@@ -140,7 +140,7 @@ pub enum RvInst {
     Ld  { rd: Reg, rs1: Reg, offset: i64 },  // Load doubleword (RV64)
     Sb  { rs2: Reg, rs1: Reg, offset: i64 }, // Store byte
     Sh  { rs2: Reg, rs1: Reg, offset: i64 }, // Store halfword
-    Software  { rs2: Reg, rs1: Reg, offset: i64 }, // Store word
+    Sw  { rs2: Reg, rs1: Reg, offset: i64 }, // Store word
     Sd  { rs2: Reg, rs1: Reg, offset: i64 }, // Store doubleword (RV64)
 
     // === Branches ===
@@ -172,7 +172,7 @@ pub enum RvInst {
     /// No operation
     Nop,
     /// Return (jalr x0, x1, 0)
-    Return_value,
+    Ret,
     /// Call label (jal x1, offset)
     Call { offset: i64 },
 
@@ -181,9 +181,9 @@ pub enum RvInst {
     /// Used to translate x86 EFLAGS or ARM NZCV flags
     CmpFlags { rs1: Reg, rs2: Reg },
     /// Branch based on translated flag condition
-    BranchCondition { condition: FlagCond, offset: i64 },
+    BranchCond { condition: FlagCond, offset: i64 },
     /// Source architecture annotation (for debugging)
-    SourceAnnotation { arch: SourceArch, address: u64, text: String },
+    SrcAnnotation { arch: SourceArch, addr: u64, text: String },
 }
 
 /// Flag-based branch conditions (for x86/ARM translation)
@@ -236,13 +236,13 @@ match self {
 // Structure publique — visible à l'extérieur de ce module.
 pub struct TranslatedBlock {
     /// Source address this block was translated from
-    pub source_address: u64,
+    pub src_addr: u64,
     /// Source architecture
-    pub source_arch: SourceArch,
+    pub src_arch: SourceArch,
     /// RISC-V IR instructions
     pub instructions: Vec<RvInst>,
     /// Number of source instructions that produced this block
-    pub source_inst_count: usize,
+    pub src_inst_count: usize,
     /// Possible successor addresses
     pub successors: Vec<u64>,
 }
@@ -250,12 +250,12 @@ pub struct TranslatedBlock {
 // Bloc d'implémentation — définit les méthodes du type ci-dessus.
 impl TranslatedBlock {
         // Fonction publique — appelable depuis d'autres modules.
-pub fn new(source_address: u64, source_arch: SourceArch) -> Self {
+pub fn new(src_addr: u64, src_arch: SourceArch) -> Self {
         Self {
-            source_address,
-            source_arch,
+            src_addr,
+            src_arch,
             instructions: Vec::new(),
-            source_inst_count: 0,
+            src_inst_count: 0,
             successors: Vec::new(),
         }
     }

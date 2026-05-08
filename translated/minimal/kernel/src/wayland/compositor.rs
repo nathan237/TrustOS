@@ -3,67 +3,67 @@
 
 
 use super::surface::Surface;
-use super::lny;
+use super::gjd;
 use alloc::vec::Vec;
 
 
 #[derive(Debug, Clone)]
-pub struct Ckh {
-    pub ad: u32,
-    pub akn: Vec<Axt>,
+pub struct Aom {
+    pub id: u32,
+    pub rects: Vec<Ur>,
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct Axt {
-    pub b: i32,
-    pub c: i32,
-    pub z: i32,
-    pub ac: i32,
+pub struct Ur {
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
     pub add: bool, 
 }
 
-impl Ckh {
-    pub fn new(ad: u32) -> Self {
+impl Aom {
+    pub fn new(id: u32) -> Self {
         Self {
-            ad,
-            akn: Vec::new(),
+            id,
+            rects: Vec::new(),
         }
     }
     
-    pub fn add(&mut self, b: i32, c: i32, z: i32, ac: i32) {
-        self.akn.push(Axt { b, c, z, ac, add: true });
+    pub fn add(&mut self, x: i32, y: i32, width: i32, height: i32) {
+        self.rects.push(Ur { x, y, width, height, add: true });
     }
     
-    pub fn zpv(&mut self, b: i32, c: i32, z: i32, ac: i32) {
-        self.akn.push(Axt { b, c, z, ac, add: false });
+    pub fn qxv(&mut self, x: i32, y: i32, width: i32, height: i32) {
+        self.rects.push(Ur { x, y, width, height, add: false });
     }
     
     
-    pub fn contains(&self, y: i32, x: i32) -> bool {
-        let mut dsa = false;
+    pub fn contains(&self, p: i32, o: i32) -> bool {
+        let mut bmz = false;
         
-        for ha in &self.akn {
-            let odu = y >= ha.b 
-                && y < ha.b + ha.z 
-                && x >= ha.c 
-                && x < ha.c + ha.ac;
+        for rect in &self.rects {
+            let igd = p >= rect.x 
+                && p < rect.x + rect.width 
+                && o >= rect.y 
+                && o < rect.y + rect.height;
             
-            if ha.add && odu {
-                dsa = true;
-            } else if !ha.add && odu {
-                dsa = false;
+            if rect.add && igd {
+                bmz = true;
+            } else if !rect.add && igd {
+                bmz = false;
             }
         }
         
-        dsa
+        bmz
     }
 }
 
 
-pub trait Ctk {
+pub trait Atp {
     
-    fn fgc(&mut self) -> u32;
+    fn create_surface(&mut self) -> u32;
     
     
-    fn ykp(&mut self) -> u32;
+    fn qbw(&mut self) -> u32;
 }

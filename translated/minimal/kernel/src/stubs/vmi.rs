@@ -4,21 +4,21 @@ use alloc::vec::Vec;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum MemoryRegionType {
-    Jw,
-    Nn,
-    Bre,
-    Nw,
-    Bbk,
-    Afg,
+    Ram,
+    Mmio,
+    Rom,
+    Reserved,
+    AcpiReclaimable,
+    Unmapped,
 }
 
 pub struct MemoryRegion {
-    pub ar: u64,
-    pub aw: u64,
-    pub bwo: MemoryRegionType,
-    pub cu: String,
+    pub base: u64,
+    pub size: u64,
+    pub region_type: MemoryRegionType,
+    pub label: String,
 }
 
-pub fn zu() -> bool { false }
-pub fn ojm() -> Vec<(u64, String, &'static str)> { Vec::new() }
-pub fn kfk(yav: usize) -> Vec<MemoryRegion> { Vec::new() }
+pub fn lq() -> bool { false }
+pub fn ikn() -> Vec<(u64, String, &'static str)> { Vec::new() }
+pub fn fkc(_max_regions: usize) -> Vec<MemoryRegion> { Vec::new() }

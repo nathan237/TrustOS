@@ -20,11 +20,11 @@ use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 #[repr(C)]
 // Structure publique — visible à l'extérieur de ce module.
 pub struct PresentParams {
-    pub source: *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+    pub src: *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u32,
-    pub destination: *mut u32,
-    pub source_stride: usize,
-    pub destination_stride: usize,
+    pub dst: *mut u32,
+    pub src_stride: usize,
+    pub dst_stride: usize,
     pub width: usize,
     pub height: usize,
 }
@@ -45,18 +45,18 @@ const PresentParams) };
     for y in start..end {
         if y >= params.height { break; }
         
-        let source_offset = y * params.source_stride;
-        let destination_offset = y * params.destination_stride;
+        let source_offset = y * params.src_stride;
+        let destination_offset = y * params.dst_stride;
         
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-            let source = params.source.add(source_offset);
-            let destination = params.destination.add(destination_offset);
+            let src = params.src.add(source_offset);
+            let dst = params.dst.add(destination_offset);
             
             #[cfg(target_arch = "x86_64")]
-            crate::graphics::simd::copy_row_sse2(destination, source, params.width);
+            crate::graphics::simd::copy_row_sse2(dst, src, params.width);
             #[cfg(not(target_arch = "x86_64"))]
-            core::ptr::copy_nonoverlapping(source, destination, params.width);
+            core::ptr::copy_nonoverlapping(src, dst, params.width);
         }
     }
 }
@@ -70,18 +70,18 @@ const PresentParams) };
     for y in start..end {
         if y >= params.height { break; }
         
-        let source_offset = y * params.source_stride;
-        let destination_offset = y * params.destination_stride;
+        let source_offset = y * params.src_stride;
+        let destination_offset = y * params.dst_stride;
         
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-            let source = params.source.add(source_offset);
-            let destination = params.destination.add(destination_offset);
+            let src = params.src.add(source_offset);
+            let dst = params.dst.add(destination_offset);
             
             #[cfg(target_arch = "x86_64")]
-            crate::graphics::simd::copy_row_sse2(destination, source, params.width);
+            crate::graphics::simd::copy_row_sse2(dst, src, params.width);
             #[cfg(not(target_arch = "x86_64"))]
-            core::ptr::copy_nonoverlapping(source, destination, params.width);
+            core::ptr::copy_nonoverlapping(src, dst, params.width);
         }
     }
 }
@@ -148,10 +148,10 @@ impl Layer {
     
     /// Fill rectangle in this layer
     pub fn fill_rect(&mut self, x: u32, y: u32, w: u32, h: u32, color: u32) {
-        let x1 = x.minimum(self.width);
-        let y1 = y.minimum(self.height);
-        let x2 = (x + w).minimum(self.width);
-        let y2 = (y + h).minimum(self.height);
+        let x1 = x.min(self.width);
+        let y1 = y.min(self.height);
+        let x2 = (x + w).min(self.width);
+        let y2 = (y + h).min(self.height);
         
         for py in y1..y2 {
             let row_start = (py * self.width + x1) as usize;
@@ -178,9 +178,9 @@ impl Layer {
         // Fonction publique — appelable depuis d'autres modules.
 pub fn set_pixel(&mut self, x: u32, y: u32, color: u32) {
         if x < self.width && y < self.height {
-            let index = (y * self.width + x) as usize;
-            if index < self.buffer.len() {
-                self.buffer[index] = color;
+            let idx = (y * self.width + x) as usize;
+            if idx < self.buffer.len() {
+                self.buffer[idx] = color;
             }
         }
     }
@@ -190,9 +190,9 @@ pub fn set_pixel(&mut self, x: u32, y: u32, color: u32) {
         // Fonction publique — appelable depuis d'autres modules.
 pub fn get_pixel(&self, x: u32, y: u32) -> u32 {
         if x < self.width && y < self.height {
-            let index = (y * self.width + x) as usize;
-            if index < self.buffer.len() {
-                return self.buffer[index];
+            let idx = (y * self.width + x) as usize;
+            if idx < self.buffer.len() {
+                return self.buffer[idx];
             }
         }
         0
@@ -207,10 +207,10 @@ pub fn get_pixel(&self, x: u32, y: u32) -> u32 {
         for dy in -r..=r {
             for dx in -r..=r {
                 if dx * dx + dy * dy <= r * r {
-                    let pixel = cx + dx;
+                    let px = cx + dx;
                     let py = cy + dy;
-                    if pixel >= 0 && py >= 0 {
-                        self.set_pixel(pixel as u32, py as u32, color);
+                    if px >= 0 && py >= 0 {
+                        self.set_pixel(px as u32, py as u32, color);
                     }
                 }
             }
@@ -229,9 +229,9 @@ pub fn get_pixel(&self, x: u32, y: u32) -> u32 {
             // Get glyph from font - returns [u8; 16] directly
             let glyph = crate::framebuffer::font::get_glyph(c);
             for (row, &bits) in glyph.iter().enumerate() {
-                for column in 0..8 {
-                    if bits & (0x80 >> column) != 0 {
-                        self.set_pixel(cx + column, y + row as u32, color);
+                for col in 0..8 {
+                    if bits & (0x80 >> col) != 0 {
+                        self.set_pixel(cx + col, y + row as u32, color);
                     }
                 }
             }
@@ -249,8 +249,8 @@ pub struct Compositor {
     composite_buffer: Box<[u32]>,
     /// GPU direct rendering: composite directly into GPU backing buffer
     /// Stored as usize to keep Compositor: Send (raw pointers are !Send)
-    gpu_target_pointer: usize,  // 0 = use composite_buffer, nonzero = GPU buffer
-    gpu_target_length: usize,
+    gpu_target_ptr: usize,  // 0 = use composite_buffer, nonzero = GPU buffer
+    gpu_target_len: usize,
 }
 
 // Bloc d'implémentation — définit les méthodes du type ci-dessus.
@@ -263,8 +263,8 @@ impl Compositor {
             screen_width: width,
             screen_height: height,
             composite_buffer: vec![0u32; size].into_boxed_slice(),
-            gpu_target_pointer: 0,
-            gpu_target_length: 0,
+            gpu_target_ptr: 0,
+            gpu_target_len: 0,
         }
     }
     
@@ -295,8 +295,8 @@ impl Compositor {
     pub fn enable_gpu_direct(&mut self) {
         if crate::drivers::virtio_gpu::is_available() {
             if let Some((ptr, w, h)) = crate::drivers::virtio_gpu::get_raw_buffer() {
-                self.gpu_target_pointer = ptr as usize;
-                self.gpu_target_length = (w * h) as usize;
+                self.gpu_target_ptr = ptr as usize;
+                self.gpu_target_len = (w * h) as usize;
                 crate::serial_println!("[COMPOSITOR] GPU direct mode: composite → GPU buffer (skip 4MB copy!)");
             }
         }
@@ -308,10 +308,10 @@ impl Compositor {
     /// OPTIMIZED: Uses fast path for opaque full-width layers
     pub fn composite(&mut self) {
         // Determine target buffer: GPU backing or own composite_buffer
-        let (target_pointer, target_length) = if self.gpu_target_pointer != 0 {
-            (self.gpu_target_pointer as *mut u32, self.gpu_target_length)
+        let (target_ptr, target_length) = if self.gpu_target_ptr != 0 {
+            (self.gpu_target_ptr as *mut u32, self.gpu_target_len)
         } else {
-            (self.composite_buffer.as_mut_pointer(), self.composite_buffer.len())
+            (self.composite_buffer.as_mut_ptr(), self.composite_buffer.len())
         };
 
         // Create sorted indices for rendering (don't modify the layers vector!)
@@ -339,7 +339,7 @@ impl Compositor {
                         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
                 crate::graphics::simd::fill_row_sse2(
-                    target_pointer,
+                    target_ptr,
                     target_length,
                     0xFF000000
                 );
@@ -348,7 +348,7 @@ unsafe {
                         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
                 for i in 0..target_length {
-                    *target_pointer.add(i) = 0xFF000000;
+                    *target_ptr.add(i) = 0xFF000000;
                 }
             }
         }
@@ -366,14 +366,14 @@ unsafe {
             // Skip FAST PATH for taskbar to debug rendering issues
             if opacity == 255 && layer.x == 0 && layer.width == self.screen_width 
                && layer.layer_type == LayerType::Background {
-                let source_height = layer.height.minimum(self.screen_height.saturating_sub(layer.y));
+                let source_height = layer.height.min(self.screen_height.saturating_sub(layer.y));
                 
                 // Use parallel_for for full-screen background copy (4MB → split across cores)
                 let params = PresentParams {
-                    source: layer.buffer.as_pointer(),
-                    destination: target_pointer,
-                    source_stride: layer.width as usize,
-                    destination_stride: self.screen_width as usize,
+                    src: layer.buffer.as_ptr(),
+                    dst: target_ptr,
+                    src_stride: layer.width as usize,
+                    dst_stride: self.screen_width as usize,
                     width: layer.width as usize,
                     height: source_height as usize,
                 };
@@ -387,7 +387,7 @@ const PresentParams as *mut u8,
                 continue;
             }
             
-            // MEDIUM PATH: Opaque layer - skip alpha blending per pixel
+            // MEDIUM PATH: Opaque layer - SSE2 row-level alpha blend
             if opacity == 255 {
                 for ly in 0..layer.height {
                     let screen_y = layer.y + ly;
@@ -395,26 +395,37 @@ const PresentParams as *mut u8,
                         continue;
                     }
                     
-                    // Copy row at once if possible
                     let source_start = (ly * layer.width) as usize;
                     let destination_start = (screen_y * self.screen_width + layer.x) as usize;
-                    let row_length = layer.width.minimum(self.screen_width - layer.x) as usize;
+                    let row_length = layer.width.min(self.screen_width - layer.x) as usize;
                     
                     if layer.x < self.screen_width 
                        && source_start + row_length <= layer.buffer.len()
                        && destination_start + row_length <= target_length {
-                        // Fast row copy for opaque content
-                        for i in 0..row_length {
-                            let source_color = layer.buffer[source_start + i];
-                            let source_alpha = (source_color >> 24) & 0xFF;
-                            if source_alpha > 200 { // Mostly opaque
-                                unsafe { *target_pointer.add(destination_start + i) = source_color; }
-                            } else if source_alpha > 0 {
-                                // Quick alpha blend
-                                let destination_color = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { *target_pointer.add(destination_start + i) };
-                                                                // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { *target_pointer.add(destination_start + i) = alpha_blend(source_color, destination_color, source_alpha); }
+                        // SSE2 alpha blend: 4 pixels at a time with fast-skip for transparent/opaque
+                        #[cfg(target_arch = "x86_64")]
+                                                // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe {
+                            crate::graphics::simd::blend_row_sse2(
+                                target_ptr.add(destination_start),
+                                layer.buffer.as_ptr().add(source_start),
+                                row_length,
+                            );
+                        }
+                        #[cfg(not(target_arch = "x86_64"))]
+                        {
+                            for i in 0..row_length {
+                                let source_color = layer.buffer[source_start + i];
+                                let source_alpha = (source_color >> 24) & 0xFF;
+                                if source_alpha > 200 {
+                                                                        // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe { *target_ptr.add(destination_start + i) = source_color; }
+                                } else if source_alpha > 0 {
+                                    let destination_color = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe { *target_ptr.add(destination_start + i) };
+                                                                        // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe { *target_ptr.add(destination_start + i) = alpha_blend(source_color, destination_color, source_alpha); }
+                                }
                             }
                         }
                     }
@@ -422,46 +433,50 @@ unsafe { *target_pointer.add(destination_start + i) = alpha_blend(source_color, 
                 continue;
             }
             
-            // SLOW PATH: Alpha blending with layer opacity
+            // SLOW PATH: Alpha blending with layer opacity — row-level SIMD
             for ly in 0..layer.height {
                 let screen_y = layer.y + ly;
                 if screen_y >= self.screen_height {
                     continue;
                 }
                 
-                for lx in 0..layer.width {
-                    let screen_x = layer.x + lx;
-                    if screen_x >= self.screen_width {
-                        continue;
-                    }
-                    
-                    let source_index = (ly * layer.width + lx) as usize;
-                    let destination_index = (screen_y * self.screen_width + screen_x) as usize;
-                    
-                    if source_index >= layer.buffer.len() || destination_index >= target_length {
-                        continue;
-                    }
-                    
-                    let source_color = layer.buffer[source_index];
-                    let source_alpha = ((source_color >> 24) & 0xFF) as u32;
-                    
-                    // Skip fully transparent pixels
-                    if source_alpha == 0 {
-                        continue;
-                    }
-                    
-                    // Apply layer opacity
-                    let final_alpha = (source_alpha * opacity) / 255;
-                    
-                    if final_alpha >= 255 {
-                        // Fully opaque, just copy
-                        unsafe { *target_pointer.add(destination_index) = source_color; }
-                    } else if final_alpha > 0 {
-                        // Alpha blend
-                        let destination_color = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { *target_pointer.add(destination_index) };
-                                                // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { *target_pointer.add(destination_index) = alpha_blend(source_color, destination_color, final_alpha); }
+                let source_start = (ly * layer.width) as usize;
+                let row_length = layer.width.min(self.screen_width.saturating_sub(layer.x)) as usize;
+                let destination_start = (screen_y * self.screen_width + layer.x) as usize;
+                
+                if layer.x >= self.screen_width 
+                   || source_start + row_length > layer.buffer.len()
+                   || destination_start + row_length > target_length {
+                    continue;
+                }
+                
+                // Pre-multiply source alpha by layer opacity, then SSE2 blend entire row
+                #[cfg(target_arch = "x86_64")]
+                                // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe {
+                    blend_row_with_opacity(
+                        target_ptr.add(destination_start),
+                        layer.buffer.as_ptr().add(source_start),
+                        row_length,
+                        opacity,
+                    );
+                }
+                #[cfg(not(target_arch = "x86_64"))]
+                {
+                    for i in 0..row_length {
+                        let source_color = layer.buffer[source_start + i];
+                        let source_alpha = ((source_color >> 24) & 0xFF) as u32;
+                        if source_alpha == 0 { continue; }
+                        let final_alpha = (source_alpha * opacity) / 255;
+                        if final_alpha >= 255 {
+                                                        // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe { *target_ptr.add(destination_start + i) = source_color; }
+                        } else if final_alpha > 0 {
+                            let destination_color = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe { *target_ptr.add(destination_start + i) };
+                                                        // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe { *target_ptr.add(destination_start + i) = alpha_blend(source_color, destination_color, final_alpha); }
+                        }
                     }
                 }
             }
@@ -480,33 +495,33 @@ unsafe { *target_pointer.add(destination_index) = alpha_blend(source_color, dest
     /// - GPU DMA transfer runs in parallel with CPU stores
     pub fn present(&self) {
         // ── GPU direct mode: composite() already wrote to GPU buffer ──
-        if self.gpu_target_pointer != 0 {
+        if self.gpu_target_ptr != 0 {
             // Trigger DMA transfer + flush (GPU display)
             let _ = crate::drivers::virtio_gpu::present_frame();
-            // Also write to MMIO framebuffer for VGA display visibility
-            self.writeback_mmio_nt();
+            // Skip MMIO writeback — GPU DMA handles display.
+            // The old writeback_mmio_nt() here was a redundant 4MB NT copy every frame.
             return;
         }
         
         // ── VirtIO GPU path (non-direct): copy composite_buffer → GPU buffer ──
         if crate::drivers::virtio_gpu::is_available() {
-            if let Some((gpu_pointer, gpu_w, gpu_h)) = crate::drivers::virtio_gpu::get_raw_buffer() {
-                let copy_w = (self.screen_width as usize).minimum(gpu_w as usize);
-                let copy_h = (self.screen_height as usize).minimum(gpu_h as usize);
+            if let Some((gpu_ptr, gpu_w, gpu_h)) = crate::drivers::virtio_gpu::get_raw_buffer() {
+                let copy_w = (self.screen_width as usize).min(gpu_w as usize);
+                let copy_h = (self.screen_height as usize).min(gpu_h as usize);
                 
                                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-                    let source_base = self.composite_buffer.as_pointer();
-                    let destination_base = gpu_pointer;
+                    let source_base = self.composite_buffer.as_ptr();
+                    let destination_base = gpu_ptr;
                     
                     for y in 0..copy_h {
-                        let source = source_base.add(y * self.screen_width as usize);
-                        let destination = destination_base.add(y * gpu_w as usize);
+                        let src = source_base.add(y * self.screen_width as usize);
+                        let dst = destination_base.add(y * gpu_w as usize);
                         
                         #[cfg(target_arch = "x86_64")]
-                        crate::graphics::simd::copy_row_sse2(destination, source, copy_w);
+                        crate::graphics::simd::copy_row_sse2(dst, src, copy_w);
                         #[cfg(not(target_arch = "x86_64"))]
-                        core::ptr::copy_nonoverlapping(source, destination, copy_w);
+                        core::ptr::copy_nonoverlapping(src, dst, copy_w);
                     }
                 }
                 
@@ -540,31 +555,31 @@ unsafe {
     fn writeback_mmio_nt(&self) {
         use crate::framebuffer::{FRAMEBUFFER_ADDRESS, FRAMEBUFFER_WIDTH, FRAMEBUFFER_HEIGHT, FRAMEBUFFER_PITCH};
         
-        let address = FRAMEBUFFER_ADDRESS.load(Ordering::SeqCst);
-        if address.is_null() { return; }
+        let addr = FRAMEBUFFER_ADDRESS.load(Ordering::SeqCst);
+        if addr.is_null() { return; }
         
-        let framebuffer_width = FRAMEBUFFER_WIDTH.load(Ordering::SeqCst) as usize;
-        let framebuffer_height = FRAMEBUFFER_HEIGHT.load(Ordering::SeqCst) as usize;
+        let fb_width = FRAMEBUFFER_WIDTH.load(Ordering::SeqCst) as usize;
+        let fb_height = FRAMEBUFFER_HEIGHT.load(Ordering::SeqCst) as usize;
         let pitch = FRAMEBUFFER_PITCH.load(Ordering::SeqCst) as usize;
         let pitch_pixels = pitch / 4;
         
-        let copy_width = framebuffer_width.minimum(self.screen_width as usize);
-        let copy_height = framebuffer_height.minimum(self.screen_height as usize);
+        let copy_width = fb_width.min(self.screen_width as usize);
+        let copy_height = fb_height.min(self.screen_height as usize);
         
         // Choose source: GPU buffer if direct mode, else composite_buffer
-        let source_base = if self.gpu_target_pointer != 0 {
-            self.gpu_target_pointer as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+        let source_base = if self.gpu_target_ptr != 0 {
+            self.gpu_target_ptr as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u32
         } else {
-            self.composite_buffer.as_pointer()
+            self.composite_buffer.as_ptr()
         };
         
         // Parallel NT writeback across all cores
         let params = PresentParams {
-            source: source_base,
-            destination: address as *mut u32,
-            source_stride: self.screen_width as usize,
-            destination_stride: pitch_pixels,
+            src: source_base,
+            dst: addr as *mut u32,
+            src_stride: self.screen_width as usize,
+            dst_stride: pitch_pixels,
             width: copy_width,
             height: copy_height,
         };
@@ -583,24 +598,114 @@ const PresentParams as *mut u8,
     }
 }
 
-/// Alpha blend two colors
-#[inline]
-fn alpha_blend(source: u32, destination: u32, alpha: u32) -> u32 {
+/// Alpha blend two colors — uses >>8 approximation (matches SIMD path)
+#[inline(always)]
+fn alpha_blend(src: u32, dst: u32, alpha: u32) -> u32 {
     let inv_alpha = 255 - alpha;
     
-    let sr = (source >> 16) & 0xFF;
-    let sg = (source >> 8) & 0xFF;
-    let sb = source & 0xFF;
+    let sr = (src >> 16) & 0xFF;
+    let sg = (src >> 8) & 0xFF;
+    let sb = src & 0xFF;
     
-    let dr = (destination >> 16) & 0xFF;
-    let dg = (destination >> 8) & 0xFF;
-    let db = destination & 0xFF;
+    let dr = (dst >> 16) & 0xFF;
+    let dg = (dst >> 8) & 0xFF;
+    let db = dst & 0xFF;
     
-    let r = (sr * alpha + dr * inv_alpha) / 255;
-    let g = (sg * alpha + dg * inv_alpha) / 255;
-    let b = (sb * alpha + db * inv_alpha) / 255;
+    let r = (sr * alpha + dr * inv_alpha + 128) >> 8;
+    let g = (sg * alpha + dg * inv_alpha + 128) >> 8;
+    let b = (sb * alpha + db * inv_alpha + 128) >> 8;
     
     0xFF000000 | (r << 16) | (g << 8) | b
+}
+
+/// Blend a row of src pixels onto dst, pre-multiplying each pixel's alpha by a uniform layer opacity.
+/// Uses SSE2 for 4-pixel-at-a-time processing.
+#[cfg(target_arch = "x86_64")]
+#[inline]
+// SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe fn blend_row_with_opacity(dst: *mut u32, src: *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+const u32, count: usize, opacity: u32) {
+    use core::arch::x86_64::*;
+    
+    let mut destination_pointer = dst;
+    let mut source_pointer = src;
+    let mut remaining = count;
+    
+    let zero = _mm_setzero_si128();
+    let opacity_vec = _mm_set1_epi16(opacity as i16);
+    let round_vec = _mm_set1_epi16(128);
+    let alpha_mask = _mm_set1_epi32(0xFF000000u32 as i32);
+    let max255 = _mm_set1_epi16(255);
+    
+    while remaining >= 4 {
+        let s = _mm_loadu_si128(source_pointer as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+const __m128i);
+        
+        // Quick check: all transparent → skip
+        let s_alpha = _mm_srli_epi32(s, 24);
+        let all_zero = _mm_cmpeq_epi32(s_alpha, zero);
+        if _mm_movemask_epi8(all_zero) == 0xFFFF {
+            source_pointer = source_pointer.add(4);
+            destination_pointer = destination_pointer.add(4);
+            remaining -= 4;
+            continue;
+        }
+        
+        let d = _mm_loadu_si128(destination_pointer as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+const __m128i);
+        
+        // --- Pixels 0-1 ---
+        let s_lo = _mm_unpacklo_epi8(s, zero);
+        let d_lo = _mm_unpacklo_epi8(d, zero);
+        
+        // Extract per-pixel alpha, multiply by layer opacity: final_alpha = (src_alpha * opacity) >> 8
+        let a0 = _mm_shufflelo_epi16(s_lo, 0xFF);
+        let a_lo = _mm_shufflehi_epi16(a0, 0xFF);
+        let fa_lo = _mm_srli_epi16(_mm_add_epi16(_mm_mullo_epi16(a_lo, opacity_vec), round_vec), 8);
+        let inv_fa_lo = _mm_sub_epi16(max255, fa_lo);
+        
+        let source_mul = _mm_mullo_epi16(s_lo, fa_lo);
+        let destination_mul = _mm_mullo_epi16(d_lo, inv_fa_lo);
+        let sum_lo = _mm_srli_epi16(_mm_add_epi16(_mm_add_epi16(source_mul, destination_mul), round_vec), 8);
+        
+        // --- Pixels 2-3 ---
+        let s_hi = _mm_unpackhi_epi8(s, zero);
+        let d_hi = _mm_unpackhi_epi8(d, zero);
+        
+        let a2 = _mm_shufflelo_epi16(s_hi, 0xFF);
+        let a_hi = _mm_shufflehi_epi16(a2, 0xFF);
+        let fa_hi = _mm_srli_epi16(_mm_add_epi16(_mm_mullo_epi16(a_hi, opacity_vec), round_vec), 8);
+        let inv_fa_hi = _mm_sub_epi16(max255, fa_hi);
+        
+        let source_mul_hi = _mm_mullo_epi16(s_hi, fa_hi);
+        let destination_mul_hi = _mm_mullo_epi16(d_hi, inv_fa_hi);
+        let sum_hi = _mm_srli_epi16(_mm_add_epi16(_mm_add_epi16(source_mul_hi, destination_mul_hi), round_vec), 8);
+        
+        // Pack and force opaque output
+        let result = _mm_packus_epi16(sum_lo, sum_hi);
+        let result = _mm_or_si128(result, alpha_mask);
+        _mm_storeu_si128(destination_pointer as *mut __m128i, result);
+        
+        source_pointer = source_pointer.add(4);
+        destination_pointer = destination_pointer.add(4);
+        remaining -= 4;
+    }
+    
+    // Scalar tail
+    for _ in 0..remaining {
+        let source_color = *source_pointer;
+        let source_alpha = ((source_color >> 24) & 0xFF) as u32;
+        if source_alpha > 0 {
+            let final_alpha = (source_alpha * opacity + 128) >> 8;
+            if final_alpha >= 255 {
+                *destination_pointer = source_color;
+            } else if final_alpha > 0 {
+                *destination_pointer = alpha_blend(source_color, *destination_pointer, final_alpha);
+            }
+        }
+        source_pointer = source_pointer.add(1);
+        destination_pointer = destination_pointer.add(1);
+    }
 }
 
 // ============================================================

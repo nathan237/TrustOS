@@ -19,121 +19,121 @@ use alloc::collections::BTreeMap;
 
 
 #[derive(Debug, Clone)]
-pub struct Dc {
-    pub re: u64,
-    pub bf: Vec<u8>,
-    pub bes: String,
-    pub bvr: Vec<Operand>,
-    pub byv: Option<String>,
+pub struct Bj {
+    pub address: u64,
+    pub bytes: Vec<u8>,
+    pub mnemonic: String,
+    pub operands: Vec<Operand>,
+    pub comment: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 pub enum Operand {
     Register(Register),
-    Acf(i64),
-    Cy { ar: Option<Register>, index: Option<Register>, bv: u8, aor: i64 },
-    Dy(String),
+    Immediate(i64),
+    Memory { base: Option<Register>, index: Option<Register>, scale: u8, uv: i64 },
+    Br(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Register {
-    Me, Bpw, Bpx, Alr, Alt, Alq, Hc, Bpv,
-    Alo, Alp, Alj, Alk, All, Alm, Aln, Aec, Aw,
-    Abh, Bfe, Bfg, Bfi, Bfn, Bfh, Bfo, Bfd,
-    Bxn, Byj, Bzf, Cat,
-    Bxh, Bxg, Byg, Byf, Aag, Byv, Cai, Cag,
+    Fa, RBX, RCX, RDX, RSI, RDI, De, RBP,
+    R8, R9, R10, R11, R12, R13, R14, R15, Af,
+    EAX, EBX, ECX, EDX, ESI, EDI, ESP, EBP,
+    AX, BX, CX, DX,
+    AL, AH, BL, BH, CL, CH, DL, DH,
 }
 
 impl Register {
-    pub fn j(&self) -> &'static str {
+    pub fn name(&self) -> &'static str {
         match self {
-            Register::Me => "rax", Register::Bpw => "rbx", Register::Bpx => "rcx", Register::Alr => "rdx",
-            Register::Alt => "rsi", Register::Alq => "rdi", Register::Hc => "rsp", Register::Bpv => "rbp",
-            Register::Alo => "r8", Register::Alp => "r9", Register::Alj => "r10", Register::Alk => "r11",
-            Register::All => "r12", Register::Alm => "r13", Register::Aln => "r14", Register::Aec => "r15",
-            Register::Aw => "rip",
-            Register::Abh => "eax", Register::Bfe => "ebx", Register::Bfg => "ecx", Register::Bfi => "edx",
-            Register::Bfn => "esi", Register::Bfh => "edi", Register::Bfo => "esp", Register::Bfd => "ebp",
-            Register::Bxn => "ax", Register::Byj => "bx", Register::Bzf => "cx", Register::Cat => "dx",
-            Register::Bxh => "al", Register::Bxg => "ah", Register::Byg => "bl", Register::Byf => "bh",
-            Register::Aag => "cl", Register::Byv => "ch", Register::Cai => "dl", Register::Cag => "dh",
+            Register::Fa => "rax", Register::RBX => "rbx", Register::RCX => "rcx", Register::RDX => "rdx",
+            Register::RSI => "rsi", Register::RDI => "rdi", Register::De => "rsp", Register::RBP => "rbp",
+            Register::R8 => "r8", Register::R9 => "r9", Register::R10 => "r10", Register::R11 => "r11",
+            Register::R12 => "r12", Register::R13 => "r13", Register::R14 => "r14", Register::R15 => "r15",
+            Register::Af => "rip",
+            Register::EAX => "eax", Register::EBX => "ebx", Register::ECX => "ecx", Register::EDX => "edx",
+            Register::ESI => "esi", Register::EDI => "edi", Register::ESP => "esp", Register::EBP => "ebp",
+            Register::AX => "ax", Register::BX => "bx", Register::CX => "cx", Register::DX => "dx",
+            Register::AL => "al", Register::AH => "ah", Register::BL => "bl", Register::BH => "bh",
+            Register::CL => "cl", Register::CH => "ch", Register::DL => "dl", Register::DH => "dh",
         }
     }
     
-    pub fn ivx(aj: u8, ic: bool, aw: u8) -> Self {
-        let w = if ic { aj + 8 } else { aj };
-        match aw {
-            8 => match w {
-                0 => Register::Me, 1 => Register::Bpx, 2 => Register::Alr, 3 => Register::Bpw,
-                4 => Register::Hc, 5 => Register::Bpv, 6 => Register::Alt, 7 => Register::Alq,
-                8 => Register::Alo, 9 => Register::Alp, 10 => Register::Alj, 11 => Register::Alk,
-                12 => Register::All, 13 => Register::Alm, 14 => Register::Aln, 15 => Register::Aec,
-                _ => Register::Me,
+    pub fn enl(code: u8, cq: bool, size: u8) -> Self {
+        let idx = if cq { code + 8 } else { code };
+        match size {
+            8 => match idx {
+                0 => Register::Fa, 1 => Register::RCX, 2 => Register::RDX, 3 => Register::RBX,
+                4 => Register::De, 5 => Register::RBP, 6 => Register::RSI, 7 => Register::RDI,
+                8 => Register::R8, 9 => Register::R9, 10 => Register::R10, 11 => Register::R11,
+                12 => Register::R12, 13 => Register::R13, 14 => Register::R14, 15 => Register::R15,
+                _ => Register::Fa,
             },
-            4 => match w {
-                0 => Register::Abh, 1 => Register::Bfg, 2 => Register::Bfi, 3 => Register::Bfe,
-                4 => Register::Bfo, 5 => Register::Bfd, 6 => Register::Bfn, 7 => Register::Bfh,
-                _ => Register::Abh,
+            4 => match idx {
+                0 => Register::EAX, 1 => Register::ECX, 2 => Register::EDX, 3 => Register::EBX,
+                4 => Register::ESP, 5 => Register::EBP, 6 => Register::ESI, 7 => Register::EDI,
+                _ => Register::EAX,
             },
-            _ => Register::Me,
+            _ => Register::Fa,
         }
     }
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Anj {
-    pub re: u64,
-    pub aqb: u64,
-    pub j: &'static str,
-    pub n: Vec<u64>,
+pub struct Ql {
+    pub address: u64,
+    pub number: u64,
+    pub name: &'static str,
+    pub args: Vec<u64>,
 }
 
 
 #[derive(Debug)]
-pub struct Bs {
-    pub j: String,
-    pub re: u64,
-    pub aw: usize,
-    pub instructions: Vec<Dc>,
-    pub apd: Vec<Anj>,
-    pub kgf: Vec<u64>,
-    pub wvd: Vec<(u64, String)>,
+pub struct Aq {
+    pub name: String,
+    pub address: u64,
+    pub size: usize,
+    pub instructions: Vec<Bj>,
+    pub syscalls: Vec<Ql>,
+    pub fkp: Vec<u64>,
+    pub strings_used: Vec<(u64, String)>,
 }
 
 
 #[derive(Debug)]
-pub struct Rm {
-    pub mi: u64,
-    pub ajb: Vec<Bs>,
-    pub pd: Vec<(u64, String)>,
-    pub dck: Vec<&'static str>,
-    pub hyh: String,
+pub struct Hf {
+    pub entry_point: u64,
+    pub functions: Vec<Aq>,
+    pub strings: Vec<(u64, String)>,
+    pub syscalls_used: Vec<&'static str>,
+    pub rust_code: String,
 }
 
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BinaryType {
     
-    Buq,
+    TrueFalse,
     
-    Bfs,
+    Echo,
     
-    Bps,
+    Pwd,
     
-    Cfb,
+    Hostname,
     
-    Ra,
+    Uname,
     
-    Bzh,
+    Cat,
     
-    Cgx,
+    Ls,
     
-    F,
+    Unknown,
 }
 
 
-pub fn gty(num: u64) -> &'static str {
+pub fn dfe(num: u64) -> &'static str {
     match num {
         0 => "read",
         1 => "write",
@@ -303,7 +303,7 @@ pub fn gty(num: u64) -> &'static str {
 }
 
 
-pub fn pre(num: u64) -> &'static str {
+pub fn jla(num: u64) -> &'static str {
     match num {
         
         0 | 1 | 2 | 3 | 39 | 60 | 63 | 79 | 102 | 104 | 107 | 108 | 110 | 186 | 231 => "Full",
@@ -320,140 +320,140 @@ pub fn pre(num: u64) -> &'static str {
 pub use codegen::Transpiler;
 
 
-pub fn dob(f: &[u8]) -> Option<Rm> {
-    if f.len() < 64 || &f[0..4] != b"\x7FELF" {
+pub fn bks(data: &[u8]) -> Option<Hf> {
+    if data.len() < 64 || &data[0..4] != b"\x7FELF" {
         return None;
     }
     
-    let mi = u64::dj(f[24..32].try_into().bq()?);
-    let bnu = u64::dj(f[32..40].try_into().bq()?) as usize;
-    let egq = u16::dj(f[54..56].try_into().bq()?) as usize;
-    let egp = u16::dj(f[56..58].try_into().bq()?) as usize;
+    let entry_point = u64::from_le_bytes(data[24..32].try_into().ok()?);
+    let aii = u64::from_le_bytes(data[32..40].try_into().ok()?) as usize;
+    let but = u16::from_le_bytes(data[54..56].try_into().ok()?) as usize;
+    let bur = u16::from_le_bytes(data[56..58].try_into().ok()?) as usize;
     
     
-    let mut fwo = 0usize;
-    let mut jtb = 0u64;
-    let mut fwp = 0usize;
+    let mut crm = 0usize;
+    let mut fcv = 0u64;
+    let mut crn = 0usize;
     
-    for a in 0..egp {
-        let afv = bnu + a * egq;
-        if afv + egq > f.len() { break; }
+    for i in 0..bur {
+        let qc = aii + i * but;
+        if qc + but > data.len() { break; }
         
-        let bku = u32::dj(f[afv..afv+4].try_into().bq()?);
-        let bvv = u32::dj(f[afv+4..afv+8].try_into().bq()?);
+        let p_type = u32::from_le_bytes(data[qc..qc+4].try_into().ok()?);
+        let p_flags = u32::from_le_bytes(data[qc+4..qc+8].try_into().ok()?);
         
-        if bku == 1 && (bvv & 1) != 0 {
-            fwo = u64::dj(f[afv+8..afv+16].try_into().bq()?) as usize;
-            jtb = u64::dj(f[afv+16..afv+24].try_into().bq()?);
-            fwp = u64::dj(f[afv+32..afv+40].try_into().bq()?) as usize;
+        if p_type == 1 && (p_flags & 1) != 0 {
+            crm = u64::from_le_bytes(data[qc+8..qc+16].try_into().ok()?) as usize;
+            fcv = u64::from_le_bytes(data[qc+16..qc+24].try_into().ok()?);
+            crn = u64::from_le_bytes(data[qc+32..qc+40].try_into().ok()?) as usize;
             break;
         }
     }
     
-    if fwp == 0 {
-        fwo = 0x1000.v(f.len());
-        jtb = mi;
-        fwp = (f.len() - fwo).v(0x10000);
+    if crn == 0 {
+        crm = 0x1000.min(data.len());
+        fcv = entry_point;
+        crn = (data.len() - crm).min(0x10000);
     }
     
-    let bql = if mi >= jtb {
-        (mi - jtb) as usize
+    let entry_offset = if entry_point >= fcv {
+        (entry_point - fcv) as usize
     } else {
         0
     };
     
-    let dez = fwo + bql;
-    let aj = if dez < f.len() {
-        &f[dez..f.len().v(dez + fwp)]
+    let code_start = crm + entry_offset;
+    let code = if code_start < data.len() {
+        &data[code_start..data.len().min(code_start + crn)]
     } else {
         return None;
     };
     
     
-    let mut disasm = Disassembler::new(aj, mi);
-    let instructions = disasm.irf();
+    let mut disasm = Disassembler::new(code, entry_point);
+    let instructions = disasm.disassemble_all();
     
     
     let mut transpiler = Transpiler::new(instructions.clone());
-    transpiler.qie();
-    let kdi = transpiler.rwn();
+    transpiler.analyze_syscalls();
+    let fje = transpiler.detect_binary_type();
     
     
-    let hyh = transpiler.tcc(kdi, f);
+    let rust_code = transpiler.generate_functional_rust(fje, data);
     
-    let mut dck: Vec<&'static str> = transpiler.apd.iter()
-        .map(|e| e.j)
+    let mut syscalls_used: Vec<&'static str> = transpiler.syscalls.iter()
+        .map(|j| j.name)
         .collect();
-    dck.jqs();
-    dck.rux();
+    syscalls_used.sort();
+    syscalls_used.dedup();
     
-    let pd = kut(f);
+    let strings = fvx(data);
     
-    Some(Rm {
-        mi,
-        ajb: vec![Bs {
-            j: String::from("_start"),
-            re: mi,
-            aw: aj.len(),
+    Some(Hf {
+        entry_point,
+        functions: vec![Aq {
+            name: String::from("_start"),
+            address: entry_point,
+            size: code.len(),
             instructions,
-            apd: transpiler.apd,
-            kgf: Vec::new(),
-            wvd: Vec::new(),
+            syscalls: transpiler.syscalls,
+            fkp: Vec::new(),
+            strings_used: Vec::new(),
         }],
-        pd,
-        dck,
-        hyh,
+        strings,
+        syscalls_used,
+        rust_code,
     })
 }
 
 
-fn kut(f: &[u8]) -> Vec<(u64, String)> {
-    let mut pd = Vec::new();
-    let mut cv = String::new();
-    let mut ay = 0u64;
+fn fvx(data: &[u8]) -> Vec<(u64, String)> {
+    let mut strings = Vec::new();
+    let mut current = String::new();
+    let mut start = 0u64;
     
-    for (a, &o) in f.iter().cf() {
-        if o >= 0x20 && o < 0x7F {
-            if cv.is_empty() {
-                ay = a as u64;
+    for (i, &b) in data.iter().enumerate() {
+        if b >= 0x20 && b < 0x7F {
+            if current.is_empty() {
+                start = i as u64;
             }
-            cv.push(o as char);
+            current.push(b as char);
         } else {
-            if cv.len() >= 4 {
-                pd.push((ay, cv.clone()));
+            if current.len() >= 4 {
+                strings.push((start, current.clone()));
             }
-            cv.clear();
+            current.clear();
         }
     }
     
-    if cv.len() >= 4 {
-        pd.push((ay, cv));
+    if current.len() >= 4 {
+        strings.push((start, current));
     }
     
-    pd
+    strings
 }
 
 
 pub struct Disassembler<'a> {
-    aj: &'a [u8],
-    sm: u64,
-    u: usize,
+    code: &'a [u8],
+    base_addr: u64,
+    pos: usize,
 }
 
 impl<'a> Disassembler<'a> {
-    pub fn new(aj: &'a [u8], sm: u64) -> Self {
-        Self { aj, sm, u: 0 }
+    pub fn new(code: &'a [u8], base_addr: u64) -> Self {
+        Self { code, base_addr, pos: 0 }
     }
     
-    pub fn irf(&mut self) -> Vec<Dc> {
+    pub fn disassemble_all(&mut self) -> Vec<Bj> {
         let mut instructions = Vec::new();
-        let eff = 500; 
+        let max_instructions = 500; 
         
-        while self.u < self.aj.len() && instructions.len() < eff {
-            if let Some(fi) = self.uui() {
-                let edy = fi.bes == "ret";
-                instructions.push(fi);
-                if edy {
+        while self.pos < self.code.len() && instructions.len() < max_instructions {
+            if let Some(inst) = self.next_instruction() {
+                let is_ret = inst.mnemonic == "ret";
+                instructions.push(inst);
+                if is_ret {
                     break;
                 }
             } else {
@@ -464,50 +464,50 @@ impl<'a> Disassembler<'a> {
         instructions
     }
     
-    fn uui(&mut self) -> Option<Dc> {
-        let poc = self.u;
-        let ag = self.sm + poc as u64;
+    fn next_instruction(&mut self) -> Option<Bj> {
+        let jij = self.pos;
+        let addr = self.base_addr + jij as u64;
         
-        if self.u >= self.aj.len() {
+        if self.pos >= self.code.len() {
             return None;
         }
         
         
-        let mut aip = 0u8;
-        let mut o = self.aj[self.u];
+        let mut rp = 0u8;
+        let mut b = self.code[self.pos];
         
         
-        if o >= 0x40 && o <= 0x4F {
-            aip = o;
-            self.u += 1;
-            if self.u >= self.aj.len() { return None; }
-            o = self.aj[self.u];
+        if b >= 0x40 && b <= 0x4F {
+            rp = b;
+            self.pos += 1;
+            if self.pos >= self.code.len() { return None; }
+            b = self.code[self.pos];
         }
         
-        let ako = (aip & 0x08) != 0;
-        let nx = (aip & 0x04) != 0;
-        let ic = (aip & 0x01) != 0;
-        let aw = if ako { 8 } else { 4 };
+        let rex_w = (rp & 0x08) != 0;
+        let gb = (rp & 0x04) != 0;
+        let cq = (rp & 0x01) != 0;
+        let size = if rex_w { 8 } else { 4 };
         
         
-        let (bes, bvr) = match o {
+        let (mnemonic, operands) = match b {
             
-            0x0F if self.amm(1) == Some(0x05) => {
-                self.u += 2;
+            0x0F if self.peek(1) == Some(0x05) => {
+                self.pos += 2;
                 ("syscall", vec![])
             }
             
             
             0xC3 => {
-                self.u += 1;
+                self.pos += 1;
                 ("ret", vec![])
             }
             
             
             0x31 => {
-                self.u += 1;
-                if let Some(ms) = self.pah(nx, ic, aw) {
-                    ("xor", ms)
+                self.pos += 1;
+                if let Some(fi) = self.read_modrm(gb, cq, size) {
+                    ("xor", fi)
                 } else {
                     return None;
                 }
@@ -515,22 +515,22 @@ impl<'a> Disassembler<'a> {
             
             
             0xB8..=0xBF => {
-                let vtw = o - 0xB8;
-                self.u += 1;
-                let gf = if ako {
-                    self.vrv()?
+                let oed = b - 0xB8;
+                self.pos += 1;
+                let imm = if rex_w {
+                    self.read_imm64()?
                 } else {
-                    self.pag()? as i64
+                    self.read_imm32()? as i64
                 };
-                let reg = Register::ivx(vtw, ic, aw);
-                ("mov", vec![Operand::Register(reg), Operand::Acf(gf)])
+                let reg = Register::enl(oed, cq, size);
+                ("mov", vec![Operand::Register(reg), Operand::Immediate(imm)])
             }
             
             
             0xC7 => {
-                self.u += 1;
-                if let Some(ms) = self.vsc(nx, ic, aw) {
-                    ("mov", ms)
+                self.pos += 1;
+                if let Some(fi) = self.read_modrm_with_imm32(gb, cq, size) {
+                    ("mov", fi)
                 } else {
                     return None;
                 }
@@ -538,9 +538,9 @@ impl<'a> Disassembler<'a> {
             
             
             0x8D => {
-                self.u += 1;
-                if let Some(ms) = self.pah(nx, ic, aw) {
-                    ("lea", ms)
+                self.pos += 1;
+                if let Some(fi) = self.read_modrm(gb, cq, size) {
+                    ("lea", fi)
                 } else {
                     return None;
                 }
@@ -548,75 +548,75 @@ impl<'a> Disassembler<'a> {
             
             
             _ => {
-                self.u += 1;
-                ("db", vec![Operand::Acf(o as i64)])
+                self.pos += 1;
+                ("db", vec![Operand::Immediate(b as i64)])
             }
         };
         
-        let bf = self.aj[poc..self.u].ip();
+        let bytes = self.code[jij..self.pos].to_vec();
         
-        Some(Dc {
-            re: ag,
-            bf,
-            bes: String::from(bes),
-            bvr,
-            byv: None,
+        Some(Bj {
+            address: addr,
+            bytes,
+            mnemonic: String::from(mnemonic),
+            operands,
+            comment: None,
         })
     }
     
-    fn amm(&self, l: usize) -> Option<u8> {
-        self.aj.get(self.u + l).hu()
+    fn peek(&self, offset: usize) -> Option<u8> {
+        self.code.get(self.pos + offset).copied()
     }
     
-    fn pah(&mut self, nx: bool, ic: bool, aw: u8) -> Option<Vec<Operand>> {
-        if self.u >= self.aj.len() { return None; }
-        let ms = self.aj[self.u];
-        self.u += 1;
+    fn read_modrm(&mut self, gb: bool, cq: bool, size: u8) -> Option<Vec<Operand>> {
+        if self.pos >= self.code.len() { return None; }
+        let fi = self.code[self.pos];
+        self.pos += 1;
         
-        let czy = (ms >> 6) & 0x03;
-        let reg = (ms >> 3) & 0x07;
-        let hb = ms & 0x07;
+        let bct = (fi >> 6) & 0x03;
+        let reg = (fi >> 3) & 0x07;
+        let rm = fi & 0x07;
         
-        let vty = Operand::Register(Register::ivx(reg, nx, aw));
-        let mao = Operand::Register(Register::ivx(hb, ic, aw));
+        let oef = Operand::Register(Register::enl(reg, gb, size));
+        let grw = Operand::Register(Register::enl(rm, cq, size));
         
-        Some(vec![mao, vty])
+        Some(vec![grw, oef])
     }
     
-    fn vsc(&mut self, nx: bool, ic: bool, aw: u8) -> Option<Vec<Operand>> {
-        if self.u >= self.aj.len() { return None; }
-        let ms = self.aj[self.u];
-        self.u += 1;
+    fn read_modrm_with_imm32(&mut self, gb: bool, cq: bool, size: u8) -> Option<Vec<Operand>> {
+        if self.pos >= self.code.len() { return None; }
+        let fi = self.code[self.pos];
+        self.pos += 1;
         
-        let hb = ms & 0x07;
-        let mao = Operand::Register(Register::ivx(hb, ic, aw));
+        let rm = fi & 0x07;
+        let grw = Operand::Register(Register::enl(rm, cq, size));
         
-        let gf = self.pag()?;
+        let imm = self.read_imm32()?;
         
-        Some(vec![mao, Operand::Acf(gf as i64)])
+        Some(vec![grw, Operand::Immediate(imm as i64)])
     }
     
-    fn pag(&mut self) -> Option<i32> {
-        if self.u + 4 > self.aj.len() { return None; }
-        let ap = i32::dj([
-            self.aj[self.u],
-            self.aj[self.u + 1],
-            self.aj[self.u + 2],
-            self.aj[self.u + 3],
+    fn read_imm32(&mut self) -> Option<i32> {
+        if self.pos + 4 > self.code.len() { return None; }
+        let val = i32::from_le_bytes([
+            self.code[self.pos],
+            self.code[self.pos + 1],
+            self.code[self.pos + 2],
+            self.code[self.pos + 3],
         ]);
-        self.u += 4;
-        Some(ap)
+        self.pos += 4;
+        Some(val)
     }
     
-    fn vrv(&mut self) -> Option<i64> {
-        if self.u + 8 > self.aj.len() { return None; }
-        let ap = i64::dj([
-            self.aj[self.u], self.aj[self.u + 1],
-            self.aj[self.u + 2], self.aj[self.u + 3],
-            self.aj[self.u + 4], self.aj[self.u + 5],
-            self.aj[self.u + 6], self.aj[self.u + 7],
+    fn read_imm64(&mut self) -> Option<i64> {
+        if self.pos + 8 > self.code.len() { return None; }
+        let val = i64::from_le_bytes([
+            self.code[self.pos], self.code[self.pos + 1],
+            self.code[self.pos + 2], self.code[self.pos + 3],
+            self.code[self.pos + 4], self.code[self.pos + 5],
+            self.code[self.pos + 6], self.code[self.pos + 7],
         ]);
-        self.u += 8;
-        Some(ap)
+        self.pos += 8;
+        Some(val)
     }
 }

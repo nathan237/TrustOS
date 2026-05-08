@@ -6,13 +6,13 @@
 
 
 
-pub const AY_: usize = 400;
+pub const BA_: usize = 400;
 
-pub const BL_: usize = 400;
+pub const BN_: usize = 400;
 
 
 
-pub static AEQ_: [u32; 160000] = [
+pub static AGK_: [u32; 160000] = [
      0xFF010100, 0xFF010100, 0xFF010100, 0xFF010100, 0xFF010100, 0xFF010100, 0xFF010100, 0xFF010100, 0xFF010100, 0xFF010100, 0xFF010100, 0xFF010000, 0xFF010000, 0xFF010000, 0xFF010000, 0xFF010000,
     0xFF010000, 0xFF010000, 0xFF010000, 0xFF010000, 0xFF010000, 0xFF010000, 0xFF010000, 0xFF010000, 0xFF010000, 0xFF010000, 0xFF010000, 0xFF010000, 0xFF010000, 0xFF010000, 0xFF010000, 0xFF010000,
     0xFF010000, 0xFF010000, 0xFF010000, 0xFF010000, 0xFF010000, 0xFF010000, 0xFF010000, 0xFF010000, 0xFF010000, 0xFF010000, 0xFF010100, 0xFF010100, 0xFF010100, 0xFF010100, 0xFF010100, 0xFF010100,
@@ -10018,7 +10018,7 @@ pub static AEQ_: [u32; 160000] = [
 
 
 
-pub static CET_: [u64; 2800] = [
+pub static CIC_: [u64; 2800] = [
     0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 
     0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 
     0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 
@@ -10423,78 +10423,78 @@ pub static CET_: [u64; 2800] = [
 
 
 #[inline]
-pub fn glw(b: usize, c: usize) -> bool {
-    if b >= AY_ || c >= BL_ { return false; }
-    let od = b / 64;
-    let ga = b % 64;
-    let w = c * 7 + od;
-    (CET_[w] >> (63 - ga)) & 1 == 1
+pub fn dau(x: usize, y: usize) -> bool {
+    if x >= BA_ || y >= BN_ { return false; }
+    let fx = x / 64;
+    let bf = x % 64;
+    let idx = y * 7 + fx;
+    (CIC_[idx] >> (63 - bf)) & 1 == 1
 }
 
 
 #[inline]
-pub fn hqj(b: usize, c: usize) -> bool {
-    if !glw(b, c) { return false; }
-    if b == 0 || !glw(b - 1, c) { return true; }
-    if b >= AY_ - 1 || !glw(b + 1, c) { return true; }
-    if c == 0 || !glw(b, c - 1) { return true; }
-    if c >= BL_ - 1 || !glw(b, c + 1) { return true; }
+pub fn dtu(x: usize, y: usize) -> bool {
+    if !dau(x, y) { return false; }
+    if x == 0 || !dau(x - 1, y) { return true; }
+    if x >= BA_ - 1 || !dau(x + 1, y) { return true; }
+    if y == 0 || !dau(x, y - 1) { return true; }
+    if y >= BN_ - 1 || !dau(x, y + 1) { return true; }
     false
 }
 
 
 
-pub fn epd(y: u32, x: u32) {
-    for c in 0..BL_ {
-        for b in 0..AY_ {
-            let bax = AEQ_[c * AY_ + b];
-            let q = (bax >> 24) & 0xFF;
-            if q < 8 { continue; } 
-            let m = (bax >> 16) & 0xFF;
-            let at = (bax >> 8) & 0xFF;
-            let o = bax & 0xFF;
+pub fn draw_logo(p: u32, o: u32) {
+    for y in 0..BN_ {
+        for x in 0..BA_ {
+            let abq = AGK_[y * BA_ + x];
+            let a = (abq >> 24) & 0xFF;
+            if a < 8 { continue; } 
+            let r = (abq >> 16) & 0xFF;
+            let g = (abq >> 8) & 0xFF;
+            let b = abq & 0xFF;
             
-            let hqm = (m * 77 + at * 150 + o * 29) >> 8;
-            if hqm < 30 { continue; }
-            let dx = y + b as u32;
-            let bg = x + c as u32;
-            if q >= 240 {
+            let dtw = (r * 77 + g * 150 + b * 29) >> 8;
+            if dtw < 30 { continue; }
+            let dx = p + x as u32;
+            let ad = o + y as u32;
+            if a >= 240 {
                 
-                crate::framebuffer::sf(dx, bg, bax);
+                crate::framebuffer::put_pixel(dx, ad, abq);
             } else {
                 
-                let ei = crate::framebuffer::beg(dx, bg);
-                let dei = gyl(bax, ei);
-                crate::framebuffer::sf(dx, bg, dei);
+                let bg = crate::framebuffer::get_pixel(dx, ad);
+                let bex = ctm(abq, bg);
+                crate::framebuffer::put_pixel(dx, ad, bex);
             }
         }
     }
 }
 
 
-pub fn sdt(cx: u32, ae: u32) {
-    let y = cx.ao(200);
-    let x = ae.ao(200);
-    epd(y, x);
+pub fn ljj(cx: u32, u: u32) {
+    let p = cx.saturating_sub(200);
+    let o = u.saturating_sub(200);
+    draw_logo(p, o);
 }
 
 
-pub fn sdu(y: u32, x: u32, tga: u8) {
-    let iwz = tga as u32;
+pub fn ljk(p: u32, o: u32, glow_intensity: u8) {
+    let eoh = glow_intensity as u32;
     
-    for c in 0..BL_ {
-        for b in 0..AY_ {
-            if hqj(b, c) {
-                let bzv = 0xFF000000 | ((iwz.v(255)) << 8);
+    for y in 0..BN_ {
+        for x in 0..BA_ {
+            if dtu(x, y) {
+                let aog = 0xFF000000 | ((eoh.min(255)) << 8);
                 
-                for bg in 0..3u32 {
+                for ad in 0..3u32 {
                     for dx in 0..3u32 {
-                        let qz = y + b as u32 + dx;
-                        let ub = x + c as u32 + bg;
-                        if qz > 0 && ub > 0 {
-                            let ei = crate::framebuffer::beg(qz - 1, ub - 1);
-                            let dei = gyl(0x40000000 | ((iwz.v(180)) << 8), ei);
-                            crate::framebuffer::sf(qz - 1, ub - 1, dei);
+                        let hc = p + x as u32 + dx;
+                        let jh = o + y as u32 + ad;
+                        if hc > 0 && jh > 0 {
+                            let bg = crate::framebuffer::get_pixel(hc - 1, jh - 1);
+                            let bex = ctm(0x40000000 | ((eoh.min(180)) << 8), bg);
+                            crate::framebuffer::put_pixel(hc - 1, jh - 1, bex);
                         }
                     }
                 }
@@ -10502,31 +10502,31 @@ pub fn sdu(y: u32, x: u32, tga: u8) {
         }
     }
     
-    epd(y, x);
+    draw_logo(p, o);
 }
 
 
 #[inline]
-fn gyl(lp: u32, ei: u32) -> u32 {
-    let q = (lp >> 24) & 0xFF;
-    if q == 0 { return ei; }
-    if q >= 255 { return lp; }
-    let esy = 255 - q;
-    let m = ((((lp >> 16) & 0xFF) * q + ((ei >> 16) & 0xFF) * esy) / 255) & 0xFF;
-    let at = ((((lp >> 8) & 0xFF) * q + ((ei >> 8) & 0xFF) * esy) / 255) & 0xFF;
-    let o = (((lp & 0xFF) * q + (ei & 0xFF) * esy) / 255) & 0xFF;
-    0xFF000000 | (m << 16) | (at << 8) | o
+fn ctm(fg: u32, bg: u32) -> u32 {
+    let a = (fg >> 24) & 0xFF;
+    if a == 0 { return bg; }
+    if a >= 255 { return fg; }
+    let caz = 255 - a;
+    let r = ((((fg >> 16) & 0xFF) * a + ((bg >> 16) & 0xFF) * caz) / 255) & 0xFF;
+    let g = ((((fg >> 8) & 0xFF) * a + ((bg >> 8) & 0xFF) * caz) / 255) & 0xFF;
+    let b = (((fg & 0xFF) * a + (bg & 0xFF) * caz) / 255) & 0xFF;
+    0xFF000000 | (r << 16) | (g << 8) | b
 }
 
 
 #[inline]
-pub fn djc(b: usize, c: usize) -> u32 {
-    AEQ_[c * AY_ + b]
+pub fn bhr(x: usize, y: usize) -> u32 {
+    AGK_[y * BA_ + x]
 }
 
 
 #[inline]
-pub fn uid(a: usize) -> u32 {
-    AEQ_[a]
+pub fn nap(i: usize) -> u32 {
+    AGK_[i]
 }
 

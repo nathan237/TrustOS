@@ -8,39 +8,39 @@ use alloc::vec::Vec;
 use spin::Mutex;
 use core::sync::atomic::{AtomicBool, Ordering};
 
-use super::{Gi, Co, DriverStatus, DriverCategory, nw};
-use crate::pci::S;
+use super::{Cw, Bb, DriverStatus, DriverCategory, register};
+use crate::pci::L;
 
 
-pub trait Ha: Gi {
+pub trait Dd: Cw {
     
-    fn csg(&self) -> [u8; 6];
-    
-    
-    fn aik(&self) -> bool;
+    fn mac_address(&self) -> [u8; 6];
     
     
-    fn gll(&self) -> u32 { 0 }
+    fn link_up(&self) -> bool;
     
     
-    fn baq(&mut self, f: &[u8]) -> Result<(), &'static str>;
+    fn cbj(&self) -> u32 { 0 }
     
     
-    fn chb(&mut self) -> Option<Vec<u8>>;
+    fn send(&mut self, data: &[u8]) -> Result<(), &'static str>;
+    
+    
+    fn receive(&mut self) -> Option<Vec<u8>>;
     
     
     fn poll(&mut self);
     
     
-    fn cm(&self) -> NetStats;
+    fn stats(&self) -> NetStats;
     
     
-    fn pjd(&mut self, qbs: bool) -> Result<(), &'static str> {
+    fn jfi(&mut self, _enabled: bool) -> Result<(), &'static str> {
         Err("Not supported")
     }
     
     
-    fn yel(&mut self, yat: [u8; 6]) -> Result<(), &'static str> {
+    fn pxt(&mut self, _mac: [u8; 6]) -> Result<(), &'static str> {
         Err("Not supported")
     }
 }
@@ -48,28 +48,28 @@ pub trait Ha: Gi {
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct NetStats {
-    pub cuz: u64,
-    pub dbo: u64,
-    pub bpc: u64,
-    pub bsc: u64,
-    pub dmv: u64,
-    pub dbn: u64,
-    pub mnn: u64,
-    pub mbk: u64,
+    pub tx_packets: u64,
+    pub rx_packets: u64,
+    pub tx_bytes: u64,
+    pub rx_bytes: u64,
+    pub tx_errors: u64,
+    pub rx_errors: u64,
+    pub tx_dropped: u64,
+    pub rx_dropped: u64,
 }
 
 
-static HJ_: Mutex<Option<Box<dyn Ha>>> = Mutex::new(None);
-static AQP_: AtomicBool = AtomicBool::new(false);
+static IB_: Mutex<Option<Box<dyn Dd>>> = Mutex::new(None);
+static ASS_: AtomicBool = AtomicBool::new(false);
 
 
-struct Bqw {
-    co: Co,
-    fig: fn() -> Box<dyn Ha>,
+struct Adl {
+    info: Bb,
+    factory: fn() -> Box<dyn Dd>,
 }
 
 
-static BBI_: Mutex<Vec<Bqw>> = Mutex::new(Vec::new());
+static BDL_: Mutex<Vec<Adl>> = Mutex::new(Vec::new());
 
 
 
@@ -107,38 +107,38 @@ pub mod iwl4965;
 
 
 
-pub fn vuc() {
-    virtio::nw();
-    e1000::nw();
-    rtl8139::nw();
-    rtl8169::nw();
+pub fn oei() {
+    virtio::register();
+    e1000::register();
+    rtl8139::register();
+    rtl8169::register();
 }
 
 
-pub fn jly(co: Co, fig: fn() -> Box<dyn Ha>) {
-    let mut chc = BBI_.lock();
-    chc.push(Bqw { co, fig });
+pub fn eyh(info: Bb, factory: fn() -> Box<dyn Dd>) {
+    let mut ary = BDL_.lock();
+    ary.push(Adl { info, factory });
 }
 
 
-pub fn lvo(sq: &S) -> bool {
-    let chc = BBI_.lock();
-    for bt in chc.iter() {
-        for &(acs, de) in bt.co.fye {
-            if sq.ml == acs && (de == 0xFFFF || sq.mx == de) {
-                let mut rj = (bt.fig)();
-                match rj.probe(sq) {
+pub fn goi(go: &L) -> bool {
+    let ary = BDL_.lock();
+    for entry in ary.iter() {
+        for &(vendor, device) in entry.info.vendor_ids {
+            if go.vendor_id == vendor && (device == 0xFFFF || go.device_id == device) {
+                let mut driver = (entry.factory)();
+                match driver.probe(go) {
                     Ok(()) => {
-                        if let Err(aa) = rj.ay() {
-                            crate::log_warn!("[DRIVERS] Failed to start {}: {}", bt.co.j, aa);
+                        if let Err(e) = driver.start() {
+                            crate::log_warn!("[DRIVERS] Failed to start {}: {}", entry.info.name, e);
                             return false;
                         }
-                        *HJ_.lock() = Some(rj);
-                        AQP_.store(true, Ordering::SeqCst);
+                        *IB_.lock() = Some(driver);
+                        ASS_.store(true, Ordering::SeqCst);
                         return true;
                     }
-                    Err(aa) => {
-                        crate::log_debug!("[DRIVERS] {} probe failed: {}", bt.co.j, aa);
+                    Err(e) => {
+                        crate::log_debug!("[DRIVERS] {} probe failed: {}", entry.info.name, e);
                     }
                 }
             }
@@ -148,43 +148,43 @@ pub fn lvo(sq: &S) -> bool {
 }
 
 
-pub fn bzy() -> bool {
-    AQP_.load(Ordering::Relaxed)
+pub fn aoh() -> bool {
+    ASS_.load(Ordering::Relaxed)
 }
 
 
-pub fn cez() -> Option<[u8; 6]> {
-    HJ_.lock().as_ref().map(|bc| bc.csg())
+pub fn aqt() -> Option<[u8; 6]> {
+    IB_.lock().as_ref().map(|d| d.mac_address())
 }
 
 
-pub fn aik() -> bool {
-    HJ_.lock().as_ref().map(|bc| bc.aik()).unwrap_or(false)
+pub fn link_up() -> bool {
+    IB_.lock().as_ref().map(|d| d.link_up()).unwrap_or(false)
 }
 
 
-pub fn baq(f: &[u8]) -> Result<(), &'static str> {
-    let mut adb = HJ_.lock();
-    let rj = adb.as_mut().ok_or("No network driver")?;
-    rj.baq(f)
+pub fn send(data: &[u8]) -> Result<(), &'static str> {
+    let mut jg = IB_.lock();
+    let driver = jg.as_mut().ok_or("No network driver")?;
+    driver.send(data)
 }
 
 
-pub fn chb() -> Option<Vec<u8>> {
-    let mut adb = HJ_.lock();
-    adb.as_mut().and_then(|bc| bc.chb())
+pub fn receive() -> Option<Vec<u8>> {
+    let mut jg = IB_.lock();
+    jg.as_mut().and_then(|d| d.receive())
 }
 
 
 pub fn poll() {
-    if let Some(rj) = HJ_.lock().as_mut() {
-        rj.poll();
+    if let Some(driver) = IB_.lock().as_mut() {
+        driver.poll();
     }
 }
 
 
-pub fn cm() -> NetStats {
-    HJ_.lock().as_ref()
-        .map(|bc| bc.cm())
-        .age()
+pub fn stats() -> NetStats {
+    IB_.lock().as_ref()
+        .map(|d| d.stats())
+        .unwrap_or_default()
 }

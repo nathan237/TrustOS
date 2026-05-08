@@ -12,200 +12,200 @@ extern crate alloc;
 
 use alloc::string::String;
 use alloc::format;
-use super::{kw, gfh, nk, apm,
-            T_, F_, AK_, AO_, AW_, O_, AAH_};
+use super::{eh, bly, ew, qu,
+            P_, F_, AC_, AK_, AN_, M_, NF_};
 
 
 pub struct HardwareState {
     
-    pub jc: usize,
+    pub scroll: usize,
     
-    pub gdn: u32,
-    pub afa: usize,
-    pub aul: usize,
-    pub eds: u64,
-    pub cnn: u64,
-    pub dmj: usize,
-    pub cok: u64,
-    pub dpr: u64,
-    pub czi: u64,
-    pub ltj: usize,
-    pub etu: usize,
-    pub ivq: f32,
-    pub mmk: u64,
-    pub kmf: u64,
+    pub cpu_pct: u32,
+    pub heap_used: usize,
+    pub heap_total: usize,
+    pub irq_rate: u64,
+    pub uptime_secs: u64,
+    pub task_count: usize,
+    pub alloc_count: u64,
+    pub dealloc_count: u64,
+    pub live_allocs: u64,
+    pub peak_heap: usize,
+    pub largest_alloc: usize,
+    pub frag_pct: f32,
+    pub total_phys_mb: u64,
+    pub ctx_switches: u64,
     
-    ehh: u64,
+    refresh_counter: u64,
 }
 
 impl HardwareState {
     pub fn new() -> Self {
         Self {
-            jc: 0,
-            gdn: 0,
-            afa: 0,
-            aul: 0,
-            eds: 0,
-            cnn: 0,
-            dmj: 0,
-            cok: 0,
-            dpr: 0,
-            czi: 0,
-            ltj: 0,
-            etu: 0,
-            ivq: 0.0,
-            mmk: 0,
-            kmf: 0,
-            ehh: 0,
+            scroll: 0,
+            cpu_pct: 0,
+            heap_used: 0,
+            heap_total: 0,
+            irq_rate: 0,
+            uptime_secs: 0,
+            task_count: 0,
+            alloc_count: 0,
+            dealloc_count: 0,
+            live_allocs: 0,
+            peak_heap: 0,
+            largest_alloc: 0,
+            frag_pct: 0.0,
+            total_phys_mb: 0,
+            ctx_switches: 0,
+            refresh_counter: 0,
         }
     }
     
     
-    pub fn qs(&mut self) {
-        self.ehh += 1;
-        if self.ehh % 15 != 0 {
+    pub fn update(&mut self) {
+        self.refresh_counter += 1;
+        if self.refresh_counter % 15 != 0 {
             return;
         }
         
         
-        self.gdn = crate::devtools::rpz();
+        self.cpu_pct = crate::devtools::kyu();
         
         
-        let mem = crate::devtools::jfu();
-        self.afa = mem.iqb;
-        self.aul = mem.aul;
-        self.cok = mem.cok;
-        self.dpr = mem.dpr;
-        self.czi = mem.czi;
-        self.ltj = mem.gpe;
-        self.etu = mem.etu;
-        self.ivq = mem.hki;
+        let mem = crate::devtools::dbe();
+        self.heap_used = mem.current_heap_used;
+        self.heap_total = mem.heap_total;
+        self.alloc_count = mem.alloc_count;
+        self.dealloc_count = mem.dealloc_count;
+        self.live_allocs = mem.live_allocs;
+        self.peak_heap = mem.peak_heap_used;
+        self.largest_alloc = mem.largest_alloc;
+        self.frag_pct = mem.fragmentation_pct;
         
         
-        self.mmk = crate::memory::fxc() / (1024 * 1024);
+        self.total_phys_mb = crate::memory::ceo() / (1024 * 1024);
         
         
-        self.eds = crate::devtools::eds();
+        self.irq_rate = crate::devtools::irq_rate();
         
         
-        self.cnn = crate::time::cnn();
+        self.uptime_secs = crate::time::uptime_secs();
         
         
-        let xkz = crate::trace::cm();
-        self.kmf = xkz.nrh;
+        let pmn = crate::trace::stats();
+        self.ctx_switches = pmn.events_recorded;
         
         
-        self.dmj = crate::scheduler::cm().exk;
+        self.task_count = crate::scheduler::stats().ready_count;
     }
     
     
-    pub fn nvo(&mut self) {
-        self.ehh = 14;
+    pub fn force_refresh(&mut self) {
+        self.refresh_counter = 14;
     }
     
-    pub fn vr(&mut self, bs: u8) {
-        use crate::keyboard::{V_, U_};
-        match bs {
-            V_ => self.jc = self.jc.ao(1),
-            U_ => self.jc += 1,
+    pub fn handle_key(&mut self, key: u8) {
+        use crate::keyboard::{T_, S_};
+        match key {
+            T_ => self.scroll = self.scroll.saturating_sub(1),
+            S_ => self.scroll += 1,
             _ => {}
         }
     }
 
     
-    pub fn ago(&mut self, yap: i32, alk: i32, dxx: u32, dxv: u32) {
-        let kq = apm() + 2;
-        if kq <= 0 { return; }
+    pub fn handle_click(&mut self, _local_x: i32, ta: i32, _w: u32, _h: u32) {
+        let ee = qu() + 2;
+        if ee <= 0 { return; }
         
-        let br = (alk / kq) as usize;
-        if br > 2 {
+        let row = (ta / ee) as usize;
+        if row > 2 {
             
-            self.jc = br.ao(3);
+            self.scroll = row.saturating_sub(3);
         }
     }
 }
 
 
-pub fn po(g: &HardwareState, b: i32, c: i32, d: u32, i: u32) {
-    let dt = nk();
-    let kq = apm() + 2; 
-    let tn = 8u32;
+pub fn draw(state: &HardwareState, x: i32, y: i32, w: u32, h: u32) {
+    let aq = ew();
+    let ee = qu() + 2; 
+    let hs = 8u32;
     
-    let aem = if dt > 0 { (d as i32 / dt) as usize } else { 30 };
-    let mut ae = c;
-    
-    
-    kw(b, ae, "CPU", O_);
-    let ngn = format!("{}%", g.gdn);
-    let ngm = if g.gdn > 80 { AW_ } else if g.gdn > 50 { AO_ } else { AK_ };
-    let dis = b + d as i32 - (ngn.len() as i32 * dt) - 4;
-    kw(dis, ae, &ngn, ngm);
-    ae += kq;
-    gfh(b, ae, d.ao(4), tn, g.gdn, ngm, 0xFF21262D);
-    ae += tn as i32 + kq / 2;
+    let nd = if aq > 0 { (w as i32 / aq) as usize } else { 30 };
+    let mut u = y;
     
     
-    kw(b, ae, "Heap", O_);
-    let mol = g.afa / (1024 * 1024);
-    let jtt = g.aul / (1024 * 1024);
-    let bne = if g.aul > 0 {
-        ((g.afa as u64 * 100) / g.aul as u64) as u32
+    eh(x, u, "CPU", M_);
+    let hof = format!("{}%", state.cpu_pct);
+    let hoe = if state.cpu_pct > 80 { AN_ } else if state.cpu_pct > 50 { AK_ } else { AC_ };
+    let bhn = x + w as i32 - (hof.len() as i32 * aq) - 4;
+    eh(bhn, u, &hof, hoe);
+    u += ee;
+    bly(x, u, w.saturating_sub(4), hs, state.cpu_pct, hoe, 0xFF21262D);
+    u += hs as i32 + ee / 2;
+    
+    
+    eh(x, u, "Heap", M_);
+    let haw = state.heap_used / (1024 * 1024);
+    let total_mb = state.heap_total / (1024 * 1024);
+    let heap_pct = if state.heap_total > 0 {
+        ((state.heap_used as u64 * 100) / state.heap_total as u64) as u32
     } else { 0 };
-    let obk = format!("{}/{}MB ({}%)", mol, jtt, bne);
-    let tpf = b + d as i32 - (obk.len() as i32 * dt) - 4;
-    let obj = if bne > 85 { AW_ } else if bne > 60 { AO_ } else { AK_ };
-    kw(tpf, ae, &obk, obj);
-    ae += kq;
-    gfh(b, ae, d.ao(4), tn, bne, obj, 0xFF21262D);
-    ae += tn as i32 + kq / 2;
+    let iem = format!("{}/{}MB ({}%)", haw, total_mb, heap_pct);
+    let mlv = x + w as i32 - (iem.len() as i32 * aq) - 4;
+    let iel = if heap_pct > 85 { AN_ } else if heap_pct > 60 { AK_ } else { AC_ };
+    eh(mlv, u, &iem, iel);
+    u += ee;
+    bly(x, u, w.saturating_sub(4), hs, heap_pct, iel, 0xFF21262D);
+    u += hs as i32 + ee / 2;
     
     
-    let cm: [(&str, String, u32); 10] = [
-        ("Uptime", nvt(g.cnn), T_),
-        ("Physical RAM", format!("{} MB", g.mmk), T_),
-        ("IRQ Rate", format!("{}/sec", g.eds), AO_),
-        ("Tasks", format!("{}", g.dmj), T_),
-        ("Trace Events", format!("{}", g.kmf), F_),
-        ("Live Allocs", format!("{}", g.czi), AK_),
-        ("Total Allocs", format!("{}", g.cok), F_),
-        ("Peak Heap", format!("{} KB", g.ltj / 1024), T_),
-        ("Largest Alloc", svs(g.etu), T_),
-        ("Fragmentation", format!("{:.1}%", g.ivq), 
-            if g.ivq > 50.0 { AW_ } else { F_ }),
+    let stats: [(&str, String, u32); 10] = [
+        ("Uptime", hzr(state.uptime_secs), P_),
+        ("Physical RAM", format!("{} MB", state.total_phys_mb), P_),
+        ("IRQ Rate", format!("{}/sec", state.irq_rate), AK_),
+        ("Tasks", format!("{}", state.task_count), P_),
+        ("Trace Events", format!("{}", state.ctx_switches), F_),
+        ("Live Allocs", format!("{}", state.live_allocs), AC_),
+        ("Total Allocs", format!("{}", state.alloc_count), F_),
+        ("Peak Heap", format!("{} KB", state.peak_heap / 1024), P_),
+        ("Largest Alloc", cxz(state.largest_alloc), P_),
+        ("Fragmentation", format!("{:.1}%", state.frag_pct), 
+            if state.frag_pct > 50.0 { AN_ } else { F_ }),
     ];
     
-    let iw = ((i as i32 - (ae - c)) / kq) as usize;
-    let ay = g.jc.v(cm.len().ao(1));
-    let ci = (ay + iw).v(cm.len());
+    let visible = ((h as i32 - (u - y)) / ee) as usize;
+    let start = state.scroll.min(stats.len().saturating_sub(1));
+    let end = (start + visible).min(stats.len());
     
-    for a in ay..ci {
-        let (cu, ref bn, s) = cm[a];
-        kw(b + 4, ae, cu, F_);
-        let fp = b + d as i32 - (bn.len() as i32 * dt) - 4;
-        kw(fp, ae, bn, s);
-        ae += kq;
+    for i in start..end {
+        let (label, ref value, color) = stats[i];
+        eh(x + 4, u, label, F_);
+        let vx = x + w as i32 - (value.len() as i32 * aq) - 4;
+        eh(vx, u, value, color);
+        u += ee;
     }
 }
 
-fn nvt(tv: u64) -> String {
-    let i = tv / 3600;
-    let ef = (tv % 3600) / 60;
-    let e = tv % 60;
-    if i > 0 {
-        format!("{}h {:02}m {:02}s", i, ef, e)
-    } else if ef > 0 {
-        format!("{}m {:02}s", ef, e)
+fn hzr(im: u64) -> String {
+    let h = im / 3600;
+    let m = (im % 3600) / 60;
+    let j = im % 60;
+    if h > 0 {
+        format!("{}h {:02}m {:02}s", h, m, j)
+    } else if m > 0 {
+        format!("{}m {:02}s", m, j)
     } else {
-        format!("{}s", e)
+        format!("{}s", j)
     }
 }
 
-fn svs(bf: usize) -> String {
-    if bf >= 1024 * 1024 {
-        format!("{} MB", bf / (1024 * 1024))
-    } else if bf >= 1024 {
-        format!("{} KB", bf / 1024)
+fn cxz(bytes: usize) -> String {
+    if bytes >= 1024 * 1024 {
+        format!("{} MB", bytes / (1024 * 1024))
+    } else if bytes >= 1024 {
+        format!("{} KB", bytes / 1024)
     } else {
-        format!("{} B", bf)
+        format!("{} B", bytes)
     }
 }

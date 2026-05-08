@@ -95,122 +95,122 @@ pub enum TokenKind {
 pub struct Token {
     pub kind: TokenKind,
     pub line: usize,
-    pub column: usize,
+    pub col: usize,
 }
 
 /// Tokenize TrustLang source into a token stream
 pub fn tokenize(source: &str) -> Result<Vec<Token>, String> {
     let mut tokens = Vec::new();
     let chars: Vec<char> = source.chars().collect();
-    let mut position = 0;
+    let mut pos = 0;
     let mut line = 1;
-    let mut column = 1;
+    let mut col = 1;
 
-    while position < chars.len() {
-        let character = chars[position];
+    while pos < chars.len() {
+        let ch = chars[pos];
 
         // Skip whitespace
-        if character == ' ' || character == '\t' || character == '\r' {
-            position += 1;
-            column += 1;
+        if ch == ' ' || ch == '\t' || ch == '\r' {
+            pos += 1;
+            col += 1;
             continue;
         }
-        if character == '\n' {
-            position += 1;
+        if ch == '\n' {
+            pos += 1;
             line += 1;
-            column = 1;
+            col = 1;
             continue;
         }
 
         // Skip comments
-        if character == '/' && position + 1 < chars.len() {
-            if chars[position + 1] == '/' {
+        if ch == '/' && pos + 1 < chars.len() {
+            if chars[pos + 1] == '/' {
                 // Line comment
-                while position < chars.len() && chars[position] != '\n' { position += 1; }
+                while pos < chars.len() && chars[pos] != '\n' { pos += 1; }
                 continue;
             }
-            if chars[position + 1] == '*' {
+            if chars[pos + 1] == '*' {
                 // Block comment
-                position += 2; column += 2;
+                pos += 2; col += 2;
                 let mut depth = 1;
-                while position < chars.len() && depth > 0 {
-                    if chars[position] == '/' && position + 1 < chars.len() && chars[position + 1] == '*' {
-                        depth += 1; position += 1;
-                    } else if chars[position] == '*' && position + 1 < chars.len() && chars[position + 1] == '/' {
-                        depth -= 1; position += 1;
+                while pos < chars.len() && depth > 0 {
+                    if chars[pos] == '/' && pos + 1 < chars.len() && chars[pos + 1] == '*' {
+                        depth += 1; pos += 1;
+                    } else if chars[pos] == '*' && pos + 1 < chars.len() && chars[pos + 1] == '/' {
+                        depth -= 1; pos += 1;
                     }
-                    if chars[position] == '\n' { line += 1; column = 0; }
-                    position += 1; column += 1;
+                    if chars[pos] == '\n' { line += 1; col = 0; }
+                    pos += 1; col += 1;
                 }
                 continue;
             }
         }
 
-        let start_column = column;
+        let start_column = col;
 
         // Numbers
-        if character.is_ascii_digit() {
-            let start = position;
+        if ch.is_ascii_digit() {
+            let start = pos;
             let mut is_float = false;
-            while position < chars.len() && (chars[position].is_ascii_digit() || chars[position] == '.' || chars[position] == '_') {
-                if chars[position] == '.' {
+            while pos < chars.len() && (chars[pos].is_ascii_digit() || chars[pos] == '.' || chars[pos] == '_') {
+                if chars[pos] == '.' {
                     if is_float { break; }
                     // Check if it's .. (range operator)
-                    if position + 1 < chars.len() && chars[position + 1] == '.' { break; }
+                    if pos + 1 < chars.len() && chars[pos + 1] == '.' { break; }
                     is_float = true;
                 }
-                position += 1;
-                column += 1;
+                pos += 1;
+                col += 1;
             }
-            let number_str: String = chars[start..position].iter().filter(|&&c| c != '_').collect();
+            let number_str: String = chars[start..pos].iter().filter(|&&c| c != '_').collect();
             if is_float {
-                let value = parse_float(&number_str).map_error(|_| format!("L{}:{}: invalid float '{}'", line, start_column, number_str))?;
-                tokens.push(Token { kind: TokenKind::FloatLit(value), line, column: start_column });
+                let val = parse_float(&number_str).map_err(|_| format!("L{}:{}: invalid float '{}'", line, start_column, number_str))?;
+                tokens.push(Token { kind: TokenKind::FloatLit(val), line, col: start_column });
             } else {
-                let value = parse_int(&number_str).map_error(|_| format!("L{}:{}: invalid integer '{}'", line, start_column, number_str))?;
-                tokens.push(Token { kind: TokenKind::IntLit(value), line, column: start_column });
+                let val = parse_int(&number_str).map_err(|_| format!("L{}:{}: invalid integer '{}'", line, start_column, number_str))?;
+                tokens.push(Token { kind: TokenKind::IntLit(val), line, col: start_column });
             }
             continue;
         }
 
         // Strings
-        if character == '"' {
-            position += 1; column += 1;
+        if ch == '"' {
+            pos += 1; col += 1;
             let mut s = String::new();
-            while position < chars.len() && chars[position] != '"' {
-                if chars[position] == '\\' && position + 1 < chars.len() {
-                    position += 1; column += 1;
+            while pos < chars.len() && chars[pos] != '"' {
+                if chars[pos] == '\\' && pos + 1 < chars.len() {
+                    pos += 1; col += 1;
                                         // Correspondance de motifs — branchement exhaustif de Rust.
-match chars[position] {
+match chars[pos] {
                         'n' => s.push('\n'),
                         't' => s.push('\t'),
                         'r' => s.push('\r'),
                         '\\' => s.push('\\'),
                         '"' => s.push('"'),
                         '0' => s.push('\0'),
-                        _ => { s.push('\\'); s.push(chars[position]); }
+                        _ => { s.push('\\'); s.push(chars[pos]); }
                     }
                 } else {
-                    if chars[position] == '\n' { line += 1; column = 0; }
-                    s.push(chars[position]);
+                    if chars[pos] == '\n' { line += 1; col = 0; }
+                    s.push(chars[pos]);
                 }
-                position += 1; column += 1;
+                pos += 1; col += 1;
             }
-            if position >= chars.len() {
+            if pos >= chars.len() {
                 return Err(format!("L{}:{}: unterminated string", line, start_column));
             }
-            position += 1; column += 1; // skip closing "
-            tokens.push(Token { kind: TokenKind::StringLit(s), line, column: start_column });
+            pos += 1; col += 1; // skip closing "
+            tokens.push(Token { kind: TokenKind::StringLit(s), line, col: start_column });
             continue;
         }
 
         // Char literals (treated as i64)
-        if character == '\'' {
-            position += 1; column += 1;
-            let c = if position < chars.len() && chars[position] == '\\' {
-                position += 1; column += 1;
+        if ch == '\'' {
+            pos += 1; col += 1;
+            let c = if pos < chars.len() && chars[pos] == '\\' {
+                pos += 1; col += 1;
                                 // Correspondance de motifs — branchement exhaustif de Rust.
-match chars.get(position) {
+match chars.get(pos) {
                     Some('n') => '\n',
                     Some('t') => '\t',
                     Some('r') => '\r',
@@ -219,27 +219,27 @@ match chars.get(position) {
                     Some('\'') => '\'',
                     _ => return Err(format!("L{}:{}: invalid escape in char", line, start_column)),
                 }
-            } else if position < chars.len() {
-                chars[position]
+            } else if pos < chars.len() {
+                chars[pos]
             } else {
                 return Err(format!("L{}:{}: unterminated char", line, start_column));
             };
-            position += 1; column += 1;
-            if position >= chars.len() || chars[position] != '\'' {
+            pos += 1; col += 1;
+            if pos >= chars.len() || chars[pos] != '\'' {
                 return Err(format!("L{}:{}: unterminated char literal", line, start_column));
             }
-            position += 1; column += 1;
-            tokens.push(Token { kind: TokenKind::IntLit(c as i64), line, column: start_column });
+            pos += 1; col += 1;
+            tokens.push(Token { kind: TokenKind::IntLit(c as i64), line, col: start_column });
             continue;
         }
 
         // Identifiers & keywords
-        if character.is_ascii_alphabetic() || character == '_' {
-            let start = position;
-            while position < chars.len() && (chars[position].is_ascii_alphanumeric() || chars[position] == '_') {
-                position += 1; column += 1;
+        if ch.is_ascii_alphabetic() || ch == '_' {
+            let start = pos;
+            while pos < chars.len() && (chars[pos].is_ascii_alphanumeric() || chars[pos] == '_') {
+                pos += 1; col += 1;
             }
-            let word: String = chars[start..position].iter().collect();
+            let word: String = chars[start..pos].iter().collect();
             let kind = // Correspondance de motifs — branchement exhaustif de Rust.
 match word.as_str() {
                 "fn" => TokenKind::Fn,
@@ -265,13 +265,13 @@ match word.as_str() {
                 "str" => TokenKind::TypeStr,
                 _ => TokenKind::Ident(word),
             };
-            tokens.push(Token { kind, line, column: start_column });
+            tokens.push(Token { kind, line, col: start_column });
             continue;
         }
 
         // Two-char operators
-        if position + 1 < chars.len() {
-            let two: String = chars[position..position + 2].iter().collect();
+        if pos + 1 < chars.len() {
+            let two: String = chars[pos..pos + 2].iter().collect();
             let kind = // Correspondance de motifs — branchement exhaustif de Rust.
 match two.as_str() {
                 "==" => Some(TokenKind::EqEq),
@@ -292,15 +292,15 @@ match two.as_str() {
                 _ => None,
             };
             if let Some(k) = kind {
-                tokens.push(Token { kind: k, line, column: start_column });
-                position += 2; column += 2;
+                tokens.push(Token { kind: k, line, col: start_column });
+                pos += 2; col += 2;
                 continue;
             }
         }
 
         // Single-char operators & delimiters
         let kind = // Correspondance de motifs — branchement exhaustif de Rust.
-match character {
+match ch {
             '+' => TokenKind::Plus,
             '-' => TokenKind::Minus,
             '*' => TokenKind::Star,
@@ -323,27 +323,27 @@ match character {
             ';' => TokenKind::Semicolon,
             ':' => TokenKind::Colon,
             '.' => TokenKind::Dot,
-            _ => return Err(format!("L{}:{}: unexpected character '{}'", line, column, character)),
+            _ => return Err(format!("L{}:{}: unexpected character '{}'", line, col, ch)),
         };
-        tokens.push(Token { kind, line, column: start_column });
-        position += 1; column += 1;
+        tokens.push(Token { kind, line, col: start_column });
+        pos += 1; col += 1;
     }
 
-    tokens.push(Token { kind: TokenKind::Eof, line, column });
+    tokens.push(Token { kind: TokenKind::Eof, line, col });
     Ok(tokens)
 }
 
 /// Parse integer (no stdlib)
 fn parse_int(s: &str) -> Result<i64, ()> {
-    let mut value: i64 = 0;
+    let mut val: i64 = 0;
     let mut neg = false;
-    for (i, character) in s.chars().enumerate() {
-        if i == 0 && character == '-' { neg = true; continue; }
-        if !character.is_ascii_digit() { return Err(()); }
-        value = value.checked_mul(10).ok_or(())?;
-        value = value.checked_add((character as i64) - 48).ok_or(())?;
+    for (i, ch) in s.chars().enumerate() {
+        if i == 0 && ch == '-' { neg = true; continue; }
+        if !ch.is_ascii_digit() { return Err(()); }
+        val = val.checked_mul(10).ok_or(())?;
+        val = val.checked_add((ch as i64) - 48).ok_or(())?;
     }
-    Ok(if neg { -value } else { value })
+    Ok(if neg { -val } else { val })
 }
 
 /// Parse float (simple, no stdlib)
@@ -354,11 +354,11 @@ fn parse_float(s: &str) -> Result<f64, ()> {
     let mut in_frac = false;
     let mut neg = false;
 
-    for (i, character) in s.chars().enumerate() {
-        if i == 0 && character == '-' { neg = true; continue; }
-        if character == '.' { in_frac = true; continue; }
-        if !character.is_ascii_digit() { return Err(()); }
-        let d = (character as u8 - b'0') as f64;
+    for (i, ch) in s.chars().enumerate() {
+        if i == 0 && ch == '-' { neg = true; continue; }
+        if ch == '.' { in_frac = true; continue; }
+        if !ch.is_ascii_digit() { return Err(()); }
+        let d = (ch as u8 - b'0') as f64;
         if in_frac {
             frac_div *= 10.0;
             frac_part += d / frac_div;
@@ -367,6 +367,6 @@ fn parse_float(s: &str) -> Result<f64, ()> {
         }
     }
 
-    let value = int_part + frac_part;
-    Ok(if neg { -value } else { value })
+    let val = int_part + frac_part;
+    Ok(if neg { -val } else { val })
 }

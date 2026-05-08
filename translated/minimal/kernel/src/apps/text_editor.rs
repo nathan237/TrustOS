@@ -21,162 +21,162 @@ use alloc::format;
 
 
 #[derive(Clone)]
-struct Afe {
-    ak: Vec<String>,
-    gn: usize,
-    hn: usize,
+struct Nq {
+    lines: Vec<String>,
+    cursor_line: usize,
+    cursor_col: usize,
 }
 
 
 #[derive(Clone)]
 pub struct EditorState {
     
-    pub ak: Vec<String>,
+    pub lines: Vec<String>,
     
-    pub gn: usize,
+    pub cursor_line: usize,
     
-    pub hn: usize,
+    pub cursor_col: usize,
     
-    pub ug: usize,
+    pub scroll_y: usize,
     
-    pub cms: usize,
+    pub scroll_x: usize,
     
-    pub wn: Option<String>,
+    pub file_path: Option<String>,
     
-    pub no: bool,
+    pub dirty: bool,
     
-    pub eej: Language,
+    pub language: Language,
     
-    pub ccb: Option<String>,
+    pub status_message: Option<String>,
     
-    pub byk: u32,
+    pub blink_counter: u32,
     
-    bsu: Vec<Afe>,
+    undo_stack: Vec<Nq>,
     
-    jlv: Vec<Afe>,
+    redo_stack: Vec<Nq>,
     
-    pub amu: Option<(usize, usize)>,
+    pub selection_anchor: Option<(usize, usize)>,
     
-    pub cqn: Option<String>,
+    pub find_query: Option<String>,
     
-    pub dbe: Option<String>,
+    pub replace_text: Option<String>,
     
-    pub dhe: bool,
+    pub find_replace_mode: bool,
     
-    pub bbq: Vec<(usize, usize)>,
+    pub find_matches: Vec<(usize, usize)>,
     
-    pub cep: usize,
+    pub find_match_idx: usize,
     
-    pub dri: Option<String>,
+    pub goto_line_input: Option<String>,
     
-    pub hqt: Option<(usize, usize)>,
+    pub matching_bracket: Option<(usize, usize)>,
 }
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Language {
-    Adu,
+    Plain,
     Rust,
-    Aez,
-    Akd,
+    Toml,
+    Markdown,
     C,
-    Aea,
-    Acj,
+    Python,
+    JavaScript,
 }
 
 impl Language {
-    pub fn j(&self) -> &'static str {
+    pub fn name(&self) -> &'static str {
         match self {
-            Language::Adu => "Plain Text",
+            Language::Plain => "Plain Text",
             Language::Rust => "Rust",
-            Language::Aez => "TOML",
-            Language::Akd => "Markdown",
+            Language::Toml => "TOML",
+            Language::Markdown => "Markdown",
             Language::C => "C/C++",
-            Language::Aea => "Python",
-            Language::Acj => "JavaScript",
+            Language::Python => "Python",
+            Language::JavaScript => "JavaScript",
         }
     }
     
     
-    pub fn sxu(j: &str) -> Self {
-        if j.pp(".rs") { Language::Rust }
-        else if j.pp(".toml") { Language::Aez }
-        else if j.pp(".md") { Language::Akd }
-        else if j.pp(".c") || j.pp(".h") || j.pp(".cpp") { Language::C }
-        else if j.pp(".py") { Language::Aea }
-        else if j.pp(".js") || j.pp(".ts") { Language::Acj }
-        else { Language::Adu }
+    pub fn lze(name: &str) -> Self {
+        if name.ends_with(".rs") { Language::Rust }
+        else if name.ends_with(".toml") { Language::Toml }
+        else if name.ends_with(".md") { Language::Markdown }
+        else if name.ends_with(".c") || name.ends_with(".h") || name.ends_with(".cpp") { Language::C }
+        else if name.ends_with(".py") { Language::Python }
+        else if name.ends_with(".js") || name.ends_with(".ts") { Language::JavaScript }
+        else { Language::Plain }
     }
 }
 
 impl EditorState {
     pub fn new() -> Self {
         Self {
-            ak: alloc::vec![String::new()],
-            gn: 0,
-            hn: 0,
-            ug: 0,
-            cms: 0,
-            wn: None,
-            no: false,
-            eej: Language::Adu,
-            ccb: None,
-            byk: 0,
-            bsu: Vec::new(),
-            jlv: Vec::new(),
-            amu: None,
-            cqn: None,
-            dbe: None,
-            dhe: false,
-            bbq: Vec::new(),
-            cep: 0,
-            dri: None,
-            hqt: None,
+            lines: alloc::vec![String::new()],
+            cursor_line: 0,
+            cursor_col: 0,
+            scroll_y: 0,
+            scroll_x: 0,
+            file_path: None,
+            dirty: false,
+            language: Language::Plain,
+            status_message: None,
+            blink_counter: 0,
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
+            selection_anchor: None,
+            find_query: None,
+            replace_text: None,
+            find_replace_mode: false,
+            find_matches: Vec::new(),
+            find_match_idx: 0,
+            goto_line_input: None,
+            matching_bracket: None,
         }
     }
     
     
-    pub fn uhh(&mut self, text: &str) {
-        self.ak.clear();
-        for line in text.ak() {
-            self.ak.push(String::from(line));
+    pub fn load_text(&mut self, text: &str) {
+        self.lines.clear();
+        for line in text.lines() {
+            self.lines.push(String::from(line));
         }
-        if self.ak.is_empty() {
-            self.ak.push(String::new());
+        if self.lines.is_empty() {
+            self.lines.push(String::new());
         }
-        self.gn = 0;
-        self.hn = 0;
-        self.ug = 0;
-        self.no = false;
+        self.cursor_line = 0;
+        self.cursor_col = 0;
+        self.scroll_y = 0;
+        self.dirty = false;
     }
     
     
-    pub fn dsu(&mut self, path: &str) {
-        self.wn = Some(String::from(path));
-        self.eej = Language::sxu(path);
+    pub fn load_file(&mut self, path: &str) {
+        self.file_path = Some(String::from(path));
+        self.language = Language::lze(path);
         
-        let wo = if path.cj('/') {
+        let kg = if path.starts_with('/') {
             String::from(path)
         } else {
             format!("/{}", path)
         };
         
-        if let Ok(f) = crate::ramfs::fh(|fs| fs.mq(&wo).map(|bc| bc.ip())) {
-            if let Ok(text) = core::str::jg(&f) {
-                self.uhh(text);
+        if let Ok(data) = crate::ramfs::bh(|fs| fs.read_file(&kg).map(|d| d.to_vec())) {
+            if let Ok(text) = core::str::from_utf8(&data) {
+                self.load_text(text);
             } else {
-                self.ak = alloc::vec![String::from("(binary file — cannot edit)")];
+                self.lines = alloc::vec![String::from("(binary file — cannot edit)")];
             }
         } else {
             
-            self.ak = alloc::vec![String::new()];
+            self.lines = alloc::vec![String::new()];
         }
-        self.no = false;
+        self.dirty = false;
     }
     
     
-    pub fn mbr(&mut self) -> bool {
-        if let Some(ref path) = self.wn {
-            let wo = if path.cj('/') {
+    pub fn save(&mut self) -> bool {
+        if let Some(ref path) = self.file_path {
+            let kg = if path.starts_with('/') {
                 String::from(path.as_str())
             } else {
                 format!("/{}", path)
@@ -184,134 +184,134 @@ impl EditorState {
             
             
             let mut text = String::new();
-            for (a, line) in self.ak.iter().cf() {
-                text.t(line);
-                if a + 1 < self.ak.len() {
+            for (i, line) in self.lines.iter().enumerate() {
+                text.push_str(line);
+                if i + 1 < self.lines.len() {
                     text.push('\n');
                 }
             }
             
-            let result = crate::ramfs::fh(|fs| {
+            let result = crate::ramfs::bh(|fs| {
                 
-                if fs.mq(&wo).is_err() {
-                    let _ = fs.touch(&wo);
+                if fs.read_file(&kg).is_err() {
+                    let _ = fs.touch(&kg);
                 }
-                fs.ns(&wo, text.as_bytes())
+                fs.write_file(&kg, text.as_bytes())
             });
             
             if result.is_ok() {
-                self.no = false;
-                self.ccb = Some(format!("Saved: {}", path));
+                self.dirty = false;
+                self.status_message = Some(format!("Saved: {}", path));
                 crate::serial_println!("[TrustCode] Saved: {}", path);
                 
-                if let Ok(()) = crate::vfs::ns(&wo, text.as_bytes()) {
+                if let Ok(()) = crate::vfs::write_file(&kg, text.as_bytes()) {
                     crate::serial_println!("[TrustCode] Persisted to disk: {}", path);
                 }
                 return true;
             } else {
-                self.ccb = Some(format!("ERROR: Could not save {}", path));
+                self.status_message = Some(format!("ERROR: Could not save {}", path));
             }
         } else {
-            self.ccb = Some(String::from("No file path — use Ctrl+Shift+S"));
+            self.status_message = Some(String::from("No file path — use Ctrl+Shift+S"));
         }
         false
     }
     
     
-    fn bgp(&self) -> &str {
-        if self.gn < self.ak.len() {
-            &self.ak[self.gn]
+    fn current_line(&self) -> &str {
+        if self.cursor_line < self.lines.len() {
+            &self.lines[self.cursor_line]
         } else {
             ""
         }
     }
     
     
-    fn dow(&mut self) {
-        let len = if self.gn < self.ak.len() {
-            self.ak[self.gn].len()
+    fn clamp_cursor_col(&mut self) {
+        let len = if self.cursor_line < self.lines.len() {
+            self.lines[self.cursor_line].len()
         } else {
             0
         };
-        if self.hn > len {
-            self.hn = len;
+        if self.cursor_col > len {
+            self.cursor_col = len;
         }
     }
 
     
-    fn chn(&mut self) {
-        self.bsu.push(Afe {
-            ak: self.ak.clone(),
-            gn: self.gn,
-            hn: self.hn,
+    fn save_undo_state(&mut self) {
+        self.undo_stack.push(Nq {
+            lines: self.lines.clone(),
+            cursor_line: self.cursor_line,
+            cursor_col: self.cursor_col,
         });
         
-        if self.bsu.len() > 200 {
-            self.bsu.remove(0);
+        if self.undo_stack.len() > 200 {
+            self.undo_stack.remove(0);
         }
         
-        self.jlv.clear();
+        self.redo_stack.clear();
     }
 
     
-    fn ifu(&mut self) {
-        if let Some(cbx) = self.bsu.pop() {
+    fn undo(&mut self) {
+        if let Some(snapshot) = self.undo_stack.pop() {
             
-            self.jlv.push(Afe {
-                ak: self.ak.clone(),
-                gn: self.gn,
-                hn: self.hn,
+            self.redo_stack.push(Nq {
+                lines: self.lines.clone(),
+                cursor_line: self.cursor_line,
+                cursor_col: self.cursor_col,
             });
-            self.ak = cbx.ak;
-            self.gn = cbx.gn;
-            self.hn = cbx.hn;
-            self.no = true;
-            self.ccb = Some(String::from("Undo"));
+            self.lines = snapshot.lines;
+            self.cursor_line = snapshot.cursor_line;
+            self.cursor_col = snapshot.cursor_col;
+            self.dirty = true;
+            self.status_message = Some(String::from("Undo"));
         }
     }
 
     
-    fn vtm(&mut self) {
-        if let Some(cbx) = self.jlv.pop() {
+    fn redo(&mut self) {
+        if let Some(snapshot) = self.redo_stack.pop() {
             
-            self.bsu.push(Afe {
-                ak: self.ak.clone(),
-                gn: self.gn,
-                hn: self.hn,
+            self.undo_stack.push(Nq {
+                lines: self.lines.clone(),
+                cursor_line: self.cursor_line,
+                cursor_col: self.cursor_col,
             });
-            self.ak = cbx.ak;
-            self.gn = cbx.gn;
-            self.hn = cbx.hn;
-            self.no = true;
-            self.ccb = Some(String::from("Redo"));
+            self.lines = snapshot.lines;
+            self.cursor_line = snapshot.cursor_line;
+            self.cursor_col = snapshot.cursor_col;
+            self.dirty = true;
+            self.status_message = Some(String::from("Redo"));
         }
     }
 
     
     
-    pub fn hll(&self) -> Option<(usize, usize, usize, usize)> {
-        let (al, jyv) = self.amu?;
-        let (bl, atw) = (self.gn, self.hn);
-        if (al, jyv) <= (bl, atw) {
-            Some((al, jyv, bl, atw))
+    pub fn get_selection_range(&self) -> Option<(usize, usize, usize, usize)> {
+        let (al, ac) = self.selection_anchor?;
+        let (bl, bc) = (self.cursor_line, self.cursor_col);
+        if (al, ac) <= (bl, bc) {
+            Some((al, ac, bl, bc))
         } else {
-            Some((bl, atw, al, jyv))
+            Some((bl, bc, al, ac))
         }
     }
 
     
-    fn phs(&self) -> Option<String> {
-        let (aks, jt, ij, ec) = self.hll()?;
+    fn selected_text(&self) -> Option<String> {
+        let (sl, dr, el, ec) = self.get_selection_range()?;
         let mut result = String::new();
-        for dm in aks..=ij {
-            if dm >= self.ak.len() { break; }
-            let line = &self.ak[dm];
-            let ay = if dm == aks { jt.v(line.len()) } else { 0 };
-            let ci = if dm == ij { ec.v(line.len()) } else { line.len() };
-            if ay <= ci {
-                result.t(&line[ay..ci]);
+        for l in sl..=el {
+            if l >= self.lines.len() { break; }
+            let line = &self.lines[l];
+            let start = if l == sl { dr.min(line.len()) } else { 0 };
+            let end = if l == el { ec.min(line.len()) } else { line.len() };
+            if start <= end {
+                result.push_str(&line[start..end]);
             }
-            if dm < ij {
+            if l < el {
                 result.push('\n');
             }
         }
@@ -319,61 +319,61 @@ impl EditorState {
     }
 
     
-    fn gej(&mut self) {
-        if let Some((aks, jt, ij, ec)) = self.hll() {
-            self.chn();
-            if aks == ij {
+    fn delete_selection(&mut self) {
+        if let Some((sl, dr, el, ec)) = self.get_selection_range() {
+            self.save_undo_state();
+            if sl == el {
                 
-                if aks < self.ak.len() {
-                    let ci = ec.v(self.ak[aks].len());
-                    let ay = jt.v(ci);
-                    self.ak[aks] = format!("{}{}", &self.ak[aks][..ay], &self.ak[aks][ci..]);
+                if sl < self.lines.len() {
+                    let end = ec.min(self.lines[sl].len());
+                    let start = dr.min(end);
+                    self.lines[sl] = format!("{}{}", &self.lines[sl][..start], &self.lines[sl][end..]);
                 }
             } else {
                 
-                if ij < self.ak.len() {
-                    let ddv = if ec <= self.ak[ij].len() {
-                        String::from(&self.ak[ij][ec..])
+                if el < self.lines.len() {
+                    let beo = if ec <= self.lines[el].len() {
+                        String::from(&self.lines[el][ec..])
                     } else {
                         String::new()
                     };
                     
-                    let adx = if jt <= self.ak[aks].len() {
-                        String::from(&self.ak[aks][..jt])
+                    let nm = if dr <= self.lines[sl].len() {
+                        String::from(&self.lines[sl][..dr])
                     } else {
-                        self.ak[aks].clone()
+                        self.lines[sl].clone()
                     };
-                    self.ak[aks] = format!("{}{}", adx, ddv);
+                    self.lines[sl] = format!("{}{}", nm, beo);
                     
-                    let vuv = ij - aks;
-                    for _ in 0..vuv {
-                        if aks + 1 < self.ak.len() {
-                            self.ak.remove(aks + 1);
+                    let oex = el - sl;
+                    for _ in 0..oex {
+                        if sl + 1 < self.lines.len() {
+                            self.lines.remove(sl + 1);
                         }
                     }
                 }
             }
-            self.gn = aks;
-            self.hn = jt;
-            self.amu = None;
-            self.no = true;
+            self.cursor_line = sl;
+            self.cursor_col = dr;
+            self.selection_anchor = None;
+            self.dirty = true;
         }
     }
 
     
-    fn jus(&mut self) {
-        self.bbq.clear();
-        if let Some(ref query) = self.cqn {
+    fn update_find_matches(&mut self) {
+        self.find_matches.clear();
+        if let Some(ref query) = self.find_query {
             if query.is_empty() { return; }
-            let fm = query.clone();
-            for (atd, line) in self.ak.iter().cf() {
-                let mut ay = 0;
-                while ay + fm.len() <= line.len() {
-                    if &line[ay..ay + fm.len()] == fm.as_str() {
-                        self.bbq.push((atd, ay));
-                        ay += fm.len().am(1);
+            let q = query.clone();
+            for (xf, line) in self.lines.iter().enumerate() {
+                let mut start = 0;
+                while start + q.len() <= line.len() {
+                    if &line[start..start + q.len()] == q.as_str() {
+                        self.find_matches.push((xf, start));
+                        start += q.len().max(1);
                     } else {
-                        ay += 1;
+                        start += 1;
                     }
                 }
             }
@@ -381,81 +381,81 @@ impl EditorState {
     }
 
     
-    fn kwf(&mut self) {
-        if self.bbq.is_empty() { return; }
-        self.cep = (self.cep + 1) % self.bbq.len();
-        let (line, bj) = self.bbq[self.cep];
-        self.gn = line;
-        self.hn = bj;
-        self.bdz();
+    fn find_next(&mut self) {
+        if self.find_matches.is_empty() { return; }
+        self.find_match_idx = (self.find_match_idx + 1) % self.find_matches.len();
+        let (line, col) = self.find_matches[self.find_match_idx];
+        self.cursor_line = line;
+        self.cursor_col = col;
+        self.ensure_cursor_visible();
     }
 
     
-    fn yqs(&mut self) {
-        if self.bbq.is_empty() { return; }
-        if self.cep == 0 {
-            self.cep = self.bbq.len() - 1;
+    fn qfu(&mut self) {
+        if self.find_matches.is_empty() { return; }
+        if self.find_match_idx == 0 {
+            self.find_match_idx = self.find_matches.len() - 1;
         } else {
-            self.cep -= 1;
+            self.find_match_idx -= 1;
         }
-        let (line, bj) = self.bbq[self.cep];
-        self.gn = line;
-        self.hn = bj;
-        self.bdz();
+        let (line, col) = self.find_matches[self.find_match_idx];
+        self.cursor_line = line;
+        self.cursor_col = col;
+        self.ensure_cursor_visible();
     }
 
     
-    fn vxg(&mut self) {
-        if self.bbq.is_empty() { return; }
-        let w = self.cep.v(self.bbq.len() - 1);
-        let (line, bj) = self.bbq[w];
-        let query = self.cqn.clone();
-        let lzi = self.dbe.clone();
-        if let (Some(fm), Some(jmc)) = (query, lzi) {
-            if line < self.ak.len() && bj + fm.len() <= self.ak[line].len() {
-                self.chn();
-                let jkq = fm.len();
-                self.ak[line] = format!("{}{}{}", &self.ak[line][..bj], jmc, &self.ak[line][bj + jkq..]);
-                self.no = true;
-                self.jus();
-                self.gn = line;
-                self.hn = bj + jmc.len();
+    fn replace_current(&mut self) {
+        if self.find_matches.is_empty() { return; }
+        let idx = self.find_match_idx.min(self.find_matches.len() - 1);
+        let (line, col) = self.find_matches[idx];
+        let query = self.find_query.clone();
+        let gre = self.replace_text.clone();
+        if let (Some(q), Some(rep)) = (query, gre) {
+            if line < self.lines.len() && col + q.len() <= self.lines[line].len() {
+                self.save_undo_state();
+                let exi = q.len();
+                self.lines[line] = format!("{}{}{}", &self.lines[line][..col], rep, &self.lines[line][col + exi..]);
+                self.dirty = true;
+                self.update_find_matches();
+                self.cursor_line = line;
+                self.cursor_col = col + rep.len();
             }
         }
     }
 
     
-    fn vxf(&mut self) {
-        if self.bbq.is_empty() { return; }
-        let query = self.cqn.clone();
-        let lzi = self.dbe.clone();
-        if let (Some(fm), Some(jmc)) = (query, lzi) {
-            self.chn();
-            for line in self.ak.el() {
+    fn replace_all(&mut self) {
+        if self.find_matches.is_empty() { return; }
+        let query = self.find_query.clone();
+        let gre = self.replace_text.clone();
+        if let (Some(q), Some(rep)) = (query, gre) {
+            self.save_undo_state();
+            for line in self.lines.iter_mut() {
                 let mut result = String::new();
-                let mut ay = 0;
-                while ay < line.len() {
-                    if ay + fm.len() <= line.len() && &line[ay..ay + fm.len()] == fm.as_str() {
-                        result.t(&jmc);
-                        ay += fm.len();
+                let mut start = 0;
+                while start < line.len() {
+                    if start + q.len() <= line.len() && &line[start..start + q.len()] == q.as_str() {
+                        result.push_str(&rep);
+                        start += q.len();
                     } else {
-                        if let Some(bm) = line.as_bytes().get(ay) {
-                            result.push(*bm as char);
+                        if let Some(ch) = line.as_bytes().get(start) {
+                            result.push(*ch as char);
                         }
-                        ay += 1;
+                        start += 1;
                     }
                 }
                 *line = result;
             }
-            self.no = true;
-            self.jus();
-            self.ccb = Some(String::from("Replaced all"));
+            self.dirty = true;
+            self.update_find_matches();
+            self.status_message = Some(String::from("Replaced all"));
         }
     }
     
     
-    pub fn zat(&self) -> usize {
-        self.ak.len()
+    pub fn ikd(&self) -> usize {
+        self.lines.len()
     }
     
     
@@ -463,73 +463,73 @@ impl EditorState {
     
     
     
-    pub fn vr(&mut self, bs: u8) -> bool {
+    pub fn handle_key(&mut self, key: u8) -> bool {
         use crate::keyboard::*;
         
-        self.byk = 0; 
+        self.blink_counter = 0; 
         
         
-        if self.ccb.is_some() && bs != 0x13 { 
+        if self.status_message.is_some() && key != 0x13 { 
             
         }
         
         
-        if self.cqn.is_some() {
-            match bs {
+        if self.find_query.is_some() {
+            match key {
                 0x1B => { 
-                    self.cqn = None;
-                    self.dbe = None;
-                    self.dhe = false;
-                    self.bbq.clear();
+                    self.find_query = None;
+                    self.replace_text = None;
+                    self.find_replace_mode = false;
+                    self.find_matches.clear();
                     return true;
                 }
                 0x0D | 0x0A => { 
-                    if self.dhe {
-                        if let Some(ref ycp) = self.dbe {
-                            self.vxg();
+                    if self.find_replace_mode {
+                        if let Some(ref _rt) = self.replace_text {
+                            self.replace_current();
                         }
                     } else {
-                        self.kwf();
+                        self.find_next();
                     }
                     return true;
                 }
                 0x09 => { 
-                    if self.dbe.is_some() {
-                        self.dhe = !self.dhe;
+                    if self.replace_text.is_some() {
+                        self.find_replace_mode = !self.find_replace_mode;
                     }
                     return true;
                 }
                 0x08 => { 
-                    if self.dhe {
-                        if let Some(ref mut dbl) = self.dbe {
-                            dbl.pop();
+                    if self.find_replace_mode {
+                        if let Some(ref mut bdm) = self.replace_text {
+                            bdm.pop();
                         }
-                    } else if let Some(ref mut fm) = self.cqn {
-                        fm.pop();
+                    } else if let Some(ref mut q) = self.find_query {
+                        q.pop();
                     }
-                    self.jus();
+                    self.update_find_matches();
                     return true;
                 }
                 0x01 => { 
-                    self.vxf();
+                    self.replace_all();
                     return true;
                 }
-                r if r >= 0x20 && r < 0x7F => {
-                    if self.dhe {
-                        if let Some(ref mut dbl) = self.dbe {
-                            dbl.push(r as char);
+                c if c >= 0x20 && c < 0x7F => {
+                    if self.find_replace_mode {
+                        if let Some(ref mut bdm) = self.replace_text {
+                            bdm.push(c as char);
                         }
-                    } else if let Some(ref mut fm) = self.cqn {
-                        fm.push(r as char);
+                    } else if let Some(ref mut q) = self.find_query {
+                        q.push(c as char);
                     }
-                    self.jus();
+                    self.update_find_matches();
                     
-                    if !self.bbq.is_empty() {
-                        self.cep = 0;
-                        let (line, bj) = self.bbq[0];
-                        self.gn = line;
-                        self.hn = bj;
-                        self.bdz();
+                    if !self.find_matches.is_empty() {
+                        self.find_match_idx = 0;
+                        let (line, col) = self.find_matches[0];
+                        self.cursor_line = line;
+                        self.cursor_col = col;
+                        self.ensure_cursor_visible();
                     }
                     return true;
                 }
@@ -538,37 +538,37 @@ impl EditorState {
         }
         
         
-        if self.dri.is_some() {
-            match bs {
+        if self.goto_line_input.is_some() {
+            match key {
                 0x1B => { 
-                    self.dri = None;
+                    self.goto_line_input = None;
                     return true;
                 }
                 0x0D | 0x0A => { 
-                    if let Some(ref input) = self.dri {
-                        if let Ok(csd) = input.parse::<usize>() {
-                            if csd > 0 && csd <= self.ak.len() {
-                                self.gn = csd - 1;
-                                self.hn = 0;
-                                self.bdz();
-                                self.ccb = Some(format!("Go to line {}", csd));
+                    if let Some(ref input) = self.goto_line_input {
+                        if let Ok(axw) = input.parse::<usize>() {
+                            if axw > 0 && axw <= self.lines.len() {
+                                self.cursor_line = axw - 1;
+                                self.cursor_col = 0;
+                                self.ensure_cursor_visible();
+                                self.status_message = Some(format!("Go to line {}", axw));
                             } else {
-                                self.ccb = Some(format!("Invalid line (1-{})", self.ak.len()));
+                                self.status_message = Some(format!("Invalid line (1-{})", self.lines.len()));
                             }
                         }
                     }
-                    self.dri = None;
+                    self.goto_line_input = None;
                     return true;
                 }
                 0x08 => { 
-                    if let Some(ref mut input) = self.dri {
+                    if let Some(ref mut input) = self.goto_line_input {
                         input.pop();
                     }
                     return true;
                 }
-                r if r >= b'0' && r <= b'9' => {
-                    if let Some(ref mut input) = self.dri {
-                        input.push(r as char);
+                c if c >= b'0' && c <= b'9' => {
+                    if let Some(ref mut input) = self.goto_line_input {
+                        input.push(c as char);
                     }
                     return true;
                 }
@@ -576,305 +576,305 @@ impl EditorState {
             }
         }
         
-        let bsk = crate::keyboard::alh(0x2A) || crate::keyboard::alh(0x36);
+        let akm = crate::keyboard::sx(0x2A) || crate::keyboard::sx(0x36);
         
-        match bs {
+        match key {
             
             0x13 => {
-                self.mbr();
+                self.save();
                 return true;
             }
             
             
             0x06 => {
-                self.cqn = Some(String::new());
-                self.dbe = None;
-                self.dhe = false;
-                self.bbq.clear();
-                self.cep = 0;
+                self.find_query = Some(String::new());
+                self.replace_text = None;
+                self.find_replace_mode = false;
+                self.find_matches.clear();
+                self.find_match_idx = 0;
                 return true;
             }
             
             
             0x12 => {
-                self.cqn = Some(String::new());
-                self.dbe = Some(String::new());
-                self.dhe = false;
-                self.bbq.clear();
-                self.cep = 0;
+                self.find_query = Some(String::new());
+                self.replace_text = Some(String::new());
+                self.find_replace_mode = false;
+                self.find_matches.clear();
+                self.find_match_idx = 0;
                 return true;
             }
             
             
             0x1A => {
-                self.ifu();
-                self.bdz();
+                self.undo();
+                self.ensure_cursor_visible();
                 return true;
             }
             
             
             0x19 => {
-                self.vtm();
-                self.bdz();
+                self.redo();
+                self.ensure_cursor_visible();
                 return true;
             }
             
             
             0x07 => {
-                self.dri = Some(String::new());
+                self.goto_line_input = Some(String::new());
                 return true;
             }
             
             
-            AYA_ => {
-                self.xit();
+            BAB_ => {
+                self.toggle_comment();
                 return true;
             }
             
             
-            AXZ_ => {
-                self.rvh();
+            BAA_ => {
+                self.delete_current_line();
                 return true;
             }
             
             
-            AXY_ => {
-                self.shi();
+            AZZ_ => {
+                self.duplicate_line();
                 return true;
             }
             
             
-            AXV_ => {
-                self.upv();
+            AZW_ => {
+                self.move_line_up();
                 return true;
             }
             
             
-            AXU_ => {
-                self.upu();
+            AZV_ => {
+                self.move_line_down();
                 return true;
             }
             
             
-            AXW_ => {
-                if bsk && self.amu.is_none() {
-                    self.amu = Some((self.gn, self.hn));
-                } else if !bsk {
-                    self.amu = None;
+            AZX_ => {
+                if akm && self.selection_anchor.is_none() {
+                    self.selection_anchor = Some((self.cursor_line, self.cursor_col));
+                } else if !akm {
+                    self.selection_anchor = None;
                 }
-                self.xvc();
-                self.bdz();
+                self.word_left();
+                self.ensure_cursor_visible();
                 return true;
             }
             
             
-            AXX_ => {
-                if bsk && self.amu.is_none() {
-                    self.amu = Some((self.gn, self.hn));
-                } else if !bsk {
-                    self.amu = None;
+            AZY_ => {
+                if akm && self.selection_anchor.is_none() {
+                    self.selection_anchor = Some((self.cursor_line, self.cursor_col));
+                } else if !akm {
+                    self.selection_anchor = None;
                 }
-                self.xvd();
-                self.bdz();
+                self.word_right();
+                self.ensure_cursor_visible();
                 return true;
             }
             
             
             0x01 => {
-                self.amu = Some((0, 0));
-                let gkv = self.ak.len().ao(1);
-                let ucd = if gkv < self.ak.len() { self.ak[gkv].len() } else { 0 };
-                self.gn = gkv;
-                self.hn = ucd;
-                self.ccb = Some(String::from("Select All"));
+                self.selection_anchor = Some((0, 0));
+                let dah = self.lines.len().saturating_sub(1);
+                let mwk = if dah < self.lines.len() { self.lines[dah].len() } else { 0 };
+                self.cursor_line = dah;
+                self.cursor_col = mwk;
+                self.status_message = Some(String::from("Select All"));
                 return true;
             }
             
             
             0x03 => {
-                if let Some(text) = self.phs() {
-                    crate::keyboard::eno(&text);
-                    self.ccb = Some(String::from("Copied"));
+                if let Some(text) = self.selected_text() {
+                    crate::keyboard::byb(&text);
+                    self.status_message = Some(String::from("Copied"));
                 }
                 return true;
             }
             
             
             0x18 => {
-                if let Some(text) = self.phs() {
-                    crate::keyboard::eno(&text);
-                    self.gej();
-                    self.ccb = Some(String::from("Cut"));
+                if let Some(text) = self.selected_text() {
+                    crate::keyboard::byb(&text);
+                    self.delete_selection();
+                    self.status_message = Some(String::from("Cut"));
                 }
                 return true;
             }
             
             
             0x16 => {
-                if let Some(text) = crate::keyboard::ndn() {
+                if let Some(text) = crate::keyboard::hln() {
                     
-                    if self.amu.is_some() {
-                        self.gej();
+                    if self.selection_anchor.is_some() {
+                        self.delete_selection();
                     }
-                    self.chn();
+                    self.save_undo_state();
                     
-                    for bm in text.bw() {
-                        if bm == '\n' {
+                    for ch in text.chars() {
+                        if ch == '\n' {
                             
-                            if self.gn < self.ak.len() {
-                                self.hn = self.hn.v(self.ak[self.gn].len());
-                                let kr = self.ak[self.gn].pmk(self.hn);
-                                self.gn += 1;
-                                self.ak.insert(self.gn, kr);
-                                self.hn = 0;
+                            if self.cursor_line < self.lines.len() {
+                                self.cursor_col = self.cursor_col.min(self.lines[self.cursor_line].len());
+                                let ef = self.lines[self.cursor_line].split_off(self.cursor_col);
+                                self.cursor_line += 1;
+                                self.lines.insert(self.cursor_line, ef);
+                                self.cursor_col = 0;
                             }
-                        } else if bm >= ' ' && bm as u32 <= 0x7E {
-                            if self.gn < self.ak.len() && self.hn <= self.ak[self.gn].len() {
-                                self.ak[self.gn].insert(self.hn, bm);
-                                self.hn += 1;
+                        } else if ch >= ' ' && ch as u32 <= 0x7E {
+                            if self.cursor_line < self.lines.len() && self.cursor_col <= self.lines[self.cursor_line].len() {
+                                self.lines[self.cursor_line].insert(self.cursor_col, ch);
+                                self.cursor_col += 1;
                             }
                         }
                     }
-                    self.no = true;
-                    self.ccb = Some(String::from("Pasted"));
+                    self.dirty = true;
+                    self.status_message = Some(String::from("Pasted"));
                 }
-                self.bdz();
+                self.ensure_cursor_visible();
                 return true;
             }
             
             
-            V_ => {
-                if bsk && self.amu.is_none() {
-                    self.amu = Some((self.gn, self.hn));
-                } else if !bsk {
-                    self.amu = None;
+            T_ => {
+                if akm && self.selection_anchor.is_none() {
+                    self.selection_anchor = Some((self.cursor_line, self.cursor_col));
+                } else if !akm {
+                    self.selection_anchor = None;
                 }
-                if self.gn > 0 {
-                    self.gn -= 1;
-                    self.dow();
+                if self.cursor_line > 0 {
+                    self.cursor_line -= 1;
+                    self.clamp_cursor_col();
                 }
-                self.bdz();
+                self.ensure_cursor_visible();
                 return true;
             }
-            U_ => {
-                if bsk && self.amu.is_none() {
-                    self.amu = Some((self.gn, self.hn));
-                } else if !bsk {
-                    self.amu = None;
+            S_ => {
+                if akm && self.selection_anchor.is_none() {
+                    self.selection_anchor = Some((self.cursor_line, self.cursor_col));
+                } else if !akm {
+                    self.selection_anchor = None;
                 }
-                if self.gn + 1 < self.ak.len() {
-                    self.gn += 1;
-                    self.dow();
+                if self.cursor_line + 1 < self.lines.len() {
+                    self.cursor_line += 1;
+                    self.clamp_cursor_col();
                 }
-                self.bdz();
-                return true;
-            }
-            AH_ => {
-                if bsk && self.amu.is_none() {
-                    self.amu = Some((self.gn, self.hn));
-                } else if !bsk {
-                    self.amu = None;
-                }
-                if self.hn > 0 {
-                    self.hn -= 1;
-                } else if self.gn > 0 {
-                    self.gn -= 1;
-                    self.hn = self.ak[self.gn].len();
-                }
-                self.bdz();
+                self.ensure_cursor_visible();
                 return true;
             }
             AI_ => {
-                if bsk && self.amu.is_none() {
-                    self.amu = Some((self.gn, self.hn));
-                } else if !bsk {
-                    self.amu = None;
+                if akm && self.selection_anchor.is_none() {
+                    self.selection_anchor = Some((self.cursor_line, self.cursor_col));
+                } else if !akm {
+                    self.selection_anchor = None;
                 }
-                let ark = if self.gn < self.ak.len() { self.ak[self.gn].len() } else { 0 };
-                if self.hn < ark {
-                    self.hn += 1;
-                } else if self.gn + 1 < self.ak.len() {
-                    self.gn += 1;
-                    self.hn = 0;
+                if self.cursor_col > 0 {
+                    self.cursor_col -= 1;
+                } else if self.cursor_line > 0 {
+                    self.cursor_line -= 1;
+                    self.cursor_col = self.lines[self.cursor_line].len();
                 }
-                self.bdz();
+                self.ensure_cursor_visible();
                 return true;
             }
-            CQ_ => {
-                if bsk && self.amu.is_none() {
-                    self.amu = Some((self.gn, self.hn));
-                } else if !bsk {
-                    self.amu = None;
+            AJ_ => {
+                if akm && self.selection_anchor.is_none() {
+                    self.selection_anchor = Some((self.cursor_line, self.cursor_col));
+                } else if !akm {
+                    self.selection_anchor = None;
                 }
-                self.hn = 0;
+                let wh = if self.cursor_line < self.lines.len() { self.lines[self.cursor_line].len() } else { 0 };
+                if self.cursor_col < wh {
+                    self.cursor_col += 1;
+                } else if self.cursor_line + 1 < self.lines.len() {
+                    self.cursor_line += 1;
+                    self.cursor_col = 0;
+                }
+                self.ensure_cursor_visible();
                 return true;
             }
-            CP_ => {
-                if bsk && self.amu.is_none() {
-                    self.amu = Some((self.gn, self.hn));
-                } else if !bsk {
-                    self.amu = None;
+            CW_ => {
+                if akm && self.selection_anchor.is_none() {
+                    self.selection_anchor = Some((self.cursor_line, self.cursor_col));
+                } else if !akm {
+                    self.selection_anchor = None;
                 }
-                let ark = if self.gn < self.ak.len() { self.ak[self.gn].len() } else { 0 };
-                self.hn = ark;
+                self.cursor_col = 0;
+                return true;
+            }
+            CV_ => {
+                if akm && self.selection_anchor.is_none() {
+                    self.selection_anchor = Some((self.cursor_line, self.cursor_col));
+                } else if !akm {
+                    self.selection_anchor = None;
+                }
+                let wh = if self.cursor_line < self.lines.len() { self.lines[self.cursor_line].len() } else { 0 };
+                self.cursor_col = wh;
                 return true;
             }
             AM_ => {
-                let eeb = 20;
-                self.gn = self.gn.ao(eeb);
-                self.dow();
-                self.bdz();
+                let jump = 20;
+                self.cursor_line = self.cursor_line.saturating_sub(jump);
+                self.clamp_cursor_col();
+                self.ensure_cursor_visible();
                 return true;
             }
-            AQ_ => {
-                let eeb = 20;
-                self.gn = (self.gn + eeb).v(self.ak.len().ao(1));
-                self.dow();
-                self.bdz();
+            AO_ => {
+                let jump = 20;
+                self.cursor_line = (self.cursor_line + jump).min(self.lines.len().saturating_sub(1));
+                self.clamp_cursor_col();
+                self.ensure_cursor_visible();
                 return true;
             }
             
             
             0x08 => {
-                if self.amu.is_some() {
-                    self.gej();
-                    self.bdz();
+                if self.selection_anchor.is_some() {
+                    self.delete_selection();
+                    self.ensure_cursor_visible();
                     return true;
                 }
-                self.chn();
-                if self.hn > 0 && self.gn < self.ak.len() {
-                    self.ak[self.gn].remove(self.hn - 1);
-                    self.hn -= 1;
-                    self.no = true;
-                } else if self.gn > 0 {
+                self.save_undo_state();
+                if self.cursor_col > 0 && self.cursor_line < self.lines.len() {
+                    self.lines[self.cursor_line].remove(self.cursor_col - 1);
+                    self.cursor_col -= 1;
+                    self.dirty = true;
+                } else if self.cursor_line > 0 {
                     
-                    let cv = self.ak.remove(self.gn);
-                    self.gn -= 1;
-                    self.hn = self.ak[self.gn].len();
-                    self.ak[self.gn].t(&cv);
-                    self.no = true;
+                    let current = self.lines.remove(self.cursor_line);
+                    self.cursor_line -= 1;
+                    self.cursor_col = self.lines[self.cursor_line].len();
+                    self.lines[self.cursor_line].push_str(&current);
+                    self.dirty = true;
                 }
-                self.bdz();
+                self.ensure_cursor_visible();
                 return true;
             }
             
             
-            CX_ => {
-                if self.amu.is_some() {
-                    self.gej();
+            DE_ => {
+                if self.selection_anchor.is_some() {
+                    self.delete_selection();
                     return true;
                 }
-                self.chn();
-                if self.gn < self.ak.len() {
-                    let ark = self.ak[self.gn].len();
-                    if self.hn < ark {
-                        self.ak[self.gn].remove(self.hn);
-                        self.no = true;
-                    } else if self.gn + 1 < self.ak.len() {
+                self.save_undo_state();
+                if self.cursor_line < self.lines.len() {
+                    let wh = self.lines[self.cursor_line].len();
+                    if self.cursor_col < wh {
+                        self.lines[self.cursor_line].remove(self.cursor_col);
+                        self.dirty = true;
+                    } else if self.cursor_line + 1 < self.lines.len() {
                         
-                        let next = self.ak.remove(self.gn + 1);
-                        self.ak[self.gn].t(&next);
-                        self.no = true;
+                        let next = self.lines.remove(self.cursor_line + 1);
+                        self.lines[self.cursor_line].push_str(&next);
+                        self.dirty = true;
                     }
                 }
                 return true;
@@ -882,98 +882,98 @@ impl EditorState {
             
             
             0x0D | 0x0A => {
-                if self.amu.is_some() {
-                    self.gej();
+                if self.selection_anchor.is_some() {
+                    self.delete_selection();
                 }
-                self.chn();
-                if self.gn < self.ak.len() {
+                self.save_undo_state();
+                if self.cursor_line < self.lines.len() {
                     
-                    self.hn = self.hn.v(self.ak[self.gn].len());
+                    self.cursor_col = self.cursor_col.min(self.lines[self.cursor_line].len());
                     
-                    let kr = self.ak[self.gn].pmk(self.hn);
+                    let ef = self.lines[self.cursor_line].split_off(self.cursor_col);
                     
                     
-                    let crn: String = self.ak[self.gn]
-                        .bw()
-                        .fwc(|r| *r == ' ' || *r == '\t')
+                    let axq: String = self.lines[self.cursor_line]
+                        .chars()
+                        .take_while(|c| *c == ' ' || *c == '\t')
                         .collect();
                     
                     
-                    let ang = if self.ak[self.gn].eke().pp('{')
-                        || self.ak[self.gn].eke().pp('(') {
+                    let ua = if self.lines[self.cursor_line].trim_end().ends_with('{')
+                        || self.lines[self.cursor_line].trim_end().ends_with('(') {
                         "    "
                     } else {
                         ""
                     };
                     
-                    let usz = format!("{}{}{}", crn, ang, kr);
-                    self.gn += 1;
-                    self.ak.insert(self.gn, usz);
-                    self.hn = crn.len() + ang.len();
-                    self.no = true;
+                    let nje = format!("{}{}{}", axq, ua, ef);
+                    self.cursor_line += 1;
+                    self.lines.insert(self.cursor_line, nje);
+                    self.cursor_col = axq.len() + ua.len();
+                    self.dirty = true;
                 }
-                self.bdz();
+                self.ensure_cursor_visible();
                 return true;
             }
             
             
             0x09 => {
-                self.chn();
-                if let Some((aks, qdo, ij, qbq)) = self.hll() {
+                self.save_undo_state();
+                if let Some((sl, _sc, el, _ec)) = self.get_selection_range() {
                     
-                    if bsk {
+                    if akm {
                         
-                        for dm in aks..=ij.v(self.ak.len().ao(1)) {
-                            let eyr = self.ak[dm].bw().take(4).fwc(|r| *r == ' ').az();
-                            if eyr > 0 {
-                                self.ak[dm] = String::from(&self.ak[dm][eyr..]);
+                        for l in sl..=el.min(self.lines.len().saturating_sub(1)) {
+                            let cdt = self.lines[l].chars().take(4).take_while(|c| *c == ' ').count();
+                            if cdt > 0 {
+                                self.lines[l] = String::from(&self.lines[l][cdt..]);
                             }
                         }
                     } else {
                         
-                        for dm in aks..=ij.v(self.ak.len().ao(1)) {
-                            self.ak[dm] = format!("    {}", self.ak[dm]);
+                        for l in sl..=el.min(self.lines.len().saturating_sub(1)) {
+                            self.lines[l] = format!("    {}", self.lines[l]);
                         }
                     }
-                    self.no = true;
-                } else if bsk {
+                    self.dirty = true;
+                } else if akm {
                     
-                    if self.gn < self.ak.len() {
-                        let eyr = self.ak[self.gn].bw().take(4).fwc(|r| *r == ' ').az();
-                        if eyr > 0 {
-                            self.ak[self.gn] = String::from(&self.ak[self.gn][eyr..]);
-                            self.hn = self.hn.ao(eyr);
-                            self.no = true;
+                    if self.cursor_line < self.lines.len() {
+                        let cdt = self.lines[self.cursor_line].chars().take(4).take_while(|c| *c == ' ').count();
+                        if cdt > 0 {
+                            self.lines[self.cursor_line] = String::from(&self.lines[self.cursor_line][cdt..]);
+                            self.cursor_col = self.cursor_col.saturating_sub(cdt);
+                            self.dirty = true;
                         }
                     }
                 } else {
                     
-                    if self.gn < self.ak.len() {
+                    if self.cursor_line < self.lines.len() {
                         for _ in 0..4 {
-                            self.ak[self.gn].insert(self.hn, ' ');
-                            self.hn += 1;
+                            self.lines[self.cursor_line].insert(self.cursor_col, ' ');
+                            self.cursor_col += 1;
                         }
-                        self.no = true;
+                        self.dirty = true;
                     }
                 }
                 return true;
             }
             
             
-            r if r >= 0x20 && r < 0x7F => {
-                if self.amu.is_some() {
-                    self.gej();
+            c if c >= 0x20 && c < 0x7F => {
+                if self.selection_anchor.is_some() {
+                    self.delete_selection();
                 }
-                self.chn();
-                if self.gn < self.ak.len() {
-                    let bm = r as char;
-                    if self.hn <= self.ak[self.gn].len() {
-                        self.ak[self.gn].insert(self.hn, bm);
-                        self.hn += 1;
-                        self.no = true;
+                self.save_undo_state();
+                if self.cursor_line < self.lines.len() {
+                    let ch = c as char;
+                    if self.cursor_col <= self.lines[self.cursor_line].len() {
+                        self.lines[self.cursor_line].insert(self.cursor_col, ch);
+                        self.cursor_col += 1;
+                        self.dirty = true;
                         
                         
-                        let agj = match bm {
+                        let close = match ch {
                             '{' => Some('}'),
                             '(' => Some(')'),
                             '[' => Some(']'),
@@ -981,8 +981,8 @@ impl EditorState {
                             '\'' => Some('\''),
                             _ => None,
                         };
-                        if let Some(rbv) = agj {
-                            self.ak[self.gn].insert(self.hn, rbv);
+                        if let Some(closing) = close {
+                            self.lines[self.cursor_line].insert(self.cursor_col, closing);
                             
                         }
                     }
@@ -996,15 +996,15 @@ impl EditorState {
     }
     
     
-    fn bdz(&mut self) {
-        if self.gn < self.ug {
-            self.ug = self.gn;
+    fn ensure_cursor_visible(&mut self) {
+        if self.cursor_line < self.scroll_y {
+            self.scroll_y = self.cursor_line;
         }
         
         
-        let iw = 30usize;
-        if self.gn >= self.ug + iw {
-            self.ug = self.gn - iw + 1;
+        let visible = 30usize;
+        if self.cursor_line >= self.scroll_y + visible {
+            self.scroll_y = self.cursor_line - visible + 1;
         }
     }
 
@@ -1013,160 +1013,160 @@ impl EditorState {
     
 
     
-    fn xit(&mut self) {
-        self.chn();
-        let gcz = match self.eej {
-            Language::Rust | Language::C | Language::Acj => "// ",
-            Language::Aea => "# ",
-            Language::Aez => "# ",
+    fn toggle_comment(&mut self) {
+        self.save_undo_state();
+        let cvk = match self.language {
+            Language::Rust | Language::C | Language::JavaScript => "// ",
+            Language::Python => "# ",
+            Language::Toml => "# ",
             _ => "// ",
         };
 
         
-        let (ay, ci) = if let Some((aks, qdo, ij, qbq)) = self.hll() {
-            (aks, ij)
+        let (start, end) = if let Some((sl, _sc, el, _ec)) = self.get_selection_range() {
+            (sl, el)
         } else {
-            (self.gn, self.gn)
+            (self.cursor_line, self.cursor_line)
         };
 
         
-        let muq = (ay..=ci.v(self.ak.len().ao(1)))
-            .xx(|dm| self.ak[dm].ifa().cj(gcz.eke()));
+        let heo = (start..=end.min(self.lines.len().saturating_sub(1)))
+            .all(|l| self.lines[l].trim_start().starts_with(cvk.trim_end()));
 
-        for dm in ay..=ci.v(self.ak.len().ao(1)) {
-            if muq {
+        for l in start..=end.min(self.lines.len().saturating_sub(1)) {
+            if heo {
                 
-                let ux = &self.ak[dm];
-                if let Some(u) = ux.du(gcz) {
-                    self.ak[dm] = format!("{}{}", &ux[..u], &ux[u + gcz.len()..]);
-                } else if let Some(u) = ux.du(gcz.eke()) {
+                let jw = &self.lines[l];
+                if let Some(pos) = jw.find(cvk) {
+                    self.lines[l] = format!("{}{}", &jw[..pos], &jw[pos + cvk.len()..]);
+                } else if let Some(pos) = jw.find(cvk.trim_end()) {
                     
-                    let vkq = gcz.eke();
-                    self.ak[dm] = format!("{}{}", &ux[..u], &ux[u + vkq.len()..]);
+                    let nwt = cvk.trim_end();
+                    self.lines[l] = format!("{}{}", &jw[..pos], &jw[pos + nwt.len()..]);
                 }
             } else {
                 
-                let oea = self.ak[dm].bw().fwc(|r| *r == ' ' || *r == '\t').az();
-                self.ak[dm] = format!("{}{}{}", &self.ak[dm][..oea], gcz, &self.ak[dm][oea..]);
+                let igi = self.lines[l].chars().take_while(|c| *c == ' ' || *c == '\t').count();
+                self.lines[l] = format!("{}{}{}", &self.lines[l][..igi], cvk, &self.lines[l][igi..]);
             }
         }
-        self.no = true;
-        self.ccb = Some(String::from(if muq { "Uncommented" } else { "Commented" }));
+        self.dirty = true;
+        self.status_message = Some(String::from(if heo { "Uncommented" } else { "Commented" }));
     }
 
     
-    fn rvh(&mut self) {
-        if self.ak.len() <= 1 {
-            self.chn();
-            self.ak[0] = String::new();
-            self.hn = 0;
-            self.no = true;
+    fn delete_current_line(&mut self) {
+        if self.lines.len() <= 1 {
+            self.save_undo_state();
+            self.lines[0] = String::new();
+            self.cursor_col = 0;
+            self.dirty = true;
             return;
         }
-        self.chn();
-        self.ak.remove(self.gn);
-        if self.gn >= self.ak.len() {
-            self.gn = self.ak.len().ao(1);
+        self.save_undo_state();
+        self.lines.remove(self.cursor_line);
+        if self.cursor_line >= self.lines.len() {
+            self.cursor_line = self.lines.len().saturating_sub(1);
         }
-        self.dow();
-        self.no = true;
-        self.bdz();
+        self.clamp_cursor_col();
+        self.dirty = true;
+        self.ensure_cursor_visible();
     }
 
     
-    fn shi(&mut self) {
-        if self.gn < self.ak.len() {
-            self.chn();
-            let ksa = self.ak[self.gn].clone();
-            self.ak.insert(self.gn + 1, ksa);
-            self.gn += 1;
-            self.no = true;
-            self.bdz();
-        }
-    }
-
-    
-    fn upv(&mut self) {
-        if self.gn > 0 && self.gn < self.ak.len() {
-            self.chn();
-            self.ak.swap(self.gn, self.gn - 1);
-            self.gn -= 1;
-            self.no = true;
-            self.bdz();
+    fn duplicate_line(&mut self) {
+        if self.cursor_line < self.lines.len() {
+            self.save_undo_state();
+            let dnx = self.lines[self.cursor_line].clone();
+            self.lines.insert(self.cursor_line + 1, dnx);
+            self.cursor_line += 1;
+            self.dirty = true;
+            self.ensure_cursor_visible();
         }
     }
 
     
-    fn upu(&mut self) {
-        if self.gn + 1 < self.ak.len() {
-            self.chn();
-            self.ak.swap(self.gn, self.gn + 1);
-            self.gn += 1;
-            self.no = true;
-            self.bdz();
+    fn move_line_up(&mut self) {
+        if self.cursor_line > 0 && self.cursor_line < self.lines.len() {
+            self.save_undo_state();
+            self.lines.swap(self.cursor_line, self.cursor_line - 1);
+            self.cursor_line -= 1;
+            self.dirty = true;
+            self.ensure_cursor_visible();
         }
     }
 
     
-    fn xvc(&mut self) {
-        if self.gn >= self.ak.len() { return; }
-        if self.hn == 0 {
+    fn move_line_down(&mut self) {
+        if self.cursor_line + 1 < self.lines.len() {
+            self.save_undo_state();
+            self.lines.swap(self.cursor_line, self.cursor_line + 1);
+            self.cursor_line += 1;
+            self.dirty = true;
+            self.ensure_cursor_visible();
+        }
+    }
+
+    
+    fn word_left(&mut self) {
+        if self.cursor_line >= self.lines.len() { return; }
+        if self.cursor_col == 0 {
             
-            if self.gn > 0 {
-                self.gn -= 1;
-                self.hn = self.ak[self.gn].len();
+            if self.cursor_line > 0 {
+                self.cursor_line -= 1;
+                self.cursor_col = self.lines[self.cursor_line].len();
             }
             return;
         }
-        let line = &self.ak[self.gn];
-        let bf = line.as_bytes();
-        let mut u = self.hn.v(bf.len());
+        let line = &self.lines[self.cursor_line];
+        let bytes = line.as_bytes();
+        let mut pos = self.cursor_col.min(bytes.len());
         
-        while u > 0 && bf[u - 1] == b' ' {
-            u -= 1;
+        while pos > 0 && bytes[pos - 1] == b' ' {
+            pos -= 1;
         }
         
-        while u > 0 && bf[u - 1] != b' ' {
-            u -= 1;
+        while pos > 0 && bytes[pos - 1] != b' ' {
+            pos -= 1;
         }
-        self.hn = u;
+        self.cursor_col = pos;
     }
 
     
-    fn xvd(&mut self) {
-        if self.gn >= self.ak.len() { return; }
-        let line = &self.ak[self.gn];
-        let bf = line.as_bytes();
-        let len = bf.len();
-        if self.hn >= len {
+    fn word_right(&mut self) {
+        if self.cursor_line >= self.lines.len() { return; }
+        let line = &self.lines[self.cursor_line];
+        let bytes = line.as_bytes();
+        let len = bytes.len();
+        if self.cursor_col >= len {
             
-            if self.gn + 1 < self.ak.len() {
-                self.gn += 1;
-                self.hn = 0;
+            if self.cursor_line + 1 < self.lines.len() {
+                self.cursor_line += 1;
+                self.cursor_col = 0;
             }
             return;
         }
-        let mut u = self.hn;
+        let mut pos = self.cursor_col;
         
-        while u < len && bf[u] != b' ' {
-            u += 1;
+        while pos < len && bytes[pos] != b' ' {
+            pos += 1;
         }
         
-        while u < len && bf[u] == b' ' {
-            u += 1;
+        while pos < len && bytes[pos] == b' ' {
+            pos += 1;
         }
-        self.hn = u;
+        self.cursor_col = pos;
     }
 
     
-    pub fn xoy(&mut self) {
-        self.hqt = None;
-        if self.gn >= self.ak.len() { return; }
-        let line = &self.ak[self.gn];
-        if self.hn >= line.len() { return; }
+    pub fn update_matching_bracket(&mut self) {
+        self.matching_bracket = None;
+        if self.cursor_line >= self.lines.len() { return; }
+        let line = &self.lines[self.cursor_line];
+        if self.cursor_col >= line.len() { return; }
         
-        let bm = line.as_bytes()[self.hn];
-        let (cd, fiz) = match bm {
+        let ch = line.as_bytes()[self.cursor_col];
+        let (target, forward) = match ch {
             b'(' => (b')', true),
             b')' => (b'(', false),
             b'{' => (b'}', true),
@@ -1176,48 +1176,48 @@ impl EditorState {
             _ => return,
         };
         
-        let mut eo: i32 = 0;
-        if fiz {
-            let mut dm = self.gn;
-            let mut r = self.hn;
-            while dm < self.ak.len() {
-                let bf = self.ak[dm].as_bytes();
-                while r < bf.len() {
-                    if bf[r] == bm { eo += 1; }
-                    else if bf[r] == cd {
-                        eo -= 1;
-                        if eo == 0 {
-                            self.hqt = Some((dm, r));
+        let mut depth: i32 = 0;
+        if forward {
+            let mut l = self.cursor_line;
+            let mut c = self.cursor_col;
+            while l < self.lines.len() {
+                let bytes = self.lines[l].as_bytes();
+                while c < bytes.len() {
+                    if bytes[c] == ch { depth += 1; }
+                    else if bytes[c] == target {
+                        depth -= 1;
+                        if depth == 0 {
+                            self.matching_bracket = Some((l, c));
                             return;
                         }
                     }
-                    r += 1;
+                    c += 1;
                 }
-                dm += 1;
-                r = 0;
+                l += 1;
+                c = 0;
             }
         } else {
-            let mut dm = self.gn;
-            let mut r = self.hn as i32;
+            let mut l = self.cursor_line;
+            let mut c = self.cursor_col as i32;
             loop {
-                let bf = self.ak[dm].as_bytes();
-                while r >= 0 {
-                    let gdw = r as usize;
-                    if gdw < bf.len() {
-                        if bf[gdw] == bm { eo += 1; }
-                        else if bf[gdw] == cd {
-                            eo -= 1;
-                            if eo == 0 {
-                                self.hqt = Some((dm, gdw));
+                let bytes = self.lines[l].as_bytes();
+                while c >= 0 {
+                    let cvz = c as usize;
+                    if cvz < bytes.len() {
+                        if bytes[cvz] == ch { depth += 1; }
+                        else if bytes[cvz] == target {
+                            depth -= 1;
+                            if depth == 0 {
+                                self.matching_bracket = Some((l, cvz));
                                 return;
                             }
                         }
                     }
-                    r -= 1;
+                    c -= 1;
                 }
-                if dm == 0 { break; }
-                dm -= 1;
-                r = self.ak[dm].len() as i32 - 1;
+                if l == 0 { break; }
+                l -= 1;
+                c = self.lines[l].len() as i32 - 1;
             }
         }
     }
@@ -1230,54 +1230,54 @@ impl EditorState {
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum TokenKind {
-    M,
-    Bx,
+    Normal,
+    Keyword,
     Type,
     String,
-    Ru,
-    L,
-    Bs,
-    Akc,
-    Ms,
-    Blb,
-    Fb,
-    Aab,
+    Comment,
+    Number,
+    Aq,
+    Macro,
+    Attribute,
+    Lifetime,
+    Operator,
+    Bracket,
 }
 
 
-pub struct W {
-    pub ay: usize,
-    pub ci: usize,
-    pub kk: TokenKind,
+pub struct O {
+    pub start: usize,
+    pub end: usize,
+    pub kind: TokenKind,
 }
 
 
-pub const BNC_: u32   = 0xFF569CD6; 
-pub const BNO_: u32      = 0xFF4EC9B0; 
-pub const BNM_: u32    = 0xFFCE9178; 
-pub const BNA_: u32   = 0xFF6A9955; 
-pub const BNJ_: u32    = 0xFFB5CEA8; 
-pub const BNB_: u32  = 0xFFDCDCAA; 
-pub const BNF_: u32     = 0xFF4FC1FF; 
-pub const BMW_: u32 = 0xFFD7BA7D; 
-pub const BND_: u32  = 0xFF569CD6; 
-pub const BNK_: u32  = 0xFFD4D4D4; 
-pub const BMX_: u32   = 0xFFFFD700; 
-pub const JQ_: u32    = 0xFFD4D4D4; 
-pub const AOH_: u32  = 0xFF858585; 
-pub const BMV_: u32 = 0xFF858585; 
-pub const MF_: u32        = 0xFF1E1E2E; 
-pub const AOE_: u32 = 0xFF1E1E2E; 
-pub const AOB_: u32 = 0xFF2A2D3A; 
-pub const AAF_: u32 = 0xFF007ACC; 
-pub const GD_: u32 = 0xFFFFFFFF; 
-pub const AOC_: u32    = 0xFFAEAFAD; 
-pub const BMY_: u32 = 0xFF252526; 
-pub const BNN_: u32 = 0xFF1E1E2E; 
-pub const DFR_: u32 = 0xFF2D2D2D; 
+pub const BPU_: u32   = 0xFF569CD6; 
+pub const BQG_: u32      = 0xFF4EC9B0; 
+pub const BQE_: u32    = 0xFFCE9178; 
+pub const BPS_: u32   = 0xFF6A9955; 
+pub const BQB_: u32    = 0xFFB5CEA8; 
+pub const BPT_: u32  = 0xFFDCDCAA; 
+pub const BPX_: u32     = 0xFF4FC1FF; 
+pub const BPO_: u32 = 0xFFD7BA7D; 
+pub const BPV_: u32  = 0xFF569CD6; 
+pub const BQC_: u32  = 0xFFD4D4D4; 
+pub const BPP_: u32   = 0xFFFFD700; 
+pub const KH_: u32    = 0xFFD4D4D4; 
+pub const AQH_: u32  = 0xFF858585; 
+pub const BPN_: u32 = 0xFF858585; 
+pub const ND_: u32        = 0xFF1E1E2E; 
+pub const AQE_: u32 = 0xFF1E1E2E; 
+pub const AQB_: u32 = 0xFF2A2D3A; 
+pub const ABU_: u32 = 0xFF007ACC; 
+pub const GS_: u32 = 0xFFFFFFFF; 
+pub const AQC_: u32    = 0xFFAEAFAD; 
+pub const BPQ_: u32 = 0xFF252526; 
+pub const BQF_: u32 = 0xFF1E1E2E; 
+pub const DJK_: u32 = 0xFF2D2D2D; 
 
 
-const CPS_: &[&str] = &[
+const CTH_: &[&str] = &[
     "as", "async", "await", "break", "const", "continue", "crate", "dyn",
     "else", "enum", "extern", "false", "fn", "for", "if", "impl", "in",
     "let", "loop", "match", "mod", "move", "mut", "pub", "ref", "return",
@@ -1286,7 +1286,7 @@ const CPS_: &[&str] = &[
 ];
 
 
-const CPT_: &[&str] = &[
+const CTI_: &[&str] = &[
     "bool", "char", "f32", "f64", "i8", "i16", "i32", "i64", "i128", "isize",
     "u8", "u16", "u32", "u64", "u128", "usize", "str", "String", "Vec",
     "Option", "Result", "Box", "Rc", "Arc", "Cell", "RefCell", "Mutex",
@@ -1295,162 +1295,162 @@ const CPT_: &[&str] = &[
 ];
 
 
-pub fn puh(line: &str) -> Vec<W> {
-    let mut ui = Vec::new();
-    let bf = line.as_bytes();
-    let len = bf.len();
-    let mut a = 0;
+pub fn jnh(line: &str) -> Vec<O> {
+    let mut jl = Vec::new();
+    let bytes = line.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
     
-    while a < len {
-        let bm = bf[a];
+    while i < len {
+        let ch = bytes[i];
         
         
-        if bm == b'/' && a + 1 < len && bf[a + 1] == b'/' {
-            ui.push(W { ay: a, ci: len, kk: TokenKind::Ru });
+        if ch == b'/' && i + 1 < len && bytes[i + 1] == b'/' {
+            jl.push(O { start: i, end: len, kind: TokenKind::Comment });
             break; 
         }
         
         
-        if bm == b'#' && a + 1 < len && bf[a + 1] == b'[' {
-            let ay = a;
+        if ch == b'#' && i + 1 < len && bytes[i + 1] == b'[' {
+            let start = i;
             
-            while a < len && bf[a] != b']' { a += 1; }
-            if a < len { a += 1; } 
-            ui.push(W { ay, ci: a, kk: TokenKind::Ms });
+            while i < len && bytes[i] != b']' { i += 1; }
+            if i < len { i += 1; } 
+            jl.push(O { start, end: i, kind: TokenKind::Attribute });
             continue;
         }
         
         
-        if bm == b'"' {
-            let ay = a;
-            a += 1;
-            while a < len {
-                if bf[a] == b'\\' && a + 1 < len {
-                    a += 2; 
-                } else if bf[a] == b'"' {
-                    a += 1;
+        if ch == b'"' {
+            let start = i;
+            i += 1;
+            while i < len {
+                if bytes[i] == b'\\' && i + 1 < len {
+                    i += 2; 
+                } else if bytes[i] == b'"' {
+                    i += 1;
                     break;
                 } else {
-                    a += 1;
+                    i += 1;
                 }
             }
-            ui.push(W { ay, ci: a, kk: TokenKind::String });
+            jl.push(O { start, end: i, kind: TokenKind::String });
             continue;
         }
         
         
-        if bm == b'\'' {
+        if ch == b'\'' {
             
-            let ay = a;
-            a += 1;
-            if a < len && bf[a].gke() {
+            let start = i;
+            i += 1;
+            if i < len && bytes[i].is_ascii_alphabetic() {
                 
-                let zwm = a;
-                while a < len && (bf[a].bvb() || bf[a] == b'_') {
-                    a += 1;
+                let rcy = i;
+                while i < len && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
+                    i += 1;
                 }
-                if a < len && bf[a] == b'\'' {
+                if i < len && bytes[i] == b'\'' {
                     
-                    a += 1;
-                    ui.push(W { ay, ci: a, kk: TokenKind::String });
+                    i += 1;
+                    jl.push(O { start, end: i, kind: TokenKind::String });
                 } else {
                     
-                    ui.push(W { ay, ci: a, kk: TokenKind::Blb });
+                    jl.push(O { start, end: i, kind: TokenKind::Lifetime });
                 }
-            } else if a < len && bf[a] == b'\\' {
+            } else if i < len && bytes[i] == b'\\' {
                 
-                while a < len && bf[a] != b'\'' { a += 1; }
-                if a < len { a += 1; }
-                ui.push(W { ay, ci: a, kk: TokenKind::String });
+                while i < len && bytes[i] != b'\'' { i += 1; }
+                if i < len { i += 1; }
+                jl.push(O { start, end: i, kind: TokenKind::String });
             } else {
-                ui.push(W { ay, ci: ay + 1, kk: TokenKind::M });
+                jl.push(O { start, end: start + 1, kind: TokenKind::Normal });
             }
             continue;
         }
         
         
-        if bm.atb() || (bm == b'0' && a + 1 < len && (bf[a+1] == b'x' || bf[a+1] == b'b' || bf[a+1] == b'o')) {
-            let ay = a;
-            a += 1;
-            while a < len && (bf[a].bvb() || bf[a] == b'_' || bf[a] == b'.') {
-                a += 1;
+        if ch.is_ascii_digit() || (ch == b'0' && i + 1 < len && (bytes[i+1] == b'x' || bytes[i+1] == b'b' || bytes[i+1] == b'o')) {
+            let start = i;
+            i += 1;
+            while i < len && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_' || bytes[i] == b'.') {
+                i += 1;
             }
-            ui.push(W { ay, ci: a, kk: TokenKind::L });
+            jl.push(O { start, end: i, kind: TokenKind::Number });
             continue;
         }
         
         
-        if bm.gke() || bm == b'_' {
-            let ay = a;
-            while a < len && (bf[a].bvb() || bf[a] == b'_') {
-                a += 1;
+        if ch.is_ascii_alphabetic() || ch == b'_' {
+            let start = i;
+            while i < len && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
+                i += 1;
             }
-            let od = &line[ay..a];
+            let fx = &line[start..i];
             
             
-            if a < len && bf[a] == b'!' {
-                ui.push(W { ay, ci: a + 1, kk: TokenKind::Akc });
-                a += 1;
+            if i < len && bytes[i] == b'!' {
+                jl.push(O { start, end: i + 1, kind: TokenKind::Macro });
+                i += 1;
                 continue;
             }
             
             
-            let lgd = a < len && bf[a] == b'(';
+            let gdw = i < len && bytes[i] == b'(';
             
-            let kk = if CPS_.contains(&od) {
-                TokenKind::Bx
-            } else if CPT_.contains(&od) {
+            let kind = if CTH_.contains(&fx) {
+                TokenKind::Keyword
+            } else if CTI_.contains(&fx) {
                 TokenKind::Type
-            } else if lgd {
-                TokenKind::Bs
+            } else if gdw {
+                TokenKind::Aq
             } else {
-                TokenKind::M
+                TokenKind::Normal
             };
             
-            ui.push(W { ay, ci: a, kk });
+            jl.push(O { start, end: i, kind });
             continue;
         }
         
         
-        if bm == b'{' || bm == b'}' || bm == b'(' || bm == b')' || bm == b'[' || bm == b']' {
-            ui.push(W { ay: a, ci: a + 1, kk: TokenKind::Aab });
-            a += 1;
+        if ch == b'{' || ch == b'}' || ch == b'(' || ch == b')' || ch == b'[' || ch == b']' {
+            jl.push(O { start: i, end: i + 1, kind: TokenKind::Bracket });
+            i += 1;
             continue;
         }
         
         
-        if bm == b'+' || bm == b'-' || bm == b'*' || bm == b'=' || bm == b'!' 
-            || bm == b'<' || bm == b'>' || bm == b'&' || bm == b'|' || bm == b'^'
-            || bm == b':' || bm == b';' || bm == b',' || bm == b'.' {
-            ui.push(W { ay: a, ci: a + 1, kk: TokenKind::Fb });
-            a += 1;
+        if ch == b'+' || ch == b'-' || ch == b'*' || ch == b'=' || ch == b'!' 
+            || ch == b'<' || ch == b'>' || ch == b'&' || ch == b'|' || ch == b'^'
+            || ch == b':' || ch == b';' || ch == b',' || ch == b'.' {
+            jl.push(O { start: i, end: i + 1, kind: TokenKind::Operator });
+            i += 1;
             continue;
         }
         
         
-        let ay = a;
-        a += 1;
-        ui.push(W { ay, ci: a, kk: TokenKind::M });
+        let start = i;
+        i += 1;
+        jl.push(O { start, end: i, kind: TokenKind::Normal });
     }
     
-    ui
+    jl
 }
 
 
-pub fn puf(kk: TokenKind) -> u32 {
-    match kk {
-        TokenKind::M => JQ_,
-        TokenKind::Bx => BNC_,
-        TokenKind::Type => BNO_,
-        TokenKind::String => BNM_,
-        TokenKind::Ru => BNA_,
-        TokenKind::L => BNJ_,
-        TokenKind::Bs => BNB_,
-        TokenKind::Akc => BNF_,
-        TokenKind::Ms => BMW_,
-        TokenKind::Blb => BND_,
-        TokenKind::Fb => BNK_,
-        TokenKind::Aab => BMX_,
+pub fn jnf(kind: TokenKind) -> u32 {
+    match kind {
+        TokenKind::Normal => KH_,
+        TokenKind::Keyword => BPU_,
+        TokenKind::Type => BQG_,
+        TokenKind::String => BQE_,
+        TokenKind::Comment => BPS_,
+        TokenKind::Number => BQB_,
+        TokenKind::Aq => BPT_,
+        TokenKind::Macro => BPX_,
+        TokenKind::Attribute => BPO_,
+        TokenKind::Lifetime => BPV_,
+        TokenKind::Operator => BQC_,
+        TokenKind::Bracket => BPP_,
     }
 }
 
@@ -1458,7 +1458,7 @@ pub fn puf(kk: TokenKind) -> u32 {
 
 
 
-const CMT_: &[&str] = &[
+const CQC_: &[&str] = &[
     "False", "None", "True", "and", "as", "assert", "async", "await",
     "break", "class", "continue", "def", "del", "elif", "else", "except",
     "finally", "for", "from", "global", "if", "import", "in", "is",
@@ -1466,7 +1466,7 @@ const CMT_: &[&str] = &[
     "while", "with", "yield",
 ];
 
-const CMS_: &[&str] = &[
+const CQB_: &[&str] = &[
     "int", "float", "str", "bool", "list", "dict", "tuple", "set",
     "frozenset", "bytes", "bytearray", "range", "type", "object",
     "print", "len", "input", "open", "super", "self", "cls",
@@ -1474,112 +1474,112 @@ const CMS_: &[&str] = &[
     "RuntimeError", "StopIteration", "OSError", "IOError",
 ];
 
-pub fn xjh(line: &str) -> Vec<W> {
-    let mut ui = Vec::new();
-    let bf = line.as_bytes();
-    let len = bf.len();
-    let mut a = 0;
+pub fn pkz(line: &str) -> Vec<O> {
+    let mut jl = Vec::new();
+    let bytes = line.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
     
-    while a < len {
-        let bm = bf[a];
+    while i < len {
+        let ch = bytes[i];
         
         
-        if bm == b'#' {
-            ui.push(W { ay: a, ci: len, kk: TokenKind::Ru });
+        if ch == b'#' {
+            jl.push(O { start: i, end: len, kind: TokenKind::Comment });
             break;
         }
         
         
-        if bm == b'@' {
-            let ay = a;
-            a += 1;
-            while a < len && (bf[a].bvb() || bf[a] == b'_' || bf[a] == b'.') { a += 1; }
-            ui.push(W { ay, ci: a, kk: TokenKind::Ms });
+        if ch == b'@' {
+            let start = i;
+            i += 1;
+            while i < len && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_' || bytes[i] == b'.') { i += 1; }
+            jl.push(O { start, end: i, kind: TokenKind::Attribute });
             continue;
         }
         
         
-        if bm == b'"' || bm == b'\'' {
-            let ay = a;
-            let cgw = bm;
+        if ch == b'"' || ch == b'\'' {
+            let start = i;
+            let arw = ch;
             
-            if a + 2 < len && bf[a+1] == cgw && bf[a+2] == cgw {
-                a += 3;
-                while a + 2 < len {
-                    if bf[a] == cgw && bf[a+1] == cgw && bf[a+2] == cgw {
-                        a += 3;
+            if i + 2 < len && bytes[i+1] == arw && bytes[i+2] == arw {
+                i += 3;
+                while i + 2 < len {
+                    if bytes[i] == arw && bytes[i+1] == arw && bytes[i+2] == arw {
+                        i += 3;
                         break;
                     }
-                    if bf[a] == b'\\' { a += 1; }
-                    a += 1;
+                    if bytes[i] == b'\\' { i += 1; }
+                    i += 1;
                 }
-                if a >= len { a = len; }
+                if i >= len { i = len; }
             } else {
-                a += 1;
-                while a < len {
-                    if bf[a] == b'\\' && a + 1 < len { a += 2; continue; }
-                    if bf[a] == cgw { a += 1; break; }
-                    a += 1;
+                i += 1;
+                while i < len {
+                    if bytes[i] == b'\\' && i + 1 < len { i += 2; continue; }
+                    if bytes[i] == arw { i += 1; break; }
+                    i += 1;
                 }
             }
-            ui.push(W { ay, ci: a, kk: TokenKind::String });
+            jl.push(O { start, end: i, kind: TokenKind::String });
             continue;
         }
         
         
-        if bm.atb() {
-            let ay = a;
-            a += 1;
-            while a < len && (bf[a].bvb() || bf[a] == b'_' || bf[a] == b'.') { a += 1; }
-            ui.push(W { ay, ci: a, kk: TokenKind::L });
+        if ch.is_ascii_digit() {
+            let start = i;
+            i += 1;
+            while i < len && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_' || bytes[i] == b'.') { i += 1; }
+            jl.push(O { start, end: i, kind: TokenKind::Number });
             continue;
         }
         
         
-        if bm.gke() || bm == b'_' {
-            let ay = a;
-            while a < len && (bf[a].bvb() || bf[a] == b'_') { a += 1; }
-            let od = &line[ay..a];
-            let lgc = a < len && bf[a] == b'(';
-            let kk = if CMT_.contains(&od) {
-                TokenKind::Bx
-            } else if CMS_.contains(&od) {
+        if ch.is_ascii_alphabetic() || ch == b'_' {
+            let start = i;
+            while i < len && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') { i += 1; }
+            let fx = &line[start..i];
+            let gdv = i < len && bytes[i] == b'(';
+            let kind = if CQC_.contains(&fx) {
+                TokenKind::Keyword
+            } else if CQB_.contains(&fx) {
                 TokenKind::Type
-            } else if lgc {
-                TokenKind::Bs
+            } else if gdv {
+                TokenKind::Aq
             } else {
-                TokenKind::M
+                TokenKind::Normal
             };
-            ui.push(W { ay, ci: a, kk });
+            jl.push(O { start, end: i, kind });
             continue;
         }
         
         
-        if bm == b'(' || bm == b')' || bm == b'{' || bm == b'}' || bm == b'[' || bm == b']' {
-            ui.push(W { ay: a, ci: a + 1, kk: TokenKind::Aab });
-            a += 1;
+        if ch == b'(' || ch == b')' || ch == b'{' || ch == b'}' || ch == b'[' || ch == b']' {
+            jl.push(O { start: i, end: i + 1, kind: TokenKind::Bracket });
+            i += 1;
             continue;
         }
         
         
-        if bm == b'+' || bm == b'-' || bm == b'*' || bm == b'/' || bm == b'=' || bm == b'!'
-            || bm == b'<' || bm == b'>' || bm == b'&' || bm == b'|' || bm == b'^'
-            || bm == b':' || bm == b';' || bm == b',' || bm == b'.' || bm == b'%' {
-            ui.push(W { ay: a, ci: a + 1, kk: TokenKind::Fb });
-            a += 1;
+        if ch == b'+' || ch == b'-' || ch == b'*' || ch == b'/' || ch == b'=' || ch == b'!'
+            || ch == b'<' || ch == b'>' || ch == b'&' || ch == b'|' || ch == b'^'
+            || ch == b':' || ch == b';' || ch == b',' || ch == b'.' || ch == b'%' {
+            jl.push(O { start: i, end: i + 1, kind: TokenKind::Operator });
+            i += 1;
             continue;
         }
         
-        a += 1;
+        i += 1;
     }
-    ui
+    jl
 }
 
 
 
 
 
-const CCR_: &[&str] = &[
+const CGA_: &[&str] = &[
     "break", "case", "catch", "class", "const", "continue", "debugger",
     "default", "delete", "do", "else", "export", "extends", "finally",
     "for", "function", "if", "import", "in", "instanceof", "let", "new",
@@ -1588,14 +1588,14 @@ const CCR_: &[&str] = &[
     "static", "get", "set",
 ];
 
-const CCS_: &[&str] = &[
+const CGB_: &[&str] = &[
     "Array", "Boolean", "Date", "Error", "Function", "JSON", "Map", "Math",
     "Number", "Object", "Promise", "Proxy", "RegExp", "Set", "String",
     "Symbol", "WeakMap", "WeakSet", "console", "document", "window",
     "null", "undefined", "true", "false", "NaN", "Infinity",
 ];
 
-const BQW_: &[&str] = &[
+const BTR_: &[&str] = &[
     "auto", "break", "case", "char", "const", "continue", "default", "do",
     "double", "else", "enum", "extern", "float", "for", "goto", "if",
     "inline", "int", "long", "register", "restrict", "return", "short",
@@ -1610,288 +1610,288 @@ const BQW_: &[&str] = &[
     "using", "virtual",
 ];
 
-const BQX_: &[&str] = &[
+const BTS_: &[&str] = &[
     "int8_t", "int16_t", "int32_t", "int64_t", "uint8_t", "uint16_t",
     "uint32_t", "uint64_t", "size_t", "ssize_t", "ptrdiff_t", "intptr_t",
     "uintptr_t", "FILE", "NULL", "EOF", "string", "vector", "map",
     "set", "pair", "shared_ptr", "unique_ptr", "weak_ptr",
 ];
 
-pub fn pug(line: &str, hou: bool) -> Vec<W> {
-    let mut ui = Vec::new();
-    let bf = line.as_bytes();
-    let len = bf.len();
-    let mut a = 0;
-    let fmj: &[&str] = if hou { BQW_ } else { CCR_ };
-    let ifn: &[&str] = if hou { BQX_ } else { CCS_ };
+pub fn jng(line: &str, dsl: bool) -> Vec<O> {
+    let mut jl = Vec::new();
+    let bytes = line.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+    let clr: &[&str] = if dsl { BTR_ } else { CGA_ };
+    let eda: &[&str] = if dsl { BTS_ } else { CGB_ };
     
-    while a < len {
-        let bm = bf[a];
+    while i < len {
+        let ch = bytes[i];
         
         
-        if bm == b'/' && a + 1 < len && bf[a + 1] == b'/' {
-            ui.push(W { ay: a, ci: len, kk: TokenKind::Ru });
+        if ch == b'/' && i + 1 < len && bytes[i + 1] == b'/' {
+            jl.push(O { start: i, end: len, kind: TokenKind::Comment });
             break;
         }
         
         
-        if bm == b'/' && a + 1 < len && bf[a + 1] == b'*' {
-            let ay = a;
-            a += 2;
-            while a + 1 < len {
-                if bf[a] == b'*' && bf[a+1] == b'/' { a += 2; break; }
-                a += 1;
+        if ch == b'/' && i + 1 < len && bytes[i + 1] == b'*' {
+            let start = i;
+            i += 2;
+            while i + 1 < len {
+                if bytes[i] == b'*' && bytes[i+1] == b'/' { i += 2; break; }
+                i += 1;
             }
-            if a >= len { a = len; }
-            ui.push(W { ay, ci: a, kk: TokenKind::Ru });
+            if i >= len { i = len; }
+            jl.push(O { start, end: i, kind: TokenKind::Comment });
             continue;
         }
         
         
-        if hou && bm == b'#' {
-            ui.push(W { ay: a, ci: len, kk: TokenKind::Akc });
+        if dsl && ch == b'#' {
+            jl.push(O { start: i, end: len, kind: TokenKind::Macro });
             break;
         }
         
         
-        if bm == b'"' || bm == b'\'' || bm == b'`' {
-            let ay = a;
-            let cgw = bm;
-            a += 1;
-            while a < len {
-                if bf[a] == b'\\' && a + 1 < len { a += 2; continue; }
-                if bf[a] == cgw { a += 1; break; }
-                a += 1;
+        if ch == b'"' || ch == b'\'' || ch == b'`' {
+            let start = i;
+            let arw = ch;
+            i += 1;
+            while i < len {
+                if bytes[i] == b'\\' && i + 1 < len { i += 2; continue; }
+                if bytes[i] == arw { i += 1; break; }
+                i += 1;
             }
-            ui.push(W { ay, ci: a, kk: TokenKind::String });
+            jl.push(O { start, end: i, kind: TokenKind::String });
             continue;
         }
         
         
-        if bm.atb() || (bm == b'.' && a + 1 < len && bf[a+1].atb()) {
-            let ay = a;
-            a += 1;
-            while a < len && (bf[a].bvb() || bf[a] == b'_' || bf[a] == b'.') { a += 1; }
-            ui.push(W { ay, ci: a, kk: TokenKind::L });
+        if ch.is_ascii_digit() || (ch == b'.' && i + 1 < len && bytes[i+1].is_ascii_digit()) {
+            let start = i;
+            i += 1;
+            while i < len && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_' || bytes[i] == b'.') { i += 1; }
+            jl.push(O { start, end: i, kind: TokenKind::Number });
             continue;
         }
         
         
-        if bm.gke() || bm == b'_' || bm == b'$' {
-            let ay = a;
-            while a < len && (bf[a].bvb() || bf[a] == b'_' || bf[a] == b'$') { a += 1; }
-            let od = &line[ay..a];
-            let lgc = a < len && bf[a] == b'(';
-            let kk = if fmj.contains(&od) {
-                TokenKind::Bx
-            } else if ifn.contains(&od) {
+        if ch.is_ascii_alphabetic() || ch == b'_' || ch == b'$' {
+            let start = i;
+            while i < len && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_' || bytes[i] == b'$') { i += 1; }
+            let fx = &line[start..i];
+            let gdv = i < len && bytes[i] == b'(';
+            let kind = if clr.contains(&fx) {
+                TokenKind::Keyword
+            } else if eda.contains(&fx) {
                 TokenKind::Type
-            } else if lgc {
-                TokenKind::Bs
+            } else if gdv {
+                TokenKind::Aq
             } else {
-                TokenKind::M
+                TokenKind::Normal
             };
-            ui.push(W { ay, ci: a, kk });
+            jl.push(O { start, end: i, kind });
             continue;
         }
         
         
-        if bm == b'(' || bm == b')' || bm == b'{' || bm == b'}' || bm == b'[' || bm == b']' {
-            ui.push(W { ay: a, ci: a + 1, kk: TokenKind::Aab });
-            a += 1;
+        if ch == b'(' || ch == b')' || ch == b'{' || ch == b'}' || ch == b'[' || ch == b']' {
+            jl.push(O { start: i, end: i + 1, kind: TokenKind::Bracket });
+            i += 1;
             continue;
         }
         
         
-        if bm == b'+' || bm == b'-' || bm == b'*' || bm == b'/' || bm == b'=' || bm == b'!'
-            || bm == b'<' || bm == b'>' || bm == b'&' || bm == b'|' || bm == b'^'
-            || bm == b':' || bm == b';' || bm == b',' || bm == b'.' || bm == b'?' || bm == b'%' {
-            ui.push(W { ay: a, ci: a + 1, kk: TokenKind::Fb });
-            a += 1;
+        if ch == b'+' || ch == b'-' || ch == b'*' || ch == b'/' || ch == b'=' || ch == b'!'
+            || ch == b'<' || ch == b'>' || ch == b'&' || ch == b'|' || ch == b'^'
+            || ch == b':' || ch == b';' || ch == b',' || ch == b'.' || ch == b'?' || ch == b'%' {
+            jl.push(O { start: i, end: i + 1, kind: TokenKind::Operator });
+            i += 1;
             continue;
         }
         
-        a += 1;
+        i += 1;
     }
-    ui
+    jl
 }
 
 
 
 
 
-pub fn xji(line: &str) -> Vec<W> {
-    let mut ui = Vec::new();
-    let bf = line.as_bytes();
-    let len = bf.len();
-    let ux = line.ifa();
+pub fn pla(line: &str) -> Vec<O> {
+    let mut jl = Vec::new();
+    let bytes = line.as_bytes();
+    let len = bytes.len();
+    let jw = line.trim_start();
     
     
-    if ux.cj('#') {
-        ui.push(W { ay: 0, ci: len, kk: TokenKind::Ru });
-        return ui;
+    if jw.starts_with('#') {
+        jl.push(O { start: 0, end: len, kind: TokenKind::Comment });
+        return jl;
     }
     
     
-    if ux.cj('[') {
-        let l = len - ux.len();
-        ui.push(W { ay: l, ci: len, kk: TokenKind::Ms });
-        return ui;
+    if jw.starts_with('[') {
+        let offset = len - jw.len();
+        jl.push(O { start: offset, end: len, kind: TokenKind::Attribute });
+        return jl;
     }
     
     
-    let mut a = 0;
+    let mut i = 0;
     
-    while a < len && bf[a] != b'=' {
-        a += 1;
+    while i < len && bytes[i] != b'=' {
+        i += 1;
     }
-    if a < len {
+    if i < len {
         
-        ui.push(W { ay: 0, ci: a, kk: TokenKind::Type });
+        jl.push(O { start: 0, end: i, kind: TokenKind::Type });
         
-        ui.push(W { ay: a, ci: a + 1, kk: TokenKind::Fb });
-        a += 1;
+        jl.push(O { start: i, end: i + 1, kind: TokenKind::Operator });
+        i += 1;
         
-        while a < len && bf[a] == b' ' { a += 1; }
+        while i < len && bytes[i] == b' ' { i += 1; }
         
-        if a < len {
-            let ekl = a;
-            let fay = bf[a];
-            if fay == b'"' || fay == b'\'' {
+        if i < len {
+            let bwr = i;
+            let cey = bytes[i];
+            if cey == b'"' || cey == b'\'' {
                 
-                ui.push(W { ay: ekl, ci: len, kk: TokenKind::String });
-            } else if fay == b't' || fay == b'f' {
+                jl.push(O { start: bwr, end: len, kind: TokenKind::String });
+            } else if cey == b't' || cey == b'f' {
                 
-                ui.push(W { ay: ekl, ci: len, kk: TokenKind::Bx });
-            } else if fay.atb() || fay == b'-' || fay == b'+' {
+                jl.push(O { start: bwr, end: len, kind: TokenKind::Keyword });
+            } else if cey.is_ascii_digit() || cey == b'-' || cey == b'+' {
                 
-                ui.push(W { ay: ekl, ci: len, kk: TokenKind::L });
-            } else if fay == b'[' {
+                jl.push(O { start: bwr, end: len, kind: TokenKind::Number });
+            } else if cey == b'[' {
                 
-                ui.push(W { ay: ekl, ci: len, kk: TokenKind::Aab });
+                jl.push(O { start: bwr, end: len, kind: TokenKind::Bracket });
             } else {
-                ui.push(W { ay: ekl, ci: len, kk: TokenKind::M });
+                jl.push(O { start: bwr, end: len, kind: TokenKind::Normal });
             }
             
-            if let Some(tnm) = line[ekl..].du('#') {
-                let qep = ekl + tnm;
-                ui.push(W { ay: qep, ci: len, kk: TokenKind::Ru });
+            if let Some(hash_pos) = line[bwr..].find('#') {
+                let jtg = bwr + hash_pos;
+                jl.push(O { start: jtg, end: len, kind: TokenKind::Comment });
             }
         }
     } else {
         
-        ui.push(W { ay: 0, ci: len, kk: TokenKind::M });
+        jl.push(O { start: 0, end: len, kind: TokenKind::Normal });
     }
-    ui
+    jl
 }
 
 
 
 
 
-pub const DFN_: u32 = 0xFF569CD6;  
-pub const DFL_: u32    = 0xFFD7BA7D;   
-pub const DFM_: u32    = 0xFFCE9178;    
-pub const DFO_: u32    = 0xFF4EC9B0;    
-pub const DFP_: u32    = 0xFF569CD6;    
+pub const DJG_: u32 = 0xFF569CD6;  
+pub const DJE_: u32    = 0xFFD7BA7D;   
+pub const DJF_: u32    = 0xFFCE9178;    
+pub const DJH_: u32    = 0xFF4EC9B0;    
+pub const DJI_: u32    = 0xFF569CD6;    
 
-pub fn xjg(line: &str) -> Vec<W> {
-    let mut ui = Vec::new();
-    let bf = line.as_bytes();
-    let len = bf.len();
-    let ux = line.ifa();
+pub fn pky(line: &str) -> Vec<O> {
+    let mut jl = Vec::new();
+    let bytes = line.as_bytes();
+    let len = bytes.len();
+    let jw = line.trim_start();
     
     
-    if ux.cj('#') {
-        ui.push(W { ay: 0, ci: len, kk: TokenKind::Bx });
-        return ui;
+    if jw.starts_with('#') {
+        jl.push(O { start: 0, end: len, kind: TokenKind::Keyword });
+        return jl;
     }
     
     
-    if ux.cj("```") {
-        ui.push(W { ay: 0, ci: len, kk: TokenKind::String });
-        return ui;
+    if jw.starts_with("```") {
+        jl.push(O { start: 0, end: len, kind: TokenKind::String });
+        return jl;
     }
     
     
-    if ux.cj("- ") || ux.cj("* ") || ux.cj("+ ") {
-        let l = len - ux.len();
-        ui.push(W { ay: l, ci: l + 2, kk: TokenKind::Akc });
+    if jw.starts_with("- ") || jw.starts_with("* ") || jw.starts_with("+ ") {
+        let offset = len - jw.len();
+        jl.push(O { start: offset, end: offset + 2, kind: TokenKind::Macro });
         
-        if l + 2 < len {
-            ui.push(W { ay: l + 2, ci: len, kk: TokenKind::M });
+        if offset + 2 < len {
+            jl.push(O { start: offset + 2, end: len, kind: TokenKind::Normal });
         }
-        return ui;
+        return jl;
     }
     
     
-    let mut a = 0;
-    let mut diu = 0;
+    let mut i = 0;
+    let mut bho = 0;
     
-    while a < len {
+    while i < len {
         
-        if bf[a] == b'`' {
-            if diu < a {
-                ui.push(W { ay: diu, ci: a, kk: TokenKind::M });
+        if bytes[i] == b'`' {
+            if bho < i {
+                jl.push(O { start: bho, end: i, kind: TokenKind::Normal });
             }
-            let ay = a;
-            a += 1;
-            while a < len && bf[a] != b'`' { a += 1; }
-            if a < len { a += 1; }
-            ui.push(W { ay, ci: a, kk: TokenKind::String });
-            diu = a;
+            let start = i;
+            i += 1;
+            while i < len && bytes[i] != b'`' { i += 1; }
+            if i < len { i += 1; }
+            jl.push(O { start, end: i, kind: TokenKind::String });
+            bho = i;
             continue;
         }
         
         
-        if bf[a] == b'*' && a + 1 < len && bf[a+1] == b'*' {
-            if diu < a {
-                ui.push(W { ay: diu, ci: a, kk: TokenKind::M });
+        if bytes[i] == b'*' && i + 1 < len && bytes[i+1] == b'*' {
+            if bho < i {
+                jl.push(O { start: bho, end: i, kind: TokenKind::Normal });
             }
-            let ay = a;
-            a += 2;
-            while a + 1 < len {
-                if bf[a] == b'*' && bf[a+1] == b'*' { a += 2; break; }
-                a += 1;
+            let start = i;
+            i += 2;
+            while i + 1 < len {
+                if bytes[i] == b'*' && bytes[i+1] == b'*' { i += 2; break; }
+                i += 1;
             }
-            ui.push(W { ay, ci: a, kk: TokenKind::Ms });
-            diu = a;
+            jl.push(O { start, end: i, kind: TokenKind::Attribute });
+            bho = i;
             continue;
         }
         
         
-        if bf[a] == b'[' {
-            if diu < a {
-                ui.push(W { ay: diu, ci: a, kk: TokenKind::M });
+        if bytes[i] == b'[' {
+            if bho < i {
+                jl.push(O { start: bho, end: i, kind: TokenKind::Normal });
             }
-            let ay = a;
-            while a < len && bf[a] != b')' { a += 1; }
-            if a < len { a += 1; }
-            ui.push(W { ay, ci: a, kk: TokenKind::Type });
-            diu = a;
+            let start = i;
+            while i < len && bytes[i] != b')' { i += 1; }
+            if i < len { i += 1; }
+            jl.push(O { start, end: i, kind: TokenKind::Type });
+            bho = i;
             continue;
         }
         
-        a += 1;
+        i += 1;
     }
     
-    if diu < len {
-        ui.push(W { ay: diu, ci: len, kk: TokenKind::M });
+    if bho < len {
+        jl.push(O { start: bho, end: len, kind: TokenKind::Normal });
     }
     
-    ui
+    jl
 }
 
 
-pub fn xjf(line: &str, sh: Language) -> Vec<W> {
-    match sh {
-        Language::Rust => puh(line),
-        Language::Aea => xjh(line),
-        Language::Acj => pug(line, false),
-        Language::C => pug(line, true),
-        Language::Aez => xji(line),
-        Language::Akd => xjg(line),
-        Language::Adu => Vec::new(),
+pub fn pkx(line: &str, ia: Language) -> Vec<O> {
+    match ia {
+        Language::Rust => jnh(line),
+        Language::Python => pkz(line),
+        Language::JavaScript => jng(line, false),
+        Language::C => jng(line, true),
+        Language::Toml => pla(line),
+        Language::Markdown => pky(line),
+        Language::Plain => Vec::new(),
     }
 }
 
@@ -1901,287 +1901,287 @@ pub fn xjf(line: &str, sh: Language) -> Vec<W> {
 
 
 
-pub fn ehm(
-    g: &mut EditorState,
-    b: i32, c: i32, d: u32, i: u32,
-    acd: &dyn Fn(i32, i32, &str, u32),
-    ymw: &dyn Fn(i32, i32, char, u32),
+pub fn bvh(
+    state: &mut EditorState,
+    x: i32, y: i32, w: u32, h: u32,
+    draw_text_fn: &dyn Fn(i32, i32, &str, u32),
+    draw_char_fn: &dyn Fn(i32, i32, char, u32),
 ) {
-    let nk: i32 = 8;
-    let gy: i32 = 16;
-    let bfm: i32 = 22;
-    let jfw: i32 = 22;
-    let dwn: i32 = 28;
-    let kev: i32 = 18;
-    let jts = jfw + dwn + kev;
+    let ew: i32 = 8;
+    let bw: i32 = 16;
+    let aej: i32 = 22;
+    let euh: i32 = 22;
+    let bpg: i32 = 28;
+    let fjt: i32 = 18;
+    let fdg = euh + bpg + fjt;
     
     
-    let nlm = if g.ak.len() >= 10000 { 5 }
-        else if g.ak.len() >= 1000 { 4 }
-        else if g.ak.len() >= 100 { 3 }
+    let hsg = if state.lines.len() >= 10000 { 5 }
+        else if state.lines.len() >= 1000 { 4 }
+        else if state.lines.len() >= 100 { 3 }
         else { 2 };
-    let bqy = (nlm + 2) * nk;
+    let ajv = (hsg + 2) * ew;
     
-    let bds = b + bqy;
-    let bdt = c + jts;
-    let ior = d as i32 - bqy;
-    let byr = i as i32 - jts - bfm;
-    let act = (byr / gy).am(1) as usize;
+    let adm = x + ajv;
+    let adn = y + fdg;
+    let ein = w as i32 - ajv;
+    let anu = h as i32 - fdg - aej;
+    let oe = (anu / bw).max(1) as usize;
     
     
-    if g.gn < g.ug {
-        g.ug = g.gn;
+    if state.cursor_line < state.scroll_y {
+        state.scroll_y = state.cursor_line;
     }
-    if g.gn >= g.ug + act {
-        g.ug = g.gn - act + 1;
+    if state.cursor_line >= state.scroll_y + oe {
+        state.scroll_y = state.cursor_line - oe + 1;
     }
-    g.byk += 1;
-    g.xoy();
+    state.blink_counter += 1;
+    state.update_matching_bracket();
     
     
-    let xp = c;
-    crate::framebuffer::ah(b as u32, xp as u32, d, jfw as u32, 0xFF333333);
+    let ks = y;
+    crate::framebuffer::fill_rect(x as u32, ks as u32, w, euh as u32, 0xFF333333);
     
-    crate::framebuffer::ah(b as u32, (xp + jfw - 1) as u32, d, 1, 0xFF252526);
-    let une = ["File", "Edit", "Selection", "View", "Go", "Run", "Terminal", "Help"];
-    let mut hl = b + 8;
-    for cu in &une {
-        acd(hl, xp + 4, cu, 0xFFCCCCCC);
-        hl += (cu.len() as i32 + 2) * nk;
+    crate::framebuffer::fill_rect(x as u32, (ks + euh - 1) as u32, w, 1, 0xFF252526);
+    let nel = ["File", "Edit", "Selection", "View", "Go", "Run", "Terminal", "Help"];
+    let mut cg = x + 8;
+    for label in &nel {
+        draw_text_fn(cg, ks + 4, label, 0xFFCCCCCC);
+        cg += (label.len() as i32 + 2) * ew;
     }
     
     
-    let bxl = c + jfw;
-    crate::framebuffer::ah(b as u32, bxl as u32, d, dwn as u32, 0xFF252526);
+    let amy = y + euh;
+    crate::framebuffer::fill_rect(x as u32, amy as u32, w, bpg as u32, 0xFF252526);
     
-    let mjp = g.wn.as_ref().map(|ai| {
-        ai.cmm('/').next().unwrap_or(ai.as_str())
+    let gxw = state.file_path.as_ref().map(|aa| {
+        aa.rsplit('/').next().unwrap_or(aa.as_str())
     }).unwrap_or("untitled");
-    let kqc = if g.no { " *" } else { "" };
+    let fsi = if state.dirty { " *" } else { "" };
     
-    let ubw = match g.eej {
+    let mwf = match state.language {
         Language::Rust => "RS",
-        Language::Aea => "PY",
-        Language::Acj => "JS",
+        Language::Python => "PY",
+        Language::JavaScript => "JS",
         Language::C => " C",
-        Language::Aez => "TL",
-        Language::Akd => "MD",
-        Language::Adu => "  ",
+        Language::Toml => "TL",
+        Language::Markdown => "MD",
+        Language::Plain => "  ",
     };
-    let icv = format!(" {} {} {}  x", ubw, mjp, kqc);
-    let axb = ((icv.len() as u32) * 8 + 4).v(d);
+    let ebe = format!(" {} {} {}  x", mwf, gxw, fsi);
+    let zm = ((ebe.len() as u32) * 8 + 4).min(w);
     
-    crate::framebuffer::ah(b as u32, bxl as u32, axb, dwn as u32, MF_);
+    crate::framebuffer::fill_rect(x as u32, amy as u32, zm, bpg as u32, ND_);
     
-    crate::framebuffer::ah(b as u32, bxl as u32, axb, 2, 0xFF007ACC);
+    crate::framebuffer::fill_rect(x as u32, amy as u32, zm, 2, 0xFF007ACC);
     
-    acd(b + 4, bxl + 8, &icv, JQ_);
+    draw_text_fn(x + 4, amy + 8, &ebe, KH_);
     
     
-    let gzz = bxl + dwn;
-    crate::framebuffer::ah(b as u32, gzz as u32, d, kev as u32, 0xFF1E1E1E);
-    if let Some(ref path) = g.wn {
+    let dis = amy + bpg;
+    crate::framebuffer::fill_rect(x as u32, dis as u32, w, fjt as u32, 0xFF1E1E1E);
+    if let Some(ref path) = state.file_path {
         
-        let mut bx = b + bqy + 4;
-        let mut ay = 0;
-        let bf = path.as_bytes();
-        for a in 0..=bf.len() {
-            if a == bf.len() || bf[a] == b'/' {
-                if a > ay {
-                    let vu = &path[ay..a];
-                    if ay > 0 {
-                        acd(bx, gzz + 2, " > ", 0xFF666666);
-                        bx += 3 * nk;
+        let mut bx = x + ajv + 4;
+        let mut start = 0;
+        let bytes = path.as_bytes();
+        for i in 0..=bytes.len() {
+            if i == bytes.len() || bytes[i] == b'/' {
+                if i > start {
+                    let jn = &path[start..i];
+                    if start > 0 {
+                        draw_text_fn(bx, dis + 2, " > ", 0xFF666666);
+                        bx += 3 * ew;
                     }
-                    acd(bx, gzz + 2, vu, 0xFF858585);
-                    bx += vu.len() as i32 * nk;
+                    draw_text_fn(bx, dis + 2, jn, 0xFF858585);
+                    bx += jn.len() as i32 * ew;
                 }
-                ay = a + 1;
+                start = i + 1;
             }
         }
     } else {
-        acd(b + bqy + 4, gzz + 2, "untitled", 0xFF858585);
+        draw_text_fn(x + ajv + 4, dis + 2, "untitled", 0xFF858585);
     }
     
-    crate::framebuffer::ah(b as u32, (gzz + kev - 1) as u32, d, 1, 0xFF333333);
+    crate::framebuffer::fill_rect(x as u32, (dis + fjt - 1) as u32, w, 1, 0xFF333333);
     
     
-    crate::framebuffer::ah(b as u32, bdt as u32, d, byr as u32, MF_);
+    crate::framebuffer::fill_rect(x as u32, adn as u32, w, anu as u32, ND_);
     
     
-    crate::framebuffer::ah(b as u32, bdt as u32, bqy as u32, byr as u32, AOE_);
-    crate::framebuffer::ah((b + bqy - 1) as u32, bdt as u32, 1, byr as u32, 0xFF333333);
+    crate::framebuffer::fill_rect(x as u32, adn as u32, ajv as u32, anu as u32, AQE_);
+    crate::framebuffer::fill_rect((x + ajv - 1) as u32, adn as u32, 1, anu as u32, 0xFF333333);
     
     
-    for afj in 0..act {
-        let atd = g.ug + afj;
-        if atd >= g.ak.len() { break; }
+    for pt in 0..oe {
+        let xf = state.scroll_y + pt;
+        if xf >= state.lines.len() { break; }
         
-        let ct = bdt + (afj as i32 * gy);
-        if ct + gy > bdt + byr { break; }
+        let ly = adn + (pt as i32 * bw);
+        if ly + bw > adn + anu { break; }
         
-        let jbd = atd == g.gn;
+        let eri = xf == state.cursor_line;
         
         
-        if jbd {
-            crate::framebuffer::ah(
-                b as u32, ct as u32,
-                bqy as u32, gy as u32,
+        if eri {
+            crate::framebuffer::fill_rect(
+                x as u32, ly as u32,
+                ajv as u32, bw as u32,
                 0xFF1A1D26,
             );
-            crate::framebuffer::ah(
-                bds as u32, ct as u32,
-                ior as u32, gy as u32,
-                AOB_,
+            crate::framebuffer::fill_rect(
+                adm as u32, ly as u32,
+                ein as u32, bw as u32,
+                AQB_,
             );
         }
         
         
-        if let Some((aks, jt, ij, ec)) = g.hll() {
-            if atd >= aks && atd <= ij {
-                let ark = g.ak[atd].len();
-                let grx = if atd == aks { jt.v(ark) } else { 0 };
-                let jod = if atd == ij { ec.v(ark) } else { ark };
-                if grx < jod {
-                    let cr = bds + 4 + (grx as i32 * nk);
-                    let kp = ((jod - grx) as i32 * nk) as u32;
-                    crate::framebuffer::ah(
-                        cr as u32, ct as u32, kp, gy as u32, 0xFF264F78,
+        if let Some((sl, dr, el, ec)) = state.get_selection_range() {
+            if xf >= sl && xf <= el {
+                let wh = state.lines[xf].len();
+                let ded = if xf == sl { dr.min(wh) } else { 0 };
+                let ezw = if xf == el { ec.min(wh) } else { wh };
+                if ded < ezw {
+                    let am = adm + 4 + (ded as i32 * ew);
+                    let dy = ((ezw - ded) as i32 * ew) as u32;
+                    crate::framebuffer::fill_rect(
+                        am as u32, ly as u32, dy, bw as u32, 0xFF264F78,
                     );
                 }
             }
         }
         
         
-        let ufa = &g.ak[atd];
-        let mut oeb = 0usize;
-        for o in ufa.bf() {
-            if o == b' ' { oeb += 1; } else { break; }
+        let myo = &state.lines[xf];
+        let mut igj = 0usize;
+        for b in myo.bytes() {
+            if b == b' ' { igj += 1; } else { break; }
         }
-        let tss = oeb / 4;
-        for jy in 0..tss {
-            let nzz = bds + 4 + (jy as i32 * 4 * nk);
-            if nzz < b + d as i32 {
-                let tig = if jbd { 0xFF505050 } else { 0xFF404040 };
-                crate::framebuffer::ah(nzz as u32, ct as u32, 1, gy as u32, tig);
+        let mop = igj / 4;
+        for level in 0..mop {
+            let idd = adm + 4 + (level as i32 * 4 * ew);
+            if idd < x + w as i32 {
+                let mgp = if eri { 0xFF505050 } else { 0xFF404040 };
+                crate::framebuffer::fill_rect(idd as u32, ly as u32, 1, bw as u32, mgp);
             }
         }
         
         
-        if let Some((gmt, jfp)) = g.hqt {
-            if atd == gmt {
-                let bx = bds + 4 + (jfp as i32 * nk);
-                crate::framebuffer::ah(bx as u32, ct as u32, nk as u32, gy as u32, 0xFF3A3D41);
-                crate::framebuffer::ah(bx as u32, ct as u32, nk as u32, 1, 0xFF888888);
-                crate::framebuffer::ah(bx as u32, (ct + gy - 1) as u32, nk as u32, 1, 0xFF888888);
-                crate::framebuffer::ah(bx as u32, ct as u32, 1, gy as u32, 0xFF888888);
-                crate::framebuffer::ah((bx + nk - 1) as u32, ct as u32, 1, gy as u32, 0xFF888888);
+        if let Some((ml, mc)) = state.matching_bracket {
+            if xf == ml {
+                let bx = adm + 4 + (mc as i32 * ew);
+                crate::framebuffer::fill_rect(bx as u32, ly as u32, ew as u32, bw as u32, 0xFF3A3D41);
+                crate::framebuffer::fill_rect(bx as u32, ly as u32, ew as u32, 1, 0xFF888888);
+                crate::framebuffer::fill_rect(bx as u32, (ly + bw - 1) as u32, ew as u32, 1, 0xFF888888);
+                crate::framebuffer::fill_rect(bx as u32, ly as u32, 1, bw as u32, 0xFF888888);
+                crate::framebuffer::fill_rect((bx + ew - 1) as u32, ly as u32, 1, bw as u32, 0xFF888888);
             }
-            if atd == g.gn && g.hn < g.ak[atd].len() {
-                let aiv = g.ak[atd].as_bytes()[g.hn];
-                if oh!(aiv, b'(' | b')' | b'{' | b'}' | b'[' | b']') {
-                    let hck = bds + 4 + (g.hn as i32 * nk);
-                    crate::framebuffer::ah(hck as u32, ct as u32, nk as u32, gy as u32, 0xFF3A3D41);
-                    crate::framebuffer::ah(hck as u32, ct as u32, nk as u32, 1, 0xFF888888);
-                    crate::framebuffer::ah(hck as u32, (ct + gy - 1) as u32, nk as u32, 1, 0xFF888888);
-                    crate::framebuffer::ah(hck as u32, ct as u32, 1, gy as u32, 0xFF888888);
-                    crate::framebuffer::ah((hck + nk - 1) as u32, ct as u32, 1, gy as u32, 0xFF888888);
+            if xf == state.cursor_line && state.cursor_col < state.lines[xf].len() {
+                let cb = state.lines[xf].as_bytes()[state.cursor_col];
+                if matches!(cb, b'(' | b')' | b'{' | b'}' | b'[' | b']') {
+                    let dkj = adm + 4 + (state.cursor_col as i32 * ew);
+                    crate::framebuffer::fill_rect(dkj as u32, ly as u32, ew as u32, bw as u32, 0xFF3A3D41);
+                    crate::framebuffer::fill_rect(dkj as u32, ly as u32, ew as u32, 1, 0xFF888888);
+                    crate::framebuffer::fill_rect(dkj as u32, (ly + bw - 1) as u32, ew as u32, 1, 0xFF888888);
+                    crate::framebuffer::fill_rect(dkj as u32, ly as u32, 1, bw as u32, 0xFF888888);
+                    crate::framebuffer::fill_rect((dkj + ew - 1) as u32, ly as u32, 1, bw as u32, 0xFF888888);
                 }
             }
         }
         
         
-        let uey = format!("{:>width$} ", atd + 1, z = nlm as usize);
-        let htc = if jbd { 0xFFC6C6C6 } else { AOH_ };
-        acd(b + 2, ct, &uey, htc);
+        let mym = format!("{:>width$} ", xf + 1, width = hsg as usize);
+        let dvm = if eri { 0xFFC6C6C6 } else { AQH_ };
+        draw_text_fn(x + 2, ly, &mym, dvm);
         
         
-        let line = &g.ak[atd];
-        let eb = xjf(line, g.eej);
-        if !eb.is_empty() {
-            for dlx in &eb {
-                let s = puf(dlx.kk);
-                let xga = &line[dlx.ay..dlx.ci];
-                let cr = bds + 4 + (dlx.ay as i32 * nk);
-                if cr < b + d as i32 {
-                    acd(cr, ct, xga, s);
+        let line = &state.lines[xf];
+        let tokens = pkx(line, state.language);
+        if !tokens.is_empty() {
+            for bjg in &tokens {
+                let color = jnf(bjg.kind);
+                let pil = &line[bjg.start..bjg.end];
+                let am = adm + 4 + (bjg.start as i32 * ew);
+                if am < x + w as i32 {
+                    draw_text_fn(am, ly, pil, color);
                 }
             }
         } else if !line.is_empty() {
-            acd(bds + 4, ct, line, JQ_);
+            draw_text_fn(adm + 4, ly, line, KH_);
         }
         
         
-        if jbd {
-            let kdv = (g.byk / 30) % 2 == 0;
-            if kdv {
-                let cx = bds + 4 + (g.hn as i32 * nk);
-                crate::framebuffer::ah(cx as u32, ct as u32, 2, gy as u32, AOC_);
+        if eri {
+            let fjk = (state.blink_counter / 30) % 2 == 0;
+            if fjk {
+                let cx = adm + 4 + (state.cursor_col as i32 * ew);
+                crate::framebuffer::fill_rect(cx as u32, ly as u32, 2, bw as u32, AQC_);
             }
         }
     }
     
     
-    if g.ak.len() > act {
-        let auz = (b + d as i32 - 10) as u32;
-        let dbr = byr as u32;
-        let axd = ((act as u32 * dbr) / g.ak.len() as u32).am(20);
-        let bsm = (g.ug as u32 * (dbr - axd)) / g.ak.len().ao(act) as u32;
-        crate::framebuffer::ah(auz + 3, bdt as u32, 7, dbr, 0xFF252526);
-        crate::framebuffer::afp(auz + 3, bdt as u32 + bsm, 7, axd, 3, 0xFF6A6A6A);
+    if state.lines.len() > oe {
+        let yc = (x + w as i32 - 10) as u32;
+        let bdo = anu as u32;
+        let zo = ((oe as u32 * bdo) / state.lines.len() as u32).max(20);
+        let akn = (state.scroll_y as u32 * (bdo - zo)) / state.lines.len().saturating_sub(oe) as u32;
+        crate::framebuffer::fill_rect(yc + 3, adn as u32, 7, bdo, 0xFF252526);
+        crate::framebuffer::fill_rounded_rect(yc + 3, adn as u32 + akn, 7, zo, 3, 0xFF6A6A6A);
     }
     
     
-    if g.cqn.is_some() {
-        let nud: i32 = if g.dbe.is_some() { 56 } else { 32 };
-        let ghb: i32 = 370.v(ior);
-        let hjo = b + d as i32 - ghb - 20;
-        let hjp = bdt + 4;
+    if state.find_query.is_some() {
+        let hyu: i32 = if state.replace_text.is_some() { 56 } else { 32 };
+        let cxv: i32 = 370.min(ein);
+        let dpq = x + w as i32 - cxv - 20;
+        let dpr = adn + 4;
         
-        crate::framebuffer::ah((hjo + 2) as u32, (hjp + 2) as u32, ghb as u32, nud as u32, 0xFF0A0A0A);
-        crate::framebuffer::ah(hjo as u32, hjp as u32, ghb as u32, nud as u32, 0xFF252526);
-        crate::framebuffer::ah(hjo as u32, hjp as u32, ghb as u32, 1, 0xFF007ACC);
+        crate::framebuffer::fill_rect((dpq + 2) as u32, (dpr + 2) as u32, cxv as u32, hyu as u32, 0xFF0A0A0A);
+        crate::framebuffer::fill_rect(dpq as u32, dpr as u32, cxv as u32, hyu as u32, 0xFF252526);
+        crate::framebuffer::fill_rect(dpq as u32, dpr as u32, cxv as u32, 1, 0xFF007ACC);
         
-        let query = g.cqn.ahz().unwrap_or("");
-        let uki = if g.bbq.is_empty() {
+        let query = state.find_query.as_deref().unwrap_or("");
+        let nch = if state.find_matches.is_empty() {
             if query.is_empty() { String::new() } else { String::from(" No results") }
         } else {
-            format!(" {}/{}", g.cep + 1, g.bbq.len())
+            format!(" {}/{}", state.find_match_idx + 1, state.find_matches.len())
         };
-        let nuc = !g.dhe;
-        let ggw = hjo + 8;
-        let iuh = hjp + 6;
-        let iug = ghb - 100;
-        crate::framebuffer::ah(ggw as u32, iuh as u32, iug as u32, 18, if nuc { 0xFF3C3C3C } else { 0xFF333333 });
-        if nuc {
-            crate::framebuffer::ah(ggw as u32, (iuh + 17) as u32, iug as u32, 1, 0xFF007ACC);
+        let hyt = !state.find_replace_mode;
+        let cxs = dpq + 8;
+        let emn = dpr + 6;
+        let emm = cxv - 100;
+        crate::framebuffer::fill_rect(cxs as u32, emn as u32, emm as u32, 18, if hyt { 0xFF3C3C3C } else { 0xFF333333 });
+        if hyt {
+            crate::framebuffer::fill_rect(cxs as u32, (emn + 17) as u32, emm as u32, 1, 0xFF007ACC);
         }
-        acd(ggw + 4, iuh + 2, query, 0xFFCCCCCC);
-        acd(hjo + ghb - 90, iuh + 2, &uki, 0xFF858585);
+        draw_text_fn(cxs + 4, emn + 2, query, 0xFFCCCCCC);
+        draw_text_fn(dpq + cxv - 90, emn + 2, &nch, 0xFF858585);
         
-        if let Some(ref replace) = g.dbe {
-            let maa = hjp + 30;
-            let pcg = g.dhe;
-            crate::framebuffer::ah(ggw as u32, maa as u32, iug as u32, 18, if pcg { 0xFF3C3C3C } else { 0xFF333333 });
-            if pcg {
-                crate::framebuffer::ah(ggw as u32, (maa + 17) as u32, iug as u32, 1, 0xFF007ACC);
+        if let Some(ref replace) = state.replace_text {
+            let grk = dpr + 30;
+            let jab = state.find_replace_mode;
+            crate::framebuffer::fill_rect(cxs as u32, grk as u32, emm as u32, 18, if jab { 0xFF3C3C3C } else { 0xFF333333 });
+            if jab {
+                crate::framebuffer::fill_rect(cxs as u32, (grk + 17) as u32, emm as u32, 1, 0xFF007ACC);
             }
-            acd(ggw + 4, maa + 2, replace, 0xFFCCCCCC);
+            draw_text_fn(cxs + 4, grk + 2, replace, 0xFFCCCCCC);
         }
         
         
-        let jkq = query.len();
-        if jkq > 0 {
-            for &(gmt, jfp) in &g.bbq {
-                if gmt >= g.ug && gmt < g.ug + act {
-                    let afj = gmt - g.ug;
-                    let lmc = bdt + (afj as i32 * gy);
-                    let lmh = bds + 4 + (jfp as i32 * nk);
-                    let efp = (jkq as i32 * nk) as u32;
-                    crate::framebuffer::ah(lmh as u32, lmc as u32, efp, gy as u32, 0xFF613214);
-                    if g.cep < g.bbq.len() && g.bbq[g.cep] == (gmt, jfp) {
-                        crate::framebuffer::ah(lmh as u32, lmc as u32, efp, 1, 0xFFE8AB53);
-                        crate::framebuffer::ah(lmh as u32, (lmc + gy - 1) as u32, efp, 1, 0xFFE8AB53);
+        let exi = query.len();
+        if exi > 0 {
+            for &(ml, mc) in &state.find_matches {
+                if ml >= state.scroll_y && ml < state.scroll_y + oe {
+                    let pt = ml - state.scroll_y;
+                    let ghw = adn + (pt as i32 * bw);
+                    let ghx = adm + 4 + (mc as i32 * ew);
+                    let buk = (exi as i32 * ew) as u32;
+                    crate::framebuffer::fill_rect(ghx as u32, ghw as u32, buk, bw as u32, 0xFF613214);
+                    if state.find_match_idx < state.find_matches.len() && state.find_matches[state.find_match_idx] == (ml, mc) {
+                        crate::framebuffer::fill_rect(ghx as u32, ghw as u32, buk, 1, 0xFFE8AB53);
+                        crate::framebuffer::fill_rect(ghx as u32, (ghw + bw - 1) as u32, buk, 1, 0xFFE8AB53);
                     }
                 }
             }
@@ -2189,64 +2189,64 @@ pub fn ehm(
     }
     
     
-    if let Some(ref input) = g.dri {
-        let fgr: i32 = 320.v(d as i32 - 40);
-        let nlg: i32 = 32;
-        let fgs = b + (d as i32 - fgr) / 2;
-        let irb = c + jts + 2;
-        crate::framebuffer::ah((fgs + 2) as u32, (irb + 2) as u32, fgr as u32, nlg as u32, 0xFF0A0A0A);
-        crate::framebuffer::ah(fgs as u32, irb as u32, fgr as u32, nlg as u32, 0xFF252526);
-        crate::framebuffer::ah(fgs as u32, irb as u32, fgr as u32, 2, 0xFF007ACC);
-        let alf = irb + 6;
-        crate::framebuffer::ah((fgs + 8) as u32, alf as u32, (fgr - 16) as u32, 18, 0xFF3C3C3C);
-        crate::framebuffer::ah((fgs + 8) as u32, (alf + 17) as u32, (fgr - 16) as u32, 1, 0xFF007ACC);
-        let tgr = format!(":{}", input);
-        acd(fgs + 12, alf + 2, &tgr, 0xFFCCCCCC);
-        let hint = format!("Go to Line (1-{})", g.ak.len());
-        let hmy = fgs + fgr - (hint.len() as i32 * nk) - 12;
-        acd(hmy, alf + 2, &hint, 0xFF666666);
+    if let Some(ref input) = state.goto_line_input {
+        let cii: i32 = 320.min(w as i32 - 40);
+        let hsb: i32 = 32;
+        let cij = x + (w as i32 - cii) / 2;
+        let ekc = y + fdg + 2;
+        crate::framebuffer::fill_rect((cij + 2) as u32, (ekc + 2) as u32, cii as u32, hsb as u32, 0xFF0A0A0A);
+        crate::framebuffer::fill_rect(cij as u32, ekc as u32, cii as u32, hsb as u32, 0xFF252526);
+        crate::framebuffer::fill_rect(cij as u32, ekc as u32, cii as u32, 2, 0xFF007ACC);
+        let sv = ekc + 6;
+        crate::framebuffer::fill_rect((cij + 8) as u32, sv as u32, (cii - 16) as u32, 18, 0xFF3C3C3C);
+        crate::framebuffer::fill_rect((cij + 8) as u32, (sv + 17) as u32, (cii - 16) as u32, 1, 0xFF007ACC);
+        let mfj = format!(":{}", input);
+        draw_text_fn(cij + 12, sv + 2, &mfj, 0xFFCCCCCC);
+        let hint = format!("Go to Line (1-{})", state.lines.len());
+        let drk = cij + cii - (hint.len() as i32 * ew) - 12;
+        draw_text_fn(drk, sv + 2, &hint, 0xFF666666);
     }
 
     
-    let uo = c + jts + byr;
-    crate::framebuffer::ah(b as u32, uo as u32, d, bfm as u32, AAF_);
+    let status_y = y + fdg + anu;
+    crate::framebuffer::fill_rect(x as u32, status_y as u32, w, aej as u32, ABU_);
     
     
-    let mut gsr = b + 8;
-    acd(gsr, uo + 4, "@ main", GD_);
-    gsr += 7 * nk;
-    crate::framebuffer::ah(gsr as u32, (uo + 4) as u32, 1, 14, 0xFF1A6DAA);
-    gsr += 6;
-    if g.no {
-        acd(gsr, uo + 4, "* Modified", 0xFFFFD166);
+    let mut deo = x + 8;
+    draw_text_fn(deo, status_y + 4, "@ main", GS_);
+    deo += 7 * ew;
+    crate::framebuffer::fill_rect(deo as u32, (status_y + 4) as u32, 1, 14, 0xFF1A6DAA);
+    deo += 6;
+    if state.dirty {
+        draw_text_fn(deo, status_y + 4, "* Modified", 0xFFFFD166);
     } else {
-        acd(gsr, uo + 4, "Saved", GD_);
+        draw_text_fn(deo, status_y + 4, "Saved", GS_);
     }
     
     
-    let dar = format!("Ln {}, Col {}", g.gn + 1, g.hn + 1);
-    let oib = g.eej.j();
+    let bdb = format!("Ln {}, Col {}", state.cursor_line + 1, state.cursor_col + 1);
+    let ijh = state.language.name();
     
-    let mut bxh = b + d as i32 - 8;
+    let mut amw = x + w as i32 - 8;
     
-    bxh -= dar.len() as i32 * nk;
-    acd(bxh, uo + 4, &dar, GD_);
-    bxh -= 10;
-    crate::framebuffer::ah(bxh as u32, (uo + 4) as u32, 1, 14, 0xFF1A6DAA);
-    bxh -= 6;
+    amw -= bdb.len() as i32 * ew;
+    draw_text_fn(amw, status_y + 4, &bdb, GS_);
+    amw -= 10;
+    crate::framebuffer::fill_rect(amw as u32, (status_y + 4) as u32, 1, 14, 0xFF1A6DAA);
+    amw -= 6;
     
-    bxh -= oib.len() as i32 * nk;
-    acd(bxh, uo + 4, oib, GD_);
-    bxh -= 10;
-    crate::framebuffer::ah(bxh as u32, (uo + 4) as u32, 1, 14, 0xFF1A6DAA);
-    bxh -= 6;
+    amw -= ijh.len() as i32 * ew;
+    draw_text_fn(amw, status_y + 4, ijh, GS_);
+    amw -= 10;
+    crate::framebuffer::fill_rect(amw as u32, (status_y + 4) as u32, 1, 14, 0xFF1A6DAA);
+    amw -= 6;
     
-    bxh -= 5 * nk;
-    acd(bxh, uo + 4, "UTF-8", GD_);
-    bxh -= 10;
-    crate::framebuffer::ah(bxh as u32, (uo + 4) as u32, 1, 14, 0xFF1A6DAA);
-    bxh -= 6;
+    amw -= 5 * ew;
+    draw_text_fn(amw, status_y + 4, "UTF-8", GS_);
+    amw -= 10;
+    crate::framebuffer::fill_rect(amw as u32, (status_y + 4) as u32, 1, 14, 0xFF1A6DAA);
+    amw -= 6;
     
-    bxh -= 9 * nk;
-    acd(bxh, uo + 4, "Spaces: 4", GD_);
+    amw -= 9 * ew;
+    draw_text_fn(amw, status_y + 4, "Spaces: 4", GS_);
 }

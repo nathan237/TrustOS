@@ -221,8 +221,8 @@ impl Rtl8169Driver {
 
     /// Convert virtual address to physical (HHDM)
     fn virt_to_phys(virt: u64) -> u64 {
-        const HHDM_OFFSET: u64 = 0xFFFF_8000_0000_0000;
-        if virt >= HHDM_OFFSET { virt - HHDM_OFFSET } else { virt }
+        let hhdm = crate::memory::hhdm_offset();
+        if virt >= hhdm { virt - hhdm } else { virt }
     }
 
     /// Software reset — set CMD.Reset, wait for it to clear
@@ -407,19 +407,39 @@ impl Driver for Rtl8169Driver {
         crate::pci::enable_bus_master(pci_device);
         crate::pci::enable_memory_space(pci_device);
 
-        // Get BAR0 (MMIO)
-        let bar0 = pci_device.bar_address(0).ok_or("No BAR0")?;
-        if bar0 == 0 { return Err("BAR0 is zero"); }
+        // RTL8168/8169: BAR0 is I/O ports, BAR1 is 32-bit MMIO, BAR2 is 64-bit MMIO.
+        // Find the first memory BAR (prefer 64-bit / BAR2).
+        let mut mmio_phys: u64 = 0;
+        let mut mmio_bar_index: usize = 0;
+        for i in 0..6 {
+            if pci_device.bar_is_memory(i) {
+                if let Some(addr) = pci_device.bar_address(i) {
+                    if addr != 0 {
+                        mmio_phys = addr;
+                        mmio_bar_index = i;
+                        break;
+                    }
+                }
+            }
+        }
+        if mmio_phys == 0 {
+            crate::serial_println!("[RTL8169] No memory BAR found! BARs: {:08X} {:08X} {:08X} {:08X} {:08X} {:08X}",
+                pci_device.bar[0], pci_device.bar[1], pci_device.bar[2],
+                pci_device.bar[3], pci_device.bar[4], pci_device.bar[5]);
+            return Err("No MMIO BAR");
+        }
+        crate::serial_println!("[RTL8169] using BAR{} phys={:#x} (BAR0 raw={:08X})",
+            mmio_bar_index, mmio_phys, pci_device.bar[0]);
 
-        // Map MMIO (256 bytes is the standard register space)
+        // Map MMIO (4 KB covers full register space)
         const RTL8169_MMIO_SIZE: usize = 4096;
-        self.mmio_base = crate::memory::map_mmio(bar0, RTL8169_MMIO_SIZE)
+        self.mmio_base = crate::memory::map_mmio(mmio_phys, RTL8169_MMIO_SIZE)
             .map_err(|e| {
                 crate::serial_println!("[RTL8169] map_mmio failed: {}", e);
                 "Failed to map RTL8169 MMIO"
             })?;
 
-        crate::log_debug!("[RTL8169] MMIO: phys={:#x} virt={:#x}", bar0, self.mmio_base);
+        crate::log_debug!("[RTL8169] MMIO: phys={:#x} virt={:#x}", mmio_phys, self.mmio_base);
 
         // Reset
         self.reset();

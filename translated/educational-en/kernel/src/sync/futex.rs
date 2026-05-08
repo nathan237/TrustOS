@@ -69,22 +69,22 @@ const FUTEX_COMMAND_MASK: u32 = !(FUTEX_PRIVATE_FLAG | FUTEX_CLOCK_REALTIME);
 /// * `val3` - Additional value (for some operations)
 pub fn futex(
     uaddr: u64,
-    futex_operation: u32,
-    value: u32,
+    futex_op: u32,
+    val: u32,
     timeout: u64,
     uaddr2: u64,
     val3: u32,
 ) -> Result<i64, i32> {
-    let cmd = futex_operation & op::FUTEX_COMMAND_MASK;
+    let cmd = futex_op & op::FUTEX_COMMAND_MASK;
     
         // Pattern matching — Rust's exhaustive branching construct.
 match cmd {
-        op::FUTEX_WAIT => futex_wait(uaddr, value, timeout),
-        op::FUTEX_WAKE => futex_wake(uaddr, value),
-        op::FUTEX_REQUEUE => futex_requeue(uaddr, value, uaddr2, val3),
-        op::FUTEX_CMP_REQUEUE => futex_cmp_requeue(uaddr, value, uaddr2, val3, timeout as u32),
-        op::FUTEX_WAIT_BITSET => futex_wait_bitset(uaddr, value, timeout, val3),
-        op::FUTEX_WAKE_BITSET => futex_wake_bitset(uaddr, value, val3),
+        op::FUTEX_WAIT => futex_wait(uaddr, val, timeout),
+        op::FUTEX_WAKE => futex_wake(uaddr, val),
+        op::FUTEX_REQUEUE => futex_requeue(uaddr, val, uaddr2, val3),
+        op::FUTEX_CMP_REQUEUE => futex_cmp_requeue(uaddr, val, uaddr2, val3, timeout as u32),
+        op::FUTEX_WAIT_BITSET => futex_wait_bitset(uaddr, val, timeout, val3),
+        op::FUTEX_WAKE_BITSET => futex_wake_bitset(uaddr, val, val3),
         _ => Err(-38), // ENOSYS
     }
 }
@@ -164,7 +164,7 @@ fn futex_wake(uaddr: u64, count: u32) -> Result<i64, i32> {
     let mut queues = FUTEX_QUEUES.lock();
     
     let woken = if let Some(queue) = queues.get_mut(&uaddr) {
-        let to_wake = (count as usize).minimum(queue.len());
+        let to_wake = (count as usize).min(queue.len());
         
         // Remove first `to_wake` entries
         let woken: Vec<_> = queue.drain(..to_wake).collect();
@@ -194,7 +194,7 @@ fn futex_requeue(uaddr: u64, wake_count: u32, uaddr2: u64, requeue_count: u32) -
     
     if let Some(queue) = queues.get_mut(&uaddr) {
         // Wake first `wake_count`
-        let to_wake = (wake_count as usize).minimum(queue.len());
+        let to_wake = (wake_count as usize).min(queue.len());
         let woken: Vec<_> = queue.drain(..to_wake).collect();
         
         for entry in &woken {
@@ -203,7 +203,7 @@ fn futex_requeue(uaddr: u64, wake_count: u32, uaddr2: u64, requeue_count: u32) -
         total_woken = woken.len() as i64;
         
         // Requeue next `requeue_count`
-        let to_requeue = (requeue_count as usize).minimum(queue.len());
+        let to_requeue = (requeue_count as usize).min(queue.len());
         let requeued: Vec<_> = queue.drain(..to_requeue).collect();
         
         // Add to second queue

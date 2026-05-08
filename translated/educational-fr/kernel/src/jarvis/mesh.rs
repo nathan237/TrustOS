@@ -144,9 +144,9 @@ pub struct PeerInformation {
     /// Current role
     pub role: NodeRole,
     /// Uptime in ms
-    pub uptime_mouse: u64,
+    pub uptime_ms: u64,
     /// Model parameter count
-    pub parameter_count: u32,
+    pub param_count: u32,
     /// Training steps completed
     pub training_steps: u32,
     /// CPU cores available
@@ -158,7 +158,7 @@ pub struct PeerInformation {
     /// CPU architecture of this peer
     pub arch: CpuArch,
     /// Last time we heard from this peer (our local uptime_ms)
-    pub last_seen_mouse: u64,
+    pub last_seen_ms: u64,
     /// Is this peer alive?
     pub alive: bool,
 }
@@ -175,7 +175,7 @@ match self.role {
         };
         format!("{}.{}.{}.{}  arch={}  role={}  params={}  steps={}  cores={}  ram={}MB",
             self.ip[0], self.ip[1], self.ip[2], self.ip[3],
-            self.arch.name(), role_str, self.parameter_count, self.training_steps,
+            self.arch.name(), role_str, self.param_count, self.training_steps,
             self.cpu_cores, self.ram_mb)
     }
 }
@@ -296,7 +296,7 @@ pub fn poll() {
         return;
     }
 
-    let now = crate::time::uptime_mouse();
+    let now = crate::time::uptime_ms();
 
     // 1. Receive and process incoming mesh packets
     while let Some(data) = crate::netstack::udp::recv_on(MESH_DISCOVERY_PORT) {
@@ -327,42 +327,42 @@ pub fn poll() {
 
 /// Build a mesh packet with our current info
 fn build_packet(msg_type: MsgType) -> [u8; PACKET_SIZE] {
-    let mut packet = [0u8; PACKET_SIZE];
+    let mut pkt = [0u8; PACKET_SIZE];
 
     // Magic
-    packet[0..4].copy_from_slice(MAGIC);
+    pkt[0..4].copy_from_slice(MAGIC);
 
     // Message type
-    packet[4] = msg_type as u8;
+    pkt[4] = msg_type as u8;
 
     // Our IP
     if let Some((ip, _, _)) = crate::network::get_ipv4_config() {
-        packet[5..9].copy_from_slice(ip.as_bytes());
+        pkt[5..9].copy_from_slice(ip.as_bytes());
     }
 
     // Our MAC
     if let Some(mac) = crate::network::get_mac_address() {
-        packet[9..15].copy_from_slice(&mac);
+        pkt[9..15].copy_from_slice(&mac);
     }
 
     // Role
-    packet[15] = OUR_ROLE.load(Ordering::SeqCst);
+    pkt[15] = OUR_ROLE.load(Ordering::SeqCst);
 
     // Uptime
-    let uptime = crate::time::uptime_mouse();
-    packet[16..24].copy_from_slice(&uptime.to_be_bytes());
+    let uptime = crate::time::uptime_ms();
+    pkt[16..24].copy_from_slice(&uptime.to_be_bytes());
 
     // Param count
     let params = if super::is_ready() {
-        super::MODEL.lock().as_ref().map(|m| m.parameter_count() as u32).unwrap_or(0)
+        super::MODEL.lock().as_ref().map(|m| m.param_count() as u32).unwrap_or(0)
     } else {
         0
     };
-    packet[24..28].copy_from_slice(&params.to_be_bytes());
+    pkt[24..28].copy_from_slice(&params.to_be_bytes());
 
     // Training steps
     let steps = super::TRAINING_STEPS.load(Ordering::SeqCst) as u32;
-    packet[28..32].copy_from_slice(&steps.to_be_bytes());
+    pkt[28..32].copy_from_slice(&steps.to_be_bytes());
 
     // CPU cores — detect from SMP subsystem
     let cores: u16 = {
@@ -371,19 +371,19 @@ fn build_packet(msg_type: MsgType) -> [u8; PACKET_SIZE] {
         #[cfg(not(target_arch = "x86_64"))]
         { 1 }
     };
-    packet[32..34].copy_from_slice(&cores.to_be_bytes());
+    pkt[32..34].copy_from_slice(&cores.to_be_bytes());
 
     // RAM MB — detect from memory subsystem
     let ram_mb: u32 = (crate::memory::total_physical_memory() / (1024 * 1024)) as u32;
-    packet[34..38].copy_from_slice(&ram_mb.to_be_bytes());
+    pkt[34..38].copy_from_slice(&ram_mb.to_be_bytes());
 
     // RPC port
-    packet[38..40].copy_from_slice(&MESH_RPC_PORT.to_be_bytes());
+    pkt[38..40].copy_from_slice(&MESH_RPC_PORT.to_be_bytes());
 
     // CPU architecture
-    packet[40] = CpuArch::current() as u8;
+    pkt[40] = CpuArch::current() as u8;
 
-    packet
+    pkt
 }
 
 /// Parse an incoming mesh packet
@@ -423,7 +423,7 @@ match data[15] {
         data[20], data[21], data[22], data[23],
     ]);
 
-    let parameter_count = u32::from_be_bytes([data[24], data[25], data[26], data[27]]);
+    let param_count = u32::from_be_bytes([data[24], data[25], data[26], data[27]]);
     let training_steps = u32::from_be_bytes([data[28], data[29], data[30], data[31]]);
     let cpu_cores = u16::from_be_bytes([data[32], data[33]]);
     let ram_mb = u32::from_be_bytes([data[34], data[35], data[36], data[37]]);
@@ -440,14 +440,14 @@ match data[15] {
         ip,
         mac,
         role,
-        uptime_mouse: uptime,
-        parameter_count,
+        uptime_ms: uptime,
+        param_count,
         training_steps,
         cpu_cores,
         ram_mb,
         rpc_port,
         arch,
-        last_seen_mouse: 0, // caller fills this
+        last_seen_ms: 0, // caller fills this
         alive: true,
     }))
 }
@@ -458,34 +458,34 @@ match data[15] {
 
 /// Send an announce broadcast to the LAN
 fn send_announce() {
-    let packet = build_packet(MsgType::Announce);
+    let pkt = build_packet(MsgType::Announce);
     let broadcast_ip = get_broadcast_ip();
-    let source_port = MESH_DISCOVERY_PORT;
+    let src_port = MESH_DISCOVERY_PORT;
 
-    if let Err(e) = crate::netstack::udp::send_to(broadcast_ip, MESH_DISCOVERY_PORT, source_port, &packet) {
+    if let Err(e) = crate::netstack::udp::send_to(broadcast_ip, MESH_DISCOVERY_PORT, src_port, &pkt) {
         crate::serial_println!("[MESH] Announce send failed: {}", e);
     }
 }
 
 /// Send heartbeat to all known alive peers
 fn send_heartbeats() {
-    let packet = build_packet(MsgType::Heartbeat);
+    let pkt = build_packet(MsgType::Heartbeat);
     let peers = PEERS.lock();
 
     for peer in peers.iter().filter(|p| p.alive) {
-        let _ = crate::netstack::udp::send_to(peer.ip, MESH_DISCOVERY_PORT, MESH_DISCOVERY_PORT, &packet);
+        let _ = crate::netstack::udp::send_to(peer.ip, MESH_DISCOVERY_PORT, MESH_DISCOVERY_PORT, &pkt);
     }
 }
 
 /// Send leave notification to all peers and broadcast
 fn send_leave() {
-    let packet = build_packet(MsgType::Leave);
+    let pkt = build_packet(MsgType::Leave);
     let broadcast_ip = get_broadcast_ip();
-    let _ = crate::netstack::udp::send_to(broadcast_ip, MESH_DISCOVERY_PORT, MESH_DISCOVERY_PORT, &packet);
+    let _ = crate::netstack::udp::send_to(broadcast_ip, MESH_DISCOVERY_PORT, MESH_DISCOVERY_PORT, &pkt);
 
     let peers = PEERS.lock();
     for peer in peers.iter().filter(|p| p.alive) {
-        let _ = crate::netstack::udp::send_to(peer.ip, MESH_DISCOVERY_PORT, MESH_DISCOVERY_PORT, &packet);
+        let _ = crate::netstack::udp::send_to(peer.ip, MESH_DISCOVERY_PORT, MESH_DISCOVERY_PORT, &pkt);
     }
 }
 
@@ -495,31 +495,31 @@ fn send_leave() {
 
 /// Handle an incoming mesh packet
 fn handle_incoming(data: &[u8], now_mouse: u64) {
-    let (msg_type, mut peer_information) = // Correspondance de motifs — branchement exhaustif de Rust.
+    let (msg_type, mut peer_info) = // Correspondance de motifs — branchement exhaustif de Rust.
 match parse_packet(data) {
         Some(v) => v,
         None => return,
     };
 
     // Ignore packets from ourselves
-    if is_our_ip(peer_information.ip) {
+    if is_our_ip(peer_info.ip) {
         return;
     }
 
-    peer_information.last_seen_mouse = now_mouse;
+    peer_info.last_seen_ms = now_mouse;
 
         // Correspondance de motifs — branchement exhaustif de Rust.
 match msg_type {
         MsgType::Announce | MsgType::Heartbeat => {
-            let is_new = !peer_known(peer_information.ip);
-            update_or_add_peer(peer_information);
+            let is_new = !peer_known(peer_info.ip);
+            update_or_add_peer(peer_info);
             // Respond immediately to new peer announcements so they discover us fast
             if is_new && msg_type == MsgType::Announce {
                 send_announce();
             }
         }
         MsgType::Leave => {
-            remove_peer(peer_information.ip);
+            remove_peer(peer_info.ip);
         }
     }
 }
@@ -531,21 +531,21 @@ fn peer_known(ip: [u8; 4]) -> bool {
 }
 
 /// Update an existing peer or add a new one
-fn update_or_add_peer(information: PeerInformation) {
+fn update_or_add_peer(info: PeerInformation) {
     let mut peers = PEERS.lock();
 
     // Check if peer already known
-    for peer in peers.iterator_mut() {
-        if peer.ip == information.ip {
-            peer.role = information.role;
-            peer.uptime_mouse = information.uptime_mouse;
-            peer.parameter_count = information.parameter_count;
-            peer.training_steps = information.training_steps;
-            peer.cpu_cores = information.cpu_cores;
-            peer.ram_mb = information.ram_mb;
-            peer.rpc_port = information.rpc_port;
-            peer.arch = information.arch;
-            peer.last_seen_mouse = information.last_seen_mouse;
+    for peer in peers.iter_mut() {
+        if peer.ip == info.ip {
+            peer.role = info.role;
+            peer.uptime_ms = info.uptime_ms;
+            peer.param_count = info.param_count;
+            peer.training_steps = info.training_steps;
+            peer.cpu_cores = info.cpu_cores;
+            peer.ram_mb = info.ram_mb;
+            peer.rpc_port = info.rpc_port;
+            peer.arch = info.arch;
+            peer.last_seen_ms = info.last_seen_ms;
             peer.alive = true;
             return;
         }
@@ -554,17 +554,17 @@ fn update_or_add_peer(information: PeerInformation) {
     // New peer
     if peers.len() < MAXIMUM_PEERS {
         crate::serial_println!("[MESH] New peer discovered: {}.{}.{}.{} (arch={}, role={:?}, params={})",
-            information.ip[0], information.ip[1], information.ip[2], information.ip[3],
-            information.arch.name(), information.role, information.parameter_count);
+            info.ip[0], info.ip[1], info.ip[2], info.ip[3],
+            info.arch.name(), info.role, info.param_count);
         PEERS_DISCOVERED.fetch_add(1, Ordering::SeqCst);
-        peers.push(information);
+        peers.push(info);
     }
 }
 
 /// Remove a peer by IP (they sent Leave)
 fn remove_peer(ip: [u8; 4]) {
     let mut peers = PEERS.lock();
-    if let Some(peer) = peers.iterator_mut().find(|p| p.ip == ip) {
+    if let Some(peer) = peers.iter_mut().find(|p| p.ip == ip) {
         crate::serial_println!("[MESH] Peer left: {}.{}.{}.{}",
             ip[0], ip[1], ip[2], ip[3]);
         peer.alive = false;
@@ -574,8 +574,8 @@ fn remove_peer(ip: [u8; 4]) {
 /// Expire peers that haven't been heard from in PEER_TIMEOUT_MS
 fn expire_peers(now_mouse: u64) {
     let mut peers = PEERS.lock();
-    for peer in peers.iterator_mut().filter(|p| p.alive) {
-        if now_mouse.wrapping_sub(peer.last_seen_mouse) > PEER_TIMEOUT_MOUSE {
+    for peer in peers.iter_mut().filter(|p| p.alive) {
+        if now_mouse.wrapping_sub(peer.last_seen_ms) > PEER_TIMEOUT_MOUSE {
             crate::serial_println!("[MESH] Peer timed out: {}.{}.{}.{}",
                 peer.ip[0], peer.ip[1], peer.ip[2], peer.ip[3]);
             peer.alive = false;

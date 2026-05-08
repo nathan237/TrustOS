@@ -188,6 +188,7 @@ pub(super) fn cmd_help(args: &[&str]) {
     crate::println!("    route               Display routing table");
     crate::println!("    traceroute <host>   Real TTL-based traceroute");
     crate::println!("    netstat             Show active connections & listeners");
+    crate::println!("    camera <cmd>        Camera endpoint probe (test/probe/status)");
     crate::println!("    browse <url>        Text-mode web browser");
     crate::println!("    sandbox <cmd>       Web sandbox (open/allow/deny/fs/status/list/kill)");
     crate::println!("    container <cmd>     Web container daemon (status/list/create/go/stop)");
@@ -4184,13 +4185,21 @@ pub(super) fn cmd_neofetch() {
     crate::println!("{} cores", crate::cpu::core_count());
     crate::print_color!(COLOR_GREEN, r"                      ");
     crate::print_color!(COLOR_CYAN, "GPU: ");
+    let mut gpu_found = false;
     if crate::drivers::nvidia::is_detected() {
         crate::println!("{}", crate::drivers::nvidia::summary());
-    } else if crate::drivers::amdgpu::is_detected() {
+        gpu_found = true;
+    }
+    #[cfg(feature = "amdgpu")]
+    if !gpu_found && crate::drivers::amdgpu::is_detected() {
         crate::println!("{}", crate::drivers::amdgpu::summary());
-    } else if crate::drivers::virtio_gpu::is_available() {
+        gpu_found = true;
+    }
+    if !gpu_found && crate::drivers::virtio_gpu::is_available() {
         crate::println!("{}", crate::drivers::virtio_gpu::info_string());
-    } else {
+        gpu_found = true;
+    }
+    if !gpu_found {
         let display_devs = crate::pci::find_by_class(crate::pci::class::DISPLAY);
         if let Some(dev) = display_devs.first() {
             crate::println!("{} {:04X}:{:04X}", dev.vendor_name(), dev.vendor_id, dev.device_id);
@@ -4228,6 +4237,7 @@ pub(super) fn cmd_cowsay(args: &[&str]) {
 }
 
 /// GPU Compute Agent — dispatch RDNA compute kernels bare-metal
+#[cfg(feature = "amdgpu")]
 pub(super) fn cmd_gpuexec(args: &[&str]) {
     use crate::drivers::amdgpu::compute;
     use crate::drivers::amdgpu::compute::AgentKind;
@@ -4399,6 +4409,7 @@ pub(super) fn cmd_gpuexec(args: &[&str]) {
 }
 
 /// SDMA Engine — bare-metal DMA transfers via AMD SDMA hardware
+#[cfg(feature = "amdgpu")]
 pub(super) fn cmd_sdma(args: &[&str]) {
     use crate::drivers::amdgpu::sdma;
 
@@ -4579,6 +4590,7 @@ pub(super) fn cmd_sdma(args: &[&str]) {
 // cmd_neural — Neural compute: GEMM kernels, activations, transformer ops
 // ═══════════════════════════════════════════════════════════════════════════════
 
+#[cfg(feature = "amdgpu")]
 pub(super) fn cmd_neural(args: &[&str]) {
     use crate::drivers::amdgpu::neural;
 
@@ -4746,6 +4758,7 @@ pub(super) fn cmd_neural(args: &[&str]) {
 // cmd_gpufw — GPU Firmware management (load, status, reload)
 // ═══════════════════════════════════════════════════════════════════════════════
 
+#[cfg(feature = "amdgpu")]
 pub(super) fn cmd_gpufw(args: &[&str]) {
     use crate::drivers::amdgpu::firmware;
 

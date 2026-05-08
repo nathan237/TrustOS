@@ -10,19 +10,19 @@ use spin::Mutex;
 use core::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 
 
-pub const BAF_: u16 = 65535;
+pub const BCH_: u16 = 65535;
 
 
-pub const DPJ_: u16 = 0;
+pub const DTD_: u16 = 0;
 
 
-static BIS_: AtomicBool = AtomicBool::new(false);
+static BKY_: AtomicBool = AtomicBool::new(false);
 
 
-static BBL_: AtomicU16 = AtomicU16::new(1);
+static BDO_: AtomicU16 = AtomicU16::new(1);
 
 
-static YY_: Mutex<BTreeSet<u16>> = Mutex::new(BTreeSet::new());
+static AAD_: Mutex<BTreeSet<u16>> = Mutex::new(BTreeSet::new());
 
 
 
@@ -33,13 +33,13 @@ static YY_: Mutex<BTreeSet<u16>> = Mutex::new(BTreeSet::new());
 #[repr(u64)]
 pub enum InvvpidType {
     
-    Cfu = 0,
+    IndividualAddress = 0,
     
-    Cmz = 1,
+    SingleContext = 1,
     
-    Bxv = 2,
+    AllContext = 2,
     
-    Dir = 3,
+    SingleContextRetainGlobal = 3,
 }
 
 
@@ -47,20 +47,20 @@ pub enum InvvpidType {
 #[derive(Clone, Copy)]
 pub struct InvvpidDescriptor {
     pub vpid: u16,
-    pub awt: [u8; 6],
-    pub ufc: u64,
+    pub reserved: [u8; 6],
+    pub linear_address: u64,
 }
 
 impl InvvpidDescriptor {
-    pub fn new(vpid: u16, ag: u64) -> Self {
+    pub fn new(vpid: u16, addr: u64) -> Self {
         InvvpidDescriptor {
             vpid,
-            awt: [0; 6],
-            ufc: ag,
+            reserved: [0; 6],
+            linear_address: addr,
         }
     }
     
-    pub fn nvn(vpid: u16) -> Self {
+    pub fn hzn(vpid: u16) -> Self {
         Self::new(vpid, 0)
     }
 }
@@ -72,55 +72,55 @@ impl InvvpidDescriptor {
 
 pub fn init() -> bool {
     
-    let dme = raa();
+    let supported = kjy();
     
-    if dme {
-        BIS_.store(true, Ordering::SeqCst);
+    if supported {
+        BKY_.store(true, Ordering::SeqCst);
         crate::serial_println!("[VPID] VPID support enabled - TLB isolation active");
     } else {
         crate::serial_println!("[VPID] VPID not supported - TLB flush on every exit");
     }
     
-    dme
+    supported
 }
 
 
-fn raa() -> bool {
+fn kjy() -> bool {
     
-    let rrd = super::vmx::bcg(0x48B); 
-    let qhe = (rrd >> 32) as u32;
+    let kzu = super::vmx::ach(0x48B); 
+    let jvc = (kzu >> 32) as u32;
     
     
-    (qhe & (1 << 5)) != 0
+    (jvc & (1 << 5)) != 0
 }
 
 
-pub fn zu() -> bool {
-    BIS_.load(Ordering::SeqCst)
+pub fn lq() -> bool {
+    BKY_.load(Ordering::SeqCst)
 }
 
 
-pub fn ijo() -> Option<u16> {
-    if !zu() {
+pub fn allocate() -> Option<u16> {
+    if !lq() {
         return None;
     }
     
-    let mut gab = YY_.lock();
+    let mut bkr = AAD_.lock();
     
     
-    let ay = BBL_.load(Ordering::SeqCst);
+    let start = BDO_.load(Ordering::SeqCst);
     
-    for l in 0..BAF_ {
-        let vpid = ((ay as u32 + l as u32) % (BAF_ as u32)) as u16;
+    for offset in 0..BCH_ {
+        let vpid = ((start as u32 + offset as u32) % (BCH_ as u32)) as u16;
         
         
         if vpid == 0 {
             continue;
         }
         
-        if !gab.contains(&vpid) {
-            gab.insert(vpid);
-            BBL_.store(vpid.cn(1).am(1), Ordering::SeqCst);
+        if !bkr.contains(&vpid) {
+            bkr.insert(vpid);
+            BDO_.store(vpid.wrapping_add(1).max(1), Ordering::SeqCst);
             
             crate::serial_println!("[VPID] Allocated VPID {} for new VM", vpid);
             return Some(vpid);
@@ -133,23 +133,23 @@ pub fn ijo() -> Option<u16> {
 }
 
 
-pub fn aez(vpid: u16) {
+pub fn free(vpid: u16) {
     if vpid == 0 {
         return; 
     }
     
-    let mut gab = YY_.lock();
-    if gab.remove(&vpid) {
+    let mut bkr = AAD_.lock();
+    if bkr.remove(&vpid) {
         crate::serial_println!("[VPID] Freed VPID {}", vpid);
         
         
-        twa(vpid);
+        mrm(vpid);
     }
 }
 
 
-pub fn qgz() -> usize {
-    YY_.lock().len()
+pub fn jvb() -> usize {
+    AAD_.lock().len()
 }
 
 
@@ -157,41 +157,41 @@ pub fn qgz() -> usize {
 
 
 
-pub fn twa(vpid: u16) {
-    if !zu() {
+pub fn mrm(vpid: u16) {
+    if !lq() {
         return;
     }
     
-    let desc = InvvpidDescriptor::nvn(vpid);
+    let desc = InvvpidDescriptor::hzn(vpid);
     
     unsafe {
-        lfk(InvvpidType::Cmz, &desc);
+        gdg(InvvpidType::SingleContext, &desc);
     }
 }
 
 
-pub fn yyp(vpid: u16, ag: u64) {
-    if !zu() {
+pub fn qlu(vpid: u16, addr: u64) {
+    if !lq() {
         return;
     }
     
-    let desc = InvvpidDescriptor::new(vpid, ag);
+    let desc = InvvpidDescriptor::new(vpid, addr);
     
     unsafe {
-        lfk(InvvpidType::Cfu, &desc);
+        gdg(InvvpidType::IndividualAddress, &desc);
     }
 }
 
 
-pub fn yyq() {
-    if !zu() {
+pub fn qlv() {
+    if !lq() {
         return;
     }
     
-    let desc = InvvpidDescriptor::nvn(0);
+    let desc = InvvpidDescriptor::hzn(0);
     
     unsafe {
-        lfk(InvvpidType::Bxv, &desc);
+        gdg(InvvpidType::AllContext, &desc);
     }
 }
 
@@ -201,20 +201,20 @@ pub fn yyq() {
 
 
 #[inline]
-unsafe fn lfk(ofg: InvvpidType, desc: &InvvpidDescriptor) {
+unsafe fn gdg(inv_type: InvvpidType, desc: &InvvpidDescriptor) {
     let result: u8;
     
     core::arch::asm!(
         "invvpid {0}, [{1}]",
         "setc {2}",
-        in(reg) ofg as u64,
+        in(reg) inv_type as u64,
         in(reg) desc as *const InvvpidDescriptor,
-        bd(reg_byte) result,
+        out(reg_byte) result,
         options(nostack)
     );
     
     if result != 0 {
-        crate::serial_println!("[VPID] INVVPID failed! type={:?}", ofg);
+        crate::serial_println!("[VPID] INVVPID failed! type={:?}", inv_type);
     }
 }
 
@@ -223,16 +223,16 @@ unsafe fn lfk(ofg: InvvpidType, desc: &InvvpidDescriptor) {
 
 
 
-pub fn tfc(vpid: Option<u16>) -> u64 {
+pub fn meb(vpid: Option<u16>) -> u64 {
     match vpid {
-        Some(p) if zu() => p as u64,
+        Some(v) if lq() => v as u64,
         _ => 0, 
     }
 }
 
 
-pub fn tep() -> u64 {
-    if zu() {
+pub fn mdt() -> u64 {
+    if lq() {
         1 << 5 
     } else {
         0
@@ -245,19 +245,19 @@ pub fn tep() -> u64 {
 
 
 #[derive(Debug, Clone, Default)]
-pub struct Bap {
-    pub gab: usize,
-    pub equ: usize,
-    pub twb: usize,
+pub struct Vx {
+    pub bkr: usize,
+    pub bzz: usize,
+    pub invalidations: usize,
 }
 
-static DBJ_: Mutex<Bap> = Mutex::new(Bap {
-    gab: 0,
-    equ: 0,
-    twb: 0,
+static DFB_: Mutex<Vx> = Mutex::new(Vx {
+    bkr: 0,
+    bzz: 0,
+    invalidations: 0,
 });
 
 
-pub fn asx() -> Bap {
-    DBJ_.lock().clone()
+pub fn get_stats() -> Vx {
+    DFB_.lock().clone()
 }

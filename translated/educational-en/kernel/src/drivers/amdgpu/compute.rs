@@ -275,9 +275,9 @@ pub static AGENT_MEMCOPY: &[u32] = &[
 ///   DW1: base_address[47:32] | stride[29:16] 
 ///   DW2: num_records (number of elements)
 ///   DW3: dst_sel_x/y/z/w | num_format | data_format | element_size | ...
-fn build_buffer_descriptor(gpu_address: u64, number_elements: u32, stride: u32) -> [u32; 4] {
-    let base_lo = (gpu_address & 0xFFFFFFFF) as u32;
-    let base_hi = ((gpu_address >> 32) & 0xFFFF) as u32;
+fn build_buffer_descriptor(gpu_addr: u64, number_elements: u32, stride: u32) -> [u32; 4] {
+    let base_lo = (gpu_addr & 0xFFFFFFFF) as u32;
+    let base_hi = ((gpu_addr >> 32) & 0xFFFF) as u32;
     // Stride in bits [29:16] of DW1
     let dw1 = base_hi | ((stride & 0x3FFF) << 16);
     // DW3: data_format=BUF_DATA_FORMAT_32(4), num_format=BUF_NUM_FORMAT_UINT(4)
@@ -304,9 +304,9 @@ pub enum AgentKind {
     /// Increment each u32 in buffer by 1
     Incr,
     /// Fill buffer with constant value      
-    MemoryFill,
+    MemFill,
     /// Copy from source buffer to destination buffer
-    MemoryCopy,
+    MemCopy,
 }
 
 // Implementation block — defines methods for the type above.
@@ -316,8 +316,8 @@ pub fn name(&self) -> &'static str {
                 // Pattern matching — Rust's exhaustive branching construct.
 match self {
             AgentKind::Incr => "incr",
-            AgentKind::MemoryFill => "memfill",
-            AgentKind::MemoryCopy => "memcopy",
+            AgentKind::MemFill => "memfill",
+            AgentKind::MemCopy => "memcopy",
         }
     }
     
@@ -326,8 +326,8 @@ pub fn description(&self) -> &'static str {
                 // Pattern matching — Rust's exhaustive branching construct.
 match self {
             AgentKind::Incr => "Increment each u32 by 1 (proof-of-life)",
-            AgentKind::MemoryFill => "Fill buffer with constant u32 value",
-            AgentKind::MemoryCopy => "GPU-speed buffer copy (src → dst)",
+            AgentKind::MemFill => "Fill buffer with constant u32 value",
+            AgentKind::MemCopy => "GPU-speed buffer copy (src → dst)",
         }
     }
 
@@ -336,8 +336,8 @@ match self {
                 // Pattern matching — Rust's exhaustive branching construct.
 match self {
             AgentKind::Incr => AGENT_INCR,
-            AgentKind::MemoryFill => AGENT_MEMFILL,
-            AgentKind::MemoryCopy => AGENT_MEMCOPY,
+            AgentKind::MemFill => AGENT_MEMFILL,
+            AgentKind::MemCopy => AGENT_MEMCOPY,
         }
     }
     
@@ -346,8 +346,8 @@ match self {
                 // Pattern matching — Rust's exhaustive branching construct.
 match self {
             AgentKind::Incr => 4,     // s[0:3] buffer desc
-            AgentKind::MemoryFill => 5,  // s[0:3] + s4 fill value
-            AgentKind::MemoryCopy => 8,  // s[0:3] src + s[4:7] dst
+            AgentKind::MemFill => 5,  // s[0:3] + s4 fill value
+            AgentKind::MemCopy => 8,  // s[0:3] src + s[4:7] dst
         }
     }
     
@@ -356,8 +356,8 @@ match self {
                 // Pattern matching — Rust's exhaustive branching construct.
 match self {
             AgentKind::Incr => 3,    // v0=tid, v1=offset, v2=data
-            AgentKind::MemoryFill => 3,
-            AgentKind::MemoryCopy => 3,
+            AgentKind::MemFill => 3,
+            AgentKind::MemCopy => 3,
         }
     }
     
@@ -366,8 +366,8 @@ match self {
                 // Pattern matching — Rust's exhaustive branching construct.
 match self {
             AgentKind::Incr => 4,
-            AgentKind::MemoryFill => 5,
-            AgentKind::MemoryCopy => 8,
+            AgentKind::MemFill => 5,
+            AgentKind::MemCopy => 8,
         }
     }
 }
@@ -376,8 +376,8 @@ match self {
 pub // Compile-time constant — evaluated at compilation, zero runtime cost.
 const ALL_AGENTS: &[AgentKind] = &[
     AgentKind::Incr,
-    AgentKind::MemoryFill,
-    AgentKind::MemoryCopy,
+    AgentKind::MemFill,
+    AgentKind::MemCopy,
 ];
 
 /// Compute dispatch state
@@ -387,15 +387,15 @@ struct ComputeState {
     /// Ring buffer virtual address
     ring_virt: u64,
     /// Ring buffer physical/GPU address
-    ring_physical: u64,
+    ring_phys: u64,
     /// Data buffer virtual address (shader I/O + fence)
     data_virt: u64,
     /// Data buffer physical/GPU address  
-    data_physical: u64,
+    data_phys: u64,
     /// Shader code buffer virtual address
     code_virt: u64,
     /// Shader code buffer physical/GPU address
-    code_physical: u64,
+    code_phys: u64,
     /// Current ring write pointer (in DWORDs)  
     wptr: u32,
     /// Dispatches completed
@@ -407,11 +407,11 @@ static COMPUTE: Mutex<ComputeState> = Mutex::new(ComputeState {
     initialized: false,
     mmio_base: 0,
     ring_virt: 0,
-    ring_physical: 0,
+    ring_phys: 0,
     data_virt: 0,
-    data_physical: 0,
+    data_phys: 0,
     code_virt: 0,
-    code_physical: 0,
+    code_phys: 0,
     wptr: 0,
     dispatch_count: 0,
 });
@@ -428,10 +428,10 @@ static COMPUTE_READY: AtomicBool = AtomicBool::new(false);
 fn ring_write(state: &mut ComputeState, data: &[u32]) -> usize {
     let ring = state.ring_virt as *mut u32;
     for (i, &dw) in data.iter().enumerate() {
-        let index = (state.wptr as usize + i) % RING_SIZE_DWORDS;
+        let idx = (state.wptr as usize + i) % RING_SIZE_DWORDS;
                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-            core::ptr::write_volatile(ring.add(index), dw);
+            core::ptr::write_volatile(ring.add(idx), dw);
         }
     }
     state.wptr = (state.wptr + data.len() as u32) % RING_SIZE_DWORDS as u32;
@@ -466,45 +466,54 @@ pub fn init(mmio_base: u64) {
     }
     
     // Step 1: Allocate ring buffer (4KB, page-aligned → naturally GPU-aligned)
-    let ring_layout = alloc::alloc::Layout::from_size_align(RING_SIZE_BYTES, 4096)
-        .expect("ring layout");
+    let ring_layout = // Pattern matching — Rust's exhaustive branching construct.
+match alloc::alloc::Layout::from_size_align(RING_SIZE_BYTES, 4096) {
+        Ok(l) => l,
+        Err(_) => { crate::log!("[GPU-COMPUTE] ERROR: invalid ring layout"); return; }
+    };
     let ring_virt = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { alloc::alloc::alloc_zeroed(ring_layout) } as u64;
-    let ring_physical = memory::virt_to_physical(ring_virt).unwrap_or(0);
+    let ring_phys = memory::virt_to_physical(ring_virt).unwrap_or(0);
     
-    if ring_physical == 0 {
+    if ring_phys == 0 {
         crate::log!("[GPU-COMPUTE] ERROR: Cannot get physical address for ring buffer");
         return;
     }
     crate::log!("[GPU-COMPUTE] Ring buffer: virt={:#X} phys={:#X} size={} dwords",
-        ring_virt, ring_physical, RING_SIZE_DWORDS);
+        ring_virt, ring_phys, RING_SIZE_DWORDS);
     
     // Step 2: Allocate data buffer (64KB — shader I/O + fence)
-    let data_layout = alloc::alloc::Layout::from_size_align(DATA_BUFFER_SIZE, 4096)
-        .expect("data layout");
+    let data_layout = // Pattern matching — Rust's exhaustive branching construct.
+match alloc::alloc::Layout::from_size_align(DATA_BUFFER_SIZE, 4096) {
+        Ok(l) => l,
+        Err(_) => { crate::log!("[GPU-COMPUTE] ERROR: invalid data layout"); return; }
+    };
     let data_virt = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { alloc::alloc::alloc_zeroed(data_layout) } as u64;
-    let data_physical = memory::virt_to_physical(data_virt).unwrap_or(0);
+    let data_phys = memory::virt_to_physical(data_virt).unwrap_or(0);
     
-    if data_physical == 0 {
+    if data_phys == 0 {
         crate::log!("[GPU-COMPUTE] ERROR: Cannot get physical address for data buffer");
         return;
     }
     crate::log!("[GPU-COMPUTE] Data buffer: virt={:#X} phys={:#X} size={}KB",
-        data_virt, data_physical, DATA_BUFFER_SIZE / 1024);
+        data_virt, data_phys, DATA_BUFFER_SIZE / 1024);
     
     // Step 3: Allocate shader code buffer (4KB — holds RDNA ISA binaries)
-    let code_layout = alloc::alloc::Layout::from_size_align(4096, 256)
-        .expect("code layout");
+    let code_layout = // Pattern matching — Rust's exhaustive branching construct.
+match alloc::alloc::Layout::from_size_align(4096, 256) {
+        Ok(l) => l,
+        Err(_) => { crate::log!("[GPU-COMPUTE] ERROR: invalid code layout"); return; }
+    };
     let code_virt = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { alloc::alloc::alloc_zeroed(code_layout) } as u64;
-    let code_physical = memory::virt_to_physical(code_virt).unwrap_or(0);
+    let code_phys = memory::virt_to_physical(code_virt).unwrap_or(0);
     
-    if code_physical == 0 {
+    if code_phys == 0 {
         crate::log!("[GPU-COMPUTE] ERROR: Cannot get physical address for code buffer");
         return;
     }
-    crate::log!("[GPU-COMPUTE] Code buffer: virt={:#X} phys={:#X}", code_virt, code_physical);
+    crate::log!("[GPU-COMPUTE] Code buffer: virt={:#X} phys={:#X}", code_virt, code_phys);
     
     // Step 4: Read MEC/CP status
     let grbm_status = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
@@ -525,7 +534,7 @@ unsafe {
         mmio_write32(mmio_base, regs::CP_HQD_ACTIVE, 0);
         
         // Set ring buffer base address (in 256-byte units for GFX10)
-        let rb_base_256 = ring_physical >> 8;
+        let rb_base_256 = ring_phys >> 8;
         mmio_write32(mmio_base, regs::CP_HQD_PQ_BASE_LO, (rb_base_256 & 0xFFFFFFFF) as u32);
         mmio_write32(mmio_base, regs::CP_HQD_PQ_BASE_HI, ((rb_base_256 >> 32) & 0xFF) as u32);
         
@@ -543,18 +552,18 @@ unsafe {
         mmio_write32(mmio_base, regs::CP_HQD_ACTIVE, 1);
     }
     
-    crate::log!("[GPU-COMPUTE] HQD configured: base={:#X} size={}dw", ring_physical, RING_SIZE_DWORDS);
+    crate::log!("[GPU-COMPUTE] HQD configured: base={:#X} size={}dw", ring_phys, RING_SIZE_DWORDS);
     
     // Store state
     let mut state = COMPUTE.lock();
     state.initialized = true;
     state.mmio_base = mmio_base;
     state.ring_virt = ring_virt;
-    state.ring_physical = ring_physical;
+    state.ring_phys = ring_phys;
     state.data_virt = data_virt;
-    state.data_physical = data_physical;
+    state.data_phys = data_phys;
     state.code_virt = code_virt;
-    state.code_physical = code_physical;
+    state.code_phys = code_phys;
     state.wptr = 0;
     state.dispatch_count = 0;
     drop(state);
@@ -594,7 +603,7 @@ pub fn dispatch(agent: AgentKind, number_elements: u32, fill_value: u32) -> Resu
     
     // Clamp to data buffer size (minus fence area)
     let maximum_elements = ((DATA_BUFFER_SIZE - 64) / 4) as u32;
-    let number_elements = number_elements.minimum(maximum_elements);
+    let number_elements = number_elements.min(maximum_elements);
     
     // Step 1: Initialize data buffer (for INCR agent, fill with sequential values)
     let data_pointer = state.data_virt as *mut u32;
@@ -606,14 +615,14 @@ match agent {
 unsafe { core::ptr::write_volatile(data_pointer.add(i as usize), i); }
             }
         }
-        AgentKind::MemoryFill => {
+        AgentKind::MemFill => {
             // Buffer will be overwritten by GPU
             for i in 0..number_elements {
                                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { core::ptr::write_volatile(data_pointer.add(i as usize), 0); }
             }
         }
-        AgentKind::MemoryCopy => {
+        AgentKind::MemCopy => {
             // First half = source data, second half = destination (zeroed)
             let half = number_elements / 2;
             for i in 0..half {
@@ -641,7 +650,7 @@ unsafe { core::ptr::write_volatile(code_pointer.add(i), insn); }
     }
     
     // Step 3: Build buffer descriptor for data
-    let buffer_descriptor = build_buffer_descriptor(state.data_physical, number_elements, 4);
+    let buffer_descriptor = build_buffer_descriptor(state.data_phys, number_elements, 4);
     
     // Step 4: Encode PGM_RSRC1 register
     // Bits: [5:0]=vgprs (granularity 8, so count/8 - 1), [11:6]=sgprs (granularity 8)
@@ -655,7 +664,7 @@ unsafe { core::ptr::write_volatile(code_pointer.add(i), insn); }
     let pgm_rsrc2 = agent.user_sgpr_count() & 0x1F; // bits [4:0]
     
     // Shader address in 256-byte units
-    let shader_address_256 = state.code_physical >> 8;
+    let shader_address_256 = state.code_phys >> 8;
     
     // Step 5: Build PM4 command stream
     // Reset ring write pointer for clean dispatch
@@ -688,14 +697,14 @@ unsafe { core::ptr::write_volatile(code_pointer.add(i), insn); }
     // SET_SH_REG: USER_DATA[0:3] = buffer descriptor
     for (i, &dw) in buffer_descriptor.iter().enumerate() {
         let reg = regs::COMPUTE_USER_DATA_0 + (i as u32) * 4;
-        let packet = pm4_set_sh_register(reg, dw);
-        ring_write(&mut state, &packet);
+        let pkt = pm4_set_sh_register(reg, dw);
+        ring_write(&mut state, &pkt);
     }
     
     // If MemFill, set USER_DATA[4] = fill value
-    if agent == AgentKind::MemoryFill {
-        let packet = pm4_set_sh_register(regs::COMPUTE_USER_DATA_0 + 16, fill_value);
-        ring_write(&mut state, &packet);
+    if agent == AgentKind::MemFill {
+        let pkt = pm4_set_sh_register(regs::COMPUTE_USER_DATA_0 + 16, fill_value);
+        ring_write(&mut state, &pkt);
     }
     
     // DISPATCH_DIRECT: launch workgroups
@@ -705,7 +714,7 @@ unsafe { core::ptr::write_volatile(code_pointer.add(i), insn); }
     ring_write(&mut state, &dispatch_packet);
     
     // RELEASE_MEM: write fence when done
-    let fence_gpu_address = state.data_physical + FENCE_OFFSET as u64;
+    let fence_gpu_address = state.data_phys + FENCE_OFFSET as u64;
     let release_packet = pm4_release_memory(fence_gpu_address, FENCE_SIGNAL_VALUE);
     ring_write(&mut state, &release_packet);
     
@@ -717,7 +726,7 @@ unsafe { core::ptr::write_volatile(code_pointer.add(i), insn); }
     crate::serial_println!("[GPU-COMPUTE] Submitting {} agent: {} elements, {} workgroups",
         agent.name(), number_elements, number_groups);
     crate::serial_println!("[GPU-COMPUTE]   Ring WPTR: {} dwords", state.wptr);
-    crate::serial_println!("[GPU-COMPUTE]   Shader: {} insns at phys {:#X}", shader.len(), state.code_physical);
+    crate::serial_println!("[GPU-COMPUTE]   Shader: {} insns at phys {:#X}", shader.len(), state.code_phys);
     
     ring_submit(&state);
     
@@ -767,7 +776,7 @@ const u32;
     let mut pass = 0u32;
     let mut fail = 0u32;
     
-    let check_count = number_elements.minimum(((DATA_BUFFER_SIZE - 64) / 4) as u32);
+    let check_count = number_elements.min(((DATA_BUFFER_SIZE - 64) / 4) as u32);
     
     for i in 0..check_count {
         let actual = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
@@ -775,8 +784,8 @@ unsafe { core::ptr::read_volatile(data_pointer.add(i as usize)) };
         let expected = // Pattern matching — Rust's exhaustive branching construct.
 match agent {
             AgentKind::Incr => i + 1, // Should be original value + 1
-            AgentKind::MemoryFill => fill_value,
-            AgentKind::MemoryCopy => {
+            AgentKind::MemFill => fill_value,
+            AgentKind::MemCopy => {
                 let half = check_count / 2;
                 if i >= half {
                     // Destination half should contain source data
@@ -808,8 +817,8 @@ pub fn read_data(index: u32) -> Option<u32> {
     if !state.initialized {
         return None;
     }
-    let maximum = ((DATA_BUFFER_SIZE - 64) / 4) as u32;
-    if index >= maximum {
+    let max = ((DATA_BUFFER_SIZE - 64) / 4) as u32;
+    if index >= max {
         return None;
     }
     let ptr = state.data_virt as *// Compile-time constant — evaluated at compilation, zero runtime cost.
@@ -837,14 +846,14 @@ pub fn summary() -> String {
     if is_ready() {
         let state = COMPUTE.lock();
         format!("GPU Compute: {} agents, {} dispatches, ring@{:#X}",
-            ALL_AGENTS.len(), state.dispatch_count, state.ring_physical)
+            ALL_AGENTS.len(), state.dispatch_count, state.ring_phys)
     } else {
         String::from("GPU Compute: not initialized")
     }
 }
 
 /// Get detailed info for terminal display
-pub fn information_lines() -> Vec<String> {
+pub fn info_lines() -> Vec<String> {
     let mut lines = Vec::new();
     
     if is_ready() {
@@ -852,9 +861,9 @@ pub fn information_lines() -> Vec<String> {
         lines.push(String::from("╔══════════════════════════════════════════════════╗"));
         lines.push(String::from("║    GPU Compute Agent — Bare-metal RDNA Dispatch  ║"));
         lines.push(String::from("╠══════════════════════════════════════════════════╣"));
-        lines.push(format!("║ Ring Buffer:  {:#X} ({} dwords)          ║", state.ring_physical, RING_SIZE_DWORDS));
-        lines.push(format!("║ Data Buffer:  {:#X} ({}KB)              ║", state.data_physical, DATA_BUFFER_SIZE/1024));
-        lines.push(format!("║ Code Buffer:  {:#X}                     ║", state.code_physical));
+        lines.push(format!("║ Ring Buffer:  {:#X} ({} dwords)          ║", state.ring_phys, RING_SIZE_DWORDS));
+        lines.push(format!("║ Data Buffer:  {:#X} ({}KB)              ║", state.data_phys, DATA_BUFFER_SIZE/1024));
+        lines.push(format!("║ Code Buffer:  {:#X}                     ║", state.code_phys));
         lines.push(format!("║ Dispatches:   {}                                  ║", state.dispatch_count));
         lines.push(format!("║ Ring WPTR:    {}                                  ║", state.wptr));
         lines.push(String::from("╠══════════════════════════════════════════════════╣"));

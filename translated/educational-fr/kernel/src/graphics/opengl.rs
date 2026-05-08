@@ -225,7 +225,8 @@ match self.current_matrix_mode {
         if stack.is_empty() {
             stack.push(Mat4::IDENTITY);
         }
-        stack.last_mut().unwrap()
+        // SAFETY: push above guarantees non-empty
+        stack.last_mut().unwrap_or_else(|| unreachable!())
     }
 
     fn get_mvp(&self) -> Mat4 {
@@ -436,18 +437,18 @@ pub fn gl_clear(mask: u32) {
 }
 
 /// Enable a capability
-pub fn gl_enable(capability: u32) {
+pub fn gl_enable(cap: u32) {
     let mut state = GL_STATE.lock();
         // Correspondance de motifs — branchement exhaustif de Rust.
-match capability {
+match cap {
         GL_DEPTH_TEST => state.depth_test_enabled = true,
         GL_LIGHTING => state.lighting_enabled = true,
         GL_CULL_FACE => state.cull_face_enabled = true,
         GL_BLEND => state.blend_enabled = true,
         GL_LIGHT0..=0x4007 => {
-            let index = (capability - GL_LIGHT0) as usize;
-            if index < 8 {
-                state.lights_enabled[index] = true;
+            let idx = (cap - GL_LIGHT0) as usize;
+            if idx < 8 {
+                state.lights_enabled[idx] = true;
             }
         }
         _ => state.last_error = GL_INVALID_ENUM,
@@ -455,18 +456,18 @@ match capability {
 }
 
 /// Disable a capability
-pub fn gl_disable(capability: u32) {
+pub fn gl_disable(cap: u32) {
     let mut state = GL_STATE.lock();
         // Correspondance de motifs — branchement exhaustif de Rust.
-match capability {
+match cap {
         GL_DEPTH_TEST => state.depth_test_enabled = false,
         GL_LIGHTING => state.lighting_enabled = false,
         GL_CULL_FACE => state.cull_face_enabled = false,
         GL_BLEND => state.blend_enabled = false,
         GL_LIGHT0..=0x4007 => {
-            let index = (capability - GL_LIGHT0) as usize;
-            if index < 8 {
-                state.lights_enabled[index] = false;
+            let idx = (cap - GL_LIGHT0) as usize;
+            if idx < 8 {
+                state.lights_enabled[idx] = false;
             }
         }
         _ => state.last_error = GL_INVALID_ENUM,
@@ -552,7 +553,7 @@ pub fn gl_end() {
             // Simple lighting calculation
             if lighting {
                 let light_directory = Vec3::new(0.5, -1.0, -0.5).normalize();
-                let ndotl = v.normal.dot(-light_directory).maximum(0.0);
+                let ndotl = v.normal.dot(-light_directory).max(0.0);
                 let ambient = 0.2;
                 let intensity = ambient + (1.0 - ambient) * ndotl;
                 color = Color2D::rgb(
@@ -585,12 +586,12 @@ pub fn gl_end() {
                     };
                     
                     if *x >= 0 && *y >= 0 && (*x as u32) < vp_width && (*y as u32) < (vp_h as u32) {
-                        let index = (*y as usize) * (vp_width as usize) + (*x as usize);
+                        let idx = (*y as usize) * (vp_width as usize) + (*x as usize);
                                                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
                             let db = &mut *depth_buffer;
-                            if !depth_test || *z < db[index] {
-                                db[index] = *z;
+                            if !depth_test || *z < db[idx] {
+                                db[idx] = *z;
                                 framebuffer::put_pixel(*x as u32, *y as u32, final_color);
                             }
                         }
@@ -814,9 +815,9 @@ pub fn gl_swap_buffers() {
 /// Get error
 pub fn gl_get_error() -> u32 {
     let mut state = GL_STATE.lock();
-    let error = state.last_error;
+    let err = state.last_error;
     state.last_error = GL_NO_ERROR;
-    error
+    err
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -824,11 +825,11 @@ pub fn gl_get_error() -> u32 {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 fn draw_line(x0: i32, y0: i32, x1: i32, y1: i32, color: u32) {
-    let dx = (x1 - x0).absolute();
-    let dy = -(y1 - y0).absolute();
+    let dx = (x1 - x0).abs();
+    let dy = -(y1 - y0).abs();
     let sx = if x0 < x1 { 1 } else { -1 };
     let sy = if y0 < y1 { 1 } else { -1 };
-    let mut error = dx + dy;
+    let mut err = dx + dy;
     let mut x = x0;
     let mut y = y0;
 
@@ -838,9 +839,9 @@ loop {
             framebuffer::put_pixel(x as u32, y as u32, color);
         }
         if x == x1 && y == y1 { break; }
-        let e2 = 2 * error;
-        if e2 >= dy { error += dy; x += sx; }
-        if e2 <= dx { error += dx; y += sy; }
+        let e2 = 2 * err;
+        if e2 >= dy { err += dy; x += sx; }
+        if e2 <= dx { err += dx; y += sy; }
     }
 }
 
@@ -867,10 +868,10 @@ fn draw_filled_triangle(
     let flat_color = c0;
     
     // Scanline rasterization
-    for y in y0.maximum(0)..=y2 {
+    for y in y0.max(0)..=y2 {
         if y < 0 { continue; }
         
-        let (xa, za, ca, xb, zb, callback) = if y < y1 {
+        let (xa, za, ca, xb, zb, cb) = if y < y1 {
             // Top part
             if y1 == y0 {
                 let t = if y2 != y0 { (y - y0) as f32 / (y2 - y0) as f32 } else { 0.0 };
@@ -908,12 +909,12 @@ fn draw_filled_triangle(
         };
         
         let (start_x, end_x, start_z, end_z, start_c, end_c) = if xa < xb {
-            (xa, xb, za, zb, ca, callback)
+            (xa, xb, za, zb, ca, cb)
         } else {
-            (xb, xa, zb, za, callback, ca)
+            (xb, xa, zb, za, cb, ca)
         };
         
-        for x in start_x.maximum(0)..=end_x {
+        for x in start_x.max(0)..=end_x {
             if x < 0 || x as u32 >= width { continue; }
             
             let t = if end_x != start_x {
@@ -929,10 +930,10 @@ fn draw_filled_triangle(
                 flat_color
             };
             
-            let index = (y as usize) * (width as usize) + (x as usize);
-            if index < depth_buffer.len() {
-                if !depth_test || z < depth_buffer[index] {
-                    depth_buffer[index] = z;
+            let idx = (y as usize) * (width as usize) + (x as usize);
+            if idx < depth_buffer.len() {
+                if !depth_test || z < depth_buffer[idx] {
+                    depth_buffer[idx] = z;
                     framebuffer::put_pixel(x as u32, y as u32, color.to_u32());
                 }
             }
@@ -975,11 +976,11 @@ fn draw_filled_triangle_textured(
     
     let flat_color = c0;
     
-    for y in y0.maximum(0)..=y2 {
+    for y in y0.max(0)..=y2 {
         if y < 0 { continue; }
         
         // Calculate scanline endpoints with UV interpolation
-        let (xa, za, ca, ua, va, xb, zb, callback, ub, vb) = if y < y1 {
+        let (xa, za, ca, ua, va, xb, zb, cb, ub, vb) = if y < y1 {
             if y1 == y0 {
                 let t = if y2 != y0 { (y - y0) as f32 / (y2 - y0) as f32 } else { 0.0 };
                 let xa = x0 + ((x2 - x0) as f32 * t) as i32;
@@ -1026,12 +1027,12 @@ fn draw_filled_triangle_textured(
         
         let (start_x, end_x, start_z, end_z, start_c, end_c, start_u, end_u, start_v, end_v) = 
             if xa < xb {
-                (xa, xb, za, zb, ca, callback, ua, ub, va, vb)
+                (xa, xb, za, zb, ca, cb, ua, ub, va, vb)
             } else {
-                (xb, xa, zb, za, callback, ca, ub, ua, vb, va)
+                (xb, xa, zb, za, cb, ca, ub, ua, vb, va)
             };
         
-        for x in start_x.maximum(0)..=end_x {
+        for x in start_x.max(0)..=end_x {
             if x < 0 || x as u32 >= width { continue; }
             
             let t = if end_x != start_x {
@@ -1053,9 +1054,9 @@ fn draw_filled_triangle_textured(
                         let tr = ((tex_color >> 16) & 0xFF) as u32;
                         let tg = ((tex_color >> 8) & 0xFF) as u32;
                         let tb = (tex_color & 0xFF) as u32;
-                        let r = (tr * vc.r as u32 / 255).minimum(255);
-                        let g = (tg * vc.g as u32 / 255).minimum(255);
-                        let b = (tb * vc.b as u32 / 255).minimum(255);
+                        let r = (tr * vc.r as u32 / 255).min(255);
+                        let g = (tg * vc.g as u32 / 255).min(255);
+                        let b = (tb * vc.b as u32 / 255).min(255);
                         (0xFF << 24) | (r << 16) | (g << 8) | b
                     } else {
                         tex_color
@@ -1077,10 +1078,10 @@ fn draw_filled_triangle_textured(
                 color.to_u32()
             };
             
-            let index = (y as usize) * (width as usize) + (x as usize);
-            if index < depth_buffer.len() {
-                if !depth_test || z < depth_buffer[index] {
-                    depth_buffer[index] = z;
+            let idx = (y as usize) * (width as usize) + (x as usize);
+            if idx < depth_buffer.len() {
+                if !depth_test || z < depth_buffer[idx] {
+                    depth_buffer[idx] = z;
                     framebuffer::put_pixel(x as u32, y as u32, final_color);
                 }
             }

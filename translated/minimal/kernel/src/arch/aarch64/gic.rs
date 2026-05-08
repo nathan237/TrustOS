@@ -15,69 +15,69 @@ use super::cpu;
 
 
 
-const ATA_: u64 = 0x0800_0000;
+const AVE_: u64 = 0x0800_0000;
 
-const ASW_: u64 = 0x0801_0000;
-
-
-
-
-
-const TJ_: u64       = 0x000;  
-const ACS_: u64      = 0x004;  
-const BXJ_: u64  = 0x100;  
-const ATB_: u64  = 0x180;  
-const DNH_: u64    = 0x200;  
-const BXG_: u64    = 0x280;  
-const ATC_: u64 = 0x400;  
-const BXM_: u64  = 0x800;  
-const BXF_: u64      = 0xC00;  
+const AVA_: u64 = 0x0801_0000;
 
 
 
 
 
-const ASY_: u64  = 0x000;  
-const ASZ_: u64   = 0x004;  
-const ASX_: u64   = 0x008;  
-const BXE_: u64   = 0x00C;  
-const BXD_: u64  = 0x010;  
+const UP_: u64       = 0x000;  
+const AEI_: u64      = 0x004;  
+const CAP_: u64  = 0x100;  
+const AVF_: u64  = 0x180;  
+const DRB_: u64    = 0x200;  
+const CAM_: u64    = 0x280;  
+const AVG_: u64 = 0x400;  
+const CAS_: u64  = 0x800;  
+const CAL_: u64      = 0xC00;  
+
+
+
+
+
+const AVC_: u64  = 0x000;  
+const AVD_: u64   = 0x004;  
+const AVB_: u64   = 0x008;  
+const CAK_: u64   = 0x00C;  
+const CAJ_: u64  = 0x010;  
 
 
 
 
 
 
-pub const LG_: u32 = 30;
+pub const MB_: u32 = 30;
 
 
-pub const BGF_: u32 = 1023;
+pub const BIJ_: u32 = 1023;
 
 
-static ATD_: AtomicBool = AtomicBool::new(false);
+static AVH_: AtomicBool = AtomicBool::new(false);
 
 
 
 
 
 #[inline(always)]
-unsafe fn tfo(l: u64) -> u32 {
-    cpu::wr(ATA_ + l)
+unsafe fn men(offset: u64) -> u32 {
+    cpu::kj(AVE_ + offset)
 }
 
 #[inline(always)]
-unsafe fn dre(l: u64, ap: u32) {
-    cpu::sk(ATA_ + l, ap);
+unsafe fn bml(offset: u64, val: u32) {
+    cpu::ib(AVE_ + offset, val);
 }
 
 #[inline(always)]
-unsafe fn tfn(l: u64) -> u32 {
-    cpu::wr(ASW_ + l)
+unsafe fn mel(offset: u64) -> u32 {
+    cpu::kj(AVA_ + offset)
 }
 
 #[inline(always)]
-unsafe fn fjq(l: u64, ap: u32) {
-    cpu::sk(ASW_ + l, ap);
+unsafe fn ckd(offset: u64, val: u32) {
+    cpu::ib(AVA_ + offset, val);
 }
 
 
@@ -93,66 +93,66 @@ pub fn init() -> bool {
         
 
         
-        dre(TJ_, 0);
+        bml(UP_, 0);
 
         
-        let gvg = tfo(ACS_);
-        let fnw = ((gvg & 0x1F) + 1) * 32;
+        let dfy = men(AEI_);
+        let cmv = ((dfy & 0x1F) + 1) * 32;
 
-        crate::serial_println!("[GIC] Distributor: {} IRQ lines", fnw);
+        crate::serial_println!("[GIC] Distributor: {} IRQ lines", cmv);
 
         
-        let pbg = fnw / 32;
-        for a in 0..pbg {
-            dre(ATB_ + (a as u64) * 4, 0xFFFF_FFFF);
+        let izg = cmv / 32;
+        for i in 0..izg {
+            bml(AVF_ + (i as u64) * 4, 0xFFFF_FFFF);
         }
 
         
-        for a in 0..pbg {
-            dre(BXG_ + (a as u64) * 4, 0xFFFF_FFFF);
+        for i in 0..izg {
+            bml(CAM_ + (i as u64) * 4, 0xFFFF_FFFF);
         }
 
         
-        for a in 8..(fnw / 4) {
+        for i in 8..(cmv / 4) {
             
-            dre(ATC_ + (a as u64) * 4, 0xA0A0_A0A0);
+            bml(AVG_ + (i as u64) * 4, 0xA0A0_A0A0);
         }
-        for a in 8..(fnw / 4) {
+        for i in 8..(cmv / 4) {
             
-            dre(BXM_ + (a as u64) * 4, 0x0101_0101);
+            bml(CAS_ + (i as u64) * 4, 0x0101_0101);
         }
 
         
-        for a in 2..(fnw / 16) {
-            dre(BXF_ + (a as u64) * 4, 0);
+        for i in 2..(cmv / 16) {
+            bml(CAL_ + (i as u64) * 4, 0);
         }
 
         
 
         
-        for a in 4..8u64 {
-            dre(ATC_ + a * 4, 0x9090_9090);
+        for i in 4..8u64 {
+            bml(AVG_ + i * 4, 0x9090_9090);
         }
 
         
-        dre(TJ_, 0x3);
+        bml(UP_, 0x3);
 
         
 
         
-        fjq(ASZ_, 0xFF);
+        ckd(AVD_, 0xFF);
 
         
-        fjq(ASX_, 0);
+        ckd(AVB_, 0);
 
         
-        fjq(ASY_, 0x3);
+        ckd(AVC_, 0x3);
 
         
-        cpu::nny();
-        cpu::hpd();
+        cpu::htz();
+        cpu::dsv();
 
-        ATD_.store(true, Ordering::Release);
+        AVH_.store(true, Ordering::Release);
         crate::serial_println!("[GIC] Initialized (GICD + GICC)");
     }
 
@@ -160,87 +160,87 @@ pub fn init() -> bool {
 }
 
 
-pub fn eso() {
+pub fn cau() {
     unsafe {
         
-        kte(LG_);
+        fum(MB_);
 
         
-        fjq(ASZ_, 0xFF);
-        fjq(ASX_, 0);
-        fjq(ASY_, 0x3);
+        ckd(AVD_, 0xFF);
+        ckd(AVB_, 0);
+        ckd(AVC_, 0x3);
 
-        cpu::nny();
-        cpu::hpd();
+        cpu::htz();
+        cpu::dsv();
     }
 }
 
 
-pub fn kte(irq: u32) {
+pub fn fum(irq: u32) {
     let reg = irq / 32;
-    let ga = irq % 32;
+    let bf = irq % 32;
     unsafe {
-        dre(BXJ_ + (reg as u64) * 4, 1 << ga);
+        bml(CAP_ + (reg as u64) * 4, 1 << bf);
     }
 }
 
 
-pub fn nlr(irq: u32) {
+pub fn hsk(irq: u32) {
     let reg = irq / 32;
-    let ga = irq % 32;
+    let bf = irq % 32;
     unsafe {
-        dre(ATB_ + (reg as u64) * 4, 1 << ga);
+        bml(AVF_ + (reg as u64) * 4, 1 << bf);
     }
 }
 
 
 
-pub fn mtl() -> u32 {
-    unsafe { tfn(BXE_) & 0x3FF }
+pub fn hdt() -> u32 {
+    unsafe { mel(CAK_) & 0x3FF }
 }
 
 
-pub fn ktu(irq: u32) {
+pub fn fvb(irq: u32) {
     unsafe {
-        fjq(BXD_, irq);
+        ckd(CAJ_, irq);
     }
 }
 
 
-pub fn ky() -> bool {
-    ATD_.load(Ordering::Acquire)
+pub fn is_initialized() -> bool {
+    AVH_.load(Ordering::Acquire)
 }
 
 
 
 
-pub fn isr(edm: u64) {
+pub fn eli(interval_ms: u64) {
     
-    kte(LG_);
+    fum(MB_);
 
     
-    let kx = super::timer::fjc();
-    let qb = (edm * kx) / 1000;
-    super::timer::jpd(qb);
+    let freq = super::timer::frequency();
+    let gx = (interval_ms * freq) / 1000;
+    super::timer::fah(gx);
 
     crate::serial_println!("[GIC] Timer IRQ enabled (PPI {}, {}ms, {} ticks)", 
-        LG_, edm, qb);
+        MB_, interval_ms, gx);
 }
 
 
-pub fn jro(edm: u64) {
-    isr(edm);
+pub fn fbp(interval_ms: u64) {
+    eli(interval_ms);
 }
 
 
-pub fn pox() {
-    nlr(LG_);
-    super::timer::rxz();
+pub fn jiy() {
+    hsk(MB_);
+    super::timer::lfa();
 }
 
 
-pub fn lye(edm: u64) {
-    let kx = super::timer::fjc();
-    let qb = (edm * kx) / 1000;
-    super::timer::jpd(qb);
+pub fn gqp(interval_ms: u64) {
+    let freq = super::timer::frequency();
+    let gx = (interval_ms * freq) / 1000;
+    super::timer::fah(gx);
 }

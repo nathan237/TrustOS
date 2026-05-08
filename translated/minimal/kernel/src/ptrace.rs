@@ -9,119 +9,119 @@ use core::sync::atomic::{AtomicU32, Ordering};
 
 
 pub mod request {
-    pub const CMI_: u32 = 0;
-    pub const CLX_: u32 = 1;
-    pub const CLW_: u32 = 2;
-    pub const CLY_: u32 = 3;
-    pub const CMA_: u32 = 4;
-    pub const CLZ_: u32 = 5;
-    pub const CMB_: u32 = 6;
-    pub const CLE_: u32 = 7;
-    pub const CLQ_: u32 = 8;
-    pub const CMG_: u32 = 9;
-    pub const CLO_: u32 = 12;
-    pub const CMF_: u32 = 13;
-    pub const CLN_: u32 = 14;
-    pub const CMD_: u32 = 15;
-    pub const CLD_: u32 = 16;
-    pub const CLF_: u32 = 17;
-    pub const EBO_: u32 = 18;
-    pub const EBY_: u32 = 19;
-    pub const CMH_: u32 = 24;
-    pub const CME_: u32 = 0x4200;
-    pub const CLM_: u32 = 0x4201;
-    pub const EBQ_: u32 = 0x4202;
-    pub const ECA_: u32 = 0x4203;
-    pub const EBP_: u32 = 0x4204;
-    pub const EBZ_: u32 = 0x4205;
-    pub const CMC_: u32 = 0x4206;
-    pub const CLP_: u32 = 0x4207;
-    pub const EBR_: u32 = 0x4208;
-    pub const EBX_: u32 = 0x4209;
+    pub const CPR_: u32 = 0;
+    pub const CPG_: u32 = 1;
+    pub const CPF_: u32 = 2;
+    pub const CPH_: u32 = 3;
+    pub const CPJ_: u32 = 4;
+    pub const CPI_: u32 = 5;
+    pub const CPK_: u32 = 6;
+    pub const CON_: u32 = 7;
+    pub const COZ_: u32 = 8;
+    pub const CPP_: u32 = 9;
+    pub const COX_: u32 = 12;
+    pub const CPO_: u32 = 13;
+    pub const COW_: u32 = 14;
+    pub const CPM_: u32 = 15;
+    pub const COM_: u32 = 16;
+    pub const COO_: u32 = 17;
+    pub const EFE_: u32 = 18;
+    pub const EFO_: u32 = 19;
+    pub const CPQ_: u32 = 24;
+    pub const CPN_: u32 = 0x4200;
+    pub const COV_: u32 = 0x4201;
+    pub const EFG_: u32 = 0x4202;
+    pub const EFQ_: u32 = 0x4203;
+    pub const EFF_: u32 = 0x4204;
+    pub const EFP_: u32 = 0x4205;
+    pub const CPL_: u32 = 0x4206;
+    pub const COY_: u32 = 0x4207;
+    pub const EFH_: u32 = 0x4208;
+    pub const EFN_: u32 = 0x4209;
 }
 
 
 pub mod options {
-    pub const EBV_: u32 = 0x00000001;
-    pub const CLU_: u32 = 0x00000002;
-    pub const CLV_: u32 = 0x00000004;
-    pub const CLR_: u32 = 0x00000008;
-    pub const CLS_: u32 = 0x00000010;
-    pub const EBW_: u32 = 0x00000020;
-    pub const CLT_: u32 = 0x00000040;
-    pub const EBU_: u32 = 0x00000080;
-    pub const EBS_: u32 = 0x00100000;
-    pub const EBT_: u32 = 0x00200000;
+    pub const EFL_: u32 = 0x00000001;
+    pub const CPD_: u32 = 0x00000002;
+    pub const CPE_: u32 = 0x00000004;
+    pub const CPA_: u32 = 0x00000008;
+    pub const CPB_: u32 = 0x00000010;
+    pub const EFM_: u32 = 0x00000020;
+    pub const CPC_: u32 = 0x00000040;
+    pub const EFK_: u32 = 0x00000080;
+    pub const EFI_: u32 = 0x00100000;
+    pub const EFJ_: u32 = 0x00200000;
 }
 
 
 pub mod events {
-    pub const CLJ_: u32 = 1;
-    pub const CLL_: u32 = 2;
-    pub const CLG_: u32 = 3;
-    pub const CLH_: u32 = 4;
-    pub const EBN_: u32 = 5;
-    pub const CLI_: u32 = 6;
-    pub const EBM_: u32 = 7;
-    pub const CLK_: u32 = 128;
+    pub const COS_: u32 = 1;
+    pub const COU_: u32 = 2;
+    pub const COP_: u32 = 3;
+    pub const COQ_: u32 = 4;
+    pub const EFD_: u32 = 5;
+    pub const COR_: u32 = 6;
+    pub const EFC_: u32 = 7;
+    pub const COT_: u32 = 128;
 }
 
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum TraceeState {
     
-    Bnk,
+    NotTraced,
     
-    Ai,
+    Running,
     
-    Ani,
+    SyscallEntry,
     
-    Azp,
+    SyscallExit,
     
-    Ayu(u32),
+    SignalStop(u32),
     
-    Bge(u32),
+    EventStop(u32),
     
-    Cna,
+    SingleStep,
     
-    Bsl,
+    Seized,
 }
 
 
 #[derive(Clone)]
 pub struct TraceState {
     
-    pub cnh: u32,
+    pub tracer_pid: u32,
     
-    pub g: TraceeState,
+    pub state: TraceeState,
     
     pub options: u32,
     
-    pub kug: u64,
+    pub event_msg: u64,
     
-    pub jje: u32,
+    pub pending_signal: u32,
 }
 
 impl TraceState {
     pub fn new() -> Self {
         Self {
-            cnh: 0,
-            g: TraceeState::Bnk,
+            tracer_pid: 0,
+            state: TraceeState::NotTraced,
             options: 0,
-            kug: 0,
-            jje: 0,
+            event_msg: 0,
+            pending_signal: 0,
         }
     }
     
-    pub fn etj(&self) -> bool {
-        self.cnh != 0
+    pub fn is_traced(&self) -> bool {
+        self.tracer_pid != 0
     }
 }
 
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
-pub struct Afi {
+pub struct Nr {
     pub r15: u64,
     pub r14: u64,
     pub r13: u64,
@@ -137,433 +137,433 @@ pub struct Afi {
     pub rdx: u64,
     pub rsi: u64,
     pub rdi: u64,
-    pub uze: u64,
-    pub pc: u64,
-    pub aap: u64,
+    pub orig_rax: u64,
+    pub rip: u64,
+    pub cs: u64,
     pub rflags: u64,
     pub rsp: u64,
-    pub rv: u64,
-    pub kxh: u64,
-    pub fjy: u64,
-    pub bjw: u64,
-    pub cqf: u64,
+    pub ss: u64,
+    pub fxw: u64,
+    pub gs_base: u64,
+    pub ds: u64,
+    pub es: u64,
     pub fs: u64,
-    pub ckx: u64,
+    pub gs: u64,
 }
 
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct FpRegs {
-    pub jv: u16,
-    pub wwp: u16,
-    pub syq: u16,
-    pub svo: u16,
-    pub pc: u64,
-    pub vra: u64,
-    pub lnd: u32,
-    pub uqy: u32,
-    pub wsb: [u32; 32],   
-    pub xwn: [u32; 64],  
-    pub ob: [u32; 24],
+    pub cwd: u16,
+    pub swd: u16,
+    pub ftw: u16,
+    pub fop: u16,
+    pub rip: u64,
+    pub rdp: u64,
+    pub mxcsr: u32,
+    pub mxcr_mask: u32,
+    pub st_space: [u32; 32],   
+    pub xmm_space: [u32; 64],  
+    pub padding: [u32; 24],
 }
 
 impl Default for FpRegs {
     fn default() -> Self {
         Self {
-            jv: 0x37F,  
-            wwp: 0,
-            syq: 0,
-            svo: 0,
-            pc: 0,
-            vra: 0,
-            lnd: 0x1F80,  
-            uqy: 0,
-            wsb: [0; 32],
-            xwn: [0; 64],
-            ob: [0; 24],
+            cwd: 0x37F,  
+            swd: 0,
+            ftw: 0,
+            fop: 0,
+            rip: 0,
+            rdp: 0,
+            mxcsr: 0x1F80,  
+            mxcr_mask: 0,
+            st_space: [0; 32],
+            xmm_space: [0; 64],
+            padding: [0; 24],
         }
     }
 }
 
 
-static BS_: Mutex<BTreeMap<u32, TraceState>> = Mutex::new(BTreeMap::new());
+static BU_: Mutex<BTreeMap<u32, TraceState>> = Mutex::new(BTreeMap::new());
 
 
-static HK_: AtomicU32 = AtomicU32::new(0);
+static IC_: AtomicU32 = AtomicU32::new(0);
 
 
-pub fn lef(ce: u32) {
-    BS_.lock().insert(ce, TraceState::new());
+pub fn gcp(pid: u32) {
+    BU_.lock().insert(pid, TraceState::new());
 }
 
 
-pub fn khu(ce: u32) {
-    let mut yh = BS_.lock();
-    if let Some(g) = yh.remove(&ce) {
-        if g.etj() {
-            HK_.fetch_sub(1, Ordering::Relaxed);
+pub fn flu(pid: u32) {
+    let mut lb = BU_.lock();
+    if let Some(state) = lb.remove(&pid) {
+        if state.is_traced() {
+            IC_.fetch_sub(1, Ordering::Relaxed);
         }
     }
 }
 
 
-pub fn ptrace(request: u32, ce: u32, ag: u64, f: u64) -> Result<u64, i32> {
+pub fn ptrace(request: u32, pid: u32, addr: u64, data: u64) -> Result<u64, i32> {
     use request::*;
     
     match request {
-        CMI_ => xla(),
-        CLX_ | CLW_ => amm(ce, ag),
-        CLY_ => vgl(ce, ag),
-        CMA_ | CLZ_ => luq(ce, ag, f),
-        CMB_ => vjs(ce, ag, f),
-        CLE_ => rod(ce, f as u32),
-        CLQ_ => dsm(ce),
-        CMG_ => woy(ce, f as u32),
-        CLO_ => tfi(ce, f as *mut Afi),
-        CMF_ => wkb(ce, f as *const Afi),
-        CLN_ => tfh(ce, f as *mut FpRegs),
-        CMD_ => wjz(ce, f as *const FpRegs),
-        CLD_ => dyl(ce),
-        CLF_ => rwl(ce, f as u32),
-        CMH_ => syscall(ce, f as u32),
-        CME_ => wka(ce, f as u32),
-        CLM_ => tfg(ce, f as *mut u64),
-        CMC_ => wgp(ce, f as u32),
-        CLP_ => gkb(ce),
+        CPR_ => pmo(),
+        CPG_ | CPF_ => peek(pid, addr),
+        CPH_ => ntl(pid, addr),
+        CPJ_ | CPI_ => gnq(pid, addr, data),
+        CPK_ => nvz(pid, addr, data),
+        CON_ => kxh(pid, data as u32),
+        COZ_ => bne(pid),
+        CPP_ => oth(pid, data as u32),
+        COX_ => meg(pid, data as *mut Nr),
+        CPO_ => opx(pid, data as *const Nr),
+        COW_ => mef(pid, data as *mut FpRegs),
+        CPM_ => opv(pid, data as *const FpRegs),
+        COM_ => attach(pid),
+        COO_ => lds(pid, data as u32),
+        CPQ_ => syscall(pid, data as u32),
+        CPN_ => opw(pid, data as u32),
+        COV_ => mee(pid, data as *mut u64),
+        CPL_ => one(pid, data as u32),
+        COY_ => interrupt(pid),
         _ => Err(-22), 
     }
 }
 
 
-fn xla() -> Result<u64, i32> {
-    let aei = crate::process::aei();
-    let lsc = crate::process::lsc(aei).ok_or(-3)?; 
+fn pmo() -> Result<u64, i32> {
+    let pe = crate::process::pe();
+    let gmc = crate::process::gmc(pe).ok_or(-3)?; 
     
-    let mut yh = BS_.lock();
-    let g = yh.ds(&aei).ok_or(-3)?;
+    let mut lb = BU_.lock();
+    let state = lb.get_mut(&pe).ok_or(-3)?;
     
-    if g.etj() {
+    if state.is_traced() {
         return Err(-1); 
     }
     
-    g.cnh = lsc;
-    g.g = TraceeState::Ai;
-    HK_.fetch_add(1, Ordering::Relaxed);
+    state.tracer_pid = gmc;
+    state.state = TraceeState::Running;
+    IC_.fetch_add(1, Ordering::Relaxed);
     
     Ok(0)
 }
 
 
-fn dyl(ce: u32) -> Result<u64, i32> {
-    let cnh = crate::process::aei();
+fn attach(pid: u32) -> Result<u64, i32> {
+    let tracer_pid = crate::process::pe();
     
     
-    if ce == cnh {
+    if pid == tracer_pid {
         return Err(-1); 
     }
     
-    let mut yh = BS_.lock();
-    let g = yh.ds(&ce).ok_or(-3)?; 
+    let mut lb = BU_.lock();
+    let state = lb.get_mut(&pid).ok_or(-3)?; 
     
-    if g.etj() {
+    if state.is_traced() {
         return Err(-1); 
     }
     
     
     
-    g.cnh = cnh;
-    g.g = TraceeState::Ayu(crate::signals::sig::Qq);
-    HK_.fetch_add(1, Ordering::Relaxed);
+    state.tracer_pid = tracer_pid;
+    state.state = TraceeState::SignalStop(crate::signals::sig::Hb);
+    IC_.fetch_add(1, Ordering::Relaxed);
     
     
-    crate::process::qg(ce);
+    crate::process::stop(pid);
     
     Ok(0)
 }
 
 
-fn wgp(ce: u32, options: u32) -> Result<u64, i32> {
-    let cnh = crate::process::aei();
+fn one(pid: u32, options: u32) -> Result<u64, i32> {
+    let tracer_pid = crate::process::pe();
     
-    if ce == cnh {
+    if pid == tracer_pid {
         return Err(-1); 
     }
     
-    let mut yh = BS_.lock();
-    let g = yh.ds(&ce).ok_or(-3)?;
+    let mut lb = BU_.lock();
+    let state = lb.get_mut(&pid).ok_or(-3)?;
     
-    if g.etj() {
+    if state.is_traced() {
         return Err(-1); 
     }
     
-    g.cnh = cnh;
-    g.g = TraceeState::Bsl;
-    g.options = options;
-    HK_.fetch_add(1, Ordering::Relaxed);
+    state.tracer_pid = tracer_pid;
+    state.state = TraceeState::Seized;
+    state.options = options;
+    IC_.fetch_add(1, Ordering::Relaxed);
     
     Ok(0)
 }
 
 
-fn rwl(ce: u32, cug: u32) -> Result<u64, i32> {
-    byp(ce)?;
+fn lds(pid: u32, ash: u32) -> Result<u64, i32> {
+    ans(pid)?;
     
-    let mut yh = BS_.lock();
-    let g = yh.ds(&ce).ok_or(-3)?;
+    let mut lb = BU_.lock();
+    let state = lb.get_mut(&pid).ok_or(-3)?;
     
-    g.cnh = 0;
-    g.g = TraceeState::Bnk;
-    g.options = 0;
-    HK_.fetch_sub(1, Ordering::Relaxed);
+    state.tracer_pid = 0;
+    state.state = TraceeState::NotTraced;
+    state.options = 0;
+    IC_.fetch_sub(1, Ordering::Relaxed);
     
-    drop(yh);
+    drop(lb);
     
     
-    if cug != 0 {
-        let _ = crate::signals::dsm(ce, cug, crate::process::aei());
+    if ash != 0 {
+        let _ = crate::signals::bne(pid, ash, crate::process::pe());
     }
-    crate::process::anu(ce);
+    crate::process::resume(pid);
     
     Ok(0)
 }
 
 
-fn rod(ce: u32, cug: u32) -> Result<u64, i32> {
-    byp(ce)?;
+fn kxh(pid: u32, ash: u32) -> Result<u64, i32> {
+    ans(pid)?;
     
-    let mut yh = BS_.lock();
-    let g = yh.ds(&ce).ok_or(-3)?;
-    g.g = TraceeState::Ai;
-    g.jje = cug;
-    drop(yh);
+    let mut lb = BU_.lock();
+    let state = lb.get_mut(&pid).ok_or(-3)?;
+    state.state = TraceeState::Running;
+    state.pending_signal = ash;
+    drop(lb);
     
-    crate::process::anu(ce);
+    crate::process::resume(pid);
     Ok(0)
 }
 
 
-fn woy(ce: u32, cug: u32) -> Result<u64, i32> {
-    byp(ce)?;
+fn oth(pid: u32, ash: u32) -> Result<u64, i32> {
+    ans(pid)?;
     
-    let mut yh = BS_.lock();
-    let g = yh.ds(&ce).ok_or(-3)?;
-    g.g = TraceeState::Cna;
-    g.jje = cug;
-    drop(yh);
+    let mut lb = BU_.lock();
+    let state = lb.get_mut(&pid).ok_or(-3)?;
+    state.state = TraceeState::SingleStep;
+    state.pending_signal = ash;
+    drop(lb);
     
     
-    if let Some(mut be) = crate::process::ghz(ce) {
-        be.rflags |= 1 << 8; 
-        let _ = crate::process::meh(ce, &be);
+    if let Some(mut ab) = crate::process::cyj(pid) {
+        ab.rflags |= 1 << 8; 
+        let _ = crate::process::gug(pid, &ab);
     }
     
-    crate::process::anu(ce);
+    crate::process::resume(pid);
     Ok(0)
 }
 
 
-fn syscall(ce: u32, cug: u32) -> Result<u64, i32> {
-    byp(ce)?;
+fn syscall(pid: u32, ash: u32) -> Result<u64, i32> {
+    ans(pid)?;
     
-    let mut yh = BS_.lock();
-    let g = yh.ds(&ce).ok_or(-3)?;
+    let mut lb = BU_.lock();
+    let state = lb.get_mut(&pid).ok_or(-3)?;
     
     
-    g.g = match g.g {
-        TraceeState::Ani => TraceeState::Azp,
-        _ => TraceeState::Ani,
+    state.state = match state.state {
+        TraceeState::SyscallEntry => TraceeState::SyscallExit,
+        _ => TraceeState::SyscallEntry,
     };
-    g.jje = cug;
-    drop(yh);
+    state.pending_signal = ash;
+    drop(lb);
     
-    crate::process::anu(ce);
+    crate::process::resume(pid);
     Ok(0)
 }
 
 
-fn dsm(ce: u32) -> Result<u64, i32> {
-    byp(ce)?;
+fn bne(pid: u32) -> Result<u64, i32> {
+    ans(pid)?;
     
-    let mut yh = BS_.lock();
-    yh.remove(&ce);
-    HK_.fetch_sub(1, Ordering::Relaxed);
-    drop(yh);
+    let mut lb = BU_.lock();
+    lb.remove(&pid);
+    IC_.fetch_sub(1, Ordering::Relaxed);
+    drop(lb);
     
-    crate::process::fwl(ce);
+    crate::process::crk(pid);
     Ok(0)
 }
 
 
-fn gkb(ce: u32) -> Result<u64, i32> {
-    byp(ce)?;
+fn interrupt(pid: u32) -> Result<u64, i32> {
+    ans(pid)?;
     
-    let mut yh = BS_.lock();
-    let g = yh.ds(&ce).ok_or(-3)?;
+    let mut lb = BU_.lock();
+    let state = lb.get_mut(&pid).ok_or(-3)?;
     
-    if g.g != TraceeState::Bsl {
+    if state.state != TraceeState::Seized {
         return Err(-22); 
     }
     
-    g.g = TraceeState::Bge(events::CLK_);
-    drop(yh);
+    state.state = TraceeState::EventStop(events::COT_);
+    drop(lb);
     
-    crate::process::qg(ce);
+    crate::process::stop(pid);
     Ok(0)
 }
 
 
-fn wka(ce: u32, options: u32) -> Result<u64, i32> {
-    byp(ce)?;
+fn opw(pid: u32, options: u32) -> Result<u64, i32> {
+    ans(pid)?;
     
-    let mut yh = BS_.lock();
-    let g = yh.ds(&ce).ok_or(-3)?;
-    g.options = options;
+    let mut lb = BU_.lock();
+    let state = lb.get_mut(&pid).ok_or(-3)?;
+    state.options = options;
     
     Ok(0)
 }
 
 
-fn tfg(ce: u32, cax: *mut u64) -> Result<u64, i32> {
-    byp(ce)?;
+fn mee(pid: u32, msg_ptr: *mut u64) -> Result<u64, i32> {
+    ans(pid)?;
     
-    let yh = BS_.lock();
-    let g = yh.get(&ce).ok_or(-3)?;
+    let lb = BU_.lock();
+    let state = lb.get(&pid).ok_or(-3)?;
     
     
-    if !cax.abq() {
-        unsafe { *cax = g.kug; }
+    if !msg_ptr.is_null() {
+        unsafe { *msg_ptr = state.event_msg; }
     }
     
     Ok(0)
 }
 
 
-fn amm(ce: u32, ag: u64) -> Result<u64, i32> {
-    byp(ce)?;
+fn peek(pid: u32, addr: u64) -> Result<u64, i32> {
+    ans(pid)?;
     
     
-    let bn = crate::memory::vst(ce, ag)?;
-    Ok(bn)
+    let value = crate::memory::odj(pid, addr)?;
+    Ok(value)
 }
 
 
-fn vgl(ce: u32, l: u64) -> Result<u64, i32> {
-    byp(ce)?;
+fn ntl(pid: u32, offset: u64) -> Result<u64, i32> {
+    ans(pid)?;
     
-    let be = crate::process::ghz(ce).ok_or(-3i32)?;
+    let ab = crate::process::cyj(pid).ok_or(-3i32)?;
     
-    let ap = match l {
-        0   => be.r15, 8   => be.r14, 16  => be.r13, 24  => be.r12,
-        32  => be.rbp, 40  => be.rbx, 48  => be.r11, 56  => be.r10,
-        64  => be.r9,  72  => be.r8,  80  => be.rax, 88  => be.rcx,
-        96  => be.rdx, 104 => be.rsi, 112 => be.rdi, 120 => be.rax, 
-        128 => be.pc, 136 => be.aap,  144 => be.rflags,
-        152 => be.rsp, 160 => be.rv,
+    let val = match offset {
+        0   => ab.r15, 8   => ab.r14, 16  => ab.r13, 24  => ab.r12,
+        32  => ab.rbp, 40  => ab.rbx, 48  => ab.r11, 56  => ab.r10,
+        64  => ab.r9,  72  => ab.r8,  80  => ab.rax, 88  => ab.rcx,
+        96  => ab.rdx, 104 => ab.rsi, 112 => ab.rdi, 120 => ab.rax, 
+        128 => ab.rip, 136 => ab.cs,  144 => ab.rflags,
+        152 => ab.rsp, 160 => ab.ss,
         _ => return Err(-14), 
     };
-    Ok(ap)
+    Ok(val)
 }
 
 
-fn luq(ce: u32, ag: u64, f: u64) -> Result<u64, i32> {
-    byp(ce)?;
+fn gnq(pid: u32, addr: u64, data: u64) -> Result<u64, i32> {
+    ans(pid)?;
     
     
-    crate::memory::xvu(ce, ag, f)?;
+    crate::memory::pvf(pid, addr, data)?;
     Ok(0)
 }
 
 
-fn vjs(ce: u32, l: u64, f: u64) -> Result<u64, i32> {
-    byp(ce)?;
+fn nvz(pid: u32, offset: u64, data: u64) -> Result<u64, i32> {
+    ans(pid)?;
     
-    let mut be = crate::process::ghz(ce).ok_or(-3i32)?;
-    match l {
-        0   => be.r15 = f, 8   => be.r14 = f,
-        16  => be.r13 = f, 24  => be.r12 = f,
-        32  => be.rbp = f, 40  => be.rbx = f,
-        48  => be.r11 = f, 56  => be.r10 = f,
-        64  => be.r9 = f,  72  => be.r8 = f,
-        80  => be.rax = f, 88  => be.rcx = f,
-        96  => be.rdx = f, 104 => be.rsi = f,
-        112 => be.rdi = f, 128 => be.pc = f,
-        136 => be.aap = f,  144 => be.rflags = f,
-        152 => be.rsp = f, 160 => be.rv = f,
+    let mut ab = crate::process::cyj(pid).ok_or(-3i32)?;
+    match offset {
+        0   => ab.r15 = data, 8   => ab.r14 = data,
+        16  => ab.r13 = data, 24  => ab.r12 = data,
+        32  => ab.rbp = data, 40  => ab.rbx = data,
+        48  => ab.r11 = data, 56  => ab.r10 = data,
+        64  => ab.r9 = data,  72  => ab.r8 = data,
+        80  => ab.rax = data, 88  => ab.rcx = data,
+        96  => ab.rdx = data, 104 => ab.rsi = data,
+        112 => ab.rdi = data, 128 => ab.rip = data,
+        136 => ab.cs = data,  144 => ab.rflags = data,
+        152 => ab.rsp = data, 160 => ab.ss = data,
         _ => return Err(-14), 
     }
-    crate::process::meh(ce, &be).jd(|_| -3i32)?;
+    crate::process::gug(pid, &ab).map_err(|_| -3i32)?;
     Ok(0)
 }
 
 
-fn tfi(ce: u32, regs: *mut Afi) -> Result<u64, i32> {
-    byp(ce)?;
+fn meg(pid: u32, regs: *mut Nr) -> Result<u64, i32> {
+    ans(pid)?;
     
-    if regs.abq() {
+    if regs.is_null() {
         return Err(-14); 
     }
     
-    let be = crate::process::ghz(ce).ok_or(-3i32)?;
-    let bfo = Afi {
-        r15: be.r15, r14: be.r14, r13: be.r13, r12: be.r12,
-        rbp: be.rbp, rbx: be.rbx, r11: be.r11, r10: be.r10,
-        r9: be.r9, r8: be.r8, rax: be.rax, rcx: be.rcx,
-        rdx: be.rdx, rsi: be.rsi, rdi: be.rdi,
-        uze: be.rax, 
-        pc: be.pc, aap: be.aap, rflags: be.rflags,
-        rsp: be.rsp, rv: be.rv,
-        kxh: 0, fjy: 0, bjw: 0, cqf: 0, fs: 0, ckx: 0,
+    let ab = crate::process::cyj(pid).ok_or(-3i32)?;
+    let aek = Nr {
+        r15: ab.r15, r14: ab.r14, r13: ab.r13, r12: ab.r12,
+        rbp: ab.rbp, rbx: ab.rbx, r11: ab.r11, r10: ab.r10,
+        r9: ab.r9, r8: ab.r8, rax: ab.rax, rcx: ab.rcx,
+        rdx: ab.rdx, rsi: ab.rsi, rdi: ab.rdi,
+        orig_rax: ab.rax, 
+        rip: ab.rip, cs: ab.cs, rflags: ab.rflags,
+        rsp: ab.rsp, ss: ab.ss,
+        fxw: 0, gs_base: 0, ds: 0, es: 0, fs: 0, gs: 0,
     };
-    unsafe { *regs = bfo; }
+    unsafe { *regs = aek; }
     
     Ok(0)
 }
 
 
-fn wkb(ce: u32, regs: *const Afi) -> Result<u64, i32> {
-    byp(ce)?;
+fn opx(pid: u32, regs: *const Nr) -> Result<u64, i32> {
+    ans(pid)?;
     
-    if regs.abq() {
+    if regs.is_null() {
         return Err(-14); 
     }
     
-    let bfo = unsafe { &*regs };
-    let mut be = crate::process::ghz(ce).ok_or(-3i32)?;
-    be.r15 = bfo.r15; be.r14 = bfo.r14;
-    be.r13 = bfo.r13; be.r12 = bfo.r12;
-    be.rbp = bfo.rbp; be.rbx = bfo.rbx;
-    be.r11 = bfo.r11; be.r10 = bfo.r10;
-    be.r9 = bfo.r9; be.r8 = bfo.r8;
-    be.rax = bfo.rax; be.rcx = bfo.rcx;
-    be.rdx = bfo.rdx; be.rsi = bfo.rsi;
-    be.rdi = bfo.rdi; be.pc = bfo.pc;
-    be.aap = bfo.aap; be.rflags = bfo.rflags;
-    be.rsp = bfo.rsp; be.rv = bfo.rv;
-    crate::process::meh(ce, &be).jd(|_| -3i32)?;
+    let aek = unsafe { &*regs };
+    let mut ab = crate::process::cyj(pid).ok_or(-3i32)?;
+    ab.r15 = aek.r15; ab.r14 = aek.r14;
+    ab.r13 = aek.r13; ab.r12 = aek.r12;
+    ab.rbp = aek.rbp; ab.rbx = aek.rbx;
+    ab.r11 = aek.r11; ab.r10 = aek.r10;
+    ab.r9 = aek.r9; ab.r8 = aek.r8;
+    ab.rax = aek.rax; ab.rcx = aek.rcx;
+    ab.rdx = aek.rdx; ab.rsi = aek.rsi;
+    ab.rdi = aek.rdi; ab.rip = aek.rip;
+    ab.cs = aek.cs; ab.rflags = aek.rflags;
+    ab.rsp = aek.rsp; ab.ss = aek.ss;
+    crate::process::gug(pid, &ab).map_err(|_| -3i32)?;
     
     Ok(0)
 }
 
 
-fn tfh(ce: u32, regs: *mut FpRegs) -> Result<u64, i32> {
-    byp(ce)?;
+fn mef(pid: u32, regs: *mut FpRegs) -> Result<u64, i32> {
+    ans(pid)?;
     
-    if regs.abq() {
+    if regs.is_null() {
         return Err(-14); 
     }
     
-    let swm = FpRegs::default();
-    unsafe { *regs = swm; }
+    let lyd = FpRegs::default();
+    unsafe { *regs = lyd; }
     
     Ok(0)
 }
 
 
-fn wjz(ce: u32, regs: *const FpRegs) -> Result<u64, i32> {
-    byp(ce)?;
+fn opv(pid: u32, regs: *const FpRegs) -> Result<u64, i32> {
+    ans(pid)?;
     
-    if regs.abq() {
+    if regs.is_null() {
         return Err(-14); 
     }
     
@@ -572,13 +572,13 @@ fn wjz(ce: u32, regs: *const FpRegs) -> Result<u64, i32> {
 }
 
 
-fn byp(ce: u32) -> Result<(), i32> {
-    let aei = crate::process::aei();
+fn ans(pid: u32) -> Result<(), i32> {
+    let pe = crate::process::pe();
     
-    let yh = BS_.lock();
-    let g = yh.get(&ce).ok_or(-3)?; 
+    let lb = BU_.lock();
+    let state = lb.get(&pid).ok_or(-3)?; 
     
-    if g.cnh != aei {
+    if state.tracer_pid != pe {
         return Err(-3); 
     }
     
@@ -586,61 +586,61 @@ fn byp(ce: u32) -> Result<(), i32> {
 }
 
 
-pub fn etj(ce: u32) -> bool {
-    BS_.lock()
-        .get(&ce)
-        .map(|e| e.etj())
+pub fn is_traced(pid: u32) -> bool {
+    BU_.lock()
+        .get(&pid)
+        .map(|j| j.is_traced())
         .unwrap_or(false)
 }
 
 
-pub fn tex(ce: u32) -> Option<u32> {
-    BS_.lock()
-        .get(&ce)
-        .hi(|e| e.etj())
-        .map(|e| e.cnh)
+pub fn mdy(pid: u32) -> Option<u32> {
+    BU_.lock()
+        .get(&pid)
+        .filter(|j| j.is_traced())
+        .map(|j| j.tracer_pid)
 }
 
 
-pub fn zdz(ce: u32, id: u32, fr: u64) {
-    let mut yh = BS_.lock();
-    if let Some(g) = yh.ds(&ce) {
-        if g.etj() && (g.options & snt(id)) != 0 {
-            g.g = TraceeState::Bge(id);
-            g.kug = fr;
+pub fn qpt(pid: u32, event: u32, bk: u64) {
+    let mut lb = BU_.lock();
+    if let Some(state) = lb.get_mut(&pid) {
+        if state.is_traced() && (state.options & lrp(event)) != 0 {
+            state.state = TraceeState::EventStop(event);
+            state.event_msg = bk;
             
             
-            drop(yh);
-            crate::process::qg(ce);
+            drop(lb);
+            crate::process::stop(pid);
             
             
-            if let Some(xlb) = tex(ce) {
-                let _ = crate::signals::dsm(xlb, crate::signals::sig::Ayf, ce);
+            if let Some(tracer) = mdy(pid) {
+                let _ = crate::signals::bne(tracer, crate::signals::sig::Uu, pid);
             }
         }
     }
 }
 
 
-fn snt(id: u32) -> u32 {
-    match id {
-        events::CLJ_ => options::CLU_,
-        events::CLL_ => options::CLV_,
-        events::CLG_ => options::CLR_,
-        events::CLH_ => options::CLS_,
-        events::CLI_ => options::CLT_,
+fn lrp(event: u32) -> u32 {
+    match event {
+        events::COS_ => options::CPD_,
+        events::COU_ => options::CPE_,
+        events::COP_ => options::CPA_,
+        events::COQ_ => options::CPB_,
+        events::COR_ => options::CPC_,
         _ => 0,
     }
 }
 
 
-pub fn zqt(ce: u32) -> bool {
-    let mut yh = BS_.lock();
-    if let Some(g) = yh.ds(&ce) {
-        if g.g == TraceeState::Ani {
-            g.g = TraceeState::Ayu(crate::signals::sig::Ayh);
-            drop(yh);
-            crate::process::qg(ce);
+pub fn qyo(pid: u32) -> bool {
+    let mut lb = BU_.lock();
+    if let Some(state) = lb.get_mut(&pid) {
+        if state.state == TraceeState::SyscallEntry {
+            state.state = TraceeState::SignalStop(crate::signals::sig::Uw);
+            drop(lb);
+            crate::process::stop(pid);
             return true;
         }
     }
@@ -648,13 +648,13 @@ pub fn zqt(ce: u32) -> bool {
 }
 
 
-pub fn zqu(ce: u32) -> bool {
-    let mut yh = BS_.lock();
-    if let Some(g) = yh.ds(&ce) {
-        if g.g == TraceeState::Azp {
-            g.g = TraceeState::Ayu(crate::signals::sig::Ayh);
-            drop(yh);
-            crate::process::qg(ce);
+pub fn qyp(pid: u32) -> bool {
+    let mut lb = BU_.lock();
+    if let Some(state) = lb.get_mut(&pid) {
+        if state.state == TraceeState::SyscallExit {
+            state.state = TraceeState::SignalStop(crate::signals::sig::Uw);
+            drop(lb);
+            crate::process::stop(pid);
             return true;
         }
     }
@@ -662,6 +662,6 @@ pub fn zqu(ce: u32) -> bool {
 }
 
 
-pub fn gxu() -> u32 {
-    HK_.load(Ordering::Relaxed)
+pub fn active_count() -> u32 {
+    IC_.load(Ordering::Relaxed)
 }

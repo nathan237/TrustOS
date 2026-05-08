@@ -295,7 +295,7 @@ struct GptHeader {
     /// Starting LBA of partition entries
     partition_entry_lba: u64,
     /// Number of partition entries
-    number_partition_entries: u32,
+    num_partition_entries: u32,
     /// Size of each partition entry (usually 128)
     partition_entry_size: u32,
     /// CRC32 of partition entries
@@ -386,7 +386,7 @@ where
     
     // Parse MBR
     let mbr = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*(sector0.as_pointer() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe { &*(sector0.as_ptr() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const Mbr) };
     
     // Check if this is a protective MBR (indicates GPT)
@@ -446,7 +446,7 @@ where
     read_sector(1, &mut sector1)?;
     
     let header = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*(sector1.as_pointer() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe { &*(sector1.as_ptr() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const GptHeader) };
     
     // Verify GPT signature
@@ -456,7 +456,7 @@ const GptHeader) };
     
     let mut partitions = Vec::new();
     let entry_size = { header.partition_entry_size };
-    let number_entries = { header.number_partition_entries };
+    let number_entries = { header.num_partition_entries };
     let entries_lba = { header.partition_entry_lba };
     let disk_guid_copy = { header.disk_guid };
     
@@ -477,7 +477,7 @@ const GptHeader) };
             
             let entry = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { 
-                &*(sector.as_pointer().add(offset) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+                &*(sector.as_ptr().add(offset) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const GptPartitionEntry) 
             };
             

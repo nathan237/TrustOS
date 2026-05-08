@@ -35,7 +35,7 @@
 use alloc::string::String;
 use alloc::format;
 use alloc::vec::Vec;
-use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use core::sync::atomic::{self, AtomicBool, AtomicU64, Ordering};
 use spin::Mutex;
 
 use super::{mmio_read32, mmio_write32, GpuInfo};
@@ -110,19 +110,34 @@ fn pm4_dispatch_direct(groups_x: u32, groups_y: u32, groups_z: u32) -> [u32; 5] 
     ]
 }
 
-/// Build RELEASE_MEM packet — writes fence value to memory on completion
-/// This tells us "all dispatched work before this point is done"
+/// Build RELEASE_MEM packet — writes fence value to memory on completion (GFX10/RDNA)
 fn pm4_release_mem(fence_gpu_addr: u64, fence_value: u64) -> [u32; 7] {
     [
         pm4_type3_header(regs::PM4_RELEASE_MEM, 6),
-        // event_type=CACHE_FLUSH_AND_INV_TS_EVENT(0x14), event_index=5 (TS)
-        (0x14) | (5 << 8) | (0 << 12), // cache policy
-        // data_sel=2 (64-bit data), int_sel=0 (no interrupt)
-        (2 << 29), // Write 64-bit immediate data
-        (fence_gpu_addr & 0xFFFFFFFF) as u32,          // address low
-        ((fence_gpu_addr >> 32) & 0xFFFF) as u32,      // address high
-        (fence_value & 0xFFFFFFFF) as u32,              // data low
-        ((fence_value >> 32) & 0xFFFFFFFF) as u32,      // data high
+        (0x14) | (5 << 8) | (0 << 12),
+        (2 << 29),
+        (fence_gpu_addr & 0xFFFFFFFF) as u32,
+        ((fence_gpu_addr >> 32) & 0xFFFF) as u32,
+        (fence_value & 0xFFFFFFFF) as u32,
+        ((fence_value >> 32) & 0xFFFFFFFF) as u32,
+    ]
+}
+
+/// Build EVENT_WRITE_EOP packet — GFX8/Polaris fence mechanism
+/// GFX8 uses EVENT_WRITE_EOP (opcode 0x47) instead of RELEASE_MEM (0x49)
+/// DW1: [27:0]=event(CACHE_FLUSH_AND_INV_TS_EVENT=0x14|event_idx=5<<8)
+/// DW2: address_lo[31:0]
+/// DW3: [15:0]=address_hi, [24]=int_sel(0=none), [31:29]=data_sel(2=64bit)
+/// DW4: data_lo
+/// DW5: data_hi
+fn pm4_event_write_eop(fence_gpu_addr: u64, fence_value: u64) -> [u32; 6] {
+    [
+        pm4_type3_header(regs::PM4_EVENT_WRITE_EOP, 5),
+        (0x14) | (5 << 8),
+        (fence_gpu_addr & 0xFFFFFFFF) as u32,
+        ((fence_gpu_addr >> 32) & 0xFFFF) as u32 | (2 << 29),
+        (fence_value & 0xFFFFFFFF) as u32,
+        ((fence_value >> 32) & 0xFFFFFFFF) as u32,
     ]
 }
 
@@ -151,25 +166,11 @@ fn pm4_release_mem(fence_gpu_addr: u64, fence_value: u64) -> [u32; 7] {
 /// MTBUF/BUFFER (Buffer operations):
 ///   64-bit, [31:26]=0x38 (MTBUF) or [31:26]=0x3A (MUBUF)
 
-/// Agent: INCR — Increment each u32 in a data buffer
-///
-/// This is the simplest possible "proof of life" compute kernel.
-/// Each work item reads data[global_id], adds 1, writes it back.
-///
-/// Expected register setup (via USER_DATA SGPRs):
-///   s[0:3] = Buffer descriptor (base_addr_lo, base_addr_hi, num_records, stride/flags)
-///
-/// RDNA 1 (GFX10) machine code:
-/// ```
-///   v_mov_b32     v1, 4                      ; stride = 4 bytes per u32
-///   v_mul_lo_u32  v1, v0, v1                  ; byte_offset = global_id * 4
-///   buffer_load_dword v2, v1, s[0:3], 0 offen ; v2 = data[global_id]
-///   s_waitcnt     vmcnt(0)                    ; wait for load
-///   v_add_u32     v2, v2, 1                   ; v2 += 1
-///   buffer_store_dword v2, v1, s[0:3], 0 offen ; data[global_id] = v2
-///   s_waitcnt     vmcnt(0)                    ; wait for store
-///   s_endpgm                                  ; done
-/// ```
+// ═══════════════════════════════════════════════════════════════════════════════
+// RDNA ISA — GFX10 Compute Kernels (Navi 10)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Agent: INCR — Increment each u32 in a data buffer (RDNA / GFX10)
 pub static AGENT_INCR: &[u32] = &[
     // v_mov_b32 v1, 4
     // VOP1: [31:25]=0x7E, vdst=v1, op=V_MOV_B32(0x01), src0=inline_const_4(0x84)
@@ -202,21 +203,7 @@ pub static AGENT_INCR: &[u32] = &[
     0xBF810000,
 ];
 
-/// Agent: MEMFILL — Fill buffer with constant value
-///
-/// Each work item writes a constant u32 to data[global_id].
-///
-/// Register setup:
-///   s[0:3] = Buffer descriptor
-///   s[4]   = Fill value (via USER_DATA_1)
-///
-/// ```
-///   v_lshlrev_b32 v1, 2, v0                  ; byte_offset = global_id * 4
-///   v_mov_b32     v2, s4                      ; v2 = fill value
-///   buffer_store_dword v2, v1, s[0:3], 0 offen
-///   s_waitcnt     vmcnt(0)
-///   s_endpgm
-/// ```
+/// Agent: MEMFILL (RDNA / GFX10)
 pub static AGENT_MEMFILL: &[u32] = &[
     // v_lshlrev_b32 v1, 2, v0
     0x02020082 | (0x12 << 25),
@@ -231,20 +218,7 @@ pub static AGENT_MEMFILL: &[u32] = &[
     0xBF810000,
 ];
 
-/// Agent: MEMCOPY — Copy from src buffer to dst buffer  
-///
-/// Register setup:
-///   s[0:3] = Source buffer descriptor
-///   s[4:7] = Destination buffer descriptor
-///
-/// ```
-///   v_lshlrev_b32 v1, 2, v0                  ; byte offset
-///   buffer_load_dword v2, v1, s[0:3], 0 offen ; load from src
-///   s_waitcnt     vmcnt(0)
-///   buffer_store_dword v2, v1, s[4:7], 0 offen ; store to dst
-///   s_waitcnt     vmcnt(0)
-///   s_endpgm
-/// ```
+/// Agent: MEMCOPY (RDNA / GFX10)
 pub static AGENT_MEMCOPY: &[u32] = &[
     // v_lshlrev_b32 v1, 2, v0
     0x02020082 | (0x12 << 25),
@@ -257,6 +231,73 @@ pub static AGENT_MEMCOPY: &[u32] = &[
     0xE0702000,
     0x80020100 | (1 << 8) | (1 << 16), // srsrc=1 → s[4:7]
     // s_waitcnt vmcnt(0) 
+    0xBF8C0070,
+    // s_endpgm
+    0xBF810000,
+];
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GCN 4 ISA — GFX8 Compute Kernels (Polaris RX 470/480/570/580)
+// ═══════════════════════════════════════════════════════════════════════════════
+// Key differences from RDNA (GFX10):
+//   - BUFFER_LOAD_DWORD opcode = 0x0C (not 0x14)
+//   - V_ADD_I32 opcode = 0x19 (not V_ADD_NC_U32 = 0x25), writes carry to VCC
+//   - Wavefront = 64 threads (not 32)
+//   - V_LSHLREV_B32, V_MOV_B32, s_waitcnt, s_endpgm: same encoding
+
+/// GCN4 BUFFER_LOAD_DWORD offen: [31:26]=0x38(MUBUF), [25:18]=0x0C, [16]=1(offen)
+const GCN4_BUF_LOAD_DWORD_OFFEN: u32 = 0xE0302000;
+/// GCN4 BUFFER_STORE_DWORD offen: same opcode 0x1C on both GFX8 and GFX10
+const GCN4_BUF_STORE_DWORD_OFFEN: u32 = 0xE0702000;
+
+/// Agent: INCR — GCN4 (Polaris)
+pub static AGENT_INCR_GCN4: &[u32] = &[
+    // v_lshlrev_b32 v1, 2, v0  (byte_offset = global_id * 4)
+    0x02020082 | (0x12 << 25),
+    // buffer_load_dword v2, v1, s[0:3], 0 offen (GCN4: op=0x0C)
+    GCN4_BUF_LOAD_DWORD_OFFEN,
+    0x80020100 | (1 << 8),
+    // s_waitcnt vmcnt(0)
+    0xBF8C0070,
+    // v_add_i32 v2, vcc, 1, v2  (GCN4: op=0x19, carry→VCC)
+    0x02040081 | (0x19 << 25),
+    // buffer_store_dword v2, v1, s[0:3], 0 offen
+    GCN4_BUF_STORE_DWORD_OFFEN,
+    0x80020100 | (1 << 8),
+    // s_waitcnt vmcnt(0)
+    0xBF8C0070,
+    // s_endpgm
+    0xBF810000,
+];
+
+/// Agent: MEMFILL — GCN4 (Polaris)
+pub static AGENT_MEMFILL_GCN4: &[u32] = &[
+    // v_lshlrev_b32 v1, 2, v0
+    0x02020082 | (0x12 << 25),
+    // v_mov_b32 v2, s4
+    0x7E040204,
+    // buffer_store_dword v2, v1, s[0:3], 0 offen
+    GCN4_BUF_STORE_DWORD_OFFEN,
+    0x80020100 | (1 << 8),
+    // s_waitcnt vmcnt(0)
+    0xBF8C0070,
+    // s_endpgm
+    0xBF810000,
+];
+
+/// Agent: MEMCOPY — GCN4 (Polaris)
+pub static AGENT_MEMCOPY_GCN4: &[u32] = &[
+    // v_lshlrev_b32 v1, 2, v0
+    0x02020082 | (0x12 << 25),
+    // buffer_load_dword v2, v1, s[0:3], 0 offen (GCN4: op=0x0C)
+    GCN4_BUF_LOAD_DWORD_OFFEN,
+    0x80020100 | (1 << 8),
+    // s_waitcnt vmcnt(0)
+    0xBF8C0070,
+    // buffer_store_dword v2, v1, s[4:7], 0 offen
+    GCN4_BUF_STORE_DWORD_OFFEN,
+    0x80020100 | (1 << 8) | (1 << 16),
+    // s_waitcnt vmcnt(0)
     0xBF8C0070,
     // s_endpgm
     0xBF810000,
@@ -324,12 +365,21 @@ impl AgentKind {
         }
     }
 
-    /// Get the RDNA ISA binary for this agent
+    /// Get the ISA binary for this agent (GFX10 RDNA default)
     pub fn shader_code(&self) -> &'static [u32] {
         match self {
             AgentKind::Incr => AGENT_INCR,
             AgentKind::MemFill => AGENT_MEMFILL,
             AgentKind::MemCopy => AGENT_MEMCOPY,
+        }
+    }
+
+    /// Get the GCN4 (GFX8 / Polaris) ISA binary for this agent
+    pub fn shader_code_gcn4(&self) -> &'static [u32] {
+        match self {
+            AgentKind::Incr => AGENT_INCR_GCN4,
+            AgentKind::MemFill => AGENT_MEMFILL_GCN4,
+            AgentKind::MemCopy => AGENT_MEMCOPY_GCN4,
         }
     }
     
@@ -371,6 +421,7 @@ pub const ALL_AGENTS: &[AgentKind] = &[
 /// Compute dispatch state
 struct ComputeState {
     initialized: bool,
+    is_polaris: bool,
     mmio_base: u64,
     /// Ring buffer virtual address
     ring_virt: u64,
@@ -378,13 +429,13 @@ struct ComputeState {
     ring_phys: u64,
     /// Data buffer virtual address (shader I/O + fence)
     data_virt: u64,
-    /// Data buffer physical/GPU address  
+    /// Data buffer physical/GPU address
     data_phys: u64,
     /// Shader code buffer virtual address
     code_virt: u64,
     /// Shader code buffer physical/GPU address
     code_phys: u64,
-    /// Current ring write pointer (in DWORDs)  
+    /// Current ring write pointer (in DWORDs)
     wptr: u32,
     /// Dispatches completed
     dispatch_count: u64,
@@ -392,6 +443,7 @@ struct ComputeState {
 
 static COMPUTE: Mutex<ComputeState> = Mutex::new(ComputeState {
     initialized: false,
+    is_polaris: false,
     mmio_base: 0,
     ring_virt: 0,
     ring_phys: 0,
@@ -423,13 +475,38 @@ fn ring_write(state: &mut ComputeState, data: &[u32]) -> usize {
     data.len()
 }
 
+/// HDP flush — ensures coherency between CPU and GPU memory views.
+/// Polaris: write 1 to HDP_MEM_COHERENCY_FLUSH_CNTL (0x0B90)
+/// Navi 10: BIF-based GPU_HDP_FLUSH mechanism
+#[inline]
+fn hdp_flush(mmio_base: u64, is_polaris: bool) {
+    unsafe {
+        if is_polaris {
+            mmio_write32(mmio_base, 0x0B90, 1);
+            let _ = mmio_read32(mmio_base, 0x0B90);
+        } else {
+            mmio_write32(mmio_base, regs::BIF_BX_PF0_GPU_HDP_FLUSH_DONE,
+                         regs::BIF_BX_PF0_GPU_HDP_FLUSH_REQ);
+            let _ = mmio_read32(mmio_base, regs::BIF_BX_PF0_GPU_HDP_FLUSH_DONE);
+        }
+    }
+}
+
 /// Submit the ring buffer to the GPU by updating WPTR register
 fn ring_submit(state: &ComputeState) {
+    atomic::fence(Ordering::Release);
+
     unsafe {
-        // Write new WPTR to HQD register (in bytes, not dwords)
         let wptr_bytes = (state.wptr as u32) * 4;
-        mmio_write32(state.mmio_base, regs::CP_HQD_PQ_WPTR_LO, wptr_bytes);
-        mmio_write32(state.mmio_base, regs::CP_HQD_PQ_WPTR_HI, 0);
+        if state.is_polaris {
+            // Select MEC1 pipe 0, queue 0 for WPTR write
+            mmio_write32(state.mmio_base, regs::SRBM_GFX_CNTL_V8, 1 << 2);
+            mmio_write32(state.mmio_base, regs::CP_HQD_PQ_WPTR_V8, wptr_bytes);
+            mmio_write32(state.mmio_base, regs::SRBM_GFX_CNTL_V8, 0);
+        } else {
+            mmio_write32(state.mmio_base, regs::CP_HQD_PQ_WPTR_LO, wptr_bytes);
+            mmio_write32(state.mmio_base, regs::CP_HQD_PQ_WPTR_HI, 0);
+        }
     }
 }
 
@@ -556,6 +633,209 @@ pub fn init(mmio_base: u64) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Polaris (GCN4 / GFX8) Initialization
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Initialize GPU compute engine for Polaris (RX 470/480/570/580)
+///
+/// Uses GART-mapped sysRAM buffers (same pattern as SDMA).
+/// ring/data/code are (cpu_virt, gpu_mc_addr) pairs.
+///
+/// Must be called after GART is set up and MEC firmware is loaded.
+pub fn init_polaris(
+    mmio_base: u64,
+    ring_cpu: u64, ring_mc: u64,
+    data_cpu: u64, data_mc: u64,
+    code_cpu: u64, code_mc: u64,
+    wb_cpu: u64, wb_mc: u64,
+) {
+    crate::log!("[GPU-COMPUTE] ═══════════════════════════════════════════════");
+    crate::log!("[GPU-COMPUTE] Polaris GCN4 Compute Init (36 CUs, 64-wide waves)");
+    crate::log!("[GPU-COMPUTE] ═══════════════════════════════════════════════");
+
+    if mmio_base == 0 {
+        crate::log!("[GPU-COMPUTE] No MMIO base — skipping");
+        return;
+    }
+
+    // Zero buffers via CPU
+    unsafe {
+        for i in 0..(RING_SIZE_BYTES / 4) {
+            core::ptr::write_volatile((ring_cpu as *mut u32).add(i), 0);
+        }
+        for i in 0..(DATA_BUFFER_SIZE / 4) {
+            core::ptr::write_volatile((data_cpu as *mut u32).add(i), 0);
+        }
+        for i in 0..(4096 / 4) {
+            core::ptr::write_volatile((code_cpu as *mut u32).add(i), 0);
+        }
+    }
+
+    crate::log!("[GPU-COMPUTE] Ring:  cpu={:#X} mc={:#X} ({}dw)",
+        ring_cpu, ring_mc, RING_SIZE_DWORDS);
+    crate::log!("[GPU-COMPUTE] Data:  cpu={:#X} mc={:#X} ({}KB)",
+        data_cpu, data_mc, DATA_BUFFER_SIZE / 1024);
+    crate::log!("[GPU-COMPUTE] Code:  cpu={:#X} mc={:#X}", code_cpu, code_mc);
+    crate::log!("[GPU-COMPUTE] WB:    cpu={:#X} mc={:#X}", wb_cpu, wb_mc);
+
+    // Read GRBM/MEC status
+    let grbm_status = unsafe { mmio_read32(mmio_base, regs::GRBM_STATUS) };
+    crate::log!("[GPU-COMPUTE] GRBM_STATUS={:#010X}", grbm_status);
+
+    // Select MEC1 pipe 0, queue 0 via SRBM_GFX_CNTL
+    // [1:0]=PIPEID=0, [3:2]=MEID=1 (MEC1), [7:4]=VMID=0, [10:8]=QUEUEID=0
+    unsafe {
+        // First, ensure RLC is out of safe mode (otherwise MEC won't run).
+        // mmRLC_SAFE_MODE = 0xEC10. CMD bit 0, MESSAGE bits 1..4.
+        // To exit: set CMD=1, MESSAGE=0, write — wait for CMD bit to clear.
+        let rlc_safe_mode = 0xEC10u32 * 4;
+        let mut sm = mmio_read32(mmio_base, rlc_safe_mode);
+        sm = (sm | 1) & !0x1E; // CMD=1, MESSAGE=0
+        mmio_write32(mmio_base, rlc_safe_mode, sm);
+        for _ in 0..1_000_000u32 {
+            if (mmio_read32(mmio_base, rlc_safe_mode) & 1) == 0 { break; }
+            core::hint::spin_loop();
+        }
+        let sm_after = mmio_read32(mmio_base, rlc_safe_mode);
+        crate::log!("[GPU-COMPUTE] RLC_SAFE_MODE: {:#X} -> {:#X}", sm, sm_after);
+
+        // Tell RLC about our compute queue: me=1, pipe=0, queue=0.
+        // mmRLC_CP_SCHEDULERS = 0xEC22 (per Linux gfx_v8_0_kiq_setting).
+        // Format: (me<<5) | (pipe<<3) | queue, then OR 0x80 to enable.
+        let rlc_cp_sched = 0xEC22u32 * 4;
+        let sched_val: u32 = (1u32 << 5) | (0u32 << 3) | 0u32; // me=1, pipe=0, queue=0
+        mmio_write32(mmio_base, rlc_cp_sched, sched_val);
+        mmio_write32(mmio_base, rlc_cp_sched, sched_val | 0x80);
+
+        mmio_write32(mmio_base, regs::SRBM_GFX_CNTL_V8, 1 << 2); // MEID=1 = 0x04
+    }
+
+    // Deactivate any existing queue
+    unsafe {
+        mmio_write32(mmio_base, regs::CP_HQD_DEQUEUE_REQUEST_V8, 1);
+    }
+    for _ in 0..100_000u32 {
+        let active = unsafe { mmio_read32(mmio_base, regs::CP_HQD_ACTIVE_V8) };
+        if active == 0 { break; }
+        core::hint::spin_loop();
+    }
+
+    // Configure HQD
+    unsafe {
+        // VMID = 0 (use GART page table)
+        mmio_write32(mmio_base, regs::CP_HQD_VMID_V8, 0);
+
+        // Ring base address (256-byte aligned units)
+        let rb_base_256 = ring_mc >> 8;
+        mmio_write32(mmio_base, regs::CP_HQD_PQ_BASE_V8,
+            (rb_base_256 & 0xFFFFFFFF) as u32);
+        mmio_write32(mmio_base, regs::CP_HQD_PQ_BASE_HI_V8,
+            ((rb_base_256 >> 32) & 0xFF) as u32);
+
+        // Ring control: queue_size=10 (log2 1024 dw), rb_blksz=5, PRIV_STATE=1 (bit28), KMD_QUEUE=1 (bit29)
+        // Linux gfx_v8_0_mqd_init: UNORD_DISPATCH=0, ROQ_PQ_IB_FLIP=0, PRIV_STATE=1, KMD_QUEUE=1
+        let pq_control: u32 = 10 | (5 << 8) | (1u32 << 28) | (1u32 << 29);
+        mmio_write32(mmio_base, regs::CP_HQD_PQ_CONTROL_V8, pq_control);
+
+        // RPTR writeback address (GART MC address, 256-byte aligned)
+        mmio_write32(mmio_base, regs::CP_HQD_PQ_RPTR_REPORT_ADDR_V8,
+            (wb_mc & 0xFFFFFFFF) as u32);
+        mmio_write32(mmio_base, regs::CP_HQD_PQ_RPTR_REPORT_ADDR_HI_V8,
+            ((wb_mc >> 32) & 0xFFFF) as u32);
+
+        // Disable doorbell (we use MMIO WPTR writes)
+        mmio_write32(mmio_base, regs::CP_HQD_PQ_DOORBELL_CONTROL_V8, 0);
+
+        // Reset pointers
+        mmio_write32(mmio_base, regs::CP_HQD_PQ_RPTR_V8, 0);
+        mmio_write32(mmio_base, regs::CP_HQD_PQ_WPTR_V8, 0);
+
+        // EOP (end-of-pipe) buffer — needed for RELEASE_MEM fence events
+        // Use a small region in the data buffer (last 4KB)
+        let eop_mc = data_mc + (DATA_BUFFER_SIZE as u64) - 4096;
+        mmio_write32(mmio_base, regs::CP_HQD_EOP_BASE_ADDR_V8,
+            ((eop_mc >> 8) & 0xFFFFFFFF) as u32);
+        mmio_write32(mmio_base, regs::CP_HQD_EOP_BASE_ADDR_HI_V8,
+            ((eop_mc >> 40) & 0xFF) as u32);
+        // EOP control: size = log2(1024/4)=8 entries, 4 dwords each
+        mmio_write32(mmio_base, regs::CP_HQD_EOP_CONTROL_V8, 8);
+
+        // ───────────────────────────────────────────────────────────────────
+        // MQD-style state required by GFX8 MEC firmware (Linux gfx_v8_0_mqd_init).
+        // Without these the MEC firmware will not start processing the queue
+        // even when CP_HQD_ACTIVE=1.
+        // ───────────────────────────────────────────────────────────────────
+
+        // CP_MQD_BASE_ADDR / HI : MEC needs an MQD region to checkpoint queue state.
+        // Reuse the second-to-last 4KB of the data buffer (last 4KB is EOP).
+        let mqd_mc = data_mc + (DATA_BUFFER_SIZE as u64) - 8192;
+        // Zero the MQD region from CPU side
+        let mqd_cpu = data_cpu + (DATA_BUFFER_SIZE as u64) - 8192;
+        for i in 0..(4096 / 4) {
+            core::ptr::write_volatile((mqd_cpu as *mut u32).add(i), 0);
+        }
+        mmio_write32(mmio_base, 0x3245 * 4, (mqd_mc & 0xFFFFFFFC) as u32);          // mmCP_MQD_BASE_ADDR
+        mmio_write32(mmio_base, 0x3246 * 4, ((mqd_mc >> 32) & 0xFFFFFFFF) as u32);  // mmCP_MQD_BASE_ADDR_HI
+        mmio_write32(mmio_base, 0x3269 * 4, 0);                                     // mmCP_MQD_CONTROL: VMID=0
+
+        // CP_HQD_PERSISTENT_STATE: PRELOAD_SIZE=0x53 + PRELOAD_REQ bit (KFD style)
+        // PRELOAD_SIZE shift=8 mask=0x3F00. PRELOAD_REQ bit 14 (per amdkfd).
+        let mut ps = mmio_read32(mmio_base, 0x3249 * 4);
+        ps = (ps & !0x3F00) | (0x53 << 8) | (1 << 14);
+        mmio_write32(mmio_base, 0x3249 * 4, ps);
+
+        // CP_HQD_IB_CONTROL: MIN_IB_AVAIL_SIZE=3, MTYPE=3
+        // MIN_IB_AVAIL_SIZE shift=20 mask=0x300000, MTYPE shift=22 mask=0xC00000
+        let mut ibc = mmio_read32(mmio_base, 0x325A * 4);
+        ibc = (ibc & !0xF00000) | (3 << 20) | (3 << 22);
+        mmio_write32(mmio_base, 0x325A * 4, ibc);
+
+        // CP_HQD_IQ_TIMER: MTYPE=3
+        // MTYPE shift=8 mask=0x300
+        let mut iqt = mmio_read32(mmio_base, 0x325B * 4);
+        iqt = (iqt & !0x300) | (3 << 8);
+        mmio_write32(mmio_base, 0x325B * 4, iqt);
+
+        // Clear any pending dequeue request before activating
+        mmio_write32(mmio_base, regs::CP_HQD_DEQUEUE_REQUEST_V8, 0);
+
+        // Activate the queue
+        mmio_write32(mmio_base, regs::CP_HQD_ACTIVE_V8, 1);
+    }
+
+    let hqd_active = unsafe { mmio_read32(mmio_base, regs::CP_HQD_ACTIVE_V8) };
+    crate::log!("[GPU-COMPUTE] HQD active={} base_mc={:#X}", hqd_active, ring_mc);
+
+    // Restore SRBM to default (ME0/GFX)
+    unsafe { mmio_write32(mmio_base, regs::SRBM_GFX_CNTL_V8, 0); }
+
+    // Store state
+    let mut state = COMPUTE.lock();
+    state.initialized = true;
+    state.is_polaris = true;
+    state.mmio_base = mmio_base;
+    state.ring_virt = ring_cpu;
+    state.ring_phys = ring_mc;
+    state.data_virt = data_cpu;
+    state.data_phys = data_mc;
+    state.code_virt = code_cpu;
+    state.code_phys = code_mc;
+    state.wptr = 0;
+    state.dispatch_count = 0;
+    drop(state);
+
+    COMPUTE_READY.store(true, Ordering::SeqCst);
+
+    crate::log!("[GPU-COMPUTE] ───────────────────────────────────────────────");
+    crate::log!("[GPU-COMPUTE] GCN4 Agents available:");
+    for agent in ALL_AGENTS {
+        crate::log!("[GPU-COMPUTE]   {} — {}", agent.name(), agent.description());
+    }
+    crate::log!("[GPU-COMPUTE] ───────────────────────────────────────────────");
+    crate::log!("[GPU-COMPUTE] Polaris compute engine ready — dispatch via `gpuexec`");
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Dispatch API
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -610,8 +890,8 @@ pub fn dispatch(agent: AgentKind, num_elements: u32, fill_value: u32) -> Result<
     let fence_ptr = (state.data_virt + FENCE_OFFSET as u64) as *mut u64;
     unsafe { core::ptr::write_volatile(fence_ptr, 0); }
     
-    // Step 2: Upload shader code to code buffer
-    let shader = agent.shader_code();
+    // Step 2: Upload shader code to code buffer (GCN4 for Polaris, RDNA for Navi)
+    let shader = if state.is_polaris { agent.shader_code_gcn4() } else { agent.shader_code() };
     let code_ptr = state.code_virt as *mut u32;
     for (i, &insn) in shader.iter().enumerate() {
         unsafe { core::ptr::write_volatile(code_ptr.add(i), insn); }
@@ -681,10 +961,15 @@ pub fn dispatch(agent: AgentKind, num_elements: u32, fill_value: u32) -> Result<
     let dispatch_pkt = pm4_dispatch_direct(num_groups, 1, 1);
     ring_write(&mut state, &dispatch_pkt);
     
-    // RELEASE_MEM: write fence when done
+    // Fence: write marker when dispatch completes
     let fence_gpu_addr = state.data_phys + FENCE_OFFSET as u64;
-    let release_pkt = pm4_release_mem(fence_gpu_addr, FENCE_SIGNAL_VALUE);
-    ring_write(&mut state, &release_pkt);
+    if state.is_polaris {
+        let eop_pkt = pm4_event_write_eop(fence_gpu_addr, FENCE_SIGNAL_VALUE);
+        ring_write(&mut state, &eop_pkt);
+    } else {
+        let release_pkt = pm4_release_mem(fence_gpu_addr, FENCE_SIGNAL_VALUE);
+        ring_write(&mut state, &release_pkt);
+    }
     
     // Pad to alignment (NOP)
     let nop = pm4_nop();
@@ -701,18 +986,28 @@ pub fn dispatch(agent: AgentKind, num_elements: u32, fill_value: u32) -> Result<
     // Step 7: Poll for fence completion
     let mut elapsed = 0u64;
     loop {
+        // Periodic HDP flush ensures GPU fence writes are visible to CPU
+        if elapsed & 0xFF == 0 {
+            hdp_flush(mmio, state.is_polaris);
+        }
         let current_fence = unsafe { core::ptr::read_volatile(fence_ptr) };
         if current_fence == FENCE_SIGNAL_VALUE {
             break;
         }
         elapsed += 1;
         if elapsed >= GPU_TIMEOUT_ITERS {
-            crate::serial_println!("[GPU-COMPUTE] TIMEOUT after {} iterations (fence={:#X})",
-                elapsed, current_fence);
-            // Read GRBM status for diagnostics
+            hdp_flush(mmio, state.is_polaris);
+            let final_fence = unsafe { core::ptr::read_volatile(fence_ptr) };
+            crate::serial_println!("[GPU-COMPUTE] TIMEOUT after {} iterations (fence={:#X} post-flush={:#X})",
+                elapsed, current_fence, final_fence);
             let grbm = unsafe { mmio_read32(mmio, regs::GRBM_STATUS) };
-            let rptr = unsafe { mmio_read32(mmio, regs::CP_HQD_PQ_RPTR) };
-            crate::serial_println!("[GPU-COMPUTE]   GRBM_STATUS={:#010X} RPTR={}", grbm, rptr);
+            let rptr = if state.is_polaris {
+                unsafe { mmio_read32(mmio, regs::CP_HQD_PQ_RPTR_V8) }
+            } else {
+                unsafe { mmio_read32(mmio, regs::CP_HQD_PQ_RPTR) }
+            };
+            crate::serial_println!("[GPU-COMPUTE]   GRBM_STATUS={:#010X} RPTR={} polaris={}",
+                grbm, rptr, state.is_polaris);
             state.dispatch_count += 1;
             return Err("GPU dispatch timed out (fence not signaled)");
         }
@@ -817,8 +1112,9 @@ pub fn info_lines() -> Vec<String> {
     
     if is_ready() {
         let state = COMPUTE.lock();
+        let isa_name = if state.is_polaris { "GCN4 (Polaris)" } else { "RDNA (Navi)" };
         lines.push(String::from("╔══════════════════════════════════════════════════╗"));
-        lines.push(String::from("║    GPU Compute Agent — Bare-metal RDNA Dispatch  ║"));
+        lines.push(format!("║  GPU Compute Agent — {} Dispatch  ║", isa_name));
         lines.push(String::from("╠══════════════════════════════════════════════════╣"));
         lines.push(format!("║ Ring Buffer:  {:#X} ({} dwords)          ║", state.ring_phys, RING_SIZE_DWORDS));
         lines.push(format!("║ Data Buffer:  {:#X} ({}KB)              ║", state.data_phys, DATA_BUFFER_SIZE/1024));
@@ -837,4 +1133,198 @@ pub fn info_lines() -> Vec<String> {
     }
     
     lines
+}
+
+/// Detailed compute-engine diagnostic dump.
+/// Reads MEC firmware halt state, RLC state, GRBM, the active HQD on
+/// MEC1/pipe0/queue0, and the first dwords of the ring + the WB/fence
+/// pages.  Read-only — never mutates GPU state apart from SRBM_GFX_CNTL
+/// muxing (which is restored to 0 at the end).
+pub fn diag() -> Vec<String> {
+    let mut out = Vec::new();
+    if !is_ready() {
+        out.push(String::from("GPU compute engine not initialized — run `gpu sdma cp-init` first"));
+        return out;
+    }
+    let state = COMPUTE.lock();
+    let mmio = state.mmio_base;
+    let ring_virt = state.ring_virt;
+    let ring_phys = state.ring_phys;
+    let data_virt = state.data_virt;
+    let data_phys = state.data_phys;
+    let code_phys = state.code_phys;
+    let wptr_dw = state.wptr;
+    let dispatches = state.dispatch_count;
+    let is_polaris = state.is_polaris;
+    drop(state);
+
+    out.push(String::from("=== GPU Compute Diagnostic ==="));
+    out.push(format!("Engine    : {}  init=true  dispatches={}",
+        if is_polaris { "GCN4 (Polaris)" } else { "RDNA (Navi)" }, dispatches));
+    out.push(format!("MMIO      : {:#X}", mmio));
+    out.push(format!("Ring      : virt={:#X} mc={:#X} wptr_cpu={} dw",
+        ring_virt, ring_phys, wptr_dw));
+    out.push(format!("Data      : virt={:#X} mc={:#X}", data_virt, data_phys));
+    out.push(format!("Code      : mc={:#X}", code_phys));
+
+    // Global GFX status
+    let grbm   = unsafe { mmio_read32(mmio, regs::GRBM_STATUS) };
+    let grbm2  = unsafe { mmio_read32(mmio, regs::GRBM_STATUS2) };
+    let mec_cntl = unsafe { mmio_read32(mmio, regs::CP_MEC_CNTL) };
+    out.push(String::from("--- Global ---"));
+    out.push(format!("GRBM_STATUS  = {:#010X}  GRBM_STATUS2 = {:#010X}", grbm, grbm2));
+    out.push(format!("CP_MEC_CNTL  = {:#010X}  ME1_HALT={}  ME2_HALT={}",
+        mec_cntl,
+        (mec_cntl >> 30) & 1,
+        (mec_cntl >> 28) & 1));
+    out.push(String::from("(RLC_STAT skipped — beyond 256KB MMIO BAR on Polaris)"));
+
+    // Try reading MEC1 instruction pointers (Linux gfx_8_0_d.h dword offsets).
+    // mmCP_MEC1_INSTR_PNTR = 0x208a, mmCP_MEC2_INSTR_PNTR = 0x208b.
+    // If the FW is running these advance; if 0 the FW never started.
+    unsafe {
+        let mec1_pc_a = mmio_read32(mmio, 0x208a * 4);
+        let mec2_pc_a = mmio_read32(mmio, 0x208b * 4);
+        // Spin then re-read to see if PC is changing (idle loop).
+        for _ in 0..200_000u32 { core::hint::spin_loop(); }
+        let mec1_pc_b = mmio_read32(mmio, 0x208a * 4);
+        let mec2_pc_b = mmio_read32(mmio, 0x208b * 4);
+        out.push(format!("MEC1_INSTR_PNTR = {:#010X} -> {:#010X}  {}",
+            mec1_pc_a, mec1_pc_b,
+            if mec1_pc_a != mec1_pc_b { "(advancing — MEC1 alive)" }
+            else if mec1_pc_a != 0     { "(stuck @ same PC)" }
+            else                       { "(stuck @ 0 — MEC1 dead)" }));
+        out.push(format!("MEC2_INSTR_PNTR = {:#010X} -> {:#010X}  {}",
+            mec2_pc_a, mec2_pc_b,
+            if mec2_pc_a != mec2_pc_b { "(advancing — MEC2 alive)" }
+            else if mec2_pc_a != 0     { "(stuck @ same PC)" }
+            else                       { "(stuck @ 0 — MEC2 dead)" }));
+
+        // RLC state — local SAFE offsets (within 256KB BAR on Polaris)
+        let rlc_cntl = mmio_read32(mmio, 0xEC00 * 4);   // mmRLC_CNTL
+        let rlc_stat = mmio_read32(mmio, 0xEC04 * 4);   // mmRLC_STAT
+        let rlc_gpm  = mmio_read32(mmio, 0xEC42 * 4);   // mmRLC_GPM_STAT
+        let rlc_pg   = mmio_read32(mmio, 0xEC43 * 4);   // mmRLC_PG_CNTL
+        out.push(format!("RLC_CNTL  = {:#010X} (F32_EN bit0={})  RLC_STAT = {:#010X}",
+            rlc_cntl, rlc_cntl & 1, rlc_stat));
+        out.push(format!("RLC_GPM_STAT = {:#010X}   RLC_PG_CNTL = {:#010X}",
+            rlc_gpm, rlc_pg));
+    }
+
+    // HQD on MEC1 pipe0 queue0 (the queue init_polaris programmed)
+    out.push(String::from("--- HQD MEC1/pipe0/queue0 (V8 regs) ---"));
+    unsafe {
+        // Mux: MEID=1, PIPEID=0, QUEUEID=0, VMID=0
+        mmio_write32(mmio, regs::SRBM_GFX_CNTL_V8, 1 << 2);
+
+        let active   = mmio_read32(mmio, regs::CP_HQD_ACTIVE_V8);
+        let vmid     = mmio_read32(mmio, regs::CP_HQD_VMID_V8);
+        let base_lo  = mmio_read32(mmio, regs::CP_HQD_PQ_BASE_V8);
+        let base_hi  = mmio_read32(mmio, regs::CP_HQD_PQ_BASE_HI_V8);
+        let pq_ctrl  = mmio_read32(mmio, regs::CP_HQD_PQ_CONTROL_V8);
+        let rptr     = mmio_read32(mmio, regs::CP_HQD_PQ_RPTR_V8);
+        let wptr     = mmio_read32(mmio, regs::CP_HQD_PQ_WPTR_V8);
+        let rpt_lo   = mmio_read32(mmio, regs::CP_HQD_PQ_RPTR_REPORT_ADDR_V8);
+        let rpt_hi   = mmio_read32(mmio, regs::CP_HQD_PQ_RPTR_REPORT_ADDR_HI_V8);
+        let dbell    = mmio_read32(mmio, regs::CP_HQD_PQ_DOORBELL_CONTROL_V8);
+        let eop_lo   = mmio_read32(mmio, regs::CP_HQD_EOP_BASE_ADDR_V8);
+        let eop_hi   = mmio_read32(mmio, regs::CP_HQD_EOP_BASE_ADDR_HI_V8);
+        let eop_ctrl = mmio_read32(mmio, regs::CP_HQD_EOP_CONTROL_V8);
+
+        let base_full = ((base_hi as u64) << 32) | (base_lo as u64);
+        let base_mc   = base_full << 8;       // 256-byte units
+        let rpt_addr  = ((rpt_hi as u64) << 32) | (rpt_lo as u64);
+
+        out.push(format!("ACTIVE       = {}      VMID = {}", active, vmid));
+        out.push(format!("PQ_BASE      = {:#010X}_{:08X}  -> mc={:#X}  (init mc={:#X})",
+            base_hi, base_lo, base_mc, ring_phys));
+        out.push(format!("PQ_CONTROL   = {:#010X}", pq_ctrl));
+        out.push(format!("PQ_RPTR      = {:#010X}      PQ_WPTR = {:#010X}", rptr, wptr));
+        out.push(format!("RPTR_RPT_ADDR= {:#010X}_{:08X}  -> {:#X}", rpt_hi, rpt_lo, rpt_addr));
+        out.push(format!("DOORBELL_CTL = {:#010X}", dbell));
+        out.push(format!("EOP_BASE     = {:#010X}_{:08X}  EOP_CTRL = {:#010X}",
+            eop_hi, eop_lo, eop_ctrl));
+
+        // Restore default mux
+        mmio_write32(mmio, regs::SRBM_GFX_CNTL_V8, 0);
+    }
+
+    // Ring contents (CPU side)
+    out.push(String::from("--- Ring (CPU view, first 16 dwords) ---"));
+    unsafe {
+        let p = ring_virt as *const u32;
+        let mut s = String::new();
+        for i in 0..16 {
+            let v = core::ptr::read_volatile(p.add(i));
+            s.push_str(&format!("{:08X} ", v));
+            if i % 4 == 3 {
+                out.push(format!("  [{:02X}] {}", i - 3, s));
+                s.clear();
+            }
+        }
+    }
+
+    // Fence area in data buffer
+    out.push(String::from("--- Fence (CPU view) ---"));
+    unsafe {
+        let fence_p = (data_virt + FENCE_OFFSET as u64) as *const u64;
+        let v = core::ptr::read_volatile(fence_p);
+        out.push(format!("data[FENCE_OFFSET={:#X}] = {:#018X}  (signal = {:#018X})",
+            FENCE_OFFSET, v, FENCE_SIGNAL_VALUE));
+    }
+
+    // ──── Definitive MEC liveness test: submit 4 PACKET2 NOPs, watch RPTR ────
+    out.push(String::from("--- NOP poke test (PACKET2 × 4) ---"));
+    unsafe {
+        // Mux to MEC1/pipe0/queue0
+        mmio_write32(mmio, regs::SRBM_GFX_CNTL_V8, 1 << 2);
+
+        let rptr_before = mmio_read32(mmio, regs::CP_HQD_PQ_RPTR_V8);
+        let wb_addr = (data_virt + (DATA_BUFFER_SIZE as u64) - 4096 - 16) as *const u32;
+        // ^ NB: WB lives in its own page, so this isn't quite the WB. But we read RPTR live anyway.
+
+        // Append 4 PACKET2 NOPs at current wptr
+        let ring_p = ring_virt as *mut u32;
+        let start = (wptr_dw as usize) & (RING_SIZE_DWORDS - 1);
+        for i in 0..4 {
+            let idx = (start + i) & (RING_SIZE_DWORDS - 1);
+            core::ptr::write_volatile(ring_p.add(idx), 0x80000000); // PACKET2 NOP
+        }
+        // Memory fence so the writes hit before WPTR bump
+        core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);
+
+        let new_wptr = (wptr_dw + 4) as u32 & ((RING_SIZE_DWORDS - 1) as u32);
+        mmio_write32(mmio, regs::CP_HQD_PQ_WPTR_V8, new_wptr);
+        out.push(format!("submitted: wptr {:#X} -> {:#X}, rptr_before = {:#X}",
+            wptr_dw as u32, new_wptr, rptr_before));
+
+        // Poll RPTR for ~250ms worth of spinning
+        let mut rptr_after = rptr_before;
+        let mut iters = 0u32;
+        for _ in 0..2_000_000u32 {
+            iters += 1;
+            rptr_after = mmio_read32(mmio, regs::CP_HQD_PQ_RPTR_V8);
+            if rptr_after == new_wptr { break; }
+            core::hint::spin_loop();
+        }
+        let pc_after = mmio_read32(mmio, 0x208a * 4);
+        out.push(format!("rptr_after  = {:#X}   iters={}  MEC1_PC_after = {:#010X}",
+            rptr_after, iters, pc_after));
+        out.push(String::from(if rptr_after == new_wptr {
+            ">>> MEC1 IS RUNNING (RPTR caught up to WPTR) <<<"
+        } else {
+            ">>> MEC1 STUCK — RPTR did not advance — firmware not executing <<<"
+        }));
+
+        // Save the new wptr so subsequent dispatches don't collide
+        let mut s = COMPUTE.lock();
+        s.wptr = new_wptr;
+        drop(s);
+
+        // Mux back
+        mmio_write32(mmio, regs::SRBM_GFX_CNTL_V8, 0);
+        let _ = wb_addr; // unused
+    }
+
+    out
 }

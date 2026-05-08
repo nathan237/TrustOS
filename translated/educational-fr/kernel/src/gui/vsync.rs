@@ -73,8 +73,8 @@ pub fn frame_end(frame_start_us: u64) {
     LAST_RENDER_US.store(render_time, Ordering::Relaxed);
     
     // Record in ring buffer
-    let index = FRAME_INDEX.fetch_add(1, Ordering::Relaxed) as usize % FPS_WINDOW;
-    FRAME_TIMES[index].store(render_time, Ordering::Relaxed);
+    let idx = FRAME_INDEX.fetch_add(1, Ordering::Relaxed) as usize % FPS_WINDOW;
+    FRAME_TIMES[idx].store(render_time, Ordering::Relaxed);
     
     TOTAL_FRAMES.fetch_add(1, Ordering::Relaxed);
     
@@ -109,7 +109,7 @@ pub fn frame_end(frame_start_us: u64) {
 /// (PIC/APIC) is not perfectly configured.
 fn adaptive_sleep(target_us: u64) {
     // Cap sleep to 50ms max — never block longer than ~3 frames
-    let capped = target_us.minimum(50_000);
+    let capped = target_us.min(50_000);
     let start = super::engine::now_us();
     let end = start + capped;
 
@@ -138,7 +138,7 @@ fn update_smooth_fps() {
     }
     let average_us = total / FPS_WINDOW as u64;
     let fps = if average_us > 0 { 1_000_000 / average_us } else { 0 };
-    SMOOTH_FPS.store(fps.minimum(999), Ordering::Relaxed);
+    SMOOTH_FPS.store(fps.min(999), Ordering::Relaxed);
 }
 
 /// Get smoothed FPS value

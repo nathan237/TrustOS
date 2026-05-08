@@ -198,11 +198,8 @@ pub fn handle_packet(data: &[u8]) {
         next_header::ICMPV6 => {
             super::icmpv6::handle_packet(header.src_addr(), header.dst_addr(), payload);
         }
-        next_header::TCP => {
-            crate::serial_println!("[IPv6] TCP packet from {} (not implemented)", header.src_addr());
-        }
-        next_header::UDP => {
-            crate::serial_println!("[IPv6] UDP packet from {} (not implemented)", header.src_addr());
+        next_header::TCP | next_header::UDP => {
+            // Silently drop — IPv6 TCP/UDP not implemented yet
         }
         _ => {}
     }

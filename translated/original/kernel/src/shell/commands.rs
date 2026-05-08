@@ -178,6 +178,7 @@ pub(super) fn cmd_help(args: &[&str]) {
     crate::println_color!(COLOR_CYAN, "  NETWORK");
     crate::println!("    ifconfig / ip       Show network interface status");
     crate::println!("    ipconfig [cmd]      Configure IP settings");
+    crate::println!("    wifi <cmd>          WiFi management (scan/connect/status/disconnect)");
     crate::println!("    ping <host>         ICMP echo to test connectivity");
     crate::println!("    curl <url>          HTTP/HTTPS client (GET, POST)");
     crate::println!("    wget <url>          Download file from URL");
@@ -4680,5 +4681,291 @@ pub(super) fn cmd_gpufw(args: &[&str]) {
             crate::println_color!(COLOR_RED, "Unknown: gpufw {}", args[0]);
             crate::println!("Use 'gpufw' for help");
         }
+    }
+}
+
+// ==================== WIFI MANAGEMENT COMMAND ====================
+
+pub(super) fn cmd_wifi(args: &[&str]) {
+    use crate::drivers::net::wifi;
+    use crate::framebuffer::{COLOR_GREEN, COLOR_RED, COLOR_YELLOW, COLOR_CYAN, COLOR_WHITE, COLOR_GRAY};
+
+    let subcmd = args.first().copied().unwrap_or("status");
+
+    match subcmd {
+        "status" | "info" => {
+            let state = wifi::state();
+            let has_hw = wifi::has_wifi();
+
+            crate::println_color!(COLOR_CYAN, "=== WiFi Status ===");
+            crate::println!("  Hardware:  {}", if has_hw { "detected" } else { "not found" });
+            crate::println!("  State:     {:?}", state);
+
+            if let Some(ssid) = wifi::connected_ssid() {
+                crate::println!("  SSID:      {}", ssid);
+                if let Some(dbm) = wifi::signal_strength() {
+                    let bars = match dbm {
+                        -50..=0 => "████ (excellent)",
+                        -60..=-51 => "███░ (good)",
+                        -70..=-61 => "██░░ (fair)",
+                        _ => "█░░░ (weak)",
+                    };
+                    crate::println!("  Signal:    {} dBm {}", dbm, bars);
+                }
+            }
+        }
+
+        "scan" => {
+            if !wifi::has_wifi() {
+                crate::println_color!(COLOR_RED, "No WiFi hardware detected");
+                return;
+            }
+            crate::println_color!(COLOR_YELLOW, "Scanning for WiFi networks...");
+            match wifi::start_scan() {
+                Ok(()) => {
+                    // Poll for ~3 seconds to let firmware scan all channels
+                    // 15 channels * ~100ms dwell = ~1.5s minimum
+                    crate::print!("  Waiting: ");
+                    for i in 0..30u32 {
+                        for _ in 0..100 {
+                            wifi::poll();
+                            for _ in 0..10000 { core::hint::spin_loop(); }
+                        }
+                        crate::print!(".");
+                        // Check if scan finished early
+                        let results = wifi::get_scan_results();
+                        if !results.is_empty() {
+                            crate::println!(" done ({} found in ~{}ms)", results.len(), i * 100);
+                            print_scan_results(&results);
+                            return;
+                        }
+                    }
+                    crate::println!(" done");
+                    let results = wifi::get_scan_results();
+                    if results.is_empty() {
+                        crate::println_color!(COLOR_YELLOW, "No networks found");
+                        crate::println!("  Run 'wifi debug' for diagnostics");
+                    } else {
+                        print_scan_results(&results);
+                    }
+                }
+                Err(e) => crate::println_color!(COLOR_RED, "Scan failed: {}", e),
+            }
+        }
+
+        "results" | "list" => {
+            let results = wifi::get_scan_results();
+            if results.is_empty() {
+                crate::println_color!(COLOR_YELLOW, "No scan results. Run 'wifi scan' first.");
+            } else {
+                print_scan_results(&results);
+            }
+        }
+
+        "connect" => {
+            if args.len() < 2 {
+                crate::println!("Usage: wifi connect <SSID> [password]");
+                return;
+            }
+            let ssid = args[1];
+            let password = if args.len() > 2 { args[2] } else { "" };
+            crate::println_color!(COLOR_YELLOW, "Connecting to '{}'...", ssid);
+            wifi::request_connect(ssid, password);
+            // Poll to process the request
+            for _ in 0..50 {
+                wifi::poll();
+                for _ in 0..50000 { core::hint::spin_loop(); }
+            }
+            let state = wifi::state();
+            match state {
+                crate::drivers::net::wifi::WifiState::Connected => {
+                    crate::println_color!(COLOR_GREEN, "Connected to '{}'!", ssid);
+                }
+                crate::drivers::net::wifi::WifiState::Connecting |
+                crate::drivers::net::wifi::WifiState::Authenticating => {
+                    crate::println_color!(COLOR_YELLOW, "Connection in progress... (state: {:?})", state);
+                }
+                _ => {
+                    crate::println_color!(COLOR_RED, "Connection state: {:?}", state);
+                }
+            }
+        }
+
+        "disconnect" => {
+            match wifi::disconnect() {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "Disconnected"),
+                Err(e) => crate::println_color!(COLOR_RED, "Disconnect failed: {}", e),
+            }
+        }
+
+        "debug" | "diag" | "test" => {
+            crate::println_color!(COLOR_CYAN, "=== WiFi Debug Dump ===");
+            crate::drivers::net::iwl4965::debug_dump();
+            crate::println!();
+            crate::drivers::net::iwl4965::debug_dump_csrs();
+            crate::println!();
+            crate::println!("  Tip: Use 'drv test wifi' for full PCI + BAR + CSR test suite");
+            crate::println!("  Tip: Use 'drv reprobe wifi' to re-probe without reboot");
+        }
+
+        "start" | "init" | "up" => {
+            if !wifi::has_wifi() {
+                crate::println_color!(COLOR_RED, "No WiFi hardware detected");
+                crate::println!("  Try: drv reprobe wifi");
+                return;
+            }
+            crate::println_color!(COLOR_YELLOW, "Starting WiFi driver (hw_init + firmware)...");
+            match wifi::ensure_started() {
+                Ok(()) => {
+                    crate::println_color!(COLOR_GREEN, "WiFi driver started successfully");
+                }
+                Err(e) => {
+                    crate::println_color!(COLOR_RED, "WiFi start failed: {}", e);
+                }
+            }
+        }
+
+        "reg" | "csr" => {
+            // wifi reg <offset> [value]  — read/write any CSR register
+            if args.len() < 2 {
+                crate::println!("Usage: wifi reg <offset_hex> [value_hex]");
+                crate::println!("  Example: wifi reg 0x24        (read GP_CNTRL)");
+                crate::println!("  Example: wifi reg 0x24 0x80   (write GP_CNTRL)");
+                return;
+            }
+            let offset_str = args[1].trim_start_matches("0x").trim_start_matches("0X");
+            let offset = match u32::from_str_radix(offset_str, 16) {
+                Ok(v) => v,
+                Err(_) => { crate::println_color!(COLOR_RED, "Bad hex: {}", args[1]); return; }
+            };
+            if args.len() >= 3 {
+                let val_str = args[2].trim_start_matches("0x").trim_start_matches("0X");
+                let val = match u32::from_str_radix(val_str, 16) {
+                    Ok(v) => v,
+                    Err(_) => { crate::println_color!(COLOR_RED, "Bad hex: {}", args[2]); return; }
+                };
+                if crate::drivers::net::iwl4965::debug_write_csr(offset, val) {
+                    crate::println_color!(COLOR_GREEN, "CSR[0x{:03X}] <= 0x{:08X}", offset, val);
+                } else {
+                    crate::println_color!(COLOR_RED, "Write failed (no MMIO)");
+                }
+            } else {
+                match crate::drivers::net::iwl4965::debug_read_csr(offset) {
+                    Some(v) => crate::println!("CSR[0x{:03X}] = 0x{:08X}", offset, v),
+                    None => crate::println_color!(COLOR_RED, "Read failed (no MMIO)"),
+                }
+            }
+        }
+
+        "prph" => {
+            // wifi prph <addr> [value]  — read/write peripheral register
+            if args.len() < 2 {
+                crate::println!("Usage: wifi prph <addr_hex> [value_hex]");
+                crate::println!("  Example: wifi prph 0x3000     (read APMG_CLK_CTRL)");
+                crate::println!("  Example: wifi prph 0x3400     (read BSM_WR_CTRL)");
+                return;
+            }
+            let addr_str = args[1].trim_start_matches("0x").trim_start_matches("0X");
+            let addr = match u32::from_str_radix(addr_str, 16) {
+                Ok(v) => v,
+                Err(_) => { crate::println_color!(COLOR_RED, "Bad hex: {}", args[1]); return; }
+            };
+            if args.len() >= 3 {
+                let val_str = args[2].trim_start_matches("0x").trim_start_matches("0X");
+                let val = match u32::from_str_radix(val_str, 16) {
+                    Ok(v) => v,
+                    Err(_) => { crate::println_color!(COLOR_RED, "Bad hex: {}", args[2]); return; }
+                };
+                if crate::drivers::net::iwl4965::debug_write_prph(addr, val) {
+                    crate::println_color!(COLOR_GREEN, "PRPH[0x{:04X}] <= 0x{:08X}", addr, val);
+                } else {
+                    crate::println_color!(COLOR_RED, "Write failed (no MMIO)");
+                }
+            } else {
+                match crate::drivers::net::iwl4965::debug_read_prph(addr) {
+                    Some(v) => crate::println!("PRPH[0x{:04X}] = 0x{:08X}", addr, v),
+                    None => crate::println_color!(COLOR_RED, "Read failed (no MMIO)"),
+                }
+            }
+        }
+
+        "apm" => {
+            // wifi apm  — run APM init with visible step-by-step output
+            crate::println_color!(COLOR_CYAN, "=== WiFi APM Init (step-by-step) ===");
+            match crate::drivers::net::iwl4965::debug_apm_init() {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "APM init SUCCESS"),
+                Err(e) => crate::println_color!(COLOR_RED, "APM init FAILED: {}", e),
+            }
+        }
+
+        "bsm" => {
+            // wifi bsm  — dump BSM state registers
+            crate::println_color!(COLOR_CYAN, "=== BSM State Machine Registers ===");
+            crate::drivers::net::iwl4965::debug_dump_bsm();
+        }
+
+        "apmg" => {
+            // wifi apmg  — dump APMG registers
+            crate::println_color!(COLOR_CYAN, "=== APMG Power Management Registers ===");
+            crate::drivers::net::iwl4965::debug_dump_apmg();
+        }
+
+        "fw" | "firmware" => {
+            // wifi fw  — verbose firmware loading attempt
+            crate::println_color!(COLOR_CYAN, "=== WiFi Firmware Load (verbose) ===");
+            match crate::drivers::net::iwl4965::debug_load_firmware() {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "Firmware loaded!"),
+                Err(e) => crate::println_color!(COLOR_RED, "Firmware load FAILED: {}", e),
+            }
+        }
+
+        _ => {
+            crate::println_color!(COLOR_CYAN, "WiFi Management Commands:");
+            crate::println!("  wifi status          Show WiFi status and connection info");
+            crate::println!("  wifi start           Initialize hardware + load firmware (verbose)");
+            crate::println!("  wifi scan            Scan for available networks");
+            crate::println!("  wifi results         Show last scan results");
+            crate::println!("  wifi connect <SSID> [password]  Connect to network");
+            crate::println!("  wifi disconnect      Disconnect from current network");
+            crate::println!("  wifi debug           PCI + CSR register dump");
+            crate::println_color!(COLOR_CYAN, "Live Debug (no recompile needed):");
+            crate::println!("  wifi reg <offset> [val]   Read/write CSR register (hex)");
+            crate::println!("  wifi prph <addr> [val]    Read/write PRPH register (hex)");
+            crate::println!("  wifi apm             Step-by-step APM init");
+            crate::println!("  wifi bsm             Dump BSM state registers");
+            crate::println!("  wifi apmg            Dump APMG power registers");
+            crate::println!("  wifi fw              Verbose firmware loading attempt");
+        }
+    }
+}
+
+fn print_scan_results(results: &[crate::drivers::net::wifi::WifiNetwork]) {
+    use crate::framebuffer::{COLOR_CYAN, COLOR_WHITE, COLOR_GREEN, COLOR_YELLOW, COLOR_RED};
+    crate::println_color!(COLOR_CYAN, "=== WiFi Networks ({} found) ===", results.len());
+    crate::println_color!(COLOR_WHITE, "  {:<32} {:>4}  {:>6}  {:<8}  {}", "SSID", "CH", "Signal", "Security", "BSSID");
+    crate::println_color!(COLOR_WHITE, "  {}", "-".repeat(78));
+
+    for net in results {
+        let signal_color = match net.signal_dbm {
+            -50..=0 => COLOR_GREEN,
+            -70..=-51 => COLOR_YELLOW,
+            _ => COLOR_RED,
+        };
+        let bars = net.signal_bars();
+        let sec = match net.security {
+            crate::drivers::net::wifi::WifiSecurity::Open => "Open",
+            crate::drivers::net::wifi::WifiSecurity::WEP => "WEP",
+            crate::drivers::net::wifi::WifiSecurity::WPA => "WPA",
+            crate::drivers::net::wifi::WifiSecurity::WPA2 => "WPA2",
+            crate::drivers::net::wifi::WifiSecurity::WPA3 => "WPA3",
+            _ => "???",
+        };
+        crate::print!("  {:<32} {:>4}  ", net.ssid, net.channel);
+        crate::print_color!(signal_color, "{:>3}dBm {}", net.signal_dbm, 
+            match bars { 4 => "████", 3 => "███░", 2 => "██░░", 1 => "█░░░", _ => "░░░░" });
+        crate::println!("  {:<8}  {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+            sec,
+            net.bssid[0], net.bssid[1], net.bssid[2],
+            net.bssid[3], net.bssid[4], net.bssid[5]);
     }
 }

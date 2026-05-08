@@ -6,105 +6,105 @@ use spin::Mutex;
 use x86_64::instructions::port::Port;
 
 
-const CJM_: u16 = 0x20;
+const CMV_: u16 = 0x20;
 
-const CJN_: u16 = 0x21;
+const CMW_: u16 = 0x21;
 
-const CJO_: u16 = 0xA0;
+const CMX_: u16 = 0xA0;
 
-const CJP_: u16 = 0xA1;
-
-
-const BDE_: u8 = 0x20;
+const CMY_: u16 = 0xA1;
 
 
-const WF_: u8 = 32;
+const BFH_: u8 = 0x20;
 
-const BDD_: u8 = WF_ + 8;
+
+const XO_: u8 = 32;
+
+const BFG_: u8 = XO_ + 8;
 
 
 #[derive(Debug, Clone, Copy)]
 #[repr(u8)]
 pub enum InterruptIndex {
-    Timer = WF_,
-    Hs = WF_ + 1,
-    Cp = BDD_ + 4,  
+    Timer = XO_,
+    Keyboard = XO_ + 1,
+    Mouse = BFG_ + 4,  
 }
 
 impl InterruptIndex {
-    pub fn gaj(self) -> u8 {
+    pub fn as_u8(self) -> u8 {
         self as u8
     }
     
-    pub fn kbe(self) -> usize {
+    pub fn as_usize(self) -> usize {
         self as usize
     }
 }
 
 
 pub struct ChainedPics {
-    cbb: [Pic; 2],
+    pics: [Pic; 2],
 }
 
 impl ChainedPics {
     
     pub const fn new() -> Self {
         Self {
-            cbb: [
-                Pic::new(CJM_, CJN_, WF_),
-                Pic::new(CJO_, CJP_, BDD_),
+            pics: [
+                Pic::new(CMV_, CMW_, XO_),
+                Pic::new(CMX_, CMY_, BFG_),
             ],
         }
     }
     
     
-    pub unsafe fn cfp(&mut self) {
+    pub unsafe fn initialize(&mut self) {
         
-        self.cbb[0].ro.write(0x11);
-        self.cbb[1].ro.write(0x11);
-        
-        
-        self.cbb[0].f.write(self.cbb[0].l);
-        self.cbb[1].f.write(self.cbb[1].l);
+        self.pics[0].command.write(0x11);
+        self.pics[1].command.write(0x11);
         
         
-        self.cbb[0].f.write(4); 
-        self.cbb[1].f.write(2); 
+        self.pics[0].data.write(self.pics[0].offset);
+        self.pics[1].data.write(self.pics[1].offset);
         
         
-        self.cbb[0].f.write(0x01);
-        self.cbb[1].f.write(0x01);
+        self.pics[0].data.write(4); 
+        self.pics[1].data.write(2); 
         
         
-        self.cbb[0].f.write(0b11111000); 
-        self.cbb[1].f.write(0b11101111); 
+        self.pics[0].data.write(0x01);
+        self.pics[1].data.write(0x01);
+        
+        
+        self.pics[0].data.write(0b11111000); 
+        self.pics[1].data.write(0b11101111); 
     }
     
     
-    pub unsafe fn goa(&mut self, irq: u8) {
-        if irq >= self.cbb[1].l {
-            self.cbb[1].ro.write(BDE_);
+    pub unsafe fn notify_end_of_interrupt(&mut self, irq: u8) {
+        if irq >= self.pics[1].offset {
+            self.pics[1].command.write(BFH_);
         }
-        self.cbb[0].ro.write(BDE_);
+        self.pics[0].command.write(BFH_);
     }
 }
 
 
 struct Pic {
-    ro: Port<u8>,
-    f: Port<u8>,
-    l: u8,
+    command: Port<u8>,
+    data: Port<u8>,
+    offset: u8,
 }
 
 impl Pic {
-    const fn new(rmr: u16, axr: u16, l: u8) -> Self {
+    const fn new(command_port: u16, zu: u16, offset: u8) -> Self {
         Self {
-            ro: Port::new(rmr),
-            f: Port::new(axr),
-            l,
+            command: Port::new(command_port),
+            data: Port::new(zu),
+            offset,
         }
     }
 }
 
 
-pub static Qh: Mutex<ChainedPics> = Mutex::new(ChainedPics::new());
+pub static Gv: Mutex<ChainedPics> = Mutex::new(ChainedPics::new());

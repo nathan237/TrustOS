@@ -71,19 +71,19 @@ pub struct DroneSwarmState {
     proj_y: [f32; MAXIMUM_DRONES],
     proj_depth: [f32; MAXIMUM_DRONES],
 
-    number_drones: usize,
+    num_drones: usize,
 
     // Edge connectivity (index pairs)
     edge_a: [u8; MAXIMUM_EDGES],
     edge_b: [u8; MAXIMUM_EDGES],
-    number_edges: usize,
+    num_edges: usize,
 
     // Global scene rotation (slow continuous tumble)
     scene_rot_y: f32,
     scene_rot_x: f32,
 
     // Choreography state
-    formation_index: u8,
+    formation_idx: u8,
     state_timer: f32,
 
     // Total elapsed frames for color cycling
@@ -115,13 +115,13 @@ impl DroneSwarmState {
             proj_x: [0.0; MAXIMUM_DRONES],
             proj_y: [0.0; MAXIMUM_DRONES],
             proj_depth: [0.0; MAXIMUM_DRONES],
-            number_drones: 0,
+            num_drones: 0,
             edge_a: [0; MAXIMUM_EDGES],
             edge_b: [0; MAXIMUM_EDGES],
-            number_edges: 0,
+            num_edges: 0,
             scene_rot_y: 0.0,
             scene_rot_x: 0.0,
-            formation_index: 0,
+            formation_idx: 0,
             state_timer: 0.0,
             total_time: 0.0,
             glow: [0.0; GLOW_SIZE],
@@ -143,11 +143,11 @@ pub fn init(s: &mut DroneSwarmState, w: u32, h: u32) {
     s.cell_h = s.screen_h / GLOW_H as f32;
 
     // Start with first formation
-    s.formation_index = 0;
+    s.formation_idx = 0;
     build_formation(s, 0);
 
     // Snap drones to targets instantly
-    for i in 0..s.number_drones {
+    for i in 0..s.num_drones {
         s.drone_x[i] = s.target_x[i];
         s.drone_y[i] = s.target_y[i];
         s.drone_z[i] = s.target_z[i];
@@ -160,7 +160,7 @@ pub fn init(s: &mut DroneSwarmState, w: u32, h: u32) {
 // Formation Builders
 // ═══════════════════════════════════════
 
-fn build_formation(s: &mut DroneSwarmState, index: u8) {
+fn build_formation(s: &mut DroneSwarmState, idx: u8) {
     // Clear targets for unused drones
     for i in 0..MAXIMUM_DRONES {
         s.target_x[i] = 0.0;
@@ -172,7 +172,7 @@ fn build_formation(s: &mut DroneSwarmState, index: u8) {
         s.edge_b[i] = 0;
     }
         // Correspondance de motifs — branchement exhaustif de Rust.
-match index % NUMBER_FORMATIONS as u8 {
+match idx % NUMBER_FORMATIONS as u8 {
         0 => build_helix(s),
         1 => build_tesseract(s),
         2 => build_atom(s),
@@ -224,8 +224,8 @@ const STRAND_N: usize = 32;
         }
     }
 
-    s.number_drones = STRAND_N * 2;
-    s.number_edges = ne;
+    s.num_drones = STRAND_N * 2;
+    s.num_edges = ne;
 }
 
 /// Tesseract — 4D hypercube projected to 3D (16 vertices, 32 edges).
@@ -243,7 +243,7 @@ fn build_tesseract(s: &mut DroneSwarmState) {
         s.target_y[bits as usize] = (y4 / denom) * scale;
         s.target_z[bits as usize] = (z4 / denom) * scale;
     }
-    s.number_drones = 16;
+    s.num_drones = 16;
 
     // Edges: connect vertices differing in exactly 1 bit
     let mut ne = 0usize;
@@ -257,7 +257,7 @@ fn build_tesseract(s: &mut DroneSwarmState) {
             }
         }
     }
-    s.number_edges = ne;
+    s.num_edges = ne;
 }
 
 /// Orbital Atom — 3 interlocking elliptical orbits with nucleus.
@@ -329,8 +329,8 @@ match ring {
         }
     }
 
-    s.number_drones = nd;
-    s.number_edges = ne;
+    s.num_drones = nd;
+    s.num_edges = ne;
 }
 
 /// Spiral Galaxy — 4 logarithmic spiral arms with central core.
@@ -382,8 +382,8 @@ const NUMBER_ARMS: usize = 4;
         ne += 1;
     }
 
-    s.number_drones = nd;
-    s.number_edges = ne;
+    s.num_drones = nd;
+    s.num_edges = ne;
 }
 
 /// Crystal Lattice — 4×4×3 grid of connected nodes.
@@ -417,28 +417,28 @@ const NZ: usize = 3;
     for iz in 0..NZ {
         for iy in 0..NY {
             for ix in 0..NX {
-                let index = iz * NY * NX + iy * NX + ix;
+                let idx = iz * NY * NX + iy * NX + ix;
                 if ix + 1 < NX && ne < MAXIMUM_EDGES {
-                    s.edge_a[ne] = index as u8;
-                    s.edge_b[ne] = (index + 1) as u8;
+                    s.edge_a[ne] = idx as u8;
+                    s.edge_b[ne] = (idx + 1) as u8;
                     ne += 1;
                 }
                 if iy + 1 < NY && ne < MAXIMUM_EDGES {
-                    s.edge_a[ne] = index as u8;
-                    s.edge_b[ne] = (index + NX) as u8;
+                    s.edge_a[ne] = idx as u8;
+                    s.edge_b[ne] = (idx + NX) as u8;
                     ne += 1;
                 }
                 if iz + 1 < NZ && ne < MAXIMUM_EDGES {
-                    s.edge_a[ne] = index as u8;
-                    s.edge_b[ne] = (index + NY * NX) as u8;
+                    s.edge_a[ne] = idx as u8;
+                    s.edge_b[ne] = (idx + NY * NX) as u8;
                     ne += 1;
                 }
             }
         }
     }
 
-    s.number_drones = nd;
-    s.number_edges = ne;
+    s.num_drones = nd;
+    s.num_edges = ne;
 }
 
 /// Infinity Lemniscate — figure-8 Möbius-like flowing form.
@@ -462,8 +462,8 @@ const N: usize = 64;
         ne += 1;
     }
 
-    s.number_drones = N;
-    s.number_edges = ne;
+    s.num_drones = N;
+    s.num_edges = ne;
 }
 
 // ═══════════════════════════════════════
@@ -484,11 +484,11 @@ pub fn update(s: &mut DroneSwarmState) {
 
     // ── Choreography: switch formation when timer expires ──
     if s.state_timer >= HOLD_FRAMES {
-        let old_number = s.number_drones;
-        s.formation_index = (s.formation_index + 1) % NUMBER_FORMATIONS as u8;
-        build_formation(s, s.formation_index);
+        let old_number = s.num_drones;
+        s.formation_idx = (s.formation_idx + 1) % NUMBER_FORMATIONS as u8;
+        build_formation(s, s.formation_idx);
         // New drones beyond old count: start from center so they "fly out"
-        for i in old_number..s.number_drones {
+        for i in old_number..s.num_drones {
             s.drone_x[i] = 0.0;
             s.drone_y[i] = 0.0;
             s.drone_z[i] = 0.0;
@@ -539,7 +539,7 @@ fn project_drones(s: &mut DroneSwarmState) {
         let z3 = y * sin_x + z2 * cos_x;
 
         // Perspective projection
-        let w = (cam_dist + z3).maximum(0.15);
+        let w = (cam_dist + z3).max(0.15);
 
         s.proj_x[i] = cx + (x2 / w) * scale;
         s.proj_y[i] = cy + (y2 / w) * scale;
@@ -571,10 +571,10 @@ fn add_glow(glow: &mut [f32; GLOW_SIZE], x: f32, y: f32, bright: f32, radius: i3
                 if dist < r_maximum {
                     let falloff = 1.0 - dist / r_maximum;
                     let falloff = falloff * falloff; // quadratic for soft neon glow
-                    let index = cy as usize * GLOW_W + cx as usize;
-                    glow[index] += bright * falloff;
-                    if glow[index] > 5.0 {
-                        glow[index] = 5.0;
+                    let idx = cy as usize * GLOW_W + cx as usize;
+                    glow[idx] += bright * falloff;
+                    if glow[idx] > 5.0 {
+                        glow[idx] = 5.0;
                     }
                 }
             }
@@ -591,28 +591,28 @@ fn render_glow(s: &mut DroneSwarmState) {
     }
 
     let cw = s.cell_w;
-    let character = s.cell_h;
+    let ch = s.cell_h;
 
     // ── Render edges as thick glowing lines ──
-    for e in 0..s.number_edges {
+    for e in 0..s.num_edges {
         let a = s.edge_a[e] as usize;
         let b = s.edge_b[e] as usize;
 
         let x0 = s.proj_x[a] / cw;
-        let y0 = s.proj_y[a] / character;
+        let y0 = s.proj_y[a] / ch;
         let x1 = s.proj_x[b] / cw;
-        let y1 = s.proj_y[b] / character;
+        let y1 = s.proj_y[b] / ch;
 
         // Average depth → brightness (nearer = brighter)
         let average_depth = (s.proj_depth[a] + s.proj_depth[b]) * 0.5;
-        let depth_bright = (1.8 / average_depth).minimum(1.5);
+        let depth_bright = (1.8 / average_depth).min(1.5);
         let edge_bright = depth_bright * 0.7;
 
         // DDA line rasterization into glow buffer
         let dx = x1 - x0;
         let dy = y1 - y0;
         let len = libm::sqrtf(dx * dx + dy * dy);
-        let steps = ((len * 1.5) as usize).maximum(1).minimum(300);
+        let steps = ((len * 1.5) as usize).max(1).min(300);
 
         for step in 0..=steps {
             let t = step as f32 / steps as f32;
@@ -623,10 +623,10 @@ fn render_glow(s: &mut DroneSwarmState) {
     }
 
     // ── Render vertices as bright point lights ──
-    for i in 0..s.number_drones {
+    for i in 0..s.num_drones {
         let gx = s.proj_x[i] / cw;
-        let gy = s.proj_y[i] / character;
-        let depth_bright = (2.5 / s.proj_depth[i]).minimum(3.0);
+        let gy = s.proj_y[i] / ch;
+        let depth_bright = (2.5 / s.proj_depth[i]).min(3.0);
         add_glow(&mut s.glow, gx, gy, depth_bright, 2);
     }
 }
@@ -656,45 +656,45 @@ const NONE: Self = Self {
 
 /// Query drone swarm interaction at pixel position (px, py).
 /// O(1) — just samples the pre-computed glow buffer.
-pub fn query(s: &DroneSwarmState, pixel: f32, py: f32) -> DroneInteraction {
+pub fn query(s: &DroneSwarmState, px: f32, py: f32) -> DroneInteraction {
     if !s.initialized {
         return DroneInteraction::NONE;
     }
 
-    let gx = (pixel / s.cell_w) as usize;
+    let gx = (px / s.cell_w) as usize;
     let gy = (py / s.cell_h) as usize;
     if gx >= GLOW_W || gy >= GLOW_H {
         return DroneInteraction::NONE;
     }
 
-    let value = s.glow[gy * GLOW_W + gx];
-    if value < 0.03 {
+    let val = s.glow[gy * GLOW_W + gx];
+    if val < 0.03 {
         return DroneInteraction::NONE;
     }
 
     // Choreography color based on formation + time
-    let (cr, cg, callback) = choreo_color(s.total_time, s.formation_index);
+    let (cr, cg, cb) = choreo_color(s.total_time, s.formation_idx);
 
     // Brightness from glow intensity
-    let brightness = if value > 2.0 {
+    let brightness = if val > 2.0 {
         // Vertex zone: strong holographic glow
-        1.4 + (value - 2.0).minimum(2.0) * 0.4
-    } else if value > 0.5 {
+        1.4 + (val - 2.0).min(2.0) * 0.4
+    } else if val > 0.5 {
         // Edge zone: moderate neon glow
-        1.1 + (value - 0.5) * 0.25
+        1.1 + (val - 0.5) * 0.25
     } else {
         // Halo zone: subtle ambient
-        1.0 + value * 0.2
+        1.0 + val * 0.2
     };
 
     // Color contribution scales with glow value
-    let color_t = (value / 2.5).minimum(1.0);
+    let color_t = (val / 2.5).min(1.0);
 
     DroneInteraction {
         brightness,
         color_r: (cr as f32 * color_t) as i16,
         color_g: (cg as f32 * color_t) as i16,
-        color_b: (callback as f32 * color_t) as i16,
+        color_b: (cb as f32 * color_t) as i16,
     }
 }
 

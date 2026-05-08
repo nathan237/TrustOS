@@ -21,72 +21,72 @@ use spin::Mutex;
 
 
 
-const BGX_: u64 = 16_666;
+const BJB_: u64 = 16_666;
 
 
-static FW_: AtomicU64 = AtomicU64::new(3_000_000_000); 
+static GL_: AtomicU64 = AtomicU64::new(3_000_000_000); 
 
 
-static ASI_: AtomicU64 = AtomicU64::new(0);
-static AYT_: AtomicU64 = AtomicU64::new(0);
-static APQ_: AtomicU64 = AtomicU64::new(0);
+static AUM_: AtomicU64 = AtomicU64::new(0);
+static BAU_: AtomicU64 = AtomicU64::new(0);
+static ARS_: AtomicU64 = AtomicU64::new(0);
 
 
-pub fn oep() {
+pub fn igw() {
     
-    let kx = crate::cpu::mnh();
-    FW_.store(kx, Ordering::SeqCst);
-    crate::serial_println!("[GUI] Frame timing init: TSC {} MHz", kx / 1_000_000);
+    let freq = crate::cpu::hac();
+    GL_.store(freq, Ordering::SeqCst);
+    crate::serial_println!("[GUI] Frame timing init: TSC {} MHz", freq / 1_000_000);
 }
 
 
 #[inline]
-fn xnb(qb: u64) -> u64 {
-    let kx = FW_.load(Ordering::Relaxed);
-    if kx == 0 { return 0; }
-    (qb * 1_000_000) / kx
+fn pog(gx: u64) -> u64 {
+    let freq = GL_.load(Ordering::Relaxed);
+    if freq == 0 { return 0; }
+    (gx * 1_000_000) / freq
 }
 
 
 #[inline]
-pub fn awf() -> u64 {
-    xnb(ow())
+pub fn yy() -> u64 {
+    pog(ey())
 }
 
 
 #[inline]
-fn ow() -> u64 {
-    crate::arch::aea()
+fn ey() -> u64 {
+    crate::arch::timestamp()
 }
 
 
-pub fn zvv(ivr: u64) {
-    let ez = awf().ao(ivr);
+pub fn rch(frame_start_us: u64) {
+    let bb = yy().saturating_sub(frame_start_us);
     
-    if ez < BGX_ {
-        let cd = ivr + BGX_;
-        let mut gzn = 0u32;
-        while awf() < cd {
-            gzn += 1;
-            if gzn >= 2_000_000 { break; } 
-            core::hint::hc();
+    if bb < BJB_ {
+        let target = frame_start_us + BJB_;
+        let mut dif = 0u32;
+        while yy() < target {
+            dif += 1;
+            if dif >= 2_000_000 { break; } 
+            core::hint::spin_loop();
         }
     }
     
     
-    let az = ASI_.fetch_add(1, Ordering::Relaxed);
-    let iu = awf();
-    let qv = AYT_.load(Ordering::Relaxed);
-    if iu - qv >= 1_000_000 {
-        APQ_.store(az, Ordering::Relaxed);
-        ASI_.store(0, Ordering::Relaxed);
-        AYT_.store(iu, Ordering::Relaxed);
+    let count = AUM_.fetch_add(1, Ordering::Relaxed);
+    let cy = yy();
+    let last = BAU_.load(Ordering::Relaxed);
+    if cy - last >= 1_000_000 {
+        ARS_.store(count, Ordering::Relaxed);
+        AUM_.store(0, Ordering::Relaxed);
+        BAU_.store(cy, Ordering::Relaxed);
     }
 }
 
 
-pub fn kyp() -> u64 {
-    APQ_.load(Ordering::Relaxed)
+pub fn fyp() -> u64 {
+    ARS_.load(Ordering::Relaxed)
 }
 
 
@@ -94,128 +94,128 @@ pub fn kyp() -> u64 {
 
 
 
-static BAW_: AtomicBool = AtomicBool::new(false);
-static BAX_: AtomicBool = AtomicBool::new(false);
-static CHA_: AtomicBool = AtomicBool::new(false);
-static BAY_: AtomicBool = AtomicBool::new(false);
+static BCY_: AtomicBool = AtomicBool::new(false);
+static BCZ_: AtomicBool = AtomicBool::new(false);
+static CKK_: AtomicBool = AtomicBool::new(false);
+static BDA_: AtomicBool = AtomicBool::new(false);
 
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum HotkeyAction {
     None,
     
-    Bzo,      
-    Cnp,     
-    Cnc,         
-    Cnd,        
-    Chg,         
-    Chl,         
-    Cmx,      
+    CloseWindow,      
+    SwitchWindow,     
+    SnapLeft,         
+    SnapRight,        
+    Maximize,         
+    Minimize,         
+    ShowDesktop,      
     
-    Aks,  
-    Tu,     
-    Cil,          
+    OpenFileManager,  
+    OpenTerminal,     
+    OpenRun,          
     
-    Cgw,       
-    Ddm,    
-    Dil,       
-    Coc,   
+    LockScreen,       
+    OpenStartMenu,    
+    Screenshot,       
+    ToggleDevPanel,   
 }
 
 
 pub mod scancode {
-    pub const Bbi: u8 = 0x38;
-    pub const Bdf: u8 = 0x1D;
-    pub const Bri: u8 = 0x2A;
-    pub const Bwh: u8 = 0x5B;  
-    pub const Cnq: u8 = 0x0F;
-    pub const Ccs: u8 = 0x3E;
-    pub const Cgm: u8 = 0x4B;
-    pub const Cju: u8 = 0x4D;
-    pub const Afc: u8 = 0x48;
-    pub const Cam: u8 = 0x50;
-    pub const Bdy: u8 = 0x20;
-    pub const Se: u8 = 0x12;
+    pub const Wd: u8 = 0x38;
+    pub const Xc: u8 = 0x1D;
+    pub const Adr: u8 = 0x2A;
+    pub const Agj: u8 = 0x5B;  
+    pub const Aqg: u8 = 0x0F;
+    pub const Ajm: u8 = 0x3E;
+    pub const Amg: u8 = 0x4B;
+    pub const Aoc: u8 = 0x4D;
+    pub const Np: u8 = 0x48;
+    pub const Ail: u8 = 0x50;
+    pub const Aid: u8 = 0x20;
+    pub const Hq: u8 = 0x12;
     pub const T: u8 = 0x14;
-    pub const Ac: u8 = 0x13;
-    pub const Aur: u8 = 0x26;
-    pub const Cvk: u8 = 0x01;
-    pub const Ccr: u8 = 0x58;
+    pub const U: u8 = 0x13;
+    pub const Th: u8 = 0x26;
+    pub const Auw: u8 = 0x01;
+    pub const Ajl: u8 = 0x58;
 }
 
 
-pub fn zuv(scancode: u8, vn: bool) {
+pub fn rbr(scancode: u8, pressed: bool) {
     match scancode {
-        scancode::Bbi => BAW_.store(vn, Ordering::Relaxed),
-        scancode::Bdf => BAX_.store(vn, Ordering::Relaxed),
-        scancode::Bri => CHA_.store(vn, Ordering::Relaxed),
-        scancode::Bwh => BAY_.store(vn, Ordering::Relaxed),
+        scancode::Wd => BCY_.store(pressed, Ordering::Relaxed),
+        scancode::Xc => BCZ_.store(pressed, Ordering::Relaxed),
+        scancode::Adr => CKK_.store(pressed, Ordering::Relaxed),
+        scancode::Agj => BDA_.store(pressed, Ordering::Relaxed),
         _ => {}
     }
 }
 
 
-pub fn yhw(scancode: u8) -> HotkeyAction {
-    let bdj = BAW_.load(Ordering::Relaxed);
-    let db = BAX_.load(Ordering::Relaxed);
-    let ep = BAY_.load(Ordering::Relaxed);
+pub fn pzl(scancode: u8) -> HotkeyAction {
+    let adf = BCY_.load(Ordering::Relaxed);
+    let ctrl = BCZ_.load(Ordering::Relaxed);
+    let aw = BDA_.load(Ordering::Relaxed);
     
     
-    if bdj && scancode == scancode::Ccs {
-        return HotkeyAction::Bzo;
+    if adf && scancode == scancode::Ajm {
+        return HotkeyAction::CloseWindow;
     }
     
     
-    if bdj && scancode == scancode::Cnq {
-        return HotkeyAction::Cnp;
+    if adf && scancode == scancode::Aqg {
+        return HotkeyAction::SwitchWindow;
     }
     
     
-    if ep {
+    if aw {
         match scancode {
-            scancode::Cgm => return HotkeyAction::Cnc,
-            scancode::Cju => return HotkeyAction::Cnd,
-            scancode::Afc => return HotkeyAction::Chg,
-            scancode::Cam => return HotkeyAction::Chl,
-            scancode::Bdy => return HotkeyAction::Cmx,
-            scancode::Se => return HotkeyAction::Aks,
-            scancode::T => return HotkeyAction::Tu,
-            scancode::Ac => return HotkeyAction::Cil,
-            scancode::Aur => return HotkeyAction::Cgw,
+            scancode::Amg => return HotkeyAction::SnapLeft,
+            scancode::Aoc => return HotkeyAction::SnapRight,
+            scancode::Np => return HotkeyAction::Maximize,
+            scancode::Ail => return HotkeyAction::Minimize,
+            scancode::Aid => return HotkeyAction::ShowDesktop,
+            scancode::Hq => return HotkeyAction::OpenFileManager,
+            scancode::T => return HotkeyAction::OpenTerminal,
+            scancode::U => return HotkeyAction::OpenRun,
+            scancode::Th => return HotkeyAction::LockScreen,
             _ => {}
         }
     }
     
     
-    if db && bdj && scancode == scancode::T {
-        return HotkeyAction::Tu;
+    if ctrl && adf && scancode == scancode::T {
+        return HotkeyAction::OpenTerminal;
     }
     
     
-    if scancode == scancode::Ccr {
-        return HotkeyAction::Coc;
+    if scancode == scancode::Ajl {
+        return HotkeyAction::ToggleDevPanel;
     }
     
     HotkeyAction::None
 }
 
 
-static YP_: AtomicBool = AtomicBool::new(false);
+static ZU_: AtomicBool = AtomicBool::new(false);
 
-pub fn yib(scancode: u8, vn: bool) -> bool {
-    if scancode == scancode::Bwh {
-        if vn {
-            YP_.store(true, Ordering::Relaxed);
+pub fn pzq(scancode: u8, pressed: bool) -> bool {
+    if scancode == scancode::Agj {
+        if pressed {
+            ZU_.store(true, Ordering::Relaxed);
         } else {
             
-            if YP_.load(Ordering::Relaxed) {
-                YP_.store(false, Ordering::Relaxed);
+            if ZU_.load(Ordering::Relaxed) {
+                ZU_.store(false, Ordering::Relaxed);
                 return true; 
             }
         }
-    } else if vn {
+    } else if pressed {
         
-        YP_.store(false, Ordering::Relaxed);
+        ZU_.store(false, Ordering::Relaxed);
     }
     false
 }
@@ -228,32 +228,32 @@ pub fn yib(scancode: u8, vn: bool) -> bool {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum SnapPosition {
     None,
-    Ap,       
-    Ca,      
-    Chh,  
-    Dp,    
-    Dq,
-    Dt,
-    Du,
+    Left,       
+    Right,      
+    Maximized,  
+    TopLeft,    
+    TopRight,
+    BottomLeft,
+    BottomRight,
 }
 
 
-pub fn yhf(
-    xj: SnapPosition,
-    wf: u32,
-    aav: u32,
-    xbc: u32,
+pub fn pzc(
+    jp: SnapPosition,
+    screen_w: u32,
+    screen_h: u32,
+    taskbar_h: u32,
 ) -> (i32, i32, u32, u32) {
-    let bxw = aav - xbc;
+    let ang = screen_h - taskbar_h;
     
-    match xj {
-        SnapPosition::Ap => (0, 0, wf / 2, bxw),
-        SnapPosition::Ca => ((wf / 2) as i32, 0, wf / 2, bxw),
-        SnapPosition::Chh => (0, 0, wf, bxw),
-        SnapPosition::Dp => (0, 0, wf / 2, bxw / 2),
-        SnapPosition::Dq => ((wf / 2) as i32, 0, wf / 2, bxw / 2),
-        SnapPosition::Dt => (0, (bxw / 2) as i32, wf / 2, bxw / 2),
-        SnapPosition::Du => ((wf / 2) as i32, (bxw / 2) as i32, wf / 2, bxw / 2),
+    match jp {
+        SnapPosition::Left => (0, 0, screen_w / 2, ang),
+        SnapPosition::Right => ((screen_w / 2) as i32, 0, screen_w / 2, ang),
+        SnapPosition::Maximized => (0, 0, screen_w, ang),
+        SnapPosition::TopLeft => (0, 0, screen_w / 2, ang / 2),
+        SnapPosition::TopRight => ((screen_w / 2) as i32, 0, screen_w / 2, ang / 2),
+        SnapPosition::BottomLeft => (0, (ang / 2) as i32, screen_w / 2, ang / 2),
+        SnapPosition::BottomRight => ((screen_w / 2) as i32, (ang / 2) as i32, screen_w / 2, ang / 2),
         SnapPosition::None => (0, 0, 400, 300), 
     }
 }
@@ -263,39 +263,39 @@ pub fn yhf(
 
 
 
-static YZ_: AtomicBool = AtomicBool::new(false);
-static LQ_: AtomicI32 = AtomicI32::new(0);
+static AAE_: AtomicBool = AtomicBool::new(false);
+static MM_: AtomicI32 = AtomicI32::new(0);
 
 
-pub fn pny() {
-    YZ_.store(true, Ordering::Relaxed);
-    LQ_.store(0, Ordering::Relaxed);
+pub fn jig() {
+    AAE_.store(true, Ordering::Relaxed);
+    MM_.store(0, Ordering::Relaxed);
 }
 
 
-pub fn mvg() {
-    LQ_.fetch_add(1, Ordering::Relaxed);
+pub fn hfb() {
+    MM_.fetch_add(1, Ordering::Relaxed);
 }
 
 
-pub fn yeu() {
-    LQ_.fetch_sub(1, Ordering::Relaxed);
+pub fn pyb() {
+    MM_.fetch_sub(1, Ordering::Relaxed);
 }
 
 
-pub fn stv() -> i32 {
-    YZ_.store(false, Ordering::Relaxed);
-    LQ_.load(Ordering::Relaxed)
+pub fn lwe() -> i32 {
+    AAE_.store(false, Ordering::Relaxed);
+    MM_.load(Ordering::Relaxed)
 }
 
 
-pub fn hot() -> bool {
-    YZ_.load(Ordering::Relaxed)
+pub fn dsk() -> bool {
+    AAE_.load(Ordering::Relaxed)
 }
 
 
-pub fn qhl() -> i32 {
-    LQ_.load(Ordering::Relaxed)
+pub fn jvj() -> i32 {
+    MM_.load(Ordering::Relaxed)
 }
 
 
@@ -305,48 +305,48 @@ pub fn qhl() -> i32 {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum CursorType {
-    Ov,
-    Cev,           
+    Arrow,
+    Hand,           
     Text,           
-    Cko,       
-    Ckn,       
-    Aeh,     
-    Aeg,     
-    Fw,           
-    Bwm,           
-    Bdw,      
+    ResizeNS,       
+    ResizeEW,       
+    ResizeNWSE,     
+    ResizeNESW,     
+    Move,           
+    Wait,           
+    Crosshair,      
 }
 
-static APP_: Mutex<CursorType> = Mutex::new(CursorType::Ov);
+static ARR_: Mutex<CursorType> = Mutex::new(CursorType::Arrow);
 
 
-pub fn bld(gi: CursorType) {
-    *APP_.lock() = gi;
-}
-
-
-pub fn gia() -> CursorType {
-    *APP_.lock()
+pub fn afr(cursor: CursorType) {
+    *ARR_.lock() = cursor;
 }
 
 
-pub fn ysx(gi: CursorType) -> &'static [u8; 64] {
-    match gi {
-        CursorType::Ov => &BQL_,
-        CursorType::Cev => &BQN_,
-        CursorType::Text => &BQT_,
-        CursorType::Cko => &BQR_,
-        CursorType::Ckn => &BQP_,
-        CursorType::Aeh => &BQS_,
-        CursorType::Aeg => &BQQ_,
-        CursorType::Fw => &BQO_,
-        CursorType::Bwm => &BQU_,
-        CursorType::Bdw => &BQM_,
+pub fn cyk() -> CursorType {
+    *ARR_.lock()
+}
+
+
+pub fn qhm(cursor: CursorType) -> &'static [u8; 64] {
+    match cursor {
+        CursorType::Arrow => &BTG_,
+        CursorType::Hand => &BTI_,
+        CursorType::Text => &BTO_,
+        CursorType::ResizeNS => &BTM_,
+        CursorType::ResizeEW => &BTK_,
+        CursorType::ResizeNWSE => &BTN_,
+        CursorType::ResizeNESW => &BTL_,
+        CursorType::Move => &BTJ_,
+        CursorType::Wait => &BTP_,
+        CursorType::Crosshair => &BTH_,
     }
 }
 
 
-static BQL_: [u8; 64] = [
+static BTG_: [u8; 64] = [
     2,0,0,0,0,0,0,0,
     2,2,0,0,0,0,0,0,
     2,1,2,0,0,0,0,0,
@@ -357,7 +357,7 @@ static BQL_: [u8; 64] = [
     2,2,2,0,0,0,0,0,
 ];
 
-static BQN_: [u8; 64] = [
+static BTI_: [u8; 64] = [
     0,0,2,2,0,0,0,0,
     0,2,1,1,2,0,0,0,
     0,2,1,1,2,0,0,0,
@@ -368,7 +368,7 @@ static BQN_: [u8; 64] = [
     0,2,2,2,2,2,2,0,
 ];
 
-static BQT_: [u8; 64] = [
+static BTO_: [u8; 64] = [
     0,2,2,2,2,2,0,0,
     0,0,0,2,0,0,0,0,
     0,0,0,2,0,0,0,0,
@@ -379,7 +379,7 @@ static BQT_: [u8; 64] = [
     0,2,2,2,2,2,0,0,
 ];
 
-static BQR_: [u8; 64] = [
+static BTM_: [u8; 64] = [
     0,0,0,2,0,0,0,0,
     0,0,2,1,2,0,0,0,
     0,2,1,1,1,2,0,0,
@@ -390,7 +390,7 @@ static BQR_: [u8; 64] = [
     0,0,0,2,0,0,0,0,
 ];
 
-static BQP_: [u8; 64] = [
+static BTK_: [u8; 64] = [
     0,0,0,0,0,0,0,0,
     0,0,2,0,0,2,0,0,
     0,2,1,2,2,1,2,0,
@@ -401,7 +401,7 @@ static BQP_: [u8; 64] = [
     0,0,0,0,0,0,0,0,
 ];
 
-static BQS_: [u8; 64] = [
+static BTN_: [u8; 64] = [
     2,2,2,2,0,0,0,0,
     2,1,1,2,0,0,0,0,
     2,1,2,0,0,0,0,0,
@@ -412,7 +412,7 @@ static BQS_: [u8; 64] = [
     0,0,0,0,2,2,2,2,
 ];
 
-static BQQ_: [u8; 64] = [
+static BTL_: [u8; 64] = [
     0,0,0,0,2,2,2,2,
     0,0,0,0,2,1,1,2,
     0,0,0,0,0,2,1,2,
@@ -423,7 +423,7 @@ static BQQ_: [u8; 64] = [
     2,2,2,2,0,0,0,0,
 ];
 
-static BQO_: [u8; 64] = [
+static BTJ_: [u8; 64] = [
     0,0,0,2,0,0,0,0,
     0,0,2,1,2,0,0,0,
     0,0,0,2,0,0,0,0,
@@ -434,7 +434,7 @@ static BQO_: [u8; 64] = [
     0,0,0,0,0,0,0,0,
 ];
 
-static BQU_: [u8; 64] = [
+static BTP_: [u8; 64] = [
     2,2,2,2,2,2,0,0,
     2,1,1,1,1,2,0,0,
     0,2,1,1,2,0,0,0,
@@ -445,7 +445,7 @@ static BQU_: [u8; 64] = [
     2,2,2,2,2,2,0,0,
 ];
 
-static BQM_: [u8; 64] = [
+static BTH_: [u8; 64] = [
     0,0,0,2,0,0,0,0,
     0,0,0,2,0,0,0,0,
     0,0,0,2,0,0,0,0,
@@ -463,133 +463,133 @@ static BQM_: [u8; 64] = [
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum NotifyPriority {
-    V,
-    Oo,
-    Q,
-    Hf,
+    Info,
+    Warning,
+    Error,
+    Success,
 }
 
 
 pub struct Toast {
-    pub dq: String,
+    pub title: String,
     pub message: String,
-    pub abv: NotifyPriority,
-    pub cju: u64,
-    pub uk: u64,
-    pub li: Option<u8>, 
+    pub priority: NotifyPriority,
+    pub created_at: u64,
+    pub duration_ms: u64,
+    pub progress: Option<u8>, 
 }
 
 impl Toast {
-    pub fn new(dq: &str, message: &str, abv: NotifyPriority) -> Self {
+    pub fn new(title: &str, message: &str, priority: NotifyPriority) -> Self {
         Self {
-            dq: String::from(dq),
+            title: String::from(title),
             message: String::from(message),
-            abv,
-            cju: awf(),
-            uk: 5000,
-            li: None,
+            priority,
+            created_at: yy(),
+            duration_ms: 5000,
+            progress: None,
         }
     }
     
-    pub fn xuw(mut self, jn: u64) -> Self {
-        self.uk = jn;
+    pub fn with_duration(mut self, dh: u64) -> Self {
+        self.duration_ms = dh;
         self
     }
     
-    pub fn xux(mut self, egl: u8) -> Self {
-        self.li = Some(egl.v(100));
+    pub fn with_progress(mut self, bup: u8) -> Self {
+        self.progress = Some(bup.min(100));
         self
     }
     
-    pub fn hox(&self) -> bool {
-        let ez = (awf() - self.cju) / 1000;
-        ez >= self.uk
+    pub fn is_expired(&self) -> bool {
+        let bb = (yy() - self.created_at) / 1000;
+        bb >= self.duration_ms
     }
     
     
-    pub fn oz(&self) -> u64 {
-        (awf() - self.cju) / 1000
+    pub fn elapsed_ms(&self) -> u64 {
+        (yy() - self.created_at) / 1000
     }
     
     
-    pub fn adh(&self) -> u8 {
-        let ez = self.oz();
+    pub fn opacity(&self) -> u8 {
+        let bb = self.elapsed_ms();
         
-        if ez < 300 {
-            return ((ez * 255) / 300).v(255) as u8;
+        if bb < 300 {
+            return ((bb * 255) / 300).min(255) as u8;
         }
         
-        if self.uk > 500 && ez > self.uk - 500 {
-            let ia = self.uk.ao(ez);
-            return ((ia * 255) / 500).v(255) as u8;
+        if self.duration_ms > 500 && bb > self.duration_ms - 500 {
+            let ck = self.duration_ms.saturating_sub(bb);
+            return ((ck * 255) / 500).min(255) as u8;
         }
         255
     }
     
-    pub fn tda(&self) -> u32 {
-        match self.abv {
-            NotifyPriority::V => 0xFF3498DB,    
-            NotifyPriority::Oo => 0xFFF39C12, 
-            NotifyPriority::Q => 0xFFE74C3C,   
-            NotifyPriority::Hf => 0xFF27AE60, 
+    pub fn get_color(&self) -> u32 {
+        match self.priority {
+            NotifyPriority::Info => 0xFF3498DB,    
+            NotifyPriority::Warning => 0xFFF39C12, 
+            NotifyPriority::Error => 0xFFE74C3C,   
+            NotifyPriority::Success => 0xFF27AE60, 
         }
     }
 }
 
 
-static Avw: Mutex<Vec<Toast>> = Mutex::new(Vec::new());
-const CFL_: usize = 5;
+static Tv: Mutex<Vec<Toast>> = Mutex::new(Vec::new());
+const CIU_: usize = 5;
 
 
-pub fn wnq(dq: &str, message: &str, abv: NotifyPriority) {
-    let mut csv = Avw.lock();
+pub fn osf(title: &str, message: &str, priority: NotifyPriority) {
+    let mut ayp = Tv.lock();
     
     
-    csv.ajm(|bo| !bo.hox());
+    ayp.retain(|ae| !ae.is_expired());
     
     
-    while csv.len() >= CFL_ {
-        csv.remove(0);
+    while ayp.len() >= CIU_ {
+        ayp.remove(0);
     }
     
-    csv.push(Toast::new(dq, message, abv));
+    ayp.push(Toast::new(title, message, priority));
 }
 
 
-pub fn zoh(dq: &str, message: &str, egl: u8) {
-    let mut csv = Avw.lock();
+pub fn qwx(title: &str, message: &str, bup: u8) {
+    let mut ayp = Tv.lock();
     
     
-    for bo in csv.el() {
-        if bo.dq == dq && bo.li.is_some() {
-            bo.li = Some(egl.v(100));
-            bo.message = String::from(message);
+    for ae in ayp.iter_mut() {
+        if ae.title == title && ae.progress.is_some() {
+            ae.progress = Some(bup.min(100));
+            ae.message = String::from(message);
             return;
         }
     }
     
     
-    csv.push(Toast::new(dq, message, NotifyPriority::V)
-        .xux(egl)
-        .xuw(30000)); 
+    ayp.push(Toast::new(title, message, NotifyPriority::Info)
+        .with_progress(bup)
+        .with_duration(30000)); 
 }
 
 
-pub fn nyg() -> Vec<Toast> {
-    let mut csv = Avw.lock();
-    csv.ajm(|bo| !bo.hox());
-    csv.clone()
+pub fn ibr() -> Vec<Toast> {
+    let mut ayp = Tv.lock();
+    ayp.retain(|ae| !ae.is_expired());
+    ayp.clone()
 }
 
 impl Clone for Toast {
     fn clone(&self) -> Self {
         Self {
-            dq: self.dq.clone(),
+            title: self.title.clone(),
             message: self.message.clone(),
-            abv: self.abv,
-            cju: self.cju,
-            uk: self.uk,
-            li: self.li,
+            priority: self.priority,
+            created_at: self.created_at,
+            duration_ms: self.duration_ms,
+            progress: self.progress,
         }
     }
 }
@@ -599,55 +599,55 @@ impl Clone for Toast {
 
 
 
-static XI_: AtomicBool = AtomicBool::new(false);
+static YP_: AtomicBool = AtomicBool::new(false);
 
 
 #[derive(Clone)]
-pub struct Of {
-    pub j: String,
-    pub pa: u8,      
-    pub hr: StartAction,
+pub struct Gb {
+    pub name: String,
+    pub icon: u8,      
+    pub action: StartAction,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub enum StartAction {
-    Akr(&'static str),
-    Tu,
-    Cih,
-    Akt,
-    Akq,
-    Qt,
-    Cks,
-    Cgv,
+    OpenApp(&'static str),
+    OpenTerminal,
+    OpenFiles,
+    OpenSettings,
+    OpenAbout,
+    Shutdown,
+    Restart,
+    Lock,
 }
 
 
-pub fn zta() {
-    let cv = XI_.load(Ordering::Relaxed);
-    XI_.store(!cv, Ordering::Relaxed);
+pub fn rao() {
+    let current = YP_.load(Ordering::Relaxed);
+    YP_.store(!current, Ordering::Relaxed);
 }
 
 
-pub fn yix() {
-    XI_.store(false, Ordering::Relaxed);
+pub fn qai() {
+    YP_.store(false, Ordering::Relaxed);
 }
 
 
-pub fn zaa() -> bool {
-    XI_.load(Ordering::Relaxed)
+pub fn qmy() -> bool {
+    YP_.load(Ordering::Relaxed)
 }
 
 
-pub fn nyp() -> Vec<Of> {
+pub fn ibw() -> Vec<Gb> {
     vec![
-        Of { j: String::from("Terminal"), pa: 0, hr: StartAction::Tu },
-        Of { j: String::from("Files"), pa: 1, hr: StartAction::Cih },
-        Of { j: String::from("Settings"), pa: 2, hr: StartAction::Akt },
-        Of { j: String::from("About"), pa: 3, hr: StartAction::Akq },
-        Of { j: String::from("───────────"), pa: 255, hr: StartAction::Akq },
-        Of { j: String::from("Lock"), pa: 4, hr: StartAction::Cgv },
-        Of { j: String::from("Restart"), pa: 5, hr: StartAction::Cks },
-        Of { j: String::from("Shutdown"), pa: 6, hr: StartAction::Qt },
+        Gb { name: String::from("Terminal"), icon: 0, action: StartAction::OpenTerminal },
+        Gb { name: String::from("Files"), icon: 1, action: StartAction::OpenFiles },
+        Gb { name: String::from("Settings"), icon: 2, action: StartAction::OpenSettings },
+        Gb { name: String::from("About"), icon: 3, action: StartAction::OpenAbout },
+        Gb { name: String::from("───────────"), icon: 255, action: StartAction::OpenAbout },
+        Gb { name: String::from("Lock"), icon: 4, action: StartAction::Lock },
+        Gb { name: String::from("Restart"), icon: 5, action: StartAction::Restart },
+        Gb { name: String::from("Shutdown"), icon: 6, action: StartAction::Shutdown },
     ]
 }
 
@@ -657,42 +657,42 @@ pub fn nyp() -> Vec<Of> {
 
 
 
-static JL_: [[u8; 256]; 256] = {
-    let mut gg = [[0u8; 256]; 256];
-    let mut dw = 0usize;
-    while dw < 256 {
-        let mut bn = 0usize;
-        while bn < 256 {
-            gg[dw][bn] = ((bn * dw + 127) / 255) as u8;
-            bn += 1;
+static KC_: [[u8; 256]; 256] = {
+    let mut bs = [[0u8; 256]; 256];
+    let mut alpha = 0usize;
+    while alpha < 256 {
+        let mut value = 0usize;
+        while value < 256 {
+            bs[alpha][value] = ((value * alpha + 127) / 255) as u8;
+            value += 1;
         }
-        dw += 1;
+        alpha += 1;
     }
-    gg
+    bs
 };
 
 
 #[inline(always)]
-pub fn kds(cy: u32, cs: u32) -> u32 {
-    let dw = ((cy >> 24) & 0xFF) as usize;
-    if dw == 0 { return cs; }
-    if dw == 255 { return cy; }
+pub fn fji(src: u32, dst: u32) -> u32 {
+    let alpha = ((src >> 24) & 0xFF) as usize;
+    if alpha == 0 { return dst; }
+    if alpha == 255 { return src; }
     
-    let akg = 255 - dw;
+    let sg = 255 - alpha;
     
-    let adz = ((cy >> 16) & 0xFF) as usize;
-    let bsi = ((cy >> 8) & 0xFF) as usize;
-    let is = (cy & 0xFF) as usize;
+    let pb = ((src >> 16) & 0xFF) as usize;
+    let akl = ((src >> 8) & 0xFF) as usize;
+    let cv = (src & 0xFF) as usize;
     
-    let ahh = ((cs >> 16) & 0xFF) as usize;
-    let bgs = ((cs >> 8) & 0xFF) as usize;
-    let ng = (cs & 0xFF) as usize;
+    let qw = ((dst >> 16) & 0xFF) as usize;
+    let afb = ((dst >> 8) & 0xFF) as usize;
+    let fu = (dst & 0xFF) as usize;
     
-    let m = JL_[dw][adz] as u32 + JL_[akg][ahh] as u32;
-    let at = JL_[dw][bsi] as u32 + JL_[akg][bgs] as u32;
-    let o = JL_[dw][is] as u32 + JL_[akg][ng] as u32;
+    let r = KC_[alpha][pb] as u32 + KC_[sg][qw] as u32;
+    let g = KC_[alpha][akl] as u32 + KC_[sg][afb] as u32;
+    let b = KC_[alpha][cv] as u32 + KC_[sg][fu] as u32;
     
-    0xFF000000 | (m << 16) | (at << 8) | o
+    0xFF000000 | (r << 16) | (g << 8) | b
 }
 
 
@@ -702,109 +702,109 @@ pub fn kds(cy: u32, cs: u32) -> u32 {
 
 #[derive(Clone, Copy, Default, Debug)]
 pub struct Rect {
-    pub b: i32,
-    pub c: i32,
-    pub d: u32,
-    pub i: u32,
+    pub x: i32,
+    pub y: i32,
+    pub w: u32,
+    pub h: u32,
 }
 
 impl Rect {
-    pub const fn new(b: i32, c: i32, d: u32, i: u32) -> Self {
-        Self { b, c, d, i }
+    pub const fn new(x: i32, y: i32, w: u32, h: u32) -> Self {
+        Self { x, y, w, h }
     }
     
-    pub fn jao(&self, gq: &Rect) -> bool {
-        self.b < gq.b + gq.d as i32 &&
-        self.b + self.d as i32 > gq.b &&
-        self.c < gq.c + gq.i as i32 &&
-        self.c + self.i as i32 > gq.c
+    pub fn intersects(&self, other: &Rect) -> bool {
+        self.x < other.x + other.w as i32 &&
+        self.x + self.w as i32 > other.x &&
+        self.y < other.y + other.h as i32 &&
+        self.y + self.h as i32 > other.y
     }
     
-    pub fn far(&self, gq: &Rect) -> Rect {
-        let dn = self.b.v(gq.b);
-        let dp = self.c.v(gq.c);
-        let hy = (self.b + self.d as i32).am(gq.b + gq.d as i32);
-        let jz = (self.c + self.i as i32).am(gq.c + gq.i as i32);
+    pub fn union(&self, other: &Rect) -> Rect {
+        let x1 = self.x.min(other.x);
+        let y1 = self.y.min(other.y);
+        let x2 = (self.x + self.w as i32).max(other.x + other.w as i32);
+        let y2 = (self.y + self.h as i32).max(other.y + other.h as i32);
         Rect {
-            b: dn,
-            c: dp,
-            d: (hy - dn) as u32,
-            i: (jz - dp) as u32,
+            x: x1,
+            y: y1,
+            w: (x2 - x1) as u32,
+            h: (y2 - y1) as u32,
         }
     }
     
-    pub fn ahy(&self) -> u32 {
-        self.d * self.i
+    pub fn area(&self) -> u32 {
+        self.w * self.h
     }
 }
 
 
-pub struct Caw {
-    akn: Vec<Rect>,
-    asw: bool,
-    wf: u32,
-    aav: u32,
+pub struct Ais {
+    rects: Vec<Rect>,
+    full_redraw: bool,
+    screen_w: u32,
+    screen_h: u32,
 }
 
-impl Caw {
-    pub fn new(d: u32, i: u32) -> Self {
+impl Ais {
+    pub fn new(w: u32, h: u32) -> Self {
         Self {
-            akn: Vec::fc(64),
-            asw: true,
-            wf: d,
-            aav: i,
+            rects: Vec::with_capacity(64),
+            full_redraw: true,
+            screen_w: w,
+            screen_h: h,
         }
     }
     
     
-    pub fn zbz(&mut self, ha: Rect) {
-        if self.asw { return; }
-        if ha.d == 0 || ha.i == 0 { return; }
+    pub fn qok(&mut self, rect: Rect) {
+        if self.full_redraw { return; }
+        if rect.w == 0 || rect.h == 0 { return; }
         
         
-        for a in 0..self.akn.len() {
-            if self.akn[a].jao(&ha) {
+        for i in 0..self.rects.len() {
+            if self.rects[i].intersects(&rect) {
                 
-                let hrj = self.akn[a].far(&ha);
-                let xtt = hrj.ahy() as i64 - 
-                    (self.akn[a].ahy() + ha.ahy()) as i64;
+                let duf = self.rects[i].union(&rect);
+                let ptx = duf.area() as i64 - 
+                    (self.rects[i].area() + rect.area()) as i64;
                 
                 
-                let wpu = self.akn[a].ahy().v(ha.ahy());
-                if xtt < (wpu / 2) as i64 {
-                    self.akn[a] = hrj;
+                let otw = self.rects[i].area().min(rect.area());
+                if ptx < (otw / 2) as i64 {
+                    self.rects[i] = duf;
                     return;
                 }
             }
         }
         
         
-        if self.akn.len() < 64 {
-            self.akn.push(ha);
+        if self.rects.len() < 64 {
+            self.rects.push(rect);
         } else {
             
-            self.asw = true;
+            self.full_redraw = true;
         }
     }
     
     
-    pub fn olb(&mut self) {
-        self.asw = true;
+    pub fn mark_full(&mut self) {
+        self.full_redraw = true;
     }
     
     
     pub fn clear(&mut self) {
-        self.akn.clear();
-        self.asw = false;
+        self.rects.clear();
+        self.full_redraw = false;
     }
     
     
-    pub fn tdi(&self) -> &[Rect] {
-        &self.akn
+    pub fn mcw(&self) -> &[Rect] {
+        &self.rects
     }
     
     
-    pub fn bex(&self) -> bool {
-        self.asw
+    pub fn needs_full_redraw(&self) -> bool {
+        self.full_redraw
     }
 }

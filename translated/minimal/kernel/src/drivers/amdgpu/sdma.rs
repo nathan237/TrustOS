@@ -39,7 +39,7 @@ use alloc::vec::Vec;
 use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use spin::Mutex;
 
-use super::{wr, sk, Sr};
+use super::{kj, ib, Hz};
 use super::regs;
 use crate::memory;
 
@@ -49,31 +49,31 @@ use crate::memory;
 
 
 
-const DM_: usize = 4096;
-const AHG_: usize = DM_ * 4;
+const DU_: usize = 4096;
+const AJC_: usize = DU_ * 4;
 
-const COR_: u32 = 12; 
-
-
-
-const HE_: usize = 256 * 1024;
+const CSG_: u32 = 12; 
 
 
-const CUF_: usize = 4096;
+
+const HW_: usize = 256 * 1024;
 
 
-const ARW_: usize = 0x00;
-const ARX_: usize = 0x10;
-
-const CPD_: usize = 0x100;
-const CPE_: usize = 0x110;
+const CXX_: usize = 4096;
 
 
-const BFI_: u64 = 10_000_000;
+const ATY_: usize = 0x00;
+const ATZ_: usize = 0x10;
+
+const CSS_: usize = 0x100;
+const CST_: usize = 0x110;
 
 
-static AIX_: AtomicU64 = AtomicU64::new(0);
-static AJA_: AtomicU64 = AtomicU64::new(0);
+const BHM_: u64 = 10_000_000;
+
+
+static AKT_: AtomicU64 = AtomicU64::new(0);
+static AKW_: AtomicU64 = AtomicU64::new(0);
 
 
 
@@ -88,14 +88,14 @@ static AJA_: AtomicU64 = AtomicU64::new(0);
 
 
 #[inline]
-fn grq(op: u32, wvn: u32) -> u32 {
-    ((wvn & 0x3) << 26) | ((op & 0x3FFFF) << 8)
+fn ddz(op: u32, sub_op: u32) -> u32 {
+    ((sub_op & 0x3) << 26) | ((op & 0x3FFFF) << 8)
 }
 
 
 #[inline]
-fn zlx() -> u32 {
-    grq(regs::CRQ_, 0)
+fn qux() -> u32 {
+    ddz(regs::CVH_, 0)
 }
 
 
@@ -111,15 +111,15 @@ fn zlx() -> u32 {
 
 
 
-fn wfi(cbz: u64, dgu: u64, aal: u32) -> [u32; 7] {
+fn omj(src_addr: u64, dst_addr: u64, nb: u32) -> [u32; 7] {
     [
-        grq(regs::CRO_, regs::CRF_),
-        aal,
+        ddz(regs::CVF_, regs::CUW_),
+        nb,
         0, 
-        (cbz & 0xFFFFFFFF) as u32,
-        ((cbz >> 32) & 0xFFFFFFFF) as u32,
-        (dgu & 0xFFFFFFFF) as u32,
-        ((dgu >> 32) & 0xFFFFFFFF) as u32,
+        (src_addr & 0xFFFFFFFF) as u32,
+        ((src_addr >> 32) & 0xFFFFFFFF) as u32,
+        (dst_addr & 0xFFFFFFFF) as u32,
+        ((dst_addr >> 32) & 0xFFFFFFFF) as u32,
     ]
 }
 
@@ -134,13 +134,13 @@ fn wfi(cbz: u64, dgu: u64, aal: u32) -> [u32; 7] {
 
 
 
-fn wfh(dgu: u64, eqg: u32, aal: u32) -> [u32; 5] {
+fn omi(dst_addr: u64, fill_value: u32, nb: u32) -> [u32; 5] {
     [
-        grq(regs::CRN_, 0),
-        (dgu & 0xFFFFFFFF) as u32,
-        ((dgu >> 32) & 0xFFFFFFFF) as u32,
-        eqg,
-        aal,
+        ddz(regs::CVE_, 0),
+        (dst_addr & 0xFFFFFFFF) as u32,
+        ((dst_addr >> 32) & 0xFFFFFFFF) as u32,
+        fill_value,
+        nb,
     ]
 }
 
@@ -154,12 +154,12 @@ fn wfh(dgu: u64, eqg: u32, aal: u32) -> [u32; 5] {
 
 
 
-fn pgx(ag: u64, bn: u32) -> [u32; 4] {
+fn jdt(addr: u64, value: u32) -> [u32; 4] {
     [
-        grq(regs::CRP_, 0),
-        (ag & 0xFFFFFFFF) as u32,
-        ((ag >> 32) & 0xFFFFFFFF) as u32,
-        bn,
+        ddz(regs::CVG_, 0),
+        (addr & 0xFFFFFFFF) as u32,
+        ((addr >> 32) & 0xFFFFFFFF) as u32,
+        value,
     ]
 }
 
@@ -172,11 +172,11 @@ fn pgx(ag: u64, bn: u32) -> [u32; 4] {
 
 
 
-fn zly(ag: u64) -> [u32; 3] {
+fn quy(addr: u64) -> [u32; 3] {
     [
-        grq(regs::CRR_, 0),
-        (ag & 0xFFFFFFFF) as u32,
-        ((ag >> 32) & 0xFFFFFFFF) as u32,
+        ddz(regs::CVI_, 0),
+        (addr & 0xFFFFFFFF) as u32,
+        ((addr >> 32) & 0xFFFFFFFF) as u32,
     ]
 }
 
@@ -191,12 +191,12 @@ fn zly(ag: u64) -> [u32; 3] {
 
 
 
-fn zlz(dgu: u64, az: u32) -> [u32; 4] {
+fn quz(dst_addr: u64, count: u32) -> [u32; 4] {
     [
-        grq(regs::CRS_, regs::CRX_),
-        (dgu & 0xFFFFFFFF) as u32,
-        ((dgu >> 32) & 0xFFFFFFFF) as u32,
-        az.ao(1),
+        ddz(regs::CVJ_, regs::CVO_),
+        (dst_addr & 0xFFFFFFFF) as u32,
+        ((dst_addr >> 32) & 0xFFFFFFFF) as u32,
+        count.saturating_sub(1),
     ]
 }
 
@@ -205,86 +205,86 @@ fn zlz(dgu: u64, az: u32) -> [u32; 4] {
 
 
 
-struct Yr {
+struct Kp {
     
     index: usize,
     
-    hv: u64,
+    mmio_base: u64,
     
-    cbi: u32,
+    reg_base: u32,
     
-    dlh: u64,
+    ring_virt: u64,
     
-    bhy: u64,
+    ring_phys: u64,
     
-    ccn: u32,
+    wptr: u32,
     
-    cxu: u32,
+    fence_seq: u32,
     
-    faf: u64,
+    transfers: u64,
     
-    bf: u64,
+    bytes: u64,
 }
 
 
-struct Bsi {
-    jr: bool,
-    hv: u64,
+struct Aep {
+    initialized: bool,
+    mmio_base: u64,
     
-    ggf: [Option<Yr>; 2],
+    engines: [Option<Kp>; 2],
     
-    dci: u64,
-    bik: u64,
+    status_virt: u64,
+    status_phys: u64,
     
-    dcf: u64,
-    cie: u64,
+    staging_virt: u64,
+    staging_phys: u64,
 }
 
-static IX_: Mutex<Bsi> = Mutex::new(Bsi {
-    jr: false,
-    hv: 0,
-    ggf: [None, None],
-    dci: 0,
-    bik: 0,
-    dcf: 0,
-    cie: 0,
+static JQ_: Mutex<Aep> = Mutex::new(Aep {
+    initialized: false,
+    mmio_base: 0,
+    engines: [None, None],
+    status_virt: 0,
+    status_phys: 0,
+    staging_virt: 0,
+    staging_phys: 0,
 });
 
-static HD_: AtomicBool = AtomicBool::new(false);
+static HV_: AtomicBool = AtomicBool::new(false);
 
 
 
 
 
 
-fn cbk(engine: &mut Yr, f: &[u32]) {
-    let mz = engine.dlh as *mut u32;
-    for (a, &aix) in f.iter().cf() {
-        let w = (engine.ccn as usize + a) % DM_;
+fn aow(engine: &mut Kp, data: &[u32]) {
+    let dq = engine.ring_virt as *mut u32;
+    for (i, &qx) in data.iter().enumerate() {
+        let idx = (engine.wptr as usize + i) % DU_;
         unsafe {
-            core::ptr::write_volatile(mz.add(w), aix);
+            core::ptr::write_volatile(dq.add(idx), qx);
         }
     }
-    engine.ccn = ((engine.ccn as usize + f.len()) % DM_) as u32;
+    engine.wptr = ((engine.wptr as usize + data.len()) % DU_) as u32;
 }
 
 
-fn jmn(engine: &Yr) {
+fn eyu(engine: &Kp) {
     unsafe {
         
-        let mqx = engine.ccn * 4;
-        let pzu = engine.cbi + regs::BFH_;
-        sk(engine.hv, pzu, mqx);
-        sk(engine.hv, pzu + 4, 0); 
+        let hco = engine.wptr * 4;
+        let jrk = engine.reg_base + regs::BHL_;
+        ib(engine.mmio_base, jrk, hco);
+        ib(engine.mmio_base, jrk + 4, 0); 
     }
 }
 
 
-fn zkf(engine: &Yr) -> u32 {
+fn quk(engine: &Kp) -> u32 {
     unsafe {
-        let was = engine.cbi + regs::BFG_;
-        let war = wr(engine.hv, was);
-        war / 4
+        let oio = engine.reg_base + regs::BHK_;
+        let oin = kj(engine.mmio_base, oio);
+        oin / 4
     }
 }
 
@@ -293,101 +293,101 @@ fn zkf(engine: &Yr) -> u32 {
 
 
 
-fn oej(
-    hv: u64,
-    cek: usize,
-    dlh: u64,
-    bhy: u64,
-    bik: u64,
-    wat: usize,
-) -> Option<Yr> {
-    let ar = if cek == 0 {
-        regs::BFC_
+fn igq(
+    mmio_base: u64,
+    engine_idx: usize,
+    ring_virt: u64,
+    ring_phys: u64,
+    status_phys: u64,
+    rptr_wb_offset: usize,
+) -> Option<Kp> {
+    let base = if engine_idx == 0 {
+        regs::BHG_
     } else {
-        regs::BFE_
+        regs::BHI_
     };
 
-    crate::log!("[SDMA{}] Initializing engine (reg_base={:#X})", cek, ar);
+    crate::log!("[SDMA{}] Initializing engine (reg_base={:#X})", engine_idx, base);
 
     unsafe {
         
-        let pon = if cek == 0 {
-            regs::CQY_
+        let jiq = if engine_idx == 0 {
+            regs::CUP_
         } else {
-            regs::CRC_
+            regs::CUT_
         };
-        let status = wr(hv, pon);
+        let status = kj(mmio_base, jiq);
         crate::log!("[SDMA{}] STATUS={:#010X} (idle={})",
-            cek, status, (status & regs::CRW_) != 0);
+            engine_idx, status, (status & regs::CVN_) != 0);
 
         
-        let nsr = if cek == 0 {
-            regs::BFD_
+        let hxq = if engine_idx == 0 {
+            regs::BHH_
         } else {
-            regs::BFF_
+            regs::BHJ_
         };
-        sk(hv, nsr, 1); 
+        ib(mmio_base, hxq, 1); 
 
         
         for _ in 0..1000 {
-            core::hint::hc();
+            core::hint::spin_loop();
         }
 
         
-        let ozt = ar + regs::CRI_;
-        sk(hv, ozt, 0); 
+        let iye = base + regs::CUZ_;
+        ib(mmio_base, iye, 0); 
 
         
-        let hwt = bhy >> 8;
-        let vqp = ar + regs::CRG_;
-        let vqo = ar + regs::CRH_;
-        sk(hv, vqp, (hwt & 0xFFFFFFFF) as u32);
-        sk(hv, vqo, ((hwt >> 32) & 0xFFFFFFFF) as u32);
+        let dxi = ring_phys >> 8;
+        let obu = base + regs::CUX_;
+        let obt = base + regs::CUY_;
+        ib(mmio_base, obu, (dxi & 0xFFFFFFFF) as u32);
+        ib(mmio_base, obt, ((dxi >> 32) & 0xFFFFFFFF) as u32);
 
         
-        sk(hv, ar + regs::BFG_, 0);
-        sk(hv, ar + regs::CRL_, 0);
-        sk(hv, ar + regs::BFH_, 0);
-        sk(hv, ar + regs::CRM_, 0);
+        ib(mmio_base, base + regs::BHK_, 0);
+        ib(mmio_base, base + regs::CVC_, 0);
+        ib(mmio_base, base + regs::BHL_, 0);
+        ib(mmio_base, base + regs::CVD_, 0);
 
         
-        let pei = bik + wat as u64;
-        sk(hv, ar + regs::CRK_,
-            (pei & 0xFFFFFFFF) as u32);
-        sk(hv, ar + regs::CRJ_,
-            ((pei >> 32) & 0xFFFFFFFF) as u32);
+        let jbp = status_phys + rptr_wb_offset as u64;
+        ib(mmio_base, base + regs::CVB_,
+            (jbp & 0xFFFFFFFF) as u32);
+        ib(mmio_base, base + regs::CVA_,
+            ((jbp >> 32) & 0xFFFFFFFF) as u32);
 
         
         
         
         
         
-        let vqq = regs::CRT_
-            | (COR_ << regs::CRU_)
-            | regs::CRV_;
-        sk(hv, ozt, vqq);
+        let obv = regs::CVK_
+            | (CSG_ << regs::CVL_)
+            | regs::CVM_;
+        ib(mmio_base, iye, obv);
 
         
-        sk(hv, nsr, 0); 
+        ib(mmio_base, hxq, 0); 
 
         
         for _ in 0..10000 {
-            core::hint::hc();
+            core::hint::spin_loop();
         }
-        let wtr = wr(hv, pon);
-        crate::log!("[SDMA{}] Post-init STATUS={:#010X}", cek, wtr);
+        let owv = kj(mmio_base, jiq);
+        crate::log!("[SDMA{}] Post-init STATUS={:#010X}", engine_idx, owv);
     }
 
-    Some(Yr {
-        index: cek,
-        hv,
-        cbi: ar,
-        dlh,
-        bhy,
-        ccn: 0,
-        cxu: 1,
-        faf: 0,
-        bf: 0,
+    Some(Kp {
+        index: engine_idx,
+        mmio_base,
+        reg_base: base,
+        ring_virt,
+        ring_phys,
+        wptr: 0,
+        fence_seq: 1,
+        transfers: 0,
+        bytes: 0,
     })
 }
 
@@ -397,94 +397,100 @@ fn oej(
 
 
 
-pub fn init(hv: u64) {
+pub fn init(mmio_base: u64) {
     crate::log!("[SDMA] ═══════════════════════════════════════════════════");
     crate::log!("[SDMA] SDMA Engine — Bare-metal DMA transfers (Navi 10)");
     crate::log!("[SDMA] ═══════════════════════════════════════════════════");
 
-    if hv == 0 {
+    if mmio_base == 0 {
         crate::log!("[SDMA] No MMIO base — skipping");
         return;
     }
 
     
-    let wfj = unsafe { wr(hv, regs::CRB_) };
-    crate::log!("[SDMA] SDMA0 VERSION={:#010X}", wfj);
+    let omk = unsafe { kj(mmio_base, regs::CUS_) };
+    crate::log!("[SDMA] SDMA0 VERSION={:#010X}", omk);
 
     
-    let jmm = alloc::alloc::Layout::bjy(AHG_, 4096)
-        .expect("sdma ring layout");
+    let eyt = match alloc::alloc::Layout::from_size_align(AJC_, 4096) {
+        Ok(l) => l,
+        Err(_) => { crate::log!("[SDMA] ERROR: invalid ring layout"); return; }
+    };
 
-    let mae = unsafe { alloc::alloc::alloc_zeroed(jmm) } as u64;
-    let mad = memory::abw(mae).unwrap_or(0);
+    let grn = unsafe { alloc::alloc::alloc_zeroed(eyt) } as u64;
+    let grm = memory::lc(grn).unwrap_or(0);
 
-    let mag = unsafe { alloc::alloc::alloc_zeroed(jmm) } as u64;
-    let maf = memory::abw(mag).unwrap_or(0);
+    let grp = unsafe { alloc::alloc::alloc_zeroed(eyt) } as u64;
+    let gro = memory::lc(grp).unwrap_or(0);
 
-    if mad == 0 || maf == 0 {
+    if grm == 0 || gro == 0 {
         crate::log!("[SDMA] ERROR: Cannot get physical address for ring buffers");
         return;
     }
 
     crate::log!("[SDMA] Ring0: virt={:#X} phys={:#X} ({} dwords)",
-        mae, mad, DM_);
+        grn, grm, DU_);
     crate::log!("[SDMA] Ring1: virt={:#X} phys={:#X} ({} dwords)",
-        mag, maf, DM_);
+        grp, gro, DU_);
 
     
-    let wtu = alloc::alloc::Layout::bjy(CUF_, 4096)
-        .expect("sdma status layout");
-    let dci = unsafe { alloc::alloc::alloc_zeroed(wtu) } as u64;
-    let bik = memory::abw(dci).unwrap_or(0);
+    let owx = match alloc::alloc::Layout::from_size_align(CXX_, 4096) {
+        Ok(l) => l,
+        Err(_) => { crate::log!("[SDMA] ERROR: invalid status layout"); return; }
+    };
+    let status_virt = unsafe { alloc::alloc::alloc_zeroed(owx) } as u64;
+    let status_phys = memory::lc(status_virt).unwrap_or(0);
 
-    if bik == 0 {
+    if status_phys == 0 {
         crate::log!("[SDMA] ERROR: Cannot get phys for status buffer");
         return;
     }
-    crate::log!("[SDMA] Status: virt={:#X} phys={:#X}", dci, bik);
+    crate::log!("[SDMA] Status: virt={:#X} phys={:#X}", status_virt, status_phys);
 
     
-    let wsf = alloc::alloc::Layout::bjy(HE_, 4096)
-        .expect("sdma staging layout");
-    let dcf = unsafe { alloc::alloc::alloc_zeroed(wsf) } as u64;
-    let cie = memory::abw(dcf).unwrap_or(0);
+    let ovw = match alloc::alloc::Layout::from_size_align(HW_, 4096) {
+        Ok(l) => l,
+        Err(_) => { crate::log!("[SDMA] ERROR: invalid staging layout"); return; }
+    };
+    let staging_virt = unsafe { alloc::alloc::alloc_zeroed(ovw) } as u64;
+    let staging_phys = memory::lc(staging_virt).unwrap_or(0);
 
-    if cie == 0 {
+    if staging_phys == 0 {
         crate::log!("[SDMA] ERROR: Cannot get phys for staging buffer");
         return;
     }
     crate::log!("[SDMA] Staging: virt={:#X} phys={:#X} ({}KB)",
-        dcf, cie, HE_ / 1024);
+        staging_virt, staging_phys, HW_ / 1024);
 
     
-    let nqf = oej(
-        hv, 0, mae, mad, bik, CPD_,
+    let hvx = igq(
+        mmio_base, 0, grn, grm, status_phys, CSS_,
     );
-    let nqg = oej(
-        hv, 1, mag, maf, bik, CPE_,
+    let hvy = igq(
+        mmio_base, 1, grp, gro, status_phys, CST_,
     );
 
-    let sia = nqf.is_some();
-    let sib = nqg.is_some();
+    let lnb = hvx.is_some();
+    let lnc = hvy.is_some();
 
     
-    let mut g = IX_.lock();
-    g.jr = true;
-    g.hv = hv;
-    g.ggf[0] = nqf;
-    g.ggf[1] = nqg;
-    g.dci = dci;
-    g.bik = bik;
-    g.dcf = dcf;
-    g.cie = cie;
-    drop(g);
+    let mut state = JQ_.lock();
+    state.initialized = true;
+    state.mmio_base = mmio_base;
+    state.engines[0] = hvx;
+    state.engines[1] = hvy;
+    state.status_virt = status_virt;
+    state.status_phys = status_phys;
+    state.staging_virt = staging_virt;
+    state.staging_phys = staging_phys;
+    drop(state);
 
-    HD_.store(true, Ordering::SeqCst);
+    HV_.store(true, Ordering::SeqCst);
 
     crate::log!("[SDMA] ───────────────────────────────────────────────────");
-    crate::log!("[SDMA] Engine 0: {}", if sia { "READY" } else { "FAILED" });
-    crate::log!("[SDMA] Engine 1: {}", if sib { "READY" } else { "FAILED" });
-    crate::log!("[SDMA] Staging: {}KB for CPU→GPU transfers", HE_ / 1024);
+    crate::log!("[SDMA] Engine 0: {}", if lnb { "READY" } else { "FAILED" });
+    crate::log!("[SDMA] Engine 1: {}", if lnc { "READY" } else { "FAILED" });
+    crate::log!("[SDMA] Staging: {}KB for CPU→GPU transfers", HW_ / 1024);
     crate::log!("[SDMA] Commands: sdma copy|fill|test|bench|info");
     crate::log!("[SDMA] ───────────────────────────────────────────────────");
 }
@@ -499,78 +505,78 @@ pub fn init(hv: u64) {
 
 
 
-pub fn bdu(jrh: u64, fhc: u64, aal: u32, cek: usize) -> Result<u32, &'static str> {
-    if !HD_.load(Ordering::Relaxed) {
+pub fn copy(src_phys: u64, dst_phys: u64, nb: u32, engine_idx: usize) -> Result<u32, &'static str> {
+    if !HV_.load(Ordering::Relaxed) {
         return Err("SDMA not initialized");
     }
-    if aal == 0 {
+    if nb == 0 {
         return Ok(0);
     }
     
-    if aal > (1 << 26) {
+    if nb > (1 << 26) {
         return Err("Transfer too large (max 64MB per SDMA packet)");
     }
-    let cei = cek.v(1);
+    let aqk = engine_idx.min(1);
 
-    let mut g = IX_.lock();
-    let bik = g.bik;
-    let dci = g.dci;
-    let engine = g.ggf[cei].as_mut().ok_or("SDMA engine not ready")?;
-
-    
-    let dhd = engine.cxu;
-    engine.cxu = engine.cxu.cn(1);
-    if engine.cxu == 0 { engine.cxu = 1; }
+    let mut state = JQ_.lock();
+    let status_phys = state.status_phys;
+    let status_virt = state.status_virt;
+    let engine = state.engines[aqk].as_mut().ok_or("SDMA engine not ready")?;
 
     
-    let hjc = if cei == 0 { ARW_ } else { ARX_ };
-    let nte = dci + hjc as u64;
-    let kvl = bik + hjc as u64;
+    let bgk = engine.fence_seq;
+    engine.fence_seq = engine.fence_seq.wrapping_add(1);
+    if engine.fence_seq == 0 { engine.fence_seq = 1; }
+
+    
+    let dpl = if aqk == 0 { ATY_ } else { ATZ_ };
+    let hya = status_virt + dpl as u64;
+    let fwk = status_phys + dpl as u64;
     unsafe {
-        core::ptr::write_volatile(nte as *mut u32, 0);
+        core::ptr::write_volatile(hya as *mut u32, 0);
     }
 
     
-    let rot = wfi(jrh, fhc, aal);
-    let kvm = pgx(kvl, dhd);
+    let kxs = omj(src_phys, dst_phys, nb);
+    let fwl = jdt(fwk, bgk);
 
-    cbk(engine, &rot);
-    cbk(engine, &kvm);
+    aow(engine, &kxs);
+    aow(engine, &fwl);
 
     
-    jmn(engine);
+    eyu(engine);
 
     crate::serial_println!("[SDMA{}] COPY: {:#X} → {:#X} ({} bytes) fence={}",
-        cei, jrh, fhc, aal, dhd);
+        aqk, src_phys, dst_phys, nb, bgk);
 
     
-    let mut ez = 0u64;
+    let mut bb = 0u64;
     loop {
-        let cv = unsafe { core::ptr::read_volatile(nte as *const u32) };
-        if cv == dhd {
+        let current = unsafe { core::ptr::read_volatile(hya as *const u32) };
+        if current == bgk {
             break;
         }
-        ez += 1;
-        if ez >= BFI_ {
+        bb += 1;
+        if bb >= BHM_ {
             crate::serial_println!("[SDMA{}] TIMEOUT: fence expected {} got {}",
-                cei, dhd, cv);
+                aqk, bgk, current);
             return Err("SDMA copy timed out");
         }
-        if ez % 100 == 0 {
-            core::hint::hc();
+        if bb % 100 == 0 {
+            core::hint::spin_loop();
         }
     }
 
     
-    engine.faf += 1;
-    engine.bf += aal as u64;
-    drop(g);
+    engine.transfers += 1;
+    engine.bytes += nb as u64;
+    drop(state);
 
-    AIX_.fetch_add(aal as u64, Ordering::Relaxed);
-    AJA_.fetch_add(1, Ordering::Relaxed);
+    AKT_.fetch_add(nb as u64, Ordering::Relaxed);
+    AKW_.fetch_add(1, Ordering::Relaxed);
 
-    crate::serial_println!("[SDMA{}] Copy complete in {} iters", cei, ez);
-    Ok(dhd)
+    crate::serial_println!("[SDMA{}] Copy complete in {} iters", aqk, bb);
+    Ok(bgk)
 }
 
 
@@ -578,73 +584,73 @@ pub fn bdu(jrh: u64, fhc: u64, aal: u32, cek: usize) -> Result<u32, &'static str
 
 
 
-pub fn vi(fhc: u64, eqg: u32, aal: u32, cek: usize) -> Result<u32, &'static str> {
-    if !HD_.load(Ordering::Relaxed) {
+pub fn fill(dst_phys: u64, fill_value: u32, nb: u32, engine_idx: usize) -> Result<u32, &'static str> {
+    if !HV_.load(Ordering::Relaxed) {
         return Err("SDMA not initialized");
     }
-    if aal == 0 {
+    if nb == 0 {
         return Ok(0);
     }
-    if aal & 3 != 0 {
+    if nb & 3 != 0 {
         return Err("byte_count must be a multiple of 4");
     }
-    if aal > (1 << 26) {
+    if nb > (1 << 26) {
         return Err("Fill too large (max 64MB per SDMA packet)");
     }
-    let cei = cek.v(1);
+    let aqk = engine_idx.min(1);
 
-    let mut g = IX_.lock();
-    let bik = g.bik;
-    let dci = g.dci;
-    let engine = g.ggf[cei].as_mut().ok_or("SDMA engine not ready")?;
+    let mut state = JQ_.lock();
+    let status_phys = state.status_phys;
+    let status_virt = state.status_virt;
+    let engine = state.engines[aqk].as_mut().ok_or("SDMA engine not ready")?;
 
-    let dhd = engine.cxu;
-    engine.cxu = engine.cxu.cn(1);
-    if engine.cxu == 0 { engine.cxu = 1; }
+    let bgk = engine.fence_seq;
+    engine.fence_seq = engine.fence_seq.wrapping_add(1);
+    if engine.fence_seq == 0 { engine.fence_seq = 1; }
 
-    let hjc = if cei == 0 { ARW_ } else { ARX_ };
-    let ntf = dci + hjc as u64;
-    let kvl = bik + hjc as u64;
+    let dpl = if aqk == 0 { ATY_ } else { ATZ_ };
+    let hyb = status_virt + dpl as u64;
+    let fwk = status_phys + dpl as u64;
     unsafe {
-        core::ptr::write_volatile(ntf as *mut u32, 0);
+        core::ptr::write_volatile(hyb as *mut u32, 0);
     }
 
-    let ssk = wfh(fhc, eqg, aal);
-    let kvm = pgx(kvl, dhd);
+    let lvg = omi(dst_phys, fill_value, nb);
+    let fwl = jdt(fwk, bgk);
 
-    cbk(engine, &ssk);
-    cbk(engine, &kvm);
-    jmn(engine);
+    aow(engine, &lvg);
+    aow(engine, &fwl);
+    eyu(engine);
 
     crate::serial_println!("[SDMA{}] FILL: {:#X} = {:#010X} x{} bytes, fence={}",
-        cei, fhc, eqg, aal, dhd);
+        aqk, dst_phys, fill_value, nb, bgk);
 
-    let mut ez = 0u64;
+    let mut bb = 0u64;
     loop {
-        let cv = unsafe { core::ptr::read_volatile(ntf as *const u32) };
-        if cv == dhd {
+        let current = unsafe { core::ptr::read_volatile(hyb as *const u32) };
+        if current == bgk {
             break;
         }
-        ez += 1;
-        if ez >= BFI_ {
+        bb += 1;
+        if bb >= BHM_ {
             crate::serial_println!("[SDMA{}] TIMEOUT: fence expected {} got {}",
-                cei, dhd, cv);
+                aqk, bgk, current);
             return Err("SDMA fill timed out");
         }
-        if ez % 100 == 0 {
-            core::hint::hc();
+        if bb % 100 == 0 {
+            core::hint::spin_loop();
         }
     }
 
-    engine.faf += 1;
-    engine.bf += aal as u64;
-    drop(g);
+    engine.transfers += 1;
+    engine.bytes += nb as u64;
+    drop(state);
 
-    AIX_.fetch_add(aal as u64, Ordering::Relaxed);
-    AJA_.fetch_add(1, Ordering::Relaxed);
+    AKT_.fetch_add(nb as u64, Ordering::Relaxed);
+    AKW_.fetch_add(1, Ordering::Relaxed);
 
-    crate::serial_println!("[SDMA{}] Fill complete in {} iters", cei, ez);
-    Ok(dhd)
+    crate::serial_println!("[SDMA{}] Fill complete in {} iters", aqk, bb);
+    Ok(bgk)
 }
 
 
@@ -656,49 +662,49 @@ pub fn vi(fhc: u64, eqg: u32, aal: u32, cek: usize) -> Result<u32, &'static str>
 
 
 
-pub fn mof(f: &[u8], fhc: u64, cek: usize) -> Result<usize, &'static str> {
-    if !HD_.load(Ordering::Relaxed) {
+pub fn upload(data: &[u8], dst_phys: u64, engine_idx: usize) -> Result<usize, &'static str> {
+    if !HV_.load(Ordering::Relaxed) {
         return Err("SDMA not initialized");
     }
-    if f.is_empty() {
+    if data.is_empty() {
         return Ok(0);
     }
 
     
-    let mut l = 0usize;
-    while l < f.len() {
-        let jj = (f.len() - l).v(HE_);
+    let mut offset = 0usize;
+    while offset < data.len() {
+        let df = (data.len() - offset).min(HW_);
         
-        let gye = (jj + 3) & !3;
+        let dhi = (df + 3) & !3;
 
-        let g = IX_.lock();
-        let dcf = g.dcf;
-        let cie = g.cie;
-        drop(g);
+        let state = JQ_.lock();
+        let staging_virt = state.staging_virt;
+        let staging_phys = state.staging_phys;
+        drop(state);
 
         
         unsafe {
-            let cs = dcf as *mut u8;
-            let cy = f.fq().add(l);
-            core::ptr::copy_nonoverlapping(cy, cs, jj);
+            let dst = staging_virt as *mut u8;
+            let src = data.as_ptr().add(offset);
+            core::ptr::copy_nonoverlapping(src, dst, df);
             
-            if gye > jj {
-                core::ptr::ahx(cs.add(jj), 0, gye - jj);
+            if dhi > df {
+                core::ptr::write_bytes(dst.add(df), 0, dhi - df);
             }
         }
 
         
-        bdu(
-            cie,
-            fhc + l as u64,
-            gye as u32,
-            cek,
+        copy(
+            staging_phys,
+            dst_phys + offset as u64,
+            dhi as u32,
+            engine_idx,
         )?;
 
-        l += jj;
+        offset += df;
     }
 
-    Ok(f.len())
+    Ok(data.len())
 }
 
 
@@ -707,43 +713,43 @@ pub fn mof(f: &[u8], fhc: u64, cek: usize) -> Result<usize, &'static str> {
 
 
 
-pub fn kqp(jrh: u64, k: &mut [u8], cek: usize) -> Result<usize, &'static str> {
-    if !HD_.load(Ordering::Relaxed) {
+pub fn fsu(src_phys: u64, buf: &mut [u8], engine_idx: usize) -> Result<usize, &'static str> {
+    if !HV_.load(Ordering::Relaxed) {
         return Err("SDMA not initialized");
     }
-    if k.is_empty() {
+    if buf.is_empty() {
         return Ok(0);
     }
 
-    let mut l = 0usize;
-    while l < k.len() {
-        let jj = (k.len() - l).v(HE_);
-        let gye = (jj + 3) & !3;
+    let mut offset = 0usize;
+    while offset < buf.len() {
+        let df = (buf.len() - offset).min(HW_);
+        let dhi = (df + 3) & !3;
 
-        let g = IX_.lock();
-        let dcf = g.dcf;
-        let cie = g.cie;
-        drop(g);
+        let state = JQ_.lock();
+        let staging_virt = state.staging_virt;
+        let staging_phys = state.staging_phys;
+        drop(state);
 
         
-        bdu(
-            jrh + l as u64,
-            cie,
-            gye as u32,
-            cek,
+        copy(
+            src_phys + offset as u64,
+            staging_phys,
+            dhi as u32,
+            engine_idx,
         )?;
 
         
         unsafe {
-            let cy = dcf as *const u8;
-            let cs = k.mw().add(l);
-            core::ptr::copy_nonoverlapping(cy, cs, jj);
+            let src = staging_virt as *const u8;
+            let dst = buf.as_mut_ptr().add(offset);
+            core::ptr::copy_nonoverlapping(src, dst, df);
         }
 
-        l += jj;
+        offset += df;
     }
 
-    Ok(k.len())
+    Ok(buf.len())
 }
 
 
@@ -758,68 +764,71 @@ pub fn kqp(jrh: u64, k: &mut [u8], cek: usize) -> Result<usize, &'static str> {
 
 
 
-pub fn eyj() -> (u32, u32) {
-    if !HD_.load(Ordering::Relaxed) {
+pub fn cdp() -> (u32, u32) {
+    if !HV_.load(Ordering::Relaxed) {
         return (0, 0);
     }
 
-    let mut afu = 0u32;
-    let mut ace = 0u32;
+    let mut gd = 0u32;
+    let mut gv = 0u32;
 
     
-    let layout = alloc::alloc::Layout::bjy(4096, 4096).expect("test layout");
-    let hbp = unsafe { alloc::alloc::alloc_zeroed(layout) } as u64;
-    let hbq = unsafe { alloc::alloc::alloc_zeroed(layout) } as u64;
-    let hbo = memory::abw(hbp).unwrap_or(0);
-    let kfg = memory::abw(hbq).unwrap_or(0);
+    let layout = match alloc::alloc::Layout::from_size_align(4096, 4096) {
+        Ok(l) => l,
+        Err(_) => { crate::serial_println!("[SDMA-TEST] FAIL: invalid test layout"); return (0, 1); }
+    };
+    let djw = unsafe { alloc::alloc::alloc_zeroed(layout) } as u64;
+    let djx = unsafe { alloc::alloc::alloc_zeroed(layout) } as u64;
+    let djv = memory::lc(djw).unwrap_or(0);
+    let fjz = memory::lc(djx).unwrap_or(0);
 
-    if hbo == 0 || kfg == 0 {
+    if djv == 0 || fjz == 0 {
         crate::serial_println!("[SDMA-TEST] FAIL: cannot allocate test buffers");
         return (0, 1);
     }
 
     
     crate::serial_println!("[SDMA-TEST] Test 1: CONST_FILL (engine 0, 1024 bytes, pattern=0xFACEFEED)");
-    match vi(hbo, 0xFACE_FEED, 1024, 0) {
+    match fill(djv, 0xFACE_FEED, 1024, 0) {
         Ok(_) => {
             
-            let ptr = hbp as *const u32;
-            let mut bq = true;
-            for a in 0..256 {
-                let ap = unsafe { core::ptr::read_volatile(ptr.add(a)) };
-                if ap != 0xFACE_FEED {
-                    crate::serial_println!("[SDMA-TEST]   MISMATCH at [{}]: got {:#010X}", a, ap);
-                    bq = false;
+            let ptr = djw as *const u32;
+            let mut ok = true;
+            for i in 0..256 {
+                let val = unsafe { core::ptr::read_volatile(ptr.add(i)) };
+                if val != 0xFACE_FEED {
+                    crate::serial_println!("[SDMA-TEST]   MISMATCH at [{}]: got {:#010X}", i, val);
+                    ok = false;
                     break;
                 }
             }
-            if bq { afu += 1; } else { ace += 1; }
+            if ok { gd += 1; } else { gv += 1; }
         }
-        Err(aa) => {
-            crate::serial_println!("[SDMA-TEST]   Error: {}", aa);
-            ace += 1;
+        Err(e) => {
+            crate::serial_println!("[SDMA-TEST]   Error: {}", e);
+            gv += 1;
         }
     }
 
     
     crate::serial_println!("[SDMA-TEST] Test 2: LINEAR COPY (engine 0, 1024 bytes)");
-    match bdu(hbo, kfg, 1024, 0) {
+    match copy(djv, fjz, 1024, 0) {
         Ok(_) => {
-            let lwb = hbq as *const u32;
-            let mut bq = true;
-            for a in 0..256 {
-                let ap = unsafe { core::ptr::read_volatile(lwb.add(a)) };
-                if ap != 0xFACE_FEED {
-                    crate::serial_println!("[SDMA-TEST]   MISMATCH at [{}]: got {:#010X}", a, ap);
-                    bq = false;
+            let gow = djx as *const u32;
+            let mut ok = true;
+            for i in 0..256 {
+                let val = unsafe { core::ptr::read_volatile(gow.add(i)) };
+                if val != 0xFACE_FEED {
+                    crate::serial_println!("[SDMA-TEST]   MISMATCH at [{}]: got {:#010X}", i, val);
+                    ok = false;
                     break;
                 }
             }
-            if bq { afu += 1; } else { ace += 1; }
+            if ok { gd += 1; } else { gv += 1; }
         }
-        Err(aa) => {
-            crate::serial_println!("[SDMA-TEST]   Error: {}", aa);
-            ace += 1;
+        Err(e) => {
+            crate::serial_println!("[SDMA-TEST]   Error: {}", e);
+            gv += 1;
         }
     }
 
@@ -827,85 +836,85 @@ pub fn eyj() -> (u32, u32) {
     crate::serial_println!("[SDMA-TEST] Test 3: CONST_FILL (engine 1, 512 bytes, pattern=0xBAAD_C0DE)");
     
     unsafe {
-        core::ptr::ahx(hbq as *mut u8, 0, 4096);
+        core::ptr::write_bytes(djx as *mut u8, 0, 4096);
     }
-    match vi(kfg, 0xBAAD_C0DE, 512, 1) {
+    match fill(fjz, 0xBAAD_C0DE, 512, 1) {
         Ok(_) => {
-            let lwb = hbq as *const u32;
-            let mut bq = true;
-            for a in 0..128 {
-                let ap = unsafe { core::ptr::read_volatile(lwb.add(a)) };
-                if ap != 0xBAAD_C0DE {
-                    crate::serial_println!("[SDMA-TEST]   MISMATCH at [{}]: got {:#010X}", a, ap);
-                    bq = false;
+            let gow = djx as *const u32;
+            let mut ok = true;
+            for i in 0..128 {
+                let val = unsafe { core::ptr::read_volatile(gow.add(i)) };
+                if val != 0xBAAD_C0DE {
+                    crate::serial_println!("[SDMA-TEST]   MISMATCH at [{}]: got {:#010X}", i, val);
+                    ok = false;
                     break;
                 }
             }
-            if bq { afu += 1; } else { ace += 1; }
+            if ok { gd += 1; } else { gv += 1; }
         }
-        Err(aa) => {
-            crate::serial_println!("[SDMA-TEST]   Error: {}", aa);
-            ace += 1;
+        Err(e) => {
+            crate::serial_println!("[SDMA-TEST]   Error: {}", e);
+            gv += 1;
         }
     }
 
     
     crate::serial_println!("[SDMA-TEST] Test 4: CPU Upload via staging (256 bytes)");
     
-    unsafe { core::ptr::ahx(hbp as *mut u8, 0, 4096); }
-    let ezo: [u8; 256] = {
-        let mut bc = [0u8; 256];
-        for a in 0..256 { bc[a] = a as u8; }
-        bc
+    unsafe { core::ptr::write_bytes(djw as *mut u8, 0, 4096); }
+    let cef: [u8; 256] = {
+        let mut d = [0u8; 256];
+        for i in 0..256 { d[i] = i as u8; }
+        d
     };
-    match mof(&ezo, hbo, 0) {
+    match upload(&cef, djv, 0) {
         Ok(_) => {
-            let ptr = hbp as *const u8;
-            let mut bq = true;
-            for a in 0..256 {
-                let ap = unsafe { core::ptr::read_volatile(ptr.add(a)) };
-                if ap != a as u8 {
-                    crate::serial_println!("[SDMA-TEST]   MISMATCH at [{}]: got {} expected {}", a, ap, a);
-                    bq = false;
+            let ptr = djw as *const u8;
+            let mut ok = true;
+            for i in 0..256 {
+                let val = unsafe { core::ptr::read_volatile(ptr.add(i)) };
+                if val != i as u8 {
+                    crate::serial_println!("[SDMA-TEST]   MISMATCH at [{}]: got {} expected {}", i, val, i);
+                    ok = false;
                     break;
                 }
             }
-            if bq { afu += 1; } else { ace += 1; }
+            if ok { gd += 1; } else { gv += 1; }
         }
-        Err(aa) => {
-            crate::serial_println!("[SDMA-TEST]   Error: {}", aa);
-            ace += 1;
+        Err(e) => {
+            crate::serial_println!("[SDMA-TEST]   Error: {}", e);
+            gv += 1;
         }
     }
 
     
     crate::serial_println!("[SDMA-TEST] Test 5: CPU Download via staging (256 bytes)");
-    let mut bky = [0u8; 256];
-    match kqp(hbo, &mut bky, 0) {
+    let mut agx = [0u8; 256];
+    match fsu(djv, &mut agx, 0) {
         Ok(_) => {
-            let mut bq = true;
-            for a in 0..256 {
-                if bky[a] != a as u8 {
-                    crate::serial_println!("[SDMA-TEST]   MISMATCH at [{}]: got {} expected {}", a, bky[a], a);
-                    bq = false;
+            let mut ok = true;
+            for i in 0..256 {
+                if agx[i] != i as u8 {
+                    crate::serial_println!("[SDMA-TEST]   MISMATCH at [{}]: got {} expected {}", i, agx[i], i);
+                    ok = false;
                     break;
                 }
             }
-            if bq { afu += 1; } else { ace += 1; }
+            if ok { gd += 1; } else { gv += 1; }
         }
-        Err(aa) => {
-            crate::serial_println!("[SDMA-TEST]   Error: {}", aa);
-            ace += 1;
+        Err(e) => {
+            crate::serial_println!("[SDMA-TEST]   Error: {}", e);
+            gv += 1;
         }
     }
 
     
     unsafe {
-        alloc::alloc::dealloc(hbp as *mut u8, layout);
-        alloc::alloc::dealloc(hbq as *mut u8, layout);
+        alloc::alloc::dealloc(djw as *mut u8, layout);
+        alloc::alloc::dealloc(djx as *mut u8, layout);
     }
 
-    (afu, ace)
+    (gd, gv)
 }
 
 
@@ -915,62 +924,62 @@ pub fn eyj() -> (u32, u32) {
 
 
 
-pub fn qoy(gs: u32) -> Result<(u64, u64), &'static str> {
-    if !HD_.load(Ordering::Relaxed) {
+pub fn kbl(size_kb: u32) -> Result<(u64, u64), &'static str> {
+    if !HV_.load(Ordering::Relaxed) {
         return Err("SDMA not initialized");
     }
-    let afz = (gs as usize * 1024).v(HE_);
-    let ciz = (afz + 3) & !3;
+    let size_bytes = (size_kb as usize * 1024).min(HW_);
+    let asw = (size_bytes + 3) & !3;
 
     
-    let layout = alloc::alloc::Layout::bjy(ciz, 4096)
-        .jd(|_| "allocation error")?;
-    let fdt = unsafe { alloc::alloc::alloc_zeroed(layout) } as u64;
-    let fdu = unsafe { alloc::alloc::alloc_zeroed(layout) } as u64;
-    let fqr = memory::abw(fdt).ok_or("virt_to_phys failed")?;
-    let hvb = memory::abw(fdu).ok_or("virt_to_phys failed")?;
+    let layout = alloc::alloc::Layout::from_size_align(asw, 4096)
+        .map_err(|_| "allocation error")?;
+    let bey = unsafe { alloc::alloc::alloc_zeroed(layout) } as u64;
+    let bez = unsafe { alloc::alloc::alloc_zeroed(layout) } as u64;
+    let buv = memory::lc(bey).ok_or("virt_to_phys failed")?;
+    let dwm = memory::lc(bez).ok_or("virt_to_phys failed")?;
 
     
-    let _ = vi(fqr, 0, ciz as u32, 0);
+    let _ = fill(buv, 0, asw as u32, 0);
 
     
-    let bbu = 16u32;
-    let xaa = crate::time::ave();
-    for _ in 0..bbu {
-        vi(fqr, 0xAAAA_BBBB, ciz as u32, 0)?;
+    let acd = 16u32;
+    let pcl = crate::time::yf();
+    for _ in 0..acd {
+        fill(buv, 0xAAAA_BBBB, asw as u32, 0)?;
     }
-    let wzx = crate::time::ave();
+    let pch = crate::time::yf();
 
     
-    let wzz = crate::time::ave();
-    for _ in 0..bbu {
-        bdu(fqr, hvb, ciz as u32, 0)?;
+    let pck = crate::time::yf();
+    for _ in 0..acd {
+        copy(buv, dwm, asw as u32, 0)?;
     }
-    let wzw = crate::time::ave();
+    let pcg = crate::time::yf();
 
     
     unsafe {
-        alloc::alloc::dealloc(fdt as *mut u8, layout);
-        alloc::alloc::dealloc(fdu as *mut u8, layout);
+        alloc::alloc::dealloc(bey as *mut u8, layout);
+        alloc::alloc::dealloc(bez as *mut u8, layout);
     }
 
     
-    let ntt = wzx.ao(xaa).am(1);
-    let nfy = wzw.ao(wzz).am(1);
+    let hyl = pch.saturating_sub(pcl).max(1);
+    let hnr = pcg.saturating_sub(pck).max(1);
     
 
     
-    let xv = ciz as u64 * bbu as u64;
+    let total_bytes = asw as u64 * acd as u64;
 
     
     
     
     
     
-    let kvu = if ntt > 0 { (xv * 1000) / (ntt * 1024) } else { 0 };
-    let kku = if nfy > 0 { (xv * 1000) / (nfy * 1024) } else { 0 };
+    let fwr = if hyl > 0 { (total_bytes * 1000) / (hyl * 1024) } else { 0 };
+    let fol = if hnr > 0 { (total_bytes * 1000) / (hnr * 1024) } else { 0 };
 
-    Ok((kvu, kku))
+    Ok((fwr, fol))
 }
 
 
@@ -978,73 +987,73 @@ pub fn qoy(gs: u32) -> Result<(u64, u64), &'static str> {
 
 
 
-pub fn uc() -> bool {
-    HD_.load(Ordering::Relaxed)
+pub fn is_ready() -> bool {
+    HV_.load(Ordering::Relaxed)
 }
 
 
-pub fn xv() -> u64 {
-    AIX_.load(Ordering::Relaxed)
+pub fn total_bytes() -> u64 {
+    AKT_.load(Ordering::Relaxed)
 }
 
 
-pub fn pvf() -> u64 {
-    AJA_.load(Ordering::Relaxed)
+pub fn jnz() -> u64 {
+    AKW_.load(Ordering::Relaxed)
 }
 
 
-pub fn awz() -> String {
-    if uc() {
-        let bf = xv();
-        let faf = pvf();
-        let cfv = bf / 1024;
-        format!("SDMA: 2 engines, {} transfers, {} KB moved", faf, cfv)
+pub fn summary() -> String {
+    if is_ready() {
+        let bytes = total_bytes();
+        let transfers = jnz();
+        let arh = bytes / 1024;
+        format!("SDMA: 2 engines, {} transfers, {} KB moved", transfers, arh)
     } else {
         String::from("SDMA: not initialized")
     }
 }
 
 
-pub fn zl() -> Vec<String> {
-    let mut ak = Vec::new();
+pub fn info_lines() -> Vec<String> {
+    let mut lines = Vec::new();
 
-    if uc() {
-        let g = IX_.lock();
-        ak.push(String::from("╔══════════════════════════════════════════════════╗"));
-        ak.push(String::from("║       SDMA Engine — Bare-metal DMA Transfers     ║"));
-        ak.push(String::from("╠══════════════════════════════════════════════════╣"));
-        ak.push(format!("║ Status Buffer: {:#X}                      ║", g.bik));
-        ak.push(format!("║ Staging:       {:#X} ({}KB)              ║",
-            g.cie, HE_ / 1024));
-        ak.push(format!("║ Total Bytes:   {} KB                           ║", xv() / 1024));
-        ak.push(format!("║ Total Xfers:   {}                              ║", pvf()));
-        ak.push(String::from("╠══════════════════════════════════════════════════╣"));
+    if is_ready() {
+        let state = JQ_.lock();
+        lines.push(String::from("╔══════════════════════════════════════════════════╗"));
+        lines.push(String::from("║       SDMA Engine — Bare-metal DMA Transfers     ║"));
+        lines.push(String::from("╠══════════════════════════════════════════════════╣"));
+        lines.push(format!("║ Status Buffer: {:#X}                      ║", state.status_phys));
+        lines.push(format!("║ Staging:       {:#X} ({}KB)              ║",
+            state.staging_phys, HW_ / 1024));
+        lines.push(format!("║ Total Bytes:   {} KB                           ║", total_bytes() / 1024));
+        lines.push(format!("║ Total Xfers:   {}                              ║", jnz()));
+        lines.push(String::from("╠══════════════════════════════════════════════════╣"));
 
-        for a in 0..2 {
-            if let Some(ref engine) = g.ggf[a] {
-                ak.push(format!("║ SDMA{}: ring@{:#X} wptr={} seq={} xfers={} bytes={}",
-                    a, engine.bhy, engine.ccn, engine.cxu,
-                    engine.faf, engine.bf));
+        for i in 0..2 {
+            if let Some(ref engine) = state.engines[i] {
+                lines.push(format!("║ SDMA{}: ring@{:#X} wptr={} seq={} xfers={} bytes={}",
+                    i, engine.ring_phys, engine.wptr, engine.fence_seq,
+                    engine.transfers, engine.bytes));
             } else {
-                ak.push(format!("║ SDMA{}: not initialized                        ║", a));
+                lines.push(format!("║ SDMA{}: not initialized                        ║", i));
             }
         }
-        ak.push(String::from("╚══════════════════════════════════════════════════╝"));
+        lines.push(String::from("╚══════════════════════════════════════════════════╝"));
     } else {
-        ak.push(String::from("SDMA not initialized (requires AMD GPU)"));
+        lines.push(String::from("SDMA not initialized (requires AMD GPU)"));
     }
 
-    ak
+    lines
 }
 
 
-pub fn cie() -> Option<u64> {
-    if !uc() { return None; }
-    let g = IX_.lock();
-    Some(g.cie)
+pub fn staging_phys() -> Option<u64> {
+    if !is_ready() { return None; }
+    let state = JQ_.lock();
+    Some(state.staging_phys)
 }
 
 
-pub fn zpl() -> usize {
-    HE_
+pub fn qxo() -> usize {
+    HW_
 }

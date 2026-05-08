@@ -400,10 +400,9 @@ fn setup_boot_params(
     write_u32(guest_memory, bp + 0x228, CMDLINE_ADDR as u32);
 
     // ramdisk_image & ramdisk_size
-    if config.initrd.is_some() {
+    if let Some(initrd) = &config.initrd {
         write_u32(guest_memory, bp + 0x218, INITRD_LOAD_ADDR as u32);
-        write_u32(guest_memory, bp + 0x21C, 
-                  config.initrd.as_ref().unwrap().len() as u32);
+        write_u32(guest_memory, bp + 0x21C, initrd.len() as u32);
     }
 
     // === Screen info (at offset 0x00 in boot_params) ===

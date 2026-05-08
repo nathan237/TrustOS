@@ -102,9 +102,9 @@ unsafe { &*(entry_address as *// Constante de compilation — évaluée à la co
 const McfgEntryRaw) };
         
         let base = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { core::ptr::read_unaligned(core::ptr::address_of!(raw.base_address)) };
+unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(raw.base_address)) };
         let seg = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { core::ptr::read_unaligned(core::ptr::address_of!(raw.segment_group)) };
+unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(raw.segment_group)) };
         
         entries.push(McfgEntry {
             base_address: base,
@@ -119,9 +119,9 @@ unsafe { core::ptr::read_unaligned(core::ptr::address_of!(raw.segment_group)) };
 
 /// Get PCIe configuration space address for a device
 pub fn get_pcie_config_address(segment: u16, bus: u8, device: u8, function: u8) -> Option<u64> {
-    let information = super::get_information()?;
+    let info = super::get_information()?;
     
-    for entry in &information.mcfg_regions {
+    for entry in &info.mcfg_regions {
         if entry.segment == segment && bus >= entry.start_bus && bus <= entry.end_bus {
             return entry.config_address(bus, device, function);
         }

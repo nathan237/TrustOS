@@ -22,9 +22,9 @@ use alloc::string::String;
 use super::ir::*;
 
 /// x86_64 register to RISC-V register mapping
-fn x86_to_rv(x86_register: u8) -> Reg {
+fn x86_to_rv(x86_reg: u8) -> Reg {
         // Pattern matching — Rust's exhaustive branching construct.
-match x86_register {
+match x86_reg {
         0  => Reg::X10,  // RAX → a0
         1  => Reg::X11,  // RCX → a1
         2  => Reg::X12,  // RDX → a2
@@ -50,7 +50,7 @@ pub struct X86Decoder {
     /// Raw binary code bytes
     code: Vec<u8>,
     /// Base virtual address
-    base_address: u64,
+    base_addr: u64,
     /// Current decode offset
     offset: usize,
     /// Translation statistics
@@ -60,10 +60,10 @@ pub struct X86Decoder {
 // Implementation block — defines methods for the type above.
 impl X86Decoder {
         // Public function — callable from other modules.
-pub fn new(code: &[u8], base_address: u64) -> Self {
+pub fn new(code: &[u8], base_addr: u64) -> Self {
         Self {
             code: code.to_vec(),
-            base_address,
+            base_addr,
             offset: 0,
             stats: TranslationStats::default(),
         }
@@ -72,16 +72,16 @@ pub fn new(code: &[u8], base_address: u64) -> Self {
     /// Translate a basic block starting at the given offset
     pub fn translate_block(&mut self, start_offset: usize) -> TranslatedBlock {
         self.offset = start_offset;
-        let source_address = self.base_address + start_offset as u64;
-        let mut block = TranslatedBlock::new(source_address, SourceArch::X86_64);
+        let src_addr = self.base_addr + start_offset as u64;
+        let mut block = TranslatedBlock::new(src_addr, SourceArch::X86_64);
 
-        let maximum_instructions = 256;
+        let max_instructions = 256;
         let mut count = 0;
 
-        while self.offset < self.code.len() && count < maximum_instructions {
+        while self.offset < self.code.len() && count < max_instructions {
             let inst_start = self.offset;
             let terminated = self.decode_one(&mut block);
-            block.source_inst_count += 1;
+            block.src_inst_count += 1;
             self.stats.instructions_translated += 1;
             count += 1;
 
@@ -104,18 +104,18 @@ pub fn new(code: &[u8], base_address: u64) -> Self {
         worklist.push(0);
 
         while let Some(offset) = worklist.pop() {
-            let address = self.base_address + offset as u64;
-            if visited.contains(&address) {
+            let addr = self.base_addr + offset as u64;
+            if visited.contains(&addr) {
                 continue;
             }
-            visited.push(address);
+            visited.push(addr);
 
             let block = self.translate_block(offset);
 
             // Add successor addresses to worklist
             for &succ in &block.successors {
-                if succ >= self.base_address {
-                    let succ_off = (succ - self.base_address) as usize;
+                if succ >= self.base_addr {
+                    let succ_off = (succ - self.base_addr) as usize;
                     if succ_off < self.code.len() && !visited.contains(&succ) {
                         worklist.push(succ_off);
                     }
@@ -135,7 +135,7 @@ pub fn new(code: &[u8], base_address: u64) -> Self {
             return true;
         }
 
-        let inst_address = self.base_address + self.offset as u64;
+        let inst_address = self.base_addr + self.offset as u64;
 
         // Parse prefixes
         let mut rex: u8 = 0;
@@ -335,11 +335,11 @@ match opcode {
 
             // CMP r/m, imm8 — 83 /7
             0x83 => {
-                let (rm, operation_ext) = self.decode_modrm(rex_b, rex_r);
+                let (rm, op_ext) = self.decode_modrm(rex_b, rex_r);
                 let imm = self.read_i8() as i64;
                 let rd = x86_to_rv(rm);
                                 // Pattern matching — Rust's exhaustive branching construct.
-match operation_ext {
+match op_ext {
                     0 => { // ADD r/m, imm8
                         block.emit(RvInst::Addi { rd, rs1: rd, imm });
                         block.emit(RvInst::CmpFlags { rs1: rd, rs2: Reg::X0 });
@@ -387,10 +387,10 @@ match operation_ext {
 
             // INC r/m — FF /0, DEC r/m — FF /1
             0xFF => {
-                let (rm, operation_ext) = self.decode_modrm(rex_b, rex_r);
+                let (rm, op_ext) = self.decode_modrm(rex_b, rex_r);
                 let rd = x86_to_rv(rm);
                                 // Pattern matching — Rust's exhaustive branching construct.
-match operation_ext {
+match op_ext {
                     0 => { // INC
                         block.emit(RvInst::Addi { rd, rs1: rd, imm: 1 });
                         block.emit(RvInst::CmpFlags { rs1: rd, rs2: Reg::X0 });
@@ -402,7 +402,7 @@ match operation_ext {
                     2 => { // CALL r/m
                         // Push return address, jump to target
                         block.emit(RvInst::Addi { rd: Reg::X2, rs1: Reg::X2, imm: -8 });
-                        let next_address = self.base_address + self.offset as u64;
+                        let next_address = self.base_addr + self.offset as u64;
                         block.emit(RvInst::Li { rd: Reg::X5, imm: next_address as i64 });
                         block.emit(RvInst::Sd { rs2: Reg::X5, rs1: Reg::X2, offset: 0 });
                         block.emit(RvInst::Jalr { rd: Reg::X1, rs1: rd, offset: 0 });
@@ -427,11 +427,11 @@ match operation_ext {
 
             // Jcc short — 7x
             0x70..=0x7F => {
-                let relative = self.read_i8() as i64;
-                let target = self.base_address as i64 + self.offset as i64 + relative;
+                let rel = self.read_i8() as i64;
+                let target = self.base_addr as i64 + self.offset as i64 + rel;
                 let condition = x86_cc_to_flag(opcode & 0x0F);
-                block.emit(RvInst::BranchCondition { condition, offset: target });
-                let fallthrough = self.base_address + self.offset as u64;
+                block.emit(RvInst::BranchCond { condition, offset: target });
+                let fallthrough = self.base_addr + self.offset as u64;
                 block.successors.push(target as u64);
                 block.successors.push(fallthrough);
                 true
@@ -439,8 +439,8 @@ match operation_ext {
 
             // JMP rel8 — EB
             0xEB => {
-                let relative = self.read_i8() as i64;
-                let target = self.base_address as i64 + self.offset as i64 + relative;
+                let rel = self.read_i8() as i64;
+                let target = self.base_addr as i64 + self.offset as i64 + rel;
                 block.emit(RvInst::Jal { rd: Reg::X0, offset: target });
                 block.successors.push(target as u64);
                 true
@@ -448,8 +448,8 @@ match operation_ext {
 
             // JMP rel32 — E9
             0xE9 => {
-                let relative = self.read_i32() as i64;
-                let target = self.base_address as i64 + self.offset as i64 + relative;
+                let rel = self.read_i32() as i64;
+                let target = self.base_addr as i64 + self.offset as i64 + rel;
                 block.emit(RvInst::Jal { rd: Reg::X0, offset: target });
                 block.successors.push(target as u64);
                 true
@@ -457,11 +457,11 @@ match operation_ext {
 
             // CALL rel32 — E8
             0xE8 => {
-                let relative = self.read_i32() as i64;
-                let target = self.base_address as i64 + self.offset as i64 + relative;
+                let rel = self.read_i32() as i64;
+                let target = self.base_addr as i64 + self.offset as i64 + rel;
                 // Push return address
                 block.emit(RvInst::Addi { rd: Reg::X2, rs1: Reg::X2, imm: -8 });
-                let return_value_address = self.base_address + self.offset as u64;
+                let return_value_address = self.base_addr + self.offset as u64;
                 block.emit(RvInst::Li { rd: Reg::X5, imm: return_value_address as i64 });
                 block.emit(RvInst::Sd { rs2: Reg::X5, rs1: Reg::X2, offset: 0 });
                 block.emit(RvInst::Call { offset: target });
@@ -475,7 +475,7 @@ match operation_ext {
                 // Pop return address and jump
                 block.emit(RvInst::Ld { rd: Reg::X1, rs1: Reg::X2, offset: 0 });
                 block.emit(RvInst::Addi { rd: Reg::X2, rs1: Reg::X2, imm: 8 });
-                block.emit(RvInst::Return_value);
+                block.emit(RvInst::Ret);
                 true
             }
 
@@ -491,9 +491,9 @@ match byte2 {
                             // SYSCALL: translate x86 ABI → RISC-V ABI
                             // x86: RAX=syscall#, RDI=arg0, RSI=arg1, RDX=arg2, R10=arg3, R8=arg4, R9=arg5
                             // RV:  a7=syscall#,  a0=arg0,  a1=arg1,  a2=arg2,  a3=arg3,  a4=arg4, a5=arg5
-                            block.emit(RvInst::SourceAnnotation {
+                            block.emit(RvInst::SrcAnnotation {
                                 arch: SourceArch::X86_64,
-                                address: inst_address,
+                                addr: inst_address,
                                 text: String::from("syscall"),
                             });
                             // Move syscall number: RAX(x10) → a7(x17)
@@ -518,11 +518,11 @@ match byte2 {
 
                         // Jcc near — 0F 8x
                         0x80..=0x8F => {
-                            let relative = self.read_i32() as i64;
-                            let target = self.base_address as i64 + self.offset as i64 + relative;
+                            let rel = self.read_i32() as i64;
+                            let target = self.base_addr as i64 + self.offset as i64 + rel;
                             let condition = x86_cc_to_flag(byte2 & 0x0F);
-                            block.emit(RvInst::BranchCondition { condition, offset: target });
-                            let fallthrough = self.base_address + self.offset as u64;
+                            block.emit(RvInst::BranchCond { condition, offset: target });
+                            let fallthrough = self.base_addr + self.offset as u64;
                             block.successors.push(target as u64);
                             block.successors.push(fallthrough);
                             true
@@ -569,9 +569,9 @@ match byte2 {
                 let int_number = self.read_u8();
                 if int_number == 0x80 {
                     // Legacy 32-bit syscall (EAX=syscall#, EBX/ECX/EDX/ESI/EDI/EBP)
-                    block.emit(RvInst::SourceAnnotation {
+                    block.emit(RvInst::SrcAnnotation {
                         arch: SourceArch::X86_64,
-                        address: inst_address,
+                        addr: inst_address,
                         text: String::from("int 0x80 (legacy syscall)"),
                     });
                     block.emit(RvInst::Mv { rd: Reg::X17, rs: Reg::X10 }); // EAX → a7
@@ -586,9 +586,9 @@ match byte2 {
             // Unrecognized instruction — emit NOP and continue
             _ => {
                 self.stats.unsupported_instructions += 1;
-                block.emit(RvInst::SourceAnnotation {
+                block.emit(RvInst::SrcAnnotation {
                     arch: SourceArch::X86_64,
-                    address: inst_address,
+                    addr: inst_address,
                     text: format!("unsupported opcode: 0x{:02X}", opcode),
                 });
                 block.emit(RvInst::Nop);

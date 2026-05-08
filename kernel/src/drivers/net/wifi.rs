@@ -351,7 +351,8 @@ pub fn probe_pci(pci_dev: &PciDevice) -> bool {
     // or Intel vendor with known WiFi device IDs
     let is_wireless = pci_dev.class_code == crate::pci::class::WIRELESS
         || (pci_dev.class_code == crate::pci::class::NETWORK && pci_dev.subclass == 0x80)
-        || (pci_dev.vendor_id == 0x8086 && super::iwl4965::IWL4965_DEVICE_IDS.contains(&pci_dev.device_id));
+        || (pci_dev.vendor_id == 0x8086 && super::iwl_family::classify(pci_dev.device_id).is_some())
+        || (pci_dev.vendor_id == 0x168C && super::ath9k::ATH9K_DEVICE_IDS.contains(&pci_dev.device_id));
 
     if !is_wireless {
         crate::serial_println!("[WIFI-PROBE] -> Not wireless (class={:02X} sub={:02X} devid={:04X})",
@@ -363,11 +364,40 @@ pub fn probe_pci(pci_dev: &PciDevice) -> bool {
         pci_dev.vendor_id, pci_dev.device_id,
         pci_dev.bus, pci_dev.device, pci_dev.function);
 
-    // Try Intel WiFi Link 4965AGN
-    if pci_dev.vendor_id == 0x8086 {
-        if let Some(driver) = super::iwl4965::probe(pci_dev) {
+    // Atheros ath9k (softMAC, no firmware blob).
+    if pci_dev.vendor_id == 0x168C {
+        if let Some(driver) = super::ath9k::probe(pci_dev) {
             set_driver(driver);
             return true;
+        }
+    }
+
+    // Intel WiFi — classify by family before trying to load.
+    if pci_dev.vendor_id == 0x8086 {
+        if let Some(family) = super::iwl_family::classify(pci_dev.device_id) {
+            crate::serial_println!(
+                "[WIFI] Intel iwlwifi {:04X} -> family={:?} op_mode={} firmware='{}' supported={}",
+                pci_dev.device_id,
+                family,
+                family.op_mode(),
+                family.firmware_hint(),
+                family.supported_in_tree()
+            );
+            crate::println!(
+                "  Intel WiFi {:04X} ({:?}) — needs firmware '{}'",
+                pci_dev.device_id, family, family.firmware_hint()
+            );
+            if family.supported_in_tree() {
+                if let Some(driver) = super::iwl4965::probe(pci_dev) {
+                    set_driver(driver);
+                    return true;
+                }
+            } else {
+                crate::println!(
+                    "  WiFi: no in-tree driver yet for this Intel generation ({})",
+                    family.op_mode()
+                );
+            }
         }
     }
 

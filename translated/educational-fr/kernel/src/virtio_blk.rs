@@ -25,7 +25,7 @@ const GEOMETRY: u32 = 1 << 4;      // Disk geometry available
     pub     // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const RO: u32 = 1 << 5;            // Read-only device
     pub     // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
-const BLOCK_SIZE: u32 = 1 << 6;      // Block size available
+const BLK_SIZE: u32 = 1 << 6;      // Block size available
     pub     // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const FLUSH: u32 = 1 << 9;         // Flush command supported
     pub     // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
@@ -111,9 +111,9 @@ static BYTES_WRITTEN: AtomicU64 = AtomicU64::new(0);
 // Bloc d'implémentation — définit les méthodes du type ci-dessus.
 impl VirtioBlk {
     /// Initialize the driver with a PCI device
-    pub fn new(pci_device: &PciDevice) -> Result<Self, &'static str> {
+    pub fn new(pci_dev: &PciDevice) -> Result<Self, &'static str> {
         // Get I/O base from BAR0
-        let bar0 = pci_device.bar[0];
+        let bar0 = pci_dev.bar[0];
         if bar0 == 0 {
             return Err("BAR0 not configured");
         }
@@ -179,10 +179,10 @@ impl VirtioBlk {
             return Err("Queue not available");
         }
         
-        let queue = self.allocator_queue(size)?;
+        let queue = self.alloc_queue(size)?;
         
         // Tell device where the queue is
-        let pfn = (queue.physical_address / 4096) as u32;
+        let pfn = (queue.phys_addr / 4096) as u32;
         self.device.set_queue_address(pfn);
         
         self.queue = Some(queue);
@@ -190,7 +190,7 @@ impl VirtioBlk {
     }
     
     /// Allocate a virtqueue
-    fn allocator_queue(&self, size: u16) -> Result<Box<Virtqueue>, &'static str> {
+    fn alloc_queue(&self, size: u16) -> Result<Box<Virtqueue>, &'static str> {
         Virtqueue::new(size)
     }
     
@@ -232,7 +232,7 @@ impl VirtioBlk {
         // Allocate DMA buffer on heap (which is in HHDM)
         // Layout: [header: 16 bytes][data: 512 bytes][status: 1 byte]
         let total_size = VirtioBlkReqHdr::SIZE + BLOCK_SIZE + 1;
-        let mut dma_buffer = vec![0u8; total_size].into_boxed_slice();
+        let mut dma_buf = vec![0u8; total_size].into_boxed_slice();
         
         // Write header at offset 0
         let header = VirtioBlkReqHdr {
@@ -242,39 +242,39 @@ impl VirtioBlk {
         };
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-            let header_pointer = dma_buffer.as_mut_pointer() as *mut VirtioBlkReqHdr;
+            let header_pointer = dma_buf.as_mut_ptr() as *mut VirtioBlkReqHdr;
             core::ptr::write(header_pointer, header);
         }
         
         // Set status byte to 0xFF at the end
-        dma_buffer[VirtioBlkReqHdr::SIZE + BLOCK_SIZE] = 0xFF;
+        dma_buf[VirtioBlkReqHdr::SIZE + BLOCK_SIZE] = 0xFF;
         
         // Get physical addresses from heap (which is in HHDM)
         let hhdm = crate::memory::hhdm_offset();
-        let dma_virt = dma_buffer.as_pointer() as u64;
+        let dma_virt = dma_buf.as_ptr() as u64;
         let dma_physical = dma_virt - hhdm;
         
         let header_physical = dma_physical;
-        let data_physical = dma_physical + VirtioBlkReqHdr::SIZE as u64;
-        let status_physical = dma_physical + (VirtioBlkReqHdr::SIZE + BLOCK_SIZE) as u64;
+        let data_phys = dma_physical + VirtioBlkReqHdr::SIZE as u64;
+        let status_phys = dma_physical + (VirtioBlkReqHdr::SIZE + BLOCK_SIZE) as u64;
         
         let queue = self.queue.as_mut().ok_or("Queue not initialized")?;
         
         // Setup descriptor chain: header -> data -> status
-        let head = queue.allocator_descriptor().ok_or("No free descriptor")?;
-        let data_descriptor = queue.allocator_descriptor().ok_or("No free descriptor")?;
-        let status_descriptor = queue.allocator_descriptor().ok_or("No free descriptor")?;
+        let head = queue.alloc_desc().ok_or("No free descriptor")?;
+        let data_descriptor = queue.alloc_desc().ok_or("No free descriptor")?;
+        let status_descriptor = queue.alloc_desc().ok_or("No free descriptor")?;
         
         // Header descriptor (device reads)
-        queue.set_descriptor(head, header_physical, VirtioBlkReqHdr::SIZE as u32, 
+        queue.set_desc(head, header_physical, VirtioBlkReqHdr::SIZE as u32, 
             desc_flags::NEXT, data_descriptor);
         
         // Data descriptor (device writes)
-        queue.set_descriptor(data_descriptor, data_physical, BLOCK_SIZE as u32,
+        queue.set_desc(data_descriptor, data_phys, BLOCK_SIZE as u32,
             desc_flags::WRITE | desc_flags::NEXT, status_descriptor);
         
         // Status descriptor (device writes)
-        queue.set_descriptor(status_descriptor, status_physical, 1, desc_flags::WRITE, 0);
+        queue.set_desc(status_descriptor, status_phys, 1, desc_flags::WRITE, 0);
         
         // Submit to available ring
         queue.submit(head);
@@ -305,9 +305,9 @@ unsafe {
         }
         
         if timeout == 0 {
-            queue.free_descriptor(head);
-            queue.free_descriptor(data_descriptor);
-            queue.free_descriptor(status_descriptor);
+            queue.free_desc(head);
+            queue.free_desc(data_descriptor);
+            queue.free_desc(status_descriptor);
             return Err("Request timeout");
         }
         
@@ -315,16 +315,16 @@ unsafe {
         let _used = queue.pop_used().ok_or("No completion")?;
         
         // Free descriptors
-        queue.free_descriptor(head);
-        queue.free_descriptor(data_descriptor);
-        queue.free_descriptor(status_descriptor);
+        queue.free_desc(head);
+        queue.free_desc(data_descriptor);
+        queue.free_desc(status_descriptor);
         
-        if dma_buffer[VirtioBlkReqHdr::SIZE + BLOCK_SIZE] != blk_status::OK {
+        if dma_buf[VirtioBlkReqHdr::SIZE + BLOCK_SIZE] != blk_status::OK {
             return Err("Device error");
         }
         
         // Copy data to output buffer
-        buffer.copy_from_slice(&dma_buffer[VirtioBlkReqHdr::SIZE..VirtioBlkReqHdr::SIZE + BLOCK_SIZE]);
+        buffer.copy_from_slice(&dma_buf[VirtioBlkReqHdr::SIZE..VirtioBlkReqHdr::SIZE + BLOCK_SIZE]);
         
         Ok(())
     }
@@ -363,7 +363,7 @@ unsafe {
         // Allocate DMA buffer on heap (which is in HHDM)
         // Layout: [header: 16 bytes][data: 512 bytes][status: 1 byte]
         let total_size = VirtioBlkReqHdr::SIZE + BLOCK_SIZE + 1;
-        let mut dma_buffer = vec![0u8; total_size].into_boxed_slice();
+        let mut dma_buf = vec![0u8; total_size].into_boxed_slice();
         
         // Write header at offset 0
         let header = VirtioBlkReqHdr {
@@ -373,42 +373,42 @@ unsafe {
         };
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-            let header_pointer = dma_buffer.as_mut_pointer() as *mut VirtioBlkReqHdr;
+            let header_pointer = dma_buf.as_mut_ptr() as *mut VirtioBlkReqHdr;
             core::ptr::write(header_pointer, header);
         }
         
         // Copy input data to DMA buffer
-        dma_buffer[VirtioBlkReqHdr::SIZE..VirtioBlkReqHdr::SIZE + BLOCK_SIZE]
+        dma_buf[VirtioBlkReqHdr::SIZE..VirtioBlkReqHdr::SIZE + BLOCK_SIZE]
             .copy_from_slice(&buffer[..BLOCK_SIZE]);
         
         // Set status byte to 0xFF at the end
-        dma_buffer[VirtioBlkReqHdr::SIZE + BLOCK_SIZE] = 0xFF;
+        dma_buf[VirtioBlkReqHdr::SIZE + BLOCK_SIZE] = 0xFF;
         
         // Get physical addresses from heap (which is in HHDM)
         let hhdm = crate::memory::hhdm_offset();
-        let dma_virt = dma_buffer.as_pointer() as u64;
+        let dma_virt = dma_buf.as_ptr() as u64;
         let dma_physical = dma_virt - hhdm;
         
         let header_physical = dma_physical;
-        let data_physical = dma_physical + VirtioBlkReqHdr::SIZE as u64;
-        let status_physical = dma_physical + (VirtioBlkReqHdr::SIZE + BLOCK_SIZE) as u64;
+        let data_phys = dma_physical + VirtioBlkReqHdr::SIZE as u64;
+        let status_phys = dma_physical + (VirtioBlkReqHdr::SIZE + BLOCK_SIZE) as u64;
         
         let queue = self.queue.as_mut().ok_or("Queue not initialized")?;
         
-        let head = queue.allocator_descriptor().ok_or("No free descriptor")?;
-        let data_descriptor = queue.allocator_descriptor().ok_or("No free descriptor")?;
-        let status_descriptor = queue.allocator_descriptor().ok_or("No free descriptor")?;
+        let head = queue.alloc_desc().ok_or("No free descriptor")?;
+        let data_descriptor = queue.alloc_desc().ok_or("No free descriptor")?;
+        let status_descriptor = queue.alloc_desc().ok_or("No free descriptor")?;
         
         // Header (device reads)
-        queue.set_descriptor(head, header_physical, VirtioBlkReqHdr::SIZE as u32,
+        queue.set_desc(head, header_physical, VirtioBlkReqHdr::SIZE as u32,
             desc_flags::NEXT, data_descriptor);
         
         // Data (device reads for write operation)
-        queue.set_descriptor(data_descriptor, data_physical, BLOCK_SIZE as u32,
+        queue.set_desc(data_descriptor, data_phys, BLOCK_SIZE as u32,
             desc_flags::NEXT, status_descriptor);
         
         // Status (device writes)
-        queue.set_descriptor(status_descriptor, status_physical, 1, desc_flags::WRITE, 0);
+        queue.set_desc(status_descriptor, status_phys, 1, desc_flags::WRITE, 0);
         
         queue.submit(head);
         
@@ -437,19 +437,19 @@ unsafe {
         }
         
         if timeout == 0 {
-            queue.free_descriptor(head);
-            queue.free_descriptor(data_descriptor);
-            queue.free_descriptor(status_descriptor);
+            queue.free_desc(head);
+            queue.free_desc(data_descriptor);
+            queue.free_desc(status_descriptor);
             return Err("Request timeout");
         }
         
         let _used = queue.pop_used().ok_or("No completion")?;
         
-        queue.free_descriptor(head);
-        queue.free_descriptor(data_descriptor);
-        queue.free_descriptor(status_descriptor);
+        queue.free_desc(head);
+        queue.free_desc(data_descriptor);
+        queue.free_desc(status_descriptor);
         
-        if dma_buffer[VirtioBlkReqHdr::SIZE + BLOCK_SIZE] != blk_status::OK {
+        if dma_buf[VirtioBlkReqHdr::SIZE + BLOCK_SIZE] != blk_status::OK {
             return Err("Device error");
         }
         
@@ -470,10 +470,10 @@ unsafe {
 // ============ Public API ============
 
 /// Initialize virtio-blk driver
-pub fn init(pci_device: &PciDevice) -> Result<(), &'static str> {
+pub fn init(pci_dev: &PciDevice) -> Result<(), &'static str> {
     crate::log!("[virtio-blk] Initializing...");
     
-    let mut driver = VirtioBlk::new(pci_device)?;
+    let mut driver = VirtioBlk::new(pci_dev)?;
     driver.setup_queue()?;
     driver.start()?;
     
@@ -484,7 +484,7 @@ pub fn init(pci_device: &PciDevice) -> Result<(), &'static str> {
     *DRIVER.lock() = Some(driver);
     
     // Route PCI interrupt through IOAPIC
-    let irq = pci_device.interrupt_line;
+    let irq = pci_dev.interrupt_line;
     if irq > 0 && irq < 255 {
         crate::apic::route_pci_interrupt_request(irq, crate::apic::VIRTIO_VECTOR);
         crate::serial_println!("[virtio-blk] IRQ {} routed to vector {}", irq, crate::apic::VIRTIO_VECTOR);
@@ -511,15 +511,15 @@ pub fn is_read_only() -> bool {
 /// Read sectors
 pub fn read_sectors(start: u64, count: usize, buffer: &mut [u8]) -> Result<(), &'static str> {
     let mut driver = DRIVER.lock();
-    let driver = driver.as_mut().ok_or("Driver not initialized")?;
-    driver.read_sectors(start, count, buffer)
+    let drv = driver.as_mut().ok_or("Driver not initialized")?;
+    drv.read_sectors(start, count, buffer)
 }
 
 /// Write sectors
 pub fn write_sectors(start: u64, count: usize, buffer: &[u8]) -> Result<(), &'static str> {
     let mut driver = DRIVER.lock();
-    let driver = driver.as_mut().ok_or("Driver not initialized")?;
-    driver.write_sectors(start, count, buffer)
+    let drv = driver.as_mut().ok_or("Driver not initialized")?;
+    drv.write_sectors(start, count, buffer)
 }
 
 /// Read a single sector (convenience wrapper for VFS)
@@ -549,13 +549,13 @@ pub fn handle_interrupt() {
     if iobase == 0 { return; }
     
     // Read ISR status register (iobase+0x13) — this also acknowledges the interrupt
-    let interrupt_handler: u8 = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+    let isr: u8 = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
         let mut port = crate::arch::Port::<u8>::new(iobase + 0x13);
         port.read()
     };
     
-    if interrupt_handler & 1 != 0 {
+    if isr & 1 != 0 {
         // Bit 0: used ring update (request completed)
         VIRTIO_BLOCK_COMPLETE.store(true, Ordering::Release);
     }

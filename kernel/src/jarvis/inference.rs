@@ -436,9 +436,11 @@ pub fn compute_loss(model: &TransformerWeights, tokens: &[u8]) -> (f32, Vec<Vec<
             *l = (*l - max).exp_approx();
             sum_exp += *l;
         }
+        let sum_exp = sum_exp.max(1e-30);
         let log_sum = max + sum_exp.ln_approx();
 
         let loss = -(engine.buf_logits[target] - log_sum);
+        let loss = if loss.is_finite() { loss } else { 20.0 };
         total_loss += loss;
 
         all_logits.push(engine.buf_logits.clone());
@@ -453,7 +455,7 @@ trait LnApprox {
 }
 impl LnApprox for f32 {
     fn ln_approx(self) -> f32 {
-        if self <= 0.0 { return -88.0; }
+        if self <= 0.0 { return -1e10; }
         let bits = self.to_bits();
         let e = ((bits >> 23) & 0xFF) as f32 - 127.0;
         let m = f32::from_bits((bits & 0x007FFFFF) | 0x3F800000);

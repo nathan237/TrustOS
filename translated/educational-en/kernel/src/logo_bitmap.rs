@@ -10430,8 +10430,8 @@ pub fn logo_mask_pixel(x: usize, y: usize) -> bool {
     if x >= LOGO_W || y >= LOGO_H { return false; }
     let word = x / 64;
     let bit = x % 64;
-    let index = y * 7 + word;
-    (LOGO_MASK[index] >> (63 - bit)) & 1 == 1
+    let idx = y * 7 + word;
+    (LOGO_MASK[idx] >> (63 - bit)) & 1 == 1
 }
 
 /// Check if pixel is on the edge of the logo (has a transparent/dark neighbor)
@@ -10448,7 +10448,7 @@ pub fn logo_edge_pixel(x: usize, y: usize) -> bool {
 
 /// Draw the full-color logo at position (px, py) onto the framebuffer
 /// with optional alpha blending
-pub fn draw_logo(pixel: u32, py: u32) {
+pub fn draw_logo(px: u32, py: u32) {
     for y in 0..LOGO_H {
         for x in 0..LOGO_W {
             let argb = LOGO_PIXELS[y * LOGO_W + x];
@@ -10460,7 +10460,7 @@ pub fn draw_logo(pixel: u32, py: u32) {
             // Skip near-black pixels (baked-in black background)
             let luminance = (r * 77 + g * 150 + b * 29) >> 8;
             if luminance < 30 { continue; }
-            let dx = pixel + x as u32;
+            let dx = px + x as u32;
             let dy = py + y as u32;
             if a >= 240 {
                 // Opaque — direct write
@@ -10477,27 +10477,27 @@ pub fn draw_logo(pixel: u32, py: u32) {
 
 /// Draw the logo centered at (cx, cy)
 pub fn draw_logo_centered(cx: u32, cy: u32) {
-    let pixel = cx.saturating_sub(200);
+    let px = cx.saturating_sub(200);
     let py = cy.saturating_sub(200);
-    draw_logo(pixel, py);
+    draw_logo(px, py);
 }
 
 /// Draw the logo with a green glow effect (for matrix rain background)
-pub fn draw_logo_glow(pixel: u32, py: u32, glow_intensity: u8) {
+pub fn draw_logo_glow(px: u32, py: u32, glow_intensity: u8) {
     let gi = glow_intensity as u32;
     // Draw glow halo first (2px radius around edges)
     for y in 0..LOGO_H {
         for x in 0..LOGO_W {
             if logo_edge_pixel(x, y) {
-                let glow_color = 0xFF000000 | ((gi.minimum(255)) << 8);
+                let glow_color = 0xFF000000 | ((gi.min(255)) << 8);
                 // Draw glow in 3x3 around edge pixels
                 for dy in 0..3u32 {
                     for dx in 0..3u32 {
-                        let gx = pixel + x as u32 + dx;
+                        let gx = px + x as u32 + dx;
                         let gy = py + y as u32 + dy;
                         if gx > 0 && gy > 0 {
                             let bg = crate::framebuffer::get_pixel(gx - 1, gy - 1);
-                            let blended = alpha_blend(0x40000000 | ((gi.minimum(180)) << 8), bg);
+                            let blended = alpha_blend(0x40000000 | ((gi.min(180)) << 8), bg);
                             crate::framebuffer::put_pixel(gx - 1, gy - 1, blended);
                         }
                     }
@@ -10506,7 +10506,7 @@ pub fn draw_logo_glow(pixel: u32, py: u32, glow_intensity: u8) {
         }
     }
     // Then draw the actual logo on top
-    draw_logo(pixel, py);
+    draw_logo(px, py);
 }
 
 /// Alpha-blend foreground over background (both ARGB)

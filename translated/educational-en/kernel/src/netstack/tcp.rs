@@ -34,7 +34,7 @@ pub enum TcpState {
     FinWait1,
     FinWait2,
     CloseWait,
-    LastAcknowledge,
+    LastAck,
     TimeWait,
     Closing,
 }
@@ -42,25 +42,25 @@ pub enum TcpState {
 // #[derive] — auto-generates trait implementations at compile time.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 struct ConnectionId {
-    source_ip: u32,
-    destination_ip: u32,
-    source_port: u16,
-    destination_port: u16,
+    src_ip: u32,
+    dst_ip: u32,
+    src_port: u16,
+    dst_port: u16,
 }
 
 // #[derive] — auto-generates trait implementations at compile time.
 #[derive(Debug, Clone)]
 struct TcpConnection {
     state: TcpState,
-    sequence: u32, // next seq to send
-    acknowledge: u32, // next ack to send
+    seq: u32, // next seq to send
+    ack: u32, // next ack to send
     fin_received: bool,
     fin_sent: bool,
     // Delayed ACK: count packets since last ACK
     pending_acks: u8,
-    last_acknowledge_time: u64,
+    last_ack_time: u64,
     // Retransmission tracking
-    last_sent_sequence: u32,
+    last_sent_seq: u32,
     last_sent_time: u64,
     retransmit_count: u8,
     /// Oldest unacknowledged sequence number
@@ -70,12 +70,12 @@ struct TcpConnection {
 /// Unacknowledged segment awaiting retransmission
 #[derive(Clone)]
 struct UnackedSegment {
-    connection_id: ConnectionId,
-    sequence: u32,
+    conn_id: ConnectionId,
+    seq: u32,
     data: Vec<u8>,       // raw TCP payload (not full segment)
     dest_ip: [u8; 4],
     dest_port: u16,
-    source_port: u16,
+    src_port: u16,
     sent_time: u64,
     retries: u8,
 }
@@ -97,13 +97,13 @@ static ISN_SECRET: Mutex<[u8; 16]> = Mutex::new([0u8; 16]);
 
 /// Generate a cryptographically unpredictable Initial Sequence Number (RFC 6528).
 /// ISN = SHA-256(src_ip, dst_ip, src_port, dst_port, secret)[0..4] + time_component
-fn generate_isn(source_ip: [u8; 4], destination_ip: [u8; 4], source_port: u16, destination_port: u16) -> u32 {
+fn generate_isn(src_ip: [u8; 4], dst_ip: [u8; 4], src_port: u16, dst_port: u16) -> u32 {
     let secret = ISN_SECRET.lock();
     let mut data = [0u8; 28]; // 4+4+2+2+16
-    data[0..4].copy_from_slice(&source_ip);
-    data[4..8].copy_from_slice(&destination_ip);
-    data[8..10].copy_from_slice(&source_port.to_be_bytes());
-    data[10..12].copy_from_slice(&destination_port.to_be_bytes());
+    data[0..4].copy_from_slice(&src_ip);
+    data[4..8].copy_from_slice(&dst_ip);
+    data[8..10].copy_from_slice(&src_port.to_be_bytes());
+    data[10..12].copy_from_slice(&dst_port.to_be_bytes());
     data[12..28].copy_from_slice(&*secret);
     drop(secret);
     let hash = crate::tls13::crypto::sha256(&data);
@@ -145,14 +145,14 @@ pub fn stop_listening(port: u16) {
 pub fn accept_connection(listen_port: u16) -> Option<(u16, [u8; 4], u16)> {
     let mut listeners = LISTENERS.lock();
     let listener = listeners.get_mut(&listen_port)?;
-    let connection_id = listener.accept_queue.pop_front()?;
+    let conn_id = listener.accept_queue.pop_front()?;
     let remote_ip = [
-        ((connection_id.destination_ip >> 24) & 0xFF) as u8,
-        ((connection_id.destination_ip >> 16) & 0xFF) as u8,
-        ((connection_id.destination_ip >> 8) & 0xFF) as u8,
-        (connection_id.destination_ip & 0xFF) as u8,
+        ((conn_id.dst_ip >> 24) & 0xFF) as u8,
+        ((conn_id.dst_ip >> 16) & 0xFF) as u8,
+        ((conn_id.dst_ip >> 8) & 0xFF) as u8,
+        (conn_id.dst_ip & 0xFF) as u8,
     ];
-    Some((connection_id.source_port, remote_ip, connection_id.destination_port))
+    Some((conn_id.src_port, remote_ip, conn_id.dst_port))
 }
 
 /// Performance: batch ACK threshold (send ACK every N packets or after timeout)
@@ -203,11 +203,11 @@ fn checksum(data: &[u8]) -> u16 {
 }
 
 /// TCP checksum using pseudo-header — **zero-allocation** (stack-only).
-fn tcp_checksum(source_ip: [u8; 4], destination_ip: [u8; 4], segment: &[u8]) -> u16 {
+fn tcp_checksum(src_ip: [u8; 4], dst_ip: [u8; 4], segment: &[u8]) -> u16 {
     let mut sum: u32 = 0;
     // Pseudo-header fields fed incrementally — no heap Vec needed
-    checksum_accumulate(&mut sum, &source_ip);
-    checksum_accumulate(&mut sum, &destination_ip);
+    checksum_accumulate(&mut sum, &src_ip);
+    checksum_accumulate(&mut sum, &dst_ip);
     let protocol_length: [u8; 4] = [0, 6, (segment.len() >> 8) as u8, segment.len() as u8];
     checksum_accumulate(&mut sum, &protocol_length);
     checksum_accumulate(&mut sum, segment);
@@ -215,8 +215,8 @@ fn tcp_checksum(source_ip: [u8; 4], destination_ip: [u8; 4], segment: &[u8]) -> 
 }
 
 /// Public TCP checksum for use by packet crafting / replay modules.
-pub fn tcp_checksum_external(source_ip: [u8; 4], destination_ip: [u8; 4], segment: &[u8]) -> u16 {
-    tcp_checksum(source_ip, destination_ip, segment)
+pub fn tcp_checksum_external(src_ip: [u8; 4], dst_ip: [u8; 4], segment: &[u8]) -> u16 {
+    tcp_checksum(src_ip, dst_ip, segment)
 }
 
 /// Garbage-collect stale TIME_WAIT / dead connections.
@@ -224,16 +224,16 @@ pub fn tcp_checksum_external(source_ip: [u8; 4], destination_ip: [u8; 4], segmen
 pub fn gc_stale_connections() {
     let now = crate::logger::get_ticks();
     let mut conns = CONNECTIONS.lock();
-    let mut receive = RECEIVE_DATA.lock();
+    let mut rx = RECEIVE_DATA.lock();
     conns.retain(|id, connection| {
         let keep = // Pattern matching — Rust's exhaustive branching construct.
 match connection.state {
-            TcpState::TimeWait => now.wrapping_sub(connection.last_acknowledge_time) < TIME_WAIT_TICKS,
+            TcpState::TimeWait => now.wrapping_sub(connection.last_ack_time) < TIME_WAIT_TICKS,
             TcpState::Closed => false,
             _ => true,
         };
         if !keep {
-            receive.remove(id);
+            rx.remove(id);
         }
         keep
     });
@@ -249,15 +249,15 @@ pub fn list_connections() -> Vec<String> {
     let conns = CONNECTIONS.lock();
     let mut out = Vec::with_capacity(conns.len());
     for (id, connection) in conns.iter() {
-        let destination = [
-            ((id.destination_ip >> 24) & 0xFF) as u8,
-            ((id.destination_ip >> 16) & 0xFF) as u8,
-            ((id.destination_ip >> 8) & 0xFF) as u8,
-            (id.destination_ip & 0xFF) as u8,
+        let dst = [
+            ((id.dst_ip >> 24) & 0xFF) as u8,
+            ((id.dst_ip >> 16) & 0xFF) as u8,
+            ((id.dst_ip >> 8) & 0xFF) as u8,
+            (id.dst_ip & 0xFF) as u8,
         ];
         out.push(alloc::format!(
             "{:<6} {}.{}.{}.{}:{:<5}  {:?}",
-            id.source_port, destination[0], destination[1], destination[2], destination[3], id.destination_port, connection.state
+            id.src_port, dst[0], dst[1], dst[2], dst[3], id.dst_port, connection.state
         ));
     }
     out
@@ -270,41 +270,41 @@ fn get_source_ip() -> [u8; 4] {
 }
 
 /// Handle incoming TCP packet — full state machine
-pub fn handle_packet(data: &[u8], source_ip: [u8; 4], destination_ip: [u8; 4]) {
+pub fn handle_packet(data: &[u8], src_ip: [u8; 4], dst_ip: [u8; 4]) {
     if data.len() < 20 {
         return;
     }
 
-    let source_port = u16::from_be_bytes([data[0], data[1]]);
-    let destination_port = u16::from_be_bytes([data[2], data[3]]);
-    let sequence = u32::from_be_bytes([data[4], data[5], data[6], data[7]]);
+    let src_port = u16::from_be_bytes([data[0], data[1]]);
+    let dst_port = u16::from_be_bytes([data[2], data[3]]);
+    let seq = u32::from_be_bytes([data[4], data[5], data[6], data[7]]);
     let acknowledge_number = u32::from_be_bytes([data[8], data[9], data[10], data[11]]);
     let data_offset = data[12] >> 4;
     let tcp_flags = data[13];
-    let header_length = (data_offset as usize) * 4;
+    let header_len = (data_offset as usize) * 4;
 
-    if data.len() < header_length {
+    if data.len() < header_len {
         return;
     }
 
-    let connection_id = ConnectionId {
-        source_ip: ip_to_u32(destination_ip),
-        destination_ip: ip_to_u32(source_ip),
-        source_port: destination_port,
-        destination_port: source_port,
+    let conn_id = ConnectionId {
+        src_ip: ip_to_u32(dst_ip),
+        dst_ip: ip_to_u32(src_ip),
+        src_port: dst_port,
+        dst_port: src_port,
     };
 
-    let payload = &data[header_length..];
+    let payload = &data[header_len..];
     let fin  = (tcp_flags & flags::FIN) != 0;
     let syn  = (tcp_flags & flags::SYN) != 0;
-    let acknowledge  = (tcp_flags & flags::ACK) != 0;
+    let ack  = (tcp_flags & flags::ACK) != 0;
     let rst  = (tcp_flags & flags::RST) != 0;
     let psh  = (tcp_flags & flags::PSH) != 0;
-    let payload_length = payload.len() as u32;
+    let payload_len = payload.len() as u32;
 
     let mut conns = CONNECTIONS.lock();
 
-    if let Some(connection) = conns.get_mut(&connection_id) {
+    if let Some(connection) = conns.get_mut(&conn_id) {
         // ── RST — immediately close ──
         if rst {
             connection.state = TcpState::Closed;
@@ -321,26 +321,26 @@ pub fn handle_packet(data: &[u8], source_ip: [u8; 4], destination_ip: [u8; 4]) {
 match connection.state {
             // ── Client handshake: waiting for SYN-ACK ──
             TcpState::SynSent => {
-                if syn && acknowledge {
+                if syn && ack {
                     connection.state = TcpState::Established;
-                    connection.acknowledge = sequence.wrapping_add(1);
+                    connection.ack = seq.wrapping_add(1);
                     connection.pending_acks = 0;
-                    connection.last_acknowledge_time = crate::logger::get_ticks();
+                    connection.last_ack_time = crate::logger::get_ticks();
                     drop(conns);
-                    let _ = send_acknowledge(source_ip, source_port, destination_port);
+                    let _ = send_acknowledge(src_ip, src_port, dst_port);
                 }
             }
 
             // ── Server handshake: waiting for ACK to complete 3-way ──
             TcpState::SynReceived => {
-                if acknowledge {
+                if ack {
                     connection.state = TcpState::Established;
-                    let listen_port = connection_id.source_port;
+                    let listen_port = conn_id.src_port;
                     drop(conns);
                     // Move connection to the accept queue
                     let mut listeners = LISTENERS.lock();
                     if let Some(listener) = listeners.get_mut(&listen_port) {
-                        listener.accept_queue.push_back(connection_id);
+                        listener.accept_queue.push_back(conn_id);
                     }
                 }
             }
@@ -348,33 +348,33 @@ match connection.state {
             // ── Data transfer ──
             TcpState::Established => {
                 // Process ACK: advance snd_una and purge retransmit queue
-                if acknowledge && acknowledge_number > connection.snd_una {
+                if ack && acknowledge_number > connection.snd_una {
                     connection.snd_una = acknowledge_number;
                     connection.retransmit_count = 0;
                     // Purge acknowledged segments from retransmit queue
                     let mut rtx = RETRANSMIT_QUEUE.lock();
                     rtx.retain(|seg| {
-                        seg.connection_id != connection_id || seg.sequence.wrapping_add(seg.data.len() as u32) > acknowledge_number
+                        seg.conn_id != conn_id || seg.seq.wrapping_add(seg.data.len() as u32) > acknowledge_number
                     });
                 }
 
                 // Store payload
                 if !payload.is_empty() {
-                    let new_acknowledge = sequence.wrapping_add(payload_length);
-                    if new_acknowledge > connection.acknowledge {
-                        connection.acknowledge = new_acknowledge;
-                        let mut receive = RECEIVE_DATA.lock();
-                        receive.entry(connection_id).or_insert_with(VecDeque::new).push_back(payload.to_vec());
+                    let new_acknowledge = seq.wrapping_add(payload_len);
+                    if new_acknowledge > connection.ack {
+                        connection.ack = new_acknowledge;
+                        let mut rx = RECEIVE_DATA.lock();
+                        rx.entry(conn_id).or_insert_with(VecDeque::new).push_back(payload.to_vec());
                     }
                 }
 
                 if fin {
                     // Peer initiated close → CloseWait
-                    connection.acknowledge = sequence.wrapping_add(payload_length).wrapping_add(1);
+                    connection.ack = seq.wrapping_add(payload_len).wrapping_add(1);
                     connection.fin_received = true;
                     connection.state = TcpState::CloseWait;
                     drop(conns);
-                    let _ = send_acknowledge(source_ip, source_port, destination_port);
+                    let _ = send_acknowledge(src_ip, src_port, dst_port);
                     return;
                 }
 
@@ -384,57 +384,57 @@ match connection.state {
                     let now = crate::logger::get_ticks();
                     let should_acknowledge = psh
                         || connection.pending_acks >= DELAYED_ACKNOWLEDGE_PACKETS
-                        || now.saturating_sub(connection.last_acknowledge_time) >= DELAYED_ACKNOWLEDGE_MOUSE;
+                        || now.saturating_sub(connection.last_ack_time) >= DELAYED_ACKNOWLEDGE_MOUSE;
                     if should_acknowledge {
                         connection.pending_acks = 0;
-                        connection.last_acknowledge_time = now;
+                        connection.last_ack_time = now;
                         drop(conns);
-                        let _ = send_acknowledge(source_ip, source_port, destination_port);
+                        let _ = send_acknowledge(src_ip, src_port, dst_port);
                     }
                 }
             }
 
             // ── Active close: we sent FIN, waiting for ACK/FIN ──
             TcpState::FinWait1 => {
-                if fin && acknowledge {
+                if fin && ack {
                     // Simultaneous close shortcut → TimeWait
-                    connection.acknowledge = sequence.wrapping_add(1);
+                    connection.ack = seq.wrapping_add(1);
                     connection.fin_received = true;
                     connection.state = TcpState::TimeWait;
-                    connection.last_acknowledge_time = crate::logger::get_ticks();
+                    connection.last_ack_time = crate::logger::get_ticks();
                     drop(conns);
-                    let _ = send_acknowledge(source_ip, source_port, destination_port);
+                    let _ = send_acknowledge(src_ip, src_port, dst_port);
                 } else if fin {
-                    connection.acknowledge = sequence.wrapping_add(1);
+                    connection.ack = seq.wrapping_add(1);
                     connection.fin_received = true;
                     connection.state = TcpState::Closing;
                     drop(conns);
-                    let _ = send_acknowledge(source_ip, source_port, destination_port);
-                } else if acknowledge {
+                    let _ = send_acknowledge(src_ip, src_port, dst_port);
+                } else if ack {
                     connection.state = TcpState::FinWait2;
                 }
             }
 
             TcpState::FinWait2 => {
                 if fin {
-                    connection.acknowledge = sequence.wrapping_add(1);
+                    connection.ack = seq.wrapping_add(1);
                     connection.fin_received = true;
                     connection.state = TcpState::TimeWait;
-                    connection.last_acknowledge_time = crate::logger::get_ticks();
+                    connection.last_ack_time = crate::logger::get_ticks();
                     drop(conns);
-                    let _ = send_acknowledge(source_ip, source_port, destination_port);
+                    let _ = send_acknowledge(src_ip, src_port, dst_port);
                 }
             }
 
             TcpState::Closing => {
-                if acknowledge {
+                if ack {
                     connection.state = TcpState::TimeWait;
-                    connection.last_acknowledge_time = crate::logger::get_ticks(); // start TIME_WAIT timer
+                    connection.last_ack_time = crate::logger::get_ticks(); // start TIME_WAIT timer
                 }
             }
 
-            TcpState::LastAcknowledge => {
-                if acknowledge {
+            TcpState::LastAck => {
+                if ack {
                     connection.state = TcpState::Closed;
                 }
             }
@@ -442,9 +442,9 @@ match connection.state {
             TcpState::CloseWait => {
                 // May still receive data retransmissions
                 if !payload.is_empty() {
-                    connection.acknowledge = sequence.wrapping_add(payload_length);
-                    let mut receive = RECEIVE_DATA.lock();
-                    receive.entry(connection_id).or_insert_with(VecDeque::new).push_back(payload.to_vec());
+                    connection.ack = seq.wrapping_add(payload_len);
+                    let mut rx = RECEIVE_DATA.lock();
+                    rx.entry(conn_id).or_insert_with(VecDeque::new).push_back(payload.to_vec());
                 }
             }
 
@@ -452,19 +452,19 @@ match connection.state {
         }
     } else {
         // ── No existing connection — check listeners for incoming SYN ──
-        if syn && !acknowledge {
+        if syn && !ack {
             // Enforce connection limit (DoS protection) — inline GC to avoid double lock
             if conns.len() >= MAXIMUM_CONNECTIONS {
                 let now = crate::logger::get_ticks();
-                let mut receive = RECEIVE_DATA.lock();
+                let mut rx = RECEIVE_DATA.lock();
                 conns.retain(|id, c| {
                     let keep = // Pattern matching — Rust's exhaustive branching construct.
 match c.state {
-                        TcpState::TimeWait => now.wrapping_sub(c.last_acknowledge_time) < TIME_WAIT_TICKS,
+                        TcpState::TimeWait => now.wrapping_sub(c.last_ack_time) < TIME_WAIT_TICKS,
                         TcpState::Closed => false,
                         _ => true,
                     };
-                    if !keep { receive.remove(id); }
+                    if !keep { rx.remove(id); }
                     keep
                 });
             }
@@ -473,40 +473,40 @@ match c.state {
                 return;
             }
             let mut listeners = LISTENERS.lock();
-            if let Some(listener) = listeners.get_mut(&destination_port) {
+            if let Some(listener) = listeners.get_mut(&dst_port) {
                 if listener.accept_queue.len() < listener.backlog as usize + 16 {
                     let source_ip_bytes = [
-                        ((connection_id.source_ip >> 24) & 0xFF) as u8,
-                        ((connection_id.source_ip >> 16) & 0xFF) as u8,
-                        ((connection_id.source_ip >> 8) & 0xFF) as u8,
-                        (connection_id.source_ip & 0xFF) as u8,
+                        ((conn_id.src_ip >> 24) & 0xFF) as u8,
+                        ((conn_id.src_ip >> 16) & 0xFF) as u8,
+                        ((conn_id.src_ip >> 8) & 0xFF) as u8,
+                        (conn_id.src_ip & 0xFF) as u8,
                     ];
                     let destination_ip_bytes = [
-                        ((connection_id.destination_ip >> 24) & 0xFF) as u8,
-                        ((connection_id.destination_ip >> 16) & 0xFF) as u8,
-                        ((connection_id.destination_ip >> 8) & 0xFF) as u8,
-                        (connection_id.destination_ip & 0xFF) as u8,
+                        ((conn_id.dst_ip >> 24) & 0xFF) as u8,
+                        ((conn_id.dst_ip >> 16) & 0xFF) as u8,
+                        ((conn_id.dst_ip >> 8) & 0xFF) as u8,
+                        (conn_id.dst_ip & 0xFF) as u8,
                     ];
-                    let initialize_sequence = generate_isn(source_ip_bytes, destination_ip_bytes, connection_id.source_port, connection_id.destination_port);
+                    let initialize_sequence = generate_isn(source_ip_bytes, destination_ip_bytes, conn_id.src_port, conn_id.dst_port);
                     let new_connection = TcpConnection {
                         state: TcpState::SynReceived,
-                        sequence: initialize_sequence.wrapping_add(1),
-                        acknowledge: sequence.wrapping_add(1),
+                        seq: initialize_sequence.wrapping_add(1),
+                        ack: seq.wrapping_add(1),
                         fin_received: false,
                         fin_sent: false,
                         pending_acks: 0,
-                        last_acknowledge_time: crate::logger::get_ticks(),
-                        last_sent_sequence: initialize_sequence,
+                        last_ack_time: crate::logger::get_ticks(),
+                        last_sent_seq: initialize_sequence,
                         last_sent_time: crate::logger::get_ticks(),
                         retransmit_count: 0,
                         snd_una: initialize_sequence.wrapping_add(1),
                     };
                     drop(listeners);
-                    conns.insert(connection_id, new_connection);
+                    conns.insert(conn_id, new_connection);
                     drop(conns);
                     // Send SYN-ACK
-                    let _ = send_syn_acknowledge(source_ip, source_port, destination_port,
-                                         sequence.wrapping_add(1), initialize_sequence);
+                    let _ = send_syn_acknowledge(src_ip, src_port, dst_port,
+                                         seq.wrapping_add(1), initialize_sequence);
                 }
             }
         }
@@ -515,15 +515,15 @@ match c.state {
 
 /// Send a TCP SYN (start of connection)
 pub fn send_syn(dest_ip: [u8; 4], dest_port: u16) -> Result<u16, &'static str> {
-    let source_ip = get_source_ip();
+    let src_ip = get_source_ip();
     // (SYN IP log removed)
-    let source_port = NEXT_EPHEMERAL_PORT.fetch_add(1, Ordering::Relaxed);
-    let sequence = generate_isn(source_ip, dest_ip, source_port, dest_port);
+    let src_port = NEXT_EPHEMERAL_PORT.fetch_add(1, Ordering::Relaxed);
+    let seq = generate_isn(src_ip, dest_ip, src_port, dest_port);
 
     let mut segment = Vec::with_capacity(20);
-    segment.extend_from_slice(&source_port.to_be_bytes());
+    segment.extend_from_slice(&src_port.to_be_bytes());
     segment.extend_from_slice(&dest_port.to_be_bytes());
-    segment.extend_from_slice(&sequence.to_be_bytes());
+    segment.extend_from_slice(&seq.to_be_bytes());
     segment.extend_from_slice(&0u32.to_be_bytes()); // ack
     segment.push(0x50); // data offset=5, no options
     segment.push(flags::SYN);
@@ -531,46 +531,46 @@ pub fn send_syn(dest_ip: [u8; 4], dest_port: u16) -> Result<u16, &'static str> {
     segment.extend_from_slice(&0u16.to_be_bytes()); // checksum (fill later)
     segment.extend_from_slice(&0u16.to_be_bytes()); // urgent pointer
 
-    let csum = tcp_checksum(source_ip, dest_ip, &segment);
+    let csum = tcp_checksum(src_ip, dest_ip, &segment);
     segment[16] = (csum >> 8) as u8;
     segment[17] = (csum & 0xFF) as u8;
     
     // (SYN segment debug removed)
 
-    let connection_id = ConnectionId {
-        source_ip: ip_to_u32(source_ip),
-        destination_ip: ip_to_u32(dest_ip),
-        source_port,
-        destination_port: dest_port,
+    let conn_id = ConnectionId {
+        src_ip: ip_to_u32(src_ip),
+        dst_ip: ip_to_u32(dest_ip),
+        src_port,
+        dst_port: dest_port,
     };
-    CONNECTIONS.lock().insert(connection_id, TcpConnection {
+    CONNECTIONS.lock().insert(conn_id, TcpConnection {
         state: TcpState::SynSent,
-        sequence: sequence.wrapping_add(1),
-        acknowledge: 0,
+        seq: seq.wrapping_add(1),
+        ack: 0,
         fin_received: false,
         fin_sent: false,
         pending_acks: 0,
-        last_acknowledge_time: crate::logger::get_ticks(),
-        last_sent_sequence: sequence,
+        last_ack_time: crate::logger::get_ticks(),
+        last_sent_seq: seq,
         last_sent_time: crate::logger::get_ticks(),
         retransmit_count: 0,
-        snd_una: sequence.wrapping_add(1),
+        snd_una: seq.wrapping_add(1),
     });
 
     // (SYN direction log removed)
 
     crate::netstack::ip::send_packet(dest_ip, 6, &segment)?;
-    Ok(source_port)
+    Ok(src_port)
 }
 
 /// Send a TCP SYN-ACK (server side of handshake)
-fn send_syn_acknowledge(dest_ip: [u8; 4], dest_port: u16, source_port: u16, acknowledge_number: u32, sequence: u32) -> Result<(), &'static str> {
-    let source_ip = get_source_ip();
+fn send_syn_acknowledge(dest_ip: [u8; 4], dest_port: u16, src_port: u16, acknowledge_number: u32, seq: u32) -> Result<(), &'static str> {
+    let src_ip = get_source_ip();
 
     let mut segment = Vec::with_capacity(20);
-    segment.extend_from_slice(&source_port.to_be_bytes());
+    segment.extend_from_slice(&src_port.to_be_bytes());
     segment.extend_from_slice(&dest_port.to_be_bytes());
-    segment.extend_from_slice(&sequence.to_be_bytes());
+    segment.extend_from_slice(&seq.to_be_bytes());
     segment.extend_from_slice(&acknowledge_number.to_be_bytes());
     segment.push(0x50);
     segment.push(flags::SYN | flags::ACK);
@@ -578,7 +578,7 @@ fn send_syn_acknowledge(dest_ip: [u8; 4], dest_port: u16, source_port: u16, ackn
     segment.extend_from_slice(&0u16.to_be_bytes());
     segment.extend_from_slice(&0u16.to_be_bytes());
 
-    let csum = tcp_checksum(source_ip, dest_ip, &segment);
+    let csum = tcp_checksum(src_ip, dest_ip, &segment);
     segment[16] = (csum >> 8) as u8;
     segment[17] = (csum & 0xFF) as u8;
 
@@ -586,33 +586,33 @@ fn send_syn_acknowledge(dest_ip: [u8; 4], dest_port: u16, source_port: u16, ackn
 }
 
 /// Send ACK for an established connection
-pub fn send_acknowledge(dest_ip: [u8; 4], dest_port: u16, source_port: u16) -> Result<(), &'static str> {
-    let source_ip = get_source_ip();
-    let connection_id = ConnectionId {
-        source_ip: ip_to_u32(source_ip),
-        destination_ip: ip_to_u32(dest_ip),
-        source_port,
-        destination_port: dest_port,
+pub fn send_acknowledge(dest_ip: [u8; 4], dest_port: u16, src_port: u16) -> Result<(), &'static str> {
+    let src_ip = get_source_ip();
+    let conn_id = ConnectionId {
+        src_ip: ip_to_u32(src_ip),
+        dst_ip: ip_to_u32(dest_ip),
+        src_port,
+        dst_port: dest_port,
     };
 
-    let (sequence, acknowledge) = {
+    let (seq, ack) = {
         let conns = CONNECTIONS.lock();
-        let connection = conns.get(&connection_id).ok_or("Connection not found")?;
-        (connection.sequence, connection.acknowledge)
+        let connection = conns.get(&conn_id).ok_or("Connection not found")?;
+        (connection.seq, connection.ack)
     };
 
     let mut segment = Vec::with_capacity(20);
-    segment.extend_from_slice(&source_port.to_be_bytes());
+    segment.extend_from_slice(&src_port.to_be_bytes());
     segment.extend_from_slice(&dest_port.to_be_bytes());
-    segment.extend_from_slice(&sequence.to_be_bytes());
-    segment.extend_from_slice(&acknowledge.to_be_bytes());
+    segment.extend_from_slice(&seq.to_be_bytes());
+    segment.extend_from_slice(&ack.to_be_bytes());
     segment.push(0x50);
     segment.push(flags::ACK);
     segment.extend_from_slice(&TCP_WINDOW_SIZE.to_be_bytes());
     segment.extend_from_slice(&0u16.to_be_bytes());
     segment.extend_from_slice(&0u16.to_be_bytes());
 
-    let csum = tcp_checksum(source_ip, dest_ip, &segment);
+    let csum = tcp_checksum(src_ip, dest_ip, &segment);
     segment[16] = (csum >> 8) as u8;
     segment[17] = (csum & 0xFF) as u8;
 
@@ -620,26 +620,26 @@ pub fn send_acknowledge(dest_ip: [u8; 4], dest_port: u16, source_port: u16) -> R
 }
 
 /// Send TCP payload with PSH|ACK
-pub fn send_payload(dest_ip: [u8; 4], dest_port: u16, source_port: u16, payload: &[u8]) -> Result<(), &'static str> {
-    let source_ip = get_source_ip();
-    let connection_id = ConnectionId {
-        source_ip: ip_to_u32(source_ip),
-        destination_ip: ip_to_u32(dest_ip),
-        source_port,
-        destination_port: dest_port,
+pub fn send_payload(dest_ip: [u8; 4], dest_port: u16, src_port: u16, payload: &[u8]) -> Result<(), &'static str> {
+    let src_ip = get_source_ip();
+    let conn_id = ConnectionId {
+        src_ip: ip_to_u32(src_ip),
+        dst_ip: ip_to_u32(dest_ip),
+        src_port,
+        dst_port: dest_port,
     };
 
-    let (sequence, acknowledge) = {
+    let (seq, ack) = {
         let conns = CONNECTIONS.lock();
-        let connection = conns.get(&connection_id).ok_or("Connection not found")?;
-        (connection.sequence, connection.acknowledge)
+        let connection = conns.get(&conn_id).ok_or("Connection not found")?;
+        (connection.seq, connection.ack)
     };
 
     let mut segment = Vec::with_capacity(20 + payload.len());
-    segment.extend_from_slice(&source_port.to_be_bytes());
+    segment.extend_from_slice(&src_port.to_be_bytes());
     segment.extend_from_slice(&dest_port.to_be_bytes());
-    segment.extend_from_slice(&sequence.to_be_bytes());
-    segment.extend_from_slice(&acknowledge.to_be_bytes());
+    segment.extend_from_slice(&seq.to_be_bytes());
+    segment.extend_from_slice(&ack.to_be_bytes());
     segment.push(0x50);
     segment.push(flags::PSH | flags::ACK);
     segment.extend_from_slice(&TCP_WINDOW_SIZE.to_be_bytes());
@@ -647,18 +647,18 @@ pub fn send_payload(dest_ip: [u8; 4], dest_port: u16, source_port: u16, payload:
     segment.extend_from_slice(&0u16.to_be_bytes());
     segment.extend_from_slice(payload);
 
-    let csum = tcp_checksum(source_ip, dest_ip, &segment);
+    let csum = tcp_checksum(src_ip, dest_ip, &segment);
     segment[16] = (csum >> 8) as u8;
     segment[17] = (csum & 0xFF) as u8;
 
     crate::netstack::ip::send_packet(dest_ip, 6, &segment)?;
 
-    let now = crate::time::uptime_mouse();
+    let now = crate::time::uptime_ms();
     let mut conns = CONNECTIONS.lock();
-    if let Some(connection) = conns.get_mut(&connection_id) {
-        connection.last_sent_sequence = sequence;
+    if let Some(connection) = conns.get_mut(&conn_id) {
+        connection.last_sent_seq = seq;
         connection.last_sent_time = now;
-        connection.sequence = connection.sequence.wrapping_add(payload.len() as u32);
+        connection.seq = connection.seq.wrapping_add(payload.len() as u32);
     }
     drop(conns);
 
@@ -668,12 +668,12 @@ pub fn send_payload(dest_ip: [u8; 4], dest_port: u16, source_port: u16, payload:
         rtx.pop_front(); // drop oldest — it's either ACKed or too old
     }
     rtx.push_back(UnackedSegment {
-        connection_id,
-        sequence,
+        conn_id,
+        seq,
         data: payload.to_vec(),
         dest_ip,
         dest_port,
-        source_port,
+        src_port,
         sent_time: now,
         retries: 0,
     });
@@ -682,19 +682,19 @@ pub fn send_payload(dest_ip: [u8; 4], dest_port: u16, source_port: u16, payload:
 }
 
 /// Send TCP FIN (close connection)
-pub fn send_fin(dest_ip: [u8; 4], dest_port: u16, source_port: u16) -> Result<(), &'static str> {
-    let source_ip = get_source_ip();
-    let connection_id = ConnectionId {
-        source_ip: ip_to_u32(source_ip),
-        destination_ip: ip_to_u32(dest_ip),
-        source_port,
-        destination_port: dest_port,
+pub fn send_fin(dest_ip: [u8; 4], dest_port: u16, src_port: u16) -> Result<(), &'static str> {
+    let src_ip = get_source_ip();
+    let conn_id = ConnectionId {
+        src_ip: ip_to_u32(src_ip),
+        dst_ip: ip_to_u32(dest_ip),
+        src_port,
+        dst_port: dest_port,
     };
 
-    let (sequence, acknowledge, already_sent) = {
+    let (seq, ack, already_sent) = {
         let conns = CONNECTIONS.lock();
-        let connection = conns.get(&connection_id).ok_or("Connection not found")?;
-        (connection.sequence, connection.acknowledge, connection.fin_sent)
+        let connection = conns.get(&conn_id).ok_or("Connection not found")?;
+        (connection.seq, connection.ack, connection.fin_sent)
     };
 
     if already_sent {
@@ -702,33 +702,33 @@ pub fn send_fin(dest_ip: [u8; 4], dest_port: u16, source_port: u16) -> Result<()
     }
 
     let mut segment = Vec::with_capacity(20);
-    segment.extend_from_slice(&source_port.to_be_bytes());
+    segment.extend_from_slice(&src_port.to_be_bytes());
     segment.extend_from_slice(&dest_port.to_be_bytes());
-    segment.extend_from_slice(&sequence.to_be_bytes());
-    segment.extend_from_slice(&acknowledge.to_be_bytes());
+    segment.extend_from_slice(&seq.to_be_bytes());
+    segment.extend_from_slice(&ack.to_be_bytes());
     segment.push(0x50);
     segment.push(flags::FIN | flags::ACK);
     segment.extend_from_slice(&TCP_WINDOW_SIZE.to_be_bytes());
     segment.extend_from_slice(&0u16.to_be_bytes());
     segment.extend_from_slice(&0u16.to_be_bytes());
 
-    let csum = tcp_checksum(source_ip, dest_ip, &segment);
+    let csum = tcp_checksum(src_ip, dest_ip, &segment);
     segment[16] = (csum >> 8) as u8;
     segment[17] = (csum & 0xFF) as u8;
 
     crate::netstack::ip::send_packet(dest_ip, 6, &segment)?;
 
     // Clear retransmit queue for this connection
-    RETRANSMIT_QUEUE.lock().retain(|seg| seg.connection_id != connection_id);
+    RETRANSMIT_QUEUE.lock().retain(|seg| seg.conn_id != conn_id);
 
     let mut conns = CONNECTIONS.lock();
-    if let Some(connection) = conns.get_mut(&connection_id) {
-        connection.sequence = connection.sequence.wrapping_add(1);
+    if let Some(connection) = conns.get_mut(&conn_id) {
+        connection.seq = connection.seq.wrapping_add(1);
         connection.fin_sent = true;
         // State transitions for active/passive close
         match connection.state {
             TcpState::Established => connection.state = TcpState::FinWait1,
-            TcpState::CloseWait  => connection.state = TcpState::LastAcknowledge,
+            TcpState::CloseWait  => connection.state = TcpState::LastAck,
             _ => {}
         }
     }
@@ -736,21 +736,21 @@ pub fn send_fin(dest_ip: [u8; 4], dest_port: u16, source_port: u16) -> Result<()
 }
 
 /// Flush any pending ACKs for a connection (call periodically during downloads)
-pub fn flush_pending_acks(dest_ip: [u8; 4], dest_port: u16, source_port: u16) {
-    let source_ip = get_source_ip();
-    let connection_id = ConnectionId {
-        source_ip: ip_to_u32(source_ip),
-        destination_ip: ip_to_u32(dest_ip),
-        source_port,
-        destination_port: dest_port,
+pub fn flush_pending_acks(dest_ip: [u8; 4], dest_port: u16, src_port: u16) {
+    let src_ip = get_source_ip();
+    let conn_id = ConnectionId {
+        src_ip: ip_to_u32(src_ip),
+        dst_ip: ip_to_u32(dest_ip),
+        src_port,
+        dst_port: dest_port,
     };
 
     let should_acknowledge = {
         let mut conns = CONNECTIONS.lock();
-        if let Some(connection) = conns.get_mut(&connection_id) {
+        if let Some(connection) = conns.get_mut(&conn_id) {
             if connection.pending_acks > 0 {
                 connection.pending_acks = 0;
-                connection.last_acknowledge_time = crate::logger::get_ticks();
+                connection.last_ack_time = crate::logger::get_ticks();
                 true
             } else {
                 false
@@ -761,23 +761,23 @@ pub fn flush_pending_acks(dest_ip: [u8; 4], dest_port: u16, source_port: u16) {
     };
 
     if should_acknowledge {
-        let _ = send_acknowledge(dest_ip, dest_port, source_port);
+        let _ = send_acknowledge(dest_ip, dest_port, src_port);
     }
 }
 
 /// Receive buffered TCP payloads for a connection (optimized batch receive)
-pub fn recv_data(dest_ip: [u8; 4], dest_port: u16, source_port: u16) -> Option<Vec<u8>> {
-    let source_ip = get_source_ip();
-    let connection_id = ConnectionId {
-        source_ip: ip_to_u32(source_ip),
-        destination_ip: ip_to_u32(dest_ip),
-        source_port,
-        destination_port: dest_port,
+pub fn recv_data(dest_ip: [u8; 4], dest_port: u16, src_port: u16) -> Option<Vec<u8>> {
+    let src_ip = get_source_ip();
+    let conn_id = ConnectionId {
+        src_ip: ip_to_u32(src_ip),
+        dst_ip: ip_to_u32(dest_ip),
+        src_port,
+        dst_port: dest_port,
     };
 
     {
-        let mut receive = RECEIVE_DATA.lock();
-        if let Some(queue) = receive.get_mut(&connection_id) {
+        let mut rx = RECEIVE_DATA.lock();
+        if let Some(queue) = rx.get_mut(&conn_id) {
             if !queue.is_empty() {
                 return queue.pop_front();
             }
@@ -785,40 +785,40 @@ pub fn recv_data(dest_ip: [u8; 4], dest_port: u16, source_port: u16) -> Option<V
     }
 
     let mut conns = CONNECTIONS.lock();
-    if let Some(connection) = conns.get(&connection_id) {
+    if let Some(connection) = conns.get(&conn_id) {
         if connection.fin_received && connection.fin_sent {
-            conns.remove(&connection_id);
-            RECEIVE_DATA.lock().remove(&connection_id);
+            conns.remove(&conn_id);
+            RECEIVE_DATA.lock().remove(&conn_id);
         }
     }
     None
 }
 
 /// Check if FIN has been received for a connection
-pub fn fin_received(dest_ip: [u8; 4], dest_port: u16, source_port: u16) -> bool {
-    let source_ip = get_source_ip();
-    let connection_id = ConnectionId {
-        source_ip: ip_to_u32(source_ip),
-        destination_ip: ip_to_u32(dest_ip),
-        source_port,
-        destination_port: dest_port,
+pub fn fin_received(dest_ip: [u8; 4], dest_port: u16, src_port: u16) -> bool {
+    let src_ip = get_source_ip();
+    let conn_id = ConnectionId {
+        src_ip: ip_to_u32(src_ip),
+        dst_ip: ip_to_u32(dest_ip),
+        src_port,
+        dst_port: dest_port,
     };
 
     CONNECTIONS
         .lock()
-        .get(&connection_id)
+        .get(&conn_id)
         .map(|c| c.fin_received)
         .unwrap_or(true)
 }
 
 /// Wait for a SYN-ACK (connection established) with SYN retransmission
-pub fn wait_for_established(dest_ip: [u8; 4], dest_port: u16, source_port: u16, timeout_mouse: u32) -> bool {
-    let source_ip = get_source_ip();
-    let connection_id = ConnectionId {
-        source_ip: ip_to_u32(source_ip),
-        destination_ip: ip_to_u32(dest_ip),
-        source_port,
-        destination_port: dest_port,
+pub fn wait_for_established(dest_ip: [u8; 4], dest_port: u16, src_port: u16, timeout_ms: u32) -> bool {
+    let src_ip = get_source_ip();
+    let conn_id = ConnectionId {
+        src_ip: ip_to_u32(src_ip),
+        dst_ip: ip_to_u32(dest_ip),
+        src_port,
+        dst_port: dest_port,
     };
 
     let start = crate::logger::get_ticks();
@@ -830,7 +830,7 @@ pub fn wait_for_established(dest_ip: [u8; 4], dest_port: u16, source_port: u16, 
 loop {
         crate::netstack::poll();
 
-        if let Some(connection) = CONNECTIONS.lock().get(&connection_id) {
+        if let Some(connection) = CONNECTIONS.lock().get(&conn_id) {
             if connection.state == TcpState::Established {
                 return true;
             }
@@ -849,15 +849,15 @@ loop {
             // (SYN retransmit log removed)
             
             // Rebuild and resend SYN
-            let sequence = {
+            let seq = {
                 let conns = CONNECTIONS.lock();
-                conns.get(&connection_id).map(|c| c.last_sent_sequence).unwrap_or(0)
+                conns.get(&conn_id).map(|c| c.last_sent_seq).unwrap_or(0)
             };
             
             let mut segment = Vec::with_capacity(20);
-            segment.extend_from_slice(&source_port.to_be_bytes());
+            segment.extend_from_slice(&src_port.to_be_bytes());
             segment.extend_from_slice(&dest_port.to_be_bytes());
-            segment.extend_from_slice(&sequence.to_be_bytes());
+            segment.extend_from_slice(&seq.to_be_bytes());
             segment.extend_from_slice(&0u32.to_be_bytes());
             segment.push(0x50);
             segment.push(flags::SYN);
@@ -865,14 +865,14 @@ loop {
             segment.extend_from_slice(&0u16.to_be_bytes());
             segment.extend_from_slice(&0u16.to_be_bytes());
             
-            let csum = tcp_checksum(source_ip, dest_ip, &segment);
+            let csum = tcp_checksum(src_ip, dest_ip, &segment);
             segment[16] = (csum >> 8) as u8;
             segment[17] = (csum & 0xFF) as u8;
             
             let _ = crate::netstack::ip::send_packet(dest_ip, 6, &segment);
         }
 
-        if now.saturating_sub(start) > timeout_mouse as u64 {
+        if now.saturating_sub(start) > timeout_ms as u64 {
             return false;
         }
         spins = spins.wrapping_add(1);
@@ -890,14 +890,14 @@ loop {
 
 /// Check if a connection is established (for socket API)
 pub fn is_connected(dest_ip: [u8; 4], dest_port: u16) -> bool {
-    let source_ip = get_source_ip();
+    let src_ip = get_source_ip();
     let conns = CONNECTIONS.lock();
     
     // Direct lookup: try all known src_ports for this dest
     // (more efficient than iterating all connections)
     for (id, connection) in conns.iter() {
-        if id.destination_ip == ip_to_u32(dest_ip) && id.destination_port == dest_port
-            && id.source_ip == ip_to_u32(source_ip)
+        if id.dst_ip == ip_to_u32(dest_ip) && id.dst_port == dest_port
+            && id.src_ip == ip_to_u32(src_ip)
             && connection.state == TcpState::Established
         {
             return true;
@@ -907,7 +907,7 @@ pub fn is_connected(dest_ip: [u8; 4], dest_port: u16) -> bool {
 }
 
 /// Send data on an established connection (for socket API)
-pub fn send_data(dest_ip: [u8; 4], dest_port: u16, source_port: u16, data: &[u8]) -> Result<(), &'static str> {
+pub fn send_data(dest_ip: [u8; 4], dest_port: u16, src_port: u16, data: &[u8]) -> Result<(), &'static str> {
     if data.is_empty() {
         return Ok(());
     }
@@ -925,7 +925,7 @@ pub fn send_data(dest_ip: [u8; 4], dest_port: u16, source_port: u16, data: &[u8]
                 // Infinite loop — runs until an explicit `break`.
 loop {
                         // Pattern matching — Rust's exhaustive branching construct.
-match send_payload(dest_ip, dest_port, source_port, chunk) {
+match send_payload(dest_ip, dest_port, src_port, chunk) {
                 Ok(()) => break,
                 Err(e) if retries < 200 => {
                     // TX queue full or transient error — poll and retry
@@ -950,30 +950,30 @@ match send_payload(dest_ip, dest_port, source_port, chunk) {
 }
 
 /// Receive data from a connection (for socket API)
-pub fn receive_data(dest_ip: [u8; 4], dest_port: u16, source_port: u16) -> Option<alloc::vec::Vec<u8>> {
-    recv_data(dest_ip, dest_port, source_port)
+pub fn receive_data(dest_ip: [u8; 4], dest_port: u16, src_port: u16) -> Option<alloc::vec::Vec<u8>> {
+    recv_data(dest_ip, dest_port, src_port)
 }
 
 /// Get connection state for debugging
-pub fn get_connection_state(dest_ip: [u8; 4], dest_port: u16, source_port: u16) -> Option<TcpState> {
-    let source_ip = get_source_ip();
-    let connection_id = ConnectionId {
-        source_ip: ip_to_u32(source_ip),
-        destination_ip: ip_to_u32(dest_ip),
-        source_port,
-        destination_port: dest_port,
+pub fn get_connection_state(dest_ip: [u8; 4], dest_port: u16, src_port: u16) -> Option<TcpState> {
+    let src_ip = get_source_ip();
+    let conn_id = ConnectionId {
+        src_ip: ip_to_u32(src_ip),
+        dst_ip: ip_to_u32(dest_ip),
+        src_port,
+        dst_port: dest_port,
     };
     
-    CONNECTIONS.lock().get(&connection_id).map(|c| c.state)
+    CONNECTIONS.lock().get(&conn_id).map(|c| c.state)
 }
 
 /// Check for timed-out unacknowledged segments and retransmit them.
 /// Called periodically from the network poll loop.
 pub fn check_retransmits() {
-    let now = crate::time::uptime_mouse();
+    let now = crate::time::uptime_ms();
     let mut rtx = RETRANSMIT_QUEUE.lock();
 
-    for seg in rtx.iterator_mut() {
+    for seg in rtx.iter_mut() {
         if now.wrapping_sub(seg.sent_time) < RETRANSMIT_TIMEOUT_MOUSE {
             continue;
         }
@@ -982,10 +982,10 @@ pub fn check_retransmits() {
         }
 
         // Check connection is still Established
-        let connection_id = seg.connection_id;
+        let conn_id = seg.conn_id;
         let conns = CONNECTIONS.lock();
-        let still_active = conns.get(&connection_id)
-            .map(|c| c.state == TcpState::Established && c.snd_una <= seg.sequence)
+        let still_active = conns.get(&conn_id)
+            .map(|c| c.state == TcpState::Established && c.snd_una <= seg.seq)
             .unwrap_or(false);
         drop(conns);
 
@@ -994,17 +994,17 @@ pub fn check_retransmits() {
         }
 
         // Rebuild and resend the segment
-        let source_ip = get_source_ip();
+        let src_ip = get_source_ip();
         let dest_ip = seg.dest_ip;
         let acknowledge_value = {
             let conns = CONNECTIONS.lock();
-            conns.get(&connection_id).map(|c| c.acknowledge).unwrap_or(0)
+            conns.get(&conn_id).map(|c| c.ack).unwrap_or(0)
         };
 
         let mut tcp_seg = Vec::with_capacity(20 + seg.data.len());
-        tcp_seg.extend_from_slice(&seg.source_port.to_be_bytes());
+        tcp_seg.extend_from_slice(&seg.src_port.to_be_bytes());
         tcp_seg.extend_from_slice(&seg.dest_port.to_be_bytes());
-        tcp_seg.extend_from_slice(&seg.sequence.to_be_bytes());
+        tcp_seg.extend_from_slice(&seg.seq.to_be_bytes());
         tcp_seg.extend_from_slice(&acknowledge_value.to_be_bytes());
         tcp_seg.push(0x50);
         tcp_seg.push(flags::PSH | flags::ACK);
@@ -1013,7 +1013,7 @@ pub fn check_retransmits() {
         tcp_seg.extend_from_slice(&0u16.to_be_bytes());
         tcp_seg.extend_from_slice(&seg.data);
 
-        let csum = tcp_checksum(source_ip, dest_ip, &tcp_seg);
+        let csum = tcp_checksum(src_ip, dest_ip, &tcp_seg);
         tcp_seg[16] = (csum >> 8) as u8;
         tcp_seg[17] = (csum & 0xFF) as u8;
 
@@ -1027,13 +1027,13 @@ pub fn check_retransmits() {
 }
 
 /// Clear retransmit queue entries for a specific connection (called on close)
-pub fn clear_retransmit_queue(dest_ip: [u8; 4], dest_port: u16, source_port: u16) {
-    let source_ip = get_source_ip();
-    let connection_id = ConnectionId {
-        source_ip: ip_to_u32(source_ip),
-        destination_ip: ip_to_u32(dest_ip),
-        source_port,
-        destination_port: dest_port,
+pub fn clear_retransmit_queue(dest_ip: [u8; 4], dest_port: u16, src_port: u16) {
+    let src_ip = get_source_ip();
+    let conn_id = ConnectionId {
+        src_ip: ip_to_u32(src_ip),
+        dst_ip: ip_to_u32(dest_ip),
+        src_port,
+        dst_port: dest_port,
     };
-    RETRANSMIT_QUEUE.lock().retain(|seg| seg.connection_id != connection_id);
+    RETRANSMIT_QUEUE.lock().retain(|seg| seg.conn_id != conn_id);
 }

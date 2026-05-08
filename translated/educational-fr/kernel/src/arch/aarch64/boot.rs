@@ -80,15 +80,15 @@ const MAIR_DEVICE_INDEX: u64 = 4; // AttrIndx[2:0] = 4 → bits[4:2]
 /// # Safety
 /// Must be called early in boot, before any MMIO access through TTBR0 addresses.
 pub // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe fn setup_mmio_identity_map(kernel_virt_base: u64, kernel_physical_base: u64) {
+unsafe fn setup_mmio_identity_map(kernel_virt_base: u64, kernel_phys_base: u64) {
     // Compute virt-to-phys offset for kernel statics (BSS)
     // phys = virt - kernel_virt_base + kernel_phys_base
     let virt_to_physical = |virt: u64| -> u64 {
-        virt.wrapping_sub(kernel_virt_base).wrapping_add(kernel_physical_base)
+        virt.wrapping_sub(kernel_virt_base).wrapping_add(kernel_phys_base)
     };
 
     // Get physical addresses of our static page tables
-    let l0_physical = virt_to_physical(&raw // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+    let l0_phys = virt_to_physical(&raw // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const TTBR0_L0 as u64);
     let l1_physical = virt_to_physical(&raw // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const TTBR0_L1 as u64);
@@ -128,7 +128,7 @@ const TTBR0_L1 as u64);
 
     // Install our page table in TTBR0_EL1
     // TTBR0_EL1 format: BADDR[47:1] | CnP[0]
-    core::arch::asm!("msr TTBR0_EL1, {}", in(reg) l0_physical, options(nomem, nostack));
+    core::arch::asm!("msr TTBR0_EL1, {}", in(reg) l0_phys, options(nomem, nostack));
 
     // Invalidate TLB for TTBR0 address space
     core::arch::asm!("tlbi vmalle1is", options(nomem, nostack));

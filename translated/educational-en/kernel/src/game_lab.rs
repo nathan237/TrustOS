@@ -79,10 +79,10 @@ pub enum LabTab {
 #[derive(Clone)]
 // Public structure — visible outside this module.
 pub struct WatchEntry {
-    pub address: u16,
+    pub addr: u16,
     pub label: [u8; 8],    // short label (ASCII)
-    pub label_length: u8,
-    pub previous_value: u8,
+    pub label_len: u8,
+    pub prev_value: u8,
     pub cur_value: u8,
     pub changed: bool,
     pub size: u8,           // 1=byte, 2=word
@@ -117,14 +117,14 @@ pub struct SaveState {
     pub cpu_h: u8, pub cpu_l: u8,
     pub cpu_sp: u16, pub cpu_pc: u16,
     pub cpu_ime: bool, pub cpu_halted: bool,
-    pub ie_register: u8, pub if_register: u8,
-    pub joypad_register: u8,
+    pub ie_reg: u8, pub if_reg: u8,
+    pub joypad_reg: u8,
     pub joypad_buttons: u8, pub joypad_dirs: u8,
-    pub serial_data: u8, pub serial_controller: u8,
+    pub serial_data: u8, pub serial_ctrl: u8,
     pub wram_bank: u8, pub key1: u8,
     pub wram: Vec<u8>,
     pub hram: [u8; 127],
-    pub gpu_lcdc: u8, pub gpu_status: u8,
+    pub gpu_lcdc: u8, pub gpu_stat: u8,
     pub gpu_scy: u8, pub gpu_scx: u8,
     pub gpu_ly: u8, pub gpu_lyc: u8,
     pub gpu_bgp: u8, pub gpu_obp0: u8, pub gpu_obp1: u8,
@@ -134,7 +134,7 @@ pub struct SaveState {
     pub gpu_vram1: [u8; 8192],
     pub gpu_oam: [u8; 160],
     pub gpu_bg_palette: [u8; 64],
-    pub gpu_object_palette: [u8; 64],
+    pub gpu_obj_palette: [u8; 64],
     pub gpu_vram_bank: u8,
     pub gpu_bcps: u8, pub gpu_ocps: u8,
     pub gpu_window_line: u8,
@@ -154,17 +154,17 @@ pub fn empty() -> Self {
             cpu_a: 0, cpu_f: 0, cpu_b: 0, cpu_c: 0,
             cpu_d: 0, cpu_e: 0, cpu_h: 0, cpu_l: 0,
             cpu_sp: 0, cpu_pc: 0, cpu_ime: false, cpu_halted: false,
-            ie_register: 0, if_register: 0, joypad_register: 0,
+            ie_reg: 0, if_reg: 0, joypad_reg: 0,
             joypad_buttons: 0xF, joypad_dirs: 0xF,
-            serial_data: 0, serial_controller: 0,
+            serial_data: 0, serial_ctrl: 0,
             wram_bank: 1, key1: 0,
             wram: Vec::new(), hram: [0; 127],
-            gpu_lcdc: 0, gpu_status: 0, gpu_scy: 0, gpu_scx: 0,
+            gpu_lcdc: 0, gpu_stat: 0, gpu_scy: 0, gpu_scx: 0,
             gpu_ly: 0, gpu_lyc: 0, gpu_bgp: 0, gpu_obp0: 0, gpu_obp1: 0,
             gpu_wy: 0, gpu_wx: 0, gpu_mode: 0, gpu_cycles: 0,
             gpu_vram: [0; 8192], gpu_vram1: [0; 8192],
             gpu_oam: [0; 160],
-            gpu_bg_palette: [0; 64], gpu_object_palette: [0; 64],
+            gpu_bg_palette: [0; 64], gpu_obj_palette: [0; 64],
             gpu_vram_bank: 0, gpu_bcps: 0, gpu_ocps: 0,
             gpu_window_line: 0,
             timer_div: 0, timer_tima: 0, timer_tma: 0, timer_tac: 0,
@@ -181,13 +181,13 @@ pub struct GameLabState {
     /// Which Game Boy window we're linked to (None = auto-detect first one)
     pub linked_gb_id: Option<u32>,
     /// Memory view start address
-    pub memory_view_address: u16,
+    pub mem_view_addr: u16,
     /// Selected panel (0-5) in analyze mode
     pub selected_panel: u8,
     /// Frame counter for blinking
     pub frame: u32,
     /// Memory view mode: 0=WRAM, 1=VRAM, 2=HRAM, 3=ROM, 4=OAM
-    pub memory_mode: u8,
+    pub mem_mode: u8,
     /// Scroll offset for panels
     pub scroll: u32,
 
@@ -200,7 +200,7 @@ pub struct GameLabState {
     // ── Memory Search ──────────────────────────────────────────────
     pub search_value: u16,         // Value to search for
     pub search_input: [u8; 6],     // Input buffer for typing
-    pub search_input_length: u8,
+    pub search_input_len: u8,
     pub search_results: Vec<u16>,  // Matching addresses
     pub search_snapshot: Vec<u8>,  // WRAM snapshot for compare scans
     pub search_mode: SearchMode,
@@ -210,14 +210,14 @@ pub struct GameLabState {
     // ── Breakpoints + Stepping ─────────────────────────────────────
     pub breakpoints: Vec<u16>,     // PC addresses to break on
     pub bp_input: [u8; 5],        // Input buffer for adding BP
-    pub bp_input_length: u8,
+    pub bp_input_len: u8,
     pub paused: bool,
     pub step_one: bool,            // Execute exactly one instruction
     pub step_frame: bool,          // Execute one frame then pause
 
     // ── Speed Control ──────────────────────────────────────────────
     /// Speed multiplier index: 0=0.25x, 1=0.5x, 2=1x, 3=2x, 4=4x
-    pub speed_index: u8,
+    pub speed_idx: u8,
 
     // ── Trace Log ──────────────────────────────────────────────────
     pub trace: Vec<TraceEntry>,
@@ -228,7 +228,7 @@ pub struct GameLabState {
     pub tile_scroll: u32,
 
     // ── Memory Diff ────────────────────────────────────────────────
-    pub memory_previous: [u8; 256], // previous 256 bytes for diff highlighting
+    pub mem_prev: [u8; 256], // previous 256 bytes for diff highlighting
 
     // ── Save State ─────────────────────────────────────────────────
     pub save_state: SaveState,
@@ -240,16 +240,16 @@ impl GameLabState {
 pub fn new() -> Self {
         Self {
             linked_gb_id: None,
-            memory_view_address: 0xC000,
+            mem_view_addr: 0xC000,
             selected_panel: 0,
             frame: 0,
-            memory_mode: 0,
+            mem_mode: 0,
             scroll: 0,
             active_tab: LabTab::Analyze,
             watches: Vec::new(),
             search_value: 0,
             search_input: [0; 6],
-            search_input_length: 0,
+            search_input_len: 0,
             search_results: Vec::new(),
             search_snapshot: Vec::new(),
             search_mode: SearchMode::Exact,
@@ -257,16 +257,16 @@ pub fn new() -> Self {
             search_byte_mode: true,
             breakpoints: Vec::new(),
             bp_input: [0; 5],
-            bp_input_length: 0,
+            bp_input_len: 0,
             paused: false,
             step_one: false,
             step_frame: false,
-            speed_index: 2, // 1x default
+            speed_idx: 2, // 1x default
             trace: Vec::new(),
             trace_enabled: false,
             tile_page: 0,
             tile_scroll: 0,
-            memory_previous: [0; 256],
+            mem_prev: [0; 256],
             save_state: SaveState::empty(),
         }
     }
@@ -274,7 +274,7 @@ pub fn new() -> Self {
         // Public function — callable from other modules.
 pub fn speed_multiplier(&self) -> f32 {
                 // Pattern matching — Rust's exhaustive branching construct.
-match self.speed_index {
+match self.speed_idx {
             0 => 0.25,
             1 => 0.5,
             2 => 1.0,
@@ -287,7 +287,7 @@ match self.speed_index {
         // Public function — callable from other modules.
 pub fn speed_label(&self) -> &'static str {
                 // Pattern matching — Rust's exhaustive branching construct.
-match self.speed_index {
+match self.speed_idx {
             0 => "0.25x",
             1 => "0.5x",
             2 => "1x",
@@ -329,16 +329,16 @@ match self.speed_index {
         s.cpu_h = emu.cpu.h; s.cpu_l = emu.cpu.l;
         s.cpu_sp = emu.cpu.sp; s.cpu_pc = emu.cpu.pc;
         s.cpu_ime = emu.cpu.ime; s.cpu_halted = emu.cpu.halted;
-        s.ie_register = emu.ie_register; s.if_register = emu.if_register;
-        s.joypad_register = emu.joypad_register;
+        s.ie_reg = emu.ie_reg; s.if_reg = emu.if_reg;
+        s.joypad_reg = emu.joypad_reg;
         s.joypad_buttons = emu.joypad_buttons;
         s.joypad_dirs = emu.joypad_dirs;
         s.serial_data = emu.serial_data;
-        s.serial_controller = emu.serial_controller;
+        s.serial_ctrl = emu.serial_ctrl;
         s.wram_bank = emu.wram_bank; s.key1 = emu.key1;
         s.wram = emu.wram.clone();
         s.hram = emu.hram;
-        s.gpu_lcdc = emu.gpu.lcdc; s.gpu_status = emu.gpu.status;
+        s.gpu_lcdc = emu.gpu.lcdc; s.gpu_stat = emu.gpu.stat;
         s.gpu_scy = emu.gpu.scy; s.gpu_scx = emu.gpu.scx;
         s.gpu_ly = emu.gpu.ly; s.gpu_lyc = emu.gpu.lyc;
         s.gpu_bgp = emu.gpu.bgp; s.gpu_obp0 = emu.gpu.obp0; s.gpu_obp1 = emu.gpu.obp1;
@@ -348,7 +348,7 @@ match self.speed_index {
         s.gpu_vram1 = emu.gpu.vram1;
         s.gpu_oam = emu.gpu.oam;
         s.gpu_bg_palette = emu.gpu.bg_palette;
-        s.gpu_object_palette = emu.gpu.object_palette;
+        s.gpu_obj_palette = emu.gpu.obj_palette;
         s.gpu_vram_bank = emu.gpu.vram_bank;
         s.gpu_bcps = emu.gpu.bcps; s.gpu_ocps = emu.gpu.ocps;
         s.gpu_window_line = emu.gpu.window_line;
@@ -372,18 +372,18 @@ match self.speed_index {
         emu.cpu.h = s.cpu_h; emu.cpu.l = s.cpu_l;
         emu.cpu.sp = s.cpu_sp; emu.cpu.pc = s.cpu_pc;
         emu.cpu.ime = s.cpu_ime; emu.cpu.halted = s.cpu_halted;
-        emu.ie_register = s.ie_register; emu.if_register = s.if_register;
-        emu.joypad_register = s.joypad_register;
+        emu.ie_reg = s.ie_reg; emu.if_reg = s.if_reg;
+        emu.joypad_reg = s.joypad_reg;
         emu.joypad_buttons = s.joypad_buttons;
         emu.joypad_dirs = s.joypad_dirs;
         emu.serial_data = s.serial_data;
-        emu.serial_controller = s.serial_controller;
+        emu.serial_ctrl = s.serial_ctrl;
         emu.wram_bank = s.wram_bank; emu.key1 = s.key1;
         if s.wram.len() == emu.wram.len() {
             emu.wram.copy_from_slice(&s.wram);
         }
         emu.hram = s.hram;
-        emu.gpu.lcdc = s.gpu_lcdc; emu.gpu.status = s.gpu_status;
+        emu.gpu.lcdc = s.gpu_lcdc; emu.gpu.stat = s.gpu_stat;
         emu.gpu.scy = s.gpu_scy; emu.gpu.scx = s.gpu_scx;
         emu.gpu.ly = s.gpu_ly; emu.gpu.lyc = s.gpu_lyc;
         emu.gpu.bgp = s.gpu_bgp; emu.gpu.obp0 = s.gpu_obp0; emu.gpu.obp1 = s.gpu_obp1;
@@ -393,7 +393,7 @@ match self.speed_index {
         emu.gpu.vram1 = s.gpu_vram1;
         emu.gpu.oam = s.gpu_oam;
         emu.gpu.bg_palette = s.gpu_bg_palette;
-        emu.gpu.object_palette = s.gpu_object_palette;
+        emu.gpu.obj_palette = s.gpu_obj_palette;
         emu.gpu.vram_bank = s.gpu_vram_bank;
         emu.gpu.bcps = s.gpu_bcps; emu.gpu.ocps = s.gpu_ocps;
         emu.gpu.window_line = s.gpu_window_line;
@@ -420,11 +420,11 @@ match self.speed_index {
     /// First scan: search all WRAM for exact value
     pub fn search_initial(&mut self, emu: &GameBoyEmulator) {
         self.search_results.clear();
-        let value = self.search_value as u8;
+        let val = self.search_value as u8;
         for (i, &b) in emu.wram.iter().enumerate() {
-            if b == value {
-                let address = if i < 0x1000 { 0xC000 + i as u16 } else { 0xD000 + (i as u16 - 0x1000) };
-                self.search_results.push(address);
+            if b == val {
+                let addr = if i < 0x1000 { 0xC000 + i as u16 } else { 0xD000 + (i as u16 - 0x1000) };
+                self.search_results.push(addr);
                 if self.search_results.len() >= MAXIMUM_SEARCH_RESULTS { break; }
             }
         }
@@ -435,44 +435,44 @@ match self.speed_index {
     /// Filter scan: narrow existing results
     pub fn search_filter(&mut self, emu: &GameBoyEmulator) {
         if !self.search_active { return; }
-        let new_results: Vec<u16> = self.search_results.iter().copied().filter(|&address| {
-            let cur = read_emu_byte(emu, address);
-            let previous = self.snapshot_byte(address);
+        let new_results: Vec<u16> = self.search_results.iter().copied().filter(|&addr| {
+            let cur = read_emu_byte(emu, addr);
+            let prev = self.snapshot_byte(addr);
                         // Pattern matching — Rust's exhaustive branching construct.
 match self.search_mode {
                 SearchMode::Exact => cur == self.search_value as u8,
-                SearchMode::Changed => cur != previous,
-                SearchMode::Unchanged => cur == previous,
-                SearchMode::Greater => cur > previous,
-                SearchMode::Less => cur < previous,
+                SearchMode::Changed => cur != prev,
+                SearchMode::Unchanged => cur == prev,
+                SearchMode::Greater => cur > prev,
+                SearchMode::Less => cur < prev,
             }
         }).collect();
         self.search_results = new_results;
         self.take_search_snapshot(emu);
     }
 
-    fn snapshot_byte(&self, address: u16) -> u8 {
-        let index = // Pattern matching — Rust's exhaustive branching construct.
-match address {
-            0xC000..=0xCFFF => (address - 0xC000) as usize,
-            0xD000..=0xDFFF => 0x1000 + (address - 0xD000) as usize,
+    fn snapshot_byte(&self, addr: u16) -> u8 {
+        let idx = // Pattern matching — Rust's exhaustive branching construct.
+match addr {
+            0xC000..=0xCFFF => (addr - 0xC000) as usize,
+            0xD000..=0xDFFF => 0x1000 + (addr - 0xD000) as usize,
             _ => return 0xFF,
         };
-        if index < self.search_snapshot.len() { self.search_snapshot[index] } else { 0xFF }
+        if idx < self.search_snapshot.len() { self.search_snapshot[idx] } else { 0xFF }
     }
 
     /// Add a watch from a search result address
-    pub fn add_watch(&mut self, address: u16) {
+    pub fn add_watch(&mut self, addr: u16) {
         if self.watches.len() >= MAXIMUM_WATCH { return; }
-        if self.watches.iter().any(|w| w.address == address) { return; }
+        if self.watches.iter().any(|w| w.addr == addr) { return; }
         let mut label = [0u8; 8];
-        let s = format!("{:04X}", address);
+        let s = format!("{:04X}", addr);
         for (i, b) in s.bytes().enumerate().take(8) { label[i] = b; }
         self.watches.push(WatchEntry {
-            address,
+            addr,
             label,
-            label_length: s.len().minimum(8) as u8,
-            previous_value: 0,
+            label_len: s.len().min(8) as u8,
+            prev_value: 0,
             cur_value: 0,
             changed: false,
             size: 1,
@@ -481,10 +481,10 @@ match address {
 
     /// Update all watch values
     pub fn update_watches(&mut self, emu: &GameBoyEmulator) {
-        for w in self.watches.iterator_mut() {
-            w.previous_value = w.cur_value;
-            w.cur_value = read_emu_byte(emu, w.address);
-            w.changed = w.cur_value != w.previous_value;
+        for w in self.watches.iter_mut() {
+            w.prev_value = w.cur_value;
+            w.cur_value = read_emu_byte(emu, w.addr);
+            w.changed = w.cur_value != w.prev_value;
         }
     }
 
@@ -512,8 +512,8 @@ match self.active_tab {
             // M = step one frame
             b'm' | b'M' => { self.step_frame = true; self.paused = true; }
             // < / > speed
-            b',' => { if self.speed_index > 0 { self.speed_index -= 1; } }
-            b'.' => { if self.speed_index < 4 { self.speed_index += 1; } }
+            b',' => { if self.speed_idx > 0 { self.speed_idx -= 1; } }
+            b'.' => { if self.speed_idx < 4 { self.speed_idx += 1; } }
             _ => {}
         }
     }
@@ -522,15 +522,15 @@ match self.active_tab {
                 // Pattern matching — Rust's exhaustive branching construct.
 match key {
             0x09 => { self.selected_panel = (self.selected_panel + 1) % 6; }
-            0xF0 => { self.memory_view_address = self.memory_view_address.wrapping_sub(0x10); }
-            0xF1 => { self.memory_view_address = self.memory_view_address.wrapping_add(0x10); }
-            0xF2 => { self.memory_view_address = self.memory_view_address.wrapping_sub(0x100); }
-            0xF3 => { self.memory_view_address = self.memory_view_address.wrapping_add(0x100); }
-            b'1' => { self.memory_mode = 0; self.memory_view_address = 0xC000; }
-            b'2' => { self.memory_mode = 1; self.memory_view_address = 0x8000; }
-            b'3' => { self.memory_mode = 2; self.memory_view_address = 0xFF80; }
-            b'4' => { self.memory_mode = 3; self.memory_view_address = 0x0000; }
-            b'5' => { self.memory_mode = 4; self.memory_view_address = 0xFE00; }
+            0xF0 => { self.mem_view_addr = self.mem_view_addr.wrapping_sub(0x10); }
+            0xF1 => { self.mem_view_addr = self.mem_view_addr.wrapping_add(0x10); }
+            0xF2 => { self.mem_view_addr = self.mem_view_addr.wrapping_sub(0x100); }
+            0xF3 => { self.mem_view_addr = self.mem_view_addr.wrapping_add(0x100); }
+            b'1' => { self.mem_mode = 0; self.mem_view_addr = 0xC000; }
+            b'2' => { self.mem_mode = 1; self.mem_view_addr = 0x8000; }
+            b'3' => { self.mem_mode = 2; self.mem_view_addr = 0xFF80; }
+            b'4' => { self.mem_mode = 3; self.mem_view_addr = 0x0000; }
+            b'5' => { self.mem_mode = 4; self.mem_view_addr = 0xFE00; }
             _ => {}
         }
     }
@@ -539,16 +539,16 @@ match key {
                 // Pattern matching — Rust's exhaustive branching construct.
 match key {
             b'0'..=b'9' | b'a'..=b'f' | b'A'..=b'F' => {
-                if (self.search_input_length as usize) < 4 {
-                    self.search_input[self.search_input_length as usize] = key;
-                    self.search_input_length += 1;
+                if (self.search_input_len as usize) < 4 {
+                    self.search_input[self.search_input_len as usize] = key;
+                    self.search_input_len += 1;
                     // Parse hex
                     self.search_value = self.parse_search_hex();
                 }
             }
             0x08 | 0x7F => { // Backspace
-                if self.search_input_length > 0 {
-                    self.search_input_length -= 1;
+                if self.search_input_len > 0 {
+                    self.search_input_len -= 1;
                     self.search_value = self.parse_search_hex();
                 }
             }
@@ -567,7 +567,7 @@ match self.search_mode {
             b'r' | b'R' => {
                 self.search_results.clear();
                 self.search_active = false;
-                self.search_input_length = 0;
+                self.search_input_len = 0;
                 self.search_snapshot.clear();
             }
             _ => {}
@@ -605,8 +605,8 @@ match key {
     }
 
     fn parse_search_hex(&self) -> u16 {
-        let mut value: u16 = 0;
-        for i in 0..self.search_input_length as usize {
+        let mut val: u16 = 0;
+        for i in 0..self.search_input_len as usize {
             let c = self.search_input[i];
             let digit = // Pattern matching — Rust's exhaustive branching construct.
 match c {
@@ -615,13 +615,13 @@ match c {
                 b'A'..=b'F' => c - b'A' + 10,
                 _ => 0,
             };
-            value = (value << 4) | digit as u16;
+            val = (val << 4) | digit as u16;
         }
-        value
+        val
     }
 
         // Public function — callable from other modules.
-pub fn handle_click(&mut self, receive: i32, ry: i32, ww: u32, _wh: u32) {
+pub fn handle_click(&mut self, rx: i32, ry: i32, ww: u32, _wh: u32) {
         // Header area: TITLE_BAR_H .. TITLE_BAR_H+22  (the "GAME LAB" bar)
         // Toolbar area: TITLE_BAR_H+22 .. TITLE_BAR_H+22+TOOLBAR_H  (tabs + speed + pause)
         let header_h = 22i32;
@@ -629,7 +629,7 @@ pub fn handle_click(&mut self, receive: i32, ry: i32, ww: u32, _wh: u32) {
         let toolbar_y_end = toolbar_y_start + TOOLBAR_H as i32;
         if ry >= toolbar_y_start && ry < toolbar_y_end {
             let tab_w = 72i32;
-            let transmit = receive - 4;
+            let transmit = rx - 4;
             if transmit >= 0 {
                 let tab_index = transmit / tab_w;
                                 // Pattern matching — Rust's exhaustive branching construct.
@@ -644,24 +644,24 @@ match tab_index {
             }
             // Speed buttons (right side)
             let speed_x = ww as i32 - 200;
-            if receive >= speed_x && receive < speed_x + 24 {
-                if self.speed_index > 0 { self.speed_index -= 1; }
-            } else if receive >= speed_x + 28 && receive < speed_x + 52 {
-                if self.speed_index < 4 { self.speed_index += 1; }
+            if rx >= speed_x && rx < speed_x + 24 {
+                if self.speed_idx > 0 { self.speed_idx -= 1; }
+            } else if rx >= speed_x + 28 && rx < speed_x + 52 {
+                if self.speed_idx < 4 { self.speed_idx += 1; }
             }
             // Pause button
             let pause_x = ww as i32 - 130;
-            if receive >= pause_x && receive < pause_x + 40 {
+            if rx >= pause_x && rx < pause_x + 40 {
                 self.paused = !self.paused;
             }
             // Step button
             let step_x = ww as i32 - 86;
-            if receive >= step_x && receive < step_x + 36 {
+            if rx >= step_x && rx < step_x + 36 {
                 self.step_one = true; self.paused = true;
             }
             // Frame button
             let frame_x = ww as i32 - 46;
-            if receive >= frame_x && receive < frame_x + 42 {
+            if rx >= frame_x && rx < frame_x + 42 {
                 self.step_frame = true; self.paused = true;
             }
         }
@@ -674,7 +674,7 @@ match tab_index {
             // Mode selector row is about 3 lines below content start
             let mode_y = content_y + 6 + LINE_H as i32 + 4 + LINE_H as i32 + 2;
             if ry >= mode_y && ry < mode_y + LINE_H as i32 {
-                let mx = receive - 8 - 48;
+                let mx = rx - 8 - 48;
                 if mx >= 0 {
                     // Each mode button: label_len*8 + 10 spacing
                     let modes_w: [i32; 5] = [5*8+10, 7*8+10, 4*8+10, 7*8+10, 4*8+10];
@@ -697,10 +697,10 @@ match i {
             }
             // "Add Watch" clicks on result list
             let list_y_start = content_y + 120;
-            if ry >= list_y_start && receive >= (ww as i32 - 60) {
-                let index = ((ry - list_y_start) / LINE_H as i32) as usize;
-                if index < self.search_results.len() {
-                    self.add_watch(self.search_results[index]);
+            if ry >= list_y_start && rx >= (ww as i32 - 60) {
+                let idx = ((ry - list_y_start) / LINE_H as i32) as usize;
+                if idx < self.search_results.len() {
+                    self.add_watch(self.search_results[idx]);
                 }
             }
         }
@@ -709,10 +709,10 @@ match i {
         if self.active_tab == LabTab::Tiles {
             let page_y = content_y + 6 + LINE_H as i32;
             if ry >= page_y && ry < page_y + LINE_H as i32 {
-                let pixel = receive - 8;
-                if pixel >= 0 && pixel < 110 { self.tile_page = 0; }
-                else if pixel >= 110 && pixel < 220 { self.tile_page = 1; }
-                else if pixel >= 220 && pixel < 330 { self.tile_page = 2; }
+                let px = rx - 8;
+                if px >= 0 && px < 110 { self.tile_page = 0; }
+                else if px >= 110 && px < 220 { self.tile_page = 1; }
+                else if px >= 220 && px < 330 { self.tile_page = 2; }
             }
         }
     }
@@ -727,12 +727,12 @@ pub fn draw_game_lab(
     let cx = wx as u32;
     let cy = (wy + TITLE_BAR_H as i32) as u32;
     let cw = ww;
-    let character = wh.saturating_sub(TITLE_BAR_H);
+    let ch = wh.saturating_sub(TITLE_BAR_H);
 
-    if cw < 200 || character < 150 { return; }
+    if cw < 200 || ch < 150 { return; }
 
     // Background
-    framebuffer::fill_rect(cx, cy, cw, character, COLUMN_BG);
+    framebuffer::fill_rect(cx, cy, cw, ch, COLUMN_BG);
 
     // ── Header bar ─────────────────────────────────────────────────
     framebuffer::fill_rect(cx, cy, cw, 22, COLUMN_HEADER_BG);
@@ -750,8 +750,8 @@ pub fn draw_game_lab(
 
     // Save/Load state buttons
     let save_x = cx + cw - 120;
-    draw_button(save_x, cy + 2, 48, 16, "SAVE", state.save_state.valid, COLUMN_ACCENT);
-    draw_button(save_x + 54, cy + 2, 48, 16, "LOAD", state.save_state.valid, if state.save_state.valid { COLUMN_BRIGHT } else { COLUMN_DIM });
+    draw_btn(save_x, cy + 2, 48, 16, "SAVE", state.save_state.valid, COLUMN_ACCENT);
+    draw_btn(save_x + 54, cy + 2, 48, 16, "LOAD", state.save_state.valid, if state.save_state.valid { COLUMN_BRIGHT } else { COLUMN_DIM });
 
     // ── Toolbar with tabs + speed/pause controls ───────────────────
     let ty = cy + 22;
@@ -775,27 +775,27 @@ pub fn draw_game_lab(
         if active {
             framebuffer::fill_rect(transmit, ty + TOOLBAR_H - 3, tab_w, 2, COLUMN_BRIGHT);
         }
-        let column = if active { COLUMN_BRIGHT } else { COLUMN_DIM };
-        draw_str(transmit + 4, ty + 6, label, column);
+        let col = if active { COLUMN_BRIGHT } else { COLUMN_DIM };
+        draw_str(transmit + 4, ty + 6, label, col);
     }
 
     // Speed controls (right side)
     let speed_x = cx + cw - 200;
-    draw_button(speed_x, ty + 3, 22, 16, "<", false, COLUMN_ACCENT);
+    draw_btn(speed_x, ty + 3, 22, 16, "<", false, COLUMN_ACCENT);
     draw_str(speed_x + 26, ty + 6, state.speed_label(), COLUMN_VALUE);
-    draw_button(speed_x + 56, ty + 3, 22, 16, ">", false, COLUMN_ACCENT);
+    draw_btn(speed_x + 56, ty + 3, 22, 16, ">", false, COLUMN_ACCENT);
 
     // Pause/Step buttons
     let pause_x = cx + cw - 130;
     let pause_column = if state.paused { COLUMN_RED } else { COLUMN_BRIGHT };
     let pause_label = if state.paused { "PLAY" } else { "PAUS" };
-    draw_button(pause_x, ty + 3, 38, 16, pause_label, state.paused, pause_column);
-    draw_button(pause_x + 42, ty + 3, 34, 16, "STEP", false, COLUMN_CYAN);
-    draw_button(pause_x + 80, ty + 3, 42, 16, "FRAME", false, COLUMN_PURPLE);
+    draw_btn(pause_x, ty + 3, 38, 16, pause_label, state.paused, pause_column);
+    draw_btn(pause_x + 42, ty + 3, 34, 16, "STEP", false, COLUMN_CYAN);
+    draw_btn(pause_x + 80, ty + 3, 42, 16, "FRAME", false, COLUMN_PURPLE);
 
     // ── Content area ───────────────────────────────────────────────
     let content_y = ty + TOOLBAR_H;
-    let content_h = character.saturating_sub(22 + TOOLBAR_H);
+    let content_h = ch.saturating_sub(22 + TOOLBAR_H);
 
         // Pattern matching — Rust's exhaustive branching construct.
 match state.active_tab {
@@ -811,52 +811,52 @@ match state.active_tab {
 // TAB: ANALYZE (original 6-panel dashboard)
 // ═══════════════════════════════════════════════════════════════════════════
 
-fn draw_tab_analyze(state: &GameLabState, emu: Option<&GameBoyEmulator>, cx: u32, cy: u32, cw: u32, character: u32) {
-    let top_h = character * 60 / 100;
-    let bot_h = character - top_h - 2;
-    let column_w = (cw - 4) / 3;
+fn draw_tab_analyze(state: &GameLabState, emu: Option<&GameBoyEmulator>, cx: u32, cy: u32, cw: u32, ch: u32) {
+    let top_h = ch * 60 / 100;
+    let bot_h = ch - top_h - 2;
+    let col_w = (cw - 4) / 3;
 
-    draw_panel_cpu(emu, cx + 1, cy, column_w, top_h, state);
-    draw_panel_gpu(emu, cx + column_w + 2, cy, column_w, top_h, state);
-    draw_panel_memory(emu, state, cx + column_w * 2 + 3, cy, column_w, top_h);
+    draw_panel_cpu(emu, cx + 1, cy, col_w, top_h, state);
+    draw_panel_gpu(emu, cx + col_w + 2, cy, col_w, top_h, state);
+    draw_panel_memory(emu, state, cx + col_w * 2 + 3, cy, col_w, top_h);
 
     let by = cy + top_h + 2;
-    draw_panel_io(emu, cx + 1, by, column_w, bot_h, state);
-    draw_panel_cart(emu, cx + column_w + 2, by, column_w, bot_h);
-    draw_panel_input(emu, cx + column_w * 2 + 3, by, column_w, bot_h, state);
+    draw_panel_io(emu, cx + 1, by, col_w, bot_h, state);
+    draw_panel_cart(emu, cx + col_w + 2, by, col_w, bot_h);
+    draw_panel_input(emu, cx + col_w * 2 + 3, by, col_w, bot_h, state);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TAB: SEARCH (Cheat Engine style memory scanner)
 // ═══════════════════════════════════════════════════════════════════════════
 
-fn draw_tab_search(state: &GameLabState, emu: Option<&GameBoyEmulator>, cx: u32, cy: u32, cw: u32, character: u32) {
-    let pixel = cx + 8;
+fn draw_tab_search(state: &GameLabState, emu: Option<&GameBoyEmulator>, cx: u32, cy: u32, cw: u32, ch: u32) {
+    let px = cx + 8;
     let mut py = cy + 6;
 
     // Title
-    draw_str(pixel, py, "MEMORY SEARCH", COLUMN_ACCENT);
-    draw_str(pixel + 120, py, "(Hex value, Tab=mode, R=reset)", COLUMN_DIM);
+    draw_str(px, py, "MEMORY SEARCH", COLUMN_ACCENT);
+    draw_str(px + 120, py, "(Hex value, Tab=mode, R=reset)", COLUMN_DIM);
     py += LINE_H + 4;
 
     // Search input
-    draw_str(pixel, py, "VALUE:", COLUMN_REGISTER);
+    draw_str(px, py, "VALUE:", COLUMN_REGISTER);
     let mut input_str = String::new();
-    for i in 0..state.search_input_length as usize {
+    for i in 0..state.search_input_len as usize {
         input_str.push(state.search_input[i] as char);
     }
     if input_str.is_empty() { input_str.push_str("__"); }
     // Blinking cursor
     if (state.frame / 20) % 2 == 0 { input_str.push('_'); }
-    draw_str(pixel + 52, py, &input_str, COLUMN_VALUE);
+    draw_str(px + 52, py, &input_str, COLUMN_VALUE);
 
     // Parsed value
     let vs = format!("= {} (0x{:02X})", state.search_value, state.search_value);
-    draw_str(pixel + 120, py, &vs, COLUMN_DIM);
+    draw_str(px + 120, py, &vs, COLUMN_DIM);
     py += LINE_H + 2;
 
     // Search mode indicator
-    draw_str(pixel, py, "MODE:", COLUMN_REGISTER);
+    draw_str(px, py, "MODE:", COLUMN_REGISTER);
     let modes = [
         ("EXACT", SearchMode::Exact),
         ("CHANGED", SearchMode::Changed),
@@ -864,19 +864,19 @@ fn draw_tab_search(state: &GameLabState, emu: Option<&GameBoyEmulator>, cx: u32,
         ("GREATER", SearchMode::Greater),
         ("LESS", SearchMode::Less),
     ];
-    let mut mx = pixel + 48;
+    let mut mx = px + 48;
     for (label, mode) in &modes {
         let active = state.search_mode == *mode;
-        let column = if active { COLUMN_BRIGHT } else { COLUMN_DIM };
+        let col = if active { COLUMN_BRIGHT } else { COLUMN_DIM };
         if active { framebuffer::fill_rect(mx - 2, py - 1, label.len() as u32 * CHAR_W + 4, LINE_H, 0xFF1A3020); }
-        draw_str(mx, py, label, column);
+        draw_str(mx, py, label, col);
         mx += label.len() as u32 * CHAR_W + 10;
     }
     py += LINE_H + 2;
 
     // Action buttons hint
-    draw_str(pixel, py, "Enter=Scan/Filter", COLUMN_ACCENT);
-    draw_str(pixel + 152, py, "R=Reset", COLUMN_WARN);
+    draw_str(px, py, "Enter=Scan/Filter", COLUMN_ACCENT);
+    draw_str(px + 152, py, "R=Reset", COLUMN_WARN);
     py += LINE_H + 6;
 
     // Status
@@ -885,39 +885,39 @@ fn draw_tab_search(state: &GameLabState, emu: Option<&GameBoyEmulator>, cx: u32,
     } else {
         format!("Results: {} addresses", state.search_results.len())
     };
-    draw_str(pixel, py, &status, COLUMN_TEXT);
+    draw_str(px, py, &status, COLUMN_TEXT);
     py += LINE_H + 4;
 
     // Results list
     if state.search_active {
         framebuffer::fill_rect(cx + 4, py, cw - 8, 1, COLUMN_BORDER);
         py += 4;
-        draw_str(pixel, py, "ADDR", COLUMN_ACCENT);
-        draw_str(pixel + 60, py, "VALUE", COLUMN_ACCENT);
-        draw_str(pixel + 110, py, "DEC", COLUMN_ACCENT);
-        if cw > 400 { draw_str(pixel + 160, py, "PREV", COLUMN_DIM); }
+        draw_str(px, py, "ADDR", COLUMN_ACCENT);
+        draw_str(px + 60, py, "VALUE", COLUMN_ACCENT);
+        draw_str(px + 110, py, "DEC", COLUMN_ACCENT);
+        if cw > 400 { draw_str(px + 160, py, "PREV", COLUMN_DIM); }
         draw_str(cx + cw - 68, py, "[+WATCH]", COLUMN_BRIGHT);
         py += LINE_H + 2;
 
-        let maximum_rows = ((character.saturating_sub(py - cy)) / LINE_H).minimum(32) as usize;
-        for (i, &address) in state.search_results.iter().take(maximum_rows).enumerate() {
-            let value = if let Some(e) = emu { read_emu_byte(e, address) } else { 0 };
-            let previous = state.snapshot_byte(address);
-            let changed = value != previous;
+        let maximum_rows = ((ch.saturating_sub(py - cy)) / LINE_H).min(32) as usize;
+        for (i, &addr) in state.search_results.iter().take(maximum_rows).enumerate() {
+            let val = if let Some(e) = emu { read_emu_byte(e, addr) } else { 0 };
+            let prev = state.snapshot_byte(addr);
+            let changed = val != prev;
 
-            let address_s = format!("{:04X}", address);
-            draw_str(pixel, py, &address_s, COLUMN_ADDRESS);
+            let address_s = format!("{:04X}", addr);
+            draw_str(px, py, &address_s, COLUMN_ADDRESS);
 
-            let value_s = format!("{:02X}", value);
+            let value_s = format!("{:02X}", val);
             let value_column = if changed { COLUMN_CHANGED } else { COLUMN_VALUE };
-            draw_str(pixel + 60, py, &value_s, value_column);
+            draw_str(px + 60, py, &value_s, value_column);
 
-            let decrypt_s = format!("{:3}", value);
-            draw_str(pixel + 110, py, &decrypt_s, COLUMN_DIM);
+            let decrypt_s = format!("{:3}", val);
+            draw_str(px + 110, py, &decrypt_s, COLUMN_DIM);
 
             if cw > 400 {
-                let previous_s = format!("{:02X}", previous);
-                draw_str(pixel + 160, py, &previous_s, COLUMN_DIM);
+                let previous_s = format!("{:02X}", prev);
+                draw_str(px + 160, py, &previous_s, COLUMN_DIM);
             }
 
             // Watch button
@@ -929,7 +929,7 @@ fn draw_tab_search(state: &GameLabState, emu: Option<&GameBoyEmulator>, cx: u32,
         }
         if state.search_results.len() > maximum_rows {
             let more = format!("... +{} more", state.search_results.len() - maximum_rows);
-            draw_str(pixel, py, &more, COLUMN_DIM);
+            draw_str(px, py, &more, COLUMN_DIM);
         }
     }
 }
@@ -938,57 +938,57 @@ fn draw_tab_search(state: &GameLabState, emu: Option<&GameBoyEmulator>, cx: u32,
 // TAB: WATCH (pinned memory addresses)
 // ═══════════════════════════════════════════════════════════════════════════
 
-fn draw_tab_watch(state: &GameLabState, emu: Option<&GameBoyEmulator>, cx: u32, cy: u32, cw: u32, character: u32) {
-    let pixel = cx + 8;
+fn draw_tab_watch(state: &GameLabState, emu: Option<&GameBoyEmulator>, cx: u32, cy: u32, cw: u32, ch: u32) {
+    let px = cx + 8;
     let mut py = cy + 6;
 
-    draw_str(pixel, py, "WATCH LIST", COLUMN_ACCENT);
+    draw_str(px, py, "WATCH LIST", COLUMN_ACCENT);
     let count_s = format!("{}/{}", state.watches.len(), MAXIMUM_WATCH);
-    draw_str(pixel + 100, py, &count_s, COLUMN_DIM);
-    draw_str(pixel + 160, py, "(Backspace=remove last)", COLUMN_DIM);
+    draw_str(px + 100, py, &count_s, COLUMN_DIM);
+    draw_str(px + 160, py, "(Backspace=remove last)", COLUMN_DIM);
     py += LINE_H + 4;
 
     if state.watches.is_empty() {
-        draw_str(pixel, py, "No watches. Add from Search tab with [+W] button.", COLUMN_DIM);
+        draw_str(px, py, "No watches. Add from Search tab with [+W] button.", COLUMN_DIM);
         return;
     }
 
     // Header
     framebuffer::fill_rect(cx + 4, py, cw - 8, 1, COLUMN_BORDER);
     py += 4;
-    draw_str(pixel, py, "LABEL", COLUMN_ACCENT);
-    draw_str(pixel + 72, py, "ADDR", COLUMN_ACCENT);
-    draw_str(pixel + 120, py, "HEX", COLUMN_ACCENT);
-    draw_str(pixel + 160, py, "DEC", COLUMN_ACCENT);
-    draw_str(pixel + 200, py, "PREV", COLUMN_ACCENT);
-    if cw > 500 { draw_str(pixel + 250, py, "VISUAL", COLUMN_DIM); }
+    draw_str(px, py, "LABEL", COLUMN_ACCENT);
+    draw_str(px + 72, py, "ADDR", COLUMN_ACCENT);
+    draw_str(px + 120, py, "HEX", COLUMN_ACCENT);
+    draw_str(px + 160, py, "DEC", COLUMN_ACCENT);
+    draw_str(px + 200, py, "PREV", COLUMN_ACCENT);
+    if cw > 500 { draw_str(px + 250, py, "VISUAL", COLUMN_DIM); }
     py += LINE_H + 2;
 
     for w in state.watches.iter() {
-        let label: String = w.label[..w.label_length as usize].iter().map(|&b| b as char).collect();
-        draw_str(pixel, py, &label, COLUMN_REGISTER);
+        let lbl: String = w.label[..w.label_len as usize].iter().map(|&b| b as char).collect();
+        draw_str(px, py, &lbl, COLUMN_REGISTER);
 
-        let address_s = format!("{:04X}", w.address);
-        draw_str(pixel + 72, py, &address_s, COLUMN_ADDRESS);
+        let address_s = format!("{:04X}", w.addr);
+        draw_str(px + 72, py, &address_s, COLUMN_ADDRESS);
 
-        let value = if let Some(e) = emu { read_emu_byte(e, w.address) } else { w.cur_value };
-        let value_s = format!("{:02X}", value);
-        let column = if w.changed { COLUMN_CHANGED } else { COLUMN_VALUE };
-        draw_str(pixel + 120, py, &value_s, column);
+        let val = if let Some(e) = emu { read_emu_byte(e, w.addr) } else { w.cur_value };
+        let value_s = format!("{:02X}", val);
+        let col = if w.changed { COLUMN_CHANGED } else { COLUMN_VALUE };
+        draw_str(px + 120, py, &value_s, col);
 
-        let decrypt_s = format!("{:3}", value);
-        draw_str(pixel + 160, py, &decrypt_s, column);
+        let decrypt_s = format!("{:3}", val);
+        draw_str(px + 160, py, &decrypt_s, col);
 
-        let previous_s = format!("{:02X}", w.previous_value);
-        draw_str(pixel + 200, py, &previous_s, COLUMN_DIM);
+        let previous_s = format!("{:02X}", w.prev_value);
+        draw_str(px + 200, py, &previous_s, COLUMN_DIM);
 
         // Visual bar
         if cw > 500 {
             let bar_w = 100u32;
-            let fill = (value as u32 * bar_w) / 255;
-            framebuffer::fill_rect(pixel + 250, py + 2, bar_w, 8, 0xFF0A1A10);
+            let fill = (val as u32 * bar_w) / 255;
+            framebuffer::fill_rect(px + 250, py + 2, bar_w, 8, 0xFF0A1A10);
             let bar_column = if w.changed { COLUMN_CHANGED } else { COLUMN_BRIGHT };
-            framebuffer::fill_rect(pixel + 250, py + 2, fill, 8, bar_column);
+            framebuffer::fill_rect(px + 250, py + 2, fill, 8, bar_column);
         }
 
         py += LINE_H;
@@ -999,54 +999,54 @@ fn draw_tab_watch(state: &GameLabState, emu: Option<&GameBoyEmulator>, cx: u32, 
 // TAB: TILES (VRAM tile viewer + OAM sprites)
 // ═══════════════════════════════════════════════════════════════════════════
 
-fn draw_tab_tiles(state: &GameLabState, emu: Option<&GameBoyEmulator>, cx: u32, cy: u32, cw: u32, character: u32) {
-    let pixel = cx + 8;
+fn draw_tab_tiles(state: &GameLabState, emu: Option<&GameBoyEmulator>, cx: u32, cy: u32, cw: u32, ch: u32) {
+    let px = cx + 8;
     let mut py = cy + 6;
 
     let pages = ["TILES $8000", "TILES $8800", "OAM SPRITES"];
-    draw_str(pixel, py, "TILE VIEWER", COLUMN_ACCENT);
+    draw_str(px, py, "TILE VIEWER", COLUMN_ACCENT);
     py += LINE_H;
 
     // Page tabs
     for (i, label) in pages.iter().enumerate() {
         let active = i as u8 == state.tile_page;
-        let column = if active { COLUMN_BRIGHT } else { COLUMN_DIM };
-        let transmit = pixel + i as u32 * 110;
+        let col = if active { COLUMN_BRIGHT } else { COLUMN_DIM };
+        let transmit = px + i as u32 * 110;
         if active { framebuffer::fill_rect(transmit - 2, py - 1, label.len() as u32 * CHAR_W + 4, LINE_H, 0xFF1A3020); }
-        draw_str(transmit, py, label, column);
+        draw_str(transmit, py, label, col);
     }
-    draw_str(pixel + 340, py, "(Tab=page, Arrows=scroll)", COLUMN_DIM);
+    draw_str(px + 340, py, "(Tab=page, Arrows=scroll)", COLUMN_DIM);
     py += LINE_H + 6;
 
     let emu = // Pattern matching — Rust's exhaustive branching construct.
 match emu {
         Some(e) => e,
-        None => { draw_str(pixel, py, "No emulator linked", COLUMN_DIM); return; }
+        None => { draw_str(px, py, "No emulator linked", COLUMN_DIM); return; }
     };
 
     if state.tile_page < 2 {
         // Draw tiles as 16x16 grid (each tile = 8x8 pixels, drawn 2x scaled = 16x16)
-        let base_address: u16 = if state.tile_page == 0 { 0x8000 } else { 0x8800 };
+        let base_addr: u16 = if state.tile_page == 0 { 0x8000 } else { 0x8800 };
         let tile_size = 2u32; // 2x scale
         let tile_pixel = 8 * tile_size;
-        let cols = ((cw - 20) / (tile_pixel + 1)).minimum(16);
-        let maximum_rows = ((character - (py - cy) - 4) / (tile_pixel + 1)).minimum(16);
-        let scroll = state.tile_scroll.minimum(16u32.saturating_sub(maximum_rows));
+        let cols = ((cw - 20) / (tile_pixel + 1)).min(16);
+        let maximum_rows = ((ch - (py - cy) - 4) / (tile_pixel + 1)).min(16);
+        let scroll = state.tile_scroll.min(16u32.saturating_sub(maximum_rows));
 
         for row in 0..maximum_rows {
-            for column in 0..cols {
-                let tile_index = (scroll + row) * 16 + column;
+            for col in 0..cols {
+                let tile_index = (scroll + row) * 16 + col;
                 if tile_index >= 256 { break; }
-                let tile_address = base_address.wrapping_add(tile_index as u16 * 16);
-                let dx = pixel + column * (tile_pixel + 1);
+                let tile_address = base_addr.wrapping_add(tile_index as u16 * 16);
+                let dx = px + col * (tile_pixel + 1);
                 let dy = py + row * (tile_pixel + 1);
 
                 // Draw 8x8 tile
                 for ty_off in 0..8u32 {
                     let lo = read_emu_byte(emu, tile_address.wrapping_add(ty_off as u16 * 2));
                     let hi = read_emu_byte(emu, tile_address.wrapping_add(ty_off as u16 * 2 + 1));
-                    for transmit_off in 0..8u32 {
-                        let bit = 7 - transmit_off;
+                    for tx_off in 0..8u32 {
+                        let bit = 7 - tx_off;
                         let color_id = ((hi >> bit) & 1) << 1 | ((lo >> bit) & 1);
                         let shade = // Pattern matching — Rust's exhaustive branching construct.
 match color_id {
@@ -1057,7 +1057,7 @@ match color_id {
                             _ => 0xFF000000,
                         };
                         framebuffer::fill_rect(
-                            dx + transmit_off * tile_size,
+                            dx + tx_off * tile_size,
                             dy + ty_off * tile_size,
                             tile_size, tile_size, shade,
                         );
@@ -1068,29 +1068,29 @@ match color_id {
 
         // Tile index label below
         let label_y = py + maximum_rows * (tile_pixel + 1) + 4;
-        let range_s = format!("Tiles {}-{}", scroll * 16, ((scroll + maximum_rows) * 16).minimum(256) - 1);
-        draw_str(pixel, label_y, &range_s, COLUMN_DIM);
+        let range_s = format!("Tiles {}-{}", scroll * 16, ((scroll + maximum_rows) * 16).min(256) - 1);
+        draw_str(px, label_y, &range_s, COLUMN_DIM);
     } else {
         // OAM sprite listing
-        draw_str(pixel, py, "#  Y   X   TILE FLAGS", COLUMN_ACCENT);
+        draw_str(px, py, "#  Y   X   TILE FLAGS", COLUMN_ACCENT);
         py += LINE_H;
 
-        let maximum_sprites = ((character - (py - cy)) / LINE_H).minimum(40);
+        let maximum_sprites = ((ch - (py - cy)) / LINE_H).min(40);
         for i in 0..maximum_sprites {
-            let oam_address = 0xFE00u16 + i as u16 * 4;
-            let sy = read_emu_byte(emu, oam_address);
-            let sx = read_emu_byte(emu, oam_address + 1);
-            let tile = read_emu_byte(emu, oam_address + 2);
-            let flags = read_emu_byte(emu, oam_address + 3);
+            let oam_addr = 0xFE00u16 + i as u16 * 4;
+            let sy = read_emu_byte(emu, oam_addr);
+            let sx = read_emu_byte(emu, oam_addr + 1);
+            let tile = read_emu_byte(emu, oam_addr + 2);
+            let flags = read_emu_byte(emu, oam_addr + 3);
 
             let visible = sy > 0 && sy < 160 && sx > 0 && sx < 168;
-            let column = if visible { COLUMN_VALUE } else { COLUMN_DIM };
+            let col = if visible { COLUMN_VALUE } else { COLUMN_DIM };
 
             let s = format!("{:2} {:3} {:3}  {:02X}   {:02X}", i, sy, sx, tile, flags);
-            draw_str(pixel, py, &s, column);
+            draw_str(px, py, &s, col);
 
             // Flags breakdown
-            let flag_x = pixel + 200;
+            let flag_x = px + 200;
             if flags & 0x80 != 0 { draw_str(flag_x, py, "P", COLUMN_WARN); }
             if flags & 0x40 != 0 { draw_str(flag_x + 12, py, "Y", COLUMN_ACCENT); }
             if flags & 0x20 != 0 { draw_str(flag_x + 24, py, "X", COLUMN_ACCENT); }
@@ -1110,44 +1110,44 @@ match color_id {
 // TAB: TRACE (instruction trace log + disassembly)
 // ═══════════════════════════════════════════════════════════════════════════
 
-fn draw_tab_trace(state: &GameLabState, emu: Option<&GameBoyEmulator>, cx: u32, cy: u32, cw: u32, character: u32) {
-    let pixel = cx + 8;
+fn draw_tab_trace(state: &GameLabState, emu: Option<&GameBoyEmulator>, cx: u32, cy: u32, cw: u32, ch: u32) {
+    let px = cx + 8;
     let mut py = cy + 6;
 
-    draw_str(pixel, py, "TRACE LOG", COLUMN_ACCENT);
+    draw_str(px, py, "TRACE LOG", COLUMN_ACCENT);
     let enabled_s = if state.trace_enabled { "[ON]" } else { "[OFF]" };
     let enabled_c = if state.trace_enabled { COLUMN_BRIGHT } else { COLUMN_RED };
-    draw_str(pixel + 88, py, enabled_s, enabled_c);
-    draw_str(pixel + 132, py, "(T=toggle, R=clear)", COLUMN_DIM);
+    draw_str(px + 88, py, enabled_s, enabled_c);
+    draw_str(px + 132, py, "(T=toggle, R=clear)", COLUMN_DIM);
     py += LINE_H + 2;
 
     // Disassembly around current PC (top section)
     if let Some(emu) = emu {
-        draw_str(pixel, py, "DISASSEMBLY @ PC", COLUMN_ACCENT);
+        draw_str(px, py, "DISASSEMBLY @ PC", COLUMN_ACCENT);
         py += LINE_H;
         let pc = emu.cpu.pc;
         // Show a few instructions before and after PC
-        let mut address = pc.wrapping_sub(8);
-        let disasm_rows = 12u32.minimum((character / 3) / LINE_H);
+        let mut addr = pc.wrapping_sub(8);
+        let disasm_rows = 12u32.min((ch / 3) / LINE_H);
         for _ in 0..disasm_rows {
-            let opcode = read_emu_byte(emu, address);
-            let is_current = address == pc;
+            let opcode = read_emu_byte(emu, addr);
+            let is_current = addr == pc;
             let prefix = if is_current { ">" } else { " " };
-            let (mnemonic, size) = disasm_opcode(emu, address);
-            let s = format!("{} {:04X}: {:02X}  {}", prefix, address, opcode, mnemonic);
-            let column = if is_current { COLUMN_BRIGHT } else { COLUMN_TEXT };
+            let (mnemonic, size) = disasm_opcode(emu, addr);
+            let s = format!("{} {:04X}: {:02X}  {}", prefix, addr, opcode, mnemonic);
+            let col = if is_current { COLUMN_BRIGHT } else { COLUMN_TEXT };
             if is_current {
-                framebuffer::fill_rect(pixel - 2, py - 1, cw - 16, LINE_H, 0xFF1A3020);
+                framebuffer::fill_rect(px - 2, py - 1, cw - 16, LINE_H, 0xFF1A3020);
             }
-            draw_str(pixel, py, &s, column);
+            draw_str(px, py, &s, col);
 
             // Breakpoint indicator
-            if state.breakpoints.iter().any(|&bp| bp == address) {
-                framebuffer::fill_rect(pixel - 6, py + 2, 4, 8, COLUMN_RED);
+            if state.breakpoints.iter().any(|&bp| bp == addr) {
+                framebuffer::fill_rect(px - 6, py + 2, 4, 8, COLUMN_RED);
             }
 
             py += LINE_H;
-            address = address.wrapping_add(size as u16);
+            addr = addr.wrapping_add(size as u16);
         }
     }
     py += 6;
@@ -1155,21 +1155,21 @@ fn draw_tab_trace(state: &GameLabState, emu: Option<&GameBoyEmulator>, cx: u32, 
     py += 4;
 
     // Breakpoints section
-    draw_str(pixel, py, "BREAKPOINTS", COLUMN_ACCENT);
+    draw_str(px, py, "BREAKPOINTS", COLUMN_ACCENT);
     let bp_count = format!("{}/{}", state.breakpoints.len(), MAXIMUM_BREAKPOINTS);
-    draw_str(pixel + 100, py, &bp_count, COLUMN_DIM);
+    draw_str(px + 100, py, &bp_count, COLUMN_DIM);
     py += LINE_H;
 
     if state.breakpoints.is_empty() {
-        draw_str(pixel, py, "None (type addr in Search, click to add)", COLUMN_DIM);
+        draw_str(px, py, "None (type addr in Search, click to add)", COLUMN_DIM);
     } else {
-        let mut bpx = pixel;
+        let mut bpx = px;
         for &bp in state.breakpoints.iter() {
             let bps = format!("{:04X}", bp);
             framebuffer::fill_rect(bpx, py, 40, LINE_H - 2, 0xFF2A0A0A);
             draw_str(bpx + 2, py, &bps, COLUMN_RED);
             bpx += 48;
-            if bpx > cx + cw - 60 { py += LINE_H; bpx = pixel; }
+            if bpx > cx + cw - 60 { py += LINE_H; bpx = px; }
         }
     }
     py += LINE_H + 4;
@@ -1177,21 +1177,21 @@ fn draw_tab_trace(state: &GameLabState, emu: Option<&GameBoyEmulator>, cx: u32, 
     py += 4;
 
     // Trace entries
-    draw_str(pixel, py, "TRACE HISTORY", COLUMN_ACCENT);
+    draw_str(px, py, "TRACE HISTORY", COLUMN_ACCENT);
     let trace_count = format!("({} entries)", state.trace.len());
-    draw_str(pixel + 120, py, &trace_count, COLUMN_DIM);
+    draw_str(px + 120, py, &trace_count, COLUMN_DIM);
     py += LINE_H;
 
-    draw_str(pixel, py, "PC    OP  A  F  SP", COLUMN_DIM);
+    draw_str(px, py, "PC    OP  A  F  SP", COLUMN_DIM);
     py += LINE_H;
 
-    let maximum_rows = ((character.saturating_sub(py - cy)) / LINE_H) as usize;
+    let maximum_rows = ((ch.saturating_sub(py - cy)) / LINE_H) as usize;
     let start = if state.trace.len() > maximum_rows { state.trace.len() - maximum_rows } else { 0 };
     for entry in state.trace[start..].iter() {
         let s = format!("{:04X}  {:02X}  {:02X} {:02X} {:04X}", entry.pc, entry.opcode, entry.a, entry.f, entry.sp);
-        draw_str(pixel, py, &s, COLUMN_TEXT);
+        draw_str(px, py, &s, COLUMN_TEXT);
         py += LINE_H;
-        if py + LINE_H > cy + character { break; }
+        if py + LINE_H > cy + ch { break; }
     }
 }
 
@@ -1199,7 +1199,7 @@ fn draw_tab_trace(state: &GameLabState, emu: Option<&GameBoyEmulator>, cx: u32, 
 fn draw_panel_cpu(emu: Option<&GameBoyEmulator>, x: u32, y: u32, w: u32, h: u32, state: &GameLabState) {
     draw_panel_frame(x, y, w, h, "CPU REGISTERS", state.selected_panel == 0);
 
-    let pixel = x + PANEL_PAD + 2;
+    let px = x + PANEL_PAD + 2;
     let mut py = y + 20;
 
     if let Some(emu) = emu {
@@ -1213,36 +1213,36 @@ fn draw_panel_cpu(emu: Option<&GameBoyEmulator>, x: u32, y: u32, w: u32, h: u32,
             ("HL", cpu.h, cpu.l),
         ];
         for (name, hi, lo) in &regs {
-            draw_str(pixel, py, name, COLUMN_REGISTER);
+            draw_str(px, py, name, COLUMN_REGISTER);
             let s = format!("{:02X}{:02X}", hi, lo);
-            draw_str(pixel + 28, py, &s, COLUMN_VALUE);
+            draw_str(px + 28, py, &s, COLUMN_VALUE);
             // Show individual bytes
             let s2 = format!("({:3} {:3})", hi, lo);
-            draw_str(pixel + 72, py, &s2, COLUMN_DIM);
+            draw_str(px + 72, py, &s2, COLUMN_DIM);
             py += LINE_H;
         }
 
         py += 4;
         // SP & PC
-        draw_str(pixel, py, "SP", COLUMN_REGISTER);
+        draw_str(px, py, "SP", COLUMN_REGISTER);
         let sps = format!("{:04X}", cpu.sp);
-        draw_str(pixel + 28, py, &sps, COLUMN_VALUE);
+        draw_str(px + 28, py, &sps, COLUMN_VALUE);
         py += LINE_H;
 
-        draw_str(pixel, py, "PC", COLUMN_REGISTER);
+        draw_str(px, py, "PC", COLUMN_REGISTER);
         let pcs = format!("{:04X}", cpu.pc);
-        draw_str(pixel + 28, py, &pcs, COLUMN_ACCENT);
+        draw_str(px + 28, py, &pcs, COLUMN_ACCENT);
 
         // Show opcode at PC
         if emu.rom_loaded {
             let opcode = read_emu_byte(emu, cpu.pc);
             let ops = format!("[{:02X}]", opcode);
-            draw_str(pixel + 72, py, &ops, COLUMN_CYAN);
+            draw_str(px + 72, py, &ops, COLUMN_CYAN);
         }
         py += LINE_H + 6;
 
         // Flags
-        draw_str(pixel, py, "FLAGS", COLUMN_DIM);
+        draw_str(px, py, "FLAGS", COLUMN_DIM);
         py += LINE_H;
         let flags = [
             ("Z", cpu.f & 0x80 != 0),
@@ -1250,7 +1250,7 @@ fn draw_panel_cpu(emu: Option<&GameBoyEmulator>, x: u32, y: u32, w: u32, h: u32,
             ("H", cpu.f & 0x20 != 0),
             ("C", cpu.f & 0x10 != 0),
         ];
-        let mut fx = pixel;
+        let mut fx = px;
         for (name, set) in &flags {
             let color = if *set { COLUMN_FLAG_ON } else { COLUMN_FLAG_OFF };
             framebuffer::fill_rect(fx, py, 24, 14, if *set { 0xFF0A3020 } else { 0xFF0A1510 });
@@ -1260,29 +1260,29 @@ fn draw_panel_cpu(emu: Option<&GameBoyEmulator>, x: u32, y: u32, w: u32, h: u32,
         py += LINE_H + 6;
 
         // IME, HALT state
-        draw_str(pixel, py, "IME", COLUMN_DIM);
-        draw_str(pixel + 32, py, if cpu.ime { "ON" } else { "OFF" }, 
+        draw_str(px, py, "IME", COLUMN_DIM);
+        draw_str(px + 32, py, if cpu.ime { "ON" } else { "OFF" }, 
             if cpu.ime { COLUMN_FLAG_ON } else { COLUMN_FLAG_OFF });
-        draw_str(pixel + 64, py, "HALT", COLUMN_DIM);
-        draw_str(pixel + 100, py, if cpu.halted { "YES" } else { "NO" },
+        draw_str(px + 64, py, "HALT", COLUMN_DIM);
+        draw_str(px + 100, py, if cpu.halted { "YES" } else { "NO" },
             if cpu.halted { COLUMN_WARN } else { COLUMN_DIM });
         py += LINE_H;
 
         // Cycle counter
-        draw_str(pixel, py, "CYCLES", COLUMN_DIM);
+        draw_str(px, py, "CYCLES", COLUMN_DIM);
         let cs = format!("{}", cpu.cycles);
-        draw_str(pixel + 56, py, &cs, COLUMN_VALUE);
+        draw_str(px + 56, py, &cs, COLUMN_VALUE);
         py += LINE_H;
 
         // CGB mode
         if emu.cgb_mode {
-            draw_str(pixel, py, "MODE", COLUMN_DIM);
-            draw_str(pixel + 40, py, "CGB", COLUMN_BRIGHT);
+            draw_str(px, py, "MODE", COLUMN_DIM);
+            draw_str(px + 40, py, "CGB", COLUMN_BRIGHT);
             let spd = if emu.key1 & 0x80 != 0 { "2x" } else { "1x" };
-            draw_str(pixel + 72, py, spd, COLUMN_ACCENT);
+            draw_str(px + 72, py, spd, COLUMN_ACCENT);
         }
     } else {
-        draw_str(pixel, py, "No emulator linked", COLUMN_DIM);
+        draw_str(px, py, "No emulator linked", COLUMN_DIM);
     }
 }
 
@@ -1290,18 +1290,18 @@ fn draw_panel_cpu(emu: Option<&GameBoyEmulator>, x: u32, y: u32, w: u32, h: u32,
 fn draw_panel_gpu(emu: Option<&GameBoyEmulator>, x: u32, y: u32, w: u32, h: u32, state: &GameLabState) {
     draw_panel_frame(x, y, w, h, "GPU / LCD", state.selected_panel == 1);
 
-    let pixel = x + PANEL_PAD + 2;
+    let px = x + PANEL_PAD + 2;
     let mut py = y + 20;
 
     if let Some(emu) = emu {
         let gpu = &emu.gpu;
 
         // LCDC register breakdown
-        draw_str(pixel, py, "LCDC", COLUMN_REGISTER);
+        draw_str(px, py, "LCDC", COLUMN_REGISTER);
         let ls = format!("{:02X}", gpu.lcdc);
-        draw_str(pixel + 40, py, &ls, COLUMN_VALUE);
+        draw_str(px + 40, py, &ls, COLUMN_VALUE);
         let lcd_on = gpu.lcdc & 0x80 != 0;
-        draw_str(pixel + 64, py, if lcd_on { "LCD:ON" } else { "LCD:OFF" },
+        draw_str(px + 64, py, if lcd_on { "LCD:ON" } else { "LCD:OFF" },
             if lcd_on { COLUMN_FLAG_ON } else { COLUMN_RED });
         py += LINE_H;
 
@@ -1312,38 +1312,38 @@ fn draw_panel_gpu(emu: Option<&GameBoyEmulator>, x: u32, y: u32, w: u32, h: u32,
             ("8x16", gpu.lcdc & 0x04 != 0),
             ("WIN", gpu.lcdc & 0x20 != 0),
         ];
-        let mut bx = pixel;
+        let mut bx = px;
         for (name, on) in &bits {
-            let column = if *on { COLUMN_FLAG_ON } else { COLUMN_FLAG_OFF };
-            draw_str(bx, py, name, column);
+            let col = if *on { COLUMN_FLAG_ON } else { COLUMN_FLAG_OFF };
+            draw_str(bx, py, name, col);
             bx += (name.len() as u32 + 1) * CHAR_W;
         }
         py += LINE_H + 4;
 
         // Scanline info
-        draw_str(pixel, py, "LY", COLUMN_REGISTER);
+        draw_str(px, py, "LY", COLUMN_REGISTER);
         let lys = format!("{:3} / 153", gpu.ly);
-        draw_str(pixel + 28, py, &lys, COLUMN_VALUE);
+        draw_str(px + 28, py, &lys, COLUMN_VALUE);
         // Scanline progress bar
-        let bar_x = pixel + 110;
+        let bar_x = px + 110;
         let bar_w = w.saturating_sub(130);
         framebuffer::fill_rect(bar_x, py + 2, bar_w, 8, 0xFF0A1A10);
         let progress = (gpu.ly as u32 * bar_w) / 154;
         let bar_column = if gpu.ly < 144 { COLUMN_BRIGHT } else { COLUMN_WARN };
-        framebuffer::fill_rect(bar_x, py + 2, progress.minimum(bar_w), 8, bar_column);
+        framebuffer::fill_rect(bar_x, py + 2, progress.min(bar_w), 8, bar_column);
         py += LINE_H;
 
-        draw_str(pixel, py, "LYC", COLUMN_DIM);
+        draw_str(px, py, "LYC", COLUMN_DIM);
         let lycs = format!("{:3}", gpu.lyc);
-        draw_str(pixel + 32, py, &lycs, COLUMN_VALUE);
+        draw_str(px + 32, py, &lycs, COLUMN_VALUE);
         if gpu.ly == gpu.lyc {
-            draw_str(pixel + 60, py, "=MATCH", COLUMN_BRIGHT);
+            draw_str(px + 60, py, "=MATCH", COLUMN_BRIGHT);
         }
         py += LINE_H;
 
         // Mode
-        draw_str(pixel, py, "MODE", COLUMN_DIM);
-        let (mode_name, mode_column) = // Pattern matching — Rust's exhaustive branching construct.
+        draw_str(px, py, "MODE", COLUMN_DIM);
+        let (mode_name, mode_col) = // Pattern matching — Rust's exhaustive branching construct.
 match gpu.mode {
             0 => ("HBLANK", COLUMN_DIM),
             1 => ("VBLANK", COLUMN_WARN),
@@ -1351,38 +1351,38 @@ match gpu.mode {
             3 => ("DRAW", COLUMN_BRIGHT),
             _ => ("???", COLUMN_RED),
         };
-        draw_str(pixel + 40, py, mode_name, mode_column);
+        draw_str(px + 40, py, mode_name, mode_col);
         let cycs = format!("({} dots)", gpu.cycles);
-        draw_str(pixel + 96, py, &cycs, COLUMN_DIM);
+        draw_str(px + 96, py, &cycs, COLUMN_DIM);
         py += LINE_H + 4;
 
         // Scroll
-        draw_str(pixel, py, "SCX/Y", COLUMN_DIM);
+        draw_str(px, py, "SCX/Y", COLUMN_DIM);
         let ss = format!("{:3},{:3}", gpu.scx, gpu.scy);
-        draw_str(pixel + 48, py, &ss, COLUMN_VALUE);
+        draw_str(px + 48, py, &ss, COLUMN_VALUE);
         py += LINE_H;
-        draw_str(pixel, py, "WX/Y", COLUMN_DIM);
+        draw_str(px, py, "WX/Y", COLUMN_DIM);
         let ws = format!("{:3},{:3}", gpu.wx, gpu.wy);
-        draw_str(pixel + 48, py, &ws, COLUMN_VALUE);
+        draw_str(px + 48, py, &ws, COLUMN_VALUE);
         py += LINE_H + 4;
 
         // DMG Palettes
-        draw_str(pixel, py, "BGP", COLUMN_DIM);
-        draw_palette_bar(pixel + 32, py, gpu.bgp);
+        draw_str(px, py, "BGP", COLUMN_DIM);
+        draw_palette_bar(px + 32, py, gpu.bgp);
         py += LINE_H;
-        draw_str(pixel, py, "OBP0", COLUMN_DIM);
-        draw_palette_bar(pixel + 40, py, gpu.obp0);
+        draw_str(px, py, "OBP0", COLUMN_DIM);
+        draw_palette_bar(px + 40, py, gpu.obp0);
         py += LINE_H;
-        draw_str(pixel, py, "OBP1", COLUMN_DIM);
-        draw_palette_bar(pixel + 40, py, gpu.obp1);
+        draw_str(px, py, "OBP1", COLUMN_DIM);
+        draw_palette_bar(px + 40, py, gpu.obp1);
         py += LINE_H + 4;
 
         // CGB palettes (show first BG palette colors if CGB)
         if emu.cgb_mode {
-            draw_str(pixel, py, "CGB BG PALETTES", COLUMN_DIM);
+            draw_str(px, py, "CGB BG PALETTES", COLUMN_DIM);
             py += LINE_H;
             for pal in 0..8 {
-                let ppx = pixel + pal * 36;
+                let ppx = px + pal * 36;
                 for c in 0..4u32 {
                     let offset = (pal * 8 + c * 2) as usize;
                     if offset + 1 < gpu.bg_palette.len() {
@@ -1400,12 +1400,12 @@ match gpu.mode {
             py += 12;
 
             // VRAM bank
-            draw_str(pixel, py, "VRAM BANK", COLUMN_DIM);
+            draw_str(px, py, "VRAM BANK", COLUMN_DIM);
             let vbs = format!("{}", gpu.vram_bank);
-            draw_str(pixel + 80, py, &vbs, COLUMN_VALUE);
+            draw_str(px + 80, py, &vbs, COLUMN_VALUE);
         }
     } else {
-        draw_str(pixel, py, "No emulator linked", COLUMN_DIM);
+        draw_str(px, py, "No emulator linked", COLUMN_DIM);
     }
 }
 
@@ -1413,54 +1413,54 @@ match gpu.mode {
 fn draw_panel_memory(emu: Option<&GameBoyEmulator>, state: &GameLabState, x: u32, y: u32, w: u32, h: u32) {
     draw_panel_frame(x, y, w, h, "MEMORY", state.selected_panel == 2);
 
-    let pixel = x + PANEL_PAD + 2;
+    let px = x + PANEL_PAD + 2;
     let mut py = y + 20;
 
     // Memory mode tabs
     let modes = ["WRAM", "VRAM", "HRAM", "ROM", "OAM"];
-    let mut transmit = pixel;
+    let mut transmit = px;
     for (i, name) in modes.iter().enumerate() {
-        let selected = i as u8 == state.memory_mode;
-        let column = if selected { COLUMN_BRIGHT } else { COLUMN_DIM };
+        let selected = i as u8 == state.mem_mode;
+        let col = if selected { COLUMN_BRIGHT } else { COLUMN_DIM };
         if selected {
             framebuffer::fill_rect(transmit, py, name.len() as u32 * CHAR_W + 4, LINE_H, 0xFF1A3020);
         }
-        draw_str(transmit + 2, py, name, column);
+        draw_str(transmit + 2, py, name, col);
         transmit += name.len() as u32 * CHAR_W + 8;
     }
     py += LINE_H + 4;
 
     // Address header
-    let adr_s = format!("ADDR  {:04X}", state.memory_view_address);
-    draw_str(pixel, py, &adr_s, COLUMN_ACCENT);
+    let adr_s = format!("ADDR  {:04X}", state.mem_view_addr);
+    draw_str(px, py, &adr_s, COLUMN_ACCENT);
     py += LINE_H;
 
     if let Some(emu) = emu {
         // Hex dump rows
-        let rows = ((h - 60) / LINE_H).minimum(16) as u16;
+        let rows = ((h - 60) / LINE_H).min(16) as u16;
         for row in 0..rows {
-            let address = state.memory_view_address.wrapping_add(row * 16);
+            let addr = state.mem_view_addr.wrapping_add(row * 16);
             // Address
-            let address_s = format!("{:04X}", address);
-            draw_str(pixel, py, &address_s, COLUMN_ADDRESS);
+            let address_s = format!("{:04X}", addr);
+            draw_str(px, py, &address_s, COLUMN_ADDRESS);
 
             // Hex bytes
-            let mut hx = pixel + 40;
+            let mut hx = px + 40;
             let mut ascii_buffer = [b'.'; 16];
-            for column in 0..16u16 {
-                let a = address.wrapping_add(column);
+            for col in 0..16u16 {
+                let a = addr.wrapping_add(col);
                 let byte = read_emu_byte(emu, a);
                 let hs = format!("{:02X}", byte);
                 // Memory diff: highlight changed bytes
-                let diff_index = (row * 16 + column) as usize;
-                let previous = if diff_index < state.memory_previous.len() { state.memory_previous[diff_index] } else { byte };
-                let byte_column = if byte != previous { COLUMN_CHANGED } else if byte == 0 { COLUMN_DIM } else { COLUMN_VALUE };
+                let diff_index = (row * 16 + col) as usize;
+                let prev = if diff_index < state.mem_prev.len() { state.mem_prev[diff_index] } else { byte };
+                let byte_column = if byte != prev { COLUMN_CHANGED } else if byte == 0 { COLUMN_DIM } else { COLUMN_VALUE };
                 draw_str(hx, py, &hs, byte_column);
                 hx += 20;
-                if column == 7 { hx += 4; } // gap between 8-byte groups
+                if col == 7 { hx += 4; } // gap between 8-byte groups
 
                 if byte >= 0x20 && byte < 0x7F {
-                    ascii_buffer[column as usize] = byte;
+                    ascii_buffer[col as usize] = byte;
                 }
             }
 
@@ -1473,7 +1473,7 @@ fn draw_panel_memory(emu: Option<&GameBoyEmulator>, state: &GameLabState, x: u32
             py += LINE_H;
         }
     } else {
-        draw_str(pixel, py, "No emulator linked", COLUMN_DIM);
+        draw_str(px, py, "No emulator linked", COLUMN_DIM);
     }
 }
 
@@ -1481,80 +1481,80 @@ fn draw_panel_memory(emu: Option<&GameBoyEmulator>, state: &GameLabState, x: u32
 fn draw_panel_io(emu: Option<&GameBoyEmulator>, x: u32, y: u32, w: u32, h: u32, state: &GameLabState) {
     draw_panel_frame(x, y, w, h, "I/O REGISTERS", state.selected_panel == 3);
 
-    let pixel = x + PANEL_PAD + 2;
+    let px = x + PANEL_PAD + 2;
     let mut py = y + 20;
 
     if let Some(emu) = emu {
         // Interrupts
-        draw_str(pixel, py, "INTERRUPTS", COLUMN_ACCENT);
+        draw_str(px, py, "INTERRUPTS", COLUMN_ACCENT);
         py += LINE_H;
 
-        draw_str(pixel, py, "IE", COLUMN_REGISTER);
-        let ies = format!("{:02X}", emu.ie_register);
-        draw_str(pixel + 24, py, &ies, COLUMN_VALUE);
+        draw_str(px, py, "IE", COLUMN_REGISTER);
+        let ies = format!("{:02X}", emu.ie_reg);
+        draw_str(px + 24, py, &ies, COLUMN_VALUE);
 
-        draw_str(pixel + 50, py, "IF", COLUMN_REGISTER);
-        let ifs = format!("{:02X}", emu.if_register);
-        draw_str(pixel + 74, py, &ifs, COLUMN_VALUE);
+        draw_str(px + 50, py, "IF", COLUMN_REGISTER);
+        let ifs = format!("{:02X}", emu.if_reg);
+        draw_str(px + 74, py, &ifs, COLUMN_VALUE);
         py += LINE_H;
 
         // Individual interrupt flags
         let int_names = ["VBL", "STA", "TIM", "SER", "JOY"];
-        let mut ix = pixel;
+        let mut ix = px;
         for (i, name) in int_names.iter().enumerate() {
-            let ie = emu.ie_register & (1 << i) != 0;
-            let iflag = emu.if_register & (1 << i) != 0;
-            let column = if ie && iflag { COLUMN_RED } else if ie { COLUMN_FLAG_ON } else { COLUMN_FLAG_OFF };
-            draw_str(ix, py, name, column);
+            let ie = emu.ie_reg & (1 << i) != 0;
+            let iflag = emu.if_reg & (1 << i) != 0;
+            let col = if ie && iflag { COLUMN_RED } else if ie { COLUMN_FLAG_ON } else { COLUMN_FLAG_OFF };
+            draw_str(ix, py, name, col);
             ix += 32;
         }
         py += LINE_H + 6;
 
         // Timer
-        draw_str(pixel, py, "TIMER", COLUMN_ACCENT);
+        draw_str(px, py, "TIMER", COLUMN_ACCENT);
         py += LINE_H;
 
-        draw_str(pixel, py, "DIV", COLUMN_DIM);
+        draw_str(px, py, "DIV", COLUMN_DIM);
         let divs = format!("{:02X}", emu.timer.read_div());
-        draw_str(pixel + 32, py, &divs, COLUMN_VALUE);
+        draw_str(px + 32, py, &divs, COLUMN_VALUE);
 
-        draw_str(pixel + 60, py, "TIMA", COLUMN_DIM);
+        draw_str(px + 60, py, "TIMA", COLUMN_DIM);
         let timas = format!("{:02X}", emu.timer.tima);
-        draw_str(pixel + 100, py, &timas, COLUMN_VALUE);
+        draw_str(px + 100, py, &timas, COLUMN_VALUE);
         py += LINE_H;
 
-        draw_str(pixel, py, "TMA", COLUMN_DIM);
+        draw_str(px, py, "TMA", COLUMN_DIM);
         let tmas = format!("{:02X}", emu.timer.tma);
-        draw_str(pixel + 32, py, &tmas, COLUMN_VALUE);
+        draw_str(px + 32, py, &tmas, COLUMN_VALUE);
 
-        draw_str(pixel + 60, py, "TAC", COLUMN_DIM);
+        draw_str(px + 60, py, "TAC", COLUMN_DIM);
         let tacs = format!("{:02X}", emu.timer.tac);
-        draw_str(pixel + 100, py, &tacs, COLUMN_VALUE);
+        draw_str(px + 100, py, &tacs, COLUMN_VALUE);
         py += LINE_H + 6;
 
         // Serial
-        draw_str(pixel, py, "SERIAL", COLUMN_ACCENT);
+        draw_str(px, py, "SERIAL", COLUMN_ACCENT);
         py += LINE_H;
-        draw_str(pixel, py, "SB", COLUMN_DIM);
+        draw_str(px, py, "SB", COLUMN_DIM);
         let sbs = format!("{:02X}", emu.serial_data);
-        draw_str(pixel + 24, py, &sbs, COLUMN_VALUE);
-        draw_str(pixel + 50, py, "SC", COLUMN_DIM);
-        let scs = format!("{:02X}", emu.serial_controller);
-        draw_str(pixel + 74, py, &scs, COLUMN_VALUE);
+        draw_str(px + 24, py, &sbs, COLUMN_VALUE);
+        draw_str(px + 50, py, "SC", COLUMN_DIM);
+        let scs = format!("{:02X}", emu.serial_ctrl);
+        draw_str(px + 74, py, &scs, COLUMN_VALUE);
 
         if emu.cgb_mode {
             py += LINE_H + 6;
-            draw_str(pixel, py, "CGB I/O", COLUMN_ACCENT);
+            draw_str(px, py, "CGB I/O", COLUMN_ACCENT);
             py += LINE_H;
-            draw_str(pixel, py, "KEY1", COLUMN_DIM);
+            draw_str(px, py, "KEY1", COLUMN_DIM);
             let k1s = format!("{:02X}", emu.key1);
-            draw_str(pixel + 40, py, &k1s, COLUMN_VALUE);
-            draw_str(pixel + 68, py, "WRAM", COLUMN_DIM);
+            draw_str(px + 40, py, &k1s, COLUMN_VALUE);
+            draw_str(px + 68, py, "WRAM", COLUMN_DIM);
             let wbs = format!("BK{}", emu.wram_bank);
-            draw_str(pixel + 104, py, &wbs, COLUMN_VALUE);
+            draw_str(px + 104, py, &wbs, COLUMN_VALUE);
         }
     } else {
-        draw_str(pixel, py, "No emulator linked", COLUMN_DIM);
+        draw_str(px, py, "No emulator linked", COLUMN_DIM);
     }
 }
 
@@ -1562,7 +1562,7 @@ fn draw_panel_io(emu: Option<&GameBoyEmulator>, x: u32, y: u32, w: u32, h: u32, 
 fn draw_panel_cart(emu: Option<&GameBoyEmulator>, x: u32, y: u32, w: u32, h: u32) {
     draw_panel_frame(x, y, w, h, "CARTRIDGE", false);
 
-    let pixel = x + PANEL_PAD + 2;
+    let px = x + PANEL_PAD + 2;
     let mut py = y + 20;
 
     if let Some(emu) = emu {
@@ -1572,8 +1572,8 @@ fn draw_panel_cart(emu: Option<&GameBoyEmulator>, x: u32, y: u32, w: u32, h: u32
         let title_bytes: alloc::vec::Vec<u8> = cart.title.iter().copied()
             .take_while(|&c| c != 0 && c >= 0x20).collect();
         let title = core::str::from_utf8(&title_bytes).unwrap_or("???");
-        draw_str(pixel, py, "TITLE", COLUMN_DIM);
-        draw_str(pixel + 48, py, title, COLUMN_BRIGHT);
+        draw_str(px, py, "TITLE", COLUMN_DIM);
+        draw_str(px + 48, py, title, COLUMN_BRIGHT);
         py += LINE_H;
 
         // Type
@@ -1584,37 +1584,37 @@ match cart.mbc_type {
             crate::gameboy::cartridge::MbcType::Mbc3 => "MBC3",
             crate::gameboy::cartridge::MbcType::Mbc5 => "MBC5",
         };
-        draw_str(pixel, py, "MBC", COLUMN_DIM);
-        draw_str(pixel + 32, py, mbc, COLUMN_VALUE);
+        draw_str(px, py, "MBC", COLUMN_DIM);
+        draw_str(px + 32, py, mbc, COLUMN_VALUE);
         py += LINE_H;
 
         // ROM/RAM size
         let rom_keyboard = cart.rom.len() / 1024;
         let ram_keyboard = cart.ram.len() / 1024;
-        draw_str(pixel, py, "ROM", COLUMN_DIM);
+        draw_str(px, py, "ROM", COLUMN_DIM);
         let rs = format!("{}KB", rom_keyboard);
-        draw_str(pixel + 32, py, &rs, COLUMN_VALUE);
-        draw_str(pixel + 80, py, "RAM", COLUMN_DIM);
+        draw_str(px + 32, py, &rs, COLUMN_VALUE);
+        draw_str(px + 80, py, "RAM", COLUMN_DIM);
         let ras = format!("{}KB", ram_keyboard);
-        draw_str(pixel + 112, py, &ras, COLUMN_VALUE);
+        draw_str(px + 112, py, &ras, COLUMN_VALUE);
         py += LINE_H;
 
         // Banks
-        draw_str(pixel, py, "ROM BANK", COLUMN_DIM);
+        draw_str(px, py, "ROM BANK", COLUMN_DIM);
         let rbs = format!("{:3}", cart.rom_bank);
-        draw_str(pixel + 72, py, &rbs, COLUMN_VALUE);
+        draw_str(px + 72, py, &rbs, COLUMN_VALUE);
         let total_banks = cart.rom.len() / 16384;
         let tbs = format!("/ {}", total_banks);
-        draw_str(pixel + 96, py, &tbs, COLUMN_DIM);
+        draw_str(px + 96, py, &tbs, COLUMN_DIM);
         py += LINE_H;
 
-        draw_str(pixel, py, "RAM BANK", COLUMN_DIM);
+        draw_str(px, py, "RAM BANK", COLUMN_DIM);
         let rmbs = format!("{:3}", cart.ram_bank);
-        draw_str(pixel + 72, py, &rmbs, COLUMN_VALUE);
+        draw_str(px + 72, py, &rmbs, COLUMN_VALUE);
         py += LINE_H;
 
         // CGB flag
-        draw_str(pixel, py, "CGB", COLUMN_DIM);
+        draw_str(px, py, "CGB", COLUMN_DIM);
         let cgb_s = // Pattern matching — Rust's exhaustive branching construct.
 match cart.cgb_flag {
             0xC0 => "CGB ONLY",
@@ -1622,9 +1622,9 @@ match cart.cgb_flag {
             _ => "DMG",
         };
         let cgb_c = if cart.cgb_flag >= 0x80 { COLUMN_ACCENT } else { COLUMN_DIM };
-        draw_str(pixel + 32, py, cgb_s, cgb_c);
+        draw_str(px + 32, py, cgb_s, cgb_c);
     } else {
-        draw_str(pixel, py, "No cartridge", COLUMN_DIM);
+        draw_str(px, py, "No cartridge", COLUMN_DIM);
     }
 }
 
@@ -1632,17 +1632,17 @@ match cart.cgb_flag {
 fn draw_panel_input(emu: Option<&GameBoyEmulator>, x: u32, y: u32, w: u32, h: u32, state: &GameLabState) {
     draw_panel_frame(x, y, w, h, "INPUT STATE", state.selected_panel == 5);
 
-    let pixel = x + PANEL_PAD + 2;
+    let px = x + PANEL_PAD + 2;
     let mut py = y + 20;
 
     if let Some(emu) = emu {
-        draw_str(pixel, py, "JOYPAD $FF00", COLUMN_ACCENT);
-        let jps = format!("{:02X}", emu.joypad_register);
-        draw_str(pixel + 104, py, &jps, COLUMN_VALUE);
+        draw_str(px, py, "JOYPAD $FF00", COLUMN_ACCENT);
+        let jps = format!("{:02X}", emu.joypad_reg);
+        draw_str(px + 104, py, &jps, COLUMN_VALUE);
         py += LINE_H + 4;
 
         // D-Pad visualization
-        draw_str(pixel, py, "D-PAD", COLUMN_DIM);
+        draw_str(px, py, "D-PAD", COLUMN_DIM);
         py += LINE_H;
         let up    = emu.joypad_dirs & 0x04 == 0;
         let down  = emu.joypad_dirs & 0x08 == 0;
@@ -1650,26 +1650,26 @@ fn draw_panel_input(emu: Option<&GameBoyEmulator>, x: u32, y: u32, w: u32, h: u3
         let right = emu.joypad_dirs & 0x01 == 0;
 
         // Draw d-pad shape
-        let dx = pixel + 16;
+        let dx = px + 16;
         let dy = py;
-        let size: u32 = 16;
+        let sz: u32 = 16;
         // Up
-        framebuffer::fill_rect(dx + size, dy, size, size, if up { COLUMN_FLAG_ON } else { 0xFF1A2820 });
-        draw_str(dx + size + 3, dy + 2, "U", if up { 0xFF000000 } else { COLUMN_DIM });
+        framebuffer::fill_rect(dx + sz, dy, sz, sz, if up { COLUMN_FLAG_ON } else { 0xFF1A2820 });
+        draw_str(dx + sz + 3, dy + 2, "U", if up { 0xFF000000 } else { COLUMN_DIM });
         // Down
-        framebuffer::fill_rect(dx + size, dy + size * 2, size, size, if down { COLUMN_FLAG_ON } else { 0xFF1A2820 });
-        draw_str(dx + size + 3, dy + size * 2 + 2, "D", if down { 0xFF000000 } else { COLUMN_DIM });
+        framebuffer::fill_rect(dx + sz, dy + sz * 2, sz, sz, if down { COLUMN_FLAG_ON } else { 0xFF1A2820 });
+        draw_str(dx + sz + 3, dy + sz * 2 + 2, "D", if down { 0xFF000000 } else { COLUMN_DIM });
         // Left
-        framebuffer::fill_rect(dx, dy + size, size, size, if left { COLUMN_FLAG_ON } else { 0xFF1A2820 });
-        draw_str(dx + 3, dy + size + 2, "L", if left { 0xFF000000 } else { COLUMN_DIM });
+        framebuffer::fill_rect(dx, dy + sz, sz, sz, if left { COLUMN_FLAG_ON } else { 0xFF1A2820 });
+        draw_str(dx + 3, dy + sz + 2, "L", if left { 0xFF000000 } else { COLUMN_DIM });
         // Right
-        framebuffer::fill_rect(dx + size * 2, dy + size, size, size, if right { COLUMN_FLAG_ON } else { 0xFF1A2820 });
-        draw_str(dx + size * 2 + 3, dy + size + 2, "R", if right { 0xFF000000 } else { COLUMN_DIM });
+        framebuffer::fill_rect(dx + sz * 2, dy + sz, sz, sz, if right { COLUMN_FLAG_ON } else { 0xFF1A2820 });
+        draw_str(dx + sz * 2 + 3, dy + sz + 2, "R", if right { 0xFF000000 } else { COLUMN_DIM });
         // Center
-        framebuffer::fill_rect(dx + size, dy + size, size, size, 0xFF1A2820);
+        framebuffer::fill_rect(dx + sz, dy + sz, sz, sz, 0xFF1A2820);
 
         // Action buttons
-        let bx = pixel + 100;
+        let bx = px + 100;
         let a_pressed = emu.joypad_buttons & 0x01 == 0;
         let b_pressed = emu.joypad_buttons & 0x02 == 0;
         let sel_pressed = emu.joypad_buttons & 0x04 == 0;
@@ -1683,10 +1683,10 @@ fn draw_panel_input(emu: Option<&GameBoyEmulator>, x: u32, y: u32, w: u32, h: u3
         framebuffer::fill_rect(bx, dy + 16, 22, 22, if b_pressed { COLUMN_FLAG_ON } else { 0xFF1A2820 });
         draw_str(bx + 6, dy + 20, "B", if b_pressed { 0xFF000000 } else { COLUMN_VALUE });
 
-        py = dy + size * 3 + 6;
+        py = dy + sz * 3 + 6;
 
         // Select / Start
-        let sel_x = pixel + 20;
+        let sel_x = px + 20;
         framebuffer::fill_rect(sel_x, py, 40, 14, if sel_pressed { COLUMN_ACCENT } else { 0xFF1A2820 });
         draw_str(sel_x + 4, py + 1, "SEL", if sel_pressed { 0xFF000000 } else { COLUMN_DIM });
 
@@ -1695,14 +1695,14 @@ fn draw_panel_input(emu: Option<&GameBoyEmulator>, x: u32, y: u32, w: u32, h: u3
         py += LINE_H + 8;
 
         // Raw button bytes
-        draw_str(pixel, py, "DIRS", COLUMN_DIM);
+        draw_str(px, py, "DIRS", COLUMN_DIM);
         let ds = format!("{:02X}", emu.joypad_dirs);
-        draw_str(pixel + 40, py, &ds, COLUMN_VALUE);
-        draw_str(pixel + 68, py, "BTNS", COLUMN_DIM);
+        draw_str(px + 40, py, &ds, COLUMN_VALUE);
+        draw_str(px + 68, py, "BTNS", COLUMN_DIM);
         let bs = format!("{:02X}", emu.joypad_buttons);
-        draw_str(pixel + 108, py, &bs, COLUMN_VALUE);
+        draw_str(px + 108, py, &bs, COLUMN_VALUE);
     } else {
-        draw_str(pixel, py, "No emulator linked", COLUMN_DIM);
+        draw_str(px, py, "No emulator linked", COLUMN_DIM);
     }
 }
 
@@ -1724,8 +1724,8 @@ fn draw_panel_frame(x: u32, y: u32, w: u32, h: u32, title: &str, selected: bool)
 
 fn draw_str(x: u32, y: u32, text: &str, color: u32) {
     let mut cx = x;
-    for character in text.chars() {
-        framebuffer::draw_char_at(cx, y, character, color);
+    for ch in text.chars() {
+        framebuffer::draw_char_at(cx, y, ch, color);
         cx += CHAR_W;
     }
 }
@@ -1740,27 +1740,27 @@ fn draw_palette_bar(x: u32, y: u32, palette: u8) {
 }
 
 /// Read a byte from the emulator's memory map (read-only, no side effects on bus)
-pub fn read_emu_byte(emu: &GameBoyEmulator, address: u16) -> u8 {
+pub fn read_emu_byte(emu: &GameBoyEmulator, addr: u16) -> u8 {
         // Pattern matching — Rust's exhaustive branching construct.
-match address {
-        0x0000..=0x7FFF => emu.cart.read(address),
-        0x8000..=0x9FFF => emu.gpu.read_vram(address),
-        0xA000..=0xBFFF => emu.cart.read(address),
+match addr {
+        0x0000..=0x7FFF => emu.cart.read(addr),
+        0x8000..=0x9FFF => emu.gpu.read_vram(addr),
+        0xA000..=0xBFFF => emu.cart.read(addr),
         0xC000..=0xCFFF => {
-            let index = (address as usize) - 0xC000;
-            if index < emu.wram.len() { emu.wram[index] } else { 0xFF }
+            let idx = (addr as usize) - 0xC000;
+            if idx < emu.wram.len() { emu.wram[idx] } else { 0xFF }
         }
         0xD000..=0xDFFF => {
-            let bank = emu.wram_bank.maximum(1) as usize;
-            let offset = bank * 0x1000 + (address as usize - 0xD000);
+            let bank = emu.wram_bank.max(1) as usize;
+            let offset = bank * 0x1000 + (addr as usize - 0xD000);
             if offset < emu.wram.len() { emu.wram[offset] } else { 0xFF }
         }
-        0xFE00..=0xFE9F => emu.gpu.read_oam(address),
+        0xFE00..=0xFE9F => emu.gpu.read_oam(addr),
         0xFF80..=0xFFFE => {
-            let index = (address - 0xFF80) as usize;
-            if index < emu.hram.len() { emu.hram[index] } else { 0xFF }
+            let idx = (addr - 0xFF80) as usize;
+            if idx < emu.hram.len() { emu.hram[idx] } else { 0xFF }
         }
-        0xFFFF => emu.ie_register,
+        0xFFFF => emu.ie_reg,
         _ => 0xFF,
     }
 }
@@ -1768,13 +1768,13 @@ match address {
 /// Update memory diff snapshot (called each frame from desktop)
 pub fn update_memory_diff(state: &mut GameLabState, emu: &GameBoyEmulator) {
     for i in 0..256usize {
-        let address = state.memory_view_address.wrapping_add(i as u16);
-        state.memory_previous[i] = read_emu_byte(emu, address);
+        let addr = state.mem_view_addr.wrapping_add(i as u16);
+        state.mem_prev[i] = read_emu_byte(emu, addr);
     }
 }
 
 /// Draw a small button
-fn draw_button(x: u32, y: u32, w: u32, h: u32, label: &str, active: bool, color: u32) {
+fn draw_btn(x: u32, y: u32, w: u32, h: u32, label: &str, active: bool, color: u32) {
     let bg = if active { 0xFF1A3020 } else { 0xFF0E1820 };
     framebuffer::fill_rect(x, y, w, h, bg);
     framebuffer::fill_rect(x, y, w, 1, color & 0x40FFFFFF);
@@ -1786,10 +1786,10 @@ fn draw_button(x: u32, y: u32, w: u32, h: u32, label: &str, active: bool, color:
 }
 
 /// Simple disassembler — returns (mnemonic, instruction_size)
-fn disasm_opcode(emu: &GameBoyEmulator, address: u16) -> (String, u8) {
-    let op = read_emu_byte(emu, address);
-    let b1 = read_emu_byte(emu, address.wrapping_add(1));
-    let b2 = read_emu_byte(emu, address.wrapping_add(2));
+fn disasm_opcode(emu: &GameBoyEmulator, addr: u16) -> (String, u8) {
+    let op = read_emu_byte(emu, addr);
+    let b1 = read_emu_byte(emu, addr.wrapping_add(1));
+    let b2 = read_emu_byte(emu, addr.wrapping_add(2));
     let imm16 = (b2 as u16) << 8 | b1 as u16;
 
         // Pattern matching — Rust's exhaustive branching construct.
@@ -1837,9 +1837,9 @@ match op {
         0x3D => (String::from("DEC A"), 1),
         0x3E => (format!("LD A,${:02X}", b1), 2),
         0x40..=0x7F if op != 0x76 => {
-            let destination = ["B","C","D","E","H","L","(HL)","A"][(op as usize >> 3) & 7];
-            let source = ["B","C","D","E","H","L","(HL)","A"][op as usize & 7];
-            (format!("LD {},{}", destination, source), 1)
+            let dst = ["B","C","D","E","H","L","(HL)","A"][(op as usize >> 3) & 7];
+            let src = ["B","C","D","E","H","L","(HL)","A"][op as usize & 7];
+            (format!("LD {},{}", dst, src), 1)
         }
         0x76 => (String::from("HALT"), 1),
         0x80..=0x87 => {
@@ -1914,12 +1914,12 @@ match op {
 /// Draw the dedicated Game Boy input window content
 pub fn draw_input_window(
     emu: Option<&GameBoyEmulator>,
-    cx: u32, cy: u32, cw: u32, character: u32,
+    cx: u32, cy: u32, cw: u32, ch: u32,
 ) {
     // Background
-    framebuffer::fill_rect(cx, cy, cw, character, 0xFF0A0F14);
+    framebuffer::fill_rect(cx, cy, cw, ch, 0xFF0A0F14);
     
-    if cw < 60 || character < 40 { return; }
+    if cw < 60 || ch < 40 { return; }
     
     let (up, down, left, right, a_pressed, b_pressed, sel_pressed, start_pressed, dirs_raw, btns_raw) =
         if let Some(emu) = emu {
@@ -1950,19 +1950,19 @@ pub fn draw_input_window(
     // ── D-Pad ──────────────────────────────────────────────────────
     let dpad_x = cx + 40;
     let dpad_y = cy + 30;
-    let size: u32 = 26;
+    let sz: u32 = 26;
     let gap: u32 = 2;
     
     // Up
-    draw_input_button(dpad_x, dpad_y - size - gap, size, size, "W", up);
+    draw_input_button(dpad_x, dpad_y - sz - gap, sz, sz, "W", up);
     // Down
-    draw_input_button(dpad_x, dpad_y + size + gap, size, size, "S", down);
+    draw_input_button(dpad_x, dpad_y + sz + gap, sz, sz, "S", down);
     // Left
-    draw_input_button(dpad_x - size - gap, dpad_y, size, size, "A", left);
+    draw_input_button(dpad_x - sz - gap, dpad_y, sz, sz, "A", left);
     // Right
-    draw_input_button(dpad_x + size + gap, dpad_y, size, size, "D", right);
+    draw_input_button(dpad_x + sz + gap, dpad_y, sz, sz, "D", right);
     // Center
-    framebuffer::fill_rect(dpad_x, dpad_y, size, size, 0xFF141E1A);
+    framebuffer::fill_rect(dpad_x, dpad_y, sz, sz, 0xFF141E1A);
     
     // ── A / B Buttons ──────────────────────────────────────────────
     let button_size: u32 = 30;
@@ -1980,7 +1980,7 @@ pub fn draw_input_window(
     
     // ── Select / Start ─────────────────────────────────────────────
     let mid_x = cx + cw / 2;
-    let pill_y = cy + character - 36;
+    let pill_y = cy + ch - 36;
     draw_input_pill(mid_x - 70, pill_y, 56, 20, "SELECT", sel_pressed);
     draw_input_pill(mid_x + 14, pill_y, 56, 20, "START", start_pressed);
     
@@ -1989,7 +1989,7 @@ pub fn draw_input_window(
     draw_str(mid_x + 14, pill_y + 22, "(Enter)", COLUMN_DIM);
     
     // ── Raw joypad bytes ───────────────────────────────────────────
-    let information_y = cy + character - 16;
+    let information_y = cy + ch - 16;
     let ds = alloc::format!("DIRS:{:02X}", dirs_raw);
     let bs = alloc::format!("BTNS:{:02X}", btns_raw);
     draw_str(cx + 6, information_y, &ds, 0xFF3A5A44);
@@ -1997,10 +1997,10 @@ pub fn draw_input_window(
 }
 
 /// Get input button bounds for click hit-testing
-pub fn get_input_buttons(cx: u32, cy: u32, cw: u32, character: u32) -> [(u32, u32, u32, u32, u8); 8] {
+pub fn get_input_buttons(cx: u32, cy: u32, cw: u32, ch: u32) -> [(u32, u32, u32, u32, u8); 8] {
     let dpad_x = cx + 40;
     let dpad_y = cy + 30;
-    let size: u32 = 26;
+    let sz: u32 = 26;
     let gap: u32 = 2;
     
     let button_size: u32 = 30;
@@ -2010,13 +2010,13 @@ pub fn get_input_buttons(cx: u32, cy: u32, cw: u32, character: u32) -> [(u32, u3
     let b_y = cy + 48;
     
     let mid_x = cx + cw / 2;
-    let pill_y = cy + character - 36;
+    let pill_y = cy + ch - 36;
     
     [
-        (dpad_x, dpad_y - size - gap, size, size, b'w'),           // Up
-        (dpad_x, dpad_y + size + gap, size, size, b's'),           // Down
-        (dpad_x - size - gap, dpad_y, size, size, b'a'),           // Left
-        (dpad_x + size + gap, dpad_y, size, size, b'd'),           // Right
+        (dpad_x, dpad_y - sz - gap, sz, sz, b'w'),           // Up
+        (dpad_x, dpad_y + sz + gap, sz, sz, b's'),           // Down
+        (dpad_x - sz - gap, dpad_y, sz, sz, b'a'),           // Left
+        (dpad_x + sz + gap, dpad_y, sz, sz, b'd'),           // Right
         (a_x, a_y, button_size, button_size, b'x'),                    // A
         (b_x, b_y, button_size, button_size, b'z'),                    // B
         (mid_x - 70, pill_y, 56, 20, b'c'),                  // Select
@@ -2039,22 +2039,22 @@ fn draw_input_button(x: u32, y: u32, w: u32, h: u32, label: &str, pressed: bool)
     draw_str(transmit, ty, label, text_column);
 }
 
-fn draw_input_circle(x: u32, y: u32, size: u32, label: &str, pressed: bool) {
+fn draw_input_circle(x: u32, y: u32, sz: u32, label: &str, pressed: bool) {
     let bg = if pressed { 0xFF00CC66 } else { 0xFF1A2E24 };
-    framebuffer::fill_rect(x, y, size, size, bg);
+    framebuffer::fill_rect(x, y, sz, sz, bg);
     // Rounded corners
     framebuffer::fill_rect(x, y, 4, 4, 0xFF0A0F14);
-    framebuffer::fill_rect(x + size - 4, y, 4, 4, 0xFF0A0F14);
-    framebuffer::fill_rect(x, y + size - 4, 4, 4, 0xFF0A0F14);
-    framebuffer::fill_rect(x + size - 4, y + size - 4, 4, 4, 0xFF0A0F14);
+    framebuffer::fill_rect(x + sz - 4, y, 4, 4, 0xFF0A0F14);
+    framebuffer::fill_rect(x, y + sz - 4, 4, 4, 0xFF0A0F14);
+    framebuffer::fill_rect(x + sz - 4, y + sz - 4, 4, 4, 0xFF0A0F14);
     // Border
     let bc = if pressed { 0xFF00FF88 } else { 0xFF2A4A38 };
-    framebuffer::fill_rect(x + 3, y, size - 6, 1, bc);
-    framebuffer::fill_rect(x + 3, y + size - 1, size - 6, 1, bc);
-    framebuffer::fill_rect(x, y + 3, 1, size - 6, bc);
-    framebuffer::fill_rect(x + size - 1, y + 3, 1, size - 6, bc);
+    framebuffer::fill_rect(x + 3, y, sz - 6, 1, bc);
+    framebuffer::fill_rect(x + 3, y + sz - 1, sz - 6, 1, bc);
+    framebuffer::fill_rect(x, y + 3, 1, sz - 6, bc);
+    framebuffer::fill_rect(x + sz - 1, y + 3, 1, sz - 6, bc);
     let text_column = if pressed { 0xFF000000 } else { 0xFF00FF88 };
-    draw_str(x + size / 2 - 4, y + size / 2 - 6, label, text_column);
+    draw_str(x + sz / 2 - 4, y + sz / 2 - 6, label, text_column);
 }
 
 fn draw_input_pill(x: u32, y: u32, w: u32, h: u32, label: &str, pressed: bool) {

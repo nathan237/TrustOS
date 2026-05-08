@@ -141,7 +141,7 @@ pub struct ModelEditorState {
     pub show_axes: bool,
     pub show_tips: bool,
     pub show_vertices: bool,
-    pub status_message: String,
+    pub status_msg: String,
     pub model_name: String,
     
     // Undo
@@ -182,7 +182,7 @@ pub fn new() -> Self {
             show_axes: true,
             show_tips: true,
             show_vertices: true,
-            status_message: String::from("TrustEdit 3D ready — Press H for help"),
+            status_msg: String::from("TrustEdit 3D ready — Press H for help"),
             model_name: String::from("untitled"),
             undo_stack: Vec::new(),
             frame: 0,
@@ -210,7 +210,7 @@ match name {
         self.edges = mesh.edges;
         self.selected_verts.clear();
         self.edge_start = None;
-        self.status_message = format!("Loaded preset: {} ({} verts, {} edges)", 
+        self.status_msg = format!("Loaded preset: {} ({} verts, {} edges)", 
             name, self.vertices.len(), self.edges.len());
     }
     
@@ -221,7 +221,7 @@ match name {
         self.edges.clear();
         self.selected_verts.clear();
         self.edge_start = None;
-        self.status_message = String::from("Scene cleared");
+        self.status_msg = String::from("Scene cleared");
     }
     
     /// Push current state to undo stack
@@ -239,9 +239,9 @@ match name {
             self.edges = edges;
             self.selected_verts.clear();
             self.edge_start = None;
-            self.status_message = String::from("Undo");
+            self.status_msg = String::from("Undo");
         } else {
-            self.status_message = String::from("Nothing to undo");
+            self.status_msg = String::from("Nothing to undo");
         }
     }
     
@@ -267,10 +267,10 @@ match name {
                 // Pattern matching — Rust's exhaustive branching construct.
 match crate::ramfs::with_filesystem(|fs| fs.write_file(&path, bytes)) {
             Ok(_) => {
-                self.status_message = format!("Saved to {}", path);
+                self.status_msg = format!("Saved to {}", path);
             },
             Err(_) => {
-                self.status_message = String::from("Error: Could not save file");
+                self.status_msg = String::from("Error: Could not save file");
             }
         }
     }
@@ -297,14 +297,14 @@ match data_result {
                             self.model_name = String::from(name);
                         }
                     }
-                    self.status_message = format!("Loaded {} ({} verts, {} edges)", 
+                    self.status_msg = format!("Loaded {} ({} verts, {} edges)", 
                         path, self.vertices.len(), self.edges.len());
                 } else {
-                    self.status_message = String::from("Error: Invalid file data");
+                    self.status_msg = String::from("Error: Invalid file data");
                 }
             },
             Err(_) => {
-                self.status_message = format!("Error: Could not read {}", path);
+                self.status_msg = format!("Error: Could not read {}", path);
             }
         }
     }
@@ -365,18 +365,18 @@ match parts[0] {
         // Rotate around Y then X (orbit camera) — using cached sin/cos
         let cy = self.cached_cy;
         let sy = self.cached_sy;
-        let receive = V3 { x: v.x * cy + v.z * sy, y: v.y, z: -v.x * sy + v.z * cy };
+        let rx = V3 { x: v.x * cy + v.z * sy, y: v.y, z: -v.x * sy + v.z * cy };
         
         let cx = self.cached_cx;
         let sx = self.cached_sx;
-        let ry = V3 { x: receive.x, y: receive.y * cx - receive.z * sx, z: receive.y * sx + receive.z * cx };
+        let ry = V3 { x: rx.x, y: rx.y * cx - rx.z * sx, z: rx.y * sx + rx.z * cx };
         
         // Translate along camera distance
         let tz = ry.z + self.cam_dist;
         
         // Perspective projection
         if tz < 0.1 { return (0, 0, -999.0); }
-        let scale = (vw.minimum(vh) as f32) * 0.45;
+        let scale = (vw.min(vh) as f32) * 0.45;
         let sx_proj = (ry.x / tz * scale) + (vw as f32 * 0.5);
         let sy_proj = (-ry.y / tz * scale) + (vh as f32 * 0.5);
         (sx_proj as i32, sy_proj as i32, tz)
@@ -385,12 +385,12 @@ match parts[0] {
     /// Unproject a screen point to a 3D position on the Y=0 plane
     fn unproject_to_grid(&self, sx: i32, sy: i32, vw: usize, vh: usize) -> V3 {
         // Reverse perspective: get ray direction
-        let scale = (vw.minimum(vh) as f32) * 0.45;
-        let receive = (sx as f32 - vw as f32 * 0.5) / scale;
+        let scale = (vw.min(vh) as f32) * 0.45;
+        let rx = (sx as f32 - vw as f32 * 0.5) / scale;
         let ry = -(sy as f32 - vh as f32 * 0.5) / scale;
         
         // Ray direction in camera space
-        let directory = V3 { x: receive, y: ry, z: 1.0 };
+        let directory = V3 { x: rx, y: ry, z: 1.0 };
         
         // Unrotate by camera angles (inverse rotation)
         let cx = fast_cos(-self.cam_angle_x);
@@ -409,7 +409,7 @@ match parts[0] {
         };
         
         // Intersect with Y=0 plane
-        if d2.y.absolute() < 0.001 {
+        if d2.y.abs() < 0.001 {
             // Ray parallel to grid — place at distance
             return V3 { x: cam_position.x + d2.x * 5.0, y: 0.0, z: cam_position.z + d2.z * 5.0 };
         }
@@ -437,9 +437,9 @@ match parts[0] {
     fn find_vertex_at(&self, sx: i32, sy: i32, vw: usize, vh: usize) -> Option<usize> {
         let mut best: Option<(usize, f32)> = None;
         for (i, v) in self.vertices.iter().enumerate() {
-            let (pixel, py, z) = self.project_vertex(*v, vw, vh);
+            let (px, py, z) = self.project_vertex(*v, vw, vh);
             if z < 0.1 { continue; }
-            let dx = (pixel - sx) as f32;
+            let dx = (px - sx) as f32;
             let dy = (py - sy) as f32;
             let dist = dx * dx + dy * dy;
             if dist < VERTEX_SELECT_RADIUS * VERTEX_SELECT_RADIUS {
@@ -464,22 +464,22 @@ match key {
             b's' | b'S' => {
                 self.tool = EditTool::Select;
                 self.edge_start = None;
-                self.status_message = String::from("Tool: Select");
+                self.status_msg = String::from("Tool: Select");
             },
             b'a' | b'A' => {
                 self.tool = EditTool::AddVertex;
                 self.edge_start = None;
-                self.status_message = String::from("Tool: Add Vertex — Click to place");
+                self.status_msg = String::from("Tool: Add Vertex — Click to place");
             },
             b'e' | b'E' => {
                 self.tool = EditTool::AddEdge;
                 self.edge_start = None;
-                self.status_message = String::from("Tool: Add Edge — Click two vertices");
+                self.status_msg = String::from("Tool: Add Edge — Click two vertices");
             },
             b'g' | b'G' => {
                 self.tool = EditTool::Move;
                 self.edge_start = None;
-                self.status_message = String::from("Tool: Move — Drag vertices");
+                self.status_msg = String::from("Tool: Move — Drag vertices");
             },
             b'x' | b'X' => {
                 if self.tool == EditTool::Delete {
@@ -490,7 +490,7 @@ match key {
                 } else {
                     self.tool = EditTool::Delete;
                     self.edge_start = None;
-                    self.status_message = String::from("Tool: Delete — Click to remove");
+                    self.status_msg = String::from("Tool: Delete — Click to remove");
                 }
             },
             
@@ -500,7 +500,7 @@ match key {
             // Toggle display
             b'h' | b'H' => {
                 self.show_tips = !self.show_tips;
-                self.status_message = format!("Tips: {}", if self.show_tips { "ON" } else { "OFF" });
+                self.status_msg = format!("Tips: {}", if self.show_tips { "ON" } else { "OFF" });
             },
             b'v' | b'V' => {
                 self.show_vertices = !self.show_vertices;
@@ -528,25 +528,25 @@ match key {
             KEY_LEFT => self.cam_angle_y -= 0.15,
             KEY_RIGHT => self.cam_angle_y += 0.15,
             KEY_UP => {
-                self.cam_angle_x = (self.cam_angle_x - 0.15).maximum(-1.5);
+                self.cam_angle_x = (self.cam_angle_x - 0.15).max(-1.5);
             },
             KEY_DOWN => {
-                self.cam_angle_x = (self.cam_angle_x + 0.15).minimum(1.5);
+                self.cam_angle_x = (self.cam_angle_x + 0.15).min(1.5);
             },
             
             // Select all / deselect all
             b'd' | b'D' => {
                 self.selected_verts.clear();
                 self.edge_start = None;
-                self.status_message = String::from("Deselected all");
+                self.status_msg = String::from("Deselected all");
             },
             
             // Camera zoom
             b'+' | b'=' => {
-                self.cam_dist = (self.cam_dist - 0.5).maximum(1.5);
+                self.cam_dist = (self.cam_dist - 0.5).max(1.5);
             },
             b'-' | b'_' => {
-                self.cam_dist = (self.cam_dist + 0.5).minimum(20.0);
+                self.cam_dist = (self.cam_dist + 0.5).min(20.0);
             },
             
             // Camera reset
@@ -555,7 +555,7 @@ match key {
                 self.cam_angle_x = 0.4;
                 self.cam_dist = 6.0;
                 self.cam_target = V3 { x: 0.0, y: 0.0, z: 0.0 };
-                self.status_message = String::from("Camera reset");
+                self.status_msg = String::from("Camera reset");
             },
             
             _ => {}
@@ -573,65 +573,65 @@ match key {
                         // Pattern matching — Rust's exhaustive branching construct.
 match self.tool {
                 EditTool::Select => {
-                    if let Some(index) = self.find_vertex_at(vx, vy, vw, vh) {
-                        if self.selected_verts.contains(&index) {
-                            self.selected_verts.retain(|&v| v != index);
+                    if let Some(idx) = self.find_vertex_at(vx, vy, vw, vh) {
+                        if self.selected_verts.contains(&idx) {
+                            self.selected_verts.retain(|&v| v != idx);
                         } else {
-                            self.selected_verts.push(index);
+                            self.selected_verts.push(idx);
                         }
-                        self.status_message = format!("Selected {} vertex(es)", self.selected_verts.len());
+                        self.status_msg = format!("Selected {} vertex(es)", self.selected_verts.len());
                     } else {
                         self.selected_verts.clear();
-                        self.status_message = String::from("Selection cleared");
+                        self.status_msg = String::from("Selection cleared");
                     }
                 },
                 EditTool::AddVertex => {
                     self.push_undo();
                     let world = self.unproject_to_grid(vx, vy, vw, vh);
                     self.vertices.push(world);
-                    self.status_message = format!("Added vertex at ({:.1}, {:.1}, {:.1}) — {} total",
+                    self.status_msg = format!("Added vertex at ({:.1}, {:.1}, {:.1}) — {} total",
                         world.x, world.y, world.z, self.vertices.len());
                 },
                 EditTool::AddEdge => {
-                    if let Some(index) = self.find_vertex_at(vx, vy, vw, vh) {
+                    if let Some(idx) = self.find_vertex_at(vx, vy, vw, vh) {
                         if let Some(start) = self.edge_start {
-                            if start != index {
+                            if start != idx {
                                 // Check if edge already exists
                                 let exists = self.edges.iter().any(|&(a, b)| 
-                                    (a == start && b == index) || (a == index && b == start));
+                                    (a == start && b == idx) || (a == idx && b == start));
                                 if !exists {
                                     self.push_undo();
-                                    self.edges.push((start, index));
-                                    self.status_message = format!("Edge {} -> {} created — {} edges total",
-                                        start, index, self.edges.len());
+                                    self.edges.push((start, idx));
+                                    self.status_msg = format!("Edge {} -> {} created — {} edges total",
+                                        start, idx, self.edges.len());
                                 } else {
-                                    self.status_message = String::from("Edge already exists");
+                                    self.status_msg = String::from("Edge already exists");
                                 }
                             }
                             self.edge_start = None;
                         } else {
-                            self.edge_start = Some(index);
-                            self.status_message = format!("Edge start: vertex {} — Click another vertex", index);
+                            self.edge_start = Some(idx);
+                            self.status_msg = format!("Edge start: vertex {} — Click another vertex", idx);
                         }
                     } else {
                         self.edge_start = None;
-                        self.status_message = String::from("No vertex found — click on a vertex");
+                        self.status_msg = String::from("No vertex found — click on a vertex");
                     }
                 },
                 EditTool::Move => {
-                    if let Some(index) = self.find_vertex_at(vx, vy, vw, vh) {
-                        if !self.selected_verts.contains(&index) {
+                    if let Some(idx) = self.find_vertex_at(vx, vy, vw, vh) {
+                        if !self.selected_verts.contains(&idx) {
                             self.selected_verts.clear();
-                            self.selected_verts.push(index);
+                            self.selected_verts.push(idx);
                         }
                         self.push_undo();
                     }
                 },
                 EditTool::Delete => {
-                    if let Some(index) = self.find_vertex_at(vx, vy, vw, vh) {
+                    if let Some(idx) = self.find_vertex_at(vx, vy, vw, vh) {
                         self.push_undo();
-                        self.delete_vertex(index);
-                        self.status_message = format!("Deleted vertex {} — {} remaining", index, self.vertices.len());
+                        self.delete_vertex(idx);
+                        self.status_msg = format!("Deleted vertex {} — {} remaining", idx, self.vertices.len());
                     }
                 },
             }
@@ -652,8 +652,8 @@ match self.tool {
         self.hover_vert = self.find_vertex_at(vx, vy, vw, vh);
         
         if self.mouse_pressed {
-            let total_dx = (vx - self.drag_start_x).absolute();
-            let total_dy = (vy - self.drag_start_y).absolute();
+            let total_dx = (vx - self.drag_start_x).abs();
+            let total_dy = (vy - self.drag_start_y).abs();
             if total_dx > 3 || total_dy > 3 {
                 self.mouse_dragging = true;
             }
@@ -671,11 +671,11 @@ match self.tool {
                         let cy = fast_cos(self.cam_angle_y);
                         let sy = fast_sin(self.cam_angle_y);
                         
-                        for &index in &self.selected_verts.clone() {
-                            if index < self.vertices.len() {
-                                self.vertices[index].x += move_x * cy;
-                                self.vertices[index].z += move_x * sy;
-                                self.vertices[index].y += move_y;
+                        for &idx in &self.selected_verts.clone() {
+                            if idx < self.vertices.len() {
+                                self.vertices[idx].x += move_x * cy;
+                                self.vertices[idx].z += move_x * sy;
+                                self.vertices[idx].y += move_y;
                             }
                         }
                     },
@@ -693,24 +693,24 @@ match self.tool {
     /// Handle scroll for zoom
     pub fn handle_scroll(&mut self, delta: i8) {
         if delta > 0 {
-            self.cam_dist = (self.cam_dist - 0.5).maximum(1.5);
+            self.cam_dist = (self.cam_dist - 0.5).max(1.5);
         } else {
-            self.cam_dist = (self.cam_dist + 0.5).minimum(20.0);
+            self.cam_dist = (self.cam_dist + 0.5).min(20.0);
         }
     }
     
-    fn delete_vertex(&mut self, index: usize) {
-        if index >= self.vertices.len() { return; }
-        self.vertices.remove(index);
+    fn delete_vertex(&mut self, idx: usize) {
+        if idx >= self.vertices.len() { return; }
+        self.vertices.remove(idx);
         // Remove edges that reference this vertex and fix indices
-        self.edges.retain(|&(a, b)| a != index && b != index);
+        self.edges.retain(|&(a, b)| a != idx && b != idx);
         for edge in &mut self.edges {
-            if edge.0 > index { edge.0 -= 1; }
-            if edge.1 > index { edge.1 -= 1; }
+            if edge.0 > idx { edge.0 -= 1; }
+            if edge.1 > idx { edge.1 -= 1; }
         }
-        self.selected_verts.retain(|&v| v != index);
+        self.selected_verts.retain(|&v| v != idx);
         for sv in &mut self.selected_verts {
-            if *sv > index { *sv -= 1; }
+            if *sv > idx { *sv -= 1; }
         }
     }
     
@@ -721,24 +721,24 @@ match self.tool {
         let mut to_remove = self.selected_verts.clone();
         to_remove.sort_unstable();
         to_remove.reverse();
-        for index in to_remove {
-            if index < self.vertices.len() {
-                self.vertices.remove(index);
-                self.edges.retain(|&(a, b)| a != index && b != index);
+        for idx in to_remove {
+            if idx < self.vertices.len() {
+                self.vertices.remove(idx);
+                self.edges.retain(|&(a, b)| a != idx && b != idx);
                 for edge in &mut self.edges {
-                    if edge.0 > index { edge.0 -= 1; }
-                    if edge.1 > index { edge.1 -= 1; }
+                    if edge.0 > idx { edge.0 -= 1; }
+                    if edge.1 > idx { edge.1 -= 1; }
                 }
             }
         }
         let count = self.selected_verts.len();
         self.selected_verts.clear();
-        self.status_message = format!("Deleted {} vertices", count);
+        self.status_msg = format!("Deleted {} vertices", count);
     }
     
     // ─── Rendering ───────────────────────────────────────────────────────
     
-    pub fn render(&mut self, buffer: &mut [u32], w: usize, h: usize) {
+    pub fn render(&mut self, buf: &mut [u32], w: usize, h: usize) {
         self.frame += 1;
         
         // Cache trig values once per frame (avoids recomputing per vertex)
@@ -753,103 +753,103 @@ match self.tool {
         let viewport_h = h.saturating_sub(toolbar_h + status_h);
         
         // Clear with background
-        for pixel in buffer.iterator_mut() {
+        for pixel in buf.iter_mut() {
             *pixel = COLUMN_BG;
         }
         
         // Draw toolbar
-        self.draw_toolbar(buffer, w, h, toolbar_h);
+        self.draw_toolbar(buf, w, h, toolbar_h);
         
         // Draw 3D viewport
         if viewport_h > 10 {
-            self.draw_viewport(buffer, w, h, 0, viewport_y, w, viewport_h);
+            self.draw_viewport(buf, w, h, 0, viewport_y, w, viewport_h);
         }
         
         // Draw status bar
-        self.draw_status_bar(buffer, w, h, h - status_h, status_h);
+        self.draw_status_bar(buf, w, h, h - status_h, status_h);
         
         // Draw tips overlay
         if self.show_tips {
-            self.draw_tips(buffer, w, h, viewport_y, viewport_h);
+            self.draw_tips(buf, w, h, viewport_y, viewport_h);
         }
     }
     
-    fn draw_toolbar(&self, buffer: &mut [u32], w: usize, h: usize, th: usize) {
+    fn draw_toolbar(&self, buf: &mut [u32], w: usize, h: usize, th: usize) {
         // Background
         for y in 0..th {
             for x in 0..w {
-                buffer[y * w + x] = COLUMN_TOOLBAR;
+                buf[y * w + x] = COLUMN_TOOLBAR;
             }
         }
         
         // Separator line
         if th < h {
             for x in 0..w {
-                buffer[th * w + x] = 0xFF333355;
+                buf[th * w + x] = 0xFF333355;
             }
         }
         
         // Tool buttons
         let tools = [EditTool::Select, EditTool::AddVertex, EditTool::AddEdge, EditTool::Move, EditTool::Delete];
-        let button_w = 60;
-        let button_h = 22;
-        let button_y = 5;
+        let btn_w = 60;
+        let btn_h = 22;
+        let btn_y = 5;
         let mut bx = 8;
         
         for tool in &tools {
             let active = self.tool == *tool;
             let bg = if active { COLUMN_TOOLBAR_ACT } else { COLUMN_TOOLBAR_BUTTON };
-            fill_rect(buffer, w, h, bx, button_y, button_w, button_h, bg);
+            fill_rect(buf, w, h, bx, btn_y, btn_w, btn_h, bg);
             // Border
-            draw_rect(buffer, w, h, bx, button_y, button_w, button_h, if active { 0xFF00AAFF } else { 0xFF444466 });
+            draw_rect(buf, w, h, bx, btn_y, btn_w, btn_h, if active { 0xFF00AAFF } else { 0xFF444466 });
             // Label
             let label = format!("{} [{}]", tool.name(), tool.hotkey());
-            draw_small_text(buffer, w, h, bx + 3, button_y + 7, &label, 
+            draw_small_text(buf, w, h, bx + 3, btn_y + 7, &label, 
                 if active { COLUMN_TEXT_HI } else { COLUMN_TEXT });
-            bx += button_w + 4;
+            bx += btn_w + 4;
         }
         
         // Right side: preset buttons
         let presets = ["1:Cube", "2:Pyr", "3:Dia", "4:Tor", "5:Ico", "6:Grid"];
-        let mut pixel = w - 8;
+        let mut px = w - 8;
         for preset in presets.iter().rev() {
             let pw = preset.len() * 6 + 8;
-            pixel -= pw;
-            fill_rect(buffer, w, h, pixel, button_y, pw, button_h, COLUMN_TOOLBAR_BUTTON);
-            draw_rect(buffer, w, h, pixel, button_y, pw, button_h, 0xFF444466);
-            draw_small_text(buffer, w, h, pixel + 4, button_y + 7, preset, COLUMN_TEXT_DIM);
-            pixel -= 4;
+            px -= pw;
+            fill_rect(buf, w, h, px, btn_y, pw, btn_h, COLUMN_TOOLBAR_BUTTON);
+            draw_rect(buf, w, h, px, btn_y, pw, btn_h, 0xFF444466);
+            draw_small_text(buf, w, h, px + 4, btn_y + 7, preset, COLUMN_TEXT_DIM);
+            px -= 4;
         }
         
         // Save/Load in middle-right
         let save_x = bx + 20;
-        fill_rect(buffer, w, h, save_x, button_y, 50, button_h, COLUMN_TOOLBAR_BUTTON);
-        draw_rect(buffer, w, h, save_x, button_y, 50, button_h, 0xFF444466);
-        draw_small_text(buffer, w, h, save_x + 4, button_y + 7, "Save[W]", COLUMN_TEXT);
+        fill_rect(buf, w, h, save_x, btn_y, 50, btn_h, COLUMN_TOOLBAR_BUTTON);
+        draw_rect(buf, w, h, save_x, btn_y, 50, btn_h, 0xFF444466);
+        draw_small_text(buf, w, h, save_x + 4, btn_y + 7, "Save[W]", COLUMN_TEXT);
         
-        fill_rect(buffer, w, h, save_x + 54, button_y, 50, button_h, COLUMN_TOOLBAR_BUTTON);
-        draw_rect(buffer, w, h, save_x + 54, button_y, 50, button_h, 0xFF444466);
-        draw_small_text(buffer, w, h, save_x + 58, button_y + 7, "Load[L]", COLUMN_TEXT);
+        fill_rect(buf, w, h, save_x + 54, btn_y, 50, btn_h, COLUMN_TOOLBAR_BUTTON);
+        draw_rect(buf, w, h, save_x + 54, btn_y, 50, btn_h, 0xFF444466);
+        draw_small_text(buf, w, h, save_x + 58, btn_y + 7, "Load[L]", COLUMN_TEXT);
         
-        fill_rect(buffer, w, h, save_x + 108, button_y, 50, button_h, COLUMN_TOOLBAR_BUTTON);
-        draw_rect(buffer, w, h, save_x + 108, button_y, 50, button_h, 0xFF444466);
-        draw_small_text(buffer, w, h, save_x + 112, button_y + 7, "Undo[Z]", COLUMN_TEXT);
+        fill_rect(buf, w, h, save_x + 108, btn_y, 50, btn_h, COLUMN_TOOLBAR_BUTTON);
+        draw_rect(buf, w, h, save_x + 108, btn_y, 50, btn_h, 0xFF444466);
+        draw_small_text(buf, w, h, save_x + 112, btn_y + 7, "Undo[Z]", COLUMN_TEXT);
     }
     
-    fn draw_viewport(&self, buffer: &mut [u32], bw: usize, bh: usize,
+    fn draw_viewport(&self, buf: &mut [u32], bw: usize, bh: usize,
                      vx: usize, vy: usize, vw: usize, vh: usize) {
         // Draw grid
         if self.show_grid {
-            self.draw_grid(buffer, bw, bh, vx, vy, vw, vh);
+            self.draw_grid(buf, bw, bh, vx, vy, vw, vh);
         }
         
         // Draw axes
         if self.show_axes {
-            self.draw_axes(buffer, bw, bh, vx, vy, vw, vh);
+            self.draw_axes(buf, bw, bh, vx, vy, vw, vh);
         }
         
         // Draw edges
-        for (index, &(a, b)) in self.edges.iter().enumerate() {
+        for (idx, &(a, b)) in self.edges.iter().enumerate() {
             if a >= self.vertices.len() || b >= self.vertices.len() { continue; }
             let (x0, y0, z0) = self.project_vertex(self.vertices[a], vw, vh);
             let (x1, y1, z1) = self.project_vertex(self.vertices[b], vw, vh);
@@ -862,11 +862,11 @@ match self.tool {
             let color = if is_edge_start { 0xFFFF8800 } else if sel { COLUMN_WIRE_SEL } else { COLUMN_WIRE };
             
             // Depth fade
-            let average_z = (z0 + z1) * 0.5;
-            let fade = (1.0 - (average_z - 3.0) * 0.1).clamp(0.3, 1.0);
+            let avg_z = (z0 + z1) * 0.5;
+            let fade = (1.0 - (avg_z - 3.0) * 0.1).clamp(0.3, 1.0);
             let color = fade_color(color, fade);
             
-            draw_line_buffer(buffer, bw, bh, 
+            draw_line_buf(buf, bw, bh, 
                 vx as i32 + x0, vy as i32 + y0,
                 vx as i32 + x1, vy as i32 + y1, color);
         }
@@ -877,7 +877,7 @@ match self.tool {
                 let (sx, sy, z) = self.project_vertex(*v, vw, vh);
                 if z < 0.1 { continue; }
                 
-                let pixel = vx as i32 + sx;
+                let px = vx as i32 + sx;
                 let py = vy as i32 + sy;
                 
                 let selected = self.selected_verts.contains(&i);
@@ -895,7 +895,7 @@ match self.tool {
                 for dy in -size..=size {
                     for dx in -size..=size {
                         if dx * dx + dy * dy <= size * size {
-                            put_buffer_pixel(buffer, bw, bh, pixel + dx, py + dy, color);
+                            put_buf_pixel(buf, bw, bh, px + dx, py + dy, color);
                         }
                     }
                 }
@@ -903,7 +903,7 @@ match self.tool {
                 // Vertex index label
                 if selected || hovered {
                     let label = format!("{}", i);
-                    draw_small_text(buffer, bw, bh, (pixel + size + 3) as usize, (py - 3) as usize, &label, color);
+                    draw_small_text(buf, bw, bh, (px + size + 3) as usize, (py - 3) as usize, &label, color);
                 }
             }
         }
@@ -914,7 +914,7 @@ match self.tool {
                 let (sx, sy, z) = self.project_vertex(self.vertices[start_index], vw, vh);
                 if z > 0.1 {
                     // Dashed line from start vertex to mouse
-                    draw_dashed_line(buffer, bw, bh,
+                    draw_dashed_line(buf, bw, bh,
                         vx as i32 + sx, vy as i32 + sy,
                         vx as i32 + self.mouse_x, vy as i32 + self.mouse_y,
                         0xFFFF8800);
@@ -923,7 +923,7 @@ match self.tool {
         }
     }
     
-    fn draw_grid(&self, buffer: &mut [u32], bw: usize, bh: usize,
+    fn draw_grid(&self, buf: &mut [u32], bw: usize, bh: usize,
                  vx: usize, vy: usize, vw: usize, vh: usize) {
         let half = GRID_SIZE * 0.5;
         let step = GRID_SIZE / GRID_DIVISIONS as f32;
@@ -937,7 +937,7 @@ match self.tool {
             let (x0, y0, z0) = self.project_vertex(V3 { x: -half, y: 0.0, z: t }, vw, vh);
             let (x1, y1, z1) = self.project_vertex(V3 { x: half, y: 0.0, z: t }, vw, vh);
             if z0 > 0.1 && z1 > 0.1 {
-                draw_line_buffer(buffer, bw, bh, 
+                draw_line_buf(buf, bw, bh, 
                     vx as i32 + x0, vy as i32 + y0,
                     vx as i32 + x1, vy as i32 + y1, color);
             }
@@ -946,14 +946,14 @@ match self.tool {
             let (x0, y0, z0) = self.project_vertex(V3 { x: t, y: 0.0, z: -half }, vw, vh);
             let (x1, y1, z1) = self.project_vertex(V3 { x: t, y: 0.0, z: half }, vw, vh);
             if z0 > 0.1 && z1 > 0.1 {
-                draw_line_buffer(buffer, bw, bh, 
+                draw_line_buf(buf, bw, bh, 
                     vx as i32 + x0, vy as i32 + y0,
                     vx as i32 + x1, vy as i32 + y1, color);
             }
         }
     }
     
-    fn draw_axes(&self, buffer: &mut [u32], bw: usize, bh: usize,
+    fn draw_axes(&self, buf: &mut [u32], bw: usize, bh: usize,
                  vx: usize, vy: usize, vw: usize, vh: usize) {
         let origin = V3 { x: 0.0, y: 0.0, z: 0.0 };
         let axes = [
@@ -971,46 +971,46 @@ match self.tool {
             
             // Draw thick axis line
             for d in -1..=1i32 {
-                draw_line_buffer(buffer, bw, bh,
+                draw_line_buf(buf, bw, bh,
                     vx as i32 + ox + d, vy as i32 + oy,
                     vx as i32 + ex + d, vy as i32 + ey, *color);
-                draw_line_buffer(buffer, bw, bh,
+                draw_line_buf(buf, bw, bh,
                     vx as i32 + ox, vy as i32 + oy + d,
                     vx as i32 + ex, vy as i32 + ey + d, *color);
             }
             
             // Axis label
-            draw_small_text(buffer, bw, bh, (vx as i32 + ex + 5) as usize, (vy as i32 + ey - 3) as usize,
+            draw_small_text(buf, bw, bh, (vx as i32 + ex + 5) as usize, (vy as i32 + ey - 3) as usize,
                 label, *color);
         }
     }
     
-    fn draw_status_bar(&self, buffer: &mut [u32], w: usize, h: usize, sy: usize, sh: usize) {
+    fn draw_status_bar(&self, buf: &mut [u32], w: usize, h: usize, sy: usize, sh: usize) {
         // Background
         for y in sy..sy + sh {
             if y >= h { break; }
             for x in 0..w {
-                buffer[y * w + x] = COLUMN_STATUS;
+                buf[y * w + x] = COLUMN_STATUS;
             }
         }
         // Separator
         if sy > 0 && sy < h {
             for x in 0..w {
-                buffer[sy * w + x] = 0xFF333355;
+                buf[sy * w + x] = 0xFF333355;
             }
         }
         
         // Status message
-        draw_small_text(buffer, w, h, 8, sy + 6, &self.status_message, COLUMN_TEXT);
+        draw_small_text(buf, w, h, 8, sy + 6, &self.status_msg, COLUMN_TEXT);
         
         // Right: stats
         let stats = format!("V:{} E:{} | {} | Zoom:{:.1}", 
             self.vertices.len(), self.edges.len(), self.model_name, self.cam_dist);
         let stats_x = w.saturating_sub(stats.len() * 6 + 8);
-        draw_small_text(buffer, w, h, stats_x, sy + 6, &stats, COLUMN_TEXT_DIM);
+        draw_small_text(buf, w, h, stats_x, sy + 6, &stats, COLUMN_TEXT_DIM);
     }
     
-    fn draw_tips(&self, buffer: &mut [u32], w: usize, h: usize, vy: usize, vh: usize) {
+    fn draw_tips(&self, buf: &mut [u32], w: usize, h: usize, vy: usize, vh: usize) {
         let panel_w = 200;
         let panel_h = 180;
         let panel_x = w.saturating_sub(panel_w + 10);
@@ -1022,42 +1022,42 @@ match self.tool {
         for y in panel_y..panel_y + panel_h {
             for x in panel_x..panel_x + panel_w {
                 if y < h && x < w {
-                    buffer[y * w + x] = blend_alpha(buffer[y * w + x], COLUMN_TIP_BG);
+                    buf[y * w + x] = blend_alpha(buf[y * w + x], COLUMN_TIP_BG);
                 }
             }
         }
         
         // Border
-        draw_rect(buffer, w, h, panel_x, panel_y, panel_w, panel_h, COLUMN_TIP_BORDER);
+        draw_rect(buf, w, h, panel_x, panel_y, panel_w, panel_h, COLUMN_TIP_BORDER);
         
         let mut ty = panel_y + 6;
         let transmit = panel_x + 8;
         
-        draw_small_text(buffer, w, h, transmit, ty, "--- Controls ---", COLUMN_TIP_BORDER);
+        draw_small_text(buf, w, h, transmit, ty, "--- Controls ---", COLUMN_TIP_BORDER);
         ty += 12;
-        draw_small_text(buffer, w, h, transmit, ty, "S: Select  A: Add Vtx", COLUMN_TEXT);
+        draw_small_text(buf, w, h, transmit, ty, "S: Select  A: Add Vtx", COLUMN_TEXT);
         ty += 10;
-        draw_small_text(buffer, w, h, transmit, ty, "E: Add Edge  G: Move", COLUMN_TEXT);
+        draw_small_text(buf, w, h, transmit, ty, "E: Add Edge  G: Move", COLUMN_TEXT);
         ty += 10;
-        draw_small_text(buffer, w, h, transmit, ty, "X: Delete  D: Deselect", COLUMN_TEXT);
+        draw_small_text(buf, w, h, transmit, ty, "X: Delete  D: Deselect", COLUMN_TEXT);
         ty += 10;
-        draw_small_text(buffer, w, h, transmit, ty, "Z: Undo  C: Clear", COLUMN_TEXT);
+        draw_small_text(buf, w, h, transmit, ty, "Z: Undo  C: Clear", COLUMN_TEXT);
         ty += 10;
-        draw_small_text(buffer, w, h, transmit, ty, "Arrows: Orbit camera", COLUMN_TEXT);
+        draw_small_text(buf, w, h, transmit, ty, "Arrows: Orbit camera", COLUMN_TEXT);
         ty += 10;
-        draw_small_text(buffer, w, h, transmit, ty, "+/-: Zoom  R: Reset cam", COLUMN_TEXT);
+        draw_small_text(buf, w, h, transmit, ty, "+/-: Zoom  R: Reset cam", COLUMN_TEXT);
         ty += 14;
-        draw_small_text(buffer, w, h, transmit, ty, "--- Presets ---", COLUMN_TIP_BORDER);
+        draw_small_text(buf, w, h, transmit, ty, "--- Presets ---", COLUMN_TIP_BORDER);
         ty += 12;
-        draw_small_text(buffer, w, h, transmit, ty, "1:Cube 2:Pyr 3:Dia", COLUMN_TEXT);
+        draw_small_text(buf, w, h, transmit, ty, "1:Cube 2:Pyr 3:Dia", COLUMN_TEXT);
         ty += 10;
-        draw_small_text(buffer, w, h, transmit, ty, "4:Torus 5:Ico 6:Grid", COLUMN_TEXT);
+        draw_small_text(buf, w, h, transmit, ty, "4:Torus 5:Ico 6:Grid", COLUMN_TEXT);
         ty += 14;
-        draw_small_text(buffer, w, h, transmit, ty, "--- File ---", COLUMN_TIP_BORDER);
+        draw_small_text(buf, w, h, transmit, ty, "--- File ---", COLUMN_TIP_BORDER);
         ty += 12;
-        draw_small_text(buffer, w, h, transmit, ty, "W: Save  L: Load", COLUMN_TEXT);
+        draw_small_text(buf, w, h, transmit, ty, "W: Save  L: Load", COLUMN_TEXT);
         ty += 10;
-        draw_small_text(buffer, w, h, transmit, ty, "H: Toggle this panel", COLUMN_TEXT_DIM);
+        draw_small_text(buf, w, h, transmit, ty, "H: Toggle this panel", COLUMN_TEXT_DIM);
         
         // Current tool tip
         let tip = self.tool.tip();
@@ -1065,8 +1065,8 @@ match self.tool {
             let tip_y = panel_y + panel_h + 5;
             if tip_y + 16 < h {
                 let tip_w = tip.len() * 6 + 12;
-                fill_rect(buffer, w, h, panel_x, tip_y, tip_w, 14, COLUMN_TIP_BG & 0xDDFFFFFF);
-                draw_small_text(buffer, w, h, panel_x + 6, tip_y + 3, tip, COLUMN_TEXT_HI);
+                fill_rect(buf, w, h, panel_x, tip_y, tip_w, 14, COLUMN_TIP_BG & 0xDDFFFFFF);
+                draw_small_text(buf, w, h, panel_x + 6, tip_y + 3, tip, COLUMN_TEXT_HI);
             }
         }
     }
@@ -1075,33 +1075,33 @@ match self.tool {
 // ─── Buffer Drawing Helpers (delegated to draw_utils) ────────────────────
 
 use crate::draw_utils::{
-    put_pixel as put_buffer_pixel,
+    put_pixel as put_buf_pixel,
     fill_rect,
     draw_rect,
-    draw_line as draw_line_buffer,
+    draw_line as draw_line_buf,
 };
 
-fn draw_dashed_line(buffer: &mut [u32], w: usize, h: usize, x0: i32, y0: i32, x1: i32, y1: i32, color: u32) {
+fn draw_dashed_line(buf: &mut [u32], w: usize, h: usize, x0: i32, y0: i32, x1: i32, y1: i32, color: u32) {
     let mut x = x0;
     let mut y = y0;
-    let dx = (x1 - x0).absolute();
-    let dy = -(y1 - y0).absolute();
+    let dx = (x1 - x0).abs();
+    let dy = -(y1 - y0).abs();
     let sx = if x0 < x1 { 1 } else { -1 };
     let sy = if y0 < y1 { 1 } else { -1 };
-    let mut error = dx + dy;
+    let mut err = dx + dy;
     let mut step = 0;
-    let maximum_steps = (dx.absolute() + dy.absolute()) as usize + 1;
-    let maximum_steps = maximum_steps.minimum(4000);
+    let maximum_steps = (dx.abs() + dy.abs()) as usize + 1;
+    let maximum_steps = maximum_steps.min(4000);
     
     for _ in 0..maximum_steps {
         if step % 8 < 4 {
-            put_buffer_pixel(buffer, w, h, x, y, color);
+            put_buf_pixel(buf, w, h, x, y, color);
         }
         step += 1;
         if x == x1 && y == y1 { break; }
-        let e2 = 2 * error;
-        if e2 >= dy { error += dy; x += sx; }
-        if e2 <= dx { error += dx; y += sy; }
+        let e2 = 2 * err;
+        if e2 >= dy { err += dy; x += sx; }
+        if e2 <= dx { err += dx; y += sy; }
     }
 }
 
@@ -1122,18 +1122,18 @@ fn blend_alpha(bg: u32, fg: u32) -> u32 {
 }
 
 /// Tiny 5x7 font — renders text into a buffer. Very compact.
-fn draw_small_text(buffer: &mut [u32], bw: usize, bh: usize, x: usize, y: usize, text: &str, color: u32) {
+fn draw_small_text(buf: &mut [u32], bw: usize, bh: usize, x: usize, y: usize, text: &str, color: u32) {
     let mut cx = x;
-    for character in text.bytes() {
-        draw_small_char(buffer, bw, bh, cx, y, character, color);
+    for ch in text.bytes() {
+        draw_small_char(buf, bw, bh, cx, y, ch, color);
         cx += 6;
     }
 }
 
 /// Minimal 5x7 bitmap font (ASCII 32-127)
-fn draw_small_char(buffer: &mut [u32], bw: usize, bh: usize, x: usize, y: usize, character: u8, color: u32) {
+fn draw_small_char(buf: &mut [u32], bw: usize, bh: usize, x: usize, y: usize, ch: u8, color: u32) {
     // Simple procedural font for basic ASCII
-    let c = character as char;
+    let c = ch as char;
     if c == ' ' { return; }
     
     // Use a simplified approach: map common characters
@@ -1199,12 +1199,12 @@ match c {
     };
     
     for row in 0..7 {
-        for column in 0..5 {
-            if bits[row] & (1 << (4 - column)) != 0 {
-                let pixel = x + column;
+        for col in 0..5 {
+            if bits[row] & (1 << (4 - col)) != 0 {
+                let px = x + col;
                 let py = y + row;
-                if pixel < bw && py < bh {
-                    buffer[py * bw + pixel] = color;
+                if px < bw && py < bh {
+                    buf[py * bw + px] = color;
                 }
             }
         }

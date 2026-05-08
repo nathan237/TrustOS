@@ -47,7 +47,7 @@ pub fn extract_tarball(tarball_path: &str, dest: &str) -> Result<usize, &'static
     let compressed = crate::ramfs::with_filesystem(|fs| {
         fs.read_file(tarball_path)
             .map(|data| data.to_vec())
-            .map_error(|_| "tarball not found")
+            .map_err(|_| "tarball not found")
     })?;
     
     // Decompress gzip
@@ -70,39 +70,39 @@ fn decompress_gzip(data: &[u8]) -> Result<Vec<u8>, &'static str> {
     }
     
     let flags = data[3];
-    let mut position = 10;
+    let mut pos = 10;
     
     // Skip extra field
     if flags & 0x04 != 0 {
-        if position + 2 > data.len() {
+        if pos + 2 > data.len() {
             return Err("truncated gzip");
         }
-        let xlen = (data[position] as usize) | ((data[position + 1] as usize) << 8);
-        position += 2 + xlen;
+        let xlen = (data[pos] as usize) | ((data[pos + 1] as usize) << 8);
+        pos += 2 + xlen;
     }
     
     // Skip filename
     if flags & 0x08 != 0 {
-        while position < data.len() && data[position] != 0 {
-            position += 1;
+        while pos < data.len() && data[pos] != 0 {
+            pos += 1;
         }
-        position += 1;
+        pos += 1;
     }
     
     // Skip comment
     if flags & 0x10 != 0 {
-        while position < data.len() && data[position] != 0 {
-            position += 1;
+        while pos < data.len() && data[pos] != 0 {
+            pos += 1;
         }
-        position += 1;
+        pos += 1;
     }
     
     // Skip header CRC
     if flags & 0x02 != 0 {
-        position += 2;
+        pos += 2;
     }
     
-    if position >= data.len() {
+    if pos >= data.len() {
         return Err("truncated gzip header");
     }
     
@@ -117,7 +117,7 @@ fn decompress_gzip(data: &[u8]) -> Result<Vec<u8>, &'static str> {
         | ((data[len - 1] as usize) << 24);
     
     // Use miniz_oxide for deflate decompression
-    let compressed_data = &data[position..len - 8];
+    let compressed_data = &data[pos..len - 8];
     
     // Allocate output buffer
     let mut output = Vec::with_capacity(orig_size);
@@ -158,8 +158,8 @@ enum BlockResult {
 
 struct DeflateDecoder<'a> {
     input: &'a [u8],
-    position: usize,
-    bit_buffer: u32,
+    pos: usize,
+    bit_buf: u32,
     bit_count: u8,
 }
 
@@ -168,24 +168,24 @@ impl<'a> DeflateDecoder<'a> {
     fn new(input: &'a [u8]) -> Self {
         Self {
             input,
-            position: 0,
-            bit_buffer: 0,
+            pos: 0,
+            bit_buf: 0,
             bit_count: 0,
         }
     }
     
     fn read_bits(&mut self, n: u8) -> Result<u32, &'static str> {
         while self.bit_count < n {
-            if self.position >= self.input.len() {
+            if self.pos >= self.input.len() {
                 return Err("unexpected end of input");
             }
-            self.bit_buffer |= (self.input[self.position] as u32) << self.bit_count;
-            self.position += 1;
+            self.bit_buf |= (self.input[self.pos] as u32) << self.bit_count;
+            self.pos += 1;
             self.bit_count += 8;
         }
         
-        let result = self.bit_buffer & ((1 << n) - 1);
-        self.bit_buffer >>= n;
+        let result = self.bit_buf & ((1 << n) - 1);
+        self.bit_buf >>= n;
         self.bit_count -= n;
         Ok(result)
     }
@@ -198,23 +198,23 @@ impl<'a> DeflateDecoder<'a> {
 match btype {
             0 => {
                 // Stored block
-                self.bit_buffer = 0;
+                self.bit_buf = 0;
                 self.bit_count = 0;
                 
-                if self.position + 4 > self.input.len() {
+                if self.pos + 4 > self.input.len() {
                     return Err("truncated stored block");
                 }
                 
-                let len = (self.input[self.position] as u16) | ((self.input[self.position + 1] as u16) << 8);
-                self.position += 4;
+                let len = (self.input[self.pos] as u16) | ((self.input[self.pos + 1] as u16) << 8);
+                self.pos += 4;
                 
                 let len = len as usize;
-                if self.position + len > self.input.len() {
+                if self.pos + len > self.input.len() {
                     return Err("truncated stored block data");
                 }
                 
-                output.extend_from_slice(&self.input[self.position..self.position + len]);
-                self.position += len;
+                output.extend_from_slice(&self.input[self.pos..self.pos + len]);
+                self.pos += len;
             }
             1 => {
                 // Fixed Huffman
@@ -343,12 +343,12 @@ match sym {
         }
         
         // Build first code for each length
-        let mut index = 0u16;
+        let mut idx = 0u16;
         for i in 1..16 {
             first[i] = code;
-            index[i] = index;
+            index[i] = idx;
             code = (code + count[i] as u32) << 1;
-            index += count[i];
+            idx += count[i];
         }
         
         // Build symbol table
@@ -356,9 +356,9 @@ match sym {
         for (sym, &len) in code_lens.iter().enumerate() {
             if len > 0 {
                 let len = len as usize;
-                let sym_index = index[len] as usize;
-                if sym_index < symbols.len() {
-                    symbols[sym_index] = sym as u16;
+                let sym_idx = index[len] as usize;
+                if sym_idx < symbols.len() {
+                    symbols[sym_idx] = sym as u16;
                     index[len] += 1;
                 }
             }
@@ -369,21 +369,21 @@ match sym {
         let mut first_index = [0u16; 16];
         let mut first_code = [0u32; 16];
         
-        index = 0;
+        idx = 0;
         let mut c = 0u32;
         for i in 1..16 {
             first_code[i] = c;
-            first_index[i] = index;
+            first_index[i] = idx;
             c = (c + count[i] as u32) << 1;
-            index += count[i];
+            idx += count[i];
         }
         
         for len in 1..16 {
             code = (code << 1) | self.read_bits(1)?;
-            let count = count[len];
-            if code < first_code[len] + count as u32 {
-                let sym_index = first_index[len] + (code - first_code[len]) as u16;
-                return Ok(symbols[sym_index as usize]);
+            let cnt = count[len];
+            if code < first_code[len] + cnt as u32 {
+                let sym_idx = first_index[len] + (code - first_code[len]) as u16;
+                return Ok(symbols[sym_idx as usize]);
             }
         }
         
@@ -396,13 +396,13 @@ const LENGTH_BASE: [u16; 29] = [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23,
                 // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const LENGTH_EXTRA: [u8; 29] = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0];
         
-        let index = (sym - 257) as usize;
-        if index >= LENGTH_BASE.len() {
+        let idx = (sym - 257) as usize;
+        if idx >= LENGTH_BASE.len() {
             return Err("invalid length code");
         }
         
-        let base = LENGTH_BASE[index] as usize;
-        let extra = LENGTH_EXTRA[index];
+        let base = LENGTH_BASE[idx] as usize;
+        let extra = LENGTH_EXTRA[idx];
         let extra_bits = if extra > 0 { self.read_bits(extra)? as usize } else { 0 };
         
         Ok(base + extra_bits)
@@ -414,13 +414,13 @@ const DIST_BASE: [u16; 30] = [1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 1
                 // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const DIST_EXTRA: [u8; 30] = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13];
         
-        let index = sym as usize;
-        if index >= DIST_BASE.len() {
+        let idx = sym as usize;
+        if idx >= DIST_BASE.len() {
             return Err("invalid distance code");
         }
         
-        let base = DIST_BASE[index] as usize;
-        let extra = DIST_EXTRA[index];
+        let base = DIST_BASE[idx] as usize;
+        let extra = DIST_EXTRA[idx];
         let extra_bits = if extra > 0 { self.read_bits(extra)? as usize } else { 0 };
         
         Ok(base + extra_bits)
@@ -429,11 +429,11 @@ const DIST_EXTRA: [u8; 30] = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7,
 
 /// Extract a tar archive to destination
 fn extract_tar(data: &[u8], dest: &str) -> Result<usize, &'static str> {
-    let mut position = 0;
+    let mut pos = 0;
     let mut file_count = 0;
     
-    while position + TAR_BLOCK_SIZE <= data.len() {
-        let header = &data[position..position + TAR_BLOCK_SIZE];
+    while pos + TAR_BLOCK_SIZE <= data.len() {
+        let header = &data[pos..pos + TAR_BLOCK_SIZE];
         
         // Check for end of archive (two zero blocks)
         if header.iter().all(|&b| b == 0) {
@@ -455,22 +455,22 @@ fn extract_tar(data: &[u8], dest: &str) -> Result<usize, &'static str> {
         
         // Skip . and empty names
         if full_name.is_empty() || full_name == "." || full_name == "./" {
-            position += TAR_BLOCK_SIZE;
-            position += align_to_block(size);
+            pos += TAR_BLOCK_SIZE;
+            pos += align_to_block(size);
             continue;
         }
         
         // Clean the path (remove leading ./)
         let clean_name = full_name.trim_start_matches("./").trim_start_matches('/');
         if clean_name.is_empty() {
-            position += TAR_BLOCK_SIZE;
-            position += align_to_block(size);
+            pos += TAR_BLOCK_SIZE;
+            pos += align_to_block(size);
             continue;
         }
         
         let dest_path = format!("{}/{}", dest, clean_name);
         
-        position += TAR_BLOCK_SIZE;
+        pos += TAR_BLOCK_SIZE;
         
                 // Correspondance de motifs — branchement exhaustif de Rust.
 match typeflag {
@@ -482,8 +482,8 @@ match typeflag {
             }
             REGTYPE | AREGTYPE | b'\0' => {
                 // Regular file
-                if size > 0 && position + size <= data.len() {
-                    let content = &data[position..position + size];
+                if size > 0 && pos + size <= data.len() {
+                    let content = &data[pos..pos + size];
                     
                     // Ensure parent directory exists
                     let parent = parent_path(&dest_path);
@@ -510,7 +510,7 @@ match typeflag {
             }
         }
         
-        position += align_to_block(size);
+        pos += align_to_block(size);
     }
     
     Ok(file_count)
@@ -531,7 +531,7 @@ fn parse_octal(bytes: &[u8]) -> Result<usize, &'static str> {
     if s.is_empty() {
         return Ok(0);
     }
-    usize::from_str_radix(&s, 8).map_error(|_| "invalid octal")
+    usize::from_str_radix(&s, 8).map_err(|_| "invalid octal")
 }
 
 fn align_to_block(size: usize) -> usize {
@@ -543,11 +543,11 @@ fn align_to_block(size: usize) -> usize {
 }
 
 fn parent_path(path: &str) -> String {
-    if let Some(position) = path.rfind('/') {
-        if position == 0 {
+    if let Some(pos) = path.rfind('/') {
+        if pos == 0 {
             String::from("/")
         } else {
-            String::from(&path[..position])
+            String::from(&path[..pos])
         }
     } else {
         String::from("/")

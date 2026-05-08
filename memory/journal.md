@@ -7,6 +7,23 @@
 > Each entry: date, scope, what was done, result, follow-up.
 > Keep entries short (3â€“6 lines). No prose. No marketing.
 
+## 2026-05-08 — WiFi Phase A foundations + ath9k skeleton + iwl family classifier
+- scope: kernel/src/drivers/firmware_loader.rs, kernel/src/netstack/wifi/{mod,frame,channel,supplicant}.rs, kernel/src/drivers/net/{iwl_family,ath9k,wifi,mod}.rs
+- did: unified firmware loader (cache + ramfs `/lib/firmware/`); softMAC layer
+  (802.11 frame builders + Probe/Auth + beacon IE parser); WPA2 supplicant
+  state machine (Open/Wpa2Psk/Wpa3Sae) with PMK/PTK derivation **stubs**
+  (TODO real PBKDF2-HMAC-SHA1 + HMAC-SHA1 PRF + AES-CCMP); iwl_family
+  classifier covering Iwldvm→IwlBz with firmware-name hints; ath9k skeleton
+  (probe + chip ID, PHY bring-up TODO); extended `wifi::probe_pci` to detect
+  Atheros 0x168C and report family + firmware needed for unsupported Intel.
+- result: `cargo build --release -p trustos_kernel` clean. PCI probe now
+  recognises iwldvm (full driver), iwlmvm7/8/9, AX, BZ (logs firmware
+  needed), and all ath9k devices (skeleton driver loads but `start()`
+  returns "PHY bring-up not implemented").
+- next: real crypto in `crate::crypto` (PBKDF2/HMAC-SHA1/CCMP), ath9k PHY
+  bring-up + DMA rings, iwlmvm op-mode (huge), USB WiFi (rtl8188eu/mt7601u).
+  See repo memory `wifi_stack_status.md`.
+
 ## 2026-05-03 — NTFS Sprint 1: dirty flag wired + reparse points detected
 - scope: kernel/src/vfs/ntfs.rs, /memories/repo/ntfs_write_plan.md
 - did: Wired `read_volume_dirty_flag` into `mount()` (`NtfsFs::is_dirty()` now

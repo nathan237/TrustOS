@@ -1,7 +1,7 @@
 //! NVIDIA GPU Driver — NV50 (Tesla) Family
 //!
 //! Native NVIDIA GPU driver for TrustOS.
-//! Targets NVIDIA Quadro NVS 140M (G86/NV86) on ThinkPad T61.
+//! Supports NV50 (Tesla) family GPUs (G80–GT200), including Quadro NVS 140M.
 //!
 //! Architecture:
 //! - PCI detection (vendor 0x10DE, G80-G98 device IDs)
@@ -41,7 +41,7 @@ const SUPPORTED_DEVICE_IDS: &[(u16, u16, &str)] = &[
     (0x0190, 0x019F, "GeForce 8800"),
     // G84
     (0x0400, 0x040F, "GeForce 8600"),
-    // G86 — ThinkPad T61 Quadro NVS 140M
+    // G86 — Quadro NVS 140M / GeForce 8500
     (0x0420, 0x042F, "Quadro NVS 140M / GeForce 8500"),
     // G92
     (0x0600, 0x060F, "GeForce 8800/9800"),
@@ -102,7 +102,7 @@ pub struct NvGpuInformation {
     /// BAR1 VRAM aperture size
     pub vram_aperture_size: u64,
     /// PCIe link speed (gen)
-    pub pcie_generator: u8,
+    pub pcie_gen: u8,
     /// PCIe link width  
     pub pcie_width: u8,
 }
@@ -130,14 +130,14 @@ pub fn summary_string(&self) -> String {
         format!("{} ({}) | {} MB VRAM | PCIe Gen{} x{}",
             self.gpu_name, self.chipset_name(),
             self.vram_size / (1024 * 1024),
-            self.pcie_generator, self.pcie_width)
+            self.pcie_gen, self.pcie_width)
     }
 }
 
 /// FIFO push buffer state for command submission
 struct FifoChannel {
     /// Physical address of the push buffer
-    pushbuf_physical: u64,
+    pushbuf_phys: u64,
     /// Virtual address of the push buffer
     pushbuf_virt: u64,
     /// Push buffer size in bytes
@@ -153,7 +153,7 @@ struct FifoChannel {
 /// Driver state
 struct NvidiaState {
     initialized: bool,
-    gpu_information: Option<NvGpuInformation>,
+    gpu_info: Option<NvGpuInformation>,
     fifo: Option<FifoChannel>,
     /// Whether 2D acceleration is ready
     accel_2d_ready: bool,
@@ -162,7 +162,7 @@ struct NvidiaState {
 // Global shared state guarded by a Mutex (mutual exclusion lock).
 static STATE: Mutex<NvidiaState> = Mutex::new(NvidiaState {
     initialized: false,
-    gpu_information: None,
+    gpu_info: None,
     fifo: None,
     accel_2d_ready: false,
 });
@@ -191,8 +191,8 @@ const u32)
 /// Write 32-bit GPU register
 #[inline]
 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe fn mmio_wr32(base: u64, offset: u32, value: u32) {
-    core::ptr::write_volatile((base + offset as u64) as *mut u32, value);
+unsafe fn mmio_wr32(base: u64, offset: u32, val: u32) {
+    core::ptr::write_volatile((base + offset as u64) as *mut u32, val);
 }
 
 /// Wait for a register to match mask (with timeout)
@@ -214,19 +214,19 @@ unsafe fn mmio_wait(base: u64, offset: u32, mask: u32, value: u32, timeout_us: u
 /// Find an NVIDIA NV50 GPU on the PCI bus
 fn probe_pci() -> Option<PciDevice> {
     let devices = pci::find_by_class(pci::class::DISPLAY);
-    for device in devices {
-        if device.vendor_id != NVIDIA_VENDOR_ID {
+    for dev in devices {
+        if dev.vendor_id != NVIDIA_VENDOR_ID {
             continue;
         }
         // Check if device ID falls within a supported range
         for &(lo, hi, _name) in SUPPORTED_DEVICE_IDS {
-            if device.device_id >= lo && device.device_id <= hi {
-                return Some(device);
+            if dev.device_id >= lo && dev.device_id <= hi {
+                return Some(dev);
             }
         }
         // Log unrecognized NVIDIA GPU
         crate::serial_println!("[NVIDIA] Unrecognized NVIDIA GPU: {:04X}:{:04X}",
-            device.vendor_id, device.device_id);
+            dev.vendor_id, dev.device_id);
     }
     None
 }
@@ -279,10 +279,10 @@ match cfg1 & 0xFFF {
 }
 
 /// Read PCIe link info from PCI config space
-fn read_pcie_link(device: &PciDevice) -> (u8, u8) {
-    if let Some(capability_offset) = pci::find_capability(device, 0x10) {
-        let link_status = pci::config_read16(device.bus, device.device, device.function, 
-            capability_offset as u8 + 0x12);
+fn read_pcie_link(dev: &PciDevice) -> (u8, u8) {
+    if let Some(cap_offset) = pci::find_capability(dev, 0x10) {
+        let link_status = pci::config_read16(dev.bus, dev.device, dev.function, 
+            cap_offset as u8 + 0x12);
         let speed = (link_status & 0xF) as u8;
         let width = ((link_status >> 4) & 0x3F) as u8;
         (speed, width)
@@ -375,7 +375,7 @@ unsafe fn setup_fifo_channel(mmio: u64, vram_base: u64) -> Option<FifoChannel> {
         pushbuf_vram_offset);
     
     Some(FifoChannel {
-        pushbuf_physical: pushbuf_vram_offset,
+        pushbuf_phys: pushbuf_vram_offset,
         pushbuf_virt,
         pushbuf_size,
         put: 0,
@@ -418,14 +418,14 @@ pub fn accel_fill_rect(x: u32, y: u32, w: u32, h: u32, color: u32) {
     }
     
     // Get framebuffer dimensions
-    let (framebuffer_w, framebuffer_h) = crate::framebuffer::get_dimensions();
-    if framebuffer_w == 0 || framebuffer_h == 0 || x >= framebuffer_w || y >= framebuffer_h {
+    let (fb_w, fb_h) = crate::framebuffer::get_dimensions();
+    if fb_w == 0 || fb_h == 0 || x >= fb_w || y >= fb_h {
         return;
     }
     
-    let x_end = (x + w).minimum(framebuffer_w);
-    let y_end = (y + h).minimum(framebuffer_h);
-    let pitch = framebuffer_w; // pixels per row (assuming 32bpp, pitch = width * 4 bytes)
+    let x_end = (x + w).min(fb_w);
+    let y_end = (y + h).min(fb_h);
+    let pitch = fb_w; // pixels per row (assuming 32bpp, pitch = width * 4 bytes)
     
     // Write directly to VRAM aperture with write-combining
     // This bypasses the CPU framebuffer and writes to GPU VRAM
@@ -437,62 +437,62 @@ pub fn accel_fill_rect(x: u32, y: u32, w: u32, h: u32, color: u32) {
             let row_pointer = base.offset(row_offset);
             
             // Use volatile writes (MMIO region)
-            for column in 0..row_width {
-                core::ptr::write_volatile(row_pointer.add(column), color);
+            for col in 0..row_width {
+                core::ptr::write_volatile(row_pointer.add(col), color);
             }
         }
     }
 }
 
 /// Accelerated blit (copy rectangle) via VRAM aperture
-pub fn accel_copy_rect(source_x: u32, source_y: u32, destination_x: u32, destination_y: u32, w: u32, h: u32) {
+pub fn accel_copy_rect(source_x: u32, source_y: u32, dst_x: u32, dst_y: u32, w: u32, h: u32) {
     let vram = VRAM_BASE.load(Ordering::Relaxed);
     if vram == 0 {
         return;
     }
     
-    let (framebuffer_w, framebuffer_h) = crate::framebuffer::get_dimensions();
-    if framebuffer_w == 0 || framebuffer_h == 0 {
+    let (fb_w, fb_h) = crate::framebuffer::get_dimensions();
+    if fb_w == 0 || fb_h == 0 {
         return;
     }
     
-    let pitch = framebuffer_w;
+    let pitch = fb_w;
     
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
         let base = vram as *mut u32;
         
         // Handle overlapping copies by choosing correct iteration order
-        if destination_y > source_y || (destination_y == source_y && destination_x > source_x) {
+        if dst_y > source_y || (dst_y == source_y && dst_x > source_x) {
             // Copy bottom-to-top, right-to-left (destination is below/right of source)
             for row in (0..h).rev() {
                 let sy = source_y + row;
-                let dy = destination_y + row;
-                if sy >= framebuffer_h || dy >= framebuffer_h { continue; }
+                let dy = dst_y + row;
+                if sy >= fb_h || dy >= fb_h { continue; }
                 
-                for column in (0..w).rev() {
-                    let sx = source_x + column;
-                    let dx = destination_x + column;
-                    if sx >= framebuffer_w || dx >= framebuffer_w { continue; }
+                for col in (0..w).rev() {
+                    let sx = source_x + col;
+                    let dx = dst_x + col;
+                    if sx >= fb_w || dx >= fb_w { continue; }
                     
-                    let value = core::ptr::read_volatile(base.offset((sy * pitch + sx) as isize));
-                    core::ptr::write_volatile(base.offset((dy * pitch + dx) as isize), value);
+                    let val = core::ptr::read_volatile(base.offset((sy * pitch + sx) as isize));
+                    core::ptr::write_volatile(base.offset((dy * pitch + dx) as isize), val);
                 }
             }
         } else {
             // Copy top-to-bottom, left-to-right
             for row in 0..h {
                 let sy = source_y + row;
-                let dy = destination_y + row;
-                if sy >= framebuffer_h || dy >= framebuffer_h { continue; }
+                let dy = dst_y + row;
+                if sy >= fb_h || dy >= fb_h { continue; }
                 
-                for column in 0..w {
-                    let sx = source_x + column;
-                    let dx = destination_x + column;
-                    if sx >= framebuffer_w || dx >= framebuffer_w { continue; }
+                for col in 0..w {
+                    let sx = source_x + col;
+                    let dx = dst_x + col;
+                    if sx >= fb_w || dx >= fb_w { continue; }
                     
-                    let value = core::ptr::read_volatile(base.offset((sy * pitch + sx) as isize));
-                    core::ptr::write_volatile(base.offset((dy * pitch + dx) as isize), value);
+                    let val = core::ptr::read_volatile(base.offset((sy * pitch + sx) as isize));
+                    core::ptr::write_volatile(base.offset((dy * pitch + dx) as isize), val);
                 }
             }
         }
@@ -510,7 +510,7 @@ pub fn init() {
     crate::serial_println!("[NVIDIA] ═══════════════════════════════════════════════════");
     
     // Step 1: Find NVIDIA GPU on PCI bus
-    let device = // Pattern matching — Rust's exhaustive branching construct.
+    let dev = // Pattern matching — Rust's exhaustive branching construct.
 match probe_pci() {
         Some(d) => d,
         None => {
@@ -530,16 +530,16 @@ match probe_pci() {
     };
     
     crate::serial_println!("[NVIDIA] Found: {:04X}:{:04X} rev {:02X} at {:02X}:{:02X}.{}",
-        device.vendor_id, device.device_id, device.revision, device.bus, device.device, device.function);
+        dev.vendor_id, dev.device_id, dev.revision, dev.bus, dev.device, dev.function);
     
     // Step 2: Enable PCI bus mastering and memory space 
-    pci::enable_bus_master(&device);
-    pci::enable_memory_space(&device);
+    pci::enable_bus_master(&dev);
+    pci::enable_memory_space(&dev);
     
     // Step 3: Map BAR0 (MMIO registers — 16MB)
     let mmio_physical = // Pattern matching — Rust's exhaustive branching construct.
-match device.bar_address(bar::MMIO) {
-        Some(address) if address > 0 => address,
+match dev.bar_address(bar::MMIO) {
+        Some(addr) if addr > 0 => addr,
         _ => {
             crate::serial_println!("[NVIDIA] ERROR: BAR0 (MMIO) not available");
             return;
@@ -561,13 +561,13 @@ match memory::map_mmio(mmio_physical, mmio_size) {
     MMIO_BASE.store(mmio_virt, Ordering::SeqCst);
     
     // Step 4: Map BAR1 (VRAM aperture)
-    let vram_physical = device.bar_address(bar::VRAM).unwrap_or(0);
+    let vram_physical = dev.bar_address(bar::VRAM).unwrap_or(0);
     let mut vram_virt: u64 = 0;
     let mut vram_ap_size: u64 = 0;
     
     if vram_physical > 0 {
         // Detect BAR1 size (typically 64MB-256MB)
-        let bar1_raw = device.bar[bar::VRAM];
+        let bar1_raw = dev.bar[bar::VRAM];
         // For BAR sizing, use standard PCI mechanism
         vram_ap_size = 256 * 1024 * 1024; // Default 256MB for NV50
         
@@ -600,7 +600,7 @@ unsafe { read_gpu_identity(mmio_virt) };
 unsafe { read_vram_size(mmio_virt) };
     
     // Step 7: Read PCIe link info
-    let (pcie_generator, pcie_width) = read_pcie_link(&device);
+    let (pcie_gen, pcie_width) = read_pcie_link(&dev);
     
     // Step 8: Initialize GPU engines
     let engines_ok = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
@@ -620,34 +620,34 @@ unsafe { setup_fifo_channel(mmio_virt, vram_virt) }
     let accel_2d = fifo.is_some() && vram_virt > 0;
     
     // Build GPU info
-    let information = NvGpuInformation {
-        vendor_id: device.vendor_id,
-        device_id: device.device_id,
-        revision: device.revision,
-        bus: device.bus,
-        device: device.device,
-        function: device.function,
+    let info = NvGpuInformation {
+        vendor_id: dev.vendor_id,
+        device_id: dev.device_id,
+        revision: dev.revision,
+        bus: dev.bus,
+        device: dev.device,
+        function: dev.function,
         chipset_id,
         stepping,
-        gpu_name: gpu_name_for_id(device.device_id),
+        gpu_name: gpu_name_for_id(dev.device_id),
         vram_size,
         mmio_base: mmio_virt,
         mmio_size: mmio_size as u64,
         vram_base: vram_virt,
         vram_aperture_size: vram_ap_size,
-        pcie_generator,
+        pcie_gen,
         pcie_width,
     };
     
     // Print summary
     crate::serial_println!("[NVIDIA] ───────────────────────────────────────────────────");
-    crate::serial_println!("[NVIDIA] GPU: {} ({})", information.gpu_name, information.chipset_name());
+    crate::serial_println!("[NVIDIA] GPU: {} ({})", info.gpu_name, info.chipset_name());
     crate::serial_println!("[NVIDIA] PCI: {:04X}:{:04X} rev {:02X} at {:02X}:{:02X}.{}", 
-        information.vendor_id, information.device_id, information.revision,
-        information.bus, information.device, information.function);
+        info.vendor_id, info.device_id, info.revision,
+        info.bus, info.device, info.function);
     crate::serial_println!("[NVIDIA] Chipset: {:#04X} stepping {:#04X}", chipset_id, stepping);
-    crate::serial_println!("[NVIDIA] VRAM: {} MB", information.vram_size / (1024 * 1024));
-    crate::serial_println!("[NVIDIA] PCIe: Gen{} x{}", pcie_generator, pcie_width);
+    crate::serial_println!("[NVIDIA] VRAM: {} MB", info.vram_size / (1024 * 1024));
+    crate::serial_println!("[NVIDIA] PCIe: Gen{} x{}", pcie_gen, pcie_width);
     crate::serial_println!("[NVIDIA] MMIO: {:#X} ({}MB)", mmio_virt, mmio_size / (1024*1024));
     if vram_virt > 0 {
         crate::serial_println!("[NVIDIA] VRAM aperture: {:#X}", vram_virt);
@@ -658,7 +658,7 @@ unsafe { setup_fifo_channel(mmio_virt, vram_virt) }
     // Store state
     let mut state = STATE.lock();
     state.initialized = true;
-    state.gpu_information = Some(information);
+    state.gpu_info = Some(info);
     state.fifo = fifo;
     state.accel_2d_ready = accel_2d;
     GPU_DETECTED.store(true, Ordering::SeqCst);
@@ -678,13 +678,13 @@ pub fn is_accel_ready() -> bool {
 
 /// Get GPU info
 pub fn get_information() -> Option<NvGpuInformation> {
-    STATE.lock().gpu_information.clone()
+    STATE.lock().gpu_info.clone()
 }
 
 /// Get summary string for boot log / shell
 pub fn summary() -> String {
-    if let Some(information) = get_information() {
-        information.summary_string()
+    if let Some(info) = get_information() {
+        info.summary_string()
     } else {
         String::from("No NVIDIA GPU detected")
     }

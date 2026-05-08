@@ -130,7 +130,7 @@ fn logo_edge(x: usize, y: usize) -> bool {
 /// Render the fleur-de-lis logo at (cx, cy) center with given scale.
 /// Interior is filled with animated matrix binary rain.
 /// Edges are chrome/silver with a subtle gradient.
-fn render_logo(buffer: &mut [u32], bw: usize, bh: usize,
+fn render_logo(buf: &mut [u32], bw: usize, bh: usize,
                cx: usize, cy: usize, scale: usize, frame: u32) {
     let logo_pw = LOGO_W * scale;
     let logo_ph = LOGO_H * scale;
@@ -147,12 +147,12 @@ fn render_logo(buffer: &mut [u32], bw: usize, bh: usize,
 
         for sx in 0..logo_pw {
             let lx = sx / scale; // logo x
-            let pixel = ox + sx;
-            if pixel >= bw { continue; }
+            let px = ox + sx;
+            if px >= bw { continue; }
 
             if !logo_pixel(lx, ly) { continue; }
 
-            let index = py * bw + pixel;
+            let idx = py * bw + px;
 
             if logo_edge(lx, ly) {
                 // Chrome/silver edge with vertical gradient
@@ -161,8 +161,8 @@ fn render_logo(buffer: &mut [u32], bw: usize, bh: usize,
                 // Slight horizontal highlight at center
                 let dx = if lx > LOGO_W / 2 { lx - LOGO_W / 2 } else { LOGO_W / 2 - lx };
                 let highlight = 30u32.saturating_sub(dx as u32 * 2);
-                let v = (base + highlight).minimum(240);
-                buffer[index] = 0xFF000000 | (v << 16) | (v << 8) | v;
+                let v = (base + highlight).min(240);
+                buf[idx] = 0xFF000000 | (v << 16) | (v << 8) | v;
             } else {
                 // Matrix rain interior: binary digits scrolling down
                 // Each "column" in the logo gets its own rain speed
@@ -191,14 +191,14 @@ fn render_logo(buffer: &mut [u32], bw: usize, bh: usize,
                     && cell_y > 0 && cell_y < scale * 5;
 
                 if is_char {
-                    let g = intensity.minimum(255);
+                    let g = intensity.min(255);
                     let r = g / 8;
                     let b = g / 5;
-                    buffer[index] = 0xFF000000 | (r << 16) | (g << 8) | b;
+                    buf[idx] = 0xFF000000 | (r << 16) | (g << 8) | b;
                 } else {
                     // Dark green/black background inside logo
                     let g = 8u32 + (char_hash as u32 % 8);
-                    buffer[index] = 0xFF000000 | (g << 8);
+                    buf[idx] = 0xFF000000 | (g << 8);
                 }
             }
         }
@@ -209,7 +209,7 @@ fn render_logo(buffer: &mut [u32], bw: usize, bh: usize,
 // HELPER FUNCTIONS
 // ===============================================================================
 
-fn draw_big_char(buffer: &mut [u32], w: usize, h: usize,
+fn draw_big_char(buf: &mut [u32], w: usize, h: usize,
                  cx: usize, cy: usize, c: char, color: u32, scale: usize) {
     let glyph = crate::framebuffer::font::get_glyph(c);
     for (row, &bits) in glyph.iter().enumerate() {
@@ -217,9 +217,9 @@ fn draw_big_char(buffer: &mut [u32], w: usize, h: usize,
             if bits & (0x80 >> bit) != 0 {
                 for sy in 0..scale {
                     for sx in 0..scale {
-                        let pixel = cx + bit as usize * scale + sx;
+                        let px = cx + bit as usize * scale + sx;
                         let py = cy + row * scale + sy;
-                        if pixel < w && py < h { buffer[py * w + pixel] = color; }
+                        if px < w && py < h { buf[py * w + px] = color; }
                     }
                 }
             }
@@ -228,12 +228,12 @@ fn draw_big_char(buffer: &mut [u32], w: usize, h: usize,
 }
 
 /// Draw a character with a soft glow halo (makes text look less pixelated)
-fn draw_big_char_glow(buffer: &mut [u32], w: usize, h: usize,
+fn draw_big_char_glow(buf: &mut [u32], w: usize, h: usize,
                       cx: usize, cy: usize, c: char, color: u32, scale: usize, glow_r: u32) {
     let glyph = crate::framebuffer::font::get_glyph(c);
     let cr = (color >> 16) & 0xFF;
     let cg = (color >> 8) & 0xFF;
-    let callback = color & 0xFF;
+    let cb = color & 0xFF;
     // First pass: soft glow (every other pixel for speed)
     if glow_r > 0 {
         let spread = glow_r as usize;
@@ -252,19 +252,19 @@ fn draw_big_char_glow(buffer: &mut [u32], w: usize, h: usize,
                             let d2 = (dx * dx + dy * dy) as u32;
                             let r2 = glow_r * glow_r;
                             if d2 > 0 && d2 < r2 {
-                                let pixel = (gcx as i32 + dx) as usize;
+                                let px = (gcx as i32 + dx) as usize;
                                 let py = (gcy as i32 + dy) as usize;
-                                if pixel < w && py < h {
+                                if px < w && py < h {
                                     let falloff = 255u32.saturating_sub(d2 * 255 / r2) / 4;
-                                    let index = py * w + pixel;
-                                    let destination = buffer[index];
-                                    let dr = (destination >> 16) & 0xFF;
-                                    let dg = (destination >> 8) & 0xFF;
-                                    let db = destination & 0xFF;
-                                    let nr = (dr + cr * falloff / 255).minimum(255);
-                                    let ng = (dg + cg * falloff / 255).minimum(255);
-                                    let nb = (db + callback * falloff / 255).minimum(255);
-                                    buffer[index] = 0xFF000000 | (nr << 16) | (ng << 8) | nb;
+                                    let idx = py * w + px;
+                                    let dst = buf[idx];
+                                    let dr = (dst >> 16) & 0xFF;
+                                    let dg = (dst >> 8) & 0xFF;
+                                    let db = dst & 0xFF;
+                                    let nr = (dr + cr * falloff / 255).min(255);
+                                    let ng = (dg + cg * falloff / 255).min(255);
+                                    let nb = (db + cb * falloff / 255).min(255);
+                                    buf[idx] = 0xFF000000 | (nr << 16) | (ng << 8) | nb;
                                 }
                             }
                             dx += step;
@@ -281,9 +281,9 @@ fn draw_big_char_glow(buffer: &mut [u32], w: usize, h: usize,
             if bits & (0x80 >> bit) != 0 {
                 for sy in 0..scale {
                     for sx in 0..scale {
-                        let pixel = cx + bit as usize * scale + sx;
+                        let px = cx + bit as usize * scale + sx;
                         let py = cy + row * scale + sy;
-                        if pixel < w && py < h { buffer[py * w + pixel] = color; }
+                        if px < w && py < h { buf[py * w + px] = color; }
                     }
                 }
             }
@@ -292,24 +292,24 @@ fn draw_big_char_glow(buffer: &mut [u32], w: usize, h: usize,
 }
 
 /// Draw text with shadow + glow for cinematic look
-fn draw_text_glow(buffer: &mut [u32], w: usize, h: usize,
+fn draw_text_glow(buf: &mut [u32], w: usize, h: usize,
                   y: usize, text: &str, color: u32, scale: usize) {
     let tw = text.len() * 8 * scale;
     let sx = if tw < w { (w - tw) / 2 } else { 0 };
     // Drop shadow (offset +2,+2)
-    let shadow = scale.maximum(1);
+    let shadow = scale.max(1);
     for (i, c) in text.chars().enumerate() {
-        draw_big_char(buffer, w, h, sx + i * 8 * scale + shadow, y + shadow, c, 0xFF000000, scale);
+        draw_big_char(buf, w, h, sx + i * 8 * scale + shadow, y + shadow, c, 0xFF000000, scale);
     }
     // Glow + main
-    let glow = (scale as u32 * 3).minimum(12);
+    let glow = (scale as u32 * 3).min(12);
     for (i, c) in text.chars().enumerate() {
-        draw_big_char_glow(buffer, w, h, sx + i * 8 * scale, y, c, color, scale, glow);
+        draw_big_char_glow(buf, w, h, sx + i * 8 * scale, y, c, color, scale, glow);
     }
 }
 
 /// Apply a vignette darkening effect (darkens edges, leaves center bright)
-fn apply_vignette(buffer: &mut [u32], w: usize, h: usize, strength: u32) {
+fn apply_vignette(buf: &mut [u32], w: usize, h: usize, strength: u32) {
     let cx = w / 2;
     let cy = h / 2;
     let maximum_r2 = (cx * cx + cy * cy) as u32;
@@ -320,19 +320,19 @@ fn apply_vignette(buffer: &mut [u32], w: usize, h: usize, strength: u32) {
             let dx = if x > cx { x - cx } else { cx - x };
             let d2 = (dx * dx + dy * dy) as u32;
             let factor = d2 * strength / maximum_r2;
-            let dim = factor.minimum(200) as u32;
+            let dim = factor.min(200) as u32;
             // Apply to 2x2 block
             for by in 0..2u32 {
                 for bx in 0..2u32 {
-                    let pixel = x + bx as usize;
+                    let px = x + bx as usize;
                     let py = y + by as usize;
-                    if pixel < w && py < h {
-                        let index = py * w + pixel;
-                        let c = buffer[index];
+                    if px < w && py < h {
+                        let idx = py * w + px;
+                        let c = buf[idx];
                         let r = ((c >> 16) & 0xFF).saturating_sub(dim);
                         let g = ((c >> 8) & 0xFF).saturating_sub(dim);
                         let b = (c & 0xFF).saturating_sub(dim);
-                        buffer[index] = 0xFF000000 | (r << 16) | (g << 8) | b;
+                        buf[idx] = 0xFF000000 | (r << 16) | (g << 8) | b;
                     }
                 }
             }
@@ -341,14 +341,14 @@ fn apply_vignette(buffer: &mut [u32], w: usize, h: usize, strength: u32) {
 }
 
 /// Draw a filled circle with radial gradient (center_color -> edge_color)
-fn draw_radial_glow(buffer: &mut [u32], w: usize, h: usize,
+fn draw_radial_glow(buf: &mut [u32], w: usize, h: usize,
                     cx: usize, cy: usize, radius: usize,
                     center_r: u32, center_g: u32, center_b: u32, alpha: u32) {
     let r2 = (radius * radius) as u32;
     let y_start = cy.saturating_sub(radius);
-    let y_end = (cy + radius).minimum(h);
+    let y_end = (cy + radius).min(h);
     let x_start = cx.saturating_sub(radius);
-    let x_end = (cx + radius).minimum(w);
+    let x_end = (cx + radius).min(w);
     for y in y_start..y_end {
         let dy = if y > cy { y - cy } else { cy - y };
         for x in x_start..x_end {
@@ -359,42 +359,42 @@ fn draw_radial_glow(buffer: &mut [u32], w: usize, h: usize,
                 let ir = center_r * falloff / 255;
                 let ig = center_g * falloff / 255;
                 let ib = center_b * falloff / 255;
-                let index = y * w + x;
-                let destination = buffer[index];
-                let dr = (destination >> 16) & 0xFF;
-                let dg = (destination >> 8) & 0xFF;
-                let db = destination & 0xFF;
-                buffer[index] = 0xFF000000
-                    | ((dr + ir).minimum(255) << 16)
-                    | ((dg + ig).minimum(255) << 8)
-                    | (db + ib).minimum(255);
+                let idx = y * w + x;
+                let dst = buf[idx];
+                let dr = (dst >> 16) & 0xFF;
+                let dg = (dst >> 8) & 0xFF;
+                let db = dst & 0xFF;
+                buf[idx] = 0xFF000000
+                    | ((dr + ir).min(255) << 16)
+                    | ((dg + ig).min(255) << 8)
+                    | (db + ib).min(255);
             }
         }
     }
 }
 
 /// Draw a filled ellipse with solid color
-fn draw_filled_ellipse(buffer: &mut [u32], w: usize, h: usize,
-                       cx: usize, cy: usize, receive: usize, ry: usize, color: u32) {
+fn draw_filled_ellipse(buf: &mut [u32], w: usize, h: usize,
+                       cx: usize, cy: usize, rx: usize, ry: usize, color: u32) {
     let y_start = cy.saturating_sub(ry);
-    let y_end = (cy + ry).minimum(h);
-    let x_start = cx.saturating_sub(receive);
-    let x_end = (cx + receive).minimum(w);
-    let rx2 = (receive * receive) as u64;
+    let y_end = (cy + ry).min(h);
+    let x_start = cx.saturating_sub(rx);
+    let x_end = (cx + rx).min(w);
+    let rx2 = (rx * rx) as u64;
     let ry2 = (ry * ry) as u64;
     for y in y_start..y_end {
         let dy = if y > cy { y - cy } else { cy - y };
         for x in x_start..x_end {
             let dx = if x > cx { x - cx } else { cx - x };
             if (dx as u64 * dx as u64) * ry2 + (dy as u64 * dy as u64) * rx2 < rx2 * ry2 {
-                buffer[y * w + x] = color;
+                buf[y * w + x] = color;
             }
         }
     }
 }
 
 /// CRT scanline + curvature overlay (applied after scene rendering)
-fn apply_crt_overlay(buffer: &mut [u32], w: usize, h: usize) {
+fn apply_crt_overlay(buf: &mut [u32], w: usize, h: usize) {
     let cx = w / 2;
     let cy = h / 2;
     for y in 0..h {
@@ -402,105 +402,105 @@ fn apply_crt_overlay(buffer: &mut [u32], w: usize, h: usize) {
         let scan_dim = if y % 3 == 0 { 40u32 } else { 0 };
         // Barrel distortion darkening at edges
         let dy = if y > cy { y - cy } else { cy - y };
-        let edge_v = (dy * dy * 60 / (cy * cy).maximum(1)) as u32;
+        let edge_v = (dy * dy * 60 / (cy * cy).max(1)) as u32;
         for x in 0..w {
             let dx = if x > cx { x - cx } else { cx - x };
-            let edge_h = (dx * dx * 60 / (cx * cx).maximum(1)) as u32;
+            let edge_h = (dx * dx * 60 / (cx * cx).max(1)) as u32;
             let total_dim = scan_dim + edge_v + edge_h;
             if total_dim > 0 {
-                let index = y * w + x;
-                let c = buffer[index];
+                let idx = y * w + x;
+                let c = buf[idx];
                 let r = ((c >> 16) & 0xFF).saturating_sub(total_dim);
                 let g = ((c >> 8) & 0xFF).saturating_sub(total_dim);
                 let b = (c & 0xFF).saturating_sub(total_dim);
-                buffer[index] = 0xFF000000 | (r << 16) | (g << 8) | b;
+                buf[idx] = 0xFF000000 | (r << 16) | (g << 8) | b;
             }
         }
     }
 }
 
-fn draw_text_at(buffer: &mut [u32], w: usize, h: usize,
+fn draw_text_at(buf: &mut [u32], w: usize, h: usize,
                 x: usize, y: usize, text: &str, color: u32, scale: usize) {
     for (i, c) in text.chars().enumerate() {
-        draw_big_char(buffer, w, h, x + i * 8 * scale, y, c, color, scale);
+        draw_big_char(buf, w, h, x + i * 8 * scale, y, c, color, scale);
     }
 }
 
-fn draw_text_centered(buffer: &mut [u32], w: usize, h: usize,
+fn draw_text_centered(buf: &mut [u32], w: usize, h: usize,
                       y: usize, text: &str, color: u32, scale: usize) {
     let tw = text.len() * 8 * scale;
     let sx = if tw < w { (w - tw) / 2 } else { 0 };
-    draw_text_at(buffer, w, h, sx, y, text, color, scale);
+    draw_text_at(buf, w, h, sx, y, text, color, scale);
 }
 
-fn fill_rect(buffer: &mut [u32], w: usize, h: usize,
-             receive: usize, ry: usize, rw: usize, rh: usize, color: u32) {
+fn fill_rect(buf: &mut [u32], w: usize, h: usize,
+             rx: usize, ry: usize, rw: usize, rh: usize, color: u32) {
     for dy in 0..rh {
         for dx in 0..rw {
-            let pixel = receive + dx;
+            let px = rx + dx;
             let py = ry + dy;
-            if pixel < w && py < h { buffer[py * w + pixel] = color; }
+            if px < w && py < h { buf[py * w + px] = color; }
         }
     }
 }
 
-fn clear_buffer(buffer: &mut [u32]) {
+fn clear_buffer(buf: &mut [u32]) {
     // SSE2-accelerated fill (4 pixels per store)
     #[cfg(target_arch = "x86_64")]
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
         use core::arch::x86_64::*;
         let black = _mm_set1_epi32(0xFF000000u32 as i32);
-        let ptr = buffer.as_mut_pointer() as *mut __m128i;
-        let count = buffer.len() / 4;
+        let ptr = buf.as_mut_ptr() as *mut __m128i;
+        let count = buf.len() / 4;
         for i in 0..count {
             _mm_storeu_si128(ptr.add(i), black);
         }
-        for i in (count * 4)..buffer.len() {
-            buffer[i] = 0xFF000000;
+        for i in (count * 4)..buf.len() {
+            buf[i] = 0xFF000000;
         }
     }
     #[cfg(not(target_arch = "x86_64"))]
     {
-        for p in buffer.iterator_mut() { *p = 0xFF000000; }
+        for p in buf.iter_mut() { *p = 0xFF000000; }
     }
 }
 
-fn blit_buffer(buffer: &[u32], w: usize, h: usize) {
+fn blit_buffer(buf: &[u32], w: usize, h: usize) {
     // Use SMP parallel blit: copies directly to MMIO FB across all cores
-    crate::framebuffer::blit_to_framebuffer_parallel(buffer.as_pointer(), w, h);
+    crate::framebuffer::blit_to_framebuffer_parallel(buf.as_ptr(), w, h);
 }
 
-fn do_fade(buffer: &mut [u32], w: usize, h: usize) {
+fn do_fade(buf: &mut [u32], w: usize, h: usize) {
     for _ in 0..40 {
-        for pixel in buffer.iterator_mut() {
-            let r = ((*pixel >> 16) & 0xFF).saturating_sub(8);
-            let g = ((*pixel >> 8) & 0xFF).saturating_sub(8);
-            let b = (*pixel & 0xFF).saturating_sub(8);
-            *pixel = 0xFF000000 | (r << 16) | (g << 8) | b;
+        for px in buf.iter_mut() {
+            let r = ((*px >> 16) & 0xFF).saturating_sub(8);
+            let g = ((*px >> 8) & 0xFF).saturating_sub(8);
+            let b = (*px & 0xFF).saturating_sub(8);
+            *px = 0xFF000000 | (r << 16) | (g << 8) | b;
         }
-        blit_buffer(buffer, w, h);
+        blit_buffer(buf, w, h);
         crate::cpu::tsc::pit_delay_mouse(FRAME_MOUSE);
     }
-    clear_buffer(buffer);
-    blit_buffer(buffer, w, h);
+    clear_buffer(buf);
+    blit_buffer(buf, w, h);
     crate::cpu::tsc::pit_delay_mouse(300);
 }
 
 /// Quick glitch transition -- 3 frames of random noise then black
-fn glitch_cut(buffer: &mut [u32], w: usize, h: usize) {
+fn glitch_cut(buf: &mut [u32], w: usize, h: usize) {
     let mut seed = 0xDEADBEEFu32;
     for _ in 0..3 {
-        for pixel in buffer.iterator_mut() {
+        for px in buf.iter_mut() {
             seed ^= seed << 13; seed ^= seed >> 17; seed ^= seed << 5;
             let v = seed & 0xFF;
-            *pixel = 0xFF000000 | (v << 16) | (v << 8) | v;
+            *px = 0xFF000000 | (v << 16) | (v << 8) | v;
         }
-        blit_buffer(buffer, w, h);
+        blit_buffer(buf, w, h);
         crate::cpu::tsc::pit_delay_mouse(40);
     }
-    clear_buffer(buffer);
-    blit_buffer(buffer, w, h);
+    clear_buffer(buf);
+    blit_buffer(buf, w, h);
     crate::cpu::tsc::pit_delay_mouse(80);
 }
 
@@ -517,30 +517,30 @@ fn can_advance() -> bool {
 // ===============================================================================
 
 /// CRT static / test pattern -- Fallout "Please Stand By" background
-fn bg_crt_static(buffer: &mut [u32], w: usize, h: usize, frame: u32) {
+fn bg_crt_static(buf: &mut [u32], w: usize, h: usize, frame: u32) {
     let mut seed = frame.wrapping_mul(2654435761);
     // Dark static noise base
-    for pixel in buffer.iterator_mut() {
+    for px in buf.iter_mut() {
         seed ^= seed << 13; seed ^= seed >> 17; seed ^= seed << 5;
         let noise = (seed & 0x1F) as u32; // 0-31 range = dark static
-        *pixel = 0xFF000000 | (noise << 16) | (noise << 8) | noise;
+        *px = 0xFF000000 | (noise << 16) | (noise << 8) | noise;
     }
     // CRT scanlines overlay
     for y in 0..h {
         if y % 3 == 0 {
             for x in 0..w {
-                let index = y * w + x;
-                let r = ((buffer[index] >> 16) & 0xFF) / 2;
-                let g = ((buffer[index] >> 8) & 0xFF) / 2;
-                let b = (buffer[index] & 0xFF) / 2;
-                buffer[index] = 0xFF000000 | (r << 16) | (g << 8) | b;
+                let idx = y * w + x;
+                let r = ((buf[idx] >> 16) & 0xFF) / 2;
+                let g = ((buf[idx] >> 8) & 0xFF) / 2;
+                let b = (buf[idx] & 0xFF) / 2;
+                buf[idx] = 0xFF000000 | (r << 16) | (g << 8) | b;
             }
         }
     }
 }
 
 /// Red warning scanlines (oppression scenes)
-fn bg_scanlines(buffer: &mut [u32], w: usize, h: usize, frame: u32) {
+fn bg_scanlines(buf: &mut [u32], w: usize, h: usize, frame: u32) {
     let scroll = (frame as usize * 2) % h;
     for y in 0..h {
         let sy = (y + scroll) % h;
@@ -548,14 +548,14 @@ fn bg_scanlines(buffer: &mut [u32], w: usize, h: usize, frame: u32) {
         for x in 0..w {
             let base_r = if stripe { 35u32 } else { 15 };
             let flash = if (sy % 60) < 2 { 30u32 } else { 0 };
-            let r = (base_r + flash).minimum(65);
-            buffer[y * w + x] = 0xFF000000 | (r << 16) | 0x0205;
+            let r = (base_r + flash).min(65);
+            buf[y * w + x] = 0xFF000000 | (r << 16) | 0x0205;
         }
     }
 }
 
 /// Pulse nebula (dark blue/purple)
-fn bg_pulse(buffer: &mut [u32], w: usize, h: usize, frame: u32) {
+fn bg_pulse(buf: &mut [u32], w: usize, h: usize, frame: u32) {
     let phase = (frame % 160) as u32;
     let pulse = if phase < 80 { phase / 2 } else { (160 - phase) / 2 };
     let phase2 = ((frame + 40) % 120) as u32;
@@ -564,76 +564,76 @@ fn bg_pulse(buffer: &mut [u32], w: usize, h: usize, frame: u32) {
         let yf = (y as u32 * 40) / h as u32;
         for x in 0..w {
             let xf = (x as u32 * 10) / w as u32;
-            let r = (yf / 4 + pulse2 / 3).minimum(40);
-            let g = (xf / 3).minimum(15);
-            let b = (yf + pulse + xf / 2).minimum(80);
-            buffer[y * w + x] = 0xFF000000 | (r << 16) | (g << 8) | b;
+            let r = (yf / 4 + pulse2 / 3).min(40);
+            let g = (xf / 3).min(15);
+            let b = (yf + pulse + xf / 2).min(80);
+            buf[y * w + x] = 0xFF000000 | (r << 16) | (g << 8) | b;
         }
     }
 }
 
 /// Rising green sparks
-fn bg_sparks(buffer: &mut [u32], w: usize, h: usize, frame: u32) {
-    for pixel in buffer.iterator_mut() {
-        let g = ((*pixel >> 8) & 0xFF).saturating_sub(10);
-        let r = ((*pixel >> 16) & 0xFF).saturating_sub(8);
-        *pixel = 0xFF000000 | (r << 16) | (g << 8);
+fn bg_sparks(buf: &mut [u32], w: usize, h: usize, frame: u32) {
+    for px in buf.iter_mut() {
+        let g = ((*px >> 8) & 0xFF).saturating_sub(10);
+        let r = ((*px >> 16) & 0xFF).saturating_sub(8);
+        *px = 0xFF000000 | (r << 16) | (g << 8);
     }
     for i in 0..30u32 {
         let seed = (i.wrapping_mul(2654435761).wrapping_add(frame.wrapping_mul(37))) as usize;
-        let pixel = (seed.wrapping_mul(7919)) % w;
+        let px = (seed.wrapping_mul(7919)) % w;
         let rise = (frame as usize + seed) % h;
         let py = h.saturating_sub(rise);
         let bright = (50 + (seed % 50)) as u32;
-        if pixel < w && py < h {
-            buffer[py * w + pixel] = 0xFF000000 | (bright / 4 << 16) | (bright << 8) | (bright / 3);
-            if pixel + 1 < w { buffer[py * w + pixel + 1] = 0xFF000000 | (bright << 8); }
+        if px < w && py < h {
+            buf[py * w + px] = 0xFF000000 | (bright / 4 << 16) | (bright << 8) | (bright / 3);
+            if px + 1 < w { buf[py * w + px + 1] = 0xFF000000 | (bright << 8); }
         }
     }
 }
 
 /// Sunrise warm gradient
-fn bg_sunrise(buffer: &mut [u32], w: usize, h: usize, frame: u32) {
-    let lift = frame.minimum(80);
+fn bg_sunrise(buf: &mut [u32], w: usize, h: usize, frame: u32) {
+    let lift = frame.min(80);
     for y in 0..h {
         let yf = y as u32 * 100 / h as u32;
-        let warmth = if yf > 50 { (yf - 50).minimum(50) + lift } else { lift / 2 };
-        let r = (warmth * 2).minimum(100);
-        let g = (warmth * 3 / 4).minimum(50);
+        let warmth = if yf > 50 { (yf - 50).min(50) + lift } else { lift / 2 };
+        let r = (warmth * 2).min(100);
+        let g = (warmth * 3 / 4).min(50);
         let b = 20u32.saturating_sub(warmth / 3);
         for x in 0..w {
-            buffer[y * w + x] = 0xFF000000 | (r << 16) | (g << 8) | b;
+            buf[y * w + x] = 0xFF000000 | (r << 16) | (g << 8) | b;
         }
     }
 }
 
 /// Circuit-board traces
-fn bg_circuit(buffer: &mut [u32], w: usize, h: usize, frame: u32) {
-    for p in buffer.iterator_mut() { *p = 0xFF0A0A14; }
+fn bg_circuit(buf: &mut [u32], w: usize, h: usize, frame: u32) {
+    for p in buf.iter_mut() { *p = 0xFF0A0A14; }
     let trace = 0xFF0F2818u32;
     for i in 0..16u32 {
         let ty = ((i.wrapping_mul(7919) as usize) % h) & !3;
         let transmit = ((i.wrapping_mul(104729) as usize) % w) & !3;
-        if ty < h { for x in 0..w { buffer[ty * w + x] = trace; } }
-        if transmit < w { for y in 0..h { buffer[y * w + transmit] = trace; } }
+        if ty < h { for x in 0..w { buf[ty * w + x] = trace; } }
+        if transmit < w { for y in 0..h { buf[y * w + transmit] = trace; } }
     }
     let py = ((frame as usize * 3) % h) & !3;
     if py < h {
-        let pw = (w / 4).minimum(120);
-        let pixel_start = (frame as usize * 5) % w;
+        let pw = (w / 4).min(120);
+        let px_start = (frame as usize * 5) % w;
         for dx in 0..pw {
-            let pixel = (pixel_start + dx) % w;
-            buffer[py * w + pixel] = 0xFF00AA44;
-            if py + 1 < h { buffer[(py + 1) * w + pixel] = 0xFF00AA44; }
+            let px = (px_start + dx) % w;
+            buf[py * w + px] = 0xFF00AA44;
+            if py + 1 < h { buf[(py + 1) * w + px] = 0xFF00AA44; }
         }
     }
 }
 
 /// Matrix rain background
-fn bg_rain(buffer: &mut [u32], w: usize, h: usize,
+fn bg_rain(buf: &mut [u32], w: usize, h: usize,
            cols: &mut [u16], speeds: &[u8], frame: u32) {
     // Fade existing
-    for pixel in buffer.iterator_mut() {
+    for pixel in buf.iter_mut() {
         let g = ((*pixel >> 8) & 0xFF) as u32;
         if g > 0 { *pixel = 0xFF000000 | (g.saturating_sub(6) << 8); }
         else { *pixel = 0xFF000000; }
@@ -651,8 +651,8 @@ fn bg_rain(buffer: &mut [u32], w: usize, h: usize,
             if py >= h { break; }
             for bit in 0..8u32 {
                 if bits & (0x80 >> bit) != 0 {
-                    let pixel = x + bit as usize;
-                    if pixel < w { buffer[py * w + pixel] = 0xFF00FF44; }
+                    let px = x + bit as usize;
+                    if px < w { buf[py * w + px] = 0xFF00FF44; }
                 }
             }
         }
@@ -660,22 +660,22 @@ fn bg_rain(buffer: &mut [u32], w: usize, h: usize,
 }
 
 /// Binary cascade (for "black box" scene)
-fn bg_binary_flood(buffer: &mut [u32], w: usize, h: usize, frame: u32) {
+fn bg_binary_flood(buf: &mut [u32], w: usize, h: usize, frame: u32) {
     // Fade down
-    for pixel in buffer.iterator_mut() {
-        let r = ((*pixel >> 16) & 0xFF).saturating_sub(15);
-        let g = ((*pixel >> 8) & 0xFF).saturating_sub(15);
-        let b = (*pixel & 0xFF).saturating_sub(15);
-        *pixel = 0xFF000000 | (r << 16) | (g << 8) | b;
+    for px in buf.iter_mut() {
+        let r = ((*px >> 16) & 0xFF).saturating_sub(15);
+        let g = ((*px >> 8) & 0xFF).saturating_sub(15);
+        let b = (*px & 0xFF).saturating_sub(15);
+        *px = 0xFF000000 | (r << 16) | (g << 8) | b;
     }
     // Drop binary digits
-    for column in 0..(w / 10) {
-        let x = column * 10 + 2;
-        let seed = (column.wrapping_mul(7919).wrapping_add(frame as usize * 3)) % 97;
+    for col in 0..(w / 10) {
+        let x = col * 10 + 2;
+        let seed = (col.wrapping_mul(7919).wrapping_add(frame as usize * 3)) % 97;
         let speed = 2 + seed % 4;
-        let y = ((frame as usize * speed + column * 23) % (h + 40)).wrapping_sub(20);
+        let y = ((frame as usize * speed + col * 23) % (h + 40)).wrapping_sub(20);
         if y < h && x < w {
-            let digit = if (column + frame as usize) % 2 == 0 { '0' } else { '1' };
+            let digit = if (col + frame as usize) % 2 == 0 { '0' } else { '1' };
             let glyph = crate::framebuffer::font::get_glyph(digit);
             let bright = 100u32 + (seed as u32 * 3) % 80;
             for (row, &bits) in glyph.iter().enumerate() {
@@ -683,9 +683,9 @@ fn bg_binary_flood(buffer: &mut [u32], w: usize, h: usize, frame: u32) {
                 if py >= h { break; }
                 for bit in 0..8u32 {
                     if bits & (0x80 >> bit) != 0 {
-                        let pixel = x + bit as usize;
-                        if pixel < w {
-                            buffer[py * w + pixel] = 0xFF000000 | (bright << 8) | (bright / 4);
+                        let px = x + bit as usize;
+                        if px < w {
+                            buf[py * w + px] = 0xFF000000 | (bright << 8) | (bright / 4);
                         }
                     }
                 }
@@ -763,32 +763,32 @@ fn beats(n: u32) -> u32 { n * FRAMES_PER_BEAT }
 // ===============================================================================
 
 /// SMASH CUT: instant cut to black, hard stop. Used for shock/drama.
-fn smash_cut(buffer: &mut [u32], w: usize, h: usize) {
-    clear_buffer(buffer);
-    blit_buffer(buffer, w, h);
+fn smash_cut(buf: &mut [u32], w: usize, h: usize) {
+    clear_buffer(buf);
+    blit_buffer(buf, w, h);
     crate::cpu::tsc::pit_delay_mouse(100);
 }
 
 /// FLASH FRAME: 2-3 frames of blinding white then black.
 /// Simulates a camera flash / "BRAAAM" hit. Maximum impact.
-fn flash_frame(buffer: &mut [u32], w: usize, h: usize) {
+fn flash_frame(buf: &mut [u32], w: usize, h: usize) {
     // Frame 1: Pure white
-    for p in buffer.iterator_mut() { *p = 0xFFFFFFFF; }
-    blit_buffer(buffer, w, h);
+    for p in buf.iter_mut() { *p = 0xFFFFFFFF; }
+    blit_buffer(buf, w, h);
     crate::cpu::tsc::pit_delay_mouse(33);
     // Frame 2: 70% white
-    for p in buffer.iterator_mut() { *p = 0xFFB0B0B0; }
-    blit_buffer(buffer, w, h);
+    for p in buf.iter_mut() { *p = 0xFFB0B0B0; }
+    blit_buffer(buf, w, h);
     crate::cpu::tsc::pit_delay_mouse(33);
     // Frame 3: Black
-    clear_buffer(buffer);
-    blit_buffer(buffer, w, h);
+    clear_buffer(buf);
+    blit_buffer(buf, w, h);
     crate::cpu::tsc::pit_delay_mouse(66);
 }
 
 /// IMPACT SHAKE: screen shakes violently for N frames.
 /// Simulates bass drop / explosion. Pairs with flash_frame.
-fn impact_shake(buffer: &mut [u32], w: usize, h: usize, intensity: usize) {
+fn impact_shake(buf: &mut [u32], w: usize, h: usize, intensity: usize) {
     let mut seed = 0xCAFEBABEu32;
     for i in 0..6u32 {
         let decay = intensity.saturating_sub(i as usize);
@@ -800,12 +800,12 @@ fn impact_shake(buffer: &mut [u32], w: usize, h: usize, intensity: usize) {
         // Shift buffer
         let mut shifted = vec![0xFF000000u32; w * h];
         for y in 0..h {
-            let sy = (y as isize + oy as isize).maximum(0) as usize;
+            let sy = (y as isize + oy as isize).max(0) as usize;
             if sy >= h { continue; }
             for x in 0..w {
-                let sx = (x as isize + ox as isize).maximum(0) as usize;
+                let sx = (x as isize + ox as isize).max(0) as usize;
                 if sx >= w { continue; }
-                shifted[sy * w + sx] = buffer[y * w + x];
+                shifted[sy * w + sx] = buf[y * w + x];
             }
         }
         blit_buffer(&shifted, w, h);
@@ -815,13 +815,13 @@ fn impact_shake(buffer: &mut [u32], w: usize, h: usize, intensity: usize) {
 
 /// WHIP PAN: horizontal wipe at extreme speed (4 frames).
 /// Simulates camera whipping sideways between scenes.
-fn whip_pan(buffer: &mut [u32], w: usize, h: usize) {
+fn whip_pan(buf: &mut [u32], w: usize, h: usize) {
     for step in 0..4u32 {
         let offset = (step + 1) as usize * w / 4;
         let mut shifted = vec![0xFF000000u32; w * h];
         for y in 0..h {
             for x in offset..w {
-                shifted[y * w + x - offset] = buffer[y * w + x];
+                shifted[y * w + x - offset] = buf[y * w + x];
             }
         }
         // Motion blur: smear the edge
@@ -834,17 +834,17 @@ fn whip_pan(buffer: &mut [u32], w: usize, h: usize) {
         blit_buffer(&shifted, w, h);
         crate::cpu::tsc::pit_delay_mouse(25);
     }
-    clear_buffer(buffer);
-    blit_buffer(buffer, w, h);
+    clear_buffer(buf);
+    blit_buffer(buf, w, h);
     crate::cpu::tsc::pit_delay_mouse(50);
 }
 
 /// SILENCE: pure black for N beats. The most powerful tool in editing.
-fn silence(buffer: &mut [u32], w: usize, h: usize, beat_count: u32) {
-    clear_buffer(buffer);
+fn silence(buf: &mut [u32], w: usize, h: usize, beat_count: u32) {
+    clear_buffer(buf);
     for _ in 0..beats(beat_count) {
         if can_advance() { return; }
-        blit_buffer(buffer, w, h);
+        blit_buffer(buf, w, h);
         crate::cpu::tsc::pit_delay_mouse(FRAME_MOUSE);
     }
 }
@@ -855,21 +855,21 @@ fn silence(buffer: &mut [u32], w: usize, h: usize, beat_count: u32) {
 
 /// Type multiple centered lines over a dynamic background.
 /// Duration is capped to `max_beats` for rhythm control.
-fn type_scene<F>(buffer: &mut [u32], w: usize, h: usize,
+fn type_scene<F>(buf: &mut [u32], w: usize, h: usize,
                  lines: &[(&str, u32, usize)],
-                 mouse_per_char: u64, maximum_beats: u32,
+                 ms_per_char: u64, max_beats: u32,
                  mut bg_fn: F)
 where F: FnMut(&mut [u32], usize, usize, u32) {
     let total_chars: usize = lines.iter().map(|(t, _, _)| t.len()).sum();
-    let fpc = (mouse_per_char / FRAME_MOUSE).maximum(1) as u32;
+    let fpc = (ms_per_char / FRAME_MOUSE).max(1) as u32;
     let typing_frames = total_chars as u32 * fpc;
-    let hold = beats(maximum_beats).saturating_sub(typing_frames);
+    let hold = beats(max_beats).saturating_sub(typing_frames);
     let total = typing_frames + hold;
 
     for frame in 0..total {
         if can_advance() { return; }
 
-        bg_fn(buffer, w, h, frame);
+        bg_fn(buf, w, h, frame);
 
         let chars_shown = (frame / fpc) as usize;
         let total_h: usize = lines.iter().map(|(_, _, s)| 16 * s + 12).sum();
@@ -881,7 +881,7 @@ where F: FnMut(&mut [u32], usize, usize, u32) {
             let sx = if tw < w { (w - tw) / 2 } else { 0 };
             for (i, c) in text.chars().enumerate() {
                 if counted + i >= chars_shown { break; }
-                draw_big_char(buffer, w, h, sx + i * 8 * scale, y, c, color, scale);
+                draw_big_char(buf, w, h, sx + i * 8 * scale, y, c, color, scale);
             }
             // Blinking cursor
             if chars_shown > counted && chars_shown < counted + text.len() {
@@ -890,8 +890,8 @@ where F: FnMut(&mut [u32], usize, usize, u32) {
                 if (frame / 8) % 2 == 0 {
                     for cy in y..y + 16 * scale {
                         if cy < h && cx + 2 < w {
-                            buffer[cy * w + cx] = 0xFFFFFFFF;
-                            buffer[cy * w + cx + 1] = 0xFFFFFFFF;
+                            buf[cy * w + cx] = 0xFFFFFFFF;
+                            buf[cy * w + cx + 1] = 0xFFFFFFFF;
                         }
                     }
                 }
@@ -900,28 +900,28 @@ where F: FnMut(&mut [u32], usize, usize, u32) {
             y += 16 * scale + 12;
         }
 
-        blit_buffer(buffer, w, h);
+        blit_buffer(buf, w, h);
         crate::cpu::tsc::pit_delay_mouse(FRAME_MOUSE);
     }
 }
 
 /// Show text instantly for N beats with animated background.
-fn hold_scene<F>(buffer: &mut [u32], w: usize, h: usize,
+fn hold_scene<F>(buf: &mut [u32], w: usize, h: usize,
                  lines: &[(&str, u32, usize)], beat_count: u32,
                  mut bg_fn: F)
 where F: FnMut(&mut [u32], usize, usize, u32) {
     for frame in 0..beats(beat_count) {
         if can_advance() { return; }
-        bg_fn(buffer, w, h, frame);
+        bg_fn(buf, w, h, frame);
 
         let total_h: usize = lines.iter().map(|(_, _, s)| 16 * s + 12).sum();
         let mut y = if total_h < h { (h - total_h) / 2 } else { 20 };
         for &(text, color, scale) in lines {
-            draw_text_centered(buffer, w, h, y, text, color, scale);
+            draw_text_centered(buf, w, h, y, text, color, scale);
             y += 16 * scale + 12;
         }
 
-        blit_buffer(buffer, w, h);
+        blit_buffer(buf, w, h);
         crate::cpu::tsc::pit_delay_mouse(FRAME_MOUSE);
     }
 }
@@ -977,7 +977,7 @@ pub(super) fn command_trustos_trailer() {
         crate::framebuffer::set_double_buffer_mode(true);
     }
 
-    let mut buffer = vec![0xFF000000u32; w * h];
+    let mut buf = vec![0xFF000000u32; w * h];
 
     // Rain state for matrix backgrounds
     let ncols = w / 8 + 1;
@@ -1002,19 +1002,19 @@ pub(super) fn command_trustos_trailer() {
 
         for frame in 0..total {
             if can_advance() { break; }
-            clear_buffer(&mut buffer);
+            clear_buffer(&mut buf);
 
             // Subtle radial green glow behind logo (builds up)
-            let glow_alpha = (frame * 3).minimum(120);
-            let glow_radius = 80 + (frame as usize * 2).minimum(h / 3);
-            draw_radial_glow(&mut buffer, w, h, w / 2, logo_cy, glow_radius,
+            let glow_alpha = (frame * 3).min(120);
+            let glow_radius = 80 + (frame as usize * 2).min(h / 3);
+            draw_radial_glow(&mut buf, w, h, w / 2, logo_cy, glow_radius,
                              20, 80, 40, glow_alpha);
 
-            render_logo(&mut buffer, w, h, w / 2, logo_cy, scale, frame);
+            render_logo(&mut buf, w, h, w / 2, logo_cy, scale, frame);
 
             // Pulsing outer halo ring around logo
             if frame > 20 {
-                let pulse = ((frame % 40) as i32 - 20).unsigned_absolute() as u32;
+                let pulse = ((frame % 40) as i32 - 20).unsigned_abs() as u32;
                 let ring_r = (LOGO_W * scale / 2 + 10 + pulse as usize) as f32;
                 let ring_bright = 60u32.saturating_sub(pulse);
                 for a in 0..180 {
@@ -1023,12 +1023,12 @@ pub(super) fn command_trustos_trailer() {
                     let cos_a = crate::formula3d::fast_cos(angle);
                     for thickness in 0..2 {
                         let r = ring_r + thickness as f32;
-                        let pixel = (w as f32 / 2.0 + cos_a * r) as usize;
+                        let px = (w as f32 / 2.0 + cos_a * r) as usize;
                         let py = (logo_cy as f32 + sin_a * r * 0.75) as usize;
-                        if pixel < w && py < h {
-                            let index = py * w + pixel;
-                            let g = ((buffer[index] >> 8) & 0xFF) + ring_bright;
-                            buffer[index] = 0xFF000000 | ((ring_bright / 4) << 16) | (g.minimum(255) << 8) | (ring_bright / 3);
+                        if px < w && py < h {
+                            let idx = py * w + px;
+                            let g = ((buf[idx] >> 8) & 0xFF) + ring_bright;
+                            buf[idx] = 0xFF000000 | ((ring_bright / 4) << 16) | (g.min(255) << 8) | (ring_bright / 3);
                         }
                     }
                 }
@@ -1037,47 +1037,47 @@ pub(super) fn command_trustos_trailer() {
             // Slow fade-in over first 60 frames
             if frame < 60 {
                 let dim = ((60 - frame) as u32 * 255 / 60) as u32;
-                for pixel in buffer.iterator_mut() {
-                    if *pixel != 0xFF000000 {
-                        let r = ((*pixel >> 16) & 0xFF).saturating_sub(dim);
-                        let g = ((*pixel >> 8) & 0xFF).saturating_sub(dim);
-                        let b = (*pixel & 0xFF).saturating_sub(dim);
-                        *pixel = 0xFF000000 | (r << 16) | (g << 8) | b;
+                for px in buf.iter_mut() {
+                    if *px != 0xFF000000 {
+                        let r = ((*px >> 16) & 0xFF).saturating_sub(dim);
+                        let g = ((*px >> 8) & 0xFF).saturating_sub(dim);
+                        let b = (*px & 0xFF).saturating_sub(dim);
+                        *px = 0xFF000000 | (r << 16) | (g << 8) | b;
                     }
                 }
             }
 
             // Vignette darkening on edges
-            apply_vignette(&mut buffer, w, h, 180);
+            apply_vignette(&mut buf, w, h, 180);
 
             // "TRUSTOS" text appears letter by letter after beat 8
             if frame > beats(8) {
                 let text = "TRUSTOS";
                 let text_scale = if h > 600 { 5 } else { 3 };
                 let sub = frame - beats(8);
-                let chars_shown = (sub / 8).minimum(text.len() as u32) as usize;
+                let chars_shown = (sub / 8).min(text.len() as u32) as usize;
                 let tw = text.len() * 8 * text_scale;
                 let transmit = if tw < w { (w - tw) / 2 } else { 0 };
                 // Shadow first
                 for (i, c) in text.chars().enumerate() {
                     if i >= chars_shown { break; }
-                    draw_big_char(&mut buffer, w, h,
+                    draw_big_char(&mut buf, w, h,
                         transmit + i * 8 * text_scale + 2, text_y + 2, c, 0xFF000000, text_scale);
                 }
                 // Glowing silver letters
                 for (i, c) in text.chars().enumerate() {
                     if i >= chars_shown { break; }
-                    draw_big_char_glow(&mut buffer, w, h,
+                    draw_big_char_glow(&mut buf, w, h,
                         transmit + i * 8 * text_scale, text_y, c, 0xFFDDDDDD, text_scale,
                         text_scale as u32 * 3);
                 }
             }
 
-            blit_buffer(&buffer, w, h);
+            blit_buffer(&buf, w, h);
             crate::cpu::tsc::pit_delay_mouse(FRAME_MOUSE);
         }
     }
-    flash_frame(&mut buffer, w, h); // BEAT 16: HIT
+    flash_frame(&mut buf, w, h); // BEAT 16: HIT
 
     // -------------------------------------------------------------------
     // SCENE 1 -- PLEASE STAND BY (8 beats = 3.7s)
@@ -1087,7 +1087,7 @@ pub(super) fn command_trustos_trailer() {
         let total = beats(8);
         for frame in 0..total {
             if can_advance() { break; }
-            bg_crt_static(&mut buffer, w, h, frame);
+            bg_crt_static(&mut buf, w, h, frame);
 
             // Round-cornered box (panel)
             let bw_r = if w > 800 { 200 } else { 160 };
@@ -1095,38 +1095,38 @@ pub(super) fn command_trustos_trailer() {
             let bx = w / 2 - bw_r;
             let by = h / 2 - bh_r;
             // Panel shadow
-            fill_rect(&mut buffer, w, h, bx + 3, by + 3, bw_r * 2, bh_r * 2, 0xFF050505);
+            fill_rect(&mut buf, w, h, bx + 3, by + 3, bw_r * 2, bh_r * 2, 0xFF050505);
             // Panel body
-            fill_rect(&mut buffer, w, h, bx, by, bw_r * 2, bh_r * 2, 0xFF111111);
+            fill_rect(&mut buf, w, h, bx, by, bw_r * 2, bh_r * 2, 0xFF111111);
             // Panel border with gradient
             for x in bx..bx + bw_r * 2 {
                 if x < w {
                     let grad = 0xFF555555 + ((x - bx) as u32 * 0x40 / (bw_r as u32 * 2));
                     let gc = 0xFF000000 | (grad & 0xFF) << 16 | (grad & 0xFF) << 8 | (grad & 0xFF);
-                    buffer[by * w + x] = gc;
-                    buffer[(by + bh_r * 2 - 1) * w + x] = gc;
+                    buf[by * w + x] = gc;
+                    buf[(by + bh_r * 2 - 1) * w + x] = gc;
                 }
             }
             for y in by..by + bh_r * 2 {
                 if y < h {
-                    buffer[y * w + bx] = 0xFF888888;
-                    buffer[y * w + (bx + bw_r * 2 - 1).minimum(w - 1)] = 0xFF888888;
+                    buf[y * w + bx] = 0xFF888888;
+                    buf[y * w + (bx + bw_r * 2 - 1).min(w - 1)] = 0xFF888888;
                 }
             }
 
             let warn_color = if (frame / 15) % 2 == 0 { 0xFFFFCC00 } else { 0xFFFF8800 };
-            draw_text_glow(&mut buffer, w, h, by + 12, "! WARNING !", warn_color, 2);
-            draw_text_glow(&mut buffer, w, h, by + 55, "PLEASE STAND BY", 0xFFCCCCCC, 2);
+            draw_text_glow(&mut buf, w, h, by + 12, "! WARNING !", warn_color, 2);
+            draw_text_glow(&mut buf, w, h, by + 55, "PLEASE STAND BY", 0xFFCCCCCC, 2);
 
             // Apply CRT curvature + scanlines
-            apply_crt_overlay(&mut buffer, w, h);
-            apply_vignette(&mut buffer, w, h, 200);
+            apply_crt_overlay(&mut buf, w, h);
+            apply_vignette(&mut buf, w, h, 200);
 
-            blit_buffer(&buffer, w, h);
+            blit_buffer(&buf, w, h);
             crate::cpu::tsc::pit_delay_mouse(FRAME_MOUSE);
         }
     }
-    glitch_cut(&mut buffer, w, h); // BEAT 24
+    glitch_cut(&mut buf, w, h); // BEAT 24
 
     // -------------------------------------------------------------------
     // SCENE 2 -- BIG BROTHER (12 beats = 5.6s)
@@ -1141,14 +1141,14 @@ pub(super) fn command_trustos_trailer() {
 
         for frame in 0..total {
             if can_advance() { break; }
-            bg_pulse(&mut buffer, w, h, frame);
+            bg_pulse(&mut buf, w, h, frame);
 
             // Menacing red radial glow behind eye (builds up)
-            let glow_int = (frame as u32 * 3).minimum(180);
-            draw_radial_glow(&mut buffer, w, h, eye_cx, eye_cy, eye_w + 40, glow_int, 0x10, 0x00, glow_int);
+            let glow_int = (frame as u32 * 3).min(180);
+            draw_radial_glow(&mut buf, w, h, eye_cx, eye_cy, eye_w + 40, glow_int, 0x10, 0x00, glow_int);
 
             // Sclera fill (white ellipse)
-            draw_filled_ellipse(&mut buffer, w, h, eye_cx, eye_cy, eye_w, eye_h, 0xFFDDCCCC);
+            draw_filled_ellipse(&mut buf, w, h, eye_cx, eye_cy, eye_w, eye_h, 0xFFDDCCCC);
 
             // Iris ring (red/orange gradient ring)
             let iris_r = eye_h * 2 / 3;
@@ -1161,14 +1161,14 @@ pub(super) fn command_trustos_trailer() {
                     let ir2 = (iris_r as i32) * (iris_r as i32);
                     let pr2 = (pupil_r as i32) * (pupil_r as i32);
                     if d2 <= ir2 && d2 >= pr2 {
-                        let pixel = (eye_cx as i32 + ddx) as usize;
+                        let px = (eye_cx as i32 + ddx) as usize;
                         let py = (eye_cy as i32 + ddy) as usize;
-                        if pixel < w && py < h {
+                        if px < w && py < h {
                             // Gradient: outer = dark red, inner = bright red
-                            let t = (d2 - pr2) as u32 * 255 / (ir2 - pr2).maximum(1) as u32;
+                            let t = (d2 - pr2) as u32 * 255 / (ir2 - pr2).max(1) as u32;
                             let r = 0xFF;
                             let g = (0x66u32).saturating_sub(t * 0x66 / 255) as u8;
-                            buffer[py * w + pixel] = 0xFF000000 | (r as u32) << 16 | (g as u32) << 8;
+                            buf[py * w + px] = 0xFF000000 | (r as u32) << 16 | (g as u32) << 8;
                         }
                     }
                 }
@@ -1180,9 +1180,9 @@ pub(super) fn command_trustos_trailer() {
                     let ddx = dx as i32 - pupil_r as i32;
                     let ddy = dy as i32 - pupil_r as i32;
                     if ddx*ddx + ddy*ddy < (pupil_r as i32 * pupil_r as i32) {
-                        let pixel = (eye_cx as i32 + ddx) as usize;
+                        let px = (eye_cx as i32 + ddx) as usize;
                         let py = (eye_cy as i32 + ddy) as usize;
-                        if pixel < w && py < h { buffer[py * w + pixel] = 0xFF080000; }
+                        if px < w && py < h { buf[py * w + px] = 0xFF080000; }
                     }
                 }
             }
@@ -1195,27 +1195,27 @@ pub(super) fn command_trustos_trailer() {
                     let a = angle as f32 * 0.008727; // ~0.5 degree steps
                     let sin_a = crate::formula3d::fast_sin(a);
                     let cos_a = crate::formula3d::fast_cos(a);
-                    let pixel = (eye_cx as f32 + cos_a * ew as f32) as usize;
+                    let px = (eye_cx as f32 + cos_a * ew as f32) as usize;
                     let py = (eye_cy as f32 + sin_a * eh as f32) as usize;
-                    if pixel < w && py < h {
-                        buffer[py * w + pixel] = 0xFFFF3333;
+                    if px < w && py < h {
+                        buf[py * w + px] = 0xFFFF3333;
                     }
                 }
             }
 
             // Text typewriter with glow
-            let chars = (frame / 3).minimum(28) as usize;
+            let chars = (frame / 3).min(28) as usize;
             let full_text = "BIG BROTHER IS WATCHING YOU.";
             let shown: alloc::string::String = full_text.chars().take(chars).collect();
-            draw_text_glow(&mut buffer, w, h, eye_cy + eye_h + 50, &shown, 0xFFFF4444, 3);
+            draw_text_glow(&mut buf, w, h, eye_cy + eye_h + 50, &shown, 0xFFFF4444, 3);
 
-            apply_vignette(&mut buffer, w, h, 160);
+            apply_vignette(&mut buf, w, h, 160);
 
-            blit_buffer(&buffer, w, h);
+            blit_buffer(&buf, w, h);
             crate::cpu::tsc::pit_delay_mouse(FRAME_MOUSE);
         }
     }
-    smash_cut(&mut buffer, w, h); // BEAT 36: hard cut to black
+    smash_cut(&mut buf, w, h); // BEAT 36: hard cut to black
 
     // -------------------------------------------------------------------
     // SCENE 3 -- DATA COLLECTION (10 beats = 4.7s)
@@ -1235,58 +1235,58 @@ pub(super) fn command_trustos_trailer() {
         let total = beats(10);
         for frame in 0..total {
             if can_advance() { break; }
-            bg_scanlines(&mut buffer, w, h, frame);
+            bg_scanlines(&mut buf, w, h, frame);
 
             // Pulsing red warning bars (top & bottom)
             let pulse = (crate::formula3d::fast_sin(frame as f32 * 0.15) * 40.0 + 60.0) as u8;
             let bar_color = 0xFF000000 | (pulse as u32) << 16;
-            fill_rect(&mut buffer, w, h, 0, 0, w, 6, bar_color);
-            fill_rect(&mut buffer, w, h, 0, h.saturating_sub(6), w, 6, bar_color);
+            fill_rect(&mut buf, w, h, 0, 0, w, 6, bar_color);
+            fill_rect(&mut buf, w, h, 0, h.saturating_sub(6), w, 6, bar_color);
 
-            let lines_shown = (frame / 12).minimum(8) as usize;
+            let lines_shown = (frame / 12).min(8) as usize;
             for (i, &line) in lines_data.iter().enumerate().take(lines_shown) {
                 let y = 80 + i * 50;
-                let slide_in = ((frame as usize).saturating_sub(i * 12)).minimum(w);
+                let slide_in = ((frame as usize).saturating_sub(i * 12)).min(w);
                 let x = w.saturating_sub(slide_in);
                 // Shadow behind text
-                draw_text_at(&mut buffer, w, h, x + 2, y + 2, line, 0xFF220000, 2);
+                draw_text_at(&mut buf, w, h, x + 2, y + 2, line, 0xFF220000, 2);
                 // Red text with brighter color for "value" part
                 let colon_position = line.find(':').unwrap_or(line.len());
                 let label = &line[..colon_position];
                 let value = &line[colon_position..];
                 let label_w = label.len() * 16;
-                draw_text_at(&mut buffer, w, h, x, y, label, 0xFFAA3333, 2);
-                draw_text_at(&mut buffer, w, h, x + label_w, y, value, 0xFFFF4444, 2);
+                draw_text_at(&mut buf, w, h, x, y, label, 0xFFAA3333, 2);
+                draw_text_at(&mut buf, w, h, x + label_w, y, value, 0xFFFF4444, 2);
             }
 
             if frame > beats(6) {
-                draw_text_glow(&mut buffer, w, h, h - 60,
+                draw_text_glow(&mut buf, w, h, h - 60,
                     "Every keystroke. Every click.", 0xFFFF6666, 2);
             }
             if frame > beats(8) {
-                draw_text_glow(&mut buffer, w, h, h - 30,
+                draw_text_glow(&mut buf, w, h, h - 30,
                     "Every file. Every thought.", 0xFFFF4444, 2);
             }
 
-            apply_vignette(&mut buffer, w, h, 180);
+            apply_vignette(&mut buf, w, h, 180);
 
-            blit_buffer(&buffer, w, h);
+            blit_buffer(&buf, w, h);
             crate::cpu::tsc::pit_delay_mouse(FRAME_MOUSE);
         }
     }
-    whip_pan(&mut buffer, w, h); // BEAT 46: whip pan transition
+    whip_pan(&mut buf, w, h); // BEAT 46: whip pan transition
 
     // -------------------------------------------------------------------
     // SCENE 4 -- THE BLACK BOX (8 beats = 3.7s)
     // "50M lines of code / you can read ZERO"
     // -------------------------------------------------------------------
-    type_scene(&mut buffer, w, h,
+    type_scene(&mut buf, w, h,
         &[("Your OS has", 0xFFAAFFAA, 2),
           ("50,000,000 lines of code.", 0xFF00FF88, 3),
           ("", 0, 1),
           ("You can read ZERO of them.", 0xFFFF4444, 3)],
-        40, 8, |buffer, w, h, f| bg_binary_flood(buffer, w, h, f));
-    smash_cut(&mut buffer, w, h); // BEAT 54
+        40, 8, |buf, w, h, f| bg_binary_flood(buf, w, h, f));
+    smash_cut(&mut buf, w, h); // BEAT 54
 
     // -------------------------------------------------------------------
     // SCENE 5 -- REDACTED (8 beats = 3.7s)
@@ -1310,10 +1310,10 @@ pub(super) fn command_trustos_trailer() {
                 let base_g: u32 = 0x14 + (y as u32 * 6 / h as u32);
                 let base_b: u32 = 0x28 + (y as u32 * 8 / h as u32);
                 let grid = if (x % 20 < 1) || (y % 20 < 1) { 0x06u32 } else { 0u32 };
-                let r = (base_r + grid).minimum(255);
-                let g = (base_g + grid).minimum(255);
-                let b = (base_b + grid).minimum(255);
-                buffer[y * w + x] = 0xFF000000 | (r << 16) | (g << 8) | b;
+                let r = (base_r + grid).min(255);
+                let g = (base_g + grid).min(255);
+                let b = (base_b + grid).min(255);
+                buf[y * w + x] = 0xFF000000 | (r << 16) | (g << 8) | b;
             }}
 
             let base_y = h / 2 - doc_lines.len() * 22;
@@ -1322,17 +1322,17 @@ pub(super) fn command_trustos_trailer() {
                 let tw = line.len() * 16;
                 let transmit = if tw < w { (w - tw) / 2 } else { 0 };
                 // Shadow
-                draw_text_at(&mut buffer, w, h, transmit + 1, y + 1, line, 0xFF223344, 2);
-                draw_text_at(&mut buffer, w, h, transmit, y, line, 0xFF7799BB, 2);
+                draw_text_at(&mut buf, w, h, transmit + 1, y + 1, line, 0xFF223344, 2);
+                draw_text_at(&mut buf, w, h, transmit, y, line, 0xFF7799BB, 2);
 
                 let redact_frame = 10 + i as u32 * 12;
                 if frame > redact_frame {
-                    let bar_progress = ((frame - redact_frame) as usize * 30).minimum(tw);
+                    let bar_progress = ((frame - redact_frame) as usize * 30).min(tw);
                     // Dark redaction bar with subtle border
-                    fill_rect(&mut buffer, w, h, transmit, y, bar_progress, 30, 0xFF0A0A0A);
+                    fill_rect(&mut buf, w, h, transmit, y, bar_progress, 30, 0xFF0A0A0A);
                     if bar_progress > 2 {
                         // Top highlight line
-                        fill_rect(&mut buffer, w, h, transmit, y, bar_progress, 1, 0xFF222222);
+                        fill_rect(&mut buf, w, h, transmit, y, bar_progress, 1, 0xFF222222);
                     }
                     if bar_progress >= tw {
                         // Red [REDACTED] stamp with glow
@@ -1342,44 +1342,44 @@ pub(super) fn command_trustos_trailer() {
                         for gy in stamp_y.saturating_sub(4)..stamp_y + 30 {
                             for gx in stamp_x.saturating_sub(8)..stamp_x + 140 {
                                 if gx < w && gy < h {
-                                    let old = buffer[gy * w + gx];
+                                    let old = buf[gy * w + gx];
                                     let or = ((old >> 16) & 0xFF) as u32;
-                                    let nr = (or + 30).minimum(255);
-                                    buffer[gy * w + gx] = (old & 0xFF00FFFF) | (nr << 16);
+                                    let nr = (or + 30).min(255);
+                                    buf[gy * w + gx] = (old & 0xFF00FFFF) | (nr << 16);
                                 }
                             }
                         }
-                        draw_text_at(&mut buffer, w, h, stamp_x, stamp_y,
+                        draw_text_at(&mut buf, w, h, stamp_x, stamp_y,
                             "[REDACTED]", 0xFFFF2222, 2);
                     }
                 }
             }
 
             if frame > beats(6) {
-                draw_text_glow(&mut buffer, w, h, h - 40,
+                draw_text_glow(&mut buf, w, h, h - 40,
                     "You trust what you cannot see.", 0xFF8888CC, 2);
             }
 
-            apply_vignette(&mut buffer, w, h, 200);
+            apply_vignette(&mut buf, w, h, 200);
 
-            blit_buffer(&buffer, w, h);
+            blit_buffer(&buf, w, h);
             crate::cpu::tsc::pit_delay_mouse(FRAME_MOUSE);
         }
     }
-    flash_frame(&mut buffer, w, h); // BEAT 62: HIT
+    flash_frame(&mut buf, w, h); // BEAT 62: HIT
 
     // =======================================================================
     // THE BREAK -- 4 beats of TOTAL SILENCE (1.9s)
     // This is the most powerful moment. Pure black. Nothing.
     // The audience holds their breath. Then...
     // =======================================================================
-    silence(&mut buffer, w, h, 4); // BEAT 62-66: silence
+    silence(&mut buf, w, h, 4); // BEAT 62-66: silence
 
     // =======================================================================
     // ACT 2 -- THE DROP (0:31) -- Flash + shake = "BRAAAM"
     // =======================================================================
-    flash_frame(&mut buffer, w, h);
-    impact_shake(&mut buffer, w, h, 12);
+    flash_frame(&mut buf, w, h);
+    impact_shake(&mut buf, w, h, 12);
 
     // -------------------------------------------------------------------
     // SCENE 7 -- TRUSTOS REVEAL (12 beats = 5.6s)
@@ -1389,7 +1389,7 @@ pub(super) fn command_trustos_trailer() {
         let total = beats(12);
         for frame in 0..total {
             if can_advance() { break; }
-            bg_sparks(&mut buffer, w, h, frame);
+            bg_sparks(&mut buf, w, h, frame);
 
             // Radiating light burst
             if frame > 5 && frame < beats(4) {
@@ -1402,11 +1402,11 @@ pub(super) fn command_trustos_trailer() {
                     let cos_a = crate::formula3d::fast_cos(angle);
                     let len = intensity as f32 * 8.0;
                     for t in 0..len as usize {
-                        let pixel = (cx as f32 + cos_a * t as f32) as usize;
+                        let px = (cx as f32 + cos_a * t as f32) as usize;
                         let py = (cy as f32 + sin_a * t as f32) as usize;
-                        if pixel < w && py < h {
-                            let bright = (200 - t * 3).maximum(40) as u32;
-                            buffer[py * w + pixel] = 0xFF000000 | (bright / 4 << 16) | (bright << 8) | (bright / 2);
+                        if px < w && py < h {
+                            let bright = (200 - t * 3).max(40) as u32;
+                            buf[py * w + px] = 0xFF000000 | (bright / 4 << 16) | (bright << 8) | (bright / 2);
                         }
                     }
                 }
@@ -1415,21 +1415,21 @@ pub(super) fn command_trustos_trailer() {
             // Giant TRUSTOS title
             if frame > 8 {
                 let title_scale = if h > 600 { 7 } else { 5 };
-                let alpha = ((frame - 8) * 12).minimum(255) as u32;
+                let alpha = ((frame - 8) * 12).min(255) as u32;
                 let color = 0xFF000000 | (alpha / 3 << 16) | (alpha << 8) | (alpha / 2);
-                draw_text_centered(&mut buffer, w, h, h / 2 - 40, "TRUSTOS", color, title_scale);
+                draw_text_centered(&mut buf, w, h, h / 2 - 40, "TRUSTOS", color, title_scale);
 
                 if frame > beats(3) {
-                    draw_text_centered(&mut buffer, w, h, h / 2 + 40,
+                    draw_text_centered(&mut buf, w, h, h / 2 + 40,
                         "The OS you can read. All of it.", 0xFF88DDAA, 2);
                 }
             }
 
-            blit_buffer(&buffer, w, h);
+            blit_buffer(&buf, w, h);
             crate::cpu::tsc::pit_delay_mouse(FRAME_MOUSE);
         }
     }
-    flash_frame(&mut buffer, w, h); // BEAT 78: HIT
+    flash_frame(&mut buf, w, h); // BEAT 78: HIT
 
     // -------------------------------------------------------------------
     // SCENE 8 -- THE NUMBERS (8 beats = 3.7s)
@@ -1445,15 +1445,15 @@ pub(super) fn command_trustos_trailer() {
         let total = beats(8);
         for frame in 0..total {
             if can_advance() { break; }
-            bg_circuit(&mut buffer, w, h, frame);
+            bg_circuit(&mut buf, w, h, frame);
 
-            let items_shown = (frame / beats(2)).minimum(4) as usize;
+            let items_shown = (frame / beats(2)).min(4) as usize;
             let base_y = h / 2 - items_shown * 35;
 
             for (i, &(target, label)) in counters.iter().enumerate().take(items_shown) {
                 let y = base_y + i * 70;
                 let sub_frame = frame.saturating_sub(i as u32 * beats(2));
-                let progress = (sub_frame * 6).minimum(beats(2));
+                let progress = (sub_frame * 6).min(beats(2));
                 let current = if target == 0 { 0 }
                     else { (target as u64 * progress as u64 / beats(2) as u64) as u32 };
 
@@ -1465,18 +1465,18 @@ pub(super) fn command_trustos_trailer() {
                 let transmit = if tw < w { (w - tw) / 2 } else { 0 };
 
                 for (ci, c) in number_str.chars().enumerate() {
-                    draw_big_char(&mut buffer, w, h, transmit + ci * 8 * scale, y, c, 0xFF00FF88, scale);
+                    draw_big_char(&mut buf, w, h, transmit + ci * 8 * scale, y, c, 0xFF00FF88, scale);
                 }
                 for (ci, c) in label.chars().enumerate() {
-                    draw_big_char(&mut buffer, w, h, transmit + (number_str.len() + ci) * 8 * scale, y, c, 0xFF44AA66, scale);
+                    draw_big_char(&mut buf, w, h, transmit + (number_str.len() + ci) * 8 * scale, y, c, 0xFF44AA66, scale);
                 }
             }
 
-            blit_buffer(&buffer, w, h);
+            blit_buffer(&buf, w, h);
             crate::cpu::tsc::pit_delay_mouse(FRAME_MOUSE);
         }
     }
-    flash_frame(&mut buffer, w, h); // BEAT 86: HIT -- accelerando starts
+    flash_frame(&mut buf, w, h); // BEAT 86: HIT -- accelerando starts
 
     // =======================================================================
     // ACT 3 -- ACCELERANDO (0:40 - 0:52) -- Cuts get faster and faster
@@ -1491,59 +1491,59 @@ pub(super) fn command_trustos_trailer() {
 
         for frame in 0..total {
             if can_advance() { break; }
-            bg_circuit(&mut buffer, w, h, frame);
+            bg_circuit(&mut buf, w, h, frame);
 
-            let current_stage = (frame * 4 / total).minimum(3) as usize;
-            draw_text_centered(&mut buffer, w, h, 30, "NETWORK STACK", 0xFF00CCFF, 3);
+            let current_stage = (frame * 4 / total).min(3) as usize;
+            draw_text_centered(&mut buf, w, h, 30, "NETWORK STACK", 0xFF00CCFF, 3);
 
             let center_y = h / 2 - 80;
             for i in 0..=current_stage {
                 let y = center_y + i * 50;
                 let bx = w / 2 - 140;
-                fill_rect(&mut buffer, w, h, bx, y, 280, 35, 0xFF111122);
-                draw_text_centered(&mut buffer, w, h, y + 4, stages[i], stage_colors[i], 2);
+                fill_rect(&mut buf, w, h, bx, y, 280, 35, 0xFF111122);
+                draw_text_centered(&mut buf, w, h, y + 4, stages[i], stage_colors[i], 2);
             }
 
-            blit_buffer(&buffer, w, h);
+            blit_buffer(&buf, w, h);
             crate::cpu::tsc::pit_delay_mouse(FRAME_MOUSE);
         }
     }
-    glitch_cut(&mut buffer, w, h); // BEAT 90
+    glitch_cut(&mut buf, w, h); // BEAT 90
 
     // Slide 9.2: TLS 1.3 (3 beats)
-    hold_scene(&mut buffer, w, h,
+    hold_scene(&mut buf, w, h,
         &[("TLS 1.3", 0xFF00CCFF, 5),
           ("Full handshake. Real crypto.", 0xFF88BBDD, 2)],
-        3, |buffer, w, h, f| bg_pulse(buffer, w, h, f));
-    flash_frame(&mut buffer, w, h); // BEAT 93
+        3, |buf, w, h, f| bg_pulse(buf, w, h, f));
+    flash_frame(&mut buf, w, h); // BEAT 93
 
     // Slide 9.3: GUI (3 beats)
-    hold_scene(&mut buffer, w, h,
+    hold_scene(&mut buf, w, h,
         &[("GUI COMPOSITOR", 0xFFFFCC00, 4),
           ("Windows. Taskbar. Wallpaper.", 0xFFCCAA88, 2)],
-        3, |buffer, w, h, f| bg_pulse(buffer, w, h, f));
-    glitch_cut(&mut buffer, w, h); // BEAT 96
+        3, |buf, w, h, f| bg_pulse(buf, w, h, f));
+    glitch_cut(&mut buf, w, h); // BEAT 96
 
     // Slide 9.4: TRUSTLANG (3 beats)
-    hold_scene(&mut buffer, w, h,
+    hold_scene(&mut buf, w, h,
         &[("TRUSTLANG", 0xFF00FF88, 5),
           ("Lexer > Parser > VM.", 0xFF88DDAA, 2)],
-        3, |buffer, w, h, f| bg_sparks(buffer, w, h, f));
-    flash_frame(&mut buffer, w, h); // BEAT 99
+        3, |buf, w, h, f| bg_sparks(buf, w, h, f));
+    flash_frame(&mut buf, w, h); // BEAT 99
 
     // Slide 9.5: FILESYSTEM (2 beats) -- FASTER
-    hold_scene(&mut buffer, w, h,
+    hold_scene(&mut buf, w, h,
         &[("TRUSTFS", 0xFFFFAA00, 5),
           ("Journaled. Persistent.", 0xFFDDAA66, 2)],
-        2, |buffer, w, h, f| bg_circuit(buffer, w, h, f));
-    glitch_cut(&mut buffer, w, h); // BEAT 101
+        2, |buf, w, h, f| bg_circuit(buf, w, h, f));
+    glitch_cut(&mut buf, w, h); // BEAT 101
 
     // Slide 9.6: BROWSER (2 beats) -- FASTER
-    hold_scene(&mut buffer, w, h,
+    hold_scene(&mut buf, w, h,
         &[("WEB BROWSER", 0xFF4488FF, 4),
           ("HTML + CSS + HTTPS.", 0xFF88AADD, 2)],
-        2, |buffer, w, h, f| bg_pulse(buffer, w, h, f));
-    flash_frame(&mut buffer, w, h); // BEAT 103
+        2, |buf, w, h, f| bg_pulse(buf, w, h, f));
+    flash_frame(&mut buf, w, h); // BEAT 103
 
     // Slide 9.7: 3D ENGINE (4 beats) -- visual wow moment (wireframe)
     {
@@ -1557,29 +1557,29 @@ pub(super) fn command_trustos_trailer() {
             let mesh_frames = beats(4) / 3; // split 4 beats across 3 meshes
             for frame in 0..mesh_frames {
                 if can_advance() { break; }
-                clear_buffer(&mut buffer);
+                clear_buffer(&mut buf);
 
                 let angle_y = frame as f32 * 0.08 + si as f32 * 2.0;
                 // Use wireframe rendering (these meshes have no faces)
                 crate::formula3d::render_wireframe_mesh(
-                    &mut buffer, w, h, &mesh, angle_y, 0.3, 3.0, *color
+                    &mut buf, w, h, &mesh, angle_y, 0.3, 3.0, *color
                 );
 
-                draw_text_centered(&mut buffer, w, h, 15, "3D ENGINE", 0xFFFFFFFF, 3);
-                draw_text_centered(&mut buffer, w, h, h - 35, label, *color, 2);
+                draw_text_centered(&mut buf, w, h, 15, "3D ENGINE", 0xFFFFFFFF, 3);
+                draw_text_centered(&mut buf, w, h, h - 35, label, *color, 2);
 
-                blit_buffer(&buffer, w, h);
+                blit_buffer(&buf, w, h);
                 crate::cpu::tsc::pit_delay_mouse(FRAME_MOUSE);
             }
             // White flash between meshes
             if si < 2 {
-                for p in buffer.iterator_mut() { *p = 0xFFFFFFFF; }
-                blit_buffer(&buffer, w, h);
+                for p in buf.iter_mut() { *p = 0xFFFFFFFF; }
+                blit_buffer(&buf, w, h);
                 crate::cpu::tsc::pit_delay_mouse(33);
             }
         }
     }
-    glitch_cut(&mut buffer, w, h); // BEAT 107
+    glitch_cut(&mut buf, w, h); // BEAT 107
 
     // Slide 9.8: VIDEO CODEC triple split (4 beats)
     // Optimized: fire at half-vertical-res, XOR plasma (no trig), matrix rain
@@ -1595,23 +1595,23 @@ pub(super) fn command_trustos_trailer() {
         let total = beats(4);
         for frame in 0..total {
             if can_advance() { break; }
-            clear_buffer(&mut buffer);
+            clear_buffer(&mut buf);
 
             // LEFT: Fire at half vertical resolution, upscale 2x
             for x in 0..third {
                 fire_seed = xorshift(fire_seed);
                 heat[(half_h - 1) * third + x] = (fire_seed & 0xFF) as u8;
                 fire_seed = xorshift(fire_seed);
-                heat[half_h.saturating_sub(2) * third + x] = ((fire_seed & 0xFF) as u16).minimum(255) as u8;
+                heat[half_h.saturating_sub(2) * third + x] = ((fire_seed & 0xFF) as u16).min(255) as u8;
             }
             for y in 0..half_h.saturating_sub(2) {
                 for x in 0..third {
                     let below = heat[(y + 1) * third + x] as u16;
                     let bl = if x > 0 { heat[(y + 1) * third + x - 1] as u16 } else { below };
                     let br = if x + 1 < third { heat[(y + 1) * third + x + 1] as u16 } else { below };
-                    let bb = heat[((y + 2).minimum(half_h - 1)) * third + x] as u16;
+                    let bb = heat[((y + 2).min(half_h - 1)) * third + x] as u16;
                     let average = (below + bl + br + bb) / 4;
-                    heat[y * third + x] = if average > 2 { (average - 2).minimum(255) as u8 } else { 0 };
+                    heat[y * third + x] = if average > 2 { (average - 2).min(255) as u8 } else { 0 };
                 }
             }
             for hy in 0..half_h { for x in 0..third {
@@ -1620,37 +1620,37 @@ pub(super) fn command_trustos_trailer() {
                     else if t < 128 { (255, (t - 64) * 4, 0u32) }
                     else if t < 192 { (255, 255, (t - 128) * 4) }
                     else { (255u32, 255u32, 255u32) };
-                let c = 0xFF000000 | (r.minimum(255) << 16) | (g.minimum(255) << 8) | b.minimum(255);
+                let c = 0xFF000000 | (r.min(255) << 16) | (g.min(255) << 8) | b.min(255);
                 let y1 = hy * 2;
                 let y2 = y1 + 1;
-                if x < w && y1 < h { buffer[y1 * w + x] = c; }
-                if x < w && y2 < h { buffer[y2 * w + x] = c; }
+                if x < w && y1 < h { buf[y1 * w + x] = c; }
+                if x < w && y2 < h { buf[y2 * w + x] = c; }
             }}
 
             // CENTER: XOR Plasma (pure integer, zero trig)
             // Animated psychedelic pattern using only XOR and shifts
             let t = frame as usize;
             for y in 0..h { for x in 0..third {
-                let pixel = third + x;
-                if pixel >= w { continue; }
+                let px = third + x;
+                if px >= w { continue; }
                 let v1 = (x ^ y).wrapping_add(t * 3) as u32;
                 let v2 = ((x.wrapping_mul(3)) ^ (y.wrapping_mul(7))).wrapping_add(t * 5) as u32;
                 let v3 = ((x + y + t * 2) ^ (x.wrapping_mul(y).wrapping_shr(4))) as u32;
-                let r = (v1 & 0xFF).minimum(255);
-                let g = ((v2 >> 1) & 0xFF).minimum(255);
-                let b = ((v3 >> 2) & 0xFF).minimum(255);
+                let r = (v1 & 0xFF).min(255);
+                let g = ((v2 >> 1) & 0xFF).min(255);
+                let b = ((v3 >> 2) & 0xFF).min(255);
                 // Tint toward purple/cyan for visual punch
-                let r2 = (r * 3 / 4 + g / 8).minimum(255);
-                let g2 = (g / 3 + b / 3).minimum(255);
-                let b2 = (b * 3 / 4 + r / 4).minimum(255);
-                buffer[y * w + pixel] = 0xFF000000 | (r2 << 16) | (g2 << 8) | b2;
+                let r2 = (r * 3 / 4 + g / 8).min(255);
+                let g2 = (g / 3 + b / 3).min(255);
+                let b2 = (b * 3 / 4 + r / 4).min(255);
+                buf[y * w + px] = 0xFF000000 | (r2 << 16) | (g2 << 8) | b2;
             }}
 
             // RIGHT: Matrix rain (kept as-is, already fast)
             for y in 0..h { for x in third*2..w {
-                let index = y * w + x;
-                let g = ((buffer[index] >> 8) & 0xFF).saturating_sub(8);
-                buffer[index] = 0xFF000000 | (g << 8);
+                let idx = y * w + x;
+                let g = ((buf[idx] >> 8) & 0xFF).saturating_sub(8);
+                buf[idx] = 0xFF000000 | (g << 8);
             }}
             for ci in 0..mat_drops.len() {
                 let x = third * 2 + ci * 8;
@@ -1665,37 +1665,37 @@ pub(super) fn command_trustos_trailer() {
                     if py >= h { break; }
                     for bit in 0..8u32 {
                         if bits & (0x80 >> bit) != 0 {
-                            let pixel = x + bit as usize;
-                            if pixel < w { buffer[py * w + pixel] = 0xFF00FF44; }
+                            let px = x + bit as usize;
+                            if px < w { buf[py * w + px] = 0xFF00FF44; }
                         }
                     }
                 }
             }
 
             // Separators + labels
-            for y in 0..h { if third < w { buffer[y * w + third] = 0xFF333333; } if third*2 < w { buffer[y * w + third*2] = 0xFF333333; } }
-            draw_text_centered(&mut buffer, w, h, 10, "VIDEO CODEC", 0xFFFFFFFF, 3);
-            draw_text_at(&mut buffer, w, h, third / 2 - 20, h - 25, "FIRE", 0xFFFF8844, 1);
-            draw_text_at(&mut buffer, w, h, third + third / 2 - 28, h - 25, "PLASMA", 0xFFCC88FF, 1);
-            draw_text_at(&mut buffer, w, h, third * 2 + third / 2 - 28, h - 25, "MATRIX", 0xFF00FF44, 1);
+            for y in 0..h { if third < w { buf[y * w + third] = 0xFF333333; } if third*2 < w { buf[y * w + third*2] = 0xFF333333; } }
+            draw_text_centered(&mut buf, w, h, 10, "VIDEO CODEC", 0xFFFFFFFF, 3);
+            draw_text_at(&mut buf, w, h, third / 2 - 20, h - 25, "FIRE", 0xFFFF8844, 1);
+            draw_text_at(&mut buf, w, h, third + third / 2 - 28, h - 25, "PLASMA", 0xFFCC88FF, 1);
+            draw_text_at(&mut buf, w, h, third * 2 + third / 2 - 28, h - 25, "MATRIX", 0xFF00FF44, 1);
 
-            blit_buffer(&buffer, w, h);
+            blit_buffer(&buf, w, h);
             crate::cpu::tsc::pit_delay_mouse(FRAME_MOUSE);
         }
     }
-    flash_frame(&mut buffer, w, h); // BEAT 111
+    flash_frame(&mut buf, w, h); // BEAT 111
 
     // -------------------------------------------------------------------
     // SCENE 10 -- 1984 REVERSED (6 beats = 2.8s)
     // -------------------------------------------------------------------
-    hold_scene(&mut buffer, w, h,
+    hold_scene(&mut buf, w, h,
         &[("In 1984,", 0xFFFF4444, 4),
           ("Big Brother watched you.", 0xFFFF6666, 3),
           ("", 0, 1),
           ("In 2026,", 0xFF44FF88, 4),
           ("you watch the code.", 0xFF00FFAA, 3)],
-        6, |buffer, w, h, f| bg_pulse(buffer, w, h, f));
-    smash_cut(&mut buffer, w, h); // BEAT 117
+        6, |buf, w, h, f| bg_pulse(buf, w, h, f));
+    smash_cut(&mut buf, w, h); // BEAT 117
 
     // -------------------------------------------------------------------
     // SCENE 11 -- SIZE COMPARISON (6 beats = 2.8s)
@@ -1715,28 +1715,28 @@ pub(super) fn command_trustos_trailer() {
 
         for frame in 0..total {
             if can_advance() { break; }
-            for p in buffer.iterator_mut() { *p = 0xFF080810; }
+            for p in buf.iter_mut() { *p = 0xFF080810; }
 
-            draw_text_centered(&mut buffer, w, h, 20, "LINES OF CODE", 0xFFCCCCCC, 3);
+            draw_text_centered(&mut buf, w, h, 20, "LINES OF CODE", 0xFFCCCCCC, 3);
 
             for (i, &(size, name, color)) in bars.iter().enumerate() {
                 let y = bar_y_start + i * (bar_h + 15);
                 let appear_frame = i as u32 * (total / 5);
                 if frame < appear_frame { continue; }
 
-                let progress = ((frame - appear_frame) * 8).minimum(100);
+                let progress = ((frame - appear_frame) * 8).min(100);
                 let bar_maximum_w = w * 3 / 4;
                 let bw = (size as u64 * bar_maximum_w as u64 / maximum_bar as u64) as usize;
                 let current_w = bw * progress as usize / 100;
 
-                draw_text_at(&mut buffer, w, h, 20, y + 8, name, 0xFF888888, 2);
+                draw_text_at(&mut buf, w, h, 20, y + 8, name, 0xFF888888, 2);
                 let bar_x = 180;
-                fill_rect(&mut buffer, w, h, bar_x, y, current_w, bar_h, color);
+                fill_rect(&mut buf, w, h, bar_x, y, current_w, bar_h, color);
 
                 if progress > 50 {
                     let label = if size >= 1000 { alloc::format!("{}M", size / 1000) }
                         else { alloc::format!("{}K", size) };
-                    draw_text_at(&mut buffer, w, h, bar_x + current_w + 10, y + 8, &label, 0xFFCCCCCC, 2);
+                    draw_text_at(&mut buf, w, h, bar_x + current_w + 10, y + 8, &label, 0xFFCCCCCC, 2);
                 }
             }
 
@@ -1744,32 +1744,32 @@ pub(super) fn command_trustos_trailer() {
             if frame > total * 3 / 5 && frame < total * 3 / 5 + 10 {
                 let shake = (10 - (frame - total * 3 / 5)) as usize;
                 if shake > 0 && shake < h {
-                    buffer.copy_within(0..(h - shake) * w, shake * w);
-                    for y in 0..shake { for x in 0..w { buffer[y * w + x] = 0xFF080810; } }
+                    buf.copy_within(0..(h - shake) * w, shake * w);
+                    for y in 0..shake { for x in 0..w { buf[y * w + x] = 0xFF080810; } }
                 }
             }
 
             if frame > total * 4 / 5 {
-                draw_text_centered(&mut buffer, w, h, h - 50,
+                draw_text_centered(&mut buf, w, h, h - 50,
                     "Small enough to understand.", 0xFF88DDAA, 2);
             }
 
-            blit_buffer(&buffer, w, h);
+            blit_buffer(&buf, w, h);
             crate::cpu::tsc::pit_delay_mouse(FRAME_MOUSE);
         }
     }
-    impact_shake(&mut buffer, w, h, 8); // BEAT 123: shake hit
+    impact_shake(&mut buf, w, h, 8); // BEAT 123: shake hit
 
     // -------------------------------------------------------------------
     // SCENE 12 -- MANIFESTO (4 beats = 1.9s) -- rapid fire
     // -------------------------------------------------------------------
-    hold_scene(&mut buffer, w, h,
+    hold_scene(&mut buf, w, h,
         &[("Your data. Your machine.", 0xFFFFCC44, 3),
           ("Your code.", 0xFFFFCC44, 3),
           ("", 0, 1),
           ("No backdoors. No telemetry.", 0xFF44FFAA, 2),
           ("No secrets.", 0xFF44FFAA, 2)],
-        4, |buffer, w, h, f| bg_sunrise(buffer, w, h, f));
+        4, |buf, w, h, f| bg_sunrise(buf, w, h, f));
 
     // =======================================================================
     // SCENE 12.5 -- FEATURE SHOWCASE CRESCENDO
@@ -1805,7 +1805,7 @@ pub(super) fn command_trustos_trailer() {
             if can_advance() { break; }
 
             // tinted background
-            for p in buffer.iterator_mut() { *p = bg; }
+            for p in buf.iter_mut() { *p = bg; }
 
             // ---- Draw a "screenshot" window mockup ----
             let win_x = w / 6;
@@ -1813,21 +1813,21 @@ pub(super) fn command_trustos_trailer() {
             let win_w = w * 2 / 3;
             let win_h = h * 3 / 8;
             // Window shadow
-            fill_rect(&mut buffer, w, h, win_x + 4, win_y + 4, win_w, win_h, 0xFF020202);
+            fill_rect(&mut buf, w, h, win_x + 4, win_y + 4, win_w, win_h, 0xFF020202);
             // Window body
-            fill_rect(&mut buffer, w, h, win_x, win_y, win_w, win_h, 0xFF111118);
+            fill_rect(&mut buf, w, h, win_x, win_y, win_w, win_h, 0xFF111118);
             // Title bar
             let tb_r = ((color >> 16) & 0xFF) / 4;
             let tb_g = ((color >> 8) & 0xFF) / 4;
             let tb_b = (color & 0xFF) / 4;
             let tb_color = 0xFF000000 | (tb_r << 16) | (tb_g << 8) | tb_b;
-            fill_rect(&mut buffer, w, h, win_x, win_y, win_w, 22, tb_color);
+            fill_rect(&mut buf, w, h, win_x, win_y, win_w, 22, tb_color);
             // Title bar text
-            draw_text_at(&mut buffer, w, h, win_x + 8, win_y + 3, title, color, 1);
+            draw_text_at(&mut buf, w, h, win_x + 8, win_y + 3, title, color, 1);
             // Close / min / max buttons
-            fill_rect(&mut buffer, w, h, win_x + win_w - 18, win_y + 5, 12, 12, 0xFFFF4444);
-            fill_rect(&mut buffer, w, h, win_x + win_w - 34, win_y + 5, 12, 12, 0xFF888844);
-            fill_rect(&mut buffer, w, h, win_x + win_w - 50, win_y + 5, 12, 12, 0xFF448844);
+            fill_rect(&mut buf, w, h, win_x + win_w - 18, win_y + 5, 12, 12, 0xFFFF4444);
+            fill_rect(&mut buf, w, h, win_x + win_w - 34, win_y + 5, 12, 12, 0xFF888844);
+            fill_rect(&mut buf, w, h, win_x + win_w - 50, win_y + 5, 12, 12, 0xFF448844);
 
             // ---- Per-feature content inside window ----
             let cx = win_x + 16;
@@ -1836,54 +1836,54 @@ pub(super) fn command_trustos_trailer() {
                         // Correspondance de motifs — branchement exhaustif de Rust.
 match i {
                 0 => { // Desktop: mini sub-windows + taskbar
-                    fill_rect(&mut buffer, w, h, cx, cy, cw / 2 - 4, win_h / 2 - 20, 0xFF1A2A4A);
-                    fill_rect(&mut buffer, w, h, cx, cy, cw / 2 - 4, 12, 0xFF3355AA);
-                    fill_rect(&mut buffer, w, h, cx + cw / 2 + 4, cy + 20, cw / 2 - 4, win_h / 2 - 40, 0xFF1A3A2A);
-                    fill_rect(&mut buffer, w, h, cx + cw / 2 + 4, cy + 20, cw / 2 - 4, 12, 0xFF33AA55);
-                    fill_rect(&mut buffer, w, h, cx, cy + win_h - 60, cw, 16, 0xFF222233);
+                    fill_rect(&mut buf, w, h, cx, cy, cw / 2 - 4, win_h / 2 - 20, 0xFF1A2A4A);
+                    fill_rect(&mut buf, w, h, cx, cy, cw / 2 - 4, 12, 0xFF3355AA);
+                    fill_rect(&mut buf, w, h, cx + cw / 2 + 4, cy + 20, cw / 2 - 4, win_h / 2 - 40, 0xFF1A3A2A);
+                    fill_rect(&mut buf, w, h, cx + cw / 2 + 4, cy + 20, cw / 2 - 4, 12, 0xFF33AA55);
+                    fill_rect(&mut buf, w, h, cx, cy + win_h - 60, cw, 16, 0xFF222233);
                 }
                 1 => { // Terminal: green text lines
                     for line in 0..5u32 {
                         let y = cy + 4 + line as usize * 18;
                         let prompts = ["> ls -la", "> cat readme.md", "> trust run app", "> netstat", "> _"];
                         if (line as usize) < prompts.len() {
-                            draw_text_at(&mut buffer, w, h, cx + 4, y, prompts[line as usize], 0xFF00CC44, 1);
+                            draw_text_at(&mut buf, w, h, cx + 4, y, prompts[line as usize], 0xFF00CC44, 1);
                         }
                     }
                 }
                 2 => { // Browser: URL bar + content
-                    fill_rect(&mut buffer, w, h, cx + 4, cy + 2, cw - 8, 14, 0xFF222233);
-                    draw_text_at(&mut buffer, w, h, cx + 8, cy + 3, "https://trustos.dev", 0xFF4488FF, 1);
+                    fill_rect(&mut buf, w, h, cx + 4, cy + 2, cw - 8, 14, 0xFF222233);
+                    draw_text_at(&mut buf, w, h, cx + 8, cy + 3, "https://trustos.dev", 0xFF4488FF, 1);
                     for line in 0..4u32 {
                         let y = cy + 24 + line as usize * 14;
                         let lw = cw - 40 - ((line as usize * 30) % 80);
-                        fill_rect(&mut buffer, w, h, cx + 12, y, lw, 8, 0xFF333344);
+                        fill_rect(&mut buf, w, h, cx + 12, y, lw, 8, 0xFF333344);
                     }
                 }
                 5 => { // 3D Engine: simple wireframe triangle
                     let mx = cx + cw / 2;
                     let my = cy + 10;
-                    let size = (win_h / 3).minimum(cw / 3);
+                    let sz = (win_h / 3).min(cw / 3);
                     // triangle outline
-                    for t in 0..size {
-                        let px1 = mx + t - size / 2;
-                        let py1 = my + size;
-                        if px1 < w && py1 < h { buffer[py1 * w + px1] = 0xFFFFCC00; }
-                        let frac = t as f32 / size as f32;
-                        let px2 = mx - (size as f32 / 2.0 * (1.0 - frac)) as usize + (size as f32 * frac / 2.0) as usize;
-                        let py2 = my + size - (size as f32 * frac) as usize;
-                        if px2 < w && py2 < h { buffer[py2 * w + px2.minimum(w - 1)] = 0xFFFFCC00; }
+                    for t in 0..sz {
+                        let px1 = mx + t - sz / 2;
+                        let py1 = my + sz;
+                        if px1 < w && py1 < h { buf[py1 * w + px1] = 0xFFFFCC00; }
+                        let frac = t as f32 / sz as f32;
+                        let px2 = mx - (sz as f32 / 2.0 * (1.0 - frac)) as usize + (sz as f32 * frac / 2.0) as usize;
+                        let py2 = my + sz - (sz as f32 * frac) as usize;
+                        if px2 < w && py2 < h { buf[py2 * w + px2.min(w - 1)] = 0xFFFFCC00; }
                     }
                 }
                 6 => { // Chess: 4x4 checkerboard
-                    let sq = ((win_h - 40) / 4).minimum(cw / 8);
+                    let sq = ((win_h - 40) / 4).min(cw / 8);
                     let bx = cx + (cw - sq * 4) / 2;
                     let by = cy + 4;
                     for row in 0..4u32 {
-                        for column in 0..4u32 {
-                            let dark = (row + column) % 2 == 0;
+                        for col in 0..4u32 {
+                            let dark = (row + col) % 2 == 0;
                             let sc = if dark { 0xFF886633 } else { 0xFFDDCC99 };
-                            fill_rect(&mut buffer, w, h, bx + column as usize * sq, by + row as usize * sq, sq, sq, sc);
+                            fill_rect(&mut buf, w, h, bx + col as usize * sq, by + row as usize * sq, sq, sq, sc);
                         }
                     }
                 }
@@ -1892,11 +1892,11 @@ match i {
                     let bar_w = (cw - 20) / bar_count;
                     for b in 0..bar_count {
                         let maximum_h = win_h - 50;
-                        let bh = ((b * 7 + 13) % maximum_h).maximum(10);
+                        let bh = ((b * 7 + 13) % maximum_h).max(10);
                         let bx = cx + 10 + b * bar_w;
                         let by = cy + win_h - 50 - bh;
-                        let g = (0x88 + b as u32 * 0x08).minimum(0xFF);
-                        fill_rect(&mut buffer, w, h, bx, by, bar_w - 2, bh, 0xFF000000 | (g << 8) | 0x44);
+                        let g = (0x88 + b as u32 * 0x08).min(0xFF);
+                        fill_rect(&mut buf, w, h, bx, by, bar_w - 2, bh, 0xFF000000 | (g << 8) | 0x44);
                     }
                 }
                 _ => { // Default: generic content lines
@@ -1906,7 +1906,7 @@ match i {
                         let dim_r = ((color >> 16) & 0xFF) / 6;
                         let dim_g = ((color >> 8) & 0xFF) / 6;
                         let dim_b = (color & 0xFF) / 6;
-                        fill_rect(&mut buffer, w, h, cx + 12, y, lw, 8,
+                        fill_rect(&mut buf, w, h, cx + 12, y, lw, 8,
                             0xFF000000 | (dim_r << 16) | (dim_g << 8) | dim_b);
                     }
                 }
@@ -1914,8 +1914,8 @@ match i {
 
             // ---- Big title + subtitle below window ----
             let title_y = win_y + win_h + 30;
-            draw_text_glow(&mut buffer, w, h, title_y, title, color, 4);
-            draw_text_centered(&mut buffer, w, h, title_y + 50, sub, 0xFF888888, 2);
+            draw_text_glow(&mut buf, w, h, title_y, title, color, 4);
+            draw_text_centered(&mut buf, w, h, title_y + 50, sub, 0xFF888888, 2);
 
             // Progress dots
             let dots_y = h - 35;
@@ -1923,20 +1923,20 @@ match i {
             let dots_x = if dots_total_w < w { (w - dots_total_w) / 2 } else { 0 };
             for d in 0..n {
                 let dc = if d <= i { color } else { 0xFF333333 };
-                fill_rect(&mut buffer, w, h, dots_x + d * 10, dots_y, 6, 6, dc);
+                fill_rect(&mut buf, w, h, dots_x + d * 10, dots_y, 6, 6, dc);
             }
 
-            apply_vignette(&mut buffer, w, h, 180);
-            blit_buffer(&buffer, w, h);
+            apply_vignette(&mut buf, w, h, 180);
+            blit_buffer(&buf, w, h);
 
             // Decreasing delay: 400ms → 80ms
-            let delay = 400u64.saturating_sub(i as u64 * 320 / (n as u64 - 1).maximum(1));
+            let delay = 400u64.saturating_sub(i as u64 * 320 / (n as u64 - 1).max(1));
             crate::cpu::tsc::pit_delay_mouse(delay);
 
             // White flash between cards
             if i < n - 1 {
-                for p in buffer.iterator_mut() { *p = 0xFFFFFFFF; }
-                blit_buffer(&buffer, w, h);
+                for p in buf.iter_mut() { *p = 0xFFFFFFFF; }
+                blit_buffer(&buf, w, h);
                 crate::cpu::tsc::pit_delay_mouse(if delay > 200 { 33 } else { 16 });
             }
         }
@@ -1944,37 +1944,37 @@ match i {
         // ---- PASS 2: rapid loop at 50ms (title only) ----
         for &(title, _, color, bg) in features.iter() {
             if can_advance() { break; }
-            for p in buffer.iterator_mut() { *p = bg; }
-            draw_text_glow(&mut buffer, w, h, h / 2 - 20, title, color, 4);
-            blit_buffer(&buffer, w, h);
+            for p in buf.iter_mut() { *p = bg; }
+            draw_text_glow(&mut buf, w, h, h / 2 - 20, title, color, 4);
+            blit_buffer(&buf, w, h);
             crate::cpu::tsc::pit_delay_mouse(50);
         }
 
         // ---- PASS 3: stroboscopic at 33ms (title only, crescendo peak) ----
         for &(title, _, color, bg) in features.iter() {
             if can_advance() { break; }
-            for p in buffer.iterator_mut() { *p = bg; }
-            draw_text_centered(&mut buffer, w, h, h / 2, title, color, 5);
-            blit_buffer(&buffer, w, h);
+            for p in buf.iter_mut() { *p = bg; }
+            draw_text_centered(&mut buf, w, h, h / 2, title, color, 5);
+            blit_buffer(&buf, w, h);
             crate::cpu::tsc::pit_delay_mouse(FRAME_MOUSE);
         }
     }
 
     // Final flash after crescendo
-    flash_frame(&mut buffer, w, h);
+    flash_frame(&mut buf, w, h);
 
     // =======================================================================
     // THE FINAL SILENCE -- 2 beats of NOTHING (0.9s)
     // Everything stops. The audience sits in the void.
     // Then the final blow.
     // =======================================================================
-    silence(&mut buffer, w, h, 2);
+    silence(&mut buf, w, h, 2);
 
     // =======================================================================
     // ACT 4 -- THE STINGER (1:02 - 1:08)
     // =======================================================================
-    flash_frame(&mut buffer, w, h);
-    impact_shake(&mut buffer, w, h, 15); // Maximum impact
+    flash_frame(&mut buf, w, h);
+    impact_shake(&mut buf, w, h, 15); // Maximum impact
 
     // -------------------------------------------------------------------
     // SCENE 13 -- "TRUST THE CODE" (8 beats = 3.7s)
@@ -1984,7 +1984,7 @@ match i {
         let total = beats(8);
         for frame in 0..total {
             if can_advance() { break; }
-            bg_rain(&mut buffer, w, h, &mut rain_cols, &rain_speeds, frame);
+            bg_rain(&mut buf, w, h, &mut rain_cols, &rain_speeds, frame);
 
             // Expanding concentric rings
             if frame > 8 {
@@ -1996,11 +1996,11 @@ match i {
                         for angle in 0..360 {
                             let sin_a = crate::formula3d::fast_sin(angle as f32 * 0.01745);
                             let cos_a = crate::formula3d::fast_cos(angle as f32 * 0.01745);
-                            let pixel = (cx as f32 + cos_a * r as f32) as usize;
+                            let px = (cx as f32 + cos_a * r as f32) as usize;
                             let py = (cy as f32 + sin_a * r as f32 / 1.5) as usize;
-                            if pixel < w && py < h {
+                            if px < w && py < h {
                                 let fade = 255u32.saturating_sub(r as u32);
-                                buffer[py * w + pixel] = 0xFF000000 | (fade / 4 << 16) | (fade << 8) | (fade / 3);
+                                buf[py * w + px] = 0xFF000000 | (fade / 4 << 16) | (fade << 8) | (fade / 3);
                             }
                         }
                     }
@@ -2009,21 +2009,21 @@ match i {
 
             // Title text
             if frame > beats(1) {
-                draw_text_centered(&mut buffer, w, h, h / 2 - 50,
+                draw_text_centered(&mut buf, w, h, h / 2 - 50,
                     "TRUST THE CODE.", 0xFF00FFAA, 5);
             }
             if frame > beats(3) {
-                draw_text_centered(&mut buffer, w, h, h / 2 + 30,
+                draw_text_centered(&mut buf, w, h, h / 2 + 30,
                     "github.com/nathan237/TrustOS", 0xFF00FF88, 2);
             }
             if frame > beats(5) {
-                draw_text_centered(&mut buffer, w, h, h / 2 + 70,
+                draw_text_centered(&mut buf, w, h, h / 2 + 70,
                     "Written in Rust. By one person.", 0xFF88CCAA, 2);
-                draw_text_centered(&mut buffer, w, h, h / 2 + 100,
+                draw_text_centered(&mut buf, w, h, h / 2 + 100,
                     "For everyone.", 0xFF88CCAA, 2);
             }
 
-            blit_buffer(&buffer, w, h);
+            blit_buffer(&buf, w, h);
             crate::cpu::tsc::pit_delay_mouse(FRAME_MOUSE);
         }
     }
@@ -2036,33 +2036,33 @@ match i {
         let total = beats(4);
         for frame in 0..total {
             if can_advance() { break; }
-            bg_crt_static(&mut buffer, w, h, frame);
+            bg_crt_static(&mut buf, w, h, frame);
 
             let bx = w / 2 - 180;
             let by = h / 2 - 40;
-            fill_rect(&mut buffer, w, h, bx, by, 360, 80, 0xFF111111);
-            for x in bx..bx+360 { if x < w { buffer[by * w + x] = 0xFF888888; buffer[(by+79) * w + x] = 0xFF888888; } }
-            for y in by..by+80 { if y < h { buffer[y * w + bx] = 0xFF888888; buffer[y * w + bx+359] = 0xFF888888; } }
+            fill_rect(&mut buf, w, h, bx, by, 360, 80, 0xFF111111);
+            for x in bx..bx+360 { if x < w { buf[by * w + x] = 0xFF888888; buf[(by+79) * w + x] = 0xFF888888; } }
+            for y in by..by+80 { if y < h { buf[y * w + bx] = 0xFF888888; buf[y * w + bx+359] = 0xFF888888; } }
 
-            draw_text_centered(&mut buffer, w, h, by + 10, "PLEASE STAND BY", 0xFFCCCCCC, 2);
+            draw_text_centered(&mut buf, w, h, by + 10, "PLEASE STAND BY", 0xFFCCCCCC, 2);
             if (frame / 15) % 2 == 0 {
-                draw_text_centered(&mut buffer, w, h, by + 45,
+                draw_text_centered(&mut buf, w, h, by + 45,
                     "TRUSTOS v0.3.3 -- LOADING...", 0xFF00FF88, 2);
             }
 
-            blit_buffer(&buffer, w, h);
+            blit_buffer(&buf, w, h);
             crate::cpu::tsc::pit_delay_mouse(FRAME_MOUSE);
         }
     }
 
     // Final fade to black
-    do_fade(&mut buffer, w, h);
+    do_fade(&mut buf, w, h);
 
     // ===================================================================
     // CLEANUP
     // ===================================================================
-    clear_buffer(&mut buffer);
-    blit_buffer(&buffer, w, h);
+    clear_buffer(&mut buf);
+    blit_buffer(&buf, w, h);
     if !was_db {
         crate::framebuffer::set_double_buffer_mode(false);
     }

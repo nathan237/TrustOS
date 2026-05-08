@@ -8,381 +8,381 @@ extern crate alloc;
 use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::format;
-use super::{kw, nk, apm,
-            T_, F_, O_, BB_, AK_, AO_};
+use super::{eh, ew, qu,
+            P_, F_, M_, AU_, AC_, AK_};
 
 
 #[derive(Clone)]
-struct Uv {
+struct Jd {
     
-    j: String,
+    name: String,
     
     path: String,
     
-    ta: bool,
+    is_dir: bool,
     
-    eo: usize,
+    depth: usize,
     
-    tg: bool,
+    expanded: bool,
     
-    aw: u64,
+    size: u64,
 }
 
 
 pub struct FileTreeState {
     
-    pub xq: Vec<Uv>,
+    pub nodes: Vec<Jd>,
     
-    pub na: usize,
+    pub selected: usize,
     
-    pub jc: usize,
+    pub scroll: usize,
     
-    pub no: bool,
+    pub dirty: bool,
 }
 
 impl FileTreeState {
     pub fn new() -> Self {
-        let mut e = Self {
-            xq: Vec::new(),
-            na: 0,
-            jc: 0,
-            no: true,
+        let mut j = Self {
+            nodes: Vec::new(),
+            selected: 0,
+            scroll: 0,
+            dirty: true,
         };
-        e.vsz();
-        e
+        j.rebuild_tree();
+        j
     }
     
     
-    fn vsz(&mut self) {
-        self.xq.clear();
+    fn rebuild_tree(&mut self) {
+        self.nodes.clear();
         
-        self.xq.push(Uv {
-            j: String::from("/"),
+        self.nodes.push(Jd {
+            name: String::from("/"),
             path: String::from("/"),
-            ta: true,
-            eo: 0,
-            tg: true,
-            aw: 0,
+            is_dir: true,
+            depth: 0,
+            expanded: true,
+            size: 0,
         });
-        self.mtu("/", 0);
-        self.no = false;
+        self.add_directory_children("/", 0);
+        self.dirty = false;
     }
     
     
-    fn mtu(&mut self, path: &str, eo: usize) {
-        if eo > 6 { return; }
+    fn add_directory_children(&mut self, path: &str, depth: usize) {
+        if depth > 6 { return; }
         
         
-        let ch = crate::ramfs::fh(|fs| {
-            fs.awb(Some(path)).age()
+        let entries = crate::ramfs::bh(|fs| {
+            fs.ls(Some(path)).unwrap_or_default()
         });
         
-        if ch.is_empty() { return; }
+        if entries.is_empty() { return; }
         
         
-        let mut dgh: Vec<_> = ch.iter()
-            .hi(|(_, agm, _)| *agm == crate::ramfs::FileType::K)
+        let mut bfy: Vec<_> = entries.iter()
+            .filter(|(_, qk, _)| *qk == crate::ramfs::FileType::Directory)
             .collect();
-        let mut sb: Vec<_> = ch.iter()
-            .hi(|(_, agm, _)| *agm != crate::ramfs::FileType::K)
+        let mut files: Vec<_> = entries.iter()
+            .filter(|(_, qk, _)| *qk != crate::ramfs::FileType::Directory)
             .collect();
-        dgh.bxe(|q, o| q.0.cmp(&o.0));
-        sb.bxe(|q, o| q.0.cmp(&o.0));
+        bfy.sort_by(|a, b| a.0.cmp(&b.0));
+        files.sort_by(|a, b| a.0.cmp(&b.0));
         
         
-        for (j, _, _) in &dgh {
-            let enk = if path == "/" {
-                format!("/{}", j)
+        for (name, _, _) in &bfy {
+            let bxx = if path == "/" {
+                format!("/{}", name)
             } else {
-                format!("{}/{}", path, j)
+                format!("{}/{}", path, name)
             };
             
-            let how = eo < 1; 
-            self.xq.push(Uv {
-                j: j.clone(),
-                path: enk.clone(),
-                ta: true,
-                eo: eo + 1,
-                tg: how,
-                aw: 0,
+            let dsn = depth < 1; 
+            self.nodes.push(Jd {
+                name: name.clone(),
+                path: bxx.clone(),
+                is_dir: true,
+                depth: depth + 1,
+                expanded: dsn,
+                size: 0,
             });
-            if how {
-                self.mtu(&enk, eo + 1);
+            if dsn {
+                self.add_directory_children(&bxx, depth + 1);
             }
         }
         
         
-        for (j, _, aw) in &sb {
-            let kwx = if path == "/" {
-                format!("/{}", j)
+        for (name, _, size) in &files {
+            let fxn = if path == "/" {
+                format!("/{}", name)
             } else {
-                format!("{}/{}", path, j)
+                format!("{}/{}", path, name)
             };
-            self.xq.push(Uv {
-                j: j.clone(),
-                path: kwx,
-                ta: false,
-                eo: eo + 1,
-                tg: false,
-                aw: *aw as u64,
+            self.nodes.push(Jd {
+                name: name.clone(),
+                path: fxn,
+                is_dir: false,
+                depth: depth + 1,
+                expanded: false,
+                size: *size as u64,
             });
         }
     }
     
-    pub fn vr(&mut self, bs: u8) {
-        use crate::keyboard::{V_, U_, AM_, AQ_};
-        match bs {
-            V_ => {
-                self.na = self.na.ao(1);
+    pub fn handle_key(&mut self, key: u8) {
+        use crate::keyboard::{T_, S_, AM_, AO_};
+        match key {
+            T_ => {
+                self.selected = self.selected.saturating_sub(1);
             }
-            U_ => {
-                if self.na + 1 < self.xq.len() {
-                    self.na += 1;
+            S_ => {
+                if self.selected + 1 < self.nodes.len() {
+                    self.selected += 1;
                 }
             }
             AM_ => {
-                self.na = self.na.ao(10);
+                self.selected = self.selected.saturating_sub(10);
             }
-            AQ_ => {
-                self.na = (self.na + 10).v(self.xq.len().ao(1));
+            AO_ => {
+                self.selected = (self.selected + 10).min(self.nodes.len().saturating_sub(1));
             }
             
             0x0D | 0x0A => {
-                self.pua();
+                self.toggle_selected();
             }
             
             b'r' | b'R' => {
-                self.no = true;
+                self.dirty = true;
             }
             _ => {}
         }
         
-        if self.no {
-            self.vta();
+        if self.dirty {
+            self.rebuild_with_state();
         }
     }
     
     
-    pub fn ago(&mut self, b: i32, c: i32, d: u32, i: u32) {
-        let kq = super::apm() + 1;
-        if kq <= 0 { return; }
+    pub fn handle_click(&mut self, x: i32, y: i32, w: u32, h: u32) {
+        let ee = super::qu() + 1;
+        if ee <= 0 { return; }
 
         
-        let ou = kq + 2;
-        if c < ou { return; } 
+        let gc = ee + 2;
+        if y < gc { return; } 
 
-        let br = ((c - ou) / kq) as usize;
-        let cd = self.jc + br;
-        if cd < self.xq.len() {
-            self.na = cd;
+        let row = ((y - gc) / ee) as usize;
+        let target = self.scroll + row;
+        if target < self.nodes.len() {
+            self.selected = target;
             
-            if self.xq[cd].ta {
-                self.pua();
+            if self.nodes[target].is_dir {
+                self.toggle_selected();
             }
         }
     }
 
     
-    fn pua(&mut self) {
-        if self.na >= self.xq.len() { return; }
-        if !self.xq[self.na].ta { return; }
+    fn toggle_selected(&mut self) {
+        if self.selected >= self.nodes.len() { return; }
+        if !self.nodes[self.selected].is_dir { return; }
         
-        self.xq[self.na].tg = !self.xq[self.na].tg;
-        self.no = true;
+        self.nodes[self.selected].expanded = !self.nodes[self.selected].expanded;
+        self.dirty = true;
     }
     
     
-    fn vta(&mut self) {
+    fn rebuild_with_state(&mut self) {
         
-        let nrw: Vec<String> = self.xq.iter()
-            .hi(|bo| bo.ta && bo.tg)
-            .map(|bo| bo.path.clone())
+        let hxe: Vec<String> = self.nodes.iter()
+            .filter(|ae| ae.is_dir && ae.expanded)
+            .map(|ae| ae.path.clone())
             .collect();
         
-        let zef = self.na;
-        self.xq.clear();
+        let qpw = self.selected;
+        self.nodes.clear();
         
         
-        let pdz = nrw.iter().any(|ai| ai == "/");
-        self.xq.push(Uv {
-            j: String::from("/"),
+        let jbj = hxe.iter().any(|aa| aa == "/");
+        self.nodes.push(Jd {
+            name: String::from("/"),
             path: String::from("/"),
-            ta: true,
-            eo: 0,
-            tg: pdz,
-            aw: 0,
+            is_dir: true,
+            depth: 0,
+            expanded: jbj,
+            size: 0,
         });
         
-        if pdz {
-            self.mtv("/", 0, &nrw);
+        if jbj {
+            self.add_directory_children_with_state("/", 0, &hxe);
         }
         
-        self.no = false;
+        self.dirty = false;
         
         
-        if self.na >= self.xq.len() && !self.xq.is_empty() {
-            self.na = self.xq.len() - 1;
+        if self.selected >= self.nodes.len() && !self.nodes.is_empty() {
+            self.selected = self.nodes.len() - 1;
         }
     }
     
-    fn mtv(&mut self, path: &str, eo: usize, tg: &[String]) {
-        if eo > 6 { return; }
+    fn add_directory_children_with_state(&mut self, path: &str, depth: usize, expanded: &[String]) {
+        if depth > 6 { return; }
         
-        let ch = crate::ramfs::fh(|fs| {
-            fs.awb(Some(path)).age()
+        let entries = crate::ramfs::bh(|fs| {
+            fs.ls(Some(path)).unwrap_or_default()
         });
         
-        let mut dgh: Vec<_> = ch.iter()
-            .hi(|(_, agm, _)| *agm == crate::ramfs::FileType::K)
+        let mut bfy: Vec<_> = entries.iter()
+            .filter(|(_, qk, _)| *qk == crate::ramfs::FileType::Directory)
             .collect();
-        let mut sb: Vec<_> = ch.iter()
-            .hi(|(_, agm, _)| *agm != crate::ramfs::FileType::K)
+        let mut files: Vec<_> = entries.iter()
+            .filter(|(_, qk, _)| *qk != crate::ramfs::FileType::Directory)
             .collect();
-        dgh.bxe(|q, o| q.0.cmp(&o.0));
-        sb.bxe(|q, o| q.0.cmp(&o.0));
+        bfy.sort_by(|a, b| a.0.cmp(&b.0));
+        files.sort_by(|a, b| a.0.cmp(&b.0));
         
-        for (j, _, _) in &dgh {
-            let enk = if path == "/" {
-                format!("/{}", j)
+        for (name, _, _) in &bfy {
+            let bxx = if path == "/" {
+                format!("/{}", name)
             } else {
-                format!("{}/{}", path, j)
+                format!("{}/{}", path, name)
             };
-            let how = tg.iter().any(|ai| ai == &enk);
-            self.xq.push(Uv {
-                j: j.clone(),
-                path: enk.clone(),
-                ta: true,
-                eo: eo + 1,
-                tg: how,
-                aw: 0,
+            let dsn = expanded.iter().any(|aa| aa == &bxx);
+            self.nodes.push(Jd {
+                name: name.clone(),
+                path: bxx.clone(),
+                is_dir: true,
+                depth: depth + 1,
+                expanded: dsn,
+                size: 0,
             });
-            if how {
-                self.mtv(&enk, eo + 1, tg);
+            if dsn {
+                self.add_directory_children_with_state(&bxx, depth + 1, expanded);
             }
         }
         
-        for (j, _, aw) in &sb {
-            let kwx = if path == "/" {
-                format!("/{}", j)
+        for (name, _, size) in &files {
+            let fxn = if path == "/" {
+                format!("/{}", name)
             } else {
-                format!("{}/{}", path, j)
+                format!("{}/{}", path, name)
             };
-            self.xq.push(Uv {
-                j: j.clone(),
-                path: kwx,
-                ta: false,
-                eo: eo + 1,
-                tg: false,
-                aw: *aw as u64,
+            self.nodes.push(Jd {
+                name: name.clone(),
+                path: fxn,
+                is_dir: false,
+                depth: depth + 1,
+                expanded: false,
+                size: *size as u64,
             });
         }
     }
 }
 
 
-pub fn po(g: &FileTreeState, b: i32, c: i32, d: u32, i: u32) {
-    let dt = nk();
-    let kq = apm() + 1;
-    if kq <= 0 || dt <= 0 { return; }
+pub fn draw(state: &FileTreeState, x: i32, y: i32, w: u32, h: u32) {
+    let aq = ew();
+    let ee = qu() + 1;
+    if ee <= 0 || aq <= 0 { return; }
     
     
-    let dh = format!("/ ({} items)", g.xq.len());
-    kw(b, c, &dh, O_);
+    let header = format!("/ ({} items)", state.nodes.len());
+    eh(x, y, &header, M_);
     
-    let ou = c + kq + 2;
-    let bae = i as i32 - kq - 2;
-    if bae <= 0 { return; }
+    let gc = y + ee + 2;
+    let abc = h as i32 - ee - 2;
+    if abc <= 0 { return; }
     
-    let iw = (bae / kq) as usize;
+    let visible = (abc / ee) as usize;
     
-    if g.xq.is_empty() {
-        kw(b + 4, ou, "Empty filesystem", F_);
+    if state.nodes.is_empty() {
+        eh(x + 4, gc, "Empty filesystem", F_);
         return;
     }
     
     
-    let jc = if g.na >= g.jc + iw {
-        g.na - iw + 1
-    } else if g.na < g.jc {
-        g.na
+    let scroll = if state.selected >= state.scroll + visible {
+        state.selected - visible + 1
+    } else if state.selected < state.scroll {
+        state.selected
     } else {
-        g.jc
+        state.scroll
     };
     
-    let ci = (jc + iw).v(g.xq.len());
-    let mut ae = ou;
+    let end = (scroll + visible).min(state.nodes.len());
+    let mut u = gc;
     
-    for a in jc..ci {
-        let anq = &g.xq[a];
-        let qe = a == g.na;
+    for i in scroll..end {
+        let uf = &state.nodes[i];
+        let hd = i == state.selected;
         
         
-        if qe {
-            crate::framebuffer::ah(b as u32, ae as u32, d, kq as u32, 0xFF1F2937);
+        if hd {
+            crate::framebuffer::fill_rect(x as u32, u as u32, w, ee as u32, 0xFF1F2937);
         }
         
         
-        let crn = anq.eo as i32 * 2 * dt;
-        let vt = b + crn;
+        let axq = uf.depth as i32 * 2 * aq;
+        let nx = x + axq;
         
         
-        let (pa, xd) = if anq.ta {
-            if anq.tg { ("v ", AO_) } else { ("> ", AO_) }
+        let (icon, icon_color) = if uf.is_dir {
+            if uf.expanded { ("v ", AK_) } else { ("> ", AK_) }
         } else {
-            let spq = ntl(&anq.j);
-            ("  ", spq)
+            let ltf = hye(&uf.name);
+            ("  ", ltf)
         };
-        kw(vt, ae, pa, xd);
+        eh(nx, u, icon, icon_color);
         
         
-        let dac = vt + 2 * dt;
-        let csp = if anq.ta {
-            BB_
+        let bcv = nx + 2 * aq;
+        let ayi = if uf.is_dir {
+            AU_
         } else {
-            ntl(&anq.j)
+            hye(&uf.name)
         };
         
-        let ulp = d as i32 - (dac - b) - 10 * dt;
-        let aem = if dt > 0 { (ulp / dt) as usize } else { 20 };
-        let j = if anq.j.len() > aem && aem > 3 {
-            &anq.j[..aem.ao(1)]
+        let nde = w as i32 - (bcv - x) - 10 * aq;
+        let nd = if aq > 0 { (nde / aq) as usize } else { 20 };
+        let name = if uf.name.len() > nd && nd > 3 {
+            &uf.name[..nd.saturating_sub(1)]
         } else {
-            &anq.j
+            &uf.name
         };
-        kw(dac, ae, j, csp);
+        eh(bcv, u, name, ayi);
         
         
-        if !anq.ta && anq.aw > 0 {
-            let als = cxz(anq.aw);
-            let cr = b + d as i32 - (als.len() as i32 * dt) - 4;
-            if cr > dac + (j.len() as i32 * dt) + dt {
-                kw(cr, ae, &als, F_);
+        if !uf.is_dir && uf.size > 0 {
+            let td = aqo(uf.size);
+            let am = x + w as i32 - (td.len() as i32 * aq) - 4;
+            if am > bcv + (name.len() as i32 * aq) + aq {
+                eh(am, u, &td, F_);
             }
         }
         
-        ae += kq;
-        if ae > c + i as i32 { break; }
+        u += ee;
+        if u > y + h as i32 { break; }
     }
     
     
-    if g.xq.len() > iw {
-        let bdc = bae;
-        let axd = ((iw as i32 * bdc) / g.xq.len() as i32).am(8);
-        let idk = (jc as i32 * (bdc - axd)) / g.xq.len().ao(1).am(1) as i32;
-        let auz = (b + d as i32 - 3) as u32;
-        crate::framebuffer::ah(auz, ou as u32, 2, bdc as u32, 0xFF21262D);
-        crate::framebuffer::ah(auz, (ou + idk) as u32, 2, axd as u32, O_);
+    if state.nodes.len() > visible {
+        let ada = abc;
+        let zo = ((visible as i32 * ada) / state.nodes.len() as i32).max(8);
+        let ebq = (scroll as i32 * (ada - zo)) / state.nodes.len().saturating_sub(1).max(1) as i32;
+        let yc = (x + w as i32 - 3) as u32;
+        crate::framebuffer::fill_rect(yc, gc as u32, 2, ada as u32, 0xFF21262D);
+        crate::framebuffer::fill_rect(yc, (gc + ebq) as u32, 2, zo as u32, M_);
     }
 }
 
 
-fn ntl(j: &str) -> u32 {
-    if let Some(wm) = j.cmm('.').next() {
-        match wm {
+fn hye(name: &str) -> u32 {
+    if let Some(ext) = name.rsplit('.').next() {
+        match ext {
             "rs" => 0xFFD18616,     
-            "toml" | "cfg" | "conf" => AK_,
-            "md" | "txt" => T_,
-            "sh" | "ps1" | "bat" => AO_,
+            "toml" | "cfg" | "conf" => AC_,
+            "md" | "txt" => P_,
+            "sh" | "ps1" | "bat" => AK_,
             "elf" | "bin" => 0xFFF85149,  
             "tl" => 0xFFBC8CFF,     
             _ => F_,
@@ -393,12 +393,12 @@ fn ntl(j: &str) -> u32 {
 }
 
 
-fn cxz(bf: u64) -> String {
-    if bf >= 1024 * 1024 {
-        format!("{:.1}M", bf as f64 / (1024.0 * 1024.0))
-    } else if bf >= 1024 {
-        format!("{:.1}K", bf as f64 / 1024.0)
+fn aqo(bytes: u64) -> String {
+    if bytes >= 1024 * 1024 {
+        format!("{:.1}M", bytes as f64 / (1024.0 * 1024.0))
+    } else if bytes >= 1024 {
+        format!("{:.1}K", bytes as f64 / 1024.0)
     } else {
-        format!("{}B", bf)
+        format!("{}B", bytes)
     }
 }

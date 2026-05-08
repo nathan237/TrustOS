@@ -263,14 +263,12 @@ impl Default for PitState {
 }
 
 impl SvmVirtualMachine {
-    /// Access VMCB (immutable). Panics if VMCB not initialized.
-    fn vmcb(&self) -> &Vmcb {
-        self.vmcb.as_ref().expect("[SVM] VMCB not initialized")
+    fn vmcb(&self) -> Result<&Vmcb> {
+        self.vmcb.as_deref().ok_or(HypervisorError::VmcbNotLoaded)
     }
 
-    /// Access VMCB (mutable). Panics if VMCB not initialized.
-    fn vmcb_mut(&mut self) -> &mut Vmcb {
-        self.vmcb.as_mut().expect("[SVM] VMCB not initialized")
+    fn vmcb_mut(&mut self) -> Result<&mut Vmcb> {
+        self.vmcb.as_deref_mut().ok_or(HypervisorError::VmcbNotLoaded)
     }
 
     /// Create a new SVM VM
@@ -749,7 +747,7 @@ impl SvmVirtualMachine {
                 // Check HPET first (borrows &mut self for hpet + ioapic)
                 let hpet_vector = self.check_hpet_interrupts();
                 if let Some(vector) = hpet_vector {
-                    let vmcb = self.vmcb_mut();
+                    let vmcb = self.vmcb_mut()?;
                     let current_event = vmcb.read_control(control_offsets::EVENT_INJ);
                     let already_injecting = (current_event & (1u64 << 31)) != 0;
                     if !already_injecting {
@@ -777,7 +775,7 @@ impl SvmVirtualMachine {
                 };
                 
                 if vector > 0 {
-                    let vmcb = self.vmcb_mut();
+                    let vmcb = self.vmcb_mut()?;
                     let current_event = vmcb.read_control(control_offsets::EVENT_INJ);
                     let already_injecting = (current_event & (1u64 << 31)) != 0;
                     if !already_injecting {
@@ -984,7 +982,7 @@ impl SvmVirtualMachine {
                     self.id, msr_dir, guest_rip,
                     &alloc::format!("MSR=0x{:X}", self.guest_regs.rcx)
                 );
-                self.handle_msr(is_write);
+                self.handle_msr(is_write)?;
                 let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
                 vmcb.write_state(state_offsets::RIP, next_rip);
                 Ok(true)
@@ -2220,7 +2218,7 @@ impl SvmVirtualMachine {
     }
     
     /// Handle MSR access exit
-    fn handle_msr(&mut self, is_write: bool) {
+    fn handle_msr(&mut self, is_write: bool) -> Result<()> {
         let msr = self.guest_regs.rcx as u32;
         
         // MSR constants
@@ -2250,51 +2248,51 @@ impl SvmVirtualMachine {
             match msr {
                 // These are stored in VMCB state save area — write directly
                 MSR_STAR => {
-                    let vmcb = self.vmcb_mut();
+                    let vmcb = self.vmcb_mut()?;
                     vmcb.write_state(state_offsets::STAR, value);
                 }
                 MSR_LSTAR => {
-                    let vmcb = self.vmcb_mut();
+                    let vmcb = self.vmcb_mut()?;
                     vmcb.write_state(state_offsets::LSTAR, value);
                 }
                 MSR_CSTAR => {
-                    let vmcb = self.vmcb_mut();
+                    let vmcb = self.vmcb_mut()?;
                     vmcb.write_state(state_offsets::CSTAR, value);
                 }
                 MSR_SFMASK => {
-                    let vmcb = self.vmcb_mut();
+                    let vmcb = self.vmcb_mut()?;
                     vmcb.write_state(state_offsets::SFMASK, value);
                 }
                 MSR_KERNEL_GS_BASE => {
-                    let vmcb = self.vmcb_mut();
+                    let vmcb = self.vmcb_mut()?;
                     vmcb.write_state(state_offsets::KERNEL_GS_BASE, value);
                 }
                 MSR_FS_BASE => {
-                    let vmcb = self.vmcb_mut();
+                    let vmcb = self.vmcb_mut()?;
                     vmcb.write_state(state_offsets::FS_BASE, value);
                 }
                 MSR_GS_BASE => {
-                    let vmcb = self.vmcb_mut();
+                    let vmcb = self.vmcb_mut()?;
                     vmcb.write_state(state_offsets::GS_BASE, value);
                 }
                 IA32_SYSENTER_CS => {
-                    let vmcb = self.vmcb_mut();
+                    let vmcb = self.vmcb_mut()?;
                     vmcb.write_state(state_offsets::SYSENTER_CS, value);
                 }
                 IA32_SYSENTER_ESP => {
-                    let vmcb = self.vmcb_mut();
+                    let vmcb = self.vmcb_mut()?;
                     vmcb.write_state(state_offsets::SYSENTER_ESP, value);
                 }
                 IA32_SYSENTER_EIP => {
-                    let vmcb = self.vmcb_mut();
+                    let vmcb = self.vmcb_mut()?;
                     vmcb.write_state(state_offsets::SYSENTER_EIP, value);
                 }
                 IA32_PAT => {
-                    let vmcb = self.vmcb_mut();
+                    let vmcb = self.vmcb_mut()?;
                     vmcb.write_state(state_offsets::PAT, value);
                 }
                 IA32_EFER => {
-                    let vmcb = self.vmcb_mut();
+                    let vmcb = self.vmcb_mut()?;
                     // Ensure SVME stays set (required for SVM guest)
                     let safe_efer = value | 0x1000; // Keep SVME bit
                     vmcb.write_state(state_offsets::EFER, safe_efer);
@@ -2323,51 +2321,51 @@ impl SvmVirtualMachine {
             let value: u64 = match msr {
                 // Read from VMCB state save area
                 MSR_STAR => {
-                    let vmcb = self.vmcb();
+                    let vmcb = self.vmcb()?;
                     vmcb.read_state(state_offsets::STAR)
                 }
                 MSR_LSTAR => {
-                    let vmcb = self.vmcb();
+                    let vmcb = self.vmcb()?;
                     vmcb.read_state(state_offsets::LSTAR)
                 }
                 MSR_CSTAR => {
-                    let vmcb = self.vmcb();
+                    let vmcb = self.vmcb()?;
                     vmcb.read_state(state_offsets::CSTAR)
                 }
                 MSR_SFMASK => {
-                    let vmcb = self.vmcb();
+                    let vmcb = self.vmcb()?;
                     vmcb.read_state(state_offsets::SFMASK)
                 }
                 MSR_KERNEL_GS_BASE => {
-                    let vmcb = self.vmcb();
+                    let vmcb = self.vmcb()?;
                     vmcb.read_state(state_offsets::KERNEL_GS_BASE)
                 }
                 MSR_FS_BASE => {
-                    let vmcb = self.vmcb();
+                    let vmcb = self.vmcb()?;
                     vmcb.read_state(state_offsets::FS_BASE)
                 }
                 MSR_GS_BASE => {
-                    let vmcb = self.vmcb();
+                    let vmcb = self.vmcb()?;
                     vmcb.read_state(state_offsets::GS_BASE)
                 }
                 IA32_SYSENTER_CS => {
-                    let vmcb = self.vmcb();
+                    let vmcb = self.vmcb()?;
                     vmcb.read_state(state_offsets::SYSENTER_CS)
                 }
                 IA32_SYSENTER_ESP => {
-                    let vmcb = self.vmcb();
+                    let vmcb = self.vmcb()?;
                     vmcb.read_state(state_offsets::SYSENTER_ESP)
                 }
                 IA32_SYSENTER_EIP => {
-                    let vmcb = self.vmcb();
+                    let vmcb = self.vmcb()?;
                     vmcb.read_state(state_offsets::SYSENTER_EIP)
                 }
                 IA32_PAT => {
-                    let vmcb = self.vmcb();
+                    let vmcb = self.vmcb()?;
                     vmcb.read_state(state_offsets::PAT)
                 }
                 IA32_EFER => {
-                    let vmcb = self.vmcb();
+                    let vmcb = self.vmcb()?;
                     vmcb.read_state(state_offsets::EFER)
                 }
                 // APIC base: report default (0xFEE00000) + enabled + BSP
@@ -2404,8 +2402,9 @@ impl SvmVirtualMachine {
             self.guest_regs.rax = value & 0xFFFF_FFFF;
             self.guest_regs.rdx = value >> 32;
         }
+        Ok(())
     }
-    
+
     /// Handle VMMCALL (hypercall) exit
     fn handle_vmmcall(&mut self) -> bool {
         let function = self.guest_regs.rax;

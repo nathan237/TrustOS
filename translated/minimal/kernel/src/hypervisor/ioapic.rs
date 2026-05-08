@@ -25,38 +25,38 @@
 
 
 
-const KQ_: usize = 24;
+const LJ_: usize = 24;
 
 
-pub const ADP_: u64 = 0xFEC0_0000;
+pub const AFG_: u64 = 0xFEC0_0000;
 
 
-const Atw: u64 = 0x00;  
-const Atx: u64 = 0x10;     
+const Sz: u64 = 0x00;  
+const Ta: u64 = 0x10;     
 
 
 #[derive(Debug, Clone)]
 pub struct IoApicState {
     
-    pub ad: u8,
+    pub id: u8,
     
-    pub esz: u32,
+    pub ioregsel: u32,
     
-    pub ctu: [u64; KQ_],
+    pub redir_table: [u64; LJ_],
 }
 
 impl Default for IoApicState {
     fn default() -> Self {
         
-        let mut ctu = [0u64; KQ_];
-        for bt in ctu.el() {
-            *bt = 1 << 16; 
+        let mut redir_table = [0u64; LJ_];
+        for entry in redir_table.iter_mut() {
+            *entry = 1 << 16; 
         }
         
         Self {
-            ad: 1, 
-            esz: 0,
-            ctu,
+            id: 1, 
+            ioregsel: 0,
+            redir_table,
         }
     }
 }
@@ -64,53 +64,53 @@ impl Default for IoApicState {
 impl IoApicState {
     
     
-    pub fn read(&self, l: u64) -> u32 {
-        match l {
-            Atw => self.esz,
-            Atx => self.gql(self.esz),
+    pub fn read(&self, offset: u64) -> u32 {
+        match offset {
+            Sz => self.ioregsel,
+            Ta => self.read_register(self.ioregsel),
             _ => 0,
         }
     }
     
     
-    pub fn write(&mut self, l: u64, bn: u32) {
-        match l {
-            Atw => {
-                self.esz = bn;
+    pub fn write(&mut self, offset: u64, value: u32) {
+        match offset {
+            Sz => {
+                self.ioregsel = value;
             }
-            Atx => {
-                self.ihl(self.esz, bn);
+            Ta => {
+                self.write_register(self.ioregsel, value);
             }
             _ => {}
         }
     }
     
     
-    fn gql(&self, index: u32) -> u32 {
+    fn read_register(&self, index: u32) -> u32 {
         match index {
             
-            0x00 => (self.ad as u32) << 24,
+            0x00 => (self.id as u32) << 24,
             
             
             0x01 => {
-                let uld = (KQ_ - 1) as u32;
-                (uld << 16) | 0x20 
+                let ncw = (LJ_ - 1) as u32;
+                (ncw << 16) | 0x20 
             }
             
             
-            0x02 => (self.ad as u32) << 24,
+            0x02 => (self.id as u32) << 24,
             
             
             
             0x10..=0x3F => {
-                let bea = ((index - 0x10) / 2) as usize;
-                let lge = (index & 1) != 0;
+                let ado = ((index - 0x10) / 2) as usize;
+                let dsp = (index & 1) != 0;
                 
-                if bea < KQ_ {
-                    if lge {
-                        (self.ctu[bea] >> 32) as u32
+                if ado < LJ_ {
+                    if dsp {
+                        (self.redir_table[ado] >> 32) as u32
                     } else {
-                        self.ctu[bea] as u32
+                        self.redir_table[ado] as u32
                     }
                 } else {
                     0
@@ -122,11 +122,11 @@ impl IoApicState {
     }
     
     
-    fn ihl(&mut self, index: u32, bn: u32) {
+    fn write_register(&mut self, index: u32, value: u32) {
         match index {
             
             0x00 => {
-                self.ad = ((bn >> 24) & 0xF) as u8;
+                self.id = ((value >> 24) & 0xF) as u8;
             }
             
             
@@ -134,24 +134,24 @@ impl IoApicState {
             
             
             0x10..=0x3F => {
-                let bea = ((index - 0x10) / 2) as usize;
-                let lge = (index & 1) != 0;
+                let ado = ((index - 0x10) / 2) as usize;
+                let dsp = (index & 1) != 0;
                 
-                if bea < KQ_ {
-                    if lge {
+                if ado < LJ_ {
+                    if dsp {
                         
-                        self.ctu[bea] = 
-                            (self.ctu[bea] & 0x0000_0000_FFFF_FFFF)
-                            | ((bn as u64) << 32);
+                        self.redir_table[ado] = 
+                            (self.redir_table[ado] & 0x0000_0000_FFFF_FFFF)
+                            | ((value as u64) << 32);
                     } else {
                         
                         
-                        let jmr: u32 = (1 << 12) | (1 << 14);
-                        let uxq = self.ctu[bea] as u32;
-                        let lnx = (bn & !jmr) | (uxq & jmr);
-                        self.ctu[bea] = 
-                            (self.ctu[bea] & 0xFFFF_FFFF_0000_0000)
-                            | (lnx as u64);
+                        let eyw: u32 = (1 << 12) | (1 << 14);
+                        let nmr = self.redir_table[ado] as u32;
+                        let new_lo = (value & !eyw) | (nmr & eyw);
+                        self.redir_table[ado] = 
+                            (self.redir_table[ado] & 0xFFFF_FFFF_0000_0000)
+                            | (new_lo as u64);
                     }
                 }
             }
@@ -162,50 +162,50 @@ impl IoApicState {
     
     
     
-    pub fn hli(&self, bup: u8) -> Option<Bkf> {
-        let w = bup as usize;
-        if w >= KQ_ {
+    pub fn get_irq_route(&self, gsi: u8) -> Option<Aaj> {
+        let idx = gsi as usize;
+        if idx >= LJ_ {
             return None;
         }
         
-        let bt = self.ctu[w];
-        let wj = (bt & 0xFF) as u8;
-        let iqu = ((bt >> 8) & 0x7) as u8;
-        let rwi = ((bt >> 11) & 1) != 0; 
-        let dkr = ((bt >> 13) & 1) != 0;   
-        let dmt = ((bt >> 15) & 1) != 0;     
-        let bnm = ((bt >> 16) & 1) != 0;
-        let nku = ((bt >> 56) & 0xFF) as u8;
+        let entry = self.redir_table[idx];
+        let vector = (entry & 0xFF) as u8;
+        let delivery_mode = ((entry >> 8) & 0x7) as u8;
+        let ldr = ((entry >> 11) & 1) != 0; 
+        let polarity = ((entry >> 13) & 1) != 0;   
+        let trigger = ((entry >> 15) & 1) != 0;     
+        let masked = ((entry >> 16) & 1) != 0;
+        let hrr = ((entry >> 56) & 0xFF) as u8;
         
-        Some(Bkf {
-            wj,
-            iqu,
-            rwh: rwi,
-            qfa: dkr,
-            oiy: dmt,
-            bnm,
-            nku,
+        Some(Aaj {
+            vector,
+            delivery_mode,
+            dest_logical: ldr,
+            active_low: polarity,
+            level_triggered: trigger,
+            masked,
+            hrr,
         })
     }
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Bkf {
+pub struct Aaj {
     
-    pub wj: u8,
+    pub vector: u8,
     
-    pub iqu: u8,
+    pub delivery_mode: u8,
     
-    pub rwh: bool,
+    pub dest_logical: bool,
     
-    pub qfa: bool,
+    pub active_low: bool,
     
-    pub oiy: bool,
+    pub level_triggered: bool,
     
-    pub bnm: bool,
+    pub masked: bool,
     
-    pub nku: u8,
+    pub hrr: u8,
 }
 
 
@@ -217,55 +217,55 @@ mod tests {
     use super::*;
     
     #[test]
-    fn psj() {
+    fn jlx() {
         let ioapic = IoApicState::default();
-        assert_eq!(ioapic.ad, 1);
-        assert_eq!(ioapic.esz, 0);
+        assert_eq!(ioapic.id, 1);
+        assert_eq!(ioapic.ioregsel, 0);
         
-        for bt in &ioapic.ctu {
-            assert_ne!(*bt & (1 << 16), 0, "Entry should be masked");
+        for entry in &ioapic.redir_table {
+            assert_ne!(*entry & (1 << 16), 0, "Entry should be masked");
         }
     }
     
     #[test]
-    fn zrt() {
+    fn qzn() {
         let ioapic = IoApicState::default();
-        let hnq = ioapic.gql(0x00);
-        assert_eq!((hnq >> 24) & 0xF, 1);
+        let drs = ioapic.read_register(0x00);
+        assert_eq!((drs >> 24) & 0xF, 1);
     }
     
     #[test]
-    fn psl() {
+    fn jlz() {
         let ioapic = IoApicState::default();
-        let axh = ioapic.gql(0x01);
-        assert_eq!(axh & 0xFF, 0x20); 
-        assert_eq!((axh >> 16) & 0xFF, 23); 
+        let tu = ioapic.read_register(0x01);
+        assert_eq!(tu & 0xFF, 0x20); 
+        assert_eq!((tu >> 16) & 0xFF, 23); 
     }
     
     #[test]
-    fn zru() {
+    fn qzo() {
         let mut ioapic = IoApicState::default();
         
-        ioapic.ihl(0x10, 0x0000_0030);
+        ioapic.write_register(0x10, 0x0000_0030);
         
-        ioapic.ihl(0x11, 0x0000_0000);
+        ioapic.write_register(0x11, 0x0000_0000);
         
-        let hh = ioapic.gql(0x10);
-        assert_eq!(hh & 0xFF, 0x30); 
-        assert_eq!((hh >> 16) & 1, 0); 
+        let lo = ioapic.read_register(0x10);
+        assert_eq!(lo & 0xFF, 0x30); 
+        assert_eq!((lo >> 16) & 1, 0); 
         
-        let bia = ioapic.hli(0).unwrap();
-        assert_eq!(bia.wj, 0x30);
-        assert!(!bia.bnm);
-        assert_eq!(bia.iqu, 0); 
+        let afo = ioapic.get_irq_route(0).unwrap();
+        assert_eq!(afo.vector, 0x30);
+        assert!(!afo.masked);
+        assert_eq!(afo.delivery_mode, 0); 
     }
     
     #[test]
-    fn psk() {
+    fn jly() {
         let mut ioapic = IoApicState::default();
         
-        ioapic.write(Atw, 0x01); 
-        let axh = ioapic.read(Atx);
-        assert_eq!(axh & 0xFF, 0x20);
+        ioapic.write(Sz, 0x01); 
+        let tu = ioapic.read(Ta);
+        assert_eq!(tu & 0xFF, 0x20);
     }
 }

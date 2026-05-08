@@ -14,14 +14,14 @@ use alloc::boxed::Box;
 
 
 
-pub const R_: usize = 240;
-pub const AS_: usize = 68;
+pub const AD_: usize = 240;
+pub const AV_: usize = 68;
 
 
-pub const BIR_: usize = 16;
+pub const BKX_: usize = 16;
 
 
-pub const BTE_: f32 = 0.12;
+pub const BWA_: f32 = 0.12;
 
 
 
@@ -31,11 +31,11 @@ pub const BTE_: f32 = 0.12;
 #[derive(Clone, Copy, PartialEq)]
 pub enum ColorMod {
     
-    M,
+    Normal,
     
-    D,
+    H,
     
-    Aui(f32),
+    Inside(f32),
 }
 
 
@@ -45,18 +45,18 @@ pub enum ColorMod {
 #[derive(Clone, Copy, PartialEq)]
 pub enum Shape3D {
     None,
-    Dw,
+    Cube,
     Sphere,
-    Dr,
-    Sd,
+    Torus,
+    DnaHelix,
 }
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum RenderMode {
-    Aiy,
-    Avj,
-    Sd,
-    Jb,
+    Hologram,
+    MatrixRain,
+    DnaHelix,
+    RotatingCube,
     Sphere,
 }
 
@@ -65,148 +65,148 @@ pub enum RenderMode {
 
 
 pub struct HoloVolume {
-    pub z: usize,
-    pub ac: usize,
-    pub eo: usize,
+    pub width: usize,
+    pub height: usize,
+    pub depth: usize,
     
     
-    pub chx: Shape3D,
+    pub shape: Shape3D,
     
     
-    pub che: RenderMode,
+    pub render_mode: RenderMode,
     
     
     time: f32,
     
     
-    chh: f32,
+    rotation: f32,
     
     
     
     
-    alg: Vec<ColorMod>,
+    intensity_map: Vec<ColorMod>,
     
     
-    anv: usize,
-    akr: usize,
+    screen_width: usize,
+    screen_height: usize,
 }
 
 impl HoloVolume {
-    pub fn new(z: usize, ac: usize, eo: usize) -> Self {
+    pub fn new(width: usize, height: usize, depth: usize) -> Self {
         
         
-        let alg = vec![ColorMod::M; R_ * AS_];
+        let intensity_map = vec![ColorMod::Normal; AD_ * AV_];
         Self {
-            z,
-            ac,
-            eo,
-            chx: Shape3D::Dw,
-            che: RenderMode::Aiy,
+            width,
+            height,
+            depth,
+            shape: Shape3D::Cube,
+            render_mode: RenderMode::Hologram,
             time: 0.0,
-            chh: 0.0,
-            alg,
-            anv: 1920,
-            akr: 1080,
+            rotation: 0.0,
+            intensity_map,
+            screen_width: 1920,
+            screen_height: 1080,
         }
     }
     
     
     #[inline]
-    fn w(bj: usize, br: usize) -> usize {
-        bj * AS_ + br
+    fn idx(col: usize, row: usize) -> usize {
+        col * AV_ + row
     }
     
-    pub fn gsg(&mut self, chx: Shape3D) {
-        self.chx = chx;
-    }
-    
-    
-    pub fn dbw(&mut self, z: usize, ac: usize) {
-        self.anv = z;
-        self.akr = ac;
+    pub fn set_shape(&mut self, shape: Shape3D) {
+        self.shape = shape;
     }
     
     
-    pub fn qs(&mut self, os: f32) {
-        self.time += os;
-        self.chh += os * 0.5;
+    pub fn set_screen_size(&mut self, width: usize, height: usize) {
+        self.screen_width = width;
+        self.screen_height = height;
+    }
+    
+    
+    pub fn update(&mut self, fm: f32) {
+        self.time += fm;
+        self.rotation += fm * 0.5;
         
         
-        let ksv = match self.che {
-            RenderMode::Sd => Shape3D::Sd,
-            RenderMode::Jb => Shape3D::Dw,
+        let fuf = match self.render_mode {
+            RenderMode::DnaHelix => Shape3D::DnaHelix,
+            RenderMode::RotatingCube => Shape3D::Cube,
             RenderMode::Sphere => Shape3D::Sphere,
-            RenderMode::Avj => Shape3D::None,
-            RenderMode::Aiy => self.chx,
+            RenderMode::MatrixRain => Shape3D::None,
+            RenderMode::Hologram => self.shape,
         };
         
         
-        self.rni(ksv);
+        self.compute_intensity_map(fuf);
     }
     
     
-    fn rni(&mut self, chx: Shape3D) {
-        if chx == Shape3D::None {
+    fn compute_intensity_map(&mut self, shape: Shape3D) {
+        if shape == Shape3D::None {
             
-            for bj in 0..R_ {
-                for br in 0..AS_ {
-                    self.alg[Self::w(bj, br)] = ColorMod::M;
+            for col in 0..AD_ {
+                for row in 0..AV_ {
+                    self.intensity_map[Self::idx(col, row)] = ColorMod::Normal;
                 }
             }
             return;
         }
         
-        let acc = 8.0;  
-        let aqw = 16.0; 
+        let cell_w = 8.0;  
+        let cell_h = 16.0; 
         
         
-        let cx = self.anv as f32 / 2.0;
-        let ae = self.akr as f32 / 2.0;
-        let pkh = (self.anv.v(self.akr) as f32) * 0.25;
+        let cx = self.screen_width as f32 / 2.0;
+        let u = self.screen_height as f32 / 2.0;
+        let jge = (self.screen_width.min(self.screen_height) as f32) * 0.25;
         
-        for bj in 0..R_ {
-            let b = bj as f32 * acc + acc / 2.0;
+        for col in 0..AD_ {
+            let x = col as f32 * cell_w + cell_w / 2.0;
             
-            for br in 0..AS_ {
-                let c = br as f32 * aqw + aqw / 2.0;
+            for row in 0..AV_ {
+                let y = row as f32 * cell_h + cell_h / 2.0;
                 
                 
-                let vt = (b - cx) / pkh;
-                let ahr = (c - ae) / pkh;
+                let nx = (x - cx) / jge;
+                let re = (y - u) / jge;
                 
                 
-                let mut jgb = 999.0f32;
-                let mut mvv = false;
+                let mut euk = 999.0f32;
+                let mut hfi = false;
                 
-                for xxf in 0..BIR_ {
-                    let arn = (xxf as f32 / BIR_ as f32) * 2.0 - 1.0;
-                    let mcu = self.wmp(vt, ahr, arn, chx);
+                for z_layer in 0..BKX_ {
+                    let wi = (z_layer as f32 / BKX_ as f32) * 2.0 - 1.0;
+                    let gtd = self.shape_sdf(nx, re, wi, shape);
                     
-                    if mcu < jgb {
-                        jgb = mcu;
+                    if gtd < euk {
+                        euk = gtd;
                     }
-                    if mcu < 0.0 {
-                        mvv = true;
+                    if gtd < 0.0 {
+                        hfi = true;
                     }
                 }
                 
                 
-                self.alg[Self::w(bj, br)] = if jgb.gp() < BTE_ {
+                self.intensity_map[Self::idx(col, row)] = if euk.abs() < BWA_ {
                     
-                    ColorMod::D
-                } else if mvv {
+                    ColorMod::H
+                } else if hfi {
                     
-                    let dqm = -jgb;
-                    let olp = 0.8;
-                    let drj = if dqm < olp {
-                        1.0 - (dqm / olp)
+                    let bma = -euk;
+                    let imi = 0.8;
+                    let bmo = if bma < imi {
+                        1.0 - (bma / imi)
                     } else {
                         0.0
                     };
-                    ColorMod::Aui(drj)
+                    ColorMod::Inside(bmo)
                 } else {
                     
-                    ColorMod::M
+                    ColorMod::Normal
                 };
             }
         }
@@ -215,20 +215,20 @@ impl HoloVolume {
     
     
     
-    pub fn tfa(&self) -> Vec<u8> {
-        let mut result = vec![0u8; R_ * AS_];
+    pub fn get_u8_intensity_map(&self) -> Vec<u8> {
+        let mut result = vec![0u8; AD_ * AV_];
         
-        for bj in 0..R_ {
-            for br in 0..AS_ {
-                let w = Self::w(bj, br);
-                result[w] = match self.alg[w] {
-                    ColorMod::M => 0,
-                    ColorMod::D => 1,
-                    ColorMod::Aui(drj) => {
+        for col in 0..AD_ {
+            for row in 0..AV_ {
+                let idx = Self::idx(col, row);
+                result[idx] = match self.intensity_map[idx] {
+                    ColorMod::Normal => 0,
+                    ColorMod::H => 1,
+                    ColorMod::Inside(bmo) => {
                         
                         
-                        let twc = 1.0 - drj;
-                        (2.0 + twc * 253.0) as u8
+                        let mro = 1.0 - bmo;
+                        (2.0 + mro * 253.0) as u8
                     }
                 };
             }
@@ -240,47 +240,47 @@ impl HoloVolume {
     
     
     #[inline]
-    pub fn tdb(&self, bj: usize, br: usize) -> ColorMod {
-        if bj < R_ && br < AS_ {
-            self.alg[Self::w(bj, br)]
+    pub fn get_color_mod(&self, col: usize, row: usize) -> ColorMod {
+        if col < AD_ && row < AV_ {
+            self.intensity_map[Self::idx(col, row)]
         } else {
-            ColorMod::M
+            ColorMod::Normal
         }
     }
     
     
-    pub fn ywg(&self) -> bool {
-        let ksv = match self.che {
-            RenderMode::Sd => Shape3D::Sd,
-            RenderMode::Jb => Shape3D::Dw,
+    pub fn qkl(&self) -> bool {
+        let fuf = match self.render_mode {
+            RenderMode::DnaHelix => Shape3D::DnaHelix,
+            RenderMode::RotatingCube => Shape3D::Cube,
             RenderMode::Sphere => Shape3D::Sphere,
-            RenderMode::Avj => Shape3D::None,
-            RenderMode::Aiy => self.chx,
+            RenderMode::MatrixRain => Shape3D::None,
+            RenderMode::Hologram => self.shape,
         };
-        ksv != Shape3D::None
+        fuf != Shape3D::None
     }
     
     
     
     #[inline]
-    pub fn yez(&self, gzs: u32, bj: usize, br: usize) -> u32 {
-        match self.tdb(bj, br) {
-            ColorMod::M => {
+    pub fn pyf(&self, dik: u32, col: usize, row: usize) -> u32 {
+        match self.get_color_mod(col, row) {
+            ColorMod::Normal => {
                 
-                let at = gzs.v(238);
-                0xFF000000 | (at << 8)
+                let g = dik.min(238);
+                0xFF000000 | (g << 8)
             }
-            ColorMod::D => {
+            ColorMod::H => {
                 
                 0xFF00FF00
             }
-            ColorMod::Aui(drj) => {
+            ColorMod::Inside(bmo) => {
                 
-                let at = ((gzs as f32) * drj * 0.7) as u32;
-                if at < 10 {
+                let g = ((dik as f32) * bmo * 0.7) as u32;
+                if g < 10 {
                     0xFF000000 
                 } else {
-                    0xFF000000 | (at << 8)
+                    0xFF000000 | (g << 8)
                 }
             }
         }
@@ -288,67 +288,67 @@ impl HoloVolume {
     
     
     
-    pub fn zjo(&self, bi: &mut [u32], ycs: usize, ycr: usize) {
+    pub fn qty(&self, buffer: &mut [u32], _screen_width: usize, _screen_height: usize) {
         
         
-        bi.vi(0xFF000000);
+        buffer.fill(0xFF000000);
     }
     
     
-    fn wmp(&self, b: f32, c: f32, av: f32, chx: Shape3D) -> f32 {
+    fn shape_sdf(&self, x: f32, y: f32, z: f32, shape: Shape3D) -> f32 {
         
-        let cwr = libm::zq(self.chh);
-        let dcb = libm::st(self.chh);
-        let kb = b * cwr - av * dcb;
-        let agv = b * dcb + av * cwr;
-        let ix = c;
+        let bax = libm::cosf(self.rotation);
+        let bds = libm::sinf(self.rotation);
+        let da = x * bax - z * bds;
+        let qp = x * bds + z * bax;
+        let cm = y;
         
-        match chx {
-            Shape3D::Dw => {
-                let aw = 0.7;
-                let dx = libm::dhb(kb) - aw;
-                let bg = libm::dhb(ix) - aw;
-                let pt = libm::dhb(agv) - aw;
-                let hl = libm::ivd(dx, 0.0);
-                let ir = libm::ivd(bg, 0.0);
-                let oov = libm::ivd(pt, 0.0);
-                let lre = libm::bon(hl * hl + ir * ir + oov * oov);
-                let dsa = libm::svg(libm::ivd(dx, libm::ivd(bg, pt)), 0.0);
-                lre + dsa
+        match shape {
+            Shape3D::Cube => {
+                let size = 0.7;
+                let dx = libm::fabsf(da) - size;
+                let ad = libm::fabsf(cm) - size;
+                let dz = libm::fabsf(qp) - size;
+                let cg = libm::fmaxf(dx, 0.0);
+                let cr = libm::fmaxf(ad, 0.0);
+                let ipf = libm::fmaxf(dz, 0.0);
+                let glk = libm::sqrtf(cg * cg + cr * cr + ipf * ipf);
+                let bmz = libm::fminf(libm::fmaxf(dx, libm::fmaxf(ad, dz)), 0.0);
+                glk + bmz
             }
             
             Shape3D::Sphere => {
-                let dy = 0.8;
-                libm::bon(kb * kb + ix * ix + agv * agv) - dy
+                let radius = 0.8;
+                libm::sqrtf(da * da + cm * cm + qp * qp) - radius
             }
             
-            Shape3D::Dr => {
-                let efb = 0.6;
-                let efm = 0.25;
-                let fm = libm::bon(kb * kb + agv * agv) - efb;
-                libm::bon(fm * fm + ix * ix) - efm
+            Shape3D::Torus => {
+                let axz = 0.6;
+                let ayh = 0.25;
+                let q = libm::sqrtf(da * da + qp * qp) - axz;
+                libm::sqrtf(q * q + cm * cm) - ayh
             }
             
-            Shape3D::Sd => {
-                let fkn = 0.4;
-                let toh = 2.0;
-                let poy = 0.15;
+            Shape3D::DnaHelix => {
+                let ckn = 0.4;
+                let mky = 2.0;
+                let jiz = 0.15;
                 
-                let hg = ix * toh + self.time * 2.0;
+                let cc = cm * mky + self.time * 2.0;
                 
-                let wbt = fkn * libm::zq(hg);
-                let wbu = fkn * libm::st(hg);
-                let nok = kb - wbt;
-                let nos = agv - wbu;
-                let apo = libm::bon(nok * nok + nos * nos) - poy;
+                let ojp = ckn * libm::cosf(cc);
+                let ojq = ckn * libm::sinf(cc);
+                let huj = da - ojp;
+                let hup = qp - ojq;
+                let vh = libm::sqrtf(huj * huj + hup * hup) - jiz;
                 
-                let wbv = fkn * libm::zq(hg + core::f32::consts::Eu);
-                let wbw = fkn * libm::st(hg + core::f32::consts::Eu);
-                let nol = kb - wbv;
-                let nou = agv - wbw;
-                let us = libm::bon(nol * nol + nou * nou) - poy;
+                let ojr = ckn * libm::cosf(cc + core::f32::consts::PI);
+                let ojs = ckn * libm::sinf(cc + core::f32::consts::PI);
+                let huk = da - ojr;
+                let huq = qp - ojs;
+                let jq = libm::sqrtf(huk * huk + huq * huq) - jiz;
                 
-                libm::svg(apo, us)
+                libm::fminf(vh, jq)
             }
             
             Shape3D::None => 999.0,

@@ -212,7 +212,7 @@ match syscall_number {
 // SYSCALL IMPLEMENTATIONS
 // ============================================================================
 
-fn system_read(process: &mut LinuxProcess, fd: i32, buffer: u64, count: usize) -> i64 {
+fn system_read(process: &mut LinuxProcess, fd: i32, buf: u64, count: usize) -> i64 {
     if fd < 0 || fd >= 256 {
         return EBADF;
     }
@@ -222,7 +222,7 @@ match fd {
         0 => {
             // stdin - read from keyboard
             let buffer_slice = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { core::slice::from_raw_parts_mut(buffer as *mut u8, count) };
+unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, count) };
             let mut read_count = 0;
             
             // Simple blocking read
@@ -249,13 +249,13 @@ unsafe { core::slice::from_raw_parts_mut(buffer as *mut u8, count) };
     }
 }
 
-fn system_write(process: &mut LinuxProcess, fd: i32, buffer: u64, count: usize) -> i64 {
+fn system_write(process: &mut LinuxProcess, fd: i32, buf: u64, count: usize) -> i64 {
     if fd < 0 || fd >= 256 {
         return EBADF;
     }
     
     let data = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { core::slice::from_raw_parts(buffer as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+unsafe { core::slice::from_raw_parts(buf as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u8, count) };
     
         // Correspondance de motifs — branchement exhaustif de Rust.
@@ -279,9 +279,9 @@ match fd {
     }
 }
 
-fn system_open(process: &mut LinuxProcess, path_pointer: u64, flags: i32, mode: u32) -> i64 {
+fn system_open(process: &mut LinuxProcess, path_ptr: u64, flags: i32, mode: u32) -> i64 {
     let path = // Correspondance de motifs — branchement exhaustif de Rust.
-match read_string_from_user(path_pointer) {
+match read_string_from_user(path_ptr) {
         Ok(s) => s,
         Err(e) => return e,
     };
@@ -300,9 +300,9 @@ match fd {
     }
 }
 
-fn system_openat(process: &mut LinuxProcess, dirfd: i32, path_pointer: u64, flags: i32, mode: u32) -> i64 {
+fn system_openat(process: &mut LinuxProcess, dirfd: i32, path_ptr: u64, flags: i32, mode: u32) -> i64 {
     // For now, ignore dirfd and treat as absolute
-    system_open(process, path_pointer, flags, mode)
+    system_open(process, path_ptr, flags, mode)
 }
 
 fn system_close(process: &mut LinuxProcess, fd: i32) -> i64 {
@@ -313,19 +313,19 @@ fn system_close(process: &mut LinuxProcess, fd: i32) -> i64 {
     0
 }
 
-fn system_status(_process: &mut LinuxProcess, _path_pointer: u64, status_buffer: u64) -> i64 {
+fn system_status(_process: &mut LinuxProcess, _path_ptr: u64, stat_buf: u64) -> i64 {
     // Return a fake stat structure
-    let status = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { &mut *(status_buffer as *mut LinuxStat) };
-    *status = LinuxStat::default();
-    status.st_mode = 0o100644; // Regular file
-    status.st_size = 0;
+    let stat = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe { &mut *(stat_buf as *mut LinuxStat) };
+    *stat = LinuxStat::default();
+    stat.st_mode = 0o100644; // Regular file
+    stat.st_size = 0;
     0
 }
 
-fn system_brk(process: &mut LinuxProcess, address: u64) -> i64 {
+fn system_brk(process: &mut LinuxProcess, addr: u64) -> i64 {
     // Delegate to the real sys_brk which allocates physical frames and maps pages
-    let result = crate::syscall::linux::system_brk(address);
+    let result = crate::syscall::linux::system_brk(addr);
     // Keep process-local tracking in sync
     if result > 0 {
         process.brk = result as u64;
@@ -333,14 +333,14 @@ fn system_brk(process: &mut LinuxProcess, address: u64) -> i64 {
     result
 }
 
-fn system_mmap(process: &mut LinuxProcess, address: u64, length: u64, prot: i32, flags: i32, fd: i32, offset: u64) -> i64 {
+fn system_mmap(process: &mut LinuxProcess, addr: u64, length: u64, prot: i32, flags: i32, fd: i32, offset: u64) -> i64 {
     // Delegate to the real sys_mmap which handles page-level mapping
-    crate::syscall::linux::system_mmap(address, length, prot as u64, flags as u64, fd as i64, offset)
+    crate::syscall::linux::system_mmap(addr, length, prot as u64, flags as u64, fd as i64, offset)
 }
 
-fn system_munmap(_process: &mut LinuxProcess, address: u64, length: u64) -> i64 {
+fn system_munmap(_process: &mut LinuxProcess, addr: u64, length: u64) -> i64 {
     // Delegate to the real sys_munmap
-    crate::syscall::linux::system_munmap(address, length)
+    crate::syscall::linux::system_munmap(addr, length)
 }
 
 fn system_exit(process: &mut LinuxProcess, code: i32) -> i64 {
@@ -349,7 +349,7 @@ fn system_exit(process: &mut LinuxProcess, code: i32) -> i64 {
     code as i64
 }
 
-fn system_uname(buffer: u64) -> i64 {
+fn system_uname(buf: u64) -> i64 {
     #[repr(C)]
     struct Utsname {
         sysname: [u8; 65],
@@ -361,11 +361,11 @@ fn system_uname(buffer: u64) -> i64 {
     }
     
     let uname = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { &mut *(buffer as *mut Utsname) };
+unsafe { &mut *(buf as *mut Utsname) };
     
     fn write_field(field: &mut [u8; 65], value: &str) {
         let bytes = value.as_bytes();
-        let len = bytes.len().minimum(64);
+        let len = bytes.len().min(64);
         field[..len].copy_from_slice(&bytes[..len]);
         field[len] = 0;
     }
@@ -380,23 +380,23 @@ unsafe { &mut *(buffer as *mut Utsname) };
     0
 }
 
-fn system_getcwd(process: &mut LinuxProcess, buffer: u64, size: usize) -> i64 {
+fn system_getcwd(process: &mut LinuxProcess, buf: u64, size: usize) -> i64 {
     let cwd = process.cwd.as_bytes();
     if cwd.len() + 1 > size {
         return EINVAL;
     }
     
     let buffer_slice = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { core::slice::from_raw_parts_mut(buffer as *mut u8, size) };
+unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, size) };
     buffer_slice[..cwd.len()].copy_from_slice(cwd);
     buffer_slice[cwd.len()] = 0;
     
-    buffer as i64
+    buf as i64
 }
 
-fn system_chdir(process: &mut LinuxProcess, path_pointer: u64) -> i64 {
+fn system_chdir(process: &mut LinuxProcess, path_ptr: u64) -> i64 {
     let path = // Correspondance de motifs — branchement exhaustif de Rust.
-match read_string_from_user(path_pointer) {
+match read_string_from_user(path_ptr) {
         Ok(s) => s,
         Err(e) => return e,
     };
@@ -404,9 +404,9 @@ match read_string_from_user(path_pointer) {
     0
 }
 
-fn system_access(_process: &mut LinuxProcess, path_pointer: u64) -> i64 {
+fn system_access(_process: &mut LinuxProcess, path_ptr: u64) -> i64 {
     let path = // Correspondance de motifs — branchement exhaustif de Rust.
-match read_string_from_user(path_pointer) {
+match read_string_from_user(path_ptr) {
         Ok(s) => s,
         Err(e) => return e,
     };
@@ -431,14 +431,14 @@ match request {
             #[repr(C)]
             struct Winsize {
                 ws_row: u16,
-                ws_column: u16,
+                ws_col: u16,
                 ws_xpixel: u16,
                 ws_ypixel: u16,
             }
             let ws = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe { &mut *(argument as *mut Winsize) };
             ws.ws_row = 25;
-            ws.ws_column = 80;
+            ws.ws_col = 80;
             ws.ws_xpixel = 0;
             ws.ws_ypixel = 0;
             0
@@ -496,17 +496,17 @@ unsafe { &mut *(pipefd as *mut [i32; 2]) };
     }
 }
 
-fn system_nanosleep(request: u64, _rem: u64) -> i64 {
+fn system_nanosleep(req: u64, _rem: u64) -> i64 {
     #[repr(C)]
     struct Timespec {
-        tv_sector: i64,
+        tv_sec: i64,
         tv_nsec: i64,
     }
     
     let ts = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { &*(request as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+unsafe { &*(req as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const Timespec) };
-    let ns = (ts.tv_sector as u64) * 1_000_000_000 + (ts.tv_nsec as u64);
+    let ns = (ts.tv_sec as u64) * 1_000_000_000 + (ts.tv_nsec as u64);
     
     // Use real thread sleep instead of busy-wait
     crate::thread::sleep_ns(ns);
@@ -517,14 +517,14 @@ const Timespec) };
 fn system_clock_gettime(clk_id: i32, tp: u64) -> i64 {
     #[repr(C)]
     struct Timespec {
-        tv_sector: i64,
+        tv_sec: i64,
         tv_nsec: i64,
     }
     
     let ts = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe { &mut *(tp as *mut Timespec) };
     let ticks = crate::logger::get_ticks();
-    ts.tv_sector = (ticks / 1000) as i64;
+    ts.tv_sec = (ticks / 1000) as i64;
     ts.tv_nsec = ((ticks % 1000) * 1_000_000) as i64;
     
     0
@@ -539,19 +539,19 @@ unsafe { *(tloc as *mut i64) = time; }
     time
 }
 
-fn system_getrandom(buffer: u64, buflen: usize, _flags: u32) -> i64 {
+fn system_getrandom(buf: u64, buflen: usize, _flags: u32) -> i64 {
     let buffer = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { core::slice::from_raw_parts_mut(buffer as *mut u8, buflen) };
+unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, buflen) };
     
     // Use our RNG
-    for byte in buffer.iterator_mut() {
+    for byte in buffer.iter_mut() {
         *byte = crate::rng::random_u8();
     }
     
     buflen as i64
 }
 
-fn system_arch_prctl(code: u64, address: u64) -> i64 {
+fn system_arch_prctl(code: u64, addr: u64) -> i64 {
         // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const ARCH_SET_FILESYSTEM: u64 = 0x1002;
         // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
@@ -568,7 +568,7 @@ match code {
             unsafe {
                 core::arch::asm!(
                     "wrfsbase {}",
-                    in(reg) address,
+                    in(reg) addr,
                 );
             }
             0
@@ -578,7 +578,7 @@ match code {
 unsafe {
                 core::arch::asm!(
                     "wrgsbase {}",
-                    in(reg) address,
+                    in(reg) addr,
                 );
             }
             0
@@ -588,9 +588,9 @@ unsafe {
     }
 }
 
-fn system_mkdir(process: &mut LinuxProcess, path_pointer: u64, _mode: u64) -> i64 {
+fn system_mkdir(process: &mut LinuxProcess, path_ptr: u64, _mode: u64) -> i64 {
     let path = // Correspondance de motifs — branchement exhaustif de Rust.
-match read_string_from_user(path_pointer) {
+match read_string_from_user(path_ptr) {
         Ok(s) => s,
         Err(e) => return e,
     };
@@ -605,9 +605,9 @@ match fs.mkdir(&full_path) {
     })
 }
 
-fn system_unlink(process: &mut LinuxProcess, path_pointer: u64) -> i64 {
+fn system_unlink(process: &mut LinuxProcess, path_ptr: u64) -> i64 {
     let path = // Correspondance de motifs — branchement exhaustif de Rust.
-match read_string_from_user(path_pointer) {
+match read_string_from_user(path_ptr) {
         Ok(s) => s,
         Err(e) => return e,
     };
@@ -635,7 +635,7 @@ fn system_lseek(_process: &mut LinuxProcess, fd: i32, offset: i64, whence: i32) 
 // #[derive] — génère automatiquement les implémentations de traits à la compilation.
 #[derive(Default)]
 struct LinuxStat {
-    st_device: u64,
+    st_dev: u64,
     st_ino: u64,
     st_nlink: u64,
     st_mode: u32,

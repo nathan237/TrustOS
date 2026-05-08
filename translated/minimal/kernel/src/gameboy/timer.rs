@@ -1,36 +1,36 @@
 
-#![allow(bgr)]
+#![allow(dead_code)]
 
 pub struct Timer {
     pub div: u16,       
-    pub ejw: u8,       
-    pub fww: u8,        
-    pub ezl: u8,        
-    pub gkb: bool, 
-    vaf: u8, 
+    pub tima: u8,       
+    pub tma: u8,        
+    pub tac: u8,        
+    pub interrupt: bool, 
+    overflow_cycles: u8, 
 }
 
 impl Timer {
     pub fn new() -> Self {
         Self {
             div: 0xABCC,
-            ejw: 0,
-            fww: 0,
-            ezl: 0,
-            gkb: false,
-            vaf: 0,
+            tima: 0,
+            tma: 0,
+            tac: 0,
+            interrupt: false,
+            overflow_cycles: 0,
         }
     }
 
     
-    pub fn gu(&mut self, yl: u32) {
-        for _ in 0..yl {
-            let uxo = self.div;
-            self.div = self.div.cn(4); 
+    pub fn step(&mut self, cycles: u32) {
+        for _ in 0..cycles {
+            let nmo = self.div;
+            self.div = self.div.wrapping_add(4); 
 
             
-            if self.ezl & 0x04 != 0 {
-                let ga = match self.ezl & 0x03 {
+            if self.tac & 0x04 != 0 {
+                let bf = match self.tac & 0x03 {
                     0 => 9,  
                     1 => 3,  
                     2 => 5,  
@@ -39,27 +39,27 @@ impl Timer {
                 };
 
                 
-                let uxm = (uxo >> ga) & 1;
-                let usm = (self.div >> ga) & 1;
+                let nmm = (nmo >> bf) & 1;
+                let nir = (self.div >> bf) & 1;
 
-                if uxm == 1 && usm == 0 {
-                    let (utv, lrg) = self.ejw.zem(1);
-                    if lrg {
-                        self.ejw = self.fww;
-                        self.gkb = true;
+                if nmm == 1 && nir == 0 {
+                    let (new_tima, overflow) = self.tima.overflowing_add(1);
+                    if overflow {
+                        self.tima = self.tma;
+                        self.interrupt = true;
                     } else {
-                        self.ejw = utv;
+                        self.tima = new_tima;
                     }
                 }
             }
         }
     }
 
-    pub fn pac(&self) -> u8 {
+    pub fn read_div(&self) -> u8 {
         (self.div >> 8) as u8
     }
 
-    pub fn xvi(&mut self) {
+    pub fn write_div(&mut self) {
         self.div = 0;
     }
 }

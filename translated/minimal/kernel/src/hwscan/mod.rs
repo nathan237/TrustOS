@@ -43,64 +43,64 @@ use alloc::vec::Vec;
 
 
 #[derive(Debug, Clone)]
-pub struct Ju {
-    pub gb: &'static str,
-    pub j: String,
-    pub re: u64,
-    pub aw: u64,
-    pub vz: AccessLevel,
-    pub yw: String,
-    pub bhz: RiskLevel,
+pub struct Dy {
+    pub category: &'static str,
+    pub name: String,
+    pub address: u64,
+    pub size: u64,
+    pub access: AccessLevel,
+    pub details: String,
+    pub risk: RiskLevel,
 }
 
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum AccessLevel {
     
-    Jx,
+    ReadWrite,
     
-    Bz,
+    ReadOnly,
     
-    In,
+    Faulted,
     
-    Ez,
+    Dead,
     
-    Adq,
+    Partial,
 }
 
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum RiskLevel {
     
-    V,
+    Info,
     
-    Eg,
+    Low,
     
-    Bc,
+    Medium,
     
-    Ao,
+    High,
     
-    Aj,
+    Critical,
 }
 
 impl AccessLevel {
     pub fn as_str(&self) -> &'static str {
         match self {
-            AccessLevel::Jx => "RW",
-            AccessLevel::Bz => "RO",
-            AccessLevel::In => "FAULT",
-            AccessLevel::Ez => "DEAD",
-            AccessLevel::Adq => "PARTIAL",
+            AccessLevel::ReadWrite => "RW",
+            AccessLevel::ReadOnly => "RO",
+            AccessLevel::Faulted => "FAULT",
+            AccessLevel::Dead => "DEAD",
+            AccessLevel::Partial => "PARTIAL",
         }
     }
 
-    pub fn cpk(&self) -> &'static str {
+    pub fn color_code(&self) -> &'static str {
         match self {
-            AccessLevel::Jx => "\x01G",  
-            AccessLevel::Bz => "\x01Y",   
-            AccessLevel::In => "\x01R",    
-            AccessLevel::Ez => "\x01W",       
-            AccessLevel::Adq => "\x01M",    
+            AccessLevel::ReadWrite => "\x01G",  
+            AccessLevel::ReadOnly => "\x01Y",   
+            AccessLevel::Faulted => "\x01R",    
+            AccessLevel::Dead => "\x01W",       
+            AccessLevel::Partial => "\x01M",    
         }
     }
 }
@@ -108,34 +108,34 @@ impl AccessLevel {
 impl RiskLevel {
     pub fn as_str(&self) -> &'static str {
         match self {
-            RiskLevel::V => "INFO",
-            RiskLevel::Eg => "LOW",
-            RiskLevel::Bc => "MEDIUM",
-            RiskLevel::Ao => "HIGH",
-            RiskLevel::Aj => "CRITICAL",
+            RiskLevel::Info => "INFO",
+            RiskLevel::Low => "LOW",
+            RiskLevel::Medium => "MEDIUM",
+            RiskLevel::High => "HIGH",
+            RiskLevel::Critical => "CRITICAL",
         }
     }
 
-    pub fn cpk(&self) -> &'static str {
+    pub fn color_code(&self) -> &'static str {
         match self {
-            RiskLevel::V => "\x01W",
-            RiskLevel::Eg => "\x01G",
-            RiskLevel::Bc => "\x01Y",
-            RiskLevel::Ao => "\x01R",
-            RiskLevel::Aj => "\x01R",
+            RiskLevel::Info => "\x01W",
+            RiskLevel::Low => "\x01G",
+            RiskLevel::Medium => "\x01Y",
+            RiskLevel::High => "\x01R",
+            RiskLevel::Critical => "\x01R",
         }
     }
 }
 
 
-pub struct Aqw {
-    pub hd: Vec<Ju>,
+pub struct Rs {
+    pub results: Vec<Dy>,
     pub arch: &'static str,
-    pub dgg: String,
-    pub pgg: u64,
+    pub device_name: String,
+    pub scan_time_ms: u64,
 }
 
-impl Aqw {
+impl Rs {
     pub fn new() -> Self {
         let arch = if cfg!(target_arch = "x86_64") {
             "x86_64"
@@ -147,90 +147,90 @@ impl Aqw {
             "unknown"
         };
 
-        Aqw {
-            hd: Vec::new(),
+        Rs {
+            results: Vec::new(),
             arch,
-            dgg: String::from("Unknown Device"),
-            pgg: 0,
+            device_name: String::from("Unknown Device"),
+            scan_time_ms: 0,
         }
     }
 
-    pub fn add(&mut self, result: Ju) {
-        self.hd.push(result);
+    pub fn add(&mut self, result: Dy) {
+        self.results.push(result);
     }
 
-    pub fn hjq(&self, jy: RiskLevel) -> Vec<&Ju> {
-        self.hd.iter().hi(|m| m.bhz == jy).collect()
+    pub fn findings_by_risk(&self, level: RiskLevel) -> Vec<&Dy> {
+        self.results.iter().filter(|r| r.risk == level).collect()
     }
 
-    pub fn ykd(&self, gb: &str) -> usize {
-        self.hd.iter().hi(|m| m.gb == gb).az()
+    pub fn qbk(&self, category: &str) -> usize {
+        self.results.iter().filter(|r| r.category == category).count()
     }
 
-    pub fn awz(&self) -> String {
-        let es = self.hd.len();
-        let cpp = self.hjq(RiskLevel::Aj).len();
-        let afq = self.hjq(RiskLevel::Ao).len();
-        let gmm = self.hjq(RiskLevel::Bc).len();
-        let ail = self.hjq(RiskLevel::Eg).len();
-        let co = self.hjq(RiskLevel::V).len();
+    pub fn summary(&self) -> String {
+        let av = self.results.len();
+        let aqb = self.findings_by_risk(RiskLevel::Critical).len();
+        let high = self.findings_by_risk(RiskLevel::High).len();
+        let dbd = self.findings_by_risk(RiskLevel::Medium).len();
+        let low = self.findings_by_risk(RiskLevel::Low).len();
+        let info = self.findings_by_risk(RiskLevel::Info).len();
 
         format!(
             "Device: {} ({})\n\
              Findings: {} total | {} CRITICAL | {} HIGH | {} MEDIUM | {} LOW | {} INFO\n\
              Scan time: {} ms",
-            self.dgg, self.arch,
-            es, cpp, afq, gmm, ail, co,
-            self.pgg
+            self.device_name, self.arch,
+            av, aqb, high, dbd, low, info,
+            self.scan_time_ms
         )
     }
 }
 
 
-pub fn oaf(n: &[&str]) -> String {
-    let air = n.fv().map(|e| *e).unwrap_or("help");
+pub fn idk(args: &[&str]) -> String {
+    let je = args.first().map(|j| *j).unwrap_or("help");
 
-    match air {
+    match je {
         "mmio" => {
-            let ar = n.get(1)
-                .and_then(|e| ouh(e))
+            let base = args.get(1)
+                .and_then(|j| itt(j))
                 .unwrap_or(0);
-            let aw = n.get(2)
-                .and_then(|e| ouh(e))
+            let size = args.get(2)
+                .and_then(|j| itt(j))
                 .unwrap_or(0);
-            mmio::pge(ar, aw)
+            mmio::jdg(base, size)
         }
         "trustzone" | "tz" => {
-            trustzone::oxy()
+            trustzone::iws()
         }
         "dma" => {
-            dma::pga()
+            dma::jda()
         }
         "irq" => {
-            irq::pgd()
+            irq::jde()
         }
         "gpio" => {
-            gpio::oxx()
+            gpio::iwr()
         }
         "timing" => {
-            let kr = n[1..].rr(" ");
-            timing::per(&kr)
+            let ef = args[1..].join(" ");
+            timing::jbw(&ef)
         }
         "firmware" | "fw" => {
-            let kr = n[1..].rr(" ");
-            firmware::pgb(&kr)
+            let ef = args[1..].join(" ");
+            firmware::jdb(&ef)
         }
         "report" => {
-            report::tck()
+            report::fyi()
         }
         "dtb" => {
-            rdz()
+            knn()
         }
         "verify" => {
-            rke()
+            ktp()
         }
         "auto" => {
-            report::qlk()
+            report::jyk()
         }
         "help" | _ => {
             format!(
@@ -265,28 +265,28 @@ pub fn oaf(n: &[&str]) -> String {
 }
 
 
-fn ouh(e: &str) -> Option<u64> {
-    if e.cj("0x") || e.cj("0X") {
-        u64::wa(&e[2..], 16).bq()
+fn itt(j: &str) -> Option<u64> {
+    if j.starts_with("0x") || j.starts_with("0X") {
+        u64::from_str_radix(&j[2..], 16).ok()
     } else {
-        e.parse::<u64>().bq()
+        j.parse::<u64>().ok()
     }
 }
 
 
-fn rdz() -> String {
+fn knn() -> String {
     #[cfg(target_arch = "aarch64")]
     {
-        let bqh = crate::android_main::kry();
-        if bqh == 0 {
+        let dtb_addr = crate::android_main::ftl();
+        if dtb_addr == 0 {
             return String::from("\x01RDTB not available.\x01W No device tree was provided by the bootloader.\n\
                 Tip: DTB is passed automatically on Android/ARM boot.\n");
         }
         unsafe {
-            if let Some(bez) = dtb_parser::jis(bqh as *const u8) {
-                dtb_parser::nvp(&bez)
+            if let Some(parsed) = dtb_parser::ewg(dtb_addr as *const u8) {
+                dtb_parser::hzo(&parsed)
             } else {
-                format!("\x01RDTB parse error.\x01W The DTB at 0x{:X} appears corrupt.\n", bqh)
+                format!("\x01RDTB parse error.\x01W The DTB at 0x{:X} appears corrupt.\n", dtb_addr)
             }
         }
     }
@@ -305,103 +305,103 @@ fn rdz() -> String {
 
 
 
-fn rke() -> String {
-    let mut bd = String::new();
+fn ktp() -> String {
+    let mut out = String::new();
 
-    bd.t("\x01C== TrustProbe: DTB vs Reality Verification ==\x01W\n\n");
+    out.push_str("\x01C== TrustProbe: DTB vs Reality Verification ==\x01W\n\n");
 
     #[cfg(target_arch = "aarch64")]
     {
-        let bqh = crate::android_main::kry();
-        if bqh == 0 {
+        let dtb_addr = crate::android_main::ftl();
+        if dtb_addr == 0 {
             return String::from("\x01RNo DTB available.\x01W Cannot verify without Device Tree.\n");
         }
 
         unsafe {
-            if let Some(bez) = dtb_parser::jis(bqh as *const u8) {
-                bd.t(&format!("DTB Model: {}\n", bez.model));
-                bd.t(&format!("DTB declares {} devices with MMIO registers\n\n", bez.ik.len()));
+            if let Some(parsed) = dtb_parser::ewg(dtb_addr as *const u8) {
+                out.push_str(&format!("DTB Model: {}\n", parsed.model));
+                out.push_str(&format!("DTB declares {} devices with MMIO registers\n\n", parsed.devices.len()));
 
-                bd.t(&format!("{:<35} {:<14} {:<10} {:<10} {}\n",
+                out.push_str(&format!("{:<35} {:<14} {:<10} {:<10} {}\n",
                     "DEVICE", "ADDRESS", "DTB STATUS", "MMIO READ", "VERDICT"));
-                bd.t(&format!("{}\n", "-".afd(90)));
+                out.push_str(&format!("{}\n", "-".repeat(90)));
 
-                let mut lpx = 0u32;
-                let mut iwy = 0u32;
-                let mut iyh = 0u32;
-                let mut pqd = 0u32;
+                let mut gkn = 0u32;
+                let mut eog = 0u32;
+                let mut epd = 0u32;
+                let mut jjz = 0u32;
 
-                for ba in &bez.ik {
-                    if ba.cbi == 0 { continue; }
+                for s in &parsed.devices {
+                    if s.reg_base == 0 { continue; }
 
-                    let ptr = ba.cbi as *const u32;
-                    let duz = core::ptr::read_volatile(ptr);
+                    let ptr = s.reg_base as *const u32;
+                    let bom = core::ptr::read_volatile(ptr);
 
-                    let (igj, s) = if ba.status == "okay" || ba.status == "ok" {
-                        if duz == 0 || duz == 0xFFFFFFFF {
-                            iwy += 1;
+                    let (edq, color) = if s.status == "okay" || s.status == "ok" {
+                        if bom == 0 || bom == 0xFFFFFFFF {
+                            eog += 1;
                             ("GHOST (no response)", "\x01Y")
                         } else {
-                            lpx += 1;
+                            gkn += 1;
                             ("OK", "\x01G")
                         }
                     } else {
                         
-                        if duz != 0 && duz != 0xFFFFFFFF {
-                            iyh += 1;
+                        if bom != 0 && bom != 0xFFFFFFFF {
+                            epd += 1;
                             ("HIDDEN ACTIVE!", "\x01R")
                         } else {
-                            lpx += 1;
+                            gkn += 1;
                             ("Disabled (confirmed)", "\x01W")
                         }
                     };
 
                     
-                    let tzc = duz == 0xDEADBEEF 
-                        || duz == 0xFEEDFACE
-                        || (duz & 0xFF000000 == 0xAA000000);
-                    if tzc {
-                        pqd += 1;
+                    let mtu = bom == 0xDEADBEEF 
+                        || bom == 0xFEEDFACE
+                        || (bom & 0xFF000000 == 0xAA000000);
+                    if mtu {
+                        jjz += 1;
                     }
 
-                    let j = if ba.bjp.len() > 34 {
-                        &ba.bjp[..34]
+                    let name = if s.compatible.len() > 34 {
+                        &s.compatible[..34]
                     } else {
-                        &ba.bjp
+                        &s.compatible
                     };
 
-                    bd.t(&format!("{}{:<35}\x01W 0x{:010X}  {:<10} 0x{:08X} {}\n",
-                        s, j, ba.cbi, ba.status, duz, igj));
+                    out.push_str(&format!("{}{:<35}\x01W 0x{:010X}  {:<10} 0x{:08X} {}\n",
+                        color, name, s.reg_base, s.status, bom, edq));
                 }
 
-                bd.t(&format!("\n\x01C--- Verification Summary ---\x01W\n"));
-                bd.t(&format!("  \x01GConsistent:\x01W {}\n", lpx));
-                bd.t(&format!("  \x01YGhost (DTB says OK, no response):\x01W {}\n", iwy));
-                bd.t(&format!("  \x01RHidden Active (disabled but responds):\x01W {}\n", iyh));
-                bd.t(&format!("  \x01RSuspicious patterns:\x01W {}\n", pqd));
+                out.push_str(&format!("\n\x01C--- Verification Summary ---\x01W\n"));
+                out.push_str(&format!("  \x01GConsistent:\x01W {}\n", gkn));
+                out.push_str(&format!("  \x01YGhost (DTB says OK, no response):\x01W {}\n", eog));
+                out.push_str(&format!("  \x01RHidden Active (disabled but responds):\x01W {}\n", epd));
+                out.push_str(&format!("  \x01RSuspicious patterns:\x01W {}\n", jjz));
 
-                if iyh > 0 {
-                    bd.t(&format!("\n\x01R!! {} devices respond despite being marked disabled by firmware !!\x01W\n", iyh));
-                    bd.t("These could be:\n");
-                    bd.t("  - Debug interfaces left active by manufacturer\n");
-                    bd.t("  - Hardware the vendor tried to hide from Linux\n");
-                    bd.t("  - Security-sensitive peripherals (crypto, secure storage)\n");
+                if epd > 0 {
+                    out.push_str(&format!("\n\x01R!! {} devices respond despite being marked disabled by firmware !!\x01W\n", epd));
+                    out.push_str("These could be:\n");
+                    out.push_str("  - Debug interfaces left active by manufacturer\n");
+                    out.push_str("  - Hardware the vendor tried to hide from Linux\n");
+                    out.push_str("  - Security-sensitive peripherals (crypto, secure storage)\n");
                 }
 
-                if iwy > 0 {
-                    bd.t(&format!("\n\x01Y{} ghost devices: declared in DTB but don't respond.\x01W\n", iwy));
-                    bd.t("Possible causes: removed in silicon revision, fused off, or clock-gated.\n");
+                if eog > 0 {
+                    out.push_str(&format!("\n\x01Y{} ghost devices: declared in DTB but don't respond.\x01W\n", eog));
+                    out.push_str("Possible causes: removed in silicon revision, fused off, or clock-gated.\n");
                 }
             } else {
-                bd.t("\x01RDTB parse failed.\x01W\n");
+                out.push_str("\x01RDTB parse failed.\x01W\n");
             }
         }
     }
     #[cfg(not(target_arch = "aarch64"))]
     {
-        bd.t("DTB verification is for ARM/RISC-V platforms.\n");
-        bd.t("On x86_64, use 'hwscan mmio' to probe MMIO directly.\n");
+        out.push_str("DTB verification is for ARM/RISC-V platforms.\n");
+        out.push_str("On x86_64, use 'hwscan mmio' to probe MMIO directly.\n");
     }
 
-    bd
+    out
 }

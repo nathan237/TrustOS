@@ -3,21 +3,21 @@
 use alloc::string::String;
 
 #[derive(Clone)]
-pub struct Pw {
-    pub afc: usize,
-    pub wx: String,
-    pub jvj: u32,
-    pub gsc: bool,
+pub struct Gq {
+    pub memory_mb: usize,
+    pub cmdline: String,
+    pub vcpus: u32,
+    pub serial_console: bool,
     pub virtio_console: bool,
 }
 
-impl Default for Pw {
+impl Default for Gq {
     fn default() -> Self {
         Self {
-            afc: 64,
-            wx: String::new(),
-            jvj: 1,
-            gsc: false,
+            memory_mb: 64,
+            cmdline: String::new(),
+            vcpus: 1,
+            serial_console: false,
             virtio_console: false,
         }
     }
@@ -26,11 +26,11 @@ impl Default for Pw {
 pub struct LinuxVm;
 
 impl LinuxVm {
-    pub fn new(xyk: Pw) -> Result<Self, String> {
+    pub fn new(_config: Gq) -> Result<Self, String> {
         Err(String::from("Linux VM not available on this architecture"))
     }
 
-    pub fn boot(&mut self, qbl: &[u8], qcg: &[u8]) -> Result<(), String> {
+    pub fn boot(&mut self, _bzimage: &[u8], _initramfs: &[u8]) -> Result<(), String> {
         Err(String::from("Linux VM not available on this architecture"))
     }
 }

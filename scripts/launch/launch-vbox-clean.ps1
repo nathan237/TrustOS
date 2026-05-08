@@ -52,7 +52,7 @@ if ($LASTEXITCODE -ne 0) {
 
 # Step 4: Configure VM
 Write-Output "Step 4: Configure VM..."
-& $VBM modifyvm $VMName --memory 1024 --vram 128 --cpus 4 2>&1
+& $VBM modifyvm $VMName --memory 2048 --vram 128 --cpus 4 2>&1
 & $VBM modifyvm $VMName --firmware efi64 2>&1
 & $VBM modifyvm $VMName --graphicscontroller vboxsvga 2>&1
 & $VBM modifyvm $VMName --boot1 dvd --boot2 disk --boot3 none --boot4 none 2>&1

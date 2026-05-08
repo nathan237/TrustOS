@@ -86,7 +86,7 @@ pub fn export_wav(path: &str, samples: &[i16], sample_rate: u32, channels: u16) 
 
     // Write to VFS
     crate::vfs::write_file(path, &wav_data)
-        .map_error(|_| "Failed to write WAV file to VFS")?;
+        .map_err(|_| "Failed to write WAV file to VFS")?;
 
     crate::serial_println!("[TRUSTDAW] Exported WAV: {} ({} bytes, {} samples, {}Hz {}ch)",
         path, size, samples.len(), sample_rate, channels);
@@ -95,16 +95,16 @@ pub fn export_wav(path: &str, samples: &[i16], sample_rate: u32, channels: u16) 
 }
 
 /// Calculate WAV file size for a given number of stereo samples
-pub fn estimated_file_size(number_stereo_samples: usize) -> usize {
-    WAV_HEADER_SIZE + number_stereo_samples * 2 // 2 bytes per i16
+pub fn estimated_file_size(num_stereo_samples: usize) -> usize {
+    WAV_HEADER_SIZE + num_stereo_samples * 2 // 2 bytes per i16
 }
 
 /// Get human-readable duration info
 pub fn duration_information(number_samples: usize, sample_rate: u32, channels: u16) -> (u32, u32) {
     // Returns (seconds, milliseconds_remainder)
     let frames = number_samples / channels as usize;
-    let total_mouse = (frames as u64 * 1000) / sample_rate as u64;
-    let seconds = (total_mouse / 1000) as u32;
-    let mouse = (total_mouse % 1000) as u32;
-    (seconds, mouse)
+    let total_ms = (frames as u64 * 1000) / sample_rate as u64;
+    let seconds = (total_ms / 1000) as u32;
+    let ms = (total_ms % 1000) as u32;
+    (seconds, ms)
 }

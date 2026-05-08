@@ -18,126 +18,126 @@ use super::backprop::ModelGrads;
 
 pub struct AdamState {
     
-    pub ef: Vec<f32>,
+    pub m: Vec<f32>,
     
-    pub p: Vec<f32>,
+    pub v: Vec<f32>,
     
-    pub ab: u64,
+    pub t: u64,
     
-    pub aad: f32,
+    pub lr: f32,
     
-    pub ilk: f32,
+    pub beta1: f32,
     
-    pub ill: f32,
+    pub beta2: f32,
     
-    pub cel: f32,
+    pub eps: f32,
     
-    pub thh: f32,
+    pub grad_clip: f32,
     
-    pub pzf: f32,
+    pub weight_decay: f32,
 }
 
 impl AdamState {
     
-    pub fn new(vm: usize) -> Self {
+    pub fn new(param_count: usize) -> Self {
         AdamState {
-            ef: vec![0.0; vm],
-            p: vec![0.0; vm],
-            ab: 0,
-            aad: 0.001,
-            ilk: 0.9,
-            ill: 0.999,
-            cel: 1e-8,
-            thh: 1.0,
-            pzf: 0.01,
+            m: vec![0.0; param_count],
+            v: vec![0.0; param_count],
+            t: 0,
+            lr: 0.001,
+            beta1: 0.9,
+            beta2: 0.999,
+            eps: 1e-8,
+            grad_clip: 1.0,
+            weight_decay: 0.01,
         }
     }
 
     
-    pub fn mqt(vm: usize, aad: f32) -> Self {
-        let mut e = Self::new(vm);
-        e.aad = aad;
-        e
+    pub fn hck(param_count: usize, lr: f32) -> Self {
+        let mut j = Self::new(param_count);
+        j.lr = lr;
+        j
     }
 
     
-    pub fn gu(&mut self, model: &mut TransformerWeights, arg: &ModelGrads) {
-        self.ab += 1;
+    pub fn step(&mut self, model: &mut TransformerWeights, wg: &ModelGrads) {
+        self.t += 1;
 
         
-        let qof = 1.0 - owu(self.ilk, self.ab);
-        let cde = 1.0 - owu(self.ill, self.ab);
-        let cgb = self.aad / qof; 
+        let kar = 1.0 - ivr(self.beta1, self.t);
+        let apv = 1.0 - ivr(self.beta2, self.t);
+        let arl = self.lr / kar; 
 
-        let mut w = 0;
-
-        
-        self.cvb(&mut model.bpa, &arg.dfs, &mut w, cgb, cde);
+        let mut idx = 0;
 
         
-        self.cvb(&mut model.cgq, &arg.dfo, &mut w, cgb, cde);
+        self.update_slice(&mut model.token_embed, &wg.d_token_embed, &mut idx, arl, apv);
 
         
-        for dm in 0..AZ_ {
-            let bnk = &arg.my[dm];
-            let zv = &mut model.my[dm];
+        self.update_slice(&mut model.pos_embed, &wg.d_pos_embed, &mut idx, arl, apv);
 
-            self.cvb(&mut zv.cmh, &bnk.dfp, &mut w, cgb, cde);
-            self.cvb(&mut zv.biw, &bnk.dfx, &mut w, cgb, cde);
-            self.cvb(&mut zv.biu, &bnk.dfv, &mut w, cgb, cde);
-            self.cvb(&mut zv.bpg, &bnk.dfz, &mut w, cgb, cde);
-            self.cvb(&mut zv.biv, &bnk.dfw, &mut w, cgb, cde);
-            self.cvb(&mut zv.cmi, &bnk.dfq, &mut w, cgb, cde);
-            self.cvb(&mut zv.bit, &bnk.dfu, &mut w, cgb, cde);
-            self.cvb(&mut zv.bpf, &bnk.dfy, &mut w, cgb, cde);
-            self.cvb(&mut zv.bpe, &bnk.dft, &mut w, cgb, cde);
+        
+        for l in 0..BB_ {
+            let aie = &wg.layers[l];
+            let mo = &mut model.layers[l];
+
+            self.update_slice(&mut mo.rms_attn, &aie.d_rms_attn, &mut idx, arl, apv);
+            self.update_slice(&mut mo.w_q, &aie.d_wq, &mut idx, arl, apv);
+            self.update_slice(&mut mo.w_k, &aie.d_wk, &mut idx, arl, apv);
+            self.update_slice(&mut mo.w_v, &aie.d_wv, &mut idx, arl, apv);
+            self.update_slice(&mut mo.w_o, &aie.d_wo, &mut idx, arl, apv);
+            self.update_slice(&mut mo.rms_ffn, &aie.d_rms_ffn, &mut idx, arl, apv);
+            self.update_slice(&mut mo.w_gate, &aie.d_wgate, &mut idx, arl, apv);
+            self.update_slice(&mut mo.w_up, &aie.d_wup, &mut idx, arl, apv);
+            self.update_slice(&mut mo.w_down, &aie.d_wdown, &mut idx, arl, apv);
         }
 
         
-        self.cvb(&mut model.chg, &arg.dfr, &mut w, cgb, cde);
+        self.update_slice(&mut model.rms_final, &wg.d_rms_final, &mut idx, arl, apv);
 
         
-        self.cvb(&mut model.bft, &arg.dfn, &mut w, cgb, cde);
+        self.update_slice(&mut model.w_output, &wg.d_output, &mut idx, arl, apv);
     }
 
     
-    fn cvb(&mut self, bix: &mut [f32], arg: &[f32], w: &mut usize, cgb: f32, cde: f32) {
-        let pze = self.pzf;
-        let uio = self.aad; 
-        for a in 0..bix.len() {
-            let fb = *w + a;
-            if fb >= self.ef.len() { break; }
+    fn update_slice(&mut self, afx: &mut [f32], wg: &[f32], idx: &mut usize, arl: f32, apv: f32) {
+        let jqy = self.weight_decay;
+        let naz = self.lr; 
+        for i in 0..afx.len() {
+            let ay = *idx + i;
+            if ay >= self.m.len() { break; }
 
-            let at = arg[a];
-
-            
-            self.ef[fb] = self.ilk * self.ef[fb] + (1.0 - self.ilk) * at;
-            self.p[fb] = self.ill * self.p[fb] + (1.0 - self.ill) * at * at;
+            let g = wg[i];
 
             
-            let xqc = self.p[fb] / cde;
+            self.m[ay] = self.beta1 * self.m[ay] + (1.0 - self.beta1) * g;
+            self.v[ay] = self.beta2 * self.v[ay] + (1.0 - self.beta2) * g * g;
 
             
-            if pze > 0.0 {
-                bix[a] *= 1.0 - uio * pze;
+            let pqv = self.v[ay] / apv;
+
+            
+            if jqy > 0.0 {
+                afx[i] *= 1.0 - naz * jqy;
             }
 
             
-            bix[a] -= cgb * self.ef[fb] / (ccw(xqc) + self.cel);
+            afx[i] -= arl * self.m[ay] / (apq(pqv) + self.eps);
         }
-        *w += bix.len();
+        *idx += afx.len();
     }
 
     
-    pub fn apa(&mut self) {
-        for p in self.ef.el() { *p = 0.0; }
-        for p in self.p.el() { *p = 0.0; }
-        self.ab = 0;
+    pub fn reset(&mut self) {
+        for v in self.m.iter_mut() { *v = 0.0; }
+        for v in self.v.iter_mut() { *v = 0.0; }
+        self.t = 0;
     }
 
     
-    pub fn omv(&self) -> usize {
-        (self.ef.len() + self.p.len()) * 4
+    pub fn memory_bytes(&self) -> usize {
+        (self.m.len() + self.v.len()) * 4
     }
 }
 
@@ -152,58 +152,58 @@ impl AdamState {
 
 
 
-pub fn kkw(gu: u64, tk: u64, fbf: u64, lka: f32, eex: f32) -> f32 {
-    if tk == 0 { return lka; }
-    if gu < fbf {
+pub fn foo(step: u64, ix: u64, cfb: u64, lr_max: f32, buc: f32) -> f32 {
+    if ix == 0 { return lr_max; }
+    if step < cfb {
         
-        eex + (lka - eex) * (gu as f32 / fbf.am(1) as f32)
+        buc + (lr_max - buc) * (step as f32 / cfb.max(1) as f32)
     } else {
         
-        let ruc = tk.ao(fbf).am(1);
-        let li = (gu - fbf) as f32 / ruc as f32;
-        let li = if li > 1.0 { 1.0 } else { li };
-        eex + 0.5 * (lka - eex) * (1.0 + byz(li * 3.14159265))
+        let lcg = ix.saturating_sub(cfb).max(1);
+        let progress = (step - cfb) as f32 / lcg as f32;
+        let progress = if progress > 1.0 { 1.0 } else { progress };
+        buc + 0.5 * (lr_max - buc) * (1.0 + anx(progress * 3.14159265))
     }
 }
 
 
-fn byz(b: f32) -> f32 {
+fn anx(x: f32) -> f32 {
     
-    let akk = 3.14159265f32;
-    let mut q = b;
+    let pi = 3.14159265f32;
+    let mut a = x;
     
-    if q < 0.0 { q = -q; }
-    while q > 2.0 * akk { q -= 2.0 * akk; }
+    if a < 0.0 { a = -a; }
+    while a > 2.0 * pi { a -= 2.0 * pi; }
     
-    let ope = q > akk;
-    if ope { q -= akk; }
+    let ipk = a > pi;
+    if ipk { a -= pi; }
     
     
-    let bvy = akk * akk;
-    let ap = (bvy - 4.0 * q * q) / (bvy + q * q);
-    if ope { -ap } else { ap }
+    let ame = pi * pi;
+    let val = (ame - 4.0 * a * a) / (ame + a * a);
+    if ipk { -val } else { val }
 }
 
 
 
 
 
-fn ccw(b: f32) -> f32 {
-    if b <= 0.0 { return 0.0; }
-    let fs = b.bsr();
-    let anj = f32::bhb((fs >> 1) + 0x1FBD_1DF5);
-    (anj + b / anj) * 0.5
+fn apq(x: f32) -> f32 {
+    if x <= 0.0 { return 0.0; }
+    let bits = x.to_bits();
+    let uc = f32::from_bits((bits >> 1) + 0x1FBD_1DF5);
+    (uc + x / uc) * 0.5
 }
 
 
-fn owu(ar: f32, bgz: u64) -> f32 {
+fn ivr(base: f32, afe: u64) -> f32 {
     let mut result = 1.0f32;
-    let mut o = ar;
-    let mut aa = bgz;
-    while aa > 0 {
-        if aa & 1 == 1 { result *= o; }
-        o *= o;
-        aa >>= 1;
+    let mut b = base;
+    let mut e = afe;
+    while e > 0 {
+        if e & 1 == 1 { result *= b; }
+        b *= b;
+        e >>= 1;
     }
     result
 }

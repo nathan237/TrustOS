@@ -6,465 +6,465 @@
 use alloc::vec::Vec;
 use alloc::string::String;
 use core::sync::atomic::{AtomicU64, AtomicPtr, Ordering};
-use crate::elf::{Acr, ElfError, Ahr};
+use crate::elf::{Mm, ElfError, Os};
 use crate::memory::paging::{AddressSpace, PageFlags, UserMemoryRegion};
-use crate::memory::lr;
+use crate::memory::hhdm_offset;
 
 
-const AJN_: usize = 1024 * 1024;
-
-
-
-
-
-static CK_: AtomicPtr<AddressSpace> = AtomicPtr::new(core::ptr::null_mut());
-
-
-static FB_: AtomicU64 = AtomicU64::new(0);
-
-
-static GF_: AtomicU64 = AtomicU64::new(0);
-
-
-
-static BUQ_: spin::Mutex<()> = spin::Mutex::new(());
+const ALI_: usize = 1024 * 1024;
 
 
 
 
 
+static CP_: AtomicPtr<AddressSpace> = AtomicPtr::new(core::ptr::null_mut());
 
-pub fn jwy<G, Ac>(bb: G) -> Option<Ac>
+
+static FQ_: AtomicU64 = AtomicU64::new(0);
+
+
+static GW_: AtomicU64 = AtomicU64::new(0);
+
+
+
+static BXM_: spin::Mutex<()> = spin::Mutex::new(());
+
+
+
+
+
+
+pub fn ffh<F, U>(f: F) -> Option<U>
 where
-    G: FnOnce(&mut AddressSpace) -> Ac,
+    F: FnOnce(&mut AddressSpace) -> U,
 {
-    let ptr = CK_.load(Ordering::Acquire);
-    if ptr.abq() {
+    let ptr = CP_.load(Ordering::Acquire);
+    if ptr.is_null() {
         return None;
     }
     
     
-    Some(bb(unsafe { &mut *ptr }))
+    Some(f(unsafe { &mut *ptr }))
 }
 
 
-pub fn dfj() -> u64 {
-    FB_.load(Ordering::Relaxed)
+pub fn bfr() -> u64 {
+    FQ_.load(Ordering::Relaxed)
 }
 
 
-pub fn wio(den: u64) {
-    FB_.store(den, Ordering::SeqCst);
+pub fn oor(brk: u64) {
+    FQ_.store(brk, Ordering::SeqCst);
 }
 
 
-pub fn rsb() -> u64 {
-    GF_.load(Ordering::Relaxed)
+pub fn lap() -> u64 {
+    GW_.load(Ordering::Relaxed)
 }
 
 
 #[derive(Debug)]
 pub enum ExecResult {
     
-    Dx(i32),
+    Exited(i32),
     
-    In(&'static str),
+    Faulted(&'static str),
     
-    Xk(ElfError),
+    LoadError(ElfError),
     
-    Bf,
+    MemoryError,
 }
 
 
 
-pub fn sow(path: &str, cjc: &[&str], qbt: &[&str]) -> Result<(), ExecResult> {
-    match itf(path, cjc) {
-        ExecResult::Dx(0) => Ok(()),
-        gq => Err(gq),
+pub fn lsh(path: &str, argv: &[&str], _envp: &[&str]) -> Result<(), ExecResult> {
+    match elt(path, argv) {
+        ExecResult::Exited(0) => Ok(()),
+        other => Err(other),
     }
 }
 
 
-pub fn aqj(j: &str) -> Option<String> {
+pub fn resolve_path(name: &str) -> Option<String> {
     
-    if j.contains('/') {
+    if name.contains('/') {
         
-        if crate::vfs::hm(j).is_ok() {
-            return Some(String::from(j));
+        if crate::vfs::stat(name).is_ok() {
+            return Some(String::from(name));
         }
         return None;
     }
     
     
-    let hzf = ["/bin", "/usr/bin", "/sbin", "/usr/sbin", "/usr/local/bin"];
-    for te in &hzf {
-        let auh = alloc::format!("{}/{}", te, j);
-        if crate::vfs::hm(&auh).is_ok() {
-            return Some(auh);
+    let dyu = ["/bin", "/usr/bin", "/sbin", "/usr/sbin", "/usr/local/bin"];
+    for it in &dyu {
+        let xo = alloc::format!("{}/{}", it, name);
+        if crate::vfs::stat(&xo).is_ok() {
+            return Some(xo);
         }
     }
     None
 }
 
 
-fn qzr(f: &[u8]) -> Option<(String, String)> {
-    if f.len() < 4 || f[0] != b'#' || f[1] != b'!' {
+fn kjr(data: &[u8]) -> Option<(String, String)> {
+    if data.len() < 4 || data[0] != b'#' || data[1] != b'!' {
         return None;
     }
     
-    let ci = f.iter().qf(|&o| o == b'\n').unwrap_or(f.len().v(256));
-    let line = core::str::jg(&f[2..ci]).bq()?;
-    let line = line.em();
+    let end = data.iter().position(|&b| b == b'\n').unwrap_or(data.len().min(256));
+    let line = core::str::from_utf8(&data[2..end]).ok()?;
+    let line = line.trim();
     
-    let mut ek = line.eyv(2, ' ');
-    let ahp = ek.next()?.em();
-    if ahp.is_empty() { return None; }
-    Some((String::from(ahp), String::new()))
+    let mut au = line.splitn(2, ' ');
+    let interp = au.next()?.trim();
+    if interp.is_empty() { return None; }
+    Some((String::from(interp), String::new()))
 }
 
 
-pub fn itf(path: &str, n: &[&str]) -> ExecResult {
+pub fn elt(path: &str, args: &[&str]) -> ExecResult {
     crate::log!("[EXEC] Loading: {}", path);
     
     
-    let bhv = aqj(path).unwrap_or_else(|| String::from(path));
+    let afn = resolve_path(path).unwrap_or_else(|| String::from(path));
     
     
-    let elf = match crate::elf::ugx(&bhv) {
-        Ok(aa) => aa,
-        Err(aa) => {
+    let elf = match crate::elf::nac(&afn) {
+        Ok(e) => e,
+        Err(e) => {
             
-            if let Ok(f) = crate::vfs::mq(&bhv) {
-                if let Some((ahp, xzb)) = qzr(&f) {
+            if let Ok(data) = crate::vfs::read_file(&afn) {
+                if let Some((interp, _extra)) = kjr(&data) {
                     
-                    let mut opi = alloc::vec![ahp.as_str(), bhv.as_str()];
-                    opi.bk(n);
+                    let mut ipo = alloc::vec![interp.as_str(), afn.as_str()];
+                    ipo.extend_from_slice(args);
                     
-                    return itf(&ahp, &opi[1..]);
+                    return elt(&interp, &ipo[1..]);
                 }
             }
-            crate::log_error!("[EXEC] Failed to load ELF: {:?}", aa);
-            return ExecResult::Xk(aa);
+            crate::log_error!("[EXEC] Failed to load ELF: {:?}", e);
+            return ExecResult::LoadError(e);
         }
     };
     
-    nrk(&elf, n)
+    hwv(&elf, args)
 }
 
 
-pub fn soc(f: &[u8], n: &[&str]) -> ExecResult {
+pub fn lru(data: &[u8], args: &[&str]) -> ExecResult {
     
-    let elf = match crate::elf::ljf(f) {
-        Ok(aa) => aa,
-        Err(aa) => {
-            crate::log_error!("[EXEC] Failed to parse ELF: {:?}", aa);
-            return ExecResult::Xk(aa);
+    let elf = match crate::elf::gfw(data) {
+        Ok(e) => e,
+        Err(e) => {
+            crate::log_error!("[EXEC] Failed to parse ELF: {:?}", e);
+            return ExecResult::LoadError(e);
         }
     };
     
-    nrk(&elf, n)
+    hwv(&elf, args)
 }
 
 
-fn nrk(elf: &Acr, n: &[&str]) -> ExecResult {
-    crate::log!("[EXEC] Entry point: {:#x}", elf.mi);
-    crate::log!("[EXEC] Address range: {:#x} - {:#x}", elf.foj, elf.gmk);
+fn hwv(elf: &Mm, args: &[&str]) -> ExecResult {
+    crate::log!("[EXEC] Entry point: {:#x}", elf.entry_point);
+    crate::log!("[EXEC] Address range: {:#x} - {:#x}", elf.min_vaddr, elf.max_vaddr);
     
     
-    let mut ze = match AddressSpace::dtn() {
-        Some(q) => q,
+    let mut address_space = match AddressSpace::bnt() {
+        Some(a) => a,
         None => {
             crate::log_error!("[EXEC] Failed to create address space");
-            return ExecResult::Bf;
+            return ExecResult::MemoryError;
         }
     };
     
-    let hp = lr();
+    let bz = hhdm_offset();
     
     
-    for ie in &elf.jq {
-        let duc = ((ie.aw as usize + 4095) / 4096).am(1);
+    for segment in &elf.segments {
+        let boc = ((segment.size as usize + 4095) / 4096).max(1);
         
         crate::log_debug!("[EXEC] Mapping segment: vaddr={:#x}, size={}, pages={}", 
-            ie.uy, ie.aw, duc);
+            segment.vaddr, segment.size, boc);
         
-        for gor in 0..duc {
-            let vd = (ie.uy & !0xFFF) + (gor as u64 * 4096);
+        for dce in 0..boc {
+            let virt_addr = (segment.vaddr & !0xFFF) + (dce as u64 * 4096);
             
             
-            let fqs = match cja() {
-                Some(ai) => ai,
+            let coa = match asx() {
+                Some(aa) => aa,
                 None => {
                     crate::log_error!("[EXEC] Out of memory");
-                    return ExecResult::Bf;
+                    return ExecResult::MemoryError;
                 }
             };
             
             
-            let jbh = (ie.flags & 1) != 0;  
-            let rm = (ie.flags & 2) != 0; 
+            let erk = (segment.flags & 1) != 0;  
+            let is_write = (segment.flags & 2) != 0; 
             
-            let flags = if jbh {
-                PageFlags::JG_
-            } else if rm {
-                PageFlags::EW_
+            let flags = if erk {
+                PageFlags::JZ_
+            } else if is_write {
+                PageFlags::FM_
             } else {
-                PageFlags::DAC_
+                PageFlags::DDU_
             };
             
             
-            if ze.bnl(vd, fqs, flags).is_none() {
-                crate::log_error!("[EXEC] Failed to map page at {:#x}", vd);
-                return ExecResult::Bf;
+            if address_space.map_page(virt_addr, coa, flags).is_none() {
+                crate::log_error!("[EXEC] Failed to map page at {:#x}", virt_addr);
+                return ExecResult::MemoryError;
             }
             
             
-            let egd = fqs + hp;
-            let mdf = gor * 4096;
-            let nfx = mdf;
-            let ros = ((ie.f.len()).v(mdf + 4096)).am(mdf);
+            let page_virt = coa + bz;
+            let gtn = dce * 4096;
+            let hnq = gtn;
+            let kxr = ((segment.data.len()).min(gtn + 4096)).max(gtn);
             
-            if nfx < ie.f.len() {
-                let cy = &ie.f[nfx..ros];
-                let aac = unsafe {
-                    core::slice::bef(egd as *mut u8, 4096)
+            if hnq < segment.data.len() {
+                let src = &segment.data[hnq..kxr];
+                let mt = unsafe {
+                    core::slice::from_raw_parts_mut(page_virt as *mut u8, 4096)
                 };
-                aac[..cy.len()].dg(cy);
+                mt[..src.len()].copy_from_slice(src);
                 
-                for o in &mut aac[cy.len()..] {
-                    *o = 0;
+                for b in &mut mt[src.len()..] {
+                    *b = 0;
                 }
             } else {
                 
-                let aac = unsafe {
-                    core::slice::bef(egd as *mut u8, 4096)
+                let mt = unsafe {
+                    core::slice::from_raw_parts_mut(page_virt as *mut u8, 4096)
                 };
-                aac.vi(0);
+                mt.fill(0);
             }
         }
     }
     
     
-    if !elf.bwp.is_empty() {
-        crate::log_debug!("[EXEC] Applying {} relocations (base={:#x})", elf.bwp.len(), elf.sm);
-        for dbb in &elf.bwp {
-            let psa = dbb.l + elf.sm;
-            match dbb.fsp {
+    if !elf.relocations.is_empty() {
+        crate::log_debug!("[EXEC] Applying {} relocations (base={:#x})", elf.relocations.len(), elf.base_addr);
+        for bdg in &elf.relocations {
+            let jlq = bdg.offset + elf.base_addr;
+            match bdg.rel_type {
                 8 => {
                     
-                    let bn = elf.sm.cn(dbb.fcn as u64);
-                    if let Some(ht) = ze.dmr(psa) {
-                        unsafe { *((ht + hp) as *mut u64) = bn; }
+                    let value = elf.base_addr.wrapping_add(bdg.addend as u64);
+                    if let Some(phys) = address_space.translate(jlq) {
+                        unsafe { *((phys + bz) as *mut u64) = value; }
                     }
                 }
                 1 | 6 | 7 => {
                     
-                    let bn = elf.sm.cn(dbb.fcn as u64);
-                    if let Some(ht) = ze.dmr(psa) {
-                        unsafe { *((ht + hp) as *mut u64) = bn; }
+                    let value = elf.base_addr.wrapping_add(bdg.addend as u64);
+                    if let Some(phys) = address_space.translate(jlq) {
+                        unsafe { *((phys + bz) as *mut u64) = value; }
                     }
                 }
                 _ => {
-                    crate::log_debug!("[EXEC] Unsupported reloc type {}", dbb.fsp);
+                    crate::log_debug!("[EXEC] Unsupported reloc type {}", bdg.rel_type);
                 }
             }
         }
     }
     
     
-    let bfl = AJN_ / 4096;
-    let dce = UserMemoryRegion::PP_ - (bfl as u64 * 4096);
-    let thu = dce - 4096;
+    let aei = ALI_ / 4096;
+    let bdt = UserMemoryRegion::QM_ - (aei as u64 * 4096);
+    let mge = bdt - 4096;
     
-    crate::log_debug!("[EXEC] Guard page at {:#x}, stack: {:#x} - {:#x}", thu, dce, UserMemoryRegion::PP_);
-    
-    
+    crate::log_debug!("[EXEC] Guard page at {:#x}, stack: {:#x} - {:#x}", mge, bdt, UserMemoryRegion::QM_);
     
     
-    for a in 0..bfl {
-        let vd = dce + (a as u64 * 4096);
+    
+    
+    for i in 0..aei {
+        let virt_addr = bdt + (i as u64 * 4096);
         
-        let fqs = match cja() {
-            Some(ai) => ai,
+        let coa = match asx() {
+            Some(aa) => aa,
             None => {
                 crate::log_error!("[EXEC] Out of memory for stack");
-                return ExecResult::Bf;
+                return ExecResult::MemoryError;
             }
         };
         
         
-        let egd = fqs + hp;
+        let page_virt = coa + bz;
         unsafe {
-            core::ptr::ahx(egd as *mut u8, 0, 4096);
+            core::ptr::write_bytes(page_virt as *mut u8, 0, 4096);
         }
         
-        if ze.bnl(vd, fqs, PageFlags::EW_).is_none() {
-            crate::log_error!("[EXEC] Failed to map stack at {:#x}", vd);
-            return ExecResult::Bf;
+        if address_space.map_page(virt_addr, coa, PageFlags::FM_).is_none() {
+            crate::log_error!("[EXEC] Failed to map stack at {:#x}", virt_addr);
+            return ExecResult::MemoryError;
         }
     }
     
     
-    let mut sp = UserMemoryRegion::PP_;
+    let mut sp = UserMemoryRegion::QM_;
     
     
-    let mut kay: Vec<u64> = Vec::new();
-    for ji in n.iter().vv() {
-        let bf = ji.as_bytes();
-        sp -= (bf.len() as u64) + 1; 
+    let mut fhi: Vec<u64> = Vec::new();
+    for db in args.iter().rev() {
+        let bytes = db.as_bytes();
+        sp -= (bytes.len() as u64) + 1; 
         
-        let zpj = sp & !0xFFF;
-        let huc = (sp - dce) as usize;
-        let gor = huc / 4096;
-        if gor < bfl {
+        let qxn = sp & !0xFFF;
+        let glv = (sp - bdt) as usize;
+        let dce = glv / 4096;
+        if dce < aei {
             
             
-            if let Some(ht) = ze.dmr(sp) {
-                let aac = (ht + hp) as *mut u8;
+            if let Some(phys) = address_space.translate(sp) {
+                let mt = (phys + bz) as *mut u8;
                 unsafe {
-                    core::ptr::copy_nonoverlapping(bf.fq(), aac, bf.len());
-                    *aac.add(bf.len()) = 0; 
+                    core::ptr::copy_nonoverlapping(bytes.as_ptr(), mt, bytes.len());
+                    *mt.add(bytes.len()) = 0; 
                 }
             }
         }
-        kay.push(sp);
+        fhi.push(sp);
     }
-    kay.dbh(); 
+    fhi.reverse(); 
     
     
     sp &= !7;
     
     
     
-    let qlo: [(u64, u64); 7] = [
+    let jyo: [(u64, u64); 7] = [
         (6,  4096),                  
-        (3,  elf.foj + 0x40),  
+        (3,  elf.min_vaddr + 0x40),  
         (4,  56),                    
-        (5,  elf.jq.len() as u64), 
-        (9,  elf.mi),       
+        (5,  elf.segments.len() as u64), 
+        (9,  elf.entry_point),       
         (25, 0),                     
         (0,  0),                     
     ];
     
     
-    for &(gzf, qlv) in qlo.iter().vv() {
+    for &(dia, aval) in jyo.iter().rev() {
         sp -= 8;
-        if let Some(ht) = ze.dmr(sp) {
-            unsafe { *((ht + hp) as *mut u64) = qlv; }
+        if let Some(phys) = address_space.translate(sp) {
+            unsafe { *((phys + bz) as *mut u64) = aval; }
         }
         sp -= 8;
-        if let Some(ht) = ze.dmr(sp) {
-            unsafe { *((ht + hp) as *mut u64) = gzf; }
+        if let Some(phys) = address_space.translate(sp) {
+            unsafe { *((phys + bz) as *mut u64) = dia; }
         }
     }
     
     
     sp -= 8;
-    if let Some(ht) = ze.dmr(sp) {
-        unsafe { *((ht + hp) as *mut u64) = 0; }
+    if let Some(phys) = address_space.translate(sp) {
+        unsafe { *((phys + bz) as *mut u64) = 0; }
     }
     
     
     sp -= 8;
-    if let Some(ht) = ze.dmr(sp) {
-        unsafe { *((ht + hp) as *mut u64) = 0; }
+    if let Some(phys) = address_space.translate(sp) {
+        unsafe { *((phys + bz) as *mut u64) = 0; }
     }
     
     
-    for ag in kay.iter().vv() {
+    for addr in fhi.iter().rev() {
         sp -= 8;
-        if let Some(ht) = ze.dmr(sp) {
-            unsafe { *((ht + hp) as *mut u64) = *ag; }
+        if let Some(phys) = address_space.translate(sp) {
+            unsafe { *((phys + bz) as *mut u64) = *addr; }
         }
     }
-    let qkk = sp; 
+    let jxn = sp; 
     
     
     sp -= 8;
-    if let Some(ht) = ze.dmr(sp) {
-        unsafe { *((ht + hp) as *mut u64) = n.len() as u64; }
+    if let Some(phys) = address_space.translate(sp) {
+        unsafe { *((phys + bz) as *mut u64) = args.len() as u64; }
     }
     
     
     sp &= !0xF;
     
     crate::log!("[EXEC] Ready to execute at {:#x}, stack at {:#x} (argc={}, argv={:#x})", 
-        elf.mi, sp, n.len(), qkk);
+        elf.entry_point, sp, args.len(), jxn);
     
     
-    let vmh = n.fv().hu().unwrap_or("user");
-    let ce = crate::process::eys(vmh).unwrap_or(0);
-    let hvy = crate::process::aei();
+    let nyc = args.first().copied().unwrap_or("user");
+    let pid = crate::process::spawn(nyc).unwrap_or(0);
+    let dwv = crate::process::pe();
     
     
-    crate::process::wjf(ce, crate::process::MemoryLayout {
-        dez: elf.foj,
-        kjr: elf.gmk,
-        caa: UserMemoryRegion::CF_,
-        ecv: UserMemoryRegion::CF_,
-        ibo: dce,
-        ibm: UserMemoryRegion::PP_,
+    crate::process::opf(pid, crate::process::MemoryLayout {
+        code_start: elf.min_vaddr,
+        code_end: elf.max_vaddr,
+        heap_start: UserMemoryRegion::CH_,
+        heap_end: UserMemoryRegion::CH_,
+        stack_start: bdt,
+        stack_end: UserMemoryRegion::QM_,
         ..Default::default()
     });
     
     
-    let nz;
+    let exit_code;
     
     
-    crate::vfs::mfc();
+    crate::vfs::gul();
     
     
-    let qbv = BUQ_.lock();
+    let jsm = BXM_.lock();
     
     unsafe {
         
-        let ade: u64;
+        let kernel_cr3: u64;
         #[cfg(target_arch = "x86_64")]
-        core::arch::asm!("mov {}, cr3", bd(reg) ade);
+        core::arch::asm!("mov {}, cr3", out(reg) kernel_cr3);
         #[cfg(not(target_arch = "x86_64"))]
-        { ade = crate::arch::dle(); }
+        { kernel_cr3 = crate::arch::biw(); }
         
         
-        CK_.store(&mut ze as *mut AddressSpace, Ordering::Release);
-        FB_.store(UserMemoryRegion::CF_, Ordering::SeqCst);
-        GF_.store(dce, Ordering::SeqCst);
+        CP_.store(&mut address_space as *mut AddressSpace, Ordering::Release);
+        FQ_.store(UserMemoryRegion::CH_, Ordering::SeqCst);
+        GW_.store(bdt, Ordering::SeqCst);
         
         
-        crate::process::mhj(ce);
+        crate::process::gwd(pid);
         
         
-        ze.fci();
+        address_space.activate();
         
-        crate::log!("[EXEC] PID {} entering Ring 3 at {:#x}...", ce, elf.mi);
-        
-        
-        nz = crate::userland::eqa(elf.mi, sp);
+        crate::log!("[EXEC] PID {} entering Ring 3 at {:#x}...", pid, elf.entry_point);
         
         
-        CK_.store(core::ptr::null_mut(), Ordering::Release);
+        exit_code = crate::userland::bzn(elf.entry_point, sp);
+        
+        
+        CP_.store(core::ptr::null_mut(), Ordering::Release);
         
         
         #[cfg(target_arch = "x86_64")]
-        core::arch::asm!("mov cr3, {}", in(reg) ade, options(nostack, preserves_flags));
+        core::arch::asm!("mov cr3, {}", in(reg) kernel_cr3, options(nostack, preserves_flags));
         #[cfg(not(target_arch = "x86_64"))]
-        crate::arch::dnj(ade);
+        crate::arch::bkc(kernel_cr3);
     }
     
     
-    drop(qbv);
+    drop(jsm);
     
     
-    crate::process::eqi(ce, nz);
-    crate::process::lyd(ce);
+    crate::process::finish(pid, exit_code);
+    crate::process::gqo(pid);
     
     
-    crate::vfs::khv();
+    crate::vfs::flv();
     
     
-    crate::process::jos(hvy);
+    crate::process::faf(dwv);
     
-    crate::log!("[EXEC] PID {} exited with code {}", ce, nz);
-    ExecResult::Dx(nz)
+    crate::log!("[EXEC] PID {} exited with code {}", pid, exit_code);
+    ExecResult::Exited(exit_code)
 }
 
 
@@ -473,19 +473,19 @@ fn nrk(elf: &Acr, n: &[&str]) -> ExecResult {
 
 
 
-pub fn hil() -> ExecResult {
+pub fn doy() -> ExecResult {
     crate::log!("[EXEC] Running Ring 3 hello world test...");
     
     
-    let mut ze = match AddressSpace::dtn() {
-        Some(q) => q,
+    let mut address_space = match AddressSpace::bnt() {
+        Some(a) => a,
         None => {
             crate::log_error!("[EXEC] Failed to create address space");
-            return ExecResult::Bf;
+            return ExecResult::MemoryError;
         }
     };
     
-    let hp = lr();
+    let bz = hhdm_offset();
     
     
     
@@ -504,7 +504,7 @@ pub fn hil() -> ExecResult {
     
     
     
-    let psf: [u8; 63] = [
+    let jlt: [u8; 63] = [
         
         0x48, 0xC7, 0xC0, 0x01, 0x00, 0x00, 0x00,
         
@@ -529,80 +529,80 @@ pub fn hil() -> ExecResult {
     ];
     
     
-    let bgl: u64 = 0x400000;
-    let asn = match cja() {
-        Some(ai) => ai,
-        None => return ExecResult::Bf,
+    let aez: u64 = 0x400000;
+    let code_phys = match asx() {
+        Some(aa) => aa,
+        None => return ExecResult::MemoryError,
     };
     
-    crate::log!("[EXEC] Code page: phys={:#x}, vaddr={:#x}", asn, bgl);
+    crate::log!("[EXEC] Code page: phys={:#x}, vaddr={:#x}", code_phys, aez);
     
     
     unsafe {
-        let aac = (asn + hp) as *mut u8;
-        core::ptr::ahx(aac, 0, 4096); 
-        core::ptr::copy_nonoverlapping(psf.fq(), aac, psf.len());
+        let mt = (code_phys + bz) as *mut u8;
+        core::ptr::write_bytes(mt, 0, 4096); 
+        core::ptr::copy_nonoverlapping(jlt.as_ptr(), mt, jlt.len());
     }
     
     
-    if ze.bnl(bgl, asn, PageFlags::JG_).is_none() {
+    if address_space.map_page(aez, code_phys, PageFlags::JZ_).is_none() {
         crate::log_error!("[EXEC] Failed to map code page");
-        return ExecResult::Bf;
+        return ExecResult::MemoryError;
     }
     
     
-    let alt: u64 = 0x7FFFFFFF0000;
-    let bfl = 4;
-    let yvp = alt - (bfl as u64 + 1) * 4096;
+    let te: u64 = 0x7FFFFFFF0000;
+    let aei = 4;
+    let qjx = te - (aei as u64 + 1) * 4096;
     
     
-    for a in 0..bfl {
-        let uy = alt - (a as u64 + 1) * 4096;
-        let ht = match cja() {
-            Some(ai) => ai,
-            None => return ExecResult::Bf,
+    for i in 0..aei {
+        let vaddr = te - (i as u64 + 1) * 4096;
+        let phys = match asx() {
+            Some(aa) => aa,
+            None => return ExecResult::MemoryError,
         };
-        unsafe { core::ptr::ahx((ht + hp) as *mut u8, 0, 4096); }
+        unsafe { core::ptr::write_bytes((phys + bz) as *mut u8, 0, 4096); }
         
-        if ze.bnl(uy, ht, PageFlags::EW_).is_none() {
+        if address_space.map_page(vaddr, phys, PageFlags::FM_).is_none() {
             crate::log_error!("[EXEC] Failed to map stack page");
-            return ExecResult::Bf;
+            return ExecResult::MemoryError;
         }
     }
     
-    let ais = alt - 8; 
+    let user_stack = te - 8; 
     
-    crate::log!("[EXEC] Jumping to Ring 3 at {:#x}, stack at {:#x}", bgl, ais);
+    crate::log!("[EXEC] Jumping to Ring 3 at {:#x}, stack at {:#x}", aez, user_stack);
     
     
     unsafe {
-        let ade: u64;
+        let kernel_cr3: u64;
         #[cfg(target_arch = "x86_64")]
-        core::arch::asm!("mov {}, cr3", bd(reg) ade);
+        core::arch::asm!("mov {}, cr3", out(reg) kernel_cr3);
         #[cfg(not(target_arch = "x86_64"))]
-        { ade = crate::arch::dle(); }
+        { kernel_cr3 = crate::arch::biw(); }
         
         
-        CK_.store(&mut ze as *mut AddressSpace, Ordering::Release);
-        FB_.store(UserMemoryRegion::CF_, Ordering::SeqCst);
-        let xfb = alt - (bfl as u64 * 4096);
-        GF_.store(xfb, Ordering::SeqCst);
+        CP_.store(&mut address_space as *mut AddressSpace, Ordering::Release);
+        FQ_.store(UserMemoryRegion::CH_, Ordering::SeqCst);
+        let phm = te - (aei as u64 * 4096);
+        GW_.store(phm, Ordering::SeqCst);
         
-        ze.fci();
+        address_space.activate();
         
-        let nz = crate::userland::eqa(bgl, ais);
+        let exit_code = crate::userland::bzn(aez, user_stack);
         
         
-        CK_.store(core::ptr::null_mut(), Ordering::Release);
+        CP_.store(core::ptr::null_mut(), Ordering::Release);
         
         
         #[cfg(target_arch = "x86_64")]
-        core::arch::asm!("mov cr3, {}", in(reg) ade, options(nostack, preserves_flags));
+        core::arch::asm!("mov cr3, {}", in(reg) kernel_cr3, options(nostack, preserves_flags));
         #[cfg(not(target_arch = "x86_64"))]
-        crate::arch::dnj(ade);
+        crate::arch::bkc(kernel_cr3);
         
-        crate::log!("[EXEC] Ring 3 test exited with code {}", nz);
-        ExecResult::Dx(nz)
+        crate::log!("[EXEC] Ring 3 test exited with code {}", exit_code);
+        ExecResult::Exited(exit_code)
     }
 }
 
@@ -613,7 +613,7 @@ pub fn hil() -> ExecResult {
 
 
 
-pub static ADJ_: &[u8] = &{
+pub static AEZ_: &[u8] = &{
     
     let mut elf = [0u8; 183];
     
@@ -710,9 +710,9 @@ pub static ADJ_: &[u8] = &{
 };
 
 
-pub fn kui() -> ExecResult {
+pub fn fvl() -> ExecResult {
     crate::log!("[EXEC] Running embedded hello world ELF...");
-    soc(ADJ_, &[])
+    lru(AEZ_, &[])
 }
 
 
@@ -724,7 +724,7 @@ pub fn kui() -> ExecResult {
 
 
 
-pub fn nrl() -> ExecResult {
+pub fn hww() -> ExecResult {
     crate::log!("[EXEC] Running v0.3 memory test in Ring 3...");
 
     
@@ -738,7 +738,7 @@ pub fn nrl() -> ExecResult {
     
     
     
-    let omx: [u8; 194] = [
+    let inj: [u8; 194] = [
         
         0xB8, 0x0C, 0x00, 0x00, 0x00,                     
         0x31, 0xFF,                                         
@@ -805,80 +805,80 @@ pub fn nrl() -> ExecResult {
 
     
 
-    let mut ze = match AddressSpace::dtn() {
-        Some(q) => q,
+    let mut address_space = match AddressSpace::bnt() {
+        Some(a) => a,
         None => {
             crate::log_error!("[EXEC] Failed to create address space");
-            return ExecResult::Bf;
+            return ExecResult::MemoryError;
         }
     };
 
-    let hp = lr();
+    let bz = hhdm_offset();
 
     
-    let bgl: u64 = 0x400000;
-    let asn = match cja() {
-        Some(ai) => ai,
-        None => return ExecResult::Bf,
+    let aez: u64 = 0x400000;
+    let code_phys = match asx() {
+        Some(aa) => aa,
+        None => return ExecResult::MemoryError,
     };
     unsafe {
-        let aac = (asn + hp) as *mut u8;
-        core::ptr::ahx(aac, 0, 4096);
-        core::ptr::copy_nonoverlapping(omx.fq(), aac, omx.len());
+        let mt = (code_phys + bz) as *mut u8;
+        core::ptr::write_bytes(mt, 0, 4096);
+        core::ptr::copy_nonoverlapping(inj.as_ptr(), mt, inj.len());
     }
-    if ze.bnl(bgl, asn, PageFlags::JG_).is_none() {
-        return ExecResult::Bf;
+    if address_space.map_page(aez, code_phys, PageFlags::JZ_).is_none() {
+        return ExecResult::MemoryError;
     }
 
     
-    let alt: u64 = 0x7FFFFFFF0000;
-    let bfl = 4;
-    for a in 0..bfl {
-        let uy = alt - (a as u64 + 1) * 4096;
-        let ht = match cja() {
-            Some(ai) => ai,
-            None => return ExecResult::Bf,
+    let te: u64 = 0x7FFFFFFF0000;
+    let aei = 4;
+    for i in 0..aei {
+        let vaddr = te - (i as u64 + 1) * 4096;
+        let phys = match asx() {
+            Some(aa) => aa,
+            None => return ExecResult::MemoryError,
         };
-        unsafe { core::ptr::ahx((ht + hp) as *mut u8, 0, 4096); }
-        if ze.bnl(uy, ht, PageFlags::EW_).is_none() {
-            return ExecResult::Bf;
+        unsafe { core::ptr::write_bytes((phys + bz) as *mut u8, 0, 4096); }
+        if address_space.map_page(vaddr, phys, PageFlags::FM_).is_none() {
+            return ExecResult::MemoryError;
         }
     }
 
-    let ais = alt - 8;
+    let user_stack = te - 8;
 
-    crate::log!("[EXEC] memtest: code at {:#x}, stack at {:#x}", bgl, ais);
+    crate::log!("[EXEC] memtest: code at {:#x}, stack at {:#x}", aez, user_stack);
 
     unsafe {
-        let ade: u64;
+        let kernel_cr3: u64;
         #[cfg(target_arch = "x86_64")]
-        core::arch::asm!("mov {}, cr3", bd(reg) ade);
+        core::arch::asm!("mov {}, cr3", out(reg) kernel_cr3);
         #[cfg(not(target_arch = "x86_64"))]
-        { ade = crate::arch::dle(); }
+        { kernel_cr3 = crate::arch::biw(); }
 
         
-        CK_.store(&mut ze as *mut AddressSpace, Ordering::Release);
-        FB_.store(UserMemoryRegion::CF_, Ordering::SeqCst);
-        let eiy = alt - (bfl as u64 * 4096);
-        GF_.store(eiy, Ordering::SeqCst);
+        CP_.store(&mut address_space as *mut AddressSpace, Ordering::Release);
+        FQ_.store(UserMemoryRegion::CH_, Ordering::SeqCst);
+        let bvx = te - (aei as u64 * 4096);
+        GW_.store(bvx, Ordering::SeqCst);
 
-        ze.fci();
-        let nz = crate::userland::eqa(bgl, ais);
+        address_space.activate();
+        let exit_code = crate::userland::bzn(aez, user_stack);
 
-        CK_.store(core::ptr::null_mut(), Ordering::Release);
+        CP_.store(core::ptr::null_mut(), Ordering::Release);
         #[cfg(target_arch = "x86_64")]
-        core::arch::asm!("mov cr3, {}", in(reg) ade, options(nostack, preserves_flags));
+        core::arch::asm!("mov cr3, {}", in(reg) kernel_cr3, options(nostack, preserves_flags));
         #[cfg(not(target_arch = "x86_64"))]
-        crate::arch::dnj(ade);
+        crate::arch::bkc(kernel_cr3);
 
-        crate::log!("[EXEC] memtest exited with code {}", nz);
-        ExecResult::Dx(nz)
+        crate::log!("[EXEC] memtest exited with code {}", exit_code);
+        ExecResult::Exited(exit_code)
     }
 }
 
 
-fn cja() -> Option<u64> {
-    crate::memory::frame::azg()
+fn asx() -> Option<u64> {
+    crate::memory::frame::aan()
 }
 
 
@@ -886,18 +886,18 @@ fn cja() -> Option<u64> {
 
 
 
-pub fn nrm() -> ExecResult {
+pub fn hwx() -> ExecResult {
     crate::log!("[EXEC] Running Ring 3 IPC pipe test...");
 
-    let mut ze = match AddressSpace::dtn() {
-        Some(q) => q,
+    let mut address_space = match AddressSpace::bnt() {
+        Some(a) => a,
         None => {
             crate::log_error!("[EXEC] Failed to create address space");
-            return ExecResult::Bf;
+            return ExecResult::MemoryError;
         }
     };
 
-    let hp = lr();
+    let bz = hhdm_offset();
 
     
     
@@ -938,7 +938,7 @@ pub fn nrm() -> ExecResult {
     
     
     
-    let ovu: [u8; 138] = [
+    let iuz: [u8; 138] = [
         
         0x48, 0x83, 0xEC, 0x10,
         
@@ -993,62 +993,62 @@ pub fn nrm() -> ExecResult {
     ];
 
     
-    let bgl: u64 = 0x400000;
-    let asn = match cja() {
-        Some(ai) => ai,
-        None => return ExecResult::Bf,
+    let aez: u64 = 0x400000;
+    let code_phys = match asx() {
+        Some(aa) => aa,
+        None => return ExecResult::MemoryError,
     };
     unsafe {
-        let aac = (asn + hp) as *mut u8;
-        core::ptr::ahx(aac, 0, 4096);
-        core::ptr::copy_nonoverlapping(ovu.fq(), aac, ovu.len());
+        let mt = (code_phys + bz) as *mut u8;
+        core::ptr::write_bytes(mt, 0, 4096);
+        core::ptr::copy_nonoverlapping(iuz.as_ptr(), mt, iuz.len());
     }
-    if ze.bnl(bgl, asn, PageFlags::JG_).is_none() {
-        return ExecResult::Bf;
+    if address_space.map_page(aez, code_phys, PageFlags::JZ_).is_none() {
+        return ExecResult::MemoryError;
     }
 
     
-    let alt: u64 = 0x7FFFFFFF0000;
-    let bfl = 4;
-    for a in 0..bfl {
-        let uy = alt - (a as u64 + 1) * 4096;
-        let ht = match cja() {
-            Some(ai) => ai,
-            None => return ExecResult::Bf,
+    let te: u64 = 0x7FFFFFFF0000;
+    let aei = 4;
+    for i in 0..aei {
+        let vaddr = te - (i as u64 + 1) * 4096;
+        let phys = match asx() {
+            Some(aa) => aa,
+            None => return ExecResult::MemoryError,
         };
-        unsafe { core::ptr::ahx((ht + hp) as *mut u8, 0, 4096); }
-        if ze.bnl(uy, ht, PageFlags::EW_).is_none() {
-            return ExecResult::Bf;
+        unsafe { core::ptr::write_bytes((phys + bz) as *mut u8, 0, 4096); }
+        if address_space.map_page(vaddr, phys, PageFlags::FM_).is_none() {
+            return ExecResult::MemoryError;
         }
     }
 
-    let ais = alt - 8;
+    let user_stack = te - 8;
 
-    crate::log!("[EXEC] pipe_test: code at {:#x}, stack at {:#x}", bgl, ais);
+    crate::log!("[EXEC] pipe_test: code at {:#x}, stack at {:#x}", aez, user_stack);
 
     unsafe {
-        let ade: u64;
+        let kernel_cr3: u64;
         #[cfg(target_arch = "x86_64")]
-        core::arch::asm!("mov {}, cr3", bd(reg) ade);
+        core::arch::asm!("mov {}, cr3", out(reg) kernel_cr3);
         #[cfg(not(target_arch = "x86_64"))]
-        { ade = crate::arch::dle(); }
+        { kernel_cr3 = crate::arch::biw(); }
 
-        CK_.store(&mut ze as *mut AddressSpace, Ordering::Release);
-        FB_.store(UserMemoryRegion::CF_, Ordering::SeqCst);
-        let eiy = alt - (bfl as u64 * 4096);
-        GF_.store(eiy, Ordering::SeqCst);
+        CP_.store(&mut address_space as *mut AddressSpace, Ordering::Release);
+        FQ_.store(UserMemoryRegion::CH_, Ordering::SeqCst);
+        let bvx = te - (aei as u64 * 4096);
+        GW_.store(bvx, Ordering::SeqCst);
 
-        ze.fci();
-        let nz = crate::userland::eqa(bgl, ais);
+        address_space.activate();
+        let exit_code = crate::userland::bzn(aez, user_stack);
 
-        CK_.store(core::ptr::null_mut(), Ordering::Release);
+        CP_.store(core::ptr::null_mut(), Ordering::Release);
         #[cfg(target_arch = "x86_64")]
-        core::arch::asm!("mov cr3, {}", in(reg) ade, options(nostack, preserves_flags));
+        core::arch::asm!("mov cr3, {}", in(reg) kernel_cr3, options(nostack, preserves_flags));
         #[cfg(not(target_arch = "x86_64"))]
-        crate::arch::dnj(ade);
+        crate::arch::bkc(kernel_cr3);
 
-        crate::log!("[EXEC] pipe_test exited with code {}", nz);
-        ExecResult::Dx(nz)
+        crate::log!("[EXEC] pipe_test exited with code {}", exit_code);
+        ExecResult::Exited(exit_code)
     }
 }
 
@@ -1059,80 +1059,80 @@ pub fn nrm() -> ExecResult {
 
 
 
-pub fn sod() -> ExecResult {
+pub fn lrv() -> ExecResult {
     crate::log!("[EXEC] Running exception safety test (UD2 in Ring 3)...");
 
-    let mut ze = match AddressSpace::dtn() {
-        Some(q) => q,
-        None => return ExecResult::Bf,
+    let mut address_space = match AddressSpace::bnt() {
+        Some(a) => a,
+        None => return ExecResult::MemoryError,
     };
-    let hp = lr();
+    let bz = hhdm_offset();
 
     
     
     
-    let aj: [u8; 4] = [
+    let code: [u8; 4] = [
         0x0F, 0x0B,  
         0xEB, 0xFE,  
     ];
 
-    let bgl: u64 = 0x400000;
-    let asn = match cja() {
-        Some(ai) => ai,
-        None => return ExecResult::Bf,
+    let aez: u64 = 0x400000;
+    let code_phys = match asx() {
+        Some(aa) => aa,
+        None => return ExecResult::MemoryError,
     };
     unsafe {
-        let aac = (asn + hp) as *mut u8;
-        core::ptr::ahx(aac, 0, 4096);
-        core::ptr::copy_nonoverlapping(aj.fq(), aac, aj.len());
+        let mt = (code_phys + bz) as *mut u8;
+        core::ptr::write_bytes(mt, 0, 4096);
+        core::ptr::copy_nonoverlapping(code.as_ptr(), mt, code.len());
     }
-    if ze.bnl(bgl, asn, PageFlags::JG_).is_none() {
-        return ExecResult::Bf;
+    if address_space.map_page(aez, code_phys, PageFlags::JZ_).is_none() {
+        return ExecResult::MemoryError;
     }
 
-    let alt: u64 = 0x7FFFFFFF0000;
-    let bfl = 4usize;
-    for a in 0..bfl {
-        let uy = alt - (a as u64 + 1) * 4096;
-        let ht = match cja() { Some(ai) => ai, None => return ExecResult::Bf };
-        unsafe { core::ptr::ahx((ht + hp) as *mut u8, 0, 4096); }
-        if ze.bnl(uy, ht, PageFlags::EW_).is_none() {
-            return ExecResult::Bf;
+    let te: u64 = 0x7FFFFFFF0000;
+    let aei = 4usize;
+    for i in 0..aei {
+        let vaddr = te - (i as u64 + 1) * 4096;
+        let phys = match asx() { Some(aa) => aa, None => return ExecResult::MemoryError };
+        unsafe { core::ptr::write_bytes((phys + bz) as *mut u8, 0, 4096); }
+        if address_space.map_page(vaddr, phys, PageFlags::FM_).is_none() {
+            return ExecResult::MemoryError;
         }
     }
-    let ais = alt - 8;
+    let user_stack = te - 8;
 
     unsafe {
-        let ade: u64;
+        let kernel_cr3: u64;
         #[cfg(target_arch = "x86_64")]
-        core::arch::asm!("mov {}, cr3", bd(reg) ade);
+        core::arch::asm!("mov {}, cr3", out(reg) kernel_cr3);
         #[cfg(not(target_arch = "x86_64"))]
-        { ade = crate::arch::dle(); }
-        CK_.store(&mut ze as *mut AddressSpace, Ordering::Release);
-        FB_.store(UserMemoryRegion::CF_, Ordering::SeqCst);
-        GF_.store(alt - (bfl as u64 * 4096), Ordering::SeqCst);
-        ze.fci();
-        let nz = crate::userland::eqa(bgl, ais);
-        CK_.store(core::ptr::null_mut(), Ordering::Release);
+        { kernel_cr3 = crate::arch::biw(); }
+        CP_.store(&mut address_space as *mut AddressSpace, Ordering::Release);
+        FQ_.store(UserMemoryRegion::CH_, Ordering::SeqCst);
+        GW_.store(te - (aei as u64 * 4096), Ordering::SeqCst);
+        address_space.activate();
+        let exit_code = crate::userland::bzn(aez, user_stack);
+        CP_.store(core::ptr::null_mut(), Ordering::Release);
         #[cfg(target_arch = "x86_64")]
-        core::arch::asm!("mov cr3, {}", in(reg) ade, options(nostack, preserves_flags));
+        core::arch::asm!("mov cr3, {}", in(reg) kernel_cr3, options(nostack, preserves_flags));
         #[cfg(not(target_arch = "x86_64"))]
-        crate::arch::dnj(ade);
-        crate::log!("[EXEC] exception_safety_test exited with code {}", nz);
-        ExecResult::Dx(nz)
+        crate::arch::bkc(kernel_cr3);
+        crate::log!("[EXEC] exception_safety_test exited with code {}", exit_code);
+        ExecResult::Exited(exit_code)
     }
 }
 
 
 
-pub fn soh() -> ExecResult {
+pub fn lry() -> ExecResult {
     crate::log!("[EXEC] Running signal syscall test...");
 
-    let mut ze = match AddressSpace::dtn() {
-        Some(q) => q,
-        None => return ExecResult::Bf,
+    let mut address_space = match AddressSpace::bnt() {
+        Some(a) => a,
+        None => return ExecResult::MemoryError,
     };
-    let hp = lr();
+    let bz = hhdm_offset();
 
     
     
@@ -1143,8 +1143,8 @@ pub fn soh() -> ExecResult {
     
     
     
-    #[rustfmt::chz]
-    let aj: [u8; 158] = [
+    #[rustfmt::skip]
+    let code: [u8; 158] = [
         
         0xB8, 0x27, 0x00, 0x00, 0x00,              
         0x0F, 0x05,                                  
@@ -1194,77 +1194,77 @@ pub fn soh() -> ExecResult {
         b'S', b'I', b'G', b' ', b'F', b'A', b'I', b'L', b'\n', 
     ];
 
-    let bgl: u64 = 0x400000;
-    let asn = match cja() {
-        Some(ai) => ai,
-        None => return ExecResult::Bf,
+    let aez: u64 = 0x400000;
+    let code_phys = match asx() {
+        Some(aa) => aa,
+        None => return ExecResult::MemoryError,
     };
     unsafe {
-        let aac = (asn + hp) as *mut u8;
-        core::ptr::ahx(aac, 0, 4096);
-        core::ptr::copy_nonoverlapping(aj.fq(), aac, aj.len());
+        let mt = (code_phys + bz) as *mut u8;
+        core::ptr::write_bytes(mt, 0, 4096);
+        core::ptr::copy_nonoverlapping(code.as_ptr(), mt, code.len());
     }
-    if ze.bnl(bgl, asn, PageFlags::JG_).is_none() {
-        return ExecResult::Bf;
+    if address_space.map_page(aez, code_phys, PageFlags::JZ_).is_none() {
+        return ExecResult::MemoryError;
     }
 
-    let alt: u64 = 0x7FFFFFFF0000;
-    let bfl = 4usize;
-    for a in 0..bfl {
-        let uy = alt - (a as u64 + 1) * 4096;
-        let ht = match cja() { Some(ai) => ai, None => return ExecResult::Bf };
-        unsafe { core::ptr::ahx((ht + hp) as *mut u8, 0, 4096); }
-        if ze.bnl(uy, ht, PageFlags::EW_).is_none() {
-            return ExecResult::Bf;
+    let te: u64 = 0x7FFFFFFF0000;
+    let aei = 4usize;
+    for i in 0..aei {
+        let vaddr = te - (i as u64 + 1) * 4096;
+        let phys = match asx() { Some(aa) => aa, None => return ExecResult::MemoryError };
+        unsafe { core::ptr::write_bytes((phys + bz) as *mut u8, 0, 4096); }
+        if address_space.map_page(vaddr, phys, PageFlags::FM_).is_none() {
+            return ExecResult::MemoryError;
         }
     }
-    let ais = alt - 8;
+    let user_stack = te - 8;
 
     
-    let ce = crate::process::eys("signal_test").unwrap_or(0);
-    let hvy = crate::process::aei();
+    let pid = crate::process::spawn("signal_test").unwrap_or(0);
+    let dwv = crate::process::pe();
 
     
-    crate::vfs::mfc();
+    crate::vfs::gul();
 
-    let nz;
+    let exit_code;
     unsafe {
-        let ade: u64;
+        let kernel_cr3: u64;
         #[cfg(target_arch = "x86_64")]
-        core::arch::asm!("mov {}, cr3", bd(reg) ade);
+        core::arch::asm!("mov {}, cr3", out(reg) kernel_cr3);
         #[cfg(not(target_arch = "x86_64"))]
-        { ade = crate::arch::dle(); }
-        CK_.store(&mut ze as *mut AddressSpace, Ordering::Release);
-        FB_.store(UserMemoryRegion::CF_, Ordering::SeqCst);
-        GF_.store(alt - (bfl as u64 * 4096), Ordering::SeqCst);
-        crate::process::mhj(ce);
-        ze.fci();
-        nz = crate::userland::eqa(bgl, ais);
-        CK_.store(core::ptr::null_mut(), Ordering::Release);
+        { kernel_cr3 = crate::arch::biw(); }
+        CP_.store(&mut address_space as *mut AddressSpace, Ordering::Release);
+        FQ_.store(UserMemoryRegion::CH_, Ordering::SeqCst);
+        GW_.store(te - (aei as u64 * 4096), Ordering::SeqCst);
+        crate::process::gwd(pid);
+        address_space.activate();
+        exit_code = crate::userland::bzn(aez, user_stack);
+        CP_.store(core::ptr::null_mut(), Ordering::Release);
         #[cfg(target_arch = "x86_64")]
-        core::arch::asm!("mov cr3, {}", in(reg) ade, options(nostack, preserves_flags));
+        core::arch::asm!("mov cr3, {}", in(reg) kernel_cr3, options(nostack, preserves_flags));
         #[cfg(not(target_arch = "x86_64"))]
-        crate::arch::dnj(ade);
+        crate::arch::bkc(kernel_cr3);
     }
 
-    crate::process::eqi(ce, nz);
-    crate::process::lyd(ce);
-    crate::vfs::khv();
-    crate::process::jos(hvy);
-    crate::log!("[EXEC] signal_test exited with code {}", nz);
-    ExecResult::Dx(nz)
+    crate::process::finish(pid, exit_code);
+    crate::process::gqo(pid);
+    crate::vfs::flv();
+    crate::process::faf(dwv);
+    crate::log!("[EXEC] signal_test exited with code {}", exit_code);
+    ExecResult::Exited(exit_code)
 }
 
 
 
-pub fn soi() -> ExecResult {
+pub fn lrz() -> ExecResult {
     crate::log!("[EXEC] Running stdio/time test...");
 
-    let mut ze = match AddressSpace::dtn() {
-        Some(q) => q,
-        None => return ExecResult::Bf,
+    let mut address_space = match AddressSpace::bnt() {
+        Some(a) => a,
+        None => return ExecResult::MemoryError,
     };
-    let hp = lr();
+    let bz = hhdm_offset();
 
     
     
@@ -1274,8 +1274,8 @@ pub fn soi() -> ExecResult {
     
     
     
-    #[rustfmt::chz]
-    let aj: [u8; 121] = [
+    #[rustfmt::skip]
+    let code: [u8; 121] = [
         
         0xB8, 0x27, 0x00, 0x00, 0x00,              
         0x0F, 0x05,                                  
@@ -1315,78 +1315,78 @@ pub fn soi() -> ExecResult {
         b'I', b'O', b' ', b'F', b'A', b'I', b'L', b'\n',      
     ];
 
-    let bgl: u64 = 0x400000;
-    let asn = match cja() {
-        Some(ai) => ai,
-        None => return ExecResult::Bf,
+    let aez: u64 = 0x400000;
+    let code_phys = match asx() {
+        Some(aa) => aa,
+        None => return ExecResult::MemoryError,
     };
     unsafe {
-        let aac = (asn + hp) as *mut u8;
-        core::ptr::ahx(aac, 0, 4096);
-        core::ptr::copy_nonoverlapping(aj.fq(), aac, aj.len());
+        let mt = (code_phys + bz) as *mut u8;
+        core::ptr::write_bytes(mt, 0, 4096);
+        core::ptr::copy_nonoverlapping(code.as_ptr(), mt, code.len());
     }
-    if ze.bnl(bgl, asn, PageFlags::JG_).is_none() {
-        return ExecResult::Bf;
+    if address_space.map_page(aez, code_phys, PageFlags::JZ_).is_none() {
+        return ExecResult::MemoryError;
     }
 
-    let alt: u64 = 0x7FFFFFFF0000;
-    let bfl = 4usize;
-    for a in 0..bfl {
-        let uy = alt - (a as u64 + 1) * 4096;
-        let ht = match cja() { Some(ai) => ai, None => return ExecResult::Bf };
-        unsafe { core::ptr::ahx((ht + hp) as *mut u8, 0, 4096); }
-        if ze.bnl(uy, ht, PageFlags::EW_).is_none() {
-            return ExecResult::Bf;
+    let te: u64 = 0x7FFFFFFF0000;
+    let aei = 4usize;
+    for i in 0..aei {
+        let vaddr = te - (i as u64 + 1) * 4096;
+        let phys = match asx() { Some(aa) => aa, None => return ExecResult::MemoryError };
+        unsafe { core::ptr::write_bytes((phys + bz) as *mut u8, 0, 4096); }
+        if address_space.map_page(vaddr, phys, PageFlags::FM_).is_none() {
+            return ExecResult::MemoryError;
         }
     }
-    let ais = alt - 8;
+    let user_stack = te - 8;
 
     
-    let ce = crate::process::eys("stdio_test").unwrap_or(0);
-    let hvy = crate::process::aei();
+    let pid = crate::process::spawn("stdio_test").unwrap_or(0);
+    let dwv = crate::process::pe();
 
     
-    crate::vfs::mfc();
+    crate::vfs::gul();
 
-    let nz;
+    let exit_code;
     unsafe {
-        let ade: u64;
+        let kernel_cr3: u64;
         #[cfg(target_arch = "x86_64")]
-        core::arch::asm!("mov {}, cr3", bd(reg) ade);
+        core::arch::asm!("mov {}, cr3", out(reg) kernel_cr3);
         #[cfg(not(target_arch = "x86_64"))]
-        { ade = crate::arch::dle(); }
-        CK_.store(&mut ze as *mut AddressSpace, Ordering::Release);
-        FB_.store(UserMemoryRegion::CF_, Ordering::SeqCst);
-        GF_.store(alt - (bfl as u64 * 4096), Ordering::SeqCst);
-        crate::process::mhj(ce);
-        ze.fci();
-        nz = crate::userland::eqa(bgl, ais);
-        CK_.store(core::ptr::null_mut(), Ordering::Release);
+        { kernel_cr3 = crate::arch::biw(); }
+        CP_.store(&mut address_space as *mut AddressSpace, Ordering::Release);
+        FQ_.store(UserMemoryRegion::CH_, Ordering::SeqCst);
+        GW_.store(te - (aei as u64 * 4096), Ordering::SeqCst);
+        crate::process::gwd(pid);
+        address_space.activate();
+        exit_code = crate::userland::bzn(aez, user_stack);
+        CP_.store(core::ptr::null_mut(), Ordering::Release);
         #[cfg(target_arch = "x86_64")]
-        core::arch::asm!("mov cr3, {}", in(reg) ade, options(nostack, preserves_flags));
+        core::arch::asm!("mov cr3, {}", in(reg) kernel_cr3, options(nostack, preserves_flags));
         #[cfg(not(target_arch = "x86_64"))]
-        crate::arch::dnj(ade);
+        crate::arch::bkc(kernel_cr3);
     }
 
-    crate::process::eqi(ce, nz);
-    crate::process::lyd(ce);
-    crate::vfs::khv();
-    crate::process::jos(hvy);
-    crate::log!("[EXEC] stdio_test exited with code {}", nz);
-    ExecResult::Dx(nz)
+    crate::process::finish(pid, exit_code);
+    crate::process::gqo(pid);
+    crate::vfs::flv();
+    crate::process::faf(dwv);
+    crate::log!("[EXEC] stdio_test exited with code {}", exit_code);
+    ExecResult::Exited(exit_code)
 }
 
 
-pub fn clc(path: &str) -> bool {
-    let da = match crate::vfs::aji(path, crate::vfs::OpenFlags(0)) {
-        Ok(da) => da,
+pub fn is_executable(path: &str) -> bool {
+    let fd = match crate::vfs::open(path, crate::vfs::OpenFlags(0)) {
+        Ok(fd) => fd,
         Err(_) => return false,
     };
     
-    let mut sj = [0u8; 4];
-    let result = crate::vfs::read(da, &mut sj).is_ok() 
-        && sj == [0x7F, b'E', b'L', b'F'];
+    let mut magic = [0u8; 4];
+    let result = crate::vfs::read(fd, &mut magic).is_ok() 
+        && magic == [0x7F, b'E', b'L', b'F'];
     
-    crate::vfs::agj(da).bq();
+    crate::vfs::close(fd).ok();
     result
 }

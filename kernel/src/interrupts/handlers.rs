@@ -1,6 +1,18 @@
-//! Interrupt Handlers
-//! 
-//! Individual handlers for CPU exceptions and hardware interrupts.
+/// NMI handler (LAPIC LINT1, vector 2)
+pub extern "x86-interrupt" fn nmi_handler(_stack_frame: InterruptStackFrame) {
+    // Log NMI event
+    crate::serial_println!("!!! NMI RECEIVED !!!");
+    // Envoi netconsole si actif
+    #[cfg(feature = "netconsole")]
+    {
+        crate::debug::netconsole::send_line("[NMI] Non-maskable interrupt received, system will reboot");
+    }
+    // Reboot immédiat
+    crate::serial_println!("[NMI] Rebooting now");
+    crate::acpi::reboot();
+}
+// Interrupt Handlers
+// Individual handlers for CPU exceptions and hardware interrupts.
 
 use x86_64::structures::idt::{InterruptStackFrame, PageFaultErrorCode};
 use core::sync::atomic::{AtomicBool, Ordering};
@@ -237,6 +249,41 @@ pub extern "x86-interrupt" fn simd_floating_point_handler(stack_frame: Interrupt
     panic!("EXCEPTION: SIMD FLOATING-POINT (#XM)\n{:#?}", stack_frame);
 }
 
+/// Machine Check Exception (#MC, interrupt 18)
+/// Catches hardware errors (PCIe bus errors, memory ECC errors, etc.)
+/// Instead of triple-faulting, we log and reboot gracefully.
+pub extern "x86-interrupt" fn machine_check_handler(
+    stack_frame: InterruptStackFrame,
+) -> ! {
+    crate::serial_println!("!!! MACHINE CHECK EXCEPTION (#MC) !!!");
+    crate::serial_println!("RIP: {:#x}", stack_frame.instruction_pointer.as_u64());
+    crate::serial_println!("RSP: {:#x}", stack_frame.stack_pointer.as_u64());
+    // Read MCi_STATUS MSRs for diagnosis (IA32_MCi_STATUS)
+    unsafe {
+        // IA32_MCG_STATUS (MSR 0x17A) — global MC status
+        let mcg_lo: u32;
+        let mcg_hi: u32;
+        core::arch::asm!("rdmsr", in("ecx") 0x17Au32, out("eax") mcg_lo, out("edx") mcg_hi);
+        let mcg = ((mcg_hi as u64) << 32) | mcg_lo as u64;
+        crate::serial_println!("MCG_STATUS: {:#018X}", mcg);
+        // Read first 4 MC banks (IA32_MC0_STATUS = 0x401, stride 4)
+        for bank in 0u32..4 {
+            let msr = 0x401 + bank * 4;
+            let lo: u32;
+            let hi: u32;
+            core::arch::asm!("rdmsr", in("ecx") msr, out("eax") lo, out("edx") hi);
+            let val = ((hi as u64) << 32) | lo as u64;
+            if val != 0 {
+                crate::serial_println!("MC{}_STATUS: {:#018X}", bank, val);
+            }
+        }
+    }
+    crate::serial_println!("Rebooting NOW (no delay — nested MCE prevention)");
+    // No spin delay: a 200M-iteration spin risks a nested MCE → triple-fault.
+    // The serial line above is enough for the UART TX FIFO to drain (ISA, ~1µs).
+    crate::acpi::reboot();
+}
+
 /// Timer interrupt handler (legacy PIC — vector 32)
 pub extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFrame) {
     if !BOOTSTRAP_READY.load(Ordering::Relaxed) {
@@ -288,9 +335,31 @@ pub extern "x86-interrupt" fn apic_timer_handler(_stack_frame: InterruptStackFra
         }
     }
     
+    // Software watchdog check — reboots via ISA if deadline passed (survives PCIe death)
+    crate::apic::watchdog_check();
+
+    // Pet TCO hardware watchdog from timer interrupt — survives shell deadlocks, GPU hangs,
+    // any software freeze. Only fires if CPU stops taking interrupts entirely (triple fault).
+    {
+        static TCO_PET_DIV: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
+        let n = TCO_PET_DIV.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+        if n % 500 == 0 { // ~5s at 100Hz timer
+            crate::debug::tco_watchdog_pet();
+        }
+    }
+
+    // Thermal management daemon tick (~every 2s at 100Hz timer)
+    {
+        static THERMAL_DIV: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
+        let n = THERMAL_DIV.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+        if n % 200 == 0 {
+            crate::thermal::tick();
+        }
+    }
+
     // Notify thread scheduler — this does real preemptive context switching!
     crate::thread::on_timer_tick();
-    
+
     // Send LAPIC EOI
     crate::apic::lapic_eoi();
 }

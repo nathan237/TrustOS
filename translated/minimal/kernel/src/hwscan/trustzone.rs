@@ -15,11 +15,11 @@
 use alloc::string::String;
 use alloc::format;
 use alloc::vec::Vec;
-use super::{Ju, AccessLevel, RiskLevel};
+use super::{Dy, AccessLevel, RiskLevel};
 
 
 #[cfg(target_arch = "aarch64")]
-const CZD_: &[(u64, &str)] = &[
+const DCV_: &[(u64, &str)] = &[
     (0x0E04_0000, "QEMU virt TZPC"),
     (0x8400_0000, "Qualcomm QSEE base"),
     (0xFE20_0000, "BCM2711 Peripheral base"),
@@ -28,7 +28,7 @@ const CZD_: &[(u64, &str)] = &[
 ];
 
 
-const CSB_: &[(u64, u64, &str)] = &[
+const CVS_: &[(u64, u64, &str)] = &[
     (0x0000_0000, 0x0001_0000, "Secure Boot ROM"),
     (0x0E00_0000, 0x0010_0000, "Secure SRAM"),
     (0x0E10_0000, 0x0010_0000, "Secure DRAM carveout"),
@@ -36,239 +36,239 @@ const CSB_: &[(u64, u64, &str)] = &[
 
 
 #[derive(Debug, Clone)]
-pub struct Anx {
-    pub re: u64,
-    pub ciy: bool,
-    pub gqn: Option<u32>,
-    pub kvh: &'static str,
+pub struct Qr {
+    pub address: u64,
+    pub accessible: bool,
+    pub read_value: Option<u32>,
+    pub fault_type: &'static str,
 }
 
 
 
-fn frf(ag: u64) -> Anx {
+fn coi(addr: u64) -> Qr {
     
     
     
     
     let result = unsafe {
-        if ag == 0 || ag > 0xFFFF_FFFF_FFFF {
-            return Anx {
-                re: ag,
-                ciy: false,
-                gqn: None,
-                kvh: "invalid",
+        if addr == 0 || addr > 0xFFFF_FFFF_FFFF {
+            return Qr {
+                address: addr,
+                accessible: false,
+                read_value: None,
+                fault_type: "invalid",
             };
         }
         
-        let ptr = ag as *const u32;
+        let ptr = addr as *const u32;
         
         
         Some(core::ptr::read_volatile(ptr))
     };
     
     match result {
-        Some(ap) => Anx {
-            re: ag,
-            ciy: true,
-            gqn: Some(ap),
-            kvh: "none",
+        Some(val) => Qr {
+            address: addr,
+            accessible: true,
+            read_value: Some(val),
+            fault_type: "none",
         },
-        None => Anx {
-            re: ag,
-            ciy: false,
-            gqn: None,
-            kvh: "data_abort",
+        None => Qr {
+            address: addr,
+            accessible: false,
+            read_value: None,
+            fault_type: "data_abort",
         },
     }
 }
 
 
-fn ssz(ay: u64, ci: u64, wsm: bool) -> u64 {
-    let mut hh = ay;
-    let mut gd = ci;
+fn lvr(start: u64, end: u64, start_accessible: bool) -> u64 {
+    let mut lo = start;
+    let mut hi = end;
     
-    while gd - hh > 0x1000 {
-        let vs = hh + ((gd - hh) / 2) & !0xFFF; 
-        let result = frf(vs);
+    while hi - lo > 0x1000 {
+        let mid = lo + ((hi - lo) / 2) & !0xFFF; 
+        let result = coi(mid);
         
-        if result.ciy == wsm {
-            hh = vs;
+        if result.accessible == start_accessible {
+            lo = mid;
         } else {
-            gd = vs;
+            hi = mid;
         }
     }
     
-    gd
+    hi
 }
 
 
-pub fn oxy() -> String {
-    let mut an = String::new();
+pub fn iws() -> String {
+    let mut output = String::new();
 
     #[cfg(target_arch = "aarch64")]
     {
-        an.t("\x01C== TrustProbe: ARM TrustZone Boundary Mapper ==\x01W\n\n");
+        output.push_str("\x01C== TrustProbe: ARM TrustZone Boundary Mapper ==\x01W\n\n");
         
         
-        an.t("\x01YNote: Running at EL1 (Normal World kernel)\x01W\n");
-        an.t("Probing Secure World boundaries by fault analysis...\n\n");
+        output.push_str("\x01YNote: Running at EL1 (Normal World kernel)\x01W\n");
+        output.push_str("Probing Secure World boundaries by fault analysis...\n\n");
         
-        let mut nq: Vec<Ju> = Vec::new();
+        let mut fw: Vec<Dy> = Vec::new();
         
         
-        an.t("\x01C--- Known Secure Region Tests ---\x01W\n");
-        an.t(&format!("{:<16} {:<12} {:<12} {}\n",
+        output.push_str("\x01C--- Known Secure Region Tests ---\x01W\n");
+        output.push_str(&format!("{:<16} {:<12} {:<12} {}\n",
             "ADDRESS", "ACCESS", "VALUE", "REGION"));
-        an.t(&format!("{}\n", "-".afd(70)));
+        output.push_str(&format!("{}\n", "-".repeat(70)));
         
-        for &(ar, aw, j) in CSB_ {
-            let result = frf(ar);
-            let vz = if result.ciy { "NORMAL" } else { "SECURE" };
-            let jvg = match result.gqn {
-                Some(p) => format!("0x{:08X}", p),
+        for &(base, size, name) in CVS_ {
+            let result = coi(base);
+            let access = if result.accessible { "NORMAL" } else { "SECURE" };
+            let fef = match result.read_value {
+                Some(v) => format!("0x{:08X}", v),
                 None => String::from("FAULT"),
             };
             
-            let bhz = if result.ciy && j.contains("Secure") {
-                RiskLevel::Aj 
-            } else if !result.ciy {
-                RiskLevel::V 
+            let risk = if result.accessible && name.contains("Secure") {
+                RiskLevel::Critical 
+            } else if !result.accessible {
+                RiskLevel::Info 
             } else {
-                RiskLevel::Eg
+                RiskLevel::Low
             };
             
-            an.t(&format!("0x{:010X}   {:<12} {:<12} {}{}\x01W\n",
-                ar, vz, jvg, bhz.cpk(), j));
+            output.push_str(&format!("0x{:010X}   {:<12} {:<12} {}{}\x01W\n",
+                base, access, fef, risk.color_code(), name));
             
-            nq.push(Ju {
-                gb: "TrustZone",
-                j: String::from(j),
-                re: ar,
-                aw,
-                vz: if result.ciy { AccessLevel::Bz } else { AccessLevel::In },
-                yw: format!("{} - {}", vz, jvg),
-                bhz,
+            fw.push(Dy {
+                category: "TrustZone",
+                name: String::from(name),
+                address: base,
+                size,
+                access: if result.accessible { AccessLevel::ReadOnly } else { AccessLevel::Faulted },
+                details: format!("{} - {}", access, fef),
+                risk,
             });
         }
         
         
-        an.t("\n\x01C--- TZPC Register Probing ---\x01W\n");
-        for &(ar, j) in CZD_ {
-            let result = frf(ar);
-            let pa = if result.ciy { "\x01G[OK]" } else { "\x01R[FAULT]" };
-            an.t(&format!("{}\x01W 0x{:010X} {}\n", pa, ar, j));
+        output.push_str("\n\x01C--- TZPC Register Probing ---\x01W\n");
+        for &(base, name) in DCV_ {
+            let result = coi(base);
+            let icon = if result.accessible { "\x01G[OK]" } else { "\x01R[FAULT]" };
+            output.push_str(&format!("{}\x01W 0x{:010X} {}\n", icon, base, name));
             
-            if result.ciy {
+            if result.accessible {
                 
-                for l in [0x800, 0x804, 0x808, 0x80C].iter() {
-                    let reg = frf(ar + l);
-                    if let Some(ap) = reg.gqn {
-                        an.t(&format!("     +0x{:03X} = 0x{:08X} (decode protection {})\n",
-                            l, ap, l / 4));
+                for offset in [0x800, 0x804, 0x808, 0x80C].iter() {
+                    let reg = coi(base + offset);
+                    if let Some(val) = reg.read_value {
+                        output.push_str(&format!("     +0x{:03X} = 0x{:08X} (decode protection {})\n",
+                            offset, val, offset / 4));
                     }
                 }
             }
         }
         
         
-        an.t("\n\x01C--- Systematic Boundary Scan ---\x01W\n");
-        an.t("Sweeping memory in 1MB steps to find Secure/Normal transitions...\n\n");
+        output.push_str("\n\x01C--- Systematic Boundary Scan ---\x01W\n");
+        output.push_str("Sweeping memory in 1MB steps to find Secure/Normal transitions...\n\n");
         
-        let wwq = [
+        let ozf = [
             (0x0000_0000u64, 0x1000_0000u64, "Low memory (0-256MB)"),
             (0x0E00_0000u64, 0x1000_0000u64, "Secure SRAM region"),
         ];
         
-        for &(ay, ci, j) in &wwq {
-            an.t(&format!("\x01Y{}: 0x{:X}-0x{:X}\x01W\n", j, ay, ci));
+        for &(start, end, name) in &ozf {
+            output.push_str(&format!("\x01Y{}: 0x{:X}-0x{:X}\x01W\n", name, start, end));
             
-            let gu = 0x10_0000u64; 
-            let mut oxf = None;
-            let mut ag = ay;
+            let step = 0x10_0000u64; 
+            let mut ivy = None;
+            let mut addr = start;
             
-            while ag < ci {
-                let result = frf(ag);
+            while addr < end {
+                let result = coi(addr);
                 
-                if let Some(vo) = oxf {
-                    if result.ciy != vo {
+                if let Some(prev) = ivy {
+                    if result.accessible != prev {
                         
-                        let mzx = ssz(ag - gu, ag, vo);
-                        let sz = if vo { "Normal->Secure" } else { "Secure->Normal" };
-                        an.t(&format!("  \x01R** BOUNDARY at 0x{:010X}: {} **\x01W\n",
-                            mzx, sz));
+                        let hil = lvr(addr - step, addr, prev);
+                        let direction = if prev { "Normal->Secure" } else { "Secure->Normal" };
+                        output.push_str(&format!("  \x01R** BOUNDARY at 0x{:010X}: {} **\x01W\n",
+                            hil, direction));
                         
-                        nq.push(Ju {
-                            gb: "TrustZone",
-                            j: format!("TZ Boundary: {}", sz),
-                            re: mzx,
-                            aw: 0x1000,
-                            vz: AccessLevel::Adq,
-                            yw: format!("{} transition", sz),
-                            bhz: RiskLevel::Ao,
+                        fw.push(Dy {
+                            category: "TrustZone",
+                            name: format!("TZ Boundary: {}", direction),
+                            address: hil,
+                            size: 0x1000,
+                            access: AccessLevel::Partial,
+                            details: format!("{} transition", direction),
+                            risk: RiskLevel::High,
                         });
                     }
                 }
                 
-                oxf = Some(result.ciy);
-                ag += gu;
+                ivy = Some(result.accessible);
+                addr += step;
             }
         }
         
         
-        let wgf = nq.iter().hi(|bb| bb.vz == AccessLevel::In).az();
-        let uvc = nq.iter().hi(|bb| bb.vz != AccessLevel::In).az();
-        let qrn = nq.iter().hi(|bb| bb.j.contains("Boundary")).az();
-        let cpp = nq.iter().hi(|bb| bb.bhz == RiskLevel::Aj).az();
+        let omw = fw.iter().filter(|f| f.access == AccessLevel::Faulted).count();
+        let nku = fw.iter().filter(|f| f.access != AccessLevel::Faulted).count();
+        let kdr = fw.iter().filter(|f| f.name.contains("Boundary")).count();
+        let aqb = fw.iter().filter(|f| f.risk == RiskLevel::Critical).count();
         
-        an.t(&format!("\n\x01C== Summary ==\x01W\n"));
-        an.t(&format!("  Secure regions: {}\n", wgf));
-        an.t(&format!("  Normal regions: {}\n", uvc));
-        an.t(&format!("  Boundaries found: {}\n", qrn));
-        if cpp > 0 {
-            an.t(&format!("  \x01R!! {} CRITICAL findings (secure memory accessible) !!\x01W\n", cpp));
+        output.push_str(&format!("\n\x01C== Summary ==\x01W\n"));
+        output.push_str(&format!("  Secure regions: {}\n", omw));
+        output.push_str(&format!("  Normal regions: {}\n", nku));
+        output.push_str(&format!("  Boundaries found: {}\n", kdr));
+        if aqb > 0 {
+            output.push_str(&format!("  \x01R!! {} CRITICAL findings (secure memory accessible) !!\x01W\n", aqb));
         }
     }
     
     #[cfg(target_arch = "x86_64")]
     {
-        an.t("\x01C== TrustProbe: x86_64 SMM/Ring Boundary Mapper ==\x01W\n\n");
-        an.t("Probing System Management Mode (SMM) boundaries...\n\n");
+        output.push_str("\x01C== TrustProbe: x86_64 SMM/Ring Boundary Mapper ==\x01W\n\n");
+        output.push_str("Probing System Management Mode (SMM) boundaries...\n\n");
         
         
-        let wpz = [
+        let oub = [
             (0x000A_0000u64, 0x0002_0000u64, "Legacy SMRAM (VGA hole)"),
             (0x000F_0000u64, 0x0001_0000u64, "High BIOS area"),
             (0xFFF0_0000u64, 0x0010_0000u64, "Flash region (4GB - 1MB)"),
         ];
         
-        an.t(&format!("{:<16} {:<12} {:<12} {}\n",
+        output.push_str(&format!("{:<16} {:<12} {:<12} {}\n",
             "ADDRESS", "ACCESS", "VALUE", "REGION"));
-        an.t(&format!("{}\n", "-".afd(60)));
+        output.push_str(&format!("{}\n", "-".repeat(60)));
         
-        for &(ar, dds, j) in &wpz {
-            let result = frf(ar);
-            let vz = if result.ciy { "READABLE" } else { "LOCKED" };
-            let jvg = match result.gqn {
-                Some(p) => format!("0x{:08X}", p),
+        for &(base, bek, name) in &oub {
+            let result = coi(base);
+            let access = if result.accessible { "READABLE" } else { "LOCKED" };
+            let fef = match result.read_value {
+                Some(v) => format!("0x{:08X}", v),
                 None => String::from("FAULT"),
             };
-            an.t(&format!("0x{:010X}   {:<12} {:<12} {}\n",
-                ar, vz, jvg, j));
+            output.push_str(&format!("0x{:010X}   {:<12} {:<12} {}\n",
+                base, access, fef, name));
         }
     }
     
     #[cfg(target_arch = "riscv64")]
     {
-        an.t("\x01C== TrustProbe: RISC-V PMP Boundary Mapper ==\x01W\n\n");
-        an.t("Probing Physical Memory Protection (PMP) boundaries...\n\n");
+        output.push_str("\x01C== TrustProbe: RISC-V PMP Boundary Mapper ==\x01W\n\n");
+        output.push_str("Probing Physical Memory Protection (PMP) boundaries...\n\n");
         
         
         
         
-        an.t("RISC-V PMP configuration (probed from S-mode):\n");
-        an.t("Attempting to access M-mode regions...\n\n");
+        output.push_str("RISC-V PMP configuration (probed from S-mode):\n");
+        output.push_str("Attempting to access M-mode regions...\n\n");
         
-        let xex = [
+        let phi = [
             (0x0000_0000u64, "Reset vector"),
             (0x0000_1000u64, "Boot ROM"),
             (0x0200_0000u64, "CLINT (M-mode timer)"),
@@ -276,12 +276,12 @@ pub fn oxy() -> String {
             (0x8000_0000u64, "Main RAM"),
         ];
         
-        for &(ag, j) in &xex {
-            let result = frf(ag);
-            let pa = if result.ciy { "\x01G[OK]" } else { "\x01R[PMP]" };
-            an.t(&format!("{}\x01W 0x{:010X} {}\n", pa, ag, j));
+        for &(addr, name) in &phi {
+            let result = coi(addr);
+            let icon = if result.accessible { "\x01G[OK]" } else { "\x01R[PMP]" };
+            output.push_str(&format!("{}\x01W 0x{:010X} {}\n", icon, addr, name));
         }
     }
     
-    an
+    output
 }

@@ -107,9 +107,9 @@ pub struct AppleUart {
     /// Reference clock frequency (from PMGR, typically 24 MHz)
     ref_clock: u32,
     /// Total bytes transmitted
-    transmit_count: u64,
+    tx_count: u64,
     /// Total bytes received
-    receive_count: u64,
+    rx_count: u64,
     /// Whether this UART is initialized
     initialized: bool,
 }
@@ -126,16 +126,16 @@ static ANY_UART_INITIALIZE: AtomicBool = AtomicBool::new(false);
 #[inline(always)]
 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe fn uart_read32(base: u64, offset: usize) -> u32 {
-    let address = (base as usize + offset) as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+    let addr = (base as usize + offset) as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u32;
-    ptr::read_volatile(address)
+    ptr::read_volatile(addr)
 }
 
 #[inline(always)]
 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe fn uart_write32(base: u64, offset: usize, value: u32) {
-    let address = (base as usize + offset) as *mut u32;
-    ptr::write_volatile(address, value);
+unsafe fn uart_write32(base: u64, offset: usize, val: u32) {
+    let addr = (base as usize + offset) as *mut u32;
+    ptr::write_volatile(addr, val);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -165,8 +165,8 @@ unsafe fn init(index: u8, base: u64, ref_clock: u32, baud: u32) -> Result<(), &'
     
     // Wait for FIFO reset to complete (few cycles)
     for _ in 0..100 {
-        let status = uart_read32(base, UFCON);
-        if status & (UFCON_RECEIVE_RESET | UFCON_TRANSMIT_RESET) == 0 {
+        let stat = uart_read32(base, UFCON);
+        if stat & (UFCON_RECEIVE_RESET | UFCON_TRANSMIT_RESET) == 0 {
             break;
         }
     }
@@ -202,8 +202,8 @@ unsafe fn init(index: u8, base: u64, ref_clock: u32, baud: u32) -> Result<(), &'
         index,
         baud_rate: baud,
         ref_clock,
-        transmit_count: 0,
-        receive_count: 0,
+        tx_count: 0,
+        rx_count: 0,
         initialized: true,
     };
     
@@ -235,7 +235,7 @@ unsafe {
         }
         
         uart_write32(uart.base, UTXH, byte as u32);
-        uart.transmit_count += 1;
+        uart.tx_count += 1;
     }
 }
 
@@ -254,7 +254,7 @@ unsafe {
         let status = uart_read32(uart.base, UTRSTAT);
         if status & UTRSTAT_RECEIVE_READY != 0 {
             let byte = uart_read32(uart.base, URXH) as u8;
-            uart.receive_count += 1;
+            uart.rx_count += 1;
             Some(byte)
         } else {
             None
@@ -273,13 +273,13 @@ pub fn write_str(index: u8, s: &str) {
 }
 
 /// Read all available bytes from RX FIFO
-pub fn read_available(index: u8, buffer: &mut [u8]) -> usize {
+pub fn read_available(index: u8, buf: &mut [u8]) -> usize {
     let mut count = 0;
-    while count < buffer.len() {
+    while count < buf.len() {
                 // Correspondance de motifs — branchement exhaustif de Rust.
 match read_byte(index) {
             Some(b) => {
-                buffer[count] = b;
+                buf[count] = b;
                 count += 1;
             }
             None => break,
@@ -313,7 +313,7 @@ pub fn status(index: u8) -> Option<alloc::string::String> {
         alloc::format!(
             "UART{} @ {:#x}: {}baud, TX:{} RX:{}, clock:{}MHz",
             uart.index, uart.base, uart.baud_rate,
-            uart.transmit_count, uart.receive_count,
+            uart.tx_count, uart.rx_count,
             uart.ref_clock / 1_000_000
         )
     })

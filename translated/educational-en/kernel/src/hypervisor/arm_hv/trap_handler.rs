@@ -381,15 +381,15 @@ fn do_mmio_read(pa: u64, size: u32) -> u64 {
     #[cfg(target_arch = "aarch64")]
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        let value: u64;
+        let val: u64;
                 // Pattern matching — Rust's exhaustive branching construct.
 match size {
             1 => {
                 let v: u8;
                 core::arch::asm!(
                     "ldrb {val:w}, [{addr}]",
-                    address = in(reg) pa,
-                    value = out(reg) v,
+                    addr = in(reg) pa,
+                    val = out(reg) v,
                     options(nostack, readonly)
                 );
                 return v as u64;
@@ -398,8 +398,8 @@ match size {
                 let v: u16;
                 core::arch::asm!(
                     "ldrh {val:w}, [{addr}]",
-                    address = in(reg) pa,
-                    value = out(reg) v,
+                    addr = in(reg) pa,
+                    val = out(reg) v,
                     options(nostack, readonly)
                 );
                 return v as u64;
@@ -408,8 +408,8 @@ match size {
                 let v: u32;
                 core::arch::asm!(
                     "ldr {val:w}, [{addr}]",
-                    address = in(reg) pa,
-                    value = out(reg) v,
+                    addr = in(reg) pa,
+                    val = out(reg) v,
                     options(nostack, readonly)
                 );
                 return v as u64;
@@ -417,11 +417,11 @@ match size {
             8 => {
                 core::arch::asm!(
                     "ldr {val}, [{addr}]",
-                    address = in(reg) pa,
-                    value = out(reg) value,
+                    addr = in(reg) pa,
+                    val = out(reg) val,
                     options(nostack, readonly)
                 );
-                return value;
+                return val;
             }
             _ => return 0,
         }
@@ -443,32 +443,32 @@ match size {
             1 => {
                 core::arch::asm!(
                     "strb {val:w}, [{addr}]",
-                    address = in(reg) pa,
-                    value = in(reg) value as u32,
+                    addr = in(reg) pa,
+                    val = in(reg) value as u32,
                     options(nostack)
                 );
             }
             2 => {
                 core::arch::asm!(
                     "strh {val:w}, [{addr}]",
-                    address = in(reg) pa,
-                    value = in(reg) value as u32,
+                    addr = in(reg) pa,
+                    val = in(reg) value as u32,
                     options(nostack)
                 );
             }
             4 => {
                 core::arch::asm!(
                     "str {val:w}, [{addr}]",
-                    address = in(reg) pa,
-                    value = in(reg) value as u32,
+                    addr = in(reg) pa,
+                    val = in(reg) value as u32,
                     options(nostack)
                 );
             }
             8 => {
                 core::arch::asm!(
                     "str {val}, [{addr}]",
-                    address = in(reg) pa,
-                    value = in(reg) value,
+                    addr = in(reg) pa,
+                    val = in(reg) value,
                     options(nostack)
                 );
             }

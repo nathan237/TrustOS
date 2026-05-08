@@ -26,13 +26,13 @@ pub struct GameBoyEmulator {
     pub hram: [u8; 127],    // $FF80-$FFFE
 
     // I/O
-    pub ie_register: u8,          // $FFFF Interrupt Enable
-    pub if_register: u8,          // $FF0F Interrupt Flag
-    pub joypad_register: u8,      // $FF00 Joypad select
+    pub ie_reg: u8,          // $FFFF Interrupt Enable
+    pub if_reg: u8,          // $FF0F Interrupt Flag
+    pub joypad_reg: u8,      // $FF00 Joypad select
     pub joypad_buttons: u8,  // A, B, Select, Start (active-low bits)
     pub joypad_dirs: u8,     // Right, Left, Up, Down (active-low bits)
     pub serial_data: u8,     // $FF01
-    pub serial_controller: u8,     // $FF02
+    pub serial_ctrl: u8,     // $FF02
 
     pub rom_loaded: bool,
     pub key_state: u32,
@@ -60,13 +60,13 @@ pub fn new() -> Self {
             cart: cartridge::Cartridge::empty(),
             wram: vec![0u8; 32768], // 32KB for CGB support
             hram: [0; 127],
-            ie_register: 0,
-            if_register: 0,
-            joypad_register: 0xCF,
+            ie_reg: 0,
+            if_reg: 0,
+            joypad_reg: 0xCF,
             joypad_buttons: 0x0F,
             joypad_dirs: 0x0F,
             serial_data: 0,
-            serial_controller: 0,
+            serial_ctrl: 0,
             rom_loaded: false,
             key_state: 0,
             cgb_mode: false,
@@ -115,14 +115,14 @@ pub fn load_rom(&mut self, data: &[u8]) -> bool {
                 self.gpu.bg_palette[6] = 0x00; self.gpu.bg_palette[7] = 0x00;
                 // OBJ palettes similar defaults
                 for i in 0..8 {
-                    self.gpu.object_palette[i] = self.gpu.bg_palette[i];
+                    self.gpu.obj_palette[i] = self.gpu.bg_palette[i];
                 }
             }
             self.timer = timer::Timer::new();
-            for b in self.wram.iterator_mut() { *b = 0; }
+            for b in self.wram.iter_mut() { *b = 0; }
             self.hram = [0; 127];
-            self.ie_register = 0;
-            self.if_register = 0;
+            self.ie_reg = 0;
+            self.if_reg = 0;
             self.wram_bank = 1;
             self.key1 = 0;
             self.hdma_active = false;
@@ -142,13 +142,13 @@ pub fn load_rom(&mut self, data: &[u8]) -> bool {
             gpu: &mut self.gpu,
             timer: &mut self.timer,
             cart: &mut self.cart,
-            ie_register: &mut self.ie_register,
-            if_register: &mut self.if_register,
-            joypad_register: &mut self.joypad_register,
+            ie_reg: &mut self.ie_reg,
+            if_reg: &mut self.if_reg,
+            joypad_reg: &mut self.joypad_reg,
             joypad_buttons: &self.joypad_buttons,
             joypad_dirs: &self.joypad_dirs,
             serial_data: &mut self.serial_data,
-            serial_controller: &mut self.serial_controller,
+            serial_ctrl: &mut self.serial_ctrl,
             cgb_mode: self.cgb_mode,
             wram_bank: &mut self.wram_bank,
             key1: &mut self.key1,
@@ -177,7 +177,7 @@ match key {
             b'c' | b'C'        => self.joypad_buttons &= !0x04, // Select
             _ => {}
         }
-        self.if_register |= 0x10; // Joypad interrupt
+        self.if_reg |= 0x10; // Joypad interrupt
     }
 
         // Public function — callable from other modules.
@@ -220,13 +220,13 @@ const MAXIMUM_INSTRUCTIONS: u32 = 200_000; // Safety limit
                     gpu: &mut self.gpu,
                     timer: &mut self.timer,
                     cart: &mut self.cart,
-                    ie_register: &mut self.ie_register,
-                    if_register: &mut self.if_register,
-                    joypad_register: &mut self.joypad_register,
+                    ie_reg: &mut self.ie_reg,
+                    if_reg: &mut self.if_reg,
+                    joypad_reg: &mut self.joypad_reg,
                     joypad_buttons: &self.joypad_buttons,
                     joypad_dirs: &self.joypad_dirs,
                     serial_data: &mut self.serial_data,
-                    serial_controller: &mut self.serial_controller,
+                    serial_ctrl: &mut self.serial_ctrl,
                     cgb_mode: self.cgb_mode,
                     wram_bank: &mut self.wram_bank,
                     key1: &mut self.key1,
@@ -245,16 +245,16 @@ const MAXIMUM_INSTRUCTIONS: u32 = 200_000; // Safety limit
             self.timer.step(m);
 
             // Collect interrupt requests
-            if self.gpu.vblank_interrupt_request {
-                self.if_register |= 0x01;
-                self.gpu.vblank_interrupt_request = false;
+            if self.gpu.vblank_irq {
+                self.if_reg |= 0x01;
+                self.gpu.vblank_irq = false;
             }
-            if self.gpu.status_interrupt_request {
-                self.if_register |= 0x02;
-                self.gpu.status_interrupt_request = false;
+            if self.gpu.stat_irq {
+                self.if_reg |= 0x02;
+                self.gpu.stat_irq = false;
             }
             if self.timer.interrupt {
-                self.if_register |= 0x04;
+                self.if_reg |= 0x04;
                 self.timer.interrupt = false;
             }
 
@@ -291,7 +291,7 @@ const MAXIMUM_INSTRUCTIONS: u32 = 200_000; // Safety limit
         let fg = 0xFFE0F8D0u32;  // Light green
         let mg = 0xFF346856u32;  // Medium green
 
-        for p in out.iterator_mut() { *p = bg; }
+        for p in out.iter_mut() { *p = bg; }
 
         // Title
         draw_text(out, w, h, "GAME BOY", w / 2 - 32, h / 6, fg, 2);
@@ -322,8 +322,8 @@ const MAXIMUM_INSTRUCTIONS: u32 = 200_000; // Safety limit
         let sh = 36usize;
         let sx = cx - software / 2;
         let sy = by + 8;
-        for y in sy..(sy + sh).minimum(h) {
-            for x in sx..(sx + software).minimum(w) {
+        for y in sy..(sy + sh).min(h) {
+            for x in sx..(sx + software).min(w) {
                 out[y * w + x] = 0xFF88C070;
             }
         }
@@ -341,13 +341,13 @@ struct BusAdapter<'a> {
     gpu: &'a mut gpu::Gpu,
     timer: &'a mut timer::Timer,
     cart: &'a mut cartridge::Cartridge,
-    ie_register: &'a mut u8,
-    if_register: &'a mut u8,
-    joypad_register: &'a mut u8,
+    ie_reg: &'a mut u8,
+    if_reg: &'a mut u8,
+    joypad_reg: &'a mut u8,
     joypad_buttons: &'a u8,
     joypad_dirs: &'a u8,
     serial_data: &'a mut u8,
-    serial_controller: &'a mut u8,
+    serial_ctrl: &'a mut u8,
     // CGB
     cgb_mode: bool,
     wram_bank: &'a mut u8,
@@ -362,53 +362,53 @@ struct BusAdapter<'a> {
 
 // Trait implementation — fulfills a behavioral contract.
 impl GbBus for BusAdapter<'_> {
-    fn read(&mut self, address: u16) -> u8 {
+    fn read(&mut self, addr: u16) -> u8 {
                 // Pattern matching — Rust's exhaustive branching construct.
-match address {
+match addr {
             // ROM
-            0x0000..=0x7FFF => self.cart.read(address),
+            0x0000..=0x7FFF => self.cart.read(addr),
             // VRAM
-            0x8000..=0x9FFF => self.gpu.read_vram(address),
+            0x8000..=0x9FFF => self.gpu.read_vram(addr),
             // External RAM
-            0xA000..=0xBFFF => self.cart.read(address),
+            0xA000..=0xBFFF => self.cart.read(addr),
             // WRAM bank 0 ($C000-$CFFF)
-            0xC000..=0xCFFF => self.wram[(address as usize - 0xC000)],
+            0xC000..=0xCFFF => self.wram[(addr as usize - 0xC000)],
             // WRAM bank 1-7 ($D000-$DFFF) — CGB switchable
             0xD000..=0xDFFF => {
-                let bank = if self.cgb_mode { (*self.wram_bank).maximum(1) as usize } else { 1 };
-                let offset = bank * 0x1000 + (address as usize - 0xD000);
+                let bank = if self.cgb_mode { (*self.wram_bank).max(1) as usize } else { 1 };
+                let offset = bank * 0x1000 + (addr as usize - 0xD000);
                 if offset < self.wram.len() { self.wram[offset] } else { 0xFF }
             },
             // Echo RAM
-            0xE000..=0xEFFF => self.wram[(address as usize - 0xE000)],
+            0xE000..=0xEFFF => self.wram[(addr as usize - 0xE000)],
             0xF000..=0xFDFF => {
-                let bank = if self.cgb_mode { (*self.wram_bank).maximum(1) as usize } else { 1 };
-                let offset = bank * 0x1000 + (address as usize - 0xF000);
+                let bank = if self.cgb_mode { (*self.wram_bank).max(1) as usize } else { 1 };
+                let offset = bank * 0x1000 + (addr as usize - 0xF000);
                 if offset < self.wram.len() { self.wram[offset] } else { 0xFF }
             },
             // OAM
-            0xFE00..=0xFE9F => self.gpu.read_oam(address),
+            0xFE00..=0xFE9F => self.gpu.read_oam(addr),
             // Not usable
             0xFEA0..=0xFEFF => 0xFF,
             // I/O registers
             0xFF00 => {
-                let mut value = *self.joypad_register & 0x30;
-                if value & 0x10 == 0 { value |= *self.joypad_dirs; }
-                if value & 0x20 == 0 { value |= *self.joypad_buttons; }
-                value | 0xC0
+                let mut val = *self.joypad_reg & 0x30;
+                if val & 0x10 == 0 { val |= *self.joypad_dirs; }
+                if val & 0x20 == 0 { val |= *self.joypad_buttons; }
+                val | 0xC0
             }
             0xFF01 => *self.serial_data,
-            0xFF02 => *self.serial_controller,
+            0xFF02 => *self.serial_ctrl,
             0xFF04 => self.timer.read_div(),
             0xFF05 => self.timer.tima,
             0xFF06 => self.timer.tma,
             0xFF07 => self.timer.tac,
-            0xFF0F => *self.if_register,
+            0xFF0F => *self.if_reg,
             // Audio (not emulated)
             0xFF10..=0xFF3F => 0xFF,
             // LCD
             0xFF40 => self.gpu.lcdc,
-            0xFF41 => self.gpu.read_status(),
+            0xFF41 => self.gpu.read_stat(),
             0xFF42 => self.gpu.scy,
             0xFF43 => self.gpu.scx,
             0xFF44 => if self.gpu.lcdc & 0x80 != 0 { self.gpu.ly } else { 0 },
@@ -433,72 +433,72 @@ match address {
             0xFF6B => self.gpu.read_ocpd(),            // OCPD
             0xFF70 => *self.wram_bank,                 // SVBK WRAM bank
             // HRAM
-            0xFF80..=0xFFFE => self.hram[(address - 0xFF80) as usize],
+            0xFF80..=0xFFFE => self.hram[(addr - 0xFF80) as usize],
             // IE
-            0xFFFF => *self.ie_register,
+            0xFFFF => *self.ie_reg,
             _ => 0xFF,
         }
     }
 
-    fn write(&mut self, address: u16, value: u8) {
+    fn write(&mut self, addr: u16, val: u8) {
                 // Pattern matching — Rust's exhaustive branching construct.
-match address {
+match addr {
             // ROM area — cartridge handles mapper writes
-            0x0000..=0x7FFF => self.cart.write(address, value),
+            0x0000..=0x7FFF => self.cart.write(addr, val),
             // VRAM
-            0x8000..=0x9FFF => self.gpu.write_vram(address, value),
+            0x8000..=0x9FFF => self.gpu.write_vram(addr, val),
             // External RAM
-            0xA000..=0xBFFF => self.cart.write(address, value),
+            0xA000..=0xBFFF => self.cart.write(addr, val),
             // WRAM bank 0
-            0xC000..=0xCFFF => self.wram[(address as usize - 0xC000)] = value,
+            0xC000..=0xCFFF => self.wram[(addr as usize - 0xC000)] = val,
             // WRAM bank 1-7 (CGB switchable)
             0xD000..=0xDFFF => {
-                let bank = if self.cgb_mode { (*self.wram_bank).maximum(1) as usize } else { 1 };
-                let offset = bank * 0x1000 + (address as usize - 0xD000);
-                if offset < self.wram.len() { self.wram[offset] = value; }
+                let bank = if self.cgb_mode { (*self.wram_bank).max(1) as usize } else { 1 };
+                let offset = bank * 0x1000 + (addr as usize - 0xD000);
+                if offset < self.wram.len() { self.wram[offset] = val; }
             },
             // Echo RAM
-            0xE000..=0xEFFF => self.wram[(address as usize - 0xE000)] = value,
+            0xE000..=0xEFFF => self.wram[(addr as usize - 0xE000)] = val,
             0xF000..=0xFDFF => {
-                let bank = if self.cgb_mode { (*self.wram_bank).maximum(1) as usize } else { 1 };
-                let offset = bank * 0x1000 + (address as usize - 0xF000);
-                if offset < self.wram.len() { self.wram[offset] = value; }
+                let bank = if self.cgb_mode { (*self.wram_bank).max(1) as usize } else { 1 };
+                let offset = bank * 0x1000 + (addr as usize - 0xF000);
+                if offset < self.wram.len() { self.wram[offset] = val; }
             },
             // OAM
-            0xFE00..=0xFE9F => self.gpu.write_oam(address, value),
+            0xFE00..=0xFE9F => self.gpu.write_oam(addr, val),
             // Not usable
             0xFEA0..=0xFEFF => {}
             // I/O
-            0xFF00 => *self.joypad_register = value & 0x30,
-            0xFF01 => *self.serial_data = value,
-            0xFF02 => *self.serial_controller = value,
+            0xFF00 => *self.joypad_reg = val & 0x30,
+            0xFF01 => *self.serial_data = val,
+            0xFF02 => *self.serial_ctrl = val,
             0xFF04 => self.timer.write_div(),
-            0xFF05 => self.timer.tima = value,
-            0xFF06 => self.timer.tma = value,
-            0xFF07 => self.timer.tac = value,
-            0xFF0F => *self.if_register = value,
+            0xFF05 => self.timer.tima = val,
+            0xFF06 => self.timer.tma = val,
+            0xFF07 => self.timer.tac = val,
+            0xFF0F => *self.if_reg = val,
             // Audio (not emulated)
             0xFF10..=0xFF3F => {}
             // LCD
             0xFF40 => {
                 let old = self.gpu.lcdc;
-                self.gpu.lcdc = value;
+                self.gpu.lcdc = val;
                 // LCD just turned on — reset GPU state
-                if value & 0x80 != 0 && old & 0x80 == 0 {
+                if val & 0x80 != 0 && old & 0x80 == 0 {
                     self.gpu.ly = 0;
                     self.gpu.cycles = 0;
                     self.gpu.mode = 2;
                     self.gpu.window_line = 0;
                 }
             }
-            0xFF41 => self.gpu.status = (self.gpu.status & 0x07) | (value & 0xF8),
-            0xFF42 => self.gpu.scy = value,
-            0xFF43 => self.gpu.scx = value,
+            0xFF41 => self.gpu.stat = (self.gpu.stat & 0x07) | (val & 0xF8),
+            0xFF42 => self.gpu.scy = val,
+            0xFF43 => self.gpu.scx = val,
             0xFF44 => {} // LY is read-only
-            0xFF45 => self.gpu.lyc = value,
+            0xFF45 => self.gpu.lyc = val,
             0xFF46 => {
                 // OAM DMA transfer — copy 160 bytes from val*$100
-                let base = (value as u16) << 8;
+                let base = (val as u16) << 8;
                 for i in 0..160u16 {
                     let byte = // Pattern matching — Rust's exhaustive branching construct.
 match base + i {
@@ -507,7 +507,7 @@ match base + i {
                         a @ 0xA000..=0xBFFF => self.cart.read(a),
                         a @ 0xC000..=0xCFFF => self.wram[(a as usize - 0xC000)],
                         a @ 0xD000..=0xDFFF => {
-                            let bank = if self.cgb_mode { (*self.wram_bank).maximum(1) as usize } else { 1 };
+                            let bank = if self.cgb_mode { (*self.wram_bank).max(1) as usize } else { 1 };
                             let offset = bank * 0x1000 + (a as usize - 0xD000);
                             if offset < self.wram.len() { self.wram[offset] } else { 0 }
                         },
@@ -516,78 +516,78 @@ match base + i {
                     self.gpu.write_oam(0xFE00 + i, byte);
                 }
             }
-            0xFF47 => self.gpu.bgp = value,
-            0xFF48 => self.gpu.obp0 = value,
-            0xFF49 => self.gpu.obp1 = value,
-            0xFF4A => self.gpu.wy = value,
-            0xFF4B => self.gpu.wx = value,
+            0xFF47 => self.gpu.bgp = val,
+            0xFF48 => self.gpu.obp0 = val,
+            0xFF49 => self.gpu.obp1 = val,
+            0xFF4A => self.gpu.wy = val,
+            0xFF4B => self.gpu.wx = val,
             // CGB registers
-            0xFF4D => *self.key1 = (*self.key1 & 0x80) | (value & 0x01), // KEY1: only bit 0 writable
-            0xFF4F => self.gpu.vram_bank = value & 0x01,                  // VBK
-            0xFF51 => *self.hdma1 = value,
-            0xFF52 => *self.hdma2 = value & 0xF0,
-            0xFF53 => *self.hdma3 = value & 0x1F,
-            0xFF54 => *self.hdma4 = value & 0xF0,
+            0xFF4D => *self.key1 = (*self.key1 & 0x80) | (val & 0x01), // KEY1: only bit 0 writable
+            0xFF4F => self.gpu.vram_bank = val & 0x01,                  // VBK
+            0xFF51 => *self.hdma1 = val,
+            0xFF52 => *self.hdma2 = val & 0xF0,
+            0xFF53 => *self.hdma3 = val & 0x1F,
+            0xFF54 => *self.hdma4 = val & 0xF0,
             0xFF55 => {
                 // HDMA5: Start HDMA transfer (General-Purpose or HBlank)
                 if self.cgb_mode {
-                    let source = ((*self.hdma1 as u16) << 8) | (*self.hdma2 as u16);
-                    let destination = 0x8000 | (((*self.hdma3 as u16) << 8) | (*self.hdma4 as u16));
-                    let len = ((value as u16 & 0x7F) + 1) * 16;
+                    let src = ((*self.hdma1 as u16) << 8) | (*self.hdma2 as u16);
+                    let dst = 0x8000 | (((*self.hdma3 as u16) << 8) | (*self.hdma4 as u16));
+                    let len = ((val as u16 & 0x7F) + 1) * 16;
                     
-                    if value & 0x80 == 0 {
+                    if val & 0x80 == 0 {
                         // General-purpose DMA: transfer all at once
                         for i in 0..len {
                             let byte = // Pattern matching — Rust's exhaustive branching construct.
-match source.wrapping_add(i) {
+match src.wrapping_add(i) {
                                 a @ 0x0000..=0x7FFF => self.cart.read(a),
                                 a @ 0x8000..=0x9FFF => self.gpu.read_vram(a),
                                 a @ 0xA000..=0xBFFF => self.cart.read(a),
                                 a @ 0xC000..=0xCFFF => self.wram[(a as usize - 0xC000)],
                                 a @ 0xD000..=0xDFFF => {
-                                    let bank = (*self.wram_bank).maximum(1) as usize;
+                                    let bank = (*self.wram_bank).max(1) as usize;
                                     let offset = bank * 0x1000 + (a as usize - 0xD000);
                                     if offset < self.wram.len() { self.wram[offset] } else { 0 }
                                 },
                                 _ => 0xFF,
                             };
-                            self.gpu.write_vram(destination.wrapping_add(i), byte);
+                            self.gpu.write_vram(dst.wrapping_add(i), byte);
                         }
                         *self.hdma5 = 0xFF; // Transfer complete
                     } else {
                         // HBlank DMA: TODO for now do immediate transfer too
                         for i in 0..len {
                             let byte = // Pattern matching — Rust's exhaustive branching construct.
-match source.wrapping_add(i) {
+match src.wrapping_add(i) {
                                 a @ 0x0000..=0x7FFF => self.cart.read(a),
                                 a @ 0xA000..=0xBFFF => self.cart.read(a),
                                 a @ 0xC000..=0xCFFF => self.wram[(a as usize - 0xC000)],
                                 a @ 0xD000..=0xDFFF => {
-                                    let bank = (*self.wram_bank).maximum(1) as usize;
+                                    let bank = (*self.wram_bank).max(1) as usize;
                                     let offset = bank * 0x1000 + (a as usize - 0xD000);
                                     if offset < self.wram.len() { self.wram[offset] } else { 0 }
                                 },
                                 _ => 0xFF,
                             };
-                            self.gpu.write_vram(destination.wrapping_add(i), byte);
+                            self.gpu.write_vram(dst.wrapping_add(i), byte);
                         }
                         *self.hdma5 = 0xFF;
                     }
                 }
             }
-            0xFF68 => self.gpu.bcps = value,               // BCPS
-            0xFF69 => self.gpu.write_bcpd(value),           // BCPD
-            0xFF6A => self.gpu.ocps = value,               // OCPS
-            0xFF6B => self.gpu.write_ocpd(value),           // OCPD
+            0xFF68 => self.gpu.bcps = val,               // BCPS
+            0xFF69 => self.gpu.write_bcpd(val),           // BCPD
+            0xFF6A => self.gpu.ocps = val,               // OCPS
+            0xFF6B => self.gpu.write_ocpd(val),           // OCPD
             0xFF70 => {
                 // SVBK: WRAM bank select (1-7, writing 0 selects bank 1)
-                *self.wram_bank = value & 0x07;
+                *self.wram_bank = val & 0x07;
                 if *self.wram_bank == 0 { *self.wram_bank = 1; }
             }
             // HRAM
-            0xFF80..=0xFFFE => self.hram[(address - 0xFF80) as usize] = value,
+            0xFF80..=0xFFFE => self.hram[(addr - 0xFF80) as usize] = val,
             // IE
-            0xFFFF => *self.ie_register = value,
+            0xFFFF => *self.ie_reg = val,
             _ => {}
         }
     }
@@ -596,16 +596,16 @@ match source.wrapping_add(i) {
 // ======== Simple text rendering (3×5 bitmap font) ========
 fn draw_text(out: &mut [u32], w: usize, h: usize, text: &str, x: usize, y: usize, color: u32, scale: usize) {
     let mut cx = x;
-    for character in text.bytes() {
-        let glyph = get_glyph(character);
+    for ch in text.bytes() {
+        let glyph = get_glyph(ch);
         for row in 0..5usize {
-            for column in 0..3usize {
-                if glyph[row] & (1 << (2 - column)) != 0 {
+            for col in 0..3usize {
+                if glyph[row] & (1 << (2 - col)) != 0 {
                     for sy in 0..scale {
                         for sx in 0..scale {
-                            let pixel = cx + column * scale + sx;
+                            let px = cx + col * scale + sx;
                             let py = y + row * scale + sy;
-                            if pixel < w && py < h { out[py * w + pixel] = color; }
+                            if px < w && py < h { out[py * w + px] = color; }
                         }
                     }
                 }
@@ -615,9 +615,9 @@ fn draw_text(out: &mut [u32], w: usize, h: usize, text: &str, x: usize, y: usize
     }
 }
 
-fn get_glyph(character: u8) -> [u8; 5] {
+fn get_glyph(ch: u8) -> [u8; 5] {
         // Pattern matching — Rust's exhaustive branching construct.
-match character {
+match ch {
         b'A' => [0b111, 0b101, 0b111, 0b101, 0b101],
         b'B' => [0b110, 0b101, 0b110, 0b101, 0b110],
         b'C' => [0b111, 0b100, 0b100, 0b100, 0b111],

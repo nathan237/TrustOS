@@ -28,7 +28,7 @@ pub struct KernelTraceState {
     /// Auto-scroll mode
     pub auto_scroll: bool,
     /// Last read index for incremental updates
-    pub last_read_index: u64,
+    pub last_read_idx: u64,
     /// Filter: which categories to show (all true by default)
     pub filters: [bool; 9],
     /// Whether in "live" mode (auto-scroll, shows latest)
@@ -49,7 +49,7 @@ pub fn new() -> Self {
             events: Vec::new(),
             scroll: 0,
             auto_scroll: false,
-            last_read_index: 0,
+            last_read_idx: 0,
             filters: [true; 9],
             is_live: false,
             refresh_counter: 0,
@@ -64,7 +64,7 @@ pub fn new_live() -> Self {
             events: Vec::new(),
             scroll: 0,
             auto_scroll: true,
-            last_read_index: 0,
+            last_read_idx: 0,
             filters: [true; 9],
             is_live: true,
             refresh_counter: 0,
@@ -81,10 +81,10 @@ pub fn new_live() -> Self {
         }
         
         // Incremental read
-        let (new_events, new_index) = read_since(self.last_read_index, 100);
+        let (new_events, new_idx) = read_since(self.last_read_idx, 100);
         if !new_events.is_empty() {
             self.events.extend(new_events);
-            self.last_read_index = new_index;
+            self.last_read_idx = new_idx;
             
             // Keep buffer bounded
             if self.events.len() > 500 {
@@ -137,9 +137,9 @@ match key {
             }
             // Number keys 1-9 = toggle category filters
             b'1'..=b'9' => {
-                let index = (key - b'1') as usize;
-                if index < self.filters.len() {
-                    self.filters[index] = !self.filters[index];
+                let idx = (key - b'1') as usize;
+                if idx < self.filters.len() {
+                    self.filters[idx] = !self.filters[idx];
                 }
             }
             _ => {}
@@ -168,12 +168,12 @@ match key {
             ];
             let mut fx = 0i32;
             for (i, cat) in cats.iter().enumerate() {
-                let label_length = cat.label().len() as i32 + 1;
-                let label_end = fx + label_length * cw;
+                let label_len = cat.label().len() as i32 + 1;
+                let label_end = fx + label_len * cw;
                 if local_x >= fx && local_x < label_end {
-                    let index = *cat as usize;
-                    if index < self.filters.len() {
-                        self.filters[index] = !self.filters[index];
+                    let idx = *cat as usize;
+                    if idx < self.filters.len() {
+                        self.filters[idx] = !self.filters[idx];
                     }
                     return;
                 }
@@ -292,9 +292,9 @@ pub fn draw(state: &KernelTraceState, x: i32, y: i32, w: u32, h: u32) {
         }
         
         // Timestamp [MM:SS.mmm]
-        let secs = event.timestamp_mouse / 1000;
-        let mouse = event.timestamp_mouse % 1000;
-        let ts = format!("{:02}:{:02}.{:03}", secs / 60, secs % 60, mouse);
+        let secs = event.timestamp_ms / 1000;
+        let ms = event.timestamp_ms % 1000;
+        let ts = format!("{:02}:{:02}.{:03}", secs / 60, secs % 60, ms);
         draw_lab_text(x, cy, &ts, COLUMN_DIM);
         
         // Category badge
@@ -305,7 +305,7 @@ pub fn draw(state: &KernelTraceState, x: i32, y: i32, w: u32, h: u32) {
         // Syscall number badge (if present)
         let message_x_base = cat_x + (6 * cw);
         let message_x;
-        if let Some(nr) = event.syscall_number {
+        if let Some(nr) = event.syscall_nr {
             let number_label = format!("#{}", nr);
             draw_lab_text(message_x_base, cy, &number_label, super::COLUMN_PURPLE);
             message_x = message_x_base + ((number_label.len() as i32 + 1) * cw);
@@ -316,21 +316,21 @@ pub fn draw(state: &KernelTraceState, x: i32, y: i32, w: u32, h: u32) {
         // Message
         let maximum_message_w = w as i32 - (message_x - x);
         let maximum_chars = if cw > 0 { (maximum_message_w / cw) as usize } else { 20 };
-        let message = if event.message.len() > maximum_chars && maximum_chars > 3 {
+        let msg = if event.message.len() > maximum_chars && maximum_chars > 3 {
             &event.message[..maximum_chars.saturating_sub(3)]
         } else {
             &event.message
         };
-        draw_lab_text(message_x, cy, message, if is_selected { COLUMN_ACCENT } else { COLUMN_TEXT });
+        draw_lab_text(message_x, cy, msg, if is_selected { COLUMN_ACCENT } else { COLUMN_TEXT });
         
         cy += lh;
         if cy > y + h as i32 { break; }
     }
     
     // Detail view for selected event (drawn at bottom of panel)
-    if let Some(sel_index) = state.selected_event {
-        if sel_index < state.events.len() {
-            let event = &state.events[sel_index];
+    if let Some(sel_idx) = state.selected_event {
+        if sel_idx < state.events.len() {
+            let event = &state.events[sel_idx];
             let detail_y = y + h as i32 - (detail_lines as i32 * lh);
             // Separator line
             crate::framebuffer::fill_rect(x as u32, (detail_y - 2) as u32, w, 1, super::COLUMN_ACCENT);
@@ -342,7 +342,7 @@ pub fn draw(state: &KernelTraceState, x: i32, y: i32, w: u32, h: u32) {
             dy += lh;
             
             // Line 2: Syscall details (if available)
-            if let Some(nr) = event.syscall_number {
+            if let Some(nr) = event.syscall_nr {
                 let name = super::trace_bus::syscall_name(nr);
                 let detail = if let Some(args) = event.syscall_args {
                     format!("Syscall #{} ({}) args=[{:#x}, {:#x}, {:#x}]",
@@ -354,18 +354,18 @@ pub fn draw(state: &KernelTraceState, x: i32, y: i32, w: u32, h: u32) {
                 dy += lh;
                 
                 // Line 3: Return value
-                if let Some(return_value) = event.syscall_return_value {
-                    let return_value_str = if return_value < 0 {
-                        format!("Return: {} (error)", return_value)
+                if let Some(ret) = event.syscall_ret {
+                    let return_value_str = if ret < 0 {
+                        format!("Return: {} (error)", ret)
                     } else {
-                        format!("Return: {} ({:#x})", return_value, return_value)
+                        format!("Return: {} ({:#x})", ret, ret)
                     };
-                    draw_lab_text(x + 2, dy, &return_value_str, if return_value < 0 { super::COLUMN_RED } else { super::COLUMN_GREEN });
+                    draw_lab_text(x + 2, dy, &return_value_str, if ret < 0 { super::COLUMN_RED } else { super::COLUMN_GREEN });
                 }
             } else {
                 // Non-syscall: show payload
                 let payload_str = format!("Payload: {} ({:#x}) | Timestamp: {}ms",
-                    event.payload, event.payload, event.timestamp_mouse);
+                    event.payload, event.payload, event.timestamp_ms);
                 draw_lab_text(x + 2, dy, &payload_str, COLUMN_DIM);
             }
         }
@@ -374,12 +374,12 @@ pub fn draw(state: &KernelTraceState, x: i32, y: i32, w: u32, h: u32) {
     // Scroll indicator on right edge
     if total_filtered > visible_lines {
         let track_y = log_y;
-        let track_h = log_h.maximum(1);
-        let thumb_h = ((visible_lines as i32 * track_h) / total_filtered as i32).maximum(8);
+        let track_h = log_h.max(1);
+        let thumb_h = ((visible_lines as i32 * track_h) / total_filtered as i32).max(8);
         let thumb_position = if total_filtered > visible_lines {
             let scroll_range = total_filtered - visible_lines;
-            let position = scroll_range.saturating_sub(state.scroll);
-            (position as i32 * (track_h - thumb_h)) / scroll_range.maximum(1) as i32
+            let pos = scroll_range.saturating_sub(state.scroll);
+            (pos as i32 * (track_h - thumb_h)) / scroll_range.max(1) as i32
         } else { 0 };
         
         let sb_x = (x + w as i32 - 3) as u32;

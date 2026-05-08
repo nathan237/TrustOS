@@ -33,8 +33,8 @@
 
 /// Signed distance to a circle: negative inside, positive outside.
 #[inline]
-fn sd_circle(pixel: f32, py: f32, cx: f32, cy: f32, r: f32) -> f32 {
-    let dx = pixel - cx;
+fn sd_circle(px: f32, py: f32, cx: f32, cy: f32, r: f32) -> f32 {
+    let dx = px - cx;
     let dy = py - cy;
     libm::sqrtf(dx * dx + dy * dy) - r
 }
@@ -42,8 +42,8 @@ fn sd_circle(pixel: f32, py: f32, cx: f32, cy: f32, r: f32) -> f32 {
 /// Signed distance to a capsule (line segment with radius).
 /// Perfect for tree trunks, branches, and roots.
 #[inline]
-fn sd_capsule(pixel: f32, py: f32, ax: f32, ay: f32, bx: f32, by: f32, r: f32) -> f32 {
-    let pax = pixel - ax;
+fn sd_capsule(px: f32, py: f32, ax: f32, ay: f32, bx: f32, by: f32, r: f32) -> f32 {
+    let pax = px - ax;
     let pay = py - ay;
     let bax = bx - ax;
     let bay = by - ay;
@@ -67,7 +67,7 @@ fn operation_smooth_union(a: f32, b: f32, k: f32) -> f32 {
     let d = k4 - libm::fabsf(a - b);
     let h = if d > 0.0 { d } else { 0.0 };
     let m = if a < b { a } else { b };
-    m - h * h * 0.25 / k4.maximum(0.001)
+    m - h * h * 0.25 / k4.max(0.001)
 }
 
 // ═══════════════════════════════════════
@@ -205,10 +205,10 @@ pub fn initialize_scene(s: &mut RainSceneState, w: u32, h: u32) {
 
     // ── Bounding box for tree (with generous margin for wind sway + influence) ──
     let margin = 60.0;
-    s.tree_bb_left  = (s.can2_cx - s.can2_r - margin).maximum(0.0);
-    s.tree_bb_right = (s.can3_cx + s.can3_r + margin).minimum(w);
-    s.tree_bb_top   = (s.can1_cy - s.can1_r - margin).maximum(0.0);
-    s.tree_bb_bot   = (s.rt_l_by.maximum(s.rt_r_by) + margin).minimum(h);
+    s.tree_bb_left  = (s.can2_cx - s.can2_r - margin).max(0.0);
+    s.tree_bb_right = (s.can3_cx + s.can3_r + margin).min(w);
+    s.tree_bb_top   = (s.can1_cy - s.can1_r - margin).max(0.0);
+    s.tree_bb_bot   = (s.rt_l_by.max(s.rt_r_by) + margin).min(h);
 
     s.initialized = true;
 }
@@ -219,34 +219,34 @@ pub fn initialize_scene(s: &mut RainSceneState, w: u32, h: u32) {
 
 /// Evaluate tree SDF at (px, py). Wind sway applied to canopy.
 /// Returns signed distance: negative = inside, positive = outside.
-fn tree_sdf(pixel: f32, py: f32, s: &RainSceneState) -> f32 {
+fn tree_sdf(px: f32, py: f32, s: &RainSceneState) -> f32 {
     // Gentle wind sway: canopy oscillates, trunk barely moves
     let wind_dx = libm::sinf(s.wind_phase) * s.can1_r * 0.04;
     let wind_dy = libm::sinf(s.wind_phase * 0.7 + 1.0) * s.can1_r * 0.015;
 
     // Trunk (base fixed, top sways slightly)
     let trunk = sd_capsule(
-        pixel, py,
+        px, py,
         s.trunk_cx, s.trunk_bot_y,
         s.trunk_cx + wind_dx * 0.1, s.trunk_top_y + wind_dy * 0.2,
         s.trunk_r,
     );
 
     // Canopy blobs (full wind sway)
-    let c1 = sd_circle(pixel, py, s.can1_cx + wind_dx, s.can1_cy + wind_dy, s.can1_r);
-    let c2 = sd_circle(pixel, py, s.can2_cx + wind_dx * 0.8, s.can2_cy + wind_dy * 0.8, s.can2_r);
-    let c3 = sd_circle(pixel, py, s.can3_cx + wind_dx * 0.8, s.can3_cy + wind_dy * 0.8, s.can3_r);
+    let c1 = sd_circle(px, py, s.can1_cx + wind_dx, s.can1_cy + wind_dy, s.can1_r);
+    let c2 = sd_circle(px, py, s.can2_cx + wind_dx * 0.8, s.can2_cy + wind_dy * 0.8, s.can2_r);
+    let c3 = sd_circle(px, py, s.can3_cx + wind_dx * 0.8, s.can3_cy + wind_dy * 0.8, s.can3_r);
     let canopy = operation_smooth_union(c1, operation_smooth_union(c2, c3, 25.0), 25.0);
 
     // Branches (partial sway)
     let bl = sd_capsule(
-        pixel, py,
+        px, py,
         s.br_l_ax + wind_dx * 0.1, s.br_l_ay + wind_dy * 0.2,
         s.br_l_bx + wind_dx * 0.8, s.br_l_by + wind_dy * 0.8,
         s.br_l_r,
     );
     let br = sd_capsule(
-        pixel, py,
+        px, py,
         s.br_r_ax + wind_dx * 0.1, s.br_r_ay + wind_dy * 0.2,
         s.br_r_bx + wind_dx * 0.8, s.br_r_by + wind_dy * 0.8,
         s.br_r_r,
@@ -254,8 +254,8 @@ fn tree_sdf(pixel: f32, py: f32, s: &RainSceneState) -> f32 {
     let branches = operation_smooth_union(bl, br, 15.0);
 
     // Roots (fixed, no wind)
-    let rl = sd_capsule(pixel, py, s.rt_l_ax, s.rt_l_ay, s.rt_l_bx, s.rt_l_by, s.rt_l_r);
-    let rr = sd_capsule(pixel, py, s.rt_r_ax, s.rt_r_ay, s.rt_r_bx, s.rt_r_by, s.rt_r_r);
+    let rl = sd_capsule(px, py, s.rt_l_ax, s.rt_l_ay, s.rt_l_bx, s.rt_l_by, s.rt_l_r);
+    let rr = sd_capsule(px, py, s.rt_r_ax, s.rt_r_ay, s.rt_r_bx, s.rt_r_by, s.rt_r_r);
     let roots = operation_smooth_union(rl, rr, 10.0);
 
     // Combine: trunk ∪ canopy ∪ branches ∪ roots
@@ -266,10 +266,10 @@ fn tree_sdf(pixel: f32, py: f32, s: &RainSceneState) -> f32 {
 
 /// Compute 2D surface normal via central finite differences.
 /// Returns normalized (nx, ny). The normal points AWAY from the surface.
-fn tree_normal(pixel: f32, py: f32, s: &RainSceneState) -> (f32, f32) {
+fn tree_normal(px: f32, py: f32, s: &RainSceneState) -> (f32, f32) {
     let eps = 3.0;
-    let dx = tree_sdf(pixel + eps, py, s) - tree_sdf(pixel - eps, py, s);
-    let dy = tree_sdf(pixel, py + eps, s) - tree_sdf(pixel, py - eps, s);
+    let dx = tree_sdf(px + eps, py, s) - tree_sdf(px - eps, py, s);
+    let dy = tree_sdf(px, py + eps, s) - tree_sdf(px, py - eps, s);
     let len = libm::sqrtf(dx * dx + dy * dy);
     if len > 0.001 {
         (dx / len, dy / len)
@@ -324,18 +324,18 @@ pub fn update(state: &mut RainSceneState) {
 ///
 /// This is called for EVERY rain glyph each frame.
 /// Uses bounding box culling to skip most queries cheaply.
-pub fn query_rain(s: &RainSceneState, pixel: f32, py: f32) -> RainInteraction {
+pub fn query_rain(s: &RainSceneState, px: f32, py: f32) -> RainInteraction {
     if !s.initialized {
         return RainInteraction::NONE;
     }
 
     // ── Fast bounding box rejection for tree ──
-    let near_tree = pixel >= s.tree_bb_left && pixel <= s.tree_bb_right
+    let near_tree = px >= s.tree_bb_left && px <= s.tree_bb_right
                  && py >= s.tree_bb_top  && py <= s.tree_bb_bot;
 
     // ── Fast check for lake ──
     let in_lake_band = py >= s.lake_y - 8.0
-                    && pixel >= s.lake_left && pixel <= s.lake_right;
+                    && px >= s.lake_left && px <= s.lake_right;
 
     if !near_tree && !in_lake_band {
         return RainInteraction::NONE;
@@ -345,7 +345,7 @@ pub fn query_rain(s: &RainSceneState, pixel: f32, py: f32) -> RainInteraction {
     // TREE INTERACTION
     // ────────────────────────────────────────
     if near_tree {
-        let tree_d = tree_sdf(pixel, py, s);
+        let tree_d = tree_sdf(px, py, s);
 
                 // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const SURFACE_BAND: f32  = 15.0;   // "on surface" thickness (pixels)
@@ -356,8 +356,8 @@ const SURFACE_BAND: f32  = 15.0;   // "on surface" thickness (pixels)
         if tree_d < INFLUENCE {
             // ── Deep inside tree: dim rain for dark silhouette ──
             if tree_d < -INNER_ZONE {
-                let depth = (-tree_d - INNER_ZONE).minimum(60.0);
-                let dim = (depth / 60.0).minimum(0.80);  // up to 80% dimming
+                let depth = (-tree_d - INNER_ZONE).min(60.0);
+                let dim = (depth / 60.0).min(0.80);  // up to 80% dimming
                 return RainInteraction {
                     x_offset: 0,
                     brightness: 0.20 + (1.0 - dim) * 0.3,  // 0.20 - 0.50
@@ -371,7 +371,7 @@ const SURFACE_BAND: f32  = 15.0;   // "on surface" thickness (pixels)
 
             // ── On the surface: flow + glow ──
             if libm::fabsf(tree_d) <= SURFACE_BAND {
-                let (nx, ny) = tree_normal(pixel, py, s);
+                let (nx, ny) = tree_normal(px, py, s);
 
                 // Flow direction: project gravity onto surface tangent
                 // tangent = (-ny, nx), gravity = (0, 1)
@@ -385,14 +385,14 @@ const SURFACE_BAND: f32  = 15.0;   // "on surface" thickness (pixels)
                 // Color: warm water highlight (white-green-teal tint)
                 let cr = (20.0 + surface_t * 30.0) as i16;
                 let cg = (30.0 + surface_t * 40.0) as i16;
-                let callback = (25.0 + surface_t * 30.0) as i16;
+                let cb = (25.0 + surface_t * 30.0) as i16;
 
                 return RainInteraction {
                     x_offset: flow as i32,
                     brightness: bright,
                     color_r: cr,
                     color_g: cg,
-                    color_b: callback,
+                    color_b: cb,
                     on_surface: true,
                     in_lake: false,
                 };
@@ -400,7 +400,7 @@ const SURFACE_BAND: f32  = 15.0;   // "on surface" thickness (pixels)
 
             // ── Influence zone: drip effect + rain shadow ──
             let falloff_t = (tree_d - SURFACE_BAND) / (INFLUENCE - SURFACE_BAND);
-            let falloff_t = falloff_t.maximum(0.0).minimum(1.0);
+            let falloff_t = falloff_t.max(0.0).min(1.0);
 
             // Drip zone: just below canopy bottom edge
             // Rain that flowed along the dome drips off, creating bright pulses
@@ -448,7 +448,7 @@ const SURFACE_BAND: f32  = 15.0;   // "on surface" thickness (pixels)
         if libm::fabsf(lake_d) < SURFACE_BAND {
             let surface_t = 1.0 - libm::fabsf(lake_d) / SURFACE_BAND;
             // Animated shimmer: sine wave along x + time
-            let shimmer = libm::sinf(pixel * 0.05 + s.wind_phase * 3.0) * 0.3 + 0.7;
+            let shimmer = libm::sinf(px * 0.05 + s.wind_phase * 3.0) * 0.3 + 0.7;
             let bright = 1.4 + surface_t * shimmer * 0.6;
             return RainInteraction {
                 x_offset: 0,
@@ -463,7 +463,7 @@ const SURFACE_BAND: f32  = 15.0;   // "on surface" thickness (pixels)
 
         // Underwater: progressive deep blue dimming
         if lake_d > SURFACE_BAND {
-            let depth = (lake_d - SURFACE_BAND).minimum(120.0) / 120.0;
+            let depth = (lake_d - SURFACE_BAND).min(120.0) / 120.0;
             let dim = 0.12 + depth * 0.55;  // 12% to 67% dimming
             return RainInteraction {
                 x_offset: 0,

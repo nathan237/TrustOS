@@ -11,176 +11,176 @@
 
 
 
-use alloc::string::{String, Gd};
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use alloc::vec;
 use alloc::sync::Arc;
 use alloc::format;
 use spin::Mutex;
 
-use super::{Et, Ep, Cc, FileType, Stat, Br, B, VfsError, I};
-use super::fat32::Bj;
+use super::{Bx, Bv, Au, FileType, Stat, Ap, E, VfsError, K};
+use super::fat32::Ak;
 
 
 
 
 
 
-const ARN_: u16 = 0xEF53;
+const ATP_: u16 = 0xEF53;
 
 
-const XO_: u64 = 1024;
+const YV_: u64 = 1024;
 
 
-const ARM_: u32 = 0x00080000;
+const ATO_: u32 = 0x00080000;
 
 
-const ABY_: u32 = 2;
+const ADO_: u32 = 2;
 
 
-const DLL_: u8 = 0;
-const BUV_: u8 = 1;
-const BUU_: u8 = 2;
-const BUT_: u8 = 3;
-const BUS_: u8 = 4;
-const DLJ_: u8 = 5;
-const DLK_: u8 = 6;
-const BUW_: u8 = 7;
+const DPA_: u8 = 0;
+const BXR_: u8 = 1;
+const BXQ_: u8 = 2;
+const BXP_: u8 = 3;
+const BXO_: u8 = 4;
+const DOY_: u8 = 5;
+const DOZ_: u8 = 6;
+const BXS_: u8 = 7;
 
 
-const BGW_: u16 = 0xF000;
-const PV_: u16 = 0x8000;
-const AIN_: u16 = 0x4000;
-const AIO_: u16 = 0xA000;
-const XQ_: u16 = 0x2000;
-const CXE_: u16 = 0x6000;
-
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-struct Ccq {
-    zlb: u32,         
-    wbx: u32,      
-    zli: u32,    
-    zkz: u32, 
-    zla: u32,    
-    wbz: u32,     
-    wcb: u32,       
-    zld: u32,     
-    jnh: u32,     
-    zkr: u32,   
-    pez: u32,     
-    zlh: u32,                
-    zll: u32,                
-    zlg: u16,            
-    zle: u16,        
-    wcc: u16,                
-    zlj: u16,                
-    zkv: u16,               
-    zlf: u16,      
-    zlc: u32,            
-    zkq: u32,        
-    zks: u32,           
-    wcd: u32,            
-    zku: u16,           
-    zkt: u16,           
-    
-    zky: u32,            
-    wca: u16,           
-    zkp: u16,       
-    zkw: u32,       
-    wby: u32,     
-    zkx: u32,    
-    zlk: [u8; 16],            
-    wce: [u8; 16],     
-    msr: [u8; 168],            
-    
-    
-}
+const BJA_: u16 = 0xF000;
+const QS_: u16 = 0x8000;
+const AKJ_: u16 = 0x4000;
+const AKK_: u16 = 0xA000;
+const YX_: u16 = 0x2000;
+const DAW_: u16 = 0x6000;
 
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct Cwj {
-    yfw: u32,     
-    yge: u32,     
-    ygg: u32,      
-    yga: u16,
-    ygb: u16,
-    ygj: u16,  
-    yfz: u16,               
-    yfy: u32,   
-    yfu: u16,
-    ygc: u16,
-    ygh: u16,    
-    yfx: u16,            
+struct Ajk {
+    s_inodes_count: u32,         
+    s_blocks_count_lo: u32,      
+    s_r_blocks_count_lo: u32,    
+    s_free_blocks_count_lo: u32, 
+    s_free_inodes_count: u32,    
+    s_first_data_block: u32,     
+    s_log_block_size: u32,       
+    s_log_cluster_size: u32,     
+    s_blocks_per_group: u32,     
+    s_clusters_per_group: u32,   
+    s_inodes_per_group: u32,     
+    s_mtime: u32,                
+    s_wtime: u32,                
+    s_mnt_count: u16,            
+    s_max_mnt_count: u16,        
+    s_magic: u16,                
+    s_state: u16,                
+    s_errors: u16,               
+    s_minor_rev_level: u16,      
+    s_lastcheck: u32,            
+    s_checkinterval: u32,        
+    s_creator_os: u32,           
+    s_rev_level: u32,            
+    s_def_resuid: u16,           
+    s_def_resgid: u16,           
     
-    yfv: u32,     
-    ygd: u32,     
-    ygf: u32,      
+    s_first_ino: u32,            
+    s_inode_size: u16,           
+    s_block_group_nr: u16,       
+    s_feature_compat: u32,       
+    s_feature_incompat: u32,     
+    s_feature_ro_compat: u32,    
+    s_uuid: [u8; 16],            
+    s_volume_name: [u8; 16],     
+    _pad1: [u8; 168],            
+    
+    
 }
 
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct Sl {
-    fkv: u16,                 
-    hno: u16,                  
-    tqy: u32,              
-    hnj: u32,                
-    hnl: u32,                
-    hnn: u32,                
-    yxe: u32,                
-    hnm: u16,                  
-    yxh: u16,          
-    hnk: u32,            
-    ocv: u32,                
-    yxi: u32,                 
-    izd: [u32; 15],          
-    yxg: u32,           
-    yxf: u32,          
-    tqx: u32,            
-    fzo: [u8; 16],              
+struct Avk {
+    bg_block_bitmap_lo: u32,     
+    bg_inode_bitmap_lo: u32,     
+    bg_inode_table_lo: u32,      
+    bg_free_blocks_count_lo: u16,
+    bg_free_inodes_count_lo: u16,
+    bg_used_dirs_count_lo: u16,  
+    bg_flags: u16,               
+    bg_exclude_bitmap_lo: u32,   
+    bg_block_bitmap_csum_lo: u16,
+    bg_inode_bitmap_csum_lo: u16,
+    bg_itable_unused_lo: u16,    
+    bg_checksum: u16,            
+    
+    bg_block_bitmap_hi: u32,     
+    bg_inode_bitmap_hi: u32,     
+    bg_inode_table_hi: u32,      
 }
 
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct Ccn {
-    sjl: u16,      
-    sjk: u16,     
-    yop: u16,         
-    sjj: u16,       
-    yoo: u32,  
+struct Hw {
+    i_mode: u16,                 
+    i_uid: u16,                  
+    i_size_lo: u32,              
+    i_atime: u32,                
+    i_ctime: u32,                
+    i_mtime: u32,                
+    i_dtime: u32,                
+    i_gid: u16,                  
+    i_links_count: u16,          
+    i_blocks_lo: u32,            
+    i_flags: u32,                
+    i_osd1: u32,                 
+    i_block: [u32; 15],          
+    i_generation: u32,           
+    i_file_acl_lo: u32,          
+    i_size_high: u32,            
+    _pad: [u8; 16],              
 }
 
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct Ccm {
-    sjc: u32,       
-    sjd: u16,         
-    sje: u16,    
-    sjf: u32,    
+struct Ajh {
+    eh_magic: u16,      
+    eh_entries: u16,     
+    eh_max: u16,         
+    eh_depth: u16,       
+    eh_generation: u32,  
 }
 
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct Cco {
-    sjo: u32,       
-    sjq: u32,     
-    sjp: u16,     
-    fzo: u16,
+struct Ajg {
+    ee_block: u32,       
+    ee_len: u16,         
+    ee_start_hi: u16,    
+    ee_start_lo: u32,    
 }
 
 
 #[repr(C)]
-struct Cwi {
-    fa: u32,          
-    jlr: u16,        
-    baf: u8,        
-    kd: u8,       
+#[derive(Clone, Copy)]
+struct Aji {
+    ei_block: u32,       
+    ei_leaf_lo: u32,     
+    ei_leaf_hi: u16,     
+    _pad: u16,
+}
+
+
+#[repr(C)]
+struct Avj {
+    inode: u32,          
+    eyb: u16,        
+    name_len: u8,        
+    file_type: u8,       
     
 }
 
@@ -189,176 +189,176 @@ struct Cwi {
 
 
 
-pub struct Sj {
-    ff: Mutex<Sk>,
+pub struct Hu {
+    inner: Mutex<Hv>,
 }
 
-struct Sk {
-    py: u32,
-    bac: u16,
-    cro: u32,
-    dej: u32,
-    dhf: u32,
-    cfc: u32,
-    iei: u32,
-    de: Arc<dyn Bj>,
+struct Hv {
+    block_size: u32,
+    inode_size: u16,
+    inodes_per_group: u32,
+    blocks_per_group: u32,
+    first_data_block: u32,
+    group_desc_size: u32,
+    ece: u32,
+    device: Arc<dyn Ak>,
 }
 
-impl Sk {
+impl Hv {
     
-    fn day(&self, aok: u64, k: &mut [u8]) -> Result<(), ()> {
-        let zn = self.de.zn() as u64;
-        let awy = aok / zn;
-        let bho = (aok % zn) as usize;
+    fn read_bytes(&self, uo: u64, buf: &mut [u8]) -> Result<(), ()> {
+        let sector_size = self.device.sector_size() as u64;
+        let start_sector = uo / sector_size;
+        let afl = (uo % sector_size) as usize;
         
         
-        let xv = bho + k.len();
-        let lpn = (xv + zn as usize - 1) / zn as usize;
+        let total_bytes = afl + buf.len();
+        let gkd = (total_bytes + sector_size as usize - 1) / sector_size as usize;
         
-        let mut aae = vec![0u8; zn as usize];
-        let mut ia = k.len();
-        let mut avj = 0usize;
+        let mut mx = vec![0u8; sector_size as usize];
+        let mut ck = buf.len();
+        let mut yj = 0usize;
         
-        for a in 0..lpn {
-            self.de.xr(awy + a as u64, &mut aae)?;
+        for i in 0..gkd {
+            self.device.read_sector(start_sector + i as u64, &mut mx)?;
             
-            let big = if a == 0 { bho } else { 0 };
-            let zg = (zn as usize - big).v(ia);
+            let zl = if i == 0 { afl } else { 0 };
+            let mb = (sector_size as usize - zl).min(ck);
             
-            k[avj..avj + zg]
-                .dg(&aae[big..big + zg]);
+            buf[yj..yj + mb]
+                .copy_from_slice(&mx[zl..zl + mb]);
             
-            avj += zg;
-            ia -= zg;
+            yj += mb;
+            ck -= mb;
         }
         
         Ok(())
     }
     
     
-    fn jlh(&self, hau: u64, k: &mut [u8]) -> Result<(), ()> {
-        let aok = hau * self.py as u64;
-        self.day(aok, k)
+    fn read_block(&self, block_num: u64, buf: &mut [u8]) -> Result<(), ()> {
+        let uo = block_num * self.block_size as u64;
+        self.read_bytes(uo, buf)
     }
     
     
-    fn tds(&self, cyi: u32) -> Result<u64, ()> {
+    fn get_inode_table_block(&self, bbz: u32) -> Result<u64, ()> {
         
-        let tao = if self.py == 1024 { 2 } else { 1 };
-        let tap = tao as u64 * self.py as u64
-            + cyi as u64 * self.cfc as u64;
+        let mbm = if self.block_size == 1024 { 2 } else { 1 };
+        let mbn = mbm as u64 * self.block_size as u64
+            + bbz as u64 * self.group_desc_size as u64;
         
-        let mut eas = [0u8; 64];
-        let cgy = (self.cfc as usize).v(64);
-        self.day(tap, &mut eas[..cgy])?;
+        let mut brw = [0u8; 64];
+        let arx = (self.group_desc_size as usize).min(64);
+        self.read_bytes(mbn, &mut brw[..arx])?;
         
-        let hh = u32::dj([eas[8], eas[9], eas[10], eas[11]]);
-        let gd = if self.cfc >= 64 {
-            u32::dj([eas[0x28], eas[0x29], eas[0x2A], eas[0x2B]])
+        let lo = u32::from_le_bytes([brw[8], brw[9], brw[10], brw[11]]);
+        let hi = if self.group_desc_size >= 64 {
+            u32::from_le_bytes([brw[0x28], brw[0x29], brw[0x2A], brw[0x2B]])
         } else {
             0
         };
         
-        Ok(hh as u64 | ((gd as u64) << 32))
+        Ok(lo as u64 | ((hi as u64) << 32))
     }
     
     
-    fn ayn(&self, dd: u32) -> Result<Sl, ()> {
-        if dd == 0 { return Err(()); }
+    fn read_inode(&self, ino: u32) -> Result<Hw, ()> {
+        if ino == 0 { return Err(()); }
         
-        let cyi = (dd - 1) / self.cro;
-        let index = (dd - 1) % self.cro;
+        let bbz = (ino - 1) / self.inodes_per_group;
+        let index = (ino - 1) % self.inodes_per_group;
         
-        let tuv = self.tds(cyi)?;
-        let tut = tuv * self.py as u64
-            + index as u64 * self.bac as u64;
+        let mqi = self.get_inode_table_block(bbz)?;
+        let mqg = mqi * self.block_size as u64
+            + index as u64 * self.inode_size as u64;
         
-        let mut k = [0u8; 128];
-        self.day(tut, &mut k)?;
+        let mut buf = [0u8; 128];
+        self.read_bytes(mqg, &mut buf)?;
         
-        Ok(unsafe { core::ptr::md(k.fq() as *const Sl) })
+        Ok(unsafe { core::ptr::read_unaligned(buf.as_ptr() as *const Hw) })
     }
     
     
-    fn bac(&self, fa: &Sl) -> u64 {
-        let hh = fa.tqy as u64;
-        let gd = if fa.fkv & PV_ == PV_ {
-            (fa.tqx as u64) << 32
+    fn inode_size(&self, inode: &Hw) -> u64 {
+        let lo = inode.i_size_lo as u64;
+        let hi = if inode.i_mode & QS_ == QS_ {
+            (inode.i_size_high as u64) << 32
         } else {
             0
         };
-        hh | gd
+        lo | hi
     }
     
     
-    fn nse(&self, fa: &Sl, bkg: u32) -> Result<u64, ()> {
+    fn extent_lookup(&self, inode: &Hw, agq: u32) -> Result<u64, ()> {
         
-        let js = unsafe {
-            core::slice::anh(
-                fa.izd.fq() as *const u8,
+        let dm = unsafe {
+            core::slice::from_raw_parts(
+                inode.i_block.as_ptr() as *const u8,
                 60, 
             )
         };
         
-        self.nsf(js, bkg, 4) 
+        self.extent_search(dm, agq, 4) 
     }
     
     
-    fn nsf(&self, f: &[u8], bkg: u32, nkq: u32) -> Result<u64, ()> {
-        if f.len() < 12 || nkq == 0 { return Err(()); }
+    fn extent_search(&self, data: &[u8], agq: u32, depth_limit: u32) -> Result<u64, ()> {
+        if data.len() < 12 || depth_limit == 0 { return Err(()); }
         
-        let dh = unsafe { core::ptr::md(f.fq() as *const Ccn) };
+        let header = unsafe { core::ptr::read_unaligned(data.as_ptr() as *const Ajh) };
         
-        if dh.sjl != 0xF30A {
+        if header.eh_magic != 0xF30A {
             return Err(()); 
         }
         
-        let ch = dh.sjk as usize;
+        let entries = header.eh_entries as usize;
         
-        if dh.sjj == 0 {
+        if header.eh_depth == 0 {
             
-            for a in 0..ch {
-                let l = 12 + a * 12;
-                if l + 12 > f.len() { break; }
+            for i in 0..entries {
+                let offset = 12 + i * 12;
+                if offset + 12 > data.len() { break; }
                 
-                let itm = unsafe {
-                    core::ptr::md(f[l..].fq() as *const Ccm)
+                let elw = unsafe {
+                    core::ptr::read_unaligned(data[offset..].as_ptr() as *const Ajg)
                 };
                 
-                let ay = itm.sjc;
-                let len = itm.sjd as u32;
+                let start = elw.ee_block;
+                let len = elw.ee_len as u32;
                 
-                if bkg >= ay && bkg < ay + len {
-                    let ltv = (itm.sje as u64) << 32
-                        | itm.sjf as u64;
-                    let qqk = (bkg - ay) as u64;
-                    return Ok(ltv + qqk);
+                if agq >= start && agq < start + len {
+                    let gmy = (elw.ee_start_hi as u64) << 32
+                        | elw.ee_start_lo as u64;
+                    let kct = (agq - start) as u64;
+                    return Ok(gmy + kct);
                 }
             }
             Err(()) 
         } else {
             
-            let mut prz: Option<(usize, u64)> = None;
+            let mut jlp: Option<(usize, u64)> = None;
             
-            for a in 0..ch {
-                let l = 12 + a * 12;
-                if l + 12 > f.len() { break; }
+            for i in 0..entries {
+                let offset = 12 + i * 12;
+                if offset + 12 > data.len() { break; }
                 
-                let w = unsafe {
-                    core::ptr::md(f[l..].fq() as *const Cco)
+                let idx = unsafe {
+                    core::ptr::read_unaligned(data[offset..].as_ptr() as *const Aji)
                 };
                 
-                if bkg >= w.sjo {
-                    let khk = (w.sjp as u64) << 32
-                        | w.sjq as u64;
-                    prz = Some((a, khk));
+                if agq >= idx.ei_block {
+                    let fln = (idx.ei_leaf_hi as u64) << 32
+                        | idx.ei_leaf_lo as u64;
+                    jlp = Some((i, fln));
                 }
             }
             
-            if let Some((_, khk)) = prz {
-                let mut ncv = vec![0u8; self.py as usize];
-                self.jlh(khk, &mut ncv)?;
-                self.nsf(&ncv, bkg, nkq - 1)
+            if let Some((_, fln)) = jlp {
+                let mut hkv = vec![0u8; self.block_size as usize];
+                self.read_block(fln, &mut hkv)?;
+                self.extent_search(&hkv, agq, depth_limit - 1)
             } else {
                 Err(())
             }
@@ -366,88 +366,88 @@ impl Sk {
     }
     
     
-    fn hwx(&self, fa: &Sl, azv: u64, k: &mut [u8]) -> Result<usize, ()> {
-        let yy = self.bac(fa);
-        if azv >= yy {
+    fn read_file_data(&self, inode: &Hw, aaw: u64, buf: &mut [u8]) -> Result<usize, ()> {
+        let file_size = self.inode_size(inode);
+        if aaw >= file_size {
             return Ok(0);
         }
         
-        let cgy = ((yy - azv) as usize).v(k.len());
-        if cgy == 0 { return Ok(0); }
+        let arx = ((file_size - aaw) as usize).min(buf.len());
+        if arx == 0 { return Ok(0); }
         
-        let py = self.py as u64;
-        let mut ia = cgy;
-        let mut avj = 0usize;
-        let mut l = azv;
+        let block_size = self.block_size as u64;
+        let mut ck = arx;
+        let mut yj = 0usize;
+        let mut offset = aaw;
         
-        while ia > 0 {
-            let bkg = (l / py) as u32;
-            let fpo = (l % py) as usize;
-            let zg = (py as usize - fpo).v(ia);
+        while ck > 0 {
+            let agq = (offset / block_size) as u32;
+            let cni = (offset % block_size) as usize;
+            let mb = (block_size as usize - cni).min(ck);
             
-            if (fa.ocv & ARM_) != 0 {
-                match self.nse(fa, bkg) {
-                    Ok(clw) => {
-                        let mut ajy = vec![0u8; py as usize];
-                        self.jlh(clw, &mut ajy)?;
-                        k[avj..avj + zg]
-                            .dg(&ajy[fpo..fpo + zg]);
+            if (inode.i_flags & ATO_) != 0 {
+                match self.extent_lookup(inode, agq) {
+                    Ok(aum) => {
+                        let mut se = vec![0u8; block_size as usize];
+                        self.read_block(aum, &mut se)?;
+                        buf[yj..yj + mb]
+                            .copy_from_slice(&se[cni..cni + mb]);
                     }
                     Err(()) => {
                         
-                        for o in &mut k[avj..avj + zg] {
-                            *o = 0;
+                        for b in &mut buf[yj..yj + mb] {
+                            *b = 0;
                         }
                     }
                 }
             } else {
                 
-                match self.ois(fa, bkg) {
-                    Some(clw) if clw != 0 => {
-                        let mut ajy = vec![0u8; py as usize];
-                        self.jlh(clw as u64, &mut ajy)?;
-                        k[avj..avj + zg]
-                            .dg(&ajy[fpo..fpo + zg]);
+                match self.legacy_block_lookup(inode, agq) {
+                    Some(aum) if aum != 0 => {
+                        let mut se = vec![0u8; block_size as usize];
+                        self.read_block(aum as u64, &mut se)?;
+                        buf[yj..yj + mb]
+                            .copy_from_slice(&se[cni..cni + mb]);
                     }
                     _ => {
                         
-                        for o in &mut k[avj..avj + zg] {
-                            *o = 0;
+                        for b in &mut buf[yj..yj + mb] {
+                            *b = 0;
                         }
                     }
                 }
             }
             
-            avj += zg;
-            l += zg as u64;
-            ia -= zg;
+            yj += mb;
+            offset += mb as u64;
+            ck -= mb;
         }
         
-        Ok(cgy)
+        Ok(arx)
     }
     
     
-    fn ois(&self, fa: &Sl, bkg: u32) -> Option<u32> {
-        let fro = self.py / 4; 
+    fn legacy_block_lookup(&self, inode: &Hw, agq: u32) -> Option<u32> {
+        let com = self.block_size / 4; 
         
-        if bkg < 12 {
+        if agq < 12 {
             
-            Some(fa.izd[bkg as usize])
-        } else if bkg < 12 + fro {
+            Some(inode.i_block[agq as usize])
+        } else if agq < 12 + com {
             
-            let oee = fa.izd[12];
-            if oee == 0 { return Some(0); }
-            self.lxq(oee as u64, (bkg - 12) as usize)
-        } else if bkg < 12 + fro + fro * fro {
+            let igl = inode.i_block[12];
+            if igl == 0 { return Some(0); }
+            self.read_indirect_entry(igl as u64, (agq - 12) as usize)
+        } else if agq < 12 + com + com * com {
             
-            let nln = fa.izd[13];
-            if nln == 0 { return Some(0); }
-            let w = bkg - 12 - fro;
-            let fmk = w / fro;
-            let bvd = w % fro;
-            let odz = self.lxq(nln as u64, fmk as usize)?;
-            if odz == 0 { return Some(0); }
-            self.lxq(odz as u64, bvd as usize)
+            let hsh = inode.i_block[13];
+            if hsh == 0 { return Some(0); }
+            let idx = agq - 12 - com;
+            let clt = idx / com;
+            let alv = idx % com;
+            let igh = self.read_indirect_entry(hsh as u64, clt as usize)?;
+            if igh == 0 { return Some(0); }
+            self.read_indirect_entry(igh as u64, alv as usize)
         } else {
             
             None
@@ -455,118 +455,118 @@ impl Sk {
     }
     
     
-    fn lxq(&self, block: u64, index: usize) -> Option<u32> {
-        let aok = block * self.py as u64 + (index * 4) as u64;
-        let mut k = [0u8; 4];
-        self.day(aok, &mut k).bq()?;
-        Some(u32::dj(k))
+    fn read_indirect_entry(&self, block: u64, index: usize) -> Option<u32> {
+        let uo = block * self.block_size as u64 + (index * 4) as u64;
+        let mut buf = [0u8; 4];
+        self.read_bytes(uo, &mut buf).ok()?;
+        Some(u32::from_le_bytes(buf))
     }
     
     
-    fn exg(&self, dd: u32) -> Result<Vec<(u32, String, u8)>, ()> {
-        let fa = self.ayn(dd)?;
-        let yy = self.bac(&fa);
+    fn read_dir_entries(&self, ino: u32) -> Result<Vec<(u32, String, u8)>, ()> {
+        let inode = self.read_inode(ino)?;
+        let file_size = self.inode_size(&inode);
         
-        let mut ch = Vec::new();
-        let mut l = 0u64;
+        let mut entries = Vec::new();
+        let mut offset = 0u64;
         
-        while l < yy {
-            let py = self.py as u64;
-            let bkg = (l / py) as u32;
-            let fpo = (l % py) as usize;
+        while offset < file_size {
+            let block_size = self.block_size as u64;
+            let agq = (offset / block_size) as u32;
+            let cni = (offset % block_size) as usize;
             
             
-            let clw = if (fa.ocv & ARM_) != 0 {
-                self.nse(&fa, bkg)?
+            let aum = if (inode.i_flags & ATO_) != 0 {
+                self.extent_lookup(&inode, agq)?
             } else {
-                self.ois(&fa, bkg)
+                self.legacy_block_lookup(&inode, agq)
                     .ok_or(())? as u64
             };
             
-            let mut ajy = vec![0u8; py as usize];
-            self.jlh(clw, &mut ajy)?;
+            let mut se = vec![0u8; block_size as usize];
+            self.read_block(aum, &mut se)?;
             
-            let mut u = fpo;
-            while u + 8 <= py as usize {
-                let isw = u32::dj([
-                    ajy[u], ajy[u+1], ajy[u+2], ajy[u+3]
+            let mut pos = cni;
+            while pos + 8 <= block_size as usize {
+                let elm = u32::from_le_bytes([
+                    se[pos], se[pos+1], se[pos+2], se[pos+3]
                 ]);
-                let jlr = u16::dj([ajy[u+4], ajy[u+5]]) as usize;
-                let baf = ajy[u+6] as usize;
-                let kd = ajy[u+7];
+                let eyb = u16::from_le_bytes([se[pos+4], se[pos+5]]) as usize;
+                let name_len = se[pos+6] as usize;
+                let file_type = se[pos+7];
                 
-                if jlr == 0 { break; } 
+                if eyb == 0 { break; } 
                 
-                if isw != 0 && baf > 0 && u + 8 + baf <= ajy.len() {
-                    let j = core::str::jg(&ajy[u+8..u+8+baf])
+                if elm != 0 && name_len > 0 && pos + 8 + name_len <= se.len() {
+                    let name = core::str::from_utf8(&se[pos+8..pos+8+name_len])
                         .unwrap_or("")
                         .to_string();
-                    if !j.is_empty() {
-                        ch.push((isw, j, kd));
+                    if !name.is_empty() {
+                        entries.push((elm, name, file_type));
                     }
                 }
                 
-                u += jlr;
-                l += jlr as u64;
+                pos += eyb;
+                offset += eyb as u64;
             }
             
             
-            let oqj = ((l / py) + 1) * py;
-            if l < oqj && u >= py as usize {
-                l = oqj;
+            let iqm = ((offset / block_size) + 1) * block_size;
+            if offset < iqm && pos >= block_size as usize {
+                offset = iqm;
             }
         }
         
-        Ok(ch)
+        Ok(entries)
     }
     
     
-    fn hgd(&self, ger: u32, j: &str) -> Result<u32, ()> {
-        let ch = self.exg(ger)?;
-        for (dd, cxm, xzk) in &ch {
-            if cxm == j {
-                return Ok(*dd);
+    fn dir_lookup(&self, dir_ino: u32, name: &str) -> Result<u32, ()> {
+        let entries = self.read_dir_entries(dir_ino)?;
+        for (ino, bbl, _ft) in &entries {
+            if bbl == name {
+                return Ok(*ino);
             }
         }
         Err(())
     }
     
     
-    fn aqj(&self, path: &str) -> Result<u32, ()> {
-        let path = path.tl('/');
+    fn resolve_path(&self, path: &str) -> Result<u32, ()> {
+        let path = path.trim_start_matches('/');
         if path.is_empty() {
-            return Ok(ABY_);
+            return Ok(ADO_);
         }
         
-        let mut cv = ABY_;
-        for ffm in path.adk('/') {
-            if ffm.is_empty() || ffm == "." { continue; }
-            cv = self.hgd(cv, ffm)?;
+        let mut current = ADO_;
+        for chn in path.split('/') {
+            if chn.is_empty() || chn == "." { continue; }
+            current = self.dir_lookup(current, chn)?;
         }
-        Ok(cv)
+        Ok(current)
     }
     
     
-    fn fll(&self, fa: &Sl) -> FileType {
-        match fa.fkv & BGW_ {
-            PV_ => FileType::Ea,
-            AIN_ => FileType::K,
-            AIO_ => FileType::Anh,
-            XQ_ => FileType::Mv,
-            CXE_ => FileType::Bj,
-            _ => FileType::Ea,
+    fn inode_file_type(&self, inode: &Hw) -> FileType {
+        match inode.i_mode & BJA_ {
+            QS_ => FileType::Regular,
+            AKJ_ => FileType::Directory,
+            AKK_ => FileType::Symlink,
+            YX_ => FileType::CharDevice,
+            DAW_ => FileType::Ak,
+            _ => FileType::Regular,
         }
     }
 }
 
-fn kqa(agm: u8) -> FileType {
-    match agm {
-        BUV_ => FileType::Ea,
-        BUU_ => FileType::K,
-        BUW_ => FileType::Anh,
-        BUT_ => FileType::Mv,
-        BUS_ => FileType::Bj,
-        _ => FileType::Ea,
+fn fsh(qk: u8) -> FileType {
+    match qk {
+        BXR_ => FileType::Regular,
+        BXQ_ => FileType::Directory,
+        BXS_ => FileType::Symlink,
+        BXP_ => FileType::CharDevice,
+        BXO_ => FileType::Ak,
+        _ => FileType::Regular,
     }
 }
 
@@ -575,306 +575,306 @@ fn kqa(agm: u8) -> FileType {
 
 
 
-struct Ccp {
-    fs: Arc<Sj>,
-    dd: u32,
+struct Ajj {
+    fs: Arc<Hu>,
+    ino: u32,
 }
 
-impl Et for Ccp {
-    fn read(&self, l: u64, k: &mut [u8]) -> B<usize> {
-        let ff = self.fs.ff.lock();
-        let fa = ff.ayn(self.dd).jd(|_| VfsError::Av)?;
-        ff.hwx(&fa, l, k).jd(|_| VfsError::Av)
+impl Bx for Ajj {
+    fn read(&self, offset: u64, buf: &mut [u8]) -> E<usize> {
+        let inner = self.fs.inner.lock();
+        let inode = inner.read_inode(self.ino).map_err(|_| VfsError::IoError)?;
+        inner.read_file_data(&inode, offset, buf).map_err(|_| VfsError::IoError)
     }
     
-    fn write(&self, dnv: u64, ihz: &[u8]) -> B<usize> {
-        Err(VfsError::Bz) 
+    fn write(&self, bkm: u64, _buf: &[u8]) -> E<usize> {
+        Err(VfsError::ReadOnly) 
     }
     
-    fn hm(&self) -> B<Stat> {
-        let ff = self.fs.ff.lock();
-        let fa = ff.ayn(self.dd).jd(|_| VfsError::Av)?;
-        let yy = ff.bac(&fa);
-        let agm = ff.fll(&fa);
+    fn stat(&self) -> E<Stat> {
+        let inner = self.fs.inner.lock();
+        let inode = inner.read_inode(self.ino).map_err(|_| VfsError::IoError)?;
+        let file_size = inner.inode_size(&inode);
+        let qk = inner.inode_file_type(&inode);
         
         Ok(Stat {
-            dd: self.dd as u64,
-            kd: agm,
-            aw: yy,
-            xk: fa.hnk as u64,
-            py: ff.py,
-            ev: fa.fkv as u32,
-            pi: fa.hno as u32,
-            pw: fa.hnm as u32,
-            byi: fa.hnj as u64,
-            bnp: fa.hnn as u64,
-            cpq: fa.hnl as u64,
+            ino: self.ino as u64,
+            file_type: qk,
+            size: file_size,
+            blocks: inode.i_blocks_lo as u64,
+            block_size: inner.block_size,
+            mode: inode.i_mode as u32,
+            uid: inode.i_uid as u32,
+            gid: inode.i_gid as u32,
+            atime: inode.i_atime as u64,
+            mtime: inode.i_mtime as u64,
+            ctime: inode.i_ctime as u64,
         })
     }
 }
 
 
-struct Ccl {
-    fs: Arc<Sj>,
-    dd: u32,
+struct Ajf {
+    fs: Arc<Hu>,
+    ino: u32,
 }
 
-impl Ep for Ccl {
-    fn cga(&self, j: &str) -> B<I> {
-        let ff = self.fs.ff.lock();
-        ff.hgd(self.dd, j)
-            .map(|dd| dd as u64)
-            .jd(|_| VfsError::N)
+impl Bv for Ajf {
+    fn lookup(&self, name: &str) -> E<K> {
+        let inner = self.fs.inner.lock();
+        inner.dir_lookup(self.ino, name)
+            .map(|ino| ino as u64)
+            .map_err(|_| VfsError::NotFound)
     }
     
-    fn brx(&self) -> B<Vec<Br>> {
-        let ff = self.fs.ff.lock();
-        let ch = ff.exg(self.dd)
-            .jd(|_| VfsError::Av)?;
+    fn readdir(&self) -> E<Vec<Ap>> {
+        let inner = self.fs.inner.lock();
+        let entries = inner.read_dir_entries(self.ino)
+            .map_err(|_| VfsError::IoError)?;
         
-        Ok(ch.dse()
-            .hi(|(_, j, _)| j != "." && j != "..")
-            .map(|(dd, j, agm)| Br {
-                j,
-                dd: dd as u64,
-                kd: kqa(agm),
+        Ok(entries.into_iter()
+            .filter(|(_, name, _)| name != "." && name != "..")
+            .map(|(ino, name, qk)| Ap {
+                name,
+                ino: ino as u64,
+                file_type: fsh(qk),
             })
             .collect())
     }
     
-    fn avp(&self, blu: &str, gxf: FileType) -> B<I> {
-        Err(VfsError::Bz)
+    fn create(&self, _name: &str, _file_type: FileType) -> E<K> {
+        Err(VfsError::ReadOnly)
     }
     
-    fn cnm(&self, blu: &str) -> B<()> {
-        Err(VfsError::Bz)
+    fn unlink(&self, _name: &str) -> E<()> {
+        Err(VfsError::ReadOnly)
     }
     
-    fn hm(&self) -> B<Stat> {
-        let ff = self.fs.ff.lock();
-        let fa = ff.ayn(self.dd).jd(|_| VfsError::Av)?;
+    fn stat(&self) -> E<Stat> {
+        let inner = self.fs.inner.lock();
+        let inode = inner.read_inode(self.ino).map_err(|_| VfsError::IoError)?;
         
         Ok(Stat {
-            dd: self.dd as u64,
-            kd: FileType::K,
-            aw: ff.bac(&fa),
-            xk: fa.hnk as u64,
-            py: ff.py,
-            ev: fa.fkv as u32,
-            pi: fa.hno as u32,
-            pw: fa.hnm as u32,
-            byi: fa.hnj as u64,
-            bnp: fa.hnn as u64,
-            cpq: fa.hnl as u64,
+            ino: self.ino as u64,
+            file_type: FileType::Directory,
+            size: inner.inode_size(&inode),
+            blocks: inode.i_blocks_lo as u64,
+            block_size: inner.block_size,
+            mode: inode.i_mode as u32,
+            uid: inode.i_uid as u32,
+            gid: inode.i_gid as u32,
+            atime: inode.i_atime as u64,
+            mtime: inode.i_mtime as u64,
+            ctime: inode.i_ctime as u64,
         })
     }
 }
 
 
-impl Cc for Sj {
-    fn j(&self) -> &str { "ext4" }
+impl Au for Hu {
+    fn name(&self) -> &str { "ext4" }
     
-    fn cbm(&self) -> I { ABY_ as u64 }
+    fn root_inode(&self) -> K { ADO_ as u64 }
     
-    fn era(&self, dd: I) -> B<Arc<dyn Et>> {
-        let ff = self.ff.lock();
-        let fa = ff.ayn(dd as u32).jd(|_| VfsError::N)?;
-        let agm = ff.fll(&fa);
-        if agm == FileType::K {
-            return Err(VfsError::Tc);
+    fn get_file(&self, ino: K) -> E<Arc<dyn Bx>> {
+        let inner = self.inner.lock();
+        let inode = inner.read_inode(ino as u32).map_err(|_| VfsError::NotFound)?;
+        let qk = inner.inode_file_type(&inode);
+        if qk == FileType::Directory {
+            return Err(VfsError::IsDirectory);
         }
-        drop(ff);
+        drop(inner);
         
         
         
         
-        Ok(Arc::new(Aru {
-            dd: dd as u32,
-            de: self.ff.lock().de.clone(),
-            py: self.ff.lock().py,
-            bac: self.ff.lock().bac,
-            cro: self.ff.lock().cro,
-            dej: self.ff.lock().dej,
-            dhf: self.ff.lock().dhf,
-            cfc: self.ff.lock().cfc,
+        Ok(Arc::new(Rz {
+            ino: ino as u32,
+            device: self.inner.lock().device.clone(),
+            block_size: self.inner.lock().block_size,
+            inode_size: self.inner.lock().inode_size,
+            inodes_per_group: self.inner.lock().inodes_per_group,
+            blocks_per_group: self.inner.lock().blocks_per_group,
+            first_data_block: self.inner.lock().first_data_block,
+            group_desc_size: self.inner.lock().group_desc_size,
         }))
     }
     
-    fn dhl(&self, dd: I) -> B<Arc<dyn Ep>> {
-        let ff = self.ff.lock();
-        let fa = ff.ayn(dd as u32).jd(|_| VfsError::N)?;
-        let agm = ff.fll(&fa);
-        if agm != FileType::K {
-            return Err(VfsError::Lz);
+    fn get_dir(&self, ino: K) -> E<Arc<dyn Bv>> {
+        let inner = self.inner.lock();
+        let inode = inner.read_inode(ino as u32).map_err(|_| VfsError::NotFound)?;
+        let qk = inner.inode_file_type(&inode);
+        if qk != FileType::Directory {
+            return Err(VfsError::NotDirectory);
         }
-        drop(ff);
+        drop(inner);
         
-        Ok(Arc::new(Art {
-            dd: dd as u32,
-            de: self.ff.lock().de.clone(),
-            py: self.ff.lock().py,
-            bac: self.ff.lock().bac,
-            cro: self.ff.lock().cro,
-            dej: self.ff.lock().dej,
-            dhf: self.ff.lock().dhf,
-            cfc: self.ff.lock().cfc,
+        Ok(Arc::new(Ry {
+            ino: ino as u32,
+            device: self.inner.lock().device.clone(),
+            block_size: self.inner.lock().block_size,
+            inode_size: self.inner.lock().inode_size,
+            inodes_per_group: self.inner.lock().inodes_per_group,
+            blocks_per_group: self.inner.lock().blocks_per_group,
+            first_data_block: self.inner.lock().first_data_block,
+            group_desc_size: self.inner.lock().group_desc_size,
         }))
     }
     
-    fn hm(&self, dd: I) -> B<Stat> {
-        let ff = self.ff.lock();
-        let fa = ff.ayn(dd as u32).jd(|_| VfsError::N)?;
-        let yy = ff.bac(&fa);
-        let agm = ff.fll(&fa);
+    fn stat(&self, ino: K) -> E<Stat> {
+        let inner = self.inner.lock();
+        let inode = inner.read_inode(ino as u32).map_err(|_| VfsError::NotFound)?;
+        let file_size = inner.inode_size(&inode);
+        let qk = inner.inode_file_type(&inode);
         
         Ok(Stat {
-            dd,
-            kd: agm,
-            aw: yy,
-            xk: fa.hnk as u64,
-            py: ff.py,
-            ev: fa.fkv as u32,
-            pi: fa.hno as u32,
-            pw: fa.hnm as u32,
-            byi: fa.hnj as u64,
-            bnp: fa.hnn as u64,
-            cpq: fa.hnl as u64,
+            ino,
+            file_type: qk,
+            size: file_size,
+            blocks: inode.i_blocks_lo as u64,
+            block_size: inner.block_size,
+            mode: inode.i_mode as u32,
+            uid: inode.i_uid as u32,
+            gid: inode.i_gid as u32,
+            atime: inode.i_atime as u64,
+            mtime: inode.i_mtime as u64,
+            ctime: inode.i_ctime as u64,
         })
     }
 }
 
 
-struct Aru {
-    dd: u32,
-    de: Arc<dyn Bj>,
-    py: u32,
-    bac: u16,
-    cro: u32,
-    dej: u32,
-    dhf: u32,
-    cfc: u32,
+struct Rz {
+    ino: u32,
+    device: Arc<dyn Ak>,
+    block_size: u32,
+    inode_size: u16,
+    inodes_per_group: u32,
+    blocks_per_group: u32,
+    first_data_block: u32,
+    group_desc_size: u32,
 }
 
-impl Aru {
-    fn csh(&self) -> Sk {
-        Sk {
-            py: self.py,
-            bac: self.bac,
-            cro: self.cro,
-            dej: self.dej,
-            dhf: self.dhf,
-            cfc: self.cfc,
-            iei: 0,
-            de: self.de.clone(),
+impl Rz {
+    fn make_inner(&self) -> Hv {
+        Hv {
+            block_size: self.block_size,
+            inode_size: self.inode_size,
+            inodes_per_group: self.inodes_per_group,
+            blocks_per_group: self.blocks_per_group,
+            first_data_block: self.first_data_block,
+            group_desc_size: self.group_desc_size,
+            ece: 0,
+            device: self.device.clone(),
         }
     }
 }
 
-impl Et for Aru {
-    fn read(&self, l: u64, k: &mut [u8]) -> B<usize> {
-        let ff = self.csh();
-        let fa = ff.ayn(self.dd).jd(|_| VfsError::Av)?;
-        ff.hwx(&fa, l, k).jd(|_| VfsError::Av)
+impl Bx for Rz {
+    fn read(&self, offset: u64, buf: &mut [u8]) -> E<usize> {
+        let inner = self.make_inner();
+        let inode = inner.read_inode(self.ino).map_err(|_| VfsError::IoError)?;
+        inner.read_file_data(&inode, offset, buf).map_err(|_| VfsError::IoError)
     }
     
-    fn write(&self, dnv: u64, ihz: &[u8]) -> B<usize> {
-        Err(VfsError::Bz)
+    fn write(&self, bkm: u64, _buf: &[u8]) -> E<usize> {
+        Err(VfsError::ReadOnly)
     }
     
-    fn hm(&self) -> B<Stat> {
-        let ff = self.csh();
-        let fa = ff.ayn(self.dd).jd(|_| VfsError::Av)?;
-        let yy = ff.bac(&fa);
-        let agm = ff.fll(&fa);
+    fn stat(&self) -> E<Stat> {
+        let inner = self.make_inner();
+        let inode = inner.read_inode(self.ino).map_err(|_| VfsError::IoError)?;
+        let file_size = inner.inode_size(&inode);
+        let qk = inner.inode_file_type(&inode);
         Ok(Stat {
-            dd: self.dd as u64,
-            kd: agm,
-            aw: yy,
-            xk: fa.hnk as u64,
-            py: ff.py,
-            ev: fa.fkv as u32,
-            pi: fa.hno as u32,
-            pw: fa.hnm as u32,
-            byi: fa.hnj as u64,
-            bnp: fa.hnn as u64,
-            cpq: fa.hnl as u64,
+            ino: self.ino as u64,
+            file_type: qk,
+            size: file_size,
+            blocks: inode.i_blocks_lo as u64,
+            block_size: inner.block_size,
+            mode: inode.i_mode as u32,
+            uid: inode.i_uid as u32,
+            gid: inode.i_gid as u32,
+            atime: inode.i_atime as u64,
+            mtime: inode.i_mtime as u64,
+            ctime: inode.i_ctime as u64,
         })
     }
 }
 
 
-struct Art {
-    dd: u32,
-    de: Arc<dyn Bj>,
-    py: u32,
-    bac: u16,
-    cro: u32,
-    dej: u32,
-    dhf: u32,
-    cfc: u32,
+struct Ry {
+    ino: u32,
+    device: Arc<dyn Ak>,
+    block_size: u32,
+    inode_size: u16,
+    inodes_per_group: u32,
+    blocks_per_group: u32,
+    first_data_block: u32,
+    group_desc_size: u32,
 }
 
-impl Art {
-    fn csh(&self) -> Sk {
-        Sk {
-            py: self.py,
-            bac: self.bac,
-            cro: self.cro,
-            dej: self.dej,
-            dhf: self.dhf,
-            cfc: self.cfc,
-            iei: 0,
-            de: self.de.clone(),
+impl Ry {
+    fn make_inner(&self) -> Hv {
+        Hv {
+            block_size: self.block_size,
+            inode_size: self.inode_size,
+            inodes_per_group: self.inodes_per_group,
+            blocks_per_group: self.blocks_per_group,
+            first_data_block: self.first_data_block,
+            group_desc_size: self.group_desc_size,
+            ece: 0,
+            device: self.device.clone(),
         }
     }
 }
 
-impl Ep for Art {
-    fn cga(&self, j: &str) -> B<I> {
-        let ff = self.csh();
-        ff.hgd(self.dd, j)
-            .map(|dd| dd as u64)
-            .jd(|_| VfsError::N)
+impl Bv for Ry {
+    fn lookup(&self, name: &str) -> E<K> {
+        let inner = self.make_inner();
+        inner.dir_lookup(self.ino, name)
+            .map(|ino| ino as u64)
+            .map_err(|_| VfsError::NotFound)
     }
     
-    fn brx(&self) -> B<Vec<Br>> {
-        let ff = self.csh();
-        let ch = ff.exg(self.dd)
-            .jd(|_| VfsError::Av)?;
+    fn readdir(&self) -> E<Vec<Ap>> {
+        let inner = self.make_inner();
+        let entries = inner.read_dir_entries(self.ino)
+            .map_err(|_| VfsError::IoError)?;
         
-        Ok(ch.dse()
-            .hi(|(_, j, _)| j != "." && j != "..")
-            .map(|(dd, j, agm)| Br {
-                j,
-                dd: dd as u64,
-                kd: kqa(agm),
+        Ok(entries.into_iter()
+            .filter(|(_, name, _)| name != "." && name != "..")
+            .map(|(ino, name, qk)| Ap {
+                name,
+                ino: ino as u64,
+                file_type: fsh(qk),
             })
             .collect())
     }
     
-    fn avp(&self, blu: &str, gxf: FileType) -> B<I> {
-        Err(VfsError::Bz)
+    fn create(&self, _name: &str, _file_type: FileType) -> E<K> {
+        Err(VfsError::ReadOnly)
     }
     
-    fn cnm(&self, blu: &str) -> B<()> {
-        Err(VfsError::Bz)
+    fn unlink(&self, _name: &str) -> E<()> {
+        Err(VfsError::ReadOnly)
     }
     
-    fn hm(&self) -> B<Stat> {
-        let ff = self.csh();
-        let fa = ff.ayn(self.dd).jd(|_| VfsError::Av)?;
+    fn stat(&self) -> E<Stat> {
+        let inner = self.make_inner();
+        let inode = inner.read_inode(self.ino).map_err(|_| VfsError::IoError)?;
         Ok(Stat {
-            dd: self.dd as u64,
-            kd: FileType::K,
-            aw: ff.bac(&fa),
-            xk: fa.hnk as u64,
-            py: ff.py,
-            ev: fa.fkv as u32,
-            pi: fa.hno as u32,
-            pw: fa.hnm as u32,
-            byi: fa.hnj as u64,
-            bnp: fa.hnn as u64,
-            cpq: fa.hnl as u64,
+            ino: self.ino as u64,
+            file_type: FileType::Directory,
+            size: inner.inode_size(&inode),
+            blocks: inode.i_blocks_lo as u64,
+            block_size: inner.block_size,
+            mode: inode.i_mode as u32,
+            uid: inode.i_uid as u32,
+            gid: inode.i_gid as u32,
+            atime: inode.i_atime as u64,
+            mtime: inode.i_mtime as u64,
+            ctime: inode.i_ctime as u64,
         })
     }
 }
@@ -884,59 +884,59 @@ impl Ep for Art {
 
 
 
-pub fn beu(de: Arc<dyn Bj>) -> Result<Arc<Sj>, &'static str> {
+pub fn abd(device: Arc<dyn Ak>) -> Result<Arc<Hu>, &'static str> {
     
-    let mut pfz = [0u8; 256]; 
-    let zn = de.zn();
+    let mut jcy = [0u8; 256]; 
+    let sector_size = device.sector_size();
     
     
-    let awy = XO_ / zn as u64;
-    let mut js = vec![0u8; zn * 4]; 
-    for a in 0..4u64 {
-        let _ = de.xr(awy + a, &mut js[a as usize * zn..(a as usize + 1) * zn]);
+    let start_sector = YV_ / sector_size as u64;
+    let mut dm = vec![0u8; sector_size * 4]; 
+    for i in 0..4u64 {
+        let _ = device.read_sector(start_sector + i, &mut dm[i as usize * sector_size..(i as usize + 1) * sector_size]);
     }
     
-    let ftp = (XO_ - awy * zn as u64) as usize;
-    if ftp + 256 > js.len() {
+    let cpy = (YV_ - start_sector * sector_size as u64) as usize;
+    if cpy + 256 > dm.len() {
         return Err("Superblock read overflow");
     }
-    pfz.dg(&js[ftp..ftp + 256]);
+    jcy.copy_from_slice(&dm[cpy..cpy + 256]);
     
-    let is = unsafe { core::ptr::md(pfz.fq() as *const Ccq) };
+    let cv = unsafe { core::ptr::read_unaligned(jcy.as_ptr() as *const Ajk) };
     
     
-    if is.wcc != ARN_ {
+    if cv.s_magic != ATP_ {
         return Err("Not an ext4 filesystem (bad magic)");
     }
     
-    let py = 1024u32 << is.wcb;
-    let bac = if is.wcd >= 1 { is.wca } else { 128 };
+    let block_size = 1024u32 << cv.s_log_block_size;
+    let inode_size = if cv.s_rev_level >= 1 { cv.s_inode_size } else { 128 };
     
     
-    let edt = (is.wby & 0x80) != 0; 
-    let cfc = if edt { 64u32 } else { 32 };
+    let arf = (cv.s_feature_incompat & 0x80) != 0; 
+    let group_desc_size = if arf { 64u32 } else { 32 };
     
-    let iei = (is.wbx + is.jnh - 1) / is.jnh;
+    let ece = (cv.s_blocks_count_lo + cv.s_blocks_per_group - 1) / cv.s_blocks_per_group;
     
-    let xsv = core::str::jg(&is.wce)
+    let ptc = core::str::from_utf8(&cv.s_volume_name)
         .unwrap_or("")
-        .bdd('\0');
+        .trim_end_matches('\0');
     
     crate::serial_println!("[ext4] Mounted: \"{}\" block_size={} inode_size={} groups={} 64bit={}",
-        xsv, py, bac, iei, edt);
+        ptc, block_size, inode_size, ece, arf);
     crate::serial_println!("[ext4] {} inodes, {} blocks per group",
-        is.pez, is.jnh);
+        cv.s_inodes_per_group, cv.s_blocks_per_group);
     
-    let fs = Arc::new(Sj {
-        ff: Mutex::new(Sk {
-            py,
-            bac,
-            cro: is.pez,
-            dej: is.jnh,
-            dhf: is.wbz,
-            cfc,
-            iei,
-            de,
+    let fs = Arc::new(Hu {
+        inner: Mutex::new(Hv {
+            block_size,
+            inode_size,
+            inodes_per_group: cv.s_inodes_per_group,
+            blocks_per_group: cv.s_blocks_per_group,
+            first_data_block: cv.s_first_data_block,
+            group_desc_size,
+            ece,
+            device,
         }),
     });
     
@@ -944,70 +944,70 @@ pub fn beu(de: Arc<dyn Bj>) -> Result<Arc<Sj>, &'static str> {
 }
 
 
-pub fn probe(de: &dyn Bj) -> bool {
-    let zn = de.zn();
-    let awy = XO_ / zn as u64;
+pub fn probe(device: &dyn Ak) -> bool {
+    let sector_size = device.sector_size();
+    let start_sector = YV_ / sector_size as u64;
     
-    let mut js = vec![0u8; zn * 4];
-    for a in 0..4u64 {
-        if de.xr(awy + a, &mut js[a as usize * zn..(a as usize + 1) * zn]).is_err() {
+    let mut dm = vec![0u8; sector_size * 4];
+    for i in 0..4u64 {
+        if device.read_sector(start_sector + i, &mut dm[i as usize * sector_size..(i as usize + 1) * sector_size]).is_err() {
             return false;
         }
     }
     
-    let ftp = (XO_ - awy * zn as u64) as usize;
-    if ftp + 2 + 0x38 > js.len() { return false; }
+    let cpy = (YV_ - start_sector * sector_size as u64) as usize;
+    if cpy + 2 + 0x38 > dm.len() { return false; }
     
-    let sj = u16::dj([js[ftp + 0x38], js[ftp + 0x39]]);
-    sj == ARN_
+    let magic = u16::from_le_bytes([dm[cpy + 0x38], dm[cpy + 0x39]]);
+    magic == ATP_
 }
 
 
-pub fn mq(fs: &Sj, path: &str) -> Result<Vec<u8>, &'static str> {
-    let ff = fs.ff.lock();
-    let dd = ff.aqj(path).jd(|_| "File not found")?;
-    let fa = ff.ayn(dd).jd(|_| "Failed to read inode")?;
+pub fn read_file(fs: &Hu, path: &str) -> Result<Vec<u8>, &'static str> {
+    let inner = fs.inner.lock();
+    let ino = inner.resolve_path(path).map_err(|_| "File not found")?;
+    let inode = inner.read_inode(ino).map_err(|_| "Failed to read inode")?;
     
-    let agm = ff.fll(&fa);
-    if agm == FileType::K {
+    let qk = inner.inode_file_type(&inode);
+    if qk == FileType::Directory {
         return Err("Is a directory");
     }
     
-    let aw = ff.bac(&fa);
-    if aw > 64 * 1024 * 1024 {
+    let size = inner.inode_size(&inode);
+    if size > 64 * 1024 * 1024 {
         return Err("File too large (>64MB)");
     }
     
-    let mut k = vec![0u8; aw as usize];
-    ff.hwx(&fa, 0, &mut k).jd(|_| "Read error")?;
-    Ok(k)
+    let mut buf = vec![0u8; size as usize];
+    inner.read_file_data(&inode, 0, &mut buf).map_err(|_| "Read error")?;
+    Ok(buf)
 }
 
 
-pub fn ojo(fs: &Sj, path: &str) -> Result<Vec<(String, FileType, u64)>, &'static str> {
-    let ff = fs.ff.lock();
-    let dd = ff.aqj(path).jd(|_| "Directory not found")?;
-    let fa = ff.ayn(dd).jd(|_| "Failed to read inode")?;
+pub fn ikp(fs: &Hu, path: &str) -> Result<Vec<(String, FileType, u64)>, &'static str> {
+    let inner = fs.inner.lock();
+    let ino = inner.resolve_path(path).map_err(|_| "Directory not found")?;
+    let inode = inner.read_inode(ino).map_err(|_| "Failed to read inode")?;
     
-    let agm = ff.fll(&fa);
-    if agm != FileType::K {
+    let qk = inner.inode_file_type(&inode);
+    if qk != FileType::Directory {
         return Err("Not a directory");
     }
     
-    let ch = ff.exg(dd).jd(|_| "Read error")?;
+    let entries = inner.read_dir_entries(ino).map_err(|_| "Read error")?;
     
     let mut result = Vec::new();
-    for (smd, j, syp) in ch {
-        if j == "." || j == ".." { continue; }
+    for (entry_ino, name, ft_byte) in entries {
+        if name == "." || name == ".." { continue; }
         
-        let kd = kqa(syp);
-        let aw = if let Ok(isw) = ff.ayn(smd) {
-            ff.bac(&isw)
+        let file_type = fsh(ft_byte);
+        let size = if let Ok(elm) = inner.read_inode(entry_ino) {
+            inner.inode_size(&elm)
         } else {
             0
         };
         
-        result.push((j, kd, aw));
+        result.push((name, file_type, size));
     }
     
     Ok(result)

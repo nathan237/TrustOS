@@ -10,21 +10,21 @@ use spin::Mutex;
 use core::sync::atomic::{AtomicU32, Ordering};
 
 
-const BAD_: usize = 16;
+const BCF_: usize = 16;
 
 
 #[derive(Clone, Copy, Debug)]
 #[repr(C)]
 pub struct WinSize {
-    pub mrf: u16,
-    pub mre: u16,
-    pub mrg: u16,
-    pub mrh: u16,
+    pub ws_row: u16,
+    pub ws_col: u16,
+    pub ws_xpixel: u16,
+    pub ws_ypixel: u16,
 }
 
 impl Default for WinSize {
     fn default() -> Self {
-        Self { mrf: 25, mre: 80, mrg: 0, mrh: 0 }
+        Self { ws_row: 25, ws_col: 80, ws_xpixel: 0, ws_ypixel: 0 }
     }
 }
 
@@ -32,27 +32,27 @@ impl Default for WinSize {
 #[derive(Clone, Debug)]
 pub struct Termios {
     
-    pub dry: u32,
+    pub iflag: u32,
     
-    pub htl: u32,
+    pub oflag: u32,
     
-    pub hco: u32,
+    pub cflag: u32,
     
-    pub eub: u32,
+    pub lflag: u32,
 }
 
 
-pub const Bff: u32   = 0x0008;
-pub const Biz: u32 = 0x0002;
-pub const Bjh: u32   = 0x0001;
+pub const Yb: u32   = 0x0008;
+pub const Zs: u32 = 0x0002;
+pub const Aaa: u32   = 0x0001;
 
 impl Default for Termios {
     fn default() -> Self {
         Self {
-            dry: 0,
-            htl: 0,
-            hco: 0,
-            eub: Bff | Biz | Bjh, 
+            iflag: 0,
+            oflag: 0,
+            cflag: 0,
+            lflag: Yb | Zs | Aaa, 
         }
     }
 }
@@ -61,65 +61,65 @@ impl Default for Termios {
 pub struct TtyDevice {
     pub index: u32,
     
-    pub fuj: u32,
+    pub session_id: u32,
     
-    pub dqv: u32,
+    pub foreground_pgid: u32,
     
-    pub cnc: Termios,
+    pub termios: Termios,
     
-    pub esq: VecDeque<u8>,
+    pub input_buf: VecDeque<u8>,
     
-    pub fmz: Vec<u8>,
+    pub line_buf: Vec<u8>,
     
-    pub ega: VecDeque<u8>,
+    pub output_buf: VecDeque<u8>,
     
-    pub fbn: WinSize,
+    pub winsize: WinSize,
     
-    pub gh: bool,
+    pub active: bool,
 }
 
 impl TtyDevice {
     pub fn new(index: u32) -> Self {
         Self {
             index,
-            fuj: 0,
-            dqv: 0,
-            cnc: Termios::default(),
-            esq: VecDeque::new(),
-            fmz: Vec::new(),
-            ega: VecDeque::new(),
-            fbn: WinSize::default(),
-            gh: false,
+            session_id: 0,
+            foreground_pgid: 0,
+            termios: Termios::default(),
+            input_buf: VecDeque::new(),
+            line_buf: Vec::new(),
+            output_buf: VecDeque::new(),
+            winsize: WinSize::default(),
+            active: false,
         }
     }
 
     
-    pub fn yyc(&mut self, bm: u8) {
-        let qvy = (self.cnc.eub & Biz) != 0;
-        let gfw = (self.cnc.eub & Bff) != 0;
-        let signals = (self.cnc.eub & Bjh) != 0;
+    pub fn qll(&mut self, ch: u8) {
+        let khg = (self.termios.lflag & Zs) != 0;
+        let cxa = (self.termios.lflag & Yb) != 0;
+        let signals = (self.termios.lflag & Aaa) != 0;
 
         
         if signals {
-            match bm {
+            match ch {
                 3 => {
                     
-                    if self.dqv > 0 {
-                        let _ = crate::signals::lhk(self.dqv, 2); 
+                    if self.foreground_pgid > 0 {
+                        let _ = crate::signals::geu(self.foreground_pgid, 2); 
                     }
                     return;
                 }
                 26 => {
                     
-                    if self.dqv > 0 {
-                        let _ = crate::signals::lhk(self.dqv, 20); 
+                    if self.foreground_pgid > 0 {
+                        let _ = crate::signals::geu(self.foreground_pgid, 20); 
                     }
                     return;
                 }
                 28 => {
                     
-                    if self.dqv > 0 {
-                        let _ = crate::signals::lhk(self.dqv, 3); 
+                    if self.foreground_pgid > 0 {
+                        let _ = crate::signals::geu(self.foreground_pgid, 3); 
                     }
                     return;
                 }
@@ -127,131 +127,131 @@ impl TtyDevice {
             }
         }
 
-        if qvy {
+        if khg {
             
-            match bm {
+            match ch {
                 b'\n' | b'\r' => {
-                    self.fmz.push(b'\n');
+                    self.line_buf.push(b'\n');
                     
-                    for &o in &self.fmz {
-                        self.esq.agt(o);
+                    for &b in &self.line_buf {
+                        self.input_buf.push_back(b);
                     }
-                    self.fmz.clear();
-                    if gfw {
-                        self.ega.agt(b'\n');
+                    self.line_buf.clear();
+                    if cxa {
+                        self.output_buf.push_back(b'\n');
                     }
                 }
                 0x7F | 8 => {
                     
-                    if !self.fmz.is_empty() {
-                        self.fmz.pop();
-                        if gfw {
-                            self.ega.agt(8);
-                            self.ega.agt(b' ');
-                            self.ega.agt(8);
+                    if !self.line_buf.is_empty() {
+                        self.line_buf.pop();
+                        if cxa {
+                            self.output_buf.push_back(8);
+                            self.output_buf.push_back(b' ');
+                            self.output_buf.push_back(8);
                         }
                     }
                 }
                 _ => {
-                    self.fmz.push(bm);
-                    if gfw {
-                        self.ega.agt(bm);
+                    self.line_buf.push(ch);
+                    if cxa {
+                        self.output_buf.push_back(ch);
                     }
                 }
             }
         } else {
             
-            self.esq.agt(bm);
-            if gfw {
-                self.ega.agt(bm);
+            self.input_buf.push_back(ch);
+            if cxa {
+                self.output_buf.push_back(ch);
             }
         }
     }
 
     
-    pub fn read(&mut self, k: &mut [u8]) -> usize {
-        let az = k.len().v(self.esq.len());
-        for a in 0..az {
-            k[a] = self.esq.awp().unwrap_or(0);
+    pub fn read(&mut self, buf: &mut [u8]) -> usize {
+        let count = buf.len().min(self.input_buf.len());
+        for i in 0..count {
+            buf[i] = self.input_buf.pop_front().unwrap_or(0);
         }
-        az
+        count
     }
 
     
-    pub fn write(&mut self, f: &[u8]) -> usize {
-        for &o in f {
-            self.ega.agt(o);
+    pub fn write(&mut self, data: &[u8]) -> usize {
+        for &b in data {
+            self.output_buf.push_back(b);
         }
         
-        for &o in f {
-            crate::serial_print!("{}", o as char);
+        for &b in data {
+            crate::serial_print!("{}", b as char);
         }
-        f.len()
+        data.len()
     }
 
     
-    pub fn yrb(&mut self) -> Vec<u8> {
-        self.ega.bbk(..).collect()
+    pub fn qfy(&mut self) -> Vec<u8> {
+        self.output_buf.drain(..).collect()
     }
 
     
-    pub fn yzg(&self, ary: u32) -> bool {
-        self.gh && self.fuj == ary
+    pub fn qmg(&self, sid: u32) -> bool {
+        self.active && self.session_id == sid
     }
 }
 
 
-static AJG_: Mutex<Option<Vec<TtyDevice>>> = Mutex::new(None);
+static ALB_: Mutex<Option<Vec<TtyDevice>>> = Mutex::new(None);
 
 
-static AGA_: AtomicU32 = AtomicU32::new(0);
+static AHU_: AtomicU32 = AtomicU32::new(0);
 
 
 pub fn init() {
-    let mut gg = AJG_.lock();
-    let mut ik = Vec::fc(BAD_);
+    let mut bs = ALB_.lock();
+    let mut devices = Vec::with_capacity(BCF_);
     
     
-    let mut jui = TtyDevice::new(0);
-    jui.gh = true;
-    jui.fuj = 1; 
-    jui.dqv = 1;
-    ik.push(jui);
+    let mut fdq = TtyDevice::new(0);
+    fdq.active = true;
+    fdq.session_id = 1; 
+    fdq.foreground_pgid = 1;
+    devices.push(fdq);
     
-    AGA_.store(1, Ordering::SeqCst);
-    *gg = Some(ik);
+    AHU_.store(1, Ordering::SeqCst);
+    *bs = Some(devices);
     
     crate::log!("[TTY] TTY subsystem initialized (tty0 = console)");
 }
 
 
-pub fn qgx() -> Option<u32> {
-    let w = AGA_.fetch_add(1, Ordering::SeqCst);
-    if w as usize >= BAD_ {
-        AGA_.fetch_sub(1, Ordering::SeqCst);
+pub fn juy() -> Option<u32> {
+    let idx = AHU_.fetch_add(1, Ordering::SeqCst);
+    if idx as usize >= BCF_ {
+        AHU_.fetch_sub(1, Ordering::SeqCst);
         return None;
     }
     
-    let mut gg = AJG_.lock();
-    if let Some(ref mut ik) = *gg {
-        let tty = TtyDevice::new(w);
-        ik.push(tty);
-        Some(w)
+    let mut bs = ALB_.lock();
+    if let Some(ref mut devices) = *bs {
+        let tty = TtyDevice::new(idx);
+        devices.push(tty);
+        Some(idx)
     } else {
         None
     }
 }
 
 
-pub fn fbp<G, Ac>(index: u32, bb: G) -> Option<Ac>
+pub fn cfj<F, U>(index: u32, f: F) -> Option<U>
 where
-    G: FnOnce(&mut TtyDevice) -> Ac,
+    F: FnOnce(&mut TtyDevice) -> U,
 {
-    let mut gg = AJG_.lock();
-    if let Some(ref mut ik) = *gg {
-        for tty in ik.el() {
+    let mut bs = ALB_.lock();
+    if let Some(ref mut devices) = *bs {
+        for tty in devices.iter_mut() {
             if tty.index == index {
-                return Some(bb(tty));
+                return Some(f(tty));
             }
         }
     }
@@ -259,34 +259,34 @@ where
 }
 
 
-pub fn wiv(bip: u32, bai: u32) {
-    fbp(bip, |tty| {
-        tty.dqv = bai;
+pub fn ooy(tty_index: u32, pgid: u32) {
+    cfj(tty_index, |tty| {
+        tty.foreground_pgid = pgid;
     });
 }
 
 
-pub fn tdp(bip: u32) -> u32 {
-    fbp(bip, |tty| tty.dqv).unwrap_or(0)
+pub fn mdc(tty_index: u32) -> u32 {
+    cfj(tty_index, |tty| tty.foreground_pgid).unwrap_or(0)
 }
 
 
-pub fn pit(bip: u32, fuj: u32) {
-    fbp(bip, |tty| {
-        tty.gh = true;
-        tty.fuj = fuj;
+pub fn jfa(tty_index: u32, session_id: u32) {
+    cfj(tty_index, |tty| {
+        tty.active = true;
+        tty.session_id = session_id;
     });
 }
 
 
-pub fn tff(bip: u32) -> WinSize {
-    fbp(bip, |tty| tty.fbn).age()
+pub fn med(tty_index: u32) -> WinSize {
+    cfj(tty_index, |tty| tty.winsize).unwrap_or_default()
 }
 
 
-pub fn wjy(bip: u32, ciw: WinSize) {
-    fbp(bip, |tty| {
-        tty.fbn = ciw;
+pub fn opu(tty_index: u32, asv: WinSize) {
+    cfj(tty_index, |tty| {
+        tty.winsize = asv;
     });
 }
 
@@ -294,97 +294,97 @@ pub fn wjy(bip: u32, ciw: WinSize) {
 
 
 
-pub const Cnt: u64   = 0x540F;
-pub const Cnw: u64   = 0x5410;
-pub const Cnu: u64    = 0x5429;
-pub const Aew: u64  = 0x5413;
-pub const Btx: u64  = 0x5414;
-pub const Cnv: u64   = 0x540E;
-pub const Djk: u64   = 0x5422;
-pub const Aev: u64      = 0x5401;
-pub const Azq: u64      = 0x5402;
+pub const Aqj: u64   = 0x540F;
+pub const Aqm: u64   = 0x5410;
+pub const Aqk: u64    = 0x5429;
+pub const Nl: u64  = 0x5413;
+pub const Aff: u64  = 0x5414;
+pub const Aql: u64   = 0x540E;
+pub const Bdu: u64   = 0x5422;
+pub const Nk: u64      = 0x5401;
+pub const Vi: u64      = 0x5402;
 
 
-pub fn yvv(bip: u32, request: u64, ji: u64) -> i64 {
+pub fn qkd(tty_index: u32, request: u64, db: u64) -> i64 {
     match request {
-        Cnt => {
+        Aqj => {
             
-            let bai = tdp(bip);
-            if ji != 0 && crate::memory::sw(ji, 4, true) {
-                unsafe { *(ji as *mut u32) = bai; }
+            let pgid = mdc(tty_index);
+            if db != 0 && crate::memory::ij(db, 4, true) {
+                unsafe { *(db as *mut u32) = pgid; }
             }
             0
         }
-        Cnw => {
+        Aqm => {
             
-            if ji != 0 && crate::memory::sw(ji, 4, false) {
-                let bai = unsafe { *(ji as *const u32) };
-                wiv(bip, bai);
+            if db != 0 && crate::memory::ij(db, 4, false) {
+                let pgid = unsafe { *(db as *const u32) };
+                ooy(tty_index, pgid);
             }
             0
         }
-        Cnu => {
+        Aqk => {
             
-            let ary = fbp(bip, |tty| tty.fuj).unwrap_or(0);
-            if ji != 0 && crate::memory::sw(ji, 4, true) {
-                unsafe { *(ji as *mut u32) = ary; }
+            let sid = cfj(tty_index, |tty| tty.session_id).unwrap_or(0);
+            if db != 0 && crate::memory::ij(db, 4, true) {
+                unsafe { *(db as *mut u32) = sid; }
             }
             0
         }
-        Aew => {
+        Nl => {
             
-            let ciw = tff(bip);
-            if ji != 0 && crate::memory::sw(ji, 8, true) {
-                unsafe { *(ji as *mut WinSize) = ciw; }
+            let asv = med(tty_index);
+            if db != 0 && crate::memory::ij(db, 8, true) {
+                unsafe { *(db as *mut WinSize) = asv; }
             }
             0
         }
-        Btx => {
+        Aff => {
             
-            if ji != 0 && crate::memory::sw(ji, 8, false) {
-                let ciw = unsafe { *(ji as *const WinSize) };
-                wjy(bip, ciw);
+            if db != 0 && crate::memory::ij(db, 8, false) {
+                let asv = unsafe { *(db as *const WinSize) };
+                opu(tty_index, asv);
             }
             0
         }
-        Cnv => {
+        Aql => {
             
-            let ce = crate::process::aei();
-            let ary = crate::process::nyo(ce);
-            pit(bip, ary);
+            let pid = crate::process::pe();
+            let sid = crate::process::ibv(pid);
+            jfa(tty_index, sid);
             0
         }
-        Aev => {
+        Nk => {
             
-            if ji != 0 && crate::memory::sw(ji, 16, true) {
-                if let Some(cnc) = fbp(bip, |tty| tty.cnc.clone()) {
+            if db != 0 && crate::memory::ij(db, 16, true) {
+                if let Some(termios) = cfj(tty_index, |tty| tty.termios.clone()) {
                     unsafe {
-                        let ai = ji as *mut u32;
-                        *ai = cnc.dry;
-                        *ai.add(1) = cnc.htl;
-                        *ai.add(2) = cnc.hco;
-                        *ai.add(3) = cnc.eub;
+                        let aa = db as *mut u32;
+                        *aa = termios.iflag;
+                        *aa.add(1) = termios.oflag;
+                        *aa.add(2) = termios.cflag;
+                        *aa.add(3) = termios.lflag;
                     }
                 }
             }
             0
         }
-        Azq => {
+        Vi => {
             
-            if ji != 0 && crate::memory::sw(ji, 16, false) {
-                let (dry, htl, hco, eub) = unsafe {
-                    let ai = ji as *const u32;
-                    (*ai, *ai.add(1), *ai.add(2), *ai.add(3))
+            if db != 0 && crate::memory::ij(db, 16, false) {
+                let (iflag, oflag, cflag, lflag) = unsafe {
+                    let aa = db as *const u32;
+                    (*aa, *aa.add(1), *aa.add(2), *aa.add(3))
                 };
-                fbp(bip, |tty| {
-                    tty.cnc.dry = dry;
-                    tty.cnc.htl = htl;
-                    tty.cnc.hco = hco;
-                    tty.cnc.eub = eub;
+                cfj(tty_index, |tty| {
+                    tty.termios.iflag = iflag;
+                    tty.termios.oflag = oflag;
+                    tty.termios.cflag = cflag;
+                    tty.termios.lflag = lflag;
                 });
             }
             0
         }
-        _ => crate::syscall::errno::Cbi,
+        _ => crate::syscall::errno::Aja,
     }
 }

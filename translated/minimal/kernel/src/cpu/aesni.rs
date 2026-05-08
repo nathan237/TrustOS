@@ -6,268 +6,268 @@
 use core::arch::x86_64::*;
 
 
-pub fn anl() -> bool {
-    super::cfe()
+pub fn sw() -> bool {
+    super::has_aesni()
 }
 
 
 #[repr(C, align(16))]
 pub struct Aes128Key {
-    xh: [acb; 11],
+    round_keys: [__m128i; 11],
 }
 
 impl Aes128Key {
     
-    pub fn new(bs: &[u8; 16]) -> Self {
-        if !anl() {
+    pub fn new(key: &[u8; 16]) -> Self {
+        if !sw() {
             panic!("AES-NI not available");
         }
         
         unsafe {
-            let mut xh: [acb; 11] = core::mem::zeroed();
+            let mut round_keys: [__m128i; 11] = core::mem::zeroed();
             
             
-            xh[0] = byb(bs.fq() as *const acb);
+            round_keys[0] = _mm_loadu_si128(key.as_ptr() as *const __m128i);
             
             
-            xh[1] = dnz(xh[0], 0x01);
-            xh[2] = dnz(xh[1], 0x02);
-            xh[3] = dnz(xh[2], 0x04);
-            xh[4] = dnz(xh[3], 0x08);
-            xh[5] = dnz(xh[4], 0x10);
-            xh[6] = dnz(xh[5], 0x20);
-            xh[7] = dnz(xh[6], 0x40);
-            xh[8] = dnz(xh[7], 0x80);
-            xh[9] = dnz(xh[8], 0x1B);
-            xh[10] = dnz(xh[9], 0x36);
+            round_keys[1] = bkq(round_keys[0], 0x01);
+            round_keys[2] = bkq(round_keys[1], 0x02);
+            round_keys[3] = bkq(round_keys[2], 0x04);
+            round_keys[4] = bkq(round_keys[3], 0x08);
+            round_keys[5] = bkq(round_keys[4], 0x10);
+            round_keys[6] = bkq(round_keys[5], 0x20);
+            round_keys[7] = bkq(round_keys[6], 0x40);
+            round_keys[8] = bkq(round_keys[7], 0x80);
+            round_keys[9] = bkq(round_keys[8], 0x1B);
+            round_keys[10] = bkq(round_keys[9], 0x36);
             
-            Self { xh }
+            Self { round_keys }
         }
     }
     
     
-    pub fn cke(&self, ajk: &[u8; 16]) -> [u8; 16] {
+    pub fn encrypt_block(&self, ry: &[u8; 16]) -> [u8; 16] {
         unsafe {
-            let mut block = byb(ajk.fq() as *const acb);
+            let mut block = _mm_loadu_si128(ry.as_ptr() as *const __m128i);
             
             
-            block = bjc(block, self.xh[0]);
+            block = _mm_xor_si128(block, self.round_keys[0]);
             
             
-            block = elq(block, self.xh[1]);
-            block = elq(block, self.xh[2]);
-            block = elq(block, self.xh[3]);
-            block = elq(block, self.xh[4]);
-            block = elq(block, self.xh[5]);
-            block = elq(block, self.xh[6]);
-            block = elq(block, self.xh[7]);
-            block = elq(block, self.xh[8]);
-            block = elq(block, self.xh[9]);
+            block = _mm_aesenc_si128(block, self.round_keys[1]);
+            block = _mm_aesenc_si128(block, self.round_keys[2]);
+            block = _mm_aesenc_si128(block, self.round_keys[3]);
+            block = _mm_aesenc_si128(block, self.round_keys[4]);
+            block = _mm_aesenc_si128(block, self.round_keys[5]);
+            block = _mm_aesenc_si128(block, self.round_keys[6]);
+            block = _mm_aesenc_si128(block, self.round_keys[7]);
+            block = _mm_aesenc_si128(block, self.round_keys[8]);
+            block = _mm_aesenc_si128(block, self.round_keys[9]);
             
             
-            block = ybd(block, self.xh[10]);
+            block = _mm_aesenclast_si128(block, self.round_keys[10]);
             
-            let mut an = [0u8; 16];
-            ccs(an.mw() as *mut acb, block);
-            an
+            let mut output = [0u8; 16];
+            _mm_storeu_si128(output.as_mut_ptr() as *mut __m128i, block);
+            output
         }
     }
     
     
-    pub fn ylk(&self, afm: &[u8; 16]) -> [u8; 16] {
+    pub fn qci(&self, pw: &[u8; 16]) -> [u8; 16] {
         unsafe {
-            let mut block = byb(afm.fq() as *const acb);
+            let mut block = _mm_loadu_si128(pw.as_ptr() as *const __m128i);
             
             
-            block = bjc(block, self.xh[10]);
+            block = _mm_xor_si128(block, self.round_keys[10]);
             
             
-            block = elp(block, elr(self.xh[9]));
-            block = elp(block, elr(self.xh[8]));
-            block = elp(block, elr(self.xh[7]));
-            block = elp(block, elr(self.xh[6]));
-            block = elp(block, elr(self.xh[5]));
-            block = elp(block, elr(self.xh[4]));
-            block = elp(block, elr(self.xh[3]));
-            block = elp(block, elr(self.xh[2]));
-            block = elp(block, elr(self.xh[1]));
+            block = _mm_aesdec_si128(block, _mm_aesimc_si128(self.round_keys[9]));
+            block = _mm_aesdec_si128(block, _mm_aesimc_si128(self.round_keys[8]));
+            block = _mm_aesdec_si128(block, _mm_aesimc_si128(self.round_keys[7]));
+            block = _mm_aesdec_si128(block, _mm_aesimc_si128(self.round_keys[6]));
+            block = _mm_aesdec_si128(block, _mm_aesimc_si128(self.round_keys[5]));
+            block = _mm_aesdec_si128(block, _mm_aesimc_si128(self.round_keys[4]));
+            block = _mm_aesdec_si128(block, _mm_aesimc_si128(self.round_keys[3]));
+            block = _mm_aesdec_si128(block, _mm_aesimc_si128(self.round_keys[2]));
+            block = _mm_aesdec_si128(block, _mm_aesimc_si128(self.round_keys[1]));
             
             
-            block = ybc(block, self.xh[0]);
+            block = _mm_aesdeclast_si128(block, self.round_keys[0]);
             
-            let mut an = [0u8; 16];
-            ccs(an.mw() as *mut acb, block);
-            an
+            let mut output = [0u8; 16];
+            _mm_storeu_si128(output.as_mut_ptr() as *mut __m128i, block);
+            output
         }
     }
 }
 
 
 #[inline]
-unsafe fn dnz(bs: acb, vqu: i32) -> acb {
-    let mut bs = bs;
-    let mut lhg = ybe(bs, vqu);
-    lhg = ybg(lhg, 0xFF);
-    bs = bjc(bs, fzn(bs, 4));
-    bs = bjc(bs, fzn(bs, 4));
-    bs = bjc(bs, fzn(bs, 4));
-    bjc(bs, lhg)
+unsafe fn bkq(key: __m128i, rcon: i32) -> __m128i {
+    let mut key = key;
+    let mut gep = _mm_aeskeygenassist_si128(key, rcon);
+    gep = _mm_shuffle_epi32(gep, 0xFF);
+    key = _mm_xor_si128(key, _mm_slli_si128(key, 4));
+    key = _mm_xor_si128(key, _mm_slli_si128(key, 4));
+    key = _mm_xor_si128(key, _mm_slli_si128(key, 4));
+    _mm_xor_si128(key, gep)
 }
 
 
-pub struct Bxt {
-    bs: Aes128Key,
-    i: acb,  
+pub struct Ahc {
+    key: Aes128Key,
+    h: __m128i,  
 }
 
-impl Bxt {
+impl Ahc {
     
-    pub fn new(bs: &[u8; 16]) -> Self {
-        let fzw = Aes128Key::new(bs);
+    pub fn new(key: &[u8; 16]) -> Self {
+        let ctk = Aes128Key::new(key);
         
         
-        let ajs = [0u8; 16];
-        let tio = fzw.cke(&ajs);
+        let zero = [0u8; 16];
+        let mgx = ctk.encrypt_block(&zero);
         
-        let i = unsafe { byb(tio.fq() as *const acb) };
+        let h = unsafe { _mm_loadu_si128(mgx.as_ptr() as *const __m128i) };
         
-        Self { bs: fzw, i }
+        Self { key: ctk, h }
     }
     
     
     
-    pub fn npy(&self, brn: &[u8; 12], ajk: &[u8], blv: &[u8]) -> (alloc::vec::Vec<u8>, [u8; 16]) {
+    pub fn encrypt(&self, akh: &[u8; 12], ry: &[u8], ahh: &[u8]) -> (alloc::vec::Vec<u8>, [u8; 16]) {
         use alloc::vec::Vec;
         
         
-        let mut va = [0u8; 16];
-        va[..12].dg(brn);
-        va[15] = 1;
+        let mut counter = [0u8; 16];
+        counter[..12].copy_from_slice(akh);
+        counter[15] = 1;
         
         
-        let hpi = self.bs.cke(&va);
+        let dta = self.key.encrypt_block(&counter);
         
         
-        va[15] = 2;
+        counter[15] = 2;
         
         
-        let mut afm = Vec::fc(ajk.len());
+        let mut pw = Vec::with_capacity(ry.len());
         
-        for jj in ajk.btq(16) {
-            let lhh = self.bs.cke(&va);
+        for df in ry.chunks(16) {
+            let geq = self.key.encrypt_block(&counter);
             
-            for (a, &hf) in jj.iter().cf() {
-                afm.push(hf ^ lhh[a]);
+            for (i, &byte) in df.iter().enumerate() {
+                pw.push(byte ^ geq[i]);
             }
             
             
-            ody(&mut va);
+            igg(&mut counter);
         }
         
         
-        let ll = self.nfj(&hpi, blv, &afm);
+        let tag = self.compute_tag(&dta, ahh, &pw);
         
-        (afm, ll)
+        (pw, tag)
     }
     
     
     
-    pub fn ruw(&self, brn: &[u8; 12], afm: &[u8], blv: &[u8], ll: &[u8; 16]) -> Option<alloc::vec::Vec<u8>> {
+    pub fn lcw(&self, akh: &[u8; 12], pw: &[u8], ahh: &[u8], tag: &[u8; 16]) -> Option<alloc::vec::Vec<u8>> {
         use alloc::vec::Vec;
         
         
-        let mut va = [0u8; 16];
-        va[..12].dg(brn);
-        va[15] = 1;
+        let mut counter = [0u8; 16];
+        counter[..12].copy_from_slice(akh);
+        counter[15] = 1;
         
         
-        let hpi = self.bs.cke(&va);
+        let dta = self.key.encrypt_block(&counter);
         
         
-        let sph = self.nfj(&hpi, blv, afm);
+        let lsr = self.compute_tag(&dta, ahh, pw);
         
         
-        let mut wz = 0u8;
-        for (q, o) in ll.iter().fca(sph.iter()) {
-            wz |= q ^ o;
+        let mut jr = 0u8;
+        for (a, b) in tag.iter().zip(lsr.iter()) {
+            jr |= a ^ b;
         }
         
-        if wz != 0 {
+        if jr != 0 {
             return None; 
         }
         
         
-        va[15] = 2;
+        counter[15] = 2;
         
-        let mut ajk = Vec::fc(afm.len());
+        let mut ry = Vec::with_capacity(pw.len());
         
-        for jj in afm.btq(16) {
-            let lhh = self.bs.cke(&va);
+        for df in pw.chunks(16) {
+            let geq = self.key.encrypt_block(&counter);
             
-            for (a, &hf) in jj.iter().cf() {
-                ajk.push(hf ^ lhh[a]);
+            for (i, &byte) in df.iter().enumerate() {
+                ry.push(byte ^ geq[i]);
             }
             
-            ody(&mut va);
+            igg(&mut counter);
         }
         
-        Some(ajk)
+        Some(ry)
     }
     
     
-    fn nfj(&self, hpi: &[u8; 16], blv: &[u8], afm: &[u8]) -> [u8; 16] {
+    fn compute_tag(&self, dta: &[u8; 16], ahh: &[u8], pw: &[u8]) -> [u8; 16] {
         
         
         
         
-        let mut bqv = unsafe { mso() };
+        let mut ajt = unsafe { _mm_setzero_si128() };
         
         
-        for jj in blv.btq(16) {
+        for df in ahh.chunks(16) {
             let mut block = [0u8; 16];
-            block[..jj.len()].dg(jj);
+            block[..df.len()].copy_from_slice(df);
             
-            let f = unsafe { byb(block.fq() as *const acb) };
-            bqv = unsafe { bjc(bqv, f) };
-            bqv = kza(bqv, self.i);
+            let data = unsafe { _mm_loadu_si128(block.as_ptr() as *const __m128i) };
+            ajt = unsafe { _mm_xor_si128(ajt, data) };
+            ajt = fyz(ajt, self.h);
         }
         
         
-        for jj in afm.btq(16) {
+        for df in pw.chunks(16) {
             let mut block = [0u8; 16];
-            block[..jj.len()].dg(jj);
+            block[..df.len()].copy_from_slice(df);
             
-            let f = unsafe { byb(block.fq() as *const acb) };
-            bqv = unsafe { bjc(bqv, f) };
-            bqv = kza(bqv, self.i);
+            let data = unsafe { _mm_loadu_si128(block.as_ptr() as *const __m128i) };
+            ajt = unsafe { _mm_xor_si128(ajt, data) };
+            ajt = fyz(ajt, self.h);
         }
         
         
-        let mut fmx = [0u8; 16];
-        let jyq = (blv.len() as u64) * 8;
-        let kmc = (afm.len() as u64) * 8;
-        fmx[..8].dg(&jyq.ft());
-        fmx[8..16].dg(&kmc.ft());
+        let mut cme = [0u8; 16];
+        let ffu = (ahh.len() as u64) * 8;
+        let fpf = (pw.len() as u64) * 8;
+        cme[..8].copy_from_slice(&ffu.to_be_bytes());
+        cme[8..16].copy_from_slice(&fpf.to_be_bytes());
         
-        let udy = unsafe { byb(fmx.fq() as *const acb) };
-        bqv = unsafe { bjc(bqv, udy) };
-        bqv = kza(bqv, self.i);
+        let mxw = unsafe { _mm_loadu_si128(cme.as_ptr() as *const __m128i) };
+        ajt = unsafe { _mm_xor_si128(ajt, mxw) };
+        ajt = fyz(ajt, self.h);
         
         
-        let eea = unsafe { byb(hpi.fq() as *const acb) };
-        bqv = unsafe { bjc(bqv, eea) };
+        let btr = unsafe { _mm_loadu_si128(dta.as_ptr() as *const __m128i) };
+        ajt = unsafe { _mm_xor_si128(ajt, btr) };
         
-        let mut ll = [0u8; 16];
-        unsafe { ccs(ll.mw() as *mut acb, bqv) };
-        ll
+        let mut tag = [0u8; 16];
+        unsafe { _mm_storeu_si128(tag.as_mut_ptr() as *mut __m128i, ajt) };
+        tag
     }
 }
 
 
-fn ody(va: &mut [u8; 16]) {
-    for a in (12..16).vv() {
-        va[a] = va[a].cn(1);
-        if va[a] != 0 {
+fn igg(counter: &mut [u8; 16]) {
+    for i in (12..16).rev() {
+        counter[i] = counter[i].wrapping_add(1);
+        if counter[i] != 0 {
             break;
         }
     }
@@ -275,53 +275,53 @@ fn ody(va: &mut [u8; 16]) {
 
 
 #[inline]
-fn kza(q: acb, o: acb) -> acb {
+fn fyz(a: __m128i, b: __m128i) -> __m128i {
     unsafe {
         
-        let bsq = jyb(q, o, 0x00);
-        let ezx = jyb(q, o, 0x10);
-        let idv = jyb(q, o, 0x01);
-        let dct = jyb(q, o, 0x11);
+        let akp = _mm_clmulepi64_si128(a, b, 0x00);
+        let cem = _mm_clmulepi64_si128(a, b, 0x10);
+        let eby = _mm_clmulepi64_si128(a, b, 0x01);
+        let beb = _mm_clmulepi64_si128(a, b, 0x11);
         
-        let ezx = bjc(ezx, idv);
-        let idv = fzn(ezx, 8);
-        let ezx = msp(ezx, 8);
-        let bsq = bjc(bsq, idv);
-        let dct = bjc(dct, ezx);
+        let cem = _mm_xor_si128(cem, eby);
+        let eby = _mm_slli_si128(cem, 8);
+        let cem = _mm_srli_si128(cem, 8);
+        let akp = _mm_xor_si128(akp, eby);
+        let beb = _mm_xor_si128(beb, cem);
         
         
-        let cur = gxj(bsq, 31);
-        let fwy = gxj(dct, 31);
-        let bsq = iie(bsq, 1);
-        let dct = iie(dct, 1);
+        let azy = _mm_srli_epi32(akp, 31);
+        let cru = _mm_srli_epi32(beb, 31);
+        let akp = _mm_slli_epi32(akp, 1);
+        let beb = _mm_slli_epi32(beb, 1);
         
-        let mli = msp(cur, 12);
-        let fwy = fzn(fwy, 4);
-        let cur = fzn(cur, 4);
-        let bsq = iic(bsq, cur);
-        let dct = iic(dct, fwy);
-        let dct = iic(dct, mli);
+        let gzc = _mm_srli_si128(azy, 12);
+        let cru = _mm_slli_si128(cru, 4);
+        let azy = _mm_slli_si128(azy, 4);
+        let akp = _mm_or_si128(akp, azy);
+        let beb = _mm_or_si128(beb, cru);
+        let beb = _mm_or_si128(beb, gzc);
         
-        let cur = iie(bsq, 31);
-        let fwy = iie(bsq, 30);
-        let mli = iie(bsq, 25);
+        let azy = _mm_slli_epi32(akp, 31);
+        let cru = _mm_slli_epi32(akp, 30);
+        let gzc = _mm_slli_epi32(akp, 25);
         
-        let cur = bjc(cur, fwy);
-        let cur = bjc(cur, mli);
-        let fwy = msp(cur, 4);
-        let cur = fzn(cur, 12);
-        let bsq = bjc(bsq, cur);
+        let azy = _mm_xor_si128(azy, cru);
+        let azy = _mm_xor_si128(azy, gzc);
+        let cru = _mm_srli_si128(azy, 4);
+        let azy = _mm_slli_si128(azy, 12);
+        let akp = _mm_xor_si128(akp, azy);
         
-        let fwx = gxj(bsq, 1);
-        let ezx = gxj(bsq, 2);
-        let idv = gxj(bsq, 7);
-        let fwx = bjc(fwx, ezx);
-        let fwx = bjc(fwx, idv);
-        let fwx = bjc(fwx, fwy);
-        let bsq = bjc(bsq, fwx);
-        let dct = bjc(dct, bsq);
+        let crt = _mm_srli_epi32(akp, 1);
+        let cem = _mm_srli_epi32(akp, 2);
+        let eby = _mm_srli_epi32(akp, 7);
+        let crt = _mm_xor_si128(crt, cem);
+        let crt = _mm_xor_si128(crt, eby);
+        let crt = _mm_xor_si128(crt, cru);
+        let akp = _mm_xor_si128(akp, crt);
+        let beb = _mm_xor_si128(beb, akp);
         
-        dct
+        beb
     }
 }
 

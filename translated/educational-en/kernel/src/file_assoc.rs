@@ -94,7 +94,7 @@ impl FileRegistry {
     }
     
     /// Initialize with default associations
-    pub fn initialize_defaults(&mut self) {
+    pub fn init_defaults(&mut self) {
         // Text files
         self.register("txt", FileCategory::Text, Program::TextEditor, "Text Document");
         self.register("log", FileCategory::Text, Program::TextEditor, "Log File");
@@ -230,7 +230,7 @@ static FILE_REGISTRY: Mutex<FileRegistry> = Mutex::new(FileRegistry::new());
 
 /// Initialize file associations
 pub fn init() {
-    FILE_REGISTRY.lock().initialize_defaults();
+    FILE_REGISTRY.lock().init_defaults();
     crate::serial_println!("[FILE_ASSOC] File associations initialized");
 }
 

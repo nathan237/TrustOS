@@ -114,9 +114,9 @@ unsafe {
 
             "3:",
 
-            temporary = out(reg) _,
+            tmp = out(reg) _,
             sync_handler = sym el2_sync_entry,
-            interrupt_request_handler = sym el2_interrupt_request_entry,
+            irq_handler = sym el2_irq_entry,
             options(nostack)
         );
     }
@@ -178,7 +178,7 @@ match action {
 /// Rust entry point for EL2 IRQ exceptions
 #[cfg(target_arch = "aarch64")]
 #[no_mangle]
-extern "C" fn el2_interrupt_request_entry() {
+extern "C" fn el2_irq_entry() {
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
         super::vgic::handle_el2_interrupt_request(&mut VGIC_INSTANCE);
@@ -232,7 +232,7 @@ pub fn enter_hypervisor(config: &HypervisorConfig) -> ! {
     }
 
     // 2. Compute HCR_EL2
-    let hcr_value = compute_hcr(config);
+    let hcr_val = compute_hcr(config);
 
     // 3. Configure EL2 system registers
     #[cfg(target_arch = "aarch64")]
@@ -242,7 +242,7 @@ unsafe {
         core::arch::asm!(
             "msr hcr_el2, {hcr}",
             "isb",
-            hcr = in(reg) hcr_value,
+            hcr = in(reg) hcr_val,
             options(nomem, nostack)
         );
 
@@ -355,8 +355,8 @@ pub fn get_spy_summary() -> alloc::string::String {
     let recent = mmio_spy::recent_mmio_events(10);
     if !recent.is_empty() {
         s.push_str("\n--- Recent MMIO (newest first) ---\n");
-        for event in &recent {
-            s.push_str(&format!("  {}\n", mmio_spy::format_mmio_event(event)));
+        for ev in &recent {
+            s.push_str(&format!("  {}\n", mmio_spy::format_mmio_event(ev)));
         }
     }
 
@@ -364,8 +364,8 @@ pub fn get_spy_summary() -> alloc::string::String {
     let smc_recent = mmio_spy::recent_smc_events(5);
     if !smc_recent.is_empty() {
         s.push_str("\n--- Recent SMC Calls ---\n");
-        for event in &smc_recent {
-            s.push_str(&format!("  {}\n", mmio_spy::format_smc_event(event)));
+        for ev in &smc_recent {
+            s.push_str(&format!("  {}\n", mmio_spy::format_smc_event(ev)));
         }
     }
 

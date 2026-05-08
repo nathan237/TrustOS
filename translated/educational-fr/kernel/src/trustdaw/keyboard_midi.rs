@@ -139,7 +139,7 @@ pub fn get_octave() -> i8 {
 
 /// Set default velocity
 pub fn set_velocity(vel: u8) {
-    DEFAULT_VELOCITY.store(vel.minimum(127), Ordering::Relaxed);
+    DEFAULT_VELOCITY.store(vel.min(127), Ordering::Relaxed);
 }
 
 /// Get default velocity

@@ -23,7 +23,7 @@ struct Rng(u64);
 // Bloc d'implémentation — définit les méthodes du type ci-dessus.
 impl Rng {
     fn new() -> Self {
-        let seed = crate::time::uptime_mouse().wrapping_mul(6364136223846793005).wrapping_add(1);
+        let seed = crate::time::uptime_ms().wrapping_mul(6364136223846793005).wrapping_add(1);
         Self(if seed == 0 { 42 } else { seed })
     }
 
@@ -34,8 +34,8 @@ impl Rng {
         self.0
     }
 
-    fn range(&mut self, minimum: u64, maximum: u64) -> u64 {
-        minimum + (self.next() % (maximum - minimum + 1))
+    fn range(&mut self, min: u64, max: u64) -> u64 {
+        min + (self.next() % (max - min + 1))
     }
 }
 
@@ -71,7 +71,7 @@ pub struct TaskResult {
 enum MathOp { Add, Sub, Mul }
 
 /// Generate a unique math task for a given node index
-fn generate_math_task(rng: &mut Rng, node_index: usize, node_ip: [u8; 4]) -> MathTask {
+fn generate_math_task(rng: &mut Rng, node_idx: usize, node_ip: [u8; 4]) -> MathTask {
     let op = // Correspondance de motifs — branchement exhaustif de Rust.
 match rng.next() % 3 {
         0 => MathOp::Add,
@@ -243,8 +243,8 @@ pub fn run_distributed_math() -> Vec<TaskResult> {
 
                 // Correspondance de motifs — branchement exhaustif de Rust.
 match super::rpc::call(peer.ip, rpc_port, super::rpc::Command::TaskExecute, payload.as_bytes()) {
-            Ok((super::rpc::Status::Ok, response)) => {
-                if let Some((answer, file_ok)) = parse_task_response(&response) {
+            Ok((super::rpc::Status::Ok, resp)) => {
+                if let Some((answer, file_ok)) = parse_task_response(&resp) {
                     results.push(TaskResult {
                         node_ip: peer.ip,
                         node_name: format!("{}.{}.{}.{} ({})",
@@ -268,9 +268,9 @@ match super::rpc::call(peer.ip, rpc_port, super::rpc::Command::TaskExecute, payl
                     });
                 }
             }
-            Ok((status, response)) => {
-                let error = core::str::from_utf8(&response).unwrap_or("?");
-                crate::serial_println!("[TASK] Peer error: {:?} — {}", status, error);
+            Ok((status, resp)) => {
+                let err = core::str::from_utf8(&resp).unwrap_or("?");
+                crate::serial_println!("[TASK] Peer error: {:?} — {}", status, err);
                 results.push(TaskResult {
                     node_ip: peer.ip,
                     node_name: format!("{}.{}.{}.{}", peer.ip[0], peer.ip[1], peer.ip[2], peer.ip[3]),

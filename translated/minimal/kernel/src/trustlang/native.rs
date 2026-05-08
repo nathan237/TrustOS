@@ -14,95 +14,95 @@ use alloc::collections::BTreeMap;
 use alloc::format;
 
 use super::parser::*;
-use super::x86asm::{X86Asm, Reg, Cc, Dy};
+use super::x86asm::{X86Asm, Reg, Cc, Br};
 
 
-pub struct Akl {
+pub struct Pp {
     
-    pub aj: Vec<u8>,
+    pub code: Vec<u8>,
     
-    pub bql: usize,
+    pub entry_offset: usize,
     
-    pub pd: Vec<String>,
+    pub strings: Vec<String>,
 }
 
 
 
 
-pub type Bcv = fn(u8, usize, *const i64) -> i64;
+pub type Ws = fn(u8, usize, *const i64) -> i64;
 
 
 struct FnCtx {
-    cu: Dy,
-    bbx: BTreeMap<String, i32>,  
-    foz: i32,               
-    bvf: Vec<Dy>,
-    euk: Vec<Dy>,
+    label: Br,
+    locals: BTreeMap<String, i32>,  
+    next_offset: i32,               
+    loop_starts: Vec<Br>,
+    loop_ends: Vec<Br>,
 }
 
 impl FnCtx {
-    fn new(cu: Dy) -> Self {
+    fn new(label: Br) -> Self {
         Self {
-            cu,
-            bbx: BTreeMap::new(),
-            foz: -8,
-            bvf: Vec::new(),
-            euk: Vec::new(),
+            label,
+            locals: BTreeMap::new(),
+            next_offset: -8,
+            loop_starts: Vec::new(),
+            loop_ends: Vec::new(),
         }
     }
 
-    fn ijm(&mut self, j: &str) -> i32 {
-        if let Some(&dz) = self.bbx.get(j) {
-            return dz;
+    fn alloc_local(&mut self, name: &str) -> i32 {
+        if let Some(&off) = self.locals.get(name) {
+            return off;
         }
-        let dz = self.foz;
-        self.bbx.insert(String::from(j), dz);
-        self.foz -= 8;
-        dz
+        let off = self.next_offset;
+        self.locals.insert(String::from(name), off);
+        self.next_offset -= 8;
+        off
     }
 
-    fn bzt(&self) -> i32 {
-        let js = (-self.foz) + 8; 
+    fn frame_size(&self) -> i32 {
+        let dm = (-self.next_offset) + 8; 
         
-        (js + 15) & !15
+        (dm + 15) & !15
     }
 }
 
 
 struct NativeCompiler {
     asm: X86Asm,
-    hkr: BTreeMap<String, Dy>,
-    pd: Vec<String>,
-    fvr: BTreeMap<String, usize>,
-    kfm: Dy,
+    func_labels: BTreeMap<String, Br>,
+    strings: Vec<String>,
+    string_map: BTreeMap<String, usize>,
+    builtin_trampoline: Br,
 }
 
 impl NativeCompiler {
     fn new() -> Self {
         let mut asm = X86Asm::new();
-        let xls = asm.dtl();
+        let pnc = asm.new_label();
         Self {
             asm,
-            hkr: BTreeMap::new(),
-            pd: Vec::new(),
-            fvr: BTreeMap::new(),
-            kfm: xls,
+            func_labels: BTreeMap::new(),
+            strings: Vec::new(),
+            string_map: BTreeMap::new(),
+            builtin_trampoline: pnc,
         }
     }
 
-    fn lfb(&mut self, e: &str) -> usize {
-        if let Some(&w) = self.fvr.get(e) {
-            return w;
+    fn intern_string(&mut self, j: &str) -> usize {
+        if let Some(&idx) = self.string_map.get(j) {
+            return idx;
         }
-        let w = self.pd.len();
-        self.pd.push(String::from(e));
-        self.fvr.insert(String::from(e), w);
-        w
+        let idx = self.strings.len();
+        self.strings.push(String::from(j));
+        self.string_map.insert(String::from(j), idx);
+        idx
     }
 
     
-    fn imj(j: &str) -> Option<u8> {
-        match j {
+    fn ehg(name: &str) -> Option<u8> {
+        match name {
             "print"        => Some(0),
             "println"      => Some(1),
             "len"          => Some(2),
@@ -127,454 +127,454 @@ impl NativeCompiler {
         }
     }
 
-    fn kkc(&mut self, alo: &Program) -> Result<Akl, String> {
+    fn compile_program(&mut self, program: &Program) -> Result<Pp, String> {
         
-        for item in &alo.pj {
-            if let Item::Bs(bb) = item {
-                let cu = self.asm.dtl();
-                self.hkr.insert(bb.j.clone(), cu);
+        for item in &program.items {
+            if let Item::Aq(f) = item {
+                let label = self.asm.new_label();
+                self.func_labels.insert(f.name.clone(), label);
             }
         }
 
         
         
         
-        self.asm.deg(self.kfm);
+        self.asm.bind_label(self.builtin_trampoline);
         
-        self.asm.qvo(Reg::Aec);
-        self.asm.aux();
+        self.asm.call_r(Reg::R15);
+        self.asm.ret();
 
         
-        for item in &alo.pj {
-            if let Item::Bs(bb) = item {
-                self.kkb(bb)?;
+        for item in &program.items {
+            if let Item::Aq(f) = item {
+                self.compile_fn(f)?;
             }
         }
 
         
-        self.asm.vxw().jd(|aa| String::from(aa))?;
+        self.asm.resolve_patches().map_err(|e| String::from(e))?;
 
-        let sme = self.hkr.get("main")
+        let lqr = self.func_labels.get("main")
             .ok_or_else(|| String::from("no main() function found"))?;
-        let bql = self.asm.cze[sme.0]
+        let entry_offset = self.asm.labels[lqr.0]
             .ok_or_else(|| String::from("main() label unresolved"))?;
 
-        Ok(Akl {
-            aj: self.asm.aj.clone(),
-            pd: self.pd.clone(),
-            bql,
+        Ok(Pp {
+            code: self.asm.code.clone(),
+            strings: self.strings.clone(),
+            entry_offset,
         })
     }
 
-    fn kkb(&mut self, aqy: &Abu) -> Result<(), String> {
-        let cu = *self.hkr.get(&aqy.j)
-            .ok_or_else(|| format!("function '{}' not registered", aqy.j))?;
+    fn compile_fn(&mut self, decl: &Md) -> Result<(), String> {
+        let label = *self.func_labels.get(&decl.name)
+            .ok_or_else(|| format!("function '{}' not registered", decl.name))?;
 
-        let mut be = FnCtx::new(cu);
+        let mut ab = FnCtx::new(label);
 
         
         
         
-        for (a, (j, msw)) in aqy.oi.iter().cf() {
-            let dz = be.ijm(j);
+        for (i, (name, _ty)) in decl.params.iter().enumerate() {
+            let off = ab.alloc_local(name);
             
-            let _ = (a, dz);
+            let _ = (i, off);
         }
 
         
-        self.hvw(&mut be, &aqy.gj);
-        let bzt = be.bzt();
+        self.prescan_block_locals(&mut ab, &decl.body);
+        let frame_size = ab.frame_size();
 
         
-        self.asm.deg(cu);
-        self.asm.vne(bzt);
+        self.asm.bind_label(label);
+        self.asm.prologue(frame_size);
 
         
         
-        for (a, (j, msw)) in aqy.oi.iter().cf() {
-            let cum = 16 + (a as i32) * 8;
-            let bgu = *be.bbx.get(j).unwrap();
-            self.asm.hrz(Reg::J, cum);
-            self.asm.gna(bgu, Reg::J);
+        for (i, (name, _ty)) in decl.params.iter().enumerate() {
+            let azu = 16 + (i as i32) * 8;
+            let afd = *ab.locals.get(name).unwrap();
+            self.asm.mov_r_rbp_offset(Reg::Rax, azu);
+            self.asm.mov_rbp_offset_r(afd, Reg::Rax);
         }
 
         
-        self.cjp(&mut be, &aqy.gj)?;
+        self.compile_block(&mut ab, &decl.body)?;
 
         
-        self.asm.gmz(Reg::J, 0);
-        self.asm.nqw();
+        self.asm.mov_r_imm32(Reg::Rax, 0);
+        self.asm.epilogue();
 
         Ok(())
     }
 
     
-    fn hvw(&self, be: &mut FnCtx, block: &Dj) {
-        for stmt in &block.boq {
+    fn prescan_block_locals(&self, ab: &mut FnCtx, block: &Bl) {
+        for stmt in &block.stmts {
             match stmt {
-                Stmt::Pu { j, .. } => { be.ijm(j); }
-                Stmt::Gx { cne, ckc, .. } => {
-                    self.hvw(be, cne);
-                    if let Some(ebc) = ckc { self.hvw(be, ebc); }
+                Stmt::Let { name, .. } => { ab.alloc_local(name); }
+                Stmt::If { avj, atp, .. } => {
+                    self.prescan_block_locals(ab, avj);
+                    if let Some(bsd) = atp { self.prescan_block_locals(ab, bsd); }
                 }
-                Stmt::La { gj, .. } | Stmt::Pz(gj) => {
-                    self.hvw(be, gj);
+                Stmt::While { body, .. } | Stmt::Loop(body) => {
+                    self.prescan_block_locals(ab, body);
                 }
-                Stmt::Ll { bfp, gj, .. } => {
-                    be.ijm(bfp);
-                    be.ijm(&format!("__for_end_{}", bfp));
-                    self.hvw(be, gj);
+                Stmt::For { ael, body, .. } => {
+                    ab.alloc_local(ael);
+                    ab.alloc_local(&format!("__for_end_{}", ael));
+                    self.prescan_block_locals(ab, body);
                 }
                 _ => {}
             }
         }
     }
 
-    fn cjp(&mut self, be: &mut FnCtx, block: &Dj) -> Result<(), String> {
-        for stmt in &block.boq {
-            self.kkd(be, stmt)?;
+    fn compile_block(&mut self, ab: &mut FnCtx, block: &Bl) -> Result<(), String> {
+        for stmt in &block.stmts {
+            self.compile_stmt(ab, stmt)?;
         }
         Ok(())
     }
 
-    fn kkd(&mut self, be: &mut FnCtx, stmt: &Stmt) -> Result<(), String> {
+    fn compile_stmt(&mut self, ab: &mut FnCtx, stmt: &Stmt) -> Result<(), String> {
         match stmt {
-            Stmt::Pu { j, init, .. } => {
-                let dz = *be.bbx.get(j).unwrap();
+            Stmt::Let { name, init, .. } => {
+                let off = *ab.locals.get(name).unwrap();
                 if let Some(expr) = init {
-                    self.aex(be, expr)?;
-                    self.asm.clz(Reg::J);
-                    self.asm.gna(dz, Reg::J);
+                    self.compile_expr(ab, expr)?;
+                    self.asm.pop_r(Reg::Rax);
+                    self.asm.mov_rbp_offset_r(off, Reg::Rax);
                 }
             }
-            Stmt::Vk { cd, bn } => {
-                self.aex(be, bn)?;
-                self.hdr(be, cd)?;
+            Stmt::Assign { target, value } => {
+                self.compile_expr(ab, value)?;
+                self.compile_store(ab, target)?;
             }
-            Stmt::Xw { op, cd, bn } => {
-                self.aex(be, cd)?;
-                self.aex(be, bn)?;
-                self.npp(*op)?;
-                self.hdr(be, &cd.clone())?;
+            Stmt::OpAssign { op, target, value } => {
+                self.compile_expr(ab, target)?;
+                self.compile_expr(ab, value)?;
+                self.emit_binop(*op)?;
+                self.compile_store(ab, &target.clone())?;
             }
             Stmt::Expr(expr) => {
-                self.aex(be, expr)?;
-                self.asm.clz(Reg::J); 
+                self.compile_expr(ab, expr)?;
+                self.asm.pop_r(Reg::Rax); 
             }
-            Stmt::Hd(ap) => {
-                if let Some(expr) = ap {
-                    self.aex(be, expr)?;
-                    self.asm.clz(Reg::J);
+            Stmt::Return(val) => {
+                if let Some(expr) = val {
+                    self.compile_expr(ab, expr)?;
+                    self.asm.pop_r(Reg::Rax);
                 } else {
-                    self.asm.gmz(Reg::J, 0);
+                    self.asm.mov_r_imm32(Reg::Rax, 0);
                 }
-                self.asm.nqw();
+                self.asm.epilogue();
             }
-            Stmt::Gx { mo, cne, ckc } => {
-                self.aex(be, mo)?;
-                self.asm.clz(Reg::J);
-                self.asm.mkj(Reg::J, Reg::J);
-                let kta = self.asm.dtl();
-                self.asm.lgu(Cc::Se, kta); 
-                self.cjp(be, cne)?;
-                if let Some(ebc) = ckc {
-                    let npz = self.asm.dtl();
-                    self.asm.gko(npz);
-                    self.asm.deg(kta);
-                    self.cjp(be, ebc)?;
-                    self.asm.deg(npz);
+            Stmt::If { fc, avj, atp } => {
+                self.compile_expr(ab, fc)?;
+                self.asm.pop_r(Reg::Rax);
+                self.asm.test_r_r(Reg::Rax, Reg::Rax);
+                let fui = self.asm.new_label();
+                self.asm.jcc_label(Cc::Hq, fui); 
+                self.compile_block(ab, avj)?;
+                if let Some(bsd) = atp {
+                    let hvs = self.asm.new_label();
+                    self.asm.jmp_label(hvs);
+                    self.asm.bind_label(fui);
+                    self.compile_block(ab, bsd)?;
+                    self.asm.bind_label(hvs);
                 } else {
-                    self.asm.deg(kta);
+                    self.asm.bind_label(fui);
                 }
             }
-            Stmt::La { mo, gj } => {
-                let qc = self.asm.dtl();
-                let ci = self.asm.dtl();
-                be.bvf.push(qc);
-                be.euk.push(ci);
+            Stmt::While { fc, body } => {
+                let top = self.asm.new_label();
+                let end = self.asm.new_label();
+                ab.loop_starts.push(top);
+                ab.loop_ends.push(end);
 
-                self.asm.deg(qc);
-                self.aex(be, mo)?;
-                self.asm.clz(Reg::J);
-                self.asm.mkj(Reg::J, Reg::J);
-                self.asm.lgu(Cc::Se, ci);
-                self.cjp(be, gj)?;
-                self.asm.gko(qc);
-                self.asm.deg(ci);
+                self.asm.bind_label(top);
+                self.compile_expr(ab, fc)?;
+                self.asm.pop_r(Reg::Rax);
+                self.asm.test_r_r(Reg::Rax, Reg::Rax);
+                self.asm.jcc_label(Cc::Hq, end);
+                self.compile_block(ab, body)?;
+                self.asm.jmp_label(top);
+                self.asm.bind_label(end);
 
-                be.bvf.pop();
-                be.euk.pop();
+                ab.loop_starts.pop();
+                ab.loop_ends.pop();
             }
-            Stmt::Ll { bfp, iter, gj } => {
-                if let Expr::Nt { ay, ci } = iter {
-                    let jvh = *be.bbx.get(bfp).unwrap();
-                    let slm = format!("__for_end_{}", bfp);
-                    let nqb = *be.bbx.get(&slm).unwrap();
+            Stmt::For { ael, iter, body } => {
+                if let Expr::Range { start, end } = iter {
+                    let feg = *ab.locals.get(ael).unwrap();
+                    let lqb = format!("__for_end_{}", ael);
+                    let hvu = *ab.locals.get(&lqb).unwrap();
 
-                    self.aex(be, ay)?;
-                    self.asm.clz(Reg::J);
-                    self.asm.gna(jvh, Reg::J);
+                    self.compile_expr(ab, start)?;
+                    self.asm.pop_r(Reg::Rax);
+                    self.asm.mov_rbp_offset_r(feg, Reg::Rax);
 
-                    self.aex(be, ci)?;
-                    self.asm.clz(Reg::J);
-                    self.asm.gna(nqb, Reg::J);
+                    self.compile_expr(ab, end)?;
+                    self.asm.pop_r(Reg::Rax);
+                    self.asm.mov_rbp_offset_r(hvu, Reg::Rax);
 
-                    let qc = self.asm.dtl();
-                    let ktl = self.asm.dtl();
-                    be.bvf.push(qc);
-                    be.euk.push(ktl);
+                    let top = self.asm.new_label();
+                    let fut = self.asm.new_label();
+                    ab.loop_starts.push(top);
+                    ab.loop_ends.push(fut);
 
-                    self.asm.deg(qc);
+                    self.asm.bind_label(top);
                     
-                    self.asm.hrz(Reg::J, jvh);
-                    self.asm.hrz(Reg::Fe, nqb);
-                    self.asm.fff(Reg::J, Reg::Fe);
-                    self.asm.lgu(Cc::Wr, ktl);
+                    self.asm.mov_r_rbp_offset(Reg::Rax, feg);
+                    self.asm.mov_r_rbp_offset(Reg::Rcx, hvu);
+                    self.asm.cmp_r_r(Reg::Rax, Reg::Rcx);
+                    self.asm.jcc_label(Cc::Ge, fut);
 
-                    self.cjp(be, gj)?;
+                    self.compile_block(ab, body)?;
 
                     
-                    self.asm.hrz(Reg::J, jvh);
-                    self.asm.jzg(Reg::J, 1);
-                    self.asm.gna(jvh, Reg::J);
-                    self.asm.gko(qc);
-                    self.asm.deg(ktl);
+                    self.asm.mov_r_rbp_offset(Reg::Rax, feg);
+                    self.asm.add_r_imm32(Reg::Rax, 1);
+                    self.asm.mov_rbp_offset_r(feg, Reg::Rax);
+                    self.asm.jmp_label(top);
+                    self.asm.bind_label(fut);
 
-                    be.bvf.pop();
-                    be.euk.pop();
+                    ab.loop_starts.pop();
+                    ab.loop_ends.pop();
                 } else {
                     return Err(String::from("for loop requires a range expression"));
                 }
             }
-            Stmt::Pz(gj) => {
-                let qc = self.asm.dtl();
-                let ci = self.asm.dtl();
-                be.bvf.push(qc);
-                be.euk.push(ci);
-                self.asm.deg(qc);
-                self.cjp(be, gj)?;
-                self.asm.gko(qc);
-                self.asm.deg(ci);
-                be.bvf.pop();
-                be.euk.pop();
+            Stmt::Loop(body) => {
+                let top = self.asm.new_label();
+                let end = self.asm.new_label();
+                ab.loop_starts.push(top);
+                ab.loop_ends.push(end);
+                self.asm.bind_label(top);
+                self.compile_block(ab, body)?;
+                self.asm.jmp_label(top);
+                self.asm.bind_label(end);
+                ab.loop_starts.pop();
+                ab.loop_ends.pop();
             }
-            Stmt::Vr => {
-                if let Some(&ci) = be.euk.qv() {
-                    self.asm.gko(ci);
+            Stmt::Break => {
+                if let Some(&end) = ab.loop_ends.last() {
+                    self.asm.jmp_label(end);
                 }
             }
-            Stmt::Cg => {
-                if let Some(&qc) = be.bvf.qv() {
-                    self.asm.gko(qc);
+            Stmt::Continue => {
+                if let Some(&top) = ab.loop_starts.last() {
+                    self.asm.jmp_label(top);
                 }
             }
         }
         Ok(())
     }
 
-    fn aex(&mut self, be: &mut FnCtx, expr: &Expr) -> Result<(), String> {
+    fn compile_expr(&mut self, ab: &mut FnCtx, expr: &Expr) -> Result<(), String> {
         match expr {
-            Expr::Ta(p) => {
-                self.asm.lmu(Reg::J, *p);
-                self.asm.dkx(Reg::J);
+            Expr::IntLit(v) => {
+                self.asm.mov_r_imm64(Reg::Rax, *v);
+                self.asm.push_r(Reg::Rax);
             }
-            Expr::Wq(p) => {
+            Expr::FloatLit(v) => {
                 
-                let fs = p.bsr() as i64;
-                self.asm.lmu(Reg::J, fs);
-                self.asm.dkx(Reg::J);
+                let bits = v.to_bits() as i64;
+                self.asm.mov_r_imm64(Reg::Rax, bits);
+                self.asm.push_r(Reg::Rax);
             }
-            Expr::Rp(o) => {
-                self.asm.gmz(Reg::J, if *o { 1 } else { 0 });
-                self.asm.dkx(Reg::J);
+            Expr::BoolLit(b) => {
+                self.asm.mov_r_imm32(Reg::Rax, if *b { 1 } else { 0 });
+                self.asm.push_r(Reg::Rax);
             }
-            Expr::Yw(e) => {
+            Expr::StringLit(j) => {
                 
-                let w = self.lfb(e);
-                self.asm.lmu(Reg::J, w as i64);
-                self.asm.dkx(Reg::J);
+                let idx = self.intern_string(j);
+                self.asm.mov_r_imm64(Reg::Rax, idx as i64);
+                self.asm.push_r(Reg::Rax);
             }
-            Expr::Kq(j) => {
-                if let Some(&dz) = be.bbx.get(j) {
-                    self.asm.hrz(Reg::J, dz);
-                    self.asm.dkx(Reg::J);
+            Expr::Ident(name) => {
+                if let Some(&off) = ab.locals.get(name) {
+                    self.asm.mov_r_rbp_offset(Reg::Rax, off);
+                    self.asm.push_r(Reg::Rax);
                 } else {
-                    return Err(format!("undefined variable: {}", j));
+                    return Err(format!("undefined variable: {}", name));
                 }
             }
-            Expr::BinOp { op, fd, hw } => {
-                self.aex(be, fd)?;
-                self.aex(be, hw)?;
-                self.npp(*op)?;
+            Expr::BinOp { op, left, right } => {
+                self.compile_expr(ab, left)?;
+                self.compile_expr(ab, right)?;
+                self.emit_binop(*op)?;
             }
             Expr::UnaryOp { op, expr } => {
-                self.aex(be, expr)?;
-                self.asm.clz(Reg::J);
+                self.compile_expr(ab, expr)?;
+                self.asm.pop_r(Reg::Rax);
                 match op {
-                    UnaryOp::Neg => self.asm.ury(Reg::J),
-                    UnaryOp::Np => {
-                        self.asm.mkj(Reg::J, Reg::J);
-                        self.asm.ful(Cc::Se, Reg::J);
-                        self.asm.fop(Reg::J, Reg::J);
+                    UnaryOp::Neg => self.asm.neg_r(Reg::Rax),
+                    UnaryOp::Not => {
+                        self.asm.test_r_r(Reg::Rax, Reg::Rax);
+                        self.asm.setcc(Cc::Hq, Reg::Rax);
+                        self.asm.movzx_r_r8(Reg::Rax, Reg::Rax);
                     }
                 }
-                self.asm.dkx(Reg::J);
+                self.asm.push_r(Reg::Rax);
             }
-            Expr::En { ke, n } => {
-                if let Some(kdf) = Self::imj(ke) {
+            Expr::Call { func, args } => {
+                if let Some(bid) = Self::ehg(func) {
                     
                     
                     
-                    let byg = n.len();
+                    let anl = args.len();
                     
-                    if byg > 0 {
-                        self.asm.ppl(Reg::Qo, (byg as i32) * 8);
+                    if anl > 0 {
+                        self.asm.sub_r_imm32(Reg::Rsp, (anl as i32) * 8);
                     }
                     
-                    for (a, ji) in n.iter().cf() {
-                        self.aex(be, ji)?;
-                        self.asm.clz(Reg::J);
+                    for (i, db) in args.iter().enumerate() {
+                        self.compile_expr(ab, db)?;
+                        self.asm.pop_r(Reg::Rax);
                         
                         
-                        let dz = (a as i32) * 8;
+                        let off = (i as i32) * 8;
                         
-                        self.ski(dz, Reg::J);
+                        self.emit_mov_rsp_offset_r(off, Reg::Rax);
                     }
                     
-                    self.asm.gmz(Reg::Bql, kdf as i32);
-                    self.asm.gmz(Reg::Brf, byg as i32);
-                    self.asm.jgg(Reg::Axm, Reg::Qo);
+                    self.asm.mov_r_imm32(Reg::Rdi, bid as i32);
+                    self.asm.mov_r_imm32(Reg::Rsi, anl as i32);
+                    self.asm.mov_r_r(Reg::Rdx, Reg::Rsp);
                     
-                    self.asm.nbl(self.kfm);
+                    self.asm.call_label(self.builtin_trampoline);
                     
-                    if byg > 0 {
-                        self.asm.jzg(Reg::Qo, (byg as i32) * 8);
+                    if anl > 0 {
+                        self.asm.add_r_imm32(Reg::Rsp, (anl as i32) * 8);
                     }
                     
-                    self.asm.dkx(Reg::J);
-                } else if let Some(&szh) = self.hkr.get(ke) {
+                    self.asm.push_r(Reg::Rax);
+                } else if let Some(&func_label) = self.func_labels.get(func) {
                     
-                    for ji in n.iter().vv() {
-                        self.aex(be, ji)?;
+                    for db in args.iter().rev() {
+                        self.compile_expr(ab, db)?;
                         
                     }
-                    self.asm.nbl(szh);
+                    self.asm.call_label(func_label);
                     
-                    let byg = n.len();
-                    if byg > 0 {
-                        self.asm.jzg(Reg::Qo, (byg as i32) * 8);
+                    let anl = args.len();
+                    if anl > 0 {
+                        self.asm.add_r_imm32(Reg::Rsp, (anl as i32) * 8);
                     }
                     
-                    self.asm.dkx(Reg::J);
+                    self.asm.push_r(Reg::Rax);
                 } else {
-                    return Err(format!("undefined function: {}", ke));
+                    return Err(format!("undefined function: {}", func));
                 }
             }
-            Expr::Apu { expr, ty } => {
-                self.aex(be, expr)?;
+            Expr::Cast { expr, ty } => {
+                self.compile_expr(ab, expr)?;
                 match ty {
-                    Type::R => {
+                    Type::F64 => {
                         
                         
                         
                     }
-                    Type::Ab => {
+                    Type::I64 => {
                         
                     }
                     _ => {}
                 }
             }
-            Expr::Nt { ay, ci } => {
+            Expr::Range { start, end } => {
                 
-                self.aex(be, ay)?;
+                self.compile_expr(ab, start)?;
                 
-                self.aex(be, ci)?;
-                self.asm.clz(Reg::J); 
+                self.compile_expr(ab, end)?;
+                self.asm.pop_r(Reg::Rax); 
             }
-            Expr::Index { .. } | Expr::U(_) | Expr::Asg { .. } | Expr::Dj(_) => {
+            Expr::Index { .. } | Expr::Array(_) | Expr::Field { .. } | Expr::Bl(_) => {
                 
                 
-                self.asm.gmz(Reg::J, 0);
-                self.asm.dkx(Reg::J);
+                self.asm.mov_r_imm32(Reg::Rax, 0);
+                self.asm.push_r(Reg::Rax);
             }
         }
         Ok(())
     }
 
     
-    fn npp(&mut self, op: BinOp) -> Result<(), String> {
-        self.asm.clz(Reg::Fe); 
-        self.asm.clz(Reg::J); 
+    fn emit_binop(&mut self, op: BinOp) -> Result<(), String> {
+        self.asm.pop_r(Reg::Rcx); 
+        self.asm.pop_r(Reg::Rax); 
         match op {
-            BinOp::Add => self.asm.qfm(Reg::J, Reg::Fe),
-            BinOp::Sub => self.asm.wvo(Reg::J, Reg::Fe),
-            BinOp::Mul => self.asm.tsk(Reg::J, Reg::Fe),
+            BinOp::Add => self.asm.add_r_r(Reg::Rax, Reg::Rcx),
+            BinOp::Sub => self.asm.sub_r_r(Reg::Rax, Reg::Rcx),
+            BinOp::Mul => self.asm.imul_r_r(Reg::Rax, Reg::Rcx),
             BinOp::Div => {
-                self.asm.ngw();
-                self.asm.odd(Reg::Fe);
+                self.asm.cqo();
+                self.asm.idiv_r(Reg::Rcx);
                 
             }
-            BinOp::Xp => {
-                self.asm.ngw();
-                self.asm.odd(Reg::Fe);
-                self.asm.jgg(Reg::J, Reg::Axm); 
+            BinOp::Mod => {
+                self.asm.cqo();
+                self.asm.idiv_r(Reg::Rcx);
+                self.asm.mov_r_r(Reg::Rax, Reg::Rdx); 
             }
             BinOp::Eq => {
-                self.asm.fff(Reg::J, Reg::Fe);
-                self.asm.ful(Cc::Se, Reg::J);
-                self.asm.fop(Reg::J, Reg::J);
+                self.asm.cmp_r_r(Reg::Rax, Reg::Rcx);
+                self.asm.setcc(Cc::Hq, Reg::Rax);
+                self.asm.movzx_r_r8(Reg::Rax, Reg::Rax);
             }
-            BinOp::Xu => {
-                self.asm.fff(Reg::J, Reg::Fe);
-                self.asm.ful(Cc::Adl, Reg::J);
-                self.asm.fop(Reg::J, Reg::J);
+            BinOp::NotEq => {
+                self.asm.cmp_r_r(Reg::Rax, Reg::Rcx);
+                self.asm.setcc(Cc::Ne, Reg::Rax);
+                self.asm.movzx_r_r8(Reg::Rax, Reg::Rax);
             }
             BinOp::Lt => {
-                self.asm.fff(Reg::J, Reg::Fe);
-                self.asm.ful(Cc::Aur, Reg::J);
-                self.asm.fop(Reg::J, Reg::J);
+                self.asm.cmp_r_r(Reg::Rax, Reg::Rcx);
+                self.asm.setcc(Cc::Th, Reg::Rax);
+                self.asm.movzx_r_r8(Reg::Rax, Reg::Rax);
             }
-            BinOp::Jn => {
-                self.asm.fff(Reg::J, Reg::Fe);
-                self.asm.ful(Cc::Aii, Reg::J);
-                self.asm.fop(Reg::J, Reg::J);
+            BinOp::Gt => {
+                self.asm.cmp_r_r(Reg::Rax, Reg::Rcx);
+                self.asm.setcc(Cc::G, Reg::Rax);
+                self.asm.movzx_r_r8(Reg::Rax, Reg::Rax);
             }
-            BinOp::Xm => {
-                self.asm.fff(Reg::J, Reg::Fe);
-                self.asm.ful(Cc::Te, Reg::J);
-                self.asm.fop(Reg::J, Reg::J);
+            BinOp::LtEq => {
+                self.asm.cmp_r_r(Reg::Rax, Reg::Rcx);
+                self.asm.setcc(Cc::Le, Reg::Rax);
+                self.asm.movzx_r_r8(Reg::Rax, Reg::Rax);
             }
-            BinOp::Wx => {
-                self.asm.fff(Reg::J, Reg::Fe);
-                self.asm.ful(Cc::Wr, Reg::J);
-                self.asm.fop(Reg::J, Reg::J);
+            BinOp::GtEq => {
+                self.asm.cmp_r_r(Reg::Rax, Reg::Rcx);
+                self.asm.setcc(Cc::Ge, Reg::Rax);
+                self.asm.movzx_r_r8(Reg::Rax, Reg::Rax);
             }
-            BinOp::Ex => self.asm.mvs(Reg::J, Reg::Fe),
-            BinOp::Fx => self.asm.osw(Reg::J, Reg::Fe),
-            BinOp::Vm => self.asm.mvs(Reg::J, Reg::Fe),
-            BinOp::Vn => self.asm.osw(Reg::J, Reg::Fe),
-            BinOp::Vo => self.asm.xwp(Reg::J, Reg::Fe),
-            BinOp::Ob => {
+            BinOp::And => self.asm.and_r_r(Reg::Rax, Reg::Rcx),
+            BinOp::Or => self.asm.or_r_r(Reg::Rax, Reg::Rcx),
+            BinOp::BitAnd => self.asm.and_r_r(Reg::Rax, Reg::Rcx),
+            BinOp::BitOr => self.asm.or_r_r(Reg::Rax, Reg::Rcx),
+            BinOp::BitXor => self.asm.xor_r_r(Reg::Rax, Reg::Rcx),
+            BinOp::Shl => {
                 
-                self.asm.wmy(Reg::J);
+                self.asm.shl_r_cl(Reg::Rax);
             }
-            BinOp::Oc => {
-                self.asm.wcr(Reg::J);
+            BinOp::Shr => {
+                self.asm.sar_r_cl(Reg::Rax);
             }
         }
-        self.asm.dkx(Reg::J);
+        self.asm.push_r(Reg::Rax);
         Ok(())
     }
 
     
-    fn hdr(&mut self, be: &mut FnCtx, cd: &Expr) -> Result<(), String> {
-        match cd {
-            Expr::Kq(j) => {
-                if let Some(&dz) = be.bbx.get(j) {
-                    self.asm.clz(Reg::J);
-                    self.asm.gna(dz, Reg::J);
+    fn compile_store(&mut self, ab: &mut FnCtx, target: &Expr) -> Result<(), String> {
+        match target {
+            Expr::Ident(name) => {
+                if let Some(&off) = ab.locals.get(name) {
+                    self.asm.pop_r(Reg::Rax);
+                    self.asm.mov_rbp_offset_r(off, Reg::Rax);
                 } else {
-                    return Err(format!("undefined variable: {}", j));
+                    return Err(format!("undefined variable: {}", name));
                 }
             }
             _ => return Err(String::from("native: unsupported store target")),
@@ -583,79 +583,79 @@ impl NativeCompiler {
     }
 
     
-    fn ski(&mut self, l: i32, cy: Reg) {
+    fn emit_mov_rsp_offset_r(&mut self, offset: i32, src: Reg) {
         
         
-        let mut aip: u8 = 0x48;
-        if cy.evf() { aip |= 0x04; }
-        self.asm.aj.push(aip);
-        self.asm.aj.push(0x89);
-        if l == 0 {
-            self.asm.aj.push(X86Asm::ms(0b00, cy.ael(), 0x04)); 
-            self.asm.aj.push(0x24); 
-        } else if l >= -128 && l <= 127 {
-            self.asm.aj.push(X86Asm::ms(0b01, cy.ael(), 0x04));
-            self.asm.aj.push(0x24);
-            self.asm.aj.push(l as u8);
+        let mut rp: u8 = 0x48;
+        if src.needs_rex() { rp |= 0x04; }
+        self.asm.code.push(rp);
+        self.asm.code.push(0x89);
+        if offset == 0 {
+            self.asm.code.push(X86Asm::fi(0b00, src.lo3(), 0x04)); 
+            self.asm.code.push(0x24); 
+        } else if offset >= -128 && offset <= 127 {
+            self.asm.code.push(X86Asm::fi(0b01, src.lo3(), 0x04));
+            self.asm.code.push(0x24);
+            self.asm.code.push(offset as u8);
         } else {
-            self.asm.aj.push(X86Asm::ms(0b10, cy.ael(), 0x04));
-            self.asm.aj.push(0x24);
-            self.asm.aj.bk(&l.ho());
+            self.asm.code.push(X86Asm::fi(0b10, src.lo3(), 0x04));
+            self.asm.code.push(0x24);
+            self.asm.code.extend_from_slice(&offset.to_le_bytes());
         }
     }
 }
 
 
-pub fn hdq(iy: &str) -> Result<Akl, String> {
-    let eb = super::lexer::fwz(iy)?;
-    let gzb = super::parser::parse(&eb)?;
+pub fn dle(source: &str) -> Result<Pp, String> {
+    let tokens = super::lexer::crv(source)?;
+    let dhy = super::parser::parse(&tokens)?;
     let mut compiler = NativeCompiler::new();
-    compiler.kkc(&gzb)
+    compiler.compile_program(&dhy)
 }
 
 
 
 
-pub unsafe fn him(
-    alo: &Akl,
-    quf: Bcv,
+pub unsafe fn doz(
+    program: &Pp,
+    builtin_callback: Ws,
 ) -> Result<i64, String> {
-    let aj = &alo.aj;
-    if aj.is_empty() {
+    let code = &program.code;
+    if code.is_empty() {
         return Err(String::from("empty native program"));
     }
 
     
-    let kuj = qgs(aj.len())
+    let fvm = juu(code.len())
         .ok_or_else(|| String::from("failed to allocate executable memory"))?;
 
     
-    core::ptr::copy_nonoverlapping(aj.fq(), kuj, aj.len());
+    core::ptr::copy_nonoverlapping(code.as_ptr(), fvm, code.len());
 
     
-    let bt: *const u8 = kuj.add(alo.bql);
+    let entry: *const u8 = fvm.add(program.entry_offset);
 
     
     
     
     let result: i64;
-    let qwq = quf as usize;
-    let kts = bt as usize;
+    let cb_ptr = builtin_callback as usize;
+    let entry_ptr = entry as usize;
 
     core::arch::asm!(
         "mov r15, {cb}",
         "call {entry}",
-        aiv = in(reg) qwq,
-        bt = in(reg) kts,
-        bd("rax") result,
+        cb = in(reg) cb_ptr,
+        entry = in(reg) entry_ptr,
+        out("rax") result,
         
-        bd("rcx") _, bd("rdx") _, bd("rsi") _, bd("rdi") _,
-        bd("r8") _, bd("r9") _, bd("r10") _, bd("r11") _,
-        yip("C"),
+        out("rcx") _, out("rdx") _, out("rsi") _, out("rdi") _,
+        out("r8") _, out("r9") _, out("r10") _, out("r11") _,
+        clobber_abi("C"),
     );
 
     
-    sxd(kuj, aj.len());
+    lyp(fvm, code.len());
 
     Ok(result)
 }
@@ -665,19 +665,19 @@ pub unsafe fn him(
 
 
 
-fn qgs(aw: usize) -> Option<*mut u8> {
+fn juu(size: usize) -> Option<*mut u8> {
     use alloc::alloc::{alloc_zeroed, Layout};
-    let kab = (aw + 4095) & !4095; 
-    let layout = Layout::bjy(kab, 4096).bq()?;
+    let fgt = (size + 4095) & !4095; 
+    let layout = Layout::from_size_align(fgt, 4096).ok()?;
     let ptr = unsafe { alloc_zeroed(layout) };
-    if ptr.abq() { None } else { Some(ptr) }
+    if ptr.is_null() { None } else { Some(ptr) }
 }
 
 
-fn sxd(ptr: *mut u8, aw: usize) {
+fn lyp(ptr: *mut u8, size: usize) {
     use alloc::alloc::{dealloc, Layout};
-    let kab = (aw + 4095) & !4095;
-    if let Ok(layout) = Layout::bjy(kab, 4096) {
+    let fgt = (size + 4095) & !4095;
+    if let Ok(layout) = Layout::from_size_align(fgt, 4096) {
         unsafe { dealloc(ptr, layout); }
     }
 }

@@ -8,428 +8,428 @@ use spin::Mutex;
 
 
 pub mod flags {
-    pub const Bgl: u8 = 0x01;
-    pub const Ame: u8 = 0x02;
-    pub const Bqg: u8 = 0x04;
-    pub const Awp: u8 = 0x08;
-    pub const Ie: u8 = 0x10;
-    pub const Dkg: u8 = 0x20;
+    pub const Yn: u8 = 0x01;
+    pub const Qd: u8 = 0x02;
+    pub const Adg: u8 = 0x04;
+    pub const Ug: u8 = 0x08;
+    pub const Dk: u8 = 0x10;
+    pub const Bek: u8 = 0x20;
 }
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TcpState {
-    Dk,
-    Dbi,
-    Btv,
-    Btu,
-    Pi,
-    Bhd,
-    Bhe,
-    Apz,
-    Bkq,
-    Aey,
-    Pb,
+    Closed,
+    Listen,
+    SynSent,
+    SynReceived,
+    Established,
+    FinWait1,
+    FinWait2,
+    CloseWait,
+    LastAck,
+    TimeWait,
+    Closing,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-struct Gt {
-    jh: u32,
-    pz: u32,
-    ey: u16,
-    sa: u16,
+struct Db {
+    src_ip: u32,
+    dst_ip: u32,
+    src_port: u16,
+    dst_port: u16,
 }
 
 #[derive(Debug, Clone)]
-struct Azt {
-    g: TcpState,
-    ls: u32, 
-    alx: u32, 
-    bqr: bool,
-    fis: bool,
+struct Vj {
+    state: TcpState,
+    seq: u32, 
+    ack: u32, 
+    fin_received: bool,
+    fin_sent: bool,
     
-    egi: u8,
-    dit: u64,
+    pending_acks: u8,
+    last_ack_time: u64,
     
-    jcr: u32,
-    lhv: u64,
-    lzx: u8,
+    last_sent_seq: u32,
+    last_sent_time: u64,
+    retransmit_count: u8,
     
-    iay: u32,
+    snd_una: u32,
 }
 
 
 #[derive(Clone)]
-struct Bvg {
-    vg: Gt,
-    ls: u32,
-    f: Vec<u8>,       
-    kv: [u8; 4],
-    rz: u16,
-    ey: u16,
-    mdv: u64,
-    arv: u8,
+struct Afw {
+    conn_id: Db,
+    seq: u32,
+    data: Vec<u8>,       
+    dest_ip: [u8; 4],
+    dest_port: u16,
+    src_port: u16,
+    sent_time: u64,
+    retries: u8,
 }
 
 
 
-static PF_: Mutex<VecDeque<Bvg>> = Mutex::new(VecDeque::new());
+static QC_: Mutex<VecDeque<Afw>> = Mutex::new(VecDeque::new());
 
-const CFP_: usize = 32;
+const CIY_: usize = 32;
 
-static Fh: Mutex<BTreeMap<Gt, Azt>> = Mutex::new(BTreeMap::new());
-static LA_: Mutex<BTreeMap<Gt, VecDeque<Vec<u8>>>> = Mutex::new(BTreeMap::new());
-static VS_: AtomicU16 = AtomicU16::new(49152);
+static Ci: Mutex<BTreeMap<Db, Vj>> = Mutex::new(BTreeMap::new());
+static LT_: Mutex<BTreeMap<Db, VecDeque<Vec<u8>>>> = Mutex::new(BTreeMap::new());
+static XB_: AtomicU16 = AtomicU16::new(49152);
 
-static AXJ_: Mutex<[u8; 16]> = Mutex::new([0u8; 16]);
+static AZK_: Mutex<[u8; 16]> = Mutex::new([0u8; 16]);
 
 
 
-fn nxj(jh: [u8; 4], pz: [u8; 4], ey: u16, sa: u16) -> u32 {
-    let eig = AXJ_.lock();
-    let mut f = [0u8; 28]; 
-    f[0..4].dg(&jh);
-    f[4..8].dg(&pz);
-    f[8..10].dg(&ey.ft());
-    f[10..12].dg(&sa.ft());
-    f[12..28].dg(&*eig);
-    drop(eig);
-    let hash = crate::tls13::crypto::chw(&f);
-    let i = u32::oa([hash[0], hash[1], hash[2], hash[3]]);
+fn iaz(src_ip: [u8; 4], dst_ip: [u8; 4], src_port: u16, dst_port: u16) -> u32 {
+    let bvr = AZK_.lock();
+    let mut data = [0u8; 28]; 
+    data[0..4].copy_from_slice(&src_ip);
+    data[4..8].copy_from_slice(&dst_ip);
+    data[8..10].copy_from_slice(&src_port.to_be_bytes());
+    data[10..12].copy_from_slice(&dst_port.to_be_bytes());
+    data[12..28].copy_from_slice(&*bvr);
+    drop(bvr);
+    let hash = crate::tls13::crypto::asg(&data);
+    let h = u32::from_be_bytes([hash[0], hash[1], hash[2], hash[3]]);
     
-    let qb = crate::logger::lh() as u32;
-    i.cn(qb)
+    let gx = crate::logger::eg() as u32;
+    h.wrapping_add(gx)
 }
 
 
-pub fn tts() {
-    let mut e = AXJ_.lock();
-    crate::rng::phh(&mut *e);
+pub fn mpj() {
+    let mut j = AZK_.lock();
+    crate::rng::jeb(&mut *j);
     crate::serial_println!("[TCP] ISN secret initialized (RFC 6528)");
 }
 
 
-struct Blj {
-    dea: u32,
-    iis: VecDeque<Gt>,
+struct Aav {
+    backlog: u32,
+    accept_queue: VecDeque<Db>,
 }
 
 
-static Acn: Mutex<BTreeMap<u16, Blj>> = Mutex::new(BTreeMap::new());
+static Mk: Mutex<BTreeMap<u16, Aav>> = Mutex::new(BTreeMap::new());
 
 
-pub fn jdt(port: u16, dea: u32) {
-    Acn.lock().insert(port, Blj { dea, iis: VecDeque::new() });
+pub fn etd(port: u16, backlog: u32) {
+    Mk.lock().insert(port, Aav { backlog, accept_queue: VecDeque::new() });
     crate::serial_println!("[TCP] Listening on port {}", port);
 }
 
 
-pub fn mhr(port: u16) {
-    Acn.lock().remove(&port);
+pub fn gwj(port: u16) {
+    Mk.lock().remove(&port);
 }
 
 
 
-pub fn iir(fnd: u16) -> Option<(u16, [u8; 4], u16)> {
-    let mut glp = Acn.lock();
-    let glo = glp.ds(&fnd)?;
-    let vg = glo.iis.awp()?;
-    let ams = [
-        ((vg.pz >> 24) & 0xFF) as u8,
-        ((vg.pz >> 16) & 0xFF) as u8,
-        ((vg.pz >> 8) & 0xFF) as u8,
-        (vg.pz & 0xFF) as u8,
+pub fn eew(cmi: u16) -> Option<(u16, [u8; 4], u16)> {
+    let mut dar = Mk.lock();
+    let daq = dar.get_mut(&cmi)?;
+    let conn_id = daq.accept_queue.pop_front()?;
+    let tn = [
+        ((conn_id.dst_ip >> 24) & 0xFF) as u8,
+        ((conn_id.dst_ip >> 16) & 0xFF) as u8,
+        ((conn_id.dst_ip >> 8) & 0xFF) as u8,
+        (conn_id.dst_ip & 0xFF) as u8,
     ];
-    Some((vg.ey, ams, vg.sa))
+    Some((conn_id.src_port, tn, conn_id.dst_port))
 }
 
 
-const BRJ_: u8 = 4;
-const BRI_: u64 = 20;
+const BUF_: u8 = 4;
+const BUE_: u64 = 20;
 
 
-const JD_: u16 = 65535;
+const JW_: u16 = 65535;
 
 
-const BEL_: u64 = 1000;
+const BGN_: u64 = 1000;
 
-const AFE_: u8 = 3;
+const AGY_: u8 = 3;
 
 
-const AEX_: usize = 512;
+const AGR_: usize = 512;
 
-const BHF_: u64 = 60_000;
+const BJJ_: u64 = 60_000;
 
-fn bad(ip: [u8; 4]) -> u32 {
+fn abb(ip: [u8; 4]) -> u32 {
     ((ip[0] as u32) << 24) | ((ip[1] as u32) << 16) | ((ip[2] as u32) << 8) | (ip[3] as u32)
 }
 
 
-fn hcs(sum: &mut u32, f: &[u8]) {
-    let mut a = 0;
-    while a + 1 < f.len() {
-        *sum += ((f[a] as u32) << 8) | (f[a + 1] as u32);
-        a += 2;
+fn dkq(sum: &mut u32, data: &[u8]) {
+    let mut i = 0;
+    while i + 1 < data.len() {
+        *sum += ((data[i] as u32) << 8) | (data[i + 1] as u32);
+        i += 2;
     }
-    if a < f.len() {
-        *sum += (f[a] as u32) << 8;
+    if i < data.len() {
+        *sum += (data[i] as u32) << 8;
     }
 }
 
-fn nct(mut sum: u32) -> u16 {
+fn hkt(mut sum: u32) -> u16 {
     while (sum >> 16) != 0 {
         sum = (sum & 0xFFFF) + (sum >> 16);
     }
     !(sum as u16)
 }
 
-fn bmj(f: &[u8]) -> u16 {
+fn checksum(data: &[u8]) -> u16 {
     let mut sum: u32 = 0;
-    hcs(&mut sum, f);
-    nct(sum)
+    dkq(&mut sum, data);
+    hkt(sum)
 }
 
 
-fn ezm(jh: [u8; 4], pz: [u8; 4], ie: &[u8]) -> u16 {
+fn ced(src_ip: [u8; 4], dst_ip: [u8; 4], segment: &[u8]) -> u16 {
     let mut sum: u32 = 0;
     
-    hcs(&mut sum, &jh);
-    hcs(&mut sum, &pz);
-    let vnk: [u8; 4] = [0, 6, (ie.len() >> 8) as u8, ie.len() as u8];
-    hcs(&mut sum, &vnk);
-    hcs(&mut sum, ie);
-    nct(sum)
+    dkq(&mut sum, &src_ip);
+    dkq(&mut sum, &dst_ip);
+    let nyz: [u8; 4] = [0, 6, (segment.len() >> 8) as u8, segment.len() as u8];
+    dkq(&mut sum, &nyz);
+    dkq(&mut sum, segment);
+    hkt(sum)
 }
 
 
-pub fn psc(jh: [u8; 4], pz: [u8; 4], ie: &[u8]) -> u16 {
-    ezm(jh, pz, ie)
+pub fn jlr(src_ip: [u8; 4], dst_ip: [u8; 4], segment: &[u8]) -> u16 {
+    ced(src_ip, dst_ip, segment)
 }
 
 
 
-pub fn ysi() {
-    let iu = crate::logger::lh();
-    let mut aan = Fh.lock();
-    let mut kb = LA_.lock();
-    aan.ajm(|ad, ly| {
-        let eec = match ly.g {
-            TcpState::Aey => iu.nj(ly.dit) < BHF_,
-            TcpState::Dk => false,
+pub fn qgy() {
+    let cy = crate::logger::eg();
+    let mut nc = Ci.lock();
+    let mut da = LT_.lock();
+    nc.retain(|id, et| {
+        let bts = match et.state {
+            TcpState::TimeWait => cy.wrapping_sub(et.last_ack_time) < BJJ_,
+            TcpState::Closed => false,
             _ => true,
         };
-        if !eec {
-            kb.remove(ad);
+        if !bts {
+            da.remove(id);
         }
-        eec
+        bts
     });
 }
 
 
-pub fn rnz() -> usize {
-    Fh.lock().len()
+pub fn kxd() -> usize {
+    Ci.lock().len()
 }
 
 
-pub fn ufo() -> Vec<String> {
-    let aan = Fh.lock();
-    let mut bd = Vec::fc(aan.len());
-    for (ad, ly) in aan.iter() {
-        let cs = [
-            ((ad.pz >> 24) & 0xFF) as u8,
-            ((ad.pz >> 16) & 0xFF) as u8,
-            ((ad.pz >> 8) & 0xFF) as u8,
-            (ad.pz & 0xFF) as u8,
+pub fn mza() -> Vec<String> {
+    let nc = Ci.lock();
+    let mut out = Vec::with_capacity(nc.len());
+    for (id, et) in nc.iter() {
+        let dst = [
+            ((id.dst_ip >> 24) & 0xFF) as u8,
+            ((id.dst_ip >> 16) & 0xFF) as u8,
+            ((id.dst_ip >> 8) & 0xFF) as u8,
+            (id.dst_ip & 0xFF) as u8,
         ];
-        bd.push(alloc::format!(
+        out.push(alloc::format!(
             "{:<6} {}.{}.{}.{}:{:<5}  {:?}",
-            ad.ey, cs[0], cs[1], cs[2], cs[3], ad.sa, ly.g
+            id.src_port, dst[0], dst[1], dst[2], dst[3], id.dst_port, et.state
         ));
     }
-    bd
+    out
 }
 
-fn cqw() -> [u8; 4] {
-    crate::network::aou()
+fn axg() -> [u8; 4] {
+    crate::network::rd()
         .map(|(ip, _, _)| *ip.as_bytes())
         .unwrap_or([10, 0, 2, 15])
 }
 
 
-pub fn bur(f: &[u8], jh: [u8; 4], pz: [u8; 4]) {
-    if f.len() < 20 {
+pub fn alq(data: &[u8], src_ip: [u8; 4], dst_ip: [u8; 4]) {
+    if data.len() < 20 {
         return;
     }
 
-    let ey = u16::oa([f[0], f[1]]);
-    let sa = u16::oa([f[2], f[3]]);
-    let ls = u32::oa([f[4], f[5], f[6], f[7]]);
-    let gxq = u32::oa([f[8], f[9], f[10], f[11]]);
-    let bbj = f[12] >> 4;
-    let dcn = f[13];
-    let ect = (bbj as usize) * 4;
+    let src_port = u16::from_be_bytes([data[0], data[1]]);
+    let dst_port = u16::from_be_bytes([data[2], data[3]]);
+    let seq = u32::from_be_bytes([data[4], data[5], data[6], data[7]]);
+    let dhc = u32::from_be_bytes([data[8], data[9], data[10], data[11]]);
+    let data_offset = data[12] >> 4;
+    let bdy = data[13];
+    let bte = (data_offset as usize) * 4;
 
-    if f.len() < ect {
+    if data.len() < bte {
         return;
     }
 
-    let vg = Gt {
-        jh: bad(pz),
-        pz: bad(jh),
-        ey: sa,
-        sa: ey,
+    let conn_id = Db {
+        src_ip: abb(dst_ip),
+        dst_ip: abb(src_ip),
+        src_port: dst_port,
+        dst_port: src_port,
     };
 
-    let ew = &f[ect..];
-    let iup  = (dcn & flags::Bgl) != 0;
-    let jry  = (dcn & flags::Ame) != 0;
-    let alx  = (dcn & flags::Ie) != 0;
-    let waz  = (dcn & flags::Bqg) != 0;
-    let vnw  = (dcn & flags::Awp) != 0;
-    let bvx = ew.len() as u32;
+    let payload = &data[bte..];
+    let emp  = (bdy & flags::Yn) != 0;
+    let fbx  = (bdy & flags::Qd) != 0;
+    let ack  = (bdy & flags::Dk) != 0;
+    let dds  = (bdy & flags::Adg) != 0;
+    let nzh  = (bdy & flags::Ug) != 0;
+    let payload_len = payload.len() as u32;
 
-    let mut aan = Fh.lock();
+    let mut nc = Ci.lock();
 
-    if let Some(ly) = aan.ds(&vg) {
+    if let Some(et) = nc.get_mut(&conn_id) {
         
-        if waz {
-            ly.g = TcpState::Dk;
-            ly.bqr = true;
-            ly.fis = true;
+        if dds {
+            et.state = TcpState::Closed;
+            et.fin_received = true;
+            et.fin_sent = true;
             return;
         }
 
-        if ly.bqr && ly.fis && ly.g == TcpState::Dk {
+        if et.fin_received && et.fin_sent && et.state == TcpState::Closed {
             return;
         }
 
-        match ly.g {
+        match et.state {
             
-            TcpState::Btv => {
-                if jry && alx {
-                    ly.g = TcpState::Pi;
-                    ly.alx = ls.cn(1);
-                    ly.egi = 0;
-                    ly.dit = crate::logger::lh();
-                    drop(aan);
-                    let _ = fue(jh, ey, sa);
+            TcpState::SynSent => {
+                if fbx && ack {
+                    et.state = TcpState::Established;
+                    et.ack = seq.wrapping_add(1);
+                    et.pending_acks = 0;
+                    et.last_ack_time = crate::logger::eg();
+                    drop(nc);
+                    let _ = cqi(src_ip, src_port, dst_port);
                 }
             }
 
             
-            TcpState::Btu => {
-                if alx {
-                    ly.g = TcpState::Pi;
-                    let fnd = vg.ey;
-                    drop(aan);
+            TcpState::SynReceived => {
+                if ack {
+                    et.state = TcpState::Established;
+                    let cmi = conn_id.src_port;
+                    drop(nc);
                     
-                    let mut glp = Acn.lock();
-                    if let Some(glo) = glp.ds(&fnd) {
-                        glo.iis.agt(vg);
+                    let mut dar = Mk.lock();
+                    if let Some(daq) = dar.get_mut(&cmi) {
+                        daq.accept_queue.push_back(conn_id);
                     }
                 }
             }
 
             
-            TcpState::Pi => {
+            TcpState::Established => {
                 
-                if alx && gxq > ly.iay {
-                    ly.iay = gxq;
-                    ly.lzx = 0;
+                if ack && dhc > et.snd_una {
+                    et.snd_una = dhc;
+                    et.retransmit_count = 0;
                     
-                    let mut exw = PF_.lock();
-                    exw.ajm(|pk| {
-                        pk.vg != vg || pk.ls.cn(pk.f.len() as u32) > gxq
+                    let mut cdm = QC_.lock();
+                    cdm.retain(|gq| {
+                        gq.conn_id != conn_id || gq.seq.wrapping_add(gq.data.len() as u32) > dhc
                     });
                 }
 
                 
-                if !ew.is_empty() {
-                    let oph = ls.cn(bvx);
-                    if oph > ly.alx {
-                        ly.alx = oph;
-                        let mut kb = LA_.lock();
-                        kb.bt(vg).clq(VecDeque::new).agt(ew.ip());
+                if !payload.is_empty() {
+                    let ipn = seq.wrapping_add(payload_len);
+                    if ipn > et.ack {
+                        et.ack = ipn;
+                        let mut da = LT_.lock();
+                        da.entry(conn_id).or_insert_with(VecDeque::new).push_back(payload.to_vec());
                     }
                 }
 
-                if iup {
+                if emp {
                     
-                    ly.alx = ls.cn(bvx).cn(1);
-                    ly.bqr = true;
-                    ly.g = TcpState::Apz;
-                    drop(aan);
-                    let _ = fue(jh, ey, sa);
+                    et.ack = seq.wrapping_add(payload_len).wrapping_add(1);
+                    et.fin_received = true;
+                    et.state = TcpState::CloseWait;
+                    drop(nc);
+                    let _ = cqi(src_ip, src_port, dst_port);
                     return;
                 }
 
                 
-                if !ew.is_empty() {
-                    ly.egi = ly.egi.akq(1);
-                    let iu = crate::logger::lh();
-                    let mfo = vnw
-                        || ly.egi >= BRJ_
-                        || iu.ao(ly.dit) >= BRI_;
-                    if mfo {
-                        ly.egi = 0;
-                        ly.dit = iu;
-                        drop(aan);
-                        let _ = fue(jh, ey, sa);
+                if !payload.is_empty() {
+                    et.pending_acks = et.pending_acks.saturating_add(1);
+                    let cy = crate::logger::eg();
+                    let guw = nzh
+                        || et.pending_acks >= BUF_
+                        || cy.saturating_sub(et.last_ack_time) >= BUE_;
+                    if guw {
+                        et.pending_acks = 0;
+                        et.last_ack_time = cy;
+                        drop(nc);
+                        let _ = cqi(src_ip, src_port, dst_port);
                     }
                 }
             }
 
             
-            TcpState::Bhd => {
-                if iup && alx {
+            TcpState::FinWait1 => {
+                if emp && ack {
                     
-                    ly.alx = ls.cn(1);
-                    ly.bqr = true;
-                    ly.g = TcpState::Aey;
-                    ly.dit = crate::logger::lh();
-                    drop(aan);
-                    let _ = fue(jh, ey, sa);
-                } else if iup {
-                    ly.alx = ls.cn(1);
-                    ly.bqr = true;
-                    ly.g = TcpState::Pb;
-                    drop(aan);
-                    let _ = fue(jh, ey, sa);
-                } else if alx {
-                    ly.g = TcpState::Bhe;
+                    et.ack = seq.wrapping_add(1);
+                    et.fin_received = true;
+                    et.state = TcpState::TimeWait;
+                    et.last_ack_time = crate::logger::eg();
+                    drop(nc);
+                    let _ = cqi(src_ip, src_port, dst_port);
+                } else if emp {
+                    et.ack = seq.wrapping_add(1);
+                    et.fin_received = true;
+                    et.state = TcpState::Closing;
+                    drop(nc);
+                    let _ = cqi(src_ip, src_port, dst_port);
+                } else if ack {
+                    et.state = TcpState::FinWait2;
                 }
             }
 
-            TcpState::Bhe => {
-                if iup {
-                    ly.alx = ls.cn(1);
-                    ly.bqr = true;
-                    ly.g = TcpState::Aey;
-                    ly.dit = crate::logger::lh();
-                    drop(aan);
-                    let _ = fue(jh, ey, sa);
+            TcpState::FinWait2 => {
+                if emp {
+                    et.ack = seq.wrapping_add(1);
+                    et.fin_received = true;
+                    et.state = TcpState::TimeWait;
+                    et.last_ack_time = crate::logger::eg();
+                    drop(nc);
+                    let _ = cqi(src_ip, src_port, dst_port);
                 }
             }
 
-            TcpState::Pb => {
-                if alx {
-                    ly.g = TcpState::Aey;
-                    ly.dit = crate::logger::lh(); 
+            TcpState::Closing => {
+                if ack {
+                    et.state = TcpState::TimeWait;
+                    et.last_ack_time = crate::logger::eg(); 
                 }
             }
 
-            TcpState::Bkq => {
-                if alx {
-                    ly.g = TcpState::Dk;
+            TcpState::LastAck => {
+                if ack {
+                    et.state = TcpState::Closed;
                 }
             }
 
-            TcpState::Apz => {
+            TcpState::CloseWait => {
                 
-                if !ew.is_empty() {
-                    ly.alx = ls.cn(bvx);
-                    let mut kb = LA_.lock();
-                    kb.bt(vg).clq(VecDeque::new).agt(ew.ip());
+                if !payload.is_empty() {
+                    et.ack = seq.wrapping_add(payload_len);
+                    let mut da = LT_.lock();
+                    da.entry(conn_id).or_insert_with(VecDeque::new).push_back(payload.to_vec());
                 }
             }
 
@@ -437,60 +437,60 @@ pub fn bur(f: &[u8], jh: [u8; 4], pz: [u8; 4]) {
         }
     } else {
         
-        if jry && !alx {
+        if fbx && !ack {
             
-            if aan.len() >= AEX_ {
-                let iu = crate::logger::lh();
-                let mut kb = LA_.lock();
-                aan.ajm(|ad, r| {
-                    let eec = match r.g {
-                        TcpState::Aey => iu.nj(r.dit) < BHF_,
-                        TcpState::Dk => false,
+            if nc.len() >= AGR_ {
+                let cy = crate::logger::eg();
+                let mut da = LT_.lock();
+                nc.retain(|id, c| {
+                    let bts = match c.state {
+                        TcpState::TimeWait => cy.wrapping_sub(c.last_ack_time) < BJJ_,
+                        TcpState::Closed => false,
                         _ => true,
                     };
-                    if !eec { kb.remove(ad); }
-                    eec
+                    if !bts { da.remove(id); }
+                    bts
                 });
             }
-            if aan.len() >= AEX_ {
-                crate::serial_println!("[TCP] Connection limit reached ({}), dropping SYN", AEX_);
+            if nc.len() >= AGR_ {
+                crate::serial_println!("[TCP] Connection limit reached ({}), dropping SYN", AGR_);
                 return;
             }
-            let mut glp = Acn.lock();
-            if let Some(glo) = glp.ds(&sa) {
-                if glo.iis.len() < glo.dea as usize + 16 {
-                    let wrs = [
-                        ((vg.jh >> 24) & 0xFF) as u8,
-                        ((vg.jh >> 16) & 0xFF) as u8,
-                        ((vg.jh >> 8) & 0xFF) as u8,
-                        (vg.jh & 0xFF) as u8,
+            let mut dar = Mk.lock();
+            if let Some(daq) = dar.get_mut(&dst_port) {
+                if daq.accept_queue.len() < daq.backlog as usize + 16 {
+                    let ovj = [
+                        ((conn_id.src_ip >> 24) & 0xFF) as u8,
+                        ((conn_id.src_ip >> 16) & 0xFF) as u8,
+                        ((conn_id.src_ip >> 8) & 0xFF) as u8,
+                        (conn_id.src_ip & 0xFF) as u8,
                     ];
-                    let shb = [
-                        ((vg.pz >> 24) & 0xFF) as u8,
-                        ((vg.pz >> 16) & 0xFF) as u8,
-                        ((vg.pz >> 8) & 0xFF) as u8,
-                        (vg.pz & 0xFF) as u8,
+                    let llp = [
+                        ((conn_id.dst_ip >> 24) & 0xFF) as u8,
+                        ((conn_id.dst_ip >> 16) & 0xFF) as u8,
+                        ((conn_id.dst_ip >> 8) & 0xFF) as u8,
+                        (conn_id.dst_ip & 0xFF) as u8,
                     ];
-                    let izx = nxj(wrs, shb, vg.ey, vg.sa);
-                    let usp = Azt {
-                        g: TcpState::Btu,
-                        ls: izx.cn(1),
-                        alx: ls.cn(1),
-                        bqr: false,
-                        fis: false,
-                        egi: 0,
-                        dit: crate::logger::lh(),
-                        jcr: izx,
-                        lhv: crate::logger::lh(),
-                        lzx: 0,
-                        iay: izx.cn(1),
+                    let eqm = iaz(ovj, llp, conn_id.src_port, conn_id.dst_port);
+                    let nit = Vj {
+                        state: TcpState::SynReceived,
+                        seq: eqm.wrapping_add(1),
+                        ack: seq.wrapping_add(1),
+                        fin_received: false,
+                        fin_sent: false,
+                        pending_acks: 0,
+                        last_ack_time: crate::logger::eg(),
+                        last_sent_seq: eqm,
+                        last_sent_time: crate::logger::eg(),
+                        retransmit_count: 0,
+                        snd_una: eqm.wrapping_add(1),
                     };
-                    drop(glp);
-                    aan.insert(vg, usp);
-                    drop(aan);
+                    drop(dar);
+                    nc.insert(conn_id, nit);
+                    drop(nc);
                     
-                    let _ = whp(jh, ey, sa,
-                                         ls.cn(1), izx);
+                    let _ = ooc(src_ip, src_port, dst_port,
+                                         seq.wrapping_add(1), eqm);
                 }
             }
         }
@@ -498,221 +498,221 @@ pub fn bur(f: &[u8], jh: [u8; 4], pz: [u8; 4]) {
 }
 
 
-pub fn cue(kv: [u8; 4], rz: u16) -> Result<u16, &'static str> {
-    let jh = cqw();
+pub fn azp(dest_ip: [u8; 4], dest_port: u16) -> Result<u16, &'static str> {
+    let src_ip = axg();
     
-    let ey = VS_.fetch_add(1, Ordering::Relaxed);
-    let ls = nxj(jh, kv, ey, rz);
+    let src_port = XB_.fetch_add(1, Ordering::Relaxed);
+    let seq = iaz(src_ip, dest_ip, src_port, dest_port);
 
-    let mut ie = Vec::fc(20);
-    ie.bk(&ey.ft());
-    ie.bk(&rz.ft());
-    ie.bk(&ls.ft());
-    ie.bk(&0u32.ft()); 
-    ie.push(0x50); 
-    ie.push(flags::Ame);
-    ie.bk(&JD_.ft()); 
-    ie.bk(&0u16.ft()); 
-    ie.bk(&0u16.ft()); 
+    let mut segment = Vec::with_capacity(20);
+    segment.extend_from_slice(&src_port.to_be_bytes());
+    segment.extend_from_slice(&dest_port.to_be_bytes());
+    segment.extend_from_slice(&seq.to_be_bytes());
+    segment.extend_from_slice(&0u32.to_be_bytes()); 
+    segment.push(0x50); 
+    segment.push(flags::Qd);
+    segment.extend_from_slice(&JW_.to_be_bytes()); 
+    segment.extend_from_slice(&0u16.to_be_bytes()); 
+    segment.extend_from_slice(&0u16.to_be_bytes()); 
 
-    let td = ezm(jh, kv, &ie);
-    ie[16] = (td >> 8) as u8;
-    ie[17] = (td & 0xFF) as u8;
+    let ig = ced(src_ip, dest_ip, &segment);
+    segment[16] = (ig >> 8) as u8;
+    segment[17] = (ig & 0xFF) as u8;
     
     
 
-    let vg = Gt {
-        jh: bad(jh),
-        pz: bad(kv),
-        ey,
-        sa: rz,
+    let conn_id = Db {
+        src_ip: abb(src_ip),
+        dst_ip: abb(dest_ip),
+        src_port,
+        dst_port: dest_port,
     };
-    Fh.lock().insert(vg, Azt {
-        g: TcpState::Btv,
-        ls: ls.cn(1),
-        alx: 0,
-        bqr: false,
-        fis: false,
-        egi: 0,
-        dit: crate::logger::lh(),
-        jcr: ls,
-        lhv: crate::logger::lh(),
-        lzx: 0,
-        iay: ls.cn(1),
+    Ci.lock().insert(conn_id, Vj {
+        state: TcpState::SynSent,
+        seq: seq.wrapping_add(1),
+        ack: 0,
+        fin_received: false,
+        fin_sent: false,
+        pending_acks: 0,
+        last_ack_time: crate::logger::eg(),
+        last_sent_seq: seq,
+        last_sent_time: crate::logger::eg(),
+        retransmit_count: 0,
+        snd_una: seq.wrapping_add(1),
     });
 
     
 
-    crate::netstack::ip::blc(kv, 6, &ie)?;
-    Ok(ey)
+    crate::netstack::ip::aha(dest_ip, 6, &segment)?;
+    Ok(src_port)
 }
 
 
-fn whp(kv: [u8; 4], rz: u16, ey: u16, gxq: u32, ls: u32) -> Result<(), &'static str> {
-    let jh = cqw();
+fn ooc(dest_ip: [u8; 4], dest_port: u16, src_port: u16, dhc: u32, seq: u32) -> Result<(), &'static str> {
+    let src_ip = axg();
 
-    let mut ie = Vec::fc(20);
-    ie.bk(&ey.ft());
-    ie.bk(&rz.ft());
-    ie.bk(&ls.ft());
-    ie.bk(&gxq.ft());
-    ie.push(0x50);
-    ie.push(flags::Ame | flags::Ie);
-    ie.bk(&JD_.ft());
-    ie.bk(&0u16.ft());
-    ie.bk(&0u16.ft());
+    let mut segment = Vec::with_capacity(20);
+    segment.extend_from_slice(&src_port.to_be_bytes());
+    segment.extend_from_slice(&dest_port.to_be_bytes());
+    segment.extend_from_slice(&seq.to_be_bytes());
+    segment.extend_from_slice(&dhc.to_be_bytes());
+    segment.push(0x50);
+    segment.push(flags::Qd | flags::Dk);
+    segment.extend_from_slice(&JW_.to_be_bytes());
+    segment.extend_from_slice(&0u16.to_be_bytes());
+    segment.extend_from_slice(&0u16.to_be_bytes());
 
-    let td = ezm(jh, kv, &ie);
-    ie[16] = (td >> 8) as u8;
-    ie[17] = (td & 0xFF) as u8;
+    let ig = ced(src_ip, dest_ip, &segment);
+    segment[16] = (ig >> 8) as u8;
+    segment[17] = (ig & 0xFF) as u8;
 
-    crate::netstack::ip::blc(kv, 6, &ie)
+    crate::netstack::ip::aha(dest_ip, 6, &segment)
 }
 
 
-pub fn fue(kv: [u8; 4], rz: u16, ey: u16) -> Result<(), &'static str> {
-    let jh = cqw();
-    let vg = Gt {
-        jh: bad(jh),
-        pz: bad(kv),
-        ey,
-        sa: rz,
+pub fn cqi(dest_ip: [u8; 4], dest_port: u16, src_port: u16) -> Result<(), &'static str> {
+    let src_ip = axg();
+    let conn_id = Db {
+        src_ip: abb(src_ip),
+        dst_ip: abb(dest_ip),
+        src_port,
+        dst_port: dest_port,
     };
 
-    let (ls, alx) = {
-        let aan = Fh.lock();
-        let ly = aan.get(&vg).ok_or("Connection not found")?;
-        (ly.ls, ly.alx)
+    let (seq, ack) = {
+        let nc = Ci.lock();
+        let et = nc.get(&conn_id).ok_or("Connection not found")?;
+        (et.seq, et.ack)
     };
 
-    let mut ie = Vec::fc(20);
-    ie.bk(&ey.ft());
-    ie.bk(&rz.ft());
-    ie.bk(&ls.ft());
-    ie.bk(&alx.ft());
-    ie.push(0x50);
-    ie.push(flags::Ie);
-    ie.bk(&JD_.ft());
-    ie.bk(&0u16.ft());
-    ie.bk(&0u16.ft());
+    let mut segment = Vec::with_capacity(20);
+    segment.extend_from_slice(&src_port.to_be_bytes());
+    segment.extend_from_slice(&dest_port.to_be_bytes());
+    segment.extend_from_slice(&seq.to_be_bytes());
+    segment.extend_from_slice(&ack.to_be_bytes());
+    segment.push(0x50);
+    segment.push(flags::Dk);
+    segment.extend_from_slice(&JW_.to_be_bytes());
+    segment.extend_from_slice(&0u16.to_be_bytes());
+    segment.extend_from_slice(&0u16.to_be_bytes());
 
-    let td = ezm(jh, kv, &ie);
-    ie[16] = (td >> 8) as u8;
-    ie[17] = (td & 0xFF) as u8;
+    let ig = ced(src_ip, dest_ip, &segment);
+    segment[16] = (ig >> 8) as u8;
+    segment[17] = (ig & 0xFF) as u8;
 
-    crate::netstack::ip::blc(kv, 6, &ie)
+    crate::netstack::ip::aha(dest_ip, 6, &segment)
 }
 
 
-pub fn dlo(kv: [u8; 4], rz: u16, ey: u16, ew: &[u8]) -> Result<(), &'static str> {
-    let jh = cqw();
-    let vg = Gt {
-        jh: bad(jh),
-        pz: bad(kv),
-        ey,
-        sa: rz,
+pub fn bjc(dest_ip: [u8; 4], dest_port: u16, src_port: u16, payload: &[u8]) -> Result<(), &'static str> {
+    let src_ip = axg();
+    let conn_id = Db {
+        src_ip: abb(src_ip),
+        dst_ip: abb(dest_ip),
+        src_port,
+        dst_port: dest_port,
     };
 
-    let (ls, alx) = {
-        let aan = Fh.lock();
-        let ly = aan.get(&vg).ok_or("Connection not found")?;
-        (ly.ls, ly.alx)
+    let (seq, ack) = {
+        let nc = Ci.lock();
+        let et = nc.get(&conn_id).ok_or("Connection not found")?;
+        (et.seq, et.ack)
     };
 
-    let mut ie = Vec::fc(20 + ew.len());
-    ie.bk(&ey.ft());
-    ie.bk(&rz.ft());
-    ie.bk(&ls.ft());
-    ie.bk(&alx.ft());
-    ie.push(0x50);
-    ie.push(flags::Awp | flags::Ie);
-    ie.bk(&JD_.ft());
-    ie.bk(&0u16.ft());
-    ie.bk(&0u16.ft());
-    ie.bk(ew);
+    let mut segment = Vec::with_capacity(20 + payload.len());
+    segment.extend_from_slice(&src_port.to_be_bytes());
+    segment.extend_from_slice(&dest_port.to_be_bytes());
+    segment.extend_from_slice(&seq.to_be_bytes());
+    segment.extend_from_slice(&ack.to_be_bytes());
+    segment.push(0x50);
+    segment.push(flags::Ug | flags::Dk);
+    segment.extend_from_slice(&JW_.to_be_bytes());
+    segment.extend_from_slice(&0u16.to_be_bytes());
+    segment.extend_from_slice(&0u16.to_be_bytes());
+    segment.extend_from_slice(payload);
 
-    let td = ezm(jh, kv, &ie);
-    ie[16] = (td >> 8) as u8;
-    ie[17] = (td & 0xFF) as u8;
+    let ig = ced(src_ip, dest_ip, &segment);
+    segment[16] = (ig >> 8) as u8;
+    segment[17] = (ig & 0xFF) as u8;
 
-    crate::netstack::ip::blc(kv, 6, &ie)?;
+    crate::netstack::ip::aha(dest_ip, 6, &segment)?;
 
-    let iu = crate::time::lc();
-    let mut aan = Fh.lock();
-    if let Some(ly) = aan.ds(&vg) {
-        ly.jcr = ls;
-        ly.lhv = iu;
-        ly.ls = ly.ls.cn(ew.len() as u32);
+    let cy = crate::time::uptime_ms();
+    let mut nc = Ci.lock();
+    if let Some(et) = nc.get_mut(&conn_id) {
+        et.last_sent_seq = seq;
+        et.last_sent_time = cy;
+        et.seq = et.seq.wrapping_add(payload.len() as u32);
     }
-    drop(aan);
+    drop(nc);
 
     
-    let mut exw = PF_.lock();
-    if exw.len() >= CFP_ {
-        exw.awp(); 
+    let mut cdm = QC_.lock();
+    if cdm.len() >= CIY_ {
+        cdm.pop_front(); 
     }
-    exw.agt(Bvg {
-        vg,
-        ls,
-        f: ew.ip(),
-        kv,
-        rz,
-        ey,
-        mdv: iu,
-        arv: 0,
+    cdm.push_back(Afw {
+        conn_id,
+        seq,
+        data: payload.to_vec(),
+        dest_ip,
+        dest_port,
+        src_port,
+        sent_time: cy,
+        retries: 0,
     });
 
     Ok(())
 }
 
 
-pub fn bwx(kv: [u8; 4], rz: u16, ey: u16) -> Result<(), &'static str> {
-    let jh = cqw();
-    let vg = Gt {
-        jh: bad(jh),
-        pz: bad(kv),
-        ey,
-        sa: rz,
+pub fn ams(dest_ip: [u8; 4], dest_port: u16, src_port: u16) -> Result<(), &'static str> {
+    let src_ip = axg();
+    let conn_id = Db {
+        src_ip: abb(src_ip),
+        dst_ip: abb(dest_ip),
+        src_port,
+        dst_port: dest_port,
     };
 
-    let (ls, alx, qhh) = {
-        let aan = Fh.lock();
-        let ly = aan.get(&vg).ok_or("Connection not found")?;
-        (ly.ls, ly.alx, ly.fis)
+    let (seq, ack, already_sent) = {
+        let nc = Ci.lock();
+        let et = nc.get(&conn_id).ok_or("Connection not found")?;
+        (et.seq, et.ack, et.fin_sent)
     };
 
-    if qhh {
+    if already_sent {
         return Ok(());
     }
 
-    let mut ie = Vec::fc(20);
-    ie.bk(&ey.ft());
-    ie.bk(&rz.ft());
-    ie.bk(&ls.ft());
-    ie.bk(&alx.ft());
-    ie.push(0x50);
-    ie.push(flags::Bgl | flags::Ie);
-    ie.bk(&JD_.ft());
-    ie.bk(&0u16.ft());
-    ie.bk(&0u16.ft());
+    let mut segment = Vec::with_capacity(20);
+    segment.extend_from_slice(&src_port.to_be_bytes());
+    segment.extend_from_slice(&dest_port.to_be_bytes());
+    segment.extend_from_slice(&seq.to_be_bytes());
+    segment.extend_from_slice(&ack.to_be_bytes());
+    segment.push(0x50);
+    segment.push(flags::Yn | flags::Dk);
+    segment.extend_from_slice(&JW_.to_be_bytes());
+    segment.extend_from_slice(&0u16.to_be_bytes());
+    segment.extend_from_slice(&0u16.to_be_bytes());
 
-    let td = ezm(jh, kv, &ie);
-    ie[16] = (td >> 8) as u8;
-    ie[17] = (td & 0xFF) as u8;
+    let ig = ced(src_ip, dest_ip, &segment);
+    segment[16] = (ig >> 8) as u8;
+    segment[17] = (ig & 0xFF) as u8;
 
-    crate::netstack::ip::blc(kv, 6, &ie)?;
+    crate::netstack::ip::aha(dest_ip, 6, &segment)?;
 
     
-    PF_.lock().ajm(|pk| pk.vg != vg);
+    QC_.lock().retain(|gq| gq.conn_id != conn_id);
 
-    let mut aan = Fh.lock();
-    if let Some(ly) = aan.ds(&vg) {
-        ly.ls = ly.ls.cn(1);
-        ly.fis = true;
+    let mut nc = Ci.lock();
+    if let Some(et) = nc.get_mut(&conn_id) {
+        et.seq = et.seq.wrapping_add(1);
+        et.fin_sent = true;
         
-        match ly.g {
-            TcpState::Pi => ly.g = TcpState::Bhd,
-            TcpState::Apz  => ly.g = TcpState::Bkq,
+        match et.state {
+            TcpState::Established => et.state = TcpState::FinWait1,
+            TcpState::CloseWait  => et.state = TcpState::LastAck,
             _ => {}
         }
     }
@@ -720,21 +720,21 @@ pub fn bwx(kv: [u8; 4], rz: u16, ey: u16) -> Result<(), &'static str> {
 }
 
 
-pub fn fiv(kv: [u8; 4], rz: u16, ey: u16) {
-    let jh = cqw();
-    let vg = Gt {
-        jh: bad(jh),
-        pz: bad(kv),
-        ey,
-        sa: rz,
+pub fn cjr(dest_ip: [u8; 4], dest_port: u16, src_port: u16) {
+    let src_ip = axg();
+    let conn_id = Db {
+        src_ip: abb(src_ip),
+        dst_ip: abb(dest_ip),
+        src_port,
+        dst_port: dest_port,
     };
 
-    let mfo = {
-        let mut aan = Fh.lock();
-        if let Some(ly) = aan.ds(&vg) {
-            if ly.egi > 0 {
-                ly.egi = 0;
-                ly.dit = crate::logger::lh();
+    let guw = {
+        let mut nc = Ci.lock();
+        if let Some(et) = nc.get_mut(&conn_id) {
+            if et.pending_acks > 0 {
+                et.pending_acks = 0;
+                et.last_ack_time = crate::logger::eg();
                 true
             } else {
                 false
@@ -744,126 +744,126 @@ pub fn fiv(kv: [u8; 4], rz: u16, ey: u16) {
         }
     };
 
-    if mfo {
-        let _ = fue(kv, rz, ey);
+    if guw {
+        let _ = cqi(dest_ip, dest_port, src_port);
     }
 }
 
 
-pub fn cme(kv: [u8; 4], rz: u16, ey: u16) -> Option<Vec<u8>> {
-    let jh = cqw();
-    let vg = Gt {
-        jh: bad(jh),
-        pz: bad(kv),
-        ey,
-        sa: rz,
+pub fn aus(dest_ip: [u8; 4], dest_port: u16, src_port: u16) -> Option<Vec<u8>> {
+    let src_ip = axg();
+    let conn_id = Db {
+        src_ip: abb(src_ip),
+        dst_ip: abb(dest_ip),
+        src_port,
+        dst_port: dest_port,
     };
 
     {
-        let mut kb = LA_.lock();
-        if let Some(queue) = kb.ds(&vg) {
+        let mut da = LT_.lock();
+        if let Some(queue) = da.get_mut(&conn_id) {
             if !queue.is_empty() {
-                return queue.awp();
+                return queue.pop_front();
             }
         }
     }
 
-    let mut aan = Fh.lock();
-    if let Some(ly) = aan.get(&vg) {
-        if ly.bqr && ly.fis {
-            aan.remove(&vg);
-            LA_.lock().remove(&vg);
+    let mut nc = Ci.lock();
+    if let Some(et) = nc.get(&conn_id) {
+        if et.fin_received && et.fin_sent {
+            nc.remove(&conn_id);
+            LT_.lock().remove(&conn_id);
         }
     }
     None
 }
 
 
-pub fn bqr(kv: [u8; 4], rz: u16, ey: u16) -> bool {
-    let jh = cqw();
-    let vg = Gt {
-        jh: bad(jh),
-        pz: bad(kv),
-        ey,
-        sa: rz,
+pub fn fin_received(dest_ip: [u8; 4], dest_port: u16, src_port: u16) -> bool {
+    let src_ip = axg();
+    let conn_id = Db {
+        src_ip: abb(src_ip),
+        dst_ip: abb(dest_ip),
+        src_port,
+        dst_port: dest_port,
     };
 
-    Fh
+    Ci
         .lock()
-        .get(&vg)
-        .map(|r| r.bqr)
+        .get(&conn_id)
+        .map(|c| c.fin_received)
         .unwrap_or(true)
 }
 
 
-pub fn dnd(kv: [u8; 4], rz: u16, ey: u16, sg: u32) -> bool {
-    let jh = cqw();
-    let vg = Gt {
-        jh: bad(jh),
-        pz: bad(kv),
-        ey,
-        sa: rz,
+pub fn bjy(dest_ip: [u8; 4], dest_port: u16, src_port: u16, timeout_ms: u32) -> bool {
+    let src_ip = axg();
+    let conn_id = Db {
+        src_ip: abb(src_ip),
+        dst_ip: abb(dest_ip),
+        src_port,
+        dst_port: dest_port,
     };
 
-    let ay = crate::logger::lh();
-    let mut oig = ay;
-    let mut pqn: u8 = 0;
-    let mut aaf: u32 = 0;
+    let start = crate::logger::eg();
+    let mut ijl = start;
+    let mut jkj: u8 = 0;
+    let mut my: u32 = 0;
     
     loop {
         crate::netstack::poll();
 
-        if let Some(ly) = Fh.lock().get(&vg) {
-            if ly.g == TcpState::Pi {
+        if let Some(et) = Ci.lock().get(&conn_id) {
+            if et.state == TcpState::Established {
                 return true;
             }
             
-            if ly.g == TcpState::Dk {
+            if et.state == TcpState::Closed {
                 return false;
             }
         }
 
-        let iu = crate::logger::lh();
+        let cy = crate::logger::eg();
         
         
-        if iu.ao(oig) > BEL_ && pqn < AFE_ {
-            pqn += 1;
-            oig = iu;
+        if cy.saturating_sub(ijl) > BGN_ && jkj < AGY_ {
+            jkj += 1;
+            ijl = cy;
             
             
             
-            let ls = {
-                let aan = Fh.lock();
-                aan.get(&vg).map(|r| r.jcr).unwrap_or(0)
+            let seq = {
+                let nc = Ci.lock();
+                nc.get(&conn_id).map(|c| c.last_sent_seq).unwrap_or(0)
             };
             
-            let mut ie = Vec::fc(20);
-            ie.bk(&ey.ft());
-            ie.bk(&rz.ft());
-            ie.bk(&ls.ft());
-            ie.bk(&0u32.ft());
-            ie.push(0x50);
-            ie.push(flags::Ame);
-            ie.bk(&JD_.ft());
-            ie.bk(&0u16.ft());
-            ie.bk(&0u16.ft());
+            let mut segment = Vec::with_capacity(20);
+            segment.extend_from_slice(&src_port.to_be_bytes());
+            segment.extend_from_slice(&dest_port.to_be_bytes());
+            segment.extend_from_slice(&seq.to_be_bytes());
+            segment.extend_from_slice(&0u32.to_be_bytes());
+            segment.push(0x50);
+            segment.push(flags::Qd);
+            segment.extend_from_slice(&JW_.to_be_bytes());
+            segment.extend_from_slice(&0u16.to_be_bytes());
+            segment.extend_from_slice(&0u16.to_be_bytes());
             
-            let td = ezm(jh, kv, &ie);
-            ie[16] = (td >> 8) as u8;
-            ie[17] = (td & 0xFF) as u8;
+            let ig = ced(src_ip, dest_ip, &segment);
+            segment[16] = (ig >> 8) as u8;
+            segment[17] = (ig & 0xFF) as u8;
             
-            let _ = crate::netstack::ip::blc(kv, 6, &ie);
+            let _ = crate::netstack::ip::aha(dest_ip, 6, &segment);
         }
 
-        if iu.ao(ay) > sg as u64 {
+        if cy.saturating_sub(start) > timeout_ms as u64 {
             return false;
         }
-        aaf = aaf.cn(1);
-        if aaf > 2_000_000 {
+        my = my.wrapping_add(1);
+        if my > 2_000_000 {
             return false;
         }
         
-        crate::thread::cix();
+        crate::thread::ajc();
     }
 }
 
@@ -872,16 +872,16 @@ pub fn dnd(kv: [u8; 4], rz: u16, ey: u16, sg: u32) -> bool {
 
 
 
-pub fn lfz(kv: [u8; 4], rz: u16) -> bool {
-    let jh = cqw();
-    let aan = Fh.lock();
+pub fn czx(dest_ip: [u8; 4], dest_port: u16) -> bool {
+    let src_ip = axg();
+    let nc = Ci.lock();
     
     
     
-    for (ad, ly) in aan.iter() {
-        if ad.pz == bad(kv) && ad.sa == rz
-            && ad.jh == bad(jh)
-            && ly.g == TcpState::Pi
+    for (id, et) in nc.iter() {
+        if id.dst_ip == abb(dest_ip) && id.dst_port == dest_port
+            && id.src_ip == abb(src_ip)
+            && et.state == TcpState::Established
         {
             return true;
         }
@@ -890,39 +890,39 @@ pub fn lfz(kv: [u8; 4], rz: u16) -> bool {
 }
 
 
-pub fn fuf(kv: [u8; 4], rz: u16, ey: u16, f: &[u8]) -> Result<(), &'static str> {
-    if f.is_empty() {
+pub fn cqj(dest_ip: [u8; 4], dest_port: u16, src_port: u16, data: &[u8]) -> Result<(), &'static str> {
+    if data.is_empty() {
         return Ok(());
     }
     
     
-    const Ave: usize = 1400;
+    const To: usize = 1400;
     
-    const Byd: usize = 4;
+    const Ahe: usize = 4;
     
-    let ztj = (f.len() + Ave - 1) / Ave;
+    let ras = (data.len() + To - 1) / To;
     
-    for (a, jj) in f.btq(Ave).cf() {
+    for (i, df) in data.chunks(To).enumerate() {
         
-        let mut arv = 0u32;
+        let mut retries = 0u32;
         loop {
-            match dlo(kv, rz, ey, jj) {
+            match bjc(dest_ip, dest_port, src_port, df) {
                 Ok(()) => break,
-                Err(aa) if arv < 200 => {
+                Err(e) if retries < 200 => {
                     
                     crate::netstack::poll();
-                    crate::thread::cix();
-                    arv += 1;
+                    crate::thread::ajc();
+                    retries += 1;
                 }
-                Err(aa) => return Err(aa),
+                Err(e) => return Err(e),
             }
         }
         
         
-        if (a + 1) % Byd == 0 {
+        if (i + 1) % Ahe == 0 {
             crate::netstack::poll();
             
-            crate::thread::cix();
+            crate::thread::ajc();
         }
         
     }
@@ -931,90 +931,90 @@ pub fn fuf(kv: [u8; 4], rz: u16, ey: u16, f: &[u8]) -> Result<(), &'static str> 
 }
 
 
-pub fn pam(kv: [u8; 4], rz: u16, ey: u16) -> Option<alloc::vec::Vec<u8>> {
-    cme(kv, rz, ey)
+pub fn iyp(dest_ip: [u8; 4], dest_port: u16, src_port: u16) -> Option<alloc::vec::Vec<u8>> {
+    aus(dest_ip, dest_port, src_port)
 }
 
 
-pub fn nxy(kv: [u8; 4], rz: u16, ey: u16) -> Option<TcpState> {
-    let jh = cqw();
-    let vg = Gt {
-        jh: bad(jh),
-        pz: bad(kv),
-        ey,
-        sa: rz,
+pub fn ibk(dest_ip: [u8; 4], dest_port: u16, src_port: u16) -> Option<TcpState> {
+    let src_ip = axg();
+    let conn_id = Db {
+        src_ip: abb(src_ip),
+        dst_ip: abb(dest_ip),
+        src_port,
+        dst_port: dest_port,
     };
     
-    Fh.lock().get(&vg).map(|r| r.g)
+    Ci.lock().get(&conn_id).map(|c| c.state)
 }
 
 
 
-pub fn qzp() {
-    let iu = crate::time::lc();
-    let mut exw = PF_.lock();
+pub fn kjp() {
+    let cy = crate::time::uptime_ms();
+    let mut cdm = QC_.lock();
 
-    for pk in exw.el() {
-        if iu.nj(pk.mdv) < BEL_ {
+    for gq in cdm.iter_mut() {
+        if cy.wrapping_sub(gq.sent_time) < BGN_ {
             continue;
         }
-        if pk.arv >= AFE_ {
+        if gq.retries >= AGY_ {
             continue; 
         }
 
         
-        let vg = pk.vg;
-        let aan = Fh.lock();
-        let wui = aan.get(&vg)
-            .map(|r| r.g == TcpState::Pi && r.iay <= pk.ls)
+        let conn_id = gq.conn_id;
+        let nc = Ci.lock();
+        let oxj = nc.get(&conn_id)
+            .map(|c| c.state == TcpState::Established && c.snd_una <= gq.seq)
             .unwrap_or(false);
-        drop(aan);
+        drop(nc);
 
-        if !wui {
+        if !oxj {
             continue;
         }
 
         
-        let jh = cqw();
-        let kv = pk.kv;
-        let qeu = {
-            let aan = Fh.lock();
-            aan.get(&vg).map(|r| r.alx).unwrap_or(0)
+        let src_ip = axg();
+        let dest_ip = gq.dest_ip;
+        let jtk = {
+            let nc = Ci.lock();
+            nc.get(&conn_id).map(|c| c.ack).unwrap_or(0)
         };
 
-        let mut cnb = Vec::fc(20 + pk.f.len());
-        cnb.bk(&pk.ey.ft());
-        cnb.bk(&pk.rz.ft());
-        cnb.bk(&pk.ls.ft());
-        cnb.bk(&qeu.ft());
-        cnb.push(0x50);
-        cnb.push(flags::Awp | flags::Ie);
-        cnb.bk(&JD_.ft());
-        cnb.bk(&0u16.ft());
-        cnb.bk(&0u16.ft());
-        cnb.bk(&pk.f);
+        let mut avi = Vec::with_capacity(20 + gq.data.len());
+        avi.extend_from_slice(&gq.src_port.to_be_bytes());
+        avi.extend_from_slice(&gq.dest_port.to_be_bytes());
+        avi.extend_from_slice(&gq.seq.to_be_bytes());
+        avi.extend_from_slice(&jtk.to_be_bytes());
+        avi.push(0x50);
+        avi.push(flags::Ug | flags::Dk);
+        avi.extend_from_slice(&JW_.to_be_bytes());
+        avi.extend_from_slice(&0u16.to_be_bytes());
+        avi.extend_from_slice(&0u16.to_be_bytes());
+        avi.extend_from_slice(&gq.data);
 
-        let td = ezm(jh, kv, &cnb);
-        cnb[16] = (td >> 8) as u8;
-        cnb[17] = (td & 0xFF) as u8;
+        let ig = ced(src_ip, dest_ip, &avi);
+        avi[16] = (ig >> 8) as u8;
+        avi[17] = (ig & 0xFF) as u8;
 
-        let _ = crate::netstack::ip::blc(kv, 6, &cnb);
-        pk.arv += 1;
-        pk.mdv = iu; 
+        let _ = crate::netstack::ip::aha(dest_ip, 6, &avi);
+        gq.retries += 1;
+        gq.sent_time = cy; 
     }
 
     
-    exw.ajm(|pk| pk.arv < AFE_);
+    cdm.retain(|gq| gq.retries < AGY_);
 }
 
 
-pub fn yim(kv: [u8; 4], rz: u16, ey: u16) {
-    let jh = cqw();
-    let vg = Gt {
-        jh: bad(jh),
-        pz: bad(kv),
-        ey,
-        sa: rz,
+pub fn qaa(dest_ip: [u8; 4], dest_port: u16, src_port: u16) {
+    let src_ip = axg();
+    let conn_id = Db {
+        src_ip: abb(src_ip),
+        dst_ip: abb(dest_ip),
+        src_port,
+        dst_port: dest_port,
     };
-    PF_.lock().ajm(|pk| pk.vg != vg);
+    QC_.lock().retain(|gq| gq.conn_id != conn_id);
 }

@@ -1,6 +1,6 @@
 
 
-#![allow(bgr)]
+#![allow(dead_code)]
 
 pub mod cartridge;
 pub mod cpu;
@@ -9,90 +9,90 @@ pub mod ppu;
 use alloc::vec;
 use alloc::vec::Vec;
 use cartridge::Cartridge;
-use cpu::{Cpu, Ch};
+use cpu::{Cpu, Ax};
 use ppu::Ppu;
 
-const BBH_: usize = 256;
-const CHL_: usize = 240;
-const BQV_: u32 = 114; 
+const BDK_: usize = 256;
+const CKU_: usize = 240;
+const BTQ_: u32 = 114; 
 
 
 pub struct NesEmulator {
     cpu: Cpu,
     ppu: Ppu,
-    ajl: [u8; 2048],
-    on: Cartridge,
-    dvf: bool,
+    ram: [u8; 2048],
+    cart: Cartridge,
+    rom_loaded: bool,
 
     
-    cwq: [u8; 2],
-    cjr: [u8; 2],
-    eoa: bool,
+    controller_state: [u8; 2],
+    controller_shift: [u8; 2],
+    controller_strobe: bool,
 
     
-    dqb: u8,
-    dgm: bool,
+    dma_page: u8,
+    dma_pending: bool,
 
     
-    hkj: bool,
-    oo: u64,
+    frame_ready: bool,
+    frame_count: u64,
 
     
-    bbv: u8, 
+    key_state: u8, 
 }
 
-struct Lf<'a> {
-    ajl: &'a mut [u8; 2048],
+struct Et<'a> {
+    ram: &'a mut [u8; 2048],
     ppu: &'a mut Ppu,
-    on: &'a mut Cartridge,
-    cwq: &'a [u8; 2],
-    cjr: &'a mut [u8; 2],
-    eoa: &'a bool,
-    dqb: &'a mut u8,
-    dgm: &'a mut bool,
+    cart: &'a mut Cartridge,
+    controller_state: &'a [u8; 2],
+    controller_shift: &'a mut [u8; 2],
+    controller_strobe: &'a bool,
+    dma_page: &'a mut u8,
+    dma_pending: &'a mut bool,
 }
 
-impl<'a> Ch for Lf<'a> {
-    fn mc(&mut self, ag: u16) -> u8 {
-        match ag {
-            0x0000..=0x1FFF => self.ajl[(ag & 0x07FF) as usize],
-            0x2000..=0x3FFF => self.ppu.gql(ag, self.on),
+impl<'a> Ax for Et<'a> {
+    fn cpu_read(&mut self, addr: u16) -> u8 {
+        match addr {
+            0x0000..=0x1FFF => self.ram[(addr & 0x07FF) as usize],
+            0x2000..=0x3FFF => self.ppu.read_register(addr, self.cart),
             0x4016 => {
-                let ap = (self.cjr[0] & 0x80) >> 7;
-                self.cjr[0] <<= 1;
-                ap | 0x40
+                let val = (self.controller_shift[0] & 0x80) >> 7;
+                self.controller_shift[0] <<= 1;
+                val | 0x40
             }
             0x4017 => {
-                let ap = (self.cjr[1] & 0x80) >> 7;
-                self.cjr[1] <<= 1;
-                ap | 0x40
+                let val = (self.controller_shift[1] & 0x80) >> 7;
+                self.controller_shift[1] <<= 1;
+                val | 0x40
             }
             0x4000..=0x4015 => 0, 
             0x4018..=0x5FFF => 0, 
-            0x6000..=0xFFFF => self.on.mc(ag),
+            0x6000..=0xFFFF => self.cart.cpu_read(addr),
             _ => 0,
         }
     }
 
-    fn ok(&mut self, ag: u16, ap: u8) {
-        match ag {
-            0x0000..=0x1FFF => self.ajl[(ag & 0x07FF) as usize] = ap,
-            0x2000..=0x3FFF => self.ppu.ihl(ag, ap, self.on),
+    fn cpu_write(&mut self, addr: u16, val: u8) {
+        match addr {
+            0x0000..=0x1FFF => self.ram[(addr & 0x07FF) as usize] = val,
+            0x2000..=0x3FFF => self.ppu.write_register(addr, val, self.cart),
             0x4014 => {
                 
-                *self.dqb = ap;
-                *self.dgm = true;
+                *self.dma_page = val;
+                *self.dma_pending = true;
             }
             0x4016 => {
-                if ap & 1 != 0 {
+                if val & 1 != 0 {
                     
-                    self.cjr[0] = self.cwq[0];
-                    self.cjr[1] = self.cwq[1];
+                    self.controller_shift[0] = self.controller_state[0];
+                    self.controller_shift[1] = self.controller_state[1];
                 }
             }
             0x4000..=0x4015 | 0x4017 => {} 
             0x4018..=0x5FFF => {} 
-            0x6000..=0xFFFF => self.on.ok(ag, ap),
+            0x6000..=0xFFFF => self.cart.cpu_write(addr, val),
             _ => {}
         }
     }
@@ -103,261 +103,261 @@ impl NesEmulator {
         Self {
             cpu: Cpu::new(),
             ppu: Ppu::new(),
-            ajl: [0; 2048],
-            on: Cartridge::azs(),
-            dvf: false,
-            cwq: [0; 2],
-            cjr: [0; 2],
-            eoa: false,
-            dqb: 0,
-            dgm: false,
-            hkj: false,
-            oo: 0,
-            bbv: 0,
+            ram: [0; 2048],
+            cart: Cartridge::empty(),
+            rom_loaded: false,
+            controller_state: [0; 2],
+            controller_shift: [0; 2],
+            controller_strobe: false,
+            dma_page: 0,
+            dma_pending: false,
+            frame_ready: false,
+            frame_count: 0,
+            key_state: 0,
         }
     }
 
     
-    pub fn ljk(&mut self, f: &[u8]) -> bool {
-        if let Some(on) = Cartridge::sxy(f) {
-            self.on = on;
-            self.dvf = true;
+    pub fn load_rom(&mut self, data: &[u8]) -> bool {
+        if let Some(cart) = Cartridge::lzi(data) {
+            self.cart = cart;
+            self.rom_loaded = true;
             
             self.cpu = Cpu::new();
             self.ppu = Ppu::new();
-            self.ajl = [0; 2048];
+            self.ram = [0; 2048];
             {
-                let mut aq = Lf {
-                    ajl: &mut self.ajl,
+                let mut bus = Et {
+                    ram: &mut self.ram,
                     ppu: &mut self.ppu,
-                    on: &mut self.on,
-                    cwq: &self.cwq,
-                    cjr: &mut self.cjr,
-                    eoa: &self.eoa,
-                    dqb: &mut self.dqb,
-                    dgm: &mut self.dgm,
+                    cart: &mut self.cart,
+                    controller_state: &self.controller_state,
+                    controller_shift: &mut self.controller_shift,
+                    controller_strobe: &self.controller_strobe,
+                    dma_page: &mut self.dma_page,
+                    dma_pending: &mut self.dma_pending,
                 };
-                self.cpu.apa(&mut aq);
+                self.cpu.reset(&mut bus);
             }
-            crate::serial_println!("[NES] ROM loaded, PC={:#06X}", self.cpu.fz);
+            crate::serial_println!("[NES] ROM loaded, PC={:#06X}", self.cpu.pc);
             true
         } else {
             false
         }
     }
 
-    fn ujl(&mut self) -> Lf<'_> {
-        Lf {
-            ajl: &mut self.ajl,
+    fn nby(&mut self) -> Et<'_> {
+        Et {
+            ram: &mut self.ram,
             ppu: &mut self.ppu,
-            on: &mut self.on,
-            cwq: &self.cwq,
-            cjr: &mut self.cjr,
-            eoa: &self.eoa,
-            dqb: &mut self.dqb,
-            dgm: &mut self.dgm,
+            cart: &mut self.cart,
+            controller_state: &self.controller_state,
+            controller_shift: &mut self.controller_shift,
+            controller_strobe: &self.controller_strobe,
+            dma_page: &mut self.dma_page,
+            dma_pending: &mut self.dma_pending,
         }
     }
 
     
 
     
-    pub fn vr(&mut self, bs: u8) {
-        match bs {
-            b'x' | b'X' => self.bbv |= 0x80, 
-            b'z' | b'Z' => self.bbv |= 0x40, 
-            b'c' | b'C' => self.bbv |= 0x20, 
-            b'\r' | 10  => self.bbv |= 0x10, 
-            b'w' | b'W' | 0xF0 => self.bbv |= 0x08, 
-            b's' | b'S' | 0xF1 => self.bbv |= 0x04, 
-            b'a' | b'A' | 0xF2 => self.bbv |= 0x02, 
-            b'd' | b'D' | 0xF3 => self.bbv |= 0x01, 
-            b' '        => self.bbv |= 0x80, 
+    pub fn handle_key(&mut self, key: u8) {
+        match key {
+            b'x' | b'X' => self.key_state |= 0x80, 
+            b'z' | b'Z' => self.key_state |= 0x40, 
+            b'c' | b'C' => self.key_state |= 0x20, 
+            b'\r' | 10  => self.key_state |= 0x10, 
+            b'w' | b'W' | 0xF0 => self.key_state |= 0x08, 
+            b's' | b'S' | 0xF1 => self.key_state |= 0x04, 
+            b'a' | b'A' | 0xF2 => self.key_state |= 0x02, 
+            b'd' | b'D' | 0xF3 => self.key_state |= 0x01, 
+            b' '        => self.key_state |= 0x80, 
             _ => {}
         }
-        self.cwq[0] = self.bbv;
+        self.controller_state[0] = self.key_state;
     }
 
-    pub fn avy(&mut self, bs: u8) {
-        match bs {
-            b'x' | b'X' => self.bbv &= !0x80,
-            b'z' | b'Z' => self.bbv &= !0x40,
-            b'c' | b'C' => self.bbv &= !0x20,
-            b'\r' | 10  => self.bbv &= !0x10,
-            b'w' | b'W' | 0xF0 => self.bbv &= !0x08,
-            b's' | b'S' | 0xF1 => self.bbv &= !0x04,
-            b'a' | b'A' | 0xF2 => self.bbv &= !0x02,
-            b'd' | b'D' | 0xF3 => self.bbv &= !0x01,
-            b' '        => self.bbv &= !0x80,
+    pub fn handle_key_release(&mut self, key: u8) {
+        match key {
+            b'x' | b'X' => self.key_state &= !0x80,
+            b'z' | b'Z' => self.key_state &= !0x40,
+            b'c' | b'C' => self.key_state &= !0x20,
+            b'\r' | 10  => self.key_state &= !0x10,
+            b'w' | b'W' | 0xF0 => self.key_state &= !0x08,
+            b's' | b'S' | 0xF1 => self.key_state &= !0x04,
+            b'a' | b'A' | 0xF2 => self.key_state &= !0x02,
+            b'd' | b'D' | 0xF3 => self.key_state &= !0x01,
+            b' '        => self.key_state &= !0x80,
             _ => {}
         }
-        self.cwq[0] = self.bbv;
+        self.controller_state[0] = self.key_state;
     }
 
     
 
     
-    pub fn or(&mut self) {
-        if !self.dvf { return; }
+    pub fn tick(&mut self) {
+        if !self.rom_loaded { return; }
 
         
         for _ in 0..262 {
             
-            let mut mch: u32 = 0;
-            while mch < BQV_ {
+            let mut gsv: u32 = 0;
+            while gsv < BTQ_ {
                 
-                if self.dgm {
-                    self.dgm = false;
-                    let ar = (self.dqb as u16) << 8;
-                    let mut nmd = [0u8; 256];
-                    for a in 0..256u16 {
-                        let ag = ar | a;
-                        nmd[a as usize] = match ag {
-                            0x0000..=0x1FFF => self.ajl[(ag & 0x07FF) as usize],
-                            0x6000..=0xFFFF => self.on.mc(ag),
+                if self.dma_pending {
+                    self.dma_pending = false;
+                    let base = (self.dma_page as u16) << 8;
+                    let mut hsu = [0u8; 256];
+                    for i in 0..256u16 {
+                        let addr = base | i;
+                        hsu[i as usize] = match addr {
+                            0x0000..=0x1FFF => self.ram[(addr & 0x07FF) as usize],
+                            0x6000..=0xFFFF => self.cart.cpu_read(addr),
                             _ => 0,
                         };
                     }
-                    self.ppu.uwt(&nmd);
-                    mch += 513;
+                    self.ppu.oam_dma(&hsu);
+                    gsv += 513;
                     continue;
                 }
 
-                let mut aq = Lf {
-                    ajl: &mut self.ajl,
+                let mut bus = Et {
+                    ram: &mut self.ram,
                     ppu: &mut self.ppu,
-                    on: &mut self.on,
-                    cwq: &self.cwq,
-                    cjr: &mut self.cjr,
-                    eoa: &self.eoa,
-                    dqb: &mut self.dqb,
-                    dgm: &mut self.dgm,
+                    cart: &mut self.cart,
+                    controller_state: &self.controller_state,
+                    controller_shift: &mut self.controller_shift,
+                    controller_strobe: &self.controller_strobe,
+                    dma_page: &mut self.dma_page,
+                    dma_pending: &mut self.dma_pending,
                 };
-                let yl = self.cpu.gu(&mut aq);
-                mch += yl;
+                let cycles = self.cpu.step(&mut bus);
+                gsv += cycles;
             }
 
             
-            let evi = self.ppu.wud(&self.on);
-            if evi {
-                self.cpu.jhc = true;
+            let ayo = self.ppu.step_scanline(&self.cart);
+            if ayo {
+                self.cpu.nmi_pending = true;
             }
         }
 
-        self.oo += 1;
+        self.frame_count += 1;
     }
 
     
 
     
-    pub fn tj(&self, an: &mut [u32], efz: usize, fpz: usize) {
-        if !self.dvf {
-            self.vwf(an, efz, fpz);
+    pub fn render(&self, output: &mut [u32], out_w: usize, out_h: usize) {
+        if !self.rom_loaded {
+            self.render_no_rom_screen(output, out_w, out_h);
             return;
         }
 
         
-        for qw in 0..fpz {
-            let cq = qw * CHL_ / fpz;
-            for mp in 0..efz {
-                let cr = mp * BBH_ / efz;
-                let s = self.ppu.framebuffer[cq * BBH_ + cr];
-                an[qw * efz + mp] = s;
+        for hk in 0..out_h {
+            let ak = hk * CKU_ / out_h;
+            for fh in 0..out_w {
+                let am = fh * BDK_ / out_w;
+                let color = self.ppu.framebuffer[ak * BDK_ + am];
+                output[hk * out_w + fh] = color;
             }
         }
     }
 
-    fn vwf(&self, an: &mut [u32], d: usize, i: usize) {
+    fn render_no_rom_screen(&self, output: &mut [u32], w: usize, h: usize) {
         
-        for a in 0..d * i {
-            an[a] = 0xFF0F0F23;
+        for i in 0..w * h {
+            output[i] = 0xFF0F0F23;
         }
 
         
-        let dq = "TrustNES";
-        let atp = "Insert ROM to play";
-        let nfu = "WASD:Dpad X:A Z:B C:Select Enter:Start";
+        let title = "TrustNES";
+        let subtitle = "Insert ROM to play";
+        let hnn = "WASD:Dpad X:A Z:B C:Select Enter:Start";
 
-        let cx = d / 2;
-        let ty = i / 3;
-        self.cb(an, d, i, cx - dq.len() * 4, ty, dq, 0xFFFF4444);
-        self.cb(an, d, i, cx - atp.len() * 4, ty + 30, atp, 0xFF888888);
-        self.cb(an, d, i, cx - nfu.len() * 4, ty + 55, nfu, 0xFF666666);
+        let cx = w / 2;
+        let ty = h / 3;
+        self.draw_text(output, w, h, cx - title.len() * 4, ty, title, 0xFFFF4444);
+        self.draw_text(output, w, h, cx - subtitle.len() * 4, ty + 30, subtitle, 0xFF888888);
+        self.draw_text(output, w, h, cx - hnn.len() * 4, ty + 55, hnn, 0xFF666666);
 
         
-        let ae = i / 2 + 30;
+        let u = h / 2 + 30;
         let bx = cx - 30;
         
-        for bg in 0..20u32 {
+        for ad in 0..20u32 {
             for dx in 0..60u32 {
-                let y = bx + dx as usize;
-                let x = ae + bg as usize;
-                if y < d && x < i {
-                    an[x * d + y] = 0xFF333333;
+                let p = bx + dx as usize;
+                let o = u + ad as usize;
+                if p < w && o < h {
+                    output[o * w + p] = 0xFF333333;
                 }
             }
         }
         
-        for bc in 0..5u32 {
-            let y = bx + 12; let x = ae + 5 + bc as usize;
-            if y < d && x < i { an[x * d + y] = 0xFF666666; }
-            let y = bx + 10 + bc as usize; let x = ae + 7;
-            if y < d && x < i { an[x * d + y] = 0xFF666666; }
+        for d in 0..5u32 {
+            let p = bx + 12; let o = u + 5 + d as usize;
+            if p < w && o < h { output[o * w + p] = 0xFF666666; }
+            let p = bx + 10 + d as usize; let o = u + 7;
+            if p < w && o < h { output[o * w + p] = 0xFF666666; }
         }
         
-        for axp in [bx + 42, bx + 50] {
-            for bg in 0..4u32 {
+        for zs in [bx + 42, bx + 50] {
+            for ad in 0..4u32 {
                 for dx in 0..4u32 {
-                    let y = axp + dx as usize;
-                    let x = ae + 6 + bg as usize;
-                    if y < d && x < i {
-                        an[x * d + y] = 0xFFCC2222;
+                    let p = zs + dx as usize;
+                    let o = u + 6 + ad as usize;
+                    if p < w && o < h {
+                        output[o * w + p] = 0xFFCC2222;
                     }
                 }
             }
         }
     }
 
-    fn cb(&self, k: &mut [u32], d: usize, i: usize, b: usize, c: usize, text: &str, s: u32) {
+    fn draw_text(&self, buf: &mut [u32], w: usize, h: usize, x: usize, y: usize, text: &str, color: u32) {
         
-        const Cdd: [u64; 128] = {
-            let mut bb = [0u64; 128];
-            bb[b'A' as usize] = 0x4A_EA_CE; bb[b'B' as usize] = 0xCA_CA_CE;
-            bb[b'C' as usize] = 0x68_88_6E; bb[b'D' as usize] = 0xCA_AA_CE;
-            bb[b'E' as usize] = 0xE8_C8_EE; bb[b'F' as usize] = 0xE8_C8_80;
-            bb[b'G' as usize] = 0x68_A8_6E; bb[b'H' as usize] = 0xAA_EA_AE;
-            bb[b'I' as usize] = 0xE4_44_EE; bb[b'J' as usize] = 0x22_2A_4E;
-            bb[b'K' as usize] = 0xAA_CA_AE; bb[b'L' as usize] = 0x88_88_EE;
-            bb[b'M' as usize] = 0xAE_EA_AE; bb[b'N' as usize] = 0xAE_EA_AE;
-            bb[b'O' as usize] = 0x4A_AA_4E; bb[b'P' as usize] = 0xCA_C8_80;
-            bb[b'Q' as usize] = 0x4A_AE_6E; bb[b'R' as usize] = 0xCA_CA_AE;
-            bb[b'S' as usize] = 0x68_42_CE; bb[b'T' as usize] = 0xE4_44_40;
-            bb[b'U' as usize] = 0xAA_AA_EE; bb[b'V' as usize] = 0xAA_AA_40;
-            bb[b'W' as usize] = 0xAA_EE_AE; bb[b'X' as usize] = 0xAA_4A_AE;
-            bb[b'Y' as usize] = 0xAA_44_40; bb[b'Z' as usize] = 0xE2_48_EE;
-            bb[b'0' as usize] = 0x4A_AA_4E; bb[b'1' as usize] = 0x4C_44_EE;
-            bb[b'2' as usize] = 0xC2_48_EE; bb[b'3' as usize] = 0xC2_42_CE;
-            bb[b'4' as usize] = 0xAA_E2_2E; bb[b'5' as usize] = 0xE8_C2_CE;
-            bb[b'6' as usize] = 0x68_CA_6E; bb[b'7' as usize] = 0xE2_24_40;
-            bb[b'8' as usize] = 0x6A_4A_6E; bb[b'9' as usize] = 0x6A_62_CE;
-            bb[b':' as usize] = 0x04_04_00; bb[b' ' as usize] = 0x00_00_00;
-            bb[b'.' as usize] = 0x00_00_40;
-            bb
+        const Ajx: [u64; 128] = {
+            let mut f = [0u64; 128];
+            f[b'A' as usize] = 0x4A_EA_CE; f[b'B' as usize] = 0xCA_CA_CE;
+            f[b'C' as usize] = 0x68_88_6E; f[b'D' as usize] = 0xCA_AA_CE;
+            f[b'E' as usize] = 0xE8_C8_EE; f[b'F' as usize] = 0xE8_C8_80;
+            f[b'G' as usize] = 0x68_A8_6E; f[b'H' as usize] = 0xAA_EA_AE;
+            f[b'I' as usize] = 0xE4_44_EE; f[b'J' as usize] = 0x22_2A_4E;
+            f[b'K' as usize] = 0xAA_CA_AE; f[b'L' as usize] = 0x88_88_EE;
+            f[b'M' as usize] = 0xAE_EA_AE; f[b'N' as usize] = 0xAE_EA_AE;
+            f[b'O' as usize] = 0x4A_AA_4E; f[b'P' as usize] = 0xCA_C8_80;
+            f[b'Q' as usize] = 0x4A_AE_6E; f[b'R' as usize] = 0xCA_CA_AE;
+            f[b'S' as usize] = 0x68_42_CE; f[b'T' as usize] = 0xE4_44_40;
+            f[b'U' as usize] = 0xAA_AA_EE; f[b'V' as usize] = 0xAA_AA_40;
+            f[b'W' as usize] = 0xAA_EE_AE; f[b'X' as usize] = 0xAA_4A_AE;
+            f[b'Y' as usize] = 0xAA_44_40; f[b'Z' as usize] = 0xE2_48_EE;
+            f[b'0' as usize] = 0x4A_AA_4E; f[b'1' as usize] = 0x4C_44_EE;
+            f[b'2' as usize] = 0xC2_48_EE; f[b'3' as usize] = 0xC2_42_CE;
+            f[b'4' as usize] = 0xAA_E2_2E; f[b'5' as usize] = 0xE8_C2_CE;
+            f[b'6' as usize] = 0x68_CA_6E; f[b'7' as usize] = 0xE2_24_40;
+            f[b'8' as usize] = 0x6A_4A_6E; f[b'9' as usize] = 0x6A_62_CE;
+            f[b':' as usize] = 0x04_04_00; f[b' ' as usize] = 0x00_00_00;
+            f[b'.' as usize] = 0x00_00_40;
+            f
         };
 
-        let mut cx = b;
-        for bm in text.bf() {
-            let w = bm as usize;
-            let ka = if w < 128 { Cdd[w] } else { 0 };
-            if ka != 0 || bm == b' ' {
-                for br in 0..5 {
-                    for bj in 0..4 {
-                        let ga = (ka >> (20 - br * 4 - bj)) & 1;
-                        if ga != 0 {
-                            let y = cx + bj as usize;
-                            let x = c + br as usize;
-                            if y < d && x < i {
-                                k[x * d + y] = s;
+        let mut cx = x;
+        for ch in text.bytes() {
+            let idx = ch as usize;
+            let du = if idx < 128 { Ajx[idx] } else { 0 };
+            if du != 0 || ch == b' ' {
+                for row in 0..5 {
+                    for col in 0..4 {
+                        let bf = (du >> (20 - row * 4 - col)) & 1;
+                        if bf != 0 {
+                            let p = cx + col as usize;
+                            let o = y + row as usize;
+                            if p < w && o < h {
+                                buf[o * w + p] = color;
                             }
                         }
                     }

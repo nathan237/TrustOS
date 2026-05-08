@@ -33,13 +33,13 @@ pub mod esr {
 
     
     #[inline(always)]
-    pub fn odh(esr: u64) -> bool {
+    pub fn il(esr: u64) -> bool {
         (esr >> 25) & 1 != 0
     }
 
     
     #[inline(always)]
-    pub fn ayb(esr: u64) -> u32 {
+    pub fn xt(esr: u64) -> u32 {
         (esr & 0x01FF_FFFF) as u32
     }
 }
@@ -48,38 +48,38 @@ pub mod esr {
 pub mod dabt {
     
     #[inline(always)]
-    pub fn tzw(ayb: u32) -> bool {
-        (ayb >> 24) & 1 != 0
+    pub fn muo(xt: u32) -> bool {
+        (xt >> 24) & 1 != 0
     }
 
     
     #[inline(always)]
-    pub fn wcs(ayb: u32) -> u32 {
-        (ayb >> 22) & 0x3
+    pub fn okd(xt: u32) -> u32 {
+        (xt >> 22) & 0x3
     }
 
     
     #[inline(always)]
-    pub fn cct(ayb: u32) -> u32 {
-        1 << wcs(ayb)
+    pub fn access_size(xt: u32) -> u32 {
+        1 << okd(xt)
     }
 
     
     #[inline(always)]
-    pub fn wrw(ayb: u32) -> u32 {
-        (ayb >> 16) & 0x1F
+    pub fn ovl(xt: u32) -> u32 {
+        (xt >> 16) & 0x1F
     }
 
     
     #[inline(always)]
-    pub fn eim(ayb: u32) -> bool {
-        (ayb >> 15) & 1 != 0
+    pub fn bvs(xt: u32) -> bool {
+        (xt >> 15) & 1 != 0
     }
 
     
     #[inline(always)]
-    pub fn rm(ayb: u32) -> bool {
-        (ayb >> 6) & 1 != 0
+    pub fn is_write(xt: u32) -> bool {
+        (xt >> 6) & 1 != 0
     }
 }
 
@@ -89,33 +89,33 @@ pub mod smc {
     #[derive(Debug, Clone, Copy)]
     pub enum SmcType {
         
-        Axd,
+        Psci,
         
-        Ayn,
+        SecureService,
         
-        Bnt,
+        OemService,
         
-        Biv,
+        HypService,
         
-        F,
+        Unknown,
     }
 
     
-    pub fn ndc(aos: u64) -> SmcType {
-        let vah = (aos >> 24) & 0x3F;
-        match vah {
-            0x04 => SmcType::Axd,          
-            0x00..=0x01 => SmcType::Ayn,
-            0x02..=0x03 => SmcType::Ayn,
-            0x30..=0x31 => SmcType::Bnt,
-            0x05 => SmcType::Biv,
-            _ => SmcType::F,
+    pub fn hld(fid: u64) -> SmcType {
+        let nov = (fid >> 24) & 0x3F;
+        match nov {
+            0x04 => SmcType::Psci,          
+            0x00..=0x01 => SmcType::SecureService,
+            0x02..=0x03 => SmcType::SecureService,
+            0x30..=0x31 => SmcType::OemService,
+            0x05 => SmcType::HypService,
+            _ => SmcType::Unknown,
         }
     }
 
     
-    pub fn vnt(aos: u64) -> &'static str {
-        match aos & 0xFFFF_FFFF {
+    pub fn nze(fid: u64) -> &'static str {
+        match fid & 0xFFFF_FFFF {
             0x8400_0000 => "PSCI_VERSION",
             0x8400_0001 => "CPU_SUSPEND (32)",
             0xC400_0001 => "CPU_SUSPEND (64)",
@@ -136,27 +136,27 @@ pub mod smc {
 
 
 mod ec {
-    pub const APT_: u32  = 0b10_0100;  
-    pub const AXA_: u32  = 0b10_0000;  
-    pub const Bin: u32             = 0b01_0110;   
-    pub const Brz: u32             = 0b01_0111;   
-    pub const BBB_: u32           = 0b01_1000;   
-    pub const Bwg: u32              = 0b00_0001;   
-    pub const Dic: u32             = 0b01_0101;   
-    pub const DMD_: u32            = 0b10_1100;   
+    pub const ARV_: u32  = 0b10_0100;  
+    pub const AZC_: u32  = 0b10_0000;  
+    pub const Zp: u32             = 0b01_0110;   
+    pub const Aei: u32             = 0b01_0111;   
+    pub const BDE_: u32           = 0b01_1000;   
+    pub const Agi: u32              = 0b00_0001;   
+    pub const Bde: u32             = 0b01_0101;   
+    pub const DPZ_: u32            = 0b10_1100;   
 }
 
 
 #[derive(Debug)]
 pub enum TrapAction {
     
-    Gw,
+    Handled,
     
-    Bhj,
+    ForwardSmc,
     
-    Auf,
+    InjectFault,
     
-    Ath,
+    GuestHalt,
 }
 
 
@@ -169,277 +169,277 @@ pub enum TrapAction {
 
 
 
-pub fn tld(
+pub fn mio(
     esr: u64,
-    adt: u64,
-    esb: u64,
-    ej: &mut [u64; 31],
+    far: u64,
+    hpfar: u64,
+    guest_regs: &mut [u64; 31],
 ) -> TrapAction {
-    let soa = esr::ec(esr);
-    let ayb = esr::ayb(esr);
+    let lrs = esr::ec(esr);
+    let xt = esr::xt(esr);
 
-    match soa {
-        ec::APT_ => {
-            tjh(ayb, adt, esb, ej)
+    match lrs {
+        ec::ARV_ => {
+            mho(xt, far, hpfar, guest_regs)
         }
-        ec::AXA_ => {
+        ec::AZC_ => {
             
-            let akh = (esb & 0x0000_000F_FFFF_FFF0) << 8;
-            mmio_spy::jdw(mmio_spy::Lv {
-                akh,
-                asf: adt,
-                bn: 0,
-                cct: 4,
-                rm: false,
-                gwm: true,
-                dgg: mmio_spy::eda(akh),
+            let ipa = (hpfar & 0x0000_000F_FFFF_FFF0) << 8;
+            mmio_spy::etg(mmio_spy::Ey {
+                ipa,
+                va: far,
+                value: 0,
+                access_size: 4,
+                is_write: false,
+                was_inst_fetch: true,
+                device_name: mmio_spy::btg(ipa),
             });
-            TrapAction::Auf
+            TrapAction::InjectFault
         }
-        ec::Brz => {
-            tky(ej)
+        ec::Aei => {
+            mik(guest_regs)
         }
-        ec::Bin => {
+        ec::Zp => {
             
             
-            let lcw = ej[0];
-            lau(lcw, ej)
+            let gbh = guest_regs[0];
+            fzs(gbh, guest_regs)
         }
-        ec::BBB_ => {
+        ec::BDE_ => {
             
-            tle(ayb, ej)
+            mip(xt, guest_regs)
         }
-        ec::Bwg => {
+        ec::Agi => {
             
-            TrapAction::Gw
+            TrapAction::Handled
         }
         _ => {
             
-            TrapAction::Auf
+            TrapAction::InjectFault
         }
     }
 }
 
 
-fn tjh(
-    ayb: u32,
-    adt: u64,
-    esb: u64,
-    ej: &mut [u64; 31],
+fn mho(
+    xt: u32,
+    far: u64,
+    hpfar: u64,
+    guest_regs: &mut [u64; 31],
 ) -> TrapAction {
     
     
-    let twm = (esb & 0x0000_000F_FFFF_FFF0) << 8;
-    let akh = twm | (adt & 0xFFF);
+    let mru = (hpfar & 0x0000_000F_FFFF_FFF0) << 8;
+    let ipa = mru | (far & 0xFFF);
 
-    if !dabt::tzw(ayb) {
+    if !dabt::muo(xt) {
         
         
         
-        mmio_spy::jdw(mmio_spy::Lv {
-            akh,
-            asf: adt,
-            bn: 0,
-            cct: 0,
-            rm: false,
-            gwm: false,
-            dgg: mmio_spy::eda(akh),
+        mmio_spy::etg(mmio_spy::Ey {
+            ipa,
+            va: far,
+            value: 0,
+            access_size: 0,
+            is_write: false,
+            was_inst_fetch: false,
+            device_name: mmio_spy::btg(ipa),
         });
-        return TrapAction::Gw;
+        return TrapAction::Handled;
     }
 
-    let rm = dabt::rm(ayb);
-    let cct = dabt::cct(ayb);
-    let alq = dabt::wrw(ayb) as usize;
+    let is_write = dabt::is_write(xt);
+    let access_size = dabt::access_size(xt);
+    let tb = dabt::ovl(xt) as usize;
 
-    if rm {
+    if is_write {
         
-        let bn = if alq < 31 { ej[alq] } else { 0 };
+        let value = if tb < 31 { guest_regs[tb] } else { 0 };
 
         
-        mmio_spy::jdw(mmio_spy::Lv {
-            akh,
-            asf: adt,
-            bn,
-            cct,
-            rm: true,
-            gwm: false,
-            dgg: mmio_spy::eda(akh),
+        mmio_spy::etg(mmio_spy::Ey {
+            ipa,
+            va: far,
+            value,
+            access_size,
+            is_write: true,
+            was_inst_fetch: false,
+            device_name: mmio_spy::btg(ipa),
         });
 
         
-        rzx(akh, bn, cct);
+        lgp(ipa, value, access_size);
     } else {
         
-        let bn = rzw(akh, cct);
+        let value = lgo(ipa, access_size);
 
         
-        mmio_spy::jdw(mmio_spy::Lv {
-            akh,
-            asf: adt,
-            bn,
-            cct,
-            rm: false,
-            gwm: false,
-            dgg: mmio_spy::eda(akh),
+        mmio_spy::etg(mmio_spy::Ey {
+            ipa,
+            va: far,
+            value,
+            access_size,
+            is_write: false,
+            was_inst_fetch: false,
+            device_name: mmio_spy::btg(ipa),
         });
 
         
-        if alq < 31 {
-            ej[alq] = bn;
+        if tb < 31 {
+            guest_regs[tb] = value;
         }
     }
 
-    TrapAction::Gw
+    TrapAction::Handled
 }
 
 
-fn tky(ej: &mut [u64; 31]) -> TrapAction {
-    let aos = ej[0];
-    let dn = ej[1];
-    let hy = ej[2];
-    let ajr = ej[3];
+fn mik(guest_regs: &mut [u64; 31]) -> TrapAction {
+    let fid = guest_regs[0];
+    let x1 = guest_regs[1];
+    let x2 = guest_regs[2];
+    let x3 = guest_regs[3];
 
-    let pln = smc::ndc(aos);
+    let jgs = smc::hld(fid);
 
     
-    mmio_spy::uhx(mmio_spy::Um {
-        aos,
-        dn,
-        hy,
-        ajr,
-        jqo: match pln {
-            smc::SmcType::Axd => smc::vnt(aos),
-            smc::SmcType::Ayn => "SECURE_SVC",
-            smc::SmcType::Bnt => "OEM_SVC",
-            smc::SmcType::Biv => "HYP_SVC",
-            smc::SmcType::F => "UNKNOWN",
+    mmio_spy::nal(mmio_spy::Iz {
+        fid,
+        x1,
+        x2,
+        x3,
+        smc_type_name: match jgs {
+            smc::SmcType::Psci => smc::nze(fid),
+            smc::SmcType::SecureService => "SECURE_SVC",
+            smc::SmcType::OemService => "OEM_SVC",
+            smc::SmcType::HypService => "HYP_SVC",
+            smc::SmcType::Unknown => "UNKNOWN",
         },
     });
 
     
-    if let smc::SmcType::Axd = pln {
-        match aos & 0xFFFF_FFFF {
-            0x8400_0008 => return TrapAction::Ath,  
-            0x8400_0009 => return TrapAction::Ath,  
+    if let smc::SmcType::Psci = jgs {
+        match fid & 0xFFFF_FFFF {
+            0x8400_0008 => return TrapAction::GuestHalt,  
+            0x8400_0009 => return TrapAction::GuestHalt,  
             _ => {}
         }
     }
 
     
-    TrapAction::Bhj
+    TrapAction::ForwardSmc
 }
 
 
-fn lau(lcw: u64, ej: &mut [u64; 31]) -> TrapAction {
-    match lcw {
+fn fzs(gbh: u64, guest_regs: &mut [u64; 31]) -> TrapAction {
+    match gbh {
         
         0x5452_5553 => {
             
-            ej[0] = mmio_spy::mmj() as u64;
-            ej[1] = mmio_spy::jty() as u64;
-            TrapAction::Gw
+            guest_regs[0] = mmio_spy::gzs() as u64;
+            guest_regs[1] = mmio_spy::fdl() as u64;
+            TrapAction::Handled
         }
-        _ => TrapAction::Gw,
+        _ => TrapAction::Handled,
     }
 }
 
 
-fn tle(yag: u32, xzo: &mut [u64; 31]) -> TrapAction {
+fn mip(_iss: u32, _guest_regs: &mut [u64; 31]) -> TrapAction {
     
     
-    TrapAction::Gw
+    TrapAction::Handled
 }
 
 
-fn rzw(awk: u64, aw: u32) -> u64 {
+fn lgo(pa: u64, size: u32) -> u64 {
     #[cfg(target_arch = "aarch64")]
     unsafe {
-        let ap: u64;
-        match aw {
+        let val: u64;
+        match size {
             1 => {
-                let p: u8;
+                let v: u8;
                 core::arch::asm!(
                     "ldrb {val:w}, [{addr}]",
-                    ag = in(reg) awk,
-                    ap = bd(reg) p,
-                    options(nostack, awr)
+                    addr = in(reg) pa,
+                    val = out(reg) v,
+                    options(nostack, readonly)
                 );
-                return p as u64;
+                return v as u64;
             }
             2 => {
-                let p: u16;
+                let v: u16;
                 core::arch::asm!(
                     "ldrh {val:w}, [{addr}]",
-                    ag = in(reg) awk,
-                    ap = bd(reg) p,
-                    options(nostack, awr)
+                    addr = in(reg) pa,
+                    val = out(reg) v,
+                    options(nostack, readonly)
                 );
-                return p as u64;
+                return v as u64;
             }
             4 => {
-                let p: u32;
+                let v: u32;
                 core::arch::asm!(
                     "ldr {val:w}, [{addr}]",
-                    ag = in(reg) awk,
-                    ap = bd(reg) p,
-                    options(nostack, awr)
+                    addr = in(reg) pa,
+                    val = out(reg) v,
+                    options(nostack, readonly)
                 );
-                return p as u64;
+                return v as u64;
             }
             8 => {
                 core::arch::asm!(
                     "ldr {val}, [{addr}]",
-                    ag = in(reg) awk,
-                    ap = bd(reg) ap,
-                    options(nostack, awr)
+                    addr = in(reg) pa,
+                    val = out(reg) val,
+                    options(nostack, readonly)
                 );
-                return ap;
+                return val;
             }
             _ => return 0,
         }
     }
     #[cfg(not(target_arch = "aarch64"))]
     {
-        let _ = (awk, aw);
+        let _ = (pa, size);
         0
     }
 }
 
 
-fn rzx(awk: u64, bn: u64, aw: u32) {
+fn lgp(pa: u64, value: u64, size: u32) {
     #[cfg(target_arch = "aarch64")]
     unsafe {
-        match aw {
+        match size {
             1 => {
                 core::arch::asm!(
                     "strb {val:w}, [{addr}]",
-                    ag = in(reg) awk,
-                    ap = in(reg) bn as u32,
+                    addr = in(reg) pa,
+                    val = in(reg) value as u32,
                     options(nostack)
                 );
             }
             2 => {
                 core::arch::asm!(
                     "strh {val:w}, [{addr}]",
-                    ag = in(reg) awk,
-                    ap = in(reg) bn as u32,
+                    addr = in(reg) pa,
+                    val = in(reg) value as u32,
                     options(nostack)
                 );
             }
             4 => {
                 core::arch::asm!(
                     "str {val:w}, [{addr}]",
-                    ag = in(reg) awk,
-                    ap = in(reg) bn as u32,
+                    addr = in(reg) pa,
+                    val = in(reg) value as u32,
                     options(nostack)
                 );
             }
             8 => {
                 core::arch::asm!(
                     "str {val}, [{addr}]",
-                    ag = in(reg) awk,
-                    ap = in(reg) bn,
+                    addr = in(reg) pa,
+                    val = in(reg) value,
                     options(nostack)
                 );
             }
@@ -448,6 +448,6 @@ fn rzx(awk: u64, bn: u64, aw: u32) {
     }
     #[cfg(not(target_arch = "aarch64"))]
     {
-        let _ = (awk, bn, aw);
+        let _ = (pa, value, size);
     }
 }

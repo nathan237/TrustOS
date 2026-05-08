@@ -15,7 +15,7 @@ pub mod io;
 
 
 #[inline(always)]
-pub fn bhd() {
+pub fn acb() {
     unsafe {
         core::arch::asm!("hlt", options(nomem, nostack, preserves_flags));
     }

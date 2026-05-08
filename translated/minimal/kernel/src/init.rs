@@ -8,36 +8,36 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use crate::process::{self, Ah, ProcessState, ProcessFlags, IS_};
+use crate::process::{self, X, ProcessState, ProcessFlags, JK_};
 
 
-pub struct Cfw {
+pub struct Als {
     
-    pub wib: Vec<String>,
+    pub services: Vec<String>,
     
-    pub wqq: bool,
+    pub spawn_shell: bool,
 }
 
-impl Default for Cfw {
+impl Default for Als {
     fn default() -> Self {
         Self {
-            wib: Vec::new(),
-            wqq: true,
+            services: Vec::new(),
+            spawn_shell: true,
         }
     }
 }
 
 
-pub fn ay() {
+pub fn start() {
     crate::log!("[INIT] Starting init process (PID 1)...");
     
     
     
-    let yxr = crate::process::Process::new(
-        IS_,
+    let qlc = crate::process::Process::new(
+        JK_,
         0, 
         "init",
-        ProcessFlags(ProcessFlags::Dm | ProcessFlags::Cad | ProcessFlags::Ps)
+        ProcessFlags(ProcessFlags::Bm | ProcessFlags::Aie | ProcessFlags::Go)
     );
     
     
@@ -53,11 +53,11 @@ pub fn ay() {
     
     
     
-    vlj();
+    nxh();
 }
 
 
-fn vlj() {
+fn nxh() {
     crate::serial_println!("");
     crate::serial_println!("========================================");
     crate::serial_println!("  TrustOS System Ready");
@@ -66,54 +66,54 @@ fn vlj() {
     
     
     crate::serial_println!("Mounted filesystems:");
-    for (path, eqw) in crate::vfs::hqa() {
-        crate::serial_println!("  {} -> {}", path, eqw);
+    for (path, caa) in crate::vfs::dtl() {
+        crate::serial_println!("  {} -> {}", path, caa);
     }
     crate::serial_println!("");
     
     
-    let vmg = process::az();
-    crate::serial_println!("Processes: {}", vmg);
+    let nyb = process::count();
+    crate::serial_println!("Processes: {}", nyb);
     
     
-    let afa = crate::memory::heap::mr();
-    crate::serial_println!("Heap used: {} KB", afa / 1024);
+    let heap_used = crate::memory::heap::used();
+    crate::serial_println!("Heap used: {} KB", heap_used / 1024);
     
     crate::serial_println!("");
 }
 
 
-pub fn vsw() {
-    let xxm: Vec<(Ah, Ah)> = process::aoy()
+pub fn odl() {
+    let pwn: Vec<(X, X)> = process::list()
         .iter()
-        .kwb(|(ce, _, g)| {
-            if *g == ProcessState::Vf {
-                process::ela(*ce, |ai| (*ce, ai.bfb))
+        .filter_map(|(pid, _, state)| {
+            if *state == ProcessState::Zombie {
+                process::bwz(*pid, |aa| (*pid, aa.ppid))
             } else {
                 None
             }
         })
         .collect();
     
-    for (ce, bfb) in xxm {
+    for (pid, ppid) in pwn {
         
-        if bfb == IS_ || process::ela(bfb, |_| ()).is_none() {
-            if let Ok(aj) = process::ccm(ce) {
-                crate::log_debug!("[INIT] Reaped zombie process {} (exit code {})", ce, aj);
+        if ppid == JK_ || process::bwz(ppid, |_| ()).is_none() {
+            if let Ok(code) = process::bqb(pid) {
+                crate::log_debug!("[INIT] Reaped zombie process {} (exit code {})", pid, code);
             }
         }
     }
 }
 
 
-pub fn cbu() {
+pub fn shutdown() {
     crate::log!("[INIT] System shutdown requested");
     
     
-    for (ce, j, _) in process::aoy() {
-        if ce > 1 {
-            crate::log_debug!("[INIT] Terminating process {} ({})", ce, j);
-            process::dsm(ce).bq();
+    for (pid, name, _) in process::list() {
+        if pid > 1 {
+            crate::log_debug!("[INIT] Terminating process {} ({})", pid, name);
+            process::bne(pid).ok();
         }
     }
     
@@ -125,9 +125,9 @@ pub fn cbu() {
 }
 
 
-pub fn jlq() {
+pub fn eya() {
     crate::log!("[INIT] System reboot requested");
-    cbu();
+    shutdown();
     
     
     
@@ -143,7 +143,7 @@ pub fn jlq() {
 }
 
 
-pub fn vw() {
+pub fn run() {
     
-    vsw();
+    odl();
 }

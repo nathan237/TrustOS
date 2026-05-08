@@ -145,7 +145,7 @@ pub struct ChessState {
     pub vs_ai: bool,
     pub ai_thinking: bool,
     pub ai_depth: i32,
-    pub random_generator_state: u32,
+    pub rng_state: u32,
     // Last move highlight
     pub last_move_from: Option<usize>,
     pub last_move_to: Option<usize>,
@@ -155,11 +155,11 @@ pub struct ChessState {
     pub drag_pixel_x: i32,           // Current mouse X during drag
     pub drag_pixel_y: i32,           // Current mouse Y during drag
     // Timer
-    pub white_time_mouse: u64,
-    pub black_time_mouse: u64,
+    pub white_time_ms: u64,
+    pub black_time_ms: u64,
     pub timer_enabled: bool,
-    pub timer_initial_mouse: u64,       // Initial time per player (e.g. 600_000 = 10min)
-    pub last_tick_mouse: u64,           // Last tick timestamp
+    pub timer_initial_ms: u64,       // Initial time per player (e.g. 600_000 = 10min)
+    pub last_tick_ms: u64,           // Last tick timestamp
     pub timer_started: bool,         // Timer starts after first move
 }
 
@@ -188,7 +188,7 @@ pub fn new() -> Self {
             vs_ai: true,
             ai_thinking: false,
             ai_depth: 2,
-            random_generator_state: 12345,
+            rng_state: 12345,
             last_move_from: None,
             last_move_to: None,
             // Mouse drag & drop
@@ -197,18 +197,18 @@ pub fn new() -> Self {
             drag_pixel_x: 0,
             drag_pixel_y: 0,
             // Timer
-            white_time_mouse: 600_000,  // 10 minutes default
-            black_time_mouse: 600_000,
+            white_time_ms: 600_000,  // 10 minutes default
+            black_time_ms: 600_000,
             timer_enabled: false,
-            timer_initial_mouse: 600_000,
-            last_tick_mouse: 0,
+            timer_initial_ms: 600_000,
+            last_tick_ms: 0,
             timer_started: false,
         };
-        state.initialize_board();
+        state.init_board();
         state
     }
 
-    fn initialize_board(&mut self) {
+    fn init_board(&mut self) {
         // Black pieces (row 0 = top = rank 8)
         self.board[0] = B_ROOK;
         self.board[1] = B_KNIGHT;
@@ -238,11 +238,11 @@ pub fn new() -> Self {
     // ── Coordinate helpers ──
 
     fn row(sq: usize) -> usize { sq / 8 }
-    fn column(sq: usize) -> usize { sq % 8 }
-    fn sq(row: usize, column: usize) -> usize { row * 8 + column }
+    fn col(sq: usize) -> usize { sq % 8 }
+    fn sq(row: usize, col: usize) -> usize { row * 8 + col }
 
     fn square_name(sq: usize) -> String {
-        let file = (b'a' + Self::column(sq) as u8) as char;
+        let file = (b'a' + Self::col(sq) as u8) as char;
         let rank = (b'1' + (7 - Self::row(sq)) as u8) as char;
         format!("{}{}", file, rank)
     }
@@ -409,7 +409,7 @@ match self.selected {
 
         // Handle castling
         if piece_type(piece) == 6 {
-            let column_diff = Self::column(to) as i32 - Self::column(from) as i32;
+            let column_diff = Self::col(to) as i32 - Self::col(from) as i32;
             if column_diff == 2 {
                 // Kingside castle
                 self.board[to - 1] = self.board[to + 1]; // Move rook
@@ -441,7 +441,7 @@ match self.selected {
         self.en_passant_target = None;
         if piece_type(piece) == 1 {
             let row_diff = Self::row(to) as i32 - Self::row(from) as i32;
-            if row_diff.absolute() == 2 {
+            if row_diff.abs() == 2 {
                 // Double pawn push — set en passant target
                 self.en_passant_target = Some(((from as i32 + to as i32) / 2) as usize);
             }
@@ -525,7 +525,7 @@ match self.selected {
         let is_w = is_white(piece);
         let mut moves = Vec::new();
         let row = Self::row(sq);
-        let column = Self::column(sq);
+        let col = Self::col(sq);
 
                 // Pattern matching — Rust's exhaustive branching construct.
 match piece_type(piece) {
@@ -547,7 +547,7 @@ match piece_type(piece) {
                 }
                 // Diagonal captures
                 for dc in [-1i32, 1] {
-                    let nc = column as i32 + dc;
+                    let nc = col as i32 + dc;
                     if nc >= 0 && nc < 8 {
                         let target = (row as i32 + directory) * 8 + nc;
                         if target >= 0 && target < 64 {
@@ -566,7 +566,7 @@ match piece_type(piece) {
                 ];
                 for (dr, dc) in offsets {
                     let nr = row as i32 + dr;
-                    let nc = column as i32 + dc;
+                    let nc = col as i32 + dc;
                     if nr >= 0 && nr < 8 && nc >= 0 && nc < 8 {
                         let t = Self::sq(nr as usize, nc as usize);
                         let tp = self.board[t];
@@ -591,7 +591,7 @@ match piece_type(piece) {
                 ];
                 for (dr, dc) in offsets {
                     let nr = row as i32 + dr;
-                    let nc = column as i32 + dc;
+                    let nc = col as i32 + dc;
                     if nr >= 0 && nr < 8 && nc >= 0 && nc < 8 {
                         let t = Self::sq(nr as usize, nc as usize);
                         let tp = self.board[t];
@@ -637,10 +637,10 @@ match piece_type(piece) {
 
     fn slider_moves(&self, sq: usize, is_w: bool, dirs: &[(i32, i32)], moves: &mut Vec<usize>) {
         let row = Self::row(sq) as i32;
-        let column = Self::column(sq) as i32;
+        let col = Self::col(sq) as i32;
         for &(dr, dc) in dirs {
             let mut r = row + dr;
-            let mut c = column + dc;
+            let mut c = col + dc;
             while r >= 0 && r < 8 && c >= 0 && c < 8 {
                 let t = Self::sq(r as usize, c as usize);
                 let tp = self.board[t];
@@ -674,7 +674,7 @@ match piece_type(piece) {
             }
             // Handle castling rook
             if piece_type(piece) == 6 {
-                let cd = Self::column(target) as i32 - Self::column(sq) as i32;
+                let cd = Self::col(target) as i32 - Self::col(sq) as i32;
                 if cd == 2 { copy[target - 1] = copy[target + 1]; copy[target + 1] = EMPTY; }
                 if cd == -2 { copy[target + 1] = copy[target - 2]; copy[target - 2] = EMPTY; }
             }
@@ -715,7 +715,7 @@ match board.iter().position(|&p| p == king) {
             if is_white(p) != by_white { continue; }
             // Check if this piece can reach `sq`
             let row = i / 8;
-            let column = i % 8;
+            let col = i % 8;
             let tr = sq / 8;
             let tc = sq % 8;
 
@@ -723,13 +723,13 @@ match board.iter().position(|&p| p == king) {
 match piece_type(p) {
                 1 => { // Pawn attacks diagonally
                     let directory: i32 = if is_white(p) { -1 } else { 1 };
-                    if tr as i32 == row as i32 + directory && (tc as i32 - column as i32).absolute() == 1 {
+                    if tr as i32 == row as i32 + directory && (tc as i32 - col as i32).abs() == 1 {
                         return true;
                     }
                 },
                 2 => { // Knight
-                    let dr = (tr as i32 - row as i32).absolute();
-                    let dc = (tc as i32 - column as i32).absolute();
+                    let dr = (tr as i32 - row as i32).abs();
+                    let dc = (tc as i32 - col as i32).abs();
                     if (dr == 2 && dc == 1) || (dr == 1 && dc == 2) {
                         return true;
                     }
@@ -746,8 +746,8 @@ match piece_type(p) {
                     }
                 },
                 6 => { // King
-                    let dr = (tr as i32 - row as i32).absolute();
-                    let dc = (tc as i32 - column as i32).absolute();
+                    let dr = (tr as i32 - row as i32).abs();
+                    let dc = (tc as i32 - col as i32).abs();
                     if dr <= 1 && dc <= 1 && (dr + dc) > 0 {
                         return true;
                     }
@@ -763,7 +763,7 @@ match piece_type(p) {
         let (tr, tc) = (to / 8, to % 8);
         let dr = tr as i32 - fr as i32;
         let dc = tc as i32 - fc as i32;
-        if dr.absolute() != dc.absolute() || dr == 0 { return false; }
+        if dr.abs() != dc.abs() || dr == 0 { return false; }
         let sr = if dr > 0 { 1 } else { -1 };
         let sc = if dc > 0 { 1 } else { -1 };
         let mut r = fr as i32 + sr;
@@ -815,12 +815,12 @@ match piece_type(p) {
         for sq in 0..64 {
             let p = self.board[sq];
             if p == EMPTY { continue; }
-            let value = piece_value(p);
-            if is_white(p) { score += value; } else { score -= value; }
+            let val = piece_value(p);
+            if is_white(p) { score += val; } else { score -= val; }
             
             // Center control bonus
             let r = Self::row(sq);
-            let c = Self::column(sq);
+            let c = Self::col(sq);
             let center_bonus = // Pattern matching — Rust's exhaustive branching construct.
 match (r, c) {
                 (3, 3) | (3, 4) | (4, 3) | (4, 4) => 15,
@@ -859,7 +859,7 @@ match (r, c) {
                     
                     // Update en passant
                     self.en_passant_target = None;
-                    if piece_type(p) == 1 && (Self::row(target) as i32 - Self::row(sq) as i32).absolute() == 2 {
+                    if piece_type(p) == 1 && (Self::row(target) as i32 - Self::row(sq) as i32).abs() == 2 {
                         self.en_passant_target = Some(((sq + target) / 2) as usize);
                     }
                     
@@ -890,7 +890,7 @@ match (r, c) {
                     self.board[sq] = EMPTY;
                     
                     self.en_passant_target = None;
-                    if piece_type(p) == 1 && (Self::row(target) as i32 - Self::row(sq) as i32).absolute() == 2 {
+                    if piece_type(p) == 1 && (Self::row(target) as i32 - Self::row(sq) as i32).abs() == 2 {
                         self.en_passant_target = Some(((sq + target) / 2) as usize);
                     }
                     
@@ -928,7 +928,7 @@ match (r, c) {
                 self.board[sq] = EMPTY;
                 
                 self.en_passant_target = None;
-                if piece_type(p) == 1 && (Self::row(target) as i32 - Self::row(sq) as i32).absolute() == 2 {
+                if piece_type(p) == 1 && (Self::row(target) as i32 - Self::row(sq) as i32).abs() == 2 {
                     self.en_passant_target = Some(((sq + target) / 2) as usize);
                 }
                 
@@ -961,10 +961,10 @@ match (r, c) {
         for sq in 0..64 {
             let p = self.board[sq];
             if p == EMPTY { continue; }
-            let value = piece_value(p);
+            let val = piece_value(p);
             // Don't count kings — they're always present
             if piece_type(p) == 6 { continue; }
-            if is_white(p) { white_mat += value; } else { black_mat += value; }
+            if is_white(p) { white_mat += val; } else { black_mat += val; }
         }
         white_mat - black_mat
     }
@@ -975,9 +975,9 @@ match (r, c) {
 
     /// Handle mouse click on board square (col 0-7, row 0-7)
     /// Returns true if the click was handled
-    pub fn handle_mouse_click(&mut self, column: i32, row: i32) -> bool {
-        if column < 0 || column > 7 || row < 0 || row > 7 { return false; }
-        let sq = row as usize * 8 + column as usize;
+    pub fn handle_mouse_click(&mut self, col: i32, row: i32) -> bool {
+        if col < 0 || col > 7 || row < 0 || row > 7 { return false; }
+        let sq = row as usize * 8 + col as usize;
         
         if self.phase == GamePhase::Checkmate || self.phase == GamePhase::Stalemate {
             return false;
@@ -1049,21 +1049,23 @@ match self.input_mode {
     }
 
     /// Handle mouse release — complete drag & drop
-    pub fn handle_mouse_release(&mut self, column: i32, row: i32) {
-        if self.drag_from.is_none() || self.dragging_piece.is_none() {
+    pub fn handle_mouse_release(&mut self, col: i32, row: i32) {
+        let from = // Pattern matching — Rust's exhaustive branching construct.
+match self.drag_from.take() {
+            Some(f) => f,
+            None => return,
+        };
+        if self.dragging_piece.is_none() {
             return;
         }
-        
-        let from = self.drag_from.unwrap();
-        self.drag_from = None;
         self.dragging_piece = None;
         
-        if column < 0 || column > 7 || row < 0 || row > 7 {
+        if col < 0 || col > 7 || row < 0 || row > 7 {
             // Dropped outside board — cancel
             return;
         }
         
-        let sq = row as usize * 8 + column as usize;
+        let sq = row as usize * 8 + col as usize;
         
         // If dropped on same square — keep selection (was just a click)
         if sq == from { return; }
@@ -1076,8 +1078,8 @@ match self.input_mode {
     }
 
     /// Update drag pixel position during mouse move
-    pub fn update_drag_position(&mut self, pixel: i32, py: i32) {
-        self.drag_pixel_x = pixel;
+    pub fn update_drag_position(&mut self, px: i32, py: i32) {
+        self.drag_pixel_x = px;
         self.drag_pixel_y = py;
     }
 
@@ -1089,10 +1091,10 @@ match self.input_mode {
     pub fn toggle_timer(&mut self) {
         self.timer_enabled = !self.timer_enabled;
         if self.timer_enabled {
-            self.white_time_mouse = self.timer_initial_mouse;
-            self.black_time_mouse = self.timer_initial_mouse;
+            self.white_time_ms = self.timer_initial_ms;
+            self.black_time_ms = self.timer_initial_ms;
             self.timer_started = false;
-            self.message = format!("Timer ON — {}min/side", self.timer_initial_mouse / 60_000);
+            self.message = format!("Timer ON — {}min/side", self.timer_initial_ms / 60_000);
         } else {
             self.message = String::from("Timer OFF");
         }
@@ -1101,14 +1103,14 @@ match self.input_mode {
     /// Cycle timer preset: 1min, 3min, 5min, 10min, 15min, 30min
     pub fn cycle_timer_preset(&mut self) {
         let presets: [u64; 6] = [60_000, 180_000, 300_000, 600_000, 900_000, 1_800_000];
-        let current_index = presets.iter().position(|&t| t == self.timer_initial_mouse).unwrap_or(3);
+        let current_index = presets.iter().position(|&t| t == self.timer_initial_ms).unwrap_or(3);
         let next_index = (current_index + 1) % presets.len();
-        self.timer_initial_mouse = presets[next_index];
-        self.white_time_mouse = self.timer_initial_mouse;
-        self.black_time_mouse = self.timer_initial_mouse;
+        self.timer_initial_ms = presets[next_index];
+        self.white_time_ms = self.timer_initial_ms;
+        self.black_time_ms = self.timer_initial_ms;
         self.timer_started = false;
-        let mins = self.timer_initial_mouse / 60_000;
-        let secs = (self.timer_initial_mouse % 60_000) / 1000;
+        let mins = self.timer_initial_ms / 60_000;
+        let secs = (self.timer_initial_ms % 60_000) / 1000;
         if secs > 0 {
             self.message = format!("Timer: {}m{}s/side", mins, secs);
         } else {
@@ -1117,19 +1119,19 @@ match self.input_mode {
     }
 
     /// Tick timer — call periodically with elapsed ms since last tick
-    pub fn tick_timer(&mut self, elapsed_mouse: u64) {
+    pub fn tick_timer(&mut self, elapsed_ms: u64) {
         if !self.timer_enabled || !self.timer_started { return; }
         if self.phase == GamePhase::Checkmate || self.phase == GamePhase::Stalemate { return; }
         
         if self.white_turn {
-            self.white_time_mouse = self.white_time_mouse.saturating_sub(elapsed_mouse);
-            if self.white_time_mouse == 0 {
+            self.white_time_ms = self.white_time_ms.saturating_sub(elapsed_ms);
+            if self.white_time_ms == 0 {
                 self.phase = GamePhase::Checkmate; // reuse for game over
                 self.message = String::from("Time's up! Black wins!");
             }
         } else {
-            self.black_time_mouse = self.black_time_mouse.saturating_sub(elapsed_mouse);
-            if self.black_time_mouse == 0 {
+            self.black_time_ms = self.black_time_ms.saturating_sub(elapsed_ms);
+            if self.black_time_ms == 0 {
                 self.phase = GamePhase::Checkmate;
                 self.message = String::from("Time's up! White wins!");
             }
@@ -1137,8 +1139,8 @@ match self.input_mode {
     }
 
     /// Format time as MM:SS
-    pub fn format_time(mouse: u64) -> String {
-        let total_secs = mouse / 1000;
+    pub fn format_time(ms: u64) -> String {
+        let total_secs = ms / 1000;
         let mins = total_secs / 60;
         let secs = total_secs % 60;
         format!("{:02}:{:02}", mins, secs)

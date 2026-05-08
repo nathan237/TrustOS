@@ -16,45 +16,45 @@ use crate::framebuffer;
 
 pub mod colors {
     
-    pub const DUA_: u32 = 0xFF202020;           
-    pub const DUB_: u32 = 0xFF1A1A1A;         
-    pub const DCD_: u32 = 0xE0282828;          
-    pub const Kw: u32 = 0xFF2D2D2D;             
-    pub const JA_: u32 = 0xFF383838;       
-    pub const PU_: u32 = 0xFF404040;    
+    pub const DXR_: u32 = 0xFF202020;           
+    pub const DXS_: u32 = 0xFF1A1A1A;         
+    pub const DFY_: u32 = 0xE0282828;          
+    pub const El: u32 = 0xFF2D2D2D;             
+    pub const JT_: u32 = 0xFF383838;       
+    pub const QR_: u32 = 0xFF404040;    
     
     
-    pub const EIB_: u32 = 0xFF1F1F1F;    
-    pub const EIC_: u32 = 0xFF2B2B2B;  
+    pub const ELS_: u32 = 0xFF1F1F1F;    
+    pub const ELT_: u32 = 0xFF2B2B2B;  
     
     
-    pub const Ge: u32 = 0xFF0078D4;              
-    pub const DCA_: u32 = 0xFF60CDFF;        
-    pub const DBX_: u32 = 0xFF005A9E;         
+    pub const Ch: u32 = 0xFF0078D4;              
+    pub const DFV_: u32 = 0xFF60CDFF;        
+    pub const DFS_: u32 = 0xFF005A9E;         
     
     
-    pub const AC_: u32 = 0xFFFFFFFF;        
-    pub const N_: u32 = 0xFFB3B3B3;      
-    pub const PZ_: u32 = 0xFF6E6E6E;       
+    pub const AB_: u32 = 0xFFFFFFFF;        
+    pub const O_: u32 = 0xFFB3B3B3;      
+    pub const QW_: u32 = 0xFF6E6E6E;       
     
     
-    pub const ZO_: u32 = 0xFF3D3D3D;       
-    pub const DDS_: u32 = 0xFF4D4D4D;      
-    pub const DDT_: u32 = 0xFF6B6B6B;       
+    pub const AAZ_: u32 = 0xFF3D3D3D;       
+    pub const DHM_: u32 = 0xFF4D4D4D;      
+    pub const DHN_: u32 = 0xFF6B6B6B;       
     
     
-    pub const BMN_: u32 = 0xFFC42B1C;         
-    pub const DFC_: u32 = 0xFFA31818;       
-    pub const DGV_: u32 = 0xFF404040;       
+    pub const BPF_: u32 = 0xFFC42B1C;         
+    pub const DIV_: u32 = 0xFFA31818;       
+    pub const DKO_: u32 = 0xFF404040;       
     
     
-    pub const EGG_: u32 = 0x40000000;      
-    pub const EGH_: u32 = 0x30000000;          
+    pub const EJZ_: u32 = 0x40000000;      
+    pub const EKA_: u32 = 0x30000000;          
     
     
-    pub const CXL_: u32 = 0xF0202020;          
-    pub const EHI_: u32 = 0xFF383838;       
-    pub const EHH_: u32 = 0xFF0078D4;      
+    pub const DBD_: u32 = 0xF0202020;          
+    pub const EKZ_: u32 = 0xFF383838;       
+    pub const EKY_: u32 = 0xFF0078D4;      
 }
 
 
@@ -62,111 +62,111 @@ pub mod colors {
 
 
 
-pub fn mf(b: i32, c: i32, d: u32, i: u32, dy: u32, s: u32) {
-    if d < dy * 2 || i < dy * 2 {
+pub fn draw_rounded_rect(x: i32, y: i32, w: u32, h: u32, radius: u32, color: u32) {
+    if w < radius * 2 || h < radius * 2 {
         
-        ah(b, c, d, i, s);
+        fill_rect(x, y, w, h, color);
         return;
     }
     
-    let m = dy as i32;
-    let d = d as i32;
-    let i = i as i32;
+    let r = radius as i32;
+    let w = w as i32;
+    let h = h as i32;
     
     
-    ah(b + m, c, (d - m * 2) as u32, i as u32, s);
-    ah(b, c + m, m as u32, (i - m * 2) as u32, s);
-    ah(b + d - m, c + m, m as u32, (i - m * 2) as u32, s);
+    fill_rect(x + r, y, (w - r * 2) as u32, h as u32, color);
+    fill_rect(x, y + r, r as u32, (h - r * 2) as u32, color);
+    fill_rect(x + w - r, y + r, r as u32, (h - r * 2) as u32, color);
     
     
-    irr(b + m, c + m, dy, Corner::Dp, s);
-    irr(b + d - m - 1, c + m, dy, Corner::Dq, s);
-    irr(b + m, c + i - m - 1, dy, Corner::Dt, s);
-    irr(b + d - m - 1, c + i - m - 1, dy, Corner::Du, s);
+    ekl(x + r, y + r, radius, Corner::TopLeft, color);
+    ekl(x + w - r - 1, y + r, radius, Corner::TopRight, color);
+    ekl(x + r, y + h - r - 1, radius, Corner::BottomLeft, color);
+    ekl(x + w - r - 1, y + h - r - 1, radius, Corner::BottomRight, color);
 }
 
 
-pub fn tf(b: i32, c: i32, d: u32, i: u32, dy: u32, s: u32) {
-    if dy == 0 {
-        if b >= 0 && c >= 0 {
-            framebuffer::lx(b as u32, c as u32, d, i, s);
+pub fn iu(x: i32, y: i32, w: u32, h: u32, radius: u32, color: u32) {
+    if radius == 0 {
+        if x >= 0 && y >= 0 {
+            framebuffer::draw_rect(x as u32, y as u32, w, h, color);
         }
         return;
     }
     
-    let m = dy as i32;
-    let yi = d as i32;
-    let gd = i as i32;
+    let r = radius as i32;
+    let ld = w as i32;
+    let hi = h as i32;
     
     
-    zs(b + m, c, (yi - m * 2) as u32, s);
-    zs(b + m, c + gd - 1, (yi - m * 2) as u32, s);
+    mn(x + r, y, (ld - r * 2) as u32, color);
+    mn(x + r, y + hi - 1, (ld - r * 2) as u32, color);
     
     
-    axt(b, c + m, (gd - m * 2) as u32, s);
-    axt(b + yi - 1, c + m, (gd - m * 2) as u32, s);
+    zv(x, y + r, (hi - r * 2) as u32, color);
+    zv(x + ld - 1, y + r, (hi - r * 2) as u32, color);
     
     
-    irq(b + m, c + m, dy, Corner::Dp, s);
-    irq(b + yi - m - 1, c + m, dy, Corner::Dq, s);
-    irq(b + m, c + gd - m - 1, dy, Corner::Dt, s);
-    irq(b + yi - m - 1, c + gd - m - 1, dy, Corner::Du, s);
+    ekk(x + r, y + r, radius, Corner::TopLeft, color);
+    ekk(x + ld - r - 1, y + r, radius, Corner::TopRight, color);
+    ekk(x + r, y + hi - r - 1, radius, Corner::BottomLeft, color);
+    ekk(x + ld - r - 1, y + hi - r - 1, radius, Corner::BottomRight, color);
 }
 
 #[derive(Clone, Copy)]
 enum Corner {
-    Dp,
-    Dq,
-    Dt,
-    Du,
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
 }
 
 
-fn irr(cx: i32, ae: i32, dy: u32, hea: Corner, s: u32) {
-    let m = dy as i32;
+fn ekl(cx: i32, u: i32, radius: u32, corner: Corner, color: u32) {
+    let r = radius as i32;
     
-    for bg in 0..=m {
-        for dx in 0..=m {
+    for ad in 0..=r {
+        for dx in 0..=r {
             
-            if dx * dx + bg * bg <= m * m {
-                let (y, x) = match hea {
-                    Corner::Dp => (cx - dx, ae - bg),
-                    Corner::Dq => (cx + dx, ae - bg),
-                    Corner::Dt => (cx - dx, ae + bg),
-                    Corner::Du => (cx + dx, ae + bg),
+            if dx * dx + ad * ad <= r * r {
+                let (p, o) = match corner {
+                    Corner::TopLeft => (cx - dx, u - ad),
+                    Corner::TopRight => (cx + dx, u - ad),
+                    Corner::BottomLeft => (cx - dx, u + ad),
+                    Corner::BottomRight => (cx + dx, u + ad),
                 };
-                draw_pixel(y, x, s);
+                draw_pixel(p, o, color);
             }
         }
     }
 }
 
 
-fn irq(cx: i32, ae: i32, dy: u32, hea: Corner, s: u32) {
-    let m = dy as i32;
-    let mut b = 0;
-    let mut c = m;
-    let mut bc = 3 - 2 * m;
+fn ekk(cx: i32, u: i32, radius: u32, corner: Corner, color: u32) {
+    let r = radius as i32;
+    let mut x = 0;
+    let mut y = r;
+    let mut d = 3 - 2 * r;
     
-    while b <= c {
-        let egw = match hea {
-            Corner::Dp => [(cx - b, ae - c), (cx - c, ae - b)],
-            Corner::Dq => [(cx + b, ae - c), (cx + c, ae - b)],
-            Corner::Dt => [(cx - b, ae + c), (cx - c, ae + b)],
-            Corner::Du => [(cx + b, ae + c), (cx + c, ae + b)],
+    while x <= y {
+        let points = match corner {
+            Corner::TopLeft => [(cx - x, u - y), (cx - y, u - x)],
+            Corner::TopRight => [(cx + x, u - y), (cx + y, u - x)],
+            Corner::BottomLeft => [(cx - x, u + y), (cx - y, u + x)],
+            Corner::BottomRight => [(cx + x, u + y), (cx + y, u + x)],
         };
         
-        for (y, x) in egw {
-            draw_pixel(y, x, s);
+        for (p, o) in points {
+            draw_pixel(p, o, color);
         }
         
-        if bc < 0 {
-            bc += 4 * b + 6;
+        if d < 0 {
+            d += 4 * x + 6;
         } else {
-            bc += 4 * (b - c) + 10;
-            c -= 1;
+            d += 4 * (x - y) + 10;
+            y -= 1;
         }
-        b += 1;
+        x += 1;
     }
 }
 
@@ -175,29 +175,29 @@ fn irq(cx: i32, ae: i32, dy: u32, hea: Corner, s: u32) {
 
 
 #[inline]
-fn draw_pixel(b: i32, c: i32, s: u32) {
-    if b >= 0 && c >= 0 {
-        framebuffer::draw_pixel(b as u32, c as u32, s);
+fn draw_pixel(x: i32, y: i32, color: u32) {
+    if x >= 0 && y >= 0 {
+        framebuffer::draw_pixel(x as u32, y as u32, color);
     }
 }
 
 #[inline]
-fn ah(b: i32, c: i32, d: u32, i: u32, s: u32) {
-    if b >= 0 && c >= 0 {
-        framebuffer::ah(b as u32, c as u32, d, i, s);
+fn fill_rect(x: i32, y: i32, w: u32, h: u32, color: u32) {
+    if x >= 0 && y >= 0 {
+        framebuffer::fill_rect(x as u32, y as u32, w, h, color);
     }
 }
 
 #[inline]
-fn zs(b: i32, c: i32, len: u32, s: u32) {
-    if b >= 0 && c >= 0 {
-        framebuffer::zs(b as u32, c as u32, len, s);
+fn mn(x: i32, y: i32, len: u32, color: u32) {
+    if x >= 0 && y >= 0 {
+        framebuffer::mn(x as u32, y as u32, len, color);
     }
 }
 
 #[inline]
-fn axt(b: i32, c: i32, len: u32, s: u32) {
-    if b >= 0 && c >= 0 {
-        framebuffer::axt(b as u32, c as u32, len, s);
+fn zv(x: i32, y: i32, len: u32, color: u32) {
+    if x >= 0 && y >= 0 {
+        framebuffer::zv(x as u32, y as u32, len, color);
     }
 }

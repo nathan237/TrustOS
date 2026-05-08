@@ -14,132 +14,132 @@ use alloc::format;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PortState {
-    Ck,
-    Dk,
-    Kl,        
-    Xx,    
+    Open,
+    Closed,
+    Filtered,        
+    OpenFiltered,    
 }
 
 impl PortState {
     pub fn as_str(&self) -> &'static str {
         match self {
-            PortState::Ck => "open",
-            PortState::Dk => "closed",
-            PortState::Kl => "filtered",
-            PortState::Xx => "open|filtered",
+            PortState::Open => "open",
+            PortState::Closed => "closed",
+            PortState::Filtered => "filtered",
+            PortState::OpenFiltered => "open|filtered",
         }
     }
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Fd {
+pub struct Cf {
     pub port: u16,
-    pub g: PortState,
-    pub xi: &'static str,
+    pub state: PortState,
+    pub service: &'static str,
     pub banner: Option<String>,
 }
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScanType {
-    Uu,         
-    Wa,     
-    Ic,         
+    Syn,         
+    Connect,     
+    Udp,         
 }
 
 
 #[derive(Debug, Clone)]
 pub struct ScanConfig {
-    pub cd: [u8; 4],
-    pub xf: Vec<u16>,
-    pub cmr: ScanType,
-    pub sg: u32,
-    pub ern: bool,
+    pub target: [u8; 4],
+    pub ports: Vec<u16>,
+    pub scan_type: ScanType,
+    pub timeout_ms: u32,
+    pub grab_banner: bool,
 }
 
 impl ScanConfig {
-    pub fn new(cd: [u8; 4]) -> Self {
+    pub fn new(target: [u8; 4]) -> Self {
         Self {
-            cd,
-            xf: super::AAL_.ip(),
-            cmr: ScanType::Uu,
-            sg: 1500,
-            ern: false,
+            target,
+            ports: super::ABY_.to_vec(),
+            scan_type: ScanType::Syn,
+            timeout_ms: 1500,
+            grab_banner: false,
         }
     }
 
-    pub fn jxa(mut self, xf: Vec<u16>) -> Self {
-        self.xf = xf;
+    pub fn with_ports(mut self, ports: Vec<u16>) -> Self {
+        self.ports = ports;
         self
     }
 
-    pub fn xuy(mut self, ay: u16, ci: u16) -> Self {
-        self.xf = (ay..=ci).collect();
+    pub fn with_range(mut self, start: u16, end: u16) -> Self {
+        self.ports = (start..=end).collect();
         self
     }
 
-    pub fn jxd(mut self, cmr: ScanType) -> Self {
-        self.cmr = cmr;
+    pub fn with_type(mut self, scan_type: ScanType) -> Self {
+        self.scan_type = scan_type;
         self
     }
 
-    pub fn jxb(mut self, jn: u32) -> Self {
-        self.sg = jn;
+    pub fn with_timeout(mut self, dh: u32) -> Self {
+        self.timeout_ms = dh;
         self
     }
 
-    pub fn pzo(mut self, thg: bool) -> Self {
-        self.ern = thg;
+    pub fn with_banner(mut self, grab: bool) -> Self {
+        self.grab_banner = grab;
         self
     }
 
-    pub fn jxc(mut self) -> Self {
-        self.xf = super::BHM_.ip();
+    pub fn with_top_ports(mut self) -> Self {
+        self.ports = super::BJQ_.to_vec();
         self
     }
 }
 
 
 #[derive(Debug, Default)]
-pub struct Amg {
-    pub pvc: usize,
-    pub aji: usize,
-    pub cwg: usize,
-    pub aud: usize,
-    pub oz: u64,
+pub struct Qe {
+    pub total_ports: usize,
+    pub open: usize,
+    pub closed: usize,
+    pub filtered: usize,
+    pub elapsed_ms: u64,
 }
 
 
-pub fn arx(config: &ScanConfig) -> (Vec<Fd>, Amg) {
-    let ay = crate::logger::lh();
-    let mut hd = Vec::new();
-    let mut cm = Amg {
-        pvc: config.xf.len(),
+pub fn scan(config: &ScanConfig) -> (Vec<Cf>, Qe) {
+    let start = crate::logger::eg();
+    let mut results = Vec::new();
+    let mut stats = Qe {
+        total_ports: config.ports.len(),
         ..Default::default()
     };
 
-    for &port in &config.xf {
-        let result = match config.cmr {
-            ScanType::Uu => wxa(config.cd, port, config.sg),
-            ScanType::Wa => rnx(config.cd, port, config.sg),
-            ScanType::Ic => xnz(config.cd, port, config.sg),
+    for &port in &config.ports {
+        let result = match config.scan_type {
+            ScanType::Syn => ozn(config.target, port, config.timeout_ms),
+            ScanType::Connect => kxb(config.target, port, config.timeout_ms),
+            ScanType::Udp => ppi(config.target, port, config.timeout_ms),
         };
 
-        match result.g {
-            PortState::Ck => cm.aji += 1,
-            PortState::Dk => cm.cwg += 1,
-            PortState::Kl | PortState::Xx => cm.aud += 1,
+        match result.state {
+            PortState::Open => stats.open += 1,
+            PortState::Closed => stats.closed += 1,
+            PortState::Filtered | PortState::OpenFiltered => stats.filtered += 1,
         }
 
         
-        if result.g != PortState::Dk {
-            hd.push(result);
+        if result.state != PortState::Closed {
+            results.push(result);
         }
     }
 
-    cm.oz = crate::logger::lh().ao(ay);
-    (hd, cm)
+    stats.elapsed_ms = crate::logger::eg().saturating_sub(start);
+    (results, stats)
 }
 
 
@@ -148,90 +148,90 @@ pub fn arx(config: &ScanConfig) -> (Vec<Fd>, Amg) {
 
 
 
-fn wxa(cd: [u8; 4], port: u16, sg: u32) -> Fd {
-    let xi = super::fui(port);
+fn ozn(target: [u8; 4], port: u16, timeout_ms: u32) -> Cf {
+    let service = super::cqk(port);
 
     
-    let ey = match crate::netstack::tcp::cue(cd, port) {
-        Ok(ai) => ai,
+    let src_port = match crate::netstack::tcp::azp(target, port) {
+        Ok(aa) => aa,
         Err(_) => {
-            return Fd { port, g: PortState::Kl, xi, banner: None };
+            return Cf { port, state: PortState::Filtered, service, banner: None };
         }
     };
 
     
-    let ay = crate::logger::lh();
-    let mut aaf: u32 = 0;
+    let start = crate::logger::eg();
+    let mut my: u32 = 0;
 
     loop {
         crate::netstack::poll();
 
-        if let Some(g) = crate::netstack::tcp::nxy(cd, port, ey) {
-            match g {
-                crate::netstack::tcp::TcpState::Pi => {
+        if let Some(state) = crate::netstack::tcp::ibk(target, port, src_port) {
+            match state {
+                crate::netstack::tcp::TcpState::Established => {
                     
-                    let _ = who(cd, port, ey);
-                    return Fd { port, g: PortState::Ck, xi, banner: None };
+                    let _ = oob(target, port, src_port);
+                    return Cf { port, state: PortState::Open, service, banner: None };
                 }
-                crate::netstack::tcp::TcpState::Dk => {
-                    return Fd { port, g: PortState::Dk, xi, banner: None };
+                crate::netstack::tcp::TcpState::Closed => {
+                    return Cf { port, state: PortState::Closed, service, banner: None };
                 }
                 _ => {}
             }
         }
 
-        if crate::logger::lh().ao(ay) > sg as u64 {
-            return Fd { port, g: PortState::Kl, xi, banner: None };
+        if crate::logger::eg().saturating_sub(start) > timeout_ms as u64 {
+            return Cf { port, state: PortState::Filtered, service, banner: None };
         }
-        aaf = aaf.cn(1);
-        if aaf > 500_000 {
-            return Fd { port, g: PortState::Kl, xi, banner: None };
+        my = my.wrapping_add(1);
+        if my > 500_000 {
+            return Cf { port, state: PortState::Filtered, service, banner: None };
         }
-        core::hint::hc();
+        core::hint::spin_loop();
     }
 }
 
 
-fn who(kv: [u8; 4], rz: u16, ey: u16) -> Result<(), &'static str> {
-    let jh = crate::network::aou()
+fn oob(dest_ip: [u8; 4], dest_port: u16, src_port: u16) -> Result<(), &'static str> {
+    let src_ip = crate::network::rd()
         .map(|(ip, _, _)| *ip.as_bytes())
         .unwrap_or([10, 0, 2, 15]);
 
-    let mut ie = alloc::vec::Vec::fc(20);
-    ie.bk(&ey.ft());
-    ie.bk(&rz.ft());
-    ie.bk(&0u32.ft()); 
-    ie.bk(&0u32.ft()); 
-    ie.push(0x50); 
-    ie.push(crate::netstack::tcp::flags::Bqg);
-    ie.bk(&0u16.ft()); 
-    ie.bk(&0u16.ft()); 
-    ie.bk(&0u16.ft()); 
+    let mut segment = alloc::vec::Vec::with_capacity(20);
+    segment.extend_from_slice(&src_port.to_be_bytes());
+    segment.extend_from_slice(&dest_port.to_be_bytes());
+    segment.extend_from_slice(&0u32.to_be_bytes()); 
+    segment.extend_from_slice(&0u32.to_be_bytes()); 
+    segment.push(0x50); 
+    segment.push(crate::netstack::tcp::flags::Adg);
+    segment.extend_from_slice(&0u16.to_be_bytes()); 
+    segment.extend_from_slice(&0u16.to_be_bytes()); 
+    segment.extend_from_slice(&0u16.to_be_bytes()); 
 
     
-    let mut dkw = alloc::vec::Vec::fc(32);
-    dkw.bk(&jh);
-    dkw.bk(&kv);
-    dkw.push(0);
-    dkw.push(6);
-    dkw.bk(&(ie.len() as u16).ft());
-    dkw.bk(&ie);
-    let td = tsu(&dkw);
-    ie[16] = (td >> 8) as u8;
-    ie[17] = (td & 0xFF) as u8;
+    let mut bit = alloc::vec::Vec::with_capacity(32);
+    bit.extend_from_slice(&src_ip);
+    bit.extend_from_slice(&dest_ip);
+    bit.push(0);
+    bit.push(6);
+    bit.extend_from_slice(&(segment.len() as u16).to_be_bytes());
+    bit.extend_from_slice(&segment);
+    let ig = moq(&bit);
+    segment[16] = (ig >> 8) as u8;
+    segment[17] = (ig & 0xFF) as u8;
 
-    crate::netstack::ip::blc(kv, 6, &ie)
+    crate::netstack::ip::aha(dest_ip, 6, &segment)
 }
 
-fn tsu(f: &[u8]) -> u16 {
+fn moq(data: &[u8]) -> u16 {
     let mut sum: u32 = 0;
-    let mut a = 0;
-    while a + 1 < f.len() {
-        sum += ((f[a] as u32) << 8) | (f[a + 1] as u32);
-        a += 2;
+    let mut i = 0;
+    while i + 1 < data.len() {
+        sum += ((data[i] as u32) << 8) | (data[i + 1] as u32);
+        i += 2;
     }
-    if a < f.len() {
-        sum += (f[a] as u32) << 8;
+    if i < data.len() {
+        sum += (data[i] as u32) << 8;
     }
     while (sum >> 16) != 0 {
         sum = (sum & 0xFFFF) + (sum >> 16);
@@ -240,95 +240,95 @@ fn tsu(f: &[u8]) -> u16 {
 }
 
 
-fn rnx(cd: [u8; 4], port: u16, sg: u32) -> Fd {
-    let xi = super::fui(port);
+fn kxb(target: [u8; 4], port: u16, timeout_ms: u32) -> Cf {
+    let service = super::cqk(port);
 
-    let ey = match crate::netstack::tcp::cue(cd, port) {
-        Ok(ai) => ai,
+    let src_port = match crate::netstack::tcp::azp(target, port) {
+        Ok(aa) => aa,
         Err(_) => {
-            return Fd { port, g: PortState::Kl, xi, banner: None };
+            return Cf { port, state: PortState::Filtered, service, banner: None };
         }
     };
 
     
-    let fhz = crate::netstack::tcp::dnd(cd, port, ey, sg);
+    let cja = crate::netstack::tcp::bjy(target, port, src_port, timeout_ms);
 
-    if fhz {
+    if cja {
         
-        let _ = crate::netstack::tcp::bwx(cd, port, ey);
-        Fd { port, g: PortState::Ck, xi, banner: None }
+        let _ = crate::netstack::tcp::ams(target, port, src_port);
+        Cf { port, state: PortState::Open, service, banner: None }
     } else {
         
-        match crate::netstack::tcp::nxy(cd, port, ey) {
-            Some(crate::netstack::tcp::TcpState::Dk) => {
-                Fd { port, g: PortState::Dk, xi, banner: None }
+        match crate::netstack::tcp::ibk(target, port, src_port) {
+            Some(crate::netstack::tcp::TcpState::Closed) => {
+                Cf { port, state: PortState::Closed, service, banner: None }
             }
             _ => {
-                Fd { port, g: PortState::Kl, xi, banner: None }
+                Cf { port, state: PortState::Filtered, service, banner: None }
             }
         }
     }
 }
 
 
-fn xnz(cd: [u8; 4], port: u16, sg: u32) -> Fd {
-    let xi = super::fui(port);
+fn ppi(target: [u8; 4], port: u16, timeout_ms: u32) -> Cf {
+    let service = super::cqk(port);
 
     
-    let ew = xny(port);
-    let ey = crate::netstack::udp::muy();
+    let payload = pph(port);
+    let src_port = crate::netstack::udp::heu();
 
-    if crate::netstack::udp::dlp(cd, port, ey, &ew).is_err() {
-        return Fd { port, g: PortState::Kl, xi, banner: None };
+    if crate::netstack::udp::azq(target, port, src_port, &payload).is_err() {
+        return Cf { port, state: PortState::Filtered, service, banner: None };
     }
 
     
-    let ay = crate::logger::lh();
-    let mut aaf: u32 = 0;
+    let start = crate::logger::eg();
+    let mut my: u32 = 0;
 
     loop {
         crate::netstack::poll();
 
         
-        if crate::netstack::udp::jlt(ey).is_some() {
-            return Fd { port, g: PortState::Ck, xi, banner: None };
+        if crate::netstack::udp::eyc(src_port).is_some() {
+            return Cf { port, state: PortState::Open, service, banner: None };
         }
 
         
-        if let Some(rq) = crate::netstack::icmp::xti(cd, 0) {
-            if rq.hih == crate::netstack::icmp::AWR_ && rq.aj == 3 {
-                return Fd { port, g: PortState::Dk, xi, banner: None };
+        if let Some(err) = crate::netstack::icmp::pti(target, 0) {
+            if err.error_type == crate::netstack::icmp::AYT_ && err.code == 3 {
+                return Cf { port, state: PortState::Closed, service, banner: None };
             }
         }
 
-        if crate::logger::lh().ao(ay) > sg as u64 {
-            return Fd { port, g: PortState::Xx, xi, banner: None };
+        if crate::logger::eg().saturating_sub(start) > timeout_ms as u64 {
+            return Cf { port, state: PortState::OpenFiltered, service, banner: None };
         }
-        aaf = aaf.cn(1);
-        if aaf > 500_000 {
-            return Fd { port, g: PortState::Xx, xi, banner: None };
+        my = my.wrapping_add(1);
+        if my > 500_000 {
+            return Cf { port, state: PortState::OpenFiltered, service, banner: None };
         }
-        core::hint::hc();
+        core::hint::spin_loop();
     }
 }
 
 
-fn xny(port: u16) -> Vec<u8> {
+fn pph(port: u16) -> Vec<u8> {
     match port {
         
         53 => {
             let mut dns = Vec::new();
-            dns.bk(&[0x00, 0x01]); 
-            dns.bk(&[0x01, 0x00]); 
-            dns.bk(&[0x00, 0x01]); 
-            dns.bk(&[0x00, 0x00, 0x00, 0x00]); 
-            dns.bk(&[0x07]); 
-            dns.bk(b"version");
-            dns.bk(&[0x04]); 
-            dns.bk(b"bind");
-            dns.bk(&[0x00]); 
-            dns.bk(&[0x00, 0x10]); 
-            dns.bk(&[0x00, 0x03]); 
+            dns.extend_from_slice(&[0x00, 0x01]); 
+            dns.extend_from_slice(&[0x01, 0x00]); 
+            dns.extend_from_slice(&[0x00, 0x01]); 
+            dns.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]); 
+            dns.extend_from_slice(&[0x07]); 
+            dns.extend_from_slice(b"version");
+            dns.extend_from_slice(&[0x04]); 
+            dns.extend_from_slice(b"bind");
+            dns.extend_from_slice(&[0x00]); 
+            dns.extend_from_slice(&[0x00, 0x10]); 
+            dns.extend_from_slice(&[0x00, 0x03]); 
             dns
         }
         
@@ -341,9 +341,9 @@ fn xny(port: u16) -> Vec<u8> {
         }
         
         123 => {
-            let mut orj = alloc::vec![0u8; 48];
-            orj[0] = 0x1B; 
-            orj
+            let mut irf = alloc::vec![0u8; 48];
+            irf[0] = 0x1B; 
+            irf
         }
         
         137 => {
@@ -359,8 +359,8 @@ fn xny(port: u16) -> Vec<u8> {
         }
         
         1900 => {
-            let fr = b"M-SEARCH * HTTP/1.1\r\nHost:239.255.255.250:1900\r\nST:ssdp:all\r\nMAN:\"ssdp:discover\"\r\nMX:1\r\n\r\n";
-            fr.ip()
+            let bk = b"M-SEARCH * HTTP/1.1\r\nHost:239.255.255.250:1900\r\nST:ssdp:all\r\nMAN:\"ssdp:discover\"\r\nMX:1\r\n\r\n";
+            bk.to_vec()
         }
         
         _ => alloc::vec![0x00; 4],
@@ -368,16 +368,16 @@ fn xny(port: u16) -> Vec<u8> {
 }
 
 
-pub fn oyv(cd: [u8; 4]) -> (Vec<Fd>, Amg) {
-    let config = ScanConfig::new(cd);
-    arx(&config)
+pub fn ixj(target: [u8; 4]) -> (Vec<Cf>, Qe) {
+    let config = ScanConfig::new(target);
+    scan(&config)
 }
 
 
-pub fn yyi(cd: [u8; 4]) -> (Vec<Fd>, Amg) {
-    let config = ScanConfig::new(cd)
-        .jxc()
-        .pzo(true)
-        .jxb(2000);
-    arx(&config)
+pub fn qlq(target: [u8; 4]) -> (Vec<Cf>, Qe) {
+    let config = ScanConfig::new(target)
+        .with_top_ports()
+        .with_banner(true)
+        .with_timeout(2000);
+    scan(&config)
 }

@@ -7,11 +7,11 @@ use super::cpu;
 
 
 #[inline(always)]
-pub fn ghg(ag: u64) {
+pub fn cxy(addr: u64) {
     unsafe {
         core::arch::asm!(
             "sfence.vma {}, zero",
-            in(reg) ag,
+            in(reg) addr,
             options(nostack, preserves_flags)
         );
     }
@@ -19,7 +19,7 @@ pub fn ghg(ag: u64) {
 
 
 #[inline(always)]
-pub fn ivc() {
+pub fn emz() {
     unsafe {
         core::arch::asm!("sfence.vma", options(nomem, nostack, preserves_flags));
     }
@@ -32,27 +32,27 @@ pub fn ivc() {
 
 
 #[inline(always)]
-pub fn dle() -> u64 {
-    cpu::vsk()
+pub fn biw() -> u64 {
+    cpu::odb()
 }
 
 
 #[inline(always)]
-pub fn dnj(ap: u64) {
-    unsafe { cpu::xvr(ap); }
+pub fn bkc(val: u64) {
+    unsafe { cpu::pvc(val); }
 }
 
 
-pub fn zbw(mas: u64, ajv: u16) -> u64 {
-    cpu::satp_mode::Cmj | ((ajv as u64) << 44) | mas
+pub fn qoi(root_ppn: u64, asid: u16) -> u64 {
+    cpu::satp_mode::Apx | ((asid as u64) << 44) | root_ppn
 }
 
 
-pub fn zbv(mas: u64, ajv: u16) -> u64 {
-    cpu::satp_mode::Cmi | ((ajv as u64) << 44) | mas
+pub fn qoh(root_ppn: u64, asid: u16) -> u64 {
+    cpu::satp_mode::Apw | ((asid as u64) << 44) | root_ppn
 }
 
 
-pub fn zlo(jnl: u64) -> u64 {
-    jnl & 0x00000FFFFFFFFFFF 
+pub fn quq(satp: u64) -> u64 {
+    satp & 0x00000FFFFFFFFFFF 
 }

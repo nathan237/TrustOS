@@ -102,7 +102,7 @@ pub struct LinuxKernelInfo {
     /// Kernel version string offset
     pub kernel_version_offset: u16,
     /// Ramdisk address max
-    pub initrd_address_maximum: u32,
+    pub initrd_addr_max: u32,
     /// Kernel alignment requirement
     pub kernel_alignment: u32,
     /// Can kernel be loaded at non-default address?
@@ -112,7 +112,7 @@ pub struct LinuxKernelInfo {
     /// Preferred load address
     pub pref_address: u64,
     /// Init size (memory needed)
-    pub initialize_size: u32,
+    pub init_size: u32,
 }
 
 // Implementation block — defines methods for the type above.
@@ -147,7 +147,7 @@ impl LinuxKernelInfo {
         let kernel_version_offset = u16::from_le_bytes([bzimage[0x20E], bzimage[0x20F]]);
         
         // Fields that require protocol >= 2.00
-        let initrd_address_maximum = if protocol_version >= 0x0200 {
+        let initrd_addr_max = if protocol_version >= 0x0200 {
             u32::from_le_bytes([
                 bzimage[0x22C],
                 bzimage[0x22D],
@@ -185,7 +185,7 @@ impl LinuxKernelInfo {
         };
         
         // Fields that require protocol >= 2.10
-        let (pref_address, initialize_size) = if protocol_version >= 0x020A {
+        let (pref_address, init_size) = if protocol_version >= 0x020A {
             let pref = u64::from_le_bytes([
                 bzimage[0x258],
                 bzimage[0x259],
@@ -213,12 +213,12 @@ impl LinuxKernelInfo {
             loadflags,
             code32_start,
             kernel_version_offset,
-            initrd_address_maximum,
+            initrd_addr_max,
             kernel_alignment,
             relocatable,
             cmdline_size,
             pref_address,
-            initialize_size,
+            init_size,
         })
     }
     
@@ -278,7 +278,7 @@ pub struct LinuxVm {
     /// Configuration
     config: LinuxVmConfig,
     /// Kernel info
-    kernel_information: Option<LinuxKernelInfo>,
+    kernel_info: Option<LinuxKernelInfo>,
     /// Is the VM running?
     running: AtomicBool,
     /// Guest memory
@@ -304,7 +304,7 @@ static NEXT_ID: AtomicU64 = AtomicU64::new(0x10000);
         Ok(Self {
             id,
             config,
-            kernel_information: None,
+            kernel_info: None,
             running: AtomicBool::new(false),
             guest_memory,
             console_buffer: Mutex::new(Vec::new()),
@@ -314,21 +314,21 @@ static NEXT_ID: AtomicU64 = AtomicU64::new(0x10000);
     /// Load Linux kernel (bzImage) into VM memory
     pub fn load_kernel(&mut self, bzimage: &[u8]) -> Result<()> {
         // Parse kernel info
-        let kernel_information = LinuxKernelInfo::from_bzimage(bzimage)
+        let kernel_info = LinuxKernelInfo::from_bzimage(bzimage)
             .ok_or(HypervisorError::InvalidBinary)?;
         
         crate::serial_println!("[LINUX-VM {}] Kernel: protocol v{}.{}, setup_sects={}", 
             self.id,
-            kernel_information.protocol_version >> 8,
-            kernel_information.protocol_version & 0xFF,
-            kernel_information.setup_sects);
+            kernel_info.protocol_version >> 8,
+            kernel_info.protocol_version & 0xFF,
+            kernel_info.setup_sects);
         
-        if let Some(version) = kernel_information.get_version_string(bzimage) {
+        if let Some(version) = kernel_info.get_version_string(bzimage) {
             crate::serial_println!("[LINUX-VM {}] Kernel version: {}", self.id, version);
         }
         
         // Calculate real-mode code size
-        let setup_sects = if kernel_information.setup_sects == 0 { 4 } else { kernel_information.setup_sects };
+        let setup_sects = if kernel_info.setup_sects == 0 { 4 } else { kernel_info.setup_sects };
         let real_mode_size = (setup_sects as usize + 1) * 512;
         
         // Protected mode kernel starts after real-mode code
@@ -339,40 +339,40 @@ static NEXT_ID: AtomicU64 = AtomicU64::new(0x10000);
             self.id, real_mode_size, pm_kernel_size);
         
         // Load protected mode kernel at 0x100000
-        let load_address = boot_proto::KERNEL_LOAD_ADDRESS as usize;
-        if load_address + pm_kernel_size > self.guest_memory.len() {
+        let load_addr = boot_proto::KERNEL_LOAD_ADDRESS as usize;
+        if load_addr + pm_kernel_size > self.guest_memory.len() {
             return Err(HypervisorError::OutOfMemory);
         }
         
-        self.guest_memory[load_address..load_address + pm_kernel_size]
+        self.guest_memory[load_addr..load_addr + pm_kernel_size]
             .copy_from_slice(&bzimage[pm_kernel_offset..]);
         
         crate::serial_println!("[LINUX-VM {}] Loaded kernel at 0x{:X} ({} KB)", 
-            self.id, load_address, pm_kernel_size / 1024);
+            self.id, load_addr, pm_kernel_size / 1024);
         
-        self.kernel_information = Some(kernel_information);
+        self.kernel_info = Some(kernel_info);
         
         Ok(())
     }
     
     /// Load initramfs into VM memory
     pub fn load_initramfs(&mut self, initramfs: &[u8]) -> Result<u64> {
-        let kernel_information = self.kernel_information.as_ref()
+        let kernel_info = self.kernel_info.as_ref()
             .ok_or(HypervisorError::InvalidState)?;
         
         // Place initramfs at high address (e.g., 16 MB)
         // But respect initrd_addr_max
-        let maximum_address = kernel_information.initrd_address_maximum as u64;
-        let mut load_address = boot_proto::INITRAMFS_ADDRESS;
+        let maximum_address = kernel_info.initrd_addr_max as u64;
+        let mut load_addr = boot_proto::INITRAMFS_ADDRESS;
         
         // Make sure initramfs fits
-        if load_address + initramfs.len() as u64 > maximum_address {
+        if load_addr + initramfs.len() as u64 > maximum_address {
             // Try to fit it below max_addr
-            load_address = maximum_address - initramfs.len() as u64;
-            load_address &= !0xFFF; // Align to page
+            load_addr = maximum_address - initramfs.len() as u64;
+            load_addr &= !0xFFF; // Align to page
         }
         
-        let offset = load_address as usize;
+        let offset = load_addr as usize;
         if offset + initramfs.len() > self.guest_memory.len() {
             return Err(HypervisorError::OutOfMemory);
         }
@@ -380,20 +380,20 @@ static NEXT_ID: AtomicU64 = AtomicU64::new(0x10000);
         self.guest_memory[offset..offset + initramfs.len()].copy_from_slice(initramfs);
         
         crate::serial_println!("[LINUX-VM {}] Loaded initramfs at 0x{:X} ({} KB)", 
-            self.id, load_address, initramfs.len() / 1024);
+            self.id, load_addr, initramfs.len() / 1024);
         
-        Ok(load_address)
+        Ok(load_addr)
     }
     
     /// Setup boot parameters (zero page)
     pub fn setup_boot_params(&mut self, initramfs_address: u64, initramfs_size: u32) -> Result<()> {
-        let kernel_information = self.kernel_information.as_ref()
+        let kernel_info = self.kernel_info.as_ref()
             .ok_or(HypervisorError::InvalidState)?;
         
         // Write command line
         let cmdline_address = boot_proto::CMDLINE_ADDRESS as usize;
         let cmdline_bytes = self.config.cmdline.as_bytes();
-        let cmdline_length = cmdline_bytes.len().minimum(boot_proto::CMDLINE_MAXIMUM_SIZE - 1);
+        let cmdline_length = cmdline_bytes.len().min(boot_proto::CMDLINE_MAXIMUM_SIZE - 1);
         
         self.guest_memory[cmdline_address..cmdline_address + cmdline_length]
             .copy_from_slice(&cmdline_bytes[..cmdline_length]);
@@ -402,49 +402,49 @@ static NEXT_ID: AtomicU64 = AtomicU64::new(0x10000);
         crate::serial_println!("[LINUX-VM {}] Command line: {}", self.id, self.config.cmdline);
         
         // Build boot_params structure at BOOT_PARAMS_ADDR
-        let boot_params_address = boot_proto::BOOT_PARAMS_ADDRESS as usize;
+        let boot_params_addr = boot_proto::BOOT_PARAMS_ADDRESS as usize;
         
         // Clear the zero page
         for i in 0..4096 {
-            self.guest_memory[boot_params_address + i] = 0;
+            self.guest_memory[boot_params_addr + i] = 0;
         }
         
         // Setup header is at offset 0x1F1 in boot_params
-        let header_offset = boot_params_address + 0x1F1;
+        let header_offset = boot_params_addr + 0x1F1;
         
         // Copy setup_sects
-        self.guest_memory[header_offset] = kernel_information.setup_sects;
+        self.guest_memory[header_offset] = kernel_info.setup_sects;
         
         // type_of_loader at offset 0x210
-        self.guest_memory[boot_params_address + 0x210] = boot_proto::LOADER_TYPE;
+        self.guest_memory[boot_params_addr + 0x210] = boot_proto::LOADER_TYPE;
         
         // loadflags at offset 0x211
         let loadflags = boot_proto::LOADED_HIGH | boot_proto::CAN_USE_HEAP;
-        self.guest_memory[boot_params_address + 0x211] = loadflags;
+        self.guest_memory[boot_params_addr + 0x211] = loadflags;
         
         // heap_end_ptr at offset 0x224 (relative to 0x10000)
         let heap_end: u16 = 0xFE00;
-        self.guest_memory[boot_params_address + 0x224] = (heap_end & 0xFF) as u8;
-        self.guest_memory[boot_params_address + 0x225] = (heap_end >> 8) as u8;
+        self.guest_memory[boot_params_addr + 0x224] = (heap_end & 0xFF) as u8;
+        self.guest_memory[boot_params_addr + 0x225] = (heap_end >> 8) as u8;
         
         // cmd_line_ptr at offset 0x228
         let cmdline_pointer = boot_proto::CMDLINE_ADDRESS as u32;
         let cmdline_bytes = cmdline_pointer.to_le_bytes();
-        self.guest_memory[boot_params_address + 0x228..boot_params_address + 0x22C]
+        self.guest_memory[boot_params_addr + 0x228..boot_params_addr + 0x22C]
             .copy_from_slice(&cmdline_bytes);
         
         // ramdisk_image at offset 0x218
         let initrd_address_bytes = (initramfs_address as u32).to_le_bytes();
-        self.guest_memory[boot_params_address + 0x218..boot_params_address + 0x21C]
+        self.guest_memory[boot_params_addr + 0x218..boot_params_addr + 0x21C]
             .copy_from_slice(&initrd_address_bytes);
         
         // ramdisk_size at offset 0x21C
         let initrd_size_bytes = initramfs_size.to_le_bytes();
-        self.guest_memory[boot_params_address + 0x21C..boot_params_address + 0x220]
+        self.guest_memory[boot_params_addr + 0x21C..boot_params_addr + 0x220]
             .copy_from_slice(&initrd_size_bytes);
         
         // Setup E820 memory map
-        self.setup_e820_map(boot_params_address)?;
+        self.setup_e820_map(boot_params_addr)?;
         
         crate::serial_println!("[LINUX-VM {}] Boot params at 0x{:X}", 
             self.id, boot_proto::BOOT_PARAMS_ADDRESS);
@@ -453,9 +453,9 @@ static NEXT_ID: AtomicU64 = AtomicU64::new(0x10000);
     }
     
     /// Setup E820 memory map in boot_params
-    fn setup_e820_map(&mut self, boot_params_address: usize) -> Result<()> {
+    fn setup_e820_map(&mut self, boot_params_addr: usize) -> Result<()> {
         // E820 entries are at offset 0x2D0 in boot_params
-        let e820_offset = boot_params_address + 0x2D0;
+        let e820_offset = boot_params_addr + 0x2D0;
         let mut entry_count: u8 = 0;
         
         // Entry 0: Low memory (0 - 0x9FC00 = 639 KB)
@@ -477,7 +477,7 @@ static NEXT_ID: AtomicU64 = AtomicU64::new(0x10000);
         entry_count += 1;
         
         // Write entry count at offset 0x1E8 in boot_params
-        self.guest_memory[boot_params_address + 0x1E8] = entry_count;
+        self.guest_memory[boot_params_addr + 0x1E8] = entry_count;
         
         crate::serial_println!("[LINUX-VM {}] E820 map: {} entries, {} MB usable", 
             self.id, entry_count, main_memory_size / (1024 * 1024));
@@ -487,11 +487,11 @@ static NEXT_ID: AtomicU64 = AtomicU64::new(0x10000);
     
     /// Write a single E820 entry
     fn write_e820_entry(&mut self, base_offset: usize, index: usize, 
-                        address: u64, size: u64, entry_type: u32) {
+                        addr: u64, size: u64, entry_type: u32) {
         let entry_offset = base_offset + index * 20;  // Each entry is 20 bytes
         
         // Address (8 bytes)
-        self.guest_memory[entry_offset..entry_offset + 8].copy_from_slice(&address.to_le_bytes());
+        self.guest_memory[entry_offset..entry_offset + 8].copy_from_slice(&addr.to_le_bytes());
         
         // Size (8 bytes)
         self.guest_memory[entry_offset + 8..entry_offset + 16].copy_from_slice(&size.to_le_bytes());
@@ -539,11 +539,11 @@ static NEXT_ID: AtomicU64 = AtomicU64::new(0x10000);
         let gdt_address = self.setup_gdt()?;
         
         // Get entry point
-        let kernel_information = self.kernel_information.as_ref()
+        let kernel_info = self.kernel_info.as_ref()
             .ok_or(HypervisorError::InvalidState)?;
         
-        let entry_point = if kernel_information.code32_start != 0 {
-            kernel_information.code32_start as u64
+        let entry_point = if kernel_info.code32_start != 0 {
+            kernel_info.code32_start as u64
         } else {
             boot_proto::KERNEL_LOAD_ADDRESS
         };

@@ -6,194 +6,194 @@
 use alloc::collections::{BTreeMap, VecDeque};
 use spin::RwLock;
 
-const AGM_: usize = 4096;
-const CJS_: i32 = 64; 
+const AIG_: usize = 4096;
+const CNB_: i32 = 64; 
 
 
-struct Bpa {
-    f: VecDeque<u8>,
-    hwz: bool,
-    ihk: bool,
+struct Acp {
+    data: VecDeque<u8>,
+    read_open: bool,
+    write_open: bool,
 }
 
 
 struct PipeRegistry {
-    ewq: BTreeMap<usize, Bpa>,
-    eqc: BTreeMap<i32, (usize, bool)>, 
-    bcb: usize,
-    bca: i32,
+    pipes: BTreeMap<usize, Acp>,
+    fd_map: BTreeMap<i32, (usize, bool)>, 
+    next_id: usize,
+    next_fd: i32,
 }
 
 impl PipeRegistry {
     const fn new() -> Self {
         Self {
-            ewq: BTreeMap::new(),
-            eqc: BTreeMap::new(),
-            bcb: 1,
-            bca: CJS_,
+            pipes: BTreeMap::new(),
+            fd_map: BTreeMap::new(),
+            next_id: 1,
+            next_fd: CNB_,
         }
     }
 }
 
-static Ev: RwLock<PipeRegistry> = RwLock::new(PipeRegistry::new());
+static Ca: RwLock<PipeRegistry> = RwLock::new(PipeRegistry::new());
 
 
-pub fn avp() -> (i32, i32) {
-    let mut reg = Ev.write();
-    let cly = reg.bcb;
-    reg.bcb += 1;
+pub fn create() -> (i32, i32) {
+    let mut reg = Ca.write();
+    let auo = reg.next_id;
+    reg.next_id += 1;
 
-    let cbh = reg.bca;
-    reg.bca += 1;
-    let civ = reg.bca;
-    reg.bca += 1;
+    let aot = reg.next_fd;
+    reg.next_fd += 1;
+    let asu = reg.next_fd;
+    reg.next_fd += 1;
 
-    reg.ewq.insert(cly, Bpa {
-        f: VecDeque::fc(AGM_),
-        hwz: true,
-        ihk: true,
+    reg.pipes.insert(auo, Acp {
+        data: VecDeque::with_capacity(AIG_),
+        read_open: true,
+        write_open: true,
     });
-    reg.eqc.insert(cbh, (cly, false));   
-    reg.eqc.insert(civ, (cly, true));    
+    reg.fd_map.insert(aot, (auo, false));   
+    reg.fd_map.insert(asu, (auo, true));    
 
-    crate::log_debug!("[PIPE] Created pipe {} (read_fd={}, write_fd={})", cly, cbh, civ);
-    (cbh, civ)
+    crate::log_debug!("[PIPE] Created pipe {} (read_fd={}, write_fd={})", auo, aot, asu);
+    (aot, asu)
 }
 
 
-pub fn gkh(da: i32) -> bool {
-    Ev.read().eqc.bgm(&da)
+pub fn dab(fd: i32) -> bool {
+    Ca.read().fd_map.contains_key(&fd)
 }
 
 
 
-pub fn write(da: i32, f: &[u8]) -> i64 {
-    if f.is_empty() { return 0; }
+pub fn write(fd: i32, data: &[u8]) -> i64 {
+    if data.is_empty() { return 0; }
     
-    let mut arv = 0u32;
+    let mut retries = 0u32;
     loop {
         {
-            let mut reg = Ev.write();
-            let &(cly, rm) = match reg.eqc.get(&da) {
-                Some(co) => co,
+            let mut reg = Ca.write();
+            let &(auo, is_write) = match reg.fd_map.get(&fd) {
+                Some(info) => info,
                 None => return -9, 
             };
-            if !rm {
+            if !is_write {
                 return -9; 
             }
-            let pipe = match reg.ewq.ds(&cly) {
-                Some(ai) => ai,
+            let pipe = match reg.pipes.get_mut(&auo) {
+                Some(aa) => aa,
                 None => return -9,
             };
-            if !pipe.hwz {
+            if !pipe.read_open {
                 return -32; 
             }
-            let atm = AGM_ - pipe.f.len();
-            if atm > 0 {
-                let bo = f.len().v(atm);
-                for &o in &f[..bo] {
-                    pipe.f.agt(o);
+            let space = AIG_ - pipe.data.len();
+            if space > 0 {
+                let ae = data.len().min(space);
+                for &b in &data[..ae] {
+                    pipe.data.push_back(b);
                 }
-                return bo as i64;
+                return ae as i64;
             }
             
         }
         
-        arv += 1;
-        if arv > 10_000 {
+        retries += 1;
+        if retries > 10_000 {
             return -11; 
         }
-        crate::thread::dvk();
+        crate::thread::boq();
     }
 }
 
 
 
-pub fn read(da: i32, k: &mut [u8]) -> i64 {
-    if k.is_empty() { return 0; }
+pub fn read(fd: i32, buf: &mut [u8]) -> i64 {
+    if buf.is_empty() { return 0; }
     
-    let mut arv = 0u32;
+    let mut retries = 0u32;
     loop {
         {
-            let mut reg = Ev.write();
-            let &(cly, rm) = match reg.eqc.get(&da) {
-                Some(co) => co,
+            let mut reg = Ca.write();
+            let &(auo, is_write) = match reg.fd_map.get(&fd) {
+                Some(info) => info,
                 None => return -9, 
             };
-            if rm {
+            if is_write {
                 return -9; 
             }
-            let pipe = match reg.ewq.ds(&cly) {
-                Some(ai) => ai,
+            let pipe = match reg.pipes.get_mut(&auo) {
+                Some(aa) => aa,
                 None => return -9,
             };
-            if !pipe.f.is_empty() {
-                let bo = k.len().v(pipe.f.len());
-                for a in 0..bo {
-                    k[a] = pipe.f.awp().unwrap();
+            if !pipe.data.is_empty() {
+                let ae = buf.len().min(pipe.data.len());
+                for i in 0..ae {
+                    buf[i] = pipe.data.pop_front().unwrap();
                 }
-                return bo as i64;
+                return ae as i64;
             }
-            if !pipe.ihk {
+            if !pipe.write_open {
                 return 0; 
             }
             
         }
         
-        arv += 1;
-        if arv > 10_000 {
+        retries += 1;
+        if retries > 10_000 {
             return 0; 
         }
-        crate::thread::dvk();
+        crate::thread::boq();
     }
 }
 
 
-pub fn agj(da: i32) -> i64 {
-    let mut reg = Ev.write();
-    let (cly, rm) = match reg.eqc.remove(&da) {
-        Some(co) => co,
+pub fn close(fd: i32) -> i64 {
+    let mut reg = Ca.write();
+    let (auo, is_write) = match reg.fd_map.remove(&fd) {
+        Some(info) => info,
         None => return -9, 
     };
-    if let Some(pipe) = reg.ewq.ds(&cly) {
-        if rm {
-            pipe.ihk = false;
+    if let Some(pipe) = reg.pipes.get_mut(&auo) {
+        if is_write {
+            pipe.write_open = false;
         } else {
-            pipe.hwz = false;
+            pipe.read_open = false;
         }
-        if !pipe.hwz && !pipe.ihk {
-            reg.ewq.remove(&cly);
-            crate::log_debug!("[PIPE] Destroyed pipe {}", cly);
+        if !pipe.read_open && !pipe.write_open {
+            reg.pipes.remove(&auo);
+            crate::log_debug!("[PIPE] Destroyed pipe {}", auo);
         }
     }
     0
 }
 
 
-pub fn gxu() -> usize {
-    Ev.read().ewq.len()
+pub fn active_count() -> usize {
+    Ca.read().pipes.len()
 }
 
 
 
-pub fn poll(da: i32) -> (bool, bool, bool) {
-    let reg = Ev.read();
-    let (cly, rm) = match reg.eqc.get(&da) {
-        Some(&co) => co,
+pub fn poll(fd: i32) -> (bool, bool, bool) {
+    let reg = Ca.read();
+    let (auo, is_write) = match reg.fd_map.get(&fd) {
+        Some(&info) => info,
         None => return (false, false, false),
     };
-    let pipe = match reg.ewq.get(&cly) {
-        Some(ai) => ai,
+    let pipe = match reg.pipes.get(&auo) {
+        Some(aa) => aa,
         None => return (false, false, false),
     };
-    if rm {
+    if is_write {
         
-        let lbi = pipe.f.len() < AGM_;
-        (false, lbi, !pipe.hwz)
+        let gab = pipe.data.len() < AIG_;
+        (false, gab, !pipe.read_open)
     } else {
         
-        let cyk = !pipe.f.is_empty();
-        let jjd = !pipe.ihk;
-        (cyk || jjd, false, jjd)
+        let has_data = !pipe.data.is_empty();
+        let ewo = !pipe.write_open;
+        (has_data || ewo, false, ewo)
     }
 }

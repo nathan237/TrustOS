@@ -4,86 +4,86 @@
 
 
 
-use super::cpu::{fom, djp};
+use super::cpu::{cmx, bhy};
 
 
 
-static mut EA_: u64 = 0x1000_0000;
+static mut EM_: u64 = 0x1000_0000;
 
 
-const Cns: u64 = 0;   
-const Cjf: u64 = 0;   
-const Cfi: u64 = 1;   
-const Ccw: u64 = 2;   
-const Bkj: u64 = 3;   
-const Cha: u64 = 4;   
-const Aut: u64 = 5;   
-const Cak: u64 = 0;   
-const Caj: u64 = 1;   
+const Aqi: u64 = 0;   
+const Anl: u64 = 0;   
+const Alh: u64 = 1;   
+const Ajq: u64 = 2;   
+const Aam: u64 = 3;   
+const Amn: u64 = 4;   
+const Tj: u64 = 5;   
+const Aij: u64 = 0;   
+const Aii: u64 = 1;   
 
 
-const AZE_: u8 = 1 << 0;
-const CEX_: u8 = 1 << 5;
+const BBF_: u8 = 1 << 0;
+const CIG_: u8 = 1 << 5;
 
 
-pub fn wih(ar: u64) {
-    unsafe { EA_ = ar; }
+pub fn oop(base: u64) {
+    unsafe { EM_ = base; }
 }
 
 
 pub fn init() {
     unsafe {
-        let ar = EA_;
+        let base = EM_;
         
         
-        djp(ar + Cfi, 0x00);
+        bhy(base + Alh, 0x00);
         
         
-        djp(ar + Bkj, 0x80);
+        bhy(base + Aam, 0x80);
         
         
-        djp(ar + Cak, 0x01);
-        djp(ar + Caj, 0x00);
+        bhy(base + Aij, 0x01);
+        bhy(base + Aii, 0x00);
         
         
-        djp(ar + Bkj, 0x03);
+        bhy(base + Aam, 0x03);
         
         
-        djp(ar + Ccw, 0xC7);
+        bhy(base + Ajq, 0xC7);
         
         
-        djp(ar + Cha, 0x0B);
+        bhy(base + Amn, 0x0B);
     }
 }
 
 
-pub fn cco(hf: u8) {
+pub fn write_byte(byte: u8) {
     unsafe {
-        let ar = EA_;
+        let base = EM_;
         
-        while fom(ar + Aut) & CEX_ == 0 {
-            core::hint::hc();
+        while cmx(base + Tj) & CIG_ == 0 {
+            core::hint::spin_loop();
         }
-        djp(ar + Cns, hf);
+        bhy(base + Aqi, byte);
     }
 }
 
 
-pub fn ahx(bf: &[u8]) {
-    for &o in bf {
-        if o == b'\n' {
-            cco(b'\r');
+pub fn write_bytes(bytes: &[u8]) {
+    for &b in bytes {
+        if b == b'\n' {
+            write_byte(b'\r');
         }
-        cco(o);
+        write_byte(b);
     }
 }
 
 
-pub fn dlb() -> Option<u8> {
+pub fn read_byte() -> Option<u8> {
     unsafe {
-        let ar = EA_;
-        if fom(ar + Aut) & AZE_ != 0 {
-            Some(fom(ar + Cjf))
+        let base = EM_;
+        if cmx(base + Tj) & BBF_ != 0 {
+            Some(cmx(base + Anl))
         } else {
             None
         }
@@ -91,9 +91,9 @@ pub fn dlb() -> Option<u8> {
 }
 
 
-pub fn nji() -> bool {
+pub fn hqn() -> bool {
     unsafe {
-        let ar = EA_;
-        fom(ar + Aut) & AZE_ != 0
+        let base = EM_;
+        cmx(base + Tj) & BBF_ != 0
     }
 }

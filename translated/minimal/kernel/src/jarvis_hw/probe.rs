@@ -30,173 +30,173 @@ use spin::Mutex;
 
 
 #[derive(Clone)]
-pub struct T {
+pub struct N {
     
-    pub avo: String,
-    pub dpf: String,
-    pub azj: u32,
-    pub heb: u8,
-    pub hec: u8,
-    pub hee: u8,
-    pub fam: u64,
-    pub cau: u8,
-    pub djk: u8,
-    pub aed: u8,
+    pub cpu_vendor: String,
+    pub cpu_brand: String,
+    pub cpu_cores: u32,
+    pub cpu_family: u8,
+    pub cpu_model: u8,
+    pub cpu_stepping: u8,
+    pub tsc_freq_hz: u64,
+    pub max_logical_cpus: u8,
+    pub max_physical_cpus: u8,
+    pub apic_id: u8,
     
-    pub ixu: bool,
-    pub dro: bool,
-    pub ixv: bool,
-    pub lbk: bool,
-    pub lbj: bool,
-    pub hmq: bool,
-    pub fke: bool,
-    pub bzx: bool,
-    pub drm: bool,
+    pub has_sse: bool,
+    pub has_sse2: bool,
+    pub has_sse3: bool,
+    pub has_ssse3: bool,
+    pub has_sse4_1: bool,
+    pub has_sse4_2: bool,
+    pub has_avx: bool,
+    pub has_avx2: bool,
+    pub has_avx512: bool,
     
-    pub cfe: bool,
-    pub git: bool,
-    pub ecm: bool,
-    pub crd: bool,
-    pub fkh: bool,
+    pub has_aesni: bool,
+    pub has_pclmulqdq: bool,
+    pub has_sha_ext: bool,
+    pub has_rdrand: bool,
+    pub has_rdseed: bool,
     
-    pub erv: bool,
-    pub eru: bool,
-    pub giv: bool,
-    pub ert: bool,
+    pub has_smep: bool,
+    pub has_smap: bool,
+    pub has_umip: bool,
+    pub has_nx: bool,
     
-    pub lbl: bool,
-    pub ixx: bool,
-    pub lbm: bool,
-    pub ixt: bool,
+    pub has_tsc: bool,
+    pub has_tsc_invariant: bool,
+    pub has_tsc_deadline: bool,
+    pub has_rdtscp: bool,
     
-    pub giw: bool,
-    pub giu: bool,
+    pub has_vmx: bool,
+    pub has_svm: bool,
 
     
-    pub ccf: u64,
-    pub drr: usize,
-    pub ecw: usize,
-    pub erx: usize,
-    pub ceu: usize,
-    pub dhj: usize,
-    pub lr: u64,
+    pub total_ram_bytes: u64,
+    pub heap_size_bytes: usize,
+    pub heap_used_bytes: usize,
+    pub heap_free_bytes: usize,
+    pub frames_used: usize,
+    pub frames_free: usize,
+    pub hhdm_offset: u64,
 
     
-    pub gxt: u8,
-    pub gxs: String,
-    pub kvd: u16,
-    pub hiu: bool,
-    pub itu: bool,
-    pub kvb: bool,
-    pub kvc: u32,
+    pub acpi_revision: u8,
+    pub acpi_oem_id: String,
+    pub fadt_sci_int: u16,
+    pub fadt_hw_reduced: bool,
+    pub fadt_reset_supported: bool,
+    pub fadt_low_power_s0: bool,
+    pub fadt_pm_tmr_blk: u32,
 
     
-    pub cap: u64,
-    pub gae: Vec<Bbt>,
-    pub edq: usize,
-    pub ofi: Vec<Bjy>,
-    pub hoq: Vec<Bke>,
-    pub kar: usize,
+    pub local_apic_addr: u64,
+    pub apic_entries: Vec<Wh>,
+    pub ioapic_count: usize,
+    pub ioapic_entries: Vec<Aae>,
+    pub irq_overrides: Vec<Aai>,
+    pub apic_nmi_count: usize,
 
     
-    pub gpa: Vec<Bot>,
-    pub fqo: bool,
+    pub pcie_segments: Vec<Acl>,
+    pub pcie_available: bool,
 
     
-    pub hus: Vec<Bos>,
-    pub dal: usize,
+    pub pci_devices: Vec<Ack>,
+    pub pci_device_count: usize,
     
-    pub ewl: usize,
-    pub egg: usize,
-    pub egh: usize,
-    pub egf: usize,
-    pub ewk: usize,
-    pub hur: usize,
-    pub fqn: usize,
+    pub pci_storage_controllers: usize,
+    pub pci_network_controllers: usize,
+    pub pci_usb_controllers: usize,
+    pub pci_audio_controllers: usize,
+    pub pci_display_controllers: usize,
+    pub pci_bridge_count: usize,
+    pub pci_crypto_controllers: usize,
 
     
-    pub aqm: Vec<Azg>,
-    pub dmp: u64,
-    pub aqd: Vec<Boq>,
-    pub avs: Vec<Ahs>,
+    pub storage_devices: Vec<Jb>,
+    pub total_storage_bytes: u64,
+    pub partitions: Vec<Acj>,
+    pub encryption_detected: Vec<Ot>,
 
     
-    pub bzz: bool,
-    pub csg: Option<[u8; 6]>,
-    pub aik: bool,
+    pub has_network: bool,
+    pub mac_address: Option<[u8; 6]>,
+    pub link_up: bool,
 
     
-    pub bqz: bool,
-    pub beh: String,
-    pub dhr: u32,
-    pub erk: u32,
+    pub has_gpu: bool,
+    pub gpu_name: String,
+    pub gpu_vram_mb: u32,
+    pub gpu_compute_units: u32,
 
     
-    pub esa: bool,
-    pub juh: bool,
-    pub hnd: u64,
-    pub gjf: u8,
-    pub iys: bool,
-    pub iyt: u16,
+    pub hpet_available: bool,
+    pub tsc_available: bool,
+    pub hpet_freq_hz: u64,
+    pub hpet_num_timers: u8,
+    pub hpet_64bit: bool,
+    pub hpet_vendor_id: u16,
 
     
-    pub fav: bool,
-    pub fxv: usize,
-    pub cvc: Vec<Bvm>,
+    pub usb_initialized: bool,
+    pub usb_controller_count: usize,
+    pub usb_devices: Vec<Afz>,
 
     
-    pub fki: bool,
+    pub hda_initialized: bool,
 
     
     pub arch: &'static str,
-    pub jjz: &'static str,
+    pub privilege_level: &'static str,
 
     
-    pub cwl: f32,
-    pub dte: f32,
-    pub ezb: f32,
-    pub evg: f32,
-    pub eyh: f32,
-    pub dkj: f32,
+    pub compute_score: f32,
+    pub memory_score: f32,
+    pub storage_score: f32,
+    pub network_score: f32,
+    pub security_score: f32,
+    pub overall_score: f32,
 }
 
 #[derive(Clone)]
-pub struct Bos {
-    pub aq: u8,
-    pub de: u8,
-    pub gw: u8,
-    pub ml: u16,
-    pub mx: u16,
-    pub ajz: u8,
-    pub adl: u8,
-    pub bpz: String,
-    pub bor: String,
+pub struct Ack {
+    pub bus: u8,
+    pub device: u8,
+    pub function: u8,
+    pub vendor_id: u16,
+    pub device_id: u16,
+    pub class_code: u8,
+    pub subclass: u8,
+    pub class_name: String,
+    pub subclass_name: String,
 }
 
 #[derive(Clone)]
-pub struct Azg {
-    pub j: String,
-    pub kk: StorageKind,
-    pub fei: u64,
+pub struct Jb {
+    pub name: String,
+    pub kind: StorageKind,
+    pub capacity_bytes: u64,
     pub model: String,
     pub serial: String,
 }
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum StorageKind {
-    Qr,
-    Xv,
-    Bjk,
-    F,
+    Sata,
+    Nvme,
+    Ide,
+    Unknown,
 }
 
 impl StorageKind {
     pub fn as_str(&self) -> &'static str {
         match self {
-            StorageKind::Qr => "SATA",
-            StorageKind::Xv => "NVMe",
-            StorageKind::Bjk => "IDE",
-            StorageKind::F => "???",
+            StorageKind::Sata => "SATA",
+            StorageKind::Nvme => "NVMe",
+            StorageKind::Ide => "IDE",
+            StorageKind::Unknown => "???",
         }
     }
 }
@@ -204,484 +204,484 @@ impl StorageKind {
 
 
 #[derive(Clone)]
-pub struct Bbt {
-    pub aed: u32,
-    pub bny: u32,
-    pub iq: bool,
-    pub htp: bool,
+pub struct Wh {
+    pub apic_id: u32,
+    pub processor_id: u32,
+    pub enabled: bool,
+    pub online_capable: bool,
 }
 
 #[derive(Clone)]
-pub struct Bjy {
-    pub ad: u8,
-    pub re: u64,
-    pub ech: u32,
+pub struct Aae {
+    pub id: u8,
+    pub address: u64,
+    pub gsi_base: u32,
 }
 
 #[derive(Clone)]
-pub struct Bke {
-    pub wqk: u8,
-    pub tfz: u32,
-    pub dkr: u8,
-    pub dmt: u8,
+pub struct Aai {
+    pub source_irq: u8,
+    pub global_irq: u32,
+    pub polarity: u8,
+    pub trigger: u8,
 }
 
 #[derive(Clone)]
-pub struct Bot {
-    pub bps: u64,
-    pub ie: u16,
-    pub cca: u8,
-    pub cej: u8,
+pub struct Acl {
+    pub base_address: u64,
+    pub segment: u16,
+    pub start_bus: u8,
+    pub end_bus: u8,
 }
 
 #[derive(Clone)]
-pub struct Boq {
-    pub app: String,
-    pub aqb: u8,
-    pub aag: u64,
-    pub afz: u64,
-    pub ddc: String,
-    pub cji: bool,
-    pub j: String,
+pub struct Acj {
+    pub disk_name: String,
+    pub number: u8,
+    pub start_lba: u64,
+    pub size_bytes: u64,
+    pub type_name: String,
+    pub bootable: bool,
+    pub name: String,
 }
 
 #[derive(Clone)]
-pub struct Ahs {
-    pub app: String,
+pub struct Ot {
+    pub disk_name: String,
     pub partition: Option<u8>,
-    pub ckf: EncryptionType,
-    pub eu: String,
+    pub encryption_type: EncryptionType,
+    pub detail: String,
 }
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum EncryptionType {
-    Ajy,
-    Ajz,
-    Aaa,
-    Afn,
-    Bgz,
-    Bes,
-    Bnu,
-    F,
+    Luks1,
+    Luks2,
+    BitLocker,
+    VeraCrypt,
+    FileVault2,
+    DmCrypt,
+    OpalSed,
+    Unknown,
 }
 
 impl EncryptionType {
     pub fn as_str(&self) -> &'static str {
         match self {
-            EncryptionType::Ajy => "LUKS1",
-            EncryptionType::Ajz => "LUKS2",
-            EncryptionType::Aaa => "BitLocker",
-            EncryptionType::Afn => "VeraCrypt",
-            EncryptionType::Bgz => "FileVault2",
-            EncryptionType::Bes => "dm-crypt",
-            EncryptionType::Bnu => "OPAL SED",
-            EncryptionType::F => "Unknown encryption",
+            EncryptionType::Luks1 => "LUKS1",
+            EncryptionType::Luks2 => "LUKS2",
+            EncryptionType::BitLocker => "BitLocker",
+            EncryptionType::VeraCrypt => "VeraCrypt",
+            EncryptionType::FileVault2 => "FileVault2",
+            EncryptionType::DmCrypt => "dm-crypt",
+            EncryptionType::OpalSed => "OPAL SED",
+            EncryptionType::Unknown => "Unknown encryption",
         }
     }
 }
 
 #[derive(Clone)]
-pub struct Bvm {
-    pub re: u8,
-    pub bpz: String,
-    pub ml: u16,
-    pub cgt: u16,
-    pub baj: String,
+pub struct Afz {
+    pub address: u8,
+    pub class_name: String,
+    pub vendor_id: u16,
+    pub product_id: u16,
+    pub product: String,
 }
 
 
-static BDO_: AtomicBool = AtomicBool::new(false);
-static Boo: Mutex<Option<T>> = Mutex::new(None);
+static BFR_: AtomicBool = AtomicBool::new(false);
+static Ach: Mutex<Option<N>> = Mutex::new(None);
 
 
-pub fn wdu() -> T {
+pub fn olc() -> N {
     crate::serial_println!("[JARVIS-HW] Starting exhaustive hardware scan...");
 
-    let mut cc = T {
+    let mut ai = N {
         
-        avo: String::new(),
-        dpf: String::new(),
-        azj: 1,
-        heb: 0,
-        hec: 0,
-        hee: 0,
-        fam: 0,
-        cau: 0,
-        djk: 0,
-        aed: 0,
-        ixu: false,
-        dro: false,
-        ixv: false,
-        lbk: false,
-        lbj: false,
-        hmq: false,
-        fke: false,
-        bzx: false,
-        drm: false,
-        cfe: false,
-        git: false,
-        ecm: false,
-        crd: false,
-        fkh: false,
-        erv: false,
-        eru: false,
-        giv: false,
-        ert: false,
-        lbl: false,
-        ixx: false,
-        lbm: false,
-        ixt: false,
-        giw: false,
-        giu: false,
+        cpu_vendor: String::new(),
+        cpu_brand: String::new(),
+        cpu_cores: 1,
+        cpu_family: 0,
+        cpu_model: 0,
+        cpu_stepping: 0,
+        tsc_freq_hz: 0,
+        max_logical_cpus: 0,
+        max_physical_cpus: 0,
+        apic_id: 0,
+        has_sse: false,
+        has_sse2: false,
+        has_sse3: false,
+        has_ssse3: false,
+        has_sse4_1: false,
+        has_sse4_2: false,
+        has_avx: false,
+        has_avx2: false,
+        has_avx512: false,
+        has_aesni: false,
+        has_pclmulqdq: false,
+        has_sha_ext: false,
+        has_rdrand: false,
+        has_rdseed: false,
+        has_smep: false,
+        has_smap: false,
+        has_umip: false,
+        has_nx: false,
+        has_tsc: false,
+        has_tsc_invariant: false,
+        has_tsc_deadline: false,
+        has_rdtscp: false,
+        has_vmx: false,
+        has_svm: false,
         
-        ccf: 0,
-        drr: 0,
-        ecw: 0,
-        erx: 0,
-        ceu: 0,
-        dhj: 0,
-        lr: 0,
+        total_ram_bytes: 0,
+        heap_size_bytes: 0,
+        heap_used_bytes: 0,
+        heap_free_bytes: 0,
+        frames_used: 0,
+        frames_free: 0,
+        hhdm_offset: 0,
         
-        gxt: 0,
-        gxs: String::new(),
-        kvd: 0,
-        hiu: false,
-        itu: false,
-        kvb: false,
-        kvc: 0,
+        acpi_revision: 0,
+        acpi_oem_id: String::new(),
+        fadt_sci_int: 0,
+        fadt_hw_reduced: false,
+        fadt_reset_supported: false,
+        fadt_low_power_s0: false,
+        fadt_pm_tmr_blk: 0,
         
-        cap: 0,
-        gae: Vec::new(),
-        edq: 0,
-        ofi: Vec::new(),
-        hoq: Vec::new(),
-        kar: 0,
+        local_apic_addr: 0,
+        apic_entries: Vec::new(),
+        ioapic_count: 0,
+        ioapic_entries: Vec::new(),
+        irq_overrides: Vec::new(),
+        apic_nmi_count: 0,
         
-        gpa: Vec::new(),
-        fqo: false,
+        pcie_segments: Vec::new(),
+        pcie_available: false,
         
-        hus: Vec::new(),
-        dal: 0,
-        ewl: 0,
-        egg: 0,
-        egh: 0,
-        egf: 0,
-        ewk: 0,
-        hur: 0,
-        fqn: 0,
+        pci_devices: Vec::new(),
+        pci_device_count: 0,
+        pci_storage_controllers: 0,
+        pci_network_controllers: 0,
+        pci_usb_controllers: 0,
+        pci_audio_controllers: 0,
+        pci_display_controllers: 0,
+        pci_bridge_count: 0,
+        pci_crypto_controllers: 0,
         
-        aqm: Vec::new(),
-        dmp: 0,
-        aqd: Vec::new(),
-        avs: Vec::new(),
+        storage_devices: Vec::new(),
+        total_storage_bytes: 0,
+        partitions: Vec::new(),
+        encryption_detected: Vec::new(),
         
-        bzz: false,
-        csg: None,
-        aik: false,
+        has_network: false,
+        mac_address: None,
+        link_up: false,
         
-        bqz: false,
-        beh: String::new(),
-        dhr: 0,
-        erk: 0,
+        has_gpu: false,
+        gpu_name: String::new(),
+        gpu_vram_mb: 0,
+        gpu_compute_units: 0,
         
-        esa: false,
-        juh: false,
-        hnd: 0,
-        gjf: 0,
-        iys: false,
-        iyt: 0,
+        hpet_available: false,
+        tsc_available: false,
+        hpet_freq_hz: 0,
+        hpet_num_timers: 0,
+        hpet_64bit: false,
+        hpet_vendor_id: 0,
         
-        fav: false,
-        fxv: 0,
-        cvc: Vec::new(),
+        usb_initialized: false,
+        usb_controller_count: 0,
+        usb_devices: Vec::new(),
         
-        fki: false,
+        hda_initialized: false,
         
         arch: if cfg!(target_arch = "x86_64") { "x86_64" }
               else if cfg!(target_arch = "aarch64") { "aarch64" }
               else if cfg!(target_arch = "riscv64") { "riscv64" }
               else { "unknown" },
-        jjz: "ring0",
+        privilege_level: "ring0",
         
-        cwl: 0.0,
-        dte: 0.0,
-        ezb: 0.0,
-        evg: 0.0,
-        eyh: 0.0,
-        dkj: 0.0,
+        compute_score: 0.0,
+        memory_score: 0.0,
+        storage_score: 0.0,
+        network_score: 0.0,
+        security_score: 0.0,
+        overall_score: 0.0,
     };
 
     
-    vls(&mut cc);
-    vlx(&mut cc);
+    nxm(&mut ai);
+    nxs(&mut ai);
 
     
-    vlp(&mut cc);
+    nxk(&mut ai);
 
     
-    gpv(&mut cc);
+    ccv(&mut ai);
 
     
-    lvr(&mut cc);
-    vmb(&mut cc);
-    lvq(&mut cc);
-    lvp(&mut cc);
-    vme(&mut cc);
-    lvs(&mut cc);
-    lvn(&mut cc);
+    gom(&mut ai);
+    nxv(&mut ai);
+    gok(&mut ai);
+    goj(&mut ai);
+    nxy(&mut ai);
+    gon(&mut ai);
+    goh(&mut ai);
 
     
-    rnk(&mut cc);
+    kwo(&mut ai);
 
     crate::serial_println!("[JARVIS-HW] Exhaustive scan complete:");
     crate::serial_println!("  score={:.0}%, {} PCI devs, {} storage, {} partitions, {} encrypted",
-        cc.dkj * 100.0, cc.dal,
-        cc.aqm.len(), cc.aqd.len(),
-        cc.avs.len());
+        ai.overall_score * 100.0, ai.pci_device_count,
+        ai.storage_devices.len(), ai.partitions.len(),
+        ai.encryption_detected.len());
     crate::serial_println!("  {}MB RAM, {} APIC CPUs, {} IOAPICs, {} USB devs",
-        cc.ccf / (1024 * 1024), cc.gae.len(),
-        cc.edq, cc.cvc.len());
+        ai.total_ram_bytes / (1024 * 1024), ai.apic_entries.len(),
+        ai.ioapic_count, ai.usb_devices.len());
 
     
-    *Boo.lock() = Some(cc.clone());
-    BDO_.store(true, Ordering::Release);
+    *Ach.lock() = Some(ai.clone());
+    BFR_.store(true, Ordering::Release);
 
-    cc
+    ai
 }
 
 
-pub fn gby() -> Option<T> {
-    Boo.lock().clone()
+pub fn cur() -> Option<N> {
+    Ach.lock().clone()
 }
 
 
-pub fn tyv() -> bool {
-    BDO_.load(Ordering::Acquire)
+pub fn mtq() -> bool {
+    BFR_.load(Ordering::Acquire)
 }
 
 
 
 
 
-fn vls(cc: &mut T) {
+fn nxm(ai: &mut N) {
     #[cfg(target_arch = "x86_64")]
     {
-        let dr = crate::cpu::CpuCapabilities::dgf();
+        let caps = crate::cpu::CpuCapabilities::bfx();
 
-        cc.avo = match dr.acs {
-            crate::cpu::CpuVendor::Ef => String::from("Intel"),
-            crate::cpu::CpuVendor::Ct => String::from("AMD"),
-            crate::cpu::CpuVendor::F => String::from("Unknown"),
+        ai.cpu_vendor = match caps.vendor {
+            crate::cpu::CpuVendor::Intel => String::from("Intel"),
+            crate::cpu::CpuVendor::Amd => String::from("AMD"),
+            crate::cpu::CpuVendor::Unknown => String::from("Unknown"),
         };
 
         
-        let qrt = dr.dem.iter()
-            .qf(|&o| o == 0)
+        let kdt = caps.brand_string.iter()
+            .position(|&b| b == 0)
             .unwrap_or(48);
-        if let Ok(e) = core::str::jg(&dr.dem[..qrt]) {
-            cc.dpf = String::from(e.em());
+        if let Ok(j) = core::str::from_utf8(&caps.brand_string[..kdt]) {
+            ai.cpu_brand = String::from(j.trim());
         }
 
-        cc.heb = dr.family;
-        cc.hec = dr.model;
-        cc.hee = dr.bxi;
-        cc.azj = crate::cpu::smp::aao();
-        cc.fam = dr.ekf;
-        cc.cau = dr.cau;
-        cc.djk = dr.djk;
-        cc.aed = dr.aed;
+        ai.cpu_family = caps.family;
+        ai.cpu_model = caps.model;
+        ai.cpu_stepping = caps.stepping;
+        ai.cpu_cores = crate::cpu::smp::cpu_count();
+        ai.tsc_freq_hz = caps.tsc_frequency_hz;
+        ai.max_logical_cpus = caps.max_logical_cpus;
+        ai.max_physical_cpus = caps.max_physical_cpus;
+        ai.apic_id = caps.apic_id;
 
         
-        cc.ixu = dr.eiw;
-        cc.dro = dr.eix;
-        cc.ixv = dr.fvj;
-        cc.lbk = dr.fvl;
-        cc.lbj = dr.fvk;
-        cc.hmq = dr.eyy;
-        cc.fke = dr.dof;
-        cc.bzx = dr.dog;
-        cc.drm = dr.eml;
+        ai.has_sse = caps.sse;
+        ai.has_sse2 = caps.sse2;
+        ai.has_sse3 = caps.sse3;
+        ai.has_ssse3 = caps.ssse3;
+        ai.has_sse4_1 = caps.sse4_1;
+        ai.has_sse4_2 = caps.sse4_2;
+        ai.has_avx = caps.avx;
+        ai.has_avx2 = caps.avx2;
+        ai.has_avx512 = caps.avx512f;
 
         
-        cc.cfe = dr.doa;
-        cc.git = dr.ewm;
-        cc.ecm = dr.eyl;
-        cc.crd = dr.cbg;
-        cc.fkh = dr.cmc;
+        ai.has_aesni = caps.aesni;
+        ai.has_pclmulqdq = caps.pclmulqdq;
+        ai.has_sha_ext = caps.sha_ext;
+        ai.has_rdrand = caps.rdrand;
+        ai.has_rdseed = caps.rdseed;
 
         
-        cc.erv = dr.cia;
-        cc.eru = dr.cul;
-        cc.giv = dr.ddd;
-        cc.ert = dr.vt;
+        ai.has_smep = caps.smep;
+        ai.has_smap = caps.smap;
+        ai.has_umip = caps.umip;
+        ai.has_nx = caps.nx;
 
         
-        cc.lbl = dr.tsc;
-        cc.ixx = dr.fan;
-        cc.lbm = dr.ifc;
-        cc.ixt = dr.fsd;
+        ai.has_tsc = caps.tsc;
+        ai.has_tsc_invariant = caps.tsc_invariant;
+        ai.has_tsc_deadline = caps.tsc_deadline;
+        ai.has_rdtscp = caps.rdtscp;
 
         
-        cc.giw = dr.vmx;
-        cc.giu = dr.svm;
+        ai.has_vmx = caps.vmx;
+        ai.has_svm = caps.svm;
 
         crate::serial_println!("[JARVIS-HW] CPU: {} F{}M{}S{} {}C SSE2={} AVX2={} AES={} SMEP={} NX={}",
-            cc.dpf, dr.family, dr.model, dr.bxi,
-            cc.azj, dr.eix, dr.dog, dr.doa, dr.cia, dr.vt);
+            ai.cpu_brand, caps.family, caps.model, caps.stepping,
+            ai.cpu_cores, caps.sse2, caps.avx2, caps.aesni, caps.smep, caps.nx);
     }
 
     #[cfg(target_arch = "aarch64")]
     {
-        cc.avo = String::from("ARM");
-        cc.dpf = String::from("AArch64 Processor");
-        cc.azj = 1;
-        cc.jjz = "EL1";
+        ai.cpu_vendor = String::from("ARM");
+        ai.cpu_brand = String::from("AArch64 Processor");
+        ai.cpu_cores = 1;
+        ai.privilege_level = "EL1";
     }
 }
 
-fn vlx(cc: &mut T) {
-    cc.ccf = crate::memory::fxc();
-    cc.drr = crate::memory::cre();
-    cc.ecw = crate::memory::heap::mr();
-    cc.erx = crate::memory::heap::aez();
-    cc.lr = crate::memory::lr();
+fn nxs(ai: &mut N) {
+    ai.total_ram_bytes = crate::memory::ceo();
+    ai.heap_size_bytes = crate::memory::atz();
+    ai.heap_used_bytes = crate::memory::heap::used();
+    ai.heap_free_bytes = crate::memory::heap::free();
+    ai.hhdm_offset = crate::memory::hhdm_offset();
 
-    let cm = crate::memory::cm();
-    cc.ceu = cm.ceu;
-    cc.dhj = cm.dhj;
+    let stats = crate::memory::stats();
+    ai.frames_used = stats.frames_used;
+    ai.frames_free = stats.frames_free;
 
     crate::serial_println!("[JARVIS-HW] RAM: {} MB total, heap {} KB / {} KB, frames {}/{}",
-        cc.ccf / (1024 * 1024),
-        cc.ecw / 1024, cc.erx / 1024,
-        cc.ceu, cc.dhj);
+        ai.total_ram_bytes / (1024 * 1024),
+        ai.heap_used_bytes / 1024, ai.heap_free_bytes / 1024,
+        ai.frames_used, ai.frames_free);
 }
 
-fn vlp(cc: &mut T) {
-    if let Some(acpi) = crate::acpi::ani() {
-        cc.gxt = acpi.afe;
-        cc.gxs = acpi.clo.clone();
-        cc.cap = acpi.cap;
+fn nxk(ai: &mut N) {
+    if let Some(acpi) = crate::acpi::rk() {
+        ai.acpi_revision = acpi.revision;
+        ai.acpi_oem_id = acpi.oem_id.clone();
+        ai.local_apic_addr = acpi.local_apic_addr;
 
         
         if let Some(ref fadt) = acpi.fadt {
-            cc.kvd = fadt.grm;
-            cc.hiu = fadt.ogb();
-            cc.itu = fadt.ppx();
-            cc.kvb = (fadt.flags & crate::acpi::fadt::FadtInfo::BVF_) != 0;
-            cc.kvc = fadt.jjn;
+            ai.fadt_sci_int = fadt.sci_int;
+            ai.fadt_hw_reduced = fadt.is_hw_reduced();
+            ai.fadt_reset_supported = fadt.supports_reset();
+            ai.fadt_low_power_s0 = (fadt.flags & crate::acpi::fadt::FadtInfo::BYM_) != 0;
+            ai.fadt_pm_tmr_blk = fadt.pm_tmr_blk;
         }
 
         
-        for ku in &acpi.dja {
-            cc.gae.push(Bbt {
-                aed: ku.aed,
-                bny: ku.bny,
-                iq: ku.iq,
-                htp: ku.htp,
+        for lapic in &acpi.local_apics {
+            ai.apic_entries.push(Wh {
+                apic_id: lapic.apic_id,
+                processor_id: lapic.processor_id,
+                enabled: lapic.enabled,
+                online_capable: lapic.online_capable,
             });
         }
 
         
-        cc.edq = acpi.cyx.len();
-        for ioapic in &acpi.cyx {
-            cc.ofi.push(Bjy {
-                ad: ioapic.ad,
-                re: ioapic.re,
-                ech: ioapic.ech,
+        ai.ioapic_count = acpi.io_apics.len();
+        for ioapic in &acpi.io_apics {
+            ai.ioapic_entries.push(Aae {
+                id: ioapic.id,
+                address: ioapic.address,
+                gsi_base: ioapic.gsi_base,
             });
         }
 
         
-        for bvu in &acpi.gka {
-            cc.hoq.push(Bke {
-                wqk: bvu.iy,
-                tfz: bvu.bup,
-                dkr: bvu.dkr,
-                dmt: bvu.dmt,
+        for ovr in &acpi.int_overrides {
+            ai.irq_overrides.push(Aai {
+                source_irq: ovr.source,
+                global_irq: ovr.gsi,
+                polarity: ovr.polarity,
+                trigger: ovr.trigger,
             });
         }
 
-        cc.kar = acpi.fne.len();
+        ai.apic_nmi_count = acpi.local_apic_nmis.len();
 
         
         if let Some(ref hpet) = acpi.hpet {
-            cc.esa = true;
-            cc.hnd = hpet.fjc();
-            cc.gjf = hpet.lph;
-            cc.iys = hpet.eoc;
-            cc.iyt = hpet.ml;
+            ai.hpet_available = true;
+            ai.hpet_freq_hz = hpet.frequency();
+            ai.hpet_num_timers = hpet.num_comparators;
+            ai.hpet_64bit = hpet.counter_64bit;
+            ai.hpet_vendor_id = hpet.vendor_id;
         }
 
         
-        cc.fqo = !acpi.eut.is_empty();
-        for pk in &acpi.eut {
-            cc.gpa.push(Bot {
-                bps: pk.bps,
-                ie: pk.ie,
-                cca: pk.cca,
-                cej: pk.cej,
+        ai.pcie_available = !acpi.mcfg_regions.is_empty();
+        for gq in &acpi.mcfg_regions {
+            ai.pcie_segments.push(Acl {
+                base_address: gq.base_address,
+                segment: gq.segment,
+                start_bus: gq.start_bus,
+                end_bus: gq.end_bus,
             });
         }
 
         crate::serial_println!("[JARVIS-HW] ACPI: rev={} OEM='{}' {} CPUs {} IOAPICs {} overrides PCIe={}",
-            acpi.afe, acpi.clo, acpi.dja.len(),
-            cc.edq, cc.hoq.len(), cc.fqo);
+            acpi.revision, acpi.oem_id, acpi.local_apics.len(),
+            ai.ioapic_count, ai.irq_overrides.len(), ai.pcie_available);
     } else {
         crate::serial_println!("[JARVIS-HW] ACPI: not available");
     }
 }
 
-fn gpv(cc: &mut T) {
-    let ik = crate::pci::fjm();
-    cc.dal = ik.len();
+fn ccv(ai: &mut N) {
+    let devices = crate::pci::aqs();
+    ai.pci_device_count = devices.len();
 
-    for ba in &ik {
-        cc.hus.push(Bos {
-            aq: ba.aq,
-            de: ba.de,
-            gw: ba.gw,
-            ml: ba.ml,
-            mx: ba.mx,
-            ajz: ba.ajz,
-            adl: ba.adl,
-            bpz: String::from(ba.bpz()),
-            bor: String::from(ba.bor()),
+    for s in &devices {
+        ai.pci_devices.push(Ack {
+            bus: s.bus,
+            device: s.device,
+            function: s.function,
+            vendor_id: s.vendor_id,
+            device_id: s.device_id,
+            class_code: s.class_code,
+            subclass: s.subclass,
+            class_name: String::from(s.class_name()),
+            subclass_name: String::from(s.subclass_name()),
         });
 
         
-        match ba.ajz {
-            0x01 => cc.ewl += 1,
-            0x02 => cc.egg += 1,
-            0x03 => cc.ewk += 1,
-            0x04 => cc.egf += 1,
-            0x06 => cc.hur += 1,
+        match s.class_code {
+            0x01 => ai.pci_storage_controllers += 1,
+            0x02 => ai.pci_network_controllers += 1,
+            0x03 => ai.pci_display_controllers += 1,
+            0x04 => ai.pci_audio_controllers += 1,
+            0x06 => ai.pci_bridge_count += 1,
             0x0C => {
-                if ba.adl == 0x03 { 
-                    cc.egh += 1;
+                if s.subclass == 0x03 { 
+                    ai.pci_usb_controllers += 1;
                 }
             }
-            0x10 => cc.fqn += 1, 
+            0x10 => ai.pci_crypto_controllers += 1, 
             _ => {}
         }
     }
 
     crate::serial_println!("[JARVIS-HW] PCI: {} devices ({}stor {}net {}usb {}audio {}disp {}bridge)",
-        cc.dal, cc.ewl,
-        cc.egg, cc.egh,
-        cc.egf, cc.ewk,
-        cc.hur);
+        ai.pci_device_count, ai.pci_storage_controllers,
+        ai.pci_network_controllers, ai.pci_usb_controllers,
+        ai.pci_audio_controllers, ai.pci_display_controllers,
+        ai.pci_bridge_count);
 }
 
-fn lvr(cc: &mut T) {
+fn gom(ai: &mut N) {
     
-    if crate::drivers::ahci::ky() {
-        for port in crate::drivers::ahci::bhh() {
-            let mh = port.agw * 512;
-            cc.dmp += mh;
-            cc.aqm.push(Azg {
-                j: format!("SATA port {}", port.kg),
-                kk: StorageKind::Qr,
-                fei: mh,
+    if crate::drivers::ahci::is_initialized() {
+        for port in crate::drivers::ahci::adz() {
+            let cap = port.sector_count * 512;
+            ai.total_storage_bytes += cap;
+            ai.storage_devices.push(Jb {
+                name: format!("SATA port {}", port.port_num),
+                kind: StorageKind::Sata,
+                capacity_bytes: cap,
                 model: port.model.clone(),
                 serial: port.serial.clone(),
             });
@@ -689,14 +689,14 @@ fn lvr(cc: &mut T) {
     }
 
     
-    if crate::nvme::ky() {
-        for csw in crate::nvme::ufs() {
-            let mh = csw.mfy * csw.bni as u64;
-            cc.dmp += mh;
-            cc.aqm.push(Azg {
-                j: format!("NVMe ns{}", csw.bvp),
-                kk: StorageKind::Xv,
-                fei: mh,
+    if crate::nvme::is_initialized() {
+        for ayq in crate::nvme::mze() {
+            let cap = ayq.size_lbas * ayq.lba_size as u64;
+            ai.total_storage_bytes += cap;
+            ai.storage_devices.push(Jb {
+                name: format!("NVMe ns{}", ayq.nsid),
+                kind: StorageKind::Nvme,
+                capacity_bytes: cap,
                 model: String::from("NVMe"),
                 serial: String::new(),
             });
@@ -704,100 +704,100 @@ fn lvr(cc: &mut T) {
     }
 
     crate::serial_println!("[JARVIS-HW] Storage: {} devices, {} GB total",
-        cc.aqm.len(),
-        cc.dmp / (1024 * 1024 * 1024));
+        ai.storage_devices.len(),
+        ai.total_storage_bytes / (1024 * 1024 * 1024));
 }
 
 
-fn vmb(cc: &mut T) {
+fn nxv(ai: &mut N) {
     
-    if crate::drivers::ahci::ky() {
-        let vjx = crate::drivers::ahci::nyj();
-        for kg in 0..vjx {
-            if crate::drivers::ahci::kyv(kg).is_some() {
+    if crate::drivers::ahci::is_initialized() {
+        let nwe = crate::drivers::ahci::ibt();
+        for port_num in 0..nwe {
+            if crate::drivers::ahci::fyw(port_num).is_some() {
                 
-                if let Ok(se) = crate::drivers::partition::lxn(kg) {
-                    let app = format!("SATA:{}", kg);
-                    for vu in &se.aqd {
-                        cc.aqd.push(Boq {
-                            app: app.clone(),
-                            aqb: vu.aqb,
-                            aag: vu.aag,
-                            afz: vu.afz(),
-                            ddc: format!("{:?}", vu.duf),
-                            cji: vu.cji,
-                            j: vu.j.clone(),
+                if let Ok(jd) = crate::drivers::partition::gqd(port_num) {
+                    let disk_name = format!("SATA:{}", port_num);
+                    for jn in &jd.partitions {
+                        ai.partitions.push(Acj {
+                            disk_name: disk_name.clone(),
+                            number: jn.number,
+                            start_lba: jn.start_lba,
+                            size_bytes: jn.size_bytes(),
+                            type_name: format!("{:?}", jn.partition_type),
+                            bootable: jn.bootable,
+                            name: jn.name.clone(),
                         });
                     }
                 }
 
                 
-                let mut k = [0u8; 512];
-                if crate::drivers::ahci::ain(kg, 0, 1, &mut k).is_ok() {
-                    nkz(&k, &format!("SATA:{}", kg), None, cc);
+                let mut buf = [0u8; 512];
+                if crate::drivers::ahci::read_sectors(port_num, 0, 1, &mut buf).is_ok() {
+                    hrw(&buf, &format!("SATA:{}", port_num), None, ai);
                 }
                 
-                if crate::drivers::ahci::ain(kg, 6, 1, &mut k).is_ok() {
-                    nkz(&k, &format!("SATA:{}", kg), None, cc);
+                if crate::drivers::ahci::read_sectors(port_num, 6, 1, &mut buf).is_ok() {
+                    hrw(&buf, &format!("SATA:{}", port_num), None, ai);
                 }
             }
         }
     }
 
     crate::serial_println!("[JARVIS-HW] Partitions: {} found, {} encrypted volumes detected",
-        cc.aqd.len(), cc.avs.len());
+        ai.partitions.len(), ai.encryption_detected.len());
 }
 
 
-fn nkz(k: &[u8], app: &str, lsy: Option<u8>, cc: &mut T) {
-    if k.len() < 512 { return; }
+fn hrw(buf: &[u8], disk_name: &str, part_num: Option<u8>, ai: &mut N) {
+    if buf.len() < 512 { return; }
 
     
-    if k.len() >= 6 && k[0] == b'L' && k[1] == b'U' && k[2] == b'K'
-        && k[3] == b'S' && k[4] == 0xBA && k[5] == 0xBE
+    if buf.len() >= 6 && buf[0] == b'L' && buf[1] == b'U' && buf[2] == b'K'
+        && buf[3] == b'S' && buf[4] == 0xBA && buf[5] == 0xBE
     {
-        let dk = if k.len() >= 8 {
-            ((k[6] as u16) << 8) | k[7] as u16
+        let version = if buf.len() >= 8 {
+            ((buf[6] as u16) << 8) | buf[7] as u16
         } else { 0 };
 
-        let iss = if dk == 2 { EncryptionType::Ajz } else { EncryptionType::Ajy };
-        let eu = format!("LUKS v{} detected at sector 0", dk);
+        let elj = if version == 2 { EncryptionType::Luks2 } else { EncryptionType::Luks1 };
+        let detail = format!("LUKS v{} detected at sector 0", version);
 
         
-        if !cc.avs.iter().any(|aa| aa.app == app && aa.ckf == iss) {
-            cc.avs.push(Ahs {
-                app: String::from(app),
-                partition: lsy,
-                ckf: iss,
-                eu,
+        if !ai.encryption_detected.iter().any(|e| e.disk_name == disk_name && e.encryption_type == elj) {
+            ai.encryption_detected.push(Ot {
+                disk_name: String::from(disk_name),
+                partition: part_num,
+                encryption_type: elj,
+                detail,
             });
         }
     }
 
     
-    if k.len() >= 11
-        && k[3] == b'-' && k[4] == b'F' && k[5] == b'V' && k[6] == b'E'
-        && k[7] == b'-' && k[8] == b'F' && k[9] == b'S' && k[10] == b'-'
+    if buf.len() >= 11
+        && buf[3] == b'-' && buf[4] == b'F' && buf[5] == b'V' && buf[6] == b'E'
+        && buf[7] == b'-' && buf[8] == b'F' && buf[9] == b'S' && buf[10] == b'-'
     {
-        if !cc.avs.iter().any(|aa| aa.app == app && aa.ckf == EncryptionType::Aaa) {
-            cc.avs.push(Ahs {
-                app: String::from(app),
-                partition: lsy,
-                ckf: EncryptionType::Aaa,
-                eu: String::from("BitLocker BDE signature (-FVE-FS-) detected"),
+        if !ai.encryption_detected.iter().any(|e| e.disk_name == disk_name && e.encryption_type == EncryptionType::BitLocker) {
+            ai.encryption_detected.push(Ot {
+                disk_name: String::from(disk_name),
+                partition: part_num,
+                encryption_type: EncryptionType::BitLocker,
+                detail: String::from("BitLocker BDE signature (-FVE-FS-) detected"),
             });
         }
     }
 
     
     
-    if k.len() >= 4 && k[0] == b'V' && k[1] == b'E' && k[2] == b'R' && k[3] == b'A' {
-        if !cc.avs.iter().any(|aa| aa.app == app && aa.ckf == EncryptionType::Afn) {
-            cc.avs.push(Ahs {
-                app: String::from(app),
-                partition: lsy,
-                ckf: EncryptionType::Afn,
-                eu: String::from("VeraCrypt volume header signature detected"),
+    if buf.len() >= 4 && buf[0] == b'V' && buf[1] == b'E' && buf[2] == b'R' && buf[3] == b'A' {
+        if !ai.encryption_detected.iter().any(|e| e.disk_name == disk_name && e.encryption_type == EncryptionType::VeraCrypt) {
+            ai.encryption_detected.push(Ot {
+                disk_name: String::from(disk_name),
+                partition: part_num,
+                encryption_type: EncryptionType::VeraCrypt,
+                detail: String::from("VeraCrypt volume header signature detected"),
             });
         }
     }
@@ -806,446 +806,446 @@ fn nkz(k: &[u8], app: &str, lsy: Option<u8>, cc: &mut T) {
     
 }
 
-fn lvq(cc: &mut T) {
-    cc.bzz = crate::drivers::net::bzy();
-    if cc.bzz {
-        cc.csg = crate::drivers::net::cez();
-        cc.aik = crate::drivers::net::aik();
+fn gok(ai: &mut N) {
+    ai.has_network = crate::drivers::net::aoh();
+    if ai.has_network {
+        ai.mac_address = crate::drivers::net::aqt();
+        ai.link_up = crate::drivers::net::link_up();
     }
 
     crate::serial_println!("[JARVIS-HW] Network: detected={} link_up={}",
-        cc.bzz, cc.aik);
+        ai.has_network, ai.link_up);
 }
 
-fn lvp(cc: &mut T) {
-    cc.bqz = crate::drivers::amdgpu::clb();
-    if cc.bqz {
-        if let Some(co) = crate::drivers::amdgpu::ani() {
-            cc.beh = String::from(co.beh());
-            cc.dhr = (co.igx / (1024 * 1024)) as u32;
-            cc.erk = co.cwm;
+fn goj(ai: &mut N) {
+    ai.has_gpu = crate::drivers::amdgpu::aud();
+    if ai.has_gpu {
+        if let Some(info) = crate::drivers::amdgpu::rk() {
+            ai.gpu_name = String::from(info.gpu_name());
+            ai.gpu_vram_mb = (info.vram_aperture_size / (1024 * 1024)) as u32;
+            ai.gpu_compute_units = info.compute_units;
         }
     }
 
     crate::serial_println!("[JARVIS-HW] GPU: detected={} name='{}'",
-        cc.bqz, cc.beh);
+        ai.has_gpu, ai.gpu_name);
 }
 
-fn vme(cc: &mut T) {
+fn nxy(ai: &mut N) {
     #[cfg(target_arch = "x86_64")]
     {
-        cc.juh = cc.lbl;
+        ai.tsc_available = ai.has_tsc;
         
-        if cc.hnd > 0 {
-            cc.esa = true;
+        if ai.hpet_freq_hz > 0 {
+            ai.hpet_available = true;
         }
     }
 }
 
-fn lvs(cc: &mut T) {
-    cc.fav = crate::drivers::usb::ky();
-    if cc.fav {
-        cc.fxv = crate::drivers::usb::roo();
-        let ik = crate::drivers::usb::smj();
-        for ba in &ik {
-            cc.cvc.push(Bvm {
-                re: ba.re,
-                bpz: format!("{:?}", ba.class),
-                ml: ba.ml,
-                cgt: ba.cgt,
-                baj: ba.baj.clone(),
+fn gon(ai: &mut N) {
+    ai.usb_initialized = crate::drivers::usb::is_initialized();
+    if ai.usb_initialized {
+        ai.usb_controller_count = crate::drivers::usb::kxn();
+        let devices = crate::drivers::usb::lqv();
+        for s in &devices {
+            ai.usb_devices.push(Afz {
+                address: s.address,
+                class_name: format!("{:?}", s.class),
+                vendor_id: s.vendor_id,
+                product_id: s.product_id,
+                product: s.product.clone(),
             });
         }
     }
 
     crate::serial_println!("[JARVIS-HW] USB: init={} controllers={} devices={}",
-        cc.fav, cc.fxv, cc.cvc.len());
+        ai.usb_initialized, ai.usb_controller_count, ai.usb_devices.len());
 }
 
-fn lvn(cc: &mut T) {
-    cc.fki = crate::drivers::hda::ky();
-    crate::serial_println!("[JARVIS-HW] Audio HDA: init={}", cc.fki);
+fn goh(ai: &mut N) {
+    ai.hda_initialized = crate::drivers::hda::is_initialized();
+    crate::serial_println!("[JARVIS-HW] Audio HDA: init={}", ai.hda_initialized);
 }
 
 
 
 
 
-fn rnk(cc: &mut T) {
+fn kwo(ai: &mut N) {
     
-    let wol = if cc.drm { 4.0 }
-        else if cc.bzx { 2.0 }
-        else if cc.fke { 1.5 }
-        else if cc.dro { 1.0 }
+    let osx = if ai.has_avx512 { 4.0 }
+        else if ai.has_avx2 { 2.0 }
+        else if ai.has_avx { 1.5 }
+        else if ai.has_sse2 { 1.0 }
         else { 0.5 };
 
-    let rpb = (cc.azj as f32).v(32.0) / 32.0;
-    let sxi = (cc.fam as f32 / 5_000_000_000.0).v(1.0);
-    let tgy = if cc.bqz { 0.3 } else { 0.0 };
+    let kxy = (ai.cpu_cores as f32).min(32.0) / 32.0;
+    let lyt = (ai.tsc_freq_hz as f32 / 5_000_000_000.0).min(1.0);
+    let mfq = if ai.has_gpu { 0.3 } else { 0.0 };
 
-    cc.cwl = ((rpb * 0.4 + sxi * 0.3 + wol / 4.0 * 0.3) + tgy).v(1.0);
-
-    
-    let vpw = cc.ccf as f32 / (1024.0 * 1024.0 * 1024.0);
-    cc.dte = (vpw / 64.0).v(1.0);
+    ai.compute_score = ((kxy * 0.4 + lyt * 0.3 + osx / 4.0 * 0.3) + mfq).min(1.0);
 
     
-    let wur = cc.dmp as f32 / (1024.0 * 1024.0 * 1024.0);
-    let lbe = cc.aqm.iter().any(|e| e.kk == StorageKind::Xv);
-    let wqz = if lbe { 1.0 } else { 0.5 };
-    cc.ezb = ((wur / 2048.0) * wqz).v(1.0);
+    let obb = ai.total_ram_bytes as f32 / (1024.0 * 1024.0 * 1024.0);
+    ai.memory_score = (obb / 64.0).min(1.0);
 
     
-    cc.evg = if cc.bzz && cc.aik { 1.0 }
-        else if cc.bzz { 0.5 }
+    let oxq = ai.total_storage_bytes as f32 / (1024.0 * 1024.0 * 1024.0);
+    let fzx = ai.storage_devices.iter().any(|j| j.kind == StorageKind::Nvme);
+    let ouv = if fzx { 1.0 } else { 0.5 };
+    ai.storage_score = ((oxq / 2048.0) * ouv).min(1.0);
+
+    
+    ai.network_score = if ai.has_network && ai.link_up { 1.0 }
+        else if ai.has_network { 0.5 }
         else { 0.0 };
 
     
-    let mut zw = 0.0f32;
-    if cc.cfe { zw += 0.12; }
-    if cc.crd { zw += 0.08; }
-    if cc.fkh { zw += 0.05; }
-    if cc.ecm { zw += 0.05; }
-    if cc.git { zw += 0.05; }
-    if cc.erv { zw += 0.10; }
-    if cc.eru { zw += 0.10; }
-    if cc.giv { zw += 0.05; }
-    if cc.ert { zw += 0.10; }
+    let mut lx = 0.0f32;
+    if ai.has_aesni { lx += 0.12; }
+    if ai.has_rdrand { lx += 0.08; }
+    if ai.has_rdseed { lx += 0.05; }
+    if ai.has_sha_ext { lx += 0.05; }
+    if ai.has_pclmulqdq { lx += 0.05; }
+    if ai.has_smep { lx += 0.10; }
+    if ai.has_smap { lx += 0.10; }
+    if ai.has_umip { lx += 0.05; }
+    if ai.has_nx { lx += 0.10; }
     
-    zw += 0.15;
+    lx += 0.15;
     
-    if cc.edq > 0 { zw += 0.05; }
+    if ai.ioapic_count > 0 { lx += 0.05; }
     
-    if cc.fqo { zw += 0.05; }
+    if ai.pcie_available { lx += 0.05; }
     
-    if cc.fqn > 0 { zw += 0.05; }
-    cc.eyh = zw.v(1.0);
+    if ai.pci_crypto_controllers > 0 { lx += 0.05; }
+    ai.security_score = lx.min(1.0);
 
     
-    cc.dkj = cc.cwl * 0.30
-        + cc.dte * 0.20
-        + cc.ezb * 0.15
-        + cc.evg * 0.10
-        + cc.eyh * 0.25;
+    ai.overall_score = ai.compute_score * 0.30
+        + ai.memory_score * 0.20
+        + ai.storage_score * 0.15
+        + ai.network_score * 0.10
+        + ai.security_score * 0.25;
 }
 
 
 
 
 
-impl T {
+impl N {
     
-    pub fn fix(&self) -> String {
-        let mut e = String::new();
+    pub fn format_report(&self) -> String {
+        let mut j = String::new();
 
-        e.t("\x01C╔══════════════════════════════════════════════════════════╗\n");
-        e.t("║       JARVIS Exhaustive Hardware Intelligence Report      ║\n");
-        e.t("╚══════════════════════════════════════════════════════════╝\x01W\n\n");
-
-        
-        e.t(&format!("\x01Y[CPU]\x01W {}\n", self.dpf));
-        e.t(&format!("  Vendor: {}  Family: {}  Model: {}  Stepping: {}\n",
-            self.avo, self.heb, self.hec, self.hee));
-        e.t(&format!("  Cores: {} (logical={} physical={})  TSC: {} MHz\n",
-            self.azj, self.cau, self.djk,
-            self.fam / 1_000_000));
-        e.t(&format!("  APIC ID: {}  TSC: inv={} deadline={} rdtscp={}\n",
-            self.aed, self.ixx, self.lbm, self.ixt));
-        e.t(&format!("  SIMD: SSE={} SSE2={} SSE3={} SSSE3={} SSE4.1={} SSE4.2={}\n",
-            self.ixu, self.dro, self.ixv, self.lbk,
-            self.lbj, self.hmq));
-        e.t(&format!("        AVX={} AVX2={} AVX-512={}\n",
-            self.fke, self.bzx, self.drm));
-        e.t(&format!("  Crypto: AES-NI={} PCLMULQDQ={} SHA={} RDRAND={} RDSEED={}\n",
-            self.cfe, self.git, self.ecm,
-            self.crd, self.fkh));
-        e.t(&format!("  Security: SMEP={} SMAP={} UMIP={} NX={}\n",
-            self.erv, self.eru, self.giv, self.ert));
-        e.t(&format!("  Virt: VMX={} SVM={}\n\n", self.giw, self.giu));
+        j.push_str("\x01C╔══════════════════════════════════════════════════════════╗\n");
+        j.push_str("║       JARVIS Exhaustive Hardware Intelligence Report      ║\n");
+        j.push_str("╚══════════════════════════════════════════════════════════╝\x01W\n\n");
 
         
-        e.t(&format!("\x01Y[Memory]\x01W {} MB physical\n", self.ccf / (1024 * 1024)));
-        e.t(&format!("  Heap: {} KB used / {} KB free (of {} KB)\n",
-            self.ecw / 1024, self.erx / 1024, self.drr / 1024));
-        e.t(&format!("  Frames: {} used / {} free  HHDM: 0x{:X}\n\n",
-            self.ceu, self.dhj, self.lr));
+        j.push_str(&format!("\x01Y[CPU]\x01W {}\n", self.cpu_brand));
+        j.push_str(&format!("  Vendor: {}  Family: {}  Model: {}  Stepping: {}\n",
+            self.cpu_vendor, self.cpu_family, self.cpu_model, self.cpu_stepping));
+        j.push_str(&format!("  Cores: {} (logical={} physical={})  TSC: {} MHz\n",
+            self.cpu_cores, self.max_logical_cpus, self.max_physical_cpus,
+            self.tsc_freq_hz / 1_000_000));
+        j.push_str(&format!("  APIC ID: {}  TSC: inv={} deadline={} rdtscp={}\n",
+            self.apic_id, self.has_tsc_invariant, self.has_tsc_deadline, self.has_rdtscp));
+        j.push_str(&format!("  SIMD: SSE={} SSE2={} SSE3={} SSSE3={} SSE4.1={} SSE4.2={}\n",
+            self.has_sse, self.has_sse2, self.has_sse3, self.has_ssse3,
+            self.has_sse4_1, self.has_sse4_2));
+        j.push_str(&format!("        AVX={} AVX2={} AVX-512={}\n",
+            self.has_avx, self.has_avx2, self.has_avx512));
+        j.push_str(&format!("  Crypto: AES-NI={} PCLMULQDQ={} SHA={} RDRAND={} RDSEED={}\n",
+            self.has_aesni, self.has_pclmulqdq, self.has_sha_ext,
+            self.has_rdrand, self.has_rdseed));
+        j.push_str(&format!("  Security: SMEP={} SMAP={} UMIP={} NX={}\n",
+            self.has_smep, self.has_smap, self.has_umip, self.has_nx));
+        j.push_str(&format!("  Virt: VMX={} SVM={}\n\n", self.has_vmx, self.has_svm));
 
         
-        e.t(&format!("\x01Y[ACPI/Firmware]\x01W Rev={} OEM='{}'\n", self.gxt, self.gxs));
-        e.t(&format!("  FADT: SCI={} HW_Reduced={} Reset={} LowPowerS0={} PM_TMR=0x{:X}\n",
-            self.kvd, self.hiu, self.itu,
-            self.kvb, self.kvc));
-        e.t(&format!("  Local APIC: 0x{:X}  {} CPU APIC entries\n",
-            self.cap, self.gae.len()));
-        e.t(&format!("  IOAPICs: {}  IRQ Overrides: {}  NMIs: {}\n",
-            self.edq, self.hoq.len(), self.kar));
-        if self.fqo {
-            e.t(&format!("  PCIe: {} segment(s)\n", self.gpa.len()));
+        j.push_str(&format!("\x01Y[Memory]\x01W {} MB physical\n", self.total_ram_bytes / (1024 * 1024)));
+        j.push_str(&format!("  Heap: {} KB used / {} KB free (of {} KB)\n",
+            self.heap_used_bytes / 1024, self.heap_free_bytes / 1024, self.heap_size_bytes / 1024));
+        j.push_str(&format!("  Frames: {} used / {} free  HHDM: 0x{:X}\n\n",
+            self.frames_used, self.frames_free, self.hhdm_offset));
+
+        
+        j.push_str(&format!("\x01Y[ACPI/Firmware]\x01W Rev={} OEM='{}'\n", self.acpi_revision, self.acpi_oem_id));
+        j.push_str(&format!("  FADT: SCI={} HW_Reduced={} Reset={} LowPowerS0={} PM_TMR=0x{:X}\n",
+            self.fadt_sci_int, self.fadt_hw_reduced, self.fadt_reset_supported,
+            self.fadt_low_power_s0, self.fadt_pm_tmr_blk));
+        j.push_str(&format!("  Local APIC: 0x{:X}  {} CPU APIC entries\n",
+            self.local_apic_addr, self.apic_entries.len()));
+        j.push_str(&format!("  IOAPICs: {}  IRQ Overrides: {}  NMIs: {}\n",
+            self.ioapic_count, self.irq_overrides.len(), self.apic_nmi_count));
+        if self.pcie_available {
+            j.push_str(&format!("  PCIe: {} segment(s)\n", self.pcie_segments.len()));
         }
-        e.push('\n');
+        j.push('\n');
 
         
-        if self.esa {
-            e.t(&format!("\x01Y[HPET]\x01W {} MHz, {} timers, 64-bit={}, vendor=0x{:04X}\n\n",
-                self.hnd / 1_000_000, self.gjf,
-                self.iys, self.iyt));
+        if self.hpet_available {
+            j.push_str(&format!("\x01Y[HPET]\x01W {} MHz, {} timers, 64-bit={}, vendor=0x{:04X}\n\n",
+                self.hpet_freq_hz / 1_000_000, self.hpet_num_timers,
+                self.hpet_64bit, self.hpet_vendor_id));
         }
 
         
-        e.t(&format!("\x01Y[Storage]\x01W {} device(s), {} GB total\n",
-            self.aqm.len(), self.dmp / (1024 * 1024 * 1024)));
-        for ba in &self.aqm {
-            e.t(&format!("  {} [{}] {} — {} GB\n",
-                ba.j, ba.kk.as_str(), ba.model,
-                ba.fei / (1024 * 1024 * 1024)));
-            if !ba.serial.is_empty() {
-                e.t(&format!("    Serial: {}\n", ba.serial));
+        j.push_str(&format!("\x01Y[Storage]\x01W {} device(s), {} GB total\n",
+            self.storage_devices.len(), self.total_storage_bytes / (1024 * 1024 * 1024)));
+        for s in &self.storage_devices {
+            j.push_str(&format!("  {} [{}] {} — {} GB\n",
+                s.name, s.kind.as_str(), s.model,
+                s.capacity_bytes / (1024 * 1024 * 1024)));
+            if !s.serial.is_empty() {
+                j.push_str(&format!("    Serial: {}\n", s.serial));
             }
         }
 
         
-        if !self.aqd.is_empty() {
-            e.t(&format!("  {} partition(s):\n", self.aqd.len()));
-            for ai in &self.aqd {
-                let uri = if !ai.j.is_empty() { format!(" '{}'", ai.j) } else { String::new() };
-                e.t(&format!("    #{} [{}] {} {} GB{}{}\n",
-                    ai.aqb, ai.app, ai.ddc,
-                    ai.afz / (1024 * 1024 * 1024),
-                    if ai.cji { " *BOOT*" } else { "" },
-                    uri));
+        if !self.partitions.is_empty() {
+            j.push_str(&format!("  {} partition(s):\n", self.partitions.len()));
+            for aa in &self.partitions {
+                let nhp = if !aa.name.is_empty() { format!(" '{}'", aa.name) } else { String::new() };
+                j.push_str(&format!("    #{} [{}] {} {} GB{}{}\n",
+                    aa.number, aa.disk_name, aa.type_name,
+                    aa.size_bytes / (1024 * 1024 * 1024),
+                    if aa.bootable { " *BOOT*" } else { "" },
+                    nhp));
             }
         }
 
         
-        if !self.avs.is_empty() {
-            e.t("\x01R  ⚠ Encrypted volumes detected:\x01W\n");
-            for bdy in &self.avs {
-                e.t(&format!("    \x01R[{}]\x01W {} — {}\n",
-                    bdy.ckf.as_str(), bdy.app, bdy.eu));
+        if !self.encryption_detected.is_empty() {
+            j.push_str("\x01R  ⚠ Encrypted volumes detected:\x01W\n");
+            for enc in &self.encryption_detected {
+                j.push_str(&format!("    \x01R[{}]\x01W {} — {}\n",
+                    enc.encryption_type.as_str(), enc.disk_name, enc.detail));
             }
         }
-        e.push('\n');
+        j.push('\n');
 
         
-        e.t(&format!("\x01Y[Network]\x01W detected={} link={}\n", self.bzz, self.aik));
-        if let Some(ed) = self.csg {
-            e.t(&format!("  MAC: {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}\n",
-                ed[0], ed[1], ed[2], ed[3], ed[4], ed[5]));
+        j.push_str(&format!("\x01Y[Network]\x01W detected={} link={}\n", self.has_network, self.link_up));
+        if let Some(mac) = self.mac_address {
+            j.push_str(&format!("  MAC: {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}\n",
+                mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]));
         }
-        e.push('\n');
+        j.push('\n');
 
         
-        if self.bqz {
-            e.t(&format!("\x01Y[GPU]\x01W {}\n", self.beh));
-            e.t(&format!("  VRAM: {} MB  CUs: {}\n\n", self.dhr, self.erk));
+        if self.has_gpu {
+            j.push_str(&format!("\x01Y[GPU]\x01W {}\n", self.gpu_name));
+            j.push_str(&format!("  VRAM: {} MB  CUs: {}\n\n", self.gpu_vram_mb, self.gpu_compute_units));
         } else {
-            e.t("\x01Y[GPU]\x01W None detected\n\n");
+            j.push_str("\x01Y[GPU]\x01W None detected\n\n");
         }
 
         
-        e.t(&format!("\x01Y[USB]\x01W init={} controllers={} devices={}\n",
-            self.fav, self.fxv, self.cvc.len()));
-        for usb in &self.cvc {
-            e.t(&format!("  [{:04X}:{:04X}] {} ({})\n",
-                usb.ml, usb.cgt, usb.baj, usb.bpz));
+        j.push_str(&format!("\x01Y[USB]\x01W init={} controllers={} devices={}\n",
+            self.usb_initialized, self.usb_controller_count, self.usb_devices.len()));
+        for usb in &self.usb_devices {
+            j.push_str(&format!("  [{:04X}:{:04X}] {} ({})\n",
+                usb.vendor_id, usb.product_id, usb.product, usb.class_name));
         }
-        e.push('\n');
+        j.push('\n');
 
         
-        e.t(&format!("\x01Y[Audio]\x01W HDA init={}\n\n", self.fki));
+        j.push_str(&format!("\x01Y[Audio]\x01W HDA init={}\n\n", self.hda_initialized));
 
         
-        e.t(&format!("\x01Y[PCI Bus]\x01W {} devices ({}stor {}net {}usb {}audio {}disp {}bridge {}crypto)\n",
-            self.dal, self.ewl,
-            self.egg, self.egh,
-            self.egf, self.ewk,
-            self.hur, self.fqn));
-        for ba in self.hus.iter().take(20) {
-            e.t(&format!("  {:02X}:{:02X}.{} [{:04X}:{:04X}] {} — {}\n",
-                ba.aq, ba.de, ba.gw,
-                ba.ml, ba.mx,
-                ba.bpz, ba.bor));
+        j.push_str(&format!("\x01Y[PCI Bus]\x01W {} devices ({}stor {}net {}usb {}audio {}disp {}bridge {}crypto)\n",
+            self.pci_device_count, self.pci_storage_controllers,
+            self.pci_network_controllers, self.pci_usb_controllers,
+            self.pci_audio_controllers, self.pci_display_controllers,
+            self.pci_bridge_count, self.pci_crypto_controllers));
+        for s in self.pci_devices.iter().take(20) {
+            j.push_str(&format!("  {:02X}:{:02X}.{} [{:04X}:{:04X}] {} — {}\n",
+                s.bus, s.device, s.function,
+                s.vendor_id, s.device_id,
+                s.class_name, s.subclass_name));
         }
-        if self.dal > 20 {
-            e.t(&format!("  ... and {} more\n", self.dal - 20));
+        if self.pci_device_count > 20 {
+            j.push_str(&format!("  ... and {} more\n", self.pci_device_count - 20));
         }
-        e.push('\n');
+        j.push('\n');
 
         
-        e.t("\x01C═══ Capability Scores ═══\x01W\n");
-        e.t(&format!("  Compute:  {} {}\n", grn(self.cwl), ghk(self.cwl)));
-        e.t(&format!("  Memory:   {} {}\n", grn(self.dte), ghk(self.dte)));
-        e.t(&format!("  Storage:  {} {}\n", grn(self.ezb), ghk(self.ezb)));
-        e.t(&format!("  Network:  {} {}\n", grn(self.evg), ghk(self.evg)));
-        e.t(&format!("  Security: {} {}\n", grn(self.eyh), ghk(self.eyh)));
-        e.t(&format!("  \x01COverall:  {} {}\x01W\n", grn(self.dkj), ghk(self.dkj)));
+        j.push_str("\x01C═══ Capability Scores ═══\x01W\n");
+        j.push_str(&format!("  Compute:  {} {}\n", ddv(self.compute_score), cyb(self.compute_score)));
+        j.push_str(&format!("  Memory:   {} {}\n", ddv(self.memory_score), cyb(self.memory_score)));
+        j.push_str(&format!("  Storage:  {} {}\n", ddv(self.storage_score), cyb(self.storage_score)));
+        j.push_str(&format!("  Network:  {} {}\n", ddv(self.network_score), cyb(self.network_score)));
+        j.push_str(&format!("  Security: {} {}\n", ddv(self.security_score), cyb(self.security_score)));
+        j.push_str(&format!("  \x01COverall:  {} {}\x01W\n", ddv(self.overall_score), cyb(self.overall_score)));
 
-        e
+        j
     }
 
     
-    pub fn zeh(&self) -> String {
+    pub fn qpx(&self) -> String {
         format!("{} {}C {}MB {}xStorage {}GPU score={:.0}%",
-            self.arch, self.azj,
-            self.ccf / (1024 * 1024),
-            self.aqm.len(),
-            if self.bqz { "+" } else { "-" },
-            self.dkj * 100.0)
+            self.arch, self.cpu_cores,
+            self.total_ram_bytes / (1024 * 1024),
+            self.storage_devices.len(),
+            if self.has_gpu { "+" } else { "-" },
+            self.overall_score * 100.0)
     }
 
     
-    pub fn xig(&self) -> String {
-        let mut e = String::new();
-        e.t("HARDWARE CONTEXT [exhaustive]:\n");
+    pub fn to_ai_context(&self) -> String {
+        let mut j = String::new();
+        j.push_str("HARDWARE CONTEXT [exhaustive]:\n");
 
         
-        e.t(&format!("CPU: vendor={} brand='{}' arch={} family={} model={} stepping={}\n",
-            self.avo, self.dpf, self.arch, self.heb,
-            self.hec, self.hee));
-        e.t(&format!("  cores={} logical={} physical={} tsc_mhz={} apic_id={}\n",
-            self.azj, self.cau, self.djk,
-            self.fam / 1_000_000, self.aed));
+        j.push_str(&format!("CPU: vendor={} brand='{}' arch={} family={} model={} stepping={}\n",
+            self.cpu_vendor, self.cpu_brand, self.arch, self.cpu_family,
+            self.cpu_model, self.cpu_stepping));
+        j.push_str(&format!("  cores={} logical={} physical={} tsc_mhz={} apic_id={}\n",
+            self.cpu_cores, self.max_logical_cpus, self.max_physical_cpus,
+            self.tsc_freq_hz / 1_000_000, self.apic_id));
 
         
-        let simd = if self.drm { "avx512" }
-            else if self.bzx { "avx2" }
-            else if self.fke { "avx" }
-            else if self.hmq { "sse4.2" }
-            else if self.dro { "sse2" }
+        let simd = if self.has_avx512 { "avx512" }
+            else if self.has_avx2 { "avx2" }
+            else if self.has_avx { "avx" }
+            else if self.has_sse4_2 { "sse4.2" }
+            else if self.has_sse2 { "sse2" }
             else { "none" };
-        e.t(&format!("  simd_level={} tsc_invariant={} rdtscp={}\n",
-            simd, self.ixx, self.ixt));
+        j.push_str(&format!("  simd_level={} tsc_invariant={} rdtscp={}\n",
+            simd, self.has_tsc_invariant, self.has_rdtscp));
 
         
-        e.t(&format!("  crypto: aesni={} pclmulqdq={} sha={} rdrand={} rdseed={}\n",
-            self.cfe, self.git, self.ecm,
-            self.crd, self.fkh));
+        j.push_str(&format!("  crypto: aesni={} pclmulqdq={} sha={} rdrand={} rdseed={}\n",
+            self.has_aesni, self.has_pclmulqdq, self.has_sha_ext,
+            self.has_rdrand, self.has_rdseed));
         
-        e.t(&format!("  security: smep={} smap={} umip={} nx={} vmx={} svm={}\n",
-            self.erv, self.eru, self.giv, self.ert,
-            self.giw, self.giu));
+        j.push_str(&format!("  security: smep={} smap={} umip={} nx={} vmx={} svm={}\n",
+            self.has_smep, self.has_smap, self.has_umip, self.has_nx,
+            self.has_vmx, self.has_svm));
 
         
-        e.t(&format!("MEMORY: total={}MB heap={}KB(used={}KB free={}KB) frames_used={} frames_free={}\n",
-            self.ccf / (1024 * 1024),
-            self.drr / 1024, self.ecw / 1024,
-            self.erx / 1024, self.ceu, self.dhj));
+        j.push_str(&format!("MEMORY: total={}MB heap={}KB(used={}KB free={}KB) frames_used={} frames_free={}\n",
+            self.total_ram_bytes / (1024 * 1024),
+            self.heap_size_bytes / 1024, self.heap_used_bytes / 1024,
+            self.heap_free_bytes / 1024, self.frames_used, self.frames_free));
 
         
-        e.t(&format!("ACPI: rev={} oem='{}' hw_reduced={} reset={}\n",
-            self.gxt, self.gxs, self.hiu, self.itu));
-        e.t(&format!("  apic_cpus={} ioapics={} irq_overrides={} pcie_segments={}\n",
-            self.gae.len(), self.edq,
-            self.hoq.len(), self.gpa.len()));
+        j.push_str(&format!("ACPI: rev={} oem='{}' hw_reduced={} reset={}\n",
+            self.acpi_revision, self.acpi_oem_id, self.fadt_hw_reduced, self.fadt_reset_supported));
+        j.push_str(&format!("  apic_cpus={} ioapics={} irq_overrides={} pcie_segments={}\n",
+            self.apic_entries.len(), self.ioapic_count,
+            self.irq_overrides.len(), self.pcie_segments.len()));
 
         
-        e.t(&format!("STORAGE: devices={} total_gb={}\n",
-            self.aqm.len(), self.dmp / (1024 * 1024 * 1024)));
-        for ba in &self.aqm {
-            e.t(&format!("  {} [{}] {}GB model='{}'\n",
-                ba.j, ba.kk.as_str(), ba.fei / (1024 * 1024 * 1024), ba.model));
+        j.push_str(&format!("STORAGE: devices={} total_gb={}\n",
+            self.storage_devices.len(), self.total_storage_bytes / (1024 * 1024 * 1024)));
+        for s in &self.storage_devices {
+            j.push_str(&format!("  {} [{}] {}GB model='{}'\n",
+                s.name, s.kind.as_str(), s.capacity_bytes / (1024 * 1024 * 1024), s.model));
         }
 
         
-        if !self.aqd.is_empty() {
-            e.t(&format!("PARTITIONS: {}\n", self.aqd.len()));
-            for ai in &self.aqd {
-                e.t(&format!("  disk={} #{} type={} {}GB boot={}\n",
-                    ai.app, ai.aqb, ai.ddc,
-                    ai.afz / (1024 * 1024 * 1024), ai.cji));
+        if !self.partitions.is_empty() {
+            j.push_str(&format!("PARTITIONS: {}\n", self.partitions.len()));
+            for aa in &self.partitions {
+                j.push_str(&format!("  disk={} #{} type={} {}GB boot={}\n",
+                    aa.disk_name, aa.number, aa.type_name,
+                    aa.size_bytes / (1024 * 1024 * 1024), aa.bootable));
             }
         }
 
         
-        if !self.avs.is_empty() {
-            e.t("ENCRYPTION_DETECTED:\n");
-            for bdy in &self.avs {
-                e.t(&format!("  disk={} type={} detail='{}'\n",
-                    bdy.app, bdy.ckf.as_str(), bdy.eu));
+        if !self.encryption_detected.is_empty() {
+            j.push_str("ENCRYPTION_DETECTED:\n");
+            for enc in &self.encryption_detected {
+                j.push_str(&format!("  disk={} type={} detail='{}'\n",
+                    enc.disk_name, enc.encryption_type.as_str(), enc.detail));
             }
         } else {
-            e.t("ENCRYPTION_DETECTED: none\n");
+            j.push_str("ENCRYPTION_DETECTED: none\n");
         }
 
         
-        e.t(&format!("NETWORK: has_driver={} link_up={}", self.bzz, self.aik));
-        if let Some(ed) = self.csg {
-            e.t(&format!(" mac={:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
-                ed[0], ed[1], ed[2], ed[3], ed[4], ed[5]));
+        j.push_str(&format!("NETWORK: has_driver={} link_up={}", self.has_network, self.link_up));
+        if let Some(mac) = self.mac_address {
+            j.push_str(&format!(" mac={:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+                mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]));
         }
-        e.push('\n');
+        j.push('\n');
 
         
-        e.t(&format!("GPU: has={} name='{}' vram_mb={} compute_units={}\n",
-            self.bqz, self.beh, self.dhr, self.erk));
+        j.push_str(&format!("GPU: has={} name='{}' vram_mb={} compute_units={}\n",
+            self.has_gpu, self.gpu_name, self.gpu_vram_mb, self.gpu_compute_units));
 
         
-        e.t(&format!("TIMERS: tsc={} hpet={} hpet_mhz={} hpet_timers={}\n",
-            self.juh, self.esa,
-            self.hnd / 1_000_000, self.gjf));
+        j.push_str(&format!("TIMERS: tsc={} hpet={} hpet_mhz={} hpet_timers={}\n",
+            self.tsc_available, self.hpet_available,
+            self.hpet_freq_hz / 1_000_000, self.hpet_num_timers));
 
         
-        e.t(&format!("USB: controllers={} devices={}\n",
-            self.fxv, self.cvc.len()));
-        for usb in &self.cvc {
-            e.t(&format!("  [{:04X}:{:04X}] {} ({})\n",
-                usb.ml, usb.cgt, usb.baj, usb.bpz));
+        j.push_str(&format!("USB: controllers={} devices={}\n",
+            self.usb_controller_count, self.usb_devices.len()));
+        for usb in &self.usb_devices {
+            j.push_str(&format!("  [{:04X}:{:04X}] {} ({})\n",
+                usb.vendor_id, usb.product_id, usb.product, usb.class_name));
         }
 
         
-        e.t(&format!("AUDIO: hda_init={}\n", self.fki));
+        j.push_str(&format!("AUDIO: hda_init={}\n", self.hda_initialized));
 
         
-        e.t(&format!("PCI: total={} storage={} net={} usb={} audio={} display={} crypto={}\n",
-            self.dal, self.ewl,
-            self.egg, self.egh,
-            self.egf, self.ewk,
-            self.fqn));
+        j.push_str(&format!("PCI: total={} storage={} net={} usb={} audio={} display={} crypto={}\n",
+            self.pci_device_count, self.pci_storage_controllers,
+            self.pci_network_controllers, self.pci_usb_controllers,
+            self.pci_audio_controllers, self.pci_display_controllers,
+            self.pci_crypto_controllers));
 
         
-        e.t(&format!("SCORES: compute={:.0}% memory={:.0}% storage={:.0}% network={:.0}% security={:.0}% overall={:.0}%\n",
-            self.cwl * 100.0, self.dte * 100.0,
-            self.ezb * 100.0, self.evg * 100.0,
-            self.eyh * 100.0, self.dkj * 100.0));
+        j.push_str(&format!("SCORES: compute={:.0}% memory={:.0}% storage={:.0}% network={:.0}% security={:.0}% overall={:.0}%\n",
+            self.compute_score * 100.0, self.memory_score * 100.0,
+            self.storage_score * 100.0, self.network_score * 100.0,
+            self.security_score * 100.0, self.overall_score * 100.0));
 
-        e
+        j
     }
 
     
-    pub fn ywh(&self, mh: &str) -> bool {
-        match mh {
-            "aesni" | "aes" => self.cfe,
-            "rdrand" | "random" => self.crd,
-            "rdseed" => self.fkh,
-            "sha" => self.ecm,
-            "avx2" => self.bzx,
-            "avx512" => self.drm,
-            "gpu" => self.bqz,
-            "network" | "net" => self.bzz,
-            "storage" | "disk" => !self.aqm.is_empty(),
-            "usb" => self.fav,
-            "audio" | "sound" => self.fki,
-            "smep" => self.erv,
-            "smap" => self.eru,
-            "nx" => self.ert,
-            "vmx" | "vt-x" => self.giw,
-            "svm" | "amd-v" => self.giu,
-            "pcie" => self.fqo,
-            "hpet" => self.esa,
-            "encryption" | "encrypted" => !self.avs.is_empty(),
+    pub fn qkm(&self, cap: &str) -> bool {
+        match cap {
+            "aesni" | "aes" => self.has_aesni,
+            "rdrand" | "random" => self.has_rdrand,
+            "rdseed" => self.has_rdseed,
+            "sha" => self.has_sha_ext,
+            "avx2" => self.has_avx2,
+            "avx512" => self.has_avx512,
+            "gpu" => self.has_gpu,
+            "network" | "net" => self.has_network,
+            "storage" | "disk" => !self.storage_devices.is_empty(),
+            "usb" => self.usb_initialized,
+            "audio" | "sound" => self.hda_initialized,
+            "smep" => self.has_smep,
+            "smap" => self.has_smap,
+            "nx" => self.has_nx,
+            "vmx" | "vt-x" => self.has_vmx,
+            "svm" | "amd-v" => self.has_svm,
+            "pcie" => self.pcie_available,
+            "hpet" => self.hpet_available,
+            "encryption" | "encrypted" => !self.encryption_detected.is_empty(),
             _ => false,
         }
     }
 }
 
-fn grn(ol: f32) -> String {
-    let adu = (ol * 20.0) as usize;
-    let azs = 20 - adu;
+fn ddv(score: f32) -> String {
+    let oz = (score * 20.0) as usize;
+    let empty = 20 - oz;
     format!("[{}{}]",
-        "#".afd(adu),
-        "-".afd(azs))
+        "#".repeat(oz),
+        "-".repeat(empty))
 }
 
-fn ghk(ol: f32) -> String {
-    format!("{:.0}%", ol * 100.0)
+fn cyb(score: f32) -> String {
+    format!("{:.0}%", score * 100.0)
 }

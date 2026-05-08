@@ -30,118 +30,118 @@ use spin::Mutex;
 
 
 
-const CGN_: usize = 1;
+const CJX_: usize = 1;
 
 
-const AZX_: usize = 16;
-
-
-
-const DDI_: u64 = 30_000;
-
-
-const AFQ_: u64 = 5_000;
-
-
-const BAA_: u64 = 120_000;
-
-
-const BVD_: f32 = 0.001;
+const BBZ_: usize = 16;
 
 
 
-const AHP_: f32 = 0.9;
+const DHC_: u64 = 30_000;
 
 
-const AVU_: f32 = 4.0;
-const AER_: f32 = 2.0;
+const AHK_: u64 = 5_000;
 
 
-
-const BIC_: bool = true;
-
+const BCC_: u64 = 120_000;
 
 
-
-
-
-static NH_: Mutex<Vec<Vec<f32>>> = Mutex::new(Vec::new());
-
-
-static ML_: Mutex<Vec<super::compression::Ii>> = Mutex::new(Vec::new());
-
-
-static TD_: AtomicU64 = AtomicU64::new(0);
-
-
-static ADB_: AtomicU64 = AtomicU64::new(0);
-
-
-static AEI_: AtomicU64 = AtomicU64::new(0);
-
-
-static TC_: AtomicBool = AtomicBool::new(false);
-
-
-static AEA_: Mutex<f32> = Mutex::new(0.0);
-
-
-static CSG_: Mutex<Vec<f32>> = Mutex::new(Vec::new());
+const BXZ_: f32 = 0.001;
 
 
 
-static BCW_: Mutex<Vec<u64>> = Mutex::new(Vec::new());
+const AJM_: f32 = 0.9;
 
 
-static QY_: AtomicU64 = AtomicU64::new(30_000);
+const AXY_: f32 = 4.0;
+const AGL_: f32 = 2.0;
 
 
-static RW_: AtomicU64 = AtomicU64::new(0);
 
-
-static AAM_: AtomicU64 = AtomicU64::new(0);
+const BKJ_: bool = true;
 
 
 
 
 
 
-pub fn aiy() {
-    TC_.store(true, Ordering::SeqCst);
-    AEI_.store(crate::time::lc(), Ordering::SeqCst);
+static OG_: Mutex<Vec<Vec<f32>>> = Mutex::new(Vec::new());
+
+
+static NK_: Mutex<Vec<super::compression::Dm>> = Mutex::new(Vec::new());
+
+
+static UJ_: AtomicU64 = AtomicU64::new(0);
+
+
+static AER_: AtomicU64 = AtomicU64::new(0);
+
+
+static AGC_: AtomicU64 = AtomicU64::new(0);
+
+
+static UI_: AtomicBool = AtomicBool::new(false);
+
+
+static AFU_: Mutex<f32> = Mutex::new(0.0);
+
+
+static CVX_: Mutex<Vec<f32>> = Mutex::new(Vec::new());
+
+
+
+static BEZ_: Mutex<Vec<u64>> = Mutex::new(Vec::new());
+
+
+static RT_: AtomicU64 = AtomicU64::new(30_000);
+
+
+static SY_: AtomicU64 = AtomicU64::new(0);
+
+
+static ABZ_: AtomicU64 = AtomicU64::new(0);
+
+
+
+
+
+
+pub fn enable() {
+    UI_.store(true, Ordering::SeqCst);
+    AGC_.store(crate::time::uptime_ms(), Ordering::SeqCst);
     crate::serial_println!("[FED] Federated learning enabled");
 }
 
 
-pub fn cwz() {
-    TC_.store(false, Ordering::SeqCst);
+pub fn bbc() {
+    UI_.store(false, Ordering::SeqCst);
     crate::serial_println!("[FED] Federated learning disabled");
 }
 
 
-pub fn zu() -> bool {
-    TC_.load(Ordering::SeqCst)
+pub fn lq() -> bool {
+    UI_.load(Ordering::SeqCst)
 }
 
 
-pub fn cm() -> String {
-    let wag = TD_.load(Ordering::SeqCst);
-    let vtd = ADB_.load(Ordering::SeqCst);
-    let aln = NH_.lock().len();
-    let rne = ML_.lock().len();
-    let vl = *AEA_.lock();
-    let crp = QY_.load(Ordering::SeqCst);
-    let ehz = RW_.load(Ordering::SeqCst);
-    let faf = AAM_.load(Ordering::SeqCst);
+pub fn stats() -> String {
+    let oif = UJ_.load(Ordering::SeqCst);
+    let odp = AER_.load(Ordering::SeqCst);
+    let pending = OG_.lock().len();
+    let kwj = NK_.lock().len();
+    let ka = *AFU_.lock();
+    let axr = RT_.load(Ordering::SeqCst);
+    let bvq = SY_.load(Ordering::SeqCst);
+    let transfers = ABZ_.load(Ordering::SeqCst);
 
     format!("fed_rounds={} grads={} pending={}+{}c loss={:.4} interval={}ms saved={}KB transfers={}",
-        wag, vtd, aln, rne, vl,
-        crp, ehz / 1024, faf)
+        oif, odp, pending, kwj, ka,
+        axr, bvq / 1024, transfers)
 }
 
 
-pub fn wah() -> u64 {
-    TD_.load(Ordering::SeqCst)
+pub fn oig() -> u64 {
+    UJ_.load(Ordering::SeqCst)
 }
 
 
@@ -150,49 +150,49 @@ pub fn wah() -> u64 {
 
 
 
-pub fn pan(gqg: &[u8]) {
-    if let Err(fr) = super::guardian::emj(super::guardian::ProtectedOp::Asf) {
-        crate::serial_println!("[FED] Guardian denied gradient reception: {}", fr);
+pub fn iyq(raw_bytes: &[u8]) {
+    if let Err(bk) = super::guardian::bxo(super::guardian::ProtectedOp::FederatedSync) {
+        crate::serial_println!("[FED] Guardian denied gradient reception: {}", bk);
         return;
     }
 
     
-    if gqg.len() >= 4 && &gqg[0..4] == b"JCMP" {
-        if let Some(ahf) = super::compression::nks(gqg) {
-            let mut dii = ML_.lock();
-            if dii.len() < AZX_ {
-                let ame = ahf.ch.len();
-                dii.push(ahf);
-                ADB_.fetch_add(1, Ordering::SeqCst);
-                AAM_.fetch_add(1, Ordering::SeqCst);
+    if raw_bytes.len() >= 4 && &raw_bytes[0..4] == b"JCMP" {
+        if let Some(qv) = super::compression::hro(raw_bytes) {
+            let mut bhd = NK_.lock();
+            if bhd.len() < BBZ_ {
+                let entry_count = qv.entries.len();
+                bhd.push(qv);
+                AER_.fetch_add(1, Ordering::SeqCst);
+                ABZ_.fetch_add(1, Ordering::SeqCst);
                 crate::serial_println!("[FED] Received compressed gradient ({} entries, {} pending)",
-                    ame, dii.len());
+                    entry_count, bhd.len());
             }
             return;
         }
     }
 
     
-    let aue = super::rpc::kfu(gqg);
-    if aue.is_empty() {
+    let xn = super::rpc::fkj(raw_bytes);
+    if xn.is_empty() {
         return;
     }
 
-    let mut dii = NH_.lock();
-    if dii.len() < AZX_ {
-        dii.push(aue);
-        ADB_.fetch_add(1, Ordering::SeqCst);
-        crate::serial_println!("[FED] Received raw gradient ({} pending)", dii.len());
+    let mut bhd = OG_.lock();
+    if bhd.len() < BBZ_ {
+        bhd.push(xn);
+        AER_.fetch_add(1, Ordering::SeqCst);
+        crate::serial_println!("[FED] Received raw gradient ({} pending)", bhd.len());
     }
 }
 
 
-pub fn ziq(gqg: &[u8], vgn: u64) {
-    let rrz = NH_.lock().len() + ML_.lock().len();
-    pan(gqg);
-    let utj = NH_.lock().len() + ML_.lock().len();
-    if utj > rrz {
-        BCW_.lock().push(vgn);
+pub fn qtb(raw_bytes: &[u8], peer_steps: u64) {
+    let lan = OG_.lock().len() + NK_.lock().len();
+    iyq(raw_bytes);
+    let njk = OG_.lock().len() + NK_.lock().len();
+    if njk > lan {
+        BEZ_.lock().push(peer_steps);
     }
 }
 
@@ -206,27 +206,27 @@ pub fn ziq(gqg: &[u8], vgn: u64) {
 
 
 pub fn poll() {
-    if !TC_.load(Ordering::SeqCst) || !super::mesh::rl() {
+    if !UI_.load(Ordering::SeqCst) || !super::mesh::is_active() {
         return;
     }
 
-    let iu = crate::time::lc();
-    let jct = AEI_.load(Ordering::SeqCst);
-    let crp = QY_.load(Ordering::SeqCst);
-    if iu.nj(jct) < crp {
+    let cy = crate::time::uptime_ms();
+    let last_sync = AGC_.load(Ordering::SeqCst);
+    let axr = RT_.load(Ordering::SeqCst);
+    if cy.wrapping_sub(last_sync) < axr {
         return;
     }
 
-    if super::consensus::ogf() {
-        oin();
+    if super::consensus::iia() {
+        ijr();
     } else {
-        pzr();
+        jrh();
     }
 
-    AEI_.store(iu, Ordering::SeqCst);
+    AGC_.store(cy, Ordering::SeqCst);
 
     
-    xoq();
+    ppt();
 }
 
 
@@ -240,199 +240,199 @@ pub fn poll() {
 
 
 
-fn oin() {
+fn ijr() {
     
-    let jld = {
-        let mut dii = NH_.lock();
-        let at: Vec<Vec<f32>> = dii.bbk(..).collect();
-        at
+    let exr = {
+        let mut bhd = OG_.lock();
+        let g: Vec<Vec<f32>> = bhd.drain(..).collect();
+        g
     };
 
     
-    let iox = {
-        let mut dii = ML_.lock();
-        let ahf: Vec<super::compression::Ii> = dii.bbk(..).collect();
-        ahf
+    let eir = {
+        let mut bhd = NK_.lock();
+        let qv: Vec<super::compression::Dm> = bhd.drain(..).collect();
+        qv
     };
 
     
-    let ovb = {
-        let mut ars = BCW_.lock();
-        let d: Vec<u64> = ars.bbk(..).collect();
-        d
+    let iui = {
+        let mut wl = BEZ_.lock();
+        let w: Vec<u64> = wl.drain(..).collect();
+        w
     };
 
-    let cus = jld.len() + iox.len();
-    if cus < CGN_ {
+    let total_count = exr.len() + eir.len();
+    if total_count < CJX_ {
         return;
     }
 
     crate::serial_println!("[FED] Leader aggregating {} gradients ({} raw, {} compressed)",
-        cus, jld.len(), iox.len());
+        total_count, exr.len(), eir.len());
 
     
-    let vm = if let Some(fv) = jld.fv() {
-        fv.len()
-    } else if let Some(fv) = iox.fv() {
-        fv.vm as usize
+    let param_count = if let Some(first) = exr.first() {
+        first.len()
+    } else if let Some(first) = eir.first() {
+        first.param_count as usize
     } else {
         return;
     };
 
     
-    let mut fyq = alloc::vec![0.0f32; vm];
-    let mut jua: f64 = 0.0;
-    let mut gin = 0usize;
+    let mut cst = alloc::vec![0.0f32; param_count];
+    let mut fdm: f64 = 0.0;
+    let mut cyx = 0usize;
 
     
-    for buo in &jld {
-        if buo.len() != vm {
+    for alp in &exr {
+        if alp.len() != param_count {
             crate::serial_println!("[FED] Skipping mismatched gradient (got {} expected {})",
-                buo.len(), vm);
-            gin += 1;
+                alp.len(), param_count);
+            cyx += 1;
             continue;
         }
-        let amz = ovb.get(gin).hu().unwrap_or(1).am(1) as f64;
-        for (a, &at) in buo.iter().cf() {
-            fyq[a] += at * amz as f32;
+        let tv = iui.get(cyx).copied().unwrap_or(1).max(1) as f64;
+        for (i, &g) in alp.iter().enumerate() {
+            cst[i] += g * tv as f32;
         }
-        jua += amz;
-        gin += 1;
+        fdm += tv;
+        cyx += 1;
     }
 
     
-    for ahf in &iox {
-        let dpu = super::compression::rus(ahf);
-        if dpu.len() != vm {
-            gin += 1;
+    for qv in &eir {
+        let blr = super::compression::lct(qv);
+        if blr.len() != param_count {
+            cyx += 1;
             continue;
         }
-        let amz = ovb.get(gin).hu().unwrap_or(1).am(1) as f64;
-        for (a, &at) in dpu.iter().cf() {
-            fyq[a] += at * amz as f32;
+        let tv = iui.get(cyx).copied().unwrap_or(1).max(1) as f64;
+        for (i, &g) in blr.iter().enumerate() {
+            cst[i] += g * tv as f32;
         }
-        jua += amz;
-        gin += 1;
+        fdm += tv;
+        cyx += 1;
     }
 
-    if jua <= 0.0 {
+    if fdm <= 0.0 {
         return;
     }
 
     
-    let tvy = 1.0 / jua as f32;
-    for at in fyq.el() {
-        *at *= tvy;
+    let mrk = 1.0 / fdm as f32;
+    for g in cst.iter_mut() {
+        *g *= mrk;
     }
 
     
     {
-        let mut hrt = CSG_.lock();
-        if hrt.len() != vm {
+        let mut dum = CVX_.lock();
+        if dum.len() != param_count {
             
-            *hrt = fyq.clone();
+            *dum = cst.clone();
         } else {
-            for a in 0..vm {
-                hrt[a] = AHP_ * hrt[a]
-                    + (1.0 - AHP_) * fyq[a];
+            for i in 0..param_count {
+                dum[i] = AJM_ * dum[i]
+                    + (1.0 - AJM_) * cst[i];
             }
             
-            for a in 0..vm {
-                fyq[a] = hrt[a];
+            for i in 0..param_count {
+                cst[i] = dum[i];
             }
         }
     }
 
     
-    qjv(&fyq);
+    jxb(&cst);
 
-    TD_.fetch_add(1, Ordering::SeqCst);
+    UJ_.fetch_add(1, Ordering::SeqCst);
     crate::serial_println!("[FED] Round {} complete (momentum={}, {} peers) — pushing delta weights",
-        TD_.load(Ordering::SeqCst), AHP_, super::mesh::cti());
+        UJ_.load(Ordering::SeqCst), AJM_, super::mesh::ayz());
 
     
-    oyn();
+    ixd();
 }
 
 
-fn qjv(dhs: &[f32]) {
-    let mut upi = super::Ci.lock();
-    let model = match upi.as_mut() {
-        Some(ef) => ef,
+fn jxb(bgs: &[f32]) {
+    let mut nfz = super::Ay.lock();
+    let model = match nfz.as_mut() {
+        Some(m) => m,
         None => return,
     };
 
-    let cv = model.gsd();
-    if cv.len() != dhs.len() {
+    let current = model.serialize();
+    if current.len() != bgs.len() {
         crate::serial_println!("[FED] Gradient size mismatch: model={} grad={}",
-            cv.len(), dhs.len());
+            current.len(), bgs.len());
         return;
     }
 
     
-    let mut juv = Vec::fc(cv.len());
-    for (d, at) in cv.iter().fca(dhs.iter()) {
-        juv.push(d - BVD_ * at);
+    let mut fdz = Vec::with_capacity(current.len());
+    for (w, g) in current.iter().zip(bgs.iter()) {
+        fdz.push(w - BXZ_ * g);
     }
 
     
-    if let Some(hst) = super::model::TransformerWeights::eos(&juv) {
-        *model = hst;
+    if let Some(new_weights) = super::model::TransformerWeights::byt(&fdz) {
+        *model = new_weights;
     }
 }
 
 
 
 
-fn oyn() {
-    let cps = {
-        let model = super::Ci.lock();
+fn ixd() {
+    let awt = {
+        let model = super::Ay.lock();
         match model.as_ref() {
-            Some(ef) => ef.gsd(),
+            Some(m) => m.serialize(),
             None => return,
         }
     };
 
-    let yp = super::mesh::dhn();
+    let lj = super::mesh::bgo();
 
-    if BIC_ {
+    if BKJ_ {
         
-        let aaq = super::compression::rnm(&cps);
-        let gdd = super::compression::pig(&aaq);
-        let ghs = cps.len() * 4;
-        let hdu = gdd.len();
+        let mk = super::compression::kwq(&awt);
+        let cvl = super::compression::jet(&mk);
+        let cyg = awt.len() * 4;
+        let dlg = cvl.len();
 
-        RW_.fetch_add((ghs - hdu) as u64, Ordering::Relaxed);
+        SY_.fetch_add((cyg - dlg) as u64, Ordering::Relaxed);
 
         crate::serial_println!("[FED] Delta compressed: {} entries, {} KB → {} KB ({}× compression)",
-            aaq.ch.len(), ghs / 1024, hdu / 1024,
-            if hdu > 0 { ghs / hdu } else { 0 });
+            mk.entries.len(), cyg / 1024, dlg / 1024,
+            if dlg > 0 { cyg / dlg } else { 0 });
 
-        for ko in &yp {
-            match super::rpc::oym(ko.ip, ko.bsb, &gdd) {
+        for peer in &lj {
+            match super::rpc::ixc(peer.ip, peer.rpc_port, &cvl) {
                 Ok(()) => {
                     crate::serial_println!("[FED] Pushed delta to {}.{}.{}.{} ({} KB)",
-                        ko.ip[0], ko.ip[1], ko.ip[2], ko.ip[3],
-                        hdu / 1024);
+                        peer.ip[0], peer.ip[1], peer.ip[2], peer.ip[3],
+                        dlg / 1024);
                 }
-                Err(aa) => {
+                Err(e) => {
                     crate::serial_println!("[FED] Failed to push to {}.{}.{}.{}: {}",
-                        ko.ip[0], ko.ip[1], ko.ip[2], ko.ip[3], aa);
+                        peer.ip[0], peer.ip[1], peer.ip[2], peer.ip[3], e);
                 }
             }
         }
     } else {
         
-        let mqk = super::rpc::nvc(&cps);
-        for ko in &yp {
-            match super::rpc::oym(ko.ip, ko.bsb, &mqk) {
+        let hcg = super::rpc::hzf(&awt);
+        for peer in &lj {
+            match super::rpc::ixc(peer.ip, peer.rpc_port, &hcg) {
                 Ok(()) => {
                     crate::serial_println!("[FED] Pushed full weights to {}.{}.{}.{}",
-                        ko.ip[0], ko.ip[1], ko.ip[2], ko.ip[3]);
+                        peer.ip[0], peer.ip[1], peer.ip[2], peer.ip[3]);
                 }
-                Err(aa) => {
+                Err(e) => {
                     crate::serial_println!("[FED] Failed to push to {}.{}.{}.{}: {}",
-                        ko.ip[0], ko.ip[1], ko.ip[2], ko.ip[3], aa);
+                        peer.ip[0], peer.ip[1], peer.ip[2], peer.ip[3], e);
                 }
             }
         }
@@ -444,98 +444,98 @@ fn oyn() {
 
 
 
-fn pzr() {
-    if !super::uc() {
+fn jrh() {
+    if !super::is_ready() {
         return;
     }
 
     
-    let bnj = match super::mesh::kyu() {
-        Some(dm) => dm,
+    let aid = match super::mesh::fyt() {
+        Some(l) => l,
         None => return, 
     };
 
     
-    let ixf = rnj();
-    if ixf.is_empty() {
+    let eol = kwn();
+    if eol.is_empty() {
         return;
     }
 
     
-    let (ixe, twz) = if BIC_ {
-        let ahf = super::compression::nfg(&ixf);
-        let bf = super::compression::pig(&ahf);
-        let ghs = ixf.len() * 4;
-        let nfe = bf.len();
-        RW_.fetch_add((ghs - nfe) as u64, Ordering::Relaxed);
-        AAM_.fetch_add(1, Ordering::Relaxed);
+    let (grad_bytes, is_compressed) = if BKJ_ {
+        let qv = super::compression::hne(&eol);
+        let bytes = super::compression::jet(&qv);
+        let cyg = eol.len() * 4;
+        let hnd = bytes.len();
+        SY_.fetch_add((cyg - hnd) as u64, Ordering::Relaxed);
+        ABZ_.fetch_add(1, Ordering::Relaxed);
         crate::serial_println!("[FED] Compressed gradient: {} entries, {} KB → {} KB",
-            ahf.ch.len(), ghs / 1024, nfe / 1024);
-        (bf, true)
+            qv.entries.len(), cyg / 1024, hnd / 1024);
+        (bytes, true)
     } else {
-        (super::rpc::nvc(&ixf), false)
+        (super::rpc::hzf(&eol), false)
     };
 
     crate::serial_println!("[FED] Sending {} gradient to leader {}.{}.{}.{} ({} KB)",
-        if twz { "compressed" } else { "raw" },
-        bnj.ip[0], bnj.ip[1], bnj.ip[2], bnj.ip[3],
-        ixe.len() / 1024);
+        if is_compressed { "compressed" } else { "raw" },
+        aid.ip[0], aid.ip[1], aid.ip[2], aid.ip[3],
+        grad_bytes.len() / 1024);
 
-    match super::rpc::voi(bnj.ip, bnj.bsb, &ixe) {
+    match super::rpc::nzr(aid.ip, aid.rpc_port, &grad_bytes) {
         Ok(()) => {
             crate::serial_println!("[FED] Gradients sent successfully");
         }
-        Err(aa) => {
-            crate::serial_println!("[FED] Failed to send gradients: {}", aa);
+        Err(e) => {
+            crate::serial_println!("[FED] Failed to send gradients: {}", e);
         }
     }
 }
 
 
 
-fn rnj() -> Vec<f32> {
-    let model = super::Ci.lock();
-    let upj = match model.as_ref() {
-        Some(ef) => ef,
+fn kwn() -> Vec<f32> {
+    let model = super::Ay.lock();
+    let nga = match model.as_ref() {
+        Some(m) => m,
         None => return Vec::new(),
     };
 
     
-    let yr = super::corpus::nyk();
-    let pfh = yr.as_bytes();
+    let sample = super::corpus::ibu();
+    let jck = sample.as_bytes();
 
-    if pfh.len() < 2 {
+    if jck.len() < 2 {
         return Vec::new();
     }
 
     
-    let (qcl, arg) = super::backprop::ivk(upj, pfh);
+    let (_loss, wg) = super::backprop::eng(nga, jck);
 
-    *AEA_.lock() = qcl;
+    *AFU_.lock() = _loss;
 
     
-    why(&arg)
+    ooj(&wg)
 }
 
 
-fn why(arg: &super::backprop::ModelGrads) -> Vec<f32> {
-    let mut f = Vec::new();
-    f.bk(&arg.dfs);
-    f.bk(&arg.dfo);
-    for fl in &arg.my {
-        f.bk(&fl.dfp);
-        f.bk(&fl.dfx);
-        f.bk(&fl.dfv);
-        f.bk(&fl.dfz);
-        f.bk(&fl.dfw);
-        f.bk(&fl.dfq);
-        f.bk(&fl.dfu);
-        f.bk(&fl.dfy);
-        f.bk(&fl.dft);
+fn ooj(wg: &super::backprop::ModelGrads) -> Vec<f32> {
+    let mut data = Vec::new();
+    data.extend_from_slice(&wg.d_token_embed);
+    data.extend_from_slice(&wg.d_pos_embed);
+    for bj in &wg.layers {
+        data.extend_from_slice(&bj.d_rms_attn);
+        data.extend_from_slice(&bj.d_wq);
+        data.extend_from_slice(&bj.d_wk);
+        data.extend_from_slice(&bj.d_wv);
+        data.extend_from_slice(&bj.d_wo);
+        data.extend_from_slice(&bj.d_rms_ffn);
+        data.extend_from_slice(&bj.d_wgate);
+        data.extend_from_slice(&bj.d_wup);
+        data.extend_from_slice(&bj.d_wdown);
     }
-    f.bk(&arg.dfr);
-    f.bk(&arg.dfn);
-    f
+    data.extend_from_slice(&wg.d_rms_final);
+    data.extend_from_slice(&wg.d_output);
+    data
 }
 
 
@@ -543,50 +543,50 @@ fn why(arg: &super::backprop::ModelGrads) -> Vec<f32> {
 
 
 
-pub fn svq() {
-    if super::consensus::ogf() {
-        oin();
+pub fn lxj() {
+    if super::consensus::iia() {
+        ijr();
     } else {
-        pzr();
+        jrh();
     }
 }
 
 
-pub fn vxk() {
-    if !super::uc() {
+pub fn oga() {
+    if !super::is_ready() {
         crate::serial_println!("[FED] Brain not ready");
         return;
     }
 
     
-    let ma = super::io_control::hkp();
-    let ol = super::io_control::gdg(&ma);
-    if !super::io_control::hsn(&ma) {
-        crate::serial_println!("[FED] Cannot replicate: I/O not network-ready (score={}%)", ol);
+    let audit = super::io_control::dqi();
+    let score = super::io_control::cvo(&audit);
+    if !super::io_control::duz(&audit) {
+        crate::serial_println!("[FED] Cannot replicate: I/O not network-ready (score={}%)", score);
         return;
     }
-    crate::serial_println!("[FED] I/O audit passed (score={}%), replicating model", ol);
+    crate::serial_println!("[FED] I/O audit passed (score={}%), replicating model", score);
 
-    oyn();
+    ixd();
 }
 
 
-pub fn vnz() -> Result<(), &'static str> {
-    let bnj = super::mesh::kyu().ok_or("No leader found")?;
+pub fn nzj() -> Result<(), &'static str> {
+    let aid = super::mesh::fyt().ok_or("No leader found")?;
 
-    let cvg = super::rpc::kyz(bnj.ip, bnj.bsb)?;
+    let baf = super::rpc::fyy(aid.ip, aid.rpc_port)?;
 
     
-    if cvg.len() >= 4 && &cvg[0..4] == b"JCMP" {
-        if let Some(aaq) = super::compression::nks(&cvg) {
-            let mut model = super::Ci.lock();
-            if let Some(ef) = model.as_mut() {
-                let mut bix = ef.gsd();
-                super::compression::qkc(&mut bix, &aaq);
-                if let Some(juv) = super::model::TransformerWeights::eos(&bix) {
-                    *ef = juv;
+    if baf.len() >= 4 && &baf[0..4] == b"JCMP" {
+        if let Some(mk) = super::compression::hro(&baf) {
+            let mut model = super::Ay.lock();
+            if let Some(m) = model.as_mut() {
+                let mut afx = m.serialize();
+                super::compression::jxg(&mut afx, &mk);
+                if let Some(fdz) = super::model::TransformerWeights::byt(&afx) {
+                    *m = fdz;
                     crate::serial_println!("[FED] Model synced from leader (compressed delta, {} entries)",
-                        aaq.ch.len());
+                        mk.entries.len());
                     return Ok(());
                 }
             }
@@ -595,10 +595,10 @@ pub fn vnz() -> Result<(), &'static str> {
     }
 
     
-    let aue = super::rpc::kfu(&cvg);
-    match super::model::TransformerWeights::eos(&aue) {
-        Some(hst) => {
-            *super::Ci.lock() = Some(hst);
+    let xn = super::rpc::fkj(&baf);
+    match super::model::TransformerWeights::byt(&xn) {
+        Some(new_weights) => {
+            *super::Ay.lock() = Some(new_weights);
             crate::serial_println!("[FED] Model synced from leader (full weights)");
             Ok(())
         }
@@ -614,36 +614,36 @@ pub fn vnz() -> Result<(), &'static str> {
 
 
 
-fn xoq() {
-    let vl = *AEA_.lock();
-    if vl <= 0.0 || !vl.dsg() {
+fn ppt() {
+    let ka = *AFU_.lock();
+    if ka <= 0.0 || !ka.is_finite() {
         return; 
     }
 
-    let lnv = if vl > AVU_ {
-        AFQ_
-    } else if vl < AER_ {
-        BAA_
+    let gjb = if ka > AXY_ {
+        AHK_
+    } else if ka < AGL_ {
+        BCC_
     } else {
         
-        let ab = (vl - AER_) / (AVU_ - AER_);
-        let cmb = BAA_ as f32 - AFQ_ as f32;
-        (AFQ_ as f32 + cmb * (1.0 - ab)) as u64
+        let t = (ka - AGL_) / (AXY_ - AGL_);
+        let range = BCC_ as f32 - AHK_ as f32;
+        (AHK_ as f32 + range * (1.0 - t)) as u64
     };
 
-    let aft = QY_.swap(lnv, Ordering::SeqCst);
-    if (lnv as i64 - aft as i64).eki() > 5000 {
+    let qb = RT_.swap(gjb, Ordering::SeqCst);
+    if (gjb as i64 - qb as i64).unsigned_abs() > 5000 {
         crate::serial_println!("[FED] Adaptive interval: {}ms → {}ms (loss={:.3})",
-            aft, lnv, vl);
+            qb, gjb, ka);
     }
 }
 
 
-pub fn rrx() -> u64 {
-    QY_.load(Ordering::SeqCst)
+pub fn lal() -> u64 {
+    RT_.load(Ordering::SeqCst)
 }
 
 
-pub fn qvc() -> u64 {
-    RW_.load(Ordering::SeqCst)
+pub fn kgq() -> u64 {
+    SY_.load(Ordering::SeqCst)
 }

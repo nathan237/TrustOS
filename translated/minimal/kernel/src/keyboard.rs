@@ -11,46 +11,46 @@ use crate::serial;
 use crate::arch::Port;
 
 
-const HA_: u16 = 0x60;
-const HB_: u16 = 0x64;
-const AGS_: u16 = 0x64;
+const HR_: u16 = 0x60;
+const HS_: u16 = 0x64;
+const AIM_: u16 = 0x64;
 
 
 
 
 
 
-pub fn tto() {
+pub fn mpg() {
     crate::serial_println!("[i8042] Initializing PS/2 keyboard controller...");
 
     
-    fku(0xAD); 
-    fku(0xA7); 
+    cks(0xAD); 
+    cks(0xA7); 
 
     
     {
-        let mut f = Port::<u8>::new(HA_);
-        let mut status = Port::<u8>::new(HB_);
+        let mut data = Port::<u8>::new(HR_);
+        let mut status = Port::<u8>::new(HS_);
         for _ in 0..64 {
             if unsafe { status.read() } & 0x01 == 0 { break; }
-            unsafe { f.read(); }
+            unsafe { data.read(); }
         }
     }
 
     
-    fku(0x20);
-    let cfg = izc();
+    cks(0x20);
+    let cfg = epx();
     crate::serial_println!("[i8042] Config byte: {:#04x}", cfg);
 
     
     
-    let opm = (cfg | 0x41) & !0x10;
-    fku(0x60); 
-    lcy(opm);
+    let ipr = (cfg | 0x41) & !0x10;
+    cks(0x60); 
+    gbk(ipr);
 
     
-    fku(0xAA);
-    let test = izc();
+    cks(0xAA);
+    let test = epx();
     if test == 0x55 {
         crate::serial_println!("[i8042] Self-test PASSED");
     } else {
@@ -59,29 +59,29 @@ pub fn tto() {
     }
 
     
-    fku(0x60);
-    lcy(opm);
+    cks(0x60);
+    gbk(ipr);
 
     
-    fku(0xAE);
+    cks(0xAE);
 
     
-    lcy(0xFF);
-    let alx = izc();
-    if alx == 0xFA {
-        let qnx = izc();
-        crate::serial_println!("[i8042] Keyboard reset: ACK={:#04x} BAT={:#04x}", alx, qnx);
+    gbk(0xFF);
+    let ack = epx();
+    if ack == 0xFA {
+        let kal = epx();
+        crate::serial_println!("[i8042] Keyboard reset: ACK={:#04x} BAT={:#04x}", ack, kal);
     } else {
-        crate::serial_println!("[i8042] Keyboard reset: response {:#04x} (no ACK)", alx);
+        crate::serial_println!("[i8042] Keyboard reset: response {:#04x} (no ACK)", ack);
     }
 
     
     {
-        let mut f = Port::<u8>::new(HA_);
-        let mut status = Port::<u8>::new(HB_);
+        let mut data = Port::<u8>::new(HR_);
+        let mut status = Port::<u8>::new(HS_);
         for _ in 0..64 {
             if unsafe { status.read() } & 0x01 == 0 { break; }
-            unsafe { f.read(); }
+            unsafe { data.read(); }
         }
     }
 
@@ -89,127 +89,127 @@ pub fn tto() {
 }
 
 
-fn fku(cmd: u8) {
-    let mut status = Port::<u8>::new(HB_);
-    let mut ro = Port::<u8>::new(AGS_);
+fn cks(cmd: u8) {
+    let mut status = Port::<u8>::new(HS_);
+    let mut command = Port::<u8>::new(AIM_);
     
     
     for _ in 0..1_000_000 {
         if unsafe { status.read() } & 0x02 == 0 { break; }
-        core::hint::hc();
+        core::hint::spin_loop();
     }
-    unsafe { ro.write(cmd); }
+    unsafe { command.write(cmd); }
 }
 
 
-fn lcy(f: u8) {
-    let mut status = Port::<u8>::new(HB_);
-    let mut port = Port::<u8>::new(HA_);
+fn gbk(data: u8) {
+    let mut status = Port::<u8>::new(HS_);
+    let mut port = Port::<u8>::new(HR_);
     for _ in 0..1_000_000 {
         if unsafe { status.read() } & 0x02 == 0 { break; }
-        core::hint::hc();
+        core::hint::spin_loop();
     }
-    unsafe { port.write(f); }
+    unsafe { port.write(data); }
 }
 
 
-fn izc() -> u8 {
-    let mut status = Port::<u8>::new(HB_);
-    let mut port = Port::<u8>::new(HA_);
+fn epx() -> u8 {
+    let mut status = Port::<u8>::new(HS_);
+    let mut port = Port::<u8>::new(HR_);
     for _ in 0..1_000_000 {
         if unsafe { status.read() } & 0x01 != 0 {
             return unsafe { port.read() };
         }
-        core::hint::hc();
+        core::hint::spin_loop();
     }
     0xFF 
 }
 
 
-const RT_: usize = 256;
+const SV_: usize = 256;
 
 
-pub const V_: u8 = 0xF0;
-pub const U_: u8 = 0xF1;
-pub const AH_: u8 = 0xF2;
-pub const AI_: u8 = 0xF3;
-pub const CQ_: u8 = 0xF4;
-pub const CP_: u8 = 0xF5;
-pub const CX_: u8 = 0xF6;
+pub const T_: u8 = 0xF0;
+pub const S_: u8 = 0xF1;
+pub const AI_: u8 = 0xF2;
+pub const AJ_: u8 = 0xF3;
+pub const CW_: u8 = 0xF4;
+pub const CV_: u8 = 0xF5;
+pub const DE_: u8 = 0xF6;
 pub const AM_: u8 = 0xF7;
-pub const AQ_: u8 = 0xF8;
+pub const AO_: u8 = 0xF8;
 
 
-pub const AYA_: u8 = 0xD0;      
-pub const AXZ_: u8 = 0xD1;    
-pub const AXY_: u8 = 0xD2;    
-pub const AXV_: u8 = 0xD3;          
-pub const AXU_: u8 = 0xD4;        
-pub const AXW_: u8 = 0xD5;       
-pub const AXX_: u8 = 0xD6;      
+pub const BAB_: u8 = 0xD0;      
+pub const BAA_: u8 = 0xD1;    
+pub const AZZ_: u8 = 0xD2;    
+pub const AZW_: u8 = 0xD3;          
+pub const AZV_: u8 = 0xD4;        
+pub const AZX_: u8 = 0xD5;       
+pub const AZY_: u8 = 0xD6;      
 
 
 struct KeyboardBuffer {
-    bi: [u8; RT_],
-    fsh: usize,
-    bau: usize,
+    buffer: [u8; SV_],
+    read_pos: usize,
+    write_pos: usize,
 }
 
 impl KeyboardBuffer {
     const fn new() -> Self {
         Self {
-            bi: [0; RT_],
-            fsh: 0,
-            bau: 0,
+            buffer: [0; SV_],
+            read_pos: 0,
+            write_pos: 0,
         }
     }
 
-    fn push(&mut self, hf: u8) {
-        let oqp = (self.bau + 1) % RT_;
-        if oqp != self.fsh {
-            self.bi[self.bau] = hf;
-            self.bau = oqp;
+    fn push(&mut self, byte: u8) {
+        let iqo = (self.write_pos + 1) % SV_;
+        if iqo != self.read_pos {
+            self.buffer[self.write_pos] = byte;
+            self.write_pos = iqo;
         }
     }
 
     fn pop(&mut self) -> Option<u8> {
-        if self.fsh == self.bau {
+        if self.read_pos == self.write_pos {
             None
         } else {
-            let hf = self.bi[self.fsh];
-            self.fsh = (self.fsh + 1) % RT_;
-            Some(hf)
+            let byte = self.buffer[self.read_pos];
+            self.read_pos = (self.read_pos + 1) % SV_;
+            Some(byte)
         }
     }
 
     fn is_empty(&self) -> bool {
-        self.fsh == self.bau
+        self.read_pos == self.write_pos
     }
 }
 
 
-const FH_: usize = 32;
+const FW_: usize = 32;
 
 struct CommandHistory {
-    ch: [Option<String>; FH_],
-    bau: usize,
-    cdi: usize,
-    az: usize,
+    entries: [Option<String>; FW_],
+    write_pos: usize,
+    browse_pos: usize,
+    count: usize,
 }
 
 impl CommandHistory {
     const fn new() -> Self {
         
         Self {
-            ch: [
+            entries: [
                 None, None, None, None, None, None, None, None,
                 None, None, None, None, None, None, None, None,
                 None, None, None, None, None, None, None, None,
                 None, None, None, None, None, None, None, None,
             ],
-            bau: 0,
-            cdi: 0,
-            az: 0,
+            write_pos: 0,
+            browse_pos: 0,
+            count: 0,
         }
     }
     
@@ -218,120 +218,120 @@ impl CommandHistory {
             return;
         }
         
-        if self.az > 0 {
-            let uck = if self.bau == 0 { FH_ - 1 } else { self.bau - 1 };
-            if let Some(ref qv) = self.ch[uck] {
-                if qv == cmd {
-                    self.cdi = self.bau;
+        if self.count > 0 {
+            let mwp = if self.write_pos == 0 { FW_ - 1 } else { self.write_pos - 1 };
+            if let Some(ref last) = self.entries[mwp] {
+                if last == cmd {
+                    self.browse_pos = self.write_pos;
                     return;
                 }
             }
         }
         
-        self.ch[self.bau] = Some(String::from(cmd));
-        self.bau = (self.bau + 1) % FH_;
-        if self.az < FH_ {
-            self.az += 1;
+        self.entries[self.write_pos] = Some(String::from(cmd));
+        self.write_pos = (self.write_pos + 1) % FW_;
+        if self.count < FW_ {
+            self.count += 1;
         }
-        self.cdi = self.bau;
+        self.browse_pos = self.write_pos;
     }
     
-    fn tek(&mut self) -> Option<&str> {
-        if self.az == 0 {
+    fn get_prev(&mut self) -> Option<&str> {
+        if self.count == 0 {
             return None;
         }
         
-        let loa = if self.cdi == 0 { 
-            FH_ - 1 
+        let gjf = if self.browse_pos == 0 { 
+            FW_ - 1 
         } else { 
-            self.cdi - 1 
+            self.browse_pos - 1 
         };
         
         
-        let osk = if self.az < FH_ {
+        let ise = if self.count < FW_ {
             0
         } else {
-            self.bau
+            self.write_pos
         };
         
-        if loa == osk && self.cdi == osk {
+        if gjf == ise && self.browse_pos == ise {
             
-            return self.ch[self.cdi].ahz();
+            return self.entries[self.browse_pos].as_deref();
         }
         
-        if self.ch[loa].is_some() {
-            self.cdi = loa;
-            self.ch[self.cdi].ahz()
+        if self.entries[gjf].is_some() {
+            self.browse_pos = gjf;
+            self.entries[self.browse_pos].as_deref()
         } else {
             None
         }
     }
     
-    fn tee(&mut self) -> Option<&str> {
-        if self.cdi == self.bau {
+    fn get_next(&mut self) -> Option<&str> {
+        if self.browse_pos == self.write_pos {
             return None; 
         }
         
-        self.cdi = (self.cdi + 1) % FH_;
+        self.browse_pos = (self.browse_pos + 1) % FW_;
         
-        if self.cdi == self.bau {
+        if self.browse_pos == self.write_pos {
             None 
         } else {
-            self.ch[self.cdi].ahz()
+            self.entries[self.browse_pos].as_deref()
         }
     }
     
-    fn vxt(&mut self) {
-        self.cdi = self.bau;
+    fn reset_browse(&mut self) {
+        self.browse_pos = self.write_pos;
     }
     
     fn iter(&self) -> impl Iterator<Item = (usize, &str)> {
-        let az = self.az;
-        let ay = if az < FH_ { 0 } else { self.bau };
+        let count = self.count;
+        let start = if count < FW_ { 0 } else { self.write_pos };
         
-        (0..az).map(move |a| {
-            let w = (ay + a) % FH_;
-            (a + 1, self.ch[w].ahz().unwrap_or(""))
+        (0..count).map(move |i| {
+            let idx = (start + i) % FW_;
+            (i + 1, self.entries[idx].as_deref().unwrap_or(""))
         })
     }
 }
 
 
-static UI_: Mutex<KeyboardBuffer> = Mutex::new(KeyboardBuffer::new());
+static VR_: Mutex<KeyboardBuffer> = Mutex::new(KeyboardBuffer::new());
 
 
-static MK_: Mutex<CommandHistory> = Mutex::new(CommandHistory::new());
+static NJ_: Mutex<CommandHistory> = Mutex::new(CommandHistory::new());
 
-static Bcz: Mutex<Option<String>> = Mutex::new(None);
-
-
-static TA_: AtomicBool = AtomicBool::new(false);
+static Ww: Mutex<Option<String>> = Mutex::new(None);
 
 
-static ABQ_: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
+static UG_: AtomicBool = AtomicBool::new(false);
 
 
-static RB_: AtomicBool = AtomicBool::new(false);
+static ADG_: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
 
 
-static LB_: AtomicBool = AtomicBool::new(false);
-
-static ZV_: AtomicBool = AtomicBool::new(false);
-
-static AGD_: AtomicBool = AtomicBool::new(false);
-
-static BP_: AtomicBool = AtomicBool::new(false);
+static RW_: AtomicBool = AtomicBool::new(false);
 
 
-static AYC_: Mutex<[u8; 32]> = Mutex::new([0u8; 32]);
+static LU_: AtomicBool = AtomicBool::new(false);
+
+static ABH_: AtomicBool = AtomicBool::new(false);
+
+static AHX_: AtomicBool = AtomicBool::new(false);
+
+static BR_: AtomicBool = AtomicBool::new(false);
 
 
-static DSJ_: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0xFF);
-
-static ECJ_: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
+static BAD_: Mutex<[u8; 32]> = Mutex::new([0u8; 32]);
 
 
-const CQH_: [u8; 128] = [
+static DWC_: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0xFF);
+
+static EFZ_: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
+
+
+const CTW_: [u8; 128] = [
     0, 27, 
     b'1', b'2', b'3', b'4', b'5', b'6', b'7', b'8', b'9', b'0', b'-', b'=', 
     0x08, 
@@ -362,7 +362,7 @@ const CQH_: [u8; 128] = [
 ];
 
 
-const CQI_: [u8; 128] = [
+const CTX_: [u8; 128] = [
     0, 27, 
     b'!', b'@', b'#', b'$', b'%', b'^', b'&', b'*', b'(', b')', b'_', b'+', 
     0x08, 
@@ -396,27 +396,27 @@ const CQI_: [u8; 128] = [
 
 
 #[inline]
-fn bpv(hf: u8) {
-    if let Some(mut k) = UI_.try_lock() {
-        k.push(hf);
+fn ajh(byte: u8) {
+    if let Some(mut buf) = VR_.try_lock() {
+        buf.push(byte);
     }
     
 }
 
 
-pub fn crc(scancode: u8) {
+pub fn handle_scancode(scancode: u8) {
     
     
     
     
-    let chz = ABQ_.load(Ordering::SeqCst);
-    if chz > 0 {
-        ABQ_.store(chz - 1, Ordering::SeqCst);
+    let skip = ADG_.load(Ordering::SeqCst);
+    if skip > 0 {
+        ADG_.store(skip - 1, Ordering::SeqCst);
         return;
     }
     if scancode == 0xE1 {
         
-        ABQ_.store(5, Ordering::SeqCst);
+        ADG_.store(5, Ordering::SeqCst);
         return;
     }
     
@@ -433,28 +433,28 @@ pub fn crc(scancode: u8) {
     
     
     
-    let lhe = scancode & 0x7F;
-    if lhe >= 0x47 && lhe <= 0x53 {
-        if !TA_.load(Ordering::SeqCst) && !AGD_.load(Ordering::SeqCst) {
+    let geo = scancode & 0x7F;
+    if geo >= 0x47 && geo <= 0x53 {
+        if !UG_.load(Ordering::SeqCst) && !AHX_.load(Ordering::SeqCst) {
             
             
             
-            let bep = scancode & 0x80 != 0;
-            if !bep {
-                let fvb = match lhe {
-                    0x47 => Some(CQ_),
-                    0x48 => Some(V_),
+            let adx = scancode & 0x80 != 0;
+            if !adx {
+                let cqw = match geo {
+                    0x47 => Some(CW_),
+                    0x48 => Some(T_),
                     0x49 => Some(AM_),
-                    0x4B => Some(AH_),
-                    0x4D => Some(AI_),
-                    0x4F => Some(CP_),
-                    0x50 => Some(U_),
-                    0x51 => Some(AQ_),
-                    0x53 => Some(CX_),
+                    0x4B => Some(AI_),
+                    0x4D => Some(AJ_),
+                    0x4F => Some(CV_),
+                    0x50 => Some(S_),
+                    0x51 => Some(AO_),
+                    0x53 => Some(DE_),
                     _ => None,
                 };
-                if let Some(eh) = fvb {
-                    bpv(eh);
+                if let Some(k) = cqw {
+                    ajh(k);
                 }
             }
             return;
@@ -463,221 +463,221 @@ pub fn crc(scancode: u8) {
     
     
     if scancode == 0xE0 {
-        TA_.store(true, Ordering::SeqCst);
+        UG_.store(true, Ordering::SeqCst);
         return;
     }
     
-    let ofx = TA_.load(Ordering::SeqCst);
-    TA_.store(false, Ordering::SeqCst);
+    let ihw = UG_.load(Ordering::SeqCst);
+    UG_.store(false, Ordering::SeqCst);
     
     
-    let bep = scancode & 0x80 != 0;
-    let bs = scancode & 0x7F;
+    let adx = scancode & 0x80 != 0;
+    let key = scancode & 0x7F;
     
     
-    xox(bs, !bep);
+    ppw(key, !adx);
     
     
-    if ofx {
+    if ihw {
         
-        if bs == 0x1D {
-            BP_.store(!bep, Ordering::SeqCst);
-            if !bep {
-                crate::accessibility::ibv(crate::accessibility::StickyModifier::Wd);
+        if key == 0x1D {
+            BR_.store(!adx, Ordering::SeqCst);
+            if !adx {
+                crate::accessibility::eak(crate::accessibility::StickyModifier::Ctrl);
             }
             return;
         }
-        if bs == 0x38 {
-            RB_.store(!bep, Ordering::SeqCst);
-            if !bep {
-                crate::accessibility::ibv(crate::accessibility::StickyModifier::Vh);
+        if key == 0x38 {
+            RW_.store(!adx, Ordering::SeqCst);
+            if !adx {
+                crate::accessibility::eak(crate::accessibility::StickyModifier::Alt);
             }
             return;
         }
         
         
-        if !bep {
-            let bdj = RB_.load(Ordering::SeqCst);
-            let db = BP_.load(Ordering::SeqCst);
+        if !adx {
+            let adf = RW_.load(Ordering::SeqCst);
+            let ctrl = BR_.load(Ordering::SeqCst);
             
-            let fvb = match bs {
-                0x48 if bdj  => Some(AXV_),
-                0x50 if bdj  => Some(AXU_),
-                0x4B if db => Some(AXW_),
-                0x4D if db => Some(AXX_),
-                0x48 => Some(V_),
-                0x50 => Some(U_),
-                0x4B => Some(AH_),
-                0x4D => Some(AI_),
-                0x47 => Some(CQ_),
-                0x4F => Some(CP_),
-                0x53 => Some(CX_),
-                0x71 => Some(CX_), 
-                0x75 => Some(V_),      
-                0x72 => Some(U_),    
-                0x6B => Some(AH_),    
-                0x74 => Some(AI_),   
-                0x6C => Some(CQ_),    
-                0x69 => Some(CP_),     
+            let cqw = match key {
+                0x48 if adf  => Some(AZW_),
+                0x50 if adf  => Some(AZV_),
+                0x4B if ctrl => Some(AZX_),
+                0x4D if ctrl => Some(AZY_),
+                0x48 => Some(T_),
+                0x50 => Some(S_),
+                0x4B => Some(AI_),
+                0x4D => Some(AJ_),
+                0x47 => Some(CW_),
+                0x4F => Some(CV_),
+                0x53 => Some(DE_),
+                0x71 => Some(DE_), 
+                0x75 => Some(T_),      
+                0x72 => Some(S_),    
+                0x6B => Some(AI_),    
+                0x74 => Some(AJ_),   
+                0x6C => Some(CW_),    
+                0x69 => Some(CV_),     
                 0x49 => Some(AM_),
-                0x51 => Some(AQ_),
+                0x51 => Some(AO_),
                 _ => None,
             };
-            if let Some(eh) = fvb {
-                bpv(eh);
+            if let Some(k) = cqw {
+                ajh(k);
             }
         }
         return;
     }
 
     
-    if !ofx && !bep && bs == 0x29 {
-        bpv(b' ');
+    if !ihw && !adx && key == 0x29 {
+        ajh(b' ');
         return;
     }
     
     
-    if bs == 0x1D {
-        BP_.store(!bep, Ordering::SeqCst);
+    if key == 0x1D {
+        BR_.store(!adx, Ordering::SeqCst);
         
-        if !bep {
-            crate::accessibility::ibv(crate::accessibility::StickyModifier::Wd);
+        if !adx {
+            crate::accessibility::eak(crate::accessibility::StickyModifier::Ctrl);
         }
         return;
     }
     
     
-    if bs == 0x2A || bs == 0x36 {
+    if key == 0x2A || key == 0x36 {
         
-        LB_.store(!bep, Ordering::SeqCst);
-        if !bep {
-            crate::accessibility::ibv(crate::accessibility::StickyModifier::Yv);
+        LU_.store(!adx, Ordering::SeqCst);
+        if !adx {
+            crate::accessibility::eak(crate::accessibility::StickyModifier::Shift);
         }
         return;
     }
     
     
-    if bs == 0x3A && !bep {
-        let cv = ZV_.load(Ordering::SeqCst);
-        ZV_.store(!cv, Ordering::SeqCst);
+    if key == 0x3A && !adx {
+        let current = ABH_.load(Ordering::SeqCst);
+        ABH_.store(!current, Ordering::SeqCst);
         return;
     }
     
     
-    if bs == 0x45 && !bep {
-        let cv = AGD_.load(Ordering::SeqCst);
-        AGD_.store(!cv, Ordering::SeqCst);
+    if key == 0x45 && !adx {
+        let current = AHX_.load(Ordering::SeqCst);
+        AHX_.store(!current, Ordering::SeqCst);
         return;
     }
     
     
-    if bep {
+    if adx {
         return;
     }
     
     
-    if BP_.load(Ordering::SeqCst) && bs == 0x1E {
-        bpv(1); 
-        return;
-    }
-
-    
-    if BP_.load(Ordering::SeqCst) && bs == 0x2E {
-        bpv(3); 
+    if BR_.load(Ordering::SeqCst) && key == 0x1E {
+        ajh(1); 
         return;
     }
 
     
-    if BP_.load(Ordering::SeqCst) && bs == 0x2F {
-        bpv(0x16); 
+    if BR_.load(Ordering::SeqCst) && key == 0x2E {
+        ajh(3); 
         return;
     }
 
     
-    if BP_.load(Ordering::SeqCst) && bs == 0x2D {
-        bpv(0x18); 
+    if BR_.load(Ordering::SeqCst) && key == 0x2F {
+        ajh(0x16); 
         return;
     }
 
     
-    if BP_.load(Ordering::SeqCst) && bs == 0x26 {
-        bpv(12); 
+    if BR_.load(Ordering::SeqCst) && key == 0x2D {
+        ajh(0x18); 
         return;
     }
 
     
-    if BP_.load(Ordering::SeqCst) && bs == 0x1F {
-        bpv(0x13); 
+    if BR_.load(Ordering::SeqCst) && key == 0x26 {
+        ajh(12); 
         return;
     }
 
     
-    if BP_.load(Ordering::SeqCst) && bs == 0x22 {
-        bpv(0x07); 
+    if BR_.load(Ordering::SeqCst) && key == 0x1F {
+        ajh(0x13); 
         return;
     }
 
     
-    if BP_.load(Ordering::SeqCst) && bs == 0x21 {
-        bpv(0x06); 
+    if BR_.load(Ordering::SeqCst) && key == 0x22 {
+        ajh(0x07); 
         return;
     }
 
     
-    if BP_.load(Ordering::SeqCst) && bs == 0x23 {
-        bpv(0x12); 
+    if BR_.load(Ordering::SeqCst) && key == 0x21 {
+        ajh(0x06); 
         return;
     }
 
     
-    if BP_.load(Ordering::SeqCst) && bs == 0x2C {
-        bpv(0x1A); 
+    if BR_.load(Ordering::SeqCst) && key == 0x23 {
+        ajh(0x12); 
         return;
     }
 
     
-    if BP_.load(Ordering::SeqCst) && bs == 0x15 {
-        bpv(0x19); 
+    if BR_.load(Ordering::SeqCst) && key == 0x2C {
+        ajh(0x1A); 
         return;
     }
 
     
-    if BP_.load(Ordering::SeqCst) && bs == 0x35 {
-        bpv(AYA_);
+    if BR_.load(Ordering::SeqCst) && key == 0x15 {
+        ajh(0x19); 
         return;
     }
 
     
-    if BP_.load(Ordering::SeqCst) && LB_.load(Ordering::SeqCst) && bs == 0x25 {
-        bpv(AXZ_);
+    if BR_.load(Ordering::SeqCst) && key == 0x35 {
+        ajh(BAB_);
         return;
     }
 
     
-    if BP_.load(Ordering::SeqCst) && LB_.load(Ordering::SeqCst) && bs == 0x20 {
-        bpv(AXY_);
+    if BR_.load(Ordering::SeqCst) && LU_.load(Ordering::SeqCst) && key == 0x25 {
+        ajh(BAA_);
         return;
     }
 
     
-    let acn = LB_.load(Ordering::SeqCst)
-        || crate::accessibility::jbu(crate::accessibility::StickyModifier::Yv);
-    let dr = ZV_.load(Ordering::SeqCst);
+    if BR_.load(Ordering::SeqCst) && LU_.load(Ordering::SeqCst) && key == 0x20 {
+        ajh(AZZ_);
+        return;
+    }
+
     
-    let ascii = if bs < 128 {
-        let ar = if acn {
-            CQI_[bs as usize]
+    let no = LU_.load(Ordering::SeqCst)
+        || crate::accessibility::erv(crate::accessibility::StickyModifier::Shift);
+    let caps = ABH_.load(Ordering::SeqCst);
+    
+    let ascii = if key < 128 {
+        let base = if no {
+            CTX_[key as usize]
         } else {
-            CQH_[bs as usize]
+            CTW_[key as usize]
         };
         
         
-        if dr && ar >= b'a' && ar <= b'z' {
-            ar - 32 
-        } else if dr && ar >= b'A' && ar <= b'Z' {
-            ar + 32 
+        if caps && base >= b'a' && base <= b'z' {
+            base - 32 
+        } else if caps && base >= b'A' && base <= b'Z' {
+            base + 32 
         } else {
-            ar
+            base
         }
     } else {
         0
@@ -686,60 +686,60 @@ pub fn crc(scancode: u8) {
     
     if ascii != 0 {
         
-        bpv(ascii);
+        ajh(ascii);
         
-        crate::accessibility::wuh();
+        crate::accessibility::oxi();
     }
 }
 
 
-pub fn auw() -> Option<u8> {
+pub fn ya() -> Option<u8> {
     
     
-    let result = crate::arch::cvh(|| {
-        UI_.lock().pop()
+    let result = crate::arch::bag(|| {
+        VR_.lock().pop()
     });
-    if let Some(o) = result {
-        return Some(o);
+    if let Some(b) = result {
+        return Some(b);
     }
-    serial::dlb()
+    serial::read_byte()
 }
 
 
-pub fn voj(ascii: u8) {
+pub fn nzs(ascii: u8) {
     if ascii != 0 {
-        crate::arch::cvh(|| {
-            UI_.lock().push(ascii);
+        crate::arch::bag(|| {
+            VR_.lock().push(ascii);
         });
     }
 }
 
 
-pub fn hmo() -> bool {
-    crate::arch::cvh(|| {
-        !UI_.lock().is_empty()
+pub fn has_input() -> bool {
+    crate::arch::bag(|| {
+        !VR_.lock().is_empty()
     })
 }
 
 
 
-pub fn alh(scancode: u8) -> bool {
+pub fn sx(scancode: u8) -> bool {
     
     
-    crate::arch::cvh(|| {
+    crate::arch::bag(|| {
         match scancode {
-            0x38 => RB_.load(Ordering::Relaxed)
-                || crate::accessibility::jbu(crate::accessibility::StickyModifier::Vh),
-            0x1D => BP_.load(Ordering::Relaxed)
-                || crate::accessibility::jbu(crate::accessibility::StickyModifier::Wd),
-            0x2A | 0x36 => LB_.load(Ordering::Relaxed)
-                || crate::accessibility::jbu(crate::accessibility::StickyModifier::Yv),
+            0x38 => RW_.load(Ordering::Relaxed)
+                || crate::accessibility::erv(crate::accessibility::StickyModifier::Alt),
+            0x1D => BR_.load(Ordering::Relaxed)
+                || crate::accessibility::erv(crate::accessibility::StickyModifier::Ctrl),
+            0x2A | 0x36 => LU_.load(Ordering::Relaxed)
+                || crate::accessibility::erv(crate::accessibility::StickyModifier::Shift),
             _ => {
-                let g = AYC_.lock();
-                let avk = (scancode / 8) as usize;
-                let deh = scancode % 8;
-                if avk < 32 {
-                    (g[avk] & (1 << deh)) != 0
+                let state = BAD_.lock();
+                let yk = (scancode / 8) as usize;
+                let bew = scancode % 8;
+                if yk < 32 {
+                    (state[yk] & (1 << bew)) != 0
                 } else {
                     false
                 }
@@ -749,240 +749,240 @@ pub fn alh(scancode: u8) -> bool {
 }
 
 
-fn xox(scancode: u8, vn: bool) {
+fn ppw(scancode: u8, pressed: bool) {
     
     match scancode {
         0x38 => {
-            RB_.store(vn, Ordering::Relaxed);
+            RW_.store(pressed, Ordering::Relaxed);
             
-            if vn {
-                crate::accessibility::ibv(crate::accessibility::StickyModifier::Vh);
+            if pressed {
+                crate::accessibility::eak(crate::accessibility::StickyModifier::Alt);
             }
         }
-        0x1D => BP_.store(vn, Ordering::Relaxed),
-        0x2A | 0x36 => LB_.store(vn, Ordering::Relaxed),
+        0x1D => BR_.store(pressed, Ordering::Relaxed),
+        0x2A | 0x36 => LU_.store(pressed, Ordering::Relaxed),
         _ => {}
     }
     
     
-    let mut g = AYC_.lock();
-    let avk = (scancode / 8) as usize;
-    let deh = scancode % 8;
-    if avk < 32 {
-        if vn {
-            g[avk] |= 1 << deh;
+    let mut state = BAD_.lock();
+    let yk = (scancode / 8) as usize;
+    let bew = scancode % 8;
+    if yk < 32 {
+        if pressed {
+            state[yk] |= 1 << bew;
         } else {
-            g[avk] &= !(1 << deh);
+            state[yk] &= !(1 << bew);
         }
     }
 }
 
 
-pub fn jzh(cmd: &str) {
-    MK_.lock().add(cmd);
+pub fn fgf(cmd: &str) {
+    NJ_.lock().add(cmd);
 }
 
 
-pub fn lcd() -> Option<String> {
-    MK_.lock().tek().map(String::from)
+pub fn gat() -> Option<String> {
+    NJ_.lock().get_prev().map(String::from)
 }
 
 
-pub fn lcc() -> Option<String> {
-    MK_.lock().tee().map(String::from)
+pub fn gas() -> Option<String> {
+    NJ_.lock().get_next().map(String::from)
 }
 
 
-pub fn lce() {
-    MK_.lock().vxt();
+pub fn gau() {
+    NJ_.lock().reset_browse();
 }
 
 
-pub fn toz() -> Vec<(usize, String)> {
-    MK_.lock().iter().map(|(a, e)| (a, String::from(e))).collect()
+pub fn mlp() -> Vec<(usize, String)> {
+    NJ_.lock().iter().map(|(i, j)| (i, String::from(j))).collect()
 }
 
-pub fn eno(text: &str) {
-    *Bcz.lock() = Some(String::from(text));
+pub fn byb(text: &str) {
+    *Ww.lock() = Some(String::from(text));
 }
 
-pub fn ndn() -> Option<String> {
-    Bcz.lock().as_ref().map(|e| e.clone())
+pub fn hln() -> Option<String> {
+    Ww.lock().as_ref().map(|j| j.clone())
 }
 
 
-pub fn vrz(bi: &mut [u8]) -> usize {
-    let mut u = 0;
-    let mut gi = 0; 
-    let mut ylb = String::new(); 
-    let mut bww = false;
+pub fn ocu(buffer: &mut [u8]) -> usize {
+    let mut pos = 0;
+    let mut cursor = 0; 
+    let mut qcc = String::new(); 
+    let mut amr = false;
     
     
-    lce();
+    gau();
     
     loop {
-        if let Some(r) = auw() {
-            match r {
+        if let Some(c) = ya() {
+            match c {
                 b'\n' | b'\r' => {
                     crate::println!();
                     
-                    let cmd = core::str::jg(&bi[..u]).unwrap_or("");
-                    if !cmd.em().is_empty() {
-                        jzh(cmd);
+                    let cmd = core::str::from_utf8(&buffer[..pos]).unwrap_or("");
+                    if !cmd.trim().is_empty() {
+                        fgf(cmd);
                     }
                     break;
                 }
                 0x01 => {
                     
-                    bww = true;
+                    amr = true;
                 }
                 0x08 => {
                     
-                    if bww {
+                    if amr {
                         
-                        while gi > 0 {
+                        while cursor > 0 {
                             crate::print!("\x08");
-                            gi -= 1;
+                            cursor -= 1;
                         }
-                        for _ in 0..u {
+                        for _ in 0..pos {
                             crate::print!(" ");
                         }
-                        for _ in 0..u {
+                        for _ in 0..pos {
                             crate::print!("\x08");
                         }
-                        u = 0;
-                        gi = 0;
-                        bww = false;
-                    } else if gi > 0 {
+                        pos = 0;
+                        cursor = 0;
+                        amr = false;
+                    } else if cursor > 0 {
                         
-                        for a in gi..u {
-                            bi[a - 1] = bi[a];
+                        for i in cursor..pos {
+                            buffer[i - 1] = buffer[i];
                         }
-                        u = u.ao(1);
-                        gi = gi.ao(1);
+                        pos = pos.saturating_sub(1);
+                        cursor = cursor.saturating_sub(1);
                         
                         
                         crate::print!("\x08");
-                        for a in gi..u {
-                            crate::print!("{}", bi[a] as char);
+                        for i in cursor..pos {
+                            crate::print!("{}", buffer[i] as char);
                         }
                         crate::print!(" ");
-                        for _ in gi..=u {
+                        for _ in cursor..=pos {
                             crate::print!("\x08");
                         }
                     }
                 }
-                V_ => {
+                T_ => {
                     
-                    if let Some(vo) = lcd() {
-                        bww = false;
+                    if let Some(prev) = gat() {
+                        amr = false;
                         
-                        while gi > 0 {
+                        while cursor > 0 {
                             crate::print!("\x08");
-                            gi -= 1;
+                            cursor -= 1;
                         }
-                        for _ in 0..u {
+                        for _ in 0..pos {
                             crate::print!(" ");
                         }
-                        for _ in 0..u {
+                        for _ in 0..pos {
                             crate::print!("\x08");
                         }
                         
-                        let bf = vo.as_bytes();
-                        let len = bf.len().v(bi.len() - 1);
-                        bi[..len].dg(&bf[..len]);
-                        u = len;
-                        gi = len;
-                        crate::print!("{}", &vo[..len]);
+                        let bytes = prev.as_bytes();
+                        let len = bytes.len().min(buffer.len() - 1);
+                        buffer[..len].copy_from_slice(&bytes[..len]);
+                        pos = len;
+                        cursor = len;
+                        crate::print!("{}", &prev[..len]);
                     }
                 }
-                U_ => {
+                S_ => {
                     
-                    let next = lcc();
-                    bww = false;
+                    let next = gas();
+                    amr = false;
                     
-                    while gi > 0 {
+                    while cursor > 0 {
                         crate::print!("\x08");
-                        gi -= 1;
+                        cursor -= 1;
                     }
-                    for _ in 0..u {
+                    for _ in 0..pos {
                         crate::print!(" ");
                     }
-                    for _ in 0..u {
+                    for _ in 0..pos {
                         crate::print!("\x08");
                     }
                     
-                    if let Some(oqk) = next {
-                        let bf = oqk.as_bytes();
-                        let len = bf.len().v(bi.len() - 1);
-                        bi[..len].dg(&bf[..len]);
-                        u = len;
-                        gi = len;
-                        crate::print!("{}", &oqk[..len]);
+                    if let Some(next_cmd) = next {
+                        let bytes = next_cmd.as_bytes();
+                        let len = bytes.len().min(buffer.len() - 1);
+                        buffer[..len].copy_from_slice(&bytes[..len]);
+                        pos = len;
+                        cursor = len;
+                        crate::print!("{}", &next_cmd[..len]);
                     } else {
-                        u = 0;
-                        gi = 0;
-                    }
-                }
-                AH_ => {
-                    bww = false;
-                    if gi > 0 {
-                        gi -= 1;
-                        crate::print!("\x08");
+                        pos = 0;
+                        cursor = 0;
                     }
                 }
                 AI_ => {
-                    bww = false;
-                    if gi < u {
-                        crate::print!("{}", bi[gi] as char);
-                        gi += 1;
-                    }
-                }
-                CQ_ => {
-                    bww = false;
-                    while gi > 0 {
+                    amr = false;
+                    if cursor > 0 {
+                        cursor -= 1;
                         crate::print!("\x08");
-                        gi -= 1;
                     }
                 }
-                CP_ => {
-                    bww = false;
-                    while gi < u {
-                        crate::print!("{}", bi[gi] as char);
-                        gi += 1;
+                AJ_ => {
+                    amr = false;
+                    if cursor < pos {
+                        crate::print!("{}", buffer[cursor] as char);
+                        cursor += 1;
                     }
                 }
-                CX_ => {
+                CW_ => {
+                    amr = false;
+                    while cursor > 0 {
+                        crate::print!("\x08");
+                        cursor -= 1;
+                    }
+                }
+                CV_ => {
+                    amr = false;
+                    while cursor < pos {
+                        crate::print!("{}", buffer[cursor] as char);
+                        cursor += 1;
+                    }
+                }
+                DE_ => {
                     
-                    if bww {
+                    if amr {
                         
-                        while gi > 0 {
+                        while cursor > 0 {
                             crate::print!("\x08");
-                            gi -= 1;
+                            cursor -= 1;
                         }
-                        for _ in 0..u {
+                        for _ in 0..pos {
                             crate::print!(" ");
                         }
-                        for _ in 0..u {
+                        for _ in 0..pos {
                             crate::print!("\x08");
                         }
-                        u = 0;
-                        gi = 0;
-                        bww = false;
-                    } else if gi < u {
+                        pos = 0;
+                        cursor = 0;
+                        amr = false;
+                    } else if cursor < pos {
                         
-                        for a in gi..u.ao(1) {
-                            bi[a] = bi[a + 1];
+                        for i in cursor..pos.saturating_sub(1) {
+                            buffer[i] = buffer[i + 1];
                         }
-                        u = u.ao(1);
+                        pos = pos.saturating_sub(1);
                         
                         
-                        for a in gi..u {
-                            crate::print!("{}", bi[a] as char);
+                        for i in cursor..pos {
+                            crate::print!("{}", buffer[i] as char);
                         }
                         crate::print!(" ");
                         
-                        for _ in gi..=u {
+                        for _ in cursor..=pos {
                             crate::print!("\x08");
                         }
                     }
@@ -991,99 +991,99 @@ pub fn vrz(bi: &mut [u8]) -> usize {
                     
                     crate::framebuffer::clear();
                     
-                    crate::gr!(crate::framebuffer::G_, "trustos");
-                    crate::gr!(crate::framebuffer::B_, "> ");
-                    for a in 0..u {
-                        crate::print!("{}", bi[a] as char);
+                    crate::bq!(crate::framebuffer::G_, "trustos");
+                    crate::bq!(crate::framebuffer::B_, "> ");
+                    for i in 0..pos {
+                        crate::print!("{}", buffer[i] as char);
                     }
                     
-                    for _ in gi..u {
+                    for _ in cursor..pos {
                         crate::print!("\x08");
                     }
-                    bww = false;
+                    amr = false;
                 }
                 3 => {
                     
-                    if let Ok(text) = core::str::jg(&bi[..u]) {
-                        eno(text);
+                    if let Ok(text) = core::str::from_utf8(&buffer[..pos]) {
+                        byb(text);
                     }
-                    bww = false;
+                    amr = false;
                 }
                 0x16 => {
                     
-                    if let Some(text) = ndn() {
-                        if bww {
+                    if let Some(text) = hln() {
+                        if amr {
                             
-                            while gi > 0 {
+                            while cursor > 0 {
                                 crate::print!("\x08");
-                                gi -= 1;
+                                cursor -= 1;
                             }
-                            for _ in 0..u {
+                            for _ in 0..pos {
                                 crate::print!(" ");
                             }
-                            for _ in 0..u {
+                            for _ in 0..pos {
                                 crate::print!("\x08");
                             }
-                            u = 0;
-                            gi = 0;
-                            bww = false;
+                            pos = 0;
+                            cursor = 0;
+                            amr = false;
                         }
-                        for o in text.bf() {
-                            if o < 0x20 || o >= 0x7F || u >= bi.len() - 1 {
+                        for b in text.bytes() {
+                            if b < 0x20 || b >= 0x7F || pos >= buffer.len() - 1 {
                                 continue;
                             }
-                            if gi < u {
-                                for a in (gi..u).vv() {
-                                    bi[a + 1] = bi[a];
+                            if cursor < pos {
+                                for i in (cursor..pos).rev() {
+                                    buffer[i + 1] = buffer[i];
                                 }
                             }
-                            bi[gi] = o;
-                            u += 1;
-                            gi += 1;
+                            buffer[cursor] = b;
+                            pos += 1;
+                            cursor += 1;
 
-                            for a in gi - 1..u {
-                                crate::print!("{}", bi[a] as char);
+                            for i in cursor - 1..pos {
+                                crate::print!("{}", buffer[i] as char);
                             }
-                            for _ in gi..u {
+                            for _ in cursor..pos {
                                 crate::print!("\x08");
                             }
                         }
                     }
                 }
-                _ if r >= 0x20 && r < 0x7F && u < bi.len() - 1 => {
+                _ if c >= 0x20 && c < 0x7F && pos < buffer.len() - 1 => {
                     
-                    if bww {
+                    if amr {
                         
-                        while gi > 0 {
+                        while cursor > 0 {
                             crate::print!("\x08");
-                            gi -= 1;
+                            cursor -= 1;
                         }
-                        for _ in 0..u {
+                        for _ in 0..pos {
                             crate::print!(" ");
                         }
-                        for _ in 0..u {
+                        for _ in 0..pos {
                             crate::print!("\x08");
                         }
-                        u = 0;
-                        gi = 0;
-                        bww = false;
+                        pos = 0;
+                        cursor = 0;
+                        amr = false;
                     }
-                    if gi < u {
+                    if cursor < pos {
                         
-                        for a in (gi..u).vv() {
-                            bi[a + 1] = bi[a];
+                        for i in (cursor..pos).rev() {
+                            buffer[i + 1] = buffer[i];
                         }
                     }
-                    bi[gi] = r;
-                    u += 1;
-                    gi += 1;
+                    buffer[cursor] = c;
+                    pos += 1;
+                    cursor += 1;
                     
                     
-                    for a in gi - 1..u {
-                        crate::print!("{}", bi[a] as char);
+                    for i in cursor - 1..pos {
+                        crate::print!("{}", buffer[i] as char);
                     }
                     
-                    for _ in gi..u {
+                    for _ in cursor..pos {
                         crate::print!("\x08");
                     }
                 }
@@ -1091,56 +1091,56 @@ pub fn vrz(bi: &mut [u8]) -> usize {
             }
         } else {
             
-            crate::arch::bhd();
+            crate::arch::acb();
         }
     }
     
-    bi[u] = 0; 
-    u
+    buffer[pos] = 0; 
+    pos
 }
 
 
-pub fn cts(bi: &mut [u8]) -> usize {
-    vrz(bi)
+pub fn read_line(buffer: &mut [u8]) -> usize {
+    ocu(buffer)
 }
 
 
-pub fn fsf(bi: &mut [u8]) -> usize {
-    let mut u = 0;
+pub fn cpb(buffer: &mut [u8]) -> usize {
+    let mut pos = 0;
     
     loop {
-        if let Some(r) = auw() {
-            match r {
+        if let Some(c) = ya() {
+            match c {
                 b'\n' | b'\r' => {
                     
                     break;
                 }
                 0x08 => {
                     
-                    if u > 0 {
-                        u -= 1;
-                        bi[u] = 0;
+                    if pos > 0 {
+                        pos -= 1;
+                        buffer[pos] = 0;
                         
                         crate::print!("\x08 \x08");
                     }
                 }
                 0x03 => {
                     
-                    u = 0;
+                    pos = 0;
                     break;
                 }
                 0x15 => {
                     
-                    for _ in 0..u {
+                    for _ in 0..pos {
                         crate::print!("\x08 \x08");
                     }
-                    u = 0;
+                    pos = 0;
                 }
-                r if r >= 0x20 && r < 0x7F => {
+                c if c >= 0x20 && c < 0x7F => {
                     
-                    if u < bi.len() - 1 {
-                        bi[u] = r;
-                        u += 1;
+                    if pos < buffer.len() - 1 {
+                        buffer[pos] = c;
+                        pos += 1;
                         
                         crate::print!("*");
                     }
@@ -1150,7 +1150,7 @@ pub fn fsf(bi: &mut [u8]) -> usize {
         }
     }
     
-    u
+    pos
 }
 
 
@@ -1159,19 +1159,19 @@ pub fn fsf(bi: &mut [u8]) -> usize {
 
 
 
-pub fn xw() -> Option<u8> {
-    auw()
+pub fn kr() -> Option<u8> {
+    ya()
 }
 
 
-pub fn xtj() -> u8 {
+pub fn ptj() -> u8 {
     loop {
-        if let Some(bs) = auw() {
-            return bs;
+        if let Some(key) = ya() {
+            return key;
         }
         
         for _ in 0..1000 {
-            core::hint::hc();
+            core::hint::spin_loop();
         }
     }
 }

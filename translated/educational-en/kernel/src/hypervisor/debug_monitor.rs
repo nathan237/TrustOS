@@ -164,7 +164,7 @@ pub struct DebugMonitor {
     /// Recent timeline
     pub timeline: Vec<TimelineEntry>,
     /// Timeline write position (circular)
-    pub timeline_position: usize,
+    pub timeline_pos: usize,
     /// Total events per category
     pub category_counts: BTreeMap<DebugCategory, u64>,
     /// Total unhandled events per category
@@ -186,7 +186,7 @@ pub fn new() -> Self {
         Self {
             stats: BTreeMap::new(),
             timeline: Vec::with_capacity(MAXIMUM_TIMELINE),
-            timeline_position: 0,
+            timeline_pos: 0,
             category_counts: BTreeMap::new(),
             unhandled_counts: BTreeMap::new(),
             gaps: Vec::new(),
@@ -208,11 +208,11 @@ pub fn new() -> Self {
 
         // Update per-identifier stats
         let key = (event.category, event.identifier);
-        if let Some(status) = self.stats.get_mut(&key) {
-            status.count += 1;
-            status.status = event.status;
-            status.last_rip = event.guest_rip;
-            status.last_detail = event.detail.clone();
+        if let Some(stat) = self.stats.get_mut(&key) {
+            stat.count += 1;
+            stat.status = event.status;
+            stat.last_rip = event.guest_rip;
+            stat.last_detail = event.detail.clone();
         } else if self.stats.len() < MAXIMUM_TRACKED_ENTRIES {
             let name = identify_name(event.category, event.identifier);
             self.stats.insert(key, IdentifierStats {
@@ -236,9 +236,9 @@ pub fn new() -> Self {
         if self.timeline.len() < MAXIMUM_TIMELINE {
             self.timeline.push(entry);
         } else {
-            self.timeline[self.timeline_position] = entry;
+            self.timeline[self.timeline_pos] = entry;
         }
-        self.timeline_position = (self.timeline_position + 1) % MAXIMUM_TIMELINE;
+        self.timeline_pos = (self.timeline_pos + 1) % MAXIMUM_TIMELINE;
 
         // Serial log if enabled (only non-handled)
         if self.serial_log && !matches!(event.status, HandleStatus::Handled) {
@@ -366,12 +366,12 @@ match monitor.as_ref() {
         out.push_str("  \x01C── Missing/Stubbed Operations ──────────────────────────────\x01W\n");
         out.push_str("  \x01YCategory      ID             Name                   Count  Status\x01W\n");
 
-        for ((cat, id), status) in gaps.iter().take(30) {
+        for ((cat, id), stat) in gaps.iter().take(30) {
             out.push_str(&format!("  {}{:<14}\x01W0x{:<12X} {:<22} {:>5}  {}{}\x01W\n",
-                status.status.color_code(),
+                stat.status.color_code(),
                 cat.as_str(), id,
-                if status.name.len() > 22 { &status.name[..22] } else { &status.name },
-                status.count, status.status.color_code(), status.status.as_str()));
+                if stat.name.len() > 22 { &stat.name[..22] } else { &stat.name },
+                stat.count, stat.status.color_code(), stat.status.as_str()));
         }
         out.push('\n');
     }
@@ -385,12 +385,12 @@ match monitor.as_ref() {
     if !io_stats.is_empty() {
         out.push_str("  \x01C── Top I/O Ports (by frequency) ────────────────────────────\x01W\n");
         out.push_str("  \x01YDir    Port       Name                   Count  Status\x01W\n");
-        for ((cat, port), status) in io_stats.iter().take(20) {
+        for ((cat, port), stat) in io_stats.iter().take(20) {
             let directory = if matches!(cat, DebugCategory::IoPortIn) { "IN " } else { "OUT" };
             out.push_str(&format!("  {}  0x{:04X}     {:<22} {:>6}  {}{}\x01W\n",
                 directory, port,
-                if status.name.len() > 22 { &status.name[..22] } else { &status.name },
-                status.count, status.status.color_code(), status.status.as_str()));
+                if stat.name.len() > 22 { &stat.name[..22] } else { &stat.name },
+                stat.count, stat.status.color_code(), stat.status.as_str()));
         }
         out.push('\n');
     }
@@ -404,12 +404,12 @@ match monitor.as_ref() {
     if !msr_stats.is_empty() {
         out.push_str("  \x01C── MSR Access Log ──────────────────────────────────────────\x01W\n");
         out.push_str("  \x01YDir     MSR            Name                   Count  Status\x01W\n");
-        for ((cat, msr), status) in msr_stats.iter().take(20) {
+        for ((cat, msr), stat) in msr_stats.iter().take(20) {
             let directory = if matches!(cat, DebugCategory::MsrRead) { "READ " } else { "WRITE" };
             out.push_str(&format!("  {}  0x{:08X}     {:<22} {:>5}  {}{}\x01W\n",
                 directory, msr,
-                if status.name.len() > 22 { &status.name[..22] } else { &status.name },
-                status.count, status.status.color_code(), status.status.as_str()));
+                if stat.name.len() > 22 { &stat.name[..22] } else { &stat.name },
+                stat.count, stat.status.color_code(), stat.status.as_str()));
         }
         out.push('\n');
     }
@@ -445,8 +445,8 @@ match monitor.as_ref() {
         if !unhandled_io.is_empty() {
             out.push_str(&format!("  \x01R✗ {} unhandled I/O port(s)\x01W — implement handlers in handle_io()\n",
                 unhandled_io.len()));
-            for ((_, port), status) in unhandled_io.iter().take(5) {
-                out.push_str(&format!("    → 0x{:04X} {} ({}x)\n", port, status.name, status.count));
+            for ((_, port), stat) in unhandled_io.iter().take(5) {
+                out.push_str(&format!("    → 0x{:04X} {} ({}x)\n", port, stat.name, stat.count));
             }
         }
 
@@ -458,8 +458,8 @@ match monitor.as_ref() {
         if !unhandled_msr.is_empty() {
             out.push_str(&format!("  \x01R✗ {} unhandled MSR(s)\x01W — implement in handle_msr()\n",
                 unhandled_msr.len()));
-            for ((_, msr), status) in unhandled_msr.iter().take(5) {
-                out.push_str(&format!("    → 0x{:08X} {} ({}x)\n", msr, status.name, status.count));
+            for ((_, msr), stat) in unhandled_msr.iter().take(5) {
+                out.push_str(&format!("    → 0x{:08X} {} ({}x)\n", msr, stat.name, stat.count));
             }
         }
 
@@ -471,8 +471,8 @@ match monitor.as_ref() {
         if !npf_faults.is_empty() {
             out.push_str(&format!("  \x01R✗ {} unhandled NPF fault address(es)\x01W — add MMIO region handlers\n",
                 npf_faults.len()));
-            for ((_, gpa), status) in npf_faults.iter().take(5) {
-                out.push_str(&format!("    → GPA 0x{:X} ({}x, last RIP=0x{:X})\n", gpa, status.count, status.last_rip));
+            for ((_, gpa), stat) in npf_faults.iter().take(5) {
+                out.push_str(&format!("    → GPA 0x{:X} ({}x, last RIP=0x{:X})\n", gpa, stat.count, stat.last_rip));
             }
         }
     }
@@ -503,12 +503,12 @@ match monitor.as_ref() {
     } else {
         out.push_str(&format!("  \x01RFound {} unhandled/stubbed operations:\x01W\n\n", gaps.len()));
         out.push_str("  \x01YCategory      ID             Name                   Count  First RIP        Detail\x01W\n");
-        for ((cat, id), status) in &gaps {
-            let name_display = if status.name.len() > 22 { &status.name[..22] } else { &status.name };
-            let detail_display = if status.last_detail.len() > 30 { &status.last_detail[..30] } else { &status.last_detail };
+        for ((cat, id), stat) in &gaps {
+            let name_display = if stat.name.len() > 22 { &stat.name[..22] } else { &stat.name };
+            let detail_display = if stat.last_detail.len() > 30 { &stat.last_detail[..30] } else { &stat.last_detail };
             out.push_str(&format!("  {}{:<14}\x01W0x{:<12X} {:<22} {:>5}  0x{:<14X} {}\n",
-                status.status.color_code(), cat.as_str(), id, name_display,
-                status.count, status.first_rip, detail_display));
+                stat.status.color_code(), cat.as_str(), id, name_display,
+                stat.count, stat.first_rip, detail_display));
         }
     }
 
@@ -582,10 +582,10 @@ match monitor.as_ref() {
     
     if !unknown.is_empty() {
         out.push_str("\n  \x01R── Unknown Ports ──\x01W\n");
-        for ((cat, port), status) in &unknown {
+        for ((cat, port), stat) in &unknown {
             let directory = if matches!(cat, DebugCategory::IoPortIn) { "IN " } else { "OUT" };
             out.push_str(&format!("  {} 0x{:04X}  {} ({}x) RIP=0x{:X}\n",
-                directory, port, status.name, status.count, status.last_rip));
+                directory, port, stat.name, stat.count, stat.last_rip));
         }
     }
 
@@ -614,13 +614,13 @@ match monitor.as_ref() {
         out.push_str("  No MSR accesses recorded.\n");
     } else {
         out.push_str("  \x01YDir     MSR            Name                        Count  Value/Detail           Status\x01W\n");
-        for ((cat, msr), status) in &msr_entries {
+        for ((cat, msr), stat) in &msr_entries {
             let directory = if matches!(cat, DebugCategory::MsrRead) { "READ " } else { "WRITE" };
-            let name_display = if status.name.len() > 26 { &status.name[..26] } else { &status.name };
-            let detail_display = if status.last_detail.len() > 20 { &status.last_detail[..20] } else { &status.last_detail };
+            let name_display = if stat.name.len() > 26 { &stat.name[..26] } else { &stat.name };
+            let detail_display = if stat.last_detail.len() > 20 { &stat.last_detail[..20] } else { &stat.last_detail };
             out.push_str(&format!("  {}  0x{:08X}     {:<26} {:>5}  {:<20}   {}{}\x01W\n",
-                directory, msr, name_display, status.count, detail_display,
-                status.status.color_code(), status.status.as_str()));
+                directory, msr, name_display, stat.count, detail_display,
+                stat.status.color_code(), stat.status.as_str()));
         }
     }
 
@@ -643,7 +643,7 @@ match monitor.as_ref() {
     if mon.timeline.is_empty() {
         out.push_str("  No events recorded yet.\n");
     } else {
-        let display_count = count.minimum(mon.timeline.len());
+        let display_count = count.min(mon.timeline.len());
         let start = mon.timeline.len() - display_count;
 
         out.push_str("  \x01YExit#      Category      ID             RIP              Name                   Status\x01W\n");
@@ -667,7 +667,7 @@ pub fn reset() {
     if let Some(ref mut mon) = *DEBUG_MONITOR.lock() {
         mon.stats.clear();
         mon.timeline.clear();
-        mon.timeline_position = 0;
+        mon.timeline_pos = 0;
         mon.category_counts.clear();
         mon.unhandled_counts.clear();
         mon.gaps.clear();

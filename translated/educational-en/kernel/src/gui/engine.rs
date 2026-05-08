@@ -36,17 +36,17 @@ static CURRENT_FPS: AtomicU64 = AtomicU64::new(0);
 /// Initialize frame timing with TSC frequency
 pub fn initialize_timing() {
     // Get TSC frequency from CPU module
-    let frequency = crate::cpu::tsc_frequency();
-    TSC_FREQUENCY_HZ.store(frequency, Ordering::SeqCst);
-    crate::serial_println!("[GUI] Frame timing init: TSC {} MHz", frequency / 1_000_000);
+    let freq = crate::cpu::tsc_frequency();
+    TSC_FREQUENCY_HZ.store(freq, Ordering::SeqCst);
+    crate::serial_println!("[GUI] Frame timing init: TSC {} MHz", freq / 1_000_000);
 }
 
 /// Convert TSC ticks to microseconds
 #[inline]
 fn tsc_to_us(ticks: u64) -> u64 {
-    let frequency = TSC_FREQUENCY_HZ.load(Ordering::Relaxed);
-    if frequency == 0 { return 0; }
-    (ticks * 1_000_000) / frequency
+    let freq = TSC_FREQUENCY_HZ.load(Ordering::Relaxed);
+    if freq == 0 { return 0; }
+    (ticks * 1_000_000) / freq
 }
 
 /// Get current time in microseconds (from TSC)
@@ -126,7 +126,7 @@ pub enum HotkeyAction {
     LockScreen,       // Win+L
     OpenStartMenu,    // Win key alone
     Screenshot,       // PrintScreen
-    ToggleDevicePanel,   // F12
+    ToggleDevPanel,   // F12
 }
 
 /// Scancode constants
@@ -182,7 +182,7 @@ match scancode {
 /// Check for hotkey and return action
 pub fn check_hotkey(scancode: u8) -> HotkeyAction {
     let alt = MOD_ALT.load(Ordering::Relaxed);
-    let controller = MOD_CONTROLLER.load(Ordering::Relaxed);
+    let ctrl = MOD_CONTROLLER.load(Ordering::Relaxed);
     let win = MOD_WIN.load(Ordering::Relaxed);
     
     // Alt+F4 = Close window
@@ -213,13 +213,13 @@ match scancode {
     }
     
     // Ctrl+Alt+T = Terminal (Linux style)
-    if controller && alt && scancode == scancode::T {
+    if ctrl && alt && scancode == scancode::T {
         return HotkeyAction::OpenTerminal;
     }
     
     // F12 = Toggle DevPanel overlay
     if scancode == scancode::F12 {
-        return HotkeyAction::ToggleDevicePanel;
+        return HotkeyAction::ToggleDevPanel;
     }
     
     HotkeyAction::None
@@ -497,7 +497,7 @@ static CURSOR_CROSSHAIR: [u8; 64] = [
 #[derive(Clone, Copy, Debug, PartialEq)]
 // Enumeration — a type that can be one of several variants.
 pub enum NotifyPriority {
-    Information,
+    Info,
     Warning,
     Error,
     Success,
@@ -509,7 +509,7 @@ pub struct Toast {
     pub message: String,
     pub priority: NotifyPriority,
     pub created_at: u64,
-    pub duration_mouse: u64,
+    pub duration_ms: u64,
     pub progress: Option<u8>, // 0-100 for progress bar
 }
 
@@ -522,45 +522,45 @@ pub fn new(title: &str, message: &str, priority: NotifyPriority) -> Self {
             message: String::from(message),
             priority,
             created_at: now_us(),
-            duration_mouse: 5000,
+            duration_ms: 5000,
             progress: None,
         }
     }
     
         // Public function — callable from other modules.
-pub fn with_duration(mut self, mouse: u64) -> Self {
-        self.duration_mouse = mouse;
+pub fn with_duration(mut self, ms: u64) -> Self {
+        self.duration_ms = ms;
         self
     }
     
         // Public function — callable from other modules.
 pub fn with_progress(mut self, percent: u8) -> Self {
-        self.progress = Some(percent.minimum(100));
+        self.progress = Some(percent.min(100));
         self
     }
     
         // Public function — callable from other modules.
 pub fn is_expired(&self) -> bool {
         let elapsed = (now_us() - self.created_at) / 1000;
-        elapsed >= self.duration_mouse
+        elapsed >= self.duration_ms
     }
     
     /// Milliseconds since notification was created
-    pub fn elapsed_mouse(&self) -> u64 {
+    pub fn elapsed_ms(&self) -> u64 {
         (now_us() - self.created_at) / 1000
     }
     
     /// Opacity 0-255 based on slide-in (first 300ms) and fade-out (last 500ms)
     pub fn opacity(&self) -> u8 {
-        let elapsed = self.elapsed_mouse();
+        let elapsed = self.elapsed_ms();
         // Slide in: 0→255 over 300ms
         if elapsed < 300 {
-            return ((elapsed * 255) / 300).minimum(255) as u8;
+            return ((elapsed * 255) / 300).min(255) as u8;
         }
         // Fade out: last 500ms
-        if self.duration_mouse > 500 && elapsed > self.duration_mouse - 500 {
-            let remaining = self.duration_mouse.saturating_sub(elapsed);
-            return ((remaining * 255) / 500).minimum(255) as u8;
+        if self.duration_ms > 500 && elapsed > self.duration_ms - 500 {
+            let remaining = self.duration_ms.saturating_sub(elapsed);
+            return ((remaining * 255) / 500).min(255) as u8;
         }
         255
     }
@@ -569,7 +569,7 @@ pub fn is_expired(&self) -> bool {
 pub fn get_color(&self) -> u32 {
                 // Pattern matching — Rust's exhaustive branching construct.
 match self.priority {
-            NotifyPriority::Information => 0xFF3498DB,    // Blue
+            NotifyPriority::Info => 0xFF3498DB,    // Blue
             NotifyPriority::Warning => 0xFFF39C12, // Orange
             NotifyPriority::Error => 0xFFE74C3C,   // Red
             NotifyPriority::Success => 0xFF27AE60, // Green
@@ -602,16 +602,16 @@ pub fn show_progress(title: &str, message: &str, percent: u8) {
     let mut notifs = NOTIFICATIONS.lock();
     
     // Update existing progress notification with same title
-    for n in notifs.iterator_mut() {
+    for n in notifs.iter_mut() {
         if n.title == title && n.progress.is_some() {
-            n.progress = Some(percent.minimum(100));
+            n.progress = Some(percent.min(100));
             n.message = String::from(message);
             return;
         }
     }
     
     // Create new
-    notifs.push(Toast::new(title, message, NotifyPriority::Information)
+    notifs.push(Toast::new(title, message, NotifyPriority::Info)
         .with_progress(percent)
         .with_duration(30000)); // Long timeout for progress
 }
@@ -631,7 +631,7 @@ impl Clone for Toast {
             message: self.message.clone(),
             priority: self.priority,
             created_at: self.created_at,
-            duration_mouse: self.duration_mouse,
+            duration_ms: self.duration_ms,
             progress: self.progress,
         }
     }
@@ -720,20 +720,20 @@ static BLEND_TABLE: [[u8; 256]; 256] = {
 /// Fast alpha blend using lookup table
 #[inline(always)]
 // Public function — callable from other modules.
-pub fn blend_fast(source: u32, destination: u32) -> u32 {
-    let alpha = ((source >> 24) & 0xFF) as usize;
-    if alpha == 0 { return destination; }
-    if alpha == 255 { return source; }
+pub fn blend_fast(src: u32, dst: u32) -> u32 {
+    let alpha = ((src >> 24) & 0xFF) as usize;
+    if alpha == 0 { return dst; }
+    if alpha == 255 { return src; }
     
     let inv_alpha = 255 - alpha;
     
-    let sr = ((source >> 16) & 0xFF) as usize;
-    let sg = ((source >> 8) & 0xFF) as usize;
-    let sb = (source & 0xFF) as usize;
+    let sr = ((src >> 16) & 0xFF) as usize;
+    let sg = ((src >> 8) & 0xFF) as usize;
+    let sb = (src & 0xFF) as usize;
     
-    let dr = ((destination >> 16) & 0xFF) as usize;
-    let dg = ((destination >> 8) & 0xFF) as usize;
-    let db = (destination & 0xFF) as usize;
+    let dr = ((dst >> 16) & 0xFF) as usize;
+    let dg = ((dst >> 8) & 0xFF) as usize;
+    let db = (dst & 0xFF) as usize;
     
     let r = BLEND_TABLE[alpha][sr] as u32 + BLEND_TABLE[inv_alpha][dr] as u32;
     let g = BLEND_TABLE[alpha][sg] as u32 + BLEND_TABLE[inv_alpha][dg] as u32;
@@ -772,10 +772,10 @@ pub fn intersects(&self, other: &Rect) -> bool {
     
         // Public function — callable from other modules.
 pub fn union(&self, other: &Rect) -> Rect {
-        let x1 = self.x.minimum(other.x);
-        let y1 = self.y.minimum(other.y);
-        let x2 = (self.x + self.w as i32).maximum(other.x + other.w as i32);
-        let y2 = (self.y + self.h as i32).maximum(other.y + other.h as i32);
+        let x1 = self.x.min(other.x);
+        let y1 = self.y.min(other.y);
+        let x2 = (self.x + self.w as i32).max(other.x + other.w as i32);
+        let y2 = (self.y + self.h as i32).max(other.y + other.h as i32);
         Rect {
             x: x1,
             y: y1,
@@ -824,7 +824,7 @@ pub fn new(w: u32, h: u32) -> Self {
                     (self.rects[i].area() + rect.area()) as i64;
                 
                 // Merge if wasted area is less than 50% of smaller rect
-                let smaller = self.rects[i].area().minimum(rect.area());
+                let smaller = self.rects[i].area().min(rect.area());
                 if wasted < (smaller / 2) as i64 {
                     self.rects[i] = merged;
                     return;

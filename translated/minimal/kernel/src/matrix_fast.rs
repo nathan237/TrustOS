@@ -13,17 +13,17 @@ use alloc::vec;
 
 
 
-pub const DDV_: usize = 2;   
-pub const DDU_: usize = 4;   
-pub const ZZ_: usize = 16;    
-pub const ZY_: usize = 32;    
+pub const DHP_: usize = 2;   
+pub const DHO_: usize = 4;   
+pub const ABL_: usize = 16;    
+pub const ABK_: usize = 32;    
 
 
-const EIP_: i32 = 64;
+const EME_: i32 = 64;
 
 
 
-const ADN_: [u8; 64] = [
+const AFD_: [u8; 64] = [
     255, 252, 248, 244, 240, 236, 231, 226,
     221, 216, 210, 204, 198, 192, 186, 179,
     172, 165, 158, 151, 144, 137, 130, 123,
@@ -37,95 +37,95 @@ const ADN_: [u8; 64] = [
 
 
 
-const fn tbz() -> [u32; 256] {
-    let mut djf = [0xFF000000u32; 256];
-    let mut a = 1u32;
-    while a < 256 {
-        let s = if a > 250 {
+const fn mcg() -> [u32; 256] {
+    let mut bhu = [0xFF000000u32; 256];
+    let mut i = 1u32;
+    while i < 256 {
+        let color = if i > 250 {
             
-            let ab = a - 250; 
-            let m = 180 + ab * 15; 
-            let at = 255;
-            let o = 220 + ab * 7; 
-            (0xFF << 24) | (m << 16) | (at << 8) | o
-        } else if a > 235 {
+            let t = i - 250; 
+            let r = 180 + t * 15; 
+            let g = 255;
+            let b = 220 + t * 7; 
+            (0xFF << 24) | (r << 16) | (g << 8) | b
+        } else if i > 235 {
             
-            let ab = a - 235; 
-            let m = 60 + ab * 8; 
-            let at = 220 + ab * 2; 
-            let o = 120 + ab * 6; 
-            (0xFF << 24) | (m << 16) | (at << 8) | o
-        } else if a > 200 {
+            let t = i - 235; 
+            let r = 60 + t * 8; 
+            let g = 220 + t * 2; 
+            let b = 120 + t * 6; 
+            (0xFF << 24) | (r << 16) | (g << 8) | b
+        } else if i > 200 {
             
-            let ab = a - 200; 
-            let m = ab; 
-            let at = 180 + ab * 2; 
-            let o = 30 + ab * 2; 
-            (0xFF << 24) | (m << 16) | (at << 8) | o
-        } else if a > 160 {
+            let t = i - 200; 
+            let r = t; 
+            let g = 180 + t * 2; 
+            let b = 30 + t * 2; 
+            (0xFF << 24) | (r << 16) | (g << 8) | b
+        } else if i > 160 {
             
-            let ab = a - 160; 
-            let at = 140 + ab; 
-            let m = ab / 6; 
-            let o = 10 + ab / 3; 
-            (0xFF << 24) | (m << 16) | (at << 8) | o
-        } else if a > 120 {
+            let t = i - 160; 
+            let g = 140 + t; 
+            let r = t / 6; 
+            let b = 10 + t / 3; 
+            (0xFF << 24) | (r << 16) | (g << 8) | b
+        } else if i > 120 {
             
-            let ab = a - 120; 
-            let at = 100 + ab; 
-            let o = 8 + ab / 3; 
-            let m = ab / 12;
-            (0xFF << 24) | (m << 16) | (at << 8) | o
-        } else if a > 80 {
+            let t = i - 120; 
+            let g = 100 + t; 
+            let b = 8 + t / 3; 
+            let r = t / 12;
+            (0xFF << 24) | (r << 16) | (g << 8) | b
+        } else if i > 80 {
             
-            let ab = a - 80; 
-            let at = 60 + ab; 
-            let o = 4 + ab / 5; 
-            (0xFF << 24) | (at << 8) | o
-        } else if a > 50 {
+            let t = i - 80; 
+            let g = 60 + t; 
+            let b = 4 + t / 5; 
+            (0xFF << 24) | (g << 8) | b
+        } else if i > 50 {
             
-            let ab = a - 50; 
-            let at = 30 + ab; 
-            let o = 3 + ab / 6; 
-            (0xFF << 24) | (at << 8) | o
-        } else if a > 25 {
+            let t = i - 50; 
+            let g = 30 + t; 
+            let b = 3 + t / 6; 
+            (0xFF << 24) | (g << 8) | b
+        } else if i > 25 {
             
-            let ab = a - 25; 
-            let at = 12 + ab; 
-            let o = 2 + ab / 5; 
-            (0xFF << 24) | (at << 8) | o
-        } else if a > 10 {
+            let t = i - 25; 
+            let g = 12 + t; 
+            let b = 2 + t / 5; 
+            (0xFF << 24) | (g << 8) | b
+        } else if i > 10 {
             
-            let ab = a - 10; 
-            let at = 5 + ab / 2; 
-            let o = 1 + ab / 8;
-            (0xFF << 24) | (at << 8) | o
+            let t = i - 10; 
+            let g = 5 + t / 2; 
+            let b = 1 + t / 8;
+            (0xFF << 24) | (g << 8) | b
         } else {
             
-            let at = 2 + a / 3;
-            let o = 1 + a / 5;
-            (0xFF << 24) | (at << 8) | o
+            let g = 2 + i / 3;
+            let b = 1 + i / 5;
+            (0xFF << 24) | (g << 8) | b
         };
-        djf[a as usize] = s;
-        a += 1;
+        bhu[i as usize] = color;
+        i += 1;
     }
-    djf
+    bhu
 }
 
 
-static BNE_: [u32; 256] = tbz();
+static BPW_: [u32; 256] = mcg();
 
 
 #[inline(always)]
-pub(crate) fn oex(hj: u8) -> u32 {
-    BNE_[hj as usize]
+pub(crate) fn ihb(intensity: u8) -> u32 {
+    BPW_[intensity as usize]
 }
 
 
 
 
 
-pub(crate) const CFC_: [[u8; 6]; 64] = [
+pub(crate) const CIL_: [[u8; 6]; 64] = [
     
     [0b011110, 0b100001, 0b100101, 0b101001, 0b100001, 0b011110],
     
@@ -257,37 +257,37 @@ pub(crate) const CFC_: [[u8; 6]; 64] = [
 ];
 
 
-const DNM_: usize = 64;
+const DRG_: usize = 64;
 
 
-pub(crate) const AZH_: &[u8] = b"0123456789ABCDEF@#$%&*<>[]{}|/\\";
-
-
-
+pub(crate) const BBI_: &[u8] = b"0123456789ABCDEF@#$%&*<>[]{}|/\\";
 
 
 
 
-const EB_: usize = 4;
-
-const DNN_: usize = 3;
-
-const RZ_: usize = EB_ / 2;
-
-
-const VG_: usize = 15;
-const VB_: usize = 50;
-
-
-const DH_: usize = 6;
-
-
-const AEW_: usize = 512;
 
 
 
+const EO_: usize = 4;
 
-const OC_: [[u8; 3]; 64] = [
+const DRH_: usize = 3;
+
+const TB_: usize = EO_ / 2;
+
+
+const WP_: usize = 15;
+const WK_: usize = 50;
+
+
+const DP_: usize = 6;
+
+
+const AGQ_: usize = 512;
+
+
+
+
+const PA_: [[u8; 3]; 64] = [
     [0b111, 0b101, 0b111], 
     [0b010, 0b010, 0b010], 
     [0b111, 0b010, 0b111], 
@@ -355,40 +355,40 @@ const OC_: [[u8; 3]; 64] = [
 ];
 
 
-const ND_: usize = 64;
+const OC_: usize = 64;
 
 
 #[derive(Clone, Copy)]
 struct RainDrop {
     
-    c: i32,
+    y: i32,
     
-    ig: u8,
+    speed: u8,
     
-    bmv: u8,
+    delay: u8,
     
-    acr: u8,
+    trail_len: u8,
     
-    amg: u32,
+    glyph_seed: u32,
     
-    gh: bool,
+    active: bool,
 }
 
 impl RainDrop {
-    fn usx() -> Self {
+    fn njc() -> Self {
         Self {
-            c: -100,
-            ig: 1,
-            bmv: 0,
-            acr: VG_ as u8,
-            amg: 0,
-            gh: false,
+            y: -100,
+            speed: 1,
+            delay: 0,
+            trail_len: WP_ as u8,
+            glyph_seed: 0,
+            active: false,
         }
     }
     
     
-    fn prt(&self) -> i32 {
-        self.c - self.acr as i32
+    fn tail_y(&self) -> i32 {
+        self.y - self.trail_len as i32
     }
 }
 
@@ -400,78 +400,78 @@ impl RainDrop {
 #[derive(Clone, Copy, PartialEq)]
 pub enum ShapeOverlay {
     None,
-    Dw,
+    Cube,
     Sphere,
-    Dr,
-    Ij,
+    Torus,
+    DNA,
 }
 
 
-const VA_: usize = 144;
+const WJ_: usize = 144;
 
 
-const AEY_: usize = 500;  
+const AGS_: usize = 500;  
 
 
 #[derive(Clone, Copy)]
 struct ShapeDrop {
     
-    bj: i32,
+    col: i32,
     
-    br: i32,
+    row: i32,
     
-    lvi: i32,
+    prev_col: i32,
     
-    frd: i32,
+    prev_row: i32,
     
-    eo: f32,
+    depth: f32,
     
-    li: f32,
+    progress: f32,
     
-    fhi: u8,
+    edge_idx: u8,
     
-    acr: u8,
+    trail_len: u8,
     
-    ig: f32,
+    speed: f32,
     
-    amg: u32,
+    glyph_seed: u32,
 }
 
 
 
 #[derive(Clone, Copy)]
-struct Aqk {
+struct Rn {
     
-    xu: f32,
+    lw: f32,
     
-    abi: f32,
+    nn: f32,
     
-    xra: f32,
+    vel_x: f32,
     
-    xrb: f32,
+    vel_y: f32,
     
-    acr: u8,
+    trail_len: u8,
     
-    gh: bool,
+    active: bool,
     
-    amg: u32,
+    glyph_seed: u32,
     
-    can: f32,
+    life: f32,
 }
 
 impl ShapeDrop {
     fn new() -> Self {
         Self {
-            bj: 0,
-            br: 0,
-            lvi: 0,
-            frd: 0,
-            eo: 0.5,
-            li: 0.0,
-            fhi: 0,
-            acr: 6,
-            ig: 0.012,
-            amg: 0,
+            col: 0,
+            row: 0,
+            prev_col: 0,
+            prev_row: 0,
+            depth: 0.5,
+            progress: 0.0,
+            edge_idx: 0,
+            trail_len: 6,
+            speed: 0.012,
+            glyph_seed: 0,
         }
     }
 }
@@ -482,164 +482,164 @@ impl ShapeDrop {
 
 
 #[repr(C)]
-struct Aac {
-    doo: *mut u32,
-    aic: usize,
-    lu: usize,
-    qh: usize,
-    ny: usize,
-    kgx: usize,
+struct Lc {
+    buffer_ptr: *mut u32,
+    buffer_len: usize,
+    fb_width: usize,
+    fb_height: usize,
+    cell_size: usize,
+    cell_rows: usize,
     
-    nnx: *const [RainDrop; DH_],
-    neo: *const u8,
-    ajg: usize,
+    drops_ptr: *const [RainDrop; DP_],
+    col_depth_ptr: *const u8,
+    num_cols: usize,
     
-    bgo: bool,
-    kmj: f32,
-    kmh: f32,
-    kmk: f32,
-    kmi: f32,
-    mlv: [(f32, f32, f32, f32); 4],
-    lih: [(f32, f32, f32, f32); 4],
-    mab: [(f32, f32, f32, f32); 4],
-    lro: [(f32, f32, f32, f32); 4],
+    cube_active: bool,
+    cube_min_x: f32,
+    cube_max_x: f32,
+    cube_min_y: f32,
+    cube_max_y: f32,
+    top_edges: [(f32, f32, f32, f32); 4],
+    left_edges: [(f32, f32, f32, f32); 4],
+    right_edges: [(f32, f32, f32, f32); 4],
+    pad_edges: [(f32, f32, f32, f32); 4],
 }
 
-unsafe impl Send for Aac {}
-unsafe impl Sync for Aac {}
+unsafe impl Send for Lc {}
+unsafe impl Sync for Lc {}
 
 
 
 #[inline(always)]
-unsafe fn sdj(bi: *mut u32, lu: usize, qh: usize,
-                              y: usize, x: usize, ka: &[u8; 3], s: u32) {
-    if x + 2 >= qh || y + 2 >= lu { return; }
+unsafe fn ljb(buffer: *mut u32, fb_width: usize, fb_height: usize,
+                              p: usize, o: usize, du: &[u8; 3], color: u32) {
+    if o + 2 >= fb_height || p + 2 >= fb_width { return; }
     
-    let wu = ka[0];
-    let bpq = x * lu + y;
-    if wu & 0b001 != 0 { *bi.add(bpq) = s; }
-    if wu & 0b010 != 0 { *bi.add(bpq + 1) = s; }
-    if wu & 0b100 != 0 { *bi.add(bpq + 2) = s; }
+    let kl = du[0];
+    let aje = o * fb_width + p;
+    if kl & 0b001 != 0 { *buffer.add(aje) = color; }
+    if kl & 0b010 != 0 { *buffer.add(aje + 1) = color; }
+    if kl & 0b100 != 0 { *buffer.add(aje + 2) = color; }
     
-    let of = ka[1];
-    let bpr = bpq + lu;
-    if of & 0b001 != 0 { *bi.add(bpr) = s; }
-    if of & 0b010 != 0 { *bi.add(bpr + 1) = s; }
-    if of & 0b100 != 0 { *bi.add(bpr + 2) = s; }
+    let gf = du[1];
+    let ajf = aje + fb_width;
+    if gf & 0b001 != 0 { *buffer.add(ajf) = color; }
+    if gf & 0b010 != 0 { *buffer.add(ajf + 1) = color; }
+    if gf & 0b100 != 0 { *buffer.add(ajf + 2) = color; }
     
-    let tb = ka[2];
-    let deb = bpr + lu;
-    if tb & 0b001 != 0 { *bi.add(deb) = s; }
-    if tb & 0b010 != 0 { *bi.add(deb + 1) = s; }
-    if tb & 0b100 != 0 { *bi.add(deb + 2) = s; }
+    let iq = du[2];
+    let bes = ajf + fb_width;
+    if iq & 0b001 != 0 { *buffer.add(bes) = color; }
+    if iq & 0b010 != 0 { *buffer.add(bes + 1) = color; }
+    if iq & 0b100 != 0 { *buffer.add(bes + 2) = color; }
 }
 
 
 #[inline]
-unsafe fn ynb(bi: *mut u32, lu: usize, qh: usize,
-                              y: usize, x: usize, ka: &[u8; 6], s: u32) {
-    if x >= qh || y >= lu { return; }
-    let efh = (qh - x).v(6);
-    let bkj = (lu - y).v(6);
-    for br in 0..efh {
-        let fs = ka[br];
-        if fs == 0 { continue; }
-        let ar = (x + br) * lu + y;
-        if fs & 0b000001 != 0 && 0 < bkj { *bi.add(ar) = s; }
-        if fs & 0b000010 != 0 && 1 < bkj { *bi.add(ar + 1) = s; }
-        if fs & 0b000100 != 0 && 2 < bkj { *bi.add(ar + 2) = s; }
-        if fs & 0b001000 != 0 && 3 < bkj { *bi.add(ar + 3) = s; }
-        if fs & 0b010000 != 0 && 4 < bkj { *bi.add(ar + 4) = s; }
-        if fs & 0b100000 != 0 && 5 < bkj { *bi.add(ar + 5) = s; }
+unsafe fn qdq(buffer: *mut u32, fb_width: usize, fb_height: usize,
+                              p: usize, o: usize, du: &[u8; 6], color: u32) {
+    if o >= fb_height || p >= fb_width { return; }
+    let buh = (fb_height - o).min(6);
+    let agr = (fb_width - p).min(6);
+    for row in 0..buh {
+        let bits = du[row];
+        if bits == 0 { continue; }
+        let base = (o + row) * fb_width + p;
+        if bits & 0b000001 != 0 && 0 < agr { *buffer.add(base) = color; }
+        if bits & 0b000010 != 0 && 1 < agr { *buffer.add(base + 1) = color; }
+        if bits & 0b000100 != 0 && 2 < agr { *buffer.add(base + 2) = color; }
+        if bits & 0b001000 != 0 && 3 < agr { *buffer.add(base + 3) = color; }
+        if bits & 0b010000 != 0 && 4 < agr { *buffer.add(base + 4) = color; }
+        if bits & 0b100000 != 0 && 5 < agr { *buffer.add(base + 5) = color; }
     }
 }
 
 
 #[inline(always)]
-fn jjo(y: f32, x: f32, bu: &[(f32, f32, f32, f32); 4]) -> bool {
-    let mut u = 0u8;
+fn ewv(p: f32, o: f32, edges: &[(f32, f32, f32, f32); 4]) -> bool {
+    let mut pos = 0u8;
     let mut neg = 0u8;
-    for &(bqp, ahm, mp, qw) in bu.iter() {
-        let bjr = bqp * (x - qw) - ahm * (y - mp);
-        if bjr > 0.0 { u += 1; }
-        else if bjr < 0.0 { neg += 1; }
+    for &(ajq, qz, fh, hk) in edges.iter() {
+        let cross = ajq * (o - hk) - qz * (p - fh);
+        if cross > 0.0 { pos += 1; }
+        else if cross < 0.0 { neg += 1; }
     }
-    u == 0 || neg == 0
+    pos == 0 || neg == 0
 }
 
 
-fn vvl(ay: usize, ci: usize, f: *mut u8) {
-    let ai = unsafe { &*(f as *const Aac) };
-    let ny = ai.ny;
+fn ofg(start: usize, end: usize, data: *mut u8) {
+    let aa = unsafe { &*(data as *const Lc) };
+    let cell_size = aa.cell_size;
     
-    for bj in ay..ci {
-        if bj >= ai.ajg { break; }
+    for col in start..end {
+        if col >= aa.num_cols { break; }
         
-        let eo = unsafe { *ai.neo.add(bj) };
-        let hfu = 100 + (eo as u32 * 155 / 255);
+        let depth = unsafe { *aa.col_depth_ptr.add(col) };
+        let dms = 100 + (depth as u32 * 155 / 255);
         
-        let cds = (bj * ny + RZ_) as f32;
-        let rlw = ai.bgo && cds >= ai.kmj && cds <= ai.kmh;
+        let aqa = (col * cell_size + TB_) as f32;
+        let kvh = aa.cube_active && aqa >= aa.cube_min_x && aqa <= aa.cube_max_x;
         
-        let agk = unsafe { &*ai.nnx.add(bj) };
+        let drops = unsafe { &*aa.drops_ptr.add(col) };
         
-        for cxd in 0..DH_ {
-            let drop = &agk[cxd];
-            if !drop.gh { continue; }
+        for drop_idx in 0..DP_ {
+            let drop = &drops[drop_idx];
+            if !drop.active { continue; }
             
-            let buu = drop.c;
-            let ies = drop.acr as usize;
+            let head_y = drop.y;
+            let ecn = drop.trail_len as usize;
             
-            for cuv in 0..ies {
-                let bmg = buu - cuv as i32;
-                if bmg < 0 || bmg >= ai.kgx as i32 { continue; }
+            for bab in 0..ecn {
+                let aho = head_y - bab as i32;
+                if aho < 0 || aho >= aa.cell_rows as i32 { continue; }
                 
-                let lfa = (cuv * 63) / ies.am(1);
-                let gzv = ADN_[lfa.v(63)] as u32;
-                let hj = ((gzv * hfu) / 255) as u8;
+                let gdc = (bab * 63) / ecn.max(1);
+                let din = AFD_[gdc.min(63)] as u32;
+                let intensity = ((din * dms) / 255) as u8;
                 
-                if rlw {
-                    let x = (bmg as usize * ny + RZ_) as f32;
-                    if x >= ai.kmk && x <= ai.kmi {
-                        if jjo(cds, x, &ai.lro) { continue; }
-                        if jjo(cds, x, &ai.mlv)
-                            || jjo(cds, x, &ai.lih)
-                            || jjo(cds, x, &ai.mab) {
+                if kvh {
+                    let o = (aho as usize * cell_size + TB_) as f32;
+                    if o >= aa.cube_min_y && o <= aa.cube_max_y {
+                        if ewv(aqa, o, &aa.pad_edges) { continue; }
+                        if ewv(aqa, o, &aa.top_edges)
+                            || ewv(aqa, o, &aa.left_edges)
+                            || ewv(aqa, o, &aa.right_edges) {
                             continue;
                         }
                     }
                 }
                 
-                if hj < 2 { continue; }
+                if intensity < 2 { continue; }
                 
-                let amg = drop.amg.cn(cuv as u32 * 2654435761);
-                let cqy = (amg % ND_ as u32) as usize;
-                let ka = &OC_[cqy];
-                let s = oex(hj);
+                let glyph_seed = drop.glyph_seed.wrapping_add(bab as u32 * 2654435761);
+                let axi = (glyph_seed % OC_ as u32) as usize;
+                let du = &PA_[axi];
+                let color = ihb(intensity);
                 
-                let y = bj * ny + 1;
-                let x = bmg as usize * ny + 1;
+                let p = col * cell_size + 1;
+                let o = aho as usize * cell_size + 1;
                 unsafe {
-                    sdj(ai.doo, ai.lu, ai.qh,
-                                       y, x, ka, s);
+                    ljb(aa.buffer_ptr, aa.fb_width, aa.fb_height,
+                                       p, o, du, color);
                 }
                 
                 
-                if cuv == 0 && hj > 200 {
-                    let qz = y + 1; 
-                    let ub = x + 1;
-                    let bkr: [(i32, i32); 4] = [(-1,0),(1,0),(0,-1),(0,1)];
-                    for &(mp, qw) in &bkr {
-                        let gx = qz as i32 + mp;
-                        let ty = ub as i32 + qw;
-                        if gx >= 0 && gx < ai.lu as i32 && ty >= 0 && ty < ai.qh as i32 {
-                            let w = ty as usize * ai.lu + gx as usize;
+                if bab == 0 && intensity > 200 {
+                    let hc = p + 1; 
+                    let jh = o + 1;
+                    let agv: [(i32, i32); 4] = [(-1,0),(1,0),(0,-1),(0,1)];
+                    for &(fh, hk) in &agv {
+                        let bu = hc as i32 + fh;
+                        let ty = jh as i32 + hk;
+                        if bu >= 0 && bu < aa.fb_width as i32 && ty >= 0 && ty < aa.fb_height as i32 {
+                            let idx = ty as usize * aa.fb_width + bu as usize;
                             unsafe {
-                                let aa = *ai.doo.add(w);
-                                let nr = (((aa >> 16) & 0xFF) + 10).v(255);
-                                let csu = (((aa >> 8) & 0xFF) + 48).v(255);
-                                let csq = ((aa & 0xFF) + 32).v(255);
-                                *ai.doo.add(w) = 0xFF000000 | (nr << 16) | (csu << 8) | csq;
+                                let e = *aa.buffer_ptr.add(idx);
+                                let nr = (((e >> 16) & 0xFF) + 10).min(255);
+                                let ayn = (((e >> 8) & 0xFF) + 48).min(255);
+                                let ayj = ((e & 0xFF) + 32).min(255);
+                                *aa.buffer_ptr.add(idx) = 0xFF000000 | (nr << 16) | (ayn << 8) | ayj;
                             }
                         }
                     }
@@ -654,349 +654,349 @@ fn vvl(ay: usize, ci: usize, f: *mut u8) {
 
 pub struct BrailleMatrix {
     
-    agk: Vec<[RainDrop; DH_]>,
+    drops: Vec<[RainDrop; DP_]>,
     
-    cwh: Vec<u8>,
+    col_depth: Vec<u8>,
     
     rng: u32,
     
     frame: u32,
     
-    ajg: usize,
+    num_cols: usize,
     
-    bnr: usize,
+    num_rows: usize,
     
-    eio: ShapeOverlay,
+    shape_mode: ShapeOverlay,
     
-    eip: f32,
+    shape_time: f32,
     
-    iae: Vec<ShapeDrop>,
+    shape_drops: Vec<ShapeDrop>,
     
-    ein: usize,
+    shape_drop_count: usize,
     
-    heo: Vec<Aqk>,
+    cube_flow_drops: Vec<Rn>,
 }
 
 impl BrailleMatrix {
     pub fn new() -> Self {
         use alloc::vec::Vec;
         
-        let ec = 1280 / EB_; 
-        let lk = 800 / EB_;  
+        let cols = 1280 / EO_; 
+        let rows = 800 / EO_;  
         
         
-        let mut agk: Vec<[RainDrop; DH_]> = Vec::fc(AEW_);
-        let mut cwh: Vec<u8> = vec![128u8; AEW_];
+        let mut drops: Vec<[RainDrop; DP_]> = Vec::with_capacity(AGQ_);
+        let mut col_depth: Vec<u8> = vec![128u8; AGQ_];
         let mut rng = 0xDEADBEEFu32;
         
         
-        for _ in 0..AEW_ {
-            agk.push([RainDrop::usx(); DH_]);
+        for _ in 0..AGQ_ {
+            drops.push([RainDrop::njc(); DP_]);
         }
         
         
         
-        for bj in 0..ec {
-            rng = rng.hx(1103515245).cn(12345);
+        for col in 0..cols {
+            rng = rng.wrapping_mul(1103515245).wrapping_add(12345);
             
             
-            let pattern = ((bj * 17 + 53) % 97) as i32 - 48; 
-            let lxa = (rng % 100) as i32 - 50; 
-            let qng = 145i32 + pattern + lxa;
-            cwh[bj] = qng.qp(30, 255) as u8;
+            let pattern = ((col * 17 + 53) % 97) as i32 - 48; 
+            let gpp = (rng % 100) as i32 - 50; 
+            let jzy = 145i32 + pattern + gpp;
+            col_depth[col] = jzy.clamp(30, 255) as u8;
         }
         
         
-        for bj in 0..ec {
-            let eo = cwh[bj];
+        for col in 0..cols {
+            let depth = col_depth[col];
             
-            let mut oqn: i32 = 0;
+            let mut iqn: i32 = 0;
             
-            for cxd in 0..DH_ {
-                rng = rng.hx(1103515245).cn(12345);
+            for drop_idx in 0..DP_ {
+                rng = rng.wrapping_mul(1103515245).wrapping_add(12345);
                 
                 
-                let btz = eo as f32 / 255.0;
-                let ydn = VB_ - VG_;
-                let hrn = (VG_ as f32 * (0.5 + btz * 0.5)) as usize;
-                let llg = (VB_ as f32 * (0.6 + btz * 0.4)) as usize;
-                let acr = hrn + (rng % (llg - hrn + 1) as u32) as usize;
+                let alh = depth as f32 / 255.0;
+                let pxj = WK_ - WP_;
+                let dui = (WP_ as f32 * (0.5 + alh * 0.5)) as usize;
+                let ghb = (WK_ as f32 * (0.6 + alh * 0.4)) as usize;
+                let trail_len = dui + (rng % (ghb - dui + 1) as u32) as usize;
                 
-                rng = rng.hx(1103515245).cn(12345);
-                
-                
-                
-                let kxq = ((1.0 - btz) * 2.0) as i32; 
-                let hkw = (2.0 + (1.0 - btz) * 6.0).am(1.0) as i32; 
-                let qi = kxq + (rng % hkw as u32) as i32;
-                let vc = oqn - (rng % 8) as i32;  
+                rng = rng.wrapping_mul(1103515245).wrapping_add(12345);
                 
                 
-                oqn = vc - acr as i32 - qi;
+                
+                let fya = ((1.0 - alh) * 2.0) as i32; 
+                let dql = (2.0 + (1.0 - alh) * 6.0).max(1.0) as i32; 
+                let gap = fya + (rng % dql as u32) as i32;
+                let start_y = iqn - (rng % 8) as i32;  
                 
                 
-                rng = rng.hx(1103515245).cn(12345);
-                let fvc = (1.0 + (1.0 - btz) * 1.5) as u8; 
-                let fvd = (2.0 + (1.0 - btz) * 3.0) as u8; 
-                let ig = fvc + (rng % fvd as u32) as u8;
+                iqn = start_y - trail_len as i32 - gap;
                 
-                rng = rng.hx(1103515245).cn(12345);
                 
-                agk[bj][cxd] = RainDrop {
-                    c: vc,
-                    ig,
-                    bmv: (rng % ig as u32) as u8,
-                    acr: acr as u8,
-                    amg: rng,
-                    gh: true,
+                rng = rng.wrapping_mul(1103515245).wrapping_add(12345);
+                let cqx = (1.0 + (1.0 - alh) * 1.5) as u8; 
+                let cqy = (2.0 + (1.0 - alh) * 3.0) as u8; 
+                let speed = cqx + (rng % cqy as u32) as u8;
+                
+                rng = rng.wrapping_mul(1103515245).wrapping_add(12345);
+                
+                drops[col][drop_idx] = RainDrop {
+                    y: start_y,
+                    speed,
+                    delay: (rng % speed as u32) as u8,
+                    trail_len: trail_len as u8,
+                    glyph_seed: rng,
+                    active: true,
                 };
             }
         }
         
         
-        let mut iae: Vec<ShapeDrop> = Vec::fc(VA_);
-        for _ in 0..VA_ {
-            iae.push(ShapeDrop::new());
+        let mut shape_drops: Vec<ShapeDrop> = Vec::with_capacity(WJ_);
+        for _ in 0..WJ_ {
+            shape_drops.push(ShapeDrop::new());
         }
         
         
-        let mut heo: Vec<Aqk> = Vec::fc(AEY_);
-        for _ in 0..AEY_ {
-            heo.push(Aqk {
-                xu: 0.0,
-                abi: 0.0,
-                xra: 0.0,
-                xrb: 0.0,
-                acr: 5,
-                gh: false,  
-                amg: 0,
-                can: 0.0,
+        let mut cube_flow_drops: Vec<Rn> = Vec::with_capacity(AGS_);
+        for _ in 0..AGS_ {
+            cube_flow_drops.push(Rn {
+                lw: 0.0,
+                nn: 0.0,
+                vel_x: 0.0,
+                vel_y: 0.0,
+                trail_len: 5,
+                active: false,  
+                glyph_seed: 0,
+                life: 0.0,
             });
         }
         
         Self {
-            agk,
-            cwh,
+            drops,
+            col_depth,
             rng,
             frame: 0,
-            ajg: ec,
-            bnr: lk,
-            eio: ShapeOverlay::None,  
-            eip: 0.0,
-            iae,
-            ein: 0,
-            heo,
+            num_cols: cols,
+            num_rows: rows,
+            shape_mode: ShapeOverlay::None,  
+            shape_time: 0.0,
+            shape_drops,
+            shape_drop_count: 0,
+            cube_flow_drops,
         }
     }
     
     
-    pub fn gsg(&mut self, ev: ShapeOverlay) {
-        self.eio = ev;
-        self.eip = 0.0;
+    pub fn set_shape(&mut self, mode: ShapeOverlay) {
+        self.shape_mode = mode;
+        self.shape_time = 0.0;
         
         
-        if ev == ShapeOverlay::Dw {
-            for a in 0..AEY_ {
-                self.heo[a].gh = false;
-                self.heo[a].can = 0.0;
+        if mode == ShapeOverlay::Cube {
+            for i in 0..AGS_ {
+                self.cube_flow_drops[i].active = false;
+                self.cube_flow_drops[i].life = 0.0;
             }
         }
         
-        if ev == ShapeOverlay::None {
-            self.ein = 0;
+        if mode == ShapeOverlay::None {
+            self.shape_drop_count = 0;
             return;
         }
         
         
         let mut rng = 0x12345678u32;
-        let sgw = match ev {
-            ShapeOverlay::Dw => 90,      
+        let lll = match mode {
+            ShapeOverlay::Cube => 90,      
             ShapeOverlay::Sphere => 64,    
-            ShapeOverlay::Dr => 80,     
-            ShapeOverlay::Ij => 64,       
+            ShapeOverlay::Torus => 80,     
+            ShapeOverlay::DNA => 64,       
             ShapeOverlay::None => 0,
         };
         
-        self.ein = sgw.v(VA_);
+        self.shape_drop_count = lll.min(WJ_);
         
-        for a in 0..self.ein {
-            rng = rng.hx(1103515245).cn(12345);
-            self.iae[a] = ShapeDrop {
-                bj: 0,
-                br: 0,
-                lvi: 0,
-                frd: 0,
-                eo: 0.5,
-                li: (a as f32 / self.ein as f32),
-                fhi: (a % 12) as u8,
-                acr: 5 + (rng % 4) as u8,
-                ig: 0.006 + (rng % 50) as f32 / 5000.0,
-                amg: rng,
+        for i in 0..self.shape_drop_count {
+            rng = rng.wrapping_mul(1103515245).wrapping_add(12345);
+            self.shape_drops[i] = ShapeDrop {
+                col: 0,
+                row: 0,
+                prev_col: 0,
+                prev_row: 0,
+                depth: 0.5,
+                progress: (i as f32 / self.shape_drop_count as f32),
+                edge_idx: (i % 12) as u8,
+                trail_len: 5 + (rng % 4) as u8,
+                speed: 0.006 + (rng % 50) as f32 / 5000.0,
+                glyph_seed: rng,
             };
         }
     }
     
     
-    pub fn ytv(&self) -> ShapeOverlay {
-        self.eio
+    pub fn qim(&self) -> ShapeOverlay {
+        self.shape_mode
     }
     
     
     #[inline(always)]
-    fn lz(b: f32) -> f32 { crate::math::lz(b) }
+    fn eu(x: f32) -> f32 { crate::math::eu(x) }
     
     
     #[inline(always)]
-    fn rk(b: f32) -> f32 { crate::math::rk(b) }
+    fn hr(x: f32) -> f32 { crate::math::hr(x) }
     
     
     #[inline(always)]
-    fn ahn(b: f32) -> f32 { crate::math::ahn(b) }
+    fn ra(x: f32) -> f32 { crate::math::ra(x) }
     
     
     #[inline(always)]
-    fn cxs(b: f32) -> f32 {
-        let a = b as i32;
-        if (a as f32) > b { (a - 1) as f32 } else { a as f32 }
+    fn bbp(x: f32) -> f32 {
+        let i = x as i32;
+        if (i as f32) > x { (i - 1) as f32 } else { i as f32 }
     }
 
     
-    pub fn qs(&mut self) {
-        self.frame = self.frame.cn(1);
+    pub fn update(&mut self) {
+        self.frame = self.frame.wrapping_add(1);
         
-        let csl = (self.bnr as i32) + VB_ as i32 + 10;
+        let aye = (self.num_rows as i32) + WK_ as i32 + 10;
         
-        for bj in 0..self.ajg {
-            let eo = self.cwh[bj];
-            let btz = eo as f32 / 255.0;
+        for col in 0..self.num_cols {
+            let depth = self.col_depth[col];
+            let alh = depth as f32 / 255.0;
             
             
-            let mut lns: [bool; DH_] = [false; DH_];
-            let mut onl: i32 = 0;
+            let mut giv: [bool; DP_] = [false; DP_];
+            let mut inv: i32 = 0;
             
-            for cxd in 0..DH_ {
-                let drop = &self.agk[bj][cxd];
-                if drop.gh {
-                    let icx = drop.prt();
-                    if icx < onl {
-                        onl = icx;
+            for drop_idx in 0..DP_ {
+                let drop = &self.drops[col][drop_idx];
+                if drop.active {
+                    let ebg = drop.tail_y();
+                    if ebg < inv {
+                        inv = ebg;
                     }
                 }
             }
             
             
-            for cxd in 0..DH_ {
-                let drop = &mut self.agk[bj][cxd];
+            for drop_idx in 0..DP_ {
+                let drop = &mut self.drops[col][drop_idx];
                 
-                if !drop.gh {
+                if !drop.active {
                     continue;
                 }
                 
                 
-                drop.bmv = drop.bmv.cn(1);
-                if drop.bmv >= drop.ig {
-                    drop.bmv = 0;
-                    drop.c += 1;
+                drop.delay = drop.delay.wrapping_add(1);
+                if drop.delay >= drop.speed {
+                    drop.delay = 0;
+                    drop.y += 1;
                     
                     
-                    drop.amg = drop.amg.hx(1103515245).cn(12345);
+                    drop.glyph_seed = drop.glyph_seed.wrapping_mul(1103515245).wrapping_add(12345);
                 }
                 
                 
-                if drop.c > csl {
-                    lns[cxd] = true;
+                if drop.y > aye {
+                    giv[drop_idx] = true;
                 }
             }
             
             
-            for cxd in 0..DH_ {
-                if !lns[cxd] {
+            for drop_idx in 0..DP_ {
+                if !giv[drop_idx] {
                     continue;
                 }
                 
                 
-                let mut kmy: i32 = 0;
-                for lqy in 0..DH_ {
-                    if lqy != cxd && !lns[lqy] {
-                        let drop = &self.agk[bj][lqy];
-                        if drop.gh {
-                            let icx = drop.prt();
-                            if icx < kmy {
-                                kmy = icx;
+                let mut fpt: i32 = 0;
+                for other_idx in 0..DP_ {
+                    if other_idx != drop_idx && !giv[other_idx] {
+                        let drop = &self.drops[col][other_idx];
+                        if drop.active {
+                            let ebg = drop.tail_y();
+                            if ebg < fpt {
+                                fpt = ebg;
                             }
                         }
                     }
                 }
                 
-                self.rng = self.rng.hx(1103515245).cn(12345);
+                self.rng = self.rng.wrapping_mul(1103515245).wrapping_add(12345);
                     
                 
-                let hrn = (VG_ as f32 * (0.5 + btz * 0.5)) as usize;
-                let llg = (VB_ as f32 * (0.6 + btz * 0.4)) as usize;
-                let oqf = hrn + (self.rng % (llg - hrn + 1).am(1) as u32) as usize;
+                let dui = (WP_ as f32 * (0.5 + alh * 0.5)) as usize;
+                let ghb = (WK_ as f32 * (0.6 + alh * 0.4)) as usize;
+                let iqi = dui + (self.rng % (ghb - dui + 1).max(1) as u32) as usize;
                 
-                self.rng = self.rng.hx(1103515245).cn(12345);
+                self.rng = self.rng.wrapping_mul(1103515245).wrapping_add(12345);
                     
                 
-                let kxq = ((1.0 - btz) * 2.0) as i32; 
-                let hkw = (2.0 + (1.0 - btz) * 6.0).am(1.0) as i32; 
-                let qi = kxq + (self.rng % hkw as u32) as i32;
+                let fya = ((1.0 - alh) * 2.0) as i32; 
+                let dql = (2.0 + (1.0 - alh) * 6.0).max(1.0) as i32; 
+                let gap = fya + (self.rng % dql as u32) as i32;
                     
                 
-                let bhn = kmy - oqf as i32 - qi - (self.rng % 5) as i32;
+                let afk = fpt - iqi as i32 - gap - (self.rng % 5) as i32;
                 
-                self.rng = self.rng.hx(1103515245).cn(12345);
+                self.rng = self.rng.wrapping_mul(1103515245).wrapping_add(12345);
                     
                 
-                let fvc = (1.0 + (1.0 - btz) * 1.5) as u8;
-                let fvd = (2.0 + (1.0 - btz) * 3.0).am(1.0) as u8;
-                let utt = fvc + (self.rng % fvd as u32) as u8;
+                let cqx = (1.0 + (1.0 - alh) * 1.5) as u8;
+                let cqy = (2.0 + (1.0 - alh) * 3.0).max(1.0) as u8;
+                let njs = cqx + (self.rng % cqy as u32) as u8;
                 
-                self.rng = self.rng.hx(1103515245).cn(12345);
+                self.rng = self.rng.wrapping_mul(1103515245).wrapping_add(12345);
                 
-                let drop = &mut self.agk[bj][cxd];
-                drop.acr = oqf as u8;
-                drop.c = bhn;
-                drop.ig = utt;
-                drop.bmv = 0;
-                drop.amg = self.rng;
+                let drop = &mut self.drops[col][drop_idx];
+                drop.trail_len = iqi as u8;
+                drop.y = afk;
+                drop.speed = njs;
+                drop.delay = 0;
+                drop.glyph_seed = self.rng;
             }
         }
         
         
-        if self.eio != ShapeOverlay::None && self.ein > 0 {
-            self.eip += 0.016; 
+        if self.shape_mode != ShapeOverlay::None && self.shape_drop_count > 0 {
+            self.shape_time += 0.016; 
             
             
-            let yv = (self.ajg * EB_ / 2) as f32;  
-            let uq = (self.bnr * EB_ / 2) as f32;  
-            let bv = ((self.bnr * EB_) as f32).v((self.ajg * EB_) as f32) * 0.18;  
+            let center_x = (self.num_cols * EO_ / 2) as f32;  
+            let center_y = (self.num_rows * EO_ / 2) as f32;  
+            let scale = ((self.num_rows * EO_) as f32).min((self.num_cols * EO_) as f32) * 0.18;  
             
-            let az = self.ein.v(VA_);
-            for a in 0..az {
-                let drop = &mut self.iae[a];
+            let count = self.shape_drop_count.min(WJ_);
+            for i in 0..count {
+                let drop = &mut self.shape_drops[i];
                 
                 
-                drop.li += drop.ig;
-                if drop.li >= 1.0 {
-                    drop.li -= 1.0;
-                    drop.fhi = (drop.fhi + 1) % 9;  
-                    drop.amg = drop.amg.hx(1103515245).cn(12345);
+                drop.progress += drop.speed;
+                if drop.progress >= 1.0 {
+                    drop.progress -= 1.0;
+                    drop.edge_idx = (drop.edge_idx + 1) % 9;  
+                    drop.glyph_seed = drop.glyph_seed.wrapping_mul(1103515245).wrapping_add(12345);
                 }
                 
                 
-                let (b, c, av) = match self.eio {
-                    ShapeOverlay::Dw => {
+                let (x, y, z) = match self.shape_mode {
+                    ShapeOverlay::Cube => {
                         
-                        let aev = 0.785398_f32;  
-                        let ajt = 0.523599_f32;  
-                        let bmo = Self::rk(aev);
-                        let bol = Self::lz(aev);
-                        let bmn = Self::rk(ajt);
-                        let bok = Self::lz(ajt);
+                        let angle_y = 0.785398_f32;  
+                        let angle_x = 0.523599_f32;  
+                        let ahs = Self::hr(angle_y);
+                        let air = Self::eu(angle_y);
+                        let ahr = Self::hr(angle_x);
+                        let aiq = Self::eu(angle_x);
                         
                         
-                        let by: [(f32, f32, f32); 8] = [
+                        let verts: [(f32, f32, f32); 8] = [
                             (-1.0, -1.0, -1.0), (1.0, -1.0, -1.0),
                             (1.0, 1.0, -1.0), (-1.0, 1.0, -1.0),
                             (-1.0, -1.0, 1.0), (1.0, -1.0, 1.0),
@@ -1005,7 +1005,7 @@ impl BrailleMatrix {
                         
                         
                         
-                        let bu: [(usize, usize); 9] = [
+                        let edges: [(usize, usize); 9] = [
                             (0,1), (0,4), (0,3),   
                             (1,5),                  
                             (4,5), (4,7),           
@@ -1014,94 +1014,94 @@ impl BrailleMatrix {
                             (6,7),                  
                         ];
                         
-                        let amd = bu[drop.fhi as usize % 9];
-                        let agy = by[amd.0];
-                        let apg = by[amd.1];
+                        let th = edges[drop.edge_idx as usize % 9];
+                        let v1 = verts[th.0];
+                        let v2 = verts[th.1];
                         
                         
-                        let ab = drop.li;
-                        let y = agy.0 + (apg.0 - agy.0) * ab;
-                        let x = agy.1 + (apg.1 - agy.1) * ab;
-                        let cbe = agy.2 + (apg.2 - agy.2) * ab;
+                        let t = drop.progress;
+                        let p = v1.0 + (v2.0 - v1.0) * t;
+                        let o = v1.1 + (v2.1 - v1.1) * t;
+                        let aos = v1.2 + (v2.2 - v1.2) * t;
                         
                         
-                        let ehw = y * bmo - cbe * bol;
-                        let cmn = y * bol + cbe * bmo;
+                        let bvo = p * ahs - aos * air;
+                        let auw = p * air + aos * ahs;
                         
                         
-                        let dbp = x * bmn - cmn * bok;
-                        let cmo = x * bok + cmn * bmn;
+                        let apa = o * ahr - auw * aiq;
+                        let auy = o * aiq + auw * ahr;
                         
                         
-                        let aab = 5.0;
-                        let cgu = cmo + aab;
-                        let aqf = aab / cgu.am(0.5);
+                        let cam_dist = 5.0;
+                        let proj_z = auy + cam_dist;
+                        let vq = cam_dist / proj_z.max(0.5);
                         
                         
-                        let xu = yv + ehw * bv * aqf;
-                        let abi = uq + dbp * bv * aqf;
+                        let lw = center_x + bvo * scale * vq;
+                        let nn = center_y + apa * scale * vq;
                         
                         
-                        let rvr = (cmo + 2.0) / 4.0;  
+                        let ldh = (auy + 2.0) / 4.0;  
                         
-                        (xu as i32, abi as i32, rvr)
+                        (lw as i32, nn as i32, ldh)
                     },
                     ShapeOverlay::Sphere => {
                         
-                        let bnv = (a as f32 / self.ein as f32) * 3.14159 * 2.0;
-                        let bdb = drop.li * 3.14159;
-                        let hg = self.eip * 0.5;
+                        let aij = (i as f32 / self.shape_drop_count as f32) * 3.14159 * 2.0;
+                        let acz = drop.progress * 3.14159;
+                        let cc = self.shape_time * 0.5;
                         
-                        let b = Self::lz(bdb) * Self::rk(bnv + hg);
-                        let c = Self::lz(bdb) * Self::lz(bnv + hg);
-                        let av = Self::rk(bdb);
+                        let x = Self::eu(acz) * Self::hr(aij + cc);
+                        let y = Self::eu(acz) * Self::eu(aij + cc);
+                        let z = Self::hr(acz);
                         
-                        let aqf = 2.0 / (3.0 + av * 0.5);
-                        let eo = (av + 1.0) / 2.0;
-                        ((yv + b * bv * aqf) as i32,
-                         (uq + c * bv * aqf * 0.7) as i32, eo)
+                        let vq = 2.0 / (3.0 + z * 0.5);
+                        let depth = (z + 1.0) / 2.0;
+                        ((center_x + x * scale * vq) as i32,
+                         (center_y + y * scale * vq * 0.7) as i32, depth)
                     },
-                    ShapeOverlay::Dr => {
+                    ShapeOverlay::Torus => {
                         
-                        let tm = drop.li * 6.28318;
-                        let p = (a as f32 / self.ein as f32) * 6.28318;
-                        let hg = self.eip * 0.4;
+                        let iy = drop.progress * 6.28318;
+                        let v = (i as f32 / self.shape_drop_count as f32) * 6.28318;
+                        let cc = self.shape_time * 0.4;
                         
-                        let aqh = 1.5;
-                        let uv = 0.5;
-                        let b = (aqh + uv * Self::rk(p)) * Self::rk(tm + hg);
-                        let c = (aqh + uv * Self::rk(p)) * Self::lz(tm + hg);
-                        let av = uv * Self::lz(p);
+                        let uh = 1.5;
+                        let ju = 0.5;
+                        let x = (uh + ju * Self::hr(v)) * Self::hr(iy + cc);
+                        let y = (uh + ju * Self::hr(v)) * Self::eu(iy + cc);
+                        let z = ju * Self::eu(v);
                         
-                        let aqf = 1.5 / (2.5 + av * 0.3);
-                        let eo = (av + 0.5) / 1.0;
-                        ((yv + b * bv * 0.6 * aqf) as i32,
-                         (uq + c * bv * 0.4 * aqf) as i32, eo)
+                        let vq = 1.5 / (2.5 + z * 0.3);
+                        let depth = (z + 0.5) / 1.0;
+                        ((center_x + x * scale * 0.6 * vq) as i32,
+                         (center_y + y * scale * 0.4 * vq) as i32, depth)
                     },
-                    ShapeOverlay::Ij => {
+                    ShapeOverlay::DNA => {
                         
-                        let ab = drop.li * 10.0 + (a as f32 * 0.1);
-                        let hg = self.eip * 0.6;
-                        let obm = if a % 2 == 0 { 1.0 } else { -1.0 };
+                        let t = drop.progress * 10.0 + (i as f32 * 0.1);
+                        let cc = self.shape_time * 0.6;
+                        let ien = if i % 2 == 0 { 1.0 } else { -1.0 };
                         
-                        let b = Self::rk(ab + hg) * obm;
-                        let c = (ab % 6.28318) / 3.14159 - 1.0;
-                        let av = Self::lz(ab + hg) * obm;
+                        let x = Self::hr(t + cc) * ien;
+                        let y = (t % 6.28318) / 3.14159 - 1.0;
+                        let z = Self::eu(t + cc) * ien;
                         
-                        let aqf = 2.0 / (3.0 + av * 0.5);
-                        let eo = (av + 1.0) / 2.0;
-                        ((yv + b * bv * 0.5 * aqf) as i32,
-                         (uq + c * bv * 0.8) as i32, eo)
+                        let vq = 2.0 / (3.0 + z * 0.5);
+                        let depth = (z + 1.0) / 2.0;
+                        ((center_x + x * scale * 0.5 * vq) as i32,
+                         (center_y + y * scale * 0.8) as i32, depth)
                     },
                     ShapeOverlay::None => (0, 0, 0.5),
                 };
                 
                 
-                drop.lvi = drop.bj;
-                drop.frd = drop.br;
-                drop.bj = b;
-                drop.br = c;
-                drop.eo = av.qp(0.0, 1.0);
+                drop.prev_col = drop.col;
+                drop.prev_row = drop.row;
+                drop.col = x;
+                drop.row = y;
+                drop.depth = z.clamp(0.0, 1.0);
             }
         }
         
@@ -1111,168 +1111,168 @@ impl BrailleMatrix {
     
     
     
-    pub fn tj(&self, bi: &mut [u32], lu: usize, qh: usize) {
+    pub fn render(&self, buffer: &mut [u32], fb_width: usize, fb_height: usize) {
         
-        let vp = 0xFF010203u32;
+        let bg_color = 0xFF010203u32;
         #[cfg(target_arch = "x86_64")]
         unsafe {
-            crate::graphics::simd::bed(bi.mw(), bi.len(), vp);
+            crate::graphics::simd::adq(buffer.as_mut_ptr(), buffer.len(), bg_color);
         }
         #[cfg(not(target_arch = "x86_64"))]
-        bi.vi(vp);
+        buffer.fill(bg_color);
         
-        let ny = EB_;
-        let qxg = lu / ny;
-        let kgx = qh / ny;
-        
-        
-        let bgo = self.eio == ShapeOverlay::Dw;
-        let yv = (lu / 2) as f32;
-        let uq = (qh / 2) as f32;
-        let bv = (qh as f32).v(lu as f32) * 0.18;
+        let cell_size = EO_;
+        let khw = fb_width / cell_size;
+        let cell_rows = fb_height / cell_size;
         
         
-        let aev = 0.785398_f32; 
-        let ajt = 0.523599_f32; 
-        let bmo = Self::rk(aev);
-        let bol = Self::lz(aev);
-        let bmn = Self::rk(ajt);
-        let bok = Self::lz(ajt);
+        let cube_active = self.shape_mode == ShapeOverlay::Cube;
+        let center_x = (fb_width / 2) as f32;
+        let center_y = (fb_height / 2) as f32;
+        let scale = (fb_height as f32).min(fb_width as f32) * 0.18;
         
         
-        let jkg = |fbv: f32, fbz: f32| -> (f32, f32) {
-            let fbx = -1.0; 
-            let ehw = fbv * bmo - fbz * bol;
-            let cmn = fbv * bol + fbz * bmo;
-            let dbp = fbx * bmn - cmn * bok;
-            let cmo = fbx * bok + cmn * bmn;
-            let aab = 5.0;
-            let cgu = cmo + aab;
-            let aqf = aab / cgu.am(1.0);
-            (yv + ehw * bv * aqf, uq + dbp * bv * aqf)
+        let angle_y = 0.785398_f32; 
+        let angle_x = 0.523599_f32; 
+        let ahs = Self::hr(angle_y);
+        let air = Self::eu(angle_y);
+        let ahr = Self::hr(angle_x);
+        let aiq = Self::eu(angle_x);
+        
+        
+        let exd = |x3d: f32, z3d: f32| -> (f32, f32) {
+            let cfp = -1.0; 
+            let bvo = x3d * ahs - z3d * air;
+            let auw = x3d * air + z3d * ahs;
+            let apa = cfp * ahr - auw * aiq;
+            let auy = cfp * aiq + auw * ahr;
+            let cam_dist = 5.0;
+            let proj_z = auy + cam_dist;
+            let vq = cam_dist / proj_z.max(1.0);
+            (center_x + bvo * scale * vq, center_y + apa * scale * vq)
         };
         
         
-        let (ztd, puk) = jkg(0.0, -1.0);
-        let (pup, ztf) = jkg(-1.0, 0.0);
-        let (pur, ztg) = jkg(1.0, 0.0);
-        let (zte, pun) = jkg(0.0, 1.0);
+        let (top_back_x, top_back_y) = exd(0.0, -1.0);
+        let (top_left_x, top_left_y) = exd(-1.0, 0.0);
+        let (top_right_x, top_right_y) = exd(1.0, 0.0);
+        let (top_front_x, top_front_y) = exd(0.0, 1.0);
         
         
         
-        let frj = |fbv: f32, fbx: f32, fbz: f32| -> (f32, f32) {
-            let ehw = fbv * bmo - fbz * bol;
-            let cmn = fbv * bol + fbz * bmo;
-            let dbp = fbx * bmn - cmn * bok;
-            let cmo = fbx * bok + cmn * bmn;
-            let aab = 5.0;
-            let cgu = cmo + aab;
-            let ove = aab / cgu.am(1.0);
-            (yv + ehw * bv * ove, uq + dbp * bv * ove)
+        let coj = |x3d: f32, cfp: f32, z3d: f32| -> (f32, f32) {
+            let bvo = x3d * ahs - z3d * air;
+            let auw = x3d * air + z3d * ahs;
+            let apa = cfp * ahr - auw * aiq;
+            let auy = cfp * aiq + auw * ahr;
+            let cam_dist = 5.0;
+            let proj_z = auy + cam_dist;
+            let iul = cam_dist / proj_z.max(1.0);
+            (center_x + bvo * scale * iul, center_y + apa * scale * iul)
         };
         
         
         
-        let to = if bgo { frj(-1.0, -1.0, -1.0) } else { (0.0, 0.0) };
-        let eah = if bgo { frj( 1.0, -1.0, -1.0) } else { (0.0, 0.0) };
-        let hez = if bgo { frj( 1.0,  1.0, -1.0) } else { (0.0, 0.0) };
-        let ged = if bgo { frj(-1.0,  1.0, -1.0) } else { (0.0, 0.0) };
-        let eai = if bgo { frj(-1.0, -1.0,  1.0) } else { (0.0, 0.0) };
-        let hfa = if bgo { frj(-1.0,  1.0,  1.0) } else { (0.0, 0.0) };
+        let ja = if cube_active { coj(-1.0, -1.0, -1.0) } else { (0.0, 0.0) };
+        let brl = if cube_active { coj( 1.0, -1.0, -1.0) } else { (0.0, 0.0) };
+        let dmc = if cube_active { coj( 1.0,  1.0, -1.0) } else { (0.0, 0.0) };
+        let cwf = if cube_active { coj(-1.0,  1.0, -1.0) } else { (0.0, 0.0) };
+        let brm = if cube_active { coj(-1.0, -1.0,  1.0) } else { (0.0, 0.0) };
+        let dmd = if cube_active { coj(-1.0,  1.0,  1.0) } else { (0.0, 0.0) };
         
         
         
-        let eoi = if bgo { frj( 1.0, -1.0,  1.0) } else { (0.0, 0.0) };
-        let mlw = [to, eah, eoi, eai];
+        let byl = if cube_active { coj( 1.0, -1.0,  1.0) } else { (0.0, 0.0) };
+        let gzl = [ja, brl, byl, brm];
         
-        let lii = [to, eai, hfa, ged];
+        let gfg = [ja, brm, dmd, cwf];
         
-        let mac = [to, eah, hez, ged];
-        
-        
-        let kmj = if bgo { to.0.v(eah.0).v(hez.0).v(ged.0).v(eai.0).v(hfa.0).v(eoi.0) - 2.0 } else { 0.0 };
-        let kmh = if bgo { to.0.am(eah.0).am(hez.0).am(ged.0).am(eai.0).am(hfa.0).am(eoi.0) + 2.0 } else { 0.0 };
-        let kmk = if bgo { to.1.v(eah.1).v(hez.1).v(ged.1).v(eai.1).v(hfa.1).v(eoi.1) - 20.0 } else { 0.0 };
-        let kmi = if bgo { to.1.am(eah.1).am(hez.1).am(ged.1).am(eai.1).am(hfa.1).am(eoi.1) + 2.0 } else { 0.0 };
+        let grl = [ja, brl, dmc, cwf];
         
         
-        let rxi = if bgo { (pur - pup) / 2.0 } else { 1.0 };
-        let rxh = if bgo { (pun - puk) / 2.0 } else { 1.0 };
-        let ymb = (pup + pur) / 2.0;
-        let ymc = (puk + pun) / 2.0;
-        let yym = 1.0 / rxi.am(1.0);
-        let yyl = 1.0 / rxh.am(1.0);
+        let cube_min_x = if cube_active { ja.0.min(brl.0).min(dmc.0).min(cwf.0).min(brm.0).min(dmd.0).min(byl.0) - 2.0 } else { 0.0 };
+        let cube_max_x = if cube_active { ja.0.max(brl.0).max(dmc.0).max(cwf.0).max(brm.0).max(dmd.0).max(byl.0) + 2.0 } else { 0.0 };
+        let cube_min_y = if cube_active { ja.1.min(brl.1).min(dmc.1).min(cwf.1).min(brm.1).min(dmd.1).min(byl.1) - 20.0 } else { 0.0 };
+        let cube_max_y = if cube_active { ja.1.max(brl.1).max(dmc.1).max(cwf.1).max(brm.1).max(dmd.1).max(byl.1) + 2.0 } else { 0.0 };
+        
+        
+        let lek = if cube_active { (top_right_x - top_left_x) / 2.0 } else { 1.0 };
+        let lej = if cube_active { (top_front_y - top_back_y) / 2.0 } else { 1.0 };
+        let qcx = (top_left_x + top_right_x) / 2.0;
+        let qcy = (top_back_y + top_front_y) / 2.0;
+        let qls = 1.0 / lek.max(1.0);
+        let qlr = 1.0 / lej.max(1.0);
         
         
         
-        let jkr = |fm: &[(f32, f32); 4]| -> [(f32, f32, f32, f32); 4] {
-            let mut bu = [(0.0f32, 0.0f32, 0.0f32, 0.0f32); 4];
-            for a in 0..4 {
-                let fb = (a + 1) % 4;
-                bu[a] = (fm[fb].0 - fm[a].0, fm[fb].1 - fm[a].1, fm[a].0, fm[a].1);
+        let exj = |q: &[(f32, f32); 4]| -> [(f32, f32, f32, f32); 4] {
+            let mut edges = [(0.0f32, 0.0f32, 0.0f32, 0.0f32); 4];
+            for i in 0..4 {
+                let ay = (i + 1) % 4;
+                edges[i] = (q[ay].0 - q[i].0, q[ay].1 - q[i].1, q[i].0, q[i].1);
             }
-            bu
+            edges
         };
-        let mlv = if bgo { jkr(&mlw) } else { [(0.0,0.0,0.0,0.0); 4] };
-        let lih = if bgo { jkr(&lii) } else { [(0.0,0.0,0.0,0.0); 4] };
-        let mab = if bgo { jkr(&mac) } else { [(0.0,0.0,0.0,0.0); 4] };
+        let top_edges = if cube_active { exj(&gzl) } else { [(0.0,0.0,0.0,0.0); 4] };
+        let left_edges = if cube_active { exj(&gfg) } else { [(0.0,0.0,0.0,0.0); 4] };
+        let right_edges = if cube_active { exj(&grl) } else { [(0.0,0.0,0.0,0.0); 4] };
         
         
         
-        let ov = 16.0_f32;
-        let xjm = (to.0 + eah.0 + eoi.0 + eai.0) / 4.0;
-        let xjn = (to.1 + eah.1 + eoi.1 + eai.1) / 4.0;
-        let arb = |ai: (f32, f32)| -> (f32, f32) {
-            let dx = ai.0 - xjm;
-            let bg = ai.1 - xjn;
-            (ai.0 + dx * 0.12 + 0.0, ai.1 + bg * 0.12 - ov * 0.5)
+        let pad = 16.0_f32;
+        let ple = (ja.0 + brl.0 + byl.0 + brm.0) / 4.0;
+        let plf = (ja.1 + brl.1 + byl.1 + brm.1) / 4.0;
+        let wd = |aa: (f32, f32)| -> (f32, f32) {
+            let dx = aa.0 - ple;
+            let ad = aa.1 - plf;
+            (aa.0 + dx * 0.12 + 0.0, aa.1 + ad * 0.12 - pad * 0.5)
         };
-        let vat = if bgo {
-            [arb(to), arb(eah), arb(eoi), arb(eai)]
+        let npg = if cube_active {
+            [wd(ja), wd(brl), wd(byl), wd(brm)]
         } else {
             [(0.0,0.0); 4]
         };
-        let lro = if bgo { jkr(&vat) } else { [(0.0,0.0,0.0,0.0); 4] };
+        let pad_edges = if cube_active { exj(&npg) } else { [(0.0,0.0,0.0,0.0); 4] };
         
         #[inline(always)]
-        fn zfu(y: f32, x: f32, bu: &[(f32, f32, f32, f32); 4]) -> bool {
-            let mut u = 0u8;
+        fn qqq(p: f32, o: f32, edges: &[(f32, f32, f32, f32); 4]) -> bool {
+            let mut pos = 0u8;
             let mut neg = 0u8;
-            for &(bqp, ahm, mp, qw) in bu.iter() {
-                let bjr = bqp * (x - qw) - ahm * (y - mp);
-                if bjr > 0.0 { u += 1; } 
-                else if bjr < 0.0 { neg += 1; }
+            for &(ajq, qz, fh, hk) in edges.iter() {
+                let cross = ajq * (o - hk) - qz * (p - fh);
+                if cross > 0.0 { pos += 1; } 
+                else if cross < 0.0 { neg += 1; }
             }
-            u == 0 || neg == 0
+            pos == 0 || neg == 0
         }
         
         
-        let xjz = qxg.v(self.ajg);
-        let oi = Aac {
-            doo: bi.mw(),
-            aic: bi.len(),
-            lu,
-            qh,
-            ny,
-            kgx,
-            nnx: self.agk.fq(),
-            neo: self.cwh.fq(),
-            ajg: self.ajg,
-            bgo,
-            kmj,
-            kmh,
-            kmk,
-            kmi,
-            mlv,
-            lih,
-            mab,
-            lro,
+        let pls = khw.min(self.num_cols);
+        let params = Lc {
+            buffer_ptr: buffer.as_mut_ptr(),
+            buffer_len: buffer.len(),
+            fb_width,
+            fb_height,
+            cell_size,
+            cell_rows,
+            drops_ptr: self.drops.as_ptr(),
+            col_depth_ptr: self.col_depth.as_ptr(),
+            num_cols: self.num_cols,
+            cube_active,
+            cube_min_x,
+            cube_max_x,
+            cube_min_y,
+            cube_max_y,
+            top_edges,
+            left_edges,
+            right_edges,
+            pad_edges,
         };
         
-        crate::cpu::smp::daj(
-            xjz,
-            vvl,
-            &oi as *const Aac as *mut u8,
+        crate::cpu::smp::bcz(
+            pls,
+            ofg,
+            &params as *const Lc as *mut u8,
         );
         
         
@@ -1281,192 +1281,192 @@ impl BrailleMatrix {
     
     
     
-    pub fn vvs(&self, bi: &mut [u32], lu: usize, qh: usize) {
-        if self.eio == ShapeOverlay::None {
+    pub fn render_entity_layer(&self, buffer: &mut [u32], fb_width: usize, fb_height: usize) {
+        if self.shape_mode == ShapeOverlay::None {
             return;
         }
         
-        let yv = (lu / 2) as f32;
-        let uq = (qh / 2) as f32;
-        let bv = (qh as f32).v(lu as f32) * 0.18;  
+        let center_x = (fb_width / 2) as f32;
+        let center_y = (fb_height / 2) as f32;
+        let scale = (fb_height as f32).min(fb_width as f32) * 0.18;  
         
         
-        let time = self.eip;
+        let time = self.shape_time;
         
-        match self.eio {
-            ShapeOverlay::Dw => {
+        match self.shape_mode {
+            ShapeOverlay::Cube => {
                 
             },
             ShapeOverlay::Sphere => {
                 
-                let jho = 24;
+                let evl = 24;
                 
                 
-                for a in 0..6 {
-                    let bnv = (a as f32 / 6.0) * 3.14159;
-                    let vlc = 0xFF00AA44;  
+                for i in 0..6 {
+                    let aij = (i as f32 / 6.0) * 3.14159;
+                    let nwz = 0xFF00AA44;  
                     
-                    let mut bwb = 0i32;
-                    let mut dur = 0i32;
-                    let mut fv = true;
+                    let mut amh = 0i32;
+                    let mut boh = 0i32;
+                    let mut first = true;
                     
-                    for fb in 0..=jho {
-                        let bdb = (fb as f32 / jho as f32) * 3.14159 * 2.0;
+                    for ay in 0..=evl {
+                        let acz = (ay as f32 / evl as f32) * 3.14159 * 2.0;
                         
-                        let b = Self::lz(bdb) * Self::rk(bnv);
-                        let av = Self::lz(bdb) * Self::lz(bnv);
-                        let c = Self::rk(bdb);
+                        let x = Self::eu(acz) * Self::hr(aij);
+                        let z = Self::eu(acz) * Self::eu(aij);
+                        let y = Self::hr(acz);
                         
                         
-                        let jmu = time * 0.1;
-                        let kb = b * Self::rk(jmu) - av * Self::lz(jmu);
-                        let agv = b * Self::lz(jmu) + av * Self::rk(jmu);
+                        let eyy = time * 0.1;
+                        let da = x * Self::hr(eyy) - z * Self::eu(eyy);
+                        let qp = x * Self::eu(eyy) + z * Self::hr(eyy);
                         
-                        let aqf = 3.0 / (4.0 + agv);
-                        let y = (yv + kb * bv * aqf) as i32;
-                        let x = (uq + c * bv * aqf * 0.8) as i32;
+                        let vq = 3.0 / (4.0 + qp);
+                        let p = (center_x + da * scale * vq) as i32;
+                        let o = (center_y + y * scale * vq * 0.8) as i32;
                         
-                        if !fv {
-                            let eo = (agv + 1.0) / 2.0;
-                            let s = if eo > 0.5 { 0xFFCCFFCC } else { vlc };  
-                            self.dqg(bi, lu, qh, 
-                                               bwb, dur, y, x, s, 2);
+                        if !first {
+                            let depth = (qp + 1.0) / 2.0;
+                            let color = if depth > 0.5 { 0xFFCCFFCC } else { nwz };  
+                            self.draw_line_thick(buffer, fb_width, fb_height, 
+                                               amh, boh, p, o, color, 2);
                         }
-                        bwb = y;
-                        dur = x;
-                        fv = false;
+                        amh = p;
+                        boh = o;
+                        first = false;
                     }
                 }
                 
                 
-                for a in 1..4 {
-                    let fby = -0.75 + (a as f32 * 0.5);
-                    let dy = (1.0 - fby * fby).am(0.0);
-                    let dy = {
-                        let mut b = dy;
-                        let mut c = dy * 0.5;
-                        for _ in 0..4 { c = (c + b / c) * 0.5; }
-                        c
+                for i in 1..4 {
+                    let cfq = -0.75 + (i as f32 * 0.5);
+                    let radius = (1.0 - cfq * cfq).max(0.0);
+                    let radius = {
+                        let mut x = radius;
+                        let mut y = radius * 0.5;
+                        for _ in 0..4 { y = (y + x / y) * 0.5; }
+                        y
                     };
                     
-                    let mut bwb = 0i32;
-                    let mut dur = 0i32;
-                    let mut fv = true;
+                    let mut amh = 0i32;
+                    let mut boh = 0i32;
+                    let mut first = true;
                     
-                    for fb in 0..=jho {
-                        let hg = (fb as f32 / jho as f32) * 3.14159 * 2.0 + time * 0.1;
-                        let b = Self::rk(hg) * dy;
-                        let av = Self::lz(hg) * dy;
+                    for ay in 0..=evl {
+                        let cc = (ay as f32 / evl as f32) * 3.14159 * 2.0 + time * 0.1;
+                        let x = Self::hr(cc) * radius;
+                        let z = Self::eu(cc) * radius;
                         
-                        let aqf = 3.0 / (4.0 + av);
-                        let y = (yv + b * bv * aqf) as i32;
-                        let x = (uq + fby * bv * aqf * 0.8) as i32;
+                        let vq = 3.0 / (4.0 + z);
+                        let p = (center_x + x * scale * vq) as i32;
+                        let o = (center_y + cfq * scale * vq * 0.8) as i32;
                         
-                        if !fv {
-                            let eo = (av + 1.0) / 2.0;
-                            let s = if eo > 0.5 { 0xFFCCFFCC } else { 0xFF00AA44 };  
-                            self.dqg(bi, lu, qh, 
-                                               bwb, dur, y, x, s, 2);
+                        if !first {
+                            let depth = (z + 1.0) / 2.0;
+                            let color = if depth > 0.5 { 0xFFCCFFCC } else { 0xFF00AA44 };  
+                            self.draw_line_thick(buffer, fb_width, fb_height, 
+                                               amh, boh, p, o, color, 2);
                         }
-                        bwb = y;
-                        dur = x;
-                        fv = false;
+                        amh = p;
+                        boh = o;
+                        first = false;
                     }
                 }
             },
-            ShapeOverlay::Dr => {
+            ShapeOverlay::Torus => {
                 
-                let czl = 0.7;
-                let cge = 0.3;
-                let jq = 16;
+                let bcm = 0.7;
+                let aro = 0.3;
+                let segments = 16;
                 
                 
-                for a in 0..8 {
-                    let tm = (a as f32 / 8.0) * 3.14159 * 2.0;
-                    let gdw = Self::rk(tm);
-                    let wvi = Self::lz(tm);
+                for i in 0..8 {
+                    let iy = (i as f32 / 8.0) * 3.14159 * 2.0;
+                    let cvz = Self::hr(iy);
+                    let oyg = Self::eu(iy);
                     
-                    let mut bwb = 0i32;
-                    let mut dur = 0i32;
-                    let mut fv = true;
+                    let mut amh = 0i32;
+                    let mut boh = 0i32;
+                    let mut first = true;
                     
-                    for fb in 0..=jq {
-                        let p = (fb as f32 / jq as f32) * 3.14159 * 2.0;
-                        let gec = Self::rk(p);
-                        let bxk = Self::lz(p);
+                    for ay in 0..=segments {
+                        let v = (ay as f32 / segments as f32) * 3.14159 * 2.0;
+                        let cwe = Self::hr(v);
+                        let amx = Self::eu(v);
                         
-                        let b = (czl + cge * gec) * gdw;
-                        let c = cge * bxk;
-                        let av = (czl + cge * gec) * wvi;
+                        let x = (bcm + aro * cwe) * cvz;
+                        let y = aro * amx;
+                        let z = (bcm + aro * cwe) * oyg;
                         
                         
-                        let dli = time * 0.2;
-                        let kb = b * Self::rk(dli) - av * Self::lz(dli);
-                        let agv = b * Self::lz(dli) + av * Self::rk(dli);
+                        let biy = time * 0.2;
+                        let da = x * Self::hr(biy) - z * Self::eu(biy);
+                        let qp = x * Self::eu(biy) + z * Self::hr(biy);
                         
-                        let aqf = 3.0 / (4.0 + agv);
-                        let y = (yv + kb * bv * aqf) as i32;
-                        let x = (uq + c * bv * aqf) as i32;
+                        let vq = 3.0 / (4.0 + qp);
+                        let p = (center_x + da * scale * vq) as i32;
+                        let o = (center_y + y * scale * vq) as i32;
                         
-                        if !fv {
-                            let eo = (agv + 1.0) / 2.0;
-                            let s = if eo > 0.5 { 0xFFCCFFCC } else { 0xFF00AA44 };  
-                            self.dqg(bi, lu, qh, 
-                                               bwb, dur, y, x, s, 2);
+                        if !first {
+                            let depth = (qp + 1.0) / 2.0;
+                            let color = if depth > 0.5 { 0xFFCCFFCC } else { 0xFF00AA44 };  
+                            self.draw_line_thick(buffer, fb_width, fb_height, 
+                                               amh, boh, p, o, color, 2);
                         }
-                        bwb = y;
-                        dur = x;
-                        fv = false;
+                        amh = p;
+                        boh = o;
+                        first = false;
                     }
                 }
             },
-            ShapeOverlay::Ij => {
+            ShapeOverlay::DNA => {
                 
-                let obn = bv * 1.5;
-                let fkn = bv * 0.3;
-                let jq = 40;
+                let ieo = scale * 1.5;
+                let ckn = scale * 0.3;
+                let segments = 40;
                 
-                let mut oxn = 0i32;
-                let mut oxp = 0i32;
-                let mut oxo = 0i32;
-                let mut oxq = 0i32;
-                let mut fv = true;
+                let mut iwh = 0i32;
+                let mut iwj = 0i32;
+                let mut iwi = 0i32;
+                let mut iwk = 0i32;
+                let mut first = true;
                 
-                for a in 0..=jq {
-                    let ab = a as f32 / jq as f32;
-                    let c = uq - obn / 2.0 + obn * ab;
-                    let hg = ab * 3.14159 * 4.0 + time * 0.5;
+                for i in 0..=segments {
+                    let t = i as f32 / segments as f32;
+                    let y = center_y - ieo / 2.0 + ieo * t;
+                    let cc = t * 3.14159 * 4.0 + time * 0.5;
                     
                     
-                    let dn = yv + Self::rk(hg) * fkn;
-                    let hy = yv + Self::rk(hg + 3.14159) * fkn;
-                    let aeu = Self::lz(hg);
-                    let ahc = Self::lz(hg + 3.14159);
+                    let x1 = center_x + Self::hr(cc) * ckn;
+                    let x2 = center_x + Self::hr(cc + 3.14159) * ckn;
+                    let po = Self::eu(cc);
+                    let qt = Self::eu(cc + 3.14159);
                     
-                    let gqb = dn as i32;
-                    let egz = c as i32;
-                    let gqc = hy as i32;
-                    let eha = c as i32;
+                    let ddb = x1 as i32;
+                    let bvc = y as i32;
+                    let ddc = x2 as i32;
+                    let bvd = y as i32;
                     
-                    if !fv {
-                        let bjo = if aeu > 0.0 { 0xFFCCFFCC } else { 0xFF00AA44 };  
-                        let btr = if ahc > 0.0 { 0xFFCCFFCC } else { 0xFF00AA44 };  
-                        self.dqg(bi, lu, qh, 
-                                           oxn, oxp, gqb, egz, bjo, 2);
-                        self.dqg(bi, lu, qh, 
-                                           oxo, oxq, gqc, eha, btr, 2);
+                    if !first {
+                        let agh = if po > 0.0 { 0xFFCCFFCC } else { 0xFF00AA44 };  
+                        let ale = if qt > 0.0 { 0xFFCCFFCC } else { 0xFF00AA44 };  
+                        self.draw_line_thick(buffer, fb_width, fb_height, 
+                                           iwh, iwj, ddb, bvc, agh, 2);
+                        self.draw_line_thick(buffer, fb_width, fb_height, 
+                                           iwi, iwk, ddc, bvd, ale, 2);
                         
                         
-                        if a % 4 == 0 {
-                            self.dqg(bi, lu, qh, 
-                                               gqb, egz, gqc, eha, 0xFF44FF44, 1);
+                        if i % 4 == 0 {
+                            self.draw_line_thick(buffer, fb_width, fb_height, 
+                                               ddb, bvc, ddc, bvd, 0xFF44FF44, 1);
                         }
                     }
-                    oxn = gqb;
-                    oxp = egz;
-                    oxo = gqc;
-                    oxq = eha;
-                    fv = false;
+                    iwh = ddb;
+                    iwj = bvc;
+                    iwi = ddc;
+                    iwk = bvd;
+                    first = false;
                 }
             },
             ShapeOverlay::None => {},
@@ -1477,265 +1477,265 @@ impl BrailleMatrix {
     
     
     
-    pub fn vvo(&self, bi: &mut [u32], lu: usize, qh: usize) {
-        if self.eio != ShapeOverlay::Dw {
+    pub fn render_cube_flow_layer(&self, buffer: &mut [u32], fb_width: usize, fb_height: usize) {
+        if self.shape_mode != ShapeOverlay::Cube {
             return;
         }
         
-        let ny = EB_;
-        let anv = (self.ajg * ny) as f32;
-        let akr = (self.bnr * ny) as f32;
-        let yv = anv / 2.0;
-        let uq = akr / 2.0;
-        let bv = akr.v(anv) * 0.18;
+        let cell_size = EO_;
+        let screen_width = (self.num_cols * cell_size) as f32;
+        let screen_height = (self.num_rows * cell_size) as f32;
+        let center_x = screen_width / 2.0;
+        let center_y = screen_height / 2.0;
+        let scale = screen_height.min(screen_width) * 0.18;
         
-        let aev = 0.785398_f32;
-        let ajt = 0.523599_f32;
-        let bmo = Self::rk(aev);
-        let bol = Self::lz(aev);
-        let bmn = Self::rk(ajt);
-        let bok = Self::lz(ajt);
-        let aab = 5.0_f32;
+        let angle_y = 0.785398_f32;
+        let angle_x = 0.523599_f32;
+        let ahs = Self::hr(angle_y);
+        let air = Self::eu(angle_y);
+        let ahr = Self::hr(angle_x);
+        let aiq = Self::eu(angle_x);
+        let cam_dist = 5.0_f32;
         
-        let nv = |fbv: f32, fbx: f32, fbz: f32| -> (f32, f32) {
-            let ehw = fbv * bmo - fbz * bol;
-            let cmn = fbv * bol + fbz * bmo;
-            let dbp = fbx * bmn - cmn * bok;
-            let cmo = fbx * bok + cmn * bmn;
-            let cgu = cmo + aab;
-            let aqf = aab / cgu.am(1.0);
-            (yv + ehw * bv * aqf, uq + dbp * bv * aqf)
+        let project = |x3d: f32, cfp: f32, z3d: f32| -> (f32, f32) {
+            let bvo = x3d * ahs - z3d * air;
+            let auw = x3d * air + z3d * ahs;
+            let apa = cfp * ahr - auw * aiq;
+            let auy = cfp * aiq + auw * ahr;
+            let proj_z = auy + cam_dist;
+            let vq = cam_dist / proj_z.max(1.0);
+            (center_x + bvo * scale * vq, center_y + apa * scale * vq)
         };
         
         
-        let bin = nv(-1.0, -1.0, -1.0); 
-        let aax = nv( 1.0, -1.0, -1.0); 
-        let aco = nv( 1.0, -1.0,  1.0); 
-        let bcx = nv(-1.0, -1.0,  1.0); 
+        let abl = project(-1.0, -1.0, -1.0); 
+        let ll = project( 1.0, -1.0, -1.0); 
+        let np = project( 1.0, -1.0,  1.0); 
+        let acw = project(-1.0, -1.0,  1.0); 
         
         
-        let bvd = nv(-1.0,  1.0,  1.0);  
-        let eei = nv(-1.0,  1.0, -1.0);  
-        let uv = nv( 1.0,  1.0, -1.0);  
+        let alv = project(-1.0,  1.0,  1.0);  
+        let btw = project(-1.0,  1.0, -1.0);  
+        let ju = project( 1.0,  1.0, -1.0);  
         
-        let mlw = [bin, aax, aco, bcx];
-        let lii = [bin, bcx, bvd, eei];
+        let gzl = [abl, ll, np, acw];
+        let gfg = [abl, acw, alv, btw];
         
-        let mac = [bin, aax, uv, eei];
-        
-        
+        let grl = [abl, ll, ju, btw];
         
         
-        let pus = aax.0 - bin.0;
-        let put = aax.1 - bin.1;
-        let puu = bcx.0 - bin.0;
-        let puv = bcx.1 - bin.1;
-        let pul = pus * puv - put * puu;
         
         
-        let gyg = [bin, aax, aco, bcx, bvd, eei, uv];
-        let mut kcl = gyg[0].0;
-        let mut kcj = gyg[0].0;
-        let mut kcm = gyg[0].1;
-        let mut kck = gyg[0].1;
-        for ai in &gyg[1..] {
-            if ai.0 < kcl { kcl = ai.0; }
-            if ai.0 > kcj { kcj = ai.0; }
-            if ai.1 < kcm { kcm = ai.1; }
-            if ai.1 > kck { kck = ai.1; }
+        let jno = ll.0 - abl.0;
+        let jnp = ll.1 - abl.1;
+        let jnq = acw.0 - abl.0;
+        let jnr = acw.1 - abl.1;
+        let jnk = jno * jnr - jnp * jnq;
+        
+        
+        let dhk = [abl, ll, np, acw, alv, btw, ju];
+        let mut fim = dhk[0].0;
+        let mut fik = dhk[0].0;
+        let mut fin = dhk[0].1;
+        let mut fil = dhk[0].1;
+        for aa in &dhk[1..] {
+            if aa.0 < fim { fim = aa.0; }
+            if aa.0 > fik { fik = aa.0; }
+            if aa.1 < fin { fin = aa.1; }
+            if aa.1 > fil { fil = aa.1; }
         }
         
-        let qxi = ((kcl / ny as f32) as i32).am(0) as usize;
-        let qxj = ((kcj / ny as f32) as i32 + 1).v(self.ajg as i32) as usize;
-        let qxk = ((kcm / ny as f32) as i32).am(0) as usize;
-        let qxl = ((kck / ny as f32) as i32 + 1).v(self.bnr as i32) as usize;
+        let khy = ((fim / cell_size as f32) as i32).max(0) as usize;
+        let khz = ((fik / cell_size as f32) as i32 + 1).min(self.num_cols as i32) as usize;
+        let kia = ((fin / cell_size as f32) as i32).max(0) as usize;
+        let kib = ((fil / cell_size as f32) as i32 + 1).min(self.num_rows as i32) as usize;
         
-        let luo = |y: f32, x: f32, fm: &[(f32, f32); 4]| -> bool {
-            let mut u = 0i32;
+        let gno = |p: f32, o: f32, q: &[(f32, f32); 4]| -> bool {
+            let mut pos = 0i32;
             let mut neg = 0i32;
-            for a in 0..4 {
-                let fb = (a + 1) % 4;
-                let bjr = (fm[fb].0 - fm[a].0) * (x - fm[a].1) - (fm[fb].1 - fm[a].1) * (y - fm[a].0);
-                if bjr > 0.0 { u += 1; } 
-                else if bjr < 0.0 { neg += 1; }
+            for i in 0..4 {
+                let ay = (i + 1) % 4;
+                let cross = (q[ay].0 - q[i].0) * (o - q[i].1) - (q[ay].1 - q[i].1) * (p - q[i].0);
+                if cross > 0.0 { pos += 1; } 
+                else if cross < 0.0 { neg += 1; }
             }
-            u == 0 || neg == 0
+            pos == 0 || neg == 0
         };
         
-        let time = self.eip;
-        let ors = 8.0_f32;   
-        let oia = 0.35_f32; 
+        let time = self.shape_time;
+        let irn = 8.0_f32;   
+        let ijg = 0.35_f32; 
         
-        for ae in qxk..qxl {
-            for cx in qxi..qxj {
-                let y = (cx * ny + RZ_) as f32;
-                let x = (ae * ny + RZ_) as f32;
+        for u in kia..kib {
+            for cx in khy..khz {
+                let p = (cx * cell_size + TB_) as f32;
+                let o = (u * cell_size + TB_) as f32;
                 
                 
-                if pul.gp() > 0.01 && luo(y, x, &mlw) {
+                if jnk.abs() > 0.01 && gno(p, o, &gzl) {
                     
-                    let nmq = y - bin.0;
-                    let nmr = x - bin.1;
-                    let off = 1.0 / pul;
-                    let tm = (nmq * puv - nmr * puu) * off;
-                    let p = (pus * nmr - put * nmq) * off;
+                    let htf = p - abl.0;
+                    let htg = o - abl.1;
+                    let ihh = 1.0 / jnk;
+                    let iy = (htf * jnr - htg * jnq) * ihh;
+                    let v = (jno * htg - jnp * htf) * ihh;
                     
                     
-                    let mnt = tm * ors;
-                    let mos = p * ors;
-                    let xnv = mnt - Self::cxs(mnt);
-                    let xqb = mos - Self::cxs(mos);
+                    let hai = iy * irn;
+                    let hbc = v * irn;
+                    let ppd = hai - Self::bbp(hai);
+                    let pqu = hbc - Self::bbp(hbc);
                     
-                    let lqn = xnv < oia; 
-                    let lqo = xqb < oia; 
+                    let gkz = ppd < ijg; 
+                    let gla = pqu < ijg; 
                     
-                    if lqn || lqo {
-                        let xnw = Self::cxs(mnt) as i32;
-                        let xqd = Self::cxs(mos) as i32;
+                    if gkz || gla {
+                        let ppe = Self::bbp(hai) as i32;
+                        let pqw = Self::bbp(hbc) as i32;
                         
                         
-                        let eie = 2.5;
-                        let mut kt: f32 = 0.0;
+                        let scroll_speed = 2.5;
+                        let mut brightness: f32 = 0.0;
                         
-                        if lqn {
+                        if gkz {
                             
-                            let dv = (xqd as u32).hx(2654435761);
-                            let ib = (dv % 100) as f32 * 0.04;
-                            let ale = time * eie + ib;
-                            let ase = 0.4_f32;  
-                            let awn = 0.7 + (dv % 3) as f32 * 0.15;
-                            let bc = tm - ale;
-                            let cee = bc - Self::cxs(bc / awn) * awn;
-                            if cee >= 0.0 && cee < ase {
-                                kt = (1.0 - cee / ase).am(0.0);
+                            let seed = (pqw as u32).wrapping_mul(2654435761);
+                            let phase = (seed % 100) as f32 * 0.04;
+                            let su = time * scroll_speed + phase;
+                            let wr = 0.4_f32;  
+                            let zd = 0.7 + (seed % 3) as f32 * 0.15;
+                            let d = iy - su;
+                            let aqj = d - Self::bbp(d / zd) * zd;
+                            if aqj >= 0.0 && aqj < wr {
+                                brightness = (1.0 - aqj / wr).max(0.0);
                             }
                         }
                         
-                        if lqo {
-                            let dv = (xnw as u32).hx(340573321);
-                            let ib = (dv % 100) as f32 * 0.04;
-                            let ale = time * eie * 0.9 + ib;
-                            let ase = 0.4_f32;
-                            let awn = 0.7 + (dv % 3) as f32 * 0.15;
-                            let bc = p - ale;
-                            let cee = bc - Self::cxs(bc / awn) * awn;
-                            if cee >= 0.0 && cee < ase {
-                                let tb = (1.0 - cee / ase).am(0.0);
-                                if tb > kt { kt = tb; }
+                        if gla {
+                            let seed = (ppe as u32).wrapping_mul(340573321);
+                            let phase = (seed % 100) as f32 * 0.04;
+                            let su = time * scroll_speed * 0.9 + phase;
+                            let wr = 0.4_f32;
+                            let zd = 0.7 + (seed % 3) as f32 * 0.15;
+                            let d = v - su;
+                            let aqj = d - Self::bbp(d / zd) * zd;
+                            if aqj >= 0.0 && aqj < wr {
+                                let iq = (1.0 - aqj / wr).max(0.0);
+                                if iq > brightness { brightness = iq; }
                             }
                         }
                         
-                        if kt < 0.08 { kt = 0.08; }
+                        if brightness < 0.08 { brightness = 0.08; }
                         
                         
-                        let hcm = (cx as u32).hx(2654435761)
-                            .cn((ae as u32).hx(340573321));
-                        let dod = (time * 8.0) as u32;
-                        let cqy = ((hcm.cn(dod)) % ND_ as u32) as usize;
-                        let ka = &OC_[cqy];
+                        let dkl = (cx as u32).wrapping_mul(2654435761)
+                            .wrapping_add((u as u32).wrapping_mul(340573321));
+                        let anim_frame = (time * 8.0) as u32;
+                        let axi = ((dkl.wrapping_add(anim_frame)) % OC_ as u32) as usize;
+                        let du = &PA_[axi];
                         
                         
-                        let s = if lqn && lqo {
+                        let color = if gkz && gla {
                             
-                            let d = (180.0 + kt * 75.0) as u8;
-                            0xFF000000 | ((d as u32) << 16) | ((d as u32) << 8) | (d as u32)
-                        } else if kt > 0.85 {
+                            let w = (180.0 + brightness * 75.0) as u8;
+                            0xFF000000 | ((w as u32) << 16) | ((w as u32) << 8) | (w as u32)
+                        } else if brightness > 0.85 {
                             
-                            let at = (kt * 255.0) as u8;
-                            0xFF000000 | 0x00300000 | ((at as u32) << 8) | 0x30
+                            let g = (brightness * 255.0) as u8;
+                            0xFF000000 | 0x00300000 | ((g as u32) << 8) | 0x30
                         } else {
                             
-                            let at = (30.0 + kt * 220.0) as u8;
-                            0xFF000000 | ((at as u32) << 8) | 0x06
+                            let g = (30.0 + brightness * 220.0) as u8;
+                            0xFF000000 | ((g as u32) << 8) | 0x06
                         };
                         
-                        self.hgu(bi, lu, cx * ny + 1, ae * ny + 1, ka, s);
+                        self.draw_glyph_3x3(buffer, fb_width, cx * cell_size + 1, u * cell_size + 1, du, color);
                     }
                     continue;
                 }
                 
                 
-                if luo(y, x, &lii) {
-                    let cds = 10.0_f32;
-                    let ffj = y / cds;
-                    let kjs = ffj - Self::cxs(ffj);
+                if gno(p, o, &gfg) {
+                    let aqa = 10.0_f32;
+                    let chk = p / aqa;
+                    let fnp = chk - Self::bbp(chk);
                     
-                    if kjs < 0.4 {
-                        let kjt = Self::cxs(ffj) as i32;
-                        let dv = (kjt as u32).hx(2654435761);
-                        let eie = 2.5 + (dv % 6) as f32 * 0.3;
-                        let ib = (dv % 100) as f32 * 0.05;
-                        let ale = time * eie + ib;
-                        let u = x / cds;
-                        let ase = 3.0;
-                        let awn = 4.0 + (dv % 3) as f32 * 0.5;
-                        let bc = u - ale;
-                        let cee = bc - Self::cxs(bc / awn) * awn;
+                    if fnp < 0.4 {
+                        let fnq = Self::bbp(chk) as i32;
+                        let seed = (fnq as u32).wrapping_mul(2654435761);
+                        let scroll_speed = 2.5 + (seed % 6) as f32 * 0.3;
+                        let phase = (seed % 100) as f32 * 0.05;
+                        let su = time * scroll_speed + phase;
+                        let pos = o / aqa;
+                        let wr = 3.0;
+                        let zd = 4.0 + (seed % 3) as f32 * 0.5;
+                        let d = pos - su;
+                        let aqj = d - Self::bbp(d / zd) * zd;
                         
-                        let mut kt: f32 = 0.06;
-                        if cee >= 0.0 && cee < ase {
-                            kt = (1.0 - cee / ase).am(0.0);
-                            if kt < 0.06 { kt = 0.06; }
+                        let mut brightness: f32 = 0.06;
+                        if aqj >= 0.0 && aqj < wr {
+                            brightness = (1.0 - aqj / wr).max(0.0);
+                            if brightness < 0.06 { brightness = 0.06; }
                         }
                         
-                        let hcm = (cx as u32).hx(2654435761)
-                            .cn((ae as u32).hx(340573321));
-                        let dod = (time * 6.0) as u32;
-                        let cqy = ((hcm.cn(dod)) % ND_ as u32) as usize;
-                        let ka = &OC_[cqy];
+                        let dkl = (cx as u32).wrapping_mul(2654435761)
+                            .wrapping_add((u as u32).wrapping_mul(340573321));
+                        let anim_frame = (time * 6.0) as u32;
+                        let axi = ((dkl.wrapping_add(anim_frame)) % OC_ as u32) as usize;
+                        let du = &PA_[axi];
                         
-                        let s = if kt > 0.88 {
-                            let at = (kt * 200.0) as u8;
-                            0xFF000000 | 0x00200000 | ((at as u32) << 8) | 0x18
+                        let color = if brightness > 0.88 {
+                            let g = (brightness * 200.0) as u8;
+                            0xFF000000 | 0x00200000 | ((g as u32) << 8) | 0x18
                         } else {
-                            let at = (12.0 + kt * 140.0) as u8;
-                            0xFF000000 | ((at as u32) << 8) | 0x04
+                            let g = (12.0 + brightness * 140.0) as u8;
+                            0xFF000000 | ((g as u32) << 8) | 0x04
                         };
                         
-                        self.hgu(bi, lu, cx * ny + 1, ae * ny + 1, ka, s);
+                        self.draw_glyph_3x3(buffer, fb_width, cx * cell_size + 1, u * cell_size + 1, du, color);
                     }
                     continue;
                 }
                 
                 
-                if luo(y, x, &mac) {
-                    let cds = 10.0_f32;
-                    let ffj = y / cds;
-                    let kjs = ffj - Self::cxs(ffj);
+                if gno(p, o, &grl) {
+                    let aqa = 10.0_f32;
+                    let chk = p / aqa;
+                    let fnp = chk - Self::bbp(chk);
                     
-                    if kjs < 0.4 {
-                        let kjt = Self::cxs(ffj) as i32;
-                        let dv = (kjt as u32).hx(340573321);
-                        let eie = 2.8 + (dv % 5) as f32 * 0.25;
-                        let ib = (dv % 100) as f32 * 0.05;
-                        let ale = time * eie + ib;
-                        let u = x / cds;
-                        let ase = 3.5;
-                        let awn = 4.5 + (dv % 3) as f32 * 0.5;
-                        let bc = u - ale;
-                        let cee = bc - Self::cxs(bc / awn) * awn;
+                    if fnp < 0.4 {
+                        let fnq = Self::bbp(chk) as i32;
+                        let seed = (fnq as u32).wrapping_mul(340573321);
+                        let scroll_speed = 2.8 + (seed % 5) as f32 * 0.25;
+                        let phase = (seed % 100) as f32 * 0.05;
+                        let su = time * scroll_speed + phase;
+                        let pos = o / aqa;
+                        let wr = 3.5;
+                        let zd = 4.5 + (seed % 3) as f32 * 0.5;
+                        let d = pos - su;
+                        let aqj = d - Self::bbp(d / zd) * zd;
                         
-                        let mut kt: f32 = 0.06;
-                        if cee >= 0.0 && cee < ase {
-                            kt = (1.0 - cee / ase).am(0.0);
-                            if kt < 0.06 { kt = 0.06; }
+                        let mut brightness: f32 = 0.06;
+                        if aqj >= 0.0 && aqj < wr {
+                            brightness = (1.0 - aqj / wr).max(0.0);
+                            if brightness < 0.06 { brightness = 0.06; }
                         }
                         
-                        let hcm = (cx as u32).hx(2654435761)
-                            .cn((ae as u32).hx(340573321));
-                        let dod = (time * 7.0) as u32;
-                        let cqy = ((hcm.cn(dod)) % ND_ as u32) as usize;
-                        let ka = &OC_[cqy];
+                        let dkl = (cx as u32).wrapping_mul(2654435761)
+                            .wrapping_add((u as u32).wrapping_mul(340573321));
+                        let anim_frame = (time * 7.0) as u32;
+                        let axi = ((dkl.wrapping_add(anim_frame)) % OC_ as u32) as usize;
+                        let du = &PA_[axi];
                         
-                        let s = if kt > 0.88 {
-                            let at = (kt * 230.0) as u8;
-                            0xFF000000 | 0x00280000 | ((at as u32) << 8) | 0x20
+                        let color = if brightness > 0.88 {
+                            let g = (brightness * 230.0) as u8;
+                            0xFF000000 | 0x00280000 | ((g as u32) << 8) | 0x20
                         } else {
-                            let at = (15.0 + kt * 170.0) as u8;
-                            0xFF000000 | ((at as u32) << 8) | 0x06
+                            let g = (15.0 + brightness * 170.0) as u8;
+                            0xFF000000 | ((g as u32) << 8) | 0x06
                         };
                         
-                        self.hgu(bi, lu, cx * ny + 1, ae * ny + 1, ka, s);
+                        self.draw_glyph_3x3(buffer, fb_width, cx * cell_size + 1, u * cell_size + 1, du, color);
                     }
                 }
             }
@@ -1743,235 +1743,235 @@ impl BrailleMatrix {
     }
     
     
-    fn dqg(&self, bi: &mut [u32], lu: usize, qh: usize,
-                       fy: i32, fo: i32, dn: i32, dp: i32, s: u32, ahw: i32) {
+    fn draw_line_thick(&self, buffer: &mut [u32], fb_width: usize, fb_height: usize,
+                       bm: i32, az: i32, x1: i32, y1: i32, color: u32, rh: i32) {
         
-        let adf = 100i32;
-        let d = lu as i32;
-        let i = qh as i32;
-        if (fy < -adf && dn < -adf) || (fy > d + adf && dn > d + adf) {
+        let oq = 100i32;
+        let w = fb_width as i32;
+        let h = fb_height as i32;
+        if (bm < -oq && x1 < -oq) || (bm > w + oq && x1 > w + oq) {
             return;
         }
-        if (fo < -adf && dp < -adf) || (fo > i + adf && dp > i + adf) {
+        if (az < -oq && y1 < -oq) || (az > h + oq && y1 > h + oq) {
             return;
         }
         
-        let dx = (dn - fy).gp();
-        let bg = -(dp - fo).gp();
-        let cr = if fy < dn { 1 } else { -1 };
-        let cq = if fo < dp { 1 } else { -1 };
-        let mut rq = dx + bg;
+        let dx = (x1 - bm).abs();
+        let ad = -(y1 - az).abs();
+        let am = if bm < x1 { 1 } else { -1 };
+        let ak = if az < y1 { 1 } else { -1 };
+        let mut err = dx + ad;
         
-        let mut b = fy;
-        let mut c = fo;
+        let mut x = bm;
+        let mut y = az;
         
         
-        let csk = (dx.gp() + (-bg).gp() + 10) as usize;
-        let mut au = 0usize;
+        let ayd = (dx.abs() + (-ad).abs() + 10) as usize;
+        let mut steps = 0usize;
         
         loop {
-            au += 1;
-            if au > csk { break; }
+            steps += 1;
+            if steps > ayd { break; }
             
             
-            for ty in -ahw/2..=ahw/2 {
-                for gx in -ahw/2..=ahw/2 {
-                    let y = b + gx;
-                    let x = c + ty;
-                    if y >= 0 && x >= 0 {
-                        let hwf = y as usize;
-                        let hwg = x as usize;
-                        if hwf < lu && hwg < qh {
-                            bi[hwg * lu + hwf] = s;
+            for ty in -rh/2..=rh/2 {
+                for bu in -rh/2..=rh/2 {
+                    let p = x + bu;
+                    let o = y + ty;
+                    if p >= 0 && o >= 0 {
+                        let dxa = p as usize;
+                        let dxb = o as usize;
+                        if dxa < fb_width && dxb < fb_height {
+                            buffer[dxb * fb_width + dxa] = color;
                         }
                     }
                 }
             }
             
-            if b == dn && c == dp { break; }
+            if x == x1 && y == y1 { break; }
             
-            let agl = 2 * rq;
-            if agl >= bg {
-                rq += bg;
-                b += cr;
+            let pg = 2 * err;
+            if pg >= ad {
+                err += ad;
+                x += am;
             }
-            if agl <= dx {
-                rq += dx;
-                c += cq;
+            if pg <= dx {
+                err += dx;
+                y += ak;
             }
         }
     }
     
     
-    fn ynd(&self, bi: &mut [u32], lu: usize, qh: usize,
-                              fy: i32, fo: i32, dn: i32, dp: i32, 
-                              agg: u32, eo: f32, fhi: usize) {
+    fn qds(&self, buffer: &mut [u32], fb_width: usize, fb_height: usize,
+                              bm: i32, az: i32, x1: i32, y1: i32, 
+                              qf: u32, depth: f32, edge_idx: usize) {
         
-        let adf = 100i32;
-        let d = lu as i32;
-        let i = qh as i32;
-        if (fy < -adf && dn < -adf) || (fy > d + adf && dn > d + adf) {
+        let oq = 100i32;
+        let w = fb_width as i32;
+        let h = fb_height as i32;
+        if (bm < -oq && x1 < -oq) || (bm > w + oq && x1 > w + oq) {
             return;
         }
-        if (fo < -adf && dp < -adf) || (fo > i + adf && dp > i + adf) {
+        if (az < -oq && y1 < -oq) || (az > h + oq && y1 > h + oq) {
             return;
         }
         
-        let time = self.eip;
+        let time = self.shape_time;
         
         
-        let nom = (dn - fy) as f32;
-        let non = (dp - fo) as f32;
-        let ark = (nom * nom + non * non).am(1.0);
-        let ark = {
-            let mut b = ark;
-            let mut c = ark * 0.5;
-            for _ in 0..4 { c = (c + b / c) * 0.5; }
-            c
+        let hul = (x1 - bm) as f32;
+        let hum = (y1 - az) as f32;
+        let wh = (hul * hul + hum * hum).max(1.0);
+        let wh = {
+            let mut x = wh;
+            let mut y = wh * 0.5;
+            for _ in 0..4 { y = (y + x / y) * 0.5; }
+            y
         };
         
-        let dx = (dn - fy).gp();
-        let bg = -(dp - fo).gp();
-        let cr = if fy < dn { 1 } else { -1 };
-        let cq = if fo < dp { 1 } else { -1 };
-        let mut rq = dx + bg;
+        let dx = (x1 - bm).abs();
+        let ad = -(y1 - az).abs();
+        let am = if bm < x1 { 1 } else { -1 };
+        let ak = if az < y1 { 1 } else { -1 };
+        let mut err = dx + ad;
         
-        let mut b = fy;
-        let mut c = fo;
-        let mut ctj = 0usize;
-        
-        
-        let csk = (dx.gp() + (-bg).gp() + 10) as usize;
-        let mut au = 0usize;
+        let mut x = bm;
+        let mut y = az;
+        let mut aza = 0usize;
         
         
-        let oru = 3;
+        let ayd = (dx.abs() + (-ad).abs() + 10) as usize;
+        let mut steps = 0usize;
         
-        let vof = 2.0 + (fhi as f32 * 0.3);
         
-        let vog = 12.0;
+        let irr = 3;
+        
+        let nzp = 2.0 + (edge_idx as f32 * 0.3);
+        
+        let nzq = 12.0;
         
         loop {
-            au += 1;
-            if au > csk { break; }
+            steps += 1;
+            if steps > ayd { break; }
             
             
-            let ab = ctj as f32 / ark.am(1.0);
+            let t = aza as f32 / wh.max(1.0);
             
             
-            let mut frs = 0.0f32;
-            for ai in 0..oru {
+            let mut coo = 0.0f32;
+            for aa in 0..irr {
                 
-                let vod = (time * vof + ai as f32 / oru as f32) % 1.0;
-                let lwe = vod;
-                
-                
-                let ryy = (ab - lwe).gp();
-                let dgk = (ab - lwe - 1.0).gp();
-                let ryz = (ab - lwe + 1.0).gp();
-                let la = ryy.v(dgk).v(ryz);
+                let nzn = (time * nzp + aa as f32 / irr as f32) % 1.0;
+                let goy = nzn;
                 
                 
-                let lwf = la * ark / vog;
-                if lwf < 1.0 {
-                    frs += (1.0 - lwf * lwf).am(0.0);
+                let lfv = (t - goy).abs();
+                let bgb = (t - goy - 1.0).abs();
+                let lfw = (t - goy + 1.0).abs();
+                let em = lfv.min(bgb).min(lfw);
+                
+                
+                let goz = em * wh / nzq;
+                if goz < 1.0 {
+                    coo += (1.0 - goz * goz).max(0.0);
                 }
             }
-            frs = frs.v(1.0);
+            coo = coo.min(1.0);
             
             
-            let (bdm, bji, cdd) = (
-                ((agg >> 16) & 0xFF) as f32,
-                ((agg >> 8) & 0xFF) as f32,
-                (agg & 0xFF) as f32,
+            let (adi, agd, apu) = (
+                ((qf >> 16) & 0xFF) as f32,
+                ((qf >> 8) & 0xFF) as f32,
+                (qf & 0xFF) as f32,
             );
             
             
-            let voe = 220.0;
-            let voc = 255.0;
-            let vob = 220.0;
+            let nzo = 220.0;
+            let nzm = 255.0;
+            let nzl = 220.0;
             
-            let m = (bdm + (voe - bdm) * frs) as u32;
-            let at = (bji + (voc - bji) * frs) as u32;
-            let o = (cdd + (vob - cdd) * frs) as u32;
-            let s = 0xFF000000 | (m << 16) | (at << 8) | o;
+            let r = (adi + (nzo - adi) * coo) as u32;
+            let g = (agd + (nzm - agd) * coo) as u32;
+            let b = (apu + (nzl - apu) * coo) as u32;
+            let color = 0xFF000000 | (r << 16) | (g << 8) | b;
             
             
-            let ahw = if frs > 0.3 { 2 } else { 1 };
-            for ty in -ahw/2..=ahw/2 {
-                for gx in -ahw/2..=ahw/2 {
-                    let y = b + gx;
-                    let oyp = c + ty;
-                    if y >= 0 && oyp >= 0 {
-                        let hwf = y as usize;
-                        let hwg = oyp as usize;
-                        if hwf < lu && hwg < qh {
-                            bi[hwg * lu + hwf] = s;
+            let rh = if coo > 0.3 { 2 } else { 1 };
+            for ty in -rh/2..=rh/2 {
+                for bu in -rh/2..=rh/2 {
+                    let p = x + bu;
+                    let ixe = y + ty;
+                    if p >= 0 && ixe >= 0 {
+                        let dxa = p as usize;
+                        let dxb = ixe as usize;
+                        if dxa < fb_width && dxb < fb_height {
+                            buffer[dxb * fb_width + dxa] = color;
                         }
                     }
                 }
             }
             
-            ctj += 1;
+            aza += 1;
             
-            if b == dn && c == dp { break; }
+            if x == x1 && y == y1 { break; }
             
-            let agl = 2 * rq;
-            if agl >= bg {
-                rq += bg;
-                b += cr;
+            let pg = 2 * err;
+            if pg >= ad {
+                err += ad;
+                x += am;
             }
-            if agl <= dx {
-                rq += dx;
-                c += cq;
+            if pg <= dx {
+                err += dx;
+                y += ak;
             }
         }
     }
     
     
     #[inline(always)]
-    fn hgu(&self, bi: &mut [u32], lu: usize,
-                       y: usize, x: usize, ka: &[u8; 3], s: u32) {
-        let qh = bi.len() / lu;
-        if x + 2 >= qh || y + 2 >= lu { return; }
+    fn draw_glyph_3x3(&self, buffer: &mut [u32], fb_width: usize,
+                       p: usize, o: usize, du: &[u8; 3], color: u32) {
+        let fb_height = buffer.len() / fb_width;
+        if o + 2 >= fb_height || p + 2 >= fb_width { return; }
         
-        let wu = ka[0];
-        let bpq = x * lu + y;
-        if wu & 0b001 != 0 { bi[bpq] = s; }
-        if wu & 0b010 != 0 { bi[bpq + 1] = s; }
-        if wu & 0b100 != 0 { bi[bpq + 2] = s; }
+        let kl = du[0];
+        let aje = o * fb_width + p;
+        if kl & 0b001 != 0 { buffer[aje] = color; }
+        if kl & 0b010 != 0 { buffer[aje + 1] = color; }
+        if kl & 0b100 != 0 { buffer[aje + 2] = color; }
         
-        let of = ka[1];
-        let bpr = bpq + lu;
-        if of & 0b001 != 0 { bi[bpr] = s; }
-        if of & 0b010 != 0 { bi[bpr + 1] = s; }
-        if of & 0b100 != 0 { bi[bpr + 2] = s; }
+        let gf = du[1];
+        let ajf = aje + fb_width;
+        if gf & 0b001 != 0 { buffer[ajf] = color; }
+        if gf & 0b010 != 0 { buffer[ajf + 1] = color; }
+        if gf & 0b100 != 0 { buffer[ajf + 2] = color; }
         
-        let tb = ka[2];
-        let deb = bpr + lu;
-        if tb & 0b001 != 0 { bi[deb] = s; }
-        if tb & 0b010 != 0 { bi[deb + 1] = s; }
-        if tb & 0b100 != 0 { bi[deb + 2] = s; }
+        let iq = du[2];
+        let bes = ajf + fb_width;
+        if iq & 0b001 != 0 { buffer[bes] = color; }
+        if iq & 0b010 != 0 { buffer[bes + 1] = color; }
+        if iq & 0b100 != 0 { buffer[bes + 2] = color; }
     }
 
     
     #[inline(always)]
-    fn sdk(&self, bi: &mut [u32], lu: usize, 
-                       y: usize, x: usize, ka: &[u8; 6], s: u32) {
-        let qh = bi.len() / lu;
-        if x >= qh || y >= lu { return; }
-        let efh = (qh - x).v(6);
-        let bkj = (lu - y).v(6);
-        for br in 0..efh {
-            let chk = ka[br];
-            if chk == 0 { continue; }
-            let mu = (x + br) * lu + y;
-            if chk & 0b000001 != 0 && 0 < bkj { bi[mu] = s; }
-            if chk & 0b000010 != 0 && 1 < bkj { bi[mu + 1] = s; }
-            if chk & 0b000100 != 0 && 2 < bkj { bi[mu + 2] = s; }
-            if chk & 0b001000 != 0 && 3 < bkj { bi[mu + 3] = s; }
-            if chk & 0b010000 != 0 && 4 < bkj { bi[mu + 4] = s; }
-            if chk & 0b100000 != 0 && 5 < bkj { bi[mu + 5] = s; }
+    fn ljc(&self, buffer: &mut [u32], fb_width: usize, 
+                       p: usize, o: usize, du: &[u8; 6], color: u32) {
+        let fb_height = buffer.len() / fb_width;
+        if o >= fb_height || p >= fb_width { return; }
+        let buh = (fb_height - o).min(6);
+        let agr = (fb_width - p).min(6);
+        for row in 0..buh {
+            let asc = du[row];
+            if asc == 0 { continue; }
+            let fk = (o + row) * fb_width + p;
+            if asc & 0b000001 != 0 && 0 < agr { buffer[fk] = color; }
+            if asc & 0b000010 != 0 && 1 < agr { buffer[fk + 1] = color; }
+            if asc & 0b000100 != 0 && 2 < agr { buffer[fk + 2] = color; }
+            if asc & 0b001000 != 0 && 3 < agr { buffer[fk + 3] = color; }
+            if asc & 0b010000 != 0 && 4 < agr { buffer[fk + 4] = color; }
+            if asc & 0b100000 != 0 && 5 < agr { buffer[fk + 5] = color; }
         }
     }
 }
@@ -1983,82 +1983,82 @@ impl BrailleMatrix {
 
 pub struct FastMatrixRenderer {
     
-    ecu: Vec<i32>,
+    heads: Vec<i32>,
     
-    arz: Vec<u8>,
+    speeds: Vec<u8>,
     
-    bw: Vec<u8>,
+    chars: Vec<u8>,
     
     frame: u32,
     
-    ec: usize,
-    lk: usize,
+    cols: usize,
+    rows: usize,
 }
 
 impl FastMatrixRenderer {
     pub fn new() -> Self {
         
-        let ec = 1280 / ZZ_; 
-        let lk = 800 / ZY_;  
+        let cols = 1280 / ABL_; 
+        let rows = 800 / ABK_;  
         
-        let mut ecu = vec![0i32; ec];
-        let mut arz = vec![1u8; ec];
-        let mut bw = vec![0u8; ec * lk];
+        let mut heads = vec![0i32; cols];
+        let mut speeds = vec![1u8; cols];
+        let mut chars = vec![0u8; cols * rows];
         
         
-        for a in 0..ec {
-            let dv = (a as u32).hx(2654435761) ^ 0xDEADBEEF;
-            ecu[a] = -((dv % (lk as u32 * 2)) as i32);
-            arz[a] = 1 + (dv % 2) as u8;
+        for i in 0..cols {
+            let seed = (i as u32).wrapping_mul(2654435761) ^ 0xDEADBEEF;
+            heads[i] = -((seed % (rows as u32 * 2)) as i32);
+            speeds[i] = 1 + (seed % 2) as u8;
             
             
-            for fb in 0..lk {
-                let des = dv.hx((fb + 1) as u32);
-                bw[a * lk + fb] = AZH_[(des as usize) % AZH_.len()];
+            for ay in 0..rows {
+                let bfe = seed.wrapping_mul((ay + 1) as u32);
+                chars[i * rows + ay] = BBI_[(bfe as usize) % BBI_.len()];
             }
         }
         
-        Self { ecu, arz, bw, frame: 0, ec, lk }
+        Self { heads, speeds, chars, frame: 0, cols, rows }
     }
     
     
-    pub fn qs(&mut self) {
-        self.frame = self.frame.cn(1);
+    pub fn update(&mut self) {
+        self.frame = self.frame.wrapping_add(1);
         
-        for a in 0..self.ec {
-            self.ecu[a] += self.arz[a] as i32;
+        for i in 0..self.cols {
+            self.heads[i] += self.speeds[i] as i32;
             
             
-            if self.ecu[a] > (self.lk as i32) + 20 {
-                let dv = (a as u32).hx(self.frame).cn(0xBEEF);
-                self.ecu[a] = -((dv % 30) as i32);
+            if self.heads[i] > (self.rows as i32) + 20 {
+                let seed = (i as u32).wrapping_mul(self.frame).wrapping_add(0xBEEF);
+                self.heads[i] = -((seed % 30) as i32);
             }
         }
     }
     
     
-    pub fn tj(&self, bi: &mut [u32], lu: usize, qh: usize) {
-        let ec = (lu / ZZ_).v(self.ec);
-        let lk = (qh / ZY_).v(self.lk);
+    pub fn render(&self, buffer: &mut [u32], fb_width: usize, fb_height: usize) {
+        let cols = (fb_width / ABL_).min(self.cols);
+        let rows = (fb_height / ABK_).min(self.rows);
         
-        for bj in 0..ec {
-            let buu = self.ecu[bj];
+        for col in 0..cols {
+            let head_y = self.heads[col];
             
-            for br in 0..lk {
-                let la = buu - (br as i32);
+            for row in 0..rows {
+                let em = head_y - (row as i32);
                 
-                if la >= 0 && la < 16 {
+                if em >= 0 && em < 16 {
                     
-                    let hj = ADN_[(la as usize).v(31)];
-                    if hj > 10 {
+                    let intensity = AFD_[(em as usize).min(31)];
+                    if intensity > 10 {
                         
-                        let r = self.bw[bj * self.lk + br];
-                        
-                        
-                        let s = (0xFF << 24) | ((hj as u32) << 8);
+                        let c = self.chars[col * self.rows + row];
                         
                         
-                        self.ahi(bi, lu, bj, br, r, s);
+                        let color = (0xFF << 24) | ((intensity as u32) << 8);
+                        
+                        
+                        self.draw_char(buffer, fb_width, col, row, c, color);
                     }
                 }
             }
@@ -2066,23 +2066,23 @@ impl FastMatrixRenderer {
     }
     
     
-    fn ahi(&self, bi: &mut [u32], lu: usize, 
-                 bj: usize, br: usize, r: u8, s: u32) {
-        let y = bj * ZZ_;
-        let x = br * ZY_;
+    fn draw_char(&self, buffer: &mut [u32], fb_width: usize, 
+                 col: usize, row: usize, c: u8, color: u32) {
+        let p = col * ABL_;
+        let o = row * ABK_;
         
-        let ka = crate::framebuffer::font::ada(r as char);
+        let du = crate::framebuffer::font::ol(c as char);
         
-        for (ub, &fs) in ka.iter().cf() {
-            let c = x + ub;
-            if c >= bi.len() / lu { continue; }
+        for (jh, &bits) in du.iter().enumerate() {
+            let y = o + jh;
+            if y >= buffer.len() / fb_width { continue; }
             
-            for qz in 0..8 {
-                if (fs >> (7 - qz)) & 1 != 0 {
-                    let b = y + qz;
-                    let w = c * lu + b;
-                    if w < bi.len() {
-                        bi[w] = s;
+            for hc in 0..8 {
+                if (bits >> (7 - hc)) & 1 != 0 {
+                    let x = p + hc;
+                    let idx = y * fb_width + x;
+                    if idx < buffer.len() {
+                        buffer[idx] = color;
                     }
                 }
             }
@@ -2095,42 +2095,42 @@ impl FastMatrixRenderer {
 
 
 
-const AEZ_: usize = 200;
+const AGT_: usize = 200;
 
 
 #[derive(Clone, Copy)]
 struct Drop3D {
     
-    b: f32,
+    x: f32,
     
-    c: f32,
+    y: f32,
     
-    av: f32,
+    z: f32,
     
-    fp: f32,
+    vx: f32,
     
-    iz: f32,
+    vy: f32,
     
-    ciq: f32,
+    vz: f32,
     
-    acr: u8,
+    trail_len: u8,
     
-    amg: u32,
+    glyph_seed: u32,
     
-    clp: bool,
+    on_surface: bool,
     
-    ebs: u8,
+    flow_time: u8,
 }
 
 impl Drop3D {
     fn new() -> Self {
         Self {
-            b: 0.0, c: -10.0, av: 0.5,
-            fp: 0.0, iz: 0.5, ciq: 0.0,
-            acr: 20,
-            amg: 0,
-            clp: false,
-            ebs: 0,
+            x: 0.0, y: -10.0, z: 0.5,
+            vx: 0.0, vy: 0.5, vz: 0.0,
+            trail_len: 20,
+            glyph_seed: 0,
+            on_surface: false,
+            flow_time: 0,
         }
     }
 }
@@ -2139,19 +2139,19 @@ impl Drop3D {
 #[derive(Clone, Copy)]
 pub enum Shape3D {
     
-    Sphere { cx: f32, ae: f32, zr: f32, m: f32 },
+    Sphere { cx: f32, u: f32, mj: f32, r: f32 },
     
-    Dw { cx: f32, ae: f32, zr: f32, iv: f32, dli: f32 },
+    Cube { cx: f32, u: f32, mj: f32, cw: f32, biy: f32 },
     
-    Dr { cx: f32, ae: f32, zr: f32, Ac: f32, m: f32 },
+    Torus { cx: f32, u: f32, mj: f32, U: f32, r: f32 },
 }
 
 
 pub struct Matrix3D {
     
-    agk: [Drop3D; AEZ_],
+    drops: [Drop3D; AGT_],
     
-    chy: [Option<Shape3D>; 4],
+    shapes: [Option<Shape3D>; 4],
     
     rng: u32,
     
@@ -2159,147 +2159,147 @@ pub struct Matrix3D {
     
     time: f32,
     
-    z: usize,
-    ac: usize,
+    width: usize,
+    height: usize,
 }
 
 impl Matrix3D {
     pub fn new() -> Self {
-        let mut agk = [Drop3D::new(); AEZ_];
+        let mut drops = [Drop3D::new(); AGT_];
         let mut rng = 0xDEADBEEFu32;
         
         
-        for drop in agk.el() {
-            rng = rng.hx(1103515245).cn(12345);
-            drop.b = (rng % 160) as f32;
-            rng = rng.hx(1103515245).cn(12345);
-            drop.c = -((rng % 120) as f32);
-            rng = rng.hx(1103515245).cn(12345);
-            drop.av = 0.2 + (rng % 80) as f32 / 100.0; 
+        for drop in drops.iter_mut() {
+            rng = rng.wrapping_mul(1103515245).wrapping_add(12345);
+            drop.x = (rng % 160) as f32;
+            rng = rng.wrapping_mul(1103515245).wrapping_add(12345);
+            drop.y = -((rng % 120) as f32);
+            rng = rng.wrapping_mul(1103515245).wrapping_add(12345);
+            drop.z = 0.2 + (rng % 80) as f32 / 100.0; 
             
             
-            drop.iz = 0.3 + drop.av * 0.7; 
+            drop.vy = 0.3 + drop.z * 0.7; 
             
-            rng = rng.hx(1103515245).cn(12345);
-            drop.acr = 10 + (rng % 30) as u8;
-            drop.amg = rng;
+            rng = rng.wrapping_mul(1103515245).wrapping_add(12345);
+            drop.trail_len = 10 + (rng % 30) as u8;
+            drop.glyph_seed = rng;
         }
         
         
-        let chy = [
-            Some(Shape3D::Sphere { cx: 80.0, ae: 50.0, zr: 0.5, m: 15.0 }),
+        let shapes = [
+            Some(Shape3D::Sphere { cx: 80.0, u: 50.0, mj: 0.5, r: 15.0 }),
             None,
             None,
             None,
         ];
         
         Self {
-            agk,
-            chy,
+            drops,
+            shapes,
             rng,
             frame: 0,
             time: 0.0,
-            z: 1280,
-            ac: 800,
+            width: 1280,
+            height: 800,
         }
     }
     
     
-    pub fn yeo(&mut self, chx: Shape3D) {
-        for gk in self.chy.el() {
-            if gk.is_none() {
-                *gk = Some(chx);
+    pub fn pxw(&mut self, shape: Shape3D) {
+        for slot in self.shapes.iter_mut() {
+            if slot.is_none() {
+                *slot = Some(shape);
                 return;
             }
         }
     }
     
     
-    pub fn yin(&mut self) {
-        for gk in self.chy.el() {
-            *gk = None;
+    pub fn qab(&mut self) {
+        for slot in self.shapes.iter_mut() {
+            *slot = None;
         }
     }
     
     
     #[inline(always)]
-    fn lz(b: f32) -> f32 { crate::math::lz(b) }
+    fn eu(x: f32) -> f32 { crate::math::eu(x) }
     
     
     #[inline(always)]
-    fn rk(b: f32) -> f32 { crate::math::rk(b) }
+    fn hr(x: f32) -> f32 { crate::math::hr(x) }
     
     
-    fn qyn(chy: &[Option<Shape3D>; 4], b: f32, c: f32, av: f32) -> Option<(f32, f32, f32)> {
-        for chx in chy.iter().kwb(|e| *e) {
-            match chx {
-                Shape3D::Sphere { cx, ae, zr, m } => {
-                    let dx = b - cx;
-                    let bg = c - ae;
-                    let pt = av - zr;
-                    let ass = dx * dx + bg * bg + pt * pt;
-                    let bwl = m * m;
+    fn kiu(shapes: &[Option<Shape3D>; 4], x: f32, y: f32, z: f32) -> Option<(f32, f32, f32)> {
+        for shape in shapes.iter().filter_map(|j| *j) {
+            match shape {
+                Shape3D::Sphere { cx, u, mj, r } => {
+                    let dx = x - cx;
+                    let ad = y - u;
+                    let dz = z - mj;
+                    let wz = dx * dx + ad * ad + dz * dz;
+                    let amn = r * r;
                     
-                    if ass < bwl {
+                    if wz < amn {
                         
-                        let la = Self::ahn(ass).am(0.01);
-                        return Some((dx / la, bg / la, pt / la));
+                        let em = Self::ra(wz).max(0.01);
+                        return Some((dx / em, ad / em, dz / em));
                     }
                 }
-                Shape3D::Dw { cx, ae, zr, iv, dli } => {
+                Shape3D::Cube { cx, u, mj, cw, biy } => {
                     
-                    let dx = b - cx;
-                    let bg = c - ae;
-                    let pt = av - zr;
+                    let dx = x - cx;
+                    let ad = y - u;
+                    let dz = z - mj;
                     
-                    let cwr = Self::rk(dli);
-                    let dcb = Self::lz(dli);
-                    
-                    
-                    let kb = dx * cwr - pt * dcb;
-                    let ix = bg;
-                    let agv = dx * dcb + pt * cwr;
+                    let bax = Self::hr(biy);
+                    let bds = Self::eu(biy);
                     
                     
-                    if kb.gp() < iv && ix.gp() < iv && agv.gp() < iv {
+                    let da = dx * bax - dz * bds;
+                    let cm = ad;
+                    let qp = dx * bds + dz * bax;
+                    
+                    
+                    if da.abs() < cw && cm.abs() < cw && qp.abs() < cw {
                         
-                        let ax = iv - kb.gp();
-                        let bga = iv - ix.gp();
-                        let gzl = iv - agv.gp();
+                        let ax = cw - da.abs();
+                        let aet = cw - cm.abs();
+                        let did = cw - qp.abs();
                         
                         
-                        if ax < bga && ax < gzl {
-                            let vt = if kb > 0.0 { 1.0 } else { -1.0 };
-                            return Some((vt * cwr, 0.0, vt * dcb));
-                        } else if bga < gzl {
-                            return Some((0.0, if ix > 0.0 { 1.0 } else { -1.0 }, 0.0));
+                        if ax < aet && ax < did {
+                            let nx = if da > 0.0 { 1.0 } else { -1.0 };
+                            return Some((nx * bax, 0.0, nx * bds));
+                        } else if aet < did {
+                            return Some((0.0, if cm > 0.0 { 1.0 } else { -1.0 }, 0.0));
                         } else {
-                            let arn = if agv > 0.0 { 1.0 } else { -1.0 };
-                            return Some((-arn * dcb, 0.0, arn * cwr));
+                            let wi = if qp > 0.0 { 1.0 } else { -1.0 };
+                            return Some((-wi * bds, 0.0, wi * bax));
                         }
                     }
                 }
-                Shape3D::Dr { cx, ae, zr, Ac, m } => {
-                    let dx = b - cx;
-                    let bg = c - ae;
-                    let pt = av - zr;
+                Shape3D::Torus { cx, u, mj, U, r } => {
+                    let dx = x - cx;
+                    let ad = y - u;
+                    let dz = z - mj;
                     
                     
-                    let hgl = Self::ahn(dx * dx + pt * pt);
+                    let dnj = Self::ra(dx * dx + dz * dz);
                     
-                    let juk = hgl - Ac;
-                    let juj = Self::ahn(juk * juk + bg * bg);
+                    let fdt = dnj - U;
+                    let fdr = Self::ra(fdt * fdt + ad * ad);
                     
-                    if juj < m {
+                    if fdr < r {
                         
-                        let rxs = if hgl > 0.01 { dx / hgl } else { 1.0 };
-                        let rxt = if hgl > 0.01 { pt / hgl } else { 0.0 };
+                        let lev = if dnj > 0.01 { dx / dnj } else { 1.0 };
+                        let lew = if dnj > 0.01 { dz / dnj } else { 0.0 };
                         
-                        let vt = juk * rxs / juj.am(0.01);
-                        let ahr = bg / juj.am(0.01);
-                        let arn = juk * rxt / juj.am(0.01);
+                        let nx = fdt * lev / fdr.max(0.01);
+                        let re = ad / fdr.max(0.01);
+                        let wi = fdt * lew / fdr.max(0.01);
                         
-                        return Some((vt, ahr, arn));
+                        return Some((nx, re, wi));
                     }
                 }
             }
@@ -2309,163 +2309,163 @@ impl Matrix3D {
     
     
     #[inline(always)]
-    fn ahn(b: f32) -> f32 { crate::math::ahn(b) }
+    fn ra(x: f32) -> f32 { crate::math::ra(x) }
     
     
-    pub fn qs(&mut self) {
-        self.frame = self.frame.cn(1);
+    pub fn update(&mut self) {
+        self.frame = self.frame.wrapping_add(1);
         self.time += 0.02; 
         
         
-        if let Some(Shape3D::Dw { ref mut dli, .. }) = self.chy.ds(0).and_then(|e| e.as_mut()) {
-            *dli = self.time;
+        if let Some(Shape3D::Cube { ref mut biy, .. }) = self.shapes.get_mut(0).and_then(|j| j.as_mut()) {
+            *biy = self.time;
         }
         
-        let lai = 0.02f32;
+        let fzj = 0.02f32;
         
         
-        let chy = self.chy;
+        let shapes = self.shapes;
         
-        for a in 0..AEZ_ {
-            let drop = &mut self.agk[a];
+        for i in 0..AGT_ {
+            let drop = &mut self.drops[i];
             
             
-            if let Some((vt, ahr, arn)) = Self::qyn(&chy, drop.b, drop.c, drop.av) {
-                if !drop.clp {
+            if let Some((nx, re, wi)) = Self::kiu(&shapes, drop.x, drop.y, drop.z) {
+                if !drop.on_surface {
                     
-                    drop.clp = true;
-                    drop.ebs = 0;
-                    
-                    
-                    
-                    let amb = drop.fp * vt + drop.iz * ahr + drop.ciq * arn;
-                    drop.fp -= amb * vt;
-                    drop.iz -= amb * ahr;
-                    drop.ciq -= amb * arn;
+                    drop.on_surface = true;
+                    drop.flow_time = 0;
                     
                     
-                    let nzn = ahr; 
-                    drop.iz += lai * (1.0 - nzn * nzn).am(0.0);
+                    
+                    let dot = drop.vx * nx + drop.vy * re + drop.vz * wi;
+                    drop.vx -= dot * nx;
+                    drop.vy -= dot * re;
+                    drop.vz -= dot * wi;
+                    
+                    
+                    let icq = re; 
+                    drop.vy += fzj * (1.0 - icq * icq).max(0.0);
                 }
                 
                 
-                drop.b += vt * 0.2;
-                drop.c += ahr * 0.2;
-                drop.av += arn * 0.2;
+                drop.x += nx * 0.2;
+                drop.y += re * 0.2;
+                drop.z += wi * 0.2;
                 
                 
-                drop.fp *= 0.95;
-                drop.iz *= 0.95;
-                drop.ciq *= 0.95;
+                drop.vx *= 0.95;
+                drop.vy *= 0.95;
+                drop.vz *= 0.95;
                 
                 
-                drop.iz += lai * 0.5;
+                drop.vy += fzj * 0.5;
                 
-                drop.ebs += 1;
+                drop.flow_time += 1;
             } else {
                 
-                drop.clp = false;
-                drop.iz += lai;
+                drop.on_surface = false;
+                drop.vy += fzj;
             }
             
             
-            drop.b += drop.fp;
-            drop.c += drop.iz;
-            drop.av += drop.ciq;
+            drop.x += drop.vx;
+            drop.y += drop.vy;
+            drop.z += drop.vz;
             
             
-            drop.av = drop.av.qp(0.1, 1.0);
+            drop.z = drop.z.clamp(0.1, 1.0);
             
             
-            let apa = drop.c > 110.0 || drop.b < -5.0 || drop.b > 165.0 || drop.ebs > 100;
+            let reset = drop.y > 110.0 || drop.x < -5.0 || drop.x > 165.0 || drop.flow_time > 100;
             
-            if apa {
-                self.rng = self.rng.hx(1103515245).cn(12345);
-                drop.b = (self.rng % 160) as f32;
-                self.rng = self.rng.hx(1103515245).cn(12345);
-                drop.c = -((self.rng % 40) as f32);
-                self.rng = self.rng.hx(1103515245).cn(12345);
-                drop.av = 0.2 + (self.rng % 80) as f32 / 100.0;
+            if reset {
+                self.rng = self.rng.wrapping_mul(1103515245).wrapping_add(12345);
+                drop.x = (self.rng % 160) as f32;
+                self.rng = self.rng.wrapping_mul(1103515245).wrapping_add(12345);
+                drop.y = -((self.rng % 40) as f32);
+                self.rng = self.rng.wrapping_mul(1103515245).wrapping_add(12345);
+                drop.z = 0.2 + (self.rng % 80) as f32 / 100.0;
                 
-                drop.fp = 0.0;
-                drop.iz = 0.3 + drop.av * 0.7;
-                drop.ciq = 0.0;
-                drop.clp = false;
-                drop.ebs = 0;
-                drop.amg = self.rng;
+                drop.vx = 0.0;
+                drop.vy = 0.3 + drop.z * 0.7;
+                drop.vz = 0.0;
+                drop.on_surface = false;
+                drop.flow_time = 0;
+                drop.glyph_seed = self.rng;
             }
             
             
-            drop.amg = drop.amg.hx(1103515245).cn(12345);
+            drop.glyph_seed = drop.glyph_seed.wrapping_mul(1103515245).wrapping_add(12345);
         }
     }
     
     
     #[inline(always)]
-    fn nv(&self, b: f32, c: f32, av: f32) -> (i32, i32, f32) {
+    fn project(&self, x: f32, y: f32, z: f32) -> (i32, i32, f32) {
         
         
-        let bv = 0.7 + av * 0.3; 
-        let yv = 80.0;
-        let uq = 50.0;
+        let scale = 0.7 + z * 0.3; 
+        let center_x = 80.0;
+        let center_y = 50.0;
         
         
-        let xu = yv + (b - yv) * bv;
-        let abi = uq + (c - uq) * bv;
+        let lw = center_x + (x - center_x) * scale;
+        let nn = center_y + (y - center_y) * scale;
         
-        (xu as i32, abi as i32, av)
+        (lw as i32, nn as i32, z)
     }
     
     
-    pub fn tj(&self, bi: &mut [u32], lu: usize, qh: usize) {
+    pub fn render(&self, buffer: &mut [u32], fb_width: usize, fb_height: usize) {
         
-        let vp = 0xFF010201u32;
-        bi.vi(vp);
+        let bg_color = 0xFF010201u32;
+        buffer.fill(bg_color);
         
-        let ny = EB_;
-        
-        
+        let cell_size = EO_;
         
         
-        for drop in self.agk.iter() {
-            if drop.c < -5.0 { continue; }
+        
+        
+        for drop in self.drops.iter() {
+            if drop.y < -5.0 { continue; }
             
-            let (xu, abi, eo) = self.nv(drop.b, drop.c, drop.av);
-            
-            
-            let hfu = (50.0 + eo * 205.0) as u32;
-            
-            
-            let wwb = if drop.clp { 30u32 } else { 0 };
+            let (lw, nn, depth) = self.project(drop.x, drop.y, drop.z);
             
             
-            let acr = drop.acr as usize;
-            for cuv in 0..acr {
+            let dms = (50.0 + depth * 205.0) as u32;
+            
+            
+            let oys = if drop.on_surface { 30u32 } else { 0 };
+            
+            
+            let trail_len = drop.trail_len as usize;
+            for bab in 0..trail_len {
                 
-                let ty = drop.c - cuv as f32 * 0.8;
+                let ty = drop.y - bab as f32 * 0.8;
                 if ty < 0.0 { continue; }
                 
-                let (gx, mnq, _) = self.nv(drop.b, ty, drop.av);
+                let (bu, ty_screen, _) = self.project(drop.x, ty, drop.z);
                 
-                if gx < 0 || gx >= (lu / ny) as i32 { continue; }
-                if mnq < 0 || mnq >= (qh / ny) as i32 { continue; }
-                
-                
-                let lfa = (cuv * 63) / acr.am(1);
-                let gzv = ADN_[lfa.v(63)] as u32;
-                let hj = (((gzv * hfu) / 255) + wwb).v(255) as u8;
-                
-                if hj < 2 { continue; }
+                if bu < 0 || bu >= (fb_width / cell_size) as i32 { continue; }
+                if ty_screen < 0 || ty_screen >= (fb_height / cell_size) as i32 { continue; }
                 
                 
-                let amg = drop.amg.cn(cuv as u32 * 2654435761);
-                let cqy = (amg % ND_ as u32) as usize;
-                let ka = &OC_[cqy];
-                let s = oex(hj);
+                let gdc = (bab * 63) / trail_len.max(1);
+                let din = AFD_[gdc.min(63)] as u32;
+                let intensity = (((din * dms) / 255) + oys).min(255) as u8;
                 
-                let y = gx as usize * ny + 1;
-                let x = mnq as usize * ny + 1;
-                self.hgu(bi, lu, y, x, ka, s);
+                if intensity < 2 { continue; }
+                
+                
+                let glyph_seed = drop.glyph_seed.wrapping_add(bab as u32 * 2654435761);
+                let axi = (glyph_seed % OC_ as u32) as usize;
+                let du = &PA_[axi];
+                let color = ihb(intensity);
+                
+                let p = bu as usize * cell_size + 1;
+                let o = ty_screen as usize * cell_size + 1;
+                self.draw_glyph_3x3(buffer, fb_width, p, o, du, color);
             }
         }
         
@@ -2475,50 +2475,50 @@ impl Matrix3D {
     
     
     #[inline(always)]
-    fn hgu(&self, bi: &mut [u32], lu: usize,
-                       y: usize, x: usize, ka: &[u8; 3], s: u32) {
-        let qh = bi.len() / lu;
-        if x + 2 >= qh || y + 2 >= lu { return; }
-        let wu = ka[0]; let bpq = x * lu + y;
-        if wu & 0b001 != 0 { bi[bpq] = s; }
-        if wu & 0b010 != 0 { bi[bpq + 1] = s; }
-        if wu & 0b100 != 0 { bi[bpq + 2] = s; }
-        let of = ka[1]; let bpr = bpq + lu;
-        if of & 0b001 != 0 { bi[bpr] = s; }
-        if of & 0b010 != 0 { bi[bpr + 1] = s; }
-        if of & 0b100 != 0 { bi[bpr + 2] = s; }
-        let tb = ka[2]; let deb = bpr + lu;
-        if tb & 0b001 != 0 { bi[deb] = s; }
-        if tb & 0b010 != 0 { bi[deb + 1] = s; }
-        if tb & 0b100 != 0 { bi[deb + 2] = s; }
+    fn draw_glyph_3x3(&self, buffer: &mut [u32], fb_width: usize,
+                       p: usize, o: usize, du: &[u8; 3], color: u32) {
+        let fb_height = buffer.len() / fb_width;
+        if o + 2 >= fb_height || p + 2 >= fb_width { return; }
+        let kl = du[0]; let aje = o * fb_width + p;
+        if kl & 0b001 != 0 { buffer[aje] = color; }
+        if kl & 0b010 != 0 { buffer[aje + 1] = color; }
+        if kl & 0b100 != 0 { buffer[aje + 2] = color; }
+        let gf = du[1]; let ajf = aje + fb_width;
+        if gf & 0b001 != 0 { buffer[ajf] = color; }
+        if gf & 0b010 != 0 { buffer[ajf + 1] = color; }
+        if gf & 0b100 != 0 { buffer[ajf + 2] = color; }
+        let iq = du[2]; let bes = ajf + fb_width;
+        if iq & 0b001 != 0 { buffer[bes] = color; }
+        if iq & 0b010 != 0 { buffer[bes + 1] = color; }
+        if iq & 0b100 != 0 { buffer[bes + 2] = color; }
     }
     
     
     #[inline(always)]
-    fn sdk(&self, bi: &mut [u32], lu: usize, 
-                       y: usize, x: usize, ka: &[u8; 6], s: u32) {
-        let qh = bi.len() / lu;
-        if x >= qh || y >= lu { return; }
-        let efh = (qh - x).v(6);
-        let bkj = (lu - y).v(6);
-        for br in 0..efh {
-            let chk = ka[br];
-            if chk == 0 { continue; }
-            let mu = (x + br) * lu + y;
-            if chk & 0b000001 != 0 && 0 < bkj { bi[mu] = s; }
-            if chk & 0b000010 != 0 && 1 < bkj { bi[mu + 1] = s; }
-            if chk & 0b000100 != 0 && 2 < bkj { bi[mu + 2] = s; }
-            if chk & 0b001000 != 0 && 3 < bkj { bi[mu + 3] = s; }
-            if chk & 0b010000 != 0 && 4 < bkj { bi[mu + 4] = s; }
-            if chk & 0b100000 != 0 && 5 < bkj { bi[mu + 5] = s; }
+    fn ljc(&self, buffer: &mut [u32], fb_width: usize, 
+                       p: usize, o: usize, du: &[u8; 6], color: u32) {
+        let fb_height = buffer.len() / fb_width;
+        if o >= fb_height || p >= fb_width { return; }
+        let buh = (fb_height - o).min(6);
+        let agr = (fb_width - p).min(6);
+        for row in 0..buh {
+            let asc = du[row];
+            if asc == 0 { continue; }
+            let fk = (o + row) * fb_width + p;
+            if asc & 0b000001 != 0 && 0 < agr { buffer[fk] = color; }
+            if asc & 0b000010 != 0 && 1 < agr { buffer[fk + 1] = color; }
+            if asc & 0b000100 != 0 && 2 < agr { buffer[fk + 2] = color; }
+            if asc & 0b001000 != 0 && 3 < agr { buffer[fk + 3] = color; }
+            if asc & 0b010000 != 0 && 4 < agr { buffer[fk + 4] = color; }
+            if asc & 0b100000 != 0 && 5 < agr { buffer[fk + 5] = color; }
         }
     }
     
     
-    pub fn wir(&mut self) {
-        self.chy = [
+    pub fn set_demo_shapes(&mut self) {
+        self.shapes = [
             
-            Some(Shape3D::Sphere { cx: 80.0, ae: 50.0, zr: 0.5, m: 18.0 }),
+            Some(Shape3D::Sphere { cx: 80.0, u: 50.0, mj: 0.5, r: 18.0 }),
             None,
             None,
             None,
@@ -2526,9 +2526,9 @@ impl Matrix3D {
     }
     
     
-    pub fn win(&mut self) {
-        self.chy = [
-            Some(Shape3D::Dw { cx: 80.0, ae: 50.0, zr: 0.5, iv: 12.0, dli: self.time }),
+    pub fn set_cube(&mut self) {
+        self.shapes = [
+            Some(Shape3D::Cube { cx: 80.0, u: 50.0, mj: 0.5, cw: 12.0, biy: self.time }),
             None,
             None,
             None,
@@ -2536,9 +2536,9 @@ impl Matrix3D {
     }
     
     
-    pub fn wjs(&mut self) {
-        self.chy = [
-            Some(Shape3D::Dr { cx: 80.0, ae: 50.0, zr: 0.5, Ac: 15.0, m: 5.0 }),
+    pub fn set_torus(&mut self) {
+        self.shapes = [
+            Some(Shape3D::Torus { cx: 80.0, u: 50.0, mj: 0.5, U: 15.0, r: 5.0 }),
             None,
             None,
             None,

@@ -47,7 +47,7 @@ pub struct DiskInformation {
 /// RAM Disk storage
 struct RamDisk {
     data: Vec<u8>,
-    information: DiskInformation,
+    info: DiskInformation,
 }
 
 /// Global disk state
@@ -66,7 +66,7 @@ static BYTES_WRITTEN: AtomicU64 = AtomicU64::new(0);
 pub fn init() {
     let data = vec![0u8; RAMDISK_SIZE];
     
-    let information = DiskInformation {
+    let info = DiskInformation {
         model: String::from("T-RustOS RAMDisk"),
         serial: String::from("RAMD-0001"),
         sectors: RAMDISK_SECTORS,
@@ -75,9 +75,9 @@ pub fn init() {
     };
     
     crate::log!("[DISK] RAMDisk initialized: {} MB ({} sectors)", 
-        information.size_mb, information.sectors);
+        info.size_mb, info.sectors);
     
-    *DISK.lock() = Some(RamDisk { data, information });
+    *DISK.lock() = Some(RamDisk { data, info });
     
     // Initialize with a simple filesystem signature
     initialize_filesystem();
@@ -113,7 +113,7 @@ pub fn is_available() -> bool {
 
 /// Get disk information
 pub fn get_information() -> Option<DiskInformation> {
-    DISK.lock().as_ref().map(|d| d.information.clone())
+    DISK.lock().as_ref().map(|d| d.info.clone())
 }
 
 /// Get disk statistics
@@ -204,7 +204,7 @@ pub fn format() -> Result<(), &'static str> {
         let ramdisk = disk.as_mut().ok_or("Disk not initialized")?;
         
         // Zero out all data
-        for byte in ramdisk.data.iterator_mut() {
+        for byte in ramdisk.data.iter_mut() {
             *byte = 0;
         }
     }
@@ -364,7 +364,7 @@ pub fn create_file(name: &str, data: &[u8]) -> Result<(), &'static str> {
     
     while !remaining.is_empty() {
         let mut sector_data = [0u8; SECTOR_SIZE];
-        let chunk_size = remaining.len().minimum(SECTOR_SIZE);
+        let chunk_size = remaining.len().min(SECTOR_SIZE);
         sector_data[..chunk_size].copy_from_slice(&remaining[..chunk_size]);
         
         write_sector(current_sector, &sector_data)?;
@@ -415,13 +415,13 @@ pub fn read_file(name: &str) -> Result<Vec<u8>, &'static str> {
         .ok_or("File not found")?;
     
     let sectors_needed = (file.size as usize + SECTOR_SIZE - 1) / SECTOR_SIZE;
-    let sectors_needed = sectors_needed.maximum(1);
+    let sectors_needed = sectors_needed.max(1);
     let mut data = Vec::with_capacity(file.size as usize);
     
     for i in 0..sectors_needed {
         let sector = read_sector(file.start_sector as u64 + i as u64)?;
         let remaining = file.size as usize - data.len();
-        let chunk_size = remaining.minimum(SECTOR_SIZE);
+        let chunk_size = remaining.min(SECTOR_SIZE);
         data.extend_from_slice(&sector[..chunk_size]);
     }
     

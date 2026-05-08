@@ -6,142 +6,142 @@ use super::{Rect, Size};
 
 
 #[derive(Clone, Copy, Debug)]
-pub struct Bzz {
-    pub czx: f32,
-    pub dtb: f32,
-    pub dtg: f32,
-    pub hrb: f32,
+pub struct Aib {
+    pub min_width: f32,
+    pub max_width: f32,
+    pub min_height: f32,
+    pub max_height: f32,
 }
 
-impl Bzz {
-    pub fn new(uon: f32, hrh: f32, uok: f32, hra: f32) -> Self {
+impl Aib {
+    pub fn new(min_w: f32, max_w: f32, min_h: f32, dua: f32) -> Self {
         Self {
-            czx: uon,
-            dtb: hrh,
-            dtg: uok,
-            hrb: hra,
+            min_width: min_w,
+            max_width: max_w,
+            min_height: min_h,
+            max_height: dua,
         }
     }
     
-    pub fn zso(aw: Size) -> Self {
+    pub fn rai(size: Size) -> Self {
         Self {
-            czx: aw.z,
-            dtb: aw.z,
-            dtg: aw.ac,
-            hrb: aw.ac,
+            min_width: size.width,
+            max_width: size.width,
+            min_height: size.height,
+            max_height: size.height,
         }
     }
     
-    pub fn zbs(aw: Size) -> Self {
+    pub fn qog(size: Size) -> Self {
         Self {
-            czx: 0.0,
-            dtb: aw.z,
-            dtg: 0.0,
-            hrb: aw.ac,
+            min_width: 0.0,
+            max_width: size.width,
+            min_height: 0.0,
+            max_height: size.height,
         }
     }
     
-    pub fn ztw() -> Self {
+    pub fn rbe() -> Self {
         Self {
-            czx: 0.0,
-            dtb: f32::Att,
-            dtg: 0.0,
-            hrb: f32::Att,
+            min_width: 0.0,
+            max_width: f32::INFINITY,
+            min_height: 0.0,
+            max_height: f32::INFINITY,
         }
     }
     
-    pub fn yjw(&self, aw: Size) -> Size {
+    pub fn qbd(&self, size: Size) -> Size {
         Size::new(
-            aw.z.am(self.czx).v(self.dtb),
-            aw.ac.am(self.dtg).v(self.hrb),
+            size.width.max(self.min_width).min(self.max_width),
+            size.height.max(self.min_height).min(self.max_height),
         )
     }
 }
 
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Crk {
-    Oe,
-    Eo,
-    Wm,
-    Uq,
+pub enum Ast {
+    Start,
+    Center,
+    End,
+    Stretch,
 }
 
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Dch {
-    Oe,
-    Eo,
-    Wm,
-    Cnh,
-    Cng,
-    Cni,
+pub enum Azm {
+    Start,
+    Center,
+    End,
+    SpaceBetween,
+    SpaceAround,
+    SpaceEvenly,
 }
 
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Cto {
-    Oe,
-    Eo,
-    Wm,
-    Uq,
+pub enum Atr {
+    Start,
+    Center,
+    End,
+    Stretch,
 }
 
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct EdgeInsets {
-    pub qc: f32,
-    pub hw: f32,
-    pub abm: f32,
-    pub fd: f32,
+    pub top: f32,
+    pub right: f32,
+    pub bottom: f32,
+    pub left: f32,
 }
 
 impl EdgeInsets {
-    pub const fn xx(bn: f32) -> Self {
+    pub const fn all(value: f32) -> Self {
         Self {
-            qc: bn,
-            hw: bn,
-            abm: bn,
-            fd: bn,
+            top: value,
+            right: value,
+            bottom: value,
+            left: value,
         }
     }
     
-    pub const fn wwy(cns: f32, dic: f32) -> Self {
+    pub const fn ozm(vertical: f32, horizontal: f32) -> Self {
         Self {
-            qc: cns,
-            abm: cns,
-            fd: dic,
-            hw: dic,
+            top: vertical,
+            bottom: vertical,
+            left: horizontal,
+            right: horizontal,
         }
     }
     
-    pub const fn uyk(qc: f32, hw: f32, abm: f32, fd: f32) -> Self {
-        Self { qc, hw, abm, fd }
+    pub const fn nnf(top: f32, right: f32, bottom: f32, left: f32) -> Self {
+        Self { top, right, bottom, left }
     }
     
-    pub fn dic(&self) -> f32 {
-        self.fd + self.hw
+    pub fn horizontal(&self) -> f32 {
+        self.left + self.right
     }
     
-    pub fn cns(&self) -> f32 {
-        self.qc + self.abm
+    pub fn vertical(&self) -> f32 {
+        self.top + self.bottom
     }
     
-    pub fn yln(&self, ha: Rect) -> Rect {
+    pub fn qcm(&self, rect: Rect) -> Rect {
         Rect::new(
-            ha.b + self.fd,
-            ha.c + self.qc,
-            ha.z - self.dic(),
-            ha.ac - self.cns(),
+            rect.x + self.left,
+            rect.y + self.top,
+            rect.width - self.horizontal(),
+            rect.height - self.vertical(),
         )
     }
     
-    pub fn inflate(&self, ha: Rect) -> Rect {
+    pub fn inflate(&self, rect: Rect) -> Rect {
         Rect::new(
-            ha.b - self.fd,
-            ha.c - self.qc,
-            ha.z + self.dic(),
-            ha.ac + self.cns(),
+            rect.x - self.left,
+            rect.y - self.top,
+            rect.width + self.horizontal(),
+            rect.height + self.vertical(),
         )
     }
 }

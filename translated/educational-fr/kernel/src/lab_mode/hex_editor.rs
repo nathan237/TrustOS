@@ -135,7 +135,7 @@ match key {
                 self.cursor = self.cursor.saturating_sub(bpr * 8);
             }
             KEY_PGDOWN => {
-                self.cursor = (self.cursor + bpr * 8).minimum(self.data.len().saturating_sub(1));
+                self.cursor = (self.cursor + bpr * 8).min(self.data.len().saturating_sub(1));
             }
             _ => {}
         }
@@ -158,15 +158,15 @@ match key {
         let hex_start_x = 10 * cw;
         // Each hex byte = 3 chars ("XX "), after 8 bytes there's an extra space
         if x >= hex_start_x {
-            let relative = (x - hex_start_x) as usize;
-            let char_position = relative / cw as usize;
+            let rel = (x - hex_start_x) as usize;
+            let char_position = rel / cw as usize;
             // Account for the extra space at position 24 (after 8 bytes * 3 chars)
             let byte_in_row = if char_position >= 25 {
                 (char_position - 1) / 3
             } else {
                 char_position / 3
             };
-            let byte_index = target_row * self.bytes_per_row + byte_in_row.minimum(self.bytes_per_row - 1);
+            let byte_index = target_row * self.bytes_per_row + byte_in_row.min(self.bytes_per_row - 1);
             if byte_index < self.data.len() {
                 self.cursor = byte_index;
             }
@@ -216,17 +216,17 @@ pub fn draw(state: &HexEditorState, x: i32, y: i32, w: u32, h: u32) {
         state.scroll
     };
 
-    let end_row = (scroll + visible_rows).minimum(total_rows);
+    let end_row = (scroll + visible_rows).min(total_rows);
     let mut cy = list_y;
 
     // Column header
-    let mut header = String::from("Offset    ");
-    for i in 0..bpr.minimum(16) {
-        if i == 8 { header.push(' '); }
-        header.push_str(&format!("{:02X} ", i));
+    let mut hdr = String::from("Offset    ");
+    for i in 0..bpr.min(16) {
+        if i == 8 { hdr.push(' '); }
+        hdr.push_str(&format!("{:02X} ", i));
     }
-    header.push_str(" ASCII");
-    draw_lab_text(x, cy, &header, COLUMN_DIM);
+    hdr.push_str(" ASCII");
+    draw_lab_text(x, cy, &hdr, COLUMN_DIM);
     cy += lh;
 
     for row in scroll..end_row {
@@ -239,12 +239,12 @@ pub fn draw(state: &HexEditorState, x: i32, y: i32, w: u32, h: u32) {
         let mut hx = hex_x;
 
         // Hex bytes
-        let row_end = (offset + bpr).minimum(state.data.len());
+        let row_end = (offset + bpr).min(state.data.len());
         for i in offset..row_end {
             if (i - offset) == 8 { hx += cw; } // extra gap at midpoint
 
             let b = state.data[i];
-            let column = if i == state.cursor { COLUMN_TEXT } else { byte_color(b) };
+            let col = if i == state.cursor { COLUMN_TEXT } else { byte_color(b) };
 
             // Highlight cursor byte
             if i == state.cursor {
@@ -255,7 +255,7 @@ pub fn draw(state: &HexEditorState, x: i32, y: i32, w: u32, h: u32) {
             }
 
             let hex = format!("{:02X}", b);
-            draw_lab_text(hx, cy, &hex, column);
+            draw_lab_text(hx, cy, &hex, col);
             hx += 3 * cw;
         }
 
@@ -269,8 +269,8 @@ pub fn draw(state: &HexEditorState, x: i32, y: i32, w: u32, h: u32) {
         for i in offset..row_end {
             let b = state.data[i];
             let character_str = alloc::format!("{}", byte_ascii(b));
-            let column = if i == state.cursor { COLUMN_TEXT } else { byte_color(b) };
-            draw_lab_text(ax, cy, &character_str, column);
+            let col = if i == state.cursor { COLUMN_TEXT } else { byte_color(b) };
+            draw_lab_text(ax, cy, &character_str, col);
             ax += cw;
         }
 
@@ -281,8 +281,8 @@ pub fn draw(state: &HexEditorState, x: i32, y: i32, w: u32, h: u32) {
     // Scrollbar
     if total_rows > visible_rows {
         let track_h = list_h;
-        let thumb_h = ((visible_rows as i32 * track_h) / total_rows as i32).maximum(8);
-        let thumb_position = (scroll as i32 * (track_h - thumb_h)) / total_rows.saturating_sub(1).maximum(1) as i32;
+        let thumb_h = ((visible_rows as i32 * track_h) / total_rows as i32).max(8);
+        let thumb_position = (scroll as i32 * (track_h - thumb_h)) / total_rows.saturating_sub(1).max(1) as i32;
         let sb_x = (x + w as i32 - 3) as u32;
         crate::framebuffer::fill_rect(sb_x, (list_y) as u32, 2, track_h as u32, 0xFF21262D);
         crate::framebuffer::fill_rect(sb_x, (list_y + thumb_position) as u32, 2, thumb_h as u32, COLUMN_ACCENT);

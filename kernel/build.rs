@@ -122,7 +122,7 @@ fn build_coremark() {
         "-mno-red-zone",
         "-mno-sse",
         "-DPERFORMANCE_RUN=1",
-        "-DITERATIONS=0",
+        "-DITERATIONS=1500000",
         "-DHAS_PRINTF=0",
         "-DHAS_STDIO=0",
     ];

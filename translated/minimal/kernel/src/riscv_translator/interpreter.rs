@@ -21,34 +21,34 @@ pub struct RvCpu {
     
     pub regs: [u64; 34],
     
-    pub fz: u64,
+    pub pc: u64,
     
     
-    pub cpf: i64,
-    pub dey: i64,
+    pub cmp_a: i64,
+    pub cmp_b: i64,
     
-    pub ioo: u64,
-    pub iop: u64,
+    pub cmp_a_u: u64,
+    pub cmp_b_u: u64,
     
-    pub flq: u64,
+    pub inst_count: u64,
     
-    pub dhv: bool,
+    pub halted: bool,
 }
 
 impl RvCpu {
     pub fn new() -> Self {
         let mut cpu = Self {
             regs: [0; 34],
-            fz: 0,
-            cpf: 0,
-            dey: 0,
-            ioo: 0,
-            iop: 0,
-            flq: 0,
-            dhv: false,
+            pc: 0,
+            cmp_a: 0,
+            cmp_b: 0,
+            cmp_a_u: 0,
+            cmp_b_u: 0,
+            inst_count: 0,
+            halted: false,
         };
         
-        cpu.regs[Reg::Ds as usize] = 0x7FFF_FFF0;
+        cpu.regs[Reg::X2 as usize] = 0x7FFF_FFF0;
         cpu
     }
 
@@ -60,41 +60,41 @@ impl RvCpu {
 
     
     #[inline]
-    pub fn oj(&mut self, reg: Reg, ap: u64) {
+    pub fn set(&mut self, reg: Reg, val: u64) {
         if reg as u8 != 0 {
-            self.regs[reg as usize] = ap;
+            self.regs[reg as usize] = val;
         }
     }
 
     
     #[inline]
-    pub fn wil(&mut self, q: u64, o: u64) {
-        self.cpf = q as i64;
-        self.dey = o as i64;
-        self.ioo = q;
-        self.iop = o;
+    pub fn set_cmp(&mut self, a: u64, b: u64) {
+        self.cmp_a = a as i64;
+        self.cmp_b = b as i64;
+        self.cmp_a_u = a;
+        self.cmp_b_u = b;
     }
 
     
-    pub fn sno(&self, mo: FlagCond) -> bool {
-        let wz = self.cpf.nj(self.dey);
-        match mo {
-            FlagCond::Eq    => self.cpf == self.dey,
-            FlagCond::Adl    => self.cpf != self.dey,
-            FlagCond::Lt    => self.cpf < self.dey,
-            FlagCond::Wr    => self.cpf >= self.dey,
-            FlagCond::Te    => self.cpf <= self.dey,
-            FlagCond::Jn    => self.cpf > self.dey,
-            FlagCond::Auz   => self.ioo < self.iop,
-            FlagCond::Atb   => self.ioo >= self.iop,
-            FlagCond::Neg   => wz < 0,
-            FlagCond::Pos   => wz >= 0,
-            FlagCond::Awn   => {
+    pub fn eval_cond(&self, fc: FlagCond) -> bool {
+        let jr = self.cmp_a.wrapping_sub(self.cmp_b);
+        match fc {
+            FlagCond::Eq    => self.cmp_a == self.cmp_b,
+            FlagCond::Ne    => self.cmp_a != self.cmp_b,
+            FlagCond::Lt    => self.cmp_a < self.cmp_b,
+            FlagCond::Ge    => self.cmp_a >= self.cmp_b,
+            FlagCond::Le    => self.cmp_a <= self.cmp_b,
+            FlagCond::Gt    => self.cmp_a > self.cmp_b,
+            FlagCond::Ltu   => self.cmp_a_u < self.cmp_b_u,
+            FlagCond::Geu   => self.cmp_a_u >= self.cmp_b_u,
+            FlagCond::Neg   => jr < 0,
+            FlagCond::Pos   => jr >= 0,
+            FlagCond::Ovf   => {
                 
-                (self.cpf ^ self.dey) < 0 && (self.cpf ^ wz) < 0
+                (self.cmp_a ^ self.cmp_b) < 0 && (self.cmp_a ^ jr) < 0
             }
-            FlagCond::Awc => {
-                !((self.cpf ^ self.dey) < 0 && (self.cpf ^ wz) < 0)
+            FlagCond::NoOvf => {
+                !((self.cmp_a ^ self.cmp_b) < 0 && (self.cmp_a ^ jr) < 0)
             }
         }
     }
@@ -103,155 +103,155 @@ impl RvCpu {
 
 pub struct RvMemory {
     
-    afx: BTreeMap<u64, Vec<u8>>,
+    regions: BTreeMap<u64, Vec<u8>>,
     
-    pub jto: usize,
+    pub total_allocated: usize,
 }
 
 impl RvMemory {
     pub fn new() -> Self {
         Self {
-            afx: BTreeMap::new(),
-            jto: 0,
+            regions: BTreeMap::new(),
+            total_allocated: 0,
         }
     }
 
     
-    pub fn map(&mut self, ag: u64, aw: usize) {
-        self.afx.insert(ag, vec![0u8; aw]);
-        self.jto += aw;
+    pub fn map(&mut self, addr: u64, size: usize) {
+        self.regions.insert(addr, vec![0u8; size]);
+        self.total_allocated += size;
     }
 
     
-    pub fn ujt(&mut self, ag: u64, f: &[u8]) {
-        self.afx.insert(ag, f.ip());
-        self.jto += f.len();
+    pub fn map_with_data(&mut self, addr: u64, data: &[u8]) {
+        self.regions.insert(addr, data.to_vec());
+        self.total_allocated += data.len();
     }
 
     
-    pub fn ady(&self, ag: u64) -> Result<u8, MemError> {
-        for (&ar, f) in &self.afx {
-            if ag >= ar && ag < ar + f.len() as u64 {
-                return Ok(f[(ag - ar) as usize]);
+    pub fn read_u8(&self, addr: u64) -> Result<u8, MemError> {
+        for (&base, data) in &self.regions {
+            if addr >= base && addr < base + data.len() as u64 {
+                return Ok(data[(addr - base) as usize]);
             }
         }
-        Err(MemError::Afg(ag))
+        Err(MemError::Unmapped(addr))
     }
 
     
-    pub fn alp(&self, ag: u64) -> Result<u16, MemError> {
-        Ok(u16::dj([
-            self.ady(ag)?,
-            self.ady(ag + 1)?,
+    pub fn read_u16(&self, addr: u64) -> Result<u16, MemError> {
+        Ok(u16::from_le_bytes([
+            self.read_u8(addr)?,
+            self.read_u8(addr + 1)?,
         ]))
     }
 
     
-    pub fn za(&self, ag: u64) -> Result<u32, MemError> {
-        Ok(u32::dj([
-            self.ady(ag)?,
-            self.ady(ag + 1)?,
-            self.ady(ag + 2)?,
-            self.ady(ag + 3)?,
+    pub fn read_u32(&self, addr: u64) -> Result<u32, MemError> {
+        Ok(u32::from_le_bytes([
+            self.read_u8(addr)?,
+            self.read_u8(addr + 1)?,
+            self.read_u8(addr + 2)?,
+            self.read_u8(addr + 3)?,
         ]))
     }
 
     
-    pub fn aqi(&self, ag: u64) -> Result<u64, MemError> {
-        Ok(u64::dj([
-            self.ady(ag)?,
-            self.ady(ag + 1)?,
-            self.ady(ag + 2)?,
-            self.ady(ag + 3)?,
-            self.ady(ag + 4)?,
-            self.ady(ag + 5)?,
-            self.ady(ag + 6)?,
-            self.ady(ag + 7)?,
+    pub fn read_u64(&self, addr: u64) -> Result<u64, MemError> {
+        Ok(u64::from_le_bytes([
+            self.read_u8(addr)?,
+            self.read_u8(addr + 1)?,
+            self.read_u8(addr + 2)?,
+            self.read_u8(addr + 3)?,
+            self.read_u8(addr + 4)?,
+            self.read_u8(addr + 5)?,
+            self.read_u8(addr + 6)?,
+            self.read_u8(addr + 7)?,
         ]))
     }
 
     
-    pub fn cvj(&mut self, ag: u64, ap: u8) -> Result<(), MemError> {
-        for (&ar, f) in self.afx.el() {
-            if ag >= ar && ag < ar + f.len() as u64 {
-                f[(ag - ar) as usize] = ap;
+    pub fn write_u8(&mut self, addr: u64, val: u8) -> Result<(), MemError> {
+        for (&base, data) in self.regions.iter_mut() {
+            if addr >= base && addr < base + data.len() as u64 {
+                data[(addr - base) as usize] = val;
                 return Ok(());
             }
         }
-        Err(MemError::Afg(ag))
+        Err(MemError::Unmapped(addr))
     }
 
     
-    pub fn aqr(&mut self, ag: u64, ap: u16) -> Result<(), MemError> {
-        let bf = ap.ho();
-        self.cvj(ag, bf[0])?;
-        self.cvj(ag + 1, bf[1])
+    pub fn write_u16(&mut self, addr: u64, val: u16) -> Result<(), MemError> {
+        let bytes = val.to_le_bytes();
+        self.write_u8(addr, bytes[0])?;
+        self.write_u8(addr + 1, bytes[1])
     }
 
     
-    pub fn sx(&mut self, ag: u64, ap: u32) -> Result<(), MemError> {
-        let bf = ap.ho();
-        for a in 0..4 {
-            self.cvj(ag + a, bf[a as usize])?;
+    pub fn write_u32(&mut self, addr: u64, val: u32) -> Result<(), MemError> {
+        let bytes = val.to_le_bytes();
+        for i in 0..4 {
+            self.write_u8(addr + i, bytes[i as usize])?;
         }
         Ok(())
     }
 
     
-    pub fn tw(&mut self, ag: u64, ap: u64) -> Result<(), MemError> {
-        let bf = ap.ho();
-        for a in 0..8 {
-            self.cvj(ag + a, bf[a as usize])?;
+    pub fn write_u64(&mut self, addr: u64, val: u64) -> Result<(), MemError> {
+        let bytes = val.to_le_bytes();
+        for i in 0..8 {
+            self.write_u8(addr + i, bytes[i as usize])?;
         }
         Ok(())
     }
 
     
-    pub fn zif(&self, ag: u64, cat: usize) -> Result<String, MemError> {
-        let mut e = String::new();
-        for a in 0..cat {
-            let o = self.ady(ag + a as u64)?;
-            if o == 0 { break; }
-            e.push(o as char);
+    pub fn qsr(&self, addr: u64, aoo: usize) -> Result<String, MemError> {
+        let mut j = String::new();
+        for i in 0..aoo {
+            let b = self.read_u8(addr + i as u64)?;
+            if b == 0 { break; }
+            j.push(b as char);
         }
-        Ok(e)
+        Ok(j)
     }
 
     
-    pub fn qad(&mut self, ag: u64, e: &str) -> Result<(), MemError> {
-        for (a, o) in e.bf().cf() {
-            self.cvj(ag + a as u64, o)?;
+    pub fn write_string(&mut self, addr: u64, j: &str) -> Result<(), MemError> {
+        for (i, b) in j.bytes().enumerate() {
+            self.write_u8(addr + i as u64, b)?;
         }
-        self.cvj(ag + e.len() as u64, 0)
+        self.write_u8(addr + j.len() as u64, 0)
     }
 }
 
 
 #[derive(Debug)]
 pub enum MemError {
-    Afg(u64),
+    Unmapped(u64),
 }
 
 
 #[derive(Debug)]
 pub enum ExecResult {
     
-    Cg,
+    Continue,
     
-    Hg {
-        aqb: u64,
-        n: [u64; 6],
+    Syscall {
+        number: u64,
+        args: [u64; 6],
     },
     
-    Bcu,
+    Breakpoint,
     
-    Amb(u64),
+    Returned(u64),
     
-    Hw(u64),
+    MemoryFault(u64),
     
-    Auj,
+    InstructionLimit,
     
-    Ceu,
+    Halted,
 }
 
 
@@ -263,7 +263,7 @@ pub struct RvInterpreter {
     
     pub block_cache: BTreeMap<u64, Vec<RvInst>>,
     
-    pub eff: u64,
+    pub max_instructions: u64,
 }
 
 impl RvInterpreter {
@@ -272,431 +272,431 @@ impl RvInterpreter {
             cpu: RvCpu::new(),
             mem: RvMemory::new(),
             block_cache: BTreeMap::new(),
-            eff: 10_000_000, 
+            max_instructions: 10_000_000, 
         }
     }
 
     
-    pub fn ugk(&mut self, block: &TranslatedBlock) {
-        self.block_cache.insert(block.cbz, block.instructions.clone());
+    pub fn load_block(&mut self, block: &TranslatedBlock) {
+        self.block_cache.insert(block.src_addr, block.instructions.clone());
     }
 
     
-    pub fn ugl(&mut self, xk: &[TranslatedBlock]) {
-        for block in xk {
-            self.ugk(block);
+    pub fn load_blocks(&mut self, blocks: &[TranslatedBlock]) {
+        for block in blocks {
+            self.load_block(block);
         }
     }
 
     
-    pub fn soe(&mut self, fi: &RvInst) -> ExecResult {
-        self.cpu.flq += 1;
+    pub fn exec_one(&mut self, inst: &RvInst) -> ExecResult {
+        self.cpu.inst_count += 1;
 
-        match fi {
+        match inst {
             
-            RvInst::Add { ck, cp, et } => {
-                self.cpu.oj(*ck, self.cpu.get(*cp).cn(self.cpu.get(*et)));
+            RvInst::Add { aj, rs1, rs2 } => {
+                self.cpu.set(*aj, self.cpu.get(*rs1).wrapping_add(self.cpu.get(*rs2)));
             }
-            RvInst::Sub { ck, cp, et } => {
-                self.cpu.oj(*ck, self.cpu.get(*cp).nj(self.cpu.get(*et)));
+            RvInst::Sub { aj, rs1, rs2 } => {
+                self.cpu.set(*aj, self.cpu.get(*rs1).wrapping_sub(self.cpu.get(*rs2)));
             }
-            RvInst::Ex { ck, cp, et } => {
-                self.cpu.oj(*ck, self.cpu.get(*cp) & self.cpu.get(*et));
+            RvInst::And { aj, rs1, rs2 } => {
+                self.cpu.set(*aj, self.cpu.get(*rs1) & self.cpu.get(*rs2));
             }
-            RvInst::Fx { ck, cp, et } => {
-                self.cpu.oj(*ck, self.cpu.get(*cp) | self.cpu.get(*et));
+            RvInst::Or { aj, rs1, rs2 } => {
+                self.cpu.set(*aj, self.cpu.get(*rs1) | self.cpu.get(*rs2));
             }
-            RvInst::Aga { ck, cp, et } => {
-                self.cpu.oj(*ck, self.cpu.get(*cp) ^ self.cpu.get(*et));
+            RvInst::Xor { aj, rs1, rs2 } => {
+                self.cpu.set(*aj, self.cpu.get(*rs1) ^ self.cpu.get(*rs2));
             }
-            RvInst::Amt { ck, cp, et } => {
-                let bcp = self.cpu.get(*et) & 63;
-                self.cpu.oj(*ck, self.cpu.get(*cp) << bcp);
+            RvInst::Sll { aj, rs1, rs2 } => {
+                let acn = self.cpu.get(*rs2) & 63;
+                self.cpu.set(*aj, self.cpu.get(*rs1) << acn);
             }
-            RvInst::Amx { ck, cp, et } => {
-                let bcp = self.cpu.get(*et) & 63;
-                self.cpu.oj(*ck, self.cpu.get(*cp) >> bcp);
+            RvInst::Srl { aj, rs1, rs2 } => {
+                let acn = self.cpu.get(*rs2) & 63;
+                self.cpu.set(*aj, self.cpu.get(*rs1) >> acn);
             }
-            RvInst::Azc { ck, cp, et } => {
-                let bcp = self.cpu.get(*et) & 63;
-                self.cpu.oj(*ck, ((self.cpu.get(*cp) as i64) >> bcp) as u64);
+            RvInst::Sra { aj, rs1, rs2 } => {
+                let acn = self.cpu.get(*rs2) & 63;
+                self.cpu.set(*aj, ((self.cpu.get(*rs1) as i64) >> acn) as u64);
             }
-            RvInst::Btb { ck, cp, et } => {
-                let p = if (self.cpu.get(*cp) as i64) < (self.cpu.get(*et) as i64) { 1 } else { 0 };
-                self.cpu.oj(*ck, p);
+            RvInst::Slt { aj, rs1, rs2 } => {
+                let v = if (self.cpu.get(*rs1) as i64) < (self.cpu.get(*rs2) as i64) { 1 } else { 0 };
+                self.cpu.set(*aj, v);
             }
-            RvInst::Bte { ck, cp, et } => {
-                let p = if self.cpu.get(*cp) < self.cpu.get(*et) { 1 } else { 0 };
-                self.cpu.oj(*ck, p);
+            RvInst::Sltu { aj, rs1, rs2 } => {
+                let v = if self.cpu.get(*rs1) < self.cpu.get(*rs2) { 1 } else { 0 };
+                self.cpu.set(*aj, v);
             }
 
             
-            RvInst::Mul { ck, cp, et } => {
-                self.cpu.oj(*ck, self.cpu.get(*cp).hx(self.cpu.get(*et)));
+            RvInst::Mul { aj, rs1, rs2 } => {
+                self.cpu.set(*aj, self.cpu.get(*rs1).wrapping_mul(self.cpu.get(*rs2)));
             }
-            RvInst::Bms { ck, cp, et } => {
-                let q = self.cpu.get(*cp) as i64 as i128;
-                let o = self.cpu.get(*et) as i64 as i128;
-                self.cpu.oj(*ck, ((q * o) >> 64) as u64);
+            RvInst::Mulh { aj, rs1, rs2 } => {
+                let a = self.cpu.get(*rs1) as i64 as i128;
+                let b = self.cpu.get(*rs2) as i64 as i128;
+                self.cpu.set(*aj, ((a * b) >> 64) as u64);
             }
-            RvInst::Div { ck, cp, et } => {
-                let o = self.cpu.get(*et) as i64;
-                if o == 0 {
-                    self.cpu.oj(*ck, u64::O); 
+            RvInst::Div { aj, rs1, rs2 } => {
+                let b = self.cpu.get(*rs2) as i64;
+                if b == 0 {
+                    self.cpu.set(*aj, u64::MAX); 
                 } else {
-                    self.cpu.oj(*ck, ((self.cpu.get(*cp) as i64).zwn(o)) as u64);
+                    self.cpu.set(*aj, ((self.cpu.get(*rs1) as i64).wrapping_div(b)) as u64);
                 }
             }
-            RvInst::Arb { ck, cp, et } => {
-                let o = self.cpu.get(*et);
-                if o == 0 {
-                    self.cpu.oj(*ck, u64::O);
+            RvInst::Divu { aj, rs1, rs2 } => {
+                let b = self.cpu.get(*rs2);
+                if b == 0 {
+                    self.cpu.set(*aj, u64::MAX);
                 } else {
-                    self.cpu.oj(*ck, self.cpu.get(*cp) / o);
+                    self.cpu.set(*aj, self.cpu.get(*rs1) / b);
                 }
             }
-            RvInst::Rem { ck, cp, et } => {
-                let o = self.cpu.get(*et) as i64;
-                if o == 0 {
-                    self.cpu.oj(*ck, self.cpu.get(*cp));
+            RvInst::Rem { aj, rs1, rs2 } => {
+                let b = self.cpu.get(*rs2) as i64;
+                if b == 0 {
+                    self.cpu.set(*aj, self.cpu.get(*rs1));
                 } else {
-                    self.cpu.oj(*ck, ((self.cpu.get(*cp) as i64).zwo(o)) as u64);
+                    self.cpu.set(*aj, ((self.cpu.get(*rs1) as i64).wrapping_rem(b)) as u64);
                 }
             }
-            RvInst::Bqx { ck, cp, et } => {
-                let o = self.cpu.get(*et);
-                if o == 0 {
-                    self.cpu.oj(*ck, self.cpu.get(*cp));
+            RvInst::Remu { aj, rs1, rs2 } => {
+                let b = self.cpu.get(*rs2);
+                if b == 0 {
+                    self.cpu.set(*aj, self.cpu.get(*rs1));
                 } else {
-                    self.cpu.oj(*ck, self.cpu.get(*cp) % o);
+                    self.cpu.set(*aj, self.cpu.get(*rs1) % b);
                 }
             }
 
             
-            RvInst::Gf { ck, cp, gf } => {
-                self.cpu.oj(*ck, self.cpu.get(*cp).cn(*gf as u64));
+            RvInst::Addi { aj, rs1, imm } => {
+                self.cpu.set(*aj, self.cpu.get(*rs1).wrapping_add(*imm as u64));
             }
-            RvInst::Ou { ck, cp, gf } => {
-                self.cpu.oj(*ck, self.cpu.get(*cp) & (*gf as u64));
+            RvInst::Andi { aj, rs1, imm } => {
+                self.cpu.set(*aj, self.cpu.get(*rs1) & (*imm as u64));
             }
-            RvInst::Akw { ck, cp, gf } => {
-                self.cpu.oj(*ck, self.cpu.get(*cp) | (*gf as u64));
+            RvInst::Ori { aj, rs1, imm } => {
+                self.cpu.set(*aj, self.cpu.get(*rs1) | (*imm as u64));
             }
-            RvInst::Aoq { ck, cp, gf } => {
-                self.cpu.oj(*ck, self.cpu.get(*cp) ^ (*gf as u64));
+            RvInst::Xori { aj, rs1, imm } => {
+                self.cpu.set(*aj, self.cpu.get(*rs1) ^ (*imm as u64));
             }
-            RvInst::Ayv { ck, cp, bcp } => {
-                self.cpu.oj(*ck, self.cpu.get(*cp) << (*bcp & 63));
+            RvInst::Slli { aj, rs1, acn } => {
+                self.cpu.set(*aj, self.cpu.get(*rs1) << (*acn & 63));
             }
-            RvInst::Aze { ck, cp, bcp } => {
-                self.cpu.oj(*ck, self.cpu.get(*cp) >> (*bcp & 63));
+            RvInst::Srli { aj, rs1, acn } => {
+                self.cpu.set(*aj, self.cpu.get(*rs1) >> (*acn & 63));
             }
-            RvInst::Azd { ck, cp, bcp } => {
-                self.cpu.oj(*ck, ((self.cpu.get(*cp) as i64) >> (*bcp & 63)) as u64);
+            RvInst::Srai { aj, rs1, acn } => {
+                self.cpu.set(*aj, ((self.cpu.get(*rs1) as i64) >> (*acn & 63)) as u64);
             }
-            RvInst::Btc { ck, cp, gf } => {
-                let p = if (self.cpu.get(*cp) as i64) < *gf { 1 } else { 0 };
-                self.cpu.oj(*ck, p);
+            RvInst::Slti { aj, rs1, imm } => {
+                let v = if (self.cpu.get(*rs1) as i64) < *imm { 1 } else { 0 };
+                self.cpu.set(*aj, v);
             }
-            RvInst::Btd { ck, cp, gf } => {
-                let p = if self.cpu.get(*cp) < (*gf as u64) { 1 } else { 0 };
-                self.cpu.oj(*ck, p);
-            }
-
-            
-            RvInst::Blq { ck, gf } => {
-                self.cpu.oj(*ck, ((*gf as u64) << 12) & 0xFFFF_FFFF_FFFF_F000);
-            }
-            RvInst::Bce { ck, gf } => {
-                self.cpu.oj(*ck, self.cpu.fz.cn((*gf as u64) << 12));
+            RvInst::Sltiu { aj, rs1, imm } => {
+                let v = if self.cpu.get(*rs1) < (*imm as u64) { 1 } else { 0 };
+                self.cpu.set(*aj, v);
             }
 
             
-            RvInst::Bky { ck, cp, l } => {
-                let ag = self.cpu.get(*cp).cn(*l as u64);
-                match self.mem.ady(ag) {
-                    Ok(p) => self.cpu.oj(*ck, p as i8 as i64 as u64),
-                    Err(_) => return ExecResult::Hw(ag),
-                }
+            RvInst::Lui { aj, imm } => {
+                self.cpu.set(*aj, ((*imm as u64) << 12) & 0xFFFF_FFFF_FFFF_F000);
             }
-            RvInst::Ajr { ck, cp, l } => {
-                let ag = self.cpu.get(*cp).cn(*l as u64);
-                match self.mem.ady(ag) {
-                    Ok(p) => self.cpu.oj(*ck, p as u64),
-                    Err(_) => return ExecResult::Hw(ag),
-                }
-            }
-            RvInst::Bla { ck, cp, l } => {
-                let ag = self.cpu.get(*cp).cn(*l as u64);
-                match self.mem.alp(ag) {
-                    Ok(p) => self.cpu.oj(*ck, p as i16 as i64 as u64),
-                    Err(_) => return ExecResult::Hw(ag),
-                }
-            }
-            RvInst::Ajs { ck, cp, l } => {
-                let ag = self.cpu.get(*cp).cn(*l as u64);
-                match self.mem.alp(ag) {
-                    Ok(p) => self.cpu.oj(*ck, p as u64),
-                    Err(_) => return ExecResult::Hw(ag),
-                }
-            }
-            RvInst::Blr { ck, cp, l } => {
-                let ag = self.cpu.get(*cp).cn(*l as u64);
-                match self.mem.za(ag) {
-                    Ok(p) => self.cpu.oj(*ck, p as i32 as i64 as u64),
-                    Err(_) => return ExecResult::Hw(ag),
-                }
-            }
-            RvInst::Aka { ck, cp, l } => {
-                let ag = self.cpu.get(*cp).cn(*l as u64);
-                match self.mem.za(ag) {
-                    Ok(p) => self.cpu.oj(*ck, p as u64),
-                    Err(_) => return ExecResult::Hw(ag),
-                }
-            }
-            RvInst::Pt { ck, cp, l } => {
-                let ag = self.cpu.get(*cp).cn(*l as u64);
-                match self.mem.aqi(ag) {
-                    Ok(p) => self.cpu.oj(*ck, p),
-                    Err(_) => return ExecResult::Hw(ag),
-                }
+            RvInst::Auipc { aj, imm } => {
+                self.cpu.set(*aj, self.cpu.pc.wrapping_add((*imm as u64) << 12));
             }
 
             
-            RvInst::Amf { et, cp, l } => {
-                let ag = self.cpu.get(*cp).cn(*l as u64);
-                let ap = self.cpu.get(*et) as u8;
-                if self.mem.cvj(ag, ap).is_err() {
-                    return ExecResult::Hw(ag);
+            RvInst::Lb { aj, rs1, offset } => {
+                let addr = self.cpu.get(*rs1).wrapping_add(*offset as u64);
+                match self.mem.read_u8(addr) {
+                    Ok(v) => self.cpu.set(*aj, v as i8 as i64 as u64),
+                    Err(_) => return ExecResult::MemoryFault(addr),
                 }
             }
-            RvInst::Amo { et, cp, l } => {
-                let ag = self.cpu.get(*cp).cn(*l as u64);
-                let ap = self.cpu.get(*et) as u16;
-                if self.mem.aqr(ag, ap).is_err() {
-                    return ExecResult::Hw(ag);
+            RvInst::Lbu { aj, rs1, offset } => {
+                let addr = self.cpu.get(*rs1).wrapping_add(*offset as u64);
+                match self.mem.read_u8(addr) {
+                    Ok(v) => self.cpu.set(*aj, v as u64),
+                    Err(_) => return ExecResult::MemoryFault(addr),
                 }
             }
-            RvInst::Ang { et, cp, l } => {
-                let ag = self.cpu.get(*cp).cn(*l as u64);
-                let ap = self.cpu.get(*et) as u32;
-                if self.mem.sx(ag, ap).is_err() {
-                    return ExecResult::Hw(ag);
+            RvInst::Lh { aj, rs1, offset } => {
+                let addr = self.cpu.get(*rs1).wrapping_add(*offset as u64);
+                match self.mem.read_u16(addr) {
+                    Ok(v) => self.cpu.set(*aj, v as i16 as i64 as u64),
+                    Err(_) => return ExecResult::MemoryFault(addr),
                 }
             }
-            RvInst::Mi { et, cp, l } => {
-                let ag = self.cpu.get(*cp).cn(*l as u64);
-                let ap = self.cpu.get(*et);
-                if self.mem.tw(ag, ap).is_err() {
-                    return ExecResult::Hw(ag);
+            RvInst::Lhu { aj, rs1, offset } => {
+                let addr = self.cpu.get(*rs1).wrapping_add(*offset as u64);
+                match self.mem.read_u16(addr) {
+                    Ok(v) => self.cpu.set(*aj, v as u64),
+                    Err(_) => return ExecResult::MemoryFault(addr),
+                }
+            }
+            RvInst::Lw { aj, rs1, offset } => {
+                let addr = self.cpu.get(*rs1).wrapping_add(*offset as u64);
+                match self.mem.read_u32(addr) {
+                    Ok(v) => self.cpu.set(*aj, v as i32 as i64 as u64),
+                    Err(_) => return ExecResult::MemoryFault(addr),
+                }
+            }
+            RvInst::Lwu { aj, rs1, offset } => {
+                let addr = self.cpu.get(*rs1).wrapping_add(*offset as u64);
+                match self.mem.read_u32(addr) {
+                    Ok(v) => self.cpu.set(*aj, v as u64),
+                    Err(_) => return ExecResult::MemoryFault(addr),
+                }
+            }
+            RvInst::Ld { aj, rs1, offset } => {
+                let addr = self.cpu.get(*rs1).wrapping_add(*offset as u64);
+                match self.mem.read_u64(addr) {
+                    Ok(v) => self.cpu.set(*aj, v),
+                    Err(_) => return ExecResult::MemoryFault(addr),
                 }
             }
 
             
-            RvInst::Agp { cp, et, l } => {
-                if self.cpu.get(*cp) == self.cpu.get(*et) {
-                    self.cpu.fz = *l as u64;
-                    return ExecResult::Cg;
+            RvInst::Sb { rs2, rs1, offset } => {
+                let addr = self.cpu.get(*rs1).wrapping_add(*offset as u64);
+                let val = self.cpu.get(*rs2) as u8;
+                if self.mem.write_u8(addr, val).is_err() {
+                    return ExecResult::MemoryFault(addr);
                 }
             }
-            RvInst::Ags { cp, et, l } => {
-                if self.cpu.get(*cp) != self.cpu.get(*et) {
-                    self.cpu.fz = *l as u64;
-                    return ExecResult::Cg;
+            RvInst::Sh { rs2, rs1, offset } => {
+                let addr = self.cpu.get(*rs1).wrapping_add(*offset as u64);
+                let val = self.cpu.get(*rs2) as u16;
+                if self.mem.write_u16(addr, val).is_err() {
+                    return ExecResult::MemoryFault(addr);
                 }
             }
-            RvInst::Bcr { cp, et, l } => {
-                if (self.cpu.get(*cp) as i64) < (self.cpu.get(*et) as i64) {
-                    self.cpu.fz = *l as u64;
-                    return ExecResult::Cg;
+            RvInst::Sw { rs2, rs1, offset } => {
+                let addr = self.cpu.get(*rs1).wrapping_add(*offset as u64);
+                let val = self.cpu.get(*rs2) as u32;
+                if self.mem.write_u32(addr, val).is_err() {
+                    return ExecResult::MemoryFault(addr);
                 }
             }
-            RvInst::Bcp { cp, et, l } => {
-                if (self.cpu.get(*cp) as i64) >= (self.cpu.get(*et) as i64) {
-                    self.cpu.fz = *l as u64;
-                    return ExecResult::Cg;
-                }
-            }
-            RvInst::Bcs { cp, et, l } => {
-                if self.cpu.get(*cp) < self.cpu.get(*et) {
-                    self.cpu.fz = *l as u64;
-                    return ExecResult::Cg;
-                }
-            }
-            RvInst::Bcq { cp, et, l } => {
-                if self.cpu.get(*cp) >= self.cpu.get(*et) {
-                    self.cpu.fz = *l as u64;
-                    return ExecResult::Cg;
+            RvInst::Sd { rs2, rs1, offset } => {
+                let addr = self.cpu.get(*rs1).wrapping_add(*offset as u64);
+                let val = self.cpu.get(*rs2);
+                if self.mem.write_u64(addr, val).is_err() {
+                    return ExecResult::MemoryFault(addr);
                 }
             }
 
             
-            RvInst::Xh { ck, l } => {
+            RvInst::Beq { rs1, rs2, offset } => {
+                if self.cpu.get(*rs1) == self.cpu.get(*rs2) {
+                    self.cpu.pc = *offset as u64;
+                    return ExecResult::Continue;
+                }
+            }
+            RvInst::Bne { rs1, rs2, offset } => {
+                if self.cpu.get(*rs1) != self.cpu.get(*rs2) {
+                    self.cpu.pc = *offset as u64;
+                    return ExecResult::Continue;
+                }
+            }
+            RvInst::Blt { rs1, rs2, offset } => {
+                if (self.cpu.get(*rs1) as i64) < (self.cpu.get(*rs2) as i64) {
+                    self.cpu.pc = *offset as u64;
+                    return ExecResult::Continue;
+                }
+            }
+            RvInst::Bge { rs1, rs2, offset } => {
+                if (self.cpu.get(*rs1) as i64) >= (self.cpu.get(*rs2) as i64) {
+                    self.cpu.pc = *offset as u64;
+                    return ExecResult::Continue;
+                }
+            }
+            RvInst::Bltu { rs1, rs2, offset } => {
+                if self.cpu.get(*rs1) < self.cpu.get(*rs2) {
+                    self.cpu.pc = *offset as u64;
+                    return ExecResult::Continue;
+                }
+            }
+            RvInst::Bgeu { rs1, rs2, offset } => {
+                if self.cpu.get(*rs1) >= self.cpu.get(*rs2) {
+                    self.cpu.pc = *offset as u64;
+                    return ExecResult::Continue;
+                }
+            }
+
+            
+            RvInst::Jal { aj, offset } => {
                 
-                self.cpu.oj(*ck, self.cpu.fz);
-                self.cpu.fz = *l as u64;
-                return ExecResult::Cg;
+                self.cpu.set(*aj, self.cpu.pc);
+                self.cpu.pc = *offset as u64;
+                return ExecResult::Continue;
             }
-            RvInst::Xi { ck, cp, l } => {
-                let cd = self.cpu.get(*cp).cn(*l as u64) & !1;
-                self.cpu.oj(*ck, self.cpu.fz);
-                self.cpu.fz = cd;
-                return ExecResult::Cg;
+            RvInst::Jalr { aj, rs1, offset } => {
+                let target = self.cpu.get(*rs1).wrapping_add(*offset as u64) & !1;
+                self.cpu.set(*aj, self.cpu.pc);
+                self.cpu.pc = target;
+                return ExecResult::Continue;
             }
 
             
-            RvInst::Wk => {
-                let aqb = self.cpu.get(Reg::Vd); 
-                let n = [
-                    self.cpu.get(Reg::Je), 
-                    self.cpu.get(Reg::Zo), 
-                    self.cpu.get(Reg::Afw), 
-                    self.cpu.get(Reg::Va), 
-                    self.cpu.get(Reg::Vb), 
-                    self.cpu.get(Reg::Vc), 
+            RvInst::Ecall => {
+                let number = self.cpu.get(Reg::X17); 
+                let args = [
+                    self.cpu.get(Reg::X10), 
+                    self.cpu.get(Reg::X11), 
+                    self.cpu.get(Reg::X12), 
+                    self.cpu.get(Reg::X13), 
+                    self.cpu.get(Reg::X14), 
+                    self.cpu.get(Reg::X15), 
                 ];
-                return ExecResult::Hg { aqb, n };
+                return ExecResult::Syscall { number, args };
             }
-            RvInst::Bfr => {
-                return ExecResult::Bcu;
+            RvInst::Ebreak => {
+                return ExecResult::Breakpoint;
             }
-            RvInst::Bgw => {
+            RvInst::Fence => {
                 
             }
 
             
-            RvInst::Bbr { ck, et, cp } => {
-                let ag = self.cpu.get(*cp);
-                match self.mem.aqi(ag) {
-                    Ok(aft) => {
-                        self.cpu.oj(*ck, aft);
-                        let _ = self.mem.tw(ag, self.cpu.get(*et));
+            RvInst::AmoswapD { aj, rs2, rs1 } => {
+                let addr = self.cpu.get(*rs1);
+                match self.mem.read_u64(addr) {
+                    Ok(qb) => {
+                        self.cpu.set(*aj, qb);
+                        let _ = self.mem.write_u64(addr, self.cpu.get(*rs2));
                     }
-                    Err(_) => return ExecResult::Hw(ag),
+                    Err(_) => return ExecResult::MemoryFault(addr),
                 }
             }
-            RvInst::Bbq { ck, et, cp } => {
-                let ag = self.cpu.get(*cp);
-                match self.mem.aqi(ag) {
-                    Ok(aft) => {
-                        self.cpu.oj(*ck, aft);
-                        let new = aft.cn(self.cpu.get(*et));
-                        let _ = self.mem.tw(ag, new);
+            RvInst::AmoaddD { aj, rs2, rs1 } => {
+                let addr = self.cpu.get(*rs1);
+                match self.mem.read_u64(addr) {
+                    Ok(qb) => {
+                        self.cpu.set(*aj, qb);
+                        let new = qb.wrapping_add(self.cpu.get(*rs2));
+                        let _ = self.mem.write_u64(addr, new);
                     }
-                    Err(_) => return ExecResult::Hw(ag),
+                    Err(_) => return ExecResult::MemoryFault(addr),
                 }
             }
 
             
-            RvInst::Hu { ck, gf } => {
-                self.cpu.oj(*ck, *gf as u64);
+            RvInst::Li { aj, imm } => {
+                self.cpu.set(*aj, *imm as u64);
             }
-            RvInst::Gl { ck, acl } => {
-                self.cpu.oj(*ck, self.cpu.get(*acl));
+            RvInst::Mv { aj, oc } => {
+                self.cpu.set(*aj, self.cpu.get(*oc));
             }
-            RvInst::Fq => {}
-            RvInst::Ama => {
-                let hwl = self.cpu.get(Reg::Oq);
-                if hwl == 0 {
+            RvInst::Nop => {}
+            RvInst::Ret => {
+                let dxe = self.cpu.get(Reg::X1);
+                if dxe == 0 {
                     
-                    return ExecResult::Amb(self.cpu.get(Reg::Je));
+                    return ExecResult::Returned(self.cpu.get(Reg::X10));
                 }
-                self.cpu.fz = hwl;
-                return ExecResult::Cg;
+                self.cpu.pc = dxe;
+                return ExecResult::Continue;
             }
-            RvInst::En { l } => {
-                self.cpu.oj(Reg::Oq, self.cpu.fz);
-                self.cpu.fz = *l as u64;
-                return ExecResult::Cg;
+            RvInst::Call { offset } => {
+                self.cpu.set(Reg::X1, self.cpu.pc);
+                self.cpu.pc = *offset as u64;
+                return ExecResult::Continue;
             }
 
             
-            RvInst::Ed { cp, et } => {
-                self.cpu.wil(self.cpu.get(*cp), self.cpu.get(*et));
+            RvInst::CmpFlags { rs1, rs2 } => {
+                self.cpu.set_cmp(self.cpu.get(*rs1), self.cpu.get(*rs2));
             }
-            RvInst::Aad { mo, l } => {
-                if self.cpu.sno(*mo) {
-                    self.cpu.fz = *l as u64;
-                    return ExecResult::Cg;
+            RvInst::BranchCond { fc, offset } => {
+                if self.cpu.eval_cond(*fc) {
+                    self.cpu.pc = *offset as u64;
+                    return ExecResult::Continue;
                 }
             }
-            RvInst::Od { .. } => {
+            RvInst::SrcAnnotation { .. } => {
                 
             }
         }
 
-        ExecResult::Cg
+        ExecResult::Continue
     }
 
     
-    pub fn nrj(&mut self, instructions: &[RvInst]) -> ExecResult {
+    pub fn exec_block(&mut self, instructions: &[RvInst]) -> ExecResult {
         let mut ip = 0;
         while ip < instructions.len() {
-            if self.cpu.flq >= self.eff {
-                return ExecResult::Auj;
+            if self.cpu.inst_count >= self.max_instructions {
+                return ExecResult::InstructionLimit;
             }
 
-            let result = self.soe(&instructions[ip]);
+            let result = self.exec_one(&instructions[ip]);
             ip += 1;
 
             match result {
-                ExecResult::Cg => {
+                ExecResult::Continue => {
                     
                     
                     
                 }
-                gq => return gq,
+                other => return other,
             }
         }
 
-        ExecResult::Cg
+        ExecResult::Continue
     }
 
     
-    pub fn zkm(&mut self, wsn: u64) -> ExecResult {
-        self.cpu.fz = wsn;
+    pub fn qun(&mut self, start_addr: u64) -> ExecResult {
+        self.cpu.pc = start_addr;
 
         loop {
-            if self.cpu.flq >= self.eff {
-                return ExecResult::Auj;
+            if self.cpu.inst_count >= self.max_instructions {
+                return ExecResult::InstructionLimit;
             }
 
             
-            if let Some(kea) = self.block_cache.get(&self.cpu.fz).abn() {
-                let uxs = self.cpu.fz;
-                let result = self.nrj(&kea);
+            if let Some(block_insts) = self.block_cache.get(&self.cpu.pc).cloned() {
+                let nmt = self.cpu.pc;
+                let result = self.exec_block(&block_insts);
 
                 match result {
-                    ExecResult::Cg => {
+                    ExecResult::Continue => {
                         
-                        if self.cpu.fz == uxs {
+                        if self.cpu.pc == nmt {
                             
-                            return ExecResult::Amb(self.cpu.get(Reg::Je));
+                            return ExecResult::Returned(self.cpu.get(Reg::X10));
                         }
                         
                     }
-                    gq => return gq,
+                    other => return other,
                 }
             } else {
                 
-                return ExecResult::Amb(self.cpu.get(Reg::Je));
+                return ExecResult::Returned(self.cpu.get(Reg::X10));
             }
         }
     }
 
     
-    pub fn noi(&self) -> String {
-        let mut e = String::from("=== RISC-V IR CPU State ===\n");
-        for a in 0..32 {
-            let reg = Reg::ivy(a);
-            let ap = self.cpu.get(reg);
-            if ap != 0 {
-                e.t(&format!("  {:4} (x{:2}) = 0x{:016X} ({})\n",
-                    reg.kj(), a, ap, ap as i64));
+    pub fn dump_state(&self) -> String {
+        let mut j = String::from("=== RISC-V IR CPU State ===\n");
+        for i in 0..32 {
+            let reg = Reg::enm(i);
+            let val = self.cpu.get(reg);
+            if val != 0 {
+                j.push_str(&format!("  {:4} (x{:2}) = 0x{:016X} ({})\n",
+                    reg.abi_name(), i, val, val as i64));
             }
         }
-        e.t(&format!("  pc = 0x{:016X}\n", self.cpu.fz));
-        e.t(&format!("  instructions executed: {}\n", self.cpu.flq));
-        e
+        j.push_str(&format!("  pc = 0x{:016X}\n", self.cpu.pc));
+        j.push_str(&format!("  instructions executed: {}\n", self.cpu.inst_count));
+        j
     }
 }

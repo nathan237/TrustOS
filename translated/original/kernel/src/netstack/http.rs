@@ -185,11 +185,10 @@ fn request_inner(method: &str, url: &str, content_type: Option<&str>, body: Opti
 /// Check if response contains end marker (for chunked or content-length based)
 fn contains_end_marker(data: &[u8]) -> bool {
     // Find header end
-    let header_end = find_header_end(data);
-    if header_end.is_none() {
-        return false;
-    }
-    let header_end = header_end.unwrap();
+    let header_end = match find_header_end(data) {
+        Some(v) => v,
+        None => return false,
+    };
     
     // Check Content-Length
     if let Some(cl) = find_content_length(data, header_end) {

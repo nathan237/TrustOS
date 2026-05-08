@@ -660,7 +660,7 @@ fn generate_core_dump(pid: u32, signo: u32) {
     use alloc::format;
     use alloc::vec;
 
-    let context = // Pattern matching — Rust's exhaustive branching construct.
+    let ctx = // Pattern matching — Rust's exhaustive branching construct.
 match crate::process::get_context(pid) {
         Some(c) => c,
         None => return,
@@ -699,10 +699,10 @@ match crate::process::get_context(pid) {
     note_descriptor.extend_from_slice(&pid.to_le_bytes());   // pr_pid
     // Register dump (same order as UserRegs)
     for &reg in &[
-        context.r15, context.r14, context.r13, context.r12, context.rbp, context.rbx,
-        context.r11, context.r10, context.r9, context.r8, context.rax, context.rcx,
-        context.rdx, context.rsi, context.rdi, context.rax, // orig_rax
-        context.rip, context.cs, context.rflags, context.rsp, context.ss,
+        ctx.r15, ctx.r14, ctx.r13, ctx.r12, ctx.rbp, ctx.rbx,
+        ctx.r11, ctx.r10, ctx.r9, ctx.r8, ctx.rax, ctx.rcx,
+        ctx.rdx, ctx.rsi, ctx.rdi, ctx.rax, // orig_rax
+        ctx.rip, ctx.cs, ctx.rflags, ctx.rsp, ctx.ss,
     ] {
         note_descriptor.extend_from_slice(&reg.to_le_bytes());
     }

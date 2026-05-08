@@ -71,7 +71,7 @@ pub struct Block {
 pub enum Stmt {
     Let { name: String, mutable: bool, ty: Option<Type>, init: Option<Expr> },
     Assign { target: Expr, value: Expr },
-    OperationAssign { op: BinOp, target: Expr, value: Expr },
+    OpAssign { op: BinOp, target: Expr, value: Expr },
     Expr(Expr),
     Return(Option<Expr>),
     If { condition: Expr, then_block: Block, else_block: Option<Block> },
@@ -121,31 +121,31 @@ pub enum UnaryOp { Neg, Not }
 
 struct Parser {
     tokens: Vec<Token>,
-    position: usize,
+    pos: usize,
 }
 
 // Implementation block — defines methods for the type above.
 impl Parser {
     fn new(tokens: Vec<Token>) -> Self {
-        Self { tokens, position: 0 }
+        Self { tokens, pos: 0 }
     }
 
     fn peek(&self) -> &TokenKind {
-        &self.tokens.get(self.position).map(|t| &t.kind).unwrap_or(&TokenKind::Eof)
+        &self.tokens.get(self.pos).map(|t| &t.kind).unwrap_or(&TokenKind::Eof)
     }
 
     fn advance(&mut self) -> &Token {
-        let token = &self.tokens[self.position];
-        if self.position < self.tokens.len() - 1 { self.position += 1; }
-        token
+        let tok = &self.tokens[self.pos];
+        if self.pos < self.tokens.len() - 1 { self.pos += 1; }
+        tok
     }
 
     fn expect(&mut self, expected: &TokenKind) -> Result<&Token, String> {
         if core::mem::discriminant(self.peek()) == core::mem::discriminant(expected) {
             Ok(self.advance())
         } else {
-            let token = &self.tokens[self.position];
-            Err(format!("L{}:{}: expected {:?}, got {:?}", token.line, token.column, expected, token.kind))
+            let tok = &self.tokens[self.pos];
+            Err(format!("L{}:{}: expected {:?}, got {:?}", tok.line, tok.col, expected, tok.kind))
         }
     }
 
@@ -153,9 +153,9 @@ impl Parser {
         core::mem::discriminant(self.peek()) == core::mem::discriminant(kind)
     }
 
-    fn line_column(&self) -> (usize, usize) {
-        let t = &self.tokens[self.position.minimum(self.tokens.len() - 1)];
-        (t.line, t.column)
+    fn line_col(&self) -> (usize, usize) {
+        let t = &self.tokens[self.pos.min(self.tokens.len() - 1)];
+        (t.line, t.col)
     }
 
     // ─── Top-level ──────────────────────────────────────────────────
@@ -174,7 +174,7 @@ match self.peek() {
             TokenKind::Fn => Ok(Item::Function(self.parse_fn()?)),
             TokenKind::Struct => Ok(Item::Struct(self.parse_struct()?)),
             _ => {
-                let (l, c) = self.line_column();
+                let (l, c) = self.line_col();
                 Err(format!("L{}:{}: expected 'fn' or 'struct', got {:?}", l, c, self.peek()))
             }
         }
@@ -245,7 +245,7 @@ match self.peek().clone() {
                 Ok(Type::Named(n))
             }
             _ => {
-                let (l, c) = self.line_column();
+                let (l, c) = self.line_col();
                 Err(format!("L{}:{}: expected type, got {:?}", l, c, self.peek()))
             }
         }
@@ -257,7 +257,7 @@ match self.peek().clone() {
             self.advance();
             Ok(n)
         } else {
-            let (l, c) = self.line_column();
+            let (l, c) = self.line_col();
             Err(format!("L{}:{}: expected identifier, got {:?}", l, c, self.peek()))
         }
     }
@@ -295,10 +295,10 @@ match self.peek() {
                         self.eat_semi();
                         Ok(Stmt::Assign { target: expr, value })
                     }
-                    TokenKind::PlusEq => { self.advance(); let v = self.parse_expr()?; self.eat_semi(); Ok(Stmt::OperationAssign { op: BinOp::Add, target: expr, value: v }) }
-                    TokenKind::MinusEq => { self.advance(); let v = self.parse_expr()?; self.eat_semi(); Ok(Stmt::OperationAssign { op: BinOp::Sub, target: expr, value: v }) }
-                    TokenKind::StarEq => { self.advance(); let v = self.parse_expr()?; self.eat_semi(); Ok(Stmt::OperationAssign { op: BinOp::Mul, target: expr, value: v }) }
-                    TokenKind::SlashEq => { self.advance(); let v = self.parse_expr()?; self.eat_semi(); Ok(Stmt::OperationAssign { op: BinOp::Div, target: expr, value: v }) }
+                    TokenKind::PlusEq => { self.advance(); let v = self.parse_expr()?; self.eat_semi(); Ok(Stmt::OpAssign { op: BinOp::Add, target: expr, value: v }) }
+                    TokenKind::MinusEq => { self.advance(); let v = self.parse_expr()?; self.eat_semi(); Ok(Stmt::OpAssign { op: BinOp::Sub, target: expr, value: v }) }
+                    TokenKind::StarEq => { self.advance(); let v = self.parse_expr()?; self.eat_semi(); Ok(Stmt::OpAssign { op: BinOp::Mul, target: expr, value: v }) }
+                    TokenKind::SlashEq => { self.advance(); let v = self.parse_expr()?; self.eat_semi(); Ok(Stmt::OpAssign { op: BinOp::Div, target: expr, value: v }) }
                     _ => {
                         self.eat_semi();
                         Ok(Stmt::Expr(expr))
@@ -330,13 +330,13 @@ match self.peek() {
 
     fn parse_return(&mut self) -> Result<Stmt, String> {
         self.expect(&TokenKind::Return)?;
-        let value = if self.at(&TokenKind::Semicolon) || self.at(&TokenKind::RBrace) {
+        let val = if self.at(&TokenKind::Semicolon) || self.at(&TokenKind::RBrace) {
             None
         } else {
             Some(self.parse_expr()?)
         };
         self.eat_semi();
-        Ok(Stmt::Return(value))
+        Ok(Stmt::Return(val))
     }
 
     fn parse_if(&mut self) -> Result<Stmt, String> {
@@ -539,10 +539,10 @@ match self.peek() {
     fn parse_primary(&mut self) -> Result<Expr, String> {
                 // Pattern matching — Rust's exhaustive branching construct.
 match self.peek().clone() {
-            TokenKind::IntLit(v) => { let value = v; self.advance(); Ok(Expr::IntLit(value)) }
-            TokenKind::FloatLit(v) => { let value = v; self.advance(); Ok(Expr::FloatLit(value)) }
-            TokenKind::StringLit(s) => { let value = s.clone(); self.advance(); Ok(Expr::StringLit(value)) }
-            TokenKind::BoolLit(b) => { let value = b; self.advance(); Ok(Expr::BoolLit(value)) }
+            TokenKind::IntLit(v) => { let val = v; self.advance(); Ok(Expr::IntLit(val)) }
+            TokenKind::FloatLit(v) => { let val = v; self.advance(); Ok(Expr::FloatLit(val)) }
+            TokenKind::StringLit(s) => { let val = s.clone(); self.advance(); Ok(Expr::StringLit(val)) }
+            TokenKind::BoolLit(b) => { let val = b; self.advance(); Ok(Expr::BoolLit(val)) }
             TokenKind::Ident(name) => {
                 let n = name.clone();
                 self.advance();
@@ -595,7 +595,7 @@ match stmt {
                 }
             }
             _ => {
-                let (l, c) = self.line_column();
+                let (l, c) = self.line_col();
                 Err(format!("L{}:{}: unexpected token {:?}", l, c, self.peek()))
             }
         }

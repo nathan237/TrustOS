@@ -13,31 +13,31 @@ use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use crate::memory::AddressSpace;
 
 
-pub type Ah = u32;
+pub type X = u32;
 
 
-pub const IT_: Ah = 0;
-pub const IS_: Ah = 1;
+pub const JL_: X = 0;
+pub const JK_: X = 1;
 
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ProcessState {
     
-    Cu,
+    Created,
     
-    At,
+    Ready,
     
-    Ai,
+    Running,
     
-    Hj,
+    Blocked,
     
-    Bwo,
+    Waiting,
     
-    Af,
+    Stopped,
     
-    Vf,
+    Zombie,
     
-    Ez,
+    Dead,
 }
 
 
@@ -45,30 +45,30 @@ pub enum ProcessState {
 pub struct ProcessFlags(pub u32);
 
 impl ProcessFlags {
-    pub const Cq: u32 = 0;
-    pub const Ps: u32 = 1 << 0;      
-    pub const Cad: u32 = 1 << 1;      
-    pub const Dm: u32 = 1 << 2;        
+    pub const Bc: u32 = 0;
+    pub const Go: u32 = 1 << 0;      
+    pub const Aie: u32 = 1 << 1;      
+    pub const Bm: u32 = 1 << 2;        
 }
 
 
 #[derive(Clone, Debug)]
-pub struct Wp {
-    pub gwc: i32,    
+pub struct Ju {
+    pub vfs_fd: i32,    
     pub flags: u32,     
 }
 
 
 #[derive(Clone, Debug, Default)]
 pub struct MemoryLayout {
-    pub dez: u64,
-    pub kjr: u64,
-    pub bjt: u64,
-    pub njm: u64,
-    pub caa: u64,
-    pub ecv: u64,
-    pub ibo: u64,
-    pub ibm: u64,
+    pub code_start: u64,
+    pub code_end: u64,
+    pub data_start: u64,
+    pub data_end: u64,
+    pub heap_start: u64,
+    pub heap_end: u64,
+    pub stack_start: u64,
+    pub stack_end: u64,
 }
 
 
@@ -93,211 +93,211 @@ pub struct CpuContext {
     pub r14: u64,
     pub r15: u64,
     
-    pub pc: u64,
+    pub rip: u64,
     
     pub rflags: u64,
     
-    pub aap: u64,
-    pub rv: u64,
+    pub cs: u64,
+    pub ss: u64,
 }
 
 
 #[derive(Clone)]
 pub struct Process {
     
-    pub ce: Ah,
+    pub pid: X,
     
-    pub bfb: Ah,
+    pub ppid: X,
     
-    pub j: String,
+    pub name: String,
     
-    pub g: ProcessState,
+    pub state: ProcessState,
     
     pub flags: ProcessFlags,
     
-    pub nz: i32,
+    pub exit_code: i32,
     
     pub context: CpuContext,
     
     pub memory: MemoryLayout,
     
-    pub buf: BTreeMap<i32, Wp>,
+    pub fd_table: BTreeMap<i32, Ju>,
     
-    bca: i32,
+    next_fd: i32,
     
-    pub jv: String,
+    pub cwd: String,
     
     pub env: BTreeMap<String, String>,
     
-    pub cdu: u64,
+    pub cpu_time: u64,
     
-    pub zf: Vec<Ah>,
+    pub children: Vec<X>,
     
-    pub jm: u64,
+    pub cr3: u64,
     
-    pub ze: Option<Arc<Mutex<AddressSpace>>>,
+    pub address_space: Option<Arc<Mutex<AddressSpace>>>,
     
-    pub bai: u32,
+    pub pgid: u32,
     
-    pub ary: u32,
+    pub sid: u32,
     
-    pub ffs: Option<u32>,
+    pub controlling_tty: Option<u32>,
     
-    pub grb: String,
+    pub root_dir: String,
     
-    pub pi: u32,
+    pub uid: u32,
     
-    pub pw: u32,
+    pub gid: u32,
     
-    pub ahl: u32,
+    pub euid: u32,
     
-    pub bqj: u32,
+    pub egid: u32,
     
-    pub gvl: u32,
+    pub umask: u32,
 }
 
 impl Process {
     
-    pub fn new(ce: Ah, bfb: Ah, j: &str, flags: ProcessFlags) -> Self {
-        let mut buf = BTreeMap::new();
+    pub fn new(pid: X, ppid: X, name: &str, flags: ProcessFlags) -> Self {
+        let mut fd_table = BTreeMap::new();
         
         
         
-        buf.insert(0, Wp { gwc: 0, flags: 0 });
-        buf.insert(1, Wp { gwc: 1, flags: 0 });
-        buf.insert(2, Wp { gwc: 2, flags: 0 });
+        fd_table.insert(0, Ju { vfs_fd: 0, flags: 0 });
+        fd_table.insert(1, Ju { vfs_fd: 1, flags: 0 });
+        fd_table.insert(2, Ju { vfs_fd: 2, flags: 0 });
         
         
-        let (ze, jm) = if flags.0 & ProcessFlags::Ps != 0 {
+        let (address_space, cr3) = if flags.0 & ProcessFlags::Go != 0 {
             
-            (None, crate::memory::paging::ade())
+            (None, crate::memory::paging::kernel_cr3())
         } else {
             
-            match AddressSpace::dtn() {
-                Some(atm) => {
-                    let jm = atm.jm();
-                    (Some(Arc::new(Mutex::new(atm))), jm)
+            match AddressSpace::bnt() {
+                Some(space) => {
+                    let cr3 = space.cr3();
+                    (Some(Arc::new(Mutex::new(space))), cr3)
                 }
                 None => {
                     
-                    (None, crate::memory::paging::ade())
+                    (None, crate::memory::paging::kernel_cr3())
                 }
             }
         };
         
         Self {
-            ce,
-            bfb,
-            j: String::from(j),
-            g: ProcessState::Cu,
+            pid,
+            ppid,
+            name: String::from(name),
+            state: ProcessState::Created,
             flags,
-            nz: 0,
+            exit_code: 0,
             context: CpuContext::default(),
             memory: MemoryLayout::default(),
-            buf,
-            bca: 3,
-            jv: String::from("/"),
+            fd_table,
+            next_fd: 3,
+            cwd: String::from("/"),
             env: BTreeMap::new(),
-            cdu: 0,
-            zf: Vec::new(),
-            jm,
-            ze,
-            bai: ce,
-            ary: ce,
-            ffs: None,
-            grb: String::from("/"),
-            pi: crate::auth::kne(),
-            pw: crate::auth::kmu(),
-            ahl: crate::auth::kne(),
-            bqj: crate::auth::kmu(),
-            gvl: 0o022,
+            cpu_time: 0,
+            children: Vec::new(),
+            cr3,
+            address_space,
+            pgid: pid,
+            sid: pid,
+            controlling_tty: None,
+            root_dir: String::from("/"),
+            uid: crate::auth::fpz(),
+            gid: crate::auth::fpp(),
+            euid: crate::auth::fpz(),
+            egid: crate::auth::fpp(),
+            umask: 0o022,
         }
     }
     
     
-    pub fn jzz(&mut self, gwc: i32) -> i32 {
-        let da = self.bca;
-        self.bca += 1;
-        self.buf.insert(da, Wp { gwc, flags: 0 });
-        da
+    pub fn alloc_fd(&mut self, vfs_fd: i32) -> i32 {
+        let fd = self.next_fd;
+        self.next_fd += 1;
+        self.fd_table.insert(fd, Ju { vfs_fd, flags: 0 });
+        fd
     }
     
     
-    pub fn yiu(&mut self, da: i32) -> Option<Wp> {
-        self.buf.remove(&da)
+    pub fn qaf(&mut self, fd: i32) -> Option<Ju> {
+        self.fd_table.remove(&fd)
     }
     
     
-    pub fn yug(&self, da: i32) -> Option<i32> {
-        self.buf.get(&da).map(|aa| aa.gwc)
+    pub fn qiw(&self, fd: i32) -> Option<i32> {
+        self.fd_table.get(&fd).map(|e| e.vfs_fd)
     }
     
     
-    pub fn znv(&mut self, bs: &str, bn: &str) {
-        self.env.insert(String::from(bs), String::from(bn));
+    pub fn qwr(&mut self, key: &str, value: &str) {
+        self.env.insert(String::from(key), String::from(value));
     }
     
     
-    pub fn yul(&self, bs: &str) -> Option<&str> {
-        self.env.get(bs).map(|e| e.as_str())
+    pub fn qjb(&self, key: &str) -> Option<&str> {
+        self.env.get(key).map(|j| j.as_str())
     }
     
     
-    pub fn ksb(&mut self, bns: i32) -> Result<i32, &'static str> {
-        let bt = self.buf.get(&bns).ok_or("Bad fd")?.clone();
-        let anp = self.bca;
-        self.bca += 1;
-        self.buf.insert(anp, bt);
-        Ok(anp)
+    pub fn ftn(&mut self, old_fd: i32) -> Result<i32, &'static str> {
+        let entry = self.fd_table.get(&old_fd).ok_or("Bad fd")?.clone();
+        let ue = self.next_fd;
+        self.next_fd += 1;
+        self.fd_table.insert(ue, entry);
+        Ok(ue)
     }
     
     
-    pub fn noj(&mut self, bns: i32, anp: i32) -> Result<i32, &'static str> {
-        if bns == anp { return Ok(anp); }
-        let bt = self.buf.get(&bns).ok_or("Bad fd")?.clone();
-        self.buf.remove(&anp);
-        self.buf.insert(anp, bt);
-        Ok(anp)
+    pub fn hui(&mut self, old_fd: i32, ue: i32) -> Result<i32, &'static str> {
+        if old_fd == ue { return Ok(ue); }
+        let entry = self.fd_table.get(&old_fd).ok_or("Bad fd")?.clone();
+        self.fd_table.remove(&ue);
+        self.fd_table.insert(ue, entry);
+        Ok(ue)
     }
 }
 
 
 pub struct ProcessTable {
-    pub ye: BTreeMap<Ah, Process>,
-    oqm: AtomicU32,
+    pub processes: BTreeMap<X, Process>,
+    next_pid: AtomicU32,
 }
 
 impl ProcessTable {
     const fn new() -> Self {
         Self {
-            ye: BTreeMap::new(),
-            oqm: AtomicU32::new(IS_),
+            processes: BTreeMap::new(),
+            next_pid: AtomicU32::new(JK_),
         }
     }
     
-    fn muz(&self) -> Ah {
-        self.oqm.fetch_add(1, Ordering::SeqCst)
+    fn alloc_pid(&self) -> X {
+        self.next_pid.fetch_add(1, Ordering::SeqCst)
     }
 }
 
-pub static AD_: RwLock<ProcessTable> = RwLock::new(ProcessTable::new());
-static APR_: AtomicU32 = AtomicU32::new(IT_);
+pub static AE_: RwLock<ProcessTable> = RwLock::new(ProcessTable::new());
+static ART_: AtomicU32 = AtomicU32::new(JL_);
 
 
 pub fn init() {
     crate::log!("[PROC] Initializing process manager...");
     
     
-    let ubb = Process::new(
-        IT_,
-        IT_,
+    let mvm = Process::new(
+        JL_,
+        JL_,
         "kernel",
-        ProcessFlags(ProcessFlags::Ps)
+        ProcessFlags(ProcessFlags::Go)
     );
     
     {
-        let mut gg = AD_.write();
-        gg.ye.insert(IT_, ubb);
+        let mut bs = AE_.write();
+        bs.processes.insert(JL_, mvm);
     }
     
     crate::log_debug!("[PROC] Kernel process created (PID 0)");
@@ -305,28 +305,28 @@ pub fn init() {
 }
 
 
-pub fn avp(j: &str, bfb: Ah) -> Result<Ah, &'static str> {
-    let mut gg = AD_.write();
+pub fn create(name: &str, ppid: X) -> Result<X, &'static str> {
+    let mut bs = AE_.write();
     
-    let ce = gg.muz();
-    let mut uf = Process::new(ce, bfb, j, ProcessFlags(ProcessFlags::Cq));
+    let pid = bs.alloc_pid();
+    let mut jj = Process::new(pid, ppid, name, ProcessFlags(ProcessFlags::Bc));
     
     
-    if let Some(tu) = gg.ye.get(&bfb) {
-        uf.jv = tu.jv.clone();
-        uf.env = tu.env.clone();
+    if let Some(parent) = bs.processes.get(&ppid) {
+        jj.cwd = parent.cwd.clone();
+        jj.env = parent.env.clone();
     }
     
     
-    if let Some(tu) = gg.ye.ds(&bfb) {
-        tu.zf.push(ce);
+    if let Some(parent) = bs.processes.get_mut(&ppid) {
+        parent.children.push(pid);
     }
     
-    uf.g = ProcessState::At;
-    gg.ye.insert(ce, uf);
+    jj.state = ProcessState::Ready;
+    bs.processes.insert(pid, jj);
     
-    crate::log_debug!("[PROC] Created process {} ({})", ce, j);
-    Ok(ce)
+    crate::log_debug!("[PROC] Created process {} ({})", pid, name);
+    Ok(pid)
 }
 
 
@@ -334,171 +334,171 @@ pub fn avp(j: &str, bfb: Ah) -> Result<Ah, &'static str> {
 
 
 
-pub fn svr() -> Result<Ah, &'static str> {
-    let cv = aei();
+pub fn lxk() -> Result<X, &'static str> {
+    let current = pe();
     
     
-    let (j, jv, env, buf, bca, huf, memory, pi, pw, ahl, bqj, gvl, bai, ary, ffs, grb) = {
-        let gg = AD_.read();
-        let tu = gg.ye.get(&cv)
+    let (name, cwd, env, fd_table, next_fd, parent_cr3, memory, uid, gid, euid, egid, umask, pgid, sid, controlling_tty, root_dir) = {
+        let bs = AE_.read();
+        let parent = bs.processes.get(&current)
             .ok_or("Current process not found")?;
         (
-            tu.j.clone(),
-            tu.jv.clone(),
-            tu.env.clone(),
-            tu.buf.clone(),
-            tu.bca,
-            tu.jm,
-            tu.memory.clone(),
-            tu.pi,
-            tu.pw,
-            tu.ahl,
-            tu.bqj,
-            tu.gvl,
-            tu.bai,
-            tu.ary,
-            tu.ffs,
-            tu.grb.clone(),
+            parent.name.clone(),
+            parent.cwd.clone(),
+            parent.env.clone(),
+            parent.fd_table.clone(),
+            parent.next_fd,
+            parent.cr3,
+            parent.memory.clone(),
+            parent.uid,
+            parent.gid,
+            parent.euid,
+            parent.egid,
+            parent.umask,
+            parent.pgid,
+            parent.sid,
+            parent.controlling_tty,
+            parent.root_dir.clone(),
         )
     };
     
     
-    let ade = crate::memory::paging::ade();
-    let (ze, jm) = if huf != ade {
-        match crate::memory::cow::rbt(huf) {
-            Some(atm) => {
-                let r = atm.jm();
-                (Some(Arc::new(Mutex::new(atm))), r)
+    let kernel_cr3 = crate::memory::paging::kernel_cr3();
+    let (address_space, cr3) = if parent_cr3 != kernel_cr3 {
+        match crate::memory::cow::klf(parent_cr3) {
+            Some(space) => {
+                let c = space.cr3();
+                (Some(Arc::new(Mutex::new(space))), c)
             }
             None => {
                 
-                match AddressSpace::dtn() {
-                    Some(atm) => {
-                        let r = atm.jm();
-                        (Some(Arc::new(Mutex::new(atm))), r)
+                match AddressSpace::bnt() {
+                    Some(space) => {
+                        let c = space.cr3();
+                        (Some(Arc::new(Mutex::new(space))), c)
                     }
-                    None => (None, ade)
+                    None => (None, kernel_cr3)
                 }
             }
         }
     } else {
-        (None, ade)
+        (None, kernel_cr3)
     };
     
     
-    let mut gg = AD_.write();
-    let ce = gg.muz();
+    let mut bs = AE_.write();
+    let pid = bs.alloc_pid();
     
-    let aeh = Process {
-        ce,
-        bfb: cv,
-        j,
-        g: ProcessState::At,
-        flags: ProcessFlags(ProcessFlags::Cq),
-        nz: 0,
+    let pd = Process {
+        pid,
+        ppid: current,
+        name,
+        state: ProcessState::Ready,
+        flags: ProcessFlags(ProcessFlags::Bc),
+        exit_code: 0,
         context: CpuContext::default(),
         memory,
-        buf,   
-        bca,
-        jv,
+        fd_table,   
+        next_fd,
+        cwd,
         env,
-        cdu: 0,
-        zf: Vec::new(),
-        jm,
-        ze,
-        bai,       
-        ary,        
-        ffs,
-        grb,
-        pi,
-        pw,
-        ahl,
-        bqj,
-        gvl,
+        cpu_time: 0,
+        children: Vec::new(),
+        cr3,
+        address_space,
+        pgid,       
+        sid,        
+        controlling_tty,
+        root_dir,
+        uid,
+        gid,
+        euid,
+        egid,
+        umask,
     };
     
-    if let Some(tu) = gg.ye.ds(&cv) {
-        tu.zf.push(ce);
+    if let Some(parent) = bs.processes.get_mut(&current) {
+        parent.children.push(pid);
     }
-    gg.ye.insert(ce, aeh);
+    bs.processes.insert(pid, pd);
     
     
-    crate::signals::lef(ce);
+    crate::signals::gcp(pid);
     
-    crate::log_debug!("[PROC] COW-fork: {} -> {}", cv, ce);
-    Ok(ce)
+    crate::log_debug!("[PROC] COW-fork: {} -> {}", current, pid);
+    Ok(pid)
 }
 
 
-pub fn cxn(aj: i32) {
-    let cv = aei();
-    let mut gg = AD_.write();
+pub fn exit(code: i32) {
+    let current = pe();
+    let mut bs = AE_.write();
     
-    if let Some(uf) = gg.ye.ds(&cv) {
-        uf.g = ProcessState::Vf;
-        uf.nz = aj;
+    if let Some(jj) = bs.processes.get_mut(&current) {
+        jj.state = ProcessState::Zombie;
+        jj.exit_code = code;
         
         
-        let zf: Vec<Ah> = uf.zf.bbk(..).collect();
-        for inl in zf {
-            if let Some(aeh) = gg.ye.ds(&inl) {
-                aeh.bfb = IS_;
+        let children: Vec<X> = jj.children.drain(..).collect();
+        for child_pid in children {
+            if let Some(pd) = bs.processes.get_mut(&child_pid) {
+                pd.ppid = JK_;
             }
-            if let Some(init) = gg.ye.ds(&IS_) {
-                init.zf.push(inl);
+            if let Some(init) = bs.processes.get_mut(&JK_) {
+                init.children.push(child_pid);
             }
         }
         
-        crate::log_debug!("[PROC] Process {} exited with code {}", cv, aj);
+        crate::log_debug!("[PROC] Process {} exited with code {}", current, code);
     }
 }
 
 
-pub fn ccm(ce: Ah) -> Result<i32, &'static str> {
-    let mut gg = AD_.write();
+pub fn bqb(pid: X) -> Result<i32, &'static str> {
+    let mut bs = AE_.write();
     
-    let uf = gg.ye.get(&ce).ok_or("Process not found")?;
+    let jj = bs.processes.get(&pid).ok_or("Process not found")?;
     
-    if uf.g != ProcessState::Vf {
+    if jj.state != ProcessState::Zombie {
         return Err("Process not yet exited");
     }
     
-    let nz = uf.nz;
+    let exit_code = jj.exit_code;
     
     
-    gg.ye.remove(&ce);
+    bs.processes.remove(&pid);
     
-    Ok(nz)
+    Ok(exit_code)
 }
 
 
-pub fn aei() -> Ah {
-    APR_.load(Ordering::Relaxed)
+pub fn pe() -> X {
+    ART_.load(Ordering::Relaxed)
 }
 
 
-pub fn jos(ce: Ah) {
-    APR_.store(ce, Ordering::SeqCst);
+pub fn faf(pid: X) {
+    ART_.store(pid, Ordering::SeqCst);
 }
 
 
-pub fn dfk() -> (u32, u32, u32, u32) {
-    let gg = AD_.read();
-    if let Some(ai) = gg.ye.get(&aei()) {
-        (ai.pi, ai.pw, ai.ahl, ai.bqj)
+pub fn bfs() -> (u32, u32, u32, u32) {
+    let bs = AE_.read();
+    if let Some(aa) = bs.processes.get(&pe()) {
+        (aa.uid, aa.gid, aa.euid, aa.egid)
     } else {
         (0, 0, 0, 0) 
     }
 }
 
 
-pub fn pji(ce: Ah, pi: u32) -> Result<(), &'static str> {
-    let mut gg = AD_.write();
-    let uf = gg.ye.ds(&ce).ok_or("No such process")?;
+pub fn jfm(pid: X, uid: u32) -> Result<(), &'static str> {
+    let mut bs = AE_.write();
+    let jj = bs.processes.get_mut(&pid).ok_or("No such process")?;
     
-    if uf.ahl == 0 || pi == uf.pi {
-        uf.pi = pi;
-        uf.ahl = pi;
+    if jj.euid == 0 || uid == jj.uid {
+        jj.uid = uid;
+        jj.euid = uid;
         Ok(())
     } else {
         Err("EPERM")
@@ -506,12 +506,12 @@ pub fn pji(ce: Ah, pi: u32) -> Result<(), &'static str> {
 }
 
 
-pub fn pja(ce: Ah, pw: u32) -> Result<(), &'static str> {
-    let mut gg = AD_.write();
-    let uf = gg.ye.ds(&ce).ok_or("No such process")?;
-    if uf.ahl == 0 || pw == uf.pw {
-        uf.pw = pw;
-        uf.bqj = pw;
+pub fn jff(pid: X, gid: u32) -> Result<(), &'static str> {
+    let mut bs = AE_.write();
+    let jj = bs.processes.get_mut(&pid).ok_or("No such process")?;
+    if jj.euid == 0 || gid == jj.gid {
+        jj.gid = gid;
+        jj.egid = gid;
         Ok(())
     } else {
         Err("EPERM")
@@ -519,81 +519,81 @@ pub fn pja(ce: Ah, pw: u32) -> Result<(), &'static str> {
 }
 
 
-pub fn wjx(ce: Ah, hs: u32) -> u32 {
-    let mut gg = AD_.write();
-    if let Some(uf) = gg.ye.ds(&ce) {
-        let aft = uf.gvl;
-        uf.gvl = hs & 0o777;
-        aft
+pub fn opt(pid: X, mask: u32) -> u32 {
+    let mut bs = AE_.write();
+    if let Some(jj) = bs.processes.get_mut(&pid) {
+        let qb = jj.umask;
+        jj.umask = mask & 0o777;
+        qb
     } else {
         0o022
     }
 }
 
 
-pub fn get(ce: Ah) -> Option<Process> {
-    AD_.read().ye.get(&ce).abn()
+pub fn get(pid: X) -> Option<Process> {
+    AE_.read().processes.get(&pid).cloned()
 }
 
 
-pub fn cv() -> Option<Process> {
-    get(aei())
+pub fn current() -> Option<Process> {
+    get(pe())
 }
 
 
 
 
 #[inline]
-pub fn ela<Ac, G: FnOnce(&Process) -> Ac>(ce: Ah, bb: G) -> Option<Ac> {
-    let gg = AD_.read();
-    gg.ye.get(&ce).map(bb)
+pub fn bwz<U, F: FnOnce(&Process) -> U>(pid: X, f: F) -> Option<U> {
+    let bs = AE_.read();
+    bs.processes.get(&pid).map(f)
 }
 
 
 #[inline]
-pub fn xuv<Ac, G: FnOnce(&Process) -> Ac>(bb: G) -> Option<Ac> {
-    ela(aei(), bb)
+pub fn pux<U, F: FnOnce(&Process) -> U>(f: F) -> Option<U> {
+    bwz(pe(), f)
 }
 
 
-pub fn dsi(ce: Ah) -> bool {
-    AD_.read().ye.get(&ce)
-        .map(|ai| ai.g == ProcessState::Ai)
+pub fn is_running(pid: X) -> bool {
+    AE_.read().processes.get(&pid)
+        .map(|aa| aa.state == ProcessState::Running)
         .unwrap_or(false)
 }
 
 
-pub fn cbr(ce: Ah, g: ProcessState) {
-    if let Some(uf) = AD_.write().ye.ds(&ce) {
-        uf.g = g;
+pub fn apc(pid: X, state: ProcessState) {
+    if let Some(jj) = AE_.write().processes.get_mut(&pid) {
+        jj.state = state;
     }
 }
 
 
-pub fn aoy() -> Vec<(Ah, String, ProcessState)> {
-    AD_.read()
-        .ye
+pub fn list() -> Vec<(X, String, ProcessState)> {
+    AE_.read()
+        .processes
         .iter()
-        .map(|(ce, uf)| (*ce, uf.j.clone(), uf.g))
+        .map(|(pid, jj)| (*pid, jj.name.clone(), jj.state))
         .collect()
 }
 
 
-pub fn az() -> usize {
-    AD_.read().ye.len()
+pub fn count() -> usize {
+    AE_.read().processes.len()
 }
 
 
-pub fn dsm(ce: Ah) -> Result<(), &'static str> {
-    if ce == IT_ || ce == IS_ {
+pub fn bne(pid: X) -> Result<(), &'static str> {
+    if pid == JL_ || pid == JK_ {
         return Err("Cannot kill kernel or init");
     }
     
-    let mut gg = AD_.write();
+    let mut bs = AE_.write();
     
-    if let Some(uf) = gg.ye.ds(&ce) {
-        uf.g = ProcessState::Ez;
-        crate::log_debug!("[PROC] Process {} killed", ce);
+    if let Some(jj) = bs.processes.get_mut(&pid) {
+        jj.state = ProcessState::Dead;
+        crate::log_debug!("[PROC] Process {} killed", pid);
         Ok(())
     } else {
         Err("Process not found")
@@ -603,124 +603,124 @@ pub fn dsm(ce: Ah) -> Result<(), &'static str> {
 
 
 
-pub fn eys(j: &str) -> Result<Ah, &'static str> {
-    let bfb = aei();
-    let ce = avp(j, bfb)?;
+pub fn spawn(name: &str) -> Result<X, &'static str> {
+    let ppid = pe();
+    let pid = create(name, ppid)?;
     
     
-    crate::signals::lef(ce);
+    crate::signals::gcp(pid);
     
-    crate::log!("[PROC] Spawned process {} ({}) under parent {}", ce, j, bfb);
-    Ok(ce)
+    crate::log!("[PROC] Spawned process {} ({}) under parent {}", pid, name, ppid);
+    Ok(pid)
 }
 
 
-pub fn mhj(ce: Ah) {
-    cbr(ce, ProcessState::Ai);
-    jos(ce);
+pub fn gwd(pid: X) {
+    apc(pid, ProcessState::Running);
+    faf(pid);
 }
 
 
-pub fn eqi(ce: Ah, nz: i32) {
-    let mut gg = AD_.write();
-    if let Some(uf) = gg.ye.ds(&ce) {
-        uf.g = ProcessState::Vf;
-        uf.nz = nz;
-        crate::log_debug!("[PROC] Process {} exited with code {}", ce, nz);
+pub fn finish(pid: X, exit_code: i32) {
+    let mut bs = AE_.write();
+    if let Some(jj) = bs.processes.get_mut(&pid) {
+        jj.state = ProcessState::Zombie;
+        jj.exit_code = exit_code;
+        crate::log_debug!("[PROC] Process {} exited with code {}", pid, exit_code);
     }
 }
 
 
-pub fn lyd(ce: Ah) {
-    let mut gg = AD_.write();
+pub fn gqo(pid: X) {
+    let mut bs = AE_.write();
     
     
-    if let Some(uf) = gg.ye.get(&ce) {
-        let zf: Vec<Ah> = uf.zf.clone();
-        for inl in zf {
-            if let Some(aeh) = gg.ye.ds(&inl) {
-                aeh.bfb = IT_;
+    if let Some(jj) = bs.processes.get(&pid) {
+        let children: Vec<X> = jj.children.clone();
+        for child_pid in children {
+            if let Some(pd) = bs.processes.get_mut(&child_pid) {
+                pd.ppid = JL_;
             }
         }
     }
     
-    gg.ye.remove(&ce);
+    bs.processes.remove(&pid);
     
     
-    crate::signals::khu(ce);
+    crate::signals::flu(pid);
     
-    crate::log_debug!("[PROC] Reaped process {}", ce);
+    crate::log_debug!("[PROC] Reaped process {}", pid);
 }
 
 
-pub fn wjf(ce: Ah, memory: MemoryLayout) {
-    if let Some(uf) = AD_.write().ye.ds(&ce) {
-        uf.memory = memory;
+pub fn opf(pid: X, memory: MemoryLayout) {
+    if let Some(jj) = AE_.write().processes.get_mut(&pid) {
+        jj.memory = memory;
     }
 }
 
 
-pub fn zgm() {
-    let gg = AD_.read();
+pub fn qrc() {
+    let bs = AE_.read();
     
-    fn oxu(gg: &ProcessTable, ce: Ah, eo: usize) {
-        if let Some(uf) = gg.ye.get(&ce) {
-            let crn: String = (0..eo).map(|_| "  ").collect();
-            crate::serial_println!("{}[{}] {} ({:?})", crn, ce, uf.j, uf.g);
-            for aeh in &uf.zf {
-                oxu(gg, *aeh, eo + 1);
+    fn iwo(bs: &ProcessTable, pid: X, depth: usize) {
+        if let Some(jj) = bs.processes.get(&pid) {
+            let axq: String = (0..depth).map(|_| "  ").collect();
+            crate::serial_println!("{}[{}] {} ({:?})", axq, pid, jj.name, jj.state);
+            for pd in &jj.children {
+                iwo(bs, *pd, depth + 1);
             }
         }
     }
     
     crate::serial_println!("Process tree:");
-    oxu(&gg, IT_, 0);
+    iwo(&bs, JL_, 0);
 }
 
 
-pub fn fwl(ce: Ah) {
-    let mut gg = AD_.write();
-    if let Some(uf) = gg.ye.ds(&ce) {
-        uf.g = ProcessState::Vf;
-        uf.nz = -9; 
+pub fn crk(pid: X) {
+    let mut bs = AE_.write();
+    if let Some(jj) = bs.processes.get_mut(&pid) {
+        jj.state = ProcessState::Zombie;
+        jj.exit_code = -9; 
     }
 }
 
 
-pub fn qg(ce: Ah) {
-    let mut gg = AD_.write();
-    if let Some(uf) = gg.ye.ds(&ce) {
-        uf.g = ProcessState::Af;
+pub fn stop(pid: X) {
+    let mut bs = AE_.write();
+    if let Some(jj) = bs.processes.get_mut(&pid) {
+        jj.state = ProcessState::Stopped;
     }
 }
 
 
-pub fn anu(ce: Ah) {
-    let mut gg = AD_.write();
-    if let Some(uf) = gg.ye.ds(&ce) {
-        if uf.g == ProcessState::Af {
-            uf.g = ProcessState::At;
+pub fn resume(pid: X) {
+    let mut bs = AE_.write();
+    if let Some(jj) = bs.processes.get_mut(&pid) {
+        if jj.state == ProcessState::Stopped {
+            jj.state = ProcessState::Ready;
         }
     }
 }
 
 
-pub fn lsc(ce: Ah) -> Option<Ah> {
-    let gg = AD_.read();
-    gg.ye.get(&ce).map(|ai| ai.bfb)
+pub fn gmc(pid: X) -> Option<X> {
+    let bs = AE_.read();
+    bs.processes.get(&pid).map(|aa| aa.ppid)
 }
 
 
-pub fn ghz(ce: Ah) -> Option<CpuContext> {
-    let gg = AD_.read();
-    gg.ye.get(&ce).map(|ai| ai.context.clone())
+pub fn cyj(pid: X) -> Option<CpuContext> {
+    let bs = AE_.read();
+    bs.processes.get(&pid).map(|aa| aa.context.clone())
 }
 
 
-pub fn meh(ce: Ah, be: &CpuContext) -> Result<(), &'static str> {
-    let mut gg = AD_.write();
-    if let Some(uf) = gg.ye.ds(&ce) {
-        uf.context = be.clone();
+pub fn gug(pid: X, ab: &CpuContext) -> Result<(), &'static str> {
+    let mut bs = AE_.write();
+    if let Some(jj) = bs.processes.get_mut(&pid) {
+        jj.context = ab.clone();
         Ok(())
     } else {
         Err("Process not found")
@@ -732,82 +732,82 @@ pub fn meh(ce: Ah, be: &CpuContext) -> Result<(), &'static str> {
 
 
 
-pub fn wjk(ce: Ah, bai: Ah) -> Result<(), &'static str> {
-    let mut gg = AD_.write();
-    let ejo = if ce == 0 { aei() } else { ce };
-    let utk = if bai == 0 { ejo } else { bai };
-    let uf = gg.ye.ds(&ejo).ok_or("No such process")?;
-    uf.bai = utk;
+pub fn oph(pid: X, pgid: X) -> Result<(), &'static str> {
+    let mut bs = AE_.write();
+    let bwg = if pid == 0 { pe() } else { pid };
+    let njl = if pgid == 0 { bwg } else { pgid };
+    let jj = bs.processes.get_mut(&bwg).ok_or("No such process")?;
+    jj.pgid = njl;
     Ok(())
 }
 
 
-pub fn nyi(ce: Ah) -> u32 {
-    let gg = AD_.read();
-    let cd = if ce == 0 { aei() } else { ce };
-    gg.ye.get(&cd).map(|ai| ai.bai).unwrap_or(0)
+pub fn ibs(pid: X) -> u32 {
+    let bs = AE_.read();
+    let target = if pid == 0 { pe() } else { pid };
+    bs.processes.get(&target).map(|aa| aa.pgid).unwrap_or(0)
 }
 
 
-pub fn nyo(ce: Ah) -> u32 {
-    let gg = AD_.read();
-    let cd = if ce == 0 { aei() } else { ce };
-    gg.ye.get(&cd).map(|ai| ai.ary).unwrap_or(0)
+pub fn ibv(pid: X) -> u32 {
+    let bs = AE_.read();
+    let target = if pid == 0 { pe() } else { pid };
+    bs.processes.get(&target).map(|aa| aa.sid).unwrap_or(0)
 }
 
 
 
-pub fn wkc() -> Result<u32, &'static str> {
-    let ce = aei();
-    let mut gg = AD_.write();
-    let uf = gg.ye.ds(&ce).ok_or("No such process")?;
+pub fn opy() -> Result<u32, &'static str> {
+    let pid = pe();
+    let mut bs = AE_.write();
+    let jj = bs.processes.get_mut(&pid).ok_or("No such process")?;
     
-    if uf.bai == ce {
+    if jj.pgid == pid {
         
     }
-    uf.ary = ce;
-    uf.bai = ce;
-    uf.ffs = None;
-    Ok(ce)
+    jj.sid = pid;
+    jj.pgid = pid;
+    jj.controlling_tty = None;
+    Ok(pid)
 }
 
 
-pub fn pit(ce: Ah, iff: u32) {
-    let mut gg = AD_.write();
-    if let Some(uf) = gg.ye.ds(&ce) {
-        uf.ffs = Some(iff);
+pub fn jfa(pid: X, ect: u32) {
+    let mut bs = AE_.write();
+    if let Some(jj) = bs.processes.get_mut(&pid) {
+        jj.controlling_tty = Some(ect);
     }
 }
 
 
-pub fn ysu(ce: Ah) -> Option<u32> {
-    let gg = AD_.read();
-    gg.ye.get(&ce).and_then(|ai| ai.ffs)
+pub fn qhj(pid: X) -> Option<u32> {
+    let bs = AE_.read();
+    bs.processes.get(&pid).and_then(|aa| aa.controlling_tty)
 }
 
 
-pub fn raq(ce: Ah, utr: &str) -> Result<(), &'static str> {
-    let mut gg = AD_.write();
-    let uf = gg.ye.ds(&ce).ok_or("No such process")?;
+pub fn kkk(pid: X, new_root: &str) -> Result<(), &'static str> {
+    let mut bs = AE_.write();
+    let jj = bs.processes.get_mut(&pid).ok_or("No such process")?;
     
-    if uf.ahl != 0 {
+    if jj.euid != 0 {
         return Err("EPERM");
     }
-    uf.grb = String::from(utr);
+    jj.root_dir = String::from(new_root);
     Ok(())
 }
 
 
-pub fn ytt(ce: Ah) -> String {
-    let gg = AD_.read();
-    gg.ye.get(&ce).map(|ai| ai.grb.clone()).unwrap_or_else(|| String::from("/"))
+pub fn qik(pid: X) -> String {
+    let bs = AE_.read();
+    bs.processes.get(&pid).map(|aa| aa.root_dir.clone()).unwrap_or_else(|| String::from("/"))
 }
 
 
-pub fn vht(bai: u32) -> Vec<Ah> {
-    let gg = AD_.read();
-    gg.ye.iter()
-        .hi(|(_, ai)| ai.bai == bai)
-        .map(|(&ce, _)| ce)
+pub fn nun(pgid: u32) -> Vec<X> {
+    let bs = AE_.read();
+    bs.processes.iter()
+        .filter(|(_, aa)| aa.pgid == pgid)
+        .map(|(&pid, _)| pid)
         .collect()
 }

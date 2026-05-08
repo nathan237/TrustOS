@@ -96,7 +96,7 @@ struct NtfsBootSector {
     media_descriptor: u8,       // 0x15
     _reserved2: [u8; 2],        // 0x16
     sectors_per_track: u16,     // 0x18
-    number_heads: u16,             // 0x1A
+    num_heads: u16,             // 0x1A
     hidden_sectors: u32,        // 0x1C
     _reserved3: u32,            // 0x20
     _reserved4: u32,            // 0x24
@@ -118,7 +118,7 @@ impl NtfsBootSector {
 
     fn cluster_size(&self) -> u32 {
         let bps = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { core::ptr::read_unaligned(core::ptr::address_of!(self.bytes_per_sector)) };
+unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(self.bytes_per_sector)) };
         bps as u32 * self.sectors_per_cluster as u32
     }
 
@@ -141,7 +141,7 @@ unsafe { core::ptr::read_unaligned(core::ptr::address_of!(self.bytes_per_sector)
 
     fn mft_start_byte(&self) -> u64 {
         let lcn = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { core::ptr::read_unaligned(core::ptr::address_of!(self.mft_lcn)) };
+unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(self.mft_lcn)) };
         lcn * self.cluster_size() as u64
     }
 }
@@ -154,15 +154,15 @@ struct MftRecordHeader {
     magic: u32,                 // 0x00: "FILE"
     update_sequence_offset: u16,     // 0x04: Offset to update sequence
     update_sequence_size: u16,       // 0x06: Size in words of update sequence
-    log_sequence_number: u64,        // 0x08: $LogFile sequence number
+    log_seq_number: u64,        // 0x08: $LogFile sequence number
     sequence_number: u16,       // 0x10: Sequence number (for consistency)
     hard_link_count: u16,       // 0x12
-    first_attribute_offset: u16,     // 0x14: Offset to first attribute
+    first_attr_offset: u16,     // 0x14: Offset to first attribute
     flags: u16,                 // 0x16: Flags (in-use, directory)
     used_size: u32,             // 0x18: Real size of record
     allocated_size: u32,        // 0x1C: Allocated size
     base_record: u64,           // 0x20: Base MFT record (0 if base)
-    next_attribute_id: u16,          // 0x28
+    next_attr_id: u16,          // 0x28
 }
 
 /// Attribute Header (common part)
@@ -176,7 +176,7 @@ struct AttributeHeader {
     name_length: u8,            // 0x09: Name length in UTF-16 chars
     name_offset: u16,           // 0x0A: Offset to name
     flags: u16,                 // 0x0C: Flags (compressed, encrypted, sparse)
-    attribute_id: u16,               // 0x0E: Attribute ID
+    attr_id: u16,               // 0x0E: Attribute ID
 }
 
 /// Resident attribute specific header
@@ -280,7 +280,7 @@ struct IndexBlockHeader {
     magic: u32,                 // "INDX"
     update_sequence_offset: u16,
     update_sequence_size: u16,
-    log_sequence_number: u64,
+    log_seq_number: u64,
     vcn: u64,                   // VCN of this index block
     // Followed by IndexNodeHeader at offset 0x18
 }
@@ -396,7 +396,7 @@ struct MftRecord {
     /// $INDEX_ROOT content (for directories)
     index_root_data: Vec<u8>,
     /// $INDEX_ALLOCATION data runs (for directories with many entries)
-    index_allocator_runs: Vec<DataRun>,
+    index_alloc_runs: Vec<DataRun>,
 }
 
 // ============================================================================
@@ -423,15 +423,15 @@ struct NtfsFilesystemInner {
 // Bloc d'implémentation — définit les méthodes du type ci-dessus.
 impl NtfsFilesystemInner {
     /// Read raw bytes from device at byte offset
-    fn read_bytes(&self, byte_offset: u64, buffer: &mut [u8]) -> Result<(), ()> {
+    fn read_bytes(&self, byte_offset: u64, buf: &mut [u8]) -> Result<(), ()> {
         let sector_size = self.device.sector_size() as u64;
         let start_sector = byte_offset / sector_size;
         let offset_in_sector = (byte_offset % sector_size) as usize;
 
-        let total_bytes = offset_in_sector + buffer.len();
+        let total_bytes = offset_in_sector + buf.len();
         let number_sectors = (total_bytes + sector_size as usize - 1) / sector_size as usize;
 
-        let mut remaining = buffer.len();
+        let mut remaining = buf.len();
         let mut buffer_offset = 0usize;
         let mut sector_buffer = vec![0u8; sector_size as usize];
 
@@ -439,9 +439,9 @@ impl NtfsFilesystemInner {
             self.device.read_sector(start_sector + i as u64, &mut sector_buffer)?;
 
             let source_start = if i == 0 { offset_in_sector } else { 0 };
-            let copy_length = (sector_size as usize - source_start).minimum(remaining);
+            let copy_length = (sector_size as usize - source_start).min(remaining);
 
-            buffer[buffer_offset..buffer_offset + copy_length]
+            buf[buffer_offset..buffer_offset + copy_length]
                 .copy_from_slice(&sector_buffer[source_start..source_start + copy_length]);
 
             buffer_offset += copy_length;
@@ -452,31 +452,31 @@ impl NtfsFilesystemInner {
     }
 
     /// Read clusters from the disk
-    fn read_clusters(&self, lcn: u64, count: u64, buffer: &mut [u8]) -> Result<(), ()> {
+    fn read_clusters(&self, lcn: u64, count: u64, buf: &mut [u8]) -> Result<(), ()> {
         let byte_offset = lcn * self.cluster_size as u64;
         let byte_length = count as usize * self.cluster_size as usize;
-        if buffer.len() < byte_length {
+        if buf.len() < byte_length {
             return Err(());
         }
-        self.read_bytes(byte_offset, &mut buffer[..byte_length])
+        self.read_bytes(byte_offset, &mut buf[..byte_length])
     }
 
     /// Apply fixup array to an MFT record buffer
-    fn apply_fixups(&self, buffer: &mut [u8], record_size: usize) -> Result<(), ()> {
-        if buffer.len() < 6 {
+    fn apply_fixups(&self, buf: &mut [u8], record_size: usize) -> Result<(), ()> {
+        if buf.len() < 6 {
             return Err(());
         }
-        let update_sequence_offset = u16::from_le_bytes([buffer[4], buffer[5]]) as usize;
-        let update_sequence_size = u16::from_le_bytes([buffer[6], buffer[7]]) as usize;
+        let update_sequence_offset = u16::from_le_bytes([buf[4], buf[5]]) as usize;
+        let update_sequence_size = u16::from_le_bytes([buf[6], buf[7]]) as usize;
 
-        if update_sequence_size < 2 || update_sequence_offset + update_sequence_size * 2 > buffer.len() {
+        if update_sequence_size < 2 || update_sequence_offset + update_sequence_size * 2 > buf.len() {
             return Err(());
         }
 
         // First word is the expected signature
         let signature = u16::from_le_bytes([
-            buffer[update_sequence_offset],
-            buffer[update_sequence_offset + 1],
+            buf[update_sequence_offset],
+            buf[update_sequence_offset + 1],
         ]);
 
         // Replace the last 2 bytes of each sector with the stored values
@@ -489,16 +489,16 @@ impl NtfsFilesystemInner {
             let fixup_position = sector_end - 2;
 
             // Verify the sector ends with the expected signature
-            let stored = u16::from_le_bytes([buffer[fixup_position], buffer[fixup_position + 1]]);
+            let stored = u16::from_le_bytes([buf[fixup_position], buf[fixup_position + 1]]);
             if stored != signature {
                 return Err(()); // Fixup mismatch — corrupt record
             }
 
             // Replace with the saved original bytes
             let saved_offset = update_sequence_offset + i * 2;
-            if saved_offset + 1 < buffer.len() {
-                buffer[fixup_position] = buffer[saved_offset];
-                buffer[fixup_position + 1] = buffer[saved_offset + 1];
+            if saved_offset + 1 < buf.len() {
+                buf[fixup_position] = buf[saved_offset];
+                buf[fixup_position + 1] = buf[saved_offset + 1];
             }
         }
 
@@ -506,12 +506,12 @@ impl NtfsFilesystemInner {
     }
 
     /// Read an MFT record by record number
-    fn read_mft_record_raw(&self, record_number: u64) -> Result<Vec<u8>, ()> {
+    fn read_mft_record_raw(&self, record_num: u64) -> Result<Vec<u8>, ()> {
         let record_size = self.mft_record_size as usize;
-        let mut buffer = vec![0u8; record_size];
+        let mut buf = vec![0u8; record_size];
 
         // Calculate which VCN this record falls in
-        let byte_offset_in_mft = record_number * record_size as u64;
+        let byte_offset_in_mft = record_num * record_size as u64;
         let vcn = byte_offset_in_mft / self.cluster_size as u64;
         let offset_in_cluster = (byte_offset_in_mft % self.cluster_size as u64) as usize;
 
@@ -535,9 +535,9 @@ match run {
                     let byte_offset = lcn * self.cluster_size as u64 + current_offset as u64;
 
                     let available_in_cluster = self.cluster_size as usize - current_offset;
-                    let to_read = bytes_remaining.minimum(available_in_cluster);
+                    let to_read = bytes_remaining.min(available_in_cluster);
 
-                    self.read_bytes(byte_offset, &mut buffer[buffer_position..buffer_position + to_read])?;
+                    self.read_bytes(byte_offset, &mut buf[buffer_position..buffer_position + to_read])?;
 
                     buffer_position += to_read;
                     bytes_remaining -= to_read;
@@ -549,28 +549,28 @@ match run {
         }
 
         // Apply fixup array
-        self.apply_fixups(&mut buffer, record_size)?;
+        self.apply_fixups(&mut buf, record_size)?;
 
         // Verify magic
-        let magic = u32::from_le_bytes([buffer[0], buffer[1], buffer[2], buffer[3]]);
+        let magic = u32::from_le_bytes([buf[0], buf[1], buf[2], buf[3]]);
         if magic != MFT_RECORD_MAGIC {
             return Err(());
         }
 
-        Ok(buffer)
+        Ok(buf)
     }
 
     /// Parse attributes from a raw MFT record buffer
-    fn parse_mft_record(&self, record_number: u64, buffer: &[u8]) -> Result<MftRecord, ()> {
+    fn parse_mft_record(&self, record_num: u64, buf: &[u8]) -> Result<MftRecord, ()> {
         let header = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-            core::ptr::read_unaligned(buffer.as_pointer() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+            core::ptr::read_unaligned(buf.as_ptr() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const MftRecordHeader)
         };
 
         let flags = header.flags;
         let is_directory = (flags & MFT_RECORD_IS_DIRECTORY) != 0;
-        let first_attribute = header.first_attribute_offset as usize;
+        let first_attribute = header.first_attr_offset as usize;
         let used_size = header.used_size as usize;
 
         let mut file_name = String::new();
@@ -585,14 +585,14 @@ const MftRecordHeader)
         let mut data_resident = false;
         let mut resident_data = Vec::new();
         let mut index_root_data = Vec::new();
-        let mut index_allocator_runs = Vec::new();
+        let mut index_alloc_runs = Vec::new();
 
         let mut offset = first_attribute;
-        let limit = used_size.minimum(buffer.len());
+        let limit = used_size.min(buf.len());
 
         while offset + 4 <= limit {
             let attribute_type = u32::from_le_bytes([
-                buffer[offset], buffer[offset + 1], buffer[offset + 2], buffer[offset + 3],
+                buf[offset], buf[offset + 1], buf[offset + 2], buf[offset + 3],
             ]);
 
             if attribute_type == ATTRIBUTE_END || attribute_type == 0 {
@@ -604,15 +604,15 @@ const MftRecordHeader)
             }
 
             let attribute_length = u32::from_le_bytes([
-                buffer[offset + 4], buffer[offset + 5], buffer[offset + 6], buffer[offset + 7],
+                buf[offset + 4], buf[offset + 5], buf[offset + 6], buf[offset + 7],
             ]) as usize;
 
             if attribute_length < 16 || attribute_length > limit - offset {
                 break;
             }
 
-            let non_resident = buffer[offset + 8];
-            let name_length = buffer[offset + 9] as usize;
+            let non_resident = buf[offset + 8];
+            let name_length = buf[offset + 9] as usize;
 
             // We only care about unnamed attributes (the default data stream)
             let is_unnamed = name_length == 0;
@@ -622,19 +622,19 @@ match attribute_type {
                 ATTRIBUTE_STANDARD_INFORMATION if non_resident == 0 => {
                     // Resident $STANDARD_INFORMATION
                     if offset + 24 <= limit {
-                        let value_length = u32::from_le_bytes([
-                            buffer[offset + 16], buffer[offset + 17],
-                            buffer[offset + 18], buffer[offset + 19],
+                        let val_len = u32::from_le_bytes([
+                            buf[offset + 16], buf[offset + 17],
+                            buf[offset + 18], buf[offset + 19],
                         ]) as usize;
                         let value_off = u16::from_le_bytes([
-                            buffer[offset + 20], buffer[offset + 21],
+                            buf[offset + 20], buf[offset + 21],
                         ]) as usize;
                         let data_start = offset + value_off;
-                        if value_length >= 48 && data_start + 48 <= buffer.len() {
+                        if val_len >= 48 && data_start + 48 <= buf.len() {
                             let si = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
                                 core::ptr::read_unaligned(
-                                    buffer[data_start..].as_pointer() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+                                    buf[data_start..].as_ptr() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const StdInformationAttribute
                                 )
                             };
@@ -649,19 +649,19 @@ const StdInformationAttribute
                 ATTRIBUTE_FILE_NAME if non_resident == 0 => {
                     // Resident $FILE_NAME
                     if offset + 24 <= limit {
-                        let value_length = u32::from_le_bytes([
-                            buffer[offset + 16], buffer[offset + 17],
-                            buffer[offset + 18], buffer[offset + 19],
+                        let val_len = u32::from_le_bytes([
+                            buf[offset + 16], buf[offset + 17],
+                            buf[offset + 18], buf[offset + 19],
                         ]) as usize;
                         let value_off = u16::from_le_bytes([
-                            buffer[offset + 20], buffer[offset + 21],
+                            buf[offset + 20], buf[offset + 21],
                         ]) as usize;
                         let data_start = offset + value_off;
-                        if value_length >= 66 && data_start + 66 <= buffer.len() {
+                        if val_len >= 66 && data_start + 66 <= buf.len() {
                             let fn_attribute = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
                                 core::ptr::read_unaligned(
-                                    buffer[data_start..].as_pointer() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+                                    buf[data_start..].as_ptr() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const FileNameAttribute
                                 )
                             };
@@ -689,9 +689,9 @@ match n {
                             }).unwrap_or(0);
 
                             if priority > current_priority {
-                                if name_start + name_chars * 2 <= buffer.len() {
+                                if name_start + name_chars * 2 <= buf.len() {
                                     file_name = decode_utf16le(
-                                        &buffer[name_start..name_start + name_chars * 2]
+                                        &buf[name_start..name_start + name_chars * 2]
                                     );
                                     best_namespace = Some(ns);
                                     parent_ref = fn_attribute.parent_ref & 0x0000FFFFFFFFFFFF;
@@ -701,7 +701,7 @@ match n {
                                         file_size = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
                                             core::ptr::read_unaligned(
-                                                core::ptr::address_of!(fn_attribute.real_size)
+                                                core::ptr::addr_of!(fn_attribute.real_size)
                                             )
                                         };
                                     }
@@ -716,17 +716,17 @@ unsafe {
                         // Resident $DATA — small file stored inside MFT record
                         data_resident = true;
                         if offset + 24 <= limit {
-                            let value_length = u32::from_le_bytes([
-                                buffer[offset + 16], buffer[offset + 17],
-                                buffer[offset + 18], buffer[offset + 19],
+                            let val_len = u32::from_le_bytes([
+                                buf[offset + 16], buf[offset + 17],
+                                buf[offset + 18], buf[offset + 19],
                             ]) as usize;
                             let value_off = u16::from_le_bytes([
-                                buffer[offset + 20], buffer[offset + 21],
+                                buf[offset + 20], buf[offset + 21],
                             ]) as usize;
                             let data_start = offset + value_off;
-                            if data_start + value_length <= buffer.len() {
-                                resident_data = buffer[data_start..data_start + value_length].to_vec();
-                                file_size = value_length as u64;
+                            if data_start + val_len <= buf.len() {
+                                resident_data = buf[data_start..data_start + val_len].to_vec();
+                                file_size = val_len as u64;
                             }
                         }
                     } else {
@@ -736,7 +736,7 @@ unsafe {
                             let number_header = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
                                 core::ptr::read_unaligned(
-                                    buffer[offset + 16..].as_pointer() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+                                    buf[offset + 16..].as_ptr() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const NonResidentAttributeHeader
                                 )
                             };
@@ -744,13 +744,13 @@ const NonResidentAttributeHeader
                             let runs_offset = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
                                 core::ptr::read_unaligned(
-                                    core::ptr::address_of!(number_header.data_runs_offset)
+                                    core::ptr::addr_of!(number_header.data_runs_offset)
                                 )
                             } as usize;
                             let runs_start = offset + runs_offset;
                             if runs_start < offset + attribute_length {
                                 data_runs = decode_data_runs(
-                                    &buffer[runs_start..offset + attribute_length]
+                                    &buf[runs_start..offset + attribute_length]
                                 );
                             }
                         }
@@ -760,16 +760,16 @@ unsafe {
                 ATTRIBUTE_INDEX_ROOT if non_resident == 0 => {
                     // Resident $INDEX_ROOT
                     if offset + 24 <= limit {
-                        let value_length = u32::from_le_bytes([
-                            buffer[offset + 16], buffer[offset + 17],
-                            buffer[offset + 18], buffer[offset + 19],
+                        let val_len = u32::from_le_bytes([
+                            buf[offset + 16], buf[offset + 17],
+                            buf[offset + 18], buf[offset + 19],
                         ]) as usize;
                         let value_off = u16::from_le_bytes([
-                            buffer[offset + 20], buffer[offset + 21],
+                            buf[offset + 20], buf[offset + 21],
                         ]) as usize;
                         let data_start = offset + value_off;
-                        if data_start + value_length <= buffer.len() {
-                            index_root_data = buffer[data_start..data_start + value_length].to_vec();
+                        if data_start + val_len <= buf.len() {
+                            index_root_data = buf[data_start..data_start + val_len].to_vec();
                         }
                     }
                 }
@@ -780,20 +780,20 @@ unsafe {
                         let number_header = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
                             core::ptr::read_unaligned(
-                                buffer[offset + 16..].as_pointer() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+                                buf[offset + 16..].as_ptr() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const NonResidentAttributeHeader
                             )
                         };
                         let runs_offset = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
                             core::ptr::read_unaligned(
-                                core::ptr::address_of!(number_header.data_runs_offset)
+                                core::ptr::addr_of!(number_header.data_runs_offset)
                             )
                         } as usize;
                         let runs_start = offset + runs_offset;
                         if runs_start < offset + attribute_length {
-                            index_allocator_runs = decode_data_runs(
-                                &buffer[runs_start..offset + attribute_length]
+                            index_alloc_runs = decode_data_runs(
+                                &buf[runs_start..offset + attribute_length]
                             );
                         }
                     }
@@ -806,7 +806,7 @@ unsafe {
         }
 
         Ok(MftRecord {
-            record_number: record_number,
+            record_number: record_num,
             flags,
             file_name,
             parent_ref,
@@ -820,14 +820,14 @@ unsafe {
             data_resident,
             resident_data,
             index_root_data,
-            index_allocator_runs,
+            index_alloc_runs,
         })
     }
 
     /// Read and parse an MFT record by number
-    fn read_mft_record(&self, record_number: u64) -> Result<MftRecord, ()> {
-        let raw = self.read_mft_record_raw(record_number)?;
-        self.parse_mft_record(record_number, &raw)
+    fn read_mft_record(&self, record_num: u64) -> Result<MftRecord, ()> {
+        let raw = self.read_mft_record_raw(record_num)?;
+        self.parse_mft_record(record_num, &raw)
     }
 
     /// Read file data using data runs
@@ -835,13 +835,13 @@ unsafe {
         &self,
         record: &MftRecord,
         file_offset: u64,
-        buffer: &mut [u8],
+        buf: &mut [u8],
     ) -> Result<usize, ()> {
         if file_offset >= record.file_size {
             return Ok(0);
         }
 
-        let read_length = ((record.file_size - file_offset) as usize).minimum(buffer.len());
+        let read_length = ((record.file_size - file_offset) as usize).min(buf.len());
         if read_length == 0 {
             return Ok(0);
         }
@@ -851,10 +851,10 @@ unsafe {
             let start = file_offset as usize;
             let end = start + read_length;
             if end <= record.resident_data.len() {
-                buffer[..read_length].copy_from_slice(&record.resident_data[start..end]);
+                buf[..read_length].copy_from_slice(&record.resident_data[start..end]);
             } else {
                 let avail = record.resident_data.len().saturating_sub(start);
-                buffer[..avail].copy_from_slice(&record.resident_data[start..start + avail]);
+                buf[..avail].copy_from_slice(&record.resident_data[start..start + avail]);
             }
             return Ok(read_length);
         }
@@ -882,9 +882,9 @@ match run {
                     let byte_offset = lcn * cluster_size + offset_in_cluster as u64;
 
                     let available = cluster_size as usize - offset_in_cluster;
-                    let to_read = remaining.minimum(available);
+                    let to_read = remaining.min(available);
 
-                    self.read_bytes(byte_offset, &mut buffer[buffer_offset..buffer_offset + to_read])?;
+                    self.read_bytes(byte_offset, &mut buf[buffer_offset..buffer_offset + to_read])?;
 
                     buffer_offset += to_read;
                     offset += to_read as u64;
@@ -893,8 +893,8 @@ match run {
                 Some(_) => {
                     // Sparse run — zero fill
                     let available = cluster_size as usize - offset_in_cluster;
-                    let to_fill = remaining.minimum(available);
-                    for b in &mut buffer[buffer_offset..buffer_offset + to_fill] {
+                    let to_fill = remaining.min(available);
+                    for b in &mut buf[buffer_offset..buffer_offset + to_fill] {
                         *b = 0;
                     }
                     buffer_offset += to_fill;
@@ -903,7 +903,7 @@ match run {
                 }
                 None => {
                     // Beyond data runs — zero fill rest
-                    for b in &mut buffer[buffer_offset..buffer_offset + remaining] {
+                    for b in &mut buf[buffer_offset..buffer_offset + remaining] {
                         *b = 0;
                     }
                     remaining = 0;
@@ -915,7 +915,7 @@ match run {
     }
 
     /// Read clusters from data runs (for index allocation)
-    fn read_from_runs(&self, runs: &[DataRun], vcn: u64, buffer: &mut [u8]) -> Result<(), ()> {
+    fn read_from_runs(&self, runs: &[DataRun], vcn: u64, buf: &mut [u8]) -> Result<(), ()> {
         let run = runs.iter().find(|r| {
             vcn >= r.vcn_start && vcn < r.vcn_start + r.length
         });
@@ -925,14 +925,14 @@ match run {
             Some(run) if run.lcn > 0 => {
                 let vcn_offset = vcn - run.vcn_start;
                 let lcn = run.lcn + vcn_offset;
-                let clusters_needed = (buffer.len() + self.cluster_size as usize - 1)
+                let clusters_needed = (buf.len() + self.cluster_size as usize - 1)
                     / self.cluster_size as usize;
                 // Read cluster by cluster
                 for i in 0..clusters_needed {
                     let byte_off = (lcn + i as u64) * self.cluster_size as u64;
                     let buffer_start = i * self.cluster_size as usize;
-                    let buffer_end = (buffer_start + self.cluster_size as usize).minimum(buffer.len());
-                    self.read_bytes(byte_off, &mut buffer[buffer_start..buffer_end])?;
+                    let buffer_end = (buffer_start + self.cluster_size as usize).min(buf.len());
+                    self.read_bytes(byte_off, &mut buf[buffer_start..buffer_end])?;
                 }
                 Ok(())
             }
@@ -941,7 +941,7 @@ match run {
     }
 
     /// Parse directory entries from $INDEX_ROOT and $INDEX_ALLOCATION
-    fn read_directory_entries(&self, record: &MftRecord) -> Result<Vec<(u64, String, bool)>, ()> {
+    fn read_dir_entries(&self, record: &MftRecord) -> Result<Vec<(u64, String, bool)>, ()> {
         let mut entries = Vec::new();
 
         // Parse $INDEX_ROOT (always present for directories)
@@ -961,27 +961,27 @@ match run {
                 ]) as usize;
 
                 let start = node_offset + entries_offset;
-                let end = (node_offset + total_size).minimum(ir_data.len());
+                let end = (node_offset + total_size).min(ir_data.len());
 
                 self.parse_index_entries(&ir_data[start..end], &mut entries);
             }
         }
 
         // Parse $INDEX_ALLOCATION (for large directories)
-        if !record.index_allocator_runs.is_empty() {
+        if !record.index_alloc_runs.is_empty() {
             let index_block_size = self.index_block_size as usize;
             let clusters_per_block = (index_block_size + self.cluster_size as usize - 1)
                 / self.cluster_size as usize;
 
             // Calculate total VCNs available
-            let total_vcns: u64 = record.index_allocator_runs.iter()
+            let total_vcns: u64 = record.index_alloc_runs.iter()
                 .map(|r| r.length)
                 .sum();
 
             let mut vcn: u64 = 0;
             while vcn < total_vcns {
                 let mut block_buffer = vec![0u8; index_block_size];
-                if self.read_from_runs(&record.index_allocator_runs, vcn, &mut block_buffer).is_ok() {
+                if self.read_from_runs(&record.index_alloc_runs, vcn, &mut block_buffer).is_ok() {
                     // Apply fixups to the index block
                     let _ = self.apply_fixups(&mut block_buffer, index_block_size);
 
@@ -1002,7 +1002,7 @@ match run {
                             ]) as usize;
 
                             let start = node_off + eo;
-                            let end = (node_off + ts).minimum(block_buffer.len());
+                            let end = (node_off + ts).min(block_buffer.len());
                             if start < end {
                                 self.parse_index_entries(&block_buffer[start..end], &mut entries);
                             }
@@ -1022,19 +1022,19 @@ match run {
         data: &[u8],
         entries: &mut Vec<(u64, String, bool)>,
     ) {
-        let mut position = 0;
-        while position + 16 <= data.len() {
+        let mut pos = 0;
+        while pos + 16 <= data.len() {
             let entry_header = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-                core::ptr::read_unaligned(data[position..].as_pointer() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+                core::ptr::read_unaligned(data[pos..].as_ptr() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const IndexEntryHeader)
             };
 
-            let entry_length = entry_header.entry_length as usize;
-            let content_length = entry_header.content_length as usize;
+            let entry_len = entry_header.entry_length as usize;
+            let content_len = entry_header.content_length as usize;
             let flags = entry_header.flags;
 
-            if entry_length < 16 || entry_length > data.len() - position {
+            if entry_len < 16 || entry_len > data.len() - pos {
                 break;
             }
 
@@ -1042,16 +1042,16 @@ const IndexEntryHeader)
                 break; // Last entry marker
             }
 
-            if content_length >= 66 {
+            if content_len >= 66 {
                 // Content is a $FILE_NAME structure
-                let content_start = position + 16; // After IndexEntryHeader
-                if content_start + content_length <= data.len() {
-                    let fn_data = &data[content_start..content_start + content_length];
+                let content_start = pos + 16; // After IndexEntryHeader
+                if content_start + content_len <= data.len() {
+                    let fn_data = &data[content_start..content_start + content_len];
                     if fn_data.len() >= 66 {
                         let fn_attribute = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
                             core::ptr::read_unaligned(
-                                fn_data.as_pointer() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+                                fn_data.as_ptr() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const FileNameAttribute
                             )
                         };
@@ -1070,14 +1070,14 @@ const FileNameAttribute
                                 let flags_value = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
                                     core::ptr::read_unaligned(
-                                        core::ptr::address_of!(fn_attribute.flags)
+                                        core::ptr::addr_of!(fn_attribute.flags)
                                     )
                                 };
-                                let is_directory = (flags_value & 0x10000000) != 0;
+                                let is_dir = (flags_value & 0x10000000) != 0;
 
                                 // Filter out special NTFS metadata files starting with $
                                 if !name.starts_with('$') && !name.is_empty() {
-                                    entries.push((mft_ref, name, is_directory));
+                                    entries.push((mft_ref, name, is_dir));
                                 }
                             }
                         }
@@ -1085,15 +1085,15 @@ unsafe {
                 }
             }
 
-            position += entry_length;
+            pos += entry_len;
         }
     }
 
     /// Lookup a name in a directory MFT record
-    fn directory_lookup(&self, directory_record_number: u64, name: &str) -> Result<u64, ()> {
-        let record = self.read_mft_record(directory_record_number)?;
-        let entries = self.read_directory_entries(&record)?;
-        for (mft_ref, entry_name, _is_directory) in &entries {
+    fn dir_lookup(&self, dir_record_num: u64, name: &str) -> Result<u64, ()> {
+        let record = self.read_mft_record(dir_record_num)?;
+        let entries = self.read_dir_entries(&record)?;
+        for (mft_ref, entry_name, _is_dir) in &entries {
             if entry_name.eq_ignore_ascii_case(name) {
                 return Ok(*mft_ref);
             }
@@ -1134,15 +1134,15 @@ fn decode_utf16le(data: &[u8]) -> String {
             let lo = chars[i + 1];
             if lo >= 0xDC00 && lo <= 0xDFFF {
                 let cp = 0x10000 + ((hi as u32 - 0xD800) << 10) + (lo as u32 - 0xDC00);
-                if let Some(character) = char::from_u32(cp) {
-                    result.push(character);
+                if let Some(ch) = char::from_u32(cp) {
+                    result.push(ch);
                 }
                 i += 2;
                 continue;
             }
         }
-        if let Some(character) = char::from_u32(c as u32) {
-            result.push(character);
+        if let Some(ch) = char::from_u32(c as u32) {
+            result.push(ch);
         }
         i += 1;
     }
@@ -1172,7 +1172,7 @@ fn ntfs_time_to_unix(ntfs_time: u64) -> u64 {
 
 /// NTFS file handle (read-only)
 struct NtfsFile {
-    record_number: u64,
+    record_num: u64,
     device: Arc<dyn BlockDevice>,
     cluster_size: u32,
     mft_record_size: u32,
@@ -1201,24 +1201,24 @@ impl NtfsFile {
 
 // Implémentation de trait — remplit un contrat comportemental.
 impl FileOperations for NtfsFile {
-    fn read(&self, offset: u64, buffer: &mut [u8]) -> VfsResult<usize> {
+    fn read(&self, offset: u64, buf: &mut [u8]) -> VfsResult<usize> {
         let inner = self.make_inner();
-        let record = inner.read_mft_record(self.record_number)
-            .map_error(|_| VfsError::IoError)?;
-        inner.read_file_data(&record, offset, buffer)
-            .map_error(|_| VfsError::IoError)
+        let record = inner.read_mft_record(self.record_num)
+            .map_err(|_| VfsError::IoError)?;
+        inner.read_file_data(&record, offset, buf)
+            .map_err(|_| VfsError::IoError)
     }
 
-    fn write(&self, _offset: u64, _buffer: &[u8]) -> VfsResult<usize> {
+    fn write(&self, _offset: u64, _buf: &[u8]) -> VfsResult<usize> {
         Err(VfsError::ReadOnly)
     }
 
-    fn status(&self) -> VfsResult<Stat> {
+    fn stat(&self) -> VfsResult<Stat> {
         let inner = self.make_inner();
-        let record = inner.read_mft_record(self.record_number)
-            .map_error(|_| VfsError::IoError)?;
+        let record = inner.read_mft_record(self.record_num)
+            .map_err(|_| VfsError::IoError)?;
         Ok(Stat {
-            ino: self.record_number,
+            ino: self.record_num,
             file_type: inner.record_file_type(&record),
             size: record.file_size,
             blocks: (record.file_size + 511) / 512,
@@ -1235,7 +1235,7 @@ impl FileOperations for NtfsFile {
 
 /// NTFS directory handle (read-only)
 struct NtfsDirectory {
-    record_number: u64,
+    record_num: u64,
     device: Arc<dyn BlockDevice>,
     cluster_size: u32,
     mft_record_size: u32,
@@ -1266,22 +1266,22 @@ impl NtfsDirectory {
 impl DirectoryOperations for NtfsDirectory {
     fn lookup(&self, name: &str) -> VfsResult<Ino> {
         let inner = self.make_inner();
-        inner.directory_lookup(self.record_number, name)
-            .map_error(|_| VfsError::NotFound)
+        inner.dir_lookup(self.record_num, name)
+            .map_err(|_| VfsError::NotFound)
     }
 
     fn readdir(&self) -> VfsResult<Vec<DirectoryEntry>> {
         let inner = self.make_inner();
-        let record = inner.read_mft_record(self.record_number)
-            .map_error(|_| VfsError::IoError)?;
-        let entries = inner.read_directory_entries(&record)
-            .map_error(|_| VfsError::IoError)?;
+        let record = inner.read_mft_record(self.record_num)
+            .map_err(|_| VfsError::IoError)?;
+        let entries = inner.read_dir_entries(&record)
+            .map_err(|_| VfsError::IoError)?;
 
-        Ok(entries.into_iterator()
-            .map(|(mft_ref, name, is_directory)| DirectoryEntry {
+        Ok(entries.into_iter()
+            .map(|(mft_ref, name, is_dir)| DirectoryEntry {
                 name,
                 ino: mft_ref,
-                file_type: if is_directory { FileType::Directory } else { FileType::Regular },
+                file_type: if is_dir { FileType::Directory } else { FileType::Regular },
             })
             .collect())
     }
@@ -1294,12 +1294,12 @@ impl DirectoryOperations for NtfsDirectory {
         Err(VfsError::ReadOnly)
     }
 
-    fn status(&self) -> VfsResult<Stat> {
+    fn stat(&self) -> VfsResult<Stat> {
         let inner = self.make_inner();
-        let record = inner.read_mft_record(self.record_number)
-            .map_error(|_| VfsError::IoError)?;
+        let record = inner.read_mft_record(self.record_num)
+            .map_err(|_| VfsError::IoError)?;
         Ok(Stat {
-            ino: self.record_number,
+            ino: self.record_num,
             file_type: FileType::Directory,
             size: record.file_size,
             blocks: 0,
@@ -1322,12 +1322,12 @@ impl FileSystem for NtfsFilesystem {
 
     fn get_file(&self, ino: Ino) -> VfsResult<Arc<dyn FileOperations>> {
         let inner = self.inner.lock();
-        let record = inner.read_mft_record(ino).map_error(|_| VfsError::NotFound)?;
+        let record = inner.read_mft_record(ino).map_err(|_| VfsError::NotFound)?;
         if record.is_directory {
             return Err(VfsError::IsDirectory);
         }
         Ok(Arc::new(NtfsFile {
-            record_number: ino,
+            record_num: ino,
             device: inner.device.clone(),
             cluster_size: inner.cluster_size,
             mft_record_size: inner.mft_record_size,
@@ -1339,14 +1339,14 @@ impl FileSystem for NtfsFilesystem {
         }))
     }
 
-    fn get_directory(&self, ino: Ino) -> VfsResult<Arc<dyn DirectoryOperations>> {
+    fn get_dir(&self, ino: Ino) -> VfsResult<Arc<dyn DirectoryOperations>> {
         let inner = self.inner.lock();
-        let record = inner.read_mft_record(ino).map_error(|_| VfsError::NotFound)?;
+        let record = inner.read_mft_record(ino).map_err(|_| VfsError::NotFound)?;
         if !record.is_directory {
             return Err(VfsError::NotDirectory);
         }
         Ok(Arc::new(NtfsDirectory {
-            record_number: ino,
+            record_num: ino,
             device: inner.device.clone(),
             cluster_size: inner.cluster_size,
             mft_record_size: inner.mft_record_size,
@@ -1358,9 +1358,9 @@ impl FileSystem for NtfsFilesystem {
         }))
     }
 
-    fn status(&self, ino: Ino) -> VfsResult<Stat> {
+    fn stat(&self, ino: Ino) -> VfsResult<Stat> {
         let inner = self.inner.lock();
-        let record = inner.read_mft_record(ino).map_error(|_| VfsError::NotFound)?;
+        let record = inner.read_mft_record(ino).map_err(|_| VfsError::NotFound)?;
         let ft = inner.record_file_type(&record);
         Ok(Stat {
             ino,
@@ -1386,11 +1386,11 @@ impl FileSystem for NtfsFilesystem {
 pub fn mount(device: Arc<dyn BlockDevice>) -> Result<Arc<NtfsFilesystem>, &'static str> {
     // Read boot sector
     let mut boot_buffer = [0u8; SECTOR_SIZE];
-    device.read_sector(0, &mut boot_buffer).map_error(|_| "Failed to read NTFS boot sector")?;
+    device.read_sector(0, &mut boot_buffer).map_err(|_| "Failed to read NTFS boot sector")?;
 
     // Verify NTFS signature
     let bpb = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { core::ptr::read_unaligned(boot_buffer.as_pointer() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+unsafe { core::ptr::read_unaligned(boot_buffer.as_ptr() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const NtfsBootSector) };
     if !bpb.is_valid() {
         return Err("Not an NTFS filesystem (bad OEM ID)");
@@ -1407,7 +1407,7 @@ const NtfsBootSector) };
     let mft_start_byte = bpb.mft_start_byte();
     let bytes_per_sector = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-        core::ptr::read_unaligned(core::ptr::address_of!(bpb.bytes_per_sector))
+        core::ptr::read_unaligned(core::ptr::addr_of!(bpb.bytes_per_sector))
     };
     let sectors_per_cluster = bpb.sectors_per_cluster;
 
@@ -1426,7 +1426,7 @@ unsafe {
     for i in 0..sectors_needed {
         device.read_sector(mft_start_sector + i, 
             &mut raw_buffer[(i as usize * sector_size as usize)..((i + 1) as usize * sector_size as usize)])
-            .map_error(|_| "Failed to read MFT record 0")?;
+            .map_err(|_| "Failed to read MFT record 0")?;
     }
     mft0_buffer.copy_from_slice(&raw_buffer[..mft_record_size as usize]);
 
@@ -1439,17 +1439,17 @@ unsafe {
         let usa_size = u16::from_le_bytes([mft0_buffer[6], mft0_buffer[7]]) as usize;
         if usa_size >= 2 && usa_offset + usa_size * 2 <= mft0_buffer.len() {
             let sig = u16::from_le_bytes([mft0_buffer[usa_offset], mft0_buffer[usa_offset + 1]]);
-            let sector_size = bytes_per_sector as usize;
+            let sector_sz = bytes_per_sector as usize;
             for i in 1..usa_size {
-                let sector_end = i * sector_size;
-                if sector_end <= mft0_buffer.len() && sector_end >= 2 {
-                    let position = sector_end - 2;
-                    let stored = u16::from_le_bytes([mft0_buffer[position], mft0_buffer[position + 1]]);
+                let sec_end = i * sector_sz;
+                if sec_end <= mft0_buffer.len() && sec_end >= 2 {
+                    let pos = sec_end - 2;
+                    let stored = u16::from_le_bytes([mft0_buffer[pos], mft0_buffer[pos + 1]]);
                     if stored == sig {
                         let saved_off = usa_offset + i * 2;
                         if saved_off + 1 < mft0_buffer.len() {
-                            mft0_buffer[position] = mft0_buffer[saved_off];
-                            mft0_buffer[position + 1] = mft0_buffer[saved_off + 1];
+                            mft0_buffer[pos] = mft0_buffer[saved_off];
+                            mft0_buffer[pos + 1] = mft0_buffer[saved_off + 1];
                         }
                     }
                 }
@@ -1469,7 +1469,7 @@ unsafe {
     let mut mft_data_runs = Vec::new();
 
     let mut off = first_attribute;
-    let limit = used_size.minimum(mft0_buffer.len());
+    let limit = used_size.min(mft0_buffer.len());
     while off + 8 <= limit {
         let atype = u32::from_le_bytes([
             mft0_buffer[off], mft0_buffer[off + 1], mft0_buffer[off + 2], mft0_buffer[off + 3],
@@ -1484,18 +1484,18 @@ unsafe {
 
         if atype == ATTRIBUTE_DATA && off + 9 < limit && mft0_buffer[off + 8] == 1 {
             // Non-resident $DATA — this is the MFT data runs
-            let name_length = mft0_buffer[off + 9] as usize;
-            if name_length == 0 && off + 64 <= limit {
+            let name_len = mft0_buffer[off + 9] as usize;
+            if name_len == 0 && off + 64 <= limit {
                 let nr = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
                     core::ptr::read_unaligned(
-                        mft0_buffer[off + 16..].as_pointer() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+                        mft0_buffer[off + 16..].as_ptr() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const NonResidentAttributeHeader
                     )
                 };
                 let runs_off = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-                    core::ptr::read_unaligned(core::ptr::address_of!(nr.data_runs_offset))
+                    core::ptr::read_unaligned(core::ptr::addr_of!(nr.data_runs_offset))
                 } as usize;
                 let runs_start = off + runs_off;
                 if runs_start < off + alen {
@@ -1539,7 +1539,7 @@ match inner.read_mft_record(MFT_RECORD_ROOT) {
                 }
                 crate::serial_println!("[NTFS] Root directory OK, reading entries...");
                                 // Correspondance de motifs — branchement exhaustif de Rust.
-match inner.read_directory_entries(&root) {
+match inner.read_dir_entries(&root) {
                     Ok(entries) => {
                         crate::serial_println!("[NTFS] Root has {} entries", entries.len());
                     }
@@ -1576,11 +1576,11 @@ pub fn try_mount_ntfs() -> Option<Arc<NtfsFilesystem>> {
     crate::serial_println!("[NTFS] Scanning {} AHCI devices for NTFS partitions", devices.len());
 
     for device in devices {
-        let port = device.port_number;
+        let port = device.port_num;
         let total_sectors = device.sector_count;
 
-        let read_fn = |sector: u64, buffer: &mut [u8]| -> Result<(), &'static str> {
-            ahci::read_sectors(port, sector, 1, buffer).map(|_| ())
+        let read_fn = |sector: u64, buf: &mut [u8]| -> Result<(), &'static str> {
+            ahci::read_sectors(port, sector, 1, buf).map(|_| ())
         };
 
         if let Ok(table) = parse_partition_table(read_fn, total_sectors) {

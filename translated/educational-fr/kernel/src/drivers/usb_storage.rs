@@ -74,24 +74,24 @@ struct Cbw {
     data_transfer_length: u32, // Expected data bytes
     flags: u8,             // Bit 7: direction (0=OUT, 1=IN)
     lun: u8,               // Logical Unit Number (usually 0)
-    callback_length: u8,         // Length of SCSI command block (1-16)
-    callback: [u8; 16],          // SCSI Command Block
+    cb_length: u8,         // Length of SCSI command block (1-16)
+    cb: [u8; 16],          // SCSI Command Block
 }
 
 // Bloc d'implémentation — définit les méthodes du type ci-dessus.
 impl Cbw {
-    fn new(tag: u32, transfer_length: u32, directory: u8, lun: u8, cmd: &[u8]) -> Self {
-        let mut callback = [0u8; 16];
-        let len = cmd.len().minimum(16);
-        callback[..len].copy_from_slice(&cmd[..len]);
+    fn new(tag: u32, transfer_len: u32, directory: u8, lun: u8, cmd: &[u8]) -> Self {
+        let mut cb = [0u8; 16];
+        let len = cmd.len().min(16);
+        cb[..len].copy_from_slice(&cmd[..len]);
         Self {
             signature: CBW_SIGNATURE,
             tag,
-            data_transfer_length: transfer_length,
+            data_transfer_length: transfer_len,
             flags: directory,
             lun,
-            callback_length: len as u8,
-            callback,
+            cb_length: len as u8,
+            cb,
         }
     }
 
@@ -145,8 +145,8 @@ pub struct UsbStorageDevice {
     pub lun: u8,
     pub bulk_in_dci: u8,     // Device Context Index for Bulk IN
     pub bulk_out_dci: u8,    // Device Context Index for Bulk OUT
-    pub maximum_packet_in: u16,
-    pub maximum_packet_out: u16,
+    pub max_packet_in: u16,
+    pub max_packet_out: u16,
     pub block_count: u64,
     pub block_size: u32,
     pub vendor: String,
@@ -179,10 +179,10 @@ match crate::memory::frame::allocator_frame_zeroed() {
     };
     let buffer_virt = super::xhci::physical_to_virt(buffer_physical) as *mut u8;
     
-    let len = data.len().minimum(4096);
+    let len = data.len().min(4096);
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-        core::ptr::copy_nonoverlapping(data.as_pointer(), buffer_virt, len);
+        core::ptr::copy_nonoverlapping(data.as_ptr(), buffer_virt, len);
     }
 
     let success = super::xhci::bulk_transfer_out(slot_id, dci, buffer_physical, len as u32);
@@ -201,10 +201,10 @@ match crate::memory::frame::allocator_frame_zeroed() {
 
     let result = super::xhci::bulk_transfer_in(slot_id, dci, buffer_physical, length);
     if let Some(transferred) = result {
-        let copy_length = (transferred as usize).minimum(buffer.len());
+        let copy_length = (transferred as usize).min(buffer.len());
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-            core::ptr::copy_nonoverlapping(buffer_virt, buffer.as_mut_pointer(), copy_length);
+            core::ptr::copy_nonoverlapping(buffer_virt, buffer.as_mut_ptr(), copy_length);
         }
     }
     
@@ -218,7 +218,7 @@ fn bulk_in_large(slot_id: u8, dci: u8, buffer: &mut [u8], length: u32) -> Option
     let mut remaining = length;
     
     while remaining > 0 {
-        let chunk = remaining.minimum(4096);
+        let chunk = remaining.min(4096);
         let end = offset + chunk as usize;
         if end > buffer.len() { break; }
 
@@ -238,7 +238,7 @@ match bulk_in(slot_id, dci, &mut buffer[offset..end], chunk) {
 fn bulk_out_large(slot_id: u8, dci: u8, data: &[u8]) -> bool {
     let mut offset = 0usize;
     while offset < data.len() {
-        let end = (offset + 4096).minimum(data.len());
+        let end = (offset + 4096).min(data.len());
         if !bulk_out(slot_id, dci, &data[offset..end]) {
             return false;
         }
@@ -254,50 +254,50 @@ fn bulk_out_large(slot_id: u8, dci: u8, data: &[u8]) -> bool {
 /// Execute a SCSI command via BOT (Bulk-Only Transport)
 /// Returns the response data (if any) and CSW status
 fn scsi_command(
-    device: &UsbStorageDevice,
+    dev: &UsbStorageDevice,
     cmd: &[u8],
     data_in: Option<&mut [u8]>,
     data_out: Option<&[u8]>,
 ) -> Result<u8, &'static str> {
     let tag = next_tag();
     let direction;
-    let transfer_length;
+    let transfer_len;
     
-    if let Some(ref buffer) = data_in {
+    if let Some(ref buf) = data_in {
         direction = CBW_DIRECTORY_IN;
-        transfer_length = buffer.len() as u32;
-    } else if let Some(ref buffer) = data_out {
+        transfer_len = buf.len() as u32;
+    } else if let Some(ref buf) = data_out {
         direction = CBW_DIRECTORY_OUT;
-        transfer_length = buffer.len() as u32;
+        transfer_len = buf.len() as u32;
     } else {
         direction = CBW_DIRECTORY_OUT;
-        transfer_length = 0;
+        transfer_len = 0;
     }
     
     // 1. Send CBW on Bulk OUT
-    let cbw = Cbw::new(tag, transfer_length, direction, device.lun, cmd);
-    if !bulk_out(device.slot_id, device.bulk_out_dci, cbw.as_bytes()) {
+    let cbw = Cbw::new(tag, transfer_len, direction, dev.lun, cmd);
+    if !bulk_out(dev.slot_id, dev.bulk_out_dci, cbw.as_bytes()) {
         return Err("CBW send failed");
     }
     
     // 2. Data phase (if any)
-    if let Some(buffer) = data_in {
-        if transfer_length > 4096 {
-            bulk_in_large(device.slot_id, device.bulk_in_dci, buffer, transfer_length)
+    if let Some(buf) = data_in {
+        if transfer_len > 4096 {
+            bulk_in_large(dev.slot_id, dev.bulk_in_dci, buf, transfer_len)
                 .ok_or("Data IN failed")?;
         } else {
-            bulk_in(device.slot_id, device.bulk_in_dci, buffer, transfer_length)
+            bulk_in(dev.slot_id, dev.bulk_in_dci, buf, transfer_len)
                 .ok_or("Data IN failed")?;
         }
-    } else if let Some(buffer) = data_out {
-        if !bulk_out_large(device.slot_id, device.bulk_out_dci, buffer) {
+    } else if let Some(buf) = data_out {
+        if !bulk_out_large(dev.slot_id, dev.bulk_out_dci, buf) {
             return Err("Data OUT failed");
         }
     }
     
     // 3. Receive CSW on Bulk IN
     let mut csw_buffer = [0u8; 13];
-    bulk_in(device.slot_id, device.bulk_in_dci, &mut csw_buffer, 13)
+    bulk_in(dev.slot_id, dev.bulk_in_dci, &mut csw_buffer, 13)
         .ok_or("CSW receive failed")?;
     
     let csw = Csw::from_bytes(&csw_buffer).ok_or("Invalid CSW")?;
@@ -313,25 +313,25 @@ fn scsi_command(
 // ============================================================================
 
 /// SCSI INQUIRY — identify device vendor/product
-fn scsi_inquiry(device: &mut UsbStorageDevice) -> bool {
+fn scsi_inquiry(dev: &mut UsbStorageDevice) -> bool {
     let cmd = [SCSI_INQUIRY, 0, 0, 0, 36, 0]; // 36 bytes response
-    let mut buffer = [0u8; 36];
+    let mut buf = [0u8; 36];
     
         // Correspondance de motifs — branchement exhaustif de Rust.
-match scsi_command(device, &cmd, Some(&mut buffer), None) {
+match scsi_command(dev, &cmd, Some(&mut buf), None) {
         Ok(CSW_STATUS_PASSED) => {
             // Parse vendor (bytes 8-15) and product (bytes 16-31)
-            let vendor = core::str::from_utf8(&buffer[8..16])
+            let vendor = core::str::from_utf8(&buf[8..16])
                 .unwrap_or("Unknown")
                 .trim()
                 .into();
-            let product = core::str::from_utf8(&buffer[16..32])
+            let product = core::str::from_utf8(&buf[16..32])
                 .unwrap_or("Unknown")
                 .trim()
                 .into();
-            device.vendor = vendor;
-            device.product = product;
-            crate::serial_println!("[USB-MS] INQUIRY: {} {}", device.vendor, device.product);
+            dev.vendor = vendor;
+            dev.product = product;
+            crate::serial_println!("[USB-MS] INQUIRY: {} {}", dev.vendor, dev.product);
             true
         }
         Ok(status) => {
@@ -346,26 +346,26 @@ match scsi_command(device, &cmd, Some(&mut buffer), None) {
 }
 
 /// SCSI TEST UNIT READY — check if medium is present
-fn scsi_test_unit_ready(device: &UsbStorageDevice) -> bool {
+fn scsi_test_unit_ready(dev: &UsbStorageDevice) -> bool {
     let cmd = [SCSI_TEST_UNIT_READY, 0, 0, 0, 0, 0];
-    matches!(scsi_command(device, &cmd, None, None), Ok(CSW_STATUS_PASSED))
+    matches!(scsi_command(dev, &cmd, None, None), Ok(CSW_STATUS_PASSED))
 }
 
 /// SCSI READ CAPACITY (10) — get block count and block size
-fn scsi_read_capacity(device: &mut UsbStorageDevice) -> bool {
+fn scsi_read_capacity(dev: &mut UsbStorageDevice) -> bool {
     let cmd = [SCSI_READ_CAPACITY_10, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-    let mut buffer = [0u8; 8];
+    let mut buf = [0u8; 8];
     
         // Correspondance de motifs — branchement exhaustif de Rust.
-match scsi_command(device, &cmd, Some(&mut buffer), None) {
+match scsi_command(dev, &cmd, Some(&mut buf), None) {
         Ok(CSW_STATUS_PASSED) => {
-            let last_lba = u32::from_be_bytes([buffer[0], buffer[1], buffer[2], buffer[3]]);
-            let block_size = u32::from_be_bytes([buffer[4], buffer[5], buffer[6], buffer[7]]);
-            device.block_count = last_lba as u64 + 1;
-            device.block_size = block_size;
+            let last_lba = u32::from_be_bytes([buf[0], buf[1], buf[2], buf[3]]);
+            let block_size = u32::from_be_bytes([buf[4], buf[5], buf[6], buf[7]]);
+            dev.block_count = last_lba as u64 + 1;
+            dev.block_size = block_size;
             crate::serial_println!("[USB-MS] Capacity: {} blocks × {} bytes = {} MB",
-                device.block_count, device.block_size,
-                (device.block_count * device.block_size as u64) / (1024 * 1024));
+                dev.block_count, dev.block_size,
+                (dev.block_count * dev.block_size as u64) / (1024 * 1024));
             true
         }
         Ok(status) => {
@@ -380,7 +380,7 @@ match scsi_command(device, &cmd, Some(&mut buffer), None) {
 }
 
 /// SCSI READ (10) — read sectors from device
-fn scsi_read(device: &UsbStorageDevice, lba: u32, count: u16, buffer: &mut [u8]) -> bool {
+fn scsi_read(dev: &UsbStorageDevice, lba: u32, count: u16, buffer: &mut [u8]) -> bool {
     let cmd = [
         SCSI_READ_10,
         0,
@@ -394,11 +394,11 @@ fn scsi_read(device: &UsbStorageDevice, lba: u32, count: u16, buffer: &mut [u8])
         0, // Control
     ];
     
-    matches!(scsi_command(device, &cmd, Some(buffer), None), Ok(CSW_STATUS_PASSED))
+    matches!(scsi_command(dev, &cmd, Some(buffer), None), Ok(CSW_STATUS_PASSED))
 }
 
 /// SCSI WRITE (10) — write sectors to device
-fn scsi_write(device: &UsbStorageDevice, lba: u32, count: u16, buffer: &[u8]) -> bool {
+fn scsi_write(dev: &UsbStorageDevice, lba: u32, count: u16, buffer: &[u8]) -> bool {
     let cmd = [
         SCSI_WRITE_10,
         0,
@@ -412,20 +412,20 @@ fn scsi_write(device: &UsbStorageDevice, lba: u32, count: u16, buffer: &[u8]) ->
         0,
     ];
     
-    matches!(scsi_command(device, &cmd, None, Some(buffer)), Ok(CSW_STATUS_PASSED))
+    matches!(scsi_command(dev, &cmd, None, Some(buffer)), Ok(CSW_STATUS_PASSED))
 }
 
 /// SCSI REQUEST SENSE — get error details after a failed command
-fn scsi_request_sense(device: &UsbStorageDevice) -> Option<(u8, u8, u8)> {
+fn scsi_request_sense(dev: &UsbStorageDevice) -> Option<(u8, u8, u8)> {
     let cmd = [SCSI_REQUEST_SENSE, 0, 0, 0, 18, 0];
-    let mut buffer = [0u8; 18];
+    let mut buf = [0u8; 18];
     
         // Correspondance de motifs — branchement exhaustif de Rust.
-match scsi_command(device, &cmd, Some(&mut buffer), None) {
+match scsi_command(dev, &cmd, Some(&mut buf), None) {
         Ok(CSW_STATUS_PASSED) => {
-            let sense_key = buffer[2] & 0x0F;
-            let asc = buffer[12];
-            let ascq = buffer[13];
+            let sense_key = buf[2] & 0x0F;
+            let asc = buf[12];
+            let ascq = buf[13];
             Some((sense_key, asc, ascq))
         }
         _ => None,
@@ -449,8 +449,8 @@ pub fn initialize_device(
     slot_id: u8,
     bulk_in_ep: u8,    // Endpoint address (e.g., 0x81)
     bulk_out_ep: u8,   // Endpoint address (e.g., 0x02)
-    maximum_packet_in: u16,
-    maximum_packet_out: u16,
+    max_packet_in: u16,
+    max_packet_out: u16,
 ) {
     let bulk_in_number = bulk_in_ep & 0x0F;
     let bulk_out_number = bulk_out_ep & 0x0F;
@@ -460,13 +460,13 @@ pub fn initialize_device(
     crate::serial_println!("[USB-MS] Initializing mass storage: slot {} IN_DCI={} OUT_DCI={}",
         slot_id, bulk_in_dci, bulk_out_dci);
     
-    let mut device = UsbStorageDevice {
+    let mut dev = UsbStorageDevice {
         slot_id,
         lun: 0,
         bulk_in_dci,
         bulk_out_dci,
-        maximum_packet_in,
-        maximum_packet_out,
+        max_packet_in,
+        max_packet_out,
         block_count: 0,
         block_size: SECTOR_SIZE as u32,
         vendor: String::new(),
@@ -475,15 +475,15 @@ pub fn initialize_device(
     };
     
     // INQUIRY
-    scsi_inquiry(&mut device);
+    scsi_inquiry(&mut dev);
     
     // Wait for unit ready (retry a few times for slow devices)
     for attempt in 0..5 {
-        if scsi_test_unit_ready(&device) {
+        if scsi_test_unit_ready(&dev) {
             break;
         }
         // Request sense to clear any pending conditions
-        if let Some((sk, asc, ascq)) = scsi_request_sense(&device) {
+        if let Some((sk, asc, ascq)) = scsi_request_sense(&dev) {
             crate::serial_println!("[USB-MS] Sense: key={:#x} ASC={:#x} ASCQ={:#x}", sk, asc, ascq);
         }
         if attempt < 4 {
@@ -493,11 +493,11 @@ pub fn initialize_device(
     }
     
     // READ CAPACITY
-    if scsi_read_capacity(&mut device) {
-        device.ready = true;
+    if scsi_read_capacity(&mut dev) {
+        dev.ready = true;
     }
     
-    STORAGE_DEVICES.lock().push(device);
+    STORAGE_DEVICES.lock().push(dev);
     INITIALIZED.store(true, Ordering::Release);
     
     crate::serial_println!("[USB-MS] Mass storage device ready");
@@ -524,13 +524,13 @@ pub fn new(device_index: usize) -> Self {
 impl BlockDevice for UsbBlockDevice {
     fn read_sector(&self, sector: u64, buffer: &mut [u8]) -> Result<(), ()> {
         let devices = STORAGE_DEVICES.lock();
-        let device = devices.get(self.device_index).ok_or(())?;
-        if !device.ready { return Err(()); }
+        let dev = devices.get(self.device_index).ok_or(())?;
+        if !dev.ready { return Err(()); }
         
-        let required = device.block_size as usize;
+        let required = dev.block_size as usize;
         if buffer.len() < required { return Err(()); }
         
-        if scsi_read(device, sector as u32, 1, &mut buffer[..required]) {
+        if scsi_read(dev, sector as u32, 1, &mut buffer[..required]) {
             Ok(())
         } else {
             Err(())
@@ -539,13 +539,13 @@ impl BlockDevice for UsbBlockDevice {
     
     fn write_sector(&self, sector: u64, buffer: &[u8]) -> Result<(), ()> {
         let devices = STORAGE_DEVICES.lock();
-        let device = devices.get(self.device_index).ok_or(())?;
-        if !device.ready { return Err(()); }
+        let dev = devices.get(self.device_index).ok_or(())?;
+        if !dev.ready { return Err(()); }
         
-        let required = device.block_size as usize;
+        let required = dev.block_size as usize;
         if buffer.len() < required { return Err(()); }
         
-        if scsi_write(device, sector as u32, 1, &buffer[..required]) {
+        if scsi_write(dev, sector as u32, 1, &buffer[..required]) {
             Ok(())
         } else {
             Err(())
@@ -555,7 +555,7 @@ impl BlockDevice for UsbBlockDevice {
     fn sector_size(&self) -> usize {
         let devices = STORAGE_DEVICES.lock();
         devices.get(self.device_index)
-            .map(|device| device.block_size as usize)
+            .map(|dev| dev.block_size as usize)
             .unwrap_or(SECTOR_SIZE)
     }
 }
@@ -576,23 +576,23 @@ pub fn device_count() -> usize {
 
 /// List all detected USB storage devices
 pub fn list_devices() -> Vec<(String, u64, u32)> {
-    STORAGE_DEVICES.lock().iter().map(|device| {
-        let name = if device.vendor.is_empty() && device.product.is_empty() {
-            alloc::format!("USB Storage (slot {})", device.slot_id)
+    STORAGE_DEVICES.lock().iter().map(|dev| {
+        let name = if dev.vendor.is_empty() && dev.product.is_empty() {
+            alloc::format!("USB Storage (slot {})", dev.slot_id)
         } else {
-            alloc::format!("{} {}", device.vendor, device.product)
+            alloc::format!("{} {}", dev.vendor, dev.product)
         };
-        (name, device.block_count, device.block_size)
+        (name, dev.block_count, dev.block_size)
     }).collect()
 }
 
 /// Read sectors from USB storage device
 pub fn read_sectors(device_index: usize, start_lba: u64, count: usize, buffer: &mut [u8]) -> Result<(), &'static str> {
     let devices = STORAGE_DEVICES.lock();
-    let device = devices.get(device_index).ok_or("Invalid device index")?;
-    if !device.ready { return Err("Device not ready"); }
+    let dev = devices.get(device_index).ok_or("Invalid device index")?;
+    if !dev.ready { return Err("Device not ready"); }
     
-    let block_size = device.block_size as usize;
+    let block_size = dev.block_size as usize;
     if buffer.len() < count * block_size {
         return Err("Buffer too small");
     }
@@ -603,10 +603,10 @@ pub fn read_sectors(device_index: usize, start_lba: u64, count: usize, buffer: &
     let mut remaining = count;
     
     while remaining > 0 {
-        let chunk = remaining.minimum(MAXIMUM_TRANSFER_SECTORS);
+        let chunk = remaining.min(MAXIMUM_TRANSFER_SECTORS);
         let byte_count = chunk * block_size;
         
-        if !scsi_read(device, lba, chunk as u16, &mut buffer[offset..offset + byte_count]) {
+        if !scsi_read(dev, lba, chunk as u16, &mut buffer[offset..offset + byte_count]) {
             return Err("SCSI READ failed");
         }
         
@@ -621,10 +621,10 @@ pub fn read_sectors(device_index: usize, start_lba: u64, count: usize, buffer: &
 /// Write sectors to USB storage device
 pub fn write_sectors(device_index: usize, start_lba: u64, count: usize, buffer: &[u8]) -> Result<(), &'static str> {
     let devices = STORAGE_DEVICES.lock();
-    let device = devices.get(device_index).ok_or("Invalid device index")?;
-    if !device.ready { return Err("Device not ready"); }
+    let dev = devices.get(device_index).ok_or("Invalid device index")?;
+    if !dev.ready { return Err("Device not ready"); }
     
-    let block_size = device.block_size as usize;
+    let block_size = dev.block_size as usize;
     if buffer.len() < count * block_size {
         return Err("Buffer too small");
     }
@@ -634,10 +634,10 @@ pub fn write_sectors(device_index: usize, start_lba: u64, count: usize, buffer: 
     let mut remaining = count;
     
     while remaining > 0 {
-        let chunk = remaining.minimum(MAXIMUM_TRANSFER_SECTORS);
+        let chunk = remaining.min(MAXIMUM_TRANSFER_SECTORS);
         let byte_count = chunk * block_size;
         
-        if !scsi_write(device, lba, chunk as u16, &buffer[offset..offset + byte_count]) {
+        if !scsi_write(dev, lba, chunk as u16, &buffer[offset..offset + byte_count]) {
             return Err("SCSI WRITE failed");
         }
         

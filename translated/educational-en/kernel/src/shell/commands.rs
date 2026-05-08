@@ -178,6 +178,7 @@ pub(super) fn command_help(args: &[&str]) {
     crate::println_color!(COLOR_CYAN, "  NETWORK");
     crate::println!("    ifconfig / ip       Show network interface status");
     crate::println!("    ipconfig [cmd]      Configure IP settings");
+    crate::println!("    wifi <cmd>          WiFi management (scan/connect/status/disconnect)");
     crate::println!("    ping <host>         ICMP echo to test connectivity");
     crate::println!("    curl <url>          HTTP/HTTPS client (GET, POST)");
     crate::println!("    wget <url>          Download file from URL");
@@ -517,7 +518,7 @@ match crate::ramfs::with_filesystem(|fs| fs.ls(path)) {
                 return;
             }
             
-            let maximum_name = items.iter().map(|(n, _, _)| n.len()).maximum().unwrap_or(0);
+            let maximum_name = items.iter().map(|(n, _, _)| n.len()).max().unwrap_or(0);
             
             for (name, file_type, size) in items {
                                 // Pattern matching — Rust's exhaustive branching construct.
@@ -550,7 +551,7 @@ match vfs::readdir(path) {
                 return;
             }
             
-            let maximum_name = entries.iter().map(|e| e.name.len()).maximum().unwrap_or(0);
+            let maximum_name = entries.iter().map(|e| e.name.len()).max().unwrap_or(0);
             
             for entry in entries {
                                 // Pattern matching — Rust's exhaustive branching construct.
@@ -882,7 +883,7 @@ pub(super) fn command_status(args: &[&str]) {
     }
     
         // Pattern matching — Rust's exhaustive branching construct.
-match crate::ramfs::with_filesystem(|fs| fs.status(args[0]).map(|e| e.clone())) {
+match crate::ramfs::with_filesystem(|fs| fs.stat(args[0]).map(|e| e.clone())) {
         Ok(entry) => {
             crate::println_color!(COLOR_CYAN, "  File: {}", entry.name);
             let ftype = if entry.file_type == FileType::Directory { "directory" } else { "file" };
@@ -1064,7 +1065,7 @@ pub(super) fn command_hostname() {
     crate::println!("trustos");
 }
 
-pub(super) fn command_id() {
+pub(super) fn cmd_id() {
     let user = crate::auth::current_user();
     let uid = crate::auth::current_uid();
     let gid = crate::auth::current_gid();
@@ -1135,10 +1136,10 @@ pub(super) fn command_passwd(args: &[&str]) {
     // Get current password (unless root)
     let old_password = if !crate::auth::is_root() {
         crate::print!("Current password: ");
-        let mut buffer = [0u8; 128];
-        let len = crate::keyboard::read_line_hidden(&mut buffer);
+        let mut buf = [0u8; 128];
+        let len = crate::keyboard::read_line_hidden(&mut buf);
         crate::println!();
-        String::from(core::str::from_utf8(&buffer[..len]).unwrap_or("").trim())
+        String::from(core::str::from_utf8(&buf[..len]).unwrap_or("").trim())
     } else {
         String::new()
     };
@@ -1245,9 +1246,9 @@ pub(super) fn command_deluser(args: &[&str]) {
     let username = args[0];
     
     crate::print_color!(COLOR_YELLOW, "Delete user {}? [y/N]: ", username);
-    let mut buffer = [0u8; 16];
-    let len = crate::keyboard::read_line(&mut buffer);
-    let answer = core::str::from_utf8(&buffer[..len]).unwrap_or("").trim();
+    let mut buf = [0u8; 16];
+    let len = crate::keyboard::read_line(&mut buf);
+    let answer = core::str::from_utf8(&buf[..len]).unwrap_or("").trim();
     
     if answer != "y" && answer != "Y" {
         crate::println!("Cancelled.");
@@ -1341,7 +1342,7 @@ pub(super) fn command_env() {
     }
 }
 
-pub(super) fn command_history() {
+pub(super) fn cmd_history() {
     for (num, cmd) in crate::keyboard::history_list() {
         crate::print_color!(COLOR_DARK_GREEN, "{:>4}  ", num);
         crate::println!("{}", cmd);
@@ -1389,16 +1390,16 @@ pub(super) fn command_df() {
         "ramfs", "ramfs", fmt(heap_total), fmt(mem.heap_used),
         fmt(heap_total.saturating_sub(mem.heap_used)), "/");
 
-    for (path, filesystem_name) in &mounts {
+    for (path, fs_name) in &mounts {
         if path == "/" { continue; } // Already shown as ramfs
         let (size, used, avail) = // Pattern matching — Rust's exhaustive branching construct.
-match filesystem_name.as_str() {
+match fs_name.as_str() {
             "devfs" | "proc" => (0, 0, 0),
             _ => (heap_total, mem.heap_used, heap_total.saturating_sub(mem.heap_used)),
         };
 
         crate::println!("{:<15} {:<8} {:>5}  {:>5}  {:>5}  {}",
-            filesystem_name, filesystem_name, fmt(size), fmt(used), fmt(avail), path);
+            fs_name, fs_name, fmt(size), fmt(used), fmt(avail), path);
     }
 }
 
@@ -1668,7 +1669,7 @@ match crate::exec::execute_memtest() {
 
     crate::print!("  no leak... ");
     if free_after >= free_before {
-        crate::println_color!(COLOR_GREEN, "[OK] (freed {} frames)", free_after - free_before + (free_before - free_after).maximum(0));
+        crate::println_color!(COLOR_GREEN, "[OK] (freed {} frames)", free_after - free_before + (free_before - free_after).max(0));
         passed += 1;
     } else {
         let leaked = free_before - free_after;
@@ -1764,10 +1765,10 @@ match args.first() {
             let port = args.get(1)
                 .and_then(|s| s.parse::<u16>().ok())
                 .unwrap_or(8080);
-            let maximum = args.get(2)
+            let max = args.get(2)
                 .and_then(|s| s.parse::<u32>().ok())
                 .unwrap_or(0);
-            crate::httpd::start(port, maximum);
+            crate::httpd::start(port, max);
         }
         Some(&"stop") => {
             crate::httpd::stop();
@@ -2163,7 +2164,7 @@ match args.first() {
         }
         Some(&"info") | Some(&"show") => {
             if args.len() > 1 {
-                crate::trustpkg::information(args[1]);
+                crate::trustpkg::info(args[1]);
             } else {
                 crate::println!("Usage: trustpkg info <package>");
             }
@@ -2408,7 +2409,7 @@ static SMP_COUNTER: AtomicU32 = AtomicU32::new(0);
             crate::print!("  thread dispatch... ");
             // Spawn 4 kernel threads
             for i in 0..4u64 {
-                crate::thread::spawn_kernel("smp_test", |_argument| {
+                crate::thread::spawn_kernel("smp_test", |_arg| {
                     SMP_COUNTER.fetch_add(1, Ordering::SeqCst);
                     0
                 }, i);
@@ -2440,9 +2441,9 @@ static SMP_COUNTER: AtomicU32 = AtomicU32::new(0);
         if crate::nvme::is_initialized() {
             // Test read
             crate::print!("  read LBA 0... ");
-            let mut buffer = [0u8; 512];
+            let mut buf = [0u8; 512];
                         // Pattern matching — Rust's exhaustive branching construct.
-match crate::nvme::read_sectors(0, 1, &mut buffer) {
+match crate::nvme::read_sectors(0, 1, &mut buf) {
                 Ok(()) => {
                     crate::println_color!(COLOR_GREEN, "[OK]");
                     passed += 1;
@@ -2455,12 +2456,12 @@ match crate::nvme::read_sectors(0, 1, &mut buffer) {
             
             // Test write + readback (use a high LBA to avoid corruption)
             crate::print!("  write+verify... ");
-            let capability = crate::nvme::capacity();
-            if capability > 100 {
-                let test_lba = capability - 1; // Last LBA
+            let cap = crate::nvme::capacity();
+            if cap > 100 {
+                let test_lba = cap - 1; // Last LBA
                 let pattern: [u8; 512] = {
                     let mut p = [0u8; 512];
-                    for (i, b) in p.iterator_mut().enumerate() {
+                    for (i, b) in p.iter_mut().enumerate() {
                         *b = (i & 0xFF) as u8 ^ 0xA5;
                     }
                     p
@@ -2644,7 +2645,7 @@ match crate::trustlang::eval_line("let x = 6 * 7; println(to_string(x));") {
         crate::print!("  size in stat... ");
         if write_ok {
                         // Pattern matching — Rust's exhaustive branching construct.
-match vfs::status(test_path) {
+match vfs::stat(test_path) {
                 Ok(st) => {
                     if st.size == test_data.len() as u64 {
                         crate::println_color!(COLOR_GREEN, "[OK] size={}", st.size);
@@ -2721,9 +2722,9 @@ match crate::netstack::dhcp::get_config() {
 
             // Test: read sector 0 (verifies interrupt-assisted I/O works)
             crate::print!("  blk read LBA 0... ");
-            let mut buffer = [0u8; 512];
+            let mut buf = [0u8; 512];
                         // Pattern matching — Rust's exhaustive branching construct.
-match crate::virtio_blk::read_sectors(0, 1, &mut buffer) {
+match crate::virtio_blk::read_sectors(0, 1, &mut buf) {
                 Ok(()) => {
                     crate::println_color!(COLOR_GREEN, "[OK]");
                     passed += 1;
@@ -2748,12 +2749,12 @@ match crate::virtio_blk::read_sectors(0, 1, &mut buffer) {
             passed += 1;
 
             crate::print!("  link-local addr... ");
-            let address = crate::netstack::ipv6::link_local_address();
-            if address.is_link_local() {
-                crate::println_color!(COLOR_GREEN, "[OK] {}", address);
+            let addr = crate::netstack::ipv6::link_local_address();
+            if addr.is_link_local() {
+                crate::println_color!(COLOR_GREEN, "[OK] {}", addr);
                 passed += 1;
             } else {
-                crate::println_color!(COLOR_RED, "[FAIL] not link-local: {}", address);
+                crate::println_color!(COLOR_RED, "[FAIL] not link-local: {}", addr);
                 failed += 1;
             }
         } else {
@@ -2787,9 +2788,9 @@ match crate::virtio_blk::read_sectors(0, 1, &mut buffer) {
         }
 
         crate::print!("  pipe read... ");
-        let mut buffer = [0u8; 32];
-        let n = crate::pipe::read(read_fd, &mut buffer);
-        if n == data.len() as i64 && &buffer[..n as usize] == data {
+        let mut buf = [0u8; 32];
+        let n = crate::pipe::read(read_fd, &mut buf);
+        if n == data.len() as i64 && &buf[..n as usize] == data {
             crate::println_color!(COLOR_GREEN, "[OK] {} bytes", n);
             passed += 1;
         } else {
@@ -2799,7 +2800,7 @@ match crate::virtio_blk::read_sectors(0, 1, &mut buffer) {
 
         crate::print!("  pipe EOF... ");
         crate::pipe::close(write_fd);
-        let n2 = crate::pipe::read(read_fd, &mut buffer);
+        let n2 = crate::pipe::read(read_fd, &mut buf);
         if n2 == 0 {
             crate::println_color!(COLOR_GREEN, "[OK] EOF after close");
             passed += 1;
@@ -2897,7 +2898,7 @@ match crate::virtio_blk::read_sectors(0, 1, &mut buffer) {
         let cfg = ScanConfig::new([10, 0, 2, 1]);
         if cfg.target == [10, 0, 2, 1]
             && cfg.scan_type == ScanType::Syn
-            && cfg.timeout_mouse == 1500
+            && cfg.timeout_ms == 1500
             && cfg.grab_banner == false
             && cfg.ports.len() == crate::netscan::COMMON_PORTS.len()
         {
@@ -2917,7 +2918,7 @@ match crate::virtio_blk::read_sectors(0, 1, &mut buffer) {
             .with_banner(true);
         if cfg2.ports == alloc::vec![80u16, 443, 8080]
             && cfg2.scan_type == ScanType::Connect
-            && cfg2.timeout_mouse == 500
+            && cfg2.timeout_ms == 500
             && cfg2.grab_banner == true
         {
             crate::println_color!(COLOR_GREEN, "[OK]");
@@ -3070,7 +3071,7 @@ match crate::virtio_blk::read_sectors(0, 1, &mut buffer) {
 
         // 24a. Severity enum
         crate::print!("  Severity enum... ");
-        if vuln::Severity::Information.as_str() == "INFO"
+        if vuln::Severity::Info.as_str() == "INFO"
             && vuln::Severity::Low.as_str() == "LOW"
             && vuln::Severity::Medium.as_str() == "MEDIUM"
             && vuln::Severity::High.as_str() == "HIGH"
@@ -3140,7 +3141,7 @@ match crate::virtio_blk::read_sectors(0, 1, &mut buffer) {
         // 25a. TraceConfig default values
         crate::print!("  TraceConfig default... ");
         let tc = crate::netscan::traceroute::TraceConfig::default();
-        if tc.maximum_hops == 30 && tc.probes_per_hop == 3 && tc.timeout_mouse == 2000 {
+        if tc.max_hops == 30 && tc.probes_per_hop == 3 && tc.timeout_ms == 2000 {
             crate::println_color!(COLOR_GREEN, "[OK]");
             passed += 1;
         } else {
@@ -3151,13 +3152,13 @@ match crate::virtio_blk::read_sectors(0, 1, &mut buffer) {
         // 25b. TraceHop struct
         crate::print!("  TraceHop struct... ");
         let hop = crate::netscan::traceroute::TraceHop {
-            hop_number: 1,
+            hop_num: 1,
             ip: Some([10, 0, 2, 1]),
             hostname: None,
-            rtt_mouse: [5, 3, 4],
+            rtt_ms: [5, 3, 4],
             reached: false,
         };
-        if hop.hop_number == 1 && hop.ip == Some([10, 0, 2, 1]) && !hop.reached {
+        if hop.hop_num == 1 && hop.ip == Some([10, 0, 2, 1]) && !hop.reached {
             crate::println_color!(COLOR_GREEN, "[OK]");
             passed += 1;
         } else {
@@ -3172,7 +3173,7 @@ match crate::virtio_blk::read_sectors(0, 1, &mut buffer) {
             mac: Some([0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF]),
             hostname: Some(String::from("gateway")),
             ttl: Some(64),
-            rtt_mouse: 5,
+            rtt_ms: 5,
             os_hint: "Linux/Unix/macOS",
         };
         if hi.ip == [192, 168, 1, 1]
@@ -3190,7 +3191,7 @@ match crate::virtio_blk::read_sectors(0, 1, &mut buffer) {
         // 25d. CaptureFilter struct
         crate::print!("  CaptureFilter default... ");
         let cf = crate::netscan::sniffer::CaptureFilter::default();
-        if cf.source_ip.is_none() && cf.destination_ip.is_none()
+        if cf.src_ip.is_none() && cf.dst_ip.is_none()
             && cf.port.is_none() && cf.protocol.is_none()
         {
             crate::println_color!(COLOR_GREEN, "[OK]");
@@ -3632,9 +3633,9 @@ pub(super) fn command_debugnew() {
 
         // 1e. read_sectors with invalid index
         crate::print!("  read_sectors(999,..)... ");
-        let mut buffer = [0u8; 512];
+        let mut buf = [0u8; 512];
                 // Pattern matching — Rust's exhaustive branching construct.
-match crate::drivers::usb_storage::read_sectors(999, 0, 1, &mut buffer) {
+match crate::drivers::usb_storage::read_sectors(999, 0, 1, &mut buf) {
             Err(_) => {
                 crate::println_color!(COLOR_GREEN, "[OK] error as expected");
                 passed += 1;
@@ -3684,7 +3685,7 @@ match crate::drivers::usb_storage::read_sectors(999, 0, 1, &mut buffer) {
                 // Trait implementation — fulfills a behavioral contract.
 impl crate::vfs::fat32::BlockDevice for FakeBlockDevice {
             fn read_sector(&self, _sector: u64, buffer: &mut [u8]) -> Result<(), ()> {
-                for b in buffer.iterator_mut() { *b = 0; }
+                for b in buffer.iter_mut() { *b = 0; }
                 Ok(())
             }
             fn write_sector(&self, _sector: u64, _buffer: &[u8]) -> Result<(), ()> {
@@ -3707,7 +3708,7 @@ impl crate::vfs::fat32::BlockDevice for FakeBlockDevice {
                 // Trait implementation — fulfills a behavioral contract.
 impl crate::vfs::fat32::BlockDevice for FakeExt4Device {
             fn read_sector(&self, sector: u64, buffer: &mut [u8]) -> Result<(), ()> {
-                for b in buffer.iterator_mut() { *b = 0; }
+                for b in buffer.iter_mut() { *b = 0; }
                 // Superblock starts at byte 1024 = sector 2 (@ 512b/sector)
                 // Magic at offset 0x38 within superblock
                 if sector == 2 {
@@ -3793,8 +3794,8 @@ match crate::vfs::ext4::mount(arc_fake) {
 
         // 4c. Sine wave symmetry â€” first and last samples should be near zero (fade)
         crate::print!("  sine fade-in/out... ");
-        let first = samples[0].absolute();
-        let last = samples[samples.len() - 2].absolute(); // Left channel of last frame
+        let first = samples[0].abs();
+        let last = samples[samples.len() - 2].abs(); // Left channel of last frame
         if first < 500 && last < 500 {
             crate::println_color!(COLOR_GREEN, "[OK] first={} last={}", first, last);
             passed += 1;
@@ -3805,7 +3806,7 @@ match crate::vfs::ext4::mount(arc_fake) {
 
         // 4d. Sine wave has non-zero peak (somewhere in the middle)
         crate::print!("  sine peak amplitude... ");
-        let peak = samples.iter().map(|s| s.absolute()).maximum().unwrap_or(0);
+        let peak = samples.iter().map(|s| s.abs()).max().unwrap_or(0);
         if peak > 5000 {
             crate::println_color!(COLOR_GREEN, "[OK] peak={}", peak);
             passed += 1;
@@ -3843,14 +3844,14 @@ match crate::vfs::ext4::mount(arc_fake) {
         // (payload: remaining bytes are zeros = silence)
 
         match crate::drivers::hda::parse_wav(&wav_data) {
-            Ok(information) => {
-                if information.channels == 2 && information.sample_rate == 44100 && information.bits_per_sample == 16 {
+            Ok(info) => {
+                if info.channels == 2 && info.sample_rate == 44100 && info.bits_per_sample == 16 {
                     crate::println_color!(COLOR_GREEN, "[OK] ch={} rate={} bits={}", 
-                        information.channels, information.sample_rate, information.bits_per_sample);
+                        info.channels, info.sample_rate, info.bits_per_sample);
                     passed += 1;
                 } else {
                     crate::println_color!(COLOR_RED, "[FAIL] wrong values: ch={} rate={} bits={}", 
-                        information.channels, information.sample_rate, information.bits_per_sample);
+                        info.channels, info.sample_rate, info.bits_per_sample);
                     failed += 1;
                 }
             }
@@ -3877,7 +3878,7 @@ match crate::drivers::hda::parse_wav(&[0u8; 10]) {
         // 5c. Note freq_hz computation
         crate::print!("  Note A4 freq... ");
         let a4 = crate::drivers::hda::Note::new(69, 4, 100);
-        let frequency_a4 = a4.frequency_hz();
+        let frequency_a4 = a4.freq_hz();
         if frequency_a4 == 440 {
             crate::println_color!(COLOR_GREEN, "[OK] freq={}Hz", frequency_a4);
             passed += 1;
@@ -3889,7 +3890,7 @@ match crate::drivers::hda::parse_wav(&[0u8; 10]) {
         // 5d. Note C4 freq (MIDI 60 â†’ ~261 Hz)
         crate::print!("  Note C4 freq... ");
         let c4 = crate::drivers::hda::Note::new(60, 4, 100);
-        let frequency_c4 = c4.frequency_hz();
+        let frequency_c4 = c4.freq_hz();
         // With integer semitone lookup: C4 = 3 semitones below A (wait, C is 9 semitones below A)
         // MIDI 60: offset = 60 - 69 = -9, octave = -9 div_euclid 12 = -1, semi = -9 rem_euclid 12 = 3
         // SEMI_RATIO[3] = 1189, base = 1189*440/1000 = 523, then >> 1 = 261
@@ -3904,11 +3905,11 @@ match crate::drivers::hda::parse_wav(&[0u8; 10]) {
         // 5e. Rest note returns 0 Hz
         crate::print!("  Rest note freq... ");
         let rest = crate::drivers::hda::Note::rest(4);
-        if rest.frequency_hz() == 0 {
+        if rest.freq_hz() == 0 {
             crate::println_color!(COLOR_GREEN, "[OK] freq=0");
             passed += 1;
         } else {
-            crate::println_color!(COLOR_RED, "[FAIL] expected 0, got {}", rest.frequency_hz());
+            crate::println_color!(COLOR_RED, "[FAIL] expected 0, got {}", rest.freq_hz());
             failed += 1;
         }
     }
@@ -3993,8 +3994,8 @@ pub(super) fn command_nvme() {
         return;
     }
     
-    if let Some((model, serial, size, lba_size)) = crate::nvme::get_information() {
-        let total_bytes = size * lba_size as u64;
+    if let Some((model, serial, size, lba_sz)) = crate::nvme::get_information() {
+        let total_bytes = size * lba_sz as u64;
         let mb = total_bytes / (1024 * 1024);
         let gb = total_bytes / (1024 * 1024 * 1024);
         
@@ -4002,15 +4003,15 @@ pub(super) fn command_nvme() {
         crate::println!("  Model:     {}", model);
         crate::println!("  Serial:    {}", serial);
         crate::println!("  Capacity:  {} LBAs ({} MB / {} GB)", size, mb, gb);
-        crate::println!("  LBA Size:  {} bytes", lba_size);
+        crate::println!("  LBA Size:  {} bytes", lba_sz);
         
         // Quick read test: read LBA 0
-        let mut buffer = [0u8; 512];
+        let mut buf = [0u8; 512];
                 // Pattern matching — Rust's exhaustive branching construct.
-match crate::nvme::read_sectors(0, 1, &mut buffer) {
+match crate::nvme::read_sectors(0, 1, &mut buf) {
             Ok(()) => {
                 crate::print!("  LBA 0:     ");
-                for b in &buffer[..16] {
+                for b in &buf[..16] {
                     crate::print!("{:02x} ", b);
                 }
                 crate::println!("...");
@@ -4128,8 +4129,8 @@ pub(super) fn command_neofetch() {
         crate::println!("{}", crate::drivers::virtio_gpu::information_string());
     } else {
         let display_devs = crate::pci::find_by_class(crate::pci::class::DISPLAY);
-        if let Some(device) = display_devs.first() {
-            crate::println!("{} {:04X}:{:04X}", device.vendor_name(), device.vendor_id, device.device_id);
+        if let Some(dev) = display_devs.first() {
+            crate::println!("{} {:04X}:{:04X}", dev.vendor_name(), dev.vendor_id, dev.device_id);
         } else {
             crate::println!("N/A");
         }
@@ -4209,7 +4210,7 @@ match args[0] {
                 crate::println!("(Requires AMD GPU with MMIO — bare metal or GPU passthrough)");
                 return;
             }
-            for line in compute::information_lines() {
+            for line in compute::info_lines() {
                 crate::println!("{}", line);
             }
         }
@@ -4244,9 +4245,9 @@ match compute::dispatch(AgentKind::Incr, 256, 0) {
             // Test 2: MEMFILL with 512 elements, value 0xCAFE1234
             crate::print!("  memfill(512, 0xCAFE1234)... ");
                         // Pattern matching — Rust's exhaustive branching construct.
-match compute::dispatch(AgentKind::MemoryFill, 512, 0xCAFE1234) {
+match compute::dispatch(AgentKind::MemFill, 512, 0xCAFE1234) {
                 Ok(iters) => {
-                    let (p, f) = compute::verify_results(AgentKind::MemoryFill, 512, 0xCAFE1234);
+                    let (p, f) = compute::verify_results(AgentKind::MemFill, 512, 0xCAFE1234);
                     if f == 0 {
                         crate::println_color!(COLOR_GREEN, "[OK] {}p/{}f in {} iters", p, f, iters);
                     } else {
@@ -4263,9 +4264,9 @@ match compute::dispatch(AgentKind::MemoryFill, 512, 0xCAFE1234) {
             // Test 3: MEMCOPY with 128 elements
             crate::print!("  memcopy(128)... ");
                         // Pattern matching — Rust's exhaustive branching construct.
-match compute::dispatch(AgentKind::MemoryCopy, 128, 0) {
+match compute::dispatch(AgentKind::MemCopy, 128, 0) {
                 Ok(iters) => {
-                    let (p, f) = compute::verify_results(AgentKind::MemoryCopy, 128, 0);
+                    let (p, f) = compute::verify_results(AgentKind::MemCopy, 128, 0);
                     if f == 0 {
                         crate::println_color!(COLOR_GREEN, "[OK] {}p/{}f in {} iters", p, f, iters);
                     } else {
@@ -4297,7 +4298,7 @@ match compute::dispatch(AgentKind::Incr, n, 0) {
                     crate::println_color!(COLOR_GREEN, "Done: {}/{} correct in {} iters", p, p+f, iters);
                     // Show first 8 results
                     crate::print!("  Data: ");
-                    for i in 0..8.minimum(n) {
+                    for i in 0..8.min(n) {
                         if let Some(v) = compute::read_data(i) {
                             crate::print!("{:#X} ", v);
                         }
@@ -4318,9 +4319,9 @@ match compute::dispatch(AgentKind::Incr, n, 0) {
             }).unwrap_or(0xDEADBEEF);
             crate::println!("Dispatching MEMFILL agent ({} elements, value={:#X})...", n, v);
                         // Pattern matching — Rust's exhaustive branching construct.
-match compute::dispatch(AgentKind::MemoryFill, n, v) {
+match compute::dispatch(AgentKind::MemFill, n, v) {
                 Ok(iters) => {
-                    let (p, f) = compute::verify_results(AgentKind::MemoryFill, n, v);
+                    let (p, f) = compute::verify_results(AgentKind::MemFill, n, v);
                     crate::println_color!(COLOR_GREEN, "Done: {}/{} correct in {} iters", p, p+f, iters);
                 }
                 Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
@@ -4330,9 +4331,9 @@ match compute::dispatch(AgentKind::MemoryFill, n, v) {
             let n: u32 = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(64);
             crate::println!("Dispatching MEMCOPY agent ({} elements)...", n);
                         // Pattern matching — Rust's exhaustive branching construct.
-match compute::dispatch(AgentKind::MemoryCopy, n, 0) {
+match compute::dispatch(AgentKind::MemCopy, n, 0) {
                 Ok(iters) => {
-                    let (p, f) = compute::verify_results(AgentKind::MemoryCopy, n, 0);
+                    let (p, f) = compute::verify_results(AgentKind::MemCopy, n, 0);
                     crate::println_color!(COLOR_GREEN, "Done: {}/{} correct in {} iters", p, p+f, iters);
                 }
                 Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
@@ -4380,7 +4381,7 @@ match args[0] {
                 crate::println!("(Requires AMD GPU with MMIO — bare metal or GPU passthrough)");
                 return;
             }
-            for line in sdma::information_lines() {
+            for line in sdma::info_lines() {
                 crate::println!("{}", line);
             }
         }
@@ -4404,10 +4405,10 @@ match args[0] {
                 crate::println_color!(COLOR_YELLOW, "SDMA not initialized");
                 return;
             }
-            let size_keyboard: u32 = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(64);
-            crate::println!("Benchmarking SDMA ({} KB, 16 iterations)...", size_keyboard);
+            let size_kb: u32 = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(64);
+            crate::println!("Benchmarking SDMA ({} KB, 16 iterations)...", size_kb);
                         // Pattern matching — Rust's exhaustive branching construct.
-match sdma::benchmark(size_keyboard) {
+match sdma::benchmark(size_kb) {
                 Ok((fill_bw, copy_bw)) => {
                     crate::println_color!(COLOR_GREEN, "  Fill BW: ~{} KB/s", fill_bw);
                     crate::println_color!(COLOR_GREEN, "  Copy BW: ~{} KB/s", copy_bw);
@@ -4421,15 +4422,15 @@ match sdma::benchmark(size_keyboard) {
                 crate::println_color!(COLOR_YELLOW, "SDMA not initialized");
                 return;
             }
-            let size_keyboard: u32 = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(4);
-            let fill_value: u32 = args.get(2).and_then(|s| {
+            let size_kb: u32 = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(4);
+            let fill_val: u32 = args.get(2).and_then(|s| {
                 if s.starts_with("0x") || s.starts_with("0X") {
                     u32::from_str_radix(&s[2..], 16).ok()
                 } else {
                     s.parse().ok()
                 }
             }).unwrap_or(0xDEAD_BEEF);
-            let byte_count = (size_keyboard * 1024).minimum(256 * 1024);
+            let byte_count = (size_kb * 1024).min(256 * 1024);
 
             // Allocate temp buffer
             let layout = alloc::alloc::Layout::from_size_align(byte_count as usize, 4096);
@@ -4438,22 +4439,22 @@ match sdma::benchmark(size_keyboard) {
                 return;
             }
             let layout = layout.unwrap();
-            let buffer = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+            let buf = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { alloc::alloc::alloc_zeroed(layout) } as u64;
-            let physical = crate::memory::virt_to_physical(buffer).unwrap_or(0);
-            if physical == 0 {
+            let phys = crate::memory::virt_to_physical(buf).unwrap_or(0);
+            if phys == 0 {
                 crate::println_color!(COLOR_RED, "Cannot get physical address");
                                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { alloc::alloc::dealloc(buffer as *mut u8, layout); }
+unsafe { alloc::alloc::dealloc(buf as *mut u8, layout); }
                 return;
             }
 
-            crate::println!("SDMA fill: {} bytes at {:#X} with {:#010X}", byte_count, physical, fill_value);
+            crate::println!("SDMA fill: {} bytes at {:#X} with {:#010X}", byte_count, phys, fill_val);
                         // Pattern matching — Rust's exhaustive branching construct.
-match sdma::fill(physical, fill_value, byte_count, 0) {
-                Ok(sequence) => {
+match sdma::fill(phys, fill_val, byte_count, 0) {
+                Ok(seq) => {
                     // Verify first 4 dwords
-                    let ptr = buffer as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+                    let ptr = buf as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u32;
                     let v0 = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { core::ptr::read_volatile(ptr) };
@@ -4464,20 +4465,20 @@ unsafe { core::ptr::read_volatile(ptr.add(2)) };
                     let v3 = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { core::ptr::read_volatile(ptr.add(3)) };
                     crate::println_color!(COLOR_GREEN, "  Done (fence={}), first 4: {:#010X} {:#010X} {:#010X} {:#010X}",
-                        sequence, v0, v1, v2, v3);
+                        seq, v0, v1, v2, v3);
                 }
                 Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
             }
                         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { alloc::alloc::dealloc(buffer as *mut u8, layout); }
+unsafe { alloc::alloc::dealloc(buf as *mut u8, layout); }
         }
         "copy" => {
             if !sdma::is_ready() {
                 crate::println_color!(COLOR_YELLOW, "SDMA not initialized");
                 return;
             }
-            let size_keyboard: u32 = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(4);
-            let byte_count = (size_keyboard * 1024).minimum(256 * 1024);
+            let size_kb: u32 = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(4);
+            let byte_count = (size_kb * 1024).min(256 * 1024);
 
             let layout = alloc::alloc::Layout::from_size_align(byte_count as usize, 4096);
             if layout.is_err() {
@@ -4502,34 +4503,34 @@ unsafe {
             }
 
             // Fill src with pattern
-            let source = buffer_a as *mut u32;
+            let src = buffer_a as *mut u32;
             for i in 0..(byte_count / 4) {
                                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::write_volatile(source.add(i as usize), 0xA000_0000 + i); }
+unsafe { core::ptr::write_volatile(src.add(i as usize), 0xA000_0000 + i); }
             }
 
             crate::println!("SDMA copy: {} bytes {:#X} → {:#X}", byte_count, physical_a, physical_b);
                         // Pattern matching — Rust's exhaustive branching construct.
 match sdma::copy(physical_a, physical_b, byte_count, 0) {
-                Ok(sequence) => {
+                Ok(seq) => {
                     // Verify first 4 dwords at destination
-                    let destination = buffer_b as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+                    let dst = buffer_b as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u32;
                     let v0 = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::read_volatile(destination) };
+unsafe { core::ptr::read_volatile(dst) };
                     let v1 = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::read_volatile(destination.add(1)) };
+unsafe { core::ptr::read_volatile(dst.add(1)) };
                     let v2 = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::read_volatile(destination.add(2)) };
+unsafe { core::ptr::read_volatile(dst.add(2)) };
                     let v3 = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::read_volatile(destination.add(3)) };
+unsafe { core::ptr::read_volatile(dst.add(3)) };
                     crate::println_color!(COLOR_GREEN, "  Done (fence={}), dst[0..3]: {:#010X} {:#010X} {:#010X} {:#010X}",
-                        sequence, v0, v1, v2, v3);
+                        seq, v0, v1, v2, v3);
                     // Quick verify
                     let mut ok = 0u32;
                     for i in 0..(byte_count / 4) {
                         let got = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::read_volatile(destination.add(i as usize)) };
+unsafe { core::ptr::read_volatile(dst.add(i as usize)) };
                         if got == 0xA000_0000 + i { ok += 1; }
                     }
                     crate::println!("  Verified: {}/{} dwords correct", ok, byte_count / 4);
@@ -4576,7 +4577,7 @@ pub(super) fn command_neural(args: &[&str]) {
         // Pattern matching — Rust's exhaustive branching construct.
 match args[0] {
         "info" => {
-            for line in neural::information_lines() {
+            for line in neural::info_lines() {
                 crate::println!("{}", line);
             }
         }
@@ -4626,7 +4627,7 @@ match args[0] {
             let elapsed = crate::time::uptime_ticks() - start;
 
             // Print first few results
-            let show = c.len().minimum(16);
+            let show = c.len().min(16);
             crate::println!("Result (first {} elements):", show);
             for i in 0..show {
                 if i > 0 && i % n == 0 { crate::println!(""); }
@@ -4673,13 +4674,13 @@ match args[0] {
             crate::println!("Architecture: seq=2, d_model=8, d_ff=16, heads=2");
             crate::println!("");
 
-            let sequence = 2;
+            let seq = 2;
             let d = 8;
             let d_ff = 16;
             let heads = 2;
 
             // Initialize with small random-ish values (deterministic)
-            let input: alloc::vec::Vec<f32> = (0..sequence*d).map(|i| ((i * 17 + 3) % 11) as f32 * 0.1 - 0.5).collect();
+            let input: alloc::vec::Vec<f32> = (0..seq*d).map(|i| ((i * 17 + 3) % 11) as f32 * 0.1 - 0.5).collect();
             let w_q: alloc::vec::Vec<f32> = (0..d*d).map(|i| ((i * 13 + 7) % 9) as f32 * 0.05 - 0.2).collect();
             let w_k: alloc::vec::Vec<f32> = (0..d*d).map(|i| ((i * 11 + 5) % 7) as f32 * 0.05 - 0.15).collect();
             let w_v: alloc::vec::Vec<f32> = (0..d*d).map(|i| ((i * 7 + 11) % 13) as f32 * 0.05 - 0.3).collect();
@@ -4694,13 +4695,13 @@ match args[0] {
                 &input, &w_q, &w_k, &w_v, &w_o,
                 &w_gate, &w_up, &w_down,
                 &rms_w, &rms_w,
-                sequence, d, d_ff, heads,
+                seq, d, d_ff, heads,
             );
             let elapsed = crate::time::uptime_ticks() - start;
 
-            crate::println!("Input[0..8]:  {:?}", &input[..d.minimum(8)]);
+            crate::println!("Input[0..8]:  {:?}", &input[..d.min(8)]);
             crate::println!("Output[0..8]: [");
-            for i in 0..d.minimum(8) {
+            for i in 0..d.min(8) {
                 crate::println!("  {:.6}", output[i]);
             }
             crate::println!("]");
@@ -4769,9 +4770,9 @@ match args[0] {
                 crate::println_color!(COLOR_RED, "No AMD GPU detected");
                 return;
             }
-            if let Some(information) = crate::drivers::amdgpu::get_information() {
-                crate::println!("Reloading firmware for {}...", information.gpu_name());
-                firmware::reload(information.mmio_base_virt);
+            if let Some(info) = crate::drivers::amdgpu::get_information() {
+                crate::println!("Reloading firmware for {}...", info.gpu_name());
+                firmware::reload(info.mmio_base_virt);
                 crate::println_color!(COLOR_GREEN, "Done. {}", firmware::summary());
             }
         }
@@ -4796,5 +4797,308 @@ match args[0] {
             crate::println_color!(COLOR_RED, "Unknown: gpufw {}", args[0]);
             crate::println!("Use 'gpufw' for help");
         }
+    }
+}
+
+// ==================== WIFI MANAGEMENT COMMAND ====================
+
+pub(super) fn command_wifi(args: &[&str]) {
+    use crate::drivers::net::wifi;
+    use crate::framebuffer::{COLOR_GREEN, COLOR_RED, COLOR_YELLOW, COLOR_CYAN, COLOR_WHITE, COLOR_GRAY};
+
+    let subcmd = args.first().copied().unwrap_or("status");
+
+        // Pattern matching — Rust's exhaustive branching construct.
+match subcmd {
+        "status" | "info" => {
+            let state = wifi::state();
+            let has_hardware = wifi::has_wifi();
+
+            crate::println_color!(COLOR_CYAN, "=== WiFi Status ===");
+            crate::println!("  Hardware:  {}", if has_hardware { "detected" } else { "not found" });
+            crate::println!("  State:     {:?}", state);
+
+            if let Some(ssid) = wifi::connected_ssid() {
+                crate::println!("  SSID:      {}", ssid);
+                if let Some(dbm) = wifi::signal_strength() {
+                    let bars = // Pattern matching — Rust's exhaustive branching construct.
+match dbm {
+                        -50..=0 => "████ (excellent)",
+                        -60..=-51 => "███░ (good)",
+                        -70..=-61 => "██░░ (fair)",
+                        _ => "█░░░ (weak)",
+                    };
+                    crate::println!("  Signal:    {} dBm {}", dbm, bars);
+                }
+            }
+        }
+
+        "scan" => {
+            if !wifi::has_wifi() {
+                crate::println_color!(COLOR_RED, "No WiFi hardware detected");
+                return;
+            }
+            crate::println_color!(COLOR_YELLOW, "Scanning for WiFi networks...");
+                        // Pattern matching — Rust's exhaustive branching construct.
+match wifi::start_scan() {
+                Ok(()) => {
+                    // Poll for ~3 seconds to let firmware scan all channels
+                    // 15 channels * ~100ms dwell = ~1.5s minimum
+                    crate::print!("  Waiting: ");
+                    for i in 0..30u32 {
+                        for _ in 0..100 {
+                            wifi::poll();
+                            for _ in 0..10000 { core::hint::spin_loop(); }
+                        }
+                        crate::print!(".");
+                        // Check if scan finished early
+                        let results = wifi::get_scan_results();
+                        if !results.is_empty() {
+                            crate::println!(" done ({} found in ~{}ms)", results.len(), i * 100);
+                            print_scan_results(&results);
+                            return;
+                        }
+                    }
+                    crate::println!(" done");
+                    let results = wifi::get_scan_results();
+                    if results.is_empty() {
+                        crate::println_color!(COLOR_YELLOW, "No networks found");
+                        crate::println!("  Run 'wifi debug' for diagnostics");
+                    } else {
+                        print_scan_results(&results);
+                    }
+                }
+                Err(e) => crate::println_color!(COLOR_RED, "Scan failed: {}", e),
+            }
+        }
+
+        "results" | "list" => {
+            let results = wifi::get_scan_results();
+            if results.is_empty() {
+                crate::println_color!(COLOR_YELLOW, "No scan results. Run 'wifi scan' first.");
+            } else {
+                print_scan_results(&results);
+            }
+        }
+
+        "connect" => {
+            if args.len() < 2 {
+                crate::println!("Usage: wifi connect <SSID> [password]");
+                return;
+            }
+            let ssid = args[1];
+            let password = if args.len() > 2 { args[2] } else { "" };
+            crate::println_color!(COLOR_YELLOW, "Connecting to '{}'...", ssid);
+            wifi::request_connect(ssid, password);
+            // Poll to process the request
+            for _ in 0..50 {
+                wifi::poll();
+                for _ in 0..50000 { core::hint::spin_loop(); }
+            }
+            let state = wifi::state();
+                        // Pattern matching — Rust's exhaustive branching construct.
+match state {
+                crate::drivers::net::wifi::WifiState::Connected => {
+                    crate::println_color!(COLOR_GREEN, "Connected to '{}'!", ssid);
+                }
+                crate::drivers::net::wifi::WifiState::Connecting |
+                crate::drivers::net::wifi::WifiState::Authenticating => {
+                    crate::println_color!(COLOR_YELLOW, "Connection in progress... (state: {:?})", state);
+                }
+                _ => {
+                    crate::println_color!(COLOR_RED, "Connection state: {:?}", state);
+                }
+            }
+        }
+
+        "disconnect" => {
+                        // Pattern matching — Rust's exhaustive branching construct.
+match wifi::disconnect() {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "Disconnected"),
+                Err(e) => crate::println_color!(COLOR_RED, "Disconnect failed: {}", e),
+            }
+        }
+
+        "debug" | "diag" | "test" => {
+            crate::println_color!(COLOR_CYAN, "=== WiFi Debug Dump ===");
+            crate::drivers::net::iwl4965::debug_dump();
+            crate::println!();
+            crate::drivers::net::iwl4965::debug_dump_csrs();
+            crate::println!();
+            crate::println!("  Tip: Use 'drv test wifi' for full PCI + BAR + CSR test suite");
+            crate::println!("  Tip: Use 'drv reprobe wifi' to re-probe without reboot");
+        }
+
+        "start" | "init" | "up" => {
+            if !wifi::has_wifi() {
+                crate::println_color!(COLOR_RED, "No WiFi hardware detected");
+                crate::println!("  Try: drv reprobe wifi");
+                return;
+            }
+            crate::println_color!(COLOR_YELLOW, "Starting WiFi driver (hw_init + firmware)...");
+                        // Pattern matching — Rust's exhaustive branching construct.
+match wifi::ensure_started() {
+                Ok(()) => {
+                    crate::println_color!(COLOR_GREEN, "WiFi driver started successfully");
+                }
+                Err(e) => {
+                    crate::println_color!(COLOR_RED, "WiFi start failed: {}", e);
+                }
+            }
+        }
+
+        "reg" | "csr" => {
+            // wifi reg <offset> [value]  — read/write any CSR register
+            if args.len() < 2 {
+                crate::println!("Usage: wifi reg <offset_hex> [value_hex]");
+                crate::println!("  Example: wifi reg 0x24        (read GP_CNTRL)");
+                crate::println!("  Example: wifi reg 0x24 0x80   (write GP_CNTRL)");
+                return;
+            }
+            let offset_str = args[1].trim_start_matches("0x").trim_start_matches("0X");
+            let offset = // Pattern matching — Rust's exhaustive branching construct.
+match u32::from_str_radix(offset_str, 16) {
+                Ok(v) => v,
+                Err(_) => { crate::println_color!(COLOR_RED, "Bad hex: {}", args[1]); return; }
+            };
+            if args.len() >= 3 {
+                let val_str = args[2].trim_start_matches("0x").trim_start_matches("0X");
+                let val = // Pattern matching — Rust's exhaustive branching construct.
+match u32::from_str_radix(val_str, 16) {
+                    Ok(v) => v,
+                    Err(_) => { crate::println_color!(COLOR_RED, "Bad hex: {}", args[2]); return; }
+                };
+                if crate::drivers::net::iwl4965::debug_write_csr(offset, val) {
+                    crate::println_color!(COLOR_GREEN, "CSR[0x{:03X}] <= 0x{:08X}", offset, val);
+                } else {
+                    crate::println_color!(COLOR_RED, "Write failed (no MMIO)");
+                }
+            } else {
+                                // Pattern matching — Rust's exhaustive branching construct.
+match crate::drivers::net::iwl4965::debug_read_csr(offset) {
+                    Some(v) => crate::println!("CSR[0x{:03X}] = 0x{:08X}", offset, v),
+                    None => crate::println_color!(COLOR_RED, "Read failed (no MMIO)"),
+                }
+            }
+        }
+
+        "prph" => {
+            // wifi prph <addr> [value]  — read/write peripheral register
+            if args.len() < 2 {
+                crate::println!("Usage: wifi prph <addr_hex> [value_hex]");
+                crate::println!("  Example: wifi prph 0x3000     (read APMG_CLK_CTRL)");
+                crate::println!("  Example: wifi prph 0x3400     (read BSM_WR_CTRL)");
+                return;
+            }
+            let address_str = args[1].trim_start_matches("0x").trim_start_matches("0X");
+            let addr = // Pattern matching — Rust's exhaustive branching construct.
+match u32::from_str_radix(address_str, 16) {
+                Ok(v) => v,
+                Err(_) => { crate::println_color!(COLOR_RED, "Bad hex: {}", args[1]); return; }
+            };
+            if args.len() >= 3 {
+                let val_str = args[2].trim_start_matches("0x").trim_start_matches("0X");
+                let val = // Pattern matching — Rust's exhaustive branching construct.
+match u32::from_str_radix(val_str, 16) {
+                    Ok(v) => v,
+                    Err(_) => { crate::println_color!(COLOR_RED, "Bad hex: {}", args[2]); return; }
+                };
+                if crate::drivers::net::iwl4965::debug_write_prph(addr, val) {
+                    crate::println_color!(COLOR_GREEN, "PRPH[0x{:04X}] <= 0x{:08X}", addr, val);
+                } else {
+                    crate::println_color!(COLOR_RED, "Write failed (no MMIO)");
+                }
+            } else {
+                                // Pattern matching — Rust's exhaustive branching construct.
+match crate::drivers::net::iwl4965::debug_read_prph(addr) {
+                    Some(v) => crate::println!("PRPH[0x{:04X}] = 0x{:08X}", addr, v),
+                    None => crate::println_color!(COLOR_RED, "Read failed (no MMIO)"),
+                }
+            }
+        }
+
+        "apm" => {
+            // wifi apm  — run APM init with visible step-by-step output
+            crate::println_color!(COLOR_CYAN, "=== WiFi APM Init (step-by-step) ===");
+                        // Pattern matching — Rust's exhaustive branching construct.
+match crate::drivers::net::iwl4965::debug_apm_initialize() {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "APM init SUCCESS"),
+                Err(e) => crate::println_color!(COLOR_RED, "APM init FAILED: {}", e),
+            }
+        }
+
+        "bsm" => {
+            // wifi bsm  — dump BSM state registers
+            crate::println_color!(COLOR_CYAN, "=== BSM State Machine Registers ===");
+            crate::drivers::net::iwl4965::debug_dump_bsm();
+        }
+
+        "apmg" => {
+            // wifi apmg  — dump APMG registers
+            crate::println_color!(COLOR_CYAN, "=== APMG Power Management Registers ===");
+            crate::drivers::net::iwl4965::debug_dump_apmg();
+        }
+
+        "fw" | "firmware" => {
+            // wifi fw  — verbose firmware loading attempt
+            crate::println_color!(COLOR_CYAN, "=== WiFi Firmware Load (verbose) ===");
+                        // Pattern matching — Rust's exhaustive branching construct.
+match crate::drivers::net::iwl4965::debug_load_firmware() {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "Firmware loaded!"),
+                Err(e) => crate::println_color!(COLOR_RED, "Firmware load FAILED: {}", e),
+            }
+        }
+
+        _ => {
+            crate::println_color!(COLOR_CYAN, "WiFi Management Commands:");
+            crate::println!("  wifi status          Show WiFi status and connection info");
+            crate::println!("  wifi start           Initialize hardware + load firmware (verbose)");
+            crate::println!("  wifi scan            Scan for available networks");
+            crate::println!("  wifi results         Show last scan results");
+            crate::println!("  wifi connect <SSID> [password]  Connect to network");
+            crate::println!("  wifi disconnect      Disconnect from current network");
+            crate::println!("  wifi debug           PCI + CSR register dump");
+            crate::println_color!(COLOR_CYAN, "Live Debug (no recompile needed):");
+            crate::println!("  wifi reg <offset> [val]   Read/write CSR register (hex)");
+            crate::println!("  wifi prph <addr> [val]    Read/write PRPH register (hex)");
+            crate::println!("  wifi apm             Step-by-step APM init");
+            crate::println!("  wifi bsm             Dump BSM state registers");
+            crate::println!("  wifi apmg            Dump APMG power registers");
+            crate::println!("  wifi fw              Verbose firmware loading attempt");
+        }
+    }
+}
+
+fn print_scan_results(results: &[crate::drivers::net::wifi::WifiNetwork]) {
+    use crate::framebuffer::{COLOR_CYAN, COLOR_WHITE, COLOR_GREEN, COLOR_YELLOW, COLOR_RED};
+    crate::println_color!(COLOR_CYAN, "=== WiFi Networks ({} found) ===", results.len());
+    crate::println_color!(COLOR_WHITE, "  {:<32} {:>4}  {:>6}  {:<8}  {}", "SSID", "CH", "Signal", "Security", "BSSID");
+    crate::println_color!(COLOR_WHITE, "  {}", "-".repeat(78));
+
+    for net in results {
+        let signal_color = // Pattern matching — Rust's exhaustive branching construct.
+match net.signal_dbm {
+            -50..=0 => COLOR_GREEN,
+            -70..=-51 => COLOR_YELLOW,
+            _ => COLOR_RED,
+        };
+        let bars = net.signal_bars();
+        let sec = // Pattern matching — Rust's exhaustive branching construct.
+match net.security {
+            crate::drivers::net::wifi::WifiSecurity::Open => "Open",
+            crate::drivers::net::wifi::WifiSecurity::WEP => "WEP",
+            crate::drivers::net::wifi::WifiSecurity::WPA => "WPA",
+            crate::drivers::net::wifi::WifiSecurity::WPA2 => "WPA2",
+            crate::drivers::net::wifi::WifiSecurity::WPA3 => "WPA3",
+            _ => "???",
+        };
+        crate::print!("  {:<32} {:>4}  ", net.ssid, net.channel);
+        crate::print_color!(signal_color, "{:>3}dBm {}", net.signal_dbm, 
+                        // Pattern matching — Rust's exhaustive branching construct.
+match bars { 4 => "████", 3 => "███░", 2 => "██░░", 1 => "█░░░", _ => "░░░░" });
+        crate::println!("  {:<8}  {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+            sec,
+            net.bssid[0], net.bssid[1], net.bssid[2],
+            net.bssid[3], net.bssid[4], net.bssid[5]);
     }
 }

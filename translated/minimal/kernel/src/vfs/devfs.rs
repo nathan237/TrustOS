@@ -9,221 +9,221 @@ use alloc::sync::Arc;
 use core::sync::atomic::{AtomicU64, Ordering};
 
 use super::{
-    Cc, Et, Ep, Stat, Br, FileType, 
-    I, B, VfsError
+    Au, Bx, Bv, Stat, Ap, FileType, 
+    K, E, VfsError
 };
 
 
 #[derive(Clone, Copy, Debug)]
 enum DeviceType {
-    Gm,       
-    Bbg,       
-    Alu,     
-    Rw,    
-    Zi,        
+    Null,       
+    Zero,       
+    Random,     
+    Hk,    
+    Vda,        
 }
 
 
-struct Ben {
-    cwx: DeviceType,
-    dd: I,
+struct Xu {
+    dev_type: DeviceType,
+    ino: K,
 }
 
-impl Et for Ben {
-    fn read(&self, l: u64, k: &mut [u8]) -> B<usize> {
-        match self.cwx {
-            DeviceType::Gm => Ok(0), 
-            DeviceType::Bbg => {
-                for o in k.el() {
-                    *o = 0;
+impl Bx for Xu {
+    fn read(&self, offset: u64, buf: &mut [u8]) -> E<usize> {
+        match self.dev_type {
+            DeviceType::Null => Ok(0), 
+            DeviceType::Zero => {
+                for b in buf.iter_mut() {
+                    *b = 0;
                 }
-                Ok(k.len())
+                Ok(buf.len())
             }
-            DeviceType::Alu => {
+            DeviceType::Random => {
                 
-                for o in k.el() {
-                    *o = crate::rng::hsw() as u8;
+                for b in buf.iter_mut() {
+                    *b = crate::rng::dvf() as u8;
                 }
-                Ok(k.len())
+                Ok(buf.len())
             }
-            DeviceType::Rw => {
+            DeviceType::Hk => {
                 
                 
-                let mut es = 0usize;
-                let ulx = 500_000_000u64; 
-                let mut aaf = 0u64;
+                let mut av = 0usize;
+                let ndl = 500_000_000u64; 
+                let mut my = 0u64;
                 
-                while es == 0 && aaf < ulx {
-                    while es < k.len() {
-                        if let Some(bm) = crate::keyboard::auw() {
-                            k[es] = bm;
-                            es += 1;
+                while av == 0 && my < ndl {
+                    while av < buf.len() {
+                        if let Some(ch) = crate::keyboard::ya() {
+                            buf[av] = ch;
+                            av += 1;
                             
-                            if bm == b'\n' || bm == b'\r' {
-                                if bm == b'\r' {
-                                    k[es - 1] = b'\n';
+                            if ch == b'\n' || ch == b'\r' {
+                                if ch == b'\r' {
+                                    buf[av - 1] = b'\n';
                                 }
-                                return Ok(es);
+                                return Ok(av);
                             }
                         } else {
                             break; 
                         }
                     }
-                    if es == 0 {
+                    if av == 0 {
                         
-                        core::hint::hc();
-                        aaf += 1;
+                        core::hint::spin_loop();
+                        my += 1;
                     }
                 }
-                Ok(es)
+                Ok(av)
             }
-            DeviceType::Zi => {
+            DeviceType::Vda => {
                 
-                if !crate::virtio_blk::ky() {
-                    return Err(VfsError::Av);
+                if !crate::virtio_blk::is_initialized() {
+                    return Err(VfsError::IoError);
                 }
-                let zn = 512u64;
-                let awy = l / zn;
-                let bho = (l % zn) as usize;
-                let mut gut = 0usize;
-                let mut gru = awy;
-                let mut u = bho;
-                let mut aae = [0u8; 512];
-                while gut < k.len() {
-                    if crate::virtio_blk::xr(gru, &mut aae).is_err() {
+                let sector_size = 512u64;
+                let start_sector = offset / sector_size;
+                let afl = (offset % sector_size) as usize;
+                let mut dfr = 0usize;
+                let mut dec = start_sector;
+                let mut pos = afl;
+                let mut mx = [0u8; 512];
+                while dfr < buf.len() {
+                    if crate::virtio_blk::read_sector(dec, &mut mx).is_err() {
                         break;
                     }
-                    let apk = 512 - u;
-                    let acq = core::cmp::v(apk, k.len() - gut);
-                    k[gut..gut + acq].dg(&aae[u..u + acq]);
-                    gut += acq;
-                    gru += 1;
-                    u = 0;
+                    let avail = 512 - pos;
+                    let od = core::cmp::min(avail, buf.len() - dfr);
+                    buf[dfr..dfr + od].copy_from_slice(&mx[pos..pos + od]);
+                    dfr += od;
+                    dec += 1;
+                    pos = 0;
                 }
-                Ok(gut)
+                Ok(dfr)
             }
         }
     }
     
-    fn write(&self, l: u64, k: &[u8]) -> B<usize> {
-        match self.cwx {
-            DeviceType::Gm => Ok(k.len()), 
-            DeviceType::Bbg => Err(VfsError::Bz),
-            DeviceType::Alu => Err(VfsError::Bz),
-            DeviceType::Rw => {
+    fn write(&self, offset: u64, buf: &[u8]) -> E<usize> {
+        match self.dev_type {
+            DeviceType::Null => Ok(buf.len()), 
+            DeviceType::Zero => Err(VfsError::ReadOnly),
+            DeviceType::Random => Err(VfsError::ReadOnly),
+            DeviceType::Hk => {
                 
-                for &o in k {
-                    crate::serial_print!("{}", o as char);
+                for &b in buf {
+                    crate::serial_print!("{}", b as char);
                 }
-                Ok(k.len())
+                Ok(buf.len())
             }
-            DeviceType::Zi => {
-                if !crate::virtio_blk::ky() {
-                    return Err(VfsError::Av);
+            DeviceType::Vda => {
+                if !crate::virtio_blk::is_initialized() {
+                    return Err(VfsError::IoError);
                 }
-                let zn = 512u64;
-                let awy = l / zn;
-                let bho = (l % zn) as usize;
-                let mut fxe = 0usize;
-                let mut gru = awy;
-                let mut u = bho;
-                let mut aae = [0u8; 512];
-                while fxe < k.len() {
+                let sector_size = 512u64;
+                let start_sector = offset / sector_size;
+                let afl = (offset % sector_size) as usize;
+                let mut cry = 0usize;
+                let mut dec = start_sector;
+                let mut pos = afl;
+                let mut mx = [0u8; 512];
+                while cry < buf.len() {
                     
-                    if u != 0 || (k.len() - fxe) < 512 {
-                        let _ = crate::virtio_blk::xr(gru, &mut aae);
+                    if pos != 0 || (buf.len() - cry) < 512 {
+                        let _ = crate::virtio_blk::read_sector(dec, &mut mx);
                     }
-                    let apk = 512 - u;
-                    let acq = core::cmp::v(apk, k.len() - fxe);
-                    aae[u..u + acq].dg(&k[fxe..fxe + acq]);
-                    if crate::virtio_blk::aby(gru, &aae).is_err() {
+                    let avail = 512 - pos;
+                    let od = core::cmp::min(avail, buf.len() - cry);
+                    mx[pos..pos + od].copy_from_slice(&buf[cry..cry + od]);
+                    if crate::virtio_blk::write_sector(dec, &mx).is_err() {
                         break;
                     }
-                    fxe += acq;
-                    gru += 1;
-                    u = 0;
+                    cry += od;
+                    dec += 1;
+                    pos = 0;
                 }
-                Ok(fxe)
+                Ok(cry)
             }
         }
     }
     
-    fn hm(&self) -> B<Stat> {
-        let kd = match self.cwx {
-            DeviceType::Zi => FileType::Bj,
-            _ => FileType::Mv,
+    fn stat(&self) -> E<Stat> {
+        let file_type = match self.dev_type {
+            DeviceType::Vda => FileType::Ak,
+            _ => FileType::CharDevice,
         };
         
         Ok(Stat {
-            dd: self.dd,
-            kd,
-            aw: 0,
-            xk: 0,
-            py: 512,
-            ev: 0o666,
+            ino: self.ino,
+            file_type,
+            size: 0,
+            blocks: 0,
+            block_size: 512,
+            mode: 0o666,
             ..Default::default()
         })
     }
 }
 
 
-struct Aba {
-    j: String,
-    cwx: DeviceType,
-    dd: I,
+struct Ll {
+    name: String,
+    dev_type: DeviceType,
+    ino: K,
 }
 
 
-struct Bem {
-    ik: Vec<Aba>,
+struct Xt {
+    devices: Vec<Ll>,
 }
 
-impl Ep for Bem {
-    fn cga(&self, j: &str) -> B<I> {
-        for ba in &self.ik {
-            if ba.j == j {
-                return Ok(ba.dd);
+impl Bv for Xt {
+    fn lookup(&self, name: &str) -> E<K> {
+        for s in &self.devices {
+            if s.name == name {
+                return Ok(s.ino);
             }
         }
-        Err(VfsError::N)
+        Err(VfsError::NotFound)
     }
     
-    fn brx(&self) -> B<Vec<Br>> {
-        let mut ch = vec![
-            Br { j: String::from("."), dd: 1, kd: FileType::K },
-            Br { j: String::from(".."), dd: 1, kd: FileType::K },
+    fn readdir(&self) -> E<Vec<Ap>> {
+        let mut entries = vec![
+            Ap { name: String::from("."), ino: 1, file_type: FileType::Directory },
+            Ap { name: String::from(".."), ino: 1, file_type: FileType::Directory },
         ];
         
-        for ba in &self.ik {
-            ch.push(Br {
-                j: ba.j.clone(),
-                dd: ba.dd,
-                kd: match ba.cwx {
-                    DeviceType::Zi => FileType::Bj,
-                    _ => FileType::Mv,
+        for s in &self.devices {
+            entries.push(Ap {
+                name: s.name.clone(),
+                ino: s.ino,
+                file_type: match s.dev_type {
+                    DeviceType::Vda => FileType::Ak,
+                    _ => FileType::CharDevice,
                 },
             });
         }
         
-        Ok(ch)
+        Ok(entries)
     }
     
-    fn avp(&self, blu: &str, gxf: FileType) -> B<I> {
-        Err(VfsError::Bz) 
+    fn create(&self, _name: &str, _file_type: FileType) -> E<K> {
+        Err(VfsError::ReadOnly) 
     }
     
-    fn cnm(&self, blu: &str) -> B<()> {
-        Err(VfsError::Bz)
+    fn unlink(&self, _name: &str) -> E<()> {
+        Err(VfsError::ReadOnly)
     }
     
-    fn hm(&self) -> B<Stat> {
+    fn stat(&self) -> E<Stat> {
         Ok(Stat {
-            dd: 1,
-            kd: FileType::K,
-            aw: 0,
-            xk: 0,
-            py: 512,
-            ev: 0o755,
+            ino: 1,
+            file_type: FileType::Directory,
+            size: 0,
+            blocks: 0,
+            block_size: 512,
+            mode: 0o755,
             ..Default::default()
         })
     }
@@ -231,104 +231,104 @@ impl Ep for Bem {
 
 
 pub struct DevFs {
-    ik: Vec<Aba>,
-    hsv: AtomicU64,
+    devices: Vec<Ll>,
+    next_ino: AtomicU64,
 }
 
 impl DevFs {
-    pub fn new() -> B<Self> {
+    pub fn new() -> E<Self> {
         let mut fs = Self {
-            ik: Vec::new(),
-            hsv: AtomicU64::new(2), 
+            devices: Vec::new(),
+            next_ino: AtomicU64::new(2), 
         };
         
         
-        fs.fcm("null", DeviceType::Gm);
-        fs.fcm("zero", DeviceType::Bbg);
-        fs.fcm("random", DeviceType::Alu);
-        fs.fcm("urandom", DeviceType::Alu);
-        fs.fcm("console", DeviceType::Rw);
-        fs.fcm("tty", DeviceType::Rw);
+        fs.add_device("null", DeviceType::Null);
+        fs.add_device("zero", DeviceType::Zero);
+        fs.add_device("random", DeviceType::Random);
+        fs.add_device("urandom", DeviceType::Random);
+        fs.add_device("console", DeviceType::Hk);
+        fs.add_device("tty", DeviceType::Hk);
         
         
-        if crate::virtio_blk::ky() {
-            fs.fcm("vda", DeviceType::Zi);
+        if crate::virtio_blk::is_initialized() {
+            fs.add_device("vda", DeviceType::Vda);
         }
         
         Ok(fs)
     }
     
-    fn fcm(&mut self, j: &str, cwx: DeviceType) {
-        let dd = self.hsv.fetch_add(1, Ordering::SeqCst);
-        self.ik.push(Aba {
-            j: String::from(j),
-            cwx,
-            dd,
+    fn add_device(&mut self, name: &str, dev_type: DeviceType) {
+        let ino = self.next_ino.fetch_add(1, Ordering::SeqCst);
+        self.devices.push(Ll {
+            name: String::from(name),
+            dev_type,
+            ino,
         });
     }
     
-    fn nuf(&self, dd: I) -> Option<&Aba> {
-        self.ik.iter().du(|bc| bc.dd == dd)
+    fn find_device(&self, ino: K) -> Option<&Ll> {
+        self.devices.iter().find(|d| d.ino == ino)
     }
 }
 
-impl Cc for DevFs {
-    fn j(&self) -> &str {
+impl Au for DevFs {
+    fn name(&self) -> &str {
         "devfs"
     }
     
-    fn cbm(&self) -> I {
+    fn root_inode(&self) -> K {
         1
     }
     
-    fn era(&self, dd: I) -> B<Arc<dyn Et>> {
-        let ba = self.nuf(dd).ok_or(VfsError::N)?;
-        Ok(Arc::new(Ben {
-            cwx: ba.cwx,
-            dd: ba.dd,
+    fn get_file(&self, ino: K) -> E<Arc<dyn Bx>> {
+        let s = self.find_device(ino).ok_or(VfsError::NotFound)?;
+        Ok(Arc::new(Xu {
+            dev_type: s.dev_type,
+            ino: s.ino,
         }))
     }
     
-    fn dhl(&self, dd: I) -> B<Arc<dyn Ep>> {
-        if dd == 1 {
-            Ok(Arc::new(Bem {
-                ik: self.ik.clone(),
+    fn get_dir(&self, ino: K) -> E<Arc<dyn Bv>> {
+        if ino == 1 {
+            Ok(Arc::new(Xt {
+                devices: self.devices.clone(),
             }))
         } else {
-            Err(VfsError::Lz)
+            Err(VfsError::NotDirectory)
         }
     }
     
-    fn hm(&self, dd: I) -> B<Stat> {
-        if dd == 1 {
+    fn stat(&self, ino: K) -> E<Stat> {
+        if ino == 1 {
             Ok(Stat {
-                dd: 1,
-                kd: FileType::K,
-                ev: 0o755,
+                ino: 1,
+                file_type: FileType::Directory,
+                mode: 0o755,
                 ..Default::default()
             })
-        } else if let Some(ba) = self.nuf(dd) {
+        } else if let Some(s) = self.find_device(ino) {
             Ok(Stat {
-                dd: ba.dd,
-                kd: match ba.cwx {
-                    DeviceType::Zi => FileType::Bj,
-                    _ => FileType::Mv,
+                ino: s.ino,
+                file_type: match s.dev_type {
+                    DeviceType::Vda => FileType::Ak,
+                    _ => FileType::CharDevice,
                 },
-                ev: 0o666,
+                mode: 0o666,
                 ..Default::default()
             })
         } else {
-            Err(VfsError::N)
+            Err(VfsError::NotFound)
         }
     }
 }
 
-impl Clone for Aba {
+impl Clone for Ll {
     fn clone(&self) -> Self {
         Self {
-            j: self.j.clone(),
-            cwx: self.cwx,
-            dd: self.dd,
+            name: self.name.clone(),
+            dev_type: self.dev_type,
+            ino: self.ino,
         }
     }
 }

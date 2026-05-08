@@ -194,24 +194,24 @@ pub fn new(id: u32) -> Self {
     }
     
     /// Check if point is inside surface (including decorations)
-    pub fn contains(&self, pixel: i32, py: i32) -> bool {
+    pub fn contains(&self, px: i32, py: i32) -> bool {
         let title_height = if self.has_decorations { 28 } else { 0 };
         let x1 = self.x;
         let y1 = self.y - title_height;
         let x2 = self.x + self.width as i32;
         let y2 = self.y + self.height as i32;
         
-        pixel >= x1 && pixel < x2 && py >= y1 && py < y2
+        px >= x1 && px < x2 && py >= y1 && py < y2
     }
     
     /// Check if point is in title bar
-    pub fn in_title_bar(&self, pixel: i32, py: i32) -> bool {
+    pub fn in_title_bar(&self, px: i32, py: i32) -> bool {
         if !self.has_decorations {
             return false;
         }
         let title_height = 28;
-        pixel >= self.x 
-            && pixel < self.x + self.width as i32 
+        px >= self.x 
+            && px < self.x + self.width as i32 
             && py >= self.y - title_height 
             && py < self.y
     }

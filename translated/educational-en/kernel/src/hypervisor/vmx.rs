@@ -201,10 +201,10 @@ pub fn vmxon() -> Result<()> {
     let region = Box::new(VmxonRegion::new(revision_id));
     let region_virt = region.as_ref() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const VmxonRegion as u64;
-    let region_physical = virt_to_physical_vmx(region_virt);
+    let region_phys = virt_to_physical_vmx(region_virt);
     
     crate::serial_println!("[VMX] VMXON region virt=0x{:016X} phys=0x{:016X}, revision 0x{:08X}", 
-                          region_virt, region_physical, revision_id);
+                          region_virt, region_phys, revision_id);
     
     // Sauvegarder la région (keep alive)
     unsafe {
@@ -220,7 +220,7 @@ unsafe {
             "vmxon [{addr}]",
             "setc {cf}",
             "setz {zf}",
-            address = in(reg) &region_physical,
+            addr = in(reg) &region_phys,
             cf = out(reg_byte) cf,
             zf = out(reg_byte) zf,
         );
@@ -265,7 +265,7 @@ unsafe {
 
 /// VMCLEAR - Initialiser/nettoyer une VMCS
 /// `vmcs_phys` is the physical address of the VMCS region.
-pub fn vmclear(vmcs_physical: u64) -> Result<()> {
+pub fn vmclear(vmcs_phys: u64) -> Result<()> {
     let cf: u8;
     let zf: u8;
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
@@ -274,14 +274,14 @@ unsafe {
             "vmclear [{addr}]",
             "setc {cf}",
             "setz {zf}",
-            address = in(reg) &vmcs_physical,
+            addr = in(reg) &vmcs_phys,
             cf = out(reg_byte) cf,
             zf = out(reg_byte) zf,
         );
     }
     
     if cf != 0 || zf != 0 {
-        crate::serial_println!("[VMX] VMCLEAR failed for phys=0x{:X} CF={} ZF={}", vmcs_physical, cf, zf);
+        crate::serial_println!("[VMX] VMCLEAR failed for phys=0x{:X} CF={} ZF={}", vmcs_phys, cf, zf);
         return Err(HypervisorError::VmclearFailed);
     }
     
@@ -290,7 +290,7 @@ unsafe {
 
 /// VMPTRLD - Charger une VMCS comme courante
 /// `vmcs_phys` is the physical address of the VMCS region.
-pub fn vmptrld(vmcs_physical: u64) -> Result<()> {
+pub fn vmptrld(vmcs_phys: u64) -> Result<()> {
     let cf: u8;
     let zf: u8;
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
@@ -299,14 +299,14 @@ unsafe {
             "vmptrld [{addr}]",
             "setc {cf}",
             "setz {zf}",
-            address = in(reg) &vmcs_physical,
+            addr = in(reg) &vmcs_phys,
             cf = out(reg_byte) cf,
             zf = out(reg_byte) zf,
         );
     }
     
     if cf != 0 || zf != 0 {
-        crate::serial_println!("[VMX] VMPTRLD failed for phys=0x{:X} CF={} ZF={}", vmcs_physical, cf, zf);
+        crate::serial_println!("[VMX] VMPTRLD failed for phys=0x{:X} CF={} ZF={}", vmcs_phys, cf, zf);
         return Err(HypervisorError::VmptrldFailed);
     }
     
@@ -325,7 +325,7 @@ unsafe {
             "vmread {val}, {field}",
             "setc {cf}",
             "setz {zf}",
-            value = out(reg) value,
+            val = out(reg) value,
             field = in(reg) field,
             cf = out(reg_byte) cf,
             zf = out(reg_byte) zf,
@@ -351,7 +351,7 @@ unsafe {
             "setc {cf}",
             "setz {zf}",
             field = in(reg) field,
-            value = in(reg) value,
+            val = in(reg) value,
             cf = out(reg_byte) cf,
             zf = out(reg_byte) zf,
         );

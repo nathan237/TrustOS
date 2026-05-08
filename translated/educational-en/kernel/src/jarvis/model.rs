@@ -115,7 +115,7 @@ impl LayerWeights {
     }
 
     /// Parameter count for one layer
-    pub fn parameter_count(&self) -> usize {
+    pub fn param_count(&self) -> usize {
         D_MODEL  // rms_attn
         + D_MODEL * D_MODEL * 4  // w_q, w_k, w_v, w_o
         + D_MODEL  // rms_ffn
@@ -129,7 +129,7 @@ pub struct TransformerWeights {
     /// Token embedding matrix [VOCAB_SIZE × D_MODEL]
     pub token_embed: Vec<f32>,
     /// Learned positional embedding [MAX_SEQ × D_MODEL]
-    pub position_embed: Vec<f32>,
+    pub pos_embed: Vec<f32>,
     /// Per-layer weights
     pub layers: Vec<LayerWeights>,
     /// Final RMSNorm [D_MODEL]
@@ -153,7 +153,7 @@ impl TransformerWeights {
 
         TransformerWeights {
             token_embed: random_vec(VOCAB_SIZE * D_MODEL, embed_scale, &mut seed),
-            position_embed: random_vec(MAXIMUM_SEQUENCE * D_MODEL, 0.02, &mut seed),
+            pos_embed: random_vec(MAXIMUM_SEQUENCE * D_MODEL, 0.02, &mut seed),
             layers,
             rms_final: vec![1.0f32; D_MODEL],
             w_output: random_vec(D_MODEL * VOCAB_SIZE, embed_scale, &mut seed),
@@ -161,24 +161,24 @@ impl TransformerWeights {
     }
 
     /// Total parameter count
-    pub fn parameter_count(&self) -> usize {
+    pub fn param_count(&self) -> usize {
         VOCAB_SIZE * D_MODEL           // token_embed
         + MAXIMUM_SEQUENCE * D_MODEL            // pos_embed
-        + self.layers.iter().map(|l| l.parameter_count()).sum::<usize>()
+        + self.layers.iter().map(|l| l.param_count()).sum::<usize>()
         + D_MODEL                       // rms_final
         + D_MODEL * VOCAB_SIZE         // w_output
     }
 
     /// Total memory in bytes (FP32)
     pub fn memory_bytes(&self) -> usize {
-        self.parameter_count() * 4
+        self.param_count() * 4
     }
 
     /// Get a flat snapshot of all weights (for serialization)
     pub fn serialize(&self) -> Vec<f32> {
-        let mut data = Vec::with_capacity(self.parameter_count());
+        let mut data = Vec::with_capacity(self.param_count());
         data.extend_from_slice(&self.token_embed);
-        data.extend_from_slice(&self.position_embed);
+        data.extend_from_slice(&self.pos_embed);
         for layer in &self.layers {
             data.extend_from_slice(&layer.rms_attn);
             data.extend_from_slice(&layer.w_q);
@@ -198,7 +198,7 @@ impl TransformerWeights {
     /// Serialize weights directly to big-endian bytes (no intermediate Vec<f32>).
     /// Saves ~17.6MB of peak memory vs serialize() + floats_to_bytes().
     pub fn serialize_to_bytes(&self) -> Vec<u8> {
-        let byte_count = self.parameter_count() * 4;
+        let byte_count = self.param_count() * 4;
         let mut bytes = Vec::with_capacity(byte_count);
 
         fn push_floats(bytes: &mut Vec<u8>, floats: &[f32]) {
@@ -208,7 +208,7 @@ impl TransformerWeights {
         }
 
         push_floats(&mut bytes, &self.token_embed);
-        push_floats(&mut bytes, &self.position_embed);
+        push_floats(&mut bytes, &self.pos_embed);
         for layer in &self.layers {
             push_floats(&mut bytes, &layer.rms_attn);
             push_floats(&mut bytes, &layer.w_q);
@@ -227,33 +227,33 @@ impl TransformerWeights {
 
     /// Load weights from a flat array (deserialization)
     pub fn deserialize(data: &[f32]) -> Option<Self> {
-        let mut position = 0;
+        let mut pos = 0;
 
-        let token_embed = slice_vec(data, &mut position, VOCAB_SIZE * D_MODEL)?;
-        let position_embed = slice_vec(data, &mut position, MAXIMUM_SEQUENCE * D_MODEL)?;
+        let token_embed = slice_vec(data, &mut pos, VOCAB_SIZE * D_MODEL)?;
+        let pos_embed = slice_vec(data, &mut pos, MAXIMUM_SEQUENCE * D_MODEL)?;
 
         let mut layers = Vec::with_capacity(N_LAYERS);
         for _ in 0..N_LAYERS {
-            let rms_attn = slice_vec(data, &mut position, D_MODEL)?;
-            let w_q = slice_vec(data, &mut position, D_MODEL * D_MODEL)?;
-            let w_k = slice_vec(data, &mut position, D_MODEL * D_MODEL)?;
-            let w_v = slice_vec(data, &mut position, D_MODEL * D_MODEL)?;
-            let w_o = slice_vec(data, &mut position, D_MODEL * D_MODEL)?;
-            let rms_ffn = slice_vec(data, &mut position, D_MODEL)?;
-            let w_gate = slice_vec(data, &mut position, D_MODEL * D_FF)?;
-            let w_up = slice_vec(data, &mut position, D_MODEL * D_FF)?;
-            let w_down = slice_vec(data, &mut position, D_FF * D_MODEL)?;
+            let rms_attn = slice_vec(data, &mut pos, D_MODEL)?;
+            let w_q = slice_vec(data, &mut pos, D_MODEL * D_MODEL)?;
+            let w_k = slice_vec(data, &mut pos, D_MODEL * D_MODEL)?;
+            let w_v = slice_vec(data, &mut pos, D_MODEL * D_MODEL)?;
+            let w_o = slice_vec(data, &mut pos, D_MODEL * D_MODEL)?;
+            let rms_ffn = slice_vec(data, &mut pos, D_MODEL)?;
+            let w_gate = slice_vec(data, &mut pos, D_MODEL * D_FF)?;
+            let w_up = slice_vec(data, &mut pos, D_MODEL * D_FF)?;
+            let w_down = slice_vec(data, &mut pos, D_FF * D_MODEL)?;
 
             layers.push(LayerWeights {
                 rms_attn, w_q, w_k, w_v, w_o, rms_ffn, w_gate, w_up, w_down,
             });
         }
 
-        let rms_final = slice_vec(data, &mut position, D_MODEL)?;
-        let w_output = slice_vec(data, &mut position, D_MODEL * VOCAB_SIZE)?;
+        let rms_final = slice_vec(data, &mut pos, D_MODEL)?;
+        let w_output = slice_vec(data, &mut pos, D_MODEL * VOCAB_SIZE)?;
 
         Some(TransformerWeights {
-            token_embed, position_embed, layers, rms_final, w_output,
+            token_embed, pos_embed, layers, rms_final, w_output,
         })
     }
 
@@ -269,10 +269,10 @@ impl TransformerWeights {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /// Extract a slice from data and advance position
-fn slice_vec(data: &[f32], position: &mut usize, len: usize) -> Option<Vec<f32>> {
-    if *position + len > data.len() { return None; }
-    let v = data[*position..*position + len].to_vec();
-    *position += len;
+fn slice_vec(data: &[f32], pos: &mut usize, len: usize) -> Option<Vec<f32>> {
+    if *pos + len > data.len() { return None; }
+    let v = data[*pos..*pos + len].to_vec();
+    *pos += len;
     Some(v)
 }
 

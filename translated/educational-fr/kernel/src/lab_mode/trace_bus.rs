@@ -72,7 +72,7 @@ match self {
 // Structure publique — visible à l'extérieur de ce module.
 pub struct LabEvent {
     /// Timestamp in milliseconds since boot
-    pub timestamp_mouse: u64,
+    pub timestamp_ms: u64,
     /// Category
     pub category: EventCategory,
     /// Short description (e.g. "timer tick", "page fault @ 0x1000")
@@ -80,18 +80,18 @@ pub struct LabEvent {
     /// Optional numeric payload
     pub payload: u64,
     /// Syscall number (if category == Syscall)
-    pub syscall_number: Option<u64>,
+    pub syscall_nr: Option<u64>,
     /// Syscall arguments (up to 3) if available
     pub syscall_args: Option<[u64; 3]>,
     /// Syscall return value
-    pub syscall_return_value: Option<i64>,
+    pub syscall_ret: Option<i64>,
 }
 
 /// Global event ring buffer
 static EVENT_RING: Mutex<EventRing> = Mutex::new(EventRing::new());
 
 /// Write index (monotonically increasing)
-static WRITE_INDEX: AtomicU64 = AtomicU64::new(0);
+static WRITE_IDX: AtomicU64 = AtomicU64::new(0);
 
 /// Read index for each consumer (Lab window)
 /// Multiple windows can read at their own pace
@@ -121,19 +121,19 @@ pub fn emit(category: EventCategory, message: String, payload: u64) {
         return; // Zero-cost when Lab is inactive
     }
     
-    let ts = crate::time::uptime_mouse();
+    let ts = crate::time::uptime_ms();
     let event = LabEvent {
-        timestamp_mouse: ts,
+        timestamp_ms: ts,
         category,
         message,
         payload,
-        syscall_number: None,
+        syscall_nr: None,
         syscall_args: None,
-        syscall_return_value: None,
+        syscall_ret: None,
     };
     
-    let index = WRITE_INDEX.fetch_add(1, Ordering::Relaxed) as usize;
-    let slot = index % EVENT_RING_SIZE;
+    let idx = WRITE_IDX.fetch_add(1, Ordering::Relaxed) as usize;
+    let slot = idx % EVENT_RING_SIZE;
     
     if let Some(mut ring) = EVENT_RING.try_lock() {
         ring.buffer[slot] = Some(event);
@@ -142,26 +142,26 @@ pub fn emit(category: EventCategory, message: String, payload: u64) {
 }
 
 /// Emit a syscall event with structured data (number, args, return value)
-pub fn emit_syscall(nr: u64, args: [u64; 3], return_value: i64) {
+pub fn emit_syscall(nr: u64, args: [u64; 3], ret: i64) {
     if !super::LAB_ACTIVE.load(Ordering::Relaxed) {
         return;
     }
     
-    let ts = crate::time::uptime_mouse();
+    let ts = crate::time::uptime_ms();
     let name = syscall_name(nr);
-    let message = alloc::format!("{}({:#x}, {:#x}, {:#x}) = {}", name, args[0], args[1], args[2], return_value);
+    let message = alloc::format!("{}({:#x}, {:#x}, {:#x}) = {}", name, args[0], args[1], args[2], ret);
     let event = LabEvent {
-        timestamp_mouse: ts,
+        timestamp_ms: ts,
         category: EventCategory::Syscall,
         message,
         payload: nr,
-        syscall_number: Some(nr),
+        syscall_nr: Some(nr),
         syscall_args: Some(args),
-        syscall_return_value: Some(return_value),
+        syscall_ret: Some(ret),
     };
     
-    let index = WRITE_INDEX.fetch_add(1, Ordering::Relaxed) as usize;
-    let slot = index % EVENT_RING_SIZE;
+    let idx = WRITE_IDX.fetch_add(1, Ordering::Relaxed) as usize;
+    let slot = idx % EVENT_RING_SIZE;
     
     if let Some(mut ring) = EVENT_RING.try_lock() {
         ring.buffer[slot] = Some(event);
@@ -240,11 +240,11 @@ match nr {
 /// Emit with a static string (avoids allocation in hot paths)
 #[inline]
 // Fonction publique — appelable depuis d'autres modules.
-pub fn emit_static(category: EventCategory, message: &'static str, payload: u64) {
+pub fn emit_static(category: EventCategory, msg: &'static str, payload: u64) {
     if !super::LAB_ACTIVE.load(Ordering::Relaxed) {
         return;
     }
-    emit(category, String::from(message), payload);
+    emit(category, String::from(msg), payload);
 }
 
 // ============================================================================
@@ -256,8 +256,8 @@ pub fn emit_vm_exit(vm_id: u64, exit_reason: &str, guest_rip: u64, detail: &str)
     if !super::LAB_ACTIVE.load(Ordering::Relaxed) {
         return;
     }
-    let message = alloc::format!("[VM {}] EXIT: {} at RIP=0x{:X} {}", vm_id, exit_reason, guest_rip, detail);
-    emit(EventCategory::Hypervisor, message, vm_id);
+    let msg = alloc::format!("[VM {}] EXIT: {} at RIP=0x{:X} {}", vm_id, exit_reason, guest_rip, detail);
+    emit(EventCategory::Hypervisor, msg, vm_id);
 }
 
 /// Emit a VM lifecycle event (create, start, stop, crash)
@@ -265,8 +265,8 @@ pub fn emit_vm_lifecycle(vm_id: u64, event: &str) {
     if !super::LAB_ACTIVE.load(Ordering::Relaxed) {
         return;
     }
-    let message = alloc::format!("[VM {}] {}", vm_id, event);
-    emit(EventCategory::Hypervisor, message, vm_id);
+    let msg = alloc::format!("[VM {}] {}", vm_id, event);
+    emit(EventCategory::Hypervisor, msg, vm_id);
 }
 
 /// Emit a VM I/O event (port access, console, hypercall)
@@ -274,17 +274,17 @@ pub fn emit_vm_io(vm_id: u64, direction: &str, port: u16, value: u64) {
     if !super::LAB_ACTIVE.load(Ordering::Relaxed) {
         return;
     }
-    let message = alloc::format!("[VM {}] IO {} port=0x{:X} val=0x{:X}", vm_id, direction, port, value);
-    emit(EventCategory::Hypervisor, message, vm_id);
+    let msg = alloc::format!("[VM {}] IO {} port=0x{:X} val=0x{:X}", vm_id, direction, port, value);
+    emit(EventCategory::Hypervisor, msg, vm_id);
 }
 
 /// Emit a VM memory event (EPT/NPT violation, page mapping)
-pub fn emit_vm_memory(vm_id: u64, event_type: &str, guest_physical: u64, extra: u64) {
+pub fn emit_vm_memory(vm_id: u64, event_type: &str, guest_phys: u64, extra: u64) {
     if !super::LAB_ACTIVE.load(Ordering::Relaxed) {
         return;
     }
-    let message = alloc::format!("[VM {}] MEM {} GPA=0x{:X} info=0x{:X}", vm_id, event_type, guest_physical, extra);
-    emit(EventCategory::Hypervisor, message, vm_id);
+    let msg = alloc::format!("[VM {}] MEM {} GPA=0x{:X} info=0x{:X}", vm_id, event_type, guest_phys, extra);
+    emit(EventCategory::Hypervisor, msg, vm_id);
 }
 
 /// Emit a VM register snapshot (for introspection panel)
@@ -292,11 +292,11 @@ pub fn emit_vm_regs(vm_id: u64, rax: u64, rbx: u64, rcx: u64, rdx: u64, rip: u64
     if !super::LAB_ACTIVE.load(Ordering::Relaxed) {
         return;
     }
-    let message = alloc::format!(
+    let msg = alloc::format!(
         "[VM {}] REGS RAX=0x{:X} RBX=0x{:X} RCX=0x{:X} RDX=0x{:X} RIP=0x{:X} RSP=0x{:X}",
         vm_id, rax, rbx, rcx, rdx, rip, rsp
     );
-    emit(EventCategory::Hypervisor, message, vm_id);
+    emit(EventCategory::Hypervisor, msg, vm_id);
 }
 
 /// Read recent events (returns up to `count` most recent events)
@@ -326,18 +326,18 @@ pub fn total_count() -> u64 {
 }
 
 /// Read events newer than a given index (for incremental updates)
-pub fn read_since(since_index: u64, maximum: usize) -> (alloc::vec::Vec<LabEvent>, u64) {
+pub fn read_since(since_idx: u64, max: usize) -> (alloc::vec::Vec<LabEvent>, u64) {
     let total = TOTAL_EVENTS.load(Ordering::Relaxed);
-    if total <= since_index {
+    if total <= since_idx {
         return (alloc::vec::Vec::new(), total);
     }
     
     let mut result = alloc::vec::Vec::new();
-    let start = since_index as usize;
+    let start = since_idx as usize;
     let end = total as usize;
     let ring = EVENT_RING.lock();
     
-    let actual_start = if end - start > maximum { end - maximum } else { start };
+    let actual_start = if end - start > max { end - max } else { start };
     for i in actual_start..end {
         let slot = i % EVENT_RING_SIZE;
         if let Some(ref event) = ring.buffer[slot] {

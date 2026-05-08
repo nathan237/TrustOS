@@ -5,41 +5,41 @@ use alloc::vec::Vec;
 
 #[derive(Debug, Clone, Copy)]
 pub enum DebugCategory {
-    Iu,
-    Lr,
-    Hx,
-    Jr,
-    Nn,
-    Ctn,
-    Fv,
-    Qg,
+    IoPortIn,
+    IoPortOut,
+    MsrRead,
+    MsrWrite,
+    Mmio,
+    CpuId,
+    Interrupt,
+    Other,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub enum HandleStatus {
-    Gw,
-    Id,
+    Handled,
+    Unhandled,
 }
 
 pub fn init() {}
-pub fn qg() {}
-pub fn apa() {}
-pub fn ky() -> bool { false }
-pub fn rl() -> bool { false }
-pub fn bry(
-    qeb: u64,
-    xyf: DebugCategory,
-    xxs: u64,
-    yda: HandleStatus,
-    fcc: u64,
-    dds: usize,
-    xys: &str,
+pub fn stop() {}
+pub fn reset() {}
+pub fn is_initialized() -> bool { false }
+pub fn is_active() -> bool { false }
+pub fn akj(
+    _vm_id: u64,
+    _category: DebugCategory,
+    _address: u64,
+    _status: HandleStatus,
+    _ip: u64,
+    bek: usize,
+    _detail: &str,
 ) {}
-pub fn jtr() -> u64 { 0 }
-pub fn jup() -> u64 { 0 }
-pub fn kym() -> String { String::from("Debug monitor not available") }
-pub fn kyr() -> String { String::new() }
-pub fn nyd() -> String { String::new() }
-pub fn nyf() -> String { String::new() }
-pub fn nys(jxu: usize) -> String { String::new() }
-pub fn pje(qbs: bool) {}
+pub fn fdf() -> u64 { 0 }
+pub fn fdw() -> u64 { 0 }
+pub fn fym() -> String { String::from("Debug monitor not available") }
+pub fn fyr() -> String { String::new() }
+pub fn ibo() -> String { String::new() }
+pub fn ibq() -> String { String::new() }
+pub fn ibz(_count: usize) -> String { String::new() }
+pub fn jfj(_enabled: bool) {}

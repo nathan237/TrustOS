@@ -151,11 +151,11 @@ pub fn new() -> Self {
         ];
         
         for (row_index, row) in standard_layout.iter().enumerate() {
-            for (column_index, button) in row.iter().enumerate() {
+            for (column_index, btn) in row.iter().enumerate() {
                 let bx = x + (column_index as u32) * (button_w + gap);
                 let by = y + (row_index as u32) * (button_h + gap);
                 
-                self.button_grid.push((*button, Rect::new(
+                self.button_grid.push((*btn, Rect::new(
                     bx as i32, by as i32, button_w, button_h
                 )));
             }
@@ -171,9 +171,9 @@ pub fn new() -> Self {
         None
     }
     
-    fn handle_button(&mut self, button: CalcButton) {
+    fn handle_button(&mut self, btn: CalcButton) {
                 // Pattern matching — Rust's exhaustive branching construct.
-match button {
+match btn {
             CalcButton::Digit(d) => {
                 if self.new_entry {
                     self.display = format!("{}", d);
@@ -239,12 +239,12 @@ match button {
             
             CalcButton::Add | CalcButton::Subtract | CalcButton::Multiply | CalcButton::Divide => {
                 self.execute_pending();
-                self.operator = Some(button);
+                self.operator = Some(btn);
                 self.previous = self.current;
                 self.new_entry = true;
                 
                 let operation_char = // Pattern matching — Rust's exhaustive branching construct.
-match button {
+match btn {
                     CalcButton::Add => "+",
                     CalcButton::Subtract => "-",
                     CalcButton::Multiply => "×",
@@ -310,7 +310,7 @@ match op {
         
         // Format with reasonable precision
         // Simple floor check: n == (n as i64) as f64
-        let is_integer = n == (n as i64) as f64 && n.absolute() < 1e15;
+        let is_integer = n == (n as i64) as f64 && n.abs() < 1e15;
         if is_integer {
             format!("{:.0}", n)
         } else {
@@ -322,9 +322,9 @@ match op {
         }
     }
     
-    fn button_color(&self, button: &CalcButton, theme: &Theme, is_hovered: bool, is_pressed: bool) -> Color {
+    fn button_color(&self, btn: &CalcButton, theme: &Theme, is_hovered: bool, is_pressed: bool) -> Color {
         let base = // Pattern matching — Rust's exhaustive branching construct.
-match button {
+match btn {
             CalcButton::Equals => theme.accent,
             CalcButton::Add | CalcButton::Subtract | CalcButton::Multiply | CalcButton::Divide => {
                 Color::new(80, 80, 90, 255)
@@ -372,10 +372,10 @@ match event {
                 true
             }
             UiEvent::Mouse(MouseEvent::Up { button: MouseButton::Left, .. }) => {
-                if let Some(index) = self.pressed_button {
-                    if Some(index) == self.hovered_button {
-                        let button = self.button_grid[index].0;
-                        self.handle_button(button);
+                if let Some(idx) = self.pressed_button {
+                    if Some(idx) == self.hovered_button {
+                        let btn = self.button_grid[idx].0;
+                        self.handle_button(btn);
                     }
                 }
                 self.pressed_button = None;
@@ -407,21 +407,21 @@ match event {
         draw_text(surface, x as i32 + 10, y as i32 + 6, "Calculator", theme.fg_secondary.to_u32());
         
         // Display background
-        let display_x = x + 10;
-        let display_y = y + 35;
+        let disp_x = x + 10;
+        let disp_y = y + 35;
         let display_w = w - 20;
-        let display_h = 50;
-        surface.fill_rounded_rect(display_x, display_y, display_w, display_h, 6, Color::new(30, 30, 35, 255).to_u32());
+        let disp_h = 50;
+        surface.fill_rounded_rect(disp_x, disp_y, display_w, disp_h, 6, Color::new(30, 30, 35, 255).to_u32());
         
         // Expression (small, top)
         if !self.expression.is_empty() {
-            let expr_x = display_x as i32 + display_w as i32 - (self.expression.len() as i32 * 8) - 8;
-            draw_text(surface, expr_x, display_y as i32 + 4, &self.expression, theme.fg_secondary.to_u32());
+            let expr_x = disp_x as i32 + display_w as i32 - (self.expression.len() as i32 * 8) - 8;
+            draw_text(surface, expr_x, disp_y as i32 + 4, &self.expression, theme.fg_secondary.to_u32());
         }
         
         // Main display (large, right-aligned)
-        let display_x = display_x as i32 + display_w as i32 - (self.display.len() as i32 * 12) - 10;
-        let display_y = display_y as i32 + 22;
+        let display_x = disp_x as i32 + display_w as i32 - (self.display.len() as i32 * 12) - 10;
+        let display_y = disp_y as i32 + 22;
         
         // Draw larger display text (2x scale simulation)
         for (i, c) in self.display.chars().enumerate() {
@@ -433,16 +433,16 @@ match event {
         
         // Memory indicator
         if self.memory != 0.0 {
-            surface.fill_rounded_rect(display_x, display_y, 20, 16, 3, theme.accent.with_alpha(60).to_u32());
-            draw_text(surface, display_x as i32 + 4, display_y as i32 + 2, "M", theme.accent.to_u32());
+            surface.fill_rounded_rect(disp_x, disp_y, 20, 16, 3, theme.accent.with_alpha(60).to_u32());
+            draw_text(surface, disp_x as i32 + 4, disp_y as i32 + 2, "M", theme.accent.to_u32());
         }
         
         // Render buttons
-        for (i, (button, rect)) in self.button_grid.iter().enumerate() {
+        for (i, (btn, rect)) in self.button_grid.iter().enumerate() {
             let is_hovered = self.hovered_button == Some(i);
             let is_pressed = self.pressed_button == Some(i);
             
-            let bg_color = self.button_color(button, theme, is_hovered, is_pressed);
+            let bg_color = self.button_color(btn, theme, is_hovered, is_pressed);
             
             surface.fill_rounded_rect(
                 rect.x as u32, rect.y as u32,
@@ -460,12 +460,12 @@ match event {
             );
             
             // Button label (centered)
-            let label = button.label();
+            let label = btn.label();
             let text_w = label.len() as i32 * 8;
             let text_x = rect.x + (rect.width as i32 - text_w) / 2;
             let text_y = rect.y + (rect.height as i32 - 16) / 2;
             
-            let text_color = if matches!(button, CalcButton::Equals) {
+            let text_color = if matches!(btn, CalcButton::Equals) {
                 Color::WHITE
             } else {
                 theme.fg_primary

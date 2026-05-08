@@ -50,9 +50,9 @@ pub fn parse_theme_string(content: &str) -> Option<Theme> {
         }
         
         // Key = Value
-        if let Some(eq_position) = line.find('=') {
-            let key = line[..eq_position].trim();
-            let value = line[eq_position+1..].trim();
+        if let Some(eq_pos) = line.find('=') {
+            let key = line[..eq_pos].trim();
+            let value = line[eq_pos+1..].trim();
             
             apply_config(&mut theme, &current_section, key, value);
         }

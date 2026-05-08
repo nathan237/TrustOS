@@ -60,7 +60,7 @@ unsafe { core::arch::asm!("mov {}, cr3", out(reg) cr3, options(nostack, preserve
     
     if is_user_fault && !is_protection {
         // Fault on a non-present page from Ring 3 — try to service it
-        let page_address = fault_address & !0xFFF;
+        let page_addr = fault_address & !0xFFF;
         
         // Check if address is in a valid user region
         let in_heap = fault_address >= UserMemoryRegion::HEAP_START
@@ -72,10 +72,10 @@ unsafe { core::arch::asm!("mov {}, cr3", out(reg) cr3, options(nostack, preserve
             && fault_address < UserMemoryRegion::STACK_TOP;
         
         // Check if address is in a VMA (mmap'd region)
-        let cr3_value: u64;
+        let cr3_val: u64;
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { core::arch::asm!("mov {}, cr3", out(reg) cr3_value, options(nostack, preserves_flags)); }
-        let vma = crate::memory::vma::lookup_vma(cr3_value, fault_address);
+unsafe { core::arch::asm!("mov {}, cr3", out(reg) cr3_val, options(nostack, preserves_flags)); }
+        let vma = crate::memory::vma::lookup_vma(cr3_val, fault_address);
         
         if in_heap || in_stack || vma.is_some() {
             // Determine page flags
@@ -86,21 +86,21 @@ unsafe { core::arch::asm!("mov {}, cr3", out(reg) cr3_value, options(nostack, pr
             };
             
             // Allocate a physical frame and map it
-            let physical = crate::memory::frame::allocator_frame_zeroed()
+            let phys = crate::memory::frame::allocator_frame_zeroed()
                 .or_else(|| crate::memory::swap::try_evict_page()); // try swap eviction on OOM
-            if let Some(physical) = physical {
+            if let Some(phys) = phys {
                 let mapped = crate::exec::with_current_address_space(|space| {
-                    space.map_page(page_address, physical, page_flags)
+                    space.map_page(page_addr, phys, page_flags)
                 });
                 
                 if mapped == Some(Some(())) {
                     // Track page for swap subsystem
-                    crate::memory::swap::track_page(cr3_value, page_address, physical);
+                    crate::memory::swap::track_page(cr3_val, page_addr, phys);
                     return; // Resume user process — IRET back to the faulting instruction
                 }
                 
                 // Mapping failed — free the frame
-                crate::memory::frame::free_frame(physical);
+                crate::memory::frame::free_frame(phys);
             }
             
             // OOM or mapping failure — kill process

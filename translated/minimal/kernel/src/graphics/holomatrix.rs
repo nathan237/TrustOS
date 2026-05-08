@@ -19,46 +19,46 @@ use core::sync::atomic::{AtomicU8, AtomicBool, Ordering};
 
 
 
-static TX_: AtomicBool = AtomicBool::new(true);
+static VF_: AtomicBool = AtomicBool::new(true);
 
 
-static AVV_: AtomicU8 = AtomicU8::new(5);
+static AXZ_: AtomicU8 = AtomicU8::new(5);
 
 
-pub fn zu() -> bool {
-    TX_.load(Ordering::Relaxed)
+pub fn lq() -> bool {
+    VF_.load(Ordering::Relaxed)
 }
 
 
-pub fn cuf(iq: bool) {
-    TX_.store(iq, Ordering::Relaxed);
-    crate::serial_println!("[HOLO] HoloMatrix: {}", if iq { "ENABLED" } else { "DISABLED" });
+pub fn set_enabled(enabled: bool) {
+    VF_.store(enabled, Ordering::Relaxed);
+    crate::serial_println!("[HOLO] HoloMatrix: {}", if enabled { "ENABLED" } else { "DISABLED" });
 }
 
 
-pub fn xiq() -> bool {
-    let cv = TX_.load(Ordering::Relaxed);
-    TX_.store(!cv, Ordering::Relaxed);
-    crate::serial_println!("[HOLO] HoloMatrix: {}", if !cv { "ENABLED" } else { "DISABLED" });
-    !cv
+pub fn pkp() -> bool {
+    let current = VF_.load(Ordering::Relaxed);
+    VF_.store(!current, Ordering::Relaxed);
+    crate::serial_println!("[HOLO] HoloMatrix: {}", if !current { "ENABLED" } else { "DISABLED" });
+    !current
 }
 
 
-pub fn hlk() -> HoloScene {
-    HoloScene::ivy(AVV_.load(Ordering::Relaxed))
+pub fn dqr() -> HoloScene {
+    HoloScene::enm(AXZ_.load(Ordering::Relaxed))
 }
 
 
-pub fn bid(amt: HoloScene) {
-    AVV_.store(amt.xik(), Ordering::Relaxed);
-    crate::serial_println!("[HOLO] Scene: {}", amt.j());
+pub fn set_scene(scene: HoloScene) {
+    AXZ_.store(scene.to_index(), Ordering::Relaxed);
+    crate::serial_println!("[HOLO] Scene: {}", scene.name());
 }
 
 
-pub fn uum() -> HoloScene {
-    let cv = hlk();
-    let next = cv.next();
-    bid(next);
+pub fn nkf() -> HoloScene {
+    let current = dqr();
+    let next = current.next();
+    set_scene(next);
     next
 }
 
@@ -66,19 +66,19 @@ pub fn uum() -> HoloScene {
 
 pub struct HoloMatrix {
     
-    pub z: usize,
+    pub width: usize,
     
-    pub ac: usize,
+    pub height: usize,
     
-    pub bkq: usize,
+    pub num_layers: usize,
     
-    pub my: Vec<Vec<u8>>,
+    pub layers: Vec<Vec<u8>>,
     
-    pub hpu: Vec<f32>,
+    pub layer_depths: Vec<f32>,
     
-    pub dlk: f32,
-    pub chi: f32,
-    pub peb: f32,
+    pub rotation_x: f32,
+    pub rotation_y: f32,
+    pub rotation_z: f32,
     
     pub time: f32,
 }
@@ -86,549 +86,549 @@ pub struct HoloMatrix {
 
 #[derive(Clone, Copy)]
 pub struct Point3D {
-    pub b: f32,
-    pub c: f32,
-    pub av: f32,
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
 }
 
 impl Point3D {
-    pub fn new(b: f32, c: f32, av: f32) -> Self {
-        Self { b, c, av }
+    pub fn new(x: f32, y: f32, z: f32) -> Self {
+        Self { x, y, z }
     }
     
     
-    pub fn dvg(self, hg: f32) -> Self {
-        let apn = byz(hg);
-        let aql = boj(hg);
+    pub fn rotate_x(self, cc: f32) -> Self {
+        let vg = anx(cc);
+        let vt = aip(cc);
         Self {
-            b: self.b,
-            c: self.c * apn - self.av * aql,
-            av: self.c * aql + self.av * apn,
+            x: self.x,
+            y: self.y * vg - self.z * vt,
+            z: self.y * vt + self.z * vg,
         }
     }
     
     
-    pub fn cmj(self, hg: f32) -> Self {
-        let apn = byz(hg);
-        let aql = boj(hg);
+    pub fn rotate_y(self, cc: f32) -> Self {
+        let vg = anx(cc);
+        let vt = aip(cc);
         Self {
-            b: self.b * apn + self.av * aql,
-            c: self.c,
-            av: -self.b * aql + self.av * apn,
+            x: self.x * vg + self.z * vt,
+            y: self.y,
+            z: -self.x * vt + self.z * vg,
         }
     }
     
     
-    pub fn wad(self, hg: f32) -> Self {
-        let apn = byz(hg);
-        let aql = boj(hg);
+    pub fn rotate_z(self, cc: f32) -> Self {
+        let vg = anx(cc);
+        let vt = aip(cc);
         Self {
-            b: self.b * apn - self.c * aql,
-            c: self.b * aql + self.c * apn,
-            av: self.av,
+            x: self.x * vg - self.y * vt,
+            y: self.x * vt + self.y * vg,
+            z: self.z,
         }
     }
 }
 
 
-fn boj(b: f32) -> f32 { crate::math::lz(b) }
+fn aip(x: f32) -> f32 { crate::math::eu(x) }
 
 
-fn byz(b: f32) -> f32 { crate::math::rk(b) }
-
-
-#[inline]
-pub fn cuh(b: f32) -> f32 { crate::math::lz(b) }
+fn anx(x: f32) -> f32 { crate::math::hr(x) }
 
 
 #[inline]
-pub fn eob(b: f32) -> f32 { crate::math::rk(b) }
+pub fn azr(x: f32) -> f32 { crate::math::eu(x) }
 
 
-fn bfj(b: f32) -> f32 { crate::math::ahn(b) }
+#[inline]
+pub fn byi(x: f32) -> f32 { crate::math::hr(x) }
+
+
+fn sqrt_approx(x: f32) -> f32 { crate::math::ra(x) }
 
 impl HoloMatrix {
     
-    pub fn new(z: usize, ac: usize, bkq: usize) -> Self {
-        let mut my = Vec::fc(bkq);
-        let mut hpu = Vec::fc(bkq);
+    pub fn new(width: usize, height: usize, num_layers: usize) -> Self {
+        let mut layers = Vec::with_capacity(num_layers);
+        let mut layer_depths = Vec::with_capacity(num_layers);
         
-        for a in 0..bkq {
-            my.push(vec![0u8; z * ac]);
+        for i in 0..num_layers {
+            layers.push(vec![0u8; width * height]);
             
-            hpu.push(a as f32 / (bkq - 1) as f32);
+            layer_depths.push(i as f32 / (num_layers - 1) as f32);
         }
         
         Self {
-            z,
-            ac,
-            bkq,
-            my,
-            hpu,
-            dlk: 0.0,
-            chi: 0.0,
-            peb: 0.0,
+            width,
+            height,
+            num_layers,
+            layers,
+            layer_depths,
+            rotation_x: 0.0,
+            rotation_y: 0.0,
+            rotation_z: 0.0,
             time: 0.0,
         }
     }
     
     
     pub fn clear(&mut self) {
-        for fl in &mut self.my {
-            fl.vi(0);
+        for bj in &mut self.layers {
+            bj.fill(0);
         }
     }
     
     
     #[inline]
-    pub fn mes(&mut self, fl: usize, b: i32, c: i32, hj: u8) {
-        if fl < self.bkq 
-            && b >= 0 && (b as usize) < self.z 
-            && c >= 0 && (c as usize) < self.ac 
+    pub fn set_point(&mut self, bj: usize, x: i32, y: i32, intensity: u8) {
+        if bj < self.num_layers 
+            && x >= 0 && (x as usize) < self.width 
+            && y >= 0 && (y as usize) < self.height 
         {
-            let w = c as usize * self.z + b as usize;
+            let idx = y as usize * self.width + x as usize;
             
-            let cv = self.my[fl][w] as u16;
-            self.my[fl][w] = (cv + hj as u16).v(255) as u8;
+            let current = self.layers[bj][idx] as u16;
+            self.layers[bj][idx] = (current + intensity as u16).min(255) as u8;
         }
     }
     
     
-    pub fn hgv(&mut self, cx: f32, ae: f32, zr: f32, dy: f32, hj: u8) {
-        let mcm = self.z as f32 / 2.0;
-        let mcn = self.ac as f32 / 2.0;
+    pub fn draw_sphere(&mut self, cx: f32, u: f32, mj: f32, radius: f32, intensity: u8) {
+        let gsx = self.width as f32 / 2.0;
+        let gsy = self.height as f32 / 2.0;
         
-        for aup in 0..self.bkq {
-            let gky = self.hpu[aup];
+        for xv in 0..self.num_layers {
+            let dai = self.layer_depths[xv];
             
             
-            let pt = gky - zr;
+            let dz = dai - mj;
             
             
-            if pt.gp() < dy {
+            if dz.abs() < radius {
                 
-                let raw = bfj(dy * dy - pt * pt);
-                
-                
-                let rav = (raw * self.z as f32 / 2.0) as i32;
-                let vfz = (cx * self.z as f32 / 2.0 + mcm) as i32;
-                let vga = (ae * self.ac as f32 / 2.0 + mcn) as i32;
+                let kkp = sqrt_approx(radius * radius - dz * dz);
                 
                 
-                let btz = 1.0 - pt.gp() / dy;
-                let udg = (hj as f32 * btz) as u8;
+                let kko = (kkp * self.width as f32 / 2.0) as i32;
+                let nsy = (cx * self.width as f32 / 2.0 + gsx) as i32;
+                let nsz = (u * self.height as f32 / 2.0 + gsy) as i32;
                 
-                self.sch(aup, vfz, vga, rav, udg);
+                
+                let alh = 1.0 - dz.abs() / radius;
+                let mxg = (intensity as f32 * alh) as u8;
+                
+                self.draw_circle_layer(xv, nsy, nsz, kko, mxg);
             }
         }
     }
     
     
-    fn sch(&mut self, fl: usize, cx: i32, ae: i32, dy: i32, hj: u8) {
-        let bwl = dy * dy;
+    fn draw_circle_layer(&mut self, bj: usize, cx: i32, u: i32, radius: i32, intensity: u8) {
+        let amn = radius * radius;
         
         
-        for bg in -dy..=dy {
-            let epm = bfj((bwl - bg * bg) as f32) as i32;
-            for dx in -epm..=epm {
-                let ass = dx * dx + bg * bg;
-                let kqh = bfj(ass as f32) / dy as f32;
+        for ad in -radius..=radius {
+            let bzb = sqrt_approx((amn - ad * ad) as f32) as i32;
+            for dx in -bzb..=bzb {
+                let wz = dx * dx + ad * ad;
+                let fsm = sqrt_approx(wz as f32) / radius as f32;
                 
                 
-                let siu = if kqh > 0.7 {
-                    1.0 + (kqh - 0.7) * 2.0
+                let lob = if fsm > 0.7 {
+                    1.0 + (fsm - 0.7) * 2.0
                 } else {
-                    0.5 + kqh * 0.5
+                    0.5 + fsm * 0.5
                 };
                 
-                let vor = (hj as f32 * siu).v(255.0) as u8;
-                self.mes(fl, cx + dx, ae + bg, vor);
+                let nzy = (intensity as f32 * lob).min(255.0) as u8;
+                self.set_point(bj, cx + dx, u + ad, nzy);
             }
         }
     }
     
     
-    pub fn gfg(&mut self, cx: f32, ae: f32, zr: f32, aw: f32, hj: u8) {
-        let iv = aw / 2.0;
+    pub fn draw_cube(&mut self, cx: f32, u: f32, mj: f32, size: f32, intensity: u8) {
+        let cw = size / 2.0;
         
         
-        let lm = [
-            Point3D::new(-iv, -iv, -iv),
-            Point3D::new( iv, -iv, -iv),
-            Point3D::new( iv,  iv, -iv),
-            Point3D::new(-iv,  iv, -iv),
-            Point3D::new(-iv, -iv,  iv),
-            Point3D::new( iv, -iv,  iv),
-            Point3D::new( iv,  iv,  iv),
-            Point3D::new(-iv,  iv,  iv),
+        let vertices = [
+            Point3D::new(-cw, -cw, -cw),
+            Point3D::new( cw, -cw, -cw),
+            Point3D::new( cw,  cw, -cw),
+            Point3D::new(-cw,  cw, -cw),
+            Point3D::new(-cw, -cw,  cw),
+            Point3D::new( cw, -cw,  cw),
+            Point3D::new( cw,  cw,  cw),
+            Point3D::new(-cw,  cw,  cw),
         ];
         
         
-        let cmk: Vec<Point3D> = lm.iter().map(|p| {
-            p.dvg(self.dlk)
-             .cmj(self.chi)
-             .wad(self.peb)
+        let auu: Vec<Point3D> = vertices.iter().map(|v| {
+            v.rotate_x(self.rotation_x)
+             .rotate_y(self.rotation_y)
+             .rotate_z(self.rotation_z)
         }).collect();
         
         
-        let fag: Vec<Point3D> = cmk.iter().map(|p| {
-            Point3D::new(p.b + cx, p.c + ae, p.av + zr)
+        let ceq: Vec<Point3D> = auu.iter().map(|v| {
+            Point3D::new(v.x + cx, v.y + u, v.z + mj)
         }).collect();
         
         
-        let bu = [
+        let edges = [
             (0, 1), (1, 2), (2, 3), (3, 0), 
             (4, 5), (5, 6), (6, 7), (7, 4), 
             (0, 4), (1, 5), (2, 6), (3, 7), 
         ];
         
         
-        for (hnh, hni) in &bu {
-            self.bzg(&fag[*hnh], &fag[*hni], hj);
+        for (i1, i2) in &edges {
+            self.draw_line_3d(&ceq[*i1], &ceq[*i2], intensity);
         }
     }
     
     
-    pub fn bzg(&mut self, pr: &Point3D, pf: &Point3D, hj: u8) {
-        let mcm = self.z as f32 / 2.0;
-        let mcn = self.ac as f32 / 2.0;
+    pub fn draw_line_3d(&mut self, gw: &Point3D, gn: &Point3D, intensity: u8) {
+        let gsx = self.width as f32 / 2.0;
+        let gsy = self.height as f32 / 2.0;
         
         
-        let dx = pf.b - pr.b;
-        let bg = pf.c - pr.c;
-        let pt = pf.av - pr.av;
-        let go = bfj(dx * dx + bg * bg + pt * pt);
-        let au = (go * 50.0) as usize + 1;
+        let dx = gn.x - gw.x;
+        let ad = gn.y - gw.y;
+        let dz = gn.z - gw.z;
+        let length = sqrt_approx(dx * dx + ad * ad + dz * dz);
+        let steps = (length * 50.0) as usize + 1;
         
-        for gu in 0..=au {
-            let ab = gu as f32 / au as f32;
-            let y = pr.b + dx * ab;
-            let x = pr.c + bg * ab;
-            let cbe = pr.av + pt * ab;
+        for step in 0..=steps {
+            let t = step as f32 / steps as f32;
+            let p = gw.x + dx * t;
+            let o = gw.y + ad * t;
+            let aos = gw.z + dz * t;
             
             
-            let gky = (cbe + 1.0) / 2.0; 
-            if gky >= 0.0 && gky <= 1.0 {
-                let aup = ((gky * (self.bkq - 1) as f32) as usize).v(self.bkq - 1);
+            let dai = (aos + 1.0) / 2.0; 
+            if dai >= 0.0 && dai <= 1.0 {
+                let xv = ((dai * (self.num_layers - 1) as f32) as usize).min(self.num_layers - 1);
                 
                 
-                let cr = (y * self.z as f32 / 2.5 + mcm) as i32;
-                let cq = (x * self.ac as f32 / 2.5 + mcn) as i32;
+                let am = (p * self.width as f32 / 2.5 + gsx) as i32;
+                let ak = (o * self.height as f32 / 2.5 + gsy) as i32;
                 
                 
-                let nkp = ((1.0 - gky * 0.5) * hj as f32) as u8;
+                let hrm = ((1.0 - dai * 0.5) * intensity as f32) as u8;
                 
                 
-                for bc in -1..=1 {
-                    self.mes(aup, cr + bc, cq, nkp);
-                    self.mes(aup, cr, cq + bc, nkp);
+                for d in -1..=1 {
+                    self.set_point(xv, am + d, ak, hrm);
+                    self.set_point(xv, am, ak + d, hrm);
                 }
             }
         }
     }
     
     
-    pub fn nnt(&mut self, cx: f32, ae: f32, zr: f32, czl: f32, cge: f32, hj: u8) {
-        let mdh = 24;
-        let mdi = 12;
+    pub fn draw_torus(&mut self, cx: f32, u: f32, mj: f32, bcm: f32, aro: f32, intensity: u8) {
+        let gtp = 24;
+        let gtq = 12;
         
-        for a in 0..mdh {
-            let psw = (a as f32 / mdh as f32) * 2.0 * 3.14159;
-            let xgh = ((a + 1) as f32 / mdh as f32) * 2.0 * 3.14159;
+        for i in 0..gtp {
+            let jmh = (i as f32 / gtp as f32) * 2.0 * 3.14159;
+            let piu = ((i + 1) as f32 / gtp as f32) * 2.0 * 3.14159;
             
-            for fb in 0..mdi {
-                let ovj = (fb as f32 / mdi as f32) * 2.0 * 3.14159;
-                let vhk = ((fb + 1) as f32 / mdi as f32) * 2.0 * 3.14159;
+            for ay in 0..gtq {
+                let iup = (ay as f32 / gtq as f32) * 2.0 * 3.14159;
+                let nug = ((ay + 1) as f32 / gtq as f32) * 2.0 * 3.14159;
                 
                 
-                let pr = self.mly(cx, ae, zr, czl, cge, psw, ovj);
-                let pf = self.mly(cx, ae, zr, czl, cge, psw, vhk);
-                let bnt = self.mly(cx, ae, zr, czl, cge, xgh, ovj);
+                let gw = self.torus_point(cx, u, mj, bcm, aro, jmh, iup);
+                let gn = self.torus_point(cx, u, mj, bcm, aro, jmh, nug);
+                let aih = self.torus_point(cx, u, mj, bcm, aro, piu, iup);
                 
                 
-                self.bzg(&pr, &pf, hj / 2);
-                self.bzg(&pr, &bnt, hj / 2);
+                self.draw_line_3d(&gw, &gn, intensity / 2);
+                self.draw_line_3d(&gw, &aih, intensity / 2);
             }
         }
     }
     
-    fn mly(&self, cx: f32, ae: f32, zr: f32, czl: f32, cge: f32, bdb: f32, bnv: f32) -> Point3D {
-        let b = (czl + cge * byz(bnv)) * byz(bdb);
-        let c = (czl + cge * byz(bnv)) * boj(bdb);
-        let av = cge * boj(bnv);
+    fn torus_point(&self, cx: f32, u: f32, mj: f32, bcm: f32, aro: f32, acz: f32, aij: f32) -> Point3D {
+        let x = (bcm + aro * anx(aij)) * anx(acz);
+        let y = (bcm + aro * anx(aij)) * aip(acz);
+        let z = aro * aip(aij);
         
         
-        let ai = Point3D::new(b, c, av)
-            .dvg(self.dlk)
-            .cmj(self.chi);
+        let aa = Point3D::new(x, y, z)
+            .rotate_x(self.rotation_x)
+            .rotate_y(self.rotation_y);
             
-        Point3D::new(ai.b + cx, ai.c + ae, ai.av + zr)
+        Point3D::new(aa.x + cx, aa.y + u, aa.z + mj)
     }
     
     
-    pub fn fgx(&mut self, fby: f32, ixh: f32, kgz: i32, hj: u8) {
-        let iv = ixh / 2.0;
-        let ny = ixh / kgz as f32;
+    pub fn draw_grid(&mut self, cfq: f32, eon: f32, cells: i32, intensity: u8) {
+        let cw = eon / 2.0;
+        let cell_size = eon / cells as f32;
         
         
-        for a in 0..=kgz {
-            let av = -iv + a as f32 * ny;
-            let pr = Point3D::new(-iv, fby, av)
-                .cmj(self.chi);
-            let pf = Point3D::new(iv, fby, av)
-                .cmj(self.chi);
-            self.bzg(&pr, &pf, hj);
+        for i in 0..=cells {
+            let z = -cw + i as f32 * cell_size;
+            let gw = Point3D::new(-cw, cfq, z)
+                .rotate_y(self.rotation_y);
+            let gn = Point3D::new(cw, cfq, z)
+                .rotate_y(self.rotation_y);
+            self.draw_line_3d(&gw, &gn, intensity);
         }
         
         
-        for a in 0..=kgz {
-            let b = -iv + a as f32 * ny;
-            let pr = Point3D::new(b, fby, -iv)
-                .cmj(self.chi);
-            let pf = Point3D::new(b, fby, iv)
-                .cmj(self.chi);
-            self.bzg(&pr, &pf, hj);
+        for i in 0..=cells {
+            let x = -cw + i as f32 * cell_size;
+            let gw = Point3D::new(x, cfq, -cw)
+                .rotate_y(self.rotation_y);
+            let gn = Point3D::new(x, cfq, cw)
+                .rotate_y(self.rotation_y);
+            self.draw_line_3d(&gw, &gn, intensity);
         }
     }
     
     
     
-    pub fn iov(&self, agg: u32, bzv: u32) -> Vec<u32> {
-        let mut an = vec![agg; self.z * self.ac];
+    pub fn composite(&self, qf: u32, aog: u32) -> Vec<u32> {
+        let mut output = vec![qf; self.width * self.height];
         
         
-        let erm = ((bzv >> 16) & 0xFF) as u32;
-        let dho = ((bzv >> 8) & 0xFF) as u32;
-        let eqx = (bzv & 0xFF) as u32;
+        let cag = ((aog >> 16) & 0xFF) as u32;
+        let bgq = ((aog >> 8) & 0xFF) as u32;
+        let cab = (aog & 0xFF) as u32;
         
         
-        for (aup, fl) in self.my.iter().cf().vv() {
-            let eo = self.hpu[aup];
+        for (xv, bj) in self.layers.iter().enumerate().rev() {
+            let depth = self.layer_depths[xv];
             
             
-            let udi = 0.3 + 0.7 * (1.0 - eo);
+            let mxh = 0.3 + 0.7 * (1.0 - depth);
             
-            for c in 0..self.ac {
-                for b in 0..self.z {
-                    let hj = fl[c * self.z + b];
+            for y in 0..self.height {
+                for x in 0..self.width {
+                    let intensity = bj[y * self.width + x];
                     
-                    if hj > 0 {
-                        let ctj = c * self.z + b;
-                        let cv = an[ctj];
+                    if intensity > 0 {
+                        let aza = y * self.width + x;
+                        let current = output[aza];
                         
                         
-                        let btu = ((cv >> 16) & 0xFF) as u32;
-                        let bmh = ((cv >> 8) & 0xFF) as u32;
-                        let aiv = (cv & 0xFF) as u32;
+                        let alg = ((current >> 16) & 0xFF) as u32;
+                        let ahp = ((current >> 8) & 0xFF) as u32;
+                        let cb = (current & 0xFF) as u32;
                         
                         
-                        let dw = (hj as f32 / 255.0) * udi;
-                        let nr = (btu as f32 * (1.0 - dw) + erm as f32 * dw) as u32;
-                        let csu = (bmh as f32 * (1.0 - dw) + dho as f32 * dw) as u32;
-                        let csq = (aiv as f32 * (1.0 - dw) + eqx as f32 * dw) as u32;
+                        let alpha = (intensity as f32 / 255.0) * mxh;
+                        let nr = (alg as f32 * (1.0 - alpha) + cag as f32 * alpha) as u32;
+                        let ayn = (ahp as f32 * (1.0 - alpha) + bgq as f32 * alpha) as u32;
+                        let ayj = (cb as f32 * (1.0 - alpha) + cab as f32 * alpha) as u32;
                         
-                        an[ctj] = 0xFF000000 | (nr.v(255) << 16) | (csu.v(255) << 8) | csq.v(255);
+                        output[aza] = 0xFF000000 | (nr.min(255) << 16) | (ayn.min(255) << 8) | ayj.min(255);
                     }
                 }
             }
         }
         
-        an
+        output
     }
     
     
-    pub fn qs(&mut self, iqv: f32) {
-        self.time += iqv;
-        self.chi += iqv * 0.5;  
-        self.dlk = boj(self.time * 0.3) * 0.3;  
+    pub fn update(&mut self, delta_time: f32) {
+        self.time += delta_time;
+        self.rotation_y += delta_time * 0.5;  
+        self.rotation_x = aip(self.time * 0.3) * 0.3;  
     }
     
     
-    pub fn dbd(&mut self, amt: HoloScene) {
+    pub fn bdi(&mut self, scene: HoloScene) {
         self.clear();
         
-        match amt {
-            HoloScene::Jb => {
-                self.gfg(0.0, 0.0, 0.5, 0.6, 200);
+        match scene {
+            HoloScene::RotatingCube => {
+                self.draw_cube(0.0, 0.0, 0.5, 0.6, 200);
             },
-            HoloScene::Un => {
-                let xg = (boj(self.time * 2.0) + 1.0) / 2.0;
-                let dy = 0.2 + xg * 0.15;
-                self.hgv(0.0, 0.0, 0.5, dy, 180);
+            HoloScene::SpherePulse => {
+                let kq = (aip(self.time * 2.0) + 1.0) / 2.0;
+                let radius = 0.2 + kq * 0.15;
+                self.draw_sphere(0.0, 0.0, 0.5, radius, 180);
             },
-            HoloScene::Dr => {
-                self.nnt(0.0, 0.0, 0.5, 0.35, 0.12, 150);
+            HoloScene::Torus => {
+                self.draw_torus(0.0, 0.0, 0.5, 0.35, 0.12, 150);
             },
-            HoloScene::St => {
-                self.fgx(-0.4, 1.5, 8, 60);
-                self.gfg(0.0, 0.0, 0.5, 0.4, 200);
+            HoloScene::GridWithCube => {
+                self.draw_grid(-0.4, 1.5, 8, 60);
+                self.draw_cube(0.0, 0.0, 0.5, 0.4, 200);
             },
-            HoloScene::Tn => {
+            HoloScene::MultiShape => {
                 
-                self.gfg(-0.4, 0.0, 0.5, 0.25, 150);
-                self.hgv(0.4, 0.0, 0.5, 0.2, 180);
-                self.nnt(0.0, 0.3, 0.5, 0.2, 0.08, 120);
+                self.draw_cube(-0.4, 0.0, 0.5, 0.25, 150);
+                self.draw_sphere(0.4, 0.0, 0.5, 0.2, 180);
+                self.draw_torus(0.0, 0.3, 0.5, 0.2, 0.08, 120);
             },
-            HoloScene::Ij => {
+            HoloScene::DNA => {
                 
-                self.scq(0.0, 0.0, 0.5, 100);
+                self.draw_dna_helix(0.0, 0.0, 0.5, 100);
             },
-            HoloScene::Nv | HoloScene::Nu => {
+            HoloScene::RayTracedSpheres | HoloScene::RayTracedDNA => {
                 
                 
-                self.hgv(0.0, 0.0, 0.5, 0.3, 150);
+                self.draw_sphere(0.0, 0.0, 0.5, 0.3, 150);
             },
         }
     }
     
     
-    fn scq(&mut self, cx: f32, ae: f32, zr: f32, hj: u8) {
-        let fkm = 1.4;  
-        let dy = 0.32;       
-        let cuy = 3.5;         
-        let jq = 100;      
+    fn draw_dna_helix(&mut self, cx: f32, u: f32, mj: f32, intensity: u8) {
+        let ckm = 1.4;  
+        let radius = 0.32;       
+        let bac = 3.5;         
+        let segments = 100;      
         
         
-        for a in 0..jq {
-            let ab = a as f32 / jq as f32;
-            let c = -fkm / 2.0 + ab * fkm;
-            let hg = ab * cuy * 2.0 * 3.14159 + self.time;
+        for i in 0..segments {
+            let t = i as f32 / segments as f32;
+            let y = -ckm / 2.0 + t * ckm;
+            let cc = t * bac * 2.0 * 3.14159 + self.time;
             
             
-            let dn = dy * byz(hg);
-            let aeu = dy * boj(hg);
+            let x1 = radius * anx(cc);
+            let po = radius * aip(cc);
             
             
-            let hy = dy * byz(hg + 3.14159);
-            let ahc = dy * boj(hg + 3.14159);
+            let x2 = radius * anx(cc + 3.14159);
+            let qt = radius * aip(cc + 3.14159);
             
             
-            let lri = Point3D::new(dn, c, aeu * 0.5)
-                .dvg(self.dlk * 0.5)
-                .cmj(self.chi * 0.3);
-            let lrk = Point3D::new(hy, c, ahc * 0.5)
-                .dvg(self.dlk * 0.5)
-                .cmj(self.chi * 0.3);
+            let gln = Point3D::new(x1, y, po * 0.5)
+                .rotate_x(self.rotation_x * 0.5)
+                .rotate_y(self.rotation_y * 0.3);
+            let glp = Point3D::new(x2, y, qt * 0.5)
+                .rotate_x(self.rotation_x * 0.5)
+                .rotate_y(self.rotation_y * 0.3);
             
-            let pr = Point3D::new(lri.b + cx, lri.c + ae, lri.av + zr);
-            let pf = Point3D::new(lrk.b + cx, lrk.c + ae, lrk.av + zr);
+            let gw = Point3D::new(gln.x + cx, gln.y + u, gln.z + mj);
+            let gn = Point3D::new(glp.x + cx, glp.y + u, glp.z + mj);
             
             
-            if a < jq - 1 {
-                let aco = (a + 1) as f32 / jq as f32;
-                let jz = -fkm / 2.0 + aco * fkm;
-                let ijs = aco * cuy * 2.0 * 3.14159 + self.time;
+            if i < segments - 1 {
+                let np = (i + 1) as f32 / segments as f32;
+                let y2 = -ckm / 2.0 + np * ckm;
+                let efl = np * bac * 2.0 * 3.14159 + self.time;
                 
-                let lrh = Point3D::new(dy * byz(ijs), jz, dy * boj(ijs) * 0.5)
-                    .dvg(self.dlk * 0.5)
-                    .cmj(self.chi * 0.3);
-                let lrj = Point3D::new(dy * byz(ijs + 3.14159), jz, dy * boj(ijs + 3.14159) * 0.5)
-                    .dvg(self.dlk * 0.5)
-                    .cmj(self.chi * 0.3);
+                let glm = Point3D::new(radius * anx(efl), y2, radius * aip(efl) * 0.5)
+                    .rotate_x(self.rotation_x * 0.5)
+                    .rotate_y(self.rotation_y * 0.3);
+                let glo = Point3D::new(radius * anx(efl + 3.14159), y2, radius * aip(efl + 3.14159) * 0.5)
+                    .rotate_x(self.rotation_x * 0.5)
+                    .rotate_y(self.rotation_y * 0.3);
                 
-                let vai = Point3D::new(lrh.b + cx, lrh.c + ae, lrh.av + zr);
-                let vaj = Point3D::new(lrj.b + cx, lrj.c + ae, lrj.av + zr);
+                let now = Point3D::new(glm.x + cx, glm.y + u, glm.z + mj);
+                let nox = Point3D::new(glo.x + cx, glo.y + u, glo.z + mj);
                 
                 
-                self.bzg(&pr, &vai, hj);
-                self.bzg(&pf, &vaj, hj);
+                self.draw_line_3d(&gw, &now, intensity);
+                self.draw_line_3d(&gn, &nox, intensity);
             }
             
             
-            if a % 10 == 0 {
-                self.nnm(pr.b, pr.c, pr.av, hj);
-                self.nnm(pf.b, pf.c, pf.av, hj);
+            if i % 10 == 0 {
+                self.draw_phosphate_group(gw.x, gw.y, gw.z, intensity);
+                self.draw_phosphate_group(gn.x, gn.y, gn.z, intensity);
             }
             
             
-            if a % 4 == 0 {
+            if i % 4 == 0 {
                 
-                self.sbu(&pr, &pf, hj, a % 8 == 0);
+                self.draw_base_pair(&gw, &gn, intensity, i % 8 == 0);
             }
         }
         
         
-        self.scz(cx, ae, zr, hj / 2);
+        self.draw_floating_particles(cx, u, mj, intensity / 2);
     }
     
     
-    fn nnm(&mut self, b: f32, c: f32, av: f32, hj: u8) {
+    fn draw_phosphate_group(&mut self, x: f32, y: f32, z: f32, intensity: u8) {
         
-        self.hgv(b, c, av, 0.03, hj);
+        self.draw_sphere(x, y, z, 0.03, intensity);
     }
     
     
-    fn sbu(&mut self, pr: &Point3D, pf: &Point3D, hj: u8, txo: bool) {
+    fn draw_base_pair(&mut self, gw: &Point3D, gn: &Point3D, intensity: u8, is_gc: bool) {
         
-        let cx = (pr.b + pf.b) / 2.0;
-        let ae = (pr.c + pf.c) / 2.0;
-        let zr = (pr.av + pf.av) / 2.0;
+        let cx = (gw.x + gn.x) / 2.0;
+        let u = (gw.y + gn.y) / 2.0;
+        let mj = (gw.z + gn.z) / 2.0;
         
         
-        if txo {
+        if is_gc {
             
-            let guj = (pf.b - pr.b) / 3.0;
-            let guk = (pf.c - pr.c) / 3.0;
-            let gul = (pf.av - pr.av) / 3.0;
+            let dfl = (gn.x - gw.x) / 3.0;
+            let dfm = (gn.y - gw.y) / 3.0;
+            let dfn = (gn.z - gw.z) / 3.0;
             
             
-            self.bzg(
-                &Point3D::new(pr.b + guj * 0.3, pr.c + guk * 0.3, pr.av + gul * 0.3),
-                &Point3D::new(pr.b + guj * 0.7, pr.c + guk * 0.7, pr.av + gul * 0.7),
-                hj / 2
+            self.draw_line_3d(
+                &Point3D::new(gw.x + dfl * 0.3, gw.y + dfm * 0.3, gw.z + dfn * 0.3),
+                &Point3D::new(gw.x + dfl * 0.7, gw.y + dfm * 0.7, gw.z + dfn * 0.7),
+                intensity / 2
             );
             
-            self.bzg(
-                &Point3D::new(cx - guj * 0.2, ae - guk * 0.2, zr - gul * 0.2),
-                &Point3D::new(cx + guj * 0.2, ae + guk * 0.2, zr + gul * 0.2),
-                hj / 2
+            self.draw_line_3d(
+                &Point3D::new(cx - dfl * 0.2, u - dfm * 0.2, mj - dfn * 0.2),
+                &Point3D::new(cx + dfl * 0.2, u + dfm * 0.2, mj + dfn * 0.2),
+                intensity / 2
             );
             
-            self.bzg(
-                &Point3D::new(pf.b - guj * 0.7, pf.c - guk * 0.7, pf.av - gul * 0.7),
-                &Point3D::new(pf.b - guj * 0.3, pf.c - guk * 0.3, pf.av - gul * 0.3),
-                hj / 2
+            self.draw_line_3d(
+                &Point3D::new(gn.x - dfl * 0.7, gn.y - dfm * 0.7, gn.z - dfn * 0.7),
+                &Point3D::new(gn.x - dfl * 0.3, gn.y - dfm * 0.3, gn.z - dfn * 0.3),
+                intensity / 2
             );
         } else {
             
-            let jks = (pf.b - pr.b) / 4.0;
-            let jkt = (pf.c - pr.c) / 4.0;
-            let jku = (pf.av - pr.av) / 4.0;
+            let exk = (gn.x - gw.x) / 4.0;
+            let exl = (gn.y - gw.y) / 4.0;
+            let exm = (gn.z - gw.z) / 4.0;
             
-            self.bzg(
-                &Point3D::new(pr.b + jks * 1.2, pr.c + jkt * 1.2, pr.av + jku * 1.2),
-                &Point3D::new(pr.b + jks * 1.8, pr.c + jkt * 1.8, pr.av + jku * 1.8),
-                hj / 2
+            self.draw_line_3d(
+                &Point3D::new(gw.x + exk * 1.2, gw.y + exl * 1.2, gw.z + exm * 1.2),
+                &Point3D::new(gw.x + exk * 1.8, gw.y + exl * 1.8, gw.z + exm * 1.8),
+                intensity / 2
             );
-            self.bzg(
-                &Point3D::new(pf.b - jks * 1.8, pf.c - jkt * 1.8, pf.av - jku * 1.8),
-                &Point3D::new(pf.b - jks * 1.2, pf.c - jkt * 1.2, pf.av - jku * 1.2),
-                hj / 2
+            self.draw_line_3d(
+                &Point3D::new(gn.x - exk * 1.8, gn.y - exl * 1.8, gn.z - exm * 1.8),
+                &Point3D::new(gn.x - exk * 1.2, gn.y - exl * 1.2, gn.z - exm * 1.2),
+                intensity / 2
             );
         }
         
         
-        self.bzg(pr, &Point3D::new(cx, ae, zr), hj / 3);
-        self.bzg(&Point3D::new(cx, ae, zr), pf, hj / 3);
+        self.draw_line_3d(gw, &Point3D::new(cx, u, mj), intensity / 3);
+        self.draw_line_3d(&Point3D::new(cx, u, mj), gn, intensity / 3);
     }
     
     
-    fn scz(&mut self, cx: f32, ae: f32, zr: f32, hj: u8) {
+    fn draw_floating_particles(&mut self, cx: f32, u: f32, mj: f32, intensity: u8) {
         
-        for a in 0..8 {
-            let hg = (a as f32 / 8.0) * 2.0 * 3.14159 + self.time * 0.7;
-            let mrw = boj(self.time * 1.5 + a as f32 * 0.789) * 0.5;
-            let htu = 0.45 + boj(self.time + a as f32) * 0.1;
+        for i in 0..8 {
+            let cc = (i as f32 / 8.0) * 2.0 * 3.14159 + self.time * 0.7;
+            let hdd = aip(self.time * 1.5 + i as f32 * 0.789) * 0.5;
+            let dvy = 0.45 + aip(self.time + i as f32) * 0.1;
             
-            let y = cx + htu * byz(hg);
-            let x = ae + mrw;
-            let cbe = zr + htu * boj(hg) * 0.4;
+            let p = cx + dvy * anx(cc);
+            let o = u + hdd;
+            let aos = mj + dvy * aip(cc) * 0.4;
             
             
-            let xg = ((boj(self.time * 2.0 + a as f32 * 1.1) + 1.0) / 2.0 * 0.5 + 0.5) as f32;
-            let veq = (hj as f32 * xg) as u8;
+            let kq = ((aip(self.time * 2.0 + i as f32 * 1.1) + 1.0) / 2.0 * 0.5 + 0.5) as f32;
+            let nrt = (intensity as f32 * kq) as u8;
             
-            self.hgv(y, x, cbe, 0.02, veq);
+            self.draw_sphere(p, o, aos, 0.02, nrt);
         }
     }
 }
@@ -636,96 +636,96 @@ impl HoloMatrix {
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum HoloScene {
-    Jb,
-    Un,
-    Dr,
-    St,
-    Tn,
-    Ij,
-    Nv,  
-    Nu,      
+    RotatingCube,
+    SpherePulse,
+    Torus,
+    GridWithCube,
+    MultiShape,
+    DNA,
+    RayTracedSpheres,  
+    RayTracedDNA,      
 }
 
 impl HoloScene {
     
     pub fn next(self) -> Self {
         match self {
-            Self::Jb => Self::Un,
-            Self::Un => Self::Dr,
-            Self::Dr => Self::St,
-            Self::St => Self::Tn,
-            Self::Tn => Self::Ij,
-            Self::Ij => Self::Nv,
-            Self::Nv => Self::Nu,
-            Self::Nu => Self::Jb,
+            Self::RotatingCube => Self::SpherePulse,
+            Self::SpherePulse => Self::Torus,
+            Self::Torus => Self::GridWithCube,
+            Self::GridWithCube => Self::MultiShape,
+            Self::MultiShape => Self::DNA,
+            Self::DNA => Self::RayTracedSpheres,
+            Self::RayTracedSpheres => Self::RayTracedDNA,
+            Self::RayTracedDNA => Self::RotatingCube,
         }
     }
     
     
-    pub fn j(&self) -> &'static str {
+    pub fn name(&self) -> &'static str {
         match self {
-            Self::Jb => "Cube",
-            Self::Un => "Sphere",
-            Self::Dr => "Torus",
-            Self::St => "Grid+Cube",
-            Self::Tn => "Multi",
-            Self::Ij => "DNA",
-            Self::Nv => "RT-Spheres",
-            Self::Nu => "RT-DNA",
+            Self::RotatingCube => "Cube",
+            Self::SpherePulse => "Sphere",
+            Self::Torus => "Torus",
+            Self::GridWithCube => "Grid+Cube",
+            Self::MultiShape => "Multi",
+            Self::DNA => "DNA",
+            Self::RayTracedSpheres => "RT-Spheres",
+            Self::RayTracedDNA => "RT-DNA",
         }
     }
     
     
-    pub fn xik(&self) -> u8 {
+    pub fn to_index(&self) -> u8 {
         match self {
-            Self::Jb => 0,
-            Self::Un => 1,
-            Self::Dr => 2,
-            Self::St => 3,
-            Self::Tn => 4,
-            Self::Ij => 5,
-            Self::Nv => 6,
-            Self::Nu => 7,
+            Self::RotatingCube => 0,
+            Self::SpherePulse => 1,
+            Self::Torus => 2,
+            Self::GridWithCube => 3,
+            Self::MultiShape => 4,
+            Self::DNA => 5,
+            Self::RayTracedSpheres => 6,
+            Self::RayTracedDNA => 7,
         }
     }
     
     
-    pub fn ivy(w: u8) -> Self {
-        match w {
-            0 => Self::Jb,
-            1 => Self::Un,
-            2 => Self::Dr,
-            3 => Self::St,
-            4 => Self::Tn,
-            5 => Self::Ij,
-            6 => Self::Nv,
-            7 => Self::Nu,
-            _ => Self::Jb,
+    pub fn enm(idx: u8) -> Self {
+        match idx {
+            0 => Self::RotatingCube,
+            1 => Self::SpherePulse,
+            2 => Self::Torus,
+            3 => Self::GridWithCube,
+            4 => Self::MultiShape,
+            5 => Self::DNA,
+            6 => Self::RayTracedSpheres,
+            7 => Self::RayTracedDNA,
+            _ => Self::RotatingCube,
         }
     }
     
     
-    pub fn nwf(j: &str) -> Option<Self> {
-        match j.aqn().as_str() {
-            "cube" | "box" => Some(Self::Jb),
-            "sphere" | "ball" => Some(Self::Un),
-            "torus" | "donut" | "ring" => Some(Self::Dr),
-            "grid" | "grid+cube" | "gridcube" => Some(Self::St),
-            "multi" | "multiple" | "shapes" => Some(Self::Tn),
-            "dna" | "helix" => Some(Self::Ij),
-            "rt-spheres" | "rtspheres" | "raytraced" => Some(Self::Nv),
-            "rt-dna" | "rtdna" | "raytraced-dna" => Some(Self::Nu),
+    pub fn iad(name: &str) -> Option<Self> {
+        match name.to_lowercase().as_str() {
+            "cube" | "box" => Some(Self::RotatingCube),
+            "sphere" | "ball" => Some(Self::SpherePulse),
+            "torus" | "donut" | "ring" => Some(Self::Torus),
+            "grid" | "grid+cube" | "gridcube" => Some(Self::GridWithCube),
+            "multi" | "multiple" | "shapes" => Some(Self::MultiShape),
+            "dna" | "helix" => Some(Self::DNA),
+            "rt-spheres" | "rtspheres" | "raytraced" => Some(Self::RayTracedSpheres),
+            "rt-dna" | "rtdna" | "raytraced-dna" => Some(Self::RayTracedDNA),
             _ => None,
         }
     }
     
     
-    pub fn qgk() -> &'static [&'static str] {
+    pub fn juo() -> &'static [&'static str] {
         &["cube", "sphere", "torus", "grid", "multi", "dna", "rt-spheres", "rt-dna"]
     }
     
     
-    pub fn tyr(&self) -> bool {
-        oh!(self, Self::Nv | Self::Nu)
+    pub fn is_raytraced(&self) -> bool {
+        matches!(self, Self::RayTracedSpheres | Self::RayTracedDNA)
     }
 }

@@ -6,167 +6,167 @@ use alloc::vec::Vec;
 use alloc::string::String;
 
 
-const ARF_: [u8; 4] = [0x7F, b'E', b'L', b'F'];
+const ATI_: [u8; 4] = [0x7F, b'E', b'L', b'F'];
 
 
-const Cbd: u8 = 2;
+const Aiv: u8 = 2;
 
 
-const Cbe: u8 = 1; 
+const Aiw: u8 = 1; 
 
 
-const BUM_: u16 = 2;    
-const ARH_: u16 = 3;     
+const BXI_: u16 = 2;    
+const ATK_: u16 = 3;     
 
 
-const BTM_: u16 = 62;
+const BWI_: u16 = 62;
 
 
-const ECB_: u32 = 0;
-const IU_: u32 = 1;
-const AGT_: u32 = 2;
-const WL_: u32 = 3;
-const BDR_: u32 = 4;
-const ECC_: u32 = 6;
-const BDP_: u32 = 0x6474e552;
-const BDQ_: u32 = 0x6474e551;
+const EFR_: u32 = 0;
+const JM_: u32 = 1;
+const AIN_: u32 = 2;
+const XU_: u32 = 3;
+const BFU_: u32 = 4;
+const EFS_: u32 = 6;
+const BFS_: u32 = 0x6474e552;
+const BFT_: u32 = 0x6474e551;
 
 
-pub const CJF_: u32 = 1; 
-pub const CJE_: u32 = 2; 
-pub const CJD_: u32 = 4; 
+pub const CMO_: u32 = 1; 
+pub const CMN_: u32 = 2; 
+pub const CMM_: u32 = 4; 
 
 
-const SU_: i64 = 0;
-const ST_: i64 = 1;     
-const BSQ_: i64 = 2;  
-const AQU_: i64 = 3;
-const AQT_: i64 = 4;
-const ABO_: i64 = 5;     
-const ABP_: i64 = 6;    
-const ABK_: i64 = 7;      
-const ABM_: i64 = 8;
-const ABL_: i64 = 9;
-const ABN_: i64 = 10;
-const DKX_: i64 = 11;
-const ABI_: i64 = 12;
-const ABG_: i64 = 13;
-const AQW_: i64 = 14;
-const AQV_: i64 = 15;
-const BSS_: i64 = 16;
-const DKU_: i64 = 17;
-const DKW_: i64 = 18;
-const DKV_: i64 = 19;
-const DKT_: i64 = 20;
-const DKS_: i64 = 21;
-const DKY_: i64 = 22;
-const ABJ_: i64 = 23;
-const BSO_: i64 = 25;
-const BSK_: i64 = 26;
-const BSP_: i64 = 27;
-const BSL_: i64 = 28;
-const ABH_: i64 = 30;
-const BSM_: i64 = 0x6ffffffb;
+const UB_: i64 = 0;
+const UA_: i64 = 1;     
+const BVM_: i64 = 2;  
+const ASX_: i64 = 3;
+const ASW_: i64 = 4;
+const ADE_: i64 = 5;     
+const ADF_: i64 = 6;    
+const ADA_: i64 = 7;      
+const ADC_: i64 = 8;
+const ADB_: i64 = 9;
+const ADD_: i64 = 10;
+const DOL_: i64 = 11;
+const ACY_: i64 = 12;
+const ACW_: i64 = 13;
+const ASZ_: i64 = 14;
+const ASY_: i64 = 15;
+const BVO_: i64 = 16;
+const DOI_: i64 = 17;
+const DOK_: i64 = 18;
+const DOJ_: i64 = 19;
+const DOH_: i64 = 20;
+const DOG_: i64 = 21;
+const DOM_: i64 = 22;
+const ACZ_: i64 = 23;
+const BVK_: i64 = 25;
+const BVG_: i64 = 26;
+const BVL_: i64 = 27;
+const BVH_: i64 = 28;
+const ACX_: i64 = 30;
+const BVI_: i64 = 0x6ffffffb;
 
 
-const EDP_: u32 = 0;
-const EDL_: u32 = 1;        
-const EDM_: u32 = 6;  
-const EDO_: u32 = 7; 
-const EDQ_: u32 = 8;  
-const EDN_: u32 = 37;
+const EHH_: u32 = 0;
+const EHD_: u32 = 1;        
+const EHE_: u32 = 6;  
+const EHG_: u32 = 7; 
+const EHI_: u32 = 8;  
+const EHF_: u32 = 37;
 
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-pub struct Bfv {
-    pub rsz: i64,
-    pub bmq: u64,
+pub struct Yi {
+    pub d_tag: i64,
+    pub d_val: u64,
 }
 
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-pub struct Cvv {
-    pub pnm: u32,
-    pub mhf: u8,
-    pub pno: u8,
-    pub pnp: u16,
-    pub pnr: u64,
-    pub gsz: u64,
+pub struct Avh {
+    pub jhy: u32,
+    pub gwa: u8,
+    pub jhz: u8,
+    pub jia: u16,
+    pub jib: u64,
+    pub st_size: u64,
 }
 
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-pub struct Ph {
-    pub jla: u64,
-    pub hwk: u64,
-    pub jky: i64,
+pub struct Gl {
+    pub r_offset: u64,
+    pub r_info: u64,
+    pub r_addend: i64,
 }
 
-impl Ph {
-    pub fn dwm(&self) -> u32 { (self.hwk >> 32) as u32 }
-    pub fn fsp(&self) -> u32 { (self.hwk & 0xFFFF_FFFF) as u32 }
+impl Gl {
+    pub fn sym_idx(&self) -> u32 { (self.r_info >> 32) as u32 }
+    pub fn rel_type(&self) -> u32 { (self.r_info & 0xFFFF_FFFF) as u32 }
 }
 
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct Elf64Header {
-    pub ksg: [u8; 16],      
-    pub ceh: u16,            
-    pub cqb: u16,         
-    pub yof: u32,         
-    pub cxe: u64,           
-    pub epo: u64,           
-    pub ksl: u64,           
-    pub yod: u32,           
-    pub yoc: u16,          
-    pub fhh: u16,       
-    pub dqk: u16,           
-    pub nov: u16,       
-    pub ksk: u16,           
-    pub ksm: u16,        
+    pub e_ident: [u8; 16],      
+    pub e_type: u16,            
+    pub e_machine: u16,         
+    pub e_version: u32,         
+    pub e_entry: u64,           
+    pub e_phoff: u64,           
+    pub ftx: u64,           
+    pub e_flags: u32,           
+    pub e_ehsize: u16,          
+    pub e_phentsize: u16,       
+    pub e_phnum: u16,           
+    pub hur: u16,       
+    pub ftv: u16,           
+    pub fty: u16,        
 }
 
 impl Elf64Header {
-    pub const Am: usize = 64;
+    pub const Z: usize = 64;
     
     
-    pub fn eca(f: &[u8]) -> Option<&Self> {
-        if f.len() < Self::Am {
+    pub fn bsv(data: &[u8]) -> Option<&Self> {
+        if data.len() < Self::Z {
             return None;
         }
         
-        let dh = unsafe { &*(f.fq() as *const Self) };
+        let header = unsafe { &*(data.as_ptr() as *const Self) };
         
         
-        if dh.ksg[0..4] != ARF_ {
-            return None;
-        }
-        
-        
-        if dh.ksg[4] != Cbd {
+        if header.e_ident[0..4] != ATI_ {
             return None;
         }
         
         
-        if dh.ksg[5] != Cbe {
+        if header.e_ident[4] != Aiv {
             return None;
         }
         
         
-        if dh.cqb != BTM_ {
+        if header.e_ident[5] != Aiw {
             return None;
         }
         
-        Some(dh)
+        
+        if header.e_machine != BWI_ {
+            return None;
+        }
+        
+        Some(header)
     }
     
     
-    pub fn clc(&self) -> bool {
-        self.ceh == BUM_ || self.ceh == ARH_
+    pub fn is_executable(&self) -> bool {
+        self.e_type == BXI_ || self.e_type == ATK_
     }
 }
 
@@ -174,367 +174,367 @@ impl Elf64Header {
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct Elf64Phdr {
-    pub bku: u32,        
-    pub bvv: u32,       
-    pub caz: u64,      
-    pub ctg: u64,       
-    pub zeo: u64,       
-    pub cgh: u64,      
-    pub ctf: u64,       
-    pub zen: u64,       
+    pub p_type: u32,        
+    pub p_flags: u32,       
+    pub p_offset: u64,      
+    pub p_vaddr: u64,       
+    pub p_paddr: u64,       
+    pub p_filesz: u64,      
+    pub p_memsz: u64,       
+    pub p_align: u64,       
 }
 
 impl Elf64Phdr {
-    pub const Am: usize = 56;
+    pub const Z: usize = 56;
     
     
-    pub fn gkf(&self) -> bool {
-        self.bku == IU_
+    pub fn czz(&self) -> bool {
+        self.p_type == JM_
     }
     
     
-    pub fn clc(&self) -> bool {
-        (self.bvv & CJF_) != 0
+    pub fn is_executable(&self) -> bool {
+        (self.p_flags & CMO_) != 0
     }
     
     
-    pub fn edz(&self) -> bool {
-        (self.bvv & CJE_) != 0
+    pub fn is_writable(&self) -> bool {
+        (self.p_flags & CMN_) != 0
     }
     
     
-    pub fn ogr(&self) -> bool {
-        (self.bvv & CJD_) != 0
+    pub fn is_readable(&self) -> bool {
+        (self.p_flags & CMM_) != 0
     }
 }
 
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-pub struct Cvu {
-    pub pjv: u32,       
-    pub dbx: u32,       
-    pub jpp: u64,      
-    pub zny: u64,       
-    pub pjy: u64,     
-    pub pjz: u64,       
-    pub zob: u32,       
-    pub zoa: u32,       
-    pub znz: u64,  
-    pub mfh: u64,    
+pub struct Avg {
+    pub sh_name: u32,       
+    pub sh_type: u32,       
+    pub fam: u64,      
+    pub sh_addr: u64,       
+    pub jfx: u64,     
+    pub jfy: u64,       
+    pub sh_link: u32,       
+    pub sh_info: u32,       
+    pub sh_addralign: u64,  
+    pub guq: u64,    
 }
 
 
 #[derive(Clone, Debug)]
-pub struct Blm {
-    pub uy: u64,
-    pub aw: u64,
+pub struct Aax {
+    pub vaddr: u64,
+    pub size: u64,
     pub flags: u32,
-    pub f: Vec<u8>,
+    pub data: Vec<u8>,
 }
 
 
 #[derive(Clone, Debug, Default)]
 pub struct DynamicInfo {
     
-    pub ahp: Option<String>,
+    pub interp: Option<String>,
     
-    pub djt: Vec<String>,
+    pub needed_libs: Vec<String>,
     
-    pub lyx: u64,
-    pub lyw: usize,
+    pub rela_offset: u64,
+    pub rela_count: usize,
     
-    pub lgw: u64,
-    pub lgv: usize,
+    pub jmprel_offset: u64,
+    pub jmprel_count: usize,
     
-    pub wwz: u64,
+    pub symtab_offset: u64,
     
-    pub wvg: u64,
-    pub mhy: usize,
+    pub strtab_offset: u64,
+    pub strtab_size: usize,
     
-    pub tsy: u64,
-    pub sts: u64,
+    pub init_addr: u64,
+    pub fini_addr: u64,
     
-    pub ttc: u64,
-    pub ttd: usize,
-    pub stt: u64,
-    pub stu: usize,
+    pub init_array_addr: u64,
+    pub init_array_size: usize,
+    pub fini_array_addr: u64,
+    pub fini_array_size: usize,
     
     pub flags: u64,
-    pub sum: u64,
+    pub flags_1: u64,
     
-    pub tmh: bool,
+    pub has_dynamic: bool,
 }
 
 
 #[derive(Clone, Debug)]
-pub struct Acr {
-    pub mi: u64,
-    pub jq: Vec<Blm>,
-    pub foj: u64,
-    pub gmk: u64,
+pub struct Mm {
+    pub entry_point: u64,
+    pub segments: Vec<Aax>,
+    pub min_vaddr: u64,
+    pub max_vaddr: u64,
     
-    pub sm: u64,
+    pub base_addr: u64,
     
-    pub jbo: bool,
+    pub erq: bool,
     
-    pub hhn: DynamicInfo,
+    pub dynamic: DynamicInfo,
     
-    pub bwp: Vec<Axu>,
+    pub relocations: Vec<Us>,
 }
 
 
 #[derive(Clone, Debug)]
-pub struct Axu {
-    pub l: u64,
-    pub fsp: u32,
-    pub dwm: u32,
-    pub fcn: i64,
+pub struct Us {
+    pub offset: u64,
+    pub rel_type: u32,
+    pub sym_idx: u32,
+    pub addend: i64,
 }
 
 
 #[derive(Clone, Copy, Debug)]
 pub enum ElfError {
-    Bju,
-    Czw,
-    Czx,
-    Chz,
-    Aum,
-    Av,
-    Cod,
-    Ns,
+    InvalidMagic,
+    InvalidClass,
+    InvalidMachine,
+    NotExecutable,
+    InvalidProgramHeader,
+    IoError,
+    TooLarge,
+    OutOfMemory,
 }
 
-pub type Ahr<T> = Result<T, ElfError>;
+pub type Os<T> = Result<T, ElfError>;
 
 
-pub fn ugx(path: &str) -> Ahr<Acr> {
+pub fn nac(path: &str) -> Os<Mm> {
     
-    let da = crate::vfs::aji(path, crate::vfs::OpenFlags(crate::vfs::OpenFlags::OO_))
-        .jd(|_| ElfError::Av)?;
+    let fd = crate::vfs::open(path, crate::vfs::OpenFlags(crate::vfs::OpenFlags::PM_))
+        .map_err(|_| ElfError::IoError)?;
     
     
-    let hm = crate::vfs::hm(path).jd(|_| ElfError::Av)?;
-    let aw = hm.aw as usize;
+    let stat = crate::vfs::stat(path).map_err(|_| ElfError::IoError)?;
+    let size = stat.size as usize;
     
-    if aw > 16 * 1024 * 1024 {  
-        crate::vfs::agj(da).bq();
-        return Err(ElfError::Cod);
+    if size > 16 * 1024 * 1024 {  
+        crate::vfs::close(fd).ok();
+        return Err(ElfError::TooLarge);
     }
     
     
-    let mut f = alloc::vec![0u8; aw];
-    crate::vfs::read(da, &mut f).jd(|_| ElfError::Av)?;
-    crate::vfs::agj(da).bq();
+    let mut data = alloc::vec![0u8; size];
+    crate::vfs::read(fd, &mut data).map_err(|_| ElfError::IoError)?;
+    crate::vfs::close(fd).ok();
     
     
-    ljf(&f)
+    gfw(&data)
 }
 
 
-pub fn ljf(f: &[u8]) -> Ahr<Acr> {
+pub fn gfw(data: &[u8]) -> Os<Mm> {
     
-    let dh = Elf64Header::eca(f)
-        .ok_or(ElfError::Bju)?;
+    let header = Elf64Header::bsv(data)
+        .ok_or(ElfError::InvalidMagic)?;
     
-    if !dh.clc() {
-        return Err(ElfError::Chz);
+    if !header.is_executable() {
+        return Err(ElfError::NotExecutable);
     }
     
-    let jbo = dh.ceh == ARH_;
+    let erq = header.e_type == ATK_;
     
-    let sm: u64 = if jbo { 0x0040_0000 } else { 0 };
+    let base_addr: u64 = if erq { 0x0040_0000 } else { 0 };
     
     crate::log_debug!("[ELF] Loading {} executable, entry: {:#x}, base: {:#x}",
-        if jbo { "PIE" } else { "static" }, dh.cxe, sm);
+        if erq { "PIE" } else { "static" }, header.e_entry, base_addr);
     
-    let mut jq = Vec::new();
-    let mut foj = u64::O;
-    let mut gmk = 0u64;
-    let mut cqa = DynamicInfo::default();
-    let mut noo: Option<(u64, u64)> = None; 
+    let mut segments = Vec::new();
+    let mut min_vaddr = u64::MAX;
+    let mut max_vaddr = 0u64;
+    let mut aww = DynamicInfo::default();
+    let mut hun: Option<(u64, u64)> = None; 
     
     
-    let bnu = dh.epo as usize;
-    let egq = dh.fhh as usize;
-    let egp = dh.dqk as usize;
+    let aii = header.e_phoff as usize;
+    let but = header.e_phentsize as usize;
+    let bur = header.e_phnum as usize;
     
-    for a in 0..egp {
-        let l = bnu + a * egq;
-        if l + Elf64Phdr::Am > f.len() {
-            return Err(ElfError::Aum);
+    for i in 0..bur {
+        let offset = aii + i * but;
+        if offset + Elf64Phdr::Z > data.len() {
+            return Err(ElfError::InvalidProgramHeader);
         }
         
-        let ajj = unsafe { &*(f[l..].fq() as *const Elf64Phdr) };
+        let rx = unsafe { &*(data[offset..].as_ptr() as *const Elf64Phdr) };
         
-        match ajj.bku {
-            WL_ => {
+        match rx.p_type {
+            XU_ => {
                 
-                let ay = ajj.caz as usize;
-                let ci = ay + ajj.cgh as usize;
-                if ci <= f.len() {
-                    let lfc = &f[ay..ci];
+                let start = rx.p_offset as usize;
+                let end = start + rx.p_filesz as usize;
+                if end <= data.len() {
+                    let gdd = &data[start..end];
                     
-                    let len = lfc.iter().qf(|&o| o == 0).unwrap_or(lfc.len());
-                    if let Ok(e) = core::str::jg(&lfc[..len]) {
-                        cqa.ahp = Some(String::from(e));
-                        crate::log_debug!("[ELF] PT_INTERP: {}", e);
+                    let len = gdd.iter().position(|&b| b == 0).unwrap_or(gdd.len());
+                    if let Ok(j) = core::str::from_utf8(&gdd[..len]) {
+                        aww.interp = Some(String::from(j));
+                        crate::log_debug!("[ELF] PT_INTERP: {}", j);
                     }
                 }
             }
-            AGT_ => {
-                cqa.tmh = true;
-                noo = Some((ajj.caz, ajj.cgh));
+            AIN_ => {
+                aww.has_dynamic = true;
+                hun = Some((rx.p_offset, rx.p_filesz));
             }
-            IU_ => {
-                let uy = ajj.ctg + sm;
+            JM_ => {
+                let vaddr = rx.p_vaddr + base_addr;
                 crate::log_debug!("[ELF] LOAD segment: vaddr={:#x}, filesz={}, memsz={}, flags={:#x}",
-                    uy, ajj.cgh, ajj.ctf, ajj.bvv);
+                    vaddr, rx.p_filesz, rx.p_memsz, rx.p_flags);
                 
-                if uy < foj { foj = uy; }
-                if uy + ajj.ctf > gmk { gmk = uy + ajj.ctf; }
+                if vaddr < min_vaddr { min_vaddr = vaddr; }
+                if vaddr + rx.p_memsz > max_vaddr { max_vaddr = vaddr + rx.p_memsz; }
                 
-                let azv = ajj.caz as usize;
-                let yy = ajj.cgh as usize;
-                let czr = ajj.ctf as usize;
+                let aaw = rx.p_offset as usize;
+                let file_size = rx.p_filesz as usize;
+                let bcr = rx.p_memsz as usize;
                 
-                if azv + yy > f.len() {
-                    return Err(ElfError::Aum);
+                if aaw + file_size > data.len() {
+                    return Err(ElfError::InvalidProgramHeader);
                 }
                 
-                let mut hzl = alloc::vec![0u8; czr];
-                hzl[..yy].dg(&f[azv..azv + yy]);
+                let mut dyy = alloc::vec![0u8; bcr];
+                dyy[..file_size].copy_from_slice(&data[aaw..aaw + file_size]);
                 
-                jq.push(Blm {
-                    uy,
-                    aw: ajj.ctf,
-                    flags: ajj.bvv,
-                    f: hzl,
+                segments.push(Aax {
+                    vaddr,
+                    size: rx.p_memsz,
+                    flags: rx.p_flags,
+                    data: dyy,
                 });
             }
             _ => {} 
         }
     }
     
-    if jq.is_empty() {
-        return Err(ElfError::Aum);
+    if segments.is_empty() {
+        return Err(ElfError::InvalidProgramHeader);
     }
     
     
-    let mut bwp = Vec::new();
-    if let Some((shx, shy)) = noo {
-        let ay = shx as usize;
-        let ci = ay + shy as usize;
-        if ci <= f.len() {
-            lsi(f, ay, ci, sm, &mut cqa);
+    let mut relocations = Vec::new();
+    if let Some((dyn_off, dyn_sz)) = hun {
+        let start = dyn_off as usize;
+        let end = start + dyn_sz as usize;
+        if end <= data.len() {
+            gmh(data, start, end, base_addr, &mut aww);
         }
         
-        if cqa.lyw > 0 && (cqa.lyx as usize) < f.len() {
-            let vul = cqa.lyx as usize;
-            for a in 0..cqa.lyw {
-                let dz = vul + a * core::mem::size_of::<Ph>();
-                if dz + core::mem::size_of::<Ph>() > f.len() { break; }
-                let ehk = unsafe { &*(f[dz..].fq() as *const Ph) };
-                bwp.push(Axu {
-                    l: ehk.jla,
-                    fsp: ehk.fsp(),
-                    dwm: ehk.dwm(),
-                    fcn: ehk.jky,
+        if aww.rela_count > 0 && (aww.rela_offset as usize) < data.len() {
+            let oeq = aww.rela_offset as usize;
+            for i in 0..aww.rela_count {
+                let off = oeq + i * core::mem::size_of::<Gl>();
+                if off + core::mem::size_of::<Gl>() > data.len() { break; }
+                let bvg = unsafe { &*(data[off..].as_ptr() as *const Gl) };
+                relocations.push(Us {
+                    offset: bvg.r_offset,
+                    rel_type: bvg.rel_type(),
+                    sym_idx: bvg.sym_idx(),
+                    addend: bvg.r_addend,
                 });
             }
         }
         
-        if cqa.lgv > 0 && (cqa.lgw as usize) < f.len() {
-            let ual = cqa.lgw as usize;
-            for a in 0..cqa.lgv {
-                let dz = ual + a * core::mem::size_of::<Ph>();
-                if dz + core::mem::size_of::<Ph>() > f.len() { break; }
-                let ehk = unsafe { &*(f[dz..].fq() as *const Ph) };
-                bwp.push(Axu {
-                    l: ehk.jla,
-                    fsp: ehk.fsp(),
-                    dwm: ehk.dwm(),
-                    fcn: ehk.jky,
+        if aww.jmprel_count > 0 && (aww.jmprel_offset as usize) < data.len() {
+            let mvb = aww.jmprel_offset as usize;
+            for i in 0..aww.jmprel_count {
+                let off = mvb + i * core::mem::size_of::<Gl>();
+                if off + core::mem::size_of::<Gl>() > data.len() { break; }
+                let bvg = unsafe { &*(data[off..].as_ptr() as *const Gl) };
+                relocations.push(Us {
+                    offset: bvg.r_offset,
+                    rel_type: bvg.rel_type(),
+                    sym_idx: bvg.sym_idx(),
+                    addend: bvg.r_addend,
                 });
             }
         }
         crate::log_debug!("[ELF] Parsed {} relocations, {} needed libs",
-            bwp.len(), cqa.djt.len());
+            relocations.len(), aww.needed_libs.len());
     }
     
-    Ok(Acr {
-        mi: dh.cxe + sm,
-        jq,
-        foj,
-        gmk,
-        sm,
-        jbo,
-        hhn: cqa,
-        bwp,
+    Ok(Mm {
+        entry_point: header.e_entry + base_addr,
+        segments,
+        min_vaddr,
+        max_vaddr,
+        base_addr,
+        erq,
+        dynamic: aww,
+        relocations,
     })
 }
 
 
-fn lsi(f: &[u8], ay: usize, ci: usize, xxz: u64, co: &mut DynamicInfo) {
-    let acy = core::mem::size_of::<Bfv>();
-    let mut lyy: u64 = 0;
-    let mut hxj: u64 = 0;
-    let mut luk: u64 = 0;
-    let mut mhx: u64 = 0;
-    let mut ppf: u64 = 0;
-    let mut opd: Vec<u64> = Vec::new();
+fn gmh(data: &[u8], start: usize, end: usize, _base: u64, info: &mut DynamicInfo) {
+    let oi = core::mem::size_of::<Yi>();
+    let mut gqy: u64 = 0;
+    let mut dxp: u64 = 0;
+    let mut gnl: u64 = 0;
+    let mut gwp: u64 = 0;
+    let mut jjf: u64 = 0;
+    let mut ipj: Vec<u64> = Vec::new();
     
-    let mut dz = ay;
-    while dz + acy <= ci {
-        let bqi = unsafe { &*(f[dz..].fq() as *const Bfv) };
-        match bqi.rsz {
-            SU_ => break,
-            ST_ => { opd.push(bqi.bmq); }
-            ABO_ => { mhx = bqi.bmq; }
-            ABN_ => { ppf = bqi.bmq; }
-            ABP_ => { co.wwz = bqi.bmq; }
-            ABK_ => { co.lyx = bqi.bmq; }
-            ABM_ => { lyy = bqi.bmq; }
-            ABL_ => { hxj = bqi.bmq; }
-            ABJ_ => { co.lgw = bqi.bmq; }
-            BSQ_ => { luk = bqi.bmq; }
-            ABI_ => { co.tsy = bqi.bmq; }
-            ABG_ => { co.sts = bqi.bmq; }
-            BSO_ => { co.ttc = bqi.bmq; }
-            BSP_ => { co.ttd = bqi.bmq as usize; }
-            BSK_ => { co.stt = bqi.bmq; }
-            BSL_ => { co.stu = bqi.bmq as usize; }
-            ABH_ => { co.flags = bqi.bmq; }
-            BSM_ => { co.sum = bqi.bmq; }
+    let mut off = start;
+    while off + oi <= end {
+        let ajn = unsafe { &*(data[off..].as_ptr() as *const Yi) };
+        match ajn.d_tag {
+            UB_ => break,
+            UA_ => { ipj.push(ajn.d_val); }
+            ADE_ => { gwp = ajn.d_val; }
+            ADD_ => { jjf = ajn.d_val; }
+            ADF_ => { info.symtab_offset = ajn.d_val; }
+            ADA_ => { info.rela_offset = ajn.d_val; }
+            ADC_ => { gqy = ajn.d_val; }
+            ADB_ => { dxp = ajn.d_val; }
+            ACZ_ => { info.jmprel_offset = ajn.d_val; }
+            BVM_ => { gnl = ajn.d_val; }
+            ACY_ => { info.init_addr = ajn.d_val; }
+            ACW_ => { info.fini_addr = ajn.d_val; }
+            BVK_ => { info.init_array_addr = ajn.d_val; }
+            BVL_ => { info.init_array_size = ajn.d_val as usize; }
+            BVG_ => { info.fini_array_addr = ajn.d_val; }
+            BVH_ => { info.fini_array_size = ajn.d_val as usize; }
+            ACX_ => { info.flags = ajn.d_val; }
+            BVI_ => { info.flags_1 = ajn.d_val; }
             _ => {}
         }
-        dz += acy;
+        off += oi;
     }
     
     
-    if hxj > 0 && lyy > 0 {
-        co.lyw = (lyy / hxj) as usize;
+    if dxp > 0 && gqy > 0 {
+        info.rela_count = (gqy / dxp) as usize;
     }
-    if luk > 0 {
-        let slw = if hxj > 0 { hxj } else { core::mem::size_of::<Ph>() as u64 };
-        co.lgv = (luk / slw) as usize;
+    if gnl > 0 {
+        let lqk = if dxp > 0 { dxp } else { core::mem::size_of::<Gl>() as u64 };
+        info.jmprel_count = (gnl / lqk) as usize;
     }
     
-    co.wvg = mhx;
-    co.mhy = ppf as usize;
+    info.strtab_offset = gwp;
+    info.strtab_size = jjf as usize;
     
     
     
     
-    let iby = mhx as usize;
-    if iby < f.len() {
-        for &lnj in &opd {
-            let akj = iby + lnj as usize;
-            if akj < f.len() {
-                let sln = f[akj..].iter().qf(|&o| o == 0)
-                    .unwrap_or(f.len() - akj);
-                if let Ok(j) = core::str::jg(&f[akj..akj + sln]) {
-                    co.djt.push(String::from(j));
+    let eam = gwp as usize;
+    if eam < data.len() {
+        for &gio in &ipj {
+            let sj = eam + gio as usize;
+            if sj < data.len() {
+                let lqc = data[sj..].iter().position(|&b| b == 0)
+                    .unwrap_or(data.len() - sj);
+                if let Ok(name) = core::str::from_utf8(&data[sj..sj + lqc]) {
+                    info.needed_libs.push(String::from(name));
                 }
             }
         }
@@ -542,17 +542,17 @@ fn lsi(f: &[u8], ay: usize, ci: usize, xxz: u64, co: &mut DynamicInfo) {
 }
 
 
-pub fn txj(f: &[u8]) -> bool {
-    if f.len() < 4 {
+pub fn msm(data: &[u8]) -> bool {
+    if data.len() < 4 {
         return false;
     }
-    f[0..4] == ARF_
+    data[0..4] == ATI_
 }
 
 
-pub fn ani(f: &[u8]) -> Ahr<(u64, usize)> {
-    let dh = Elf64Header::eca(f)
-        .ok_or(ElfError::Bju)?;
+pub fn rk(data: &[u8]) -> Os<(u64, usize)> {
+    let header = Elf64Header::bsv(data)
+        .ok_or(ElfError::InvalidMagic)?;
     
-    Ok((dh.cxe, dh.dqk as usize))
+    Ok((header.e_entry, header.e_phnum as usize))
 }

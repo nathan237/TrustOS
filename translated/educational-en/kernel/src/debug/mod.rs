@@ -12,6 +12,8 @@
 //! - Memory map display
 //! - E9 debug port (Bochs/QEMU debug console)
 
+pub mod netconsole;
+
 use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::format;
@@ -70,7 +72,7 @@ impl CheckpointLog {
             self.count += 1;
         }
     }
-    fn iter(&self) -> core::slice::Iterator<'_, (u64, u8, &'static str)> {
+    fn iter(&self) -> core::slice::Iter<'_, (u64, u8, &'static str)> {
         self.entries[..self.count].iter()
     }
     fn is_empty(&self) -> bool {
@@ -147,7 +149,7 @@ pub fn get_checkpoints() -> Vec<(u64, u8, &'static str)> {
 /// Single short beep via PC speaker (PIT channel 2)
 #[cfg(target_arch = "x86_64")]
 // Public function — callable from other modules.
-pub fn beep(frequency_hz: u32, duration_mouse: u32) {
+pub fn beep(frequency_hz: u32, duration_ms: u32) {
     if frequency_hz == 0 { return; }
     let divisor = 1193180u32 / frequency_hz;
 
@@ -159,23 +161,23 @@ unsafe {
         core::arch::asm!("out dx, al", in("dx") 0x42u16, in("al") ((divisor >> 8) & 0xFF) as u8, options(nostack, preserves_flags));
 
         // Enable speaker (bits 0 and 1 of port 0x61)
-        let value: u8;
-        core::arch::asm!("in al, dx", in("dx") 0x61u16, out("al") value, options(nostack, preserves_flags));
-        let on = value | 0x03;
+        let val: u8;
+        core::arch::asm!("in al, dx", in("dx") 0x61u16, out("al") val, options(nostack, preserves_flags));
+        let on = val | 0x03;
         core::arch::asm!("out dx, al", in("dx") 0x61u16, in("al") on, options(nostack, preserves_flags));
 
         // Busy-wait for duration
-        busy_wait_mouse(duration_mouse);
+        busy_wait_mouse(duration_ms);
 
         // Disable speaker
-        let off = value & !0x03;
+        let off = val & !0x03;
         core::arch::asm!("out dx, al", in("dx") 0x61u16, in("al") off, options(nostack, preserves_flags));
     }
 }
 
 #[cfg(not(target_arch = "x86_64"))]
 // Public function — callable from other modules.
-pub fn beep(_frequency_hz: u32, _duration_mouse: u32) {}
+pub fn beep(_frequency_hz: u32, _duration_ms: u32) {}
 
 /// Quick beep patterns for boot feedback
 pub fn beep_ok()    { beep(1000, 100); }  // Single short beep = OK
@@ -190,7 +192,7 @@ pub fn beep_error() { beep(200, 500); } // Long low = error
 /// Returns pairs of (return_address, frame_pointer)
 #[cfg(target_arch = "x86_64")]
 // Public function — callable from other modules.
-pub fn stack_walk(maximum_frames: usize) -> Vec<(u64, u64)> {
+pub fn stack_walk(max_frames: usize) -> Vec<(u64, u64)> {
     let mut frames = Vec::new();
     let mut rbp: u64;
     
@@ -201,7 +203,7 @@ unsafe {
     
     let kernel_start = 0xFFFF_8000_0000_0000u64; // higher half
     
-    for _ in 0..maximum_frames {
+    for _ in 0..max_frames {
         if rbp == 0 || rbp < kernel_start {
             break;
         }
@@ -234,17 +236,17 @@ unsafe { core::ptr::read_volatile(frame_pointer) };
 
 #[cfg(not(target_arch = "x86_64"))]
 // Public function — callable from other modules.
-pub fn stack_walk(_maximum_frames: usize) -> Vec<(u64, u64)> {
+pub fn stack_walk(_max_frames: usize) -> Vec<(u64, u64)> {
     Vec::new()
 }
 
 /// Format a backtrace for display
-pub fn format_backtrace(maximum_frames: usize) -> Vec<String> {
+pub fn format_backtrace(max_frames: usize) -> Vec<String> {
     let mut lines = Vec::new();
     lines.push(String::from("  Stack Backtrace:"));
     lines.push(String::from("  ─────────────────────────────────────────────"));
     
-    let frames = stack_walk(maximum_frames);
+    let frames = stack_walk(max_frames);
     if frames.is_empty() {
         lines.push(String::from("  <no frames — frame pointers may be omitted>"));
         lines.push(String::from("  Hint: build with RUSTFLAGS=\"-Cforce-frame-pointers=yes\""));
@@ -371,7 +373,7 @@ unsafe {
     for &(msr_id, name) in msrs {
                 // Pattern matching — Rust's exhaustive branching construct.
 match read_msr_safe(msr_id) {
-            Some(value) => lines.push(format!("  0x{:08X} ({:<24}) = 0x{:016x}", msr_id, name, value)),
+            Some(val) => lines.push(format!("  0x{:08X} ({:<24}) = 0x{:016x}", msr_id, name, val)),
             None      => lines.push(format!("  0x{:08X} ({:<24}) = <GPF — not available>", msr_id, name)),
         }
     }
@@ -393,54 +395,54 @@ pub fn full_cpu_dump() -> Vec<String> {
 #[cfg(target_arch = "x86_64")]
 // Public function — callable from other modules.
 pub fn inb(port: u16) -> u8 {
-    let value: u8;
+    let val: u8;
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::arch::asm!("in al, dx", in("dx") port, out("al") value, options(nostack, preserves_flags)); }
-    value
+unsafe { core::arch::asm!("in al, dx", in("dx") port, out("al") val, options(nostack, preserves_flags)); }
+    val
 }
 
 /// Read a word from an I/O port
 #[cfg(target_arch = "x86_64")]
 // Public function — callable from other modules.
 pub fn inw(port: u16) -> u16 {
-    let value: u16;
+    let val: u16;
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::arch::asm!("in ax, dx", in("dx") port, out("ax") value, options(nostack, preserves_flags)); }
-    value
+unsafe { core::arch::asm!("in ax, dx", in("dx") port, out("ax") val, options(nostack, preserves_flags)); }
+    val
 }
 
 /// Read a dword from an I/O port
 #[cfg(target_arch = "x86_64")]
 // Public function — callable from other modules.
 pub fn inl(port: u16) -> u32 {
-    let value: u32;
+    let val: u32;
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::arch::asm!("in eax, dx", in("dx") port, out("eax") value, options(nostack, preserves_flags)); }
-    value
+unsafe { core::arch::asm!("in eax, dx", in("dx") port, out("eax") val, options(nostack, preserves_flags)); }
+    val
 }
 
 /// Write a byte to an I/O port
 #[cfg(target_arch = "x86_64")]
 // Public function — callable from other modules.
-pub fn outb(port: u16, value: u8) {
+pub fn outb(port: u16, val: u8) {
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::arch::asm!("out dx, al", in("dx") port, in("al") value, options(nostack, preserves_flags)); }
+unsafe { core::arch::asm!("out dx, al", in("dx") port, in("al") val, options(nostack, preserves_flags)); }
 }
 
 /// Write a word to an I/O port
 #[cfg(target_arch = "x86_64")]
 // Public function — callable from other modules.
-pub fn outw(port: u16, value: u16) {
+pub fn outw(port: u16, val: u16) {
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::arch::asm!("out dx, ax", in("dx") port, in("ax") value, options(nostack, preserves_flags)); }
+unsafe { core::arch::asm!("out dx, ax", in("dx") port, in("ax") val, options(nostack, preserves_flags)); }
 }
 
 /// Write a dword to an I/O port
 #[cfg(target_arch = "x86_64")]
 // Public function — callable from other modules.
-pub fn outl(port: u16, value: u32) {
+pub fn outl(port: u16, val: u32) {
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::arch::asm!("out dx, eax", in("dx") port, in("eax") value, options(nostack, preserves_flags)); }
+unsafe { core::arch::asm!("out dx, eax", in("dx") port, in("eax") val, options(nostack, preserves_flags)); }
 }
 
 #[cfg(not(target_arch = "x86_64"))]
@@ -454,13 +456,13 @@ pub fn inw(_port: u16) -> u16 { 0 }
 pub fn inl(_port: u16) -> u32 { 0 }
 #[cfg(not(target_arch = "x86_64"))]
 // Public function — callable from other modules.
-pub fn outb(_port: u16, _value: u8) {}
+pub fn outb(_port: u16, _val: u8) {}
 #[cfg(not(target_arch = "x86_64"))]
 // Public function — callable from other modules.
-pub fn outw(_port: u16, _value: u16) {}
+pub fn outw(_port: u16, _val: u16) {}
 #[cfg(not(target_arch = "x86_64"))]
 // Public function — callable from other modules.
-pub fn outl(_port: u16, _value: u32) {}
+pub fn outl(_port: u16, _val: u32) {}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 7. MSR ACCESS — read/write Model Specific Registers
@@ -631,16 +633,16 @@ pub fn panic_dump() {
 unsafe { core::arch::asm!("mov {}, rsp", out(reg) rsp); }
         crate::serial_println!("");
         crate::serial_println!("  ── Stack Dump (RSP=0x{:016x}, 256 bytes) ──", rsp);
-        let stack_pointer = rsp as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+        let stack_ptr = rsp as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u8;
         for row in 0..16 {
             let offset = row * 16;
-            let address = rsp + offset as u64;
+            let addr = rsp + offset as u64;
             let mut hex = String::new();
             let mut ascii = String::new();
-            for column in 0..16 {
+            for col in 0..16 {
                 let byte = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::read_volatile(stack_pointer.add(offset + column)) };
+unsafe { core::ptr::read_volatile(stack_ptr.add(offset + col)) };
                 hex.push_str(&format!("{:02x} ", byte));
                 if byte >= 0x20 && byte < 0x7f {
                     ascii.push(byte as char);
@@ -648,7 +650,7 @@ unsafe { core::ptr::read_volatile(stack_pointer.add(offset + column)) };
                     ascii.push('.');
                 }
             }
-            crate::serial_println!("  {:016x}: {} |{}|", address, hex, ascii);
+            crate::serial_println!("  {:016x}: {} |{}|", addr, hex, ascii);
         }
     }
     
@@ -669,7 +671,7 @@ unsafe { core::ptr::read_volatile(stack_pointer.add(offset + column)) };
     crate::serial_println!("  ── Heap State ──");
     let stats = crate::devtools::memdbg_stats();
     crate::serial_println!("  allocs={}, deallocs={}, live={}, peak={}",
-        stats.allocator_count, stats.dealloc_count, stats.live_allocs, stats.peak_heap_used);
+        stats.alloc_count, stats.dealloc_count, stats.live_allocs, stats.peak_heap_used);
     
     crate::serial_println!("════════════════════════════════════════════════════════════");
     crate::serial_println!("Collect this output via serial cable (115200 8N1) for analysis.");
@@ -713,7 +715,7 @@ pub fn format_memory_map() -> Vec<String> {
         let mut total_reserved: u64 = 0;
         for (base, length, typ) in &regions {
             let end = base + length;
-            let size_keyboard = length / 1024;
+            let size_kb = length / 1024;
             let type_str = // Pattern matching — Rust's exhaustive branching construct.
 match typ {
                 0 => { total_usable += length; "USABLE" },
@@ -726,7 +728,7 @@ match typ {
                 7 => "FRAMEBUFFER",
                 _ => "UNKNOWN",
             };
-            lines.push(format!("  0x{:016x}  0x{:016x}  {:>8} KB  {}", base, end, size_keyboard, type_str));
+            lines.push(format!("  0x{:016x}  0x{:016x}  {:>8} KB  {}", base, end, size_kb, type_str));
         }
         lines.push(String::from("  ─────────────────────────────────────────────────────────────"));
         lines.push(format!("  Total usable: {} MB   Reserved: {} MB", total_usable / 1024 / 1024, total_reserved / 1024 / 1024));
@@ -775,8 +777,8 @@ pub fn full_diagnostic_report() -> Vec<String> {
     lines.push(String::from(""));
     lines.push(String::from("━━━ HEAP STATUS ━━━"));
     let stats = crate::devtools::memdbg_stats();
-    lines.push(format!("  Allocations: {}   Deallocations: {}", stats.allocator_count, stats.dealloc_count));
-    lines.push(format!("  Live allocs: {}   Peak heap: {}   Largest single: {}", stats.live_allocs, stats.peak_heap_used, stats.largest_allocator));
+    lines.push(format!("  Allocations: {}   Deallocations: {}", stats.alloc_count, stats.dealloc_count));
+    lines.push(format!("  Live allocs: {}   Peak heap: {}   Largest single: {}", stats.live_allocs, stats.peak_heap_used, stats.largest_alloc));
     lines.push(format!("  Heap free: {} KB", crate::memory::heap::free() / 1024));
     
     // PCI devices
@@ -786,12 +788,12 @@ pub fn full_diagnostic_report() -> Vec<String> {
     if pci_devs.is_empty() {
         lines.push(String::from("  <no PCI devices found>"));
     } else {
-        for device in &pci_devs {
+        for dev in &pci_devs {
             lines.push(format!("  {:02x}:{:02x}.{} [{:04x}:{:04x}] class={:02x}{:02x} {}",
-                device.bus, device.device, device.function,
-                device.vendor_id, device.device_id,
-                device.class_code, device.subclass,
-                device.class_name()));
+                dev.bus, dev.device, dev.function,
+                dev.vendor_id, dev.device_id,
+                dev.class_code, dev.subclass,
+                dev.class_name()));
         }
     }
     
@@ -846,11 +848,11 @@ static WATCHDOG_COUNTER: AtomicU64 = AtomicU64::new(0);
 static WATCHDOG_THRESHOLD: AtomicU64 = AtomicU64::new(5000); // 5 seconds default
 
 /// Enable the software watchdog (must be pet regularly or it prints a warning)
-pub fn watchdog_enable(timeout_mouse: u64) {
-    WATCHDOG_THRESHOLD.store(timeout_mouse, Ordering::Relaxed);
+pub fn watchdog_enable(timeout_ms: u64) {
+    WATCHDOG_THRESHOLD.store(timeout_ms, Ordering::Relaxed);
     WATCHDOG_COUNTER.store(0, Ordering::Relaxed);
     WATCHDOG_ENABLED.store(true, Ordering::Relaxed);
-    crate::serial_println!("[WATCHDOG] Enabled with {} ms timeout", timeout_mouse);
+    crate::serial_println!("[WATCHDOG] Enabled with {} ms timeout", timeout_ms);
 }
 
 /// Pet the watchdog (call from main loop or timer)
@@ -859,11 +861,11 @@ pub fn watchdog_pet() {
 }
 
 /// Called from timer interrupt — increments counter and checks for timeout
-pub fn watchdog_tick(mouse_elapsed: u64) {
+pub fn watchdog_tick(ms_elapsed: u64) {
     if !WATCHDOG_ENABLED.load(Ordering::Relaxed) {
         return;
     }
-    let count = WATCHDOG_COUNTER.fetch_add(mouse_elapsed, Ordering::Relaxed) + mouse_elapsed;
+    let count = WATCHDOG_COUNTER.fetch_add(ms_elapsed, Ordering::Relaxed) + ms_elapsed;
     if count >= WATCHDOG_THRESHOLD.load(Ordering::Relaxed) {
         WATCHDOG_COUNTER.store(0, Ordering::Relaxed);
         crate::serial_println!("!!! WATCHDOG TIMEOUT !!! System may be hung ({} ms)", count);
@@ -883,7 +885,8 @@ pub fn watchdog_disable() {
 
 /// Read TSC (Time Stamp Counter)
 #[cfg(target_arch = "x86_64")]
-fn read_tsc() -> u64 {
+// Public function — callable from other modules.
+pub fn read_tsc() -> u64 {
     let lo: u32;
     let hi: u32;
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
@@ -894,14 +897,15 @@ unsafe {
 }
 
 #[cfg(not(target_arch = "x86_64"))]
-fn read_tsc() -> u64 { 0 }
+// Public function — callable from other modules.
+pub fn read_tsc() -> u64 { 0 }
 
 /// Busy-wait for approximately `ms` milliseconds (TSC-based when available)
-fn busy_wait_mouse(mouse: u32) {
+fn busy_wait_mouse(ms: u32) {
     // Rough estimate: assume ~1 GHz TSC minimum for modern CPUs
     // Actual frequency doesn't matter much for beep durations
     let start = read_tsc();
-    let target = start + (mouse as u64) * 1_000_000; // ~1M cycles/ms @ 1GHz
+    let target = start + (ms as u64) * 1_000_000; // ~1M cycles/ms @ 1GHz
     while read_tsc() < target {
         core::hint::spin_loop();
     }

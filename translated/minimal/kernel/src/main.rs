@@ -7,35 +7,35 @@
 
 #![no_std]
 #![no_main]
-#![cfg_attr(target_arch = "x86_64", feature(ydz))]
+#![cfg_attr(target_arch = "x86_64", feature(abi_x86_interrupt))]
 #![feature(alloc_error_handler)]
 
 
 
-#![allow(bgr)]
-#![allow(moc)]
-#![allow(zut)]
-#![allow(zuq)]
-#![allow(zur)]
-#![allow(zum)]
-#![allow(zuo)]
-#![allow(zus)]
-#![allow(zun)]
-#![allow(zug)]
-#![allow(zuh)]
-#![allow(ynt)]
+#![allow(dead_code)]
+#![allow(unused_imports)]
+#![allow(unused_variables)]
+#![allow(unused_mut)]
+#![allow(unused_parens)]
+#![allow(unused_assignments)]
+#![allow(unused_doc_comments)]
+#![allow(unused_unsafe)]
+#![allow(unused_comparisons)]
+#![allow(unreachable_code)]
+#![allow(unreachable_patterns)]
+#![allow(dropping_references)]
 #![allow(deprecated)]
-#![allow(zdt)]
-#![allow(zds)]
-#![allow(zdv)]
-#![allow(zpq)]
-#![allow(yfd)]
-#![allow(zgn)]
-#![allow(ztx)]
-#![allow(zcv)]
-#![allow(zup)]
-#![allow(yry)]
-#![allow(zuf)]
+#![allow(non_snake_case)]
+#![allow(non_camel_case_types)]
+#![allow(nonstandard_style)]
+#![allow(static_mut_refs)]
+#![allow(asm_sub_register)]
+#![allow(private_interfaces)]
+#![allow(unexpected_cfgs)]
+#![allow(mismatched_lifetime_syntaxes)]
+#![allow(unused_must_use)]
+#![allow(function_casts_as_integer)]
+#![allow(unnecessary_transmutes)]
 extern crate alloc;
 
 
@@ -170,6 +170,12 @@ mod netscan;
 mod hwscan;
 
 
+mod hwdiag;
+
+
+mod marionet;
+
+
 mod httpd;
 
 
@@ -177,6 +183,9 @@ mod trustpkg;
 
 
 mod lab_mode;
+
+
+mod wifi_analyzer;
 
 
 
@@ -260,7 +269,7 @@ mod jarvis;
 
 mod jarvis_hw;
 
-use core::panic::Ciy;
+use core::panic::PanicInfo;
 use core::alloc::Layout;
 use limine::request::{
     FramebufferRequest, MemoryMapRequest, HhdmRequest,
@@ -275,78 +284,78 @@ use limine::BaseRevision;
 
 
 
-#[mr]
+#[used]
 #[unsafe(link_section = ".requests_start_marker")]
-static ELM_: RequestsStartMarker = RequestsStartMarker::new();
+static EOX_: RequestsStartMarker = RequestsStartMarker::new();
 
 
-#[mr]
+#[used]
 #[unsafe(link_section = ".requests")]
-static BKZ_: BaseRevision = BaseRevision::new();
+static BNQ_: BaseRevision = BaseRevision::new();
 
 
-#[mr]
+#[used]
 #[unsafe(link_section = ".requests")]
-static BVJ_: FramebufferRequest = FramebufferRequest::new();
+static BYP_: FramebufferRequest = FramebufferRequest::new();
 
 
-#[mr]
+#[used]
 #[unsafe(link_section = ".requests")]
-static CGG_: MemoryMapRequest = MemoryMapRequest::new();
+static CJQ_: MemoryMapRequest = MemoryMapRequest::new();
 
 
-#[mr]
+#[used]
 #[unsafe(link_section = ".requests")]
-static BZL_: HhdmRequest = HhdmRequest::new();
+static CCW_: HhdmRequest = HhdmRequest::new();
 
 
-#[mr]
+#[used]
 #[unsafe(link_section = ".requests")]
-static CGZ_: ModuleRequest = ModuleRequest::new();
+static CKJ_: ModuleRequest = ModuleRequest::new();
 
 
-static mut AXM_: Option<&'static [u8]> = None;
+static mut AZP_: Option<&'static [u8]> = None;
 
 
-#[mr]
+#[used]
 #[unsafe(link_section = ".requests")]
-static CPF_: RsdpRequest = RsdpRequest::new();
+static CSU_: RsdpRequest = RsdpRequest::new();
 
 
-#[mr]
+#[used]
 #[unsafe(link_section = ".requests")]
-static CTO_: SmpRequest = SmpRequest::new();
+static CXF_: SmpRequest = SmpRequest::new();
 
 
-#[mr]
+#[used]
 #[unsafe(link_section = ".requests")]
-static CCU_: KernelAddressRequest = KernelAddressRequest::new();
+static CGD_: KernelAddressRequest = KernelAddressRequest::new();
 
 
-#[mr]
+#[used]
 #[unsafe(link_section = ".requests")]
-static CCV_: KernelFileRequest = KernelFileRequest::new();
+static CGE_: KernelFileRequest = KernelFileRequest::new();
 
 
 
 
-#[mr]
+#[used]
 #[unsafe(link_section = ".requests")]
-static EGS_: StackSizeRequest = StackSizeRequest::new().zwh(512 * 1024);
+static EKK_: StackSizeRequest = StackSizeRequest::new().with_size(512 * 1024);
 
 
-#[mr]
+#[used]
 #[unsafe(link_section = ".requests_end_marker")]
-static ELG_: RequestsEndMarker = RequestsEndMarker::new();
+static EOR_: RequestsEndMarker = RequestsEndMarker::new();
 
 
 
 
 
 
-#[mr]
+#[used]
 #[link_section = ".text"]
-static DSG_: unsafe extern "C" fn() -> ! = ubn;
+static DVZ_: unsafe extern "C" fn() -> ! = mvw;
 
 
 
@@ -358,10 +367,10 @@ static DSG_: unsafe extern "C" fn() -> ! = ubn;
 
 #[no_mangle]
 #[link_section = ".text.kmain"]
-pub unsafe extern "C" fn ubn() -> ! {
+pub unsafe extern "C" fn mvw() -> ! {
     
-    if !BKZ_.gkj() {
-        hmj();
+    if !BNQ_.is_supported() {
+        dre();
     }
 
     
@@ -369,251 +378,251 @@ pub unsafe extern "C" fn ubn() -> ! {
     
     #[cfg(target_arch = "aarch64")]
     {
-        if let Some(ohn) = CCU_.fjo() {
-            crate::arch::platform::boot::wle(
-                ohn.zvk(),
-                ohn.zfb(),
+        if let Some(ka_resp) = CGD_.get_response() {
+            crate::arch::platform::boot::oql(
+                ka_resp.virtual_base(),
+                ka_resp.physical_base(),
             );
         }
         
     }
 
     
-    if let Some(ubj) = CCV_.fjo() {
-        let file = ubj.file();
-        let ptr = file.ag();
-        let aw = file.aw() as usize;
-        if aw > 0 {
-            unsafe { jarvis::pxe_replicator::vue(ptr, aw); }
+    if let Some(kf_resp) = CGE_.get_response() {
+        let file = kf_resp.file();
+        let ptr = file.addr();
+        let size = file.size() as usize;
+        if size > 0 {
+            unsafe { jarvis::pxe_replicator::oej(ptr, size); }
         }
     }
 
     
     serial::init();
-    debug::cpc(debug::CKP_, "Serial port initialized");
+    debug::awn(debug::CNY_, "Serial port initialized");
     serial_println!("T-RustOs Kernel v0.2.0");
     serial_println!("Limine protocol supported");
 
     
     #[cfg(target_arch = "aarch64")]
     {
-        let kms: u64;
-        core::arch::asm!("mrs {}, CurrentEL", bd(reg) kms);
-        let ij = (kms >> 2) & 3;
-        serial_println!("[AARCH64] CurrentEL = EL{}", ij);
-        if ij == 2 {
+        let current_el: u64;
+        core::arch::asm!("mrs {}, CurrentEL", out(reg) current_el);
+        let el = (current_el >> 2) & 3;
+        serial_println!("[AARCH64] CurrentEL = EL{}", el);
+        if el == 2 {
             serial_println!("[EL2] *** Hypervisor mode detected! ***");
             serial_println!("[EL2] ARM EL2 MMIO Spy available — use 'hv el2' in shell");
-        } else if ij == 1 {
+        } else if el == 1 {
             serial_println!("[EL1] Standard kernel mode (no hypervisor)");
         }
     }
 
     
-    if let Some(srf) = BVJ_.fjo() {
-        if let Some(pq) = srf.yrn().next() {
+    if let Some(fb_response) = BYP_.get_response() {
+        if let Some(fb) = fb_response.framebuffers().next() {
             framebuffer::init(
-                pq.ag(),
-                pq.z(),
-                pq.ac(),
-                pq.jb(),
-                pq.cwa(),
+                fb.addr(),
+                fb.width(),
+                fb.height(),
+                fb.pitch(),
+                fb.bpp(),
             );
-            serial_println!("Framebuffer: {}x{} @ {:p}", pq.z(), pq.ac(), pq.ag());
+            serial_println!("Framebuffer: {}x{} @ {:p}", fb.width(), fb.height(), fb.addr());
         }
     }
     
     
-    framebuffer::led();
+    framebuffer::gcn();
     
     use framebuffer::BootStatus;
 
     
     serial_println!("Initializing memory management...");
     
-    let mut lbz = false;
+    let mut gao = false;
     
-    if let Some(fol) = CGG_.fjo() {
-        let lr = BZL_.fjo()
-            .map(|m| m.l())
+    if let Some(mmap_response) = CJQ_.get_response() {
+        let hhdm_offset = CCW_.get_response()
+            .map(|r| r.offset())
             .unwrap_or(0);
         
-        serial_println!("HHDM offset: {:#x}", lr);
-        serial_println!("Memory map entries: {}", fol.ch().len());
+        serial_println!("HHDM offset: {:#x}", hhdm_offset);
+        serial_println!("Memory map entries: {}", mmap_response.entries().len());
         
         
-        let mut juy: Option<u64> = None;
-        let mut dip: u64 = 0;
-        let mut iel: u64 = 0;
+        let mut fec: Option<u64> = None;
+        let mut bhk: u64 = 0;
+        let mut ecg: u64 = 0;
         
         
-        for bt in fol.ch() {
-            let kk = match bt.avt {
-                limine::memory_map::EntryType::Qz => "USABLE",
-                limine::memory_map::EntryType::Bqb => "RESERVED",
-                limine::memory_map::EntryType::AKE_ => "ACPI_RECLAIM",
-                limine::memory_map::EntryType::BJI_ => "ACPI_NVS",
-                limine::memory_map::EntryType::BKX_ => "BAD",
-                limine::memory_map::EntryType::ZM_ => "BOOTLOADER",
-                limine::memory_map::EntryType::ARL_ => "KERNEL",
-                limine::memory_map::EntryType::Cdf => "FRAMEBUFFER",
+        for entry in mmap_response.entries() {
+            let kind = match entry.entry_type {
+                limine::memory_map::EntryType::USABLE => "USABLE",
+                limine::memory_map::EntryType::RESERVED => "RESERVED",
+                limine::memory_map::EntryType::ACPI_RECLAIMABLE => "ACPI_RECLAIM",
+                limine::memory_map::EntryType::ACPI_NVS => "ACPI_NVS",
+                limine::memory_map::EntryType::BAD_MEMORY => "BAD",
+                limine::memory_map::EntryType::BOOTLOADER_RECLAIMABLE => "BOOTLOADER",
+                limine::memory_map::EntryType::EXECUTABLE_AND_MODULES => "KERNEL",
+                limine::memory_map::EntryType::FRAMEBUFFER => "FRAMEBUFFER",
                 _ => "UNKNOWN",
             };
             serial_println!("  {:#012x} - {:#012x} ({:12} bytes) {}", 
-                bt.ar, 
-                bt.ar + bt.go,
-                bt.go,
-                kk
+                entry.base, 
+                entry.base + entry.length,
+                entry.length,
+                kind
             );
             
             
-            let ifl = match bt.avt {
-                limine::memory_map::EntryType::Qz => 0u8,
-                limine::memory_map::EntryType::Bqb => 1,
-                limine::memory_map::EntryType::AKE_ => 2,
-                limine::memory_map::EntryType::BJI_ => 3,
-                limine::memory_map::EntryType::BKX_ => 4,
-                limine::memory_map::EntryType::ZM_ => 5,
-                limine::memory_map::EntryType::ARL_ => 6,
-                limine::memory_map::EntryType::Cdf => 7,
+            let ecy = match entry.entry_type {
+                limine::memory_map::EntryType::USABLE => 0u8,
+                limine::memory_map::EntryType::RESERVED => 1,
+                limine::memory_map::EntryType::ACPI_RECLAIMABLE => 2,
+                limine::memory_map::EntryType::ACPI_NVS => 3,
+                limine::memory_map::EntryType::BAD_MEMORY => 4,
+                limine::memory_map::EntryType::BOOTLOADER_RECLAIMABLE => 5,
+                limine::memory_map::EntryType::EXECUTABLE_AND_MODULES => 6,
+                limine::memory_map::EntryType::FRAMEBUFFER => 7,
                 _ => 0xFF,
             };
-            memory::wuv(bt.ar, bt.go, ifl);
+            memory::oxu(entry.base, entry.length, ecy);
             
             
-            if bt.avt == limine::memory_map::EntryType::ARL_
-                || bt.avt == limine::memory_map::EntryType::ZM_
+            if entry.entry_type == limine::memory_map::EntryType::EXECUTABLE_AND_MODULES
+                || entry.entry_type == limine::memory_map::EntryType::BOOTLOADER_RECLAIMABLE
             {
-                let ci = bt.ar + bt.go;
-                if ci > dip {
-                    dip = ci;
+                let end = entry.base + entry.length;
+                if end > bhk {
+                    bhk = end;
                 }
             }
             
-            if bt.avt == limine::memory_map::EntryType::Qz
-                || bt.avt == limine::memory_map::EntryType::ZM_
-                || bt.avt == limine::memory_map::EntryType::AKE_
+            if entry.entry_type == limine::memory_map::EntryType::USABLE
+                || entry.entry_type == limine::memory_map::EntryType::BOOTLOADER_RECLAIMABLE
+                || entry.entry_type == limine::memory_map::EntryType::ACPI_RECLAIMABLE
             {
-                iel += bt.go;
+                ecg += entry.length;
             }
         }
 
         
-        memory::wjt(iel);
-        serial_println!("[MEM] Total physical memory: {} MB", iel / 1024 / 1024);
+        memory::opo(ecg);
+        serial_println!("[MEM] Total physical memory: {} MB", ecg / 1024 / 1024);
 
         
-        let epn = memory::rnh(iel);
+        let bzc = memory::kwm(ecg);
         serial_println!("[HEAP] Dynamic size: {} MB (25% of {} MB RAM)", 
-            epn / 1024 / 1024, iel / 1024 / 1024);
+            bzc / 1024 / 1024, ecg / 1024 / 1024);
 
         
-        let ijg = |ag: u64, align: u64| -> u64 {
-            if ag % align == 0 { ag } else { ag + (align - (ag % align)) }
+        let align_up = |addr: u64, align: u64| -> u64 {
+            if addr % align == 0 { addr } else { addr + (align - (addr % align)) }
         };
 
         
-        let oni = ijg(core::cmp::am(0x100000, dip), 0x1000);
-        for bt in fol.ch() {
-            if bt.avt != limine::memory_map::EntryType::Qz {
+        let inr = align_up(core::cmp::max(0x100000, bhk), 0x1000);
+        for entry in mmap_response.entries() {
+            if entry.entry_type != limine::memory_map::EntryType::USABLE {
                 continue;
             }
-            let lyo = bt.ar;
-            let exn = bt.ar.akq(bt.go);
-            if exn <= oni {
+            let gqx = entry.base;
+            let cdf = entry.base.saturating_add(entry.length);
+            if cdf <= inr {
                 continue;
             }
-            let caa = core::cmp::am(lyo, oni);
-            if exn >= caa + epn as u64 {
-                juy = Some(caa);
+            let heap_start = core::cmp::max(gqx, inr);
+            if cdf >= heap_start + bzc as u64 {
+                fec = Some(heap_start);
                 break;
             }
         }
 
         
-        if juy.is_none() {
-            let mut fdg: u64 = 0;
-            let mut cjg: u64 = 0;
-            for bt in fol.ch() {
-                if bt.avt != limine::memory_map::EntryType::Qz {
+        if fec.is_none() {
+            let mut cgg: u64 = 0;
+            let mut atb: u64 = 0;
+            for entry in mmap_response.entries() {
+                if entry.entry_type != limine::memory_map::EntryType::USABLE {
                     continue;
                 }
-                if bt.go > cjg {
-                    cjg = bt.go;
-                    fdg = bt.ar;
+                if entry.length > atb {
+                    atb = entry.length;
+                    cgg = entry.base;
                 }
             }
 
-            if cjg >= epn as u64 {
-                let mut caa = ijg(fdg, 0x1000);
-                if caa < 0x100000 {
-                    caa = ijg(0x100000, 0x1000);
+            if atb >= bzc as u64 {
+                let mut heap_start = align_up(cgg, 0x1000);
+                if heap_start < 0x100000 {
+                    heap_start = align_up(0x100000, 0x1000);
                 }
-                if fdg.akq(cjg) >= caa + epn as u64 {
-                    juy = Some(caa);
+                if cgg.saturating_add(atb) >= heap_start + bzc as u64 {
+                    fec = Some(heap_start);
                 }
             }
         }
         
         
-        if let Some(dhz) = juy {
-            serial_println!("[HEAP] Using mmap region at phys {:#x}, size {} MB", dhz, epn / 1024 / 1024);
+        if let Some(bgx) = fec {
+            serial_println!("[HEAP] Using mmap region at phys {:#x}, size {} MB", bgx, bzc / 1024 / 1024);
             
-            memory::lej(lr, dhz, epn);
-            lbz = true;
-            serial_println!("[HEAP] Initialized: free={} KB", memory::heap::aez() / 1024);
+            memory::gcr(hhdm_offset, bgx, bzc);
+            gao = true;
+            serial_println!("[HEAP] Initialized: free={} KB", memory::heap::free() / 1024);
             
             
             
-            let fau: alloc::vec::Vec<memory::frame::Adt> = fol.ch()
+            let cew: alloc::vec::Vec<memory::frame::Mw> = mmap_response.entries()
                 .iter()
-                .hi(|aa| aa.avt == limine::memory_map::EntryType::Qz)
-                .map(|aa| memory::frame::Adt { ar: aa.ar, go: aa.go })
+                .filter(|e| e.entry_type == limine::memory_map::EntryType::USABLE)
+                .map(|e| memory::frame::Mw { base: e.base, length: e.length })
                 .collect();
-            memory::frame::init(&fau, dhz, epn as u64);
+            memory::frame::init(&cew, bgx, bzc as u64);
         } else {
             
             
-            let mut fdg: u64 = 0;
-            let mut cjg: u64 = 0;
-            for bt in fol.ch() {
-                if bt.avt != limine::memory_map::EntryType::Qz && bt.go > cjg {
+            let mut cgg: u64 = 0;
+            let mut atb: u64 = 0;
+            for entry in mmap_response.entries() {
+                if entry.entry_type != limine::memory_map::EntryType::USABLE && entry.length > atb {
                     
                 }
-                if bt.avt == limine::memory_map::EntryType::Qz && bt.go > cjg {
-                    cjg = bt.go;
-                    fdg = bt.ar;
+                if entry.entry_type == limine::memory_map::EntryType::USABLE && entry.length > atb {
+                    atb = entry.length;
+                    cgg = entry.base;
                 }
             }
             
-            if cjg >= memory::TW_ as u64 {
-                let iyf = ijg(core::cmp::am(fdg, 0x100000), 0x1000);
-                let xpe = fdg.akq(cjg);
-                let hmu = core::cmp::v(
-                    (xpe - iyf) as usize,
-                    epn,
+            if atb >= memory::VE_ as u64 {
+                let epb = align_up(core::cmp::max(cgg, 0x100000), 0x1000);
+                let pqc = cgg.saturating_add(atb);
+                let drj = core::cmp::min(
+                    (pqc - epb) as usize,
+                    bzc,
                 );
-                let hmu = (hmu / 4096) * 4096; 
+                let drj = (drj / 4096) * 4096; 
                 
-                serial_println!("[HEAP] Fallback: using {:#x} size {} MB", iyf, hmu / 1024 / 1024);
-                memory::lej(lr, iyf, hmu);
-                lbz = true;
-                serial_println!("[HEAP] Initialized: free={} KB", memory::heap::aez() / 1024);
+                serial_println!("[HEAP] Fallback: using {:#x} size {} MB", epb, drj / 1024 / 1024);
+                memory::gcr(hhdm_offset, epb, drj);
+                gao = true;
+                serial_println!("[HEAP] Initialized: free={} KB", memory::heap::free() / 1024);
                 
                 
-                let fau: alloc::vec::Vec<memory::frame::Adt> = fol.ch()
+                let cew: alloc::vec::Vec<memory::frame::Mw> = mmap_response.entries()
                     .iter()
-                    .hi(|aa| aa.avt == limine::memory_map::EntryType::Qz)
-                    .map(|aa| memory::frame::Adt { ar: aa.ar, go: aa.go })
+                    .filter(|e| e.entry_type == limine::memory_map::EntryType::USABLE)
+                    .map(|e| memory::frame::Mw { base: e.base, length: e.length })
                     .collect();
-                memory::frame::init(&fau, iyf, hmu as u64);
+                memory::frame::init(&cew, epb, drj as u64);
             } else {
                 serial_println!("[HEAP] ERROR: No usable region found for heap!");
             }
         }
     }
     
-    if !lbz {
+    if !gao {
         
         serial_println!("[HEAP] Using fallback init");
         memory::init();
@@ -621,268 +630,268 @@ pub unsafe extern "C" fn ubn() -> ! {
     
     
     serial_println!("[FB] Initializing scrollback buffer...");
-    framebuffer::leh();
+    framebuffer::gcq();
     
     
-    signature::ttp();
+    signature::mph();
     
     
-    signature::ttl(&[0x54, 0x72, 0x75, 0x73, 0x74, 0x4f, 0x53]); 
+    signature::mpe(&[0x54, 0x72, 0x75, 0x73, 0x74, 0x4f, 0x53]); 
     
     
-    framebuffer::bir(0, "Memory management initialized");
-    framebuffer::sd("Memory management initialized", BootStatus::Ok);
+    framebuffer::afw(0, "Memory management initialized");
+    framebuffer::hm("Memory management initialized", BootStatus::Ok);
 
     
     #[cfg(target_arch = "x86_64")]
     {
-        debug::cpc(debug::CKK_, "GDT init");
+        debug::awn(debug::CNT_, "GDT init");
         serial_println!("Initializing GDT with Ring 0/3 support...");
         gdt::init();
-        framebuffer::bir(1, "GDT initialized (Ring 0/3)");
-        framebuffer::sd("GDT initialized (Ring 0/3)", BootStatus::Ok);
+        framebuffer::afw(1, "GDT initialized (Ring 0/3)");
+        framebuffer::hm("GDT initialized (Ring 0/3)", BootStatus::Ok);
     }
     
     
-    debug::cpc(debug::CKL_, "IDT/interrupts init");
+    debug::awn(debug::CNU_, "IDT/interrupts init");
     serial_println!("Initializing early interrupts...");
     interrupts::init();
-    framebuffer::bir(2, "Interrupts initialized");
-    framebuffer::sd("Interrupts (early)", BootStatus::Ok);
+    framebuffer::afw(2, "Interrupts initialized");
+    framebuffer::hm("Interrupts (early)", BootStatus::Ok);
     
     
     #[cfg(target_arch = "x86_64")]
     {
         
-        debug::cpc(debug::CKI_, "CPU detection");
+        debug::awn(debug::CNR_, "CPU detection");
         serial_println!("Detecting CPU capabilities...");
         cpu::init();
-        framebuffer::bir(3, "CPU capabilities detected");
-        framebuffer::sd("CPU capabilities detected", BootStatus::Ok);
+        framebuffer::afw(3, "CPU capabilities detected");
+        framebuffer::hm("CPU capabilities detected", BootStatus::Ok);
         
         
-        debug::cpc(debug::CKG_, "ACPI tables parsing");
+        debug::awn(debug::CNP_, "ACPI tables parsing");
         serial_println!("Parsing ACPI tables...");
-        if let Some(waw) = CPF_.fjo() {
-            let gre = waw.re();
-            serial_println!("[DEBUG] RSDP pointer from Limine: {:#x}", gre as usize);
-            if acpi::oeh(gre as u64) {
-                if let Some(co) = acpi::ani() {
-                    framebuffer::sd(&alloc::format!(
+        if let Some(rsdp_response) = CSU_.get_response() {
+            let ddr = rsdp_response.address();
+            serial_println!("[DEBUG] RSDP pointer from Limine: {:#x}", ddr as usize);
+            if acpi::igo(ddr as u64) {
+                if let Some(info) = acpi::rk() {
+                    framebuffer::hm(&alloc::format!(
                         "ACPI: {} CPUs, {} I/O APICs", 
-                        co.aao, co.cyx.len()
+                        info.cpu_count, info.io_apics.len()
                     ), BootStatus::Ok);
                 }
             } else {
-                framebuffer::sd("ACPI init failed", BootStatus::Ej);
+                framebuffer::hm("ACPI init failed", BootStatus::Skip);
             }
         } else {
-            framebuffer::sd("No RSDP from bootloader", BootStatus::Ej);
+            framebuffer::hm("No RSDP from bootloader", BootStatus::Skip);
         }
         
         
-        debug::cpc(debug::CKH_, "APIC init");
+        debug::awn(debug::CNQ_, "APIC init");
         serial_println!("Initializing APIC...");
         if apic::init() {
-            framebuffer::sd("APIC initialized (LAPIC + IOAPIC)", BootStatus::Ok);
+            framebuffer::hm("APIC initialized (LAPIC + IOAPIC)", BootStatus::Ok);
         } else {
             serial_println!("[APIC] Not available, staying on legacy PIC");
-            framebuffer::sd("APIC not available (legacy PIC)", BootStatus::Ej);
+            framebuffer::hm("APIC not available (legacy PIC)", BootStatus::Skip);
         }
 
         
         if acpi::hpet::init() {
-            framebuffer::sd("HPET initialized", BootStatus::Ok);
+            framebuffer::hm("HPET initialized", BootStatus::Ok);
         } else {
-            framebuffer::sd("HPET not available", BootStatus::Ej);
+            framebuffer::hm("HPET not available", BootStatus::Skip);
         }
 
         
-        debug::cpc(debug::CKR_, "SMP multi-core init");
+        debug::awn(debug::COA_, "SMP multi-core init");
         serial_println!("Initializing SMP...");
         cpu::smp::init();
         
-        if let Some(plq) = CTO_.fjo() {
-            let aao = plq.cdv().len();
-            serial_println!("[SMP] Found {} CPUs via Limine", aao);
+        if let Some(smp_response) = CXF_.get_response() {
+            let cpu_count = smp_response.cpus().len();
+            serial_println!("[SMP] Found {} CPUs via Limine", cpu_count);
             
-            for cpu in plq.cdv().iter() {
-                if cpu.ad != 0 {
-                    serial_println!("[SMP] Starting AP {} (LAPIC ID: {})", cpu.ad, cpu.ett);
-                    cpu.dhq.write(cpu::smp::mvx);
+            for cpu in smp_response.cpus().iter() {
+                if cpu.id != 0 {
+                    serial_println!("[SMP] Starting AP {} (LAPIC ID: {})", cpu.id, cpu.lapic_id);
+                    cpu.goto_address.write(cpu::smp::hfk);
                 }
             }
             
-            let mut exk = 1u32;
+            let mut ready_count = 1u32;
             for _ in 0..1000 {
-                exk = cpu::smp::boc();
-                if exk >= aao as u32 { break; }
-                for _ in 0..10000 { core::hint::hc(); }
+                ready_count = cpu::smp::ail();
+                if ready_count >= cpu_count as u32 { break; }
+                for _ in 0..10000 { core::hint::spin_loop(); }
             }
             
-            serial_println!("[SMP] {} of {} CPUs online", exk, aao);
-            cpu::smp::piv(aao as u32);
-            framebuffer::bir(4, "SMP multi-core active");
-            framebuffer::sd(&alloc::format!("SMP: {} cores active", exk), BootStatus::Ok);
+            serial_println!("[SMP] {} of {} CPUs online", ready_count, cpu_count);
+            cpu::smp::jfb(cpu_count as u32);
+            framebuffer::afw(4, "SMP multi-core active");
+            framebuffer::hm(&alloc::format!("SMP: {} cores active", ready_count), BootStatus::Ok);
         } else {
             serial_println!("[SMP] No SMP response from bootloader");
-            framebuffer::sd("SMP: single core", BootStatus::Ok);
+            framebuffer::hm("SMP: single core", BootStatus::Ok);
         }
     }
     
     
     serial_println!("Initializing paging subsystem...");
     memory::paging::init();  
-    framebuffer::bir(5, "Paging & memory protection");
-    framebuffer::sd("Paging initialized (NX enabled)", BootStatus::Ok);
+    framebuffer::afw(5, "Paging & memory protection");
+    framebuffer::hm("Paging initialized (NX enabled)", BootStatus::Ok);
     
     
     #[cfg(target_arch = "x86_64")]
-    let lgp = acpi::ani()
-        .map(|co| co.clo.em().dha("VBOX"))
+    let gef = acpi::rk()
+        .map(|info| info.oem_id.trim().eq_ignore_ascii_case("VBOX"))
         .unwrap_or(false);
     #[cfg(not(target_arch = "x86_64"))]
-    let lgp = false;
-    if lgp {
+    let gef = false;
+    if gef {
         serial_println!("[PAT] Skipping Write-Combining on VirtualBox (VMSVGA compat)");
     } else {
-        memory::paging::wlh();
+        memory::paging::oqn();
     }
     
     
     #[cfg(target_arch = "x86_64")]
     {
         serial_println!("Initializing userland support...");
-        userland::oen();
+        userland::igu();
         userland::init();
-        framebuffer::sd("Userland support ready", BootStatus::Ok);
+        framebuffer::hm("Userland support ready", BootStatus::Ok);
     }
     
     
     serial_println!("Initializing thread subsystem...");
     thread::init();
-    framebuffer::bir(6, "Thread subsystem ready");
-    framebuffer::sd("Thread subsystem ready", BootStatus::Ok);
+    framebuffer::afw(6, "Thread subsystem ready");
+    framebuffer::hm("Thread subsystem ready", BootStatus::Ok);
     
     
     serial_println!("Initializing security subsystem...");
     
-    framebuffer::sd("Security (basic)", BootStatus::Ok);
+    framebuffer::hm("Security (basic)", BootStatus::Ok);
 
     
     #[cfg(target_arch = "x86_64")]
     {
     
-    keyboard::tto();
+    keyboard::mpg();
     serial_println!("Keyboard driver ready");
-    framebuffer::bir(7, "Keyboard & input devices");
-    framebuffer::sd("Keyboard ready", BootStatus::Ok);
+    framebuffer::afw(7, "Keyboard & input devices");
+    framebuffer::hm("Keyboard ready", BootStatus::Ok);
 
     
     
     
     
-    const BTR_: bool = true;
-    if BTR_ {
+    const BWN_: bool = true;
+    if BWN_ {
         serial_println!("[RTC] init start");
-        if rtc::xmo() {
-            framebuffer::sd("RTC initialized", BootStatus::Ok);
+        if rtc::pnw() {
+            framebuffer::hm("RTC initialized", BootStatus::Ok);
         } else {
-            framebuffer::sd("RTC skipped", BootStatus::Ej);
+            framebuffer::hm("RTC skipped", BootStatus::Skip);
         }
         serial_println!("[RTC] init done");
     } else {
-        framebuffer::sd("RTC disabled", BootStatus::Ej);
+        framebuffer::hm("RTC disabled", BootStatus::Skip);
     }
 
     
     rng::init();
-    framebuffer::sd("RNG (CSPRNG)", BootStatus::Ok);
+    framebuffer::hm("RNG (CSPRNG)", BootStatus::Ok);
     
     
     mouse::init();
-    let (lu, qh) = framebuffer::yn();
-    mouse::dbw(lu, qh);
-    framebuffer::bir(8, "Mouse & touch input");
-    framebuffer::sd("Mouse initialized", BootStatus::Ok);
+    let (fb_width, fb_height) = framebuffer::kv();
+    mouse::set_screen_size(fb_width, fb_height);
+    framebuffer::afw(8, "Mouse & touch input");
+    framebuffer::hm("Mouse initialized", BootStatus::Ok);
     
     
     touch::init();
-    touch::dbw(lu, qh);
-    framebuffer::sd("Touch input ready", BootStatus::Ok);
+    touch::set_screen_size(fb_width, fb_height);
+    framebuffer::hm("Touch input ready", BootStatus::Ok);
     
     
-    const BTQ_: bool = true;
-    const BTS_: bool = true;
-    const BTN_: bool = true;   
-    const BTO_: bool = true;
-    const BTP_: bool = true;
+    const BWM_: bool = true;
+    const BWO_: bool = true;
+    const BWJ_: bool = true;   
+    const BWK_: bool = true;
+    const BWL_: bool = true;
 
     
-    debug::cpc(debug::CKN_, "PCI bus enumeration");
+    debug::awn(debug::CNW_, "PCI bus enumeration");
     serial_println!("[PHASE] PCI init start");
-    framebuffer::sd("PCI bus scanning...", BootStatus::V);
-    if BTQ_ {
+    framebuffer::hm("PCI bus scanning...", BootStatus::Info);
+    if BWM_ {
         pci::init();
-        framebuffer::bir(9, "PCI bus enumeration");
-        framebuffer::sd("PCI bus scanned", BootStatus::Ok);
+        framebuffer::afw(9, "PCI bus enumeration");
+        framebuffer::hm("PCI bus scanned", BootStatus::Ok);
     } else {
-        framebuffer::sd("PCI disabled", BootStatus::Ej);
+        framebuffer::hm("PCI disabled", BootStatus::Skip);
     }
     serial_println!("[PHASE] PCI init done");
     
     
     serial_println!("[PHASE] Task scheduler init start");
-    if BTS_ {
+    if BWO_ {
         task::init();
         scheduler::init();
-        framebuffer::bir(10, "Task scheduler");
-        framebuffer::sd("Task scheduler ready", BootStatus::Ok);
+        framebuffer::afw(10, "Task scheduler");
+        framebuffer::hm("Task scheduler ready", BootStatus::Ok);
     } else {
-        framebuffer::sd("Task scheduler disabled", BootStatus::Ej);
+        framebuffer::hm("Task scheduler disabled", BootStatus::Skip);
     }
     serial_println!("[PHASE] Task scheduler init done");
     
     
-    debug::cpc(debug::CKJ_, "Disk I/O init");
+    debug::awn(debug::CNS_, "Disk I/O init");
     serial_println!("[PHASE] Disk init start");
-    framebuffer::sd("Disk subsystem...", BootStatus::V);
-    if BTN_ {
+    framebuffer::hm("Disk subsystem...", BootStatus::Info);
+    if BWJ_ {
         
-        let osa: alloc::vec::Vec<_> = pci::fjm().iter()
-            .hi(|bc| bc.ajz == 0x01 && bc.adl == 0x08)
-            .abn()
+        let irx: alloc::vec::Vec<_> = pci::aqs().iter()
+            .filter(|d| d.class_code == 0x01 && d.subclass == 0x08)
+            .cloned()
             .collect();
         
-        if !osa.is_empty() {
-            match nvme::init(&osa[0]) {
+        if !irx.is_empty() {
+            match nvme::init(&irx[0]) {
                 Ok(()) => {
-                    if let Some((model, msv, aw, cak)) = nvme::ani() {
-                        let csm = (aw * cak as u64) / (1024 * 1024);
-                        framebuffer::sd(
-                            &alloc::format!("NVMe: {} ({} MB)", model, csm), BootStatus::Ok);
+                    if let Some((model, _serial, size, aol)) = nvme::rk() {
+                        let aop = (size * aol as u64) / (1024 * 1024);
+                        framebuffer::hm(
+                            &alloc::format!("NVMe: {} ({} MB)", model, aop), BootStatus::Ok);
                     }
                 }
-                Err(aa) => {
-                    crate::log_warn!("[DISK] NVMe init failed: {}", aa);
+                Err(e) => {
+                    crate::log_warn!("[DISK] NVMe init failed: {}", e);
                 }
             }
         }
         
         
-        if !nvme::ky() {
-            let mzo: alloc::vec::Vec<_> = pci::fjm().iter()
-                .hi(|bc| bc.ml == 0x1AF4 && bc.mx == 0x1001)
-                .abn()
+        if !nvme::is_initialized() {
+            let hie: alloc::vec::Vec<_> = pci::aqs().iter()
+                .filter(|d| d.vendor_id == 0x1AF4 && d.device_id == 0x1001)
+                .cloned()
                 .collect();
             
-            if !mzo.is_empty() {
-                if let Err(aa) = virtio_blk::init(&mzo[0]) {
-                    crate::log_warn!("[DISK] virtio-blk init failed: {}", aa);
+            if !hie.is_empty() {
+                if let Err(e) = virtio_blk::init(&hie[0]) {
+                    crate::log_warn!("[DISK] virtio-blk init failed: {}", e);
                     disk::init();
                 } else {
-                    framebuffer::sd(&alloc::format!("virtio-blk: {} MB storage", 
-                        (virtio_blk::aty() * 512) / (1024 * 1024)), BootStatus::Ok);
+                    framebuffer::hm(&alloc::format!("virtio-blk: {} MB storage", 
+                        (virtio_blk::capacity() * 512) / (1024 * 1024)), BootStatus::Ok);
                 }
             } else {
                 
@@ -890,128 +899,149 @@ pub unsafe extern "C" fn ubn() -> ! {
             }
         }
         
-        if disk::anl() || virtio_blk::ky() || nvme::ky() {
-            framebuffer::sd("Disk driver ready", BootStatus::Ok);
+        if disk::sw() || virtio_blk::is_initialized() || nvme::is_initialized() {
+            framebuffer::hm("Disk driver ready", BootStatus::Ok);
         } else {
-            framebuffer::sd("No disk detected", BootStatus::Ej);
+            framebuffer::hm("No disk detected", BootStatus::Skip);
         }
     } else {
-        framebuffer::sd("Disk disabled", BootStatus::Ej);
+        framebuffer::hm("Disk disabled", BootStatus::Skip);
     }
     serial_println!("[PHASE] Disk init done");
     
     
     serial_println!("[PHASE] Driver framework init start");
-    if BTO_ {
+    if BWK_ {
         drivers::init();
         
-        drivers::lvr();
-        framebuffer::bir(12, "Driver framework");
-        framebuffer::sd("Driver framework initialized", BootStatus::Ok);
-        if drivers::oba() {
-            framebuffer::sd("Persistent storage detected", BootStatus::Ok);
+        drivers::gom();
+        framebuffer::afw(12, "Driver framework");
+        framebuffer::hm("Driver framework initialized", BootStatus::Ok);
+        if drivers::ied() {
+            framebuffer::hm("Persistent storage detected", BootStatus::Ok);
         }
     } else {
-        framebuffer::sd("Driver framework disabled", BootStatus::Ej);
+        framebuffer::hm("Driver framework disabled", BootStatus::Skip);
     }
     serial_println!("[PHASE] Driver framework init done");
     
     
     serial_println!("[PHASE] VirtIO GPU init start");
-    framebuffer::sd("VirtIO GPU...", BootStatus::V);
-    drivers::virtio_gpu::oel().bq();
-    if drivers::virtio_gpu::anl() {
-        framebuffer::sd(&alloc::format!("VirtIO GPU: {}", drivers::virtio_gpu::lea()), BootStatus::Ok);
+    framebuffer::hm("VirtIO GPU...", BootStatus::Info);
+    drivers::virtio_gpu::igs().ok();
+    if drivers::virtio_gpu::sw() {
+        framebuffer::hm(&alloc::format!("VirtIO GPU: {}", drivers::virtio_gpu::gcl()), BootStatus::Ok);
     } else {
-        framebuffer::sd("VirtIO GPU: not found (fallback framebuffer)", BootStatus::Ej);
+        framebuffer::hm("VirtIO GPU: not found (fallback framebuffer)", BootStatus::Skip);
     }
     serial_println!("[PHASE] VirtIO GPU init done");
     
     
     serial_println!("[PHASE] AMD GPU init start");
-    framebuffer::sd("AMD GPU...", BootStatus::V);
+    framebuffer::hm("AMD GPU...", BootStatus::Info);
     drivers::amdgpu::init();
-    if drivers::amdgpu::clb() {
-        framebuffer::sd(&alloc::format!("AMD GPU: {}", drivers::amdgpu::awz()), BootStatus::Ok);
+    if drivers::amdgpu::aud() {
+        framebuffer::hm(&alloc::format!("AMD GPU: {}", drivers::amdgpu::summary()), BootStatus::Ok);
     } else {
-        framebuffer::sd("AMD GPU: not found (VM or non-AMD)", BootStatus::Ej);
+        framebuffer::hm("AMD GPU: not found (VM or non-AMD)", BootStatus::Skip);
     }
     serial_println!("[PHASE] AMD GPU init done");
     
     
     serial_println!("[PHASE] NVIDIA GPU init start");
-    framebuffer::sd("NVIDIA GPU...", BootStatus::V);
+    framebuffer::hm("NVIDIA GPU...", BootStatus::Info);
     drivers::nvidia::init();
-    if drivers::nvidia::clb() {
-        framebuffer::sd(&alloc::format!("NVIDIA GPU: {}", drivers::nvidia::awz()), BootStatus::Ok);
+    if drivers::nvidia::aud() {
+        framebuffer::hm(&alloc::format!("NVIDIA GPU: {}", drivers::nvidia::summary()), BootStatus::Ok);
     } else {
-        framebuffer::sd("NVIDIA GPU: not found", BootStatus::Ej);
+        framebuffer::hm("NVIDIA GPU: not found", BootStatus::Skip);
     }
     serial_println!("[PHASE] NVIDIA GPU init done");
     
     
     
-    if !lgp {
-        let dqt = framebuffer::BJ_.load(core::sync::atomic::Ordering::SeqCst);
-        let gz = framebuffer::AB_.load(core::sync::atomic::Ordering::SeqCst) as usize;
-        let kc = framebuffer::Z_.load(core::sync::atomic::Ordering::SeqCst) as usize;
-        if !dqt.abq() && gz > 0 && kc > 0 {
-            let srg = gz * kc * 4;
-            let _ = memory::paging::vus(dqt as u64, srg);
+    if !gef {
+        let bme = framebuffer::BL_.load(core::sync::atomic::Ordering::SeqCst);
+        let fb_w = framebuffer::X_.load(core::sync::atomic::Ordering::SeqCst) as usize;
+        let fb_h = framebuffer::W_.load(core::sync::atomic::Ordering::SeqCst) as usize;
+        if !bme.is_null() && fb_w > 0 && fb_h > 0 {
+            let lul = fb_w * fb_h * 4;
+            let _ = memory::paging::oeu(bme as u64, lul);
         }
     } else {
         serial_println!("[PAT] Skipping framebuffer WC remap on VirtualBox");
     }
     
     
-    debug::cpc(debug::CKM_, "Network init");
+    debug::awn(debug::CNV_, "Network init");
     serial_println!("[PHASE] Network init start");
-    framebuffer::sd("Network subsystem...", BootStatus::V);
-    if BTP_ {
+    framebuffer::hm("Network subsystem...", BootStatus::Info);
+    if BWL_ {
         network::init();
-        if network::anl() {
+        if network::sw() {
             
-            let platform = network::tej();
-            framebuffer::sd(&alloc::format!("Platform: {}", platform), BootStatus::V);
+            let platform = network::fyv();
+            framebuffer::hm(&alloc::format!("Platform: {}", platform), BootStatus::Info);
             
             
-            let kpq = pci::ebq(pci::class::Qa);
-            if !kpq.is_empty() {
-                for ba in &kpq {
-                    if drivers::net::lvo(ba) {
-                        network::pxf();
-                        let kro = if ba.ml == 0x1AF4 { "virtio-net" } 
-                            else if ba.ml == 0x8086 { "e1000" }
-                            else if ba.ml == 0x10EC { "rtl8139" }
-                            else { "unknown" };
-                        framebuffer::sd(&alloc::format!("Network driver: {}", kro), BootStatus::Ok);
-                        break;
-                    }
+            
+            
+            framebuffer::hm("PCI scan...", BootStatus::Info);
+            let cih = pci::bsp(pci::class::Gr);
+            framebuffer::hm(&alloc::format!("Found {} network devices", cih.len()), BootStatus::Info);
+            
+            
+            
+            for s in &cih {
+                if s.vendor_id == 0x8086 
+                    && (s.subclass == 0x80 || s.class_code == 0x0D 
+                        || drivers::net::iwl4965::AFI_.contains(&s.device_id))
+                {
+                    framebuffer::hm(
+                        &alloc::format!("WiFi detected: {:04X}:{:04X} (deferred)", s.vendor_id, s.device_id),
+                        BootStatus::Info);
+                    
+                    drivers::net::wifi::oot(s.bus, s.device, s.function);
+                }
+            }
+            
+            
+            println!("  Ethernet probe starting...");
+            framebuffer::hm("Ethernet probe...", BootStatus::Info);
+            for s in &cih {
+                if drivers::net::goi(s) {
+                    network::jpe();
+                    let fte = if s.vendor_id == 0x1AF4 { "virtio-net" } 
+                        else if s.vendor_id == 0x8086 { "e1000" }
+                        else if s.vendor_id == 0x10EC { "rtl8139" }
+                        else { "unknown" };
+                    framebuffer::hm(&alloc::format!("Network driver: {}", fte), BootStatus::Ok);
+                    break;
                 }
             }
 
             
-            if !drivers::net::bzy() && !crate::virtio_net::ky() {
-                if let Some(ba) = kpq.iter().du(|bc| bc.ml == 0x1AF4) {
-                    if let Err(aa) = crate::virtio_net::init(ba) {
-                        crate::log_warn!("[NET] Legacy virtio-net init failed: {}", aa);
+            if !drivers::net::aoh() && !crate::virtio_net::is_initialized() {
+                if let Some(s) = cih.iter().find(|d| d.vendor_id == 0x1AF4) {
+                    if let Err(e) = crate::virtio_net::init(s) {
+                        crate::log_warn!("[NET] Legacy virtio-net init failed: {}", e);
                     } else {
-                        network::pxf();
-                        framebuffer::sd("Network driver: virtio-net (legacy)", BootStatus::Ok);
+                        network::jpe();
+                        framebuffer::hm("Network driver: virtio-net (legacy)", BootStatus::Ok);
                     }
                 }
             }
             
-            framebuffer::bir(14, "Network stack ready");
-            framebuffer::sd("Network ready", BootStatus::Ok);
+            framebuffer::afw(14, "Network stack ready");
+            framebuffer::hm("Network ready", BootStatus::Ok);
             
             
-            netstack::dhcp::ay();
+            netstack::dhcp::start();
             netstack::ipv6::init();
-            netstack::tcp::tts();
+            netstack::tcp::mpj();
         }
     } else {
-        framebuffer::sd("Network disabled", BootStatus::Ej);
+        framebuffer::hm("Network disabled", BootStatus::Skip);
     }
     serial_println!("[PHASE] Network init done");
     } 
@@ -1020,21 +1050,21 @@ pub unsafe extern "C" fn ubn() -> ! {
     #[cfg(target_arch = "aarch64")]
     {
         serial_println!("[AARCH64] Skipping x86 peripherals (keyboard, RTC, mouse, PCI)");
-        framebuffer::sd("Keyboard: N/A (serial)", BootStatus::Ej);
-        framebuffer::sd("RTC: N/A", BootStatus::Ej);
-        framebuffer::sd("PCI: N/A (ECAM not yet)", BootStatus::Ej);
-        framebuffer::sd("Network: N/A", BootStatus::Ej);
+        framebuffer::hm("Keyboard: N/A (serial)", BootStatus::Skip);
+        framebuffer::hm("RTC: N/A", BootStatus::Skip);
+        framebuffer::hm("PCI: N/A (ECAM not yet)", BootStatus::Skip);
+        framebuffer::hm("Network: N/A", BootStatus::Skip);
     }
 
     
     
     
-    debug::cpc(debug::CKS_, "VFS init");
+    debug::awn(debug::COB_, "VFS init");
     serial_println!("[PHASE] VFS init start");
     vfs::init();
     serial_println!("[PHASE] VFS init done");
-    framebuffer::bir(15, "Virtual filesystem (VFS)");
-    framebuffer::sd("Virtual filesystem ready", BootStatus::Ok);
+    framebuffer::afw(15, "Virtual filesystem (VFS)");
+    framebuffer::hm("Virtual filesystem ready", BootStatus::Ok);
     
     
     
@@ -1042,46 +1072,51 @@ pub unsafe extern "C" fn ubn() -> ! {
     #[cfg(target_arch = "x86_64")]
     {
         serial_println!("[PHASE] Linux Subsystem init start");
-        if let Some(upm) = CGZ_.fjo() {
-            let lmo = upm.lmo();
-            serial_println!("[TSL] Found {} boot modules", lmo.len());
+        if let Some(module_response) = CKJ_.get_response() {
+            let modules = module_response.modules();
+            serial_println!("[TSL] Found {} boot modules", modules.len());
             
-            let mut abr: Option<&'static [u8]> = None;
-            let mut izz: Option<&'static [u8]> = None;
+            let mut kernel_data: Option<&'static [u8]> = None;
+            let mut eqn: Option<&'static [u8]> = None;
             
-            for apz in lmo {
-                let dzn = apz.wx();
-                let wx = core::str::jg(dzn).unwrap_or("unknown");
-                let path = apz.path().zsy().unwrap_or("unknown");
-                let ag = apz.ag();
-                let aw = apz.aw() as usize;
+            for vn in modules {
+                let bqz = vn.cmdline();
+                let cmdline = core::str::from_utf8(bqz).unwrap_or("unknown");
+                let path = vn.path().to_str().unwrap_or("unknown");
+                let addr = vn.addr();
+                let size = vn.size() as usize;
                 
                 serial_println!("[TSL] Module: {} ({}), {} bytes at {:p}", 
-                    wx, path, aw, ag);
+                    cmdline, path, size, addr);
                 
-                let f = unsafe { core::slice::anh(ag, aw) };
+                let data = unsafe { core::slice::from_raw_parts(addr, size) };
                 
-                if wx.contains("linux-kernel") || path.contains("bzImage") {
-                    abr = Some(f);
-                    serial_println!("[TSL] Linux kernel loaded: {} bytes", aw);
-                } else if wx.contains("linux-initramfs") || path.contains("initramfs") {
-                    izz = Some(f);
-                    serial_println!("[TSL] Initramfs loaded: {} bytes", aw);
-                } else if wx.contains("jarvis-brain") || path.contains("jarvis_pretrained") {
+                if cmdline.contains("linux-kernel") || path.contains("bzImage") {
+                    kernel_data = Some(data);
+                    serial_println!("[TSL] Linux kernel loaded: {} bytes", size);
+                } else if cmdline.contains("linux-initramfs") || path.contains("initramfs") {
+                    eqn = Some(data);
+                    serial_println!("[TSL] Initramfs loaded: {} bytes", size);
+                } else if cmdline.contains("jarvis-brain") || path.contains("jarvis_pretrained") {
                     
-                    serial_println!("[JARVIS] Boot module: {} bytes brain weights (deferred to RamFS)", aw);
-                    unsafe { AXM_ = Some(f); }
+                    serial_println!("[JARVIS] Boot module: {} bytes brain weights (deferred to RamFS)", size);
+                    unsafe { AZP_ = Some(data); }
+                } else if cmdline.contains("iwlwifi") || path.contains("iwlwifi") || path.contains(".ucode") {
+                    
+                    serial_println!("[WIFI] Firmware module: {} bytes at {:p}", size, addr);
+                    let mau = alloc::vec::Vec::from(data);
+                    drivers::net::iwl4965::oox(&mau);
                 }
             }
             
-            if let (Some(acf), Some(buz)) = (abr, izz) {
-                hypervisor::linux_subsystem::bcu().piw(acf, buz);
-                framebuffer::sd("Linux Subsystem (TSL) ready", BootStatus::Ok);
+            if let (Some(ny), Some(initramfs)) = (kernel_data, eqn) {
+                hypervisor::linux_subsystem::acs().set_embedded_images(ny, initramfs);
+                framebuffer::hm("Linux Subsystem (TSL) ready", BootStatus::Ok);
             } else {
-                framebuffer::sd("Linux Subsystem (partial)", BootStatus::Ej);
+                framebuffer::hm("Linux Subsystem (partial)", BootStatus::Skip);
             }
         } else {
-            framebuffer::sd("Linux Subsystem (no modules)", BootStatus::Ej);
+            framebuffer::hm("Linux Subsystem (no modules)", BootStatus::Skip);
         }
         serial_println!("[PHASE] Linux Subsystem init done");
     }
@@ -1090,16 +1125,16 @@ pub unsafe extern "C" fn ubn() -> ! {
     
     
     file_assoc::init();
-    framebuffer::sd("File associations ready", BootStatus::Ok);
+    framebuffer::hm("File associations ready", BootStatus::Ok);
     
     
     
     
-    debug::cpc(debug::CKO_, "Process manager init");
+    debug::awn(debug::CNX_, "Process manager init");
     serial_println!("[PHASE] Process manager init start");
     process::init();
-    framebuffer::bir(17, "Process manager");
-    framebuffer::sd("Process manager ready", BootStatus::Ok);
+    framebuffer::afw(17, "Process manager");
+    framebuffer::hm("Process manager ready", BootStatus::Ok);
     serial_println!("[PHASE] Process manager init done");
     
     
@@ -1107,22 +1142,22 @@ pub unsafe extern "C" fn ubn() -> ! {
     
     serial_println!("[PHASE] Auth system init");
     auth::init();
-    auth::nhc();
-    framebuffer::bir(18, "Authentication system");
-    framebuffer::sd("Authentication ready", BootStatus::Ok);
+    auth::hoo();
+    framebuffer::afw(18, "Authentication system");
+    framebuffer::hm("Authentication ready", BootStatus::Ok);
     
     
     serial_println!("[PHASE] TTY/PTY init");
     tty::init();
     pty::init();
-    framebuffer::sd("TTY/PTY subsystem ready", BootStatus::Ok);
+    framebuffer::hm("TTY/PTY subsystem ready", BootStatus::Ok);
     
     
     
     
     serial_println!("[PHASE] Init process start");
-    init::ay();
-    framebuffer::sd("Init process started (PID 1)", BootStatus::Ok);
+    init::start();
+    framebuffer::hm("Init process started (PID 1)", BootStatus::Ok);
     serial_println!("[PHASE] Init process done");
     
     
@@ -1130,88 +1165,91 @@ pub unsafe extern "C" fn ubn() -> ! {
     
     serial_println!("[PHASE] RAM filesystem init");
     ramfs::init();
-    framebuffer::bir(19, "RAM filesystem");
+    framebuffer::afw(19, "RAM filesystem");
     
-    ramfs::fh(|fs| {
-        let _ = fs.ut("/tmp");
-        let _ = fs.ut("/var");
-        let _ = fs.ut("/home");
-        let _ = fs.ut("/bin");
-        let _ = fs.ut("/usr");
-        let _ = fs.ut("/etc");
+    ramfs::bh(|fs| {
+        let _ = fs.mkdir("/tmp");
+        let _ = fs.mkdir("/var");
+        let _ = fs.mkdir("/home");
+        let _ = fs.mkdir("/bin");
+        let _ = fs.mkdir("/usr");
+        let _ = fs.mkdir("/etc");
     });
 
     
-    if let Some(kes) = unsafe { AXM_.take() } {
-        serial_println!("[JARVIS] Copying {} KB brain weights to RamFS...", kes.len() / 1024);
-        ramfs::fh(|fs| {
-            let _ = fs.ut("/jarvis");
+    if let Some(brain_data) = unsafe { AZP_.take() } {
+        serial_println!("[JARVIS] Copying {} KB brain weights to RamFS...", brain_data.len() / 1024);
+        ramfs::bh(|fs| {
+            let _ = fs.mkdir("/jarvis");
         });
-        ramfs::fh(|fs| {
+        ramfs::bh(|fs| {
             let _ = fs.touch("/jarvis/weights.bin");
-            match fs.ns("/jarvis/weights.bin", kes) {
-                Ok(_) => serial_println!("[JARVIS] Brain weights cached to /jarvis/weights.bin ({} KB)", kes.len() / 1024),
+            match fs.write_file("/jarvis/weights.bin", brain_data) {
+                Ok(_) => serial_println!("[JARVIS] Brain weights cached to /jarvis/weights.bin ({} KB)", brain_data.len() / 1024),
                 Err(_) => serial_println!("[JARVIS] WARNING: Failed to cache brain to RamFS"),
             }
         });
     }
 
-    framebuffer::sd("RAM filesystem ready", BootStatus::Ok);
+    framebuffer::hm("RAM filesystem ready", BootStatus::Ok);
 
     
-    auth::ugw();
+    auth::nab();
 
     
     
     
     serial_println!("[PHASE] Persistence init");
     persistence::init();
-    framebuffer::bir(20, "Persistence layer");
-    framebuffer::sd("Persistence system ready", BootStatus::Ok);
+    framebuffer::afw(20, "Persistence layer");
+    framebuffer::hm("Persistence system ready", BootStatus::Ok);
 
     
     
     
     serial_println!("[PHASE] Web Sandbox init");
     sandbox::init();
-    framebuffer::sd("Web Sandbox ready", BootStatus::Ok);
+    framebuffer::hm("Web Sandbox ready", BootStatus::Ok);
 
     
     serial_println!("[PHASE] Container daemon boot");
-    sandbox::container::qqw();
-    framebuffer::bir(21, "System ready!");
-    framebuffer::sd("Container daemon ready", BootStatus::Ok);
+    sandbox::container::kde();
+    framebuffer::afw(21, "System ready!");
+    framebuffer::hm("Container daemon ready", BootStatus::Ok);
 
     
     
-    for _ in 0..5_000_000u64 { core::hint::hc(); }
-    framebuffer::kuv();
+    for _ in 0..5_000_000u64 { core::hint::spin_loop(); }
+    framebuffer::fvz();
 
     
     println!();
-    framebuffer::krj(framebuffer::gia().1 as u32 * 16, framebuffer::B_);
+    framebuffer::ftb(framebuffer::cyk().1 as u32 * 16, framebuffer::B_);
     println!();
-    h!(framebuffer::G_, "  System ready - TRust-OS v0.2.0");
-    h!(framebuffer::B_, "  Type 'desktop' to launch the desktop, or use shell commands.");
+    n!(framebuffer::G_, "  System ready - TRust-OS v0.2.0");
+    n!(framebuffer::B_, "  Type 'desktop' to launch the desktop, or use shell commands.");
     println!();
 
     
-    if persistence::anl() {
-        persistence::vng();
+    if persistence::sw() {
+        persistence::nyv();
     }
 
     
-    auth::mww();
+    auth::hgb();
+
+    
+    marionet::autodump::kdd();
 
     
     serial_println!("[BOOT] Running crypto self-tests...");
-    tls13::crypto::peq();
+    tls13::crypto::jbv();
     serial_println!("[BOOT] Crypto self-tests complete");
 
     
-    debug::cpc(debug::CKQ_, "Shell ready — boot complete");
+    debug::awn(debug::CNZ_, "Shell ready — boot complete");
     serial_println!("Starting shell...");
-    shell::vw();
+    shell::run();
 }
 
 
@@ -1220,49 +1258,49 @@ pub unsafe extern "C" fn ubn() -> ! {
 
 
 
-fn hmj() -> ! {
-    arch::hmj()
+fn dre() -> ! {
+    arch::dre()
 }
 
 #[alloc_error_handler]
-fn yeq(layout: Layout) -> ! {
+fn pxy(layout: Layout) -> ! {
     serial_println!("\n!!! ALLOC ERROR !!!");
-    serial_println!("layout: size={}, align={}", layout.aw(), layout.align());
-    if framebuffer::ky() {
-        framebuffer::dbv(framebuffer::A_);
+    serial_println!("layout: size={}, align={}", layout.size(), layout.align());
+    if framebuffer::is_initialized() {
+        framebuffer::bdr(framebuffer::A_);
         println!("\n!!! ALLOC ERROR !!!");
-        println!("layout: size={}, align={}", layout.aw(), layout.align());
+        println!("layout: size={}, align={}", layout.size(), layout.align());
     }
-    hmj();
+    dre();
 }
 
 
 #[panic_handler]
-fn panic(co: &Ciy) -> ! {
+fn panic(info: &PanicInfo) -> ! {
     
-    debug::jjr(debug::BDL_);
+    debug::ewx(debug::BFO_);
     
     
-    debug::vbm();
+    debug::npv();
     
     
     serial_println!("\n!!! KERNEL PANIC !!!");
-    serial_println!("{}", co);
+    serial_println!("{}", info);
     
     
-    if framebuffer::ky() {
-        framebuffer::dbv(framebuffer::A_);
+    if framebuffer::is_initialized() {
+        framebuffer::bdr(framebuffer::A_);
         println!("\n!!! KERNEL PANIC !!!");
-        println!("{}", co);
-        framebuffer::dbv(0xFFAAAAAA);
+        println!("{}", info);
+        framebuffer::bdr(0xFFAAAAAA);
         println!("Full crash dump sent to serial port (115200 8N1).");
         println!("Connect serial cable and reboot to capture output.");
         
-        let qsd = debug::ivi(8);
-        for line in &qsd {
+        let ked = debug::enf(8);
+        for line in &ked {
             println!("{}", line);
         }
     }
     
-    hmj();
+    dre();
 }

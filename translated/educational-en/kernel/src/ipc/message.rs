@@ -51,7 +51,7 @@ pub enum MessagePayload {
     /// Zero-copy buffer reference
     Buffer {
         /// Physical address of buffer
-        physical_address: u64,
+        phys_addr: u64,
         /// Buffer size
         size: usize,
     },

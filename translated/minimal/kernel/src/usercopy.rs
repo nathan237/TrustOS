@@ -13,85 +13,85 @@ use alloc::string::String;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UserCopyError {
     
-    Qf,
+    NullPointer,
     
-    Nq,
+    NotUserSpace,
     
     Overflow,
     
-    Mb,
+    PageFault,
     
-    Awu,
+    Permission,
     
-    Ajh,
+    InvalidLength,
 }
 
 impl UserCopyError {
     
-    pub fn zsv(self) -> i64 {
+    pub fn raj(self) -> i64 {
         match self {
-            Self::Qf | Self::Nq => -14, 
+            Self::NullPointer | Self::NotUserSpace => -14, 
             Self::Overflow => -14, 
-            Self::Mb => -14, 
-            Self::Awu => -13, 
-            Self::Ajh => -22, 
+            Self::PageFault => -14, 
+            Self::Permission => -13, 
+            Self::InvalidLength => -22, 
         }
     }
 }
 
 
-pub struct Coy {
+pub struct Ari {
     ptr: u64,
     len: usize,
-    bjb: bool,
+    writable: bool,
 }
 
-impl Coy {
+impl Ari {
     
-    pub fn jmq(ptr: u64, len: usize) -> Result<Self, UserCopyError> {
-        Self::dxi(ptr, len, false)?;
-        Ok(Self { ptr, len, bjb: false })
+    pub fn eyv(ptr: u64, len: usize) -> Result<Self, UserCopyError> {
+        Self::bpu(ptr, len, false)?;
+        Ok(Self { ptr, len, writable: false })
     }
     
     
-    pub fn yq(ptr: u64, len: usize) -> Result<Self, UserCopyError> {
-        Self::dxi(ptr, len, true)?;
-        Ok(Self { ptr, len, bjb: true })
+    pub fn lk(ptr: u64, len: usize) -> Result<Self, UserCopyError> {
+        Self::bpu(ptr, len, true)?;
+        Ok(Self { ptr, len, writable: true })
     }
     
     
-    pub fn zwl(ptr: u64, len: usize) -> Result<Self, UserCopyError> {
-        Self::dxi(ptr, len, true)?;
-        Ok(Self { ptr, len, bjb: true })
+    pub fn rcw(ptr: u64, len: usize) -> Result<Self, UserCopyError> {
+        Self::bpu(ptr, len, true)?;
+        Ok(Self { ptr, len, writable: true })
     }
     
     
-    fn dxi(ptr: u64, len: usize, write: bool) -> Result<(), UserCopyError> {
+    fn bpu(ptr: u64, len: usize, write: bool) -> Result<(), UserCopyError> {
         
         if ptr == 0 && len == 0 {
             return Ok(());
         }
         
         if ptr == 0 {
-            return Err(UserCopyError::Qf);
+            return Err(UserCopyError::NullPointer);
         }
         
         
-        let ci = ptr.ink(len as u64)
+        let end = ptr.checked_add(len as u64)
             .ok_or(UserCopyError::Overflow)?;
         
         
-        if !crate::memory::aov(ptr) {
-            return Err(UserCopyError::Nq);
+        if !crate::memory::ux(ptr) {
+            return Err(UserCopyError::NotUserSpace);
         }
         
-        if !crate::memory::aov(ci.ao(1)) {
-            return Err(UserCopyError::Nq);
+        if !crate::memory::ux(end.saturating_sub(1)) {
+            return Err(UserCopyError::NotUserSpace);
         }
         
         
-        if !crate::memory::sw(ptr, len, write) {
-            return Err(UserCopyError::Mb);
+        if !crate::memory::ij(ptr, len, write) {
+            return Err(UserCopyError::PageFault);
         }
         
         Ok(())
@@ -113,56 +113,56 @@ impl Coy {
     }
     
     
-    pub fn zik(&self, k: &mut [u8]) -> Result<usize, UserCopyError> {
-        let ajp = k.len().v(self.len);
-        nfv(&mut k[..ajp], self.ptr)?;
-        Ok(ajp)
+    pub fn qsw(&self, buf: &mut [u8]) -> Result<usize, UserCopyError> {
+        let rz = buf.len().min(self.len);
+        hno(&mut buf[..rz], self.ptr)?;
+        Ok(rz)
     }
     
     
-    pub fn zws(&self, k: &[u8]) -> Result<usize, UserCopyError> {
-        if !self.bjb {
-            return Err(UserCopyError::Awu);
+    pub fn rdc(&self, buf: &[u8]) -> Result<usize, UserCopyError> {
+        if !self.writable {
+            return Err(UserCopyError::Permission);
         }
-        let dwy = k.len().v(self.len);
-        nfz(self.ptr, &k[..dwy])?;
-        Ok(dwy)
+        let bpo = buf.len().min(self.len);
+        hns(self.ptr, &buf[..bpo])?;
+        Ok(bpo)
     }
     
     
-    pub unsafe fn zhq<T: Copy>(&self) -> Result<T, UserCopyError> {
+    pub unsafe fn qsc<T: Copy>(&self) -> Result<T, UserCopyError> {
         if self.len < size_of::<T>() {
-            return Err(UserCopyError::Ajh);
+            return Err(UserCopyError::InvalidLength);
         }
         
-        let mut bn: T = core::mem::zeroed();
-        let slice = slice::bef(
-            &mut bn as *mut T as *mut u8,
+        let mut value: T = core::mem::zeroed();
+        let slice = slice::from_raw_parts_mut(
+            &mut value as *mut T as *mut u8,
             size_of::<T>()
         );
-        nfv(slice, self.ptr)?;
-        Ok(bn)
+        hno(slice, self.ptr)?;
+        Ok(value)
     }
     
     
-    pub unsafe fn zwr<T: Copy>(&self, bn: &T) -> Result<(), UserCopyError> {
-        if !self.bjb {
-            return Err(UserCopyError::Awu);
+    pub unsafe fn rdb<T: Copy>(&self, value: &T) -> Result<(), UserCopyError> {
+        if !self.writable {
+            return Err(UserCopyError::Permission);
         }
         if self.len < size_of::<T>() {
-            return Err(UserCopyError::Ajh);
+            return Err(UserCopyError::InvalidLength);
         }
         
-        let slice = slice::anh(
-            bn as *const T as *const u8,
+        let slice = slice::from_raw_parts(
+            value as *const T as *const u8,
             size_of::<T>()
         );
-        nfz(self.ptr, slice)?;
+        hns(self.ptr, slice)?;
         Ok(())
     }
     
     
-    pub fn zdu(self) -> Option<Self> {
+    pub fn qpp(self) -> Option<Self> {
         if self.ptr == 0 {
             None
         } else {
@@ -172,113 +172,113 @@ impl Coy {
 }
 
 
-pub fn nfv(cs: &mut [u8], aob: u64) -> Result<(), UserCopyError> {
-    if cs.is_empty() {
+pub fn hno(dst: &mut [u8], ps: u64) -> Result<(), UserCopyError> {
+    if dst.is_empty() {
         return Ok(());
     }
     
-    if aob == 0 {
-        return Err(UserCopyError::Qf);
+    if ps == 0 {
+        return Err(UserCopyError::NullPointer);
     }
     
     
-    if !crate::memory::aov(aob) {
-        return Err(UserCopyError::Nq);
+    if !crate::memory::ux(ps) {
+        return Err(UserCopyError::NotUserSpace);
     }
     
     
-    if !crate::memory::sw(aob, cs.len(), false) {
-        return Err(UserCopyError::Mb);
+    if !crate::memory::ij(ps, dst.len(), false) {
+        return Err(UserCopyError::PageFault);
     }
     
     
     unsafe {
-        let cy = aob as *const u8;
-        core::ptr::copy_nonoverlapping(cy, cs.mw(), cs.len());
+        let src = ps as *const u8;
+        core::ptr::copy_nonoverlapping(src, dst.as_mut_ptr(), dst.len());
     }
     
     Ok(())
 }
 
 
-pub fn nfz(alc: u64, cy: &[u8]) -> Result<(), UserCopyError> {
-    if cy.is_empty() {
+pub fn hns(nt: u64, src: &[u8]) -> Result<(), UserCopyError> {
+    if src.is_empty() {
         return Ok(());
     }
     
-    if alc == 0 {
-        return Err(UserCopyError::Qf);
+    if nt == 0 {
+        return Err(UserCopyError::NullPointer);
     }
     
     
-    if !crate::memory::aov(alc) {
-        return Err(UserCopyError::Nq);
+    if !crate::memory::ux(nt) {
+        return Err(UserCopyError::NotUserSpace);
     }
     
     
-    if !crate::memory::sw(alc, cy.len(), true) {
-        return Err(UserCopyError::Mb);
+    if !crate::memory::ij(nt, src.len(), true) {
+        return Err(UserCopyError::PageFault);
     }
     
     
     unsafe {
-        let cs = alc as *mut u8;
-        core::ptr::copy_nonoverlapping(cy.fq(), cs, cy.len());
+        let dst = nt as *mut u8;
+        core::ptr::copy_nonoverlapping(src.as_ptr(), dst, src.len());
     }
     
     Ok(())
 }
 
 
-pub fn ykb(ptr: u64, cat: usize) -> Result<String, UserCopyError> {
+pub fn qbj(ptr: u64, aoo: usize) -> Result<String, UserCopyError> {
     if ptr == 0 {
-        return Err(UserCopyError::Qf);
+        return Err(UserCopyError::NullPointer);
     }
     
-    if !crate::memory::aov(ptr) {
-        return Err(UserCopyError::Nq);
+    if !crate::memory::ux(ptr) {
+        return Err(UserCopyError::NotUserSpace);
     }
     
-    let mut result = Vec::fc(256);
-    let mut l = 0u64;
+    let mut result = Vec::with_capacity(256);
+    let mut offset = 0u64;
     
     loop {
-        if l as usize >= cat {
+        if offset as usize >= aoo {
             break;
         }
         
-        let ag = ptr.ink(l)
+        let addr = ptr.checked_add(offset)
             .ok_or(UserCopyError::Overflow)?;
         
-        if !crate::memory::sw(ag, 1, false) {
-            return Err(UserCopyError::Mb);
+        if !crate::memory::ij(addr, 1, false) {
+            return Err(UserCopyError::PageFault);
         }
         
-        let hf = unsafe { *(ag as *const u8) };
+        let byte = unsafe { *(addr as *const u8) };
         
-        if hf == 0 {
+        if byte == 0 {
             break;
         }
         
-        result.push(hf);
-        l += 1;
+        result.push(byte);
+        offset += 1;
     }
     
-    String::jg(result).jd(|_| UserCopyError::Ajh)
+    String::from_utf8(result).map_err(|_| UserCopyError::InvalidLength)
 }
 
 
-pub fn zig<T: Copy>(ptr: u64) -> Result<T, UserCopyError> {
+pub fn qss<T: Copy>(ptr: u64) -> Result<T, UserCopyError> {
     if ptr == 0 {
-        return Err(UserCopyError::Qf);
+        return Err(UserCopyError::NullPointer);
     }
     
-    if !crate::memory::aov(ptr) {
-        return Err(UserCopyError::Nq);
+    if !crate::memory::ux(ptr) {
+        return Err(UserCopyError::NotUserSpace);
     }
     
-    if !crate::memory::sw(ptr, size_of::<T>(), false) {
-        return Err(UserCopyError::Mb);
+    if !crate::memory::ij(ptr, size_of::<T>(), false) {
+        return Err(UserCopyError::PageFault);
     }
     
     unsafe {
@@ -287,45 +287,45 @@ pub fn zig<T: Copy>(ptr: u64) -> Result<T, UserCopyError> {
 }
 
 
-pub fn zwz<T: Copy>(ptr: u64, bn: &T) -> Result<(), UserCopyError> {
+pub fn rdk<T: Copy>(ptr: u64, value: &T) -> Result<(), UserCopyError> {
     if ptr == 0 {
-        return Err(UserCopyError::Qf);
+        return Err(UserCopyError::NullPointer);
     }
     
-    if !crate::memory::aov(ptr) {
-        return Err(UserCopyError::Nq);
+    if !crate::memory::ux(ptr) {
+        return Err(UserCopyError::NotUserSpace);
     }
     
-    if !crate::memory::sw(ptr, size_of::<T>(), true) {
-        return Err(UserCopyError::Mb);
+    if !crate::memory::ij(ptr, size_of::<T>(), true) {
+        return Err(UserCopyError::PageFault);
     }
     
     unsafe {
-        core::ptr::write(ptr as *mut T, *bn);
+        core::ptr::write(ptr as *mut T, *value);
     }
     
     Ok(())
 }
 
 
-pub fn zvd(ptr: u64, len: usize, write: bool) -> Result<(), UserCopyError> {
+pub fn rbw(ptr: u64, len: usize, write: bool) -> Result<(), UserCopyError> {
     if ptr == 0 && len == 0 {
         return Ok(());
     }
     
     if ptr == 0 {
-        return Err(UserCopyError::Qf);
+        return Err(UserCopyError::NullPointer);
     }
     
-    let ci = ptr.ink(len as u64)
+    let end = ptr.checked_add(len as u64)
         .ok_or(UserCopyError::Overflow)?;
     
-    if !crate::memory::aov(ptr) || !crate::memory::aov(ci.ao(1)) {
-        return Err(UserCopyError::Nq);
+    if !crate::memory::ux(ptr) || !crate::memory::ux(end.saturating_sub(1)) {
+        return Err(UserCopyError::NotUserSpace);
     }
     
-    if !crate::memory::sw(ptr, len, write) {
-        return Err(UserCopyError::Mb);
+    if !crate::memory::ij(ptr, len, write) {
+        return Err(UserCopyError::PageFault);
     }
     
     Ok(())

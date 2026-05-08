@@ -5,55 +5,55 @@ use alloc::vec::Vec;
 
 
 
-fn okq() -> ([u8; 4], [u8; 4], Option<[u8; 4]>) {
-    let ed = crate::drivers::net::cez()
+fn ilm() -> ([u8; 4], [u8; 4], Option<[u8; 4]>) {
+    let mac = crate::drivers::net::aqt()
         .unwrap_or([0x52, 0x54, 0x00, 0x12, 0x34, 0x56]);
     
-    let kh = if ed[5] == 0 { 1 } else if ed[5] == 255 { 254 } else { ed[5] };
-    ([10, 0, 100, kh], [255, 255, 255, 0], None)
+    let host = if mac[5] == 0 { 1 } else if mac[5] == 255 { 254 } else { mac[5] };
+    ([10, 0, 100, host], [255, 255, 255, 0], None)
 }
 
 
 
-fn oft(aac: [u8; 4], cy: &[u8; 4], hs: &[u8; 4]) -> bool {
+fn ihu(mt: [u8; 4], src: &[u8; 4], mask: &[u8; 4]) -> bool {
     
-    if aac == [255, 255, 255, 255] {
+    if mt == [255, 255, 255, 255] {
         return true;
     }
     
-    (aac[0] & !hs[0]) == !hs[0] &&
-    (aac[1] & !hs[1]) == !hs[1] &&
-    (aac[2] & !hs[2]) == !hs[2] &&
-    (aac[3] & !hs[3]) == !hs[3]
+    (mt[0] & !mask[0]) == !mask[0] &&
+    (mt[1] & !mask[1]) == !mask[1] &&
+    (mt[2] & !mask[2]) == !mask[2] &&
+    (mt[3] & !mask[3]) == !mask[3]
 }
 
 
 #[repr(C, packed)]
-struct Dad {
-    zvh: u8,      
-    ynu: u8,         
-    dmo: u16,
-    yxj: u16,
-    yqx: u16,  
-    akv: u8,
+struct Aya {
+    version_ihl: u8,      
+    dscp_ecn: u8,         
+    bjq: u16,
+    identification: u16,
+    flags_fragment: u16,  
+    ttl: u8,
     protocol: u8,
-    bmj: u16,
-    iy: [u8; 4],
-    aac: [u8; 4],
+    checksum: u16,
+    source: [u8; 4],
+    mt: [u8; 4],
 }
 
 
-fn bmj(f: &[u8]) -> u16 {
+fn checksum(data: &[u8]) -> u16 {
     let mut sum: u32 = 0;
-    let mut a = 0;
+    let mut i = 0;
     
-    while a < f.len() - 1 {
-        sum += ((f[a] as u32) << 8) | (f[a + 1] as u32);
-        a += 2;
+    while i < data.len() - 1 {
+        sum += ((data[i] as u32) << 8) | (data[i + 1] as u32);
+        i += 2;
     }
     
-    if a < f.len() {
-        sum += (f[a] as u32) << 8;
+    if i < data.len() {
+        sum += (data[i] as u32) << 8;
     }
     
     while sum >> 16 != 0 {
@@ -64,45 +64,45 @@ fn bmj(f: &[u8]) -> u16 {
 }
 
 
-pub fn bur(f: &[u8]) {
-    if f.len() < 20 {
+pub fn alq(data: &[u8]) {
+    if data.len() < 20 {
         return;
     }
     
-    let dk = f[0] >> 4;
-    let ldh = (f[0] & 0x0F) as usize;
-    let ect = ldh * 4;
+    let version = data[0] >> 4;
+    let gbr = (data[0] & 0x0F) as usize;
+    let bte = gbr * 4;
     
-    if dk != 4 || f.len() < ect {
+    if version != 4 || data.len() < bte {
         return;
     }
     
     
-    let dmo = u16::oa([f[2], f[3]]) as usize;
+    let bjq = u16::from_be_bytes([data[2], data[3]]) as usize;
     
     
-    if dmo < ect || dmo > f.len() {
+    if bjq < bte || bjq > data.len() {
         return;
     }
     
-    let akv = f[8];
-    let protocol = f[9];
-    let iy = [f[12], f[13], f[14], f[15]];
-    let aac = [f[16], f[17], f[18], f[19]];
+    let ttl = data[8];
+    let protocol = data[9];
+    let source = [data[12], data[13], data[14], data[15]];
+    let mt = [data[16], data[17], data[18], data[19]];
     
     
-    let ew = &f[ect..dmo];
+    let payload = &data[bte..bjq];
     
     
-    let (bom, bmx) = kus(protocol, ew);
-    if !crate::netstack::firewall::ssp(protocol, iy, aac, bom, bmx, dmo) {
+    let (ais, ahv) = fvw(protocol, payload);
+    if !crate::netstack::firewall::lvk(protocol, source, mt, ais, ahv, bjq) {
         return; 
     }
     
     match protocol {
-        1 => crate::netstack::icmp::bur(ew, akv, iy), 
-        6 => crate::netstack::tcp::bur(ew, iy, aac), 
-        17 => crate::netstack::udp::bur(ew, iy),      
+        1 => crate::netstack::icmp::alq(payload, ttl, source), 
+        6 => crate::netstack::tcp::alq(payload, source, mt), 
+        17 => crate::netstack::udp::alq(payload, source),      
         _ => {
             crate::serial_println!("[IP] Unsupported protocol {}", protocol);
         }
@@ -110,170 +110,170 @@ pub fn bur(f: &[u8]) {
 }
 
 
-pub fn whj(kv: [u8; 4], protocol: u8, ew: &[u8], akv: u8) -> Result<(), &'static str> {
-    let (bct, up, auj) = crate::network::aou()
-        .map(|(ip, hs, nt)| (*ip.as_bytes(), *hs.as_bytes(), nt.map(|at| *at.as_bytes())))
-        .unwrap_or_else(okq);
+pub fn onw(dest_ip: [u8; 4], protocol: u8, payload: &[u8], ttl: u8) -> Result<(), &'static str> {
+    let (source_ip, subnet, gateway) = crate::network::rd()
+        .map(|(ip, mask, fz)| (*ip.as_bytes(), *mask.as_bytes(), fz.map(|g| *g.as_bytes())))
+        .unwrap_or_else(ilm);
 
     
-    let (bom, bmx) = kus(protocol, ew);
-    if !crate::netstack::firewall::ntw(protocol, bct, kv, bom, bmx, 20 + ew.len()) {
+    let (ais, ahv) = fvw(protocol, payload);
+    if !crate::netstack::firewall::hyo(protocol, source_ip, dest_ip, ais, ahv, 20 + payload.len()) {
         return Err("Blocked by firewall");
     }
 
-    let lql = |ip: [u8; 4]| {
-        (ip[0] & up[0]) == (bct[0] & up[0]) &&
-        (ip[1] & up[1]) == (bct[1] & up[1]) &&
-        (ip[2] & up[2]) == (bct[2] & up[2]) &&
-        (ip[3] & up[3]) == (bct[3] & up[3])
+    let gkx = |ip: [u8; 4]| {
+        (ip[0] & subnet[0]) == (source_ip[0] & subnet[0]) &&
+        (ip[1] & subnet[1]) == (source_ip[1] & subnet[1]) &&
+        (ip[2] & subnet[2]) == (source_ip[2] & subnet[2]) &&
+        (ip[3] & subnet[3]) == (source_ip[3] & subnet[3])
     };
 
-    let foy = if lql(kv) {
-        kv
-    } else if let Some(nt) = auj {
-        if nt != [0, 0, 0, 0] { nt } else { kv }
+    let cnf = if gkx(dest_ip) {
+        dest_ip
+    } else if let Some(fz) = gateway {
+        if fz != [0, 0, 0, 0] { fz } else { dest_ip }
     } else {
-        kv
+        dest_ip
     };
 
-    let mut dh = Vec::new();
-    let dmo = 20 + ew.len();
-    dh.push(0x45);
-    dh.push(0);
-    dh.bk(&(dmo as u16).ft());
-    dh.bk(&0u16.ft());
-    dh.bk(&0x4000u16.ft());
-    dh.push(akv);
-    dh.push(protocol);
-    dh.push(0); dh.push(0);
-    dh.bk(&bct);
-    dh.bk(&kv);
+    let mut header = Vec::new();
+    let bjq = 20 + payload.len();
+    header.push(0x45);
+    header.push(0);
+    header.extend_from_slice(&(bjq as u16).to_be_bytes());
+    header.extend_from_slice(&0u16.to_be_bytes());
+    header.extend_from_slice(&0x4000u16.to_be_bytes());
+    header.push(ttl);
+    header.push(protocol);
+    header.push(0); header.push(0);
+    header.extend_from_slice(&source_ip);
+    header.extend_from_slice(&dest_ip);
 
-    let td = bmj(&dh);
-    dh[10] = (td >> 8) as u8;
-    dh[11] = (td & 0xFF) as u8;
+    let ig = checksum(&header);
+    header[10] = (ig >> 8) as u8;
+    header[11] = (ig & 0xFF) as u8;
 
-    let mut ex = dh;
-    ex.bk(ew);
+    let mut be = header;
+    be.extend_from_slice(payload);
 
-    let kpk = if oft(kv, &bct, &up) {
+    let frs = if ihu(dest_ip, &source_ip, &subnet) {
         [0xFF; 6]
     } else {
-        match crate::netstack::arp::ayo(foy) {
-            Some(ed) => ed,
+        match crate::netstack::arp::yb(cnf) {
+            Some(mac) => mac,
             None => {
-                crate::netstack::arp::eii(foy)?;
-                let ay = crate::logger::lh();
-                let mut aaf: u32 = 0;
+                crate::netstack::arp::bos(cnf)?;
+                let start = crate::logger::eg();
+                let mut my: u32 = 0;
                 loop {
                     crate::netstack::poll();
-                    if let Some(ed) = crate::netstack::arp::ayo(foy) {
-                        break ed;
+                    if let Some(mac) = crate::netstack::arp::yb(cnf) {
+                        break mac;
                     }
-                    if crate::logger::lh().ao(ay) > 1000 {
+                    if crate::logger::eg().saturating_sub(start) > 1000 {
                         return Err("ARP timeout");
                     }
-                    aaf = aaf.cn(1);
-                    if aaf > 2_000_000 { return Err("ARP timeout"); }
-                    crate::arch::bhd();
+                    my = my.wrapping_add(1);
+                    if my > 2_000_000 { return Err("ARP timeout"); }
+                    crate::arch::acb();
                 }
             }
         }
     };
 
-    crate::netstack::fug(kpk, 0x0800, &ex)
+    crate::netstack::cdq(frs, 0x0800, &be)
 }
 
 
-pub fn blc(kv: [u8; 4], protocol: u8, ew: &[u8]) -> Result<(), &'static str> {
+pub fn aha(dest_ip: [u8; 4], protocol: u8, payload: &[u8]) -> Result<(), &'static str> {
     
-    let (bct, up, auj) = crate::network::aou()
-        .map(|(ip, hs, nt)| (*ip.as_bytes(), *hs.as_bytes(), nt.map(|at| *at.as_bytes())))
-        .unwrap_or_else(okq);
+    let (source_ip, subnet, gateway) = crate::network::rd()
+        .map(|(ip, mask, fz)| (*ip.as_bytes(), *mask.as_bytes(), fz.map(|g| *g.as_bytes())))
+        .unwrap_or_else(ilm);
 
     
-    let (bom, bmx) = kus(protocol, ew);
-    if !crate::netstack::firewall::ntw(protocol, bct, kv, bom, bmx, 20 + ew.len()) {
+    let (ais, ahv) = fvw(protocol, payload);
+    if !crate::netstack::firewall::hyo(protocol, source_ip, dest_ip, ais, ahv, 20 + payload.len()) {
         return Err("Blocked by firewall");
     }
 
     
-    let lql = |ip: [u8; 4]| {
-        (ip[0] & up[0]) == (bct[0] & up[0]) &&
-        (ip[1] & up[1]) == (bct[1] & up[1]) &&
-        (ip[2] & up[2]) == (bct[2] & up[2]) &&
-        (ip[3] & up[3]) == (bct[3] & up[3])
+    let gkx = |ip: [u8; 4]| {
+        (ip[0] & subnet[0]) == (source_ip[0] & subnet[0]) &&
+        (ip[1] & subnet[1]) == (source_ip[1] & subnet[1]) &&
+        (ip[2] & subnet[2]) == (source_ip[2] & subnet[2]) &&
+        (ip[3] & subnet[3]) == (source_ip[3] & subnet[3])
     };
 
-    let foy = if lql(kv) {
-        kv
-    } else if let Some(nt) = auj {
+    let cnf = if gkx(dest_ip) {
+        dest_ip
+    } else if let Some(fz) = gateway {
         
-        if nt != [0, 0, 0, 0] {
-            nt
+        if fz != [0, 0, 0, 0] {
+            fz
         } else {
-            kv 
+            dest_ip 
         }
     } else {
-        kv
+        dest_ip
     };
     
     
-    let mut dh = Vec::new();
-    let dmo = 20 + ew.len();
+    let mut header = Vec::new();
+    let bjq = 20 + payload.len();
     
-    dh.push(0x45); 
-    dh.push(0);    
-    dh.bk(&(dmo as u16).ft()); 
-    dh.bk(&0u16.ft()); 
-    dh.bk(&0x4000u16.ft()); 
-    dh.push(64);   
-    dh.push(protocol); 
-    dh.push(0); dh.push(0); 
-    dh.bk(&bct); 
-    dh.bk(&kv);   
-    
-    
-    let td = bmj(&dh);
-    dh[10] = (td >> 8) as u8;
-    dh[11] = (td & 0xFF) as u8;
+    header.push(0x45); 
+    header.push(0);    
+    header.extend_from_slice(&(bjq as u16).to_be_bytes()); 
+    header.extend_from_slice(&0u16.to_be_bytes()); 
+    header.extend_from_slice(&0x4000u16.to_be_bytes()); 
+    header.push(64);   
+    header.push(protocol); 
+    header.push(0); header.push(0); 
+    header.extend_from_slice(&source_ip); 
+    header.extend_from_slice(&dest_ip);   
     
     
+    let ig = checksum(&header);
+    header[10] = (ig >> 8) as u8;
+    header[11] = (ig & 0xFF) as u8;
     
     
-    let mut ex = dh;
-    ex.bk(ew);
     
     
-    let kpk = if oft(kv, &bct, &up) {
+    let mut be = header;
+    be.extend_from_slice(payload);
+    
+    
+    let frs = if ihu(dest_ip, &source_ip, &subnet) {
         [0xFF; 6]
     } else {
-        match crate::netstack::arp::ayo(foy) {
-            Some(ed) => ed,
+        match crate::netstack::arp::yb(cnf) {
+            Some(mac) => mac,
             None => {
-                crate::netstack::arp::eii(foy)?;
-                let ay = crate::logger::lh();
-                let mut aaf: u32 = 0;
+                crate::netstack::arp::bos(cnf)?;
+                let start = crate::logger::eg();
+                let mut my: u32 = 0;
                 loop {
                     crate::netstack::poll();
-                    if let Some(ed) = crate::netstack::arp::ayo(foy) {
-                        break ed;
+                    if let Some(mac) = crate::netstack::arp::yb(cnf) {
+                        break mac;
                     }
-                    if crate::logger::lh().ao(ay) > 1000 {
+                    if crate::logger::eg().saturating_sub(start) > 1000 {
                         return Err("ARP timeout");
                     }
-                    aaf = aaf.cn(1);
-                    if aaf > 2_000_000 {
+                    my = my.wrapping_add(1);
+                    if my > 2_000_000 {
                         return Err("ARP timeout");
                     }
-                    crate::arch::bhd();
+                    crate::arch::acb();
                 }
             }
         }
     };
     
     
-    crate::netstack::fug(kpk, 0x0800, &ex)?;
+    crate::netstack::cdq(frs, 0x0800, &be)?;
     
     
     
@@ -281,14 +281,14 @@ pub fn blc(kv: [u8; 4], protocol: u8, ew: &[u8]) -> Result<(), &'static str> {
 }
 
 
-fn kus(protocol: u8, ew: &[u8]) -> (u16, u16) {
+fn fvw(protocol: u8, payload: &[u8]) -> (u16, u16) {
     match protocol {
         6 | 17 => {
             
-            if ew.len() >= 4 {
-                let bom = u16::oa([ew[0], ew[1]]);
-                let bmx = u16::oa([ew[2], ew[3]]);
-                (bom, bmx)
+            if payload.len() >= 4 {
+                let ais = u16::from_be_bytes([payload[0], payload[1]]);
+                let ahv = u16::from_be_bytes([payload[2], payload[3]]);
+                (ais, ahv)
             } else {
                 (0, 0)
             }

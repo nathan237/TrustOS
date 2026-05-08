@@ -67,10 +67,10 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 
 /// Generate a cryptographically random salt (16 random bytes, hex-encoded).
 fn generate_salt(_username: &str) -> String {
-    let mut buffer = [0u8; 16];
-    crate::rng::secure_fill_bytes(&mut buffer);
+    let mut buf = [0u8; 16];
+    crate::rng::secure_fill_bytes(&mut buf);
     let mut s = String::with_capacity(32);
-    for b in &buffer {
+    for b in &buf {
         s.push_str(&format!("{:02x}", b));
     }
     s
@@ -108,7 +108,7 @@ pub struct UserEntry {
     pub uid: Uid,
     pub gid: Gid,
     pub gecos: String,       // Full name / description
-    pub home_directory: String,
+    pub home_dir: String,
     pub shell: String,
 }
 
@@ -121,7 +121,7 @@ impl UserEntry {
             uid,
             gid,
             gecos: String::new(),
-            home_directory: format!("/home/{}", username),
+            home_dir: format!("/home/{}", username),
             shell: String::from("/bin/tsh"),
         }
     }
@@ -133,7 +133,7 @@ impl UserEntry {
             uid: ROOT_UID,
             gid: ROOT_GID,
             gecos: String::from("System Administrator"),
-            home_directory: String::from("/root"),
+            home_dir: String::from("/root"),
             shell: String::from("/bin/tsh"),
         }
     }
@@ -142,7 +142,7 @@ impl UserEntry {
     pub fn to_passwd_line(&self) -> String {
         format!("{}:x:{}:{}:{}:{}:{}",
             self.username, self.uid, self.gid,
-            self.gecos, self.home_directory, self.shell)
+            self.gecos, self.home_dir, self.shell)
     }
     
     /// Parse from passwd line
@@ -157,7 +157,7 @@ impl UserEntry {
             uid: parts[2].parse().ok()?,
             gid: parts[3].parse().ok()?,
             gecos: String::from(parts[4]),
-            home_directory: String::from(parts[5]),
+            home_dir: String::from(parts[5]),
             shell: String::from(parts[6]),
         })
     }
@@ -171,8 +171,8 @@ pub struct ShadowEntry {
     pub password_hash: [u8; 32],
     pub salt: String,
     pub last_changed: u64,    // Days since epoch
-    pub minimum_days: u32,        // Min days before change
-    pub maximum_days: u32,        // Max days before must change
+    pub min_days: u32,        // Min days before change
+    pub max_days: u32,        // Max days before must change
     pub warn_days: u32,       // Days before expiry to warn
     pub inactive_days: i32,   // Days after expiry until account disabled (-1 = never)
     pub expire_date: i64,     // Date account expires (-1 = never)
@@ -190,8 +190,8 @@ impl ShadowEntry {
             password_hash: hash,
             salt,
             last_changed: 0,
-            minimum_days: 0,
-            maximum_days: 99999,
+            min_days: 0,
+            max_days: 99999,
             warn_days: 7,
             inactive_days: -1,
             expire_date: -1,
@@ -205,8 +205,8 @@ impl ShadowEntry {
             password_hash: [0u8; 32],
             salt: String::from("!"),
             last_changed: 0,
-            minimum_days: 0,
-            maximum_days: 99999,
+            min_days: 0,
+            max_days: 99999,
             warn_days: 7,
             inactive_days: -1,
             expire_date: -1,
@@ -240,8 +240,8 @@ impl ShadowEntry {
             hash_hex,
             self.salt,
             self.last_changed,
-            self.minimum_days,
-            self.maximum_days,
+            self.min_days,
+            self.max_days,
             self.warn_days,
             self.inactive_days,
             self.expire_date)
@@ -267,8 +267,8 @@ impl ShadowEntry {
             password_hash: hash,
             salt,
             last_changed: parts[2].parse().unwrap_or(0),
-            minimum_days: parts[3].parse().unwrap_or(0),
-            maximum_days: parts[4].parse().unwrap_or(99999),
+            min_days: parts[3].parse().unwrap_or(0),
+            max_days: parts[4].parse().unwrap_or(99999),
             warn_days: parts[5].parse().unwrap_or(7),
             inactive_days: parts[6].parse().unwrap_or(-1),
             expire_date: parts[7].parse().unwrap_or(-1),
@@ -324,7 +324,7 @@ pub struct Session {
     pub uid: Uid,
     pub gid: Gid,
     pub username: String,
-    pub home_directory: String,
+    pub home_dir: String,
     pub login_time: u64,
 }
 
@@ -337,7 +337,7 @@ pub fn new() -> Self {
             uid: 0,
             gid: 0,
             username: String::new(),
-            home_directory: String::from("/"),
+            home_dir: String::from("/"),
             login_time: 0,
         }
     }
@@ -386,7 +386,7 @@ pub fn new() -> Self {
             uid: 1000,
             gid: USERS_GID,
             gecos: String::from("Guest User"),
-            home_directory: String::from("/home/guest"),
+            home_dir: String::from("/home/guest"),
             shell: String::from("/bin/tsh"),
         };
         let guest_shadow = ShadowEntry::new("guest", "guest");
@@ -599,8 +599,8 @@ pub fn login(username: &str, password: &str) -> Result<(), &'static str> {
         s.uid = user.uid;
         s.gid = user.gid;
         s.username = user.username.clone();
-        s.home_directory = user.home_directory.clone();
-        s.login_time = crate::time::uptime_mouse();
+        s.home_dir = user.home_dir.clone();
+        s.login_time = crate::time::uptime_ms();
     }
     
     Ok(())
@@ -614,7 +614,7 @@ pub fn logout() {
         s.uid = 0;
         s.gid = 0;
         s.username.clear();
-        s.home_directory = String::from("/");
+        s.home_dir = String::from("/");
         s.login_time = 0;
     }
 }
@@ -680,7 +680,7 @@ pub fn list_users() -> Vec<(String, Uid, Gid, String)> {
 /// Get home directory for user
 pub fn get_home_directory(username: &str) -> Option<String> {
     let db = USER_DB.lock();
-    db.as_ref()?.get_user(username).map(|u| u.home_directory.clone())
+    db.as_ref()?.get_user(username).map(|u| u.home_dir.clone())
 }
 
 /// Display login prompt and handle authentication

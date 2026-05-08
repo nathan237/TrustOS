@@ -10,284 +10,284 @@ use alloc::collections::BTreeMap;
 
 
 
-pub const BFS_: u32 = 0;
-pub const CTD_: u32 = 1;
-pub const BFU_: u32 = 2;
-pub const CTE_: u32 = 3;
-pub const AHW_: u32 = 4;
-pub const CSZ_: u32 = 5;
-pub const BFQ_: u32 = 6;
-pub const CTC_: u32 = 7;
-pub const CTB_: u32 = 8;
-pub const BFT_: u32 = 9;
-pub const BFR_: u32 = 11;
-pub const CTA_: u32 = 14;
-pub const CSV_: u32 = 15;
-pub const CSW_: u32 = 0x6FFFFFF6;
-pub const CSY_: u32 = 0x6FFFFFFF;
-pub const CSX_: u32 = 0x6FFFFFFE;
+pub const BHW_: u32 = 0;
+pub const CWU_: u32 = 1;
+pub const BHY_: u32 = 2;
+pub const CWV_: u32 = 3;
+pub const AJT_: u32 = 4;
+pub const CWQ_: u32 = 5;
+pub const BHU_: u32 = 6;
+pub const CWT_: u32 = 7;
+pub const CWS_: u32 = 8;
+pub const BHX_: u32 = 9;
+pub const BHV_: u32 = 11;
+pub const CWR_: u32 = 14;
+pub const CWM_: u32 = 15;
+pub const CWN_: u32 = 0x6FFFFFF6;
+pub const CWP_: u32 = 0x6FFFFFFF;
+pub const CWO_: u32 = 0x6FFFFFFE;
 
 
 
-pub const CSU_: u64 = 0x1;
-pub const BFO_: u64 = 0x2;
-pub const BFP_: u64 = 0x4;
-pub const CSS_: u64 = 0x10;
-pub const CST_: u64 = 0x20;
+pub const CWL_: u64 = 0x1;
+pub const BHS_: u64 = 0x2;
+pub const BHT_: u64 = 0x4;
+pub const CWJ_: u64 = 0x10;
+pub const CWK_: u64 = 0x20;
 
 
 
-pub const CUH_: u8 = 0;
-pub const CUG_: u8 = 1;
-pub const CUI_: u8 = 2;
+pub const CXZ_: u8 = 0;
+pub const CXY_: u8 = 1;
+pub const CYA_: u8 = 2;
 
-pub const CUP_: u8 = 0;
-pub const BGN_: u8 = 1;
-pub const BGM_: u8 = 2;
-pub const CUQ_: u8 = 3;
-pub const CUO_: u8 = 4;
-
-
-
-pub const IU_: u32 = 1;
-pub const AGT_: u32 = 2;
-pub const WL_: u32 = 3;
-pub const BDR_: u32 = 4;
-pub const CMM_: u32 = 0x6474E550;
-pub const BDQ_: u32 = 0x6474E551;
-pub const BDP_: u32 = 0x6474E552;
+pub const CYH_: u8 = 0;
+pub const BIR_: u8 = 1;
+pub const BIQ_: u8 = 2;
+pub const CYI_: u8 = 3;
+pub const CYG_: u8 = 4;
 
 
 
-pub const SU_: i64 = 0;
-pub const ST_: i64 = 1;
-pub const AQU_: i64 = 3;
-pub const AQT_: i64 = 4;
-pub const ABO_: i64 = 5;
-pub const ABP_: i64 = 6;
-pub const ABK_: i64 = 7;
-pub const ABM_: i64 = 8;
-pub const ABL_: i64 = 9;
-pub const ABN_: i64 = 10;
-pub const ABI_: i64 = 12;
-pub const ABG_: i64 = 13;
-pub const AQW_: i64 = 14;
-pub const AQV_: i64 = 15;
-pub const BSS_: i64 = 16;
-pub const ABJ_: i64 = 23;
-pub const BSJ_: i64 = 24;
-pub const BSR_: i64 = 29;
-pub const ABH_: i64 = 30;
-pub const BSN_: i64 = 0x6FFFFEF5;
-pub const BST_: i64 = 0x6FFFFFFE;
-pub const BSU_: i64 = 0x6FFFFFFF;
+pub const JM_: u32 = 1;
+pub const AIN_: u32 = 2;
+pub const XU_: u32 = 3;
+pub const BFU_: u32 = 4;
+pub const CPV_: u32 = 0x6474E550;
+pub const BFT_: u32 = 0x6474E551;
+pub const BFS_: u32 = 0x6474E552;
+
+
+
+pub const UB_: i64 = 0;
+pub const UA_: i64 = 1;
+pub const ASX_: i64 = 3;
+pub const ASW_: i64 = 4;
+pub const ADE_: i64 = 5;
+pub const ADF_: i64 = 6;
+pub const ADA_: i64 = 7;
+pub const ADC_: i64 = 8;
+pub const ADB_: i64 = 9;
+pub const ADD_: i64 = 10;
+pub const ACY_: i64 = 12;
+pub const ACW_: i64 = 13;
+pub const ASZ_: i64 = 14;
+pub const ASY_: i64 = 15;
+pub const BVO_: i64 = 16;
+pub const ACZ_: i64 = 23;
+pub const BVF_: i64 = 24;
+pub const BVN_: i64 = 29;
+pub const ACX_: i64 = 30;
+pub const BVJ_: i64 = 0x6FFFFEF5;
+pub const BVP_: i64 = 0x6FFFFFFE;
+pub const BVQ_: i64 = 0x6FFFFFFF;
 
 
 
 
 #[derive(Debug, Clone)]
-pub struct Ga {
+pub struct Ct {
     
     pub index: usize,
     
-    pub j: String,
+    pub name: String,
     
-    pub dbx: u32,
+    pub sh_type: u32,
     
     pub flags: u64,
     
-    pub ag: u64,
+    pub addr: u64,
     
-    pub l: u64,
+    pub offset: u64,
     
-    pub aw: u64,
+    pub size: u64,
     
-    pub arl: u32,
+    pub link: u32,
     
-    pub co: u32,
+    pub info: u32,
     
-    pub mub: u64,
+    pub addralign: u64,
     
-    pub isx: u64,
+    pub entsize: u64,
 }
 
-impl Ga {
-    pub fn ddc(&self) -> &'static str {
-        match self.dbx {
-            BFS_ => "NULL",
-            CTD_ => "PROGBITS",
-            BFU_ => "SYMTAB",
-            CTE_ => "STRTAB",
-            AHW_ => "RELA",
-            CSZ_ => "HASH",
-            BFQ_ => "DYNAMIC",
-            CTC_ => "NOTE",
-            CTB_ => "NOBITS",
-            BFT_ => "REL",
-            BFR_ => "DYNSYM",
-            CTA_ => "INIT_ARRAY",
-            CSV_ => "FINI_ARRAY",
-            CSW_ => "GNU_HASH",
-            CSY_ => "GNU_VERSYM",
-            CSX_ => "GNU_VERNEED",
+impl Ct {
+    pub fn type_name(&self) -> &'static str {
+        match self.sh_type {
+            BHW_ => "NULL",
+            CWU_ => "PROGBITS",
+            BHY_ => "SYMTAB",
+            CWV_ => "STRTAB",
+            AJT_ => "RELA",
+            CWQ_ => "HASH",
+            BHU_ => "DYNAMIC",
+            CWT_ => "NOTE",
+            CWS_ => "NOBITS",
+            BHX_ => "REL",
+            BHV_ => "DYNSYM",
+            CWR_ => "INIT_ARRAY",
+            CWM_ => "FINI_ARRAY",
+            CWN_ => "GNU_HASH",
+            CWP_ => "GNU_VERSYM",
+            CWO_ => "GNU_VERNEED",
             _ => "UNKNOWN",
         }
     }
 
-    pub fn kwm(&self) -> String {
-        let mut e = String::new();
-        if self.flags & CSU_ != 0 { e.push('W'); }
-        if self.flags & BFO_ != 0 { e.push('A'); }
-        if self.flags & BFP_ != 0 { e.push('X'); }
-        if self.flags & CSS_ != 0 { e.push('M'); }
-        if self.flags & CST_ != 0 { e.push('S'); }
-        if e.is_empty() { e.push('-'); }
-        e
+    pub fn flags_string(&self) -> String {
+        let mut j = String::new();
+        if self.flags & CWL_ != 0 { j.push('W'); }
+        if self.flags & BHS_ != 0 { j.push('A'); }
+        if self.flags & BHT_ != 0 { j.push('X'); }
+        if self.flags & CWJ_ != 0 { j.push('M'); }
+        if self.flags & CWK_ != 0 { j.push('S'); }
+        if j.is_empty() { j.push('-'); }
+        j
     }
 
     
-    pub fn clc(&self) -> bool {
-        self.flags & BFP_ != 0
+    pub fn is_executable(&self) -> bool {
+        self.flags & BHT_ != 0
     }
 
     
-    pub fn lfv(&self) -> bool {
-        self.flags & BFO_ != 0
+    pub fn is_alloc(&self) -> bool {
+        self.flags & BHS_ != 0
     }
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Go {
+pub struct Cy {
     
-    pub j: String,
+    pub name: String,
     
-    pub bn: u64,
+    pub value: u64,
     
-    pub aw: u64,
+    pub size: u64,
     
-    pub gtt: u8,
+    pub sym_type: u8,
     
-    pub kdk: u8,
+    pub binding: u8,
     
-    pub pyi: u8,
+    pub jqe: u8,
     
-    pub phd: u16,
+    pub section_index: u16,
 }
 
-impl Go {
-    pub fn ddc(&self) -> &'static str {
-        match self.gtt {
-            CUP_ => "NOTYPE",
-            BGN_ => "OBJECT",
-            BGM_ => "FUNC",
-            CUQ_ => "SECTION",
-            CUO_ => "FILE",
+impl Cy {
+    pub fn type_name(&self) -> &'static str {
+        match self.sym_type {
+            CYH_ => "NOTYPE",
+            BIR_ => "OBJECT",
+            BIQ_ => "FUNC",
+            CYI_ => "SECTION",
+            CYG_ => "FILE",
             _ => "UNKNOWN",
         }
     }
 
-    pub fn qpo(&self) -> &'static str {
-        match self.kdk {
-            CUH_ => "LOCAL",
-            CUG_ => "GLOBAL",
-            CUI_ => "WEAK",
+    pub fn binding_name(&self) -> &'static str {
+        match self.binding {
+            CXZ_ => "LOCAL",
+            CXY_ => "GLOBAL",
+            CYA_ => "WEAK",
             _ => "?",
         }
     }
 
     
-    pub fn txm(&self) -> bool {
-        self.gtt == BGM_
+    pub fn is_function(&self) -> bool {
+        self.sym_type == BIQ_
     }
 
     
-    pub fn yzt(&self) -> bool {
-        self.gtt == BGN_
+    pub fn qms(&self) -> bool {
+        self.sym_type == BIR_
     }
 
     
-    pub fn ofu(&self) -> bool {
-        self.phd != 0 && self.bn != 0
+    pub fn is_defined(&self) -> bool {
+        self.section_index != 0 && self.value != 0
     }
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Qm {
+pub struct Gz {
     
-    pub bku: u32,
+    pub p_type: u32,
     
     pub flags: u32,
     
-    pub l: u64,
+    pub offset: u64,
     
-    pub uy: u64,
+    pub vaddr: u64,
     
-    pub otp: u64,
+    pub itf: u64,
     
-    pub hjh: u64,
+    pub filesz: u64,
     
-    pub jfv: u64,
+    pub memsz: u64,
     
     pub align: u64,
 }
 
-impl Qm {
-    pub fn ddc(&self) -> &'static str {
-        match self.bku {
-            IU_ => "LOAD",
-            AGT_ => "DYNAMIC",
-            WL_ => "INTERP",
-            BDR_ => "NOTE",
-            CMM_ => "GNU_EH_FRAME",
-            BDQ_ => "GNU_STACK",
-            BDP_ => "GNU_RELRO",
+impl Gz {
+    pub fn type_name(&self) -> &'static str {
+        match self.p_type {
+            JM_ => "LOAD",
+            AIN_ => "DYNAMIC",
+            XU_ => "INTERP",
+            BFU_ => "NOTE",
+            CPV_ => "GNU_EH_FRAME",
+            BFT_ => "GNU_STACK",
+            BFS_ => "GNU_RELRO",
             6 => "PHDR",
             _ => "UNKNOWN",
         }
     }
 
-    pub fn kwm(&self) -> String {
-        let mut e = String::new();
-        e.push(if self.flags & 4 != 0 { 'R' } else { '-' });
-        e.push(if self.flags & 2 != 0 { 'W' } else { '-' });
-        e.push(if self.flags & 1 != 0 { 'X' } else { '-' });
-        e
+    pub fn flags_string(&self) -> String {
+        let mut j = String::new();
+        j.push(if self.flags & 4 != 0 { 'R' } else { '-' });
+        j.push(if self.flags & 2 != 0 { 'W' } else { '-' });
+        j.push(if self.flags & 1 != 0 { 'X' } else { '-' });
+        j
     }
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Abg {
-    pub ll: i64,
-    pub bn: u64,
+pub struct Lo {
+    pub tag: i64,
+    pub value: u64,
 }
 
-impl Abg {
-    pub fn zqx(&self) -> &'static str {
-        match self.ll {
-            SU_ => "NULL",
-            ST_ => "NEEDED",
-            AQU_ => "PLTGOT",
-            AQT_ => "HASH",
-            ABO_ => "STRTAB",
-            ABP_ => "SYMTAB",
-            ABK_ => "RELA",
-            ABM_ => "RELASZ",
-            ABL_ => "RELAENT",
-            ABN_ => "STRSZ",
-            ABI_ => "INIT",
-            ABG_ => "FINI",
-            AQW_ => "SONAME",
-            AQV_ => "RPATH",
-            ABJ_ => "JMPREL",
-            BSJ_ => "BIND_NOW",
-            BSR_ => "RUNPATH",
-            ABH_ => "FLAGS",
-            BSN_ => "GNU_HASH",
-            BST_ => "VERNEED",
-            BSU_ => "VERNEEDNUM",
+impl Lo {
+    pub fn qys(&self) -> &'static str {
+        match self.tag {
+            UB_ => "NULL",
+            UA_ => "NEEDED",
+            ASX_ => "PLTGOT",
+            ASW_ => "HASH",
+            ADE_ => "STRTAB",
+            ADF_ => "SYMTAB",
+            ADA_ => "RELA",
+            ADC_ => "RELASZ",
+            ADB_ => "RELAENT",
+            ADD_ => "STRSZ",
+            ACY_ => "INIT",
+            ACW_ => "FINI",
+            ASZ_ => "SONAME",
+            ASY_ => "RPATH",
+            ACZ_ => "JMPREL",
+            BVF_ => "BIND_NOW",
+            BVN_ => "RUNPATH",
+            ACX_ => "FLAGS",
+            BVJ_ => "GNU_HASH",
+            BVP_ => "VERNEED",
+            BVQ_ => "VERNEEDNUM",
             _ => "?",
         }
     }
@@ -295,22 +295,22 @@ impl Abg {
 
 
 #[derive(Debug, Clone)]
-pub struct Aef {
+pub struct Mz {
     
-    pub l: u64,
+    pub offset: u64,
     
-    pub hyf: u32,
+    pub rtype: u32,
     
-    pub jrx: u32,
+    pub fbw: u32,
     
-    pub fcn: i64,
+    pub addend: i64,
     
-    pub ezj: String,
+    pub sym_name: String,
 }
 
-impl Aef {
-    pub fn ddc(&self) -> &'static str {
-        match self.hyf {
+impl Mz {
+    pub fn type_name(&self) -> &'static str {
+        match self.rtype {
             0 => "R_X86_64_NONE",
             1 => "R_X86_64_64",
             2 => "R_X86_64_PC32",
@@ -327,167 +327,167 @@ impl Aef {
 
 
 #[derive(Debug, Clone)]
-pub struct Abr {
+pub struct Ma {
     
-    pub l: u64,
+    pub offset: u64,
     
-    pub uy: Option<u64>,
+    pub vaddr: Option<u64>,
     
-    pub ca: String,
+    pub content: String,
     
-    pub ava: String,
+    pub section: String,
 }
 
 
 
 
 #[derive(Debug, Clone)]
-pub struct Aro {
+pub struct Rw {
     
     pub class: &'static str,
     
-    pub f: &'static str,
+    pub data: &'static str,
     
-    pub uzl: &'static str,
+    pub osabi: &'static str,
     
-    pub gfz: &'static str,
+    pub elf_type: &'static str,
     
-    pub czk: &'static str,
+    pub machine: &'static str,
     
-    pub bt: u64,
+    pub entry: u64,
     
-    pub ltu: u64,
+    pub gmx: u64,
     
-    pub jpz: u64,
+    pub shoff: u64,
     
-    pub ltt: u16,
+    pub gmw: u16,
     
-    pub jpy: u16,
+    pub shnum: u16,
     
-    pub jqe: u16,
+    pub shstrndx: u16,
     
-    pub yy: usize,
+    pub file_size: usize,
 }
 
 
 
 
 #[derive(Debug)]
-pub struct Abq {
+pub struct Lz {
     
-    pub co: Aro,
+    pub info: Rw,
     
-    pub dku: Vec<Qm>,
+    pub programs: Vec<Gz>,
     
-    pub aeo: Vec<Ga>,
+    pub sections: Vec<Ct>,
     
-    pub bot: Vec<Go>,
+    pub symbols: Vec<Cy>,
     
-    pub dqj: Vec<Go>,
+    pub dynamic_symbols: Vec<Cy>,
     
-    pub hhn: Vec<Abg>,
+    pub dynamic: Vec<Lo>,
     
-    pub bwp: Vec<Aef>,
+    pub relocations: Vec<Mz>,
     
-    pub pd: Vec<Abr>,
+    pub strings: Vec<Ma>,
     
     pub interpreter: Option<String>,
     
-    pub djt: Vec<String>,
+    pub needed_libs: Vec<String>,
     
-    pub blw: BTreeMap<u64, String>,
+    pub addr_to_symbol: BTreeMap<u64, String>,
     
-    ozm: usize,
+    raw_data_len: usize,
 }
 
-impl Abq {
+impl Lz {
     
-    pub fn zma(&self, j: &str) -> Option<&Ga> {
-        self.aeo.iter().du(|e| e.j == j)
+    pub fn qva(&self, name: &str) -> Option<&Ct> {
+        self.sections.iter().find(|j| j.name == name)
     }
 
     
-    pub fn ioq(&self) -> Vec<&Ga> {
-        self.aeo.iter().hi(|e| e.clc()).collect()
+    pub fn code_sections(&self) -> Vec<&Ct> {
+        self.sections.iter().filter(|j| j.is_executable()).collect()
     }
 
     
-    pub fn ajb(&self) -> Vec<&Go> {
-        let mut hks: Vec<&Go> = self.bot.iter()
-            .rh(self.dqj.iter())
-            .hi(|e| e.txm() && e.ofu())
+    pub fn functions(&self) -> Vec<&Cy> {
+        let mut dqj: Vec<&Cy> = self.symbols.iter()
+            .chain(self.dynamic_symbols.iter())
+            .filter(|j| j.is_function() && j.is_defined())
             .collect();
-        hks.bxf(|e| e.bn);
-        hks.ruy(|e| e.bn);
-        hks
+        dqj.sort_by_key(|j| j.value);
+        dqj.dedup_by_key(|j| j.value);
+        dqj
     }
 
     
-    pub fn zql(&self, ag: u64) -> Option<&str> {
-        self.blw.get(&ag).map(|e| e.as_str())
+    pub fn qyi(&self, addr: u64) -> Option<&str> {
+        self.addr_to_symbol.get(&addr).map(|j| j.as_str())
     }
 
     
-    pub fn wfz(&self, ag: u64) -> Option<&Ga> {
-        self.aeo.iter().du(|e| {
-            e.lfv() && ag >= e.ag && ag < e.ag + e.aw
+    pub fn section_for_addr(&self, addr: u64) -> Option<&Ct> {
+        self.sections.iter().find(|j| {
+            j.is_alloc() && addr >= j.addr && addr < j.addr + j.size
         })
     }
 
     
-    pub fn yy(&self) -> usize {
-        self.ozm
+    pub fn file_size(&self) -> usize {
+        self.raw_data_len
     }
 }
 
 
 
 
-pub fn vcd(f: &[u8]) -> Result<Abq, &'static str> {
-    if f.len() < 64 {
+pub fn nqd(data: &[u8]) -> Result<Lz, &'static str> {
+    if data.len() < 64 {
         return Err("File too small for ELF header");
     }
-    if &f[0..4] != b"\x7FELF" {
+    if &data[0..4] != b"\x7FELF" {
         return Err("Not an ELF file (bad magic)");
     }
 
     
-    let class = f[4];
+    let class = data[4];
     if class != 2 {
         return Err("Not a 64-bit ELF");
     }
-    let njl = f[5];
-    if njl != 1 {
+    let hqp = data[5];
+    if hqp != 1 {
         return Err("Not little-endian (unsupported)");
     }
 
-    let ceh = fap(f, 16);
-    let cqb = fap(f, 18);
-    let cxe = biq(f, 24);
-    let epo = biq(f, 32);
-    let ksl = biq(f, 40);
-    let fhh = fap(f, 54);
-    let dqk = fap(f, 56);
-    let nov = fap(f, 58);
-    let ksk = fap(f, 60);
-    let ksm = fap(f, 62);
+    let e_type = ceu(data, 16);
+    let e_machine = ceu(data, 18);
+    let e_entry = afv(data, 24);
+    let e_phoff = afv(data, 32);
+    let ftx = afv(data, 40);
+    let e_phentsize = ceu(data, 54);
+    let e_phnum = ceu(data, 56);
+    let hur = ceu(data, 58);
+    let ftv = ceu(data, 60);
+    let fty = ceu(data, 62);
 
-    let co = Aro {
+    let info = Rw {
         class: "ELF64",
-        f: if njl == 1 { "Little Endian" } else { "Big Endian" },
-        uzl: match f[7] {
+        data: if hqp == 1 { "Little Endian" } else { "Big Endian" },
+        osabi: match data[7] {
             0 => "UNIX System V",
             3 => "Linux",
             _ => "Unknown",
         },
-        gfz: match ceh {
+        elf_type: match e_type {
             1 => "REL (Relocatable)",
             2 => "EXEC (Executable)",
             3 => "DYN (Shared/PIE)",
             4 => "CORE (Core dump)",
             _ => "Unknown",
         },
-        czk: match cqb {
+        machine: match e_machine {
             62 => "x86-64",
             3 => "x86 (i386)",
             40 => "ARM",
@@ -495,395 +495,395 @@ pub fn vcd(f: &[u8]) -> Result<Abq, &'static str> {
             243 => "RISC-V",
             _ => "Unknown",
         },
-        bt: cxe,
-        ltu: epo,
-        jpz: ksl,
-        ltt: dqk,
-        jpy: ksk,
-        jqe: ksm,
-        yy: f.len(),
+        entry: e_entry,
+        gmx: e_phoff,
+        shoff: ftx,
+        gmw: e_phnum,
+        shnum: ftv,
+        shstrndx: fty,
+        file_size: data.len(),
     };
 
     
-    let mut dku = Vec::new();
+    let mut programs = Vec::new();
     let mut interpreter = None;
 
-    for a in 0..dqk as usize {
-        let dz = epo as usize + a * fhh as usize;
-        if dz + 56 > f.len() { break; }
+    for i in 0..e_phnum as usize {
+        let off = e_phoff as usize + i * e_phentsize as usize;
+        if off + 56 > data.len() { break; }
 
-        let bku = fxs(f, dz);
-        let flags = fxs(f, dz + 4);
-        let l = biq(f, dz + 8);
-        let uy = biq(f, dz + 16);
-        let otp = biq(f, dz + 24);
-        let hjh = biq(f, dz + 32);
-        let jfv = biq(f, dz + 40);
-        let align = biq(f, dz + 48);
+        let p_type = csd(data, off);
+        let flags = csd(data, off + 4);
+        let offset = afv(data, off + 8);
+        let vaddr = afv(data, off + 16);
+        let itf = afv(data, off + 24);
+        let filesz = afv(data, off + 32);
+        let memsz = afv(data, off + 40);
+        let align = afv(data, off + 48);
 
         
-        if bku == WL_ {
-            let ay = l as usize;
-            let ci = (l + hjh) as usize;
-            if ci <= f.len() {
-                let e = &f[ay..ci];
-                let len = e.iter().qf(|&o| o == 0).unwrap_or(e.len());
-                interpreter = Some(String::from(core::str::jg(&e[..len]).unwrap_or("?")));
+        if p_type == XU_ {
+            let start = offset as usize;
+            let end = (offset + filesz) as usize;
+            if end <= data.len() {
+                let j = &data[start..end];
+                let len = j.iter().position(|&b| b == 0).unwrap_or(j.len());
+                interpreter = Some(String::from(core::str::from_utf8(&j[..len]).unwrap_or("?")));
             }
         }
 
-        dku.push(Qm {
-            bku, flags, l, uy, otp, hjh, jfv, align,
+        programs.push(Gz {
+            p_type, flags, offset, vaddr, itf, filesz, memsz, align,
         });
     }
 
     
-    let aeo = vdn(f, ksl as usize, nov as usize, ksk as usize, ksm as usize);
+    let sections = nrc(data, ftx as usize, hur as usize, ftv as usize, fty as usize);
 
     
-    let bot = ouo(f, &aeo, BFU_);
-    let dqj = ouo(f, &aeo, BFR_);
+    let symbols = ity(data, &sections, BHY_);
+    let dynamic_symbols = ity(data, &sections, BHV_);
 
     
-    let mut blw = BTreeMap::new();
-    for aaw in bot.iter().rh(dqj.iter()) {
-        if aaw.ofu() && !aaw.j.is_empty() {
-            blw.insert(aaw.bn, aaw.j.clone());
+    let mut addr_to_symbol = BTreeMap::new();
+    for sym in symbols.iter().chain(dynamic_symbols.iter()) {
+        if sym.is_defined() && !sym.name.is_empty() {
+            addr_to_symbol.insert(sym.value, sym.name.clone());
         }
     }
 
     
-    let (hhn, djt) = lsi(f, &aeo);
+    let (dynamic, needed_libs) = gmh(data, &sections);
 
     
-    let bwp = vdh(f, &aeo, &dqj);
+    let relocations = nqy(data, &sections, &dynamic_symbols);
 
     
-    let pd = sqc(f, &aeo, &dku);
+    let strings = lto(data, &sections, &programs);
 
-    Ok(Abq {
-        co,
-        dku,
-        aeo,
-        bot,
-        dqj,
-        hhn,
-        bwp,
-        pd,
+    Ok(Lz {
+        info,
+        programs,
+        sections,
+        symbols,
+        dynamic_symbols,
+        dynamic,
+        relocations,
+        strings,
         interpreter,
-        djt,
-        blw,
-        ozm: f.len(),
+        needed_libs,
+        addr_to_symbol,
+        raw_data_len: data.len(),
     })
 }
 
 
 
-fn vdn(f: &[u8], jpz: usize, wmt: usize, jpy: usize, jqe: usize) -> Vec<Ga> {
-    if jpz == 0 || jpy == 0 {
+fn nrc(data: &[u8], shoff: usize, shentsize: usize, shnum: usize, shstrndx: usize) -> Vec<Ct> {
+    if shoff == 0 || shnum == 0 {
         return Vec::new();
     }
 
     
-    let mut jle: Vec<(u32, u32, u64, u64, u64, u64, u32, u32, u64, u64)> = Vec::new();
-    for a in 0..jpy {
-        let dz = jpz + a * wmt;
-        if dz + 64 > f.len() { break; }
+    let mut exs: Vec<(u32, u32, u64, u64, u64, u64, u32, u32, u64, u64)> = Vec::new();
+    for i in 0..shnum {
+        let off = shoff + i * shentsize;
+        if off + 64 > data.len() { break; }
 
-        jle.push((
-            fxs(f, dz),           
-            fxs(f, dz + 4),       
-            biq(f, dz + 8),       
-            biq(f, dz + 16),      
-            biq(f, dz + 24),      
-            biq(f, dz + 32),      
-            fxs(f, dz + 40),      
-            fxs(f, dz + 44),      
-            biq(f, dz + 48),      
-            biq(f, dz + 56),      
+        exs.push((
+            csd(data, off),           
+            csd(data, off + 4),       
+            afv(data, off + 8),       
+            afv(data, off + 16),      
+            afv(data, off + 24),      
+            afv(data, off + 32),      
+            csd(data, off + 40),      
+            csd(data, off + 44),      
+            afv(data, off + 48),      
+            afv(data, off + 56),      
         ));
     }
 
     
-    let wns = if jqe < jle.len() {
-        let (_, _, _, _, ppd, mhy, _, _, _, _) = jle[jqe];
-        let ay = ppd as usize;
-        let ci = (ppd + mhy) as usize;
-        if ci <= f.len() { Some(&f[ay..ci]) } else { None }
+    let osh = if shstrndx < exs.len() {
+        let (_, _, _, _, strtab_off, strtab_size, _, _, _, _) = exs[shstrndx];
+        let start = strtab_off as usize;
+        let end = (strtab_off + strtab_size) as usize;
+        if end <= data.len() { Some(&data[start..end]) } else { None }
     } else {
         None
     };
 
     
-    let mut aeo = Vec::new();
-    for (a, &(pjv, dbx, flags, ag, l, aw, arl, co, mub, isx)) in jle.iter().cf() {
-        let j = if let Some(ezd) = wns {
-            lxt(ezd, pjv as usize)
+    let mut sections = Vec::new();
+    for (i, &(sh_name, sh_type, flags, addr, offset, size, link, info, addralign, entsize)) in exs.iter().enumerate() {
+        let name = if let Some(cdz) = osh {
+            gqg(cdz, sh_name as usize)
         } else {
-            format!("section_{}", a)
+            format!("section_{}", i)
         };
 
-        aeo.push(Ga {
-            index: a,
-            j,
-            dbx,
+        sections.push(Ct {
+            index: i,
+            name,
+            sh_type,
             flags,
-            ag,
-            l,
-            aw,
-            arl,
-            co,
-            mub,
-            isx,
+            addr,
+            offset,
+            size,
+            link,
+            info,
+            addralign,
+            entsize,
         });
     }
 
-    aeo
+    sections
 }
 
-fn ouo(f: &[u8], aeo: &[Ga], gud: u32) -> Vec<Go> {
-    let mut bot = Vec::new();
+fn ity(data: &[u8], sections: &[Ct], table_type: u32) -> Vec<Cy> {
+    let mut symbols = Vec::new();
 
     
-    let gtu = match aeo.iter().du(|e| e.dbx == gud) {
-        Some(e) => e,
-        None => return bot,
+    let dfc = match sections.iter().find(|j| j.sh_type == table_type) {
+        Some(j) => j,
+        None => return symbols,
     };
 
     
-    let ppe = if (gtu.arl as usize) < aeo.len() {
-        &aeo[gtu.arl as usize]
+    let jje = if (dfc.link as usize) < sections.len() {
+        &sections[dfc.link as usize]
     } else {
-        return bot;
+        return symbols;
     };
 
-    let iby = ppe.l as usize;
-    let ppc = iby + ppe.aw as usize;
-    if ppc > f.len() { return bot; }
-    let ezd = &f[iby..ppc];
+    let eam = jje.offset as usize;
+    let jjd = eam + jje.size as usize;
+    if jjd > data.len() { return symbols; }
+    let cdz = &data[eam..jjd];
 
-    let www = gtu.l as usize;
-    let mil = if gtu.isx > 0 {
-        gtu.aw / gtu.isx
+    let ozk = dfc.offset as usize;
+    let gwv = if dfc.entsize > 0 {
+        dfc.size / dfc.entsize
     } else {
         0
     };
 
-    for a in 0..mil as usize {
-        let dz = www + a * 24; 
-        if dz + 24 > f.len() { break; }
+    for i in 0..gwv as usize {
+        let off = ozk + i * 24; 
+        if off + 24 > data.len() { break; }
 
-        let pnm = fxs(f, dz);
-        let mhf = f[dz + 4];
-        let pno = f[dz + 5];
-        let pnp = fap(f, dz + 6);
-        let pnr = biq(f, dz + 8);
-        let gsz = biq(f, dz + 16);
+        let jhy = csd(data, off);
+        let gwa = data[off + 4];
+        let jhz = data[off + 5];
+        let jia = ceu(data, off + 6);
+        let jib = afv(data, off + 8);
+        let st_size = afv(data, off + 16);
 
-        let j = lxt(ezd, pnm as usize);
-        let gtt = mhf & 0x0F;
-        let kdk = mhf >> 4;
-        let pyi = pno & 0x03;
+        let name = gqg(cdz, jhy as usize);
+        let sym_type = gwa & 0x0F;
+        let binding = gwa >> 4;
+        let jqe = jhz & 0x03;
 
-        bot.push(Go {
-            j,
-            bn: pnr,
-            aw: gsz,
-            gtt,
-            kdk,
-            pyi,
-            phd: pnp,
+        symbols.push(Cy {
+            name,
+            value: jib,
+            size: st_size,
+            sym_type,
+            binding,
+            jqe,
+            section_index: jia,
         });
     }
 
-    bot
+    symbols
 }
 
-fn lsi(f: &[u8], aeo: &[Ga]) -> (Vec<Abg>, Vec<String>) {
-    let mut ch = Vec::new();
-    let mut djt = Vec::new();
+fn gmh(data: &[u8], sections: &[Ct]) -> (Vec<Lo>, Vec<String>) {
+    let mut entries = Vec::new();
+    let mut needed_libs = Vec::new();
 
-    let ise = match aeo.iter().du(|e| e.dbx == BFQ_) {
-        Some(e) => e,
-        None => return (ch, djt),
+    let ekz = match sections.iter().find(|j| j.sh_type == BHU_) {
+        Some(j) => j,
+        None => return (entries, needed_libs),
     };
 
     
-    let shz = if (ise.arl as usize) < aeo.len() {
-        let e = &aeo[ise.arl as usize];
-        let ay = e.l as usize;
-        let ci = ay + e.aw as usize;
-        if ci <= f.len() { Some(&f[ay..ci]) } else { None }
+    let lna = if (ekz.link as usize) < sections.len() {
+        let j = &sections[ekz.link as usize];
+        let start = j.offset as usize;
+        let end = start + j.size as usize;
+        if end <= data.len() { Some(&data[start..end]) } else { None }
     } else {
         None
     };
 
-    let ay = ise.l as usize;
-    let az = ise.aw as usize / 16; 
+    let start = ekz.offset as usize;
+    let count = ekz.size as usize / 16; 
 
-    for a in 0..az {
-        let dz = ay + a * 16;
-        if dz + 16 > f.len() { break; }
+    for i in 0..count {
+        let off = start + i * 16;
+        if off + 16 > data.len() { break; }
 
-        let ll = ocu(f, dz);
-        let bn = biq(f, dz + 8);
+        let tag = ifj(data, off);
+        let value = afv(data, off + 8);
 
-        if ll == SU_ { break; }
+        if tag == UB_ { break; }
 
         
-        if ll == ST_ {
-            if let Some(ezd) = shz {
-                let j = lxt(ezd, bn as usize);
-                djt.push(j);
+        if tag == UA_ {
+            if let Some(cdz) = lna {
+                let name = gqg(cdz, value as usize);
+                needed_libs.push(name);
             }
         }
 
-        ch.push(Abg { ll, bn });
+        entries.push(Lo { tag, value });
     }
 
-    (ch, djt)
+    (entries, needed_libs)
 }
 
-fn vdh(f: &[u8], aeo: &[Ga], nor: &[Go]) -> Vec<Aef> {
-    let mut bwp = Vec::new();
+fn nqy(data: &[u8], sections: &[Ct], dynsyms: &[Cy]) -> Vec<Mz> {
+    let mut relocations = Vec::new();
 
-    for ava in aeo.iter() {
-        if ava.dbx != AHW_ && ava.dbx != BFT_ {
+    for section in sections.iter() {
+        if section.sh_type != AJT_ && section.sh_type != BHX_ {
             continue;
         }
 
-        let ay = ava.l as usize;
-        let ogs = ava.dbx == AHW_;
-        let acy = if ogs { 24 } else { 16 };
-        let az = ava.aw as usize / acy;
+        let start = section.offset as usize;
+        let iii = section.sh_type == AJT_;
+        let oi = if iii { 24 } else { 16 };
+        let count = section.size as usize / oi;
 
-        for a in 0..az {
-            let dz = ay + a * acy;
-            if dz + acy > f.len() { break; }
+        for i in 0..count {
+            let off = start + i * oi;
+            if off + oi > data.len() { break; }
 
-            let jla = biq(f, dz);
-            let hwk = biq(f, dz + 8);
-            let jky = if ogs { ocu(f, dz + 16) } else { 0 };
+            let r_offset = afv(data, off);
+            let r_info = afv(data, off + 8);
+            let r_addend = if iii { ifj(data, off + 16) } else { 0 };
 
-            let jrx = (hwk >> 32) as u32;
-            let hyf = (hwk & 0xFFFFFFFF) as u32;
+            let fbw = (r_info >> 32) as u32;
+            let rtype = (r_info & 0xFFFFFFFF) as u32;
 
-            let ezj = if (jrx as usize) < nor.len() {
-                nor[jrx as usize].j.clone()
+            let sym_name = if (fbw as usize) < dynsyms.len() {
+                dynsyms[fbw as usize].name.clone()
             } else {
                 String::new()
             };
 
-            bwp.push(Aef {
-                l: jla,
-                hyf,
-                jrx,
-                fcn: jky,
-                ezj,
+            relocations.push(Mz {
+                offset: r_offset,
+                rtype,
+                fbw,
+                addend: r_addend,
+                sym_name,
             });
         }
     }
 
-    bwp
+    relocations
 }
 
-fn sqc(f: &[u8], aeo: &[Ga], dku: &[Qm]) -> Vec<Abr> {
-    let mut pd = Vec::new();
+fn lto(data: &[u8], sections: &[Ct], programs: &[Gz]) -> Vec<Ma> {
+    let mut strings = Vec::new();
 
     
-    for ava in aeo.iter() {
-        if ava.dbx == BFS_ || ava.aw == 0 {
+    for section in sections.iter() {
+        if section.sh_type == BHW_ || section.size == 0 {
             continue;
         }
 
-        let ay = ava.l as usize;
-        let ci = ay + ava.aw as usize;
-        if ci > f.len() { continue; }
+        let start = section.offset as usize;
+        let end = start + section.size as usize;
+        if end > data.len() { continue; }
 
-        let wfy = &f[ay..ci];
-        let mut cv = String::new();
-        let mut ibw = 0usize;
+        let omr = &data[start..end];
+        let mut current = String::new();
+        let mut eal = 0usize;
 
-        for (a, &o) in wfy.iter().cf() {
-            if o >= 0x20 && o < 0x7F {
-                if cv.is_empty() {
-                    ibw = a;
+        for (i, &b) in omr.iter().enumerate() {
+            if b >= 0x20 && b < 0x7F {
+                if current.is_empty() {
+                    eal = i;
                 }
-                cv.push(o as char);
+                current.push(b as char);
             } else {
-                if cv.len() >= 4 {
-                    let azv = ay + ibw;
+                if current.len() >= 4 {
+                    let aaw = start + eal;
                     
-                    let uy = if ava.lfv() && ava.ag > 0 {
-                        Some(ava.ag + ibw as u64)
+                    let vaddr = if section.is_alloc() && section.addr > 0 {
+                        Some(section.addr + eal as u64)
                     } else {
                         None
                     };
 
-                    pd.push(Abr {
-                        l: azv as u64,
-                        uy,
-                        ca: cv.clone(),
-                        ava: ava.j.clone(),
+                    strings.push(Ma {
+                        offset: aaw as u64,
+                        vaddr,
+                        content: current.clone(),
+                        section: section.name.clone(),
                     });
                 }
-                cv.clear();
+                current.clear();
             }
         }
 
         
-        if cv.len() >= 4 {
-            let azv = ay + ibw;
-            let uy = if ava.lfv() && ava.ag > 0 {
-                Some(ava.ag + ibw as u64)
+        if current.len() >= 4 {
+            let aaw = start + eal;
+            let vaddr = if section.is_alloc() && section.addr > 0 {
+                Some(section.addr + eal as u64)
             } else {
                 None
             };
-            pd.push(Abr {
-                l: azv as u64,
-                uy,
-                ca: cv,
-                ava: ava.j.clone(),
+            strings.push(Ma {
+                offset: aaw as u64,
+                vaddr,
+                content: current,
+                section: section.name.clone(),
             });
         }
     }
 
     
-    pd.bxf(|e| e.l);
-    pd.ruy(|e| e.l);
+    strings.sort_by_key(|j| j.offset);
+    strings.dedup_by_key(|j| j.offset);
 
-    pd
+    strings
 }
 
 
 
-fn fap(f: &[u8], dz: usize) -> u16 {
-    if dz + 2 > f.len() { return 0; }
-    u16::dj([f[dz], f[dz + 1]])
+fn ceu(data: &[u8], off: usize) -> u16 {
+    if off + 2 > data.len() { return 0; }
+    u16::from_le_bytes([data[off], data[off + 1]])
 }
 
-fn fxs(f: &[u8], dz: usize) -> u32 {
-    if dz + 4 > f.len() { return 0; }
-    u32::dj([f[dz], f[dz + 1], f[dz + 2], f[dz + 3]])
+fn csd(data: &[u8], off: usize) -> u32 {
+    if off + 4 > data.len() { return 0; }
+    u32::from_le_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]])
 }
 
-fn biq(f: &[u8], dz: usize) -> u64 {
-    if dz + 8 > f.len() { return 0; }
-    u64::dj([
-        f[dz], f[dz + 1], f[dz + 2], f[dz + 3],
-        f[dz + 4], f[dz + 5], f[dz + 6], f[dz + 7],
+fn afv(data: &[u8], off: usize) -> u64 {
+    if off + 8 > data.len() { return 0; }
+    u64::from_le_bytes([
+        data[off], data[off + 1], data[off + 2], data[off + 3],
+        data[off + 4], data[off + 5], data[off + 6], data[off + 7],
     ])
 }
 
-fn ocu(f: &[u8], dz: usize) -> i64 {
-    biq(f, dz) as i64
+fn ifj(data: &[u8], off: usize) -> i64 {
+    afv(data, off) as i64
 }
 
-fn lxt(ezd: &[u8], l: usize) -> String {
-    if l >= ezd.len() {
+fn gqg(cdz: &[u8], offset: usize) -> String {
+    if offset >= cdz.len() {
         return String::new();
     }
-    let bf = &ezd[l..];
-    let len = bf.iter().qf(|&o| o == 0).unwrap_or(bf.len());
-    String::from(core::str::jg(&bf[..len]).unwrap_or(""))
+    let bytes = &cdz[offset..];
+    let len = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
+    String::from(core::str::from_utf8(&bytes[..len]).unwrap_or(""))
 }

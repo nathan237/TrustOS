@@ -44,7 +44,7 @@ pub struct XhciCapabilityRegs {
 // Implementation block — defines methods for the type above.
 impl XhciCapabilityRegs {
         // Public function — callable from other modules.
-pub fn maximum_slots(&self) -> u8 {
+pub fn max_slots(&self) -> u8 {
         (self.hcsparams1 & 0xFF) as u8
     }
     
@@ -54,7 +54,7 @@ pub fn maximum_intrs(&self) -> u16 {
     }
     
         // Public function — callable from other modules.
-pub fn maximum_ports(&self) -> u8 {
+pub fn max_ports(&self) -> u8 {
         ((self.hcsparams1 >> 24) & 0xFF) as u8
     }
     
@@ -146,9 +146,9 @@ pub fn new() -> Self {
     }
     
         // Public function — callable from other modules.
-pub fn link(next_ring_physical: u64) -> Self {
+pub fn link(next_ring_phys: u64) -> Self {
         Self {
-            parameter: next_ring_physical,
+            parameter: next_ring_phys,
             status: 0,
             control: (TRB_TYPE_LINK << 10) | TRB_CYCLE,
         }
@@ -300,17 +300,17 @@ pub struct XhciDevice {
     pub class: u8,
     pub subclass: u8,
     pub protocol: u8,
-    pub number_configs: u8,
-    pub maximum_packet_size: u16,
+    pub num_configs: u8,
+    pub max_packet_size: u16,
     pub manufacturer: String,
     pub product: String,
 }
 
 /// xHCI Controller
 pub struct XhciController {
-    pub base_physical: u64,
+    pub base_phys: u64,
     pub base_virt: u64,
-    pub capability_regs: *mut XhciCapabilityRegs,
+    pub cap_regs: *mut XhciCapabilityRegs,
     pub operation_regs: *mut XhciOperationRegs,
     pub doorbell_base: u64,
     pub runtime_base: u64,
@@ -320,14 +320,14 @@ pub struct XhciController {
     pub dcbaa_physical: u64,
     
     // Command Ring
-    pub command_ring: Box<CommandRing>,
-    pub command_ring_physical: u64,
-    pub command_enqueue: usize,
-    pub command_cycle: bool,
+    pub cmd_ring: Box<CommandRing>,
+    pub cmd_ring_phys: u64,
+    pub cmd_enqueue: usize,
+    pub cmd_cycle: bool,
     
     // Event Ring (for interrupter 0)
     pub event_ring: Box<[Trb; 256]>,
-    pub event_ring_physical: u64,
+    pub event_ring_phys: u64,
     pub erst: Box<[ErstEntry; 1]>,
     pub erst_physical: u64,
     pub event_dequeue: usize,
@@ -339,8 +339,8 @@ pub struct XhciController {
     // Detected devices
     pub devices: Vec<XhciDevice>,
     
-    pub maximum_slots: u8,
-    pub maximum_ports: u8,
+    pub max_slots: u8,
+    pub max_ports: u8,
     pub context_size: usize,
     pub initialized: bool,
 }
@@ -365,9 +365,9 @@ fn virt_to_physical(virt: u64) -> u64 {
 }
 
 // Public function — callable from other modules.
-pub fn physical_to_virt(physical: u64) -> u64 {
+pub fn physical_to_virt(phys: u64) -> u64 {
     let hhdm = crate::memory::hhdm_offset();
-    physical.wrapping_add(hhdm)
+    phys.wrapping_add(hhdm)
 }
 
 // ============================================================================
@@ -396,32 +396,32 @@ match crate::memory::map_mmio(bar0, 0x4000) {
     crate::serial_println!("[xHCI] Mapped to virt {:#x}", base_virt);
     
     // Read capability registers
-    let capability_regs = base_virt as *mut XhciCapabilityRegs;
-    let capability = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*capability_regs };
+    let cap_regs = base_virt as *mut XhciCapabilityRegs;
+    let cap = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { &*cap_regs };
     
-    let caplength = capability.caplength as u64;
-    let version = capability.hciversion;
-    let maximum_slots = capability.maximum_slots();
-    let maximum_ports = capability.maximum_ports();
-    let context_size = capability.context_size();
+    let caplength = cap.caplength as u64;
+    let version = cap.hciversion;
+    let max_slots = cap.max_slots();
+    let max_ports = cap.max_ports();
+    let context_size = cap.context_size();
     
     crate::serial_println!("[xHCI] Version: {}.{}", version >> 8, version & 0xFF);
     crate::serial_println!("[xHCI] Max slots: {}, Max ports: {}, Context size: {}", 
-        maximum_slots, maximum_ports, context_size);
+        max_slots, max_ports, context_size);
     
     // Get operational registers base
     let operation_base = base_virt + caplength;
     let operation_regs = operation_base as *mut XhciOperationRegs;
     
     // Get doorbell and runtime register bases
-    let doorbell_base = base_virt + (capability.dboff as u64);
-    let runtime_base = base_virt + (capability.rtsoff as u64);
+    let doorbell_base = base_virt + (cap.dboff as u64);
+    let runtime_base = base_virt + (cap.rtsoff as u64);
     
     // ---- xHCI BIOS/OS Handoff (USBLEGSUP) ----
     // Walk Extended Capabilities to find USB Legacy Support and claim ownership
     // before we halt/reset.  Without this, BIOS SMI handlers may interfere.
-    let xecp = ((capability.hccparams1 >> 16) & 0xFFFF) as u64;
+    let xecp = ((cap.hccparams1 >> 16) & 0xFFFF) as u64;
     if xecp != 0 {
         let mut ecap_pointer = base_virt + (xecp << 2);
         for _ in 0..32 {
@@ -518,35 +518,35 @@ unsafe { &mut *operation_regs };
     
     // Allocate DCBAA (Device Context Base Address Array)
     let mut dcbaa = Box::new([0u64; 256]);
-    let dcbaa_physical = virt_to_physical(dcbaa.as_pointer() as u64);
+    let dcbaa_physical = virt_to_physical(dcbaa.as_ptr() as u64);
     
     // Allocate Command Ring
-    let mut command_ring = Box::new(CommandRing { trbs: [Trb::new(); 256] });
-    let command_ring_physical = virt_to_physical(command_ring.trbs.as_pointer() as u64);
+    let mut cmd_ring = Box::new(CommandRing { trbs: [Trb::new(); 256] });
+    let cmd_ring_phys = virt_to_physical(cmd_ring.trbs.as_ptr() as u64);
     
     // Set up link TRB at end of command ring
-    command_ring.trbs[255] = Trb::link(command_ring_physical);
+    cmd_ring.trbs[255] = Trb::link(cmd_ring_phys);
     
     // Allocate Event Ring
     let event_ring = Box::new([Trb::new(); 256]);
-    let event_ring_physical = virt_to_physical(event_ring.as_pointer() as u64);
+    let event_ring_phys = virt_to_physical(event_ring.as_ptr() as u64);
     
     // Allocate Event Ring Segment Table
     let mut erst = Box::new([ErstEntry {
-        ring_base: event_ring_physical,
+        ring_base: event_ring_phys,
         ring_size: 256,
         _reserved: [0; 3],
     }]);
-    let erst_physical = virt_to_physical(erst.as_pointer() as u64);
+    let erst_physical = virt_to_physical(erst.as_ptr() as u64);
     
     // Configure controller
-    op.config = maximum_slots as u32;
+    op.config = max_slots as u32;
     
     // Set DCBAA pointer
     op.dcbaap = dcbaa_physical;
     
     // Set Command Ring Control Register (with cycle bit = 1)
-    op.crcr = command_ring_physical | 1;
+    op.crcr = cmd_ring_phys | 1;
     
     // Set up Interrupter 0
     let intr_regs = (runtime_base + 0x20) as *mut XhciIntrRegs;
@@ -555,7 +555,7 @@ unsafe { &mut *intr_regs };
     
     intr.erstsz = 1;  // One segment
     intr.erstba = erst_physical;
-    intr.erdp = event_ring_physical;
+    intr.erdp = event_ring_phys;
     intr.iman = 0;    // Disable interrupts (we'll poll)
     intr.imod = 0;
     
@@ -583,28 +583,28 @@ unsafe { &mut *intr_regs };
     
     // Create controller state
     let controller = XhciController {
-        base_physical: bar0,
+        base_phys: bar0,
         base_virt,
-        capability_regs,
+        cap_regs,
         operation_regs,
         doorbell_base,
         runtime_base,
         dcbaa,
         dcbaa_physical,
-        command_ring,
-        command_ring_physical,
-        command_enqueue: 0,
-        command_cycle: true,
+        cmd_ring,
+        cmd_ring_phys,
+        cmd_enqueue: 0,
+        cmd_cycle: true,
         event_ring,
-        event_ring_physical,
+        event_ring_phys,
         erst,
         erst_physical,
         event_dequeue: 0,
         event_cycle: true,
         device_contexts,
         devices: Vec::new(),
-        maximum_slots,
-        maximum_ports,
+        max_slots,
+        max_ports,
         context_size,
         initialized: true,
     };
@@ -614,14 +614,14 @@ unsafe { &mut *intr_regs };
     
     // Allocate scratchpad buffers (required by spec)
     {
-        let mut controller = CONTROLLER.lock();
-        if let Some(c) = controller.as_mut() {
+        let mut ctrl = CONTROLLER.lock();
+        if let Some(c) = ctrl.as_mut() {
             allocator_scratchpad_buffers(c);
         }
     }
     
     // Initialize per-slot ring storage
-    initialize_slot_rings(maximum_slots);
+    initialize_slot_rings(max_slots);
     
     // Enumerate root hub ports
     enumerate_ports();
@@ -634,21 +634,21 @@ unsafe { &mut *intr_regs };
 
 /// Enumerate root hub ports and detect connected devices
 fn enumerate_ports() {
-    let mut controller = CONTROLLER.lock();
+    let mut ctrl = CONTROLLER.lock();
     let controller = // Pattern matching — Rust's exhaustive branching construct.
-match controller.as_mut() {
+match ctrl.as_mut() {
         Some(c) => c,
         None => return,
     };
     
     let port_base = controller.base_virt + 
         (        // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*controller.capability_regs }.caplength as u64) + 0x400;
+unsafe { &*controller.cap_regs }.caplength as u64) + 0x400;
     
-    crate::serial_println!("[xHCI] Enumerating {} ports...", controller.maximum_ports);
+    crate::serial_println!("[xHCI] Enumerating {} ports...", controller.max_ports);
     
-    for port_number in 0..controller.maximum_ports {
-        let port_regs = (port_base + (port_number as u64 * 16)) as *mut XhciPortRegs;
+    for port_num in 0..controller.max_ports {
+        let port_regs = (port_base + (port_num as u64 * 16)) as *mut XhciPortRegs;
         let port = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { &mut *port_regs };
         
@@ -667,14 +667,14 @@ match speed {
             };
             
             crate::serial_println!("[xHCI] Port {}: Device connected, speed: {}", 
-                port_number + 1, speed_str);
+                port_num + 1, speed_str);
             
             // Clear status change bits
             port.portsc = portsc | PORTSC_CSC | PORTSC_PRC;
             
             // If not enabled, try to reset and enable
             if (portsc & PORTSC_PED) == 0 {
-                crate::serial_println!("[xHCI] Port {}: Resetting...", port_number + 1);
+                crate::serial_println!("[xHCI] Port {}: Resetting...", port_num + 1);
                 
                 // Trigger port reset
                 port.portsc = (portsc & !PORTSC_PED) | PORTSC_PR;
@@ -692,38 +692,38 @@ match speed {
                 
                 let final_portsc = port.portsc;
                 if (final_portsc & PORTSC_PED) != 0 {
-                    crate::serial_println!("[xHCI] Port {}: Enabled after reset", port_number + 1);
+                    crate::serial_println!("[xHCI] Port {}: Enabled after reset", port_num + 1);
                     
                     // Record device
                     controller.devices.push(XhciDevice {
                         slot_id: 0,
-                        port: port_number + 1,
+                        port: port_num + 1,
                         speed: speed as u8,
                         vendor_id: 0,
                         product_id: 0,
                         class: 0,
                         subclass: 0,
                         protocol: 0,
-                        number_configs: 0,
-                        maximum_packet_size: 0,
+                        num_configs: 0,
+                        max_packet_size: 0,
                         manufacturer: String::new(),
                         product: String::new(),
                     });
                 }
             } else {
-                crate::serial_println!("[xHCI] Port {}: Already enabled", port_number + 1);
+                crate::serial_println!("[xHCI] Port {}: Already enabled", port_num + 1);
                 
                 controller.devices.push(XhciDevice {
                     slot_id: 0,
-                    port: port_number + 1,
+                    port: port_num + 1,
                     speed: speed as u8,
                     vendor_id: 0,
                     product_id: 0,
                     class: 0,
                     subclass: 0,
                     protocol: 0,
-                    number_configs: 0,
-                    maximum_packet_size: 0,
+                    num_configs: 0,
+                    max_packet_size: 0,
                     manufacturer: String::new(),
                     product: String::new(),
                 });
@@ -740,27 +740,27 @@ match speed {
 
 /// Enqueue a TRB on the command ring and ring doorbell 0
 pub(crate) fn submit_command(controller: &mut XhciController, trb: Trb) {
-    let index = controller.command_enqueue;
+    let idx = controller.cmd_enqueue;
     
     // Write TRB with correct cycle bit
     let mut cmd = trb;
-    if controller.command_cycle {
+    if controller.cmd_cycle {
         cmd.control |= TRB_CYCLE;
     } else {
         cmd.control &= !TRB_CYCLE;
     }
     
-    controller.command_ring.trbs[index] = cmd;
+    controller.cmd_ring.trbs[idx] = cmd;
     
     // Advance enqueue pointer
-    controller.command_enqueue += 1;
-    if controller.command_enqueue >= 255 {
+    controller.cmd_enqueue += 1;
+    if controller.cmd_enqueue >= 255 {
         // Wrap: update link TRB cycle bit and reset
-        let link_controller = (TRB_TYPE_LINK << 10) | if controller.command_cycle { TRB_CYCLE } else { 0 } | (1 << 1); // Toggle Cycle
-        controller.command_ring.trbs[255].control = link_controller;
-        controller.command_ring.trbs[255].parameter = controller.command_ring_physical;
-        controller.command_cycle = !controller.command_cycle;
-        controller.command_enqueue = 0;
+        let link_controller = (TRB_TYPE_LINK << 10) | if controller.cmd_cycle { TRB_CYCLE } else { 0 } | (1 << 1); // Toggle Cycle
+        controller.cmd_ring.trbs[255].control = link_controller;
+        controller.cmd_ring.trbs[255].parameter = controller.cmd_ring_phys;
+        controller.cmd_cycle = !controller.cmd_cycle;
+        controller.cmd_enqueue = 0;
     }
     
     // Ring doorbell 0 (Host Controller Command)
@@ -773,8 +773,8 @@ pub(crate) fn submit_command(controller: &mut XhciController, trb: Trb) {
 /// Poll event ring for a Command Completion Event. Returns (completion_code, slot_id, parameter).
 fn wait_command_completion(controller: &mut XhciController) -> Option<(u8, u8, u64)> {
     for _ in 0..2_000_000u32 {
-        let index = controller.event_dequeue;
-        let trb = controller.event_ring[index];
+        let idx = controller.event_dequeue;
+        let trb = controller.event_ring[idx];
         
         // Check phase bit
         let phase = (trb.control & TRB_CYCLE) != 0;
@@ -787,7 +787,7 @@ fn wait_command_completion(controller: &mut XhciController) -> Option<(u8, u8, u
             }
             
             // Update ERDP
-            let erdp_physical = controller.event_ring_physical + (controller.event_dequeue as u64 * 16);
+            let erdp_physical = controller.event_ring_phys + (controller.event_dequeue as u64 * 16);
             let intr_regs = (controller.runtime_base + 0x20) as *mut XhciIntrRegs;
                         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
@@ -812,8 +812,8 @@ unsafe {
 /// Poll event ring for a Transfer Event. Returns (completion_code, transfer_length, endpoint_id).
 fn wait_transfer_event(controller: &mut XhciController) -> Option<(u8, u32, u8)> {
     for _ in 0..5_000_000u32 {
-        let index = controller.event_dequeue;
-        let trb = controller.event_ring[index];
+        let idx = controller.event_dequeue;
+        let trb = controller.event_ring[idx];
         
         let phase = (trb.control & TRB_CYCLE) != 0;
         if phase == controller.event_cycle {
@@ -823,7 +823,7 @@ fn wait_transfer_event(controller: &mut XhciController) -> Option<(u8, u32, u8)>
                 controller.event_cycle = !controller.event_cycle;
             }
             
-            let erdp_physical = controller.event_ring_physical + (controller.event_dequeue as u64 * 16);
+            let erdp_physical = controller.event_ring_phys + (controller.event_dequeue as u64 * 16);
             let intr_regs = (controller.runtime_base + 0x20) as *mut XhciIntrRegs;
                         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
@@ -857,7 +857,7 @@ unsafe {
 /// A per-endpoint transfer ring (256 TRBs)
 pub(crate) struct TransferRing {
     trbs: Box<[Trb; 256]>,
-    pub(crate) physical: u64,
+    pub(crate) phys: u64,
     pub(crate) enqueue: usize,
     pub(crate) cycle: bool,
 }
@@ -866,8 +866,8 @@ pub(crate) struct TransferRing {
 impl TransferRing {
     pub(crate) fn new() -> Option<Self> {
         let trbs = Box::new([Trb::new(); 256]);
-        let physical = virt_to_physical(trbs.as_pointer() as u64);
-        Some(Self { trbs, physical, enqueue: 0, cycle: true })
+        let phys = virt_to_physical(trbs.as_ptr() as u64);
+        Some(Self { trbs, phys, enqueue: 0, cycle: true })
     }
     
     pub(crate) fn enqueue_trb(&mut self, mut trb: Trb) {
@@ -882,7 +882,7 @@ impl TransferRing {
             // Link TRB
             let link_controller = (TRB_TYPE_LINK << 10) | if self.cycle { TRB_CYCLE } else { 0 } | (1 << 1);
             self.trbs[255].control = link_controller;
-            self.trbs[255].parameter = self.physical;
+            self.trbs[255].parameter = self.phys;
             self.cycle = !self.cycle;
             self.enqueue = 0;
         }
@@ -906,9 +906,9 @@ pub(crate) struct SlotRings {
 // ============================================================================
 
 fn allocator_scratchpad_buffers(controller: &mut XhciController) {
-    let capability = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*controller.capability_regs };
-    let hcsparams2 = capability.hcsparams2;
+    let cap = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { &*controller.cap_regs };
+    let hcsparams2 = cap.hcsparams2;
     
     let hi = ((hcsparams2 >> 21) & 0x1F) as u32;
     let lo = ((hcsparams2 >> 27) & 0x1F) as u32;
@@ -929,7 +929,7 @@ match crate::memory::frame::allocator_frame_zeroed() {
     let array_virt = physical_to_virt(array_physical) as *mut u64;
     
     // Allocate each scratchpad page
-    for i in 0..number_bufs.minimum(512) as usize {
+    for i in 0..number_bufs.min(512) as usize {
         if let Some(page_physical) = crate::memory::frame::allocator_frame_zeroed() {
                         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { ptr::write_volatile(array_virt.add(i), page_physical); }
@@ -948,10 +948,10 @@ unsafe { ptr::write_volatile(array_virt.add(i), page_physical); }
 pub(crate) // Global shared state guarded by a Mutex (mutual exclusion lock).
 static SLOT_RINGS: Mutex<Vec<Option<SlotRings>>> = Mutex::new(Vec::new());
 
-fn initialize_slot_rings(maximum_slots: u8) {
+fn initialize_slot_rings(max_slots: u8) {
     let mut rings = SLOT_RINGS.lock();
     rings.clear();
-    for _ in 0..=maximum_slots {
+    for _ in 0..=max_slots {
         rings.push(None);
     }
 }
@@ -966,7 +966,7 @@ fn enable_slot(controller: &mut XhciController) -> Option<u8> {
     
     submit_command(controller, trb);
     
-    if let Some((cc, slot_id, _parameter)) = wait_command_completion(controller) {
+    if let Some((cc, slot_id, _param)) = wait_command_completion(controller) {
         if cc == 1 { // Success
             crate::serial_println!("[xHCI] Enable Slot → slot_id={}", slot_id);
             return Some(slot_id);
@@ -977,7 +977,7 @@ fn enable_slot(controller: &mut XhciController) -> Option<u8> {
 }
 
 /// Address Device command — sets up input context and issues the command
-fn address_device(controller: &mut XhciController, slot_id: u8, port_number: u8, speed: u8) -> bool {
+fn address_device(controller: &mut XhciController, slot_id: u8, port_num: u8, speed: u8) -> bool {
     // Allocate device context
     let device_context = Box::new(DeviceContext {
         slot: SlotContext::default(),
@@ -994,7 +994,7 @@ match TransferRing::new() {
         Some(r) => r,
         None => { crate::serial_println!("[xHCI] OOM for EP0 ring"); return false; }
     };
-    let ep0_ring_physical = ep0_ring.physical;
+    let ep0_ring_physical = ep0_ring.phys;
     
     // Allocate input context (on heap, page-aligned conceptually)
     let input_context_physical = // Pattern matching — Rust's exhaustive branching construct.
@@ -1003,7 +1003,7 @@ match crate::memory::frame::allocator_frame_zeroed() {
         None => { crate::serial_println!("[xHCI] OOM for input context"); return false; }
     };
     let input_context_virt = physical_to_virt(input_context_physical);
-    let context_size = controller.context_size;
+    let ctx_size = controller.context_size;
     
     // Input Control Context: Add Slot (bit 0) + Add EP0 (bit 1)
     unsafe {
@@ -1012,7 +1012,7 @@ match crate::memory::frame::allocator_frame_zeroed() {
     }
     
     // Slot Context (at offset context_size from input context base)
-    let slot_context_virt = input_context_virt + context_size as u64;
+    let slot_context_virt = input_context_virt + ctx_size as u64;
     let maximum_packet = // Pattern matching — Rust's exhaustive branching construct.
 match speed as u32 {
         SPEED_LOW => 8u16,
@@ -1030,11 +1030,11 @@ unsafe {
         let context_entries = 1u32 << 27; // Only EP0
         ptr::write_volatile(slot, speed_field | context_entries);
         // DW1: Root Hub Port Number (16:23)
-        ptr::write_volatile(slot.add(1), (port_number as u32) << 16);
+        ptr::write_volatile(slot.add(1), (port_num as u32) << 16);
     }
     
     // Endpoint 0 Context (at offset 2 * context_size) — DCI=1
-    let ep0_context_virt = input_context_virt + (2 * context_size) as u64;
+    let ep0_context_virt = input_context_virt + (2 * ctx_size) as u64;
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
         let ep = ep0_context_virt as *mut u32;
@@ -1075,7 +1075,7 @@ unsafe {
     
     submit_command(controller, trb);
     
-    if let Some((cc, _sid, _parameter)) = wait_command_completion(controller) {
+    if let Some((cc, _sid, _param)) = wait_command_completion(controller) {
         if cc == 1 {
             crate::serial_println!("[xHCI] Address Device slot {} → success", slot_id);
             crate::memory::frame::free_frame(input_context_physical);
@@ -1181,9 +1181,9 @@ unsafe {
     }
     
     // Wait for transfer completion
-    if let Some((cc, transfer_length, _ep)) = wait_transfer_event(controller) {
+    if let Some((cc, transfer_len, _ep)) = wait_transfer_event(controller) {
         if cc == 1 || cc == 13 { // Success or Short Packet
-            return Some(transfer_length);
+            return Some(transfer_len);
         }
         crate::serial_println!("[xHCI] Control IN failed: cc={}", cc);
     }
@@ -1243,7 +1243,7 @@ unsafe {
 // ============================================================================
 
 /// Get USB Device Descriptor and populate XhciDevice fields
-fn get_device_descriptor(controller: &mut XhciController, slot_id: u8, device: &mut XhciDevice) -> bool {
+fn get_device_descriptor(controller: &mut XhciController, slot_id: u8, dev: &mut XhciDevice) -> bool {
     let buffer_physical = // Pattern matching — Rust's exhaustive branching construct.
 match crate::memory::frame::allocator_frame_zeroed() {
         Some(p) => p,
@@ -1266,18 +1266,18 @@ const u8;
 unsafe {
             let _bcd_usb = ptr::read_unaligned(buffer_virt.add(2) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u16);
-            device.class = *buffer_virt.add(4);
-            device.subclass = *buffer_virt.add(5);
-            device.protocol = *buffer_virt.add(6);
-            device.maximum_packet_size = *buffer_virt.add(7) as u16;
-            device.vendor_id = ptr::read_unaligned(buffer_virt.add(8) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+            dev.class = *buffer_virt.add(4);
+            dev.subclass = *buffer_virt.add(5);
+            dev.protocol = *buffer_virt.add(6);
+            dev.max_packet_size = *buffer_virt.add(7) as u16;
+            dev.vendor_id = ptr::read_unaligned(buffer_virt.add(8) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u16);
-            device.product_id = ptr::read_unaligned(buffer_virt.add(10) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+            dev.product_id = ptr::read_unaligned(buffer_virt.add(10) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u16);
-            device.number_configs = *buffer_virt.add(17);
+            dev.num_configs = *buffer_virt.add(17);
         }
         crate::serial_println!("[xHCI] Device: VID={:04X} PID={:04X} class={:02X}:{:02X}:{:02X}",
-            device.vendor_id, device.product_id, device.class, device.subclass, device.protocol);
+            dev.vendor_id, dev.product_id, dev.class, dev.subclass, dev.protocol);
     }
     
     crate::memory::frame::free_frame(buffer_physical);
@@ -1309,7 +1309,7 @@ const u8;
     let total_length = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { ptr::read_unaligned(buffer_virt.add(2) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u16) };
-    let read_length = total_length.minimum(4096);
+    let read_length = total_length.min(4096);
     
     // Second read: get full config descriptor
     control_transfer_in(
@@ -1413,7 +1413,7 @@ unsafe { *buffer_virt.add(offset + 6) };
 fn configure_hid_endpoint(
     controller: &mut XhciController,
     slot_id: u8,
-    port_number: u8,
+    port_num: u8,
     speed: u8,
     ep_address: u8,
     maximum_packet: u16,
@@ -1428,7 +1428,7 @@ match TransferRing::new() {
         Some(r) => r,
         None => return false,
     };
-    let int_ring_physical = int_ring.physical;
+    let int_ring_physical = int_ring.phys;
     
     // Build input context for Configure Endpoint
     let input_physical = // Pattern matching — Rust's exhaustive branching construct.
@@ -1437,7 +1437,7 @@ match crate::memory::frame::allocator_frame_zeroed() {
         None => return false,
     };
     let input_virt = physical_to_virt(input_physical);
-    let context_size = controller.context_size;
+    let ctx_size = controller.context_size;
     
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
@@ -1446,22 +1446,22 @@ unsafe {
         ptr::write_volatile(icc.add(1), 1 | (1u32 << dci));
         
         // Slot Context (must re-specify): update Context Entries to include new DCI
-        let slot = (input_virt + context_size as u64) as *mut u32;
+        let slot = (input_virt + ctx_size as u64) as *mut u32;
         let speed_field = (speed as u32) << 20;
         let context_entries = (dci as u32) << 27;
         ptr::write_volatile(slot, speed_field | context_entries);
-        ptr::write_volatile(slot.add(1), (port_number as u32) << 16);
+        ptr::write_volatile(slot.add(1), (port_num as u32) << 16);
         
         // Endpoint Context at offset (1 + dci) * context_size
-        let ep_context = (input_virt + ((1 + dci as usize) * context_size) as u64) as *mut u32;
+        let ep_context = (input_virt + ((1 + dci as usize) * ctx_size) as u64) as *mut u32;
         
         // DW0: Interval (16:23) — for xHCI, interval = 2^(interval-1) * 125µs
         let xhci_interval = // Pattern matching — Rust's exhaustive branching construct.
 match speed as u32 {
-            SPEED_HIGH | SPEED_SUPER => interval.maximum(1) as u32,
+            SPEED_HIGH | SPEED_SUPER => interval.max(1) as u32,
             _ => {
                 // Convert ms to 125µs frames: interval * 8, then log2 + 1
-                let frames = (interval as u32).maximum(1) * 8;
+                let frames = (interval as u32).max(1) * 8;
                 let mut log2 = 0u32;
                 let mut v = frames;
                 while v > 1 { v >>= 1; log2 += 1; }
@@ -1521,18 +1521,18 @@ match speed as u32 {
 fn configure_bulk_endpoints(
     controller: &mut XhciController,
     slot_id: u8,
-    port_number: u8,
+    port_num: u8,
     speed: u8,
-    ep_in_address: u8,
-    ep_out_address: u8,
-    maximum_packet_in: u16,
-    maximum_packet_out: u16,
+    ep_in_addr: u8,
+    ep_out_addr: u8,
+    max_packet_in: u16,
+    max_packet_out: u16,
 ) -> bool {
-    let ep_in_number = ep_in_address & 0x0F;
+    let ep_in_number = ep_in_addr & 0x0F;
     let dci_in = (ep_in_number * 2 + 1) as u8;  // IN endpoint DCI
-    let ep_out_number = ep_out_address & 0x0F;
+    let ep_out_number = ep_out_addr & 0x0F;
     let dci_out = (ep_out_number * 2) as u8;     // OUT endpoint DCI
-    let maximum_dci = dci_in.maximum(dci_out);
+    let maximum_dci = dci_in.max(dci_out);
     
     // Allocate transfer rings
     let bulk_in_ring = // Pattern matching — Rust's exhaustive branching construct.
@@ -1545,8 +1545,8 @@ match TransferRing::new() {
         Some(r) => r,
         None => return false,
     };
-    let in_ring_physical = bulk_in_ring.physical;
-    let out_ring_physical = bulk_out_ring.physical;
+    let in_ring_physical = bulk_in_ring.phys;
+    let out_ring_physical = bulk_out_ring.phys;
     
     // Build input context for Configure Endpoint
     let input_physical = // Pattern matching — Rust's exhaustive branching construct.
@@ -1555,7 +1555,7 @@ match crate::memory::frame::allocator_frame_zeroed() {
         None => return false,
     };
     let input_virt = physical_to_virt(input_physical);
-    let context_size = controller.context_size;
+    let ctx_size = controller.context_size;
     
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
@@ -1564,28 +1564,28 @@ unsafe {
         ptr::write_volatile(icc.add(1), 1 | (1u32 << dci_in) | (1u32 << dci_out));
         
         // Slot Context: update Context Entries to include highest DCI
-        let slot = (input_virt + context_size as u64) as *mut u32;
+        let slot = (input_virt + ctx_size as u64) as *mut u32;
         let speed_field = (speed as u32) << 20;
         let context_entries = (maximum_dci as u32) << 27;
         ptr::write_volatile(slot, speed_field | context_entries);
-        ptr::write_volatile(slot.add(1), (port_number as u32) << 16);
+        ptr::write_volatile(slot.add(1), (port_num as u32) << 16);
         
         // Bulk IN endpoint context (EP Type = 6 = Bulk IN)
-        let ep_in_context = (input_virt + ((1 + dci_in as usize) * context_size) as u64) as *mut u32;
+        let ep_in_context = (input_virt + ((1 + dci_in as usize) * ctx_size) as u64) as *mut u32;
         let cerr = 3u32 << 1;
         let ep_type_bulk_in = 6u32 << 3;
-        let mps_in = (maximum_packet_in as u32) << 16;
+        let mps_in = (max_packet_in as u32) << 16;
         ptr::write_volatile(ep_in_context.add(1), cerr | ep_type_bulk_in | mps_in);
         ptr::write_volatile(ep_in_context.add(2) as *mut u64, in_ring_physical | 1);
-        ptr::write_volatile(ep_in_context.add(4), maximum_packet_in as u32);
+        ptr::write_volatile(ep_in_context.add(4), max_packet_in as u32);
         
         // Bulk OUT endpoint context (EP Type = 2 = Bulk OUT)
-        let ep_out_context = (input_virt + ((1 + dci_out as usize) * context_size) as u64) as *mut u32;
+        let ep_out_context = (input_virt + ((1 + dci_out as usize) * ctx_size) as u64) as *mut u32;
         let ep_type_bulk_out = 2u32 << 3;
-        let mps_out = (maximum_packet_out as u32) << 16;
+        let mps_out = (max_packet_out as u32) << 16;
         ptr::write_volatile(ep_out_context.add(1), cerr | ep_type_bulk_out | mps_out);
         ptr::write_volatile(ep_out_context.add(2) as *mut u64, out_ring_physical | 1);
-        ptr::write_volatile(ep_out_context.add(4), maximum_packet_out as u32);
+        ptr::write_volatile(ep_out_context.add(4), max_packet_out as u32);
     }
     
     // Store bulk rings
@@ -1788,9 +1788,9 @@ fn setup_devices() {
     let mut mouse_devices: Vec<(u8, u8, u8, u16, u16)> = Vec::new();
     
     {
-        let mut controller = CONTROLLER.lock();
+        let mut ctrl = CONTROLLER.lock();
         let controller = // Pattern matching — Rust's exhaustive branching construct.
-match controller.as_mut() {
+match ctrl.as_mut() {
             Some(c) => c,
             None => return,
         };
@@ -1826,12 +1826,12 @@ match enable_slot(controller) {
             }
             
             // Get Device Descriptor
-            let mut device = controller.devices[i].clone();
-            if !get_device_descriptor(controller, slot_id, &mut device) {
+            let mut dev = controller.devices[i].clone();
+            if !get_device_descriptor(controller, slot_id, &mut dev) {
                 crate::serial_println!("[xHCI] Failed to get device descriptor for slot {}", slot_id);
                 continue;
             }
-            controller.devices[i] = device;
+            controller.devices[i] = dev;
             
             // Get Configuration Descriptor + find HID and Mass Storage endpoints
             if let Some(all_interfaces) = get_config_descriptor(controller, slot_id) {
@@ -1873,9 +1873,9 @@ match iface_class {
                 }
                 
                 // Configure mass storage bulk endpoints
-                if let (Some((in_address, in_mps)), Some((out_address, out_mps))) = (mouse_in, mouse_out) {
-                    if configure_bulk_endpoints(controller, slot_id, port, speed, in_address, out_address, in_mps, out_mps) {
-                        mouse_devices.push((slot_id, in_address, out_address, in_mps, out_mps));
+                if let (Some((in_addr, in_mps)), Some((out_addr, out_mps))) = (mouse_in, mouse_out) {
+                    if configure_bulk_endpoints(controller, slot_id, port, speed, in_addr, out_addr, in_mps, out_mps) {
+                        mouse_devices.push((slot_id, in_addr, out_addr, in_mps, out_mps));
                         
                         if controller.devices[i].class == 0 {
                             controller.devices[i].class = 0x08;
@@ -1892,8 +1892,8 @@ match iface_class {
     
     // Initialize mass storage devices outside CONTROLLER lock
     // (usb_storage bulk transfers need to lock CONTROLLER internally)
-    for (slot_id, in_address, out_address, in_mps, out_mps) in mouse_devices {
-        super::usb_storage::initialize_device(slot_id, in_address, out_address, in_mps, out_mps);
+    for (slot_id, in_addr, out_addr, in_mps, out_mps) in mouse_devices {
+        super::usb_storage::initialize_device(slot_id, in_addr, out_addr, in_mps, out_mps);
     }
 }
 
@@ -1927,9 +1927,9 @@ match slot_rings.bulk_out.as_mut() {
     }
     
     // Ring doorbell and wait for completion
-    let mut controller = CONTROLLER.lock();
+    let mut ctrl = CONTROLLER.lock();
     let controller = // Pattern matching — Rust's exhaustive branching construct.
-match controller.as_mut() {
+match ctrl.as_mut() {
         Some(c) => c,
         None => return false,
     };
@@ -1972,9 +1972,9 @@ match slot_rings.bulk_in.as_mut() {
     }
     
     // Ring doorbell and wait for completion
-    let mut controller = CONTROLLER.lock();
+    let mut ctrl = CONTROLLER.lock();
     let controller = // Pattern matching — Rust's exhaustive branching construct.
-match controller.as_mut() {
+match ctrl.as_mut() {
         Some(c) => c,
         None => return None,
     };
@@ -1998,31 +1998,31 @@ unsafe {
 pub fn poll_hid_devices() {
     // Collect HID device info under lock, then release
     let hid_devices: Vec<(u8, u16, u8)> = {
-        let controller = CONTROLLER.lock();
+        let ctrl = CONTROLLER.lock();
                 // Pattern matching — Rust's exhaustive branching construct.
-match controller.as_ref() {
+match ctrl.as_ref() {
             Some(c) => c.devices.iter()
                 .filter(|d| d.slot_id != 0 && d.class == 0x03)
-                .map(|d| (d.slot_id, d.maximum_packet_size, d.protocol))
+                .map(|d| (d.slot_id, d.max_packet_size, d.protocol))
                 .collect(),
             None => return,
         }
     };
     
-    for &(slot_id, maximum_packet_size, protocol) in &hid_devices {
+    for &(slot_id, max_packet_size, protocol) in &hid_devices {
         let buffer_physical = // Pattern matching — Rust's exhaustive branching construct.
 match crate::memory::frame::allocator_frame_zeroed() {
             Some(p) => p,
             None => continue,
         };
         let buffer_virt = physical_to_virt(buffer_physical);
-        let maximum_packet = maximum_packet_size.maximum(8);
+        let max_pkt = max_packet_size.max(8);
         
         // Queue interrupt IN transfer (requires lock)
         {
-            let controller = CONTROLLER.lock();
-            if let Some(controller) = controller.as_ref() {
-                if !queue_interrupt_in(controller, slot_id, buffer_physical, maximum_packet) {
+            let ctrl = CONTROLLER.lock();
+            if let Some(controller) = ctrl.as_ref() {
+                if !queue_interrupt_in(controller, slot_id, buffer_physical, max_pkt) {
                     crate::memory::frame::free_frame(buffer_physical);
                     continue;
                 }
@@ -2037,8 +2037,8 @@ match crate::memory::frame::allocator_frame_zeroed() {
             let mut ctrl2 = CONTROLLER.lock();
             if let Some(controller) = ctrl2.as_mut() {
                 for _ in 0..50_000u32 {
-                    let index = controller.event_dequeue;
-                    let trb = controller.event_ring[index];
+                    let idx = controller.event_dequeue;
+                    let trb = controller.event_ring[idx];
                     let phase = (trb.control & TRB_CYCLE) != 0;
                     if phase == controller.event_cycle {
                         controller.event_dequeue += 1;
@@ -2046,7 +2046,7 @@ match crate::memory::frame::allocator_frame_zeroed() {
                             controller.event_dequeue = 0;
                             controller.event_cycle = !controller.event_cycle;
                         }
-                        let erdp = controller.event_ring_physical + (controller.event_dequeue as u64 * 16);
+                        let erdp = controller.event_ring_phys + (controller.event_dequeue as u64 * 16);
                         let intr = (controller.runtime_base + 0x20) as *mut XhciIntrRegs;
                                                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { (*intr).erdp = erdp | (1 << 3); }
@@ -2056,7 +2056,7 @@ unsafe { (*intr).erdp = erdp | (1 << 3); }
                             let report = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
                                 core::slice::from_raw_parts(buffer_virt as *// Compile-time constant — evaluated at compilation, zero runtime cost.
-const u8, maximum_packet as usize)
+const u8, max_pkt as usize)
                             };
                             
                                                         // Pattern matching — Rust's exhaustive branching construct.

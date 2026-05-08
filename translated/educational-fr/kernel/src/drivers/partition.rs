@@ -295,7 +295,7 @@ struct GptHeader {
     /// Starting LBA of partition entries
     partition_entry_lba: u64,
     /// Number of partition entries
-    number_partition_entries: u32,
+    num_partition_entries: u32,
     /// Size of each partition entry (usually 128)
     partition_entry_size: u32,
     /// CRC32 of partition entries
@@ -386,7 +386,7 @@ where
     
     // Parse MBR
     let mbr = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { &*(sector0.as_pointer() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+unsafe { &*(sector0.as_ptr() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const Mbr) };
     
     // Check if this is a protective MBR (indicates GPT)
@@ -446,7 +446,7 @@ where
     read_sector(1, &mut sector1)?;
     
     let header = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { &*(sector1.as_pointer() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+unsafe { &*(sector1.as_ptr() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const GptHeader) };
     
     // Verify GPT signature
@@ -456,7 +456,7 @@ const GptHeader) };
     
     let mut partitions = Vec::new();
     let entry_size = { header.partition_entry_size };
-    let number_entries = { header.number_partition_entries };
+    let number_entries = { header.num_partition_entries };
     let entries_lba = { header.partition_entry_lba };
     let disk_guid_copy = { header.disk_guid };
     
@@ -477,7 +477,7 @@ const GptHeader) };
             
             let entry = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe { 
-                &*(sector.as_pointer().add(offset) as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+                &*(sector.as_ptr().add(offset) as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const GptPartitionEntry) 
             };
             

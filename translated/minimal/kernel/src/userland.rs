@@ -6,17 +6,17 @@
 
 
 
-use crate::gdt::{NQ_, NR_, AJK_, AJL_};
-use x86_64::registers::model_specific::{Efer, EferFlags, LStar, SFMask, And};
+use crate::gdt::{KERNEL_CODE_SELECTOR, KERNEL_DATA_SELECTOR, ALF_, ALG_};
+use x86_64::registers::model_specific::{Efer, EferFlags, LStar, SFMask, Star};
 use x86_64::registers::rflags::RFlags;
 use x86_64::VirtAddr;
 
 
-pub const DAD_: u64 = 0x0000_7FFF_FFFF_0000;
+pub const DDV_: u64 = 0x0000_7FFF_FFFF_0000;
 
-pub const AJN_: usize = 1024 * 1024;
+pub const ALI_: usize = 1024 * 1024;
 
-pub const DAB_: u64 = 0x0000_0000_0040_0000;
+pub const DDT_: u64 = 0x0000_0000_0040_0000;
 
 
 
@@ -26,7 +26,7 @@ pub fn init() {
     unsafe {
         
         let efer = Efer::read();
-        Efer::write(efer | EferFlags::EHE_);
+        Efer::write(efer | EferFlags::SYSTEM_CALL_EXTENSIONS);
         
         
         
@@ -85,24 +85,24 @@ pub fn init() {
         
         
         
-        let pnx: u64 = (0x10u64 << 48) | (0x08u64 << 32);
+        let star_value: u64 = (0x10u64 << 48) | (0x08u64 << 32);
         core::arch::asm!(
             "wrmsr",
             in("ecx") 0xC0000081u32, 
-            in("eax") pnx as u32,
-            in("edx") (pnx >> 32) as u32,
+            in("eax") star_value as u32,
+            in("edx") (star_value >> 32) as u32,
         );
         
         
-        LStar::write(VirtAddr::new(prb as *const () as u64));
+        LStar::write(VirtAddr::new(jky as *const () as u64));
         
         
         
         SFMask::write(
-            RFlags::DRF_ | 
-            RFlags::DJN_ | 
-            RFlags::EIQ_ |
-            RFlags::DCM_
+            RFlags::INTERRUPT_FLAG | 
+            RFlags::DIRECTION_FLAG | 
+            RFlags::TRAP_FLAG |
+            RFlags::ALIGNMENT_CHECK
         );
     }
     
@@ -125,16 +125,16 @@ pub fn init() {
 
 
 #[inline(never)]
-pub unsafe fn uau(mi: u64, ais: u64) -> ! {
+pub unsafe fn mvh(entry_point: u64, user_stack: u64) -> ! {
     
     
-    const QL_: u64 = 0x20 | 3; 
-    const QN_: u64 = 0x18 | 3; 
+    const USER_CS: u64 = 0x20 | 3; 
+    const USER_SS: u64 = 0x18 | 3; 
     
     
-    const QM_: u64 = 0x202; 
+    const USER_RFLAGS: u64 = 0x202; 
     
-    crate::log_debug!("[USERLAND] Jumping to Ring 3: RIP={:#x}, RSP={:#x}", mi, ais);
+    crate::log_debug!("[USERLAND] Jumping to Ring 3: RIP={:#x}, RSP={:#x}", entry_point, user_stack);
     
     core::arch::asm!(
         
@@ -164,24 +164,24 @@ pub unsafe fn uau(mi: u64, ais: u64) -> ! {
         
         "iretq",
         
-        rv = in(reg) QN_,
-        rsp = in(reg) ais,
-        rflags = in(reg) QM_,
-        aap = in(reg) QL_,
-        pc = in(reg) mi,
-        options(jhe)
+        ss = in(reg) USER_SS,
+        rsp = in(reg) user_stack,
+        rflags = in(reg) USER_RFLAGS,
+        cs = in(reg) USER_CS,
+        rip = in(reg) entry_point,
+        options(noreturn)
     );
 }
 
 
 #[inline(never)]
-pub unsafe fn ohk(mi: u64, ais: u64, aai: u64, agf: u64) -> ! {
-    const QL_: u64 = 0x20 | 3;
-    const QN_: u64 = 0x18 | 3;
-    const QM_: u64 = 0x202;
+pub unsafe fn jump_to_ring3_with_args(entry_point: u64, user_stack: u64, arg1: u64, arg2: u64) -> ! {
+    const USER_CS: u64 = 0x20 | 3;
+    const USER_SS: u64 = 0x18 | 3;
+    const USER_RFLAGS: u64 = 0x202;
     
     crate::log_debug!("[USERLAND] Jumping to Ring 3: RIP={:#x}, RSP={:#x}, args=({}, {:#x})", 
-        mi, ais, aai, agf);
+        entry_point, user_stack, arg1, arg2);
     
     core::arch::asm!(
         
@@ -212,14 +212,14 @@ pub unsafe fn ohk(mi: u64, ais: u64, aai: u64, agf: u64) -> ! {
         
         "iretq",
         
-        rv = in(reg) QN_,
-        rsp = in(reg) ais,
-        rflags = in(reg) QM_,
-        aap = in(reg) QL_,
-        pc = in(reg) mi,
-        aai = in(reg) aai,
-        agf = in(reg) agf,
-        options(jhe)
+        ss = in(reg) USER_SS,
+        rsp = in(reg) user_stack,
+        rflags = in(reg) USER_RFLAGS,
+        cs = in(reg) USER_CS,
+        rip = in(reg) entry_point,
+        arg1 = in(reg) arg1,
+        arg2 = in(reg) arg2,
+        options(noreturn)
     );
 }
 
@@ -237,9 +237,9 @@ pub unsafe fn ohk(mi: u64, ais: u64, aai: u64, agf: u64) -> ! {
 
 
 
-#[unsafe(evb)]
-extern "C" fn prb() {
-    core::arch::evc!(
+#[unsafe(naked)]
+extern "C" fn jky() {
+    core::arch::naked_asm!(
         
         
         
@@ -316,44 +316,44 @@ extern "C" fn prb() {
         
         "sysretq",
         
-        bhg = aaw NT_,
-        zva = aaw YD_,
-        zuz = aaw YC_,
-        zuy = aaw YB_,
-        zoj = aaw AHX_,
-        cfd = aaw crate::interrupts::syscall::prc,
+        kernel_stack = sym KERNEL_SYSCALL_STACK_TOP,
+        user_rsp_temp = sym USER_RSP_TEMP,
+        user_return_rip = sym USER_RETURN_RIP,
+        user_return_rflags = sym USER_RETURN_RFLAGS,
+        signal_signo = sym SIGNAL_DELIVER_SIGNO,
+        handler = sym crate::interrupts::syscall::syscall_handler_rust,
     );
 }
 
 
 #[no_mangle]
-pub static mut YD_: u64 = 0;
+pub static mut USER_RSP_TEMP: u64 = 0;
 
 
 #[no_mangle]
-pub static mut YC_: u64 = 0;
+pub static mut USER_RETURN_RIP: u64 = 0;
 
 
 #[no_mangle]
-pub static mut YB_: u64 = 0;
+pub static mut USER_RETURN_RFLAGS: u64 = 0;
 
 
 
 #[no_mangle]
-pub static mut AHX_: u64 = 0;
+pub static mut SIGNAL_DELIVER_SIGNO: u64 = 0;
 
 
-static mut CDA_: [u8; 65536] = [0; 65536]; 
+static mut CGJ_: [u8; 65536] = [0; 65536]; 
 
 #[no_mangle]
-pub static mut NT_: u64 = 0;
+pub static mut KERNEL_SYSCALL_STACK_TOP: u64 = 0;
 
 
-pub fn oen() {
+pub fn igu() {
     unsafe {
-        let eiy = CDA_.fq() as u64;
-        NT_ = eiy + 65536;
-        crate::log_debug!("[USERLAND] Syscall stack at {:#x}", NT_);
+        let bvx = CGJ_.as_ptr() as u64;
+        KERNEL_SYSCALL_STACK_TOP = bvx + 65536;
+        crate::log_debug!("[USERLAND] Syscall stack at {:#x}", KERNEL_SYSCALL_STACK_TOP);
     }
 }
 
@@ -365,11 +365,11 @@ pub fn oen() {
 
 
 
-static mut AXT_: u64 = 0;
+static mut KERNEL_RETURN_RSP: u64 = 0;
 
-static mut AXS_: u64 = 0;
+static mut KERNEL_RETURN_RIP: u64 = 0;
 
-static mut QK_: bool = false;
+static mut RH_: bool = false;
 
 
 
@@ -386,18 +386,18 @@ static mut QK_: bool = false;
 
 
 #[inline(never)]
-pub unsafe fn eqa(mi: u64, ais: u64) -> i32 {
-    const QL_: u64 = 0x20 | 3;  
-    const QN_: u64 = 0x18 | 3;  
-    const QM_: u64 = 0x202; 
+pub unsafe fn bzn(entry_point: u64, user_stack: u64) -> i32 {
+    const USER_CS: u64 = 0x20 | 3;  
+    const USER_SS: u64 = 0x18 | 3;  
+    const USER_RFLAGS: u64 = 0x202; 
 
-    let nz: i64;
-    QK_ = true;
+    let exit_code: i64;
+    RH_ = true;
 
     
     
-    let mi = core::hint::mzg(mi);
-    let ais = core::hint::mzg(ais);
+    let entry_point = core::hint::black_box(entry_point);
+    let user_stack = core::hint::black_box(user_stack);
 
     core::arch::asm!(
         
@@ -458,15 +458,15 @@ pub unsafe fn eqa(mi: u64, ais: u64) -> i32 {
 
         
 
-        bt = in(reg) mi,
-        dxg = in(reg) ais,
-        rv = in(reg) QN_,
-        aap = in(reg) QL_,
-        rflags = in(reg) QM_,
-        vyl = aaw AXT_,
-        vyk = aaw AXS_,
+        entry = in(reg) entry_point,
+        user_rsp = in(reg) user_stack,
+        ss = in(reg) USER_SS,
+        cs = in(reg) USER_CS,
+        rflags = in(reg) USER_RFLAGS,
+        return_rsp = sym KERNEL_RETURN_RSP,
+        return_rip = sym KERNEL_RETURN_RIP,
         
-        bd("rax") nz,
+        out("rax") exit_code,
         
         lateout("rcx") _,
         lateout("rdx") _,
@@ -478,8 +478,8 @@ pub unsafe fn eqa(mi: u64, ais: u64) -> i32 {
         lateout("r11") _,
     );
 
-    QK_ = false;
-    nz as i32
+    RH_ = false;
+    exit_code as i32
 }
 
 
@@ -489,11 +489,11 @@ pub unsafe fn eqa(mi: u64, ais: u64) -> i32 {
 
 
 
-pub unsafe fn ctw(nz: i32) -> ! {
+pub unsafe fn azi(exit_code: i32) -> ! {
     
     core::arch::asm!(
         "mov cr3, {cr3}",
-        jm = in(reg) crate::memory::paging::ade(),
+        cr3 = in(reg) crate::memory::paging::kernel_cr3(),
         options(nostack, preserves_flags)
     );
 
@@ -503,16 +503,16 @@ pub unsafe fn ctw(nz: i32) -> ! {
         "mov rsp, [{return_rsp}]",
         "sti",          
         "jmp [{return_rip}]",
-        aj = in(reg) nz as i64,
-        vyl = aaw AXT_,
-        vyk = aaw AXS_,
-        options(jhe)
+        code = in(reg) exit_code as i64,
+        return_rsp = sym KERNEL_RETURN_RSP,
+        return_rip = sym KERNEL_RETURN_RIP,
+        options(noreturn)
     );
 }
 
 
-pub fn jbp() -> bool {
-    unsafe { QK_ }
+pub fn ers() -> bool {
+    unsafe { RH_ }
 }
 
 
@@ -522,11 +522,9 @@ pub fn jbp() -> bool {
 use core::sync::atomic::{AtomicI32, AtomicU64, Ordering};
 
 
-static AJM_: AtomicI32 = AtomicI32::new(0);
+static ALH_: AtomicI32 = AtomicI32::new(0);
 
-pub static LN_: AtomicU64 = AtomicU64::new(0);
-
-
+pub static MH_: AtomicU64 = AtomicU64::new(0);
 
 
 
@@ -538,57 +536,59 @@ pub static LN_: AtomicU64 = AtomicU64::new(0);
 
 
 
-pub unsafe fn udc(mi: u64, ais: u64) -> i32 {
-    let ce = crate::process::aei();
-    let kge = crate::thread::bqd();
+
+
+pub unsafe fn mxd(entry_point: u64, user_stack: u64) -> i32 {
+    let pid = crate::process::pe();
+    let fko = crate::thread::current_tid();
     
     
-    LN_.store(kge, Ordering::SeqCst);
-    AJM_.store(0, Ordering::SeqCst);
-    QK_ = true;
+    MH_.store(fko, Ordering::SeqCst);
+    ALH_.store(0, Ordering::SeqCst);
+    RH_ = true;
     
     
     
     
     
-    let qdx = crate::thread::pme(ce, "user_main", mi, ais, 0);
+    let jsv = crate::thread::jhc(pid, "user_main", entry_point, user_stack, 0);
     
     crate::log_debug!("[USERLAND] Launched user thread TID={:#x} for PID {}, waiting on TID={:#x}", 
-        qdx, ce, kge);
+        jsv, pid, fko);
     
     
-    crate::thread::block(kge);
-    crate::thread::cix();
+    crate::thread::block(fko);
+    crate::thread::ajc();
     
     
-    QK_ = false;
+    RH_ = false;
     
-    let aj = AJM_.load(Ordering::SeqCst);
-    crate::log_debug!("[USERLAND] User process exited with code {}", aj);
-    aj
+    let code = ALH_.load(Ordering::SeqCst);
+    crate::log_debug!("[USERLAND] User process exited with code {}", code);
+    code
 }
 
 
 
 
-pub fn mop(nz: i32) {
-    AJM_.store(nz, Ordering::SeqCst);
+pub fn haz(exit_code: i32) {
+    ALH_.store(exit_code, Ordering::SeqCst);
     
-    let cnx = LN_.load(Ordering::SeqCst);
-    if cnx != 0 {
-        LN_.store(0, Ordering::SeqCst);
-        crate::thread::wake(cnx);
+    let avt = MH_.load(Ordering::SeqCst);
+    if avt != 0 {
+        MH_.store(0, Ordering::SeqCst);
+        crate::thread::wake(avt);
     }
     
     
     unsafe {
         core::arch::asm!(
             "mov cr3, {cr3}",
-            jm = in(reg) crate::memory::paging::ade(),
+            cr3 = in(reg) crate::memory::paging::kernel_cr3(),
             options(nostack, preserves_flags)
         );
     }
     
     
-    crate::thread::cxn(nz);
+    crate::thread::exit(exit_code);
 }

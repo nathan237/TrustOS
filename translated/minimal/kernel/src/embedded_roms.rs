@@ -1,28 +1,28 @@
 
 
-#![allow(bgr)]
+#![allow(dead_code)]
 
 
-pub fn usa() -> Option<&'static [u8]> {
-    #[cfg(tmt)]
+pub fn nif() -> Option<&'static [u8]> {
+    #[cfg(has_nes_rom)]
     {
-        static CHK_: &[u8] = include_bytes!(env!("NES_ROM_PATH"));
-        Some(CHK_)
+        static CKT_: &[u8] = include_bytes!(env!("NES_ROM_PATH"));
+        Some(CKT_)
     }
-    #[cfg(not(tmt))]
+    #[cfg(not(has_nes_rom))]
     {
         None
     }
 }
 
 
-pub fn tag() -> Option<&'static [u8]> {
-    #[cfg(tmn)]
+pub fn mbe() -> Option<&'static [u8]> {
+    #[cfg(has_gb_rom)]
     {
-        static BWK_: &[u8] = include_bytes!(env!("GB_ROM_PATH"));
-        Some(BWK_)
+        static BZQ_: &[u8] = include_bytes!(env!("GB_ROM_PATH"));
+        Some(BZQ_)
     }
-    #[cfg(not(tmn))]
+    #[cfg(not(has_gb_rom))]
     {
         None
     }

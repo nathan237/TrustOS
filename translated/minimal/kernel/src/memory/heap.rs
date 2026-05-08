@@ -4,60 +4,60 @@
 
 
 use linked_list_allocator::LockedHeap;
-use core::alloc::{Cel, Layout};
+use core::alloc::{GlobalAlloc, Layout};
 
 
-static Ace: LockedHeap = LockedHeap::azs();
+static Mg: LockedHeap = LockedHeap::empty();
 
 
-struct Azy;
+struct Vm;
 
-unsafe impl Cel for Azy {
+unsafe impl GlobalAlloc for Vm {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let ptr = unsafe { Ace.alloc(layout) };
-        if !ptr.abq() {
-            crate::devtools::xld(layout.aw());
+        let ptr = unsafe { Mg.alloc(layout) };
+        if !ptr.is_null() {
+            crate::devtools::pmp(layout.size());
         }
         ptr
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        unsafe { Ace.dealloc(ptr, layout); }
-        crate::devtools::xlj(layout.aw());
+        unsafe { Mg.dealloc(ptr, layout); }
+        crate::devtools::pmu(layout.size());
     }
 }
 
 #[global_allocator]
-static Crc: Azy = Azy;
+static Asn: Vm = Vm;
 
 
-pub fn lec(caa: usize, cre: usize) {
+pub fn gcm(heap_start: usize, atz: usize) {
     unsafe {
-        Ace.lock().init(caa as *mut u8, cre);
+        Mg.lock().init(heap_start as *mut u8, atz);
     }
 }
 
 
-pub fn mr() -> usize {
-    Ace.lock().mr()
+pub fn used() -> usize {
+    Mg.lock().used()
 }
 
 
-pub fn aez() -> usize {
-    Ace.lock().aez()
+pub fn free() -> usize {
+    Mg.lock().free()
 }
 
 
 
-pub fn ijo(aw: usize, align: usize) -> Option<*mut u8> {
+pub fn allocate(size: usize, align: usize) -> Option<*mut u8> {
     use core::alloc::Layout;
     
-    let layout = Layout::bjy(aw, align).bq()?;
+    let layout = Layout::from_size_align(size, align).ok()?;
     let ptr = unsafe {
         alloc::alloc::alloc(layout)
     };
     
-    if ptr.abq() {
+    if ptr.is_null() {
         None
     } else {
         Some(ptr)
@@ -69,10 +69,10 @@ pub fn ijo(aw: usize, align: usize) -> Option<*mut u8> {
 
 
 
-pub unsafe fn ylh(ptr: *mut u8, aw: usize, align: usize) {
+pub unsafe fn qch(ptr: *mut u8, size: usize, align: usize) {
     use core::alloc::Layout;
     
-    if let Ok(layout) = Layout::bjy(aw, align) {
+    if let Ok(layout) = Layout::from_size_align(size, align) {
         alloc::alloc::dealloc(ptr, layout);
     }
 }

@@ -3,135 +3,135 @@
 
 
 
-const Eu: f32 = 3.14159265;
-const Yy: f32 = 6.28318530;
+const By: f32 = 3.14159265;
+const Kr: f32 = 6.28318530;
 
 
 #[inline(always)]
-pub fn pzv(b: f32) -> f32 {
-    let mut q = b % Yy;
-    while q > Eu { q -= Yy; }
-    while q < -Eu { q += Yy; }
-    q
+pub fn jrl(x: f32) -> f32 {
+    let mut a = x % Kr;
+    while a > By { a -= Kr; }
+    while a < -By { a += Kr; }
+    a
 }
 
 
 #[inline(always)]
-pub fn lz(b: f32) -> f32 {
-    let b = pzv(b);
-    let hy = b * b;
-    let ajr = b * hy;
-    let fbw = ajr * hy;
-    let fyz = fbw * hy;
-    b - ajr / 6.0 + fbw / 120.0 - fyz / 5040.0
+pub fn eu(x: f32) -> f32 {
+    let x = jrl(x);
+    let x2 = x * x;
+    let x3 = x * x2;
+    let cfo = x3 * x2;
+    let csy = cfo * x2;
+    x - x3 / 6.0 + cfo / 120.0 - csy / 5040.0
 }
 
 
 #[inline(always)]
-pub fn rk(b: f32) -> f32 {
-    lz(b + 1.5707963)
+pub fn hr(x: f32) -> f32 {
+    eu(x + 1.5707963)
 }
 
 
 #[inline(always)]
-pub fn nsw(b: f32) -> f32 {
-    let r = rk(b);
-    if r.gp() < 0.0001 { return 99999.0; }
-    lz(b) / r
+pub fn hxv(x: f32) -> f32 {
+    let c = hr(x);
+    if c.abs() < 0.0001 { return 99999.0; }
+    eu(x) / c
 }
 
 
 #[inline(always)]
-pub fn ahn(b: f32) -> f32 {
-    if b <= 0.0 { return 0.0; }
-    let mut at = b * 0.5;
-    at = 0.5 * (at + b / at);
-    at = 0.5 * (at + b / at);
-    0.5 * (at + b / at)
+pub fn ra(x: f32) -> f32 {
+    if x <= 0.0 { return 0.0; }
+    let mut g = x * 0.5;
+    g = 0.5 * (g + x / g);
+    g = 0.5 * (g + x / g);
+    0.5 * (g + x / g)
 }
 
 
 #[inline(always)]
-pub fn iua(b: f32) -> f32 {
-    if b <= 0.0 { return 0.0; }
-    let qar = 0.5 * b;
-    let a = unsafe { core::mem::transmute::<f32, u32>(b) };
-    let a = 0x5f375a86u32.nj(a >> 1);
-    let c = unsafe { core::mem::transmute::<u32, f32>(a) };
-    let c = c * (1.5 - qar * c * c);
-    c * (1.5 - qar * c * c)
+pub fn emg(x: f32) -> f32 {
+    if x <= 0.0 { return 0.0; }
+    let jrz = 0.5 * x;
+    let i = unsafe { core::mem::transmute::<f32, u32>(x) };
+    let i = 0x5f375a86u32.wrapping_sub(i >> 1);
+    let y = unsafe { core::mem::transmute::<u32, f32>(i) };
+    let y = y * (1.5 - jrz * y * y);
+    y * (1.5 - jrz * y * y)
 }
 
 
 #[inline(always)]
-pub fn itz(c: f32, b: f32) -> f32 {
-    let gxm = axv(b);
-    let gxn = axv(c);
-    let aki = if gxm > gxn { gxm } else { gxn };
-    let hro = if gxm < gxn { gxm } else { gxn };
+pub fn emf(y: f32, x: f32) -> f32 {
+    let dgz = zx(x);
+    let dha = zx(y);
+    let sh = if dgz > dha { dgz } else { dha };
+    let duj = if dgz < dha { dgz } else { dha };
 
-    if aki < 0.0001 { return 0.0; }
+    if sh < 0.0001 { return 0.0; }
 
-    let q = hro / aki;
-    let e = q * q;
-    let m = ((-0.0464964749 * e + 0.15931422) * e - 0.327622764) * e * q + q;
+    let a = duj / sh;
+    let j = a * a;
+    let r = ((-0.0464964749 * j + 0.15931422) * j - 0.327622764) * j * a + a;
 
-    let m = if gxn > gxm { 1.5707963 - m } else { m };
-    let m = if b < 0.0 { Eu - m } else { m };
-    if c < 0.0 { -m } else { m }
+    let r = if dha > dgz { 1.5707963 - r } else { r };
+    let r = if x < 0.0 { By - r } else { r };
+    if y < 0.0 { -r } else { r }
 }
 
 
 #[inline(always)]
-pub fn cxr(b: f32) -> f32 {
-    if b < -6.0 { return 0.0; }
-    if b > 0.0 { return 1.0; }
-    let ab = 1.0 + b * 0.125;
-    let ab = if ab < 0.0 { 0.0 } else { ab };
-    let ab = ab * ab; 
-    let ab = ab * ab; 
-    ab * ab           
+pub fn bbo(x: f32) -> f32 {
+    if x < -6.0 { return 0.0; }
+    if x > 0.0 { return 1.0; }
+    let t = 1.0 + x * 0.125;
+    let t = if t < 0.0 { 0.0 } else { t };
+    let t = t * t; 
+    let t = t * t; 
+    t * t           
 }
 
 
 #[inline(always)]
-pub fn axv(b: f32) -> f32 {
-    if b < 0.0 { -b } else { b }
+pub fn zx(x: f32) -> f32 {
+    if x < 0.0 { -x } else { x }
 }
 
 
 #[inline(always)]
-pub fn qp(b: f32, v: f32, am: f32) -> f32 {
-    if b < v { v } else if b > am { am } else { b }
+pub fn clamp(x: f32, min: f32, max: f32) -> f32 {
+    if x < min { min } else if x > max { max } else { x }
 }
 
 
 #[inline(always)]
-pub fn yif(b: i32, v: i32, am: i32) -> i32 {
-    if b < v { v } else if b > am { am } else { b }
+pub fn pzt(x: i32, min: i32, max: i32) -> i32 {
+    if x < min { min } else if x > max { max } else { x }
 }
 
 
 #[inline(always)]
-pub fn csb(q: f32, o: f32, ab: f32) -> f32 {
-    q + (o - q) * ab
+pub fn lerp(a: f32, b: f32, t: f32) -> f32 {
+    a + (b - a) * t
 }
 
 
 #[inline(always)]
-pub fn jdi(q: u8, o: u8, ab: f32) -> u8 {
-    ((q as f32) * (1.0 - ab) + (o as f32) * ab) as u8
+pub fn esw(a: u8, b: u8, t: f32) -> u8 {
+    ((a as f32) * (1.0 - t) + (b as f32) * t) as u8
 }
 
 
 #[inline(always)]
-pub fn suw(b: f32) -> i32 {
-    let a = b as i32;
-    if (a as f32) > b { a - 1 } else { a }
+pub fn lxa(x: f32) -> i32 {
+    let i = x as i32;
+    if (i as f32) > x { i - 1 } else { i }
 }
 
 
 #[inline(always)]
-pub fn ivp(b: f32) -> f32 {
-    b - (suw(b) as f32)
+pub fn fract(x: f32) -> f32 {
+    x - (lxa(x) as f32)
 }

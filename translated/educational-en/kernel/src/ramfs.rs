@@ -64,7 +64,7 @@ pub fn new_directory(name: &str) -> Self {
 /// Global filesystem
 pub struct RamFs {
     entries: BTreeMap<String, FsEntry>,
-    current_directory: String,
+    current_dir: String,
 }
 
 // Implementation block — defines methods for the type above.
@@ -72,14 +72,14 @@ impl RamFs {
     pub const fn new() -> Self {
         Self {
             entries: BTreeMap::new(),
-            current_directory: String::new(),
+            current_dir: String::new(),
         }
     }
     
         // Public function — callable from other modules.
 pub fn init(&mut self) {
         // Create root directory
-        self.current_directory.clear();
+        self.current_dir.clear();
         self.entries.insert(String::from("/"), FsEntry::new_directory("/"));
         
         // Create default directories
@@ -122,10 +122,10 @@ pub fn init(&mut self) {
     
     /// Get current directory
     pub fn pwd(&self) -> &str {
-        if self.current_directory.is_empty() {
+        if self.current_dir.is_empty() {
             "/"
         } else {
-            &self.current_directory
+            &self.current_dir
         }
     }
     
@@ -135,7 +135,7 @@ pub fn init(&mut self) {
         
         if let Some(entry) = self.entries.get(&absolute_path) {
             if entry.file_type == FileType::Directory {
-                self.current_directory = absolute_path;
+                self.current_dir = absolute_path;
                 Ok(())
             } else {
                 Err(FsError::NotADirectory)
@@ -151,10 +151,10 @@ pub fn init(&mut self) {
 match path {
             Some(p) => self.resolve_path(p),
             None => {
-                if self.current_directory.is_empty() {
+                if self.current_dir.is_empty() {
                     String::from("/")
                 } else {
-                    self.current_directory.clone()
+                    self.current_dir.clone()
                 }
             }
         };
@@ -332,13 +332,13 @@ match path {
     }
     
     /// Copy file
-    pub fn cp(&mut self, source: &str, destination: &str) -> Result<(), FsError> {
-        let source_path = self.resolve_path(source);
-        let destination_path = self.resolve_path(destination);
+    pub fn cp(&mut self, src: &str, dst: &str) -> Result<(), FsError> {
+        let src_path = self.resolve_path(src);
+        let destination_path = self.resolve_path(dst);
         
         // Read source
         let content = {
-            if let Some(entry) = self.entries.get(&source_path) {
+            if let Some(entry) = self.entries.get(&src_path) {
                 if entry.file_type != FileType::File {
                     return Err(FsError::IsADirectory);
                 }
@@ -350,17 +350,17 @@ match path {
         
         // Create destination if it doesn't exist
         if !self.entries.contains_key(&destination_path) {
-            self.touch(destination)?;
+            self.touch(dst)?;
         }
         
         // Write content
-        self.write_file(destination, &content)
+        self.write_file(dst, &content)
     }
     
     /// Move/rename file
-    pub fn mv(&mut self, source: &str, destination: &str) -> Result<(), FsError> {
-        self.cp(source, destination)?;
-        self.rm(source)?;
+    pub fn mv(&mut self, src: &str, dst: &str) -> Result<(), FsError> {
+        self.cp(src, dst)?;
+        self.rm(src)?;
         Ok(())
     }
     
@@ -371,7 +371,7 @@ match path {
     }
     
     /// Get file/dir info
-    pub fn status(&self, path: &str) -> Result<&FsEntry, FsError> {
+    pub fn stat(&self, path: &str) -> Result<&FsEntry, FsError> {
         let absolute_path = self.resolve_path(path);
         self.entries.get(&absolute_path).ok_or(FsError::NotFound)
     }
@@ -388,7 +388,7 @@ match path {
                 format!("/home/{}", rest)
             }
         } else {
-            let cwd = if self.current_directory.is_empty() { "/" } else { &self.current_directory };
+            let cwd = if self.current_dir.is_empty() { "/" } else { &self.current_dir };
             if cwd == "/" {
                 self.normalize_path(&format!("/{}", path))
             } else {
@@ -419,11 +419,11 @@ match part {
     
     // Helper: get parent path
     fn parent_path(&self, path: &str) -> String {
-        if let Some(position) = path.rfind('/') {
-            if position == 0 {
+        if let Some(pos) = path.rfind('/') {
+            if pos == 0 {
                 String::from("/")
             } else {
-                String::from(&path[..position])
+                String::from(&path[..pos])
             }
         } else {
             String::from("/")
@@ -432,8 +432,8 @@ match part {
     
     // Helper: get basename
     fn basename(&self, path: &str) -> String {
-        if let Some(position) = path.rfind('/') {
-            String::from(&path[position + 1..])
+        if let Some(pos) = path.rfind('/') {
+            String::from(&path[pos + 1..])
         } else {
             String::from(path)
         }

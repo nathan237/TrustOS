@@ -29,18 +29,18 @@ pub struct CpuState {
     pub r15: u64,
     
     
-    pub pc: u64,
+    pub rip: u64,
     
     
     pub rflags: u64,
     
     
-    pub aap: u16,
-    pub bjw: u16,
-    pub cqf: u16,
+    pub cs: u16,
+    pub ds: u16,
+    pub es: u16,
     pub fs: u64,  
-    pub ckx: u64,  
-    pub rv: u16,
+    pub gs: u64,  
+    pub ss: u16,
 }
 
 impl CpuState {
@@ -50,16 +50,16 @@ impl CpuState {
             rsi: 0, rdi: 0, rbp: 0, rsp: 0,
             r8: 0, r9: 0, r10: 0, r11: 0,
             r12: 0, r13: 0, r14: 0, r15: 0,
-            pc: 0,
+            rip: 0,
             rflags: 0x202, 
-            aap: 0x33, bjw: 0x2b, cqf: 0x2b,
-            fs: 0, ckx: 0, rv: 0x2b,
+            cs: 0x33, ds: 0x2b, es: 0x2b,
+            fs: 0, gs: 0, ss: 0x2b,
         }
     }
     
     
-    pub fn bzu(&self, w: u8) -> u64 {
-        match w {
+    pub fn get_reg(&self, idx: u8) -> u64 {
+        match idx {
             0 => self.rax,
             1 => self.rcx,
             2 => self.rdx,
@@ -81,81 +81,81 @@ impl CpuState {
     }
     
     
-    pub fn bxa(&mut self, w: u8, ap: u64) {
-        match w {
-            0 => self.rax = ap,
-            1 => self.rcx = ap,
-            2 => self.rdx = ap,
-            3 => self.rbx = ap,
-            4 => self.rsp = ap,
-            5 => self.rbp = ap,
-            6 => self.rsi = ap,
-            7 => self.rdi = ap,
-            8 => self.r8 = ap,
-            9 => self.r9 = ap,
-            10 => self.r10 = ap,
-            11 => self.r11 = ap,
-            12 => self.r12 = ap,
-            13 => self.r13 = ap,
-            14 => self.r14 = ap,
-            15 => self.r15 = ap,
+    pub fn set_reg(&mut self, idx: u8, val: u64) {
+        match idx {
+            0 => self.rax = val,
+            1 => self.rcx = val,
+            2 => self.rdx = val,
+            3 => self.rbx = val,
+            4 => self.rsp = val,
+            5 => self.rbp = val,
+            6 => self.rsi = val,
+            7 => self.rdi = val,
+            8 => self.r8 = val,
+            9 => self.r9 = val,
+            10 => self.r10 = val,
+            11 => self.r11 = val,
+            12 => self.r12 = val,
+            13 => self.r13 = val,
+            14 => self.r14 = val,
+            15 => self.r15 = val,
             _ => {}
         }
     }
 }
 
 
-pub const ASC_: u64 = 1 << 0;  
-pub const ACF_: u64 = 1 << 2;  
-pub const DLY_: u64 = 1 << 4;  
-pub const ACH_: u64 = 1 << 6;  
-pub const ACG_: u64 = 1 << 7;  
-pub const ASE_: u64 = 1 << 11; 
+pub const AUG_: u64 = 1 << 0;  
+pub const ADW_: u64 = 1 << 2;  
+pub const DPU_: u64 = 1 << 4;  
+pub const ADY_: u64 = 1 << 6;  
+pub const ADX_: u64 = 1 << 7;  
+pub const AUI_: u64 = 1 << 11; 
 
 
 pub struct ProcessMemory {
     
-    afx: BTreeMap<u64, MemoryRegion>,
+    regions: BTreeMap<u64, MemoryRegion>,
     
-    den: u64,
+    brk: u64,
 }
 
 struct MemoryRegion {
-    f: Vec<u8>,
-    bob: bool,
-    bjb: bool,
-    kuk: bool,
+    data: Vec<u8>,
+    readable: bool,
+    writable: bool,
+    fvn: bool,
 }
 
 impl ProcessMemory {
     pub fn new() -> Self {
         Self {
-            afx: BTreeMap::new(),
-            den: 0x1000_0000, 
+            regions: BTreeMap::new(),
+            brk: 0x1000_0000, 
         }
     }
     
     
-    pub fn map(&mut self, ag: u64, aw: usize, m: bool, d: bool, b: bool) {
-        self.afx.insert(ag, MemoryRegion {
-            f: alloc::vec![0u8; aw],
-            bob: m,
-            bjb: d,
-            kuk: b,
+    pub fn map(&mut self, addr: u64, size: usize, r: bool, w: bool, x: bool) {
+        self.regions.insert(addr, MemoryRegion {
+            data: alloc::vec![0u8; size],
+            readable: r,
+            writable: w,
+            fvn: x,
         });
     }
     
     
-    pub fn write(&mut self, ag: u64, f: &[u8]) -> Result<(), &'static str> {
-        for (fso, aoz) in self.afx.el() {
-            let exn = *fso + aoz.f.len() as u64;
-            if ag >= *fso && ag < exn {
-                if !aoz.bjb {
+    pub fn write(&mut self, addr: u64, data: &[u8]) -> Result<(), &'static str> {
+        for (region_base, qd) in self.regions.iter_mut() {
+            let cdf = *region_base + qd.data.len() as u64;
+            if addr >= *region_base && addr < cdf {
+                if !qd.writable {
                     return Err("Write to non-writable memory");
                 }
-                let l = (ag - *fso) as usize;
-                let zg = core::cmp::v(f.len(), aoz.f.len() - l);
-                aoz.f[l..l + zg].dg(&f[..zg]);
+                let offset = (addr - *region_base) as usize;
+                let mb = core::cmp::min(data.len(), qd.data.len() - offset);
+                qd.data[offset..offset + mb].copy_from_slice(&data[..mb]);
                 return Ok(());
             }
         }
@@ -163,73 +163,73 @@ impl ProcessMemory {
     }
     
     
-    pub fn read(&self, ag: u64, len: usize) -> Result<Vec<u8>, &'static str> {
-        for (fso, aoz) in self.afx.iter() {
-            let exn = *fso + aoz.f.len() as u64;
-            if ag >= *fso && ag < exn {
-                if !aoz.bob {
+    pub fn read(&self, addr: u64, len: usize) -> Result<Vec<u8>, &'static str> {
+        for (region_base, qd) in self.regions.iter() {
+            let cdf = *region_base + qd.data.len() as u64;
+            if addr >= *region_base && addr < cdf {
+                if !qd.readable {
                     return Err("Read from non-readable memory");
                 }
-                let l = (ag - *fso) as usize;
-                let zg = core::cmp::v(len, aoz.f.len() - l);
-                return Ok(aoz.f[l..l + zg].ip());
+                let offset = (addr - *region_base) as usize;
+                let mb = core::cmp::min(len, qd.data.len() - offset);
+                return Ok(qd.data[offset..offset + mb].to_vec());
             }
         }
         Err("Read from unmapped memory")
     }
     
     
-    pub fn ady(&self, ag: u64) -> Result<u8, &'static str> {
-        let f = self.read(ag, 1)?;
-        Ok(f[0])
+    pub fn read_u8(&self, addr: u64) -> Result<u8, &'static str> {
+        let data = self.read(addr, 1)?;
+        Ok(data[0])
     }
     
     
-    pub fn alp(&self, ag: u64) -> Result<u16, &'static str> {
-        let f = self.read(ag, 2)?;
-        Ok(u16::dj([f[0], f[1]]))
+    pub fn read_u16(&self, addr: u64) -> Result<u16, &'static str> {
+        let data = self.read(addr, 2)?;
+        Ok(u16::from_le_bytes([data[0], data[1]]))
     }
     
     
-    pub fn za(&self, ag: u64) -> Result<u32, &'static str> {
-        let f = self.read(ag, 4)?;
-        Ok(u32::dj([f[0], f[1], f[2], f[3]]))
+    pub fn read_u32(&self, addr: u64) -> Result<u32, &'static str> {
+        let data = self.read(addr, 4)?;
+        Ok(u32::from_le_bytes([data[0], data[1], data[2], data[3]]))
     }
     
     
-    pub fn aqi(&self, ag: u64) -> Result<u64, &'static str> {
-        let f = self.read(ag, 8)?;
-        Ok(u64::dj([
-            f[0], f[1], f[2], f[3],
-            f[4], f[5], f[6], f[7],
+    pub fn read_u64(&self, addr: u64) -> Result<u64, &'static str> {
+        let data = self.read(addr, 8)?;
+        Ok(u64::from_le_bytes([
+            data[0], data[1], data[2], data[3],
+            data[4], data[5], data[6], data[7],
         ]))
     }
     
     
-    pub fn cvj(&mut self, ag: u64, ap: u8) -> Result<(), &'static str> {
-        self.write(ag, &[ap])
+    pub fn write_u8(&mut self, addr: u64, val: u8) -> Result<(), &'static str> {
+        self.write(addr, &[val])
     }
     
     
-    pub fn tw(&mut self, ag: u64, ap: u64) -> Result<(), &'static str> {
-        self.write(ag, &ap.ho())
+    pub fn write_u64(&mut self, addr: u64, val: u64) -> Result<(), &'static str> {
+        self.write(addr, &val.to_le_bytes())
     }
     
     
-    pub fn den(&self) -> u64 { self.den }
-    pub fn pip(&mut self, usn: u64) { self.den = usn; }
+    pub fn brk(&self) -> u64 { self.brk }
+    pub fn set_brk(&mut self, new_brk: u64) { self.brk = new_brk; }
 }
 
 
 pub enum DecodeResult {
     
-    Cg,
+    Continue,
     
-    Hg,
+    Syscall,
     
-    Lk(i32),
+    Exit(i32),
     
-    Q(&'static str),
+    Error(&'static str),
 }
 
 
@@ -237,562 +237,562 @@ pub struct Interpreter {
     pub cpu: CpuState,
     pub memory: ProcessMemory,
     
-    pub aho: BTreeMap<i32, FileDescriptor>,
+    pub fds: BTreeMap<i32, FileDescriptor>,
     
-    bca: i32,
+    next_fd: i32,
     
-    pub ce: u32,
+    pub pid: u32,
     
-    pub jv: String,
+    pub cwd: String,
     
-    pub cjc: Vec<String>,
+    pub argv: Vec<String>,
     
-    pub epy: Vec<String>,
+    pub bzm: Vec<String>,
 }
 
 pub enum FileDescriptor {
-    Btl,
-    Btm,
-    Btk,
-    Es { path: String, qf: u64 },
-    Yc { bi: Vec<u8> },
+    Stdin,
+    Stdout,
+    Stderr,
+    File { path: String, position: u64 },
+    Pipe { buffer: Vec<u8> },
 }
 
 impl Interpreter {
     pub fn new() -> Self {
-        let mut aho = BTreeMap::new();
-        aho.insert(0, FileDescriptor::Btl);
-        aho.insert(1, FileDescriptor::Btm);
-        aho.insert(2, FileDescriptor::Btk);
+        let mut fds = BTreeMap::new();
+        fds.insert(0, FileDescriptor::Stdin);
+        fds.insert(1, FileDescriptor::Stdout);
+        fds.insert(2, FileDescriptor::Stderr);
         
         Self {
             cpu: CpuState::new(),
             memory: ProcessMemory::new(),
-            aho,
-            bca: 3,
-            ce: 1,
-            jv: String::from("/"),
-            cjc: Vec::new(),
-            epy: Vec::new(),
+            fds,
+            next_fd: 3,
+            pid: 1,
+            cwd: String::from("/"),
+            argv: Vec::new(),
+            bzm: Vec::new(),
         }
     }
     
     
-    pub fn ugu(&mut self, pu: &[u8]) -> Result<u64, &'static str> {
+    pub fn load_elf(&mut self, gz: &[u8]) -> Result<u64, &'static str> {
         
-        if pu.len() < 64 {
+        if gz.len() < 64 {
             return Err("ELF too small");
         }
-        if &pu[0..4] != b"\x7fELF" {
+        if &gz[0..4] != b"\x7fELF" {
             return Err("Not an ELF file");
         }
-        if pu[4] != 2 {
+        if gz[4] != 2 {
             return Err("Not 64-bit ELF");
         }
-        if pu[5] != 1 {
+        if gz[5] != 1 {
             return Err("Not little-endian");
         }
         
         
-        let ceh = u16::dj([pu[16], pu[17]]);
-        if ceh != 2 && ceh != 3 {
+        let e_type = u16::from_le_bytes([gz[16], gz[17]]);
+        if e_type != 2 && e_type != 3 {
             return Err("Not executable or shared object");
         }
         
-        let cxe = u64::dj([
-            pu[24], pu[25], pu[26], pu[27],
-            pu[28], pu[29], pu[30], pu[31],
+        let e_entry = u64::from_le_bytes([
+            gz[24], gz[25], gz[26], gz[27],
+            gz[28], gz[29], gz[30], gz[31],
         ]);
         
-        let epo = u64::dj([
-            pu[32], pu[33], pu[34], pu[35],
-            pu[36], pu[37], pu[38], pu[39],
+        let e_phoff = u64::from_le_bytes([
+            gz[32], gz[33], gz[34], gz[35],
+            gz[36], gz[37], gz[38], gz[39],
         ]) as usize;
         
-        let fhh = u16::dj([pu[54], pu[55]]) as usize;
-        let dqk = u16::dj([pu[56], pu[57]]) as usize;
+        let e_phentsize = u16::from_le_bytes([gz[54], gz[55]]) as usize;
+        let e_phnum = u16::from_le_bytes([gz[56], gz[57]]) as usize;
         
         
-        for a in 0..dqk {
-            let abt = epo + a * fhh;
-            if abt + 56 > pu.len() {
+        for i in 0..e_phnum {
+            let nv = e_phoff + i * e_phentsize;
+            if nv + 56 > gz.len() {
                 continue;
             }
             
-            let bku = u32::dj([
-                pu[abt], pu[abt + 1],
-                pu[abt + 2], pu[abt + 3],
+            let p_type = u32::from_le_bytes([
+                gz[nv], gz[nv + 1],
+                gz[nv + 2], gz[nv + 3],
             ]);
             
             
-            if bku != 1 {
+            if p_type != 1 {
                 continue;
             }
             
-            let caz = u64::dj([
-                pu[abt + 8], pu[abt + 9],
-                pu[abt + 10], pu[abt + 11],
-                pu[abt + 12], pu[abt + 13],
-                pu[abt + 14], pu[abt + 15],
+            let p_offset = u64::from_le_bytes([
+                gz[nv + 8], gz[nv + 9],
+                gz[nv + 10], gz[nv + 11],
+                gz[nv + 12], gz[nv + 13],
+                gz[nv + 14], gz[nv + 15],
             ]) as usize;
             
-            let ctg = u64::dj([
-                pu[abt + 16], pu[abt + 17],
-                pu[abt + 18], pu[abt + 19],
-                pu[abt + 20], pu[abt + 21],
-                pu[abt + 22], pu[abt + 23],
+            let p_vaddr = u64::from_le_bytes([
+                gz[nv + 16], gz[nv + 17],
+                gz[nv + 18], gz[nv + 19],
+                gz[nv + 20], gz[nv + 21],
+                gz[nv + 22], gz[nv + 23],
             ]);
             
-            let cgh = u64::dj([
-                pu[abt + 32], pu[abt + 33],
-                pu[abt + 34], pu[abt + 35],
-                pu[abt + 36], pu[abt + 37],
-                pu[abt + 38], pu[abt + 39],
+            let p_filesz = u64::from_le_bytes([
+                gz[nv + 32], gz[nv + 33],
+                gz[nv + 34], gz[nv + 35],
+                gz[nv + 36], gz[nv + 37],
+                gz[nv + 38], gz[nv + 39],
             ]) as usize;
             
-            let ctf = u64::dj([
-                pu[abt + 40], pu[abt + 41],
-                pu[abt + 42], pu[abt + 43],
-                pu[abt + 44], pu[abt + 45],
-                pu[abt + 46], pu[abt + 47],
+            let p_memsz = u64::from_le_bytes([
+                gz[nv + 40], gz[nv + 41],
+                gz[nv + 42], gz[nv + 43],
+                gz[nv + 44], gz[nv + 45],
+                gz[nv + 46], gz[nv + 47],
             ]) as usize;
             
-            let bvv = u32::dj([
-                pu[abt + 4], pu[abt + 5],
-                pu[abt + 6], pu[abt + 7],
+            let p_flags = u32::from_le_bytes([
+                gz[nv + 4], gz[nv + 5],
+                gz[nv + 6], gz[nv + 7],
             ]);
             
             
-            let bob = (bvv & 4) != 0;
-            let bjb = (bvv & 2) != 0;
-            let kuk = (bvv & 1) != 0;
+            let readable = (p_flags & 4) != 0;
+            let writable = (p_flags & 2) != 0;
+            let fvn = (p_flags & 1) != 0;
             
-            self.memory.map(ctg, ctf, bob, bjb, kuk);
+            self.memory.map(p_vaddr, p_memsz, readable, writable, fvn);
             
             
-            if caz + cgh <= pu.len() {
-                let _ = self.memory.write(ctg, &pu[caz..caz + cgh]);
+            if p_offset + p_filesz <= gz.len() {
+                let _ = self.memory.write(p_vaddr, &gz[p_offset..p_offset + p_filesz]);
             }
         }
         
         
-        let dce = 0x7FFF_0000_0000u64;
-        let ibn = 8 * 1024 * 1024;
-        self.memory.map(dce - ibn as u64, ibn, true, true, false);
-        self.cpu.rsp = dce - 8;
+        let bdt = 0x7FFF_0000_0000u64;
+        let eah = 8 * 1024 * 1024;
+        self.memory.map(bdt - eah as u64, eah, true, true, false);
+        self.cpu.rsp = bdt - 8;
         
         
-        self.cpu.pc = cxe;
+        self.cpu.rip = e_entry;
         
-        Ok(cxe)
+        Ok(e_entry)
     }
     
     
-    pub fn wll(&mut self, cjc: &[&str], epy: &[&str]) -> Result<(), &'static str> {
+    pub fn setup_stack(&mut self, argv: &[&str], bzm: &[&str]) -> Result<(), &'static str> {
         
-        let mut mht: Vec<u64> = Vec::new();
-        let mut ktt: Vec<u64> = Vec::new();
+        let mut gwm: Vec<u64> = Vec::new();
+        let mut fva: Vec<u64> = Vec::new();
         
         
-        for ji in cjc.iter().vv() {
-            self.cpu.rsp -= (ji.len() + 1) as u64;
-            let _ = self.memory.write(self.cpu.rsp, ji.as_bytes());
-            let _ = self.memory.cvj(self.cpu.rsp + ji.len() as u64, 0);
-            mht.push(self.cpu.rsp);
+        for db in argv.iter().rev() {
+            self.cpu.rsp -= (db.len() + 1) as u64;
+            let _ = self.memory.write(self.cpu.rsp, db.as_bytes());
+            let _ = self.memory.write_u8(self.cpu.rsp + db.len() as u64, 0);
+            gwm.push(self.cpu.rsp);
         }
-        mht.dbh();
+        gwm.reverse();
         
-        for env in epy.iter().vv() {
+        for env in bzm.iter().rev() {
             self.cpu.rsp -= (env.len() + 1) as u64;
             let _ = self.memory.write(self.cpu.rsp, env.as_bytes());
-            let _ = self.memory.cvj(self.cpu.rsp + env.len() as u64, 0);
-            ktt.push(self.cpu.rsp);
+            let _ = self.memory.write_u8(self.cpu.rsp + env.len() as u64, 0);
+            fva.push(self.cpu.rsp);
         }
-        ktt.dbh();
+        fva.reverse();
         
         
         self.cpu.rsp &= !15;
         
         
         self.cpu.rsp -= 8;
-        let _ = self.memory.tw(self.cpu.rsp, 0);
+        let _ = self.memory.write_u64(self.cpu.rsp, 0);
         
         
-        for ptr in ktt.iter().vv() {
+        for ptr in fva.iter().rev() {
             self.cpu.rsp -= 8;
-            let _ = self.memory.tw(self.cpu.rsp, *ptr);
+            let _ = self.memory.write_u64(self.cpu.rsp, *ptr);
         }
         
         
         self.cpu.rsp -= 8;
-        let _ = self.memory.tw(self.cpu.rsp, 0);
+        let _ = self.memory.write_u64(self.cpu.rsp, 0);
         
         
-        for ptr in mht.iter().vv() {
+        for ptr in gwm.iter().rev() {
             self.cpu.rsp -= 8;
-            let _ = self.memory.tw(self.cpu.rsp, *ptr);
+            let _ = self.memory.write_u64(self.cpu.rsp, *ptr);
         }
         
         
         self.cpu.rsp -= 8;
-        let _ = self.memory.tw(self.cpu.rsp, cjc.len() as u64);
+        let _ = self.memory.write_u64(self.cpu.rsp, argv.len() as u64);
         
         Ok(())
     }
     
     
-    pub fn gu(&mut self) -> DecodeResult {
+    pub fn step(&mut self) -> DecodeResult {
         
-        let aij = match self.memory.read(self.cpu.pc, 16) {
-            Ok(o) => o,
-            Err(_) => return DecodeResult::Q("Failed to fetch instruction"),
+        let ro = match self.memory.read(self.cpu.rip, 16) {
+            Ok(b) => b,
+            Err(_) => return DecodeResult::Error("Failed to fetch instruction"),
         };
         
-        let mut w = 0;
+        let mut idx = 0;
         
         
-        let mut aip: u8 = 0;
-        let mut tlz = false;
+        let mut rp: u8 = 0;
+        let mut mja = false;
         
         loop {
-            if w >= aij.len() {
-                return DecodeResult::Q("Instruction too long");
+            if idx >= ro.len() {
+                return DecodeResult::Error("Instruction too long");
             }
             
-            match aij[w] {
+            match ro[idx] {
                 0x40..=0x4F => {
-                    aip = aij[w];
-                    w += 1;
+                    rp = ro[idx];
+                    idx += 1;
                 }
                 0x66 => {
-                    tlz = true;
-                    w += 1;
+                    mja = true;
+                    idx += 1;
                 }
                 0xF0 | 0xF2 | 0xF3 | 0x26 | 0x2E | 0x36 | 0x3E | 0x64 | 0x65 => {
                     
-                    w += 1;
+                    idx += 1;
                 }
                 _ => break,
             }
         }
         
-        let ako = (aip & 0x08) != 0;
-        let nx = (aip & 0x04) != 0;
-        let pg = (aip & 0x02) != 0;
-        let ic = (aip & 0x01) != 0;
+        let rex_w = (rp & 0x08) != 0;
+        let gb = (rp & 0x04) != 0;
+        let gp = (rp & 0x02) != 0;
+        let cq = (rp & 0x01) != 0;
         
-        let opcode = aij[w];
-        w += 1;
+        let opcode = ro[idx];
+        idx += 1;
         
         match opcode {
             
-            0x0F if aij.get(w) == Some(&0x05) => {
-                self.cpu.pc += (w + 1) as u64;
-                return DecodeResult::Hg;
+            0x0F if ro.get(idx) == Some(&0x05) => {
+                self.cpu.rip += (idx + 1) as u64;
+                return DecodeResult::Syscall;
             }
             
             
             0x90 => {
-                self.cpu.pc += w as u64;
+                self.cpu.rip += idx as u64;
             }
             
             
             0xC3 => {
-                let dbg = self.memory.aqi(self.cpu.rsp).unwrap_or(0);
+                let bdk = self.memory.read_u64(self.cpu.rsp).unwrap_or(0);
                 self.cpu.rsp += 8;
-                self.cpu.pc = dbg;
-                if dbg == 0 {
-                    return DecodeResult::Lk(self.cpu.rax as i32);
+                self.cpu.rip = bdk;
+                if bdk == 0 {
+                    return DecodeResult::Exit(self.cpu.rax as i32);
                 }
             }
             
             
             0x50..=0x57 => {
-                let alq = (opcode - 0x50) + if ic { 8 } else { 0 };
-                let ap = self.cpu.bzu(alq);
+                let tb = (opcode - 0x50) + if cq { 8 } else { 0 };
+                let val = self.cpu.get_reg(tb);
                 self.cpu.rsp -= 8;
-                let _ = self.memory.tw(self.cpu.rsp, ap);
-                self.cpu.pc += w as u64;
+                let _ = self.memory.write_u64(self.cpu.rsp, val);
+                self.cpu.rip += idx as u64;
             }
             
             
             0x58..=0x5F => {
-                let alq = (opcode - 0x58) + if ic { 8 } else { 0 };
-                let ap = self.memory.aqi(self.cpu.rsp).unwrap_or(0);
+                let tb = (opcode - 0x58) + if cq { 8 } else { 0 };
+                let val = self.memory.read_u64(self.cpu.rsp).unwrap_or(0);
                 self.cpu.rsp += 8;
-                self.cpu.bxa(alq, ap);
-                self.cpu.pc += w as u64;
+                self.cpu.set_reg(tb, val);
+                self.cpu.rip += idx as u64;
             }
             
             
-            0xB8..=0xBF if ako => {
-                let alq = (opcode - 0xB8) + if ic { 8 } else { 0 };
-                if w + 8 <= aij.len() {
-                    let gf = u64::dj([
-                        aij[w], aij[w + 1],
-                        aij[w + 2], aij[w + 3],
-                        aij[w + 4], aij[w + 5],
-                        aij[w + 6], aij[w + 7],
+            0xB8..=0xBF if rex_w => {
+                let tb = (opcode - 0xB8) + if cq { 8 } else { 0 };
+                if idx + 8 <= ro.len() {
+                    let imm = u64::from_le_bytes([
+                        ro[idx], ro[idx + 1],
+                        ro[idx + 2], ro[idx + 3],
+                        ro[idx + 4], ro[idx + 5],
+                        ro[idx + 6], ro[idx + 7],
                     ]);
-                    self.cpu.bxa(alq, gf);
-                    self.cpu.pc += (w + 8) as u64;
+                    self.cpu.set_reg(tb, imm);
+                    self.cpu.rip += (idx + 8) as u64;
                 } else {
-                    return DecodeResult::Q("MOV imm64 truncated");
+                    return DecodeResult::Error("MOV imm64 truncated");
                 }
             }
             
             
             0xB8..=0xBF => {
-                let alq = (opcode - 0xB8) + if ic { 8 } else { 0 };
-                if w + 4 <= aij.len() {
-                    let gf = u32::dj([
-                        aij[w], aij[w + 1],
-                        aij[w + 2], aij[w + 3],
+                let tb = (opcode - 0xB8) + if cq { 8 } else { 0 };
+                if idx + 4 <= ro.len() {
+                    let imm = u32::from_le_bytes([
+                        ro[idx], ro[idx + 1],
+                        ro[idx + 2], ro[idx + 3],
                     ]);
-                    self.cpu.bxa(alq, gf as u64);
-                    self.cpu.pc += (w + 4) as u64;
+                    self.cpu.set_reg(tb, imm as u64);
+                    self.cpu.rip += (idx + 4) as u64;
                 } else {
-                    return DecodeResult::Q("MOV imm32 truncated");
+                    return DecodeResult::Error("MOV imm32 truncated");
                 }
             }
             
             
-            0x31 if ako => {
-                if w >= aij.len() {
-                    return DecodeResult::Q("XOR missing modrm");
+            0x31 if rex_w => {
+                if idx >= ro.len() {
+                    return DecodeResult::Error("XOR missing modrm");
                 }
-                let ms = aij[w];
-                w += 1;
+                let fi = ro[idx];
+                idx += 1;
                 
-                let hrq = (ms >> 6) & 3;
-                let reg = ((ms >> 3) & 7) + if nx { 8 } else { 0 };
-                let hb = (ms & 7) + if ic { 8 } else { 0 };
+                let dul = (fi >> 6) & 3;
+                let reg = ((fi >> 3) & 7) + if gb { 8 } else { 0 };
+                let rm = (fi & 7) + if cq { 8 } else { 0 };
                 
-                if hrq == 3 {
+                if dul == 3 {
                     
-                    let cy = self.cpu.bzu(reg);
-                    let cs = self.cpu.bzu(hb);
-                    let result = cs ^ cy;
-                    self.cpu.bxa(hb, result);
-                    self.pxd(result);
+                    let src = self.cpu.get_reg(reg);
+                    let dst = self.cpu.get_reg(rm);
+                    let result = dst ^ src;
+                    self.cpu.set_reg(rm, result);
+                    self.update_flags_logic(result);
                 }
-                self.cpu.pc += w as u64;
+                self.cpu.rip += idx as u64;
             }
             
             
             0x31 => {
-                if w >= aij.len() {
-                    return DecodeResult::Q("XOR missing modrm");
+                if idx >= ro.len() {
+                    return DecodeResult::Error("XOR missing modrm");
                 }
-                let ms = aij[w];
-                w += 1;
+                let fi = ro[idx];
+                idx += 1;
                 
-                let hrq = (ms >> 6) & 3;
-                let reg = ((ms >> 3) & 7) + if nx { 8 } else { 0 };
-                let hb = (ms & 7) + if ic { 8 } else { 0 };
+                let dul = (fi >> 6) & 3;
+                let reg = ((fi >> 3) & 7) + if gb { 8 } else { 0 };
+                let rm = (fi & 7) + if cq { 8 } else { 0 };
                 
-                if hrq == 3 {
-                    let cy = self.cpu.bzu(reg) as u32;
-                    let cs = self.cpu.bzu(hb) as u32;
-                    let result = cs ^ cy;
-                    self.cpu.bxa(hb, result as u64);
-                    self.pxd(result as u64);
+                if dul == 3 {
+                    let src = self.cpu.get_reg(reg) as u32;
+                    let dst = self.cpu.get_reg(rm) as u32;
+                    let result = dst ^ src;
+                    self.cpu.set_reg(rm, result as u64);
+                    self.update_flags_logic(result as u64);
                 }
-                self.cpu.pc += w as u64;
+                self.cpu.rip += idx as u64;
             }
             
             
             0xE8 => {
-                if w + 4 > aij.len() {
-                    return DecodeResult::Q("CALL truncated");
+                if idx + 4 > ro.len() {
+                    return DecodeResult::Error("CALL truncated");
                 }
-                let adj = i32::dj([
-                    aij[w], aij[w + 1],
-                    aij[w + 2], aij[w + 3],
+                let ot = i32::from_le_bytes([
+                    ro[idx], ro[idx + 1],
+                    ro[idx + 2], ro[idx + 3],
                 ]);
-                let aqa = self.cpu.pc + (w + 4) as u64;
+                let vo = self.cpu.rip + (idx + 4) as u64;
                 self.cpu.rsp -= 8;
-                let _ = self.memory.tw(self.cpu.rsp, aqa);
-                self.cpu.pc = (aqa as i64 + adj as i64) as u64;
+                let _ = self.memory.write_u64(self.cpu.rsp, vo);
+                self.cpu.rip = (vo as i64 + ot as i64) as u64;
             }
             
             
             0xE9 => {
-                if w + 4 > aij.len() {
-                    return DecodeResult::Q("JMP truncated");
+                if idx + 4 > ro.len() {
+                    return DecodeResult::Error("JMP truncated");
                 }
-                let adj = i32::dj([
-                    aij[w], aij[w + 1],
-                    aij[w + 2], aij[w + 3],
+                let ot = i32::from_le_bytes([
+                    ro[idx], ro[idx + 1],
+                    ro[idx + 2], ro[idx + 3],
                 ]);
-                let aqa = self.cpu.pc + (w + 4) as u64;
-                self.cpu.pc = (aqa as i64 + adj as i64) as u64;
+                let vo = self.cpu.rip + (idx + 4) as u64;
+                self.cpu.rip = (vo as i64 + ot as i64) as u64;
             }
             
             
             0xEB => {
-                if w >= aij.len() {
-                    return DecodeResult::Q("JMP rel8 truncated");
+                if idx >= ro.len() {
+                    return DecodeResult::Error("JMP rel8 truncated");
                 }
-                let adj = aij[w] as i8;
-                let aqa = self.cpu.pc + (w + 1) as u64;
-                self.cpu.pc = (aqa as i64 + adj as i64) as u64;
+                let ot = ro[idx] as i8;
+                let vo = self.cpu.rip + (idx + 1) as u64;
+                self.cpu.rip = (vo as i64 + ot as i64) as u64;
             }
             
             
             0x70..=0x7F => {
-                if w >= aij.len() {
-                    return DecodeResult::Q("Jcc truncated");
+                if idx >= ro.len() {
+                    return DecodeResult::Error("Jcc truncated");
                 }
-                let adj = aij[w] as i8;
-                let mo = opcode & 0x0F;
-                let aqa = self.cpu.pc + (w + 1) as u64;
+                let ot = ro[idx] as i8;
+                let fc = opcode & 0x0F;
+                let vo = self.cpu.rip + (idx + 1) as u64;
                 
-                if self.qyp(mo) {
-                    self.cpu.pc = (aqa as i64 + adj as i64) as u64;
+                if self.check_condition(fc) {
+                    self.cpu.rip = (vo as i64 + ot as i64) as u64;
                 } else {
-                    self.cpu.pc = aqa;
+                    self.cpu.rip = vo;
                 }
             }
             
             
             0xCC => {
-                crate::serial_println!("[INTERP] INT3 at 0x{:x}", self.cpu.pc);
-                self.cpu.pc += w as u64;
+                crate::serial_println!("[INTERP] INT3 at 0x{:x}", self.cpu.rip);
+                self.cpu.rip += idx as u64;
             }
             
             
             0xF4 => {
-                return DecodeResult::Lk(0);
+                return DecodeResult::Exit(0);
             }
             
             _ => {
                 crate::serial_println!(
                     "[INTERP] Unknown opcode 0x{:02x} at RIP=0x{:x}",
-                    opcode, self.cpu.pc
+                    opcode, self.cpu.rip
                 );
                 
-                self.cpu.pc += w as u64;
+                self.cpu.rip += idx as u64;
             }
         }
         
-        DecodeResult::Cg
+        DecodeResult::Continue
     }
     
     
-    fn pxd(&mut self, result: u64) {
-        self.cpu.rflags &= !(ASC_ | ASE_ | ACG_ | ACH_ | ACF_);
+    fn update_flags_logic(&mut self, result: u64) {
+        self.cpu.rflags &= !(AUG_ | AUI_ | ADX_ | ADY_ | ADW_);
         
         if result == 0 {
-            self.cpu.rflags |= ACH_;
+            self.cpu.rflags |= ADY_;
         }
         if (result as i64) < 0 {
-            self.cpu.rflags |= ACG_;
+            self.cpu.rflags |= ADX_;
         }
         
-        let vbq = (result as u8).ipi();
-        if vbq % 2 == 0 {
-            self.cpu.rflags |= ACF_;
+        let gme = (result as u8).count_ones();
+        if gme % 2 == 0 {
+            self.cpu.rflags |= ADW_;
         }
     }
     
     
-    fn qyp(&self, mo: u8) -> bool {
-        let vq = (self.cpu.rflags & ASC_) != 0;
-        let aca = (self.cpu.rflags & ACH_) != 0;
-        let eim = (self.cpu.rflags & ACG_) != 0;
-        let gog = (self.cpu.rflags & ASE_) != 0;
-        let ewp = (self.cpu.rflags & ACF_) != 0;
+    fn check_condition(&self, fc: u8) -> bool {
+        let cf = (self.cpu.rflags & AUG_) != 0;
+        let zf = (self.cpu.rflags & ADY_) != 0;
+        let bvs = (self.cpu.rflags & ADX_) != 0;
+        let dby = (self.cpu.rflags & AUI_) != 0;
+        let ccq = (self.cpu.rflags & ADW_) != 0;
         
-        match mo {
-            0x0 => gog,           
-            0x1 => !gog,          
-            0x2 => vq,           
-            0x3 => !vq,          
-            0x4 => aca,           
-            0x5 => !aca,          
-            0x6 => vq || aca,     
-            0x7 => !vq && !aca,   
-            0x8 => eim,           
-            0x9 => !eim,          
-            0xA => ewp,           
-            0xB => !ewp,          
-            0xC => eim != gog,     
-            0xD => eim == gog,     
-            0xE => aca || (eim != gog), 
-            0xF => !aca && (eim == gog), 
+        match fc {
+            0x0 => dby,           
+            0x1 => !dby,          
+            0x2 => cf,           
+            0x3 => !cf,          
+            0x4 => zf,           
+            0x5 => !zf,          
+            0x6 => cf || zf,     
+            0x7 => !cf && !zf,   
+            0x8 => bvs,           
+            0x9 => !bvs,          
+            0xA => ccq,           
+            0xB => !ccq,          
+            0xC => bvs != dby,     
+            0xD => bvs == dby,     
+            0xE => zf || (bvs != dby), 
+            0xF => !zf && (bvs == dby), 
             _ => false,
         }
     }
     
     
-    pub fn vw(&mut self) -> Result<i32, &'static str> {
-        let mut au = 0u64;
-        let csk = 1_000_000u64; 
-        let vxl = 100_000u64;
+    pub fn run(&mut self) -> Result<i32, &'static str> {
+        let mut steps = 0u64;
+        let ayd = 1_000_000u64; 
+        let ogb = 100_000u64;
         
         loop {
-            match self.gu() {
-                DecodeResult::Cg => {
-                    au += 1;
-                    if au % vxl == 0 {
+            match self.step() {
+                DecodeResult::Continue => {
+                    steps += 1;
+                    if steps % ogb == 0 {
                         crate::print!(".");  
                     }
-                    if au > csk {
+                    if steps > ayd {
                         crate::println!();
-                        crate::println!("Executed {} instructions", au);
+                        crate::println!("Executed {} instructions", steps);
                         return Err("Timeout: binary too complex for interpreter");
                     }
                 }
-                DecodeResult::Hg => {
+                DecodeResult::Syscall => {
                     
-                    let ezk = self.cpu.rax;
-                    let result = self.ixo();
+                    let cec = self.cpu.rax;
+                    let result = self.handle_syscall();
                     
                     
-                    if ezk == 60 || ezk == 231 {
+                    if cec == 60 || cec == 231 {
                         return Ok(result as i32);
                     }
                     
                     self.cpu.rax = result as u64;
                 }
-                DecodeResult::Lk(aj) => {
-                    return Ok(aj);
+                DecodeResult::Exit(code) => {
+                    return Ok(code);
                 }
-                DecodeResult::Q(aa) => {
+                DecodeResult::Error(e) => {
                     crate::println!();
-                    crate::println!("After {} instructions:", au);
-                    crate::println!("  RIP: 0x{:x}", self.cpu.pc);
-                    return Err(aa);
+                    crate::println!("After {} instructions:", steps);
+                    crate::println!("  RIP: 0x{:x}", self.cpu.rip);
+                    return Err(e);
                 }
             }
         }
     }
     
     
-    fn ixo(&mut self) -> i64 {
-        let ezk = self.cpu.rax;
-        let aai = self.cpu.rdi;
-        let agf = self.cpu.rsi;
-        let bfx = self.cpu.rdx;
-        let fcs = self.cpu.r10;
-        let gyx = self.cpu.r8;
-        let xxw = self.cpu.r9;
+    fn handle_syscall(&mut self) -> i64 {
+        let cec = self.cpu.rax;
+        let arg1 = self.cpu.rdi;
+        let arg2 = self.cpu.rsi;
+        let aer = self.cpu.rdx;
+        let cfw = self.cpu.r10;
+        let dhv = self.cpu.r8;
+        let pwq = self.cpu.r9;
         
-        match ezk {
+        match cec {
             
             1 => {
-                let da = aai as i32;
-                let k = agf;
-                let az = bfx as usize;
+                let fd = arg1 as i32;
+                let buf = arg2;
+                let count = aer as usize;
                 
-                if let Ok(f) = self.memory.read(k, az) {
-                    match self.aho.get(&da) {
-                        Some(FileDescriptor::Btm) | Some(FileDescriptor::Btk) => {
-                            if let Ok(e) = core::str::jg(&f) {
-                                crate::print!("{}", e);
+                if let Ok(data) = self.memory.read(buf, count) {
+                    match self.fds.get(&fd) {
+                        Some(FileDescriptor::Stdout) | Some(FileDescriptor::Stderr) => {
+                            if let Ok(j) = core::str::from_utf8(&data) {
+                                crate::print!("{}", j);
                             }
-                            az as i64
+                            count as i64
                         }
                         _ => -9, 
                     }
@@ -803,28 +803,28 @@ impl Interpreter {
             
             
             0 => {
-                let da = aai as i32;
-                let k = agf;
-                let az = bfx as usize;
+                let fd = arg1 as i32;
+                let buf = arg2;
+                let count = aer as usize;
                 
-                match self.aho.get(&da) {
-                    Some(FileDescriptor::Btl) => {
+                match self.fds.get(&fd) {
+                    Some(FileDescriptor::Stdin) => {
                         
-                        let mut dlc = 0;
-                        while dlc < az {
-                            if let Some(r) = crate::keyboard::auw() {
-                                let _ = self.memory.cvj(k + dlc as u64, r);
-                                dlc += 1;
-                                if r == b'\n' {
+                        let mut biv = 0;
+                        while biv < count {
+                            if let Some(c) = crate::keyboard::ya() {
+                                let _ = self.memory.write_u8(buf + biv as u64, c);
+                                biv += 1;
+                                if c == b'\n' {
                                     break;
                                 }
-                            } else if dlc > 0 {
+                            } else if biv > 0 {
                                 break;
                             } else {
-                                core::hint::hc();
+                                core::hint::spin_loop();
                             }
                         }
-                        dlc as i64
+                        biv as i64
                     }
                     _ => -9, 
                 }
@@ -837,39 +837,39 @@ impl Interpreter {
             
             
             12 => {
-                let ag = aai;
-                if ag == 0 {
-                    self.memory.den() as i64
+                let addr = arg1;
+                if addr == 0 {
+                    self.memory.brk() as i64
                 } else {
-                    self.memory.pip(ag);
-                    ag as i64
+                    self.memory.set_brk(addr);
+                    addr as i64
                 }
             }
             
             
             9 => {
-                let ag = aai;
-                let go = agf as usize;
-                let ybz = bfx;
-                let ddp = fcs;
+                let addr = arg1;
+                let length = arg2 as usize;
+                let pxf = aer;
+                let bej = cfw;
                 
                 
-                let efc = if ag == 0 {
-                    self.memory.den()
+                let bug = if addr == 0 {
+                    self.memory.brk()
                 } else {
-                    ag
+                    addr
                 };
                 
-                self.memory.map(efc, go, true, true, false);
-                if ag == 0 {
-                    self.memory.pip(efc + go as u64);
+                self.memory.map(bug, length, true, true, false);
+                if addr == 0 {
+                    self.memory.set_brk(bug + length as u64);
                 }
                 
-                efc as i64
+                bug as i64
             }
             
             
-            39 => self.ce as i64,
+            39 => self.pid as i64,
             
             
             102 => 0, 
@@ -886,24 +886,24 @@ impl Interpreter {
             
             63 => {
                 
-                let k = aai;
-                let xoc = b"Linux\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
-                let _ = self.memory.write(k, xoc);
+                let buf = arg1;
+                let ppl = b"Linux\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
+                let _ = self.memory.write(buf, ppl);
                 0
             }
             
             
             158 => {
-                let aj = aai;
-                let ag = agf;
+                let code = arg1;
+                let addr = arg2;
                 
-                match aj {
+                match code {
                     0x1002 => { 
-                        self.cpu.fs = ag;
+                        self.cpu.fs = addr;
                         0
                     }
                     0x1003 => { 
-                        self.cpu.ckx = ag;
+                        self.cpu.gs = addr;
                         0
                     }
                     _ => -22, 
@@ -913,7 +913,7 @@ impl Interpreter {
             _ => {
                 crate::serial_println!(
                     "[INTERP] Unknown syscall {} (rdi={:x}, rsi={:x}, rdx={:x})",
-                    ezk, aai, agf, bfx
+                    cec, arg1, arg2, aer
                 );
                 -38 
             }
@@ -922,18 +922,18 @@ impl Interpreter {
 }
 
 
-pub fn peo(pu: &[u8], cjc: &[&str]) -> Result<i32, &'static str> {
-    let mut ahp = Interpreter::new();
+pub fn jbu(gz: &[u8], argv: &[&str]) -> Result<i32, &'static str> {
+    let mut interp = Interpreter::new();
     
     
-    ahp.ugu(pu)?;
+    interp.load_elf(gz)?;
     
     
-    let epy = ["PATH=/bin:/usr/bin", "HOME=/root", "USER=root"];
-    ahp.wll(cjc, &epy)?;
+    let bzm = ["PATH=/bin:/usr/bin", "HOME=/root", "USER=root"];
+    interp.setup_stack(argv, &bzm)?;
     
-    crate::println!("Starting {} ...", cjc.get(0).unwrap_or(&"<binary>"));
+    crate::println!("Starting {} ...", argv.get(0).unwrap_or(&"<binary>"));
     
     
-    ahp.vw()
+    interp.run()
 }

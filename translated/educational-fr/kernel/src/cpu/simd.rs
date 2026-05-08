@@ -112,19 +112,19 @@ unsafe {
 /// When SSE is enabled in the target, replace with the SSE2 version
 #[inline]
 pub // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe fn memcpy_sse2(destination: *mut u8, source: *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+unsafe fn memcpy_sse2(dst: *mut u8, src: *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u8, len: usize) {
     // Basic copy - compiler may optimize this
     let mut i = 0;
     while i + 8 <= len {
         // Copy 8 bytes at a time (u64)
-        let data = (source.add(i) as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+        let data = (src.add(i) as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u64).read_unaligned();
-        (destination.add(i) as *mut u64).write_unaligned(data);
+        (dst.add(i) as *mut u64).write_unaligned(data);
         i += 8;
     }
     while i < len {
-        *destination.add(i) = *source.add(i);
+        *dst.add(i) = *src.add(i);
         i += 1;
     }
 }
@@ -132,17 +132,17 @@ const u64).read_unaligned();
 /// Fast memory set (basic version)
 #[inline]
 pub // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe fn memset_sse2(destination: *mut u8, value: u8, len: usize) {
+unsafe fn memset_sse2(dst: *mut u8, value: u8, len: usize) {
     // Create a u64 filled with the byte value
     let fill: u64 = 0x0101010101010101u64 * (value as u64);
     
     let mut i = 0;
     while i + 8 <= len {
-        (destination.add(i) as *mut u64).write_unaligned(fill);
+        (dst.add(i) as *mut u64).write_unaligned(fill);
         i += 8;
     }
     while i < len {
-        *destination.add(i) = value;
+        *dst.add(i) = value;
         i += 1;
     }
 }
@@ -176,18 +176,18 @@ const u64).read_unaligned();
 /// XOR blocks (basic version)
 #[inline]
 pub // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe fn xor_blocks_sse2(destination: *mut u8, source: *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+unsafe fn xor_blocks_sse2(dst: *mut u8, src: *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u8, len: usize) {
     let mut i = 0;
     while i + 8 <= len {
-        let a = (destination.add(i) as *mut u64).read_unaligned();
-        let b = (source.add(i) as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+        let a = (dst.add(i) as *mut u64).read_unaligned();
+        let b = (src.add(i) as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u64).read_unaligned();
-        (destination.add(i) as *mut u64).write_unaligned(a ^ b);
+        (dst.add(i) as *mut u64).write_unaligned(a ^ b);
         i += 8;
     }
     while i < len {
-        *destination.add(i) ^= *source.add(i);
+        *dst.add(i) ^= *src.add(i);
         i += 1;
     }
 }

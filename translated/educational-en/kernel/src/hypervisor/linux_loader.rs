@@ -76,19 +76,19 @@ pub struct SetupHeader {
     /// Ramdisk size (at 0x21C)
     pub ramdisk_size: u32,
     /// Command line pointer (at 0x228)
-    pub command_line_pointer: u32,
+    pub cmd_line_ptr: u32,
     /// Highest address for initrd (at 0x22C)
-    pub initrd_address_maximum: u32,
+    pub initrd_addr_max: u32,
     /// Kernel alignment (at 0x230)
     pub kernel_alignment: u32,
     /// Can be relocated? (at 0x234)
     pub relocatable_kernel: u8,
     /// Minimum alignment (at 0x235)
-    pub minimum_alignment: u8,
+    pub min_alignment: u8,
     /// Extended load flags (at 0x236)
     pub xloadflags: u16,
     /// Amount of memory used for init (at 0x260)
-    pub initialize_size: u32,
+    pub init_size: u32,
     /// Preferred load address (at 0x258)
     pub pref_address: u64,
 }
@@ -128,7 +128,7 @@ pub enum E820Type {
 #[derive(Debug, Clone, Copy)]
 // Public structure — visible outside this module.
 pub struct E820Entry {
-    pub address: u64,
+    pub addr: u64,
     pub size: u64,
     pub entry_type: u32,
 }
@@ -187,13 +187,13 @@ pub fn parse_bzimage(data: &[u8]) -> Result<LinuxKernel> {
         code32_start: read_u32(data, 0x214),
         ramdisk_image: read_u32(data, 0x218),
         ramdisk_size: read_u32(data, 0x21C),
-        command_line_pointer: read_u32(data, 0x228),
-        initrd_address_maximum: read_u32(data, 0x22C),
+        cmd_line_ptr: read_u32(data, 0x228),
+        initrd_addr_max: read_u32(data, 0x22C),
         kernel_alignment: read_u32(data, 0x230),
         relocatable_kernel: data[0x234],
-        minimum_alignment: data[0x235],
+        min_alignment: data[0x235],
         xloadflags: read_u16(data, 0x236),
-        initialize_size: read_u32(data, 0x260),
+        init_size: read_u32(data, 0x260),
         pref_address: read_u64(data, 0x258),
     };
 
@@ -231,7 +231,7 @@ pub fn parse_bzimage(data: &[u8]) -> Result<LinuxKernel> {
     crate::serial_println!("  64-bit: {}", supports_64bit);
     crate::serial_println!("  Entry point: 0x{:X}", entry_64);
     crate::serial_println!("  Preferred load: 0x{:X}", header.pref_address);
-    crate::serial_println!("  Init size: {} KB", header.initialize_size / 1024);
+    crate::serial_println!("  Init size: {} KB", header.init_size / 1024);
 
     Ok(LinuxKernel {
         header,
@@ -272,9 +272,9 @@ pub struct LinuxGuestSetup {
     /// Guest entry point (RIP)
     pub entry_point: u64,
     /// Guest stack pointer (RSP)
-    pub stack_pointer: u64,
+    pub stack_ptr: u64,
     /// Boot params address (for RSI)
-    pub boot_params_address: u64,
+    pub boot_params_addr: u64,
     /// Page table root (CR3) in guest physical space
     pub cr3: u64,
     /// GDT base address in guest physical space
@@ -295,16 +295,16 @@ pub fn load_linux_kernel(
     kernel: &LinuxKernel,
     config: &LinuxGuestConfig,
 ) -> Result<LinuxGuestSetup> {
-    let memory_size = guest_memory.len() as u64;
+    let mem_size = guest_memory.len() as u64;
     
     crate::serial_println!("[Linux] Loading kernel into {} MB guest memory",
-                          memory_size / (1024 * 1024));
+                          mem_size / (1024 * 1024));
 
     // Verify we have enough memory
     let minimum_memory = KERNEL_LOAD_ADDRESS + kernel.kernel_data.len() as u64 + 0x100000;
-    if memory_size < minimum_memory {
+    if mem_size < minimum_memory {
         crate::serial_println!("[Linux] Insufficient guest memory: need {} MB, have {} MB",
-                              minimum_memory / (1024 * 1024), memory_size / (1024 * 1024));
+                              minimum_memory / (1024 * 1024), mem_size / (1024 * 1024));
         return Err(HypervisorError::OutOfMemory);
     }
 
@@ -320,7 +320,7 @@ pub fn load_linux_kernel(
 
     // 2. Set up command line
     let cmdline_bytes = config.cmdline.as_bytes();
-    let cmdline_length = cmdline_bytes.len().minimum(CMDLINE_MAXIMUM - 1);
+    let cmdline_length = cmdline_bytes.len().min(CMDLINE_MAXIMUM - 1);
     let command_start = CMDLINE_ADDRESS as usize;
     guest_memory[command_start..command_start + cmdline_length]
         .copy_from_slice(&cmdline_bytes[..cmdline_length]);
@@ -332,7 +332,7 @@ pub fn load_linux_kernel(
     setup_boot_params(guest_memory, kernel, config)?;
 
     // 4. Set up page tables (identity map 0-4GB)
-    setup_guest_page_tables(guest_memory, memory_size)?;
+    setup_guest_page_tables(guest_memory, mem_size)?;
 
     // 5. Set up GDT
     setup_guest_gdt(guest_memory)?;
@@ -357,8 +357,8 @@ pub fn load_linux_kernel(
 
     Ok(LinuxGuestSetup {
         entry_point: kernel.entry_64,
-        stack_pointer: GUEST_STACK_ADDRESS,
-        boot_params_address: BOOT_PARAMS_ADDRESS,
+        stack_ptr: GUEST_STACK_ADDRESS,
+        boot_params_addr: BOOT_PARAMS_ADDRESS,
         cr3: PAGE_TABLES_ADDRESS,
         gdt_base: GDT_ADDRESS,
     })
@@ -389,12 +389,12 @@ fn setup_boot_params(
     // Copy the original setup header (0x1F1 - 0x290 approximately)
     // The setup header goes at offset 0x1F1 within boot_params
     let header_source_start = 0x1F1;
-    let header_source_end = 0x290.minimum(kernel.setup_data.len());
+    let header_source_end = 0x290.min(kernel.setup_data.len());
     if header_source_end > header_source_start {
         let dest_start = bp + 0x1F1;
-        let source = &kernel.setup_data[header_source_start..header_source_end];
-        let dest = &mut guest_memory[dest_start..dest_start + source.len()];
-        dest.copy_from_slice(source);
+        let src = &kernel.setup_data[header_source_start..header_source_end];
+        let dest = &mut guest_memory[dest_start..dest_start + src.len()];
+        dest.copy_from_slice(src);
     }
 
     // Overwrite key fields in the setup header within boot_params:
@@ -426,8 +426,8 @@ fn setup_boot_params(
 
     // === E820 Memory Map (at offset 0x2D0 in boot_params) ===
     // e820_entries count at offset 0x1E8
-    let memory_size = config.memory_size;
-    let e820_entries = setup_e820_map(guest_memory, bp, memory_size);
+    let mem_size = config.memory_size;
+    let e820_entries = setup_e820_map(guest_memory, bp, mem_size);
     guest_memory[bp + 0x1E8] = e820_entries;
 
     crate::serial_println!("[Linux] boot_params at 0x{:X}, {} e820 entries, cmdline at 0x{:X}",
@@ -438,7 +438,7 @@ fn setup_boot_params(
 
 /// Set up the E820 memory map in boot_params.
 /// Returns the number of entries.
-fn setup_e820_map(guest_memory: &mut [u8], bp: usize, memory_size: u64) -> u8 {
+fn setup_e820_map(guest_memory: &mut [u8], bp: usize, mem_size: u64) -> u8 {
     // E820 map starts at offset 0x2D0 in boot_params
     // Each entry is 20 bytes: u64 addr, u64 size, u32 type
     let e820_base = bp + 0x2D0;
@@ -465,7 +465,7 @@ fn setup_e820_map(guest_memory: &mut [u8], bp: usize, memory_size: u64) -> u8 {
     count += 1;
 
     // Entry 4: Main memory (1MB - end of guest memory)
-    let main_memory_size = memory_size - 0x100000;
+    let main_memory_size = mem_size - 0x100000;
     write_e820_entry(guest_memory, e820_base, count,
                      0x100000, main_memory_size, E820Type::Ram);
     count += 1;
@@ -475,10 +475,10 @@ fn setup_e820_map(guest_memory: &mut [u8], bp: usize, memory_size: u64) -> u8 {
 
 fn write_e820_entry(
     mem: &mut [u8], base: usize, index: u8,
-    address: u64, size: u64, entry_type: E820Type,
+    addr: u64, size: u64, entry_type: E820Type,
 ) {
     let offset = base + (index as usize) * 20;
-    write_u64(mem, offset, address);
+    write_u64(mem, offset, addr);
     write_u64(mem, offset + 8, size);
     write_u32(mem, offset + 16, entry_type as u32);
 }
@@ -497,7 +497,7 @@ fn write_e820_entry(
 ///   +0x3000: PD1 (1 page)  — 512 entries × 2MB = 1GB
 ///   +0x4000: PD2 (1 page)  — 512 entries × 2MB = 1GB
 ///   +0x5000: PD3 (1 page)  — 512 entries × 2MB = 1GB
-fn setup_guest_page_tables(guest_memory: &mut [u8], _memory_size: u64) -> Result<()> {
+fn setup_guest_page_tables(guest_memory: &mut [u8], _mem_size: u64) -> Result<()> {
     let pt_base = PAGE_TABLES_ADDRESS as usize;
 
     // Zero 6 pages (PML4 + PDPT + 4 PDs)
@@ -522,9 +522,9 @@ fn setup_guest_page_tables(guest_memory: &mut [u8], _memory_size: u64) -> Result
     for pd_index in 0..4u64 {
         let pd_offset = pt_base + 0x2000 + (pd_index as usize) * 0x1000;
         for entry in 0..512u64 {
-            let physical_address = (pd_index * 512 + entry) * 0x200000; // 2MB pages
+            let phys_addr = (pd_index * 512 + entry) * 0x200000; // 2MB pages
             // Present + Writable + Page Size (2MB)
-            let pde = physical_address | 0x83; // bit 7 = PS (page size)
+            let pde = phys_addr | 0x83; // bit 7 = PS (page size)
             write_u64(guest_memory, pd_offset + (entry as usize) * 8, pde);
         }
     }
@@ -693,7 +693,7 @@ pub fn configure_vmcs_for_linux(
 
     // === Guest RIP, RSP, RFLAGS ===
     vmcs.write(fields::GUEST_RIP, setup.entry_point)?;
-    vmcs.write(fields::GUEST_RSP, setup.stack_pointer)?;
+    vmcs.write(fields::GUEST_RSP, setup.stack_ptr)?;
     vmcs.write(fields::GUEST_RFLAGS, 0x2)?; // Reserved bit 1 must be set
 
     // === Guest MSRs ===
@@ -701,7 +701,7 @@ pub fn configure_vmcs_for_linux(
     vmcs.write(fields::GUEST_IA32_EFER, 0x501)?; // SCE + LME + LMA
 
     crate::serial_println!("[Linux] VMCS configured: RIP=0x{:X} RSP=0x{:X} CR3=0x{:X} RSI=0x{:X}",
-                          setup.entry_point, setup.stack_pointer, setup.cr3, setup.boot_params_address);
+                          setup.entry_point, setup.stack_ptr, setup.cr3, setup.boot_params_addr);
 
     Ok(())
 }

@@ -271,7 +271,7 @@ pub fn new(point: Vec3, normal: Vec3, material_id: u8) -> Self {
 pub fn intersect(&self, ray: &Ray) -> HitInfo {
         let denom = self.normal.dot(ray.direction);
         
-        if denom.absolute() < 0.0001 {
+        if denom.abs() < 0.0001 {
             return HitInfo::none();
         }
         
@@ -292,8 +292,8 @@ pub fn intersect(&self, ray: &Ray) -> HitInfo {
 
 /// Box primitive (axis-aligned)
 pub struct Box3D {
-    pub minimum: Vec3,
-    pub maximum: Vec3,
+    pub min: Vec3,
+    pub max: Vec3,
     pub material_id: u8,
 }
 
@@ -302,8 +302,8 @@ impl Box3D {
         // Fonction publique — appelable depuis d'autres modules.
 pub fn new(center: Vec3, half_size: Vec3, material_id: u8) -> Self {
         Self {
-            minimum: center - half_size,
-            maximum: center + half_size,
+            min: center - half_size,
+            max: center + half_size,
             material_id,
         }
     }
@@ -316,15 +316,15 @@ pub fn intersect(&self, ray: &Ray) -> HitInfo {
             1.0 / ray.direction.z,
         );
         
-        let t1 = (self.minimum.x - ray.origin.x) * inv_d.x;
-        let t2 = (self.maximum.x - ray.origin.x) * inv_d.x;
-        let t3 = (self.minimum.y - ray.origin.y) * inv_d.y;
-        let t4 = (self.maximum.y - ray.origin.y) * inv_d.y;
-        let t5 = (self.minimum.z - ray.origin.z) * inv_d.z;
-        let t6 = (self.maximum.z - ray.origin.z) * inv_d.z;
+        let t1 = (self.min.x - ray.origin.x) * inv_d.x;
+        let t2 = (self.max.x - ray.origin.x) * inv_d.x;
+        let t3 = (self.min.y - ray.origin.y) * inv_d.y;
+        let t4 = (self.max.y - ray.origin.y) * inv_d.y;
+        let t5 = (self.min.z - ray.origin.z) * inv_d.z;
+        let t6 = (self.max.z - ray.origin.z) * inv_d.z;
         
-        let tmin = t1.minimum(t2).maximum(t3.minimum(t4)).maximum(t5.minimum(t6));
-        let tmax = t1.maximum(t2).minimum(t3.maximum(t4)).minimum(t5.maximum(t6));
+        let tmin = t1.min(t2).max(t3.min(t4)).max(t5.min(t6));
+        let tmax = t1.max(t2).min(t3.max(t4)).min(t5.max(t6));
         
         if tmax < 0.0 || tmin > tmax {
             return HitInfo::none();
@@ -338,9 +338,9 @@ pub fn intersect(&self, ray: &Ray) -> HitInfo {
         let point = ray.at(t);
         
         // Calculate normal based on which face was hit
-        let center = (self.minimum + self.maximum) * 0.5;
+        let center = (self.min + self.max) * 0.5;
         let local = point - center;
-        let half = (self.maximum - self.minimum) * 0.5;
+        let half = (self.max - self.min) * 0.5;
         
         let bias = 1.0001;
         let normal = Vec3::new(
@@ -446,11 +446,11 @@ pub struct RayTracer {
     pub boxes: Vec<Box3D>,
     pub materials: Vec<Material>,
     pub lights: Vec<PointLight>,
-    pub camera_position: Vec3,
+    pub camera_pos: Vec3,
     pub camera_target: Vec3,
     pub fov: f32,
     pub time: f32,
-    pub maximum_bounces: u8,
+    pub max_bounces: u8,
 }
 
 // Bloc d'implémentation — définit les méthodes du type ci-dessus.
@@ -465,11 +465,11 @@ pub fn new(width: usize, height: usize) -> Self {
             boxes: Vec::new(),
             materials: vec![Material::default_holo()],
             lights: Vec::new(),
-            camera_position: Vec3::new(0.0, 0.0, -3.0),
+            camera_pos: Vec3::new(0.0, 0.0, -3.0),
             camera_target: Vec3::ZERO,
             fov: 60.0,
             time: 0.0,
-            maximum_bounces: 2,
+            max_bounces: 2,
         }
     }
     
@@ -515,17 +515,17 @@ pub fn new(width: usize, height: usize) -> Self {
         let tan_fov = tan_fast(fov_rad / 2.0);
         
         // Normalized device coordinates
-        let pixel = (2.0 * (x as f32 + 0.5) / self.width as f32 - 1.0) * tan_fov * aspect;
+        let px = (2.0 * (x as f32 + 0.5) / self.width as f32 - 1.0) * tan_fov * aspect;
         let py = (1.0 - 2.0 * (y as f32 + 0.5) / self.height as f32) * tan_fov;
         
         // Camera coordinate system
-        let forward = (self.camera_target - self.camera_position).normalize();
+        let forward = (self.camera_target - self.camera_pos).normalize();
         let right = forward.cross(Vec3::UP).normalize();
         let up = right.cross(forward);
         
-        let direction = (forward + right * pixel + up * py).normalize();
+        let direction = (forward + right * px + up * py).normalize();
         
-        Ray::new(self.camera_position, direction)
+        Ray::new(self.camera_pos, direction)
     }
     
     /// Find closest intersection
@@ -557,8 +557,8 @@ pub fn new(width: usize, height: usize) -> Self {
     }
     
     /// Check if a point is in shadow
-    fn in_shadow(&self, point: Vec3, light_position: Vec3) -> f32 {
-        let to_light = light_position - point;
+    fn in_shadow(&self, point: Vec3, light_pos: Vec3) -> f32 {
+        let to_light = light_pos - point;
         let distance = to_light.length();
         let ray = Ray::new(point + to_light.normalize() * 0.01, to_light.normalize());
         
@@ -592,19 +592,19 @@ pub fn new(width: usize, height: usize) -> Self {
             let shadow = self.in_shadow(hit.point, light.position);
             
             // Diffuse
-            let diff = hit.normal.dot(to_light).maximum(0.0);
+            let diff = hit.normal.dot(to_light).max(0.0);
             let diffuse_color = material.color * light.color * (diff * material.diffuse * shadow * light.intensity);
             color = color + diffuse_color;
             
             // Specular
             let reflect_directory = (-to_light).reflect(hit.normal);
-            let spec = (-ray.direction).dot(reflect_directory).maximum(0.0);
+            let spec = (-ray.direction).dot(reflect_directory).max(0.0);
             let spec_intensity = pow_fast(spec, material.shininess) * material.specular * shadow;
             color = color + light.color * (spec_intensity * light.intensity);
         }
         
         // Reflection
-        if material.reflectivity > 0.0 && depth < self.maximum_bounces {
+        if material.reflectivity > 0.0 && depth < self.max_bounces {
             let reflect_directory = ray.direction.reflect(hit.normal);
             let reflect_ray = Ray::new(hit.point + reflect_directory * 0.01, reflect_directory);
             let reflect_hit = self.trace(&reflect_ray);
@@ -614,9 +614,9 @@ pub fn new(width: usize, height: usize) -> Self {
         
         // Clamp color
         Vec3::new(
-            color.x.minimum(1.0),
-            color.y.minimum(1.0),
-            color.z.minimum(1.0),
+            color.x.min(1.0),
+            color.y.min(1.0),
+            color.z.min(1.0),
         )
     }
     
@@ -642,10 +642,10 @@ pub fn new(width: usize, height: usize) -> Self {
     }
     
     /// Render to HoloMatrix-compatible layers (volumetric output)
-    pub fn render_to_layers(&self, number_layers: usize) -> Vec<Vec<u8>> {
-        let mut layers = Vec::with_capacity(number_layers);
+    pub fn render_to_layers(&self, num_layers: usize) -> Vec<Vec<u8>> {
+        let mut layers = Vec::with_capacity(num_layers);
         
-        for _ in 0..number_layers {
+        for _ in 0..num_layers {
             layers.push(vec![0u8; self.width * self.height]);
         }
         
@@ -657,16 +657,16 @@ pub fn new(width: usize, height: usize) -> Self {
                 
                 if hit.hit() {
                     // Map hit distance to layer index
-                    let z_normalized = ((hit.t - 1.0) / 10.0).maximum(0.0).minimum(1.0);
-                    let layer_index = (z_normalized * (number_layers - 1) as f32) as usize;
+                    let z_normalized = ((hit.t - 1.0) / 10.0).max(0.0).min(1.0);
+                    let layer_index = (z_normalized * (num_layers - 1) as f32) as usize;
                     
                     // Calculate intensity from shading
                     let color = self.shade(&hit, &ray, 0);
                     let intensity = ((color.x + color.y + color.z) / 3.0 * 255.0) as u8;
                     
-                    let index = y * self.width + x;
-                    if layer_index < number_layers {
-                        layers[layer_index][index] = layers[layer_index][index].saturating_add(intensity);
+                    let idx = y * self.width + x;
+                    if layer_index < num_layers {
+                        layers[layer_index][idx] = layers[layer_index][idx].saturating_add(intensity);
                     }
                 }
             }
@@ -727,7 +727,7 @@ pub fn new(width: usize, height: usize) -> Self {
         self.add_light(Vec3::new(-5.0, 3.0, -3.0), Vec3::new(0.5, 0.0, 1.0), 0.8);
         
         // Camera
-        self.camera_position = Vec3::new(0.0, 0.0, -6.0);
+        self.camera_pos = Vec3::new(0.0, 0.0, -6.0);
         self.camera_target = Vec3::ZERO;
     }
     
@@ -768,7 +768,7 @@ pub fn new(width: usize, height: usize) -> Self {
         self.add_light(Vec3::new(-3.0, 4.0, 2.0), Vec3::new(0.2, 0.4, 1.0), 0.6);
         
         // Camera
-        self.camera_position = Vec3::new(0.0, 2.0, -5.0);
+        self.camera_pos = Vec3::new(0.0, 2.0, -5.0);
         self.camera_target = Vec3::ZERO;
     }
 }

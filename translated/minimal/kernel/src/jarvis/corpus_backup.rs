@@ -17,7 +17,7 @@
 
 
 
-pub static Gr: &[&[&str]] = &[
+pub static Da: &[&[&str]] = &[
     
     
     
@@ -970,36 +970,36 @@ pub static Gr: &[&[&str]] = &[
 ];
 
 
-pub fn ien() -> usize {
-    Gr.iter().map(|ib| ib.len()).sum()
+pub fn eci() -> usize {
+    Da.iter().map(|phase| phase.len()).sum()
 }
 
 
-pub fn htg() -> usize {
-    Gr.len()
+pub fn dvp() -> usize {
+    Da.len()
 }
 
 
-pub fn nyk() -> &'static str {
-    let es = ien();
-    if es == 0 {
+pub fn ibu() -> &'static str {
+    let av = eci();
+    if av == 0 {
         return "Hello world";
     }
     
-    let w = (crate::time::lc() as usize) % es;
-    let mut ia = w;
-    for ib in Gr {
-        if ia < ib.len() {
-            return ib[ia];
+    let idx = (crate::time::uptime_ms() as usize) % av;
+    let mut ck = idx;
+    for phase in Da {
+        if ck < phase.len() {
+            return phase[ck];
         }
-        ia -= ib.len();
+        ck -= phase.len();
     }
-    Gr[0][0]
+    Da[0][0]
 }
 
 
-pub fn jjg(ib: usize) -> &'static str {
-    match ib {
+pub fn ewq(phase: usize) -> &'static str {
+    match phase {
         0 => "Byte Patterns",
         1 => "Simple Sentences",
         2 => "Shell Commands",

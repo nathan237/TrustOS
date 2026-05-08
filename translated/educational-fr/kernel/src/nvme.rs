@@ -145,11 +145,11 @@ struct QueuePair {
     /// Virtual address of SQ (array of SqEntry)
     sq_virt: u64,
     /// Physical address of SQ
-    sq_physical: u64,
+    sq_phys: u64,
     /// Virtual address of CQ (array of CqEntry)
     cq_virt: u64,
     /// Physical address of CQ
-    cq_physical: u64,
+    cq_phys: u64,
     /// Queue depth (number of entries)
     depth: u16,
     /// SQ tail (next entry to write)
@@ -169,18 +169,18 @@ impl QueuePair {
     /// Allocate a new queue pair using physical frame allocator
     fn new(qid: u16, depth: u16) -> Option<Self> {
         // SQ: depth × 64 bytes. One 4KB page fits 64 entries.
-        let sq_physical = crate::memory::frame::allocator_frame_zeroed()?;
-        let sq_virt = crate::memory::physical_to_virt(sq_physical);
+        let sq_phys = crate::memory::frame::allocator_frame_zeroed()?;
+        let sq_virt = crate::memory::physical_to_virt(sq_phys);
         
         // CQ: depth × 16 bytes. One 4KB page fits 256 entries.
-        let cq_physical = crate::memory::frame::allocator_frame_zeroed()?;
-        let cq_virt = crate::memory::physical_to_virt(cq_physical);
+        let cq_phys = crate::memory::frame::allocator_frame_zeroed()?;
+        let cq_virt = crate::memory::physical_to_virt(cq_phys);
         
         Some(Self {
             sq_virt,
-            sq_physical,
+            sq_phys,
             cq_virt,
-            cq_physical,
+            cq_phys,
             depth,
             sq_tail: 0,
             cq_head: 0,
@@ -270,7 +270,7 @@ struct NvmeController {
     /// All discovered namespaces
     namespaces: Vec<NvmeNamespace>,
     /// Maximum transfer size (in pages)
-    maximum_transfer_pages: u32,
+    max_transfer_pages: u32,
 }
 
 // Bloc d'implémentation — définit les méthodes du type ci-dessus.
@@ -320,7 +320,7 @@ unsafe { core::ptr::write_volatile((self.bar_virt + offset) as *mut u32, value) 
     // ─── Command submission + polling ────────────────────────────
     
     /// Submit an admin command and wait for completion (polling).
-    fn admin_command(&mut self, cmd: SqEntry) -> Result<CqEntry, &'static str> {
+    fn admin_cmd(&mut self, cmd: SqEntry) -> Result<CqEntry, &'static str> {
         let _cid = self.admin.submit(cmd);
         self.ring_sq_doorbell(0, self.admin.sq_tail);
         
@@ -342,7 +342,7 @@ unsafe { core::ptr::write_volatile((self.bar_virt + offset) as *mut u32, value) 
     }
     
     /// Submit an I/O command and wait for completion (polling).
-    fn io_command(&mut self, cmd: SqEntry) -> Result<CqEntry, &'static str> {
+    fn io_cmd(&mut self, cmd: SqEntry) -> Result<CqEntry, &'static str> {
         // Submit and extract sq_tail before releasing borrow
         let sq_tail = {
             let io = self.io.as_mut().ok_or("NVMe I/O queue not initialized")?;
@@ -384,7 +384,7 @@ unsafe { core::ptr::write_volatile((self.bar_virt + offset) as *mut u32, value) 
             ..Default::default()
         };
         
-        self.admin_command(cmd)?;
+        self.admin_cmd(cmd)?;
         
         // Parse Identify Controller data
         unsafe {
@@ -393,7 +393,7 @@ const u8;
             
             // Serial Number: bytes 4-23 (20 chars, ASCII)
             let mut sn = [0u8; 20];
-            core::ptr::copy_nonoverlapping(data.add(4), sn.as_mut_pointer(), 20);
+            core::ptr::copy_nonoverlapping(data.add(4), sn.as_mut_ptr(), 20);
             self.serial = core::str::from_utf8(&sn)
                 .unwrap_or("?")
                 .trim()
@@ -401,7 +401,7 @@ const u8;
             
             // Model Number: bytes 24-63 (40 chars, ASCII)
             let mut mn = [0u8; 40];
-            core::ptr::copy_nonoverlapping(data.add(24), mn.as_mut_pointer(), 40);
+            core::ptr::copy_nonoverlapping(data.add(24), mn.as_mut_ptr(), 40);
             self.model = core::str::from_utf8(&mn)
                 .unwrap_or("?")
                 .trim()
@@ -410,7 +410,7 @@ const u8;
             // MDTS (Maximum Data Transfer Size): byte 77
             // 0 = no limit, else 2^(MDTS) pages
             let mdts = *data.add(77);
-            self.maximum_transfer_pages = if mdts == 0 { 256 } else { 1u32 << mdts };
+            self.max_transfer_pages = if mdts == 0 { 256 } else { 1u32 << mdts };
         }
         
         crate::memory::frame::free_frame(buffer_physical);
@@ -431,7 +431,7 @@ const u8;
             ..Default::default()
         };
         
-        self.admin_command(cmd)?;
+        self.admin_cmd(cmd)?;
         
         let (nsze, lba_size) = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
@@ -451,9 +451,9 @@ const u64);
             let lbaf = core::ptr::read_unaligned(data.add(lbaf_offset) as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u32);
             let lbads = (lbaf >> 16) & 0xFF;
-            let lba_size = 1u32 << lbads;
+            let lba_sz = 1u32 << lbads;
             
-            (nsze, lba_size)
+            (nsze, lba_sz)
         };
         
         crate::memory::frame::free_frame(buffer_physical);
@@ -486,7 +486,7 @@ const u32);
         let ns_ids: Vec<u32>;
         
                 // Correspondance de motifs — branchement exhaustif de Rust.
-match self.admin_command(cmd) {
+match self.admin_cmd(cmd) {
             Ok(_) => {
                 // The returned buffer is a list of up to 1024 active NSIDs (u32 each),
                 // terminated by 0.
@@ -550,10 +550,10 @@ match self.identify_namespace_by_id(nsid) {
     // ─── I/O Queue creation ──────────────────────────────────────
     
     /// Create I/O Completion Queue (admin command)
-    fn create_io_cq(&mut self, qid: u16, cq_physical: u64, depth: u16) -> Result<(), &'static str> {
+    fn create_io_cq(&mut self, qid: u16, cq_phys: u64, depth: u16) -> Result<(), &'static str> {
         let cmd = SqEntry {
             cdw0: ADMIN_CREATE_IO_CQ as u32,
-            prp1: cq_physical,
+            prp1: cq_phys,
             // CDW10: QID (15:0) + Queue Size (31:16) — size is 0-based
             cdw10: (qid as u32) | (((depth - 1) as u32) << 16),
             // CDW11: PC=1 (Physically Contiguous), IEN=0, IV=0 (polling, no interrupts)
@@ -561,15 +561,15 @@ match self.identify_namespace_by_id(nsid) {
             ..Default::default()
         };
         
-        self.admin_command(cmd)?;
+        self.admin_cmd(cmd)?;
         Ok(())
     }
     
     /// Create I/O Submission Queue (admin command)
-    fn create_io_sq(&mut self, qid: u16, sq_physical: u64, cqid: u16, depth: u16) -> Result<(), &'static str> {
+    fn create_io_sq(&mut self, qid: u16, sq_phys: u64, cqid: u16, depth: u16) -> Result<(), &'static str> {
         let cmd = SqEntry {
             cdw0: ADMIN_CREATE_IO_SQ as u32,
-            prp1: sq_physical,
+            prp1: sq_phys,
             // CDW10: QID (15:0) + Queue Size (31:16) — size is 0-based
             cdw10: (qid as u32) | (((depth - 1) as u32) << 16),
             // CDW11: PC=1 (Physically Contiguous) + CQID (31:16)
@@ -577,7 +577,7 @@ match self.identify_namespace_by_id(nsid) {
             ..Default::default()
         };
         
-        self.admin_command(cmd)?;
+        self.admin_cmd(cmd)?;
         Ok(())
     }
     
@@ -632,9 +632,9 @@ unsafe {
             ..Default::default()
         };
         
-        let result = self.io_command(cmd);
-        if let Some(physical) = prp_list_page {
-            crate::memory::frame::free_frame(physical);
+        let result = self.io_cmd(cmd);
+        if let Some(phys) = prp_list_page {
+            crate::memory::frame::free_frame(phys);
         }
         result?;
         Ok(())
@@ -655,9 +655,9 @@ unsafe {
             ..Default::default()
         };
         
-        let result = self.io_command(cmd);
-        if let Some(physical) = prp_list_page {
-            crate::memory::frame::free_frame(physical);
+        let result = self.io_cmd(cmd);
+        if let Some(phys) = prp_list_page {
+            crate::memory::frame::free_frame(phys);
         }
         result?;
         Ok(())
@@ -670,7 +670,7 @@ unsafe {
             nsid: 1,
             ..Default::default()
         };
-        self.io_command(cmd)?;
+        self.io_cmd(cmd)?;
         Ok(())
     }
 }
@@ -700,8 +700,8 @@ pub fn lba_size() -> u32 {
 
 /// Get NVMe drive info
 pub fn get_information() -> Option<(String, String, u64, u32)> {
-    let controller = NVME.lock();
-    let c = controller.as_ref()?;
+    let ctrl = NVME.lock();
+    let c = ctrl.as_ref()?;
     Some((c.model.clone(), c.serial.clone(), c.ns1_size, c.ns1_lba_size))
 }
 
@@ -724,22 +724,22 @@ pub fn list_namespaces() -> Vec<NvmeNamespace> {
 /// 5. Enable controller (CC.EN=1), wait for CSTS.RDY
 /// 6. Identify Controller + Identify Namespace
 /// 7. Create I/O queue pair
-pub fn init(pci_device: &crate::pci::PciDevice) -> Result<(), &'static str> {
+pub fn init(pci_dev: &crate::pci::PciDevice) -> Result<(), &'static str> {
     crate::serial_println!("[NVMe] Initializing {:02X}:{:02X}.{} ({:04X}:{:04X})",
-        pci_device.bus, pci_device.device, pci_device.function,
-        pci_device.vendor_id, pci_device.device_id);
+        pci_dev.bus, pci_dev.device, pci_dev.function,
+        pci_dev.vendor_id, pci_dev.device_id);
     
     // ── Step 0: Enable PCI bus mastering + memory space ──
-    crate::pci::enable_bus_master(pci_device);
-    crate::pci::enable_memory_space(pci_device);
+    crate::pci::enable_bus_master(pci_dev);
+    crate::pci::enable_memory_space(pci_dev);
     
     // Disable interrupts via PCI command register (we use polling)
-    let cmd = crate::pci::config_read16(pci_device.bus, pci_device.device, pci_device.function, 0x04);
-    crate::pci::config_write(pci_device.bus, pci_device.device, pci_device.function, 0x04,
+    let cmd = crate::pci::config_read16(pci_dev.bus, pci_dev.device, pci_dev.function, 0x04);
+    crate::pci::config_write(pci_dev.bus, pci_dev.device, pci_dev.function, 0x04,
         (cmd | (1 << 10)) as u32); // Interrupt Disable bit
     
     // ── Step 1: Map BAR0 (MMIO) ──
-    let bar0_physical = pci_device.bar_address(0).ok_or("NVMe: no BAR0")?;
+    let bar0_physical = pci_dev.bar_address(0).ok_or("NVMe: no BAR0")?;
     if bar0_physical == 0 {
         return Err("NVMe: BAR0 is zero");
     }
@@ -750,7 +750,7 @@ pub fn init(pci_device: &crate::pci::PciDevice) -> Result<(), &'static str> {
     crate::serial_println!("[NVMe] BAR0: phys={:#x}, virt={:#x}", bar0_physical, bar_virt);
     
     // ── Step 2: Read capabilities ──
-    let capability = {
+    let cap = {
         let lo = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe { core::ptr::read_volatile((bar_virt + REGISTER_CAPABILITY) as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u32) } as u64;
@@ -760,11 +760,11 @@ const u32) } as u64;
         lo | (hi << 32)
     };
     
-    let mqes = (capability & 0xFFFF) as u16 + 1;  // Maximum Queue Entries Supported (0-based)
-    let dstrd = ((capability >> 32) & 0xF) as u32; // Doorbell Stride (4 << DSTRD)
+    let mqes = (cap & 0xFFFF) as u16 + 1;  // Maximum Queue Entries Supported (0-based)
+    let dstrd = ((cap >> 32) & 0xF) as u32; // Doorbell Stride (4 << DSTRD)
     let doorbell_stride = 4u32 << dstrd;
-    let mpsmin = ((capability >> 48) & 0xF) as u32; // Min Memory Page Size (2^(12+MPSMIN))
-    let timeout_500ms = ((capability >> 24) & 0xFF) as u32; // Timeout in 500ms units
+    let mpsmin = ((cap >> 48) & 0xF) as u32; // Min Memory Page Size (2^(12+MPSMIN))
+    let timeout_500ms = ((cap >> 24) & 0xFF) as u32; // Timeout in 500ms units
     
     let vs = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe { core::ptr::read_volatile((bar_virt + REGISTER_VS) as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
@@ -776,7 +776,7 @@ const u32) };
         major, minor, mqes, dstrd, 4 << mpsmin, timeout_500ms * 500);
     
     // Use smaller of MQES and 64 entries (keeps within 1 page)
-    let queue_depth = mqes.minimum(64) as u16;
+    let queue_depth = mqes.min(64) as u16;
     
     // ── Step 3: Disable controller ──
     let cc = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
@@ -803,7 +803,7 @@ const u32) };
         .ok_or("NVMe: OOM for admin queues")?;
     
     crate::serial_println!("[NVMe] Admin SQ phys={:#x}, CQ phys={:#x}, depth={}",
-        admin.sq_physical, admin.cq_physical, queue_depth);
+        admin.sq_phys, admin.cq_phys, queue_depth);
     
     // ── Step 5: Configure admin queue registers ──
     // AQA: Admin Queue Attributes — ACQS (27:16) + ASQS (11:0), both 0-based
@@ -812,11 +812,11 @@ const u32) };
 unsafe {
         core::ptr::write_volatile((bar_virt + REGISTER_AQA) as *mut u32, aqa);
         // ASQ: Admin Submission Queue Base Address (64-bit, page-aligned)
-        core::ptr::write_volatile((bar_virt + REGISTER_ASQ) as *mut u32, admin.sq_physical as u32);
-        core::ptr::write_volatile((bar_virt + REGISTER_ASQ + 4) as *mut u32, (admin.sq_physical >> 32) as u32);
+        core::ptr::write_volatile((bar_virt + REGISTER_ASQ) as *mut u32, admin.sq_phys as u32);
+        core::ptr::write_volatile((bar_virt + REGISTER_ASQ + 4) as *mut u32, (admin.sq_phys >> 32) as u32);
         // ACQ: Admin Completion Queue Base Address (64-bit, page-aligned)
-        core::ptr::write_volatile((bar_virt + REGISTER_ACQ) as *mut u32, admin.cq_physical as u32);
-        core::ptr::write_volatile((bar_virt + REGISTER_ACQ + 4) as *mut u32, (admin.cq_physical >> 32) as u32);
+        core::ptr::write_volatile((bar_virt + REGISTER_ACQ) as *mut u32, admin.cq_phys as u32);
+        core::ptr::write_volatile((bar_virt + REGISTER_ACQ + 4) as *mut u32, (admin.cq_phys >> 32) as u32);
     }
     
     // Mask all interrupts (we use polling)
@@ -854,7 +854,7 @@ const u32) };
     crate::serial_println!("[NVMe] Controller enabled and ready");
     
     // ── Step 7: Build controller struct ──
-    let mut controller = NvmeController {
+    let mut ctrl = NvmeController {
         bar_virt,
         doorbell_stride,
         admin,
@@ -864,34 +864,34 @@ const u32) };
         ns1_size: 0,
         ns1_lba_size: 512,
         namespaces: Vec::new(),
-        maximum_transfer_pages: 256,
+        max_transfer_pages: 256,
     };
     
     // ── Step 8: Identify Controller ──
-    controller.identify_controller()?;
-    crate::serial_println!("[NVMe] Model: '{}', Serial: '{}'", controller.model, controller.serial);
+    ctrl.identify_controller()?;
+    crate::serial_println!("[NVMe] Model: '{}', Serial: '{}'", ctrl.model, ctrl.serial);
     
     // ── Step 9: Enumerate all active namespaces ──
-    controller.enumerate_namespaces()?;
-    let total_mb: u64 = controller.namespaces.iter()
+    ctrl.enumerate_namespaces()?;
+    let total_mb: u64 = ctrl.namespaces.iter()
         .map(|ns| (ns.size_lbas * ns.lba_size as u64) / (1024 * 1024))
         .sum();
-    crate::serial_println!("[NVMe] {} namespace(s), total {} MB", controller.namespaces.len(), total_mb);
+    crate::serial_println!("[NVMe] {} namespace(s), total {} MB", ctrl.namespaces.len(), total_mb);
     
     // ── Step 10: Create I/O Queue Pair (QID=1) ──
     let io_depth = queue_depth;
     let io_queue = QueuePair::new(1, io_depth)
         .ok_or("NVMe: OOM for I/O queues")?;
     
-    controller.create_io_cq(1, io_queue.cq_physical, io_depth)?;
-    controller.create_io_sq(1, io_queue.sq_physical, 1, io_depth)?;
-    controller.io = Some(io_queue);
+    ctrl.create_io_cq(1, io_queue.cq_phys, io_depth)?;
+    ctrl.create_io_sq(1, io_queue.sq_phys, 1, io_depth)?;
+    ctrl.io = Some(io_queue);
     
     crate::serial_println!("[NVMe] I/O queue pair created (depth={})", io_depth);
     
     // ── Done! ──
-    let ns_count = controller.namespaces.len();
-    *NVME.lock() = Some(controller);
+    let ns_count = ctrl.namespaces.len();
+    *NVME.lock() = Some(ctrl);
     INITIALIZED.store(true, Ordering::Release);
     
     crate::serial_println!("[NVMe] ✓ Driver initialized — {} namespace(s), {} MB NVMe storage available",
@@ -910,17 +910,17 @@ const u32) };
 /// `count` — number of sectors (LBAs) to read
 /// `buffer` — destination buffer (must be at least count × lba_size bytes)
 pub fn read_sectors(start_lba: u64, count: usize, buffer: &mut [u8]) -> Result<(), &'static str> {
-    let mut controller = NVME.lock();
-    let controller = controller.as_mut().ok_or("NVMe: not initialized")?;
+    let mut ctrl = NVME.lock();
+    let ctrl = ctrl.as_mut().ok_or("NVMe: not initialized")?;
     
-    let lba_size = controller.ns1_lba_size as usize;
-    let total_bytes = count * lba_size;
+    let lba_sz = ctrl.ns1_lba_size as usize;
+    let total_bytes = count * lba_sz;
     
     if buffer.len() < total_bytes {
         return Err("NVMe: buffer too small");
     }
     
-    if start_lba + count as u64 > controller.ns1_size {
+    if start_lba + count as u64 > ctrl.ns1_size {
         return Err("NVMe: read past end of namespace");
     }
     
@@ -928,15 +928,15 @@ pub fn read_sectors(start_lba: u64, count: usize, buffer: &mut [u8]) -> Result<(
     // Use up to 128 pages (512KB) per chunk for a good balance of speed vs memory.
     let maximum_pages_per_chunk = 128usize;
     let maximum_bytes_per_chunk = maximum_pages_per_chunk * 4096;
-    let maximum_lbas_per_chunk = (maximum_bytes_per_chunk / lba_size).maximum(1);
+    let maximum_lbas_per_chunk = (maximum_bytes_per_chunk / lba_sz).max(1);
     
     let mut lba = start_lba;
     let mut offset = 0usize;
     let mut remaining = count;
     
     while remaining > 0 {
-        let chunk = remaining.minimum(maximum_lbas_per_chunk);
-        let chunk_bytes = chunk * lba_size;
+        let chunk = remaining.min(maximum_lbas_per_chunk);
+        let chunk_bytes = chunk * lba_sz;
         let pages_needed = (chunk_bytes + 4095) / 4096;
         
         // Allocate DMA pages
@@ -944,7 +944,7 @@ pub fn read_sectors(start_lba: u64, count: usize, buffer: &mut [u8]) -> Result<(
         for _ in 0..pages_needed {
                         // Correspondance de motifs — branchement exhaustif de Rust.
 match crate::memory::frame::allocator_frame_zeroed() {
-                Some(physical) => dma_pages.push(physical),
+                Some(phys) => dma_pages.push(phys),
                 None => {
                     // Free already allocated pages
                     for p in &dma_pages { crate::memory::frame::free_frame(*p); }
@@ -954,19 +954,19 @@ match crate::memory::frame::allocator_frame_zeroed() {
         }
         
         // Issue scatter-gather read
-        controller.read_lbas_scatter(lba, chunk as u16, &dma_pages)?;
+        ctrl.read_lbas_scatter(lba, chunk as u16, &dma_pages)?;
         
         // Copy data from DMA pages to user buffer
         let mut bytes_left = chunk_bytes;
         for (i, &page_physical) in dma_pages.iter().enumerate() {
-            let copy_size = bytes_left.minimum(4096);
+            let copy_size = bytes_left.min(4096);
             let virt = crate::memory::physical_to_virt(page_physical);
                         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
                 core::ptr::copy_nonoverlapping(
                     virt as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u8,
-                    buffer[offset + i * 4096..].as_mut_pointer(),
+                    buffer[offset + i * 4096..].as_mut_ptr(),
                     copy_size,
                 );
             }
@@ -986,31 +986,31 @@ const u8,
 
 /// Write sectors to NVMe namespace 1.
 pub fn write_sectors(start_lba: u64, count: usize, buffer: &[u8]) -> Result<(), &'static str> {
-    let mut controller = NVME.lock();
-    let controller = controller.as_mut().ok_or("NVMe: not initialized")?;
+    let mut ctrl = NVME.lock();
+    let ctrl = ctrl.as_mut().ok_or("NVMe: not initialized")?;
     
-    let lba_size = controller.ns1_lba_size as usize;
-    let total_bytes = count * lba_size;
+    let lba_sz = ctrl.ns1_lba_size as usize;
+    let total_bytes = count * lba_sz;
     
     if buffer.len() < total_bytes {
         return Err("NVMe: buffer too small");
     }
     
-    if start_lba + count as u64 > controller.ns1_size {
+    if start_lba + count as u64 > ctrl.ns1_size {
         return Err("NVMe: write past end of namespace");
     }
     
     let maximum_pages_per_chunk = 128usize;
     let maximum_bytes_per_chunk = maximum_pages_per_chunk * 4096;
-    let maximum_lbas_per_chunk = (maximum_bytes_per_chunk / lba_size).maximum(1);
+    let maximum_lbas_per_chunk = (maximum_bytes_per_chunk / lba_sz).max(1);
     
     let mut lba = start_lba;
     let mut offset = 0usize;
     let mut remaining = count;
     
     while remaining > 0 {
-        let chunk = remaining.minimum(maximum_lbas_per_chunk);
-        let chunk_bytes = chunk * lba_size;
+        let chunk = remaining.min(maximum_lbas_per_chunk);
+        let chunk_bytes = chunk * lba_sz;
         let pages_needed = (chunk_bytes + 4095) / 4096;
         
         // Allocate DMA pages
@@ -1018,7 +1018,7 @@ pub fn write_sectors(start_lba: u64, count: usize, buffer: &[u8]) -> Result<(), 
         for _ in 0..pages_needed {
                         // Correspondance de motifs — branchement exhaustif de Rust.
 match crate::memory::frame::allocator_frame_zeroed() {
-                Some(physical) => dma_pages.push(physical),
+                Some(phys) => dma_pages.push(phys),
                 None => {
                     for p in &dma_pages { crate::memory::frame::free_frame(*p); }
                     return Err("NVMe: OOM for DMA write buffer");
@@ -1029,12 +1029,12 @@ match crate::memory::frame::allocator_frame_zeroed() {
         // Copy data from user buffer to DMA pages
         let mut bytes_left = chunk_bytes;
         for (i, &page_physical) in dma_pages.iter().enumerate() {
-            let copy_size = bytes_left.minimum(4096);
+            let copy_size = bytes_left.min(4096);
             let virt = crate::memory::physical_to_virt(page_physical);
                         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
                 core::ptr::copy_nonoverlapping(
-                    buffer[offset + i * 4096..].as_pointer(),
+                    buffer[offset + i * 4096..].as_ptr(),
                     virt as *mut u8,
                     copy_size,
                 );
@@ -1043,7 +1043,7 @@ unsafe {
         }
         
         // Issue scatter-gather write
-        controller.write_lbas_scatter(lba, chunk as u16, &dma_pages)?;
+        ctrl.write_lbas_scatter(lba, chunk as u16, &dma_pages)?;
         
         // Free DMA pages
         for p in &dma_pages { crate::memory::frame::free_frame(*p); }
@@ -1058,7 +1058,7 @@ unsafe {
 
 /// Flush pending writes
 pub fn flush() -> Result<(), &'static str> {
-    let mut controller = NVME.lock();
-    let controller = controller.as_mut().ok_or("NVMe: not initialized")?;
-    controller.flush()
+    let mut ctrl = NVME.lock();
+    let ctrl = ctrl.as_mut().ok_or("NVMe: not initialized")?;
+    ctrl.flush()
 }

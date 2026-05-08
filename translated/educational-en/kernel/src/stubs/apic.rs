@@ -36,10 +36,10 @@ pub fn lapic_eoi() {
 // Public function — callable from other modules.
 pub fn lapic_id() -> u32 { 0 }
 // Public function — callable from other modules.
-pub fn start_timer(_interval_mouse: u64) {
+pub fn start_timer(_interval_ms: u64) {
     #[cfg(target_arch = "aarch64")]
     if crate::arch::platform::gic::is_initialized() {
-        crate::arch::platform::gic::rearm_timer(_interval_mouse);
+        crate::arch::platform::gic::rearm_timer(_interval_ms);
     }
 }
 // Public function — callable from other modules.
@@ -58,4 +58,4 @@ pub fn is_enabled() -> bool {
 // Public function — callable from other modules.
 pub fn ticks_per_mouse() -> u64 { 0 }
 // Public function — callable from other modules.
-pub fn route_pci_interrupt_request(_interrupt_request: u8, _vector: u8) {}
+pub fn route_pci_interrupt_request(_irq: u8, _vector: u8) {}

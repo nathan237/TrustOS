@@ -57,14 +57,14 @@ match key {
 
         // Fonction publique — appelable depuis d'autres modules.
 pub fn handle_click(&mut self, _lx: i32, ly: i32, _w: u32, _h: u32) {
-        let character = super::char_h();
-        if character <= 0 { return; }
+        let ch = super::char_h();
+        if ch <= 0 { return; }
         // Tab bar click (first row)
-        if ly < character {
+        if ly < ch {
             // Rough tab detection
-            let column = (_lx / 80).maximum(0) as usize;
-            if column < 3 {
-                self.tab = column;
+            let col = (_lx / 80).max(0) as usize;
+            if col < 3 {
+                self.tab = col;
             }
         }
     }
@@ -72,13 +72,13 @@ pub fn handle_click(&mut self, _lx: i32, ly: i32, _w: u32, _h: u32) {
 
 /// Draw the network dashboard into the given content area
 pub fn draw(state: &NetworkPanelState, x: i32, y: i32, w: u32, h: u32) {
-    let character = super::char_h();
+    let ch = super::char_h();
     let cw_pixel = super::char_w();
-    if character <= 0 || cw_pixel <= 0 || w < 60 || h < 40 {
+    if ch <= 0 || cw_pixel <= 0 || w < 60 || h < 40 {
         return;
     }
     let maximum_cols = (w as i32 / cw_pixel) as usize;
-    let maximum_rows = (h as i32 / character) as usize;
+    let maximum_rows = (h as i32 / ch) as usize;
     if maximum_rows < 3 { return; }
 
     // ── Tab bar ──
@@ -90,19 +90,19 @@ pub fn draw(state: &NetworkPanelState, x: i32, y: i32, w: u32, h: u32) {
         transmit += (label.len() as i32 + 2) * cw_pixel;
     }
 
-    let content_y = y + character + 4;
+    let content_y = y + ch + 4;
     let content_rows = maximum_rows.saturating_sub(2);
 
         // Correspondance de motifs — branchement exhaustif de Rust.
 match state.tab {
-        0 => draw_overview(x, content_y, w, content_rows, character, cw_pixel, maximum_cols),
-        1 => draw_connections(state, x, content_y, w, content_rows, character, cw_pixel, maximum_cols),
-        2 => draw_packets(state, x, content_y, w, content_rows, character, cw_pixel, maximum_cols),
+        0 => draw_overview(x, content_y, w, content_rows, ch, cw_pixel, maximum_cols),
+        1 => draw_connections(state, x, content_y, w, content_rows, ch, cw_pixel, maximum_cols),
+        2 => draw_packets(state, x, content_y, w, content_rows, ch, cw_pixel, maximum_cols),
         _ => {}
     }
 }
 
-fn draw_overview(x: i32, y: i32, _w: u32, rows: usize, character: i32, _cw: i32, maximum_cols: usize) {
+fn draw_overview(x: i32, y: i32, _w: u32, rows: usize, ch: i32, _cw: i32, maximum_cols: usize) {
     let mut row = 0;
     let mut py = y;
 
@@ -126,24 +126,24 @@ fn draw_overview(x: i32, y: i32, _w: u32, rows: usize, character: i32, _cw: i32,
         let display = if line.len() > maximum_cols { &line[..maximum_cols] } else { line.as_str() };
         let color = if line.is_empty() { super::COLUMN_DIM } else { super::COLUMN_TEXT };
         super::draw_lab_text(x, py, display, color);
-        py += character;
+        py += ch;
         row += 1;
     }
 }
 
-fn draw_connections(state: &NetworkPanelState, x: i32, y: i32, _w: u32, rows: usize, character: i32, _cw: i32, maximum_cols: usize) {
+fn draw_connections(state: &NetworkPanelState, x: i32, y: i32, _w: u32, rows: usize, ch: i32, _cw: i32, maximum_cols: usize) {
     let conns = crate::netstack::tcp::list_connections();
     let header = "SRC_PORT  DST_IP:PORT         STATE";
     super::draw_lab_text(x, y, header, super::COLUMN_ACCENT);
 
-    let mut py = y + character;
+    let mut py = y + ch;
     let mut row = 0;
-    for (i, information) in conns.iter().enumerate() {
+    for (i, info) in conns.iter().enumerate() {
         if i < state.scroll { continue; }
         if row >= rows.saturating_sub(1) { break; }
-        let display = if information.len() > maximum_cols { &information[..maximum_cols] } else { information.as_str() };
+        let display = if info.len() > maximum_cols { &info[..maximum_cols] } else { info.as_str() };
         super::draw_lab_text(x, py, display, super::COLUMN_TEXT);
-        py += character;
+        py += ch;
         row += 1;
     }
     if conns.is_empty() {
@@ -151,20 +151,20 @@ fn draw_connections(state: &NetworkPanelState, x: i32, y: i32, _w: u32, rows: us
     }
 }
 
-fn draw_packets(state: &NetworkPanelState, x: i32, y: i32, _w: u32, rows: usize, character: i32, _cw: i32, maximum_cols: usize) {
+fn draw_packets(state: &NetworkPanelState, x: i32, y: i32, _w: u32, rows: usize, ch: i32, _cw: i32, maximum_cols: usize) {
     let captured = crate::netscan::sniffer::get_captured_packets();
     let header = "#    PROTO  SRC -> DST          INFO";
     super::draw_lab_text(x, y, header, super::COLUMN_ACCENT);
 
-    let mut py = y + character;
+    let mut py = y + ch;
     let mut row = 0;
-    for (i, packet) in captured.iter().enumerate().rev() {
+    for (i, pkt) in captured.iter().enumerate().rev() {
         if row < state.scroll { row += 1; continue; }
         if row >= rows.saturating_sub(1) + state.scroll { break; }
-        let line = format!("{:<4} {:?}  {}", i, packet.protocol, &packet.information);
+        let line = format!("{:<4} {:?}  {}", i, pkt.protocol, &pkt.info);
         let display = if line.len() > maximum_cols { &line[..maximum_cols] } else { line.as_str() };
         let color = // Correspondance de motifs — branchement exhaustif de Rust.
-match packet.protocol {
+match pkt.protocol {
             crate::netscan::sniffer::Protocol::Tcp => super::COLUMN_GREEN,
             crate::netscan::sniffer::Protocol::Udp => super::COLUMN_CYAN,
             crate::netscan::sniffer::Protocol::Icmp => super::COLUMN_YELLOW,
@@ -172,7 +172,7 @@ match packet.protocol {
             _ => super::COLUMN_TEXT,
         };
         super::draw_lab_text(x, py, display, color);
-        py += character;
+        py += ch;
         row += 1;
     }
     if captured.is_empty() {

@@ -18,7 +18,7 @@ use alloc::format;
 /// Get real time in milliseconds (PIT-based, reliable in VBox)
 #[inline]
 fn now_mouse() -> u64 {
-    crate::time::uptime_mouse()
+    crate::time::uptime_ms()
 }
 
 // ── Slide positioning ──────────────────────────────────────────────────────
@@ -35,10 +35,10 @@ enum Pos {
 struct Slide {
     lines: &'static [&'static str],
     highlights: &'static [&'static str],
-    position: Pos,
+    pos: Pos,
     focus: Option<usize>,
     /// Duration in MILLISECONDS (real time)
-    dur_mouse: u64,
+    dur_ms: u64,
     /// true = scale 3 (giant), false = scale 2
     big: bool,
 }
@@ -56,92 +56,92 @@ const GLITCH_MOUSE: u64 = 350; // glitch transition duration between slides
 const SCRIPT: &[Slide] = &[
     // === MORPHEUS INTRO — black screen (0s-3s) ===
     Slide { lines: &[""],
-        highlights: &[], position: Pos::BlackScreen, focus: None,
-        dur_mouse: 800, big: true },
+        highlights: &[], pos: Pos::BlackScreen, focus: None,
+        dur_ms: 800, big: true },
     Slide { lines: &["Are you ready",  "to see the Matrix, Neo?"],
-        highlights: &["Matrix", "Neo"], position: Pos::BlackScreen, focus: None,
-        dur_mouse: 2200, big: true },
+        highlights: &["Matrix", "Neo"], pos: Pos::BlackScreen, focus: None,
+        dur_ms: 2200, big: true },
 
     // === HOOK (5s-9s) ===
     Slide { lines: &["You don't understand", "how your computer works."],
-        highlights: &["don't", "computer"], position: Pos::Center, focus: None,
-        dur_mouse: 2000, big: true },
+        highlights: &["don't", "computer"], pos: Pos::Center, focus: None,
+        dur_ms: 2000, big: true },
     Slide { lines: &["This is TrustLab."],
-        highlights: &["TrustLab"], position: Pos::Center, focus: None,
-        dur_mouse: 1500, big: true },
+        highlights: &["TrustLab"], pos: Pos::Center, focus: None,
+        dur_ms: 1500, big: true },
 
     // === HARDWARE (9s-13s) ===
     Slide { lines: &["HARDWARE STATUS"],
-        highlights: &["HARDWARE"], position: Pos::Panel(0), focus: Some(0),
-        dur_mouse: 500, big: true },
+        highlights: &["HARDWARE"], pos: Pos::Panel(0), focus: Some(0),
+        dur_ms: 500, big: true },
     Slide { lines: &["Real CPU. Real memory.", "Raw silicon."],
-        highlights: &["CPU", "memory", "Raw"], position: Pos::Panel(0), focus: Some(0),
-        dur_mouse: 1500, big: true },
+        highlights: &["CPU", "memory", "Raw"], pos: Pos::Panel(0), focus: Some(0),
+        dur_ms: 1500, big: true },
     Slide { lines: &["What Task Manager", "will never show you."],
-        highlights: &["never"], position: Pos::Panel(0), focus: Some(0),
-        dur_mouse: 1200, big: true },
+        highlights: &["never"], pos: Pos::Panel(0), focus: Some(0),
+        dur_ms: 1200, big: true },
 
     // === KERNEL TRACE (13s-17s) ===
     Slide { lines: &["LIVE KERNEL TRACE"],
-        highlights: &["KERNEL", "TRACE"], position: Pos::Panel(1), focus: Some(1),
-        dur_mouse: 500, big: true },
+        highlights: &["KERNEL", "TRACE"], pos: Pos::Panel(1), focus: Some(1),
+        dur_ms: 500, big: true },
     Slide { lines: &["Every interrupt.", "Every syscall."],
-        highlights: &["interrupt", "syscall"], position: Pos::Panel(1), focus: Some(1),
-        dur_mouse: 1500, big: true },
+        highlights: &["interrupt", "syscall"], pos: Pos::Panel(1), focus: Some(1),
+        dur_ms: 1500, big: true },
     Slide { lines: &["Raw kernel truth."],
-        highlights: &["Raw", "truth"], position: Pos::Panel(1), focus: Some(1),
-        dur_mouse: 1200, big: true },
+        highlights: &["Raw", "truth"], pos: Pos::Panel(1), focus: Some(1),
+        dur_ms: 1200, big: true },
 
     // === PIPELINE (17s-20s) ===
     Slide { lines: &["EXECUTION PIPELINE"],
-        highlights: &["PIPELINE"], position: Pos::Panel(5), focus: Some(5),
-        dur_mouse: 500, big: true },
+        highlights: &["PIPELINE"], pos: Pos::Panel(5), focus: Some(5),
+        dur_ms: 500, big: true },
     Slide { lines: &["Watch data flow through", "the kernel in real time."],
-        highlights: &["flow", "real time"], position: Pos::Panel(5), focus: Some(5),
-        dur_mouse: 1500, big: true },
+        highlights: &["flow", "real time"], pos: Pos::Panel(5), focus: Some(5),
+        dur_ms: 1500, big: true },
 
     // === HEX EDITOR (20s-23s) ===
     Slide { lines: &["HEX EDITOR"],
-        highlights: &["HEX"], position: Pos::Panel(6), focus: Some(6),
-        dur_mouse: 500, big: true },
+        highlights: &["HEX"], pos: Pos::Panel(6), focus: Some(6),
+        dur_ms: 500, big: true },
     Slide { lines: &["Raw bytes. Color-coded."],
-        highlights: &["Raw", "bytes"], position: Pos::Panel(6), focus: Some(6),
-        dur_mouse: 1300, big: true },
+        highlights: &["Raw", "bytes"], pos: Pos::Panel(6), focus: Some(6),
+        dur_ms: 1300, big: true },
 
     // === FILE TREE (23s-25s) ===
     Slide { lines: &["FILE SYSTEM"],
-        highlights: &["FILE"], position: Pos::Panel(3), focus: Some(3),
-        dur_mouse: 500, big: true },
+        highlights: &["FILE"], pos: Pos::Panel(3), focus: Some(3),
+        dur_ms: 500, big: true },
     Slide { lines: &["Live filesystem. In memory."],
-        highlights: &["Live", "memory"], position: Pos::Panel(3), focus: Some(3),
-        dur_mouse: 1200, big: true },
+        highlights: &["Live", "memory"], pos: Pos::Panel(3), focus: Some(3),
+        dur_ms: 1200, big: true },
 
     // === EDITOR (25s-28s) ===
     Slide { lines: &["TRUSTLANG EDITOR"],
-        highlights: &["TRUSTLANG"], position: Pos::Panel(4), focus: Some(4),
-        dur_mouse: 500, big: true },
+        highlights: &["TRUSTLANG"], pos: Pos::Panel(4), focus: Some(4),
+        dur_ms: 500, big: true },
     Slide { lines: &["Write code inside the kernel.", "Execute it."],
-        highlights: &["code", "kernel", "Execute"], position: Pos::Panel(4), focus: Some(4),
-        dur_mouse: 1500, big: true },
+        highlights: &["code", "kernel", "Execute"], pos: Pos::Panel(4), focus: Some(4),
+        dur_ms: 1500, big: true },
 
     // === COMMAND GUIDE (28s-30s) ===
     Slide { lines: &["52 COMMANDS"],
-        highlights: &["52"], position: Pos::Panel(2), focus: Some(2),
-        dur_mouse: 500, big: true },
+        highlights: &["52"], pos: Pos::Panel(2), focus: Some(2),
+        dur_ms: 500, big: true },
     Slide { lines: &["Full shell. All built-in."],
-        highlights: &["shell", "built-in"], position: Pos::Panel(2), focus: Some(2),
-        dur_mouse: 1200, big: true },
+        highlights: &["shell", "built-in"], pos: Pos::Panel(2), focus: Some(2),
+        dur_ms: 1200, big: true },
 
     // === CLOSE (30s-35s) ===
     Slide { lines: &["TrustLab is not a tool."],
-        highlights: &["not"], position: Pos::Center, focus: None,
-        dur_mouse: 1500, big: true },
+        highlights: &["not"], pos: Pos::Center, focus: None,
+        dur_ms: 1500, big: true },
     Slide { lines: &["Bare metal. Rust. Open source."],
-        highlights: &["Rust", "Open source"], position: Pos::Center, focus: None,
-        dur_mouse: 1500, big: true },
+        highlights: &["Rust", "Open source"], pos: Pos::Center, focus: None,
+        dur_ms: 1500, big: true },
     Slide { lines: &["Boot it. Break it.", "Understand it."],
-        highlights: &["Boot", "Break", "Understand"], position: Pos::Center, focus: None,
-        dur_mouse: 2000, big: true },
+        highlights: &["Boot", "Break", "Understand"], pos: Pos::Center, focus: None,
+        dur_ms: 2000, big: true },
 ];
 
 // ── State ──────────────────────────────────────────────────────────────────
@@ -150,9 +150,9 @@ pub struct DemoState {
     pub active: bool,
     pub current_slide: usize,
     /// Millisecond timestamp when current slide started
-    slide_start_mouse: u64,
+    slide_start_ms: u64,
     /// Millisecond timestamp when demo started
-    demo_start_mouse: u64,
+    demo_start_ms: u64,
     /// Pseudo-random seed (for glitch)
     seed: u32,
     /// Last slide index (to detect transitions)
@@ -169,8 +169,8 @@ pub fn new() -> Self {
         Self {
             active: false,
             current_slide: 0,
-            slide_start_mouse: 0,
-            demo_start_mouse: 0,
+            slide_start_ms: 0,
+            demo_start_ms: 0,
             seed: 12345,
             last_slide: usize::MAX,
             tick_in_slide: 0,
@@ -182,15 +182,15 @@ pub fn new() -> Self {
 pub fn start(&mut self) {
         self.active = true;
         self.current_slide = 0;
-        self.demo_start_mouse = now_mouse();
-        self.slide_start_mouse = self.demo_start_mouse;
-        self.seed = (self.demo_start_mouse & 0xFFFF) as u32 ^ 0xA5A5;
+        self.demo_start_ms = now_mouse();
+        self.slide_start_ms = self.demo_start_ms;
+        self.seed = (self.demo_start_ms & 0xFFFF) as u32 ^ 0xA5A5;
         self.last_slide = usize::MAX;
         self.tick_in_slide = 0;
         self.total_ticks = 0;
-        let total_mouse: u64 = SCRIPT.iter().map(|s| s.dur_mouse).sum();
+        let total_ms: u64 = SCRIPT.iter().map(|s| s.dur_ms).sum();
         crate::serial_println!("[DEMO] Started! now_ms={} total_script={}ms slides={}",
-            self.demo_start_mouse, total_mouse, SCRIPT.len());
+            self.demo_start_ms, total_ms, SCRIPT.len());
     }
 
         // Public function — callable from other modules.
@@ -204,7 +204,7 @@ pub fn stop(&mut self) {
         self.total_ticks += 1;
 
         let t = now_mouse();
-        let total_elapsed_mouse = t - self.demo_start_mouse;
+        let total_elapsed_ms = t - self.demo_start_ms;
 
         if self.current_slide >= SCRIPT.len() {
             self.stop();
@@ -215,22 +215,22 @@ pub fn stop(&mut self) {
         let mut cumulative_mouse: u64 = 0;
         for i in 0..=self.current_slide {
             if i < SCRIPT.len() {
-                cumulative_mouse += SCRIPT[i].dur_mouse;
+                cumulative_mouse += SCRIPT[i].dur_ms;
             }
         }
 
         // Debug every 200 ticks
         if self.total_ticks % 200 == 0 {
             crate::serial_println!("[DEMO] slide={} total={}ms deadline={}ms ticks={}",
-                self.current_slide, total_elapsed_mouse, cumulative_mouse, self.total_ticks);
+                self.current_slide, total_elapsed_ms, cumulative_mouse, self.total_ticks);
         }
 
-        if total_elapsed_mouse >= cumulative_mouse {
+        if total_elapsed_ms >= cumulative_mouse {
             // Advance to next slide
             crate::serial_println!("[DEMO] -> next slide {} at total={}ms (deadline={}ms)",
-                self.current_slide + 1, total_elapsed_mouse, cumulative_mouse);
+                self.current_slide + 1, total_elapsed_ms, cumulative_mouse);
             self.current_slide += 1;
-            self.slide_start_mouse = t;
+            self.slide_start_ms = t;
             self.tick_in_slide = 0;
             if self.current_slide >= SCRIPT.len() {
                 self.stop();
@@ -257,7 +257,7 @@ match key {
             0x1B => { self.stop(); true }
             0x20 => {
                 self.current_slide += 1;
-                self.slide_start_mouse = now_mouse();
+                self.slide_start_ms = now_mouse();
                 self.tick_in_slide = 0;
                 if self.current_slide >= SCRIPT.len() { self.stop(); }
                 true
@@ -267,17 +267,17 @@ match key {
     }
 
     /// Elapsed ms in current slide
-    fn slide_elapsed_mouse(&self) -> u64 {
-        now_mouse() - self.slide_start_mouse
+    fn slide_elapsed_ms(&self) -> u64 {
+        now_mouse() - self.slide_start_ms
     }
 
     /// Total elapsed ms since demo start
-    fn total_elapsed_mouse(&self) -> u64 {
-        now_mouse() - self.demo_start_mouse
+    fn total_elapsed_ms(&self) -> u64 {
+        now_mouse() - self.demo_start_ms
     }
 
     /// Simple pseudo-random from seed + frame
-    fn pseudo_random(&self, extra: u32) -> u32 {
+    fn pseudo_rand(&self, extra: u32) -> u32 {
         let mut v = self.seed.wrapping_add(self.total_ticks as u32).wrapping_add(extra);
         v ^= v << 13;
         v ^= v >> 17;
@@ -294,28 +294,28 @@ fn panel_rects(wx: i32, wy: i32, ww: u32, wh: u32) -> [PRect; 7] {
     let cx = wx + 2;
     let cy = wy + TITLE_BAR_H as i32 + 2;
     let cw = ww.saturating_sub(4);
-    let character = wh.saturating_sub(TITLE_BAR_H + 4);
+    let ch = wh.saturating_sub(TITLE_BAR_H + 4);
     let gap = 4u32;
-    let content_h = character.saturating_sub(SHELL_H + gap);
-    let column_w = cw.saturating_sub(gap * 2) / 3;
+    let content_h = ch.saturating_sub(SHELL_H + gap);
+    let col_w = cw.saturating_sub(gap * 2) / 3;
     let row_h = content_h.saturating_sub(gap) / 2;
     let x0 = cx;
-    let x1 = cx + column_w as i32 + gap as i32;
-    let x2 = cx + (column_w as i32 + gap as i32) * 2;
+    let x1 = cx + col_w as i32 + gap as i32;
+    let x2 = cx + (col_w as i32 + gap as i32) * 2;
     let y0 = cy;
     let y1 = cy + row_h as i32 + gap as i32;
-    let col2_w = (cw as i32 - (x2 - cx)).maximum(40) as u32;
+    let col2_w = (cw as i32 - (x2 - cx)).max(40) as u32;
     let trace_h = row_h.saturating_sub(gap) / 2;
     let pipe_h = row_h.saturating_sub(trace_h + gap);
     let pipe_y = y0 + trace_h as i32 + gap as i32;
 
     [
-        PRect { x: x0, y: y0, w: column_w, h: row_h },
-        PRect { x: x1, y: y0, w: column_w, h: trace_h },
+        PRect { x: x0, y: y0, w: col_w, h: row_h },
+        PRect { x: x1, y: y0, w: col_w, h: trace_h },
         PRect { x: x2, y: y0, w: col2_w, h: row_h },
-        PRect { x: x0, y: y1, w: column_w, h: row_h },
-        PRect { x: x1, y: y1, w: column_w, h: row_h },
-        PRect { x: x1, y: pipe_y, w: column_w, h: pipe_h },
+        PRect { x: x0, y: y1, w: col_w, h: row_h },
+        PRect { x: x1, y: y1, w: col_w, h: row_h },
+        PRect { x: x1, y: pipe_y, w: col_w, h: pipe_h },
         PRect { x: x2, y: y1, w: col2_w, h: row_h },
     ]
 }
@@ -323,13 +323,13 @@ fn panel_rects(wx: i32, wy: i32, ww: u32, wh: u32) -> [PRect; 7] {
 // ── Drawing ────────────────────────────────────────────────────────────────
 
 /// Total script duration in ms
-fn total_duration_mouse() -> u64 {
-    SCRIPT.iter().map(|s| s.dur_mouse).sum()
+fn total_duration_ms() -> u64 {
+    SCRIPT.iter().map(|s| s.dur_ms).sum()
 }
 
 /// Duration of slides 0..n (exclusive) in ms
 fn slides_before_mouse(n: usize) -> u64 {
-    SCRIPT[..n].iter().map(|s| s.dur_mouse).sum()
+    SCRIPT[..n].iter().map(|s| s.dur_ms).sum()
 }
 
 /// Draw the demo overlay. Called with absolute window coordinates.
@@ -338,31 +338,31 @@ pub fn draw_overlay(state: &DemoState, wx: i32, wy: i32, ww: u32, wh: u32) {
     if state.current_slide >= SCRIPT.len() { return; }
 
     let slide = &SCRIPT[state.current_slide];
-    let elapsed_mouse = state.slide_elapsed_mouse();
+    let elapsed_ms = state.slide_elapsed_ms();
     let scale: u32 = 3; // ALWAYS giant text
 
     let char_pixel = 8i32 * scale as i32;
     let line_pixel = 16i32 * scale as i32 + 8;
 
     // ── BlackScreen mode: full black overlay + matrix rain ──
-    let is_black = matches!(slide.position, Pos::BlackScreen);
+    let is_black = matches!(slide.pos, Pos::BlackScreen);
     if is_black {
-        crate::framebuffer::fill_rect(wx.maximum(0) as u32, wy.maximum(0) as u32, ww, wh, 0xFF000000);
+        crate::framebuffer::fill_rect(wx.max(0) as u32, wy.max(0) as u32, ww, wh, 0xFF000000);
         draw_morpheus_rain(state, wx, wy, ww, wh);
     }
 
     // ── glitch transition (first GLITCH_MS of each slide, NOT on black) ──
-    if !is_black && elapsed_mouse < GLITCH_MOUSE {
-        draw_glitch_matrix(state, wx, wy, ww, wh, elapsed_mouse);
+    if !is_black && elapsed_ms < GLITCH_MOUSE {
+        draw_glitch_matrix(state, wx, wy, ww, wh, elapsed_ms);
     }
 
     // ── fade in / out (real ms) ──
     let fade_mouse = 200u64;
-    let alpha = if elapsed_mouse < fade_mouse {
-        (elapsed_mouse * 255 / fade_mouse).minimum(255) as u32
-    } else if elapsed_mouse > slide.dur_mouse.saturating_sub(fade_mouse) {
-        let rem = slide.dur_mouse.saturating_sub(elapsed_mouse);
-        (rem * 255 / fade_mouse).minimum(255) as u32
+    let alpha = if elapsed_ms < fade_mouse {
+        (elapsed_ms * 255 / fade_mouse).min(255) as u32
+    } else if elapsed_ms > slide.dur_ms.saturating_sub(fade_mouse) {
+        let rem = slide.dur_ms.saturating_sub(elapsed_ms);
+        (rem * 255 / fade_mouse).min(255) as u32
     } else {
         255u32
     };
@@ -373,7 +373,7 @@ pub fn draw_overlay(state: &DemoState, wx: i32, wy: i32, ww: u32, wh: u32) {
     if !has_text { return; }
 
     // ── text block dimensions ──
-    let maximum_length = slide.lines.iter().map(|l| l.len()).maximum().unwrap_or(1);
+    let maximum_length = slide.lines.iter().map(|l| l.len()).max().unwrap_or(1);
     let block_w = maximum_length as i32 * char_pixel;
     let block_h = slide.lines.len() as i32 * line_pixel;
 
@@ -381,17 +381,17 @@ pub fn draw_overlay(state: &DemoState, wx: i32, wy: i32, ww: u32, wh: u32) {
     let panels = panel_rects(wx, wy, ww, wh);
 
     let (transmit, ty) = // Pattern matching — Rust's exhaustive branching construct.
-match slide.position {
+match slide.pos {
         Pos::Center | Pos::BlackScreen => {
             (wx + (ww as i32 - block_w) / 2,
              wy + (wh as i32 - block_h) / 2)
         }
-        Pos::Panel(index) => {
-            let p = &panels[index.minimum(6)];
+        Pos::Panel(idx) => {
+            let p = &panels[idx.min(6)];
             let bx = p.x + (p.w as i32 - block_w) / 2;
             let by = p.y + (p.h as i32 - block_h) / 2;
-            (bx.maximum(wx + 4).minimum(wx + ww as i32 - block_w - 4),
-             by.maximum(wy + 32).minimum(wy + wh as i32 - block_h - 4))
+            (bx.max(wx + 4).min(wx + ww as i32 - block_w - 4),
+             by.max(wy + 32).min(wy + wh as i32 - block_h - 4))
         }
     };
 
@@ -407,16 +407,16 @@ match slide.position {
     }
 
     // ── progress bar at window bottom ──
-    let total_mouse = total_duration_mouse();
-    let elapsed_total = state.total_elapsed_mouse().minimum(total_mouse);
-    let prog_pixel = (elapsed_total as u32 * ww / total_mouse.maximum(1) as u32).minimum(ww);
-    let prog_y = (wy + wh as i32 - 3).maximum(0) as u32;
-    crate::framebuffer::fill_rect(wx.maximum(0) as u32, prog_y, ww, 3, 0xFF1C2128);
-    crate::framebuffer::fill_rect(wx.maximum(0) as u32, prog_y, prog_pixel, 3, 0xFFFF2020);
+    let total_ms = total_duration_ms();
+    let elapsed_total = state.total_elapsed_ms().min(total_ms);
+    let prog_pixel = (elapsed_total as u32 * ww / total_ms.max(1) as u32).min(ww);
+    let prog_y = (wy + wh as i32 - 3).max(0) as u32;
+    crate::framebuffer::fill_rect(wx.max(0) as u32, prog_y, ww, 3, 0xFF1C2128);
+    crate::framebuffer::fill_rect(wx.max(0) as u32, prog_y, prog_pixel, 3, 0xFFFF2020);
 
     // ── timer (right) ──
     let secs = elapsed_total / 1000;
-    let total_secs = total_mouse / 1000;
+    let total_secs = total_ms / 1000;
     let timer = format!("{}s/{}s", secs, total_secs);
     let tcw = super::char_w();
     let timer_x = wx + ww as i32 - (timer.len() as i32 * tcw) - 8;
@@ -430,17 +430,17 @@ match slide.position {
 // ── Glitch/matrix transition effect ────────────────────────────────────────
 
 /// Draw matrix-style glitch rain during slide transitions
-fn draw_glitch_matrix(state: &DemoState, wx: i32, wy: i32, ww: u32, wh: u32, elapsed_mouse: u64) {
-    let intensity = ((GLITCH_MOUSE - elapsed_mouse) * 255 / GLITCH_MOUSE).minimum(255) as u32;
+fn draw_glitch_matrix(state: &DemoState, wx: i32, wy: i32, ww: u32, wh: u32, elapsed_ms: u64) {
+    let intensity = ((GLITCH_MOUSE - elapsed_ms) * 255 / GLITCH_MOUSE).min(255) as u32;
     if intensity < 10 { return; }
 
     // Matrix rain columns
     let column_spacing = 12u32;
-    let number_cols = ww / column_spacing;
+    let num_cols = ww / column_spacing;
     let chars = b"01?#@!$%&*<>{}[]|/\\~";
 
-    for c in 0..number_cols {
-        let seed = state.pseudo_random(c * 7919 + 31);
+    for c in 0..num_cols {
+        let seed = state.pseudo_rand(c * 7919 + 31);
         let column_x = wx + (c * column_spacing) as i32;
         let speed = (seed % 5 + 2) as i32;
         let offset = (state.total_ticks as i32 * speed + seed as i32) % wh as i32;
@@ -450,33 +450,33 @@ fn draw_glitch_matrix(state: &DemoState, wx: i32, wy: i32, ww: u32, wh: u32, ela
         for j in 0..count {
             let cy = wy + (offset + j * 14) % wh as i32;
             let character_index = ((seed >> (j as u32 * 3)) as usize + state.total_ticks as usize) % chars.len();
-            let character = chars[character_index] as char;
+            let ch = chars[character_index] as char;
 
             // Green with distance fade
             let brightness = if j == 0 { intensity } else { intensity * (count - j) as u32 / count as u32 / 2 };
-            let g = (brightness * 255 / 255).minimum(255);
+            let g = (brightness * 255 / 255).min(255);
             let color = 0xFF000000 | ((g / 4) << 16) | (g << 8) | (g / 4);
 
-            let mut buffer = [0u8; 1];
-            buffer[0] = character as u8;
-            if let Ok(s) = core::str::from_utf8(&buffer) {
+            let mut buf = [0u8; 1];
+            buf[0] = ch as u8;
+            if let Ok(s) = core::str::from_utf8(&buf) {
                 crate::graphics::scaling::draw_text_at_scale(column_x, cy, s, color, 1);
             }
         }
     }
 
     // Horizontal glitch bars (random horizontal distortion lines)
-    let bar_count = (intensity / 40).minimum(6);
+    let bar_count = (intensity / 40).min(6);
     for b in 0..bar_count {
-        let bar_seed = state.pseudo_random(b * 1337 + 42);
+        let bar_seed = state.pseudo_rand(b * 1337 + 42);
         let bar_y = wy + (bar_seed % wh) as i32;
         let bar_w = (bar_seed % (ww / 2)) + 20;
         let bar_x = wx + (bar_seed % (ww / 3)) as i32;
-        let g = (bar_seed % 100 + 50).minimum(200);
+        let g = (bar_seed % 100 + 50).min(200);
         let color = 0xFF000000 | ((g / 6) << 16) | (g << 8) | ((g / 4) & 0xFF);
         crate::framebuffer::fill_rect(
-            bar_x.maximum(0) as u32, bar_y.maximum(0) as u32,
-            bar_w.minimum(ww), 2, color,
+            bar_x.max(0) as u32, bar_y.max(0) as u32,
+            bar_w.min(ww), 2, color,
         );
     }
 }
@@ -486,11 +486,11 @@ fn draw_glitch_matrix(state: &DemoState, wx: i32, wy: i32, ww: u32, wh: u32, ela
 /// Slow, dense matrix rain for the Morpheus intro — green characters falling
 fn draw_morpheus_rain(state: &DemoState, wx: i32, wy: i32, ww: u32, wh: u32) {
     let column_spacing = 10u32;
-    let number_cols = ww / column_spacing;
+    let num_cols = ww / column_spacing;
     let chars = b"01?#@$%&*<>{}[]|/\\~:;_=+-.";
 
-    for c in 0..number_cols {
-        let seed = state.pseudo_random(c * 6271 + 17);
+    for c in 0..num_cols {
+        let seed = state.pseudo_rand(c * 6271 + 17);
         let column_x = wx + (c * column_spacing) as i32;
         let speed = (seed % 3 + 1) as i32;
         let offset = (state.total_ticks as i32 * speed + (seed as i32 * 37)) % (wh as i32 * 2);
@@ -500,19 +500,19 @@ fn draw_morpheus_rain(state: &DemoState, wx: i32, wy: i32, ww: u32, wh: u32) {
         for j in 0..count {
             let cy = wy + (offset + j * 12) % wh as i32;
             let character_index = ((seed >> (j as u32 * 2 + 1)) as usize + state.total_ticks as usize) % chars.len();
-            let character = chars[character_index];
+            let ch = chars[character_index];
 
             // Head char is bright white-green, rest fades to dark green
             let brightness = if j == 0 { 255u32 }
                 else { (200u32).saturating_sub(j as u32 * 18) };
-            let g = brightness.minimum(255);
+            let g = brightness.min(255);
             let r = if j == 0 { g / 2 } else { 0 };
             let b = if j == 0 { g / 3 } else { 0 };
             let color = 0xFF000000 | (r << 16) | (g << 8) | b;
 
-            let mut buffer = [0u8; 1];
-            buffer[0] = character;
-            if let Ok(s) = core::str::from_utf8(&buffer) {
+            let mut buf = [0u8; 1];
+            buf[0] = ch;
+            if let Ok(s) = core::str::from_utf8(&buf) {
                 crate::graphics::scaling::draw_text_at_scale(column_x, cy, s, color, 1);
             }
         }
@@ -536,30 +536,30 @@ fn draw_highlighted_line(x: i32, y: i32, line: &str, highlights: &[&str],
     let mut word_buffer = String::new();
 
     let mut chars = line.chars().peekable();
-    while let Some(&character) = chars.peek() {
-        if character.is_alphanumeric() || character == '\'' {
-            word_buffer.push(character);
+    while let Some(&ch) = chars.peek() {
+        if ch.is_alphanumeric() || ch == '\'' {
+            word_buffer.push(ch);
             chars.next();
         } else {
             if !word_buffer.is_empty() {
-                let column = if shadow { shadow_column }
+                let col = if shadow { shadow_column }
                           else { pick_word_color(&word_buffer, highlights, normal, accent, green) };
-                crate::graphics::scaling::draw_text_at_scale(cx, y, &word_buffer, column, scale);
+                crate::graphics::scaling::draw_text_at_scale(cx, y, &word_buffer, col, scale);
                 cx += word_buffer.len() as i32 * char_pixel;
                 word_buffer.clear();
             }
-            let mut buffer = [0u8; 4];
-            let s = character.encode_utf8(&mut buffer);
-            let column = if shadow { shadow_column } else { normal };
-            crate::graphics::scaling::draw_text_at_scale(cx, y, s, column, scale);
+            let mut buf = [0u8; 4];
+            let s = ch.encode_utf8(&mut buf);
+            let col = if shadow { shadow_column } else { normal };
+            crate::graphics::scaling::draw_text_at_scale(cx, y, s, col, scale);
             cx += char_pixel;
             chars.next();
         }
     }
     if !word_buffer.is_empty() {
-        let column = if shadow { shadow_column }
+        let col = if shadow { shadow_column }
                   else { pick_word_color(&word_buffer, highlights, normal, accent, green) };
-        crate::graphics::scaling::draw_text_at_scale(cx, y, &word_buffer, column, scale);
+        crate::graphics::scaling::draw_text_at_scale(cx, y, &word_buffer, col, scale);
     }
 }
 
@@ -581,7 +581,7 @@ match word {
 
 /// Dim a color by alpha (0-255)
 fn dim_color(color: u32, alpha: u32) -> u32 {
-    let a = alpha.minimum(255);
+    let a = alpha.min(255);
     let r = ((color >> 16) & 0xFF) * a / 255;
     let g = ((color >> 8) & 0xFF) * a / 255;
     let b = (color & 0xFF) * a / 255;

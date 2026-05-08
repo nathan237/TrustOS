@@ -63,7 +63,7 @@ pub fn clear(&mut self, color: u32) {
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
             crate::graphics::simd::fill_row_sse2(
-                self.data.as_mut_pointer(),
+                self.data.as_mut_ptr(),
                 self.data.len(),
                 color
             );
@@ -79,10 +79,10 @@ unsafe {
     #[inline]
         // Fonction publique — appelable depuis d'autres modules.
 pub fn fill_rect(&mut self, x: i32, y: i32, w: u32, h: u32, color: u32) {
-        let x1 = x.maximum(0) as u32;
-        let y1 = y.maximum(0) as u32;
-        let x2 = ((x + w as i32) as u32).minimum(self.width);
-        let y2 = ((y + h as i32) as u32).minimum(self.height);
+        let x1 = x.max(0) as u32;
+        let y1 = y.max(0) as u32;
+        let x2 = ((x + w as i32) as u32).min(self.width);
+        let y2 = ((y + h as i32) as u32).min(self.height);
         
         if x2 <= x1 || y2 <= y1 { return; }
         
@@ -95,7 +95,7 @@ pub fn fill_rect(&mut self, x: i32, y: i32, w: u32, h: u32, color: u32) {
                         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
                 crate::graphics::simd::fill_row_sse2(
-                    self.data.as_mut_pointer().add(row_start),
+                    self.data.as_mut_ptr().add(row_start),
                     row_width,
                     color
                 );
@@ -135,8 +135,8 @@ pub fn get_pixel(&self, x: u32, y: u32) -> u32 {
 pub fn hline(&mut self, x: i32, y: i32, len: u32, color: u32) {
         if y < 0 || y >= self.height as i32 { return; }
         
-        let x1 = x.maximum(0) as u32;
-        let x2 = ((x + len as i32) as u32).minimum(self.width);
+        let x1 = x.max(0) as u32;
+        let x2 = ((x + len as i32) as u32).min(self.width);
         if x2 <= x1 { return; }
         
         let y = y as u32;
@@ -147,7 +147,7 @@ pub fn hline(&mut self, x: i32, y: i32, len: u32, color: u32) {
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
             crate::graphics::simd::fill_row_sse2(
-                self.data.as_mut_pointer().add(start),
+                self.data.as_mut_ptr().add(start),
                 fill_length,
                 color,
             );
@@ -166,8 +166,8 @@ unsafe {
 pub fn vline(&mut self, x: i32, y: i32, len: u32, color: u32) {
         if x < 0 || x >= self.width as i32 { return; }
         
-        let y1 = y.maximum(0) as u32;
-        let y2 = ((y + len as i32) as u32).minimum(self.height);
+        let y1 = y.max(0) as u32;
+        let y2 = ((y + len as i32) as u32).min(self.height);
         if y2 <= y1 { return; }
         
         let x = x as u32;
@@ -188,25 +188,25 @@ pub fn vline(&mut self, x: i32, y: i32, len: u32, color: u32) {
     }
 
     /// Blit from another surface (optimized row copy)
-    pub fn blit(&mut self, source: &FastSurface, destination_x: i32, destination_y: i32) {
-        self.blit_region(source, 0, 0, source.width, source.height, destination_x, destination_y);
+    pub fn blit(&mut self, src: &FastSurface, dst_x: i32, dst_y: i32) {
+        self.blit_region(src, 0, 0, src.width, src.height, dst_x, dst_y);
     }
 
     /// Blit a region from another surface
-    pub fn blit_region(&mut self, source: &FastSurface, 
+    pub fn blit_region(&mut self, src: &FastSurface, 
                        source_x: u32, source_y: u32, source_w: u32, source_h: u32,
-                       destination_x: i32, destination_y: i32) {
+                       dst_x: i32, dst_y: i32) {
         // Clip source region
-        let sx1 = source_x.minimum(source.width);
-        let sy1 = source_y.minimum(source.height);
-        let sx2 = (source_x + source_w).minimum(source.width);
-        let sy2 = (source_y + source_h).minimum(source.height);
+        let sx1 = source_x.min(src.width);
+        let sy1 = source_y.min(src.height);
+        let sx2 = (source_x + source_w).min(src.width);
+        let sy2 = (source_y + source_h).min(src.height);
         
         if sx2 <= sx1 || sy2 <= sy1 { return; }
         
         // Clip destination
-        let mut dx = destination_x;
-        let mut dy = destination_y;
+        let mut dx = dst_x;
+        let mut dy = dst_y;
         let mut copy_w = (sx2 - sx1) as i32;
         let mut copy_h = (sy2 - sy1) as i32;
         let mut source_offset_x = 0i32;
@@ -243,26 +243,26 @@ pub fn vline(&mut self, x: i32, y: i32, len: u32, color: u32) {
         let actual_sy = (sy1 as i32 + source_offset_y) as usize;
         
         // Copy row by row using SSE2
-        let source_stride = source.width as usize;
-        let destination_stride = self.width as usize;
+        let src_stride = src.width as usize;
+        let dst_stride = self.width as usize;
         
         for row in 0..copy_h {
-            let source_row_start = (actual_sy + row) * source_stride + actual_sx;
-            let destination_row_start = (dy + row) * destination_stride + dx;
+            let source_row_start = (actual_sy + row) * src_stride + actual_sx;
+            let destination_row_start = (dy + row) * dst_stride + dx;
             
             #[cfg(target_arch = "x86_64")]
                         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
                 crate::graphics::simd::copy_row_sse2(
-                    self.data.as_mut_pointer().add(destination_row_start),
-                    source.data.as_pointer().add(source_row_start),
+                    self.data.as_mut_ptr().add(destination_row_start),
+                    src.data.as_ptr().add(source_row_start),
                     copy_w
                 );
             }
             #[cfg(not(target_arch = "x86_64"))]
             {
                 self.data[destination_row_start..destination_row_start + copy_w]
-                    .copy_from_slice(&source.data[source_row_start..source_row_start + copy_w]);
+                    .copy_from_slice(&src.data[source_row_start..source_row_start + copy_w]);
             }
         }
         
@@ -270,30 +270,30 @@ unsafe {
     }
 
     /// Blit with alpha blending (SSE2 optimized)
-    pub fn blit_alpha(&mut self, source: &FastSurface, destination_x: i32, destination_y: i32) {
-        let dx_start = destination_x.maximum(0) as u32;
-        let dy_start = destination_y.maximum(0) as u32;
-        let source_x_start = if destination_x < 0 { (-destination_x) as u32 } else { 0 };
-        let source_y_start = if destination_y < 0 { (-destination_y) as u32 } else { 0 };
+    pub fn blit_alpha(&mut self, src: &FastSurface, dst_x: i32, dst_y: i32) {
+        let dx_start = dst_x.max(0) as u32;
+        let dy_start = dst_y.max(0) as u32;
+        let source_x_start = if dst_x < 0 { (-dst_x) as u32 } else { 0 };
+        let source_y_start = if dst_y < 0 { (-dst_y) as u32 } else { 0 };
         
-        let copy_w = (source.width - source_x_start).minimum(self.width - dx_start);
-        let copy_h = (source.height - source_y_start).minimum(self.height - dy_start);
+        let copy_w = (src.width - source_x_start).min(self.width - dx_start);
+        let copy_h = (src.height - source_y_start).min(self.height - dy_start);
         
         if copy_w == 0 || copy_h == 0 { return; }
         
-        let source_stride = source.width as usize;
-        let destination_stride = self.width as usize;
+        let src_stride = src.width as usize;
+        let dst_stride = self.width as usize;
         
         for row in 0..copy_h {
-            let source_row = (source_y_start + row) as usize * source_stride;
-            let destination_row = (dy_start + row) as usize * destination_stride;
+            let source_row = (source_y_start + row) as usize * src_stride;
+            let destination_row = (dy_start + row) as usize * dst_stride;
             
             // Use SSE2 blend when available
             #[cfg(target_arch = "x86_64")]
                         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-                let source_pointer = source.data.as_pointer().add(source_row + source_x_start as usize);
-                let destination_pointer = self.data.as_mut_pointer().add(destination_row + dx_start as usize);
+                let source_pointer = src.data.as_ptr().add(source_row + source_x_start as usize);
+                let destination_pointer = self.data.as_mut_ptr().add(destination_row + dx_start as usize);
                 crate::graphics::simd::blend_row_sse2(destination_pointer, source_pointer, copy_w as usize);
             }
             #[cfg(not(target_arch = "x86_64"))]
@@ -304,7 +304,7 @@ unsafe {
                     for i in 0..8 {
                         let source_index = source_row + (source_x_start + x + i) as usize;
                         let destination_index = destination_row + (dx_start + x + i) as usize;
-                        let source_pixel = source.data[source_index];
+                        let source_pixel = src.data[source_index];
                         let alpha = source_pixel >> 24;
                         
                         if alpha == 255 {
@@ -320,7 +320,7 @@ unsafe {
                 while x < copy_w {
                     let source_index = source_row + (source_x_start + x) as usize;
                     let destination_index = destination_row + (dx_start + x) as usize;
-                    let source_pixel = source.data[source_index];
+                    let source_pixel = src.data[source_index];
                     let alpha = source_pixel >> 24;
                 
                     if alpha == 255 {
@@ -338,7 +338,7 @@ unsafe {
 
     /// Draw rounded rectangle (optimized)
     pub fn fill_rounded_rect(&mut self, x: i32, y: i32, w: u32, h: u32, r: u32, color: u32) {
-        let r = r.minimum(w / 2).minimum(h / 2);
+        let r = r.min(w / 2).min(h / 2);
         
         // Center rectangle (no corners)
         self.fill_rect(x + r as i32, y, w - 2 * r, h, color);
@@ -361,15 +361,15 @@ unsafe {
         for dy in 0..=r {
             for dx in 0..=r {
                 if dx * dx + dy * dy <= r_sq {
-                    let (pixel, py) = // Correspondance de motifs — branchement exhaustif de Rust.
+                    let (px, py) = // Correspondance de motifs — branchement exhaustif de Rust.
 match corner {
                         Corner::TopLeft => (cx - dx, cy - dy),
                         Corner::TopRight => (cx + dx, cy - dy),
                         Corner::BottomLeft => (cx - dx, cy + dy),
                         Corner::BottomRight => (cx + dx, cy + dy),
                     };
-                    if pixel >= 0 && py >= 0 && pixel < self.width as i32 && py < self.height as i32 {
-                        self.set_pixel(pixel as u32, py as u32, color);
+                    if px >= 0 && py >= 0 && px < self.width as i32 && py < self.height as i32 {
+                        self.set_pixel(px as u32, py as u32, color);
                     }
                 }
             }
@@ -387,52 +387,52 @@ match corner {
     }
 
     /// Copy only dirty regions to framebuffer (massive optimization!)
-    pub fn flush_dirty_to_framebuffer(&mut self) {
+    pub fn flush_dirty_to_fb(&mut self) {
         if self.dirty.full_redraw {
-            self.flush_to_framebuffer();
+            self.flush_to_fb();
         } else {
             for i in 0..self.dirty.count {
                 let rect = self.dirty.rects[i];
-                self.flush_rect_to_framebuffer(rect.x, rect.y, rect.w, rect.h);
+                self.flush_rect_to_fb(rect.x, rect.y, rect.w, rect.h);
             }
         }
         self.dirty.clear();
     }
 
     /// Flush entire surface to framebuffer
-    pub fn flush_to_framebuffer(&self) {
-        let (framebuffer_width, framebuffer_height) = crate::framebuffer::get_dimensions();
-        let copy_w = self.width.minimum(framebuffer_width) as usize;
-        let copy_h = self.height.minimum(framebuffer_height) as usize;
+    pub fn flush_to_fb(&self) {
+        let (fb_width, fb_height) = crate::framebuffer::get_dimensions();
+        let copy_w = self.width.min(fb_width) as usize;
+        let copy_h = self.height.min(fb_height) as usize;
         
         let framebuffer_address = crate::framebuffer::get_framebuffer_address();
         let framebuffer_pitch = crate::framebuffer::get_framebuffer_pitch();
         
         if framebuffer_address.is_null() { return; }
         
-        let source_stride = self.width as usize;
+        let src_stride = self.width as usize;
         
         for row in 0..copy_h {
-            let source_start = row * source_stride;
+            let source_start = row * src_stride;
             let destination_offset = row * framebuffer_pitch;
             
                         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-                let source = self.data.as_pointer().add(source_start);
-                let destination = framebuffer_address.add(destination_offset) as *mut u32;
-                core::ptr::copy_nonoverlapping(source, destination, copy_w);
+                let src = self.data.as_ptr().add(source_start);
+                let dst = framebuffer_address.add(destination_offset) as *mut u32;
+                core::ptr::copy_nonoverlapping(src, dst, copy_w);
             }
         }
     }
 
     /// Flush only a rectangle to framebuffer
-    fn flush_rect_to_framebuffer(&self, x: u32, y: u32, w: u32, h: u32) {
-        let (framebuffer_width, framebuffer_height) = crate::framebuffer::get_dimensions();
+    fn flush_rect_to_fb(&self, x: u32, y: u32, w: u32, h: u32) {
+        let (fb_width, fb_height) = crate::framebuffer::get_dimensions();
         
-        let x1 = x.minimum(framebuffer_width).minimum(self.width);
-        let y1 = y.minimum(framebuffer_height).minimum(self.height);
-        let x2 = (x + w).minimum(framebuffer_width).minimum(self.width);
-        let y2 = (y + h).minimum(framebuffer_height).minimum(self.height);
+        let x1 = x.min(fb_width).min(self.width);
+        let y1 = y.min(fb_height).min(self.height);
+        let x2 = (x + w).min(fb_width).min(self.width);
+        let y2 = (y + h).min(fb_height).min(self.height);
         
         if x2 <= x1 || y2 <= y1 { return; }
         
@@ -442,17 +442,17 @@ unsafe {
         if framebuffer_address.is_null() { return; }
         
         let copy_w = (x2 - x1) as usize;
-        let source_stride = self.width as usize;
+        let src_stride = self.width as usize;
         
         for row in y1..y2 {
-            let source_start = row as usize * source_stride + x1 as usize;
+            let source_start = row as usize * src_stride + x1 as usize;
             let destination_offset = row as usize * framebuffer_pitch + x1 as usize * 4;
             
                         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-                let source = self.data.as_pointer().add(source_start);
-                let destination = framebuffer_address.add(destination_offset) as *mut u32;
-                core::ptr::copy_nonoverlapping(source, destination, copy_w);
+                let src = self.data.as_ptr().add(source_start);
+                let dst = framebuffer_address.add(destination_offset) as *mut u32;
+                core::ptr::copy_nonoverlapping(src, dst, copy_w);
             }
         }
     }
@@ -543,10 +543,10 @@ fn rects_overlap(a: &Rect, b: &Rect) -> bool {
 }
 
 fn merge_rects(a: &Rect, b: &Rect) -> Rect {
-    let x1 = a.x.minimum(b.x);
-    let y1 = a.y.minimum(b.y);
-    let x2 = (a.x + a.w).maximum(b.x + b.w);
-    let y2 = (a.y + a.h).maximum(b.y + b.h);
+    let x1 = a.x.min(b.x);
+    let y1 = a.y.min(b.y);
+    let x2 = (a.x + a.w).max(b.x + b.w);
+    let y2 = (a.y + a.h).max(b.y + b.h);
     Rect { x: x1, y: y1, w: x2 - x1, h: y2 - y1 }
 }
 
@@ -556,21 +556,21 @@ fn merge_rects(a: &Rect, b: &Rect) -> Rect {
 
 /// Fast alpha blend using integer math only
 #[inline(always)]
-fn blend_fast(source: u32, destination: u32) -> u32 {
-    let alpha = (source >> 24) & 0xFF;
-    if alpha == 0 { return destination; }
-    if alpha == 255 { return source; }
+fn blend_fast(src: u32, dst: u32) -> u32 {
+    let alpha = (src >> 24) & 0xFF;
+    if alpha == 0 { return dst; }
+    if alpha == 255 { return src; }
     
     let inv_alpha = 255 - alpha;
     
     // Unpack
-    let sr = (source >> 16) & 0xFF;
-    let sg = (source >> 8) & 0xFF;
-    let sb = source & 0xFF;
+    let sr = (src >> 16) & 0xFF;
+    let sg = (src >> 8) & 0xFF;
+    let sb = src & 0xFF;
     
-    let dr = (destination >> 16) & 0xFF;
-    let dg = (destination >> 8) & 0xFF;
-    let db = destination & 0xFF;
+    let dr = (dst >> 16) & 0xFF;
+    let dg = (dst >> 8) & 0xFF;
+    let db = dst & 0xFF;
     
     // Blend with rounding
     let r = (sr * alpha + dr * inv_alpha + 127) / 255;
@@ -608,17 +608,17 @@ impl GlyphCache {
         
         for c in 0..FONT_CACHE_SIZE {
             let glyph_data = crate::framebuffer::font::get_glyph(c as u8 as char);
-            let mut pixel_index = 0;
+            let mut pixel_idx = 0;
             
             for row in 0..16 {
                 let bits = glyph_data[row];
-                for column in 0..8 {
-                    if (bits >> (7 - column)) & 1 == 1 {
-                        self.glyphs[c][pixel_index] = fg_color;
+                for col in 0..8 {
+                    if (bits >> (7 - col)) & 1 == 1 {
+                        self.glyphs[c][pixel_idx] = fg_color;
                     } else {
-                        self.glyphs[c][pixel_index] = 0; // Transparent
+                        self.glyphs[c][pixel_idx] = 0; // Transparent
                     }
-                    pixel_index += 1;
+                    pixel_idx += 1;
                 }
             }
         }
@@ -628,25 +628,25 @@ impl GlyphCache {
 
     /// Draw cached glyph to surface (fast - no per-pixel bit testing)
     pub fn draw_glyph(&self, surface: &mut FastSurface, c: char, x: i32, y: i32) {
-        let index = (c as usize).minimum(FONT_CACHE_SIZE - 1);
-        let glyph = &self.glyphs[index];
+        let idx = (c as usize).min(FONT_CACHE_SIZE - 1);
+        let glyph = &self.glyphs[idx];
         
-        let mut pixel_index = 0;
+        let mut pixel_idx = 0;
         for row in 0..16 {
             let py = y + row;
             if py >= 0 && py < surface.height as i32 {
-                for column in 0..8 {
-                    let pixel = x + column;
-                    if pixel >= 0 && pixel < surface.width as i32 {
-                        let color = glyph[pixel_index];
+                for col in 0..8 {
+                    let px = x + col;
+                    if px >= 0 && px < surface.width as i32 {
+                        let color = glyph[pixel_idx];
                         if color != 0 {
-                            surface.set_pixel(pixel as u32, py as u32, color);
+                            surface.set_pixel(px as u32, py as u32, color);
                         }
                     }
-                    pixel_index += 1;
+                    pixel_idx += 1;
                 }
             } else {
-                pixel_index += 8;
+                pixel_idx += 8;
             }
         }
     }
@@ -740,7 +740,7 @@ pub fn new(width: u32, height: u32) -> Self {
 
     /// Get layer by ID
     pub fn get_layer(&mut self, id: u32) -> Option<&mut Layer> {
-        self.layers.iterator_mut().find(|l| l.id == id)
+        self.layers.iter_mut().find(|l| l.id == id)
     }
 
     /// Remove layer
@@ -758,7 +758,7 @@ pub fn new(width: u32, height: u32) -> Self {
 
     /// Raise layer to top
     pub fn raise_layer(&mut self, id: u32) {
-        let maximum_z = self.layers.iter().map(|l| l.z).maximum().unwrap_or(0);
+        let maximum_z = self.layers.iter().map(|l| l.z).max().unwrap_or(0);
         if let Some(layer) = self.get_layer(id) {
             layer.z = maximum_z + 1;
         }
@@ -784,7 +784,7 @@ pub fn new(width: u32, height: u32) -> Self {
 
     /// Flush output to framebuffer
     pub fn present(&mut self) {
-        self.output.flush_dirty_to_framebuffer();
+        self.output.flush_dirty_to_fb();
     }
 
     /// Full render and present

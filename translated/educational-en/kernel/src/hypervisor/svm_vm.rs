@@ -126,13 +126,13 @@ pub struct SvmVirtualMachine {
     /// Serial COM1 FIFO Control Register state
     pub serial_fcr: u8,
     /// VirtIO block device RAM-backed storage (64 sectors * 512 = 32KB default)
-    pub virtio_block_storage: Vec<u8>,
+    pub virtio_blk_storage: Vec<u8>,
     /// VirtIO block device status register
-    pub virtio_block_status: u8,
+    pub virtio_blk_status: u8,
     /// VirtIO console device status register
     pub virtio_console_status: u8,
     /// VirtIO block device state (legacy I/O transport)
-    pub virtio_block_state: VirtioBlkState,
+    pub virtio_blk_state: VirtioBlkState,
     /// VirtIO console device state (legacy I/O transport)
     pub virtio_console_state: VirtioConsoleState,
 }
@@ -192,7 +192,7 @@ pub struct PicState {
     /// Slave PIC: vector base
     pub slave_vector_base: u8,
     /// Master PIC: in-service register (ISR)
-    pub master_interrupt_handler: u8,
+    pub master_isr: u8,
     /// Master PIC: interrupt request register (IRR)
     pub master_irr: u8,
     /// Whether initialization is complete
@@ -209,7 +209,7 @@ impl Default for PicState {
             slave_imr: 0xFF,
             master_vector_base: 0x08, // Default BIOS mapping
             slave_vector_base: 0x70,
-            master_interrupt_handler: 0,
+            master_isr: 0,
             master_irr: 0,
             initialized: false,
         }
@@ -338,10 +338,10 @@ impl SvmVirtualMachine {
             serial_input_buffer: VecDeque::with_capacity(256),
             serial_ier: 0,
             serial_fcr: 0,
-            virtio_block_storage: alloc::vec![0u8; 64 * 512], // 32KB RAM disk
-            virtio_block_status: 0,
+            virtio_blk_storage: alloc::vec![0u8; 64 * 512], // 32KB RAM disk
+            virtio_blk_status: 0,
             virtio_console_status: 0,
-            virtio_block_state: VirtioBlkState::with_capacity(64 * 512),
+            virtio_blk_state: VirtioBlkState::with_capacity(64 * 512),
             virtio_console_state: VirtioConsoleState::default(),
         })
     }
@@ -362,7 +362,7 @@ impl SvmVirtualMachine {
         // Allocate IOPM (I/O Permission Map) — 12 KB (3 pages)
         // All bits = 1 means intercept all I/O ports
         let iopm = alloc::vec![0xFFu8; 12288]; // 12KB, all 1s = intercept everything
-        let iopm_pointer = iopm.as_pointer() as u64;
+        let iopm_pointer = iopm.as_ptr() as u64;
         let iopm_physical = iopm_pointer - crate::memory::hhdm_offset();
         vmcb.set_iopm_base(iopm_physical);
         // Leak the IOPM allocation so it lives for the duration of the VM
@@ -372,7 +372,7 @@ impl SvmVirtualMachine {
         // Allocate MSRPM (MSR Permission Map) — 8 KB (2 pages)
         // All bits = 1 means intercept all MSR accesses
         let msrpm = alloc::vec![0xFFu8; 8192]; // 8KB, all 1s = intercept everything
-        let msrpm_pointer = msrpm.as_pointer() as u64;
+        let msrpm_pointer = msrpm.as_ptr() as u64;
         let msrpm_physical = msrpm_pointer - crate::memory::hhdm_offset();
         vmcb.set_msrpm_base(msrpm_physical);
         core::mem::forget(msrpm);
@@ -383,7 +383,7 @@ impl SvmVirtualMachine {
             let mut npt = Npt::new(self.asid);
             
             // Map guest memory 1:1
-            let guest_memory_pointer = self.guest_memory.as_pointer() as u64;
+            let guest_memory_pointer = self.guest_memory.as_ptr() as u64;
             let guest_memory_physical = guest_memory_pointer - crate::memory::hhdm_offset();
             
             if let Err(e) = npt.map_range(
@@ -471,52 +471,52 @@ impl SvmVirtualMachine {
     }
     
     /// Setup guest state in VMCB for protected mode
-    pub fn setup_protected_mode(&mut self, entry_point: u64, stack_pointer: u64) -> Result<()> {
+    pub fn setup_protected_mode(&mut self, entry_point: u64, stack_ptr: u64) -> Result<()> {
         let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
         vmcb.setup_protected_mode(entry_point);
         
         vmcb.write_state(state_offsets::RIP, entry_point);
-        vmcb.write_state(state_offsets::RSP, stack_pointer);
+        vmcb.write_state(state_offsets::RSP, stack_ptr);
         
         crate::serial_println!("[SVM-VM {}] Protected mode: RIP=0x{:X}, RSP=0x{:X}", 
-                              self.id, entry_point, stack_pointer);
+                              self.id, entry_point, stack_ptr);
         
         Ok(())
     }
     
     /// Setup guest state for Linux kernel boot (protected mode with boot_params)
-    pub fn setup_protected_mode_for_linux(&mut self, entry_point: u64, stack_pointer: u64, boot_params_address: u64) -> Result<()> {
+    pub fn setup_protected_mode_for_linux(&mut self, entry_point: u64, stack_ptr: u64, boot_params_addr: u64) -> Result<()> {
         let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
         vmcb.setup_protected_mode(entry_point);
         
         vmcb.write_state(state_offsets::RIP, entry_point);
-        vmcb.write_state(state_offsets::RSP, stack_pointer);
+        vmcb.write_state(state_offsets::RSP, stack_ptr);
         
         // Linux kernel expects boot_params pointer in RSI
         // Since RSI is not in VMCB state save area, we set it in guest_regs
         // which will be loaded before VMRUN
-        self.guest_regs.rsi = boot_params_address;
+        self.guest_regs.rsi = boot_params_addr;
         
         // Also set some other commonly expected values
         self.guest_regs.rbp = 0;
         self.guest_regs.rdi = 0;
         
         crate::serial_println!("[SVM-VM {}] Linux protected mode: RIP=0x{:X}, RSP=0x{:X}, RSI(boot_params)=0x{:X}", 
-                              self.id, entry_point, stack_pointer, boot_params_address);
+                              self.id, entry_point, stack_ptr, boot_params_addr);
         
         Ok(())
     }
 
     /// Setup guest state in VMCB for long mode (64-bit)
-    pub fn setup_long_mode(&mut self, entry_point: u64, stack_pointer: u64, guest_cr3: u64) -> Result<()> {
+    pub fn setup_long_mode(&mut self, entry_point: u64, stack_ptr: u64, guest_cr3: u64) -> Result<()> {
         let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
         vmcb.setup_long_mode(entry_point, guest_cr3);
         
         vmcb.write_state(state_offsets::RIP, entry_point);
-        vmcb.write_state(state_offsets::RSP, stack_pointer);
+        vmcb.write_state(state_offsets::RSP, stack_ptr);
         
         crate::serial_println!("[SVM-VM {}] Long mode: RIP=0x{:X}, RSP=0x{:X}, CR3=0x{:X}", 
-                              self.id, entry_point, stack_pointer, guest_cr3);
+                              self.id, entry_point, stack_ptr, guest_cr3);
         
         Ok(())
     }
@@ -539,7 +539,7 @@ impl SvmVirtualMachine {
         
         // Parse bzImage
         let kernel = linux_loader::parse_bzimage(bzimage_data)
-            .map_error(|e| {
+            .map_err(|e| {
                 crate::serial_println!("[SVM-VM {}] bzImage parse error: {:?}", self.id, e);
                 HypervisorError::InvalidGuest
             })?;
@@ -556,20 +556,20 @@ impl SvmVirtualMachine {
         };
         
         let setup = linux_loader::load_linux_kernel(&mut self.guest_memory, &kernel, &config)
-            .map_error(|e| {
+            .map_err(|e| {
                 crate::serial_println!("[SVM-VM {}] Linux load error: {:?}", self.id, e);
                 HypervisorError::InvalidGuest
             })?;
         
         crate::serial_println!("[SVM-VM {}] Linux loaded: entry=0x{:X}, stack=0x{:X}, cr3=0x{:X}, gdt=0x{:X}",
-            self.id, setup.entry_point, setup.stack_pointer, setup.cr3, setup.gdt_base);
+            self.id, setup.entry_point, setup.stack_ptr, setup.cr3, setup.gdt_base);
         
         // Configure VMCB for Linux long mode boot
         {
             let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
             vmcb.setup_long_mode_for_linux(
                 setup.entry_point,
-                setup.stack_pointer,
+                setup.stack_ptr,
                 setup.cr3,
                 setup.gdt_base,
                 39, // 5 GDT entries × 8 bytes - 1
@@ -577,12 +577,12 @@ impl SvmVirtualMachine {
         }
         
         // Set RSI = boot_params address (Linux boot protocol requirement)
-        self.guest_regs.rsi = setup.boot_params_address;
+        self.guest_regs.rsi = setup.boot_params_addr;
         self.guest_regs.rbp = 0;
         self.guest_regs.rdi = 0;
         
         crate::serial_println!("[SVM-VM {}] Starting Linux with RSI=0x{:X} (boot_params)", 
-            self.id, setup.boot_params_address);
+            self.id, setup.boot_params_addr);
         
         // Start execution
         self.state = SvmVmState::Running;
@@ -612,9 +612,9 @@ impl SvmVirtualMachine {
     /// VM execution loop
     fn run_loop(&mut self) -> Result<()> {
         // Get VMCB physical address first
-        let vmcb_physical = {
+        let vmcb_phys = {
             let vmcb = self.vmcb.as_ref().ok_or(HypervisorError::VmcbNotLoaded)?;
-            vmcb.physical_address()
+            vmcb.phys_addr()
         };
         
         // Create VmrunGuestRegs from our guest_regs for vmrun_with_regs
@@ -714,7 +714,7 @@ match timer_mode {
                         // We map reload values to VMEXIT intervals: smaller reload = more frequent
                         let reload = self.pit.channels[0].reload as u64;
                         // ~500 VMEXITs for default 100Hz, scale proportionally
-                        (reload / 24).maximum(100).minimum(2000)
+                        (reload / 24).max(100).min(2000)
                     } else {
                         500 // Default ~100 Hz
                     };
@@ -724,7 +724,7 @@ match timer_mode {
                         let rflags = vmcb.read_state(state_offsets::RFLAGS);
                         if (rflags & 0x200) != 0 {
                             // Route PIT IRQ0 through I/O APIC if configured, else PIC
-                            let vector = if let Some(route) = self.ioapic.get_interrupt_request_route(0) {
+                            let vector = if let Some(route) = self.ioapic.get_irq_route(0) {
                                 if !route.masked && route.vector > 0 {
                                     route.vector as u64
                                 } else {
@@ -771,7 +771,7 @@ match timer_mode {
             
             // 4) Serial COM1 IRQ4 — inject when IER data-available enabled and buffer has data
             if (self.serial_ier & 0x01) != 0 && !self.serial_input_buffer.is_empty() {
-                let vector = if let Some(route) = self.ioapic.get_interrupt_request_route(4) {
+                let vector = if let Some(route) = self.ioapic.get_irq_route(4) {
                     if !route.masked && route.vector > 0 {
                         route.vector as u64
                     } else {
@@ -803,7 +803,7 @@ match timer_mode {
             
             // VMRUN - Enter guest with all GPRs loaded
             unsafe {
-                svm::vmrun_with_regs(vmcb_physical, &mut vmrun_regs);
+                svm::vmrun_with_regs(vmcb_phys, &mut vmrun_regs);
             }
             
             // STGI - Set Global Interrupt Flag (re-enable interrupts)
@@ -998,7 +998,7 @@ match exit {
             
             SvmExitCode::NpfFault => {
                 self.stats.npf_exits += 1;
-                let guest_physical = exit_info2;
+                let guest_phys = exit_info2;
                 let error_code = exit_info1;
                 
                 // Fetch instruction bytes from VMCB for MMIO decoding
@@ -1009,13 +1009,13 @@ match exit {
                 let decoded = mmio::decode_mmio_instruction(&insn_bytes, fetched, true);
                 
                 // Determine if this is a known MMIO region we can emulate
-                let handled = self.handle_npf(guest_physical, error_code, guest_rip, decoded.as_ref());
+                let handled = self.handle_npf(guest_phys, error_code, guest_rip, decoded.as_ref());
                 
                 if handled {
                     // Advance RIP past the decoded instruction
-                    if let Some(ref decrypt) = decoded {
+                    if let Some(ref dec) = decoded {
                         let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
-                        vmcb.write_state(state_offsets::RIP, guest_rip + decrypt.insn_length as u64);
+                        vmcb.write_state(state_offsets::RIP, guest_rip + dec.insn_len as u64);
                     } else if self.features.nrip_save {
                         // Fallback: try NRIP_SAVE if decoder couldn't parse the instruction
                         let vmcb = self.vmcb.as_ref().ok_or(HypervisorError::VmcbNotLoaded)?;
@@ -1039,20 +1039,20 @@ match exit {
                     Ok(true)
                 } else {
                     crate::lab_mode::trace_bus::emit_vm_memory(
-                        self.id, "NPF_VIOLATION", guest_physical, error_code
+                        self.id, "NPF_VIOLATION", guest_phys, error_code
                     );
                     super::debug_monitor::record_event(
                         self.id, super::debug_monitor::DebugCategory::NpfFault,
-                        guest_physical, super::debug_monitor::HandleStatus::Fatal,
+                        guest_phys, super::debug_monitor::HandleStatus::Fatal,
                         guest_rip, self.stats.vmexits,
                         &alloc::format!("err=0x{:X}", error_code),
                     );
                     crate::serial_println!("[SVM-VM {}] FATAL NPF: GPA=0x{:X}, Error=0x{:X}, RIP=0x{:X}", 
-                                          self.id, guest_physical, error_code, guest_rip);
+                                          self.id, guest_phys, error_code, guest_rip);
                     
                     super::isolation::record_violation(
                         self.id,
-                        guest_physical,
+                        guest_phys,
                         None,
                         error_code,
                         guest_rip,
@@ -1452,7 +1452,7 @@ match leaf {
     
     /// Handle Nested Page Fault (NPF)
     /// Returns true if the fault was handled successfully
-    fn handle_npf(&mut self, guest_physical: u64, error_code: u64, guest_rip: u64, decoded: Option<&MmioDecoded>) -> bool {
+    fn handle_npf(&mut self, guest_phys: u64, error_code: u64, guest_rip: u64, decoded: Option<&MmioDecoded>) -> bool {
         // MMIO region constants
         const LAPIC_BASE: u64 = 0xFEE0_0000;
                 // Compile-time constant — evaluated at compilation, zero runtime cost.
@@ -1467,26 +1467,26 @@ const HPET_BASE: u64 = 0xFED0_0000;
 const HPET_END: u64 = 0xFED0_1000;
         
                 // Pattern matching — Rust's exhaustive branching construct.
-match guest_physical {
+match guest_phys {
             // Local APIC MMIO (0xFEE00000 - 0xFEE00FFF)
             LAPIC_BASE..=LAPIC_END => {
-                self.handle_lapic_mmio(guest_physical, error_code, decoded);
+                self.handle_lapic_mmio(guest_phys, error_code, decoded);
                 true
             }
             // I/O APIC MMIO (0xFEC00000 - 0xFEC00FFF) 
             IOAPIC_BASE..=IOAPIC_END => {
-                self.handle_ioapic_mmio(guest_physical, error_code, decoded);
+                self.handle_ioapic_mmio(guest_phys, error_code, decoded);
                 true
             }
             // HPET MMIO (0xFED00000 - 0xFED00FFF)
             HPET_BASE..=HPET_END => {
-                self.handle_hpet_mmio(guest_physical, error_code, decoded);
+                self.handle_hpet_mmio(guest_phys, error_code, decoded);
                 true
             }
             // VGA framebuffer (0xA0000 - 0xBFFFF) — map if within guest memory
             0xA0000..=0xBFFFF => {
                 if self.stats.npf_exits < 20 {
-                    crate::serial_println!("[SVM-VM {}] VGA FB access at 0x{:X}", self.id, guest_physical);
+                    crate::serial_println!("[SVM-VM {}] VGA FB access at 0x{:X}", self.id, guest_phys);
                 }
                 self.mmio_complete_read(decoded, 0);
                 true
@@ -1513,7 +1513,7 @@ match guest_physical {
             _ => {
                 if self.stats.npf_exits < 50 {
                     crate::serial_println!("[SVM-VM {}] NPF: GPA=0x{:X}, err=0x{:X}, RIP=0x{:X}", 
-                        self.id, guest_physical, error_code, guest_rip);
+                        self.id, guest_phys, error_code, guest_rip);
                 }
                 false
             }
@@ -1523,13 +1523,13 @@ match guest_physical {
     /// Get the write value from a decoded MMIO instruction.
     /// Uses the decoded register or immediate; falls back to RAX if no decode available.
     fn mmio_get_write_value(&self, decoded: Option<&MmioDecoded>) -> u32 {
-        if let Some(decrypt) = decoded {
-            if let Some(imm) = decrypt.immediate {
-                return mmio::mask_to_size(imm, decrypt.operand_size) as u32;
+        if let Some(dec) = decoded {
+            if let Some(imm) = dec.immediate {
+                return mmio::mask_to_size(imm, dec.operand_size) as u32;
             }
-            if let Some(register_index) = decrypt.register {
-                let value = mmio::read_guest_register(&self.guest_regs, register_index);
-                return mmio::mask_to_size(value, decrypt.operand_size) as u32;
+            if let Some(register_index) = dec.register {
+                let val = mmio::read_guest_register(&self.guest_regs, register_index);
+                return mmio::mask_to_size(val, dec.operand_size) as u32;
             }
         }
         // Fallback: use RAX (legacy behavior)
@@ -1539,9 +1539,9 @@ match guest_physical {
     /// Complete an MMIO read by writing the result to the correct guest register.
     /// If no decode available, falls back to writing RAX.
     fn mmio_complete_read(&mut self, decoded: Option<&MmioDecoded>, value: u32) {
-        if let Some(decrypt) = decoded {
-            if !decrypt.is_write {
-                if let Some(register_index) = decrypt.register {
+        if let Some(dec) = decoded {
+            if !dec.is_write {
+                if let Some(register_index) = dec.register {
                     // For MOVZX/MOVSX the operand_size tells us the MMIO access size,
                     // but we write the full value (already masked) to the destination register.
                     // LAPIC registers are always 32-bit, so we just zero-extend.
@@ -1772,10 +1772,10 @@ match self.lapic.dcr & 0xB {
             }
             
             // Look up the route in the I/O APIC redirection table
-            if let Some(route) = self.ioapic.get_interrupt_request_route(interrupt_request_route) {
+            if let Some(route) = self.ioapic.get_irq_route(interrupt_request_route) {
                 if !route.masked && route.vector > 0 {
                     // Set interrupt status bit for this timer
-                    self.hpet.interrupt_handler |= 1 << i;
+                    self.hpet.isr |= 1 << i;
                     
                     // For edge-triggered: reset comparator to avoid re-firing
                     let config = self.hpet.timers[i].config;
@@ -1859,7 +1859,7 @@ match port & 0x7 {
                 // ── PIC (8259A) ───────────────────────────────────
                 0x20 => {
                     // Master PIC: read ISR or IRR depending on OCW3
-                    self.pic.master_interrupt_handler as u32
+                    self.pic.master_isr as u32
                 }
                 0x21 => self.pic.master_imr as u32,  // Master PIC: IMR
                 0xA0 => 0,                           // Slave PIC: ISR
@@ -1867,8 +1867,8 @@ match port & 0x7 {
                 
                 // ── PIT (8254) timer ──────────────────────────────
                 0x40 | 0x41 | 0x42 => {
-                    let character = (port - 0x40) as usize;
-                    let pit_character = &mut self.pit.channels[character];
+                    let ch = (port - 0x40) as usize;
+                    let pit_character = &mut self.pit.channels[ch];
                     if pit_character.latched {
                         pit_character.latched = false;
                         pit_character.latch_value as u32
@@ -1936,7 +1936,7 @@ match self.cmos_index {
                 // ── VirtIO Block (BAR0 = 0xC040, 64 bytes) ───────
                 0xC040..=0xC07F => {
                     let offset = port - 0xC040;
-                    self.virtio_block_state.io_read(offset)
+                    self.virtio_blk_state.io_read(offset)
                 }
                 
                 // ── ACPI / power management ───────────────────────
@@ -1985,16 +1985,16 @@ match self.cmos_index {
 match port {
                 // Serial output — write directly to physical serial port
                 0x3F8 => {
-                    let character = (value & 0xFF) as u8;
-                    crate::serial_print!("{}", character as char);
+                    let ch = (value & 0xFF) as u8;
+                    crate::serial_print!("{}", ch as char);
                     if let Some(console_id) = self.console_id {
-                        super::console::write_char(console_id, character as char);
+                        super::console::write_char(console_id, ch as char);
                     }
                 }
                 // COM2 serial output
                 0x2F8 => {
-                    let character = (value & 0xFF) as u8;
-                    crate::serial_print!("{}", character as char);
+                    let ch = (value & 0xFF) as u8;
+                    crate::serial_print!("{}", ch as char);
                 }
                 // COM1 registers writes
                 0x3F9 => {
@@ -2020,7 +2020,7 @@ match port {
                     if v & 0x10 != 0 {
                         // ICW1: start initialization sequence
                         self.pic.master_icw_phase = 1;
-                        self.pic.master_interrupt_handler = 0;
+                        self.pic.master_isr = 0;
                         self.pic.master_irr = 0;
                         if self.stats.io_exits < 200 {
                             crate::serial_println!("[SVM-VM {}] PIC master: ICW1=0x{:02X}", self.id, v);
@@ -2031,7 +2031,7 @@ match port {
                         // OCW2: EOI commands
                         if v == 0x20 {
                             // Non-specific EOI
-                            self.pic.master_interrupt_handler = 0;
+                            self.pic.master_isr = 0;
                         }
                     }
                 }
@@ -2096,9 +2096,9 @@ match self.pic.slave_icw_phase {
                 
                 // PIT programming — track counter reload values
                 0x40 | 0x41 | 0x42 => {
-                    let character = (port - 0x40) as usize;
+                    let ch = (port - 0x40) as usize;
                     let v = value as u8;
-                    let pit_character = &mut self.pit.channels[character];
+                    let pit_character = &mut self.pit.channels[ch];
                                         // Pattern matching — Rust's exhaustive branching construct.
 match pit_character.access {
                         1 => {
@@ -2117,7 +2117,7 @@ match pit_character.access {
                                 pit_character.reload = (pit_character.reload & 0x00FF) | ((v as u16) << 8);
                                 pit_character.count = pit_character.reload;
                                 pit_character.write_hi_pending = false;
-                                if character == 0 && self.stats.io_exits < 200 {
+                                if ch == 0 && self.stats.io_exits < 200 {
                                     crate::serial_println!("[SVM-VM {}] PIT ch0: reload={} ({} Hz)", 
                                         self.id, pit_character.reload,
                                         if pit_character.reload > 0 { 1193182 / pit_character.reload as u32 } else { 0 });
@@ -2179,12 +2179,12 @@ match pit_character.access {
                     let byte_offset = (port - 0xCFC) as u8;
                     self.pci.write_config_data(byte_offset, value);
                     if self.stats.io_exits < 200 {
-                        let (_, bus, device, func, reg) = {
-                            let address = self.pci.config_address;
-                            (address >> 31 != 0, (address >> 16) as u8 & 0xFF, (address >> 11) as u8 & 0x1F, (address >> 8) as u8 & 0x7, address as u8 & 0xFC)
+                        let (_, bus, dev, func, reg) = {
+                            let addr = self.pci.config_addr;
+                            (addr >> 31 != 0, (addr >> 16) as u8 & 0xFF, (addr >> 11) as u8 & 0x1F, (addr >> 8) as u8 & 0x7, addr as u8 & 0xFC)
                         };
                         crate::serial_println!("[SVM-VM {}] PCI CFG WRITE {:02X}:{:02X}.{} reg=0x{:02X} val=0x{:X}", 
-                            self.id, bus, device, func, reg, value);
+                            self.id, bus, dev, func, reg, value);
                     }
                 }
                 
@@ -2201,19 +2201,19 @@ match pit_character.access {
                 // VirtIO Block I/O (BAR0 = 0xC040)
                 0xC040..=0xC07F => {
                     let offset = port - 0xC040;
-                    let notify = self.virtio_block_state.io_write(offset, value);
+                    let notify = self.virtio_blk_state.io_write(offset, value);
                     if notify {
                         // Guest submitted block requests — process them
                         // We need to split borrow: clone storage ref boundaries
-                        let storage_length = self.virtio_block_storage.len();
-                        let storage_pointer = self.virtio_block_storage.as_mut_pointer();
-                        let memory_pointer = self.guest_memory.as_mut_pointer();
+                        let storage_length = self.virtio_blk_storage.len();
+                        let storage_pointer = self.virtio_blk_storage.as_mut_ptr();
+                        let memory_pointer = self.guest_memory.as_mut_ptr();
                         let memory_length = self.guest_memory.len();
                         // Safety: virtio_blk_storage and guest_memory are separate Vec allocations
                         unsafe {
                             let storage = core::slice::from_raw_parts_mut(storage_pointer, storage_length);
-                            let guest_memory = core::slice::from_raw_parts_mut(memory_pointer, memory_length);
-                            self.virtio_block_state.process_queue(guest_memory, storage);
+                            let guest_mem = core::slice::from_raw_parts_mut(memory_pointer, memory_length);
+                            self.virtio_blk_state.process_queue(guest_mem, storage);
                         }
                     }
                 }
@@ -2223,8 +2223,8 @@ match pit_character.access {
                 
                 // Debug ports
                 0xE9 => {
-                    let character = (value & 0xFF) as u8;
-                    crate::serial_print!("{}", character as char);
+                    let ch = (value & 0xFF) as u8;
+                    crate::serial_print!("{}", ch as char);
                 }
                 0xED => {} // I/O delay, do nothing
                 
@@ -2513,7 +2513,7 @@ unsafe { core::arch::x86_64::_rdtsc() as i64 }, true)
         super::api::emit_event(
             super::api::VmEventType::Hypercall,
             self.id,
-            super::api::VmEventData::HypercallInformation { function, result },
+            super::api::VmEventData::HypercallInfo { function, result },
         );
         
         should_continue
@@ -2524,15 +2524,15 @@ unsafe { core::arch::x86_64::_rdtsc() as i64 }, true)
         let offset = gpa as usize;
         if offset < self.guest_memory.len() {
             // Find null terminator
-            let maximum_length = (self.guest_memory.len() - offset).minimum(256);
+            let maximum_length = (self.guest_memory.len() - offset).min(256);
             let slice = &self.guest_memory[offset..offset + maximum_length];
             
-            if let Some(null_position) = slice.iter().position(|&c| c == 0) {
-                if let Ok(s) = core::str::from_utf8(&slice[..null_position]) {
+            if let Some(null_pos) = slice.iter().position(|&c| c == 0) {
+                if let Ok(s) = core::str::from_utf8(&slice[..null_pos]) {
                     crate::serial_println!("[SVM-VM {} PRINT] {}", self.id, s);
                     if let Some(console_id) = self.console_id {
-                        for character in s.chars() {
-                            super::console::write_char(console_id, character);
+                        for ch in s.chars() {
+                            super::console::write_char(console_id, ch);
                         }
                     }
                 }
@@ -2625,7 +2625,7 @@ where
     F: FnOnce(&mut SvmVirtualMachine) -> R,
 {
     let mut vms = SVM_VMS.lock();
-    vms.iterator_mut().find(|vm| vm.id == id).map(f)
+    vms.iter_mut().find(|vm| vm.id == id).map(f)
 }
 
 /// List all SVM VMs
@@ -2639,8 +2639,8 @@ pub fn list_vms() -> Vec<(u64, String, SvmVmState)> {
 /// Destroy a VM
 pub fn destroy_vm(id: u64) -> Result<()> {
     let mut vms = SVM_VMS.lock();
-    if let Some(position) = vms.iter().position(|vm| vm.id == id) {
-        vms.remove(position);
+    if let Some(pos) = vms.iter().position(|vm| vm.id == id) {
+        vms.remove(pos);
         Ok(())
     } else {
         Err(HypervisorError::VmNotFound)
@@ -2671,7 +2671,7 @@ mod tests {
         let mut pic = PicState::default();
         // ICW1
         pic.master_icw_phase = 1;
-        pic.master_interrupt_handler = 0;
+        pic.master_isr = 0;
         // ICW2: vector base 0x20
         pic.master_vector_base = 0x20;
         pic.master_icw_phase = 2;
@@ -2696,17 +2696,17 @@ mod tests {
 
     #[test]
     fn test_pit_lohi_write() {
-        let mut character = PitChannel::default();
-        character.access = 3;
+        let mut ch = PitChannel::default();
+        ch.access = 3;
         // Low byte
-        character.reload = (character.reload & 0xFF00) | 0x9C;
-        character.write_hi_pending = true;
+        ch.reload = (ch.reload & 0xFF00) | 0x9C;
+        ch.write_hi_pending = true;
         // High byte
-        character.reload = (character.reload & 0x00FF) | (0x2E << 8);
-        character.count = character.reload;
-        character.write_hi_pending = false;
-        assert_eq!(character.reload, 0x2E9C);
-        assert_eq!(character.count, 0x2E9C);
+        ch.reload = (ch.reload & 0x00FF) | (0x2E << 8);
+        ch.count = ch.reload;
+        ch.write_hi_pending = false;
+        assert_eq!(ch.reload, 0x2E9C);
+        assert_eq!(ch.count, 0x2E9C);
     }
 
     #[test]

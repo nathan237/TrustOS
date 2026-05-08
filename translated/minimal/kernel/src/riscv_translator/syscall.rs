@@ -20,268 +20,268 @@ use super::ir::SourceArch;
 pub enum UnifiedSyscall {
     Read,
     Write,
-    Ck,
-    Mx,
+    Open,
+    Close,
     Stat,
-    Abw,
-    Ajx,
-    Adb,
-    Adf,
-    Adi,
-    Aae,
-    Aun,
-    Aou,
-    Abf,
-    Arh,
-    Abz,
-    Aih,
-    Ahx,
-    Lk,
-    Bar,
-    Ajm,
-    Ra,
-    Ase,
-    Aby,
-    Apx,
-    Ada,
-    Brd,
-    Bag,
-    Axp,
-    Bdn,
-    Aiq,
-    Aim,
-    Ail,
-    Aik,
-    Ain,
-    Aip,
-    Aha,
-    Avx,
-    Ahy,
-    Aku,
-    Ata,
-    Amn,
-    Apc,
-    Aio,
-    F(u64),
+    Fstat,
+    Lseek,
+    Mmap,
+    Mprotect,
+    Munmap,
+    Brk,
+    Ioctl,
+    Access,
+    Dup,
+    Dup2,
+    Getpid,
+    Fork,
+    Execve,
+    Exit,
+    Wait4,
+    Kill,
+    Uname,
+    Fcntl,
+    Getcwd,
+    Chdir,
+    Mkdir,
+    Rmdir,
+    Unlink,
+    Readlink,
+    Chmod,
+    Getuid,
+    Getgid,
+    Geteuid,
+    Getegid,
+    Getppid,
+    Gettid,
+    Clock_gettime,
+    Nanosleep,
+    ExitGroup,
+    Openat,
+    Getdents64,
+    Set_tid_address,
+    Arch_prctl,
+    Getrandom,
+    Unknown(u64),
 }
 
 impl UnifiedSyscall {
     
-    pub fn sxp(arch: SourceArch, aqb: u64) -> Self {
+    pub fn lyz(arch: SourceArch, number: u64) -> Self {
         match arch {
-            SourceArch::BT_ => Self::syk(aqb),
-            SourceArch::Fg | SourceArch::Jy => Self::sxo(aqb),
-            SourceArch::Acz => Self::syc(aqb),
-            SourceArch::Aod => UnifiedSyscall::F(aqb),
+            SourceArch::X86_64 => Self::lzt(number),
+            SourceArch::Aarch64 | SourceArch::Riscv64 => Self::lyy(number),
+            SourceArch::Mips64 => Self::lzm(number),
+            SourceArch::Wasm => UnifiedSyscall::Unknown(number),
         }
     }
 
     
-    fn syk(num: u64) -> Self {
+    fn lzt(num: u64) -> Self {
         match num {
             0   => UnifiedSyscall::Read,
             1   => UnifiedSyscall::Write,
-            2   => UnifiedSyscall::Ck,
-            3   => UnifiedSyscall::Mx,
+            2   => UnifiedSyscall::Open,
+            3   => UnifiedSyscall::Close,
             4   => UnifiedSyscall::Stat,
-            5   => UnifiedSyscall::Abw,
-            8   => UnifiedSyscall::Ajx,
-            9   => UnifiedSyscall::Adb,
-            10  => UnifiedSyscall::Adf,
-            11  => UnifiedSyscall::Adi,
-            12  => UnifiedSyscall::Aae,
-            16  => UnifiedSyscall::Aun,
-            21  => UnifiedSyscall::Aou,
-            32  => UnifiedSyscall::Abf,
-            33  => UnifiedSyscall::Arh,
-            35  => UnifiedSyscall::Avx,
-            39  => UnifiedSyscall::Abz,
-            57  => UnifiedSyscall::Aih,
-            59  => UnifiedSyscall::Ahx,
-            60  => UnifiedSyscall::Lk,
-            61  => UnifiedSyscall::Bar,
-            62  => UnifiedSyscall::Ajm,
-            63  => UnifiedSyscall::Ra,
-            72  => UnifiedSyscall::Ase,
-            79  => UnifiedSyscall::Aby,
-            80  => UnifiedSyscall::Apx,
-            83  => UnifiedSyscall::Ada,
-            84  => UnifiedSyscall::Brd,
-            87  => UnifiedSyscall::Bag,
-            89  => UnifiedSyscall::Axp,
-            90  => UnifiedSyscall::Bdn,
-            102 => UnifiedSyscall::Aiq,
-            104 => UnifiedSyscall::Aim,
-            107 => UnifiedSyscall::Ail,
-            108 => UnifiedSyscall::Aik,
-            110 => UnifiedSyscall::Ain,
-            158 => UnifiedSyscall::Apc,
-            186 => UnifiedSyscall::Aip,
-            217 => UnifiedSyscall::Ata,
-            218 => UnifiedSyscall::Amn,
-            228 => UnifiedSyscall::Aha,
-            231 => UnifiedSyscall::Ahy,
-            257 => UnifiedSyscall::Aku,
-            318 => UnifiedSyscall::Aio,
-            _   => UnifiedSyscall::F(num),
+            5   => UnifiedSyscall::Fstat,
+            8   => UnifiedSyscall::Lseek,
+            9   => UnifiedSyscall::Mmap,
+            10  => UnifiedSyscall::Mprotect,
+            11  => UnifiedSyscall::Munmap,
+            12  => UnifiedSyscall::Brk,
+            16  => UnifiedSyscall::Ioctl,
+            21  => UnifiedSyscall::Access,
+            32  => UnifiedSyscall::Dup,
+            33  => UnifiedSyscall::Dup2,
+            35  => UnifiedSyscall::Nanosleep,
+            39  => UnifiedSyscall::Getpid,
+            57  => UnifiedSyscall::Fork,
+            59  => UnifiedSyscall::Execve,
+            60  => UnifiedSyscall::Exit,
+            61  => UnifiedSyscall::Wait4,
+            62  => UnifiedSyscall::Kill,
+            63  => UnifiedSyscall::Uname,
+            72  => UnifiedSyscall::Fcntl,
+            79  => UnifiedSyscall::Getcwd,
+            80  => UnifiedSyscall::Chdir,
+            83  => UnifiedSyscall::Mkdir,
+            84  => UnifiedSyscall::Rmdir,
+            87  => UnifiedSyscall::Unlink,
+            89  => UnifiedSyscall::Readlink,
+            90  => UnifiedSyscall::Chmod,
+            102 => UnifiedSyscall::Getuid,
+            104 => UnifiedSyscall::Getgid,
+            107 => UnifiedSyscall::Geteuid,
+            108 => UnifiedSyscall::Getegid,
+            110 => UnifiedSyscall::Getppid,
+            158 => UnifiedSyscall::Arch_prctl,
+            186 => UnifiedSyscall::Gettid,
+            217 => UnifiedSyscall::Getdents64,
+            218 => UnifiedSyscall::Set_tid_address,
+            228 => UnifiedSyscall::Clock_gettime,
+            231 => UnifiedSyscall::ExitGroup,
+            257 => UnifiedSyscall::Openat,
+            318 => UnifiedSyscall::Getrandom,
+            _   => UnifiedSyscall::Unknown(num),
         }
     }
 
     
-    fn sxo(num: u64) -> Self {
+    fn lyy(num: u64) -> Self {
         match num {
-            17  => UnifiedSyscall::Aby,
-            23  => UnifiedSyscall::Abf,
-            24  => UnifiedSyscall::Arh,  
-            25  => UnifiedSyscall::Ase,
-            29  => UnifiedSyscall::Aun,
-            34  => UnifiedSyscall::Ada,   
-            35  => UnifiedSyscall::Bag,  
-            48  => UnifiedSyscall::Aou,  
-            49  => UnifiedSyscall::Apx,
-            56  => UnifiedSyscall::Aku,
-            57  => UnifiedSyscall::Mx,
-            62  => UnifiedSyscall::Ajx,
+            17  => UnifiedSyscall::Getcwd,
+            23  => UnifiedSyscall::Dup,
+            24  => UnifiedSyscall::Dup2,  
+            25  => UnifiedSyscall::Fcntl,
+            29  => UnifiedSyscall::Ioctl,
+            34  => UnifiedSyscall::Mkdir,   
+            35  => UnifiedSyscall::Unlink,  
+            48  => UnifiedSyscall::Access,  
+            49  => UnifiedSyscall::Chdir,
+            56  => UnifiedSyscall::Openat,
+            57  => UnifiedSyscall::Close,
+            62  => UnifiedSyscall::Lseek,
             63  => UnifiedSyscall::Read,
             64  => UnifiedSyscall::Write,
-            78  => UnifiedSyscall::Axp, 
-            79  => UnifiedSyscall::Abw,    
-            80  => UnifiedSyscall::Abw,
-            93  => UnifiedSyscall::Lk,
-            94  => UnifiedSyscall::Ahy,
-            96  => UnifiedSyscall::Amn,
-            101 => UnifiedSyscall::Avx,
-            113 => UnifiedSyscall::Aha,
-            124 => UnifiedSyscall::Ajm,
-            129 => UnifiedSyscall::Ajm,     
-            160 => UnifiedSyscall::Ra,
-            172 => UnifiedSyscall::Abz,
-            173 => UnifiedSyscall::Ain,
-            174 => UnifiedSyscall::Aiq,
-            175 => UnifiedSyscall::Ail,
-            176 => UnifiedSyscall::Aim,
-            177 => UnifiedSyscall::Aik,
-            178 => UnifiedSyscall::Aip,
-            214 => UnifiedSyscall::Aae,
-            215 => UnifiedSyscall::Adi,
-            222 => UnifiedSyscall::Adb,
-            226 => UnifiedSyscall::Adf,
-            220 => UnifiedSyscall::Aih,     
-            221 => UnifiedSyscall::Ahx,
-            233 => UnifiedSyscall::Bar,    
-            261 => UnifiedSyscall::Ata,
-            278 => UnifiedSyscall::Aio,
-            _   => UnifiedSyscall::F(num),
+            78  => UnifiedSyscall::Readlink, 
+            79  => UnifiedSyscall::Fstat,    
+            80  => UnifiedSyscall::Fstat,
+            93  => UnifiedSyscall::Exit,
+            94  => UnifiedSyscall::ExitGroup,
+            96  => UnifiedSyscall::Set_tid_address,
+            101 => UnifiedSyscall::Nanosleep,
+            113 => UnifiedSyscall::Clock_gettime,
+            124 => UnifiedSyscall::Kill,
+            129 => UnifiedSyscall::Kill,     
+            160 => UnifiedSyscall::Uname,
+            172 => UnifiedSyscall::Getpid,
+            173 => UnifiedSyscall::Getppid,
+            174 => UnifiedSyscall::Getuid,
+            175 => UnifiedSyscall::Geteuid,
+            176 => UnifiedSyscall::Getgid,
+            177 => UnifiedSyscall::Getegid,
+            178 => UnifiedSyscall::Gettid,
+            214 => UnifiedSyscall::Brk,
+            215 => UnifiedSyscall::Munmap,
+            222 => UnifiedSyscall::Mmap,
+            226 => UnifiedSyscall::Mprotect,
+            220 => UnifiedSyscall::Fork,     
+            221 => UnifiedSyscall::Execve,
+            233 => UnifiedSyscall::Wait4,    
+            261 => UnifiedSyscall::Getdents64,
+            278 => UnifiedSyscall::Getrandom,
+            _   => UnifiedSyscall::Unknown(num),
         }
     }
 
     
-    fn syc(num: u64) -> Self {
+    fn lzm(num: u64) -> Self {
         match num {
             5000 => UnifiedSyscall::Read,
             5001 => UnifiedSyscall::Write,
-            5002 => UnifiedSyscall::Ck,
-            5003 => UnifiedSyscall::Mx,
-            5005 => UnifiedSyscall::Abw,
-            5008 => UnifiedSyscall::Ajx,
-            5009 => UnifiedSyscall::Adb,
-            5010 => UnifiedSyscall::Adf,
-            5011 => UnifiedSyscall::Adi,
-            5012 => UnifiedSyscall::Aae,
-            5038 => UnifiedSyscall::Abz,
-            5057 => UnifiedSyscall::Aih,
-            5058 => UnifiedSyscall::Ahx,
-            5059 => UnifiedSyscall::Lk,
-            5061 => UnifiedSyscall::Ra,
-            5079 => UnifiedSyscall::Aby,
-            5093 => UnifiedSyscall::Lk,  
-            _    => UnifiedSyscall::F(num),
+            5002 => UnifiedSyscall::Open,
+            5003 => UnifiedSyscall::Close,
+            5005 => UnifiedSyscall::Fstat,
+            5008 => UnifiedSyscall::Lseek,
+            5009 => UnifiedSyscall::Mmap,
+            5010 => UnifiedSyscall::Mprotect,
+            5011 => UnifiedSyscall::Munmap,
+            5012 => UnifiedSyscall::Brk,
+            5038 => UnifiedSyscall::Getpid,
+            5057 => UnifiedSyscall::Fork,
+            5058 => UnifiedSyscall::Execve,
+            5059 => UnifiedSyscall::Exit,
+            5061 => UnifiedSyscall::Uname,
+            5079 => UnifiedSyscall::Getcwd,
+            5093 => UnifiedSyscall::Exit,  
+            _    => UnifiedSyscall::Unknown(num),
         }
     }
 
-    pub fn j(&self) -> &'static str {
+    pub fn name(&self) -> &'static str {
         match self {
             UnifiedSyscall::Read => "read",
             UnifiedSyscall::Write => "write",
-            UnifiedSyscall::Ck => "open",
-            UnifiedSyscall::Mx => "close",
+            UnifiedSyscall::Open => "open",
+            UnifiedSyscall::Close => "close",
             UnifiedSyscall::Stat => "stat",
-            UnifiedSyscall::Abw => "fstat",
-            UnifiedSyscall::Ajx => "lseek",
-            UnifiedSyscall::Adb => "mmap",
-            UnifiedSyscall::Adf => "mprotect",
-            UnifiedSyscall::Adi => "munmap",
-            UnifiedSyscall::Aae => "brk",
-            UnifiedSyscall::Aun => "ioctl",
-            UnifiedSyscall::Aou => "access",
-            UnifiedSyscall::Abf => "dup",
-            UnifiedSyscall::Arh => "dup2",
-            UnifiedSyscall::Abz => "getpid",
-            UnifiedSyscall::Aih => "fork",
-            UnifiedSyscall::Ahx => "execve",
-            UnifiedSyscall::Lk => "exit",
-            UnifiedSyscall::Bar => "wait4",
-            UnifiedSyscall::Ajm => "kill",
-            UnifiedSyscall::Ra => "uname",
-            UnifiedSyscall::Ase => "fcntl",
-            UnifiedSyscall::Aby => "getcwd",
-            UnifiedSyscall::Apx => "chdir",
-            UnifiedSyscall::Ada => "mkdir",
-            UnifiedSyscall::Brd => "rmdir",
-            UnifiedSyscall::Bag => "unlink",
-            UnifiedSyscall::Axp => "readlink",
-            UnifiedSyscall::Bdn => "chmod",
-            UnifiedSyscall::Aiq => "getuid",
-            UnifiedSyscall::Aim => "getgid",
-            UnifiedSyscall::Ail => "geteuid",
-            UnifiedSyscall::Aik => "getegid",
-            UnifiedSyscall::Ain => "getppid",
-            UnifiedSyscall::Aip => "gettid",
-            UnifiedSyscall::Aha => "clock_gettime",
-            UnifiedSyscall::Avx => "nanosleep",
-            UnifiedSyscall::Ahy => "exit_group",
-            UnifiedSyscall::Aku => "openat",
-            UnifiedSyscall::Ata => "getdents64",
-            UnifiedSyscall::Amn => "set_tid_address",
-            UnifiedSyscall::Apc => "arch_prctl",
-            UnifiedSyscall::Aio => "getrandom",
-            UnifiedSyscall::F(_) => "unknown",
+            UnifiedSyscall::Fstat => "fstat",
+            UnifiedSyscall::Lseek => "lseek",
+            UnifiedSyscall::Mmap => "mmap",
+            UnifiedSyscall::Mprotect => "mprotect",
+            UnifiedSyscall::Munmap => "munmap",
+            UnifiedSyscall::Brk => "brk",
+            UnifiedSyscall::Ioctl => "ioctl",
+            UnifiedSyscall::Access => "access",
+            UnifiedSyscall::Dup => "dup",
+            UnifiedSyscall::Dup2 => "dup2",
+            UnifiedSyscall::Getpid => "getpid",
+            UnifiedSyscall::Fork => "fork",
+            UnifiedSyscall::Execve => "execve",
+            UnifiedSyscall::Exit => "exit",
+            UnifiedSyscall::Wait4 => "wait4",
+            UnifiedSyscall::Kill => "kill",
+            UnifiedSyscall::Uname => "uname",
+            UnifiedSyscall::Fcntl => "fcntl",
+            UnifiedSyscall::Getcwd => "getcwd",
+            UnifiedSyscall::Chdir => "chdir",
+            UnifiedSyscall::Mkdir => "mkdir",
+            UnifiedSyscall::Rmdir => "rmdir",
+            UnifiedSyscall::Unlink => "unlink",
+            UnifiedSyscall::Readlink => "readlink",
+            UnifiedSyscall::Chmod => "chmod",
+            UnifiedSyscall::Getuid => "getuid",
+            UnifiedSyscall::Getgid => "getgid",
+            UnifiedSyscall::Geteuid => "geteuid",
+            UnifiedSyscall::Getegid => "getegid",
+            UnifiedSyscall::Getppid => "getppid",
+            UnifiedSyscall::Gettid => "gettid",
+            UnifiedSyscall::Clock_gettime => "clock_gettime",
+            UnifiedSyscall::Nanosleep => "nanosleep",
+            UnifiedSyscall::ExitGroup => "exit_group",
+            UnifiedSyscall::Openat => "openat",
+            UnifiedSyscall::Getdents64 => "getdents64",
+            UnifiedSyscall::Set_tid_address => "set_tid_address",
+            UnifiedSyscall::Arch_prctl => "arch_prctl",
+            UnifiedSyscall::Getrandom => "getrandom",
+            UnifiedSyscall::Unknown(_) => "unknown",
         }
     }
 }
 
 
 
-pub fn ixo(
-    gsy: SourceArch,
-    aqb: u64,
-    n: &[u64; 6],
+pub fn handle_syscall(
+    src_arch: SourceArch,
+    number: u64,
+    args: &[u64; 6],
     mem: &mut super::interpreter::RvMemory,
 ) -> (i64, bool) {
-    let syscall = UnifiedSyscall::sxp(gsy, aqb);
+    let syscall = UnifiedSyscall::lyz(src_arch, number);
 
     crate::serial_println!("[RV-XLAT] Syscall: {} ({}) from {} [args: 0x{:x}, 0x{:x}, 0x{:x}]",
-        syscall.j(), aqb, gsy.j(), n[0], n[1], n[2]);
+        syscall.name(), number, src_arch.name(), args[0], args[1], args[2]);
 
     match syscall {
         UnifiedSyscall::Write => {
             
-            let da = n[0];
-            let qso = n[1];
-            let az = n[2] as usize;
+            let fd = args[0];
+            let kem = args[1];
+            let count = args[2] as usize;
 
-            if da == 1 || da == 2 {
+            if fd == 1 || fd == 2 {
                 
-                let mut gwz = 0usize;
-                for a in 0..az {
-                    if let Ok(o) = mem.ady(qso + a as u64) {
-                        crate::serial_print!("{}", o as char);
-                        gwz += 1;
+                let mut dgu = 0usize;
+                for i in 0..count {
+                    if let Ok(b) = mem.read_u8(kem + i as u64) {
+                        crate::serial_print!("{}", b as char);
+                        dgu += 1;
                     } else {
                         break;
                     }
                 }
-                (gwz as i64, false)
+                (dgu as i64, false)
             } else {
                 (-9i64, false) 
             }
@@ -292,49 +292,49 @@ pub fn ixo(
             (0, false)
         }
 
-        UnifiedSyscall::Lk | UnifiedSyscall::Ahy => {
-            let aj = n[0] as i64;
-            crate::serial_println!("[RV-XLAT] Process exited with code {}", aj);
-            (aj, true)
+        UnifiedSyscall::Exit | UnifiedSyscall::ExitGroup => {
+            let code = args[0] as i64;
+            crate::serial_println!("[RV-XLAT] Process exited with code {}", code);
+            (code, true)
         }
 
-        UnifiedSyscall::Aae => {
+        UnifiedSyscall::Brk => {
             
             (0x1000_0000i64, false)
         }
 
-        UnifiedSyscall::Adb => {
+        UnifiedSyscall::Mmap => {
             
-            let ag = n[0];
-            let len = n[1] as usize;
-            let muw = if ag != 0 { ag } else { 0x4000_0000 + mem.jto as u64 };
+            let addr = args[0];
+            let len = args[1] as usize;
+            let het = if addr != 0 { addr } else { 0x4000_0000 + mem.total_allocated as u64 };
             if len > 0 && len <= 64 * 1024 * 1024 {
-                mem.map(muw, len);
-                (muw as i64, false)
+                mem.map(het, len);
+                (het as i64, false)
             } else {
                 (-12i64, false) 
             }
         }
 
-        UnifiedSyscall::Adi => {
+        UnifiedSyscall::Munmap => {
             
             (0, false)
         }
 
-        UnifiedSyscall::Adf => {
+        UnifiedSyscall::Mprotect => {
             
             (0, false)
         }
 
-        UnifiedSyscall::Abz => (1000, false),
-        UnifiedSyscall::Ain => (1, false),
-        UnifiedSyscall::Aiq | UnifiedSyscall::Ail => (0, false),
-        UnifiedSyscall::Aim | UnifiedSyscall::Aik => (0, false),
-        UnifiedSyscall::Aip => (1000, false),
+        UnifiedSyscall::Getpid => (1000, false),
+        UnifiedSyscall::Getppid => (1, false),
+        UnifiedSyscall::Getuid | UnifiedSyscall::Geteuid => (0, false),
+        UnifiedSyscall::Getgid | UnifiedSyscall::Getegid => (0, false),
+        UnifiedSyscall::Gettid => (1000, false),
 
-        UnifiedSyscall::Ra => {
+        UnifiedSyscall::Uname => {
             
-            let k = n[0];
+            let buf = args[0];
             
             let fields = [
                 "TrustOS",                    
@@ -344,55 +344,55 @@ pub fn ixo(
                 "rv64gc",                      
                 "trustos.local",              
             ];
-            for (a, buj) in fields.iter().cf() {
-                let _ = mem.qad(k + (a * 65) as u64, buj);
+            for (i, field) in fields.iter().enumerate() {
+                let _ = mem.write_string(buf + (i * 65) as u64, field);
             }
             (0, false)
         }
 
-        UnifiedSyscall::Aby => {
-            let k = n[0];
-            let _ = mem.qad(k, "/");
-            (k as i64, false)
+        UnifiedSyscall::Getcwd => {
+            let buf = args[0];
+            let _ = mem.write_string(buf, "/");
+            (buf as i64, false)
         }
 
-        UnifiedSyscall::Amn => (1000, false),
-        UnifiedSyscall::Apc => (0, false),
+        UnifiedSyscall::Set_tid_address => (1000, false),
+        UnifiedSyscall::Arch_prctl => (0, false),
 
-        UnifiedSyscall::Ck | UnifiedSyscall::Aku => {
+        UnifiedSyscall::Open | UnifiedSyscall::Openat => {
             
             (-2i64, false)
         }
 
-        UnifiedSyscall::Mx => (0, false),
+        UnifiedSyscall::Close => (0, false),
 
-        UnifiedSyscall::Aha => {
+        UnifiedSyscall::Clock_gettime => {
             
-            let k = n[1];
-            let _ = mem.tw(k, 1709664000); 
-            let _ = mem.tw(k + 8, 0);      
+            let buf = args[1];
+            let _ = mem.write_u64(buf, 1709664000); 
+            let _ = mem.write_u64(buf + 8, 0);      
             (0, false)
         }
 
-        UnifiedSyscall::Aio => {
+        UnifiedSyscall::Getrandom => {
             
-            let k = n[0];
-            let az = n[1] as usize;
-            let mut ajn: u64 = 0xDEAD_BEEF_CAFE_1234;
-            for a in 0..az {
-                ajn = ajn.hx(6364136223846793005).cn(1);
-                let _ = mem.cvj(k + a as u64, (ajn >> 33) as u8);
+            let buf = args[0];
+            let count = args[1] as usize;
+            let mut rng_state: u64 = 0xDEAD_BEEF_CAFE_1234;
+            for i in 0..count {
+                rng_state = rng_state.wrapping_mul(6364136223846793005).wrapping_add(1);
+                let _ = mem.write_u8(buf + i as u64, (rng_state >> 33) as u8);
             }
-            (az as i64, false)
+            (count as i64, false)
         }
 
-        UnifiedSyscall::F(num) => {
-            crate::serial_println!("[RV-XLAT] WARNING: unhandled syscall {} from {}", num, gsy.j());
+        UnifiedSyscall::Unknown(num) => {
+            crate::serial_println!("[RV-XLAT] WARNING: unhandled syscall {} from {}", num, src_arch.name());
             (-38i64, false) 
         }
 
         _ => {
-            crate::serial_println!("[RV-XLAT] STUB: {} not fully implemented", syscall.j());
+            crate::serial_println!("[RV-XLAT] STUB: {} not fully implemented", syscall.name());
             (-38i64, false)
         }
     }

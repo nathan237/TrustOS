@@ -31,107 +31,107 @@ use core::fmt;
 
 
 
-pub const BLJ_: &[u8; 8] = b"ANDROID!";
+pub const BOB_: &[u8; 8] = b"ANDROID!";
 
 
-pub const BLK_: u32 = 4096;
+pub const BOC_: u32 = 4096;
 
 
 
 #[repr(C)]
 #[derive(Clone)]
-pub struct Byp {
+pub struct Ahm {
     
-    pub sj: [u8; 8],
+    pub magic: [u8; 8],
     
-    pub bvc: u32,
+    pub kernel_size: u32,
     
-    pub eed: u32,
+    pub kernel_addr: u32,
     
-    pub hwp: u32,
+    pub ramdisk_size: u32,
     
-    pub vpz: u32,
+    pub ramdisk_addr: u32,
     
-    pub wfu: u32,
+    pub second_size: u32,
     
-    pub wft: u32,
+    pub second_addr: u32,
     
-    pub xao: u32,
+    pub tags_addr: u32,
     
-    pub aus: u32,
+    pub xy: u32,
     
-    pub obi: u32,
+    pub header_version: u32,
     
-    pub otc: u32,
+    pub os_version: u32,
     
-    pub j: [u8; 16],
+    pub name: [u8; 16],
     
-    pub wx: [u8; 512],
+    pub cmdline: [u8; 512],
     
-    pub ad: [u8; 32],
+    pub id: [u8; 32],
     
-    pub spz: [u8; 1024],
-    
-    
-    pub vti: u32,
-    
-    pub vth: u64,
-    
-    pub drp: u32,
+    pub extra_cmdline: [u8; 1024],
     
     
-    pub dgv: u32,
+    pub recovery_dtbo_size: u32,
     
-    pub bqh: u64,
+    pub recovery_dtbo_offset: u64,
+    
+    pub bms: u32,
+    
+    
+    pub dtb_size: u32,
+    
+    pub dtb_addr: u64,
 }
 
-impl Byp {
+impl Ahm {
     
-    pub fn zdn(bvc: u32, eed: u32) -> Self {
-        let mut dh = Self {
-            sj: *BLJ_,
-            bvc,
-            eed,
-            hwp: 0,
-            vpz: 0x01000000,      
-            wfu: 0,
-            wft: 0,
-            xao: 0x00000100,
-            aus: BLK_,
-            obi: 2,
-            otc: Self::van(1, 0, 0, 2026, 2), 
-            j: [0u8; 16],
-            wx: [0u8; 512],
-            ad: [0u8; 32],
-            spz: [0u8; 1024],
-            vti: 0,
-            vth: 0,
-            drp: core::mem::size_of::<Self>() as u32,
-            dgv: 0,
-            bqh: 0,
+    pub fn qpn(kernel_size: u32, kernel_addr: u32) -> Self {
+        let mut header = Self {
+            magic: *BOB_,
+            kernel_size,
+            kernel_addr,
+            ramdisk_size: 0,
+            ramdisk_addr: 0x01000000,      
+            second_size: 0,
+            second_addr: 0,
+            tags_addr: 0x00000100,
+            xy: BOC_,
+            header_version: 2,
+            os_version: Self::npb(1, 0, 0, 2026, 2), 
+            name: [0u8; 16],
+            cmdline: [0u8; 512],
+            id: [0u8; 32],
+            extra_cmdline: [0u8; 1024],
+            recovery_dtbo_size: 0,
+            recovery_dtbo_offset: 0,
+            bms: core::mem::size_of::<Self>() as u32,
+            dtb_size: 0,
+            dtb_addr: 0,
         };
 
         
-        let j = b"TrustOS";
-        dh.j[..j.len()].dg(j);
+        let name = b"TrustOS";
+        header.name[..name.len()].copy_from_slice(name);
 
         
-        let wx = b"trustos.mode=desktop trustos.serial=ttyS0";
-        dh.wx[..wx.len()].dg(wx);
+        let cmdline = b"trustos.mode=desktop trustos.serial=ttyS0";
+        header.cmdline[..cmdline.len()].copy_from_slice(cmdline);
 
-        dh
+        header
     }
 
     
     
-    fn van(q: u32, o: u32, r: u32, ccq: u32, caw: u32) -> u32 {
-        (q << 25) | (o << 18) | (r << 11) | ((ccq - 2000) << 4) | caw
+    fn npb(a: u32, b: u32, c: u32, year: u32, month: u32) -> u32 {
+        (a << 25) | (b << 18) | (c << 11) | ((year - 2000) << 4) | month
     }
 
     
     pub fn as_bytes(&self) -> &[u8] {
         unsafe {
-            core::slice::anh(
+            core::slice::from_raw_parts(
                 self as *const Self as *const u8,
                 core::mem::size_of::<Self>(),
             )
@@ -148,25 +148,25 @@ impl Byp {
 
 #[repr(C)]
 #[derive(Clone)]
-pub struct Cse {
+pub struct Ate {
     
-    pub sj: [u8; 8],
+    pub magic: [u8; 8],
     
-    pub bvc: u32,
+    pub kernel_size: u32,
     
-    pub hwp: u32,
+    pub ramdisk_size: u32,
     
-    pub otc: u32,
+    pub os_version: u32,
     
-    pub drp: u32,
+    pub bms: u32,
     
-    pub awt: [u32; 4],
+    pub reserved: [u32; 4],
     
-    pub obi: u32,
+    pub header_version: u32,
     
-    pub wx: [u8; 1536],
+    pub cmdline: [u8; 1536],
     
-    pub zok: u32,
+    pub signature_size: u32,
 }
 
 
@@ -174,44 +174,44 @@ pub struct Cse {
 
 
 
-pub const JZ_: u32 = 0xD00DFEED;
+pub const KT_: u32 = 0xD00DFEED;
 
 
 #[repr(C)]
 pub struct FdtHeader {
-    pub sj: u32,
-    pub fac: u32,
-    pub uxd: u32,
-    pub uxc: u32,
-    pub uxe: u32,
-    pub dk: u32,
-    pub uce: u32,
-    pub qqv: u32,
-    pub wpb: u32,
-    pub wpc: u32,
+    pub magic: u32,
+    pub totalsize: u32,
+    pub off_dt_struct: u32,
+    pub off_dt_strings: u32,
+    pub off_mem_rsvmap: u32,
+    pub version: u32,
+    pub last_comp_version: u32,
+    pub boot_cpuid_phys: u32,
+    pub size_dt_strings: u32,
+    pub size_dt_struct: u32,
 }
 
 impl FdtHeader {
     
-    pub unsafe fn dxi(ptr: *const u8) -> bool {
-        if ptr.abq() {
+    pub unsafe fn bpu(ptr: *const u8) -> bool {
+        if ptr.is_null() {
             return false;
         }
-        let sj = u32::eqv((ptr as *const u32).md());
-        sj == JZ_
+        let magic = u32::from_be((ptr as *const u32).read_unaligned());
+        magic == KT_
     }
 
     
-    pub unsafe fn nwg(ptr: *const u8) -> Option<&'static Self> {
-        if !Self::dxi(ptr) {
+    pub unsafe fn from_ptr(ptr: *const u8) -> Option<&'static Self> {
+        if !Self::bpu(ptr) {
             return None;
         }
         Some(&*(ptr as *const Self))
     }
 
     
-    pub fn aay(&self) -> u32 {
-        u32::eqv(self.fac)
+    pub fn total_size(&self) -> u32 {
+        u32::from_be(self.totalsize)
     }
 }
 
@@ -224,46 +224,46 @@ impl FdtHeader {
 
 pub struct DtbInfo {
     
-    pub epj: u64,
+    pub dtb_base: u64,
     
-    pub dgv: u32,
+    pub dtb_size: u32,
     
     pub model: [u8; 64],
-    pub uph: usize,
+    pub model_len: usize,
     
-    pub umv: u64,
+    pub mem_base: u64,
     
-    pub czr: u64,
+    pub bcr: u64,
     
-    pub whw: u64,
+    pub serial_base: u64,
 }
 
 impl Default for DtbInfo {
     fn default() -> Self {
         Self {
-            epj: 0,
-            dgv: 0,
+            dtb_base: 0,
+            dtb_size: 0,
             model: [0u8; 64],
-            uph: 0,
-            umv: 0,
-            czr: 0,
-            whw: 0,
+            model_len: 0,
+            mem_base: 0,
+            bcr: 0,
+            serial_base: 0,
         }
     }
 }
 
 impl DtbInfo {
     
-    pub unsafe fn sxt(ptr: *const u8) -> Option<Self> {
-        let dh = FdtHeader::nwg(ptr)?;
-        let mut co = DtbInfo::default();
-        co.epj = ptr as u64;
-        co.dgv = dh.aay();
+    pub unsafe fn lzd(ptr: *const u8) -> Option<Self> {
+        let header = FdtHeader::from_ptr(ptr)?;
+        let mut info = DtbInfo::default();
+        info.dtb_base = ptr as u64;
+        info.dtb_size = header.total_size();
 
         
         
         
-        Some(co)
+        Some(info)
     }
 }
 
@@ -275,41 +275,41 @@ impl DtbInfo {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SocFamily {
     
-    F,
+    Unknown,
     
-    Aeb,
+    QemuVirt,
     
-    Ali,
+    Qualcomm,
     
-    Ahz,
+    Exynos,
     
-    Akf,
+    MediaTek,
     
-    Anm,
+    Tensor,
     
-    Agu,
+    Broadcom,
 }
 
 impl fmt::Display for SocFamily {
-    fn fmt(&self, bb: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::F => write!(bb, "Unknown"),
-            Self::Aeb => write!(bb, "QEMU virt"),
-            Self::Ali => write!(bb, "Qualcomm Snapdragon"),
-            Self::Ahz => write!(bb, "Samsung Exynos"),
-            Self::Akf => write!(bb, "MediaTek"),
-            Self::Anm => write!(bb, "Google Tensor"),
-            Self::Agu => write!(bb, "Broadcom (RPi)"),
+            Self::Unknown => write!(f, "Unknown"),
+            Self::QemuVirt => write!(f, "QEMU virt"),
+            Self::Qualcomm => write!(f, "Qualcomm Snapdragon"),
+            Self::Exynos => write!(f, "Samsung Exynos"),
+            Self::MediaTek => write!(f, "MediaTek"),
+            Self::Tensor => write!(f, "Google Tensor"),
+            Self::Broadcom => write!(f, "Broadcom (RPi)"),
         }
     }
 }
 
 
-pub static mut XF_: SocFamily = SocFamily::F;
+pub static mut YM_: SocFamily = SocFamily::Unknown;
 
 
-pub fn zow() -> SocFamily {
-    unsafe { XF_ }
+pub fn qxg() -> SocFamily {
+    unsafe { YM_ }
 }
 
 
@@ -317,46 +317,46 @@ pub fn zow() -> SocFamily {
 
 
 
-pub struct Cne {
-    pub hpk: u64,
-    pub epj: u64,
-    pub hwo: u64,
-    pub cnl: u64,
+pub struct Aqe {
+    pub kernel_base: u64,
+    pub dtb_base: u64,
+    pub ramdisk_base: u64,
+    pub uart_base: u64,
 }
 
-impl Cne {
+impl Aqe {
     
-    pub const fn yrg(jqr: SocFamily) -> Self {
-        match jqr {
-            SocFamily::Aeb => Self {
-                hpk: 0x4008_0000,
-                epj: 0x4000_0000,
-                hwo: 0x4400_0000,
-                cnl: 0x0900_0000,  
+    pub const fn qgb(fbe: SocFamily) -> Self {
+        match fbe {
+            SocFamily::QemuVirt => Self {
+                kernel_base: 0x4008_0000,
+                dtb_base: 0x4000_0000,
+                ramdisk_base: 0x4400_0000,
+                uart_base: 0x0900_0000,  
             },
-            SocFamily::Ali => Self {
-                hpk: 0x8008_0000,
-                epj: 0x8300_0000,
-                hwo: 0x8200_0000,
-                cnl: 0x0078_AF00,  
+            SocFamily::Qualcomm => Self {
+                kernel_base: 0x8008_0000,
+                dtb_base: 0x8300_0000,
+                ramdisk_base: 0x8200_0000,
+                uart_base: 0x0078_AF00,  
             },
-            SocFamily::Anm => Self {
-                hpk: 0x8008_0000,
-                epj: 0x8300_0000,
-                hwo: 0x8200_0000,
-                cnl: 0x10A0_0000,  
+            SocFamily::Tensor => Self {
+                kernel_base: 0x8008_0000,
+                dtb_base: 0x8300_0000,
+                ramdisk_base: 0x8200_0000,
+                uart_base: 0x10A0_0000,  
             },
-            SocFamily::Agu => Self {
-                hpk: 0x0008_0000,
-                epj: 0x0000_0100,
-                hwo: 0x0200_0000,
-                cnl: 0xFE20_1000,  
+            SocFamily::Broadcom => Self {
+                kernel_base: 0x0008_0000,
+                dtb_base: 0x0000_0100,
+                ramdisk_base: 0x0200_0000,
+                uart_base: 0xFE20_1000,  
             },
-            SocFamily::Ahz | SocFamily::Akf | SocFamily::F => Self {
-                hpk: 0x8008_0000,
-                epj: 0x8300_0000,
-                hwo: 0x8200_0000,
-                cnl: 0x1102_0000,  
+            SocFamily::Exynos | SocFamily::MediaTek | SocFamily::Unknown => Self {
+                kernel_base: 0x8008_0000,
+                dtb_base: 0x8300_0000,
+                ramdisk_base: 0x8200_0000,
+                uart_base: 0x1102_0000,  
             },
         }
     }

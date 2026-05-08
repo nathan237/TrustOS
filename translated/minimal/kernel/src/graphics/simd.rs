@@ -18,46 +18,46 @@ use core::arch::x86_64::*;
 
 #[cfg(target_arch = "x86_64")]
 #[inline]
-pub unsafe fn bed(cs: *mut u32, az: usize, s: u32) {
-    if az == 0 { return; }
+pub unsafe fn adq(dst: *mut u32, count: usize, color: u32) {
+    if count == 0 { return; }
     
     
-    let dfb = els(s as i32);
+    let bfl = _mm_set1_epi32(color as i32);
     
-    let mut ptr = cs;
-    let mut ia = az;
+    let mut ptr = dst;
+    let mut ck = count;
     
     
-    let muo = (ptr as usize) & 15; 
-    if muo != 0 {
-        let vik = ((16 - muo) / 4).v(ia);
-        for _ in 0..vik {
-            *ptr = s;
+    let hel = (ptr as usize) & 15; 
+    if hel != 0 {
+        let nva = ((16 - hel) / 4).min(ck);
+        for _ in 0..nva {
+            *ptr = color;
             ptr = ptr.add(1);
-            ia -= 1;
+            ck -= 1;
         }
     }
     
     
-    while ia >= 16 {
-        iif(ptr as *mut acb, dfb);
-        iif(ptr.add(4) as *mut acb, dfb);
-        iif(ptr.add(8) as *mut acb, dfb);
-        iif(ptr.add(12) as *mut acb, dfb);
+    while ck >= 16 {
+        _mm_store_si128(ptr as *mut __m128i, bfl);
+        _mm_store_si128(ptr.add(4) as *mut __m128i, bfl);
+        _mm_store_si128(ptr.add(8) as *mut __m128i, bfl);
+        _mm_store_si128(ptr.add(12) as *mut __m128i, bfl);
         ptr = ptr.add(16);
-        ia -= 16;
+        ck -= 16;
     }
     
     
-    while ia >= 4 {
-        iif(ptr as *mut acb, dfb);
+    while ck >= 4 {
+        _mm_store_si128(ptr as *mut __m128i, bfl);
         ptr = ptr.add(4);
-        ia -= 4;
+        ck -= 4;
     }
     
     
-    for _ in 0..ia {
-        *ptr = s;
+    for _ in 0..ck {
+        *ptr = color;
         ptr = ptr.add(1);
     }
 }
@@ -65,44 +65,44 @@ pub unsafe fn bed(cs: *mut u32, az: usize, s: u32) {
 
 #[cfg(target_arch = "x86_64")]
 #[inline]
-pub unsafe fn dpd(cs: *mut u32, cy: *const u32, az: usize) {
-    if az == 0 { return; }
+pub unsafe fn blg(dst: *mut u32, src: *const u32, count: usize) {
+    if count == 0 { return; }
     
-    let mut alc = cs;
-    let mut aob = cy;
-    let mut ia = az;
+    let mut nt = dst;
+    let mut ps = src;
+    let mut ck = count;
     
     
-    while ia >= 16 {
-        let abk = byb(aob as *const acb);
-        let agy = byb(aob.add(4) as *const acb);
-        let apg = byb(aob.add(8) as *const acb);
-        let bdf = byb(aob.add(12) as *const acb);
+    while ck >= 16 {
+        let v0 = _mm_loadu_si128(ps as *const __m128i);
+        let v1 = _mm_loadu_si128(ps.add(4) as *const __m128i);
+        let v2 = _mm_loadu_si128(ps.add(8) as *const __m128i);
+        let v3 = _mm_loadu_si128(ps.add(12) as *const __m128i);
         
-        ccs(alc as *mut acb, abk);
-        ccs(alc.add(4) as *mut acb, agy);
-        ccs(alc.add(8) as *mut acb, apg);
-        ccs(alc.add(12) as *mut acb, bdf);
+        _mm_storeu_si128(nt as *mut __m128i, v0);
+        _mm_storeu_si128(nt.add(4) as *mut __m128i, v1);
+        _mm_storeu_si128(nt.add(8) as *mut __m128i, v2);
+        _mm_storeu_si128(nt.add(12) as *mut __m128i, v3);
         
-        aob = aob.add(16);
-        alc = alc.add(16);
-        ia -= 16;
+        ps = ps.add(16);
+        nt = nt.add(16);
+        ck -= 16;
     }
     
     
-    while ia >= 4 {
-        let p = byb(aob as *const acb);
-        ccs(alc as *mut acb, p);
-        aob = aob.add(4);
-        alc = alc.add(4);
-        ia -= 4;
+    while ck >= 4 {
+        let v = _mm_loadu_si128(ps as *const __m128i);
+        _mm_storeu_si128(nt as *mut __m128i, v);
+        ps = ps.add(4);
+        nt = nt.add(4);
+        ck -= 4;
     }
     
     
-    for _ in 0..ia {
-        *alc = *aob;
-        aob = aob.add(1);
-        alc = alc.add(1);
+    for _ in 0..ck {
+        *nt = *ps;
+        ps = ps.add(1);
+        nt = nt.add(1);
     }
 }
 
@@ -129,26 +129,26 @@ pub unsafe fn dpd(cs: *mut u32, cy: *const u32, az: usize) {
 
 #[cfg(target_arch = "x86_64")]
 #[inline]
-pub unsafe fn iph(cs: *mut u32, cy: *const u32, az: usize) {
-    if az == 0 { return; }
+pub unsafe fn eiy(dst: *mut u32, src: *const u32, count: usize) {
+    if count == 0 { return; }
 
-    let hhb = cs as *mut u64;
-    let pmp = cy as *const u64;
-    let evx = az / 2;  
-    let mut a = 0usize;
+    let dst8 = dst as *mut u64;
+    let jhl = src as *const u64;
+    let ccd = count / 2;  
+    let mut i = 0usize;
 
     
-    while a + 8 <= evx {
-        let e = pmp.add(a);
-        let bc = hhb.add(a);
-        let abk = core::ptr::md(e);
-        let agy = core::ptr::md(e.add(1));
-        let apg = core::ptr::md(e.add(2));
-        let bdf = core::ptr::md(e.add(3));
-        let cnq = core::ptr::md(e.add(4));
-        let pxu = core::ptr::md(e.add(5));
-        let pxv = core::ptr::md(e.add(6));
-        let jvd = core::ptr::md(e.add(7));
+    while i + 8 <= ccd {
+        let j = jhl.add(i);
+        let d = dst8.add(i);
+        let v0 = core::ptr::read_unaligned(j);
+        let v1 = core::ptr::read_unaligned(j.add(1));
+        let v2 = core::ptr::read_unaligned(j.add(2));
+        let v3 = core::ptr::read_unaligned(j.add(3));
+        let v4 = core::ptr::read_unaligned(j.add(4));
+        let v5 = core::ptr::read_unaligned(j.add(5));
+        let v6 = core::ptr::read_unaligned(j.add(6));
+        let v7 = core::ptr::read_unaligned(j.add(7));
         core::arch::asm!(
             "movnti [{d}], {v0}",
             "movnti [{d} + 8], {v1}",
@@ -158,35 +158,35 @@ pub unsafe fn iph(cs: *mut u32, cy: *const u32, az: usize) {
             "movnti [{d} + 40], {v5}",
             "movnti [{d} + 48], {v6}",
             "movnti [{d} + 56], {v7}",
-            bc = in(reg) bc,
-            abk = in(reg) abk,
-            agy = in(reg) agy,
-            apg = in(reg) apg,
-            bdf = in(reg) bdf,
-            cnq = in(reg) cnq,
-            pxu = in(reg) pxu,
-            pxv = in(reg) pxv,
-            jvd = in(reg) jvd,
+            d = in(reg) d,
+            v0 = in(reg) v0,
+            v1 = in(reg) v1,
+            v2 = in(reg) v2,
+            v3 = in(reg) v3,
+            v4 = in(reg) v4,
+            v5 = in(reg) v5,
+            v6 = in(reg) v6,
+            v7 = in(reg) v7,
             options(nostack),
         );
-        a += 8;
+        i += 8;
     }
 
     
-    while a < evx {
-        let p = core::ptr::md(pmp.add(a));
+    while i < ccd {
+        let v = core::ptr::read_unaligned(jhl.add(i));
         core::arch::asm!(
             "movnti [{d}], {v}",
-            bc = in(reg) hhb.add(a),
-            p = in(reg) p,
+            d = in(reg) dst8.add(i),
+            v = in(reg) v,
             options(nostack),
         );
-        a += 1;
+        i += 1;
     }
 
     
-    if az & 1 != 0 {
-        *cs.add(az - 1) = *cy.add(az - 1);
+    if count & 1 != 0 {
+        *dst.add(count - 1) = *src.add(count - 1);
     }
 
     
@@ -196,16 +196,16 @@ pub unsafe fn iph(cs: *mut u32, cy: *const u32, az: usize) {
 
 #[cfg(target_arch = "x86_64")]
 #[inline]
-pub unsafe fn yqo(cs: *mut u32, az: usize, s: u32) {
-    if az == 0 { return; }
+pub unsafe fn qfq(dst: *mut u32, count: usize, color: u32) {
+    if count == 0 { return; }
 
-    let nex = (s as u64) | ((s as u64) << 32);
-    let hhb = cs as *mut u64;
-    let evx = az / 2;
-    let mut a = 0usize;
+    let color64 = (color as u64) | ((color as u64) << 32);
+    let dst8 = dst as *mut u64;
+    let ccd = count / 2;
+    let mut i = 0usize;
 
-    while a + 8 <= evx {
-        let bc = hhb.add(a);
+    while i + 8 <= ccd {
+        let d = dst8.add(i);
         core::arch::asm!(
             "movnti [{d}], {v}",
             "movnti [{d} + 8], {v}",
@@ -215,25 +215,25 @@ pub unsafe fn yqo(cs: *mut u32, az: usize, s: u32) {
             "movnti [{d} + 40], {v}",
             "movnti [{d} + 48], {v}",
             "movnti [{d} + 56], {v}",
-            bc = in(reg) bc,
-            p = in(reg) nex,
+            d = in(reg) d,
+            v = in(reg) color64,
             options(nostack),
         );
-        a += 8;
+        i += 8;
     }
 
-    while a < evx {
+    while i < ccd {
         core::arch::asm!(
             "movnti [{d}], {v}",
-            bc = in(reg) hhb.add(a),
-            p = in(reg) nex,
+            d = in(reg) dst8.add(i),
+            v = in(reg) color64,
             options(nostack),
         );
-        a += 1;
+        i += 1;
     }
 
-    if az & 1 != 0 {
-        *cs.add(az - 1) = s;
+    if count & 1 != 0 {
+        *dst.add(count - 1) = color;
     }
 
     core::arch::asm!("sfence", options(nostack));
@@ -248,116 +248,116 @@ pub unsafe fn yqo(cs: *mut u32, az: usize, s: u32) {
 
 #[cfg(target_arch = "x86_64")]
 #[inline]
-pub unsafe fn kdu(cs: *mut u32, cy: *const u32, az: usize) {
-    let mut alc = cs;
-    let mut aob = cy;
-    let mut ia = az;
+pub unsafe fn egy(dst: *mut u32, src: *const u32, count: usize) {
+    let mut nt = dst;
+    let mut ps = src;
+    let mut ck = count;
 
-    let ajs = mso();
+    let zero = _mm_setzero_si128();
 
     
-    while ia >= 4 {
-        let e = byb(aob as *const acb);
-        let bc = byb(alc as *const acb);
+    while ck >= 4 {
+        let j = _mm_loadu_si128(ps as *const __m128i);
+        let d = _mm_loadu_si128(nt as *const __m128i);
 
         
-        let mvd = gxj(e, 24);
-        let jzy = qcy(mvd, ajs);
-        if qcz(jzy) == 0xFFFF {
+        let hey = _mm_srli_epi32(j, 24);
+        let dhl = _mm_cmpeq_epi32(hey, zero);
+        if _mm_movemask_epi8(dhl) == 0xFFFF {
             
-            aob = aob.add(4);
-            alc = alc.add(4);
-            ia -= 4;
+            ps = ps.add(4);
+            nt = nt.add(4);
+            ck -= 4;
             continue;
         }
-        let jzx = qcy(mvd, els(255));
-        if qcz(jzx) == 0xFFFF {
+        let fgs = _mm_cmpeq_epi32(hey, _mm_set1_epi32(255));
+        if _mm_movemask_epi8(fgs) == 0xFFFF {
             
-            ccs(alc as *mut acb, e);
-            aob = aob.add(4);
-            alc = alc.add(4);
-            ia -= 4;
+            _mm_storeu_si128(nt as *mut __m128i, j);
+            ps = ps.add(4);
+            nt = nt.add(4);
+            ck -= 4;
             continue;
         }
 
         
         
-        let jnj = jyh(e, ajs); 
-        let knt = jyh(bc, ajs); 
+        let cpw = _mm_unpacklo_epi8(j, zero); 
+        let dmf = _mm_unpacklo_epi8(d, zero); 
 
         
         
-        let bfv = qdc(jnj, 0xFF); 
-        let mtd = qdb(bfv, 0xFF);  
-        let tvt = qdd(fzm(255), mtd);
+        let abn = _mm_shufflelo_epi16(cpw, 0xFF); 
+        let eeq = _mm_shufflehi_epi16(abn, 0xFF);  
+        let mrd = _mm_sub_epi16(_mm_set1_epi16(255), eeq);
 
         
-        let wrt = fce(jnj, mtd);
-        let shd = fce(knt, tvt);
-        let mif = fcd(fcd(wrt, shd), fzm(128));
-        let lzn = jyf(mif, 8);
+        let gvw = _mm_mullo_epi16(cpw, eeq);
+        let ftj = _mm_mullo_epi16(dmf, mrd);
+        let eat = _mm_add_epi16(_mm_add_epi16(gvw, ftj), _mm_set1_epi16(128));
+        let grg = _mm_srli_epi16(eat, 8);
 
         
-        let jni = jyg(e, ajs);
-        let knq = jyg(bc, ajs);
+        let cpv = _mm_unpackhi_epi8(j, zero);
+        let dme = _mm_unpackhi_epi8(d, zero);
 
-        let oe = qdc(jni, 0xFF);
-        let mtb = qdb(oe, 0xFF);
-        let tvs = qdd(fzm(255), mtb);
+        let fy = _mm_shufflelo_epi16(cpv, 0xFF);
+        let eep = _mm_shufflehi_epi16(fy, 0xFF);
+        let mrc = _mm_sub_epi16(_mm_set1_epi16(255), eep);
 
-        let wru = fce(jni, mtb);
-        let krv = fce(knq, tvs);
-        let mie = fcd(fcd(wru, krv), fzm(128));
-        let lzm = jyf(mie, 8);
+        let gvx = _mm_mullo_epi16(cpv, eep);
+        let dnu = _mm_mullo_epi16(dme, mrc);
+        let eas = _mm_add_epi16(_mm_add_epi16(gvx, dnu), _mm_set1_epi16(128));
+        let grf = _mm_srli_epi16(eas, 8);
 
         
-        let result = qda(lzn, lzm);
+        let result = _mm_packus_epi16(grg, grf);
         
-        let result = iic(result, els(0xFF000000u32 as i32));
-        ccs(alc as *mut acb, result);
+        let result = _mm_or_si128(result, _mm_set1_epi32(0xFF000000u32 as i32));
+        _mm_storeu_si128(nt as *mut __m128i, result);
 
-        aob = aob.add(4);
-        alc = alc.add(4);
-        ia -= 4;
+        ps = ps.add(4);
+        nt = nt.add(4);
+        ck -= 4;
     }
 
     
-    for _ in 0..ia {
-        let dw = (*aob >> 24) as u32;
-        if dw == 255 {
-            *alc = *aob;
-        } else if dw > 0 {
-            *alc = kdt(*aob, *alc);
+    for _ in 0..ck {
+        let alpha = (*ps >> 24) as u32;
+        if alpha == 255 {
+            *nt = *ps;
+        } else if alpha > 0 {
+            *nt = fjj(*ps, *nt);
         }
-        aob = aob.add(1);
-        alc = alc.add(1);
+        ps = ps.add(1);
+        nt = nt.add(1);
     }
 }
 
 
 #[inline(always)]
-pub fn kdt(cy: u32, cs: u32) -> u32 {
-    let dw = (cy >> 24) as u32;
-    if dw == 0 { return cs; }
-    if dw == 255 { return cy; }
+pub fn fjj(src: u32, dst: u32) -> u32 {
+    let alpha = (src >> 24) as u32;
+    if alpha == 0 { return dst; }
+    if alpha == 255 { return src; }
     
-    let akg = 255 - dw;
+    let sg = 255 - alpha;
     
-    let adz = (cy >> 16) & 0xFF;
-    let bsi = (cy >> 8) & 0xFF;
-    let is = cy & 0xFF;
+    let pb = (src >> 16) & 0xFF;
+    let akl = (src >> 8) & 0xFF;
+    let cv = src & 0xFF;
     
-    let ahh = (cs >> 16) & 0xFF;
-    let bgs = (cs >> 8) & 0xFF;
-    let ng = cs & 0xFF;
+    let qw = (dst >> 16) & 0xFF;
+    let afb = (dst >> 8) & 0xFF;
+    let fu = dst & 0xFF;
     
     
     
-    let m = ((adz * dw + ahh * akg + 128) >> 8).v(255);
-    let at = ((bsi * dw + bgs * akg + 128) >> 8).v(255);
-    let o = ((is * dw + ng * akg + 128) >> 8).v(255);
+    let r = ((pb * alpha + qw * sg + 128) >> 8).min(255);
+    let g = ((akl * alpha + afb * sg + 128) >> 8).min(255);
+    let b = ((cv * alpha + fu * sg + 128) >> 8).min(255);
     
-    0xFF000000 | (m << 16) | (at << 8) | o
+    0xFF000000 | (r << 16) | (g << 8) | b
 }
 
 
@@ -369,71 +369,71 @@ pub fn kdt(cy: u32, cs: u32) -> u32 {
 
 #[cfg(target_arch = "x86_64")]
 #[inline]
-pub unsafe fn mzl(cs: *mut u32, az: usize, s: u32, dw: u32) {
-    if az == 0 { return; }
-    if dw == 0 { return; }
-    if dw >= 255 {
-        bed(cs, az, s | 0xFF000000);
+pub unsafe fn hib(dst: *mut u32, count: usize, color: u32, alpha: u32) {
+    if count == 0 { return; }
+    if alpha == 0 { return; }
+    if alpha >= 255 {
+        adq(dst, count, color | 0xFF000000);
         return;
     }
 
-    let esy = 255 - dw;
+    let caz = 255 - alpha;
 
     
-    let fvi = els(s as i32);
-    let mve = fzm(dw as i16);
-    let ofd = fzm(esy as i16);
-    let ped = fzm(128);
-    let ajs = mso();
-    let ijr = els(0xFF000000u32 as i32);
+    let crb = _mm_set1_epi32(color as i32);
+    let hez = _mm_set1_epi16(alpha as i16);
+    let ihf = _mm_set1_epi16(caz as i16);
+    let cpo = _mm_set1_epi16(128);
+    let zero = _mm_setzero_si128();
+    let ctn = _mm_set1_epi32(0xFF000000u32 as i32);
 
     
-    let jnj = jyh(fvi, ajs);
-    let jni = jyg(fvi, ajs);
-    let wrq = fce(jnj, mve);
-    let wrp = fce(jni, mve);
+    let cpw = _mm_unpacklo_epi8(crb, zero);
+    let cpv = _mm_unpackhi_epi8(crb, zero);
+    let ovi = _mm_mullo_epi16(cpw, hez);
+    let ovh = _mm_mullo_epi16(cpv, hez);
 
-    let mut ptr = cs;
-    let mut ia = az;
+    let mut ptr = dst;
+    let mut ck = count;
 
     
-    while ia >= 4 {
-        let bc = byb(ptr as *const acb);
+    while ck >= 4 {
+        let d = _mm_loadu_si128(ptr as *const __m128i);
 
         
-        let knt = jyh(bc, ajs);
-        let she = fce(knt, ofd);
-        let mif = fcd(fcd(wrq, she), ped);
-        let lzn = jyf(mif, 8);
+        let dmf = _mm_unpacklo_epi8(d, zero);
+        let llr = _mm_mullo_epi16(dmf, ihf);
+        let eat = _mm_add_epi16(_mm_add_epi16(ovi, llr), cpo);
+        let grg = _mm_srli_epi16(eat, 8);
 
         
-        let knq = jyg(bc, ajs);
-        let krv = fce(knq, ofd);
-        let mie = fcd(fcd(wrp, krv), ped);
-        let lzm = jyf(mie, 8);
+        let dme = _mm_unpackhi_epi8(d, zero);
+        let dnu = _mm_mullo_epi16(dme, ihf);
+        let eas = _mm_add_epi16(_mm_add_epi16(ovh, dnu), cpo);
+        let grf = _mm_srli_epi16(eas, 8);
 
         
-        let result = qda(lzn, lzm);
-        let result = iic(result, ijr);
-        ccs(ptr as *mut acb, result);
+        let result = _mm_packus_epi16(grg, grf);
+        let result = _mm_or_si128(result, ctn);
+        _mm_storeu_si128(ptr as *mut __m128i, result);
 
         ptr = ptr.add(4);
-        ia -= 4;
+        ck -= 4;
     }
 
     
-    let adz = ((s >> 16) & 0xFF) as u32;
-    let bsi = ((s >> 8) & 0xFF) as u32;
-    let is = (s & 0xFF) as u32;
-    for _ in 0..ia {
-        let xy = *ptr;
-        let ahh = ((xy >> 16) & 0xFF) as u32;
-        let bgs = ((xy >> 8) & 0xFF) as u32;
-        let ng = (xy & 0xFF) as u32;
-        let m = ((adz * dw + ahh * esy + 128) >> 8).v(255);
-        let at = ((bsi * dw + bgs * esy + 128) >> 8).v(255);
-        let o = ((is * dw + ng * esy + 128) >> 8).v(255);
-        *ptr = 0xFF000000 | (m << 16) | (at << 8) | o;
+    let pb = ((color >> 16) & 0xFF) as u32;
+    let akl = ((color >> 8) & 0xFF) as u32;
+    let cv = (color & 0xFF) as u32;
+    for _ in 0..ck {
+        let ku = *ptr;
+        let qw = ((ku >> 16) & 0xFF) as u32;
+        let afb = ((ku >> 8) & 0xFF) as u32;
+        let fu = (ku & 0xFF) as u32;
+        let r = ((pb * alpha + qw * caz + 128) >> 8).min(255);
+        let g = ((akl * alpha + afb * caz + 128) >> 8).min(255);
+        let b = ((cv * alpha + fu * caz + 128) >> 8).min(255);
+        *ptr = 0xFF000000 | (r << 16) | (g << 8) | b;
         ptr = ptr.add(1);
     }
 }
@@ -444,28 +444,28 @@ pub unsafe fn mzl(cs: *mut u32, az: usize, s: u32, dw: u32) {
 
 
 #[cfg(target_arch = "x86_64")]
-pub unsafe fn yik(pq: *mut u32, z: usize, ac: usize, luc: usize, s: u32) {
-    for c in 0..ac {
-        let br = pq.add(c * luc);
-        bed(br, z, s);
+pub unsafe fn pzy(fb: *mut u32, width: usize, height: usize, gne: usize, color: u32) {
+    for y in 0..height {
+        let row = fb.add(y * gne);
+        adq(row, width, color);
     }
 }
 
 
 #[cfg(target_arch = "x86_64")]
-pub unsafe fn ygo(
-    pq: *mut u32,
-    fij: usize,
-    cy: *const u32,
-    pmw: usize,
-    jrf: usize,
-    buc: usize,
-    bqg: usize,
+pub unsafe fn pyw(
+    fb: *mut u32,
+    cjh: usize,
+    src: *const u32,
+    src_width: usize,
+    fbj: usize,
+    dst_x: usize,
+    dst_y: usize,
 ) {
-    for c in 0..jrf {
-        let bxg = cy.add(c * pmw);
-        let hhd = pq.add((bqg + c) * fij + buc);
-        dpd(hhd, bxg, pmw);
+    for y in 0..fbj {
+        let amv = src.add(y * src_width);
+        let dnw = fb.add((dst_y + y) * cjh + dst_x);
+        blg(dnw, amv, src_width);
     }
 }
 
@@ -474,98 +474,99 @@ pub unsafe fn ygo(
 
 
 
-pub struct Agz {
+pub struct Oh {
     
-    pub hz: [u32; 128], 
+    pub pixels: [u32; 128], 
     
-    pub z: u8,
+    pub width: u8,
     
-    pub ac: u8,
+    pub height: u8,
     
-    pub axw: u32,
+    pub fg_color: u32,
 }
 
 
 pub struct GlyphCache {
     
-    cqz: [Option<Agz>; 128],
+    glyphs: [Option<Oh>; 128],
     
-    btw: u32,
+    current_fg: u32,
 }
 
 impl GlyphCache {
     pub const fn new() -> Self {
-        const Cq: Option<Agz> = None;
+        const Bc: Option<Oh> = None;
         Self {
-            cqz: [Cq; 128],
-            btw: 0xFF00FF66, 
+            glyphs: [Bc; 128],
+            current_fg: 0xFF00FF66, 
         }
     }
     
     
-    pub fn dbv(&mut self, s: u32) {
-        if self.btw != s {
-            self.btw = s;
+    pub fn bdr(&mut self, color: u32) {
+        if self.current_fg != color {
+            self.current_fg = color;
             
-            for at in &mut self.cqz {
-                *at = None;
+            for g in &mut self.glyphs {
+                *g = None;
             }
         }
     }
     
     
-    pub fn ada(&mut self, r: char) -> &Agz {
-        let w = (r as usize) & 127;
+    pub fn ol(&mut self, c: char) -> &Oh {
+        let idx = (c as usize) & 127;
         
-        if self.cqz[w].is_none() || 
-           self.cqz[w].as_ref().map(|at| at.axw) != Some(self.btw) {
+        if self.glyphs[idx].is_none() || 
+           self.glyphs[idx].as_ref().map(|g| g.fg_color) != Some(self.current_fg) {
             
-            let hlr = crate::framebuffer::font::ada(r);
-            let mut hz = [0u32; 128];
+            let dqw = crate::framebuffer::font::ol(c);
+            let mut pixels = [0u32; 128];
             
-            for (bwv, &br) in hlr.iter().cf() {
-                for ga in 0..8 {
-                    if (br >> (7 - ga)) & 1 == 1 {
-                        hz[bwv * 8 + ga] = self.btw;
+            for (amq, &row) in dqw.iter().enumerate() {
+                for bf in 0..8 {
+                    if (row >> (7 - bf)) & 1 == 1 {
+                        pixels[amq * 8 + bf] = self.current_fg;
                     }
                 }
             }
             
-            self.cqz[w] = Some(Agz {
-                hz,
-                z: 8,
-                ac: 16,
-                axw: self.btw,
+            self.glyphs[idx] = Some(Oh {
+                pixels,
+                width: 8,
+                height: 16,
+                fg_color: self.current_fg,
             });
         }
         
-        self.cqz[w].as_ref().unwrap()
+        
+        self.glyphs[idx].as_ref().unwrap_or_else(|| unreachable!())
     }
     
     
     #[inline]
-    pub fn sdl(
+    pub fn draw_glyph_to_buffer(
         &mut self,
-        bi: &mut [u32],
-        oq: usize,
-        b: usize,
-        c: usize,
-        r: char,
-        lp: u32,
-        ei: u32,
+        buffer: &mut [u32],
+        stride: usize,
+        x: usize,
+        y: usize,
+        c: char,
+        fg: u32,
+        bg: u32,
     ) {
-        let hlr = crate::framebuffer::font::ada(r);
+        let dqw = crate::framebuffer::font::ol(c);
         
-        for (bwv, &br) in hlr.iter().cf() {
-            let x = c + bwv;
-            let mu = x * oq + b;
+        for (amq, &row) in dqw.iter().enumerate() {
+            let o = y + amq;
+            let fk = o * stride + x;
             
-            if mu + 8 > bi.len() { continue; }
+            if fk + 8 > buffer.len() { continue; }
             
             
-            for ga in 0..8u8 {
-                let s = if (br >> (7 - ga)) & 1 == 1 { lp } else { ei };
-                bi[mu + ga as usize] = s;
+            for bf in 0..8u8 {
+                let color = if (row >> (7 - bf)) & 1 == 1 { fg } else { bg };
+                buffer[fk + bf as usize] = color;
             }
         }
     }
@@ -573,46 +574,46 @@ impl GlyphCache {
 
 
 use spin::Mutex;
-pub static BXO_: Mutex<GlyphCache> = Mutex::new(GlyphCache::new());
+pub static CAU_: Mutex<GlyphCache> = Mutex::new(GlyphCache::new());
 
 
 
 
 
 
-pub fn vws(
-    bi: &mut [u32],
-    oq: usize,
-    b: usize,
-    c: usize,
+pub fn ofs(
+    buffer: &mut [u32],
+    stride: usize,
+    x: usize,
+    y: usize,
     text: &str,
-    lp: u32,
-    ei: u32,
+    fg: u32,
+    bg: u32,
 ) {
-    let mut bdq = BXO_.lock();
-    let mut cx = b;
+    let mut adk = CAU_.lock();
+    let mut cx = x;
     
-    for r in text.bw() {
-        if cx + 8 > oq { break; }
-        bdq.sdl(bi, oq, cx, c, r, lp, ei);
+    for c in text.chars() {
+        if cx + 8 > stride { break; }
+        adk.draw_glyph_to_buffer(buffer, stride, cx, y, c, fg, bg);
         cx += 8;
     }
 }
 
 
-pub fn zjn(
-    bi: &mut [u32],
-    oq: usize,
-    b: usize,
-    c: usize,
-    ak: &[&str],
-    lp: u32,
-    ei: u32,
+pub fn qtx(
+    buffer: &mut [u32],
+    stride: usize,
+    x: usize,
+    y: usize,
+    lines: &[&str],
+    fg: u32,
+    bg: u32,
 ) {
-    let mut ae = c;
-    for line in ak {
-        vws(bi, oq, b, ae, line, lp, ei);
-        ae += 16;
+    let mut u = y;
+    for line in lines {
+        ofs(buffer, stride, x, u, line, fg, bg);
+        u += 16;
     }
 }
 
@@ -621,45 +622,45 @@ pub fn zjn(
 
 
 
-pub fn ntp(bi: &mut [u32], s: u32) {
+pub fn hyi(buffer: &mut [u32], color: u32) {
     #[cfg(target_arch = "x86_64")]
     unsafe {
-        if bi.len() >= 4 {
-            bed(bi.mw(), bi.len(), s);
+        if buffer.len() >= 4 {
+            adq(buffer.as_mut_ptr(), buffer.len(), color);
             return;
         }
     }
     
-    bi.vi(s);
+    buffer.fill(color);
 }
 
 
-pub fn ror(cs: &mut [u32], cy: &[u32]) {
-    let az = cs.len().v(cy.len());
+pub fn kxq(dst: &mut [u32], src: &[u32]) {
+    let count = dst.len().min(src.len());
     #[cfg(target_arch = "x86_64")]
     unsafe {
-        if az >= 4 {
-            dpd(cs.mw(), cy.fq(), az);
+        if count >= 4 {
+            blg(dst.as_mut_ptr(), src.as_ptr(), count);
             return;
         }
     }
     
-    cs[..az].dg(&cy[..az]);
+    dst[..count].copy_from_slice(&src[..count]);
 }
 
 
-pub fn ygk(cs: &mut [u32], cy: &[u32]) {
-    let az = cs.len().v(cy.len());
+pub fn pys(dst: &mut [u32], src: &[u32]) {
+    let count = dst.len().min(src.len());
     #[cfg(target_arch = "x86_64")]
     unsafe {
-        if az >= 2 {
-            kdu(cs.mw(), cy.fq(), az);
+        if count >= 2 {
+            egy(dst.as_mut_ptr(), src.as_ptr(), count);
             return;
         }
     }
     
-    for a in 0..az {
-        cs[a] = kdt(cy[a], cs[a]);
+    for i in 0..count {
+        dst[i] = fjj(src[i], dst[i]);
     }
 }
 
@@ -670,14 +671,14 @@ pub fn ygk(cs: &mut [u32], cy: &[u32]) {
 use core::sync::atomic::{AtomicU8, Ordering};
 
 
-static ALH_: AtomicU8 = AtomicU8::new(0);
+static ANC_: AtomicU8 = AtomicU8::new(0);
 
 
 #[cfg(target_arch = "x86_64")]
-fn bzx() -> bool {
-    let ene = ALH_.load(Ordering::Relaxed);
-    if ene != 0 {
-        return ene == 2;
+fn has_avx2() -> bool {
+    let bfd = ANC_.load(Ordering::Relaxed);
+    if bfd != 0 {
+        return bfd == 2;
     }
     let result = unsafe {
         
@@ -687,157 +688,157 @@ fn bzx() -> bool {
             "cpuid",
             "mov {out}, ebx",
             "mov rbx, {tmp_rbx}",
-            zst = bd(reg) _,
-            bd = bd(reg) ebx,
+            tmp_rbx = out(reg) _,
+            out = out(reg) ebx,
             inout("eax") 7u32 => _,
             inout("ecx") 0u32 => _,
-            bd("edx") _,
+            out("edx") _,
         );
         (ebx & (1 << 5)) != 0
     };
-    ALH_.store(if result { 2 } else { 1 }, Ordering::Relaxed);
+    ANC_.store(if result { 2 } else { 1 }, Ordering::Relaxed);
     result
 }
 
 
 
 #[cfg(target_arch = "x86_64")]
-#[dmi(aiy = "avx2")]
-pub unsafe fn ssl(cs: *mut u32, az: usize, s: u32) {
-    if az == 0 { return; }
+#[target_feature(enable = "avx2")]
+pub unsafe fn lvh(dst: *mut u32, count: usize, color: u32) {
+    if count == 0 { return; }
 
-    let dfb = qcr(s as i32);
-    let mut ptr = cs;
-    let mut ia = az;
+    let bfl = _mm256_set1_epi32(color as i32);
+    let mut ptr = dst;
+    let mut ck = count;
 
     
-    while ia >= 32 {
-        ddr(ptr as *mut bpm, dfb);
-        ddr(ptr.add(8) as *mut bpm, dfb);
-        ddr(ptr.add(16) as *mut bpm, dfb);
-        ddr(ptr.add(24) as *mut bpm, dfb);
+    while ck >= 32 {
+        _mm256_storeu_si256(ptr as *mut __m256i, bfl);
+        _mm256_storeu_si256(ptr.add(8) as *mut __m256i, bfl);
+        _mm256_storeu_si256(ptr.add(16) as *mut __m256i, bfl);
+        _mm256_storeu_si256(ptr.add(24) as *mut __m256i, bfl);
         ptr = ptr.add(32);
-        ia -= 32;
+        ck -= 32;
     }
     
-    while ia >= 8 {
-        ddr(ptr as *mut bpm, dfb);
+    while ck >= 8 {
+        _mm256_storeu_si256(ptr as *mut __m256i, bfl);
         ptr = ptr.add(8);
-        ia -= 8;
+        ck -= 8;
     }
     
-    for a in 0..ia {
-        *ptr.add(a) = s;
-    }
-}
-
-
-
-#[cfg(target_arch = "x86_64")]
-#[dmi(aiy = "avx2")]
-pub unsafe fn rou(cs: *mut u32, cy: *const u32, az: usize) {
-    if az == 0 { return; }
-
-    let mut bc = cs;
-    let mut e = cy;
-    let mut ia = az;
-
-    
-    while ia >= 32 {
-        let q = fzl(e as *const bpm);
-        let o = fzl(e.add(8) as *const bpm);
-        let r = fzl(e.add(16) as *const bpm);
-        let aa = fzl(e.add(24) as *const bpm);
-        ddr(bc as *mut bpm, q);
-        ddr(bc.add(8) as *mut bpm, o);
-        ddr(bc.add(16) as *mut bpm, r);
-        ddr(bc.add(24) as *mut bpm, aa);
-        bc = bc.add(32);
-        e = e.add(32);
-        ia -= 32;
-    }
-    
-    while ia >= 8 {
-        ddr(bc as *mut bpm, fzl(e as *const bpm));
-        bc = bc.add(8);
-        e = e.add(8);
-        ia -= 8;
-    }
-    
-    for a in 0..ia {
-        *bc.add(a) = *e.add(a);
+    for i in 0..ck {
+        *ptr.add(i) = color;
     }
 }
 
 
 
 #[cfg(target_arch = "x86_64")]
-#[dmi(aiy = "avx2")]
-pub unsafe fn qpw(cs: *mut u32, cy: *const u32, az: usize) {
-    if az == 0 { return; }
+#[target_feature(enable = "avx2")]
+pub unsafe fn kxt(dst: *mut u32, src: *const u32, count: usize) {
+    if count == 0 { return; }
 
-    let ajs = yba();
-    let iv = msn(128);
-
-    let mut bc = cs;
-    let mut e = cy;
-    let mut ia = az;
+    let mut d = dst;
+    let mut j = src;
+    let mut ck = count;
 
     
-    while ia >= 8 {
-        let fvi = fzl(e as *const bpm);
-        let nod = fzl(bc as *const bpm);
+    while ck >= 32 {
+        let a = _mm256_loadu_si256(j as *const __m256i);
+        let b = _mm256_loadu_si256(j.add(8) as *const __m256i);
+        let c = _mm256_loadu_si256(j.add(16) as *const __m256i);
+        let e = _mm256_loadu_si256(j.add(24) as *const __m256i);
+        _mm256_storeu_si256(d as *mut __m256i, a);
+        _mm256_storeu_si256(d.add(8) as *mut __m256i, b);
+        _mm256_storeu_si256(d.add(16) as *mut __m256i, c);
+        _mm256_storeu_si256(d.add(24) as *mut __m256i, e);
+        d = d.add(32);
+        j = j.add(32);
+        ck -= 32;
+    }
+    
+    while ck >= 8 {
+        _mm256_storeu_si256(d as *mut __m256i, _mm256_loadu_si256(j as *const __m256i));
+        d = d.add(8);
+        j = j.add(8);
+        ck -= 8;
+    }
+    
+    for i in 0..ck {
+        *d.add(i) = *j.add(i);
+    }
+}
+
+
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+pub unsafe fn kce(dst: *mut u32, src: *const u32, count: usize) {
+    if count == 0 { return; }
+
+    let zero = _mm256_setzero_si256();
+    let cw = _mm256_set1_epi16(128);
+
+    let mut d = dst;
+    let mut j = src;
+    let mut ck = count;
+
+    
+    while ck >= 8 {
+        let crb = _mm256_loadu_si256(j as *const __m256i);
+        let huc = _mm256_loadu_si256(d as *const __m256i);
 
         
-        let ijr = ybb(fvi, 24);
-        let jzx = qco(ijr, qcr(0xFF));
-        let jzy = qco(ijr, ajs);
+        let ctn = _mm256_srli_epi32(crb, 24);
+        let fgs = _mm256_cmpeq_epi32(ctn, _mm256_set1_epi32(0xFF));
+        let dhl = _mm256_cmpeq_epi32(ctn, zero);
 
-        if qcq(jzx) == -1i32 {
-            ddr(bc as *mut bpm, fvi);
-        } else if qcq(jzy) != -1i32 {
+        if _mm256_movemask_epi8(fgs) == -1i32 {
+            _mm256_storeu_si256(d as *mut __m256i, crb);
+        } else if _mm256_movemask_epi8(dhl) != -1i32 {
             
-            let pms = qcx(fvi, ajs);
-            let shc = qcx(nod, ajs);
-
-            
-            let mvc = qcs(
-                qct(pms, 0xFF), 0xFF
-            );
-            let tvv = qcv(msn(255), mvc);
-
-            let qpz = jxy(
-                jxy(jxz(pms, mvc), iv),
-                jxz(shc, tvv),
-            );
-            let vyg = qcu(qpz, 8);
+            let jhp = _mm256_unpacklo_epi8(crb, zero);
+            let llq = _mm256_unpacklo_epi8(huc, zero);
 
             
-            let pmr = qcw(fvi, ajs);
-            let sha = qcw(nod, ajs);
-
-            let mvb = qcs(
-                qct(pmr, 0xFF), 0xFF
+            let hex = _mm256_shufflehi_epi16(
+                _mm256_shufflelo_epi16(jhp, 0xFF), 0xFF
             );
-            let tvu = qcv(msn(255), mvb);
+            let mrf = _mm256_sub_epi16(_mm256_set1_epi16(255), hex);
 
-            let qpy = jxy(
-                jxy(jxz(pmr, mvb), iv),
-                jxz(sha, tvu),
+            let kci = _mm256_add_epi16(
+                _mm256_add_epi16(_mm256_mullo_epi16(jhp, hex), cw),
+                _mm256_mullo_epi16(llq, mrf),
             );
-            let vyf = qcu(qpy, 8);
+            let ogo = _mm256_srli_epi16(kci, 8);
 
-            ddr(bc as *mut bpm, yaz(vyg, vyf));
+            
+            let jho = _mm256_unpackhi_epi8(crb, zero);
+            let llo = _mm256_unpackhi_epi8(huc, zero);
+
+            let hew = _mm256_shufflehi_epi16(
+                _mm256_shufflelo_epi16(jho, 0xFF), 0xFF
+            );
+            let mre = _mm256_sub_epi16(_mm256_set1_epi16(255), hew);
+
+            let kch = _mm256_add_epi16(
+                _mm256_add_epi16(_mm256_mullo_epi16(jho, hew), cw),
+                _mm256_mullo_epi16(llo, mre),
+            );
+            let ogn = _mm256_srli_epi16(kch, 8);
+
+            _mm256_storeu_si256(d as *mut __m256i, _mm256_packus_epi16(ogo, ogn));
         }
         
 
-        bc = bc.add(8);
-        e = e.add(8);
-        ia -= 8;
+        d = d.add(8);
+        j = j.add(8);
+        ck -= 8;
     }
     
-    for a in 0..ia {
-        *bc.add(a) = kdt(*e.add(a), *bc.add(a));
+    for i in 0..ck {
+        *d.add(i) = fjj(*j.add(i), *d.add(i));
     }
 }
 
@@ -848,32 +849,32 @@ pub unsafe fn qpw(cs: *mut u32, cy: *const u32, az: usize) {
 
 #[cfg(target_arch = "x86_64")]
 #[inline]
-pub unsafe fn yqn(cs: *mut u32, az: usize, s: u32) {
-    if bzx() {
-        ssl(cs, az, s);
+pub unsafe fn qfp(dst: *mut u32, count: usize, color: u32) {
+    if has_avx2() {
+        lvh(dst, count, color);
     } else {
-        bed(cs, az, s);
+        adq(dst, count, color);
     }
 }
 
 
 #[cfg(target_arch = "x86_64")]
 #[inline]
-pub unsafe fn yka(cs: *mut u32, cy: *const u32, az: usize) {
-    if bzx() {
-        rou(cs, cy, az);
+pub unsafe fn qbi(dst: *mut u32, src: *const u32, count: usize) {
+    if has_avx2() {
+        kxt(dst, src, count);
     } else {
-        dpd(cs, cy, az);
+        blg(dst, src, count);
     }
 }
 
 
 #[cfg(target_arch = "x86_64")]
 #[inline]
-pub unsafe fn ygl(cs: *mut u32, cy: *const u32, az: usize) {
-    if bzx() {
-        qpw(cs, cy, az);
+pub unsafe fn pyt(dst: *mut u32, src: *const u32, count: usize) {
+    if has_avx2() {
+        kce(dst, src, count);
     } else {
-        kdu(cs, cy, az);
+        egy(dst, src, count);
     }
 }

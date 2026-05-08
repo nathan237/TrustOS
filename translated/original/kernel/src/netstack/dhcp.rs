@@ -407,7 +407,20 @@ pub fn poll() {
         DhcpState::Init => {
             if now.saturating_sub(c.last_send) > 1000 {
                 c.retries += 1;
-                if c.retries > 5 { c.xid = generate_xid(); c.retries = 0; }
+                if c.retries > 10 {
+                    // DHCP failed after ~10s — apply static fallback IP
+                    drop(c);
+                    ENABLED.store(false, Ordering::SeqCst);
+                    crate::log!("[DHCP] No server found, applying fallback 10.0.0.2/24");
+                    crate::network::set_ip(
+                        crate::network::Ipv4Address::new(10, 0, 0, 2),
+                        crate::network::Ipv4Address::new(255, 255, 255, 0),
+                        crate::network::Ipv4Address::new(10, 0, 0, 1),
+                    );
+                    BOUND.store(true, Ordering::SeqCst);
+                    return;
+                }
+                if c.retries > 5 { c.xid = generate_xid(); }
                 drop(c);
                 let _ = send_discover();
             }

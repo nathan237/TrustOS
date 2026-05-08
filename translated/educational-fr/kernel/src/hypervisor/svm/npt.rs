@@ -74,8 +74,8 @@ impl NptEntry {
         Self(0)
     }
     
-    pub const fn new(physical_address: u64, flags: u64) -> Self {
-        Self((physical_address & 0x000F_FFFF_FFFF_F000) | flags)
+    pub const fn new(phys_addr: u64, flags: u64) -> Self {
+        Self((phys_addr & 0x000F_FFFF_FFFF_F000) | flags)
     }
     
     #[inline]
@@ -104,7 +104,7 @@ pub fn is_executable(&self) -> bool {
     
     #[inline]
         // Fonction publique — appelable depuis d'autres modules.
-pub fn physical_address(&self) -> u64 {
+pub fn phys_addr(&self) -> u64 {
         self.0 & 0x000F_FFFF_FFFF_F000
     }
     
@@ -115,8 +115,8 @@ pub fn flags(&self) -> u64 {
     }
     
         // Fonction publique — appelable depuis d'autres modules.
-pub fn set(&mut self, physical_address: u64, flags: u64) {
-        self.0 = (physical_address & 0x000F_FFFF_FFFF_F000) | flags;
+pub fn set(&mut self, phys_addr: u64, flags: u64) {
+        self.0 = (phys_addr & 0x000F_FFFF_FFFF_F000) | flags;
     }
     
         // Fonction publique — appelable depuis d'autres modules.
@@ -158,7 +158,7 @@ pub fn entry_mut(&mut self, index: usize) -> &mut NptEntry {
     }
     
         // Fonction publique — appelable depuis d'autres modules.
-pub fn physical_address(&self) -> u64 {
+pub fn phys_addr(&self) -> u64 {
         let virt = self as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const _ as u64;
         virt.wrapping_sub(crate::memory::hhdm_offset())
@@ -177,7 +177,7 @@ pub struct Npt {
     guest_memory_size: u64,
     
     /// Base host physical address of guest memory
-    host_physical_base: u64,
+    host_phys_base: u64,
     
     /// ASID for TLB tagging
     asid: u32,
@@ -191,14 +191,14 @@ impl Npt {
             pml4: Box::new(NptTable::new()),
             tables: Vec::new(),
             guest_memory_size: 0,
-            host_physical_base: 0,
+            host_phys_base: 0,
             asid,
         }
     }
     
     /// Get the nCR3 value (physical address of PML4)
     pub fn ncr3(&self) -> u64 {
-        self.pml4.physical_address()
+        self.pml4.phys_addr()
     }
     
     /// Alias for ncr3 (nCR3 = NPT CR3)
@@ -216,7 +216,7 @@ impl Npt {
     /// Maps [guest_phys, guest_phys + size) to [host_phys, host_phys + size)
     pub fn map_range(
         &mut self,
-        guest_physical: u64,
+        guest_phys: u64,
         host_physical: u64,
         size: u64,
         perms: u64,
@@ -224,7 +224,7 @@ impl Npt {
         let mut offset = 0u64;
         
         while offset < size {
-            let gpa = guest_physical + offset;
+            let gpa = guest_phys + offset;
             let hpa = host_physical + offset;
             let remaining = size - offset;
             
@@ -247,9 +247,9 @@ impl Npt {
             }
         }
         
-        self.guest_memory_size = self.guest_memory_size.maximum(guest_physical + size);
-        if self.host_physical_base == 0 {
-            self.host_physical_base = host_physical;
+        self.guest_memory_size = self.guest_memory_size.max(guest_phys + size);
+        if self.host_phys_base == 0 {
+            self.host_phys_base = host_physical;
         }
         
         Ok(())
@@ -332,14 +332,14 @@ unsafe { &mut *parent_pointer };
         if !parent.entry(index).is_present() {
             // Create new table
             let new_table = Box::new(NptTable::new());
-            let table_physical = new_table.physical_address();
+            let table_physical = new_table.phys_addr();
             self.tables.push(new_table);
             
             // Set parent entry
             parent.entry_mut(index).set(table_physical, flags::PRESENT | flags::WRITABLE | flags::USER);
             Ok(table_physical)
         } else {
-            Ok(parent.entry(index).physical_address())
+            Ok(parent.entry(index).phys_addr())
         }
     }
     
@@ -355,7 +355,7 @@ unsafe { &mut *parent_pointer };
             return Ok(());  // Not mapped
         }
         
-        let pdpt_physical = self.pml4.entry(pml4_index).physical_address();
+        let pdpt_physical = self.pml4.entry(pml4_index).phys_addr();
         let pdpt = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe { &mut *((pdpt_physical + crate::memory::hhdm_offset()) as *mut NptTable) };
         
@@ -369,7 +369,7 @@ unsafe { &mut *((pdpt_physical + crate::memory::hhdm_offset()) as *mut NptTable)
             return Ok(());
         }
         
-        let pd_physical = pdpt.entry(pdpt_index).physical_address();
+        let pd_physical = pdpt.entry(pdpt_index).phys_addr();
         let pd = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe { &mut *((pd_physical + crate::memory::hhdm_offset()) as *mut NptTable) };
         
@@ -383,7 +383,7 @@ unsafe { &mut *((pd_physical + crate::memory::hhdm_offset()) as *mut NptTable) }
             return Ok(());
         }
         
-        let pt_physical = pd.entry(pd_index).physical_address();
+        let pt_physical = pd.entry(pd_index).phys_addr();
         let pt = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe { &mut *((pt_physical + crate::memory::hhdm_offset()) as *mut NptTable) };
         
@@ -404,7 +404,7 @@ unsafe { &mut *((pt_physical + crate::memory::hhdm_offset()) as *mut NptTable) }
             return None;
         }
         
-        let pdpt_physical = self.pml4.entry(pml4_index).physical_address();
+        let pdpt_physical = self.pml4.entry(pml4_index).phys_addr();
         let pdpt = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe { &*((pdpt_physical + crate::memory::hhdm_offset()) as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const NptTable) };
@@ -415,11 +415,11 @@ const NptTable) };
         
         if pdpt.entry(pdpt_index).is_huge() {
             // 1GB page
-            let base = pdpt.entry(pdpt_index).physical_address();
+            let base = pdpt.entry(pdpt_index).phys_addr();
             return Some(base | (gpa & (HUGE_PAGE_SIZE - 1)));
         }
         
-        let pd_physical = pdpt.entry(pdpt_index).physical_address();
+        let pd_physical = pdpt.entry(pdpt_index).phys_addr();
         let pd = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe { &*((pd_physical + crate::memory::hhdm_offset()) as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const NptTable) };
@@ -430,11 +430,11 @@ const NptTable) };
         
         if pd.entry(pd_index).is_huge() {
             // 2MB page
-            let base = pd.entry(pd_index).physical_address();
+            let base = pd.entry(pd_index).phys_addr();
             return Some(base | (gpa & (LARGE_PAGE_SIZE - 1)));
         }
         
-        let pt_physical = pd.entry(pd_index).physical_address();
+        let pt_physical = pd.entry(pd_index).phys_addr();
         let pt = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe { &*((pt_physical + crate::memory::hhdm_offset()) as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const NptTable) };
@@ -444,7 +444,7 @@ const NptTable) };
         }
         
         // 4KB page
-        let base = pt.entry(pt_index).physical_address();
+        let base = pt.entry(pt_index).phys_addr();
         Some(base | (gpa & (PAGE_SIZE - 1)))
     }
     
@@ -463,7 +463,7 @@ const NptTable) };
         // Map low memory (0 - size) to host physical memory
         self.map_range(0, host_physical, size, flags::RWX)?;
         
-        self.host_physical_base = host_physical;
+        self.host_phys_base = host_physical;
         self.guest_memory_size = size;
         
         Ok(())
@@ -482,7 +482,7 @@ unsafe {
         NptStats {
             table_count: 1 + self.tables.len(),  // +1 for PML4
             guest_memory_size: self.guest_memory_size,
-            host_physical_base: self.host_physical_base,
+            host_phys_base: self.host_phys_base,
             asid: self.asid,
         }
     }
@@ -502,29 +502,29 @@ impl Drop for Npt {
 pub struct NptStats {
     pub table_count: usize,
     pub guest_memory_size: u64,
-    pub host_physical_base: u64,
+    pub host_phys_base: u64,
     pub asid: u32,
 }
 
 /// ASID allocator for NPT
 pub struct AsidAllocator {
     next_asid: AtomicU64,
-    maximum_asid: u32,
+    max_asid: u32,
 }
 
 // Bloc d'implémentation — définit les méthodes du type ci-dessus.
 impl AsidAllocator {
-    pub const fn new(maximum_asid: u32) -> Self {
+    pub const fn new(max_asid: u32) -> Self {
         Self {
             next_asid: AtomicU64::new(1),  // ASID 0 is reserved for host
-            maximum_asid,
+            max_asid,
         }
     }
     
     /// Allocate a new ASID
     pub fn allocate(&self) -> Option<u32> {
         let asid = self.next_asid.fetch_add(1, Ordering::SeqCst);
-        if asid as u32 >= self.maximum_asid {
+        if asid as u32 >= self.max_asid {
             // Wrap around (should trigger TLB flush)
             self.next_asid.store(1, Ordering::SeqCst);
             Some(1)
@@ -561,7 +561,7 @@ pub fn create_npt_for_guest(guest_memory: &[u8]) -> Result<Npt, &'static str> {
     let mut npt = Npt::new(asid);
     
     // Get physical address of guest memory
-    let guest_virt = guest_memory.as_pointer() as u64;
+    let guest_virt = guest_memory.as_ptr() as u64;
     let host_physical = guest_virt.wrapping_sub(crate::memory::hhdm_offset());
     
     // Map guest memory starting at GPA 0

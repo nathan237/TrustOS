@@ -4,7 +4,7 @@
 
 
 #[inline(always)]
-pub fn aiy() {
+pub fn enable() {
     unsafe {
         core::arch::asm!("msr DAIFClr, #0x2", options(nomem, nostack, preserves_flags));
     }
@@ -12,7 +12,7 @@ pub fn aiy() {
 
 
 #[inline(always)]
-pub fn cwz() {
+pub fn bbc() {
     unsafe {
         core::arch::asm!("msr DAIFSet, #0x2", options(nomem, nostack, preserves_flags));
     }
@@ -20,28 +20,28 @@ pub fn cwz() {
 
 
 #[inline(always)]
-pub fn gag() -> bool {
-    let njh: u64;
+pub fn ctq() -> bool {
+    let daif: u64;
     unsafe {
-        core::arch::asm!("mrs {}, DAIF", bd(reg) njh, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("mrs {}, DAIF", out(reg) daif, options(nomem, nostack, preserves_flags));
     }
     
-    njh & (1 << 7) == 0
+    daif & (1 << 7) == 0
 }
 
 
 #[inline(always)]
-pub fn cvh<G, Ac>(bb: G) -> Ac
+pub fn bag<F, U>(f: F) -> U
 where
-    G: FnOnce() -> Ac,
+    F: FnOnce() -> U,
 {
-    let fbg = gag();
-    if fbg {
-        cwz();
+    let cfc = ctq();
+    if cfc {
+        bbc();
     }
-    let result = bb();
-    if fbg {
-        aiy();
+    let result = f();
+    if cfc {
+        enable();
     }
     result
 }
@@ -49,7 +49,7 @@ where
 
 
 
-pub fn ttu() {
+pub fn mpk() {
     super::vectors::init();
     super::gic::init();
     

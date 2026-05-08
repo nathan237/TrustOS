@@ -82,7 +82,7 @@ fn parse_bitmap(data: &[u8]) -> Option<WallpaperData> {
         return None;
     }
     
-    let height_absolute = height.absolute();
+    let height_absolute = height.abs();
     if height_absolute <= 0 || height_absolute > 8192 {
         crate::serial_println!("[BMP] Invalid height: {}", height);
         return None;
@@ -120,8 +120,8 @@ fn parse_bitmap(data: &[u8]) -> Option<WallpaperData> {
         let source_row = if is_top_down { row } else { height_u - 1 - row };
         let row_start = source_row as usize * row_size;
         
-        for column in 0..width {
-            let pixel_start = row_start + column as usize * bytes_per_pixel;
+        for col in 0..width {
+            let pixel_start = row_start + col as usize * bytes_per_pixel;
             
             if pixel_start + bytes_per_pixel <= pixel_data.len() {
                 // BMP stores BGR(A)
@@ -198,8 +198,8 @@ pub fn create_bitmap(width: u32, height: u32, pixels: &[u32]) -> Vec<u8> {
     
     // Pixel data (bottom-to-top, BGR)
     for row in (0..height).rev() {
-        for column in 0..width {
-            let pixel = pixels[(row * width + column) as usize];
+        for col in 0..width {
+            let pixel = pixels[(row * width + col) as usize];
             let r = ((pixel >> 16) & 0xFF) as u8;
             let g = ((pixel >> 8) & 0xFF) as u8;
             let b = (pixel & 0xFF) as u8;

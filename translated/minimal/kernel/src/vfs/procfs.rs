@@ -3,7 +3,7 @@
 
 
 
-use alloc::string::{String, Gd};
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use alloc::vec;
 use alloc::sync::Arc;
@@ -11,19 +11,19 @@ use alloc::format;
 use spin::RwLock;
 
 use super::{
-    Cc, Et, Ep, Stat, Br, FileType,
-    I, B, VfsError
+    Au, Bx, Bv, Stat, Ap, FileType,
+    K, E, VfsError
 };
 
 
 #[derive(Clone, Copy, Debug)]
 enum ProcFileType {
-    Aat,
-    Bmd,
-    Afh,
-    Re,
-    Bmq,
-    Vz,
+    Fk,
+    MemInfo,
+    Uptime,
+    Version,
+    Mounts,
+    Cmdline,
     Stat,
 }
 
@@ -31,11 +31,11 @@ enum ProcFileType {
 #[derive(Clone, Copy, Debug)]
 enum PidFileType {
     Status,
-    Aqd,
-    Avh,
-    Vz,
-    Aqm,
-    Arp,
+    Comm,
+    Maps,
+    Cmdline,
+    Cwd,
+    Environ,
 }
 
 
@@ -46,26 +46,26 @@ enum PidFileType {
 
 
 
-fn jjh(ce: u32) -> I { 1000 + (ce as u64) * 10 }
-fn ovn(ce: u32, w: u64) -> I { 1000 + (ce as u64) * 10 + w }
+fn ewr(pid: u32) -> K { 1000 + (pid as u64) * 10 }
+fn ius(pid: u32, idx: u64) -> K { 1000 + (pid as u64) * 10 + idx }
 
 
-fn ogn(dd: I) -> Option<u32> {
-    if dd >= 1000 && (dd - 1000) % 10 == 0 {
-        Some(((dd - 1000) / 10) as u32)
+fn iie(ino: K) -> Option<u32> {
+    if ino >= 1000 && (ino - 1000) % 10 == 0 {
+        Some(((ino - 1000) / 10) as u32)
     } else {
         None
     }
 }
 
 
-fn ogo(dd: I) -> Option<(u32, u64)> {
-    if dd >= 1001 {
-        let l = dd - 1000;
-        let ce = (l / 10) as u32;
-        let w = l % 10;
-        if w >= 1 && w <= 6 {
-            Some((ce, w))
+fn iif(ino: K) -> Option<(u32, u64)> {
+    if ino >= 1001 {
+        let offset = ino - 1000;
+        let pid = (offset / 10) as u32;
+        let idx = offset % 10;
+        if idx >= 1 && idx <= 6 {
+            Some((pid, idx))
         } else {
             None
         }
@@ -74,32 +74,32 @@ fn ogo(dd: I) -> Option<(u32, u64)> {
     }
 }
 
-const BDF_: &[&str] = &["status", "comm", "maps", "cmdline", "cwd", "environ"];
+const BFI_: &[&str] = &["status", "comm", "maps", "cmdline", "cwd", "environ"];
 
 
-struct Alh {
-    kd: ProcFileType,
-    dd: I,
+struct Pz {
+    file_type: ProcFileType,
+    ino: K,
 }
 
-impl Alh {
-    fn fjj(&self) -> Vec<u8> {
-        match self.kd {
-            ProcFileType::Aat => self.tat(),
-            ProcFileType::Bmd => self.tbe(),
-            ProcFileType::Afh => self.tbt(),
-            ProcFileType::Re => self.tbu(),
-            ProcFileType::Bmq => self.tbf(),
-            ProcFileType::Vz => self.kxz(),
-            ProcFileType::Stat => self.tbn(),
+impl Pz {
+    fn generate_content(&self) -> Vec<u8> {
+        match self.file_type {
+            ProcFileType::Fk => self.gen_cpuinfo(),
+            ProcFileType::MemInfo => self.gen_meminfo(),
+            ProcFileType::Uptime => self.gen_uptime(),
+            ProcFileType::Version => self.gen_version(),
+            ProcFileType::Mounts => self.gen_mounts(),
+            ProcFileType::Cmdline => self.gen_cmdline(),
+            ProcFileType::Stat => self.gen_stat(),
         }
     }
     
-    fn tat(&self) -> Vec<u8> {
-        let bcc = crate::cpu::smp::boc();
-        let mut e = String::new();
-        for a in 0..bcc {
-            e.t(&format!(
+    fn gen_cpuinfo(&self) -> Vec<u8> {
+        let num_cpus = crate::cpu::smp::ail();
+        let mut j = String::new();
+        for i in 0..num_cpus {
+            j.push_str(&format!(
                 "processor\t: {}\n\
                  vendor_id\t: TrustOS\n\
                  cpu family\t: 6\n\
@@ -108,16 +108,16 @@ impl Alh {
                  cache size\t: 4096 KB\n\
                  flags\t\t: fpu vme de pse tsc msr pae cx8 apic\n\
                  bogomips\t: 2000.00\n\n",
-                a
+                i
             ));
         }
-        e.cfq()
+        j.into_bytes()
     }
     
-    fn tbe(&self) -> Vec<u8> {
-        let cuu = 1024u64;
-        let mr = crate::memory::heap::mr() as u64 / 1024;
-        let aez = cuu.ao(mr);
+    fn gen_meminfo(&self) -> Vec<u8> {
+        let baa = 1024u64;
+        let used = crate::memory::heap::used() as u64 / 1024;
+        let free = baa.saturating_sub(used);
         
         format!(
             "MemTotal:       {} kB\n\
@@ -127,84 +127,84 @@ impl Alh {
              Cached:         0 kB\n\
              SwapTotal:      0 kB\n\
              SwapFree:       0 kB\n",
-            cuu, aez, mr
-        ).cfq()
+            baa, free, used
+        ).into_bytes()
     }
     
-    fn tbt(&self) -> Vec<u8> {
-        let qb = crate::logger::lh();
-        let tv = qb / 100;
-        let avw = (qb % 100) as f32 / 100.0;
-        format!("{}.{:02} 0.00\n", tv, (avw * 100.0) as u32).cfq()
+    fn gen_uptime(&self) -> Vec<u8> {
+        let gx = crate::logger::eg();
+        let im = gx / 100;
+        let yt = (gx % 100) as f32 / 100.0;
+        format!("{}.{:02} 0.00\n", im, (yt * 100.0) as u32).into_bytes()
     }
     
-    fn tbu(&self) -> Vec<u8> {
+    fn gen_version(&self) -> Vec<u8> {
         format!(
             "TrustOS version 0.1.0 (rustc) #1 SMP PREEMPT {}\n",
             "Jan 30 2026"
-        ).cfq()
+        ).into_bytes()
     }
     
-    fn tbf(&self) -> Vec<u8> {
-        let mut ca = String::new();
-        for (path, eqw) in crate::vfs::hqa() {
-            ca.t(&format!("{} {} {} rw 0 0\n", eqw, path, eqw));
+    fn gen_mounts(&self) -> Vec<u8> {
+        let mut content = String::new();
+        for (path, caa) in crate::vfs::dtl() {
+            content.push_str(&format!("{} {} {} rw 0 0\n", caa, path, caa));
         }
-        if ca.is_empty() {
-            ca.t("none / rootfs rw 0 0\n");
+        if content.is_empty() {
+            content.push_str("none / rootfs rw 0 0\n");
         }
-        ca.cfq()
+        content.into_bytes()
     }
     
-    fn kxz(&self) -> Vec<u8> {
-        b"BOOT_IMAGE=/boot/trustos root=/dev/vda\n".ip()
+    fn gen_cmdline(&self) -> Vec<u8> {
+        b"BOOT_IMAGE=/boot/trustos root=/dev/vda\n".to_vec()
     }
     
-    fn tbn(&self) -> Vec<u8> {
-        let qb = crate::logger::lh();
-        let bcc = crate::cpu::smp::boc();
-        let mut e = format!(
+    fn gen_stat(&self) -> Vec<u8> {
+        let gx = crate::logger::eg();
+        let num_cpus = crate::cpu::smp::ail();
+        let mut j = format!(
             "cpu  {} 0 {} 0 0 0 0 0 0 0\n",
-            qb / 2, qb / 2
+            gx / 2, gx / 2
         );
-        for a in 0..bcc {
-            e.t(&format!(
+        for i in 0..num_cpus {
+            j.push_str(&format!(
                 "cpu{} {} 0 {} 0 0 0 0 0 0 0\n",
-                a, qb / (2 * bcc as u64), qb / (2 * bcc as u64)
+                i, gx / (2 * num_cpus as u64), gx / (2 * num_cpus as u64)
             ));
         }
-        e.t(&format!(
+        j.push_str(&format!(
             "intr 0\nctxt 0\nbtime 0\nprocesses {}\nprocs_running {}\nprocs_blocked 0\n",
-            crate::process::az(),
-            bcc
+            crate::process::count(),
+            num_cpus
         ));
-        e.cfq()
+        j.into_bytes()
     }
 }
 
-impl Et for Alh {
-    fn read(&self, l: u64, k: &mut [u8]) -> B<usize> {
-        let ca = self.fjj();
-        if l >= ca.len() as u64 {
+impl Bx for Pz {
+    fn read(&self, offset: u64, buf: &mut [u8]) -> E<usize> {
+        let content = self.generate_content();
+        if offset >= content.len() as u64 {
             return Ok(0);
         }
-        let ay = l as usize;
-        let ajp = core::cmp::v(k.len(), ca.len() - ay);
-        k[..ajp].dg(&ca[ay..ay + ajp]);
-        Ok(ajp)
+        let start = offset as usize;
+        let rz = core::cmp::min(buf.len(), content.len() - start);
+        buf[..rz].copy_from_slice(&content[start..start + rz]);
+        Ok(rz)
     }
     
-    fn write(&self, dnv: u64, ihz: &[u8]) -> B<usize> {
-        Err(VfsError::Bz)
+    fn write(&self, bkm: u64, _buf: &[u8]) -> E<usize> {
+        Err(VfsError::ReadOnly)
     }
     
-    fn hm(&self) -> B<Stat> {
-        let aw = self.fjj().len() as u64;
+    fn stat(&self) -> E<Stat> {
+        let size = self.generate_content().len() as u64;
         Ok(Stat {
-            dd: self.dd,
-            kd: FileType::Ea,
-            aw,
-            ev: 0o444,
+            ino: self.ino,
+            file_type: FileType::Regular,
+            size,
+            mode: 0o444,
             ..Default::default()
         })
     }
@@ -215,151 +215,151 @@ impl Et for Alh {
 
 
 
-struct Ale {
-    ce: u32,
-    kd: PidFileType,
-    dd: I,
+struct Py {
+    pid: u32,
+    file_type: PidFileType,
+    ino: K,
 }
 
-impl Ale {
-    fn fjj(&self) -> Vec<u8> {
-        match self.kd {
-            PidFileType::Status => self.tbo(),
-            PidFileType::Aqd => self.tas(),
-            PidFileType::Avh => self.tbb(),
-            PidFileType::Vz => self.kxz(),
-            PidFileType::Aqm => self.tav(),
-            PidFileType::Arp => self.tay(),
+impl Py {
+    fn generate_content(&self) -> Vec<u8> {
+        match self.file_type {
+            PidFileType::Status => self.gen_status(),
+            PidFileType::Comm => self.gen_comm(),
+            PidFileType::Maps => self.gen_maps(),
+            PidFileType::Cmdline => self.gen_cmdline(),
+            PidFileType::Cwd => self.gen_cwd(),
+            PidFileType::Environ => self.gen_environ(),
         }
     }
     
-    fn tbo(&self) -> Vec<u8> {
-        let mut e = String::new();
-        crate::process::ela(self.ce, |ai| {
-            let boo = match ai.g {
-                crate::process::ProcessState::Cu => "N (created)",
-                crate::process::ProcessState::At => "R (running)",
-                crate::process::ProcessState::Ai => "R (running)",
-                crate::process::ProcessState::Hj => "S (sleeping)",
-                crate::process::ProcessState::Bwo => "S (sleeping)",
-                crate::process::ProcessState::Af => "T (stopped)",
-                crate::process::ProcessState::Vf => "Z (zombie)",
-                crate::process::ProcessState::Ez => "X (dead)",
-            };
-            e.t(&format!("Name:\t{}\n", ai.j));
-            e.t(&format!("State:\t{}\n", boo));
-            e.t(&format!("Pid:\t{}\n", ai.ce));
-            e.t(&format!("PPid:\t{}\n", ai.bfb));
-            e.t(&format!("Uid:\t{}\t{}\t{}\t{}\n", ai.pi, ai.ahl, ai.pi, ai.pi));
-            e.t(&format!("Gid:\t{}\t{}\t{}\t{}\n", ai.pw, ai.bqj, ai.pw, ai.pw));
-            e.t(&format!("FDSize:\t{}\n", ai.buf.len()));
-            e.t(&format!("VmSize:\t{} kB\n", 
-                (ai.memory.ecv.ao(ai.memory.dez)) / 1024));
-            e.t(&format!("Threads:\t{}\n", ai.zf.len() + 1));
-            e.t(&format!("SigPnd:\t0000000000000000\n"));
-            e.t(&format!("Cpus_allowed:\tff\n"));
-        });
-        if e.is_empty() {
-            e.t("(no such process)\n");
-        }
-        e.cfq()
-    }
-    
-    fn tas(&self) -> Vec<u8> {
+    fn gen_status(&self) -> Vec<u8> {
         let mut j = String::new();
-        crate::process::ela(self.ce, |ai| {
-            j = ai.j.clone();
+        crate::process::bwz(self.pid, |aa| {
+            let acr = match aa.state {
+                crate::process::ProcessState::Created => "N (created)",
+                crate::process::ProcessState::Ready => "R (running)",
+                crate::process::ProcessState::Running => "R (running)",
+                crate::process::ProcessState::Blocked => "S (sleeping)",
+                crate::process::ProcessState::Waiting => "S (sleeping)",
+                crate::process::ProcessState::Stopped => "T (stopped)",
+                crate::process::ProcessState::Zombie => "Z (zombie)",
+                crate::process::ProcessState::Dead => "X (dead)",
+            };
+            j.push_str(&format!("Name:\t{}\n", aa.name));
+            j.push_str(&format!("State:\t{}\n", acr));
+            j.push_str(&format!("Pid:\t{}\n", aa.pid));
+            j.push_str(&format!("PPid:\t{}\n", aa.ppid));
+            j.push_str(&format!("Uid:\t{}\t{}\t{}\t{}\n", aa.uid, aa.euid, aa.uid, aa.uid));
+            j.push_str(&format!("Gid:\t{}\t{}\t{}\t{}\n", aa.gid, aa.egid, aa.gid, aa.gid));
+            j.push_str(&format!("FDSize:\t{}\n", aa.fd_table.len()));
+            j.push_str(&format!("VmSize:\t{} kB\n", 
+                (aa.memory.heap_end.saturating_sub(aa.memory.code_start)) / 1024));
+            j.push_str(&format!("Threads:\t{}\n", aa.children.len() + 1));
+            j.push_str(&format!("SigPnd:\t0000000000000000\n"));
+            j.push_str(&format!("Cpus_allowed:\tff\n"));
         });
-        format!("{}\n", j).cfq()
+        if j.is_empty() {
+            j.push_str("(no such process)\n");
+        }
+        j.into_bytes()
     }
     
-    fn tbb(&self) -> Vec<u8> {
-        let mut e = String::new();
-        crate::process::ela(self.ce, |ai| {
-            let ef = &ai.memory;
-            if ef.kjr > ef.dez {
-                e.t(&format!("{:016x}-{:016x} r-xp 00000000 00:00 0  [code]\n", 
-                    ef.dez, ef.kjr));
+    fn gen_comm(&self) -> Vec<u8> {
+        let mut name = String::new();
+        crate::process::bwz(self.pid, |aa| {
+            name = aa.name.clone();
+        });
+        format!("{}\n", name).into_bytes()
+    }
+    
+    fn gen_maps(&self) -> Vec<u8> {
+        let mut j = String::new();
+        crate::process::bwz(self.pid, |aa| {
+            let m = &aa.memory;
+            if m.code_end > m.code_start {
+                j.push_str(&format!("{:016x}-{:016x} r-xp 00000000 00:00 0  [code]\n", 
+                    m.code_start, m.code_end));
             }
-            if ef.njm > ef.bjt {
-                e.t(&format!("{:016x}-{:016x} rw-p 00000000 00:00 0  [data]\n", 
-                    ef.bjt, ef.njm));
+            if m.data_end > m.data_start {
+                j.push_str(&format!("{:016x}-{:016x} rw-p 00000000 00:00 0  [data]\n", 
+                    m.data_start, m.data_end));
             }
-            if ef.ecv > ef.caa {
-                e.t(&format!("{:016x}-{:016x} rw-p 00000000 00:00 0  [heap]\n", 
-                    ef.caa, ef.ecv));
+            if m.heap_end > m.heap_start {
+                j.push_str(&format!("{:016x}-{:016x} rw-p 00000000 00:00 0  [heap]\n", 
+                    m.heap_start, m.heap_end));
             }
-            if ef.ibm > ef.ibo {
-                e.t(&format!("{:016x}-{:016x} rw-p 00000000 00:00 0  [stack]\n", 
-                    ef.ibo, ef.ibm));
+            if m.stack_end > m.stack_start {
+                j.push_str(&format!("{:016x}-{:016x} rw-p 00000000 00:00 0  [stack]\n", 
+                    m.stack_start, m.stack_end));
             }
             
-            if let Some(jm) = ai.jm.ink(0).hi(|&r| r != 0) {
-                for vma in crate::memory::vma::ufz(jm) {
-                    let m = if vma.prot & 1 != 0 { 'r' } else { '-' };
-                    let d = if vma.prot & 2 != 0 { 'w' } else { '-' };
-                    let b = if vma.prot & 4 != 0 { 'x' } else { '-' };
-                    e.t(&format!("{:016x}-{:016x} {}{}{}p 00000000 00:00 0  [mmap]\n",
-                        vma.ay, vma.ci, m, d, b));
+            if let Some(cr3) = aa.cr3.checked_add(0).filter(|&c| c != 0) {
+                for vma in crate::memory::vma::mzk(cr3) {
+                    let r = if vma.prot & 1 != 0 { 'r' } else { '-' };
+                    let w = if vma.prot & 2 != 0 { 'w' } else { '-' };
+                    let x = if vma.prot & 4 != 0 { 'x' } else { '-' };
+                    j.push_str(&format!("{:016x}-{:016x} {}{}{}p 00000000 00:00 0  [mmap]\n",
+                        vma.start, vma.end, r, w, x));
                 }
             }
         });
-        if e.is_empty() {
-            e.t("(no such process)\n");
+        if j.is_empty() {
+            j.push_str("(no such process)\n");
         }
-        e.cfq()
+        j.into_bytes()
     }
     
-    fn kxz(&self) -> Vec<u8> {
+    fn gen_cmdline(&self) -> Vec<u8> {
+        let mut name = String::new();
+        crate::process::bwz(self.pid, |aa| {
+            name = aa.name.clone();
+        });
+        format!("{}\0", name).into_bytes()
+    }
+    
+    fn gen_cwd(&self) -> Vec<u8> {
+        let mut cwd = String::from("/");
+        crate::process::bwz(self.pid, |aa| {
+            cwd = aa.cwd.clone();
+        });
+        format!("{}\n", cwd).into_bytes()
+    }
+    
+    fn gen_environ(&self) -> Vec<u8> {
         let mut j = String::new();
-        crate::process::ela(self.ce, |ai| {
-            j = ai.j.clone();
-        });
-        format!("{}\0", j).cfq()
-    }
-    
-    fn tav(&self) -> Vec<u8> {
-        let mut jv = String::from("/");
-        crate::process::ela(self.ce, |ai| {
-            jv = ai.jv.clone();
-        });
-        format!("{}\n", jv).cfq()
-    }
-    
-    fn tay(&self) -> Vec<u8> {
-        let mut e = String::new();
-        crate::process::ela(self.ce, |ai| {
-            for (eh, p) in &ai.env {
-                e.t(&format!("{}={}\0", eh, p));
+        crate::process::bwz(self.pid, |aa| {
+            for (k, v) in &aa.env {
+                j.push_str(&format!("{}={}\0", k, v));
             }
         });
-        e.cfq()
+        j.into_bytes()
     }
 }
 
-impl Et for Ale {
-    fn read(&self, l: u64, k: &mut [u8]) -> B<usize> {
-        let ca = self.fjj();
-        if l >= ca.len() as u64 {
+impl Bx for Py {
+    fn read(&self, offset: u64, buf: &mut [u8]) -> E<usize> {
+        let content = self.generate_content();
+        if offset >= content.len() as u64 {
             return Ok(0);
         }
-        let ay = l as usize;
-        let ajp = core::cmp::v(k.len(), ca.len() - ay);
-        k[..ajp].dg(&ca[ay..ay + ajp]);
-        Ok(ajp)
+        let start = offset as usize;
+        let rz = core::cmp::min(buf.len(), content.len() - start);
+        buf[..rz].copy_from_slice(&content[start..start + rz]);
+        Ok(rz)
     }
     
-    fn write(&self, dnv: u64, ihz: &[u8]) -> B<usize> {
-        Err(VfsError::Bz)
+    fn write(&self, bkm: u64, _buf: &[u8]) -> E<usize> {
+        Err(VfsError::ReadOnly)
     }
     
-    fn hm(&self) -> B<Stat> {
-        let aw = self.fjj().len() as u64;
+    fn stat(&self) -> E<Stat> {
+        let size = self.generate_content().len() as u64;
         Ok(Stat {
-            dd: self.dd,
-            kd: FileType::Ea,
-            aw,
-            ev: 0o444,
+            ino: self.ino,
+            file_type: FileType::Regular,
+            size,
+            mode: 0o444,
             ..Default::default()
         })
     }
@@ -369,48 +369,48 @@ impl Et for Ale {
 
 
 
-struct Bpi {
-    ce: u32,
+struct Act {
+    pid: u32,
 }
 
-impl Ep for Bpi {
-    fn cga(&self, j: &str) -> B<I> {
-        for (a, ebt) in BDF_.iter().cf() {
-            if j == *ebt {
-                return Ok(ovn(self.ce, (a + 1) as u64));
+impl Bv for Act {
+    fn lookup(&self, name: &str) -> E<K> {
+        for (i, bsr) in BFI_.iter().enumerate() {
+            if name == *bsr {
+                return Ok(ius(self.pid, (i + 1) as u64));
             }
         }
-        Err(VfsError::N)
+        Err(VfsError::NotFound)
     }
     
-    fn brx(&self) -> B<Vec<Br>> {
-        let mut ch = vec![
-            Br { j: String::from("."), dd: jjh(self.ce), kd: FileType::K },
-            Br { j: String::from(".."), dd: 1, kd: FileType::K },
+    fn readdir(&self) -> E<Vec<Ap>> {
+        let mut entries = vec![
+            Ap { name: String::from("."), ino: ewr(self.pid), file_type: FileType::Directory },
+            Ap { name: String::from(".."), ino: 1, file_type: FileType::Directory },
         ];
-        for (a, ebt) in BDF_.iter().cf() {
-            ch.push(Br {
-                j: String::from(*ebt),
-                dd: ovn(self.ce, (a + 1) as u64),
-                kd: FileType::Ea,
+        for (i, bsr) in BFI_.iter().enumerate() {
+            entries.push(Ap {
+                name: String::from(*bsr),
+                ino: ius(self.pid, (i + 1) as u64),
+                file_type: FileType::Regular,
             });
         }
-        Ok(ch)
+        Ok(entries)
     }
     
-    fn avp(&self, blu: &str, gxf: FileType) -> B<I> {
-        Err(VfsError::Bz)
+    fn create(&self, _name: &str, _file_type: FileType) -> E<K> {
+        Err(VfsError::ReadOnly)
     }
     
-    fn cnm(&self, blu: &str) -> B<()> {
-        Err(VfsError::Bz)
+    fn unlink(&self, _name: &str) -> E<()> {
+        Err(VfsError::ReadOnly)
     }
     
-    fn hm(&self) -> B<Stat> {
+    fn stat(&self) -> E<Stat> {
         Ok(Stat {
-            dd: jjh(self.ce),
-            kd: FileType::K,
-            ev: 0o555,
+            ino: ewr(self.pid),
+            file_type: FileType::Directory,
+            mode: 0o555,
             ..Default::default()
         })
     }
@@ -422,76 +422,76 @@ impl Ep for Bpi {
 
 
 #[derive(Clone)]
-struct Md {
-    j: String,
-    kd: ProcFileType,
-    dd: I,
+struct Ez {
+    name: String,
+    file_type: ProcFileType,
+    ino: K,
 }
 
 
-struct Bpj {
-    ch: Vec<Md>,
+struct Acu {
+    entries: Vec<Ez>,
 }
 
-impl Ep for Bpj {
-    fn cga(&self, j: &str) -> B<I> {
+impl Bv for Acu {
+    fn lookup(&self, name: &str) -> E<K> {
         
-        for bt in &self.ch {
-            if bt.j == j {
-                return Ok(bt.dd);
+        for entry in &self.entries {
+            if entry.name == name {
+                return Ok(entry.ino);
             }
         }
         
-        if let Ok(ce) = j.parse::<u32>() {
+        if let Ok(pid) = name.parse::<u32>() {
             
-            let aja = crate::process::aoy().iter().any(|(ai, _, _)| *ai == ce);
-            if aja {
-                return Ok(jjh(ce));
+            let exists = crate::process::list().iter().any(|(aa, _, _)| *aa == pid);
+            if exists {
+                return Ok(ewr(pid));
             }
         }
-        Err(VfsError::N)
+        Err(VfsError::NotFound)
     }
     
-    fn brx(&self) -> B<Vec<Br>> {
-        let mut ch = vec![
-            Br { j: String::from("."), dd: 1, kd: FileType::K },
-            Br { j: String::from(".."), dd: 1, kd: FileType::K },
+    fn readdir(&self) -> E<Vec<Ap>> {
+        let mut entries = vec![
+            Ap { name: String::from("."), ino: 1, file_type: FileType::Directory },
+            Ap { name: String::from(".."), ino: 1, file_type: FileType::Directory },
         ];
         
         
-        for bt in &self.ch {
-            ch.push(Br {
-                j: bt.j.clone(),
-                dd: bt.dd,
-                kd: FileType::Ea,
+        for entry in &self.entries {
+            entries.push(Ap {
+                name: entry.name.clone(),
+                ino: entry.ino,
+                file_type: FileType::Regular,
             });
         }
         
         
-        for (ce, blu, gxl) in crate::process::aoy() {
-            ch.push(Br {
-                j: format!("{}", ce),
-                dd: jjh(ce),
-                kd: FileType::K,
+        for (pid, _name, _state) in crate::process::list() {
+            entries.push(Ap {
+                name: format!("{}", pid),
+                ino: ewr(pid),
+                file_type: FileType::Directory,
             });
         }
         
-        Ok(ch)
+        Ok(entries)
     }
     
-    fn avp(&self, blu: &str, gxf: FileType) -> B<I> {
-        Err(VfsError::Bz)
+    fn create(&self, _name: &str, _file_type: FileType) -> E<K> {
+        Err(VfsError::ReadOnly)
     }
     
-    fn cnm(&self, blu: &str) -> B<()> {
-        Err(VfsError::Bz)
+    fn unlink(&self, _name: &str) -> E<()> {
+        Err(VfsError::ReadOnly)
     }
     
-    fn hm(&self) -> B<Stat> {
+    fn stat(&self) -> E<Stat> {
         Ok(Stat {
-            dd: 1,
-            kd: FileType::K,
-            ev: 0o555,
+            ino: 1,
+            file_type: FileType::Directory,
+            mode: 0o555,
             ..Default::default()
         })
     }
@@ -499,125 +499,125 @@ impl Ep for Bpj {
 
 
 pub struct ProcFs {
-    ch: Vec<Md>,
+    entries: Vec<Ez>,
 }
 
 impl ProcFs {
-    pub fn new() -> B<Self> {
-        let ch = vec![
-            Md { j: String::from("cpuinfo"), kd: ProcFileType::Aat, dd: 2 },
-            Md { j: String::from("meminfo"), kd: ProcFileType::Bmd, dd: 3 },
-            Md { j: String::from("uptime"), kd: ProcFileType::Afh, dd: 4 },
-            Md { j: String::from("version"), kd: ProcFileType::Re, dd: 5 },
-            Md { j: String::from("mounts"), kd: ProcFileType::Bmq, dd: 6 },
-            Md { j: String::from("cmdline"), kd: ProcFileType::Vz, dd: 7 },
-            Md { j: String::from("stat"), kd: ProcFileType::Stat, dd: 8 },
+    pub fn new() -> E<Self> {
+        let entries = vec![
+            Ez { name: String::from("cpuinfo"), file_type: ProcFileType::Fk, ino: 2 },
+            Ez { name: String::from("meminfo"), file_type: ProcFileType::MemInfo, ino: 3 },
+            Ez { name: String::from("uptime"), file_type: ProcFileType::Uptime, ino: 4 },
+            Ez { name: String::from("version"), file_type: ProcFileType::Version, ino: 5 },
+            Ez { name: String::from("mounts"), file_type: ProcFileType::Mounts, ino: 6 },
+            Ez { name: String::from("cmdline"), file_type: ProcFileType::Cmdline, ino: 7 },
+            Ez { name: String::from("stat"), file_type: ProcFileType::Stat, ino: 8 },
         ];
         
-        Ok(Self { ch })
+        Ok(Self { entries })
     }
     
-    fn nug(&self, dd: I) -> Option<&Md> {
-        self.ch.iter().du(|aa| aa.dd == dd)
+    fn find_entry(&self, ino: K) -> Option<&Ez> {
+        self.entries.iter().find(|e| e.ino == ino)
     }
 }
 
-impl Cc for ProcFs {
-    fn j(&self) -> &str {
+impl Au for ProcFs {
+    fn name(&self) -> &str {
         "proc"
     }
     
-    fn cbm(&self) -> I {
+    fn root_inode(&self) -> K {
         1
     }
     
-    fn era(&self, dd: I) -> B<Arc<dyn Et>> {
+    fn get_file(&self, ino: K) -> E<Arc<dyn Bx>> {
         
-        if let Some(bt) = self.nug(dd) {
-            return Ok(Arc::new(Alh {
-                kd: bt.kd,
-                dd: bt.dd,
+        if let Some(entry) = self.find_entry(ino) {
+            return Ok(Arc::new(Pz {
+                file_type: entry.file_type,
+                ino: entry.ino,
             }));
         }
         
-        if let Some((ce, w)) = ogo(dd) {
-            let agm = match w {
+        if let Some((pid, idx)) = iif(ino) {
+            let qk = match idx {
                 1 => PidFileType::Status,
-                2 => PidFileType::Aqd,
-                3 => PidFileType::Avh,
-                4 => PidFileType::Vz,
-                5 => PidFileType::Aqm,
-                6 => PidFileType::Arp,
-                _ => return Err(VfsError::N),
+                2 => PidFileType::Comm,
+                3 => PidFileType::Maps,
+                4 => PidFileType::Cmdline,
+                5 => PidFileType::Cwd,
+                6 => PidFileType::Environ,
+                _ => return Err(VfsError::NotFound),
             };
-            return Ok(Arc::new(Ale { ce, kd: agm, dd }));
+            return Ok(Arc::new(Py { pid, file_type: qk, ino }));
         }
-        Err(VfsError::N)
+        Err(VfsError::NotFound)
     }
     
-    fn dhl(&self, dd: I) -> B<Arc<dyn Ep>> {
-        if dd == 1 {
-            return Ok(Arc::new(Bpj {
-                ch: self.ch.clone(),
+    fn get_dir(&self, ino: K) -> E<Arc<dyn Bv>> {
+        if ino == 1 {
+            return Ok(Arc::new(Acu {
+                entries: self.entries.clone(),
             }));
         }
         
-        if let Some(ce) = ogn(dd) {
-            return Ok(Arc::new(Bpi { ce }));
+        if let Some(pid) = iie(ino) {
+            return Ok(Arc::new(Act { pid }));
         }
-        Err(VfsError::Lz)
+        Err(VfsError::NotDirectory)
     }
     
-    fn hm(&self, dd: I) -> B<Stat> {
-        if dd == 1 {
+    fn stat(&self, ino: K) -> E<Stat> {
+        if ino == 1 {
             return Ok(Stat {
-                dd: 1,
-                kd: FileType::K,
-                ev: 0o555,
+                ino: 1,
+                file_type: FileType::Directory,
+                mode: 0o555,
                 ..Default::default()
             });
         }
         
-        if let Some(bt) = self.nug(dd) {
-            let byy = Alh { kd: bt.kd, dd: bt.dd }
-                .fjj().len() as u64;
+        if let Some(entry) = self.find_entry(ino) {
+            let anw = Pz { file_type: entry.file_type, ino: entry.ino }
+                .generate_content().len() as u64;
             return Ok(Stat {
-                dd: bt.dd,
-                kd: FileType::Ea,
-                aw: byy,
-                ev: 0o444,
+                ino: entry.ino,
+                file_type: FileType::Regular,
+                size: anw,
+                mode: 0o444,
                 ..Default::default()
             });
         }
         
-        if ogn(dd).is_some() {
+        if iie(ino).is_some() {
             return Ok(Stat {
-                dd,
-                kd: FileType::K,
-                ev: 0o555,
+                ino,
+                file_type: FileType::Directory,
+                mode: 0o555,
                 ..Default::default()
             });
         }
         
-        if let Some((ce, w)) = ogo(dd) {
-            let agm = match w {
+        if let Some((pid, idx)) = iif(ino) {
+            let qk = match idx {
                 1 => PidFileType::Status,
-                2 => PidFileType::Aqd,
-                3 => PidFileType::Avh,
-                4 => PidFileType::Vz,
-                5 => PidFileType::Aqm,
-                6 => PidFileType::Arp,
-                _ => return Err(VfsError::N),
+                2 => PidFileType::Comm,
+                3 => PidFileType::Maps,
+                4 => PidFileType::Cmdline,
+                5 => PidFileType::Cwd,
+                6 => PidFileType::Environ,
+                _ => return Err(VfsError::NotFound),
             };
-            let aw = Ale { ce, kd: agm, dd }.fjj().len() as u64;
+            let size = Py { pid, file_type: qk, ino }.generate_content().len() as u64;
             return Ok(Stat {
-                dd,
-                kd: FileType::Ea,
-                aw,
-                ev: 0o444,
+                ino,
+                file_type: FileType::Regular,
+                size,
+                mode: 0o444,
                 ..Default::default()
             });
         }
-        Err(VfsError::N)
+        Err(VfsError::NotFound)
     }
 }

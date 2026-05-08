@@ -54,14 +54,14 @@ fn find_data_port() -> Option<u8> {
         return None;
     }
     let devices = crate::drivers::ahci::list_devices();
-    for device in &devices {
-        if device.device_type == crate::drivers::ahci::AhciDeviceType::Sata && device.sector_count > 64 {
+    for dev in &devices {
+        if dev.device_type == crate::drivers::ahci::AhciDeviceType::Sata && dev.sector_count > 64 {
             let mut probe = alloc::vec![0u8; 512];
-            if crate::drivers::ahci::read_sectors(device.port_number, 0, 1, &mut probe).is_ok() {
+            if crate::drivers::ahci::read_sectors(dev.port_num, 0, 1, &mut probe).is_ok() {
                 if probe.len() >= 4 && &probe[0..4] == b"TWAV" {
-                    crate::serial_println!("[DISK-AUDIO] Found TWAV disk on port {}", device.port_number);
-                    CACHED_PORT.store(device.port_number, Ordering::Relaxed);
-                    return Some(device.port_number);
+                    crate::serial_println!("[DISK-AUDIO] Found TWAV disk on port {}", dev.port_num);
+                    CACHED_PORT.store(dev.port_num, Ordering::Relaxed);
+                    return Some(dev.port_num);
                 }
             }
         }
@@ -111,12 +111,12 @@ match version {
             })
         }
         2 => {
-            let number_tracks = u32::from_le_bytes([
+            let num_tracks = u32::from_le_bytes([
                 header_buffer[8], header_buffer[9], header_buffer[10], header_buffer[11],
             ]) as usize;
-            let number_tracks = number_tracks.minimum(MAXIMUM_TRACKS);
-            let mut tracks = Vec::with_capacity(number_tracks);
-            for i in 0..number_tracks {
+            let num_tracks = num_tracks.min(MAXIMUM_TRACKS);
+            let mut tracks = Vec::with_capacity(num_tracks);
+            for i in 0..num_tracks {
                 let off = 16 + i * ENTRY_SIZE;
                 if off + ENTRY_SIZE > SECTOR_SIZE { break; }
                 let wav_size = u64::from_le_bytes([
@@ -134,8 +134,8 @@ match version {
                 ]);
                 // Name: 28 bytes null-padded UTF-8
                 let name_bytes = &header_buffer[off+20..off+48];
-                let name_length = name_bytes.iter().position(|&b| b == 0).unwrap_or(28);
-                let name = core::str::from_utf8(&name_bytes[..name_length])
+                let name_len = name_bytes.iter().position(|&b| b == 0).unwrap_or(28);
+                let name = core::str::from_utf8(&name_bytes[..name_len])
                     .unwrap_or("Unknown")
                     .into();
                 crate::serial_println!("[DISK-AUDIO] Track {}: '{}' {} bytes, LBA {}", i, name, wav_size, start_lba);
@@ -177,7 +177,7 @@ fn load_track_data(track: &TrackInformation) -> Result<(Vec<u8>, String), &'stat
 
     // Allocate DMA buffer FIRST (small, 64KB) before the large WAV buffer
     // so the allocator can service it from a clean free-list.
-    let mut dma_buffer = vec![0u8; DMA_READ_BYTES];
+    let mut dma_buf = vec![0u8; DMA_READ_BYTES];
 
     let mut wav_buffer = Vec::with_capacity(track.wav_size);
 
@@ -188,20 +188,20 @@ fn load_track_data(track: &TrackInformation) -> Result<(Vec<u8>, String), &'stat
         // Compute chunk in usize FIRST, then cast to u16.
         // Avoids truncation: e.g. 102496_usize as u16 = 37120, but
         // 102496_usize.min(128) = 128 then as u16 = 128.
-        let chunk_sectors = sectors_remaining.minimum(DMA_READ_SECTORS as usize);
+        let chunk_sectors = sectors_remaining.min(DMA_READ_SECTORS as usize);
         let chunk = chunk_sectors as u16;
         let chunk_bytes = chunk_sectors * SECTOR_SIZE;
 
         crate::drivers::ahci::read_sectors(
             port, current_lba, chunk,
-            &mut dma_buffer[..chunk_bytes],
+            &mut dma_buf[..chunk_bytes],
         )?;
 
         // Copy from DMA buffer to target Vec (only up to what we still need)
         let needed = track.wav_size.saturating_sub(wav_buffer.len());
-        let to_copy = chunk_bytes.minimum(needed);
+        let to_copy = chunk_bytes.min(needed);
         if to_copy > 0 {
-            wav_buffer.extend_from_slice(&dma_buffer[..to_copy]);
+            wav_buffer.extend_from_slice(&dma_buf[..to_copy]);
         }
 
         current_lba += chunk_sectors as u64;

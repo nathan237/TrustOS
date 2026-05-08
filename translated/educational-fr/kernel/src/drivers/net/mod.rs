@@ -49,14 +49,14 @@ pub trait NetworkDriver: Driver {
 #[derive(Debug, Clone, Copy, Default)]
 // Structure publique — visible à l'extérieur de ce module.
 pub struct NetStats {
-    pub transmit_packets: u64,
-    pub receive_packets: u64,
-    pub transmit_bytes: u64,
-    pub receive_bytes: u64,
-    pub transmit_errors: u64,
-    pub receive_errors: u64,
-    pub transmit_dropped: u64,
-    pub receive_dropped: u64,
+    pub tx_packets: u64,
+    pub rx_packets: u64,
+    pub tx_bytes: u64,
+    pub rx_bytes: u64,
+    pub tx_errors: u64,
+    pub rx_errors: u64,
+    pub tx_dropped: u64,
+    pub rx_dropped: u64,
 }
 
 /// Active network driver
@@ -66,7 +66,7 @@ static DRIVER_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 /// Registered network driver entry
 struct RegisteredNetDriver {
-    information: DriverInformation,
+    info: DriverInformation,
     factory: fn() -> Box<dyn NetworkDriver>,
 }
 
@@ -98,7 +98,7 @@ mod rtl8139;
 mod rtl8169;
 
 // ============================================================================
-// Intel WiFi Link 4965AGN (iwl4965) — ThinkPad T61
+// Intel WiFi Link 4965AGN (iwl4965)
 // ============================================================================
 
 pub mod wifi;
@@ -117,23 +117,23 @@ pub fn register_drivers() {
 }
 
 /// Register a network driver factory
-pub fn register_net_driver(information: DriverInformation, factory: fn() -> Box<dyn NetworkDriver>) {
+pub fn register_net_driver(info: DriverInformation, factory: fn() -> Box<dyn NetworkDriver>) {
     let mut registry = NET_REGISTRY.lock();
-    registry.push(RegisteredNetDriver { information, factory });
+    registry.push(RegisteredNetDriver { info, factory });
 }
 
 /// Probe and load a network driver for a PCI device
-pub fn probe_device(pci_device: &PciDevice) -> bool {
+pub fn probe_device(pci_dev: &PciDevice) -> bool {
     let registry = NET_REGISTRY.lock();
     for entry in registry.iter() {
-        for &(vendor, device) in entry.information.vendor_ids {
-            if pci_device.vendor_id == vendor && (device == 0xFFFF || pci_device.device_id == device) {
+        for &(vendor, device) in entry.info.vendor_ids {
+            if pci_dev.vendor_id == vendor && (device == 0xFFFF || pci_dev.device_id == device) {
                 let mut driver = (entry.factory)();
                                 // Correspondance de motifs — branchement exhaustif de Rust.
-match driver.probe(pci_device) {
+match driver.probe(pci_dev) {
                     Ok(()) => {
                         if let Err(e) = driver.start() {
-                            crate::log_warn!("[DRIVERS] Failed to start {}: {}", entry.information.name, e);
+                            crate::log_warn!("[DRIVERS] Failed to start {}: {}", entry.info.name, e);
                             return false;
                         }
                         *ACTIVE_DRIVER.lock() = Some(driver);
@@ -141,7 +141,7 @@ match driver.probe(pci_device) {
                         return true;
                     }
                     Err(e) => {
-                        crate::log_debug!("[DRIVERS] {} probe failed: {}", entry.information.name, e);
+                        crate::log_debug!("[DRIVERS] {} probe failed: {}", entry.info.name, e);
                     }
                 }
             }

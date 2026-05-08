@@ -28,36 +28,36 @@ use alloc::vec;
 
 
 
-pub const BG_: usize = 256;
+pub const BI_: usize = 256;
 
 
 pub const E_: usize = 256;
 
 
-pub const FP_: usize = 4;
+pub const GE_: usize = 4;
 
 
-pub const CU_: usize = E_ / FP_; 
+pub const DA_: usize = E_ / GE_; 
 
 
-pub const Y_: usize = 1024;
+pub const Z_: usize = 1024;
 
 
-pub const AZ_: usize = 4;
+pub const BB_: usize = 4;
 
 
-pub const CY_: usize = 256;
+pub const DF_: usize = 256;
 
 
-pub const HC_: f32 = 1e-5;
+pub const HT_: f32 = 1e-5;
 
 
 
-fn ccw(b: f32) -> f32 {
-    if b <= 0.0 { return 0.0; }
-    let fs = b.bsr();
-    let anj = f32::bhb((fs >> 1) + 0x1FBD_1DF5);
-    (anj + b / anj) * 0.5
+fn apq(x: f32) -> f32 {
+    if x <= 0.0 { return 0.0; }
+    let bits = x.to_bits();
+    let uc = f32::from_bits((bits >> 1) + 0x1FBD_1DF5);
+    (uc + x / uc) * 0.5
 }
 
 
@@ -67,190 +67,190 @@ fn ccw(b: f32) -> f32 {
 
 pub struct LayerWeights {
     
-    pub cmh: Vec<f32>,
+    pub rms_attn: Vec<f32>,
     
-    pub biw: Vec<f32>,
+    pub w_q: Vec<f32>,
     
-    pub biu: Vec<f32>,
+    pub w_k: Vec<f32>,
     
-    pub bpg: Vec<f32>,
+    pub w_v: Vec<f32>,
     
-    pub biv: Vec<f32>,
+    pub w_o: Vec<f32>,
     
-    pub cmi: Vec<f32>,
+    pub rms_ffn: Vec<f32>,
     
-    pub bit: Vec<f32>,
+    pub w_gate: Vec<f32>,
     
-    pub bpf: Vec<f32>,
+    pub w_up: Vec<f32>,
     
-    pub bpe: Vec<f32>,
+    pub w_down: Vec<f32>,
 }
 
 impl LayerWeights {
     
-    fn dtm(dv: &mut u64) -> Self {
-        let ike = 1.0 / ccw(E_ as f32);
-        let fil = 1.0 / ccw(Y_ as f32);
+    fn bns(seed: &mut u64) -> Self {
+        let efs = 1.0 / apq(E_ as f32);
+        let cji = 1.0 / apq(Z_ as f32);
 
         LayerWeights {
-            cmh: vec![1.0f32; E_],
-            biw: bhu(E_ * E_, ike, dv),
-            biu: bhu(E_ * E_, ike, dv),
-            bpg: bhu(E_ * E_, ike, dv),
-            biv: bhu(E_ * E_, ike, dv),
-            cmi: vec![1.0f32; E_],
-            bit: bhu(E_ * Y_, fil, dv),
-            bpf: bhu(E_ * Y_, fil, dv),
-            bpe: bhu(Y_ * E_, fil, dv),
+            rms_attn: vec![1.0f32; E_],
+            w_q: afm(E_ * E_, efs, seed),
+            w_k: afm(E_ * E_, efs, seed),
+            w_v: afm(E_ * E_, efs, seed),
+            w_o: afm(E_ * E_, efs, seed),
+            rms_ffn: vec![1.0f32; E_],
+            w_gate: afm(E_ * Z_, cji, seed),
+            w_up: afm(E_ * Z_, cji, seed),
+            w_down: afm(Z_ * E_, cji, seed),
         }
     }
 
     
-    pub fn vm(&self) -> usize {
+    pub fn param_count(&self) -> usize {
         E_  
         + E_ * E_ * 4  
         + E_  
-        + E_ * Y_ * 2  
-        + Y_ * E_  
+        + E_ * Z_ * 2  
+        + Z_ * E_  
     }
 }
 
 
 pub struct TransformerWeights {
     
-    pub bpa: Vec<f32>,
+    pub token_embed: Vec<f32>,
     
-    pub cgq: Vec<f32>,
+    pub pos_embed: Vec<f32>,
     
-    pub my: Vec<LayerWeights>,
+    pub layers: Vec<LayerWeights>,
     
-    pub chg: Vec<f32>,
+    pub rms_final: Vec<f32>,
     
-    pub bft: Vec<f32>,
+    pub w_output: Vec<f32>,
 }
 
 impl TransformerWeights {
     
-    pub fn dtm() -> Self {
-        let mut dv = 42_u64; 
+    pub fn bns() -> Self {
+        let mut seed = 42_u64; 
 
-        let npo = 1.0 / ccw(E_ as f32);
+        let hvj = 1.0 / apq(E_ as f32);
 
-        let mut my = Vec::fc(AZ_);
-        for _ in 0..AZ_ {
-            my.push(LayerWeights::dtm(&mut dv));
+        let mut layers = Vec::with_capacity(BB_);
+        for _ in 0..BB_ {
+            layers.push(LayerWeights::bns(&mut seed));
         }
 
         TransformerWeights {
-            bpa: bhu(BG_ * E_, npo, &mut dv),
-            cgq: bhu(CY_ * E_, 0.02, &mut dv),
-            my,
-            chg: vec![1.0f32; E_],
-            bft: bhu(E_ * BG_, npo, &mut dv),
+            token_embed: afm(BI_ * E_, hvj, &mut seed),
+            pos_embed: afm(DF_ * E_, 0.02, &mut seed),
+            layers,
+            rms_final: vec![1.0f32; E_],
+            w_output: afm(E_ * BI_, hvj, &mut seed),
         }
     }
 
     
-    pub fn vm(&self) -> usize {
-        BG_ * E_           
-        + CY_ * E_            
-        + self.my.iter().map(|dm| dm.vm()).sum::<usize>()
+    pub fn param_count(&self) -> usize {
+        BI_ * E_           
+        + DF_ * E_            
+        + self.layers.iter().map(|l| l.param_count()).sum::<usize>()
         + E_                       
-        + E_ * BG_         
+        + E_ * BI_         
     }
 
     
-    pub fn omv(&self) -> usize {
-        self.vm() * 4
+    pub fn memory_bytes(&self) -> usize {
+        self.param_count() * 4
     }
 
     
-    pub fn gsd(&self) -> Vec<f32> {
-        let mut f = Vec::fc(self.vm());
-        f.bk(&self.bpa);
-        f.bk(&self.cgq);
-        for fl in &self.my {
-            f.bk(&fl.cmh);
-            f.bk(&fl.biw);
-            f.bk(&fl.biu);
-            f.bk(&fl.bpg);
-            f.bk(&fl.biv);
-            f.bk(&fl.cmi);
-            f.bk(&fl.bit);
-            f.bk(&fl.bpf);
-            f.bk(&fl.bpe);
+    pub fn serialize(&self) -> Vec<f32> {
+        let mut data = Vec::with_capacity(self.param_count());
+        data.extend_from_slice(&self.token_embed);
+        data.extend_from_slice(&self.pos_embed);
+        for bj in &self.layers {
+            data.extend_from_slice(&bj.rms_attn);
+            data.extend_from_slice(&bj.w_q);
+            data.extend_from_slice(&bj.w_k);
+            data.extend_from_slice(&bj.w_v);
+            data.extend_from_slice(&bj.w_o);
+            data.extend_from_slice(&bj.rms_ffn);
+            data.extend_from_slice(&bj.w_gate);
+            data.extend_from_slice(&bj.w_up);
+            data.extend_from_slice(&bj.w_down);
         }
-        f.bk(&self.chg);
-        f.bk(&self.bft);
-        f
+        data.extend_from_slice(&self.rms_final);
+        data.extend_from_slice(&self.w_output);
+        data
     }
 
     
     
-    pub fn pih(&self) -> Vec<u8> {
-        let aal = self.vm() * 4;
-        let mut bf = Vec::fc(aal);
+    pub fn serialize_to_bytes(&self) -> Vec<u8> {
+        let nb = self.param_count() * 4;
+        let mut bytes = Vec::with_capacity(nb);
 
-        fn ctn(bf: &mut Vec<u8>, aue: &[f32]) {
-            for bb in aue {
-                bf.bk(&bb.ft());
+        fn azd(bytes: &mut Vec<u8>, xn: &[f32]) {
+            for f in xn {
+                bytes.extend_from_slice(&f.to_be_bytes());
             }
         }
 
-        ctn(&mut bf, &self.bpa);
-        ctn(&mut bf, &self.cgq);
-        for fl in &self.my {
-            ctn(&mut bf, &fl.cmh);
-            ctn(&mut bf, &fl.biw);
-            ctn(&mut bf, &fl.biu);
-            ctn(&mut bf, &fl.bpg);
-            ctn(&mut bf, &fl.biv);
-            ctn(&mut bf, &fl.cmi);
-            ctn(&mut bf, &fl.bit);
-            ctn(&mut bf, &fl.bpf);
-            ctn(&mut bf, &fl.bpe);
+        azd(&mut bytes, &self.token_embed);
+        azd(&mut bytes, &self.pos_embed);
+        for bj in &self.layers {
+            azd(&mut bytes, &bj.rms_attn);
+            azd(&mut bytes, &bj.w_q);
+            azd(&mut bytes, &bj.w_k);
+            azd(&mut bytes, &bj.w_v);
+            azd(&mut bytes, &bj.w_o);
+            azd(&mut bytes, &bj.rms_ffn);
+            azd(&mut bytes, &bj.w_gate);
+            azd(&mut bytes, &bj.w_up);
+            azd(&mut bytes, &bj.w_down);
         }
-        ctn(&mut bf, &self.chg);
-        ctn(&mut bf, &self.bft);
-        bf
+        azd(&mut bytes, &self.rms_final);
+        azd(&mut bytes, &self.w_output);
+        bytes
     }
 
     
-    pub fn eos(f: &[f32]) -> Option<Self> {
-        let mut u = 0;
+    pub fn byt(data: &[f32]) -> Option<Self> {
+        let mut pos = 0;
 
-        let bpa = avb(f, &mut u, BG_ * E_)?;
-        let cgq = avb(f, &mut u, CY_ * E_)?;
+        let token_embed = yd(data, &mut pos, BI_ * E_)?;
+        let pos_embed = yd(data, &mut pos, DF_ * E_)?;
 
-        let mut my = Vec::fc(AZ_);
-        for _ in 0..AZ_ {
-            let cmh = avb(f, &mut u, E_)?;
-            let biw = avb(f, &mut u, E_ * E_)?;
-            let biu = avb(f, &mut u, E_ * E_)?;
-            let bpg = avb(f, &mut u, E_ * E_)?;
-            let biv = avb(f, &mut u, E_ * E_)?;
-            let cmi = avb(f, &mut u, E_)?;
-            let bit = avb(f, &mut u, E_ * Y_)?;
-            let bpf = avb(f, &mut u, E_ * Y_)?;
-            let bpe = avb(f, &mut u, Y_ * E_)?;
+        let mut layers = Vec::with_capacity(BB_);
+        for _ in 0..BB_ {
+            let rms_attn = yd(data, &mut pos, E_)?;
+            let w_q = yd(data, &mut pos, E_ * E_)?;
+            let w_k = yd(data, &mut pos, E_ * E_)?;
+            let w_v = yd(data, &mut pos, E_ * E_)?;
+            let w_o = yd(data, &mut pos, E_ * E_)?;
+            let rms_ffn = yd(data, &mut pos, E_)?;
+            let w_gate = yd(data, &mut pos, E_ * Z_)?;
+            let w_up = yd(data, &mut pos, E_ * Z_)?;
+            let w_down = yd(data, &mut pos, Z_ * E_)?;
 
-            my.push(LayerWeights {
-                cmh, biw, biu, bpg, biv, cmi, bit, bpf, bpe,
+            layers.push(LayerWeights {
+                rms_attn, w_q, w_k, w_v, w_o, rms_ffn, w_gate, w_up, w_down,
             });
         }
 
-        let chg = avb(f, &mut u, E_)?;
-        let bft = avb(f, &mut u, E_ * BG_)?;
+        let rms_final = yd(data, &mut pos, E_)?;
+        let w_output = yd(data, &mut pos, E_ * BI_)?;
 
         Some(TransformerWeights {
-            bpa, cgq, my, chg, bft,
+            token_embed, pos_embed, layers, rms_final, w_output,
         })
     }
 
     
-    pub fn apa(&mut self) {
-        let sxl = Self::dtm();
-        *self = sxl;
+    pub fn reset(&mut self) {
+        let lyv = Self::bns();
+        *self = lyv;
     }
 }
 
@@ -259,30 +259,30 @@ impl TransformerWeights {
 
 
 
-fn avb(f: &[f32], u: &mut usize, len: usize) -> Option<Vec<f32>> {
-    if *u + len > f.len() { return None; }
-    let p = f[*u..*u + len].ip();
-    *u += len;
-    Some(p)
+fn yd(data: &[f32], pos: &mut usize, len: usize) -> Option<Vec<f32>> {
+    if *pos + len > data.len() { return None; }
+    let v = data[*pos..*pos + len].to_vec();
+    *pos += len;
+    Some(v)
 }
 
 
-fn bhu(len: usize, bv: f32, dv: &mut u64) -> Vec<f32> {
-    let mut p = Vec::fc(len);
+fn afm(len: usize, scale: f32, seed: &mut u64) -> Vec<f32> {
+    let mut v = Vec::with_capacity(len);
     for _ in 0..len {
-        p.push(mrs(dv) * bv);
+        v.push(hcz(seed) * scale);
     }
-    p
+    v
 }
 
 
-fn mrs(g: &mut u64) -> f32 {
-    let mut b = *g;
-    b ^= b << 13;
-    b ^= b >> 7;
-    b ^= b << 17;
-    *g = b;
+fn hcz(state: &mut u64) -> f32 {
+    let mut x = *state;
+    x ^= x << 13;
+    x ^= x >> 7;
+    x ^= x << 17;
+    *state = x;
     
-    let fs = (b >> 40) as u32; 
-    (fs as f32 / (1u32 << 24) as f32) * 2.0 - 1.0
+    let bits = (x >> 40) as u32; 
+    (bits as f32 / (1u32 << 24) as f32) * 2.0 - 1.0
 }

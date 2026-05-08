@@ -23,8 +23,9 @@ TrustOS is `#![no_std]` everywhere with `panic = "abort"`. The following are **n
 
 ```powershell
 cargo build --release -p trustos_kernel
-.\trustos.ps1 build           # kernel + ISO + VM
-.\trustos.ps1 build -NoRun    # kernel + ISO only
+.\scripts\build\build-trustos.ps1              # kernel + ISO + VM
+.\scripts\build\build-trustos.ps1 -NoRun       # kernel + ISO seulement
+.\scripts\trustos-hub.ps1                      # hub — point d'entrée principal
 ```
 
 Linux/macOS:

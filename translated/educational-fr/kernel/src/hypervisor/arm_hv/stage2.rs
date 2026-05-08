@@ -38,7 +38,7 @@ pub enum S2Perm {
     /// Read-Write
     ReadWrite,
     /// Read-Execute (code)
-    ReadExecute,
+    ReadExec,
     /// Full access (RWX)
     Full,
 }
@@ -64,9 +64,9 @@ pub struct S2Mapping {
     /// Size in bytes
     pub size: u64,
     /// Permissions
-    pub permission: S2Perm,
+    pub perm: S2Perm,
     /// Memory type
-    pub memory_type: S2MemType,
+    pub mem_type: S2MemType,
     /// Human label (for debug)
     pub label: &'static str,
 }
@@ -205,8 +205,8 @@ impl Stage2Tables {
             ipa_base: base,
             pa_base: base,
             size,
-            permission: S2Perm::None,
-            memory_type: S2MemType::Device,
+            perm: S2Perm::None,
+            mem_type: S2MemType::Device,
             label,
         });
         // No page table entries created = access will fault!
@@ -218,20 +218,20 @@ impl Stage2Tables {
         ipa_base: u64,
         pa_base: u64,
         size: u64,
-        permission: S2Perm,
-        memory_type: S2MemType,
+        perm: S2Perm,
+        mem_type: S2MemType,
         label: &'static str,
     ) {
         self.mappings.push(S2Mapping {
-            ipa_base, pa_base, size, permission, memory_type, label,
+            ipa_base, pa_base, size, perm, mem_type, label,
         });
 
-        if permission == S2Perm::None {
+        if perm == S2Perm::None {
             return; // Trapped — don't create entries
         }
 
         // Build descriptor attributes
-        let attribute = self.build_descriptor_attrs(permission, memory_type);
+        let attr = self.build_descriptor_attrs(perm, mem_type);
 
         // Map using 2MB blocks where aligned, 4KB pages otherwise
         let mut ipa = ipa_base & !0xFFF;
@@ -244,11 +244,11 @@ impl Stage2Tables {
                 && pa & (L2_BLOCK_SIZE - 1) == 0
                 && ipa + L2_BLOCK_SIZE <= end
             {
-                self.map_2mb_block(ipa, pa, attribute);
+                self.map_2mb_block(ipa, pa, attr);
                 ipa += L2_BLOCK_SIZE;
                 pa += L2_BLOCK_SIZE;
             } else {
-                self.map_4kb_page(ipa, pa, attribute);
+                self.map_4kb_page(ipa, pa, attr);
                 ipa += PAGE_SIZE;
                 pa += PAGE_SIZE;
             }
@@ -256,38 +256,38 @@ impl Stage2Tables {
     }
 
     /// Build Stage-2 descriptor attributes from permissions and memory type
-    fn build_descriptor_attrs(&self, permission: S2Perm, memory_type: S2MemType) -> u64 {
-        let mut attribute: u64 = desc::AF;
+    fn build_descriptor_attrs(&self, perm: S2Perm, mem_type: S2MemType) -> u64 {
+        let mut attr: u64 = desc::AF;
 
         // Access permissions
-        attribute |= // Correspondance de motifs — branchement exhaustif de Rust.
-match permission {
+        attr |= // Correspondance de motifs — branchement exhaustif de Rust.
+match perm {
             S2Perm::None => desc::S2AP_NONE,
             S2Perm::ReadOnly => desc::S2AP_RO,
             S2Perm::ReadWrite => desc::S2AP_RW,
-            S2Perm::ReadExecute => desc::S2AP_RO,
+            S2Perm::ReadExec => desc::S2AP_RO,
             S2Perm::Full => desc::S2AP_RW,
         };
 
         // Execute permissions
-        attribute |= // Correspondance de motifs — branchement exhaustif de Rust.
-match permission {
-            S2Perm::ReadExecute | S2Perm::Full => desc::XN_NONE,
+        attr |= // Correspondance de motifs — branchement exhaustif de Rust.
+match perm {
+            S2Perm::ReadExec | S2Perm::Full => desc::XN_NONE,
             _ => desc::XN_ALL,
         };
 
         // Memory type
-        attribute |= // Correspondance de motifs — branchement exhaustif de Rust.
-match memory_type {
+        attr |= // Correspondance de motifs — branchement exhaustif de Rust.
+match mem_type {
             S2MemType::Normal => desc::MEMATTR_NORMAL_WB | desc::SH_INNER,
             S2MemType::Device => desc::MEMATTR_DEVICE | desc::SH_NONE,
         };
 
-        attribute
+        attr
     }
 
     /// Map a 2MB block (Level 2 descriptor)
-    fn map_2mb_block(&mut self, ipa: u64, pa: u64, attribute: u64) {
+    fn map_2mb_block(&mut self, ipa: u64, pa: u64, attr: u64) {
         let l1_index = ((ipa >> 30) & 0x1FF) as usize;
         let l2_index = ((ipa >> 21) & 0x1FF) as usize;
 
@@ -296,13 +296,13 @@ match memory_type {
 
         // Write 2MB block descriptor
         unsafe {
-            let entry = pa & 0x0000_FFFF_FFE0_0000 | attribute | desc::BLOCK;
+            let entry = pa & 0x0000_FFFF_FFE0_0000 | attr | desc::BLOCK;
             l2.add(l2_index).write_volatile(entry);
         }
     }
 
     /// Map a 4KB page (Level 3 descriptor)
-    fn map_4kb_page(&mut self, ipa: u64, pa: u64, attribute: u64) {
+    fn map_4kb_page(&mut self, ipa: u64, pa: u64, attr: u64) {
         let l1_index = ((ipa >> 30) & 0x1FF) as usize;
         let l2_index = ((ipa >> 21) & 0x1FF) as usize;
         let l3_index = ((ipa >> 12) & 0x1FF) as usize;
@@ -312,7 +312,7 @@ match memory_type {
 
         // Write 4KB page descriptor
         unsafe {
-            let entry = pa & 0x0000_FFFF_FFFF_F000 | attribute | desc::PAGE;
+            let entry = pa & 0x0000_FFFF_FFFF_F000 | attr | desc::PAGE;
             l3.add(l3_index).write_volatile(entry);
         }
     }
@@ -388,7 +388,7 @@ unsafe {
     /// Check if an IPA falls in a trapped (spy) region
     pub fn is_trapped_ipa(&self, ipa: u64) -> Option<&S2Mapping> {
         self.mappings.iter().find(|m| {
-            m.permission == S2Perm::None
+            m.perm == S2Perm::None
                 && ipa >= m.ipa_base
                 && ipa < m.ipa_base + m.size
         })

@@ -208,7 +208,7 @@ pub struct DisplayConnector {
     /// DIG (Display Interface Generator) encoder index
     pub dig_encoder: u8,
     /// PHY index
-    pub physical_index: u8,
+    pub phy_index: u8,
     /// HPD (Hot Plug Detect) pin
     pub hpd_pin: u8,
     /// Current mode (if active)
@@ -216,9 +216,9 @@ pub struct DisplayConnector {
     /// DPCD revision (for DP connectors) 
     pub dpcd_rev: u8,
     /// Max link rate in 270MHz units (for DP)
-    pub maximum_link_rate: u8,
+    pub max_link_rate: u8,
     /// Max lane count (for DP)
-    pub maximum_lane_count: u8,
+    pub max_lane_count: u8,
 }
 
 /// Surface pixel format
@@ -263,7 +263,7 @@ match self {
 // Structure publique — visible à l'extérieur de ce module.
 pub struct ScanoutSurface {
     /// Physical address of the framebuffer
-    pub framebuffer_physical_address: u64,
+    pub fb_phys_addr: u64,
     /// Width in pixels
     pub width: u32,
     /// Height in pixels
@@ -289,7 +289,7 @@ pub struct DcnState {
     /// DCN version detected
     pub dcn_version: (u8, u8),  // (major, minor)
     /// Max number of pipes
-    pub maximum_pipes: u8,
+    pub max_pipes: u8,
     /// Current scanout configuration per pipe
     pub scanouts: [Option<ScanoutSurface>; 6],
 }
@@ -300,7 +300,7 @@ static DCN_STATE: Mutex<DcnState> = Mutex::new(DcnState {
     connectors: Vec::new(),
     active_displays: 0,
     dcn_version: (0, 0),
-    maximum_pipes: 0,
+    max_pipes: 0,
     scanouts: [None, None, None, None, None, None],
 });
 
@@ -410,12 +410,12 @@ match transmit_type {
                 connector_type,
                 status,
                 dig_encoder: i,
-                physical_index: i,
+                phy_index: i,
                 hpd_pin: i,
                 current_mode: None,
                 dpcd_rev: 0,
-                maximum_link_rate: 0,
-                maximum_lane_count: 0,
+                max_link_rate: 0,
+                max_lane_count: 0,
             });
         }
     }
@@ -579,9 +579,9 @@ pub fn enable_otg(mmio: u64, pipe: u8) {
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
         // Set OTG_CONTROL bit 0 = enable
-        let mut controller = otg_read(mmio, pipe, dcn::OTG_CONTROL_OFFSET);
-        controller |= 1; // Enable
-        otg_write(mmio, pipe, dcn::OTG_CONTROL_OFFSET, controller);
+        let mut ctl = otg_read(mmio, pipe, dcn::OTG_CONTROL_OFFSET);
+        ctl |= 1; // Enable
+        otg_write(mmio, pipe, dcn::OTG_CONTROL_OFFSET, ctl);
         crate::serial_println!("[DCN] OTG{} enabled", pipe);
     }
 }
@@ -590,9 +590,9 @@ unsafe {
 pub fn disable_otg(mmio: u64, pipe: u8) {
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-        let mut controller = otg_read(mmio, pipe, dcn::OTG_CONTROL_OFFSET);
-        controller &= !1; // Disable
-        otg_write(mmio, pipe, dcn::OTG_CONTROL_OFFSET, controller);
+        let mut ctl = otg_read(mmio, pipe, dcn::OTG_CONTROL_OFFSET);
+        ctl &= !1; // Disable
+        otg_write(mmio, pipe, dcn::OTG_CONTROL_OFFSET, ctl);
         crate::serial_println!("[DCN] OTG{} disabled", pipe);
     }
 }
@@ -604,13 +604,13 @@ unsafe {
 /// Configure HUBP pipe for a scanout surface
 pub fn configure_hubp(mmio: u64, pipe: u8, surface: &ScanoutSurface) {
     crate::serial_println!("[DCN] Configuring HUBP{} for {}x{} @ {:#X}", 
-        pipe, surface.width, surface.height, surface.framebuffer_physical_address);
+        pipe, surface.width, surface.height, surface.fb_phys_addr);
     
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
         // Set surface address (split into high/low 32-bit)
-        let address_hi = (surface.framebuffer_physical_address >> 32) as u32;
-        let address_lo = (surface.framebuffer_physical_address & 0xFFFFFFFF) as u32;
+        let address_hi = (surface.fb_phys_addr >> 32) as u32;
+        let address_lo = (surface.fb_phys_addr & 0xFFFFFFFF) as u32;
         
         hubp_write(mmio, pipe, dcn::HUBP_SURFACE_ADDRESS_HIGH_OFFSET, address_hi);
         hubp_write(mmio, pipe, dcn::HUBP_SURFACE_ADDRESS_OFFSET, address_lo);
@@ -712,24 +712,24 @@ unsafe {
             let surf_pitch = hubp_read(mmio_base, pipe, dcn::HUBP_SURFACE_PITCH_OFFSET);
             let surf_size = hubp_read(mmio_base, pipe, dcn::HUBP_SURFACE_SIZE_OFFSET);
             
-            let address = ((surf_address_hi as u64) << 32) | (surf_address_lo as u64);
+            let addr = ((surf_address_hi as u64) << 32) | (surf_address_lo as u64);
             
-            if address != 0 && address != 0xFFFFFFFFFFFFFFFF && surf_config != 0xFFFFFFFF {
+            if addr != 0 && addr != 0xFFFFFFFFFFFFFFFF && surf_config != 0xFFFFFFFF {
                 let width = surf_size & 0xFFFF;
                 let height = (surf_size >> 16) & 0xFFFF;
                 
                 crate::serial_println!("[DCN]   HUBP{}: addr={:#014X} size={}x{} pitch={} config={:#010X}", 
-                    pipe, address, width, height, surf_pitch, surf_config);
+                    pipe, addr, width, height, surf_pitch, surf_config);
                 
                 if width > 0 && height > 0 && width < 16384 && height < 16384 {
                     scanouts[pipe as usize] = Some(ScanoutSurface {
-                        framebuffer_physical_address: address,
+                        fb_phys_addr: addr,
                         width,
                         height,
                         pitch: surf_pitch * 4, // Assume 32bpp
                         format: SurfaceFormat::Xrgb8888,
                     });
-                    crate::log!("[DCN]   HUBP{}: {}x{} surface at {:#014X}", pipe, width, height, address);
+                    crate::log!("[DCN]   HUBP{}: {}x{} surface at {:#014X}", pipe, width, height, addr);
                 }
             }
         }
@@ -760,7 +760,7 @@ unsafe {
     state.connectors = connectors;
     state.active_displays = active_displays;
     state.dcn_version = (dcn_major as u8, dcn_minor as u8);
-    state.maximum_pipes = 6;
+    state.max_pipes = 6;
     state.scanouts = scanouts;
     DCN_READY.store(true, Ordering::SeqCst);
 }
@@ -805,13 +805,13 @@ pub fn summary() -> String {
 }
 
 /// Get detailed info lines for terminal display
-pub fn information_lines() -> Vec<String> {
+pub fn info_lines() -> Vec<String> {
     let mut lines = Vec::new();
     let state = DCN_STATE.lock();
     
     if state.initialized {
         lines.push(format!("DCN {}.{} Display Engine", state.dcn_version.0, state.dcn_version.1));
-        lines.push(format!("  Pipes: {} max, {} active", state.maximum_pipes, state.active_displays));
+        lines.push(format!("  Pipes: {} max, {} active", state.max_pipes, state.active_displays));
         lines.push(String::new());
         
         for connection in &state.connectors {
@@ -838,7 +838,7 @@ match connection.status {
         for (i, scanout) in state.scanouts.iter().enumerate() {
             if let Some(ref s) = scanout {
                 lines.push(format!("    HUBP{}: {}x{} {:?} @ {:#X}", 
-                    i, s.width, s.height, s.format, s.framebuffer_physical_address));
+                    i, s.width, s.height, s.format, s.fb_phys_addr));
             }
         }
     } else {

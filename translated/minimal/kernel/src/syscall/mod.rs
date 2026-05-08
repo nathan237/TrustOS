@@ -5,7 +5,7 @@
 
 pub mod linux;
 
-use crate::memory::{sw, aov};
+use crate::memory::{ij, ux};
 
 
 pub mod nr {
@@ -13,50 +13,50 @@ pub mod nr {
     pub use super::linux::nr::*;
     
     
-    pub const CVA_: u64 = 0x1000;
-    pub const CWY_: u64 = 0x1001;
-    pub const CWX_: u64 = 0x1002;
-    pub const CWW_: u64 = 0x1003;
+    pub const CYS_: u64 = 0x1000;
+    pub const DAQ_: u64 = 0x1001;
+    pub const DAP_: u64 = 0x1002;
+    pub const DAO_: u64 = 0x1003;
 }
 
 
 pub mod errno {
-    pub const Cve: i64 = -1;
-    pub const Il: i64 = -2;
-    pub const Cvm: i64 = -3;
-    pub const Cus: i64 = -4;
-    pub const Abi: i64 = -5;
-    pub const Cvd: i64 = -6;
-    pub const Cun: i64 = -7;
-    pub const Cva: i64 = -8;
-    pub const Fu: i64 = -9;
-    pub const Cbb: i64 = -10;
-    pub const Bfc: i64 = -11;
-    pub const Abl: i64 = -12;
-    pub const Cuo: i64 = -13;
-    pub const X: i64 = -14;
-    pub const Cvc: i64 = -15;
-    pub const Cup: i64 = -16;
-    pub const Cbc: i64 = -17;
-    pub const Cvr: i64 = -18;
-    pub const Cuz: i64 = -19;
-    pub const Cbh: i64 = -20;
-    pub const Cuu: i64 = -21;
-    pub const Er: i64 = -22;
-    pub const Cuy: i64 = -23;
-    pub const Cuv: i64 = -24;
-    pub const Cbi: i64 = -25;
-    pub const Cvn: i64 = -26;
-    pub const Cur: i64 = -27;
-    pub const Cvb: i64 = -28;
-    pub const Cvl: i64 = -29;
-    pub const Cvj: i64 = -30;
-    pub const Cuw: i64 = -31;
-    pub const Cvf: i64 = -32;
-    pub const Cuq: i64 = -33;
-    pub const Cvi: i64 = -34;
-    pub const Pg: i64 = -38;
-    pub const Cvq: i64 = Bfc;
+    pub const Auq: i64 = -1;
+    pub const Do: i64 = -2;
+    pub const Auy: i64 = -3;
+    pub const Aue: i64 = -4;
+    pub const Lp: i64 = -5;
+    pub const Aup: i64 = -6;
+    pub const Atz: i64 = -7;
+    pub const Aum: i64 = -8;
+    pub const Cp: i64 = -9;
+    pub const Ait: i64 = -10;
+    pub const Ya: i64 = -11;
+    pub const Lu: i64 = -12;
+    pub const Aua: i64 = -13;
+    pub const P: i64 = -14;
+    pub const Auo: i64 = -15;
+    pub const Aub: i64 = -16;
+    pub const Aiu: i64 = -17;
+    pub const Avd: i64 = -18;
+    pub const Aul: i64 = -19;
+    pub const Aiz: i64 = -20;
+    pub const Aug: i64 = -21;
+    pub const Bw: i64 = -22;
+    pub const Auk: i64 = -23;
+    pub const Auh: i64 = -24;
+    pub const Aja: i64 = -25;
+    pub const Auz: i64 = -26;
+    pub const Aud: i64 = -27;
+    pub const Aun: i64 = -28;
+    pub const Aux: i64 = -29;
+    pub const Auv: i64 = -30;
+    pub const Aui: i64 = -31;
+    pub const Aur: i64 = -32;
+    pub const Auc: i64 = -33;
+    pub const Auu: i64 = -34;
+    pub const Gk: i64 = -38;
+    pub const Avc: i64 = Ya;
 }
 
 
@@ -69,352 +69,352 @@ pub fn init() {
 
 
 
-pub fn yvu(num: u64, km: u64, oe: u64, vy: u64) -> u64 {
+pub fn qkc(num: u64, eb: u64, fy: u64, kb: u64) -> u64 {
     
-    let aux = oae(num, km, oe, vy, 0, 0, 0);
+    let ret = idi(num, eb, fy, kb, 0, 0, 0);
 
     
-    crate::lab_mode::trace_bus::ktb(num, [km, oe, vy], aux);
+    crate::lab_mode::trace_bus::fuj(num, [eb, fy, kb], ret);
 
     
-    let ce = crate::process::aei();
-    if ce > 0 {
-        if let Some(qk) = crate::signals::qzs(ce) {
+    let pid = crate::process::pe();
+    if pid > 0 {
+        if let Some(signo) = crate::signals::kjs(pid) {
             
             
-            if !crate::process::dsi(ce) && crate::userland::jbp() {
-                unsafe { crate::userland::ctw(-(qk as i32)); }
+            if !crate::process::is_running(pid) && crate::userland::ers() {
+                unsafe { crate::userland::azi(-(signo as i32)); }
             }
         }
     }
 
-    aux as u64
+    ret as u64
 }
 
 
-pub fn oae(num: u64, km: u64, oe: u64, vy: u64, bfw: u64, fcf: u64, iik: u64) -> i64 {
+pub fn idi(num: u64, eb: u64, fy: u64, kb: u64, aeq: u64, a5: u64, a6: u64) -> i64 {
     use linux::nr::*;
     
     match num {
         
-        Cm => mjb(km as i32, oe, vy as usize),
-        Db => mjf(km as i32, oe, vy as usize),
-        Bnr => jse(km, oe as u32),
-        App => mis(km as i32),
-        Bsc | Bkp => linux::icn(km, oe),
-        Bgo => linux::pqu(km as i32, oe),
-        Bkn => mix(km as i32, oe as i64, vy as u32),
-        Cjl => linux::wyq(km as i32, oe, vy as u32),
-        Bwk => linux::wzn(km as i32, oe, vy as u32),
-        Aos => linux::mio(km, oe as u32),
-        Bpy => linux::wyp(km, oe, vy),
-        Bjf => linux::miw(km as i32, oe, vy),
-        Ccv => linux::wxs(km as i32, oe as u32, vy),
-        Asr => miu(km, oe as usize),
-        Bcy => miq(km),
-        Blu => miy(km),
-        Bva => mjd(km),
-        Bed => linux::mit(km as i32),
-        Bee => linux::jsb(km as i32, oe as i32),
-        Cas => linux::jsb(km as i32, oe as i32),
-        Bol => linux::pqx(km, oe as u32, vy as i32),
-        Cdw => linux::wxv(km as i32, oe, vy as u32),
-        Bns => linux::mja(km as i32, oe, vy as u32),
-        Bnb => linux::wyk(km as i32, oe, vy, bfw as u32),
+        Ba => gxl(eb as i32, fy, kb as usize),
+        Bh => gxo(eb as i32, fy, kb as usize),
+        Aby => fcd(eb, fy as u32),
+        Rf => gxc(eb as i32),
+        Ael | Aas => linux::eav(eb, fy),
+        Yq => linux::jkr(eb as i32, fy),
+        Aaq => gxh(eb as i32, fy as i64, kb as u32),
+        Anr => linux::pbe(eb as i32, fy, kb as u32),
+        Agm => linux::pcb(eb as i32, fy, kb as u32),
+        Qy => linux::gwy(eb, fy as u32),
+        Acx => linux::pbd(eb, fy, kb),
+        Zy => linux::gxg(eb as i32, fy, kb),
+        Ajp => linux::pae(eb as i32, fy as u32, kb),
+        Sk => gxe(eb, fy as usize),
+        Wv => gxa(eb),
+        Aba => gxi(eb),
+        Afq => gxn(eb),
+        Xo => linux::gxd(eb as i32),
+        Xp => linux::fca(eb as i32, fy as i32),
+        Air => linux::fca(eb as i32, fy as i32),
+        Ace => linux::jku(eb, fy as u32, kb as i32),
+        Akh => linux::pah(eb as i32, fy, kb as u32),
+        Abz => linux::gxk(eb as i32, fy, kb as u32),
+        Abp => linux::pay(eb as i32, fy, kb, aeq as u32),
         
         
-        Avd => linux::jsc(km, oe, vy, bfw, fcf as i64, iik),
-        Avf => linux::jsd(km, oe),
-        Blw => linux::wyj(km, oe, vy),
-        Apl => linux::jsa(km),
+        Tn => linux::fcb(eb, fy, kb, aeq, a5 as i64, a6),
+        Tp => linux::fcc(eb, fy),
+        Abc => linux::pax(eb, fy, kb),
+        Rd => linux::fbz(eb),
         
         
-        Asv => linux::wya(),
-        Cea => linux::wyb(),
-        Ceg => linux::pqw(),
-        Asw | Ast => linux::wyg(),
-        Asu | Ass => linux::wxw(),
-        Clq => linux::wzf(km as u32),
-        Clj => linux::wyz(km as u32),
-        Clm => linux::wzc(km as u32, oe as u32),
-        Cll => linux::wzb(km as u32, oe as u32),
-        Clk => linux::wza(km as u32, oe as u32),
-        Cdz => linux::wxz(),
-        Clo => linux::wzd(),
-        Cdy => linux::wxy(km as u32),
-        Ced => linux::wyc(km as u32),
-        Byy => linux::wxh(km),
-        Coq => linux::wzl(km as u32),
-        Byw => linux::wxg(km, oe as u32),
-        Cct => linux::wxq(km as i32, oe as u32),
-        Byx => linux::pqq(km, oe as u32, vy as u32),
-        Ccu => linux::wxr(km as i32, oe as u32, vy as u32),
-        Cgl => linux::pqq(km, oe as u32, vy as u32),
-        Bgm => pqt(),
-        Coz => pqt(),
-        Byz => wxi(km, oe, vy),
-        Bfp => wxo(km, oe, vy),
-        Ahp => { 
-            crate::process::cxn(km as i32);
-            if crate::userland::jbp() { 
+        So => linux::pam(),
+        Akl => linux::pao(),
+        Akr => linux::jkt(),
+        Sp | Sm => linux::pau(),
+        Sn | Sl => linux::pai(),
+        Apf => linux::pbt(eb as u32),
+        Aoy => linux::pbn(eb as u32),
+        Apb => linux::pbq(eb as u32, fy as u32),
+        Apa => linux::pbp(eb as u32, fy as u32),
+        Aoz => linux::pbo(eb as u32, fy as u32),
+        Akk => linux::pal(),
+        Apd => linux::pbr(),
+        Akj => linux::pak(eb as u32),
+        Ako => linux::pap(eb as u32),
+        Ahr => linux::ozs(eb),
+        Ard => linux::pbz(eb as u32),
+        Ahp => linux::ozr(eb, fy as u32),
+        Ajn => linux::pab(eb as i32, fy as u32),
+        Ahq => linux::jkn(eb, fy as u32, kb as u32),
+        Ajo => linux::pac(eb as i32, fy as u32, kb as u32),
+        Amf => linux::jkn(eb, fy as u32, kb as u32),
+        Yo => jkq(),
+        Arj => jkq(),
+        Ahs => ozt(eb, fy, kb),
+        Yg => ozz(eb, fy, kb),
+        Oq => { 
+            crate::process::exit(eb as i32);
+            if crate::userland::ers() { 
                 
                 
-                if crate::userland::LN_.load(core::sync::atomic::Ordering::SeqCst) != 0 {
-                    crate::userland::mop(km as i32);
+                if crate::userland::MH_.load(core::sync::atomic::Ordering::SeqCst) != 0 {
+                    crate::userland::haz(eb as i32);
                 } else {
-                    unsafe { crate::userland::ctw(km as i32); }
+                    unsafe { crate::userland::azi(eb as i32); }
                 }
             }
             0
         }
-        ABX_ => { 
-            crate::process::cxn(km as i32);
-            if crate::userland::jbp() { 
-                if crate::userland::LN_.load(core::sync::atomic::Ordering::SeqCst) != 0 {
-                    crate::userland::mop(km as i32);
+        ADN_ => { 
+            crate::process::exit(eb as i32);
+            if crate::userland::ers() { 
+                if crate::userland::MH_.load(core::sync::atomic::Ordering::SeqCst) != 0 {
+                    crate::userland::haz(eb as i32);
                 } else {
-                    unsafe { crate::userland::ctw(km as i32); }
+                    unsafe { crate::userland::azi(eb as i32); }
                 }
             }
             0
         }
-        Cpz => wzm(km as i32, oe, vy as u32),
-        Cgg => wyh(km as i32, oe as i32),
-        AHU_ => linux::wyy(km),
+        Arv => pca(eb as i32, fy, kb as u32),
+        Ama => pav(eb as i32, fy as i32),
+        AJR_ => linux::pbm(eb),
         
         
-        ZD_ => linux::mip(km, oe),
+        AAK_ => linux::gwz(eb, fy),
         
         
-        Bae => linux::mjc(km),
+        Vq => linux::gxm(eb),
         
         
-        BMM_ => linux::mir(km as u32, oe),
-        Ceh => linux::wyf(km, oe),
-        Chr => linux::miz(km, oe),
+        BPE_ => linux::gxb(eb as u32, fy),
+        Aks => linux::pas(eb, fy),
+        Amv => linux::gxj(eb, fy),
         
         
-        CPQ_ => linux::wys(km as u32, oe, vy, bfw),
-        CPR_ => linux::wyt(km as u32, oe, vy, bfw),
-        AHJ_ => 0,
-        Cls => 0,
+        CTF_ => linux::pbg(eb as u32, fy, kb, aeq),
+        CTG_ => linux::pbh(eb as u32, fy, kb, aeq),
+        AJF_ => 0,
+        Aph => 0,
         
         
-        CQM_ => linux::wyv(),
-        CQK_ => linux::wyu(km as u32, oe, vy),
-        CQL_ => 0,
+        CUD_ => linux::pbj(),
+        CUB_ => linux::pbi(eb as u32, fy, kb),
+        CUC_ => 0,
         
         
-        Cdg => wxt(km, oe as u32, vy as u32),
-        CSM_ => linux::wyx(km, oe),
-        BWZ_ => linux::wxu(km as u32, oe, vy),
+        Ajz => paf(eb, fy as u32, kb as u32),
+        CWD_ => linux::pbl(eb, fy),
+        CAF_ => linux::pag(eb as u32, fy, kb),
         
         
-        Cec => linux::pqv(km as u32, oe),
-        Cln => 0,
-        Ciu => linux::wyo(km as u32, oe as u32, vy, bfw),
+        Akn => linux::jks(eb as u32, fy),
+        Apc => 0,
+        Ani => linux::pbc(eb as u32, fy as u32, kb, aeq),
         
         
-        Ceb => linux::miv(km, oe, vy),
+        Akm => linux::gxf(eb, fy, kb),
         
         
-        Cmc => wzh(km as u16, oe as u32, vy as u32),
-        Bzb => wxj(km as i32, oe, vy as usize),
-        Bxe => wxe(km as i32, oe, vy),
-        Clg => pqz(km as i32, oe, vy as usize, bfw as u32, fcf, iik as usize),
-        Cjm => pqy(km as i32, oe, vy as usize, bfw as u32, fcf, iik),
-        Uf => wzg(km as i32, oe as i32),
-        Bch => wxf(km as i32, oe, vy as usize),
-        Cgn => wyi(km as i32, oe as u32),
-        Cee => wyd(km as i32, oe, vy),
-        Cdx => wxx(km as i32, oe, vy),
-        Clp => wze(km as i32, oe as i32, vy as i32, bfw, fcf as usize),
-        Cef => wye(km as i32, oe as i32, vy as i32, bfw, fcf),
-        Clf => wyw(km as i32, oe, vy as u32),
-        Cjn => wyr(km as i32, oe, vy as u32),
+        Apq => pbv(eb as u16, fy as u32, kb as u32),
+        Ahu => ozu(eb as i32, fy, kb as usize),
+        Agt => ozp(eb as i32, fy, kb),
+        Aov => jkw(eb as i32, fy, kb as usize, aeq as u32, a5, a6 as usize),
+        Ans => jkv(eb as i32, fy, kb as usize, aeq as u32, a5, a6),
+        Iu => pbu(eb as i32, fy as i32),
+        Wm => ozq(eb as i32, fy, kb as usize),
+        Amh => paw(eb as i32, fy as u32),
+        Akp => paq(eb as i32, fy, kb),
+        Aki => paj(eb as i32, fy, kb),
+        Ape => pbs(eb as i32, fy as i32, kb as i32, aeq, a5 as usize),
+        Akq => par(eb as i32, fy as i32, kb as i32, aeq, a5),
+        Aou => pbk(eb as i32, fy, kb as u32),
+        Ant => pbf(eb as i32, fy, kb as u32),
         
         
-        Cip => wym(km, oe as u32),
+        Anc => pba(eb, fy as u32),
         
         
-        BTZ_ => linux::wxl(km as i32),
-        BUG_ => linux::pqs(km as i32, oe, vy as i32, bfw as i32),
-        BUB_ => linux::wxm(km as i32, oe as i32, vy as i32, bfw),
-        BUF_ => linux::wxn(km as i32, oe, vy as i32, bfw as i32, fcf, iik),
-        BUA_ => linux::pqr(km as u32),
+        BWV_ => linux::ozw(eb as i32),
+        BXC_ => linux::jkp(eb as i32, fy, kb as i32, aeq as i32),
+        BWX_ => linux::ozx(eb as i32, fy as i32, kb as i32, aeq),
+        BXB_ => linux::ozy(eb as i32, fy, kb as i32, aeq as i32, a5, a6),
+        BWW_ => linux::jko(eb as u32),
         
         
-        Cit => linux::wyn(km as u32, oe, vy, bfw, fcf),
-        Cml => linux::wzj(km),
-        Cmk => linux::wzi(km),
+        Anh => linux::pbb(eb as u32, fy, kb, aeq, a5),
+        Apz => linux::pbx(eb),
+        Apy => linux::pbw(eb),
         
         
-        nr::CVA_ => wxk(km, oe as usize),
-        nr::CWY_ => { crate::ipc::whk(km); 0 },
-        nr::CWX_ => crate::ipc::vtc(km) as i64,
-        nr::CWW_ => crate::ipc::rqk() as i64,
+        nr::CYS_ => ozv(eb, fy as usize),
+        nr::DAQ_ => { crate::ipc::onx(eb); 0 },
+        nr::DAP_ => crate::ipc::odo(eb) as i64,
+        nr::DAO_ => crate::ipc::kzf() as i64,
         
         _ => {
             crate::log_debug!("[SYSCALL] Unknown: {} (0x{:x})", num, num);
-            errno::Pg
+            errno::Gk
         }
     }
 }
 
-fn mjb(da: i32, aeg: u64, az: usize) -> i64 {
-    if aeg == 0 || az == 0 {
-        return errno::Er;
+fn gxl(fd: i32, buf_ptr: u64, count: usize) -> i64 {
+    if buf_ptr == 0 || count == 0 {
+        return errno::Bw;
     }
     
     
-    if !sw(aeg, az, true) {
-        crate::log_warn!("[SYSCALL] read: invalid user pointer {:#x}", aeg);
-        return errno::X;
+    if !ij(buf_ptr, count, true) {
+        crate::log_warn!("[SYSCALL] read: invalid user pointer {:#x}", buf_ptr);
+        return errno::P;
     }
     
     
-    if crate::pipe::gkh(da) {
-        let bi = unsafe { core::slice::bef(aeg as *mut u8, az) };
-        return crate::pipe::read(da, bi);
+    if crate::pipe::dab(fd) {
+        let buffer = unsafe { core::slice::from_raw_parts_mut(buf_ptr as *mut u8, count) };
+        return crate::pipe::read(fd, buffer);
     }
     
-    let bi = unsafe { core::slice::bef(aeg as *mut u8, az) };
-    match crate::vfs::read(da, bi) {
-        Ok(bo) => bo as i64,
-        Err(_) => errno::Abi,
-    }
-}
-
-fn mjf(da: i32, aeg: u64, az: usize) -> i64 {
-    if aeg == 0 || az == 0 {
-        return errno::Er;
-    }
-    
-    
-    if !sw(aeg, az, false) {
-        crate::log_warn!("[SYSCALL] write: invalid user pointer {:#x}", aeg);
-        return errno::X;
-    }
-    
-    let bi = unsafe { core::slice::anh(aeg as *const u8, az) };
-    
-    
-    if da == 1 || da == 2 {
-        for &o in bi { crate::serial_print!("{}", o as char); }
-        return az as i64;
-    }
-    
-    
-    if crate::pipe::gkh(da) {
-        return crate::pipe::write(da, bi);
-    }
-    
-    match crate::vfs::write(da, bi) {
-        Ok(bo) => bo as i64,
-        Err(_) => errno::Abi,
+    let buffer = unsafe { core::slice::from_raw_parts_mut(buf_ptr as *mut u8, count) };
+    match crate::vfs::read(fd, buffer) {
+        Ok(ae) => ae as i64,
+        Err(_) => errno::Lp,
     }
 }
 
-fn jse(arq: u64, flags: u32) -> i64 {
-    let path = match gqk(arq, 256) {
-        Some(e) => e,
-        None => return errno::X,
+fn gxo(fd: i32, buf_ptr: u64, count: usize) -> i64 {
+    if buf_ptr == 0 || count == 0 {
+        return errno::Bw;
+    }
+    
+    
+    if !ij(buf_ptr, count, false) {
+        crate::log_warn!("[SYSCALL] write: invalid user pointer {:#x}", buf_ptr);
+        return errno::P;
+    }
+    
+    let buffer = unsafe { core::slice::from_raw_parts(buf_ptr as *const u8, count) };
+    
+    
+    if fd == 1 || fd == 2 {
+        for &b in buffer { crate::serial_print!("{}", b as char); }
+        return count as i64;
+    }
+    
+    
+    if crate::pipe::dab(fd) {
+        return crate::pipe::write(fd, buffer);
+    }
+    
+    match crate::vfs::write(fd, buffer) {
+        Ok(ae) => ae as i64,
+        Err(_) => errno::Lp,
+    }
+}
+
+fn fcd(path_ptr: u64, flags: u32) -> i64 {
+    let path = match dde(path_ptr, 256) {
+        Some(j) => j,
+        None => return errno::P,
     };
-    match crate::vfs::aji(&path, crate::vfs::OpenFlags(flags)) {
-        Ok(da) => da as i64,
-        Err(_) => errno::Il,
+    match crate::vfs::open(&path, crate::vfs::OpenFlags(flags)) {
+        Ok(fd) => fd as i64,
+        Err(_) => errno::Do,
     }
 }
 
-fn mis(da: i32) -> i64 {
+fn gxc(fd: i32) -> i64 {
     
-    if linux::txk(da) {
-        crate::syscall::linux::JX_.lock().remove(&da);
+    if linux::msn(fd) {
+        crate::syscall::linux::KR_.lock().remove(&fd);
         return 0;
     }
     
-    if crate::pipe::gkh(da) {
-        return crate::pipe::agj(da);
+    if crate::pipe::dab(fd) {
+        return crate::pipe::close(fd);
     }
-    match crate::vfs::agj(da) {
+    match crate::vfs::close(fd) {
         Ok(()) => 0,
-        Err(_) => errno::Fu,
+        Err(_) => errno::Cp,
     }
 }
 
 
-fn wym(ovv: u64, ddp: u32) -> i64 {
-    if !sw(ovv, 8, true) {
-        return errno::X;
+fn pba(pipefd_ptr: u64, bej: u32) -> i64 {
+    if !ij(pipefd_ptr, 8, true) {
+        return errno::P;
     }
-    let (cbh, civ) = crate::pipe::avp();
+    let (aot, asu) = crate::pipe::create();
     unsafe {
-        let ptr = ovv as *mut i32;
-        *ptr = cbh;
-        *ptr.add(1) = civ;
+        let ptr = pipefd_ptr as *mut i32;
+        *ptr = aot;
+        *ptr.add(1) = asu;
     }
-    crate::log_debug!("[SYSCALL] pipe2: read_fd={}, write_fd={}", cbh, civ);
+    crate::log_debug!("[SYSCALL] pipe2: read_fd={}, write_fd={}", aot, asu);
     0
 }
 
-fn miy(arq: u64) -> i64 {
-    let path = match gqk(arq, 256) {
-        Some(e) => e,
-        None => return errno::X,
+fn gxi(path_ptr: u64) -> i64 {
+    let path = match dde(path_ptr, 256) {
+        Some(j) => j,
+        None => return errno::P,
     };
-    match crate::vfs::ut(&path) {
+    match crate::vfs::mkdir(&path) {
         Ok(()) => 0,
-        Err(_) => errno::Abi,
+        Err(_) => errno::Lp,
     }
 }
 
-fn mjd(arq: u64) -> i64 {
-    let path = match gqk(arq, 256) {
-        Some(e) => e,
-        None => return errno::X,
+fn gxn(path_ptr: u64) -> i64 {
+    let path = match dde(path_ptr, 256) {
+        Some(j) => j,
+        None => return errno::P,
     };
-    match crate::vfs::cnm(&path) {
+    match crate::vfs::unlink(&path) {
         Ok(()) => 0,
-        Err(_) => errno::Il,
+        Err(_) => errno::Do,
     }
 }
 
-fn wxk(aeg: u64, len: usize) -> i64 {
-    if aeg == 0 { return errno::X; }
+fn ozv(buf_ptr: u64, len: usize) -> i64 {
+    if buf_ptr == 0 { return errno::P; }
     
     
-    if !sw(aeg, len, false) {
-        return errno::X;
+    if !ij(buf_ptr, len, false) {
+        return errno::P;
     }
     
-    let bi = unsafe { core::slice::anh(aeg as *const u8, len) };
-    for &o in bi { crate::serial_print!("{}", o as char); }
+    let buffer = unsafe { core::slice::from_raw_parts(buf_ptr as *const u8, len) };
+    for &b in buffer { crate::serial_print!("{}", b as char); }
     len as i64
 }
 
 
-fn gqk(ptr: u64, am: usize) -> Option<alloc::string::String> {
+fn dde(ptr: u64, max: usize) -> Option<alloc::string::String> {
     if ptr == 0 { return None; }
     
     
-    if !aov(ptr) {
+    if !ux(ptr) {
         crate::log_warn!("[SYSCALL] read_cstring: kernel address {:#x}", ptr);
         return None;
     }
     
-    let mut e = alloc::string::String::new();
-    for a in 0..am {
+    let mut j = alloc::string::String::new();
+    for i in 0..max {
         
-        let hbx = ptr + a as u64;
-        if !aov(hbx) {
+        let dkc = ptr + i as u64;
+        if !ux(dkc) {
             return None;
         }
         
-        let o = unsafe { *(hbx as *const u8) };
-        if o == 0 { break; }
-        e.push(o as char);
+        let b = unsafe { *(dkc as *const u8) };
+        if b == 0 { break; }
+        j.push(b as char);
     }
-    if e.is_empty() { None } else { Some(e) }
+    if j.is_empty() { None } else { Some(j) }
 }
 
 
@@ -425,23 +425,23 @@ fn gqk(ptr: u64, am: usize) -> Option<alloc::string::String> {
 
 
 
-fn wxi(flags: u64, jo: u64, bt: u64) -> i64 {
+fn ozt(flags: u64, dn: u64, entry: u64) -> i64 {
     
     
     
-    if jo == 0 || bt == 0 {
-        return errno::Er;
+    if dn == 0 || entry == 0 {
+        return errno::Bw;
     }
     
     
-    if !aov(jo) || !aov(bt) {
-        return errno::X;
+    if !ux(dn) || !ux(entry) {
+        return errno::P;
     }
     
-    let ce = crate::process::aei();
-    let ni = crate::thread::pme(ce, "user_thread", bt, jo, 0);
+    let pid = crate::process::pe();
+    let tid = crate::thread::jhc(pid, "user_thread", entry, dn, 0);
     
-    ni as i64
+    tid as i64
 }
 
 
@@ -449,39 +449,39 @@ fn wxi(flags: u64, jo: u64, bt: u64) -> i64 {
 
 
 
-fn wxt(ag: u64, op: u32, ap: u32) -> i64 {
-    const ACN_: u32 = 0;
-    const ACO_: u32 = 1;
-    const ACM_: u32 = 128;
+fn paf(addr: u64, op: u32, val: u32) -> i64 {
+    const AED_: u32 = 0;
+    const AEE_: u32 = 1;
+    const AEC_: u32 = 128;
     
-    let op = op & !ACM_;
+    let op = op & !AEC_;
     
-    if !aov(ag) {
-        return errno::X;
+    if !ux(addr) {
+        return errno::P;
     }
     
     match op {
-        ACN_ => {
+        AED_ => {
             
-            let cv = unsafe { *(ag as *const u32) };
-            if cv != ap {
-                return errno::Bfc;
+            let current = unsafe { *(addr as *const u32) };
+            if current != val {
+                return errno::Ya;
             }
             
             
-            let ydl = crate::thread::bqd();
+            let hdl = crate::thread::current_tid();
             
             
-            crate::thread::cix();
+            crate::thread::ajc();
             0
         }
-        ACO_ => {
+        AEE_ => {
             
             
             
             0
         }
-        _ => errno::Pg,
+        _ => errno::Gk,
     }
 }
 
@@ -489,117 +489,117 @@ fn wxt(ag: u64, op: u32, ap: u32) -> i64 {
 
 
 
-fn mix(da: i32, l: i64, gwp: u32) -> i64 {
-    match crate::vfs::uis(da, l, gwp) {
-        Ok(u) => u as i64,
-        Err(_) => errno::Er,
+fn gxh(fd: i32, offset: i64, whence: u32) -> i64 {
+    match crate::vfs::nbd(fd, offset, whence) {
+        Ok(pos) => pos as i64,
+        Err(_) => errno::Bw,
     }
 }
 
-fn miu(k: u64, aw: usize) -> i64 {
-    if !sw(k, aw, true) {
-        return errno::X;
+fn gxe(buf: u64, size: usize) -> i64 {
+    if !ij(buf, size, true) {
+        return errno::P;
     }
     
-    let jv = crate::vfs::iwx();
-    let bf = jv.as_bytes();
-    let len = bf.len().v(aw - 1);
+    let cwd = crate::vfs::eof();
+    let bytes = cwd.as_bytes();
+    let len = bytes.len().min(size - 1);
     
     unsafe {
-        let cs = core::slice::bef(k as *mut u8, aw);
-        cs[..len].dg(&bf[..len]);
-        cs[len] = 0;
+        let dst = core::slice::from_raw_parts_mut(buf as *mut u8, size);
+        dst[..len].copy_from_slice(&bytes[..len]);
+        dst[len] = 0;
     }
     
-    k as i64
+    buf as i64
 }
 
-fn miq(arq: u64) -> i64 {
-    let path = match gqk(arq, 256) {
-        Some(e) => e,
-        None => return errno::X,
+fn gxa(path_ptr: u64) -> i64 {
+    let path = match dde(path_ptr, 256) {
+        Some(j) => j,
+        None => return errno::P,
     };
     
-    match crate::vfs::qyj(&path) {
+    match crate::vfs::kir(&path) {
         Ok(()) => 0,
-        Err(_) => errno::Il,
+        Err(_) => errno::Do,
     }
 }
 
-fn pqt() -> i64 {
-    match crate::process::svr() {
-        Ok(ce) => ce as i64,
-        Err(_) => errno::Abl,
+fn jkq() -> i64 {
+    match crate::process::lxk() {
+        Ok(pid) => pid as i64,
+        Err(_) => errno::Lu,
     }
 }
 
-fn wxo(clu: u64, fzk: u64, qbt: u64) -> i64 {
-    let path = match gqk(clu, 256) {
-        Some(e) => e,
-        None => return errno::X,
+fn ozz(pathname: u64, _argv: u64, _envp: u64) -> i64 {
+    let path = match dde(pathname, 256) {
+        Some(j) => j,
+        None => return errno::P,
     };
     
     
-    let mut emg: alloc::vec::Vec<alloc::string::String> = alloc::vec::Vec::new();
-    if fzk != 0 && aov(fzk) {
-        for a in 0..256u64 {
-            let oyi = fzk + a * 8;
-            if !aov(oyi) { break; }
-            let ptr = unsafe { *(oyi as *const u64) };
+    let mut bxn: alloc::vec::Vec<alloc::string::String> = alloc::vec::Vec::new();
+    if _argv != 0 && ux(_argv) {
+        for i in 0..256u64 {
+            let ixa = _argv + i * 8;
+            if !ux(ixa) { break; }
+            let ptr = unsafe { *(ixa as *const u64) };
             if ptr == 0 { break; }
-            if let Some(e) = gqk(ptr, 256) {
-                emg.push(e);
+            if let Some(j) = dde(ptr, 256) {
+                bxn.push(j);
             } else {
                 break;
             }
         }
     }
-    if emg.is_empty() {
-        emg.push(path.clone());
+    if bxn.is_empty() {
+        bxn.push(path.clone());
     }
-    let qkl: alloc::vec::Vec<&str> = emg.iter().map(|e| e.as_str()).collect();
+    let jxo: alloc::vec::Vec<&str> = bxn.iter().map(|j| j.as_str()).collect();
     
-    match crate::exec::sow(&path, &qkl, &[]) {
+    match crate::exec::lsh(&path, &jxo, &[]) {
         Ok(()) => 0, 
-        Err(_) => errno::Il,
+        Err(_) => errno::Do,
     }
 }
 
-fn wzm(ce: i32, mri: u64, options: u32) -> i64 {
-    let ejo = if ce > 0 { ce as u32 } else { 0 };
-    let pzp = options & 1 != 0; 
+fn pca(pid: i32, wstatus: u64, options: u32) -> i64 {
+    let bwg = if pid > 0 { pid as u32 } else { 0 };
+    let jrf = options & 1 != 0; 
     
     
-    let umb: u32 = if pzp { 1 } else { 5000 };
+    let ndn: u32 = if jrf { 1 } else { 5000 };
     
-    for _ in 0..umb {
-        match crate::process::ccm(ejo) {
+    for _ in 0..ndn {
+        match crate::process::bqb(bwg) {
             Ok(status) => {
-                if mri != 0 && sw(mri, 4, true) {
+                if wstatus != 0 && ij(wstatus, 4, true) {
                     
-                    unsafe { *(mri as *mut i32) = (status & 0xFF) << 8; }
+                    unsafe { *(wstatus as *mut i32) = (status & 0xFF) << 8; }
                 }
-                return ejo as i64;
+                return bwg as i64;
             }
             Err(_) => {
-                if pzp { return 0; }
-                crate::thread::cix();
+                if jrf { return 0; }
+                crate::thread::ajc();
             }
         }
     }
-    errno::Cbb
+    errno::Ait
 }
 
-fn wyh(ce: i32, sig: i32) -> i64 {
-    if ce <= 0 {
-        return errno::Er;
+fn pav(pid: i32, sig: i32) -> i64 {
+    if pid <= 0 {
+        return errno::Bw;
     }
     
-    let gsa = crate::process::aei();
+    let def = crate::process::pe();
     
-    match crate::signals::dsm(ce as u32, sig as u32, gsa) {
+    match crate::signals::bne(pid as u32, sig as u32, def) {
         Ok(()) => 0,
-        Err(aa) => aa as i64,
+        Err(e) => e as i64,
     }
 }
 
@@ -608,271 +608,271 @@ fn wyh(ce: i32, sig: i32) -> i64 {
 
 
 
-fn wzh(vh: u16, bif: u32, protocol: u32) -> i64 {
-    match crate::netstack::socket::socket(vh, bif, protocol) {
-        Ok(da) => da as i64,
-        Err(aa) => aa as i64,
+fn pbv(domain: u16, sock_type: u32, protocol: u32) -> i64 {
+    match crate::netstack::socket::socket(domain, sock_type, protocol) {
+        Ok(fd) => fd as i64,
+        Err(e) => e as i64,
     }
 }
 
 
-fn wxj(da: i32, azf: u64, ely: usize) -> i64 {
+fn ozu(fd: i32, addr_ptr: u64, addr_len: usize) -> i64 {
     use crate::netstack::socket::SockAddrIn;
     
-    if ely < SockAddrIn::Am {
-        return errno::Er;
+    if addr_len < SockAddrIn::Z {
+        return errno::Bw;
     }
     
-    if !sw(azf, ely, false) {
-        return errno::X;
+    if !ij(addr_ptr, addr_len, false) {
+        return errno::P;
     }
     
-    let ag = unsafe { *(azf as *const SockAddrIn) };
+    let addr = unsafe { *(addr_ptr as *const SockAddrIn) };
     
-    match crate::netstack::socket::ipa(da, &ag) {
+    match crate::netstack::socket::connect(fd, &addr) {
         Ok(()) => 0,
-        Err(aa) => aa as i64,
+        Err(e) => e as i64,
     }
 }
 
 
-fn wxf(da: i32, azf: u64, ely: usize) -> i64 {
+fn ozq(fd: i32, addr_ptr: u64, addr_len: usize) -> i64 {
     use crate::netstack::socket::SockAddrIn;
     
-    if ely < SockAddrIn::Am {
-        return errno::Er;
+    if addr_len < SockAddrIn::Z {
+        return errno::Bw;
     }
     
-    if !sw(azf, ely, false) {
-        return errno::X;
+    if !ij(addr_ptr, addr_len, false) {
+        return errno::P;
     }
     
-    let ag = unsafe { *(azf as *const SockAddrIn) };
+    let addr = unsafe { *(addr_ptr as *const SockAddrIn) };
     
-    match crate::netstack::socket::kdj(da, &ag) {
+    match crate::netstack::socket::fjf(fd, &addr) {
         Ok(()) => 0,
-        Err(aa) => aa as i64,
+        Err(e) => e as i64,
     }
 }
 
 
-fn wyi(da: i32, dea: u32) -> i64 {
-    match crate::netstack::socket::ojr(da, dea) {
+fn paw(fd: i32, backlog: u32) -> i64 {
+    match crate::netstack::socket::iks(fd, backlog) {
         Ok(()) => 0,
-        Err(aa) => aa as i64,
+        Err(e) => e as i64,
     }
 }
 
 
-fn wxe(da: i32, azf: u64, bye: u64) -> i64 {
-    match crate::netstack::socket::qes(da, azf, bye) {
-        Ok(anp) => anp as i64,
-        Err(aa) => aa as i64,
+fn ozp(fd: i32, addr_ptr: u64, addr_len_ptr: u64) -> i64 {
+    match crate::netstack::socket::jtj(fd, addr_ptr, addr_len_ptr) {
+        Ok(ue) => ue as i64,
+        Err(e) => e as i64,
     }
 }
 
 
-fn pqz(da: i32, aeg: u64, len: usize, flags: u32, azf: u64, ely: usize) -> i64 {
+fn jkw(fd: i32, buf_ptr: u64, len: usize, flags: u32, addr_ptr: u64, addr_len: usize) -> i64 {
     use crate::netstack::socket::SockAddrIn;
     
-    if !sw(aeg, len, false) {
-        return errno::X;
+    if !ij(buf_ptr, len, false) {
+        return errno::P;
     }
     
-    let f = unsafe { core::slice::anh(aeg as *const u8, len) };
+    let data = unsafe { core::slice::from_raw_parts(buf_ptr as *const u8, len) };
     
-    if azf != 0 && ely >= SockAddrIn::Am {
+    if addr_ptr != 0 && addr_len >= SockAddrIn::Z {
         
-        if !sw(azf, ely, false) {
-            return errno::X;
+        if !ij(addr_ptr, addr_len, false) {
+            return errno::P;
         }
-        let ag = unsafe { *(azf as *const SockAddrIn) };
-        match crate::netstack::socket::whr(da, f, flags, &ag) {
-            Ok(bo) => bo as i64,
-            Err(aa) => aa as i64,
+        let addr = unsafe { *(addr_ptr as *const SockAddrIn) };
+        match crate::netstack::socket::ooe(fd, data, flags, &addr) {
+            Ok(ae) => ae as i64,
+            Err(e) => e as i64,
         }
     } else {
         
-        match crate::netstack::socket::baq(da, f, flags) {
-            Ok(bo) => bo as i64,
-            Err(aa) => aa as i64,
+        match crate::netstack::socket::send(fd, data, flags) {
+            Ok(ae) => ae as i64,
+            Err(e) => e as i64,
         }
     }
 }
 
 
-fn pqy(da: i32, aeg: u64, len: usize, flags: u32, azf: u64, bye: u64) -> i64 {
-    if !sw(aeg, len, true) {
-        return errno::X;
+fn jkv(fd: i32, buf_ptr: u64, len: usize, flags: u32, addr_ptr: u64, addr_len_ptr: u64) -> i64 {
+    if !ij(buf_ptr, len, true) {
+        return errno::P;
     }
     
-    let k = unsafe { core::slice::bef(aeg as *mut u8, len) };
+    let buf = unsafe { core::slice::from_raw_parts_mut(buf_ptr as *mut u8, len) };
     
     
-    match crate::netstack::socket::ehf(da, k, flags) {
-        Ok(bo) => bo as i64,
-        Err(aa) => aa as i64,
+    match crate::netstack::socket::recv(fd, buf, flags) {
+        Ok(ae) => ae as i64,
+        Err(e) => e as i64,
     }
 }
 
 
-fn wzg(da: i32, xzv: i32) -> i64 {
-    match crate::netstack::socket::agj(da) {
+fn pbu(fd: i32, _how: i32) -> i64 {
+    match crate::netstack::socket::close(fd) {
         Ok(()) => 0,
-        Err(aa) => aa as i64,
+        Err(e) => e as i64,
     }
 }
 
 
-fn wyd(da: i32, azf: u64, bye: u64) -> i64 {
-    use crate::netstack::socket::{SockAddrIn, BA_};
+fn paq(fd: i32, addr_ptr: u64, addr_len_ptr: u64) -> i64 {
+    use crate::netstack::socket::{SockAddrIn, BC_};
 
-    if azf == 0 || bye == 0 {
-        return errno::X;
+    if addr_ptr == 0 || addr_len_ptr == 0 {
+        return errno::P;
     }
-    if !sw(bye, 4, true) {
-        return errno::X;
-    }
-
-    let len = unsafe { *(bye as *const u32) } as usize;
-    if len < SockAddrIn::Am || !sw(azf, SockAddrIn::Am, true) {
-        return errno::Er;
+    if !ij(addr_len_ptr, 4, true) {
+        return errno::P;
     }
 
-    let gg = BA_.lock();
-    let su = match gg.get(&da) {
-        Some(e) => e,
-        None => return errno::Fu,
+    let len = unsafe { *(addr_len_ptr as *const u32) } as usize;
+    if len < SockAddrIn::Z || !ij(addr_ptr, SockAddrIn::Z, true) {
+        return errno::Bw;
+    }
+
+    let bs = BC_.lock();
+    let ih = match bs.get(&fd) {
+        Some(j) => j,
+        None => return errno::Cp,
     };
 
-    let ag = su.ljn.age();
+    let addr = ih.local_addr.unwrap_or_default();
     unsafe {
-        *(azf as *mut SockAddrIn) = ag;
-        *(bye as *mut u32) = SockAddrIn::Am as u32;
+        *(addr_ptr as *mut SockAddrIn) = addr;
+        *(addr_len_ptr as *mut u32) = SockAddrIn::Z as u32;
     }
     0
 }
 
 
-fn wxx(da: i32, azf: u64, bye: u64) -> i64 {
-    use crate::netstack::socket::{SockAddrIn, BA_};
+fn paj(fd: i32, addr_ptr: u64, addr_len_ptr: u64) -> i64 {
+    use crate::netstack::socket::{SockAddrIn, BC_};
 
-    if azf == 0 || bye == 0 {
-        return errno::X;
+    if addr_ptr == 0 || addr_len_ptr == 0 {
+        return errno::P;
     }
-    if !sw(bye, 4, true) {
-        return errno::X;
-    }
-
-    let len = unsafe { *(bye as *const u32) } as usize;
-    if len < SockAddrIn::Am || !sw(azf, SockAddrIn::Am, true) {
-        return errno::Er;
+    if !ij(addr_len_ptr, 4, true) {
+        return errno::P;
     }
 
-    let gg = BA_.lock();
-    let su = match gg.get(&da) {
-        Some(e) => e,
-        None => return errno::Fu,
+    let len = unsafe { *(addr_len_ptr as *const u32) } as usize;
+    if len < SockAddrIn::Z || !ij(addr_ptr, SockAddrIn::Z, true) {
+        return errno::Bw;
+    }
+
+    let bs = BC_.lock();
+    let ih = match bs.get(&fd) {
+        Some(j) => j,
+        None => return errno::Cp,
     };
 
-    let ag = match su.exp {
-        Some(q) => q,
+    let addr = match ih.remote_addr {
+        Some(a) => a,
         None => return -107, 
     };
     unsafe {
-        *(azf as *mut SockAddrIn) = ag;
-        *(bye as *mut u32) = SockAddrIn::Am as u32;
+        *(addr_ptr as *mut SockAddrIn) = addr;
+        *(addr_len_ptr as *mut u32) = SockAddrIn::Z as u32;
     }
     0
 }
 
 
-fn wyw(da: i32, cax: u64, flags: u32) -> i64 {
-    if cax == 0 || !sw(cax, 56, false) {
-        return errno::X;
+fn pbk(fd: i32, msg_ptr: u64, flags: u32) -> i64 {
+    if msg_ptr == 0 || !ij(msg_ptr, 56, false) {
+        return errno::P;
     }
     
-    let lnk = unsafe { *(cax as *const u64) };
-    let baf = unsafe { *((cax + 8) as *const u32) } as usize;
-    let edr  = unsafe { *((cax + 16) as *const u64) };
-    let cyy  = unsafe { *((cax + 24) as *const u64) } as usize;
+    let gip = unsafe { *(msg_ptr as *const u64) };
+    let name_len = unsafe { *((msg_ptr + 8) as *const u32) } as usize;
+    let bto  = unsafe { *((msg_ptr + 16) as *const u64) };
+    let iov_len  = unsafe { *((msg_ptr + 24) as *const u64) } as usize;
 
-    if cyy == 0 || edr == 0 {
+    if iov_len == 0 || bto == 0 {
         return 0;
     }
     
-    if !sw(edr, 16, false) {
-        return errno::X;
+    if !ij(bto, 16, false) {
+        return errno::P;
     }
-    let ar = unsafe { *(edr as *const u64) };
-    let len  = unsafe { *((edr + 8) as *const u64) } as usize;
+    let base = unsafe { *(bto as *const u64) };
+    let len  = unsafe { *((bto + 8) as *const u64) } as usize;
 
-    pqz(da, ar, len, flags, lnk, baf)
+    jkw(fd, base, len, flags, gip, name_len)
 }
 
 
-fn wyr(da: i32, cax: u64, flags: u32) -> i64 {
-    if cax == 0 || !sw(cax, 56, true) {
-        return errno::X;
+fn pbf(fd: i32, msg_ptr: u64, flags: u32) -> i64 {
+    if msg_ptr == 0 || !ij(msg_ptr, 56, true) {
+        return errno::P;
     }
-    let lnk = unsafe { *(cax as *const u64) };
-    let urf = unsafe { (cax + 8) as u64 };
-    let edr  = unsafe { *((cax + 16) as *const u64) };
-    let cyy  = unsafe { *((cax + 24) as *const u64) } as usize;
+    let gip = unsafe { *(msg_ptr as *const u64) };
+    let nhn = unsafe { (msg_ptr + 8) as u64 };
+    let bto  = unsafe { *((msg_ptr + 16) as *const u64) };
+    let iov_len  = unsafe { *((msg_ptr + 24) as *const u64) } as usize;
 
-    if cyy == 0 || edr == 0 {
+    if iov_len == 0 || bto == 0 {
         return 0;
     }
-    if !sw(edr, 16, false) {
-        return errno::X;
+    if !ij(bto, 16, false) {
+        return errno::P;
     }
-    let ar = unsafe { *(edr as *const u64) };
-    let len  = unsafe { *((edr + 8) as *const u64) } as usize;
+    let base = unsafe { *(bto as *const u64) };
+    let len  = unsafe { *((bto + 8) as *const u64) } as usize;
 
-    pqy(da, ar, len, flags, lnk, urf)
+    jkv(fd, base, len, flags, gip, nhn)
 }
 
 
-fn wze(da: i32, jy: i32, evr: i32, ctc: u64, evq: usize) -> i64 {
-    if evq > 0 && !sw(ctc, evq, false) {
-        return errno::X;
+fn pbs(fd: i32, level: i32, optname: i32, optval: u64, cca: usize) -> i64 {
+    if cca > 0 && !ij(optval, cca, false) {
+        return errno::P;
     }
     
-    let f = if evq > 0 {
-        unsafe { core::slice::anh(ctc as *const u8, evq) }
+    let data = if cca > 0 {
+        unsafe { core::slice::from_raw_parts(optval as *const u8, cca) }
     } else {
         &[]
     };
     
-    match crate::netstack::socket::wkd(da, jy, evr, f) {
+    match crate::netstack::socket::opz(fd, level, optname, data) {
         Ok(()) => 0,
-        Err(aa) => aa as i64,
+        Err(e) => e as i64,
     }
 }
 
 
-fn wye(da: i32, jy: i32, evr: i32, ctc: u64, jhy: u64) -> i64 {
-    if ctc == 0 || jhy == 0 {
-        return errno::X;
+fn par(fd: i32, level: i32, optname: i32, optval: u64, optlen_ptr: u64) -> i64 {
+    if optval == 0 || optlen_ptr == 0 {
+        return errno::P;
     }
     
-    if !sw(jhy, 4, true) {
-        return errno::X;
+    if !ij(optlen_ptr, 4, true) {
+        return errno::P;
     }
     
-    let evq = unsafe { *(jhy as *const u32) } as usize;
+    let cca = unsafe { *(optlen_ptr as *const u32) } as usize;
     
-    if evq > 0 && !sw(ctc, evq, true) {
-        return errno::X;
+    if cca > 0 && !ij(optval, cca, true) {
+        return errno::P;
     }
     
-    let k = unsafe { core::slice::bef(ctc as *mut u8, evq) };
+    let buf = unsafe { core::slice::from_raw_parts_mut(optval as *mut u8, cca) };
     
-    match crate::netstack::socket::tfj(da, jy, evr, k) {
+    match crate::netstack::socket::meh(fd, level, optname, buf) {
         Ok(len) => {
-            unsafe { *(jhy as *mut u32) = len as u32; }
+            unsafe { *(optlen_ptr as *mut u32) = len as u32; }
             0
         }
-        Err(aa) => aa as i64,
+        Err(e) => e as i64,
     }
 }

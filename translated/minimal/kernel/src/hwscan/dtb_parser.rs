@@ -20,41 +20,41 @@ use alloc::vec::Vec;
 use alloc::format;
 
 
-const ARR_: u32 = 0x00000001;
-const ARS_: u32   = 0x00000002;
-const ARU_: u32        = 0x00000003;
-const ART_: u32         = 0x00000004;
-const ACA_: u32         = 0x00000009;
+const ATT_: u32 = 0x00000001;
+const ATU_: u32   = 0x00000002;
+const ATW_: u32        = 0x00000003;
+const ATV_: u32         = 0x00000004;
+const ADQ_: u32         = 0x00000009;
 
 
-const JZ_: u32 = 0xD00DFEED;
+const KT_: u32 = 0xD00DFEED;
 
 
 #[repr(C)]
 pub struct FdtHeader {
-    pub sj: u32,
-    pub fac: u32,
-    pub uxd: u32,
-    pub uxc: u32,
-    pub uxe: u32,
-    pub dk: u32,
-    pub uce: u32,
-    pub qqv: u32,
-    pub wpb: u32,
-    pub wpc: u32,
+    pub magic: u32,
+    pub totalsize: u32,
+    pub off_dt_struct: u32,
+    pub off_dt_strings: u32,
+    pub off_mem_rsvmap: u32,
+    pub version: u32,
+    pub last_comp_version: u32,
+    pub boot_cpuid_phys: u32,
+    pub size_dt_strings: u32,
+    pub size_dt_struct: u32,
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Bfb {
+pub struct Xz {
     
     pub path: String,
     
-    pub bjp: String,
+    pub compatible: String,
     
-    pub cbi: u64,
+    pub reg_base: u64,
     
-    pub pbi: u64,
+    pub reg_size: u64,
     
     pub interrupts: Vec<u32>,
     
@@ -63,21 +63,21 @@ pub struct Bfb {
 
 
 #[derive(Debug, Clone)]
-pub struct Bqz {
-    pub j: String,
-    pub ar: u64,
-    pub aw: u64,
-    pub uuu: bool,
+pub struct Adn {
+    pub name: String,
+    pub base: u64,
+    pub size: u64,
+    pub no_map: bool,
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Bsu {
-    pub ar: u64,
-    pub aw: u64,
-    pub z: u32,
-    pub ac: u32,
-    pub oq: u32,
+pub struct Aew {
+    pub base: u64,
+    pub size: u64,
+    pub width: u32,
+    pub height: u32,
+    pub stride: u32,
     pub format: String,
 }
 
@@ -87,78 +87,78 @@ pub struct ParsedDtb {
     
     pub model: String,
     
-    pub bjp: Vec<String>,
+    pub compatible: Vec<String>,
     
     pub memory: Vec<(u64, u64)>,
     
-    pub ibu: String,
+    pub stdout_path: String,
     
-    pub cnl: u64,
+    pub uart_base: u64,
     
-    pub ik: Vec<Bfb>,
+    pub devices: Vec<Xz>,
     
-    pub awt: Vec<Bqz>,
+    pub reserved: Vec<Adn>,
     
-    pub jql: Option<Bsu>,
+    pub simplefb: Option<Aew>,
     
-    pub dgv: u32,
+    pub dtb_size: u32,
     
-    pub fpb: u32,
+    pub node_count: u32,
     
-    pub haz: String,
+    pub bootargs: String,
 }
 
 impl ParsedDtb {
     pub fn new() -> Self {
         Self {
             model: String::new(),
-            bjp: Vec::new(),
+            compatible: Vec::new(),
             memory: Vec::new(),
-            ibu: String::new(),
-            cnl: 0,
-            ik: Vec::new(),
-            awt: Vec::new(),
-            jql: None,
-            dgv: 0,
-            fpb: 0,
-            haz: String::new(),
+            stdout_path: String::new(),
+            uart_base: 0,
+            devices: Vec::new(),
+            reserved: Vec::new(),
+            simplefb: None,
+            dtb_size: 0,
+            node_count: 0,
+            bootargs: String::new(),
         }
     }
 }
 
 
-unsafe fn btj(ptr: *const u8) -> u32 {
-    let o = core::slice::anh(ptr, 4);
-    u32::oa([o[0], o[1], o[2], o[3]])
+unsafe fn aky(ptr: *const u8) -> u32 {
+    let b = core::slice::from_raw_parts(ptr, 4);
+    u32::from_be_bytes([b[0], b[1], b[2], b[3]])
 }
 
 
-unsafe fn myi(ptr: *const u8) -> u64 {
-    let gd = btj(ptr) as u64;
-    let hh = btj(ptr.add(4)) as u64;
-    (gd << 32) | hh
+unsafe fn hha(ptr: *const u8) -> u64 {
+    let hi = aky(ptr) as u64;
+    let lo = aky(ptr.add(4)) as u64;
+    (hi << 32) | lo
 }
 
 
-unsafe fn exf(ptr: *const u8, am: usize) -> String {
+unsafe fn cdb(ptr: *const u8, max: usize) -> String {
     let mut len = 0;
-    while len < am && *ptr.add(len) != 0 {
+    while len < max && *ptr.add(len) != 0 {
         len += 1;
     }
-    let bf = core::slice::anh(ptr, len);
-    String::azw(bf).bkc()
+    let bytes = core::slice::from_raw_parts(ptr, len);
+    String::from_utf8_lossy(bytes).into_owned()
 }
 
 
-fn mun(l: u32) -> u32 {
-    (l + 3) & !3
+fn hek(offset: u32) -> u32 {
+    (offset + 3) & !3
 }
 
 
-fn veg(j: &str) -> Option<u64> {
-    if let Some(ikc) = j.du('@') {
-        let tok = &j[ikc + 1..];
-        u64::wa(tok, 16).bq()
+fn nrl(name: &str) -> Option<u64> {
+    if let Some(at_pos) = name.find('@') {
+        let mlb = &name[at_pos + 1..];
+        u64::from_str_radix(mlb, 16).ok()
     } else {
         None
     }
@@ -168,245 +168,245 @@ fn veg(j: &str) -> Option<u64> {
 
 
 
-pub unsafe fn jis(ceg: *const u8) -> Option<ParsedDtb> {
-    if ceg.abq() {
+pub unsafe fn ewg(dtb_ptr: *const u8) -> Option<ParsedDtb> {
+    if dtb_ptr.is_null() {
         return None;
     }
 
     
-    let sj = btj(ceg);
-    if sj != JZ_ {
+    let magic = aky(dtb_ptr);
+    if magic != KT_ {
         return None;
     }
 
-    let fac = btj(ceg.add(4));
-    let lpv = btj(ceg.add(8));
-    let osd = btj(ceg.add(12));
+    let totalsize = aky(dtb_ptr.add(4));
+    let gkl = aky(dtb_ptr.add(8));
+    let irz = aky(dtb_ptr.add(12));
 
     
-    if fac > 16 * 1024 * 1024 || lpv >= fac || osd >= fac {
+    if totalsize > 16 * 1024 * 1024 || gkl >= totalsize || irz >= totalsize {
         return None;
     }
 
-    let ibz = ceg.add(lpv as usize);
-    let wvc = ceg.add(osd as usize);
+    let ean = dtb_ptr.add(gkl as usize);
+    let oye = dtb_ptr.add(irz as usize);
 
     let mut result = ParsedDtb::new();
-    result.dgv = fac;
+    result.dtb_size = totalsize;
 
     
-    let mut l: u32 = 0;
-    let llb = fac - lpv;
-    let mut goy: Vec<String> = Vec::new();
-    let mut rp = String::new();
+    let mut offset: u32 = 0;
+    let ggy = totalsize - gkl;
+    let mut dci: Vec<String> = Vec::new();
+    let mut ht = String::new();
 
     
-    let mut ipv = String::new();
-    let mut dfi: u64 = 0;
-    let mut dpi: u64 = 0;
-    let mut kmp = String::from("okay");
-    let mut kmn: Vec<u32> = Vec::new();
-    let mut ldv = false;
-    let mut odv = false;
-    let mut izq = false;
-    let mut esl = false;
+    let mut ejh = String::new();
+    let mut bfq: u64 = 0;
+    let mut blk: u64 = 0;
+    let mut fpl = String::from("okay");
+    let mut fpj: Vec<u32> = Vec::new();
+    let mut gcg = false;
+    let mut ige = false;
+    let mut eqh = false;
+    let mut cas = false;
 
     
-    let mut jpm: u64 = 0;
-    let mut jpn: u64 = 0;
-    let mut mfg: u32 = 0;
-    let mut mff: u32 = 0;
-    let mut pju: u32 = 0;
-    let mut pjt = String::new();
+    let mut fak: u64 = 0;
+    let mut fal: u64 = 0;
+    let mut gup: u32 = 0;
+    let mut guo: u32 = 0;
+    let mut jfu: u32 = 0;
+    let mut jft = String::new();
 
     
-    let mut jzl: u32 = 2;
-    let mut pld: u32 = 1;
+    let mut fgg: u32 = 2;
+    let mut jgl: u32 = 1;
 
-    while l + 4 <= llb {
-        let bat = btj(ibz.add(l as usize));
-        l += 4;
+    while offset + 4 <= ggy {
+        let abm = aky(ean.add(offset as usize));
+        offset += 4;
 
-        match bat {
-            ARR_ => {
-                let j = exf(ibz.add(l as usize), 256);
-                let baf = j.len() as u32 + 1; 
-                l = mun(l + baf);
+        match abm {
+            ATT_ => {
+                let name = cdb(ean.add(offset as usize), 256);
+                let name_len = name.len() as u32 + 1; 
+                offset = hek(offset + name_len);
 
                 
-                if j.is_empty() {
-                    rp = String::from("/");
+                if name.is_empty() {
+                    ht = String::from("/");
                 } else {
-                    if rp == "/" {
-                        rp = format!("/{}", j);
+                    if ht == "/" {
+                        ht = format!("/{}", name);
                     } else {
-                        rp = format!("{}/{}", rp, j);
+                        ht = format!("{}/{}", ht, name);
                     }
                 }
-                goy.push(rp.clone());
-                result.fpb += 1;
+                dci.push(ht.clone());
+                result.node_count += 1;
 
                 
-                ipv = String::new();
-                dfi = 0;
-                dpi = 0;
-                kmp = String::from("okay");
-                kmn = Vec::new();
+                ejh = String::new();
+                bfq = 0;
+                blk = 0;
+                fpl = String::from("okay");
+                fpj = Vec::new();
 
                 
-                ldv = j.cj("memory");
-                izq = j == "chosen";
-                odv = j == "reserved-memory" || rp.contains("/reserved-memory/");
-                esl = j.contains("framebuffer") || j.contains("simple-framebuffer");
+                gcg = name.starts_with("memory");
+                eqh = name == "chosen";
+                ige = name == "reserved-memory" || ht.contains("/reserved-memory/");
+                cas = name.contains("framebuffer") || name.contains("simple-framebuffer");
             }
 
-            ARS_ => {
+            ATU_ => {
                 
-                let txf = dfi != 0 || dpi != 0;
+                let msi = bfq != 0 || blk != 0;
 
-                if ldv && (dfi != 0 || dpi != 0) {
-                    result.memory.push((dfi, dpi));
-                } else if odv && !rp.pp("reserved-memory") && dfi != 0 {
-                    result.awt.push(Bqz {
-                        j: goy.qv().abn().age(),
-                        ar: dfi,
-                        aw: dpi,
-                        uuu: false, 
+                if gcg && (bfq != 0 || blk != 0) {
+                    result.memory.push((bfq, blk));
+                } else if ige && !ht.ends_with("reserved-memory") && bfq != 0 {
+                    result.reserved.push(Adn {
+                        name: dci.last().cloned().unwrap_or_default(),
+                        base: bfq,
+                        size: blk,
+                        no_map: false, 
                     });
-                } else if esl {
-                    if jpm == 0 { jpm = dfi; }
-                    if jpn == 0 { jpn = dpi; }
-                    if mfg > 0 && mff > 0 {
-                        result.jql = Some(Bsu {
-                            ar: jpm,
-                            aw: jpn,
-                            z: mfg,
-                            ac: mff,
-                            oq: pju,
-                            format: pjt.clone(),
+                } else if cas {
+                    if fak == 0 { fak = bfq; }
+                    if fal == 0 { fal = blk; }
+                    if gup > 0 && guo > 0 {
+                        result.simplefb = Some(Aew {
+                            base: fak,
+                            size: fal,
+                            width: gup,
+                            height: guo,
+                            stride: jfu,
+                            format: jft.clone(),
                         });
                     }
-                    esl = false;
-                } else if txf && !ipv.is_empty() {
-                    result.ik.push(Bfb {
-                        path: rp.clone(),
-                        bjp: ipv.clone(),
-                        cbi: dfi,
-                        pbi: dpi,
-                        interrupts: kmn.clone(),
-                        status: kmp.clone(),
+                    cas = false;
+                } else if msi && !ejh.is_empty() {
+                    result.devices.push(Xz {
+                        path: ht.clone(),
+                        compatible: ejh.clone(),
+                        reg_base: bfq,
+                        reg_size: blk,
+                        interrupts: fpj.clone(),
+                        status: fpl.clone(),
                     });
                 }
 
                 
-                goy.pop();
-                rp = goy.qv().abn().unwrap_or(String::from("/"));
-                ldv = false;
-                izq = rp.contains("chosen");
+                dci.pop();
+                ht = dci.last().cloned().unwrap_or(String::from("/"));
+                gcg = false;
+                eqh = ht.contains("chosen");
             }
 
-            ARU_ => {
-                if l + 8 > llb { break; }
-                let brt = btj(ibz.add(l as usize));
-                let lnj = btj(ibz.add(l as usize + 4));
-                l += 8;
+            ATW_ => {
+                if offset + 8 > ggy { break; }
+                let aki = aky(ean.add(offset as usize));
+                let gio = aky(ean.add(offset as usize + 4));
+                offset += 8;
 
-                let vnh = exf(wvc.add(lnj as usize), 128);
-                let bwd = ibz.add(l as usize);
-                l = mun(l + brt);
+                let nyw = cdb(oye.add(gio as usize), 128);
+                let ami = ean.add(offset as usize);
+                offset = hek(offset + aki);
 
                 
-                match vnh.as_str() {
-                    "model" if goy.len() <= 1 => {
-                        result.model = exf(bwd, brt as usize);
+                match nyw.as_str() {
+                    "model" if dci.len() <= 1 => {
+                        result.model = cdb(ami, aki as usize);
                     }
                     "compatible" => {
-                        let rmw = exf(bwd, brt as usize);
-                        if goy.len() <= 1 {
+                        let kwc = cdb(ami, aki as usize);
+                        if dci.len() <= 1 {
                             
-                            let bf = core::slice::anh(bwd, brt as usize);
-                            for jj in bf.adk(|&o| o == 0) {
-                                if !jj.is_empty() {
-                                    result.bjp.push(String::azw(jj).bkc());
+                            let bytes = core::slice::from_raw_parts(ami, aki as usize);
+                            for df in bytes.split(|&b| b == 0) {
+                                if !df.is_empty() {
+                                    result.compatible.push(String::from_utf8_lossy(df).into_owned());
                                 }
                             }
                         }
-                        ipv = rmw;
+                        ejh = kwc;
                     }
                     "reg" => {
                         
-                        if brt >= 4 {
-                            if jzl == 2 && brt >= 8 {
-                                dfi = myi(bwd);
+                        if aki >= 4 {
+                            if fgg == 2 && aki >= 8 {
+                                bfq = hha(ami);
                             } else {
-                                dfi = btj(bwd) as u64;
+                                bfq = aky(ami) as u64;
                             }
 
-                            let cmv = (jzl * 4) as usize;
-                            if (cmv + 4) <= brt as usize {
-                                if pld == 2 && (cmv + 8) <= brt as usize {
-                                    dpi = myi(bwd.add(cmv));
+                            let avc = (fgg * 4) as usize;
+                            if (avc + 4) <= aki as usize {
+                                if jgl == 2 && (avc + 8) <= aki as usize {
+                                    blk = hha(ami.add(avc));
                                 } else {
-                                    dpi = btj(bwd.add(cmv)) as u64;
+                                    blk = aky(ami.add(avc)) as u64;
                                 }
                             }
                         }
 
                         
-                        if esl {
-                            jpm = dfi;
-                            jpn = dpi;
+                        if cas {
+                            fak = bfq;
+                            fal = blk;
                         }
                     }
                     "#address-cells" => {
-                        if brt >= 4 {
-                            jzl = btj(bwd);
+                        if aki >= 4 {
+                            fgg = aky(ami);
                         }
                     }
                     "#size-cells" => {
-                        if brt >= 4 {
-                            pld = btj(bwd);
+                        if aki >= 4 {
+                            jgl = aky(ami);
                         }
                     }
                     "status" => {
-                        kmp = exf(bwd, brt as usize);
+                        fpl = cdb(ami, aki as usize);
                     }
                     "interrupts" | "interrupts-extended" => {
-                        let az = brt / 4;
-                        for a in 0..az {
-                            kmn.push(btj(bwd.add(a as usize * 4)));
+                        let count = aki / 4;
+                        for i in 0..count {
+                            fpj.push(aky(ami.add(i as usize * 4)));
                         }
                     }
-                    "stdout-path" if izq => {
-                        result.ibu = exf(bwd, brt as usize);
+                    "stdout-path" if eqh => {
+                        result.stdout_path = cdb(ami, aki as usize);
                         
                         
-                        if let Some(ag) = veg(&result.ibu) {
-                            result.cnl = ag;
+                        if let Some(addr) = nrl(&result.stdout_path) {
+                            result.uart_base = addr;
                         }
                     }
-                    "bootargs" if izq => {
-                        result.haz = exf(bwd, brt as usize);
+                    "bootargs" if eqh => {
+                        result.bootargs = cdb(ami, aki as usize);
                     }
                     
-                    "width" if esl => {
-                        if brt >= 4 { mfg = btj(bwd); }
+                    "width" if cas => {
+                        if aki >= 4 { gup = aky(ami); }
                     }
-                    "height" if esl => {
-                        if brt >= 4 { mff = btj(bwd); }
+                    "height" if cas => {
+                        if aki >= 4 { guo = aky(ami); }
                     }
-                    "stride" if esl => {
-                        if brt >= 4 { pju = btj(bwd); }
+                    "stride" if cas => {
+                        if aki >= 4 { jfu = aky(ami); }
                     }
-                    "format" if esl => {
-                        pjt = exf(bwd, brt as usize);
+                    "format" if cas => {
+                        jft = cdb(ami, aki as usize);
                     }
                     _ => {}
                 }
             }
 
-            ART_ => {  }
-            ACA_ => break,
+            ATV_ => {  }
+            ADQ_ => break,
             _ => {
                 
                 break;
@@ -414,7 +414,7 @@ pub unsafe fn jis(ceg: *const u8) -> Option<ParsedDtb> {
         }
 
         
-        if l > llb {
+        if offset > ggy {
             break;
         }
     }
@@ -423,82 +423,82 @@ pub unsafe fn jis(ceg: *const u8) -> Option<ParsedDtb> {
 }
 
 
-pub fn nvp(azq: &ParsedDtb) -> String {
-    let mut bd = String::new();
+pub fn hzo(dtb: &ParsedDtb) -> String {
+    let mut out = String::new();
 
-    bd.t("\x01C== Device Tree Blob (DTB) Report ==\x01W\n\n");
-    bd.t(&format!("Model: {}\n", if azq.model.is_empty() { "(unknown)" } else { &azq.model }));
+    out.push_str("\x01C== Device Tree Blob (DTB) Report ==\x01W\n\n");
+    out.push_str(&format!("Model: {}\n", if dtb.model.is_empty() { "(unknown)" } else { &dtb.model }));
 
-    if !azq.bjp.is_empty() {
-        bd.t("Compatible: ");
-        for (a, r) in azq.bjp.iter().cf() {
-            if a > 0 { bd.t(", "); }
-            bd.t(r);
+    if !dtb.compatible.is_empty() {
+        out.push_str("Compatible: ");
+        for (i, c) in dtb.compatible.iter().enumerate() {
+            if i > 0 { out.push_str(", "); }
+            out.push_str(c);
         }
-        bd.push('\n');
+        out.push('\n');
     }
 
-    bd.t(&format!("DTB size: {} bytes  |  {} nodes parsed\n", azq.dgv, azq.fpb));
+    out.push_str(&format!("DTB size: {} bytes  |  {} nodes parsed\n", dtb.dtb_size, dtb.node_count));
 
-    if !azq.haz.is_empty() {
-        bd.t(&format!("Bootargs: {}\n", azq.haz));
+    if !dtb.bootargs.is_empty() {
+        out.push_str(&format!("Bootargs: {}\n", dtb.bootargs));
     }
-    if !azq.ibu.is_empty() {
-        bd.t(&format!("Console: {} (UART @ 0x{:X})\n", azq.ibu, azq.cnl));
+    if !dtb.stdout_path.is_empty() {
+        out.push_str(&format!("Console: {} (UART @ 0x{:X})\n", dtb.stdout_path, dtb.uart_base));
     }
 
     
-    if !azq.memory.is_empty() {
-        bd.t("\n\x01Y--- Physical Memory ---\x01W\n");
-        for (ar, aw) in &azq.memory {
-            let csm = aw / (1024 * 1024);
-            bd.t(&format!("  0x{:010X} - 0x{:010X}  ({} MB)\n", ar, ar + aw, csm));
+    if !dtb.memory.is_empty() {
+        out.push_str("\n\x01Y--- Physical Memory ---\x01W\n");
+        for (base, size) in &dtb.memory {
+            let aop = size / (1024 * 1024);
+            out.push_str(&format!("  0x{:010X} - 0x{:010X}  ({} MB)\n", base, base + size, aop));
         }
     }
 
     
-    if !azq.awt.is_empty() {
-        bd.t("\n\x01R--- Reserved Memory (Firmware / TrustZone) ---\x01W\n");
-        for m in &azq.awt {
-            let cfv = m.aw / 1024;
-            bd.t(&format!("  0x{:010X} - 0x{:010X}  ({:>6} KB) {}\n",
-                m.ar, m.ar + m.aw, cfv, m.j));
+    if !dtb.reserved.is_empty() {
+        out.push_str("\n\x01R--- Reserved Memory (Firmware / TrustZone) ---\x01W\n");
+        for r in &dtb.reserved {
+            let arh = r.size / 1024;
+            out.push_str(&format!("  0x{:010X} - 0x{:010X}  ({:>6} KB) {}\n",
+                r.base, r.base + r.size, arh, r.name));
         }
-        bd.t(&format!("  Total reserved: {} regions\n", azq.awt.len()));
+        out.push_str(&format!("  Total reserved: {} regions\n", dtb.reserved.len()));
     }
 
     
-    if let Some(ref bxc) = azq.jql {
-        bd.t("\n\x01G--- SimpleFB Framebuffer ---\x01W\n");
-        bd.t(&format!("  Base: 0x{:010X}  Size: {} bytes\n", bxc.ar, bxc.aw));
-        bd.t(&format!("  Resolution: {}x{}  Stride: {}  Format: {}\n",
-            bxc.z, bxc.ac, bxc.oq, bxc.format));
+    if let Some(ref sfb) = dtb.simplefb {
+        out.push_str("\n\x01G--- SimpleFB Framebuffer ---\x01W\n");
+        out.push_str(&format!("  Base: 0x{:010X}  Size: {} bytes\n", sfb.base, sfb.size));
+        out.push_str(&format!("  Resolution: {}x{}  Stride: {}  Format: {}\n",
+            sfb.width, sfb.height, sfb.stride, sfb.format));
     }
 
     
-    if !azq.ik.is_empty() {
-        bd.t("\n\x01Y--- Discovered Peripherals ---\x01W\n");
-        bd.t(&format!("{:<40} {:<14} {:<10} {}\n",
+    if !dtb.devices.is_empty() {
+        out.push_str("\n\x01Y--- Discovered Peripherals ---\x01W\n");
+        out.push_str(&format!("{:<40} {:<14} {:<10} {}\n",
             "PATH", "REG BASE", "SIZE", "COMPATIBLE"));
-        bd.t(&format!("{}\n", "-".afd(90)));
+        out.push_str(&format!("{}\n", "-".repeat(90)));
 
-        for ba in &azq.ik {
-            let mhn = match ba.status.as_str() {
+        for s in &dtb.devices {
+            let gwf = match s.status.as_str() {
                 "okay" | "ok" => "\x01G",
                 "disabled" => "\x01R",
                 _ => "\x01Y",
             };
-            bd.t(&format!("{}{:<40}\x01W 0x{:010X}  {:<10} {}\n",
-                mhn,
-                if ba.path.len() > 39 { &ba.path[ba.path.len()-39..] } else { &ba.path },
-                ba.cbi,
-                format!("0x{:X}", ba.pbi),
-                ba.bjp));
+            out.push_str(&format!("{}{:<40}\x01W 0x{:010X}  {:<10} {}\n",
+                gwf,
+                if s.path.len() > 39 { &s.path[s.path.len()-39..] } else { &s.path },
+                s.reg_base,
+                format!("0x{:X}", s.reg_size),
+                s.compatible));
         }
-        bd.t(&format!("\nTotal: {} devices ({} enabled)\n",
-            azq.ik.len(),
-            azq.ik.iter().hi(|bc| bc.status == "okay" || bc.status == "ok").az()));
+        out.push_str(&format!("\nTotal: {} devices ({} enabled)\n",
+            dtb.devices.len(),
+            dtb.devices.iter().filter(|d| d.status == "okay" || d.status == "ok").count()));
     }
 
-    bd
+    out
 }

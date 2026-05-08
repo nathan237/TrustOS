@@ -113,8 +113,8 @@ impl Scheduler {
         self.tasks.make_contiguous().sort_by(|a, b| b.priority.cmp(&a.priority));
         
         // Find first ready task
-        if let Some(index) = self.tasks.iter().position(|t| t.state == TaskState::Ready) {
-            if let Some(mut task) = self.tasks.remove(index) {
+        if let Some(idx) = self.tasks.iter().position(|t| t.state == TaskState::Ready) {
+            if let Some(mut task) = self.tasks.remove(idx) {
                 self.current_task_id = Some(task.id);
                 task.run();
                 self.current_task_id = None;

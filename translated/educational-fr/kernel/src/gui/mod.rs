@@ -25,6 +25,6 @@ pub fn init() {
 }
 
 // Fonction publique — appelable depuis d'autres modules.
-pub fn get_framebuffer_address() -> u64 {
+pub fn get_framebuffer_addr() -> u64 {
     crate::framebuffer::get_framebuffer_address() as u64
 }

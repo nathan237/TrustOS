@@ -23,17 +23,17 @@ use super::SandboxId;
 // Structure publique — visible à l'extérieur de ce module.
 pub struct JsSandboxConfig {
     /// Max execution time in milliseconds (0 = no limit)
-    pub timeout_mouse: u64,
+    pub timeout_ms: u64,
     /// Max call stack depth
-    pub maximum_stack_depth: usize,
+    pub max_stack_depth: usize,
     /// Max string length (prevent memory bombs)
-    pub maximum_string_length: usize,
+    pub max_string_length: usize,
     /// Max array length
-    pub maximum_array_length: usize,
+    pub max_array_length: usize,
     /// Max object properties
-    pub maximum_object_props: usize,
+    pub max_object_props: usize,
     /// Max total allocations in bytes
-    pub maximum_memory_bytes: usize,
+    pub max_memory_bytes: usize,
     /// Allow console.log output
     pub allow_console: bool,
     /// Allow setTimeout/setInterval  
@@ -48,12 +48,12 @@ pub struct JsSandboxConfig {
 impl Default for JsSandboxConfig {
     fn default() -> Self {
         Self {
-            timeout_mouse: 5000,          // 5 seconds max
-            maximum_stack_depth: 64,
-            maximum_string_length: 65536,  // 64 KB per string
-            maximum_array_length: 4096,
-            maximum_object_props: 256,
-            maximum_memory_bytes: 1024 * 1024, // 1 MB total
+            timeout_ms: 5000,          // 5 seconds max
+            max_stack_depth: 64,
+            max_string_length: 65536,  // 64 KB per string
+            max_array_length: 4096,
+            max_object_props: 256,
+            max_memory_bytes: 1024 * 1024, // 1 MB total
             allow_console: true,
             allow_timers: false,       // no async in bare-metal context
             allow_network: false,      // must go through sandbox proxy
@@ -118,12 +118,12 @@ pub fn scan_for_threats(code: &str) -> Vec<String> {
     }
 
     // Check for deeply nested structures (parse bomb)
-    let maximum_nesting = code.chars().fold((0i32, 0i32), |(depth, maximum), c| {
+    let maximum_nesting = code.chars().fold((0i32, 0i32), |(depth, max), c| {
                 // Correspondance de motifs — branchement exhaustif de Rust.
 match c {
-            '{' | '[' | '(' => (depth + 1, core::cmp::maximum(maximum, depth + 1)),
-            '}' | ']' | ')' => (depth - 1, maximum),
-            _ => (depth, maximum),
+            '{' | '[' | '(' => (depth + 1, core::cmp::max(max, depth + 1)),
+            '}' | ']' | ')' => (depth - 1, max),
+            _ => (depth, max),
         }
     }).1;
     if maximum_nesting > 32 {
@@ -148,7 +148,7 @@ pub struct JsExecuteResult {
     /// Error message if failed
     pub error: Option<String>,
     /// Execution time in ms
-    pub elapsed_mouse: u64,
+    pub elapsed_ms: u64,
 }
 
 /// Sandboxed JS execution environment
@@ -160,7 +160,7 @@ pub struct JsSandbox {
     /// Console output buffer
     pub console_buffer: Vec<String>,
     /// Total executions
-    pub execute_count: usize,
+    pub exec_count: usize,
     /// Total blocked attempts
     pub blocked_count: usize,
 }
@@ -174,7 +174,7 @@ pub fn new(sandbox_id: SandboxId, config: JsSandboxConfig) -> Self {
             config,
             persistent_vars: BTreeMap::new(),
             console_buffer: Vec::new(),
-            execute_count: 0,
+            exec_count: 0,
             blocked_count: 0,
         }
     }
@@ -182,7 +182,7 @@ pub fn new(sandbox_id: SandboxId, config: JsSandboxConfig) -> Self {
     /// Execute JavaScript code in the sandbox.
     /// Returns execution result with output and return value.
     pub fn execute(&mut self, code: &str) -> JsExecuteResult {
-        self.execute_count += 1;
+        self.exec_count += 1;
 
         // Step 1: Static analysis — scan for threats
         let threats = scan_for_threats(code);
@@ -199,23 +199,23 @@ pub fn new(sandbox_id: SandboxId, config: JsSandboxConfig) -> Self {
                 completed: false,
                 error: Some(format!("Security: {} threat(s) detected: {}", 
                     threats.len(), threats.first().unwrap_or(&String::new()))),
-                elapsed_mouse: 0,
+                elapsed_ms: 0,
             };
         }
 
         // Step 2: Execute using the kernel's JS engine with restricted context
-        let start = crate::time::uptime_mouse();
+        let start = crate::time::uptime_ms();
 
         // Create a restricted JS context
-        let mut context = crate::browser::js_engine::JsContext::new();
+        let mut ctx = crate::browser::js_engine::JsContext::new();
 
         // Execute the code
-        let result = context.execute(code);
+        let result = ctx.execute(code);
 
-        let elapsed = crate::time::uptime_mouse().saturating_sub(start);
+        let elapsed = crate::time::uptime_ms().saturating_sub(start);
 
         // Collect console output
-        let output: Vec<String> = context.console_output.iter()
+        let output: Vec<String> = ctx.console_output.iter()
             .map(|s| s.clone())
             .collect();
         
@@ -229,19 +229,19 @@ pub fn new(sandbox_id: SandboxId, config: JsSandboxConfig) -> Self {
         }
 
         // Check timeout
-        if elapsed > self.config.timeout_mouse && self.config.timeout_mouse > 0 {
+        if elapsed > self.config.timeout_ms && self.config.timeout_ms > 0 {
             return JsExecuteResult {
                 output,
                 return_value: String::from("undefined"),
                 completed: false,
-                error: Some(format!("Timeout: execution exceeded {}ms limit", self.config.timeout_mouse)),
-                elapsed_mouse: elapsed,
+                error: Some(format!("Timeout: execution exceeded {}ms limit", self.config.timeout_ms)),
+                elapsed_ms: elapsed,
             };
         }
 
         let return_str = // Correspondance de motifs — branchement exhaustif de Rust.
 match &result {
-            Ok(value) => value.to_string(),
+            Ok(val) => val.to_string(),
             Err(e) => format!("Error: {}", e),
         };
 
@@ -250,7 +250,7 @@ match &result {
             return_value: return_str.clone(),
             completed: result.is_ok(),
             error: if result.is_err() { Some(return_str) } else { None },
-            elapsed_mouse: elapsed,
+            elapsed_ms: elapsed,
         }
     }
 
@@ -265,14 +265,14 @@ loop {
             let lower = html[search_from..].to_ascii_lowercase();
             let start_tag = // Correspondance de motifs — branchement exhaustif de Rust.
 match lower.find("<script") {
-                Some(position) => position + search_from,
+                Some(pos) => pos + search_from,
                 None => break,
             };
 
             // Find end of opening tag
             let content_start = // Correspondance de motifs — branchement exhaustif de Rust.
 match html[start_tag..].find('>') {
-                Some(position) => start_tag + position + 1,
+                Some(pos) => start_tag + pos + 1,
                 None => break,
             };
 
@@ -287,7 +287,7 @@ match html[start_tag..].find('>') {
             // Find closing </script>
             let end_tag = // Correspondance de motifs — branchement exhaustif de Rust.
 match html[content_start..].to_ascii_lowercase().find("</script>") {
-                Some(position) => content_start + position,
+                Some(pos) => content_start + pos,
                 None => break,
             };
 
@@ -315,6 +315,6 @@ match html[content_start..].to_ascii_lowercase().find("</script>") {
 
     /// Get execution statistics
     pub fn stats(&self) -> (usize, usize) {
-        (self.execute_count, self.blocked_count)
+        (self.exec_count, self.blocked_count)
     }
 }

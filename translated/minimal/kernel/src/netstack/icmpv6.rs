@@ -15,52 +15,52 @@ use super::ipv6::{self, Ipv6Address, next_header};
 
 pub mod icmpv6_type {
     
-    pub const DJE_: u8 = 1;
-    pub const DYL_: u8 = 2;
-    pub const EIA_: u8 = 3;
+    pub const DMT_: u8 = 1;
+    pub const ECC_: u8 = 2;
+    pub const ELR_: u8 = 3;
 
     
-    pub const BSX_: u8 = 128;
-    pub const AQZ_: u8 = 129;
+    pub const BVT_: u8 = 128;
+    pub const ATC_: u8 = 129;
 
     
-    pub const CPC_: u8 = 133;
-    pub const CPB_: u8 = 134;
-    pub const BBG_: u8 = 135;
-    pub const BBE_: u8 = 136;
+    pub const CSR_: u8 = 133;
+    pub const CSQ_: u8 = 134;
+    pub const BDJ_: u8 = 135;
+    pub const BDH_: u8 = 136;
 }
 
 
 pub mod ndp_option {
-    pub const XG_: u8 = 1;
-    pub const BGY_: u8 = 2;
-    pub const CKT_: u8 = 3;
-    pub const Che: u8 = 5;
+    pub const YN_: u8 = 1;
+    pub const BJC_: u8 = 2;
+    pub const COC_: u8 = 3;
+    pub const Amr: u8 = 5;
 }
 
 
 #[derive(Clone)]
-struct Bne {
-    ed: [u8; 6],
-    #[allow(bgr)]
-    aea: u64,
+struct Abq {
+    mac: [u8; 6],
+    #[allow(dead_code)]
+    timestamp: u64,
 }
 
 
-static BBF_: Mutex<BTreeMap<[u8; 16], Bne>> = Mutex::new(BTreeMap::new());
+static BDI_: Mutex<BTreeMap<[u8; 16], Abq>> = Mutex::new(BTreeMap::new());
 
 
-pub fn uih(ag: Ipv6Address) -> Option<[u8; 6]> {
-    BBF_.lock().get(&ag.0).map(|aa| aa.ed)
+pub fn nar(addr: Ipv6Address) -> Option<[u8; 6]> {
+    BDI_.lock().get(&addr.0).map(|e| e.mac)
 }
 
 
-fn kfy(ag: Ipv6Address, ed: [u8; 6]) {
-    let bt = Bne {
-        ed,
-        aea: crate::logger::lh(),
+fn fkn(addr: Ipv6Address, mac: [u8; 6]) {
+    let entry = Abq {
+        mac,
+        timestamp: crate::logger::eg(),
     };
-    BBF_.lock().insert(ag.0, bt);
+    BDI_.lock().insert(addr.0, entry);
 }
 
 
@@ -68,31 +68,31 @@ fn kfy(ag: Ipv6Address, ed: [u8; 6]) {
 
 
 
-pub fn bur(cy: Ipv6Address, cs: Ipv6Address, f: &[u8]) {
-    if f.len() < 4 { return; } 
+pub fn alq(src: Ipv6Address, dst: Ipv6Address, data: &[u8]) {
+    if data.len() < 4 { return; } 
 
-    let msg_type = f[0];
-    let xyi = f[1];
+    let msg_type = data[0];
+    let pwu = data[1];
     
 
     match msg_type {
-        icmpv6_type::BSX_ => {
-            tjk(cy, cs, f);
+        icmpv6_type::BVT_ => {
+            mhq(src, dst, data);
         }
-        icmpv6_type::AQZ_ => {
-            tjj(cy, f);
+        icmpv6_type::ATC_ => {
+            mhp(src, data);
         }
-        icmpv6_type::BBG_ => {
-            tkl(cy, f);
+        icmpv6_type::BDJ_ => {
+            mic(src, data);
         }
-        icmpv6_type::BBE_ => {
-            tkk(cy, f);
+        icmpv6_type::BDH_ => {
+            mib(src, data);
         }
-        icmpv6_type::CPB_ => {
-            tkt(cy, f);
+        icmpv6_type::CSQ_ => {
+            mih(src, data);
         }
         _ => {
-            crate::serial_println!("[ICMPv6] Unknown type {} from {}", msg_type, cy);
+            crate::serial_println!("[ICMPv6] Unknown type {} from {}", msg_type, src);
         }
     }
 }
@@ -101,86 +101,86 @@ pub fn bur(cy: Ipv6Address, cs: Ipv6Address, f: &[u8]) {
 
 
 
-fn tjk(cy: Ipv6Address, xyw: Ipv6Address, f: &[u8]) {
-    if f.len() < 8 { return; }
+fn mhq(src: Ipv6Address, _dst: Ipv6Address, data: &[u8]) {
+    if data.len() < 8 { return; }
 
-    crate::serial_println!("[ICMPv6] Echo Request from {}", cy);
+    crate::serial_println!("[ICMPv6] Echo Request from {}", src);
 
-    let bvt = ipv6::jdo();
-
-    
-    let mut ehp = Vec::fc(f.len());
-    ehp.push(icmpv6_type::AQZ_);
-    ehp.push(0); 
-    ehp.push(0); ehp.push(0); 
-    ehp.bk(&f[4..]); 
+    let amc = ipv6::esz();
 
     
-    let td = ipv6::izf(&bvt, &cy, &ehp);
-    ehp[2] = (td >> 8) as u8;
-    ehp[3] = (td & 0xFF) as u8;
+    let mut bvj = Vec::with_capacity(data.len());
+    bvj.push(icmpv6_type::ATC_);
+    bvj.push(0); 
+    bvj.push(0); bvj.push(0); 
+    bvj.extend_from_slice(&data[4..]); 
 
-    let _ = ipv6::blc(cy, next_header::Xb, &ehp);
+    
+    let ig = ipv6::epz(&amc, &src, &bvj);
+    bvj[2] = (ig >> 8) as u8;
+    bvj[3] = (ig & 0xFF) as u8;
+
+    let _ = ipv6::aha(src, next_header::Ka, &bvj);
 }
 
-fn tjj(cy: Ipv6Address, f: &[u8]) {
-    if f.len() < 8 { return; }
-    let ad = u16::oa([f[4], f[5]]);
-    let ls = u16::oa([f[6], f[7]]);
-    crate::serial_println!("[ICMPv6] Echo Reply from {}: id={} seq={}", cy, ad, ls);
+fn mhp(src: Ipv6Address, data: &[u8]) {
+    if data.len() < 8 { return; }
+    let id = u16::from_be_bytes([data[4], data[5]]);
+    let seq = u16::from_be_bytes([data[6], data[7]]);
+    crate::serial_println!("[ICMPv6] Echo Reply from {}: id={} seq={}", src, id, seq);
 }
 
 
 
 
 
-fn tkl(cy: Ipv6Address, f: &[u8]) {
+fn mic(src: Ipv6Address, data: &[u8]) {
     
-    if f.len() < 24 { return; }
+    if data.len() < 24 { return; }
 
-    let cd = Ipv6Address::new([
-        f[8], f[9], f[10], f[11],
-        f[12], f[13], f[14], f[15],
-        f[16], f[17], f[18], f[19],
-        f[20], f[21], f[22], f[23],
+    let target = Ipv6Address::new([
+        data[8], data[9], data[10], data[11],
+        data[12], data[13], data[14], data[15],
+        data[16], data[17], data[18], data[19],
+        data[20], data[21], data[22], data[23],
     ]);
 
-    let bvt = ipv6::jdo();
+    let amc = ipv6::esz();
 
     
-    lsq(&f[24..], |fpu, anr| {
-        if fpu == ndp_option::XG_ && anr.len() >= 6 {
-            let ed = [anr[0], anr[1], anr[2], anr[3], anr[4], anr[5]];
-            kfy(cy, ed);
+    gmn(&data[24..], |cno, opt_data| {
+        if cno == ndp_option::YN_ && opt_data.len() >= 6 {
+            let mac = [opt_data[0], opt_data[1], opt_data[2], opt_data[3], opt_data[4], opt_data[5]];
+            fkn(src, mac);
         }
     });
 
     
-    if cd != bvt { return; }
+    if target != amc { return; }
 
-    crate::serial_println!("[NDP] Neighbor Solicitation for {} from {}", cd, cy);
+    crate::serial_println!("[NDP] Neighbor Solicitation for {} from {}", target, src);
 
     
-    let _ = whi(cy, bvt);
+    let _ = onv(src, amc);
 }
 
-fn tkk(cy: Ipv6Address, f: &[u8]) {
-    if f.len() < 24 { return; }
+fn mib(src: Ipv6Address, data: &[u8]) {
+    if data.len() < 24 { return; }
 
-    let cd = Ipv6Address::new([
-        f[8], f[9], f[10], f[11],
-        f[12], f[13], f[14], f[15],
-        f[16], f[17], f[18], f[19],
-        f[20], f[21], f[22], f[23],
+    let target = Ipv6Address::new([
+        data[8], data[9], data[10], data[11],
+        data[12], data[13], data[14], data[15],
+        data[16], data[17], data[18], data[19],
+        data[20], data[21], data[22], data[23],
     ]);
 
-    crate::serial_println!("[NDP] Neighbor Advertisement: {} is at {}", cd, cy);
+    crate::serial_println!("[NDP] Neighbor Advertisement: {} is at {}", target, src);
 
     
-    lsq(&f[24..], |fpu, anr| {
-        if fpu == ndp_option::BGY_ && anr.len() >= 6 {
-            let ed = [anr[0], anr[1], anr[2], anr[3], anr[4], anr[5]];
-            kfy(cd, ed);
+    gmn(&data[24..], |cno, opt_data| {
+        if cno == ndp_option::BJC_ && opt_data.len() >= 6 {
+            let mac = [opt_data[0], opt_data[1], opt_data[2], opt_data[3], opt_data[4], opt_data[5]];
+            fkn(target, mac);
         }
     });
 }
@@ -189,36 +189,36 @@ fn tkk(cy: Ipv6Address, f: &[u8]) {
 
 
 
-fn tkt(cy: Ipv6Address, f: &[u8]) {
+fn mih(src: Ipv6Address, data: &[u8]) {
     
     
-    if f.len() < 16 { return; }
+    if data.len() < 16 { return; }
 
-    let iyn = f[4];
-    let waj = u16::oa([f[6], f[7]]);
+    let epj = data[4];
+    let oii = u16::from_be_bytes([data[6], data[7]]);
 
     crate::serial_println!("[NDP] Router Advertisement from {}: hop_limit={} lifetime={}s", 
-        cy, iyn, waj);
+        src, epj, oii);
 
     
-    lsq(&f[16..], |fpu, anr| {
-        match fpu {
-            ndp_option::CKT_ if anr.len() >= 30 => {
-                let vkp = anr[0];
-                let flags = anr[1];
-                let adx = &anr[14..30];
+    gmn(&data[16..], |cno, opt_data| {
+        match cno {
+            ndp_option::COC_ if opt_data.len() >= 30 => {
+                let nws = opt_data[0];
+                let flags = opt_data[1];
+                let nm = &opt_data[14..30];
                 crate::serial_println!("[NDP]   Prefix: {:02x}{:02x}:{:02x}{:02x}::/{} flags={:#x}",
-                    adx[0], adx[1], adx[2], adx[3], vkp, flags);
+                    nm[0], nm[1], nm[2], nm[3], nws, flags);
             }
-            ndp_option::XG_ if anr.len() >= 6 => {
-                let ed = [anr[0], anr[1], anr[2], anr[3], anr[4], anr[5]];
-                kfy(cy, ed);
+            ndp_option::YN_ if opt_data.len() >= 6 => {
+                let mac = [opt_data[0], opt_data[1], opt_data[2], opt_data[3], opt_data[4], opt_data[5]];
+                fkn(src, mac);
                 crate::serial_println!("[NDP]   Router MAC: {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-                    ed[0], ed[1], ed[2], ed[3], ed[4], ed[5]);
+                    mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
             }
-            ndp_option::Che if anr.len() >= 6 => {
-                let uql = u32::oa([anr[2], anr[3], anr[4], anr[5]]);
-                crate::serial_println!("[NDP]   MTU: {}", uql);
+            ndp_option::Amr if opt_data.len() >= 6 => {
+                let ngx = u32::from_be_bytes([opt_data[2], opt_data[3], opt_data[4], opt_data[5]]);
+                crate::serial_println!("[NDP]   MTU: {}", ngx);
             }
             _ => {}
         }
@@ -230,110 +230,110 @@ fn tkt(cy: Ipv6Address, f: &[u8]) {
 
 
 
-pub fn whn(bvt: Ipv6Address) -> Result<(), &'static str> {
-    let ed = crate::drivers::net::cez()
-        .or_else(crate::network::ckt)
+pub fn ooa(amc: Ipv6Address) -> Result<(), &'static str> {
+    let mac = crate::drivers::net::aqt()
+        .or_else(crate::network::aqu)
         .unwrap_or([0; 6]);
 
-    let cs = Ipv6Address::BKC_;
+    let dst = Ipv6Address::BMM_;
 
     
-    let mut fr = Vec::fc(16);
-    fr.push(icmpv6_type::CPC_);
-    fr.push(0); 
-    fr.push(0); fr.push(0); 
-    fr.bk(&[0u8; 4]); 
+    let mut bk = Vec::with_capacity(16);
+    bk.push(icmpv6_type::CSR_);
+    bk.push(0); 
+    bk.push(0); bk.push(0); 
+    bk.extend_from_slice(&[0u8; 4]); 
 
     
-    fr.push(ndp_option::XG_);
-    fr.push(1); 
-    fr.bk(&ed);
+    bk.push(ndp_option::YN_);
+    bk.push(1); 
+    bk.extend_from_slice(&mac);
 
     
-    let td = ipv6::izf(&bvt, &cs, &fr);
-    fr[2] = (td >> 8) as u8;
-    fr[3] = (td & 0xFF) as u8;
+    let ig = ipv6::epz(&amc, &dst, &bk);
+    bk[2] = (ig >> 8) as u8;
+    bk[3] = (ig & 0xFF) as u8;
 
     crate::serial_println!("[NDP] Sending Router Solicitation");
-    ipv6::joj(bvt, cs, next_header::Xb, 255, &fr)
+    ipv6::fab(amc, dst, next_header::Ka, 255, &bk)
 }
 
 
-fn whi(cs: Ipv6Address, bvt: Ipv6Address) -> Result<(), &'static str> {
-    let ed = crate::drivers::net::cez()
-        .or_else(crate::network::ckt)
+fn onv(dst: Ipv6Address, amc: Ipv6Address) -> Result<(), &'static str> {
+    let mac = crate::drivers::net::aqt()
+        .or_else(crate::network::aqu)
         .unwrap_or([0; 6]);
 
     
-    let mut fr = Vec::fc(32);
-    fr.push(icmpv6_type::BBE_);
-    fr.push(0); 
-    fr.push(0); fr.push(0); 
+    let mut bk = Vec::with_capacity(32);
+    bk.push(icmpv6_type::BDH_);
+    bk.push(0); 
+    bk.push(0); bk.push(0); 
 
     
     let flags: u32 = (1 << 30) | (1 << 29);
-    fr.bk(&flags.ft());
+    bk.extend_from_slice(&flags.to_be_bytes());
 
     
-    fr.bk(&bvt.0);
+    bk.extend_from_slice(&amc.0);
 
     
-    fr.push(ndp_option::BGY_);
-    fr.push(1); 
-    fr.bk(&ed);
+    bk.push(ndp_option::BJC_);
+    bk.push(1); 
+    bk.extend_from_slice(&mac);
 
     
-    let td = ipv6::izf(&bvt, &cs, &fr);
-    fr[2] = (td >> 8) as u8;
-    fr[3] = (td & 0xFF) as u8;
+    let ig = ipv6::epz(&amc, &dst, &bk);
+    bk[2] = (ig >> 8) as u8;
+    bk[3] = (ig & 0xFF) as u8;
 
-    crate::serial_println!("[NDP] Sending Neighbor Advertisement to {}", cs);
-    ipv6::joj(bvt, cs, next_header::Xb, 255, &fr)
+    crate::serial_println!("[NDP] Sending Neighbor Advertisement to {}", dst);
+    ipv6::fab(amc, dst, next_header::Ka, 255, &bk)
 }
 
 
-pub fn zmi(cd: Ipv6Address) -> Result<(), &'static str> {
-    let bvt = ipv6::jdo();
-    let ed = crate::drivers::net::cez()
-        .or_else(crate::network::ckt)
+pub fn qvh(target: Ipv6Address) -> Result<(), &'static str> {
+    let amc = ipv6::esz();
+    let mac = crate::drivers::net::aqt()
+        .or_else(crate::network::aqu)
         .unwrap_or([0; 6]);
 
-    let cs = cd.pma();
+    let dst = target.solicited_node_multicast();
 
     
-    let mut fr = Vec::fc(32);
-    fr.push(icmpv6_type::BBG_);
-    fr.push(0); 
-    fr.push(0); fr.push(0); 
-    fr.bk(&[0u8; 4]); 
-    fr.bk(&cd.0);
+    let mut bk = Vec::with_capacity(32);
+    bk.push(icmpv6_type::BDJ_);
+    bk.push(0); 
+    bk.push(0); bk.push(0); 
+    bk.extend_from_slice(&[0u8; 4]); 
+    bk.extend_from_slice(&target.0);
 
     
-    fr.push(ndp_option::XG_);
-    fr.push(1);
-    fr.bk(&ed);
+    bk.push(ndp_option::YN_);
+    bk.push(1);
+    bk.extend_from_slice(&mac);
 
     
-    let td = ipv6::izf(&bvt, &cs, &fr);
-    fr[2] = (td >> 8) as u8;
-    fr[3] = (td & 0xFF) as u8;
+    let ig = ipv6::epz(&amc, &dst, &bk);
+    bk[2] = (ig >> 8) as u8;
+    bk[3] = (ig & 0xFF) as u8;
 
-    crate::serial_println!("[NDP] Sending Neighbor Solicitation for {}", cd);
-    ipv6::joj(bvt, cs, next_header::Xb, 255, &fr)
+    crate::serial_println!("[NDP] Sending Neighbor Solicitation for {}", target);
+    ipv6::fab(amc, dst, next_header::Ka, 255, &bk)
 }
 
 
 
 
 
-fn lsq<G: FnMut(u8, &[u8])>(f: &[u8], mut cfd: G) {
-    let mut a = 0;
-    while a + 2 <= f.len() {
-        let fpu = f[a];
-        let jhw = f[a + 1] as usize * 8; 
-        if jhw == 0 || a + jhw > f.len() { break; }
+fn gmn<F: FnMut(u8, &[u8])>(data: &[u8], mut handler: F) {
+    let mut i = 0;
+    while i + 2 <= data.len() {
+        let cno = data[i];
+        let evt = data[i + 1] as usize * 8; 
+        if evt == 0 || i + evt > data.len() { break; }
         
-        cfd(fpu, &f[a + 2..a + jhw]);
-        a += jhw;
+        handler(cno, &data[i + 2..i + evt]);
+        i += evt;
     }
 }

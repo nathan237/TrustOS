@@ -15,351 +15,351 @@ pub mod smp;
 use core::sync::atomic::{AtomicBool, Ordering};
 
 
-static APA_: AtomicBool = AtomicBool::new(false);
-static mut AOY_: Option<CpuCapabilities> = None;
+static ARA_: AtomicBool = AtomicBool::new(false);
+static mut AQY_: Option<CpuCapabilities> = None;
 
 
 #[derive(Debug, Clone)]
 pub struct CpuCapabilities {
     
-    pub acs: CpuVendor,
+    pub vendor: CpuVendor,
     pub family: u8,
     pub model: u8,
-    pub bxi: u8,
-    pub dem: [u8; 48],
+    pub stepping: u8,
+    pub brand_string: [u8; 48],
     
     
     pub tsc: bool,           
-    pub fan: bool, 
-    pub ifc: bool,  
-    pub fsd: bool,        
+    pub tsc_invariant: bool, 
+    pub tsc_deadline: bool,  
+    pub rdtscp: bool,        
     
     
-    pub eiw: bool,
-    pub eix: bool,
-    pub fvj: bool,
-    pub fvl: bool,
-    pub fvk: bool,
-    pub eyy: bool,
-    pub dof: bool,
-    pub dog: bool,
-    pub eml: bool,
-    pub hka: bool,
+    pub sse: bool,
+    pub sse2: bool,
+    pub sse3: bool,
+    pub ssse3: bool,
+    pub sse4_1: bool,
+    pub sse4_2: bool,
+    pub avx: bool,
+    pub avx2: bool,
+    pub avx512f: bool,
+    pub fma: bool,
     
     
-    pub doa: bool,         
-    pub ewm: bool,     
-    pub eyl: bool,       
-    pub cbg: bool,        
-    pub cmc: bool,        
+    pub aesni: bool,         
+    pub pclmulqdq: bool,     
+    pub sha_ext: bool,       
+    pub rdrand: bool,        
+    pub rdseed: bool,        
     
     
-    pub cia: bool,
-    pub cul: bool,
-    pub ddd: bool,
-    pub vt: bool,
+    pub smep: bool,
+    pub smap: bool,
+    pub umip: bool,
+    pub nx: bool,
     
     
     pub vmx: bool,           
     pub svm: bool,           
     
     
-    pub cau: u8,
-    pub djk: u8,
-    pub aed: u8,
+    pub max_logical_cpus: u8,
+    pub max_physical_cpus: u8,
+    pub apic_id: u8,
     
     
-    pub ekf: u64,
+    pub tsc_frequency_hz: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CpuVendor {
-    Ef,
-    Ct,
-    F,
+    Intel,
+    Amd,
+    Unknown,
 }
 
 impl CpuCapabilities {
     
-    pub fn dgf() -> Self {
-        let mut dr = Self {
-            acs: CpuVendor::F,
+    pub fn bfx() -> Self {
+        let mut caps = Self {
+            vendor: CpuVendor::Unknown,
             family: 0,
             model: 0,
-            bxi: 0,
-            dem: [0; 48],
+            stepping: 0,
+            brand_string: [0; 48],
             tsc: false,
-            fan: false,
-            ifc: false,
-            fsd: false,
-            eiw: false,
-            eix: false,
-            fvj: false,
-            fvl: false,
-            fvk: false,
-            eyy: false,
-            dof: false,
-            dog: false,
-            eml: false,
-            hka: false,
-            doa: false,
-            ewm: false,
-            eyl: false,
-            cbg: false,
-            cmc: false,
-            cia: false,
-            cul: false,
-            ddd: false,
-            vt: false,
+            tsc_invariant: false,
+            tsc_deadline: false,
+            rdtscp: false,
+            sse: false,
+            sse2: false,
+            sse3: false,
+            ssse3: false,
+            sse4_1: false,
+            sse4_2: false,
+            avx: false,
+            avx2: false,
+            avx512f: false,
+            fma: false,
+            aesni: false,
+            pclmulqdq: false,
+            sha_ext: false,
+            rdrand: false,
+            rdseed: false,
+            smep: false,
+            smap: false,
+            umip: false,
+            nx: false,
             vmx: false,
             svm: false,
-            cau: 1,
-            djk: 1,
-            aed: 0,
-            ekf: 0,
+            max_logical_cpus: 1,
+            max_physical_cpus: 1,
+            apic_id: 0,
+            tsc_frequency_hz: 0,
         };
         
         
-        let gdp = unsafe { core::arch::x86_64::ddo(0) };
-        let olm = gdp.eax;
+        let cvt = unsafe { core::arch::x86_64::__cpuid(0) };
+        let img = cvt.eax;
         
         
-        let moz = [
-            gdp.ebx.ho(),
-            gdp.edx.ho(),
-            gdp.ecx.ho(),
+        let hbi = [
+            cvt.ebx.to_le_bytes(),
+            cvt.edx.to_le_bytes(),
+            cvt.ecx.to_le_bytes(),
         ];
         
-        let mut gvz = [0u8; 12];
-        gvz[0..4].dg(&moz[0]);
-        gvz[4..8].dg(&moz[1]);
-        gvz[8..12].dg(&moz[2]);
+        let mut bpw = [0u8; 12];
+        bpw[0..4].copy_from_slice(&hbi[0]);
+        bpw[4..8].copy_from_slice(&hbi[1]);
+        bpw[8..12].copy_from_slice(&hbi[2]);
         
-        dr.acs = match &gvz {
-            b"GenuineIntel" => CpuVendor::Ef,
-            b"AuthenticAMD" => CpuVendor::Ct,
-            _ => CpuVendor::F,
+        caps.vendor = match &bpw {
+            b"GenuineIntel" => CpuVendor::Intel,
+            b"AuthenticAMD" => CpuVendor::Amd,
+            _ => CpuVendor::Unknown,
         };
         
         
-        if olm >= 1 {
-            let bgn = unsafe { core::arch::x86_64::ddo(1) };
+        if img >= 1 {
+            let afa = unsafe { core::arch::x86_64::__cpuid(1) };
             
             
-            dr.bxi = (bgn.eax & 0xF) as u8;
-            dr.model = ((bgn.eax >> 4) & 0xF) as u8;
-            dr.family = ((bgn.eax >> 8) & 0xF) as u8;
+            caps.stepping = (afa.eax & 0xF) as u8;
+            caps.model = ((afa.eax >> 4) & 0xF) as u8;
+            caps.family = ((afa.eax >> 8) & 0xF) as u8;
             
             
-            if dr.family == 0xF {
-                dr.family += ((bgn.eax >> 20) & 0xFF) as u8;
+            if caps.family == 0xF {
+                caps.family += ((afa.eax >> 20) & 0xFF) as u8;
             }
-            if dr.family >= 6 {
-                dr.model += (((bgn.eax >> 16) & 0xF) << 4) as u8;
+            if caps.family >= 6 {
+                caps.model += (((afa.eax >> 16) & 0xF) << 4) as u8;
             }
             
             
-            dr.aed = ((bgn.ebx >> 24) & 0xFF) as u8;
-            dr.cau = ((bgn.ebx >> 16) & 0xFF) as u8;
+            caps.apic_id = ((afa.ebx >> 24) & 0xFF) as u8;
+            caps.max_logical_cpus = ((afa.ebx >> 16) & 0xFF) as u8;
             
             
-            dr.fvj = (bgn.ecx & (1 << 0)) != 0;
-            dr.ewm = (bgn.ecx & (1 << 1)) != 0;
-            dr.fvl = (bgn.ecx & (1 << 9)) != 0;
-            dr.fvk = (bgn.ecx & (1 << 19)) != 0;
-            dr.eyy = (bgn.ecx & (1 << 20)) != 0;
-            dr.doa = (bgn.ecx & (1 << 25)) != 0;
-            dr.dof = (bgn.ecx & (1 << 28)) != 0;
-            dr.hka = (bgn.ecx & (1 << 12)) != 0;
-            dr.cbg = (bgn.ecx & (1 << 30)) != 0;
-            dr.vmx = (bgn.ecx & (1 << 5)) != 0;
-            dr.ifc = (bgn.ecx & (1 << 24)) != 0;
+            caps.sse3 = (afa.ecx & (1 << 0)) != 0;
+            caps.pclmulqdq = (afa.ecx & (1 << 1)) != 0;
+            caps.ssse3 = (afa.ecx & (1 << 9)) != 0;
+            caps.sse4_1 = (afa.ecx & (1 << 19)) != 0;
+            caps.sse4_2 = (afa.ecx & (1 << 20)) != 0;
+            caps.aesni = (afa.ecx & (1 << 25)) != 0;
+            caps.avx = (afa.ecx & (1 << 28)) != 0;
+            caps.fma = (afa.ecx & (1 << 12)) != 0;
+            caps.rdrand = (afa.ecx & (1 << 30)) != 0;
+            caps.vmx = (afa.ecx & (1 << 5)) != 0;
+            caps.tsc_deadline = (afa.ecx & (1 << 24)) != 0;
             
             
-            dr.tsc = (bgn.edx & (1 << 4)) != 0;
-            dr.eiw = (bgn.edx & (1 << 25)) != 0;
-            dr.eix = (bgn.edx & (1 << 26)) != 0;
+            caps.tsc = (afa.edx & (1 << 4)) != 0;
+            caps.sse = (afa.edx & (1 << 25)) != 0;
+            caps.sse2 = (afa.edx & (1 << 26)) != 0;
         }
         
         
-        if olm >= 7 {
-            let dfh = unsafe { core::arch::x86_64::qbf(7, 0) };
+        if img >= 7 {
+            let bfp = unsafe { core::arch::x86_64::__cpuid_count(7, 0) };
             
-            dr.cia = (dfh.ebx & (1 << 7)) != 0;
-            dr.dog = (dfh.ebx & (1 << 5)) != 0;
-            dr.eml = (dfh.ebx & (1 << 16)) != 0;
-            dr.eyl = (dfh.ebx & (1 << 29)) != 0;
-            dr.cmc = (dfh.ebx & (1 << 18)) != 0;
-            dr.cul = (dfh.ebx & (1 << 20)) != 0;
-            dr.ddd = (dfh.ecx & (1 << 2)) != 0;
+            caps.smep = (bfp.ebx & (1 << 7)) != 0;
+            caps.avx2 = (bfp.ebx & (1 << 5)) != 0;
+            caps.avx512f = (bfp.ebx & (1 << 16)) != 0;
+            caps.sha_ext = (bfp.ebx & (1 << 29)) != 0;
+            caps.rdseed = (bfp.ebx & (1 << 18)) != 0;
+            caps.smap = (bfp.ebx & (1 << 20)) != 0;
+            caps.umip = (bfp.ecx & (1 << 2)) != 0;
         }
         
         
-        let rqc = unsafe { core::arch::x86_64::ddo(0x80000000) };
-        let lkw = rqc.eax;
+        let kyy = unsafe { core::arch::x86_64::__cpuid(0x80000000) };
+        let ggw = kyy.eax;
         
         
-        if lkw >= 0x80000001 {
-            let klr = unsafe { core::arch::x86_64::ddo(0x80000001) };
+        if ggw >= 0x80000001 {
+            let foz = unsafe { core::arch::x86_64::__cpuid(0x80000001) };
             
-            dr.vt = (klr.edx & (1 << 20)) != 0;
-            dr.fsd = (klr.edx & (1 << 27)) != 0;
-            dr.svm = (klr.ecx & (1 << 2)) != 0;
+            caps.nx = (foz.edx & (1 << 20)) != 0;
+            caps.rdtscp = (foz.edx & (1 << 27)) != 0;
+            caps.svm = (foz.ecx & (1 << 2)) != 0;
         }
         
         
-        if lkw >= 0x80000007 {
-            let rqb = unsafe { core::arch::x86_64::ddo(0x80000007) };
-            dr.fan = (rqb.edx & (1 << 8)) != 0;
+        if ggw >= 0x80000007 {
+            let kyx = unsafe { core::arch::x86_64::__cpuid(0x80000007) };
+            caps.tsc_invariant = (kyx.edx & (1 << 8)) != 0;
         }
         
         
-        if lkw >= 0x80000004 {
-            for a in 0..3 {
-                let ipm = unsafe { core::arch::x86_64::ddo(0x80000002 + a) };
-                let l = (a as usize) * 16;
-                dr.dem[l..l+4].dg(&ipm.eax.ho());
-                dr.dem[l+4..l+8].dg(&ipm.ebx.ho());
-                dr.dem[l+8..l+12].dg(&ipm.ecx.ho());
-                dr.dem[l+12..l+16].dg(&ipm.edx.ho());
+        if ggw >= 0x80000004 {
+            for i in 0..3 {
+                let ejb = unsafe { core::arch::x86_64::__cpuid(0x80000002 + i) };
+                let offset = (i as usize) * 16;
+                caps.brand_string[offset..offset+4].copy_from_slice(&ejb.eax.to_le_bytes());
+                caps.brand_string[offset+4..offset+8].copy_from_slice(&ejb.ebx.to_le_bytes());
+                caps.brand_string[offset+8..offset+12].copy_from_slice(&ejb.ecx.to_le_bytes());
+                caps.brand_string[offset+12..offset+16].copy_from_slice(&ejb.edx.to_le_bytes());
             }
         }
         
-        dr
+        caps
     }
     
     
-    pub fn keu(&self) -> &str {
-        let ci = self.dem.iter()
-            .qf(|&o| o == 0)
+    pub fn brand(&self) -> &str {
+        let end = self.brand_string.iter()
+            .position(|&b| b == 0)
             .unwrap_or(48);
-        core::str::jg(&self.dem[..ci])
+        core::str::from_utf8(&self.brand_string[..end])
             .unwrap_or("Unknown CPU")
-            .em()
+            .trim()
     }
 }
 
 
 pub fn init() {
-    if APA_.swap(true, Ordering::SeqCst) {
+    if ARA_.swap(true, Ordering::SeqCst) {
         return; 
     }
     
     
-    let mut dr = CpuCapabilities::dgf();
+    let mut caps = CpuCapabilities::bfx();
     
     
-    dr.ekf = tsc::nbj();
+    caps.tsc_frequency_hz = tsc::hju();
     
     
     unsafe {
-        AOY_ = Some(dr.clone());
+        AQY_ = Some(caps.clone());
     }
     
     
-    crate::serial_println!("[CPU] {}", dr.keu());
+    crate::serial_println!("[CPU] {}", caps.brand());
     crate::serial_println!("[CPU] Vendor: {:?}, Family: {}, Model: {}", 
-        dr.acs, dr.family, dr.model);
+        caps.vendor, caps.family, caps.model);
     crate::serial_println!("[CPU] TSC: {} (invariant: {}, freq: {} MHz)", 
-        dr.tsc, dr.fan, dr.ekf / 1_000_000);
+        caps.tsc, caps.tsc_invariant, caps.tsc_frequency_hz / 1_000_000);
     crate::serial_println!("[CPU] SIMD: SSE={} SSE2={} SSE4.2={} AVX={} AVX2={} FMA={}", 
-        dr.eiw, dr.eix, dr.eyy, dr.dof, dr.dog, dr.hka);
+        caps.sse, caps.sse2, caps.sse4_2, caps.avx, caps.avx2, caps.fma);
     crate::serial_println!("[CPU] Crypto: AES-NI={} PCLMULQDQ={} SHA={} RDRAND={}", 
-        dr.doa, dr.ewm, dr.eyl, dr.cbg);
+        caps.aesni, caps.pclmulqdq, caps.sha_ext, caps.rdrand);
     crate::serial_println!("[CPU] Security: SMEP={} SMAP={} NX={}", 
-        dr.cia, dr.cul, dr.vt);
-    crate::serial_println!("[CPU] Virt: VMX={} SVM={}", dr.vmx, dr.svm);
+        caps.smep, caps.smap, caps.nx);
+    crate::serial_println!("[CPU] Virt: VMX={} SVM={}", caps.vmx, caps.svm);
     
     
-    if dr.eiw {
-        simd::ktg();
+    if caps.sse {
+        simd::fuo();
     }
     
     
-    if dr.dof {
-        simd::ktd();
+    if caps.avx {
+        simd::ful();
     }
     
     
-    tsc::init(dr.ekf);
+    tsc::init(caps.tsc_frequency_hz);
 }
 
 
-pub fn bme() -> Option<&'static CpuCapabilities> {
-    if !APA_.load(Ordering::Relaxed) {
+pub fn capabilities() -> Option<&'static CpuCapabilities> {
+    if !ARA_.load(Ordering::Relaxed) {
         return None;
     }
-    unsafe { AOY_.as_ref() }
+    unsafe { AQY_.as_ref() }
 }
 
 
-pub fn mnh() -> u64 {
-    bme().map(|r| r.ekf).unwrap_or(3_000_000_000)
+pub fn hac() -> u64 {
+    capabilities().map(|c| c.tsc_frequency_hz).unwrap_or(3_000_000_000)
 }
 
 
-pub fn cfe() -> bool {
-    bme().map(|r| r.doa).unwrap_or(false)
+pub fn has_aesni() -> bool {
+    capabilities().map(|c| c.aesni).unwrap_or(false)
 }
 
 
-pub fn crd() -> bool {
-    bme().map(|r| r.cbg).unwrap_or(false)
+pub fn has_rdrand() -> bool {
+    capabilities().map(|c| c.rdrand).unwrap_or(false)
 }
 
 
-pub fn gdj() -> u8 {
-    bme().map(|r| r.cau).unwrap_or(1)
+pub fn cvr() -> u8 {
+    capabilities().map(|c| c.max_logical_cpus).unwrap_or(1)
 }
 
 
-pub fn cbg() -> Option<u64> {
-    if !crd() {
+pub fn rdrand() -> Option<u64> {
+    if !has_rdrand() {
         return None;
     }
     
-    let mut bn: u64;
-    let vx: u8;
+    let mut value: u64;
+    let success: u8;
     
     unsafe {
         core::arch::asm!(
             "rdrand {0}",
             "setc {1}",
-            bd(reg) bn,
-            bd(reg_byte) vx,
+            out(reg) value,
+            out(reg_byte) success,
             options(nostack)
         );
     }
     
-    if vx != 0 {
-        Some(bn)
+    if success != 0 {
+        Some(value)
     } else {
         None
     }
 }
 
 
-pub fn cmc() -> Option<u64> {
-    let dr = bme()?;
-    if !dr.cmc {
+pub fn rdseed() -> Option<u64> {
+    let caps = capabilities()?;
+    if !caps.rdseed {
         return None;
     }
     
-    let mut bn: u64;
-    let vx: u8;
+    let mut value: u64;
+    let success: u8;
     
     unsafe {
         core::arch::asm!(
             "rdseed {0}",
             "setc {1}",
-            bd(reg) bn,
-            bd(reg_byte) vx,
+            out(reg) value,
+            out(reg_byte) success,
             options(nostack)
         );
     }
     
-    if vx != 0 {
-        Some(bn)
+    if success != 0 {
+        Some(value)
     } else {
         None
     }

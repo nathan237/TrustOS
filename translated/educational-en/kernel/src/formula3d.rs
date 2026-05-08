@@ -77,7 +77,7 @@ fn translate_z(v: V3, dz: f32) -> V3 {
 /// THE FORMULA: project({x,y,z}) = {x/z, y/z}
 #[inline(always)]
 fn project(v: V3) -> V2 {
-    if v.z.absolute() < 0.001 {
+    if v.z.abs() < 0.001 {
         V2 { x: 0.0, y: 0.0 }
     } else {
         V2 { x: v.x / v.z, y: v.y / v.z }
@@ -87,7 +87,7 @@ fn project(v: V3) -> V2 {
 /// Map normalized coords to screen pixels
 #[inline(always)]
 fn to_screen(p: V2, w: usize, h: usize) -> (i32, i32) {
-    let scale = w.minimum(h) as f32 * 0.45;
+    let scale = w.min(h) as f32 * 0.45;
     let sx = (p.x * scale) + (w as f32 * 0.5);
     let sy = (-p.y * scale) + (h as f32 * 0.5);
     (sx as i32, sy as i32)
@@ -205,11 +205,11 @@ pub fn mesh_torus(major_r: f32, minor_r: f32, major_seg: usize, minor_seg: usize
             let y = minor_r * sp;
             verts.push(V3 { x, y, z });
             
-            let index = i * minor_seg + j;
+            let idx = i * minor_seg + j;
             let next_j = i * minor_seg + (j + 1) % minor_seg;
-            edges.push((index, next_j));
+            edges.push((idx, next_j));
             let next_i = ((i + 1) % major_seg) * minor_seg + j;
-            edges.push((index, next_i));
+            edges.push((idx, next_i));
         }
     }
     Mesh { vertices: verts, edges, edge_colors: None, faces: None, face_colors: None }
@@ -257,9 +257,9 @@ pub fn mesh_grid(half: f32, divisions: usize) -> Mesh {
             let x = -half + i as f32 * step;
             let z = -half + j as f32 * step;
             verts.push(V3 { x, y: -0.3, z });
-            let index = i * n + j;
-            if j + 1 < n { edges.push((index, index + 1)); }
-            if i + 1 < n { edges.push((index, index + n)); }
+            let idx = i * n + j;
+            if j + 1 < n { edges.push((idx, idx + 1)); }
+            if i + 1 < n { edges.push((idx, idx + n)); }
         }
     }
     Mesh { vertices: verts, edges, edge_colors: None, faces: None, face_colors: None }
@@ -308,11 +308,11 @@ pub fn mesh_penger() -> Mesh {
 
     // ── HEAD — wider box on top ──
     let head_bot = verts.len(); // 12..15
-    let hardware = 0.26; let hd = 0.22; let hby = 0.32;
-    verts.push(V3 { x: -hardware, y: hby, z: -hd }); // 12
-    verts.push(V3 { x:  hardware, y: hby, z: -hd }); // 13
-    verts.push(V3 { x:  hardware, y: hby, z:  hd }); // 14
-    verts.push(V3 { x: -hardware, y: hby, z:  hd }); // 15
+    let hw = 0.26; let hd = 0.22; let hby = 0.32;
+    verts.push(V3 { x: -hw, y: hby, z: -hd }); // 12
+    verts.push(V3 { x:  hw, y: hby, z: -hd }); // 13
+    verts.push(V3 { x:  hw, y: hby, z:  hd }); // 14
+    verts.push(V3 { x: -hw, y: hby, z:  hd }); // 15
     // Head top ring (y = 0.65)
     let head_top = verts.len(); // 16..19
     let htw = 0.24; let htd = 0.20;
@@ -454,9 +454,9 @@ pub fn mesh_trustos_text() -> Mesh {
     fn add_polyline(verts: &mut alloc::vec::Vec<V3>, edges: &mut alloc::vec::Vec<(usize, usize)>,
                     points: &[(f32, f32)], ox: f32, depth: f32) {
         let base = verts.len();
-        for &(pixel, py) in points {
-            verts.push(V3 { x: ox + pixel, y: py, z: -depth }); // front
-            verts.push(V3 { x: ox + pixel, y: py, z: depth });  // back
+        for &(px, py) in points {
+            verts.push(V3 { x: ox + px, y: py, z: -depth }); // front
+            verts.push(V3 { x: ox + px, y: py, z: depth });  // back
         }
         for i in 0..points.len() {
             // Front-to-back edge at each vertex
@@ -530,17 +530,17 @@ pub fn mesh_character() -> Mesh {
     // Helper: add a box (8 verts, 12 edges) and return base index
     let mut add_box = |verts: &mut alloc::vec::Vec<V3>, edges: &mut alloc::vec::Vec<(usize, usize)>,
                        colors: &mut alloc::vec::Vec<u32>,
-                       cx: f32, cy: f32, cz: f32, hardware: f32, hh: f32, hd: f32, color: u32| -> usize {
+                       cx: f32, cy: f32, cz: f32, hw: f32, hh: f32, hd: f32, color: u32| -> usize {
         let b = verts.len();
         // 8 corners: bottom 4, top 4
-        verts.push(V3 { x: cx - hardware, y: cy - hh, z: cz - hd }); // 0 bottom-front-left
-        verts.push(V3 { x: cx + hardware, y: cy - hh, z: cz - hd }); // 1 bottom-front-right
-        verts.push(V3 { x: cx + hardware, y: cy - hh, z: cz + hd }); // 2 bottom-back-right
-        verts.push(V3 { x: cx - hardware, y: cy - hh, z: cz + hd }); // 3 bottom-back-left
-        verts.push(V3 { x: cx - hardware, y: cy + hh, z: cz - hd }); // 4 top-front-left
-        verts.push(V3 { x: cx + hardware, y: cy + hh, z: cz - hd }); // 5 top-front-right
-        verts.push(V3 { x: cx + hardware, y: cy + hh, z: cz + hd }); // 6 top-back-right
-        verts.push(V3 { x: cx - hardware, y: cy + hh, z: cz + hd }); // 7 top-back-left
+        verts.push(V3 { x: cx - hw, y: cy - hh, z: cz - hd }); // 0 bottom-front-left
+        verts.push(V3 { x: cx + hw, y: cy - hh, z: cz - hd }); // 1 bottom-front-right
+        verts.push(V3 { x: cx + hw, y: cy - hh, z: cz + hd }); // 2 bottom-back-right
+        verts.push(V3 { x: cx - hw, y: cy - hh, z: cz + hd }); // 3 bottom-back-left
+        verts.push(V3 { x: cx - hw, y: cy + hh, z: cz - hd }); // 4 top-front-left
+        verts.push(V3 { x: cx + hw, y: cy + hh, z: cz - hd }); // 5 top-front-right
+        verts.push(V3 { x: cx + hw, y: cy + hh, z: cz + hd }); // 6 top-back-right
+        verts.push(V3 { x: cx - hw, y: cy + hh, z: cz + hd }); // 7 top-back-left
         // Bottom ring
         edges.push((b, b+1)); edges.push((b+1, b+2)); edges.push((b+2, b+3)); edges.push((b+3, b));
         // Top ring
@@ -613,7 +613,7 @@ pub fn mesh_character() -> Mesh {
     verts.push(V3 { x:  shw, y: shy, z:  shd });
     verts.push(V3 { x: -shw, y: shy, z:  shd });
     // Chest ring (mid torso)
-    let character = verts.len(); // 19..22
+    let ch = verts.len(); // 19..22
     let chw = 0.20; let chd = 0.10; let chy = 0.30;
     verts.push(V3 { x: -chw, y: chy, z: -chd });
     verts.push(V3 { x:  chw, y: chy, z: -chd });
@@ -640,7 +640,7 @@ pub fn mesh_character() -> Mesh {
     edges.push((sh, sh+1)); edges.push((sh+1, sh+2)); edges.push((sh+2, sh+3)); edges.push((sh+3, sh));
     for _ in 0..4 { colors.push(column_body); }
     // Chest ring
-    edges.push((character, character+1)); edges.push((character+1, character+2)); edges.push((character+2, character+3)); edges.push((character+3, character));
+    edges.push((ch, ch+1)); edges.push((ch+1, ch+2)); edges.push((ch+2, ch+3)); edges.push((ch+3, ch));
     for _ in 0..4 { colors.push(column_body); }
     // Waist ring
     edges.push((wa, wa+1)); edges.push((wa+1, wa+2)); edges.push((wa+2, wa+3)); edges.push((wa+3, wa));
@@ -649,8 +649,8 @@ pub fn mesh_character() -> Mesh {
     edges.push((hp, hp+1)); edges.push((hp+1, hp+2)); edges.push((hp+2, hp+3)); edges.push((hp+3, hp));
     for _ in 0..4 { colors.push(column_body); }
     // Vertical connections
-    for i in 0..4 { edges.push((sh + i, character + i)); colors.push(column_body); }
-    for i in 0..4 { edges.push((character + i, wa + i)); colors.push(column_body); }
+    for i in 0..4 { edges.push((sh + i, ch + i)); colors.push(column_body); }
+    for i in 0..4 { edges.push((ch + i, wa + i)); colors.push(column_body); }
     for i in 0..4 { edges.push((wa + i, hp + i)); colors.push(column_body); }
 
     // ── LEFT ARM — upper arm box + forearm box ──
@@ -782,7 +782,7 @@ fn normalize(v: V3) -> V3 {
 /// Fills a 2D triangle defined by 3 screen-space points (x,y) with a solid color.
 /// Uses the standard top-down scanline approach: sort by Y, split at mid vertex.
 #[inline(never)]
-fn fill_triangle(buffer: &mut [u32], w: usize, h: usize,
+fn fill_triangle(buf: &mut [u32], w: usize, h: usize,
                  mut x0: i32, mut y0: i32,
                  mut x1: i32, mut y1: i32,
                  mut x2: i32, mut y2: i32,
@@ -796,8 +796,8 @@ fn fill_triangle(buffer: &mut [u32], w: usize, h: usize,
     if total_h == 0 { return; }
 
     // Clamp to screen
-    let y_start = y0.maximum(0);
-    let y_end = y2.minimum(h as i32 - 1);
+    let y_start = y0.max(0);
+    let y_end = y2.min(h as i32 - 1);
 
     for y in y_start..=y_end {
         let second_half = y >= y1;
@@ -822,14 +822,14 @@ fn fill_triangle(buffer: &mut [u32], w: usize, h: usize,
         if left > right { core::mem::swap(&mut left, &mut right); }
 
         // Clamp X to screen
-        left = left.maximum(0);
-        right = right.minimum(w as i32 - 1);
+        left = left.max(0);
+        right = right.min(w as i32 - 1);
 
         let row = y as usize * w;
         for x in left..=right {
-            let index = row + x as usize;
-            if index < buffer.len() {
-                buffer[index] = color;
+            let idx = row + x as usize;
+            if idx < buf.len() {
+                buf[idx] = color;
             }
         }
     }
@@ -837,28 +837,28 @@ fn fill_triangle(buffer: &mut [u32], w: usize, h: usize,
 
 /// Render a mesh as wireframe with depth-colored edges and vertex glow.
 /// Public API for external callers (trailer, showcase, etc.)
-pub fn render_wireframe_mesh(buffer: &mut [u32], w: usize, h: usize,
+pub fn render_wireframe_mesh(buf: &mut [u32], w: usize, h: usize,
                              mesh: &Mesh, angle_y: f32, angle_x: f32, dz: f32,
                              color: u32) {
-    for (index, &(a, b)) in mesh.edges.iter().enumerate() {
+    for (idx, &(a, b)) in mesh.edges.iter().enumerate() {
         if a >= mesh.vertices.len() || b >= mesh.vertices.len() { continue; }
         let (x0, y0, z0) = transform_vertex(mesh.vertices[a], angle_y, angle_x, dz, w, h);
         let (x1, y1, z1) = transform_vertex(mesh.vertices[b], angle_y, angle_x, dz, w, h);
-        let average_z = (z0 + z1) * 0.5;
+        let avg_z = (z0 + z1) * 0.5;
         let base = // Pattern matching — Rust's exhaustive branching construct.
 match &mesh.edge_colors {
-            Some(ec) if index < ec.len() => ec[index],
+            Some(ec) if idx < ec.len() => ec[idx],
             _ => color,
         };
-        let c = depth_color(average_z, base);
-        draw_line_thick(buffer, w, h, x0, y0, x1, y1, c);
+        let c = depth_color(avg_z, base);
+        draw_line_thick(buf, w, h, x0, y0, x1, y1, c);
     }
     // Vertex glow: bright 3x3 dots at each vertex
     for v in &mesh.vertices {
         let (sx, sy, _z) = transform_vertex(*v, angle_y, angle_x, dz, w, h);
         for dy in -1..=1i32 {
             for dx in -1..=1i32 {
-                additive_blend(buffer, w, h, sx + dx, sy + dy, 0x00FFFFFF);
+                additive_blend(buf, w, h, sx + dx, sy + dy, 0x00FFFFFF);
             }
         }
     }
@@ -867,7 +867,7 @@ match &mesh.edge_colors {
 /// Render a mesh with filled triangles, flat shading, backface culling, and painter's sort.
 /// `light_dir` should be normalized. `base_color` is the object's base ARGB color.
 /// `ambient` is the minimum brightness (0.0-1.0).
-pub fn render_filled_mesh(buffer: &mut [u32], w: usize, h: usize,
+pub fn render_filled_mesh(buf: &mut [u32], w: usize, h: usize,
                           mesh: &Mesh, angle_y: f32, angle_x: f32, dz: f32,
                           base_color: u32, light_directory: V3, ambient: f32) {
     let faces = // Pattern matching — Rust's exhaustive branching construct.
@@ -890,8 +890,8 @@ match &mesh.faces {
     // Build face data: (face_index, avg_z) for painter's sort
     // Also compute normal for backface culling and shading
     struct FaceData {
-        index: usize,
-        average_z: f32,
+        idx: usize,
+        avg_z: f32,
         brightness: f32,
     }
     let mut visible_faces = alloc::vec::Vec::with_capacity(faces.len());
@@ -915,17 +915,17 @@ match &mesh.faces {
 
         // Flat shading: dot(normal, light_dir)
         let ndotl = dot(normal, light_directory);
-        let brightness = ambient + (1.0 - ambient) * ndotl.maximum(0.0);
+        let brightness = ambient + (1.0 - ambient) * ndotl.max(0.0);
 
-        let average_z = (va.z + vb.z + vc.z) / 3.0;
-        visible_faces.push(FaceData { index: i, average_z, brightness });
+        let avg_z = (va.z + vb.z + vc.z) / 3.0;
+        visible_faces.push(FaceData { idx: i, avg_z, brightness });
     }
 
     // Painter's sort: far faces first (higher z = further away)
     // Simple insertion sort (good for small N, no alloc needed)
     for i in 1..visible_faces.len() {
         let mut j = i;
-        while j > 0 && visible_faces[j].average_z > visible_faces[j - 1].average_z {
+        while j > 0 && visible_faces[j].avg_z > visible_faces[j - 1].avg_z {
             visible_faces.swap(j, j - 1);
             j -= 1;
         }
@@ -937,28 +937,28 @@ match &mesh.faces {
     let base_b = base_color & 0xFF;
 
     for face in &visible_faces {
-        let (a, b, c) = faces[face.index];
+        let (a, b, c) = faces[face.idx];
         let (sx0, sy0) = screen_pts[a];
         let (sx1, sy1) = screen_pts[b];
         let (sx2, sy2) = screen_pts[c];
 
         // Per-face color if available
-        let (fr, fg, framebuffer) = // Pattern matching — Rust's exhaustive branching construct.
+        let (fr, fg, fb) = // Pattern matching — Rust's exhaustive branching construct.
 match &mesh.face_colors {
-            Some(fc) if face.index < fc.len() => {
-                ((fc[face.index] >> 16) & 0xFF,
-                 (fc[face.index] >> 8) & 0xFF,
-                 fc[face.index] & 0xFF)
+            Some(fc) if face.idx < fc.len() => {
+                ((fc[face.idx] >> 16) & 0xFF,
+                 (fc[face.idx] >> 8) & 0xFF,
+                 fc[face.idx] & 0xFF)
             }
             _ => (base_r, base_g, base_b),
         };
 
-        let r = ((fr as f32 * face.brightness) as u32).minimum(255);
-        let g = ((fg as f32 * face.brightness) as u32).minimum(255);
-        let b = ((framebuffer as f32 * face.brightness) as u32).minimum(255);
+        let r = ((fr as f32 * face.brightness) as u32).min(255);
+        let g = ((fg as f32 * face.brightness) as u32).min(255);
+        let b = ((fb as f32 * face.brightness) as u32).min(255);
         let shaded = 0xFF000000 | (r << 16) | (g << 8) | b;
 
-        fill_triangle(buffer, w, h, sx0, sy0, sx1, sy1, sx2, sy2, shaded);
+        fill_triangle(buf, w, h, sx0, sy0, sx1, sy1, sx2, sy2, shaded);
     }
 
     // Wireframe overlay (edges drawn on top for definition)
@@ -968,7 +968,7 @@ match &mesh.face_colors {
         let (x1, y1) = screen_pts[b];
         // Dark edge outline
         let edge_color = 0xFF000000 | ((base_r / 3) << 16) | ((base_g / 3) << 8) | (base_b / 3);
-        draw_line(buffer, w, h, x0, y0, x1, y1, edge_color);
+        draw_line(buf, w, h, x0, y0, x1, y1, edge_color);
     }
 }
 
@@ -976,57 +976,57 @@ match &mesh.face_colors {
 
 /// Additive blend a pixel at (x,y)
 #[inline(always)]
-fn additive_blend(buffer: &mut [u32], w: usize, h: usize, x: i32, y: i32, color: u32) {
+fn additive_blend(buf: &mut [u32], w: usize, h: usize, x: i32, y: i32, color: u32) {
     if x < 0 || y < 0 || x >= w as i32 || y >= h as i32 { return; }
-    let index = y as usize * w + x as usize;
-    if index >= buffer.len() { return; }
-    let destination = buffer[index];
-    let r = ((destination >> 16) & 0xFF) + ((color >> 16) & 0xFF);
-    let g = ((destination >> 8) & 0xFF) + ((color >> 8) & 0xFF);
-    let b = (destination & 0xFF) + (color & 0xFF);
-    buffer[index] = 0xFF000000 | (r.minimum(255) << 16) | (g.minimum(255) << 8) | b.minimum(255);
+    let idx = y as usize * w + x as usize;
+    if idx >= buf.len() { return; }
+    let dst = buf[idx];
+    let r = ((dst >> 16) & 0xFF) + ((color >> 16) & 0xFF);
+    let g = ((dst >> 8) & 0xFF) + ((color >> 8) & 0xFF);
+    let b = (dst & 0xFF) + (color & 0xFF);
+    buf[idx] = 0xFF000000 | (r.min(255) << 16) | (g.min(255) << 8) | b.min(255);
 }
 
 /// Bresenham line drawing
-fn draw_line(buffer: &mut [u32], w: usize, h: usize, x0: i32, y0: i32, x1: i32, y1: i32, color: u32) {
+fn draw_line(buf: &mut [u32], w: usize, h: usize, x0: i32, y0: i32, x1: i32, y1: i32, color: u32) {
     let mut x0 = x0; let mut y0 = y0;
-    let dx = (x1 - x0).absolute();
-    let dy = -(y1 - y0).absolute();
+    let dx = (x1 - x0).abs();
+    let dy = -(y1 - y0).abs();
     let sx: i32 = if x0 < x1 { 1 } else { -1 };
     let sy: i32 = if y0 < y1 { 1 } else { -1 };
-    let mut error = dx + dy;
+    let mut err = dx + dy;
     
         // Infinite loop — runs until an explicit `break`.
 loop {
-        additive_blend(buffer, w, h, x0, y0, color);
+        additive_blend(buf, w, h, x0, y0, color);
         if x0 == x1 && y0 == y1 { break; }
-        let e2 = 2 * error;
-        if e2 >= dy { error += dy; x0 += sx; }
-        if e2 <= dx { error += dx; y0 += sy; }
+        let e2 = 2 * err;
+        if e2 >= dy { err += dy; x0 += sx; }
+        if e2 <= dx { err += dx; y0 += sy; }
     }
 }
 
 /// Thick line (3px) for better visibility
-fn draw_line_thick(buffer: &mut [u32], w: usize, h: usize, x0: i32, y0: i32, x1: i32, y1: i32, color: u32) {
-    draw_line(buffer, w, h, x0, y0, x1, y1, color);
-    draw_line(buffer, w, h, x0 + 1, y0, x1 + 1, y1, color);
-    draw_line(buffer, w, h, x0, y0 + 1, x1, y1 + 1, color);
+fn draw_line_thick(buf: &mut [u32], w: usize, h: usize, x0: i32, y0: i32, x1: i32, y1: i32, color: u32) {
+    draw_line(buf, w, h, x0, y0, x1, y1, color);
+    draw_line(buf, w, h, x0 + 1, y0, x1 + 1, y1, color);
+    draw_line(buf, w, h, x0, y0 + 1, x1, y1 + 1, color);
 }
 
 /// Dim entire buffer (fade to black effect)
-fn dim(buffer: &mut [u32], factor: u8) {
-    for pixel in buffer.iterator_mut() {
-        let r = ((*pixel >> 16) & 0xFF) * factor as u32 / 256;
-        let g = ((*pixel >> 8) & 0xFF) * factor as u32 / 256;
-        let b = (*pixel & 0xFF) * factor as u32 / 256;
-        *pixel = 0xFF000000 | (r << 16) | (g << 8) | b;
+fn dim(buf: &mut [u32], factor: u8) {
+    for px in buf.iter_mut() {
+        let r = ((*px >> 16) & 0xFF) * factor as u32 / 256;
+        let g = ((*px >> 8) & 0xFF) * factor as u32 / 256;
+        let b = (*px & 0xFF) * factor as u32 / 256;
+        *px = 0xFF000000 | (r << 16) | (g << 8) | b;
     }
 }
 
 /// Color based on depth (closer = brighter green, further = darker)
 fn depth_color(z: f32, base_color: u32) -> u32 {
     let intensity = ((1.0 / (z * 0.5 + 1.0)) * 255.0) as u32;
-    let intensity = intensity.minimum(255);
+    let intensity = intensity.min(255);
     let r = ((base_color >> 16) & 0xFF) * intensity / 255;
     let g = ((base_color >> 8) & 0xFF) * intensity / 255;
     let b = (base_color & 0xFF) * intensity / 255;
@@ -1047,7 +1047,7 @@ struct HoloRainCol3D {
     x: f32,
     z: f32,
     speed: f32,
-    trail_length: u8,
+    trail_len: u8,
     phase: f32,
 }
 
@@ -1205,86 +1205,86 @@ match self.scene {
     }
 
     /// Full render to buffer
-    pub fn render(&self, buffer: &mut [u32], w: usize, h: usize) {
+    pub fn render(&self, buf: &mut [u32], w: usize, h: usize) {
         // Fast black fill via SSE2
         #[cfg(target_arch = "x86_64")]
                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
             use core::arch::x86_64::*;
             let black = _mm_set1_epi32(0xFF000000u32 as i32);
-            let ptr = buffer.as_mut_pointer() as *mut __m128i;
-            let count = buffer.len() / 4;
+            let ptr = buf.as_mut_ptr() as *mut __m128i;
+            let count = buf.len() / 4;
             for i in 0..count {
                 _mm_storeu_si128(ptr.add(i), black);
             }
             // Handle remaining pixels
-            for i in (count * 4)..buffer.len() {
-                buffer[i] = 0xFF000000;
+            for i in (count * 4)..buf.len() {
+                buf[i] = 0xFF000000;
             }
         }
         #[cfg(not(target_arch = "x86_64"))]
-        buffer.fill(0xFF000000);
+        buf.fill(0xFF000000);
 
         if self.scene == FormulaScene::HoloMatrix {
             // Full 3D holographic matrix — no 2D rain, no scanlines
-            self.render_holo_matrix(buffer, w, h);
+            self.render_holo_matrix(buf, w, h);
             return;
         }
 
         if self.scene == FormulaScene::Character {
             // Special background: dark gradient + subtle ground grid
-            self.render_character_bg(buffer, w, h);
+            self.render_character_bg(buf, w, h);
         } else {
             // Render rain background
-            self.render_rain(buffer, w, h);
+            self.render_rain(buf, w, h);
         }
         
         // Render wireframe(s)
         if self.scene == FormulaScene::Multi {
-            self.render_multi(buffer, w, h);
+            self.render_multi(buf, w, h);
         } else if let Some(mesh) = self.get_mesh() {
-            self.render_wireframe(buffer, w, h, mesh, self.angle_y, self.angle_x, self.dz, self.wire_color);
-            self.render_vertices(buffer, w, h, mesh, self.angle_y, self.angle_x, self.dz);
+            self.render_wireframe(buf, w, h, mesh, self.angle_y, self.angle_x, self.dz, self.wire_color);
+            self.render_vertices(buf, w, h, mesh, self.angle_y, self.angle_x, self.dz);
         }
 
         // Hologram scanline effect
         if self.scene == FormulaScene::TrustOs || self.scene == FormulaScene::Character {
-            self.render_scanlines(buffer, w, h);
+            self.render_scanlines(buf, w, h);
         }
     }
 
-    fn render_wireframe(&self, buffer: &mut [u32], w: usize, h: usize, mesh: &Mesh,
+    fn render_wireframe(&self, buf: &mut [u32], w: usize, h: usize, mesh: &Mesh,
                         ay: f32, ax: f32, dz: f32, color: u32) {
-        for (index, &(a, b)) in mesh.edges.iter().enumerate() {
+        for (idx, &(a, b)) in mesh.edges.iter().enumerate() {
             if a >= mesh.vertices.len() || b >= mesh.vertices.len() { continue; }
             let (x0, y0, z0) = transform_vertex(mesh.vertices[a], ay, ax, dz, w, h);
             let (x1, y1, z1) = transform_vertex(mesh.vertices[b], ay, ax, dz, w, h);
-            let average_z = (z0 + z1) * 0.5;
+            let avg_z = (z0 + z1) * 0.5;
             // Use per-edge color if available, otherwise fallback to wire_color
             let base_color = // Pattern matching — Rust's exhaustive branching construct.
 match &mesh.edge_colors {
-                Some(ec) if index < ec.len() => ec[index],
+                Some(ec) if idx < ec.len() => ec[idx],
                 _ => color,
             };
-            let c = depth_color(average_z, base_color);
-            draw_line_thick(buffer, w, h, x0, y0, x1, y1, c);
+            let c = depth_color(avg_z, base_color);
+            draw_line_thick(buf, w, h, x0, y0, x1, y1, c);
         }
     }
 
-    fn render_vertices(&self, buffer: &mut [u32], w: usize, h: usize, mesh: &Mesh,
+    fn render_vertices(&self, buf: &mut [u32], w: usize, h: usize, mesh: &Mesh,
                        ay: f32, ax: f32, dz: f32) {
         for v in &mesh.vertices {
             let (sx, sy, _z) = transform_vertex(*v, ay, ax, dz, w, h);
             // Glow: 3×3 bright center
             for dy in -1..=1i32 {
                 for dx in -1..=1i32 {
-                    additive_blend(buffer, w, h, sx + dx, sy + dy, 0x00FFFFFF);
+                    additive_blend(buf, w, h, sx + dx, sy + dy, 0x00FFFFFF);
                 }
             }
         }
     }
 
-    fn render_multi(&self, buffer: &mut [u32], w: usize, h: usize) {
+    fn render_multi(&self, buf: &mut [u32], w: usize, h: usize) {
         let t = self.frame as f32 * 0.012;
         let orbit_r = 1.2;
         
@@ -1318,9 +1318,9 @@ match scene {
                     let vb = V3 { x: mesh.vertices[b].x * 0.35 + ox, y: mesh.vertices[b].y * 0.35, z: mesh.vertices[b].z * 0.35 + oz };
                     let (x0, y0, z0) = transform_vertex(va, self.angle_y * 0.5, self.angle_x, self.dz + 1.0, w, h);
                     let (x1, y1, z1) = transform_vertex(vb, self.angle_y * 0.5, self.angle_x, self.dz + 1.0, w, h);
-                    let average_z = (z0 + z1) * 0.5;
-                    let c = depth_color(average_z, *color);
-                    draw_line_thick(buffer, w, h, x0, y0, x1, y1, c);
+                    let avg_z = (z0 + z1) * 0.5;
+                    let c = depth_color(avg_z, *color);
+                    draw_line_thick(buf, w, h, x0, y0, x1, y1, c);
                 }
             }
         }
@@ -1338,7 +1338,7 @@ match scene {
     ///  6. No rotation (camera drift only) = vestibular stability → "flying through"
     ///  7. Demoscene distance table trick: z wraps modulo → seamless infinite repeat
     ///  8. Trail brightness squared falloff = Weber-Fechner logarithmic perception
-    fn render_holo_matrix(&self, buffer: &mut [u32], w: usize, h: usize) {
+    fn render_holo_matrix(&self, buf: &mut [u32], w: usize, h: usize) {
         // ── Glyph bitmaps: 16 katakana-inspired 5×7 patterns stored as u64 bitmasks ──
         const GLYPHS: [u64; 16] = [
             0b11111_10001_10001_11111_00001_00001_00001, // ア (a)
@@ -1388,24 +1388,24 @@ match scene {
                 let py = cy as i32 + ry;
                 if py < 0 || py >= h as i32 { continue; }
                 let ry2 = ry * ry;
-                for receive in -maximum_rad..=maximum_rad {
-                    let d2 = receive * receive + ry2;
+                for rx in -maximum_rad..=maximum_rad {
+                    let d2 = rx * rx + ry2;
                     if d2 > mr2 { continue; }
-                    let pixel_x = cx as i32 + receive;
-                    if pixel_x < 0 || pixel_x >= w as i32 { continue; }
+                    let px_x = cx as i32 + rx;
+                    if px_x < 0 || px_x >= w as i32 { continue; }
                     let t = 1.0 - (d2 as f32 / mr2 as f32);
                     let t = t * t * pulse;
                     let g = (t * 45.0) as u32;
                     let b = (t * 15.0) as u32;
                     if g > 0 {
-                        let glow = 0xFF000000 | (g.minimum(255) << 8) | b.minimum(255);
-                        let index = py as usize * w + pixel_x as usize;
-                        if index < buffer.len() {
-                            let destination = buffer[index];
-                            let rr = ((destination >> 16) & 0xFF) + ((glow >> 16) & 0xFF);
-                            let gg = ((destination >> 8) & 0xFF) + ((glow >> 8) & 0xFF);
-                            let bb = (destination & 0xFF) + (glow & 0xFF);
-                            buffer[index] = 0xFF000000 | (rr.minimum(255) << 16) | (gg.minimum(255) << 8) | bb.minimum(255);
+                        let glow = 0xFF000000 | (g.min(255) << 8) | b.min(255);
+                        let idx = py as usize * w + px_x as usize;
+                        if idx < buf.len() {
+                            let dst = buf[idx];
+                            let rr = ((dst >> 16) & 0xFF) + ((glow >> 16) & 0xFF);
+                            let gg = ((dst >> 8) & 0xFF) + ((glow >> 8) & 0xFF);
+                            let bb = (dst & 0xFF) + (glow & 0xFF);
+                            buf[idx] = 0xFF000000 | (rr.min(255) << 16) | (gg.min(255) << 8) | bb.min(255);
                         }
                     }
                 }
@@ -1443,16 +1443,16 @@ match scene {
 
             // Rain parameters
             let speed = 0.012 + (seed3 % 1000) as f32 / 1000.0 * 0.02;
-            let trail_length = 6 + (seed >> 12) as usize % 12;
+            let trail_len = 6 + (seed >> 12) as usize % 12;
             let char_spacing: f32 = 0.30;
             let phase = (seed2 >> 8) as f32 / 256.0;
             let y_range: f32 = 3.0 + radius * 0.5;
 
             // Head Y — drops fall downward within the column's local space
-            let total_travel = y_range + trail_length as f32 * char_spacing + 2.0;
+            let total_travel = y_range + trail_len as f32 * char_spacing + 2.0;
             let head_local_y = y_range * 0.5 - ((frame as f32 * speed + phase * y_range) % total_travel);
 
-            for ci in 0..trail_length {
+            for ci in 0..trail_len {
                 let local_y = head_local_y + ci as f32 * char_spacing;
                 if local_y > y_range || local_y < -y_range { continue; }
 
@@ -1469,7 +1469,7 @@ match scene {
 
                 // ── Depth-based scaling: 1/z² foreshortening (stronger depth cue) ──
                 let z_inv = 1.0 / rotated.z;
-                let scale = (z_inv * z_inv * 30.0).maximum(1.0).minimum(4.0) as i32;
+                let scale = (z_inv * z_inv * 30.0).max(1.0).min(4.0) as i32;
 
                 let glyph_w = scale * 5;
                 let glyph_h = scale * 7;
@@ -1477,7 +1477,7 @@ match scene {
                 if sy + glyph_h < -5 || sy - glyph_h > h as i32 + 5 { continue; }
 
                 // ── Brightness: head bright, trail fades squared ──
-                let trail_t = ci as f32 / trail_length as f32;
+                let trail_t = ci as f32 / trail_len as f32;
                 let trail_fade = (1.0 - trail_t) * (1.0 - trail_t);
                 // Depth fog: far = dim (exponential for realism)
                 let depth_fade = fast_exp(-rotated.z * 0.12);
@@ -1490,7 +1490,7 @@ match scene {
                 let glyph = GLYPHS[glyph_index];
 
                 // ── Color: green hologram palette ──
-                let (cr, cg, callback) = if ci == 0 {
+                let (cr, cg, cb) = if ci == 0 {
                     // Head: white-hot green (optic flow anchor point)
                     ((brightness * 200.0) as u32, (brightness * 255.0) as u32, (brightness * 210.0) as u32)
                 } else if ci <= 2 {
@@ -1498,35 +1498,35 @@ match scene {
                 } else {
                     ((brightness * 8.0) as u32, (brightness * 230.0) as u32, (brightness * 20.0) as u32)
                 };
-                let cr = cr.minimum(255);
-                let cg = cg.minimum(255);
-                let callback = callback.minimum(255);
-                let color = 0xFF000000 | (cr << 16) | (cg << 8) | callback;
+                let cr = cr.min(255);
+                let cg = cg.min(255);
+                let cb = cb.min(255);
+                let color = 0xFF000000 | (cr << 16) | (cg << 8) | cb;
 
                 // ── Draw glyph bitmap, scaled — direct write for trail, additive for head ──
                 let ox = sx - glyph_w / 2;
                 let oy = sy - glyph_h / 2;
                 let use_additive = ci <= 1; // only head chars need additive (might overlap glow)
                 for row in 0..7i32 {
-                    for column in 0..5i32 {
-                        let bit_index = row * 5 + column;
+                    for col in 0..5i32 {
+                        let bit_index = row * 5 + col;
                         if (glyph >> bit_index) & 1 == 0 { continue; }
                         for py in 0..scale {
                             let fy = oy + row * scale + py;
                             if fy < 0 || fy >= h as i32 { continue; }
                             let row_off = fy as usize * w;
-                            for pixel in 0..scale {
-                                let fx = ox + column * scale + pixel;
+                            for px in 0..scale {
+                                let fx = ox + col * scale + px;
                                 if fx < 0 || fx >= w as i32 { continue; }
-                                let index = row_off + fx as usize;
+                                let idx = row_off + fx as usize;
                                 if use_additive {
-                                    let destination = buffer[index];
-                                    let rr = ((destination >> 16) & 0xFF) + ((color >> 16) & 0xFF);
-                                    let gg = ((destination >> 8) & 0xFF) + ((color >> 8) & 0xFF);
-                                    let bb = (destination & 0xFF) + (color & 0xFF);
-                                    buffer[index] = 0xFF000000 | (rr.minimum(255) << 16) | (gg.minimum(255) << 8) | bb.minimum(255);
+                                    let dst = buf[idx];
+                                    let rr = ((dst >> 16) & 0xFF) + ((color >> 16) & 0xFF);
+                                    let gg = ((dst >> 8) & 0xFF) + ((color >> 8) & 0xFF);
+                                    let bb = (dst & 0xFF) + (color & 0xFF);
+                                    buf[idx] = 0xFF000000 | (rr.min(255) << 16) | (gg.min(255) << 8) | bb.min(255);
                                 } else {
-                                    buffer[index] = color;
+                                    buf[idx] = color;
                                 }
                             }
                         }
@@ -1543,7 +1543,7 @@ match scene {
                     ];
                     for &(gx, gy) in &corners {
                         if gx >= 0 && gx < w as i32 && gy >= 0 && gy < h as i32 {
-                            additive_blend(buffer, w, h, gx, gy, glow_color);
+                            additive_blend(buf, w, h, gx, gy, glow_color);
                         }
                     }
                 }
@@ -1562,25 +1562,25 @@ match scene {
             // Horizontal lines (receding — get closer together toward horizon)
             for i in 0..number_hz {
                 let t = (i as f32 + grid_z_scroll / 48.0 * (number_hz as f32 / 4.0)) / number_hz as f32;
-                let t = t.minimum(0.99);
+                let t = t.min(0.99);
                 let screen_y = horizon_y + ((1.0 - t) * (1.0 - t) * (h as f32 - horizon_y as f32)) as i32;
                 if screen_y < 0 || screen_y >= h as i32 { continue; }
                 let depth_fade = (1.0 - t) * (1.0 - t);
                 let g = (grid_color_base as f32 * depth_fade * 1.5) as u32;
                 if g < 3 { continue; }
-                let line_color = 0xFF000000 | (g.minimum(255) << 8) | (g.minimum(255) / 4);
+                let line_color = 0xFF000000 | (g.min(255) << 8) | (g.min(255) / 4);
                 let row_off = screen_y as usize * w;
                 // Draw horizontal line — skip every other pixel for speed
-                let mut pixel = 0;
-                while pixel < w {
-                    let index = row_off + pixel;
-                    if index < buffer.len() {
-                        let destination = buffer[index];
-                        let gg = ((destination >> 8) & 0xFF) + ((line_color >> 8) & 0xFF);
-                        let bb = (destination & 0xFF) + (line_color & 0xFF);
-                        buffer[index] = 0xFF000000 | (gg.minimum(255) << 8) | bb.minimum(255);
+                let mut px = 0;
+                while px < w {
+                    let idx = row_off + px;
+                    if idx < buf.len() {
+                        let dst = buf[idx];
+                        let gg = ((dst >> 8) & 0xFF) + ((line_color >> 8) & 0xFF);
+                        let bb = (dst & 0xFF) + (line_color & 0xFF);
+                        buf[idx] = 0xFF000000 | (gg.min(255) << 8) | bb.min(255);
                     }
-                    pixel += 2; // skip pixel for perf
+                    px += 2; // skip pixel for perf
                 }
             }
 
@@ -1589,7 +1589,7 @@ match scene {
                 let vx = (i as f32 / number_vt as f32) * w as f32;
                 let vx = vx as i32;
                 let bottom_y = h as i32 - 1;
-                let steps = (bottom_y - horizon_y).maximum(1);
+                let steps = (bottom_y - horizon_y).max(1);
                 let mut s = 0;
                 while s < steps {
                     let t = s as f32 / steps as f32;
@@ -1601,13 +1601,13 @@ match scene {
                         let depth_fade = t * t;
                         let g = (grid_color_base as f32 * depth_fade * 1.2) as u32;
                         if g >= 2 {
-                            let index = sy as usize * w + sx as usize;
-                            if index < buffer.len() {
-                                let line_color = 0xFF000000 | (g.minimum(255) << 8) | (g.minimum(255) / 4);
-                                let destination = buffer[index];
-                                let gg = ((destination >> 8) & 0xFF) + ((line_color >> 8) & 0xFF);
-                                let bb = (destination & 0xFF) + (line_color & 0xFF);
-                                buffer[index] = 0xFF000000 | (gg.minimum(255) << 8) | bb.minimum(255);
+                            let idx = sy as usize * w + sx as usize;
+                            if idx < buf.len() {
+                                let line_color = 0xFF000000 | (g.min(255) << 8) | (g.min(255) / 4);
+                                let dst = buf[idx];
+                                let gg = ((dst >> 8) & 0xFF) + ((line_color >> 8) & 0xFF);
+                                let bb = (dst & 0xFF) + (line_color & 0xFF);
+                                buf[idx] = 0xFF000000 | (gg.min(255) << 8) | bb.min(255);
                             }
                         }
                     }
@@ -1639,23 +1639,23 @@ match scene {
 
                 let fade = ((1.0 - life) * 40.0) as u32;
                 if fade < 2 { continue; }
-                let streak_color = 0xFF000000 | (fade.minimum(255) << 8) | (fade.minimum(255) / 3);
-                draw_line(buffer, w, h, x0, y0, x1, y1, streak_color);
+                let streak_color = 0xFF000000 | (fade.min(255) << 8) | (fade.min(255) / 3);
+                draw_line(buf, w, h, x0, y0, x1, y1, streak_color);
             }
         }
 
     }
 
     /// Character scene background: dark blue gradient + radial vignette + subtle floor grid
-    fn render_character_bg(&self, buffer: &mut [u32], w: usize, h: usize) {
+    fn render_character_bg(&self, buf: &mut [u32], w: usize, h: usize) {
         let cx = w as f32 * 0.5;
         let cy = h as f32 * 0.5;
         let maximum_dist = fast_sqrt(cx * cx + cy * cy);
 
         for y in 0..h {
             for x in 0..w {
-                let index = y * w + x;
-                if index >= buffer.len() { break; }
+                let idx = y * w + x;
+                if idx >= buf.len() { break; }
                 // Vertical gradient: dark navy at top → slightly lighter at bottom
                 let t = y as f32 / h as f32;
                 let base_r = (8.0 + t * 12.0) as u32;
@@ -1666,10 +1666,10 @@ match scene {
                 let dy = y as f32 - cy;
                 let dist = fast_sqrt(dx * dx + dy * dy) / maximum_dist;
                 let vig = 1.0 - dist * dist * 0.6;
-                let r = ((base_r as f32 * vig) as u32).minimum(255);
-                let g = ((base_g as f32 * vig) as u32).minimum(255);
-                let b = ((base_b as f32 * vig) as u32).minimum(255);
-                buffer[index] = 0xFF000000 | (r << 16) | (g << 8) | b;
+                let r = ((base_r as f32 * vig) as u32).min(255);
+                let g = ((base_g as f32 * vig) as u32).min(255);
+                let b = ((base_b as f32 * vig) as u32).min(255);
+                buf[idx] = 0xFF000000 | (r << 16) | (g << 8) | b;
             }
         }
 
@@ -1684,25 +1684,25 @@ match scene {
             let fade = (1.0 - t) * (1.0 - t);
             let g = (grid_color as f32 * fade * 1.5) as u32;
             if g < 2 { continue; }
-            let line_color = 0xFF000000 | (g.minimum(60) / 3 << 16) | (g.minimum(60) / 2 << 8) | g.minimum(60);
+            let line_color = 0xFF000000 | (g.min(60) / 3 << 16) | (g.min(60) / 2 << 8) | g.min(60);
             let row_off = screen_y * w;
-            let mut pixel = 0;
-            while pixel < w {
-                let index = row_off + pixel;
-                if index < buffer.len() {
-                    let destination = buffer[index];
-                    let rr = ((destination >> 16) & 0xFF) + ((line_color >> 16) & 0xFF);
-                    let gg = ((destination >> 8) & 0xFF) + ((line_color >> 8) & 0xFF);
-                    let bb = (destination & 0xFF) + (line_color & 0xFF);
-                    buffer[index] = 0xFF000000 | (rr.minimum(255) << 16) | (gg.minimum(255) << 8) | bb.minimum(255);
+            let mut px = 0;
+            while px < w {
+                let idx = row_off + px;
+                if idx < buf.len() {
+                    let dst = buf[idx];
+                    let rr = ((dst >> 16) & 0xFF) + ((line_color >> 16) & 0xFF);
+                    let gg = ((dst >> 8) & 0xFF) + ((line_color >> 8) & 0xFF);
+                    let bb = (dst & 0xFF) + (line_color & 0xFF);
+                    buf[idx] = 0xFF000000 | (rr.min(255) << 16) | (gg.min(255) << 8) | bb.min(255);
                 }
-                pixel += 2;
+                px += 2;
             }
         }
     }
 
     /// Hologram scanline effect — Star Wars-style horizontal sweep + CRT scanlines
-    fn render_scanlines(&self, buffer: &mut [u32], w: usize, h: usize) {
+    fn render_scanlines(&self, buf: &mut [u32], w: usize, h: usize) {
         // Sweeping bright beam that bounces up and down
         let cycle = (h as f32) * 2.0;
         let raw_y = (self.frame as f32 * 1.8) % cycle;
@@ -1712,27 +1712,27 @@ match scene {
         for y in 0..h {
             let row_start = y * w;
             let row_end = row_start + w;
-            if row_end > buffer.len() { break; }
+            if row_end > buf.len() { break; }
 
             // CRT scanline: every 3rd row gets dimmed
             if y % 3 == 0 {
-                for pixel in buffer[row_start..row_end].iterator_mut() {
-                    let r = ((*pixel >> 16) & 0xFF) * 200 / 256;
-                    let g = ((*pixel >> 8) & 0xFF) * 200 / 256;
-                    let b = (*pixel & 0xFF) * 200 / 256;
-                    *pixel = 0xFF000000 | (r << 16) | (g << 8) | b;
+                for px in buf[row_start..row_end].iter_mut() {
+                    let r = ((*px >> 16) & 0xFF) * 200 / 256;
+                    let g = ((*px >> 8) & 0xFF) * 200 / 256;
+                    let b = (*px & 0xFF) * 200 / 256;
+                    *px = 0xFF000000 | (r << 16) | (g << 8) | b;
                 }
             }
 
             // Bright sweep beam (±6 pixels around sweep_y)
-            let dist = (y as i32 - sweep_y).unsigned_absolute();
+            let dist = (y as i32 - sweep_y).unsigned_abs();
             if dist < 6 {
                 let boost = (6 - dist) * 5;
-                for pixel in buffer[row_start..row_end].iterator_mut() {
-                    let r = (((*pixel >> 16) & 0xFF) + boost).minimum(255);
-                    let g = (((*pixel >> 8) & 0xFF) + boost).minimum(255);
-                    let b = ((*pixel & 0xFF) + boost).minimum(255);
-                    *pixel = 0xFF000000 | (r << 16) | (g << 8) | b;
+                for px in buf[row_start..row_end].iter_mut() {
+                    let r = (((*px >> 16) & 0xFF) + boost).min(255);
+                    let g = (((*px >> 8) & 0xFF) + boost).min(255);
+                    let b = ((*px & 0xFF) + boost).min(255);
+                    *px = 0xFF000000 | (r << 16) | (g << 8) | b;
                 }
             }
 
@@ -1741,7 +1741,7 @@ match scene {
             if jitter_seed % 97 < 3 {
                 // Shift row slightly (2px) for glitch effect
                 let shift = 2;
-                let row = &mut buffer[row_start..row_end];
+                let row = &mut buf[row_start..row_end];
                 if w > shift {
                     for x in (shift..w).rev() {
                         row[x] = row[x - shift];
@@ -1754,7 +1754,7 @@ match scene {
         }
     }
 
-    fn render_rain(&self, buffer: &mut [u32], w: usize, h: usize) {
+    fn render_rain(&self, buf: &mut [u32], w: usize, h: usize) {
         // Simple fast rain: vertical streaks based on frame counter
         let number_drops = w / 12;
         let frame = self.frame;
@@ -1771,11 +1771,11 @@ match scene {
                 let y = y_base - j;
                 if y >= 0 && y < h as i32 {
                     let fade = (len as i32 - j) as u32 * 255 / len as u32;
-                    let g = (fade * 180 / 255).minimum(255);
+                    let g = (fade * 180 / 255).min(255);
                     let color = 0xFF000000 | (g << 8);
-                    let index = y as usize * w + x as usize;
-                    if index < buffer.len() {
-                        buffer[index] = color;
+                    let idx = y as usize * w + x as usize;
+                    if idx < buf.len() {
+                        buf[idx] = color;
                     }
                 }
             }

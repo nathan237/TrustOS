@@ -6,396 +6,396 @@
 use alloc::vec::Vec;
 
 
-pub const AZD_: usize = 64;
-pub const AZB_: usize = 80;
+pub const BBE_: usize = 64;
+pub const BBC_: usize = 80;
 
 
-pub const IH_: u32 = 0xFF00FF00;
-pub const NZ_: u32 = 0xFF00CC00;
-pub const UU_: u32 = 0xFF008800;
-pub const UV_: u32 = 0xFF004400;
+pub const JA_: u32 = 0xFF00FF00;
+pub const OX_: u32 = 0xFF00CC00;
+pub const WD_: u32 = 0xFF008800;
+pub const WE_: u32 = 0xFF004400;
 
 
 
-#[rustfmt::chz]
-pub static DSR_: [u8; AZD_ * AZB_] = {
-    let mut f = [0u8; AZD_ * AZB_];
-    f
+#[rustfmt::skip]
+pub static DWJ_: [u8; BBE_ * BBC_] = {
+    let mut data = [0u8; BBE_ * BBC_];
+    data
 };
 
 
-pub fn epd(b: u32, c: u32) {
-    nnh(b, c, 1);
+pub fn draw_logo(x: u32, y: u32) {
+    hto(x, y, 1);
 }
 
 
-pub fn ynf(b: u32, c: u32, bv: u32) {
-    nnh(b, c, bv);
+pub fn qdu(x: u32, y: u32, scale: u32) {
+    hto(x, y, scale);
 }
 
 
-fn nnh(cx: u32, ae: u32, bv: u32) {
-    let e = bv;
+fn hto(cx: u32, u: u32, scale: u32) {
+    let j = scale;
     
     
-    let cli = cx + 24 * e;
-    let bhj = ae;
+    let auf = cx + 24 * j;
+    let afi = u;
     
     
-    sbr(cli + 8 * e, bhj + 2 * e, 6 * e, 8 * e, IH_);
+    lia(auf + 8 * j, afi + 2 * j, 6 * j, 8 * j, JA_);
     
     
-    bdx(cli + 2 * e, bhj + 10 * e, 12 * e, 10 * e, NZ_);
-    epg(cli + 2 * e, bhj + 10 * e, 12 * e, 10 * e, IH_);
+    draw_filled_rect(auf + 2 * j, afi + 10 * j, 12 * j, 10 * j, OX_);
+    draw_rect_outline(auf + 2 * j, afi + 10 * j, 12 * j, 10 * j, JA_);
     
     
-    epc(cli + 8 * e, bhj + 14 * e, 2 * e, UV_);
-    bdx(cli + 7 * e, bhj + 14 * e, 2 * e, 4 * e, UV_);
+    byw(auf + 8 * j, afi + 14 * j, 2 * j, WE_);
+    draw_filled_rect(auf + 7 * j, afi + 14 * j, 2 * j, 4 * j, WE_);
     
     
-    let wmu = cx + 8 * e;
-    let eiq = ae + 22 * e;
-    let cbt = 48 * e;
-    let dlu = 44 * e;
+    let orr = cx + 8 * j;
+    let bvt = u + 22 * j;
+    let apd = 48 * j;
+    let bje = 44 * j;
     
-    sfn(wmu, eiq, cbt, dlu, NZ_, IH_);
-    
-    
-    let khg = cx + 20 * e;
-    let khh = ae + 38 * e;
-    scf(khg, khh, 24 * e, IH_);
+    lkr(orr, bvt, apd, bje, OX_, JA_);
     
     
-    sfg(cx, ae + 30 * e, 64 * e, 36 * e, UU_);
+    let flj = cx + 20 * j;
+    let flk = u + 38 * j;
+    lih(flj, flk, 24 * j, JA_);
+    
+    
+    lkn(cx, u + 30 * j, 64 * j, 36 * j, WD_);
 }
 
 
-fn bdx(b: u32, c: u32, d: u32, i: u32, s: u32) {
-    for x in c..(c + i) {
-        for y in b..(b + d) {
-            super::sf(y, x, s);
+fn draw_filled_rect(x: u32, y: u32, w: u32, h: u32, color: u32) {
+    for o in y..(y + h) {
+        for p in x..(x + w) {
+            super::put_pixel(p, o, color);
         }
     }
 }
 
 
-fn epg(b: u32, c: u32, d: u32, i: u32, s: u32) {
+fn draw_rect_outline(x: u32, y: u32, w: u32, h: u32, color: u32) {
     
-    for y in b..(b + d) {
-        super::sf(y, c, s);
-        super::sf(y, c + i - 1, s);
+    for p in x..(x + w) {
+        super::put_pixel(p, y, color);
+        super::put_pixel(p, y + h - 1, color);
     }
     
-    for x in c..(c + i) {
-        super::sf(b, x, s);
-        super::sf(b + d - 1, x, s);
+    for o in y..(y + h) {
+        super::put_pixel(x, o, color);
+        super::put_pixel(x + w - 1, o, color);
     }
 }
 
 
-fn epc(cx: u32, ae: u32, m: u32, s: u32) {
-    let bwl = (m * m) as i32;
-    for bg in -(m as i32)..(m as i32 + 1) {
-        for dx in -(m as i32)..(m as i32 + 1) {
-            if dx * dx + bg * bg <= bwl {
-                let y = (cx as i32 + dx) as u32;
-                let x = (ae as i32 + bg) as u32;
-                super::sf(y, x, s);
+fn byw(cx: u32, u: u32, r: u32, color: u32) {
+    let amn = (r * r) as i32;
+    for ad in -(r as i32)..(r as i32 + 1) {
+        for dx in -(r as i32)..(r as i32 + 1) {
+            if dx * dx + ad * ad <= amn {
+                let p = (cx as i32 + dx) as u32;
+                let o = (u as i32 + ad) as u32;
+                super::put_pixel(p, o, color);
             }
         }
     }
 }
 
 
-fn sbr(cx: u32, ae: u32, dut: u32, bwk: u32, s: u32) {
-    let vpl = (dut * dut) as i32;
-    let vpm = (bwk * bwk) as i32;
+fn lia(cx: u32, u: u32, boi: u32, amm: u32, color: u32) {
+    let oas = (boi * boi) as i32;
+    let oat = (amm * amm) as i32;
     
-    for bg in -(bwk as i32)..1 {  
-        for dx in -(bwk as i32)..(bwk as i32 + 1) {
-            let eok = dx * dx + bg * bg;
-            if eok >= vpl && eok <= vpm {
-                let y = (cx as i32 + dx) as u32;
-                let x = (ae as i32 + bg) as u32;
-                super::sf(y, x, s);
+    for ad in -(amm as i32)..1 {  
+        for dx in -(amm as i32)..(amm as i32 + 1) {
+            let byn = dx * dx + ad * ad;
+            if byn >= oas && byn <= oat {
+                let p = (cx as i32 + dx) as u32;
+                let o = (u as i32 + ad) as u32;
+                super::put_pixel(p, o, color);
             }
         }
     }
     
-    for bg in 0..(bwk - dut + 2) {
-        let eua = cx - bwk + 1;
-        let dvc = cx + bwk - 1;
-        let x = ae + bg;
-        for ab in 0..(bwk - dut) {
-            super::sf(eua + ab, x, s);
-            super::sf(dvc - ab, x, s);
+    for ad in 0..(amm - boi + 2) {
+        let aue = cx - amm + 1;
+        let asa = cx + amm - 1;
+        let o = u + ad;
+        for t in 0..(amm - boi) {
+            super::put_pixel(aue + t, o, color);
+            super::put_pixel(asa - t, o, color);
         }
     }
 }
 
 
-fn sfn(b: u32, c: u32, d: u32, i: u32, ebo: u32, dua: u32) {
-    let abd = d / 2;
-    let fwt = c + i;
+fn lkr(x: u32, y: u32, w: u32, h: u32, bso: u32, bob: u32) {
+    let nk = w / 2;
+    let crq = y + h;
     
     
-    let exm = i * 2 / 3;
-    for x in c..(c + exm) {
-        for y in b..(b + d) {
+    let cde = h * 2 / 3;
+    for o in y..(y + cde) {
+        for p in x..(x + w) {
             
-            let rzb = if y < b + abd { 
-                b + abd - y 
+            let lfy = if p < x + nk { 
+                x + nk - p 
             } else { 
-                y - (b + abd) 
+                p - (x + nk) 
             };
-            let dlr = if rzb < d / 6 {
-                ebo
+            let shade = if lfy < w / 6 {
+                bso
             } else {
-                mzk(ebo, 0xFF000000, 20)
+                hia(bso, 0xFF000000, 20)
             };
-            super::sf(y, x, dlr);
+            super::put_pixel(p, o, shade);
         }
     }
     
     
-    for x in (c + exm)..fwt {
-        let li = (x - (c + exm)) as f32 / (i - exm) as f32;
-        let fgg = ((1.0 - li) * abd as f32) as u32;
+    for o in (y + cde)..crq {
+        let progress = (o - (y + cde)) as f32 / (h - cde) as f32;
+        let chx = ((1.0 - progress) * nk as f32) as u32;
         
-        if fgg > 0 {
-            let fd = b + abd - fgg;
-            let hw = b + abd + fgg;
-            for y in fd..hw {
-                super::sf(y, x, ebo);
+        if chx > 0 {
+            let left = x + nk - chx;
+            let right = x + nk + chx;
+            for p in left..right {
+                super::put_pixel(p, o, bso);
             }
         }
     }
     
     
     
-    for y in b..(b + d) {
-        super::sf(y, c, dua);
+    for p in x..(x + w) {
+        super::put_pixel(p, y, bob);
     }
     
-    for x in c..(c + exm) {
-        super::sf(b, x, dua);
-        super::sf(b + d - 1, x, dua);
+    for o in y..(y + cde) {
+        super::put_pixel(x, o, bob);
+        super::put_pixel(x + w - 1, o, bob);
     }
     
-    for x in (c + exm)..fwt {
-        let li = (x - (c + exm)) as f32 / (i - exm) as f32;
-        let fgg = ((1.0 - li) * abd as f32) as u32;
-        if fgg > 0 {
-            super::sf(b + abd - fgg, x, dua);
-            super::sf(b + abd + fgg, x, dua);
+    for o in (y + cde)..crq {
+        let progress = (o - (y + cde)) as f32 / (h - cde) as f32;
+        let chx = ((1.0 - progress) * nk as f32) as u32;
+        if chx > 0 {
+            super::put_pixel(x + nk - chx, o, bob);
+            super::put_pixel(x + nk + chx, o, bob);
         }
     }
     
-    super::sf(b + abd, fwt - 1, dua);
+    super::put_pixel(x + nk, crq - 1, bob);
 }
 
 
-fn scf(b: u32, c: u32, aw: u32, s: u32) {
-    let ahw = core::cmp::am(2, aw / 8);
+fn lih(x: u32, y: u32, size: u32, color: u32) {
+    let rh = core::cmp::max(2, size / 8);
     
     
-    let ql = b;
-    let vc = c + aw / 3;
-    let cgd = b + aw / 3;
-    let bkl = c + aw * 2 / 3;
+    let start_x = x;
+    let start_y = y + size / 3;
+    let arn = x + size / 3;
+    let ags = y + size * 2 / 3;
     
-    nns(ql, vc, cgd, bkl, ahw, s);
+    hts(start_x, start_y, arn, ags, rh, color);
     
     
-    let cqe = b + aw;
-    let hic = c;
+    let awy = x + size;
+    let doq = y;
     
-    nns(cgd, bkl, cqe, hic, ahw, s);
+    hts(arn, ags, awy, doq, rh, color);
 }
 
 
-fn nns(fy: u32, fo: u32, dn: u32, dp: u32, ahw: u32, s: u32) {
-    let dx = (dn as i32 - fy as i32).gp();
-    let bg = (dp as i32 - fo as i32).gp();
-    let cr: i32 = if fy < dn { 1 } else { -1 };
-    let cq: i32 = if fo < dp { 1 } else { -1 };
-    let mut rq = dx - bg;
+fn hts(bm: u32, az: u32, x1: u32, y1: u32, rh: u32, color: u32) {
+    let dx = (x1 as i32 - bm as i32).abs();
+    let ad = (y1 as i32 - az as i32).abs();
+    let am: i32 = if bm < x1 { 1 } else { -1 };
+    let ak: i32 = if az < y1 { 1 } else { -1 };
+    let mut err = dx - ad;
     
-    let mut b = fy as i32;
-    let mut c = fo as i32;
-    let dn = dn as i32;
-    let dp = dp as i32;
+    let mut x = bm as i32;
+    let mut y = az as i32;
+    let x1 = x1 as i32;
+    let y1 = y1 as i32;
     
     loop {
         
-        for ty in -(ahw as i32 / 2)..(ahw as i32 / 2 + 1) {
-            for gx in -(ahw as i32 / 2)..(ahw as i32 / 2 + 1) {
-                if gx * gx + ty * ty <= (ahw as i32 / 2) * (ahw as i32 / 2) {
-                    super::sf((b + gx) as u32, (c + ty) as u32, s);
+        for ty in -(rh as i32 / 2)..(rh as i32 / 2 + 1) {
+            for bu in -(rh as i32 / 2)..(rh as i32 / 2 + 1) {
+                if bu * bu + ty * ty <= (rh as i32 / 2) * (rh as i32 / 2) {
+                    super::put_pixel((x + bu) as u32, (y + ty) as u32, color);
                 }
             }
         }
         
-        if b == dn && c == dp {
+        if x == x1 && y == y1 {
             break;
         }
         
-        let agl = 2 * rq;
-        if agl > -bg {
-            rq -= bg;
-            b += cr;
+        let pg = 2 * err;
+        if pg > -ad {
+            err -= ad;
+            x += am;
         }
-        if agl < dx {
-            rq += dx;
-            c += cq;
+        if pg < dx {
+            err += dx;
+            y += ak;
         }
     }
 }
 
 
-fn sfg(b: u32, c: u32, d: u32, i: u32, s: u32) {
-    let ccz = d / 10;
+fn lkn(x: u32, y: u32, w: u32, h: u32, color: u32) {
+    let aps = w / 10;
     
     
-    let eua = b;
-    let gli = c + i / 4;
+    let aue = x;
+    let dal = y + h / 4;
     
     
-    bdx(eua, gli, d / 4, ccz, s);
+    draw_filled_rect(aue, dal, w / 4, aps, color);
     
-    bdx(eua, gli + ccz, ccz * 2, i / 3, s);
+    draw_filled_rect(aue, dal + aps, aps * 2, h / 3, color);
     
-    bdx(eua + d / 4 - ccz, gli - ccz, ccz * 2, ccz * 3, s);
+    draw_filled_rect(aue + w / 4 - aps, dal - aps, aps * 2, aps * 3, color);
     
     
-    let dvc = b + d - d / 4;
-    bdx(dvc, gli, d / 4, ccz, s);
-    bdx(b + d - ccz * 2, gli + ccz, ccz * 2, i / 3, s);
-    bdx(dvc - ccz, gli - ccz, ccz * 2, ccz * 3, s);
+    let asa = x + w - w / 4;
+    draw_filled_rect(asa, dal, w / 4, aps, color);
+    draw_filled_rect(x + w - aps * 2, dal + aps, aps * 2, h / 3, color);
+    draw_filled_rect(asa - aps, dal - aps, aps * 2, aps * 3, color);
 }
 
 
-fn mzk(bjo: u32, btr: u32, dw: u32) -> u32 {
-    let dw = dw.v(255);
-    let akg = 255 - dw;
+fn hia(agh: u32, ale: u32, alpha: u32) -> u32 {
+    let alpha = alpha.min(255);
+    let sg = 255 - alpha;
     
-    let aqh = (bjo >> 16) & 0xFF;
-    let cyd = (bjo >> 8) & 0xFF;
-    let of = bjo & 0xFF;
+    let uh = (agh >> 16) & 0xFF;
+    let bbu = (agh >> 8) & 0xFF;
+    let gf = agh & 0xFF;
     
-    let uv = (btr >> 16) & 0xFF;
-    let cqu = (btr >> 8) & 0xFF;
-    let tb = btr & 0xFF;
+    let ju = (ale >> 16) & 0xFF;
+    let axe = (ale >> 8) & 0xFF;
+    let iq = ale & 0xFF;
     
-    let m = (aqh * akg + uv * dw) / 255;
-    let at = (cyd * akg + cqu * dw) / 255;
-    let o = (of * akg + tb * dw) / 255;
+    let r = (uh * sg + ju * alpha) / 255;
+    let g = (bbu * sg + axe * alpha) / 255;
+    let b = (gf * sg + iq * alpha) / 255;
     
-    0xFF000000 | (m << 16) | (at << 8) | o
+    0xFF000000 | (r << 16) | (g << 8) | b
 }
 
 
-pub fn nmt() {
-    let (z, ac) = super::yn();
+pub fn hti() {
+    let (width, height) = super::kv();
 
     
-    super::ah(0, 0, z, ac, LC_);
+    super::fill_rect(0, 0, width, height, LW_);
 
     
-    let cfz = crate::logo_bitmap::AY_ as u32;
-    let cfy = crate::logo_bitmap::BL_ as u32;
-    let euh = (z / 2).ao(cfz / 2);
-    let eui = (ac / 2).ao(cfy / 2);
-    crate::logo_bitmap::epd(euh, eui);
+    let ark = crate::logo_bitmap::BA_ as u32;
+    let arj = crate::logo_bitmap::BN_ as u32;
+    let cbn = (width / 2).saturating_sub(ark / 2);
+    let cbo = (height / 2).saturating_sub(arj / 2);
+    crate::logo_bitmap::draw_logo(cbn, cbo);
 }
 
 
-fn ynm(cx: u32, c: u32, qdp: u32) {
+fn qeb(cx: u32, y: u32, _scale: u32) {
     
-    let dq = "TRust-OS";
-    let xhv = dq.len() as u32;
-    let nk = 8u32;
-    let ql = cx.ao(xhv * nk / 2);
-    
-    
-    let bii = (ql / nk) as usize;
-    let br = (c / 16) as usize;
+    let title = "TRust-OS";
+    let pkc = title.len() as u32;
+    let ew = 8u32;
+    let start_x = cx.saturating_sub(pkc * ew / 2);
     
     
-    for (a, r) in dq.bw().cf() {
-        let y = ql + (a as u32) * nk;
-        afn(r, y as usize, c as usize, IH_, 0xFF000000);
+    let afu = (start_x / ew) as usize;
+    let row = (y / 16) as usize;
+    
+    
+    for (i, c) in title.chars().enumerate() {
+        let p = start_x + (i as u32) * ew;
+        px(c, p as usize, y as usize, JA_, 0xFF000000);
     }
 }
 
 
-fn ynk(cx: u32, c: u32, qdp: u32) {
-    let prs = "FAST . SECURE . RELIABLE";
-    let xan = prs.len() as u32;
-    let nk = 8u32;
-    let ql = cx.ao(xan * nk / 2);
+fn qdz(cx: u32, y: u32, _scale: u32) {
+    let jlk = "FAST . SECURE . RELIABLE";
+    let pcy = jlk.len() as u32;
+    let ew = 8u32;
+    let start_x = cx.saturating_sub(pcy * ew / 2);
     
-    for (a, r) in prs.bw().cf() {
-        let y = ql + (a as u32) * nk;
+    for (i, c) in jlk.chars().enumerate() {
+        let p = start_x + (i as u32) * ew;
         
-        afn(r, y as usize, c as usize, NZ_, 0xFF000000);
+        px(c, p as usize, y as usize, OX_, 0xFF000000);
     }
 }
 
 
-fn afn(r: char, b: usize, c: usize, lp: u32, ei: u32) {
-    let ka = super::font::ada(r);
+fn px(c: char, x: usize, y: usize, fg: u32, bg: u32) {
+    let du = super::font::ol(c);
     
-    for br in 0..16 {
-        let fs = ka[br];
-        for bj in 0..8 {
-            let s = if (fs >> (7 - bj)) & 1 == 1 { lp } else { ei };
-            if s != ei {  
-                super::sf((b + bj) as u32, (c + br) as u32, s);
+    for row in 0..16 {
+        let bits = du[row];
+        for col in 0..8 {
+            let color = if (bits >> (7 - col)) & 1 == 1 { fg } else { bg };
+            if color != bg {  
+                super::put_pixel((x + col) as u32, (y + row) as u32, color);
             }
         }
     }
 }
 
 
-fn ynh(z: u32, ac: u32) {
+fn qdw(width: u32, height: u32) {
     
-    let mut dv: u32 = 12345;
+    let mut seed: u32 = 12345;
     
-    let das = |e: &mut u32| -> u32 {
-        *e = e.hx(1103515245).cn(12345);
-        (*e >> 16) & 0x7FFF
+    let pseudo_rand = |j: &mut u32| -> u32 {
+        *j = j.wrapping_mul(1103515245).wrapping_add(12345);
+        (*j >> 16) & 0x7FFF
     };
     
     
-    let mft = z / 8;
+    let guz = width / 8;
     
     for _ in 0..200 {
         
-        let b = das(&mut dv) % mft;
-        let c = das(&mut dv) % ac;
-        let hj = (das(&mut dv) % 4) as u8;
-        let s = match hj {
-            0 => UV_,
-            1 => UU_,
-            2 => NZ_,
-            _ => IH_,
+        let x = pseudo_rand(&mut seed) % guz;
+        let y = pseudo_rand(&mut seed) % height;
+        let intensity = (pseudo_rand(&mut seed) % 4) as u8;
+        let color = match intensity {
+            0 => WE_,
+            1 => WD_,
+            2 => OX_,
+            _ => JA_,
         };
-        let r = (b'0' + (das(&mut dv) % 75) as u8) as char;
-        afn(r, b as usize, c as usize, s, 0xFF000000);
+        let c = (b'0' + (pseudo_rand(&mut seed) % 75) as u8) as char;
+        px(c, x as usize, y as usize, color, 0xFF000000);
         
         
-        let b = z - mft + das(&mut dv) % mft;
-        let c = das(&mut dv) % ac;
-        let hj = (das(&mut dv) % 4) as u8;
-        let s = match hj {
-            0 => UV_,
-            1 => UU_,
-            2 => NZ_,
-            _ => IH_,
+        let x = width - guz + pseudo_rand(&mut seed) % guz;
+        let y = pseudo_rand(&mut seed) % height;
+        let intensity = (pseudo_rand(&mut seed) % 4) as u8;
+        let color = match intensity {
+            0 => WE_,
+            1 => WD_,
+            2 => OX_,
+            _ => JA_,
         };
-        let r = (b'0' + (das(&mut dv) % 75) as u8) as char;
-        afn(r, b as usize, c as usize, s, 0xFF000000);
+        let c = (b'0' + (pseudo_rand(&mut seed) % 75) as u8) as char;
+        px(c, x as usize, y as usize, color, 0xFF000000);
     }
 }
 
@@ -404,139 +404,139 @@ fn ynh(z: u32, ac: u32) {
 
 
 
-const BLL_: u32 = 22;
+const BOD_: u32 = 22;
 
 
-const LC_: u32 = 0xFF050606;
-const CTX_: u32 = 0xFF0A1A0E;
-const BGE_: u32 = 0xFF00FF66;
-const CTY_: u32 = 0xFF00CC55;
-const CUA_: u32 = 0xFF558866;
-const CTZ_: u32 = 0xFFCCEEDD;
-const EGQ_: u32 = 0xFF00AA44;
+const LW_: u32 = 0xFF050606;
+const CXO_: u32 = 0xFF0A1A0E;
+const BII_: u32 = 0xFF00FF66;
+const CXP_: u32 = 0xFF00CC55;
+const CXR_: u32 = 0xFF558866;
+const CXQ_: u32 = 0xFFCCEEDD;
+const EKJ_: u32 = 0xFF00AA44;
 
 
 
 
-pub fn led() {
-    let (z, ac) = super::yn();
-    if z == 0 || ac == 0 { return; }
-
-    
-    super::ah(0, 0, z, ac, LC_);
+pub fn gcn() {
+    let (width, height) = super::kv();
+    if width == 0 || height == 0 { return; }
 
     
-    let cfz = crate::logo_bitmap::AY_ as u32; 
-    let cfy = crate::logo_bitmap::BL_ as u32; 
-    let euh = (z / 2).ao(cfz / 2);
-    let eui = (ac / 2).ao(cfy / 2);
-    crate::logo_bitmap::epd(euh, eui);
+    super::fill_rect(0, 0, width, height, LW_);
 
     
-    let lo: u32 = 200;
-    let tn: u32 = 8;
-    let ajx: u32 = 40;
-    let pl = ac - 60;
+    let ark = crate::logo_bitmap::BA_ as u32; 
+    let arj = crate::logo_bitmap::BN_ as u32; 
+    let cbn = (width / 2).saturating_sub(ark / 2);
+    let cbo = (height / 2).saturating_sub(arj / 2);
+    crate::logo_bitmap::draw_logo(cbn, cbo);
 
     
-    super::ah(ajx, pl, lo, tn, CTX_);
-    
-    super::lx(ajx.ao(1), pl.ao(1), lo + 2, tn + 2, UU_);
+    let ek: u32 = 200;
+    let hs: u32 = 8;
+    let pv: u32 = 40;
+    let gk = height - 60;
 
     
-    let tua = "Initializing...";
-    let tud = pl + tn + 8;
-    for (a, r) in tua.bw().cf() {
-        let y = ajx + (a as u32) * 8;
-        afn(r, y as usize, tud as usize, CUA_, LC_);
+    super::fill_rect(pv, gk, ek, hs, CXO_);
+    
+    super::draw_rect(pv.saturating_sub(1), gk.saturating_sub(1), ek + 2, hs + 2, WD_);
+
+    
+    let mpp = "Initializing...";
+    let mps = gk + hs + 8;
+    for (i, c) in mpp.chars().enumerate() {
+        let p = pv + (i as u32) * 8;
+        px(c, p as usize, mps as usize, CXR_, LW_);
     }
 }
 
 
 
 
-pub fn bir(ib: u32, message: &str) {
-    let (jym, ac) = super::yn();
-    if jym == 0 || ac == 0 { return; }
+pub fn afw(phase: u32, message: &str) {
+    let (_width, height) = super::kv();
+    if _width == 0 || height == 0 { return; }
 
     
-    let lo: u32 = 200;
-    let tn: u32 = 8;
-    let ajx: u32 = 40;
-    let pl = ac - 60;
+    let ek: u32 = 200;
+    let hs: u32 = 8;
+    let pv: u32 = 40;
+    let gk = height - 60;
 
     
-    let li = ((ib + 1) * 100) / BLL_;
-    let kwa = (lo * li.v(100)) / 100;
+    let progress = ((phase + 1) * 100) / BOD_;
+    let fww = (ek * progress.min(100)) / 100;
 
     
-    if kwa > 0 {
-        super::ah(ajx, pl, kwa, tn, BGE_);
-        super::ah(ajx, pl, kwa, 2, CTY_);
+    if fww > 0 {
+        super::fill_rect(pv, gk, fww, hs, BII_);
+        super::fill_rect(pv, gk, fww, 2, CXP_);
     }
 
     
-    let dti = pl + tn + 8;
-    super::ah(ajx, dti, 400, 18, LC_);
+    let bnq = gk + hs + 8;
+    super::fill_rect(pv, bnq, 400, 18, LW_);
 
     
-    for (a, r) in message.bw().cf() {
-        let y = ajx + (a as u32) * 8;
-        afn(r, y as usize, dti as usize, CTZ_, LC_);
+    for (i, c) in message.chars().enumerate() {
+        let p = pv + (i as u32) * 8;
+        px(c, p as usize, bnq as usize, CXQ_, LW_);
     }
 
     
-    let vfx = if li >= 100 {
+    let nsw = if progress >= 100 {
         "100%"
     } else {
-        static mut CIV_: [u8; 5] = [0; 5];
-        let k = unsafe { &mut CIV_ };
-        let xbp = (li / 10) as u8;
-        let osn = (li % 10) as u8;
-        if li >= 10 {
-            k[0] = b' ';
-            k[1] = b'0' + xbp;
-            k[2] = b'0' + osn;
-            k[3] = b'%';
-            k[4] = 0;
+        static mut CME_: [u8; 5] = [0; 5];
+        let buf = unsafe { &mut CME_ };
+        let pdv = (progress / 10) as u8;
+        let isg = (progress % 10) as u8;
+        if progress >= 10 {
+            buf[0] = b' ';
+            buf[1] = b'0' + pdv;
+            buf[2] = b'0' + isg;
+            buf[3] = b'%';
+            buf[4] = 0;
         } else {
-            k[0] = b' ';
-            k[1] = b' ';
-            k[2] = b'0' + osn;
-            k[3] = b'%';
-            k[4] = 0;
+            buf[0] = b' ';
+            buf[1] = b' ';
+            buf[2] = b'0' + isg;
+            buf[3] = b'%';
+            buf[4] = 0;
         }
-        unsafe { core::str::nwj(&k[..4]) }
+        unsafe { core::str::from_utf8_unchecked(&buf[..4]) }
     };
-    let vfy = ajx + lo + 8;
-    for (a, r) in vfx.bw().cf() {
-        let y = vfy + (a as u32) * 8;
-        afn(r, y as usize, pl as usize, BGE_, LC_);
+    let nsx = pv + ek + 8;
+    for (i, c) in nsw.chars().enumerate() {
+        let p = nsx + (i as u32) * 8;
+        px(c, p as usize, gk as usize, BII_, LW_);
     }
 }
 
 
-pub fn kuv() {
-    let (z, ac) = super::yn();
-    if z == 0 || ac == 0 { return; }
+pub fn fvz() {
+    let (width, height) = super::kv();
+    if width == 0 || height == 0 { return; }
     
     
-    for gu in 0u32..8 {
-        let dw = (gu + 1) * 32; 
-        let dlr = if dw >= 255 { 0xFF000000 } else {
+    for step in 0u32..8 {
+        let alpha = (step + 1) * 32; 
+        let shade = if alpha >= 255 { 0xFF000000 } else {
             
-            let wq = 255 - dw;
-            let at = (0x05 * wq) / 255;
-            0xFF000000 | (at << 8)
+            let ki = 255 - alpha;
+            let g = (0x05 * ki) / 255;
+            0xFF000000 | (g << 8)
         };
-        super::ah(0, 0, z, ac, dlr);
+        super::fill_rect(0, 0, width, height, shade);
         
         
-        for _ in 0..2_000_000 { core::hint::hc(); }
+        for _ in 0..2_000_000 { core::hint::spin_loop(); }
     }
     
     
-    super::ah(0, 0, z, ac, 0xFF000000);
+    super::fill_rect(0, 0, width, height, 0xFF000000);
     
-    for _ in 0..3_000_000 { core::hint::hc(); }
+    for _ in 0..3_000_000 { core::hint::spin_loop(); }
 }

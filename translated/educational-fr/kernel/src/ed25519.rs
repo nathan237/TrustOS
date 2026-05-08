@@ -56,18 +56,18 @@ pub fn sha512(data: &[u8]) -> [u8; 64] {
     let bit_length = (data.len() as u128) * 8;
 
     // Pre-process: pad message
-    let mut message = Vec::from(data);
-    message.push(0x80);
-    while message.len() % 128 != 112 {
-        message.push(0);
+    let mut msg = Vec::from(data);
+    msg.push(0x80);
+    while msg.len() % 128 != 112 {
+        msg.push(0);
     }
     // Append length as 128-bit big-endian
     for i in (0..16).rev() {
-        message.push((bit_length >> (i * 8)) as u8);
+        msg.push((bit_length >> (i * 8)) as u8);
     }
 
     // Process each 128-byte block
-    for block in message.chunks_exact(128) {
+    for block in msg.chunks_exact(128) {
         let mut w = [0u64; 80];
         for i in 0..16 {
             w[i] = u64::from_be_bytes([
@@ -86,8 +86,8 @@ pub fn sha512(data: &[u8]) -> [u8; 64] {
 
         for i in 0..80 {
             let s1 = e.rotate_right(14) ^ e.rotate_right(18) ^ e.rotate_right(41);
-            let character = (e & f) ^ ((!e) & g);
-            let temp1 = hh.wrapping_add(s1).wrapping_add(character).wrapping_add(SHA512_K[i]).wrapping_add(w[i]);
+            let ch = (e & f) ^ ((!e) & g);
+            let temp1 = hh.wrapping_add(s1).wrapping_add(ch).wrapping_add(SHA512_K[i]).wrapping_add(w[i]);
             let s0 = a.rotate_right(28) ^ a.rotate_right(34) ^ a.rotate_right(39);
             let maj = (a & b) ^ (a & c) ^ (b & c);
             let temp2 = s0.wrapping_add(maj);
@@ -115,8 +115,8 @@ pub fn sha512(data: &[u8]) -> [u8; 64] {
 pub struct Sha512 {
     state: [u64; 8],
     buffer: [u8; 128],
-    buffer_length: usize,
-    total_length: u128,
+    buffer_len: usize,
+    total_len: u128,
 }
 
 // Bloc d'implémentation — définit les méthodes du type ci-dessus.
@@ -131,28 +131,28 @@ pub fn new() -> Self {
                 0x1f83d9abfb41bd6b, 0x5be0cd19137e2179,
             ],
             buffer: [0u8; 128],
-            buffer_length: 0,
-            total_length: 0,
+            buffer_len: 0,
+            total_len: 0,
         }
     }
 
         // Fonction publique — appelable depuis d'autres modules.
 pub fn update(&mut self, data: &[u8]) {
-        self.total_length += data.len() as u128;
+        self.total_len += data.len() as u128;
         let mut offset = 0;
 
-        if self.buffer_length > 0 {
-            let space = 128 - self.buffer_length;
-            let to_copy = data.len().minimum(space);
-            self.buffer[self.buffer_length..self.buffer_length + to_copy]
+        if self.buffer_len > 0 {
+            let space = 128 - self.buffer_len;
+            let to_copy = data.len().min(space);
+            self.buffer[self.buffer_len..self.buffer_len + to_copy]
                 .copy_from_slice(&data[..to_copy]);
-            self.buffer_length += to_copy;
+            self.buffer_len += to_copy;
             offset = to_copy;
 
-            if self.buffer_length == 128 {
+            if self.buffer_len == 128 {
                 let block = self.buffer;
                 sha512_compress(&mut self.state, &block);
-                self.buffer_length = 0;
+                self.buffer_len = 0;
             }
         }
 
@@ -166,29 +166,29 @@ pub fn update(&mut self, data: &[u8]) {
         if offset < data.len() {
             let remaining = data.len() - offset;
             self.buffer[..remaining].copy_from_slice(&data[offset..]);
-            self.buffer_length = remaining;
+            self.buffer_len = remaining;
         }
     }
 
         // Fonction publique — appelable depuis d'autres modules.
 pub fn finalize(&mut self) -> [u8; 64] {
-        let bit_length = self.total_length * 8;
+        let bit_length = self.total_len * 8;
 
         // Pad
-        self.buffer[self.buffer_length] = 0x80;
-        self.buffer_length += 1;
+        self.buffer[self.buffer_len] = 0x80;
+        self.buffer_len += 1;
 
-        if self.buffer_length > 112 {
+        if self.buffer_len > 112 {
             // Need another block
-            for i in self.buffer_length..128 {
+            for i in self.buffer_len..128 {
                 self.buffer[i] = 0;
             }
             let block = self.buffer;
             sha512_compress(&mut self.state, &block);
-            self.buffer_length = 0;
+            self.buffer_len = 0;
         }
 
-        for i in self.buffer_length..112 {
+        for i in self.buffer_len..112 {
             self.buffer[i] = 0;
         }
 
@@ -226,8 +226,8 @@ fn sha512_compress(state: &mut [u64; 8], block: &[u8; 128]) {
 
     for i in 0..80 {
         let s1 = e.rotate_right(14) ^ e.rotate_right(18) ^ e.rotate_right(41);
-        let character = (e & f) ^ ((!e) & g);
-        let temp1 = hh.wrapping_add(s1).wrapping_add(character).wrapping_add(SHA512_K[i]).wrapping_add(w[i]);
+        let ch = (e & f) ^ ((!e) & g);
+        let temp1 = hh.wrapping_add(s1).wrapping_add(ch).wrapping_add(SHA512_K[i]).wrapping_add(w[i]);
         let s0 = a.rotate_right(28) ^ a.rotate_right(34) ^ a.rotate_right(39);
         let maj = (a & b) ^ (a & c) ^ (b & c);
         let temp2 = s0.wrapping_add(maj);

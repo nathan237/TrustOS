@@ -10,32 +10,32 @@ use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use spin::Mutex;
 
 
-static Ja: AtomicBool = AtomicBool::new(false);
+static Dr: AtomicBool = AtomicBool::new(false);
 
 
-static AEK_: AtomicU8 = AtomicU8::new(0);
+static AGE_: AtomicU8 = AtomicU8::new(0);
 
 
-const AFC_: usize = 16;
+const AGW_: usize = 16;
 
 
 #[derive(Clone, Copy)]
 struct Lease {
-    ed: [u8; 6],
+    mac: [u8; 6],
     ip: [u8; 4],
-    gh: bool,
-    hlv: u64,
-    fmw: u32,
+    active: bool,
+    granted_at: u64,
+    lease_time: u32,
 }
 
 impl Lease {
-    const fn azs() -> Self {
+    const fn empty() -> Self {
         Self {
-            ed: [0; 6],
+            mac: [0; 6],
             ip: [0; 4],
-            gh: false,
-            hlv: 0,
-            fmw: 86400, 
+            active: false,
+            granted_at: 0,
+            lease_time: 86400, 
         }
     }
 }
@@ -44,225 +44,225 @@ impl Lease {
 #[derive(Clone, Copy)]
 struct PxeConfig {
     
-    aep: [u8; 4],
+    server_ip: [u8; 4],
     
-    up: [u8; 4],
+    subnet: [u8; 4],
     
-    auj: [u8; 4],
+    gateway: [u8; 4],
     
-    dun: [u8; 4],
+    pool_base: [u8; 4],
     
-    duo: u8,
+    pool_size: u8,
     
-    ily: [u8; 128],
-    fdp: usize,
+    boot_file: [u8; 128],
+    boot_file_len: usize,
 }
 
 impl PxeConfig {
     const fn default() -> Self {
         Self {
-            aep: [10, 0, 2, 1],
-            up: [255, 255, 255, 0],
-            auj: [10, 0, 2, 1],
-            dun: [10, 0, 2, 100],
-            duo: 16,
-            ily: [0; 128],
-            fdp: 0,
+            server_ip: [10, 0, 2, 1],
+            subnet: [255, 255, 255, 0],
+            gateway: [10, 0, 2, 1],
+            pool_base: [10, 0, 2, 100],
+            pool_size: 16,
+            boot_file: [0; 128],
+            boot_file_len: 0,
         }
     }
 }
 
-static Acm: Mutex<[Lease; AFC_]> = Mutex::new([Lease::azs(); AFC_]);
-static Pa: Mutex<PxeConfig> = Mutex::new(PxeConfig::default());
+static Mj: Mutex<[Lease; AGW_]> = Mutex::new([Lease::empty(); AGW_]);
+static Gh: Mutex<PxeConfig> = Mutex::new(PxeConfig::default());
 
 
 mod msg_type {
-    pub const Aqn: u8 = 1;
-    pub const Akp: u8 = 2;
-    pub const Ua: u8 = 3;
-    pub const ELD_: u8 = 4;
-    pub const Ie: u8 = 5;
-    pub const Xr: u8 = 6;
+    pub const Ro: u8 = 1;
+    pub const Ps: u8 = 2;
+    pub const Iq: u8 = 3;
+    pub const EOO_: u8 = 4;
+    pub const Dk: u8 = 5;
+    pub const Kf: u8 = 6;
 }
 
 
 mod option {
-    pub const XL_: u8 = 1;
-    pub const Als: u8 = 3;
-    pub const GG_: u8 = 6;
-    pub const Bim: u8 = 12;
-    pub const AHE_: u8 = 50;
-    pub const UQ_: u8 = 51;
-    pub const OH_: u8 = 53;
-    pub const WY_: u8 = 54;
-    pub const CXW_: u8 = 66;
-    pub const BLI_: u8 = 67;
-    pub const CMR_: u8 = 60;
-    pub const Abj: u8 = 255;
+    pub const YS_: u8 = 1;
+    pub const Qa: u8 = 3;
+    pub const GX_: u8 = 6;
+    pub const Zo: u8 = 12;
+    pub const AJA_: u8 = 50;
+    pub const VZ_: u8 = 51;
+    pub const PF_: u8 = 53;
+    pub const YF_: u8 = 54;
+    pub const DBO_: u8 = 66;
+    pub const BOA_: u8 = 67;
+    pub const CQA_: u8 = 60;
+    pub const Lq: u8 = 255;
 }
 
 
-pub fn dsi() -> bool {
-    Ja.load(Ordering::Relaxed)
+pub fn is_running() -> bool {
+    Dr.load(Ordering::Relaxed)
 }
 
 
-pub fn qez() -> u8 {
-    AEK_.load(Ordering::Relaxed)
+pub fn jtn() -> u8 {
+    AGE_.load(Ordering::Relaxed)
 }
 
 
-pub fn ay(aep: [u8; 4], up: [u8; 4], dkt: [u8; 4], duo: u8, mzt: &str) {
-    if Ja.load(Ordering::Relaxed) {
+pub fn start(server_ip: [u8; 4], subnet: [u8; 4], bis: [u8; 4], pool_size: u8, boot_filename: &str) {
+    if Dr.load(Ordering::Relaxed) {
         crate::serial_println!("[DHCPD] Already running");
         return;
     }
 
-    let mut cfg = Pa.lock();
-    cfg.aep = aep;
-    cfg.up = up;
-    cfg.auj = aep; 
-    cfg.dun = dkt;
-    cfg.duo = duo;
+    let mut cfg = Gh.lock();
+    cfg.server_ip = server_ip;
+    cfg.subnet = subnet;
+    cfg.gateway = server_ip; 
+    cfg.pool_base = bis;
+    cfg.pool_size = pool_size;
 
     
-    let bf = mzt.as_bytes();
-    let len = bf.len().v(127);
-    cfg.ily[..len].dg(&bf[..len]);
-    cfg.fdp = len;
+    let bytes = boot_filename.as_bytes();
+    let len = bytes.len().min(127);
+    cfg.boot_file[..len].copy_from_slice(&bytes[..len]);
+    cfg.boot_file_len = len;
     drop(cfg);
 
     
-    let mut bkf = Acm.lock();
-    for dm in bkf.el() {
-        *dm = Lease::azs();
+    let mut agp = Mj.lock();
+    for l in agp.iter_mut() {
+        *l = Lease::empty();
     }
-    drop(bkf);
-    AEK_.store(0, Ordering::Relaxed);
+    drop(agp);
+    AGE_.store(0, Ordering::Relaxed);
 
-    Ja.store(true, Ordering::Relaxed);
+    Dr.store(true, Ordering::Relaxed);
     crate::serial_println!("[DHCPD] PXE DHCP server started on {}.{}.{}.{}",
-        aep[0], aep[1], aep[2], aep[3]);
+        server_ip[0], server_ip[1], server_ip[2], server_ip[3]);
     crate::serial_println!("[DHCPD] Pool: {}.{}.{}.{} - {}.{}.{}.{} ({} IPs)",
-        dkt[0], dkt[1], dkt[2], dkt[3],
-        dkt[0], dkt[1], dkt[2], dkt[3] + duo - 1,
-        duo);
-    crate::serial_println!("[DHCPD] PXE boot file: {}", mzt);
+        bis[0], bis[1], bis[2], bis[3],
+        bis[0], bis[1], bis[2], bis[3] + pool_size - 1,
+        pool_size);
+    crate::serial_println!("[DHCPD] PXE boot file: {}", boot_filename);
 }
 
 
-pub fn qg() {
-    Ja.store(false, Ordering::Relaxed);
+pub fn stop() {
+    Dr.store(false, Ordering::Relaxed);
     crate::serial_println!("[DHCPD] Server stopped");
 }
 
 
 
-pub fn bur(f: &[u8]) {
-    if !Ja.load(Ordering::Relaxed) {
+pub fn alq(data: &[u8]) {
+    if !Dr.load(Ordering::Relaxed) {
         return;
     }
 
     
-    if f.len() < 240 {
+    if data.len() < 240 {
         return;
     }
 
     
-    if f[0] != 1 {
+    if data[0] != 1 {
         return;
     }
 
-    let bxz = [f[4], f[5], f[6], f[7]];
-    let bgh = [f[28], f[29], f[30], f[31], f[32], f[33]];
+    let xid = [data[4], data[5], data[6], data[7]];
+    let aew = [data[28], data[29], data[30], data[31], data[32], data[33]];
 
     
-    if f[236] != 99 || f[237] != 130 || f[238] != 83 || f[239] != 99 {
+    if data[236] != 99 || data[237] != 130 || data[238] != 83 || data[239] != 99 {
         return;
     }
 
     
-    let options = &f[240..];
-    let mut lmw: u8 = 0;
-    let mut pck: Option<[u8; 4]> = None;
-    let mut jbq = false;
-    let mut a = 0;
+    let options = &data[240..];
+    let mut gii: u8 = 0;
+    let mut jag: Option<[u8; 4]> = None;
+    let mut ert = false;
+    let mut i = 0;
 
-    while a < options.len() {
-        let fpt = options[a];
-        if fpt == option::Abj {
+    while i < options.len() {
+        let cnn = options[i];
+        if cnn == option::Lq {
             break;
         }
-        if fpt == 0 {
-            a += 1; 
+        if cnn == 0 {
+            i += 1; 
             continue;
         }
-        if a + 1 >= options.len() {
+        if i + 1 >= options.len() {
             break;
         }
-        let len = options[a + 1] as usize;
-        if a + 2 + len > options.len() {
+        let len = options[i + 1] as usize;
+        if i + 2 + len > options.len() {
             break;
         }
-        let ap = &options[a + 2..a + 2 + len];
+        let val = &options[i + 2..i + 2 + len];
 
-        match fpt {
-            option::OH_ => {
-                if len >= 1 { lmw = ap[0]; }
+        match cnn {
+            option::PF_ => {
+                if len >= 1 { gii = val[0]; }
             }
-            option::AHE_ => {
+            option::AJA_ => {
                 if len >= 4 {
-                    pck = Some([ap[0], ap[1], ap[2], ap[3]]);
+                    jag = Some([val[0], val[1], val[2], val[3]]);
                 }
             }
-            option::CMR_ => {
+            option::CQA_ => {
                 
-                if len >= 9 && &ap[..9] == b"PXEClient" {
-                    jbq = true;
+                if len >= 9 && &val[..9] == b"PXEClient" {
+                    ert = true;
                 }
             }
             _ => {}
         }
 
-        a += 2 + len;
+        i += 2 + len;
     }
 
     crate::serial_println!("[DHCPD] Received {} from {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X} (PXE: {})",
-        match lmw {
+        match gii {
             1 => "DISCOVER",
             3 => "REQUEST",
             _ => "UNKNOWN",
         },
-        bgh[0], bgh[1], bgh[2],
-        bgh[3], bgh[4], bgh[5],
-        jbq);
+        aew[0], aew[1], aew[2],
+        aew[3], aew[4], aew[5],
+        ert);
 
-    match lmw {
-        msg_type::Aqn => {
+    match gii {
+        msg_type::Ro => {
             
-            if let Some(uxi) = stm(&bgh) {
-                jok(msg_type::Akp, &bxz, &bgh, &uxi, jbq);
+            if let Some(offer_ip) = lwb(&aew) {
+                fac(msg_type::Ps, &xid, &aew, &offer_ip, ert);
             } else {
                 crate::serial_println!("[DHCPD] No IPs available in pool!");
             }
         }
-        msg_type::Ua => {
+        msg_type::Iq => {
             
-            let ip = pck.unwrap_or_else(|| {
+            let ip = jag.unwrap_or_else(|| {
                 
-                sth(&bgh).unwrap_or([0; 4])
+                lvw(&aew).unwrap_or([0; 4])
             });
 
             if ip == [0; 4] {
-                jok(msg_type::Xr, &bxz, &bgh, &[0; 4], false);
+                fac(msg_type::Kf, &xid, &aew, &[0; 4], false);
                 return;
             }
 
             
-            if xql(&bgh, &ip) {
-                jok(msg_type::Ie, &bxz, &bgh, &ip, jbq);
+            if prb(&aew, &ip) {
+                fac(msg_type::Dk, &xid, &aew, &ip, ert);
             } else {
-                jok(msg_type::Xr, &bxz, &bgh, &[0; 4], false);
+                fac(msg_type::Kf, &xid, &aew, &[0; 4], false);
             }
         }
         _ => {}
@@ -270,39 +270,39 @@ pub fn bur(f: &[u8]) {
 }
 
 
-fn stm(ed: &[u8; 6]) -> Option<[u8; 4]> {
-    let mut bkf = Acm.lock();
-    let cfg = Pa.lock();
+fn lwb(mac: &[u8; 6]) -> Option<[u8; 4]> {
+    let mut agp = Mj.lock();
+    let cfg = Gh.lock();
 
     
-    for anm in bkf.iter() {
-        if anm.gh && anm.ed == *ed {
-            return Some(anm.ip);
+    for lease in agp.iter() {
+        if lease.active && lease.mac == *mac {
+            return Some(lease.ip);
         }
     }
 
     
-    let duo = cfg.duo as usize;
-    for l in 0..duo.v(AFC_) {
-        let kgi = [
-            cfg.dun[0],
-            cfg.dun[1],
-            cfg.dun[2],
-            cfg.dun[3].cn(l as u8),
+    let pool_size = cfg.pool_size as usize;
+    for offset in 0..pool_size.min(AGW_) {
+        let fkr = [
+            cfg.pool_base[0],
+            cfg.pool_base[1],
+            cfg.pool_base[2],
+            cfg.pool_base[3].wrapping_add(offset as u8),
         ];
 
         
-        let qhj = bkf.iter().any(|dm| dm.gh && dm.ip == kgi);
-        if !qhj {
+        let jvg = agp.iter().any(|l| l.active && l.ip == fkr);
+        if !jvg {
             
-            for anm in bkf.el() {
-                if !anm.gh {
-                    anm.ed = *ed;
-                    anm.ip = kgi;
-                    anm.gh = true;
-                    anm.hlv = crate::time::lc();
-                    AEK_.fetch_add(1, Ordering::Relaxed);
-                    return Some(kgi);
+            for lease in agp.iter_mut() {
+                if !lease.active {
+                    lease.mac = *mac;
+                    lease.ip = fkr;
+                    lease.active = true;
+                    lease.granted_at = crate::time::uptime_ms();
+                    AGE_.fetch_add(1, Ordering::Relaxed);
+                    return Some(fkr);
                 }
             }
         }
@@ -312,41 +312,41 @@ fn stm(ed: &[u8; 6]) -> Option<[u8; 4]> {
 }
 
 
-fn sth(ed: &[u8; 6]) -> Option<[u8; 4]> {
-    let bkf = Acm.lock();
-    for anm in bkf.iter() {
-        if anm.gh && anm.ed == *ed {
-            return Some(anm.ip);
+fn lvw(mac: &[u8; 6]) -> Option<[u8; 4]> {
+    let agp = Mj.lock();
+    for lease in agp.iter() {
+        if lease.active && lease.mac == *mac {
+            return Some(lease.ip);
         }
     }
     None
 }
 
 
-fn xql(ed: &[u8; 6], ip: &[u8; 4]) -> bool {
-    let mut bkf = Acm.lock();
+fn prb(mac: &[u8; 6], ip: &[u8; 4]) -> bool {
+    let mut agp = Mj.lock();
 
     
-    for anm in bkf.el() {
-        if anm.gh && anm.ed == *ed && anm.ip == *ip {
-            anm.hlv = crate::time::lc();
+    for lease in agp.iter_mut() {
+        if lease.active && lease.mac == *mac && lease.ip == *ip {
+            lease.granted_at = crate::time::uptime_ms();
             return true;
         }
     }
 
     
-    for anm in bkf.el() {
-        if anm.gh && anm.ed == *ed {
+    for lease in agp.iter_mut() {
+        if lease.active && lease.mac == *mac {
             
-            let cfg = Pa.lock();
-            let myb = cfg.dun[3];
-            let vjv = myb.cn(cfg.duo);
-            if ip[0] == cfg.dun[0] && ip[1] == cfg.dun[1]
-                && ip[2] == cfg.dun[2]
-                && ip[3] >= myb && ip[3] < vjv
+            let cfg = Gh.lock();
+            let hgx = cfg.pool_base[3];
+            let nwc = hgx.wrapping_add(cfg.pool_size);
+            if ip[0] == cfg.pool_base[0] && ip[1] == cfg.pool_base[1]
+                && ip[2] == cfg.pool_base[2]
+                && ip[3] >= hgx && ip[3] < nwc
             {
-                anm.ip = *ip;
-                anm.hlv = crate::time::lc();
+                lease.ip = *ip;
+                lease.granted_at = crate::time::uptime_ms();
                 return true;
             }
             
@@ -358,170 +358,170 @@ fn xql(ed: &[u8; 6], ip: &[u8; 4]) -> bool {
 }
 
 
-fn jok(lzt: u8, bxz: &[u8; 4], bgh: &[u8; 6], bjn: &[u8; 4], jkp: bool) {
-    let cfg = Pa.lock();
-    let mut ex = Vec::fc(400);
+fn fac(response_type: u8, xid: &[u8; 4], aew: &[u8; 6], client_ip: &[u8; 4], pxe: bool) {
+    let cfg = Gh.lock();
+    let mut be = Vec::with_capacity(400);
 
     
-    ex.push(2);                         
-    ex.push(1);                         
-    ex.push(6);                         
-    ex.push(0);                         
-    ex.bk(bxz);          
-    ex.bk(&[0, 0]);      
-    ex.bk(&[0x80, 0x00]); 
-    ex.bk(&[0, 0, 0, 0]); 
-    ex.bk(bjn);    
-    ex.bk(&cfg.aep); 
-    ex.bk(&[0, 0, 0, 0]); 
-    ex.bk(bgh);   
-    ex.bk(&[0u8; 10]);   
+    be.push(2);                         
+    be.push(1);                         
+    be.push(6);                         
+    be.push(0);                         
+    be.extend_from_slice(xid);          
+    be.extend_from_slice(&[0, 0]);      
+    be.extend_from_slice(&[0x80, 0x00]); 
+    be.extend_from_slice(&[0, 0, 0, 0]); 
+    be.extend_from_slice(client_ip);    
+    be.extend_from_slice(&cfg.server_ip); 
+    be.extend_from_slice(&[0, 0, 0, 0]); 
+    be.extend_from_slice(aew);   
+    be.extend_from_slice(&[0u8; 10]);   
     
     
-    if jkp {
-        let wqb = format!("{}.{}.{}.{}",
-            cfg.aep[0], cfg.aep[1],
-            cfg.aep[2], cfg.aep[3]);
-        let plu = wqb.as_bytes();
-        let pli = plu.len().v(63);
-        ex.bk(&plu[..pli]);
-        for _ in pli..64 {
-            ex.push(0);
+    if pxe {
+        let ouc = format!("{}.{}.{}.{}",
+            cfg.server_ip[0], cfg.server_ip[1],
+            cfg.server_ip[2], cfg.server_ip[3]);
+        let jgx = ouc.as_bytes();
+        let jgn = jgx.len().min(63);
+        be.extend_from_slice(&jgx[..jgn]);
+        for _ in jgn..64 {
+            be.push(0);
         }
     } else {
-        ex.bk(&[0u8; 64]);
+        be.extend_from_slice(&[0u8; 64]);
     }
 
     
-    if jkp && cfg.fdp > 0 {
-        let nvb = cfg.fdp.v(127);
-        ex.bk(&cfg.ily[..nvb]);
-        for _ in nvb..128 {
-            ex.push(0);
+    if pxe && cfg.boot_file_len > 0 {
+        let hze = cfg.boot_file_len.min(127);
+        be.extend_from_slice(&cfg.boot_file[..hze]);
+        for _ in hze..128 {
+            be.push(0);
         }
     } else {
-        ex.bk(&[0u8; 128]);
+        be.extend_from_slice(&[0u8; 128]);
     }
 
     
-    ex.bk(&[99, 130, 83, 99]);
+    be.extend_from_slice(&[99, 130, 83, 99]);
 
     
     
-    ex.bk(&[option::OH_, 1, lzt]);
+    be.extend_from_slice(&[option::PF_, 1, response_type]);
 
     
-    ex.bk(&[option::WY_, 4]);
-    ex.bk(&cfg.aep);
+    be.extend_from_slice(&[option::YF_, 4]);
+    be.extend_from_slice(&cfg.server_ip);
 
-    if lzt != msg_type::Xr {
+    if response_type != msg_type::Kf {
         
-        ex.bk(&[option::UQ_, 4]);
-        ex.bk(&86400u32.ft());
-
-        
-        ex.bk(&[option::XL_, 4]);
-        ex.bk(&cfg.up);
+        be.extend_from_slice(&[option::VZ_, 4]);
+        be.extend_from_slice(&86400u32.to_be_bytes());
 
         
-        ex.bk(&[option::Als, 4]);
-        ex.bk(&cfg.auj);
+        be.extend_from_slice(&[option::YS_, 4]);
+        be.extend_from_slice(&cfg.subnet);
 
         
-        ex.bk(&[option::GG_, 4]);
-        ex.bk(&cfg.aep);
+        be.extend_from_slice(&[option::Qa, 4]);
+        be.extend_from_slice(&cfg.gateway);
 
-        if jkp {
+        
+        be.extend_from_slice(&[option::GX_, 4]);
+        be.extend_from_slice(&cfg.server_ip);
+
+        if pxe {
             
-            let wia = format!("{}.{}.{}.{}",
-                cfg.aep[0], cfg.aep[1],
-                cfg.aep[2], cfg.aep[3]);
-            let is = wia.as_bytes();
-            ex.push(option::CXW_);
-            ex.push(is.len() as u8);
-            ex.bk(is);
+            let ook = format!("{}.{}.{}.{}",
+                cfg.server_ip[0], cfg.server_ip[1],
+                cfg.server_ip[2], cfg.server_ip[3]);
+            let cv = ook.as_bytes();
+            be.push(option::DBO_);
+            be.push(cv.len() as u8);
+            be.extend_from_slice(cv);
 
             
-            if cfg.fdp > 0 {
-                ex.push(option::BLI_);
-                ex.push(cfg.fdp as u8);
-                ex.bk(&cfg.ily[..cfg.fdp]);
+            if cfg.boot_file_len > 0 {
+                be.push(option::BOA_);
+                be.push(cfg.boot_file_len as u8);
+                be.extend_from_slice(&cfg.boot_file[..cfg.boot_file_len]);
             }
         }
     }
 
     
-    ex.push(option::Abj);
+    be.push(option::Lq);
 
     
-    while ex.len() < 300 {
-        ex.push(0);
+    while be.len() < 300 {
+        be.push(0);
     }
 
     drop(cfg);
 
     
-    let jh = Pa.lock().aep;
-    let vyb = match lzt {
-        msg_type::Akp => "OFFER",
-        msg_type::Ie => "ACK",
-        msg_type::Xr => "NAK",
+    let src_ip = Gh.lock().server_ip;
+    let ogl = match response_type {
+        msg_type::Ps => "OFFER",
+        msg_type::Dk => "ACK",
+        msg_type::Kf => "NAK",
         _ => "?",
     };
     crate::serial_println!("[DHCPD] Sending {} to {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X} -> {}.{}.{}.{} (PXE: {})",
-        vyb,
-        bgh[0], bgh[1], bgh[2],
-        bgh[3], bgh[4], bgh[5],
-        bjn[0], bjn[1], bjn[2], bjn[3],
-        jkp);
+        ogl,
+        aew[0], aew[1], aew[2],
+        aew[3], aew[4], aew[5],
+        client_ip[0], client_ip[1], client_ip[2], client_ip[3],
+        pxe);
 
     
-    wha(&ex, jh);
+    onm(&be, src_ip);
 }
 
 
-fn wha(ew: &[u8], jh: [u8; 4]) {
+fn onm(payload: &[u8], src_ip: [u8; 4]) {
     
-    let mut udp = Vec::fc(8 + ew.len());
-    udp.bk(&67u16.ft());  
-    udp.bk(&68u16.ft());  
-    udp.bk(&((8 + ew.len()) as u16).ft());
-    udp.bk(&0u16.ft());   
-    udp.bk(ew);
+    let mut udp = Vec::with_capacity(8 + payload.len());
+    udp.extend_from_slice(&67u16.to_be_bytes());  
+    udp.extend_from_slice(&68u16.to_be_bytes());  
+    udp.extend_from_slice(&((8 + payload.len()) as u16).to_be_bytes());
+    udp.extend_from_slice(&0u16.to_be_bytes());   
+    udp.extend_from_slice(payload);
 
     
-    let mut ip = Vec::fc(20 + udp.len());
+    let mut ip = Vec::with_capacity(20 + udp.len());
     ip.push(0x45); ip.push(0x10); 
-    ip.bk(&((20 + udp.len()) as u16).ft());
-    ip.bk(&[0, 0, 0x40, 0x00]); 
+    ip.extend_from_slice(&((20 + udp.len()) as u16).to_be_bytes());
+    ip.extend_from_slice(&[0, 0, 0x40, 0x00]); 
     ip.push(64); ip.push(17); 
-    ip.bk(&0u16.ft()); 
-    ip.bk(&jh);
-    ip.bk(&[255, 255, 255, 255]); 
+    ip.extend_from_slice(&0u16.to_be_bytes()); 
+    ip.extend_from_slice(&src_ip);
+    ip.extend_from_slice(&[255, 255, 255, 255]); 
 
     
     let mut sum: u32 = 0;
-    for a in (0..20).akt(2) {
-        sum += ((ip[a] as u32) << 8) | (ip[a + 1] as u32);
+    for i in (0..20).step_by(2) {
+        sum += ((ip[i] as u32) << 8) | (ip[i + 1] as u32);
     }
     while sum >> 16 != 0 { sum = (sum & 0xFFFF) + (sum >> 16); }
-    let td = !(sum as u16);
-    ip[10] = (td >> 8) as u8;
-    ip[11] = (td & 0xFF) as u8;
+    let ig = !(sum as u16);
+    ip[10] = (ig >> 8) as u8;
+    ip[11] = (ig & 0xFF) as u8;
 
-    ip.bk(&udp);
+    ip.extend_from_slice(&udp);
 
     
-    let _ = crate::netstack::fug([0xFF; 6], crate::netstack::ethertype::Aty, &ip);
+    let _ = crate::netstack::cdq([0xFF; 6], crate::netstack::ethertype::Tb, &ip);
 }
 
 
-pub fn tdw() -> Vec<([u8; 6], [u8; 4], u64)> {
-    let bkf = Acm.lock();
+pub fn mdi() -> Vec<([u8; 6], [u8; 4], u64)> {
+    let agp = Mj.lock();
     let mut result = Vec::new();
-    for anm in bkf.iter() {
-        if anm.gh {
-            result.push((anm.ed, anm.ip, anm.hlv));
+    for lease in agp.iter() {
+        if lease.active {
+            result.push((lease.mac, lease.ip, lease.granted_at));
         }
     }
     result

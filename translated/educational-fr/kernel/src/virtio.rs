@@ -80,7 +80,7 @@ const INDIRECT: u16 = 4;   // Buffer contains indirect descriptors
 #[derive(Debug, Clone, Copy, Default)]
 // Structure publique — visible à l'extérieur de ce module.
 pub struct VirtqDesc {
-    pub address: u64,    // Physical address of buffer
+    pub addr: u64,    // Physical address of buffer
     pub len: u32,     // Length of buffer
     pub flags: u16,   // Descriptor flags
     pub next: u16,    // Next descriptor index (if NEXT flag set)
@@ -93,7 +93,7 @@ pub struct VirtqDesc {
 // Structure publique — visible à l'extérieur de ce module.
 pub struct VirtqAvail {
     pub flags: u16,
-    pub index: u16,
+    pub idx: u16,
     // ring: [u16; queue_size] follows
 }
 
@@ -114,7 +114,7 @@ pub struct VirtqUsedElement {
 // Structure publique — visible à l'extérieur de ce module.
 pub struct VirtqUsed {
     pub flags: u16,
-    pub index: u16,
+    pub idx: u16,
     // ring: [VirtqUsedElem; queue_size] follows
 }
 
@@ -123,7 +123,7 @@ pub struct Virtqueue {
     /// Queue size (number of descriptors)
     pub size: u16,
     /// Physical base address of the queue
-    pub physical_address: u64,
+    pub phys_addr: u64,
     /// Virtual address of descriptor table
     pub desc: *mut VirtqDesc,
     /// Virtual address of available ring
@@ -131,11 +131,11 @@ pub struct Virtqueue {
     /// Virtual address of used ring
     pub used: *mut VirtqUsed,
     /// Last seen used index
-    pub last_used_index: u16,
+    pub last_used_idx: u16,
     /// Next free descriptor
     pub free_head: u16,
     /// Number of free descriptors
-    pub number_free: u16,
+    pub num_free: u16,
     /// Free descriptor list (next pointers)
     pub free_list: Vec<u16>,
 }
@@ -164,22 +164,22 @@ impl Virtqueue {
     }
     
     /// Allocate a descriptor from the free list
-    pub fn allocator_descriptor(&mut self) -> Option<u16> {
-        if self.number_free == 0 {
+    pub fn alloc_desc(&mut self) -> Option<u16> {
+        if self.num_free == 0 {
             return None;
         }
         
-        let index = self.free_head;
-        self.free_head = self.free_list[index as usize];
-        self.number_free -= 1;
-        Some(index)
+        let idx = self.free_head;
+        self.free_head = self.free_list[idx as usize];
+        self.num_free -= 1;
+        Some(idx)
     }
     
     /// Free a descriptor back to the free list
-    pub fn free_descriptor(&mut self, index: u16) {
-        self.free_list[index as usize] = self.free_head;
-        self.free_head = index;
-        self.number_free += 1;
+    pub fn free_desc(&mut self, idx: u16) {
+        self.free_list[idx as usize] = self.free_head;
+        self.free_head = idx;
+        self.num_free += 1;
     }
     
     /// Add a buffer to the available ring
@@ -187,13 +187,13 @@ impl Virtqueue {
 unsafe fn add_available(&mut self, head: u16) {
         let avail = &mut *self.avail;
         let ring_pointer = (self.avail as *mut u8).add(4) as *mut u16;
-        let index = avail.index;
-        *ring_pointer.add((index % self.size) as usize) = head;
+        let idx = avail.idx;
+        *ring_pointer.add((idx % self.size) as usize) = head;
         
         // Memory barrier
         core::sync::atomic::fence(Ordering::Release);
         
-        avail.index = index.wrapping_add(1);
+        avail.idx = idx.wrapping_add(1);
     }
     
 
@@ -204,7 +204,7 @@ unsafe fn add_available(&mut self, head: u16) {
         
         let total_size = Self::calc_size(size);
         let layout = Layout::from_size_align(total_size, 4096)
-            .map_error(|_| "Invalid layout")?;
+            .map_err(|_| "Invalid layout")?;
         
         let ptr = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe { alloc_zeroed(layout) };
@@ -212,7 +212,7 @@ unsafe { alloc_zeroed(layout) };
             return Err("Failed to allocate virtqueue");
         }
         
-        let physical_address = ptr as u64; // Identity mapped in our setup
+        let phys_addr = ptr as u64; // Identity mapped in our setup
         
         // Calculate offsets
         let descriptor_size = core::mem::size_of::<VirtqDesc>() * size as usize;
@@ -236,23 +236,23 @@ unsafe { ptr.add(used_offset) as *mut VirtqUsed };
         
         Ok(Box::new(Self {
             size,
-            physical_address,
+            phys_addr,
             desc,
             avail,
             used,
-            last_used_index: 0,
+            last_used_idx: 0,
             free_head: 0,
-            number_free: size,
+            num_free: size,
             free_list,
         }))
     }
     
     /// Set a descriptor's fields
-    pub fn set_descriptor(&mut self, index: u16, address: u64, len: u32, flags: u16, next: u16) {
+    pub fn set_desc(&mut self, idx: u16, addr: u64, len: u32, flags: u16, next: u16) {
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-            let desc = &mut *self.desc.add(index as usize);
-            desc.address = address;
+            let desc = &mut *self.desc.add(idx as usize);
+            desc.addr = addr;
             desc.len = len;
             desc.flags = flags;
             desc.next = next;
@@ -271,7 +271,7 @@ unsafe { self.add_available(head) }
 unsafe { 
             let used = &*self.used;
             core::sync::atomic::fence(Ordering::Acquire);
-            used.index != self.last_used_index
+            used.idx != self.last_used_idx
         }
     }
     
@@ -282,15 +282,15 @@ unsafe {
             let used = &*self.used;
             core::sync::atomic::fence(Ordering::Acquire);
             
-            if used.index == self.last_used_index {
+            if used.idx == self.last_used_idx {
                 return None;
             }
             
             let ring_pointer = (self.used as *mut u8).add(4) as *mut VirtqUsedElement;
-            let element = *ring_pointer.add((self.last_used_index % self.size) as usize);
-            self.last_used_index = self.last_used_index.wrapping_add(1);
+            let elem = *ring_pointer.add((self.last_used_idx % self.size) as usize);
+            self.last_used_idx = self.last_used_idx.wrapping_add(1);
             
-            Some((element.id, element.len))
+            Some((elem.id, elem.len))
         }
     }
 }

@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "kernel",
+    "debugonly",
     "userland/trustos-syscall",
     "userland/init",
     "userland/hello-rust",
@@ -32,6 +33,14 @@ panic = "abort"
 panic = "abort"
 lto = true
 opt-level = "s"
+
+# Fast iteration profile for hardware debug (no LTO, ~10-15s builds)
+# Usage: cargo build --profile release-dev -p trustos_kernel
+[profile.release-dev]
+inherits = "release"
+lto = "thin"
+codegen-units = 16
+incremental = true
 
 [patch.crates-io]
 mbedtls-platform-support = { path = "crates/mbedtls-platform-support" }

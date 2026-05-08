@@ -92,15 +92,15 @@ pub struct DawUI {
 impl DawUI {
     /// Create a new DAW UI filling the screen
     pub fn new() -> Self {
-        let framebuffer_w = crate::framebuffer::FRAMEBUFFER_WIDTH.load(Ordering::Relaxed) as u32;
-        let framebuffer_h = crate::framebuffer::FRAMEBUFFER_HEIGHT.load(Ordering::Relaxed) as u32;
+        let fb_w = crate::framebuffer::FRAMEBUFFER_WIDTH.load(Ordering::Relaxed) as u32;
+        let fb_h = crate::framebuffer::FRAMEBUFFER_HEIGHT.load(Ordering::Relaxed) as u32;
 
         let piano_y = TRANSPORT_HEIGHT + TRACK_LIST_HEIGHT;
-        let piano_h = framebuffer_h.saturating_sub(piano_y);
+        let piano_h = fb_h.saturating_sub(piano_y);
 
         Self {
             selected_track: 0,
-            piano_roll: PianoRoll::new(0, piano_y, framebuffer_w, piano_h),
+            piano_roll: PianoRoll::new(0, piano_y, fb_w, piano_h),
             show_piano_roll: true,
             dirty: true,
         }
@@ -108,12 +108,12 @@ impl DawUI {
 
     /// Draw the entire DAW UI
     pub fn draw(&mut self) {
-        let framebuffer_w = crate::framebuffer::FRAMEBUFFER_WIDTH.load(Ordering::Relaxed) as u32;
-        let framebuffer_h = crate::framebuffer::FRAMEBUFFER_HEIGHT.load(Ordering::Relaxed) as u32;
-        if framebuffer_w == 0 || framebuffer_h == 0 { return; }
+        let fb_w = crate::framebuffer::FRAMEBUFFER_WIDTH.load(Ordering::Relaxed) as u32;
+        let fb_h = crate::framebuffer::FRAMEBUFFER_HEIGHT.load(Ordering::Relaxed) as u32;
+        if fb_w == 0 || fb_h == 0 { return; }
 
         // Background
-        crate::framebuffer::fill_rect(0, 0, framebuffer_w, framebuffer_h, colors::BG);
+        crate::framebuffer::fill_rect(0, 0, fb_w, fb_h, colors::BG);
 
         // Get project data
         let project = super::PROJECT.lock();
@@ -121,10 +121,10 @@ impl DawUI {
 
         if let (Some(proj), Some(mix)) = (project.as_ref(), mixer.as_ref()) {
             // 1. Transport bar
-            self.draw_transport(framebuffer_w, proj);
+            self.draw_transport(fb_w, proj);
 
             // 2. Track list
-            self.draw_track_list(framebuffer_w, proj, mix);
+            self.draw_track_list(fb_w, proj, mix);
 
             // 3. Piano roll for selected track
             if self.show_piano_roll {
@@ -147,8 +147,8 @@ impl DawUI {
     }
 
     /// Draw the transport bar (top)
-    fn draw_transport(&self, framebuffer_w: u32, proj: &super::track::Project) {
-        crate::framebuffer::fill_rect(0, 0, framebuffer_w, TRANSPORT_HEIGHT, colors::TRANSPORT_BG);
+    fn draw_transport(&self, fb_w: u32, proj: &super::track::Project) {
+        crate::framebuffer::fill_rect(0, 0, fb_w, TRANSPORT_HEIGHT, colors::TRANSPORT_BG);
 
         // Title
         crate::framebuffer::draw_text("TrustDAW", 8, 4, colors::TEXT_PRIMARY);
@@ -181,10 +181,10 @@ impl DawUI {
         crate::framebuffer::draw_text(&bpm_str, 350, 4, colors::TEXT_PRIMARY);
 
         // Position (Bar:Beat:Tick)
-        let position = PLAYBACK_POSITION.load(Ordering::Relaxed);
-        let bar = position / (TICKS_PER_QUARTER * 4);
-        let beat = (position % (TICKS_PER_QUARTER * 4)) / TICKS_PER_QUARTER;
-        let tick = position % TICKS_PER_QUARTER;
+        let pos = PLAYBACK_POSITION.load(Ordering::Relaxed);
+        let bar = pos / (TICKS_PER_QUARTER * 4);
+        let beat = (pos % (TICKS_PER_QUARTER * 4)) / TICKS_PER_QUARTER;
+        let tick = pos % TICKS_PER_QUARTER;
         let position_str = format!("{}:{:02}:{:03}", bar + 1, beat + 1, tick);
         crate::framebuffer::draw_text(&position_str, 450, 4, colors::TEXT_PRIMARY);
 
@@ -193,7 +193,7 @@ impl DawUI {
         crate::framebuffer::draw_text(&track_str, 560, 4, colors::TEXT_SECONDARY);
 
         // Bottom border
-        crate::framebuffer::draw_hline(0, TRANSPORT_HEIGHT - 1, framebuffer_w, colors::TRACK_BORDER);
+        crate::framebuffer::draw_hline(0, TRANSPORT_HEIGHT - 1, fb_w, colors::TRACK_BORDER);
 
         // Second row: keyboard shortcuts
         crate::framebuffer::draw_text(
@@ -203,12 +203,12 @@ impl DawUI {
     }
 
     /// Draw the track list (middle section)
-    fn draw_track_list(&self, framebuffer_w: u32, proj: &super::track::Project, mixer: &super::mixer::Mixer) {
+    fn draw_track_list(&self, fb_w: u32, proj: &super::track::Project, mixer: &super::mixer::Mixer) {
         let list_y = TRANSPORT_HEIGHT;
-        crate::framebuffer::fill_rect(0, list_y, framebuffer_w, TRACK_LIST_HEIGHT, colors::TRACK_BG);
+        crate::framebuffer::fill_rect(0, list_y, fb_w, TRACK_LIST_HEIGHT, colors::TRACK_BG);
 
         // Header
-        crate::framebuffer::fill_rect(0, list_y, framebuffer_w, TRACK_ROW_HEIGHT, colors::HEADER_BG);
+        crate::framebuffer::fill_rect(0, list_y, fb_w, TRACK_ROW_HEIGHT, colors::HEADER_BG);
         crate::framebuffer::draw_text(" # ", 4, list_y + 6, colors::TEXT_DIM);
         crate::framebuffer::draw_text("Track", 30, list_y + 6, colors::TEXT_DIM);
         crate::framebuffer::draw_text("Wave", 140, list_y + 6, colors::TEXT_DIM);
@@ -231,7 +231,7 @@ impl DawUI {
             } else {
                 colors::TRACK_BG
             };
-            crate::framebuffer::fill_rect(0, row_y, framebuffer_w, TRACK_ROW_HEIGHT, bg);
+            crate::framebuffer::fill_rect(0, row_y, fb_w, TRACK_ROW_HEIGHT, bg);
 
             // Track color indicator
             crate::framebuffer::fill_rect(0, row_y, 4, TRACK_ROW_HEIGHT, track.color);
@@ -251,45 +251,45 @@ impl DawUI {
             crate::framebuffer::draw_text(&notes_str, 200, row_y + 6, colors::TEXT_SECONDARY);
 
             // Volume
-            if let Some(character) = mixer.channels.get(i) {
-                let vol_str = format!("{}", character.volume);
+            if let Some(ch) = mixer.channels.get(i) {
+                let vol_str = format!("{}", ch.volume);
                 crate::framebuffer::draw_text(&vol_str, 260, row_y + 6, colors::TEXT_PRIMARY);
 
                 // Pan
-                let pan_str = if character.pan == 0 { String::from("C") }
-                    else if character.pan > 0 { format!("R{}", character.pan) }
-                    else { format!("L{}", -character.pan) };
+                let pan_str = if ch.pan == 0 { String::from("C") }
+                    else if ch.pan > 0 { format!("R{}", ch.pan) }
+                    else { format!("L{}", -ch.pan) };
                 crate::framebuffer::draw_text(&pan_str, 310, row_y + 6, colors::TEXT_SECONDARY);
 
                 // Mute indicator
-                if character.muted {
+                if ch.muted {
                     crate::framebuffer::draw_text("M", 360, row_y + 6, colors::MUTE_COLOR);
                 }
 
                 // Solo indicator
-                if character.solo {
+                if ch.solo {
                     crate::framebuffer::draw_text("S", 376, row_y + 6, colors::SOLO_COLOR);
                 }
 
                 // Simple volume meter bar
                 let meter_x: u32 = 400;
-                let meter_w: u32 = (framebuffer_w - meter_x).saturating_sub(20).minimum(200);
-                let filled = (meter_w as u32 * character.volume as u32) / 255;
+                let meter_w: u32 = (fb_w - meter_x).saturating_sub(20).min(200);
+                let filled = (meter_w as u32 * ch.volume as u32) / 255;
                 crate::framebuffer::fill_rect(meter_x, row_y + 8, meter_w, 12, colors::METER_BG);
                 if filled > 0 {
-                    let meter_color = if character.volume > 230 { colors::METER_RED }
-                        else if character.volume > 180 { colors::METER_YELLOW }
+                    let meter_color = if ch.volume > 230 { colors::METER_RED }
+                        else if ch.volume > 180 { colors::METER_YELLOW }
                         else { colors::METER_GREEN };
                     crate::framebuffer::fill_rect(meter_x, row_y + 8, filled, 12, meter_color);
                 }
             }
 
             // Bottom border
-            crate::framebuffer::draw_hline(0, row_y + TRACK_ROW_HEIGHT - 1, framebuffer_w, colors::TRACK_BORDER);
+            crate::framebuffer::draw_hline(0, row_y + TRACK_ROW_HEIGHT - 1, fb_w, colors::TRACK_BORDER);
         }
 
         // Bottom border of track list
-        crate::framebuffer::draw_hline(0, list_y + TRACK_LIST_HEIGHT - 1, framebuffer_w, colors::TRACK_BORDER);
+        crate::framebuffer::draw_hline(0, list_y + TRACK_LIST_HEIGHT - 1, fb_w, colors::TRACK_BORDER);
     }
 
     // ─── Track selection ─────────────────────────────────────────────────
@@ -306,7 +306,7 @@ impl DawUI {
     }
 
     /// Select previous track
-    pub fn previous_track(&mut self) {
+    pub fn prev_track(&mut self) {
         let project = super::PROJECT.lock();
         if let Some(proj) = project.as_ref() {
             if !proj.tracks.is_empty() {
@@ -329,7 +329,7 @@ impl DawUI {
 
 /// Launch the full DAW GUI (blocking, interactive mode)
 pub fn launch_gui() -> Result<(), &'static str> {
-    super::ensure_initialize()?;
+    super::ensure_init()?;
 
     let mut ui = DawUI::new();
     ui.draw();

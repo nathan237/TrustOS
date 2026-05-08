@@ -39,6 +39,12 @@ pub fn _print(args: fmt::Arguments) {
     // Capture to dmesg ring buffer (best-effort, never panic)
     crate::devtools::capture_serial_line(args);
     
+    // Mirror to UDP netconsole (if enabled, and heap available)
+    if crate::debug::netconsole::is_enabled() && crate::memory::heap::free() > 0 {
+        let s = alloc::format!("{}", args);
+        crate::debug::netconsole::send_line(&s);
+    }
+    
     // Disable interrupts to prevent deadlock, then write
     crate::arch::without_interrupts(|| {
         let _lock = SERIAL_LOCK.lock();

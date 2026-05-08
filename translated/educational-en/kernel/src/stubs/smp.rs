@@ -102,7 +102,7 @@ pub fn parallel_for(total_items: usize, func: WorkFn, data: *mut u8) {
 
 /// AP entry point stub (not used on non-x86)
 pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe extern "C" fn ap_entry(_smp_information: &limine::smp::Cpu) -> ! {
+unsafe extern "C" fn ap_entry(_smp_info: &limine::smp::Cpu) -> ! {
         // Infinite loop — runs until an explicit `break`.
 loop { crate::arch::halt(); }
 }

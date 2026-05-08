@@ -28,8 +28,8 @@ pub struct Slider {
     bounds: Rect,
     state: WidgetState,
     pub value: f32,        // 0.0 to 1.0
-    pub minimum: f32,
-    pub maximum: f32,
+    pub min: f32,
+    pub max: f32,
     pub step: f32,
     pub show_value: bool,
     pub on_change: Option<Box<dyn Fn(f32) + Send + Sync>>,
@@ -39,14 +39,14 @@ pub struct Slider {
 // Implementation block — defines methods for the type above.
 impl Slider {
         // Public function — callable from other modules.
-pub fn new(minimum: f32, maximum: f32, value: f32) -> Self {
+pub fn new(min: f32, max: f32, value: f32) -> Self {
         Self {
             id: next_widget_id(),
             bounds: Rect::ZERO,
             state: WidgetState::new(),
-            value: ((value - minimum) / (maximum - minimum)).clamp(0.0, 1.0),
-            minimum,
-            maximum,
+            value: ((value - min) / (max - min)).clamp(0.0, 1.0),
+            min,
+            max,
             step: 0.0,
             show_value: true,
             on_change: None,
@@ -68,7 +68,7 @@ pub fn on_change<F: Fn(f32) + Send + Sync + 'static>(mut self, f: F) -> Self {
     
         // Public function — callable from other modules.
 pub fn actual_value(&self) -> f32 {
-        self.minimum + self.value * (self.maximum - self.minimum)
+        self.min + self.value * (self.max - self.min)
     }
     
     fn update_from_x(&mut self, x: i32) {
@@ -82,7 +82,7 @@ pub fn actual_value(&self) -> f32 {
             
             // Apply step if set
             if self.step > 0.0 {
-                let range = self.maximum - self.minimum;
+                let range = self.max - self.min;
                 let steps_f = self.value * range / self.step;
                 let steps = (steps_f + 0.5) as i32 as f32; // Simple round
                 self.value = (steps * self.step / range).clamp(0.0, 1.0);
@@ -153,11 +153,11 @@ match event {
         
         // Value text
         if self.show_value {
-            let value = self.actual_value();
+            let val = self.actual_value();
             let text = if self.step >= 1.0 {
-                format!("{}", value as i32)
+                format!("{}", val as i32)
             } else {
-                format!("{:.1}", value)
+                format!("{:.1}", val)
             };
             let text_x = x as i32 + w as i32 + 8;
             let text_y = y as i32 + (h as i32 - 16) / 2;
@@ -289,7 +289,7 @@ pub fn new(options: Vec<String>) -> Self {
     
         // Public function — callable from other modules.
 pub fn selected(mut self, index: usize) -> Self {
-        self.selected_index = index.minimum(self.options.len().saturating_sub(1));
+        self.selected_index = index.min(self.options.len().saturating_sub(1));
         self
     }
     
@@ -314,8 +314,8 @@ impl Widget for Dropdown {
     fn set_state(&mut self, state: WidgetState) { self.state = state; }
     
     fn preferred_size(&self) -> Size {
-        let maximum_length = self.options.iter().map(|s| s.len()).maximum().unwrap_or(10);
-        Size::new((maximum_length as u32 * 8 + 32).maximum(120), 32)
+        let maximum_length = self.options.iter().map(|s| s.len()).max().unwrap_or(10);
+        Size::new((maximum_length as u32 * 8 + 32).max(120), 32)
     }
     
     fn handle_event(&mut self, event: &UiEvent) -> bool {
@@ -325,11 +325,11 @@ match event {
                 if self.expanded {
                     // Check if clicking on an option
                     let option_y = self.bounds.y + self.bounds.height as i32;
-                    let index = ((*y - option_y) / 28) as usize;
-                    if index < self.options.len() {
-                        self.selected_index = index;
+                    let idx = ((*y - option_y) / 28) as usize;
+                    if idx < self.options.len() {
+                        self.selected_index = idx;
                         if let Some(ref on_change) = self.on_change {
-                            on_change(index);
+                            on_change(idx);
                         }
                     }
                     self.expanded = false;
@@ -375,7 +375,7 @@ match event {
         // Dropdown options
         if self.expanded {
             let dropdown_y = y + h + 2;
-            let dropdown_h = (self.options.len() as u32 * 28).minimum(200);
+            let dropdown_h = (self.options.len() as u32 * 28).min(200);
             
             surface.fill_rounded_rect(x, dropdown_y, w, dropdown_h, theme.border_radius, theme.bg_secondary.to_u32());
             surface.draw_rounded_rect(x, dropdown_y, w, dropdown_h, theme.border_radius, theme.border.to_u32());
@@ -426,7 +426,7 @@ pub fn new(content_height: u32) -> Self {
     
         // Public function — callable from other modules.
 pub fn scroll_to(&mut self, y: i32) {
-        let maximum_scroll = (self.content_height as i32 - self.bounds.height as i32).maximum(0);
+        let maximum_scroll = (self.content_height as i32 - self.bounds.height as i32).max(0);
         self.scroll_y = y.clamp(0, maximum_scroll);
     }
     
@@ -483,7 +483,7 @@ match event {
         // Scrollbar thumb
         if self.content_height > h {
             let visible_ratio = h as f32 / self.content_height as f32;
-            let thumb_height = ((h as f32 * visible_ratio) as u32).maximum(20);
+            let thumb_height = ((h as f32 * visible_ratio) as u32).max(20);
             let scroll_ratio = self.scroll_y as f32 / (self.content_height - h) as f32;
             let thumb_y = y + ((h - thumb_height) as f32 * scroll_ratio) as u32;
             
@@ -840,7 +840,7 @@ match event {
         
         let x = self.bounds.x as u32;
         let y = self.bounds.y as u32;
-        let size = self.bounds.width.minimum(self.bounds.height);
+        let size = self.bounds.width.min(self.bounds.height);
         
         let bg = if self.state.pressed {
             theme.button_pressed

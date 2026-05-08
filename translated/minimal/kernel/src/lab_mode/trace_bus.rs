@@ -11,96 +11,96 @@ use core::sync::atomic::{AtomicU64, Ordering};
 use spin::Mutex;
 
 
-const JY_: usize = 128;
+const KS_: usize = 128;
 
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[repr(u8)]
 pub enum EventCategory {
-    Fv = 0,
+    Interrupt = 0,
     Scheduler = 1,
-    Cy = 2,
-    Cc = 3,
-    Hg = 4,
-    Hs = 5,
-    As = 6,
-    De = 7,
-    Gv = 8,
-    Ee = 9,
+    Memory = 2,
+    Au = 3,
+    Syscall = 4,
+    Keyboard = 5,
+    Network = 6,
+    Security = 7,
+    Custom = 8,
+    Hypervisor = 9,
 }
 
 impl EventCategory {
-    pub fn cu(&self) -> &'static str {
+    pub fn label(&self) -> &'static str {
         match self {
-            Self::Fv  => "IRQ",
+            Self::Interrupt  => "IRQ",
             Self::Scheduler  => "SCHED",
-            Self::Cy     => "MEM",
-            Self::Cc => "VFS",
-            Self::Hg    => "SYS",
-            Self::Hs   => "KBD",
-            Self::As    => "NET",
-            Self::De   => "SEC",
-            Self::Gv     => "USR",
-            Self::Ee => "HV",
+            Self::Memory     => "MEM",
+            Self::Au => "VFS",
+            Self::Syscall    => "SYS",
+            Self::Keyboard   => "KBD",
+            Self::Network    => "NET",
+            Self::Security   => "SEC",
+            Self::Custom     => "USR",
+            Self::Hypervisor => "HV",
         }
     }
     
-    pub fn s(&self) -> u32 {
+    pub fn color(&self) -> u32 {
         match self {
-            Self::Fv  => 0xFFD18616, 
+            Self::Interrupt  => 0xFFD18616, 
             Self::Scheduler  => 0xFFD29922, 
-            Self::Cy     => 0xFF3FB950, 
-            Self::Cc => 0xFF79C0FF, 
-            Self::Hg    => 0xFFBC8CFF, 
-            Self::Hs   => 0xFF58A6FF, 
-            Self::As    => 0xFF79C0FF, 
-            Self::De   => 0xFFF85149, 
-            Self::Gv     => 0xFFE6EDF3, 
-            Self::Ee => 0xFFFF6B6B, 
+            Self::Memory     => 0xFF3FB950, 
+            Self::Au => 0xFF79C0FF, 
+            Self::Syscall    => 0xFFBC8CFF, 
+            Self::Keyboard   => 0xFF58A6FF, 
+            Self::Network    => 0xFF79C0FF, 
+            Self::Security   => 0xFFF85149, 
+            Self::Custom     => 0xFFE6EDF3, 
+            Self::Hypervisor => 0xFFFF6B6B, 
         }
     }
 }
 
 
 #[derive(Clone)]
-pub struct Jq {
+pub struct Dw {
     
-    pub aet: u64,
+    pub timestamp_ms: u64,
     
-    pub gb: EventCategory,
+    pub category: EventCategory,
     
     pub message: String,
     
-    pub ew: u64,
+    pub payload: u64,
     
-    pub fvy: Option<u64>,
+    pub syscall_nr: Option<u64>,
     
-    pub mjg: Option<[u64; 3]>,
+    pub syscall_args: Option<[u64; 3]>,
     
-    pub mjh: Option<i64>,
+    pub syscall_ret: Option<i64>,
 }
 
 
-static GK_: Mutex<EventRing> = Mutex::new(EventRing::new());
+static HB_: Mutex<EventRing> = Mutex::new(EventRing::new());
 
 
-static BJC_: AtomicU64 = AtomicU64::new(0);
+static BLH_: AtomicU64 = AtomicU64::new(0);
 
 
 
-static ET_: AtomicU64 = AtomicU64::new(0);
+static FJ_: AtomicU64 = AtomicU64::new(0);
 
 struct EventRing {
-    bi: [Option<Jq>; JY_],
+    buffer: [Option<Dw>; KS_],
 }
 
 
 impl EventRing {
     const fn new() -> Self {
         
-        const Cq: Option<Jq> = None;
+        const Bc: Option<Dw> = None;
         Self {
-            bi: [Cq; JY_],
+            buffer: [Bc; KS_],
         }
     }
 }
@@ -109,61 +109,61 @@ impl EventRing {
 
 
 
-pub fn fj(gb: EventCategory, message: String, ew: u64) {
-    if !super::EK_.load(Ordering::Relaxed) {
+pub fn emit(category: EventCategory, message: String, payload: u64) {
+    if !super::EY_.load(Ordering::Relaxed) {
         return; 
     }
     
-    let wi = crate::time::lc();
-    let id = Jq {
-        aet: wi,
-        gb,
+    let jy = crate::time::uptime_ms();
+    let event = Dw {
+        timestamp_ms: jy,
+        category,
         message,
-        ew,
-        fvy: None,
-        mjg: None,
-        mjh: None,
+        payload,
+        syscall_nr: None,
+        syscall_args: None,
+        syscall_ret: None,
     };
     
-    let w = BJC_.fetch_add(1, Ordering::Relaxed) as usize;
-    let gk = w % JY_;
+    let idx = BLH_.fetch_add(1, Ordering::Relaxed) as usize;
+    let slot = idx % KS_;
     
-    if let Some(mut mz) = GK_.try_lock() {
-        mz.bi[gk] = Some(id);
+    if let Some(mut dq) = HB_.try_lock() {
+        dq.buffer[slot] = Some(event);
     }
-    ET_.fetch_add(1, Ordering::Relaxed);
+    FJ_.fetch_add(1, Ordering::Relaxed);
 }
 
 
-pub fn ktb(nr: u64, n: [u64; 3], aux: i64) {
-    if !super::EK_.load(Ordering::Relaxed) {
+pub fn fuj(nr: u64, args: [u64; 3], ret: i64) {
+    if !super::EY_.load(Ordering::Relaxed) {
         return;
     }
     
-    let wi = crate::time::lc();
-    let j = gty(nr);
-    let message = alloc::format!("{}({:#x}, {:#x}, {:#x}) = {}", j, n[0], n[1], n[2], aux);
-    let id = Jq {
-        aet: wi,
-        gb: EventCategory::Hg,
+    let jy = crate::time::uptime_ms();
+    let name = dfe(nr);
+    let message = alloc::format!("{}({:#x}, {:#x}, {:#x}) = {}", name, args[0], args[1], args[2], ret);
+    let event = Dw {
+        timestamp_ms: jy,
+        category: EventCategory::Syscall,
         message,
-        ew: nr,
-        fvy: Some(nr),
-        mjg: Some(n),
-        mjh: Some(aux),
+        payload: nr,
+        syscall_nr: Some(nr),
+        syscall_args: Some(args),
+        syscall_ret: Some(ret),
     };
     
-    let w = BJC_.fetch_add(1, Ordering::Relaxed) as usize;
-    let gk = w % JY_;
+    let idx = BLH_.fetch_add(1, Ordering::Relaxed) as usize;
+    let slot = idx % KS_;
     
-    if let Some(mut mz) = GK_.try_lock() {
-        mz.bi[gk] = Some(id);
+    if let Some(mut dq) = HB_.try_lock() {
+        dq.buffer[slot] = Some(event);
     }
-    ET_.fetch_add(1, Ordering::Relaxed);
+    FJ_.fetch_add(1, Ordering::Relaxed);
 }
 
 
-pub fn gty(nr: u64) -> &'static str {
+pub fn dfe(nr: u64) -> &'static str {
     match nr {
         0 => "read",
         1 => "write",
@@ -231,11 +231,11 @@ pub fn gty(nr: u64) -> &'static str {
 
 
 #[inline]
-pub fn dgy(gb: EventCategory, fr: &'static str, ew: u64) {
-    if !super::EK_.load(Ordering::Relaxed) {
+pub fn bgi(category: EventCategory, bk: &'static str, payload: u64) {
+    if !super::EY_.load(Ordering::Relaxed) {
         return;
     }
-    fj(gb, String::from(fr), ew);
+    emit(category, String::from(bk), payload);
 }
 
 
@@ -243,68 +243,68 @@ pub fn dgy(gb: EventCategory, fr: &'static str, ew: u64) {
 
 
 
-pub fn ept(fk: u64, exit_reason: &str, wb: u64, eu: &str) {
-    if !super::EK_.load(Ordering::Relaxed) {
+pub fn bzg(vm_id: u64, exit_reason: &str, guest_rip: u64, detail: &str) {
+    if !super::EY_.load(Ordering::Relaxed) {
         return;
     }
-    let fr = alloc::format!("[VM {}] EXIT: {} at RIP=0x{:X} {}", fk, exit_reason, wb, eu);
-    fj(EventCategory::Ee, fr, fk);
+    let bk = alloc::format!("[VM {}] EXIT: {} at RIP=0x{:X} {}", vm_id, exit_reason, guest_rip, detail);
+    emit(EventCategory::Hypervisor, bk, vm_id);
 }
 
 
-pub fn epu(fk: u64, id: &str) {
-    if !super::EK_.load(Ordering::Relaxed) {
+pub fn bzh(vm_id: u64, event: &str) {
+    if !super::EY_.load(Ordering::Relaxed) {
         return;
     }
-    let fr = alloc::format!("[VM {}] {}", fk, id);
-    fj(EventCategory::Ee, fr, fk);
+    let bk = alloc::format!("[VM {}] {}", vm_id, event);
+    emit(EventCategory::Hypervisor, bk, vm_id);
 }
 
 
-pub fn npq(fk: u64, sz: &str, port: u16, bn: u64) {
-    if !super::EK_.load(Ordering::Relaxed) {
+pub fn hvk(vm_id: u64, direction: &str, port: u16, value: u64) {
+    if !super::EY_.load(Ordering::Relaxed) {
         return;
     }
-    let fr = alloc::format!("[VM {}] IO {} port=0x{:X} val=0x{:X}", fk, sz, port, bn);
-    fj(EventCategory::Ee, fr, fk);
+    let bk = alloc::format!("[VM {}] IO {} port=0x{:X} val=0x{:X}", vm_id, direction, port, value);
+    emit(EventCategory::Hypervisor, bk, vm_id);
 }
 
 
-pub fn npr(fk: u64, bqo: &str, axy: u64, ang: u64) {
-    if !super::EK_.load(Ordering::Relaxed) {
+pub fn hvl(vm_id: u64, event_type: &str, zy: u64, ua: u64) {
+    if !super::EY_.load(Ordering::Relaxed) {
         return;
     }
-    let fr = alloc::format!("[VM {}] MEM {} GPA=0x{:X} info=0x{:X}", fk, bqo, axy, ang);
-    fj(EventCategory::Ee, fr, fk);
+    let bk = alloc::format!("[VM {}] MEM {} GPA=0x{:X} info=0x{:X}", vm_id, event_type, zy, ua);
+    emit(EventCategory::Hypervisor, bk, vm_id);
 }
 
 
-pub fn nps(fk: u64, rax: u64, rbx: u64, rcx: u64, rdx: u64, pc: u64, rsp: u64) {
-    if !super::EK_.load(Ordering::Relaxed) {
+pub fn hvm(vm_id: u64, rax: u64, rbx: u64, rcx: u64, rdx: u64, rip: u64, rsp: u64) {
+    if !super::EY_.load(Ordering::Relaxed) {
         return;
     }
-    let fr = alloc::format!(
+    let bk = alloc::format!(
         "[VM {}] REGS RAX=0x{:X} RBX=0x{:X} RCX=0x{:X} RDX=0x{:X} RIP=0x{:X} RSP=0x{:X}",
-        fk, rax, rbx, rcx, rdx, pc, rsp
+        vm_id, rax, rbx, rcx, rdx, rip, rsp
     );
-    fj(EventCategory::Ee, fr, fk);
+    emit(EventCategory::Hypervisor, bk, vm_id);
 }
 
 
-pub fn vsi(az: usize) -> alloc::vec::Vec<Jq> {
+pub fn ocz(count: usize) -> alloc::vec::Vec<Dw> {
     let mut result = alloc::vec::Vec::new();
-    let es = ET_.load(Ordering::Relaxed) as usize;
-    if es == 0 {
+    let av = FJ_.load(Ordering::Relaxed) as usize;
+    if av == 0 {
         return result;
     }
     
-    let ay = if es > az { es - az } else { 0 };
-    let mz = GK_.lock();
+    let start = if av > count { av - count } else { 0 };
+    let dq = HB_.lock();
     
-    for a in ay..es {
-        let gk = a % JY_;
-        if let Some(ref id) = mz.bi[gk] {
-            result.push(id.clone());
+    for i in start..av {
+        let slot = i % KS_;
+        if let Some(ref event) = dq.buffer[slot] {
+            result.push(event.clone());
         }
     }
     
@@ -312,29 +312,29 @@ pub fn vsi(az: usize) -> alloc::vec::Vec<Jq> {
 }
 
 
-pub fn cus() -> u64 {
-    ET_.load(Ordering::Relaxed)
+pub fn total_count() -> u64 {
+    FJ_.load(Ordering::Relaxed)
 }
 
 
-pub fn hxa(plb: u64, am: usize) -> (alloc::vec::Vec<Jq>, u64) {
-    let es = ET_.load(Ordering::Relaxed);
-    if es <= plb {
-        return (alloc::vec::Vec::new(), es);
+pub fn dxk(since_idx: u64, max: usize) -> (alloc::vec::Vec<Dw>, u64) {
+    let av = FJ_.load(Ordering::Relaxed);
+    if av <= since_idx {
+        return (alloc::vec::Vec::new(), av);
     }
     
     let mut result = alloc::vec::Vec::new();
-    let ay = plb as usize;
-    let ci = es as usize;
-    let mz = GK_.lock();
+    let start = since_idx as usize;
+    let end = av as usize;
+    let dq = HB_.lock();
     
-    let qfc = if ci - ay > am { ci - am } else { ay };
-    for a in qfc..ci {
-        let gk = a % JY_;
-        if let Some(ref id) = mz.bi[gk] {
-            result.push(id.clone());
+    let jtp = if end - start > max { end - max } else { start };
+    for i in jtp..end {
+        let slot = i % KS_;
+        if let Some(ref event) = dq.buffer[slot] {
+            result.push(event.clone());
         }
     }
     
-    (result, es)
+    (result, av)
 }

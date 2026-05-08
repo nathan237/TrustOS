@@ -36,7 +36,7 @@ pub fn run() {
         }
     }
     
-    let mut command_buffer = [0u8; 512];
+    let mut cmd_buffer = [0u8; 512];
     let mut history: Vec<String> = Vec::new();
     
         // Infinite loop — runs until an explicit `break`.
@@ -60,8 +60,8 @@ loop {
             crate::print!("$ ");
         }
         
-        let len = crate::keyboard::read_line(&mut command_buffer);
-        let input = core::str::from_utf8(&command_buffer[..len]).unwrap_or("");
+        let len = crate::keyboard::read_line(&mut cmd_buffer);
+        let input = core::str::from_utf8(&cmd_buffer[..len]).unwrap_or("");
         let cmd = input.trim();
         
         if cmd.is_empty() {
@@ -294,30 +294,30 @@ match rootfs::list_directory(&linux_path.replace("/linux", "").replace("//", "/"
                 crate::println!("total {}", entries.len());
             }
             
-            let mut items: Vec<_> = entries.into_iterator().collect();
+            let mut items: Vec<_> = entries.into_iter().collect();
             items.sort_by(|a, b| a.0.cmp(&b.0));
             
-            for (name, is_directory, size) in items {
+            for (name, is_dir, size) in items {
                 if !show_all && name.starts_with('.') {
                     continue;
                 }
                 
                 if long_format {
-                    let perms = if is_directory { "drwxr-xr-x" } else { "-rw-r--r--" };
-                    let size_str = if is_directory { 
+                    let perms = if is_dir { "drwxr-xr-x" } else { "-rw-r--r--" };
+                    let size_str = if is_dir { 
                         format!("{:>8}", 4096) 
                     } else { 
                         format!("{:>8}", size) 
                     };
                     
-                    if is_directory {
+                    if is_dir {
                         crate::print!("{} 1 root root {} Feb  2 12:00 ", perms, size_str);
                         crate::println_color!(COLOR_BLUE, "{}/", name);
                     } else {
                         crate::println!("{} 1 root root {} Feb  2 12:00 {}", perms, size_str, name);
                     }
                 } else {
-                    if is_directory {
+                    if is_dir {
                         crate::print_color!(COLOR_BLUE, "{}  ", name);
                     } else {
                         crate::print!("{}  ", name);
@@ -516,23 +516,23 @@ fn command_cp(args: &[&str]) {
     }
     
     let cwd = super::with_linux(|l| String::from(l.cwd()));
-    let source = args[0];
-    let destination = args[1];
+    let src = args[0];
+    let dst = args[1];
     
-    let source_path = if source.starts_with('/') {
-        format!("/linux{}", source)
+    let src_path = if src.starts_with('/') {
+        format!("/linux{}", src)
     } else {
-        format!("/linux{}/{}", cwd, source)
+        format!("/linux{}/{}", cwd, src)
     };
     
-    let destination_path = if destination.starts_with('/') {
-        format!("/linux{}", destination)
+    let destination_path = if dst.starts_with('/') {
+        format!("/linux{}", dst)
     } else {
-        format!("/linux{}/{}", cwd, destination)
+        format!("/linux{}/{}", cwd, dst)
     };
     
     crate::ramfs::with_filesystem(|fs| {
-        if let Err(e) = fs.cp(&source_path, &destination_path) {
+        if let Err(e) = fs.cp(&src_path, &destination_path) {
             crate::println!("cp: error: {}", e.as_str());
         }
     });
@@ -545,23 +545,23 @@ fn command_mv(args: &[&str]) {
     }
     
     let cwd = super::with_linux(|l| String::from(l.cwd()));
-    let source = args[0];
-    let destination = args[1];
+    let src = args[0];
+    let dst = args[1];
     
-    let source_path = if source.starts_with('/') {
-        format!("/linux{}", source)
+    let src_path = if src.starts_with('/') {
+        format!("/linux{}", src)
     } else {
-        format!("/linux{}/{}", cwd, source)
+        format!("/linux{}/{}", cwd, src)
     };
     
-    let destination_path = if destination.starts_with('/') {
-        format!("/linux{}", destination)
+    let destination_path = if dst.starts_with('/') {
+        format!("/linux{}", dst)
     } else {
-        format!("/linux{}/{}", cwd, destination)
+        format!("/linux{}/{}", cwd, dst)
     };
     
     crate::ramfs::with_filesystem(|fs| {
-        if let Err(e) = fs.mv(&source_path, &destination_path) {
+        if let Err(e) = fs.mv(&src_path, &destination_path) {
             crate::println!("mv: error: {}", e.as_str());
         }
     });

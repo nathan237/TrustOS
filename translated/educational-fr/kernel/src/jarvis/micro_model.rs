@@ -75,7 +75,7 @@ pub struct MicroLayerWeights {
 // Structure publique — visible à l'extérieur de ce module.
 pub struct MicroWeights {
     pub token_embed: Vec<f32>,   // [MICRO_VOCAB × MICRO_D_MODEL]
-    pub position_embed: Vec<f32>,     // [MICRO_MAX_SEQ × MICRO_D_MODEL]
+    pub pos_embed: Vec<f32>,     // [MICRO_MAX_SEQ × MICRO_D_MODEL]
     pub layers: Vec<MicroLayerWeights>,
     pub rms_final: Vec<f32>,     // [MICRO_D_MODEL]
     pub w_output: Vec<f32>,      // [MICRO_D_MODEL × MICRO_VOCAB]
@@ -84,7 +84,7 @@ pub struct MicroWeights {
 // Bloc d'implémentation — définit les méthodes du type ci-dessus.
 impl MicroWeights {
         // Fonction publique — appelable depuis d'autres modules.
-pub fn parameter_count(&self) -> usize {
+pub fn param_count(&self) -> usize {
         MICRO_VOCAB * MICRO_D_MODEL              // token_embed
         + MICRO_MAXIMUM_SEQUENCE * MICRO_D_MODEL          // pos_embed
         + MICRO_N_LAYERS * (
@@ -100,9 +100,9 @@ pub fn parameter_count(&self) -> usize {
 
     /// Serialize to flat f32 array (same order as full model)
     pub fn serialize(&self) -> Vec<f32> {
-        let mut data = Vec::with_capacity(self.parameter_count());
+        let mut data = Vec::with_capacity(self.param_count());
         data.extend_from_slice(&self.token_embed);
-        data.extend_from_slice(&self.position_embed);
+        data.extend_from_slice(&self.pos_embed);
         for layer in &self.layers {
             data.extend_from_slice(&layer.rms_attn);
             data.extend_from_slice(&layer.w_q);
@@ -121,30 +121,30 @@ pub fn parameter_count(&self) -> usize {
 
     /// Deserialize from flat f32 array
     pub fn deserialize(data: &[f32]) -> Option<Self> {
-        let mut position = 0;
-        let token_embed = slice_vec(data, &mut position, MICRO_VOCAB * MICRO_D_MODEL)?;
-        let position_embed = slice_vec(data, &mut position, MICRO_MAXIMUM_SEQUENCE * MICRO_D_MODEL)?;
+        let mut pos = 0;
+        let token_embed = slice_vec(data, &mut pos, MICRO_VOCAB * MICRO_D_MODEL)?;
+        let pos_embed = slice_vec(data, &mut pos, MICRO_MAXIMUM_SEQUENCE * MICRO_D_MODEL)?;
 
         let mut layers = Vec::with_capacity(MICRO_N_LAYERS);
         for _ in 0..MICRO_N_LAYERS {
             layers.push(MicroLayerWeights {
-                rms_attn: slice_vec(data, &mut position, MICRO_D_MODEL)?,
-                w_q: slice_vec(data, &mut position, MICRO_D_MODEL * MICRO_D_MODEL)?,
-                w_k: slice_vec(data, &mut position, MICRO_D_MODEL * MICRO_D_MODEL)?,
-                w_v: slice_vec(data, &mut position, MICRO_D_MODEL * MICRO_D_MODEL)?,
-                w_o: slice_vec(data, &mut position, MICRO_D_MODEL * MICRO_D_MODEL)?,
-                rms_ffn: slice_vec(data, &mut position, MICRO_D_MODEL)?,
-                w_gate: slice_vec(data, &mut position, MICRO_D_MODEL * MICRO_D_FF)?,
-                w_up: slice_vec(data, &mut position, MICRO_D_MODEL * MICRO_D_FF)?,
-                w_down: slice_vec(data, &mut position, MICRO_D_FF * MICRO_D_MODEL)?,
+                rms_attn: slice_vec(data, &mut pos, MICRO_D_MODEL)?,
+                w_q: slice_vec(data, &mut pos, MICRO_D_MODEL * MICRO_D_MODEL)?,
+                w_k: slice_vec(data, &mut pos, MICRO_D_MODEL * MICRO_D_MODEL)?,
+                w_v: slice_vec(data, &mut pos, MICRO_D_MODEL * MICRO_D_MODEL)?,
+                w_o: slice_vec(data, &mut pos, MICRO_D_MODEL * MICRO_D_MODEL)?,
+                rms_ffn: slice_vec(data, &mut pos, MICRO_D_MODEL)?,
+                w_gate: slice_vec(data, &mut pos, MICRO_D_MODEL * MICRO_D_FF)?,
+                w_up: slice_vec(data, &mut pos, MICRO_D_MODEL * MICRO_D_FF)?,
+                w_down: slice_vec(data, &mut pos, MICRO_D_FF * MICRO_D_MODEL)?,
             });
         }
 
-        let rms_final = slice_vec(data, &mut position, MICRO_D_MODEL)?;
-        let w_output = slice_vec(data, &mut position, MICRO_D_MODEL * MICRO_VOCAB)?;
+        let rms_final = slice_vec(data, &mut pos, MICRO_D_MODEL)?;
+        let w_output = slice_vec(data, &mut pos, MICRO_D_MODEL * MICRO_VOCAB)?;
 
         Some(MicroWeights {
-            token_embed, position_embed, layers, rms_final, w_output,
+            token_embed, pos_embed, layers, rms_final, w_output,
         })
     }
 
@@ -171,7 +171,7 @@ pub fn parameter_count(&self) -> usize {
 
         MicroWeights {
             token_embed: random_vec(MICRO_VOCAB * MICRO_D_MODEL, emb_scale, &mut seed),
-            position_embed: random_vec(MICRO_MAXIMUM_SEQUENCE * MICRO_D_MODEL, 0.02, &mut seed),
+            pos_embed: random_vec(MICRO_MAXIMUM_SEQUENCE * MICRO_D_MODEL, 0.02, &mut seed),
             layers,
             rms_final: vec![1.0; MICRO_D_MODEL],
             w_output: random_vec(MICRO_D_MODEL * MICRO_VOCAB, emb_scale, &mut seed),
@@ -187,17 +187,17 @@ pub struct MicroEngine {
     /// KV cache: keys[layer][pos * MICRO_D_MODEL .. (pos+1) * MICRO_D_MODEL]
     cache_k: Vec<Vec<f32>>,
     cache_v: Vec<Vec<f32>>,
-    cache_length: usize,
+    cache_len: usize,
     /// Scratch buffers
-    buffer_x: Vec<f32>,
-    buffer_xn: Vec<f32>,
-    buffer_q: Vec<f32>,
-    buffer_k: Vec<f32>,
-    buffer_v: Vec<f32>,
-    buffer_attn: Vec<f32>,
-    buffer_gate: Vec<f32>,
-    buffer_up: Vec<f32>,
-    buffer_logits: Vec<f32>,
+    buf_x: Vec<f32>,
+    buf_xn: Vec<f32>,
+    buf_q: Vec<f32>,
+    buf_k: Vec<f32>,
+    buf_v: Vec<f32>,
+    buf_attn: Vec<f32>,
+    buf_gate: Vec<f32>,
+    buf_up: Vec<f32>,
+    buf_logits: Vec<f32>,
     rng: u64,
 }
 
@@ -208,16 +208,16 @@ pub fn new() -> Self {
         MicroEngine {
             cache_k: (0..MICRO_N_LAYERS).map(|_| Vec::with_capacity(MICRO_MAXIMUM_SEQUENCE * MICRO_D_MODEL)).collect(),
             cache_v: (0..MICRO_N_LAYERS).map(|_| Vec::with_capacity(MICRO_MAXIMUM_SEQUENCE * MICRO_D_MODEL)).collect(),
-            cache_length: 0,
-            buffer_x: vec![0.0; MICRO_D_MODEL],
-            buffer_xn: vec![0.0; MICRO_D_MODEL],
-            buffer_q: vec![0.0; MICRO_D_MODEL],
-            buffer_k: vec![0.0; MICRO_D_MODEL],
-            buffer_v: vec![0.0; MICRO_D_MODEL],
-            buffer_attn: vec![0.0; MICRO_MAXIMUM_SEQUENCE],
-            buffer_gate: vec![0.0; MICRO_D_FF],
-            buffer_up: vec![0.0; MICRO_D_FF],
-            buffer_logits: vec![0.0; MICRO_VOCAB],
+            cache_len: 0,
+            buf_x: vec![0.0; MICRO_D_MODEL],
+            buf_xn: vec![0.0; MICRO_D_MODEL],
+            buf_q: vec![0.0; MICRO_D_MODEL],
+            buf_k: vec![0.0; MICRO_D_MODEL],
+            buf_v: vec![0.0; MICRO_D_MODEL],
+            buf_attn: vec![0.0; MICRO_MAXIMUM_SEQUENCE],
+            buf_gate: vec![0.0; MICRO_D_FF],
+            buf_up: vec![0.0; MICRO_D_FF],
+            buf_logits: vec![0.0; MICRO_VOCAB],
             rng: crate::time::uptime_ticks().wrapping_add(0xBEEF_CAFE),
         }
     }
@@ -225,15 +225,15 @@ pub fn new() -> Self {
     /// Generate text from prompt
     pub fn generate(&mut self, model: &MicroWeights, prompt: &[u8], maximum_tokens: usize) -> Vec<u8> {
         self.clear_cache();
-        let maximum = maximum_tokens.minimum(MICRO_MAXIMUM_SEQUENCE);
-        let mut output = Vec::with_capacity(maximum);
+        let max = maximum_tokens.min(MICRO_MAXIMUM_SEQUENCE);
+        let mut output = Vec::with_capacity(max);
 
         for &token in prompt.iter().take(MICRO_MAXIMUM_SEQUENCE - 1) {
             self.forward_one(model, token);
         }
 
         let mut next = self.sample(0.7, 20, &output);
-        for _ in 0..maximum {
+        for _ in 0..max {
             if next == 0 || next == 3 { break; }
             output.push(next);
             self.forward_one(model, next);
@@ -248,13 +248,13 @@ pub fn new() -> Self {
         for &token in input.iter().take(MICRO_MAXIMUM_SEQUENCE) {
             self.forward_one(model, token);
         }
-        argmax(&self.buffer_logits)
+        argmax(&self.buf_logits)
     }
 
     /// Compute loss on a token sequence (teacher forcing)
     pub fn compute_loss(&mut self, model: &MicroWeights, tokens: &[u8]) -> f32 {
         self.clear_cache();
-        let sequence_length = tokens.len().minimum(MICRO_MAXIMUM_SEQUENCE);
+        let sequence_length = tokens.len().min(MICRO_MAXIMUM_SEQUENCE);
         if sequence_length < 2 { return f32::MAX; }
 
         let mut total_loss = 0.0f32;
@@ -264,10 +264,10 @@ pub fn new() -> Self {
             self.forward_one(model, tokens[t]);
             if t < n_targets {
                 let target = tokens[t + 1] as usize;
-                let mut probs = self.buffer_logits.clone();
+                let mut probs = self.buf_logits.clone();
                 softmax(&mut probs);
-                let p = probs[target].maximum(1e-10);
-                total_loss += -p.line_approx();
+                let p = probs[target].max(1e-10);
+                total_loss += -p.ln_approx();
             }
         }
         total_loss / n_targets as f32
@@ -276,34 +276,34 @@ pub fn new() -> Self {
     fn clear_cache(&mut self) {
         for k in &mut self.cache_k { k.clear(); }
         for v in &mut self.cache_v { v.clear(); }
-        self.cache_length = 0;
+        self.cache_len = 0;
     }
 
     fn forward_one(&mut self, model: &MicroWeights, token: u8) {
-        let position = self.cache_length;
-        if position >= MICRO_MAXIMUM_SEQUENCE { return; }
+        let pos = self.cache_len;
+        if pos >= MICRO_MAXIMUM_SEQUENCE { return; }
 
-        let token = token as usize;
+        let tok = token as usize;
         for i in 0..MICRO_D_MODEL {
-            self.buffer_x[i] = model.token_embed[token * MICRO_D_MODEL + i]
-                           + model.position_embed[position * MICRO_D_MODEL + i];
+            self.buf_x[i] = model.token_embed[tok * MICRO_D_MODEL + i]
+                           + model.pos_embed[pos * MICRO_D_MODEL + i];
         }
 
         for l in 0..MICRO_N_LAYERS {
             let layer = &model.layers[l];
 
             // Pre-attn RMSNorm
-            rmsnorm(&mut self.buffer_xn, &self.buffer_x, &layer.rms_attn);
+            rmsnorm(&mut self.buf_xn, &self.buf_x, &layer.rms_attn);
 
             // QKV projections
-            matvec(&mut self.buffer_q, &layer.w_q, &self.buffer_xn, MICRO_D_MODEL, MICRO_D_MODEL);
-            matvec(&mut self.buffer_k, &layer.w_k, &self.buffer_xn, MICRO_D_MODEL, MICRO_D_MODEL);
-            matvec(&mut self.buffer_v, &layer.w_v, &self.buffer_xn, MICRO_D_MODEL, MICRO_D_MODEL);
+            matvec(&mut self.buf_q, &layer.w_q, &self.buf_xn, MICRO_D_MODEL, MICRO_D_MODEL);
+            matvec(&mut self.buf_k, &layer.w_k, &self.buf_xn, MICRO_D_MODEL, MICRO_D_MODEL);
+            matvec(&mut self.buf_v, &layer.w_v, &self.buf_xn, MICRO_D_MODEL, MICRO_D_MODEL);
 
-            self.cache_k[l].extend_from_slice(&self.buffer_k);
-            self.cache_v[l].extend_from_slice(&self.buffer_v);
+            self.cache_k[l].extend_from_slice(&self.buf_k);
+            self.cache_v[l].extend_from_slice(&self.buf_v);
 
-            let n_position = position + 1;
+            let n_position = pos + 1;
             let mut attn_out = vec![0.0f32; MICRO_D_MODEL];
             let dk_sqrt = (MICRO_D_K as f32).sqrt_approx();
 
@@ -312,13 +312,13 @@ pub fn new() -> Self {
                 for t in 0..n_position {
                     let mut score = 0.0f32;
                     for d in 0..MICRO_D_K {
-                        score += self.buffer_q[ho + d] * self.cache_k[l][t * MICRO_D_MODEL + ho + d];
+                        score += self.buf_q[ho + d] * self.cache_k[l][t * MICRO_D_MODEL + ho + d];
                     }
-                    self.buffer_attn[t] = score / dk_sqrt;
+                    self.buf_attn[t] = score / dk_sqrt;
                 }
-                softmax(&mut self.buffer_attn[..n_position]);
+                softmax(&mut self.buf_attn[..n_position]);
                 for t in 0..n_position {
-                    let w = self.buffer_attn[t];
+                    let w = self.buf_attn[t];
                     for d in 0..MICRO_D_K {
                         attn_out[ho + d] += w * self.cache_v[l][t * MICRO_D_MODEL + ho + d];
                     }
@@ -328,45 +328,45 @@ pub fn new() -> Self {
             // Output projection + residual
             let mut proj = vec![0.0f32; MICRO_D_MODEL];
             matvec(&mut proj, &layer.w_o, &attn_out, MICRO_D_MODEL, MICRO_D_MODEL);
-            for i in 0..MICRO_D_MODEL { self.buffer_x[i] += proj[i]; }
+            for i in 0..MICRO_D_MODEL { self.buf_x[i] += proj[i]; }
 
             // Pre-FFN RMSNorm
-            rmsnorm(&mut self.buffer_xn, &self.buffer_x, &layer.rms_ffn);
+            rmsnorm(&mut self.buf_xn, &self.buf_x, &layer.rms_ffn);
 
             // SwiGLU FFN
-            matvec(&mut self.buffer_gate, &layer.w_gate, &self.buffer_xn, MICRO_D_MODEL, MICRO_D_FF);
-            matvec(&mut self.buffer_up, &layer.w_up, &self.buffer_xn, MICRO_D_MODEL, MICRO_D_FF);
+            matvec(&mut self.buf_gate, &layer.w_gate, &self.buf_xn, MICRO_D_MODEL, MICRO_D_FF);
+            matvec(&mut self.buf_up, &layer.w_up, &self.buf_xn, MICRO_D_MODEL, MICRO_D_FF);
             for i in 0..MICRO_D_FF {
-                let g = self.buffer_gate[i];
+                let g = self.buf_gate[i];
                 let sig = 1.0 / (1.0 + (-g).exp_approx());
-                self.buffer_gate[i] = g * sig * self.buffer_up[i];
+                self.buf_gate[i] = g * sig * self.buf_up[i];
             }
             let mut ffn_out = vec![0.0f32; MICRO_D_MODEL];
-            matvec(&mut ffn_out, &layer.w_down, &self.buffer_gate, MICRO_D_FF, MICRO_D_MODEL);
-            for i in 0..MICRO_D_MODEL { self.buffer_x[i] += ffn_out[i]; }
+            matvec(&mut ffn_out, &layer.w_down, &self.buf_gate, MICRO_D_FF, MICRO_D_MODEL);
+            for i in 0..MICRO_D_MODEL { self.buf_x[i] += ffn_out[i]; }
         }
 
         // Final norm + logits
-        rmsnorm(&mut self.buffer_xn, &self.buffer_x, &model.rms_final);
-        matvec(&mut self.buffer_logits, &model.w_output, &self.buffer_xn, MICRO_D_MODEL, MICRO_VOCAB);
-        self.cache_length = position + 1;
+        rmsnorm(&mut self.buf_xn, &self.buf_x, &model.rms_final);
+        matvec(&mut self.buf_logits, &model.w_output, &self.buf_xn, MICRO_D_MODEL, MICRO_VOCAB);
+        self.cache_len = pos + 1;
     }
 
     fn sample(&mut self, temperature: f32, top_k: usize, recent: &[u8]) -> u8 {
-        if temperature <= 0.01 { return argmax(&self.buffer_logits); }
+        if temperature <= 0.01 { return argmax(&self.buf_logits); }
 
-        let mut logits = self.buffer_logits.clone();
-        for l in logits.iterator_mut() { *l /= temperature; }
+        let mut logits = self.buf_logits.clone();
+        for l in logits.iter_mut() { *l /= temperature; }
 
         // Repetition penalty on last 16 tokens
-        let window = recent.len().minimum(16);
+        let window = recent.len().min(16);
         if window > 0 {
             let start = recent.len() - window;
-            for &token in &recent[start..] {
-                let index = token as usize;
-                if index < MICRO_VOCAB {
-                    if logits[index] > 0.0 { logits[index] /= 1.3; }
-                    else { logits[index] *= 1.3; }
+            for &tok in &recent[start..] {
+                let idx = tok as usize;
+                if idx < MICRO_VOCAB {
+                    if logits[idx] > 0.0 { logits[idx] /= 1.3; }
+                    else { logits[idx] *= 1.3; }
                 }
             }
         }
@@ -376,12 +376,12 @@ pub fn new() -> Self {
             let mut indexed: Vec<(f32, usize)> = logits.iter().copied()
                 .enumerate().map(|(i, v)| (v, i)).collect();
             indexed.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(core::cmp::Ordering::Equal));
-            let threshold = indexed[top_k.minimum(indexed.len() - 1)].0;
-            for l in logits.iterator_mut() { if *l < threshold { *l = f32::NEGATIVE_INFINITY; } }
+            let threshold = indexed[top_k.min(indexed.len() - 1)].0;
+            for l in logits.iter_mut() { if *l < threshold { *l = f32::NEG_INFINITY; } }
         }
 
         softmax(&mut logits);
-        let r = self.random_f32();
+        let r = self.rand_f32();
         let mut cum = 0.0f32;
         for (i, &p) in logits.iter().enumerate() {
             cum += p;
@@ -390,7 +390,7 @@ pub fn new() -> Self {
         (MICRO_VOCAB - 1) as u8
     }
 
-    fn random_f32(&mut self) -> f32 {
+    fn rand_f32(&mut self) -> f32 {
         let mut x = self.rng;
         x ^= x << 13; x ^= x >> 7; x ^= x << 17;
         self.rng = x;
@@ -406,7 +406,7 @@ pub fn new() -> Self {
 pub struct KernelStatus {
     pub heap_ok: bool,
     pub interrupts_ok: bool,
-    pub filesystem_ok: bool,
+    pub fs_ok: bool,
     pub serial_ok: bool,
     pub full_brain_available: bool,
     pub full_brain_loaded: bool,
@@ -417,7 +417,7 @@ pub fn kernel_validate() -> KernelStatus {
     KernelStatus {
         heap_ok: check_heap(),
         interrupts_ok: check_interrupts(),
-        filesystem_ok: check_filesystem(),
+        fs_ok: check_filesystem(),
         serial_ok: check_serial(),
         full_brain_available: check_full_brain_file(),
         full_brain_loaded: false, // Updated by mod.rs
@@ -527,10 +527,10 @@ fn rmsnorm(out: &mut [f32], x: &[f32], weight: &[f32]) {
 
 fn softmax(data: &mut [f32]) {
     if data.is_empty() { return; }
-    let maximum = data.iter().copied().fold(f32::NEGATIVE_INFINITY, f32::maximum);
-    for v in data.iterator_mut() { *v = (*v - maximum).exp_approx(); }
+    let max = data.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+    for v in data.iter_mut() { *v = (*v - max).exp_approx(); }
     let sum: f32 = data.iter().sum();
-    if sum > 0.0 { let inv = 1.0 / sum; for v in data.iterator_mut() { *v *= inv; } }
+    if sum > 0.0 { let inv = 1.0 / sum; for v in data.iter_mut() { *v *= inv; } }
 }
 
 fn argmax(data: &[f32]) -> u8 {
@@ -551,10 +551,10 @@ fn xorshift_f32(state: &mut u64) -> f32 {
     (bits as f32 / (1u32 << 24) as f32) * 2.0 - 1.0
 }
 
-fn slice_vec(data: &[f32], position: &mut usize, count: usize) -> Option<Vec<f32>> {
-    if *position + count > data.len() { return None; }
-    let v = data[*position..*position + count].to_vec();
-    *position += count;
+fn slice_vec(data: &[f32], pos: &mut usize, count: usize) -> Option<Vec<f32>> {
+    if *pos + count > data.len() { return None; }
+    let v = data[*pos..*pos + count].to_vec();
+    *pos += count;
     Some(v)
 }
 
@@ -565,7 +565,7 @@ fn slice_vec(data: &[f32], position: &mut usize, count: usize) -> Option<Vec<f32
 trait F32Ext {
     fn exp_approx(self) -> f32;
     fn sqrt_approx(self) -> f32;
-    fn line_approx(self) -> f32;
+    fn ln_approx(self) -> f32;
 }
 
 // Implémentation de trait — remplit un contrat comportemental.
@@ -574,7 +574,7 @@ impl F32Ext for f32 {
         let x = self.clamp(-88.0, 88.0);
         let a = 12102203.0f32;
         let b = 1065353216.0f32;
-        let bits = ((a * x + b) as i32).maximum(0) as u32;
+        let bits = ((a * x + b) as i32).max(0) as u32;
         f32::from_bits(bits)
     }
 
@@ -585,11 +585,11 @@ impl F32Ext for f32 {
         (guess + self / guess) * 0.5
     }
 
-    fn line_approx(self) -> f32 {
+    fn ln_approx(self) -> f32 {
         if self <= 0.0 { return -88.0; }
         let bits = self.to_bits();
         let e = ((bits >> 23) & 0xFF) as f32 - 127.0;
         let m = f32::from_bits((bits & 0x007FFFFF) | 0x3F800000);
-        (e + (m - 1.0) * 1.4427) * core::f32::consts::LINE_2
+        (e + (m - 1.0) * 1.4427) * core::f32::consts::LN_2
     }
 }

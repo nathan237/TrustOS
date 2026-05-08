@@ -1,14 +1,14 @@
 
 use alloc::string::String;
 
-pub struct Afp {
-    pub dme: bool,
-    pub fhw: bool,
-    pub gvo: bool,
-    pub gwj: bool,
-    pub igr: u32,
+pub struct Nv {
+    pub supported: bool,
+    pub ept_supported: bool,
+    pub unrestricted_guest: bool,
+    pub vpid_supported: bool,
+    pub vmcs_revision_id: u32,
 }
 
-pub fn inj() -> Result<Afp, String> {
+pub fn ehv() -> Result<Nv, String> {
     Err(String::from("VMX not available on this architecture"))
 }

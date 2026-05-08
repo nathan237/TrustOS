@@ -69,28 +69,28 @@ static BATCH_MODE: core::sync::atomic::AtomicBool =
 /// Check serial port for mentor commands (called periodically from shell idle loop)
 pub fn poll_serial() {
     // Try to read a line from serial
-    let mut buffer = [0u8; 512];
-    let mut position = 0;
+    let mut buf = [0u8; 512];
+    let mut pos = 0;
 
     // Non-blocking: read available bytes
-    while position < buffer.len() - 1 {
+    while pos < buf.len() - 1 {
         if let Some(b) = crate::serial::read_byte() {
             if b == b'\n' || b == b'\r' {
-                if position > 0 { break; }
+                if pos > 0 { break; }
                 continue;
             }
-            buffer[position] = b;
-            position += 1;
+            buf[pos] = b;
+            pos += 1;
         } else {
             break;
         }
     }
 
-    if position == 0 { return; }
+    if pos == 0 { return; }
 
     // Convert to string
     let line = // Correspondance de motifs — branchement exhaustif de Rust.
-match core::str::from_utf8(&buffer[..position]) {
+match core::str::from_utf8(&buf[..pos]) {
         Ok(s) => s,
         Err(_) => return,
     };
@@ -185,9 +185,9 @@ fn handle_teach(text: &str) {
 
 /// Handle correction: "wrong_output|correct_output"
 fn handle_correct(text: &str) {
-    if let Some(separator_position) = text.find('|') {
-        let _bad = &text[..separator_position];
-        let good = &text[separator_position + 1..];
+    if let Some(sep_pos) = text.find('|') {
+        let _bad = &text[..sep_pos];
+        let good = &text[sep_pos + 1..];
         // Train more aggressively on the correct version
         let lr = *LEARNING_RATE.lock() * 2.0;
         let loss = super::train_on_text(good, lr);
@@ -222,8 +222,8 @@ fn handle_generate(prompt: &str) {
 
 /// Handle configuration changes
 fn handle_config(config: &str) {
-    if let Err(message) = super::guardian::authorize(super::guardian::ProtectedOp::ConfigChange) {
-        respond(&alloc::format!("ERROR:Guardian denied — {}", message));
+    if let Err(msg) = super::guardian::authorize(super::guardian::ProtectedOp::ConfigChange) {
+        respond(&alloc::format!("ERROR:Guardian denied — {}", msg));
         return;
     }
     if config.starts_with("temp=") {
@@ -262,8 +262,8 @@ match super::save_weights() {
 
 /// Load weights from RamFS disk
 fn handle_load() {
-    if let Err(message) = super::guardian::authorize(super::guardian::ProtectedOp::WeightLoad) {
-        respond(&alloc::format!("ERROR:Guardian denied — {}", message));
+    if let Err(msg) = super::guardian::authorize(super::guardian::ProtectedOp::WeightLoad) {
+        respond(&alloc::format!("ERROR:Guardian denied — {}", msg));
         return;
     }
         // Correspondance de motifs — branchement exhaustif de Rust.
@@ -275,8 +275,8 @@ match super::load_weights() {
 
 /// Reset all weights to random initialization
 fn handle_reset() {
-    if let Err(message) = super::guardian::authorize(super::guardian::ProtectedOp::ModelReset) {
-        respond(&alloc::format!("ERROR:Guardian denied — {}", message));
+    if let Err(msg) = super::guardian::authorize(super::guardian::ProtectedOp::ModelReset) {
+        respond(&alloc::format!("ERROR:Guardian denied — {}", msg));
         return;
     }
     if let Some(model) = super::MODEL.lock().as_mut() {
@@ -292,8 +292,8 @@ fn handle_reset() {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /// Send a response back through serial
-fn respond(message: &str) {
-    crate::serial_println!("JARVIS:{}", message);
+fn respond(msg: &str) {
+    crate::serial_println!("JARVIS:{}", msg);
 }
 
 /// Get the current learning rate

@@ -665,7 +665,7 @@ static NEXT_MMAP_ADDRESS: AtomicU64 = AtomicU64::new(0x4000_0000); // 1 GB, well
 /// 
 /// For anonymous mappings, only metadata is stored. Physical frames are
 /// allocated lazily by the page fault handler on first access.
-pub fn system_mmap(address: u64, length: u64, prot: u64, flags: u64, fd: i64, _offset: u64) -> i64 {
+pub fn system_mmap(addr: u64, length: u64, prot: u64, flags: u64, fd: i64, _offset: u64) -> i64 {
     use mmap_flags::*;
     use prot_flags::*;
     use crate::memory::paging::PageFlags;
@@ -678,8 +678,8 @@ pub fn system_mmap(address: u64, length: u64, prot: u64, flags: u64, fd: i64, _o
     let aligned_length = (length + page_size - 1) & !(page_size - 1);
     
     // Determine the mapping address
-    let map_address = if address != 0 && (flags & MAP_FIXED) != 0 {
-        let aligned = address & !(page_size - 1); // page-align
+    let map_address = if addr != 0 && (flags & MAP_FIXED) != 0 {
+        let aligned = addr & !(page_size - 1); // page-align
         // Reject MAP_FIXED targeting kernel-space addresses
         if !crate::memory::is_user_address(aligned) {
             return errno::EINVAL;
@@ -719,15 +719,15 @@ unsafe { core::arch::asm!("mov {}, cr3", out(reg) cr3, options(nostack, preserve
 }
 
 /// sys_munmap - Unmap memory and free frames
-pub fn system_munmap(address: u64, length: u64) -> i64 {
-    if address == 0 || length == 0 {
+pub fn system_munmap(addr: u64, length: u64) -> i64 {
+    if addr == 0 || length == 0 {
         return errno::EINVAL;
     }
     
     let page_size = 4096u64;
     let aligned_length = (length + page_size - 1) & !(page_size - 1);
     let number_pages = (aligned_length / page_size) as usize;
-    let start = address & !(page_size - 1);
+    let start = addr & !(page_size - 1);
     
     // Remove VMA tracking
     let cr3: u64;
@@ -742,24 +742,24 @@ unsafe { core::arch::asm!("mov {}, cr3", out(reg) cr3, options(nostack, preserve
     crate::exec::with_current_address_space(|space| {
         for i in 0..number_pages {
             let virt = start + (i as u64 * page_size);
-            if let Some(physical) = space.translate(virt) {
-                let physical_page = physical & !0xFFF;
+            if let Some(phys) = space.translate(virt) {
+                let physical_page = phys & !0xFFF;
                 space.unmap_page(virt);
                 crate::memory::frame::free_frame(physical_page);
             }
         }
     });
     
-    crate::log_debug!("[MUNMAP] Unmapped {} pages at {:#x}", number_pages, address);
+    crate::log_debug!("[MUNMAP] Unmapped {} pages at {:#x}", number_pages, addr);
     0
 }
 
 /// sys_mprotect - Change memory protection (walks page tables)
-pub fn system_mprotect(address: u64, length: u64, prot: u64) -> i64 {
+pub fn system_mprotect(addr: u64, length: u64, prot: u64) -> i64 {
     use prot_flags::*;
     use crate::memory::paging::{PageFlags, PageTable};
     
-    if address == 0 || address & 0xFFF != 0 {
+    if addr == 0 || addr & 0xFFF != 0 {
         return errno::EINVAL;
     }
     
@@ -782,7 +782,7 @@ pub fn system_mprotect(address: u64, length: u64, prot: u64) -> i64 {
         let cr3 = space.cr3();
         
         for i in 0..number_pages {
-            let virt = address + (i as u64 * page_size);
+            let virt = addr + (i as u64 * page_size);
             let pml4_index = ((virt >> 39) & 0x1FF) as usize;
             let pdpt_index = ((virt >> 30) & 0x1FF) as usize;
             let pd_index   = ((virt >> 21) & 0x1FF) as usize;
@@ -793,38 +793,38 @@ unsafe { &*((cr3 + hhdm) as *// Compile-time constant — evaluated at compilati
 const PageTable) };
             if !pml4.entries[pml4_index].is_present() { continue; }
             let pdpt = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*((pml4.entries[pml4_index].physical_address() + hhdm) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe { &*((pml4.entries[pml4_index].phys_addr() + hhdm) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const PageTable) };
             if !pdpt.entries[pdpt_index].is_present() { continue; }
             let pd = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*((pdpt.entries[pdpt_index].physical_address() + hhdm) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe { &*((pdpt.entries[pdpt_index].phys_addr() + hhdm) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const PageTable) };
             if !pd.entries[pd_index].is_present() { continue; }
             let pt = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &mut *((pd.entries[pd_index].physical_address() + hhdm) as *mut PageTable) };
+unsafe { &mut *((pd.entries[pd_index].phys_addr() + hhdm) as *mut PageTable) };
             if !pt.entries[pt_index].is_present() { continue; }
             
-            let physical = pt.entries[pt_index].physical_address();
-            pt.entries[pt_index].set(physical, new_flags);
+            let phys = pt.entries[pt_index].phys_addr();
+            pt.entries[pt_index].set(phys, new_flags);
             #[cfg(target_arch = "x86_64")]
                         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { core::arch::asm!("invlpg [{}]", in(reg) virt, options(nostack, preserves_flags)); }
         }
     });
     
-    crate::log_debug!("[MPROTECT] addr={:#x} len={:#x} prot={:#x}", address, length, prot);
+    crate::log_debug!("[MPROTECT] addr={:#x} len={:#x} prot={:#x}", addr, length, prot);
     0
 }
 
 /// sys_brk - Change program break (heap end)
 ///
 /// Eagerly allocates and maps physical frames when the break is extended.
-pub fn system_brk(address: u64) -> i64 {
+pub fn system_brk(addr: u64) -> i64 {
     use crate::memory::paging::{PageFlags, UserMemoryRegion};
     
     let current_brk = crate::exec::current_brk();
     
-    if address == 0 || current_brk == 0 {
+    if addr == 0 || current_brk == 0 {
         // Query / initialize — return current break
         if current_brk == 0 {
             return UserMemoryRegion::HEAP_START as i64;
@@ -833,16 +833,16 @@ pub fn system_brk(address: u64) -> i64 {
     }
     
     // Validate range
-    if address < UserMemoryRegion::HEAP_START || address >= UserMemoryRegion::HEAP_END {
+    if addr < UserMemoryRegion::HEAP_START || addr >= UserMemoryRegion::HEAP_END {
         return current_brk as i64;
     }
     
     let page_size = 4096u64;
     
-    if address > current_brk {
+    if addr > current_brk {
         // Extending the heap — allocate and map new pages
         let old_page = (current_brk + page_size - 1) & !(page_size - 1); // first unmapped page
-        let new_page = (address + page_size - 1) & !(page_size - 1);        // last page to map (exclusive)
+        let new_page = (addr + page_size - 1) & !(page_size - 1);        // last page to map (exclusive)
         
         if new_page > old_page {
             let pages_needed = ((new_page - old_page) / page_size) as usize;
@@ -850,12 +850,12 @@ pub fn system_brk(address: u64) -> i64 {
             let ok = crate::exec::with_current_address_space(|space| {
                 for i in 0..pages_needed {
                     let virt = old_page + (i as u64 * page_size);
-                    let physical = // Pattern matching — Rust's exhaustive branching construct.
+                    let phys = // Pattern matching — Rust's exhaustive branching construct.
 match crate::memory::frame::allocator_frame_zeroed() {
                         Some(p) => p,
                         None => return false,
                     };
-                    if space.map_page(virt, physical, PageFlags::USER_DATA).is_none() {
+                    if space.map_page(virt, phys, PageFlags::USER_DATA).is_none() {
                         return false;
                     }
                 }
@@ -870,9 +870,9 @@ match crate::memory::frame::allocator_frame_zeroed() {
     // Note: shrinking the heap (addr < current_brk) — we just move the break
     // without freeing pages for now (matches many real OS behaviours).
     
-    crate::exec::set_current_brk(address);
-    crate::log_debug!("[BRK] Set program break to {:#x}", address);
-    address as i64
+    crate::exec::set_current_brk(addr);
+    crate::log_debug!("[BRK] Set program break to {:#x}", addr);
+    addr as i64
 }
 
 // ============================================================================
@@ -1023,9 +1023,9 @@ pub fn system_getsid(pid: u32) -> i64 {
 }
 
 /// sys_chroot - Change root directory
-pub fn system_chroot(path_pointer: u64) -> i64 {
+pub fn system_chroot(path_ptr: u64) -> i64 {
     let path = // Pattern matching — Rust's exhaustive branching construct.
-match read_user_string(path_pointer, 256) {
+match read_user_string(path_ptr, 256) {
         Some(s) => s,
         None => return -14, // EFAULT
     };
@@ -1038,9 +1038,9 @@ match crate::process::chroot(pid, &path) {
 }
 
 /// sys_chmod - Change file mode
-pub fn system_chmod(path_pointer: u64, mode: u32) -> i64 {
+pub fn system_chmod(path_ptr: u64, mode: u32) -> i64 {
     let path = // Pattern matching — Rust's exhaustive branching construct.
-match read_user_string(path_pointer, 256) {
+match read_user_string(path_ptr, 256) {
         Some(p) => p,
         None => return -14, // EFAULT
     };
@@ -1061,9 +1061,9 @@ match crate::vfs::fchmod(fd, mode) {
 }
 
 /// sys_chown - Change file owner
-pub fn system_chown(path_pointer: u64, uid: u32, gid: u32) -> i64 {
+pub fn system_chown(path_ptr: u64, uid: u32, gid: u32) -> i64 {
     let path = // Pattern matching — Rust's exhaustive branching construct.
-match read_user_string(path_pointer, 256) {
+match read_user_string(path_ptr, 256) {
         Some(p) => p,
         None => return -14,
     };
@@ -1107,14 +1107,14 @@ const ARCH_GET_GS: u64 = 0x1004;
 static TLS_BASE: AtomicU64 = AtomicU64::new(0);
 
 /// sys_arch_prctl - Set architecture-specific thread state
-pub fn system_arch_prctl(code: u64, address: u64) -> i64 {
+pub fn system_arch_prctl(code: u64, addr: u64) -> i64 {
     use arch_prctl_codes::*;
     
         // Pattern matching — Rust's exhaustive branching construct.
 match code {
         ARCH_SET_FILESYSTEM => {
             // Set FS base register (used for TLS)
-            TLS_BASE.store(address, Ordering::SeqCst);
+            TLS_BASE.store(addr, Ordering::SeqCst);
             
             // Actually set the FS base using MSR
             #[cfg(target_arch = "x86_64")]
@@ -1124,11 +1124,11 @@ unsafe {
                 core::arch::asm!(
                     "wrmsr",
                     in("ecx") 0xC0000100u32,
-                    in("eax") (address as u32),
-                    in("edx") ((address >> 32) as u32),
+                    in("eax") (addr as u32),
+                    in("edx") ((addr >> 32) as u32),
                 );
             }
-            crate::log_debug!("[ARCH_PRCTL] Set FS base to {:#x}", address);
+            crate::log_debug!("[ARCH_PRCTL] Set FS base to {:#x}", addr);
             0
         }
         ARCH_SET_GS => {
@@ -1140,26 +1140,26 @@ unsafe {
                 core::arch::asm!(
                     "wrmsr",
                     in("ecx") 0xC0000101u32,
-                    in("eax") (address as u32),
-                    in("edx") ((address >> 32) as u32),
+                    in("eax") (addr as u32),
+                    in("edx") ((addr >> 32) as u32),
                 );
             }
             0
         }
         ARCH_GET_FILESYSTEM => {
-            if !is_user_address(address) {
+            if !is_user_address(addr) {
                 return errno::EFAULT;
             }
-            let value = TLS_BASE.load(Ordering::SeqCst);
+            let val = TLS_BASE.load(Ordering::SeqCst);
                         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { *(address as *mut u64) = value; }
+unsafe { *(addr as *mut u64) = val; }
             0
         }
         ARCH_GET_GS => {
-            if !is_user_address(address) {
+            if !is_user_address(addr) {
                 return errno::EFAULT;
             }
-            let value: u64;
+            let val: u64;
             #[cfg(target_arch = "x86_64")]
                         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
@@ -1170,12 +1170,12 @@ unsafe {
                     out("edx") _,
                 );
                 // Simplified - in reality we'd combine eax/edx
-                value = 0;
+                val = 0;
             }
             #[cfg(not(target_arch = "x86_64"))]
-            { value = 0; }
+            { val = 0; }
                         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { *(address as *mut u64) = value; }
+unsafe { *(addr as *mut u64) = val; }
             0
         }
         _ => errno::EINVAL,
@@ -1211,13 +1211,13 @@ pub struct Utsname {
 }
 
 /// sys_uname - Get system information
-pub fn system_uname(buffer: u64) -> i64 {
-    if !validate_user_pointer(buffer, core::mem::size_of::<Utsname>(), true) {
+pub fn system_uname(buf: u64) -> i64 {
+    if !validate_user_pointer(buf, core::mem::size_of::<Utsname>(), true) {
         return errno::EFAULT;
     }
     
     let uname = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &mut *(buffer as *mut Utsname) };
+unsafe { &mut *(buf as *mut Utsname) };
     
     // Zero out first
     *uname = Utsname {
@@ -1242,7 +1242,7 @@ unsafe { &mut *(buffer as *mut Utsname) };
 
 fn copy_str_to_array(arr: &mut [u8; 65], s: &str) {
     let bytes = s.as_bytes();
-    let len = bytes.len().minimum(64);
+    let len = bytes.len().min(64);
     arr[..len].copy_from_slice(&bytes[..len]);
 }
 
@@ -1256,7 +1256,7 @@ fn copy_str_to_array(arr: &mut [u8; 65], s: &str) {
 #[derive(Clone, Copy, Default)]
 // Public structure — visible outside this module.
 pub struct Timespec {
-    pub tv_sector: i64,
+    pub tv_sec: i64,
     pub tv_nsec: i64,
 }
 
@@ -1266,7 +1266,7 @@ pub struct Timespec {
 #[derive(Clone, Copy, Default)]
 // Public structure — visible outside this module.
 pub struct Timeval {
-    pub tv_sector: i64,
+    pub tv_sec: i64,
     pub tv_usec: i64,
 }
 
@@ -1302,7 +1302,7 @@ pub fn system_clock_gettime(clock_id: u32, tp: u64) -> i64 {
     
     let ts = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { &mut *(tp as *mut Timespec) };
-    ts.tv_sector = seconds as i64;
+    ts.tv_sec = seconds as i64;
     ts.tv_nsec = nanos as i64;
     
     0
@@ -1321,7 +1321,7 @@ pub fn system_gettimeofday(tv: u64, tz: u64) -> i64 {
         
         let timeval = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { &mut *(tv as *mut Timeval) };
-        timeval.tv_sector = seconds as i64;
+        timeval.tv_sec = seconds as i64;
         timeval.tv_usec = usecs as i64;
     }
     
@@ -1330,26 +1330,26 @@ unsafe { &mut *(tv as *mut Timeval) };
 }
 
 /// sys_nanosleep - Sleep for specified time (yield-based)
-pub fn system_nanosleep(request: u64, rem: u64) -> i64 {
-    if !validate_user_pointer(request, core::mem::size_of::<Timespec>(), false) {
+pub fn system_nanosleep(req: u64, rem: u64) -> i64 {
+    if !validate_user_pointer(req, core::mem::size_of::<Timespec>(), false) {
         return errno::EFAULT;
     }
     
     let ts = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*(request as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe { &*(req as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const Timespec) };
-    let mouse = (ts.tv_sector * 1000 + ts.tv_nsec / 1_000_000) as u64;
+    let ms = (ts.tv_sec * 1000 + ts.tv_nsec / 1_000_000) as u64;
     
     // Yield-based sleep — gives other threads CPU time
     let start = crate::time::uptime_ticks();
-    while crate::time::uptime_ticks().saturating_sub(start) < mouse {
+    while crate::time::uptime_ticks().saturating_sub(start) < ms {
         crate::thread::yield_thread();
     }
     
     if rem != 0 && validate_user_pointer(rem, core::mem::size_of::<Timespec>(), true) {
         let rem_ts = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { &mut *(rem as *mut Timespec) };
-        rem_ts.tv_sector = 0;
+        rem_ts.tv_sec = 0;
         rem_ts.tv_nsec = 0;
     }
     
@@ -1361,16 +1361,16 @@ unsafe { &mut *(rem as *mut Timespec) };
 // ============================================================================
 
 /// sys_getrandom - Get random bytes
-pub fn system_getrandom(buffer: u64, count: u64, _flags: u64) -> i64 {
-    if !validate_user_pointer(buffer, count as usize, true) {
+pub fn system_getrandom(buf: u64, count: u64, _flags: u64) -> i64 {
+    if !validate_user_pointer(buf, count as usize, true) {
         return errno::EFAULT;
     }
     
     let buffer = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::slice::from_raw_parts_mut(buffer as *mut u8, count as usize) };
+unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, count as usize) };
     
     // Use our RNG
-    for byte in buffer.iterator_mut() {
+    for byte in buffer.iter_mut() {
         *byte = crate::rng::random_u8();
     }
     
@@ -1501,7 +1501,7 @@ match crate::vfs::dup_fd(fd) {
 #[derive(Clone, Copy, Default)]
 // Public structure — visible outside this module.
 pub struct Stat {
-    pub st_device: u64,
+    pub st_dev: u64,
     pub st_ino: u64,
     pub st_nlink: u64,
     pub st_mode: u32,
@@ -1556,7 +1556,7 @@ match ft {
 /// Convert a VFS Stat to a Linux Stat structure
 fn vfs_to_linux_status(vfs: &crate::vfs::Stat) -> Stat {
     Stat {
-        st_device: 1,
+        st_dev: 1,
         st_ino: vfs.ino,
         st_nlink: 1,
         st_mode: filetype_to_mode(vfs.file_type) | (vfs.mode & 0o7777),
@@ -1583,22 +1583,22 @@ pub fn system_fstat(fd: i32, statbuf: u64) -> i64 {
         return errno::EFAULT;
     }
     
-    let status = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+    let stat = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { &mut *(statbuf as *mut Stat) };
     
     // stdin/stdout/stderr — character device
     if fd >= 0 && fd <= 2 {
-        *status = Stat::default();
-        status.st_mode = stat_mode::S_IFCHR | 0o666;
-        status.st_rdev = 0x0500; // /dev/tty
-        status.st_blksize = 4096;
+        *stat = Stat::default();
+        stat.st_mode = stat_mode::S_IFCHR | 0o666;
+        stat.st_rdev = 0x0500; // /dev/tty
+        stat.st_blksize = 4096;
         return 0;
     }
     
     // Query VFS for real file info
     match crate::vfs::fstat_fd(fd) {
-        Ok(vfs_status) => {
-            *status = vfs_to_linux_status(&vfs_status);
+        Ok(vfs_stat) => {
+            *stat = vfs_to_linux_status(&vfs_stat);
             0
         }
         Err(_) => errno::EBADF,
@@ -1617,13 +1617,13 @@ match read_user_string(pathname, 4096) {
         return errno::EFAULT;
     }
     
-    let status = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+    let stat = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { &mut *(statbuf as *mut Stat) };
     
         // Pattern matching — Rust's exhaustive branching construct.
-match crate::vfs::status(&path) {
-        Ok(vfs_status) => {
-            *status = vfs_to_linux_status(&vfs_status);
+match crate::vfs::stat(&path) {
+        Ok(vfs_stat) => {
+            *stat = vfs_to_linux_status(&vfs_stat);
             0
         }
         Err(_) => errno::ENOENT,
@@ -1676,7 +1676,7 @@ match read_user_string(pathname, 256) {
 }
 
 /// sys_readlink - Read symbolic link
-pub fn system_readlink(pathname: u64, buffer: u64, bufsiz: u64) -> i64 {
+pub fn system_readlink(pathname: u64, buf: u64, bufsiz: u64) -> i64 {
     let path = // Pattern matching — Rust's exhaustive branching construct.
 match read_user_string(pathname, 256) {
         Some(s) => s,
@@ -1686,11 +1686,11 @@ match read_user_string(pathname, 256) {
     // Handle /proc/self/exe
     if path == "/proc/self/exe" {
         let exe = "/bin/program";
-        let len = exe.len().minimum(bufsiz as usize);
-        if validate_user_pointer(buffer, len, true) {
-            let destination = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::slice::from_raw_parts_mut(buffer as *mut u8, len) };
-            destination.copy_from_slice(&exe.as_bytes()[..len]);
+        let len = exe.len().min(bufsiz as usize);
+        if validate_user_pointer(buf, len, true) {
+            let dst = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len) };
+            dst.copy_from_slice(&exe.as_bytes()[..len]);
             return len as i64;
         }
     }
@@ -1768,7 +1768,7 @@ unsafe {
 // Public structure — visible outside this module.
 pub struct Rlimit {
     pub rlim_cur: u64,
-    pub rlim_maximum: u64,
+    pub rlim_max: u64,
 }
 
 /// Resource limit types
@@ -1824,19 +1824,19 @@ unsafe { &mut *(rlim as *mut Rlimit) };
 match resource {
         RLIMIT_STACK => {
             limit.rlim_cur = 8 * 1024 * 1024; // 8MB
-            limit.rlim_maximum = RLIM_INFINITY;
+            limit.rlim_max = RLIM_INFINITY;
         }
         RLIMIT_NOFILE => {
             limit.rlim_cur = 1024;
-            limit.rlim_maximum = 1024 * 1024;
+            limit.rlim_max = 1024 * 1024;
         }
         RLIMIT_AS | RLIMIT_DATA => {
             limit.rlim_cur = RLIM_INFINITY;
-            limit.rlim_maximum = RLIM_INFINITY;
+            limit.rlim_max = RLIM_INFINITY;
         }
         _ => {
             limit.rlim_cur = RLIM_INFINITY;
-            limit.rlim_maximum = RLIM_INFINITY;
+            limit.rlim_max = RLIM_INFINITY;
         }
     }
     
@@ -1870,7 +1870,7 @@ pub fn system_set_robust_list(head: u64, len: u64) -> i64 {
 }
 
 /// sys_get_robust_list - Get robust futex list
-pub fn system_get_robust_list(pid: u32, head_pointer: u64, length_pointer: u64) -> i64 {
+pub fn system_get_robust_list(pid: u32, head_ptr: u64, len_ptr: u64) -> i64 {
     0
 }
 
@@ -1926,13 +1926,13 @@ pub fn system_scheduler_getaffinity(pid: u32, cpusetsize: u64, mask: u64) -> i64
 // ============================================================================
 
 /// Read a null-terminated string from user space
-pub fn read_user_string(ptr: u64, maximum: usize) -> Option<String> {
+pub fn read_user_string(ptr: u64, max: usize) -> Option<String> {
     if ptr == 0 || !is_user_address(ptr) {
         return None;
     }
     
     let mut s = String::new();
-    for i in 0..maximum {
+    for i in 0..max {
         let byte_address = ptr + i as u64;
         if !is_user_address(byte_address) {
             return None;
@@ -1949,12 +1949,12 @@ const u8) };
 }
 
 /// Copy a string to user space
-fn copy_str_to_user(ptr: u64, s: &str, maximum: usize) {
-    let len = s.len().minimum(maximum - 1);
-    let destination = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::slice::from_raw_parts_mut(ptr as *mut u8, maximum) };
-    destination[..len].copy_from_slice(&s.as_bytes()[..len]);
-    destination[len] = 0; // Null terminate
+fn copy_str_to_user(ptr: u64, s: &str, max: usize) {
+    let len = s.len().min(max - 1);
+    let dst = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { core::slice::from_raw_parts_mut(ptr as *mut u8, max) };
+    dst[..len].copy_from_slice(&s.as_bytes()[..len]);
+    dst[len] = 0; // Null terminate
 }
 
 // ============================================================================
@@ -1968,7 +1968,7 @@ unsafe { core::slice::from_raw_parts_mut(ptr as *mut u8, maximum) };
 // Public structure — visible outside this module.
 pub struct Iovec {
     pub iov_base: u64,
-    pub iov_length: u64,
+    pub iov_len: u64,
 }
 
 /// sys_writev - Write to multiple buffers
@@ -1983,26 +1983,26 @@ const Iovec, iovcnt as usize) };
     let mut total = 0i64;
     
     for iovec in iovecs {
-        if iovec.iov_length == 0 {
+        if iovec.iov_len == 0 {
             continue;
         }
-        if !validate_user_pointer(iovec.iov_base, iovec.iov_length as usize, false) {
+        if !validate_user_pointer(iovec.iov_base, iovec.iov_len as usize, false) {
             return errno::EFAULT;
         }
         
-        let buffer = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+        let buf = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { core::slice::from_raw_parts(iovec.iov_base as *// Compile-time constant — evaluated at compilation, zero runtime cost.
-const u8, iovec.iov_length as usize) };
+const u8, iovec.iov_len as usize) };
         
         // stdout/stderr
         if fd == 1 || fd == 2 {
-            for &b in buffer {
+            for &b in buf {
                 crate::serial_print!("{}", b as char);
             }
-            total += iovec.iov_length as i64;
+            total += iovec.iov_len as i64;
         } else {
                         // Pattern matching — Rust's exhaustive branching construct.
-match crate::vfs::write(fd, buffer) {
+match crate::vfs::write(fd, buf) {
                 Ok(n) => total += n as i64,
                 Err(_) => return if total > 0 { total } else { errno::EIO },
             }
@@ -2024,21 +2024,21 @@ const Iovec, iovcnt as usize) };
     let mut total = 0i64;
     
     for iovec in iovecs {
-        if iovec.iov_length == 0 {
+        if iovec.iov_len == 0 {
             continue;
         }
-        if !validate_user_pointer(iovec.iov_base, iovec.iov_length as usize, true) {
+        if !validate_user_pointer(iovec.iov_base, iovec.iov_len as usize, true) {
             return errno::EFAULT;
         }
         
-        let buffer = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::slice::from_raw_parts_mut(iovec.iov_base as *mut u8, iovec.iov_length as usize) };
+        let buf = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { core::slice::from_raw_parts_mut(iovec.iov_base as *mut u8, iovec.iov_len as usize) };
         
                 // Pattern matching — Rust's exhaustive branching construct.
-match crate::vfs::read(fd, buffer) {
+match crate::vfs::read(fd, buf) {
             Ok(n) => {
                 total += n as i64;
-                if n < iovec.iov_length as usize {
+                if n < iovec.iov_len as usize {
                     break; // Short read
                 }
             }
@@ -2108,29 +2108,29 @@ const POLLHUP: i16 = 16;
 const POLLNVAL: i16 = 32;
 
 /// sys_poll - Check readiness of file descriptors
-pub fn system_poll(fds_pointer: u64, nfds: u32, timeout_mouse: i32) -> i64 {
+pub fn system_poll(fds_ptr: u64, nfds: u32, timeout_ms: i32) -> i64 {
     if nfds == 0 { return 0; }
     let size = (nfds as usize) * core::mem::size_of::<PollFd>();
-    if !validate_user_pointer(fds_pointer, size, true) {
+    if !validate_user_pointer(fds_ptr, size, true) {
         return errno::EFAULT;
     }
     
     let fds = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::slice::from_raw_parts_mut(fds_pointer as *mut PollFd, nfds as usize) };
+unsafe { core::slice::from_raw_parts_mut(fds_ptr as *mut PollFd, nfds as usize) };
     
     // Compute absolute deadline
-    let deadline_ns = if timeout_mouse < 0 {
+    let deadline_ns = if timeout_ms < 0 {
         u64::MAX // block forever
-    } else if timeout_mouse == 0 {
+    } else if timeout_ms == 0 {
         0 // non-blocking poll
     } else {
-        crate::time::now_ns().saturating_add((timeout_mouse as u64) * 1_000_000)
+        crate::time::now_ns().saturating_add((timeout_ms as u64) * 1_000_000)
     };
     
         // Infinite loop — runs until an explicit `break`.
 loop {
         let mut ready = 0i64;
-        for pfd in fds.iterator_mut() {
+        for pfd in fds.iter_mut() {
             pfd.revents = 0;
             if pfd.fd < 0 { continue; }
             
@@ -2149,7 +2149,7 @@ loop {
         if ready > 0 { return ready; }
         
         // Non-blocking: return immediately
-        if timeout_mouse == 0 { return 0; }
+        if timeout_ms == 0 { return 0; }
         
         // Check timeout
         let now = crate::time::now_ns();
@@ -2158,7 +2158,7 @@ loop {
         // Sleep up to 10 ms or until deadline, whichever is sooner.
         // The thread will be woken by the timer; if an fd becomes ready
         // in the meantime the next iteration will detect it.
-        let sleep_until = deadline_ns.minimum(now.saturating_add(10_000_000));
+        let sleep_until = deadline_ns.min(now.saturating_add(10_000_000));
         crate::thread::sleep_until(sleep_until);
     }
 }
@@ -2183,7 +2183,7 @@ match crate::vfs::readdir(&path) {
         Err(_) => return errno::ENOTDIR,
     };
     
-    let buffer = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+    let buf = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { core::slice::from_raw_parts_mut(dirp as *mut u8, count as usize) };
     let mut offset = 0usize;
     
@@ -2205,7 +2205,7 @@ match entry.file_type {
             crate::vfs::FileType::Socket     => 12,
         };
         
-        let ptr = &mut buffer[offset..];
+        let ptr = &mut buf[offset..];
         if ptr.len() < reclen { break; }
         
         // d_ino
@@ -2225,7 +2225,7 @@ match entry.file_type {
             ptr[name_end] = 0;
         }
         // Zero padding
-        for i in (name_end + 1)..reclen.minimum(ptr.len()) {
+        for i in (name_end + 1)..reclen.min(ptr.len()) {
             ptr[i] = 0;
         }
         
@@ -2277,11 +2277,11 @@ match crate::vfs::open(&full_path, crate::vfs::OpenFlags(flags)) {
 }
 
 /// sys_swapon — Enable swap on a file/partition
-pub fn system_swapon(path_pointer: u64) -> i64 {
+pub fn system_swapon(path_ptr: u64) -> i64 {
     let (_, _, euid, _) = crate::process::current_credentials();
     if euid != 0 { return -1; } // EPERM: must be root
     let path = // Pattern matching — Rust's exhaustive branching construct.
-match read_user_string(path_pointer, 256) {
+match read_user_string(path_ptr, 256) {
         Some(p) => p,
         None => return errno::EFAULT,
     };
@@ -2293,11 +2293,11 @@ match crate::memory::swap::swapon(&path) {
 }
 
 /// sys_swapoff — Disable swap
-pub fn system_swapoff(path_pointer: u64) -> i64 {
+pub fn system_swapoff(path_ptr: u64) -> i64 {
     let (_, _, euid, _) = crate::process::current_credentials();
     if euid != 0 { return -1; }
     let path = // Pattern matching — Rust's exhaustive branching construct.
-match read_user_string(path_pointer, 256) {
+match read_user_string(path_ptr, 256) {
         Some(p) => p,
         None => return errno::EFAULT,
     };
@@ -2397,7 +2397,7 @@ pub fn system_epoll_create(_size: i32) -> i64 {
 }
 
 /// sys_epoll_ctl — Control an epoll instance (ADD/MOD/DEL)
-pub fn system_epoll_controller(epfd: i32, op: i32, fd: i32, event_pointer: u64) -> i64 {
+pub fn system_epoll_controller(epfd: i32, op: i32, fd: i32, event_ptr: u64) -> i64 {
     use epoll_op::*;
     
     let mut table = EPOLL_TABLE.lock();
@@ -2413,32 +2413,32 @@ match op {
             if instance.interests.contains_key(&fd) {
                 return errno::EEXIST;
             }
-            if event_pointer == 0 || !validate_user_pointer(event_pointer, core::mem::size_of::<EpollEvent>(), false) {
+            if event_ptr == 0 || !validate_user_pointer(event_ptr, core::mem::size_of::<EpollEvent>(), false) {
                 return errno::EFAULT;
             }
-            let event = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { *(event_pointer as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+            let ev = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { *(event_ptr as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const EpollEvent) };
             instance.interests.insert(fd, EpollInterest {
                 fd,
-                events: event.events,
-                data: event.data,
+                events: ev.events,
+                data: ev.data,
             });
         }
         EPOLL_CONTROLLER_MOD => {
             if !instance.interests.contains_key(&fd) {
                 return errno::ENOENT;
             }
-            if event_pointer == 0 || !validate_user_pointer(event_pointer, core::mem::size_of::<EpollEvent>(), false) {
+            if event_ptr == 0 || !validate_user_pointer(event_ptr, core::mem::size_of::<EpollEvent>(), false) {
                 return errno::EFAULT;
             }
-            let event = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { *(event_pointer as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+            let ev = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { *(event_ptr as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const EpollEvent) };
             instance.interests.insert(fd, EpollInterest {
                 fd,
-                events: event.events,
-                data: event.data,
+                events: ev.events,
+                data: ev.data,
             });
         }
         EPOLL_CONTROLLER_DEL => {
@@ -2453,28 +2453,28 @@ const EpollEvent) };
 }
 
 /// sys_epoll_wait — Wait for events on an epoll instance
-pub fn system_epoll_wait(epfd: i32, events_pointer: u64, maxevents: i32, timeout_mouse: i32) -> i64 {
+pub fn system_epoll_wait(epfd: i32, events_ptr: u64, maxevents: i32, timeout_ms: i32) -> i64 {
     if maxevents <= 0 {
         return errno::EINVAL;
     }
     let event_size = core::mem::size_of::<EpollEvent>();
-    let buffer_size = (maxevents as usize) * event_size;
-    if !validate_user_pointer(events_pointer, buffer_size, true) {
+    let buf_size = (maxevents as usize) * event_size;
+    if !validate_user_pointer(events_ptr, buf_size, true) {
         return errno::EFAULT;
     }
     
     let events_buffer = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        core::slice::from_raw_parts_mut(events_pointer as *mut EpollEvent, maxevents as usize)
+        core::slice::from_raw_parts_mut(events_ptr as *mut EpollEvent, maxevents as usize)
     };
     
     // Compute deadline
-    let deadline_ns = if timeout_mouse < 0 {
+    let deadline_ns = if timeout_ms < 0 {
         u64::MAX
-    } else if timeout_mouse == 0 {
+    } else if timeout_ms == 0 {
         0
     } else {
-        crate::time::now_ns().saturating_add((timeout_mouse as u64) * 1_000_000)
+        crate::time::now_ns().saturating_add((timeout_ms as u64) * 1_000_000)
     };
     
         // Infinite loop — runs until an explicit `break`.
@@ -2530,19 +2530,19 @@ match table.get(&epfd) {
         }
         
         // Non-blocking
-        if timeout_mouse == 0 { return 0; }
+        if timeout_ms == 0 { return 0; }
         
         // Check deadline
         let now = crate::time::now_ns();
         if now >= deadline_ns { return 0; }
         
         // Sleep briefly, then retry
-        let sleep_until = deadline_ns.minimum(now.saturating_add(10_000_000));
+        let sleep_until = deadline_ns.min(now.saturating_add(10_000_000));
         crate::thread::sleep_until(sleep_until);
     }
 }
 
 /// sys_epoll_pwait — epoll_wait with signal mask (signals not yet supported, delegates)
-pub fn system_epoll_pwait(epfd: i32, events_pointer: u64, maxevents: i32, timeout_mouse: i32, _sigmask: u64, _sigsetsize: u64) -> i64 {
-    system_epoll_wait(epfd, events_pointer, maxevents, timeout_mouse)
+pub fn system_epoll_pwait(epfd: i32, events_ptr: u64, maxevents: i32, timeout_ms: i32, _sigmask: u64, _sigsetsize: u64) -> i64 {
+    system_epoll_wait(epfd, events_ptr, maxevents, timeout_ms)
 }

@@ -46,8 +46,8 @@ pub struct Vma {
 // Implementation block — defines methods for the type above.
 impl Vma {
     /// Check if this VMA contains the given address
-    pub fn contains(&self, address: u64) -> bool {
-        address >= self.start && address < self.end
+    pub fn contains(&self, addr: u64) -> bool {
+        addr >= self.start && addr < self.end
     }
     
     /// Size in bytes
@@ -66,11 +66,11 @@ pub fn add_vma(cr3: u64, vma: Vma) {
 }
 
 /// Look up a VMA containing the given fault address for the given CR3
-pub fn lookup_vma(cr3: u64, address: u64) -> Option<Vma> {
+pub fn lookup_vma(cr3: u64, addr: u64) -> Option<Vma> {
     let table = VMA_TABLE.lock();
     if let Some(vmas) = table.get(&cr3) {
         for vma in vmas {
-            if vma.contains(address) {
+            if vma.contains(addr) {
                 return Some(vma.clone());
             }
         }
@@ -116,7 +116,7 @@ pub fn remove_vma_range(cr3: u64, start: u64, end: u64) {
 pub fn update_vma_prot(cr3: u64, start: u64, end: u64, new_prot: u32) {
     let mut table = VMA_TABLE.lock();
     if let Some(vmas) = table.get_mut(&cr3) {
-        for vma in vmas.iterator_mut() {
+        for vma in vmas.iter_mut() {
             if vma.start < end && vma.end > start {
                 vma.prot = new_prot;
             }
@@ -125,11 +125,11 @@ pub fn update_vma_prot(cr3: u64, start: u64, end: u64, new_prot: u32) {
 }
 
 /// Clone VMAs from one address space to another (used by fork)
-pub fn clone_vmas(source_cr3: u64, destination_cr3: u64) {
+pub fn clone_vmas(src_cr3: u64, dst_cr3: u64) {
     let mut table = VMA_TABLE.lock();
-    if let Some(vmas) = table.get(&source_cr3) {
+    if let Some(vmas) = table.get(&src_cr3) {
         let cloned = vmas.clone();
-        table.insert(destination_cr3, cloned);
+        table.insert(dst_cr3, cloned);
     }
 }
 

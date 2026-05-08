@@ -14,14 +14,14 @@ use alloc::format;
 
 
 
-pub const BHR_: &str = "TrustVM";
-pub const CYT_: &str = "1.0.0";
-pub const CYR_: &str = "Phoenix";
-pub const CYS_: &str = "(c) 2026 TrustOS Project";
+pub const BJV_: &str = "TrustVM";
+pub const DCL_: &str = "1.0.0";
+pub const DCJ_: &str = "Phoenix";
+pub const DCK_: &str = "(c) 2026 TrustOS Project";
 
 
-pub fn pyf() -> String {
-    format!("{} v{} \"{}\"", BHR_, CYT_, CYR_)
+pub fn jqb() -> String {
+    format!("{} v{} \"{}\"", BJV_, DCL_, DCJ_)
 }
 
 
@@ -29,7 +29,7 @@ pub fn pyf() -> String {
 
 
 
-pub const AZC_: &str = r#"
+pub const BBD_: &str = r#"
  _____              _  __   ____  __ 
 |_   _| __ _   _ ___| |_\ \ / /  \/  |
   | || '__| | | / __| __\ V /| |\/| |
@@ -38,7 +38,7 @@ pub const AZC_: &str = r#"
 "#;
 
 
-pub const DSS_: &str = r#"
+pub const DWK_: &str = r#"
 ████████╗██████╗ ██╗   ██╗███████╗████████╗██╗   ██╗███╗   ███╗
 ╚══██╔══╝██╔══██╗██║   ██║██╔════╝╚══██╔══╝██║   ██║████╗ ████║
    ██║   ██████╔╝██║   ██║███████╗   ██║   ██║   ██║██╔████╔██║
@@ -48,10 +48,10 @@ pub const DSS_: &str = r#"
 "#;
 
 
-pub const DSQ_: &str = "[TrustVM]";
+pub const DWI_: &str = "[TrustVM]";
 
 
-pub const DQH_: &str = r#"
+pub const DUB_: &str = r#"
   ████
  ██████
 ██  ✓ ██
@@ -61,7 +61,7 @@ pub const DQH_: &str = r#"
 "#;
 
 
-pub const DQJ_: &str = r#"
+pub const DUD_: &str = r#"
 ┌──────┐
 │ ▓▓▓▓ │
 │ ░░░░ │
@@ -73,44 +73,44 @@ pub const DQJ_: &str = r#"
 
 
 
-pub const CUE_: &str = "● ";
+pub const CXW_: &str = "● ";
 
-pub const XJ_: &str = "○ ";
+pub const YQ_: &str = "○ ";
 
-pub const XK_: &str = "▲ ";
+pub const YR_: &str = "▲ ";
 
-pub const BGG_: &str = "✗ ";
+pub const BIK_: &str = "✗ ";
 
-pub const FS_: &str = "✓ ";
+pub const GH_: &str = "✓ ";
 
 
-pub fn nvt(jn: u64) -> String {
-    let tv = jn / 1000;
-    let bbz = tv / 60;
-    let cad = bbz / 60;
-    let fgl = cad / 24;
+pub fn hzr(dh: u64) -> String {
+    let im = dh / 1000;
+    let acf = im / 60;
+    let aoi = acf / 60;
+    let cic = aoi / 24;
     
-    if fgl > 0 {
-        format!("{}d {}h {}m", fgl, cad % 24, bbz % 60)
-    } else if cad > 0 {
-        format!("{}h {}m {}s", cad, bbz % 60, tv % 60)
-    } else if bbz > 0 {
-        format!("{}m {}s", bbz, tv % 60)
+    if cic > 0 {
+        format!("{}d {}h {}m", cic, aoi % 24, acf % 60)
+    } else if aoi > 0 {
+        format!("{}h {}m {}s", aoi, acf % 60, im % 60)
+    } else if acf > 0 {
+        format!("{}m {}s", acf, im % 60)
     } else {
-        format!("{}s", tv)
+        format!("{}s", im)
     }
 }
 
 
-pub fn yri(bf: u64) -> String {
-    if bf >= 1024 * 1024 * 1024 {
-        format!("{} GB", bf / (1024 * 1024 * 1024))
-    } else if bf >= 1024 * 1024 {
-        format!("{} MB", bf / (1024 * 1024))
-    } else if bf >= 1024 {
-        format!("{} KB", bf / 1024)
+pub fn qge(bytes: u64) -> String {
+    if bytes >= 1024 * 1024 * 1024 {
+        format!("{} GB", bytes / (1024 * 1024 * 1024))
+    } else if bytes >= 1024 * 1024 {
+        format!("{} MB", bytes / (1024 * 1024))
+    } else if bytes >= 1024 {
+        format!("{} KB", bytes / 1024)
     } else {
-        format!("{} B", bf)
+        format!("{} B", bytes)
     }
 }
 
@@ -120,39 +120,39 @@ pub fn yri(bf: u64) -> String {
 
 
 #[derive(Debug, Clone)]
-pub struct Bvx {
-    pub ad: u64,
-    pub j: String,
-    pub g: &'static str,
-    pub afc: usize,
-    pub rpu: u8,
-    pub ith: u64,
+pub struct Age {
+    pub id: u64,
+    pub name: String,
+    pub state: &'static str,
+    pub memory_mb: usize,
+    pub cpu_percent: u8,
+    pub exits: u64,
 }
 
-impl Bvx {
-    pub fn tj(&self) -> String {
-        let wtn = match self.g {
-            "Running" => CUE_,
-            "Stopped" => XJ_,
-            "Crashed" => BGG_,
-            "Paused" => XK_,
+impl Age {
+    pub fn render(&self) -> String {
+        let owr = match self.state {
+            "Running" => CXW_,
+            "Stopped" => YQ_,
+            "Crashed" => BIK_,
+            "Paused" => YR_,
             _ => "  ",
         };
         
         format!(
             "│ {:>3} │ {}{:<12} │ {:>4} MB │ {:>3}% │ {:>8} │",
-            self.ad,
-            wtn,
-            self.g,
-            self.afc,
-            self.rpu,
-            self.ith
+            self.id,
+            owr,
+            self.state,
+            self.memory_mb,
+            self.cpu_percent,
+            self.exits
         )
     }
 }
 
 
-pub fn rtk() -> &'static str {
+pub fn lbm() -> &'static str {
     r#"
 ┌─────┬────────────────┬─────────┬──────┬──────────┐
 │ ID  │ State          │ Memory  │ CPU  │ Exits    │
@@ -160,30 +160,30 @@ pub fn rtk() -> &'static str {
 }
 
 
-pub fn rtj() -> &'static str {
+pub fn lbl() -> &'static str {
     "└─────┴────────────────┴─────────┴──────┴──────────┘"
 }
 
 
-pub fn zjj(bfr: &[Bvx]) -> String {
-    let mut an = String::new();
+pub fn qtt(aen: &[Age]) -> String {
+    let mut output = String::new();
     
-    an.t(&pyf());
-    an.push('\n');
-    an.t(rtk());
-    an.push('\n');
+    output.push_str(&jqb());
+    output.push('\n');
+    output.push_str(lbm());
+    output.push('\n');
     
-    if bfr.is_empty() {
-        an.t("│     │ (no VMs)       │         │      │          │\n");
+    if aen.is_empty() {
+        output.push_str("│     │ (no VMs)       │         │      │          │\n");
     } else {
-        for vm in bfr {
-            an.t(&vm.tj());
-            an.push('\n');
+        for vm in aen {
+            output.push_str(&vm.render());
+            output.push('\n');
         }
     }
     
-    an.t(rtj());
-    an
+    output.push_str(lbl());
+    output
 }
 
 
@@ -191,8 +191,8 @@ pub fn zjj(bfr: &[Bvx]) -> String {
 
 
 
-pub fn jma(dr: u64) -> String {
-    let mut an = String::from("TrustVM Capabilities:\n");
+pub fn eyj(caps: u64) -> String {
+    let mut output = String::from("TrustVM Capabilities:\n");
     
     let features = [
         (1 << 0, "VMX Enabled", "Intel VT-x hardware virtualization"),
@@ -206,12 +206,12 @@ pub fn jma(dr: u64) -> String {
         (1 << 8, "Shared Filesystem", "VirtFS host-guest sharing"),
     ];
     
-    for (ga, j, desc) in features {
-        let status = if dr & ga != 0 { FS_ } else { XJ_ };
-        an.t(&format!("  {} {:<20} {}\n", status, j, desc));
+    for (bf, name, desc) in features {
+        let status = if caps & bf != 0 { GH_ } else { YQ_ };
+        output.push_str(&format!("  {} {:<20} {}\n", status, name, desc));
     }
     
-    an
+    output
 }
 
 
@@ -219,34 +219,34 @@ pub fn jma(dr: u64) -> String {
 
 
 
-pub fn jmb(
-    fyk: bool,
-    kty: bool,
-    osb: bool,
-    cnt: u64,
+pub fn eyk(
+    csm: bool,
+    ept_enabled: bool,
+    nx_enabled: bool,
+    violations: u64,
 ) -> String {
-    let mut an = String::from("Security Status:\n");
+    let mut output = String::from("Security Status:\n");
     
     
-    let xsw = if fyk { FS_ } else { XK_ };
-    an.t(&format!("  {} VPID Isolation: {}\n", xsw, 
-        if fyk { "Active" } else { "Disabled" }));
+    let ptd = if csm { GH_ } else { YR_ };
+    output.push_str(&format!("  {} VPID Isolation: {}\n", ptd, 
+        if csm { "Active" } else { "Disabled" }));
     
     
-    let snb = if kty { FS_ } else { BGG_ };
-    an.t(&format!("  {} EPT Protection: {}\n", snb,
-        if kty { "Active" } else { "Disabled" }));
+    let lrj = if ept_enabled { GH_ } else { BIK_ };
+    output.push_str(&format!("  {} EPT Protection: {}\n", lrj,
+        if ept_enabled { "Active" } else { "Disabled" }));
     
     
-    let uwr = if osb { FS_ } else { XK_ };
-    an.t(&format!("  {} NX Enforcement: {}\n", uwr,
-        if osb { "Active" } else { "Disabled" }));
+    let nma = if nx_enabled { GH_ } else { YR_ };
+    output.push_str(&format!("  {} NX Enforcement: {}\n", nma,
+        if nx_enabled { "Active" } else { "Disabled" }));
     
     
-    let xrq = if cnt == 0 { FS_ } else { XK_ };
-    an.t(&format!("  {} EPT Violations: {}\n", xrq, cnt));
+    let psb = if violations == 0 { GH_ } else { YR_ };
+    output.push_str(&format!("  {} EPT Violations: {}\n", psb, violations));
     
-    an
+    output
 }
 
 
@@ -254,18 +254,18 @@ pub fn jmb(
 
 
 
-pub fn wth() -> String {
+pub fn owm() -> String {
     format!(r#"
 {}
 ────────────────────────────────────────────────
   {} - Secure Hardware Virtualization
   {}
 ────────────────────────────────────────────────
-"#, AZC_.em(), pyf(), CYS_)
+"#, BBD_.trim(), jqb(), DCK_)
 }
 
 
-pub fn pzg(vpid: bool, ept: bool) -> String {
+pub fn jqz(vpid: bool, ept: bool) -> String {
     format!(r#"
 {} Hypervisor Ready
 
@@ -277,11 +277,11 @@ Features:
 
 Type 'hv help' for commands or 'vm run hello' to start a guest.
 "#,
-        BHR_,
-        if vpid { FS_ } else { XJ_ },
-        if ept { FS_ } else { XJ_ },
-        FS_,
-        FS_
+        BJV_,
+        if vpid { GH_ } else { YQ_ },
+        if ept { GH_ } else { YQ_ },
+        GH_,
+        GH_
     )
 }
 
@@ -290,19 +290,19 @@ Type 'hv help' for commands or 'vm run hello' to start a guest.
 
 
 
-pub fn zgq(li: u8, z: usize) -> String {
-    let adu = (li as usize * z) / 100;
-    let azs = z - adu;
+pub fn qrf(progress: u8, width: usize) -> String {
+    let oz = (progress as usize * width) / 100;
+    let empty = width - oz;
     
     format!("[{}{}] {}%", 
-        "█".afd(adu),
-        "░".afd(azs),
-        li
+        "█".repeat(oz),
+        "░".repeat(empty),
+        progress
     )
 }
 
 
-pub fn zpe(frame: usize) -> char {
-    const Bgn: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-    Bgn[frame % Bgn.len()]
+pub fn qxl(frame: usize) -> char {
+    const Yp: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+    Yp[frame % Yp.len()]
 }

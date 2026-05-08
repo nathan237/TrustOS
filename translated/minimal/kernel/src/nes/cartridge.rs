@@ -1,193 +1,193 @@
 
 
-#![allow(bgr)]
+#![allow(dead_code)]
 
 use alloc::vec;
 use alloc::vec::Vec;
 
-const CBP_: [u8; 4] = [0x4E, 0x45, 0x53, 0x1A];
+const CFA_: [u8; 4] = [0x4E, 0x45, 0x53, 0x1A];
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Mirror {
-    Po,
-    On,
-    Bsv,
-    Bsw,
-    Bhk,
+    Horizontal,
+    Vertical,
+    Single0,
+    Single1,
+    FourScreen,
 }
 
 pub struct Cartridge {
-    pub bce: Vec<u8>,
-    pub cpe: Vec<u8>,
-    pub inn: bool,
-    pub gpu: [u8; 8192],
-    pub fnq: u8,
-    pub djo: Mirror,
+    pub prg_rom: Vec<u8>,
+    pub chr_rom: Vec<u8>,
+    pub chr_ram: bool,
+    pub prg_ram: [u8; 8192],
+    pub mapper_id: u8,
+    pub mirror: Mirror,
     
-    fnj: u8,
-    gma: u8,
-    glz: u8,
-    hqo: u8,
-    jef: u8,
-    jeg: u8,
+    m1_shift: u8,
+    m1_shift_count: u8,
+    m1_control: u8,
+    m1_chr_bank0: u8,
+    m1_chr_bank1: u8,
+    m1_prg_bank: u8,
     
-    jeh: u8,
-    jei: u8,
+    m2_prg_bank: u8,
+    m3_chr_bank: u8,
 }
 
 impl Cartridge {
-    pub fn azs() -> Self {
+    pub fn empty() -> Self {
         Self {
-            bce: vec![0u8; 32768],
-            cpe: vec![0u8; 8192],
-            inn: true,
-            gpu: [0; 8192],
-            fnq: 0,
-            djo: Mirror::Po,
-            fnj: 0x10,
-            gma: 0,
-            glz: 0x0C,
-            hqo: 0,
-            jef: 0,
-            jeg: 0,
-            jeh: 0,
-            jei: 0,
+            prg_rom: vec![0u8; 32768],
+            chr_rom: vec![0u8; 8192],
+            chr_ram: true,
+            prg_ram: [0; 8192],
+            mapper_id: 0,
+            mirror: Mirror::Horizontal,
+            m1_shift: 0x10,
+            m1_shift_count: 0,
+            m1_control: 0x0C,
+            m1_chr_bank0: 0,
+            m1_chr_bank1: 0,
+            m1_prg_bank: 0,
+            m2_prg_bank: 0,
+            m3_chr_bank: 0,
         }
     }
 
-    pub fn sxy(f: &[u8]) -> Option<Self> {
-        if f.len() < 16 { return None; }
-        if f[0..4] != CBP_ { return None; }
+    pub fn lzi(data: &[u8]) -> Option<Self> {
+        if data.len() < 16 { return None; }
+        if data[0..4] != CFA_ { return None; }
 
-        let lvk = f[4] as usize;
-        let rao = f[5] as usize;
-        let iuy = f[6];
-        let sul = f[7];
-        let fnq = (sul & 0xF0) | (iuy >> 4);
-        let djo = if iuy & 0x08 != 0 {
-            Mirror::Bhk
-        } else if iuy & 0x01 != 0 {
-            Mirror::On
+        let god = data[4] as usize;
+        let kki = data[5] as usize;
+        let emw = data[6];
+        let lwq = data[7];
+        let mapper_id = (lwq & 0xF0) | (emw >> 4);
+        let mirror = if emw & 0x08 != 0 {
+            Mirror::FourScreen
+        } else if emw & 0x01 != 0 {
+            Mirror::Vertical
         } else {
-            Mirror::Po
+            Mirror::Horizontal
         };
-        let tnk = iuy & 0x04 != 0;
-        let l = 16 + if tnk { 512 } else { 0 };
-        let hwa = lvk * 16384;
-        let kho = rao * 8192;
+        let mkh = emw & 0x04 != 0;
+        let offset = 16 + if mkh { 512 } else { 0 };
+        let dwx = god * 16384;
+        let flp = kki * 8192;
 
-        if f.len() < l + hwa + kho { return None; }
+        if data.len() < offset + dwx + flp { return None; }
 
-        let bce = f[l..l + hwa].ip();
-        let (cpe, inn) = if kho > 0 {
-            (f[l + hwa..l + hwa + kho].ip(), false)
+        let prg_rom = data[offset..offset + dwx].to_vec();
+        let (chr_rom, chr_ram) = if flp > 0 {
+            (data[offset + dwx..offset + dwx + flp].to_vec(), false)
         } else {
             (vec![0u8; 8192], true)
         };
 
         crate::serial_println!("[NES] ROM: mapper={} PRG={}KB CHR={}KB mirror={:?}",
-            fnq, hwa / 1024, cpe.len() / 1024,
-            if djo == Mirror::On { "V" } else { "H" });
+            mapper_id, dwx / 1024, chr_rom.len() / 1024,
+            if mirror == Mirror::Vertical { "V" } else { "H" });
 
         Some(Self {
-            bce,
-            cpe,
-            inn,
-            gpu: [0; 8192],
-            fnq,
-            djo,
-            fnj: 0x10,
-            gma: 0,
-            glz: 0x0C,
-            hqo: 0,
-            jef: 0,
-            jeg: 0,
-            jeh: 0,
-            jei: 0,
+            prg_rom,
+            chr_rom,
+            chr_ram,
+            prg_ram: [0; 8192],
+            mapper_id,
+            mirror,
+            m1_shift: 0x10,
+            m1_shift_count: 0,
+            m1_control: 0x0C,
+            m1_chr_bank0: 0,
+            m1_chr_bank1: 0,
+            m1_prg_bank: 0,
+            m2_prg_bank: 0,
+            m3_chr_bank: 0,
         })
     }
 
     
 
-    pub fn mc(&self, ag: u16) -> u8 {
-        match self.fnq {
-            0 => self.lkj(ag),
-            1 => self.uju(ag),
-            2 => self.ujx(ag),
-            3 => self.ujz(ag),
-            _ => self.lkj(ag),
+    pub fn cpu_read(&self, addr: u16) -> u8 {
+        match self.mapper_id {
+            0 => self.mapper0_cpu_read(addr),
+            1 => self.mapper1_cpu_read(addr),
+            2 => self.mapper2_cpu_read(addr),
+            3 => self.mapper3_cpu_read(addr),
+            _ => self.mapper0_cpu_read(addr),
         }
     }
 
-    pub fn ok(&mut self, ag: u16, ap: u8) {
-        match self.fnq {
+    pub fn cpu_write(&mut self, addr: u16, val: u8) {
+        match self.mapper_id {
             0 => {} 
-            1 => self.ujv(ag, ap),
-            2 => self.ujy(ag, ap),
-            3 => self.uka(ag, ap),
+            1 => self.mapper1_cpu_write(addr, val),
+            2 => self.mapper2_cpu_write(addr, val),
+            3 => self.mapper3_cpu_write(addr, val),
             _ => {}
         }
         
-        if ag >= 0x6000 && ag < 0x8000 {
-            self.gpu[(ag - 0x6000) as usize] = ap;
+        if addr >= 0x6000 && addr < 0x8000 {
+            self.prg_ram[(addr - 0x6000) as usize] = val;
         }
     }
 
     
 
-    pub fn egx(&self, ag: u16) -> u8 {
-        match self.fnq {
+    pub fn ppu_read(&self, addr: u16) -> u8 {
+        match self.mapper_id {
             3 => {
-                let qmr = (self.jei as usize) * 8192;
-                let w = qmr + (ag as usize & 0x1FFF);
-                if w < self.cpe.len() { self.cpe[w] } else { 0 }
+                let jzk = (self.m3_chr_bank as usize) * 8192;
+                let idx = jzk + (addr as usize & 0x1FFF);
+                if idx < self.chr_rom.len() { self.chr_rom[idx] } else { 0 }
             }
-            1 => self.ujw(ag),
+            1 => self.mapper1_ppu_read(addr),
             _ => {
-                let w = ag as usize & (self.cpe.len() - 1).am(0x1FFF);
-                if w < self.cpe.len() { self.cpe[w] } else { 0 }
+                let idx = addr as usize & (self.chr_rom.len() - 1).max(0x1FFF);
+                if idx < self.chr_rom.len() { self.chr_rom[idx] } else { 0 }
             }
         }
     }
 
-    pub fn lva(&mut self, ag: u16, ap: u8) {
-        if self.inn {
-            let w = ag as usize & 0x1FFF;
-            if w < self.cpe.len() {
-                self.cpe[w] = ap;
+    pub fn ppu_write(&mut self, addr: u16, val: u8) {
+        if self.chr_ram {
+            let idx = addr as usize & 0x1FFF;
+            if idx < self.chr_rom.len() {
+                self.chr_rom[idx] = val;
             }
         }
     }
 
-    pub fn ono(&self, ag: u16) -> u16 {
-        let ag = ag & 0x0FFF;
-        match self.djo {
-            Mirror::Po => {
+    pub fn mirror_nametable(&self, addr: u16) -> u16 {
+        let addr = addr & 0x0FFF;
+        match self.mirror {
+            Mirror::Horizontal => {
                 
-                let gg = (ag >> 11) & 1;
-                (gg * 0x400) | (ag & 0x03FF)
+                let bs = (addr >> 11) & 1;
+                (bs * 0x400) | (addr & 0x03FF)
             }
-            Mirror::On => {
+            Mirror::Vertical => {
                 
-                ag & 0x07FF
+                addr & 0x07FF
             }
-            Mirror::Bsv => ag & 0x03FF,
-            Mirror::Bsw => 0x400 | (ag & 0x03FF),
-            Mirror::Bhk => ag & 0x0FFF,
+            Mirror::Single0 => addr & 0x03FF,
+            Mirror::Single1 => 0x400 | (addr & 0x03FF),
+            Mirror::FourScreen => addr & 0x0FFF,
         }
     }
 
     
 
-    fn lkj(&self, ag: u16) -> u8 {
-        match ag {
-            0x6000..=0x7FFF => self.gpu[(ag - 0x6000) as usize],
+    fn mapper0_cpu_read(&self, addr: u16) -> u8 {
+        match addr {
+            0x6000..=0x7FFF => self.prg_ram[(addr - 0x6000) as usize],
             0x8000..=0xFFFF => {
-                let w = (ag - 0x8000) as usize;
-                if self.bce.len() <= 16384 {
-                    self.bce[w & 0x3FFF] 
+                let idx = (addr - 0x8000) as usize;
+                if self.prg_rom.len() <= 16384 {
+                    self.prg_rom[idx & 0x3FFF] 
                 } else {
-                    self.bce[w & (self.bce.len() - 1)]
+                    self.prg_rom[idx & (self.prg_rom.len() - 1)]
                 }
             }
             _ => 0,
@@ -196,37 +196,37 @@ impl Cartridge {
 
     
 
-    fn uju(&self, ag: u16) -> u8 {
-        match ag {
-            0x6000..=0x7FFF => self.gpu[(ag - 0x6000) as usize],
+    fn mapper1_cpu_read(&self, addr: u16) -> u8 {
+        match addr {
+            0x6000..=0x7FFF => self.prg_ram[(addr - 0x6000) as usize],
             0x8000..=0xFFFF => {
-                let vld = (self.glz >> 2) & 3;
-                let om = self.jeg as usize & 0x0F;
-                let lvk = self.bce.len() / 16384;
-                match vld {
+                let nxa = (self.m1_control >> 2) & 3;
+                let gi = self.m1_prg_bank as usize & 0x0F;
+                let god = self.prg_rom.len() / 16384;
+                match nxa {
                     0 | 1 => {
                         
-                        let ar = (om & !1) * 16384;
-                        let w = ar + (ag as usize - 0x8000);
-                        self.bce[w % self.bce.len()]
+                        let base = (gi & !1) * 16384;
+                        let idx = base + (addr as usize - 0x8000);
+                        self.prg_rom[idx % self.prg_rom.len()]
                     }
                     2 => {
                         
-                        if ag < 0xC000 {
-                            self.bce[(ag as usize - 0x8000) % self.bce.len()]
+                        if addr < 0xC000 {
+                            self.prg_rom[(addr as usize - 0x8000) % self.prg_rom.len()]
                         } else {
-                            let ar = om * 16384;
-                            self.bce[(ar + (ag as usize - 0xC000)) % self.bce.len()]
+                            let base = gi * 16384;
+                            self.prg_rom[(base + (addr as usize - 0xC000)) % self.prg_rom.len()]
                         }
                     }
                     _ => {
                         
-                        if ag < 0xC000 {
-                            let ar = om * 16384;
-                            self.bce[(ar + (ag as usize - 0x8000)) % self.bce.len()]
+                        if addr < 0xC000 {
+                            let base = gi * 16384;
+                            self.prg_rom[(base + (addr as usize - 0x8000)) % self.prg_rom.len()]
                         } else {
-                            let ar = (lvk - 1) * 16384;
-                            self.bce[(ar + (ag as usize - 0xC000)) % self.bce.len()]
+                            let base = (god - 1) * 16384;
+                            self.prg_rom[(base + (addr as usize - 0xC000)) % self.prg_rom.len()]
                         }
                     }
                 }
@@ -235,91 +235,91 @@ impl Cartridge {
         }
     }
 
-    fn ujv(&mut self, ag: u16, ap: u8) {
-        if ag < 0x8000 { return; }
+    fn mapper1_cpu_write(&mut self, addr: u16, val: u8) {
+        if addr < 0x8000 { return; }
 
-        if ap & 0x80 != 0 {
-            self.fnj = 0x10;
-            self.gma = 0;
-            self.glz |= 0x0C;
+        if val & 0x80 != 0 {
+            self.m1_shift = 0x10;
+            self.m1_shift_count = 0;
+            self.m1_control |= 0x0C;
             return;
         }
 
-        self.fnj = (self.fnj >> 1) | ((ap & 1) << 4);
-        self.gma += 1;
+        self.m1_shift = (self.m1_shift >> 1) | ((val & 1) << 4);
+        self.m1_shift_count += 1;
 
-        if self.gma == 5 {
-            let bn = self.fnj;
-            match ag {
+        if self.m1_shift_count == 5 {
+            let value = self.m1_shift;
+            match addr {
                 0x8000..=0x9FFF => {
-                    self.glz = bn;
-                    self.djo = match bn & 3 {
-                        0 => Mirror::Bsv,
-                        1 => Mirror::Bsw,
-                        2 => Mirror::On,
-                        _ => Mirror::Po,
+                    self.m1_control = value;
+                    self.mirror = match value & 3 {
+                        0 => Mirror::Single0,
+                        1 => Mirror::Single1,
+                        2 => Mirror::Vertical,
+                        _ => Mirror::Horizontal,
                     };
                 }
-                0xA000..=0xBFFF => self.hqo = bn,
-                0xC000..=0xDFFF => self.jef = bn,
-                0xE000..=0xFFFF => self.jeg = bn & 0x0F,
+                0xA000..=0xBFFF => self.m1_chr_bank0 = value,
+                0xC000..=0xDFFF => self.m1_chr_bank1 = value,
+                0xE000..=0xFFFF => self.m1_prg_bank = value & 0x0F,
                 _ => {}
             }
-            self.fnj = 0x10;
-            self.gma = 0;
+            self.m1_shift = 0x10;
+            self.m1_shift_count = 0;
         }
     }
 
-    fn ujw(&self, ag: u16) -> u8 {
-        let rap = (self.glz >> 4) & 1;
-        let w = if rap == 0 {
+    fn mapper1_ppu_read(&self, addr: u16) -> u8 {
+        let kkj = (self.m1_control >> 4) & 1;
+        let idx = if kkj == 0 {
             
-            let om = (self.hqo as usize & !1) * 4096;
-            om + (ag as usize & 0x1FFF)
+            let gi = (self.m1_chr_bank0 as usize & !1) * 4096;
+            gi + (addr as usize & 0x1FFF)
         } else {
             
-            if ag < 0x1000 {
-                (self.hqo as usize) * 4096 + (ag as usize & 0x0FFF)
+            if addr < 0x1000 {
+                (self.m1_chr_bank0 as usize) * 4096 + (addr as usize & 0x0FFF)
             } else {
-                (self.jef as usize) * 4096 + (ag as usize & 0x0FFF)
+                (self.m1_chr_bank1 as usize) * 4096 + (addr as usize & 0x0FFF)
             }
         };
-        if w < self.cpe.len() { self.cpe[w] } else { 0 }
+        if idx < self.chr_rom.len() { self.chr_rom[idx] } else { 0 }
     }
 
     
 
-    fn ujx(&self, ag: u16) -> u8 {
-        match ag {
-            0x6000..=0x7FFF => self.gpu[(ag - 0x6000) as usize],
+    fn mapper2_cpu_read(&self, addr: u16) -> u8 {
+        match addr {
+            0x6000..=0x7FFF => self.prg_ram[(addr - 0x6000) as usize],
             0x8000..=0xBFFF => {
-                let ar = (self.jeh as usize) * 16384;
-                self.bce[(ar + (ag as usize - 0x8000)) % self.bce.len()]
+                let base = (self.m2_prg_bank as usize) * 16384;
+                self.prg_rom[(base + (addr as usize - 0x8000)) % self.prg_rom.len()]
             }
             0xC000..=0xFFFF => {
-                let uca = (self.bce.len() / 16384).ao(1);
-                let ar = uca * 16384;
-                self.bce[(ar + (ag as usize - 0xC000)) % self.bce.len()]
+                let mwi = (self.prg_rom.len() / 16384).saturating_sub(1);
+                let base = mwi * 16384;
+                self.prg_rom[(base + (addr as usize - 0xC000)) % self.prg_rom.len()]
             }
             _ => 0,
         }
     }
 
-    fn ujy(&mut self, ag: u16, ap: u8) {
-        if ag >= 0x8000 {
-            self.jeh = ap;
+    fn mapper2_cpu_write(&mut self, addr: u16, val: u8) {
+        if addr >= 0x8000 {
+            self.m2_prg_bank = val;
         }
     }
 
     
 
-    fn ujz(&self, ag: u16) -> u8 {
-        self.lkj(ag) 
+    fn mapper3_cpu_read(&self, addr: u16) -> u8 {
+        self.mapper0_cpu_read(addr) 
     }
 
-    fn uka(&mut self, ag: u16, ap: u8) {
-        if ag >= 0x8000 {
-            self.jei = ap & 0x03;
+    fn mapper3_cpu_write(&mut self, addr: u16, val: u8) {
+        if addr >= 0x8000 {
+            self.m3_chr_bank = val & 0x03;
         }
     }
 }

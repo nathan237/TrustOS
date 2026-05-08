@@ -22,132 +22,132 @@ use pattern::{Pattern, PatternBank};
 use player::PatternPlayer;
 
 
-static Ka: Mutex<Option<SynthEngine>> = Mutex::new(None);
+static Ea: Mutex<Option<SynthEngine>> = Mutex::new(None);
 
-static Kt: Mutex<Option<PatternBank>> = Mutex::new(None);
+static Ei: Mutex<Option<PatternBank>> = Mutex::new(None);
 
-static Adp: Mutex<Option<PatternPlayer>> = Mutex::new(None);
+static Mu: Mutex<Option<PatternPlayer>> = Mutex::new(None);
 
 
 pub fn init() -> Result<(), &'static str> {
     
-    if !crate::drivers::hda::ky() {
+    if !crate::drivers::hda::is_initialized() {
         crate::drivers::hda::init()?;
     }
 
     
     let engine = SynthEngine::new();
-    *Ka.lock() = Some(engine);
+    *Ea.lock() = Some(engine);
 
     
-    let mut om = PatternBank::new();
-    om.ojw();
-    *Kt.lock() = Some(om);
+    let mut gi = PatternBank::new();
+    gi.load_presets();
+    *Ei.lock() = Some(gi);
 
     
-    *Adp.lock() = Some(PatternPlayer::new());
+    *Mu.lock() = Some(PatternPlayer::new());
 
     crate::serial_println!("[AUDIO] TrustSynth engine + pattern bank initialized");
     Ok(())
 }
 
 
-fn aqz() -> Result<(), &'static str> {
-    if Ka.lock().is_none() {
+fn ensure_init() -> Result<(), &'static str> {
+    if Ea.lock().is_none() {
         init()?;
     }
     Ok(())
 }
 
 
-pub fn owc(j: &str, uk: u32) -> Result<(), &'static str> {
-    aqz()?;
+pub fn ivf(name: &str, duration_ms: u32) -> Result<(), &'static str> {
+    ensure_init()?;
 
-    let un = {
-        let mut synth = Ka.lock();
+    let jo = {
+        let mut synth = Ea.lock();
         let engine = synth.as_mut().ok_or("Synth not initialized")?;
-        engine.viz(j, uk)?
+        engine.play_note_by_name(name, duration_ms)?
     };
 
     
-    lug(&un, uk)?;
+    gnh(&jo, duration_ms)?;
     Ok(())
 }
 
 
-pub fn owb(jp: u8, qm: u8, uk: u32) -> Result<(), &'static str> {
-    aqz()?;
+pub fn ive(note: u8, velocity: u8, duration_ms: u32) -> Result<(), &'static str> {
+    ensure_init()?;
 
-    let un = {
-        let mut synth = Ka.lock();
+    let jo = {
+        let mut synth = Ea.lock();
         let engine = synth.as_mut().ok_or("Synth not initialized")?;
-        engine.lzf(jp, qm, uk)
+        engine.render_note(note, velocity, duration_ms)
     };
 
-    lug(&un, uk)?;
+    gnh(&jo, duration_ms)?;
     Ok(())
 }
 
 
-pub fn viw(auf: u32, uk: u32) -> Result<(), &'static str> {
-    aqz()?;
+pub fn nvj(freq_hz: u32, duration_ms: u32) -> Result<(), &'static str> {
+    ensure_init()?;
 
-    let un = {
-        let mut synth = Ka.lock();
+    let jo = {
+        let mut synth = Ea.lock();
         let engine = synth.as_mut().ok_or("Synth not initialized")?;
-        engine.vvv(auf, uk)
+        engine.render_freq(freq_hz, duration_ms)
     };
 
-    lug(&un, uk)?;
+    gnh(&jo, duration_ms)?;
     Ok(())
 }
 
 
-pub fn dvs(azd: Waveform) -> Result<(), &'static str> {
-    aqz()?;
-    let mut synth = Ka.lock();
+pub fn set_waveform(aal: Waveform) -> Result<(), &'static str> {
+    ensure_init()?;
+    let mut synth = Ea.lock();
     let engine = synth.as_mut().ok_or("Synth not initialized")?;
-    engine.dvs(azd);
+    engine.set_waveform(aal);
     Ok(())
 }
 
 
-pub fn med(gzc: u32, hfm: u32, icg: u32, hxk: u32) -> Result<(), &'static str> {
-    aqz()?;
-    let mut synth = Ka.lock();
+pub fn set_adsr(attack_ms: u32, decay_ms: u32, sustain_pct: u32, release_ms: u32) -> Result<(), &'static str> {
+    ensure_init()?;
+    let mut synth = Ea.lock();
     let engine = synth.as_mut().ok_or("Synth not initialized")?;
-    engine.med(gzc, hfm, icg, hxk);
+    engine.set_adsr(attack_ms, decay_ms, sustain_pct, release_ms);
     Ok(())
 }
 
 
-pub fn wiu(j: &str) -> Result<(), &'static str> {
-    aqz()?;
-    let env = match j {
-        "default" => Envelope::iqt(),
-        "organ" => Envelope::uza(),
-        "pluck" => Envelope::hvi(),
-        "pad" => Envelope::ov(),
+pub fn oow(name: &str) -> Result<(), &'static str> {
+    ensure_init()?;
+    let env = match name {
+        "default" => Envelope::eka(),
+        "organ" => Envelope::nnt(),
+        "pluck" => Envelope::dwp(),
+        "pad" => Envelope::pad(),
         _ => return Err("Unknown preset (use: default, organ, pluck, pad)"),
     };
-    let mut synth = Ka.lock();
+    let mut synth = Ea.lock();
     let engine = synth.as_mut().ok_or("Synth not initialized")?;
-    engine.qr = env;
+    engine.envelope = env;
     Ok(())
 }
 
 
-pub fn chv(api: u8) -> Result<(), &'static str> {
-    aqz()?;
-    let mut synth = Ka.lock();
+pub fn set_volume(vd: u8) -> Result<(), &'static str> {
+    ensure_init()?;
+    let mut synth = Ea.lock();
     let engine = synth.as_mut().ok_or("Synth not initialized")?;
-    engine.euo = api;
+    engine.master_volume = vd;
     Ok(())
 }
 
 
 pub fn status() -> String {
-    let synth = Ka.lock();
+    let synth = Ea.lock();
     match synth.as_ref() {
         Some(engine) => engine.status(),
         None => String::from("TrustSynth: not initialized\n"),
@@ -155,14 +155,14 @@ pub fn status() -> String {
 }
 
 
-pub fn qg() -> Result<(), &'static str> {
+pub fn stop() -> Result<(), &'static str> {
     {
-        let mut synth = Ka.lock();
+        let mut synth = Ea.lock();
         if let Some(engine) = synth.as_mut() {
-            engine.qgm();
+            engine.all_notes_off();
         }
     }
-    crate::drivers::hda::qg()
+    crate::drivers::hda::stop()
 }
 
 
@@ -170,9 +170,9 @@ pub fn qg() -> Result<(), &'static str> {
 
 
 
-fn lug(un: &[i16], uk: u32) -> Result<(), &'static str> {
+fn gnh(jo: &[i16], duration_ms: u32) -> Result<(), &'static str> {
     
-    crate::drivers::hda::ele(un, uk)
+    crate::drivers::hda::bxb(jo, duration_ms)
 }
 
 
@@ -180,109 +180,109 @@ fn lug(un: &[i16], uk: u32) -> Result<(), &'static str> {
 
 
 
-fn fht() -> Result<(), &'static str> {
-    aqz()?;
-    if Kt.lock().is_none() {
-        let mut om = PatternBank::new();
-        om.ojw();
-        *Kt.lock() = Some(om);
+fn cix() -> Result<(), &'static str> {
+    ensure_init()?;
+    if Ei.lock().is_none() {
+        let mut gi = PatternBank::new();
+        gi.load_presets();
+        *Ei.lock() = Some(gi);
     }
-    if Adp.lock().is_none() {
-        *Adp.lock() = Some(PatternPlayer::new());
+    if Mu.lock().is_none() {
+        *Mu.lock() = Some(PatternPlayer::new());
     }
     Ok(())
 }
 
 
-pub fn vfd(j: &str, au: usize, kz: u16) -> Result<(), &'static str> {
-    fht()?;
-    let pattern = Pattern::new(j, au, kz);
-    let mut om = Kt.lock();
-    let om = om.as_mut().ok_or("Pattern bank not initialized")?;
-    om.add(pattern)?;
+pub fn nsc(name: &str, steps: usize, bpm: u16) -> Result<(), &'static str> {
+    cix()?;
+    let pattern = Pattern::new(name, steps, bpm);
+    let mut gi = Ei.lock();
+    let gi = gi.as_mut().ok_or("Pattern bank not initialized")?;
+    gi.add(pattern)?;
     Ok(())
 }
 
 
-pub fn vfh(j: &str, gu: usize, bkp: &str) -> Result<(), &'static str> {
-    fht()?;
-    let mut om = Kt.lock();
-    let om = om.as_mut().ok_or("Pattern bank not initialized")?;
-    let pat = om.kyj(j).ok_or("Pattern not found")?;
-    pat.wjh(gu, bkp)
+pub fn nsg(name: &str, step: usize, agu: &str) -> Result<(), &'static str> {
+    cix()?;
+    let mut gi = Ei.lock();
+    let gi = gi.as_mut().ok_or("Pattern bank not initialized")?;
+    let pat = gi.get_by_name_mut(name).ok_or("Pattern not found")?;
+    pat.set_note(step, agu)
 }
 
 
-pub fn vfg(j: &str, kz: u16) -> Result<(), &'static str> {
-    fht()?;
-    let mut om = Kt.lock();
-    let om = om.as_mut().ok_or("Pattern bank not initialized")?;
-    let pat = om.kyj(j).ok_or("Pattern not found")?;
-    pat.kz = kz;
+pub fn nsf(name: &str, bpm: u16) -> Result<(), &'static str> {
+    cix()?;
+    let mut gi = Ei.lock();
+    let gi = gi.as_mut().ok_or("Pattern bank not initialized")?;
+    let pat = gi.get_by_name_mut(name).ok_or("Pattern not found")?;
+    pat.bpm = bpm;
     Ok(())
 }
 
 
-pub fn vfi(j: &str, azd: Waveform) -> Result<(), &'static str> {
-    fht()?;
-    let mut om = Kt.lock();
-    let om = om.as_mut().ok_or("Pattern bank not initialized")?;
-    let pat = om.kyj(j).ok_or("Pattern not found")?;
-    pat.ve = azd;
+pub fn nsh(name: &str, aal: Waveform) -> Result<(), &'static str> {
+    cix()?;
+    let mut gi = Ei.lock();
+    let gi = gi.as_mut().ok_or("Pattern bank not initialized")?;
+    let pat = gi.get_by_name_mut(name).ok_or("Pattern not found")?;
+    pat.waveform = aal;
     Ok(())
 }
 
 
-pub fn vfj(j: &str) -> Result<String, &'static str> {
-    fht()?;
-    let om = Kt.lock();
-    let om = om.as_ref().ok_or("Pattern bank not initialized")?;
-    let pat = om.nxt(j).ok_or("Pattern not found")?;
+pub fn nsi(name: &str) -> Result<String, &'static str> {
+    cix()?;
+    let gi = Ei.lock();
+    let gi = gi.as_ref().ok_or("Pattern bank not initialized")?;
+    let pat = gi.get_by_name(name).ok_or("Pattern not found")?;
     Ok(pat.display())
 }
 
 
-pub fn vfc() -> String {
-    let om = Kt.lock();
-    match om.as_ref() {
-        Some(o) => o.aoy(),
+pub fn nsb() -> String {
+    let gi = Ei.lock();
+    match gi.as_ref() {
+        Some(b) => b.list(),
         None => String::from("Pattern bank not initialized\n"),
     }
 }
 
 
-pub fn vff(j: &str) -> Result<(), &'static str> {
-    fht()?;
-    let mut om = Kt.lock();
-    let om = om.as_mut().ok_or("Pattern bank not initialized")?;
-    om.remove(j)
+pub fn nse(name: &str) -> Result<(), &'static str> {
+    cix()?;
+    let mut gi = Ei.lock();
+    let gi = gi.as_mut().ok_or("Pattern bank not initialized")?;
+    gi.remove(name)
 }
 
 
-pub fn vfe(j: &str, bkh: u32) -> Result<(), &'static str> {
-    fht()?;
+pub fn nsd(name: &str, loops: u32) -> Result<(), &'static str> {
+    cix()?;
 
     
     let pattern = {
-        let om = Kt.lock();
-        let om = om.as_ref().ok_or("Pattern bank not initialized")?;
-        om.nxt(j).ok_or("Pattern not found")?.clone()
+        let gi = Ei.lock();
+        let gi = gi.as_ref().ok_or("Pattern bank not initialized")?;
+        gi.get_by_name(name).ok_or("Pattern not found")?.clone()
     };
 
     
-    let mut wxd = Ka.lock();
-    let engine = wxd.as_mut().ok_or("Synth not initialized")?;
-    let mut lui = Adp.lock();
-    let player = lui.as_mut().ok_or("Player not initialized")?;
+    let mut ozo = Ea.lock();
+    let engine = ozo.as_mut().ok_or("Synth not initialized")?;
+    let mut gnj = Mu.lock();
+    let player = gnj.as_mut().ok_or("Player not initialized")?;
 
-    player.vja(&pattern, engine, bkh)
+    player.play_pattern_visual(&pattern, engine, loops)
 }
 
 
-pub fn vfk() -> Result<(), &'static str> {
-    let mut lui = Adp.lock();
-    if let Some(player) = lui.as_mut() {
-        player.qg();
+pub fn nsj() -> Result<(), &'static str> {
+    let mut gnj = Mu.lock();
+    if let Some(player) = gnj.as_mut() {
+        player.stop();
     }
     Ok(())
 }

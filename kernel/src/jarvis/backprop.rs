@@ -251,6 +251,9 @@ fn softmax(data: &mut [f32]) {
     if sum > 0.0 {
         let inv = 1.0 / sum;
         for v in data.iter_mut() { *v *= inv; }
+    } else {
+        let uniform = 1.0 / data.len() as f32;
+        for v in data.iter_mut() { *v = uniform; }
     }
 }
 
@@ -302,6 +305,11 @@ pub fn forward_backward(model: &TransformerWeights, tokens: &[u8]) -> (f32, Mode
     let mut all_v: Vec<Vec<Vec<f32>>> = vec![Vec::new(); N_LAYERS];
 
     for t in 0..seq_len {
+        // Keep network alive during heavy compute (every 4 positions)
+        if t > 0 && t % 2 == 0 {
+            crate::netstack::poll_net_only();
+        }
+
         let tok = tokens[t] as usize;
         let pos = t;
 
@@ -425,6 +433,11 @@ pub fn forward_backward(model: &TransformerWeights, tokens: &[u8]) -> (f32, Mode
 
     // We'll accumulate dL/dx for each position, then backprop through layers
     for t in 0..n_targets {
+        // Keep network alive during heavy backward pass (every 4 positions)
+        if t > 0 && t % 2 == 0 {
+            crate::netstack::poll_net_only();
+        }
+
         let target = tokens[t + 1] as usize;
         let acts = &all_acts[t];
 
@@ -434,8 +447,10 @@ pub fn forward_backward(model: &TransformerWeights, tokens: &[u8]) -> (f32, Mode
         softmax(&mut probs);
 
         // Loss = -log(prob[target])
-        let p_target = probs[target].max(1e-10);
-        total_loss += -ln_approx(p_target);
+        let p_target = probs[target].max(1e-7).min(1.0 - 1e-7);
+        let step_loss = -ln_approx(p_target);
+        let step_loss = if step_loss.is_finite() { step_loss } else { 20.0 };
+        total_loss += step_loss;
 
         let mut d_logits = probs; // softmax output
         d_logits[target] -= 1.0;  // subtract one-hot
@@ -573,6 +588,254 @@ pub fn forward_backward(model: &TransformerWeights, tokens: &[u8]) -> (f32, Mode
     (avg_loss, grads)
 }
 
+/// Same as forward_backward but writes into a pre-allocated ModelGrads buffer.
+/// Avoids ~104 MB alloc/free per step, preventing heap fragmentation.
+pub fn forward_backward_into(model: &TransformerWeights, tokens: &[u8], grads: &mut ModelGrads) -> f32 {
+    let seq_len = tokens.len().min(super::model::MAX_SEQ);
+    if seq_len < 2 {
+        grads.zero();
+        return f32::MAX;
+    }
+
+    grads.zero();
+
+    // ── FORWARD PASS (save activations) ─────────────────────────────────
+    let mut all_acts: Vec<PosActivations> = Vec::with_capacity(seq_len);
+    let mut all_k: Vec<Vec<Vec<f32>>> = vec![Vec::new(); N_LAYERS];
+    let mut all_v: Vec<Vec<Vec<f32>>> = vec![Vec::new(); N_LAYERS];
+
+    for t in 0..seq_len {
+        if t > 0 && t % 2 == 0 {
+            crate::netstack::poll_net_only();
+        }
+
+        let tok = tokens[t] as usize;
+        let pos = t;
+
+        let mut x = vec![0.0f32; D_MODEL];
+        for i in 0..D_MODEL {
+            x[i] = model.token_embed[tok * D_MODEL + i] + model.pos_embed[pos * D_MODEL + i];
+        }
+
+        let mut layer_acts_vec = Vec::with_capacity(N_LAYERS);
+
+        for l in 0..N_LAYERS {
+            let layer = &model.layers[l];
+            let x_in = x.clone();
+
+            let mut x_norm = vec![0.0f32; D_MODEL];
+            let _ = super::simd::rmsnorm(&mut x_norm, &x_in, &layer.rms_attn);
+
+            let mut q = vec![0.0f32; D_MODEL];
+            let mut k = vec![0.0f32; D_MODEL];
+            let mut v = vec![0.0f32; D_MODEL];
+            super::simd::matvec(&mut q, &layer.w_q, &x_norm, D_MODEL, D_MODEL);
+            super::simd::matvec(&mut k, &layer.w_k, &x_norm, D_MODEL, D_MODEL);
+            super::simd::matvec(&mut v, &layer.w_v, &x_norm, D_MODEL, D_MODEL);
+
+            all_k[l].push(k.clone());
+            all_v[l].push(v.clone());
+
+            let n_pos = t + 1;
+            let mut attn_out = vec![0.0f32; D_MODEL];
+            let d_k_sqrt = approx_sqrt(D_K as f32);
+            let mut attn_weights_all_heads = Vec::with_capacity(N_HEADS);
+
+            for h in 0..N_HEADS {
+                let ho = h * D_K;
+                let mut scores = vec![0.0f32; n_pos];
+                for p in 0..n_pos {
+                    let mut s = 0.0f32;
+                    for d in 0..D_K {
+                        s += q[ho + d] * all_k[l][p][ho + d];
+                    }
+                    scores[p] = s / d_k_sqrt;
+                }
+                softmax(&mut scores);
+
+                for p in 0..n_pos {
+                    let w = scores[p];
+                    for d in 0..D_K {
+                        attn_out[ho + d] += w * all_v[l][p][ho + d];
+                    }
+                }
+                attn_weights_all_heads.push(scores);
+            }
+
+            let mut proj = vec![0.0f32; D_MODEL];
+            super::simd::matvec(&mut proj, &layer.w_o, &attn_out, D_MODEL, D_MODEL);
+
+            for i in 0..D_MODEL { x[i] = x_in[i] + proj[i]; }
+            let x_mid = x.clone();
+
+            let mut x_norm_ffn = vec![0.0f32; D_MODEL];
+            let _ = super::simd::rmsnorm(&mut x_norm_ffn, &x_mid, &layer.rms_ffn);
+
+            let mut gate_pre = vec![0.0f32; D_FF];
+            let mut up = vec![0.0f32; D_FF];
+            super::simd::matvec(&mut gate_pre, &layer.w_gate, &x_norm_ffn, D_MODEL, D_FF);
+            super::simd::matvec(&mut up, &layer.w_up, &x_norm_ffn, D_MODEL, D_FF);
+
+            let mut gate_act = vec![0.0f32; D_FF];
+            let mut gated = vec![0.0f32; D_FF];
+            for i in 0..D_FF {
+                gate_act[i] = silu(gate_pre[i]);
+                gated[i] = gate_act[i] * up[i];
+            }
+
+            let mut ffn_out = vec![0.0f32; D_MODEL];
+            super::simd::matvec(&mut ffn_out, &layer.w_down, &gated, D_FF, D_MODEL);
+
+            for i in 0..D_MODEL { x[i] = x_mid[i] + ffn_out[i]; }
+
+            layer_acts_vec.push(LayerActivations {
+                x_in, x_norm_attn: x_norm, q, k: all_k[l][t].clone(), v: all_v[l][t].clone(),
+                attn_weights: attn_weights_all_heads, attn_out, proj_out: proj,
+                x_mid, x_norm_ffn, gate_pre, gate_act, up, gated, ffn_out,
+            });
+        }
+
+        let mut x_final = vec![0.0f32; D_MODEL];
+        super::simd::rmsnorm(&mut x_final, &x, &model.rms_final);
+
+        let mut logits = vec![0.0f32; VOCAB_SIZE];
+        super::simd::matvec(&mut logits, &model.w_output, &x_final, D_MODEL, VOCAB_SIZE);
+
+        all_acts.push(PosActivations {
+            x: x.clone(),
+            layer_acts: layer_acts_vec,
+            x_final_norm: x_final,
+            logits,
+        });
+    }
+
+    // ── COMPUTE LOSS + BACKWARD ─────────────────────────────────────────
+    let mut total_loss = 0.0f32;
+    let n_targets = seq_len - 1;
+
+    for t in 0..n_targets {
+        if t > 0 && t % 2 == 0 {
+            crate::netstack::poll_net_only();
+        }
+
+        let target = tokens[t + 1] as usize;
+        let acts = &all_acts[t];
+
+        let mut probs = acts.logits.clone();
+        softmax(&mut probs);
+
+        let p_target = probs[target].max(1e-7).min(1.0 - 1e-7);
+        let step_loss = -ln_approx(p_target);
+        let step_loss = if step_loss.is_finite() { step_loss } else { 20.0 };
+        total_loss += step_loss;
+
+        let mut d_logits = probs;
+        d_logits[target] -= 1.0;
+        let scale = 1.0 / n_targets as f32;
+        for v in d_logits.iter_mut() { *v *= scale; }
+
+        super::simd::outer_product_accum(&mut grads.d_output, &d_logits, &acts.x_final_norm, D_MODEL, VOCAB_SIZE);
+
+        let mut d_xfn = vec![0.0f32; D_MODEL];
+        super::simd::matvec_transpose(&mut d_xfn, &model.w_output, &d_logits, D_MODEL, VOCAB_SIZE);
+
+        let mut d_x = backward_rmsnorm(&d_xfn, &acts.x, &model.rms_final, &mut grads.d_rms_final);
+
+        for l in (0..N_LAYERS).rev() {
+            let la = &acts.layer_acts[l];
+            let layer = &model.layers[l];
+            let lg = &mut grads.layers[l];
+
+            let d_ffn_out = d_x.clone();
+
+            let mut d_gated = vec![0.0f32; D_FF];
+            super::simd::outer_product_accum(&mut lg.d_wdown, &d_ffn_out, &la.gated, D_FF, D_MODEL);
+            super::simd::matvec_transpose(&mut d_gated, &layer.w_down, &d_ffn_out, D_FF, D_MODEL);
+
+            let mut d_gate_pre = vec![0.0f32; D_FF];
+            let mut d_up = vec![0.0f32; D_FF];
+            for i in 0..D_FF {
+                let d_gate_act = d_gated[i] * la.up[i];
+                d_up[i] = d_gated[i] * la.gate_act[i];
+                d_gate_pre[i] = d_gate_act * silu_grad(la.gate_pre[i]);
+            }
+
+            let mut d_xnf = vec![0.0f32; D_MODEL];
+            super::simd::outer_product_accum(&mut lg.d_wgate, &d_gate_pre, &la.x_norm_ffn, D_MODEL, D_FF);
+            super::simd::outer_product_accum(&mut lg.d_wup, &d_up, &la.x_norm_ffn, D_MODEL, D_FF);
+            super::simd::matvec_transpose(&mut d_xnf, &layer.w_gate, &d_gate_pre, D_MODEL, D_FF);
+            super::simd::matvec_transpose_accum(&mut d_xnf, &layer.w_up, &d_up, D_MODEL, D_FF);
+
+            let d_x_mid = backward_rmsnorm(&d_xnf, &la.x_mid, &layer.rms_ffn, &mut lg.d_rms_ffn);
+
+            let mut d_x_pre_ffn = vec![0.0f32; D_MODEL];
+            for i in 0..D_MODEL {
+                d_x_pre_ffn[i] = d_x[i] + d_x_mid[i];
+            }
+
+            super::simd::outer_product_accum(&mut lg.d_wo, &d_x_pre_ffn, &la.attn_out, D_MODEL, D_MODEL);
+            let mut d_attn_out = vec![0.0f32; D_MODEL];
+            super::simd::matvec_transpose(&mut d_attn_out, &layer.w_o, &d_x_pre_ffn, D_MODEL, D_MODEL);
+
+            let d_k_sqrt = approx_sqrt(D_K as f32);
+            let n_pos = t + 1;
+            let mut d_q = vec![0.0f32; D_MODEL];
+            let mut d_k_self = vec![0.0f32; D_MODEL];
+            let mut d_v_self = vec![0.0f32; D_MODEL];
+            for h in 0..N_HEADS {
+                let ho = h * D_K;
+                let wts = &la.attn_weights[h];
+
+                let mut d_wts = vec![0.0f32; n_pos];
+                for p in 0..n_pos {
+                    let mut s = 0.0f32;
+                    for d in 0..D_K {
+                        s += d_attn_out[ho + d] * all_v[l][p][ho + d];
+                        if p == t { d_v_self[ho + d] += wts[p] * d_attn_out[ho + d]; }
+                    }
+                    d_wts[p] = s;
+                }
+
+                let dot: f32 = (0..n_pos).map(|p| d_wts[p] * wts[p]).sum();
+                let mut d_scores = vec![0.0f32; n_pos];
+                for p in 0..n_pos {
+                    d_scores[p] = wts[p] * (d_wts[p] - dot);
+                }
+
+                for p in 0..n_pos {
+                    let ds = d_scores[p] / d_k_sqrt;
+                    for d in 0..D_K {
+                        d_q[ho + d] += ds * all_k[l][p][ho + d];
+                        if p == t { d_k_self[ho + d] += ds * la.q[ho + d]; }
+                    }
+                }
+            }
+
+            super::simd::outer_product_accum(&mut lg.d_wq, &d_q, &la.x_norm_attn, D_MODEL, D_MODEL);
+            super::simd::outer_product_accum(&mut lg.d_wk, &d_k_self, &la.x_norm_attn, D_MODEL, D_MODEL);
+            super::simd::outer_product_accum(&mut lg.d_wv, &d_v_self, &la.x_norm_attn, D_MODEL, D_MODEL);
+            let mut d_xna = vec![0.0f32; D_MODEL];
+            super::simd::matvec_transpose(&mut d_xna, &layer.w_q, &d_q, D_MODEL, D_MODEL);
+            super::simd::matvec_transpose_accum(&mut d_xna, &layer.w_k, &d_k_self, D_MODEL, D_MODEL);
+            super::simd::matvec_transpose_accum(&mut d_xna, &layer.w_v, &d_v_self, D_MODEL, D_MODEL);
+
+            let d_x_in = backward_rmsnorm(&d_xna, &la.x_in, &layer.rms_attn, &mut lg.d_rms_attn);
+
+            for i in 0..D_MODEL {
+                d_x[i] = d_x_pre_ffn[i] + d_x_in[i];
+            }
+        }
+
+        let tok = tokens[t] as usize;
+        for i in 0..D_MODEL {
+            grads.d_token_embed[tok * D_MODEL + i] += d_x[i];
+            grads.d_pos_embed[t * D_MODEL + i] += d_x[i];
+        }
+    }
+
+    total_loss / n_targets as f32
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // RMSNorm backward
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -618,7 +881,7 @@ fn backward_rmsnorm(d_out: &[f32], x: &[f32], weight: &[f32], d_weight: &mut [f3
 // ═══════════════════════════════════════════════════════════════════════════════
 
 fn ln_approx(x: f32) -> f32 {
-    if x <= 0.0 { return -88.0; }
+    if x <= 0.0 { return -1e10; }
     let bits = x.to_bits();
     let e = ((bits >> 23) & 0xFF) as f32 - 127.0;
     let m = f32::from_bits((bits & 0x007FFFFF) | 0x3F800000);

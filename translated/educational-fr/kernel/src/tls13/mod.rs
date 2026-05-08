@@ -158,18 +158,18 @@ pub struct TlsSession {
     server_write_iv: [u8; 12],
     
     /// Sequence numbers for AEAD
-    client_sequence: u64,
-    server_sequence: u64,
+    client_seq: u64,
+    server_seq: u64,
     
     /// X25519 ephemeral key pair
     ecdhe_private: [u8; 32],
     ecdhe_public: [u8; 32],
     
     /// Receive buffer for fragmented records
-    receive_buffer: Vec<u8>,
+    rx_buffer: Vec<u8>,
     
     /// Send buffer
-    transmit_buffer: Vec<u8>,
+    tx_buffer: Vec<u8>,
     
     /// Server certificate public key (extracted during Certificate parsing)
     pub server_pubkey: Vec<u8>,
@@ -206,12 +206,12 @@ impl TlsSession {
             client_write_iv: [0u8; 12],
             server_write_key: [0u8; 16],
             server_write_iv: [0u8; 12],
-            client_sequence: 0,
-            server_sequence: 0,
+            client_seq: 0,
+            server_seq: 0,
             ecdhe_private,
             ecdhe_public,
-            receive_buffer: Vec::new(),
-            transmit_buffer: Vec::new(),
+            rx_buffer: Vec::new(),
+            tx_buffer: Vec::new(),
             server_pubkey: Vec::new(),
             server_pubkey_algo: Vec::new(),
         }
@@ -293,7 +293,7 @@ loop {
             // Sanity check: TLS record type should be 20-23, version 0x0301-0x0303
             if content_type < 20 || content_type > 23 {
                 crate::serial_println!("[TLS] Invalid content type {}, first 10 bytes: {:02x?}", 
-                    content_type, &accumulator[..accumulator.len().minimum(10)]);
+                    content_type, &accumulator[..accumulator.len().min(10)]);
                 return Err(TlsError::ProtocolError);
             }
             

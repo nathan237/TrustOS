@@ -7,30 +7,30 @@ use spin::Mutex;
 use super::TaskId;
 
 
-pub struct Brg {
+pub struct Adp {
     
     queue: Mutex<VecDeque<TaskId>>,
     
-    qq: u8,
+    cpu_id: u8,
 }
 
-impl Brg {
+impl Adp {
     
-    pub const fn new(qq: u8) -> Self {
+    pub const fn new(cpu_id: u8) -> Self {
         Self {
             queue: Mutex::new(VecDeque::new()),
-            qq,
+            cpu_id,
         }
     }
     
     
-    pub fn ggg(&self, task: TaskId) {
-        self.queue.lock().agt(task);
+    pub fn enqueue(&self, task: TaskId) {
+        self.queue.lock().push_back(task);
     }
     
     
-    pub fn ylq(&self) -> Option<TaskId> {
-        self.queue.lock().awp()
+    pub fn qcp(&self) -> Option<TaskId> {
+        self.queue.lock().pop_front()
     }
     
     
@@ -45,19 +45,19 @@ impl Brg {
     
     
     pub fn cpu(&self) -> u8 {
-        self.qq
+        self.cpu_id
     }
 }
 
 
-pub trait Cqo {
+pub trait Asc {
     
-    fn por(&self) -> Option<TaskId>;
+    fn jit(&self) -> Option<TaskId>;
 }
 
-impl Cqo for Brg {
-    fn por(&self) -> Option<TaskId> {
+impl Asc for Adp {
+    fn jit(&self) -> Option<TaskId> {
         
-        self.queue.lock().owo()
+        self.queue.lock().pop_back()
     }
 }

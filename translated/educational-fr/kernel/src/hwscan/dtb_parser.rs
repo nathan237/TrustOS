@@ -41,10 +41,10 @@ pub struct FdtHeader {
     pub totalsize: u32,
     pub off_dt_struct: u32,
     pub off_dt_strings: u32,
-    pub off_memory_rsvmap: u32,
+    pub off_mem_rsvmap: u32,
     pub version: u32,
     pub last_comp_version: u32,
-    pub boot_cpuid_physical: u32,
+    pub boot_cpuid_phys: u32,
     pub size_dt_strings: u32,
     pub size_dt_struct: u32,
 }
@@ -58,9 +58,9 @@ pub struct DtbDevice {
     /// Compatible string (e.g., "arm,pl011")
     pub compatible: String,
     /// MMIO base address
-    pub register_base: u64,
+    pub reg_base: u64,
     /// MMIO region size
-    pub register_size: u64,
+    pub reg_size: u64,
     /// Interrupt numbers (if any)
     pub interrupts: Vec<u32>,
     /// Status ("okay", "disabled", etc.)
@@ -154,9 +154,9 @@ const u8) -> u64 {
 
 /// Read a NUL-terminated string from a byte pointer (max len)
 unsafe fn read_cstr(ptr: *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
-const u8, maximum: usize) -> String {
+const u8, max: usize) -> String {
     let mut len = 0;
-    while len < maximum && *ptr.add(len) != 0 {
+    while len < max && *ptr.add(len) != 0 {
         len += 1;
     }
     let bytes = core::slice::from_raw_parts(ptr, len);
@@ -170,8 +170,8 @@ fn align4(offset: u32) -> u32 {
 
 /// Try to extract a hex address from a node name like "uart@9000000"
 fn parse_unit_address(name: &str) -> Option<u64> {
-    if let Some(at_position) = name.find('@') {
-        let hex_str = &name[at_position + 1..];
+    if let Some(at_pos) = name.find('@') {
+        let hex_str = &name[at_pos + 1..];
         u64::from_str_radix(hex_str, 16).ok()
     } else {
         None
@@ -183,29 +183,29 @@ fn parse_unit_address(name: &str) -> Option<u64> {
 /// # Safety
 /// `dtb_ptr` must point to a valid FDT blob in readable memory.
 pub // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe fn parse_dtb(dtb_pointer: *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+unsafe fn parse_dtb(dtb_ptr: *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u8) -> Option<ParsedDtb> {
-    if dtb_pointer.is_null() {
+    if dtb_ptr.is_null() {
         return None;
     }
 
     // Validate magic 
-    let magic = be32(dtb_pointer);
+    let magic = be32(dtb_ptr);
     if magic != FDT_MAGIC {
         return None;
     }
 
-    let totalsize = be32(dtb_pointer.add(4));
-    let off_struct = be32(dtb_pointer.add(8));
-    let off_strings = be32(dtb_pointer.add(12));
+    let totalsize = be32(dtb_ptr.add(4));
+    let off_struct = be32(dtb_ptr.add(8));
+    let off_strings = be32(dtb_ptr.add(12));
 
     // Sanity checks
     if totalsize > 16 * 1024 * 1024 || off_struct >= totalsize || off_strings >= totalsize {
         return None;
     }
 
-    let struct_base = dtb_pointer.add(off_struct as usize);
-    let strings_base = dtb_pointer.add(off_strings as usize);
+    let struct_base = dtb_ptr.add(off_struct as usize);
+    let strings_base = dtb_ptr.add(off_strings as usize);
 
     let mut result = ParsedDtb::new();
     result.dtb_size = totalsize;
@@ -247,8 +247,8 @@ const u8) -> Option<ParsedDtb> {
 match token {
             FDT_BEGIN_NODE => {
                 let name = read_cstr(struct_base.add(offset as usize), 256);
-                let name_length = name.len() as u32 + 1; // +1 for NUL
-                offset = align4(offset + name_length);
+                let name_len = name.len() as u32 + 1; // +1 for NUL
+                offset = align4(offset + name_len);
 
                 // Build path
                 if name.is_empty() {
@@ -308,8 +308,8 @@ match token {
                     result.devices.push(DtbDevice {
                         path: current_path.clone(),
                         compatible: cur_compatible.clone(),
-                        register_base: cur_register_base,
-                        register_size: cur_register_size,
+                        reg_base: cur_register_base,
+                        reg_size: cur_register_size,
                         interrupts: cur_interrupts.clone(),
                         status: cur_status.clone(),
                     });
@@ -398,8 +398,8 @@ match token {
                         result.stdout_path = read_cstr(prop_data, prop_length as usize);
                         // Extract UART address from stdout-path
                         // Common formats: "/soc/uart@9000000" or "serial0:115200n8"
-                        if let Some(address) = parse_unit_address(&result.stdout_path) {
-                            result.uart_base = address;
+                        if let Some(addr) = parse_unit_address(&result.stdout_path) {
+                            result.uart_base = addr;
                         }
                     }
                     "bootargs" if in_chosen => {
@@ -477,9 +477,9 @@ pub fn format_dtb_report(dtb: &ParsedDtb) -> String {
     if !dtb.reserved.is_empty() {
         out.push_str("\n\x01R--- Reserved Memory (Firmware / TrustZone) ---\x01W\n");
         for r in &dtb.reserved {
-            let keyboard = r.size / 1024;
+            let kb = r.size / 1024;
             out.push_str(&format!("  0x{:010X} - 0x{:010X}  ({:>6} KB) {}\n",
-                r.base, r.base + r.size, keyboard, r.name));
+                r.base, r.base + r.size, kb, r.name));
         }
         out.push_str(&format!("  Total reserved: {} regions\n", dtb.reserved.len()));
     }
@@ -499,19 +499,19 @@ pub fn format_dtb_report(dtb: &ParsedDtb) -> String {
             "PATH", "REG BASE", "SIZE", "COMPATIBLE"));
         out.push_str(&format!("{}\n", "-".repeat(90)));
 
-        for device in &dtb.devices {
+        for dev in &dtb.devices {
             let status_icon = // Correspondance de motifs — branchement exhaustif de Rust.
-match device.status.as_str() {
+match dev.status.as_str() {
                 "okay" | "ok" => "\x01G",
                 "disabled" => "\x01R",
                 _ => "\x01Y",
             };
             out.push_str(&format!("{}{:<40}\x01W 0x{:010X}  {:<10} {}\n",
                 status_icon,
-                if device.path.len() > 39 { &device.path[device.path.len()-39..] } else { &device.path },
-                device.register_base,
-                format!("0x{:X}", device.register_size),
-                device.compatible));
+                if dev.path.len() > 39 { &dev.path[dev.path.len()-39..] } else { &dev.path },
+                dev.reg_base,
+                format!("0x{:X}", dev.reg_size),
+                dev.compatible));
         }
         out.push_str(&format!("\nTotal: {} devices ({} enabled)\n",
             dtb.devices.len(),

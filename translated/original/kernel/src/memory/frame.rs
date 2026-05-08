@@ -130,8 +130,14 @@ pub fn init(usable_regions: &[PhysRegion], heap_phys: u64, heap_size: u64) {
     }
     
     // Determine the physical address range to track
-    let min_phys = usable_regions.iter().map(|r| r.base).min().unwrap();
-    let max_phys = usable_regions.iter().map(|r| r.base + r.length).max().unwrap();
+    let min_phys = match usable_regions.iter().map(|r| r.base).min() {
+        Some(v) => v,
+        None => { crate::serial_println!("[FRAME] BUG: no min in non-empty regions"); return; }
+    };
+    let max_phys = match usable_regions.iter().map(|r| r.base + r.length).max() {
+        Some(v) => v,
+        None => { crate::serial_println!("[FRAME] BUG: no max in non-empty regions"); return; }
+    };
     
     // Align min down and max up to FRAME_SIZE
     let base_phys = min_phys & !(FRAME_SIZE - 1);

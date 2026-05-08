@@ -28,7 +28,7 @@ pub struct Gpu {
 
     // LCD registers
     pub lcdc: u8,   // $FF40 LCD Control
-    pub status: u8,   // $FF41 LCD Status
+    pub stat: u8,   // $FF41 LCD Status
     pub scy: u8,    // $FF42 Scroll Y
     pub scx: u8,    // $FF43 Scroll X
     pub ly: u8,     // $FF44 LY (current scanline)
@@ -42,8 +42,8 @@ pub struct Gpu {
     pub mode: u8,       // Current LCD mode (0-3)
     pub cycles: u32,    // Cycles into current scanline
     pub frame_ready: bool,
-    pub status_interrupt_request: bool,  // STAT interrupt request
-    pub vblank_interrupt_request: bool, // VBlank interrupt request
+    pub stat_irq: bool,  // STAT interrupt request
+    pub vblank_irq: bool, // VBlank interrupt request
 
     // Internal
     pub window_line: u8,     // Current window line counter
@@ -52,7 +52,7 @@ pub struct Gpu {
     pub cgb_mode: bool,        // Running in CGB mode
     pub vram_bank: u8,         // FF4F: VRAM bank select (0 or 1)
     pub bg_palette: [u8; 64],  // CGB BG color palette data (8 palettes × 4 colors × 2 bytes)
-    pub object_palette: [u8; 64], // CGB OBJ color palette data
+    pub obj_palette: [u8; 64], // CGB OBJ color palette data
     pub bcps: u8,              // FF68: BG Color Palette Spec (auto-inc + index)
     pub ocps: u8,              // FF6A: OBJ Color Palette Spec
     // Internal: scanline BG priority info for sprite drawing
@@ -69,7 +69,7 @@ pub fn new() -> Self {
             oam: [0; 160],
             framebuffer: vec![GB_PALETTE[0]; SCREEN_W * SCREEN_H],
             lcdc: 0x91,
-            status: 0x00,
+            stat: 0x00,
             scy: 0,
             scx: 0,
             ly: 0,
@@ -82,13 +82,13 @@ pub fn new() -> Self {
             mode: 2,
             cycles: 0,
             frame_ready: false,
-            status_interrupt_request: false,
-            vblank_interrupt_request: false,
+            stat_irq: false,
+            vblank_irq: false,
             window_line: 0,
             cgb_mode: false,
             vram_bank: 0,
             bg_palette: [0xFF; 64],
-            object_palette: [0xFF; 64],
+            obj_palette: [0xFF; 64],
             bcps: 0,
             ocps: 0,
             bg_priority: [0; 160],
@@ -120,8 +120,8 @@ pub fn new() -> Self {
                     self.render_scanline();
 
                     // STAT mode 0 interrupt
-                    if self.status & 0x08 != 0 {
-                        self.status_interrupt_request = true;
+                    if self.stat & 0x08 != 0 {
+                        self.stat_irq = true;
                     }
                 }
             }
@@ -133,19 +133,19 @@ pub fn new() -> Self {
                     if self.ly == 144 {
                         // Enter VBlank
                         self.mode = 1;
-                        self.vblank_interrupt_request = true;
+                        self.vblank_irq = true;
                         self.frame_ready = true;
                         self.window_line = 0;
 
                         // STAT mode 1 interrupt
-                        if self.status & 0x10 != 0 {
-                            self.status_interrupt_request = true;
+                        if self.stat & 0x10 != 0 {
+                            self.stat_irq = true;
                         }
                     } else {
                         self.mode = 2;
                         // STAT mode 2 interrupt
-                        if self.status & 0x20 != 0 {
-                            self.status_interrupt_request = true;
+                        if self.stat & 0x20 != 0 {
+                            self.stat_irq = true;
                         }
                     }
 
@@ -162,8 +162,8 @@ pub fn new() -> Self {
                         self.mode = 2;
 
                         // STAT mode 2 interrupt
-                        if self.status & 0x20 != 0 {
-                            self.status_interrupt_request = true;
+                        if self.stat & 0x20 != 0 {
+                            self.stat_irq = true;
                         }
                     }
 
@@ -176,18 +176,18 @@ pub fn new() -> Self {
 
     fn check_lyc(&mut self) {
         if self.ly == self.lyc {
-            self.status |= 0x04; // LYC coincidence flag
-            if self.status & 0x40 != 0 {
-                self.status_interrupt_request = true;
+            self.stat |= 0x04; // LYC coincidence flag
+            if self.stat & 0x40 != 0 {
+                self.stat_irq = true;
             }
         } else {
-            self.status &= !0x04;
+            self.stat &= !0x04;
         }
     }
 
         // Public function — callable from other modules.
-pub fn read_status(&self) -> u8 {
-        (self.status & 0xF8) | (if self.ly == self.lyc { 0x04 } else { 0 }) | self.mode
+pub fn read_stat(&self) -> u8 {
+        (self.stat & 0xF8) | (if self.ly == self.lyc { 0x04 } else { 0 }) | self.mode
     }
 
     /// Render one scanline to the framebuffer
@@ -351,7 +351,7 @@ pub fn read_status(&self) -> u8 {
 
         // Render sprites in reverse order (lower OAM index = higher priority)
         for i in (0..count).rev() {
-            let (sy_raw, sx_raw, mut tile, flags, _oam_index) = sprites[i];
+            let (sy_raw, sx_raw, mut tile, flags, _oam_idx) = sprites[i];
             let sy = sy_raw as i32 - 16;
             let sx = sx_raw as i32 - 8;
             let flip_x = flags & 0x20 != 0;
@@ -376,11 +376,11 @@ pub fn read_status(&self) -> u8 {
             let lo = self.vram[tile_address];
             let hi = self.vram[tile_address + 1];
 
-            for pixel in 0..8i32 {
-                let screen_x = sx + pixel;
+            for px in 0..8i32 {
+                let screen_x = sx + px;
                 if screen_x < 0 || screen_x >= SCREEN_W as i32 { continue; }
 
-                let bit = if flip_x { pixel } else { 7 - pixel } as u8;
+                let bit = if flip_x { px } else { 7 - px } as u8;
                 let color_id = ((hi >> bit) & 1) << 1 | ((lo >> bit) & 1);
                 if color_id == 0 { continue; } // Transparent
 
@@ -557,11 +557,11 @@ pub fn read_status(&self) -> u8 {
             let lo = vram_data[tile_address];
             let hi = vram_data[tile_address + 1];
 
-            for pixel in 0..8i32 {
-                let screen_x = sx + pixel;
+            for px in 0..8i32 {
+                let screen_x = sx + px;
                 if screen_x < 0 || screen_x >= SCREEN_W as i32 { continue; }
 
-                let bit = if flip_x { pixel } else { 7 - pixel } as u8;
+                let bit = if flip_x { px } else { 7 - px } as u8;
                 let color_id = ((hi >> bit) & 1) << 1 | ((lo >> bit) & 1);
                 if color_id == 0 { continue; } // Transparent
 
@@ -571,64 +571,64 @@ pub fn read_status(&self) -> u8 {
                 // CGB BG priority: if LCDC bit 0 set AND (BG-to-OAM priority OR sprite behind_bg)
                 // AND BG color != 0, then BG wins
                 if self.lcdc & 0x01 != 0 {
-                    let bg_priority = self.bg_priority[sx_index];
-                    if (behind_bg || bg_priority & 2 != 0) && bg_priority & 1 != 0 {
+                    let bg_prio = self.bg_priority[sx_index];
+                    if (behind_bg || bg_prio & 2 != 0) && bg_prio & 1 != 0 {
                         continue;
                     }
                 }
 
-                let color = Self::cgb_color(&self.object_palette, cgb_palette, color_id as usize);
+                let color = Self::cgb_color(&self.obj_palette, cgb_palette, color_id as usize);
                 self.framebuffer[screen_index] = color;
             }
         }
     }
 
     // VRAM read/write (bank-aware for CGB)
-    pub fn read_vram(&self, address: u16) -> u8 {
-        let index = (address & 0x1FFF) as usize;
-        if self.vram_bank == 1 { self.vram1[index] } else { self.vram[index] }
+    pub fn read_vram(&self, addr: u16) -> u8 {
+        let idx = (addr & 0x1FFF) as usize;
+        if self.vram_bank == 1 { self.vram1[idx] } else { self.vram[idx] }
     }
         // Public function — callable from other modules.
-pub fn write_vram(&mut self, address: u16, value: u8) {
-        let index = (address & 0x1FFF) as usize;
-        if self.vram_bank == 1 { self.vram1[index] = value; } else { self.vram[index] = value; }
+pub fn write_vram(&mut self, addr: u16, val: u8) {
+        let idx = (addr & 0x1FFF) as usize;
+        if self.vram_bank == 1 { self.vram1[idx] = val; } else { self.vram[idx] = val; }
     }
     /// Read VRAM from a specific bank (0 or 1)
-    pub fn read_vram_bank(&self, address: u16, bank: u8) -> u8 {
-        let index = (address & 0x1FFF) as usize;
-        if bank == 1 { self.vram1[index] } else { self.vram[index] }
+    pub fn read_vram_bank(&self, addr: u16, bank: u8) -> u8 {
+        let idx = (addr & 0x1FFF) as usize;
+        if bank == 1 { self.vram1[idx] } else { self.vram[idx] }
     }
 
     // CGB color palette access
     pub fn read_bcpd(&self) -> u8 {
-        let index = (self.bcps & 0x3F) as usize;
-        self.bg_palette[index]
+        let idx = (self.bcps & 0x3F) as usize;
+        self.bg_palette[idx]
     }
         // Public function — callable from other modules.
-pub fn write_bcpd(&mut self, value: u8) {
-        let index = (self.bcps & 0x3F) as usize;
-        self.bg_palette[index] = value;
+pub fn write_bcpd(&mut self, val: u8) {
+        let idx = (self.bcps & 0x3F) as usize;
+        self.bg_palette[idx] = val;
         if self.bcps & 0x80 != 0 {
             self.bcps = 0x80 | ((self.bcps + 1) & 0x3F);
         }
     }
         // Public function — callable from other modules.
 pub fn read_ocpd(&self) -> u8 {
-        let index = (self.ocps & 0x3F) as usize;
-        self.object_palette[index]
+        let idx = (self.ocps & 0x3F) as usize;
+        self.obj_palette[idx]
     }
         // Public function — callable from other modules.
-pub fn write_ocpd(&mut self, value: u8) {
-        let index = (self.ocps & 0x3F) as usize;
-        self.object_palette[index] = value;
+pub fn write_ocpd(&mut self, val: u8) {
+        let idx = (self.ocps & 0x3F) as usize;
+        self.obj_palette[idx] = val;
         if self.ocps & 0x80 != 0 {
             self.ocps = 0x80 | ((self.ocps + 1) & 0x3F);
         }
     }
 
     /// Convert CGB RGB555 palette entry to ARGB8888
-    fn cgb_color(palette_data: &[u8], palette_number: usize, color_index: usize) -> u32 {
-        let offset = palette_number * 8 + color_index * 2;
+    fn cgb_color(palette_data: &[u8], palette_num: usize, color_idx: usize) -> u32 {
+        let offset = palette_num * 8 + color_idx * 2;
         if offset + 1 >= palette_data.len() { return 0xFF000000; }
         let lo = palette_data[offset] as u16;
         let hi = palette_data[offset + 1] as u16;
@@ -644,13 +644,13 @@ pub fn write_ocpd(&mut self, value: u8) {
     }
 
     // OAM read/write
-    pub fn read_oam(&self, address: u16) -> u8 {
-        let index = (address - 0xFE00) as usize;
-        if index < 160 { self.oam[index] } else { 0xFF }
+    pub fn read_oam(&self, addr: u16) -> u8 {
+        let idx = (addr - 0xFE00) as usize;
+        if idx < 160 { self.oam[idx] } else { 0xFF }
     }
         // Public function — callable from other modules.
-pub fn write_oam(&mut self, address: u16, value: u8) {
-        let index = (address - 0xFE00) as usize;
-        if index < 160 { self.oam[index] = value; }
+pub fn write_oam(&mut self, addr: u16, val: u8) {
+        let idx = (addr - 0xFE00) as usize;
+        if idx < 160 { self.oam[idx] = val; }
     }
 }

@@ -17,64 +17,64 @@ use alloc::vec;
 
 pub struct LinuxProcess {
     
-    pub ce: u32,
+    pub pid: u32,
     
     pub path: String,
     
-    pub cjc: Vec<String>,
+    pub argv: Vec<String>,
     
-    pub epy: Vec<String>,
+    pub bzm: Vec<String>,
     
-    pub jv: String,
+    pub cwd: String,
     
-    pub den: u64,
+    pub brk: u64,
     
-    pub aho: [Option<u32>; 256],
+    pub fds: [Option<u32>; 256],
     
-    pub nz: Option<i32>,
+    pub exit_code: Option<i32>,
 }
 
 impl LinuxProcess {
-    pub fn new(path: &str, cjc: Vec<String>, epy: Vec<String>) -> Self {
-        let mut aho = [None; 256];
+    pub fn new(path: &str, argv: Vec<String>, bzm: Vec<String>) -> Self {
+        let mut fds = [None; 256];
         
-        aho[0] = Some(0); 
-        aho[1] = Some(1); 
-        aho[2] = Some(2); 
+        fds[0] = Some(0); 
+        fds[1] = Some(1); 
+        fds[2] = Some(2); 
         
         Self {
-            ce: qgy(),
+            pid: juz(),
             path: String::from(path),
-            cjc,
-            epy,
-            jv: String::from("/"),
-            den: 0,
-            aho,
-            nz: None,
+            argv,
+            bzm,
+            cwd: String::from("/"),
+            brk: 0,
+            fds,
+            exit_code: None,
         }
     }
 }
 
-static CHT_: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(1000);
+static CLC_: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(1000);
 
-fn qgy() -> u32 {
-    CHT_.fetch_add(1, core::sync::atomic::Ordering::Relaxed)
+fn juz() -> u32 {
+    CLC_.fetch_add(1, core::sync::atomic::Ordering::Relaxed)
 }
 
 
-pub fn exec(path: &str, n: &[&str]) -> Result<i32, &'static str> {
-    crate::serial_println!("[LINUX] Executing: {} {:?}", path, n);
+pub fn exec(path: &str, args: &[&str]) -> Result<i32, &'static str> {
+    crate::serial_println!("[LINUX] Executing: {} {:?}", path, args);
     
     
-    let pu = crate::ramfs::fh(|fs| {
-        fs.mq(path).map(|bc| bc.ip())
-    }).or_else(|_| crate::linux::rootfs::mq(path))?;
+    let gz = crate::ramfs::bh(|fs| {
+        fs.read_file(path).map(|d| d.to_vec())
+    }).or_else(|_| crate::linux::rootfs::read_file(path))?;
     
     
-    let mut emg: Vec<&str> = Vec::new();
-    emg.push(path);
-    for ji in n {
-        emg.push(*ji);
+    let mut bxn: Vec<&str> = Vec::new();
+    bxn.push(path);
+    for db in args {
+        bxn.push(*db);
     }
     
     
@@ -83,23 +83,23 @@ pub fn exec(path: &str, n: &[&str]) -> Result<i32, &'static str> {
     crate::println!("║  Executing: {}                       ", path);
     crate::println!("╚══════════════════════════════════════════════════════════════╝");
     
-    match interpreter::peo(&pu, &emg) {
-        Ok(nz) => {
-            crate::println!("\n[Process exited with code {}]", nz);
-            Ok(nz)
+    match interpreter::jbu(&gz, &bxn) {
+        Ok(exit_code) => {
+            crate::println!("\n[Process exited with code {}]", exit_code);
+            Ok(exit_code)
         }
-        Err(aa) => {
-            crate::h!(0xFF0000, "\n[Process error: {}]", aa);
-            Err(aa)
+        Err(e) => {
+            crate::n!(0xFF0000, "\n[Process error: {}]", e);
+            Err(e)
         }
     }
 }
 
 
-pub fn tya(path: &str) -> bool {
-    if let Ok(f) = crate::linux::rootfs::mq(path) {
+pub fn msy(path: &str) -> bool {
+    if let Ok(data) = crate::linux::rootfs::read_file(path) {
         
-        f.len() >= 4 && &f[0..4] == b"\x7fELF"
+        data.len() >= 4 && &data[0..4] == b"\x7fELF"
     } else {
         false
     }

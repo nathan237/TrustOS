@@ -83,7 +83,7 @@ impl XrefDatabase {
     /// Build xref database from disassembled instructions and symbol table
     pub fn build(
         instructions: &[Instruction],
-        address_to_symbol: &BTreeMap<u64, String>,
+        addr_to_symbol: &BTreeMap<u64, String>,
     ) -> Self {
         let mut xrefs = Vec::new();
         let mut refs_from: BTreeMap<u64, Vec<Xref>> = BTreeMap::new();
@@ -94,7 +94,7 @@ impl XrefDatabase {
             if let Some(target) = inst.branch_target {
                 let xtype = if inst.is_call {
                     XrefType::Call
-                } else if inst.is_condition_jump {
+                } else if inst.is_cond_jump {
                     XrefType::ConditionalJump
                 } else if inst.is_jump {
                     XrefType::Jump
@@ -116,21 +116,21 @@ impl XrefDatabase {
             // Check for LEA with RIP-relative addressing (data reference)
             if inst.mnemonic == "lea" && inst.operands_str.contains("rip") {
                 // Try to extract the effective address from the operand string
-                if let Some(address) = extract_rip_target(&inst.operands_str, inst.address, inst.bytes.len() as u64) {
+                if let Some(addr) = extract_rip_target(&inst.operands_str, inst.address, inst.bytes.len() as u64) {
                     let xref = Xref {
                         from: inst.address,
-                        to: address,
+                        to: addr,
                         xref_type: XrefType::DataRef,
                     };
                     xrefs.push(xref.clone());
                     refs_from.entry(inst.address).or_insert_with(Vec::new).push(xref.clone());
-                    refs_to.entry(address).or_insert_with(Vec::new).push(xref);
+                    refs_to.entry(addr).or_insert_with(Vec::new).push(xref);
                 }
             }
         }
 
         // ── Pass 2: Detect function boundaries ──
-        let functions = detect_functions(instructions, &refs_to, address_to_symbol);
+        let functions = detect_functions(instructions, &refs_to, addr_to_symbol);
 
         // Build function entry lookup
         let mut function_entries = BTreeMap::new();
@@ -148,20 +148,20 @@ impl XrefDatabase {
     }
 
     /// Get all references to this address
-    pub fn xrefs_to(&self, address: u64) -> &[Xref] {
-        self.refs_to.get(&address).map(|v| v.as_slice()).unwrap_or(&[])
+    pub fn xrefs_to(&self, addr: u64) -> &[Xref] {
+        self.refs_to.get(&addr).map(|v| v.as_slice()).unwrap_or(&[])
     }
 
     /// Get all references from this address
-    pub fn xrefs_from(&self, address: u64) -> &[Xref] {
-        self.refs_from.get(&address).map(|v| v.as_slice()).unwrap_or(&[])
+    pub fn xrefs_from(&self, addr: u64) -> &[Xref] {
+        self.refs_from.get(&addr).map(|v| v.as_slice()).unwrap_or(&[])
     }
 
     /// Find which function contains this address
-    pub fn function_at(&self, address: u64) -> Option<&DetectedFunction> {
+    pub fn function_at(&self, addr: u64) -> Option<&DetectedFunction> {
         // Find the function with the largest entry ≤ addr
         for func in self.functions.iter().rev() {
-            if address >= func.entry && address < func.end {
+            if addr >= func.entry && addr < func.end {
                 return Some(func);
             }
         }
@@ -169,14 +169,14 @@ impl XrefDatabase {
     }
 
     /// Is this address a function entry?
-    pub fn is_function_entry(&self, address: u64) -> bool {
-        self.function_entries.contains_key(&address)
+    pub fn is_function_entry(&self, addr: u64) -> bool {
+        self.function_entries.contains_key(&addr)
     }
 
     /// Get function by entry address
     pub fn get_function(&self, entry: u64) -> Option<&DetectedFunction> {
         self.function_entries.get(&entry)
-            .and_then(|&index| self.functions.get(index))
+            .and_then(|&idx| self.functions.get(idx))
     }
 
     /// Count total xrefs
@@ -207,7 +207,7 @@ impl XrefDatabase {
 fn detect_functions(
     instructions: &[Instruction],
     refs_to: &BTreeMap<u64, Vec<Xref>>,
-    address_to_symbol: &BTreeMap<u64, String>,
+    addr_to_symbol: &BTreeMap<u64, String>,
 ) -> Vec<DetectedFunction> {
     if instructions.is_empty() {
         return Vec::new();
@@ -217,33 +217,33 @@ fn detect_functions(
     let mut entries: BTreeMap<u64, String> = BTreeMap::new();
 
     // 1. All CALL targets are function entries
-    for (address, xrefs) in refs_to.iter() {
+    for (addr, xrefs) in refs_to.iter() {
         for xref in xrefs {
             if xref.xref_type == XrefType::Call {
-                let name = address_to_symbol.get(address)
+                let name = addr_to_symbol.get(addr)
                     .cloned()
-                    .unwrap_or_else(|| format!("sub_{:x}", address));
-                entries.insert(*address, name);
+                    .unwrap_or_else(|| format!("sub_{:x}", addr));
+                entries.insert(*addr, name);
                 break;
             }
         }
     }
 
     // 2. All symbols of type FUNC are entries
-    for (address, name) in address_to_symbol {
-        entries.entry(*address).or_insert_with(|| name.clone());
+    for (addr, name) in addr_to_symbol {
+        entries.entry(*addr).or_insert_with(|| name.clone());
     }
 
     // 3. First instruction is an entry (if no symbol covers it)
     let first_address = instructions[0].address;
     entries.entry(first_address).or_insert_with(|| {
-        address_to_symbol.get(&first_address)
+        addr_to_symbol.get(&first_address)
             .cloned()
             .unwrap_or_else(|| String::from("_start"))
     });
 
     // Sort entries by address
-    let sorted_entries: Vec<(u64, String)> = entries.into_iterator().collect();
+    let sorted_entries: Vec<(u64, String)> = entries.into_iter().collect();
 
     // Build instruction address map for quick lookup
     let address_to_index: BTreeMap<u64, usize> = instructions.iter()
@@ -257,7 +257,7 @@ fn detect_functions(
         // Find instruction index for this entry
         let start_index = // Pattern matching — Rust's exhaustive branching construct.
 match address_to_index.get(entry) {
-            Some(&index) => index,
+            Some(&idx) => idx,
             None => continue, // Entry address not in our instructions
         };
 
@@ -292,7 +292,7 @@ match address_to_index.get(entry) {
 
         // Count basic blocks (rough: each Jcc/JMP/RET starts a new one)
         let basic_blocks = 1 + func_instructions.iter()
-            .filter(|inst| inst.is_jump || inst.is_condition_jump || inst.is_return_value)
+            .filter(|inst| inst.is_jump || inst.is_cond_jump || inst.is_ret)
             .count();
 
         functions.push(DetectedFunction {
@@ -313,12 +313,12 @@ match address_to_index.get(entry) {
 // ──── Helpers ──────────────────────────────────────────────────────────────
 
 /// Try to extract an absolute address from a RIP-relative operand
-fn extract_rip_target(operands: &str, inst_address: u64, inst_length: u64) -> Option<u64> {
+fn extract_rip_target(operands: &str, inst_address: u64, inst_len: u64) -> Option<u64> {
     // Format: "reg, qword [rip+0x123]" or "reg, qword [rip-0x123]"
     let rip_position = operands.find("rip")?;
     let after_rip = &operands[rip_position + 3..];
 
-    let next_address = inst_address + inst_length; // RIP points to next instruction
+    let next_address = inst_address + inst_len; // RIP points to next instruction
 
     if let Some(rest) = after_rip.strip_prefix('+') {
         // Positive offset

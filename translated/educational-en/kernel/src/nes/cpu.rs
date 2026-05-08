@@ -12,8 +12,8 @@ const FLAG_V: u8 = 0x40; // Overflow
 const FLAG_N: u8 = 0x80; // Negative
 
 pub trait CpuBus {
-    fn cpu_read(&mut self, address: u16) -> u8;
-    fn cpu_write(&mut self, address: u16, value: u8);
+    fn cpu_read(&mut self, addr: u16) -> u8;
+    fn cpu_write(&mut self, addr: u16, val: u8);
 }
 
 // #[derive] — auto-generates trait implementations at compile time.
@@ -28,7 +28,7 @@ pub struct Cpu {
     pub status: u8,
     pub cycles: u64,
     pub nmi_pending: bool,
-    pub interrupt_request_pending: bool,
+    pub irq_pending: bool,
     pub stall: u32,
 }
 
@@ -43,7 +43,7 @@ pub fn new() -> Self {
             status: FLAG_U | FLAG_I,
             cycles: 0,
             nmi_pending: false,
-            interrupt_request_pending: false,
+            irq_pending: false,
             stall: 0,
         }
     }
@@ -65,14 +65,14 @@ impl CpuBus) {
     fn set_zn(&mut self, v: u8) { self.set_flag(FLAG_Z, v == 0); self.set_flag(FLAG_N, v & 0x80 != 0); }
 
     fn push8(&mut self, bus: &mut // Implementation block — defines methods for the type above.
-impl CpuBus, value: u8) {
-        bus.cpu_write(0x0100 | self.sp as u16, value);
+impl CpuBus, val: u8) {
+        bus.cpu_write(0x0100 | self.sp as u16, val);
         self.sp = self.sp.wrapping_sub(1);
     }
     fn push16(&mut self, bus: &mut // Implementation block — defines methods for the type above.
-impl CpuBus, value: u16) {
-        self.push8(bus, (value >> 8) as u8);
-        self.push8(bus, value as u8);
+impl CpuBus, val: u16) {
+        self.push8(bus, (val >> 8) as u8);
+        self.push8(bus, val as u8);
     }
     fn pull8(&mut self, bus: &mut // Implementation block — defines methods for the type above.
 impl CpuBus) -> u8 {
@@ -100,10 +100,10 @@ impl CpuBus) -> u16 {
         (hi << 8) | lo
     }
     fn read16_bug(&self, bus: &mut // Implementation block — defines methods for the type above.
-impl CpuBus, address: u16) -> u16 {
+impl CpuBus, addr: u16) -> u16 {
         // 6502 indirect JMP bug: wraps within page
-        let lo = bus.cpu_read(address) as u16;
-        let hi_address = (address & 0xFF00) | ((address + 1) & 0x00FF);
+        let lo = bus.cpu_read(addr) as u16;
+        let hi_address = (addr & 0xFF00) | ((addr + 1) & 0x00FF);
         let hi = bus.cpu_read(hi_address) as u16;
         (hi << 8) | lo
     }
@@ -117,7 +117,7 @@ impl CpuBus) -> u8 { let a = self.read8(bus) as u16; bus.cpu_read(a) }
 impl CpuBus) -> u8 { let a = self.read8(bus).wrapping_add(self.x) as u16; bus.cpu_read(a) }
     fn zpy_r(&mut self, bus: &mut // Implementation block — defines methods for the type above.
 impl CpuBus) -> u8 { let a = self.read8(bus).wrapping_add(self.y) as u16; bus.cpu_read(a) }
-    fn absolute_r(&mut self, bus: &mut // Implementation block — defines methods for the type above.
+    fn abs_r(&mut self, bus: &mut // Implementation block — defines methods for the type above.
 impl CpuBus) -> u8 { let a = self.read16(bus); bus.cpu_read(a) }
     fn abx_r(&mut self, bus: &mut // Implementation block — defines methods for the type above.
 impl CpuBus) -> (u8, u32) {
@@ -156,7 +156,7 @@ impl CpuBus) -> u16 { self.read8(bus) as u16 }
 impl CpuBus) -> u16 { self.read8(bus).wrapping_add(self.x) as u16 }
     fn zpy_a(&mut self, bus: &mut // Implementation block — defines methods for the type above.
 impl CpuBus) -> u16 { self.read8(bus).wrapping_add(self.y) as u16 }
-    fn absolute_a(&mut self, bus: &mut // Implementation block — defines methods for the type above.
+    fn abs_a(&mut self, bus: &mut // Implementation block — defines methods for the type above.
 impl CpuBus) -> u16 { self.read16(bus) }
     fn abx_a(&mut self, bus: &mut // Implementation block — defines methods for the type above.
 impl CpuBus) -> u16 { let b = self.read16(bus); b.wrapping_add(self.x as u16) }
@@ -194,7 +194,7 @@ impl CpuBus) -> u16 {
 
     fn sbc(&mut self, v: u8) { self.adc(!v); }
 
-    fn cmp_register(&mut self, reg: u8, v: u8) {
+    fn cmp_reg(&mut self, reg: u8, v: u8) {
         let r = reg.wrapping_sub(v);
         self.set_flag(FLAG_C, reg >= v);
         self.set_zn(r);
@@ -211,20 +211,20 @@ impl CpuBus, condition: bool) -> u32 {
         } else { 2 }
     }
 
-    fn asl_value(&mut self, v: u8) -> u8 {
+    fn asl_val(&mut self, v: u8) -> u8 {
         self.set_flag(FLAG_C, v & 0x80 != 0);
         let r = v << 1; self.set_zn(r); r
     }
-    fn lsr_value(&mut self, v: u8) -> u8 {
+    fn lsr_val(&mut self, v: u8) -> u8 {
         self.set_flag(FLAG_C, v & 0x01 != 0);
         let r = v >> 1; self.set_zn(r); r
     }
-    fn rol_value(&mut self, v: u8) -> u8 {
+    fn rol_val(&mut self, v: u8) -> u8 {
         let c = if self.flag(FLAG_C) { 1u8 } else { 0 };
         self.set_flag(FLAG_C, v & 0x80 != 0);
         let r = (v << 1) | c; self.set_zn(r); r
     }
-    fn ror_value(&mut self, v: u8) -> u8 {
+    fn ror_val(&mut self, v: u8) -> u8 {
         let c = if self.flag(FLAG_C) { 0x80u8 } else { 0 };
         self.set_flag(FLAG_C, v & 0x01 != 0);
         let r = (v >> 1) | c; self.set_zn(r); r
@@ -250,8 +250,8 @@ impl CpuBus) -> u32 {
         }
 
         // Handle IRQ
-        if self.interrupt_request_pending && !self.flag(FLAG_I) {
-            self.interrupt_request_pending = false;
+        if self.irq_pending && !self.flag(FLAG_I) {
+            self.irq_pending = false;
             self.push16(bus, self.pc);
             self.push8(bus, (self.status | FLAG_U) & !FLAG_B);
             self.set_flag(FLAG_I, true);
@@ -271,7 +271,7 @@ match opcode {
             0xA9 => { let v = self.imm(bus); self.a = v; self.set_zn(v); 2 }
             0xA5 => { let v = self.zp_r(bus); self.a = v; self.set_zn(v); 3 }
             0xB5 => { let v = self.zpx_r(bus); self.a = v; self.set_zn(v); 4 }
-            0xAD => { let v = self.absolute_r(bus); self.a = v; self.set_zn(v); 4 }
+            0xAD => { let v = self.abs_r(bus); self.a = v; self.set_zn(v); 4 }
             0xBD => { let (v, p) = self.abx_r(bus); self.a = v; self.set_zn(v); 4 + p }
             0xB9 => { let (v, p) = self.aby_r(bus); self.a = v; self.set_zn(v); 4 + p }
             0xA1 => { let v = self.izx_r(bus); self.a = v; self.set_zn(v); 6 }
@@ -281,20 +281,20 @@ match opcode {
             0xA2 => { let v = self.imm(bus); self.x = v; self.set_zn(v); 2 }
             0xA6 => { let v = self.zp_r(bus); self.x = v; self.set_zn(v); 3 }
             0xB6 => { let v = self.zpy_r(bus); self.x = v; self.set_zn(v); 4 }
-            0xAE => { let v = self.absolute_r(bus); self.x = v; self.set_zn(v); 4 }
+            0xAE => { let v = self.abs_r(bus); self.x = v; self.set_zn(v); 4 }
             0xBE => { let (v, p) = self.aby_r(bus); self.x = v; self.set_zn(v); 4 + p }
 
             // ===== LDY =====
             0xA0 => { let v = self.imm(bus); self.y = v; self.set_zn(v); 2 }
             0xA4 => { let v = self.zp_r(bus); self.y = v; self.set_zn(v); 3 }
             0xB4 => { let v = self.zpx_r(bus); self.y = v; self.set_zn(v); 4 }
-            0xAC => { let v = self.absolute_r(bus); self.y = v; self.set_zn(v); 4 }
+            0xAC => { let v = self.abs_r(bus); self.y = v; self.set_zn(v); 4 }
             0xBC => { let (v, p) = self.abx_r(bus); self.y = v; self.set_zn(v); 4 + p }
 
             // ===== STA =====
             0x85 => { let a = self.zp_a(bus); bus.cpu_write(a, self.a); 3 }
             0x95 => { let a = self.zpx_a(bus); bus.cpu_write(a, self.a); 4 }
-            0x8D => { let a = self.absolute_a(bus); bus.cpu_write(a, self.a); 4 }
+            0x8D => { let a = self.abs_a(bus); bus.cpu_write(a, self.a); 4 }
             0x9D => { let a = self.abx_a(bus); bus.cpu_write(a, self.a); 5 }
             0x99 => { let a = self.aby_a(bus); bus.cpu_write(a, self.a); 5 }
             0x81 => { let a = self.izx_a(bus); bus.cpu_write(a, self.a); 6 }
@@ -303,18 +303,18 @@ match opcode {
             // ===== STX =====
             0x86 => { let a = self.zp_a(bus); bus.cpu_write(a, self.x); 3 }
             0x96 => { let a = self.zpy_a(bus); bus.cpu_write(a, self.x); 4 }
-            0x8E => { let a = self.absolute_a(bus); bus.cpu_write(a, self.x); 4 }
+            0x8E => { let a = self.abs_a(bus); bus.cpu_write(a, self.x); 4 }
 
             // ===== STY =====
             0x84 => { let a = self.zp_a(bus); bus.cpu_write(a, self.y); 3 }
             0x94 => { let a = self.zpx_a(bus); bus.cpu_write(a, self.y); 4 }
-            0x8C => { let a = self.absolute_a(bus); bus.cpu_write(a, self.y); 4 }
+            0x8C => { let a = self.abs_a(bus); bus.cpu_write(a, self.y); 4 }
 
             // ===== ADC =====
             0x69 => { let v = self.imm(bus); self.adc(v); 2 }
             0x65 => { let v = self.zp_r(bus); self.adc(v); 3 }
             0x75 => { let v = self.zpx_r(bus); self.adc(v); 4 }
-            0x6D => { let v = self.absolute_r(bus); self.adc(v); 4 }
+            0x6D => { let v = self.abs_r(bus); self.adc(v); 4 }
             0x7D => { let (v, p) = self.abx_r(bus); self.adc(v); 4 + p }
             0x79 => { let (v, p) = self.aby_r(bus); self.adc(v); 4 + p }
             0x61 => { let v = self.izx_r(bus); self.adc(v); 6 }
@@ -324,7 +324,7 @@ match opcode {
             0xE9 | 0xEB => { let v = self.imm(bus); self.sbc(v); 2 }
             0xE5 => { let v = self.zp_r(bus); self.sbc(v); 3 }
             0xF5 => { let v = self.zpx_r(bus); self.sbc(v); 4 }
-            0xED => { let v = self.absolute_r(bus); self.sbc(v); 4 }
+            0xED => { let v = self.abs_r(bus); self.sbc(v); 4 }
             0xFD => { let (v, p) = self.abx_r(bus); self.sbc(v); 4 + p }
             0xF9 => { let (v, p) = self.aby_r(bus); self.sbc(v); 4 + p }
             0xE1 => { let v = self.izx_r(bus); self.sbc(v); 6 }
@@ -334,7 +334,7 @@ match opcode {
             0x29 => { let v = self.imm(bus); self.a &= v; self.set_zn(self.a); 2 }
             0x25 => { let v = self.zp_r(bus); self.a &= v; self.set_zn(self.a); 3 }
             0x35 => { let v = self.zpx_r(bus); self.a &= v; self.set_zn(self.a); 4 }
-            0x2D => { let v = self.absolute_r(bus); self.a &= v; self.set_zn(self.a); 4 }
+            0x2D => { let v = self.abs_r(bus); self.a &= v; self.set_zn(self.a); 4 }
             0x3D => { let (v, p) = self.abx_r(bus); self.a &= v; self.set_zn(self.a); 4 + p }
             0x39 => { let (v, p) = self.aby_r(bus); self.a &= v; self.set_zn(self.a); 4 + p }
             0x21 => { let v = self.izx_r(bus); self.a &= v; self.set_zn(self.a); 6 }
@@ -344,7 +344,7 @@ match opcode {
             0x09 => { let v = self.imm(bus); self.a |= v; self.set_zn(self.a); 2 }
             0x05 => { let v = self.zp_r(bus); self.a |= v; self.set_zn(self.a); 3 }
             0x15 => { let v = self.zpx_r(bus); self.a |= v; self.set_zn(self.a); 4 }
-            0x0D => { let v = self.absolute_r(bus); self.a |= v; self.set_zn(self.a); 4 }
+            0x0D => { let v = self.abs_r(bus); self.a |= v; self.set_zn(self.a); 4 }
             0x1D => { let (v, p) = self.abx_r(bus); self.a |= v; self.set_zn(self.a); 4 + p }
             0x19 => { let (v, p) = self.aby_r(bus); self.a |= v; self.set_zn(self.a); 4 + p }
             0x01 => { let v = self.izx_r(bus); self.a |= v; self.set_zn(self.a); 6 }
@@ -354,74 +354,74 @@ match opcode {
             0x49 => { let v = self.imm(bus); self.a ^= v; self.set_zn(self.a); 2 }
             0x45 => { let v = self.zp_r(bus); self.a ^= v; self.set_zn(self.a); 3 }
             0x55 => { let v = self.zpx_r(bus); self.a ^= v; self.set_zn(self.a); 4 }
-            0x4D => { let v = self.absolute_r(bus); self.a ^= v; self.set_zn(self.a); 4 }
+            0x4D => { let v = self.abs_r(bus); self.a ^= v; self.set_zn(self.a); 4 }
             0x5D => { let (v, p) = self.abx_r(bus); self.a ^= v; self.set_zn(self.a); 4 + p }
             0x59 => { let (v, p) = self.aby_r(bus); self.a ^= v; self.set_zn(self.a); 4 + p }
             0x41 => { let v = self.izx_r(bus); self.a ^= v; self.set_zn(self.a); 6 }
             0x51 => { let (v, p) = self.izy_r(bus); self.a ^= v; self.set_zn(self.a); 5 + p }
 
             // ===== CMP =====
-            0xC9 => { let v = self.imm(bus); self.cmp_register(self.a, v); 2 }
-            0xC5 => { let v = self.zp_r(bus); self.cmp_register(self.a, v); 3 }
-            0xD5 => { let v = self.zpx_r(bus); self.cmp_register(self.a, v); 4 }
-            0xCD => { let v = self.absolute_r(bus); self.cmp_register(self.a, v); 4 }
-            0xDD => { let (v, p) = self.abx_r(bus); self.cmp_register(self.a, v); 4 + p }
-            0xD9 => { let (v, p) = self.aby_r(bus); self.cmp_register(self.a, v); 4 + p }
-            0xC1 => { let v = self.izx_r(bus); self.cmp_register(self.a, v); 6 }
-            0xD1 => { let (v, p) = self.izy_r(bus); self.cmp_register(self.a, v); 5 + p }
+            0xC9 => { let v = self.imm(bus); self.cmp_reg(self.a, v); 2 }
+            0xC5 => { let v = self.zp_r(bus); self.cmp_reg(self.a, v); 3 }
+            0xD5 => { let v = self.zpx_r(bus); self.cmp_reg(self.a, v); 4 }
+            0xCD => { let v = self.abs_r(bus); self.cmp_reg(self.a, v); 4 }
+            0xDD => { let (v, p) = self.abx_r(bus); self.cmp_reg(self.a, v); 4 + p }
+            0xD9 => { let (v, p) = self.aby_r(bus); self.cmp_reg(self.a, v); 4 + p }
+            0xC1 => { let v = self.izx_r(bus); self.cmp_reg(self.a, v); 6 }
+            0xD1 => { let (v, p) = self.izy_r(bus); self.cmp_reg(self.a, v); 5 + p }
 
             // ===== CPX =====
-            0xE0 => { let v = self.imm(bus); self.cmp_register(self.x, v); 2 }
-            0xE4 => { let v = self.zp_r(bus); self.cmp_register(self.x, v); 3 }
-            0xEC => { let v = self.absolute_r(bus); self.cmp_register(self.x, v); 4 }
+            0xE0 => { let v = self.imm(bus); self.cmp_reg(self.x, v); 2 }
+            0xE4 => { let v = self.zp_r(bus); self.cmp_reg(self.x, v); 3 }
+            0xEC => { let v = self.abs_r(bus); self.cmp_reg(self.x, v); 4 }
 
             // ===== CPY =====
-            0xC0 => { let v = self.imm(bus); self.cmp_register(self.y, v); 2 }
-            0xC4 => { let v = self.zp_r(bus); self.cmp_register(self.y, v); 3 }
-            0xCC => { let v = self.absolute_r(bus); self.cmp_register(self.y, v); 4 }
+            0xC0 => { let v = self.imm(bus); self.cmp_reg(self.y, v); 2 }
+            0xC4 => { let v = self.zp_r(bus); self.cmp_reg(self.y, v); 3 }
+            0xCC => { let v = self.abs_r(bus); self.cmp_reg(self.y, v); 4 }
 
             // ===== BIT =====
             0x24 => { let v = self.zp_r(bus); self.set_flag(FLAG_Z, self.a & v == 0); self.set_flag(FLAG_V, v & 0x40 != 0); self.set_flag(FLAG_N, v & 0x80 != 0); 3 }
-            0x2C => { let v = self.absolute_r(bus); self.set_flag(FLAG_Z, self.a & v == 0); self.set_flag(FLAG_V, v & 0x40 != 0); self.set_flag(FLAG_N, v & 0x80 != 0); 4 }
+            0x2C => { let v = self.abs_r(bus); self.set_flag(FLAG_Z, self.a & v == 0); self.set_flag(FLAG_V, v & 0x40 != 0); self.set_flag(FLAG_N, v & 0x80 != 0); 4 }
 
             // ===== ASL =====
-            0x0A => { self.a = self.asl_value(self.a); 2 }
-            0x06 => { let a = self.zp_a(bus); let v = bus.cpu_read(a); let r = self.asl_value(v); bus.cpu_write(a, r); 5 }
-            0x16 => { let a = self.zpx_a(bus); let v = bus.cpu_read(a); let r = self.asl_value(v); bus.cpu_write(a, r); 6 }
-            0x0E => { let a = self.absolute_a(bus); let v = bus.cpu_read(a); let r = self.asl_value(v); bus.cpu_write(a, r); 6 }
-            0x1E => { let a = self.abx_a(bus); let v = bus.cpu_read(a); let r = self.asl_value(v); bus.cpu_write(a, r); 7 }
+            0x0A => { self.a = self.asl_val(self.a); 2 }
+            0x06 => { let a = self.zp_a(bus); let v = bus.cpu_read(a); let r = self.asl_val(v); bus.cpu_write(a, r); 5 }
+            0x16 => { let a = self.zpx_a(bus); let v = bus.cpu_read(a); let r = self.asl_val(v); bus.cpu_write(a, r); 6 }
+            0x0E => { let a = self.abs_a(bus); let v = bus.cpu_read(a); let r = self.asl_val(v); bus.cpu_write(a, r); 6 }
+            0x1E => { let a = self.abx_a(bus); let v = bus.cpu_read(a); let r = self.asl_val(v); bus.cpu_write(a, r); 7 }
 
             // ===== LSR =====
-            0x4A => { self.a = self.lsr_value(self.a); 2 }
-            0x46 => { let a = self.zp_a(bus); let v = bus.cpu_read(a); let r = self.lsr_value(v); bus.cpu_write(a, r); 5 }
-            0x56 => { let a = self.zpx_a(bus); let v = bus.cpu_read(a); let r = self.lsr_value(v); bus.cpu_write(a, r); 6 }
-            0x4E => { let a = self.absolute_a(bus); let v = bus.cpu_read(a); let r = self.lsr_value(v); bus.cpu_write(a, r); 6 }
-            0x5E => { let a = self.abx_a(bus); let v = bus.cpu_read(a); let r = self.lsr_value(v); bus.cpu_write(a, r); 7 }
+            0x4A => { self.a = self.lsr_val(self.a); 2 }
+            0x46 => { let a = self.zp_a(bus); let v = bus.cpu_read(a); let r = self.lsr_val(v); bus.cpu_write(a, r); 5 }
+            0x56 => { let a = self.zpx_a(bus); let v = bus.cpu_read(a); let r = self.lsr_val(v); bus.cpu_write(a, r); 6 }
+            0x4E => { let a = self.abs_a(bus); let v = bus.cpu_read(a); let r = self.lsr_val(v); bus.cpu_write(a, r); 6 }
+            0x5E => { let a = self.abx_a(bus); let v = bus.cpu_read(a); let r = self.lsr_val(v); bus.cpu_write(a, r); 7 }
 
             // ===== ROL =====
-            0x2A => { self.a = self.rol_value(self.a); 2 }
-            0x26 => { let a = self.zp_a(bus); let v = bus.cpu_read(a); let r = self.rol_value(v); bus.cpu_write(a, r); 5 }
-            0x36 => { let a = self.zpx_a(bus); let v = bus.cpu_read(a); let r = self.rol_value(v); bus.cpu_write(a, r); 6 }
-            0x2E => { let a = self.absolute_a(bus); let v = bus.cpu_read(a); let r = self.rol_value(v); bus.cpu_write(a, r); 6 }
-            0x3E => { let a = self.abx_a(bus); let v = bus.cpu_read(a); let r = self.rol_value(v); bus.cpu_write(a, r); 7 }
+            0x2A => { self.a = self.rol_val(self.a); 2 }
+            0x26 => { let a = self.zp_a(bus); let v = bus.cpu_read(a); let r = self.rol_val(v); bus.cpu_write(a, r); 5 }
+            0x36 => { let a = self.zpx_a(bus); let v = bus.cpu_read(a); let r = self.rol_val(v); bus.cpu_write(a, r); 6 }
+            0x2E => { let a = self.abs_a(bus); let v = bus.cpu_read(a); let r = self.rol_val(v); bus.cpu_write(a, r); 6 }
+            0x3E => { let a = self.abx_a(bus); let v = bus.cpu_read(a); let r = self.rol_val(v); bus.cpu_write(a, r); 7 }
 
             // ===== ROR =====
-            0x6A => { self.a = self.ror_value(self.a); 2 }
-            0x66 => { let a = self.zp_a(bus); let v = bus.cpu_read(a); let r = self.ror_value(v); bus.cpu_write(a, r); 5 }
-            0x76 => { let a = self.zpx_a(bus); let v = bus.cpu_read(a); let r = self.ror_value(v); bus.cpu_write(a, r); 6 }
-            0x6E => { let a = self.absolute_a(bus); let v = bus.cpu_read(a); let r = self.ror_value(v); bus.cpu_write(a, r); 6 }
-            0x7E => { let a = self.abx_a(bus); let v = bus.cpu_read(a); let r = self.ror_value(v); bus.cpu_write(a, r); 7 }
+            0x6A => { self.a = self.ror_val(self.a); 2 }
+            0x66 => { let a = self.zp_a(bus); let v = bus.cpu_read(a); let r = self.ror_val(v); bus.cpu_write(a, r); 5 }
+            0x76 => { let a = self.zpx_a(bus); let v = bus.cpu_read(a); let r = self.ror_val(v); bus.cpu_write(a, r); 6 }
+            0x6E => { let a = self.abs_a(bus); let v = bus.cpu_read(a); let r = self.ror_val(v); bus.cpu_write(a, r); 6 }
+            0x7E => { let a = self.abx_a(bus); let v = bus.cpu_read(a); let r = self.ror_val(v); bus.cpu_write(a, r); 7 }
 
             // ===== INC =====
             0xE6 => { let a = self.zp_a(bus); let v = bus.cpu_read(a).wrapping_add(1); self.set_zn(v); bus.cpu_write(a, v); 5 }
             0xF6 => { let a = self.zpx_a(bus); let v = bus.cpu_read(a).wrapping_add(1); self.set_zn(v); bus.cpu_write(a, v); 6 }
-            0xEE => { let a = self.absolute_a(bus); let v = bus.cpu_read(a).wrapping_add(1); self.set_zn(v); bus.cpu_write(a, v); 6 }
+            0xEE => { let a = self.abs_a(bus); let v = bus.cpu_read(a).wrapping_add(1); self.set_zn(v); bus.cpu_write(a, v); 6 }
             0xFE => { let a = self.abx_a(bus); let v = bus.cpu_read(a).wrapping_add(1); self.set_zn(v); bus.cpu_write(a, v); 7 }
 
             // ===== DEC =====
             0xC6 => { let a = self.zp_a(bus); let v = bus.cpu_read(a).wrapping_sub(1); self.set_zn(v); bus.cpu_write(a, v); 5 }
             0xD6 => { let a = self.zpx_a(bus); let v = bus.cpu_read(a).wrapping_sub(1); self.set_zn(v); bus.cpu_write(a, v); 6 }
-            0xCE => { let a = self.absolute_a(bus); let v = bus.cpu_read(a).wrapping_sub(1); self.set_zn(v); bus.cpu_write(a, v); 6 }
+            0xCE => { let a = self.abs_a(bus); let v = bus.cpu_read(a).wrapping_sub(1); self.set_zn(v); bus.cpu_write(a, v); 6 }
             0xDE => { let a = self.abx_a(bus); let v = bus.cpu_read(a).wrapping_sub(1); self.set_zn(v); bus.cpu_write(a, v); 7 }
 
             // ===== INX/INY/DEX/DEY =====
@@ -504,7 +504,7 @@ match opcode {
             // ===== Unofficial: LAX (LDA + LDX) =====
             0xA7 => { let v = self.zp_r(bus); self.a = v; self.x = v; self.set_zn(v); 3 }
             0xB7 => { let v = self.zpy_r(bus); self.a = v; self.x = v; self.set_zn(v); 4 }
-            0xAF => { let v = self.absolute_r(bus); self.a = v; self.x = v; self.set_zn(v); 4 }
+            0xAF => { let v = self.abs_r(bus); self.a = v; self.x = v; self.set_zn(v); 4 }
             0xBF => { let (v, p) = self.aby_r(bus); self.a = v; self.x = v; self.set_zn(v); 4 + p }
             0xA3 => { let v = self.izx_r(bus); self.a = v; self.x = v; self.set_zn(v); 6 }
             0xB3 => { let (v, p) = self.izy_r(bus); self.a = v; self.x = v; self.set_zn(v); 5 + p }
@@ -512,62 +512,62 @@ match opcode {
             // ===== Unofficial: SAX (store A & X) =====
             0x87 => { let a = self.zp_a(bus); bus.cpu_write(a, self.a & self.x); 3 }
             0x97 => { let a = self.zpy_a(bus); bus.cpu_write(a, self.a & self.x); 4 }
-            0x8F => { let a = self.absolute_a(bus); bus.cpu_write(a, self.a & self.x); 4 }
+            0x8F => { let a = self.abs_a(bus); bus.cpu_write(a, self.a & self.x); 4 }
             0x83 => { let a = self.izx_a(bus); bus.cpu_write(a, self.a & self.x); 6 }
 
             // ===== Unofficial: DCP (DEC + CMP) =====
-            0xC7 => { let a = self.zp_a(bus); let v = bus.cpu_read(a).wrapping_sub(1); bus.cpu_write(a, v); self.cmp_register(self.a, v); 5 }
-            0xD7 => { let a = self.zpx_a(bus); let v = bus.cpu_read(a).wrapping_sub(1); bus.cpu_write(a, v); self.cmp_register(self.a, v); 6 }
-            0xCF => { let a = self.absolute_a(bus); let v = bus.cpu_read(a).wrapping_sub(1); bus.cpu_write(a, v); self.cmp_register(self.a, v); 6 }
-            0xDF => { let a = self.abx_a(bus); let v = bus.cpu_read(a).wrapping_sub(1); bus.cpu_write(a, v); self.cmp_register(self.a, v); 7 }
-            0xDB => { let a = self.aby_a(bus); let v = bus.cpu_read(a).wrapping_sub(1); bus.cpu_write(a, v); self.cmp_register(self.a, v); 7 }
-            0xC3 => { let a = self.izx_a(bus); let v = bus.cpu_read(a).wrapping_sub(1); bus.cpu_write(a, v); self.cmp_register(self.a, v); 8 }
-            0xD3 => { let a = self.izy_a(bus); let v = bus.cpu_read(a).wrapping_sub(1); bus.cpu_write(a, v); self.cmp_register(self.a, v); 8 }
+            0xC7 => { let a = self.zp_a(bus); let v = bus.cpu_read(a).wrapping_sub(1); bus.cpu_write(a, v); self.cmp_reg(self.a, v); 5 }
+            0xD7 => { let a = self.zpx_a(bus); let v = bus.cpu_read(a).wrapping_sub(1); bus.cpu_write(a, v); self.cmp_reg(self.a, v); 6 }
+            0xCF => { let a = self.abs_a(bus); let v = bus.cpu_read(a).wrapping_sub(1); bus.cpu_write(a, v); self.cmp_reg(self.a, v); 6 }
+            0xDF => { let a = self.abx_a(bus); let v = bus.cpu_read(a).wrapping_sub(1); bus.cpu_write(a, v); self.cmp_reg(self.a, v); 7 }
+            0xDB => { let a = self.aby_a(bus); let v = bus.cpu_read(a).wrapping_sub(1); bus.cpu_write(a, v); self.cmp_reg(self.a, v); 7 }
+            0xC3 => { let a = self.izx_a(bus); let v = bus.cpu_read(a).wrapping_sub(1); bus.cpu_write(a, v); self.cmp_reg(self.a, v); 8 }
+            0xD3 => { let a = self.izy_a(bus); let v = bus.cpu_read(a).wrapping_sub(1); bus.cpu_write(a, v); self.cmp_reg(self.a, v); 8 }
 
             // ===== Unofficial: ISB/ISC (INC + SBC) =====
             0xE7 => { let a = self.zp_a(bus); let v = bus.cpu_read(a).wrapping_add(1); bus.cpu_write(a, v); self.sbc(v); 5 }
             0xF7 => { let a = self.zpx_a(bus); let v = bus.cpu_read(a).wrapping_add(1); bus.cpu_write(a, v); self.sbc(v); 6 }
-            0xEF => { let a = self.absolute_a(bus); let v = bus.cpu_read(a).wrapping_add(1); bus.cpu_write(a, v); self.sbc(v); 6 }
+            0xEF => { let a = self.abs_a(bus); let v = bus.cpu_read(a).wrapping_add(1); bus.cpu_write(a, v); self.sbc(v); 6 }
             0xFF => { let a = self.abx_a(bus); let v = bus.cpu_read(a).wrapping_add(1); bus.cpu_write(a, v); self.sbc(v); 7 }
             0xFB => { let a = self.aby_a(bus); let v = bus.cpu_read(a).wrapping_add(1); bus.cpu_write(a, v); self.sbc(v); 7 }
             0xE3 => { let a = self.izx_a(bus); let v = bus.cpu_read(a).wrapping_add(1); bus.cpu_write(a, v); self.sbc(v); 8 }
             0xF3 => { let a = self.izy_a(bus); let v = bus.cpu_read(a).wrapping_add(1); bus.cpu_write(a, v); self.sbc(v); 8 }
 
             // ===== Unofficial: SLO (ASL + ORA) =====
-            0x07 => { let a = self.zp_a(bus); let v = bus.cpu_read(a); let r = self.asl_value(v); bus.cpu_write(a, r); self.a |= r; self.set_zn(self.a); 5 }
-            0x17 => { let a = self.zpx_a(bus); let v = bus.cpu_read(a); let r = self.asl_value(v); bus.cpu_write(a, r); self.a |= r; self.set_zn(self.a); 6 }
-            0x0F => { let a = self.absolute_a(bus); let v = bus.cpu_read(a); let r = self.asl_value(v); bus.cpu_write(a, r); self.a |= r; self.set_zn(self.a); 6 }
-            0x1F => { let a = self.abx_a(bus); let v = bus.cpu_read(a); let r = self.asl_value(v); bus.cpu_write(a, r); self.a |= r; self.set_zn(self.a); 7 }
-            0x1B => { let a = self.aby_a(bus); let v = bus.cpu_read(a); let r = self.asl_value(v); bus.cpu_write(a, r); self.a |= r; self.set_zn(self.a); 7 }
-            0x03 => { let a = self.izx_a(bus); let v = bus.cpu_read(a); let r = self.asl_value(v); bus.cpu_write(a, r); self.a |= r; self.set_zn(self.a); 8 }
-            0x13 => { let a = self.izy_a(bus); let v = bus.cpu_read(a); let r = self.asl_value(v); bus.cpu_write(a, r); self.a |= r; self.set_zn(self.a); 8 }
+            0x07 => { let a = self.zp_a(bus); let v = bus.cpu_read(a); let r = self.asl_val(v); bus.cpu_write(a, r); self.a |= r; self.set_zn(self.a); 5 }
+            0x17 => { let a = self.zpx_a(bus); let v = bus.cpu_read(a); let r = self.asl_val(v); bus.cpu_write(a, r); self.a |= r; self.set_zn(self.a); 6 }
+            0x0F => { let a = self.abs_a(bus); let v = bus.cpu_read(a); let r = self.asl_val(v); bus.cpu_write(a, r); self.a |= r; self.set_zn(self.a); 6 }
+            0x1F => { let a = self.abx_a(bus); let v = bus.cpu_read(a); let r = self.asl_val(v); bus.cpu_write(a, r); self.a |= r; self.set_zn(self.a); 7 }
+            0x1B => { let a = self.aby_a(bus); let v = bus.cpu_read(a); let r = self.asl_val(v); bus.cpu_write(a, r); self.a |= r; self.set_zn(self.a); 7 }
+            0x03 => { let a = self.izx_a(bus); let v = bus.cpu_read(a); let r = self.asl_val(v); bus.cpu_write(a, r); self.a |= r; self.set_zn(self.a); 8 }
+            0x13 => { let a = self.izy_a(bus); let v = bus.cpu_read(a); let r = self.asl_val(v); bus.cpu_write(a, r); self.a |= r; self.set_zn(self.a); 8 }
 
             // ===== Unofficial: RLA (ROL + AND) =====
-            0x27 => { let a = self.zp_a(bus); let v = bus.cpu_read(a); let r = self.rol_value(v); bus.cpu_write(a, r); self.a &= r; self.set_zn(self.a); 5 }
-            0x37 => { let a = self.zpx_a(bus); let v = bus.cpu_read(a); let r = self.rol_value(v); bus.cpu_write(a, r); self.a &= r; self.set_zn(self.a); 6 }
-            0x2F => { let a = self.absolute_a(bus); let v = bus.cpu_read(a); let r = self.rol_value(v); bus.cpu_write(a, r); self.a &= r; self.set_zn(self.a); 6 }
-            0x3F => { let a = self.abx_a(bus); let v = bus.cpu_read(a); let r = self.rol_value(v); bus.cpu_write(a, r); self.a &= r; self.set_zn(self.a); 7 }
-            0x3B => { let a = self.aby_a(bus); let v = bus.cpu_read(a); let r = self.rol_value(v); bus.cpu_write(a, r); self.a &= r; self.set_zn(self.a); 7 }
-            0x23 => { let a = self.izx_a(bus); let v = bus.cpu_read(a); let r = self.rol_value(v); bus.cpu_write(a, r); self.a &= r; self.set_zn(self.a); 8 }
-            0x33 => { let a = self.izy_a(bus); let v = bus.cpu_read(a); let r = self.rol_value(v); bus.cpu_write(a, r); self.a &= r; self.set_zn(self.a); 8 }
+            0x27 => { let a = self.zp_a(bus); let v = bus.cpu_read(a); let r = self.rol_val(v); bus.cpu_write(a, r); self.a &= r; self.set_zn(self.a); 5 }
+            0x37 => { let a = self.zpx_a(bus); let v = bus.cpu_read(a); let r = self.rol_val(v); bus.cpu_write(a, r); self.a &= r; self.set_zn(self.a); 6 }
+            0x2F => { let a = self.abs_a(bus); let v = bus.cpu_read(a); let r = self.rol_val(v); bus.cpu_write(a, r); self.a &= r; self.set_zn(self.a); 6 }
+            0x3F => { let a = self.abx_a(bus); let v = bus.cpu_read(a); let r = self.rol_val(v); bus.cpu_write(a, r); self.a &= r; self.set_zn(self.a); 7 }
+            0x3B => { let a = self.aby_a(bus); let v = bus.cpu_read(a); let r = self.rol_val(v); bus.cpu_write(a, r); self.a &= r; self.set_zn(self.a); 7 }
+            0x23 => { let a = self.izx_a(bus); let v = bus.cpu_read(a); let r = self.rol_val(v); bus.cpu_write(a, r); self.a &= r; self.set_zn(self.a); 8 }
+            0x33 => { let a = self.izy_a(bus); let v = bus.cpu_read(a); let r = self.rol_val(v); bus.cpu_write(a, r); self.a &= r; self.set_zn(self.a); 8 }
 
             // ===== Unofficial: SRE (LSR + EOR) =====
-            0x47 => { let a = self.zp_a(bus); let v = bus.cpu_read(a); let r = self.lsr_value(v); bus.cpu_write(a, r); self.a ^= r; self.set_zn(self.a); 5 }
-            0x57 => { let a = self.zpx_a(bus); let v = bus.cpu_read(a); let r = self.lsr_value(v); bus.cpu_write(a, r); self.a ^= r; self.set_zn(self.a); 6 }
-            0x4F => { let a = self.absolute_a(bus); let v = bus.cpu_read(a); let r = self.lsr_value(v); bus.cpu_write(a, r); self.a ^= r; self.set_zn(self.a); 6 }
-            0x5F => { let a = self.abx_a(bus); let v = bus.cpu_read(a); let r = self.lsr_value(v); bus.cpu_write(a, r); self.a ^= r; self.set_zn(self.a); 7 }
-            0x5B => { let a = self.aby_a(bus); let v = bus.cpu_read(a); let r = self.lsr_value(v); bus.cpu_write(a, r); self.a ^= r; self.set_zn(self.a); 7 }
-            0x43 => { let a = self.izx_a(bus); let v = bus.cpu_read(a); let r = self.lsr_value(v); bus.cpu_write(a, r); self.a ^= r; self.set_zn(self.a); 8 }
-            0x53 => { let a = self.izy_a(bus); let v = bus.cpu_read(a); let r = self.lsr_value(v); bus.cpu_write(a, r); self.a ^= r; self.set_zn(self.a); 8 }
+            0x47 => { let a = self.zp_a(bus); let v = bus.cpu_read(a); let r = self.lsr_val(v); bus.cpu_write(a, r); self.a ^= r; self.set_zn(self.a); 5 }
+            0x57 => { let a = self.zpx_a(bus); let v = bus.cpu_read(a); let r = self.lsr_val(v); bus.cpu_write(a, r); self.a ^= r; self.set_zn(self.a); 6 }
+            0x4F => { let a = self.abs_a(bus); let v = bus.cpu_read(a); let r = self.lsr_val(v); bus.cpu_write(a, r); self.a ^= r; self.set_zn(self.a); 6 }
+            0x5F => { let a = self.abx_a(bus); let v = bus.cpu_read(a); let r = self.lsr_val(v); bus.cpu_write(a, r); self.a ^= r; self.set_zn(self.a); 7 }
+            0x5B => { let a = self.aby_a(bus); let v = bus.cpu_read(a); let r = self.lsr_val(v); bus.cpu_write(a, r); self.a ^= r; self.set_zn(self.a); 7 }
+            0x43 => { let a = self.izx_a(bus); let v = bus.cpu_read(a); let r = self.lsr_val(v); bus.cpu_write(a, r); self.a ^= r; self.set_zn(self.a); 8 }
+            0x53 => { let a = self.izy_a(bus); let v = bus.cpu_read(a); let r = self.lsr_val(v); bus.cpu_write(a, r); self.a ^= r; self.set_zn(self.a); 8 }
 
             // ===== Unofficial: RRA (ROR + ADC) =====
-            0x67 => { let a = self.zp_a(bus); let v = bus.cpu_read(a); let r = self.ror_value(v); bus.cpu_write(a, r); self.adc(r); 5 }
-            0x77 => { let a = self.zpx_a(bus); let v = bus.cpu_read(a); let r = self.ror_value(v); bus.cpu_write(a, r); self.adc(r); 6 }
-            0x6F => { let a = self.absolute_a(bus); let v = bus.cpu_read(a); let r = self.ror_value(v); bus.cpu_write(a, r); self.adc(r); 6 }
-            0x7F => { let a = self.abx_a(bus); let v = bus.cpu_read(a); let r = self.ror_value(v); bus.cpu_write(a, r); self.adc(r); 7 }
-            0x7B => { let a = self.aby_a(bus); let v = bus.cpu_read(a); let r = self.ror_value(v); bus.cpu_write(a, r); self.adc(r); 7 }
-            0x63 => { let a = self.izx_a(bus); let v = bus.cpu_read(a); let r = self.ror_value(v); bus.cpu_write(a, r); self.adc(r); 8 }
-            0x73 => { let a = self.izy_a(bus); let v = bus.cpu_read(a); let r = self.ror_value(v); bus.cpu_write(a, r); self.adc(r); 8 }
+            0x67 => { let a = self.zp_a(bus); let v = bus.cpu_read(a); let r = self.ror_val(v); bus.cpu_write(a, r); self.adc(r); 5 }
+            0x77 => { let a = self.zpx_a(bus); let v = bus.cpu_read(a); let r = self.ror_val(v); bus.cpu_write(a, r); self.adc(r); 6 }
+            0x6F => { let a = self.abs_a(bus); let v = bus.cpu_read(a); let r = self.ror_val(v); bus.cpu_write(a, r); self.adc(r); 6 }
+            0x7F => { let a = self.abx_a(bus); let v = bus.cpu_read(a); let r = self.ror_val(v); bus.cpu_write(a, r); self.adc(r); 7 }
+            0x7B => { let a = self.aby_a(bus); let v = bus.cpu_read(a); let r = self.ror_val(v); bus.cpu_write(a, r); self.adc(r); 7 }
+            0x63 => { let a = self.izx_a(bus); let v = bus.cpu_read(a); let r = self.ror_val(v); bus.cpu_write(a, r); self.adc(r); 8 }
+            0x73 => { let a = self.izy_a(bus); let v = bus.cpu_read(a); let r = self.ror_val(v); bus.cpu_write(a, r); self.adc(r); 8 }
 
             // ===== Unknown / unimplemented — treat as NOP =====
             _ => {

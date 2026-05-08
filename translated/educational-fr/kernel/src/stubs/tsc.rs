@@ -52,10 +52,10 @@ unsafe { FREQUENCY } }
 
 // Fonction publique — appelable depuis d'autres modules.
 pub fn cycles_to_nanos(cycles: u64) -> u64 {
-    let frequency = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+    let freq = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe { FREQUENCY };
-    if frequency == 0 { return 0; }
-    (cycles as u128 * 1_000_000_000 / frequency as u128) as u64
+    if freq == 0 { return 0; }
+    (cycles as u128 * 1_000_000_000 / freq as u128) as u64
 }
 // Fonction publique — appelable depuis d'autres modules.
 pub fn cycles_to_micros(cycles: u64) -> u64 { cycles_to_nanos(cycles) / 1_000 }

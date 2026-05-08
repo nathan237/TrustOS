@@ -53,6 +53,10 @@ impl OpenFlags {
     pub fn append(&self) -> bool {
         (self.0 & Self::O_APPEND) != 0
     }
+
+    pub fn truncate(&self) -> bool {
+        (self.0 & Self::O_TRUNC) != 0
+    }
 }
 
 /// File type
@@ -500,6 +504,16 @@ pub fn open(path: &str, flags: OpenFlags) -> VfsResult<Fd> {
             }
         }
     }
+
+    if flags.truncate() && flags.writable() {
+        let vfs = VFS.read();
+        let fs = &vfs.mounts[mount_idx].fs;
+        let file_ops = fs.get_file(ino)?;
+        match file_ops.truncate(0) {
+            Ok(()) | Err(VfsError::NotSupported) => {}
+            Err(e) => return Err(e),
+        }
+    }
     
     let fd = {
         let vfs = VFS.read();
@@ -814,8 +828,12 @@ pub fn read_to_string(path: &str) -> VfsResult<String> {
 
 /// Write bytes to a file (creates or truncates)
 pub fn write_file(path: &str, data: &[u8]) -> VfsResult<()> {
-    // Try to create if doesn't exist
-    let _ = mkdir(path); // Ensure parent dir exists - will fail silently if file
+    // Ensure parent directory exists (not the file path itself!)
+    if let Some(pos) = path.rfind('/') {
+        if pos > 0 {
+            let _ = mkdir(&path[..pos]);
+        }
+    }
     
     let fd = open(path, OpenFlags(OpenFlags::O_WRONLY | OpenFlags::O_CREAT | OpenFlags::O_TRUNC))?;
     let mut offset = 0;
@@ -836,6 +854,8 @@ pub fn sync_all() -> VfsResult<()> {
     }
     // Also flush block cache
     let _ = block_cache::sync();
+    // Flush AHCI hardware write cache to persistent storage
+    crate::drivers::ahci::flush_all_ports();
     Ok(())
 }
 

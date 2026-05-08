@@ -398,6 +398,163 @@ fn find_cmdslot(port: &HbaPort) -> Option<u32> {
     None
 }
 
+/// Initialize AHCI controller with console-visible diagnostics
+pub fn init_verbose(bar5: u64) -> bool {
+    if bar5 == 0 || bar5 == 0xFFFFFFFF {
+        crate::println!("[AHCI] Invalid BAR5");
+        return false;
+    }
+    
+    let abar_phys = (bar5 & !0xF) as u64;
+    const AHCI_MMIO_SIZE: usize = 0x2000;
+    
+    crate::println!("[AHCI] map_mmio phys={:#x} size={:#x}", abar_phys, AHCI_MMIO_SIZE);
+    
+    let abar_virt = match crate::memory::map_mmio(abar_phys, AHCI_MMIO_SIZE) {
+        Ok(virt) => {
+            crate::println!("[AHCI] mapped -> virt={:#x}", virt);
+            virt
+        }
+        Err(e) => {
+            crate::println!("[AHCI] map_mmio FAILED: {}", e);
+            return false;
+        }
+    };
+    
+    let probe = unsafe { core::ptr::read_volatile(abar_virt as *const u32) };
+    crate::println!("[AHCI] CAP={:#010x}", probe);
+    if probe == 0xFFFFFFFF {
+        crate::println!("[AHCI] MMIO probe FAIL (0xFFFFFFFF)");
+        return false;
+    }
+    
+    let hba = unsafe { &mut *(abar_virt as *mut HbaMemory) };
+    
+    let version = hba.vs;
+    crate::println!("[AHCI] Version {}.{}", (version >> 16) & 0xFF, version & 0xFF);
+    
+    let pi = hba.pi;
+    let cap = hba.cap;
+    let num_cmd_slots = ((cap >> 8) & 0x1F) + 1;
+    let s64a = (cap >> 31) & 1 != 0;
+    crate::println!("[AHCI] PI={:#x} ({} ports) slots={} s64a={}", pi, pi.count_ones(), num_cmd_slots, s64a);
+    
+    // Enable AHCI mode
+    crate::println!("[AHCI] Enabling AHCI mode...");
+    hba.ghc |= 1 << 31;
+    
+    // Skip HBA reset — BIOS already initialized, reset kills PHY links
+    // and requires COMRESET to re-establish them.
+    
+    // Re-read PI
+    let pi = hba.pi;
+    crate::println!("[AHCI] PI={:#x}", pi);
+    
+    let mut ports = Vec::new();
+    let mut port_memory: Vec<Option<PortMemory>> = (0..32).map(|_| None).collect();
+    
+    for i in 0..32 {
+        if pi & (1 << i) != 0 {
+            let port = unsafe { &mut *(hba.ports.as_mut_ptr().add(i)) };
+            let ssts = port.ssts;
+            let mut det = ssts & 0x0F;
+            let mut ipm = (ssts >> 8) & 0x0F;
+            let sig = port.sig;
+            crate::println!("[AHCI] Port {} SSTS={:#x} DET={} IPM={} SIG={:#010x}", i, ssts, det, ipm, sig);
+            
+            // If PHY offline or no link, try COMRESET
+            if det != 3 && det != 0 {
+                crate::println!("[AHCI] Port {} DET={} — issuing COMRESET...", i, det);
+                // Set DET=1 to initiate COMRESET
+                let sctl = port.sctl;
+                port.sctl = (sctl & !0xF) | 1;
+                // Wait ~2ms (spin)
+                for _ in 0..200_000 { core::hint::spin_loop(); }
+                // Set DET=0 to allow normal operation
+                port.sctl = sctl & !0xF;
+                // Wait for link up (DET=3, IPM=1) — up to ~500ms
+                let mut link_up = false;
+                for _ in 0..500_000 {
+                    let s = port.ssts;
+                    if (s & 0x0F) == 3 && ((s >> 8) & 0x0F) == 1 {
+                        link_up = true;
+                        break;
+                    }
+                    core::hint::spin_loop();
+                }
+                let ssts2 = port.ssts;
+                det = ssts2 & 0x0F;
+                ipm = (ssts2 >> 8) & 0x0F;
+                if link_up {
+                    crate::println!("[AHCI] Port {} COMRESET OK DET={} IPM={}", i, det, ipm);
+                } else {
+                    crate::println!("[AHCI] Port {} COMRESET no link DET={} IPM={}", i, det, ipm);
+                    continue;
+                }
+                // Re-read signature after COMRESET — may need a moment
+                for _ in 0..100_000 { core::hint::spin_loop(); }
+            }
+            
+            if det == 3 && ipm == 1 {
+                let sig = port.sig;
+                crate::println!("[AHCI] Port {} SIG={:#010x}", i, sig);
+                let device_type = match sig {
+                    SATA_SIG_ATA => AhciDeviceType::Sata,
+                    SATA_SIG_ATAPI => AhciDeviceType::Satapi,
+                    SATA_SIG_SEMB => AhciDeviceType::Semb,
+                    SATA_SIG_PM => AhciDeviceType::Pm,
+                    _ => AhciDeviceType::None,
+                };
+                
+                crate::println!("[AHCI] Port {} type={:?}", i, device_type);
+                
+                if device_type != AhciDeviceType::None {
+                    let mem = PortMemory::new();
+                    stop_cmd(port);
+                    
+                    let clb_phys = virt_to_phys(&*mem.cmd_list as *const _ as u64);
+                    let fb_phys = virt_to_phys(&*mem.fis as *const _ as u64);
+                    crate::println!("[AHCI] Port {} CLB={:#x} FB={:#x}", i, clb_phys, fb_phys);
+                    
+                    if !s64a && (clb_phys > 0xFFFF_FFFF || fb_phys > 0xFFFF_FFFF) {
+                        crate::println!("[AHCI] Port {} DMA above 4GB, no S64A — skip", i);
+                        continue;
+                    }
+                    
+                    port.clb = clb_phys;
+                    port.fb = fb_phys;
+                    port.is = 0xFFFFFFFF;
+                    port.serr = 0xFFFFFFFF;
+                    start_cmd(port);
+                    
+                    port_memory[i] = Some(mem);
+                    ports.push(AhciPort {
+                        port_num: i as u8,
+                        device_type,
+                        sector_count: 0,
+                        model: String::from("Unknown"),
+                        serial: String::from("Unknown"),
+                    });
+                    crate::println!("[AHCI] Port {} configured OK", i);
+                }
+            }
+        }
+    }
+    
+    let has_devices = !ports.is_empty();
+    crate::println!("[AHCI] {} ports with devices", ports.len());
+    
+    *CONTROLLER.lock() = Some(AhciController {
+        base_addr: abar_phys,
+        virt_addr: abar_virt,
+        ports,
+        port_memory,
+        initialized: has_devices,
+    });
+    
+    has_devices
+}
+
 /// Initialize AHCI controller
 pub fn init(bar5: u64) -> bool {
     if bar5 == 0 || bar5 == 0xFFFFFFFF {
@@ -422,6 +579,18 @@ pub fn init(bar5: u64) -> bool {
     
     crate::serial_println!("[AHCI] Initializing at ABAR phys={:#x} virt={:#x}", abar_phys, abar_virt);
     
+    // Safety probe: read first 4 bytes to check if MMIO is accessible
+    // On some boards, the mapping may succeed but the region is not actually readable
+    let probe = unsafe { core::ptr::read_volatile(abar_virt as *const u32) };
+    if probe == 0xFFFFFFFF || probe == 0 {
+        crate::serial_println!("[AHCI] MMIO probe failed (read {:#x}) — controller may be offline", probe);
+        // 0xFFFFFFFF often means bus error / unmapped, 0 may be valid but unlikely for CAP
+        if probe == 0xFFFFFFFF {
+            return false;
+        }
+    }
+    crate::serial_println!("[AHCI] MMIO probe OK (CAP={:#x})", probe);
+    
     let hba = unsafe { &mut *(abar_virt as *mut HbaMemory) };
     
     // Check AHCI version
@@ -441,33 +610,61 @@ pub fn init(bar5: u64) -> bool {
     // Enable AHCI mode
     hba.ghc |= 1 << 31;
     
-    // HBA Reset for clean state
-    hba.ghc |= 1; // GHC.HR = 1
-    let mut reset_wait = 0u32;
-    while hba.ghc & 1 != 0 && reset_wait < 1_000_000 {
-        reset_wait += 1;
-        core::hint::spin_loop();
-    }
-    if hba.ghc & 1 != 0 {
-        crate::serial_println!("[AHCI] HBA reset timeout");
-        return false;
-    }
-    
-    // Re-enable AHCI mode after reset
-    hba.ghc |= 1 << 31;
+    // Skip HBA reset — BIOS already initialized the controller.
+    // HBA reset kills PHY links and requires COMRESET to re-establish.
+    // COMRESET is only done in init_verbose() for manual use.
     
     let mut ports = Vec::new();
     let mut port_memory: Vec<Option<PortMemory>> = (0..32).map(|_| None).collect();
     
-    // Probe each implemented port
+    // Probe each implemented port — COMRESET if PHY not linked yet (SSD spin-up)
     for i in 0..32 {
         if pi & (1 << i) != 0 {
             let port = unsafe { &mut *(hba.ports.as_mut_ptr().add(i)) };
-            
-            let ssts = port.ssts;
-            let det = ssts & 0x0F;
-            let ipm = (ssts >> 8) & 0x0F;
-            
+
+            let mut ssts = port.ssts;
+            let mut det = ssts & 0x0F;
+            let mut ipm = (ssts >> 8) & 0x0F;
+
+            // If port is implemented but PHY not linked, try COMRESET
+            if det != 3 && det != 0 {
+                crate::serial_println!("[AHCI] Port {} DET={} — COMRESET...", i, det);
+                let sctl = port.sctl;
+                port.sctl = (sctl & !0xF) | 1; // DET=1 initiate COMRESET
+                for _ in 0..200_000u32 { core::hint::spin_loop(); } // ~2ms
+                port.sctl = sctl & !0xF; // DET=0 normal operation
+                // Wait for link up (DET=3, IPM=1) — up to ~500ms
+                for _ in 0..500_000u32 {
+                    let s = port.ssts;
+                    if (s & 0x0F) == 3 && ((s >> 8) & 0x0F) == 1 {
+                        break;
+                    }
+                    core::hint::spin_loop();
+                }
+                ssts = port.ssts;
+                det = ssts & 0x0F;
+                ipm = (ssts >> 8) & 0x0F;
+            }
+            // If no device present (DET=0), try a blind COMRESET — device may need a kick
+            if det == 0 {
+                let sctl = port.sctl;
+                port.sctl = (sctl & !0xF) | 1;
+                for _ in 0..200_000u32 { core::hint::spin_loop(); }
+                port.sctl = sctl & !0xF;
+                for _ in 0..500_000u32 {
+                    let s = port.ssts;
+                    if (s & 0x0F) == 3 && ((s >> 8) & 0x0F) == 1 {
+                        break;
+                    }
+                    core::hint::spin_loop();
+                }
+                ssts = port.ssts;
+                det = ssts & 0x0F;
+                ipm = (ssts >> 8) & 0x0F;
+            }
+
+            crate::serial_println!("[AHCI] Port {} SSTS={:#x} DET={} IPM={}", i, ssts, det, ipm);
+
             if det == 3 && ipm == 1 {
                 let sig = port.sig;
                 let device_type = match sig {
@@ -862,6 +1059,10 @@ pub fn write_sectors(port_num: u8, lba: u64, count: u16, buffer: &[u8]) -> Resul
     if buffer.len() < required_size {
         return Err("Buffer too small");
     }
+
+    // Copy to a heap-allocated DMA buffer to ensure correct physical address
+    let mut dma_buf = alloc::vec![0u8; required_size];
+    dma_buf[..required_size].copy_from_slice(&buffer[..required_size]);
     
     let mut ctrl = CONTROLLER.lock();
     let controller = ctrl.as_mut().ok_or("AHCI not initialized")?;
@@ -895,7 +1096,8 @@ pub fn write_sectors(port_num: u8, lba: u64, count: u16, buffer: &[u8]) -> Resul
         ptr::write_bytes(cmd_table as *mut HbaCmdTable, 0, 1);
     }
     
-    let buffer_phys = virt_to_phys(buffer.as_ptr() as u64);
+    // Use DMA buffer (heap-allocated, guaranteed in HHDM)
+    let buffer_phys = virt_to_phys(dma_buf.as_ptr() as u64);
     cmd_table.prdt[0].dba = buffer_phys;
     cmd_table.prdt[0].dbc_i = ((required_size - 1) as u32) | (1 << 31);
     
@@ -946,6 +1148,7 @@ pub fn write_sectors(port_num: u8, lba: u64, count: u16, buffer: &[u8]) -> Resul
         core::hint::spin_loop();
     }
     
+    // Post-completion check
     if (port.is & (1 << 30)) != 0 {
         return Err("Task file error after completion");
     }
@@ -1022,6 +1225,16 @@ pub fn flush_cache(port_num: u8) -> Result<(), &'static str> {
     }
     
     Ok(())
+}
+
+/// Flush write cache on ALL active AHCI ports
+pub fn flush_all_ports() {
+    let ports = list_devices();
+    for port in &ports {
+        if port.device_type != AhciDeviceType::None {
+            let _ = flush_cache(port.port_num as u8);
+        }
+    }
 }
 
 // ============================================================================

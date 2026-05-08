@@ -19,202 +19,202 @@ use spin::Mutex;
 
 
 
-const BEB_: u64 = 0x00;     
-const CON_: u64 = 0x08;      
-const CNT_: u64 = 0x0C;   
-const ECF_: u64 = 0x10;   
-const AHB_: u64 = 0x14;      
-const BEC_: u64 = 0x1C;    
-const CNP_: u64 = 0x24;     
-const BEA_: u64 = 0x28;     
-const BDZ_: u64 = 0x30;     
+const BGB_: u64 = 0x00;     
+const CRX_: u64 = 0x08;      
+const CRD_: u64 = 0x0C;   
+const EFV_: u64 = 0x10;   
+const AIV_: u64 = 0x14;      
+const BGC_: u64 = 0x1C;    
+const CQY_: u64 = 0x24;     
+const BGA_: u64 = 0x28;     
+const BFZ_: u64 = 0x30;     
 
 
-const AQO_: u64 = 0x1000;
+const ASR_: u64 = 0x1000;
 
 
-const ZW_: u32 = 1 << 0;         
-const BLY_: u32 = 0 << 4;    
-const BMC_: u32 = 0 << 7;     
-const BLX_: u32 = 0 << 11;    
-const BMB_: u32 = 6 << 16;    
-const BMA_: u32 = 4 << 20;    
+const ABI_: u32 = 1 << 0;         
+const BOR_: u32 = 0 << 4;    
+const BOV_: u32 = 0 << 7;     
+const BOQ_: u32 = 0 << 11;    
+const BOU_: u32 = 6 << 16;    
+const BOT_: u32 = 4 << 20;    
 
 
-const APN_: u32 = 1 << 0;      
-const BQG_: u32 = 1 << 1;      
-
-
-
-
-
-
-const DCG_: u8 = 0x00;
-const BJK_: u8 = 0x01;
-const DCF_: u8 = 0x04;
-const BJJ_: u8 = 0x05;
-const YW_: u8 = 0x06;
-const DCH_: u8 = 0x09;
-
-
-const CCH_: u8 = 0x00;
-const CCK_: u8 = 0x01;
-const CCJ_: u8 = 0x02;
-
-
-const CBJ_: u32 = 0x00;
-const CBI_: u32 = 0x01;
-const CBH_: u32 = 0x02;
+const ARO_: u32 = 1 << 0;      
+const BSZ_: u32 = 1 << 1;      
 
 
 
 
 
 
-#[derive(Clone, Copy, Default)]
-#[repr(C)]
-struct Ia {
-    
-    dot: u32,
-    
-    bvp: u32,
-    
-    yhr: u32,
-    yhs: u32,
-    
-    zdd: u64,
-    
-    frm: u64,
-    
-    jkj: u64,
-    
-    fen: u32,
-    ina: u32,
-    nbw: u32,
-    yho: u32,
-    yhp: u32,
-    yhq: u32,
-}
+const DGB_: u8 = 0x00;
+const BLO_: u8 = 0x01;
+const DGA_: u8 = 0x04;
+const BLN_: u8 = 0x05;
+const AAB_: u8 = 0x06;
+const DGC_: u8 = 0x09;
 
-const _: () = assert!(core::mem::size_of::<Ia>() == 64);
+
+const CFS_: u8 = 0x00;
+const CFV_: u8 = 0x01;
+const CFU_: u8 = 0x02;
+
+
+const CEU_: u32 = 0x00;
+const CET_: u32 = 0x01;
+const CES_: u32 = 0x02;
+
+
+
+
 
 
 #[derive(Clone, Copy, Default)]
 #[repr(C)]
-struct Rx {
+struct Di {
     
-    sho: u32,
+    cdw0: u32,
     
-    epl: u32,
+    nsid: u32,
     
-    zph: u32,
+    cdw2: u32,
+    cdw3: u32,
     
-    khr: u32,
+    mptr: u64,
+    
+    prp1: u64,
+    
+    prp2: u64,
+    
+    cdw10: u32,
+    cdw11: u32,
+    cdw12: u32,
+    cdw13: u32,
+    cdw14: u32,
+    cdw15: u32,
 }
 
-const _: () = assert!(core::mem::size_of::<Rx>() == 16);
+const _: () = assert!(core::mem::size_of::<Di>() == 64);
 
-impl Rx {
-    fn ib(&self) -> bool {
-        self.khr & (1 << 16) != 0
+
+#[derive(Clone, Copy, Default)]
+#[repr(C)]
+struct Hl {
+    
+    lmt: u32,
+    
+    bza: u32,
+    
+    sq_head_sqid: u32,
+    
+    cid_status: u32,
+}
+
+const _: () = assert!(core::mem::size_of::<Hl>() == 16);
+
+impl Hl {
+    fn phase(&self) -> bool {
+        self.cid_status & (1 << 16) != 0
     }
 
-    fn wt(&self) -> u16 {
-        ((self.khr >> 17) & 0x7FF) as u16
+    fn status_code(&self) -> u16 {
+        ((self.cid_status >> 17) & 0x7FF) as u16
     }
 
-    fn yjo(&self) -> u16 {
-        (self.khr & 0xFFFF) as u16
+    fn qav(&self) -> u16 {
+        (self.cid_status & 0xFFFF) as u16
     }
 }
 
 
 struct QueuePair {
     
-    mgz: u64,
+    sq_virt: u64,
     
-    eiu: u64,
+    sq_phys: u64,
     
-    kls: u64,
+    cq_virt: u64,
     
-    dzy: u64,
+    cq_phys: u64,
     
-    eo: u16,
+    depth: u16,
     
-    eyx: u16,
+    sq_tail: u16,
     
-    dzx: u16,
+    cq_head: u16,
     
-    ipn: bool,
+    cq_phase: bool,
     
-    jgw: u16,
+    next_cid: u16,
     
-    dus: u16,
+    qid: u16,
 }
 
 impl QueuePair {
     
-    fn new(dus: u16, eo: u16) -> Option<Self> {
+    fn new(qid: u16, depth: u16) -> Option<Self> {
         
-        let eiu = crate::memory::frame::azg()?;
-        let mgz = crate::memory::auv(eiu);
+        let sq_phys = crate::memory::frame::aan()?;
+        let sq_virt = crate::memory::wk(sq_phys);
         
         
-        let dzy = crate::memory::frame::azg()?;
-        let kls = crate::memory::auv(dzy);
+        let cq_phys = crate::memory::frame::aan()?;
+        let cq_virt = crate::memory::wk(cq_phys);
         
         Some(Self {
-            mgz,
-            eiu,
-            kls,
-            dzy,
-            eo,
-            eyx: 0,
-            dzx: 0,
-            ipn: true,     
-            jgw: 0,
-            dus,
+            sq_virt,
+            sq_phys,
+            cq_virt,
+            cq_phys,
+            depth,
+            sq_tail: 0,
+            cq_head: 0,
+            cq_phase: true,     
+            next_cid: 0,
+            qid,
         })
     }
     
     
-    fn dmd(&mut self, mut cmd: Ia) -> u16 {
-        let ncz = self.jgw;
-        self.jgw = self.jgw.cn(1);
+    fn submit(&mut self, mut cmd: Di) -> u16 {
+        let hkz = self.next_cid;
+        self.next_cid = self.next_cid.wrapping_add(1);
         
         
-        cmd.dot = (cmd.dot & 0x0000FFFF) | ((ncz as u32) << 16);
+        cmd.cdw0 = (cmd.cdw0 & 0x0000FFFF) | ((hkz as u32) << 16);
         
         
-        let l = self.eyx as usize * core::mem::size_of::<Ia>();
+        let offset = self.sq_tail as usize * core::mem::size_of::<Di>();
         unsafe {
-            let ptr = (self.mgz + l as u64) as *mut Ia;
+            let ptr = (self.sq_virt + offset as u64) as *mut Di;
             core::ptr::write_volatile(ptr, cmd);
         }
         
         
-        self.eyx = (self.eyx + 1) % self.eo;
+        self.sq_tail = (self.sq_tail + 1) % self.depth;
         
-        ncz
+        hkz
     }
     
     
-    fn owi(&mut self) -> Option<Rx> {
-        let l = self.dzx as usize * core::mem::size_of::<Rx>();
-        let bt = unsafe {
-            let ptr = (self.kls + l as u64) as *const Rx;
+    fn poll_completion(&mut self) -> Option<Hl> {
+        let offset = self.cq_head as usize * core::mem::size_of::<Hl>();
+        let entry = unsafe {
+            let ptr = (self.cq_virt + offset as u64) as *const Hl;
             core::ptr::read_volatile(ptr)
         };
         
         
-        if bt.ib() == self.ipn {
+        if entry.phase() == self.cq_phase {
             
-            self.dzx += 1;
-            if self.dzx >= self.eo {
-                self.dzx = 0;
-                self.ipn = !self.ipn;
+            self.cq_head += 1;
+            if self.cq_head >= self.depth {
+                self.cq_head = 0;
+                self.cq_phase = !self.cq_phase;
             }
-            Some(bt)
+            Some(entry)
         } else {
             None
         }
@@ -223,23 +223,23 @@ impl QueuePair {
 
 
 #[derive(Clone)]
-pub struct Awj {
+pub struct Ud {
     
-    pub bvp: u32,
+    pub nsid: u32,
     
-    pub mfy: u64,
+    pub size_lbas: u64,
     
-    pub bni: u32,
+    pub lba_size: u32,
 }
 
 
-struct Awi {
+struct Uc {
     
-    bly: u64,
+    bar_virt: u64,
     
-    irl: u32,
+    doorbell_stride: u32,
     
-    cvm: QueuePair,
+    admin: QueuePair,
     
     io: Option<QueuePair>,
     
@@ -247,103 +247,103 @@ struct Awi {
     
     model: String,
     
-    fpg: u64,
+    ns1_size: u64,
     
-    fpf: u32,
+    ns1_lba_size: u32,
     
-    evd: Vec<Awj>,
+    namespaces: Vec<Ud>,
     
-    omg: u32,
+    max_transfer_pages: u32,
 }
 
-impl Awi {
+impl Uc {
     
     
     #[inline]
-    fn amp(&self, l: u64) -> u32 {
-        unsafe { core::ptr::read_volatile((self.bly + l) as *const u32) }
+    fn read32(&self, offset: u64) -> u32 {
+        unsafe { core::ptr::read_volatile((self.bar_virt + offset) as *const u32) }
     }
     
     #[inline]
-    fn aiu(&self, l: u64, bn: u32) {
-        unsafe { core::ptr::write_volatile((self.bly + l) as *mut u32, bn) }
+    fn write32(&self, offset: u64, value: u32) {
+        unsafe { core::ptr::write_volatile((self.bar_virt + offset) as *mut u32, value) }
     }
     
     #[inline]
-    fn zhi(&self, l: u64) -> u64 {
-        let hh = self.amp(l) as u64;
-        let gd = self.amp(l + 4) as u64;
-        hh | (gd << 32)
+    fn qru(&self, offset: u64) -> u64 {
+        let lo = self.read32(offset) as u64;
+        let hi = self.read32(offset + 4) as u64;
+        lo | (hi << 32)
     }
     
     #[inline]
-    fn jxe(&self, l: u64, bn: u64) {
-        self.aiu(l, bn as u32);
-        self.aiu(l + 4, (bn >> 32) as u32);
+    fn write64(&self, offset: u64, value: u64) {
+        self.write32(offset, value as u32);
+        self.write32(offset + 4, (value >> 32) as u32);
     }
     
     
     
     
-    fn pdk(&self, dus: u16, utu: u16) {
-        let l = AQO_ + (2 * dus as u64) * self.irl as u64;
-        self.aiu(l, utu as u32);
+    fn ring_sq_doorbell(&self, qid: u16, new_tail: u16) {
+        let offset = ASR_ + (2 * qid as u64) * self.doorbell_stride as u64;
+        self.write32(offset, new_tail as u32);
     }
     
     
-    fn pdh(&self, dus: u16, efs: u16) {
-        let l = AQO_ + (2 * dus as u64 + 1) * self.irl as u64;
-        self.aiu(l, efs as u32);
+    fn ring_cq_doorbell(&self, qid: u16, bum: u16) {
+        let offset = ASR_ + (2 * qid as u64 + 1) * self.doorbell_stride as u64;
+        self.write32(offset, bum as u32);
     }
     
     
     
     
-    fn gyc(&mut self, cmd: Ia) -> Result<Rx, &'static str> {
-        let qbn = self.cvm.dmd(cmd);
-        self.pdk(0, self.cvm.eyx);
+    fn admin_cmd(&mut self, cmd: Di) -> Result<Hl, &'static str> {
+        let jsl = self.admin.submit(cmd);
+        self.ring_sq_doorbell(0, self.admin.sq_tail);
         
         
         for _ in 0..1_000_000u32 {
-            if let Some(ffz) = self.cvm.owi() {
+            if let Some(cqe) = self.admin.poll_completion() {
                 
-                self.pdh(0, self.cvm.dzx);
+                self.ring_cq_doorbell(0, self.admin.cq_head);
                 
-                if ffz.wt() != 0 {
-                    crate::serial_println!("[NVMe] Admin cmd failed: status={:#x}", ffz.wt());
+                if cqe.status_code() != 0 {
+                    crate::serial_println!("[NVMe] Admin cmd failed: status={:#x}", cqe.status_code());
                     return Err("NVMe admin command failed");
                 }
-                return Ok(ffz);
+                return Ok(cqe);
             }
-            core::hint::hc();
+            core::hint::spin_loop();
         }
         Err("NVMe admin command timeout")
     }
     
     
-    fn lfl(&mut self, cmd: Ia) -> Result<Rx, &'static str> {
+    fn io_cmd(&mut self, cmd: Di) -> Result<Hl, &'static str> {
         
-        let eyx = {
+        let sq_tail = {
             let io = self.io.as_mut().ok_or("NVMe I/O queue not initialized")?;
-            let qbn = io.dmd(cmd);
-            io.eyx
+            let jsl = io.submit(cmd);
+            io.sq_tail
         };
-        self.pdk(1, eyx);
+        self.ring_sq_doorbell(1, sq_tail);
         
         
         for _ in 0..10_000_000u32 {
             let io = self.io.as_mut().unwrap();
-            if let Some(ffz) = io.owi() {
-                let dzx = io.dzx;
-                self.pdh(1, dzx);
+            if let Some(cqe) = io.poll_completion() {
+                let cq_head = io.cq_head;
+                self.ring_cq_doorbell(1, cq_head);
                 
-                if ffz.wt() != 0 {
-                    crate::serial_println!("[NVMe] I/O cmd failed: status={:#x}", ffz.wt());
+                if cqe.status_code() != 0 {
+                    crate::serial_println!("[NVMe] I/O cmd failed: status={:#x}", cqe.status_code());
                     return Err("NVMe I/O command failed");
                 }
-                return Ok(ffz);
+                return Ok(cqe);
             }
-            core::hint::hc();
+            core::hint::spin_loop();
         }
         Err("NVMe I/O command timeout")
     }
@@ -351,166 +351,166 @@ impl Awi {
     
     
     
-    fn trj(&mut self) -> Result<(), &'static str> {
-        let rg = crate::memory::frame::azg()
+    fn identify_controller(&mut self) -> Result<(), &'static str> {
+        let hg = crate::memory::frame::aan()
             .ok_or("NVMe: OOM for identify buffer")?;
-        let aak = crate::memory::auv(rg);
+        let kt = crate::memory::wk(hg);
         
-        let cmd = Ia {
-            dot: YW_ as u32,
-            frm: rg,
-            fen: CBI_,
+        let cmd = Di {
+            cdw0: AAB_ as u32,
+            prp1: hg,
+            cdw10: CET_,
             ..Default::default()
         };
         
-        self.gyc(cmd)?;
+        self.admin_cmd(cmd)?;
         
         
         unsafe {
-            let f = aak as *const u8;
+            let data = kt as *const u8;
             
             
-            let mut plr = [0u8; 20];
-            core::ptr::copy_nonoverlapping(f.add(4), plr.mw(), 20);
-            self.serial = core::str::jg(&plr)
+            let mut jgu = [0u8; 20];
+            core::ptr::copy_nonoverlapping(data.add(4), jgu.as_mut_ptr(), 20);
+            self.serial = core::str::from_utf8(&jgu)
                 .unwrap_or("?")
-                .em()
+                .trim()
                 .into();
             
             
-            let mut brk = [0u8; 40];
-            core::ptr::copy_nonoverlapping(f.add(24), brk.mw(), 40);
-            self.model = core::str::jg(&brk)
+            let mut akc = [0u8; 40];
+            core::ptr::copy_nonoverlapping(data.add(24), akc.as_mut_ptr(), 40);
+            self.model = core::str::from_utf8(&akc)
                 .unwrap_or("?")
-                .em()
+                .trim()
                 .into();
             
             
             
-            let omn = *f.add(77);
-            self.omg = if omn == 0 { 256 } else { 1u32 << omn };
+            let ina = *data.add(77);
+            self.max_transfer_pages = if ina == 0 { 256 } else { 1u32 << ina };
         }
         
-        crate::memory::frame::apt(rg);
+        crate::memory::frame::vk(hg);
         Ok(())
     }
     
     
-    fn odc(&mut self, bvp: u32) -> Result<(u64, u32), &'static str> {
-        let rg = crate::memory::frame::azg()
+    fn identify_namespace_by_id(&mut self, nsid: u32) -> Result<(u64, u32), &'static str> {
+        let hg = crate::memory::frame::aan()
             .ok_or("NVMe: OOM for identify namespace buffer")?;
-        let aak = crate::memory::auv(rg);
+        let kt = crate::memory::wk(hg);
         
-        let cmd = Ia {
-            dot: YW_ as u32,
-            bvp,
-            frm: rg,
-            fen: CBJ_,
+        let cmd = Di {
+            cdw0: AAB_ as u32,
+            nsid,
+            prp1: hg,
+            cdw10: CEU_,
             ..Default::default()
         };
         
-        self.gyc(cmd)?;
+        self.admin_cmd(cmd)?;
         
-        let (djz, bni) = unsafe {
-            let f = aak as *const u8;
+        let (bii, lba_size) = unsafe {
+            let data = kt as *const u8;
             
             
-            let djz = core::ptr::md(f as *const u64);
+            let bii = core::ptr::read_unaligned(data as *const u64);
             
             
-            let sus = *f.add(26) & 0x0F;
+            let lww = *data.add(26) & 0x0F;
             
             
             
-            let uds = 128 + (sus as usize) * 4;
-            let udr = core::ptr::md(f.add(uds) as *const u32);
-            let udq = (udr >> 16) & 0xFF;
-            let cak = 1u32 << udq;
+            let mxq = 128 + (lww as usize) * 4;
+            let mxp = core::ptr::read_unaligned(data.add(mxq) as *const u32);
+            let mxo = (mxp >> 16) & 0xFF;
+            let aol = 1u32 << mxo;
             
-            (djz, cak)
+            (bii, aol)
         };
         
-        crate::memory::frame::apt(rg);
-        Ok((djz, bni))
+        crate::memory::frame::vk(hg);
+        Ok((bii, lba_size))
     }
     
     
-    fn yxk(&mut self) -> Result<(), &'static str> {
-        let (djz, bni) = self.odc(1)?;
-        self.fpg = djz;
-        self.fpf = bni;
+    fn qkx(&mut self) -> Result<(), &'static str> {
+        let (bii, lba_size) = self.identify_namespace_by_id(1)?;
+        self.ns1_size = bii;
+        self.ns1_lba_size = lba_size;
         Ok(())
     }
     
     
     
-    fn smk(&mut self) -> Result<(), &'static str> {
-        let rg = crate::memory::frame::azg()
+    fn enumerate_namespaces(&mut self) -> Result<(), &'static str> {
+        let hg = crate::memory::frame::aan()
             .ok_or("NVMe: OOM for NS list buffer")?;
-        let aak = crate::memory::auv(rg);
+        let kt = crate::memory::wk(hg);
         
-        let cmd = Ia {
-            dot: YW_ as u32,
-            bvp: 0, 
-            frm: rg,
-            fen: CBH_,
+        let cmd = Di {
+            cdw0: AAB_ as u32,
+            nsid: 0, 
+            prp1: hg,
+            cdw10: CES_,
             ..Default::default()
         };
         
-        let lpe: Vec<u32>;
+        let gjx: Vec<u32>;
         
-        match self.gyc(cmd) {
+        match self.admin_cmd(cmd) {
             Ok(_) => {
                 
                 
-                let mut esg = Vec::new();
+                let mut ids = Vec::new();
                 unsafe {
-                    let aoy = aak as *const u32;
-                    for a in 0..1024 {
-                        let bvp = core::ptr::read_volatile(aoy.add(a));
-                        if bvp == 0 { break; }
-                        esg.push(bvp);
+                    let list = kt as *const u32;
+                    for i in 0..1024 {
+                        let nsid = core::ptr::read_volatile(list.add(i));
+                        if nsid == 0 { break; }
+                        ids.push(nsid);
                     }
                 }
-                lpe = esg;
+                gjx = ids;
             }
             Err(_) => {
                 
                 crate::serial_println!("[NVMe] Active NSID list not supported, using NS1 only");
-                lpe = alloc::vec![1];
+                gjx = alloc::vec![1];
             }
         }
         
-        crate::memory::frame::apt(rg);
+        crate::memory::frame::vk(hg);
         
-        self.evd.clear();
+        self.namespaces.clear();
         
-        for &bvp in &lpe {
-            match self.odc(bvp) {
-                Ok((djz, bni)) => {
-                    if djz > 0 {
-                        let aga = (djz * bni as u64) / (1024 * 1024);
+        for &nsid in &gjx {
+            match self.identify_namespace_by_id(nsid) {
+                Ok((bii, lba_size)) => {
+                    if bii > 0 {
+                        let size_mb = (bii * lba_size as u64) / (1024 * 1024);
                         crate::serial_println!("[NVMe] NS{}: {} LBAs x {} B = {} MB",
-                            bvp, djz, bni, aga);
-                        self.evd.push(Awj {
-                            bvp,
-                            mfy: djz,
-                            bni,
+                            nsid, bii, lba_size, size_mb);
+                        self.namespaces.push(Ud {
+                            nsid,
+                            size_lbas: bii,
+                            lba_size,
                         });
                         
-                        if bvp == 1 {
-                            self.fpg = djz;
-                            self.fpf = bni;
+                        if nsid == 1 {
+                            self.ns1_size = bii;
+                            self.ns1_lba_size = lba_size;
                         }
                     }
                 }
-                Err(aa) => {
-                    crate::serial_println!("[NVMe] Failed to identify NS{}: {}", bvp, aa);
+                Err(e) => {
+                    crate::serial_println!("[NVMe] Failed to identify NS{}: {}", nsid, e);
                 }
             }
         }
         
-        if self.evd.is_empty() {
+        if self.namespaces.is_empty() {
             return Err("NVMe: no usable namespaces found");
         }
         
@@ -520,34 +520,34 @@ impl Awi {
     
     
     
-    fn rqo(&mut self, dus: u16, dzy: u64, eo: u16) -> Result<(), &'static str> {
-        let cmd = Ia {
-            dot: BJJ_ as u32,
-            frm: dzy,
+    fn create_io_cq(&mut self, qid: u16, cq_phys: u64, depth: u16) -> Result<(), &'static str> {
+        let cmd = Di {
+            cdw0: BLN_ as u32,
+            prp1: cq_phys,
             
-            fen: (dus as u32) | (((eo - 1) as u32) << 16),
+            cdw10: (qid as u32) | (((depth - 1) as u32) << 16),
             
-            ina: 1,   
+            cdw11: 1,   
             ..Default::default()
         };
         
-        self.gyc(cmd)?;
+        self.admin_cmd(cmd)?;
         Ok(())
     }
     
     
-    fn rqp(&mut self, dus: u16, eiu: u64, rqe: u16, eo: u16) -> Result<(), &'static str> {
-        let cmd = Ia {
-            dot: BJK_ as u32,
-            frm: eiu,
+    fn create_io_sq(&mut self, qid: u16, sq_phys: u64, cqid: u16, depth: u16) -> Result<(), &'static str> {
+        let cmd = Di {
+            cdw0: BLO_ as u32,
+            prp1: sq_phys,
             
-            fen: (dus as u32) | (((eo - 1) as u32) << 16),
+            cdw10: (qid as u32) | (((depth - 1) as u32) << 16),
             
-            ina: 1 | ((rqe as u32) << 16),
+            cdw11: 1 | ((cqid as u32) << 16),
             ..Default::default()
         };
         
-        self.gyc(cmd)?;
+        self.admin_cmd(cmd)?;
         Ok(())
     }
     
@@ -556,90 +556,90 @@ impl Awi {
     
     
     
-    fn nap(&self, bcd: &[u64]) -> Result<(u64, Option<u64>), &'static str> {
-        if bcd.len() <= 1 {
+    fn build_prp2_scatter(&self, acg: &[u64]) -> Result<(u64, Option<u64>), &'static str> {
+        if acg.len() <= 1 {
             
             Ok((0, None))
-        } else if bcd.len() == 2 {
+        } else if acg.len() == 2 {
             
-            Ok((bcd[1], None))
+            Ok((acg[1], None))
         } else {
             
-            let jds = crate::memory::frame::azg()
+            let etc = crate::memory::frame::aan()
                 .ok_or("NVMe: OOM for PRP list")?;
-            let ufy = crate::memory::auv(jds);
+            let mzj = crate::memory::wk(etc);
             
-            let ia = bcd.len() - 1; 
-            if ia > 512 {
-                crate::memory::frame::apt(jds);
+            let ck = acg.len() - 1; 
+            if ck > 512 {
+                crate::memory::frame::vk(etc);
                 return Err("NVMe: transfer too large for single PRP list");
             }
             
             unsafe {
-                let ch = ufy as *mut u64;
-                for a in 0..ia {
-                    core::ptr::write_volatile(ch.add(a), bcd[a + 1]);
+                let entries = mzj as *mut u64;
+                for i in 0..ck {
+                    core::ptr::write_volatile(entries.add(i), acg[i + 1]);
                 }
             }
             
-            Ok((jds, Some(jds)))
+            Ok((etc, Some(etc)))
         }
     }
     
     
-    fn vrx(&mut self, aag: u64, az: u16, bcd: &[u64]) -> Result<(), &'static str> {
-        let (jkj, lvz) = self.nap(bcd)?;
+    fn read_lbas_scatter(&mut self, start_lba: u64, count: u16, acg: &[u64]) -> Result<(), &'static str> {
+        let (prp2, prp_list_page) = self.build_prp2_scatter(acg)?;
         
-        let cmd = Ia {
-            dot: CCJ_ as u32,
-            bvp: 1,
-            frm: bcd[0],
-            jkj,
-            fen: aag as u32,
-            ina: (aag >> 32) as u32,
-            nbw: (az - 1) as u32,
+        let cmd = Di {
+            cdw0: CFU_ as u32,
+            nsid: 1,
+            prp1: acg[0],
+            prp2,
+            cdw10: start_lba as u32,
+            cdw11: (start_lba >> 32) as u32,
+            cdw12: (count - 1) as u32,
             ..Default::default()
         };
         
-        let result = self.lfl(cmd);
-        if let Some(ht) = lvz {
-            crate::memory::frame::apt(ht);
-        }
-        result?;
-        Ok(())
-    }
-    
-    
-    fn xvm(&mut self, aag: u64, az: u16, bcd: &[u64]) -> Result<(), &'static str> {
-        let (jkj, lvz) = self.nap(bcd)?;
-        
-        let cmd = Ia {
-            dot: CCK_ as u32,
-            bvp: 1,
-            frm: bcd[0],
-            jkj,
-            fen: aag as u32,
-            ina: (aag >> 32) as u32,
-            nbw: (az - 1) as u32,
-            ..Default::default()
-        };
-        
-        let result = self.lfl(cmd);
-        if let Some(ht) = lvz {
-            crate::memory::frame::apt(ht);
+        let result = self.io_cmd(cmd);
+        if let Some(phys) = prp_list_page {
+            crate::memory::frame::vk(phys);
         }
         result?;
         Ok(())
     }
     
     
-    fn hjx(&mut self) -> Result<(), &'static str> {
-        let cmd = Ia {
-            dot: CCH_ as u32,
-            bvp: 1,
+    fn write_lbas_scatter(&mut self, start_lba: u64, count: u16, acg: &[u64]) -> Result<(), &'static str> {
+        let (prp2, prp_list_page) = self.build_prp2_scatter(acg)?;
+        
+        let cmd = Di {
+            cdw0: CFV_ as u32,
+            nsid: 1,
+            prp1: acg[0],
+            prp2,
+            cdw10: start_lba as u32,
+            cdw11: (start_lba >> 32) as u32,
+            cdw12: (count - 1) as u32,
             ..Default::default()
         };
-        self.lfl(cmd)?;
+        
+        let result = self.io_cmd(cmd);
+        if let Some(phys) = prp_list_page {
+            crate::memory::frame::vk(phys);
+        }
+        result?;
+        Ok(())
+    }
+    
+    
+    fn flush(&mut self) -> Result<(), &'static str> {
+        let cmd = Di {
+            cdw0: CFS_ as u32,
+            nsid: 1,
+            ..Default::default()
+        };
+        self.io_cmd(cmd)?;
         Ok(())
     }
 }
@@ -648,34 +648,34 @@ impl Awi {
 
 
 
-static Qb: Mutex<Option<Awi>> = Mutex::new(None);
-static Be: AtomicBool = AtomicBool::new(false);
+static Gs: Mutex<Option<Uc>> = Mutex::new(None);
+static Ah: AtomicBool = AtomicBool::new(false);
 
 
-pub fn ky() -> bool {
-    Be.load(Ordering::Relaxed)
+pub fn is_initialized() -> bool {
+    Ah.load(Ordering::Relaxed)
 }
 
 
-pub fn aty() -> u64 {
-    Qb.lock().as_ref().map(|r| r.fpg).unwrap_or(0)
+pub fn capacity() -> u64 {
+    Gs.lock().as_ref().map(|c| c.ns1_size).unwrap_or(0)
 }
 
 
-pub fn bni() -> u32 {
-    Qb.lock().as_ref().map(|r| r.fpf).unwrap_or(512)
+pub fn lba_size() -> u32 {
+    Gs.lock().as_ref().map(|c| c.ns1_lba_size).unwrap_or(512)
 }
 
 
-pub fn ani() -> Option<(String, String, u64, u32)> {
-    let db = Qb.lock();
-    let r = db.as_ref()?;
-    Some((r.model.clone(), r.serial.clone(), r.fpg, r.fpf))
+pub fn rk() -> Option<(String, String, u64, u32)> {
+    let ctrl = Gs.lock();
+    let c = ctrl.as_ref()?;
+    Some((c.model.clone(), c.serial.clone(), c.ns1_size, c.ns1_lba_size))
 }
 
 
-pub fn ufs() -> Vec<Awj> {
-    Qb.lock().as_ref().map(|r| r.evd.clone()).age()
+pub fn mze() -> Vec<Ud> {
+    Gs.lock().as_ref().map(|c| c.namespaces.clone()).unwrap_or_default()
 }
 
 
@@ -692,164 +692,164 @@ pub fn ufs() -> Vec<Awj> {
 
 
 
-pub fn init(sq: &crate::pci::S) -> Result<(), &'static str> {
+pub fn init(go: &crate::pci::L) -> Result<(), &'static str> {
     crate::serial_println!("[NVMe] Initializing {:02X}:{:02X}.{} ({:04X}:{:04X})",
-        sq.aq, sq.de, sq.gw,
-        sq.ml, sq.mx);
+        go.bus, go.device, go.function,
+        go.vendor_id, go.device_id);
     
     
-    crate::pci::fhp(sq);
-    crate::pci::fhq(sq);
+    crate::pci::bzi(go);
+    crate::pci::bzj(go);
     
     
-    let cmd = crate::pci::byw(sq.aq, sq.de, sq.gw, 0x04);
-    crate::pci::aso(sq.aq, sq.de, sq.gw, 0x04,
+    let cmd = crate::pci::vf(go.bus, go.device, go.function, 0x04);
+    crate::pci::qj(go.bus, go.device, go.function, 0x04,
         (cmd | (1 << 10)) as u32); 
     
     
-    let fcz = sq.cje(0).ok_or("NVMe: no BAR0")?;
-    if fcz == 0 {
+    let cgc = go.bar_address(0).ok_or("NVMe: no BAR0")?;
+    if cgc == 0 {
         return Err("NVMe: BAR0 is zero");
     }
     
     
-    let bly = crate::memory::bki(fcz, 0x10000)?;
+    let bar_virt = crate::memory::yv(cgc, 0x10000)?;
     
-    crate::serial_println!("[NVMe] BAR0: phys={:#x}, virt={:#x}", fcz, bly);
+    crate::serial_println!("[NVMe] BAR0: phys={:#x}, virt={:#x}", cgc, bar_virt);
     
     
-    let mh = {
-        let hh = unsafe { core::ptr::read_volatile((bly + BEB_) as *const u32) } as u64;
-        let gd = unsafe { core::ptr::read_volatile((bly + BEB_ + 4) as *const u32) } as u64;
-        hh | (gd << 32)
+    let cap = {
+        let lo = unsafe { core::ptr::read_volatile((bar_virt + BGB_) as *const u32) } as u64;
+        let hi = unsafe { core::ptr::read_volatile((bar_virt + BGB_ + 4) as *const u32) } as u64;
+        lo | (hi << 32)
     };
     
-    let ood = (mh & 0xFFFF) as u16 + 1;  
-    let noe = ((mh >> 32) & 0xF) as u32; 
-    let irl = 4u32 << noe;
-    let uqc = ((mh >> 48) & 0xF) as u32; 
-    let xhd = ((mh >> 24) & 0xFF) as u32; 
+    let euo = (cap & 0xFFFF) as u16 + 1;  
+    let ekv = ((cap >> 32) & 0xF) as u32; 
+    let doorbell_stride = 4u32 << ekv;
+    let eun = ((cap >> 48) & 0xF) as u32; 
+    let pjo = ((cap >> 24) & 0xFF) as u32; 
     
-    let gwl = unsafe { core::ptr::read_volatile((bly + CON_) as *const u32) };
-    let efb = (gwl >> 16) & 0xFFFF;
-    let efm = (gwl >> 8) & 0xFF;
+    let vs = unsafe { core::ptr::read_volatile((bar_virt + CRX_) as *const u32) };
+    let axz = (vs >> 16) & 0xFFFF;
+    let ayh = (vs >> 8) & 0xFF;
     
     crate::serial_println!("[NVMe] Version: {}.{}, MQES={}, DSTRD={}, MPS_MIN={}KB, Timeout={}ms",
-        efb, efm, ood, noe, 4 << uqc, xhd * 500);
+        axz, ayh, euo, ekv, 4 << eun, pjo * 500);
     
     
-    let hwi = ood.v(64) as u16;
+    let dxc = euo.min(64) as u16;
     
     
-    let nn = unsafe { core::ptr::read_volatile((bly + AHB_) as *const u32) };
-    if nn & ZW_ != 0 {
+    let ft = unsafe { core::ptr::read_volatile((bar_virt + AIV_) as *const u32) };
+    if ft & ABI_ != 0 {
         
-        unsafe { core::ptr::write_volatile((bly + AHB_) as *mut u32, nn & !ZW_) };
+        unsafe { core::ptr::write_volatile((bar_virt + AIV_) as *mut u32, ft & !ABI_) };
         
         
         for _ in 0..1_000_000u32 {
-            let ipt = unsafe { core::ptr::read_volatile((bly + BEC_) as *const u32) };
-            if ipt & APN_ == 0 {
+            let chv = unsafe { core::ptr::read_volatile((bar_virt + BGC_) as *const u32) };
+            if chv & ARO_ == 0 {
                 break;
             }
-            core::hint::hc();
+            core::hint::spin_loop();
         }
     }
     
     
-    let cvm = QueuePair::new(0, hwi)
+    let admin = QueuePair::new(0, dxc)
         .ok_or("NVMe: OOM for admin queues")?;
     
     crate::serial_println!("[NVMe] Admin SQ phys={:#x}, CQ phys={:#x}, depth={}",
-        cvm.eiu, cvm.dzy, hwi);
+        admin.sq_phys, admin.cq_phys, dxc);
     
     
     
-    let qkd = ((hwi - 1) as u32) | (((hwi - 1) as u32) << 16);
+    let jxh = ((dxc - 1) as u32) | (((dxc - 1) as u32) << 16);
     unsafe {
-        core::ptr::write_volatile((bly + CNP_) as *mut u32, qkd);
+        core::ptr::write_volatile((bar_virt + CQY_) as *mut u32, jxh);
         
-        core::ptr::write_volatile((bly + BEA_) as *mut u32, cvm.eiu as u32);
-        core::ptr::write_volatile((bly + BEA_ + 4) as *mut u32, (cvm.eiu >> 32) as u32);
+        core::ptr::write_volatile((bar_virt + BGA_) as *mut u32, admin.sq_phys as u32);
+        core::ptr::write_volatile((bar_virt + BGA_ + 4) as *mut u32, (admin.sq_phys >> 32) as u32);
         
-        core::ptr::write_volatile((bly + BDZ_) as *mut u32, cvm.dzy as u32);
-        core::ptr::write_volatile((bly + BDZ_ + 4) as *mut u32, (cvm.dzy >> 32) as u32);
+        core::ptr::write_volatile((bar_virt + BFZ_) as *mut u32, admin.cq_phys as u32);
+        core::ptr::write_volatile((bar_virt + BFZ_ + 4) as *mut u32, (admin.cq_phys >> 32) as u32);
     }
     
     
     unsafe {
-        core::ptr::write_volatile((bly + CNT_) as *mut u32, 0xFFFFFFFF);
+        core::ptr::write_volatile((bar_virt + CRD_) as *mut u32, 0xFFFFFFFF);
     }
     
     
-    let qxb = ZW_ | BLY_ | BMC_ | BLX_ | BMB_ | BMA_;
+    let khu = ABI_ | BOR_ | BOV_ | BOQ_ | BOU_ | BOT_;
     unsafe {
-        core::ptr::write_volatile((bly + AHB_) as *mut u32, qxb);
+        core::ptr::write_volatile((bar_virt + AIV_) as *mut u32, khu);
     }
     
     
-    let mut ack = false;
+    let mut ready = false;
     for _ in 0..5_000_000u32 {
-        let ipt = unsafe { core::ptr::read_volatile((bly + BEC_) as *const u32) };
-        if ipt & BQG_ != 0 {
+        let chv = unsafe { core::ptr::read_volatile((bar_virt + BGC_) as *const u32) };
+        if chv & BSZ_ != 0 {
             return Err("NVMe: Controller Fatal Status during enable");
         }
-        if ipt & APN_ != 0 {
-            ack = true;
+        if chv & ARO_ != 0 {
+            ready = true;
             break;
         }
-        core::hint::hc();
+        core::hint::spin_loop();
     }
     
-    if !ack {
+    if !ready {
         return Err("NVMe: Controller did not become ready");
     }
     
     crate::serial_println!("[NVMe] Controller enabled and ready");
     
     
-    let mut db = Awi {
-        bly,
-        irl,
-        cvm,
+    let mut ctrl = Uc {
+        bar_virt,
+        doorbell_stride,
+        admin,
         io: None,
         serial: String::new(),
         model: String::new(),
-        fpg: 0,
-        fpf: 512,
-        evd: Vec::new(),
-        omg: 256,
+        ns1_size: 0,
+        ns1_lba_size: 512,
+        namespaces: Vec::new(),
+        max_transfer_pages: 256,
     };
     
     
-    db.trj()?;
-    crate::serial_println!("[NVMe] Model: '{}', Serial: '{}'", db.model, db.serial);
+    ctrl.identify_controller()?;
+    crate::serial_println!("[NVMe] Model: '{}', Serial: '{}'", ctrl.model, ctrl.serial);
     
     
-    db.smk()?;
-    let jtt: u64 = db.evd.iter()
-        .map(|csw| (csw.mfy * csw.bni as u64) / (1024 * 1024))
+    ctrl.enumerate_namespaces()?;
+    let total_mb: u64 = ctrl.namespaces.iter()
+        .map(|ayq| (ayq.size_lbas * ayq.lba_size as u64) / (1024 * 1024))
         .sum();
-    crate::serial_println!("[NVMe] {} namespace(s), total {} MB", db.evd.len(), jtt);
+    crate::serial_println!("[NVMe] {} namespace(s), total {} MB", ctrl.namespaces.len(), total_mb);
     
     
-    let jas = hwi;
-    let lfm = QueuePair::new(1, jas)
+    let era = dxc;
+    let gdh = QueuePair::new(1, era)
         .ok_or("NVMe: OOM for I/O queues")?;
     
-    db.rqo(1, lfm.dzy, jas)?;
-    db.rqp(1, lfm.eiu, 1, jas)?;
-    db.io = Some(lfm);
+    ctrl.create_io_cq(1, gdh.cq_phys, era)?;
+    ctrl.create_io_sq(1, gdh.sq_phys, 1, era)?;
+    ctrl.io = Some(gdh);
     
-    crate::serial_println!("[NVMe] I/O queue pair created (depth={})", jas);
+    crate::serial_println!("[NVMe] I/O queue pair created (depth={})", era);
     
     
-    let uvw = db.evd.len();
-    *Qb.lock() = Some(db);
-    Be.store(true, Ordering::Release);
+    let nll = ctrl.namespaces.len();
+    *Gs.lock() = Some(ctrl);
+    Ah.store(true, Ordering::Release);
     
     crate::serial_println!("[NVMe] ✓ Driver initialized — {} namespace(s), {} MB NVMe storage available",
-        uvw, jtt);
+        nll, total_mb);
     
     Ok(())
 }
@@ -863,151 +863,151 @@ pub fn init(sq: &crate::pci::S) -> Result<(), &'static str> {
 
 
 
-pub fn ain(aag: u64, az: usize, bi: &mut [u8]) -> Result<(), &'static str> {
-    let mut db = Qb.lock();
-    let db = db.as_mut().ok_or("NVMe: not initialized")?;
+pub fn read_sectors(start_lba: u64, count: usize, buffer: &mut [u8]) -> Result<(), &'static str> {
+    let mut ctrl = Gs.lock();
+    let ctrl = ctrl.as_mut().ok_or("NVMe: not initialized")?;
     
-    let cak = db.fpf as usize;
-    let xv = az * cak;
+    let aol = ctrl.ns1_lba_size as usize;
+    let total_bytes = count * aol;
     
-    if bi.len() < xv {
+    if buffer.len() < total_bytes {
         return Err("NVMe: buffer too small");
     }
     
-    if aag + az as u64 > db.fpg {
+    if start_lba + count as u64 > ctrl.ns1_size {
         return Err("NVMe: read past end of namespace");
     }
     
     
     
-    let llc = 128usize;
-    let lkt = llc * 4096;
-    let lkz = (lkt / cak).am(1);
+    let ggz = 128usize;
+    let ggt = ggz * 4096;
+    let ggx = (ggt / aol).max(1);
     
-    let mut qa = aag;
-    let mut l = 0usize;
-    let mut ia = az;
+    let mut hb = start_lba;
+    let mut offset = 0usize;
+    let mut ck = count;
     
-    while ia > 0 {
-        let jj = ia.v(lkz);
-        let dov = jj * cak;
-        let duc = (dov + 4095) / 4096;
+    while ck > 0 {
+        let df = ck.min(ggx);
+        let blb = df * aol;
+        let boc = (blb + 4095) / 4096;
         
         
-        let mut dgl: Vec<u64> = Vec::fc(duc);
-        for _ in 0..duc {
-            match crate::memory::frame::azg() {
-                Some(ht) => dgl.push(ht),
+        let mut bgc: Vec<u64> = Vec::with_capacity(boc);
+        for _ in 0..boc {
+            match crate::memory::frame::aan() {
+                Some(phys) => bgc.push(phys),
                 None => {
                     
-                    for ai in &dgl { crate::memory::frame::apt(*ai); }
+                    for aa in &bgc { crate::memory::frame::vk(*aa); }
                     return Err("NVMe: OOM for DMA read buffer");
                 }
             }
         }
         
         
-        db.vrx(qa, jj as u16, &dgl)?;
+        ctrl.read_lbas_scatter(hb, df as u16, &bgc)?;
         
         
-        let mut hbz = dov;
-        for (a, &dai) in dgl.iter().cf() {
-            let hdz = hbz.v(4096);
-            let ju = crate::memory::auv(dai);
+        let mut dke = blb;
+        for (i, &bcy) in bgc.iter().enumerate() {
+            let dll = dke.min(4096);
+            let virt = crate::memory::wk(bcy);
             unsafe {
                 core::ptr::copy_nonoverlapping(
-                    ju as *const u8,
-                    bi[l + a * 4096..].mw(),
-                    hdz,
+                    virt as *const u8,
+                    buffer[offset + i * 4096..].as_mut_ptr(),
+                    dll,
                 );
             }
-            hbz -= hdz;
+            dke -= dll;
         }
         
         
-        for ai in &dgl { crate::memory::frame::apt(*ai); }
+        for aa in &bgc { crate::memory::frame::vk(*aa); }
         
-        qa += jj as u64;
-        l += dov;
-        ia -= jj;
+        hb += df as u64;
+        offset += blb;
+        ck -= df;
     }
     
     Ok(())
 }
 
 
-pub fn bpi(aag: u64, az: usize, bi: &[u8]) -> Result<(), &'static str> {
-    let mut db = Qb.lock();
-    let db = db.as_mut().ok_or("NVMe: not initialized")?;
+pub fn write_sectors(start_lba: u64, count: usize, buffer: &[u8]) -> Result<(), &'static str> {
+    let mut ctrl = Gs.lock();
+    let ctrl = ctrl.as_mut().ok_or("NVMe: not initialized")?;
     
-    let cak = db.fpf as usize;
-    let xv = az * cak;
+    let aol = ctrl.ns1_lba_size as usize;
+    let total_bytes = count * aol;
     
-    if bi.len() < xv {
+    if buffer.len() < total_bytes {
         return Err("NVMe: buffer too small");
     }
     
-    if aag + az as u64 > db.fpg {
+    if start_lba + count as u64 > ctrl.ns1_size {
         return Err("NVMe: write past end of namespace");
     }
     
-    let llc = 128usize;
-    let lkt = llc * 4096;
-    let lkz = (lkt / cak).am(1);
+    let ggz = 128usize;
+    let ggt = ggz * 4096;
+    let ggx = (ggt / aol).max(1);
     
-    let mut qa = aag;
-    let mut l = 0usize;
-    let mut ia = az;
+    let mut hb = start_lba;
+    let mut offset = 0usize;
+    let mut ck = count;
     
-    while ia > 0 {
-        let jj = ia.v(lkz);
-        let dov = jj * cak;
-        let duc = (dov + 4095) / 4096;
+    while ck > 0 {
+        let df = ck.min(ggx);
+        let blb = df * aol;
+        let boc = (blb + 4095) / 4096;
         
         
-        let mut dgl: Vec<u64> = Vec::fc(duc);
-        for _ in 0..duc {
-            match crate::memory::frame::azg() {
-                Some(ht) => dgl.push(ht),
+        let mut bgc: Vec<u64> = Vec::with_capacity(boc);
+        for _ in 0..boc {
+            match crate::memory::frame::aan() {
+                Some(phys) => bgc.push(phys),
                 None => {
-                    for ai in &dgl { crate::memory::frame::apt(*ai); }
+                    for aa in &bgc { crate::memory::frame::vk(*aa); }
                     return Err("NVMe: OOM for DMA write buffer");
                 }
             }
         }
         
         
-        let mut hbz = dov;
-        for (a, &dai) in dgl.iter().cf() {
-            let hdz = hbz.v(4096);
-            let ju = crate::memory::auv(dai);
+        let mut dke = blb;
+        for (i, &bcy) in bgc.iter().enumerate() {
+            let dll = dke.min(4096);
+            let virt = crate::memory::wk(bcy);
             unsafe {
                 core::ptr::copy_nonoverlapping(
-                    bi[l + a * 4096..].fq(),
-                    ju as *mut u8,
-                    hdz,
+                    buffer[offset + i * 4096..].as_ptr(),
+                    virt as *mut u8,
+                    dll,
                 );
             }
-            hbz -= hdz;
+            dke -= dll;
         }
         
         
-        db.xvm(qa, jj as u16, &dgl)?;
+        ctrl.write_lbas_scatter(hb, df as u16, &bgc)?;
         
         
-        for ai in &dgl { crate::memory::frame::apt(*ai); }
+        for aa in &bgc { crate::memory::frame::vk(*aa); }
         
-        qa += jj as u64;
-        l += dov;
-        ia -= jj;
+        hb += df as u64;
+        offset += blb;
+        ck -= df;
     }
     
     Ok(())
 }
 
 
-pub fn hjx() -> Result<(), &'static str> {
-    let mut db = Qb.lock();
-    let db = db.as_mut().ok_or("NVMe: not initialized")?;
-    db.hjx()
+pub fn flush() -> Result<(), &'static str> {
+    let mut ctrl = Gs.lock();
+    let ctrl = ctrl.as_mut().ok_or("NVMe: not initialized")?;
+    ctrl.flush()
 }

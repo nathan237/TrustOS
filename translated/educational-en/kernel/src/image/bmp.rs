@@ -51,7 +51,7 @@ pub fn load_bitmap_from_bytes(data: &[u8]) -> Option<Image> {
         return None;
     }
     
-    let height_absolute = height.absolute();
+    let height_absolute = height.abs();
     if height_absolute <= 0 || height_absolute > 8192 {
         crate::serial_println!("[BMP] Invalid height: {}", height);
         return None;
@@ -89,8 +89,8 @@ pub fn load_bitmap_from_bytes(data: &[u8]) -> Option<Image> {
         let source_row = if is_top_down { row } else { height_u - 1 - row };
         let row_start = source_row as usize * row_size;
         
-        for column in 0..width {
-            let pixel_start = row_start + column as usize * bytes_per_pixel;
+        for col in 0..width {
+            let pixel_start = row_start + col as usize * bytes_per_pixel;
             
             if pixel_start + bytes_per_pixel <= pixel_data.len() {
                 // BMP stores BGR(A)
@@ -137,14 +137,14 @@ fn read_u16(data: &[u8]) -> u16 {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /// Save image as BMP
-pub fn save_bitmap(image: &Image, path: &str) -> Result<(), &'static str> {
-    let data = create_bitmap(image);
-    crate::vfs::write_file(path, &data).map_error(|_| "Failed to write file")
+pub fn save_bitmap(img: &Image, path: &str) -> Result<(), &'static str> {
+    let data = create_bitmap(img);
+    crate::vfs::write_file(path, &data).map_err(|_| "Failed to write file")
 }
 
 /// Create a BMP file from an Image
-pub fn create_bitmap(image: &Image) -> Vec<u8> {
-    create_bitmap_from_pixels(image.width, image.height, &image.pixels)
+pub fn create_bitmap(img: &Image) -> Vec<u8> {
+    create_bitmap_from_pixels(img.width, img.height, &img.pixels)
 }
 
 /// Create a BMP file from pixel data
@@ -174,8 +174,8 @@ pub fn create_bitmap_from_pixels(width: u32, height: u32, pixels: &[u32]) -> Vec
     
     // Pixel data (bottom-to-top, BGR)
     for row in (0..height).rev() {
-        for column in 0..width {
-            let pixel = pixels[(row * width + column) as usize];
+        for col in 0..width {
+            let pixel = pixels[(row * width + col) as usize];
             let r = ((pixel >> 16) & 0xFF) as u8;
             let g = ((pixel >> 8) & 0xFF) as u8;
             let b = (pixel & 0xFF) as u8;

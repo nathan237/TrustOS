@@ -58,6 +58,7 @@ pub mod inference;
 pub mod agent;
 pub mod mentor;
 pub mod training;
+pub mod corpus_trustos;
 pub mod corpus;
 pub mod backprop;
 pub mod optimizer;
@@ -74,17 +75,50 @@ pub mod task;
 pub mod compression;
 pub mod io_control;
 pub mod micro_model;
+pub mod training_loop;
+pub mod training_dashboard;
+pub mod conversation_log;
+pub mod developmental;
+pub mod heartbeat;
+pub mod genome;
+pub mod trace;
 
 use alloc::string::String;
 use alloc::format;
 use alloc::vec::Vec;
-use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use spin::Mutex;
 
 use model::TransformerWeights;
 use inference::InferenceEngine;
 use optimizer::AdamState;
 use micro_model::{MicroWeights, MicroEngine};
+
+/// Max tokens per sequence during training (compile-time default)
+/// Keep short: each forward+backward scales as O(seq² × d² × layers).
+/// On a G4400 (no AVX), seq=64 takes ~30s+ per tick — starves network.
+pub const TRAIN_MAX_SEQ: usize = 16;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SSD-configurable training parameters (set by /mnt/sda1/training.cfg)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Runtime-configurable max seq length (0 = use TRAIN_MAX_SEQ const)
+pub static TRAIN_MAX_SEQ_CFG: AtomicUsize = AtomicUsize::new(0);
+/// Runtime LR max (bits of f32, 0 = use default)
+pub static LR_MAX_CFG: AtomicU32 = AtomicU32::new(0);
+/// Runtime LR min (bits of f32, 0 = use default)
+pub static LR_MIN_CFG: AtomicU32 = AtomicU32::new(0);
+/// Runtime epochs (0 = use default from TrainingConfig)
+pub static EPOCHS_CFG: AtomicU32 = AtomicU32::new(0);
+/// Runtime early_stop override (default true)
+pub static EARLY_STOP_CFG: AtomicBool = AtomicBool::new(true);
+
+/// Get effective max_seq (config override or compile-time default)
+pub fn effective_max_seq() -> usize {
+    let cfg = TRAIN_MAX_SEQ_CFG.load(Ordering::Relaxed);
+    if cfg > 0 { cfg } else { TRAIN_MAX_SEQ }
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Global State
@@ -192,6 +226,18 @@ pub fn init() {
     crate::serial_println!("[JARVIS] Init complete. Micro={}, Full={}",
         if MICRO_MODEL.lock().is_some() { "OK" } else { "FAIL" },
         if FULL_BRAIN_LOADED.load(Ordering::Relaxed) { "LOADED" } else { "NOT LOADED" });
+
+    // Initialize developmental learning system
+    developmental::init();
+    // If full brain was loaded (pretrained), set stage based on maturity
+    if FULL_BRAIN_LOADED.load(Ordering::Relaxed) {
+        developmental::set_stage(match MATURITY.load(Ordering::Relaxed) {
+            0 => developmental::Stage::Infant,
+            1 => developmental::Stage::Child,
+            2 => developmental::Stage::PreTeen,
+            _ => developmental::Stage::Adult,
+        });
+    }
 
     // Auto-start mesh when full brain is available (makes this node discoverable)
     if has_full_brain() && !mesh::is_active() {
@@ -348,7 +394,18 @@ pub fn maturity_name() -> &'static str {
 }
 
 /// Initialize Jarvis neural brain with random full weights (fallback)
-fn init_random() {
+pub fn init_random() {
+    // Memory check: weights(130MB) + Adam(260MB) + headroom(50MB) = ~440MB minimum
+    let heap_free = crate::memory::heap::free();
+    let needed = 440 * 1024 * 1024;
+    crate::serial_println!("[JARVIS] Heap free: {} MB, need ~{} MB for full brain",
+        heap_free / (1024 * 1024), needed / (1024 * 1024));
+    if heap_free < needed {
+        crate::serial_println!("[JARVIS] ERROR: Not enough heap for full brain ({} MB free < {} MB needed)",
+            heap_free / (1024 * 1024), needed / (1024 * 1024));
+        return;
+    }
+
     crate::serial_println!("[JARVIS] Initializing random full brain...");
 
     let weights = TransformerWeights::new_random();
@@ -420,6 +477,11 @@ fn update_maturity() {
 pub fn generate(prompt: &str, max_tokens: usize) -> String {
     if !is_ready() {
         return String::from("[JARVIS brain not initialized]");
+    }
+
+    // Feed input to developmental perception system
+    if developmental::is_active() {
+        developmental::observe(prompt.as_bytes());
     }
 
     // Route: full brain if available
@@ -777,6 +839,10 @@ pub fn learn_from_exchange(user_input: &str, good_response: &str) {
 pub fn pretrain(epochs: usize, lr: f32) -> (usize, f32, u64) {
     if !is_ready() { init(); }
     if !is_ready() { return (0, f32::MAX, 0); }
+    if !has_full_brain() {
+        crate::serial_println!("[JARVIS] No full brain loaded — initializing random weights");
+        init_random();
+    }
 
     let start = crate::time::uptime_ticks();
     let total_seqs = corpus::total_sequences();
@@ -785,9 +851,51 @@ pub fn pretrain(epochs: usize, lr: f32) -> (usize, f32, u64) {
     let mut step = 0u64;
     let mut total_loss = 0.0f32;
     let mut loss_count = 0u32;
+    let mut best_loss = f32::MAX;
 
-    // Gradient accumulation batch size
-    const ACCUM_BATCH: usize = 4;
+    // SSD checkpoint: try auto-mount if not already mounted, then test write
+    const SSD_PATH: &str = "/mnt/sda1";
+    const CKPT_WEIGHTS: &str = "/mnt/sda1/jarvis_weights.bin";
+    const CKPT_BEST: &str = "/mnt/sda1/jarvis_best.bin";
+    const CKPT_META: &str = "/mnt/sda1/jarvis_meta.txt";
+    const CKPT_INTERVAL: u64 = 200; // save every N steps
+
+    // Auto-mount AHCI port 5 (ADATA SSD) if not already mounted
+    // SSD should already be mounted by ssd_autoexec(), but check mount list as fallback
+    let already = crate::vfs::list_mounts().iter().any(|(p, _)| p == SSD_PATH);
+    if !already {
+        crate::serial_println!("[JARVIS] SSD not mounted — attempting auto-mount");
+        let _ = crate::vfs::mkdir("/mnt");
+        let _ = crate::vfs::mkdir(SSD_PATH);
+        use alloc::sync::Arc;
+        let reader = Arc::new(crate::vfs::fat32::AhciBlockReader::new(5, 2048));
+        match crate::vfs::fat32::Fat32Fs::mount(reader) {
+            Ok(fs) => {
+                if let Err(e) = crate::vfs::mount(SSD_PATH, Arc::new(fs)) {
+                    crate::serial_println!("[JARVIS] VFS mount error: {:?}", e);
+                }
+            }
+            Err(e) => crate::serial_println!("[JARVIS] FAT32 mount failed: {:?}", e),
+        }
+    }
+
+    let ssd_ok = {
+        let probe = b"JARVIS_PROBE";
+        let probe_path = format!("{}/probe.tmp", SSD_PATH);
+        if crate::vfs::write_file(&probe_path, probe).is_ok() {
+            match crate::vfs::read_file(&probe_path) {
+                Ok(data) => data == probe,
+                Err(_) => false,
+            }
+        } else {
+            false
+        }
+    };
+    if ssd_ok {
+        crate::serial_println!("[JARVIS] SSD checkpoint enabled at {}", SSD_PATH);
+    } else {
+        crate::serial_println!("[JARVIS] WARNING: SSD not available — no checkpoints will be saved!");
+    }
 
     // Generate hardware-contextual training data from live probe
     let hw_sequences = if crate::jarvis_hw::probe::is_scanned() {
@@ -806,8 +914,11 @@ pub fn pretrain(epochs: usize, lr: f32) -> (usize, f32, u64) {
     total_steps += hw_sequences.len() * epochs;
     let warmup_steps = (total_steps / 10).max(5) as u64; // 10% warmup
 
-    crate::serial_println!("[JARVIS] Pre-training: {} phases + HW, {} sequences, {} epoch(s), lr_peak={}, warmup={}",
-        corpus::num_phases(), total_steps, epochs, lr, warmup_steps);
+    // Memory report
+    let heap_free = crate::memory::heap::free();
+    crate::serial_println!("[JARVIS] Heap free: {} MB", heap_free / (1024 * 1024));
+    crate::serial_println!("[JARVIS] Pre-training: {} phases + HW, {} sequences, {} epoch(s), lr_peak={}, warmup={}, max_seq={}",
+        corpus::num_phases(), total_steps, epochs, lr, warmup_steps, TRAIN_MAX_SEQ);
 
     let mut opt_guard = OPTIMIZER.lock();
     let mut model_guard = MODEL.lock();
@@ -817,12 +928,10 @@ pub fn pretrain(epochs: usize, lr: f32) -> (usize, f32, u64) {
             for (phase_idx, phase) in corpus::CORPUS.iter().enumerate() {
                 let mut phase_loss = 0.0f32;
                 let mut phase_count = 0u32;
-                let mut accum_grads = backprop::ModelGrads::new();
-                let mut accum_count = 0usize;
-                let mut accum_loss = 0.0f32;
 
                 for &text in *phase {
-                    let tokens = tokenizer::encode(text);
+                    let mut tokens = tokenizer::encode(text);
+                    if tokens.len() > TRAIN_MAX_SEQ { tokens.truncate(TRAIN_MAX_SEQ); }
                     if tokens.len() < 2 { step += 1; continue; }
 
                     // Cosine LR schedule
@@ -831,56 +940,60 @@ pub fn pretrain(epochs: usize, lr: f32) -> (usize, f32, u64) {
                     );
                     adam.lr = current_lr;
 
-                    // Forward + backward (accumulate, don't step yet)
-                    let (loss, grads) = backprop::forward_backward(model, &tokens);
+                    // Forward + backward, apply immediately (no accumulation = 130MB saved)
+                    let (loss, mut grads) = backprop::forward_backward(model, &tokens);
                     if loss.is_finite() {
-                        accum_grads.accumulate(&grads);
-                        accum_loss += loss;
-                        accum_count += 1;
+                        grads.clip_norm(1.0);
+                        adam.step(model, &grads);
+                        TRAINING_STEPS.fetch_add(1, Ordering::Relaxed);
                         phase_loss += loss;
                         phase_count += 1;
                         total_loss += loss;
                         loss_count += 1;
                     }
 
-                    // Flush accumulated gradients every ACCUM_BATCH sequences
-                    if accum_count >= ACCUM_BATCH {
-                        accum_grads.scale(1.0 / accum_count as f32);
-                        accum_grads.clip_norm(1.0);
-                        adam.step(model, &accum_grads);
-                        TRAINING_STEPS.fetch_add(1, Ordering::Relaxed);
-                        accum_grads.zero();
-                        accum_count = 0;
-                        accum_loss = 0.0;
+                    step += 1;
+
+                    // Yield to network stack every 8 steps so board stays responsive
+                    if step % 8 == 0 {
+                        crate::netstack::poll();
                     }
 
-                    step += 1;
-                }
-
-                // Flush remaining accumulated gradients for this phase
-                if accum_count > 0 {
-                    accum_grads.scale(1.0 / accum_count as f32);
-                    accum_grads.clip_norm(1.0);
-                    adam.step(model, &accum_grads);
-                    TRAINING_STEPS.fetch_add(1, Ordering::Relaxed);
-                    accum_grads.zero();
+                    // SSD checkpoint every CKPT_INTERVAL steps
+                    if ssd_ok && step % CKPT_INTERVAL == 0 {
+                        let bytes = model.serialize_to_bytes();
+                        let _ = crate::vfs::write_file(CKPT_WEIGHTS, &bytes);
+                        let avg_so_far = if loss_count > 0 { total_loss / loss_count as f32 } else { f32::MAX };
+                        if avg_so_far < best_loss {
+                            best_loss = avg_so_far;
+                            let _ = crate::vfs::write_file(CKPT_BEST, &bytes);
+                        }
+                        let meta = format!("step={}\nepoch={}\nloss={:.6}\nbest={:.6}\nlr={:.8}\n",
+                            step, epoch + 1, avg_so_far, best_loss, adam.lr);
+                        let _ = crate::vfs::write_file(CKPT_META, meta.as_bytes());
+                        let _ = crate::vfs::sync_all();
+                        crate::serial_println!("[JARVIS] Checkpoint saved at step {} (loss={:.3})", step, avg_so_far);
+                        crate::netstack::poll();
+                    }
                 }
 
                 let avg = if phase_count > 0 { phase_loss / phase_count as f32 } else { 0.0 };
                 crate::serial_println!("[JARVIS] Epoch {}/{} Phase {} ({}) — {} seqs, avg loss={:.3}",
                     epoch + 1, epochs, phase_idx, corpus::phase_name(phase_idx),
                     phase_count, avg);
+
+                // Yield at phase boundaries
+                crate::netstack::poll();
             }
 
             // Phase 11: Hardware-generated corpus (dynamic per-boot)
             if !hw_sequences.is_empty() {
                 let mut hw_loss = 0.0f32;
                 let mut hw_count = 0u32;
-                let mut accum_grads = backprop::ModelGrads::new();
-                let mut accum_count = 0usize;
 
                 for text in &hw_sequences {
-                    let tokens = tokenizer::encode(text);
+                    let mut tokens = tokenizer::encode(text);
+                    if tokens.len() > TRAIN_MAX_SEQ { tokens.truncate(TRAIN_MAX_SEQ); }
                     if tokens.len() < 2 { step += 1; continue; }
 
                     let current_lr = optimizer::cosine_lr(
@@ -888,38 +1001,59 @@ pub fn pretrain(epochs: usize, lr: f32) -> (usize, f32, u64) {
                     );
                     adam.lr = current_lr;
 
-                    let (loss, grads) = backprop::forward_backward(model, &tokens);
+                    let (loss, mut grads) = backprop::forward_backward(model, &tokens);
                     if loss.is_finite() {
-                        accum_grads.accumulate(&grads);
-                        accum_count += 1;
+                        grads.clip_norm(1.0);
+                        adam.step(model, &grads);
+                        TRAINING_STEPS.fetch_add(1, Ordering::Relaxed);
                         hw_loss += loss;
                         hw_count += 1;
                         total_loss += loss;
                         loss_count += 1;
                     }
 
-                    if accum_count >= ACCUM_BATCH {
-                        accum_grads.scale(1.0 / accum_count as f32);
-                        accum_grads.clip_norm(1.0);
-                        adam.step(model, &accum_grads);
-                        TRAINING_STEPS.fetch_add(1, Ordering::Relaxed);
-                        accum_grads.zero();
-                        accum_count = 0;
-                    }
-
                     step += 1;
-                }
+                    if step % 8 == 0 { crate::netstack::poll(); }
 
-                if accum_count > 0 {
-                    accum_grads.scale(1.0 / accum_count as f32);
-                    accum_grads.clip_norm(1.0);
-                    adam.step(model, &accum_grads);
-                    TRAINING_STEPS.fetch_add(1, Ordering::Relaxed);
+                    // SSD checkpoint every CKPT_INTERVAL steps
+                    if ssd_ok && step % CKPT_INTERVAL == 0 {
+                        let bytes = model.serialize_to_bytes();
+                        let _ = crate::vfs::write_file(CKPT_WEIGHTS, &bytes);
+                        let avg_so_far = if loss_count > 0 { total_loss / loss_count as f32 } else { f32::MAX };
+                        if avg_so_far < best_loss {
+                            best_loss = avg_so_far;
+                            let _ = crate::vfs::write_file(CKPT_BEST, &bytes);
+                        }
+                        let meta = format!("step={}\nepoch={}\nloss={:.6}\nbest={:.6}\nlr={:.8}\n",
+                            step, epoch + 1, avg_so_far, best_loss, adam.lr);
+                        let _ = crate::vfs::write_file(CKPT_META, meta.as_bytes());
+                        let _ = crate::vfs::sync_all();
+                        crate::serial_println!("[JARVIS] Checkpoint saved at step {} (loss={:.3})", step, avg_so_far);
+                        crate::netstack::poll();
+                    }
                 }
 
                 let avg = if hw_count > 0 { hw_loss / hw_count as f32 } else { 0.0 };
                 crate::serial_println!("[JARVIS] Epoch {}/{} Phase HW (Hardware Context) — {} seqs, avg loss={:.3}",
                     epoch + 1, epochs, hw_count, avg);
+                crate::netstack::poll();
+            }
+
+            // End-of-epoch checkpoint
+            if ssd_ok {
+                let bytes = model.serialize_to_bytes();
+                let _ = crate::vfs::write_file(CKPT_WEIGHTS, &bytes);
+                let avg_so_far = if loss_count > 0 { total_loss / loss_count as f32 } else { f32::MAX };
+                if avg_so_far < best_loss {
+                    best_loss = avg_so_far;
+                    let _ = crate::vfs::write_file(CKPT_BEST, &bytes);
+                }
+                let meta = format!("step={}\nepoch={}\nloss={:.6}\nbest={:.6}\nlr={:.8}\ncompleted_epoch={}\n",
+                    step, epoch + 1, avg_so_far, best_loss, adam.lr, epoch + 1);
+                let _ = crate::vfs::write_file(CKPT_META, meta.as_bytes());
+                let _ = crate::vfs::sync_all();
+                crate::serial_println!("[JARVIS] Epoch {} checkpoint saved (loss={:.3})", epoch + 1, avg_so_far);
+                crate::netstack::poll();
             }
         }
     } else {
@@ -942,6 +1076,9 @@ pub fn pretrain(epochs: usize, lr: f32) -> (usize, f32, u64) {
 
     crate::serial_println!("[JARVIS] Pre-training done: {} steps, avg loss={:.3}, {} ms",
         step, avg_loss, elapsed);
+
+    // Report to developmental system for milestone tracking
+    developmental::report_pretrain_loss(avg_loss);
 
     (step as usize, avg_loss, elapsed)
 }
@@ -1259,4 +1396,255 @@ pub fn auto_propagate(enable_pxe: bool) -> String {
         brain_status, peer_count);
 
     report
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Birth System — Persistent lifecycle across reboots
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// SSD paths for JARVIS birth persistence
+const SSD_JARVIS_DIR: &str = "/mnt/sda1/jarvis";
+const SSD_WEIGHTS_PATH: &str = "/mnt/sda1/jarvis/brain.bin";
+const SSD_GENOME_PATH: &str = "/mnt/sda1/jarvis/genome.dna";
+const SSD_ADAM_PATH: &str = "/mnt/sda1/jarvis/adam.bin";
+const SSD_BIRTH_META: &str = "/mnt/sda1/jarvis/birth.txt";
+const SSD_TRAINING_STEPS_PATH: &str = "/mnt/sda1/jarvis/steps.bin";
+
+/// Save JARVIS's complete state to SSD before reboot.
+/// Saves: weights + optimizer + developmental state + training steps + metadata.
+/// This is JARVIS going to sleep — he will wake up where he left off.
+pub fn save_all_to_ssd() -> Result<(), &'static str> {
+    let ssd_ok = crate::vfs::list_mounts().iter().any(|(p, _)| p == "/mnt/sda1");
+    if !ssd_ok {
+        return Err("SSD not mounted");
+    }
+
+    let _ = crate::vfs::mkdir(SSD_JARVIS_DIR);
+    let mut saved = 0u32;
+
+    // 1. Save weights as DNA genome (compressed)
+    if let Some(model) = MODEL.lock().as_ref() {
+        let g = genome::encode(model);
+        let st = genome::stats(&g);
+        let dna_bytes = genome::serialize(&g);
+        let dna_size = dna_bytes.len();
+        if crate::vfs::write_file(SSD_GENOME_PATH, &dna_bytes).is_ok() {
+            crate::serial_println!(
+                "[JARVIS-DNA] Genome saved: {} bytes (ratio {:.0}x, {}/{} deltas, {:.1}% sparse)",
+                dna_size, st.ratio, st.delta_count, st.param_count, st.sparsity * 100.0);
+            saved += 1;
+        } else {
+            crate::serial_println!("[JARVIS-DNA] WARNING: Failed to save genome, fallback to raw");
+            // Fallback: save raw weights
+            let bytes = model.serialize_to_bytes();
+            let size = bytes.len();
+            if crate::vfs::write_file(SSD_WEIGHTS_PATH, &bytes).is_ok() {
+                crate::serial_println!("[JARVIS-BIRTH] Weights saved (raw): {} KB", size / 1024);
+                saved += 1;
+            }
+        }
+    }
+
+    // 2. Save Adam optimizer state
+    if let Some(adam) = OPTIMIZER.lock().as_ref() {
+        let adam_bytes = training_loop::serialize_adam_public(adam);
+        let size = adam_bytes.len();
+        if crate::vfs::write_file(SSD_ADAM_PATH, &adam_bytes).is_ok() {
+            crate::serial_println!("[JARVIS-BIRTH] Adam state saved: {} KB", size / 1024);
+            saved += 1;
+        }
+    }
+
+    // 3. Save developmental state (stage, milestones, observations)
+    if developmental::save_state().is_ok() {
+        saved += 1;
+    }
+
+    // 4. Save training step counter
+    let steps = TRAINING_STEPS.load(Ordering::Relaxed);
+    let gens = GENERATION_COUNT.load(Ordering::Relaxed);
+    let mut step_buf = Vec::with_capacity(16);
+    step_buf.extend_from_slice(&steps.to_le_bytes());
+    step_buf.extend_from_slice(&gens.to_le_bytes());
+    let _ = crate::vfs::write_file(SSD_TRAINING_STEPS_PATH, &step_buf);
+
+    // 5. Save birth metadata (human-readable)
+    let stage = developmental::current_stage();
+    let meta = format!(
+        "# JARVIS Birth Record\n\
+         # Auto-generated — do not edit\n\
+         stage={}\n\
+         stage_name={}\n\
+         training_steps={}\n\
+         generations={}\n\
+         maturity={}\n\
+         maturity_name={}\n\
+         saved_at_uptime_ms={}\n\
+         components_saved={}\n",
+        stage as u8, stage.name(),
+        steps, gens,
+        MATURITY.load(Ordering::Relaxed), maturity_name(),
+        crate::time::uptime_ms(),
+        saved
+    );
+    let _ = crate::vfs::write_file(SSD_BIRTH_META, meta.as_bytes());
+
+    // Flush FAT32 to disk
+    let _ = crate::vfs::sync_all();
+
+    crate::serial_println!("[JARVIS-BIRTH] ★ State saved to SSD ({}/3 components) — ready for sleep ★", saved);
+    Ok(())
+}
+
+/// Resume JARVIS from SSD after boot. This is JARVIS waking up.
+/// Loads weights, optimizer, developmental state, and resumes background training.
+/// Returns true if JARVIS was successfully restored (not a first birth).
+pub fn resume_from_ssd() -> bool {
+    let ssd_ok = crate::vfs::list_mounts().iter().any(|(p, _)| p == "/mnt/sda1");
+    if !ssd_ok {
+        crate::serial_println!("[JARVIS-BIRTH] SSD not available — cannot resume");
+        return false;
+    }
+
+    // Check if birth record exists (has JARVIS been born before?)
+    let has_birth = crate::vfs::read_file(SSD_BIRTH_META).is_ok();
+    if !has_birth {
+        crate::serial_println!("[JARVIS-BIRTH] No birth record found — this is the FIRST BIRTH");
+        return false;
+    }
+
+    crate::serial_println!("[JARVIS-BIRTH] Birth record found — waking up...");
+    let mut restored = 0u32;
+
+    // 1. Restore weights — try genome (DNA) first, fallback to raw
+    let mut brain_restored = false;
+    if let Ok(data) = crate::vfs::read_file(SSD_GENOME_PATH) {
+        if let Some(g) = genome::deserialize(&data) {
+            let st = genome::stats(&g);
+            crate::serial_println!(
+                "[JARVIS-DNA] Growing brain from genome: {} bytes DNA → {} params ({:.0}x ratio)",
+                data.len(), st.param_count, st.ratio);
+            if let Some(weights) = genome::decode(&g) {
+                let pc = weights.param_count();
+                *MODEL.lock() = Some(weights);
+                *ENGINE.lock() = Some(InferenceEngine::new());
+                FULL_BRAIN_LOADED.store(true, Ordering::Release);
+                crate::serial_println!(
+                    "[JARVIS-DNA] Brain grown: {} params, {} deltas applied",
+                    pc, st.delta_count);
+                brain_restored = true;
+                restored += 1;
+            }
+        }
+    }
+    // Fallback: raw weights (legacy or genome save failure)
+    if !brain_restored {
+        if let Ok(data) = crate::vfs::read_file(SSD_WEIGHTS_PATH) {
+            if data.len() >= 1024 && data.len() % 4 == 0 {
+                let float_count = data.len() / 4;
+                let floats: &[f32] = unsafe {
+                    core::slice::from_raw_parts(data.as_ptr() as *const f32, float_count)
+                };
+                if let Some(weights) = model::TransformerWeights::deserialize(floats) {
+                    let pc = weights.param_count();
+                    *MODEL.lock() = Some(weights);
+                    *ENGINE.lock() = Some(InferenceEngine::new());
+                    FULL_BRAIN_LOADED.store(true, Ordering::Release);
+                    crate::serial_println!("[JARVIS-BIRTH] Brain restored (raw): {} params ({} KB)",
+                        pc, data.len() / 1024);
+                    restored += 1;
+                }
+            }
+        }
+    }
+
+    // 2. Restore Adam optimizer
+    if let Ok(data) = crate::vfs::read_file(SSD_ADAM_PATH) {
+        if let Some(adam) = training_loop::deserialize_adam_public(&data) {
+            crate::serial_println!("[JARVIS-BIRTH] Adam optimizer restored ({} KB)", data.len() / 1024);
+            *OPTIMIZER.lock() = Some(adam);
+            restored += 1;
+        }
+    }
+
+    // 3. Restore developmental state
+    match developmental::load_state() {
+        Ok(stage) => {
+            // Sync maturity with restored stage
+            let maturity = match stage {
+                developmental::Stage::Fetus | developmental::Stage::Infant => 0,
+                developmental::Stage::Baby | developmental::Stage::Child => 1,
+                developmental::Stage::PreTeen | developmental::Stage::Teen => 2,
+                developmental::Stage::Adult => 3,
+            };
+            MATURITY.store(maturity, Ordering::Relaxed);
+            crate::serial_println!("[JARVIS-BIRTH] Developmental stage restored: {} (maturity={})",
+                stage.name(), maturity);
+            restored += 1;
+        }
+        Err(e) => {
+            crate::serial_println!("[JARVIS-BIRTH] Dev state not restored: {}", e);
+        }
+    }
+
+    // 4. Restore training step counters
+    if let Ok(data) = crate::vfs::read_file(SSD_TRAINING_STEPS_PATH) {
+        if data.len() >= 16 {
+            if let (Ok(s), Ok(g)) = (
+                data[0..8].try_into().map(u64::from_le_bytes),
+                data[8..16].try_into().map(u64::from_le_bytes),
+            ) {
+                TRAINING_STEPS.store(s, Ordering::Relaxed);
+                GENERATION_COUNT.store(g, Ordering::Relaxed);
+                crate::serial_println!("[JARVIS-BIRTH] Counters restored: steps={} gens={}", s, g);
+            }
+        }
+    }
+
+    INITIALIZED.store(true, Ordering::Release);
+
+    crate::serial_println!("[JARVIS-BIRTH] ★ JARVIS is awake ({}/3 components restored) ★", restored);
+    crate::serial_println!("[JARVIS-BIRTH] Stage: {} | Steps: {} | Maturity: {}",
+        developmental::current_stage().name(),
+        TRAINING_STEPS.load(Ordering::Relaxed),
+        maturity_name());
+
+    restored > 0
+}
+
+/// Start background training automatically after resume.
+/// This makes JARVIS continue growing while we work on other things.
+pub fn auto_start_background_training() {
+    if training_loop::is_running() {
+        crate::serial_println!("[JARVIS-BIRTH] Training already running");
+        return;
+    }
+
+    let stage = developmental::current_stage();
+    crate::serial_println!("[JARVIS-BIRTH] Auto-starting background training (stage: {})", stage.name());
+
+    // Configure based on current developmental stage
+    let config = training_loop::TrainingConfig {
+        lr_max: match stage {
+            developmental::Stage::Fetus => 0.001,      // Aggressive for initial wiring
+            developmental::Stage::Infant => 0.0005,     // Moderate
+            developmental::Stage::Baby => 0.0003,       // Conservative
+            _ => 0.0002,                                // Gentle for mature stages
+        },
+        lr_min: 0.00001,
+        epochs: 0,  // Infinite — JARVIS trains forever
+        checkpoint_every: 50,
+        checkpoint_path: String::from(SSD_JARVIS_DIR),
+        early_stop: false,  // Never stop — JARVIS lives
+        warmup_fraction: 0.05,
+    };
+
+    match training_loop::start(config) {
+        Ok(()) => {
+            crate::serial_println!("[JARVIS-BIRTH] ★ Background training active — JARVIS is growing ★");
+        }
+        Err(e) => {
+            crate::serial_println!("[JARVIS-BIRTH] Failed to start training: {}", e);
+        }
+    }
 }

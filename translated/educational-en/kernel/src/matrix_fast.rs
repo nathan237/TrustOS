@@ -374,7 +374,7 @@ struct RainDrop {
     /// Delay counter for speed
     delay: u8,
     /// Trail length for this drop (varies per drop)
-    trail_length: u8,
+    trail_len: u8,
     /// Starting glyph index (randomized per drop)
     glyph_seed: u32,
     /// Is this drop active?
@@ -388,7 +388,7 @@ impl RainDrop {
             y: -100,
             speed: 1,
             delay: 0,
-            trail_length: MINIMUM_TRAIL_LENGTH as u8,
+            trail_len: MINIMUM_TRAIL_LENGTH as u8,
             glyph_seed: 0,
             active: false,
         }
@@ -396,7 +396,7 @@ impl RainDrop {
     
     /// Get the bottom Y position of this drop's trail
     fn tail_y(&self) -> i32 {
-        self.y - self.trail_length as i32
+        self.y - self.trail_len as i32
     }
 }
 
@@ -425,21 +425,21 @@ const MAXIMUM_CUBE_FLOW_DROPS: usize = 500;  // Dense grid/hatching pattern on c
 #[derive(Clone, Copy)]
 struct ShapeDrop {
     /// Screen X position (pixel)
-    column: i32,
+    col: i32,
     /// Screen Y position (pixel)
     row: i32,
     /// Previous X position (for trail direction)
-    previous_column: i32,
+    prev_col: i32,
     /// Previous Y position (for trail direction)
-    previous_row: i32,
+    prev_row: i32,
     /// Depth (Z) for brightness - 0.0=far/dim, 1.0=near/bright
     depth: f32,
     /// Progress along the edge (0.0 to 1.0)
     progress: f32,
     /// Edge index this drop follows
-    edge_index: u8,
+    edge_idx: u8,
     /// Trail length (in pixels)
-    trail_length: u8,
+    trail_len: u8,
     /// Speed along edge
     speed: f32,
     /// Glyph seed
@@ -459,7 +459,7 @@ struct CubeFlowDrop {
     /// Velocity Y (pixels per frame) - diagonal direction
     vel_y: f32,
     /// Trail length
-    trail_length: u8,
+    trail_len: u8,
     /// Is this drop active?
     active: bool,
     /// Glyph seed for variation
@@ -472,14 +472,14 @@ struct CubeFlowDrop {
 impl ShapeDrop {
     fn new() -> Self {
         Self {
-            column: 0,
+            col: 0,
             row: 0,
-            previous_column: 0,
-            previous_row: 0,
+            prev_col: 0,
+            prev_row: 0,
             depth: 0.5,
             progress: 0.0,
-            edge_index: 0,
-            trail_length: 6,
+            edge_idx: 0,
+            trail_len: 6,
             speed: 0.012,
             glyph_seed: 0,
         }
@@ -493,24 +493,24 @@ impl ShapeDrop {
 /// Parameters for parallel braille column rendering
 #[repr(C)]
 struct BrailleParallelParams {
-    buffer_pointer: *mut u32,
-    buffer_length: usize,
-    framebuffer_width: usize,
-    framebuffer_height: usize,
+    buffer_ptr: *mut u32,
+    buffer_len: usize,
+    fb_width: usize,
+    fb_height: usize,
     cell_size: usize,
     cell_rows: usize,
     // BrailleMatrix data pointers (immutable during render)
-    drops_pointer: *// Compile-time constant — evaluated at compilation, zero runtime cost.
+    drops_ptr: *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const [RainDrop; DROPS_PER_COLUMN],
-    column_depth_pointer: *// Compile-time constant — evaluated at compilation, zero runtime cost.
+    col_depth_ptr: *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u8,
-    number_cols: usize,
+    num_cols: usize,
     // Pre-computed cube geometry
     cube_active: bool,
-    cube_minimum_x: f32,
-    cube_maximum_x: f32,
-    cube_minimum_y: f32,
-    cube_maximum_y: f32,
+    cube_min_x: f32,
+    cube_max_x: f32,
+    cube_min_y: f32,
+    cube_max_y: f32,
     top_edges: [(f32, f32, f32, f32); 4],
     left_edges: [(f32, f32, f32, f32); 4],
     right_edges: [(f32, f32, f32, f32); 4],
@@ -528,24 +528,24 @@ impl Sync for BrailleParallelParams {}
 /// Ultra-fast: only 9 pixel positions, fully unrolled, no loop overhead
 #[inline(always)]
 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe fn draw_glyph_3x3_raw(buffer: *mut u32, framebuffer_width: usize, framebuffer_height: usize,
-                              pixel: usize, py: usize, glyph: &[u8; 3], color: u32) {
-    if py + 2 >= framebuffer_height || pixel + 2 >= framebuffer_width { return; }
+unsafe fn draw_glyph_3x3_raw(buffer: *mut u32, fb_width: usize, fb_height: usize,
+                              px: usize, py: usize, glyph: &[u8; 3], color: u32) {
+    if py + 2 >= fb_height || px + 2 >= fb_width { return; }
     // Row 0
     let b0 = glyph[0];
-    let base0 = py * framebuffer_width + pixel;
+    let base0 = py * fb_width + px;
     if b0 & 0b001 != 0 { *buffer.add(base0) = color; }
     if b0 & 0b010 != 0 { *buffer.add(base0 + 1) = color; }
     if b0 & 0b100 != 0 { *buffer.add(base0 + 2) = color; }
     // Row 1
     let b1 = glyph[1];
-    let base1 = base0 + framebuffer_width;
+    let base1 = base0 + fb_width;
     if b1 & 0b001 != 0 { *buffer.add(base1) = color; }
     if b1 & 0b010 != 0 { *buffer.add(base1 + 1) = color; }
     if b1 & 0b100 != 0 { *buffer.add(base1 + 2) = color; }
     // Row 2
     let b2 = glyph[2];
-    let base2 = base1 + framebuffer_width;
+    let base2 = base1 + fb_width;
     if b2 & 0b001 != 0 { *buffer.add(base2) = color; }
     if b2 & 0b010 != 0 { *buffer.add(base2 + 1) = color; }
     if b2 & 0b100 != 0 { *buffer.add(base2 + 2) = color; }
@@ -554,15 +554,15 @@ unsafe fn draw_glyph_3x3_raw(buffer: *mut u32, framebuffer_width: usize, framebu
 /// Draw 6x6 glyph at pixel position (raw pointer version for shape overlays)
 #[inline]
 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe fn draw_glyph_6x6_raw(buffer: *mut u32, framebuffer_width: usize, framebuffer_height: usize,
-                              pixel: usize, py: usize, glyph: &[u8; 6], color: u32) {
-    if py >= framebuffer_height || pixel >= framebuffer_width { return; }
-    let maximum_row = (framebuffer_height - py).minimum(6);
-    let maximum_column = (framebuffer_width - pixel).minimum(6);
+unsafe fn draw_glyph_6x6_raw(buffer: *mut u32, fb_width: usize, fb_height: usize,
+                              px: usize, py: usize, glyph: &[u8; 6], color: u32) {
+    if py >= fb_height || px >= fb_width { return; }
+    let maximum_row = (fb_height - py).min(6);
+    let maximum_column = (fb_width - px).min(6);
     for row in 0..maximum_row {
         let bits = glyph[row];
         if bits == 0 { continue; }
-        let base = (py + row) * framebuffer_width + pixel;
+        let base = (py + row) * fb_width + px;
         if bits & 0b000001 != 0 && 0 < maximum_column { *buffer.add(base) = color; }
         if bits & 0b000010 != 0 && 1 < maximum_column { *buffer.add(base + 1) = color; }
         if bits & 0b000100 != 0 && 2 < maximum_column { *buffer.add(base + 2) = color; }
@@ -574,15 +574,15 @@ unsafe fn draw_glyph_6x6_raw(buffer: *mut u32, framebuffer_width: usize, framebu
 
 /// Point-in-quad winding test (free function for parallel use)
 #[inline(always)]
-fn point_in_quad_par(pixel: f32, py: f32, edges: &[(f32, f32, f32, f32); 4]) -> bool {
-    let mut position = 0u8;
+fn point_in_quad_par(px: f32, py: f32, edges: &[(f32, f32, f32, f32); 4]) -> bool {
+    let mut pos = 0u8;
     let mut neg = 0u8;
     for &(ex, ey, ox, oy) in edges.iter() {
-        let cross = ex * (py - oy) - ey * (pixel - ox);
-        if cross > 0.0 { position += 1; }
+        let cross = ex * (py - oy) - ey * (px - ox);
+        if cross > 0.0 { pos += 1; }
         else if cross < 0.0 { neg += 1; }
     }
-    position == 0 || neg == 0
+    pos == 0 || neg == 0
 }
 
 /// Parallel column renderer — called by each core
@@ -592,37 +592,37 @@ unsafe { &*(data as *// Compile-time constant — evaluated at compilation, zero
 const BrailleParallelParams) };
     let cell_size = p.cell_size;
     
-    for column in start..end {
-        if column >= p.number_cols { break; }
+    for col in start..end {
+        if col >= p.num_cols { break; }
         
         let depth = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { *p.column_depth_pointer.add(column) };
+unsafe { *p.col_depth_ptr.add(col) };
         let depth_brightness = 100 + (depth as u32 * 155 / 255);
         
-        let column_pixel = (column * cell_size + CELL_CENTER) as f32;
-        let column_in_cube_x = p.cube_active && column_pixel >= p.cube_minimum_x && column_pixel <= p.cube_maximum_x;
+        let column_pixel = (col * cell_size + CELL_CENTER) as f32;
+        let column_in_cube_x = p.cube_active && column_pixel >= p.cube_min_x && column_pixel <= p.cube_max_x;
         
         let drops = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*p.drops_pointer.add(column) };
+unsafe { &*p.drops_ptr.add(col) };
         
-        for drop_index in 0..DROPS_PER_COLUMN {
-            let drop = &drops[drop_index];
+        for drop_idx in 0..DROPS_PER_COLUMN {
+            let drop = &drops[drop_idx];
             if !drop.active { continue; }
             
             let head_y = drop.y;
-            let trail_length = drop.trail_length as usize;
+            let trail_length = drop.trail_len as usize;
             
             for trail_position in 0..trail_length {
                 let cell_y = head_y - trail_position as i32;
                 if cell_y < 0 || cell_y >= p.cell_rows as i32 { continue; }
                 
-                let intensity_index = (trail_position * 63) / trail_length.maximum(1);
-                let base_intensity = INTENSITY_LUT[intensity_index.minimum(63)] as u32;
+                let intensity_index = (trail_position * 63) / trail_length.max(1);
+                let base_intensity = INTENSITY_LUT[intensity_index.min(63)] as u32;
                 let intensity = ((base_intensity * depth_brightness) / 255) as u8;
                 
                 if column_in_cube_x {
                     let py = (cell_y as usize * cell_size + CELL_CENTER) as f32;
-                    if py >= p.cube_minimum_y && py <= p.cube_maximum_y {
+                    if py >= p.cube_min_y && py <= p.cube_max_y {
                         if point_in_quad_par(column_pixel, py, &p.pad_edges) { continue; }
                         if point_in_quad_par(column_pixel, py, &p.top_edges)
                             || point_in_quad_par(column_pixel, py, &p.left_edges)
@@ -639,31 +639,31 @@ unsafe { &*p.drops_pointer.add(column) };
                 let glyph = &MATRIX_GLYPHS_3X3[glyph_index];
                 let color = intensity_to_color(intensity);
                 
-                let pixel = column * cell_size + 1;
+                let px = col * cell_size + 1;
                 let py = cell_y as usize * cell_size + 1;
                                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-                    draw_glyph_3x3_raw(p.buffer_pointer, p.framebuffer_width, p.framebuffer_height,
-                                       pixel, py, glyph, color);
+                    draw_glyph_3x3_raw(p.buffer_ptr, p.fb_width, p.fb_height,
+                                       px, py, glyph, color);
                 }
                 
                 // HEAD GLOW — compact for 3×3 cells
                 if trail_position == 0 && intensity > 200 {
-                    let gx = pixel + 1; // center of 3×3
+                    let gx = px + 1; // center of 3×3
                     let gy = py + 1;
                     let offsets: [(i32, i32); 4] = [(-1,0),(1,0),(0,-1),(0,1)];
                     for &(ox, oy) in &offsets {
                         let transmit = gx as i32 + ox;
                         let ty = gy as i32 + oy;
-                        if transmit >= 0 && transmit < p.framebuffer_width as i32 && ty >= 0 && ty < p.framebuffer_height as i32 {
-                            let index = ty as usize * p.framebuffer_width + transmit as usize;
+                        if transmit >= 0 && transmit < p.fb_width as i32 && ty >= 0 && ty < p.fb_height as i32 {
+                            let idx = ty as usize * p.fb_width + transmit as usize;
                                                         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-                                let e = *p.buffer_pointer.add(index);
-                                let nr = (((e >> 16) & 0xFF) + 10).minimum(255);
-                                let ng = (((e >> 8) & 0xFF) + 48).minimum(255);
-                                let nb = ((e & 0xFF) + 32).minimum(255);
-                                *p.buffer_pointer.add(index) = 0xFF000000 | (nr << 16) | (ng << 8) | nb;
+                                let e = *p.buffer_ptr.add(idx);
+                                let nr = (((e >> 16) & 0xFF) + 10).min(255);
+                                let ng = (((e >> 8) & 0xFF) + 48).min(255);
+                                let nb = ((e & 0xFF) + 32).min(255);
+                                *p.buffer_ptr.add(idx) = 0xFF000000 | (nr << 16) | (ng << 8) | nb;
                             }
                         }
                     }
@@ -680,15 +680,15 @@ pub struct BrailleMatrix {
     /// All drops: drops[col][drop_idx] - Vec to avoid stack overflow
     drops: Vec<[RainDrop; DROPS_PER_COLUMN]>,
     /// Depth per column: 0=far (dim, sparse), 255=close (bright, dense)
-    column_depth: Vec<u8>,
+    col_depth: Vec<u8>,
     /// Global RNG seed
     rng: u32,
     /// Frame counter
     frame: u32,
     /// Number of active columns
-    number_cols: usize,
+    num_cols: usize,
     /// Number of rows on screen
-    number_rows: usize,
+    num_rows: usize,
     /// Shape overlay mode
     shape_mode: ShapeOverlay,
     /// Shape animation time
@@ -712,7 +712,7 @@ pub fn new() -> Self {
         
         // Allocate on heap using Vec to avoid stack overflow
         let mut drops: Vec<[RainDrop; DROPS_PER_COLUMN]> = Vec::with_capacity(MAXIMUM_COLUMNS);
-        let mut column_depth: Vec<u8> = vec![128u8; MAXIMUM_COLUMNS];
+        let mut col_depth: Vec<u8> = vec![128u8; MAXIMUM_COLUMNS];
         let mut rng = 0xDEADBEEFu32;
         
         // Initialize drops vec with default values
@@ -722,23 +722,23 @@ pub fn new() -> Self {
         
         // Assign random depth per column (creates parallax lanes)
         // Use pseudo-noise pattern for natural look (no sin() needed in no_std)
-        for column in 0..cols {
+        for col in 0..cols {
             rng = rng.wrapping_mul(1103515245).wrapping_add(12345);
             // Create depth bands: mix of random and position-based pattern
             // Prime-based modulo creates pseudo-wave without floating-point sin
-            let pattern = ((column * 17 + 53) % 97) as i32 - 48; // -48 to +48
+            let pattern = ((col * 17 + 53) % 97) as i32 - 48; // -48 to +48
             let random = (rng % 100) as i32 - 50; // -50 to +50
             let base_depth = 145i32 + pattern + random;
-            column_depth[column] = base_depth.clamp(30, 255) as u8;
+            col_depth[col] = base_depth.clamp(30, 255) as u8;
         }
         
         // Initialize drops with staggered starting positions
-        for column in 0..cols {
-            let depth = column_depth[column];
+        for col in 0..cols {
+            let depth = col_depth[col];
             // Track cumulative offset to prevent overlap
             let mut next_start_offset: i32 = 0;
             
-            for drop_index in 0..DROPS_PER_COLUMN {
+            for drop_idx in 0..DROPS_PER_COLUMN {
                 rng = rng.wrapping_mul(1103515245).wrapping_add(12345);
                 
                 // Trail length based on depth: closer = longer trails
@@ -746,19 +746,19 @@ pub fn new() -> Self {
                 let _trail_range = MAXIMUM_TRAIL_LENGTH - MINIMUM_TRAIL_LENGTH;
                 let minimum_trail = (MINIMUM_TRAIL_LENGTH as f32 * (0.5 + depth_factor * 0.5)) as usize;
                 let maximum_trail = (MAXIMUM_TRAIL_LENGTH as f32 * (0.6 + depth_factor * 0.4)) as usize;
-                let trail_length = minimum_trail + (rng % (maximum_trail - minimum_trail + 1) as u32) as usize;
+                let trail_len = minimum_trail + (rng % (maximum_trail - minimum_trail + 1) as u32) as usize;
                 
                 rng = rng.wrapping_mul(1103515245).wrapping_add(12345);
                 
                 // Gap based on depth: closer = MINIMAL gaps (ultra dense rain!)
                 // Far (depth=30): gap 2-8, Close (depth=255): gap 0-2
                 let gap_minimum = ((1.0 - depth_factor) * 2.0) as i32; // 0-2
-                let gap_range = (2.0 + (1.0 - depth_factor) * 6.0).maximum(1.0) as i32; // 2-8
+                let gap_range = (2.0 + (1.0 - depth_factor) * 6.0).max(1.0) as i32; // 2-8
                 let gap = gap_minimum + (rng % gap_range as u32) as i32;
                 let start_y = next_start_offset - (rng % 8) as i32;  // Tighter spawn
                 
                 // Update offset for next drop: must wait until this trail passes
-                next_start_offset = start_y - trail_length as i32 - gap;
+                next_start_offset = start_y - trail_len as i32 - gap;
                 
                 // Speed based on depth: closer = faster (1-2), far = slower (2-5)
                 rng = rng.wrapping_mul(1103515245).wrapping_add(12345);
@@ -768,11 +768,11 @@ pub fn new() -> Self {
                 
                 rng = rng.wrapping_mul(1103515245).wrapping_add(12345);
                 
-                drops[column][drop_index] = RainDrop {
+                drops[col][drop_idx] = RainDrop {
                     y: start_y,
                     speed,
                     delay: (rng % speed as u32) as u8,
-                    trail_length: trail_length as u8,
+                    trail_len: trail_len as u8,
                     glyph_seed: rng,
                     active: true,
                 };
@@ -793,7 +793,7 @@ pub fn new() -> Self {
                 screen_y: 0.0,
                 vel_x: 0.0,
                 vel_y: 0.0,
-                trail_length: 5,
+                trail_len: 5,
                 active: false,  // Inactive until triggered by rain
                 glyph_seed: 0,
                 life: 0.0,
@@ -802,11 +802,11 @@ pub fn new() -> Self {
         
         Self {
             drops,
-            column_depth,
+            col_depth,
             rng,
             frame: 0,
-            number_cols: cols,
-            number_rows: rows,
+            num_cols: cols,
+            num_rows: rows,
             shape_mode: ShapeOverlay::None,  // No shape by default
             shape_time: 0.0,
             shape_drops,
@@ -844,19 +844,19 @@ match mode {
             ShapeOverlay::None => 0,
         };
         
-        self.shape_drop_count = drop_count.minimum(MAXIMUM_SHAPE_DROPS);
+        self.shape_drop_count = drop_count.min(MAXIMUM_SHAPE_DROPS);
         
         for i in 0..self.shape_drop_count {
             rng = rng.wrapping_mul(1103515245).wrapping_add(12345);
             self.shape_drops[i] = ShapeDrop {
-                column: 0,
+                col: 0,
                 row: 0,
-                previous_column: 0,
-                previous_row: 0,
+                prev_col: 0,
+                prev_row: 0,
                 depth: 0.5,
                 progress: (i as f32 / self.shape_drop_count as f32),
-                edge_index: (i % 12) as u8,
-                trail_length: 5 + (rng % 4) as u8,
+                edge_idx: (i % 12) as u8,
+                trail_len: 5 + (rng % 4) as u8,
                 speed: 0.006 + (rng % 50) as f32 / 5000.0,
                 glyph_seed: rng,
             };
@@ -891,18 +891,18 @@ match mode {
     pub fn update(&mut self) {
         self.frame = self.frame.wrapping_add(1);
         
-        let maximum_y = (self.number_rows as i32) + MAXIMUM_TRAIL_LENGTH as i32 + 10;
+        let maximum_y = (self.num_rows as i32) + MAXIMUM_TRAIL_LENGTH as i32 + 10;
         
-        for column in 0..self.number_cols {
-            let depth = self.column_depth[column];
+        for col in 0..self.num_cols {
+            let depth = self.col_depth[col];
             let depth_factor = depth as f32 / 255.0;
             
             // First pass: collect info about all drops and determine if any need reset
             let mut needs_reset: [bool; DROPS_PER_COLUMN] = [false; DROPS_PER_COLUMN];
             let mut minimum_tail_y: i32 = 0;
             
-            for drop_index in 0..DROPS_PER_COLUMN {
-                let drop = &self.drops[column][drop_index];
+            for drop_idx in 0..DROPS_PER_COLUMN {
+                let drop = &self.drops[col][drop_idx];
                 if drop.active {
                     let tail = drop.tail_y();
                     if tail < minimum_tail_y {
@@ -912,8 +912,8 @@ match mode {
             }
             
             // Second pass: update positions
-            for drop_index in 0..DROPS_PER_COLUMN {
-                let drop = &mut self.drops[column][drop_index];
+            for drop_idx in 0..DROPS_PER_COLUMN {
+                let drop = &mut self.drops[col][drop_idx];
                 
                 if !drop.active {
                     continue;
@@ -931,21 +931,21 @@ match mode {
                 
                 // Mark for reset if off screen
                 if drop.y > maximum_y {
-                    needs_reset[drop_index] = true;
+                    needs_reset[drop_idx] = true;
                 }
             }
             
             // Third pass: reset drops that went off screen
-            for drop_index in 0..DROPS_PER_COLUMN {
-                if !needs_reset[drop_index] {
+            for drop_idx in 0..DROPS_PER_COLUMN {
+                if !needs_reset[drop_idx] {
                     continue;
                 }
                 
                 // Recalculate min_tail_y excluding drops being reset
                 let mut current_minimum_tail: i32 = 0;
-                for other_index in 0..DROPS_PER_COLUMN {
-                    if other_index != drop_index && !needs_reset[other_index] {
-                        let drop = &self.drops[column][other_index];
+                for other_idx in 0..DROPS_PER_COLUMN {
+                    if other_idx != drop_idx && !needs_reset[other_idx] {
+                        let drop = &self.drops[col][other_idx];
                         if drop.active {
                             let tail = drop.tail_y();
                             if tail < current_minimum_tail {
@@ -960,13 +960,13 @@ match mode {
                 // Trail length based on depth: closer = longer trails
                 let minimum_trail = (MINIMUM_TRAIL_LENGTH as f32 * (0.5 + depth_factor * 0.5)) as usize;
                 let maximum_trail = (MAXIMUM_TRAIL_LENGTH as f32 * (0.6 + depth_factor * 0.4)) as usize;
-                let new_trail = minimum_trail + (self.rng % (maximum_trail - minimum_trail + 1).maximum(1) as u32) as usize;
+                let new_trail = minimum_trail + (self.rng % (maximum_trail - minimum_trail + 1).max(1) as u32) as usize;
                 
                 self.rng = self.rng.wrapping_mul(1103515245).wrapping_add(12345);
                     
                 // Gap based on depth: closer = MINIMAL gaps (ultra dense!)
                 let gap_minimum = ((1.0 - depth_factor) * 2.0) as i32; // 0-2
-                let gap_range = (2.0 + (1.0 - depth_factor) * 6.0).maximum(1.0) as i32; // 2-8
+                let gap_range = (2.0 + (1.0 - depth_factor) * 6.0).max(1.0) as i32; // 2-8
                 let gap = gap_minimum + (self.rng % gap_range as u32) as i32;
                     
                 // Start above the lowest other drop's tail - tighter spawn
@@ -976,13 +976,13 @@ match mode {
                     
                 // Speed based on depth: closer = faster (1-2), far = slower (2-5)
                 let speed_minimum = (1.0 + (1.0 - depth_factor) * 1.5) as u8;
-                let speed_range = (2.0 + (1.0 - depth_factor) * 3.0).maximum(1.0) as u8;
+                let speed_range = (2.0 + (1.0 - depth_factor) * 3.0).max(1.0) as u8;
                 let new_speed = speed_minimum + (self.rng % speed_range as u32) as u8;
                 
                 self.rng = self.rng.wrapping_mul(1103515245).wrapping_add(12345);
                 
-                let drop = &mut self.drops[column][drop_index];
-                drop.trail_length = new_trail as u8;
+                let drop = &mut self.drops[col][drop_idx];
+                drop.trail_len = new_trail as u8;
                 drop.y = new_y;
                 drop.speed = new_speed;
                 drop.delay = 0;
@@ -995,11 +995,11 @@ match mode {
             self.shape_time += 0.016; // ~60 FPS step
             
             // Center in pixels (assuming 1280x800 or similar)
-            let center_x = (self.number_cols * CELL_SIZE / 2) as f32;  // Pixel center X
-            let center_y = (self.number_rows * CELL_SIZE / 2) as f32;  // Pixel center Y
-            let scale = ((self.number_rows * CELL_SIZE) as f32).minimum((self.number_cols * CELL_SIZE) as f32) * 0.18;  // MUST match entity layer
+            let center_x = (self.num_cols * CELL_SIZE / 2) as f32;  // Pixel center X
+            let center_y = (self.num_rows * CELL_SIZE / 2) as f32;  // Pixel center Y
+            let scale = ((self.num_rows * CELL_SIZE) as f32).min((self.num_cols * CELL_SIZE) as f32) * 0.18;  // MUST match entity layer
             
-            let count = self.shape_drop_count.minimum(MAXIMUM_SHAPE_DROPS);
+            let count = self.shape_drop_count.min(MAXIMUM_SHAPE_DROPS);
             for i in 0..count {
                 let drop = &mut self.shape_drops[i];
                 
@@ -1007,7 +1007,7 @@ match mode {
                 drop.progress += drop.speed;
                 if drop.progress >= 1.0 {
                     drop.progress -= 1.0;
-                    drop.edge_index = (drop.edge_index + 1) % 9;  // 9 visible edges
+                    drop.edge_idx = (drop.edge_idx + 1) % 9;  // 9 visible edges
                     drop.glyph_seed = drop.glyph_seed.wrapping_mul(1103515245).wrapping_add(12345);
                 }
                 
@@ -1042,19 +1042,19 @@ match self.shape_mode {
                             (6,7),                  // front-bottom
                         ];
                         
-                        let edge = edges[drop.edge_index as usize % 9];
+                        let edge = edges[drop.edge_idx as usize % 9];
                         let v1 = verts[edge.0];
                         let v2 = verts[edge.1];
                         
                         // Interpolate along edge
                         let t = drop.progress;
-                        let pixel = v1.0 + (v2.0 - v1.0) * t;
+                        let px = v1.0 + (v2.0 - v1.0) * t;
                         let py = v1.1 + (v2.1 - v1.1) * t;
                         let pz = v1.2 + (v2.2 - v1.2) * t;
                         
                         // Rotate around Y axis first
-                        let rx1 = pixel * cos_y - pz * sin_y;
-                        let rz1 = pixel * sin_y + pz * cos_y;
+                        let rx1 = px * cos_y - pz * sin_y;
+                        let rz1 = px * sin_y + pz * cos_y;
                         
                         // Then rotate around X axis
                         let ry2 = py * cos_x - rz1 * sin_x;
@@ -1063,7 +1063,7 @@ match self.shape_mode {
                         // Perspective projection (camera at z=5, same as entity layer)
                         let cam_dist = 5.0;
                         let proj_z = rz2 + cam_dist;
-                        let perspective = cam_dist / proj_z.maximum(0.5);
+                        let perspective = cam_dist / proj_z.max(0.5);
                         
                         // Project to screen (centered)
                         let screen_x = center_x + rx1 * scale * perspective;
@@ -1125,9 +1125,9 @@ match self.shape_mode {
                 };
                 
                 // Store previous position for trail direction
-                drop.previous_column = drop.column;
-                drop.previous_row = drop.row;
-                drop.column = x;
+                drop.prev_col = drop.col;
+                drop.prev_row = drop.row;
+                drop.col = x;
                 drop.row = y;
                 drop.depth = z.clamp(0.0, 1.0);
             }
@@ -1139,26 +1139,26 @@ match self.shape_mode {
     
     /// Render to framebuffer - OPTIMIZED for maximum FPS
     /// Strategy: Only render active drops, skip empty cells entirely
-    pub fn render(&self, buffer: &mut [u32], framebuffer_width: usize, framebuffer_height: usize) {
+    pub fn render(&self, buffer: &mut [u32], fb_width: usize, fb_height: usize) {
         // Fast SSE2 fill with dark blue-tinted base (cinematic feel)
         let bg_color = 0xFF010203u32;
         #[cfg(target_arch = "x86_64")]
                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-            crate::graphics::simd::fill_row_sse2(buffer.as_mut_pointer(), buffer.len(), bg_color);
+            crate::graphics::simd::fill_row_sse2(buffer.as_mut_ptr(), buffer.len(), bg_color);
         }
         #[cfg(not(target_arch = "x86_64"))]
         buffer.fill(bg_color);
         
         let cell_size = CELL_SIZE;
-        let cell_cols = framebuffer_width / cell_size;
-        let cell_rows = framebuffer_height / cell_size;
+        let cell_cols = fb_width / cell_size;
+        let cell_rows = fb_height / cell_size;
         
         // Pre-compute cube TOP FACE diamond shape for masking and glow
         let cube_active = self.shape_mode == ShapeOverlay::Cube;
-        let center_x = (framebuffer_width / 2) as f32;
-        let center_y = (framebuffer_height / 2) as f32;
-        let scale = (framebuffer_height as f32).minimum(framebuffer_width as f32) * 0.18;
+        let center_x = (fb_width / 2) as f32;
+        let center_y = (fb_height / 2) as f32;
+        let scale = (fb_height as f32).min(fb_width as f32) * 0.18;
         
         // Isometric angles (same as entity layer)
         let angle_y = 0.785398_f32; // 45°
@@ -1177,7 +1177,7 @@ unsafe {
             let rz2 = y3d * sin_x + rz1 * cos_x;
             let cam_dist = 5.0;
             let proj_z = rz2 + cam_dist;
-            let perspective = cam_dist / proj_z.maximum(1.0);
+            let perspective = cam_dist / proj_z.max(1.0);
             (center_x + rx1 * scale * perspective, center_y + ry2 * scale * perspective)
         };
         
@@ -1196,7 +1196,7 @@ unsafe {
             let rz2 = y3d * sin_x + rz1 * cos_x;
             let cam_dist = 5.0;
             let proj_z = rz2 + cam_dist;
-            let persp = cam_dist / proj_z.maximum(1.0);
+            let persp = cam_dist / proj_z.max(1.0);
             (center_x + rx1 * scale * persp, center_y + ry2 * scale * persp)
         };
         
@@ -1219,18 +1219,18 @@ unsafe {
         let right_quad = [cv0, cv1, cv2, cv3];
         
         // Bounding box for quick rejection (expanded upward for padding)
-        let cube_minimum_x = if cube_active { cv0.0.minimum(cv1.0).minimum(cv2.0).minimum(cv3.0).minimum(cv4.0).minimum(cv7.0).minimum(cv_t2.0) - 2.0 } else { 0.0 };
-        let cube_maximum_x = if cube_active { cv0.0.maximum(cv1.0).maximum(cv2.0).maximum(cv3.0).maximum(cv4.0).maximum(cv7.0).maximum(cv_t2.0) + 2.0 } else { 0.0 };
-        let cube_minimum_y = if cube_active { cv0.1.minimum(cv1.1).minimum(cv2.1).minimum(cv3.1).minimum(cv4.1).minimum(cv7.1).minimum(cv_t2.1) - 20.0 } else { 0.0 };
-        let cube_maximum_y = if cube_active { cv0.1.maximum(cv1.1).maximum(cv2.1).maximum(cv3.1).maximum(cv4.1).maximum(cv7.1).maximum(cv_t2.1) + 2.0 } else { 0.0 };
+        let cube_min_x = if cube_active { cv0.0.min(cv1.0).min(cv2.0).min(cv3.0).min(cv4.0).min(cv7.0).min(cv_t2.0) - 2.0 } else { 0.0 };
+        let cube_max_x = if cube_active { cv0.0.max(cv1.0).max(cv2.0).max(cv3.0).max(cv4.0).max(cv7.0).max(cv_t2.0) + 2.0 } else { 0.0 };
+        let cube_min_y = if cube_active { cv0.1.min(cv1.1).min(cv2.1).min(cv3.1).min(cv4.1).min(cv7.1).min(cv_t2.1) - 20.0 } else { 0.0 };
+        let cube_max_y = if cube_active { cv0.1.max(cv1.1).max(cv2.1).max(cv3.1).max(cv4.1).max(cv7.1).max(cv_t2.1) + 2.0 } else { 0.0 };
         
         // Pre-compute glow metrics ONCE (not per-cell)
         let diamond_half_w = if cube_active { (top_right_x - top_left_x) / 2.0 } else { 1.0 };
         let diamond_half_h = if cube_active { (top_front_y - top_back_y) / 2.0 } else { 1.0 };
         let diamond_center_x_g = (top_left_x + top_right_x) / 2.0;
         let diamond_center_y_g = (top_back_y + top_front_y) / 2.0;
-        let inv_diamond_half_w = 1.0 / diamond_half_w.maximum(1.0);
-        let inv_diamond_half_h = 1.0 / diamond_half_h.maximum(1.0);
+        let inv_diamond_half_w = 1.0 / diamond_half_w.max(1.0);
+        let inv_diamond_half_h = 1.0 / diamond_half_h.max(1.0);
         
         // Point-in-quad winding test (no trig - just cross products)
         // Pre-compute edge vectors for each quad to avoid recomputing
@@ -1264,34 +1264,34 @@ unsafe {
         let pad_edges = if cube_active { quad_edges(&pad_quad) } else { [(0.0,0.0,0.0,0.0); 4] };
         
         #[inline(always)]
-        fn point_in_quad_fast(pixel: f32, py: f32, edges: &[(f32, f32, f32, f32); 4]) -> bool {
-            let mut position = 0u8;
+        fn point_in_quad_fast(px: f32, py: f32, edges: &[(f32, f32, f32, f32); 4]) -> bool {
+            let mut pos = 0u8;
             let mut neg = 0u8;
             for &(ex, ey, ox, oy) in edges.iter() {
-                let cross = ex * (py - oy) - ey * (pixel - ox);
-                if cross > 0.0 { position += 1; } 
+                let cross = ex * (py - oy) - ey * (px - ox);
+                if cross > 0.0 { pos += 1; } 
                 else if cross < 0.0 { neg += 1; }
             }
-            position == 0 || neg == 0
+            pos == 0 || neg == 0
         }
         
         // PARALLEL column rendering via SMP — split columns across cores
-        let total_cols = cell_cols.minimum(self.number_cols);
+        let total_cols = cell_cols.min(self.num_cols);
         let params = BrailleParallelParams {
-            buffer_pointer: buffer.as_mut_pointer(),
-            buffer_length: buffer.len(),
-            framebuffer_width,
-            framebuffer_height,
+            buffer_ptr: buffer.as_mut_ptr(),
+            buffer_len: buffer.len(),
+            fb_width,
+            fb_height,
             cell_size,
             cell_rows,
-            drops_pointer: self.drops.as_pointer(),
-            column_depth_pointer: self.column_depth.as_pointer(),
-            number_cols: self.number_cols,
+            drops_ptr: self.drops.as_ptr(),
+            col_depth_ptr: self.col_depth.as_ptr(),
+            num_cols: self.num_cols,
             cube_active,
-            cube_minimum_x,
-            cube_maximum_x,
-            cube_minimum_y,
-            cube_maximum_y,
+            cube_min_x,
+            cube_max_x,
+            cube_min_y,
+            cube_max_y,
             top_edges,
             left_edges,
             right_edges,
@@ -1311,14 +1311,14 @@ const BrailleParallelParams as *mut u8,
     
     /// Render entity overlay - white pixel layer on top of rain
     /// Uses small 2x2 pixels for clean geometric shapes
-    pub fn render_entity_layer(&self, buffer: &mut [u32], framebuffer_width: usize, framebuffer_height: usize) {
+    pub fn render_entity_layer(&self, buffer: &mut [u32], fb_width: usize, fb_height: usize) {
         if self.shape_mode == ShapeOverlay::None {
             return;
         }
         
-        let center_x = (framebuffer_width / 2) as f32;
-        let center_y = (framebuffer_height / 2) as f32;
-        let scale = (framebuffer_height as f32).minimum(framebuffer_width as f32) * 0.18;  // Smaller cube
+        let center_x = (fb_width / 2) as f32;
+        let center_y = (fb_height / 2) as f32;
+        let scale = (fb_height as f32).min(fb_width as f32) * 0.18;  // Smaller cube
         
         // Time for animation
         let time = self.shape_time;
@@ -1350,20 +1350,20 @@ match self.shape_mode {
                         
                         // Rotate by time for subtle motion
                         let rot_angle = time * 0.1;
-                        let receive = x * Self::fast_cos(rot_angle) - z * Self::fast_sin(rot_angle);
+                        let rx = x * Self::fast_cos(rot_angle) - z * Self::fast_sin(rot_angle);
                         let rz = x * Self::fast_sin(rot_angle) + z * Self::fast_cos(rot_angle);
                         
                         let perspective = 3.0 / (4.0 + rz);
-                        let pixel = (center_x + receive * scale * perspective) as i32;
+                        let px = (center_x + rx * scale * perspective) as i32;
                         let py = (center_y + y * scale * perspective * 0.8) as i32;
                         
                         if !first {
                             let depth = (rz + 1.0) / 2.0;
                             let color = if depth > 0.5 { 0xFFCCFFCC } else { previous_color };  // Matrix green
-                            self.draw_line_thick(buffer, framebuffer_width, framebuffer_height, 
-                                               previous_x, previous_y, pixel, py, color, 2);
+                            self.draw_line_thick(buffer, fb_width, fb_height, 
+                                               previous_x, previous_y, px, py, color, 2);
                         }
-                        previous_x = pixel;
+                        previous_x = px;
                         previous_y = py;
                         first = false;
                     }
@@ -1372,7 +1372,7 @@ match self.shape_mode {
                 // Draw latitude lines (horizontal circles)
                 for i in 1..4 {
                     let y_level = -0.75 + (i as f32 * 0.5);
-                    let radius = (1.0 - y_level * y_level).maximum(0.0);
+                    let radius = (1.0 - y_level * y_level).max(0.0);
                     let radius = {
                         let mut x = radius;
                         let mut y = radius * 0.5;
@@ -1390,16 +1390,16 @@ match self.shape_mode {
                         let z = Self::fast_sin(angle) * radius;
                         
                         let perspective = 3.0 / (4.0 + z);
-                        let pixel = (center_x + x * scale * perspective) as i32;
+                        let px = (center_x + x * scale * perspective) as i32;
                         let py = (center_y + y_level * scale * perspective * 0.8) as i32;
                         
                         if !first {
                             let depth = (z + 1.0) / 2.0;
                             let color = if depth > 0.5 { 0xFFCCFFCC } else { 0xFF00AA44 };  // Matrix green
-                            self.draw_line_thick(buffer, framebuffer_width, framebuffer_height, 
-                                               previous_x, previous_y, pixel, py, color, 2);
+                            self.draw_line_thick(buffer, fb_width, fb_height, 
+                                               previous_x, previous_y, px, py, color, 2);
                         }
-                        previous_x = pixel;
+                        previous_x = px;
                         previous_y = py;
                         first = false;
                     }
@@ -1432,20 +1432,20 @@ match self.shape_mode {
                         
                         // Rotate
                         let rot = time * 0.2;
-                        let receive = x * Self::fast_cos(rot) - z * Self::fast_sin(rot);
+                        let rx = x * Self::fast_cos(rot) - z * Self::fast_sin(rot);
                         let rz = x * Self::fast_sin(rot) + z * Self::fast_cos(rot);
                         
                         let perspective = 3.0 / (4.0 + rz);
-                        let pixel = (center_x + receive * scale * perspective) as i32;
+                        let px = (center_x + rx * scale * perspective) as i32;
                         let py = (center_y + y * scale * perspective) as i32;
                         
                         if !first {
                             let depth = (rz + 1.0) / 2.0;
                             let color = if depth > 0.5 { 0xFFCCFFCC } else { 0xFF00AA44 };  // Matrix green
-                            self.draw_line_thick(buffer, framebuffer_width, framebuffer_height, 
-                                               previous_x, previous_y, pixel, py, color, 2);
+                            self.draw_line_thick(buffer, fb_width, fb_height, 
+                                               previous_x, previous_y, px, py, color, 2);
                         }
-                        previous_x = pixel;
+                        previous_x = px;
                         previous_y = py;
                         first = false;
                     }
@@ -1482,14 +1482,14 @@ match self.shape_mode {
                     if !first {
                         let color1 = if z1 > 0.0 { 0xFFCCFFCC } else { 0xFF00AA44 };  // Matrix green
                         let color2 = if z2 > 0.0 { 0xFFCCFFCC } else { 0xFF00AA44 };  // Matrix green
-                        self.draw_line_thick(buffer, framebuffer_width, framebuffer_height, 
+                        self.draw_line_thick(buffer, fb_width, fb_height, 
                                            previous_x1, previous_y1, px1, py1, color1, 2);
-                        self.draw_line_thick(buffer, framebuffer_width, framebuffer_height, 
+                        self.draw_line_thick(buffer, fb_width, fb_height, 
                                            previous_x2, previous_y2, px2, py2, color2, 2);
                         
                         // Draw connecting rungs every 4 segments
                         if i % 4 == 0 {
-                            self.draw_line_thick(buffer, framebuffer_width, framebuffer_height, 
+                            self.draw_line_thick(buffer, fb_width, fb_height, 
                                                px1, py1, px2, py2, 0xFF44FF44, 1);
                         }
                     }
@@ -1508,17 +1508,17 @@ match self.shape_mode {
     /// TOP face: rain splits into 2 diagonal streams following isometric edges
     /// Where 2 diagonals cross → white pixel (brilliance effect)
     /// SIDE faces: rain flows vertically downward
-    pub fn render_cube_flow_layer(&self, buffer: &mut [u32], framebuffer_width: usize, framebuffer_height: usize) {
+    pub fn render_cube_flow_layer(&self, buffer: &mut [u32], fb_width: usize, fb_height: usize) {
         if self.shape_mode != ShapeOverlay::Cube {
             return;
         }
         
         let cell_size = CELL_SIZE;
-        let screen_width = (self.number_cols * cell_size) as f32;
-        let screen_height = (self.number_rows * cell_size) as f32;
+        let screen_width = (self.num_cols * cell_size) as f32;
+        let screen_height = (self.num_rows * cell_size) as f32;
         let center_x = screen_width / 2.0;
         let center_y = screen_height / 2.0;
-        let scale = screen_height.minimum(screen_width) * 0.18;
+        let scale = screen_height.min(screen_width) * 0.18;
         
         let angle_y = 0.785398_f32;
         let angle_x = 0.523599_f32;
@@ -1534,7 +1534,7 @@ match self.shape_mode {
             let ry2 = y3d * cos_x - rz1 * sin_x;
             let rz2 = y3d * sin_x + rz1 * cos_x;
             let proj_z = rz2 + cam_dist;
-            let perspective = cam_dist / proj_z.maximum(1.0);
+            let perspective = cam_dist / proj_z.max(1.0);
             (center_x + rx1 * scale * perspective, center_y + ry2 * scale * perspective)
         };
         
@@ -1576,21 +1576,21 @@ match self.shape_mode {
             if p.1 > bb_maximum_y { bb_maximum_y = p.1; }
         }
         
-        let cell_x0 = ((bb_minimum_x / cell_size as f32) as i32).maximum(0) as usize;
-        let cell_x1 = ((bb_maximum_x / cell_size as f32) as i32 + 1).minimum(self.number_cols as i32) as usize;
-        let cell_y0 = ((bb_minimum_y / cell_size as f32) as i32).maximum(0) as usize;
-        let cell_y1 = ((bb_maximum_y / cell_size as f32) as i32 + 1).minimum(self.number_rows as i32) as usize;
+        let cell_x0 = ((bb_minimum_x / cell_size as f32) as i32).max(0) as usize;
+        let cell_x1 = ((bb_maximum_x / cell_size as f32) as i32 + 1).min(self.num_cols as i32) as usize;
+        let cell_y0 = ((bb_minimum_y / cell_size as f32) as i32).max(0) as usize;
+        let cell_y1 = ((bb_maximum_y / cell_size as f32) as i32 + 1).min(self.num_rows as i32) as usize;
         
-        let point_in_quad = |pixel: f32, py: f32, q: &[(f32, f32); 4]| -> bool {
-            let mut position = 0i32;
+        let point_in_quad = |px: f32, py: f32, q: &[(f32, f32); 4]| -> bool {
+            let mut pos = 0i32;
             let mut neg = 0i32;
             for i in 0..4 {
                 let j = (i + 1) % 4;
-                let cross = (q[j].0 - q[i].0) * (py - q[i].1) - (q[j].1 - q[i].1) * (pixel - q[i].0);
-                if cross > 0.0 { position += 1; } 
+                let cross = (q[j].0 - q[i].0) * (py - q[i].1) - (q[j].1 - q[i].1) * (px - q[i].0);
+                if cross > 0.0 { pos += 1; } 
                 else if cross < 0.0 { neg += 1; }
             }
-            position == 0 || neg == 0
+            pos == 0 || neg == 0
         };
         
         let time = self.shape_time;
@@ -1599,13 +1599,13 @@ match self.shape_mode {
         
         for cy in cell_y0..cell_y1 {
             for cx in cell_x0..cell_x1 {
-                let pixel = (cx * cell_size + CELL_CENTER) as f32;
+                let px = (cx * cell_size + CELL_CENTER) as f32;
                 let py = (cy * cell_size + CELL_CENTER) as f32;
                 
                 // === TOP FACE: diagonal rain following isometric edges ===
-                if top_det.absolute() > 0.01 && point_in_quad(pixel, py, &top_quad) {
+                if top_det.abs() > 0.01 && point_in_quad(px, py, &top_quad) {
                     // Compute UV on the top face (0..1 range)
-                    let dpx = pixel - t0.0;
+                    let dpx = px - t0.0;
                     let dpy = py - t0.1;
                     let inv_det = 1.0 / top_det;
                     let u = (dpx * top_v_dy - dpy * top_v_dx) * inv_det;
@@ -1638,7 +1638,7 @@ match self.shape_mode {
                             let d = u - head;
                             let dm = d - Self::fast_floor(d / period) * period;
                             if dm >= 0.0 && dm < trail {
-                                brightness = (1.0 - dm / trail).maximum(0.0);
+                                brightness = (1.0 - dm / trail).max(0.0);
                             }
                         }
                         
@@ -1651,7 +1651,7 @@ match self.shape_mode {
                             let d = v - head;
                             let dm = d - Self::fast_floor(d / period) * period;
                             if dm >= 0.0 && dm < trail {
-                                let b2 = (1.0 - dm / trail).maximum(0.0);
+                                let b2 = (1.0 - dm / trail).max(0.0);
                                 if b2 > brightness { brightness = b2; }
                             }
                         }
@@ -1680,15 +1680,15 @@ match self.shape_mode {
                             0xFF000000 | ((g as u32) << 8) | 0x06
                         };
                         
-                        self.draw_glyph_3x3(buffer, framebuffer_width, cx * cell_size + 1, cy * cell_size + 1, glyph, color);
+                        self.draw_glyph_3x3(buffer, fb_width, cx * cell_size + 1, cy * cell_size + 1, glyph, color);
                     }
                     continue;
                 }
                 
                 // === LEFT FACE: vertical rain columns ===
-                if point_in_quad(pixel, py, &left_quad) {
+                if point_in_quad(px, py, &left_quad) {
                     let column_pixel = 10.0_f32;
-                    let column_f = pixel / column_pixel;
+                    let column_f = px / column_pixel;
                     let column_frac = column_f - Self::fast_floor(column_f);
                     
                     if column_frac < 0.4 {
@@ -1697,15 +1697,15 @@ match self.shape_mode {
                         let scroll_speed = 2.5 + (seed % 6) as f32 * 0.3;
                         let phase = (seed % 100) as f32 * 0.05;
                         let head = time * scroll_speed + phase;
-                        let position = py / column_pixel;
+                        let pos = py / column_pixel;
                         let trail = 3.0;
                         let period = 4.0 + (seed % 3) as f32 * 0.5;
-                        let d = position - head;
+                        let d = pos - head;
                         let dm = d - Self::fast_floor(d / period) * period;
                         
                         let mut brightness: f32 = 0.06;
                         if dm >= 0.0 && dm < trail {
-                            brightness = (1.0 - dm / trail).maximum(0.0);
+                            brightness = (1.0 - dm / trail).max(0.0);
                             if brightness < 0.06 { brightness = 0.06; }
                         }
                         
@@ -1723,15 +1723,15 @@ match self.shape_mode {
                             0xFF000000 | ((g as u32) << 8) | 0x04
                         };
                         
-                        self.draw_glyph_3x3(buffer, framebuffer_width, cx * cell_size + 1, cy * cell_size + 1, glyph, color);
+                        self.draw_glyph_3x3(buffer, fb_width, cx * cell_size + 1, cy * cell_size + 1, glyph, color);
                     }
                     continue;
                 }
                 
                 // === RIGHT FACE (z=-1): vertical rain columns ===
-                if point_in_quad(pixel, py, &right_quad) {
+                if point_in_quad(px, py, &right_quad) {
                     let column_pixel = 10.0_f32;
-                    let column_f = pixel / column_pixel;
+                    let column_f = px / column_pixel;
                     let column_frac = column_f - Self::fast_floor(column_f);
                     
                     if column_frac < 0.4 {
@@ -1740,15 +1740,15 @@ match self.shape_mode {
                         let scroll_speed = 2.8 + (seed % 5) as f32 * 0.25;
                         let phase = (seed % 100) as f32 * 0.05;
                         let head = time * scroll_speed + phase;
-                        let position = py / column_pixel;
+                        let pos = py / column_pixel;
                         let trail = 3.5;
                         let period = 4.5 + (seed % 3) as f32 * 0.5;
-                        let d = position - head;
+                        let d = pos - head;
                         let dm = d - Self::fast_floor(d / period) * period;
                         
                         let mut brightness: f32 = 0.06;
                         if dm >= 0.0 && dm < trail {
-                            brightness = (1.0 - dm / trail).maximum(0.0);
+                            brightness = (1.0 - dm / trail).max(0.0);
                             if brightness < 0.06 { brightness = 0.06; }
                         }
                         
@@ -1766,7 +1766,7 @@ match self.shape_mode {
                             0xFF000000 | ((g as u32) << 8) | 0x06
                         };
                         
-                        self.draw_glyph_3x3(buffer, framebuffer_width, cx * cell_size + 1, cy * cell_size + 1, glyph, color);
+                        self.draw_glyph_3x3(buffer, fb_width, cx * cell_size + 1, cy * cell_size + 1, glyph, color);
                     }
                 }
             }
@@ -1774,12 +1774,12 @@ match self.shape_mode {
     }
     
     /// Draw a thick line using Bresenham algorithm with width
-    fn draw_line_thick(&self, buffer: &mut [u32], framebuffer_width: usize, framebuffer_height: usize,
+    fn draw_line_thick(&self, buffer: &mut [u32], fb_width: usize, fb_height: usize,
                        x0: i32, y0: i32, x1: i32, y1: i32, color: u32, thickness: i32) {
         // Safety: skip if both endpoints are way off-screen
         let margin = 100i32;
-        let w = framebuffer_width as i32;
-        let h = framebuffer_height as i32;
+        let w = fb_width as i32;
+        let h = fb_height as i32;
         if (x0 < -margin && x1 < -margin) || (x0 > w + margin && x1 > w + margin) {
             return;
         }
@@ -1787,17 +1787,17 @@ match self.shape_mode {
             return;
         }
         
-        let dx = (x1 - x0).absolute();
-        let dy = -(y1 - y0).absolute();
+        let dx = (x1 - x0).abs();
+        let dy = -(y1 - y0).abs();
         let sx = if x0 < x1 { 1 } else { -1 };
         let sy = if y0 < y1 { 1 } else { -1 };
-        let mut error = dx + dy;
+        let mut err = dx + dy;
         
         let mut x = x0;
         let mut y = y0;
         
         // Safety: limit iterations to prevent infinite loops
-        let maximum_steps = (dx.absolute() + (-dy).absolute() + 10) as usize;
+        let maximum_steps = (dx.abs() + (-dy).abs() + 10) as usize;
         let mut steps = 0usize;
         
                 // Infinite loop — runs until an explicit `break`.
@@ -1808,13 +1808,13 @@ loop {
             // Draw thick pixel (cross pattern for thickness)
             for ty in -thickness/2..=thickness/2 {
                 for transmit in -thickness/2..=thickness/2 {
-                    let pixel = x + transmit;
+                    let px = x + transmit;
                     let py = y + ty;
-                    if pixel >= 0 && py >= 0 {
-                        let pxu = pixel as usize;
+                    if px >= 0 && py >= 0 {
+                        let pxu = px as usize;
                         let pyu = py as usize;
-                        if pxu < framebuffer_width && pyu < framebuffer_height {
-                            buffer[pyu * framebuffer_width + pxu] = color;
+                        if pxu < fb_width && pyu < fb_height {
+                            buffer[pyu * fb_width + pxu] = color;
                         }
                     }
                 }
@@ -1822,26 +1822,26 @@ loop {
             
             if x == x1 && y == y1 { break; }
             
-            let e2 = 2 * error;
+            let e2 = 2 * err;
             if e2 >= dy {
-                error += dy;
+                err += dy;
                 x += sx;
             }
             if e2 <= dx {
-                error += dx;
+                err += dx;
                 y += sy;
             }
         }
     }
     
     /// Draw a line with Matrix flow effect - pulses travel along the edge
-    fn draw_line_matrix_flow(&self, buffer: &mut [u32], framebuffer_width: usize, framebuffer_height: usize,
+    fn draw_line_matrix_flow(&self, buffer: &mut [u32], fb_width: usize, fb_height: usize,
                               x0: i32, y0: i32, x1: i32, y1: i32, 
-                              base_color: u32, depth: f32, edge_index: usize) {
+                              base_color: u32, depth: f32, edge_idx: usize) {
         // Safety: skip if both endpoints are way off-screen
         let margin = 100i32;
-        let w = framebuffer_width as i32;
-        let h = framebuffer_height as i32;
+        let w = fb_width as i32;
+        let h = fb_height as i32;
         if (x0 < -margin && x1 < -margin) || (x0 > w + margin && x1 > w + margin) {
             return;
         }
@@ -1854,7 +1854,7 @@ loop {
         // Calculate line length for flow effect
         let dx_f = (x1 - x0) as f32;
         let dy_f = (y1 - y0) as f32;
-        let line_length = (dx_f * dx_f + dy_f * dy_f).maximum(1.0);
+        let line_length = (dx_f * dx_f + dy_f * dy_f).max(1.0);
         let line_length = {
             let mut x = line_length;
             let mut y = line_length * 0.5;
@@ -1862,24 +1862,24 @@ loop {
             y
         };
         
-        let dx = (x1 - x0).absolute();
-        let dy = -(y1 - y0).absolute();
+        let dx = (x1 - x0).abs();
+        let dy = -(y1 - y0).abs();
         let sx = if x0 < x1 { 1 } else { -1 };
         let sy = if y0 < y1 { 1 } else { -1 };
-        let mut error = dx + dy;
+        let mut err = dx + dy;
         
         let mut x = x0;
         let mut y = y0;
-        let mut pixel_index = 0usize;
+        let mut pixel_idx = 0usize;
         
         // Safety: limit iterations
-        let maximum_steps = (dx.absolute() + (-dy).absolute() + 10) as usize;
+        let maximum_steps = (dx.abs() + (-dy).abs() + 10) as usize;
         let mut steps = 0usize;
         
         // Number of "data pulses" traveling along this edge
         let number_pulses = 3;
         // Speed of pulses (cycles per second)
-        let pulse_speed = 2.0 + (edge_index as f32 * 0.3);
+        let pulse_speed = 2.0 + (edge_idx as f32 * 0.3);
         // Width of each pulse (in pixels)
         let pulse_width = 12.0;
         
@@ -1889,7 +1889,7 @@ loop {
             if steps > maximum_steps { break; }
             
             // Calculate position along line (0.0 to 1.0)
-            let t = pixel_index as f32 / line_length.maximum(1.0);
+            let t = pixel_idx as f32 / line_length.max(1.0);
             
             // Calculate pulse intensity at this position
             let mut pulse_intensity = 0.0f32;
@@ -1899,18 +1899,18 @@ loop {
                 let pulse_center = pulse_phase;
                 
                 // Distance from pulse center (wrapping)
-                let dist1 = (t - pulse_center).absolute();
-                let dist2 = (t - pulse_center - 1.0).absolute();
-                let dist3 = (t - pulse_center + 1.0).absolute();
-                let dist = dist1.minimum(dist2).minimum(dist3);
+                let dist1 = (t - pulse_center).abs();
+                let dist2 = (t - pulse_center - 1.0).abs();
+                let dist3 = (t - pulse_center + 1.0).abs();
+                let dist = dist1.min(dist2).min(dist3);
                 
                 // Gaussian-like falloff for pulse
                 let pulse_t = dist * line_length / pulse_width;
                 if pulse_t < 1.0 {
-                    pulse_intensity += (1.0 - pulse_t * pulse_t).maximum(0.0);
+                    pulse_intensity += (1.0 - pulse_t * pulse_t).max(0.0);
                 }
             }
-            pulse_intensity = pulse_intensity.minimum(1.0);
+            pulse_intensity = pulse_intensity.min(1.0);
             
             // Blend between base color and bright white based on pulse
             let (base_r, base_g, base_b) = (
@@ -1933,29 +1933,29 @@ loop {
             let thickness = if pulse_intensity > 0.3 { 2 } else { 1 };
             for ty in -thickness/2..=thickness/2 {
                 for transmit in -thickness/2..=thickness/2 {
-                    let pixel = x + transmit;
+                    let px = x + transmit;
                     let py_coord = y + ty;
-                    if pixel >= 0 && py_coord >= 0 {
-                        let pxu = pixel as usize;
+                    if px >= 0 && py_coord >= 0 {
+                        let pxu = px as usize;
                         let pyu = py_coord as usize;
-                        if pxu < framebuffer_width && pyu < framebuffer_height {
-                            buffer[pyu * framebuffer_width + pxu] = color;
+                        if pxu < fb_width && pyu < fb_height {
+                            buffer[pyu * fb_width + pxu] = color;
                         }
                     }
                 }
             }
             
-            pixel_index += 1;
+            pixel_idx += 1;
             
             if x == x1 && y == y1 { break; }
             
-            let e2 = 2 * error;
+            let e2 = 2 * err;
             if e2 >= dy {
-                error += dy;
+                err += dy;
                 x += sx;
             }
             if e2 <= dx {
-                error += dx;
+                err += dx;
                 y += sy;
             }
         }
@@ -1963,25 +1963,25 @@ loop {
     
     /// Draw a 3×3 micro-glyph at pixel position — high-res version
     #[inline(always)]
-    fn draw_glyph_3x3(&self, buffer: &mut [u32], framebuffer_width: usize,
-                       pixel: usize, py: usize, glyph: &[u8; 3], color: u32) {
-        let framebuffer_height = buffer.len() / framebuffer_width;
-        if py + 2 >= framebuffer_height || pixel + 2 >= framebuffer_width { return; }
+    fn draw_glyph_3x3(&self, buffer: &mut [u32], fb_width: usize,
+                       px: usize, py: usize, glyph: &[u8; 3], color: u32) {
+        let fb_height = buffer.len() / fb_width;
+        if py + 2 >= fb_height || px + 2 >= fb_width { return; }
         // Row 0
         let b0 = glyph[0];
-        let base0 = py * framebuffer_width + pixel;
+        let base0 = py * fb_width + px;
         if b0 & 0b001 != 0 { buffer[base0] = color; }
         if b0 & 0b010 != 0 { buffer[base0 + 1] = color; }
         if b0 & 0b100 != 0 { buffer[base0 + 2] = color; }
         // Row 1
         let b1 = glyph[1];
-        let base1 = base0 + framebuffer_width;
+        let base1 = base0 + fb_width;
         if b1 & 0b001 != 0 { buffer[base1] = color; }
         if b1 & 0b010 != 0 { buffer[base1 + 1] = color; }
         if b1 & 0b100 != 0 { buffer[base1 + 2] = color; }
         // Row 2
         let b2 = glyph[2];
-        let base2 = base1 + framebuffer_width;
+        let base2 = base1 + fb_width;
         if b2 & 0b001 != 0 { buffer[base2] = color; }
         if b2 & 0b010 != 0 { buffer[base2 + 1] = color; }
         if b2 & 0b100 != 0 { buffer[base2 + 2] = color; }
@@ -1989,16 +1989,16 @@ loop {
 
     /// Draw a 6x6 glyph at pixel position (kept for entity overlay)
     #[inline(always)]
-    fn draw_glyph_6x6(&self, buffer: &mut [u32], framebuffer_width: usize, 
-                       pixel: usize, py: usize, glyph: &[u8; 6], color: u32) {
-        let framebuffer_height = buffer.len() / framebuffer_width;
-        if py >= framebuffer_height || pixel >= framebuffer_width { return; }
-        let maximum_row = (framebuffer_height - py).minimum(6);
-        let maximum_column = (framebuffer_width - pixel).minimum(6);
+    fn draw_glyph_6x6(&self, buffer: &mut [u32], fb_width: usize, 
+                       px: usize, py: usize, glyph: &[u8; 6], color: u32) {
+        let fb_height = buffer.len() / fb_width;
+        if py >= fb_height || px >= fb_width { return; }
+        let maximum_row = (fb_height - py).min(6);
+        let maximum_column = (fb_width - px).min(6);
         for row in 0..maximum_row {
             let row_bits = glyph[row];
             if row_bits == 0 { continue; }
-            let row_start = (py + row) * framebuffer_width + pixel;
+            let row_start = (py + row) * fb_width + px;
             if row_bits & 0b000001 != 0 && 0 < maximum_column { buffer[row_start] = color; }
             if row_bits & 0b000010 != 0 && 1 < maximum_column { buffer[row_start + 1] = color; }
             if row_bits & 0b000100 != 0 && 2 < maximum_column { buffer[row_start + 2] = color; }
@@ -2072,28 +2072,28 @@ pub fn new() -> Self {
     }
     
     /// Render to framebuffer
-    pub fn render(&self, buffer: &mut [u32], framebuffer_width: usize, framebuffer_height: usize) {
-        let cols = (framebuffer_width / CELL_PIXEL_W).minimum(self.cols);
-        let rows = (framebuffer_height / CELL_PIXEL_H).minimum(self.rows);
+    pub fn render(&self, buffer: &mut [u32], fb_width: usize, fb_height: usize) {
+        let cols = (fb_width / CELL_PIXEL_W).min(self.cols);
+        let rows = (fb_height / CELL_PIXEL_H).min(self.rows);
         
-        for column in 0..cols {
-            let head_y = self.heads[column];
+        for col in 0..cols {
+            let head_y = self.heads[col];
             
             for row in 0..rows {
                 let dist = head_y - (row as i32);
                 
                 if dist >= 0 && dist < 16 {
                     // Calculate intensity
-                    let intensity = INTENSITY_LUT[(dist as usize).minimum(31)];
+                    let intensity = INTENSITY_LUT[(dist as usize).min(31)];
                     if intensity > 10 {
                         // Get character for this cell
-                        let c = self.chars[column * self.rows + row];
+                        let c = self.chars[col * self.rows + row];
                         
                         // Color: bright green fading
                         let color = (0xFF << 24) | ((intensity as u32) << 8);
                         
                         // Draw character
-                        self.draw_char(buffer, framebuffer_width, column, row, c, color);
+                        self.draw_char(buffer, fb_width, col, row, c, color);
                     }
                 }
             }
@@ -2101,23 +2101,23 @@ pub fn new() -> Self {
     }
     
     /// Draw character using font
-    fn draw_char(&self, buffer: &mut [u32], framebuffer_width: usize, 
-                 column: usize, row: usize, c: u8, color: u32) {
-        let pixel = column * CELL_PIXEL_W;
+    fn draw_char(&self, buffer: &mut [u32], fb_width: usize, 
+                 col: usize, row: usize, c: u8, color: u32) {
+        let px = col * CELL_PIXEL_W;
         let py = row * CELL_PIXEL_H;
         
         let glyph = crate::framebuffer::font::get_glyph(c as char);
         
         for (gy, &bits) in glyph.iter().enumerate() {
             let y = py + gy;
-            if y >= buffer.len() / framebuffer_width { continue; }
+            if y >= buffer.len() / fb_width { continue; }
             
             for gx in 0..8 {
                 if (bits >> (7 - gx)) & 1 != 0 {
-                    let x = pixel + gx;
-                    let index = y * framebuffer_width + x;
-                    if index < buffer.len() {
-                        buffer[index] = color;
+                    let x = px + gx;
+                    let idx = y * fb_width + x;
+                    if idx < buffer.len() {
+                        buffer[idx] = color;
                     }
                 }
             }
@@ -2148,7 +2148,7 @@ struct Drop3D {
     /// Velocity Z (depth movement)
     vz: f32,
     /// Trail length
-    trail_length: u8,
+    trail_len: u8,
     /// Glyph randomizer
     glyph_seed: u32,
     /// Is drop on a surface?
@@ -2163,7 +2163,7 @@ impl Drop3D {
         Self {
             x: 0.0, y: -10.0, z: 0.5,
             vx: 0.0, vy: 0.5, vz: 0.0,
-            trail_length: 20,
+            trail_len: 20,
             glyph_seed: 0,
             on_surface: false,
             flow_time: 0,
@@ -2208,7 +2208,7 @@ pub fn new() -> Self {
         let mut rng = 0xDEADBEEFu32;
         
         // Initialize drops with random positions
-        for drop in drops.iterator_mut() {
+        for drop in drops.iter_mut() {
             rng = rng.wrapping_mul(1103515245).wrapping_add(12345);
             drop.x = (rng % 160) as f32;
             rng = rng.wrapping_mul(1103515245).wrapping_add(12345);
@@ -2220,7 +2220,7 @@ pub fn new() -> Self {
             drop.vy = 0.3 + drop.z * 0.7; // 0.3 to 1.0
             
             rng = rng.wrapping_mul(1103515245).wrapping_add(12345);
-            drop.trail_length = 10 + (rng % 30) as u8;
+            drop.trail_len = 10 + (rng % 30) as u8;
             drop.glyph_seed = rng;
         }
         
@@ -2245,7 +2245,7 @@ pub fn new() -> Self {
     
     /// Add a shape to the scene
     pub fn add_shape(&mut self, shape: Shape3D) {
-        for slot in self.shapes.iterator_mut() {
+        for slot in self.shapes.iter_mut() {
             if slot.is_none() {
                 *slot = Some(shape);
                 return;
@@ -2255,7 +2255,7 @@ pub fn new() -> Self {
     
     /// Clear all shapes
     pub fn clear_shapes(&mut self) {
-        for slot in self.shapes.iterator_mut() {
+        for slot in self.shapes.iter_mut() {
             *slot = None;
         }
     }
@@ -2282,7 +2282,7 @@ match shape {
                     
                     if dist_sq < r_sq {
                         // Inside sphere - calculate outward normal
-                        let dist = Self::fast_sqrt(dist_sq).maximum(0.01);
+                        let dist = Self::fast_sqrt(dist_sq).max(0.01);
                         return Some((dx / dist, dy / dist, dz / dist));
                     }
                 }
@@ -2296,20 +2296,20 @@ match shape {
                     let sin_r = Self::fast_sin(rot);
                     
                     // Rotate around Y axis
-                    let receive = dx * cos_r - dz * sin_r;
+                    let rx = dx * cos_r - dz * sin_r;
                     let ry = dy;
                     let rz = dx * sin_r + dz * cos_r;
                     
                     // Check if inside axis-aligned box
-                    if receive.absolute() < half && ry.absolute() < half && rz.absolute() < half {
+                    if rx.abs() < half && ry.abs() < half && rz.abs() < half {
                         // Find closest face for normal
-                        let ax = half - receive.absolute();
-                        let ay = half - ry.absolute();
-                        let az = half - rz.absolute();
+                        let ax = half - rx.abs();
+                        let ay = half - ry.abs();
+                        let az = half - rz.abs();
                         
                         // Rotate normal back
                         if ax < ay && ax < az {
-                            let nx = if receive > 0.0 { 1.0 } else { -1.0 };
+                            let nx = if rx > 0.0 { 1.0 } else { -1.0 };
                             return Some((nx * cos_r, 0.0, nx * sin_r));
                         } else if ay < az {
                             return Some((0.0, if ry > 0.0 { 1.0 } else { -1.0 }, 0.0));
@@ -2335,9 +2335,9 @@ match shape {
                         let directory_x = if dist_xz > 0.01 { dx / dist_xz } else { 1.0 };
                         let directory_z = if dist_xz > 0.01 { dz / dist_xz } else { 0.0 };
                         
-                        let nx = tube_dx * directory_x / tube_dist.maximum(0.01);
-                        let ny = dy / tube_dist.maximum(0.01);
-                        let nz = tube_dx * directory_z / tube_dist.maximum(0.01);
+                        let nx = tube_dx * directory_x / tube_dist.max(0.01);
+                        let ny = dy / tube_dist.max(0.01);
+                        let nz = tube_dx * directory_z / tube_dist.max(0.01);
                         
                         return Some((nx, ny, nz));
                     }
@@ -2385,7 +2385,7 @@ match shape {
                     
                     // Add gravity tangent component
                     let grav_dot = ny; // gravity is (0, 1, 0)
-                    drop.vy += gravity * (1.0 - grav_dot * grav_dot).maximum(0.0);
+                    drop.vy += gravity * (1.0 - grav_dot * grav_dot).max(0.0);
                 }
                 
                 // Push out of shape
@@ -2457,7 +2457,7 @@ match shape {
     }
     
     /// Render to framebuffer
-    pub fn render(&self, buffer: &mut [u32], framebuffer_width: usize, framebuffer_height: usize) {
+    pub fn render(&self, buffer: &mut [u32], fb_width: usize, fb_height: usize) {
         // Fill background
         let bg_color = 0xFF010201u32;
         buffer.fill(bg_color);
@@ -2479,21 +2479,21 @@ match shape {
             let surface_boost = if drop.on_surface { 30u32 } else { 0 };
             
             // Draw trail
-            let trail_length = drop.trail_length as usize;
-            for trail_position in 0..trail_length {
+            let trail_len = drop.trail_len as usize;
+            for trail_position in 0..trail_len {
                 // Trail position in world space
                 let ty = drop.y - trail_position as f32 * 0.8;
                 if ty < 0.0 { continue; }
                 
                 let (transmit, ty_screen, _) = self.project(drop.x, ty, drop.z);
                 
-                if transmit < 0 || transmit >= (framebuffer_width / cell_size) as i32 { continue; }
-                if ty_screen < 0 || ty_screen >= (framebuffer_height / cell_size) as i32 { continue; }
+                if transmit < 0 || transmit >= (fb_width / cell_size) as i32 { continue; }
+                if ty_screen < 0 || ty_screen >= (fb_height / cell_size) as i32 { continue; }
                 
                 // Intensity fades along trail
-                let intensity_index = (trail_position * 63) / trail_length.maximum(1);
-                let base_intensity = INTENSITY_LUT[intensity_index.minimum(63)] as u32;
-                let intensity = (((base_intensity * depth_brightness) / 255) + surface_boost).minimum(255) as u8;
+                let intensity_index = (trail_position * 63) / trail_len.max(1);
+                let base_intensity = INTENSITY_LUT[intensity_index.min(63)] as u32;
+                let intensity = (((base_intensity * depth_brightness) / 255) + surface_boost).min(255) as u8;
                 
                 if intensity < 2 { continue; }
                 
@@ -2503,9 +2503,9 @@ match shape {
                 let glyph = &MATRIX_GLYPHS_3X3[glyph_index];
                 let color = intensity_to_color(intensity);
                 
-                let pixel = transmit as usize * cell_size + 1;
+                let px = transmit as usize * cell_size + 1;
                 let py = ty_screen as usize * cell_size + 1;
-                self.draw_glyph_3x3(buffer, framebuffer_width, pixel, py, glyph, color);
+                self.draw_glyph_3x3(buffer, fb_width, px, py, glyph, color);
             }
         }
         
@@ -2515,19 +2515,19 @@ match shape {
     
     /// Draw a 3×3 micro-glyph at pixel position — high-res version
     #[inline(always)]
-    fn draw_glyph_3x3(&self, buffer: &mut [u32], framebuffer_width: usize,
-                       pixel: usize, py: usize, glyph: &[u8; 3], color: u32) {
-        let framebuffer_height = buffer.len() / framebuffer_width;
-        if py + 2 >= framebuffer_height || pixel + 2 >= framebuffer_width { return; }
-        let b0 = glyph[0]; let base0 = py * framebuffer_width + pixel;
+    fn draw_glyph_3x3(&self, buffer: &mut [u32], fb_width: usize,
+                       px: usize, py: usize, glyph: &[u8; 3], color: u32) {
+        let fb_height = buffer.len() / fb_width;
+        if py + 2 >= fb_height || px + 2 >= fb_width { return; }
+        let b0 = glyph[0]; let base0 = py * fb_width + px;
         if b0 & 0b001 != 0 { buffer[base0] = color; }
         if b0 & 0b010 != 0 { buffer[base0 + 1] = color; }
         if b0 & 0b100 != 0 { buffer[base0 + 2] = color; }
-        let b1 = glyph[1]; let base1 = base0 + framebuffer_width;
+        let b1 = glyph[1]; let base1 = base0 + fb_width;
         if b1 & 0b001 != 0 { buffer[base1] = color; }
         if b1 & 0b010 != 0 { buffer[base1 + 1] = color; }
         if b1 & 0b100 != 0 { buffer[base1 + 2] = color; }
-        let b2 = glyph[2]; let base2 = base1 + framebuffer_width;
+        let b2 = glyph[2]; let base2 = base1 + fb_width;
         if b2 & 0b001 != 0 { buffer[base2] = color; }
         if b2 & 0b010 != 0 { buffer[base2 + 1] = color; }
         if b2 & 0b100 != 0 { buffer[base2 + 2] = color; }
@@ -2535,16 +2535,16 @@ match shape {
     
     /// Draw a 6x6 glyph (kept for compatibility)
     #[inline(always)]
-    fn draw_glyph_6x6(&self, buffer: &mut [u32], framebuffer_width: usize, 
-                       pixel: usize, py: usize, glyph: &[u8; 6], color: u32) {
-        let framebuffer_height = buffer.len() / framebuffer_width;
-        if py >= framebuffer_height || pixel >= framebuffer_width { return; }
-        let maximum_row = (framebuffer_height - py).minimum(6);
-        let maximum_column = (framebuffer_width - pixel).minimum(6);
+    fn draw_glyph_6x6(&self, buffer: &mut [u32], fb_width: usize, 
+                       px: usize, py: usize, glyph: &[u8; 6], color: u32) {
+        let fb_height = buffer.len() / fb_width;
+        if py >= fb_height || px >= fb_width { return; }
+        let maximum_row = (fb_height - py).min(6);
+        let maximum_column = (fb_width - px).min(6);
         for row in 0..maximum_row {
             let row_bits = glyph[row];
             if row_bits == 0 { continue; }
-            let row_start = (py + row) * framebuffer_width + pixel;
+            let row_start = (py + row) * fb_width + px;
             if row_bits & 0b000001 != 0 && 0 < maximum_column { buffer[row_start] = color; }
             if row_bits & 0b000010 != 0 && 1 < maximum_column { buffer[row_start + 1] = color; }
             if row_bits & 0b000100 != 0 && 2 < maximum_column { buffer[row_start + 2] = color; }

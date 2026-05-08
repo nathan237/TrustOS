@@ -15,65 +15,65 @@ use alloc::format;
 #[repr(u8)]
 pub enum Op {
     
-    Adz,    
-    Bpq,    
-    Bpp,   
-    Bpr,    
-    Bpg,        
-    Abf,        
+    PushI64,    
+    PushF64,    
+    PushBool,   
+    PushStr,    
+    Pop,        
+    Dup,        
 
     
-    Ti,  
-    Qv, 
+    LoadLocal,  
+    StoreLocal, 
 
     
-    Cgr,  
-    Cnl, 
+    LoadGlobal,  
+    StoreGlobal, 
 
     
-    Zq, Azl, Avv, Ara, Bmj, Bnd,
+    AddI, SubI, MulI, DivI, ModI, NegI,
     
-    Bxr, Cnn, Chm, Cay, Chx,
+    AddF, SubF, MulF, DivF, NegF,
     
-    Bga, Bnc, Auy, Bik, Bkz, Bhw,
-    Cbs, Chw, Cgy, Ceq, Cgo, Cej,
+    EqI, NeI, LtI, GtI, LeI, GeI,
+    EqF, NeF, LtF, GtF, LeF, GeF,
     
-    Ex, Fx, Np,
+    And, Or, Not,
     
-    Vm, Vn, Vo, Ob, Oc,
+    BitAnd, BitOr, BitXor, Shl, Shr,
 
     
-    Biy, Bgk,
+    I64toF64, F64toI64,
 
     
-    Nh,       
-    Ajk, 
-    En,       
-    Bdi, 
-    Hd,     
+    Jump,       
+    JumpIfFalse, 
+    Call,       
+    CallBuiltin, 
+    Return,     
 
     
-    Avz,   
-    Bby,   
-    Bbz,   
-    Bxy,   
-    Bxz,  
+    NewArray,   
+    ArrayGet,   
+    ArraySet,   
+    ArrayLen,   
+    ArrayPush,  
 
     
-    Cnm,  
+    StrConcat,  
 
     
-    Bio,       
+    Halt,       
 }
 
 impl Op {
     
     
     #[inline(always)]
-    fn ckp(p: u8) -> Option<Op> {
-        if p <= Op::Bio as u8 {
+    fn atw(v: u8) -> Option<Op> {
+        if v <= Op::Halt as u8 {
             
-            Some(unsafe { core::mem::transmute(p) })
+            Some(unsafe { core::mem::transmute(v) })
         } else {
             None
         }
@@ -83,795 +83,795 @@ impl Op {
 
 #[derive(Debug, Clone)]
 pub enum Value {
-    Ab(i64),
-    R(f64),
-    Em(bool),
-    He(String),
-    U(Vec<Value>),
-    Cn,
+    I64(i64),
+    F64(f64),
+    Bool(bool),
+    Str(String),
+    Array(Vec<Value>),
+    Void,
 }
 
 impl Value {
-    fn abb(&self) -> Result<i64, String> {
-        match self { Value::Ab(p) => Ok(*p), _ => Err(format!("expected i64, got {:?}", self)) }
+    fn as_i64(&self) -> Result<i64, String> {
+        match self { Value::I64(v) => Ok(*v), _ => Err(format!("expected i64, got {:?}", self)) }
     }
-    fn dyj(&self) -> Result<f64, String> {
-        match self { Value::R(p) => Ok(*p), _ => Err(format!("expected f64, got {:?}", self)) }
+    fn as_f64(&self) -> Result<f64, String> {
+        match self { Value::F64(v) => Ok(*v), _ => Err(format!("expected f64, got {:?}", self)) }
     }
-    fn gah(&self) -> Result<bool, String> {
-        match self { Value::Em(p) => Ok(*p), _ => Err(format!("expected bool, got {:?}", self)) }
+    fn as_bool(&self) -> Result<bool, String> {
+        match self { Value::Bool(v) => Ok(*v), _ => Err(format!("expected bool, got {:?}", self)) }
     }
-    fn guq(&self) -> String {
+    fn to_display(&self) -> String {
         match self {
-            Value::Ab(p) => format!("{}", p),
-            Value::R(p) => format!("{:.6}", p),
-            Value::Em(p) => format!("{}", p),
-            Value::He(e) => e.clone(),
-            Value::U(q) => {
-                let pj: Vec<String> = q.iter().map(|p| p.guq()).collect();
-                format!("[{}]", pj.rr(", "))
+            Value::I64(v) => format!("{}", v),
+            Value::F64(v) => format!("{:.6}", v),
+            Value::Bool(v) => format!("{}", v),
+            Value::Str(j) => j.clone(),
+            Value::Array(a) => {
+                let items: Vec<String> = a.iter().map(|v| v.to_display()).collect();
+                format!("[{}]", items.join(", "))
             }
-            Value::Cn => String::from("()"),
+            Value::Void => String::from("()"),
         }
     }
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Bs {
-    pub j: String,
-    pub qkm: u8,         
-    pub bbx: u8,        
-    pub aj: Vec<u8>,     
+pub struct Aq {
+    pub name: String,
+    pub arity: u8,         
+    pub locals: u8,        
+    pub code: Vec<u8>,     
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Aaf {
-    pub ajb: Vec<Bs>,
-    pub pd: Vec<String>,     
-    pub bt: usize,             
+pub struct Lf {
+    pub functions: Vec<Aq>,
+    pub strings: Vec<String>,     
+    pub entry: usize,             
 }
 
 
 struct CallFrame {
-    hkq: usize,
+    func_idx: usize,
     ip: usize,
-    ar: usize, 
-    bbx: [Value; 256],
+    base: usize, 
+    locals: [Value; 256],
 }
 
 impl CallFrame {
-    fn new(hkq: usize, ar: usize) -> Self {
-        const Cph: Value = Value::Cn;
+    fn new(func_idx: usize, base: usize) -> Self {
+        const Arr: Value = Value::Void;
         Self {
-            hkq,
+            func_idx,
             ip: 0,
-            ar,
-            bbx: [Cph; 256],
+            base,
+            locals: [Arr; 256],
         }
     }
 }
 
 
-const AMV_: u8 = 0;
-const AMW_: u8 = 1;
-const AMQ_: u8 = 2;
-const AMX_: u8 = 3;
-const ANH_: u8 = 4;
-const ANG_: u8 = 5;
-const AND_: u8 = 6;
-const AMD_: u8 = 7;
-const AMU_: u8 = 8;
-const AMG_: u8 = 9;
-const AMM_: u8 = 10;
-const AMJ_: u8 = 11;
-const AMI_: u8 = 12;
-const ANA_: u8 = 13;
-const AMZ_: u8 = 14;
-const AMN_: u8 = 15;
-const AMK_: u8 = 16;
-const ANC_: u8 = 17;
-const ANF_: u8 = 18;
-const AMY_: u8 = 19;
+const AOZ_: u8 = 0;
+const APA_: u8 = 1;
+const AOU_: u8 = 2;
+const APB_: u8 = 3;
+const APL_: u8 = 4;
+const APK_: u8 = 5;
+const APH_: u8 = 6;
+const AOH_: u8 = 7;
+const AOY_: u8 = 8;
+const AOK_: u8 = 9;
+const AOQ_: u8 = 10;
+const AON_: u8 = 11;
+const AOM_: u8 = 12;
+const APE_: u8 = 13;
+const APD_: u8 = 14;
+const AOR_: u8 = 15;
+const AOO_: u8 = 16;
+const APG_: u8 = 17;
+const APJ_: u8 = 18;
+const APC_: u8 = 19;
 
-const AMF_: u8 = 20;
-const AME_: u8 = 21;
-const ANE_: u8 = 22;
-const AMR_: u8 = 23;
-const AMP_: u8 = 24;
-const ANI_: u8 = 25;
-const AML_: u8 = 26;
-const AMO_: u8 = 27;
-const ANB_: u8 = 28;
-const AMH_: u8 = 29;
-const AMS_: u8 = 30;
-const AMT_: u8 = 31;
+const AOJ_: u8 = 20;
+const AOI_: u8 = 21;
+const API_: u8 = 22;
+const AOV_: u8 = 23;
+const AOT_: u8 = 24;
+const APM_: u8 = 25;
+const AOP_: u8 = 26;
+const AOS_: u8 = 27;
+const APF_: u8 = 28;
+const AOL_: u8 = 29;
+const AOW_: u8 = 30;
+const AOX_: u8 = 31;
 
 
-pub fn imj(j: &str) -> Option<u8> {
-    match j {
-        "print" => Some(AMV_),
-        "println" => Some(AMW_),
-        "len" => Some(AMQ_),
-        "push" => Some(AMX_),
-        "to_string" => Some(ANH_),
-        "to_int" => Some(ANG_),
-        "to_float" => Some(ANF_),
-        "sqrt" => Some(AND_),
-        "abs" => Some(AMD_),
-        "pixel" => Some(AMU_),
-        "clear_screen" => Some(AMG_),
-        "fill_rect" => Some(AMM_),
-        "draw_line" => Some(AMJ_),
-        "draw_circle" => Some(AMI_),
-        "screen_w" => Some(ANA_),
-        "screen_h" => Some(AMZ_),
-        "flush" => Some(AMN_),
-        "draw_text" => Some(AMK_),
-        "sleep" => Some(ANC_),
-        "read_line" => Some(AMY_),
+pub fn ehg(name: &str) -> Option<u8> {
+    match name {
+        "print" => Some(AOZ_),
+        "println" => Some(APA_),
+        "len" => Some(AOU_),
+        "push" => Some(APB_),
+        "to_string" => Some(APL_),
+        "to_int" => Some(APK_),
+        "to_float" => Some(APJ_),
+        "sqrt" => Some(APH_),
+        "abs" => Some(AOH_),
+        "pixel" => Some(AOY_),
+        "clear_screen" => Some(AOK_),
+        "fill_rect" => Some(AOQ_),
+        "draw_line" => Some(AON_),
+        "draw_circle" => Some(AOM_),
+        "screen_w" => Some(APE_),
+        "screen_h" => Some(APD_),
+        "flush" => Some(AOR_),
+        "draw_text" => Some(AOO_),
+        "sleep" => Some(APG_),
+        "read_line" => Some(APC_),
         
-        "beat" => Some(AMF_),
-        "bass" => Some(AME_),
-        "sub_bass" => Some(ANE_),
-        "mid" => Some(AMR_),
-        "high_mid" => Some(AMP_),
-        "treble" => Some(ANI_),
-        "energy" => Some(AML_),
-        "frame_num" => Some(AMO_),
-        "sin_f" => Some(ANB_),
-        "cos_f" => Some(AMH_),
-        "mouse_x" => Some(AMS_),
-        "mouse_y" => Some(AMT_),
+        "beat" => Some(AOJ_),
+        "bass" => Some(AOI_),
+        "sub_bass" => Some(API_),
+        "mid" => Some(AOV_),
+        "high_mid" => Some(AOT_),
+        "treble" => Some(APM_),
+        "energy" => Some(AOP_),
+        "frame_num" => Some(AOS_),
+        "sin_f" => Some(APF_),
+        "cos_f" => Some(AOL_),
+        "mouse_x" => Some(AOW_),
+        "mouse_y" => Some(AOX_),
         _ => None,
     }
 }
 
 
-pub fn bna(hby: &Aaf) -> Result<String, String> {
-    let mut an = String::new();
-    let mut jo: Vec<Value> = Vec::fc(1024);
-    let mut vj: Vec<CallFrame> = Vec::fc(64);
+pub fn execute(dkd: &Lf) -> Result<String, String> {
+    let mut output = String::new();
+    let mut dn: Vec<Value> = Vec::with_capacity(1024);
+    let mut frames: Vec<CallFrame> = Vec::with_capacity(64);
 
-    vj.push(CallFrame::new(hby.bt, 0));
+    frames.push(CallFrame::new(dkd.entry, 0));
 
-    let csk = 500_000_000; 
-    let mut au = 0;
+    let ayd = 500_000_000; 
+    let mut steps = 0;
 
     loop {
-        au += 1;
-        if au > csk {
+        steps += 1;
+        if steps > ayd {
             return Err(String::from("execution limit exceeded (10M steps)"));
         }
 
-        let frame = vj.dsq().ok_or("no call frame")?;
-        let ke = &hby.ajb[frame.hkq];
+        let frame = frames.last_mut().ok_or("no call frame")?;
+        let func = &dkd.functions[frame.func_idx];
 
-        if frame.ip >= ke.aj.len() {
+        if frame.ip >= func.code.len() {
             
-            if vj.len() <= 1 { break; }
-            vj.pop();
-            jo.push(Value::Cn);
+            if frames.len() <= 1 { break; }
+            frames.pop();
+            dn.push(Value::Void);
             continue;
         }
 
-        let oso = ke.aj[frame.ip];
+        let ish = func.code[frame.ip];
         frame.ip += 1;
 
-        let op = match Op::ckp(oso) {
-            Some(dkb) => dkb,
-            None => return Err(format!("unknown opcode: {}", oso)),
+        let op = match Op::atw(ish) {
+            Some(ays) => ays,
+            None => return Err(format!("unknown opcode: {}", ish)),
         };
 
         match op {
-            Op::Adz => {
-                let bf = day(&ke.aj, &mut frame.ip, 8);
-                let p = i64::dj(bf.try_into().unwrap());
-                jo.push(Value::Ab(p));
+            Op::PushI64 => {
+                let bytes = read_bytes(&func.code, &mut frame.ip, 8);
+                let v = i64::from_le_bytes(bytes.try_into().unwrap());
+                dn.push(Value::I64(v));
             }
-            Op::Bpq => {
-                let bf = day(&ke.aj, &mut frame.ip, 8);
-                let p = f64::dj(bf.try_into().unwrap());
-                jo.push(Value::R(p));
+            Op::PushF64 => {
+                let bytes = read_bytes(&func.code, &mut frame.ip, 8);
+                let v = f64::from_le_bytes(bytes.try_into().unwrap());
+                dn.push(Value::F64(v));
             }
-            Op::Bpp => {
-                let p = ke.aj[frame.ip] != 0;
+            Op::PushBool => {
+                let v = func.code[frame.ip] != 0;
                 frame.ip += 1;
-                jo.push(Value::Em(p));
+                dn.push(Value::Bool(v));
             }
-            Op::Bpr => {
-                let w = alp(&ke.aj, &mut frame.ip) as usize;
-                let e = hby.pd.get(w).abn().age();
-                jo.push(Value::He(e));
+            Op::PushStr => {
+                let idx = read_u16(&func.code, &mut frame.ip) as usize;
+                let j = dkd.strings.get(idx).cloned().unwrap_or_default();
+                dn.push(Value::Str(j));
             }
-            Op::Bpg => { jo.pop(); }
-            Op::Abf => {
-                let p = jo.qv().abn().unwrap_or(Value::Cn);
-                jo.push(p);
+            Op::Pop => { dn.pop(); }
+            Op::Dup => {
+                let v = dn.last().cloned().unwrap_or(Value::Void);
+                dn.push(v);
             }
-            Op::Ti => {
-                let gk = ke.aj[frame.ip] as usize;
+            Op::LoadLocal => {
+                let slot = func.code[frame.ip] as usize;
                 frame.ip += 1;
-                jo.push(frame.bbx[gk].clone());
+                dn.push(frame.locals[slot].clone());
             }
-            Op::Qv => {
-                let gk = ke.aj[frame.ip] as usize;
+            Op::StoreLocal => {
+                let slot = func.code[frame.ip] as usize;
                 frame.ip += 1;
-                let ap = jo.pop().unwrap_or(Value::Cn);
-                frame.bbx[gk] = ap;
+                let val = dn.pop().unwrap_or(Value::Void);
+                frame.locals[slot] = val;
             }
-            Op::Cgr | Op::Cnl => {
+            Op::LoadGlobal | Op::StoreGlobal => {
                 
                 frame.ip += 2;
             }
             
-            Op::Zq => { emu(&mut jo, |q, o| q.cn(o), |q, o| q + o)?; }
-            Op::Azl => { emu(&mut jo, |q, o| q.nj(o), |q, o| q - o)?; }
-            Op::Avv => { emu(&mut jo, |q, o| q.hx(o), |q, o| q * o)?; }
-            Op::Ara => {
-                let coo = jo.pop().unwrap_or(Value::Ab(0));
-                let ddt = jo.pop().unwrap_or(Value::Ab(0));
-                match (&ddt, &coo) {
-                    (Value::R(q), Value::R(o)) => jo.push(Value::R(q / o)),
-                    (Value::Ab(q), Value::R(o)) => jo.push(Value::R(*q as f64 / o)),
-                    (Value::R(q), Value::Ab(o)) => jo.push(Value::R(q / *o as f64)),
+            Op::AddI => { bxt(&mut dn, |a, b| a.wrapping_add(b), |a, b| a + b)?; }
+            Op::SubI => { bxt(&mut dn, |a, b| a.wrapping_sub(b), |a, b| a - b)?; }
+            Op::MulI => { bxt(&mut dn, |a, b| a.wrapping_mul(b), |a, b| a * b)?; }
+            Op::DivI => {
+                let awd = dn.pop().unwrap_or(Value::I64(0));
+                let bel = dn.pop().unwrap_or(Value::I64(0));
+                match (&bel, &awd) {
+                    (Value::F64(a), Value::F64(b)) => dn.push(Value::F64(a / b)),
+                    (Value::I64(a), Value::F64(b)) => dn.push(Value::F64(*a as f64 / b)),
+                    (Value::F64(a), Value::I64(b)) => dn.push(Value::F64(a / *b as f64)),
                     _ => {
-                        let o = coo.abb()?;
-                        let q = ddt.abb()?;
-                        if o == 0 { return Err(String::from("division by zero")); }
-                        jo.push(Value::Ab(q / o));
+                        let b = awd.as_i64()?;
+                        let a = bel.as_i64()?;
+                        if b == 0 { return Err(String::from("division by zero")); }
+                        dn.push(Value::I64(a / b));
                     }
                 }
             }
-            Op::Bmj => {
-                let coo = jo.pop().unwrap_or(Value::Ab(0));
-                let ddt = jo.pop().unwrap_or(Value::Ab(0));
-                match (&ddt, &coo) {
-                    (Value::R(q), Value::R(o)) => jo.push(Value::R(q % o)),
-                    (Value::Ab(q), Value::R(o)) => jo.push(Value::R(*q as f64 % o)),
-                    (Value::R(q), Value::Ab(o)) => jo.push(Value::R(q % *o as f64)),
+            Op::ModI => {
+                let awd = dn.pop().unwrap_or(Value::I64(0));
+                let bel = dn.pop().unwrap_or(Value::I64(0));
+                match (&bel, &awd) {
+                    (Value::F64(a), Value::F64(b)) => dn.push(Value::F64(a % b)),
+                    (Value::I64(a), Value::F64(b)) => dn.push(Value::F64(*a as f64 % b)),
+                    (Value::F64(a), Value::I64(b)) => dn.push(Value::F64(a % *b as f64)),
                     _ => {
-                        let o = coo.abb()?;
-                        let q = ddt.abb()?;
-                        if o == 0 { return Err(String::from("modulo by zero")); }
-                        jo.push(Value::Ab(q % o));
+                        let b = awd.as_i64()?;
+                        let a = bel.as_i64()?;
+                        if b == 0 { return Err(String::from("modulo by zero")); }
+                        dn.push(Value::I64(a % b));
                     }
                 }
             }
-            Op::Bnd => {
-                let p = jo.pop().unwrap_or(Value::Ab(0));
-                match p {
-                    Value::R(bb) => jo.push(Value::R(-bb)),
-                    _ => jo.push(Value::Ab(-p.abb()?)),
+            Op::NegI => {
+                let v = dn.pop().unwrap_or(Value::I64(0));
+                match v {
+                    Value::F64(f) => dn.push(Value::F64(-f)),
+                    _ => dn.push(Value::I64(-v.as_i64()?)),
                 }
             }
             
-            Op::Bxr => { ilp(&mut jo, |q, o| q + o)?; }
-            Op::Cnn => { ilp(&mut jo, |q, o| q - o)?; }
-            Op::Chm => { ilp(&mut jo, |q, o| q * o)?; }
-            Op::Cay => { ilp(&mut jo, |q, o| q / o)?; }
-            Op::Chx => {
-                let p = jo.pop().unwrap_or(Value::R(0.0)).dyj()?;
-                jo.push(Value::R(-p));
+            Op::AddF => { egv(&mut dn, |a, b| a + b)?; }
+            Op::SubF => { egv(&mut dn, |a, b| a - b)?; }
+            Op::MulF => { egv(&mut dn, |a, b| a * b)?; }
+            Op::DivF => { egv(&mut dn, |a, b| a / b)?; }
+            Op::NegF => {
+                let v = dn.pop().unwrap_or(Value::F64(0.0)).as_f64()?;
+                dn.push(Value::F64(-v));
             }
             
-            Op::Bga => { gct(&mut jo, |q, o| q == o, |q, o| q == o)?; }
-            Op::Bnc => { gct(&mut jo, |q, o| q != o, |q, o| q != o)?; }
-            Op::Auy => { gct(&mut jo, |q, o| q < o, |q, o| q < o)?; }
-            Op::Bik => { gct(&mut jo, |q, o| q > o, |q, o| q > o)?; }
-            Op::Bkz => { gct(&mut jo, |q, o| q <= o, |q, o| q <= o)?; }
-            Op::Bhw => { gct(&mut jo, |q, o| q >= o, |q, o| q >= o)?; }
+            Op::EqI => { cvf(&mut dn, |a, b| a == b, |a, b| a == b)?; }
+            Op::NeI => { cvf(&mut dn, |a, b| a != b, |a, b| a != b)?; }
+            Op::LtI => { cvf(&mut dn, |a, b| a < b, |a, b| a < b)?; }
+            Op::GtI => { cvf(&mut dn, |a, b| a > b, |a, b| a > b)?; }
+            Op::LeI => { cvf(&mut dn, |a, b| a <= b, |a, b| a <= b)?; }
+            Op::GeI => { cvf(&mut dn, |a, b| a >= b, |a, b| a >= b)?; }
             
-            Op::Cbs => { gcs(&mut jo, |q, o| q == o)?; }
-            Op::Chw => { gcs(&mut jo, |q, o| q != o)?; }
-            Op::Cgy => { gcs(&mut jo, |q, o| q < o)?; }
-            Op::Ceq => { gcs(&mut jo, |q, o| q > o)?; }
-            Op::Cgo => { gcs(&mut jo, |q, o| q <= o)?; }
-            Op::Cej => { gcs(&mut jo, |q, o| q >= o)?; }
+            Op::EqF => { cve(&mut dn, |a, b| a == b)?; }
+            Op::NeF => { cve(&mut dn, |a, b| a != b)?; }
+            Op::LtF => { cve(&mut dn, |a, b| a < b)?; }
+            Op::GtF => { cve(&mut dn, |a, b| a > b)?; }
+            Op::LeF => { cve(&mut dn, |a, b| a <= b)?; }
+            Op::GeF => { cve(&mut dn, |a, b| a >= b)?; }
             
-            Op::Ex => {
-                let o = jo.pop().unwrap_or(Value::Em(false)).gah()?;
-                let q = jo.pop().unwrap_or(Value::Em(false)).gah()?;
-                jo.push(Value::Em(q && o));
+            Op::And => {
+                let b = dn.pop().unwrap_or(Value::Bool(false)).as_bool()?;
+                let a = dn.pop().unwrap_or(Value::Bool(false)).as_bool()?;
+                dn.push(Value::Bool(a && b));
             }
-            Op::Fx => {
-                let o = jo.pop().unwrap_or(Value::Em(false)).gah()?;
-                let q = jo.pop().unwrap_or(Value::Em(false)).gah()?;
-                jo.push(Value::Em(q || o));
+            Op::Or => {
+                let b = dn.pop().unwrap_or(Value::Bool(false)).as_bool()?;
+                let a = dn.pop().unwrap_or(Value::Bool(false)).as_bool()?;
+                dn.push(Value::Bool(a || b));
             }
-            Op::Np => {
-                let p = jo.pop().unwrap_or(Value::Em(false)).gah()?;
-                jo.push(Value::Em(!p));
-            }
-            
-            Op::Vm => { emu(&mut jo, |q, o| q & o, |q, o| (q as i64 & o as i64) as f64)?; }
-            Op::Vn => { emu(&mut jo, |q, o| q | o, |q, o| (q as i64 | o as i64) as f64)?; }
-            Op::Vo => { emu(&mut jo, |q, o| q ^ o, |q, o| (q as i64 ^ o as i64) as f64)?; }
-            Op::Ob => { emu(&mut jo, |q, o| q << (o & 63), |q, o| ((q as i64) << (o as i64 & 63)) as f64)?; }
-            Op::Oc => { emu(&mut jo, |q, o| q >> (o & 63), |q, o| ((q as i64) >> (o as i64 & 63)) as f64)?; }
-            
-            Op::Biy => {
-                let p = jo.pop().unwrap_or(Value::Ab(0)).abb()?;
-                jo.push(Value::R(p as f64));
-            }
-            Op::Bgk => {
-                let p = jo.pop().unwrap_or(Value::R(0.0)).dyj()?;
-                jo.push(Value::Ab(p as i64));
+            Op::Not => {
+                let v = dn.pop().unwrap_or(Value::Bool(false)).as_bool()?;
+                dn.push(Value::Bool(!v));
             }
             
-            Op::Nh => {
-                let dz = alp(&ke.aj, &mut frame.ip) as usize;
-                frame.ip = dz;
+            Op::BitAnd => { bxt(&mut dn, |a, b| a & b, |a, b| (a as i64 & b as i64) as f64)?; }
+            Op::BitOr => { bxt(&mut dn, |a, b| a | b, |a, b| (a as i64 | b as i64) as f64)?; }
+            Op::BitXor => { bxt(&mut dn, |a, b| a ^ b, |a, b| (a as i64 ^ b as i64) as f64)?; }
+            Op::Shl => { bxt(&mut dn, |a, b| a << (b & 63), |a, b| ((a as i64) << (b as i64 & 63)) as f64)?; }
+            Op::Shr => { bxt(&mut dn, |a, b| a >> (b & 63), |a, b| ((a as i64) >> (b as i64 & 63)) as f64)?; }
+            
+            Op::I64toF64 => {
+                let v = dn.pop().unwrap_or(Value::I64(0)).as_i64()?;
+                dn.push(Value::F64(v as f64));
             }
-            Op::Ajk => {
-                let dz = alp(&ke.aj, &mut frame.ip) as usize;
-                let mo = jo.pop().unwrap_or(Value::Em(false)).gah()?;
-                if !mo { frame.ip = dz; }
+            Op::F64toI64 => {
+                let v = dn.pop().unwrap_or(Value::F64(0.0)).as_f64()?;
+                dn.push(Value::I64(v as i64));
             }
-            Op::En => {
-                let hkq = alp(&ke.aj, &mut frame.ip) as usize;
-                let byg = ke.aj[frame.ip] as usize;
+            
+            Op::Jump => {
+                let off = read_u16(&func.code, &mut frame.ip) as usize;
+                frame.ip = off;
+            }
+            Op::JumpIfFalse => {
+                let off = read_u16(&func.code, &mut frame.ip) as usize;
+                let fc = dn.pop().unwrap_or(Value::Bool(false)).as_bool()?;
+                if !fc { frame.ip = off; }
+            }
+            Op::Call => {
+                let func_idx = read_u16(&func.code, &mut frame.ip) as usize;
+                let anl = func.code[frame.ip] as usize;
                 frame.ip += 1;
                 
-                let mut n = Vec::fc(byg);
-                for _ in 0..byg {
-                    n.push(jo.pop().unwrap_or(Value::Cn));
+                let mut args = Vec::with_capacity(anl);
+                for _ in 0..anl {
+                    args.push(dn.pop().unwrap_or(Value::Void));
                 }
-                n.dbh();
+                args.reverse();
                 
-                let mut opu = CallFrame::new(hkq, jo.len());
-                for (a, ji) in n.dse().cf() {
-                    opu.bbx[a] = ji;
+                let mut ipy = CallFrame::new(func_idx, dn.len());
+                for (i, db) in args.into_iter().enumerate() {
+                    ipy.locals[i] = db;
                 }
-                vj.push(opu);
+                frames.push(ipy);
             }
-            Op::Bdi => {
-                let que = ke.aj[frame.ip];
+            Op::CallBuiltin => {
+                let kfx = func.code[frame.ip];
                 frame.ip += 1;
-                let byg = ke.aj[frame.ip] as usize;
+                let anl = func.code[frame.ip] as usize;
                 frame.ip += 1;
-                let mut n = Vec::fc(byg);
-                for _ in 0..byg {
-                    n.push(jo.pop().unwrap_or(Value::Cn));
+                let mut args = Vec::with_capacity(anl);
+                for _ in 0..anl {
+                    args.push(dn.pop().unwrap_or(Value::Void));
                 }
-                n.dbh();
-                let result = sob(que, &n, &mut an)?;
-                jo.push(result);
+                args.reverse();
+                let result = lrt(kfx, &args, &mut output)?;
+                dn.push(result);
             }
-            Op::Hd => {
-                let aux = jo.pop().unwrap_or(Value::Cn);
-                if vj.len() <= 1 {
-                    jo.push(aux);
+            Op::Return => {
+                let ret = dn.pop().unwrap_or(Value::Void);
+                if frames.len() <= 1 {
+                    dn.push(ret);
                     break;
                 }
-                vj.pop();
-                jo.push(aux);
+                frames.pop();
+                dn.push(ret);
             }
             
-            Op::Avz => {
-                let az = alp(&ke.aj, &mut frame.ip) as usize;
-                let mut sy = Vec::fc(az);
-                for _ in 0..az {
-                    sy.push(jo.pop().unwrap_or(Value::Cn));
+            Op::NewArray => {
+                let count = read_u16(&func.code, &mut frame.ip) as usize;
+                let mut ik = Vec::with_capacity(count);
+                for _ in 0..count {
+                    ik.push(dn.pop().unwrap_or(Value::Void));
                 }
-                sy.dbh();
-                jo.push(Value::U(sy));
+                ik.reverse();
+                dn.push(Value::Array(ik));
             }
-            Op::Bby => {
-                let w = jo.pop().unwrap_or(Value::Ab(0)).abb()? as usize;
-                let sy = jo.pop().unwrap_or(Value::U(Vec::new()));
-                match sy {
-                    Value::U(q) => {
-                        let p = q.get(w).abn().unwrap_or(Value::Cn);
-                        jo.push(p);
+            Op::ArrayGet => {
+                let idx = dn.pop().unwrap_or(Value::I64(0)).as_i64()? as usize;
+                let ik = dn.pop().unwrap_or(Value::Array(Vec::new()));
+                match ik {
+                    Value::Array(a) => {
+                        let v = a.get(idx).cloned().unwrap_or(Value::Void);
+                        dn.push(v);
                     }
-                    Value::He(e) => {
-                        let r = e.as_bytes().get(w).hu().unwrap_or(0);
-                        jo.push(Value::Ab(r as i64));
+                    Value::Str(j) => {
+                        let c = j.as_bytes().get(idx).copied().unwrap_or(0);
+                        dn.push(Value::I64(c as i64));
                     }
                     _ => return Err(String::from("index on non-array")),
                 }
             }
-            Op::Bbz => {
-                let ap = jo.pop().unwrap_or(Value::Cn);
-                let w = jo.pop().unwrap_or(Value::Ab(0)).abb()? as usize;
-                let sy = jo.pop().unwrap_or(Value::U(Vec::new()));
-                match sy {
-                    Value::U(mut q) => {
-                        if w < q.len() { q[w] = ap; }
-                        jo.push(Value::U(q));
+            Op::ArraySet => {
+                let val = dn.pop().unwrap_or(Value::Void);
+                let idx = dn.pop().unwrap_or(Value::I64(0)).as_i64()? as usize;
+                let ik = dn.pop().unwrap_or(Value::Array(Vec::new()));
+                match ik {
+                    Value::Array(mut a) => {
+                        if idx < a.len() { a[idx] = val; }
+                        dn.push(Value::Array(a));
                     }
                     _ => return Err(String::from("index-set on non-array")),
                 }
             }
-            Op::Bxy => {
-                let p = jo.pop().unwrap_or(Value::Cn);
-                let len = match &p {
-                    Value::U(q) => q.len() as i64,
-                    Value::He(e) => e.len() as i64,
+            Op::ArrayLen => {
+                let v = dn.pop().unwrap_or(Value::Void);
+                let len = match &v {
+                    Value::Array(a) => a.len() as i64,
+                    Value::Str(j) => j.len() as i64,
                     _ => 0,
                 };
-                jo.push(Value::Ab(len));
+                dn.push(Value::I64(len));
             }
-            Op::Bxz => {
-                let ap = jo.pop().unwrap_or(Value::Cn);
-                let sy = jo.pop().unwrap_or(Value::U(Vec::new()));
-                match sy {
-                    Value::U(mut q) => {
-                        q.push(ap);
-                        jo.push(Value::U(q));
+            Op::ArrayPush => {
+                let val = dn.pop().unwrap_or(Value::Void);
+                let ik = dn.pop().unwrap_or(Value::Array(Vec::new()));
+                match ik {
+                    Value::Array(mut a) => {
+                        a.push(val);
+                        dn.push(Value::Array(a));
                     }
                     _ => return Err(String::from("push on non-array")),
                 }
             }
-            Op::Cnm => {
-                let o = jo.pop().unwrap_or(Value::He(String::new())).guq();
-                let q = jo.pop().unwrap_or(Value::He(String::new())).guq();
-                jo.push(Value::He(format!("{}{}", q, o)));
+            Op::StrConcat => {
+                let b = dn.pop().unwrap_or(Value::Str(String::new())).to_display();
+                let a = dn.pop().unwrap_or(Value::Str(String::new())).to_display();
+                dn.push(Value::Str(format!("{}{}", a, b)));
             }
-            Op::Bio => break,
+            Op::Halt => break,
         }
     }
 
-    Ok(an)
+    Ok(output)
 }
 
 
 
-fn day(aj: &[u8], ip: &mut usize, bo: usize) -> Vec<u8> {
-    let bf = aj[*ip..*ip + bo].ip();
-    *ip += bo;
-    bf
+fn read_bytes(code: &[u8], ip: &mut usize, ae: usize) -> Vec<u8> {
+    let bytes = code[*ip..*ip + ae].to_vec();
+    *ip += ae;
+    bytes
 }
 
-fn alp(aj: &[u8], ip: &mut usize) -> u16 {
-    let p = u16::dj([aj[*ip], aj[*ip + 1]]);
+fn read_u16(code: &[u8], ip: &mut usize) -> u16 {
+    let v = u16::from_le_bytes([code[*ip], code[*ip + 1]]);
     *ip += 2;
-    p
+    v
 }
 
-fn emu(jo: &mut Vec<Value>, cqk: fn(i64, i64) -> i64, fik: fn(f64, f64) -> f64) -> Result<(), String> {
-    let coo = jo.pop().unwrap_or(Value::Ab(0));
-    let ddt = jo.pop().unwrap_or(Value::Ab(0));
+fn bxt(dn: &mut Vec<Value>, axb: fn(i64, i64) -> i64, ff: fn(f64, f64) -> f64) -> Result<(), String> {
+    let awd = dn.pop().unwrap_or(Value::I64(0));
+    let bel = dn.pop().unwrap_or(Value::I64(0));
     
-    match (&ddt, &coo) {
-        (Value::R(q), Value::R(o)) => jo.push(Value::R(fik(*q, *o))),
-        (Value::Ab(q), Value::R(o)) => jo.push(Value::R(fik(*q as f64, *o))),
-        (Value::R(q), Value::Ab(o)) => jo.push(Value::R(fik(*q, *o as f64))),
+    match (&bel, &awd) {
+        (Value::F64(a), Value::F64(b)) => dn.push(Value::F64(ff(*a, *b))),
+        (Value::I64(a), Value::F64(b)) => dn.push(Value::F64(ff(*a as f64, *b))),
+        (Value::F64(a), Value::I64(b)) => dn.push(Value::F64(ff(*a, *b as f64))),
         _ => {
-            let q = ddt.abb()?;
-            let o = coo.abb()?;
-            jo.push(Value::Ab(cqk(q, o)));
+            let a = bel.as_i64()?;
+            let b = awd.as_i64()?;
+            dn.push(Value::I64(axb(a, b)));
         }
     }
     Ok(())
 }
 
-fn ilp(jo: &mut Vec<Value>, bb: fn(f64, f64) -> f64) -> Result<(), String> {
-    let o = jo.pop().unwrap_or(Value::R(0.0)).dyj()?;
-    let q = jo.pop().unwrap_or(Value::R(0.0)).dyj()?;
-    jo.push(Value::R(bb(q, o)));
+fn egv(dn: &mut Vec<Value>, f: fn(f64, f64) -> f64) -> Result<(), String> {
+    let b = dn.pop().unwrap_or(Value::F64(0.0)).as_f64()?;
+    let a = dn.pop().unwrap_or(Value::F64(0.0)).as_f64()?;
+    dn.push(Value::F64(f(a, b)));
     Ok(())
 }
 
-fn gct(jo: &mut Vec<Value>, cqk: fn(i64, i64) -> bool, fik: fn(f64, f64) -> bool) -> Result<(), String> {
-    let coo = jo.pop().unwrap_or(Value::Ab(0));
-    let ddt = jo.pop().unwrap_or(Value::Ab(0));
+fn cvf(dn: &mut Vec<Value>, axb: fn(i64, i64) -> bool, ff: fn(f64, f64) -> bool) -> Result<(), String> {
+    let awd = dn.pop().unwrap_or(Value::I64(0));
+    let bel = dn.pop().unwrap_or(Value::I64(0));
     
-    match (&ddt, &coo) {
-        (Value::R(q), Value::R(o)) => jo.push(Value::Em(fik(*q, *o))),
-        (Value::Ab(q), Value::R(o)) => jo.push(Value::Em(fik(*q as f64, *o))),
-        (Value::R(q), Value::Ab(o)) => jo.push(Value::Em(fik(*q, *o as f64))),
+    match (&bel, &awd) {
+        (Value::F64(a), Value::F64(b)) => dn.push(Value::Bool(ff(*a, *b))),
+        (Value::I64(a), Value::F64(b)) => dn.push(Value::Bool(ff(*a as f64, *b))),
+        (Value::F64(a), Value::I64(b)) => dn.push(Value::Bool(ff(*a, *b as f64))),
         _ => {
-            let q = ddt.abb()?;
-            let o = coo.abb()?;
-            jo.push(Value::Em(cqk(q, o)));
+            let a = bel.as_i64()?;
+            let b = awd.as_i64()?;
+            dn.push(Value::Bool(axb(a, b)));
         }
     }
     Ok(())
 }
 
-fn gcs(jo: &mut Vec<Value>, bb: fn(f64, f64) -> bool) -> Result<(), String> {
-    let o = jo.pop().unwrap_or(Value::R(0.0)).dyj()?;
-    let q = jo.pop().unwrap_or(Value::R(0.0)).dyj()?;
-    jo.push(Value::Em(bb(q, o)));
+fn cve(dn: &mut Vec<Value>, f: fn(f64, f64) -> bool) -> Result<(), String> {
+    let b = dn.pop().unwrap_or(Value::F64(0.0)).as_f64()?;
+    let a = dn.pop().unwrap_or(Value::F64(0.0)).as_f64()?;
+    dn.push(Value::Bool(f(a, b)));
     Ok(())
 }
 
 
-fn sob(ad: u8, n: &[Value], an: &mut String) -> Result<Value, String> {
-    match ad {
-        AMV_ => {
-            for ji in n { an.t(&ji.guq()); }
-            Ok(Value::Cn)
+fn lrt(id: u8, args: &[Value], output: &mut String) -> Result<Value, String> {
+    match id {
+        AOZ_ => {
+            for db in args { output.push_str(&db.to_display()); }
+            Ok(Value::Void)
         }
-        AMW_ => {
-            for ji in n { an.t(&ji.guq()); }
-            an.push('\n');
-            Ok(Value::Cn)
+        APA_ => {
+            for db in args { output.push_str(&db.to_display()); }
+            output.push('\n');
+            Ok(Value::Void)
         }
-        AMQ_ => {
-            let p = n.fv().unwrap_or(&Value::Cn);
-            match p {
-                Value::U(q) => Ok(Value::Ab(q.len() as i64)),
-                Value::He(e) => Ok(Value::Ab(e.len() as i64)),
-                _ => Ok(Value::Ab(0)),
+        AOU_ => {
+            let v = args.first().unwrap_or(&Value::Void);
+            match v {
+                Value::Array(a) => Ok(Value::I64(a.len() as i64)),
+                Value::Str(j) => Ok(Value::I64(j.len() as i64)),
+                _ => Ok(Value::I64(0)),
             }
         }
-        AMX_ => {
-            if n.len() >= 2 {
-                if let Value::U(mut q) = n[0].clone() {
-                    q.push(n[1].clone());
-                    return Ok(Value::U(q));
+        APB_ => {
+            if args.len() >= 2 {
+                if let Value::Array(mut a) = args[0].clone() {
+                    a.push(args[1].clone());
+                    return Ok(Value::Array(a));
                 }
             }
             Err(String::from("push expects (array, value)"))
         }
-        ANH_ => {
-            let p = n.fv().unwrap_or(&Value::Cn);
-            Ok(Value::He(p.guq()))
+        APL_ => {
+            let v = args.first().unwrap_or(&Value::Void);
+            Ok(Value::Str(v.to_display()))
         }
-        ANG_ => {
-            let p = n.fv().unwrap_or(&Value::Cn);
-            match p {
-                Value::Ab(bo) => Ok(Value::Ab(*bo)),
-                Value::R(bb) => Ok(Value::Ab(*bb as i64)),
-                Value::Em(o) => Ok(Value::Ab(if *o { 1 } else { 0 })),
-                Value::He(e) => {
-                    let bo: i64 = vcp(e.em());
-                    Ok(Value::Ab(bo))
+        APK_ => {
+            let v = args.first().unwrap_or(&Value::Void);
+            match v {
+                Value::I64(ae) => Ok(Value::I64(*ae)),
+                Value::F64(f) => Ok(Value::I64(*f as i64)),
+                Value::Bool(b) => Ok(Value::I64(if *b { 1 } else { 0 })),
+                Value::Str(j) => {
+                    let ae: i64 = nqo(j.trim());
+                    Ok(Value::I64(ae))
                 }
-                _ => Ok(Value::Ab(0)),
+                _ => Ok(Value::I64(0)),
             }
         }
-        AND_ => {
-            let p = n.fv().unwrap_or(&Value::R(0.0)).dyj().unwrap_or(0.0);
-            Ok(Value::R(libm::ibi(p)))
+        APH_ => {
+            let v = args.first().unwrap_or(&Value::F64(0.0)).as_f64().unwrap_or(0.0);
+            Ok(Value::F64(libm::sqrt(v)))
         }
-        AMD_ => {
-            match n.fv().unwrap_or(&Value::Ab(0)) {
-                Value::Ab(bo) => Ok(Value::Ab(bo.gp())),
-                Value::R(bb) => Ok(Value::R(libm::sqq(*bb))),
-                _ => Ok(Value::Ab(0)),
+        AOH_ => {
+            match args.first().unwrap_or(&Value::I64(0)) {
+                Value::I64(ae) => Ok(Value::I64(ae.abs())),
+                Value::F64(f) => Ok(Value::F64(libm::fabs(*f))),
+                _ => Ok(Value::I64(0)),
             }
         }
         
         
         
-        AMU_ => {
+        AOY_ => {
             
-            let b = n.get(0).and_then(|p| p.abb().bq()).unwrap_or(0) as u32;
-            let c = n.get(1).and_then(|p| p.abb().bq()).unwrap_or(0) as u32;
-            let m = n.get(2).and_then(|p| p.abb().bq()).unwrap_or(255) as u32 & 0xFF;
-            let at = n.get(3).and_then(|p| p.abb().bq()).unwrap_or(255) as u32 & 0xFF;
-            let o = n.get(4).and_then(|p| p.abb().bq()).unwrap_or(255) as u32 & 0xFF;
-            let s = 0xFF000000 | (m << 16) | (at << 8) | o;
-            crate::framebuffer::sf(b, c, s);
-            Ok(Value::Cn)
+            let x = args.get(0).and_then(|v| v.as_i64().ok()).unwrap_or(0) as u32;
+            let y = args.get(1).and_then(|v| v.as_i64().ok()).unwrap_or(0) as u32;
+            let r = args.get(2).and_then(|v| v.as_i64().ok()).unwrap_or(255) as u32 & 0xFF;
+            let g = args.get(3).and_then(|v| v.as_i64().ok()).unwrap_or(255) as u32 & 0xFF;
+            let b = args.get(4).and_then(|v| v.as_i64().ok()).unwrap_or(255) as u32 & 0xFF;
+            let color = 0xFF000000 | (r << 16) | (g << 8) | b;
+            crate::framebuffer::put_pixel(x, y, color);
+            Ok(Value::Void)
         }
-        AMG_ => {
+        AOK_ => {
             
-            let m = n.get(0).and_then(|p| p.abb().bq()).unwrap_or(0) as u32 & 0xFF;
-            let at = n.get(1).and_then(|p| p.abb().bq()).unwrap_or(0) as u32 & 0xFF;
-            let o = n.get(2).and_then(|p| p.abb().bq()).unwrap_or(0) as u32 & 0xFF;
-            let s = 0xFF000000 | (m << 16) | (at << 8) | o;
-            let (kp, kl) = crate::framebuffer::yn();
-            crate::framebuffer::ah(0, 0, kp, kl, s);
-            Ok(Value::Cn)
+            let r = args.get(0).and_then(|v| v.as_i64().ok()).unwrap_or(0) as u32 & 0xFF;
+            let g = args.get(1).and_then(|v| v.as_i64().ok()).unwrap_or(0) as u32 & 0xFF;
+            let b = args.get(2).and_then(|v| v.as_i64().ok()).unwrap_or(0) as u32 & 0xFF;
+            let color = 0xFF000000 | (r << 16) | (g << 8) | b;
+            let (dy, dw) = crate::framebuffer::kv();
+            crate::framebuffer::fill_rect(0, 0, dy, dw, color);
+            Ok(Value::Void)
         }
-        AMM_ => {
+        AOQ_ => {
             
-            let b = n.get(0).and_then(|p| p.abb().bq()).unwrap_or(0) as u32;
-            let c = n.get(1).and_then(|p| p.abb().bq()).unwrap_or(0) as u32;
-            let d = n.get(2).and_then(|p| p.abb().bq()).unwrap_or(0) as u32;
-            let i = n.get(3).and_then(|p| p.abb().bq()).unwrap_or(0) as u32;
-            let m = n.get(4).and_then(|p| p.abb().bq()).unwrap_or(255) as u32 & 0xFF;
-            let at = n.get(5).and_then(|p| p.abb().bq()).unwrap_or(255) as u32 & 0xFF;
-            let o = n.get(6).and_then(|p| p.abb().bq()).unwrap_or(255) as u32 & 0xFF;
-            let s = 0xFF000000 | (m << 16) | (at << 8) | o;
-            crate::framebuffer::ah(b, c, d, i, s);
-            Ok(Value::Cn)
+            let x = args.get(0).and_then(|v| v.as_i64().ok()).unwrap_or(0) as u32;
+            let y = args.get(1).and_then(|v| v.as_i64().ok()).unwrap_or(0) as u32;
+            let w = args.get(2).and_then(|v| v.as_i64().ok()).unwrap_or(0) as u32;
+            let h = args.get(3).and_then(|v| v.as_i64().ok()).unwrap_or(0) as u32;
+            let r = args.get(4).and_then(|v| v.as_i64().ok()).unwrap_or(255) as u32 & 0xFF;
+            let g = args.get(5).and_then(|v| v.as_i64().ok()).unwrap_or(255) as u32 & 0xFF;
+            let b = args.get(6).and_then(|v| v.as_i64().ok()).unwrap_or(255) as u32 & 0xFF;
+            let color = 0xFF000000 | (r << 16) | (g << 8) | b;
+            crate::framebuffer::fill_rect(x, y, w, h, color);
+            Ok(Value::Void)
         }
-        AMJ_ => {
+        AON_ => {
             
-            let fy = n.get(0).and_then(|p| p.abb().bq()).unwrap_or(0);
-            let fo = n.get(1).and_then(|p| p.abb().bq()).unwrap_or(0);
-            let dn = n.get(2).and_then(|p| p.abb().bq()).unwrap_or(0);
-            let dp = n.get(3).and_then(|p| p.abb().bq()).unwrap_or(0);
-            let m = n.get(4).and_then(|p| p.abb().bq()).unwrap_or(255) as u32 & 0xFF;
-            let at = n.get(5).and_then(|p| p.abb().bq()).unwrap_or(255) as u32 & 0xFF;
-            let o = n.get(6).and_then(|p| p.abb().bq()).unwrap_or(255) as u32 & 0xFF;
-            let s = 0xFF000000 | (m << 16) | (at << 8) | o;
+            let bm = args.get(0).and_then(|v| v.as_i64().ok()).unwrap_or(0);
+            let az = args.get(1).and_then(|v| v.as_i64().ok()).unwrap_or(0);
+            let x1 = args.get(2).and_then(|v| v.as_i64().ok()).unwrap_or(0);
+            let y1 = args.get(3).and_then(|v| v.as_i64().ok()).unwrap_or(0);
+            let r = args.get(4).and_then(|v| v.as_i64().ok()).unwrap_or(255) as u32 & 0xFF;
+            let g = args.get(5).and_then(|v| v.as_i64().ok()).unwrap_or(255) as u32 & 0xFF;
+            let b = args.get(6).and_then(|v| v.as_i64().ok()).unwrap_or(255) as u32 & 0xFF;
+            let color = 0xFF000000 | (r << 16) | (g << 8) | b;
             
-            let mut cx = fy;
-            let mut ae = fo;
-            let dx = (dn - fy).gp();
-            let bg = -(dp - fo).gp();
-            let cr: i64 = if fy < dn { 1 } else { -1 };
-            let cq: i64 = if fo < dp { 1 } else { -1 };
-            let mut rq = dx + bg;
+            let mut cx = bm;
+            let mut u = az;
+            let dx = (x1 - bm).abs();
+            let ad = -(y1 - az).abs();
+            let am: i64 = if bm < x1 { 1 } else { -1 };
+            let ak: i64 = if az < y1 { 1 } else { -1 };
+            let mut err = dx + ad;
             loop {
-                if cx >= 0 && ae >= 0 {
-                    crate::framebuffer::sf(cx as u32, ae as u32, s);
+                if cx >= 0 && u >= 0 {
+                    crate::framebuffer::put_pixel(cx as u32, u as u32, color);
                 }
-                if cx == dn && ae == dp { break; }
-                let agl = 2 * rq;
-                if agl >= bg { rq += bg; cx += cr; }
-                if agl <= dx { rq += dx; ae += cq; }
+                if cx == x1 && u == y1 { break; }
+                let pg = 2 * err;
+                if pg >= ad { err += ad; cx += am; }
+                if pg <= dx { err += dx; u += ak; }
             }
-            Ok(Value::Cn)
+            Ok(Value::Void)
         }
-        AMI_ => {
+        AOM_ => {
             
-            let cx = n.get(0).and_then(|p| p.abb().bq()).unwrap_or(0);
-            let ae = n.get(1).and_then(|p| p.abb().bq()).unwrap_or(0);
-            let dy = n.get(2).and_then(|p| p.abb().bq()).unwrap_or(0);
-            let m = n.get(3).and_then(|p| p.abb().bq()).unwrap_or(255) as u32 & 0xFF;
-            let at = n.get(4).and_then(|p| p.abb().bq()).unwrap_or(255) as u32 & 0xFF;
-            let o = n.get(5).and_then(|p| p.abb().bq()).unwrap_or(255) as u32 & 0xFF;
-            let s = 0xFF000000 | (m << 16) | (at << 8) | o;
+            let cx = args.get(0).and_then(|v| v.as_i64().ok()).unwrap_or(0);
+            let u = args.get(1).and_then(|v| v.as_i64().ok()).unwrap_or(0);
+            let radius = args.get(2).and_then(|v| v.as_i64().ok()).unwrap_or(0);
+            let r = args.get(3).and_then(|v| v.as_i64().ok()).unwrap_or(255) as u32 & 0xFF;
+            let g = args.get(4).and_then(|v| v.as_i64().ok()).unwrap_or(255) as u32 & 0xFF;
+            let b = args.get(5).and_then(|v| v.as_i64().ok()).unwrap_or(255) as u32 & 0xFF;
+            let color = 0xFF000000 | (r << 16) | (g << 8) | b;
             
-            let mut b = dy;
-            let mut c: i64 = 0;
-            let mut bc = 1 - dy;
-            while b >= c {
-                let frp = [
-                    (cx + b, ae + c), (cx - b, ae + c),
-                    (cx + b, ae - c), (cx - b, ae - c),
-                    (cx + c, ae + b), (cx - c, ae + b),
-                    (cx + c, ae - b), (cx - c, ae - b),
+            let mut x = radius;
+            let mut y: i64 = 0;
+            let mut d = 1 - radius;
+            while x >= y {
+                let pts = [
+                    (cx + x, u + y), (cx - x, u + y),
+                    (cx + x, u - y), (cx - x, u - y),
+                    (cx + y, u + x), (cx - y, u + x),
+                    (cx + y, u - x), (cx - y, u - x),
                 ];
-                for (y, x) in frp {
-                    if y >= 0 && x >= 0 {
-                        crate::framebuffer::sf(y as u32, x as u32, s);
+                for (p, o) in pts {
+                    if p >= 0 && o >= 0 {
+                        crate::framebuffer::put_pixel(p as u32, o as u32, color);
                     }
                 }
-                c += 1;
-                if bc <= 0 {
-                    bc += 2 * c + 1;
+                y += 1;
+                if d <= 0 {
+                    d += 2 * y + 1;
                 } else {
-                    b -= 1;
-                    bc += 2 * (c - b) + 1;
+                    x -= 1;
+                    d += 2 * (y - x) + 1;
                 }
             }
-            Ok(Value::Cn)
+            Ok(Value::Void)
         }
-        ANA_ => {
-            let (d, _) = crate::framebuffer::yn();
-            Ok(Value::Ab(d as i64))
+        APE_ => {
+            let (w, _) = crate::framebuffer::kv();
+            Ok(Value::I64(w as i64))
         }
-        AMZ_ => {
-            let (_, i) = crate::framebuffer::yn();
-            Ok(Value::Ab(i as i64))
+        APD_ => {
+            let (_, h) = crate::framebuffer::kv();
+            Ok(Value::I64(h as i64))
         }
-        AMN_ => {
+        AOR_ => {
             
-            crate::framebuffer::sv();
-            Ok(Value::Cn)
+            crate::framebuffer::ii();
+            Ok(Value::Void)
         }
-        AMK_ => {
+        AOO_ => {
             
-            if let Some(Value::He(text)) = n.get(0) {
-                let b = n.get(1).and_then(|p| p.abb().bq()).unwrap_or(0) as u32;
-                let c = n.get(2).and_then(|p| p.abb().bq()).unwrap_or(0) as u32;
-                let m = n.get(3).and_then(|p| p.abb().bq()).unwrap_or(255) as u32 & 0xFF;
-                let at = n.get(4).and_then(|p| p.abb().bq()).unwrap_or(255) as u32 & 0xFF;
-                let o = n.get(5).and_then(|p| p.abb().bq()).unwrap_or(255) as u32 & 0xFF;
-                let bv = n.get(6).and_then(|p| p.abb().bq()).unwrap_or(1) as u32;
-                let s = 0xFF000000 | (m << 16) | (at << 8) | o;
+            if let Some(Value::Str(text)) = args.get(0) {
+                let x = args.get(1).and_then(|v| v.as_i64().ok()).unwrap_or(0) as u32;
+                let y = args.get(2).and_then(|v| v.as_i64().ok()).unwrap_or(0) as u32;
+                let r = args.get(3).and_then(|v| v.as_i64().ok()).unwrap_or(255) as u32 & 0xFF;
+                let g = args.get(4).and_then(|v| v.as_i64().ok()).unwrap_or(255) as u32 & 0xFF;
+                let b = args.get(5).and_then(|v| v.as_i64().ok()).unwrap_or(255) as u32 & 0xFF;
+                let scale = args.get(6).and_then(|v| v.as_i64().ok()).unwrap_or(1) as u32;
+                let color = 0xFF000000 | (r << 16) | (g << 8) | b;
                 
-                let mut cx = b;
-                for r in text.bw() {
-                    let ka = crate::framebuffer::font::ada(r);
-                    for (br, &fs) in ka.iter().cf() {
-                        for ga in 0..8u32 {
-                            if fs & (0x80 >> ga) != 0 {
-                                for cq in 0..bv {
-                                    for cr in 0..bv {
-                                        crate::framebuffer::sf(
-                                            cx + ga * bv + cr,
-                                            c + br as u32 * bv + cq,
-                                            s,
+                let mut cx = x;
+                for c in text.chars() {
+                    let du = crate::framebuffer::font::ol(c);
+                    for (row, &bits) in du.iter().enumerate() {
+                        for bf in 0..8u32 {
+                            if bits & (0x80 >> bf) != 0 {
+                                for ak in 0..scale {
+                                    for am in 0..scale {
+                                        crate::framebuffer::put_pixel(
+                                            cx + bf * scale + am,
+                                            y + row as u32 * scale + ak,
+                                            color,
                                         );
                                     }
                                 }
                             }
                         }
                     }
-                    cx += 8 * bv;
+                    cx += 8 * scale;
                 }
             }
-            Ok(Value::Cn)
+            Ok(Value::Void)
         }
-        ANC_ => {
+        APG_ => {
             
-            let jn = n.get(0).and_then(|p| p.abb().bq()).unwrap_or(0) as u64;
-            crate::cpu::tsc::rd(jn);
-            Ok(Value::Cn)
+            let dh = args.get(0).and_then(|v| v.as_i64().ok()).unwrap_or(0) as u64;
+            crate::cpu::tsc::hq(dh);
+            Ok(Value::Void)
         }
-        ANF_ => {
-            let p = n.fv().unwrap_or(&Value::Cn);
-            match p {
-                Value::R(bb) => Ok(Value::R(*bb)),
-                Value::Ab(bo) => Ok(Value::R(*bo as f64)),
-                Value::Em(o) => Ok(Value::R(if *o { 1.0 } else { 0.0 })),
-                Value::He(e) => {
-                    let bb = vcf(e.em());
-                    Ok(Value::R(bb))
+        APJ_ => {
+            let v = args.first().unwrap_or(&Value::Void);
+            match v {
+                Value::F64(f) => Ok(Value::F64(*f)),
+                Value::I64(ae) => Ok(Value::F64(*ae as f64)),
+                Value::Bool(b) => Ok(Value::F64(if *b { 1.0 } else { 0.0 })),
+                Value::Str(j) => {
+                    let f = nqf(j.trim());
+                    Ok(Value::F64(f))
                 }
-                _ => Ok(Value::R(0.0)),
+                _ => Ok(Value::F64(0.0)),
             }
         }
-        AMY_ => {
+        APC_ => {
             
-            let line = crate::shell::cts();
-            Ok(Value::He(line))
+            let line = crate::shell::read_line();
+            Ok(Value::Str(line))
         }
         
         
         
-        AMF_ => Ok(Value::R(crate::trustdaw::live_viz::tcw() as f64)),
-        AME_ => Ok(Value::R(crate::trustdaw::live_viz::tcv() as f64)),
-        ANE_ => Ok(Value::R(crate::trustdaw::live_viz::tet() as f64)),
-        AMR_ => Ok(Value::R(crate::trustdaw::live_viz::teb() as f64)),
-        AMP_ => Ok(Value::R(crate::trustdaw::live_viz::tdr() as f64)),
-        ANI_ => Ok(Value::R(crate::trustdaw::live_viz::tez() as f64)),
-        AML_ => Ok(Value::R(crate::trustdaw::live_viz::tdo() as f64)),
-        AMO_ => Ok(Value::Ab(crate::trustdaw::live_viz::tdq() as i64)),
-        ANB_ => {
-            let b = n.fv().unwrap_or(&Value::R(0.0)).dyj().unwrap_or(0.0);
-            Ok(Value::R(libm::ayq(b)))
+        AOJ_ => Ok(Value::F64(crate::trustdaw::live_viz::mcr() as f64)),
+        AOI_ => Ok(Value::F64(crate::trustdaw::live_viz::mcq() as f64)),
+        API_ => Ok(Value::F64(crate::trustdaw::live_viz::mdw() as f64)),
+        AOV_ => Ok(Value::F64(crate::trustdaw::live_viz::mdm() as f64)),
+        AOT_ => Ok(Value::F64(crate::trustdaw::live_viz::mde() as f64)),
+        APM_ => Ok(Value::F64(crate::trustdaw::live_viz::mea() as f64)),
+        AOP_ => Ok(Value::F64(crate::trustdaw::live_viz::mdb() as f64)),
+        AOS_ => Ok(Value::I64(crate::trustdaw::live_viz::mdd() as i64)),
+        APF_ => {
+            let x = args.first().unwrap_or(&Value::F64(0.0)).as_f64().unwrap_or(0.0);
+            Ok(Value::F64(libm::sin(x)))
         }
-        AMH_ => {
-            let b = n.fv().unwrap_or(&Value::R(0.0)).dyj().unwrap_or(0.0);
-            Ok(Value::R(libm::cjt(b)))
+        AOL_ => {
+            let x = args.first().unwrap_or(&Value::F64(0.0)).as_f64().unwrap_or(0.0);
+            Ok(Value::F64(libm::cos(x)))
         }
-        AMS_ => {
-            let bc = crate::desktop::Aa.lock();
-            let hl = bc.lf;
-            drop(bc);
-            Ok(Value::Ab(hl as i64))
+        AOW_ => {
+            let d = crate::desktop::S.lock();
+            let cg = d.cursor_x;
+            drop(d);
+            Ok(Value::I64(cg as i64))
         }
-        AMT_ => {
-            let bc = crate::desktop::Aa.lock();
-            let ir = bc.ot;
-            drop(bc);
-            Ok(Value::Ab(ir as i64))
+        AOX_ => {
+            let d = crate::desktop::S.lock();
+            let cr = d.cursor_y;
+            drop(d);
+            Ok(Value::I64(cr as i64))
         }
-        _ => Err(format!("unknown builtin id: {}", ad)),
+        _ => Err(format!("unknown builtin id: {}", id)),
     }
 }
 
 
-fn vcp(e: &str) -> i64 {
-    let mut ap: i64 = 0;
+fn nqo(j: &str) -> i64 {
+    let mut val: i64 = 0;
     let mut neg = false;
-    for (a, bm) in e.bw().cf() {
-        if a == 0 && bm == '-' { neg = true; continue; }
-        if !bm.atb() { break; }
-        ap = ap.hx(10).cn((bm as i64) - 48);
+    for (i, ch) in j.chars().enumerate() {
+        if i == 0 && ch == '-' { neg = true; continue; }
+        if !ch.is_ascii_digit() { break; }
+        val = val.wrapping_mul(10).wrapping_add((ch as i64) - 48);
     }
-    if neg { -ap } else { ap }
+    if neg { -val } else { val }
 }
 
 
-fn vcf(e: &str) -> f64 {
-    let mut ap: f64 = 0.0;
+fn nqf(j: &str) -> f64 {
+    let mut val: f64 = 0.0;
     let mut neg = false;
-    let mut avw = false;
-    let mut hkh: f64 = 1.0;
-    for (a, bm) in e.bw().cf() {
-        if a == 0 && bm == '-' { neg = true; continue; }
-        if bm == '.' && !avw { avw = true; continue; }
-        if !bm.atb() { break; }
-        let bc = (bm as u8 - b'0') as f64;
-        if avw {
-            hkh *= 10.0;
-            ap += bc / hkh;
+    let mut yt = false;
+    let mut dqe: f64 = 1.0;
+    for (i, ch) in j.chars().enumerate() {
+        if i == 0 && ch == '-' { neg = true; continue; }
+        if ch == '.' && !yt { yt = true; continue; }
+        if !ch.is_ascii_digit() { break; }
+        let d = (ch as u8 - b'0') as f64;
+        if yt {
+            dqe *= 10.0;
+            val += d / dqe;
         } else {
-            ap = ap * 10.0 + bc;
+            val = val * 10.0 + d;
         }
     }
-    if neg { -ap } else { ap }
+    if neg { -val } else { val }
 }

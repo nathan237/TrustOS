@@ -233,7 +233,7 @@ pub fn validate_dtb(data: &[u8]) -> Result<(), &'static str> {
 /// If no /chosen node exists, we append properties at the end.
 pub fn patch_dtb_chosen(
     dtb: &mut [u8],
-    dtb_length: usize,
+    dtb_len: usize,
     initrd_start: Option<u64>,
     initrd_end: Option<u64>,
     bootargs: Option<&str>,
@@ -248,11 +248,11 @@ pub fn patch_dtb_chosen(
     // -append flag handle bootargs.
     
     // Validate DTB
-    validate_dtb(&dtb[..dtb_length])?;
+    validate_dtb(&dtb[..dtb_len])?;
     
     // Return unmodified size for now
     // TODO: Full FDT property patching (add linux,initrd-start/end to /chosen)
-    Ok(dtb_length)
+    Ok(dtb_len)
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -304,15 +304,15 @@ impl Default for GuestLoadConfig {
 // Structure publique — visible à l'extérieur de ce module.
 pub struct GuestLoadResult {
     /// Where the kernel was loaded
-    pub kernel_address: u64,
+    pub kernel_addr: u64,
     /// Kernel size
     pub kernel_size: usize,
     /// Where the DTB was placed
-    pub dtb_address: u64,
+    pub dtb_addr: u64,
     /// DTB size
     pub dtb_size: usize,
     /// Where the initrd was placed (if any)
-    pub initrd_address: Option<u64>,
+    pub initrd_addr: Option<u64>,
     /// Initrd size
     pub initrd_size: Option<usize>,
     /// Parsed ARM64 Image header
@@ -346,10 +346,10 @@ pub fn load_arm64_guest(
     }
 
     let header = Arm64ImageHeader::parse(kernel_data)
-        .map_error(|e| String::from(e))?;
+        .map_err(|e| String::from(e))?;
 
     // ── Validate DTB ──
-    validate_dtb(dtb_data).map_error(|e| String::from(e))?;
+    validate_dtb(dtb_data).map_err(|e| String::from(e))?;
     if dtb_data.len() > MAXIMUM_DTB_SIZE {
         return Err(format!("DTB too large: {}KB (max {}KB)",
             dtb_data.len() / 1024, MAXIMUM_DTB_SIZE / 1024));
@@ -364,23 +364,23 @@ pub fn load_arm64_guest(
     }
 
     // ── Calculate addresses ──
-    let kernel_address = config.ram_base + KERNEL_OFFSET;
-    let dtb_address = config.ram_base + DTB_OFFSET;
-    let initrd_address = config.ram_base + INITRD_OFFSET;
+    let kernel_addr = config.ram_base + KERNEL_OFFSET;
+    let dtb_addr = config.ram_base + DTB_OFFSET;
+    let initrd_addr = config.ram_base + INITRD_OFFSET;
 
     // Verify everything fits
-    let kernel_end = kernel_address + header.effective_size(kernel_data.len()) as u64;
-    if kernel_end > dtb_address {
+    let kernel_end = kernel_addr + header.effective_size(kernel_data.len()) as u64;
+    if kernel_end > dtb_addr {
         return Err(format!("Kernel too large ({}MB), overlaps DTB region",
             kernel_data.len() / (1024*1024)));
     }
     if let Some(initrd) = initrd_data {
-        let initrd_end = initrd_address + initrd.len() as u64;
+        let initrd_end = initrd_addr + initrd.len() as u64;
         let ram_end = config.ram_base + config.ram_size;
         if initrd_end > ram_end {
             return Err(format!("initrd doesn't fit in guest RAM (need {}MB, have {}MB free)",
                 initrd.len() / (1024*1024),
-                (ram_end - initrd_address) / (1024*1024)));
+                (ram_end - initrd_addr) / (1024*1024)));
         }
     }
 
@@ -389,8 +389,8 @@ pub fn load_arm64_guest(
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
         ptr::copy_nonoverlapping(
-            kernel_data.as_pointer(),
-            kernel_address as *mut u8,
+            kernel_data.as_ptr(),
+            kernel_addr as *mut u8,
             kernel_size,
         );
     }
@@ -398,39 +398,39 @@ unsafe {
     // ── Copy DTB to guest memory ──
     // Make a mutable copy so we can patch it
     let mut dtb_buffer = [0u8; 1048576]; // 1MB max DTB
-    let dtb_copy_length = dtb_data.len().minimum(dtb_buffer.len());
+    let dtb_copy_length = dtb_data.len().min(dtb_buffer.len());
     dtb_buffer[..dtb_copy_length].copy_from_slice(&dtb_data[..dtb_copy_length]);
 
     // Patch DTB with initrd info and cmdline
-    let initrd_end_address = initrd_data.map(|d| initrd_address + d.len() as u64);
+    let initrd_end_address = initrd_data.map(|d| initrd_addr + d.len() as u64);
     let dtb_final_size = patch_dtb_chosen(
         &mut dtb_buffer,
         dtb_copy_length,
-        initrd_data.map(|_| initrd_address),
+        initrd_data.map(|_| initrd_addr),
         initrd_end_address,
         if config.cmdline.is_empty() { None } else { Some(&config.cmdline) },
-    ).map_error(|e| String::from(e))?;
+    ).map_err(|e| String::from(e))?;
 
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
         ptr::copy_nonoverlapping(
-            dtb_buffer.as_pointer(),
-            dtb_address as *mut u8,
+            dtb_buffer.as_ptr(),
+            dtb_addr as *mut u8,
             dtb_final_size,
         );
     }
 
     // ── Copy initrd to guest memory ──
-    let (initrd_result_address, initrd_result_size) = if let Some(initrd) = initrd_data {
+    let (initrd_result_addr, initrd_result_size) = if let Some(initrd) = initrd_data {
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
             ptr::copy_nonoverlapping(
-                initrd.as_pointer(),
-                initrd_address as *mut u8,
+                initrd.as_ptr(),
+                initrd_addr as *mut u8,
                 initrd.len(),
             );
         }
-        (Some(initrd_address), Some(initrd.len()))
+        (Some(initrd_addr), Some(initrd.len()))
     } else {
         (None, None)
     };
@@ -452,8 +452,8 @@ unsafe {
 
     // ── Build HypervisorConfig ──
     let hv_config = HypervisorConfig {
-        guest_entry: kernel_address,
-        guest_dtb: dtb_address,
+        guest_entry: kernel_addr,
+        guest_dtb: dtb_addr,
         guest_ram_base: config.ram_base,
         guest_ram_size: config.ram_size,
         trapped_mmio: config.trap_mmio.clone(),
@@ -462,11 +462,11 @@ unsafe {
     };
 
     Ok(GuestLoadResult {
-        kernel_address,
+        kernel_addr,
         kernel_size,
-        dtb_address,
+        dtb_addr,
         dtb_size: dtb_final_size,
-        initrd_address: initrd_result_address,
+        initrd_addr: initrd_result_addr,
         initrd_size: initrd_result_size,
         header,
         hv_config,
@@ -478,11 +478,11 @@ pub fn format_load_result(result: &GuestLoadResult) -> String {
     let mut s = String::new();
     s.push_str("=== ARM64 Guest Loaded ===\n");
     s.push_str(&format!("  Kernel:  0x{:08X} ({} KB)\n",
-        result.kernel_address, result.kernel_size / 1024));
+        result.kernel_addr, result.kernel_size / 1024));
     s.push_str(&format!("  DTB:     0x{:08X} ({} KB)\n",
-        result.dtb_address, result.dtb_size / 1024));
-    if let (Some(address), Some(size)) = (result.initrd_address, result.initrd_size) {
-        s.push_str(&format!("  initrd:  0x{:08X} ({} KB)\n", address, size / 1024));
+        result.dtb_addr, result.dtb_size / 1024));
+    if let (Some(addr), Some(size)) = (result.initrd_addr, result.initrd_size) {
+        s.push_str(&format!("  initrd:  0x{:08X} ({} KB)\n", addr, size / 1024));
     }
     s.push_str(&format!("  Entry:   0x{:08X}\n", result.hv_config.guest_entry));
     s.push_str(&format!("  RAM:     0x{:08X} - 0x{:08X} ({} MB)\n",

@@ -154,16 +154,16 @@ pub fn matches(&self, ip: [u8; 4]) -> bool {
                 // Pattern matching — Rust's exhaustive branching construct.
 match self {
             IpMatch::Any => true,
-            IpMatch::Exact(address) => *address == ip,
-            IpMatch::Subnet(address, prefix) => {
+            IpMatch::Exact(addr) => *addr == ip,
+            IpMatch::Subnet(addr, prefix) => {
                 if *prefix == 0 {
                     return true;
                 }
                 if *prefix >= 32 {
-                    return *address == ip;
+                    return *addr == ip;
                 }
                 let mask = !0u32 << (32 - prefix);
-                let a = u32::from_be_bytes(*address) & mask;
+                let a = u32::from_be_bytes(*addr) & mask;
                 let b = u32::from_be_bytes(ip) & mask;
                 a == b
             }
@@ -176,15 +176,15 @@ pub fn parse(s: &str) -> Option<Self> {
             return Some(IpMatch::Any);
         }
         if let Some((address_str, prefix_str)) = s.split_once('/') {
-            let address = parse_ipv4(address_str)?;
+            let addr = parse_ipv4(address_str)?;
             let prefix: u8 = prefix_str.parse().ok()?;
             if prefix > 32 {
                 return None;
             }
-            Some(IpMatch::Subnet(address, prefix))
+            Some(IpMatch::Subnet(addr, prefix))
         } else {
-            let address = parse_ipv4(s)?;
-            Some(IpMatch::Exact(address))
+            let addr = parse_ipv4(s)?;
+            Some(IpMatch::Exact(addr))
         }
     }
 
@@ -252,10 +252,10 @@ match self {
 pub struct Rule {
     pub chain: Chain,
     pub protocol: Protocol,
-    pub source_ip: IpMatch,
-    pub destination_ip: IpMatch,
-    pub source_port: PortMatch,
-    pub destination_port: PortMatch,
+    pub src_ip: IpMatch,
+    pub dst_ip: IpMatch,
+    pub src_port: PortMatch,
+    pub dst_port: PortMatch,
     pub action: Action,
     pub comment: String,
     /// Number of packets matched
@@ -271,10 +271,10 @@ pub fn new(chain: Chain, action: Action) -> Self {
         Self {
             chain,
             protocol: Protocol::Any,
-            source_ip: IpMatch::Any,
-            destination_ip: IpMatch::Any,
-            source_port: PortMatch::Any,
-            destination_port: PortMatch::Any,
+            src_ip: IpMatch::Any,
+            dst_ip: IpMatch::Any,
+            src_port: PortMatch::Any,
+            dst_port: PortMatch::Any,
             action,
             comment: String::new(),
             packets: 0,
@@ -283,26 +283,26 @@ pub fn new(chain: Chain, action: Action) -> Self {
     }
 
     /// Check if this rule matches a packet
-    pub fn matches(&self, protocol: u8, source: [u8; 4], destination: [u8; 4], sport: u16, dport: u16) -> bool {
+    pub fn matches(&self, proto: u8, src: [u8; 4], dst: [u8; 4], sport: u16, dport: u16) -> bool {
         // Protocol match
         if let Some(p) = self.protocol.number() {
-            if p != protocol {
+            if p != proto {
                 return false;
             }
         }
         // IP match
-        if !self.source_ip.matches(source) {
+        if !self.src_ip.matches(src) {
             return false;
         }
-        if !self.destination_ip.matches(destination) {
+        if !self.dst_ip.matches(dst) {
             return false;
         }
         // Port match (only for TCP/UDP)
-        if protocol == 6 || protocol == 17 {
-            if !self.source_port.matches(sport) {
+        if proto == 6 || proto == 17 {
+            if !self.src_port.matches(sport) {
                 return false;
             }
-            if !self.destination_port.matches(dport) {
+            if !self.dst_port.matches(dport) {
                 return false;
             }
         }
@@ -391,31 +391,31 @@ pub fn set_enabled(enabled: bool) {
 }
 
 /// Filter an incoming packet. Returns true if ACCEPT, false if DROP.
-pub fn filter_input(protocol: u8, source: [u8; 4], destination: [u8; 4], sport: u16, dport: u16, packet_length: usize) -> bool {
+pub fn filter_input(proto: u8, src: [u8; 4], dst: [u8; 4], sport: u16, dport: u16, packet_length: usize) -> bool {
     if !is_enabled() {
         return true;
     }
-    filter_chain(Chain::Input, protocol, source, destination, sport, dport, packet_length)
+    filter_chain(Chain::Input, proto, src, dst, sport, dport, packet_length)
 }
 
 /// Filter an outgoing packet. Returns true if ACCEPT, false if DROP.
-pub fn filter_output(protocol: u8, source: [u8; 4], destination: [u8; 4], sport: u16, dport: u16, packet_length: usize) -> bool {
+pub fn filter_output(proto: u8, src: [u8; 4], dst: [u8; 4], sport: u16, dport: u16, packet_length: usize) -> bool {
     if !is_enabled() {
         return true;
     }
-    filter_chain(Chain::Output, protocol, source, destination, sport, dport, packet_length)
+    filter_chain(Chain::Output, proto, src, dst, sport, dport, packet_length)
 }
 
 /// Core filtering logic for a chain
-fn filter_chain(chain: Chain, protocol: u8, source: [u8; 4], destination: [u8; 4], sport: u16, dport: u16, packet_length: usize) -> bool {
+fn filter_chain(chain: Chain, proto: u8, src: [u8; 4], dst: [u8; 4], sport: u16, dport: u16, packet_length: usize) -> bool {
     let mut fw = FIREWALL.lock();
 
     // Walk rules in order
-    for rule in fw.rules.iterator_mut() {
+    for rule in fw.rules.iter_mut() {
         if rule.chain != chain {
             continue;
         }
-        if rule.matches(protocol, source, destination, sport, dport) {
+        if rule.matches(proto, src, dst, sport, dport) {
             rule.packets += 1;
             rule.bytes += packet_length as u64;
 
@@ -431,12 +431,12 @@ match rule.action {
                 }
                 Action::Reject => {
                     PACKETS_DROPPED.fetch_add(1, Ordering::Relaxed);
-                    send_reject(protocol, source, destination, sport, dport);
+                    send_reject(proto, src, dst, sport, dport);
                     return false;
                 }
                 Action::Log => {
                     let protocol_name = // Pattern matching — Rust's exhaustive branching construct.
-match protocol {
+match proto {
                         1 => "ICMP",
                         6 => "TCP",
                         17 => "UDP",
@@ -445,8 +445,8 @@ match protocol {
                     let entry = format!(
                         "[FW {}] {} {}.{}.{}.{}:{} -> {}.{}.{}.{}:{} len={}",
                         chain.name(), protocol_name,
-                        source[0], source[1], source[2], source[3], sport,
-                        destination[0], destination[1], destination[2], destination[3], dport,
+                        src[0], src[1], src[2], src[3], sport,
+                        dst[0], dst[1], dst[2], dst[3], dport,
                         packet_length,
                     );
                     crate::serial_println!("{}", entry);
@@ -557,7 +557,7 @@ pub fn reset_stats() {
     PACKETS_ALLOWED.store(0, Ordering::Relaxed);
     PACKETS_DROPPED.store(0, Ordering::Relaxed);
     let mut fw = FIREWALL.lock();
-    for rule in fw.rules.iterator_mut() {
+    for rule in fw.rules.iter_mut() {
         rule.packets = 0;
         rule.bytes = 0;
     }
@@ -580,13 +580,13 @@ fn parse_ipv4(s: &str) -> Option<[u8; 4]> {
 }
 
 /// Send rejection response: TCP RST for TCP, ICMP Unreachable for others
-fn send_reject(protocol: u8, source: [u8; 4], destination: [u8; 4], sport: u16, dport: u16) {
-    if protocol == 6 {
+fn send_reject(proto: u8, src: [u8; 4], dst: [u8; 4], sport: u16, dport: u16) {
+    if proto == 6 {
         // TCP RST: swap src/dst, set RST flag, use seq=0 ack=0
-        send_tcp_rst(source, destination, sport, dport);
+        send_tcp_rst(src, dst, sport, dport);
     } else {
         // ICMP Destination Unreachable, Code 13 (Communication Administratively Prohibited)
-        send_icmp_unreachable(source, destination);
+        send_icmp_unreachable(src, dst);
     }
 }
 
@@ -617,19 +617,19 @@ fn send_tcp_rst(remote_ip: [u8; 4], local_ip: [u8; 4], remote_port: u16, local_p
 /// Send ICMP Destination Unreachable (Type 3, Code 13 = Admin Prohibited)
 fn send_icmp_unreachable(remote_ip: [u8; 4], _local_ip: [u8; 4]) {
     // ICMP Destination Unreachable: 8 bytes header
-    let mut packet = [0u8; 8];
-    packet[0] = 3;  // Type 3 = Destination Unreachable
-    packet[1] = 13; // Code 13 = Communication Administratively Prohibited
+    let mut pkt = [0u8; 8];
+    pkt[0] = 3;  // Type 3 = Destination Unreachable
+    pkt[1] = 13; // Code 13 = Communication Administratively Prohibited
     // Checksum at [2..4], computed below
     // Unused/Next-hop MTU at [4..8] = 0
 
     // Compute ICMP checksum
     let mut sum: u32 = 0;
-    for i in (0..packet.len()).step_by(2) {
-        let word = if i + 1 < packet.len() {
-            ((packet[i] as u16) << 8) | (packet[i + 1] as u16)
+    for i in (0..pkt.len()).step_by(2) {
+        let word = if i + 1 < pkt.len() {
+            ((pkt[i] as u16) << 8) | (pkt[i + 1] as u16)
         } else {
-            (packet[i] as u16) << 8
+            (pkt[i] as u16) << 8
         };
         sum += word as u32;
     }
@@ -637,7 +637,7 @@ fn send_icmp_unreachable(remote_ip: [u8; 4], _local_ip: [u8; 4]) {
         sum = (sum & 0xFFFF) + (sum >> 16);
     }
     let csum = !(sum as u16);
-    packet[2..4].copy_from_slice(&csum.to_be_bytes());
+    pkt[2..4].copy_from_slice(&csum.to_be_bytes());
 
-    let _ = super::ip::send_packet(remote_ip, 1, &packet);
+    let _ = super::ip::send_packet(remote_ip, 1, &pkt);
 }

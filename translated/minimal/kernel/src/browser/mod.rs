@@ -29,358 +29,358 @@ use alloc::collections::BTreeMap;
 
 
 #[derive(Clone)]
-pub struct Aqe {
-    pub j: String,
-    pub bn: String,
-    pub vh: String,
+pub struct Rk {
+    pub name: String,
+    pub value: String,
+    pub domain: String,
     pub path: String,
-    pub hzi: bool,
-    pub ocj: bool,
+    pub secure: bool,
+    pub http_only: bool,
 }
 
 
 pub struct BrowserTab {
     pub url: String,
-    pub dq: String,
-    pub ama: Option<Su>,
-    pub ug: i32,
-    pub czh: Vec<Wz>,
-    pub bfc: String,
-    pub dca: bool,
-    pub adv: Vec<String>,
-    pub ari: usize,
+    pub title: String,
+    pub document: Option<Ia>,
+    pub scroll_y: i32,
+    pub links: Vec<Jy>,
+    pub raw_html: String,
+    pub show_raw_html: bool,
+    pub history: Vec<String>,
+    pub history_index: usize,
     pub status: BrowserStatus,
-    pub bhw: BTreeMap<String, Nx>,
-    pub dug: Vec<String>,
+    pub resources: BTreeMap<String, Fx>,
+    pub pending_resources: Vec<String>,
 }
 
 impl BrowserTab {
     pub fn new() -> Self {
         Self {
             url: String::new(),
-            dq: String::from("New Tab"),
-            ama: None,
-            ug: 0,
-            czh: Vec::new(),
-            bfc: String::new(),
-            dca: false,
-            adv: Vec::new(),
-            ari: 0,
-            status: BrowserStatus::Cv,
-            bhw: BTreeMap::new(),
-            dug: Vec::new(),
+            title: String::from("New Tab"),
+            document: None,
+            scroll_y: 0,
+            links: Vec::new(),
+            raw_html: String::new(),
+            show_raw_html: false,
+            history: Vec::new(),
+            history_index: 0,
+            status: BrowserStatus::Idle,
+            resources: BTreeMap::new(),
+            pending_resources: Vec::new(),
         }
     }
 }
 
 
 pub struct Browser {
-    pub bdv: String,
-    pub adv: Vec<String>,
-    pub ari: usize,
-    pub ama: Option<Su>,
-    pub ug: i32,
-    pub faz: u32,
-    pub fyg: u32,
+    pub current_url: String,
+    pub history: Vec<String>,
+    pub history_index: usize,
+    pub document: Option<Ia>,
+    pub scroll_y: i32,
+    pub viewport_width: u32,
+    pub viewport_height: u32,
     pub status: BrowserStatus,
-    pub czh: Vec<Wz>,
+    pub links: Vec<Jy>,
     
-    pub bfc: String,
+    pub raw_html: String,
     
-    pub dca: bool,
+    pub show_raw_html: bool,
     
-    pub bhw: BTreeMap<String, Nx>,
+    pub resources: BTreeMap<String, Fx>,
     
-    pub dug: Vec<String>,
+    pub pending_resources: Vec<String>,
     
-    pub ipg: Vec<Aqe>,
+    pub cookies: Vec<Rk>,
     
-    pub bio: Vec<BrowserTab>,
+    pub tabs: Vec<BrowserTab>,
     
-    pub ahd: usize,
+    pub active_tab: usize,
     
-    pub hay: Vec<(String, String)>, 
+    pub bookmarks: Vec<(String, String)>, 
     
-    pub ohh: Vec<String>,
+    pub js_console: Vec<String>,
     
-    pub ghi: BTreeMap<String, String>,
+    pub form_inputs: BTreeMap<String, String>,
     
-    pub kwq: Option<String>,
+    pub focused_input: Option<String>,
 }
 
 
 #[derive(Clone)]
-pub struct Nx {
-    pub ahg: ResourceType,
-    pub f: Vec<u8>,
+pub struct Fx {
+    pub content_type: ResourceType,
+    pub data: Vec<u8>,
 }
 
 
 #[derive(Clone, PartialEq)]
 pub enum ResourceType {
     Image,
-    Mj,
-    Cmq,
-    Qg,
+    Fd,
+    Script,
+    Other,
 }
 
 
 #[derive(Clone, PartialEq)]
 pub enum BrowserStatus {
-    Cv,
-    Py,
-    Q(String),
-    At,
+    Idle,
+    Loading,
+    Error(String),
+    Ready,
 }
 
 
 #[derive(Clone)]
-pub struct Wz {
-    pub cae: String,
-    pub b: i32,
-    pub c: i32,
-    pub z: u32,
-    pub ac: u32,
+pub struct Jy {
+    pub href: String,
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
 }
 
 impl Browser {
-    pub fn new(z: u32, ac: u32) -> Self {
-        let sue = BrowserTab::new();
+    pub fn new(width: u32, height: u32) -> Self {
+        let lwl = BrowserTab::new();
         Self {
-            bdv: String::new(),
-            adv: Vec::new(),
-            ari: 0,
-            ama: None,
-            ug: 0,
-            faz: z,
-            fyg: ac,
-            status: BrowserStatus::Cv,
-            czh: Vec::new(),
-            bfc: String::new(),
-            dca: false,
-            bhw: BTreeMap::new(),
-            dug: Vec::new(),
-            ipg: Vec::new(),
-            bio: alloc::vec![sue],
-            ahd: 0,
-            hay: Vec::new(),
-            ohh: Vec::new(),
-            ghi: BTreeMap::new(),
-            kwq: None,
+            current_url: String::new(),
+            history: Vec::new(),
+            history_index: 0,
+            document: None,
+            scroll_y: 0,
+            viewport_width: width,
+            viewport_height: height,
+            status: BrowserStatus::Idle,
+            links: Vec::new(),
+            raw_html: String::new(),
+            show_raw_html: false,
+            resources: BTreeMap::new(),
+            pending_resources: Vec::new(),
+            cookies: Vec::new(),
+            tabs: alloc::vec![lwl],
+            active_tab: 0,
+            bookmarks: Vec::new(),
+            js_console: Vec::new(),
+            form_inputs: BTreeMap::new(),
+            focused_input: None,
         }
     }
     
     
-    pub fn xja(&mut self) {
-        self.dca = !self.dca;
-        crate::serial_println!("[BROWSER] View mode: {}", if self.dca { "RAW" } else { "PARSED" });
+    pub fn toggle_view_mode(&mut self) {
+        self.show_raw_html = !self.show_raw_html;
+        crate::serial_println!("[BROWSER] View mode: {}", if self.show_raw_html { "RAW" } else { "PARSED" });
     }
     
     
-    pub fn bvn(&mut self, url: &str) -> Result<(), &'static str> {
-        self.ooz(url, 0)
+    pub fn navigate(&mut self, url: &str) -> Result<(), &'static str> {
+        self.navigate_inner(url, 0)
     }
     
     
-    fn ooz(&mut self, url: &str, eo: u32) -> Result<(), &'static str> {
-        if eo > 5 {
-            self.status = BrowserStatus::Q(alloc::format!("Too many redirects"));
+    fn navigate_inner(&mut self, url: &str, depth: u32) -> Result<(), &'static str> {
+        if depth > 5 {
+            self.status = BrowserStatus::Error(alloc::format!("Too many redirects"));
             return Err("Too many redirects");
         }
         
-        self.status = BrowserStatus::Py;
+        self.status = BrowserStatus::Loading;
         
         
-        let amf = gnx(url, &self.bdv);
+        let ti = normalize_url(url, &self.current_url);
         
-        crate::serial_println!("[BROWSER] Navigating to: {}", amf);
+        crate::serial_println!("[BROWSER] Navigating to: {}", ti);
         
         
-        let (wt, zk, gj) = if amf.cj("https://") {
+        let (status_code, headers, body) = if ti.starts_with("https://") {
             
-            match crate::netstack::https::get(&amf) {
-                Ok(m) => (m.wt, m.zk, m.gj),
-                Err(aa) => {
-                    crate::serial_println!("[BROWSER] HTTPS error: {}", aa);
-                    self.status = BrowserStatus::Q(alloc::format!("HTTPS error: {}", aa));
-                    self.bfc = alloc::format!(
+            match crate::netstack::https::get(&ti) {
+                Ok(r) => (r.status_code, r.headers, r.body),
+                Err(e) => {
+                    crate::serial_println!("[BROWSER] HTTPS error: {}", e);
+                    self.status = BrowserStatus::Error(alloc::format!("HTTPS error: {}", e));
+                    self.raw_html = alloc::format!(
                         "<html><body><h1>HTTPS Error</h1><p>Could not load {}</p><p>{}</p></body></html>",
-                        amf, aa
+                        ti, e
                     );
-                    self.ama = Some(due(&self.bfc));
-                    self.bdv = amf;
-                    self.ug = 0;
+                    self.document = Some(boe(&self.raw_html));
+                    self.current_url = ti;
+                    self.scroll_y = 0;
                     return Err("HTTPS error");
                 }
             }
         } else {
             
-            match crate::netstack::http::get(&amf) {
-                Ok(m) => (m.wt, m.zk, m.gj),
-                Err(aa) => {
-                    crate::serial_println!("[BROWSER] Network error: {}", aa);
-                    self.status = BrowserStatus::Q(alloc::format!("Network error: {}", aa));
-                    self.bfc = alloc::format!(
+            match crate::netstack::http::get(&ti) {
+                Ok(r) => (r.status_code, r.headers, r.body),
+                Err(e) => {
+                    crate::serial_println!("[BROWSER] Network error: {}", e);
+                    self.status = BrowserStatus::Error(alloc::format!("Network error: {}", e));
+                    self.raw_html = alloc::format!(
                         "<html><body><h1>Error</h1><p>Could not load {}</p><p>{}</p></body></html>",
-                        amf, aa
+                        ti, e
                     );
-                    self.ama = Some(due(&self.bfc));
-                    self.bdv = amf;
-                    self.ug = 0;
-                    return Err(aa);
+                    self.document = Some(boe(&self.raw_html));
+                    self.current_url = ti;
+                    self.scroll_y = 0;
+                    return Err(e);
                 }
             }
         };
         
-        if wt >= 400 {
-            let fr = alloc::format!("HTTP {}", wt);
-            self.status = BrowserStatus::Q(fr.clone());
-            self.bfc = alloc::format!(
+        if status_code >= 400 {
+            let bk = alloc::format!("HTTP {}", status_code);
+            self.status = BrowserStatus::Error(bk.clone());
+            self.raw_html = alloc::format!(
                 "<html><body><h1>HTTP Error {}</h1><p>The server returned an error for {}</p></body></html>",
-                wt, amf
+                status_code, ti
             );
-            self.ama = Some(due(&self.bfc));
-            self.bdv = amf;
-            self.ug = 0;
+            self.document = Some(boe(&self.raw_html));
+            self.current_url = ti;
+            self.scroll_y = 0;
             return Err("HTTP error");
         }
         
         
-        if wt >= 300 && wt < 400 {
+        if status_code >= 300 && status_code < 400 {
             
-            let cse = zk.iter()
-                .du(|(eh, _)| eh.aqn() == "location")
-                .map(|(_, p)| p.clone());
-            if let Some(euf) = cse {
-                crate::serial_println!("[BROWSER] Redirect {} -> {}", wt, euf);
-                return self.ooz(&euf, eo + 1);
+            let axx = headers.iter()
+                .find(|(k, _)| k.to_lowercase() == "location")
+                .map(|(_, v)| v.clone());
+            if let Some(loc) = axx {
+                crate::serial_println!("[BROWSER] Redirect {} -> {}", status_code, loc);
+                return self.navigate_inner(&loc, depth + 1);
             }
         }
         
         
-        let brb = core::str::jg(&gj).unwrap_or("");
-        self.bfc = brb.to_string();
+        let ajx = core::str::from_utf8(&body).unwrap_or("");
+        self.raw_html = ajx.to_string();
         
         
-        self.lvt(&zk, &amf);
+        self.process_set_cookies(&headers, &ti);
         
         
-        self.ama = Some(due(brb));
+        self.document = Some(boe(ajx));
         
         
-        self.nrp();
+        self.execute_scripts();
         
         
-        self.nsm(&amf);
+        self.extract_resources(&ti);
         
         
-        if self.ari < self.adv.len() {
-            self.adv.dmu(self.ari);
+        if self.history_index < self.history.len() {
+            self.history.truncate(self.history_index);
         }
-        self.adv.push(amf.clone());
-        self.ari = self.adv.len();
+        self.history.push(ti.clone());
+        self.history_index = self.history.len();
         
-        self.bdv = amf;
-        self.ug = 0;
-        self.status = BrowserStatus::At;
+        self.current_url = ti;
+        self.scroll_y = 0;
+        self.status = BrowserStatus::Ready;
         
         Ok(())
     }
     
     
-    pub fn nsm(&mut self, qnr: &str) {
-        self.dug.clear();
-        self.bhw.clear();
+    pub fn extract_resources(&mut self, base_url: &str) {
+        self.pending_resources.clear();
+        self.resources.clear();
         
-        if let Some(ref doc) = self.ama {
-            let bhw = net(&doc.xq);
-            for (ll, url) in bhw {
-                let amf = gnx(&url, qnr);
-                crate::serial_println!("[BROWSER] Found {} resource: {}", ll, amf);
-                self.dug.push(amf);
+        if let Some(ref doc) = self.document {
+            let resources = hmu(&doc.nodes);
+            for (tag, url) in resources {
+                let ti = normalize_url(&url, base_url);
+                crate::serial_println!("[BROWSER] Found {} resource: {}", tag, ti);
+                self.pending_resources.push(ti);
             }
         }
     }
     
     
-    pub fn zbe(&mut self) {
-        let vxx: Vec<String> = self.dug.bbk(..).collect();
+    pub fn qnt(&mut self) {
+        let ogi: Vec<String> = self.pending_resources.drain(..).collect();
         
-        for url in vxx {
-            if self.bhw.bgm(&url) {
+        for url in ogi {
+            if self.resources.contains_key(&url) {
                 continue; 
             }
             
             crate::serial_println!("[BROWSER] Loading resource: {}", url);
             
             match crate::netstack::http::get(&url) {
-                Ok(mk) => {
-                    if mk.wt == 200 {
-                        let ahg = mk.dh("Content-Type").unwrap_or("");
-                        let bsa = if ahg.contains("image") {
+                Ok(fa) => {
+                    if fa.status_code == 200 {
+                        let content_type = fa.header("Content-Type").unwrap_or("");
+                        let akk = if content_type.contains("image") {
                             ResourceType::Image
-                        } else if ahg.contains("css") {
-                            ResourceType::Mj
-                        } else if ahg.contains("javascript") {
-                            ResourceType::Cmq
+                        } else if content_type.contains("css") {
+                            ResourceType::Fd
+                        } else if content_type.contains("javascript") {
+                            ResourceType::Script
                         } else {
-                            ResourceType::Qg
+                            ResourceType::Other
                         };
                         
-                        crate::serial_println!("[BROWSER] Loaded {} ({} bytes)", url, mk.gj.len());
-                        self.bhw.insert(url, Nx {
-                            ahg: bsa,
-                            f: mk.gj,
+                        crate::serial_println!("[BROWSER] Loaded {} ({} bytes)", url, fa.body.len());
+                        self.resources.insert(url, Fx {
+                            content_type: akk,
+                            data: fa.body,
                         });
                     }
                 }
-                Err(aa) => {
-                    crate::serial_println!("[BROWSER] Failed to load {}: {}", url, aa);
+                Err(e) => {
+                    crate::serial_println!("[BROWSER] Failed to load {}: {}", url, e);
                 }
             }
         }
     }
     
     
-    pub fn qmf(&mut self) -> Result<(), &'static str> {
-        if self.ari > 1 {
-            self.ari -= 1;
-            let url = self.adv[self.ari - 1].clone();
-            self.bvn(&url)
+    pub fn back(&mut self) -> Result<(), &'static str> {
+        if self.history_index > 1 {
+            self.history_index -= 1;
+            let url = self.history[self.history_index - 1].clone();
+            self.navigate(&url)
         } else {
             Err("No previous page")
         }
     }
     
     
-    pub fn fiz(&mut self) -> Result<(), &'static str> {
-        if self.ari < self.adv.len() {
-            self.ari += 1;
-            let url = self.adv[self.ari - 1].clone();
-            self.bvn(&url)
+    pub fn forward(&mut self) -> Result<(), &'static str> {
+        if self.history_index < self.history.len() {
+            self.history_index += 1;
+            let url = self.history[self.history_index - 1].clone();
+            self.navigate(&url)
         } else {
             Err("No next page")
         }
     }
     
     
-    pub fn gqr(&mut self) -> Result<(), &'static str> {
-        let url = self.bdv.clone();
-        self.bvn(&url)
+    pub fn refresh(&mut self) -> Result<(), &'static str> {
+        let url = self.current_url.clone();
+        self.navigate(&url)
     }
     
     
-    pub fn jc(&mut self, aaq: i32) {
-        self.ug = (self.ug + aaq).am(0);
+    pub fn scroll(&mut self, mk: i32) {
+        self.scroll_y = (self.scroll_y + mk).max(0);
     }
     
     
-    pub fn tpb(&self, b: i32, c: i32) -> Option<&str> {
-        let mue = c + self.ug;
-        for arl in &self.czh {
-            if b >= arl.b && b < arl.b + arl.z as i32 &&
-               mue >= arl.c && mue < arl.c + arl.ac as i32 {
-                return Some(&arl.cae);
+    pub fn mlr(&self, x: i32, y: i32) -> Option<&str> {
+        let hed = y + self.scroll_y;
+        for link in &self.links {
+            if x >= link.x && x < link.x + link.width as i32 &&
+               hed >= link.y && hed < link.y + link.height as i32 {
+                return Some(&link.href);
             }
         }
         None
@@ -391,86 +391,86 @@ impl Browser {
     
 
     
-    pub fn zdm(&mut self) {
+    pub fn qpm(&mut self) {
         
-        self.pfm();
-        let acp = BrowserTab::new();
-        self.bio.push(acp);
-        self.ahd = self.bio.len() - 1;
-        self.lje();
-        crate::serial_println!("[BROWSER] New tab #{}", self.ahd);
+        self.save_to_active_tab();
+        let tab = BrowserTab::new();
+        self.tabs.push(tab);
+        self.active_tab = self.tabs.len() - 1;
+        self.load_from_active_tab();
+        crate::serial_println!("[BROWSER] New tab #{}", self.active_tab);
     }
 
     
-    pub fn zqj(&mut self, index: usize) {
-        if index >= self.bio.len() || index == self.ahd {
+    pub fn qyg(&mut self, index: usize) {
+        if index >= self.tabs.len() || index == self.active_tab {
             return;
         }
-        self.pfm();
-        self.ahd = index;
-        self.lje();
+        self.save_to_active_tab();
+        self.active_tab = index;
+        self.load_from_active_tab();
         crate::serial_println!("[BROWSER] Switched to tab #{}", index);
     }
 
     
-    pub fn yiy(&mut self) {
-        if self.bio.len() <= 1 {
+    pub fn qaj(&mut self) {
+        if self.tabs.len() <= 1 {
             return; 
         }
-        self.bio.remove(self.ahd);
-        if self.ahd >= self.bio.len() {
-            self.ahd = self.bio.len() - 1;
+        self.tabs.remove(self.active_tab);
+        if self.active_tab >= self.tabs.len() {
+            self.active_tab = self.tabs.len() - 1;
         }
-        self.lje();
+        self.load_from_active_tab();
     }
 
     
-    pub fn zqv(&self) -> usize {
-        self.bio.len()
+    pub fn qyq(&self) -> usize {
+        self.tabs.len()
     }
 
     
-    pub fn zqw(&self) -> Vec<(String, bool)> {
-        self.bio.iter().cf()
-            .map(|(a, acp)| (acp.dq.clone(), a == self.ahd))
+    pub fn qyr(&self) -> Vec<(String, bool)> {
+        self.tabs.iter().enumerate()
+            .map(|(i, tab)| (tab.title.clone(), i == self.active_tab))
             .collect()
     }
 
-    fn pfm(&mut self) {
-        if let Some(acp) = self.bio.ds(self.ahd) {
-            acp.url = self.bdv.clone();
-            acp.ama = self.ama.take();
-            acp.ug = self.ug;
-            acp.czh = core::mem::take(&mut self.czh);
-            acp.bfc = core::mem::take(&mut self.bfc);
-            acp.dca = self.dca;
-            acp.adv = self.adv.clone();
-            acp.ari = self.ari;
-            acp.status = self.status.clone();
-            acp.bhw = core::mem::take(&mut self.bhw);
-            acp.dug = core::mem::take(&mut self.dug);
+    fn save_to_active_tab(&mut self) {
+        if let Some(tab) = self.tabs.get_mut(self.active_tab) {
+            tab.url = self.current_url.clone();
+            tab.document = self.document.take();
+            tab.scroll_y = self.scroll_y;
+            tab.links = core::mem::take(&mut self.links);
+            tab.raw_html = core::mem::take(&mut self.raw_html);
+            tab.show_raw_html = self.show_raw_html;
+            tab.history = self.history.clone();
+            tab.history_index = self.history_index;
+            tab.status = self.status.clone();
+            tab.resources = core::mem::take(&mut self.resources);
+            tab.pending_resources = core::mem::take(&mut self.pending_resources);
             
-            if let Some(ref doc) = acp.ama {
-                if !doc.dq.is_empty() {
-                    acp.dq = doc.dq.clone();
+            if let Some(ref doc) = tab.document {
+                if !doc.title.is_empty() {
+                    tab.title = doc.title.clone();
                 }
             }
         }
     }
 
-    fn lje(&mut self) {
-        if let Some(acp) = self.bio.ds(self.ahd) {
-            self.bdv = acp.url.clone();
-            self.ama = acp.ama.take();
-            self.ug = acp.ug;
-            self.czh = core::mem::take(&mut acp.czh);
-            self.bfc = core::mem::take(&mut acp.bfc);
-            self.dca = acp.dca;
-            self.adv = acp.adv.clone();
-            self.ari = acp.ari;
-            self.status = acp.status.clone();
-            self.bhw = core::mem::take(&mut acp.bhw);
-            self.dug = core::mem::take(&mut acp.dug);
+    fn load_from_active_tab(&mut self) {
+        if let Some(tab) = self.tabs.get_mut(self.active_tab) {
+            self.current_url = tab.url.clone();
+            self.document = tab.document.take();
+            self.scroll_y = tab.scroll_y;
+            self.links = core::mem::take(&mut tab.links);
+            self.raw_html = core::mem::take(&mut tab.raw_html);
+            self.show_raw_html = tab.show_raw_html;
+            self.history = tab.history.clone();
+            self.history_index = tab.history_index;
+            self.status = tab.status.clone();
+            self.resources = core::mem::take(&mut tab.resources);
+            self.pending_resources = core::mem::take(&mut tab.pending_resources);
         }
     }
 
@@ -479,35 +479,35 @@ impl Browser {
     
 
     
-    pub fn lvt(&mut self, zk: &[(String, String)], url: &str) {
-        let vh = ggn(url);
-        for (bs, bn) in zk {
-            if bs.aqn() == "set-cookie" {
-                if let Some(dzu) = vdr(bn, &vh) {
+    pub fn process_set_cookies(&mut self, headers: &[(String, String)], url: &str) {
+        let domain = cxk(url);
+        for (key, value) in headers {
+            if key.to_lowercase() == "set-cookie" {
+                if let Some(brd) = nre(value, &domain) {
                     
-                    self.ipg.ajm(|r| !(r.j == dzu.j && r.vh == dzu.vh));
-                    self.ipg.push(dzu);
+                    self.cookies.retain(|c| !(c.name == brd.name && c.domain == brd.domain));
+                    self.cookies.push(brd);
                 }
             }
         }
     }
 
     
-    pub fn yjz(&self, url: &str) -> Option<String> {
-        let vh = ggn(url);
-        let tyw = url.cj("https://");
-        let path = sqe(url);
+    pub fn qbh(&self, url: &str) -> Option<String> {
+        let domain = cxk(url);
+        let mtr = url.starts_with("https://");
+        let path = ltq(url);
 
-        let olh: Vec<String> = self.ipg.iter()
-            .hi(|r| {
-                vh.pp(&r.vh) &&
-                path.cj(&r.path) &&
-                (!r.hzi || tyw)
+        let ima: Vec<String> = self.cookies.iter()
+            .filter(|c| {
+                domain.ends_with(&c.domain) &&
+                path.starts_with(&c.path) &&
+                (!c.secure || mtr)
             })
-            .map(|r| alloc::format!("{}={}", r.j, r.bn))
+            .map(|c| alloc::format!("{}={}", c.name, c.value))
             .collect();
 
-        if olh.is_empty() { None } else { Some(olh.rr("; ")) }
+        if ima.is_empty() { None } else { Some(ima.join("; ")) }
     }
 
     
@@ -515,26 +515,26 @@ impl Browser {
     
 
     
-    pub fn yej(&mut self) {
-        let dq = self.ama.as_ref()
-            .map(|bc| bc.dq.clone())
-            .unwrap_or_else(|| self.bdv.clone());
-        if !self.bdv.is_empty() {
-            self.hay.push((self.bdv.clone(), dq));
-            crate::serial_println!("[BROWSER] Bookmarked: {}", self.bdv);
+    pub fn pxs(&mut self) {
+        let title = self.document.as_ref()
+            .map(|d| d.title.clone())
+            .unwrap_or_else(|| self.current_url.clone());
+        if !self.current_url.is_empty() {
+            self.bookmarks.push((self.current_url.clone(), title));
+            crate::serial_println!("[BROWSER] Bookmarked: {}", self.current_url);
         }
     }
 
     
-    pub fn zjg(&mut self, index: usize) {
-        if index < self.hay.len() {
-            self.hay.remove(index);
+    pub fn qtq(&mut self, index: usize) {
+        if index < self.bookmarks.len() {
+            self.bookmarks.remove(index);
         }
     }
 
     
-    pub fn yzc(&self) -> bool {
-        self.hay.iter().any(|(url, _)| url == &self.bdv)
+    pub fn qmd(&self) -> bool {
+        self.bookmarks.iter().any(|(url, _)| url == &self.current_url)
     }
 
     
@@ -542,81 +542,81 @@ impl Browser {
     
 
     
-    pub fn zps(&mut self, hr: &str, clk: &str) -> Result<(), &'static str> {
-        let amf = gnx(hr, &self.bdv);
+    pub fn qxs(&mut self, action: &str, aui: &str) -> Result<(), &'static str> {
+        let ti = normalize_url(action, &self.current_url);
         
         
-        let mut dqw = String::new();
-        for (j, bn) in &self.ghi {
-            if !dqw.is_empty() { dqw.push('&'); }
-            dqw.t(&moh(j));
-            dqw.push('=');
-            dqw.t(&moh(bn));
+        let mut bmf = String::new();
+        for (name, value) in &self.form_inputs {
+            if !bmf.is_empty() { bmf.push('&'); }
+            bmf.push_str(&hau(name));
+            bmf.push('=');
+            bmf.push_str(&hau(value));
         }
 
-        crate::serial_println!("[BROWSER] Form submit: {} {} data={}", clk, amf, dqw);
+        crate::serial_println!("[BROWSER] Form submit: {} {} data={}", aui, ti, bmf);
 
-        if clk.dha("post") {
+        if aui.eq_ignore_ascii_case("post") {
             
-            match crate::netstack::http::vkc(&amf, "application/x-www-form-urlencoded", dqw.as_bytes()) {
-                Ok(m) => {
+            match crate::netstack::http::nwh(&ti, "application/x-www-form-urlencoded", bmf.as_bytes()) {
+                Ok(r) => {
                     
-                    self.lvt(&m.zk, &amf);
+                    self.process_set_cookies(&r.headers, &ti);
 
-                    if m.wt >= 300 && m.wt < 400 {
-                        if let Some(euf) = m.zk.iter()
-                            .du(|(eh, _)| eh.aqn() == "location")
-                            .map(|(_, p)| p.clone())
+                    if r.status_code >= 300 && r.status_code < 400 {
+                        if let Some(loc) = r.headers.iter()
+                            .find(|(k, _)| k.to_lowercase() == "location")
+                            .map(|(_, v)| v.clone())
                         {
-                            return self.bvn(&euf);
+                            return self.navigate(&loc);
                         }
                     }
 
-                    let brb = core::str::jg(&m.gj).unwrap_or("");
-                    self.bfc = brb.to_string();
-                    self.ama = Some(due(brb));
-                    self.bdv = amf;
-                    self.ug = 0;
-                    self.status = BrowserStatus::At;
-                    self.ghi.clear();
+                    let ajx = core::str::from_utf8(&r.body).unwrap_or("");
+                    self.raw_html = ajx.to_string();
+                    self.document = Some(boe(ajx));
+                    self.current_url = ti;
+                    self.scroll_y = 0;
+                    self.status = BrowserStatus::Ready;
+                    self.form_inputs.clear();
                     Ok(())
                 }
-                Err(aa) => {
-                    self.status = BrowserStatus::Q(alloc::format!("POST error: {}", aa));
+                Err(e) => {
+                    self.status = BrowserStatus::Error(alloc::format!("POST error: {}", e));
                     Err("POST failed")
                 }
             }
         } else {
             
-            let xpc = if dqw.is_empty() {
-                amf
-            } else if amf.contains('?') {
-                alloc::format!("{}&{}", amf, dqw)
+            let pqa = if bmf.is_empty() {
+                ti
+            } else if ti.contains('?') {
+                alloc::format!("{}&{}", ti, bmf)
             } else {
-                alloc::format!("{}?{}", amf, dqw)
+                alloc::format!("{}?{}", ti, bmf)
             };
-            self.bvn(&xpc)
+            self.navigate(&pqa)
         }
     }
 
     
-    pub fn zne(&mut self, j: &str, bn: &str) {
-        self.ghi.insert(j.to_string(), bn.to_string());
+    pub fn qwb(&mut self, name: &str, value: &str) {
+        self.form_inputs.insert(name.to_string(), value.to_string());
     }
 
     
-    pub fn ztt(&mut self, r: char) {
-        if let Some(ref j) = self.kwq.clone() {
-            let ap = self.ghi.bt(j.clone()).clq(String::new);
-            ap.push(r);
+    pub fn rbc(&mut self, c: char) {
+        if let Some(ref name) = self.focused_input.clone() {
+            let val = self.form_inputs.entry(name.clone()).or_insert_with(String::new);
+            val.push(c);
         }
     }
 
     
-    pub fn yfg(&mut self) {
-        if let Some(ref j) = self.kwq.clone() {
-            if let Some(ap) = self.ghi.ds(j) {
-                ap.pop();
+    pub fn pyi(&mut self) {
+        if let Some(ref name) = self.focused_input.clone() {
+            if let Some(val) = self.form_inputs.get_mut(name) {
+                val.pop();
             }
         }
     }
@@ -626,112 +626,112 @@ impl Browser {
     
 
     
-    pub fn nrp(&mut self) {
-        if let Some(ref doc) = self.ama {
-            let gro = neu(&doc.xq);
-            if !gro.is_empty() {
-                let mut ohf = js_engine::JsContext::new();
-                for eib in gro {
-                    if let Err(aa) = ohf.bna(&eib) {
-                        crate::serial_println!("[BROWSER JS ERROR] {}", aa);
+    pub fn execute_scripts(&mut self) {
+        if let Some(ref doc) = self.document {
+            let ddx = hmv(&doc.nodes);
+            if !ddx.is_empty() {
+                let mut iis = js_engine::JsContext::new();
+                for script in ddx {
+                    if let Err(e) = iis.execute(&script) {
+                        crate::serial_println!("[BROWSER JS ERROR] {}", e);
                     }
                 }
-                self.ohh.lg(ohf.ffp);
+                self.js_console.extend(iis.console_output);
             }
         }
     }
 }
 
 
-pub fn gnx(url: &str, ar: &str) -> String {
-    let url = url.em();
+pub fn normalize_url(url: &str, base: &str) -> String {
+    let url = url.trim();
     
     
-    if url.cj("http://") || url.cj("https://") {
+    if url.starts_with("http://") || url.starts_with("https://") {
         return url.to_string();
     }
     
     
-    if url.cj("//") {
+    if url.starts_with("//") {
         return alloc::format!("http:{}", url);
     }
     
     
     
-    let tmg = url.contains('.');
-    let sud = url.du('/');
-    let stz = url.du('.');
-    let twt = tmg && match (stz, sud) {
-        (Some(bc), Some(e)) => bc < e,  
+    let mjg = url.contains('.');
+    let lwk = url.find('/');
+    let lwg = url.find('.');
+    let mry = mjg && match (lwg, lwk) {
+        (Some(d), Some(j)) => d < j,  
         (Some(_), None) => true,       
         _ => false,
     };
     
-    if twt {
+    if mry {
         return alloc::format!("http://{}", url);
     }
     
     
-    let ar = if ar.is_empty() { "http://localhost/" } else { ar };
-    let ar = ar.blj("http://").unwrap_or(ar);
+    let base = if base.is_empty() { "http://localhost/" } else { base };
+    let base = base.strip_prefix("http://").unwrap_or(base);
     
-    let (kh, fdd) = match ar.du('/') {
-        Some(a) => (&ar[..a], &ar[a..]),
-        None => (ar, "/"),
+    let (host, cge) = match base.find('/') {
+        Some(i) => (&base[..i], &base[i..]),
+        None => (base, "/"),
     };
     
     
-    if url.cj('/') {
-        return alloc::format!("http://{}{}", kh, url);
+    if url.starts_with('/') {
+        return alloc::format!("http://{}{}", host, url);
     }
     
     
-    let gzr = match fdd.bhx('/') {
-        Some(a) => &fdd[..=a],
+    let dij = match cge.rfind('/') {
+        Some(i) => &cge[..=i],
         None => "/",
     };
     
-    alloc::format!("http://{}{}{}", kh, gzr, url)
+    alloc::format!("http://{}{}{}", host, dij, url)
 }
 
 
 
-fn net(xq: &[HtmlNode]) -> Vec<(String, String)> {
-    let mut bhw = Vec::new();
+fn hmu(nodes: &[HtmlNode]) -> Vec<(String, String)> {
+    let mut resources = Vec::new();
     
-    for anq in xq {
-        if let HtmlNode::Na(ij) = anq {
-            match ij.ll.as_str() {
+    for uf in nodes {
+        if let HtmlNode::Element(el) = uf {
+            match el.tag.as_str() {
                 "img" => {
-                    if let Some(cy) = ij.qn("src") {
-                        if !cy.is_empty() && !cy.cj("data:") {
-                            bhw.push(("img".to_string(), cy.to_string()));
+                    if let Some(src) = el.attr("src") {
+                        if !src.is_empty() && !src.starts_with("data:") {
+                            resources.push(("img".to_string(), src.to_string()));
                         }
                     }
                 }
                 "link" => {
                     
-                    let adj = ij.qn("rel").unwrap_or("");
-                    if adj == "stylesheet" {
-                        if let Some(cae) = ij.qn("href") {
-                            if !cae.is_empty() {
-                                bhw.push(("css".to_string(), cae.to_string()));
+                    let ot = el.attr("rel").unwrap_or("");
+                    if ot == "stylesheet" {
+                        if let Some(href) = el.attr("href") {
+                            if !href.is_empty() {
+                                resources.push(("css".to_string(), href.to_string()));
                             }
                         }
                     }
                     
-                    if adj.contains("icon") {
-                        if let Some(cae) = ij.qn("href") {
-                            if !cae.is_empty() {
-                                bhw.push(("icon".to_string(), cae.to_string()));
+                    if ot.contains("icon") {
+                        if let Some(href) = el.attr("href") {
+                            if !href.is_empty() {
+                                resources.push(("icon".to_string(), href.to_string()));
                             }
                         }
                     }
                 }
                 "script" => {
-                    if let Some(cy) = ij.qn("src") {
-                        if !cy.is_empty() {
-                            bhw.push(("script".to_string(), cy.to_string()));
+                    if let Some(src) = el.attr("src") {
+                        if !src.is_empty() {
+                            resources.push(("script".to_string(), src.to_string()));
                         }
                     }
                 }
@@ -739,105 +739,105 @@ fn net(xq: &[HtmlNode]) -> Vec<(String, String)> {
             }
             
             
-            bhw.lg(net(&ij.zf));
+            resources.extend(hmu(&el.children));
         }
     }
     
-    bhw
+    resources
 }
 
-use alloc::string::Gd;
+use alloc::string::ToString;
 
 
-fn ggn(url: &str) -> String {
-    let fbq = url.blj("https://")
-        .or_else(|| url.blj("http://"))
+fn cxk(url: &str) -> String {
+    let cfk = url.strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))
         .unwrap_or(url);
-    fbq.adk('/').next().unwrap_or("").adk(':').next().unwrap_or("").to_string()
+    cfk.split('/').next().unwrap_or("").split(':').next().unwrap_or("").to_string()
 }
 
 
-fn sqe(url: &str) -> String {
-    let fbq = url.blj("https://")
-        .or_else(|| url.blj("http://"))
+fn ltq(url: &str) -> String {
+    let cfk = url.strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))
         .unwrap_or(url);
-    match fbq.du('/') {
-        Some(a) => fbq[a..].adk('?').next().unwrap_or("/").to_string(),
+    match cfk.find('/') {
+        Some(i) => cfk[i..].split('?').next().unwrap_or("/").to_string(),
         None => "/".to_string(),
     }
 }
 
 
-fn moh(e: &str) -> String {
-    let mut ckd = String::new();
-    for o in e.bf() {
-        if o.bvb() || b"-_.~".contains(&o) {
-            ckd.push(o as char);
-        } else if o == b' ' {
-            ckd.push('+');
+fn hau(j: &str) -> String {
+    let mut atq = String::new();
+    for b in j.bytes() {
+        if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) {
+            atq.push(b as char);
+        } else if b == b' ' {
+            atq.push('+');
         } else {
-            ckd.push('%');
-            ckd.push(char::from(b"0123456789ABCDEF"[(o >> 4) as usize]));
-            ckd.push(char::from(b"0123456789ABCDEF"[(o & 0xF) as usize]));
+            atq.push('%');
+            atq.push(char::from(b"0123456789ABCDEF"[(b >> 4) as usize]));
+            atq.push(char::from(b"0123456789ABCDEF"[(b & 0xF) as usize]));
         }
     }
-    ckd
+    atq
 }
 
 
-fn vdr(dh: &str, rvb: &str) -> Option<Aqe> {
-    let mut ek = dh.adk(';');
-    let lnl = ek.next()?.em();
-    let eq = lnl.du('=')?;
-    let j = lnl[..eq].em().to_string();
-    let bn = lnl[eq + 1..].em().to_string();
+fn nre(header: &str, default_domain: &str) -> Option<Rk> {
+    let mut au = header.split(';');
+    let giq = au.next()?.trim();
+    let eq = giq.find('=')?;
+    let name = giq[..eq].trim().to_string();
+    let value = giq[eq + 1..].trim().to_string();
     
-    if j.is_empty() { return None; }
+    if name.is_empty() { return None; }
 
-    let mut dzu = Aqe {
-        j,
-        bn,
-        vh: rvb.to_string(),
+    let mut brd = Rk {
+        name,
+        value,
+        domain: default_domain.to_string(),
         path: "/".to_string(),
-        hzi: false,
-        ocj: false,
+        secure: false,
+        http_only: false,
     };
 
-    for qn in ek {
-        let qn = qn.em().aqn();
-        if qn.cj("domain=") {
-            dzu.vh = qn[7..].tl('.').to_string();
-        } else if qn.cj("path=") {
-            dzu.path = qn[5..].to_string();
-        } else if qn == "secure" {
-            dzu.hzi = true;
-        } else if qn == "httponly" {
-            dzu.ocj = true;
+    for attr in au {
+        let attr = attr.trim().to_lowercase();
+        if attr.starts_with("domain=") {
+            brd.domain = attr[7..].trim_start_matches('.').to_string();
+        } else if attr.starts_with("path=") {
+            brd.path = attr[5..].to_string();
+        } else if attr == "secure" {
+            brd.secure = true;
+        } else if attr == "httponly" {
+            brd.http_only = true;
         }
         
     }
 
-    Some(dzu)
+    Some(brd)
 }
 
 
-fn neu(xq: &[HtmlNode]) -> Vec<String> {
-    let mut gro = Vec::new();
-    for anq in xq {
-        if let HtmlNode::Na(ij) = anq {
-            if ij.ll == "script" && ij.qn("src").is_none() {
+fn hmv(nodes: &[HtmlNode]) -> Vec<String> {
+    let mut ddx = Vec::new();
+    for uf in nodes {
+        if let HtmlNode::Element(el) = uf {
+            if el.tag == "script" && el.attr("src").is_none() {
                 let mut text = String::new();
-                for aeh in &ij.zf {
-                    if let HtmlNode::Text(ab) = aeh {
-                        text.t(ab);
+                for pd in &el.children {
+                    if let HtmlNode::Text(t) = pd {
+                        text.push_str(t);
                     }
                 }
-                if !text.em().is_empty() {
-                    gro.push(text);
+                if !text.trim().is_empty() {
+                    ddx.push(text);
                 }
             }
-            gro.lg(neu(&ij.zf));
+            ddx.extend(hmv(&el.children));
         }
     }
-    gro
+    ddx
 }

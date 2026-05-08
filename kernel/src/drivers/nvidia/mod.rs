@@ -246,19 +246,32 @@ unsafe fn read_vram_size(mmio: u64) -> u64 {
     let cfg1 = mmio_rd32(mmio, regs::PFB_CFG1);
     crate::serial_println!("[NVIDIA] PFB_CFG0={:#010X} PFB_CFG1={:#010X}", cfg0, cfg1);
     
-    // For NV50, VRAM size is encoded in fb config registers
-    // The exact encoding depends on the chip, but a common approach:
-    // Check the VRAM size field in bits
-    let size_mb = match cfg1 & 0xFFF {
-        s if s > 0 => s as u64,
-        _ => {
-            // Fallback: try reading from BAR1 size
-            128 // Default for NVS 140M
-        }
+    // NV50 VRAM detection: try multiple approaches
+    // Approach 1: For G80-G98, try reading config register at 0x100204
+    // Some NV50 encode total VRAM in bits 7:0 as count of 16MB units
+    let vram_from_cfg1 = ((cfg1 & 0xFFF) as u64) * 1024 * 1024;
+    
+    // Approach 2: BAR1 probe — read from PFB offset 0x20C (used by nouveau)
+    let pfb_20c = mmio_rd32(mmio, 0x10020C);
+    crate::serial_println!("[NVIDIA] PFB_020C={:#010X}", pfb_20c);
+    
+    // Approach 3: Try NV50-style total memory from 0x100320
+    let pfb_320 = mmio_rd32(mmio, 0x100320);
+    crate::serial_println!("[NVIDIA] PFB_0320={:#010X} (possible VRAM pages)", pfb_320);
+    
+    // Pick best detected value
+    let size_mb = if vram_from_cfg1 > 0 && vram_from_cfg1 <= 2048 * 1024 * 1024 {
+        vram_from_cfg1 / (1024 * 1024)
+    } else if pfb_320 > 0 {
+        // Pages * 4KB → bytes → MB
+        ((pfb_320 as u64) * 4096) / (1024 * 1024)
+    } else {
+        // G86 NVS 140M default
+        128
     };
     
     let vram_bytes = size_mb * 1024 * 1024;
-    crate::serial_println!("[NVIDIA] VRAM: {} MB", size_mb);
+    crate::serial_println!("[NVIDIA] VRAM: {} MB (detected)", size_mb);
     vram_bytes
 }
 
@@ -283,8 +296,9 @@ unsafe fn gpu_engine_init(mmio: u64) -> bool {
     let enable = mmio_rd32(mmio, regs::PMC_ENABLE);
     crate::serial_println!("[NVIDIA] Current PMC_ENABLE = {:#010X}", enable);
     
-    // Enable PFIFO, PGRAPH, PFB, PDISPLAY
-    let new_enable = enable | regs::PMC_ENABLE_PFIFO | regs::PMC_ENABLE_PGRAPH 
+    // Enable PTIMER, PFB, PGRAPH, PDISPLAY (NV50 bit layout from envytools)
+    // Note: PFIFO has its own enable register at 0x002200
+    let new_enable = enable | regs::PMC_ENABLE_PTIMER | regs::PMC_ENABLE_PGRAPH 
                            | regs::PMC_ENABLE_PFB | regs::PMC_ENABLE_PDISPLAY;
     mmio_wr32(mmio, regs::PMC_ENABLE, new_enable);
     
@@ -663,4 +677,180 @@ pub fn summary() -> String {
     } else {
         String::from("No NVIDIA GPU detected")
     }
+}
+
+/// Dump all critical NV50 registers for hardware debugging.
+/// Outputs via serial AND returns lines for framebuffer display.
+pub fn dump_registers() -> Vec<String> {
+    let mut lines = Vec::new();
+    let mmio = MMIO_BASE.load(Ordering::Relaxed);
+    if mmio == 0 {
+        lines.push(String::from("[NVIDIA] No MMIO mapped — GPU not initialized"));
+        return lines;
+    }
+
+    unsafe {
+        lines.push(String::from("═══ NV50 Register Dump ═══"));
+
+        // PMC
+        let boot0 = mmio_rd32(mmio, regs::PMC_BOOT_0);
+        let enable = mmio_rd32(mmio, regs::PMC_ENABLE);
+        let intr = mmio_rd32(mmio, regs::PMC_INTR_HOST);
+        let intr_en = mmio_rd32(mmio, regs::PMC_INTR_EN_HOST);
+        lines.push(format!("PMC_BOOT_0    = {:#010X}  (chip={:#04X} step={:#04X})",
+            boot0, (boot0 >> 20) & 0xFF, boot0 & 0xFF));
+        lines.push(format!("PMC_ENABLE    = {:#010X}", enable));
+        lines.push(format!("PMC_INTR      = {:#010X}", intr));
+        lines.push(format!("PMC_INTR_EN   = {:#010X}", intr_en));
+
+        // Decode PMC_ENABLE bits
+        let ptimer = if enable & regs::PMC_ENABLE_PTIMER != 0 { "ON" } else { "OFF" };
+        let pfb    = if enable & regs::PMC_ENABLE_PFB    != 0 { "ON" } else { "OFF" };
+        let pgraph = if enable & regs::PMC_ENABLE_PGRAPH != 0 { "ON" } else { "OFF" };
+        let pdisp  = if enable & regs::PMC_ENABLE_PDISPLAY != 0 { "ON" } else { "OFF" };
+        lines.push(format!("  PTIMER={} PFB={} PGRAPH={} PDISP={}", ptimer, pfb, pgraph, pdisp));
+
+        // PFB (VRAM controller)
+        let cfg0 = mmio_rd32(mmio, regs::PFB_CFG0);
+        let cfg1 = mmio_rd32(mmio, regs::PFB_CFG1);
+        let pfb_20c = mmio_rd32(mmio, 0x10020C);
+        let pfb_320 = mmio_rd32(mmio, 0x100320);
+        lines.push(format!("PFB_CFG0      = {:#010X}", cfg0));
+        lines.push(format!("PFB_CFG1      = {:#010X}", cfg1));
+        lines.push(format!("PFB_020C      = {:#010X}", pfb_20c));
+        lines.push(format!("PFB_0320      = {:#010X}", pfb_320));
+
+        // PTIMER
+        let time0 = mmio_rd32(mmio, regs::PTIMER_TIME_0);
+        let time1 = mmio_rd32(mmio, regs::PTIMER_TIME_1);
+        let tnum = mmio_rd32(mmio, regs::PTIMER_NUMERATOR);
+        let tden = mmio_rd32(mmio, regs::PTIMER_DENOMINATOR);
+        lines.push(format!("PTIMER        = {:#010X}:{:#010X}  N/D={}/{}",
+            time1, time0, tnum, tden));
+
+        // PFIFO
+        let fifo_en = mmio_rd32(mmio, regs::PFIFO_ENABLE);
+        let fifo_intr = mmio_rd32(mmio, regs::PFIFO_INTR);
+        let fifo_mode = mmio_rd32(mmio, regs::PFIFO_MODE);
+        lines.push(format!("PFIFO_ENABLE  = {:#010X}", fifo_en));
+        lines.push(format!("PFIFO_INTR    = {:#010X}", fifo_intr));
+        lines.push(format!("PFIFO_MODE    = {:#010X}", fifo_mode));
+
+        // PGRAPH
+        let pgraph_intr = mmio_rd32(mmio, regs::PGRAPH_INTR);
+        let pgraph_status = mmio_rd32(mmio, regs::PGRAPH_STATUS);
+        let pgraph_trap = mmio_rd32(mmio, regs::PGRAPH_TRAP);
+        lines.push(format!("PGRAPH_INTR   = {:#010X}", pgraph_intr));
+        lines.push(format!("PGRAPH_STATUS = {:#010X}", pgraph_status));
+        lines.push(format!("PGRAPH_TRAP   = {:#010X}", pgraph_trap));
+
+        // PDISPLAY (critical for actual output)
+        let disp_intr = mmio_rd32(mmio, regs::PDISP_INTR);
+        let disp_intr_en = mmio_rd32(mmio, regs::PDISP_INTR_EN);
+        let disp_master = mmio_rd32(mmio, regs::PDISP_MASTER_CTRL);
+        let disp_state = mmio_rd32(mmio, regs::PDISP_MASTER_STATE);
+        let disp_head0 = mmio_rd32(mmio, regs::PDISP_HEAD0_BASE);
+        let disp_surf = mmio_rd32(mmio, regs::PDISP_HEAD0_SURFACE);
+        let disp_size = mmio_rd32(mmio, regs::PDISP_HEAD0_SIZE);
+        let disp_fb = mmio_rd32(mmio, regs::PDISP_FB_BASE);
+        let dac0 = mmio_rd32(mmio, regs::PDISP_DAC0_CTRL);
+        let sor0 = mmio_rd32(mmio, regs::PDISP_SOR0_CTRL);
+        lines.push(format!("PDISP_INTR    = {:#010X}", disp_intr));
+        lines.push(format!("PDISP_INTR_EN = {:#010X}", disp_intr_en));
+        lines.push(format!("PDISP_MASTER  = {:#010X}", disp_master));
+        lines.push(format!("PDISP_STATE   = {:#010X}", disp_state));
+        lines.push(format!("PDISP_HEAD0   = {:#010X}", disp_head0));
+        lines.push(format!("PDISP_SURFACE = {:#010X}", disp_surf));
+        lines.push(format!("PDISP_SIZE    = {:#010X}  ({}x{})", 
+            disp_size, disp_size >> 16, disp_size & 0xFFFF));
+        lines.push(format!("PDISP_FB_BASE = {:#010X}", disp_fb));
+        lines.push(format!("PDISP_DAC0    = {:#010X}", dac0));
+        lines.push(format!("PDISP_SOR0    = {:#010X}", sor0));
+
+        // PBUS
+        let pbus_intr = mmio_rd32(mmio, regs::PBUS_INTR);
+        lines.push(format!("PBUS_INTR     = {:#010X}", pbus_intr));
+
+        // Check for all-FF or all-00 (indicates BAR not responding)
+        if boot0 == 0xFFFFFFFF {
+            lines.push(String::from("*** WARNING: BOOT_0 = 0xFFFFFFFF → GPU not responding! ***"));
+            lines.push(String::from("    Possible causes: BAR not mapped, GPU in D3, power issue"));
+        } else if boot0 == 0 {
+            lines.push(String::from("*** WARNING: BOOT_0 = 0x00000000 → GPU may be off ***"));
+        }
+
+        // Decode PDISPLAY state
+        if disp_master == 0 && disp_state == 0 {
+            lines.push(String::from("DISP: Master controller NOT active"));
+        } else {
+            lines.push(format!("DISP: Master ctrl active (state bits: {:#X})", disp_state));
+        }
+
+        // Check intr sources
+        if intr != 0 {
+            lines.push(String::from("Pending interrupts:"));
+            if intr & (1 << 8) != 0 { lines.push(String::from("  - PFIFO")); }
+            if intr & (1 << 12) != 0 { lines.push(String::from("  - PGRAPH")); }
+            if intr & (1 << 26) != 0 { lines.push(String::from("  - PDISPLAY")); }
+            if intr & (1 << 28) != 0 { lines.push(String::from("  - PBUS")); }
+        }
+    }
+
+    // Also dump to serial
+    for line in &lines {
+        crate::serial_println!("[NVIDIA-DUMP] {}", line);
+    }
+
+    lines
+}
+
+/// Probe PCI config space for the GPU — can be called even if init failed
+pub fn probe_pci_raw() -> Vec<String> {
+    let mut lines = Vec::new();
+    let devices = crate::pci::find_by_class(crate::pci::class::DISPLAY);
+    
+    if devices.is_empty() {
+        lines.push(String::from("No display controllers on PCI bus"));
+        return lines;
+    }
+
+    for dev in &devices {
+        lines.push(format!("{:04X}:{:04X} rev {:02X} at {:02X}:{:02X}.{} [{}]",
+            dev.vendor_id, dev.device_id, dev.revision,
+            dev.bus, dev.device, dev.function,
+            dev.vendor_name()));
+        
+        // Read PCI command/status
+        let cmd = crate::pci::config_read16(dev.bus, dev.device, dev.function, 0x04);
+        let status = crate::pci::config_read16(dev.bus, dev.device, dev.function, 0x06);
+        lines.push(format!("  CMD={:#06X} STS={:#06X} BM={} MEM={} IO={}",
+            cmd, status,
+            if cmd & 4 != 0 { "Y" } else { "N" },
+            if cmd & 2 != 0 { "Y" } else { "N" },
+            if cmd & 1 != 0 { "Y" } else { "N" }));
+
+        // BARs
+        for bar_idx in 0..6 {
+            if let Some(addr) = dev.bar_address(bar_idx) {
+                if addr > 0 {
+                    lines.push(format!("  BAR{}: {:#010X}", bar_idx, addr));
+                }
+            }
+        }
+
+        // Vendor = NVIDIA?
+        if dev.vendor_id == NVIDIA_VENDOR_ID {
+            lines.push(format!("  NVIDIA: {}", gpu_name_for_id(dev.device_id)));
+            
+            // PCIe link
+            let (gen, width) = read_pcie_link(dev);
+            lines.push(format!("  PCIe: Gen{} x{}", gen, width));
+        }
+    }
+
+    for line in &lines {
+        crate::serial_println!("[GPU-PCI] {}", line);
+    }
+
+    lines
 }

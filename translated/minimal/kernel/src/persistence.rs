@@ -10,46 +10,46 @@ use spin::Mutex;
 use core::sync::atomic::{AtomicBool, Ordering};
 
 
-const WC_: &[u8; 8] = b"TRUSTPST";
+const XL_: &[u8; 8] = b"TRUSTPST";
 
 
-const BCY_: u32 = 1;
+const BFB_: u32 = 1;
 
 
-const FQ_: u64 = 2048; 
+const GF_: u64 = 2048; 
 
 
-const CIX_: u64 = 32768; 
+const CMG_: u64 = 32768; 
 
 
 const H_: usize = 512;
 
 
-static AGJ_: AtomicBool = AtomicBool::new(false);
+static AID_: AtomicBool = AtomicBool::new(false);
 
 
-static BCX_: AtomicBool = AtomicBool::new(false);
+static BFA_: AtomicBool = AtomicBool::new(false);
 
 
-static OV_: Mutex<Option<u8>> = Mutex::new(None);
+static PT_: Mutex<Option<u8>> = Mutex::new(None);
 
 
 #[repr(C, packed)]
-struct Awv {
-    sj: [u8; 8],      
-    dk: u32,         
-    ame: u32,     
-    aay: u64,      
-    bmj: u32,        
-    asi: [u8; 484], 
+struct Uj {
+    magic: [u8; 8],      
+    version: u32,         
+    entry_count: u32,     
+    total_size: u64,      
+    checksum: u32,        
+    _reserved: [u8; 484], 
 }
 
 
 #[repr(C, packed)]
-struct Aie {
-    gox: u16,        
-    cwv: u32,        
-    asi: [u8; 2],   
+struct Oz {
+    dch: u16,        
+    atl: u32,        
+    _reserved: [u8; 2],   
     
 }
 
@@ -58,18 +58,18 @@ pub fn init() {
     crate::serial_println!("[PERSIST] Initializing persistence system...");
     
     
-    let port = ssx();
+    let port = lvq();
     if port.is_none() {
         crate::serial_println!("[PERSIST] No AHCI disk found, persistence disabled");
         return;
     }
     
     let port = port.unwrap();
-    *OV_.lock() = Some(port);
+    *PT_.lock() = Some(port);
     
     
-    if ncr(port) {
-        AGJ_.store(true, Ordering::Relaxed);
+    if hkr(port) {
+        AID_.store(true, Ordering::Relaxed);
         crate::serial_println!("[PERSIST] Found existing persistence data on port {}", port);
     } else {
         crate::serial_println!("[PERSIST] No existing persistence data found");
@@ -77,16 +77,16 @@ pub fn init() {
 }
 
 
-fn ssx() -> Option<u8> {
+fn lvq() -> Option<u8> {
     
-    let xf = crate::drivers::ahci::bhh();
-    for port in xf {
+    let ports = crate::drivers::ahci::adz();
+    for port in ports {
         
-        if port.agw > 0 {
+        if port.sector_count > 0 {
             
-            let mut bi = [0u8; 512];
-            if crate::drivers::ahci::ain(port.kg, 0, 1, &mut bi).is_ok() {
-                return Some(port.kg);
+            let mut buffer = [0u8; 512];
+            if crate::drivers::ahci::read_sectors(port.port_num, 0, 1, &mut buffer).is_ok() {
+                return Some(port.port_num);
             }
         }
     }
@@ -94,27 +94,27 @@ fn ssx() -> Option<u8> {
 }
 
 
-fn ncr(port: u8) -> bool {
-    let mut bi = [0u8; 512];
+fn hkr(port: u8) -> bool {
+    let mut buffer = [0u8; 512];
     
-    if crate::drivers::ahci::ain(port, FQ_, 1, &mut bi).is_err() {
+    if crate::drivers::ahci::read_sectors(port, GF_, 1, &mut buffer).is_err() {
         return false;
     }
     
     
-    &bi[0..8] == WC_
+    &buffer[0..8] == XL_
 }
 
 
-pub fn vng() -> bool {
-    if !AGJ_.load(Ordering::Relaxed) {
+pub fn nyv() -> bool {
+    if !AID_.load(Ordering::Relaxed) {
         return false;
     }
     
     crate::println!();
-    crate::h!(0x00FFFF, "╔══════════════════════════════════════════════════════════════╗");
-    crate::h!(0x00FFFF, "║           Saved Data Detected                                ║");
-    crate::h!(0x00FFFF, "╚══════════════════════════════════════════════════════════════╝");
+    crate::n!(0x00FFFF, "╔══════════════════════════════════════════════════════════════╗");
+    crate::n!(0x00FFFF, "║           Saved Data Detected                                ║");
+    crate::n!(0x00FFFF, "╚══════════════════════════════════════════════════════════════╝");
     crate::println!();
     crate::println!("  Previously downloaded files were found on disk.");
     crate::println!("  Do you want to restore them? (Y/n)");
@@ -122,316 +122,316 @@ pub fn vng() -> bool {
     crate::print!("  > ");
     
     
-    let mk = vrh();
+    let fa = ocj();
     
-    let pcv = mk != b'n' && mk != b'N';
+    let jal = fa != b'n' && fa != b'N';
     
-    if pcv {
+    if jal {
         crate::println!("Yes");
         crate::println!();
-        crate::h!(0x00FF00, "  Restoring saved data...");
+        crate::n!(0x00FF00, "  Restoring saved data...");
         
-        if let Err(aa) = vye() {
-            crate::h!(0xFF0000, "  Error restoring: {}", aa);
+        if let Err(e) = ogm() {
+            crate::n!(0xFF0000, "  Error restoring: {}", e);
             return false;
         }
         
-        BCX_.store(true, Ordering::Relaxed);
-        crate::h!(0x00FF00, "  Data restored successfully!");
+        BFA_.store(true, Ordering::Relaxed);
+        crate::n!(0x00FF00, "  Data restored successfully!");
     } else {
         crate::println!("No");
         crate::println!("  Starting fresh.");
     }
     
     crate::println!();
-    pcv
+    jal
 }
 
 
-fn vrh() -> u8 {
+fn ocj() -> u8 {
     loop {
-        if let Some(r) = crate::keyboard::auw() {
-            return r;
+        if let Some(c) = crate::keyboard::ya() {
+            return c;
         }
-        core::hint::hc();
+        core::hint::spin_loop();
     }
 }
 
 
-pub fn ftm(path: &str, f: &[u8]) -> Result<(), &'static str> {
-    let port = OV_.lock().ok_or("Persistence not available")?;
+pub fn save_file(path: &str, data: &[u8]) -> Result<(), &'static str> {
+    let port = PT_.lock().ok_or("Persistence not available")?;
     
-    crate::serial_println!("[PERSIST] Saving {} ({} bytes)", path, f.len());
+    crate::serial_println!("[PERSIST] Saving {} ({} bytes)", path, data.len());
     
     
-    let mut vk = [0u8; 512];
-    let mut dh = if ncr(port) {
-        crate::drivers::ahci::ain(port, FQ_, 1, &mut vk)
-            .jd(|_| "Failed to read header")?;
-        fqg(&vk)?
+    let mut jz = [0u8; 512];
+    let mut header = if hkr(port) {
+        crate::drivers::ahci::read_sectors(port, GF_, 1, &mut jz)
+            .map_err(|_| "Failed to read header")?;
+        cnu(&jz)?
     } else {
         
-        Awv {
-            sj: *WC_,
-            dk: BCY_,
-            ame: 0,
-            aay: 0,
-            bmj: 0,
-            asi: [0; 484],
+        Uj {
+            magic: *XL_,
+            version: BFB_,
+            entry_count: 0,
+            total_size: 0,
+            checksum: 0,
+            _reserved: [0; 484],
         }
     };
     
     
-    let njr = FQ_ + 1 + (dh.aay + 511) / 512;
+    let hqs = GF_ + 1 + (header.total_size + 511) / 512;
     
     
-    if njr + ((f.len() as u64 + path.len() as u64 + 16) / 512) + 1 
-        > FQ_ + CIX_ {
+    if hqs + ((data.len() as u64 + path.len() as u64 + 16) / 512) + 1 
+        > GF_ + CMG_ {
         return Err("Persistence storage full");
     }
     
     
-    let bzn = Aie {
-        gox: path.len() as u16,
-        cwv: f.len() as u32,
-        asi: [0; 2],
+    let aob = Oz {
+        dch: path.len() as u16,
+        atl: data.len() as u32,
+        _reserved: [0; 2],
     };
     
-    let mut ebg: Vec<u8> = Vec::new();
+    let mut bsh: Vec<u8> = Vec::new();
     
     
-    let giy: [u8; 8] = unsafe { core::mem::transmute(bzn) };
-    ebg.bk(&giy);
+    let czd: [u8; 8] = unsafe { core::mem::transmute(aob) };
+    bsh.extend_from_slice(&czd);
     
     
-    ebg.bk(path.as_bytes());
+    bsh.extend_from_slice(path.as_bytes());
     
     
-    ebg.bk(f);
+    bsh.extend_from_slice(data);
     
     
-    while ebg.len() % 512 != 0 {
-        ebg.push(0);
+    while bsh.len() % 512 != 0 {
+        bsh.push(0);
     }
     
     
-    let dbu = ebg.len() / 512;
-    for a in 0..dbu {
-        let jk = njr + a as u64;
-        let l = a * 512;
-        let mut aae = [0u8; 512];
-        aae.dg(&ebg[l..l + 512]);
+    let bdq = bsh.len() / 512;
+    for i in 0..bdq {
+        let dj = hqs + i as u64;
+        let offset = i * 512;
+        let mut mx = [0u8; 512];
+        mx.copy_from_slice(&bsh[offset..offset + 512]);
         
-        crate::drivers::ahci::bpi(port, jk, 1, &aae)
-            .jd(|_| "Failed to write data sector")?;
+        crate::drivers::ahci::write_sectors(port, dj, 1, &mx)
+            .map_err(|_| "Failed to write data sector")?;
     }
     
     
-    dh.ame += 1;
-    dh.aay += ebg.len() as u64;
-    dh.bmj = rnf(&ebg);
+    header.entry_count += 1;
+    header.total_size += bsh.len() as u64;
+    header.checksum = kwk(&bsh);
     
     
-    let mut erw = [0u8; 512];
-    erw[0..8].dg(&dh.sj);
-    erw[8..12].dg(&dh.dk.ho());
-    erw[12..16].dg(&dh.ame.ho());
-    erw[16..24].dg(&dh.aay.ho());
-    erw[24..28].dg(&dh.bmj.ho());
+    let mut caj = [0u8; 512];
+    caj[0..8].copy_from_slice(&header.magic);
+    caj[8..12].copy_from_slice(&header.version.to_le_bytes());
+    caj[12..16].copy_from_slice(&header.entry_count.to_le_bytes());
+    caj[16..24].copy_from_slice(&header.total_size.to_le_bytes());
+    caj[24..28].copy_from_slice(&header.checksum.to_le_bytes());
     
-    crate::drivers::ahci::bpi(port, FQ_, 1, &erw)
-        .jd(|_| "Failed to write header")?;
+    crate::drivers::ahci::write_sectors(port, GF_, 1, &caj)
+        .map_err(|_| "Failed to write header")?;
     
     crate::serial_println!("[PERSIST] Saved {} successfully", path);
     Ok(())
 }
 
 
-fn vye() -> Result<(), &'static str> {
-    let port = *OV_.lock();
+fn ogm() -> Result<(), &'static str> {
+    let port = *PT_.lock();
     let port = port.ok_or("Persistence not available")?;
     
     
-    let mut vk = [0u8; 512];
-    crate::drivers::ahci::ain(port, FQ_, 1, &mut vk)
-        .jd(|_| "Failed to read header")?;
+    let mut jz = [0u8; 512];
+    crate::drivers::ahci::read_sectors(port, GF_, 1, &mut jz)
+        .map_err(|_| "Failed to read header")?;
     
-    let dh = fqg(&vk)?;
+    let header = cnu(&jz)?;
     
-    let ame = dh.ame;
-    let aay = dh.aay;
+    let entry_count = header.entry_count;
+    let total_size = header.total_size;
     
     
-    if ame > 1000 {
+    if entry_count > 1000 {
         return Err("Corrupted: too many entries");
     }
-    if aay > 100 * 1024 * 1024 {
+    if total_size > 100 * 1024 * 1024 {
         return Err("Corrupted: size too large");
     }
-    if aay == 0 {
+    if total_size == 0 {
         return Ok(()); 
     }
     
     crate::serial_println!("[PERSIST] Restoring {} files ({} bytes)", 
-        ame, aay);
+        entry_count, total_size);
     
     
-    let axf = (aay + 511) / 512;
-    let mut cvn: Vec<u8> = vec![0u8; aay as usize];
+    let zp = (total_size + 511) / 512;
+    let mut bai: Vec<u8> = vec![0u8; total_size as usize];
     
-    for a in 0..axf {
-        let jk = FQ_ + 1 + a;
-        let l = (a as usize) * 512;
-        let mut aae = [0u8; 512];
+    for i in 0..zp {
+        let dj = GF_ + 1 + i;
+        let offset = (i as usize) * 512;
+        let mut mx = [0u8; 512];
         
-        crate::drivers::ahci::ain(port, jk, 1, &mut aae)
-            .jd(|_| "Failed to read data sector")?;
+        crate::drivers::ahci::read_sectors(port, dj, 1, &mut mx)
+            .map_err(|_| "Failed to read data sector")?;
         
-        let zg = core::cmp::v(512, cvn.len() - l);
-        cvn[l..l + zg].dg(&aae[..zg]);
+        let mb = core::cmp::min(512, bai.len() - offset);
+        bai[offset..offset + mb].copy_from_slice(&mx[..mb]);
     }
     
     
-    let mut l = 0;
-    let mut lzw = 0;
+    let mut offset = 0;
+    let mut grj = 0;
     
-    while l + 8 <= cvn.len() && lzw < dh.ame {
+    while offset + 8 <= bai.len() && grj < header.entry_count {
         
-        let gox = u16::dj([cvn[l], cvn[l + 1]]) as usize;
-        let cwv = u32::dj([
-            cvn[l + 2], cvn[l + 3],
-            cvn[l + 4], cvn[l + 5],
+        let dch = u16::from_le_bytes([bai[offset], bai[offset + 1]]) as usize;
+        let atl = u32::from_le_bytes([
+            bai[offset + 2], bai[offset + 3],
+            bai[offset + 4], bai[offset + 5],
         ]) as usize;
         
-        l += 8;
+        offset += 8;
         
-        if l + gox + cwv > cvn.len() {
+        if offset + dch + atl > bai.len() {
             break;
         }
         
         
-        let path = match core::str::jg(&cvn[l..l + gox]) {
-            Ok(e) => e,
+        let path = match core::str::from_utf8(&bai[offset..offset + dch]) {
+            Ok(j) => j,
             Err(_) => {
-                l += gox + cwv;
+                offset += dch + atl;
                 continue;
             }
         };
-        l += gox;
+        offset += dch;
         
         
-        let f = &cvn[l..l + cwv];
-        l += cwv;
+        let data = &bai[offset..offset + atl];
+        offset += atl;
         
         
-        l = (l + 511) & !511;
+        offset = (offset + 511) & !511;
         
         
-        crate::serial_println!("[PERSIST] Restoring: {} ({} bytes)", path, cwv);
+        crate::serial_println!("[PERSIST] Restoring: {} ({} bytes)", path, atl);
         
         
-        let result = crate::ramfs::fh(|fs| {
+        let result = crate::ramfs::bh(|fs| {
             
-            let mut cv = String::new();
-            for vu in path.adk('/').hi(|ai| !ai.is_empty()) {
-                if !path.pp(vu) {
-                    cv.push('/');
-                    cv.t(vu);
-                    let _ = fs.ut(&cv);
+            let mut current = String::new();
+            for jn in path.split('/').filter(|aa| !aa.is_empty()) {
+                if !path.ends_with(jn) {
+                    current.push('/');
+                    current.push_str(jn);
+                    let _ = fs.mkdir(&current);
                 }
             }
             
             
             let _ = fs.touch(path);
-            fs.ns(path, f)
+            fs.write_file(path, data)
         });
         
         if result.is_ok() {
-            lzw += 1;
+            grj += 1;
             crate::print!(".");
         }
     }
     
     crate::println!();
-    crate::println!("  Restored {} files", lzw);
+    crate::println!("  Restored {} files", grj);
     
     Ok(())
 }
 
 
-fn fqg(k: &[u8; 512]) -> Result<Awv, &'static str> {
-    if &k[0..8] != WC_ {
+fn cnu(buf: &[u8; 512]) -> Result<Uj, &'static str> {
+    if &buf[0..8] != XL_ {
         return Err("Invalid magic signature");
     }
     
-    let dk = u32::dj([k[8], k[9], k[10], k[11]]);
-    if dk != BCY_ {
+    let version = u32::from_le_bytes([buf[8], buf[9], buf[10], buf[11]]);
+    if version != BFB_ {
         return Err("Incompatible version");
     }
     
-    Ok(Awv {
-        sj: *WC_,
-        dk,
-        ame: u32::dj([k[12], k[13], k[14], k[15]]),
-        aay: u64::dj([
-            k[16], k[17], k[18], k[19],
-            k[20], k[21], k[22], k[23],
+    Ok(Uj {
+        magic: *XL_,
+        version,
+        entry_count: u32::from_le_bytes([buf[12], buf[13], buf[14], buf[15]]),
+        total_size: u64::from_le_bytes([
+            buf[16], buf[17], buf[18], buf[19],
+            buf[20], buf[21], buf[22], buf[23],
         ]),
-        bmj: u32::dj([k[24], k[25], k[26], k[27]]),
-        asi: [0; 484],
+        checksum: u32::from_le_bytes([buf[24], buf[25], buf[26], buf[27]]),
+        _reserved: [0; 484],
     })
 }
 
 
-fn rnf(f: &[u8]) -> u32 {
+fn kwk(data: &[u8]) -> u32 {
     let mut sum: u32 = 0;
-    for hf in f {
-        sum = sum.cn(*hf as u32);
+    for byte in data {
+        sum = sum.wrapping_add(*byte as u32);
     }
     sum
 }
 
 
 pub fn clear() -> Result<(), &'static str> {
-    let port = *OV_.lock();
+    let port = *PT_.lock();
     let port = port.ok_or("Persistence not available")?;
     
     
-    let erw = [0u8; 512];
-    crate::drivers::ahci::bpi(port, FQ_, 1, &erw)
-        .jd(|_| "Failed to clear persistence")?;
+    let caj = [0u8; 512];
+    crate::drivers::ahci::write_sectors(port, GF_, 1, &caj)
+        .map_err(|_| "Failed to clear persistence")?;
     
     crate::serial_println!("[PERSIST] Persistence data cleared");
     Ok(())
 }
 
 
-pub fn zu() -> bool {
-    BCX_.load(Ordering::Relaxed)
+pub fn lq() -> bool {
+    BFA_.load(Ordering::Relaxed)
 }
 
 
-pub fn anl() -> bool {
-    AGJ_.load(Ordering::Relaxed)
+pub fn sw() -> bool {
+    AID_.load(Ordering::Relaxed)
 }
 
 
 pub fn status() -> (&'static str, u32, u64) {
-    let port = *OV_.lock();
+    let port = *PT_.lock();
     
     if port.is_none() {
         return ("No disk", 0, 0);
     }
     
     let port = port.unwrap();
-    let mut vk = [0u8; 512];
+    let mut jz = [0u8; 512];
     
-    if crate::drivers::ahci::ain(port, FQ_, 1, &mut vk).is_err() {
+    if crate::drivers::ahci::read_sectors(port, GF_, 1, &mut jz).is_err() {
         return ("Read error", 0, 0);
     }
     
-    if let Ok(dh) = fqg(&vk) {
-        ("Active", dh.ame, dh.aay)
+    if let Ok(header) = cnu(&jz) {
+        ("Active", header.entry_count, header.total_size)
     } else {
         ("Empty", 0, 0)
     }

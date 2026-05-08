@@ -75,7 +75,7 @@ pub enum AccessLevel {
 // Énumération — un type qui peut être l'une de plusieurs variantes.
 pub enum RiskLevel {
     /// Informational — normal hardware behavior
-    Information,
+    Info,
     /// Low — expected but noteworthy access
     Low,
     /// Medium — unexpected access, potential attack surface
@@ -119,7 +119,7 @@ impl RiskLevel {
 pub fn as_str(&self) -> &'static str {
                 // Correspondance de motifs — branchement exhaustif de Rust.
 match self {
-            RiskLevel::Information => "INFO",
+            RiskLevel::Info => "INFO",
             RiskLevel::Low => "LOW",
             RiskLevel::Medium => "MEDIUM",
             RiskLevel::High => "HIGH",
@@ -131,7 +131,7 @@ match self {
 pub fn color_code(&self) -> &'static str {
                 // Correspondance de motifs — branchement exhaustif de Rust.
 match self {
-            RiskLevel::Information => "\x01W",
+            RiskLevel::Info => "\x01W",
             RiskLevel::Low => "\x01G",
             RiskLevel::Medium => "\x01Y",
             RiskLevel::High => "\x01R",
@@ -145,7 +145,7 @@ pub struct DeviceMap {
     pub results: Vec<ProbeResult>,
     pub arch: &'static str,
     pub device_name: String,
-    pub scan_time_mouse: u64,
+    pub scan_time_ms: u64,
 }
 
 // Bloc d'implémentation — définit les méthodes du type ci-dessus.
@@ -166,7 +166,7 @@ pub fn new() -> Self {
             results: Vec::new(),
             arch,
             device_name: String::from("Unknown Device"),
-            scan_time_mouse: 0,
+            scan_time_ms: 0,
         }
     }
 
@@ -192,15 +192,15 @@ pub fn summary(&self) -> String {
         let high = self.findings_by_risk(RiskLevel::High).len();
         let medium = self.findings_by_risk(RiskLevel::Medium).len();
         let low = self.findings_by_risk(RiskLevel::Low).len();
-        let information = self.findings_by_risk(RiskLevel::Information).len();
+        let info = self.findings_by_risk(RiskLevel::Info).len();
 
         format!(
             "Device: {} ({})\n\
              Findings: {} total | {} CRITICAL | {} HIGH | {} MEDIUM | {} LOW | {} INFO\n\
              Scan time: {} ms",
             self.device_name, self.arch,
-            total, critical, high, medium, low, information,
-            self.scan_time_mouse
+            total, critical, high, medium, low, info,
+            self.scan_time_ms
         )
     }
 }
@@ -297,18 +297,18 @@ fn parse_hex_or_decrypt(s: &str) -> Option<u64> {
 fn command_dtb_information() -> String {
     #[cfg(target_arch = "aarch64")]
     {
-        let dtb_address = crate::android_main::dtb_address();
-        if dtb_address == 0 {
+        let dtb_addr = crate::android_main::dtb_address();
+        if dtb_addr == 0 {
             return String::from("\x01RDTB not available.\x01W No device tree was provided by the bootloader.\n\
                 Tip: DTB is passed automatically on Android/ARM boot.\n");
         }
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-            if let Some(parsed) = dtb_parser::parse_dtb(dtb_address as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+            if let Some(parsed) = dtb_parser::parse_dtb(dtb_addr as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u8) {
                 dtb_parser::format_dtb_report(&parsed)
             } else {
-                format!("\x01RDTB parse error.\x01W The DTB at 0x{:X} appears corrupt.\n", dtb_address)
+                format!("\x01RDTB parse error.\x01W The DTB at 0x{:X} appears corrupt.\n", dtb_addr)
             }
         }
     }
@@ -334,14 +334,14 @@ fn command_verify_hardware() -> String {
 
     #[cfg(target_arch = "aarch64")]
     {
-        let dtb_address = crate::android_main::dtb_address();
-        if dtb_address == 0 {
+        let dtb_addr = crate::android_main::dtb_address();
+        if dtb_addr == 0 {
             return String::from("\x01RNo DTB available.\x01W Cannot verify without Device Tree.\n");
         }
 
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-            if let Some(parsed) = dtb_parser::parse_dtb(dtb_address as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+            if let Some(parsed) = dtb_parser::parse_dtb(dtb_addr as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u8) {
                 out.push_str(&format!("DTB Model: {}\n", parsed.model));
                 out.push_str(&format!("DTB declares {} devices with MMIO registers\n\n", parsed.devices.len()));
@@ -355,14 +355,14 @@ const u8) {
                 let mut hidden_count = 0u32;
                 let mut suspicious_count = 0u32;
 
-                for device in &parsed.devices {
-                    if device.register_base == 0 { continue; }
+                for dev in &parsed.devices {
+                    if dev.reg_base == 0 { continue; }
 
-                    let ptr = device.register_base as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+                    let ptr = dev.reg_base as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u32;
                     let read_result = core::ptr::read_volatile(ptr);
 
-                    let (verdict, color) = if device.status == "okay" || device.status == "ok" {
+                    let (verdict, color) = if dev.status == "okay" || dev.status == "ok" {
                         if read_result == 0 || read_result == 0xFFFFFFFF {
                             ghost_count += 1;
                             ("GHOST (no response)", "\x01Y")
@@ -389,14 +389,14 @@ const u32;
                         suspicious_count += 1;
                     }
 
-                    let name = if device.compatible.len() > 34 {
-                        &device.compatible[..34]
+                    let name = if dev.compatible.len() > 34 {
+                        &dev.compatible[..34]
                     } else {
-                        &device.compatible
+                        &dev.compatible
                     };
 
                     out.push_str(&format!("{}{:<35}\x01W 0x{:010X}  {:<10} 0x{:08X} {}\n",
-                        color, name, device.register_base, device.status, read_result, verdict));
+                        color, name, dev.reg_base, dev.status, read_result, verdict));
                 }
 
                 out.push_str(&format!("\n\x01C--- Verification Summary ---\x01W\n"));

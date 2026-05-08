@@ -63,9 +63,9 @@ pub fn create_capability(
     owner: u64,
 ) -> CapabilityId {
     let id = CapabilityId(NEXT_CAPABILITY_ID.fetch_add(1, Ordering::Relaxed));
-    let capability = Capability::new(id, cap_type, rights, owner);
+    let cap = Capability::new(id, cap_type, rights, owner);
     
-    CAPABILITIES.lock().insert(id, capability);
+    CAPABILITIES.lock().insert(id, cap);
     
     crate::log_debug!("Created capability {:?} for task {}", id, owner);
     
@@ -75,9 +75,9 @@ pub fn create_capability(
 /// Validate capability for operation
 pub fn validate(cap_id: CapabilityId, required_rights: CapabilityRights) -> Result<(), SecurityError> {
     let caps = CAPABILITIES.lock();
-    let capability = caps.get(&cap_id).ok_or(SecurityError::InvalidCapability)?;
+    let cap = caps.get(&cap_id).ok_or(SecurityError::InvalidCapability)?;
     
-    if !capability.has_rights(required_rights) {
+    if !cap.has_rights(required_rights) {
         VIOLATIONS.fetch_add(1, Ordering::Relaxed);
         crate::log_warn!("Security violation: capability {:?} lacks rights {:?}", cap_id, required_rights);
         
@@ -89,7 +89,7 @@ pub fn validate(cap_id: CapabilityId, required_rights: CapabilityRights) -> Resu
         return Err(SecurityError::InsufficientRights);
     }
     
-    if capability.is_expired() {
+    if cap.is_expired() {
         return Err(SecurityError::ExpiredCapability);
     }
     
@@ -137,26 +137,26 @@ pub fn validate_typed(
     required_rights: CapabilityRights,
 ) -> Result<(), SecurityError> {
     let caps = CAPABILITIES.lock();
-    let capability = caps.get(&cap_id).ok_or(SecurityError::InvalidCapability)?;
+    let cap = caps.get(&cap_id).ok_or(SecurityError::InvalidCapability)?;
     
     // Check type match (Kernel type acts as superuser)
-    if capability.cap_type != required_type && capability.cap_type != CapabilityType::Kernel {
+    if cap.cap_type != required_type && cap.cap_type != CapabilityType::Kernel {
         VIOLATIONS.fetch_add(1, Ordering::Relaxed);
         crate::log_warn!("Security violation: capability {:?} type mismatch (have {:?}, need {:?})",
-            cap_id, capability.cap_type, required_type);
+            cap_id, cap.cap_type, required_type);
         return Err(SecurityError::NotPermitted);
     }
     
-    if !capability.has_rights(required_rights) {
+    if !cap.has_rights(required_rights) {
         VIOLATIONS.fetch_add(1, Ordering::Relaxed);
         return Err(SecurityError::InsufficientRights);
     }
     
-    if capability.is_expired() {
+    if cap.is_expired() {
         return Err(SecurityError::ExpiredCapability);
     }
     
-    capability.use_once();
+    cap.use_once();
     Ok(())
 }
 
@@ -164,7 +164,7 @@ pub fn validate_typed(
 pub fn list_capabilities() -> Vec<(CapabilityId, CapabilityType, CapabilityRights, u64)> {
     CAPABILITIES.lock()
         .iter()
-        .map(|(id, capability)| (*id, capability.cap_type, capability.rights, capability.owner))
+        .map(|(id, cap)| (*id, cap.cap_type, cap.rights, cap.owner))
         .collect()
 }
 
@@ -172,8 +172,8 @@ pub fn list_capabilities() -> Vec<(CapabilityId, CapabilityType, CapabilityRight
 pub fn list_by_owner(owner: u64) -> Vec<(CapabilityId, CapabilityType, CapabilityRights)> {
     CAPABILITIES.lock()
         .iter()
-        .filter(|(_, capability)| capability.owner == owner)
-        .map(|(id, capability)| (*id, capability.cap_type, capability.rights))
+        .filter(|(_, cap)| cap.owner == owner)
+        .map(|(id, cap)| (*id, cap.cap_type, cap.rights))
         .collect()
 }
 
@@ -181,8 +181,8 @@ pub fn list_by_owner(owner: u64) -> Vec<(CapabilityId, CapabilityType, Capabilit
 pub fn list_by_type(cap_type: CapabilityType) -> Vec<(CapabilityId, u64, CapabilityRights)> {
     CAPABILITIES.lock()
         .iter()
-        .filter(|(_, capability)| capability.cap_type == cap_type)
-        .map(|(id, capability)| (*id, capability.owner, capability.rights))
+        .filter(|(_, cap)| cap.cap_type == cap_type)
+        .map(|(id, cap)| (*id, cap.owner, cap.rights))
         .collect()
 }
 
@@ -190,7 +190,7 @@ pub fn list_by_type(cap_type: CapabilityType) -> Vec<(CapabilityId, u64, Capabil
 pub fn revoke_by_owner(owner: u64) -> usize {
     let mut caps = CAPABILITIES.lock();
     let to_remove: Vec<CapabilityId> = caps.iter()
-        .filter(|(_, capability)| capability.owner == owner)
+        .filter(|(_, cap)| cap.owner == owner)
         .map(|(id, _)| *id)
         .collect();
     let count = to_remove.len();

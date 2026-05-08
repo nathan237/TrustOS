@@ -24,7 +24,7 @@ use alloc::format;
 struct UndoSnapshot {
     lines: Vec<String>,
     cursor_line: usize,
-    cursor_column: usize,
+    cursor_col: usize,
 }
 
 /// Editor state per-window (stored outside Window struct to avoid bloat)
@@ -36,7 +36,7 @@ pub struct EditorState {
     /// Cursor line (0-indexed)
     pub cursor_line: usize,
     /// Cursor column (0-indexed, byte position)
-    pub cursor_column: usize,
+    pub cursor_col: usize,
     /// Scroll offset (first visible line)
     pub scroll_y: usize,
     /// Scroll horizontal offset
@@ -66,7 +66,7 @@ pub struct EditorState {
     /// All find match positions [(line, col)]
     pub find_matches: Vec<(usize, usize)>,
     /// Current match index
-    pub find_match_index: usize,
+    pub find_match_idx: usize,
     /// Go-to-line mode: None=normal, Some(input)=dialog active
     pub goto_line_input: Option<String>,
     /// Matching bracket position (line, col) — calculated each frame
@@ -121,7 +121,7 @@ pub fn new() -> Self {
         Self {
             lines: alloc::vec![String::new()],
             cursor_line: 0,
-            cursor_column: 0,
+            cursor_col: 0,
             scroll_y: 0,
             scroll_x: 0,
             file_path: None,
@@ -136,7 +136,7 @@ pub fn new() -> Self {
             replace_text: None,
             find_replace_mode: false,
             find_matches: Vec::new(),
-            find_match_index: 0,
+            find_match_idx: 0,
             goto_line_input: None,
             matching_bracket: None,
         }
@@ -152,7 +152,7 @@ pub fn new() -> Self {
             self.lines.push(String::new());
         }
         self.cursor_line = 0;
-        self.cursor_column = 0;
+        self.cursor_col = 0;
         self.scroll_y = 0;
         self.dirty = false;
     }
@@ -235,14 +235,14 @@ pub fn new() -> Self {
     }
     
     /// Clamp cursor col to current line length
-    fn clamp_cursor_column(&mut self) {
+    fn clamp_cursor_col(&mut self) {
         let len = if self.cursor_line < self.lines.len() {
             self.lines[self.cursor_line].len()
         } else {
             0
         };
-        if self.cursor_column > len {
-            self.cursor_column = len;
+        if self.cursor_col > len {
+            self.cursor_col = len;
         }
     }
 
@@ -251,7 +251,7 @@ pub fn new() -> Self {
         self.undo_stack.push(UndoSnapshot {
             lines: self.lines.clone(),
             cursor_line: self.cursor_line,
-            cursor_column: self.cursor_column,
+            cursor_col: self.cursor_col,
         });
         // Cap at 200 entries
         if self.undo_stack.len() > 200 {
@@ -268,11 +268,11 @@ pub fn new() -> Self {
             self.redo_stack.push(UndoSnapshot {
                 lines: self.lines.clone(),
                 cursor_line: self.cursor_line,
-                cursor_column: self.cursor_column,
+                cursor_col: self.cursor_col,
             });
             self.lines = snapshot.lines;
             self.cursor_line = snapshot.cursor_line;
-            self.cursor_column = snapshot.cursor_column;
+            self.cursor_col = snapshot.cursor_col;
             self.dirty = true;
             self.status_message = Some(String::from("Undo"));
         }
@@ -285,11 +285,11 @@ pub fn new() -> Self {
             self.undo_stack.push(UndoSnapshot {
                 lines: self.lines.clone(),
                 cursor_line: self.cursor_line,
-                cursor_column: self.cursor_column,
+                cursor_col: self.cursor_col,
             });
             self.lines = snapshot.lines;
             self.cursor_line = snapshot.cursor_line;
-            self.cursor_column = snapshot.cursor_column;
+            self.cursor_col = snapshot.cursor_col;
             self.dirty = true;
             self.status_message = Some(String::from("Redo"));
         }
@@ -299,7 +299,7 @@ pub fn new() -> Self {
     /// Returns None if no selection active
     pub fn get_selection_range(&self) -> Option<(usize, usize, usize, usize)> {
         let (al, ac) = self.selection_anchor?;
-        let (bl, bc) = (self.cursor_line, self.cursor_column);
+        let (bl, bc) = (self.cursor_line, self.cursor_col);
         if (al, ac) <= (bl, bc) {
             Some((al, ac, bl, bc))
         } else {
@@ -314,8 +314,8 @@ pub fn new() -> Self {
         for l in sl..=el {
             if l >= self.lines.len() { break; }
             let line = &self.lines[l];
-            let start = if l == sl { sc.minimum(line.len()) } else { 0 };
-            let end = if l == el { ec.minimum(line.len()) } else { line.len() };
+            let start = if l == sl { sc.min(line.len()) } else { 0 };
+            let end = if l == el { ec.min(line.len()) } else { line.len() };
             if start <= end {
                 result.push_str(&line[start..end]);
             }
@@ -333,8 +333,8 @@ pub fn new() -> Self {
             if sl == el {
                 // Single line selection
                 if sl < self.lines.len() {
-                    let end = ec.minimum(self.lines[sl].len());
-                    let start = sc.minimum(end);
+                    let end = ec.min(self.lines[sl].len());
+                    let start = sc.min(end);
                     self.lines[sl] = format!("{}{}", &self.lines[sl][..start], &self.lines[sl][end..]);
                 }
             } else {
@@ -362,7 +362,7 @@ pub fn new() -> Self {
                 }
             }
             self.cursor_line = sl;
-            self.cursor_column = sc;
+            self.cursor_col = sc;
             self.selection_anchor = None;
             self.dirty = true;
         }
@@ -379,7 +379,7 @@ pub fn new() -> Self {
                 while start + q.len() <= line.len() {
                     if &line[start..start + q.len()] == q.as_str() {
                         self.find_matches.push((line_index, start));
-                        start += q.len().maximum(1);
+                        start += q.len().max(1);
                     } else {
                         start += 1;
                     }
@@ -391,43 +391,43 @@ pub fn new() -> Self {
     /// Jump to next find match
     fn find_next(&mut self) {
         if self.find_matches.is_empty() { return; }
-        self.find_match_index = (self.find_match_index + 1) % self.find_matches.len();
-        let (line, column) = self.find_matches[self.find_match_index];
+        self.find_match_idx = (self.find_match_idx + 1) % self.find_matches.len();
+        let (line, col) = self.find_matches[self.find_match_idx];
         self.cursor_line = line;
-        self.cursor_column = column;
+        self.cursor_col = col;
         self.ensure_cursor_visible();
     }
 
     /// Jump to previous find match
     fn find_previous(&mut self) {
         if self.find_matches.is_empty() { return; }
-        if self.find_match_index == 0 {
-            self.find_match_index = self.find_matches.len() - 1;
+        if self.find_match_idx == 0 {
+            self.find_match_idx = self.find_matches.len() - 1;
         } else {
-            self.find_match_index -= 1;
+            self.find_match_idx -= 1;
         }
-        let (line, column) = self.find_matches[self.find_match_index];
+        let (line, col) = self.find_matches[self.find_match_idx];
         self.cursor_line = line;
-        self.cursor_column = column;
+        self.cursor_col = col;
         self.ensure_cursor_visible();
     }
 
     /// Replace current match and find next
     fn replace_current(&mut self) {
         if self.find_matches.is_empty() { return; }
-        let index = self.find_match_index.minimum(self.find_matches.len() - 1);
-        let (line, column) = self.find_matches[index];
+        let idx = self.find_match_idx.min(self.find_matches.len() - 1);
+        let (line, col) = self.find_matches[idx];
         let query = self.find_query.clone();
         let replacement = self.replace_text.clone();
         if let (Some(q), Some(rep)) = (query, replacement) {
-            if line < self.lines.len() && column + q.len() <= self.lines[line].len() {
+            if line < self.lines.len() && col + q.len() <= self.lines[line].len() {
                 self.save_undo_state();
                 let q_length = q.len();
-                self.lines[line] = format!("{}{}{}", &self.lines[line][..column], rep, &self.lines[line][column + q_length..]);
+                self.lines[line] = format!("{}{}{}", &self.lines[line][..col], rep, &self.lines[line][col + q_length..]);
                 self.dirty = true;
                 self.update_find_matches();
                 self.cursor_line = line;
-                self.cursor_column = column + rep.len();
+                self.cursor_col = col + rep.len();
             }
         }
     }
@@ -439,7 +439,7 @@ pub fn new() -> Self {
         let replacement = self.replace_text.clone();
         if let (Some(q), Some(rep)) = (query, replacement) {
             self.save_undo_state();
-            for line in self.lines.iterator_mut() {
+            for line in self.lines.iter_mut() {
                 let mut result = String::new();
                 let mut start = 0;
                 while start < line.len() {
@@ -447,8 +447,8 @@ pub fn new() -> Self {
                         result.push_str(&rep);
                         start += q.len();
                     } else {
-                        if let Some(character) = line.as_bytes().get(start) {
-                            result.push(*character as char);
+                        if let Some(ch) = line.as_bytes().get(start) {
+                            result.push(*ch as char);
                         }
                         start += 1;
                     }
@@ -534,10 +534,10 @@ match key {
                     self.update_find_matches();
                     // Auto-jump to first match
                     if !self.find_matches.is_empty() {
-                        self.find_match_index = 0;
-                        let (line, column) = self.find_matches[0];
+                        self.find_match_idx = 0;
+                        let (line, col) = self.find_matches[0];
                         self.cursor_line = line;
-                        self.cursor_column = column;
+                        self.cursor_col = col;
                         self.ensure_cursor_visible();
                     }
                     return true;
@@ -559,7 +559,7 @@ match key {
                         if let Ok(line_number) = input.parse::<usize>() {
                             if line_number > 0 && line_number <= self.lines.len() {
                                 self.cursor_line = line_number - 1;
-                                self.cursor_column = 0;
+                                self.cursor_col = 0;
                                 self.ensure_cursor_visible();
                                 self.status_message = Some(format!("Go to line {}", line_number));
                             } else {
@@ -602,7 +602,7 @@ match key {
                 self.replace_text = None;
                 self.find_replace_mode = false;
                 self.find_matches.clear();
-                self.find_match_index = 0;
+                self.find_match_idx = 0;
                 return true;
             }
             
@@ -612,7 +612,7 @@ match key {
                 self.replace_text = Some(String::new());
                 self.find_replace_mode = false;
                 self.find_matches.clear();
-                self.find_match_index = 0;
+                self.find_match_idx = 0;
                 return true;
             }
             
@@ -669,7 +669,7 @@ match key {
             // ── Ctrl+Left (word left) ──
             KEY_CONTROLLER_LEFT => {
                 if shift_held && self.selection_anchor.is_none() {
-                    self.selection_anchor = Some((self.cursor_line, self.cursor_column));
+                    self.selection_anchor = Some((self.cursor_line, self.cursor_col));
                 } else if !shift_held {
                     self.selection_anchor = None;
                 }
@@ -681,7 +681,7 @@ match key {
             // ── Ctrl+Right (word right) ──
             KEY_CONTROLLER_RIGHT => {
                 if shift_held && self.selection_anchor.is_none() {
-                    self.selection_anchor = Some((self.cursor_line, self.cursor_column));
+                    self.selection_anchor = Some((self.cursor_line, self.cursor_col));
                 } else if !shift_held {
                     self.selection_anchor = None;
                 }
@@ -696,7 +696,7 @@ match key {
                 let last_line = self.lines.len().saturating_sub(1);
                 let last_column = if last_line < self.lines.len() { self.lines[last_line].len() } else { 0 };
                 self.cursor_line = last_line;
-                self.cursor_column = last_column;
+                self.cursor_col = last_column;
                 self.status_message = Some(String::from("Select All"));
                 return true;
             }
@@ -729,20 +729,20 @@ match key {
                     }
                     self.save_undo_state();
                     // Insert text at cursor
-                    for character in text.chars() {
-                        if character == '\n' {
+                    for ch in text.chars() {
+                        if ch == '\n' {
                             // Split line
                             if self.cursor_line < self.lines.len() {
-                                self.cursor_column = self.cursor_column.minimum(self.lines[self.cursor_line].len());
-                                let rest = self.lines[self.cursor_line].split_off(self.cursor_column);
+                                self.cursor_col = self.cursor_col.min(self.lines[self.cursor_line].len());
+                                let rest = self.lines[self.cursor_line].split_off(self.cursor_col);
                                 self.cursor_line += 1;
                                 self.lines.insert(self.cursor_line, rest);
-                                self.cursor_column = 0;
+                                self.cursor_col = 0;
                             }
-                        } else if character >= ' ' && character as u32 <= 0x7E {
-                            if self.cursor_line < self.lines.len() && self.cursor_column <= self.lines[self.cursor_line].len() {
-                                self.lines[self.cursor_line].insert(self.cursor_column, character);
-                                self.cursor_column += 1;
+                        } else if ch >= ' ' && ch as u32 <= 0x7E {
+                            if self.cursor_line < self.lines.len() && self.cursor_col <= self.lines[self.cursor_line].len() {
+                                self.lines[self.cursor_line].insert(self.cursor_col, ch);
+                                self.cursor_col += 1;
                             }
                         }
                     }
@@ -756,91 +756,91 @@ match key {
             // ── Arrow keys (Shift = extend selection) ──
             KEY_UP => {
                 if shift_held && self.selection_anchor.is_none() {
-                    self.selection_anchor = Some((self.cursor_line, self.cursor_column));
+                    self.selection_anchor = Some((self.cursor_line, self.cursor_col));
                 } else if !shift_held {
                     self.selection_anchor = None;
                 }
                 if self.cursor_line > 0 {
                     self.cursor_line -= 1;
-                    self.clamp_cursor_column();
+                    self.clamp_cursor_col();
                 }
                 self.ensure_cursor_visible();
                 return true;
             }
             KEY_DOWN => {
                 if shift_held && self.selection_anchor.is_none() {
-                    self.selection_anchor = Some((self.cursor_line, self.cursor_column));
+                    self.selection_anchor = Some((self.cursor_line, self.cursor_col));
                 } else if !shift_held {
                     self.selection_anchor = None;
                 }
                 if self.cursor_line + 1 < self.lines.len() {
                     self.cursor_line += 1;
-                    self.clamp_cursor_column();
+                    self.clamp_cursor_col();
                 }
                 self.ensure_cursor_visible();
                 return true;
             }
             KEY_LEFT => {
                 if shift_held && self.selection_anchor.is_none() {
-                    self.selection_anchor = Some((self.cursor_line, self.cursor_column));
+                    self.selection_anchor = Some((self.cursor_line, self.cursor_col));
                 } else if !shift_held {
                     self.selection_anchor = None;
                 }
-                if self.cursor_column > 0 {
-                    self.cursor_column -= 1;
+                if self.cursor_col > 0 {
+                    self.cursor_col -= 1;
                 } else if self.cursor_line > 0 {
                     self.cursor_line -= 1;
-                    self.cursor_column = self.lines[self.cursor_line].len();
+                    self.cursor_col = self.lines[self.cursor_line].len();
                 }
                 self.ensure_cursor_visible();
                 return true;
             }
             KEY_RIGHT => {
                 if shift_held && self.selection_anchor.is_none() {
-                    self.selection_anchor = Some((self.cursor_line, self.cursor_column));
+                    self.selection_anchor = Some((self.cursor_line, self.cursor_col));
                 } else if !shift_held {
                     self.selection_anchor = None;
                 }
                 let line_length = if self.cursor_line < self.lines.len() { self.lines[self.cursor_line].len() } else { 0 };
-                if self.cursor_column < line_length {
-                    self.cursor_column += 1;
+                if self.cursor_col < line_length {
+                    self.cursor_col += 1;
                 } else if self.cursor_line + 1 < self.lines.len() {
                     self.cursor_line += 1;
-                    self.cursor_column = 0;
+                    self.cursor_col = 0;
                 }
                 self.ensure_cursor_visible();
                 return true;
             }
             KEY_HOME => {
                 if shift_held && self.selection_anchor.is_none() {
-                    self.selection_anchor = Some((self.cursor_line, self.cursor_column));
+                    self.selection_anchor = Some((self.cursor_line, self.cursor_col));
                 } else if !shift_held {
                     self.selection_anchor = None;
                 }
-                self.cursor_column = 0;
+                self.cursor_col = 0;
                 return true;
             }
             KEY_END => {
                 if shift_held && self.selection_anchor.is_none() {
-                    self.selection_anchor = Some((self.cursor_line, self.cursor_column));
+                    self.selection_anchor = Some((self.cursor_line, self.cursor_col));
                 } else if !shift_held {
                     self.selection_anchor = None;
                 }
                 let line_length = if self.cursor_line < self.lines.len() { self.lines[self.cursor_line].len() } else { 0 };
-                self.cursor_column = line_length;
+                self.cursor_col = line_length;
                 return true;
             }
             KEY_PGUP => {
                 let jump = 20;
                 self.cursor_line = self.cursor_line.saturating_sub(jump);
-                self.clamp_cursor_column();
+                self.clamp_cursor_col();
                 self.ensure_cursor_visible();
                 return true;
             }
             KEY_PGDOWN => {
                 let jump = 20;
-                self.cursor_line = (self.cursor_line + jump).minimum(self.lines.len().saturating_sub(1));
-                self.clamp_cursor_column();
+                self.cursor_line = (self.cursor_line + jump).min(self.lines.len().saturating_sub(1));
+                self.clamp_cursor_col();
                 self.ensure_cursor_visible();
                 return true;
             }
@@ -853,15 +853,15 @@ match key {
                     return true;
                 }
                 self.save_undo_state();
-                if self.cursor_column > 0 && self.cursor_line < self.lines.len() {
-                    self.lines[self.cursor_line].remove(self.cursor_column - 1);
-                    self.cursor_column -= 1;
+                if self.cursor_col > 0 && self.cursor_line < self.lines.len() {
+                    self.lines[self.cursor_line].remove(self.cursor_col - 1);
+                    self.cursor_col -= 1;
                     self.dirty = true;
                 } else if self.cursor_line > 0 {
                     // Join with previous line
                     let current = self.lines.remove(self.cursor_line);
                     self.cursor_line -= 1;
-                    self.cursor_column = self.lines[self.cursor_line].len();
+                    self.cursor_col = self.lines[self.cursor_line].len();
                     self.lines[self.cursor_line].push_str(&current);
                     self.dirty = true;
                 }
@@ -878,8 +878,8 @@ match key {
                 self.save_undo_state();
                 if self.cursor_line < self.lines.len() {
                     let line_length = self.lines[self.cursor_line].len();
-                    if self.cursor_column < line_length {
-                        self.lines[self.cursor_line].remove(self.cursor_column);
+                    if self.cursor_col < line_length {
+                        self.lines[self.cursor_line].remove(self.cursor_col);
                         self.dirty = true;
                     } else if self.cursor_line + 1 < self.lines.len() {
                         // Join next line
@@ -899,9 +899,9 @@ match key {
                 self.save_undo_state();
                 if self.cursor_line < self.lines.len() {
                     // Clamp cursor_col to line length to prevent split_off panic
-                    self.cursor_column = self.cursor_column.minimum(self.lines[self.cursor_line].len());
+                    self.cursor_col = self.cursor_col.min(self.lines[self.cursor_line].len());
                     // Split line at cursor
-                    let rest = self.lines[self.cursor_line].split_off(self.cursor_column);
+                    let rest = self.lines[self.cursor_line].split_off(self.cursor_col);
                     
                     // Auto-indent: copy leading whitespace from current line
                     let indent: String = self.lines[self.cursor_line]
@@ -920,7 +920,7 @@ match key {
                     let new_line = format!("{}{}{}", indent, extra, rest);
                     self.cursor_line += 1;
                     self.lines.insert(self.cursor_line, new_line);
-                    self.cursor_column = indent.len() + extra.len();
+                    self.cursor_col = indent.len() + extra.len();
                     self.dirty = true;
                 }
                 self.ensure_cursor_visible();
@@ -934,7 +934,7 @@ match key {
                     // Block indent/outdent: operate on all selected lines
                     if shift_held {
                         // Shift+Tab: outdent selected lines by up to 4 spaces
-                        for l in sl..=el.minimum(self.lines.len().saturating_sub(1)) {
+                        for l in sl..=el.min(self.lines.len().saturating_sub(1)) {
                             let spaces = self.lines[l].chars().take(4).take_while(|c| *c == ' ').count();
                             if spaces > 0 {
                                 self.lines[l] = String::from(&self.lines[l][spaces..]);
@@ -942,7 +942,7 @@ match key {
                         }
                     } else {
                         // Tab: indent selected lines by 4 spaces
-                        for l in sl..=el.minimum(self.lines.len().saturating_sub(1)) {
+                        for l in sl..=el.min(self.lines.len().saturating_sub(1)) {
                             self.lines[l] = format!("    {}", self.lines[l]);
                         }
                     }
@@ -953,7 +953,7 @@ match key {
                         let spaces = self.lines[self.cursor_line].chars().take(4).take_while(|c| *c == ' ').count();
                         if spaces > 0 {
                             self.lines[self.cursor_line] = String::from(&self.lines[self.cursor_line][spaces..]);
-                            self.cursor_column = self.cursor_column.saturating_sub(spaces);
+                            self.cursor_col = self.cursor_col.saturating_sub(spaces);
                             self.dirty = true;
                         }
                     }
@@ -961,8 +961,8 @@ match key {
                     // Plain Tab: insert 4 spaces
                     if self.cursor_line < self.lines.len() {
                         for _ in 0..4 {
-                            self.lines[self.cursor_line].insert(self.cursor_column, ' ');
-                            self.cursor_column += 1;
+                            self.lines[self.cursor_line].insert(self.cursor_col, ' ');
+                            self.cursor_col += 1;
                         }
                         self.dirty = true;
                     }
@@ -977,15 +977,15 @@ match key {
                 }
                 self.save_undo_state();
                 if self.cursor_line < self.lines.len() {
-                    let character = c as char;
-                    if self.cursor_column <= self.lines[self.cursor_line].len() {
-                        self.lines[self.cursor_line].insert(self.cursor_column, character);
-                        self.cursor_column += 1;
+                    let ch = c as char;
+                    if self.cursor_col <= self.lines[self.cursor_line].len() {
+                        self.lines[self.cursor_line].insert(self.cursor_col, ch);
+                        self.cursor_col += 1;
                         self.dirty = true;
                         
                         // Auto-close brackets
                         let close = // Pattern matching — Rust's exhaustive branching construct.
-match character {
+match ch {
                             '{' => Some('}'),
                             '(' => Some(')'),
                             '[' => Some(']'),
@@ -994,7 +994,7 @@ match character {
                             _ => None,
                         };
                         if let Some(closing) = close {
-                            self.lines[self.cursor_line].insert(self.cursor_column, closing);
+                            self.lines[self.cursor_line].insert(self.cursor_col, closing);
                             // Don't advance cursor — keep between brackets
                         }
                     }
@@ -1043,19 +1043,19 @@ match self.language {
         };
 
         // Check if ALL lines in range are already commented
-        let all_commented = (start..=end.minimum(self.lines.len().saturating_sub(1)))
+        let all_commented = (start..=end.min(self.lines.len().saturating_sub(1)))
             .all(|l| self.lines[l].trim_start().starts_with(comment_prefix.trim_end()));
 
-        for l in start..=end.minimum(self.lines.len().saturating_sub(1)) {
+        for l in start..=end.min(self.lines.len().saturating_sub(1)) {
             if all_commented {
                 // Uncomment: remove first occurrence of comment prefix
                 let trimmed = &self.lines[l];
-                if let Some(position) = trimmed.find(comment_prefix) {
-                    self.lines[l] = format!("{}{}", &trimmed[..position], &trimmed[position + comment_prefix.len()..]);
-                } else if let Some(position) = trimmed.find(comment_prefix.trim_end()) {
+                if let Some(pos) = trimmed.find(comment_prefix) {
+                    self.lines[l] = format!("{}{}", &trimmed[..pos], &trimmed[pos + comment_prefix.len()..]);
+                } else if let Some(pos) = trimmed.find(comment_prefix.trim_end()) {
                     // Handle "//text" without space after
                     let prefix_no_space = comment_prefix.trim_end();
-                    self.lines[l] = format!("{}{}", &trimmed[..position], &trimmed[position + prefix_no_space.len()..]);
+                    self.lines[l] = format!("{}{}", &trimmed[..pos], &trimmed[pos + prefix_no_space.len()..]);
                 }
             } else {
                 // Comment: find indentation level and insert comment prefix after it
@@ -1072,7 +1072,7 @@ match self.language {
         if self.lines.len() <= 1 {
             self.save_undo_state();
             self.lines[0] = String::new();
-            self.cursor_column = 0;
+            self.cursor_col = 0;
             self.dirty = true;
             return;
         }
@@ -1081,7 +1081,7 @@ match self.language {
         if self.cursor_line >= self.lines.len() {
             self.cursor_line = self.lines.len().saturating_sub(1);
         }
-        self.clamp_cursor_column();
+        self.clamp_cursor_col();
         self.dirty = true;
         self.ensure_cursor_visible();
     }
@@ -1123,26 +1123,26 @@ match self.language {
     /// Move cursor one word to the left (Ctrl+Left)
     fn word_left(&mut self) {
         if self.cursor_line >= self.lines.len() { return; }
-        if self.cursor_column == 0 {
+        if self.cursor_col == 0 {
             // Jump to end of previous line
             if self.cursor_line > 0 {
                 self.cursor_line -= 1;
-                self.cursor_column = self.lines[self.cursor_line].len();
+                self.cursor_col = self.lines[self.cursor_line].len();
             }
             return;
         }
         let line = &self.lines[self.cursor_line];
         let bytes = line.as_bytes();
-        let mut position = self.cursor_column.minimum(bytes.len());
+        let mut pos = self.cursor_col.min(bytes.len());
         // Skip whitespace backwards
-        while position > 0 && bytes[position - 1] == b' ' {
-            position -= 1;
+        while pos > 0 && bytes[pos - 1] == b' ' {
+            pos -= 1;
         }
         // Skip word characters backwards
-        while position > 0 && bytes[position - 1] != b' ' {
-            position -= 1;
+        while pos > 0 && bytes[pos - 1] != b' ' {
+            pos -= 1;
         }
-        self.cursor_column = position;
+        self.cursor_col = pos;
     }
 
     /// Move cursor one word to the right (Ctrl+Right)
@@ -1151,24 +1151,24 @@ match self.language {
         let line = &self.lines[self.cursor_line];
         let bytes = line.as_bytes();
         let len = bytes.len();
-        if self.cursor_column >= len {
+        if self.cursor_col >= len {
             // Jump to start of next line
             if self.cursor_line + 1 < self.lines.len() {
                 self.cursor_line += 1;
-                self.cursor_column = 0;
+                self.cursor_col = 0;
             }
             return;
         }
-        let mut position = self.cursor_column;
+        let mut pos = self.cursor_col;
         // Skip word characters forward
-        while position < len && bytes[position] != b' ' {
-            position += 1;
+        while pos < len && bytes[pos] != b' ' {
+            pos += 1;
         }
         // Skip whitespace forward
-        while position < len && bytes[position] == b' ' {
-            position += 1;
+        while pos < len && bytes[pos] == b' ' {
+            pos += 1;
         }
-        self.cursor_column = position;
+        self.cursor_col = pos;
     }
 
     /// Find the matching bracket for the character at cursor position
@@ -1176,11 +1176,11 @@ match self.language {
         self.matching_bracket = None;
         if self.cursor_line >= self.lines.len() { return; }
         let line = &self.lines[self.cursor_line];
-        if self.cursor_column >= line.len() { return; }
+        if self.cursor_col >= line.len() { return; }
         
-        let character = line.as_bytes()[self.cursor_column];
+        let ch = line.as_bytes()[self.cursor_col];
         let (target, forward) = // Pattern matching — Rust's exhaustive branching construct.
-match character {
+match ch {
             b'(' => (b')', true),
             b')' => (b'(', false),
             b'{' => (b'}', true),
@@ -1193,11 +1193,11 @@ match character {
         let mut depth: i32 = 0;
         if forward {
             let mut l = self.cursor_line;
-            let mut c = self.cursor_column;
+            let mut c = self.cursor_col;
             while l < self.lines.len() {
                 let bytes = self.lines[l].as_bytes();
                 while c < bytes.len() {
-                    if bytes[c] == character { depth += 1; }
+                    if bytes[c] == ch { depth += 1; }
                     else if bytes[c] == target {
                         depth -= 1;
                         if depth == 0 {
@@ -1212,14 +1212,14 @@ match character {
             }
         } else {
             let mut l = self.cursor_line;
-            let mut c = self.cursor_column as i32;
+            let mut c = self.cursor_col as i32;
                         // Infinite loop — runs until an explicit `break`.
 loop {
                 let bytes = self.lines[l].as_bytes();
                 while c >= 0 {
                     let cu = c as usize;
                     if cu < bytes.len() {
-                        if bytes[cu] == character { depth += 1; }
+                        if bytes[cu] == ch { depth += 1; }
                         else if bytes[cu] == target {
                             depth -= 1;
                             if depth == 0 {
@@ -1341,16 +1341,16 @@ pub fn tokenize_rust_line(line: &str) -> Vec<ColorSpan> {
     let mut i = 0;
     
     while i < len {
-        let character = bytes[i];
+        let ch = bytes[i];
         
         // ── Line comment ──
-        if character == b'/' && i + 1 < len && bytes[i + 1] == b'/' {
+        if ch == b'/' && i + 1 < len && bytes[i + 1] == b'/' {
             spans.push(ColorSpan { start: i, end: len, kind: TokenKind::Comment });
             break; // Rest of line is comment
         }
         
         // ── Attribute ──
-        if character == b'#' && i + 1 < len && bytes[i + 1] == b'[' {
+        if ch == b'#' && i + 1 < len && bytes[i + 1] == b'[' {
             let start = i;
             // Find closing ]
             while i < len && bytes[i] != b']' { i += 1; }
@@ -1360,7 +1360,7 @@ pub fn tokenize_rust_line(line: &str) -> Vec<ColorSpan> {
         }
         
         // ── String literal ──
-        if character == b'"' {
+        if ch == b'"' {
             let start = i;
             i += 1;
             while i < len {
@@ -1378,7 +1378,7 @@ pub fn tokenize_rust_line(line: &str) -> Vec<ColorSpan> {
         }
         
         // ── Char literal ──
-        if character == b'\'' {
+        if ch == b'\'' {
             // Check if it's a lifetime ('a, 'static) or char literal
             let start = i;
             i += 1;
@@ -1408,7 +1408,7 @@ pub fn tokenize_rust_line(line: &str) -> Vec<ColorSpan> {
         }
         
         // ── Number ──
-        if character.is_ascii_digit() || (character == b'0' && i + 1 < len && (bytes[i+1] == b'x' || bytes[i+1] == b'b' || bytes[i+1] == b'o')) {
+        if ch.is_ascii_digit() || (ch == b'0' && i + 1 < len && (bytes[i+1] == b'x' || bytes[i+1] == b'b' || bytes[i+1] == b'o')) {
             let start = i;
             i += 1;
             while i < len && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_' || bytes[i] == b'.') {
@@ -1419,7 +1419,7 @@ pub fn tokenize_rust_line(line: &str) -> Vec<ColorSpan> {
         }
         
         // ── Identifiers / keywords ──
-        if character.is_ascii_alphabetic() || character == b'_' {
+        if ch.is_ascii_alphabetic() || ch == b'_' {
             let start = i;
             while i < len && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
                 i += 1;
@@ -1451,16 +1451,16 @@ pub fn tokenize_rust_line(line: &str) -> Vec<ColorSpan> {
         }
         
         // ── Brackets ──
-        if character == b'{' || character == b'}' || character == b'(' || character == b')' || character == b'[' || character == b']' {
+        if ch == b'{' || ch == b'}' || ch == b'(' || ch == b')' || ch == b'[' || ch == b']' {
             spans.push(ColorSpan { start: i, end: i + 1, kind: TokenKind::Bracket });
             i += 1;
             continue;
         }
         
         // ── Operators ──
-        if character == b'+' || character == b'-' || character == b'*' || character == b'=' || character == b'!' 
-            || character == b'<' || character == b'>' || character == b'&' || character == b'|' || character == b'^'
-            || character == b':' || character == b';' || character == b',' || character == b'.' {
+        if ch == b'+' || ch == b'-' || ch == b'*' || ch == b'=' || ch == b'!' 
+            || ch == b'<' || ch == b'>' || ch == b'&' || ch == b'|' || ch == b'^'
+            || ch == b':' || ch == b';' || ch == b',' || ch == b'.' {
             spans.push(ColorSpan { start: i, end: i + 1, kind: TokenKind::Operator });
             i += 1;
             continue;
@@ -1523,16 +1523,16 @@ pub fn tokenize_python_line(line: &str) -> Vec<ColorSpan> {
     let mut i = 0;
     
     while i < len {
-        let character = bytes[i];
+        let ch = bytes[i];
         
         // Comment
-        if character == b'#' {
+        if ch == b'#' {
             spans.push(ColorSpan { start: i, end: len, kind: TokenKind::Comment });
             break;
         }
         
         // Decorator
-        if character == b'@' {
+        if ch == b'@' {
             let start = i;
             i += 1;
             while i < len && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_' || bytes[i] == b'.') { i += 1; }
@@ -1541,9 +1541,9 @@ pub fn tokenize_python_line(line: &str) -> Vec<ColorSpan> {
         }
         
         // String (single, double, triple-quoted)
-        if character == b'"' || character == b'\'' {
+        if ch == b'"' || ch == b'\'' {
             let start = i;
-            let quote = character;
+            let quote = ch;
             // Check for triple quote
             if i + 2 < len && bytes[i+1] == quote && bytes[i+2] == quote {
                 i += 3;
@@ -1569,7 +1569,7 @@ pub fn tokenize_python_line(line: &str) -> Vec<ColorSpan> {
         }
         
         // Number
-        if character.is_ascii_digit() {
+        if ch.is_ascii_digit() {
             let start = i;
             i += 1;
             while i < len && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_' || bytes[i] == b'.') { i += 1; }
@@ -1578,7 +1578,7 @@ pub fn tokenize_python_line(line: &str) -> Vec<ColorSpan> {
         }
         
         // Identifier / keyword
-        if character.is_ascii_alphabetic() || character == b'_' {
+        if ch.is_ascii_alphabetic() || ch == b'_' {
             let start = i;
             while i < len && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') { i += 1; }
             let word = &line[start..i];
@@ -1597,16 +1597,16 @@ pub fn tokenize_python_line(line: &str) -> Vec<ColorSpan> {
         }
         
         // Brackets
-        if character == b'(' || character == b')' || character == b'{' || character == b'}' || character == b'[' || character == b']' {
+        if ch == b'(' || ch == b')' || ch == b'{' || ch == b'}' || ch == b'[' || ch == b']' {
             spans.push(ColorSpan { start: i, end: i + 1, kind: TokenKind::Bracket });
             i += 1;
             continue;
         }
         
         // Operators
-        if character == b'+' || character == b'-' || character == b'*' || character == b'/' || character == b'=' || character == b'!'
-            || character == b'<' || character == b'>' || character == b'&' || character == b'|' || character == b'^'
-            || character == b':' || character == b';' || character == b',' || character == b'.' || character == b'%' {
+        if ch == b'+' || ch == b'-' || ch == b'*' || ch == b'/' || ch == b'=' || ch == b'!'
+            || ch == b'<' || ch == b'>' || ch == b'&' || ch == b'|' || ch == b'^'
+            || ch == b':' || ch == b';' || ch == b',' || ch == b'.' || ch == b'%' {
             spans.push(ColorSpan { start: i, end: i + 1, kind: TokenKind::Operator });
             i += 1;
             continue;
@@ -1672,16 +1672,16 @@ pub fn tokenize_js_c_line(line: &str, is_c: bool) -> Vec<ColorSpan> {
     let types: &[&str] = if is_c { C_TYPES } else { JS_TYPES };
     
     while i < len {
-        let character = bytes[i];
+        let ch = bytes[i];
         
         // Line comment
-        if character == b'/' && i + 1 < len && bytes[i + 1] == b'/' {
+        if ch == b'/' && i + 1 < len && bytes[i + 1] == b'/' {
             spans.push(ColorSpan { start: i, end: len, kind: TokenKind::Comment });
             break;
         }
         
         // Block comment (single-line portion)
-        if character == b'/' && i + 1 < len && bytes[i + 1] == b'*' {
+        if ch == b'/' && i + 1 < len && bytes[i + 1] == b'*' {
             let start = i;
             i += 2;
             while i + 1 < len {
@@ -1694,15 +1694,15 @@ pub fn tokenize_js_c_line(line: &str, is_c: bool) -> Vec<ColorSpan> {
         }
         
         // Preprocessor directives (C/C++)
-        if is_c && character == b'#' {
+        if is_c && ch == b'#' {
             spans.push(ColorSpan { start: i, end: len, kind: TokenKind::Macro });
             break;
         }
         
         // String
-        if character == b'"' || character == b'\'' || character == b'`' {
+        if ch == b'"' || ch == b'\'' || ch == b'`' {
             let start = i;
-            let quote = character;
+            let quote = ch;
             i += 1;
             while i < len {
                 if bytes[i] == b'\\' && i + 1 < len { i += 2; continue; }
@@ -1714,7 +1714,7 @@ pub fn tokenize_js_c_line(line: &str, is_c: bool) -> Vec<ColorSpan> {
         }
         
         // Number
-        if character.is_ascii_digit() || (character == b'.' && i + 1 < len && bytes[i+1].is_ascii_digit()) {
+        if ch.is_ascii_digit() || (ch == b'.' && i + 1 < len && bytes[i+1].is_ascii_digit()) {
             let start = i;
             i += 1;
             while i < len && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_' || bytes[i] == b'.') { i += 1; }
@@ -1723,7 +1723,7 @@ pub fn tokenize_js_c_line(line: &str, is_c: bool) -> Vec<ColorSpan> {
         }
         
         // Identifier / keyword
-        if character.is_ascii_alphabetic() || character == b'_' || character == b'$' {
+        if ch.is_ascii_alphabetic() || ch == b'_' || ch == b'$' {
             let start = i;
             while i < len && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_' || bytes[i] == b'$') { i += 1; }
             let word = &line[start..i];
@@ -1742,16 +1742,16 @@ pub fn tokenize_js_c_line(line: &str, is_c: bool) -> Vec<ColorSpan> {
         }
         
         // Brackets
-        if character == b'(' || character == b')' || character == b'{' || character == b'}' || character == b'[' || character == b']' {
+        if ch == b'(' || ch == b')' || ch == b'{' || ch == b'}' || ch == b'[' || ch == b']' {
             spans.push(ColorSpan { start: i, end: i + 1, kind: TokenKind::Bracket });
             i += 1;
             continue;
         }
         
         // Operators
-        if character == b'+' || character == b'-' || character == b'*' || character == b'/' || character == b'=' || character == b'!'
-            || character == b'<' || character == b'>' || character == b'&' || character == b'|' || character == b'^'
-            || character == b':' || character == b';' || character == b',' || character == b'.' || character == b'?' || character == b'%' {
+        if ch == b'+' || ch == b'-' || ch == b'*' || ch == b'/' || ch == b'=' || ch == b'!'
+            || ch == b'<' || ch == b'>' || ch == b'&' || ch == b'|' || ch == b'^'
+            || ch == b':' || ch == b';' || ch == b',' || ch == b'.' || ch == b'?' || ch == b'%' {
             spans.push(ColorSpan { start: i, end: i + 1, kind: TokenKind::Operator });
             i += 1;
             continue;
@@ -1819,8 +1819,8 @@ pub fn tokenize_toml_line(line: &str) -> Vec<ColorSpan> {
                 spans.push(ColorSpan { start: value_start, end: len, kind: TokenKind::Normal });
             }
             // Inline comment
-            if let Some(hash_position) = line[value_start..].find('#') {
-                let absolute_position = value_start + hash_position;
+            if let Some(hash_pos) = line[value_start..].find('#') {
+                let absolute_position = value_start + hash_pos;
                 spans.push(ColorSpan { start: absolute_position, end: len, kind: TokenKind::Comment });
             }
         }
@@ -1978,7 +1978,7 @@ pub fn render_editor(
     let code_y = y + total_header;
     let code_w = w as i32 - gutter_w;
     let code_h = h as i32 - total_header - status_h;
-    let visible_lines = (code_h / line_h).maximum(1) as usize;
+    let visible_lines = (code_h / line_h).max(1) as usize;
     
     // Update scroll + bracket matching
     if state.cursor_line < state.scroll_y {
@@ -2022,7 +2022,7 @@ match state.language {
         Language::Plain => "  ",
     };
     let tab_label = format!(" {} {} {}  x", lang_prefix, tab_name, dirty_marker);
-    let tab_w = ((tab_label.len() as u32) * 8 + 4).minimum(w);
+    let tab_w = ((tab_label.len() as u32) * 8 + 4).min(w);
     // Active tab background (editor bg color = looks connected to editor)
     crate::framebuffer::fill_rect(x as u32, tab_y as u32, tab_w, tab_bar_h as u32, COLOR_BG);
     // Top accent line (blue)
@@ -2093,8 +2093,8 @@ match state.language {
         if let Some((sl, sc, el, ec)) = state.get_selection_range() {
             if line_index >= sl && line_index <= el {
                 let line_length = state.lines[line_index].len();
-                let sel_start = if line_index == sl { sc.minimum(line_length) } else { 0 };
-                let sel_end = if line_index == el { ec.minimum(line_length) } else { line_length };
+                let sel_start = if line_index == sl { sc.min(line_length) } else { 0 };
+                let sel_end = if line_index == el { ec.min(line_length) } else { line_length };
                 if sel_start < sel_end {
                     let sx = code_x + 4 + (sel_start as i32 * char_w);
                     let software = ((sel_end - sel_start) as i32 * char_w) as u32;
@@ -2130,10 +2130,10 @@ match state.language {
                 crate::framebuffer::fill_rect(bx as u32, ly as u32, 1, line_h as u32, 0xFF888888);
                 crate::framebuffer::fill_rect((bx + char_w - 1) as u32, ly as u32, 1, line_h as u32, 0xFF888888);
             }
-            if line_index == state.cursor_line && state.cursor_column < state.lines[line_index].len() {
-                let callback = state.lines[line_index].as_bytes()[state.cursor_column];
-                if matches!(callback, b'(' | b')' | b'{' | b'}' | b'[' | b']') {
-                    let cbx = code_x + 4 + (state.cursor_column as i32 * char_w);
+            if line_index == state.cursor_line && state.cursor_col < state.lines[line_index].len() {
+                let cb = state.lines[line_index].as_bytes()[state.cursor_col];
+                if matches!(cb, b'(' | b')' | b'{' | b'}' | b'[' | b']') {
+                    let cbx = code_x + 4 + (state.cursor_col as i32 * char_w);
                     crate::framebuffer::fill_rect(cbx as u32, ly as u32, char_w as u32, line_h as u32, 0xFF3A3D41);
                     crate::framebuffer::fill_rect(cbx as u32, ly as u32, char_w as u32, 1, 0xFF888888);
                     crate::framebuffer::fill_rect(cbx as u32, (ly + line_h - 1) as u32, char_w as u32, 1, 0xFF888888);
@@ -2168,7 +2168,7 @@ match state.language {
         if is_current_line {
             let blink_on = (state.blink_counter / 30) % 2 == 0;
             if blink_on {
-                let cx = code_x + 4 + (state.cursor_column as i32 * char_w);
+                let cx = code_x + 4 + (state.cursor_col as i32 * char_w);
                 crate::framebuffer::fill_rect(cx as u32, ly as u32, 2, line_h as u32, COLOR_CURSOR);
             }
         }
@@ -2178,7 +2178,7 @@ match state.language {
     if state.lines.len() > visible_lines {
         let sb_x = (x + w as i32 - 10) as u32;
         let sb_h = code_h as u32;
-        let thumb_h = ((visible_lines as u32 * sb_h) / state.lines.len() as u32).maximum(20);
+        let thumb_h = ((visible_lines as u32 * sb_h) / state.lines.len() as u32).max(20);
         let thumb_y = (state.scroll_y as u32 * (sb_h - thumb_h)) / state.lines.len().saturating_sub(visible_lines) as u32;
         crate::framebuffer::fill_rect(sb_x + 3, code_y as u32, 7, sb_h, 0xFF252526);
         crate::framebuffer::fill_rounded_rect(sb_x + 3, code_y as u32 + thumb_y, 7, thumb_h, 3, 0xFF6A6A6A);
@@ -2187,7 +2187,7 @@ match state.language {
     // ── Find/Replace bar (floating, VSCode-style) ──
     if state.find_query.is_some() {
         let find_bar_h: i32 = if state.replace_text.is_some() { 56 } else { 32 };
-        let find_w: i32 = 370.minimum(code_w);
+        let find_w: i32 = 370.min(code_w);
         let find_x = x + w as i32 - find_w - 20;
         let find_y = code_y + 4;
         // Shadow + background
@@ -2199,7 +2199,7 @@ match state.language {
         let match_information = if state.find_matches.is_empty() {
             if query.is_empty() { String::new() } else { String::from(" No results") }
         } else {
-            format!(" {}/{}", state.find_match_index + 1, state.find_matches.len())
+            format!(" {}/{}", state.find_match_idx + 1, state.find_matches.len())
         };
         let find_active = !state.find_replace_mode;
         let ff_x = find_x + 8;
@@ -2232,7 +2232,7 @@ match state.language {
                     let mmx = code_x + 4 + (mc as i32 * char_w);
                     let mw = (q_length as i32 * char_w) as u32;
                     crate::framebuffer::fill_rect(mmx as u32, mly as u32, mw, line_h as u32, 0xFF613214);
-                    if state.find_match_index < state.find_matches.len() && state.find_matches[state.find_match_index] == (ml, mc) {
+                    if state.find_match_idx < state.find_matches.len() && state.find_matches[state.find_match_idx] == (ml, mc) {
                         crate::framebuffer::fill_rect(mmx as u32, mly as u32, mw, 1, 0xFFE8AB53);
                         crate::framebuffer::fill_rect(mmx as u32, (mly + line_h - 1) as u32, mw, 1, 0xFFE8AB53);
                     }
@@ -2243,7 +2243,7 @@ match state.language {
     
     // ── Go-to-line dialog ──
     if let Some(ref input) = state.goto_line_input {
-        let dialog_w: i32 = 320.minimum(w as i32 - 40);
+        let dialog_w: i32 = 320.min(w as i32 - 40);
         let dialog_h: i32 = 32;
         let dialog_x = x + (w as i32 - dialog_w) / 2;
         let dialog_y = y + total_header + 2;
@@ -2277,7 +2277,7 @@ match state.language {
     }
     
     // Right: Spaces, Encoding, Language, Ln/Col
-    let position_str = format!("Ln {}, Col {}", state.cursor_line + 1, state.cursor_column + 1);
+    let position_str = format!("Ln {}, Col {}", state.cursor_line + 1, state.cursor_col + 1);
     let lang_name = state.language.name();
     // Draw from right to left
     let mut srx = x + w as i32 - 8;

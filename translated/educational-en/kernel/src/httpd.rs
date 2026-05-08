@@ -39,7 +39,7 @@ pub fn get_stats() -> (u16, u64, bool) {
 
 /// Start the HTTP server on the given port.
 /// This blocks and processes requests until stopped.
-pub fn start(port: u16, maximum_requests: u32) {
+pub fn start(port: u16, max_requests: u32) {
     if SERVER_RUNNING.load(Ordering::SeqCst) {
         crate::println_color!(crate::framebuffer::COLOR_YELLOW, "HTTP server already running");
         return;
@@ -64,21 +64,21 @@ pub fn start(port: u16, maximum_requests: u32) {
     crate::netstack::tcp::listen_on(port, 8);
 
     let mut served: u32 = 0;
-    let limit = if maximum_requests == 0 { u32::MAX } else { maximum_requests };
+    let limit = if max_requests == 0 { u32::MAX } else { max_requests };
 
     // Main accept loop
     while SERVER_RUNNING.load(Ordering::SeqCst) && served < limit {
         crate::netstack::poll();
 
         // Check for incoming connection
-        if let Some((source_port, remote_ip, remote_port)) =
+        if let Some((src_port, remote_ip, remote_port)) =
             crate::netstack::tcp::accept_connection(port)
         {
             let remote = format!("{}.{}.{}.{}", remote_ip[0], remote_ip[1], remote_ip[2], remote_ip[3]);
             crate::serial_println!("[HTTPD] Connection from {}:{}", remote, remote_port);
 
             // Read request
-            let request = read_request(remote_ip, port, source_port, 3000);
+            let request = read_request(remote_ip, port, src_port, 3000);
 
             if !request.is_empty() {
                 // Parse HTTP request
@@ -89,7 +89,7 @@ pub fn start(port: u16, maximum_requests: u32) {
                 let response = route_request(&method, &path);
 
                 // Send response
-                let _ = crate::netstack::tcp::send_data(remote_ip, remote_port, source_port, response.as_bytes());
+                let _ = crate::netstack::tcp::send_data(remote_ip, remote_port, src_port, response.as_bytes());
 
                 // Brief delay for data to send
                 for _ in 0..50_000 { core::hint::spin_loop(); }
@@ -99,7 +99,7 @@ pub fn start(port: u16, maximum_requests: u32) {
             }
 
             // Close connection
-            let _ = crate::netstack::tcp::send_fin(remote_ip, remote_port, source_port);
+            let _ = crate::netstack::tcp::send_fin(remote_ip, remote_port, src_port);
         }
 
         // Check keyboard for Ctrl+C
@@ -128,7 +128,7 @@ pub fn stop() {
 }
 
 /// Read HTTP request from a connection
-fn read_request(remote_ip: [u8; 4], listen_port: u16, source_port: u16, timeout_mouse: u32) -> String {
+fn read_request(remote_ip: [u8; 4], listen_port: u16, src_port: u16, timeout_ms: u32) -> String {
     let mut data = Vec::new();
     let start = crate::logger::get_ticks();
 
@@ -136,7 +136,7 @@ fn read_request(remote_ip: [u8; 4], listen_port: u16, source_port: u16, timeout_
 loop {
         crate::netstack::poll();
 
-        if let Some(chunk) = crate::netstack::tcp::recv_data(remote_ip, listen_port, source_port) {
+        if let Some(chunk) = crate::netstack::tcp::recv_data(remote_ip, listen_port, src_port) {
             data.extend_from_slice(&chunk);
             // Check for end of HTTP headers
             if data.windows(4).any(|w| w == b"\r\n\r\n") {
@@ -144,7 +144,7 @@ loop {
             }
         }
 
-        if crate::logger::get_ticks().saturating_sub(start) > timeout_mouse as u64 {
+        if crate::logger::get_ticks().saturating_sub(start) > timeout_ms as u64 {
             break;
         }
 
@@ -214,13 +214,13 @@ fn response_404() -> String {
 // ═══════════════════════════════════════════════════════════════════
 
 fn page_index() -> String {
-    let uptime_s = crate::time::uptime_mouse() / 1000;
+    let uptime_s = crate::time::uptime_ms() / 1000;
     let hours = uptime_s / 3600;
     let mins = (uptime_s % 3600) / 60;
     let secs = uptime_s % 60;
 
     let (total, used) = crate::memory::frame::stats();
-    let memory_mb = (total * 4096) / (1024 * 1024);
+    let mem_mb = (total * 4096) / (1024 * 1024);
     let used_mb = (used * 4096) / (1024 * 1024);
 
     let cores = crate::cpu::smp::ready_cpu_count();
@@ -288,13 +288,13 @@ fn page_index() -> String {
 
     <footer>Served by TrustOS HTTP Server v1.0 | Powered by Rust</footer>
 </body>
-</html>"#, cores, memory_mb, used_mb, hours, mins, secs);
+</html>"#, cores, mem_mb, used_mb, hours, mins, secs);
 
     http_response("text/html; charset=utf-8", &body)
 }
 
 fn page_status() -> String {
-    let uptime_s = crate::time::uptime_mouse() / 1000;
+    let uptime_s = crate::time::uptime_ms() / 1000;
     let (total, used) = crate::memory::frame::stats();
     let free = total - used;
     let cores = crate::cpu::smp::ready_cpu_count();
@@ -386,7 +386,7 @@ fn page_files(path: &str) -> String {
 }
 
 fn api_information() -> String {
-    let uptime = crate::time::uptime_mouse();
+    let uptime = crate::time::uptime_ms();
     let (total, used) = crate::memory::frame::stats();
     let cores = crate::cpu::smp::ready_cpu_count();
 

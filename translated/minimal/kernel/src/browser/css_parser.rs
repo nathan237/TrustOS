@@ -3,295 +3,295 @@
 
 
 
-use alloc::string::{String, Gd};
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use alloc::collections::BTreeMap;
 
 
 #[derive(Debug, Clone)]
-pub struct Mj {
-    pub bib: Vec<Aqj>,
+pub struct Fd {
+    pub rules: Vec<Rm>,
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Aqj {
-    pub fud: Vec<Yt>,
-    pub dps: Vec<Sa>,
+pub struct Rm {
+    pub selectors: Vec<Kq>,
+    pub declarations: Vec<Ho>,
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Yt {
-    pub bgw: Vec<SelectorPart>,
+pub struct Kq {
+    pub elements: Vec<SelectorPart>,
 }
 
 
 #[derive(Debug, Clone)]
 pub enum SelectorPart {
-    Azr(String),           
-    Bdo(String),         
-    Bjj(String),            
-    Bvi,             
-    Cau,            
-    Bdm,                 
-    Bbm,              
-    Bst,               
-    Bpn(String),        
-    Ms(String, Option<String>), 
+    Tag(String),           
+    Class(String),         
+    Id(String),            
+    Universal,             
+    Descendant,            
+    Child,                 
+    Adjacent,              
+    Sibling,               
+    Pseudo(String),        
+    Attribute(String, Option<String>), 
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Sa {
-    pub jki: String,
-    pub bn: CssValue,
-    pub flg: bool,
+pub struct Ho {
+    pub property: String,
+    pub value: CssValue,
+    pub ckz: bool,
 }
 
 
 #[derive(Debug, Clone)]
 pub enum CssValue {
-    Bx(String),              
+    Keyword(String),              
     Color(u32),                   
-    Acp(f32, LengthUnit),      
-    L(f32),                  
+    Length(f32, LengthUnit),      
+    Number(f32),                  
     String(String),               
     Url(String),                  
-    Cho(Vec<CssValue>),      
+    Multiple(Vec<CssValue>),      
 }
 
 
 #[derive(Debug, Clone, Copy)]
 pub enum LengthUnit {
-    Cjc,     
-    Cbp,     
+    Px,     
+    Em,     
     Rem,    
-    Qk,
-    Cpx,     
-    Cpj,     
-    Cjb,     
+    Percent,
+    Vw,     
+    Vh,     
+    Pt,     
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Bzx {
+pub struct Ahz {
     pub display: Display,
-    pub s: u32,
-    pub cdb: u32,
-    pub asv: f32,
-    pub svn: FontWeight,
-    pub svm: FontStyle,
-    pub xft: TextDecoration,
-    pub xfp: TextAlign,
-    pub adf: EdgeSizes,
-    pub ob: EdgeSizes,
-    pub dek: EdgeSizes,
-    pub aia: u32,
-    pub avh: f32,
-    pub z: Option<f32>,
-    pub ac: Option<f32>,
-    pub dtb: Option<f32>,
-    pub czx: Option<f32>,
-    pub acg: f32,
-    pub adh: f32,
-    pub lrg: Overflow,
-    pub qf: Position,
-    pub xuj: WhiteSpace,
-    pub xvb: WordBreak,
-    pub gi: CursorStyle,
-    pub qrp: Option<Bys>,
-    pub xgc: TextTransform,
-    pub uec: f32,
-    pub ufw: ListStyleType,
+    pub color: u32,
+    pub background_color: u32,
+    pub font_size: f32,
+    pub font_weight: FontWeight,
+    pub font_style: FontStyle,
+    pub text_decoration: TextDecoration,
+    pub text_align: TextAlign,
+    pub oq: EdgeSizes,
+    pub padding: EdgeSizes,
+    pub border_width: EdgeSizes,
+    pub ri: u32,
+    pub border_radius: f32,
+    pub width: Option<f32>,
+    pub height: Option<f32>,
+    pub max_width: Option<f32>,
+    pub min_width: Option<f32>,
+    pub line_height: f32,
+    pub opacity: f32,
+    pub overflow: Overflow,
+    pub position: Position,
+    pub white_space: WhiteSpace,
+    pub word_break: WordBreak,
+    pub cursor: CursorStyle,
+    pub box_shadow: Option<Aho>,
+    pub text_transform: TextTransform,
+    pub letter_spacing: f32,
+    pub list_style_type: ListStyleType,
 }
 
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Overflow {
-    Cpn,
-    Cyi,
-    Yq,
-    Api,
+    Visible,
+    Hidden,
+    Scroll,
+    Auto,
 }
 
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Position {
-    Cnj,
-    Dfv,
-    Cri,
-    Cxd,
-    Diy,
+    Static,
+    Relative,
+    Absolute,
+    Fixed,
+    Sticky,
 }
 
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum WhiteSpace {
-    M,
-    Dde,
-    Des,
-    Deu,
-    Det,
+    Normal,
+    Nowrap,
+    Pre,
+    PreWrap,
+    PreLine,
 }
 
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum WordBreak {
-    M,
-    Csf,
-    Das,
-    Csg,
+    Normal,
+    BreakAll,
+    KeepAll,
+    BreakWord,
 }
 
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CursorStyle {
     Default,
-    Del,
+    Pointer,
     Text,
-    Fw,
-    Ddc,
-    Bdw,
-    Bwm,
+    Move,
+    NotAllowed,
+    Crosshair,
+    Wait,
 }
 
 
 #[derive(Debug, Clone, Copy)]
-pub struct Bys {
-    pub dtw: f32,
-    pub dtx: f32,
-    pub cou: f32,
-    pub eyw: f32,
-    pub s: u32,
+pub struct Aho {
+    pub bny: f32,
+    pub bnz: f32,
+    pub awi: f32,
+    pub cdv: f32,
+    pub color: u32,
 }
 
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TextTransform {
     None,
-    Dkt,
-    Dbk,
-    Css,
+    Uppercase,
+    Lowercase,
+    Capitalize,
 }
 
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ListStyleType {
-    Cax,
+    Disc,
     Circle,
-    Gb,
-    Aay,
+    Square,
+    Decimal,
     None,
 }
 
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Display {
-    Dj,
-    Aug,
-    Czt,
+    Bl,
+    Inline,
+    InlineBlock,
     None,
-    Cxe,
-    Pn,
+    Flex,
+    Grid,
 }
 
 
 #[derive(Debug, Clone, Copy)]
 pub enum FontWeight {
-    M,
-    Csd,
-    Ddf(u16), 
+    Normal,
+    Bold,
+    Numeric(u16), 
 }
 
 
 #[derive(Debug, Clone, Copy)]
 pub enum FontStyle {
-    M,
-    Dag,
-    Ddl,
+    Normal,
+    Italic,
+    Oblique,
 }
 
 
 #[derive(Debug, Clone, Copy)]
 pub enum TextDecoration {
     None,
-    Dkq,
-    Ddn,
-    Dbh,
+    Underline,
+    Overline,
+    LineThrough,
 }
 
 
 #[derive(Debug, Clone, Copy)]
 pub enum TextAlign {
-    Ap,
-    Ca,
-    Eo,
-    Dam,
+    Left,
+    Right,
+    Center,
+    Justify,
 }
 
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct EdgeSizes {
-    pub qc: f32,
-    pub hw: f32,
-    pub abm: f32,
-    pub fd: f32,
+    pub top: f32,
+    pub right: f32,
+    pub bottom: f32,
+    pub left: f32,
 }
 
-impl Default for Bzx {
+impl Default for Ahz {
     fn default() -> Self {
         Self {
-            display: Display::Dj,
-            s: 0xFF000000,
-            cdb: 0x00000000,
-            asv: 16.0,
-            svn: FontWeight::M,
-            svm: FontStyle::M,
-            xft: TextDecoration::None,
-            xfp: TextAlign::Ap,
-            adf: EdgeSizes::default(),
-            ob: EdgeSizes::default(),
-            dek: EdgeSizes::default(),
-            aia: 0xFF000000,
-            avh: 0.0,
-            z: None,
-            ac: None,
-            dtb: None,
-            czx: None,
-            acg: 1.2,
-            adh: 1.0,
-            lrg: Overflow::Cpn,
-            qf: Position::Cnj,
-            xuj: WhiteSpace::M,
-            xvb: WordBreak::M,
-            gi: CursorStyle::Default,
-            qrp: None,
-            xgc: TextTransform::None,
-            uec: 0.0,
-            ufw: ListStyleType::Cax,
+            display: Display::Bl,
+            color: 0xFF000000,
+            background_color: 0x00000000,
+            font_size: 16.0,
+            font_weight: FontWeight::Normal,
+            font_style: FontStyle::Normal,
+            text_decoration: TextDecoration::None,
+            text_align: TextAlign::Left,
+            oq: EdgeSizes::default(),
+            padding: EdgeSizes::default(),
+            border_width: EdgeSizes::default(),
+            ri: 0xFF000000,
+            border_radius: 0.0,
+            width: None,
+            height: None,
+            max_width: None,
+            min_width: None,
+            line_height: 1.2,
+            opacity: 1.0,
+            overflow: Overflow::Visible,
+            position: Position::Static,
+            white_space: WhiteSpace::Normal,
+            word_break: WordBreak::Normal,
+            cursor: CursorStyle::Default,
+            box_shadow: None,
+            text_transform: TextTransform::None,
+            letter_spacing: 0.0,
+            list_style_type: ListStyleType::Disc,
         }
     }
 }
 
 
-pub fn lsx(eoe: &str) -> Mj {
-    let mut parser = CssParser::new(eoe);
-    parser.lsx()
+pub fn parse_stylesheet(blj: &str) -> Fd {
+    let mut parser = CssParser::new(blj);
+    parser.parse_stylesheet()
 }
 
 
-pub fn vcr(amx: &str) -> Vec<Sa> {
-    let mut parser = CssParser::new(amx);
-    parser.oue()
+pub fn nqq(style: &str) -> Vec<Ho> {
+    let mut parser = CssParser::new(style);
+    parser.parse_declarations()
 }
 
 
-pub fn clt(bn: &str) -> Option<u32> {
-    let bn = bn.em().aqn();
+pub fn aul(value: &str) -> Option<u32> {
+    let value = value.trim().to_lowercase();
     
     
-    match bn.as_str() {
+    match value.as_str() {
         "aliceblue" => return Some(0xFFF0F8FF),
         "antiquewhite" => return Some(0xFFFAEBD7),
         "aqua" => return Some(0xFF00FFFF),
@@ -438,79 +438,79 @@ pub fn clt(bn: &str) -> Option<u32> {
     }
     
     
-    if bn.cj('#') {
-        let nu = &bn[1..];
-        return match nu.len() {
+    if value.starts_with('#') {
+        let ga = &value[1..];
+        return match ga.len() {
             3 => {
-                let m = u8::wa(&nu[0..1], 16).bq()?;
-                let at = u8::wa(&nu[1..2], 16).bq()?;
-                let o = u8::wa(&nu[2..3], 16).bq()?;
-                Some(0xFF000000 | ((m as u32 * 17) << 16) | ((at as u32 * 17) << 8) | (o as u32 * 17))
+                let r = u8::from_str_radix(&ga[0..1], 16).ok()?;
+                let g = u8::from_str_radix(&ga[1..2], 16).ok()?;
+                let b = u8::from_str_radix(&ga[2..3], 16).ok()?;
+                Some(0xFF000000 | ((r as u32 * 17) << 16) | ((g as u32 * 17) << 8) | (b as u32 * 17))
             }
             4 => {
                 
-                let m = u8::wa(&nu[0..1], 16).bq()?;
-                let at = u8::wa(&nu[1..2], 16).bq()?;
-                let o = u8::wa(&nu[2..3], 16).bq()?;
-                let q = u8::wa(&nu[3..4], 16).bq()?;
-                Some(((q as u32 * 17) << 24) | ((m as u32 * 17) << 16) | ((at as u32 * 17) << 8) | (o as u32 * 17))
+                let r = u8::from_str_radix(&ga[0..1], 16).ok()?;
+                let g = u8::from_str_radix(&ga[1..2], 16).ok()?;
+                let b = u8::from_str_radix(&ga[2..3], 16).ok()?;
+                let a = u8::from_str_radix(&ga[3..4], 16).ok()?;
+                Some(((a as u32 * 17) << 24) | ((r as u32 * 17) << 16) | ((g as u32 * 17) << 8) | (b as u32 * 17))
             }
             6 => {
-                let m = u8::wa(&nu[0..2], 16).bq()?;
-                let at = u8::wa(&nu[2..4], 16).bq()?;
-                let o = u8::wa(&nu[4..6], 16).bq()?;
-                Some(0xFF000000 | ((m as u32) << 16) | ((at as u32) << 8) | (o as u32))
+                let r = u8::from_str_radix(&ga[0..2], 16).ok()?;
+                let g = u8::from_str_radix(&ga[2..4], 16).ok()?;
+                let b = u8::from_str_radix(&ga[4..6], 16).ok()?;
+                Some(0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32))
             }
             8 => {
-                let m = u8::wa(&nu[0..2], 16).bq()?;
-                let at = u8::wa(&nu[2..4], 16).bq()?;
-                let o = u8::wa(&nu[4..6], 16).bq()?;
-                let q = u8::wa(&nu[6..8], 16).bq()?;
-                Some(((q as u32) << 24) | ((m as u32) << 16) | ((at as u32) << 8) | (o as u32))
+                let r = u8::from_str_radix(&ga[0..2], 16).ok()?;
+                let g = u8::from_str_radix(&ga[2..4], 16).ok()?;
+                let b = u8::from_str_radix(&ga[4..6], 16).ok()?;
+                let a = u8::from_str_radix(&ga[6..8], 16).ok()?;
+                Some(((a as u32) << 24) | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32))
             }
             _ => None,
         };
     }
     
     
-    if bn.cj("rgb") {
-        let ay = bn.du('(')?;
-        let ci = bn.du(')')?;
-        let ff = &bn[ay + 1..ci];
-        let ek: Vec<&str> = ff.adk(',').collect();
+    if value.starts_with("rgb") {
+        let start = value.find('(')?;
+        let end = value.find(')')?;
+        let inner = &value[start + 1..end];
+        let au: Vec<&str> = inner.split(',').collect();
         
-        if ek.len() >= 3 {
-            let m: u8 = ek[0].em().parse().bq()?;
-            let at: u8 = ek[1].em().parse().bq()?;
-            let o: u8 = ek[2].em().parse().bq()?;
-            let q: u8 = if ek.len() >= 4 {
-                let dw: f32 = ek[3].em().parse().bq()?;
-                (dw * 255.0) as u8
+        if au.len() >= 3 {
+            let r: u8 = au[0].trim().parse().ok()?;
+            let g: u8 = au[1].trim().parse().ok()?;
+            let b: u8 = au[2].trim().parse().ok()?;
+            let a: u8 = if au.len() >= 4 {
+                let alpha: f32 = au[3].trim().parse().ok()?;
+                (alpha * 255.0) as u8
             } else {
                 255
             };
-            return Some(((q as u32) << 24) | ((m as u32) << 16) | ((at as u32) << 8) | (o as u32));
+            return Some(((a as u32) << 24) | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32));
         }
     }
     
     
-    if bn.cj("hsl") {
-        let ay = bn.du('(')?;
-        let ci = bn.du(')')?;
-        let ff = &bn[ay + 1..ci];
-        let ek: Vec<&str> = ff.adk(',').collect();
-        if ek.len() >= 3 {
-            let i: f32 = ek[0].em().bdd("deg").parse::<f32>().bq()?;
-            let e: f32 = ek[1].em().bdd('%').parse::<f32>().bq()? / 100.0;
-            let dm: f32 = ek[2].em().bdd('%').parse::<f32>().bq()? / 100.0;
-            let q: f32 = if ek.len() >= 4 {
-                ek[3].em().parse::<f32>().bq()?
+    if value.starts_with("hsl") {
+        let start = value.find('(')?;
+        let end = value.find(')')?;
+        let inner = &value[start + 1..end];
+        let au: Vec<&str> = inner.split(',').collect();
+        if au.len() >= 3 {
+            let h: f32 = au[0].trim().trim_end_matches("deg").parse::<f32>().ok()?;
+            let j: f32 = au[1].trim().trim_end_matches('%').parse::<f32>().ok()? / 100.0;
+            let l: f32 = au[2].trim().trim_end_matches('%').parse::<f32>().ok()? / 100.0;
+            let a: f32 = if au.len() >= 4 {
+                au[3].trim().parse::<f32>().ok()?
             } else {
                 1.0
             };
-            let (m, at, o) = tqm(i, e, dm);
-            let dw = (q * 255.0) as u8;
-            return Some(((dw as u32) << 24) | ((m as u32) << 16) | ((at as u32) << 8) | (o as u32));
+            let (r, g, b) = mmo(h, j, l);
+            let alpha = (a * 255.0) as u8;
+            return Some(((alpha as u32) << 24) | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32));
         }
     }
     
@@ -518,247 +518,247 @@ pub fn clt(bn: &str) -> Option<u32> {
 }
 
 
-fn tqm(i: f32, e: f32, dm: f32) -> (u8, u8, u8) {
-    if e == 0.0 {
-        let p = (dm * 255.0) as u8;
-        return (p, p, p);
+fn mmo(h: f32, j: f32, l: f32) -> (u8, u8, u8) {
+    if j == 0.0 {
+        let v = (l * 255.0) as u8;
+        return (v, v, v);
     }
-    let aya = ((i % 360.0) + 360.0) % 360.0 / 360.0;
-    let fm = if dm < 0.5 { dm * (1.0 + e) } else { dm + e - dm * e };
-    let ai = 2.0 * dm - fm;
-    let m = lcv(ai, fm, aya + 1.0 / 3.0);
-    let at = lcv(ai, fm, aya);
-    let o = lcv(ai, fm, aya - 1.0 / 3.0);
-    ((m * 255.0) as u8, (at * 255.0) as u8, (o * 255.0) as u8)
+    let zz = ((h % 360.0) + 360.0) % 360.0 / 360.0;
+    let q = if l < 0.5 { l * (1.0 + j) } else { l + j - l * j };
+    let aa = 2.0 * l - q;
+    let r = gbg(aa, q, zz + 1.0 / 3.0);
+    let g = gbg(aa, q, zz);
+    let b = gbg(aa, q, zz - 1.0 / 3.0);
+    ((r * 255.0) as u8, (g * 255.0) as u8, (b * 255.0) as u8)
 }
 
-fn lcv(ai: f32, fm: f32, mut ab: f32) -> f32 {
-    if ab < 0.0 { ab += 1.0; }
-    if ab > 1.0 { ab -= 1.0; }
-    if ab < 1.0 / 6.0 { return ai + (fm - ai) * 6.0 * ab; }
-    if ab < 1.0 / 2.0 { return fm; }
-    if ab < 2.0 / 3.0 { return ai + (fm - ai) * (2.0 / 3.0 - ab) * 6.0; }
-    ai
+fn gbg(aa: f32, q: f32, mut t: f32) -> f32 {
+    if t < 0.0 { t += 1.0; }
+    if t > 1.0 { t -= 1.0; }
+    if t < 1.0 / 6.0 { return aa + (q - aa) * 6.0 * t; }
+    if t < 1.0 / 2.0 { return q; }
+    if t < 2.0 / 3.0 { return aa + (q - aa) * (2.0 / 3.0 - t) * 6.0; }
+    aa
 }
 
 
 struct CssParser<'a> {
     input: &'a str,
-    u: usize,
+    pos: usize,
 }
 
 impl<'a> CssParser<'a> {
     fn new(input: &'a str) -> Self {
-        Self { input, u: 0 }
+        Self { input, pos: 0 }
     }
     
-    fn lsx(&mut self) -> Mj {
-        let mut bib = Vec::new();
+    fn parse_stylesheet(&mut self) -> Fd {
+        let mut rules = Vec::new();
         
         loop {
-            self.wpj();
-            if self.u >= self.input.len() {
+            self.skip_whitespace_and_comments();
+            if self.pos >= self.input.len() {
                 break;
             }
             
             
-            if self.asp() == Some('@') {
-                self.wpf();
+            if self.current_char() == Some('@') {
+                self.skip_at_rule();
                 continue;
             }
             
-            if let Some(agu) = self.vdl() {
-                bib.push(agu);
+            if let Some(qo) = self.parse_rule() {
+                rules.push(qo);
             }
         }
         
-        Mj { bib }
+        Fd { rules }
     }
     
-    fn vdl(&mut self) -> Option<Aqj> {
-        let fud = self.vdp();
-        if fud.is_empty() {
+    fn parse_rule(&mut self) -> Option<Rm> {
+        let selectors = self.parse_selectors();
+        if selectors.is_empty() {
             return None;
         }
         
-        self.ayr();
-        if !self.cwp('{') {
+        self.skip_whitespace();
+        if !self.consume_char('{') {
             return None;
         }
         
-        let dps = self.oue();
+        let declarations = self.parse_declarations();
         
-        self.ayr();
-        self.cwp('}');
+        self.skip_whitespace();
+        self.consume_char('}');
         
-        Some(Aqj { fud, dps })
+        Some(Rm { selectors, declarations })
     }
     
-    fn vdp(&mut self) -> Vec<Yt> {
-        let mut fud = Vec::new();
+    fn parse_selectors(&mut self) -> Vec<Kq> {
+        let mut selectors = Vec::new();
         
         loop {
-            self.ayr();
-            if let Some(bof) = self.vdo() {
-                fud.push(bof);
+            self.skip_whitespace();
+            if let Some(selector) = self.parse_selector() {
+                selectors.push(selector);
             }
             
-            self.ayr();
-            if !self.cwp(',') {
+            self.skip_whitespace();
+            if !self.consume_char(',') {
                 break;
             }
         }
         
-        fud
+        selectors
     }
     
-    fn vdo(&mut self) -> Option<Yt> {
-        let mut bgw = Vec::new();
+    fn parse_selector(&mut self) -> Option<Kq> {
+        let mut elements = Vec::new();
         
         loop {
-            self.ayr();
+            self.skip_whitespace();
             
-            match self.asp()? {
+            match self.current_char()? {
                 '{' | ',' => break,
                 '*' => {
-                    self.u += 1;
-                    bgw.push(SelectorPart::Bvi);
+                    self.pos += 1;
+                    elements.push(SelectorPart::Universal);
                 }
                 '.' => {
-                    self.u += 1;
-                    let class = self.ege();
-                    bgw.push(SelectorPart::Bdo(class));
+                    self.pos += 1;
+                    let class = self.parse_identifier();
+                    elements.push(SelectorPart::Class(class));
                 }
                 '#' => {
-                    self.u += 1;
-                    let ad = self.ege();
-                    bgw.push(SelectorPart::Bjj(ad));
+                    self.pos += 1;
+                    let id = self.parse_identifier();
+                    elements.push(SelectorPart::Id(id));
                 }
                 ':' => {
-                    self.u += 1;
-                    if self.asp() == Some(':') {
-                        self.u += 1; 
+                    self.pos += 1;
+                    if self.current_char() == Some(':') {
+                        self.pos += 1; 
                     }
-                    let dkw = self.ege();
-                    bgw.push(SelectorPart::Bpn(dkw));
+                    let bit = self.parse_identifier();
+                    elements.push(SelectorPart::Pseudo(bit));
                 }
                 '[' => {
-                    self.u += 1;
-                    let qn = self.vbu();
-                    bgw.push(qn);
+                    self.pos += 1;
+                    let attr = self.parse_attribute_selector();
+                    elements.push(attr);
                 }
                 '>' => {
-                    self.u += 1;
-                    bgw.push(SelectorPart::Bdm);
+                    self.pos += 1;
+                    elements.push(SelectorPart::Child);
                 }
                 '+' => {
-                    self.u += 1;
-                    bgw.push(SelectorPart::Bbm);
+                    self.pos += 1;
+                    elements.push(SelectorPart::Adjacent);
                 }
                 '~' => {
-                    self.u += 1;
-                    bgw.push(SelectorPart::Bst);
+                    self.pos += 1;
+                    elements.push(SelectorPart::Sibling);
                 }
-                r if r.jaz() || r == '-' || r == '_' => {
-                    let ll = self.ege();
-                    bgw.push(SelectorPart::Azr(ll));
+                c if c.is_alphabetic() || c == '-' || c == '_' => {
+                    let tag = self.parse_identifier();
+                    elements.push(SelectorPart::Tag(tag));
                 }
                 _ => break,
             }
         }
         
-        if bgw.is_empty() {
+        if elements.is_empty() {
             None
         } else {
-            Some(Yt { bgw })
+            Some(Kq { elements })
         }
     }
     
-    fn vbu(&mut self) -> SelectorPart {
-        let mwr = self.ege();
-        self.ayr();
+    fn parse_attribute_selector(&mut self) -> SelectorPart {
+        let hfx = self.parse_identifier();
+        self.skip_whitespace();
         
-        if self.cwp(']') {
-            return SelectorPart::Ms(mwr, None);
+        if self.consume_char(']') {
+            return SelectorPart::Attribute(hfx, None);
         }
         
         
-        while let Some(r) = self.asp() {
-            if r == '"' || r == '\'' || r.etb() {
+        while let Some(c) = self.current_char() {
+            if c == '"' || c == '\'' || c.is_alphanumeric() {
                 break;
             }
-            self.u += 1;
+            self.pos += 1;
         }
         
-        let bn = self.vdv();
-        self.ayr();
-        self.cwp(']');
+        let value = self.parse_string_or_ident();
+        self.skip_whitespace();
+        self.consume_char(']');
         
-        SelectorPart::Ms(mwr, Some(bn))
+        SelectorPart::Attribute(hfx, Some(value))
     }
     
-    fn oue(&mut self) -> Vec<Sa> {
-        let mut dps = Vec::new();
+    fn parse_declarations(&mut self) -> Vec<Ho> {
+        let mut declarations = Vec::new();
         
         loop {
-            self.ayr();
+            self.skip_whitespace();
             
-            if self.asp() == Some('}') || self.u >= self.input.len() {
+            if self.current_char() == Some('}') || self.pos >= self.input.len() {
                 break;
             }
             
-            if let Some(aqy) = self.vcc() {
-                dps.push(aqy);
+            if let Some(decl) = self.parse_declaration() {
+                declarations.push(decl);
             }
             
-            self.ayr();
-            self.cwp(';');
+            self.skip_whitespace();
+            self.consume_char(';');
         }
         
-        dps
+        declarations
     }
     
-    fn vcc(&mut self) -> Option<Sa> {
-        self.ayr();
+    fn parse_declaration(&mut self) -> Option<Ho> {
+        self.skip_whitespace();
         
-        let jki = self.ege();
-        if jki.is_empty() {
+        let property = self.parse_identifier();
+        if property.is_empty() {
             return None;
         }
         
-        self.ayr();
-        if !self.cwp(':') {
+        self.skip_whitespace();
+        if !self.consume_char(':') {
             return None;
         }
         
-        self.ayr();
-        let (bn, flg) = self.vek();
+        self.skip_whitespace();
+        let (value, ckz) = self.parse_value();
         
-        Some(Sa { jki, bn, flg })
+        Some(Ho { property, value, ckz })
     }
     
-    fn vek(&mut self) -> (CssValue, bool) {
-        self.ayr();
+    fn parse_value(&mut self) -> (CssValue, bool) {
+        self.skip_whitespace();
         
-        let mut alv = Vec::new();
-        let mut flg = false;
+        let mut values = Vec::new();
+        let mut ckz = false;
         
         loop {
-            self.ayr();
+            self.skip_whitespace();
             
-            match self.asp() {
+            match self.current_char() {
                 None | Some(';') | Some('}') => break,
                 Some('!') => {
-                    self.u += 1;
-                    let od = self.ege();
-                    if od == "important" {
-                        flg = true;
+                    self.pos += 1;
+                    let fx = self.parse_identifier();
+                    if fx == "important" {
+                        ckz = true;
                     }
                     break;
                 }
                 Some(_) => {
-                    if let Some(p) = self.vds() {
-                        alv.push(p);
+                    if let Some(v) = self.parse_single_value() {
+                        values.push(v);
                     } else {
                         break;
                     }
@@ -766,206 +766,207 @@ impl<'a> CssParser<'a> {
             }
         }
         
-        let bn = if alv.len() == 1 {
-            alv.dse().next().unwrap()
+        let value = if values.len() == 1 {
+            
+            values.into_iter().next().unwrap_or(CssValue::Keyword(String::new()))
         } else {
-            CssValue::Cho(alv)
+            CssValue::Multiple(values)
         };
         
-        (bn, flg)
+        (value, ckz)
     }
     
-    fn vds(&mut self) -> Option<CssValue> {
-        self.ayr();
+    fn parse_single_value(&mut self) -> Option<CssValue> {
+        self.skip_whitespace();
         
-        match self.asp()? {
+        match self.current_char()? {
             '#' => {
                 
-                let ay = self.u;
-                self.u += 1;
-                while let Some(r) = self.asp() {
-                    if r.ofp() {
-                        self.u += 1;
+                let start = self.pos;
+                self.pos += 1;
+                while let Some(c) = self.current_char() {
+                    if c.is_ascii_hexdigit() {
+                        self.pos += 1;
                     } else {
                         break;
                     }
                 }
-                let kjx = &self.input[ay..self.u];
-                if let Some(s) = clt(kjx) {
-                    Some(CssValue::Color(s))
+                let fnu = &self.input[start..self.pos];
+                if let Some(color) = aul(fnu) {
+                    Some(CssValue::Color(color))
                 } else {
                     None
                 }
             }
             '"' | '\'' => {
                 
-                let e = self.lsv();
-                Some(CssValue::String(e))
+                let j = self.parse_quoted_string();
+                Some(CssValue::String(j))
             }
-            r if r.atb() || r == '-' || r == '.' => {
+            c if c.is_ascii_digit() || c == '-' || c == '.' => {
                 
-                let (num, ifv) = self.vcy();
-                if let Some(ifv) = ifv {
-                    Some(CssValue::Acp(num, ifv))
+                let (num, edh) = self.parse_number_with_unit();
+                if let Some(edh) = edh {
+                    Some(CssValue::Length(num, edh))
                 } else {
-                    Some(CssValue::L(num))
+                    Some(CssValue::Number(num))
                 }
             }
-            r if r.jaz() => {
-                let ay = self.u;
-                let od = self.ege();
+            c if c.is_alphabetic() => {
+                let start = self.pos;
+                let fx = self.parse_identifier();
                 
                 
-                if od == "url" && self.cwp('(') {
-                    self.ayr();
-                    let url = if self.asp() == Some('"') || self.asp() == Some('\'') {
-                        self.lsv()
+                if fx == "url" && self.consume_char('(') {
+                    self.skip_whitespace();
+                    let url = if self.current_char() == Some('"') || self.current_char() == Some('\'') {
+                        self.parse_quoted_string()
                     } else {
-                        let ay = self.u;
-                        while let Some(r) = self.asp() {
-                            if r == ')' { break; }
-                            self.u += 1;
+                        let start = self.pos;
+                        while let Some(c) = self.current_char() {
+                            if c == ')' { break; }
+                            self.pos += 1;
                         }
-                        self.input[ay..self.u].to_string()
+                        self.input[start..self.pos].to_string()
                     };
-                    self.ayr();
-                    self.cwp(')');
+                    self.skip_whitespace();
+                    self.consume_char(')');
                     return Some(CssValue::Url(url));
                 }
                 
                 
-                if let Some(s) = clt(&od) {
-                    return Some(CssValue::Color(s));
+                if let Some(color) = aul(&fx) {
+                    return Some(CssValue::Color(color));
                 }
                 
                 
-                if (od == "rgb" || od == "rgba") && self.cwp('(') {
-                    let szi = ay;
-                    while let Some(r) = self.asp() {
-                        if r == ')' { break; }
-                        self.u += 1;
+                if (fx == "rgb" || fx == "rgba") && self.consume_char('(') {
+                    let mam = start;
+                    while let Some(c) = self.current_char() {
+                        if c == ')' { break; }
+                        self.pos += 1;
                     }
-                    self.cwp(')');
-                    let szj = &self.input[szi..self.u];
-                    if let Some(s) = clt(szj) {
-                        return Some(CssValue::Color(s));
+                    self.consume_char(')');
+                    let man = &self.input[mam..self.pos];
+                    if let Some(color) = aul(man) {
+                        return Some(CssValue::Color(color));
                     }
                 }
                 
-                Some(CssValue::Bx(od))
+                Some(CssValue::Keyword(fx))
             }
             _ => None,
         }
     }
     
-    fn vcy(&mut self) -> (f32, Option<LengthUnit>) {
-        let ay = self.u;
+    fn parse_number_with_unit(&mut self) -> (f32, Option<LengthUnit>) {
+        let start = self.pos;
         
         
-        if self.asp() == Some('-') {
-            self.u += 1;
+        if self.current_char() == Some('-') {
+            self.pos += 1;
         }
         
         
-        while let Some(r) = self.asp() {
-            if r.atb() || r == '.' {
-                self.u += 1;
+        while let Some(c) = self.current_char() {
+            if c.is_ascii_digit() || c == '.' {
+                self.pos += 1;
             } else {
                 break;
             }
         }
         
-        let ajh = &self.input[ay..self.u];
-        let num: f32 = ajh.parse().unwrap_or(0.0);
+        let rw = &self.input[start..self.pos];
+        let num: f32 = rw.parse().unwrap_or(0.0);
         
         
-        let xoe = self.u;
-        while let Some(r) = self.asp() {
-            if r.jaz() || r == '%' {
-                self.u += 1;
+        let ppp = self.pos;
+        while let Some(c) = self.current_char() {
+            if c.is_alphabetic() || c == '%' {
+                self.pos += 1;
             } else {
                 break;
             }
         }
         
-        let xof = &self.input[xoe..self.u];
-        let ifv = match xof {
-            "px" => Some(LengthUnit::Cjc),
-            "em" => Some(LengthUnit::Cbp),
+        let ppq = &self.input[ppp..self.pos];
+        let edh = match ppq {
+            "px" => Some(LengthUnit::Px),
+            "em" => Some(LengthUnit::Em),
             "rem" => Some(LengthUnit::Rem),
-            "%" => Some(LengthUnit::Qk),
-            "vw" => Some(LengthUnit::Cpx),
-            "vh" => Some(LengthUnit::Cpj),
-            "pt" => Some(LengthUnit::Cjb),
+            "%" => Some(LengthUnit::Percent),
+            "vw" => Some(LengthUnit::Vw),
+            "vh" => Some(LengthUnit::Vh),
+            "pt" => Some(LengthUnit::Pt),
             "" => None,
             _ => None,
         };
         
-        (num, ifv)
+        (num, edh)
     }
     
-    fn ege(&mut self) -> String {
-        let ay = self.u;
-        while let Some(r) = self.asp() {
-            if r.etb() || r == '-' || r == '_' {
-                self.u += 1;
+    fn parse_identifier(&mut self) -> String {
+        let start = self.pos;
+        while let Some(c) = self.current_char() {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                self.pos += 1;
             } else {
                 break;
             }
         }
-        self.input[ay..self.u].to_string()
+        self.input[start..self.pos].to_string()
     }
     
-    fn lsv(&mut self) -> String {
-        let cgw = self.asp().unwrap_or('"');
-        self.u += 1;
+    fn parse_quoted_string(&mut self) -> String {
+        let arw = self.current_char().unwrap_or('"');
+        self.pos += 1;
         
-        let ay = self.u;
-        while let Some(r) = self.asp() {
-            if r == cgw {
+        let start = self.pos;
+        while let Some(c) = self.current_char() {
+            if c == arw {
                 break;
             }
-            if r == '\\' {
-                self.u += 2; 
+            if c == '\\' {
+                self.pos += 2; 
             } else {
-                self.u += 1;
+                self.pos += 1;
             }
         }
-        let e = self.input[ay..self.u].to_string();
-        self.cwp(cgw);
-        e
+        let j = self.input[start..self.pos].to_string();
+        self.consume_char(arw);
+        j
     }
     
-    fn vdv(&mut self) -> String {
-        match self.asp() {
-            Some('"') | Some('\'') => self.lsv(),
-            _ => self.ege(),
+    fn parse_string_or_ident(&mut self) -> String {
+        match self.current_char() {
+            Some('"') | Some('\'') => self.parse_quoted_string(),
+            _ => self.parse_identifier(),
         }
     }
     
-    fn ayr(&mut self) {
-        while let Some(r) = self.asp() {
-            if r.fme() {
-                self.u += 1;
+    fn skip_whitespace(&mut self) {
+        while let Some(c) = self.current_char() {
+            if c.is_whitespace() {
+                self.pos += 1;
             } else {
                 break;
             }
         }
     }
     
-    fn wpj(&mut self) {
+    fn skip_whitespace_and_comments(&mut self) {
         loop {
-            self.ayr();
+            self.skip_whitespace();
             
-            if self.cj("/*") {
+            if self.starts_with("/*") {
                 
-                self.u += 2;
-                while self.u < self.input.len() {
-                    if self.cj("*/") {
-                        self.u += 2;
+                self.pos += 2;
+                while self.pos < self.input.len() {
+                    if self.starts_with("*/") {
+                        self.pos += 2;
                         break;
                     }
-                    self.u += 1;
+                    self.pos += 1;
                 }
             } else {
                 break;
@@ -973,42 +974,42 @@ impl<'a> CssParser<'a> {
         }
     }
     
-    fn wpf(&mut self) {
+    fn skip_at_rule(&mut self) {
         
-        while let Some(r) = self.asp() {
-            if r == ';' {
-                self.u += 1;
+        while let Some(c) = self.current_char() {
+            if c == ';' {
+                self.pos += 1;
                 break;
             }
-            if r == '{' {
+            if c == '{' {
                 
-                let mut eo = 1;
-                self.u += 1;
-                while self.u < self.input.len() && eo > 0 {
-                    match self.input.bw().goc(self.u) {
-                        Some('{') => eo += 1,
-                        Some('}') => eo -= 1,
+                let mut depth = 1;
+                self.pos += 1;
+                while self.pos < self.input.len() && depth > 0 {
+                    match self.input.chars().nth(self.pos) {
+                        Some('{') => depth += 1,
+                        Some('}') => depth -= 1,
                         _ => {}
                     }
-                    self.u += 1;
+                    self.pos += 1;
                 }
                 break;
             }
-            self.u += 1;
+            self.pos += 1;
         }
     }
     
-    fn asp(&self) -> Option<char> {
-        self.input.bw().goc(self.u)
+    fn current_char(&self) -> Option<char> {
+        self.input.chars().nth(self.pos)
     }
     
-    fn cj(&self, e: &str) -> bool {
-        self.input[self.u..].cj(e)
+    fn starts_with(&self, j: &str) -> bool {
+        self.input[self.pos..].starts_with(j)
     }
     
-    fn cwp(&mut self, qy: char) -> bool {
-        if self.asp() == Some(qy) {
-            self.u += 1;
+    fn consume_char(&mut self, expected: char) -> bool {
+        if self.current_char() == Some(expected) {
+            self.pos += 1;
             true
         } else {
             false
@@ -1021,11 +1022,11 @@ mod tests {
     use super::*;
     
     #[test]
-    fn xea() {
-        assert_eq!(clt("#fff"), Some(0xFFFFFFFF));
-        assert_eq!(clt("#000"), Some(0xFF000000));
-        assert_eq!(clt("#ff0000"), Some(0xFFFF0000));
-        assert_eq!(clt("red"), Some(0xFFFF0000));
-        assert_eq!(clt("transparent"), Some(0x00000000));
+    fn pgk() {
+        assert_eq!(aul("#fff"), Some(0xFFFFFFFF));
+        assert_eq!(aul("#000"), Some(0xFF000000));
+        assert_eq!(aul("#ff0000"), Some(0xFFFF0000));
+        assert_eq!(aul("red"), Some(0xFFFF0000));
+        assert_eq!(aul("transparent"), Some(0x00000000));
     }
 }

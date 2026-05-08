@@ -383,18 +383,18 @@ unsafe {
 
                 // Correspondance de motifs — branchement exhaustif de Rust.
 match (vm_result, native_result) {
-            (Ok(_vm_out), Ok(native_value)) => {
+            (Ok(_vm_out), Ok(native_val)) => {
                 // The VM returns output string, not i64. We compare what we can.
                 details.push_str(&format!(
                     "  \x1b[32mMATCH\x1b[0m {} -- native={}\n",
-                    name, native_value
+                    name, native_val
                 ));
                 passed += 1;
             }
-            (Err(vm_e), Ok(native_value)) => {
+            (Err(vm_e), Ok(native_val)) => {
                 details.push_str(&format!(
                     "  \x1b[33mWARN\x1b[0m {} -- VM err: {}, native={}\n",
-                    name, vm_e, native_value
+                    name, vm_e, native_val
                 ));
             }
             (_, Err(native_e)) => {

@@ -36,25 +36,25 @@ use alloc::collections::VecDeque;
 
 
 
-const JI_: u32 = 0xFF050606;
+const KB_: u32 = 0xFF050606;
 
-const DLT_: u32 = 0xFF00FF66;
+const DPI_: u32 = 0xFF00FF66;
 
-const NA_: u32 = 0xFF00CC55;
+const CQ_: u32 = 0xFF00CC55;
 
-const DLU_: u32 = 0xFF00AA44;
+const DPJ_: u32 = 0xFF00AA44;
 
-const DLW_: u32 = 0xFF008844;
+const DPL_: u32 = 0xFF008844;
 
-const DLV_: u32 = 0xFF003B1A;
-
-
-const APS_: u32 = 0xFF00FF88;
-
-const EFK_: u32 = 0xFF1A3A2A;
+const DPK_: u32 = 0xFF003B1A;
 
 
-const LR_: [u32; 16] = [
+const ARU_: u32 = 0xFF00FF88;
+
+const EJD_: u32 = 0xFF1A3A2A;
+
+
+const MN_: [u32; 16] = [
     0xFF050606, 
     0xFF882222, 
     0xFF00CC55, 
@@ -81,22 +81,22 @@ const LR_: [u32; 16] = [
 #[derive(Debug, Clone, Copy)]
 pub struct Cell {
     
-    pub bm: char,
+    pub ch: char,
     
-    pub lp: u32,
+    pub fg: u32,
     
-    pub ei: u32,
+    pub bg: u32,
     
-    pub qn: CellAttr,
+    pub attr: CellAttr,
 }
 
 impl Default for Cell {
     fn default() -> Self {
         Self {
-            bm: ' ',
-            lp: NA_,
-            ei: JI_,
-            qn: CellAttr::default(),
+            ch: ' ',
+            fg: CQ_,
+            bg: KB_,
+            attr: CellAttr::default(),
         }
     }
 }
@@ -104,14 +104,14 @@ impl Default for Cell {
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct CellAttr {
-    pub bpt: bool,
-    pub tp: bool,
-    pub gkl: bool,
-    pub dde: bool,
-    pub ilt: bool,
-    pub dbh: bool,
+    pub bold: bool,
+    pub dim: bool,
+    pub italic: bool,
+    pub underline: bool,
+    pub blink: bool,
+    pub reverse: bool,
     pub hidden: bool,
-    pub dmb: bool,
+    pub strikethrough: bool,
 }
 
 
@@ -122,72 +122,72 @@ pub struct CellAttr {
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum ParseState {
     
-    M,
+    Normal,
     
-    Bgc,
+    Escape,
     
-    Bdx,
+    Csi,
     
-    Boh,
+    Osc,
     
-    Beh,
+    Dcs,
 }
 
 
 #[derive(Debug, Clone)]
-pub enum Crl {
+pub enum Asu {
     
-    Dew(char),
+    Print(char),
     
-    Ctv(u16),
+    CursorUp(u16),
     
-    Ctr(u16),
+    CursorDown(u16),
     
-    Ctu(u16),
+    CursorRight(u16),
     
-    Cts(u16),
+    CursorLeft(u16),
     
-    Ctt(u16, u16),
+    CursorPosition(u16, u16),
     
-    Dik,
+    SaveCursor,
     
-    Dgf,
+    RestoreCursor,
     
-    Cwc,
+    EraseToEnd,
     
-    Cwd,
+    EraseToStart,
     
-    Cwb,
+    EraseScreen,
     
-    Cvz,
+    EraseLineToEnd,
     
-    Cwa,
+    EraseLineToStart,
     
-    Cvy,
+    EraseLine,
     
-    Dip(Vec<u16>),
+    Sgr(Vec<u16>),
     
-    Din(u16),
+    ScrollUp(u16),
     
-    Dim(u16),
+    ScrollDown(u16),
     
-    Dio(String),
+    SetTitle(String),
     
-    Crz,
+    Bell,
     
-    Zz,
+    Backspace,
     
-    Djr,
+    Tab,
     
-    Ddb,
+    Newline,
     
-    Cst,
+    CarriageReturn,
     
-    Diq,
+    ShowCursor,
     
-    Cyj,
+    HideCursor,
     
-    F,
+    Unknown,
 }
 
 
@@ -197,165 +197,165 @@ pub enum Crl {
 
 pub struct GraphicsTerminal {
     
-    pub ec: u16,
-    pub lk: u16,
+    pub cols: u16,
+    pub rows: u16,
     
     
-    pub bpy: u16,
-    pub bpx: u16,
+    pub cell_width: u16,
+    pub cell_height: u16,
     
     
-    pub lf: u16,
-    pub ot: u16,
+    pub cursor_x: u16,
+    pub cursor_y: u16,
     
     
-    hyo: u16,
-    hyp: u16,
+    saved_cursor_x: u16,
+    saved_cursor_y: u16,
     
     
-    pub cwu: bool,
+    pub cursor_visible: bool,
     
     
-    btx: bool,
-    byk: u32,
+    cursor_blink: bool,
+    blink_counter: u32,
     
     
-    bbr: Vec<Cell>,
+    grid: Vec<Cell>,
     
     
-    bsf: VecDeque<Vec<Cell>>,
-    pgt: usize,
+    scrollback: VecDeque<Vec<Cell>>,
+    scrollback_max: usize,
     
     
-    px: usize,
+    scroll_offset: usize,
     
     
-    azl: CellAttr,
-    btw: u32,
-    dpj: u32,
+    current_attr: CellAttr,
+    current_fg: u32,
+    current_bg: u32,
     
     
-    cba: ParseState,
-    eod: Vec<u16>,
-    gdv: String,
-    goo: String,
+    parse_state: ParseState,
+    csi_params: Vec<u16>,
+    csi_buffer: String,
+    osc_buffer: String,
     
     
-    pub dq: String,
+    pub title: String,
     
     
-    pub cmz: Option<u32>,
+    pub avh: Option<u32>,
     
     
-    no: bool,
+    dirty: bool,
     
     
-    pub nzd: bool,
+    pub glow_enabled: bool,
     
     
-    pub mci: u8,
+    pub scanline_intensity: u8,
 }
 
 impl GraphicsTerminal {
     
-    pub fn new(z: u32, ac: u32) -> Self {
+    pub fn new(width: u32, height: u32) -> Self {
         
-        let bpy = 8u16;
-        let bpx = 16u16;
-        let ec = (z / bpy as u32) as u16;
-        let lk = (ac / bpx as u32) as u16;
+        let cell_width = 8u16;
+        let cell_height = 16u16;
+        let cols = (width / cell_width as u32) as u16;
+        let rows = (height / cell_height as u32) as u16;
         
-        let ixh = (ec as usize) * (lk as usize);
-        let bbr = vec![Cell::default(); ixh];
+        let eon = (cols as usize) * (rows as usize);
+        let grid = vec![Cell::default(); eon];
         
-        let mut asc = Self {
-            ec,
-            lk,
-            bpy,
-            bpx,
-            lf: 0,
-            ot: 0,
-            hyo: 0,
-            hyp: 0,
-            cwu: true,
-            btx: true,
-            byk: 0,
-            bbr,
-            bsf: VecDeque::new(),
-            pgt: 1000,
-            px: 0,
-            azl: CellAttr::default(),
-            btw: NA_,
-            dpj: JI_,
-            cba: ParseState::M,
-            eod: Vec::new(),
-            gdv: String::new(),
-            goo: String::new(),
-            dq: String::from("TrustOS Terminal"),
-            cmz: None,
-            no: true,
-            nzd: true,
-            mci: 20,
+        let mut wp = Self {
+            cols,
+            rows,
+            cell_width,
+            cell_height,
+            cursor_x: 0,
+            cursor_y: 0,
+            saved_cursor_x: 0,
+            saved_cursor_y: 0,
+            cursor_visible: true,
+            cursor_blink: true,
+            blink_counter: 0,
+            grid,
+            scrollback: VecDeque::new(),
+            scrollback_max: 1000,
+            scroll_offset: 0,
+            current_attr: CellAttr::default(),
+            current_fg: CQ_,
+            current_bg: KB_,
+            parse_state: ParseState::Normal,
+            csi_params: Vec::new(),
+            csi_buffer: String::new(),
+            osc_buffer: String::new(),
+            title: String::from("TrustOS Terminal"),
+            avh: None,
+            dirty: true,
+            glow_enabled: true,
+            scanline_intensity: 20,
         };
         
         
-        asc.write_str("\x1b[1;32m"); 
-        asc.write_str("╔══════════════════════════════════════════════════════════╗\r\n");
-        asc.write_str("║  \x1b[1;97mTrustOS\x1b[1;32m Graphical Terminal                             ║\r\n");
-        asc.write_str("║  Matrix Edition v1.0                                     ║\r\n");
-        asc.write_str("╚══════════════════════════════════════════════════════════╝\r\n");
-        asc.write_str("\x1b[0;32m"); 
-        asc.write_str("\r\n");
+        wp.write_str("\x1b[1;32m"); 
+        wp.write_str("╔══════════════════════════════════════════════════════════╗\r\n");
+        wp.write_str("║  \x1b[1;97mTrustOS\x1b[1;32m Graphical Terminal                             ║\r\n");
+        wp.write_str("║  Matrix Edition v1.0                                     ║\r\n");
+        wp.write_str("╚══════════════════════════════════════════════════════════╝\r\n");
+        wp.write_str("\x1b[0;32m"); 
+        wp.write_str("\r\n");
         
-        asc
+        wp
     }
     
     
-    pub fn write_str(&mut self, e: &str) {
-        for r in e.bw() {
-            self.write_char(r);
+    pub fn write_str(&mut self, j: &str) {
+        for c in j.chars() {
+            self.write_char(c);
         }
     }
     
     
-    pub fn write_char(&mut self, r: char) {
-        match self.cba {
-            ParseState::M => self.tkn(r),
-            ParseState::Bgc => self.tjm(r),
-            ParseState::Bdx => self.tjg(r),
-            ParseState::Boh => self.tkp(r),
-            ParseState::Beh => self.tji(r),
+    pub fn write_char(&mut self, c: char) {
+        match self.parse_state {
+            ParseState::Normal => self.handle_normal(c),
+            ParseState::Escape => self.handle_escape(c),
+            ParseState::Csi => self.handle_csi(c),
+            ParseState::Osc => self.handle_osc(c),
+            ParseState::Dcs => self.handle_dcs(c),
         }
-        self.no = true;
+        self.dirty = true;
     }
     
-    fn tkn(&mut self, r: char) {
-        match r {
+    fn handle_normal(&mut self, c: char) {
+        match c {
             '\x1b' => {
-                self.cba = ParseState::Bgc;
+                self.parse_state = ParseState::Escape;
             }
             '\n' => {
-                self.agr();
+                self.newline();
             }
             '\r' => {
-                self.lf = 0;
+                self.cursor_x = 0;
             }
             '\x08' => {
                 
-                if self.lf > 0 {
-                    self.lf -= 1;
+                if self.cursor_x > 0 {
+                    self.cursor_x -= 1;
                 }
             }
             '\t' => {
                 
-                let uun = ((self.lf / 8) + 1) * 8;
-                self.lf = uun.v(self.ec - 1);
+                let nkg = ((self.cursor_x / 8) + 1) * 8;
+                self.cursor_x = nkg.min(self.cols - 1);
             }
             '\x07' => {
                 
             }
-            _ if r >= ' ' => {
-                self.vol(r);
+            _ if c >= ' ' => {
+                self.put_char(c);
             }
             _ => {
                 
@@ -363,189 +363,189 @@ impl GraphicsTerminal {
         }
     }
     
-    fn tjm(&mut self, r: char) {
-        match r {
+    fn handle_escape(&mut self, c: char) {
+        match c {
             '[' => {
-                self.cba = ParseState::Bdx;
-                self.eod.clear();
-                self.gdv.clear();
+                self.parse_state = ParseState::Csi;
+                self.csi_params.clear();
+                self.csi_buffer.clear();
             }
             ']' => {
-                self.cba = ParseState::Boh;
-                self.goo.clear();
+                self.parse_state = ParseState::Osc;
+                self.osc_buffer.clear();
             }
             'P' => {
-                self.cba = ParseState::Beh;
+                self.parse_state = ParseState::Dcs;
             }
             'c' => {
                 
-                self.apa();
-                self.cba = ParseState::M;
+                self.reset();
+                self.parse_state = ParseState::Normal;
             }
             '7' => {
                 
-                self.hyo = self.lf;
-                self.hyp = self.ot;
-                self.cba = ParseState::M;
+                self.saved_cursor_x = self.cursor_x;
+                self.saved_cursor_y = self.cursor_y;
+                self.parse_state = ParseState::Normal;
             }
             '8' => {
                 
-                self.lf = self.hyo;
-                self.ot = self.hyp;
-                self.cba = ParseState::M;
+                self.cursor_x = self.saved_cursor_x;
+                self.cursor_y = self.saved_cursor_y;
+                self.parse_state = ParseState::Normal;
             }
             'D' => {
                 
-                self.agr();
-                self.cba = ParseState::M;
+                self.newline();
+                self.parse_state = ParseState::Normal;
             }
             'M' => {
                 
-                if self.ot > 0 {
-                    self.ot -= 1;
+                if self.cursor_y > 0 {
+                    self.cursor_y -= 1;
                 }
-                self.cba = ParseState::M;
+                self.parse_state = ParseState::Normal;
             }
             'E' => {
                 
-                self.lf = 0;
-                self.agr();
-                self.cba = ParseState::M;
+                self.cursor_x = 0;
+                self.newline();
+                self.parse_state = ParseState::Normal;
             }
             _ => {
                 
-                self.cba = ParseState::M;
+                self.parse_state = ParseState::Normal;
             }
         }
     }
     
-    fn tjg(&mut self, r: char) {
-        if r.atb() || r == ';' {
-            self.gdv.push(r);
+    fn handle_csi(&mut self, c: char) {
+        if c.is_ascii_digit() || c == ';' {
+            self.csi_buffer.push(c);
         } else {
             
-            self.eod.clear();
-            for vu in self.gdv.adk(';') {
-                if let Ok(bo) = vu.parse::<u16>() {
-                    self.eod.push(bo);
+            self.csi_params.clear();
+            for jn in self.csi_buffer.split(';') {
+                if let Ok(ae) = jn.parse::<u16>() {
+                    self.csi_params.push(ae);
                 } else {
-                    self.eod.push(0);
+                    self.csi_params.push(0);
                 }
             }
             
             
-            self.som(r);
-            self.cba = ParseState::M;
+            self.execute_csi(c);
+            self.parse_state = ParseState::Normal;
         }
     }
     
-    fn som(&mut self, cmd: char) {
-        let oi = &self.eod;
-        let ags = oi.fv().hu().unwrap_or(1).am(1);
-        let pr = oi.get(1).hu().unwrap_or(1).am(1);
+    fn execute_csi(&mut self, cmd: char) {
+        let params = &self.csi_params;
+        let qm = params.first().copied().unwrap_or(1).max(1);
+        let gw = params.get(1).copied().unwrap_or(1).max(1);
         
         match cmd {
             'A' => {
                 
-                self.ot = self.ot.ao(ags);
+                self.cursor_y = self.cursor_y.saturating_sub(qm);
             }
             'B' => {
                 
-                self.ot = (self.ot + ags).v(self.lk - 1);
+                self.cursor_y = (self.cursor_y + qm).min(self.rows - 1);
             }
             'C' => {
                 
-                self.lf = (self.lf + ags).v(self.ec - 1);
+                self.cursor_x = (self.cursor_x + qm).min(self.cols - 1);
             }
             'D' => {
                 
-                self.lf = self.lf.ao(ags);
+                self.cursor_x = self.cursor_x.saturating_sub(qm);
             }
             'E' => {
                 
-                self.lf = 0;
-                self.ot = (self.ot + ags).v(self.lk - 1);
+                self.cursor_x = 0;
+                self.cursor_y = (self.cursor_y + qm).min(self.rows - 1);
             }
             'F' => {
                 
-                self.lf = 0;
-                self.ot = self.ot.ao(ags);
+                self.cursor_x = 0;
+                self.cursor_y = self.cursor_y.saturating_sub(qm);
             }
             'G' => {
                 
-                self.lf = (ags - 1).v(self.ec - 1);
+                self.cursor_x = (qm - 1).min(self.cols - 1);
             }
             'H' | 'f' => {
                 
-                let br = oi.fv().hu().unwrap_or(1).am(1);
-                let bj = oi.get(1).hu().unwrap_or(1).am(1);
-                self.ot = (br - 1).v(self.lk - 1);
-                self.lf = (bj - 1).v(self.ec - 1);
+                let row = params.first().copied().unwrap_or(1).max(1);
+                let col = params.get(1).copied().unwrap_or(1).max(1);
+                self.cursor_y = (row - 1).min(self.rows - 1);
+                self.cursor_x = (col - 1).min(self.cols - 1);
             }
             'J' => {
                 
-                let ev = oi.fv().hu().unwrap_or(0);
-                match ev {
-                    0 => self.sne(),
-                    1 => self.snf(),
-                    2 | 3 => self.nqy(),
+                let mode = params.first().copied().unwrap_or(0);
+                match mode {
+                    0 => self.erase_to_end_of_screen(),
+                    1 => self.erase_to_start_of_screen(),
+                    2 | 3 => self.erase_screen(),
                     _ => {}
                 }
             }
             'K' => {
                 
-                let ev = oi.fv().hu().unwrap_or(0);
-                match ev {
-                    0 => self.nqz(),
-                    1 => self.nra(),
-                    2 => self.snd(),
+                let mode = params.first().copied().unwrap_or(0);
+                match mode {
+                    0 => self.erase_to_end_of_line(),
+                    1 => self.erase_to_start_of_line(),
+                    2 => self.erase_line(),
                     _ => {}
                 }
             }
             'S' => {
                 
-                for _ in 0..ags {
-                    self.dlm();
+                for _ in 0..qm {
+                    self.scroll_up();
                 }
             }
             'T' => {
                 
-                for _ in 0..ags {
-                    self.eid();
+                for _ in 0..qm {
+                    self.scroll_down();
                 }
             }
             'm' => {
                 
-                self.sot();
+                self.execute_sgr();
             }
             's' => {
                 
-                self.hyo = self.lf;
-                self.hyp = self.ot;
+                self.saved_cursor_x = self.cursor_x;
+                self.saved_cursor_y = self.cursor_y;
             }
             'u' => {
                 
-                self.lf = self.hyo;
-                self.ot = self.hyp;
+                self.cursor_x = self.saved_cursor_x;
+                self.cursor_y = self.saved_cursor_y;
             }
-            '?' if !oi.is_empty() => {
+            '?' if !params.is_empty() => {
                 
             }
             'h' => {
                 
-                if self.gdv.cj('?') {
-                    let ev = oi.fv().hu().unwrap_or(0);
-                    if ev == 25 {
-                        self.cwu = true;
+                if self.csi_buffer.starts_with('?') {
+                    let mode = params.first().copied().unwrap_or(0);
+                    if mode == 25 {
+                        self.cursor_visible = true;
                     }
                 }
             }
             'l' => {
                 
-                if self.gdv.cj('?') {
-                    let ev = oi.fv().hu().unwrap_or(0);
-                    if ev == 25 {
-                        self.cwu = false;
+                if self.csi_buffer.starts_with('?') {
+                    let mode = params.first().copied().unwrap_or(0);
+                    if mode == 25 {
+                        self.cursor_visible = false;
                     }
                 }
             }
@@ -555,597 +555,597 @@ impl GraphicsTerminal {
         }
     }
     
-    fn sot(&mut self) {
-        let oi = if self.eod.is_empty() {
+    fn execute_sgr(&mut self) {
+        let params = if self.csi_params.is_empty() {
             vec![0] 
         } else {
-            self.eod.clone()
+            self.csi_params.clone()
         };
         
-        let mut a = 0;
-        while a < oi.len() {
-            let ai = oi[a];
-            match ai {
+        let mut i = 0;
+        while i < params.len() {
+            let aa = params[i];
+            match aa {
                 0 => {
                     
-                    self.azl = CellAttr::default();
-                    self.btw = NA_;
-                    self.dpj = JI_;
+                    self.current_attr = CellAttr::default();
+                    self.current_fg = CQ_;
+                    self.current_bg = KB_;
                 }
-                1 => self.azl.bpt = true,
-                2 => self.azl.tp = true,
-                3 => self.azl.gkl = true,
-                4 => self.azl.dde = true,
-                5 => self.azl.ilt = true,
-                7 => self.azl.dbh = true,
-                8 => self.azl.hidden = true,
-                9 => self.azl.dmb = true,
-                21 => self.azl.bpt = false,
+                1 => self.current_attr.bold = true,
+                2 => self.current_attr.dim = true,
+                3 => self.current_attr.italic = true,
+                4 => self.current_attr.underline = true,
+                5 => self.current_attr.blink = true,
+                7 => self.current_attr.reverse = true,
+                8 => self.current_attr.hidden = true,
+                9 => self.current_attr.strikethrough = true,
+                21 => self.current_attr.bold = false,
                 22 => {
-                    self.azl.bpt = false;
-                    self.azl.tp = false;
+                    self.current_attr.bold = false;
+                    self.current_attr.dim = false;
                 }
-                23 => self.azl.gkl = false,
-                24 => self.azl.dde = false,
-                25 => self.azl.ilt = false,
-                27 => self.azl.dbh = false,
-                28 => self.azl.hidden = false,
-                29 => self.azl.dmb = false,
+                23 => self.current_attr.italic = false,
+                24 => self.current_attr.underline = false,
+                25 => self.current_attr.blink = false,
+                27 => self.current_attr.reverse = false,
+                28 => self.current_attr.hidden = false,
+                29 => self.current_attr.strikethrough = false,
                 
                 30..=37 => {
-                    let w = (ai - 30) as usize;
-                    self.btw = LR_[w];
+                    let idx = (aa - 30) as usize;
+                    self.current_fg = MN_[idx];
                 }
                 38 => {
                     
-                    if a + 2 < oi.len() && oi[a + 1] == 5 {
+                    if i + 2 < params.len() && params[i + 1] == 5 {
                         
-                        let w = oi[a + 2] as usize;
-                        self.btw = self.ney(w);
-                        a += 2;
-                    } else if a + 4 < oi.len() && oi[a + 1] == 2 {
+                        let idx = params[i + 2] as usize;
+                        self.current_fg = self.color_256(idx);
+                        i += 2;
+                    } else if i + 4 < params.len() && params[i + 1] == 2 {
                         
-                        let m = oi[a + 2] as u32;
-                        let at = oi[a + 3] as u32;
-                        let o = oi[a + 4] as u32;
-                        self.btw = 0xFF000000 | (m << 16) | (at << 8) | o;
-                        a += 4;
+                        let r = params[i + 2] as u32;
+                        let g = params[i + 3] as u32;
+                        let b = params[i + 4] as u32;
+                        self.current_fg = 0xFF000000 | (r << 16) | (g << 8) | b;
+                        i += 4;
                     }
                 }
-                39 => self.btw = NA_, 
+                39 => self.current_fg = CQ_, 
                 
                 40..=47 => {
-                    let w = (ai - 40) as usize;
-                    self.dpj = LR_[w];
+                    let idx = (aa - 40) as usize;
+                    self.current_bg = MN_[idx];
                 }
                 48 => {
                     
-                    if a + 2 < oi.len() && oi[a + 1] == 5 {
-                        let w = oi[a + 2] as usize;
-                        self.dpj = self.ney(w);
-                        a += 2;
-                    } else if a + 4 < oi.len() && oi[a + 1] == 2 {
-                        let m = oi[a + 2] as u32;
-                        let at = oi[a + 3] as u32;
-                        let o = oi[a + 4] as u32;
-                        self.dpj = 0xFF000000 | (m << 16) | (at << 8) | o;
-                        a += 4;
+                    if i + 2 < params.len() && params[i + 1] == 5 {
+                        let idx = params[i + 2] as usize;
+                        self.current_bg = self.color_256(idx);
+                        i += 2;
+                    } else if i + 4 < params.len() && params[i + 1] == 2 {
+                        let r = params[i + 2] as u32;
+                        let g = params[i + 3] as u32;
+                        let b = params[i + 4] as u32;
+                        self.current_bg = 0xFF000000 | (r << 16) | (g << 8) | b;
+                        i += 4;
                     }
                 }
-                49 => self.dpj = JI_, 
+                49 => self.current_bg = KB_, 
                 
                 90..=97 => {
-                    let w = (ai - 90 + 8) as usize;
-                    self.btw = LR_[w];
+                    let idx = (aa - 90 + 8) as usize;
+                    self.current_fg = MN_[idx];
                 }
                 
                 100..=107 => {
-                    let w = (ai - 100 + 8) as usize;
-                    self.dpj = LR_[w];
+                    let idx = (aa - 100 + 8) as usize;
+                    self.current_bg = MN_[idx];
                 }
                 _ => {}
             }
-            a += 1;
+            i += 1;
         }
     }
     
     
-    fn ney(&self, w: usize) -> u32 {
-        if w < 16 {
-            LR_[w]
-        } else if w < 232 {
+    fn color_256(&self, idx: usize) -> u32 {
+        if idx < 16 {
+            MN_[idx]
+        } else if idx < 232 {
             
-            let w = w - 16;
-            let m = (w / 36) % 6;
-            let at = (w / 6) % 6;
-            let o = w % 6;
-            let m = if m > 0 { m * 40 + 55 } else { 0 };
-            let at = if at > 0 { at * 40 + 55 } else { 0 };
-            let o = if o > 0 { o * 40 + 55 } else { 0 };
-            0xFF000000 | ((m as u32) << 16) | ((at as u32) << 8) | (o as u32)
+            let idx = idx - 16;
+            let r = (idx / 36) % 6;
+            let g = (idx / 6) % 6;
+            let b = idx % 6;
+            let r = if r > 0 { r * 40 + 55 } else { 0 };
+            let g = if g > 0 { g * 40 + 55 } else { 0 };
+            let b = if b > 0 { b * 40 + 55 } else { 0 };
+            0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32)
         } else {
             
-            let laj = (w - 232) * 10 + 8;
-            0xFF000000 | ((laj as u32) << 16) | ((laj as u32) << 8) | (laj as u32)
+            let fzk = (idx - 232) * 10 + 8;
+            0xFF000000 | ((fzk as u32) << 16) | ((fzk as u32) << 8) | (fzk as u32)
         }
     }
     
-    fn tkp(&mut self, r: char) {
-        if r == '\x07' || r == '\x1b' {
+    fn handle_osc(&mut self, c: char) {
+        if c == '\x07' || c == '\x1b' {
             
-            self.soq();
-            self.cba = ParseState::M;
+            self.execute_osc();
+            self.parse_state = ParseState::Normal;
         } else {
-            self.goo.push(r);
+            self.osc_buffer.push(c);
         }
     }
     
-    fn soq(&mut self) {
+    fn execute_osc(&mut self) {
         
-        if let Some(w) = self.goo.du(';') {
-            let cmd = &self.goo[..w];
-            let f = &self.goo[w + 1..];
+        if let Some(idx) = self.osc_buffer.find(';') {
+            let cmd = &self.osc_buffer[..idx];
+            let data = &self.osc_buffer[idx + 1..];
             
             match cmd {
                 "0" | "2" => {
                     
-                    self.dq = String::from(f);
+                    self.title = String::from(data);
                 }
                 _ => {}
             }
         }
     }
     
-    fn tji(&mut self, r: char) {
+    fn handle_dcs(&mut self, c: char) {
         
-        if r == '\x1b' || r == '\\' {
-            self.cba = ParseState::M;
+        if c == '\x1b' || c == '\\' {
+            self.parse_state = ParseState::Normal;
         }
     }
     
     
-    fn vol(&mut self, r: char) {
-        if self.lf >= self.ec {
-            self.lf = 0;
-            self.agr();
+    fn put_char(&mut self, c: char) {
+        if self.cursor_x >= self.cols {
+            self.cursor_x = 0;
+            self.newline();
         }
         
-        let w = self.ot as usize * self.ec as usize + self.lf as usize;
-        if w < self.bbr.len() {
+        let idx = self.cursor_y as usize * self.cols as usize + self.cursor_x as usize;
+        if idx < self.grid.len() {
             
-            let (lp, ei) = if self.azl.dbh {
-                (self.dpj, self.btw)
+            let (fg, bg) = if self.current_attr.reverse {
+                (self.current_bg, self.current_fg)
             } else {
-                (self.btw, self.dpj)
+                (self.current_fg, self.current_bg)
             };
             
-            let lp = if self.azl.bpt {
-                self.qrz(lp)
-            } else if self.azl.tp {
-                self.eot(lp)
+            let fg = if self.current_attr.bold {
+                self.brighten(fg)
+            } else if self.current_attr.dim {
+                self.dim_color(fg)
             } else {
-                lp
+                fg
             };
             
-            self.bbr[w] = Cell {
-                bm: r,
-                lp,
-                ei,
-                qn: self.azl,
+            self.grid[idx] = Cell {
+                ch: c,
+                fg,
+                bg,
+                attr: self.current_attr,
             };
         }
         
-        self.lf += 1;
+        self.cursor_x += 1;
     }
     
     
-    fn qrz(&self, s: u32) -> u32 {
-        let m = ((s >> 16) & 0xFF).v(255);
-        let at = ((s >> 8) & 0xFF).v(255);
-        let o = (s & 0xFF).v(255);
+    fn brighten(&self, color: u32) -> u32 {
+        let r = ((color >> 16) & 0xFF).min(255);
+        let g = ((color >> 8) & 0xFF).min(255);
+        let b = (color & 0xFF).min(255);
         
-        let m = (m + (255 - m) / 3).v(255);
-        let at = (at + (255 - at) / 3).v(255);
-        let o = (o + (255 - o) / 3).v(255);
+        let r = (r + (255 - r) / 3).min(255);
+        let g = (g + (255 - g) / 3).min(255);
+        let b = (b + (255 - b) / 3).min(255);
         
-        0xFF000000 | (m << 16) | (at << 8) | o
+        0xFF000000 | (r << 16) | (g << 8) | b
     }
     
     
-    fn eot(&self, s: u32) -> u32 {
-        let m = ((s >> 16) & 0xFF) * 2 / 3;
-        let at = ((s >> 8) & 0xFF) * 2 / 3;
-        let o = (s & 0xFF) * 2 / 3;
+    fn dim_color(&self, color: u32) -> u32 {
+        let r = ((color >> 16) & 0xFF) * 2 / 3;
+        let g = ((color >> 8) & 0xFF) * 2 / 3;
+        let b = (color & 0xFF) * 2 / 3;
         
-        0xFF000000 | (m << 16) | (at << 8) | o
+        0xFF000000 | (r << 16) | (g << 8) | b
     }
     
     
-    fn agr(&mut self) {
-        if self.ot >= self.lk - 1 {
-            self.dlm();
+    fn newline(&mut self) {
+        if self.cursor_y >= self.rows - 1 {
+            self.scroll_up();
         } else {
-            self.ot += 1;
+            self.cursor_y += 1;
         }
     }
     
     
-    fn dlm(&mut self) {
+    fn scroll_up(&mut self) {
         
-        let xjo: Vec<Cell> = self.bbr[..self.ec as usize].ip();
-        self.bsf.agt(xjo);
+        let plg: Vec<Cell> = self.grid[..self.cols as usize].to_vec();
+        self.scrollback.push_back(plg);
         
         
-        while self.bsf.len() > self.pgt {
-            self.bsf.awp();
+        while self.scrollback.len() > self.scrollback_max {
+            self.scrollback.pop_front();
         }
         
         
-        let ec = self.ec as usize;
-        for c in 0..self.lk as usize - 1 {
-            let big = (c + 1) * ec;
-            let dqh = c * ec;
-            for b in 0..ec {
-                self.bbr[dqh + b] = self.bbr[big + b];
+        let cols = self.cols as usize;
+        for y in 0..self.rows as usize - 1 {
+            let zl = (y + 1) * cols;
+            let alj = y * cols;
+            for x in 0..cols {
+                self.grid[alj + x] = self.grid[zl + x];
             }
         }
         
         
-        let ucm = (self.lk as usize - 1) * ec;
-        for b in 0..ec {
-            self.bbr[ucm + b] = Cell::default();
+        let mwq = (self.rows as usize - 1) * cols;
+        for x in 0..cols {
+            self.grid[mwq + x] = Cell::default();
         }
     }
     
     
-    fn eid(&mut self) {
-        let ec = self.ec as usize;
+    fn scroll_down(&mut self) {
+        let cols = self.cols as usize;
         
         
-        for c in (1..self.lk as usize).vv() {
-            let big = (c - 1) * ec;
-            let dqh = c * ec;
-            for b in 0..ec {
-                self.bbr[dqh + b] = self.bbr[big + b];
+        for y in (1..self.rows as usize).rev() {
+            let zl = (y - 1) * cols;
+            let alj = y * cols;
+            for x in 0..cols {
+                self.grid[alj + x] = self.grid[zl + x];
             }
         }
         
         
-        for b in 0..ec {
-            self.bbr[b] = Cell::default();
+        for x in 0..cols {
+            self.grid[x] = Cell::default();
         }
     }
     
     
-    fn sne(&mut self) {
+    fn erase_to_end_of_screen(&mut self) {
         
-        self.nqz();
-        
-        
-        let ec = self.ec as usize;
-        for c in (self.ot + 1) as usize..self.lk as usize {
-            let mu = c * ec;
-            for b in 0..ec {
-                self.bbr[mu + b] = Cell::default();
-            }
-        }
-    }
-    
-    
-    fn snf(&mut self) {
-        
-        self.nra();
+        self.erase_to_end_of_line();
         
         
-        let ec = self.ec as usize;
-        for c in 0..self.ot as usize {
-            let mu = c * ec;
-            for b in 0..ec {
-                self.bbr[mu + b] = Cell::default();
+        let cols = self.cols as usize;
+        for y in (self.cursor_y + 1) as usize..self.rows as usize {
+            let fk = y * cols;
+            for x in 0..cols {
+                self.grid[fk + x] = Cell::default();
             }
         }
     }
     
     
-    fn nqy(&mut self) {
-        for cell in &mut self.bbr {
+    fn erase_to_start_of_screen(&mut self) {
+        
+        self.erase_to_start_of_line();
+        
+        
+        let cols = self.cols as usize;
+        for y in 0..self.cursor_y as usize {
+            let fk = y * cols;
+            for x in 0..cols {
+                self.grid[fk + x] = Cell::default();
+            }
+        }
+    }
+    
+    
+    fn erase_screen(&mut self) {
+        for cell in &mut self.grid {
             *cell = Cell::default();
         }
     }
     
     
-    fn nqz(&mut self) {
-        let mu = self.ot as usize * self.ec as usize;
-        for b in self.lf as usize..self.ec as usize {
-            self.bbr[mu + b] = Cell::default();
+    fn erase_to_end_of_line(&mut self) {
+        let fk = self.cursor_y as usize * self.cols as usize;
+        for x in self.cursor_x as usize..self.cols as usize {
+            self.grid[fk + x] = Cell::default();
         }
     }
     
     
-    fn nra(&mut self) {
-        let mu = self.ot as usize * self.ec as usize;
-        for b in 0..=self.lf as usize {
-            if mu + b < self.bbr.len() {
-                self.bbr[mu + b] = Cell::default();
+    fn erase_to_start_of_line(&mut self) {
+        let fk = self.cursor_y as usize * self.cols as usize;
+        for x in 0..=self.cursor_x as usize {
+            if fk + x < self.grid.len() {
+                self.grid[fk + x] = Cell::default();
             }
         }
     }
     
     
-    fn snd(&mut self) {
-        let mu = self.ot as usize * self.ec as usize;
-        for b in 0..self.ec as usize {
-            self.bbr[mu + b] = Cell::default();
+    fn erase_line(&mut self) {
+        let fk = self.cursor_y as usize * self.cols as usize;
+        for x in 0..self.cols as usize {
+            self.grid[fk + x] = Cell::default();
         }
     }
     
     
-    pub fn apa(&mut self) {
-        self.lf = 0;
-        self.ot = 0;
-        self.azl = CellAttr::default();
-        self.btw = NA_;
-        self.dpj = JI_;
-        self.cwu = true;
-        self.nqy();
+    pub fn reset(&mut self) {
+        self.cursor_x = 0;
+        self.cursor_y = 0;
+        self.current_attr = CellAttr::default();
+        self.current_fg = CQ_;
+        self.current_bg = KB_;
+        self.cursor_visible = true;
+        self.erase_screen();
     }
     
     
-    pub fn vr(&mut self, r: char) {
+    pub fn handle_key(&mut self, c: char) {
         
         
-        if r == '\n' {
+        if c == '\n' {
             self.write_str("\r\n");
         } else {
-            self.write_char(r);
+            self.write_char(c);
         }
     }
     
     
-    pub fn tj(&mut self) -> Vec<u32> {
-        let z = self.ec as usize * self.bpy as usize;
-        let ac = self.lk as usize * self.bpx as usize;
+    pub fn render(&mut self) -> Vec<u32> {
+        let width = self.cols as usize * self.cell_width as usize;
+        let height = self.rows as usize * self.cell_height as usize;
         
         
-        let mut bi = vec![0u32; z * ac];
-        crate::graphics::simd::ntp(&mut bi, JI_);
+        let mut buffer = vec![0u32; width * height];
+        crate::graphics::simd::hyi(&mut buffer, KB_);
         
         
-        self.byk = self.byk.cn(1);
-        if self.byk % 30 == 0 {
-            self.btx = !self.btx;
+        self.blink_counter = self.blink_counter.wrapping_add(1);
+        if self.blink_counter % 30 == 0 {
+            self.cursor_blink = !self.cursor_blink;
         }
         
         
-        for c in 0..self.lk as usize {
-            for b in 0..self.ec as usize {
-                let w = c * self.ec as usize + b;
-                let cell = &self.bbr[w];
+        for y in 0..self.rows as usize {
+            for x in 0..self.cols as usize {
+                let idx = y * self.cols as usize + x;
+                let cell = &self.grid[idx];
                 
                 
-                self.scd(&mut bi, z, b as u32, c as u32, cell.ei);
+                self.draw_cell_bg_fast(&mut buffer, width, x as u32, y as u32, cell.bg);
                 
                 
-                if cell.bm != ' ' {
-                    self.ahi(&mut bi, z as u32, b as u32, c as u32, cell.bm, cell.lp);
+                if cell.ch != ' ' {
+                    self.draw_char(&mut buffer, width as u32, x as u32, y as u32, cell.ch, cell.fg);
                 }
                 
                 
-                if cell.qn.dde {
-                    self.sgk(&mut bi, z, b as u32, c as u32, cell.lp);
+                if cell.attr.underline {
+                    self.draw_underline_fast(&mut buffer, width, x as u32, y as u32, cell.fg);
                 }
             }
         }
         
         
-        if self.cwu && self.btx {
-            self.scl(&mut bi, z);
+        if self.cursor_visible && self.cursor_blink {
+            self.draw_cursor_fast(&mut buffer, width);
         }
         
         
-        if self.nzd {
-            self.qju(&mut bi, z as u32, ac as u32);
+        if self.glow_enabled {
+            self.apply_glow(&mut buffer, width as u32, height as u32);
         }
         
         
-        if self.mci > 0 {
-            self.qka(&mut bi, z as u32, ac as u32);
+        if self.scanline_intensity > 0 {
+            self.apply_scanlines(&mut buffer, width as u32, height as u32);
         }
         
-        self.no = false;
-        bi
+        self.dirty = false;
+        buffer
     }
     
     
-    fn scd(&self, bi: &mut [u32], z: usize, cx: u32, ae: u32, ei: u32) {
-        let bwi = cx as usize * self.bpy as usize;
-        let cto = ae as usize * self.bpx as usize;
-        let acc = self.bpy as usize;
+    fn draw_cell_bg_fast(&self, buffer: &mut [u32], width: usize, cx: u32, u: u32, bg: u32) {
+        let amk = cx as usize * self.cell_width as usize;
+        let aze = u as usize * self.cell_height as usize;
+        let cell_w = self.cell_width as usize;
         
         
-        for bg in 0..self.bpx as usize {
-            let mu = (cto + bg) * z + bwi;
-            if mu + acc <= bi.len() {
+        for ad in 0..self.cell_height as usize {
+            let fk = (aze + ad) * width + amk;
+            if fk + cell_w <= buffer.len() {
                 #[cfg(target_arch = "x86_64")]
                 unsafe {
-                    crate::graphics::simd::bed(
-                        bi.mw().add(mu),
-                        acc,
-                        ei
+                    crate::graphics::simd::adq(
+                        buffer.as_mut_ptr().add(fk),
+                        cell_w,
+                        bg
                     );
                 }
                 #[cfg(not(target_arch = "x86_64"))]
                 {
-                    bi[mu..mu + acc].vi(ei);
+                    buffer[fk..fk + cell_w].fill(bg);
                 }
             }
         }
     }
 
-    fn ymv(&self, bi: &mut [u32], z: u32, cx: u32, ae: u32, ei: u32) {
-        let bwi = cx * self.bpy as u32;
-        let cto = ae * self.bpx as u32;
+    fn qdl(&self, buffer: &mut [u32], width: u32, cx: u32, u: u32, bg: u32) {
+        let amk = cx * self.cell_width as u32;
+        let aze = u * self.cell_height as u32;
         
-        for bg in 0..self.bpx as u32 {
-            for dx in 0..self.bpy as u32 {
-                let w = ((cto + bg) * z + bwi + dx) as usize;
-                if w < bi.len() {
-                    bi[w] = ei;
+        for ad in 0..self.cell_height as u32 {
+            for dx in 0..self.cell_width as u32 {
+                let idx = ((aze + ad) * width + amk + dx) as usize;
+                if idx < buffer.len() {
+                    buffer[idx] = bg;
                 }
             }
         }
     }
     
-    fn ahi(&self, bi: &mut [u32], z: u32, cx: u32, ae: u32, r: char, lp: u32) {
-        let ka = crate::framebuffer::font::ada(r);
-        let bwi = cx * self.bpy as u32;
-        let cto = ae * self.bpx as u32;
+    fn draw_char(&self, buffer: &mut [u32], width: u32, cx: u32, u: u32, c: char, fg: u32) {
+        let du = crate::framebuffer::font::ol(c);
+        let amk = cx * self.cell_width as u32;
+        let aze = u * self.cell_height as u32;
         
-        for (bwv, &br) in ka.iter().cf() {
-            for ga in 0..8 {
-                if (br >> (7 - ga)) & 1 == 1 {
-                    let b = bwi + ga;
-                    let c = cto + bwv as u32;
-                    let w = (c * z + b) as usize;
-                    if w < bi.len() {
-                        bi[w] = lp;
+        for (amq, &row) in du.iter().enumerate() {
+            for bf in 0..8 {
+                if (row >> (7 - bf)) & 1 == 1 {
+                    let x = amk + bf;
+                    let y = aze + amq as u32;
+                    let idx = (y * width + x) as usize;
+                    if idx < buffer.len() {
+                        buffer[idx] = fg;
                     }
                 }
             }
         }
     }
     
-    fn yno(&self, bi: &mut [u32], z: u32, cx: u32, ae: u32, lp: u32) {
-        let bwi = cx * self.bpy as u32;
-        let cto = ae * self.bpx as u32 + self.bpx as u32 - 2;
+    fn qed(&self, buffer: &mut [u32], width: u32, cx: u32, u: u32, fg: u32) {
+        let amk = cx * self.cell_width as u32;
+        let aze = u * self.cell_height as u32 + self.cell_height as u32 - 2;
         
-        for dx in 0..self.bpy as u32 {
-            let w = (cto * z + bwi + dx) as usize;
-            if w < bi.len() {
-                bi[w] = lp;
+        for dx in 0..self.cell_width as u32 {
+            let idx = (aze * width + amk + dx) as usize;
+            if idx < buffer.len() {
+                buffer[idx] = fg;
             }
         }
     }
     
     
-    fn sgk(&self, bi: &mut [u32], z: usize, cx: u32, ae: u32, lp: u32) {
-        let bwi = cx as usize * self.bpy as usize;
-        let cto = ae as usize * self.bpx as usize + self.bpx as usize - 2;
-        let acc = self.bpy as usize;
+    fn draw_underline_fast(&self, buffer: &mut [u32], width: usize, cx: u32, u: u32, fg: u32) {
+        let amk = cx as usize * self.cell_width as usize;
+        let aze = u as usize * self.cell_height as usize + self.cell_height as usize - 2;
+        let cell_w = self.cell_width as usize;
         
-        let ay = cto * z + bwi;
-        if ay + acc <= bi.len() {
+        let start = aze * width + amk;
+        if start + cell_w <= buffer.len() {
             #[cfg(target_arch = "x86_64")]
             unsafe {
-                crate::graphics::simd::bed(
-                    bi.mw().add(ay),
-                    acc,
-                    lp
+                crate::graphics::simd::adq(
+                    buffer.as_mut_ptr().add(start),
+                    cell_w,
+                    fg
                 );
             }
             #[cfg(not(target_arch = "x86_64"))]
             {
-                bi[ay..ay + acc].vi(lp);
+                buffer[start..start + cell_w].fill(fg);
             }
         }
     }
     
-    fn dqf(&self, bi: &mut [u32], z: u32) {
-        let bwi = self.lf as u32 * self.bpy as u32;
-        let cto = self.ot as u32 * self.bpx as u32;
+    fn draw_cursor(&self, buffer: &mut [u32], width: u32) {
+        let amk = self.cursor_x as u32 * self.cell_width as u32;
+        let aze = self.cursor_y as u32 * self.cell_height as u32;
         
         
-        for bg in 0..self.bpx as u32 {
-            for dx in 0..self.bpy as u32 {
-                let w = ((cto + bg) * z + bwi + dx) as usize;
-                if w < bi.len() {
+        for ad in 0..self.cell_height as u32 {
+            for dx in 0..self.cell_width as u32 {
+                let idx = ((aze + ad) * width + amk + dx) as usize;
+                if idx < buffer.len() {
                     
-                    let xy = bi[w];
-                    bi[w] = xy ^ APS_;
+                    let ku = buffer[idx];
+                    buffer[idx] = ku ^ ARU_;
                 }
             }
         }
     }
     
     
-    fn scl(&self, bi: &mut [u32], z: usize) {
-        let bwi = self.lf as usize * self.bpy as usize;
-        let cto = self.ot as usize * self.bpx as usize;
-        let acc = self.bpy as usize;
+    fn draw_cursor_fast(&self, buffer: &mut [u32], width: usize) {
+        let amk = self.cursor_x as usize * self.cell_width as usize;
+        let aze = self.cursor_y as usize * self.cell_height as usize;
+        let cell_w = self.cell_width as usize;
         
         
-        for bg in 0..self.bpx as usize {
-            let mu = (cto + bg) * z + bwi;
-            if mu + acc <= bi.len() {
-                for dx in 0..acc {
-                    let xy = bi[mu + dx];
-                    bi[mu + dx] = xy ^ APS_;
+        for ad in 0..self.cell_height as usize {
+            let fk = (aze + ad) * width + amk;
+            if fk + cell_w <= buffer.len() {
+                for dx in 0..cell_w {
+                    let ku = buffer[fk + dx];
+                    buffer[fk + dx] = ku ^ ARU_;
                 }
             }
         }
     }
     
     
-    fn qju(&self, bi: &mut [u32], z: u32, ac: u32) {
+    fn apply_glow(&self, buffer: &mut [u32], width: u32, height: u32) {
         
         
         
-        let mut bcz = bi.ip();
+        let mut ts = buffer.to_vec();
         
-        for c in 0..ac {
-            for b in 1..(z - 1) {
-                let w = (c * z + b) as usize;
-                let fd = bi[(c * z + b - 1) as usize];
-                let pn = bi[w];
-                let hw = bi[(c * z + b + 1) as usize];
+        for y in 0..height {
+            for x in 1..(width - 1) {
+                let idx = (y * width + x) as usize;
+                let left = buffer[(y * width + x - 1) as usize];
+                let center = buffer[idx];
+                let right = buffer[(y * width + x + 1) as usize];
                 
                 
-                let nxa = (fd >> 8) & 0xFF;
-                let nwz = (pn >> 8) & 0xFF;
-                let nxb = (hw >> 8) & 0xFF;
+                let ias = (left >> 8) & 0xFF;
+                let iar = (center >> 8) & 0xFF;
+                let iat = (right >> 8) & 0xFF;
                 
-                if nwz > 100 || nxa > 100 || nxb > 100 {
-                    let tq = ((nxa + nwz * 2 + nxb) / 4).v(255);
-                    let m = (pn >> 16) & 0xFF;
-                    let o = pn & 0xFF;
-                    bcz[w] = 0xFF000000 | (m << 16) | (tq << 8) | o;
+                if iar > 100 || ias > 100 || iat > 100 {
+                    let glow = ((ias + iar * 2 + iat) / 4).min(255);
+                    let r = (center >> 16) & 0xFF;
+                    let b = center & 0xFF;
+                    ts[idx] = 0xFF000000 | (r << 16) | (glow << 8) | b;
                 }
             }
         }
         
-        bi.dg(&bcz);
+        buffer.copy_from_slice(&ts);
     }
     
     
-    fn qka(&self, bi: &mut [u32], z: u32, ac: u32) {
-        let hj = 255 - self.mci as u32;
+    fn apply_scanlines(&self, buffer: &mut [u32], width: u32, height: u32) {
+        let intensity = 255 - self.scanline_intensity as u32;
         
-        for c in (1..ac).akt(2) {
-            let mu = (c * z) as usize;
-            let cub = ((c + 1) * z) as usize;
+        for y in (1..height).step_by(2) {
+            let fk = (y * width) as usize;
+            let azm = ((y + 1) * width) as usize;
             
-            if cub <= bi.len() {
-                for w in mu..cub.v(mu + z as usize) {
-                    let il = bi[w];
-                    let m = ((il >> 16) & 0xFF) * hj / 255;
-                    let at = ((il >> 8) & 0xFF) * hj / 255;
-                    let o = (il & 0xFF) * hj / 255;
-                    bi[w] = 0xFF000000 | (m << 16) | (at << 8) | o;
+            if azm <= buffer.len() {
+                for idx in fk..azm.min(fk + width as usize) {
+                    let ct = buffer[idx];
+                    let r = ((ct >> 16) & 0xFF) * intensity / 255;
+                    let g = ((ct >> 8) & 0xFF) * intensity / 255;
+                    let b = (ct & 0xFF) * intensity / 255;
+                    buffer[idx] = 0xFF000000 | (r << 16) | (g << 8) | b;
                 }
             }
         }
     }
     
     
-    pub fn yzi(&self) -> bool {
-        self.no
+    pub fn qmi(&self) -> bool {
+        self.dirty
     }
     
     
-    pub fn vii(&self) -> (u32, u32) {
+    pub fn pixel_size(&self) -> (u32, u32) {
         (
-            self.ec as u32 * self.bpy as u32,
-            self.lk as u32 * self.bpx as u32,
+            self.cols as u32 * self.cell_width as u32,
+            self.rows as u32 * self.cell_height as u32,
         )
     }
 }
@@ -1156,40 +1156,40 @@ impl GraphicsTerminal {
 
 use spin::Mutex;
 
-static NI_: Mutex<Option<GraphicsTerminal>> = Mutex::new(None);
+static OH_: Mutex<Option<GraphicsTerminal>> = Mutex::new(None);
 
 
-pub fn init(z: u32, ac: u32) -> Result<(), &'static str> {
-    let mut asc = NI_.lock();
-    if asc.is_some() {
+pub fn init(width: u32, height: u32) -> Result<(), &'static str> {
+    let mut wp = OH_.lock();
+    if wp.is_some() {
         return Err("Graphics terminal already initialized");
     }
     
-    *asc = Some(GraphicsTerminal::new(z, ac));
-    crate::serial_println!("[GTERM] Graphics terminal initialized ({}x{})", z, ac);
+    *wp = Some(GraphicsTerminal::new(width, height));
+    crate::serial_println!("[GTERM] Graphics terminal initialized ({}x{})", width, height);
     Ok(())
 }
 
 
-pub fn write(e: &str) {
-    if let Some(asc) = NI_.lock().as_mut() {
-        asc.write_str(e);
+pub fn write(j: &str) {
+    if let Some(wp) = OH_.lock().as_mut() {
+        wp.write_str(j);
     }
 }
 
 
-pub fn tj() -> Option<Vec<u32>> {
-    NI_.lock().as_mut().map(|asc| asc.tj())
+pub fn render() -> Option<Vec<u32>> {
+    OH_.lock().as_mut().map(|wp| wp.render())
 }
 
 
-pub fn vr(r: char) {
-    if let Some(asc) = NI_.lock().as_mut() {
-        asc.vr(r);
+pub fn handle_key(c: char) {
+    if let Some(wp) = OH_.lock().as_mut() {
+        wp.handle_key(c);
     }
 }
 
 
-pub fn gii() -> Option<(u32, u32)> {
-    NI_.lock().as_ref().map(|asc| asc.vii())
+pub fn cyt() -> Option<(u32, u32)> {
+    OH_.lock().as_ref().map(|wp| wp.pixel_size())
 }

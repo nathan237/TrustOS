@@ -6,11 +6,11 @@
 
 
 
-#[allow(moc)]
-use x86_64::registers::model_specific::{Efer, EferFlags, LStar, SFMask, And};
-#[allow(moc)]
+#[allow(unused_imports)]
+use x86_64::registers::model_specific::{Efer, EferFlags, LStar, SFMask, Star};
+#[allow(unused_imports)]
 use x86_64::registers::rflags::RFlags;
-#[allow(moc)]
+#[allow(unused_imports)]
 use x86_64::VirtAddr;
 
 
@@ -38,9 +38,9 @@ pub fn init() {
 
 
 
-#[unsafe(evb)]
-unsafe extern "C" fn prb() {
-    core::arch::evc!(
+#[unsafe(naked)]
+unsafe extern "C" fn jky() {
+    core::arch::naked_asm!(
         
         "push rcx",          
         "push r11",          
@@ -98,7 +98,7 @@ unsafe extern "C" fn prb() {
         
         "sysretq",
         
-        cfd = aaw prc,
+        handler = sym syscall_handler_rust,
     );
 }
 
@@ -108,32 +108,32 @@ unsafe extern "C" fn prb() {
 
 
 #[no_mangle]
-pub extern "C" fn prc(
+pub extern "C" fn syscall_handler_rust(
     num: u64,
-    aai: u64,
-    agf: u64,
-    bfx: u64,
-    fcs: u64,
-    gyx: u64,
-    kax: u64,
+    arg1: u64,
+    arg2: u64,
+    aer: u64,
+    cfw: u64,
+    dhv: u64,
+    arg6: u64,
 ) -> u64 {
-    use crate::syscall::linux::nr::AHJ_;
+    use crate::syscall::linux::nr::AJF_;
     
     
-    let aux = crate::syscall::oae(num, aai, agf, bfx, fcs, gyx, kax);
+    let ret = crate::syscall::idi(num, arg1, arg2, aer, cfw, dhv, arg6);
 
     
-    crate::lab_mode::trace_bus::ktb(num, [aai, agf, bfx], aux);
+    crate::lab_mode::trace_bus::fuj(num, [arg1, arg2, aer], ret);
 
     
     
-    if num == AHJ_ {
+    if num == AJF_ {
         
         unsafe {
-            let result = crate::signals::wog(
-                &mut crate::userland::YC_,
-                &mut crate::userland::YD_,
-                &mut crate::userland::YB_,
+            let result = crate::signals::oss(
+                &mut crate::userland::USER_RETURN_RIP,
+                &mut crate::userland::USER_RSP_TEMP,
+                &mut crate::userland::USER_RETURN_RFLAGS,
             );
             return result as u64;
         }
@@ -141,20 +141,20 @@ pub extern "C" fn prc(
     
     
     unsafe {
-        if let Some(qk) = crate::signals::xml(
-            &mut crate::userland::YC_,
-            &mut crate::userland::YD_,
-            &mut crate::userland::YB_,
-            aux as u64,
+        if let Some(signo) = crate::signals::pnt(
+            &mut crate::userland::USER_RETURN_RIP,
+            &mut crate::userland::USER_RSP_TEMP,
+            &mut crate::userland::USER_RETURN_RFLAGS,
+            ret as u64,
         ) {
             
             
             
-            crate::userland::AHX_ = qk;
+            crate::userland::SIGNAL_DELIVER_SIGNO = signo;
             
             
         }
     }
 
-    aux as u64
+    ret as u64
 }

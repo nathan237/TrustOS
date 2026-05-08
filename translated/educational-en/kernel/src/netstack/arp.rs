@@ -34,7 +34,7 @@ pub fn parse(data: &[u8]) -> Option<Self> {
             return None;
         }
         Some(        // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::read_unaligned(data.as_pointer() as *const Self) })
+unsafe { core::ptr::read_unaligned(data.as_ptr() as *const Self) })
     }
     
         // Public function — callable from other modules.

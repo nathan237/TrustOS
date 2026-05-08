@@ -21,116 +21,116 @@ use crate::security;
 use crate::security::{CapabilityId, CapabilityType, CapabilityRights};
 
 use self::policy::{SandboxPolicy, PolicyPreset, PolicyVerdict};
-use self::net_proxy::{NetProxy, Fz, ProxyError};
+use self::net_proxy::{NetProxy, Cs, ProxyError};
 use self::fs::SandboxFs;
 
 
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Ax(pub u64);
+pub struct Ag(pub u64);
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SandboxState {
     
-    Cv,
+    Idle,
     
-    Di,
+    Active,
     
-    Ky,
+    Suspended,
     
-    Hh,
+    Terminated,
 }
 
 
 #[derive(Debug, Clone)]
 pub struct ResourceLimits {
     
-    pub jfj: usize,
+    pub max_memory_bytes: usize,
     
-    pub uky: usize,
+    pub max_concurrent_requests: usize,
     
-    pub gmj: usize,
+    pub max_total_requests: usize,
     
-    pub efg: usize,
+    pub max_response_size: usize,
     
-    pub ols: usize,
+    pub max_fs_files: usize,
     
-    pub olr: usize,
+    pub max_fs_bytes: usize,
     
-    pub uas: u64,
+    pub js_timeout_ms: u64,
     
-    pub uaq: usize,
+    pub js_max_stack: usize,
 }
 
 impl Default for ResourceLimits {
     fn default() -> Self {
         Self {
-            jfj: 4 * 1024 * 1024,       
-            uky: 4,
-            gmj: 100,
-            efg: 1024 * 1024,           
-            ols: 64,
-            olr: 512 * 1024,                 
-            uas: 5000,
-            uaq: 64,
+            max_memory_bytes: 4 * 1024 * 1024,       
+            max_concurrent_requests: 4,
+            max_total_requests: 100,
+            max_response_size: 1024 * 1024,           
+            max_fs_files: 64,
+            max_fs_bytes: 512 * 1024,                 
+            js_timeout_ms: 5000,
+            js_max_stack: 64,
         }
     }
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Ke {
-    pub aet: u64,
-    pub afh: Ax,
-    pub hr: AuditAction,
-    pub eu: String,
+pub struct Eb {
+    pub timestamp_ms: u64,
+    pub sandbox_id: Ag,
+    pub action: AuditAction,
+    pub detail: String,
 }
 
 #[derive(Debug, Clone)]
 pub enum AuditAction {
-    Cu,
-    Chv,
-    Dcz,
-    Dcy,
-    Daj,
-    Dai,
-    Cxh,
-    Dep,
-    Cav,
+    Created,
+    Navigate,
+    NetworkRequest,
+    NetworkBlocked,
+    JsExecute,
+    JsBlocked,
+    FsAccess,
+    PolicyViolation,
+    Destroyed,
 }
 
 
 #[derive(Debug, Clone)]
 pub struct SandboxStats {
-    pub fsr: usize,
-    pub jmd: usize,
-    pub cdm: usize,
-    pub ohi: usize,
-    pub hvq: usize,
-    pub nwo: usize,
-    pub nwm: usize,
+    pub requests_made: usize,
+    pub requests_blocked: usize,
+    pub bytes_received: usize,
+    pub js_executions: usize,
+    pub policy_violations: usize,
+    pub fs_files_created: usize,
+    pub fs_bytes_used: usize,
 }
 
 impl SandboxStats {
     fn new() -> Self {
         Self {
-            fsr: 0,
-            jmd: 0,
-            cdm: 0,
-            ohi: 0,
-            hvq: 0,
-            nwo: 0,
-            nwm: 0,
+            requests_made: 0,
+            requests_blocked: 0,
+            bytes_received: 0,
+            js_executions: 0,
+            policy_violations: 0,
+            fs_files_created: 0,
+            fs_bytes_used: 0,
         }
     }
 }
 
 
 pub struct Sandbox {
-    pub ad: Ax,
-    pub g: SandboxState,
+    pub id: Ag,
+    pub state: SandboxState,
     
     pub capability: CapabilityId,
     
@@ -138,35 +138,35 @@ pub struct Sandbox {
     
     pub net_proxy: NetProxy,
     
-    pub fio: SandboxFs,
+    pub filesystem: SandboxFs,
     
-    pub bdv: Option<String>,
+    pub current_url: Option<String>,
     
-    pub cfw: ResourceLimits,
+    pub limits: ResourceLimits,
     
-    pub cm: SandboxStats,
+    pub stats: SandboxStats,
     
-    pub jij: BTreeMap<String, Vec<u8>>,
+    pub page_cache: BTreeMap<String, Vec<u8>>,
     
-    pub cu: String,
+    pub label: String,
 }
 
 impl Sandbox {
-    fn new(ad: Ax, capability: CapabilityId, policy: SandboxPolicy, cfw: ResourceLimits, cu: String) -> Self {
-        let net_proxy = NetProxy::new(ad, &policy);
-        let fio = SandboxFs::new(ad, cfw.ols, cfw.olr);
+    fn new(id: Ag, capability: CapabilityId, policy: SandboxPolicy, limits: ResourceLimits, label: String) -> Self {
+        let net_proxy = NetProxy::new(id, &policy);
+        let filesystem = SandboxFs::new(id, limits.max_fs_files, limits.max_fs_bytes);
         Self {
-            ad,
-            g: SandboxState::Cv,
+            id,
+            state: SandboxState::Idle,
             capability,
             policy,
             net_proxy,
-            fio,
-            bdv: None,
-            cfw,
-            cm: SandboxStats::new(),
-            jij: BTreeMap::new(),
-            cu,
+            filesystem,
+            current_url: None,
+            limits,
+            stats: SandboxStats::new(),
+            page_cache: BTreeMap::new(),
+            label,
         }
     }
 }
@@ -175,244 +175,244 @@ impl Sandbox {
 
 
 pub struct SandboxManager {
-    bse: BTreeMap<u64, Sandbox>,
-    bcb: u64,
+    sandboxes: BTreeMap<u64, Sandbox>,
+    next_id: u64,
     
-    nbr: Option<u32>,
+    cap_type_id: Option<u32>,
     
-    lkk: Option<CapabilityId>,
+    master_cap: Option<CapabilityId>,
     
-    emi: Vec<Ke>,
+    audit_log: Vec<Eb>,
 }
 
 impl SandboxManager {
     pub fn new() -> Self {
         Self {
-            bse: BTreeMap::new(),
-            bcb: 1,
-            nbr: None,
-            lkk: None,
-            emi: Vec::new(),
+            sandboxes: BTreeMap::new(),
+            next_id: 1,
+            cap_type_id: None,
+            master_cap: None,
+            audit_log: Vec::new(),
         }
     }
 
     
-    pub fn vub(&mut self) {
-        let pws = security::pbm(
+    pub fn register_capability_type(&mut self) {
+        let joy = security::izk(
             "WebSandbox",
             3, 
             "Security",
             "Web sandbox isolation — controls network, JS, filesystem access for untrusted web content"
         );
-        self.nbr = Some(pws);
+        self.cap_type_id = Some(joy);
 
         
-        let jez = security::klu(
-            CapabilityType::Ari(pws),
-            CapabilityRights::Cm
-                .far(CapabilityRights::Db)
-                .far(CapabilityRights::Vx)
-                .far(CapabilityRights::Mt),
+        let etw = security::fpa(
+            CapabilityType::Dynamic(joy),
+            CapabilityRights::Ba
+                .union(CapabilityRights::Bh)
+                .union(CapabilityRights::Jq)
+                .union(CapabilityRights::Fj),
             0, 
         );
-        self.lkk = Some(jez);
+        self.master_cap = Some(etw);
     }
 
     
-    pub fn nhh(&mut self, akl: PolicyPreset, cu: Option<&str>) -> Ax {
-        let ad = Ax(self.bcb);
-        self.bcb += 1;
+    pub fn create_sandbox(&mut self, preset: PolicyPreset, label: Option<&str>) -> Ag {
+        let id = Ag(self.next_id);
+        self.next_id += 1;
 
         
-        let capability = if let Some(jez) = self.lkk {
+        let capability = if let Some(etw) = self.master_cap {
             security::derive(
-                jez,
-                CapabilityRights::Cm.far(CapabilityRights::Db),
-                ad.0, 
-            ).unwrap_or(jez)
+                etw,
+                CapabilityRights::Ba.union(CapabilityRights::Bh),
+                id.0, 
+            ).unwrap_or(etw)
         } else {
             CapabilityId(0)
         };
 
-        let policy = SandboxPolicy::sye(akl);
-        let cfw = ResourceLimits::default();
-        let fms = cu.unwrap_or("sandbox").into();
-        let sandbox = Sandbox::new(ad, capability, policy, cfw, fms);
-        self.bse.insert(ad.0, sandbox);
+        let policy = SandboxPolicy::lzo(preset);
+        let limits = ResourceLimits::default();
+        let cmb = label.unwrap_or("sandbox").into();
+        let sandbox = Sandbox::new(id, capability, policy, limits, cmb);
+        self.sandboxes.insert(id.0, sandbox);
 
-        self.ma(ad, AuditAction::Cu, format!("preset={:?}", akl));
-        ad
+        self.audit(id, AuditAction::Created, format!("preset={:?}", preset));
+        id
     }
 
     
-    pub fn bvn(&mut self, ad: Ax, url: &str) -> Result<Fz, SandboxError> {
+    pub fn navigate(&mut self, id: Ag, url: &str) -> Result<Cs, SandboxError> {
         
         {
-            let sandbox = self.bse.get(&ad.0)
-                .ok_or(SandboxError::N)?;
-            if sandbox.g == SandboxState::Hh {
-                return Err(SandboxError::Hh);
+            let sandbox = self.sandboxes.get(&id.0)
+                .ok_or(SandboxError::NotFound)?;
+            if sandbox.state == SandboxState::Terminated {
+                return Err(SandboxError::Terminated);
             }
-            if sandbox.g == SandboxState::Ky {
-                return Err(SandboxError::Ky);
+            if sandbox.state == SandboxState::Suspended {
+                return Err(SandboxError::Suspended);
             }
-            if sandbox.cm.fsr >= sandbox.cfw.gmj {
+            if sandbox.stats.requests_made >= sandbox.limits.max_total_requests {
                 
             }
         }
 
         
-        let sandbox = self.bse.ds(&ad.0)
-            .ok_or(SandboxError::N)?;
+        let sandbox = self.sandboxes.get_mut(&id.0)
+            .ok_or(SandboxError::NotFound)?;
 
-        if sandbox.cm.fsr >= sandbox.cfw.gmj {
-            sandbox.cm.hvq += 1;
-            return Err(SandboxError::Axx);
+        if sandbox.stats.requests_made >= sandbox.limits.max_total_requests {
+            sandbox.stats.policy_violations += 1;
+            return Err(SandboxError::RequestLimitExceeded);
         }
 
-        let igj = sandbox.policy.nrf(url);
-        match igj {
-            PolicyVerdict::Zs => {},
-            PolicyVerdict::Pf(ctt) => {
-                sandbox.cm.jmd += 1;
-                sandbox.cm.hvq += 1;
-                return Err(SandboxError::Adv(ctt));
+        let edq = sandbox.policy.evaluate_url(url);
+        match edq {
+            PolicyVerdict::Allow => {},
+            PolicyVerdict::Deny(azg) => {
+                sandbox.stats.requests_blocked += 1;
+                sandbox.stats.policy_violations += 1;
+                return Err(SandboxError::PolicyDenied(azg));
             },
-            PolicyVerdict::Nl => {},
+            PolicyVerdict::Log => {},
         }
 
         
-        sandbox.cm.fsr += 1;
-        let ate = sandbox.cfw.efg;
-        let mk = sandbox.net_proxy.hjd(url, ate)?;
+        sandbox.stats.requests_made += 1;
+        let max_size = sandbox.limits.max_response_size;
+        let fa = sandbox.net_proxy.fetch(url, max_size)?;
 
-        sandbox.cm.cdm += mk.gj.len();
-        sandbox.bdv = Some(url.into());
-        sandbox.g = SandboxState::Di;
-        sandbox.jij.insert(url.into(), mk.gj.clone());
+        sandbox.stats.bytes_received += fa.body.len();
+        sandbox.current_url = Some(url.into());
+        sandbox.state = SandboxState::Active;
+        sandbox.page_cache.insert(url.into(), fa.body.clone());
 
         
-        self.ma(ad, AuditAction::Chv, url.into());
+        self.audit(id, AuditAction::Navigate, url.into());
 
-        Ok(mk)
+        Ok(fa)
     }
 
     
-    pub fn kvn(&mut self, ad: Ax, url: &str) -> Result<Fz, SandboxError> {
-        let sandbox = self.bse.ds(&ad.0)
-            .ok_or(SandboxError::N)?;
+    pub fn fetch_resource(&mut self, id: Ag, url: &str) -> Result<Cs, SandboxError> {
+        let sandbox = self.sandboxes.get_mut(&id.0)
+            .ok_or(SandboxError::NotFound)?;
 
-        if sandbox.g == SandboxState::Hh {
-            return Err(SandboxError::Hh);
+        if sandbox.state == SandboxState::Terminated {
+            return Err(SandboxError::Terminated);
         }
 
         
-        if let Some(ene) = sandbox.jij.get(url) {
-            return Ok(Fz {
-                wt: 200,
-                ahg: String::from("text/html"),
-                gj: ene.clone(),
-                zk: Vec::new(),
-                mqh: true,
+        if let Some(bfd) = sandbox.page_cache.get(url) {
+            return Ok(Cs {
+                status_code: 200,
+                content_type: String::from("text/html"),
+                body: bfd.clone(),
+                headers: Vec::new(),
+                was_cached: true,
             });
         }
 
-        if sandbox.cm.fsr >= sandbox.cfw.gmj {
-            sandbox.cm.hvq += 1;
-            return Err(SandboxError::Axx);
+        if sandbox.stats.requests_made >= sandbox.limits.max_total_requests {
+            sandbox.stats.policy_violations += 1;
+            return Err(SandboxError::RequestLimitExceeded);
         }
 
-        let igj = sandbox.policy.nrf(url);
-        match igj {
-            PolicyVerdict::Zs | PolicyVerdict::Nl => {},
-            PolicyVerdict::Pf(ctt) => {
-                sandbox.cm.jmd += 1;
-                return Err(SandboxError::Adv(ctt));
+        let edq = sandbox.policy.evaluate_url(url);
+        match edq {
+            PolicyVerdict::Allow | PolicyVerdict::Log => {},
+            PolicyVerdict::Deny(azg) => {
+                sandbox.stats.requests_blocked += 1;
+                return Err(SandboxError::PolicyDenied(azg));
             },
         }
 
-        sandbox.cm.fsr += 1;
-        let ate = sandbox.cfw.efg;
-        let mk = sandbox.net_proxy.hjd(url, ate)?;
-        sandbox.cm.cdm += mk.gj.len();
-        sandbox.jij.insert(url.into(), mk.gj.clone());
-        Ok(mk)
+        sandbox.stats.requests_made += 1;
+        let max_size = sandbox.limits.max_response_size;
+        let fa = sandbox.net_proxy.fetch(url, max_size)?;
+        sandbox.stats.bytes_received += fa.body.len();
+        sandbox.page_cache.insert(url.into(), fa.body.clone());
+        Ok(fa)
     }
 
     
-    pub fn fvw(&mut self, ad: Ax) -> Result<(), SandboxError> {
-        let sandbox = self.bse.ds(&ad.0)
-            .ok_or(SandboxError::N)?;
-        sandbox.g = SandboxState::Ky;
+    pub fn crf(&mut self, id: Ag) -> Result<(), SandboxError> {
+        let sandbox = self.sandboxes.get_mut(&id.0)
+            .ok_or(SandboxError::NotFound)?;
+        sandbox.state = SandboxState::Suspended;
         Ok(())
     }
 
     
-    pub fn anu(&mut self, ad: Ax) -> Result<(), SandboxError> {
-        let sandbox = self.bse.ds(&ad.0)
-            .ok_or(SandboxError::N)?;
-        if sandbox.g == SandboxState::Ky {
-            sandbox.g = SandboxState::Di;
+    pub fn resume(&mut self, id: Ag) -> Result<(), SandboxError> {
+        let sandbox = self.sandboxes.get_mut(&id.0)
+            .ok_or(SandboxError::NotFound)?;
+        if sandbox.state == SandboxState::Suspended {
+            sandbox.state = SandboxState::Active;
         }
         Ok(())
     }
 
     
-    pub fn hfy(&mut self, ad: Ax) -> Result<(), SandboxError> {
-        if let Some(sandbox) = self.bse.ds(&ad.0) {
-            sandbox.g = SandboxState::Hh;
-            security::vyp(sandbox.capability);
-            self.ma(ad, AuditAction::Cav, String::new());
+    pub fn destroy(&mut self, id: Ag) -> Result<(), SandboxError> {
+        if let Some(sandbox) = self.sandboxes.get_mut(&id.0) {
+            sandbox.state = SandboxState::Terminated;
+            security::ogu(sandbox.capability);
+            self.audit(id, AuditAction::Destroyed, String::new());
         }
-        self.bse.remove(&ad.0);
+        self.sandboxes.remove(&id.0);
         Ok(())
     }
 
     
-    pub fn get(&self, ad: Ax) -> Option<&Sandbox> {
-        self.bse.get(&ad.0)
+    pub fn get(&self, id: Ag) -> Option<&Sandbox> {
+        self.sandboxes.get(&id.0)
     }
 
     
-    pub fn ds(&mut self, ad: Ax) -> Option<&mut Sandbox> {
-        self.bse.ds(&ad.0)
+    pub fn get_mut(&mut self, id: Ag) -> Option<&mut Sandbox> {
+        self.sandboxes.get_mut(&id.0)
     }
 
     
-    pub fn aoy(&self) -> Vec<(Ax, &str, SandboxState)> {
-        self.bse.alv()
-            .map(|e| (e.ad, e.cu.as_str(), e.g))
+    pub fn list(&self) -> Vec<(Ag, &str, SandboxState)> {
+        self.sandboxes.values()
+            .map(|j| (j.id, j.label.as_str(), j.state))
             .collect()
     }
 
     
-    pub fn az(&self) -> usize {
-        self.bse.len()
+    pub fn count(&self) -> usize {
+        self.sandboxes.len()
     }
 
     
-    fn ma(&mut self, ad: Ax, hr: AuditAction, eu: String) {
-        let wi = crate::time::lc();
-        self.emi.push(Ke {
-            aet: wi,
-            afh: ad,
-            hr,
-            eu,
+    fn audit(&mut self, id: Ag, action: AuditAction, detail: String) {
+        let jy = crate::time::uptime_ms();
+        self.audit_log.push(Eb {
+            timestamp_ms: jy,
+            sandbox_id: id,
+            action,
+            detail,
         });
         
-        if self.emi.len() > 256 {
-            self.emi.remove(0);
+        if self.audit_log.len() > 256 {
+            self.audit_log.remove(0);
         }
     }
 
     
-    pub fn emi(&self) -> &[Ke] {
-        &self.emi
+    pub fn audit_log(&self) -> &[Eb] {
+        &self.audit_log
     }
 
     
-    pub fn qlf(&self, ad: Ax) -> Vec<&Ke> {
-        self.emi.iter().hi(|aa| aa.afh == ad).collect()
+    pub fn audit_for(&self, id: Ag) -> Vec<&Eb> {
+        self.audit_log.iter().filter(|e| e.sandbox_id == id).collect()
     }
 }
 
@@ -420,30 +420,30 @@ impl SandboxManager {
 
 #[derive(Debug)]
 pub enum SandboxError {
-    N,
-    Hh,
-    Ky,
-    Adv(String),
-    Axx,
-    Qd(String),
-    Cxj,
-    Cxi,
-    Dal,
-    Dak,
-    Csr,
+    NotFound,
+    Terminated,
+    Suspended,
+    PolicyDenied(String),
+    RequestLimitExceeded,
+    NetworkError(String),
+    FsQuotaExceeded,
+    FsNotFound,
+    JsTimeout,
+    JsStackOverflow,
+    CapabilityDenied,
 }
 
 impl From<ProxyError> for SandboxError {
-    fn from(aa: ProxyError) -> Self {
-        match aa {
-            ProxyError::Beu(bc) => SandboxError::Adv(bc),
-            ProxyError::Bqk => SandboxError::Axx,
-            ProxyError::Ckr => SandboxError::Adv(String::from("response too large")),
-            ProxyError::Qd(e) => SandboxError::Qd(e),
-            ProxyError::Wj => SandboxError::Qd(String::from("DNS resolution failed")),
-            ProxyError::TlsError => SandboxError::Qd(String::from("TLS handshake failed")),
-            ProxyError::Oi => SandboxError::Qd(String::from("request timeout")),
-            ProxyError::Bjv => SandboxError::Adv(String::from("invalid URL")),
+    fn from(e: ProxyError) -> Self {
+        match e {
+            ProxyError::DomainBlocked(d) => SandboxError::PolicyDenied(d),
+            ProxyError::RateLimited => SandboxError::RequestLimitExceeded,
+            ProxyError::ResponseTooLarge => SandboxError::PolicyDenied(String::from("response too large")),
+            ProxyError::NetworkError(j) => SandboxError::NetworkError(j),
+            ProxyError::DnsError => SandboxError::NetworkError(String::from("DNS resolution failed")),
+            ProxyError::TlsError => SandboxError::NetworkError(String::from("TLS handshake failed")),
+            ProxyError::Timeout => SandboxError::NetworkError(String::from("request timeout")),
+            ProxyError::InvalidUrl => SandboxError::PolicyDenied(String::from("invalid URL")),
         }
     }
 }
@@ -451,57 +451,57 @@ impl From<ProxyError> for SandboxError {
 
 
 lazy_static::lazy_static! {
-    pub static ref BD_: Mutex<SandboxManager> = Mutex::new(SandboxManager::new());
+    pub static ref BE_: Mutex<SandboxManager> = Mutex::new(SandboxManager::new());
 }
 
 
 pub fn init() {
-    let mut aas = BD_.lock();
-    aas.vub();
+    let mut ng = BE_.lock();
+    ng.register_capability_type();
     crate::serial_println!("[sandbox] Web Sandbox subsystem initialized");
     crate::serial_println!("[sandbox] Capability type registered: WebSandbox (danger=3)");
 }
 
 
-pub fn avp(akl: PolicyPreset, cu: Option<&str>) -> Ax {
-    BD_.lock().nhh(akl, cu)
+pub fn create(preset: PolicyPreset, label: Option<&str>) -> Ag {
+    BE_.lock().create_sandbox(preset, label)
 }
 
 
-pub fn bvn(ad: Ax, url: &str) -> Result<Fz, SandboxError> {
-    BD_.lock().bvn(ad, url)
+pub fn navigate(id: Ag, url: &str) -> Result<Cs, SandboxError> {
+    BE_.lock().navigate(id, url)
 }
 
 
-pub fn kvn(ad: Ax, url: &str) -> Result<Fz, SandboxError> {
-    BD_.lock().kvn(ad, url)
+pub fn fetch_resource(id: Ag, url: &str) -> Result<Cs, SandboxError> {
+    BE_.lock().fetch_resource(id, url)
 }
 
 
-pub fn hfy(ad: Ax) -> Result<(), SandboxError> {
-    BD_.lock().hfy(ad)
+pub fn destroy(id: Ag) -> Result<(), SandboxError> {
+    BE_.lock().destroy(id)
 }
 
 
-pub fn aoy() -> Vec<(Ax, String, SandboxState)> {
-    BD_.lock().aoy().dse()
-        .map(|(ad, e, apc)| (ad, String::from(e), apc))
+pub fn list() -> Vec<(Ag, String, SandboxState)> {
+    BE_.lock().list().into_iter()
+        .map(|(id, j, uz)| (id, String::from(j), uz))
         .collect()
 }
 
 
-pub fn ibt(ad: Ax) -> Option<String> {
-    let aas = BD_.lock();
-    let is = aas.get(ad)?;
+pub fn status_string(id: Ag) -> Option<String> {
+    let ng = BE_.lock();
+    let cv = ng.get(id)?;
     Some(format!(
         "Sandbox #{} '{}'\n  State: {:?}\n  URL: {}\n  Requests: {}/{} ({} blocked)\n  Data: {} bytes\n  JS execs: {}\n  Violations: {}\n  FS: {} files, {} bytes\n  Policy: {:?}",
-        is.ad.0, is.cu, is.g,
-        is.bdv.ahz().unwrap_or("(none)"),
-        is.cm.fsr, is.cfw.gmj, is.cm.jmd,
-        is.cm.cdm,
-        is.cm.ohi,
-        is.cm.hvq,
-        is.cm.nwo, is.cm.nwm,
-        is.policy.akl,
+        cv.id.0, cv.label, cv.state,
+        cv.current_url.as_deref().unwrap_or("(none)"),
+        cv.stats.requests_made, cv.limits.max_total_requests, cv.stats.requests_blocked,
+        cv.stats.bytes_received,
+        cv.stats.js_executions,
+        cv.stats.policy_violations,
+        cv.stats.fs_files_created, cv.stats.fs_bytes_used,
+        cv.policy.preset,
     ))
 }

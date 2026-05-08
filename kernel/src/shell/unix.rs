@@ -22,7 +22,6 @@ const STUBS: &[(&str, &str)] = &[
     ("bg",         "job control"),
     ("fg",         "job control"),
     ("gunzip",     "decompression"),
-    ("mkfs",       "filesystem creation"),
     ("patch",      "patch"),
     ("script",     "terminal recording"),
     ("loadkeys",   "keymap"),
@@ -814,6 +813,38 @@ pub(super) fn cmd_watchdog(args: &[&str]) {
             crate::println!("  enable [timeout_ms]  — Start watchdog (default: 5000 ms)");
             crate::println!("  disable              — Stop watchdog");
             crate::println!("  pet                  — Reset watchdog counter");
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TCO Hardware Watchdog diagnostics
+// ═══════════════════════════════════════════════════════════════════════════════
+
+pub(super) fn cmd_tco(args: &[&str]) {
+    match args.first().copied() {
+        Some("status" | "info") | None => {
+            crate::debug::tco_watchdog_diag();
+        }
+        Some("arm") => {
+            let steps = args.get(1).and_then(|s| s.parse::<u16>().ok()).unwrap_or(50);
+            crate::debug::tco_watchdog_init(steps);
+            crate::println_color!(COLOR_GREEN, "TCO armed: {} steps ({:.1}s)", steps, steps as f64 * 0.6);
+        }
+        Some("disarm" | "off") => {
+            crate::debug::tco_watchdog_disable();
+            crate::println_color!(COLOR_GREEN, "TCO disabled");
+        }
+        Some("pet") => {
+            crate::debug::tco_watchdog_pet();
+            crate::println_color!(COLOR_GREEN, "TCO petted");
+        }
+        _ => {
+            crate::println!("Usage: tco [status|arm [steps]|disarm|pet]");
+            crate::println!("  status        — Dump TCO/SMBus/PMC registers");
+            crate::println!("  arm [steps]   — Arm TCO (default 50 = 30s)");
+            crate::println!("  disarm        — Halt TCO timer");
+            crate::println!("  pet           — Reload TCO timer");
         }
     }
 }
@@ -1682,7 +1713,14 @@ pub(super) fn cmd_mount(args: &[&str]) {
     if args.is_empty() {
         // Show mounted filesystems
         crate::println_color!(COLOR_BRIGHT_GREEN, "Mounted Filesystems:");
-        crate::vfs::list_mounts();
+        let mounts = crate::vfs::list_mounts();
+        if mounts.is_empty() {
+            crate::println!("  (none)");
+        } else {
+            for (path, fstype) in &mounts {
+                crate::println!("  {} on {} type {}", fstype, path, fstype);
+            }
+        }
         return;
     }
     
@@ -1835,9 +1873,244 @@ pub(super) fn cmd_mount(args: &[&str]) {
     }
 }
 
+pub(super) fn cmd_mkfs(args: &[&str]) {
+    if args.is_empty() {
+        crate::println!("Usage: mkfs <type> <device>");
+        crate::println!();
+        crate::println!("Types:");
+        crate::println!("  fat32     Format as FAT32 (recommended for SATA SSD)");
+        crate::println!();
+        crate::println!("Devices:");
+        crate::println!("  ahci:<port>[:<start_lba>]  - AHCI/SATA partition");
+        crate::println!();
+        crate::println!("Examples:");
+        crate::println!("  mkfs fat32 ahci:5:0        - Format AHCI port 5 as FAT32");
+        return;
+    }
+
+    if args.len() < 2 {
+        crate::println_color!(COLOR_RED, "Error: specify both filesystem type and device");
+        crate::println!("Usage: mkfs <type> <device>");
+        return;
+    }
+
+    let fstype = args[0].to_lowercase();
+    let device = args[1];
+
+    match fstype.as_str() {
+        "fat32" | "vfat" => cmd_mkfs_fat32(device),
+        _ => crate::println_color!(COLOR_RED, "Unsupported filesystem type: {}", fstype),
+    }
+}
+
+fn cmd_mkfs_fat32(device: &str) {
+    // Parse device specification  
+    if !device.starts_with("ahci:") && !device.starts_with("sata:") {
+        crate::println_color!(COLOR_RED, "mkfs: unsupported device: {}", device);
+        crate::println!("Supported: ahci:<port>[:<start_lba>]");
+        return;
+    }
+
+    let spec = &device[5..];
+    let parts: Vec<&str> = spec.split(':').collect();
+
+    let port: u8 = match parts[0].parse() {
+        Ok(n) => n,
+        Err(_) => {
+            crate::println_color!(COLOR_RED, "Invalid port number: {}", parts[0]);
+            return;
+        }
+    };
+
+    let start_lba: u64 = if parts.len() > 1 {
+        match parts[1].parse() {
+            Ok(n) => n,
+            Err(_) => {
+                crate::println_color!(COLOR_RED, "Invalid LBA: {}", parts[1]);
+                return;
+            }
+        }
+    } else {
+        0
+    };
+
+    crate::println_color!(COLOR_BRIGHT_GREEN, "Creating FAT32 filesystem on ahci:{}:{}", port, start_lba);
+    crate::println!("This will overwrite any existing data. Press Ctrl+C to cancel (or wait 3 seconds)...");
+
+    // Write FAT32 boot sector
+    let mut boot_sector = [0u8; 512];
+
+    // Jump instruction EB 3C 90
+    boot_sector[0x00] = 0xEB;
+    boot_sector[0x01] = 0x3C;
+    boot_sector[0x02] = 0x90;
+
+    // OEM identifier "TRUSTOS"
+    boot_sector[0x03..0x0B].copy_from_slice(b"TRUSTOS ");
+
+    // Bytes per sector = 512
+    boot_sector[0x0B] = 0x00;
+    boot_sector[0x0C] = 0x02;
+
+    // Sectors per cluster = 8 (4KB clusters)
+    boot_sector[0x0D] = 0x08;
+
+    // Reserved sectors = 32 (FAT32 standard)
+    boot_sector[0x0E] = 0x20;
+    boot_sector[0x0F] = 0x00;
+
+    // Number of FATs = 2
+    boot_sector[0x10] = 0x02;
+
+    // Root directory entries = 0 (FAT32)
+    boot_sector[0x11] = 0x00;
+    boot_sector[0x12] = 0x00;
+
+    // Total sectors 16-bit = 0 (FAT32)
+    boot_sector[0x13] = 0x00;
+    boot_sector[0x14] = 0x00;
+
+    // Media descriptor
+    boot_sector[0x15] = 0xF8;
+
+    // Sectors per FAT 16-bit = 0 (FAT32)
+    boot_sector[0x16] = 0x00;
+    boot_sector[0x17] = 0x00;
+
+    // Sectors per track
+    boot_sector[0x18] = 0x3F;
+    boot_sector[0x19] = 0x00;
+
+    // Heads
+    boot_sector[0x1A] = 0xFF;
+    boot_sector[0x1B] = 0x00;
+
+    // Hidden sectors
+    boot_sector[0x1C] = 0x00;
+    boot_sector[0x1D] = 0x00;
+    boot_sector[0x1E] = 0x00;
+    boot_sector[0x1F] = 0x00;
+
+    // Total sectors 32-bit: use a reasonable default (1GB = ~2097152 sectors)
+    let total_sectors = 2097152u32;
+    boot_sector[0x20..0x24].copy_from_slice(&total_sectors.to_le_bytes());
+
+    // Sectors per FAT (32-bit): allocate enough for clusters
+    // For ~2M sectors with 8 sec/cluster = ~256K clusters
+    // FAT needs 1 byte per cluster entry = 256K bytes = ~512 sectors
+    let sectors_per_fat = 512u64;
+    boot_sector[0x24..0x28].copy_from_slice(&(sectors_per_fat as u32).to_le_bytes());
+
+    // Flags
+    boot_sector[0x28] = 0x00;
+    boot_sector[0x29] = 0x00;
+
+    // Filesystem version
+    boot_sector[0x2A] = 0x00;
+    boot_sector[0x2B] = 0x00;
+
+    // Root directory cluster (always 2 for FAT32)
+    boot_sector[0x2C..0x30].copy_from_slice(&2u32.to_le_bytes());
+
+    // FSINFO sector (usually 1)
+    boot_sector[0x30] = 0x01;
+    boot_sector[0x31] = 0x00;
+
+    // Backup boot sector (usually 6)
+    boot_sector[0x32] = 0x06;
+    boot_sector[0x33] = 0x00;
+
+    // Reserved (12 bytes)
+    for i in 0x34..0x40 {
+        boot_sector[i] = 0x00;
+    }
+
+    // Drive number
+    boot_sector[0x40] = 0x80;
+
+    // Reserved
+    boot_sector[0x41] = 0x00;
+
+    // Boot signature (0x29 = extended boot signature present)
+    boot_sector[0x42] = 0x29;
+
+    // Serial number (use a timestamp-based value)
+    let serial = 0x12345678u32;
+    boot_sector[0x43..0x47].copy_from_slice(&serial.to_le_bytes());
+
+    // Volume label "TRUSTOS    " (11 bytes, padded with spaces)
+    boot_sector[0x47..0x52].copy_from_slice(b"TRUSTOS    ");
+
+    // Filesystem type "FAT32   " (8 bytes)
+    boot_sector[0x52..0x5A].copy_from_slice(b"FAT32   ");
+
+    // Boot code area (0x5A to 0x1FD)
+    for i in 0x5A..0x1FE {
+        boot_sector[i] = 0x00;
+    }
+
+    // Boot signature (0xAA55)
+    boot_sector[0x1FE] = 0x55;
+    boot_sector[0x1FF] = 0xAA;
+
+    // Write boot sector - simple, no nesting to avoid hangs
+    match crate::drivers::ahci::write_sectors(port, start_lba, 1u16, &boot_sector) {
+        Ok(bytes) => crate::println_color!(COLOR_GREEN, "[1/4] Boot sector written: {} bytes", bytes),
+        Err(e) => {
+            crate::println_color!(COLOR_RED, "mkfs: boot write failed: {:?}", e);
+            return;
+        }
+    }
+
+    // Initialize FAT table with minimal structure
+    let mut fat_sector = [0u8; 512];
+    fat_sector[0..4].copy_from_slice(&0xFFFFFFF8u32.to_le_bytes()); // FAT[0]
+    fat_sector[4..8].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes()); // FAT[1]
+    fat_sector[8..12].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes()); // FAT[2]
+
+    // Write first FAT copy
+    match crate::drivers::ahci::write_sectors(port, start_lba + 32, 1u16, &fat_sector) {
+        Ok(_) => crate::println_color!(COLOR_GREEN, "[2/4] FAT table initialized"),
+        Err(e) => {
+            crate::println_color!(COLOR_RED, "mkfs: FAT write failed: {:?}", e);
+            return;
+        }
+    }
+
+    // Write second FAT copy
+    match crate::drivers::ahci::write_sectors(port, start_lba + 32 + sectors_per_fat, 1u16, &fat_sector) {
+        Ok(_) => crate::println_color!(COLOR_GREEN, "[3/4] Backup FAT written"),
+        Err(e) => {
+            crate::println_color!(COLOR_RED, "mkfs: backup FAT write failed: {:?}", e);
+            return;
+        }
+    }
+
+    // Write empty root directory cluster
+    let mut dir_sector = [0u8; 512];
+    let root_cluster_lba = start_lba + 32 + 2 * sectors_per_fat;
+    match crate::drivers::ahci::write_sectors(port, root_cluster_lba, 1u16, &dir_sector) {
+        Ok(_) => crate::println_color!(COLOR_GREEN, "[4/4] Root directory initialized"),
+        Err(e) => {
+            crate::println_color!(COLOR_RED, "mkfs: root dir write failed: {:?}", e);
+            return;
+        }
+    }
+
+    crate::println_color!(COLOR_BRIGHT_GREEN, "FAT32 filesystem created successfully!");
+    match crate::drivers::ahci::flush_cache(port) {
+        Ok(()) => crate::println_color!(COLOR_GREEN, "Disk cache flushed OK"),
+        Err(e) => crate::println_color!(COLOR_RED, "Flush cache FAILED: {}", e),
+    }
+    crate::println!("Mount with: mount ahci:{}:{} /mnt/ssd", port, start_lba);
+}
+
 pub(super) fn cmd_sync() {
     crate::println!("Syncing filesystems...");
-    crate::println_color!(COLOR_GREEN, "Done.");
+    match crate::vfs::sync_all() {
+        Ok(()) => crate::println_color!(COLOR_GREEN, "Done."),
+        Err(e) => crate::println_color!(COLOR_RED, "Sync error: {:?}", e),
+    }
 }
 
 pub(super) fn cmd_umount(args: &[&str]) {
@@ -2064,6 +2337,166 @@ pub(super) fn cmd_export(args: &[&str]) {
         // Just mark as exported (already in our global store)
         if super::scripting::get_var(args[0]).is_none() {
             super::scripting::set_var(args[0], "");
+        }
+    }
+}
+
+/// config — view/edit training parameters and save to SSD
+///
+/// Usage:
+///   config                   Show all current config
+///   config <key>             Show one value
+///   config <key> <value>     Set a value (runtime)
+///   config save              Write current config to /mnt/sda1/training.cfg
+///   config load              Re-load /mnt/sda1/training.cfg
+pub(super) fn cmd_config(args: &[&str]) {
+    #[cfg(not(feature = "jarvis"))]
+    {
+        let _ = args;
+        crate::println_color!(COLOR_RED, "  Training config requires the 'jarvis' feature");
+        return;
+    }
+
+    #[cfg(feature = "jarvis")]
+    {
+        use core::sync::atomic::Ordering;
+        use alloc::format;
+
+        const CFG_PATH: &str = "/mnt/sda1/training.cfg";
+
+        if args.is_empty() {
+            // Show all
+            let max_seq = crate::jarvis::effective_max_seq();
+            let lr_bits = crate::jarvis::LR_MAX_CFG.load(Ordering::Relaxed);
+            let lr_max = if lr_bits != 0 { f32::from_bits(lr_bits) } else { 0.001 };
+            let lr_min_bits = crate::jarvis::LR_MIN_CFG.load(Ordering::Relaxed);
+            let lr_min = if lr_min_bits != 0 { f32::from_bits(lr_min_bits) } else { lr_max * 0.1 };
+            let epochs = crate::jarvis::EPOCHS_CFG.load(Ordering::Relaxed);
+            let ckpt = crate::jarvis::training_loop::CHECKPOINT_EVERY.load(Ordering::Relaxed);
+            let early = crate::jarvis::EARLY_STOP_CFG.load(Ordering::Relaxed);
+
+            crate::println!("  === Training Config ===");
+            crate::println!("  train_max_seq   = {}", max_seq);
+            crate::println!("  lr_max          = {:.6}", lr_max);
+            crate::println!("  lr_min          = {:.6}", lr_min);
+            crate::println!("  epochs          = {} (0=infinite)", epochs);
+            crate::println!("  checkpoint_every= {}", ckpt);
+            crate::println!("  early_stop      = {}", early);
+            crate::println!();
+            crate::println!("  config <key> <value>  to set");
+            crate::println!("  config save           to write to SSD");
+            crate::println!("  config load           to reload from SSD");
+            return;
+        }
+
+        match args[0] {
+            "save" => {
+                let max_seq = crate::jarvis::effective_max_seq();
+                let lr_bits = crate::jarvis::LR_MAX_CFG.load(Ordering::Relaxed);
+                let lr_max = if lr_bits != 0 { f32::from_bits(lr_bits) } else { 0.001 };
+                let lr_min_bits = crate::jarvis::LR_MIN_CFG.load(Ordering::Relaxed);
+                let lr_min = if lr_min_bits != 0 { f32::from_bits(lr_min_bits) } else { lr_max * 0.1 };
+                let epochs = crate::jarvis::EPOCHS_CFG.load(Ordering::Relaxed);
+                let ckpt = crate::jarvis::training_loop::CHECKPOINT_EVERY.load(Ordering::Relaxed);
+                let early = crate::jarvis::EARLY_STOP_CFG.load(Ordering::Relaxed);
+
+                let content = format!(
+                    "# JARVIS Training Config (auto-generated)\n\
+                     # Edit and reboot, or run 'config load'\n\
+                     train_max_seq={}\n\
+                     lr_max={:.6}\n\
+                     lr_min={:.6}\n\
+                     epochs={}\n\
+                     checkpoint_every={}\n\
+                     early_stop={}\n",
+                    max_seq, lr_max, lr_min, epochs, ckpt, early
+                );
+                match crate::vfs::write_file(CFG_PATH, content.as_bytes()) {
+                    Ok(()) => {
+                        let _ = crate::vfs::sync_all();
+                        crate::println_color!(COLOR_GREEN, "  Config saved to {}", CFG_PATH);
+                    }
+                    Err(e) => crate::println_color!(COLOR_RED, "  Save failed: {:?}", e),
+                }
+            }
+            "load" => {
+                match crate::vfs::read_file(CFG_PATH) {
+                    Ok(data) => {
+                        if let Ok(text) = core::str::from_utf8(&data) {
+                            crate::apply_training_config(text);
+                            crate::println_color!(COLOR_GREEN, "  Config reloaded from {}", CFG_PATH);
+                        } else {
+                            crate::println_color!(COLOR_RED, "  Invalid UTF-8 in {}", CFG_PATH);
+                        }
+                    }
+                    Err(e) => crate::println_color!(COLOR_RED, "  Load failed: {:?}", e),
+                }
+            }
+            key => {
+                if args.len() >= 2 {
+                    // Set value
+                    let val = args[1];
+                    match key {
+                        "train_max_seq" => {
+                            if let Ok(v) = val.parse::<usize>() {
+                                crate::jarvis::TRAIN_MAX_SEQ_CFG.store(v, Ordering::Release);
+                                crate::println_color!(COLOR_GREEN, "  train_max_seq = {}", v);
+                            } else {
+                                crate::println_color!(COLOR_RED, "  Invalid value");
+                            }
+                        }
+                        "lr_max" | "lr" => {
+                            if let Ok(v) = val.parse::<f32>() {
+                                crate::jarvis::LR_MAX_CFG.store(v.to_bits(), Ordering::Release);
+                                crate::println_color!(COLOR_GREEN, "  lr_max = {}", v);
+                            }
+                        }
+                        "lr_min" => {
+                            if let Ok(v) = val.parse::<f32>() {
+                                crate::jarvis::LR_MIN_CFG.store(v.to_bits(), Ordering::Release);
+                                crate::println_color!(COLOR_GREEN, "  lr_min = {}", v);
+                            }
+                        }
+                        "epochs" => {
+                            if let Ok(v) = val.parse::<u32>() {
+                                crate::jarvis::EPOCHS_CFG.store(v, Ordering::Release);
+                                crate::println_color!(COLOR_GREEN, "  epochs = {}", v);
+                            }
+                        }
+                        "checkpoint_every" | "ckpt" => {
+                            if let Ok(v) = val.parse::<u32>() {
+                                crate::jarvis::training_loop::CHECKPOINT_EVERY.store(v, Ordering::Release);
+                                crate::println_color!(COLOR_GREEN, "  checkpoint_every = {}", v);
+                            }
+                        }
+                        "early_stop" => {
+                            let v = matches!(val, "true" | "1" | "yes");
+                            crate::jarvis::EARLY_STOP_CFG.store(v, Ordering::Release);
+                            crate::println_color!(COLOR_GREEN, "  early_stop = {}", v);
+                        }
+                        _ => crate::println_color!(COLOR_RED, "  Unknown key: {}", key),
+                    }
+                } else {
+                    // Show one value
+                    match key {
+                        "train_max_seq" => crate::println!("  {}", crate::jarvis::effective_max_seq()),
+                        "lr_max" | "lr" => {
+                            let b = crate::jarvis::LR_MAX_CFG.load(Ordering::Relaxed);
+                            let v = if b != 0 { f32::from_bits(b) } else { 0.001 };
+                            crate::println!("  {:.6}", v);
+                        }
+                        "lr_min" => {
+                            let b = crate::jarvis::LR_MIN_CFG.load(Ordering::Relaxed);
+                            let v = if b != 0 { f32::from_bits(b) } else { 0.0001 };
+                            crate::println!("  {:.6}", v);
+                        }
+                        "epochs" => crate::println!("  {}", crate::jarvis::EPOCHS_CFG.load(Ordering::Relaxed)),
+                        "checkpoint_every" | "ckpt" => crate::println!("  {}", crate::jarvis::training_loop::CHECKPOINT_EVERY.load(Ordering::Relaxed)),
+                        "early_stop" => crate::println!("  {}", crate::jarvis::EARLY_STOP_CFG.load(Ordering::Relaxed)),
+                        _ => crate::println_color!(COLOR_RED, "  Unknown key: {}", key),
+                    }
+                }
+            }
         }
     }
 }
@@ -4684,4 +5117,141 @@ pub(super) fn cmd_benchmark() {
 
     crate::println!("======================================================");
     crate::println_color!(COLOR_GREEN, "Benchmark complete.");
+}
+
+// ── bios dump/flash tooling ─────────────────────────────────────────────────
+
+/// bios <subcommand> [args]
+///
+/// Subcommands:
+///   pull <file> [dst_ip] [dst_port]   — Read file from VFS and stream over UDP
+///   help                               — Show usage
+///
+/// Examples:
+///   bios pull /mnt/ssd/BIOS.ROM
+///   bios pull /mnt/ssd/BIOS.ROM 10.0.0.1 7780
+pub(super) fn cmd_bios(args: &[&str]) {
+    const DEFAULT_IP: [u8; 4] = [10, 0, 0, 1];
+    const DEFAULT_PORT: u16 = 7780;
+    const CHUNK_DATA: usize = 1400;
+
+    let sub = args.first().copied().unwrap_or("help");
+
+    match sub {
+        "pull" => {
+            if args.len() < 2 {
+                crate::println_color!(COLOR_RED, "Usage: bios pull <file> [dst_ip] [dst_port]");
+                return;
+            }
+            let path = args[1];
+
+            // Parse optional destination IP
+            let dst_ip: [u8; 4] = if args.len() > 2 {
+                let mut ip = [0u8; 4];
+                let mut ok = true;
+                let parts: Vec<&str> = args[2].split('.').collect();
+                if parts.len() == 4 {
+                    for (i, p) in parts.iter().enumerate() {
+                        let mut v: u16 = 0;
+                        for b in p.bytes() {
+                            if b >= b'0' && b <= b'9' { v = v * 10 + (b - b'0') as u16; }
+                            else { ok = false; break; }
+                        }
+                        ip[i] = v as u8;
+                    }
+                } else { ok = false; }
+                if !ok {
+                    crate::println_color!(COLOR_RED, "bios: invalid IP: {}", args[2]);
+                    return;
+                }
+                ip
+            } else {
+                DEFAULT_IP
+            };
+
+            let dst_port: u16 = if args.len() > 3 {
+                let mut v: u32 = 0;
+                for b in args[3].bytes() {
+                    if b >= b'0' && b <= b'9' { v = v * 10 + (b - b'0') as u32; }
+                    else { crate::println_color!(COLOR_RED, "bios: invalid port"); return; }
+                }
+                v as u16
+            } else {
+                DEFAULT_PORT
+            };
+
+            // Read file from VFS
+            crate::println_color!(COLOR_CYAN, "bios pull: reading {} ...", path);
+            let data = match crate::vfs::read_file(path) {
+                Ok(d) => d,
+                Err(e) => {
+                    crate::println_color!(COLOR_RED, "bios: cannot read {}: {:?}", path, e);
+                    crate::println!("Tip: mount your disk first, e.g.:");
+                    crate::println!("  diskscan");
+                    crate::println!("  mount ahci:0:2048 /mnt/ssd");
+                    crate::println!("  bios pull /mnt/ssd/BIOS.ROM");
+                    return;
+                }
+            };
+
+            let total_bytes = data.len();
+            let total_chunks = (total_bytes + CHUNK_DATA - 1) / CHUNK_DATA;
+
+            crate::println!("  Size     : {} bytes ({} KB)", total_bytes, total_bytes / 1024);
+            crate::println!("  Chunks   : {} x {} B", total_chunks, CHUNK_DATA);
+            crate::println!("  Dst      : {}.{}.{}.{}:{}", dst_ip[0], dst_ip[1], dst_ip[2], dst_ip[3], dst_port);
+
+            // Send header: "BIOS" magic + 4 bytes total_size LE + 4 bytes total_chunks LE
+            let mut hdr = [0u8; 12];
+            hdr[0..4].copy_from_slice(b"BIOS");
+            hdr[4..8].copy_from_slice(&(total_bytes as u32).to_le_bytes());
+            hdr[8..12].copy_from_slice(&(total_chunks as u32).to_le_bytes());
+            let _ = crate::netstack::udp::send_to(dst_ip, dst_port, 7780, &hdr);
+
+            // Brief pause for header to arrive
+            for _ in 0..10_000 { core::hint::spin_loop(); }
+
+            // Send chunks: [4-byte header: u16 chunk_idx + u16 data_len] + data
+            let mut buf = [0u8; 4 + CHUNK_DATA];
+            for chunk_idx in 0..total_chunks {
+                let offset = chunk_idx * CHUNK_DATA;
+                let len = core::cmp::min(CHUNK_DATA, total_bytes - offset);
+
+                buf[0..2].copy_from_slice(&(chunk_idx as u16).to_le_bytes());
+                buf[2..4].copy_from_slice(&(len as u16).to_le_bytes());
+                buf[4..4 + len].copy_from_slice(&data[offset..offset + len]);
+
+                let _ = crate::netstack::udp::send_to(dst_ip, dst_port, 7780, &buf[..4 + len]);
+
+                // Progress every 64 chunks
+                if chunk_idx % 64 == 63 {
+                    let pct = (chunk_idx + 1) * 100 / total_chunks;
+                    crate::println!("  ... {}% ({}/{})", pct, chunk_idx + 1, total_chunks);
+                    // Pace TX to avoid dropping
+                    for _ in 0..5_000 { core::hint::spin_loop(); }
+                }
+            }
+
+            // Send EOF marker
+            let eof = *b"BEOF";
+            let _ = crate::netstack::udp::send_to(dst_ip, dst_port, 7780, &eof);
+
+            crate::println_color!(COLOR_GREEN, "bios pull: done. {} bytes sent in {} chunks.", total_bytes, total_chunks);
+            crate::println!("  On dev box: hub menu 'd' (BIOS UDP receiver) must be running.");
+        }
+
+        _ => {
+            crate::println_color!(COLOR_BRIGHT_GREEN, "bios — BIOS dump/transfer tool");
+            crate::println!();
+            crate::println!("  bios pull <file> [dst_ip] [dst_port]");
+            crate::println!("       Stream file over UDP to dev box");
+            crate::println!("       Default dst: 10.0.0.1:7780");
+            crate::println!();
+            crate::println!("Workflow:");
+            crate::println!("  1. diskscan                         # find SSD port/LBA");
+            crate::println!("  2. mount ahci:0:<lba> /mnt/ssd      # mount FAT32 partition");
+            crate::println!("  3. ls /mnt/ssd                      # verify BIOS.ROM is there");
+            crate::println!("  4. bios pull /mnt/ssd/BIOS.ROM      # stream to 10.0.0.1:7780");
+        }
+    }
 }

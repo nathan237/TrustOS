@@ -10,114 +10,114 @@ use spin::Mutex;
 use core::sync::atomic::{AtomicU64, Ordering};
 
 
-static AFZ_: AtomicU64 = AtomicU64::new(1);
+static AHT_: AtomicU64 = AtomicU64::new(1);
 
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TaskState {
-    At,
-    Ai,
-    Hj,
-    Hh,
+    Ready,
+    Running,
+    Blocked,
+    Terminated,
 }
 
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Priority {
-    Eg = 0,
-    M = 1,
-    Ao = 2,
-    Aj = 3,
+    Low = 0,
+    Normal = 1,
+    High = 2,
+    Critical = 3,
 }
 
 
 pub struct Task {
-    pub ad: u64,
-    pub j: String,
-    pub g: TaskState,
-    pub abv: Priority,
-    pub cdu: u64,  
-    ke: Option<Box<dyn FnOnce() + Send>>,
+    pub id: u64,
+    pub name: String,
+    pub state: TaskState,
+    pub priority: Priority,
+    pub cpu_time: u64,  
+    func: Option<Box<dyn FnOnce() + Send>>,
 }
 
 impl Task {
     
-    pub fn new<G>(j: &str, abv: Priority, ke: G) -> Self
+    pub fn new<F>(name: &str, priority: Priority, func: F) -> Self
     where
-        G: FnOnce() + Send + 'static,
+        F: FnOnce() + Send + 'static,
     {
         Task {
-            ad: AFZ_.fetch_add(1, Ordering::SeqCst),
-            j: String::from(j),
-            g: TaskState::At,
-            abv,
-            cdu: 0,
-            ke: Some(Box::new(ke)),
+            id: AHT_.fetch_add(1, Ordering::SeqCst),
+            name: String::from(name),
+            state: TaskState::Ready,
+            priority,
+            cpu_time: 0,
+            func: Some(Box::new(func)),
         }
     }
     
     
-    pub fn vw(&mut self) {
-        if let Some(ke) = self.ke.take() {
-            self.g = TaskState::Ai;
-            ke();
-            self.g = TaskState::Hh;
+    pub fn run(&mut self) {
+        if let Some(func) = self.func.take() {
+            self.state = TaskState::Running;
+            func();
+            self.state = TaskState::Terminated;
         }
     }
 }
 
 
 pub struct Scheduler {
-    bcy: VecDeque<Task>,
-    knd: Option<u64>,
+    tasks: VecDeque<Task>,
+    current_task_id: Option<u64>,
 }
 
 impl Scheduler {
     pub const fn new() -> Self {
         Scheduler {
-            bcy: VecDeque::new(),
-            knd: None,
+            tasks: VecDeque::new(),
+            current_task_id: None,
         }
     }
     
     
-    pub fn eys<G>(&mut self, j: &str, abv: Priority, ke: G) -> u64
+    pub fn spawn<F>(&mut self, name: &str, priority: Priority, func: F) -> u64
     where
-        G: FnOnce() + Send + 'static,
+        F: FnOnce() + Send + 'static,
     {
-        let task = Task::new(j, abv, ke);
-        let ad = task.ad;
-        self.bcy.agt(task);
-        ad
+        let task = Task::new(name, priority, func);
+        let id = task.id;
+        self.tasks.push_back(task);
+        id
     }
     
     
-    pub fn dmj(&self) -> usize {
-        self.bcy.len()
+    pub fn task_count(&self) -> usize {
+        self.tasks.len()
     }
     
     
-    pub fn liy(&self) -> Vec<(u64, String, TaskState, Priority)> {
-        self.bcy.iter()
-            .map(|ab| (ab.ad, ab.j.clone(), ab.g, ab.abv))
+    pub fn list_tasks(&self) -> Vec<(u64, String, TaskState, Priority)> {
+        self.tasks.iter()
+            .map(|t| (t.id, t.name.clone(), t.state, t.priority))
             .collect()
     }
     
     
-    pub fn wbj(&mut self) -> bool {
+    pub fn run_one(&mut self) -> bool {
         
-        self.bcy.zbu().bxe(|q, o| o.abv.cmp(&q.abv));
+        self.tasks.make_contiguous().sort_by(|a, b| b.priority.cmp(&a.priority));
         
         
-        if let Some(w) = self.bcy.iter().qf(|ab| ab.g == TaskState::At) {
-            if let Some(mut task) = self.bcy.remove(w) {
-                self.knd = Some(task.ad);
-                task.vw();
-                self.knd = None;
+        if let Some(idx) = self.tasks.iter().position(|t| t.state == TaskState::Ready) {
+            if let Some(mut task) = self.tasks.remove(idx) {
+                self.current_task_id = Some(task.id);
+                task.run();
+                self.current_task_id = None;
                 
                 
-                if task.g != TaskState::Hh {
-                    self.bcy.agt(task);
+                if task.state != TaskState::Terminated {
+                    self.tasks.push_back(task);
                 }
                 return true;
             }
@@ -126,54 +126,54 @@ impl Scheduler {
     }
     
     
-    pub fn yih(&mut self) {
-        self.bcy.ajm(|ab| ab.g != TaskState::Hh);
+    pub fn pzv(&mut self) {
+        self.tasks.retain(|t| t.state != TaskState::Terminated);
     }
 }
 
 
-static Amd: Mutex<Scheduler> = Mutex::new(Scheduler::new());
+static Qc: Mutex<Scheduler> = Mutex::new(Scheduler::new());
 
 
-pub fn eys<G>(j: &str, abv: Priority, ke: G) -> u64
+pub fn spawn<F>(name: &str, priority: Priority, func: F) -> u64
 where
-    G: FnOnce() + Send + 'static,
+    F: FnOnce() + Send + 'static,
 {
-    Amd.lock().eys(j, abv, ke)
+    Qc.lock().spawn(name, priority, func)
 }
 
 
-pub fn zpa<G>(j: &str, ke: G) -> u64
+pub fn qxh<F>(name: &str, func: F) -> u64
 where
-    G: FnOnce() + Send + 'static,
+    F: FnOnce() + Send + 'static,
 {
-    eys(j, Priority::M, ke)
+    spawn(name, Priority::Normal, func)
 }
 
 
-pub fn liy() -> Vec<(u64, String, TaskState, Priority)> {
-    Amd.lock().liy()
+pub fn list_tasks() -> Vec<(u64, String, TaskState, Priority)> {
+    Qc.lock().list_tasks()
 }
 
 
-pub fn dmj() -> usize {
-    Amd.lock().dmj()
+pub fn task_count() -> usize {
+    Qc.lock().task_count()
 }
 
 
-pub fn vw() {
+pub fn run() {
     loop {
-        if !Amd.lock().wbj() {
+        if !Qc.lock().run_one() {
             
-            core::hint::hc();
+            core::hint::spin_loop();
         }
     }
 }
 
 
-pub fn gxc() {
+pub fn dgw() {
     
-    core::hint::hc();
+    core::hint::spin_loop();
 }
 
 

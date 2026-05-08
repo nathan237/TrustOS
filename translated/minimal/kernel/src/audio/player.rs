@@ -8,7 +8,7 @@ use alloc::vec;
 use alloc::string::String;
 use alloc::format;
 
-use super::synth::{SynthEngine, BR_, Dv};
+use super::synth::{SynthEngine, BT_, Bq};
 use super::pattern::Pattern;
 
 
@@ -18,156 +18,156 @@ use super::pattern::Pattern;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PlayerState {
-    Af,
-    Ce,
-    Cl,
+    Stopped,
+    Playing,
+    Paused,
 }
 
 
 pub struct PatternPlayer {
     
-    pub g: PlayerState,
+    pub state: PlayerState,
     
-    pub dsx: u32,
+    pub loop_count: u32,
     
-    pub fgh: u32,
+    pub current_loop: u32,
     
-    pub aop: usize,
+    pub current_step: usize,
 }
 
 impl PatternPlayer {
     pub fn new() -> Self {
         Self {
-            g: PlayerState::Af,
-            dsx: 1,
-            fgh: 0,
-            aop: 0,
+            state: PlayerState::Stopped,
+            loop_count: 1,
+            current_loop: 0,
+            current_step: 0,
         }
     }
 
     
-    pub fn zfj(
+    pub fn qqo(
         &mut self,
         pattern: &Pattern,
         engine: &mut SynthEngine,
-        bkh: u32,
+        loops: u32,
     ) -> Result<(), &'static str> {
-        self.g = PlayerState::Ce;
-        self.fgh = 0;
-        self.aop = 0;
-        self.dsx = if bkh == 0 { 1 } else { bkh };
+        self.state = PlayerState::Playing;
+        self.current_loop = 0;
+        self.current_step = 0;
+        self.loop_count = if loops == 0 { 1 } else { loops };
 
         crate::serial_println!("[PLAYER] Playing pattern \"{}\" — {} loops, {} BPM",
-            pattern.amj(), self.dsx, pattern.kz);
+            pattern.name_str(), self.loop_count, pattern.bpm);
 
-        for qck in 0..self.dsx {
-            if self.g != PlayerState::Ce {
+        for _loop_i in 0..self.loop_count {
+            if self.state != PlayerState::Playing {
                 break;
             }
-            self.fgh = qck;
+            self.current_loop = _loop_i;
 
             
-            let un = pattern.tj(engine);
+            let jo = pattern.render(engine);
 
             
-            let uk = pattern.ief();
-            crate::drivers::hda::ele(&un, uk)?;
+            let duration_ms = pattern.total_duration_ms();
+            crate::drivers::hda::bxb(&jo, duration_ms)?;
 
-            self.aop = pattern.len(); 
+            self.current_step = pattern.len(); 
         }
 
-        self.g = PlayerState::Af;
-        self.aop = 0;
-        self.fgh = 0;
+        self.state = PlayerState::Stopped;
+        self.current_step = 0;
+        self.current_loop = 0;
         Ok(())
     }
 
     
-    pub fn vja(
+    pub fn play_pattern_visual(
         &mut self,
         pattern: &Pattern,
         engine: &mut SynthEngine,
-        bkh: u32,
+        loops: u32,
     ) -> Result<(), &'static str> {
-        self.g = PlayerState::Ce;
-        self.fgh = 0;
-        self.aop = 0;
-        self.dsx = if bkh == 0 { 1 } else { bkh };
+        self.state = PlayerState::Playing;
+        self.current_loop = 0;
+        self.current_step = 0;
+        self.loop_count = if loops == 0 { 1 } else { loops };
 
-        let bop = pattern.dwh();
+        let ait = pattern.step_duration_ms();
 
         crate::serial_println!("[PLAYER] Visual playback \"{}\" — {} loops, {} BPM, {}ms/step",
-            pattern.amj(), self.dsx, pattern.kz, bop);
+            pattern.name_str(), self.loop_count, pattern.bpm, ait);
 
         
         crate::println!();
-        crate::gr!(0x00FF88, "▶ ");
+        crate::bq!(0x00FF88, "▶ ");
         crate::print!("\"{}\" | {} BPM | {} steps | {}",
-            pattern.amj(), pattern.kz, pattern.len(), pattern.ve.j());
+            pattern.name_str(), pattern.bpm, pattern.len(), pattern.waveform.name());
         crate::println!();
 
-        for okk in 0..self.dsx {
-            if self.g != PlayerState::Ce {
+        for loop_i in 0..self.loop_count {
+            if self.state != PlayerState::Playing {
                 break;
             }
-            self.fgh = okk;
+            self.current_loop = loop_i;
 
-            if self.dsx > 1 {
-                crate::gr!(0xAAAAFF, "  Loop {}/{}: ", okk + 1, self.dsx);
+            if self.loop_count > 1 {
+                crate::bq!(0xAAAAFF, "  Loop {}/{}: ", loop_i + 1, self.loop_count);
             } else {
                 crate::print!("  ");
             }
 
             
-            let un = pattern.tj(engine);
-            let dwk = pattern.pot() as usize;
+            let jo = pattern.render(engine);
+            let bpf = pattern.step_duration_samples() as usize;
 
             
-            for (wub, gu) in pattern.au.iter().cf() {
-                if self.g != PlayerState::Ce {
+            for (step_i, step) in pattern.steps.iter().enumerate() {
+                if self.state != PlayerState::Playing {
                     break;
                 }
-                self.aop = wub;
+                self.current_step = step_i;
 
                 
-                if gu.jbs() {
-                    crate::gr!(0x666666, "·");
+                if step.is_rest() {
+                    crate::bq!(0x666666, "·");
                 } else {
-                    crate::gr!(0x00FF00, "♪");
+                    crate::bq!(0x00FF00, "♪");
                 }
             }
 
             
-            let uk = pattern.ief();
-            crate::drivers::hda::ele(&un, uk)?;
+            let duration_ms = pattern.total_duration_ms();
+            crate::drivers::hda::bxb(&jo, duration_ms)?;
 
             crate::println!();
         }
 
-        self.g = PlayerState::Af;
-        crate::gr!(0x00FF88, "■ ");
+        self.state = PlayerState::Stopped;
+        crate::bq!(0x00FF88, "■ ");
         crate::println!("Stopped");
         Ok(())
     }
 
     
-    pub fn qg(&mut self) {
-        self.g = PlayerState::Af;
-        let _ = crate::drivers::hda::qg();
+    pub fn stop(&mut self) {
+        self.state = PlayerState::Stopped;
+        let _ = crate::drivers::hda::stop();
     }
 
     
     pub fn status(&self) -> String {
-        match self.g {
-            PlayerState::Af => String::from("Player: Stopped\n"),
-            PlayerState::Ce => {
+        match self.state {
+            PlayerState::Stopped => String::from("Player: Stopped\n"),
+            PlayerState::Playing => {
                 format!("Player: Playing | Step {}/{} | Loop {}/{}\n",
-                    self.aop + 1,
+                    self.current_step + 1,
                     0, 
-                    self.fgh + 1,
-                    self.dsx)
+                    self.current_loop + 1,
+                    self.loop_count)
             }
-            PlayerState::Cl => String::from("Player: Paused\n"),
+            PlayerState::Paused => String::from("Player: Paused\n"),
         }
     }
 }

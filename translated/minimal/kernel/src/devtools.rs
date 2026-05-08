@@ -19,84 +19,84 @@ use spin::Mutex;
 
 
 #[derive(Clone)]
-struct Ahn {
-    aet: u64,
-    jy: u8,       
+struct On {
+    timestamp_ms: u64,
+    level: u8,       
     message: String,
 }
 
 
-const AQK_: usize = 2048;
+const ASN_: usize = 2048;
 
 struct DmesgBuffer {
-    ch: Vec<Ahn>,
+    entries: Vec<On>,
     
-    dxt: usize,
+    write_idx: usize,
     
-    cus: u64,
+    total_count: u64,
     
-    fyx: bool,
+    wrapped: bool,
 }
 
 impl DmesgBuffer {
     const fn new() -> Self {
         Self {
-            ch: Vec::new(),
-            dxt: 0,
-            cus: 0,
-            fyx: false,
+            entries: Vec::new(),
+            write_idx: 0,
+            total_count: 0,
+            wrapped: false,
         }
     }
     
-    fn push(&mut self, aet: u64, jy: u8, message: String) {
-        if self.ch.len() < AQK_ {
-            self.ch.push(Ahn { aet, jy, message });
+    fn push(&mut self, timestamp_ms: u64, level: u8, message: String) {
+        if self.entries.len() < ASN_ {
+            self.entries.push(On { timestamp_ms, level, message });
         } else {
-            self.ch[self.dxt] = Ahn { aet, jy, message };
-            self.fyx = true;
+            self.entries[self.write_idx] = On { timestamp_ms, level, message };
+            self.wrapped = true;
         }
-        self.dxt = (self.dxt + 1) % AQK_;
-        self.cus += 1;
+        self.write_idx = (self.write_idx + 1) % ASN_;
+        self.total_count += 1;
     }
     
     
-    fn uaa(&self) -> impl Iterator<Item = &Ahn> {
-        let ay = if self.fyx { self.dxt } else { 0 };
-        let len = self.ch.len();
-        (0..len).map(move |a| &self.ch[(ay + a) % len])
+    fn iter_ordered(&self) -> impl Iterator<Item = &On> {
+        let start = if self.wrapped { self.write_idx } else { 0 };
+        let len = self.entries.len();
+        (0..len).map(move |i| &self.entries[(start + i) % len])
     }
     
     fn len(&self) -> usize {
-        self.ch.len()
+        self.entries.len()
     }
 }
 
-static Aqp: Mutex<DmesgBuffer> = Mutex::new(DmesgBuffer::new());
+static Rq: Mutex<DmesgBuffer> = Mutex::new(DmesgBuffer::new());
 
 
 
-pub fn rzp(jy: u8, message: String) {
+pub fn lgl(level: u8, message: String) {
     
-    let wi = crate::time::lc();
-    if let Some(mut k) = Aqp.try_lock() {
-        k.push(wi, jy, message);
+    let jy = crate::time::uptime_ms();
+    if let Some(mut buf) = Rq.try_lock() {
+        buf.push(jy, level, message);
     }
 }
 
 
-pub fn nmg(jy: u8, fr: &str) {
-    rzp(jy, String::from(fr));
+pub fn hsx(level: u8, bk: &str) {
+    lgl(level, String::from(bk));
 }
 
 
-pub fn rzn(bo: usize) -> Vec<String> {
-    let k = Aqp.lock();
-    let ch: Vec<_> = k.uaa().collect();
-    let ay = if bo > 0 && bo < ch.len() { ch.len() - bo } else { 0 };
-    ch[ay..]
+pub fn lgj(ae: usize) -> Vec<String> {
+    let buf = Rq.lock();
+    let entries: Vec<_> = buf.iter_ordered().collect();
+    let start = if ae > 0 && ae < entries.len() { entries.len() - ae } else { 0 };
+    entries[start..]
         .iter()
-        .map(|aa| {
-            let jy = match aa.jy {
+        .map(|e| {
+            let level = match e.level {
                 0 => "TRACE",
                 1 => "DEBUG",
                 2 => "INFO ",
@@ -106,15 +106,15 @@ pub fn rzn(bo: usize) -> Vec<String> {
                 _ => "?????",
             };
             format!("[{:>10.3}] [{}] {}", 
-                aa.aet as f64 / 1000.0, jy, aa.message)
+                e.timestamp_ms as f64 / 1000.0, level, e.message)
         })
         .collect()
 }
 
 
-pub fn rzo() -> (usize, u64) {
-    let k = Aqp.lock();
-    (k.len(), k.cus)
+pub fn lgk() -> (usize, u64) {
+    let buf = Rq.lock();
+    (buf.len(), buf.total_count)
 }
 
 
@@ -122,107 +122,107 @@ pub fn rzo() -> (usize, u64) {
 
 
 
-static AKL_: AtomicU64 = AtomicU64::new(0);
-static APW_: AtomicU64 = AtomicU64::new(0);
-static AKK_: AtomicU64 = AtomicU64::new(0);
-static APV_: AtomicU64 = AtomicU64::new(0);
-static BCU_: AtomicUsize = AtomicUsize::new(0);
-static SK_: AtomicU64 = AtomicU64::new(0);
+static AMF_: AtomicU64 = AtomicU64::new(0);
+static ARY_: AtomicU64 = AtomicU64::new(0);
+static AME_: AtomicU64 = AtomicU64::new(0);
+static ARX_: AtomicU64 = AtomicU64::new(0);
+static BEX_: AtomicUsize = AtomicUsize::new(0);
+static TQ_: AtomicU64 = AtomicU64::new(0);
 
-static AYO_: AtomicUsize = AtomicUsize::new(0);
+static BAP_: AtomicUsize = AtomicUsize::new(0);
 
 
-pub fn xld(aw: usize) {
-    AKL_.fetch_add(1, Ordering::Relaxed);
-    AKK_.fetch_add(aw as u64, Ordering::Relaxed);
-    SK_.fetch_add(1, Ordering::Relaxed);
+pub fn pmp(size: usize) {
+    AMF_.fetch_add(1, Ordering::Relaxed);
+    AME_.fetch_add(size as u64, Ordering::Relaxed);
+    TQ_.fetch_add(1, Ordering::Relaxed);
     
     
-    let mr = crate::memory::heap::mr();
-    let _ = BCU_.sru(mr, Ordering::Relaxed);
+    let used = crate::memory::heap::used();
+    let _ = BEX_.fetch_max(used, Ordering::Relaxed);
     
     
-    let _ = AYO_.sru(aw, Ordering::Relaxed);
+    let _ = BAP_.fetch_max(size, Ordering::Relaxed);
     
     
-    if aw >= 4096 {
-        crate::lab_mode::trace_bus::fj(
-            crate::lab_mode::trace_bus::EventCategory::Cy,
-            alloc::format!("alloc {} bytes", aw),
-            aw as u64,
+    if size >= 4096 {
+        crate::lab_mode::trace_bus::emit(
+            crate::lab_mode::trace_bus::EventCategory::Memory,
+            alloc::format!("alloc {} bytes", size),
+            size as u64,
         );
     }
 }
 
 
-pub fn xlj(aw: usize) {
-    APW_.fetch_add(1, Ordering::Relaxed);
-    APV_.fetch_add(aw as u64, Ordering::Relaxed);
-    SK_.fetch_sub(1, Ordering::Relaxed);
+pub fn pmu(size: usize) {
+    ARY_.fetch_add(1, Ordering::Relaxed);
+    ARX_.fetch_add(size as u64, Ordering::Relaxed);
+    TQ_.fetch_sub(1, Ordering::Relaxed);
     
     
-    if aw >= 4096 {
-        crate::lab_mode::trace_bus::fj(
-            crate::lab_mode::trace_bus::EventCategory::Cy,
-            alloc::format!("dealloc {} bytes", aw),
-            aw as u64,
+    if size >= 4096 {
+        crate::lab_mode::trace_bus::emit(
+            crate::lab_mode::trace_bus::EventCategory::Memory,
+            alloc::format!("dealloc {} bytes", size),
+            size as u64,
         );
     }
 }
 
 
-pub struct Bmc {
-    pub cok: u64,
-    pub dpr: u64,
-    pub mux: u64,
-    pub nju: u64,
-    pub gpe: usize,
-    pub iqb: usize,
-    pub kmv: usize,
-    pub aul: usize,
-    pub czi: u64,
-    pub etu: usize,
-    pub hki: f32,
+pub struct Abh {
+    pub alloc_count: u64,
+    pub dealloc_count: u64,
+    pub alloc_bytes_total: u64,
+    pub dealloc_bytes_total: u64,
+    pub peak_heap_used: usize,
+    pub current_heap_used: usize,
+    pub current_heap_free: usize,
+    pub heap_total: usize,
+    pub live_allocs: u64,
+    pub largest_alloc: usize,
+    pub fragmentation_pct: f32,
 }
 
 
-pub fn jfu() -> Bmc {
-    let mr = crate::memory::heap::mr();
-    let aez = crate::memory::heap::aez();
-    let es = mr + aez;
+pub fn dbe() -> Abh {
+    let used = crate::memory::heap::used();
+    let free = crate::memory::heap::free();
+    let av = used + free;
     
     
     
     
-    let cok = AKL_.load(Ordering::Relaxed);
-    let dpr = APW_.load(Ordering::Relaxed);
-    let sws = if es > 0 && cok > 100 {
+    let alloc_count = AMF_.load(Ordering::Relaxed);
+    let dealloc_count = ARY_.load(Ordering::Relaxed);
+    let lyh = if av > 0 && alloc_count > 100 {
         
         
-        let rat = if cok > 0 {
-            (dpr as f32) / (cok as f32)
+        let kkm = if alloc_count > 0 {
+            (dealloc_count as f32) / (alloc_count as f32)
         } else {
             0.0
         };
         
-        let sxf = aez as f32 / es as f32;
-        (rat * (1.0 - sxf) * 100.0).v(100.0)
+        let lyq = free as f32 / av as f32;
+        (kkm * (1.0 - lyq) * 100.0).min(100.0)
     } else {
         0.0
     };
     
-    Bmc {
-        cok,
-        dpr,
-        mux: AKK_.load(Ordering::Relaxed),
-        nju: APV_.load(Ordering::Relaxed),
-        gpe: BCU_.load(Ordering::Relaxed),
-        iqb: mr,
-        kmv: aez,
-        aul: es,
-        czi: SK_.load(Ordering::Relaxed),
-        etu: AYO_.load(Ordering::Relaxed),
-        hki: sws,
+    Abh {
+        alloc_count,
+        dealloc_count,
+        alloc_bytes_total: AME_.load(Ordering::Relaxed),
+        dealloc_bytes_total: ARX_.load(Ordering::Relaxed),
+        peak_heap_used: BEX_.load(Ordering::Relaxed),
+        current_heap_used: used,
+        current_heap_free: free,
+        heap_total: av,
+        live_allocs: TQ_.load(Ordering::Relaxed),
+        largest_alloc: BAP_.load(Ordering::Relaxed),
+        fragmentation_pct: lyh,
     }
 }
 
@@ -231,84 +231,84 @@ pub fn jfu() -> Bmc {
 
 
 
-static CDO_: AtomicU64 = AtomicU64::new(0);
-static CDP_: AtomicU64 = AtomicU64::new(0);
-static AXI_: AtomicU64 = AtomicU64::new(0);
+static CGX_: AtomicU64 = AtomicU64::new(0);
+static CGY_: AtomicU64 = AtomicU64::new(0);
+static AZJ_: AtomicU64 = AtomicU64::new(0);
 
 
-static AWV_: AtomicU64 = AtomicU64::new(0);
-static ANJ_: AtomicU64 = AtomicU64::new(0);
+static AYX_: AtomicU64 = AtomicU64::new(0);
+static APN_: AtomicU64 = AtomicU64::new(0);
 
 
-pub fn zis(yl: u64) {
-    AWV_.fetch_add(yl, Ordering::Relaxed);
+pub fn qtd(cycles: u64) {
+    AYX_.fetch_add(cycles, Ordering::Relaxed);
 }
 
 
-pub fn zir(yl: u64) {
-    ANJ_.fetch_add(yl, Ordering::Relaxed);
+pub fn qtc(cycles: u64) {
+    APN_.fetch_add(cycles, Ordering::Relaxed);
 }
 
 
-pub fn rpz() -> u32 {
-    let fkz = AWV_.swap(0, Ordering::Relaxed);
-    let imk = ANJ_.swap(0, Ordering::Relaxed);
-    let es = fkz + imk;
-    if es == 0 { return 0; }
-    ((imk * 100) / es) as u32
+pub fn kyu() -> u32 {
+    let ckv = AYX_.swap(0, Ordering::Relaxed);
+    let ehi = APN_.swap(0, Ordering::Relaxed);
+    let av = ckv + ehi;
+    if av == 0 { return 0; }
+    ((ehi * 100) / av) as u32
 }
 
 
-pub fn xow() {
-    let cm = crate::sync::percpu::gyf();
-    let blm: u64 = cm.iter().map(|e| e.interrupts).sum();
-    let iu = crate::time::lc();
+pub fn ppv() {
+    let stats = crate::sync::percpu::dhj();
+    let total_irqs: u64 = stats.iter().map(|j| j.interrupts).sum();
+    let cy = crate::time::uptime_ms();
     
-    let uci = CDO_.swap(blm, Ordering::Relaxed);
-    let ucq = CDP_.swap(iu, Ordering::Relaxed);
+    let mwn = CGX_.swap(total_irqs, Ordering::Relaxed);
+    let mws = CGY_.swap(cy, Ordering::Relaxed);
     
-    let os = iu.ao(ucq);
-    if os > 0 {
-        let jlc = (blm - uci) * 1000 / os;
-        AXI_.store(jlc, Ordering::Relaxed);
+    let fm = cy.saturating_sub(mws);
+    if fm > 0 {
+        let exq = (total_irqs - mwn) * 1000 / fm;
+        AZJ_.store(exq, Ordering::Relaxed);
     }
 }
 
 
-pub fn eds() -> u64 {
-    AXI_.load(Ordering::Relaxed)
+pub fn irq_rate() -> u64 {
+    AZJ_.load(Ordering::Relaxed)
 }
 
 
-pub struct Bov {
-    pub lc: u64,
-    pub ngt: Vec<crate::sync::percpu::Aqf>,
-    pub blm: u64,
-    pub mmn: u64,
-    pub mmd: u64,
-    pub hor: u64,
-    pub afa: usize,
-    pub buv: usize,
-    pub tz: u64,
+pub struct Acn {
+    pub uptime_ms: u64,
+    pub cpu_stats: Vec<crate::sync::percpu::Rl>,
+    pub total_irqs: u64,
+    pub total_syscalls: u64,
+    pub total_ctx_switches: u64,
+    pub irq_per_sec: u64,
+    pub heap_used: usize,
+    pub heap_free: usize,
+    pub fps: u64,
 }
 
 
-pub fn vgr() -> Bov {
-    let cm = crate::sync::percpu::gyf();
-    let blm: u64 = cm.iter().map(|e| e.interrupts).sum();
-    let mmn: u64 = cm.iter().map(|e| e.apd).sum();
-    let mmd: u64 = cm.iter().map(|e| e.gdf).sum();
+pub fn nto() -> Acn {
+    let stats = crate::sync::percpu::dhj();
+    let total_irqs: u64 = stats.iter().map(|j| j.interrupts).sum();
+    let total_syscalls: u64 = stats.iter().map(|j| j.syscalls).sum();
+    let total_ctx_switches: u64 = stats.iter().map(|j| j.context_switches).sum();
     
-    Bov {
-        lc: crate::time::lc(),
-        ngt: cm,
-        blm,
-        mmn,
-        mmd,
-        hor: eds(),
-        afa: crate::memory::heap::mr(),
-        buv: crate::memory::heap::aez(),
-        tz: crate::gui::engine::kyp(),
+    Acn {
+        uptime_ms: crate::time::uptime_ms(),
+        cpu_stats: stats,
+        total_irqs,
+        total_syscalls,
+        total_ctx_switches,
+        irq_per_sec: irq_rate(),
+        heap_used: crate::memory::heap::used(),
+        heap_free: crate::memory::heap::free(),
+        fps: crate::gui::engine::fyp(),
     }
 }
 
@@ -318,95 +318,95 @@ pub fn vgr() -> Bov {
 
 
 
-pub fn amm(ag: usize, az: usize) -> Vec<String> {
-    let mut ak = Vec::new();
+pub fn peek(addr: usize, count: usize) -> Vec<String> {
+    let mut lines = Vec::new();
 
     
-    if !crate::auth::crt() {
-        ak.push(String::from("Error: peek requires root privileges"));
-        return ak;
+    if !crate::auth::is_root() {
+        lines.push(String::from("Error: peek requires root privileges"));
+        return lines;
     }
 
-    let az = az.v(256); 
+    let count = count.min(256); 
     
     
-    if ag == 0 {
-        ak.push(String::from("Error: NULL pointer"));
-        return ak;
+    if addr == 0 {
+        lines.push(String::from("Error: NULL pointer"));
+        return lines;
     }
     
-    let kfs = 16;
-    let mut l = 0;
+    let fkh = 16;
+    let mut offset = 0;
     
-    while l < az {
-        let uev = (az - l).v(kfs);
-        let mut nu = String::new();
+    while offset < count {
+        let myk = (count - offset).min(fkh);
+        let mut ga = String::new();
         let mut ascii = String::new();
         
-        for a in 0..kfs {
-            if a < uev {
-                let hf = unsafe {
+        for i in 0..fkh {
+            if i < myk {
+                let byte = unsafe {
                     
-                    core::ptr::read_volatile((ag + l + a) as *const u8)
+                    core::ptr::read_volatile((addr + offset + i) as *const u8)
                 };
-                nu.t(&format!("{:02x} ", hf));
-                ascii.push(if hf >= 0x20 && hf < 0x7F { hf as char } else { '.' });
+                ga.push_str(&format!("{:02x} ", byte));
+                ascii.push(if byte >= 0x20 && byte < 0x7F { byte as char } else { '.' });
             } else {
-                nu.t("   ");
+                ga.push_str("   ");
                 ascii.push(' ');
             }
-            if a == 7 { nu.push(' '); }
+            if i == 7 { ga.push(' '); }
         }
         
-        ak.push(format!("  {:016x}  {}|{}|", ag + l, nu, ascii));
-        l += kfs;
+        lines.push(format!("  {:016x}  {}|{}|", addr + offset, ga, ascii));
+        offset += fkh;
     }
     
-    ak
+    lines
 }
 
 
 
-pub fn luq(ag: usize, bn: u8) -> Result<(), &'static str> {
+pub fn gnq(addr: usize, value: u8) -> Result<(), &'static str> {
     
-    if !crate::auth::crt() {
+    if !crate::auth::is_root() {
         return Err("poke requires root privileges");
     }
-    if ag == 0 {
+    if addr == 0 {
         return Err("NULL pointer");
     }
-    if ag < 0x1000 {
+    if addr < 0x1000 {
         return Err("Address too low (first page guard)");
     }
     
     unsafe {
-        core::ptr::write_volatile(ag as *mut u8, bn);
+        core::ptr::write_volatile(addr as *mut u8, value);
     }
     Ok(())
 }
 
 
-pub fn rpv() -> Vec<String> {
+pub fn kyq() -> Vec<String> {
     let mut regs = Vec::new();
     
     let rsp: u64;
     let rbp: u64;
     let rflags: u64;
-    let akb: u64;
-    let jm: u64;
+    let cr0: u64;
+    let cr3: u64;
     let cr4: u64;
     
     #[cfg(target_arch = "x86_64")]
     unsafe {
-        core::arch::asm!("mov {}, rsp", bd(reg) rsp);
-        core::arch::asm!("mov {}, rbp", bd(reg) rbp);
-        core::arch::asm!("pushfq; pop {}", bd(reg) rflags);
-        core::arch::asm!("mov {}, cr0", bd(reg) akb);
-        core::arch::asm!("mov {}, cr3", bd(reg) jm);
-        core::arch::asm!("mov {}, cr4", bd(reg) cr4);
+        core::arch::asm!("mov {}, rsp", out(reg) rsp);
+        core::arch::asm!("mov {}, rbp", out(reg) rbp);
+        core::arch::asm!("pushfq; pop {}", out(reg) rflags);
+        core::arch::asm!("mov {}, cr0", out(reg) cr0);
+        core::arch::asm!("mov {}, cr3", out(reg) cr3);
+        core::arch::asm!("mov {}, cr4", out(reg) cr4);
     }
     #[cfg(not(target_arch = "x86_64"))]
-    { rsp = 0; rbp = 0; rflags = 0; akb = 0; jm = 0; cr4 = 0; }
+    { rsp = 0; rbp = 0; rflags = 0; cr0 = 0; cr3 = 0; cr4 = 0; }
     
     regs.push(String::from("  CPU Register Snapshot"));
     regs.push(String::from("  ─────────────────────────────────────"));
@@ -414,55 +414,55 @@ pub fn rpv() -> Vec<String> {
     regs.push(format!("  RBP    = 0x{:016x}  (base pointer)", rbp));
     regs.push(format!("  RFLAGS = 0x{:016x}", rflags));
     regs.push(String::from(""));
-    regs.push(format!("  CR0    = 0x{:016x}", akb));
+    regs.push(format!("  CR0    = 0x{:016x}", cr0));
     
     
-    let mut fga = Vec::new();
-    if akb & 1 != 0 { fga.push("PE"); }
-    if akb & (1 << 1) != 0 { fga.push("MP"); }
-    if akb & (1 << 4) != 0 { fga.push("ET"); }
-    if akb & (1 << 5) != 0 { fga.push("NE"); }
-    if akb & (1 << 16) != 0 { fga.push("WP"); }
-    if akb & (1 << 31) != 0 { fga.push("PG"); }
-    regs.push(format!("           [{}]", fga.rr(" | ")));
+    let mut chu = Vec::new();
+    if cr0 & 1 != 0 { chu.push("PE"); }
+    if cr0 & (1 << 1) != 0 { chu.push("MP"); }
+    if cr0 & (1 << 4) != 0 { chu.push("ET"); }
+    if cr0 & (1 << 5) != 0 { chu.push("NE"); }
+    if cr0 & (1 << 16) != 0 { chu.push("WP"); }
+    if cr0 & (1 << 31) != 0 { chu.push("PG"); }
+    regs.push(format!("           [{}]", chu.join(" | ")));
     
-    regs.push(format!("  CR3    = 0x{:016x}  (page table root)", jm));
+    regs.push(format!("  CR3    = 0x{:016x}  (page table root)", cr3));
     regs.push(format!("  CR4    = 0x{:016x}", cr4));
     
     
-    let mut dzz = Vec::new();
-    if cr4 & (1 << 5) != 0 { dzz.push("PAE"); }
-    if cr4 & (1 << 7) != 0 { dzz.push("PGE"); }
-    if cr4 & (1 << 9) != 0 { dzz.push("OSFXSR"); }
-    if cr4 & (1 << 10) != 0 { dzz.push("OSXMMEXCPT"); }
-    if cr4 & (1 << 13) != 0 { dzz.push("VMXE"); }
-    if cr4 & (1 << 18) != 0 { dzz.push("OSXSAVE"); }
-    if cr4 & (1 << 20) != 0 { dzz.push("SMEP"); }
-    if cr4 & (1 << 21) != 0 { dzz.push("SMAP"); }
-    regs.push(format!("           [{}]", dzz.rr(" | ")));
+    let mut brf = Vec::new();
+    if cr4 & (1 << 5) != 0 { brf.push("PAE"); }
+    if cr4 & (1 << 7) != 0 { brf.push("PGE"); }
+    if cr4 & (1 << 9) != 0 { brf.push("OSFXSR"); }
+    if cr4 & (1 << 10) != 0 { brf.push("OSXMMEXCPT"); }
+    if cr4 & (1 << 13) != 0 { brf.push("VMXE"); }
+    if cr4 & (1 << 18) != 0 { brf.push("OSXSAVE"); }
+    if cr4 & (1 << 20) != 0 { brf.push("SMEP"); }
+    if cr4 & (1 << 21) != 0 { brf.push("SMAP"); }
+    regs.push(format!("           [{}]", brf.join(" | ")));
     
     
     #[cfg(target_arch = "x86_64")]
     let efer: u64 = unsafe {
-        let hh: u32;
-        let gd: u32;
+        let lo: u32;
+        let hi: u32;
         core::arch::asm!(
             "rdmsr",
             in("ecx") 0xC000_0080u32,
-            bd("eax") hh,
-            bd("edx") gd,
+            out("eax") lo,
+            out("edx") hi,
         );
-        (gd as u64) << 32 | hh as u64
+        (hi as u64) << 32 | lo as u64
     };
     #[cfg(not(target_arch = "x86_64"))]
     let efer: u64 = 0;
     regs.push(format!("  EFER   = 0x{:016x}", efer));
-    let mut hht = Vec::new();
-    if efer & 1 != 0 { hht.push("SCE"); }
-    if efer & (1 << 8) != 0 { hht.push("LME"); }
-    if efer & (1 << 10) != 0 { hht.push("LMA"); }
-    if efer & (1 << 11) != 0 { hht.push("NXE"); }
-    regs.push(format!("           [{}]", hht.rr(" | ")));
+    let mut dok = Vec::new();
+    if efer & 1 != 0 { dok.push("SCE"); }
+    if efer & (1 << 8) != 0 { dok.push("LME"); }
+    if efer & (1 << 10) != 0 { dok.push("LMA"); }
+    if efer & (1 << 11) != 0 { dok.push("NXE"); }
+    regs.push(format!("           [{}]", dok.join(" | ")));
     
     regs
 }
@@ -472,154 +472,154 @@ pub fn rpv() -> Vec<String> {
 
 
 
-static SR_: AtomicBool = AtomicBool::new(false);
+static TY_: AtomicBool = AtomicBool::new(false);
 
 
-pub fn xiu() {
-    let vo = SR_.load(Ordering::Relaxed);
-    SR_.store(!vo, Ordering::Relaxed);
+pub fn pks() {
+    let prev = TY_.load(Ordering::Relaxed);
+    TY_.store(!prev, Ordering::Relaxed);
 }
 
-pub fn zmw(iw: bool) {
-    SR_.store(iw, Ordering::Relaxed);
+pub fn qvt(visible: bool) {
+    TY_.store(visible, Ordering::Relaxed);
 }
 
-pub fn ofv() -> bool {
-    SR_.load(Ordering::Relaxed)
-}
-
-
-pub struct Bel {
-    pub tz: u64,
-    pub ivs: u64,
-    pub hmv: usize,
-    pub gja: usize,
-    pub bne: u32,
-    pub czi: u64,
-    pub hor: u64,
-    pub cnn: u64,
-    pub aao: usize,
-    pub blm: u64,
+pub fn ihv() -> bool {
+    TY_.load(Ordering::Relaxed)
 }
 
 
-pub fn rxd() -> Bel {
-    let mr = crate::memory::heap::mr();
-    let aez = crate::memory::heap::aez();
-    let es = mr + aez;
-    let cm = crate::sync::percpu::gyf();
-    let blm: u64 = cm.iter().map(|e| e.interrupts).sum();
+pub struct Xs {
+    pub fps: u64,
+    pub frame_time_us: u64,
+    pub heap_used_kb: usize,
+    pub heap_total_kb: usize,
+    pub heap_pct: u32,
+    pub live_allocs: u64,
+    pub irq_per_sec: u64,
+    pub uptime_secs: u64,
+    pub cpu_count: usize,
+    pub total_irqs: u64,
+}
+
+
+pub fn leg() -> Xs {
+    let used = crate::memory::heap::used();
+    let free = crate::memory::heap::free();
+    let av = used + free;
+    let stats = crate::sync::percpu::dhj();
+    let total_irqs: u64 = stats.iter().map(|j| j.interrupts).sum();
     
-    Bel {
-        tz: crate::gui::engine::kyp(),
-        ivs: 0, 
-        hmv: mr / 1024,
-        gja: es / 1024,
-        bne: if es > 0 { ((mr * 100) / es) as u32 } else { 0 },
-        czi: SK_.load(Ordering::Relaxed),
-        hor: eds(),
-        cnn: crate::time::lc() / 1000,
-        aao: cm.len().am(1),
-        blm,
+    Xs {
+        fps: crate::gui::engine::fyp(),
+        frame_time_us: 0, 
+        heap_used_kb: used / 1024,
+        heap_total_kb: av / 1024,
+        heap_pct: if av > 0 { ((used * 100) / av) as u32 } else { 0 },
+        live_allocs: TQ_.load(Ordering::Relaxed),
+        irq_per_sec: irq_rate(),
+        uptime_secs: crate::time::uptime_ms() / 1000,
+        cpu_count: stats.len().max(1),
+        total_irqs,
     }
 }
 
 
 
-pub fn vvp(z: u32, qce: u32, ivs: u64) {
-    if !ofv() {
+pub fn ofi(width: u32, _height: u32, frame_time_us: u64) {
+    if !ihv() {
         return;
     }
     
     
-    xow();
+    ppv();
     
-    let f = rxd();
-    
-    
-    let yd = 260u32;
-    let ans = 180u32;
-    let awm = (z - yd - 8) as i32;
-    let atg = 8i32;
+    let data = leg();
     
     
-    let vp: u32 = 0xFF101018;
-    let aia: u32 = 0xFF00FF88;
-    let ejy: u32 = 0xFF00FFAA;
-    let bbw: u32 = 0xFF88AACC;
-    let xqo: u32 = 0xFFFFFFFF;
-    let qmv: u32 = 0xFF333344;
+    let he = 260u32;
+    let ug = 180u32;
+    let zc = (width - he - 8) as i32;
+    let xg = 8i32;
     
     
-    crate::framebuffer::ah(awm as u32, atg as u32, yd, ans, vp);
+    let bg_color: u32 = 0xFF101018;
+    let ri: u32 = 0xFF00FF88;
+    let bwl: u32 = 0xFF00FFAA;
+    let ace: u32 = 0xFF88AACC;
+    let prd: u32 = 0xFFFFFFFF;
+    let jzm: u32 = 0xFF333344;
     
     
-    crate::framebuffer::zs(awm as u32, atg as u32, yd, aia);
-    crate::framebuffer::zs(awm as u32, (atg + ans as i32 - 1) as u32, yd, aia);
-    crate::framebuffer::axt(awm as u32, atg as u32, ans, aia);
-    crate::framebuffer::axt((awm + yd as i32 - 1) as u32, atg as u32, ans, aia);
-    
-    let b = awm + 8;
-    let mut c = atg + 6;
+    crate::framebuffer::fill_rect(zc as u32, xg as u32, he, ug, bg_color);
     
     
-    fgy(b, c, "DEVPANEL [F12]", ejy);
-    c += 14;
+    crate::framebuffer::mn(zc as u32, xg as u32, he, ri);
+    crate::framebuffer::mn(zc as u32, (xg + ug as i32 - 1) as u32, he, ri);
+    crate::framebuffer::zv(zc as u32, xg as u32, ug, ri);
+    crate::framebuffer::zv((zc + he as i32 - 1) as u32, xg as u32, ug, ri);
+    
+    let x = zc + 8;
+    let mut y = xg + 6;
     
     
-    crate::framebuffer::zs((awm + 4) as u32, c as u32, yd - 8, 0xFF444466);
-    c += 6;
+    cim(x, y, "DEVPANEL [F12]", bwl);
+    y += 14;
     
     
-    let agm = if ivs > 0 { ivs } else { 16666 };
-    fgy(b, c, &format!("FPS: {:<4}  Frame: {:.1}ms", f.tz, agm as f64 / 1000.0), xqo);
-    c += 14;
+    crate::framebuffer::mn((zc + 4) as u32, y as u32, he - 8, 0xFF444466);
+    y += 6;
     
     
-    fgy(b, c, &format!("Heap: {} / {} KB ({}%)", 
-        f.hmv, f.gja, f.bne), bbw);
-    c += 12;
+    let qk = if frame_time_us > 0 { frame_time_us } else { 16666 };
+    cim(x, y, &format!("FPS: {:<4}  Frame: {:.1}ms", data.fps, qk as f64 / 1000.0), prd);
+    y += 14;
     
     
-    let lo = (yd - 20) as u32;
-    let ajx = (b + 2) as u32;
-    let pl = c as u32;
-    crate::framebuffer::ah(ajx, pl, lo, 6, qmv);
-    let adu = (lo * f.bne) / 100;
-    let emn = if f.bne > 90 { 0xFFFF4444 }
-        else if f.bne > 70 { 0xFFFFAA44 }
+    cim(x, y, &format!("Heap: {} / {} KB ({}%)", 
+        data.heap_used_kb, data.heap_total_kb, data.heap_pct), ace);
+    y += 12;
+    
+    
+    let ek = (he - 20) as u32;
+    let pv = (x + 2) as u32;
+    let gk = y as u32;
+    crate::framebuffer::fill_rect(pv, gk, ek, 6, jzm);
+    let oz = (ek * data.heap_pct) / 100;
+    let bxq = if data.heap_pct > 90 { 0xFFFF4444 }
+        else if data.heap_pct > 70 { 0xFFFFAA44 }
         else { 0xFF44FF88 };
-    crate::framebuffer::ah(ajx, pl, adu, 6, emn);
-    c += 12;
+    crate::framebuffer::fill_rect(pv, gk, oz, 6, bxq);
+    y += 12;
     
     
-    fgy(b, c, &format!("Allocs: {} live", f.czi), bbw);
-    c += 14;
+    cim(x, y, &format!("Allocs: {} live", data.live_allocs), ace);
+    y += 14;
     
     
-    fgy(b, c, &format!("IRQ/s: {}   Total: {}", f.hor, f.blm), bbw);
-    c += 14;
+    cim(x, y, &format!("IRQ/s: {}   Total: {}", data.irq_per_sec, data.total_irqs), ace);
+    y += 14;
     
     
-    fgy(b, c, &format!("CPUs: {}   Uptime: {}s", f.aao, f.cnn), bbw);
-    c += 14;
+    cim(x, y, &format!("CPUs: {}   Uptime: {}s", data.cpu_count, data.uptime_secs), ace);
+    y += 14;
     
     
-    let cm = crate::sync::percpu::gyf();
-    for (a, e) in cm.iter().cf().take(4) {
-        let trq = if e.edw { "idle" } else { "busy" };
-        fgy(b, c, &format!("  CPU{}: {} irqs [{}]", a, e.interrupts, trq), 
-            if e.edw { 0xFF667788 } else { 0xFF88FFAA });
-        c += 12;
+    let stats = crate::sync::percpu::dhj();
+    for (i, j) in stats.iter().enumerate().take(4) {
+        let mnt = if j.is_idle { "idle" } else { "busy" };
+        cim(x, y, &format!("  CPU{}: {} irqs [{}]", i, j.interrupts, mnt), 
+            if j.is_idle { 0xFF667788 } else { 0xFF88FFAA });
+        y += 12;
     }
 }
 
 
-fn fgy(b: i32, c: i32, text: &str, s: u32) {
-    let b = b as u32;
-    let c = c as u32;
-    for (a, r) in text.bw().cf() {
-        crate::framebuffer::afn(b + (a as u32 * 8), c, r, s);
+fn cim(x: i32, y: i32, text: &str, color: u32) {
+    let x = x as u32;
+    let y = y as u32;
+    for (i, c) in text.chars().enumerate() {
+        crate::framebuffer::px(x + (i as u32 * 8), y, c, color);
     }
 }
 
@@ -628,17 +628,17 @@ fn fgy(b: i32, c: i32, text: &str, s: u32) {
 
 
 
-pub fn yhk(fr: &str) {
-    nmg(2, fr); 
+pub fn pzg(bk: &str) {
+    hsx(2, bk); 
 }
 
 
-pub fn qwh(fr: core::fmt::Arguments) {
+pub fn khl(bk: core::fmt::Arguments) {
     
     
-    if crate::memory::heap::aez() == 0 {
+    if crate::memory::heap::free() == 0 {
         return;
     }
-    let e = format!("{}", fr);
-    nmg(2, &e);
+    let j = format!("{}", bk);
+    hsx(2, &j);
 }

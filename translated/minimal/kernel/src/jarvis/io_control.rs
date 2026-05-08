@@ -35,32 +35,32 @@ use spin::Mutex;
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum IoStatus {
     
-    Di,
+    Active,
     
-    Jk,
+    Detected,
     
-    If,
+    Absent,
     
-    F,
+    Unknown,
 }
 
 impl IoStatus {
-    fn cna(self) -> &'static str {
+    fn symbol(self) -> &'static str {
         match self {
-            IoStatus::Di => "[+]",
-            IoStatus::Jk => "[~]",
-            IoStatus::If => "[-]",
-            IoStatus::F => "[?]",
+            IoStatus::Active => "[+]",
+            IoStatus::Detected => "[~]",
+            IoStatus::Absent => "[-]",
+            IoStatus::Unknown => "[?]",
         }
     }
 
-    fn rl(self) -> bool {
-        self == IoStatus::Di
+    fn is_active(self) -> bool {
+        self == IoStatus::Active
     }
 }
 
 
-pub struct Ng {
+pub struct Fs {
     pub keyboard: IoStatus,
     pub mouse: IoStatus,
     pub serial: IoStatus,
@@ -70,221 +70,221 @@ pub struct Ng {
     pub usb: IoStatus,
     pub audio: IoStatus,
     pub touch: IoStatus,
-    pub gdo: IoStatus,
+    pub cpu_smp: IoStatus,
     pub gpu: IoStatus,
-    pub gtj: IoStatus,
-    pub gtk: IoStatus,
-    pub jrv: IoStatus,
+    pub storage_ahci: IoStatus,
+    pub storage_ata: IoStatus,
+    pub storage_nvme: IoStatus,
     pub pci: IoStatus,
 }
 
 
-static AYQ_: AtomicU64 = AtomicU64::new(0);
+static BAR_: AtomicU64 = AtomicU64::new(0);
 
 
-static CDN_: Mutex<Option<Ng>> = Mutex::new(None);
+static CGW_: Mutex<Option<Fs>> = Mutex::new(None);
 
 
-static AFS_: AtomicBool = AtomicBool::new(false);
+static AHM_: AtomicBool = AtomicBool::new(false);
 
 
-static AXH_: AtomicU64 = AtomicU64::new(0);
-
-
-
+static AZI_: AtomicU64 = AtomicU64::new(0);
 
 
 
 
-pub fn hkp() -> Ng {
-    let ma = Ng {
-        keyboard: vlw(),
-        mouse: vly(),
-        serial: vmc(),
-        network: lvq(),
-        disk: vlu(),
-        display: vlv(),
-        usb: lvs(),
-        audio: lvn(),
-        touch: vmf(),
-        gdo: vlt(),
-        gpu: lvp(),
-        gtj: vlq(),
-        gtk: vlr(),
-        jrv: vlz(),
-        pci: gpv(),
+
+
+
+pub fn dqi() -> Fs {
+    let audit = Fs {
+        keyboard: nxr(),
+        mouse: nxt(),
+        serial: nxw(),
+        network: gok(),
+        disk: nxo(),
+        display: nxp(),
+        usb: gon(),
+        audio: goh(),
+        touch: nxz(),
+        cpu_smp: nxn(),
+        gpu: goj(),
+        storage_ahci: gog(),
+        storage_ata: nxl(),
+        storage_nvme: gol(),
+        pci: ccv(),
     };
 
     
-    AYQ_.store(crate::time::lc(), Ordering::SeqCst);
-    *CDN_.lock() = Some(Ng {
-        keyboard: ma.keyboard,
-        mouse: ma.mouse,
-        serial: ma.serial,
-        network: ma.network,
-        disk: ma.disk,
-        display: ma.display,
-        usb: ma.usb,
-        audio: ma.audio,
-        touch: ma.touch,
-        gdo: ma.gdo,
-        gpu: ma.gpu,
-        gtj: ma.gtj,
-        gtk: ma.gtk,
-        jrv: ma.jrv,
-        pci: ma.pci,
+    BAR_.store(crate::time::uptime_ms(), Ordering::SeqCst);
+    *CGW_.lock() = Some(Fs {
+        keyboard: audit.keyboard,
+        mouse: audit.mouse,
+        serial: audit.serial,
+        network: audit.network,
+        disk: audit.disk,
+        display: audit.display,
+        usb: audit.usb,
+        audio: audit.audio,
+        touch: audit.touch,
+        cpu_smp: audit.cpu_smp,
+        gpu: audit.gpu,
+        storage_ahci: audit.storage_ahci,
+        storage_ata: audit.storage_ata,
+        storage_nvme: audit.storage_nvme,
+        pci: audit.pci,
     });
 
-    AXH_.fetch_add(1, Ordering::Relaxed);
-    ma
+    AZI_.fetch_add(1, Ordering::Relaxed);
+    audit
 }
 
 
 
 
 
-fn vlw() -> IoStatus {
-    if crate::drivers::input::oar() {
-        IoStatus::Di
-    } else if crate::keyboard::hmo() {
-        IoStatus::Di
+fn nxr() -> IoStatus {
+    if crate::drivers::input::idr() {
+        IoStatus::Active
+    } else if crate::keyboard::has_input() {
+        IoStatus::Active
     } else {
         
-        IoStatus::Jk
+        IoStatus::Detected
     }
 }
 
-fn vly() -> IoStatus {
-    if crate::mouse::ky() {
-        if crate::drivers::input::tms() {
-            IoStatus::Di
+fn nxt() -> IoStatus {
+    if crate::mouse::is_initialized() {
+        if crate::drivers::input::mjr() {
+            IoStatus::Active
         } else {
-            IoStatus::Jk
+            IoStatus::Detected
         }
     } else {
-        IoStatus::If
+        IoStatus::Absent
     }
 }
 
-fn vmc() -> IoStatus {
+fn nxw() -> IoStatus {
     
     
-    IoStatus::Di
+    IoStatus::Active
 }
 
-fn lvq() -> IoStatus {
-    if crate::network::anl() {
-        if crate::network::ckt().is_some() {
-            IoStatus::Di
+fn gok() -> IoStatus {
+    if crate::network::sw() {
+        if crate::network::aqu().is_some() {
+            IoStatus::Active
         } else {
-            IoStatus::Jk
+            IoStatus::Detected
         }
     } else {
-        IoStatus::If
+        IoStatus::Absent
     }
 }
 
-fn vlu() -> IoStatus {
-    if crate::disk::anl() {
-        IoStatus::Di
+fn nxo() -> IoStatus {
+    if crate::disk::sw() {
+        IoStatus::Active
     } else {
-        IoStatus::If
+        IoStatus::Absent
     }
 }
 
-fn vlv() -> IoStatus {
-    if crate::framebuffer::ky() {
-        IoStatus::Di
+fn nxp() -> IoStatus {
+    if crate::framebuffer::is_initialized() {
+        IoStatus::Active
     } else {
-        IoStatus::If
+        IoStatus::Absent
     }
 }
 
-fn lvs() -> IoStatus {
-    if crate::drivers::usb::ky() {
-        if crate::drivers::usb::tmo() {
-            IoStatus::Di
+fn gon() -> IoStatus {
+    if crate::drivers::usb::is_initialized() {
+        if crate::drivers::usb::mjm() {
+            IoStatus::Active
         } else {
-            IoStatus::Jk
+            IoStatus::Detected
         }
     } else {
-        IoStatus::If
+        IoStatus::Absent
     }
 }
 
-fn lvn() -> IoStatus {
-    if crate::drivers::hda::ky() {
-        IoStatus::Di
+fn goh() -> IoStatus {
+    if crate::drivers::hda::is_initialized() {
+        IoStatus::Active
     } else {
-        IoStatus::If
+        IoStatus::Absent
     }
 }
 
-fn vmf() -> IoStatus {
-    if crate::touch::anl() {
-        if crate::touch::ky() {
-            IoStatus::Di
+fn nxz() -> IoStatus {
+    if crate::touch::sw() {
+        if crate::touch::is_initialized() {
+            IoStatus::Active
         } else {
-            IoStatus::Jk
+            IoStatus::Detected
         }
     } else {
-        IoStatus::If
+        IoStatus::Absent
     }
 }
 
-fn vlt() -> IoStatus {
-    let az = crate::cpu::smp::aao();
-    let ack = crate::cpu::smp::boc();
-    if ack > 1 {
-        IoStatus::Di
-    } else if az > 1 {
-        IoStatus::Jk
+fn nxn() -> IoStatus {
+    let count = crate::cpu::smp::cpu_count();
+    let ready = crate::cpu::smp::ail();
+    if ready > 1 {
+        IoStatus::Active
+    } else if count > 1 {
+        IoStatus::Detected
     } else {
         
-        IoStatus::Di
+        IoStatus::Active
     }
 }
 
-fn lvp() -> IoStatus {
-    if crate::drivers::amdgpu::clb() {
-        if crate::drivers::amdgpu::compute::uc() {
-            IoStatus::Di
+fn goj() -> IoStatus {
+    if crate::drivers::amdgpu::aud() {
+        if crate::drivers::amdgpu::compute::is_ready() {
+            IoStatus::Active
         } else {
-            IoStatus::Jk
+            IoStatus::Detected
         }
     } else {
-        IoStatus::If
+        IoStatus::Absent
     }
 }
 
-fn vlq() -> IoStatus {
-    if crate::drivers::ahci::ky() {
-        IoStatus::Di
+fn gog() -> IoStatus {
+    if crate::drivers::ahci::is_initialized() {
+        IoStatus::Active
     } else {
-        IoStatus::If
+        IoStatus::Absent
     }
 }
 
-fn vlr() -> IoStatus {
-    if crate::drivers::ata::ky() {
-        IoStatus::Di
+fn nxl() -> IoStatus {
+    if crate::drivers::ata::is_initialized() {
+        IoStatus::Active
     } else {
-        IoStatus::If
+        IoStatus::Absent
     }
 }
 
-fn vlz() -> IoStatus {
+fn gol() -> IoStatus {
     
-    if crate::drivers::oba() {
-        IoStatus::Jk
+    if crate::drivers::ied() {
+        IoStatus::Detected
     } else {
-        IoStatus::If
+        IoStatus::Absent
     }
 }
 
-fn gpv() -> IoStatus {
+fn ccv() -> IoStatus {
     
-    IoStatus::Di
+    IoStatus::Active
 }
 
 
@@ -295,60 +295,60 @@ fn gpv() -> IoStatus {
 
 
 
-pub fn gdg(ma: &Ng) -> u8 {
-    let mut ol: u32 = 0;
-    let mut eus: u32 = 0;
+pub fn cvo(audit: &Fs) -> u8 {
+    let mut score: u32 = 0;
+    let mut cbr: u32 = 0;
 
     
-    let cpp = [
-        (ma.keyboard, 15u32),
-        (ma.serial, 15),
-        (ma.network, 15),
-        (ma.disk, 15),
-        (ma.display, 15),
+    let aqb = [
+        (audit.keyboard, 15u32),
+        (audit.serial, 15),
+        (audit.network, 15),
+        (audit.disk, 15),
+        (audit.display, 15),
     ];
 
     
-    let uyz = [
-        (ma.mouse, 5u32),
-        (ma.usb, 5),
-        (ma.audio, 5),
-        (ma.touch, 5),
-        (ma.gpu, 5),
+    let nns = [
+        (audit.mouse, 5u32),
+        (audit.usb, 5),
+        (audit.audio, 5),
+        (audit.touch, 5),
+        (audit.gpu, 5),
     ];
 
-    for (status, amz) in &cpp {
-        eus += amz;
+    for (status, tv) in &aqb {
+        cbr += tv;
         match status {
-            IoStatus::Di => ol += amz,
-            IoStatus::Jk => ol += amz / 2,
+            IoStatus::Active => score += tv,
+            IoStatus::Detected => score += tv / 2,
             _ => {}
         }
     }
 
-    for (status, amz) in &uyz {
-        eus += amz;
+    for (status, tv) in &nns {
+        cbr += tv;
         match status {
-            IoStatus::Di => ol += amz,
-            IoStatus::Jk => ol += amz / 2,
+            IoStatus::Active => score += tv,
+            IoStatus::Detected => score += tv / 2,
             _ => {}
         }
     }
 
-    ((ol * 100) / eus).v(100) as u8
+    ((score * 100) / cbr).min(100) as u8
 }
 
 
 
-pub fn hsn(ma: &Ng) -> bool {
-    ma.network.rl()
-        && (ma.keyboard.rl() || ma.serial.rl())
-        && ma.disk.rl()
+pub fn duz(audit: &Fs) -> bool {
+    audit.network.is_active()
+        && (audit.keyboard.is_active() || audit.serial.is_active())
+        && audit.disk.is_active()
 }
 
 
-pub fn nwq(ma: &Ng) -> bool {
-    gdg(ma) >= 75
+pub fn iai(audit: &Fs) -> bool {
+    cvo(audit) >= 75
 }
 
 
@@ -356,57 +356,57 @@ pub fn nwq(ma: &Ng) -> bool {
 
 
 
-pub fn fix(ma: &Ng) -> Vec<String> {
-    let ol = gdg(ma);
-    let ack = hsn(ma);
+pub fn format_report(audit: &Fs) -> Vec<String> {
+    let score = cvo(audit);
+    let ready = duz(audit);
 
-    let mut ak = Vec::fc(24);
-    ak.push(String::from("╔═══════════════════════════════════════════════════╗"));
-    ak.push(String::from("║       JARVIS I/O CONTROL AUDIT                   ║"));
-    ak.push(String::from("╠═══════════════════════════════════════════════════╣"));
+    let mut lines = Vec::with_capacity(24);
+    lines.push(String::from("╔═══════════════════════════════════════════════════╗"));
+    lines.push(String::from("║       JARVIS I/O CONTROL AUDIT                   ║"));
+    lines.push(String::from("╠═══════════════════════════════════════════════════╣"));
 
     
-    ak.push(String::from("║ CRITICAL CHANNELS:                                ║"));
-    ak.push(format!("║  {} Keyboard    {}", ma.keyboard.cna(), bli(ma.keyboard)));
-    ak.push(format!("║  {} Serial      {}", ma.serial.cna(), bli(ma.serial)));
-    ak.push(format!("║  {} Network     {}", ma.network.cna(), bli(ma.network)));
-    ak.push(format!("║  {} Disk        {}", ma.disk.cna(), bli(ma.disk)));
-    ak.push(format!("║  {} Display     {}", ma.display.cna(), bli(ma.display)));
+    lines.push(String::from("║ CRITICAL CHANNELS:                                ║"));
+    lines.push(format!("║  {} Keyboard    {}", audit.keyboard.symbol(), ahd(audit.keyboard)));
+    lines.push(format!("║  {} Serial      {}", audit.serial.symbol(), ahd(audit.serial)));
+    lines.push(format!("║  {} Network     {}", audit.network.symbol(), ahd(audit.network)));
+    lines.push(format!("║  {} Disk        {}", audit.disk.symbol(), ahd(audit.disk)));
+    lines.push(format!("║  {} Display     {}", audit.display.symbol(), ahd(audit.display)));
 
-    ak.push(String::from("║ EXTENDED CHANNELS:                                ║"));
-    ak.push(format!("║  {} Mouse       {}", ma.mouse.cna(), bli(ma.mouse)));
-    ak.push(format!("║  {} USB         {}", ma.usb.cna(), bli(ma.usb)));
-    ak.push(format!("║  {} Audio       {}", ma.audio.cna(), bli(ma.audio)));
-    ak.push(format!("║  {} Touch       {}", ma.touch.cna(), bli(ma.touch)));
-    ak.push(format!("║  {} GPU Compute {}", ma.gpu.cna(), bli(ma.gpu)));
+    lines.push(String::from("║ EXTENDED CHANNELS:                                ║"));
+    lines.push(format!("║  {} Mouse       {}", audit.mouse.symbol(), ahd(audit.mouse)));
+    lines.push(format!("║  {} USB         {}", audit.usb.symbol(), ahd(audit.usb)));
+    lines.push(format!("║  {} Audio       {}", audit.audio.symbol(), ahd(audit.audio)));
+    lines.push(format!("║  {} Touch       {}", audit.touch.symbol(), ahd(audit.touch)));
+    lines.push(format!("║  {} GPU Compute {}", audit.gpu.symbol(), ahd(audit.gpu)));
 
-    ak.push(String::from("║ STORAGE:                                          ║"));
-    ak.push(format!("║  {} AHCI/SATA  {}", ma.gtj.cna(), bli(ma.gtj)));
-    ak.push(format!("║  {} ATA/IDE    {}", ma.gtk.cna(), bli(ma.gtk)));
+    lines.push(String::from("║ STORAGE:                                          ║"));
+    lines.push(format!("║  {} AHCI/SATA  {}", audit.storage_ahci.symbol(), ahd(audit.storage_ahci)));
+    lines.push(format!("║  {} ATA/IDE    {}", audit.storage_ata.symbol(), ahd(audit.storage_ata)));
 
-    ak.push(String::from("║ COMPUTE:                                          ║"));
-    ak.push(format!("║  {} CPU/SMP    {}", ma.gdo.cna(), bli(ma.gdo)));
-    ak.push(format!("║  {} PCI Bus    {}", ma.pci.cna(), bli(ma.pci)));
+    lines.push(String::from("║ COMPUTE:                                          ║"));
+    lines.push(format!("║  {} CPU/SMP    {}", audit.cpu_smp.symbol(), ahd(audit.cpu_smp)));
+    lines.push(format!("║  {} PCI Bus    {}", audit.pci.symbol(), ahd(audit.pci)));
 
-    ak.push(String::from("╠═══════════════════════════════════════════════════╣"));
-    ak.push(format!("║  Control Score: {}%                                 ║",
-        if ol < 10 { format!(" {}", ol) } else { format!("{}", ol) }));
-    ak.push(format!("║  Network Ready: {}                                ║",
-        if ack { "YES ✓" } else { "NO  ✗" }));
-    ak.push(format!("║  Full Control:  {}                                ║",
-        if nwq(ma) { "YES ✓" } else { "NO  ✗" }));
-    ak.push(String::from("╚═══════════════════════════════════════════════════╝"));
+    lines.push(String::from("╠═══════════════════════════════════════════════════╣"));
+    lines.push(format!("║  Control Score: {}%                                 ║",
+        if score < 10 { format!(" {}", score) } else { format!("{}", score) }));
+    lines.push(format!("║  Network Ready: {}                                ║",
+        if ready { "YES ✓" } else { "NO  ✗" }));
+    lines.push(format!("║  Full Control:  {}                                ║",
+        if iai(audit) { "YES ✓" } else { "NO  ✗" }));
+    lines.push(String::from("╚═══════════════════════════════════════════════════╝"));
 
-    ak
+    lines
 }
 
 
-fn bli(status: IoStatus) -> &'static str {
+fn ahd(status: IoStatus) -> &'static str {
     match status {
-        IoStatus::Di =>   "Active                          ║",
-        IoStatus::Jk => "Detected                        ║",
-        IoStatus::If =>   "Absent                          ║",
-        IoStatus::F =>  "Unknown                         ║",
+        IoStatus::Active =>   "Active                          ║",
+        IoStatus::Detected => "Detected                        ║",
+        IoStatus::Absent =>   "Absent                          ║",
+        IoStatus::Unknown =>  "Unknown                         ║",
     }
 }
 
@@ -424,54 +424,54 @@ fn bli(status: IoStatus) -> &'static str {
 
 
 
-pub fn nbs(ma: &Ng) -> u16 {
-    let mut hs: u16 = 0;
-    if ma.keyboard.rl() { hs |= 1 << 0; }
-    if ma.mouse.rl()    { hs |= 1 << 1; }
-    if ma.serial.rl()   { hs |= 1 << 2; }
-    if ma.network.rl()  { hs |= 1 << 3; }
-    if ma.disk.rl()     { hs |= 1 << 4; }
-    if ma.display.rl()  { hs |= 1 << 5; }
-    if ma.usb.rl()      { hs |= 1 << 6; }
-    if ma.audio.rl()    { hs |= 1 << 7; }
-    if ma.touch.rl()    { hs |= 1 << 8; }
-    if ma.gpu.rl()      { hs |= 1 << 9; }
-    if ma.gdo.rl()  { hs |= 1 << 10; }
-    if ma.gtj.rl() { hs |= 1 << 11; }
-    if ma.gtk.rl()  { hs |= 1 << 12; }
-    if ma.jrv.rl() { hs |= 1 << 13; }
-    if ma.pci.rl()      { hs |= 1 << 14; }
-    hs
+pub fn hjv(audit: &Fs) -> u16 {
+    let mut mask: u16 = 0;
+    if audit.keyboard.is_active() { mask |= 1 << 0; }
+    if audit.mouse.is_active()    { mask |= 1 << 1; }
+    if audit.serial.is_active()   { mask |= 1 << 2; }
+    if audit.network.is_active()  { mask |= 1 << 3; }
+    if audit.disk.is_active()     { mask |= 1 << 4; }
+    if audit.display.is_active()  { mask |= 1 << 5; }
+    if audit.usb.is_active()      { mask |= 1 << 6; }
+    if audit.audio.is_active()    { mask |= 1 << 7; }
+    if audit.touch.is_active()    { mask |= 1 << 8; }
+    if audit.gpu.is_active()      { mask |= 1 << 9; }
+    if audit.cpu_smp.is_active()  { mask |= 1 << 10; }
+    if audit.storage_ahci.is_active() { mask |= 1 << 11; }
+    if audit.storage_ata.is_active()  { mask |= 1 << 12; }
+    if audit.storage_nvme.is_active() { mask |= 1 << 13; }
+    if audit.pci.is_active()      { mask |= 1 << 14; }
+    mask
 }
 
 
-pub fn yls(hs: u16) -> String {
-    let mut dr = Vec::new();
-    if hs & (1 << 0) != 0 { dr.push("kbd"); }
-    if hs & (1 << 1) != 0 { dr.push("mouse"); }
-    if hs & (1 << 2) != 0 { dr.push("serial"); }
-    if hs & (1 << 3) != 0 { dr.push("net"); }
-    if hs & (1 << 4) != 0 { dr.push("disk"); }
-    if hs & (1 << 5) != 0 { dr.push("display"); }
-    if hs & (1 << 6) != 0 { dr.push("usb"); }
-    if hs & (1 << 7) != 0 { dr.push("audio"); }
-    if hs & (1 << 8) != 0 { dr.push("touch"); }
-    if hs & (1 << 9) != 0 { dr.push("gpu"); }
-    if hs & (1 << 10) != 0 { dr.push("smp"); }
-    if hs & (1 << 11) != 0 { dr.push("ahci"); }
-    if hs & (1 << 12) != 0 { dr.push("ata"); }
-    if hs & (1 << 13) != 0 { dr.push("nvme"); }
-    if hs & (1 << 14) != 0 { dr.push("pci"); }
+pub fn qcr(mask: u16) -> String {
+    let mut caps = Vec::new();
+    if mask & (1 << 0) != 0 { caps.push("kbd"); }
+    if mask & (1 << 1) != 0 { caps.push("mouse"); }
+    if mask & (1 << 2) != 0 { caps.push("serial"); }
+    if mask & (1 << 3) != 0 { caps.push("net"); }
+    if mask & (1 << 4) != 0 { caps.push("disk"); }
+    if mask & (1 << 5) != 0 { caps.push("display"); }
+    if mask & (1 << 6) != 0 { caps.push("usb"); }
+    if mask & (1 << 7) != 0 { caps.push("audio"); }
+    if mask & (1 << 8) != 0 { caps.push("touch"); }
+    if mask & (1 << 9) != 0 { caps.push("gpu"); }
+    if mask & (1 << 10) != 0 { caps.push("smp"); }
+    if mask & (1 << 11) != 0 { caps.push("ahci"); }
+    if mask & (1 << 12) != 0 { caps.push("ata"); }
+    if mask & (1 << 13) != 0 { caps.push("nvme"); }
+    if mask & (1 << 14) != 0 { caps.push("pci"); }
 
-    if dr.is_empty() {
+    if caps.is_empty() {
         String::from("none")
     } else {
-        let mut e = String::new();
-        for (a, r) in dr.iter().cf() {
-            if a > 0 { e.t(", "); }
-            e.t(r);
+        let mut j = String::new();
+        for (i, c) in caps.iter().enumerate() {
+            if i > 0 { j.push_str(", "); }
+            j.push_str(c);
         }
-        e
+        j
     }
 }
 
@@ -480,48 +480,48 @@ pub fn yls(hs: u16) -> String {
 
 
 
-pub fn ypf() {
-    AFS_.store(true, Ordering::SeqCst);
+pub fn qex() {
+    AHM_.store(true, Ordering::SeqCst);
     crate::serial_println!("[IO-CTRL] Continuous I/O monitoring enabled");
 }
 
 
-pub fn ymd() {
-    AFS_.store(false, Ordering::SeqCst);
+pub fn qcz() {
+    AHM_.store(false, Ordering::SeqCst);
 }
 
 
 
 pub fn poll() {
-    if !AFS_.load(Ordering::SeqCst) {
+    if !AHM_.load(Ordering::SeqCst) {
         return;
     }
 
-    let iu = crate::time::lc();
-    let qv = AYQ_.load(Ordering::SeqCst);
-    if iu.nj(qv) < 10_000 {
+    let cy = crate::time::uptime_ms();
+    let last = BAR_.load(Ordering::SeqCst);
+    if cy.wrapping_sub(last) < 10_000 {
         return;
     }
 
-    let ma = hkp();
-    let ol = gdg(&ma);
+    let audit = dqi();
+    let score = cvo(&audit);
 
     
-    if ol < 60 {
-        crate::serial_println!("[IO-CTRL] WARNING: I/O control score dropped to {}%", ol);
+    if score < 60 {
+        crate::serial_println!("[IO-CTRL] WARNING: I/O control score dropped to {}%", score);
     }
 }
 
 
-pub fn ypr() -> u64 {
-    AXH_.load(Ordering::Relaxed)
+pub fn qfh() -> u64 {
+    AZI_.load(Ordering::Relaxed)
 }
 
 
-pub fn zhe() -> String {
-    let ma = hkp();
-    let ol = gdg(&ma);
-    let hs = nbs(&ma);
-    let ack = hsn(&ma);
-    format!("io_score={}% caps=0x{:04X} mesh_ready={}", ol, hs, ack)
+pub fn qrq() -> String {
+    let audit = dqi();
+    let score = cvo(&audit);
+    let mask = hjv(&audit);
+    let ready = duz(&audit);
+    format!("io_score={}% caps=0x{:04X} mesh_ready={}", score, mask, ready)
 }

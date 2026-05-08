@@ -34,38 +34,38 @@ use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Backend {
     
-    Pd,
+    CpuSimd,
     
-    Ot,
+    AmdGpu,
 }
 
 
-static ATP_: AtomicU64 = AtomicU64::new(0);
-static DG_: AtomicU64 = AtomicU64::new(0);
-static KH_: AtomicBool = AtomicBool::new(false);
+static AVT_: AtomicU64 = AtomicU64::new(0);
+static DO_: AtomicU64 = AtomicU64::new(0);
+static LA_: AtomicBool = AtomicBool::new(false);
 
 
-pub fn nky() -> Backend {
+pub fn hrv() -> Backend {
     
-    if crate::drivers::amdgpu::clb() {
-        KH_.store(true, Ordering::Relaxed);
-        Backend::Ot
+    if crate::drivers::amdgpu::aud() {
+        LA_.store(true, Ordering::Relaxed);
+        Backend::AmdGpu
     } else {
-        Backend::Pd
+        Backend::CpuSimd
     }
 }
 
 
-pub fn gil() -> bool {
-    KH_.load(Ordering::Relaxed)
+pub fn cyv() -> bool {
+    LA_.load(Ordering::Relaxed)
 }
 
 
-pub fn iiu() -> Backend {
-    if KH_.load(Ordering::Relaxed) {
-        Backend::Ot
+pub fn eex() -> Backend {
+    if LA_.load(Ordering::Relaxed) {
+        Backend::AmdGpu
     } else {
-        Backend::Pd
+        Backend::CpuSimd
     }
 }
 
@@ -82,48 +82,17 @@ pub fn iiu() -> Backend {
 
 
 #[inline]
-pub fn ami(bd: &mut [f32], d: &[f32], b: &[f32], ec: usize, lk: usize) {
-    match iiu() {
-        Backend::Ot => {
+pub fn tk(out: &mut [f32], w: &[f32], x: &[f32], cols: usize, rows: usize) {
+    match eex() {
+        Backend::AmdGpu => {
             
             
             
-            thc(bd, d, b, ec, lk);
+            mfu(out, w, x, cols, rows);
         }
-        Backend::Pd => {
-            super::simd::ami(bd, d, b, ec, lk);
-            DG_.fetch_add(1, Ordering::Relaxed);
-        }
-    }
-}
-
-
-
-#[inline]
-pub fn dta(bd: &mut [f32], d: &[f32], c: &[f32], ec: usize, lk: usize) {
-    match iiu() {
-        Backend::Ot => {
-            super::simd::dta(bd, d, c, ec, lk);
-            DG_.fetch_add(1, Ordering::Relaxed);
-        }
-        Backend::Pd => {
-            super::simd::dta(bd, d, c, ec, lk);
-            DG_.fetch_add(1, Ordering::Relaxed);
-        }
-    }
-}
-
-
-#[inline]
-pub fn euq(bd: &mut [f32], d: &[f32], c: &[f32], ec: usize, lk: usize) {
-    match iiu() {
-        Backend::Ot => {
-            super::simd::euq(bd, d, c, ec, lk);
-            DG_.fetch_add(1, Ordering::Relaxed);
-        }
-        Backend::Pd => {
-            super::simd::euq(bd, d, c, ec, lk);
-            DG_.fetch_add(1, Ordering::Relaxed);
+        Backend::CpuSimd => {
+            super::simd::tk(out, w, x, cols, rows);
+            DO_.fetch_add(1, Ordering::Relaxed);
         }
     }
 }
@@ -131,25 +100,56 @@ pub fn euq(bd: &mut [f32], d: &[f32], c: &[f32], ec: usize, lk: usize) {
 
 
 #[inline]
-pub fn ctd(aix: &mut [f32], bg: &[f32], b: &[f32], ec: usize, lk: usize) {
-    match iiu() {
-        Backend::Ot => {
-            super::simd::ctd(aix, bg, b, ec, lk);
-            DG_.fetch_add(1, Ordering::Relaxed);
+pub fn bnm(out: &mut [f32], w: &[f32], y: &[f32], cols: usize, rows: usize) {
+    match eex() {
+        Backend::AmdGpu => {
+            super::simd::bnm(out, w, y, cols, rows);
+            DO_.fetch_add(1, Ordering::Relaxed);
         }
-        Backend::Pd => {
-            super::simd::ctd(aix, bg, b, ec, lk);
-            DG_.fetch_add(1, Ordering::Relaxed);
+        Backend::CpuSimd => {
+            super::simd::bnm(out, w, y, cols, rows);
+            DO_.fetch_add(1, Ordering::Relaxed);
         }
     }
 }
 
 
 #[inline]
-pub fn cbl(bd: &mut [f32], b: &[f32], amz: &[f32]) -> f32 {
-    let bfd = super::simd::cbl(bd, b, amz);
-    DG_.fetch_add(1, Ordering::Relaxed);
-    bfd
+pub fn cbq(out: &mut [f32], w: &[f32], y: &[f32], cols: usize, rows: usize) {
+    match eex() {
+        Backend::AmdGpu => {
+            super::simd::cbq(out, w, y, cols, rows);
+            DO_.fetch_add(1, Ordering::Relaxed);
+        }
+        Backend::CpuSimd => {
+            super::simd::cbq(out, w, y, cols, rows);
+            DO_.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+}
+
+
+
+#[inline]
+pub fn ayw(qx: &mut [f32], ad: &[f32], x: &[f32], cols: usize, rows: usize) {
+    match eex() {
+        Backend::AmdGpu => {
+            super::simd::ayw(qx, ad, x, cols, rows);
+            DO_.fetch_add(1, Ordering::Relaxed);
+        }
+        Backend::CpuSimd => {
+            super::simd::ayw(qx, ad, x, cols, rows);
+            DO_.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+}
+
+
+#[inline]
+pub fn aox(out: &mut [f32], x: &[f32], tv: &[f32]) -> f32 {
+    let aeg = super::simd::aox(out, x, tv);
+    DO_.fetch_add(1, Ordering::Relaxed);
+    aeg
 }
 
 
@@ -158,11 +158,11 @@ pub fn cbl(bd: &mut [f32], b: &[f32], amz: &[f32]) -> f32 {
 
 
 
-fn thc(bd: &mut [f32], d: &[f32], b: &[f32], ec: usize, lk: usize) {
+fn mfu(out: &mut [f32], w: &[f32], x: &[f32], cols: usize, rows: usize) {
     
-    if !crate::drivers::amdgpu::compute::uc() {
-        super::simd::ami(bd, d, b, ec, lk);
-        DG_.fetch_add(1, Ordering::Relaxed);
+    if !crate::drivers::amdgpu::compute::is_ready() {
+        super::simd::tk(out, w, x, cols, rows);
+        DO_.fetch_add(1, Ordering::Relaxed);
         return;
     }
 
@@ -180,18 +180,18 @@ fn thc(bd: &mut [f32], d: &[f32], b: &[f32], ec: usize, lk: usize) {
     
     
     
-    super::simd::ami(bd, d, b, ec, lk);
-    DG_.fetch_add(1, Ordering::Relaxed);
+    super::simd::tk(out, w, x, cols, rows);
+    DO_.fetch_add(1, Ordering::Relaxed);
 }
 
 
 
-pub fn mog(ydw: &super::model::TransformerWeights) -> Result<usize, &'static str> {
-    if !crate::drivers::amdgpu::clb() {
+pub fn hat(_weights: &super::model::TransformerWeights) -> Result<usize, &'static str> {
+    if !crate::drivers::amdgpu::aud() {
         return Err("No AMD GPU detected");
     }
 
-    if !crate::drivers::amdgpu::sdma::uc() {
+    if !crate::drivers::amdgpu::sdma::is_ready() {
         return Err("SDMA not ready");
     }
 
@@ -217,26 +217,26 @@ pub fn mog(ydw: &super::model::TransformerWeights) -> Result<usize, &'static str
 
 
 
-pub fn awz() -> String {
-    let backend = if gil() { "GPU (AMD RDNA)" } else { "CPU (SSE2 SIMD)" };
-    let the = ATP_.load(Ordering::Relaxed);
-    let rpt = DG_.load(Ordering::Relaxed);
-    alloc::format!("Backend: {}, GPU ops: {}, CPU ops: {}", backend, the, rpt)
+pub fn summary() -> String {
+    let backend = if cyv() { "GPU (AMD RDNA)" } else { "CPU (SSE2 SIMD)" };
+    let mfw = AVT_.load(Ordering::Relaxed);
+    let kyp = DO_.load(Ordering::Relaxed);
+    alloc::format!("Backend: {}, GPU ops: {}, CPU ops: {}", backend, mfw, kyp)
 }
 
 
-pub fn zl() -> Vec<String> {
-    let mut ak = Vec::new();
-    let backend = if gil() { "GPU (AMD RDNA)" } else { "CPU (SSE2 SIMD)" };
-    ak.push(alloc::format!("Compute: {}", backend));
-    ak.push(alloc::format!("  GPU ops:  {}", ATP_.load(Ordering::Relaxed)));
-    ak.push(alloc::format!("  CPU ops:  {}", DG_.load(Ordering::Relaxed)));
+pub fn info_lines() -> Vec<String> {
+    let mut lines = Vec::new();
+    let backend = if cyv() { "GPU (AMD RDNA)" } else { "CPU (SSE2 SIMD)" };
+    lines.push(alloc::format!("Compute: {}", backend));
+    lines.push(alloc::format!("  GPU ops:  {}", AVT_.load(Ordering::Relaxed)));
+    lines.push(alloc::format!("  CPU ops:  {}", DO_.load(Ordering::Relaxed)));
 
-    if gil() {
-        if let Some(co) = crate::drivers::amdgpu::ani() {
-            ak.push(alloc::format!("  GPU: {} ({})", co.beh(), co.jwb()));
+    if cyv() {
+        if let Some(info) = crate::drivers::amdgpu::rk() {
+            lines.push(alloc::format!("  GPU: {} ({})", info.gpu_name(), info.vram_string()));
         }
     }
 
-    ak
+    lines
 }

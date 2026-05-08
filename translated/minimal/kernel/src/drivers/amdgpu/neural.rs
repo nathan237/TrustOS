@@ -55,22 +55,22 @@ use super::compute;
 
 
 
-const CXY_: usize = 16;
-const CXZ_: usize = 16;
+const DBQ_: usize = 16;
+const DBR_: usize = 16;
 
-const EHO_: usize = 16;
+const ELF_: usize = 16;
 
 
-const DBP_: usize = CXY_ * CXZ_;
+const DFK_: usize = DBQ_ * DBR_;
 
 
 
 
-const CFG_: usize = 128;
+const CIP_: usize = 128;
 
 
 
-const DIZ_: f32 = 1.0 / 128.0;
+const DMO_: f32 = 1.0 / 128.0;
 
 
 
@@ -163,7 +163,7 @@ const DIZ_: f32 = 1.0 / 128.0;
 
 
 
-pub static CCX_: &[u32] = &[
+pub static CGG_: &[u32] = &[
     
     
     
@@ -237,7 +237,7 @@ pub static CCX_: &[u32] = &[
     
     
     
-    0xBF860000u32.nj(14),  
+    0xBF860000u32.wrapping_sub(14),  
 
     
     
@@ -270,7 +270,7 @@ pub static CCX_: &[u32] = &[
 
 
 
-pub static CCW_: &[u32] = &[
+pub static CGF_: &[u32] = &[
     
     0x02020084 | (0x10 << 25),  
     0x0204008F | (0x1C << 25),  
@@ -317,7 +317,7 @@ pub static CCW_: &[u32] = &[
     
     0xD4C20000,      
     0x00001D07,
-    0xBF860000u32.nj(16),  
+    0xBF860000u32.wrapping_sub(16),  
 
     
     0xD3690006,      
@@ -338,7 +338,7 @@ pub static CCW_: &[u32] = &[
 
 
 
-pub static CCY_: &[u32] = &[
+pub static CGH_: &[u32] = &[
     
     0x02020082 | (0x12 << 25),
     
@@ -365,7 +365,7 @@ pub static CCY_: &[u32] = &[
 
 
 
-pub static CCZ_: &[u32] = &[
+pub static CGI_: &[u32] = &[
     
     0x02020082 | (0x12 << 25),
     
@@ -390,7 +390,7 @@ pub static CCZ_: &[u32] = &[
 
 
 
-pub static CCT_: &[u32] = &[
+pub static CGC_: &[u32] = &[
     
     0x02020082 | (0x12 << 25),
     
@@ -419,72 +419,72 @@ pub static CCT_: &[u32] = &[
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NeuralKernel {
     
-    Wt,
+    GemmInt8,
     
-    Ws,
+    GemmFp32,
     
-    Ym,
+    ReLU,
     
-    Yp,
+    Scale,
     
     Add,
 }
 
 impl NeuralKernel {
-    pub fn j(&self) -> &'static str {
+    pub fn name(&self) -> &'static str {
         match self {
-            NeuralKernel::Wt => "gemm_int8",
-            NeuralKernel::Ws => "gemm_fp32",
-            NeuralKernel::Ym => "relu",
-            NeuralKernel::Yp => "scale",
+            NeuralKernel::GemmInt8 => "gemm_int8",
+            NeuralKernel::GemmFp32 => "gemm_fp32",
+            NeuralKernel::ReLU => "relu",
+            NeuralKernel::Scale => "scale",
             NeuralKernel::Add => "add",
         }
     }
 
-    pub fn dc(&self) -> &'static str {
+    pub fn description(&self) -> &'static str {
         match self {
-            NeuralKernel::Wt => "INT8 MatMul (V_DOT4_I32_I8, ~17 TOPS)",
-            NeuralKernel::Ws => "FP32 MatMul (V_FMA_F32, ~9.75 TFLOPS)",
-            NeuralKernel::Ym => "ReLU activation max(x, 0)",
-            NeuralKernel::Yp => "Scalar multiply (x * alpha)",
+            NeuralKernel::GemmInt8 => "INT8 MatMul (V_DOT4_I32_I8, ~17 TOPS)",
+            NeuralKernel::GemmFp32 => "FP32 MatMul (V_FMA_F32, ~9.75 TFLOPS)",
+            NeuralKernel::ReLU => "ReLU activation max(x, 0)",
+            NeuralKernel::Scale => "Scalar multiply (x * alpha)",
             NeuralKernel::Add => "Element-wise add (C = A + B)",
         }
     }
 
-    pub fn fun(&self) -> &'static [u32] {
+    pub fn shader_code(&self) -> &'static [u32] {
         match self {
-            NeuralKernel::Wt => CCX_,
-            NeuralKernel::Ws => CCW_,
-            NeuralKernel::Ym => CCY_,
-            NeuralKernel::Yp => CCZ_,
-            NeuralKernel::Add => CCT_,
+            NeuralKernel::GemmInt8 => CGG_,
+            NeuralKernel::GemmFp32 => CGF_,
+            NeuralKernel::ReLU => CGH_,
+            NeuralKernel::Scale => CGI_,
+            NeuralKernel::Add => CGC_,
         }
     }
 
-    pub fn jpo(&self) -> u32 {
+    pub fn sgpr_count(&self) -> u32 {
         match self {
-            NeuralKernel::Wt | NeuralKernel::Ws => 15, 
-            NeuralKernel::Ym => 4,     
-            NeuralKernel::Yp => 5,    
+            NeuralKernel::GemmInt8 | NeuralKernel::GemmFp32 => 15, 
+            NeuralKernel::ReLU => 4,     
+            NeuralKernel::Scale => 5,    
             NeuralKernel::Add => 12,     
         }
     }
 
-    pub fn jvl(&self) -> u32 {
+    pub fn vgpr_count(&self) -> u32 {
         match self {
-            NeuralKernel::Wt | NeuralKernel::Ws => 8, 
-            NeuralKernel::Ym | NeuralKernel::Yp => 3,
+            NeuralKernel::GemmInt8 | NeuralKernel::GemmFp32 => 8, 
+            NeuralKernel::ReLU | NeuralKernel::Scale => 3,
             NeuralKernel::Add => 4,
         }
     }
 }
 
 
-pub const LP_: &[NeuralKernel] = &[
-    NeuralKernel::Wt,
-    NeuralKernel::Ws,
-    NeuralKernel::Ym,
-    NeuralKernel::Yp,
+pub const ML_: &[NeuralKernel] = &[
+    NeuralKernel::GemmInt8,
+    NeuralKernel::GemmFp32,
+    NeuralKernel::ReLU,
+    NeuralKernel::Scale,
     NeuralKernel::Add,
 ];
 
@@ -494,157 +494,157 @@ pub const LP_: &[NeuralKernel] = &[
 
 
 
-pub fn rpq(q: &[i8], o: &[i8], r: &mut [i32], ef: usize, bo: usize, eh: usize) {
-    for a in 0..ef {
-        for fb in 0..bo {
-            let mut btc = 0i32;
-            for ai in 0..eh {
-                btc += q[a * eh + ai] as i32 * o[fb * eh + ai] as i32;
+pub fn kyn(a: &[i8], b: &[i8], c: &mut [i32], m: usize, ae: usize, k: usize) {
+    for i in 0..m {
+        for ay in 0..ae {
+            let mut aku = 0i32;
+            for aa in 0..k {
+                aku += a[i * k + aa] as i32 * b[ay * k + aa] as i32;
             }
-            r[a * bo + fb] = btc;
+            c[i * ae + ay] = aku;
         }
     }
 }
 
 
-pub fn rpp(q: &[f32], o: &[f32], r: &mut [f32], ef: usize, bo: usize, eh: usize) {
-    for a in 0..ef {
-        for fb in 0..bo {
-            let mut btc = 0.0f32;
-            for ai in 0..eh {
-                btc += q[a * eh + ai] * o[ai * bo + fb]; 
+pub fn kym(a: &[f32], b: &[f32], c: &mut [f32], m: usize, ae: usize, k: usize) {
+    for i in 0..m {
+        for ay in 0..ae {
+            let mut aku = 0.0f32;
+            for aa in 0..k {
+                aku += a[i * k + aa] * b[aa * ae + ay]; 
             }
-            r[a * bo + fb] = btc;
+            c[i * ae + ay] = aku;
         }
     }
 }
 
 
-pub fn ngr(f: &mut [f32]) {
-    for b in f.el() {
-        if *b < 0.0 { *b = 0.0; }
+pub fn hoj(data: &mut [f32]) {
+    for x in data.iter_mut() {
+        if *x < 0.0 { *x = 0.0; }
     }
 }
 
 
-pub fn ngs(f: &mut [f32]) {
-    for b in f.el() {
-        let sig = 1.0 / (1.0 + (-*b).cqh());
-        *b = *b * sig;
+pub fn hok(data: &mut [f32]) {
+    for x in data.iter_mut() {
+        let sig = 1.0 / (1.0 + (-*x).exp_approx());
+        *x = *x * sig;
     }
 }
 
 
-pub fn rpo(f: &mut [f32]) {
-    for b in f.el() {
+pub fn kyl(data: &mut [f32]) {
+    for x in data.iter_mut() {
         
-        let ajr = *b * *b * *b;
-        let ff = 0.7978845608 * (*b + 0.044715 * ajr); 
-        let ab = ff.mjt();
-        *b = 0.5 * *b * (1.0 + ab);
+        let x3 = *x * *x * *x;
+        let inner = 0.7978845608 * (*x + 0.044715 * x3); 
+        let t = inner.tanh_approx();
+        *x = 0.5 * *x * (1.0 + t);
     }
 }
 
 
 
-pub fn klm(bd: &mut [f32], b: &[f32], amz: &[f32], cel: f32) {
-    let bo = b.len();
-    let mut rv = 0.0f32;
-    for &p in b {
-        rv += p * p;
+pub fn fow(out: &mut [f32], x: &[f32], tv: &[f32], eps: f32) {
+    let ae = x.len();
+    let mut ss = 0.0f32;
+    for &v in x {
+        ss += v * v;
     }
-    rv = 1.0 / (rv / bo as f32 + cel).bfj();
-    for a in 0..bo {
-        bd[a] = b[a] * rv * amz[a];
+    ss = 1.0 / (ss / ae as f32 + eps).sqrt_approx();
+    for i in 0..ae {
+        out[i] = x[i] * ss * tv[i];
     }
 }
 
 
-pub fn kln(f: &mut [f32]) {
-    if f.is_empty() { return; }
+pub fn fox(data: &mut [f32]) {
+    if data.is_empty() { return; }
     
-    let mut aki = f[0];
-    for &p in f.iter() {
-        if p > aki { aki = p; }
+    let mut sh = data[0];
+    for &v in data.iter() {
+        if v > sh { sh = v; }
     }
     
     let mut sum = 0.0f32;
-    for b in f.el() {
-        *b = (*b - aki).cqh();
-        sum += *b;
+    for x in data.iter_mut() {
+        *x = (*x - sh).exp_approx();
+        sum += *x;
     }
     
     if sum > 0.0 {
-        let tvw = 1.0 / sum;
-        for b in f.el() {
-            *b *= tvw;
+        let mri = 1.0 / sum;
+        for x in data.iter_mut() {
+            *x *= mri;
         }
     }
 }
 
 
-pub fn oyr(f: &[f32]) -> (Vec<i8>, f32) {
-    let mut awd = 0.0f32;
-    for &p in f {
-        let mtg = if p < 0.0 { -p } else { p };
-        if mtg > awd { awd = mtg; }
+pub fn ixf(data: &[f32]) -> (Vec<i8>, f32) {
+    let mut yw = 0.0f32;
+    for &v in data {
+        let hdq = if v < 0.0 { -v } else { v };
+        if hdq > yw { yw = hdq; }
     }
-    let bv = if awd > 0.0 { awd / 127.0 } else { 1.0 };
-    let hom = 1.0 / bv;
-    let fm: Vec<i8> = f.iter().map(|&p| {
-        let fm = (p * hom) as i32;
-        fm.am(-128).v(127) as i8
+    let scale = if yw > 0.0 { yw / 127.0 } else { 1.0 };
+    let dsh = 1.0 / scale;
+    let q: Vec<i8> = data.iter().map(|&v| {
+        let q = (v * dsh) as i32;
+        q.max(-128).min(127) as i8
     }).collect();
-    (fm, bv)
+    (q, scale)
 }
 
 
-pub fn rvv(f: &[i32], wdj: f32, wdk: f32) -> Vec<f32> {
-    let rmp = wdj * wdk;
-    f.iter().map(|&p| p as f32 * rmp).collect()
+pub fn ldl(data: &[i32], scale_a: f32, scale_b: f32) -> Vec<f32> {
+    let kvz = scale_a * scale_b;
+    data.iter().map(|&v| v as f32 * kvz).collect()
 }
 
 
 
 
 
-trait Apb {
-    fn cqh(self) -> f32;
-    fn mjt(self) -> f32;
-    fn bfj(self) -> f32;
+trait Ra {
+    fn exp_approx(self) -> f32;
+    fn tanh_approx(self) -> f32;
+    fn sqrt_approx(self) -> f32;
 }
 
-impl Apb for f32 {
+impl Ra for f32 {
     
-    fn cqh(self) -> f32 {
-        if self > 88.0 { return f32::O; }
+    fn exp_approx(self) -> f32 {
+        if self > 88.0 { return f32::MAX; }
         if self < -88.0 { return 0.0; }
         
-        let b = self;
-        let q = (1 << 23) as f32 / core::f32::consts::IG_;
-        let o = (1 << 23) as f32 * (127.0 - 0.04368); 
-        let fs = ((q * b + o) as i32).am(0) as u32;
-        f32::bhb(fs)
+        let x = self;
+        let a = (1 << 23) as f32 / core::f32::consts::LN_2;
+        let b = (1 << 23) as f32 * (127.0 - 0.04368); 
+        let bits = ((a * x + b) as i32).max(0) as u32;
+        f32::from_bits(bits)
     }
 
     
-    fn mjt(self) -> f32 {
-        let b = self;
-        if b > 5.0 { return 1.0; }
-        if b < -5.0 { return -1.0; }
-        let hy = b * b;
-        b * (27.0 + hy) / (27.0 + 9.0 * hy)
+    fn tanh_approx(self) -> f32 {
+        let x = self;
+        if x > 5.0 { return 1.0; }
+        if x < -5.0 { return -1.0; }
+        let x2 = x * x;
+        x * (27.0 + x2) / (27.0 + 9.0 * x2)
     }
 
     
-    fn bfj(self) -> f32 {
+    fn sqrt_approx(self) -> f32 {
         if self <= 0.0 { return 0.0; }
-        let fs = self.bsr();
+        let bits = self.to_bits();
         
-        let anj = f32::bhb((fs >> 1) + 0x1FBD_1DF5);
+        let uc = f32::from_bits((bits >> 1) + 0x1FBD_1DF5);
         
-        let at = anj;
-        (at + self / at) * 0.5
+        let g = uc;
+        (g + self / g) * 0.5
     }
 }
 
@@ -653,16 +653,16 @@ impl Apb for f32 {
 
 
 
-struct Bng {
-    hlc: u64,
-    jzb: u64,
-    iej: u64, 
+struct Abs {
+    gemm_count: u64,
+    activation_count: u64,
+    total_macs: u64, 
 }
 
-static VR_: Mutex<Bng> = Mutex::new(Bng {
-    hlc: 0,
-    jzb: 0,
-    iej: 0,
+static XA_: Mutex<Abs> = Mutex::new(Abs {
+    gemm_count: 0,
+    activation_count: 0,
+    total_macs: 0,
 });
 
 
@@ -681,28 +681,28 @@ static VR_: Mutex<Bng> = Mutex::new(Bng {
 
 
 
-pub fn kxy(q: &[i8], o: &[i8], ef: usize, bo: usize, eh: usize) -> Vec<i32> {
+pub fn fyh(a: &[i8], b: &[i8], m: usize, ae: usize, k: usize) -> Vec<i32> {
     
-    let mut r = vec![0i32; ef * bo];
-    rpq(q, o, &mut r, ef, bo, eh);
+    let mut c = vec![0i32; m * ae];
+    kyn(a, b, &mut c, m, ae, k);
 
-    let mut g = VR_.lock();
-    g.hlc += 1;
-    g.iej += (ef * bo * eh) as u64;
+    let mut state = XA_.lock();
+    state.gemm_count += 1;
+    state.total_macs += (m * ae * k) as u64;
 
-    r
+    c
 }
 
 
-pub fn dhk(q: &[f32], o: &[f32], ef: usize, bo: usize, eh: usize) -> Vec<f32> {
-    let mut r = vec![0.0f32; ef * bo];
-    rpp(q, o, &mut r, ef, bo, eh);
+pub fn bgn(a: &[f32], b: &[f32], m: usize, ae: usize, k: usize) -> Vec<f32> {
+    let mut c = vec![0.0f32; m * ae];
+    kym(a, b, &mut c, m, ae, k);
 
-    let mut g = VR_.lock();
-    g.hlc += 1;
-    g.iej += (ef * bo * eh) as u64;
+    let mut state = XA_.lock();
+    state.gemm_count += 1;
+    state.total_macs += (m * ae * k) as u64;
 
-    r
+    c
 }
 
 
@@ -722,97 +722,97 @@ pub fn dhk(q: &[f32], o: &[f32], ef: usize, bo: usize, eh: usize) -> Vec<f32> {
 
 
 
-pub fn xlu(
+pub fn pnd(
     input: &[f32],      
-    biw: &[f32],        
-    biu: &[f32],
-    bpg: &[f32],
-    biv: &[f32],
-    bit: &[f32],     
-    bpf: &[f32],       
-    bpe: &[f32],     
-    vzp: &[f32],
-    vzq: &[f32],
-    anz: usize,
-    aub: usize,
-    eoj: usize,
-    urc: usize,
+    w_q: &[f32],        
+    w_k: &[f32],
+    w_v: &[f32],
+    w_o: &[f32],
+    w_gate: &[f32],     
+    w_up: &[f32],       
+    w_down: &[f32],     
+    rms_weight_attn: &[f32],
+    rms_weight_ffn: &[f32],
+    uj: usize,
+    d_model: usize,
+    bym: usize,
+    n_heads: usize,
 ) -> Vec<f32> {
-    let rsy = aub / urc;
+    let lbd = d_model / n_heads;
 
     
-    let mut dtp = vec![0.0f32; anz * aub];
-    for e in 0..anz {
-        let l = e * aub;
-        klm(
-            &mut dtp[l..l + aub],
-            &input[l..l + aub],
-            vzp,
+    let mut bnv = vec![0.0f32; uj * d_model];
+    for j in 0..uj {
+        let offset = j * d_model;
+        fow(
+            &mut bnv[offset..offset + d_model],
+            &input[offset..offset + d_model],
+            rms_weight_attn,
             1e-5,
         );
     }
 
     
-    let fm = dhk(&dtp, biw, anz, aub, aub);
-    let eh = dhk(&dtp, biu, anz, aub, aub);
-    let p = dhk(&dtp, bpg, anz, aub, aub);
+    let q = bgn(&bnv, w_q, uj, d_model, d_model);
+    let k = bgn(&bnv, w_k, uj, d_model, d_model);
+    let v = bgn(&bnv, w_v, uj, d_model, d_model);
 
     
     
-    let mut ohm = vec![0.0f32; aub * anz];
-    for a in 0..anz {
-        for fb in 0..aub {
-            ohm[fb * anz + a] = eh[a * aub + fb];
+    let mut iiv = vec![0.0f32; d_model * uj];
+    for i in 0..uj {
+        for ay in 0..d_model {
+            iiv[ay * uj + i] = k[i * d_model + ay];
         }
     }
-    let mut eyd = dhk(&fm, &ohm, anz, anz, aub);
+    let mut cdo = bgn(&q, &iiv, uj, uj, d_model);
     
-    let bv = 1.0 / (rsy as f32).bfj();
-    for e in eyd.el() { *e *= bv; }
+    let scale = 1.0 / (lbd as f32).sqrt_approx();
+    for j in cdo.iter_mut() { *j *= scale; }
     
-    for br in 0..anz {
-        let l = br * anz;
-        kln(&mut eyd[l..l + anz]);
+    for row in 0..uj {
+        let offset = row * uj;
+        fox(&mut cdo[offset..offset + uj]);
     }
     
-    let qky = dhk(&eyd, &p, anz, aub, anz);
+    let jxz = bgn(&cdo, &v, uj, d_model, uj);
 
     
-    let con = dhk(&qky, biv, anz, aub, aub);
-    let mut hidden = vec![0.0f32; anz * aub];
-    for a in 0..hidden.len() {
-        hidden[a] = input[a] + con[a];
+    let attn_out = bgn(&jxz, w_o, uj, d_model, d_model);
+    let mut hidden = vec![0.0f32; uj * d_model];
+    for i in 0..hidden.len() {
+        hidden[i] = input[i] + attn_out[i];
     }
 
     
-    let mut lou = vec![0.0f32; anz * aub];
-    for e in 0..anz {
-        let l = e * aub;
-        klm(
-            &mut lou[l..l + aub],
-            &hidden[l..l + aub],
-            vzq,
+    let mut gjp = vec![0.0f32; uj * d_model];
+    for j in 0..uj {
+        let offset = j * d_model;
+        fow(
+            &mut gjp[offset..offset + d_model],
+            &hidden[offset..offset + d_model],
+            rms_weight_ffn,
             1e-5,
         );
     }
 
     
-    let mut iwh = dhk(&lou, bit, anz, eoj, aub);
-    let bln = dhk(&lou, bpf, anz, eoj, aub);
-    ngs(&mut iwh);
+    let mut enu = bgn(&gjp, w_gate, uj, bym, d_model);
+    let up = bgn(&gjp, w_up, uj, bym, d_model);
+    hok(&mut enu);
     
-    for a in 0..iwh.len() {
-        iwh[a] *= bln[a];
+    for i in 0..enu.len() {
+        enu[i] *= up[i];
     }
 
     
-    let cxv = dhk(&iwh, bpe, anz, aub, eoj);
-    let mut an = vec![0.0f32; anz * aub];
-    for a in 0..an.len() {
-        an[a] = hidden[a] + cxv[a];
+    let bbr = bgn(&enu, w_down, uj, d_model, bym);
+    let mut output = vec![0.0f32; uj * d_model];
+    for i in 0..output.len() {
+        output[i] = hidden[i] + bbr[i];
     }
 
-    an
+    output
 }
 
 
@@ -821,183 +821,183 @@ pub fn xlu(
 
 
 
-pub fn eyj() -> (u32, u32) {
-    let mut afu = 0u32;
-    let mut ace = 0u32;
+pub fn cdp() -> (u32, u32) {
+    let mut gd = 0u32;
+    let mut gv = 0u32;
 
     
     crate::serial_println!("[NEURAL] Test 1: INT8 GEMM 4×4 × 4×4");
     {
-        let ef = 4; let bo = 4; let eh = 4;
+        let m = 4; let ae = 4; let k = 4;
         
-        let q: Vec<i8> = vec![
+        let a: Vec<i8> = vec![
             1, 0, 0, 0,
             0, 1, 0, 0,
             0, 0, 1, 0,
             0, 0, 0, 1,
         ];
         
-        let o: Vec<i8> = vec![
+        let b: Vec<i8> = vec![
             2, 0, 0, 0,   
             0, 2, 0, 0,   
             0, 0, 2, 0,   
             0, 0, 0, 2,   
         ];
-        let r = kxy(&q, &o, ef, bo, eh);
+        let c = fyh(&a, &b, m, ae, k);
         
-        let qy = [2, 0, 0, 0,  0, 2, 0, 0,  0, 0, 2, 0,  0, 0, 0, 2];
-        if r == qy { afu += 1; } else {
-            crate::serial_println!("[NEURAL]   FAIL: got {:?}", &r[..16]);
-            ace += 1;
+        let expected = [2, 0, 0, 0,  0, 2, 0, 0,  0, 0, 2, 0,  0, 0, 0, 2];
+        if c == expected { gd += 1; } else {
+            crate::serial_println!("[NEURAL]   FAIL: got {:?}", &c[..16]);
+            gv += 1;
         }
     }
 
     
     crate::serial_println!("[NEURAL] Test 2: FP32 GEMM 2×3 × 3×2");
     {
-        let q: Vec<f32> = vec![1.0, 2.0, 3.0,  4.0, 5.0, 6.0];
-        let o: Vec<f32> = vec![7.0, 8.0,  9.0, 10.0,  11.0, 12.0];
-        let r = dhk(&q, &o, 2, 2, 3);
+        let a: Vec<f32> = vec![1.0, 2.0, 3.0,  4.0, 5.0, 6.0];
+        let b: Vec<f32> = vec![7.0, 8.0,  9.0, 10.0,  11.0, 12.0];
+        let c = bgn(&a, &b, 2, 2, 3);
         
         
         
         
-        let bq = (r[0] - 58.0).gp() < 0.01
-              && (r[1] - 64.0).gp() < 0.01
-              && (r[2] - 139.0).gp() < 0.01
-              && (r[3] - 154.0).gp() < 0.01;
-        if bq { afu += 1; } else {
-            crate::serial_println!("[NEURAL]   FAIL: got {:?}", &r);
-            ace += 1;
+        let ok = (c[0] - 58.0).abs() < 0.01
+              && (c[1] - 64.0).abs() < 0.01
+              && (c[2] - 139.0).abs() < 0.01
+              && (c[3] - 154.0).abs() < 0.01;
+        if ok { gd += 1; } else {
+            crate::serial_println!("[NEURAL]   FAIL: got {:?}", &c);
+            gv += 1;
         }
     }
 
     
     crate::serial_println!("[NEURAL] Test 3: ReLU");
     {
-        let mut f = vec![-3.0f32, -1.0, 0.0, 1.5, 4.0, -0.001];
-        ngr(&mut f);
-        let bq = f[0] == 0.0 && f[1] == 0.0 && f[2] == 0.0
-              && f[3] == 1.5 && f[4] == 4.0 && f[5] == 0.0;
-        if bq { afu += 1; } else {
-            crate::serial_println!("[NEURAL]   FAIL: got {:?}", &f);
-            ace += 1;
+        let mut data = vec![-3.0f32, -1.0, 0.0, 1.5, 4.0, -0.001];
+        hoj(&mut data);
+        let ok = data[0] == 0.0 && data[1] == 0.0 && data[2] == 0.0
+              && data[3] == 1.5 && data[4] == 4.0 && data[5] == 0.0;
+        if ok { gd += 1; } else {
+            crate::serial_println!("[NEURAL]   FAIL: got {:?}", &data);
+            gv += 1;
         }
     }
 
     
     crate::serial_println!("[NEURAL] Test 4: Softmax");
     {
-        let mut f = vec![1.0f32, 2.0, 3.0, 4.0];
-        kln(&mut f);
-        let sum: f32 = f.iter().sum();
-        let bq = (sum - 1.0).gp() < 0.01
-              && f[3] > f[2]
-              && f[2] > f[1]
-              && f[1] > f[0];
-        if bq { afu += 1; } else {
-            crate::serial_println!("[NEURAL]   FAIL: sum={}, data={:?}", sum, &f);
-            ace += 1;
+        let mut data = vec![1.0f32, 2.0, 3.0, 4.0];
+        fox(&mut data);
+        let sum: f32 = data.iter().sum();
+        let ok = (sum - 1.0).abs() < 0.01
+              && data[3] > data[2]
+              && data[2] > data[1]
+              && data[1] > data[0];
+        if ok { gd += 1; } else {
+            crate::serial_println!("[NEURAL]   FAIL: sum={}, data={:?}", sum, &data);
+            gv += 1;
         }
     }
 
     
     crate::serial_println!("[NEURAL] Test 5: RMSNorm");
     {
-        let b = vec![1.0f32, 2.0, 3.0, 4.0];
-        let d = vec![1.0f32; 4];
-        let mut bd = vec![0.0f32; 4];
-        klm(&mut bd, &b, &d, 1e-5);
+        let x = vec![1.0f32, 2.0, 3.0, 4.0];
+        let w = vec![1.0f32; 4];
+        let mut out = vec![0.0f32; 4];
+        fow(&mut out, &x, &w, 1e-5);
         
         
-        let bfd = (30.0f32 / 4.0).bfj();
-        let bq = (bd[0] - 1.0 / bfd).gp() < 0.05
-              && (bd[3] - 4.0 / bfd).gp() < 0.05;
-        if bq { afu += 1; } else {
-            crate::serial_println!("[NEURAL]   FAIL: out={:?}", &bd);
-            ace += 1;
+        let aeg = (30.0f32 / 4.0).sqrt_approx();
+        let ok = (out[0] - 1.0 / aeg).abs() < 0.05
+              && (out[3] - 4.0 / aeg).abs() < 0.05;
+        if ok { gd += 1; } else {
+            crate::serial_println!("[NEURAL]   FAIL: out={:?}", &out);
+            gv += 1;
         }
     }
 
     
     crate::serial_println!("[NEURAL] Test 6: Quant/Dequant round-trip");
     {
-        let qeg = vec![1.0f32, 0.0, 0.0, 1.0]; 
-        let qmc = vec![3.0f32, 0.0, 0.0, 3.0]; 
-        let (qei, mte) = oyr(&qeg);
-        let (qme, mxf) = oyr(&qmc);
-        let qve = kxy(&qei, &qme, 2, 2, 2);
-        let hcc = rvv(&qve, mte, mxf);
+        let jsy = vec![1.0f32, 0.0, 0.0, 1.0]; 
+        let jyx = vec![3.0f32, 0.0, 0.0, 3.0]; 
+        let (a_q, a_scale) = ixf(&jsy);
+        let (b_q, b_scale) = ixf(&jyx);
+        let kgr = fyh(&a_q, &b_q, 2, 2, 2);
+        let dkg = ldl(&kgr, a_scale, b_scale);
         
-        let bq = (hcc[0] - 3.0).gp() < 0.5
-              && (hcc[3] - 3.0).gp() < 0.5
-              && hcc[1].gp() < 0.5
-              && hcc[2].gp() < 0.5;
-        if bq { afu += 1; } else {
-            crate::serial_println!("[NEURAL]   FAIL: c_fp={:?} (scales: a={}, b={})", &hcc, mte, mxf);
-            ace += 1;
+        let ok = (dkg[0] - 3.0).abs() < 0.5
+              && (dkg[3] - 3.0).abs() < 0.5
+              && dkg[1].abs() < 0.5
+              && dkg[2].abs() < 0.5;
+        if ok { gd += 1; } else {
+            crate::serial_println!("[NEURAL]   FAIL: c_fp={:?} (scales: a={}, b={})", &dkg, a_scale, b_scale);
+            gv += 1;
         }
     }
 
     
     crate::serial_println!("[NEURAL] Test 7: SiLU activation");
     {
-        let mut f = vec![0.0f32, 1.0, -1.0, 5.0];
-        ngs(&mut f);
+        let mut data = vec![0.0f32, 1.0, -1.0, 5.0];
+        hok(&mut data);
         
-        let bq = f[0].gp() < 0.01
-              && (f[1] - 0.731).gp() < 0.05
-              && (f[2] + 0.269).gp() < 0.05
-              && (f[3] - 4.966).gp() < 0.1;
-        if bq { afu += 1; } else {
-            crate::serial_println!("[NEURAL]   FAIL: {:?}", &f);
-            ace += 1;
+        let ok = data[0].abs() < 0.01
+              && (data[1] - 0.731).abs() < 0.05
+              && (data[2] + 0.269).abs() < 0.05
+              && (data[3] - 4.966).abs() < 0.1;
+        if ok { gd += 1; } else {
+            crate::serial_println!("[NEURAL]   FAIL: {:?}", &data);
+            gv += 1;
         }
     }
 
     
     crate::serial_println!("[NEURAL] Test 8: GELU activation");
     {
-        let mut f = vec![0.0f32, 1.0, -1.0, 2.0];
-        rpo(&mut f);
+        let mut data = vec![0.0f32, 1.0, -1.0, 2.0];
+        kyl(&mut data);
         
-        let bq = f[0].gp() < 0.01
-              && (f[1] - 0.841).gp() < 0.05
-              && (f[2] + 0.159).gp() < 0.05
-              && (f[3] - 1.955).gp() < 0.1;
-        if bq { afu += 1; } else {
-            crate::serial_println!("[NEURAL]   FAIL: {:?}", &f);
-            ace += 1;
+        let ok = data[0].abs() < 0.01
+              && (data[1] - 0.841).abs() < 0.05
+              && (data[2] + 0.159).abs() < 0.05
+              && (data[3] - 1.955).abs() < 0.1;
+        if ok { gd += 1; } else {
+            crate::serial_println!("[NEURAL]   FAIL: {:?}", &data);
+            gv += 1;
         }
     }
 
     
     crate::serial_println!("[NEURAL] Test 9: GPU kernel enumeration");
     {
-        let bq = LP_.len() == 5
-              && LP_[0].fun().len() > 5
-              && LP_[1].fun().len() > 5;
-        if bq { afu += 1; } else {
-            ace += 1;
+        let ok = ML_.len() == 5
+              && ML_[0].shader_code().len() > 5
+              && ML_[1].shader_code().len() > 5;
+        if ok { gd += 1; } else {
+            gv += 1;
         }
     }
 
     
     crate::serial_println!("[NEURAL] Test 10: Math approximations");
     {
-        let ebb = 1.0f32.cqh();       
-        let aax = 1.0f32.mjt();      
-        let pew = 4.0f32.bfj();      
-        let bq = (ebb - 2.718).gp() < 0.2
-              && (aax - 0.762).gp() < 0.05
-              && (pew - 2.0).gp() < 0.05;
-        if bq { afu += 1; } else {
-            crate::serial_println!("[NEURAL]   FAIL: exp(1)={}, tanh(1)={}, sqrt(4)={}", ebb, aax, pew);
-            ace += 1;
+        let bsc = 1.0f32.exp_approx();       
+        let ll = 1.0f32.tanh_approx();      
+        let jcc = 4.0f32.sqrt_approx();      
+        let ok = (bsc - 2.718).abs() < 0.2
+              && (ll - 0.762).abs() < 0.05
+              && (jcc - 2.0).abs() < 0.05;
+        if ok { gd += 1; } else {
+            crate::serial_println!("[NEURAL]   FAIL: exp(1)={}, tanh(1)={}, sqrt(4)={}", bsc, ll, jcc);
+            gv += 1;
         }
     }
 
-    (afu, ace)
+    (gd, gv)
 }
 
 
@@ -1005,67 +1005,67 @@ pub fn eyj() -> (u32, u32) {
 
 
 
-pub fn awz() -> String {
-    let g = VR_.lock();
+pub fn summary() -> String {
+    let state = XA_.lock();
     format!("Neural: {} GEMM, {} activations, {} MACs total",
-        g.hlc, g.jzb, g.iej)
+        state.gemm_count, state.activation_count, state.total_macs)
 }
 
 
-pub fn zl() -> Vec<String> {
-    let mut ak = Vec::new();
-    let g = VR_.lock();
+pub fn info_lines() -> Vec<String> {
+    let mut lines = Vec::new();
+    let state = XA_.lock();
 
-    ak.push(String::from("╔══════════════════════════════════════════════════╗"));
-    ak.push(String::from("║  Neural Compute — GEMM + Ops for LLM Inference  ║"));
-    ak.push(String::from("╠══════════════════════════════════════════════════╣"));
-    ak.push(format!("║ GEMM ops:       {}                              ║", g.hlc));
-    ak.push(format!("║ Activation ops: {}                              ║", g.jzb));
-    ak.push(format!("║ Total MACs:     {}                          ║", g.iej));
-    ak.push(format!("║ GPU ready:      {}                          ║", compute::uc()));
-    ak.push(String::from("╠══════════════════════════════════════════════════╣"));
-    ak.push(String::from("║ GPU Kernels:                                     ║"));
-    for eh in LP_ {
-        ak.push(format!("║  {:12} {} ({} insns)            ║",
-            eh.j(), eh.dc(), eh.fun().len()));
+    lines.push(String::from("╔══════════════════════════════════════════════════╗"));
+    lines.push(String::from("║  Neural Compute — GEMM + Ops for LLM Inference  ║"));
+    lines.push(String::from("╠══════════════════════════════════════════════════╣"));
+    lines.push(format!("║ GEMM ops:       {}                              ║", state.gemm_count));
+    lines.push(format!("║ Activation ops: {}                              ║", state.activation_count));
+    lines.push(format!("║ Total MACs:     {}                          ║", state.total_macs));
+    lines.push(format!("║ GPU ready:      {}                          ║", compute::is_ready()));
+    lines.push(String::from("╠══════════════════════════════════════════════════╣"));
+    lines.push(String::from("║ GPU Kernels:                                     ║"));
+    for k in ML_ {
+        lines.push(format!("║  {:12} {} ({} insns)            ║",
+            k.name(), k.description(), k.shader_code().len()));
     }
-    ak.push(String::from("╠══════════════════════════════════════════════════╣"));
-    ak.push(String::from("║ CPU Ops: gemm_int8, gemm_fp32, relu, silu, gelu ║"));
-    ak.push(String::from("║          softmax, rmsnorm, quantize, dequantize  ║"));
-    ak.push(String::from("║ Transformer: full LLaMA-style layer (CPU)        ║"));
-    ak.push(String::from("╚══════════════════════════════════════════════════╝"));
+    lines.push(String::from("╠══════════════════════════════════════════════════╣"));
+    lines.push(String::from("║ CPU Ops: gemm_int8, gemm_fp32, relu, silu, gelu ║"));
+    lines.push(String::from("║          softmax, rmsnorm, quantize, dequantize  ║"));
+    lines.push(String::from("║ Transformer: full LLaMA-style layer (CPU)        ║"));
+    lines.push(String::from("╚══════════════════════════════════════════════════╝"));
 
-    ak
+    lines
 }
 
 
 
-pub fn qow(tp: usize) -> f64 {
-    let tp = tp.v(CFG_);
-    let q: Vec<i8> = vec![1i8; tp * tp];
-    let o: Vec<i8> = vec![1i8; tp * tp];
+pub fn kbj(dim: usize) -> f64 {
+    let dim = dim.min(CIP_);
+    let a: Vec<i8> = vec![1i8; dim * dim];
+    let b: Vec<i8> = vec![1i8; dim * dim];
 
-    let ay = crate::time::ave();
+    let start = crate::time::yf();
 
-    let bbu = 4u32;
-    for _ in 0..bbu {
-        let _ = kxy(&q, &o, tp, tp, tp);
+    let acd = 4u32;
+    for _ in 0..acd {
+        let _ = fyh(&a, &b, dim, dim, dim);
     }
 
-    let ci = crate::time::ave();
-    let oz = ci.ao(ay).am(1);
+    let end = crate::time::yf();
+    let elapsed_ms = end.saturating_sub(start).max(1);
 
-    let xkm = 2 * tp * tp * tp * bbu as usize; 
-    let kzi = xkm as f64 / (oz as f64 * 1_000.0); 
-    kzi
+    let pmd = 2 * dim * dim * dim * acd as usize; 
+    let fzg = pmd as f64 / (elapsed_ms as f64 * 1_000.0); 
+    fzg
 }
 
 
-trait Bxo {
-    fn gp(self) -> f32;
+trait Aha {
+    fn abs(self) -> f32;
 }
-impl Bxo for f32 {
-    fn gp(self) -> f32 {
+impl Aha for f32 {
+    fn abs(self) -> f32 {
         if self < 0.0 { -self } else { self }
     }
 }

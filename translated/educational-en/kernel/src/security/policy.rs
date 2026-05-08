@@ -135,9 +135,9 @@ pub mod invariants {
     }
     
     /// Invariant: All IPC calls validated
-    pub fn check_ipc_capability(capability_rights: CapabilityRights) -> bool {
-        capability_rights.contains(CapabilityRights::READ) || 
-        capability_rights.contains(CapabilityRights::WRITE)
+    pub fn check_ipc_capability(cap_rights: CapabilityRights) -> bool {
+        cap_rights.contains(CapabilityRights::READ) || 
+        cap_rights.contains(CapabilityRights::WRITE)
     }
     
     /// Invariant: Kernel operations require kernel capability

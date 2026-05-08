@@ -12,46 +12,46 @@ use alloc::string::String;
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use spin::Mutex;
 
-use crate::vfs::fat32::Bj;
+use crate::vfs::fat32::Ak;
 
 
 
 
 
 
-const CZS_: u8 = 0x08;
+const DDK_: u8 = 0x08;
 
-const DAA_: u8 = 0x06;
+const DDS_: u8 = 0x06;
 
-const CZW_: u8 = 0x50;
-
-
-const BLW_: u32 = 0x43425355; 
-
-const BQH_: u32 = 0x53425355; 
+const DDO_: u8 = 0x50;
 
 
-const ANS_: u8 = 0x00;
-const BLV_: u8 = 0x80;
+const BOP_: u32 = 0x43425355; 
+
+const BTA_: u32 = 0x53425355; 
 
 
-const JT_: u8 = 0x00;
-const DIH_: u8 = 0x01;
-const DII_: u8 = 0x02;
+const APW_: u8 = 0x00;
+const BOO_: u8 = 0x80;
 
 
-const CQW_: u8 = 0x00;
-const CQV_: u8 = 0x03;
-const CQS_: u8 = 0x12;
-const CQU_: u8 = 0x25;
-const CQT_: u8 = 0x28;
-const CQX_: u8 = 0x2A;
+const KN_: u8 = 0x00;
+const DLU_: u8 = 0x01;
+const DLV_: u8 = 0x02;
+
+
+const CUN_: u8 = 0x00;
+const CUM_: u8 = 0x03;
+const CUJ_: u8 = 0x12;
+const CUL_: u8 = 0x25;
+const CUK_: u8 = 0x28;
+const CUO_: u8 = 0x2A;
 
 
 const H_: usize = 512;
 
 
-const BAC_: usize = 128; 
+const BCE_: usize = 128; 
 
 
 
@@ -61,33 +61,33 @@ const BAC_: usize = 128;
 #[derive(Clone, Copy)]
 struct Cbw {
     signature: u32,        
-    ll: u32,              
-    rtr: u32, 
+    tag: u32,              
+    data_transfer_length: u32, 
     flags: u8,             
-    hqn: u8,               
-    qwp: u8,         
-    aiv: [u8; 16],          
+    lun: u8,               
+    cb_length: u8,         
+    cb: [u8; 16],          
 }
 
 impl Cbw {
-    fn new(ll: u32, dmq: u32, te: u8, hqn: u8, cmd: &[u8]) -> Self {
-        let mut aiv = [0u8; 16];
-        let len = cmd.len().v(16);
-        aiv[..len].dg(&cmd[..len]);
+    fn new(tag: u32, bjr: u32, it: u8, lun: u8, cmd: &[u8]) -> Self {
+        let mut cb = [0u8; 16];
+        let len = cmd.len().min(16);
+        cb[..len].copy_from_slice(&cmd[..len]);
         Self {
-            signature: BLW_,
-            ll,
-            rtr: dmq,
-            flags: te,
-            hqn,
-            qwp: len as u8,
-            aiv,
+            signature: BOP_,
+            tag,
+            data_transfer_length: bjr,
+            flags: it,
+            lun,
+            cb_length: len as u8,
+            cb,
         }
     }
 
     fn as_bytes(&self) -> &[u8] {
         unsafe {
-            core::slice::anh(self as *const Self as *const u8, 31)
+            core::slice::from_raw_parts(self as *const Self as *const u8, 31)
         }
     }
 }
@@ -100,21 +100,21 @@ impl Cbw {
 #[derive(Clone, Copy, Default)]
 struct Csw {
     signature: u32,      
-    ll: u32,            
-    rtn: u32,   
+    tag: u32,            
+    data_residue: u32,   
     status: u8,          
 }
 
 impl Csw {
-    fn eca(f: &[u8]) -> Option<Self> {
-        if f.len() < 13 { return None; }
-        let sig = u32::dj([f[0], f[1], f[2], f[3]]);
-        if sig != BQH_ { return None; }
+    fn bsv(data: &[u8]) -> Option<Self> {
+        if data.len() < 13 { return None; }
+        let sig = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
+        if sig != BTA_ { return None; }
         Some(Self {
             signature: sig,
-            ll: u32::dj([f[4], f[5], f[6], f[7]]),
-            rtn: u32::dj([f[8], f[9], f[10], f[11]]),
-            status: f[12],
+            tag: u32::from_le_bytes([data[4], data[5], data[6], data[7]]),
+            data_residue: u32::from_le_bytes([data[8], data[9], data[10], data[11]]),
+            status: data[12],
         })
     }
 }
@@ -125,27 +125,27 @@ impl Csw {
 
 
 #[derive(Clone)]
-pub struct Om {
-    pub fw: u8,
-    pub hqn: u8,
-    pub dzi: u8,     
-    pub enc: u8,    
-    pub hrd: u16,
-    pub hre: u16,
-    pub hat: u64,
-    pub py: u32,
-    pub acs: String,
-    pub baj: String,
-    pub ack: bool,
+pub struct Gc {
+    pub slot_id: u8,
+    pub lun: u8,
+    pub bulk_in_dci: u8,     
+    pub bulk_out_dci: u8,    
+    pub max_packet_in: u16,
+    pub max_packet_out: u16,
+    pub block_count: u64,
+    pub block_size: u32,
+    pub vendor: String,
+    pub product: String,
+    pub ready: bool,
 }
 
 
-static FT_: Mutex<Vec<Om>> = Mutex::new(Vec::new());
-static CXH_: AtomicU32 = AtomicU32::new(1);
-static Be: AtomicBool = AtomicBool::new(false);
+static GI_: Mutex<Vec<Gc>> = Mutex::new(Vec::new());
+static DAZ_: AtomicU32 = AtomicU32::new(1);
+static Ah: AtomicBool = AtomicBool::new(false);
 
-fn uuo() -> u32 {
-    CXH_.fetch_add(1, Ordering::Relaxed)
+fn nkh() -> u32 {
+    DAZ_.fetch_add(1, Ordering::Relaxed)
 }
 
 
@@ -153,74 +153,74 @@ fn uuo() -> u32 {
 
 
 
-fn gbu(fw: u8, bms: u8, f: &[u8]) -> bool {
+fn bulk_out(slot_id: u8, ahu: u8, data: &[u8]) -> bool {
     
-    let rg = match crate::memory::frame::azg() {
-        Some(ai) => ai,
+    let hg = match crate::memory::frame::aan() {
+        Some(aa) => aa,
         None => return false,
     };
-    let aak = super::xhci::auv(rg) as *mut u8;
+    let kt = super::xhci::wk(hg) as *mut u8;
     
-    let len = f.len().v(4096);
+    let len = data.len().min(4096);
     unsafe {
-        core::ptr::copy_nonoverlapping(f.fq(), aak, len);
+        core::ptr::copy_nonoverlapping(data.as_ptr(), kt, len);
     }
 
-    let vx = super::xhci::quo(fw, bms, rg, len as u32);
-    crate::memory::frame::apt(rg);
-    vx
+    let success = super::xhci::kgd(slot_id, ahu, hg, len as u32);
+    crate::memory::frame::vk(hg);
+    success
 }
 
 
-fn fea(fw: u8, bms: u8, bi: &mut [u8], go: u32) -> Option<u32> {
-    let rg = match crate::memory::frame::azg() {
-        Some(ai) => ai,
+fn bulk_in(slot_id: u8, ahu: u8, buffer: &mut [u8], length: u32) -> Option<u32> {
+    let hg = match crate::memory::frame::aan() {
+        Some(aa) => aa,
         None => return None,
     };
-    let aak = super::xhci::auv(rg) as *mut u8;
+    let kt = super::xhci::wk(hg) as *mut u8;
 
-    let result = super::xhci::qun(fw, bms, rg, go);
-    if let Some(ieu) = result {
-        let zg = (ieu as usize).v(bi.len());
+    let result = super::xhci::kgc(slot_id, ahu, hg, length);
+    if let Some(transferred) = result {
+        let mb = (transferred as usize).min(buffer.len());
         unsafe {
-            core::ptr::copy_nonoverlapping(aak, bi.mw(), zg);
+            core::ptr::copy_nonoverlapping(kt, buffer.as_mut_ptr(), mb);
         }
     }
     
-    crate::memory::frame::apt(rg);
+    crate::memory::frame::vk(hg);
     result
 }
 
 
-fn qui(fw: u8, bms: u8, bi: &mut [u8], go: u32) -> Option<u32> {
-    let mut l = 0usize;
-    let mut ia = go;
+fn kfy(slot_id: u8, ahu: u8, buffer: &mut [u8], length: u32) -> Option<u32> {
+    let mut offset = 0usize;
+    let mut ck = length;
     
-    while ia > 0 {
-        let jj = ia.v(4096);
-        let ci = l + jj as usize;
-        if ci > bi.len() { break; }
+    while ck > 0 {
+        let df = ck.min(4096);
+        let end = offset + df as usize;
+        if end > buffer.len() { break; }
 
-        match fea(fw, bms, &mut bi[l..ci], jj) {
-            Some(ieu) => {
-                l += ieu as usize;
-                ia -= jj;
+        match bulk_in(slot_id, ahu, &mut buffer[offset..end], df) {
+            Some(transferred) => {
+                offset += transferred as usize;
+                ck -= df;
             }
             None => return None,
         }
     }
-    Some(l as u32)
+    Some(offset as u32)
 }
 
 
-fn qul(fw: u8, bms: u8, f: &[u8]) -> bool {
-    let mut l = 0usize;
-    while l < f.len() {
-        let ci = (l + 4096).v(f.len());
-        if !gbu(fw, bms, &f[l..ci]) {
+fn kga(slot_id: u8, ahu: u8, data: &[u8]) -> bool {
+    let mut offset = 0usize;
+    while offset < data.len() {
+        let end = (offset + 4096).min(data.len());
+        if !bulk_out(slot_id, ahu, &data[offset..end]) {
             return false;
         }
-        l = ci;
+        offset = end;
     }
     true
 }
@@ -231,59 +231,59 @@ fn qul(fw: u8, bms: u8, f: &[u8]) -> bool {
 
 
 
-fn grp(
-    ba: &Om,
+fn ddy(
+    s: &Gc,
     cmd: &[u8],
-    njn: Option<&mut [u8]>,
-    njo: Option<&[u8]>,
+    data_in: Option<&mut [u8]>,
+    data_out: Option<&[u8]>,
 ) -> Result<u8, &'static str> {
-    let ll = uuo();
-    let sz;
-    let dmq;
+    let tag = nkh();
+    let direction;
+    let bjr;
     
-    if let Some(ref k) = njn {
-        sz = BLV_;
-        dmq = k.len() as u32;
-    } else if let Some(ref k) = njo {
-        sz = ANS_;
-        dmq = k.len() as u32;
+    if let Some(ref buf) = data_in {
+        direction = BOO_;
+        bjr = buf.len() as u32;
+    } else if let Some(ref buf) = data_out {
+        direction = APW_;
+        bjr = buf.len() as u32;
     } else {
-        sz = ANS_;
-        dmq = 0;
+        direction = APW_;
+        bjr = 0;
     }
     
     
-    let qxa = Cbw::new(ll, dmq, sz, ba.hqn, cmd);
-    if !gbu(ba.fw, ba.enc, qxa.as_bytes()) {
+    let kht = Cbw::new(tag, bjr, direction, s.lun, cmd);
+    if !bulk_out(s.slot_id, s.bulk_out_dci, kht.as_bytes()) {
         return Err("CBW send failed");
     }
     
     
-    if let Some(k) = njn {
-        if dmq > 4096 {
-            qui(ba.fw, ba.dzi, k, dmq)
+    if let Some(buf) = data_in {
+        if bjr > 4096 {
+            kfy(s.slot_id, s.bulk_in_dci, buf, bjr)
                 .ok_or("Data IN failed")?;
         } else {
-            fea(ba.fw, ba.dzi, k, dmq)
+            bulk_in(s.slot_id, s.bulk_in_dci, buf, bjr)
                 .ok_or("Data IN failed")?;
         }
-    } else if let Some(k) = njo {
-        if !qul(ba.fw, ba.enc, k) {
+    } else if let Some(buf) = data_out {
+        if !kga(s.slot_id, s.bulk_out_dci, buf) {
             return Err("Data OUT failed");
         }
     }
     
     
-    let mut nhs = [0u8; 13];
-    fea(ba.fw, ba.dzi, &mut nhs, 13)
+    let mut hpd = [0u8; 13];
+    bulk_in(s.slot_id, s.bulk_in_dci, &mut hpd, 13)
         .ok_or("CSW receive failed")?;
     
-    let nhr = Csw::eca(&nhs).ok_or("Invalid CSW")?;
-    if nhr.ll != ll {
+    let hpc = Csw::bsv(&hpd).ok_or("Invalid CSW")?;
+    if hpc.tag != tag {
         return Err("CSW tag mismatch");
     }
     
-    Ok(nhr.status)
+    Ok(hpc.status)
 }
 
 
@@ -291,117 +291,117 @@ fn grp(
 
 
 
-fn wex(ba: &mut Om) -> bool {
-    let cmd = [CQS_, 0, 0, 0, 36, 0]; 
-    let mut k = [0u8; 36];
+fn olz(s: &mut Gc) -> bool {
+    let cmd = [CUJ_, 0, 0, 0, 36, 0]; 
+    let mut buf = [0u8; 36];
     
-    match grp(ba, &cmd, Some(&mut k), None) {
-        Ok(JT_) => {
+    match ddy(s, &cmd, Some(&mut buf), None) {
+        Ok(KN_) => {
             
-            let acs = core::str::jg(&k[8..16])
+            let vendor = core::str::from_utf8(&buf[8..16])
                 .unwrap_or("Unknown")
-                .em()
+                .trim()
                 .into();
-            let baj = core::str::jg(&k[16..32])
+            let product = core::str::from_utf8(&buf[16..32])
                 .unwrap_or("Unknown")
-                .em()
+                .trim()
                 .into();
-            ba.acs = acs;
-            ba.baj = baj;
-            crate::serial_println!("[USB-MS] INQUIRY: {} {}", ba.acs, ba.baj);
+            s.vendor = vendor;
+            s.product = product;
+            crate::serial_println!("[USB-MS] INQUIRY: {} {}", s.vendor, s.product);
             true
         }
         Ok(status) => {
             crate::serial_println!("[USB-MS] INQUIRY failed: status={}", status);
             false
         }
-        Err(aa) => {
-            crate::serial_println!("[USB-MS] INQUIRY error: {}", aa);
+        Err(e) => {
+            crate::serial_println!("[USB-MS] INQUIRY error: {}", e);
             false
         }
     }
 }
 
 
-fn wfa(ba: &Om) -> bool {
-    let cmd = [CQW_, 0, 0, 0, 0, 0];
-    oh!(grp(ba, &cmd, None, None), Ok(JT_))
+fn omc(s: &Gc) -> bool {
+    let cmd = [CUN_, 0, 0, 0, 0, 0];
+    matches!(ddy(s, &cmd, None, None), Ok(KN_))
 }
 
 
-fn wey(ba: &mut Om) -> bool {
-    let cmd = [CQU_, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-    let mut k = [0u8; 8];
+fn oma(s: &mut Gc) -> bool {
+    let cmd = [CUL_, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let mut buf = [0u8; 8];
     
-    match grp(ba, &cmd, Some(&mut k), None) {
-        Ok(JT_) => {
-            let ucj = u32::oa([k[0], k[1], k[2], k[3]]);
-            let py = u32::oa([k[4], k[5], k[6], k[7]]);
-            ba.hat = ucj as u64 + 1;
-            ba.py = py;
+    match ddy(s, &cmd, Some(&mut buf), None) {
+        Ok(KN_) => {
+            let mwo = u32::from_be_bytes([buf[0], buf[1], buf[2], buf[3]]);
+            let block_size = u32::from_be_bytes([buf[4], buf[5], buf[6], buf[7]]);
+            s.block_count = mwo as u64 + 1;
+            s.block_size = block_size;
             crate::serial_println!("[USB-MS] Capacity: {} blocks × {} bytes = {} MB",
-                ba.hat, ba.py,
-                (ba.hat * ba.py as u64) / (1024 * 1024));
+                s.block_count, s.block_size,
+                (s.block_count * s.block_size as u64) / (1024 * 1024));
             true
         }
         Ok(status) => {
             crate::serial_println!("[USB-MS] READ CAPACITY failed: status={}", status);
             false
         }
-        Err(aa) => {
-            crate::serial_println!("[USB-MS] READ CAPACITY error: {}", aa);
+        Err(e) => {
+            crate::serial_println!("[USB-MS] READ CAPACITY error: {}", e);
             false
         }
     }
 }
 
 
-fn pgv(ba: &Om, qa: u32, az: u16, bi: &mut [u8]) -> bool {
+fn jdr(s: &Gc, hb: u32, count: u16, buffer: &mut [u8]) -> bool {
     let cmd = [
-        CQT_,
+        CUK_,
         0,
-        (qa >> 24) as u8,
-        (qa >> 16) as u8,
-        (qa >> 8) as u8,
-        qa as u8,
+        (hb >> 24) as u8,
+        (hb >> 16) as u8,
+        (hb >> 8) as u8,
+        hb as u8,
         0, 
-        (az >> 8) as u8,
-        az as u8,
+        (count >> 8) as u8,
+        count as u8,
         0, 
     ];
     
-    oh!(grp(ba, &cmd, Some(bi), None), Ok(JT_))
+    matches!(ddy(s, &cmd, Some(buffer), None), Ok(KN_))
 }
 
 
-fn pgw(ba: &Om, qa: u32, az: u16, bi: &[u8]) -> bool {
+fn jds(s: &Gc, hb: u32, count: u16, buffer: &[u8]) -> bool {
     let cmd = [
-        CQX_,
+        CUO_,
         0,
-        (qa >> 24) as u8,
-        (qa >> 16) as u8,
-        (qa >> 8) as u8,
-        qa as u8,
+        (hb >> 24) as u8,
+        (hb >> 16) as u8,
+        (hb >> 8) as u8,
+        hb as u8,
         0,
-        (az >> 8) as u8,
-        az as u8,
+        (count >> 8) as u8,
+        count as u8,
         0,
     ];
     
-    oh!(grp(ba, &cmd, None, Some(bi)), Ok(JT_))
+    matches!(ddy(s, &cmd, None, Some(buffer)), Ok(KN_))
 }
 
 
-fn wez(ba: &Om) -> Option<(u8, u8, u8)> {
-    let cmd = [CQV_, 0, 0, 0, 18, 0];
-    let mut k = [0u8; 18];
+fn omb(s: &Gc) -> Option<(u8, u8, u8)> {
+    let cmd = [CUM_, 0, 0, 0, 18, 0];
+    let mut buf = [0u8; 18];
     
-    match grp(ba, &cmd, Some(&mut k), None) {
-        Ok(JT_) => {
-            let whs = k[2] & 0x0F;
-            let kbf = k[12];
-            let kbg = k[13];
-            Some((whs, kbf, kbg))
+    match ddy(s, &cmd, Some(&mut buf), None) {
+        Ok(KN_) => {
+            let oof = buf[2] & 0x0F;
+            let fho = buf[12];
+            let fhp = buf[13];
+            Some((oof, fho, fhp))
         }
         _ => None,
     }
@@ -412,68 +412,68 @@ fn wez(ba: &Om) -> Option<(u8, u8, u8)> {
 
 
 
-pub fn ogh(class: u8, adl: u8, protocol: u8) -> bool {
-    class == CZS_ 
-        && adl == DAA_ 
-        && protocol == CZW_
+pub fn iib(class: u8, subclass: u8, protocol: u8) -> bool {
+    class == DDK_ 
+        && subclass == DDS_ 
+        && protocol == DDO_
 }
 
 
 
-pub fn ttj(
-    fw: u8,
-    quh: u8,    
-    quk: u8,   
-    hrd: u16,
-    hre: u16,
+pub fn mpb(
+    slot_id: u8,
+    bulk_in_ep: u8,    
+    bulk_out_ep: u8,   
+    max_packet_in: u16,
+    max_packet_out: u16,
 ) {
-    let quj = quh & 0x0F;
-    let qum = quk & 0x0F;
-    let dzi = quj * 2 + 1;   
-    let enc = qum * 2;      
+    let kfz = bulk_in_ep & 0x0F;
+    let kgb = bulk_out_ep & 0x0F;
+    let bulk_in_dci = kfz * 2 + 1;   
+    let bulk_out_dci = kgb * 2;      
     
     crate::serial_println!("[USB-MS] Initializing mass storage: slot {} IN_DCI={} OUT_DCI={}",
-        fw, dzi, enc);
+        slot_id, bulk_in_dci, bulk_out_dci);
     
-    let mut ba = Om {
-        fw,
-        hqn: 0,
-        dzi,
-        enc,
-        hrd,
-        hre,
-        hat: 0,
-        py: H_ as u32,
-        acs: String::new(),
-        baj: String::new(),
-        ack: false,
+    let mut s = Gc {
+        slot_id,
+        lun: 0,
+        bulk_in_dci,
+        bulk_out_dci,
+        max_packet_in,
+        max_packet_out,
+        block_count: 0,
+        block_size: H_ as u32,
+        vendor: String::new(),
+        product: String::new(),
+        ready: false,
     };
     
     
-    wex(&mut ba);
+    olz(&mut s);
     
     
-    for kbj in 0..5 {
-        if wfa(&ba) {
+    for attempt in 0..5 {
+        if omc(&s) {
             break;
         }
         
-        if let Some((mfz, kbf, kbg)) = wez(&ba) {
-            crate::serial_println!("[USB-MS] Sense: key={:#x} ASC={:#x} ASCQ={:#x}", mfz, kbf, kbg);
+        if let Some((gvg, fho, fhp)) = omb(&s) {
+            crate::serial_println!("[USB-MS] Sense: key={:#x} ASC={:#x} ASCQ={:#x}", gvg, fho, fhp);
         }
-        if kbj < 4 {
+        if attempt < 4 {
             
-            for _ in 0..100_000 { core::hint::hc(); }
+            for _ in 0..100_000 { core::hint::spin_loop(); }
         }
     }
     
     
-    if wey(&mut ba) {
-        ba.ack = true;
+    if oma(&mut s) {
+        s.ready = true;
     }
     
-    FT_.lock().push(ba);
-    Be.store(true, Ordering::Release);
+    GI_.lock().push(s);
+    Ah.store(true, Ordering::Release);
     
     crate::serial_println!("[USB-MS] Mass storage device ready");
 }
@@ -484,50 +484,50 @@ pub fn ttj(
 
 
 pub struct UsbBlockDevice {
-    cpy: usize,
+    device_index: usize,
 }
 
 impl UsbBlockDevice {
-    pub fn new(cpy: usize) -> Self {
-        Self { cpy }
+    pub fn new(device_index: usize) -> Self {
+        Self { device_index }
     }
 }
 
-impl Bj for UsbBlockDevice {
-    fn xr(&self, jk: u64, bi: &mut [u8]) -> Result<(), ()> {
-        let ik = FT_.lock();
-        let ba = ik.get(self.cpy).ok_or(())?;
-        if !ba.ack { return Err(()); }
+impl Ak for UsbBlockDevice {
+    fn read_sector(&self, dj: u64, buffer: &mut [u8]) -> Result<(), ()> {
+        let devices = GI_.lock();
+        let s = devices.get(self.device_index).ok_or(())?;
+        if !s.ready { return Err(()); }
         
-        let cbj = ba.py as usize;
-        if bi.len() < cbj { return Err(()); }
+        let aov = s.block_size as usize;
+        if buffer.len() < aov { return Err(()); }
         
-        if pgv(ba, jk as u32, 1, &mut bi[..cbj]) {
+        if jdr(s, dj as u32, 1, &mut buffer[..aov]) {
             Ok(())
         } else {
             Err(())
         }
     }
     
-    fn aby(&self, jk: u64, bi: &[u8]) -> Result<(), ()> {
-        let ik = FT_.lock();
-        let ba = ik.get(self.cpy).ok_or(())?;
-        if !ba.ack { return Err(()); }
+    fn write_sector(&self, dj: u64, buffer: &[u8]) -> Result<(), ()> {
+        let devices = GI_.lock();
+        let s = devices.get(self.device_index).ok_or(())?;
+        if !s.ready { return Err(()); }
         
-        let cbj = ba.py as usize;
-        if bi.len() < cbj { return Err(()); }
+        let aov = s.block_size as usize;
+        if buffer.len() < aov { return Err(()); }
         
-        if pgw(ba, jk as u32, 1, &bi[..cbj]) {
+        if jds(s, dj as u32, 1, &buffer[..aov]) {
             Ok(())
         } else {
             Err(())
         }
     }
     
-    fn zn(&self) -> usize {
-        let ik = FT_.lock();
-        ik.get(self.cpy)
-            .map(|ba| ba.py as usize)
+    fn sector_size(&self) -> usize {
+        let devices = GI_.lock();
+        devices.get(self.device_index)
+            .map(|s| s.block_size as usize)
             .unwrap_or(H_)
     }
 }
@@ -537,95 +537,95 @@ impl Bj for UsbBlockDevice {
 
 
 
-pub fn anl() -> bool {
-    Be.load(Ordering::Acquire)
+pub fn sw() -> bool {
+    Ah.load(Ordering::Acquire)
 }
 
 
-pub fn cjx() -> usize {
-    FT_.lock().len()
+pub fn aqg() -> usize {
+    GI_.lock().len()
 }
 
 
-pub fn bhh() -> Vec<(String, u64, u32)> {
-    FT_.lock().iter().map(|ba| {
-        let j = if ba.acs.is_empty() && ba.baj.is_empty() {
-            alloc::format!("USB Storage (slot {})", ba.fw)
+pub fn adz() -> Vec<(String, u64, u32)> {
+    GI_.lock().iter().map(|s| {
+        let name = if s.vendor.is_empty() && s.product.is_empty() {
+            alloc::format!("USB Storage (slot {})", s.slot_id)
         } else {
-            alloc::format!("{} {}", ba.acs, ba.baj)
+            alloc::format!("{} {}", s.vendor, s.product)
         };
-        (j, ba.hat, ba.py)
+        (name, s.block_count, s.block_size)
     }).collect()
 }
 
 
-pub fn ain(cpy: usize, aag: u64, az: usize, bi: &mut [u8]) -> Result<(), &'static str> {
-    let ik = FT_.lock();
-    let ba = ik.get(cpy).ok_or("Invalid device index")?;
-    if !ba.ack { return Err("Device not ready"); }
+pub fn read_sectors(device_index: usize, start_lba: u64, count: usize, buffer: &mut [u8]) -> Result<(), &'static str> {
+    let devices = GI_.lock();
+    let s = devices.get(device_index).ok_or("Invalid device index")?;
+    if !s.ready { return Err("Device not ready"); }
     
-    let py = ba.py as usize;
-    if bi.len() < az * py {
+    let block_size = s.block_size as usize;
+    if buffer.len() < count * block_size {
         return Err("Buffer too small");
     }
     
     
-    let mut qa = aag as u32;
-    let mut l = 0;
-    let mut ia = az;
+    let mut hb = start_lba as u32;
+    let mut offset = 0;
+    let mut ck = count;
     
-    while ia > 0 {
-        let jj = ia.v(BAC_);
-        let aal = jj * py;
+    while ck > 0 {
+        let df = ck.min(BCE_);
+        let nb = df * block_size;
         
-        if !pgv(ba, qa, jj as u16, &mut bi[l..l + aal]) {
+        if !jdr(s, hb, df as u16, &mut buffer[offset..offset + nb]) {
             return Err("SCSI READ failed");
         }
         
-        qa += jj as u32;
-        l += aal;
-        ia -= jj;
+        hb += df as u32;
+        offset += nb;
+        ck -= df;
     }
     
     Ok(())
 }
 
 
-pub fn bpi(cpy: usize, aag: u64, az: usize, bi: &[u8]) -> Result<(), &'static str> {
-    let ik = FT_.lock();
-    let ba = ik.get(cpy).ok_or("Invalid device index")?;
-    if !ba.ack { return Err("Device not ready"); }
+pub fn write_sectors(device_index: usize, start_lba: u64, count: usize, buffer: &[u8]) -> Result<(), &'static str> {
+    let devices = GI_.lock();
+    let s = devices.get(device_index).ok_or("Invalid device index")?;
+    if !s.ready { return Err("Device not ready"); }
     
-    let py = ba.py as usize;
-    if bi.len() < az * py {
+    let block_size = s.block_size as usize;
+    if buffer.len() < count * block_size {
         return Err("Buffer too small");
     }
     
-    let mut qa = aag as u32;
-    let mut l = 0;
-    let mut ia = az;
+    let mut hb = start_lba as u32;
+    let mut offset = 0;
+    let mut ck = count;
     
-    while ia > 0 {
-        let jj = ia.v(BAC_);
-        let aal = jj * py;
+    while ck > 0 {
+        let df = ck.min(BCE_);
+        let nb = df * block_size;
         
-        if !pgw(ba, qa, jj as u16, &bi[l..l + aal]) {
+        if !jds(s, hb, df as u16, &buffer[offset..offset + nb]) {
             return Err("SCSI WRITE failed");
         }
         
-        qa += jj as u32;
-        l += aal;
-        ia -= jj;
+        hb += df as u32;
+        offset += nb;
+        ck -= df;
     }
     
     Ok(())
 }
 
 
-pub fn tcx(cpy: usize) -> Option<UsbBlockDevice> {
-    let ik = FT_.lock();
-    if cpy < ik.len() && ik[cpy].ack {
-        Some(UsbBlockDevice::new(cpy))
+pub fn ibh(device_index: usize) -> Option<UsbBlockDevice> {
+    let devices = GI_.lock();
+    if device_index < devices.len() && devices[device_index].ready {
+        Some(UsbBlockDevice::new(device_index))
     } else {
         None
     }

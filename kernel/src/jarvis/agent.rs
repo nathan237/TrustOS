@@ -62,9 +62,50 @@ pub enum IntrospectTarget {
 // Intent Classification (for agent routing)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// Classify user input into an agent action
+/// Classify user input into an agent action (Enhanced for TrustOS Omniscience)
 pub fn classify_input(input: &str) -> AgentAction {
     let lower = input.to_ascii_lowercase();
+
+    // ── TrustOS-specific intent recognition ──
+    // GPU queries
+    if lower.contains("gpu") || lower.contains("graphics") || lower.contains("vram") {
+        return AgentAction::Execute { command: String::from("hwdiag gpu") };
+    }
+
+    // CPU/processor info
+    if lower.contains("cpu") || lower.contains("processor") || lower.contains("cores") {
+        return AgentAction::Execute { command: String::from("hwdiag cpu") };
+    }
+
+    // Memory
+    if (lower.contains("memory") || lower.contains("ram")) && !lower.contains("memorable") {
+        return AgentAction::Execute { command: String::from("memory") };
+    }
+
+    // Process listing
+    if lower.contains("process") || lower.contains("task") || lower.contains("ps ") {
+        return AgentAction::Execute { command: String::from("ps") };
+    }
+
+    // Disk/storage
+    if lower.contains("disk") || lower.contains("storage") || lower.contains("drive") {
+        return AgentAction::Execute { command: String::from("disk list") };
+    }
+
+    // PCI bus / devices
+    if lower.contains("pci") || lower.contains("device") || lower.contains("peripheral") {
+        return AgentAction::Execute { command: String::from("pci list") };
+    }
+
+    // Network
+    if lower.contains("network") || lower.contains("eth") || lower.contains("ip address") {
+        return AgentAction::Execute { command: String::from("netstat") };
+    }
+
+    // Introspection motives (hardware state)
+    if lower.contains("what is running") || lower.contains("current state") {
+        return AgentAction::Execute { command: String::from("hwdiag") };
+    }
 
     // ── Introspection commands ──
     if lower.starts_with("introspect") || lower.starts_with("describe yourself")
@@ -77,7 +118,7 @@ pub fn classify_input(input: &str) -> AgentAction {
         return AgentAction::Introspect { what: IntrospectTarget::WeightStats };
     }
 
-    if lower.starts_with("hardware") || lower.contains("gpu") || lower.contains("materiel") {
+    if lower.starts_with("hardware") || lower.contains("materiel") {
         return AgentAction::Introspect { what: IntrospectTarget::Hardware };
     }
 

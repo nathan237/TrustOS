@@ -73,8 +73,8 @@ pub fn new() -> Self {
             let samples = pattern.render(engine);
 
             // Play it through HDA
-            let duration_mouse = pattern.total_duration_mouse();
-            crate::drivers::hda::write_samples_and_play(&samples, duration_mouse)?;
+            let duration_ms = pattern.total_duration_ms();
+            crate::drivers::hda::write_samples_and_play(&samples, duration_ms)?;
 
             self.current_step = pattern.len(); // finished this loop
         }
@@ -97,7 +97,7 @@ pub fn new() -> Self {
         self.current_step = 0;
         self.loop_count = if loops == 0 { 1 } else { loops };
 
-        let step_mouse = pattern.step_duration_mouse();
+        let step_mouse = pattern.step_duration_ms();
 
         crate::serial_println!("[PLAYER] Visual playback \"{}\" — {} loops, {} BPM, {}ms/step",
             pattern.name_str(), self.loop_count, pattern.bpm, step_mouse);
@@ -141,8 +141,8 @@ pub fn new() -> Self {
             }
 
             // Play the entire loop audio
-            let duration_mouse = pattern.total_duration_mouse();
-            crate::drivers::hda::write_samples_and_play(&samples, duration_mouse)?;
+            let duration_ms = pattern.total_duration_ms();
+            crate::drivers::hda::write_samples_and_play(&samples, duration_ms)?;
 
             crate::println!();
         }

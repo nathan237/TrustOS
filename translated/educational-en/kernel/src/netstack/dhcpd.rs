@@ -56,7 +56,7 @@ struct PxeConfig {
     pool_size: u8,
     /// PXE boot filename
     boot_file: [u8; 128],
-    boot_file_length: usize,
+    boot_file_len: usize,
 }
 
 // Implementation block — defines methods for the type above.
@@ -69,7 +69,7 @@ impl PxeConfig {
             pool_base: [10, 0, 2, 100],
             pool_size: 16,
             boot_file: [0; 128],
-            boot_file_length: 0,
+            boot_file_len: 0,
         }
     }
 }
@@ -149,14 +149,14 @@ pub fn start(server_ip: [u8; 4], subnet: [u8; 4], pool_start: [u8; 4], pool_size
 
     // Copy boot filename
     let bytes = boot_filename.as_bytes();
-    let len = bytes.len().minimum(127);
+    let len = bytes.len().min(127);
     cfg.boot_file[..len].copy_from_slice(&bytes[..len]);
-    cfg.boot_file_length = len;
+    cfg.boot_file_len = len;
     drop(cfg);
 
     // Clear old leases
     let mut leases = LEASES.lock();
-    for l in leases.iterator_mut() {
+    for l in leases.iter_mut() {
         *l = Lease::empty();
     }
     drop(leases);
@@ -226,21 +226,21 @@ pub fn handle_packet(data: &[u8]) {
         if i + 2 + len > options.len() {
             break;
         }
-        let value = &options[i + 2..i + 2 + len];
+        let val = &options[i + 2..i + 2 + len];
 
                 // Pattern matching — Rust's exhaustive branching construct.
 match opt {
             option::MESSAGE_TYPE => {
-                if len >= 1 { message_type_value = value[0]; }
+                if len >= 1 { message_type_value = val[0]; }
             }
             option::REQUESTED_IP => {
                 if len >= 4 {
-                    requested_ip = Some([value[0], value[1], value[2], value[3]]);
+                    requested_ip = Some([val[0], val[1], val[2], val[3]]);
                 }
             }
             option::PXE_VENDOR_CLASS => {
                 // Client is PXE if vendor class starts with "PXEClient"
-                if len >= 9 && &value[..9] == b"PXEClient" {
+                if len >= 9 && &val[..9] == b"PXEClient" {
                     is_pxe = true;
                 }
             }
@@ -308,7 +308,7 @@ fn find_or_allocate_ip(mac: &[u8; 6]) -> Option<[u8; 4]> {
 
     // Allocate new IP from pool
     let pool_size = cfg.pool_size as usize;
-    for offset in 0..pool_size.minimum(MAXIMUM_LEASES) {
+    for offset in 0..pool_size.min(MAXIMUM_LEASES) {
         let candidate_ip = [
             cfg.pool_base[0],
             cfg.pool_base[1],
@@ -320,12 +320,12 @@ fn find_or_allocate_ip(mac: &[u8; 6]) -> Option<[u8; 4]> {
         let already_used = leases.iter().any(|l| l.active && l.ip == candidate_ip);
         if !already_used {
             // Find empty slot
-            for lease in leases.iterator_mut() {
+            for lease in leases.iter_mut() {
                 if !lease.active {
                     lease.mac = *mac;
                     lease.ip = candidate_ip;
                     lease.active = true;
-                    lease.granted_at = crate::time::uptime_mouse();
+                    lease.granted_at = crate::time::uptime_ms();
                     LEASE_COUNT.fetch_add(1, Ordering::Relaxed);
                     return Some(candidate_ip);
                 }
@@ -352,15 +352,15 @@ fn validate_and_confirm_lease(mac: &[u8; 6], ip: &[u8; 4]) -> bool {
     let mut leases = LEASES.lock();
 
     // Check if this MAC already has this IP
-    for lease in leases.iterator_mut() {
+    for lease in leases.iter_mut() {
         if lease.active && lease.mac == *mac && lease.ip == *ip {
-            lease.granted_at = crate::time::uptime_mouse();
+            lease.granted_at = crate::time::uptime_ms();
             return true;
         }
     }
 
     // Check if it's from a DISCOVER that allocated but not yet confirmed
-    for lease in leases.iterator_mut() {
+    for lease in leases.iter_mut() {
         if lease.active && lease.mac == *mac {
             // MAC has a different IP — update to requested if in pool
             let cfg = CONFIG.lock();
@@ -371,7 +371,7 @@ fn validate_and_confirm_lease(mac: &[u8; 6], ip: &[u8; 4]) -> bool {
                 && ip[3] >= base_last && ip[3] < pool_end
             {
                 lease.ip = *ip;
-                lease.granted_at = crate::time::uptime_mouse();
+                lease.granted_at = crate::time::uptime_ms();
                 return true;
             }
             // Not in pool — reject
@@ -408,7 +408,7 @@ fn send_response(response_type: u8, xid: &[u8; 4], client_mac: &[u8; 6], client_
             cfg.server_ip[0], cfg.server_ip[1],
             cfg.server_ip[2], cfg.server_ip[3]);
         let sname_bytes = sname.as_bytes();
-        let slen = sname_bytes.len().minimum(63);
+        let slen = sname_bytes.len().min(63);
         packet.extend_from_slice(&sname_bytes[..slen]);
         for _ in slen..64 {
             packet.push(0);
@@ -418,8 +418,8 @@ fn send_response(response_type: u8, xid: &[u8; 4], client_mac: &[u8; 6], client_
     }
 
     // file field (128 bytes) — boot filename for PXE
-    if pxe && cfg.boot_file_length > 0 {
-        let flen = cfg.boot_file_length.minimum(127);
+    if pxe && cfg.boot_file_len > 0 {
+        let flen = cfg.boot_file_len.min(127);
         packet.extend_from_slice(&cfg.boot_file[..flen]);
         for _ in flen..128 {
             packet.push(0);
@@ -467,10 +467,10 @@ fn send_response(response_type: u8, xid: &[u8; 4], client_mac: &[u8; 6], client_
             packet.extend_from_slice(sb);
 
             // Option 67: Boot File Name
-            if cfg.boot_file_length > 0 {
+            if cfg.boot_file_len > 0 {
                 packet.push(option::BOOT_FILE_NAME);
-                packet.push(cfg.boot_file_length as u8);
-                packet.extend_from_slice(&cfg.boot_file[..cfg.boot_file_length]);
+                packet.push(cfg.boot_file_len as u8);
+                packet.extend_from_slice(&cfg.boot_file[..cfg.boot_file_len]);
             }
         }
     }
@@ -486,7 +486,7 @@ fn send_response(response_type: u8, xid: &[u8; 4], client_mac: &[u8; 6], client_
     drop(cfg);
 
     // Send as broadcast on port 68 (client port) from port 67 (server port)
-    let source_ip = CONFIG.lock().server_ip;
+    let src_ip = CONFIG.lock().server_ip;
     let response_name = // Pattern matching — Rust's exhaustive branching construct.
 match response_type {
         msg_type::OFFER => "OFFER",
@@ -502,11 +502,11 @@ match response_type {
         pxe);
 
     // Build raw UDP/IP/Ethernet frame for broadcast
-    send_dhcp_server_packet(&packet, source_ip);
+    send_dhcp_server_packet(&packet, src_ip);
 }
 
 /// Send a DHCP server packet (port 67 → port 68, broadcast)
-fn send_dhcp_server_packet(payload: &[u8], source_ip: [u8; 4]) {
+fn send_dhcp_server_packet(payload: &[u8], src_ip: [u8; 4]) {
     // Build UDP header
     let mut udp = Vec::with_capacity(8 + payload.len());
     udp.extend_from_slice(&67u16.to_be_bytes());  // src port (server)
@@ -522,7 +522,7 @@ fn send_dhcp_server_packet(payload: &[u8], source_ip: [u8; 4]) {
     ip.extend_from_slice(&[0, 0, 0x40, 0x00]); // ID=0, flags=DF
     ip.push(64); ip.push(17); // TTL=64, protocol=UDP
     ip.extend_from_slice(&0u16.to_be_bytes()); // checksum placeholder
-    ip.extend_from_slice(&source_ip);
+    ip.extend_from_slice(&src_ip);
     ip.extend_from_slice(&[255, 255, 255, 255]); // broadcast destination
 
     // Compute IP checksum

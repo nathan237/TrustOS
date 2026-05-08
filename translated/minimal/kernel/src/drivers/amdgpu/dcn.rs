@@ -31,7 +31,7 @@ use alloc::vec::Vec;
 use core::sync::atomic::{AtomicBool, Ordering};
 use spin::Mutex;
 
-use super::{wr, sk, onq, Sr};
+use super::{kj, ib, inz, Hz};
 use super::regs::dcn;
 
 
@@ -40,111 +40,111 @@ use super::regs::dcn;
 
 
 #[derive(Debug, Clone, Copy)]
-pub struct Gh {
+pub struct Cv {
     
-    pub buq: u32,
+    pub h_active: u32,
     
-    pub eci: u32,
+    pub h_front_porch: u32,
     
-    pub erq: u32,
+    pub h_sync_width: u32,
     
-    pub fjz: u32,
+    pub h_back_porch: u32,
     
-    pub bxq: u32,
+    pub v_active: u32,
     
-    pub ekk: u32,
+    pub v_front_porch: u32,
     
-    pub faw: u32,
+    pub v_sync_width: u32,
     
-    pub fxz: u32,
+    pub v_back_porch: u32,
     
-    pub duj: u32,
+    pub pixel_clock_khz: u32,
     
-    pub ehi: u32,
+    pub refresh_hz: u32,
     
-    pub giq: bool,
+    pub h_sync_positive: bool,
     
-    pub gvx: bool,
+    pub v_sync_positive: bool,
 }
 
-impl Gh {
+impl Cv {
     
-    pub fn gir(&self) -> u32 {
-        self.buq + self.eci + self.erq + self.fjz
+    pub fn h_total(&self) -> u32 {
+        self.h_active + self.h_front_porch + self.h_sync_width + self.h_back_porch
     }
 
     
-    pub fn gvy(&self) -> u32 {
-        self.bxq + self.ekk + self.faw + self.fxz
+    pub fn v_total(&self) -> u32 {
+        self.v_active + self.v_front_porch + self.v_sync_width + self.v_back_porch
     }
 
     
-    pub fn hmh(&self) -> u32 {
-        self.buq + self.eci
+    pub fn h_sync_start(&self) -> u32 {
+        self.h_active + self.h_front_porch
     }
 
     
-    pub fn ixl(&self) -> u32 {
-        self.buq + self.eci + self.erq
+    pub fn h_sync_end(&self) -> u32 {
+        self.h_active + self.h_front_porch + self.h_sync_width
     }
 
     
-    pub fn ige(&self) -> u32 {
-        self.bxq + self.ekk
+    pub fn v_sync_start(&self) -> u32 {
+        self.v_active + self.v_front_porch
     }
 
     
-    pub fn jve(&self) -> u32 {
-        self.bxq + self.ekk + self.faw
+    pub fn v_sync_end(&self) -> u32 {
+        self.v_active + self.v_front_porch + self.v_sync_width
     }
 
     
-    pub fn lmk(&self) -> String {
+    pub fn modeline(&self) -> String {
         format!("{}x{}@{}Hz pclk={}kHz htotal={} vtotal={}",
-            self.buq, self.bxq, self.ehi,
-            self.duj, self.gir(), self.gvy())
+            self.h_active, self.v_active, self.refresh_hz,
+            self.pixel_clock_khz, self.h_total(), self.v_total())
     }
 }
 
 
-pub const CGY_: Gh = Gh {
-    buq: 640, eci: 16, erq: 96, fjz: 48,
-    bxq: 480, ekk: 10, faw: 2, fxz: 33,
-    duj: 25175, ehi: 60,
-    giq: false, gvx: false,
+pub const CKI_: Cv = Cv {
+    h_active: 640, h_front_porch: 16, h_sync_width: 96, h_back_porch: 48,
+    v_active: 480, v_front_porch: 10, v_sync_width: 2, v_back_porch: 33,
+    pixel_clock_khz: 25175, refresh_hz: 60,
+    h_sync_positive: false, v_sync_positive: false,
 };
 
-pub const CGU_: Gh = Gh {
-    buq: 1280, eci: 110, erq: 40, fjz: 220,
-    bxq: 720, ekk: 5, faw: 5, fxz: 20,
-    duj: 74250, ehi: 60,
-    giq: true, gvx: true,
+pub const CKE_: Cv = Cv {
+    h_active: 1280, h_front_porch: 110, h_sync_width: 40, h_back_porch: 220,
+    v_active: 720, v_front_porch: 5, v_sync_width: 5, v_back_porch: 20,
+    pixel_clock_khz: 74250, refresh_hz: 60,
+    h_sync_positive: true, v_sync_positive: true,
 };
 
-pub const CGV_: Gh = Gh {
-    buq: 1920, eci: 88, erq: 44, fjz: 148,
-    bxq: 1080, ekk: 4, faw: 5, fxz: 36,
-    duj: 148500, ehi: 60,
-    giq: true, gvx: true,
+pub const CKF_: Cv = Cv {
+    h_active: 1920, h_front_porch: 88, h_sync_width: 44, h_back_porch: 148,
+    v_active: 1080, v_front_porch: 4, v_sync_width: 5, v_back_porch: 36,
+    pixel_clock_khz: 148500, refresh_hz: 60,
+    h_sync_positive: true, v_sync_positive: true,
 };
 
-pub const CGW_: Gh = Gh {
-    buq: 2560, eci: 48, erq: 32, fjz: 80,
-    bxq: 1440, ekk: 3, faw: 5, fxz: 33,
-    duj: 241500, ehi: 60,
-    giq: true, gvx: false,
+pub const CKG_: Cv = Cv {
+    h_active: 2560, h_front_porch: 48, h_sync_width: 32, h_back_porch: 80,
+    v_active: 1440, v_front_porch: 3, v_sync_width: 5, v_back_porch: 33,
+    pixel_clock_khz: 241500, refresh_hz: 60,
+    h_sync_positive: true, v_sync_positive: false,
 };
 
-pub const CGX_: Gh = Gh {
-    buq: 3840, eci: 176, erq: 88, fjz: 296,
-    bxq: 2160, ekk: 8, faw: 10, fxz: 72,
-    duj: 533250, ehi: 60,
-    giq: true, gvx: false,
+pub const CKH_: Cv = Cv {
+    h_active: 3840, h_front_porch: 176, h_sync_width: 88, h_back_porch: 296,
+    v_active: 2160, v_front_porch: 8, v_sync_width: 10, v_back_porch: 72,
+    pixel_clock_khz: 533250, refresh_hz: 60,
+    h_sync_positive: true, v_sync_positive: false,
 };
 
 
-pub fn wsi() -> &'static [Gh] {
-    &[CGY_, CGU_, CGV_, CGW_, CGX_]
+pub fn ovz() -> &'static [Cv] {
+    &[CKI_, CKE_, CKF_, CKG_, CKH_]
 }
 
 
@@ -155,22 +155,22 @@ pub fn wsi() -> &'static [Gh] {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConnectorType {
     None,
-    Ahm,
-    Bil,
-    Bef,
-    Cpa,
-    F,
+    DisplayPort,
+    HDMI,
+    DVI,
+    VGA,
+    Unknown,
 }
 
 impl ConnectorType {
-    pub fn j(&self) -> &'static str {
+    pub fn name(&self) -> &'static str {
         match self {
             ConnectorType::None => "None",
-            ConnectorType::Ahm => "DisplayPort",
-            ConnectorType::Bil => "HDMI",
-            ConnectorType::Bef => "DVI",
-            ConnectorType::Cpa => "VGA",
-            ConnectorType::F => "Unknown",
+            ConnectorType::DisplayPort => "DisplayPort",
+            ConnectorType::HDMI => "HDMI",
+            ConnectorType::DVI => "DVI",
+            ConnectorType::VGA => "VGA",
+            ConnectorType::Unknown => "Unknown",
         }
     }
 }
@@ -178,80 +178,80 @@ impl ConnectorType {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConnectorStatus {
-    Lg,
-    Dl,
-    F,
+    Disconnected,
+    Connected,
+    Unknown,
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Abc {
+pub struct Lm {
     
     pub index: u8,
     
-    pub ffo: ConnectorType,
+    pub connector_type: ConnectorType,
     
     pub status: ConnectorStatus,
     
-    pub nlj: u8,
+    pub dig_encoder: u8,
     
-    pub vhl: u8,
+    pub phy_index: u8,
     
-    pub tqh: u8,
+    pub hpd_pin: u8,
     
-    pub eog: Option<Gh>,
+    pub current_mode: Option<Cv>,
     
-    pub sat: u8,
+    pub dpcd_rev: u8,
     
-    pub ull: u8,
+    pub max_link_rate: u8,
     
-    pub ulj: u8,
+    pub max_lane_count: u8,
 }
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SurfaceFormat {
     
-    Apd,
+    Argb8888,
     
-    Aor,
+    Xrgb8888,
     
-    Bbj,
+    Abgr8888,
     
-    Bra,
+    Rgb565,
 }
 
 impl SurfaceFormat {
     
-    pub fn cwa(&self) -> u32 {
+    pub fn bpp(&self) -> u32 {
         match self {
-            SurfaceFormat::Apd | SurfaceFormat::Aor | SurfaceFormat::Bbj => 4,
-            SurfaceFormat::Bra => 2,
+            SurfaceFormat::Argb8888 | SurfaceFormat::Xrgb8888 | SurfaceFormat::Abgr8888 => 4,
+            SurfaceFormat::Rgb565 => 2,
         }
     }
 
     
-    pub fn rtx(&self) -> u32 {
+    pub fn dcn_format_code(&self) -> u32 {
         match self {
-            SurfaceFormat::Apd => 0x0A, 
-            SurfaceFormat::Aor => 0x08, 
-            SurfaceFormat::Bbj => 0x0C, 
-            SurfaceFormat::Bra => 0x04,   
+            SurfaceFormat::Argb8888 => 0x0A, 
+            SurfaceFormat::Xrgb8888 => 0x08, 
+            SurfaceFormat::Abgr8888 => 0x0C, 
+            SurfaceFormat::Rgb565 => 0x04,   
         }
     }
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Amh {
+pub struct Qf {
     
-    pub hja: u64,
+    pub fb_phys_addr: u64,
     
-    pub z: u32,
+    pub width: u32,
     
-    pub ac: u32,
+    pub height: u32,
     
-    pub jb: u32,
+    pub pitch: u32,
     
     pub format: SurfaceFormat,
 }
@@ -261,71 +261,71 @@ pub struct Amh {
 
 
 
-pub struct Beg {
+pub struct Xq {
     
-    pub jr: bool,
+    pub initialized: bool,
     
-    pub cdt: Vec<Abc>,
+    pub connectors: Vec<Lm>,
     
-    pub dyb: u8,
+    pub active_displays: u8,
     
-    pub eon: (u8, u8),  
+    pub dcn_version: (u8, u8),  
     
-    pub lle: u8,
+    pub max_pipes: u8,
     
-    pub grl: [Option<Amh>; 6],
+    pub scanouts: [Option<Qf>; 6],
 }
 
-static JV_: Mutex<Beg> = Mutex::new(Beg {
-    jr: false,
-    cdt: Vec::new(),
-    dyb: 0,
-    eon: (0, 0),
-    lle: 0,
-    grl: [None, None, None, None, None, None],
+static KP_: Mutex<Xq> = Mutex::new(Xq {
+    initialized: false,
+    connectors: Vec::new(),
+    active_displays: 0,
+    dcn_version: (0, 0),
+    max_pipes: 0,
+    scanouts: [None, None, None, None, None, None],
 });
 
-static APU_: AtomicBool = AtomicBool::new(false);
+static ARW_: AtomicBool = AtomicBool::new(false);
 
 
 
 
 
 
-unsafe fn dtz(mmio: u64, pipe: u8, ban: u32) -> u32 {
-    let ar = dcn::BBX_ + (pipe as u32) * dcn::BCB_;
-    wr(mmio, ar + ban)
+unsafe fn boa(mmio: u64, pipe: u8, abg: u32) -> u32 {
+    let base = dcn::BEA_ + (pipe as u32) * dcn::BEE_;
+    kj(mmio, base + abg)
 }
 
 
-unsafe fn efy(mmio: u64, pipe: u8, ban: u32, bn: u32) {
-    let ar = dcn::BBX_ + (pipe as u32) * dcn::BCB_;
-    sk(mmio, ar + ban, bn);
+unsafe fn buo(mmio: u64, pipe: u8, abg: u32, value: u32) {
+    let base = dcn::BEA_ + (pipe as u32) * dcn::BEE_;
+    ib(mmio, base + abg, value);
 }
 
 
-unsafe fn hne(mmio: u64, pipe: u8, ban: u32) -> u32 {
-    let ar = dcn::AWC_ + (pipe as u32) * dcn::AWD_;
-    wr(mmio, ar + ban)
+unsafe fn drn(mmio: u64, pipe: u8, abg: u32) -> u32 {
+    let base = dcn::AYF_ + (pipe as u32) * dcn::AYG_;
+    kj(mmio, base + abg)
 }
 
 
-unsafe fn hnf(mmio: u64, pipe: u8, ban: u32, bn: u32) {
-    let ar = dcn::AWC_ + (pipe as u32) * dcn::AWD_;
-    sk(mmio, ar + ban, bn);
+unsafe fn dro(mmio: u64, pipe: u8, abg: u32, value: u32) {
+    let base = dcn::AYF_ + (pipe as u32) * dcn::AYG_;
+    ib(mmio, base + abg, value);
 }
 
 
-#[allow(bgr)]
-unsafe fn rxm(mmio: u64, hgc: u8, ban: u32) -> u32 {
-    let ar = dcn::BRS_ + (hgc as u32) * dcn::BRU_;
-    wr(mmio, ar + ban)
+#[allow(dead_code)]
+unsafe fn lep(mmio: u64, dnc: u8, abg: u32) -> u32 {
+    let base = dcn::BUO_ + (dnc as u32) * dcn::BUQ_;
+    kj(mmio, base + abg)
 }
 
 
-unsafe fn och(mmio: u64, gje: u8, ban: u32) -> u32 {
-    let ar = dcn::CAK_ + (gje as u32) * dcn::CAN_;
-    wr(mmio, ar + ban)
+unsafe fn ife(mmio: u64, czg: u8, abg: u32) -> u32 {
+    let base = dcn::CDV_ + (czg as u32) * dcn::CDY_;
+    kj(mmio, base + abg)
 }
 
 
@@ -334,98 +334,98 @@ unsafe fn och(mmio: u64, gje: u8, ban: u32) -> u32 {
 
 
 
-pub fn rwo(mmio: u64) -> Vec<Abc> {
-    let mut cdt = Vec::new();
+pub fn ldu(mmio: u64) -> Vec<Lm> {
+    let mut connectors = Vec::new();
     
     crate::serial_println!("[DCN] Scanning display connectors (6 HPD pins)...");
     
-    for a in 0..6u8 {
+    for i in 0..6u8 {
         unsafe {
             
-            let lcq = och(mmio, a, dcn::CAM_);
-            let lcp = och(mmio, a, dcn::CAL_);
+            let gbd = ife(mmio, i, dcn::CDX_);
+            let gbc = ife(mmio, i, dcn::CDW_);
             
             crate::serial_println!("[DCN]   HPD{}: INT_STATUS={:#010X} INT_CONTROL={:#010X}", 
-                a, lcq, lcp);
+                i, gbd, gbc);
             
             
-            let dzr = (lcq & 1) != 0;
+            let bfn = (gbd & 1) != 0;
             
             
-            let nlk = rxm(mmio, a, dcn::BRT_);
+            let hse = lep(mmio, i, dcn::BUP_);
             
             crate::serial_println!("[DCN]   DIG{}: FE_CNTL={:#010X} connected={}", 
-                a, nlk, dzr);
+                i, hse, bfn);
             
             
             
-            let xno = (nlk >> 16) & 0xF;
-            let ffo = match xno {
-                0 => ConnectorType::Ahm,
-                1 => ConnectorType::Bil,
-                2 => ConnectorType::Bef,
+            let poy = (hse >> 16) & 0xF;
+            let connector_type = match poy {
+                0 => ConnectorType::DisplayPort,
+                1 => ConnectorType::HDMI,
+                2 => ConnectorType::DVI,
                 _ => {
                     
-                    if lcp != 0 && lcp != 0xFFFFFFFF {
-                        ConnectorType::Ahm 
+                    if gbc != 0 && gbc != 0xFFFFFFFF {
+                        ConnectorType::DisplayPort 
                     } else {
-                        ConnectorType::F
+                        ConnectorType::Unknown
                     }
                 }
             };
             
-            let status = if dzr {
-                ConnectorStatus::Dl
-            } else if lcq == 0xFFFFFFFF {
-                ConnectorStatus::F 
+            let status = if bfn {
+                ConnectorStatus::Connected
+            } else if gbd == 0xFFFFFFFF {
+                ConnectorStatus::Unknown 
             } else {
-                ConnectorStatus::Lg
+                ConnectorStatus::Disconnected
             };
             
-            cdt.push(Abc {
-                index: a,
-                ffo,
+            connectors.push(Lm {
+                index: i,
+                connector_type,
                 status,
-                nlj: a,
-                vhl: a,
-                tqh: a,
-                eog: None,
-                sat: 0,
-                ull: 0,
-                ulj: 0,
+                dig_encoder: i,
+                phy_index: i,
+                hpd_pin: i,
+                current_mode: None,
+                dpcd_rev: 0,
+                max_link_rate: 0,
+                max_lane_count: 0,
             });
         }
     }
     
-    cdt
+    connectors
 }
 
 
 
-pub fn vro(mmio: u64, nfn: &mut Abc) {
-    if nfn.ffo != ConnectorType::Ahm {
+pub fn ocp(mmio: u64, connector: &mut Lm) {
+    if connector.connector_type != ConnectorType::DisplayPort {
         return;
     }
     
     unsafe {
         
-        let hgc = nfn.nlj;
-        let mxa = dcn::BKT_ + (hgc as u32) * dcn::BKW_;
+        let dnc = connector.dig_encoder;
+        let hge = dcn::BNH_ + (dnc as u32) * dcn::BNK_;
         
         
-        let qln = wr(mmio, mxa + dcn::BKU_);
-        crate::serial_println!("[DCN]   AUX{}: CONTROL={:#010X}", hgc, qln);
-        
-        
-        
+        let jyn = kj(mmio, hge + dcn::BNI_);
+        crate::serial_println!("[DCN]   AUX{}: CONTROL={:#010X}", dnc, jyn);
         
         
         
         
         
         
-        let sas = wr(mmio, mxa + dcn::BKV_);
-        crate::serial_println!("[DCN]   AUX{}: DPHY_TX_REF={:#010X}", hgc, sas);
+        
+        
+        
+        let lhi = kj(mmio, hge + dcn::BNJ_);
+        crate::serial_println!("[DCN]   AUX{}: DPHY_TX_REF={:#010X}", dnc, lhi);
     }
 }
 
@@ -434,137 +434,137 @@ pub fn vro(mmio: u64, nfn: &mut Abc) {
 
 
 
-pub fn vrm(mmio: u64, pipe: u8) -> Option<Gh> {
+pub fn ocn(mmio: u64, pipe: u8) -> Option<Cv> {
     unsafe {
         
-        let otd = dtz(mmio, pipe, dcn::KU_);
-        crate::serial_println!("[DCN] OTG{}: CONTROL={:#010X}", pipe, otd);
+        let isv = boa(mmio, pipe, dcn::LN_);
+        crate::serial_println!("[DCN] OTG{}: CONTROL={:#010X}", pipe, isv);
         
         
-        if otd & 1 == 0 {
+        if isv & 1 == 0 {
             return None;
         }
         
         
-        let gir = dtz(mmio, pipe, dcn::BCA_);
-        let las = dtz(mmio, pipe, dcn::BBY_);
-        let hmg = dtz(mmio, pipe, dcn::BBZ_);
-        let gvy = dtz(mmio, pipe, dcn::BCE_);
-        let mor = dtz(mmio, pipe, dcn::BCC_);
-        let igd = dtz(mmio, pipe, dcn::BCD_);
+        let h_total = boa(mmio, pipe, dcn::BED_);
+        let fzr = boa(mmio, pipe, dcn::BEB_);
+        let drc = boa(mmio, pipe, dcn::BEC_);
+        let v_total = boa(mmio, pipe, dcn::BEH_);
+        let hbb = boa(mmio, pipe, dcn::BEF_);
+        let edm = boa(mmio, pipe, dcn::BEG_);
         
         crate::serial_println!("[DCN] OTG{}: H_TOTAL={:#010X} H_BLANK={:#010X} H_SYNC={:#010X}", 
-            pipe, gir, las, hmg);
+            pipe, h_total, fzr, drc);
         crate::serial_println!("[DCN] OTG{}: V_TOTAL={:#010X} V_BLANK={:#010X} V_SYNC={:#010X}", 
-            pipe, gvy, mor, igd);
+            pipe, v_total, hbb, edm);
         
         
-        let esc = gir & 0x7FFF;
-        let fbd = gvy & 0x7FFF;
-        let yvt = (las >> 16) & 0x7FFF;
-        let oaa = las & 0x7FFF;
-        let zvb = (mor >> 16) & 0x7FFF;
-        let pxw = mor & 0x7FFF;
-        let hmh = (hmg >> 16) & 0x7FFF;
-        let ixl = hmg & 0x7FFF;
-        let ige = (igd >> 16) & 0x7FFF;
-        let jve = igd & 0x7FFF;
+        let cal = h_total & 0x7FFF;
+        let cfa = v_total & 0x7FFF;
+        let qkb = (fzr >> 16) & 0x7FFF;
+        let ide = fzr & 0x7FFF;
+        let rbu = (hbb >> 16) & 0x7FFF;
+        let jpr = hbb & 0x7FFF;
+        let h_sync_start = (drc >> 16) & 0x7FFF;
+        let h_sync_end = drc & 0x7FFF;
+        let v_sync_start = (edm >> 16) & 0x7FFF;
+        let v_sync_end = edm & 0x7FFF;
         
         
-        if esc == 0 || fbd == 0 || esc > 8192 || fbd > 8192 {
+        if cal == 0 || cfa == 0 || cal > 8192 || cfa > 8192 {
             return None;
         }
         
-        let buq = if oaa <= esc { oaa } else { esc };
-        let bxq = if pxw <= fbd { pxw } else { fbd };
+        let h_active = if ide <= cal { ide } else { cal };
+        let v_active = if jpr <= cfa { jpr } else { cfa };
         
-        if buq == 0 || bxq == 0 {
+        if h_active == 0 || v_active == 0 {
             return None;
         }
         
-        let tip = hmh.ao(buq);
-        let tit = ixl.ao(hmh);
-        let tin = esc.ao(ixl);
+        let mgy = h_sync_start.saturating_sub(h_active);
+        let mhc = h_sync_end.saturating_sub(h_sync_start);
+        let mgw = cal.saturating_sub(h_sync_end);
         
-        let xqa = ige.ao(bxq);
-        let xqe = jve.ao(ige);
-        let xpz = fbd.ao(jve);
+        let pqt = v_sync_start.saturating_sub(v_active);
+        let pqx = v_sync_end.saturating_sub(v_sync_start);
+        let pqs = cfa.saturating_sub(v_sync_end);
         
         
-        let kic = dtz(mmio, pipe, dcn::CIJ_);
-        let duj = if kic != 0 && kic != 0xFFFFFFFF {
+        let fmb = boa(mmio, pipe, dcn::CLS_);
+        let pixel_clock_khz = if fmb != 0 && fmb != 0xFFFFFFFF {
             
-            (kic & 0xFFFF) * 10 
+            (fmb & 0xFFFF) * 10 
         } else {
             
-            ((esc as u64) * (fbd as u64) * 60 / 1000) as u32
+            ((cal as u64) * (cfa as u64) * 60 / 1000) as u32
         };
         
-        let gqr = if esc > 0 && fbd > 0 && duj > 0 {
-            (duj as u64 * 1000) / (esc as u64 * fbd as u64)
+        let refresh = if cal > 0 && cfa > 0 && pixel_clock_khz > 0 {
+            (pixel_clock_khz as u64 * 1000) / (cal as u64 * cfa as u64)
         } else {
             60 
         };
         
-        Some(Gh {
-            buq, eci: tip, erq: tit, fjz: tin,
-            bxq, ekk: xqa, faw: xqe, fxz: xpz,
-            duj,
-            ehi: gqr as u32,
-            giq: true,
-            gvx: true,
+        Some(Cv {
+            h_active, h_front_porch: mgy, h_sync_width: mhc, h_back_porch: mgw,
+            v_active, v_front_porch: pqt, v_sync_width: pqx, v_back_porch: pqs,
+            pixel_clock_khz,
+            refresh_hz: refresh as u32,
+            h_sync_positive: true,
+            v_sync_positive: true,
         })
     }
 }
 
 
-pub fn zgp(mmio: u64, pipe: u8, ev: &Gh) {
-    crate::serial_println!("[DCN] Programming OTG{} for {}", pipe, ev.lmk());
+pub fn qre(mmio: u64, pipe: u8, mode: &Cv) {
+    crate::serial_println!("[DCN] Programming OTG{} for {}", pipe, mode.modeline());
     
     unsafe {
         
-        efy(mmio, pipe, dcn::KU_, 0);
+        buo(mmio, pipe, dcn::LN_, 0);
         
         
-        efy(mmio, pipe, dcn::BCA_, ev.gir() - 1);
+        buo(mmio, pipe, dcn::BED_, mode.h_total() - 1);
         
-        let tim = ((ev.hmh()) << 16) | ev.buq;
-        efy(mmio, pipe, dcn::BBY_, tim);
+        let mgv = ((mode.h_sync_start()) << 16) | mode.h_active;
+        buo(mmio, pipe, dcn::BEB_, mgv);
         
-        let hmg = ((ev.hmh()) << 16) | ev.ixl();
-        efy(mmio, pipe, dcn::BBZ_, hmg);
+        let drc = ((mode.h_sync_start()) << 16) | mode.h_sync_end();
+        buo(mmio, pipe, dcn::BEC_, drc);
         
         
-        efy(mmio, pipe, dcn::BCE_, ev.gvy() - 1);
+        buo(mmio, pipe, dcn::BEH_, mode.v_total() - 1);
         
-        let xpy = ((ev.ige()) << 16) | ev.bxq;
-        efy(mmio, pipe, dcn::BCC_, xpy);
+        let pqr = ((mode.v_sync_start()) << 16) | mode.v_active;
+        buo(mmio, pipe, dcn::BEF_, pqr);
         
-        let igd = ((ev.ige()) << 16) | ev.jve();
-        efy(mmio, pipe, dcn::BCD_, igd);
+        let edm = ((mode.v_sync_start()) << 16) | mode.v_sync_end();
+        buo(mmio, pipe, dcn::BEG_, edm);
         
         crate::serial_println!("[DCN] OTG{} timing programmed: {}x{} htotal={} vtotal={}",
-            pipe, ev.buq, ev.bxq, ev.gir(), ev.gvy());
+            pipe, mode.h_active, mode.v_active, mode.h_total(), mode.v_total());
     }
 }
 
 
-pub fn ypi(mmio: u64, pipe: u8) {
+pub fn qfa(mmio: u64, pipe: u8) {
     unsafe {
         
-        let mut bqb = dtz(mmio, pipe, dcn::KU_);
-        bqb |= 1; 
-        efy(mmio, pipe, dcn::KU_, bqb);
+        let mut ajj = boa(mmio, pipe, dcn::LN_);
+        ajj |= 1; 
+        buo(mmio, pipe, dcn::LN_, ajj);
         crate::serial_println!("[DCN] OTG{} enabled", pipe);
     }
 }
 
 
-pub fn ymg(mmio: u64, pipe: u8) {
+pub fn qdc(mmio: u64, pipe: u8) {
     unsafe {
-        let mut bqb = dtz(mmio, pipe, dcn::KU_);
-        bqb &= !1; 
-        efy(mmio, pipe, dcn::KU_, bqb);
+        let mut ajj = boa(mmio, pipe, dcn::LN_);
+        ajj &= !1; 
+        buo(mmio, pipe, dcn::LN_, ajj);
         crate::serial_println!("[DCN] OTG{} disabled", pipe);
     }
 }
@@ -574,30 +574,30 @@ pub fn ymg(mmio: u64, pipe: u8) {
 
 
 
-pub fn yjv(mmio: u64, pipe: u8, surface: &Amh) {
+pub fn qbc(mmio: u64, pipe: u8, surface: &Qf) {
     crate::serial_println!("[DCN] Configuring HUBP{} for {}x{} @ {:#X}", 
-        pipe, surface.z, surface.ac, surface.hja);
+        pipe, surface.width, surface.height, surface.fb_phys_addr);
     
     unsafe {
         
-        let mty = (surface.hja >> 32) as u32;
-        let mtz = (surface.hja & 0xFFFFFFFF) as u32;
+        let hdz = (surface.fb_phys_addr >> 32) as u32;
+        let dhe = (surface.fb_phys_addr & 0xFFFFFFFF) as u32;
         
-        hnf(mmio, pipe, dcn::AWE_, mty);
-        hnf(mmio, pipe, dcn::AWF_, mtz);
-        
-        
-        hnf(mmio, pipe, dcn::AWH_, surface.jb / surface.format.cwa());
+        dro(mmio, pipe, dcn::AYH_, hdz);
+        dro(mmio, pipe, dcn::AYI_, dhe);
         
         
-        let wpd = (surface.ac << 16) | surface.z;
-        hnf(mmio, pipe, dcn::AWI_, wpd);
+        dro(mmio, pipe, dcn::AYK_, surface.pitch / surface.format.bpp());
         
         
-        hnf(mmio, pipe, dcn::AWG_, surface.format.rtx());
+        let otm = (surface.height << 16) | surface.width;
+        dro(mmio, pipe, dcn::AYL_, otm);
+        
+        
+        dro(mmio, pipe, dcn::AYJ_, surface.format.dcn_format_code());
         
         crate::serial_println!("[DCN] HUBP{} configured: addr={:#010X}:{:#010X} pitch={} fmt={:?}",
-            pipe, mty, mtz, surface.jb, surface.format);
+            pipe, hdz, dhe, surface.pitch, surface.format);
     }
 }
 
@@ -607,61 +607,61 @@ pub fn yjv(mmio: u64, pipe: u8, surface: &Amh) {
 
 
 
-pub fn init(hv: u64) {
+pub fn init(mmio_base: u64) {
     crate::log!("[DCN] ═══════════════════════════════════════════════════════");
     crate::log!("[DCN] Display Core Next 2.0 — Phase 2: Display Configuration");
     crate::log!("[DCN] ═══════════════════════════════════════════════════════");
     
     
-    let koi = unsafe { wr(hv, dcn::BQZ_) };
-    crate::serial_println!("[DCN] DCN_VERSION raw: {:#010X}", koi);
+    let fqw = unsafe { kj(mmio_base, dcn::BTU_) };
+    crate::serial_println!("[DCN] DCN_VERSION raw: {:#010X}", fqw);
     
-    let kog = (koi >> 8) & 0xFF;
-    let koh = koi & 0xFF;
-    crate::log!("[DCN] DCN version: {}.{}", kog, koh);
+    let fqu = (fqw >> 8) & 0xFF;
+    let fqv = fqw & 0xFF;
+    crate::log!("[DCN] DCN version: {}.{}", fqu, fqv);
     
     
-    let rzm = unsafe { wr(hv, dcn::BRY_) };
-    crate::serial_println!("[DCN] DMCUB_STATUS: {:#010X}", rzm);
+    let lgi = unsafe { kj(mmio_base, dcn::BUU_) };
+    crate::serial_println!("[DCN] DMCUB_STATUS: {:#010X}", lgi);
     
     
     crate::log!("[DCN] Detecting display connectors...");
-    let mut cdt = rwo(hv);
+    let mut connectors = ldu(mmio_base);
     
-    let mut kkp = 0u8;
-    for ly in &cdt {
-        let ejb = match ly.status {
-            ConnectorStatus::Dl => {
-                kkp += 1;
+    let mut fof = 0u8;
+    for et in &connectors {
+        let bvz = match et.status {
+            ConnectorStatus::Connected => {
+                fof += 1;
                 "CONNECTED"
             },
-            ConnectorStatus::Lg => "disconnected",
-            ConnectorStatus::F => "unknown",
+            ConnectorStatus::Disconnected => "disconnected",
+            ConnectorStatus::Unknown => "unknown",
         };
         crate::log!("[DCN]   Connector {}: {} — {}", 
-            ly.index, ly.ffo.j(), ejb);
+            et.index, et.connector_type.name(), bvz);
     }
-    crate::log!("[DCN] Found {} connected display(s)", kkp);
+    crate::log!("[DCN] Found {} connected display(s)", fof);
     
     
-    for ly in &mut cdt {
-        if ly.status == ConnectorStatus::Dl {
-            vro(hv, ly);
+    for et in &mut connectors {
+        if et.status == ConnectorStatus::Connected {
+            ocp(mmio_base, et);
         }
     }
     
     
     crate::log!("[DCN] Reading active display modes...");
-    let mut dyb = 0u8;
+    let mut active_displays = 0u8;
     
     for pipe in 0..6u8 {
-        if let Some(ev) = vrm(hv, pipe) {
-            crate::log!("[DCN]   OTG{}: {} (active)", pipe, ev.lmk());
+        if let Some(mode) = ocn(mmio_base, pipe) {
+            crate::log!("[DCN]   OTG{}: {} (active)", pipe, mode.modeline());
             
-            if (pipe as usize) < cdt.len() {
-                cdt[pipe as usize].eog = Some(ev);
+            if (pipe as usize) < connectors.len() {
+                connectors[pipe as usize].current_mode = Some(mode);
             }
-            dyb += 1;
+            active_displays += 1;
         } else {
             crate::serial_println!("[DCN]   OTG{}: inactive", pipe);
         }
@@ -669,34 +669,34 @@ pub fn init(hv: u64) {
     
     
     crate::log!("[DCN] Reading HUBP surface configurations...");
-    let mut grl: [Option<Amh>; 6] = [None, None, None, None, None, None];
+    let mut scanouts: [Option<Qf>; 6] = [None, None, None, None, None, None];
     
     for pipe in 0..6u8 {
         unsafe {
-            let wvz = hne(hv, pipe, dcn::AWE_);
-            let wwa = hne(hv, pipe, dcn::AWF_);
-            let ppy = hne(hv, pipe, dcn::AWG_);
-            let ppz = hne(hv, pipe, dcn::AWH_);
-            let pqa = hne(hv, pipe, dcn::AWI_);
+            let oyq = drn(mmio_base, pipe, dcn::AYH_);
+            let oyr = drn(mmio_base, pipe, dcn::AYI_);
+            let jjw = drn(mmio_base, pipe, dcn::AYJ_);
+            let jjx = drn(mmio_base, pipe, dcn::AYK_);
+            let jjy = drn(mmio_base, pipe, dcn::AYL_);
             
-            let ag = ((wvz as u64) << 32) | (wwa as u64);
+            let addr = ((oyq as u64) << 32) | (oyr as u64);
             
-            if ag != 0 && ag != 0xFFFFFFFFFFFFFFFF && ppy != 0xFFFFFFFF {
-                let z = pqa & 0xFFFF;
-                let ac = (pqa >> 16) & 0xFFFF;
+            if addr != 0 && addr != 0xFFFFFFFFFFFFFFFF && jjw != 0xFFFFFFFF {
+                let width = jjy & 0xFFFF;
+                let height = (jjy >> 16) & 0xFFFF;
                 
                 crate::serial_println!("[DCN]   HUBP{}: addr={:#014X} size={}x{} pitch={} config={:#010X}", 
-                    pipe, ag, z, ac, ppz, ppy);
+                    pipe, addr, width, height, jjx, jjw);
                 
-                if z > 0 && ac > 0 && z < 16384 && ac < 16384 {
-                    grl[pipe as usize] = Some(Amh {
-                        hja: ag,
-                        z,
-                        ac,
-                        jb: ppz * 4, 
-                        format: SurfaceFormat::Aor,
+                if width > 0 && height > 0 && width < 16384 && height < 16384 {
+                    scanouts[pipe as usize] = Some(Qf {
+                        fb_phys_addr: addr,
+                        width,
+                        height,
+                        pitch: jjx * 4, 
+                        format: SurfaceFormat::Xrgb8888,
                     });
-                    crate::log!("[DCN]   HUBP{}: {}x{} surface at {:#014X}", pipe, z, ac, ag);
+                    crate::log!("[DCN]   HUBP{}: {}x{} surface at {:#014X}", pipe, width, height, addr);
                 }
             }
         }
@@ -705,16 +705,16 @@ pub fn init(hv: u64) {
     
     crate::log!("[DCN] ───────────────────────────────────────────────────────");
     crate::log!("[DCN] DCN {}.{} — {} connector(s), {} active display(s)",
-        kog, koh, kkp, dyb);
-    for ly in &cdt {
-        if ly.status == ConnectorStatus::Dl {
-            if let Some(ref ev) = ly.eog {
+        fqu, fqv, fof, active_displays);
+    for et in &connectors {
+        if et.status == ConnectorStatus::Connected {
+            if let Some(ref mode) = et.current_mode {
                 crate::log!("[DCN]   Output {}: {} {}x{}@{}Hz", 
-                    ly.index, ly.ffo.j(),
-                    ev.buq, ev.bxq, ev.ehi);
+                    et.index, et.connector_type.name(),
+                    mode.h_active, mode.v_active, mode.refresh_hz);
             } else {
                 crate::log!("[DCN]   Output {}: {} (connected, no active mode)", 
-                    ly.index, ly.ffo.j());
+                    et.index, et.connector_type.name());
             }
         }
     }
@@ -722,14 +722,14 @@ pub fn init(hv: u64) {
     crate::log!("[DCN] Phase 2 complete — Display engine probed");
     
     
-    let mut g = JV_.lock();
-    g.jr = true;
-    g.cdt = cdt;
-    g.dyb = dyb;
-    g.eon = (kog as u8, koh as u8);
-    g.lle = 6;
-    g.grl = grl;
-    APU_.store(true, Ordering::SeqCst);
+    let mut state = KP_.lock();
+    state.initialized = true;
+    state.connectors = connectors;
+    state.active_displays = active_displays;
+    state.dcn_version = (fqu as u8, fqv as u8);
+    state.max_pipes = 6;
+    state.scanouts = scanouts;
+    ARW_.store(true, Ordering::SeqCst);
 }
 
 
@@ -737,79 +737,79 @@ pub fn init(hv: u64) {
 
 
 
-pub fn uc() -> bool {
-    APU_.load(Ordering::Relaxed)
+pub fn is_ready() -> bool {
+    ARW_.load(Ordering::Relaxed)
 }
 
 
-pub fn yst() -> Vec<Abc> {
-    JV_.lock().cdt.clone()
+pub fn qhi() -> Vec<Lm> {
+    KP_.lock().connectors.clone()
 }
 
 
-pub fn yeh() -> u8 {
-    JV_.lock().dyb
+pub fn pxq() -> u8 {
+    KP_.lock().active_displays
 }
 
 
-pub fn eon() -> (u8, u8) {
-    JV_.lock().eon
+pub fn dcn_version() -> (u8, u8) {
+    KP_.lock().dcn_version
 }
 
 
-pub fn awz() -> String {
-    let g = JV_.lock();
-    if g.jr {
-        let dzr = g.cdt.iter()
-            .hi(|r| r.status == ConnectorStatus::Dl)
-            .az();
+pub fn summary() -> String {
+    let state = KP_.lock();
+    if state.initialized {
+        let bfn = state.connectors.iter()
+            .filter(|c| c.status == ConnectorStatus::Connected)
+            .count();
         format!("DCN {}.{} — {} display(s), {} connected", 
-            g.eon.0, g.eon.1,
-            g.dyb, dzr)
+            state.dcn_version.0, state.dcn_version.1,
+            state.active_displays, bfn)
     } else {
         String::from("DCN not initialized")
     }
 }
 
 
-pub fn zl() -> Vec<String> {
-    let mut ak = Vec::new();
-    let g = JV_.lock();
+pub fn info_lines() -> Vec<String> {
+    let mut lines = Vec::new();
+    let state = KP_.lock();
     
-    if g.jr {
-        ak.push(format!("DCN {}.{} Display Engine", g.eon.0, g.eon.1));
-        ak.push(format!("  Pipes: {} max, {} active", g.lle, g.dyb));
-        ak.push(String::new());
+    if state.initialized {
+        lines.push(format!("DCN {}.{} Display Engine", state.dcn_version.0, state.dcn_version.1));
+        lines.push(format!("  Pipes: {} max, {} active", state.max_pipes, state.active_displays));
+        lines.push(String::new());
         
-        for ly in &g.cdt {
-            let status = match ly.status {
-                ConnectorStatus::Dl => "CONNECTED",
-                ConnectorStatus::Lg => "disconnected",
-                ConnectorStatus::F => "unknown",
+        for et in &state.connectors {
+            let status = match et.status {
+                ConnectorStatus::Connected => "CONNECTED",
+                ConnectorStatus::Disconnected => "disconnected",
+                ConnectorStatus::Unknown => "unknown",
             };
             
             let mut line = format!("  Connector {}: {} [{}]", 
-                ly.index, ly.ffo.j(), status);
+                et.index, et.connector_type.name(), status);
             
-            if let Some(ref ev) = ly.eog {
-                line.t(&format!(" — {}x{}@{}Hz", ev.buq, ev.bxq, ev.ehi));
+            if let Some(ref mode) = et.current_mode {
+                line.push_str(&format!(" — {}x{}@{}Hz", mode.h_active, mode.v_active, mode.refresh_hz));
             }
             
-            ak.push(line);
+            lines.push(line);
         }
         
         
-        ak.push(String::new());
-        ak.push(String::from("  Active Surfaces:"));
-        for (a, wea) in g.grl.iter().cf() {
-            if let Some(ref e) = wea {
-                ak.push(format!("    HUBP{}: {}x{} {:?} @ {:#X}", 
-                    a, e.z, e.ac, e.format, e.hja));
+        lines.push(String::new());
+        lines.push(String::from("  Active Surfaces:"));
+        for (i, scanout) in state.scanouts.iter().enumerate() {
+            if let Some(ref j) = scanout {
+                lines.push(format!("    HUBP{}: {}x{} {:?} @ {:#X}", 
+                    i, j.width, j.height, j.format, j.fb_phys_addr));
             }
         }
     } else {
-        ak.push(String::from("DCN display engine not initialized"));
+        lines.push(String::from("DCN display engine not initialized"));
     }
     
-    ak
+    lines
 }

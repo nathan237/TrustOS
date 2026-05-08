@@ -8,11 +8,11 @@ use alloc::vec::Vec;
 
 
 #[derive(Debug, Clone, Copy)]
-pub struct Ahh {
-    pub b: i32,
-    pub c: i32,
-    pub z: i32,
-    pub ac: i32,
+pub struct Oj {
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
 }
 
 
@@ -20,241 +20,241 @@ pub struct Ahh {
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum BufferTransform {
     #[default]
-    M = 0,
-    Ckw = 1,
-    Cku = 2,
-    Ckv = 3,
-    Cdr = 4,
-    Cdu = 5,
-    Cds = 6,
-    Cdt = 7,
+    Normal = 0,
+    Rotate90 = 1,
+    Rotate180 = 2,
+    Rotate270 = 3,
+    Flipped = 4,
+    FlippedRotate90 = 5,
+    FlippedRotate180 = 6,
+    FlippedRotate270 = 7,
 }
 
 
 #[derive(Debug, Clone)]
 pub struct Surface {
     
-    pub ad: u32,
+    pub id: u32,
     
     
-    pub b: i32,
-    pub c: i32,
+    pub x: i32,
+    pub y: i32,
     
     
-    pub z: u32,
-    pub ac: u32,
+    pub width: u32,
+    pub height: u32,
     
     
-    pub bi: Vec<u32>,
+    pub buffer: Vec<u32>,
     
     
-    pub ltl: Option<Vec<u32>>,
-    pub lto: u32,
-    pub ltn: u32,
+    pub pending_buffer: Option<Vec<u32>>,
+    pub pending_width: u32,
+    pub pending_height: u32,
     
     
-    pub qst: i32,
-    pub qsu: i32,
+    pub buffer_offset_x: i32,
+    pub buffer_offset_y: i32,
     
     
-    pub qsv: i32,
+    pub buffer_scale: i32,
     
     
-    pub qsw: BufferTransform,
+    pub buffer_transform: BufferTransform,
     
     
-    pub cpt: Vec<Ahh>,
+    pub damage: Vec<Oj>,
     
     
-    pub gda: bool,
+    pub committed: bool,
     
     
-    pub iw: bool,
+    pub visible: bool,
     
     
-    pub dq: String,
+    pub title: String,
     
     
-    pub ijv: String,
+    pub app_id: String,
     
     
-    pub hmn: bool,
+    pub has_decorations: bool,
     
     
-    pub ogx: bool,
+    pub is_toplevel: bool,
     
     
-    pub tu: Option<u32>,
+    pub parent: Option<u32>,
     
     
-    pub uys: Option<Ahh>,
+    pub opaque_region: Option<Oj>,
     
     
-    pub tvb: Option<Ahh>,
+    pub input_region: Option<Oj>,
     
     
-    pub swv: Option<u32>,
+    pub frame_callback: Option<u32>,
     
     
-    pub g: SurfaceState,
+    pub state: SurfaceState,
 }
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct SurfaceState {
-    pub bkk: bool,
-    pub szf: bool,
-    pub dlg: bool,
-    pub qey: bool,
-    pub zsq: bool,
-    pub zsr: bool,
-    pub zss: bool,
-    pub zsp: bool,
+    pub maximized: bool,
+    pub fullscreen: bool,
+    pub resizing: bool,
+    pub activated: bool,
+    pub tiled_left: bool,
+    pub tiled_right: bool,
+    pub tiled_top: bool,
+    pub tiled_bottom: bool,
 }
 
 impl Surface {
-    pub fn new(ad: u32) -> Self {
+    pub fn new(id: u32) -> Self {
         Self {
-            ad,
-            b: 100,
-            c: 100,
-            z: 0,
-            ac: 0,
-            bi: Vec::new(),
-            ltl: None,
-            lto: 0,
-            ltn: 0,
-            qst: 0,
-            qsu: 0,
-            qsv: 1,
-            qsw: BufferTransform::M,
-            cpt: Vec::new(),
-            gda: false,
-            iw: true,
-            dq: String::new(),
-            ijv: String::new(),
-            hmn: true,
-            ogx: false,
-            tu: None,
-            uys: None,
-            tvb: None,
-            swv: None,
-            g: SurfaceState::default(),
+            id,
+            x: 100,
+            y: 100,
+            width: 0,
+            height: 0,
+            buffer: Vec::new(),
+            pending_buffer: None,
+            pending_width: 0,
+            pending_height: 0,
+            buffer_offset_x: 0,
+            buffer_offset_y: 0,
+            buffer_scale: 1,
+            buffer_transform: BufferTransform::Normal,
+            damage: Vec::new(),
+            committed: false,
+            visible: true,
+            title: String::new(),
+            app_id: String::new(),
+            has_decorations: true,
+            is_toplevel: false,
+            parent: None,
+            opaque_region: None,
+            input_region: None,
+            frame_callback: None,
+            state: SurfaceState::default(),
         }
     }
     
     
-    pub fn dyl(&mut self, bi: Vec<u32>, z: u32, ac: u32) {
-        self.ltl = Some(bi);
-        self.lto = z;
-        self.ltn = ac;
+    pub fn attach(&mut self, buffer: Vec<u32>, width: u32, height: u32) {
+        self.pending_buffer = Some(buffer);
+        self.pending_width = width;
+        self.pending_height = height;
     }
     
     
-    pub fn cpt(&mut self, b: i32, c: i32, z: i32, ac: i32) {
-        self.cpt.push(Ahh { b, c, z, ac });
+    pub fn damage(&mut self, x: i32, y: i32, width: i32, height: i32) {
+        self.damage.push(Oj { x, y, width, height });
     }
     
     
-    pub fn dfc(&mut self) {
+    pub fn commit(&mut self) {
         
-        if let Some(bi) = self.ltl.take() {
-            self.bi = bi;
-            self.z = self.lto;
-            self.ac = self.ltn;
+        if let Some(buffer) = self.pending_buffer.take() {
+            self.buffer = buffer;
+            self.width = self.pending_width;
+            self.height = self.pending_height;
         }
         
         
-        self.cpt.clear();
+        self.damage.clear();
         
-        self.gda = true;
+        self.committed = true;
     }
     
     
-    pub fn hzz(&mut self, dq: &str) {
-        self.dq = String::from(dq);
+    pub fn set_title(&mut self, title: &str) {
+        self.title = String::from(title);
     }
     
     
-    pub fn zmm(&mut self, ijv: &str) {
-        self.ijv = String::from(ijv);
+    pub fn qvj(&mut self, app_id: &str) {
+        self.app_id = String::from(app_id);
     }
     
     
-    pub fn eyk(&mut self, b: i32, c: i32) {
-        self.b = b;
-        self.c = c;
+    pub fn set_position(&mut self, x: i32, y: i32) {
+        self.x = x;
+        self.y = y;
     }
     
     
-    pub fn contains(&self, y: i32, x: i32) -> bool {
-        let fwu = if self.hmn { 28 } else { 0 };
-        let dn = self.b;
-        let dp = self.c - fwu;
-        let hy = self.b + self.z as i32;
-        let jz = self.c + self.ac as i32;
+    pub fn contains(&self, p: i32, o: i32) -> bool {
+        let crr = if self.has_decorations { 28 } else { 0 };
+        let x1 = self.x;
+        let y1 = self.y - crr;
+        let x2 = self.x + self.width as i32;
+        let y2 = self.y + self.height as i32;
         
-        y >= dn && y < hy && x >= dp && x < jz
+        p >= x1 && p < x2 && o >= y1 && o < y2
     }
     
     
-    pub fn odw(&self, y: i32, x: i32) -> bool {
-        if !self.hmn {
+    pub fn in_title_bar(&self, p: i32, o: i32) -> bool {
+        if !self.has_decorations {
             return false;
         }
-        let fwu = 28;
-        y >= self.b 
-            && y < self.b + self.z as i32 
-            && x >= self.c - fwu 
-            && x < self.c
+        let crr = 28;
+        p >= self.x 
+            && p < self.x + self.width as i32 
+            && o >= self.y - crr 
+            && o < self.y
     }
     
     
-    pub fn yjx(&self) -> (i32, i32, u32, u32) {
-        (self.b, self.c, self.z, self.ac)
+    pub fn qbf(&self) -> (i32, i32, u32, u32) {
+        (self.x, self.y, self.width, self.height)
     }
     
     
-    pub fn hqr(&mut self) {
-        self.ogx = true;
-        self.hmn = true;
-        self.g.qey = true;
+    pub fn make_toplevel(&mut self) {
+        self.is_toplevel = true;
+        self.has_decorations = true;
+        self.state.activated = true;
     }
     
     
-    pub fn zcl(&mut self, anv: u32, akr: u32) {
-        self.g.bkk = true;
-        self.b = 0;
-        self.c = 28; 
+    pub fn qow(&mut self, screen_width: u32, screen_height: u32) {
+        self.state.maximized = true;
+        self.x = 0;
+        self.y = 28; 
         
     }
     
     
-    pub fn zud(&mut self, bwb: i32, dur: i32) {
-        self.g.bkk = false;
-        self.b = bwb;
-        self.c = dur;
+    pub fn rbj(&mut self, amh: i32, boh: i32) {
+        self.state.maximized = false;
+        self.x = amh;
+        self.y = boh;
     }
 }
 
 
-pub struct Bto {
-    bcb: u32,
+pub struct Afa {
+    next_id: u32,
 }
 
-impl Bto {
+impl Afa {
     pub fn new() -> Self {
-        Self { bcb: 1 }
+        Self { next_id: 1 }
     }
     
-    pub fn avp(&mut self) -> Surface {
-        let ad = self.bcb;
-        self.bcb += 1;
-        Surface::new(ad)
+    pub fn create(&mut self) -> Surface {
+        let id = self.next_id;
+        self.next_id += 1;
+        Surface::new(id)
     }
 }
 
-impl Default for Bto {
+impl Default for Afa {
     fn default() -> Self {
         Self::new()
     }

@@ -91,14 +91,14 @@ impl WriteAheadLog {
         self.sequence += 1;
 
         // Step 1: Write WAL header (marks transaction as pending)
-        let mut header_buffer = [0u8; SECTOR_SIZE];
-        let header = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &mut *(header_buffer.as_mut_pointer() as *mut WalHeader) };
-        header.magic = WAL_MAGIC;
-        header.entry_count = self.count as u32;
-        header.committed = 1;
-        header.sequence = self.sequence;
-        write_sector(WAL_HEADER_SECTOR, &header_buffer)?;
+        let mut hdr_buf = [0u8; SECTOR_SIZE];
+        let hdr = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { &mut *(hdr_buf.as_mut_ptr() as *mut WalHeader) };
+        hdr.magic = WAL_MAGIC;
+        hdr.entry_count = self.count as u32;
+        hdr.committed = 1;
+        hdr.sequence = self.sequence;
+        write_sector(WAL_HEADER_SECTOR, &hdr_buf)?;
 
         // Step 2: Write each pending entry to WAL area (for replay on crash)
         for i in 0..self.count {
@@ -106,7 +106,7 @@ unsafe { &mut *(header_buffer.as_mut_pointer() as *mut WalHeader) };
             // Store target sector in first 8 bytes, rest is data
             let mut entry_buffer = [0u8; SECTOR_SIZE];
             entry_buffer[0..8].copy_from_slice(&target.to_le_bytes());
-            let copy_length = core::cmp::minimum(data.len(), SECTOR_SIZE - 8);
+            let copy_length = core::cmp::min(data.len(), SECTOR_SIZE - 8);
             entry_buffer[8..8 + copy_length].copy_from_slice(&data[..copy_length]);
             write_sector(WAL_ENTRY_SECTOR_START + i as u64, &entry_buffer)?;
         }
@@ -140,27 +140,27 @@ pub fn replay_if_needed(
     read_sector: &dyn Fn(u64, &mut [u8; SECTOR_SIZE]) -> Result<(), ()>,
     write_sector: &dyn Fn(u64, &[u8; SECTOR_SIZE]) -> Result<(), ()>,
 ) -> Result<usize, ()> {
-    let mut header_buffer = [0u8; SECTOR_SIZE];
-    read_sector(WAL_HEADER_SECTOR, &mut header_buffer)?;
+    let mut hdr_buf = [0u8; SECTOR_SIZE];
+    read_sector(WAL_HEADER_SECTOR, &mut hdr_buf)?;
 
-    let header = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*(header_buffer.as_pointer() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+    let hdr = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { &*(hdr_buf.as_ptr() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const WalHeader) };
-    if header.magic != WAL_MAGIC || header.committed != 1 || header.entry_count == 0 {
+    if hdr.magic != WAL_MAGIC || hdr.committed != 1 || hdr.entry_count == 0 {
         return Ok(0); // No pending WAL
     }
 
-    let count = header.entry_count as usize;
-    crate::log!("[WAL] Replaying {} pending writes from sequence {}", count, header.sequence);
+    let count = hdr.entry_count as usize;
+    crate::log!("[WAL] Replaying {} pending writes from sequence {}", count, hdr.sequence);
 
-    for i in 0..count.minimum(MAXIMUM_WAL_ENTRIES) {
+    for i in 0..count.min(MAXIMUM_WAL_ENTRIES) {
         let mut entry_buffer = [0u8; SECTOR_SIZE];
         read_sector(WAL_ENTRY_SECTOR_START + i as u64, &mut entry_buffer)?;
 
         let target = u64::from_le_bytes(entry_buffer[0..8].try_into().unwrap_or([0; 8]));
         // Reconstruct sector data (first 8 bytes were target, rest is data)
         let mut data = [0u8; SECTOR_SIZE];
-        let copy_length = core::cmp::minimum(SECTOR_SIZE - 8, SECTOR_SIZE);
+        let copy_length = core::cmp::min(SECTOR_SIZE - 8, SECTOR_SIZE);
         data[..copy_length].copy_from_slice(&entry_buffer[8..8 + copy_length]);
         // Pad remaining with zeros (last 8 bytes)
         write_sector(target, &data)?;

@@ -15,7 +15,7 @@ static TICK_COUNTER: AtomicU64 = AtomicU64::new(0);
 pub enum LogLevel {
     Trace = 0,
     Debug = 1,
-    Information = 2,
+    Info = 2,
     Warn = 3,
     Error = 4,
     Fatal = 5,
@@ -29,7 +29,7 @@ pub fn as_str(&self) -> &'static str {
 match self {
             LogLevel::Trace => "TRACE",
             LogLevel::Debug => "DEBUG",
-            LogLevel::Information => "INFO ",
+            LogLevel::Info => "INFO ",
             LogLevel::Warn => "WARN ",
             LogLevel::Error => "ERROR",
             LogLevel::Fatal => "FATAL",
@@ -80,7 +80,7 @@ macro_rules! log_level {
 #[macro_export]
 macro_rules! log {
     ($($argument:tt)*) => {
-        $crate::log_level!($crate::logger::LogLevel::Information, $($argument)*)
+        $crate::log_level!($crate::logger::LogLevel::Info, $($argument)*)
     };
 }
 

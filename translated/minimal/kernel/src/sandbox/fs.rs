@@ -12,7 +12,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::format;
 
-use super::Ax;
+use super::Ag;
 
 
 
@@ -20,49 +20,49 @@ use super::Ax;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SandboxFileType {
     
-    Es,
+    File,
     
-    K,
+    Directory,
 }
 
 
 #[derive(Debug, Clone)]
 pub struct SandboxFile {
-    pub j: String,
-    pub kd: SandboxFileType,
-    pub f: Vec<u8>,
-    pub cju: u64,
-    pub euw: u64,
+    pub name: String,
+    pub file_type: SandboxFileType,
+    pub data: Vec<u8>,
+    pub created_at: u64,
+    pub modified_at: u64,
     
-    pub atf: String,
+    pub origin: String,
     
-    pub awr: bool,
+    pub readonly: bool,
 }
 
 impl SandboxFile {
-    fn gnm(j: &str, atf: &str) -> Self {
-        let iu = crate::time::lc();
+    fn dbp(name: &str, origin: &str) -> Self {
+        let cy = crate::time::uptime_ms();
         Self {
-            j: String::from(j),
-            kd: SandboxFileType::Es,
-            f: Vec::new(),
-            cju: iu,
-            euw: iu,
-            atf: String::from(atf),
-            awr: false,
+            name: String::from(name),
+            file_type: SandboxFileType::File,
+            data: Vec::new(),
+            created_at: cy,
+            modified_at: cy,
+            origin: String::from(origin),
+            readonly: false,
         }
     }
 
-    fn cll(j: &str) -> Self {
-        let iu = crate::time::lc();
+    fn auj(name: &str) -> Self {
+        let cy = crate::time::uptime_ms();
         Self {
-            j: String::from(j),
-            kd: SandboxFileType::K,
-            f: Vec::new(),
-            cju: iu,
-            euw: iu,
-            atf: String::new(),
-            awr: false,
+            name: String::from(name),
+            file_type: SandboxFileType::Directory,
+            data: Vec::new(),
+            created_at: cy,
+            modified_at: cy,
+            origin: String::new(),
+            readonly: false,
         }
     }
 }
@@ -70,189 +70,189 @@ impl SandboxFile {
 
 #[derive(Debug)]
 pub enum FsError {
-    N,
-    Ri,
-    Bpu,
-    Bpt,
-    Ciz,
-    Bz,
-    Pr,
-    Tc,
-    Lz,
+    NotFound,
+    AlreadyExists,
+    QuotaFiles,
+    QuotaBytes,
+    PathViolation,
+    ReadOnly,
+    InvalidPath,
+    IsDirectory,
+    NotDirectory,
 }
 
 
 
 
 pub struct SandboxFs {
-    afh: Ax,
+    sandbox_id: Ag,
     
-    sb: BTreeMap<String, SandboxFile>,
+    files: BTreeMap<String, SandboxFile>,
     
-    hqz: usize,
-    fnt: usize,
+    max_files: usize,
+    max_bytes: usize,
     
-    xv: usize,
+    total_bytes: usize,
 }
 
 impl SandboxFs {
-    pub fn new(afh: Ax, hqz: usize, fnt: usize) -> Self {
+    pub fn new(sandbox_id: Ag, max_files: usize, max_bytes: usize) -> Self {
         let mut fs = Self {
-            afh,
-            sb: BTreeMap::new(),
-            hqz,
-            fnt,
-            xv: 0,
+            sandbox_id,
+            files: BTreeMap::new(),
+            max_files,
+            max_bytes,
+            total_bytes: 0,
         };
         
-        fs.sb.insert(String::from("/"), SandboxFile::cll("/"));
-        fs.sb.insert(String::from("/cache"), SandboxFile::cll("cache"));
-        fs.sb.insert(String::from("/cookies"), SandboxFile::cll("cookies"));
-        fs.sb.insert(String::from("/storage"), SandboxFile::cll("storage"));
-        fs.sb.insert(String::from("/downloads"), SandboxFile::cll("downloads"));
+        fs.files.insert(String::from("/"), SandboxFile::auj("/"));
+        fs.files.insert(String::from("/cache"), SandboxFile::auj("cache"));
+        fs.files.insert(String::from("/cookies"), SandboxFile::auj("cookies"));
+        fs.files.insert(String::from("/storage"), SandboxFile::auj("storage"));
+        fs.files.insert(String::from("/downloads"), SandboxFile::auj("downloads"));
         fs
     }
 
     
-    fn bro(&self, path: &str) -> Result<String, FsError> {
+    fn normalize_path(&self, path: &str) -> Result<String, FsError> {
         
-        let dox = if path.cj('/') {
+        let blc = if path.starts_with('/') {
             String::from(path)
         } else {
             format!("/{}", path)
         };
 
         
-        if dox.contains("..") || dox.contains("./") || dox.contains("//") {
-            return Err(FsError::Ciz);
+        if blc.contains("..") || blc.contains("./") || blc.contains("//") {
+            return Err(FsError::PathViolation);
         }
 
         
-        if dox.bf().any(|o| o == 0 || o < 0x20) {
-            return Err(FsError::Pr);
+        if blc.bytes().any(|b| b == 0 || b < 0x20) {
+            return Err(FsError::InvalidPath);
         }
 
         
-        if dox.len() > 256 {
-            return Err(FsError::Pr);
+        if blc.len() > 256 {
+            return Err(FsError::InvalidPath);
         }
 
-        Ok(dox)
+        Ok(blc)
     }
 
     
-    pub fn write(&mut self, path: &str, f: &[u8], atf: &str) -> Result<(), FsError> {
-        let path = self.bro(path)?;
+    pub fn write(&mut self, path: &str, data: &[u8], origin: &str) -> Result<(), FsError> {
+        let path = self.normalize_path(path)?;
 
         
-        if let Some(xy) = self.sb.get(&path) {
-            if xy.awr {
-                return Err(FsError::Bz);
+        if let Some(ku) = self.files.get(&path) {
+            if ku.readonly {
+                return Err(FsError::ReadOnly);
             }
-            if xy.kd == SandboxFileType::K {
-                return Err(FsError::Tc);
+            if ku.file_type == SandboxFileType::Directory {
+                return Err(FsError::IsDirectory);
             }
             
-            let jhs = xy.f.len();
-            let oqe = self.xv - jhs + f.len();
-            if oqe > self.fnt {
-                return Err(FsError::Bpt);
+            let evr = ku.data.len();
+            let iqh = self.total_bytes - evr + data.len();
+            if iqh > self.max_bytes {
+                return Err(FsError::QuotaBytes);
             }
-            self.xv = oqe;
+            self.total_bytes = iqh;
         } else {
             
-            if self.sb.len() >= self.hqz {
-                return Err(FsError::Bpu);
+            if self.files.len() >= self.max_files {
+                return Err(FsError::QuotaFiles);
             }
-            if self.xv + f.len() > self.fnt {
-                return Err(FsError::Bpt);
+            if self.total_bytes + data.len() > self.max_bytes {
+                return Err(FsError::QuotaBytes);
             }
-            self.xv += f.len();
+            self.total_bytes += data.len();
         }
 
-        let mut file = SandboxFile::gnm(
-            path.cmm('/').next().unwrap_or(&path),
-            atf,
+        let mut file = SandboxFile::dbp(
+            path.rsplit('/').next().unwrap_or(&path),
+            origin,
         );
-        file.f = f.ip();
-        self.sb.insert(path, file);
+        file.data = data.to_vec();
+        self.files.insert(path, file);
         Ok(())
     }
 
     
     pub fn read(&self, path: &str) -> Result<&[u8], FsError> {
-        let path = self.bro(path)?;
-        match self.sb.get(&path) {
-            Some(bb) if bb.kd == SandboxFileType::Es => Ok(&bb.f),
-            Some(_) => Err(FsError::Tc),
-            None => Err(FsError::N),
+        let path = self.normalize_path(path)?;
+        match self.files.get(&path) {
+            Some(f) if f.file_type == SandboxFileType::File => Ok(&f.data),
+            Some(_) => Err(FsError::IsDirectory),
+            None => Err(FsError::NotFound),
         }
     }
 
     
-    pub fn rvg(&mut self, path: &str) -> Result<(), FsError> {
-        let path = self.bro(path)?;
-        match self.sb.get(&path) {
-            Some(bb) => {
-                if bb.awr {
-                    return Err(FsError::Bz);
+    pub fn delete(&mut self, path: &str) -> Result<(), FsError> {
+        let path = self.normalize_path(path)?;
+        match self.files.get(&path) {
+            Some(f) => {
+                if f.readonly {
+                    return Err(FsError::ReadOnly);
                 }
-                if bb.kd == SandboxFileType::K {
+                if f.file_type == SandboxFileType::Directory {
                     
-                    let adx = format!("{}/", path);
-                    let tmf = self.sb.cai().any(|eh| eh.cj(&adx));
-                    if tmf {
-                        return Err(FsError::Lz); 
+                    let nm = format!("{}/", path);
+                    let mjf = self.files.keys().any(|k| k.starts_with(&nm));
+                    if mjf {
+                        return Err(FsError::NotDirectory); 
                     }
                 }
-                let aw = bb.f.len();
-                self.sb.remove(&path);
-                self.xv -= aw;
+                let size = f.data.len();
+                self.files.remove(&path);
+                self.total_bytes -= size;
                 Ok(())
             }
-            None => Err(FsError::N),
+            None => Err(FsError::NotFound),
         }
     }
 
     
-    pub fn aoy(&self, hge: &str) -> Result<Vec<(&str, &SandboxFileType, usize)>, FsError> {
-        let te = self.bro(hge)?;
-        let adx = if te == "/" { String::from("/") } else { format!("{}/", te) };
+    pub fn list(&self, dnd: &str) -> Result<Vec<(&str, &SandboxFileType, usize)>, FsError> {
+        let it = self.normalize_path(dnd)?;
+        let nm = if it == "/" { String::from("/") } else { format!("{}/", it) };
 
-        let mut ch = Vec::new();
-        for (path, file) in &self.sb {
-            if path == &te { continue; } 
-            if path.cj(&adx) {
+        let mut entries = Vec::new();
+        for (path, file) in &self.files {
+            if path == &it { continue; } 
+            if path.starts_with(&nm) {
                 
-                let kr = &path[adx.len()..];
-                if !kr.contains('/') {
-                    ch.push((path.as_str(), &file.kd, file.f.len()));
+                let ef = &path[nm.len()..];
+                if !ef.contains('/') {
+                    entries.push((path.as_str(), &file.file_type, file.data.len()));
                 }
             }
         }
-        Ok(ch)
+        Ok(entries)
     }
 
     
-    pub fn aja(&self, path: &str) -> bool {
-        if let Ok(ai) = self.bro(path) {
-            self.sb.bgm(&ai)
+    pub fn exists(&self, path: &str) -> bool {
+        if let Ok(aa) = self.normalize_path(path) {
+            self.files.contains_key(&aa)
         } else {
             false
         }
     }
 
     
-    pub fn ut(&mut self, path: &str) -> Result<(), FsError> {
-        let path = self.bro(path)?;
-        if self.sb.bgm(&path) {
-            return Err(FsError::Ri);
+    pub fn mkdir(&mut self, path: &str) -> Result<(), FsError> {
+        let path = self.normalize_path(path)?;
+        if self.files.contains_key(&path) {
+            return Err(FsError::AlreadyExists);
         }
-        if self.sb.len() >= self.hqz {
-            return Err(FsError::Bpu);
+        if self.files.len() >= self.max_files {
+            return Err(FsError::QuotaFiles);
         }
-        self.sb.insert(path.clone(), SandboxFile::cll(
-            path.cmm('/').next().unwrap_or(&path)
+        self.files.insert(path.clone(), SandboxFile::auj(
+            path.rsplit('/').next().unwrap_or(&path)
         ));
         Ok(())
     }
@@ -260,94 +260,94 @@ impl SandboxFs {
     
 
     
-    pub fn zmr(&mut self, vh: &str, j: &str, bn: &str) -> Result<(), FsError> {
-        let path = format!("/cookies/{}_{}", vh.replace('.', "_"), j);
-        self.write(&path, bn.as_bytes(), vh)
+    pub fn qvo(&mut self, domain: &str, name: &str, value: &str) -> Result<(), FsError> {
+        let path = format!("/cookies/{}_{}", domain.replace('.', "_"), name);
+        self.write(&path, value.as_bytes(), domain)
     }
 
     
-    pub fn ysv(&self, vh: &str, j: &str) -> Option<String> {
-        let path = format!("/cookies/{}_{}", vh.replace('.', "_"), j);
-        self.read(&path).bq()
-            .map(|f| String::azw(f).bkc())
+    pub fn qhk(&self, domain: &str, name: &str) -> Option<String> {
+        let path = format!("/cookies/{}_{}", domain.replace('.', "_"), name);
+        self.read(&path).ok()
+            .map(|data| String::from_utf8_lossy(data).into_owned())
     }
 
     
-    pub fn zbp(&mut self, vh: &str, bs: &str, bn: &str) -> Result<(), FsError> {
-        let te = format!("/storage/{}", vh.replace('.', "_"));
-        if !self.aja(&te) {
-            self.ut(&te)?;
+    pub fn qod(&mut self, domain: &str, key: &str, value: &str) -> Result<(), FsError> {
+        let it = format!("/storage/{}", domain.replace('.', "_"));
+        if !self.exists(&it) {
+            self.mkdir(&it)?;
         }
-        let path = format!("{}/{}", te, bs);
-        self.write(&path, bn.as_bytes(), vh)
+        let path = format!("{}/{}", it, key);
+        self.write(&path, value.as_bytes(), domain)
     }
 
     
-    pub fn zbo(&self, vh: &str, bs: &str) -> Option<String> {
-        let path = format!("/storage/{}/{}", vh.replace('.', "_"), bs);
-        self.read(&path).bq()
-            .map(|f| String::azw(f).bkc())
+    pub fn qoc(&self, domain: &str, key: &str) -> Option<String> {
+        let path = format!("/storage/{}/{}", domain.replace('.', "_"), key);
+        self.read(&path).ok()
+            .map(|data| String::from_utf8_lossy(data).into_owned())
     }
 
     
-    pub fn yhd(&mut self, url: &str, f: &[u8]) -> Result<(), FsError> {
+    pub fn pza(&mut self, url: &str, data: &[u8]) -> Result<(), FsError> {
         
-        let hash = url.bf().cqs(0u64, |btc, o| btc.hx(31).cn(o as u64));
+        let hash = url.bytes().fold(0u64, |aku, b| aku.wrapping_mul(31).wrapping_add(b as u64));
         let path = format!("/cache/{:016x}", hash);
-        self.write(&path, f, "cache")
+        self.write(&path, data, "cache")
     }
 
     
-    pub fn ysr(&self, url: &str) -> Option<&[u8]> {
-        let hash = url.bf().cqs(0u64, |btc, o| btc.hx(31).cn(o as u64));
+    pub fn qhg(&self, url: &str) -> Option<&[u8]> {
+        let hash = url.bytes().fold(0u64, |aku, b| aku.wrapping_mul(31).wrapping_add(b as u64));
         let path = format!("/cache/{:016x}", hash);
-        self.read(&path).bq()
+        self.read(&path).ok()
     }
 
     
 
     
-    pub fn pxo(&self) -> (usize, usize, usize, usize) {
-        let bec = self.sb.alv()
-            .hi(|bb| bb.kd == SandboxFileType::Es)
-            .az();
-        (bec, self.hqz, self.xv, self.fnt)
+    pub fn usage(&self) -> (usize, usize, usize, usize) {
+        let adp = self.files.values()
+            .filter(|f| f.file_type == SandboxFileType::File)
+            .count();
+        (adp, self.max_files, self.total_bytes, self.max_bytes)
     }
 
     
     pub fn clear(&mut self) {
-        self.sb.clear();
-        self.xv = 0;
+        self.files.clear();
+        self.total_bytes = 0;
         
-        self.sb.insert(String::from("/"), SandboxFile::cll("/"));
-        self.sb.insert(String::from("/cache"), SandboxFile::cll("cache"));
-        self.sb.insert(String::from("/cookies"), SandboxFile::cll("cookies"));
-        self.sb.insert(String::from("/storage"), SandboxFile::cll("storage"));
-        self.sb.insert(String::from("/downloads"), SandboxFile::cll("downloads"));
+        self.files.insert(String::from("/"), SandboxFile::auj("/"));
+        self.files.insert(String::from("/cache"), SandboxFile::auj("cache"));
+        self.files.insert(String::from("/cookies"), SandboxFile::auj("cookies"));
+        self.files.insert(String::from("/storage"), SandboxFile::auj("storage"));
+        self.files.insert(String::from("/downloads"), SandboxFile::auj("downloads"));
     }
 
     
-    pub fn iex(&self) -> String {
-        let mut bd = String::from("Sandbox FS (");
-        let (sb, ule, bf, ukt) = self.pxo();
-        bd.t(&format!("{}/{} files, {}/{} bytes)\n", sb, ule, bf, ukt));
+    pub fn tree(&self) -> String {
+        let mut out = String::from("Sandbox FS (");
+        let (files, max_f, bytes, max_b) = self.usage();
+        out.push_str(&format!("{}/{} files, {}/{} bytes)\n", files, max_f, bytes, max_b));
 
-        let mut bcs: Vec<_> = self.sb.cai().collect();
-        bcs.jqs();
-        for path in bcs {
-            let file = &self.sb[path];
-            let eo = path.oh('/').az();
-            let crn = "  ".afd(eo);
-            match file.kd {
-                SandboxFileType::K => {
-                    bd.t(&format!("{}{}/\n", crn, file.j));
+        let mut acq: Vec<_> = self.files.keys().collect();
+        acq.sort();
+        for path in acq {
+            let file = &self.files[path];
+            let depth = path.matches('/').count();
+            let axq = "  ".repeat(depth);
+            match file.file_type {
+                SandboxFileType::Directory => {
+                    out.push_str(&format!("{}{}/\n", axq, file.name));
                 }
-                SandboxFileType::Es => {
-                    bd.t(&format!("{}{} ({} bytes, origin: {})\n",
-                        crn, file.j, file.f.len(), file.atf));
+                SandboxFileType::File => {
+                    out.push_str(&format!("{}{} ({} bytes, origin: {})\n",
+                        axq, file.name, file.data.len(), file.origin));
                 }
             }
         }
-        bd
+        out
     }
 }

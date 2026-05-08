@@ -99,7 +99,7 @@ match crate::sandbox::container::container_status(id) {
             let config = // Pattern matching — Rust's exhaustive branching construct.
 match preset_str {
                 "secure" => crate::sandbox::container::ContainerConfig::secure(),
-                "dev" => crate::sandbox::container::ContainerConfig::device(),
+                "dev" => crate::sandbox::container::ContainerConfig::dev(),
                 _ => {
                     let mut cfg = crate::sandbox::container::ContainerConfig::default();
                     // If first arg doesn't look like a preset, use it as the name
@@ -131,12 +131,12 @@ match daemon.start_container(id) {
             let mut daemon = crate::sandbox::container::CONTAINER_DAEMON.lock();
                         // Pattern matching — Rust's exhaustive branching construct.
 match daemon.navigate(container_id, url) {
-                Ok(response) => {
+                Ok(resp) => {
                     crate::println_color!(COLOR_GREEN, "  Status: {} | {} | {} bytes",
-                        response.status_code, response.content_type, response.body.len());
+                        resp.status_code, resp.content_type, resp.body.len());
 
-                    if response.is_html() {
-                        let html_str = response.body_string();
+                    if resp.is_html() {
+                        let html_str = resp.body_string();
                         let doc = crate::browser::html_parser::parse_html(&html_str);
                         if !doc.title.is_empty() {
                             crate::println!("  Title: {}", doc.title);
@@ -144,7 +144,7 @@ match daemon.navigate(container_id, url) {
                         crate::println!();
                         render_document_text(&doc, 0);
                     } else {
-                        let text = response.body_string();
+                        let text = resp.body_string();
                         let preview: String = text.chars().take(2000).collect();
                         crate::println!("{}", preview);
                         if text.len() > 2000 {
@@ -234,8 +234,8 @@ match daemon.destroy_container(id) {
             };
             // Apply to live sandbox outside daemon lock
             if let Some(sid) = sandbox_id {
-                let mut manager = crate::sandbox::SANDBOX_MANAGER.lock();
-                if let Some(sb) = manager.get_mut(sid) {
+                let mut mgr = crate::sandbox::SANDBOX_MANAGER.lock();
+                if let Some(sb) = mgr.get_mut(sid) {
                     sb.policy.allow_domain(domain);
                 }
             }
@@ -260,8 +260,8 @@ match daemon.destroy_container(id) {
                 }
             };
             if let Some(sid) = sandbox_id {
-                let mut manager = crate::sandbox::SANDBOX_MANAGER.lock();
-                if let Some(sb) = manager.get_mut(sid) {
+                let mut mgr = crate::sandbox::SANDBOX_MANAGER.lock();
+                if let Some(sb) = mgr.get_mut(sid) {
                     sb.policy.deny_domain(domain);
                 }
             }
@@ -355,13 +355,13 @@ match args.get(2).copied() {
             crate::println_color!(COLOR_CYAN, "[Sandbox] Navigating to {}...", url);
                         // Pattern matching — Rust's exhaustive branching construct.
 match crate::sandbox::navigate(id, url) {
-                Ok(response) => {
+                Ok(resp) => {
                     crate::println_color!(COLOR_GREEN, "  Status: {} | Content-Type: {} | {} bytes",
-                        response.status_code, response.content_type, response.body.len());
+                        resp.status_code, resp.content_type, resp.body.len());
 
-                    if response.is_html() {
+                    if resp.is_html() {
                         // Parse and render through browser engine
-                        let html_str = response.body_string();
+                        let html_str = resp.body_string();
                         let doc = crate::browser::html_parser::parse_html(&html_str);
                         if !doc.title.is_empty() {
                             crate::println!("  Title: {}", doc.title);
@@ -370,9 +370,9 @@ match crate::sandbox::navigate(id, url) {
                         render_document_text(&doc, 0);
 
                         // Execute inline scripts through JS sandbox
-                        let manager = crate::sandbox::SANDBOX_MANAGER.lock();
-                        let policy = manager.get(id).map(|s| s.policy.js_allowed()).unwrap_or(false);
-                        drop(manager);
+                        let mgr = crate::sandbox::SANDBOX_MANAGER.lock();
+                        let policy = mgr.get(id).map(|s| s.policy.js_allowed()).unwrap_or(false);
+                        drop(mgr);
                         if policy {
                             let mut jss = crate::sandbox::js_sandbox::JsSandbox::new(
                                 id, crate::sandbox::js_sandbox::JsSandboxConfig::default()
@@ -382,7 +382,7 @@ match crate::sandbox::navigate(id, url) {
                                 crate::println_color!(COLOR_YELLOW, "\n  [JS] {} script(s) processed", results.len());
                                 for (i, r) in results.iter().enumerate() {
                                     if r.completed {
-                                        crate::println_color!(COLOR_GREEN, "    Script {}: OK ({}ms)", i+1, r.elapsed_mouse);
+                                        crate::println_color!(COLOR_GREEN, "    Script {}: OK ({}ms)", i+1, r.elapsed_ms);
                                     } else {
                                         crate::println_color!(COLOR_RED, "    Script {}: {}", i+1,
                                             r.error.as_deref().unwrap_or("failed"));
@@ -397,7 +397,7 @@ match crate::sandbox::navigate(id, url) {
                         }
                     } else {
                         // Non-HTML: show raw body (truncated)
-                        let text = response.body_string();
+                        let text = resp.body_string();
                         let preview: String = text.chars().take(2000).collect();
                         crate::println!("{}", preview);
                         if text.len() > 2000 {
@@ -471,8 +471,8 @@ match crate::sandbox::destroy(id) {
             }
             let id_number: u64 = args[1].parse().unwrap_or(0);
             let domain = args[2];
-            let mut manager = crate::sandbox::SANDBOX_MANAGER.lock();
-            if let Some(sb) = manager.get_mut(crate::sandbox::SandboxId(id_number)) {
+            let mut mgr = crate::sandbox::SANDBOX_MANAGER.lock();
+            if let Some(sb) = mgr.get_mut(crate::sandbox::SandboxId(id_number)) {
                 sb.policy.allow_domain(domain);
                 crate::println_color!(COLOR_GREEN, "Domain '{}' allowed in sandbox #{}", domain, id_number);
             } else {
@@ -488,8 +488,8 @@ match crate::sandbox::destroy(id) {
             }
             let id_number: u64 = args[1].parse().unwrap_or(0);
             let domain = args[2];
-            let mut manager = crate::sandbox::SANDBOX_MANAGER.lock();
-            if let Some(sb) = manager.get_mut(crate::sandbox::SandboxId(id_number)) {
+            let mut mgr = crate::sandbox::SANDBOX_MANAGER.lock();
+            if let Some(sb) = mgr.get_mut(crate::sandbox::SandboxId(id_number)) {
                 sb.policy.deny_domain(domain);
                 crate::println_color!(COLOR_GREEN, "Domain '{}' blocked in sandbox #{}", domain, id_number);
             } else {
@@ -503,8 +503,8 @@ match crate::sandbox::destroy(id) {
                 return;
             }
             let id_number: u64 = args[1].parse().unwrap_or(0);
-            let manager = crate::sandbox::SANDBOX_MANAGER.lock();
-            if let Some(sb) = manager.get(crate::sandbox::SandboxId(id_number)) {
+            let mgr = crate::sandbox::SANDBOX_MANAGER.lock();
+            if let Some(sb) = mgr.get(crate::sandbox::SandboxId(id_number)) {
                 crate::println!("{}", sb.policy.summary());
             } else {
                 crate::println_color!(COLOR_RED, "Sandbox #{} not found", id_number);
@@ -519,8 +519,8 @@ match crate::sandbox::destroy(id) {
             }
             let id_number: u64 = args[1].parse().unwrap_or(0);
             let filesystem_command = args[2];
-            let mut manager = crate::sandbox::SANDBOX_MANAGER.lock();
-            if let Some(sb) = manager.get_mut(crate::sandbox::SandboxId(id_number)) {
+            let mut mgr = crate::sandbox::SANDBOX_MANAGER.lock();
+            if let Some(sb) = mgr.get_mut(crate::sandbox::SandboxId(id_number)) {
                                 // Pattern matching — Rust's exhaustive branching construct.
 match filesystem_command {
                     "tree" => {
@@ -588,11 +588,11 @@ match sb.filesystem.delete(path) {
             }
             let id_number: u64 = args[1].parse().unwrap_or(0);
             let code = args[2..].join(" ");
-            let manager = crate::sandbox::SANDBOX_MANAGER.lock();
-            let exists = manager.get(crate::sandbox::SandboxId(id_number)).is_some();
-            let js_ok = manager.get(crate::sandbox::SandboxId(id_number))
+            let mgr = crate::sandbox::SANDBOX_MANAGER.lock();
+            let exists = mgr.get(crate::sandbox::SandboxId(id_number)).is_some();
+            let js_ok = mgr.get(crate::sandbox::SandboxId(id_number))
                 .map(|s| s.policy.js_allowed()).unwrap_or(false);
-            drop(manager);
+            drop(mgr);
 
             if !exists {
                 crate::println_color!(COLOR_RED, "Sandbox #{} not found", id_number);
@@ -616,35 +616,35 @@ match sb.filesystem.delete(path) {
             for line in &result.output {
                 crate::println!("  > {}", line);
             }
-            crate::println_color!(COLOR_WHITE, "  ({}ms)", result.elapsed_mouse);
+            crate::println_color!(COLOR_WHITE, "  ({}ms)", result.elapsed_ms);
         }
 
         "audit" | "log" => {
             if args.len() < 2 {
                 // Show global audit log
-                let manager = crate::sandbox::SANDBOX_MANAGER.lock();
-                let log = manager.audit_log();
+                let mgr = crate::sandbox::SANDBOX_MANAGER.lock();
+                let log = mgr.audit_log();
                 if log.is_empty() {
                     crate::println!("No audit entries.");
                 } else {
                     crate::println_color!(COLOR_CYAN, "Audit log ({} entries):", log.len());
                     for entry in log.iter().rev().take(20) {
                         crate::println!("  [{}ms] #{} {:?}: {}",
-                            entry.timestamp_mouse, entry.sandbox_id.0,
+                            entry.timestamp_ms, entry.sandbox_id.0,
                             entry.action, entry.detail);
                     }
                 }
             } else {
                 let id_number: u64 = args[1].parse().unwrap_or(0);
-                let manager = crate::sandbox::SANDBOX_MANAGER.lock();
-                let entries = manager.audit_for(crate::sandbox::SandboxId(id_number));
+                let mgr = crate::sandbox::SANDBOX_MANAGER.lock();
+                let entries = mgr.audit_for(crate::sandbox::SandboxId(id_number));
                 if entries.is_empty() {
                     crate::println!("No audit entries for sandbox #{}", id_number);
                 } else {
                     crate::println_color!(COLOR_CYAN, "Audit for sandbox #{} ({} entries):", id_number, entries.len());
                     for entry in entries.iter().rev().take(20) {
                         crate::println!("  [{}ms] {:?}: {}",
-                            entry.timestamp_mouse, entry.action, entry.detail);
+                            entry.timestamp_ms, entry.action, entry.detail);
                     }
                 }
             }
@@ -743,7 +743,7 @@ match node {
                     crate::println!("----------------------------------------");
                 }
                 "a" => {
-                    if let Some(href) = el.attribute("href") {
+                    if let Some(href) = el.attr("href") {
                         let text = get_element_text(el);
                         if !text.is_empty() {
                             crate::println_color!(COLOR_BLUE, "[{}] ({})", text, href);
@@ -760,7 +760,7 @@ match node {
                     return;
                 }
                 "img" => {
-                    if let Some(alt) = el.attribute("alt") {
+                    if let Some(alt) = el.attr("alt") {
                         crate::println!("[Image: {}]", alt);
                     } else {
                         crate::println!("[Image]");
@@ -823,10 +823,10 @@ pub(super) fn read_file_content(path: &str) -> Option<String> {
     // Then try VFS
     match crate::vfs::open(path, crate::vfs::OpenFlags(0)) {
         Ok(fd) => {
-            let mut buffer = [0u8; 4096];
-            let n = crate::vfs::read(fd, &mut buffer).unwrap_or(0);
+            let mut buf = [0u8; 4096];
+            let n = crate::vfs::read(fd, &mut buf).unwrap_or(0);
             crate::vfs::close(fd).ok();
-            Some(String::from(core::str::from_utf8(&buffer[..n]).unwrap_or("")))
+            Some(String::from(core::str::from_utf8(&buf[..n]).unwrap_or("")))
         }
         Err(_) => None,
     }
@@ -844,19 +844,19 @@ pub(super) fn read_file_bytes(path: &str) -> Option<Vec<u8>> {
     // Then try VFS
     match crate::vfs::open(path, crate::vfs::OpenFlags(0)) {
         Ok(fd) => {
-            let mut buffer = Vec::new();
+            let mut buf = Vec::new();
             let mut chunk = [0u8; 4096];
                         // Infinite loop — runs until an explicit `break`.
 loop {
                                 // Pattern matching — Rust's exhaustive branching construct.
 match crate::vfs::read(fd, &mut chunk) {
                     Ok(0) => break,
-                    Ok(n) => buffer.extend_from_slice(&chunk[..n]),
+                    Ok(n) => buf.extend_from_slice(&chunk[..n]),
                     Err(_) => break,
                 }
             }
             crate::vfs::close(fd).ok();
-            Some(buffer)
+            Some(buf)
         }
         Err(_) => None,
     }

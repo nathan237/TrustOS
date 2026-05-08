@@ -180,7 +180,7 @@ pub fn exists(path: &str) -> bool {
 pub fn is_directory(path: &str) -> bool {
     let trustos_path = format!("/linux{}", path);
     crate::ramfs::with_filesystem(|fs| {
-        if let Ok(entry) = fs.status(&trustos_path) {
+        if let Ok(entry) = fs.stat(&trustos_path) {
             entry.file_type == crate::ramfs::FileType::Directory
         } else {
             false
@@ -194,7 +194,7 @@ pub fn read_file(path: &str) -> Result<Vec<u8>, &'static str> {
     crate::ramfs::with_filesystem(|fs| {
         fs.read_file(&trustos_path)
             .map(|data| data.to_vec())
-            .map_error(|_| "file not found")
+            .map_err(|_| "file not found")
     })
 }
 
@@ -208,19 +208,19 @@ pub fn write_file(path: &str, content: &[u8]) -> Result<(), &'static str> {
         
         // Create file if it doesn't exist
         if !fs.exists(&trustos_path) {
-            fs.touch(&trustos_path).map_error(|_| "cannot create file")?;
+            fs.touch(&trustos_path).map_err(|_| "cannot create file")?;
         }
         
-        fs.write_file(&trustos_path, content).map_error(|_| "write failed")
+        fs.write_file(&trustos_path, content).map_err(|_| "write failed")
     })
 }
 
 fn parent_path(path: &str) -> String {
-    if let Some(position) = path.rfind('/') {
-        if position == 0 {
+    if let Some(pos) = path.rfind('/') {
+        if pos == 0 {
             String::from("/")
         } else {
-            String::from(&path[..position])
+            String::from(&path[..pos])
         }
     } else {
         String::from("/")
@@ -244,8 +244,8 @@ fn create_parent_dirs(fs: &mut crate::ramfs::RamFs, path: &str) {
 pub fn list_directory(path: &str) -> Result<Vec<(String, bool, usize)>, &'static str> {
     let trustos_path = format!("/linux{}", path);
     crate::ramfs::with_filesystem(|fs| {
-        let items = fs.ls(Some(&trustos_path)).map_error(|_| "cannot list directory")?;
-        Ok(items.into_iterator().map(|(name, ftype, size)| {
+        let items = fs.ls(Some(&trustos_path)).map_err(|_| "cannot list directory")?;
+        Ok(items.into_iter().map(|(name, ftype, size)| {
             (name, ftype == crate::ramfs::FileType::Directory, size)
         }).collect())
     })

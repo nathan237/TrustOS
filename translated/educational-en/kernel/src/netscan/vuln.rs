@@ -15,7 +15,7 @@ use alloc::format;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 // Enumeration — a type that can be one of several variants.
 pub enum Severity {
-    Information,
+    Info,
     Low,
     Medium,
     High,
@@ -28,7 +28,7 @@ impl Severity {
 pub fn as_str(&self) -> &'static str {
                 // Pattern matching — Rust's exhaustive branching construct.
 match self {
-            Severity::Information => "INFO",
+            Severity::Info => "INFO",
             Severity::Low => "LOW",
             Severity::Medium => "MEDIUM",
             Severity::High => "HIGH",
@@ -63,7 +63,7 @@ match port {
             53 => check_dns(target, &mut findings),
             80 | 8080 | 8000 | 8008 => check_http(target, port, &mut findings),
             110 | 995 => findings.push(Finding {
-                port, service: "pop3", severity: Severity::Information,
+                port, service: "pop3", severity: Severity::Info,
                 title: String::from("POP3 service detected"),
                 description: String::from("POP3 mail service is listening"),
                 recommendation: String::from("Ensure POP3S (SSL) is used"),
@@ -82,7 +82,7 @@ match port {
                 findings.push(Finding {
                     port,
                     service: super::service_name(port),
-                    severity: Severity::Information,
+                    severity: Severity::Info,
                     title: format!("Open port {}", port),
                     description: format!("Service {} is listening on port {}", super::service_name(port), port),
                     recommendation: String::from("Verify this service is intentionally exposed"),
@@ -130,7 +130,7 @@ fn check_ssh(target: [u8; 4], findings: &mut Vec<Finding>) {
         let severity = if banner.contains("SSH-1") {
             Severity::Critical
         } else {
-            Severity::Information
+            Severity::Info
         };
 
         let title = if banner.contains("SSH-1") {
@@ -189,7 +189,7 @@ fn check_http(target: [u8; 4], port: u16, findings: &mut Vec<Finding>) {
             || banner.to_ascii_lowercase().contains("apache/2.0") {
             Severity::High
         } else {
-            Severity::Information
+            Severity::Info
         };
 
         findings.push(Finding {
@@ -213,7 +213,7 @@ fn check_http(target: [u8; 4], port: u16, findings: &mut Vec<Finding>) {
 
 fn check_https(target: [u8; 4], port: u16, findings: &mut Vec<Finding>) {
     findings.push(Finding {
-        port, service: "https", severity: Severity::Information,
+        port, service: "https", severity: Severity::Info,
         title: String::from("HTTPS service detected"),
         description: String::from("TLS-encrypted web service"),
         recommendation: String::from("Verify TLS 1.2+ is enforced. Check certificate validity."),
@@ -327,11 +327,11 @@ pub fn format_report(target: [u8; 4], findings: &[Finding]) -> String {
     let high = findings.iter().filter(|f| f.severity == Severity::High).count();
     let medium = findings.iter().filter(|f| f.severity == Severity::Medium).count();
     let low = findings.iter().filter(|f| f.severity == Severity::Low).count();
-    let information = findings.iter().filter(|f| f.severity == Severity::Information).count();
+    let info = findings.iter().filter(|f| f.severity == Severity::Info).count();
 
     report.push_str(&format!("Summary: {} findings\n", findings.len()));
     report.push_str(&format!("  CRITICAL: {}  HIGH: {}  MEDIUM: {}  LOW: {}  INFO: {}\n\n",
-        critical, high, medium, low, information));
+        critical, high, medium, low, info));
 
     // Sort by severity (critical first)
     let mut sorted: Vec<&Finding> = findings.iter().collect();
@@ -341,7 +341,7 @@ match f.severity {
         Severity::High => 1,
         Severity::Medium => 2,
         Severity::Low => 3,
-        Severity::Information => 4,
+        Severity::Info => 4,
     });
 
     for finding in sorted {

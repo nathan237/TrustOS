@@ -14,334 +14,334 @@ use alloc::format;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Severity {
-    V,
-    Eg,
-    Bc,
-    Ao,
-    Aj,
+    Info,
+    Low,
+    Medium,
+    High,
+    Critical,
 }
 
 impl Severity {
     pub fn as_str(&self) -> &'static str {
         match self {
-            Severity::V => "INFO",
-            Severity::Eg => "LOW",
-            Severity::Bc => "MEDIUM",
-            Severity::Ao => "HIGH",
-            Severity::Aj => "CRITICAL",
+            Severity::Info => "INFO",
+            Severity::Low => "LOW",
+            Severity::Medium => "MEDIUM",
+            Severity::High => "HIGH",
+            Severity::Critical => "CRITICAL",
         }
     }
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Au {
+pub struct Ad {
     pub port: u16,
-    pub xi: &'static str,
-    pub qj: Severity,
-    pub dq: String,
-    pub dc: String,
-    pub aws: String,
+    pub service: &'static str,
+    pub severity: Severity,
+    pub title: String,
+    pub description: String,
+    pub recommendation: String,
 }
 
 
-pub fn arx(cd: [u8; 4], dkf: &[u16]) -> Vec<Au> {
-    let mut nq = Vec::new();
+pub fn scan(target: [u8; 4], bil: &[u16]) -> Vec<Ad> {
+    let mut fw = Vec::new();
 
-    for &port in dkf {
+    for &port in bil {
         match port {
-            21 => qyu(cd, &mut nq),
-            22 => qzv(cd, &mut nq),
-            23 => qzx(cd, &mut nq),
-            25 | 587 => qzu(cd, port, &mut nq),
-            53 => qyr(cd, &mut nq),
-            80 | 8080 | 8000 | 8008 => qyy(cd, port, &mut nq),
-            110 | 995 => nq.push(Au {
-                port, xi: "pop3", qj: Severity::V,
-                dq: String::from("POP3 service detected"),
-                dc: String::from("POP3 mail service is listening"),
-                aws: String::from("Ensure POP3S (SSL) is used"),
+            21 => kiy(target, &mut fw),
+            22 => kjv(target, &mut fw),
+            23 => kjw(target, &mut fw),
+            25 | 587 => kju(target, port, &mut fw),
+            53 => kiw(target, &mut fw),
+            80 | 8080 | 8000 | 8008 => kjb(target, port, &mut fw),
+            110 | 995 => fw.push(Ad {
+                port, service: "pop3", severity: Severity::Info,
+                title: String::from("POP3 service detected"),
+                description: String::from("POP3 mail service is listening"),
+                recommendation: String::from("Ensure POP3S (SSL) is used"),
             }),
-            139 | 445 => qzt(cd, port, &mut nq),
-            443 | 8443 => qyz(cd, port, &mut nq),
-            1433 => qzf(cd, &mut nq),
-            3306 => qzg(cd, &mut nq),
-            3389 => qzn(cd, &mut nq),
-            5432 => qzm(cd, &mut nq),
-            5900 => qzz(cd, &mut nq),
-            6379 => qzo(cd, &mut nq),
-            27017 => qze(cd, &mut nq),
+            139 | 445 => kjt(target, port, &mut fw),
+            443 | 8443 => kjc(target, port, &mut fw),
+            1433 => kjh(target, &mut fw),
+            3306 => kji(target, &mut fw),
+            3389 => kjn(target, &mut fw),
+            5432 => kjm(target, &mut fw),
+            5900 => kjx(target, &mut fw),
+            6379 => kjo(target, &mut fw),
+            27017 => kjg(target, &mut fw),
             _ => {
                 
-                nq.push(Au {
+                fw.push(Ad {
                     port,
-                    xi: super::fui(port),
-                    qj: Severity::V,
-                    dq: format!("Open port {}", port),
-                    dc: format!("Service {} is listening on port {}", super::fui(port), port),
-                    aws: String::from("Verify this service is intentionally exposed"),
+                    service: super::cqk(port),
+                    severity: Severity::Info,
+                    title: format!("Open port {}", port),
+                    description: format!("Service {} is listening on port {}", super::cqk(port), port),
+                    recommendation: String::from("Verify this service is intentionally exposed"),
                 });
             }
         }
     }
 
-    nq
+    fw
 }
 
-fn gvc(cd: [u8; 4], port: u16) -> Option<String> {
-    super::banner::ern(cd, port, 2000).map(|o| o.banner)
+fn dfv(target: [u8; 4], port: u16) -> Option<String> {
+    super::banner::grab_banner(target, port, 2000).map(|b| b.banner)
 }
 
-fn qyu(cd: [u8; 4], nq: &mut Vec<Au>) {
-    if let Some(banner) = gvc(cd, 21) {
-        nq.push(Au {
-            port: 21, xi: "ftp", qj: Severity::Bc,
-            dq: String::from("FTP service exposed"),
-            dc: format!("FTP banner: {}", banner),
-            aws: String::from("Use SFTP instead of FTP. Disable anonymous login."),
+fn kiy(target: [u8; 4], fw: &mut Vec<Ad>) {
+    if let Some(banner) = dfv(target, 21) {
+        fw.push(Ad {
+            port: 21, service: "ftp", severity: Severity::Medium,
+            title: String::from("FTP service exposed"),
+            description: format!("FTP banner: {}", banner),
+            recommendation: String::from("Use SFTP instead of FTP. Disable anonymous login."),
         });
 
-        if banner.avd().contains("anonymous") {
-            nq.push(Au {
-                port: 21, xi: "ftp", qj: Severity::Ao,
-                dq: String::from("FTP anonymous access allowed"),
-                dc: String::from("Server may allow anonymous FTP login"),
-                aws: String::from("Disable anonymous FTP access"),
+        if banner.to_ascii_lowercase().contains("anonymous") {
+            fw.push(Ad {
+                port: 21, service: "ftp", severity: Severity::High,
+                title: String::from("FTP anonymous access allowed"),
+                description: String::from("Server may allow anonymous FTP login"),
+                recommendation: String::from("Disable anonymous FTP access"),
             });
         }
     } else {
-        nq.push(Au {
-            port: 21, xi: "ftp", qj: Severity::Bc,
-            dq: String::from("FTP service detected"),
-            dc: String::from("FTP service is listening (no banner)"),
-            aws: String::from("Consider using SFTP instead"),
+        fw.push(Ad {
+            port: 21, service: "ftp", severity: Severity::Medium,
+            title: String::from("FTP service detected"),
+            description: String::from("FTP service is listening (no banner)"),
+            recommendation: String::from("Consider using SFTP instead"),
         });
     }
 }
 
-fn qzv(cd: [u8; 4], nq: &mut Vec<Au>) {
-    if let Some(banner) = gvc(cd, 22) {
-        let qj = if banner.contains("SSH-1") {
-            Severity::Aj
+fn kjv(target: [u8; 4], fw: &mut Vec<Ad>) {
+    if let Some(banner) = dfv(target, 22) {
+        let severity = if banner.contains("SSH-1") {
+            Severity::Critical
         } else {
-            Severity::V
+            Severity::Info
         };
 
-        let dq = if banner.contains("SSH-1") {
+        let title = if banner.contains("SSH-1") {
             String::from("SSHv1 protocol detected (INSECURE)")
         } else {
             String::from("SSH service detected")
         };
 
-        let hxf = if banner.contains("SSH-1") {
+        let dxn = if banner.contains("SSH-1") {
             String::from("Upgrade to SSHv2 immediately — SSHv1 has known vulnerabilities")
         } else {
             String::from("Ensure key-based auth is used, disable password auth")
         };
 
-        nq.push(Au {
-            port: 22, xi: "ssh", qj,
-            dq,
-            dc: format!("SSH banner: {}", banner),
-            aws: hxf,
+        fw.push(Ad {
+            port: 22, service: "ssh", severity,
+            title,
+            description: format!("SSH banner: {}", banner),
+            recommendation: dxn,
         });
     }
 }
 
-fn qzx(cd: [u8; 4], nq: &mut Vec<Au>) {
-    nq.push(Au {
-        port: 23, xi: "telnet", qj: Severity::Aj,
-        dq: String::from("Telnet service exposed (INSECURE)"),
-        dc: String::from("Telnet transmits credentials in cleartext"),
-        aws: String::from("Replace with SSH. Disable Telnet immediately."),
+fn kjw(target: [u8; 4], fw: &mut Vec<Ad>) {
+    fw.push(Ad {
+        port: 23, service: "telnet", severity: Severity::Critical,
+        title: String::from("Telnet service exposed (INSECURE)"),
+        description: String::from("Telnet transmits credentials in cleartext"),
+        recommendation: String::from("Replace with SSH. Disable Telnet immediately."),
     });
 }
 
-fn qzu(cd: [u8; 4], port: u16, nq: &mut Vec<Au>) {
-    if let Some(banner) = gvc(cd, port) {
-        nq.push(Au {
-            port, xi: "smtp", qj: Severity::Bc,
-            dq: String::from("SMTP service exposed"),
-            dc: format!("SMTP banner: {}", banner),
-            aws: String::from("Ensure STARTTLS is required. Check for open relay."),
+fn kju(target: [u8; 4], port: u16, fw: &mut Vec<Ad>) {
+    if let Some(banner) = dfv(target, port) {
+        fw.push(Ad {
+            port, service: "smtp", severity: Severity::Medium,
+            title: String::from("SMTP service exposed"),
+            description: format!("SMTP banner: {}", banner),
+            recommendation: String::from("Ensure STARTTLS is required. Check for open relay."),
         });
     }
 }
 
-fn qyr(cd: [u8; 4], nq: &mut Vec<Au>) {
-    nq.push(Au {
-        port: 53, xi: "dns", qj: Severity::Eg,
-        dq: String::from("DNS service exposed"),
-        dc: String::from("DNS server is publicly accessible"),
-        aws: String::from("Restrict DNS access. Disable zone transfers to unauthorized hosts."),
+fn kiw(target: [u8; 4], fw: &mut Vec<Ad>) {
+    fw.push(Ad {
+        port: 53, service: "dns", severity: Severity::Low,
+        title: String::from("DNS service exposed"),
+        description: String::from("DNS server is publicly accessible"),
+        recommendation: String::from("Restrict DNS access. Disable zone transfers to unauthorized hosts."),
     });
 }
 
-fn qyy(cd: [u8; 4], port: u16, nq: &mut Vec<Au>) {
-    if let Some(banner) = gvc(cd, port) {
-        let qj = if banner.avd().contains("apache/2.2")
-            || banner.avd().contains("apache/2.0") {
-            Severity::Ao
+fn kjb(target: [u8; 4], port: u16, fw: &mut Vec<Ad>) {
+    if let Some(banner) = dfv(target, port) {
+        let severity = if banner.to_ascii_lowercase().contains("apache/2.2")
+            || banner.to_ascii_lowercase().contains("apache/2.0") {
+            Severity::High
         } else {
-            Severity::V
+            Severity::Info
         };
 
-        nq.push(Au {
-            port, xi: "http", qj,
-            dq: String::from("HTTP service detected (unencrypted)"),
-            dc: format!("Server: {}", banner),
-            aws: String::from("Use HTTPS. Check for sensitive info exposure."),
+        fw.push(Ad {
+            port, service: "http", severity,
+            title: String::from("HTTP service detected (unencrypted)"),
+            description: format!("Server: {}", banner),
+            recommendation: String::from("Use HTTPS. Check for sensitive info exposure."),
         });
 
         
-        if banner.avd().contains("server:") {
-            nq.push(Au {
-                port, xi: "http", qj: Severity::Eg,
-                dq: String::from("Server version disclosure"),
-                dc: format!("Server header reveals version: {}", banner),
-                aws: String::from("Configure server to suppress version headers"),
+        if banner.to_ascii_lowercase().contains("server:") {
+            fw.push(Ad {
+                port, service: "http", severity: Severity::Low,
+                title: String::from("Server version disclosure"),
+                description: format!("Server header reveals version: {}", banner),
+                recommendation: String::from("Configure server to suppress version headers"),
             });
         }
     }
 }
 
-fn qyz(cd: [u8; 4], port: u16, nq: &mut Vec<Au>) {
-    nq.push(Au {
-        port, xi: "https", qj: Severity::V,
-        dq: String::from("HTTPS service detected"),
-        dc: String::from("TLS-encrypted web service"),
-        aws: String::from("Verify TLS 1.2+ is enforced. Check certificate validity."),
+fn kjc(target: [u8; 4], port: u16, fw: &mut Vec<Ad>) {
+    fw.push(Ad {
+        port, service: "https", severity: Severity::Info,
+        title: String::from("HTTPS service detected"),
+        description: String::from("TLS-encrypted web service"),
+        recommendation: String::from("Verify TLS 1.2+ is enforced. Check certificate validity."),
     });
 }
 
-fn qzt(cd: [u8; 4], port: u16, nq: &mut Vec<Au>) {
-    nq.push(Au {
-        port, xi: "smb", qj: Severity::Ao,
-        dq: String::from("SMB service exposed"),
-        dc: format!("SMB (port {}) is accessible — potential target for EternalBlue", port),
-        aws: String::from("Restrict SMB access to trusted networks. Ensure SMBv1 is disabled. Apply MS17-010 patch."),
+fn kjt(target: [u8; 4], port: u16, fw: &mut Vec<Ad>) {
+    fw.push(Ad {
+        port, service: "smb", severity: Severity::High,
+        title: String::from("SMB service exposed"),
+        description: format!("SMB (port {}) is accessible — potential target for EternalBlue", port),
+        recommendation: String::from("Restrict SMB access to trusted networks. Ensure SMBv1 is disabled. Apply MS17-010 patch."),
     });
 }
 
-fn qzf(cd: [u8; 4], nq: &mut Vec<Au>) {
-    nq.push(Au {
-        port: 1433, xi: "ms-sql", qj: Severity::Ao,
-        dq: String::from("MS-SQL database exposed"),
-        dc: String::from("Microsoft SQL Server is directly accessible"),
-        aws: String::from("Restrict access to application servers only. Use Windows Auth."),
+fn kjh(target: [u8; 4], fw: &mut Vec<Ad>) {
+    fw.push(Ad {
+        port: 1433, service: "ms-sql", severity: Severity::High,
+        title: String::from("MS-SQL database exposed"),
+        description: String::from("Microsoft SQL Server is directly accessible"),
+        recommendation: String::from("Restrict access to application servers only. Use Windows Auth."),
     });
 }
 
-fn qzg(cd: [u8; 4], nq: &mut Vec<Au>) {
-    if let Some(banner) = gvc(cd, 3306) {
-        nq.push(Au {
-            port: 3306, xi: "mysql", qj: Severity::Ao,
-            dq: String::from("MySQL database exposed"),
-            dc: format!("MySQL version: {}", banner),
-            aws: String::from("Restrict MySQL to localhost/internal network. Disable remote root login."),
+fn kji(target: [u8; 4], fw: &mut Vec<Ad>) {
+    if let Some(banner) = dfv(target, 3306) {
+        fw.push(Ad {
+            port: 3306, service: "mysql", severity: Severity::High,
+            title: String::from("MySQL database exposed"),
+            description: format!("MySQL version: {}", banner),
+            recommendation: String::from("Restrict MySQL to localhost/internal network. Disable remote root login."),
         });
     } else {
-        nq.push(Au {
-            port: 3306, xi: "mysql", qj: Severity::Ao,
-            dq: String::from("MySQL database exposed"),
-            dc: String::from("MySQL service is directly accessible"),
-            aws: String::from("Restrict MySQL to localhost or trusted hosts"),
+        fw.push(Ad {
+            port: 3306, service: "mysql", severity: Severity::High,
+            title: String::from("MySQL database exposed"),
+            description: String::from("MySQL service is directly accessible"),
+            recommendation: String::from("Restrict MySQL to localhost or trusted hosts"),
         });
     }
 }
 
-fn qzn(cd: [u8; 4], nq: &mut Vec<Au>) {
-    nq.push(Au {
-        port: 3389, xi: "rdp", qj: Severity::Ao,
-        dq: String::from("RDP service exposed"),
-        dc: String::from("Remote Desktop Protocol is accessible — common attack vector"),
-        aws: String::from("Use VPN for RDP access. Enable NLA. Apply BlueKeep patches."),
+fn kjn(target: [u8; 4], fw: &mut Vec<Ad>) {
+    fw.push(Ad {
+        port: 3389, service: "rdp", severity: Severity::High,
+        title: String::from("RDP service exposed"),
+        description: String::from("Remote Desktop Protocol is accessible — common attack vector"),
+        recommendation: String::from("Use VPN for RDP access. Enable NLA. Apply BlueKeep patches."),
     });
 }
 
-fn qzm(cd: [u8; 4], nq: &mut Vec<Au>) {
-    nq.push(Au {
-        port: 5432, xi: "postgresql", qj: Severity::Ao,
-        dq: String::from("PostgreSQL database exposed"),
-        dc: String::from("PostgreSQL is directly accessible"),
-        aws: String::from("Restrict to trusted hosts via pg_hba.conf. Use SSL."),
+fn kjm(target: [u8; 4], fw: &mut Vec<Ad>) {
+    fw.push(Ad {
+        port: 5432, service: "postgresql", severity: Severity::High,
+        title: String::from("PostgreSQL database exposed"),
+        description: String::from("PostgreSQL is directly accessible"),
+        recommendation: String::from("Restrict to trusted hosts via pg_hba.conf. Use SSL."),
     });
 }
 
-fn qzz(cd: [u8; 4], nq: &mut Vec<Au>) {
-    nq.push(Au {
-        port: 5900, xi: "vnc", qj: Severity::Aj,
-        dq: String::from("VNC service exposed"),
-        dc: String::from("VNC remote desktop is accessible — often weakly protected"),
-        aws: String::from("Use SSH tunnel for VNC. Enable strong authentication."),
+fn kjx(target: [u8; 4], fw: &mut Vec<Ad>) {
+    fw.push(Ad {
+        port: 5900, service: "vnc", severity: Severity::Critical,
+        title: String::from("VNC service exposed"),
+        description: String::from("VNC remote desktop is accessible — often weakly protected"),
+        recommendation: String::from("Use SSH tunnel for VNC. Enable strong authentication."),
     });
 }
 
-fn qzo(cd: [u8; 4], nq: &mut Vec<Au>) {
-    if let Some(banner) = gvc(cd, 6379) {
-        let qj = if !banner.avd().contains("noauth") {
-            Severity::Aj
+fn kjo(target: [u8; 4], fw: &mut Vec<Ad>) {
+    if let Some(banner) = dfv(target, 6379) {
+        let severity = if !banner.to_ascii_lowercase().contains("noauth") {
+            Severity::Critical
         } else {
-            Severity::Ao
+            Severity::High
         };
 
-        nq.push(Au {
-            port: 6379, xi: "redis", qj,
-            dq: String::from("Redis exposed (likely unauthenticated)"),
-            dc: format!("Redis response: {}", banner),
-            aws: String::from("Enable AUTH password. Bind to localhost. Use firewall rules."),
+        fw.push(Ad {
+            port: 6379, service: "redis", severity,
+            title: String::from("Redis exposed (likely unauthenticated)"),
+            description: format!("Redis response: {}", banner),
+            recommendation: String::from("Enable AUTH password. Bind to localhost. Use firewall rules."),
         });
     } else {
-        nq.push(Au {
-            port: 6379, xi: "redis", qj: Severity::Aj,
-            dq: String::from("Redis service exposed"),
-            dc: String::from("Redis is directly accessible — often without authentication"),
-            aws: String::from("Enable authentication. Restrict network access."),
+        fw.push(Ad {
+            port: 6379, service: "redis", severity: Severity::Critical,
+            title: String::from("Redis service exposed"),
+            description: String::from("Redis is directly accessible — often without authentication"),
+            recommendation: String::from("Enable authentication. Restrict network access."),
         });
     }
 }
 
-fn qze(cd: [u8; 4], nq: &mut Vec<Au>) {
-    nq.push(Au {
-        port: 27017, xi: "mongodb", qj: Severity::Aj,
-        dq: String::from("MongoDB exposed"),
-        dc: String::from("MongoDB is directly accessible — common ransomware target"),
-        aws: String::from("Enable authentication. Bind to localhost. Use firewall."),
+fn kjg(target: [u8; 4], fw: &mut Vec<Ad>) {
+    fw.push(Ad {
+        port: 27017, service: "mongodb", severity: Severity::Critical,
+        title: String::from("MongoDB exposed"),
+        description: String::from("MongoDB is directly accessible — common ransomware target"),
+        recommendation: String::from("Enable authentication. Bind to localhost. Use firewall."),
     });
 }
 
 
-pub fn fix(cd: [u8; 4], nq: &[Au]) -> String {
+pub fn format_report(target: [u8; 4], fw: &[Ad]) -> String {
     let mut report = String::new();
 
-    report.t(&format!("Security Scan Report for {}\n", super::aot(cd)));
-    report.t(&format!("{}\n\n", "=".afd(50)));
+    report.push_str(&format!("Security Scan Report for {}\n", super::uw(target)));
+    report.push_str(&format!("{}\n\n", "=".repeat(50)));
 
-    let cpp = nq.iter().hi(|bb| bb.qj == Severity::Aj).az();
-    let afq = nq.iter().hi(|bb| bb.qj == Severity::Ao).az();
-    let gmm = nq.iter().hi(|bb| bb.qj == Severity::Bc).az();
-    let ail = nq.iter().hi(|bb| bb.qj == Severity::Eg).az();
-    let co = nq.iter().hi(|bb| bb.qj == Severity::V).az();
+    let aqb = fw.iter().filter(|f| f.severity == Severity::Critical).count();
+    let high = fw.iter().filter(|f| f.severity == Severity::High).count();
+    let dbd = fw.iter().filter(|f| f.severity == Severity::Medium).count();
+    let low = fw.iter().filter(|f| f.severity == Severity::Low).count();
+    let info = fw.iter().filter(|f| f.severity == Severity::Info).count();
 
-    report.t(&format!("Summary: {} findings\n", nq.len()));
-    report.t(&format!("  CRITICAL: {}  HIGH: {}  MEDIUM: {}  LOW: {}  INFO: {}\n\n",
-        cpp, afq, gmm, ail, co));
+    report.push_str(&format!("Summary: {} findings\n", fw.len()));
+    report.push_str(&format!("  CRITICAL: {}  HIGH: {}  MEDIUM: {}  LOW: {}  INFO: {}\n\n",
+        aqb, high, dbd, low, info));
 
     
-    let mut bcs: Vec<&Au> = nq.iter().collect();
-    bcs.bxf(|bb| match bb.qj {
-        Severity::Aj => 0,
-        Severity::Ao => 1,
-        Severity::Bc => 2,
-        Severity::Eg => 3,
-        Severity::V => 4,
+    let mut acq: Vec<&Ad> = fw.iter().collect();
+    acq.sort_by_key(|f| match f.severity {
+        Severity::Critical => 0,
+        Severity::High => 1,
+        Severity::Medium => 2,
+        Severity::Low => 3,
+        Severity::Info => 4,
     });
 
-    for ghc in bcs {
-        report.t(&format!("[{}] Port {}/{} — {}\n",
-            ghc.qj.as_str(), ghc.port, ghc.xi, ghc.dq));
-        report.t(&format!("  {}\n", ghc.dc));
-        report.t(&format!("  Fix: {}\n\n", ghc.aws));
+    for finding in acq {
+        report.push_str(&format!("[{}] Port {}/{} — {}\n",
+            finding.severity.as_str(), finding.port, finding.service, finding.title));
+        report.push_str(&format!("  {}\n", finding.description));
+        report.push_str(&format!("  Fix: {}\n\n", finding.recommendation));
     }
 
     report

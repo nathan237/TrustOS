@@ -56,37 +56,37 @@ pub struct Mixer {
 // Bloc d'implémentation — définit les méthodes du type ci-dessus.
 impl Mixer {
     /// Create a new mixer with N channels
-    pub fn new(number_channels: usize) -> Self {
+    pub fn new(num_channels: usize) -> Self {
         Self {
-            channels: vec![MixerChannel::new(); number_channels],
+            channels: vec![MixerChannel::new(); num_channels],
             master_volume: 220,
         }
     }
 
     /// Set volume for a channel
-    pub fn set_volume(&mut self, character: usize, volume: u8) -> Result<(), &'static str> {
-        let channel = self.channels.get_mut(character).ok_or("Invalid channel")?;
+    pub fn set_volume(&mut self, ch: usize, volume: u8) -> Result<(), &'static str> {
+        let channel = self.channels.get_mut(ch).ok_or("Invalid channel")?;
         channel.volume = volume;
         Ok(())
     }
 
     /// Set pan for a channel
-    pub fn set_pan(&mut self, character: usize, pan: i8) -> Result<(), &'static str> {
-        let channel = self.channels.get_mut(character).ok_or("Invalid channel")?;
+    pub fn set_pan(&mut self, ch: usize, pan: i8) -> Result<(), &'static str> {
+        let channel = self.channels.get_mut(ch).ok_or("Invalid channel")?;
         channel.pan = pan.clamp(-100, 100);
         Ok(())
     }
 
     /// Toggle mute for a channel
-    pub fn toggle_mute(&mut self, character: usize) -> Result<bool, &'static str> {
-        let channel = self.channels.get_mut(character).ok_or("Invalid channel")?;
+    pub fn toggle_mute(&mut self, ch: usize) -> Result<bool, &'static str> {
+        let channel = self.channels.get_mut(ch).ok_or("Invalid channel")?;
         channel.muted = !channel.muted;
         Ok(channel.muted)
     }
 
     /// Toggle solo for a channel
-    pub fn toggle_solo(&mut self, character: usize) -> Result<bool, &'static str> {
-        let channel = self.channels.get_mut(character).ok_or("Invalid channel")?;
+    pub fn toggle_solo(&mut self, ch: usize) -> Result<bool, &'static str> {
+        let channel = self.channels.get_mut(ch).ok_or("Invalid channel")?;
         channel.solo = !channel.solo;
         Ok(channel.solo)
     }
@@ -97,8 +97,8 @@ impl Mixer {
     }
 
     /// Should a channel be audible? (considering mute/solo logic)
-    pub fn is_audible(&self, character: usize) -> bool {
-        if let Some(channel) = self.channels.get(character) {
+    pub fn is_audible(&self, ch: usize) -> bool {
+        if let Some(channel) = self.channels.get(ch) {
             if channel.muted { return false; }
             if self.has_solo() { return channel.solo; }
             true
@@ -109,8 +109,8 @@ impl Mixer {
 
     /// Apply volume and pan to a stereo sample pair
     /// Returns (left, right)
-    pub fn apply_channel(&self, character: usize, left: i32, right: i32) -> (i32, i32) {
-        if let Some(channel) = self.channels.get(character) {
+    pub fn apply_channel(&self, ch: usize, left: i32, right: i32) -> (i32, i32) {
+        if let Some(channel) = self.channels.get(ch) {
             let vol = channel.volume as i32;
             // Pan law: constant power approximation with integer math
             // pan = -100..+100
@@ -149,7 +149,7 @@ fn render_track(track: &Track, bpm: u32, start_tick: u32, total_samples: usize) 
     // Process notes: for each sample position, check which notes should be active
     // Convert all note events to sample-position events
     struct NoteEvent {
-        sample_position: usize,
+        sample_pos: usize,
         pitch: u8,
         velocity: u8,
         is_on: bool,
@@ -174,7 +174,7 @@ fn render_track(track: &Track, bpm: u32, start_tick: u32, total_samples: usize) 
 
         if note_start_sample < total_samples {
             events.push(NoteEvent {
-                sample_position: note_start_sample,
+                sample_pos: note_start_sample,
                 pitch: note.pitch,
                 velocity: note.velocity,
                 is_on: true,
@@ -183,7 +183,7 @@ fn render_track(track: &Track, bpm: u32, start_tick: u32, total_samples: usize) 
 
         if note_end_sample < total_samples {
             events.push(NoteEvent {
-                sample_position: note_end_sample,
+                sample_pos: note_end_sample,
                 pitch: note.pitch,
                 velocity: note.velocity,
                 is_on: false,
@@ -192,7 +192,7 @@ fn render_track(track: &Track, bpm: u32, start_tick: u32, total_samples: usize) 
     }
 
     // Sort events by sample position
-    events.sort_by_key(|e| e.sample_position);
+    events.sort_by_key(|e| e.sample_pos);
 
     // Render sample by sample, processing events as we go
     let mut event_index = 0;
@@ -200,12 +200,12 @@ fn render_track(track: &Track, bpm: u32, start_tick: u32, total_samples: usize) 
 
     for sample in 0..total_samples {
         // Process all events at this sample position
-        while event_index < events.len() && events[event_index].sample_position <= sample {
-            let event = &events[event_index];
-            if event.is_on {
-                engine.note_on(event.pitch, event.velocity);
+        while event_index < events.len() && events[event_index].sample_pos <= sample {
+            let ev = &events[event_index];
+            if ev.is_on {
+                engine.note_on(ev.pitch, ev.velocity);
             } else {
-                engine.note_off(event.pitch);
+                engine.note_off(ev.pitch);
             }
             event_index += 1;
         }
@@ -251,12 +251,12 @@ pub fn render_project(project: &Project, mixer: &Mixer, bpm: u32, start_tick: u3
         let mut left_mix: i32 = 0;
         let mut right_mix: i32 = 0;
 
-        for (character_index, track_buffer) in track_buffers.iter().enumerate() {
+        for (character_index, track_buf) in track_buffers.iter().enumerate() {
             if !mixer.is_audible(character_index) {
                 continue;
             }
 
-            let mono_sample = track_buffer[sample];
+            let mono_sample = track_buf[sample];
             let (l, r) = mixer.apply_channel(character_index, mono_sample, mono_sample);
             left_mix += l;
             right_mix += r;

@@ -52,7 +52,7 @@ impl Default for IoApicState {
     fn default() -> Self {
         // All entries masked by default (bit 16 = 1)
         let mut redir_table = [0u64; MAXIMUM_REDIR_ENTRIES];
-        for entry in redir_table.iterator_mut() {
+        for entry in redir_table.iter_mut() {
             *entry = 1 << 16; // Masked
         }
         
@@ -170,13 +170,13 @@ match index {
     
     /// Get the routing information for a given IRQ (GSI).
     /// Returns (vector, masked, delivery_mode, destination) if the entry exists.
-    pub fn get_interrupt_request_route(&self, gsi: u8) -> Option<Interrupt_requestRoute> {
-        let index = gsi as usize;
-        if index >= MAXIMUM_REDIR_ENTRIES {
+    pub fn get_irq_route(&self, gsi: u8) -> Option<Interrupt_requestRoute> {
+        let idx = gsi as usize;
+        if idx >= MAXIMUM_REDIR_ENTRIES {
             return None;
         }
         
-        let entry = self.redir_table[index];
+        let entry = self.redir_table[idx];
         let vector = (entry & 0xFF) as u8;
         let delivery_mode = ((entry >> 8) & 0x7) as u8;
         let dest_mode = ((entry >> 11) & 1) != 0; // true = logical
@@ -263,7 +263,7 @@ mod tests {
         assert_eq!(lo & 0xFF, 0x30); // vector
         assert_eq!((lo >> 16) & 1, 0); // not masked
         
-        let route = ioapic.get_interrupt_request_route(0).unwrap();
+        let route = ioapic.get_irq_route(0).unwrap();
         assert_eq!(route.vector, 0x30);
         assert!(!route.masked);
         assert_eq!(route.delivery_mode, 0); // Fixed

@@ -47,13 +47,13 @@ pub(super) fn command_benchmark(args: &[&str]) {
     // Test 2: Buffer copy with SSE2
     crate::println_color!(COLOR_GREEN, "? Test 2: SSE2 Buffer Copy");
     {
-        let source = vec![0xFF112233u32; pixels];
-        let mut destination = vec![0u32; pixels];
+        let src = vec![0xFF112233u32; pixels];
+        let mut dst = vec![0u32; pixels];
         let iterations = 100;
         
         let start = crate::cpu::tsc::read_tsc();
         for _ in 0..iterations {
-            crate::graphics::simd::copy_buffer_fast(&mut destination, &source);
+            crate::graphics::simd::copy_buffer_fast(&mut dst, &src);
         }
         let end = crate::cpu::tsc::read_tsc();
         
@@ -100,7 +100,7 @@ pub(super) fn command_benchmark(args: &[&str]) {
         
         let cycles_per_swap = (end - start) / iterations;
         // Estimate FPS: ~3GHz CPU, 60 FPS target = 50M cycles/frame
-        let estimated_fps = 3_000_000_000u64 / cycles_per_swap.maximum(1);
+        let estimated_fps = 3_000_000_000u64 / cycles_per_swap.max(1);
         crate::println!("  {} iterations: {} cycles/swap", iterations, cycles_per_swap);
         crate::println!("  Estimated max FPS: ~{} (at 3GHz)", estimated_fps);
         
@@ -124,7 +124,7 @@ pub(super) fn command_benchmark(args: &[&str]) {
         let end = crate::cpu::tsc::read_tsc();
         
         let cycles_per_render = (end - start) / iterations;
-        let estimated_fps = 3_000_000_000u64 / cycles_per_render.maximum(1);
+        let estimated_fps = 3_000_000_000u64 / cycles_per_render.max(1);
         crate::println!("  {} iterations: {} cycles/render", iterations, cycles_per_render);
         crate::println!("  Estimated terminal FPS: ~{}", estimated_fps);
     }
@@ -158,7 +158,14 @@ match subcommand {
             crate::println!();
             
             crate::println_color!(COLOR_GREEN, "Creating COSMIC renderer...");
-            let mut renderer = CosmicRenderer::new(width, height);
+            let mut renderer = // Correspondance de motifs — branchement exhaustif de Rust.
+match CosmicRenderer::new(width, height) {
+                Some(r) => r,
+                None => {
+                    crate::println_color!(COLOR_RED, "  ERROR: Failed to create COSMIC renderer (OOM?)");
+                    return;
+                }
+            };
             
             // Clear with COSMIC background
             renderer.clear(dark::BG_BASE);
@@ -341,21 +348,21 @@ fn check_desktop_resources() -> bool {
     }
 
     // 3. Framebuffer resolution check (need at least 800x600)
-    let (framebuffer_w, framebuffer_h) = crate::framebuffer::get_dimensions();
-    if framebuffer_w == 0 || framebuffer_h == 0 {
+    let (fb_w, fb_h) = crate::framebuffer::get_dimensions();
+    if fb_w == 0 || fb_h == 0 {
         crate::println_color!(COLOR_RED, "\u{26A0} No framebuffer detected! Desktop requires a display.");
         warnings += 1;
-    } else if framebuffer_w < 800 || framebuffer_h < 600 {
-        crate::println_color!(COLOR_YELLOW, "\u{26A0} Low resolution: {}x{} (recommended: 1024x768+)", framebuffer_w, framebuffer_h);
+    } else if fb_w < 800 || fb_h < 600 {
+        crate::println_color!(COLOR_YELLOW, "\u{26A0} Low resolution: {}x{} (recommended: 1024x768+)", fb_w, fb_h);
     }
 
     // 4. Backbuffer memory estimate (width * height * 4 bytes * 2 buffers)
-    if framebuffer_w > 0 && framebuffer_h > 0 {
-        let backbuf_bytes = (framebuffer_w as usize) * (framebuffer_h as usize) * 4 * 2;
+    if fb_w > 0 && fb_h > 0 {
+        let backbuf_bytes = (fb_w as usize) * (fb_h as usize) * 4 * 2;
         let backbuf_mb = backbuf_bytes / (1024 * 1024);
         if heap_free_mb > 0 && (backbuf_mb as usize) > heap_free_mb + 4 {
             crate::println_color!(COLOR_RED, "\u{26A0} Not enough memory for {}x{} framebuffer ({} MB needed, {} MB free)",
-                framebuffer_w, framebuffer_h, backbuf_mb, heap_free_mb);
+                fb_w, fb_h, backbuf_mb, heap_free_mb);
             warnings += 1;
         }
     }
@@ -394,7 +401,7 @@ pub(super) fn launch_desktop_env(initial_window: Option<(&str, crate::desktop::W
     d.init(width, height);
     
     // If host resources are too low, stay in CLI
-    if d.desktop_tier == desktop::DesktopTier::ClientOnly {
+    if d.desktop_tier == desktop::DesktopTier::CliOnly {
         crate::println_color!(COLOR_YELLOW, "Insufficient resources for desktop (< 128 MB RAM).");
         crate::println_color!(COLOR_YELLOW, "Staying in command-line mode. Increase RAM to 256 MB+ (-m 256M).");
         drop(d);
@@ -787,7 +794,7 @@ match subsystem_name {
                     "storage" | "disk" => Some(crate::security::isolation::Subsystem::Storage),
                     "network" | "net" => Some(crate::security::isolation::Subsystem::Network),
                     "graphics" | "gpu" => Some(crate::security::isolation::Subsystem::Graphics),
-                    "process" | "proc" => Some(crate::security::isolation::Subsystem::ProcessManager),
+                    "process" | "proc" => Some(crate::security::isolation::Subsystem::ProcessMgr),
                     "hypervisor" | "hv" => Some(crate::security::isolation::Subsystem::Hypervisor),
                     "shell" => Some(crate::security::isolation::Subsystem::Shell),
                     "crypto" => Some(crate::security::isolation::Subsystem::Crypto),
@@ -823,10 +830,10 @@ match crate::security::isolation::gate_check(
                 crate::println_color!(COLOR_GRAY, "No dynamic capability types registered.");
             } else {
                 crate::println_color!(COLOR_CYAN, "Dynamic Capability Types ({} registered)", types.len());
-                for (id, information) in &types {
+                for (id, info) in &types {
                     crate::println!("  [{}] {} (danger:{}, category:{})", 
-                        id, information.name, information.danger_level, information.category);
-                    crate::println!("       {}", information.description);
+                        id, info.name, info.danger_level, info.category);
+                    crate::println!("       {}", info.description);
                 }
             }
             crate::println!();
@@ -858,11 +865,11 @@ match args.first().copied() {
 
     // Use TSC for timing
     let pause = |secs: u64| {
-        let mouse = secs * 1000;
+        let ms = secs * 1000;
         let start_tsc = crate::cpu::tsc::read_tsc();
-        let frequency = crate::cpu::tsc::frequency_hz();
-        if frequency == 0 { return; }
-        let target_cycles = frequency / 1000 * mouse;
+        let freq = crate::cpu::tsc::frequency_hz();
+        if freq == 0 { return; }
+        let target_cycles = freq / 1000 * ms;
                 // Boucle infinie — tourne jusqu'à un `break` explicite.
 loop {
             let elapsed = crate::cpu::tsc::read_tsc().saturating_sub(start_tsc);
@@ -873,11 +880,11 @@ loop {
     };
 
     let wait_key_or_timeout = |timeout_secs: u64| -> bool {
-        let mouse = timeout_secs * 1000;
+        let ms = timeout_secs * 1000;
         let start_tsc = crate::cpu::tsc::read_tsc();
-        let frequency = crate::cpu::tsc::frequency_hz();
-        if frequency == 0 { return false; }
-        let target_cycles = frequency / 1000 * mouse;
+        let freq = crate::cpu::tsc::frequency_hz();
+        if freq == 0 { return false; }
+        let target_cycles = freq / 1000 * ms;
                 // Boucle infinie — tourne jusqu'à un `break` explicite.
 loop {
             let elapsed = crate::cpu::tsc::read_tsc().saturating_sub(start_tsc);
@@ -904,20 +911,20 @@ loop {
 
         let w = software as usize;
         let h = sh as usize;
-        let mut buffer = alloc::vec![0u32; w * h];
+        let mut buf = alloc::vec![0u32; w * h];
 
         // -- Helper: draw scaled character into buffer --
-        let draw_big_char = |buffer: &mut [u32], w: usize, h: usize, cx: usize, cy: usize, c: char, color: u32, scale: usize| {
+        let draw_big_char = |buf: &mut [u32], w: usize, h: usize, cx: usize, cy: usize, c: char, color: u32, scale: usize| {
             let glyph = crate::framebuffer::font::get_glyph(c);
             for (row, &bits) in glyph.iter().enumerate() {
                 for bit in 0..8u32 {
                     if bits & (0x80 >> bit) != 0 {
                         for sy in 0..scale {
                             for sx in 0..scale {
-                                let pixel = cx + bit as usize * scale + sx;
+                                let px = cx + bit as usize * scale + sx;
                                 let py = cy + row * scale + sy;
-                                if pixel < w && py < h {
-                                    buffer[py * w + pixel] = color;
+                                if px < w && py < h {
+                                    buf[py * w + px] = color;
                                 }
                             }
                         }
@@ -934,8 +941,8 @@ loop {
             rain_speeds[i] = (((i * 7 + 3) % 4) + 1) as u8;
         }
 
-        let draw_rain_step = |buffer: &mut [u32], w: usize, h: usize, cols: &mut [u16], speeds: &[u8], frame: u32| {
-            for pixel in buffer.iterator_mut() {
+        let draw_rain_step = |buf: &mut [u32], w: usize, h: usize, cols: &mut [u16], speeds: &[u8], frame: u32| {
+            for pixel in buf.iter_mut() {
                 let g = ((*pixel >> 8) & 0xFF) as u32;
                 if g > 0 {
                     let new_g = g.saturating_sub(8);
@@ -955,9 +962,9 @@ loop {
                     if py >= h { break; }
                     for bit in 0..8u32 {
                         if bits & (0x80 >> bit) != 0 {
-                            let pixel = x + bit as usize;
-                            if pixel < w {
-                                buffer[py * w + pixel] = 0xFF00FF44;
+                            let px = x + bit as usize;
+                            if px < w {
+                                buf[py * w + px] = 0xFF00FF44;
                             }
                         }
                     }
@@ -965,15 +972,15 @@ loop {
             }
         };
 
-        let blit_buffer = |buffer: &[u32], w: usize, h: usize| {
-            if let Some((bb_pointer, _bb_w, bb_h, bb_stride)) = crate::framebuffer::get_backbuffer_information() {
-                let bb = bb_pointer as *mut u32;
+        let blit_buffer = |buf: &[u32], w: usize, h: usize| {
+            if let Some((bb_ptr, _bb_w, bb_h, bb_stride)) = crate::framebuffer::get_backbuffer_information() {
+                let bb = bb_ptr as *mut u32;
                 let bb_s = bb_stride as usize;
-                for y in 0..h.minimum(bb_h as usize) {
+                for y in 0..h.min(bb_h as usize) {
                                         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
                         core::ptr::copy_nonoverlapping(
-                            buffer[y * w..].as_pointer(),
+                            buf[y * w..].as_ptr(),
                             bb.add(y * bb_s),
                             w,
                         );
@@ -984,19 +991,19 @@ unsafe {
         };
 
         // -- Helper: render tutorial scene with typing effect --
-        let render_scene = |buffer: &mut [u32], w: usize, h: usize,
+        let render_scene = |buf: &mut [u32], w: usize, h: usize,
                            rain_cols: &mut [u16], rain_speeds: &[u8],
                            lines: &[(&str, u32, usize)],
-                           hold_mouse: u64| {
-            let frequency = crate::cpu::tsc::frequency_hz();
-            if frequency == 0 { return; }
+                           hold_ms: u64| {
+            let freq = crate::cpu::tsc::frequency_hz();
+            if freq == 0 { return; }
 
             let total_chars: usize = lines.iter().map(|(t, _, _)| t.len()).sum();
             let type_mouse = 60u64;
             let type_total_mouse = total_chars as u64 * type_mouse;
 
             let start_tsc = crate::cpu::tsc::read_tsc();
-            let hold_target = frequency / 1000 * (type_total_mouse + hold_mouse);
+            let hold_target = freq / 1000 * (type_total_mouse + hold_ms);
 
             let mut frame = 0u32;
                         // Boucle infinie — tourne jusqu'à un `break` explicite.
@@ -1008,11 +1015,11 @@ loop {
                     if key == b' ' || key == b'\n' || key == 13 { break; } // skip scene
                 }
 
-                draw_rain_step(buffer, w, h, rain_cols, rain_speeds, frame);
+                draw_rain_step(buf, w, h, rain_cols, rain_speeds, frame);
 
-                let elapsed_mouse = elapsed / (frequency / 1000).maximum(1);
-                let chars_shown = if elapsed_mouse < type_total_mouse {
-                    (elapsed_mouse / type_mouse.maximum(1)) as usize
+                let elapsed_ms = elapsed / (freq / 1000).max(1);
+                let chars_shown = if elapsed_ms < type_total_mouse {
+                    (elapsed_ms / type_mouse.max(1)) as usize
                 } else {
                     total_chars
                 };
@@ -1027,15 +1034,15 @@ loop {
 
                     for (i, c) in text.chars().enumerate() {
                         if chars_counted + i >= chars_shown { break; }
-                        draw_big_char(buffer, w, h, start_x + i * 8 * scale, y_start, c, color, scale);
+                        draw_big_char(buf, w, h, start_x + i * 8 * scale, y_start, c, color, scale);
                     }
                     if chars_shown > chars_counted && chars_shown < chars_counted + text.len() {
                         let cursor_i = chars_shown - chars_counted;
                         let cx = start_x + cursor_i * 8 * scale;
                         for cy in y_start..y_start + 16 * scale {
                             if cy < h && cx + 2 < w {
-                                buffer[cy * w + cx] = 0xFF00FF88;
-                                buffer[cy * w + cx + 1] = 0xFF00FF88;
+                                buf[cy * w + cx] = 0xFF00FF88;
+                                buf[cy * w + cx + 1] = 0xFF00FF88;
                             }
                         }
                     }
@@ -1044,20 +1051,20 @@ loop {
                     y_start += 16 * scale + 8;
                 }
 
-                blit_buffer(buffer, w, h);
+                blit_buffer(buf, w, h);
                 frame += 1;
                 crate::cpu::tsc::delay_millis(33);
             }
 
             // Fade out
             let fade_start = crate::cpu::tsc::read_tsc();
-            let fade_target = frequency / 1000 * 600;
+            let fade_target = freq / 1000 * 600;
                         // Boucle infinie — tourne jusqu'à un `break` explicite.
 loop {
                 let elapsed = crate::cpu::tsc::read_tsc().saturating_sub(fade_start);
                 if elapsed >= fade_target { break; }
                 let progress = (elapsed * 255 / fade_target) as u32;
-                for pixel in buffer.iterator_mut() {
+                for pixel in buf.iter_mut() {
                     let r = ((*pixel >> 16) & 0xFF) as u32;
                     let g = ((*pixel >> 8) & 0xFF) as u32;
                     let b = (*pixel & 0xFF) as u32;
@@ -1066,23 +1073,23 @@ loop {
                     let nb = b.saturating_sub(b * progress / 512 + 1);
                     *pixel = 0xFF000000 | (nr << 16) | (ng << 8) | nb;
                 }
-                blit_buffer(buffer, w, h);
+                blit_buffer(buf, w, h);
                 crate::cpu::tsc::delay_millis(33);
             }
-            for pixel in buffer.iterator_mut() { *pixel = 0xFF000000; }
-            blit_buffer(buffer, w, h);
+            for pixel in buf.iter_mut() { *pixel = 0xFF000000; }
+            blit_buffer(buf, w, h);
         };
 
         // ---- Scene 1: Welcome ----
         crate::serial_println!("[DEMO] Scene 1: Welcome");
-        for pixel in buffer.iterator_mut() { *pixel = 0xFF000000; }
+        for pixel in buf.iter_mut() { *pixel = 0xFF000000; }
         if lang == "fr" {
-            render_scene(&mut buffer, w, h, &mut rain_cols, &rain_speeds,
+            render_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
                 &[("Bienvenue dans", 0xFF00DD55, 5),
                   ("TrustOS", 0xFF00FFAA, 6)],
                 3000);
         } else {
-            render_scene(&mut buffer, w, h, &mut rain_cols, &rain_speeds,
+            render_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
                 &[("Welcome to", 0xFF00DD55, 5),
                   ("TrustOS", 0xFF00FFAA, 6)],
                 3000);
@@ -1091,13 +1098,13 @@ loop {
         // ---- Scene 2: What is it? ----
         crate::serial_println!("[DEMO] Scene 2: What is TrustOS");
         if lang == "fr" {
-            render_scene(&mut buffer, w, h, &mut rain_cols, &rain_speeds,
+            render_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
                 &[("Un OS bare-metal", 0xFF00DD55, 4),
                   ("ecrit en 100% Rust", 0xFF00FF88, 4),
                   ("Aucun C. Aucun Linux.", 0xFFFFCC44, 3)],
                 3000);
         } else {
-            render_scene(&mut buffer, w, h, &mut rain_cols, &rain_speeds,
+            render_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
                 &[("A bare-metal OS", 0xFF00DD55, 4),
                   ("written in 100% Rust", 0xFF00FF88, 4),
                   ("No C. No Linux. Just Rust.", 0xFFFFCC44, 3)],
@@ -1107,13 +1114,13 @@ loop {
         // ---- Scene 3: Tutorial Mode ----
         crate::serial_println!("[DEMO] Scene 3: Tutorial start");
         if lang == "fr" {
-            render_scene(&mut buffer, w, h, &mut rain_cols, &rain_speeds,
+            render_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
                 &[("Tutoriel Interactif", 0xFF44DDFF, 5),
                   ("Appuyez ESPACE pour continuer", 0xFF888888, 2),
                   ("ESC pour quitter", 0xFF666666, 2)],
                 4000);
         } else {
-            render_scene(&mut buffer, w, h, &mut rain_cols, &rain_speeds,
+            render_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
                 &[("Interactive Tutorial", 0xFF44DDFF, 5),
                   ("Press SPACE to continue", 0xFF888888, 2),
                   ("ESC to quit", 0xFF666666, 2)],
@@ -1130,7 +1137,7 @@ loop {
     // -------------------------------------------------------------------
     crate::framebuffer::clear();
 
-    let print_step = |step: u32, total: u32, title_en: &str, title_fr: &str, descriptor_en: &str, descriptor_fr: &str| {
+    let print_step = |step: u32, total: u32, title_en: &str, title_fr: &str, desc_en: &str, desc_fr: &str| {
         crate::println!();
         crate::println_color!(0xFF00CCFF, "+--------------------------------------------------------------+");
         if lang == "fr" {
@@ -1141,9 +1148,9 @@ loop {
         crate::println_color!(0xFF00CCFF, "+--------------------------------------------------------------+");
         crate::println!();
         if lang == "fr" {
-            crate::println_color!(0xFF888888, "  {}", descriptor_fr);
+            crate::println_color!(0xFF888888, "  {}", desc_fr);
         } else {
-            crate::println_color!(0xFF888888, "  {}", descriptor_en);
+            crate::println_color!(0xFF888888, "  {}", desc_en);
         }
         crate::println!();
     };
@@ -1333,8 +1340,8 @@ match crate::trustlang::run(tl_code) {
         crate::framebuffer::swap_buffers();
 
         let start_tsc = crate::cpu::tsc::read_tsc();
-        let frequency = crate::cpu::tsc::frequency_hz();
-        let target_cycles = if frequency > 0 { frequency / 1000 * 6000 } else { u64::MAX }; // 6 seconds
+        let freq = crate::cpu::tsc::frequency_hz();
+        let target_cycles = if freq > 0 { freq / 1000 * 6000 } else { u64::MAX }; // 6 seconds
 
         loop {
             let elapsed = crate::cpu::tsc::read_tsc().saturating_sub(start_tsc);
@@ -1347,14 +1354,14 @@ match crate::trustlang::run(tl_code) {
             renderer.update();
             renderer.render(&mut vp_buffer, rw, rh);
 
-            if let Some((bb_pointer, _bb_w, bb_h, bb_stride)) = crate::framebuffer::get_backbuffer_information() {
-                let bb = bb_pointer as *mut u32;
+            if let Some((bb_ptr, _bb_w, bb_h, bb_stride)) = crate::framebuffer::get_backbuffer_information() {
+                let bb = bb_ptr as *mut u32;
                 let bb_s = bb_stride as usize;
-                for y in 0..rh.minimum(bb_h as usize) {
+                for y in 0..rh.min(bb_h as usize) {
                                         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
                         core::ptr::copy_nonoverlapping(
-                            vp_buffer[y * rw..].as_pointer(),
+                            vp_buffer[y * rw..].as_ptr(),
                             bb.add(y * bb_s),
                             rw,
                         );
@@ -1432,19 +1439,19 @@ unsafe {
 
         let w = software as usize;
         let h = sh as usize;
-        let mut buffer = alloc::vec![0u32; w * h];
+        let mut buf = alloc::vec![0u32; w * h];
 
-        let draw_big_char = |buffer: &mut [u32], w: usize, h: usize, cx: usize, cy: usize, c: char, color: u32, scale: usize| {
+        let draw_big_char = |buf: &mut [u32], w: usize, h: usize, cx: usize, cy: usize, c: char, color: u32, scale: usize| {
             let glyph = crate::framebuffer::font::get_glyph(c);
             for (row, &bits) in glyph.iter().enumerate() {
                 for bit in 0..8u32 {
                     if bits & (0x80 >> bit) != 0 {
                         for sy in 0..scale {
                             for sx in 0..scale {
-                                let pixel = cx + bit as usize * scale + sx;
+                                let px = cx + bit as usize * scale + sx;
                                 let py = cy + row * scale + sy;
-                                if pixel < w && py < h {
-                                    buffer[py * w + pixel] = color;
+                                if px < w && py < h {
+                                    buf[py * w + px] = color;
                                 }
                             }
                         }
@@ -1460,8 +1467,8 @@ unsafe {
             rain_speeds[i] = (((i * 11 + 5) % 4) + 1) as u8;
         }
 
-        let draw_rain_step = |buffer: &mut [u32], w: usize, h: usize, cols: &mut [u16], speeds: &[u8], frame: u32| {
-            for pixel in buffer.iterator_mut() {
+        let draw_rain_step = |buf: &mut [u32], w: usize, h: usize, cols: &mut [u16], speeds: &[u8], frame: u32| {
+            for pixel in buf.iter_mut() {
                 let g = ((*pixel >> 8) & 0xFF) as u32;
                 if g > 0 {
                     let new_g = g.saturating_sub(8);
@@ -1481,9 +1488,9 @@ unsafe {
                     if py >= h { break; }
                     for bit in 0..8u32 {
                         if bits & (0x80 >> bit) != 0 {
-                            let pixel = x + bit as usize;
-                            if pixel < w {
-                                buffer[py * w + pixel] = 0xFF00FF44;
+                            let px = x + bit as usize;
+                            if px < w {
+                                buf[py * w + px] = 0xFF00FF44;
                             }
                         }
                     }
@@ -1491,15 +1498,15 @@ unsafe {
             }
         };
 
-        let blit_buffer = |buffer: &[u32], w: usize, h: usize| {
-            if let Some((bb_pointer, _bb_w, bb_h, bb_stride)) = crate::framebuffer::get_backbuffer_information() {
-                let bb = bb_pointer as *mut u32;
+        let blit_buffer = |buf: &[u32], w: usize, h: usize| {
+            if let Some((bb_ptr, _bb_w, bb_h, bb_stride)) = crate::framebuffer::get_backbuffer_information() {
+                let bb = bb_ptr as *mut u32;
                 let bb_s = bb_stride as usize;
-                for y in 0..h.minimum(bb_h as usize) {
+                for y in 0..h.min(bb_h as usize) {
                                         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
                         core::ptr::copy_nonoverlapping(
-                            buffer[y * w..].as_pointer(),
+                            buf[y * w..].as_ptr(),
                             bb.add(y * bb_s),
                             w,
                         );
@@ -1511,11 +1518,11 @@ unsafe {
 
         // Outro scene: "You're ready!" + 3D character
         crate::serial_println!("[DEMO] Outro: You're ready!");
-        for pixel in buffer.iterator_mut() { *pixel = 0xFF000000; }
+        for pixel in buf.iter_mut() { *pixel = 0xFF000000; }
 
-        let frequency = crate::cpu::tsc::frequency_hz();
+        let freq = crate::cpu::tsc::frequency_hz();
         let outro_mouse = 7000u64;
-        let outro_target = if frequency > 0 { frequency / 1000 * outro_mouse } else { u64::MAX };
+        let outro_target = if freq > 0 { freq / 1000 * outro_mouse } else { u64::MAX };
         let start_tsc = crate::cpu::tsc::read_tsc();
 
         let mut renderer3d = crate::formula3d::FormulaRenderer::new();
@@ -1534,7 +1541,7 @@ loop {
                 if key == 0x1B || key == b'q' || key == b' ' || key == b'\n' || key == 13 { break; }
             }
 
-            draw_rain_step(&mut buffer, w, h, &mut rain_cols, &rain_speeds, frame);
+            draw_rain_step(&mut buf, w, h, &mut rain_cols, &rain_speeds, frame);
 
             // Title
             let title = if lang == "fr" { "Pret a explorer!" } else { "You're ready!" };
@@ -1554,23 +1561,23 @@ loop {
                     let t = (hue - 240) * 255 / 120;
                     0xFF000000 | (t << 16) | (255 - t)
                 };
-                draw_big_char(&mut buffer, w, h, title_x + i * 8 * title_scale, title_y, c, color, title_scale);
+                draw_big_char(&mut buf, w, h, title_x + i * 8 * title_scale, title_y, c, color, title_scale);
             }
 
             // 3D character
             renderer3d.update();
-            for p in vp_buffer.iterator_mut() { *p = 0x00000000; }
+            for p in vp_buffer.iter_mut() { *p = 0x00000000; }
             renderer3d.render(&mut vp_buffer, vp_w, vp_h);
             let vp_x = if vp_w < w { (w - vp_w) / 2 } else { 0 };
             let vp_y = title_y + 16 * title_scale + 20;
             for vy in 0..vp_h {
                 for vx in 0..vp_w {
-                    let source = vp_buffer[vy * vp_w + vx];
-                    if source & 0x00FFFFFF != 0 {
+                    let src = vp_buffer[vy * vp_w + vx];
+                    if src & 0x00FFFFFF != 0 {
                         let dy = vp_y + vy;
                         let dx = vp_x + vx;
                         if dy < h && dx < w {
-                            buffer[dy * w + dx] = source;
+                            buf[dy * w + dx] = src;
                         }
                     }
                 }
@@ -1599,30 +1606,30 @@ loop {
                 let tw = text.len() * 8 * hint_scale;
                 let hx = if tw < w { (w - tw) / 2 } else { 0 };
                 for (i, c) in text.chars().enumerate() {
-                    draw_big_char(&mut buffer, w, h, hx + i * 8 * hint_scale, hy, c, color, hint_scale);
+                    draw_big_char(&mut buf, w, h, hx + i * 8 * hint_scale, hy, c, color, hint_scale);
                 }
                 hy += 16 * hint_scale + 6;
             }
 
-            blit_buffer(&buffer, w, h);
+            blit_buffer(&buf, w, h);
             frame += 1;
             crate::cpu::tsc::delay_millis(33);
         }
 
         // Final fade out
         let fade_start = crate::cpu::tsc::read_tsc();
-        let fade_target = if frequency > 0 { frequency / 1000 * 800 } else { u64::MAX };
+        let fade_target = if freq > 0 { freq / 1000 * 800 } else { u64::MAX };
                 // Boucle infinie — tourne jusqu'à un `break` explicite.
 loop {
             let elapsed = crate::cpu::tsc::read_tsc().saturating_sub(fade_start);
             if elapsed >= fade_target { break; }
-            for pixel in buffer.iterator_mut() {
+            for pixel in buf.iter_mut() {
                 let r = ((*pixel >> 16) & 0xFF).saturating_sub(4) as u32;
                 let g = ((*pixel >> 8) & 0xFF).saturating_sub(4) as u32;
                 let b = (*pixel & 0xFF).saturating_sub(4) as u32;
                 *pixel = 0xFF000000 | (r << 16) | (g << 8) | b;
             }
-            blit_buffer(&buffer, w, h);
+            blit_buffer(&buf, w, h);
             crate::cpu::tsc::delay_millis(33);
         }
 
@@ -1666,11 +1673,11 @@ match args.first().copied() {
 
     // Use TSC for timing -- uptime_ms() doesn't advance during spin_loop()
     let pause = |secs: u64| {
-        let mouse = secs * 1000 * speed / 2;
+        let ms = secs * 1000 * speed / 2;
         let start_tsc = crate::cpu::tsc::read_tsc();
-        let frequency = crate::cpu::tsc::frequency_hz();
-        if frequency == 0 { return; } // TSC not calibrated
-        let target_cycles = frequency / 1000 * mouse; // cycles for ms milliseconds
+        let freq = crate::cpu::tsc::frequency_hz();
+        if freq == 0 { return; } // TSC not calibrated
+        let target_cycles = freq / 1000 * ms; // cycles for ms milliseconds
         loop {
             let elapsed = crate::cpu::tsc::read_tsc().saturating_sub(start_tsc);
             if elapsed >= target_cycles { break; }
@@ -1696,20 +1703,20 @@ match args.first().copied() {
 
         let w = software as usize;
         let h = sh as usize;
-        let mut buffer = alloc::vec![0u32; w * h];
+        let mut buf = alloc::vec![0u32; w * h];
 
         // -- Helper: draw scaled character into buffer --
-        let draw_big_char = |buffer: &mut [u32], w: usize, h: usize, cx: usize, cy: usize, c: char, color: u32, scale: usize| {
+        let draw_big_char = |buf: &mut [u32], w: usize, h: usize, cx: usize, cy: usize, c: char, color: u32, scale: usize| {
             let glyph = crate::framebuffer::font::get_glyph(c);
             for (row, &bits) in glyph.iter().enumerate() {
                 for bit in 0..8u32 {
                     if bits & (0x80 >> bit) != 0 {
                         for sy in 0..scale {
                             for sx in 0..scale {
-                                let pixel = cx + bit as usize * scale + sx;
+                                let px = cx + bit as usize * scale + sx;
                                 let py = cy + row * scale + sy;
-                                if pixel < w && py < h {
-                                    buffer[py * w + pixel] = color;
+                                if px < w && py < h {
+                                    buf[py * w + px] = color;
                                 }
                             }
                         }
@@ -1719,11 +1726,11 @@ match args.first().copied() {
         };
 
         // -- Helper: draw big text centered --
-        let draw_big_text_centered = |buffer: &mut [u32], w: usize, h: usize, y: usize, text: &str, color: u32, scale: usize| {
+        let draw_big_text_centered = |buf: &mut [u32], w: usize, h: usize, y: usize, text: &str, color: u32, scale: usize| {
             let text_w = text.len() * 8 * scale;
             let start_x = if text_w < w { (w - text_w) / 2 } else { 0 };
             for (i, c) in text.chars().enumerate() {
-                draw_big_char(buffer, w, h, start_x + i * 8 * scale, y, c, color, scale);
+                draw_big_char(buf, w, h, start_x + i * 8 * scale, y, c, color, scale);
             }
         };
 
@@ -1736,9 +1743,9 @@ match args.first().copied() {
             rain_speeds[i] = (((i * 7 + 3) % 4) + 1) as u8;
         }
 
-        let draw_rain_step = |buffer: &mut [u32], w: usize, h: usize, cols: &mut [u16], speeds: &[u8], frame: u32| {
+        let draw_rain_step = |buf: &mut [u32], w: usize, h: usize, cols: &mut [u16], speeds: &[u8], frame: u32| {
             // Dim existing pixels slightly (trail effect)
-            for pixel in buffer.iterator_mut() {
+            for pixel in buf.iter_mut() {
                 let g = ((*pixel >> 8) & 0xFF) as u32;
                 if g > 0 {
                     let new_g = g.saturating_sub(8);
@@ -1760,9 +1767,9 @@ match args.first().copied() {
                     if py >= h { break; }
                     for bit in 0..8u32 {
                         if bits & (0x80 >> bit) != 0 {
-                            let pixel = x + bit as usize;
-                            if pixel < w {
-                                buffer[py * w + pixel] = 0xFF00FF44;
+                            let px = x + bit as usize;
+                            if px < w {
+                                buf[py * w + px] = 0xFF00FF44;
                             }
                         }
                     }
@@ -1771,15 +1778,15 @@ match args.first().copied() {
         };
 
         // -- Helper: blit buffer to backbuffer --
-        let blit_buffer = |buffer: &[u32], w: usize, h: usize| {
-            if let Some((bb_pointer, _bb_w, bb_h, bb_stride)) = crate::framebuffer::get_backbuffer_information() {
-                let bb = bb_pointer as *mut u32;
+        let blit_buffer = |buf: &[u32], w: usize, h: usize| {
+            if let Some((bb_ptr, _bb_w, bb_h, bb_stride)) = crate::framebuffer::get_backbuffer_information() {
+                let bb = bb_ptr as *mut u32;
                 let bb_s = bb_stride as usize;
-                for y in 0..h.minimum(bb_h as usize) {
+                for y in 0..h.min(bb_h as usize) {
                                         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
                         core::ptr::copy_nonoverlapping(
-                            buffer[y * w..].as_pointer(),
+                            buf[y * w..].as_ptr(),
                             bb.add(y * bb_s),
                             w,
                         );
@@ -1791,12 +1798,12 @@ unsafe {
 
         // -- Helper: Scene -- type text with matrix rain bg --
         // Renders text that "types in" char by char with Matrix rain bg
-        let render_scene = |buffer: &mut [u32], w: usize, h: usize,
+        let render_scene = |buf: &mut [u32], w: usize, h: usize,
                            rain_cols: &mut [u16], rain_speeds: &[u8],
                            lines: &[(&str, u32, usize)], // (text, color, scale)
-                           hold_mouse: u64, speed: u64| {
-            let frequency = crate::cpu::tsc::frequency_hz();
-            if frequency == 0 { return; }
+                           hold_ms: u64, speed: u64| {
+            let freq = crate::cpu::tsc::frequency_hz();
+            if freq == 0 { return; }
 
             // Phase 1: Type in text (rain + typed text appearing)
             let total_chars: usize = lines.iter().map(|(t, _, _)| t.len()).sum();
@@ -1804,8 +1811,8 @@ unsafe {
             let type_total_mouse = total_chars as u64 * type_mouse;
             
             let start_tsc = crate::cpu::tsc::read_tsc();
-            let type_target = frequency / 1000 * type_total_mouse;
-            let hold_target = frequency / 1000 * (type_total_mouse + hold_mouse * speed / 2);
+            let type_target = freq / 1000 * type_total_mouse;
+            let hold_target = freq / 1000 * (type_total_mouse + hold_ms * speed / 2);
 
             let mut frame = 0u32;
                         // Boucle infinie — tourne jusqu'à un `break` explicite.
@@ -1817,12 +1824,12 @@ loop {
                 }
 
                 // Rain background
-                draw_rain_step(buffer, w, h, rain_cols, rain_speeds, frame);
+                draw_rain_step(buf, w, h, rain_cols, rain_speeds, frame);
 
                 // Calculate how many chars to show
-                let elapsed_mouse = elapsed / (frequency / 1000).maximum(1);
-                let chars_shown = if elapsed_mouse < type_total_mouse {
-                    (elapsed_mouse / type_mouse.maximum(1)) as usize
+                let elapsed_ms = elapsed / (freq / 1000).max(1);
+                let chars_shown = if elapsed_ms < type_total_mouse {
+                    (elapsed_ms / type_mouse.max(1)) as usize
                 } else {
                     total_chars
                 };
@@ -1838,7 +1845,7 @@ loop {
 
                     for (i, c) in text.chars().enumerate() {
                         if chars_counted + i >= chars_shown { break; }
-                        draw_big_char(buffer, w, h, start_x + i * 8 * scale, y_start, c, color, scale);
+                        draw_big_char(buf, w, h, start_x + i * 8 * scale, y_start, c, color, scale);
                     }
                     // Cursor blink
                     if chars_shown > chars_counted && chars_shown < chars_counted + text.len() {
@@ -1846,8 +1853,8 @@ loop {
                         let cx = start_x + cursor_i * 8 * scale;
                         for cy in y_start..y_start + 16 * scale {
                             if cy < h && cx + 2 < w {
-                                buffer[cy * w + cx] = 0xFF00FF88;
-                                buffer[cy * w + cx + 1] = 0xFF00FF88;
+                                buf[cy * w + cx] = 0xFF00FF88;
+                                buf[cy * w + cx + 1] = 0xFF00FF88;
                             }
                         }
                     }
@@ -1856,7 +1863,7 @@ loop {
                     y_start += 16 * scale + 8;
                 }
 
-                blit_buffer(buffer, w, h);
+                blit_buffer(buf, w, h);
                 frame += 1;
                 // ~30 FPS pacing
                 crate::cpu::tsc::delay_millis(33);
@@ -1865,13 +1872,13 @@ loop {
             // Fade out
             let fade_start = crate::cpu::tsc::read_tsc();
             let fade_mouse = 800u64;
-            let fade_target = frequency / 1000 * fade_mouse;
+            let fade_target = freq / 1000 * fade_mouse;
                         // Boucle infinie — tourne jusqu'à un `break` explicite.
 loop {
                 let elapsed = crate::cpu::tsc::read_tsc().saturating_sub(fade_start);
                 if elapsed >= fade_target { break; }
                 let progress = (elapsed * 255 / fade_target) as u32;
-                for pixel in buffer.iterator_mut() {
+                for pixel in buf.iter_mut() {
                     let r = ((*pixel >> 16) & 0xFF) as u32;
                     let g = ((*pixel >> 8) & 0xFF) as u32;
                     let b = (*pixel & 0xFF) as u32;
@@ -1880,26 +1887,26 @@ loop {
                     let nb = b.saturating_sub(b * progress / 512 + 1);
                     *pixel = 0xFF000000 | (nr << 16) | (ng << 8) | nb;
                 }
-                blit_buffer(buffer, w, h);
+                blit_buffer(buf, w, h);
                 crate::cpu::tsc::delay_millis(33);
             }
 
             // Clear to black
-            for pixel in buffer.iterator_mut() { *pixel = 0xFF000000; }
-            blit_buffer(buffer, w, h);
+            for pixel in buf.iter_mut() { *pixel = 0xFF000000; }
+            blit_buffer(buf, w, h);
         };
 
         // -- Scene 1: "Do you think life is a simulation?" --
         crate::serial_println!("[SHOWCASE] Scene 1: Simulation question");
-        for pixel in buffer.iterator_mut() { *pixel = 0xFF000000; }
-        render_scene(&mut buffer, w, h, &mut rain_cols, &rain_speeds,
+        for pixel in buf.iter_mut() { *pixel = 0xFF000000; }
+        render_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
             &[("Do you think", 0xFF00DD55, 4),
               ("life is a simulation?", 0xFF00FF66, 4)],
             3000, speed);
 
         // -- Scene 2: "Can it run in a 6MB OS?" --
         crate::serial_println!("[SHOWCASE] Scene 2: 6MB OS");
-        render_scene(&mut buffer, w, h, &mut rain_cols, &rain_speeds,
+        render_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
             &[("Can it run", 0xFF00DD55, 5),
               ("in a 6MB OS?", 0xFF00FF88, 5)],
             3000, speed);
@@ -1908,9 +1915,9 @@ loop {
         crate::serial_println!("[SHOWCASE] Scene 3: TrustOS title");
         {
             // Special scene: TrustOS big title + 3D wireframe + credits
-            let frequency = crate::cpu::tsc::frequency_hz();
+            let freq = crate::cpu::tsc::frequency_hz();
             let scene3_mouse = 8000u64 * speed / 2;
-            let scene3_target = frequency / 1000 * scene3_mouse;
+            let scene3_target = freq / 1000 * scene3_mouse;
             let start_tsc = crate::cpu::tsc::read_tsc();
 
             let mut renderer3d = crate::formula3d::FormulaRenderer::new();
@@ -1932,7 +1939,7 @@ loop {
                 }
 
                 // Rain background
-                draw_rain_step(&mut buffer, w, h, &mut rain_cols, &rain_speeds, frame);
+                draw_rain_step(&mut buf, w, h, &mut rain_cols, &rain_speeds, frame);
 
                 // Title: "TRUST OS" big
                 let title = "TRUST OS";
@@ -1953,12 +1960,12 @@ loop {
                         let t = (hue - 240) * 255 / 120;
                         0xFF000000 | (t << 16) | (255 - t)
                     };
-                    draw_big_char(&mut buffer, w, h, title_x + i * 8 * title_scale, title_y, c, color, title_scale);
+                    draw_big_char(&mut buf, w, h, title_x + i * 8 * title_scale, title_y, c, color, title_scale);
                 }
 
                 // 3D animated character in center
                 renderer3d.update();
-                for p in vp_buffer.iterator_mut() { *p = 0x00000000; } // transparent
+                for p in vp_buffer.iter_mut() { *p = 0x00000000; } // transparent
                 renderer3d.render(&mut vp_buffer, vp_w, vp_h);
 
                 // Blit 3D viewport centered below title
@@ -1966,12 +1973,12 @@ loop {
                 let vp_y = title_y + 16 * title_scale + 20;
                 for vy in 0..vp_h {
                     for vx in 0..vp_w {
-                        let source = vp_buffer[vy * vp_w + vx];
-                        if source & 0x00FFFFFF != 0 { // not black = has content
+                        let src = vp_buffer[vy * vp_w + vx];
+                        if src & 0x00FFFFFF != 0 { // not black = has content
                             let dy = vp_y + vy;
                             let dx = vp_x + vx;
                             if dy < h && dx < w {
-                                buffer[dy * w + dx] = source;
+                                buf[dy * w + dx] = src;
                             }
                         }
                     }
@@ -1984,37 +1991,37 @@ loop {
                 let credit_x = if credit_w < w { (w - credit_w) / 2 } else { 0 };
                 let credit_y = vp_y + vp_h + 30;
                 for (i, c) in credit.chars().enumerate() {
-                    draw_big_char(&mut buffer, w, h, credit_x + i * 8 * credit_scale, credit_y, c, 0xFF88CCFF, credit_scale);
+                    draw_big_char(&mut buf, w, h, credit_x + i * 8 * credit_scale, credit_y, c, 0xFF88CCFF, credit_scale);
                 }
 
-                blit_buffer(&buffer, w, h);
+                blit_buffer(&buf, w, h);
                 frame += 1;
                 crate::cpu::tsc::delay_millis(33);
             }
 
             // Fade out
             let fade_start = crate::cpu::tsc::read_tsc();
-            let fade_target = frequency / 1000 * 800;
+            let fade_target = freq / 1000 * 800;
                         // Boucle infinie — tourne jusqu'à un `break` explicite.
 loop {
                 let elapsed = crate::cpu::tsc::read_tsc().saturating_sub(fade_start);
                 if elapsed >= fade_target { break; }
-                for pixel in buffer.iterator_mut() {
+                for pixel in buf.iter_mut() {
                     let r = ((*pixel >> 16) & 0xFF).saturating_sub(4) as u32;
                     let g = ((*pixel >> 8) & 0xFF).saturating_sub(4) as u32;
                     let b = (*pixel & 0xFF).saturating_sub(4) as u32;
                     *pixel = 0xFF000000 | (r << 16) | (g << 8) | b;
                 }
-                blit_buffer(&buffer, w, h);
+                blit_buffer(&buf, w, h);
                 crate::cpu::tsc::delay_millis(33);
             }
-            for pixel in buffer.iterator_mut() { *pixel = 0xFF000000; }
-            blit_buffer(&buffer, w, h);
+            for pixel in buf.iter_mut() { *pixel = 0xFF000000; }
+            blit_buffer(&buf, w, h);
         }
 
         // -- Scene 4: Specs comparison --
         crate::serial_println!("[SHOWCASE] Scene 4: Specs");
-        render_scene(&mut buffer, w, h, &mut rain_cols, &rain_speeds,
+        render_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
             &[("6MB ISO vs 6GB Windows",  0xFF00FF66, 3),
               ("0 lines of C. Pure Rust.", 0xFF44FFAA, 3),
               ("Boots in 0.8s not 45s",    0xFF00DDFF, 3),
@@ -2025,7 +2032,7 @@ loop {
 
         // -- Scene 5: "Are you ready?" --
         crate::serial_println!("[SHOWCASE] Scene 5: Are you ready?");
-        render_scene(&mut buffer, w, h, &mut rain_cols, &rain_speeds,
+        render_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
             &[("Are you ready?", 0xFF00FF44, 6)],
             2000, speed);
 
@@ -2227,7 +2234,7 @@ match crate::trustlang::run(tl_code) {
         let ox = if software > rw as u32 { (software - rw as u32) / 2 } else { 0 } as usize;
         let oy = if sh > rh as u32 { (sh - rh as u32) / 2 } else { 0 } as usize;
 
-        let mut buffer = alloc::vec![0u32; rw * rh];
+        let mut buf = alloc::vec![0u32; rw * rh];
 
         let was_db = crate::framebuffer::is_double_buffer_enabled();
         if !was_db {
@@ -2238,9 +2245,9 @@ match crate::trustlang::run(tl_code) {
         crate::framebuffer::swap_buffers();
 
         let start_tsc = crate::cpu::tsc::read_tsc();
-        let frequency = crate::cpu::tsc::frequency_hz();
-        let duration_mouse = effect_duration;
-        let target_cycles = if frequency > 0 { frequency / 1000 * duration_mouse } else { u64::MAX };
+        let freq = crate::cpu::tsc::frequency_hz();
+        let duration_ms = effect_duration;
+        let target_cycles = if freq > 0 { freq / 1000 * duration_ms } else { u64::MAX };
 
                 // Boucle infinie — tourne jusqu'à un `break` explicite.
 loop {
@@ -2251,20 +2258,20 @@ loop {
             }
 
             renderer.update();
-            renderer.render(&mut buffer, rw, rh);
+            renderer.render(&mut buf, rw, rh);
 
             // Blit to backbuffer
-            if let Some((bb_pointer, _bb_w, bb_h, bb_stride)) = crate::framebuffer::get_backbuffer_information() {
-                let bb = bb_pointer as *mut u32;
+            if let Some((bb_ptr, _bb_w, bb_h, bb_stride)) = crate::framebuffer::get_backbuffer_information() {
+                let bb = bb_ptr as *mut u32;
                 let bb_s = bb_stride as usize;
                 for y in 0..rh {
                     let dy = oy + y;
                     if dy >= bb_h as usize { break; }
-                    let source_row = &buffer[y * rw..y * rw + rw];
+                    let source_row = &buf[y * rw..y * rw + rw];
                                         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-                        let destination = bb.add(dy * bb_s + ox);
-                        core::ptr::copy_nonoverlapping(source_row.as_pointer(), destination, rw);
+                        let dst = bb.add(dy * bb_s + ox);
+                        core::ptr::copy_nonoverlapping(source_row.as_ptr(), dst, rw);
                     }
                 }
             }
@@ -2357,11 +2364,11 @@ match args.first().copied() {
     };
 
     let pause = |secs: u64| {
-        let mouse = secs * 1000 * speed / 2;
+        let ms = secs * 1000 * speed / 2;
         let start_tsc = crate::cpu::tsc::read_tsc();
-        let frequency = crate::cpu::tsc::frequency_hz();
-        if frequency == 0 { return; }
-        let target_cycles = frequency / 1000 * mouse;
+        let freq = crate::cpu::tsc::frequency_hz();
+        if freq == 0 { return; }
+        let target_cycles = freq / 1000 * ms;
                 // Boucle infinie — tourne jusqu'à un `break` explicite.
 loop {
             let elapsed = crate::cpu::tsc::read_tsc().saturating_sub(start_tsc);
@@ -2389,10 +2396,10 @@ loop {
 
         let w = software as usize;
         let h = sh as usize;
-        let mut buffer = alloc::vec![0u32; w * h];
+        let mut buf = alloc::vec![0u32; w * h];
 
         // Helper: draw scaled character
-        let draw_char = |buffer: &mut [u32], w: usize, h: usize, cx: usize, cy: usize,
+        let draw_char = |buf: &mut [u32], w: usize, h: usize, cx: usize, cy: usize,
                          c: char, color: u32, scale: usize| {
             let glyph = crate::framebuffer::font::get_glyph(c);
             for (row, &bits) in glyph.iter().enumerate() {
@@ -2400,10 +2407,10 @@ loop {
                     if bits & (0x80 >> bit) != 0 {
                         for sy in 0..scale {
                             for sx in 0..scale {
-                                let pixel = cx + bit as usize * scale + sx;
+                                let px = cx + bit as usize * scale + sx;
                                 let py = cy + row * scale + sy;
-                                if pixel < w && py < h {
-                                    buffer[py * w + pixel] = color;
+                                if px < w && py < h {
+                                    buf[py * w + px] = color;
                                 }
                             }
                         }
@@ -2413,23 +2420,23 @@ loop {
         };
 
         // Helper: draw string
-        let draw_str = |buffer: &mut [u32], w: usize, h: usize, x: usize, y: usize,
+        let draw_str = |buf: &mut [u32], w: usize, h: usize, x: usize, y: usize,
                         s: &str, color: u32, scale: usize| {
             for (i, c) in s.chars().enumerate() {
-                draw_char(buffer, w, h, x + i * 8 * scale, y, c, color, scale);
+                draw_char(buf, w, h, x + i * 8 * scale, y, c, color, scale);
             }
         };
 
         // Helper: blit buffer to backbuffer
-        let blit = |buffer: &[u32], w: usize, h: usize| {
-            if let Some((bb_pointer, _bb_w, bb_h, bb_stride)) = crate::framebuffer::get_backbuffer_information() {
-                let bb = bb_pointer as *mut u32;
+        let blit = |buf: &[u32], w: usize, h: usize| {
+            if let Some((bb_ptr, _bb_w, bb_h, bb_stride)) = crate::framebuffer::get_backbuffer_information() {
+                let bb = bb_ptr as *mut u32;
                 let bb_s = bb_stride as usize;
-                for y in 0..h.minimum(bb_h as usize) {
+                for y in 0..h.min(bb_h as usize) {
                                         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
                         core::ptr::copy_nonoverlapping(
-                            buffer[y * w..].as_pointer(),
+                            buf[y * w..].as_ptr(),
                             bb.add(y * bb_s),
                             w,
                         );
@@ -2439,10 +2446,10 @@ unsafe {
             crate::framebuffer::swap_buffers();
         };
 
-        let frequency = crate::cpu::tsc::frequency_hz();
+        let freq = crate::cpu::tsc::frequency_hz();
         let start_tsc = crate::cpu::tsc::read_tsc();
         let scene_mouse = 6000u64 * speed / 2;
-        let target_cycles = if frequency > 0 { frequency / 1000 * scene_mouse } else { u64::MAX };
+        let target_cycles = if freq > 0 { freq / 1000 * scene_mouse } else { u64::MAX };
 
         // Use a simple PRNG seeded from TSC
         let mut rng = crate::cpu::tsc::read_tsc();
@@ -2480,8 +2487,8 @@ loop {
             }
 
             // Clear to deep dark blue
-            for pixel in buffer.iterator_mut() {
-                *pixel = 0xFF050510;
+            for px in buf.iter_mut() {
+                *px = 0xFF050510;
             }
 
             // Draw connections with pulsing brightness
@@ -2490,19 +2497,19 @@ loop {
                 for &(x1, y1) in &node_positions[li] {
                     for &(x2, y2) in &node_positions[li + 1] {
                         // Simple Bresenham-ish line
-                        let dx = (x2 as i32 - x1 as i32).absolute();
-                        let dy = (y2 as i32 - y1 as i32).absolute();
-                        let steps = dx.maximum(dy) as usize;
+                        let dx = (x2 as i32 - x1 as i32).abs();
+                        let dy = (y2 as i32 - y1 as i32).abs();
+                        let steps = dx.max(dy) as usize;
                         if steps == 0 { continue; }
                         let random_brightness = (next_random() % 60) as f32;
                         let g = (40.0 + pulse * 80.0 + random_brightness) as u32;
-                        let color = 0xFF000000 | (g.minimum(255) << 8);
+                        let color = 0xFF000000 | (g.min(255) << 8);
                         for s in 0..steps {
                             let t = s as f32 / steps as f32;
-                            let pixel = (x1 as f32 + (x2 as f32 - x1 as f32) * t) as usize;
+                            let px = (x1 as f32 + (x2 as f32 - x1 as f32) * t) as usize;
                             let py = (y1 as f32 + (y2 as f32 - y1 as f32) * t) as usize;
-                            if pixel < w && py < h {
-                                buffer[py * w + pixel] = color;
+                            if px < w && py < h {
+                                buf[py * w + px] = color;
                             }
                         }
                     }
@@ -2515,17 +2522,17 @@ loop {
                     let node_pulse = crate::graphics::holomatrix::sin_approx_pub(frame as f32 * 0.12 + li as f32 * 1.5 + ni as f32 * 0.8) * 0.5 + 0.5;
                     let r = 5 + (node_pulse * 3.0) as usize;
                     let g_value = (120.0 + node_pulse * 135.0) as u32;
-                    let color = 0xFF000000 | (g_value.minimum(255) << 8) | ((g_value / 3).minimum(255));
+                    let color = 0xFF000000 | (g_value.min(255) << 8) | ((g_value / 3).min(255));
                     // Draw filled circle
                     for dy in 0..=r * 2 {
                         for dx_i in 0..=r * 2 {
                             let ddx = dx_i as i32 - r as i32;
                             let ddy = dy as i32 - r as i32;
                             if ddx * ddx + ddy * ddy <= (r * r) as i32 {
-                                let pixel = (nx as i32 + ddx) as usize;
+                                let px = (nx as i32 + ddx) as usize;
                                 let py = (ny as i32 + ddy) as usize;
-                                if pixel < w && py < h {
-                                    buffer[py * w + pixel] = color;
+                                if px < w && py < h {
+                                    buf[py * w + px] = color;
                                 }
                             }
                         }
@@ -2540,16 +2547,16 @@ loop {
                 let destination_index = (next_random() % node_positions[li + 1].len() as u64) as usize;
                 let (x1, y1) = node_positions[li][source_index];
                 let (x2, y2) = node_positions[li + 1][destination_index];
-                let t = ((flow_phase + li as f32 * 0.7) % 1.0).absolute();
+                let t = ((flow_phase + li as f32 * 0.7) % 1.0).abs();
                 let dot_x = (x1 as f32 + (x2 as f32 - x1 as f32) * t) as usize;
                 let dot_y = (y1 as f32 + (y2 as f32 - y1 as f32) * t) as usize;
                 // Bright green dot
                 for dy in 0..4 {
                     for dx in 0..4 {
-                        let pixel = dot_x + dx;
+                        let px = dot_x + dx;
                         let py = dot_y + dy;
-                        if pixel < w && py < h {
-                            buffer[py * w + pixel] = 0xFF00FF66;
+                        if px < w && py < h {
+                            buf[py * w + px] = 0xFF00FF66;
                         }
                     }
                 }
@@ -2559,13 +2566,13 @@ loop {
             let title = "J A R V I S";
             let title_w = title.len() * 8 * 4;
             let transmit = if w > title_w { (w - title_w) / 2 } else { 0 };
-            draw_str(&mut buffer, w, h, transmit, h / 12, title, 0xFF00FF64, 4);
+            draw_str(&mut buf, w, h, transmit, h / 12, title, 0xFF00FF64, 4);
 
             // Subtitle
             let sub = "Kernel-Resident Neural Network";
             let sub_w = sub.len() * 8 * 2;
             let sx = if w > sub_w { (w - sub_w) / 2 } else { 0 };
-            draw_str(&mut buffer, w, h, sx, h / 12 + 72, sub, 0xFF88DDAA, 2);
+            draw_str(&mut buf, w, h, sx, h / 12 + 72, sub, 0xFF88DDAA, 2);
 
             // Stats bar at bottom
             let stats_y = h - 50;
@@ -2578,22 +2585,22 @@ loop {
             ];
             let total_stats_w = stats.iter().map(|s| s.len() * 8 + 30).sum::<usize>();
             let mut sx_position = if w > total_stats_w { (w - total_stats_w) / 2 } else { 10 };
-            for status in &stats {
-                draw_str(&mut buffer, w, h, sx_position, stats_y, status, 0xFF00CC88, 1);
-                sx_position += status.len() * 8 + 30;
+            for stat in &stats {
+                draw_str(&mut buf, w, h, sx_position, stats_y, stat, 0xFF00CC88, 1);
+                sx_position += stat.len() * 8 + 30;
             }
 
             // Layer labels
             let labels = ["Input", "Hidden", "Hidden", "Output"];
             for (li, layer) in node_positions.iter().enumerate() {
                 if let Some(&(lx, _)) = layer.first() {
-                    let label = labels[li];
-                    let label_x = if lx > label.len() * 4 { lx - label.len() * 4 } else { 0 };
-                    draw_str(&mut buffer, w, h, label_x, h * 3 / 4 + 20, label, 0xFF666666, 1);
+                    let lbl = labels[li];
+                    let lbl_x = if lx > lbl.len() * 4 { lx - lbl.len() * 4 } else { 0 };
+                    draw_str(&mut buf, w, h, lbl_x, h * 3 / 4 + 20, lbl, 0xFF666666, 1);
                 }
             }
 
-            blit(&buffer, w, h);
+            blit(&buf, w, h);
             frame += 1;
         }
 
@@ -2824,21 +2831,21 @@ pub fn command_showcase3d() {
         crate::framebuffer::set_double_buffer_mode(true);
     }
 
-    let mut buffer = alloc::vec![0u32; w * h];
+    let mut buf = alloc::vec![0u32; w * h];
 
     // -- Helpers ----------------------------------------------------------
 
-    let draw_char = |buffer: &mut [u32], w: usize, h: usize, cx: usize, cy: usize, c: char, color: u32, scale: usize| {
+    let draw_char = |buf: &mut [u32], w: usize, h: usize, cx: usize, cy: usize, c: char, color: u32, scale: usize| {
         let glyph = crate::framebuffer::font::get_glyph(c);
         for (row, &bits) in glyph.iter().enumerate() {
             for bit in 0..8u32 {
                 if bits & (0x80 >> bit) != 0 {
                     for sy in 0..scale {
                         for sx in 0..scale {
-                            let pixel = cx + bit as usize * scale + sx;
+                            let px = cx + bit as usize * scale + sx;
                             let py = cy + row * scale + sy;
-                            if pixel < w && py < h {
-                                buffer[py * w + pixel] = color;
+                            if px < w && py < h {
+                                buf[py * w + px] = color;
                             }
                         }
                     }
@@ -2847,23 +2854,23 @@ pub fn command_showcase3d() {
         }
     };
 
-    let draw_text = |buffer: &mut [u32], w: usize, h: usize, x: usize, y: usize, text: &str, color: u32, scale: usize| {
+    let draw_text = |buf: &mut [u32], w: usize, h: usize, x: usize, y: usize, text: &str, color: u32, scale: usize| {
         for (i, c) in text.chars().enumerate() {
-            draw_char(buffer, w, h, x + i * 8 * scale, y, c, color, scale);
+            draw_char(buf, w, h, x + i * 8 * scale, y, c, color, scale);
         }
     };
 
-    let draw_text_centered = |buffer: &mut [u32], w: usize, h: usize, y: usize, text: &str, color: u32, scale: usize| {
+    let draw_text_centered = |buf: &mut [u32], w: usize, h: usize, y: usize, text: &str, color: u32, scale: usize| {
         let tw = text.len() * 8 * scale;
         let x = if tw < w { (w - tw) / 2 } else { 0 };
         for (i, c) in text.chars().enumerate() {
-            draw_char(buffer, w, h, x + i * 8 * scale, y, c, color, scale);
+            draw_char(buf, w, h, x + i * 8 * scale, y, c, color, scale);
         }
     };
 
-    let blit = |buffer: &[u32], w: usize, h: usize| {
+    let blit = |buf: &[u32], w: usize, h: usize| {
         // SMP parallel blit: write directly to MMIO FB across all cores
-        crate::framebuffer::blit_to_framebuffer_parallel(buffer.as_pointer(), w, h);
+        crate::framebuffer::blit_to_framebuffer_parallel(buf.as_ptr(), w, h);
     };
 
     // -- Tick-based wall-clock timing (PIT at ~100 Hz) ----------------
@@ -2872,22 +2879,22 @@ pub fn command_showcase3d() {
     let ticks_now = || crate::logger::get_ticks();
 
     // Draw stats bar at bottom (with real hardware info)
-    let draw_stats = |buffer: &mut [u32], w: usize, h: usize, scene_name: &str, scene_number: usize, fps: u32, elapsed_s: u32, total_s: u32, quality: usize| {
+    let draw_stats = |buf: &mut [u32], w: usize, h: usize, scene_name: &str, scene_num: usize, fps: u32, elapsed_s: u32, total_s: u32, quality: usize| {
         let bar_h = 28usize;
         let bar_y = h - bar_h;
         for y in bar_y..h {
             for x in 0..w {
-                buffer[y * w + x] = 0xFF0A0A0A;
+                buf[y * w + x] = 0xFF0A0A0A;
             }
         }
         for x in 0..w {
-            buffer[bar_y * w + x] = 0xFF00AA44;
+            buf[bar_y * w + x] = 0xFF00AA44;
         }
         // Gather RAM stats
         let mem = crate::memory::stats();
-        let heap_used_keyboard = mem.heap_used / 1024;
-        let heap_total_keyboard = (mem.heap_used + mem.heap_free) / 1024;
-        let heap_pct = if heap_total_keyboard > 0 { heap_used_keyboard * 100 / heap_total_keyboard } else { 0 };
+        let heap_used_kb = mem.heap_used / 1024;
+        let heap_total_kb = (mem.heap_used + mem.heap_free) / 1024;
+        let heap_pct = if heap_total_kb > 0 { heap_used_kb * 100 / heap_total_kb } else { 0 };
         // Frame time approximation from FPS
         let frame_mouse = if fps > 0 { 1000 / fps } else { 999 };
         let quality_str = // Correspondance de motifs — branchement exhaustif de Rust.
@@ -2895,17 +2902,17 @@ match quality { 1 => "Full", 2 => "High", 3 => "Med", _ => "Low" };
         let mut stats_str = alloc::string::String::new();
         use core::fmt::Write;
         let _ = write!(stats_str, " {}/12 {} | {} FPS {}ms | RAM {}KB/{}KB ({}%) | CPU 100% | {} | {}x{}",
-            scene_number, scene_name, fps, frame_mouse, heap_used_keyboard, heap_total_keyboard, heap_pct, quality_str, w, h);
-        draw_text(buffer, w, h, 8, bar_y + 8, &stats_str, 0xFF00FF66, 1);
+            scene_num, scene_name, fps, frame_mouse, heap_used_kb, heap_total_kb, heap_pct, quality_str, w, h);
+        draw_text(buf, w, h, 8, bar_y + 8, &stats_str, 0xFF00FF66, 1);
     };
 
     let scene_ticks = 500u64;  // 5 seconds per scene (100 ticks/sec)
     let title_ticks = 200u64;  // 2 seconds title overlay
 
     // Render a pixel-shader scene (tick-based timing, adaptive quality)
-    let render_shader_scene = |buffer: &mut [u32], w: usize, h: usize,
+    let render_shader_scene = |buf: &mut [u32], w: usize, h: usize,
                                 shader_fn: fn(PixelInput) -> PixelOutput,
-                                title: &str, subtitle: &str, scene_number: usize,
+                                title: &str, subtitle: &str, scene_num: usize,
                                 dur_ticks: u64| {
         let start = ticks_now();
         let mut frame = 0u32;
@@ -2946,10 +2953,10 @@ loop {
                     // Fill the stepA--step block
                     for dy in 0..step {
                         for dx in 0..step {
-                            let pixel = x + dx;
+                            let px = x + dx;
                             let py = y + dy;
-                            if pixel < w && py < h {
-                                buffer[py * w + pixel] = color;
+                            if px < w && py < h {
+                                buf[py * w + px] = color;
                             }
                         }
                     }
@@ -2973,26 +2980,26 @@ loop {
                     let fade = elapsed - 150;
                     255u32.saturating_sub((fade * 255 / 50) as u32)
                 } else { 255 };
-                let a = alpha.minimum(255);
+                let a = alpha.min(255);
                 let tc = 0xFF000000 | (a << 16) | (a << 8) | a;
-                draw_text_centered(buffer, w, h, 30, title, tc, 4);
+                draw_text_centered(buf, w, h, 30, title, tc, 4);
                 let sc = 0xFF000000 | ((a * 180 / 255) << 8);
-                draw_text_centered(buffer, w, h, 100, subtitle, sc, 2);
+                draw_text_centered(buf, w, h, 100, subtitle, sc, 2);
             }
 
             let elapsed_s = (elapsed / 100) as u32;
             let total_s = (dur_ticks / 100) as u32;
-            draw_stats(buffer, w, h, title, scene_number, cur_fps, elapsed_s, total_s, step);
-            blit(buffer, w, h);
+            draw_stats(buf, w, h, title, scene_num, cur_fps, elapsed_s, total_s, step);
+            blit(buf, w, h);
             frame += 1;
         }
     };
 
     // Render a Formula3D wireframe scene (tick-based timing)
-    let render_formula_scene = |buffer: &mut [u32], w: usize, h: usize,
+    let render_formula_scene = |buf: &mut [u32], w: usize, h: usize,
                                  scene: crate::formula3d::FormulaScene,
                                  wire_color: u32,
-                                 title: &str, subtitle: &str, scene_number: usize,
+                                 title: &str, subtitle: &str, scene_num: usize,
                                  dur_ticks: u64| {
         let mut renderer = crate::formula3d::FormulaRenderer::new();
         renderer.set_scene(scene);
@@ -3012,8 +3019,8 @@ loop {
             }
 
             renderer.update();
-            for p in buffer.iterator_mut() { *p = 0xFF000000; }
-            renderer.render(buffer, w, h);
+            for p in buf.iter_mut() { *p = 0xFF000000; }
+            renderer.render(buf, w, h);
 
             fps_frames += 1;
             let fps_elapsed = ticks_now().saturating_sub(fps_start);
@@ -3030,39 +3037,39 @@ loop {
                     let fade = elapsed - 150;
                     255u32.saturating_sub((fade * 255 / 50) as u32)
                 } else { 255 };
-                let a = alpha.minimum(255);
+                let a = alpha.min(255);
                 let c = 0xFF000000 | (a << 16) | (a << 8) | a;
-                draw_text_centered(buffer, w, h, 30, title, c, 4);
+                draw_text_centered(buf, w, h, 30, title, c, 4);
                 let sc = 0xFF000000 | ((a * 180 / 255) << 8);
-                draw_text_centered(buffer, w, h, 100, subtitle, sc, 2);
+                draw_text_centered(buf, w, h, 100, subtitle, sc, 2);
             }
 
             let elapsed_s = (elapsed / 100) as u32;
             let total_s = (dur_ticks / 100) as u32;
-            draw_stats(buffer, w, h, title, scene_number, cur_fps, elapsed_s, total_s, 1);
-            blit(buffer, w, h);
+            draw_stats(buf, w, h, title, scene_num, cur_fps, elapsed_s, total_s, 1);
+            blit(buf, w, h);
             frame += 1;
         }
     };
 
     // Fade to black transition (tick-based)
-    let fade_out = |buffer: &mut [u32], w: usize, h: usize, dur_ticks: u64| {
+    let fade_out = |buf: &mut [u32], w: usize, h: usize, dur_ticks: u64| {
         let start = ticks_now();
                 // Boucle infinie — tourne jusqu'à un `break` explicite.
 loop {
             let elapsed = ticks_now().saturating_sub(start);
             if elapsed >= dur_ticks { break; }
-            for pixel in buffer.iterator_mut() {
+            for pixel in buf.iter_mut() {
                 let r = ((*pixel >> 16) & 0xFF).saturating_sub(6) as u32;
                 let g = ((*pixel >> 8) & 0xFF).saturating_sub(6) as u32;
                 let b = (*pixel & 0xFF).saturating_sub(6) as u32;
                 *pixel = 0xFF000000 | (r << 16) | (g << 8) | b;
             }
-            blit(buffer, w, h);
+            blit(buf, w, h);
             crate::cpu::tsc::delay_millis(33);
         }
-        for p in buffer.iterator_mut() { *p = 0xFF000000; }
-        blit(buffer, w, h);
+        for p in buf.iter_mut() { *p = 0xFF000000; }
+        blit(buf, w, h);
     };
 
     let fade_ticks = 40u64; // 400ms fade
@@ -3083,154 +3090,154 @@ loop {
             for y in 0..h {
                 for x in 0..w {
                     let v = ((x as i32 + frame as i32) ^ (y as i32)) as u32 & 0x0F;
-                    buffer[y * w + x] = 0xFF000000 | (v << 8);
+                    buf[y * w + x] = 0xFF000000 | (v << 8);
                 }
             }
-            let alpha = (elapsed * 255 / intro_ticks.maximum(1)).minimum(255) as u32;
+            let alpha = (elapsed * 255 / intro_ticks.max(1)).min(255) as u32;
             let c = 0xFF000000 | (alpha << 16) | (alpha << 8) | alpha;
-            draw_text_centered(&mut buffer, w, h, h / 3, "TrustOS", c, 8);
+            draw_text_centered(&mut buf, w, h, h / 3, "TrustOS", c, 8);
             let sc = 0xFF000000 | ((alpha * 120 / 255) << 16) | ((alpha * 255 / 255) << 8) | ((alpha * 120 / 255));
-            draw_text_centered(&mut buffer, w, h, h / 3 + 140, "3D Graphics Showcase", sc, 3);
+            draw_text_centered(&mut buf, w, h, h / 3 + 140, "3D Graphics Showcase", sc, 3);
             let cc = 0xFF000000 | ((alpha * 100 / 255) << 16) | ((alpha * 100 / 255) << 8) | ((alpha * 100 / 255));
-            draw_text_centered(&mut buffer, w, h, h / 3 + 200, "Pure software rendering - No GPU hardware", cc, 2);
-            blit(&buffer, w, h);
+            draw_text_centered(&mut buf, w, h, h / 3 + 200, "Pure software rendering - No GPU hardware", cc, 2);
+            blit(&buf, w, h);
             frame += 1;
             crate::cpu::tsc::delay_millis(33);
         }
-        fade_out(&mut buffer, w, h, fade_ticks);
+        fade_out(&mut buf, w, h, fade_ticks);
     }
 
     // -----------------------------------------------------------------
     // SCENE 1 -- Rotating Cube
     // -----------------------------------------------------------------
     crate::serial_println!("[SHOWCASE3D] Scene 1: Cube");
-    render_formula_scene(&mut buffer, w, h,
+    render_formula_scene(&mut buf, w, h,
         crate::formula3d::FormulaScene::Cube,
         0xFF00FF66,
         "Wireframe Cube", "8 vertices - 12 edges - perspective projection", 1,
         scene_ticks);
-    fade_out(&mut buffer, w, h, fade_ticks);
+    fade_out(&mut buf, w, h, fade_ticks);
 
     // -----------------------------------------------------------------
     // SCENE 2 -- Diamond
     // -----------------------------------------------------------------
     crate::serial_println!("[SHOWCASE3D] Scene 2: Diamond");
-    render_formula_scene(&mut buffer, w, h,
+    render_formula_scene(&mut buf, w, h,
         crate::formula3d::FormulaScene::Diamond,
         0xFFFF44FF,
         "Diamond", "Octahedron geometry - depth colored edges", 2,
         scene_ticks);
-    fade_out(&mut buffer, w, h, fade_ticks);
+    fade_out(&mut buf, w, h, fade_ticks);
 
     // -----------------------------------------------------------------
     // SCENE 3 -- Torus
     // -----------------------------------------------------------------
     crate::serial_println!("[SHOWCASE3D] Scene 3: Torus");
-    render_formula_scene(&mut buffer, w, h,
+    render_formula_scene(&mut buf, w, h,
         crate::formula3d::FormulaScene::Torus,
         0xFFFF8844,
         "Torus", "Donut wireframe - parametric surface mesh", 3,
         scene_ticks);
-    fade_out(&mut buffer, w, h, fade_ticks);
+    fade_out(&mut buf, w, h, fade_ticks);
 
     // -----------------------------------------------------------------
     // SCENE 4 -- Pyramid
     // -----------------------------------------------------------------
     crate::serial_println!("[SHOWCASE3D] Scene 4: Pyramid");
-    render_formula_scene(&mut buffer, w, h,
+    render_formula_scene(&mut buf, w, h,
         crate::formula3d::FormulaScene::Pyramid,
         0xFFFFCC00,
         "Pyramid", "5 vertices - 8 edges - ancient geometry", 4,
         scene_ticks);
-    fade_out(&mut buffer, w, h, fade_ticks);
+    fade_out(&mut buf, w, h, fade_ticks);
 
     // -----------------------------------------------------------------
     // SCENE 5 -- HoloMatrix Rain 3D
     // -----------------------------------------------------------------
     crate::serial_println!("[SHOWCASE3D] Scene 5: HoloMatrix");
-    render_formula_scene(&mut buffer, w, h,
+    render_formula_scene(&mut buf, w, h,
         crate::formula3d::FormulaScene::HoloMatrix,
         0xFF00FF44,
         "HoloMatrix", "3D matrix rain with perspective depth", 5,
         scene_ticks);
-    fade_out(&mut buffer, w, h, fade_ticks);
+    fade_out(&mut buf, w, h, fade_ticks);
 
     // -----------------------------------------------------------------
     // SCENE 6 -- Multi-Shape Orbit
     // -----------------------------------------------------------------
     crate::serial_println!("[SHOWCASE3D] Scene 6: Multi-Shape");
-    render_formula_scene(&mut buffer, w, h,
+    render_formula_scene(&mut buf, w, h,
         crate::formula3d::FormulaScene::Multi,
         0xFF00FFAA,
         "Multi Shape", "4 wireframe objects orbiting - depth colored", 6,
         scene_ticks);
-    fade_out(&mut buffer, w, h, fade_ticks);
+    fade_out(&mut buf, w, h, fade_ticks);
 
     // -----------------------------------------------------------------
     // SCENE 7 -- DNA Double Helix
     // -----------------------------------------------------------------
     crate::serial_println!("[SHOWCASE3D] Scene 7: DNA Helix");
-    render_formula_scene(&mut buffer, w, h,
+    render_formula_scene(&mut buf, w, h,
         crate::formula3d::FormulaScene::Helix,
         0xFF44FFCC,
         "DNA Helix", "Double-strand helix with cross rungs", 7,
         scene_ticks);
-    fade_out(&mut buffer, w, h, fade_ticks);
+    fade_out(&mut buf, w, h, fade_ticks);
 
     // -----------------------------------------------------------------
     // SCENE 8 -- Grid
     // -----------------------------------------------------------------
     crate::serial_println!("[SHOWCASE3D] Scene 8: Grid");
-    render_formula_scene(&mut buffer, w, h,
+    render_formula_scene(&mut buf, w, h,
         crate::formula3d::FormulaScene::Grid,
         0xFF4488FF,
         "Infinite Grid", "Wireframe ground plane with perspective", 8,
         scene_ticks);
-    fade_out(&mut buffer, w, h, fade_ticks);
+    fade_out(&mut buf, w, h, fade_ticks);
 
     // -----------------------------------------------------------------
     // SCENE 9 -- Penger
     // -----------------------------------------------------------------
     crate::serial_println!("[SHOWCASE3D] Scene 9: Penger");
-    render_formula_scene(&mut buffer, w, h,
+    render_formula_scene(&mut buf, w, h,
         crate::formula3d::FormulaScene::Penger,
         0xFFFFFF00,
         "Penger", "The legendary wireframe penguin", 9,
         scene_ticks);
-    fade_out(&mut buffer, w, h, fade_ticks);
+    fade_out(&mut buf, w, h, fade_ticks);
 
     // -----------------------------------------------------------------
     // SCENE 10 -- TrustOS Logo
     // -----------------------------------------------------------------
     crate::serial_println!("[SHOWCASE3D] Scene 10: TrustOS Logo");
-    render_formula_scene(&mut buffer, w, h,
+    render_formula_scene(&mut buf, w, h,
         crate::formula3d::FormulaScene::TrustOs,
         0xFF00FF88,
         "TrustOS Logo", "3D wireframe logo with glow vertices", 10,
         scene_ticks);
-    fade_out(&mut buffer, w, h, fade_ticks);
+    fade_out(&mut buf, w, h, fade_ticks);
 
     // -----------------------------------------------------------------
     // SCENE 11 -- Icosphere
     // -----------------------------------------------------------------
     crate::serial_println!("[SHOWCASE3D] Scene 11: Icosphere");
-    render_formula_scene(&mut buffer, w, h,
+    render_formula_scene(&mut buf, w, h,
         crate::formula3d::FormulaScene::Icosphere,
         0xFF66CCFF,
         "Icosphere", "Geodesic sphere - subdivided icosahedron", 11,
         scene_ticks);
-    fade_out(&mut buffer, w, h, fade_ticks);
+    fade_out(&mut buf, w, h, fade_ticks);
 
     // -----------------------------------------------------------------
     // SCENE 12 -- Character
     // -----------------------------------------------------------------
     crate::serial_println!("[SHOWCASE3D] Scene 12: Character");
-    render_formula_scene(&mut buffer, w, h,
+    render_formula_scene(&mut buf, w, h,
         crate::formula3d::FormulaScene::Character,
         0xFF00FF88,
         "TrustOS", "Wireframe humanoid - perspective projection", 12,
         scene_ticks);
-    fade_out(&mut buffer, w, h, fade_ticks);
+    fade_out(&mut buf, w, h, fade_ticks);
 
     // -----------------------------------------------------------------
     // OUTRO -- Credits (4 seconds)
@@ -3241,28 +3248,28 @@ loop {
         loop {
             let elapsed = ticks_now().saturating_sub(start);
             if elapsed >= outro_ticks { break; }
-            for p in buffer.iterator_mut() { *p = 0xFF000000; }
+            for p in buf.iter_mut() { *p = 0xFF000000; }
             let alpha = if elapsed < 100 {
-                (elapsed * 255 / 100).minimum(255)
+                (elapsed * 255 / 100).min(255)
             } else if elapsed > 300 {
                 let fd = elapsed - 300;
                 255u64.saturating_sub(fd * 255 / 100)
             } else { 255 } as u32;
             let c = 0xFF000000 | (alpha << 16) | (alpha << 8) | alpha;
             let gc = 0xFF000000 | ((alpha * 200 / 255) << 8);
-            draw_text_centered(&mut buffer, w, h, h / 3 - 30, "TrustOS 3D Engine", c, 5);
-            draw_text_centered(&mut buffer, w, h, h / 3 + 60, "12 wireframe scenes - Pure software rendering", gc, 2);
-            draw_text_centered(&mut buffer, w, h, h / 3 + 100, "No GPU hardware - All CPU computed", gc, 2);
-            draw_text_centered(&mut buffer, w, h, h / 3 + 160, "Written in Rust by Nated0ge", 0xFF000000 | ((alpha * 140 / 255) << 16) | ((alpha * 180 / 255) << 8) | (alpha * 255 / 255), 3);
-            draw_text_centered(&mut buffer, w, h, h / 3 + 220, "github.com/nathan237/TrustOS", 0xFF000000 | ((alpha * 100 / 255) << 16) | ((alpha * 100 / 255) << 8) | ((alpha * 100 / 255)), 2);
-            blit(&buffer, w, h);
+            draw_text_centered(&mut buf, w, h, h / 3 - 30, "TrustOS 3D Engine", c, 5);
+            draw_text_centered(&mut buf, w, h, h / 3 + 60, "12 wireframe scenes - Pure software rendering", gc, 2);
+            draw_text_centered(&mut buf, w, h, h / 3 + 100, "No GPU hardware - All CPU computed", gc, 2);
+            draw_text_centered(&mut buf, w, h, h / 3 + 160, "Written in Rust by Nated0ge", 0xFF000000 | ((alpha * 140 / 255) << 16) | ((alpha * 180 / 255) << 8) | (alpha * 255 / 255), 3);
+            draw_text_centered(&mut buf, w, h, h / 3 + 220, "github.com/nathan237/TrustOS", 0xFF000000 | ((alpha * 100 / 255) << 16) | ((alpha * 100 / 255) << 8) | ((alpha * 100 / 255)), 2);
+            blit(&buf, w, h);
             crate::cpu::tsc::delay_millis(33);
         }
     }
 
     // Restore
-    for p in buffer.iterator_mut() { *p = 0xFF000000; }
-    blit(&buffer, w, h);
+    for p in buf.iter_mut() { *p = 0xFF000000; }
+    blit(&buf, w, h);
     if !was_db {
         crate::framebuffer::set_double_buffer_mode(false);
     }
@@ -3286,19 +3293,19 @@ pub fn command_filled3d() {
         crate::framebuffer::set_double_buffer_mode(true);
     }
 
-    let mut buffer = alloc::vec![0xFF000000u32; w * h];
+    let mut buf = alloc::vec![0xFF000000u32; w * h];
 
-    let draw_char = |buffer: &mut [u32], w: usize, h: usize, cx: usize, cy: usize, c: char, color: u32, scale: usize| {
+    let draw_char = |buf: &mut [u32], w: usize, h: usize, cx: usize, cy: usize, c: char, color: u32, scale: usize| {
         let glyph = crate::framebuffer::font::get_glyph(c);
         for (row, &bits) in glyph.iter().enumerate() {
             for bit in 0..8u32 {
                 if bits & (0x80 >> bit) != 0 {
                     for sy in 0..scale {
                         for sx in 0..scale {
-                            let pixel = cx + bit as usize * scale + sx;
+                            let px = cx + bit as usize * scale + sx;
                             let py = cy + row * scale + sy;
-                            if pixel < w && py < h {
-                                buffer[py * w + pixel] = color;
+                            if px < w && py < h {
+                                buf[py * w + px] = color;
                             }
                         }
                     }
@@ -3307,9 +3314,9 @@ pub fn command_filled3d() {
         }
     };
 
-    let blit = |buffer: &[u32], w: usize, h: usize| {
+    let blit = |buf: &[u32], w: usize, h: usize| {
         // SMP parallel blit: write directly to MMIO FB across all cores
-        crate::framebuffer::blit_to_framebuffer_parallel(buffer.as_pointer(), w, h);
+        crate::framebuffer::blit_to_framebuffer_parallel(buf.as_ptr(), w, h);
     };
 
     let ticks_now = || crate::logger::get_ticks();
@@ -3343,7 +3350,7 @@ loop {
         }
 
         // Clear to dark blue-grey
-        for p in buffer.iterator_mut() { *p = 0xFF0C1018; }
+        for p in buf.iter_mut() { *p = 0xFF0C1018; }
 
         angle_y += 0.025;
         let angle_x = 0.35 + crate::formula3d::fast_sin(frame as f32 * 0.008) * 0.2;
@@ -3367,8 +3374,8 @@ loop {
                 for x in 0..third {
                     let source_index = y * third + x;
                     let destination_index = y * w + x;
-                    if source_index < sub_buffer.len() && destination_index < buffer.len() {
-                        buffer[destination_index] = sub_buffer[source_index];
+                    if source_index < sub_buffer.len() && destination_index < buf.len() {
+                        buf[destination_index] = sub_buffer[source_index];
                     }
                 }
             }
@@ -3384,8 +3391,8 @@ loop {
                 for x in 0..third {
                     let source_index = y * third + x;
                     let destination_index = y * w + third + x;
-                    if source_index < sub_buffer.len() && destination_index < buffer.len() {
-                        buffer[destination_index] = sub_buffer[source_index];
+                    if source_index < sub_buffer.len() && destination_index < buf.len() {
+                        buf[destination_index] = sub_buffer[source_index];
                     }
                 }
             }
@@ -3401,8 +3408,8 @@ loop {
                 for x in 0..third {
                     let source_index = y * third + x;
                     let destination_index = y * w + 2 * third + x;
-                    if source_index < sub_buffer.len() && destination_index < buffer.len() {
-                        buffer[destination_index] = sub_buffer[source_index];
+                    if source_index < sub_buffer.len() && destination_index < buf.len() {
+                        buf[destination_index] = sub_buffer[source_index];
                     }
                 }
             }
@@ -3422,44 +3429,44 @@ loop {
         let bar_y = h.saturating_sub(bar_h);
         for y in bar_y..h {
             for x in 0..w {
-                let index = y * w + x;
-                if index < buffer.len() { buffer[index] = 0xFF000000; }
+                let idx = y * w + x;
+                if idx < buf.len() { buf[idx] = 0xFF000000; }
             }
         }
         let stats = alloc::format!("Filled 3D | {} FPS | Flat Shading + Backface Cull + Painter Sort | ESC=exit", cur_fps);
-        for (i, character) in stats.chars().enumerate() {
+        for (i, ch) in stats.chars().enumerate() {
             let cx = 8 + i * 8;
             if cx + 8 > w { break; }
-            draw_char(&mut buffer, w, h, cx, bar_y + 4, character, 0xFF00FF88, 1);
+            draw_char(&mut buf, w, h, cx, bar_y + 4, ch, 0xFF00FF88, 1);
         }
 
         // Title on first frames
         if frame < 200 {
             let alpha = if frame < 30 { frame * 255 / 30 } else if frame > 170 { (200 - frame) * 255 / 30 } else { 255 };
-            let a = (alpha.minimum(255)) as u32;
+            let a = (alpha.min(255)) as u32;
             let c = 0xFF000000 | (a << 16) | (a << 8) | a;
             let title = "FILLED 3D TEST";
             let tw = title.len() * 8 * 3;
             let transmit = if tw < w { (w - tw) / 2 } else { 0 };
-            for (i, character) in title.chars().enumerate() {
-                draw_char(&mut buffer, w, h, transmit + i * 24, 30, character, c, 3);
+            for (i, ch) in title.chars().enumerate() {
+                draw_char(&mut buf, w, h, transmit + i * 24, 30, ch, c, 3);
             }
             let sub = "Scanline Rasterizer + Flat Shading";
             let stw = sub.len() * 8 * 2;
             let stx = if stw < w { (w - stw) / 2 } else { 0 };
             let sc = 0xFF000000 | ((a * 180 / 255) << 8);
-            for (i, character) in sub.chars().enumerate() {
-                draw_char(&mut buffer, w, h, stx + i * 16, 80, character, sc, 2);
+            for (i, ch) in sub.chars().enumerate() {
+                draw_char(&mut buf, w, h, stx + i * 16, 80, ch, sc, 2);
             }
         }
 
-        blit(&buffer, w, h);
+        blit(&buf, w, h);
         frame += 1;
     }
 
     // Restore
-    for p in buffer.iterator_mut() { *p = 0xFF000000; }
-    blit(&buffer, w, h);
+    for p in buf.iter_mut() { *p = 0xFF000000; }
+    blit(&buf, w, h);
     if !was_db {
         crate::framebuffer::set_double_buffer_mode(false);
     }
@@ -3482,7 +3489,7 @@ pub(super) fn command_cosmic_v2_with_app(initial_app: Option<&str>) {
 }
 
 /// Open desktop with optional app and optional auto-exit timeout (0 = no timeout)
-pub(super) fn command_cosmic_v2_with_app_timed(initial_app: Option<&str>, timeout_mouse: u64) {
+pub(super) fn command_cosmic_v2_with_app_timed(initial_app: Option<&str>, timeout_ms: u64) {
     use crate::compositor::{Compositor, LayerType};
     use alloc::format;
     use alloc::string::String;
@@ -3760,7 +3767,7 @@ match initial_app {
     let mut browser_loading = false;
     let mut browser_url_focused = true;
     let mut browser_view_mode: u8 = 0;  // 0=DevTools, 1=Rendered
-    let mut auto_navigate_pending = timeout_mouse > 0 && active_mode == AppMode::Browser;
+    let mut auto_navigate_pending = timeout_ms > 0 && active_mode == AppMode::Browser;
     
     // Helper to add a simple line
     fn make_simple_line(text: &str, color: u32, line_type: LineType) -> BrowserLine {
@@ -4160,19 +4167,19 @@ match $mode {
     
     // Helper to compute flat index for matrix_chars
     #[inline]
-    fn matrix_index(column: usize, row: usize) -> usize {
-        column * MATRIX_ROWS + row
+    fn matrix_index(col: usize, row: usize) -> usize {
+        col * MATRIX_ROWS + row
     }
     
     // Pre-generate character grid (static characters for each cell)
     // This is generated once and reused every frame
     // Vec allocated directly on heap - no stack overflow
     let mut matrix_chars: Vec<u8> = vec![0u8; MATRIX_COLS * MATRIX_ROWS];
-    for column in 0..MATRIX_COLS {
-        let seed = (column as u32 * 2654435761) ^ 0xDEADBEEF;
+    for col in 0..MATRIX_COLS {
+        let seed = (col as u32 * 2654435761) ^ 0xDEADBEEF;
         for row in 0..MATRIX_ROWS {
             let char_seed = seed.wrapping_mul(row as u32 + 1);
-            matrix_chars[matrix_index(column, row)] = MATRIX_CHARS[(char_seed as usize) % MATRIX_CHARS.len()];
+            matrix_chars[matrix_index(col, row)] = MATRIX_CHARS[(char_seed as usize) % MATRIX_CHARS.len()];
         }
     }
     
@@ -4180,10 +4187,10 @@ match $mode {
     // Only this moves each frame - much faster than redrawing characters!
     let mut matrix_heads: [i32; MATRIX_COLS] = [0; MATRIX_COLS];
     let mut matrix_speeds: [u32; MATRIX_COLS] = [0; MATRIX_COLS];
-    for column in 0..MATRIX_COLS {
-        let seed = (column as u32 * 2654435761) ^ 0xDEADBEEF;
-        matrix_heads[column] = -((seed % (MATRIX_ROWS as u32 * 2)) as i32);
-        matrix_speeds[column] = 1 + (seed % 3);  // Speed 1-3
+    for col in 0..MATRIX_COLS {
+        let seed = (col as u32 * 2654435761) ^ 0xDEADBEEF;
+        matrix_heads[col] = -((seed % (MATRIX_ROWS as u32 * 2)) as i32);
+        matrix_speeds[col] = 1 + (seed % 3);  // Speed 1-3
     }
     
     // HoloMatrix 3D volumetric renderer
@@ -4268,7 +4275,7 @@ match $mode {
     let mut mouse_y: i32 = (height / 2) as i32;
     
     // FPS tracking
-    let tsc_frequency = crate::cpu::tsc::frequency_hz();
+    let tsc_freq = crate::cpu::tsc::frequency_hz();
     let mut fps = 0u32;
     let mut frame_in_second = 0u32;
     let mut last_second_tsc = crate::cpu::tsc::read_tsc();
@@ -4290,7 +4297,7 @@ match $mode {
     // Auto-exit timer for showcase mode
     let auto_start_tsc = crate::cpu::tsc::read_tsc();
     let auto_frequency = crate::cpu::tsc::frequency_hz();
-    let auto_target = if timeout_mouse > 0 && auto_frequency > 0 { auto_frequency / 1000 * timeout_mouse } else { u64::MAX };
+    let auto_target = if timeout_ms > 0 && auto_frequency > 0 { auto_frequency / 1000 * timeout_ms } else { u64::MAX };
     
     while running {
         // Auto-navigate for showcase mode (trigger browser load on frame 5)
@@ -4357,7 +4364,7 @@ match crate::netstack::https::get(&browser_url) {
         }
 
         // Auto-exit for showcase mode
-        if timeout_mouse > 0 {
+        if timeout_ms > 0 {
             let elapsed = crate::cpu::tsc::read_tsc().saturating_sub(auto_start_tsc);
             if elapsed >= auto_target { break; }
         }
@@ -4537,10 +4544,10 @@ match crate::netstack::https::get(&browser_url) {
                         }
                     },
                     43 | 61 => { // + or = - zoom in
-                        image_viewer_zoom = (image_viewer_zoom * 1.25).minimum(10.0);
+                        image_viewer_zoom = (image_viewer_zoom * 1.25).min(10.0);
                     },
                     45 => { // - zoom out
-                        image_viewer_zoom = (image_viewer_zoom / 1.25).maximum(0.1);
+                        image_viewer_zoom = (image_viewer_zoom / 1.25).max(0.1);
                     },
                     114 | 82 => { // R - reset view
                         image_viewer_zoom = 1.0;
@@ -4589,7 +4596,7 @@ match crate::netstack::https::get(&browser_url) {
                 0x51 => { // PageDown - scroll down
                     let maximum_scroll = shell_output.len().saturating_sub(MAXIMUM_VISIBLE_LINES);
                     if scroll_offset < maximum_scroll {
-                        scroll_offset = (scroll_offset + 5).minimum(maximum_scroll);
+                        scroll_offset = (scroll_offset + 5).min(maximum_scroll);
                     }
                 },
                 10 | 13 => { // Enter - execute command (ASCII LF=10 or CR=13)
@@ -5032,7 +5039,7 @@ match file_type {
                                     
                                     // Get backbuffer pointer (stride = width in pixels, no pitch mismatch)
                                     let bb_information = crate::framebuffer::get_backbuffer_information();
-                                    let (framebuffer_pointer, bb_stride) = if let Some((ptr, _w, _h, stride)) = bb_information {
+                                    let (fb_ptr, bb_stride) = if let Some((ptr, _w, _h, stride)) = bb_information {
                                         (ptr as *mut u32, stride)
                                     } else {
                                         // Fallback to direct MMIO (will have stride issues on some hw)
@@ -5040,7 +5047,7 @@ match file_type {
                                     };
                                     
                                     // Init virtual GPU with backbuffer
-                                    crate::gpu_emu::initialize_stride(framebuffer_pointer, width, height, bb_stride);
+                                    crate::gpu_emu::initialize_stride(fb_ptr, width, height, bb_stride);
                                     crate::gpu_emu::set_shader(shader_fn);
                                     
                                     // Run shader demo loop
@@ -5338,7 +5345,7 @@ match app.as_str() {
 match crate::ramfs::with_filesystem(|fs| fs.ls(None)) {
                                     Ok(items) => {
                                         let count = items.len();
-                                        for (i, (name, file_type, _)) in items.into_iterator().enumerate() {
+                                        for (i, (name, file_type, _)) in items.into_iter().enumerate() {
                                             let prefix = if i + 1 == count { "+-- " } else { "+-- " };
                                                                                         // Correspondance de motifs — branchement exhaustif de Rust.
 match file_type {
@@ -5445,14 +5452,14 @@ match crate::ramfs::with_filesystem(|fs| {
                                     Ok(data) => {
                                         // Detect format and load
                                         let format = crate::image::detect_image_format(&data);
-                                        if let Some(image) = crate::image::load_image_auto(&data) {
+                                        if let Some(img) = crate::image::load_image_auto(&data) {
                                             image_viewer_path = String::from(path);
-                                            image_viewer_information = format!("{}x{} ({} bytes)", image.width, image.height, data.len());
+                                            image_viewer_information = format!("{}x{} ({} bytes)", img.width, img.height, data.len());
                                             image_viewer_format = String::from(format.extension());
                                             image_viewer_zoom = 1.0;
                                             image_viewer_offset_x = 0;
                                             image_viewer_offset_y = 0;
-                                            image_viewer_data = Some(image);
+                                            image_viewer_data = Some(img);
                                             
                                             // Switch to image viewer mode
                                             active_mode = AppMode::ImageViewer;
@@ -5482,10 +5489,10 @@ match crate::ramfs::with_filesystem(|fs| {
                                         shell_output.push(format!("| Size:    {} bytes   ", data.len()));
                                         
                                         // Try to get dimensions
-                                        if let Some(image) = crate::image::load_image_auto(&data) {
-                                            shell_output.push(format!("| Width:   {} px   ", image.width));
-                                            shell_output.push(format!("| Height:  {} px   ", image.height));
-                                            shell_output.push(format!("| Pixels:  {}   ", image.width * image.height));
+                                        if let Some(img) = crate::image::load_image_auto(&data) {
+                                            shell_output.push(format!("| Width:   {} px   ", img.width));
+                                            shell_output.push(format!("| Height:  {} px   ", img.height));
+                                            shell_output.push(format!("| Pixels:  {}   ", img.width * img.height));
                                         } else {
                                             shell_output.push(format!("| (Cannot decode image dimensions)"));
                                         }
@@ -5774,9 +5781,9 @@ match k {
                                     
                                     // Blit demo to screen
                                     for py in 0..demo_h {
-                                        for pixel in 0..demo_w {
-                                            let index = (py * demo_w + pixel) as usize;
-                                            crate::framebuffer::draw_pixel(demo_x + pixel, demo_y + py, rast.back_buffer[index]);
+                                        for px in 0..demo_w {
+                                            let idx = (py * demo_w + px) as usize;
+                                            crate::framebuffer::draw_pixel(demo_x + px, demo_y + py, rast.back_buffer[idx]);
                                         }
                                     }
                                     
@@ -5839,9 +5846,9 @@ match k {
                                 
                                 // Blit to screen
                                 for py in 0..demo_h {
-                                    for pixel in 0..demo_w {
-                                        let index = (py * demo_w + pixel) as usize;
-                                        crate::framebuffer::draw_pixel(demo_x + pixel, demo_y + py, rast.back_buffer[index]);
+                                    for px in 0..demo_w {
+                                        let idx = (py * demo_w + px) as usize;
+                                        crate::framebuffer::draw_pixel(demo_x + px, demo_y + py, rast.back_buffer[idx]);
                                     }
                                 }
                                 
@@ -5933,9 +5940,9 @@ loop {
             if mx >= menu_x && mx < menu_x + 250 && my >= menu_y && my < menu_y + 290 {
                 let item_h = 36u32;
                 let relative_y = if my > menu_y + 40 { my - menu_y - 40 } else { 0 };
-                let index = (relative_y / item_h) as i32;
-                if index >= 0 && index < menu_items.len() as i32 {
-                    menu_hover = index;
+                let idx = (relative_y / item_h) as i32;
+                if idx >= 0 && idx < menu_items.len() as i32 {
+                    menu_hover = idx;
                 }
             }
         }
@@ -6106,8 +6113,8 @@ match i {
         // Each core renders a chunk of columns simultaneously
         // -------------------------------------------------------------------
         if let Some(bg) = compositor.get_layer_mut(bg_layer) {
-            let buffer_pointer = bg.buffer.as_mut_pointer();
-            let buffer_length = bg.buffer.len();
+            let buf_ptr = bg.buffer.as_mut_ptr();
+            let buf_len = bg.buffer.len();
             
             // FAST PATH: Use optimized renderers
             if use_formula {
@@ -6126,7 +6133,7 @@ match i {
                 // ~12K glyph blits/frame vs 1M+ pixel shader calls.
                 // -------------------------------------------------------------
                 crate::gpu_emu::shader_matrix_render(
-                    buffer_pointer,
+                    buf_ptr,
                     width as usize,
                     height as usize,
                 );
@@ -6164,19 +6171,19 @@ match i {
                 holovolume.update(0.016);
                 
                 // Move heads down (same as normal rain)
-                for column in 0..MATRIX_COLS {
-                    matrix_heads[column] += matrix_speeds[column] as i32;
-                    if matrix_heads[column] > (MATRIX_ROWS as i32 + 30) {
-                        let seed = (column as u32 * 2654435761).wrapping_add(frame_count as u32);
-                        matrix_heads[column] = -((seed % 30) as i32);
-                        matrix_speeds[column] = 1 + (seed % 3);
+                for col in 0..MATRIX_COLS {
+                    matrix_heads[col] += matrix_speeds[col] as i32;
+                    if matrix_heads[col] > (MATRIX_ROWS as i32 + 30) {
+                        let seed = (col as u32 * 2654435761).wrapping_add(frame_count as u32);
+                        matrix_heads[col] = -((seed % 30) as i32);
+                        matrix_speeds[col] = 1 + (seed % 3);
                     }
                 }
                 
                 // Clear with black
                 unsafe {
                     #[cfg(target_arch = "x86_64")]
-                    crate::graphics::simd::fill_row_sse2(buffer_pointer, buffer_length, black);
+                    crate::graphics::simd::fill_row_sse2(buf_ptr, buf_len, black);
                     #[cfg(not(target_arch = "x86_64"))]
                     bg.buffer.fill(black);
                 }
@@ -6186,13 +6193,13 @@ match i {
                 
                 // Render with holo intensity modifier
                 let params = super::MatrixRenderParams {
-                    buffer_pointer,
-                    buffer_length,
+                    buf_ptr,
+                    buf_len,
                     width,
                     height,
-                    matrix_chars: matrix_chars.as_pointer(),
-                    matrix_heads: matrix_heads.as_pointer(),
-                    holo_intensity: holo_intensity.as_pointer(),
+                    matrix_chars: matrix_chars.as_ptr(),
+                    matrix_heads: matrix_heads.as_ptr(),
+                    holo_intensity: holo_intensity.as_ptr(),
                     matrix_rows: MATRIX_ROWS,
                 };
                 
@@ -6237,9 +6244,9 @@ match i {
                     
                     for y in 0..height as usize {
                         for x in 0..width as usize {
-                            let receive = (x / scale_x).minimum(rt_w - 1);
-                            let ry = (y / scale_y).minimum(rt_h - 1);
-                            let color = rt_output[ry * rt_w + receive];
+                            let rx = (x / scale_x).min(rt_w - 1);
+                            let ry = (y / scale_y).min(rt_h - 1);
+                            let color = rt_output[ry * rt_w + rx];
                             bg.buffer[y * width as usize + x] = color;
                         }
                     }
@@ -6269,19 +6276,19 @@ match i {
                     // 3D projection parameters - center of screen
                     let cx = width as f32 / 2.0;
                     let cy = height as f32 / 2.0;
-                    let scale = (height as f32 / 3.0).minimum(width as f32 / 4.0);
+                    let scale = (height as f32 / 3.0).min(width as f32 / 4.0);
                     
                     // Generate 3D shape points and mark intensity on grid
                     match holo_scene {
                         crate::graphics::holomatrix::HoloScene::DNA => {
                             // DNA Double Helix with higher resolution
-                            let helix_length = 2.2;
+                            let helix_len = 2.2;
                             let radius = 0.45;
                             let turns = 3.5;
                             
                             for i in 0..180 {
                                 let t = i as f32 / 180.0;
-                                let y = -helix_length / 2.0 + t * helix_length;
+                                let y = -helix_len / 2.0 + t * helix_len;
                                 let angle = t * turns * 6.28318 + time;
                                 
                                 // Strand 1
@@ -6317,24 +6324,24 @@ match i {
                                 let row2 = (sy2 / cell_h) as usize;
                                 
                                 // Intensity based on depth (closer = brighter) - MAX values!
-                                let int1 = (180.0 + 75.0 * (1.0 - ((rz1 + 0.5) * 0.5).maximum(0.0).minimum(1.0))) as u8;
-                                let int2 = (180.0 + 75.0 * (1.0 - ((rz2 + 0.5) * 0.5).maximum(0.0).minimum(1.0))) as u8;
+                                let int1 = (180.0 + 75.0 * (1.0 - ((rz1 + 0.5) * 0.5).max(0.0).min(1.0))) as u8;
+                                let int2 = (180.0 + 75.0 * (1.0 - ((rz2 + 0.5) * 0.5).max(0.0).min(1.0))) as u8;
                                 
                                 // Mark intensity on grid (both strands) - with THICKNESS
                                 if col1 < MATRIX_COLS && row1 < MATRIX_ROWS {
-                                    intensity_map[col1][row1] = intensity_map[col1][row1].maximum(int1);
+                                    intensity_map[col1][row1] = intensity_map[col1][row1].max(int1);
                                     // Spread to neighbors for thickness (3 cells wide)
-                                    if col1 > 0 { intensity_map[col1-1][row1] = intensity_map[col1-1][row1].maximum(int1 * 2/3); }
-                                    if col1 < MATRIX_COLS-1 { intensity_map[col1+1][row1] = intensity_map[col1+1][row1].maximum(int1 * 2/3); }
-                                    if row1 > 0 { intensity_map[col1][row1-1] = intensity_map[col1][row1-1].maximum(int1/2); }
-                                    if row1 < MATRIX_ROWS-1 { intensity_map[col1][row1+1] = intensity_map[col1][row1+1].maximum(int1/2); }
+                                    if col1 > 0 { intensity_map[col1-1][row1] = intensity_map[col1-1][row1].max(int1 * 2/3); }
+                                    if col1 < MATRIX_COLS-1 { intensity_map[col1+1][row1] = intensity_map[col1+1][row1].max(int1 * 2/3); }
+                                    if row1 > 0 { intensity_map[col1][row1-1] = intensity_map[col1][row1-1].max(int1/2); }
+                                    if row1 < MATRIX_ROWS-1 { intensity_map[col1][row1+1] = intensity_map[col1][row1+1].max(int1/2); }
                                 }
                                 if col2 < MATRIX_COLS && row2 < MATRIX_ROWS {
-                                    intensity_map[col2][row2] = intensity_map[col2][row2].maximum(int2);
-                                    if col2 > 0 { intensity_map[col2-1][row2] = intensity_map[col2-1][row2].maximum(int2 * 2/3); }
-                                    if col2 < MATRIX_COLS-1 { intensity_map[col2+1][row2] = intensity_map[col2+1][row2].maximum(int2 * 2/3); }
-                                    if row2 > 0 { intensity_map[col2][row2-1] = intensity_map[col2][row2-1].maximum(int2/2); }
-                                    if row2 < MATRIX_ROWS-1 { intensity_map[col2][row2+1] = intensity_map[col2][row2+1].maximum(int2/2); }
+                                    intensity_map[col2][row2] = intensity_map[col2][row2].max(int2);
+                                    if col2 > 0 { intensity_map[col2-1][row2] = intensity_map[col2-1][row2].max(int2 * 2/3); }
+                                    if col2 < MATRIX_COLS-1 { intensity_map[col2+1][row2] = intensity_map[col2+1][row2].max(int2 * 2/3); }
+                                    if row2 > 0 { intensity_map[col2][row2-1] = intensity_map[col2][row2-1].max(int2/2); }
+                                    if row2 < MATRIX_ROWS-1 { intensity_map[col2][row2+1] = intensity_map[col2][row2+1].max(int2/2); }
                                 }
                                 
                                 // Cross-links every 12 points (base pairs)
@@ -6346,7 +6353,7 @@ match i {
                                         let lcol = (lx / cell_w) as usize;
                                         let lrow = (ly / cell_h) as usize;
                                         if lcol < MATRIX_COLS && lrow < MATRIX_ROWS {
-                                            intensity_map[lcol][lrow] = intensity_map[lcol][lrow].maximum(80);
+                                            intensity_map[lcol][lrow] = intensity_map[lcol][lrow].max(80);
                                         }
                                     }
                                 }
@@ -6386,18 +6393,18 @@ match i {
                                     let rz = y * sin_x + z * cos_x;
                                     let cos_y = crate::graphics::holomatrix::cos_approx_pub(rot_y);
                                     let sin_y = crate::graphics::holomatrix::sin_approx_pub(rot_y);
-                                    let receive = x * cos_y + rz * sin_y;
+                                    let rx = x * cos_y + rz * sin_y;
                                     let rz2 = -x * sin_y + rz * cos_y;
                                     
                                     let depth = 1.0 / (2.0 + rz2);
-                                    let sx = cx + receive * scale * depth;
+                                    let sx = cx + rx * scale * depth;
                                     let sy = cy + ry * scale * depth;
-                                    let column = (sx / cell_w) as usize;
+                                    let col = (sx / cell_w) as usize;
                                     let row = (sy / cell_h) as usize;
                                     
-                                    if column < MATRIX_COLS && row < MATRIX_ROWS {
-                                        let int = (100.0 + 100.0 * (1.0 - ((rz2 + 0.6) * 0.5).maximum(0.0).minimum(1.0))) as u8;
-                                        intensity_map[column][row] = intensity_map[column][row].maximum(int);
+                                    if col < MATRIX_COLS && row < MATRIX_ROWS {
+                                        let int = (100.0 + 100.0 * (1.0 - ((rz2 + 0.6) * 0.5).max(0.0).min(1.0))) as u8;
+                                        intensity_map[col][row] = intensity_map[col][row].max(int);
                                     }
                                 }
                             }
@@ -6415,18 +6422,18 @@ match i {
                                 
                                 let cos_t = crate::graphics::holomatrix::cos_approx_pub(time * 0.5);
                                 let sin_t = crate::graphics::holomatrix::sin_approx_pub(time * 0.5);
-                                let receive = x * cos_t + z * sin_t;
+                                let rx = x * cos_t + z * sin_t;
                                 let rz = -x * sin_t + z * cos_t;
                                 
                                 let depth = 1.0 / (2.0 + rz);
-                                let sx = cx + receive * scale * depth;
+                                let sx = cx + rx * scale * depth;
                                 let sy = cy + y * scale * depth;
-                                let column = (sx / cell_w) as usize;
+                                let col = (sx / cell_w) as usize;
                                 let row = (sy / cell_h) as usize;
                                 
-                                if column < MATRIX_COLS && row < MATRIX_ROWS {
-                                    let int = (80.0 + 120.0 * (1.0 - ((rz + 0.6) * 0.5).maximum(0.0).minimum(1.0))) as u8;
-                                    intensity_map[column][row] = intensity_map[column][row].maximum(int);
+                                if col < MATRIX_COLS && row < MATRIX_ROWS {
+                                    let int = (80.0 + 120.0 * (1.0 - ((rz + 0.6) * 0.5).max(0.0).min(1.0))) as u8;
+                                    intensity_map[col][row] = intensity_map[col][row].max(int);
                                 }
                             }
                         }
@@ -6438,12 +6445,12 @@ match i {
                     // ---------------------------------------------------------
                     
                     // Move Matrix heads down
-                    for column in 0..MATRIX_COLS {
-                        matrix_heads[column] += matrix_speeds[column] as i32;
-                        if matrix_heads[column] > (MATRIX_ROWS as i32 + 30) {
-                            let seed = (column as u32 * 2654435761).wrapping_add(frame_count as u32);
-                            matrix_heads[column] = -((seed % 30) as i32);
-                            matrix_speeds[column] = 1 + (seed % 3);
+                    for col in 0..MATRIX_COLS {
+                        matrix_heads[col] += matrix_speeds[col] as i32;
+                        if matrix_heads[col] > (MATRIX_ROWS as i32 + 30) {
+                            let seed = (col as u32 * 2654435761).wrapping_add(frame_count as u32);
+                            matrix_heads[col] = -((seed % 30) as i32);
+                            matrix_speeds[col] = 1 + (seed % 3);
                         }
                     }
                     
@@ -6452,11 +6459,11 @@ match i {
                     
                     // Render each column with intensity boost
                     let column_width = 8u32;
-                    for column in 0..MATRIX_COLS {
-                        let x = column as u32 * column_width;
+                    for col in 0..MATRIX_COLS {
+                        let x = col as u32 * column_width;
                         if x >= width { continue; }
                         
-                        let head = matrix_heads[column];
+                        let head = matrix_heads[col];
                         
                         for row in 0..MATRIX_ROWS {
                             let y = row as u32 * 16;
@@ -6473,7 +6480,7 @@ match i {
                                 255 - (dist as u32 * 8)
                             } else if dist <= 28 {
                                 // Safely calculate fade to avoid underflow
-                                let factor = ((dist - 12) as u32).minimum(15) * 16;
+                                let factor = ((dist - 12) as u32).min(15) * 16;
                                 let fade = 255u32.saturating_sub(factor);
                                 (160 * fade) / 255
                             } else {
@@ -6481,25 +6488,25 @@ match i {
                             };
                             
                             // Get intensity boost from hologram
-                            let boost = intensity_map[column][row] as u32;
+                            let boost = intensity_map[col][row] as u32;
                             
                             // Combine: base Matrix + hologram boost
                             // Hologram makes characters MUCH brighter + colored where shape exists
                             let (r, g, b) = if boost > 0 {
                                 // Shape exists here: bright cyan-white glow
-                                let intensity = (base_color + boost * 2).minimum(255);
-                                let cyan = (boost as u32 * 3 / 2).minimum(255);
+                                let intensity = (base_color + boost * 2).min(255);
+                                let cyan = (boost as u32 * 3 / 2).min(255);
                                 (cyan / 3, intensity, cyan)  // R=dim, G=bright, B=cyan
                             } else {
                                 // No shape: very dim green (shape stands out)
-                                let dim = (base_color / 3).minimum(80);
+                                let dim = (base_color / 3).min(80);
                                 (0, dim, 0)
                             };
                             
                             let color = 0xFF000000 | (r << 16) | (g << 8) | b;
                             
                             // Get character
-                            let c = matrix_chars[matrix_index(column, row)] as char;
+                            let c = matrix_chars[matrix_index(col, row)] as char;
                             let glyph = crate::framebuffer::font::get_glyph(c);
                             
                             // Draw glyph
@@ -6510,14 +6517,14 @@ match i {
                                 
                                 if bits != 0 {
                                     let x_usize = x as usize;
-                                    if bits & 0x80 != 0 { let index = row_offset + x_usize; if index < bg.buffer.len() { bg.buffer[index] = color; } }
-                                    if bits & 0x40 != 0 { let index = row_offset + x_usize + 1; if index < bg.buffer.len() { bg.buffer[index] = color; } }
-                                    if bits & 0x20 != 0 { let index = row_offset + x_usize + 2; if index < bg.buffer.len() { bg.buffer[index] = color; } }
-                                    if bits & 0x10 != 0 { let index = row_offset + x_usize + 3; if index < bg.buffer.len() { bg.buffer[index] = color; } }
-                                    if bits & 0x08 != 0 { let index = row_offset + x_usize + 4; if index < bg.buffer.len() { bg.buffer[index] = color; } }
-                                    if bits & 0x04 != 0 { let index = row_offset + x_usize + 5; if index < bg.buffer.len() { bg.buffer[index] = color; } }
-                                    if bits & 0x02 != 0 { let index = row_offset + x_usize + 6; if index < bg.buffer.len() { bg.buffer[index] = color; } }
-                                    if bits & 0x01 != 0 { let index = row_offset + x_usize + 7; if index < bg.buffer.len() { bg.buffer[index] = color; } }
+                                    if bits & 0x80 != 0 { let idx = row_offset + x_usize; if idx < bg.buffer.len() { bg.buffer[idx] = color; } }
+                                    if bits & 0x40 != 0 { let idx = row_offset + x_usize + 1; if idx < bg.buffer.len() { bg.buffer[idx] = color; } }
+                                    if bits & 0x20 != 0 { let idx = row_offset + x_usize + 2; if idx < bg.buffer.len() { bg.buffer[idx] = color; } }
+                                    if bits & 0x10 != 0 { let idx = row_offset + x_usize + 3; if idx < bg.buffer.len() { bg.buffer[idx] = color; } }
+                                    if bits & 0x08 != 0 { let idx = row_offset + x_usize + 4; if idx < bg.buffer.len() { bg.buffer[idx] = color; } }
+                                    if bits & 0x04 != 0 { let idx = row_offset + x_usize + 5; if idx < bg.buffer.len() { bg.buffer[idx] = color; } }
+                                    if bits & 0x02 != 0 { let idx = row_offset + x_usize + 6; if idx < bg.buffer.len() { bg.buffer[idx] = color; } }
+                                    if bits & 0x01 != 0 { let idx = row_offset + x_usize + 7; if idx < bg.buffer.len() { bg.buffer[idx] = color; } }
                                 }
                             }
                         }
@@ -6529,19 +6536,19 @@ match i {
                 // -------------------------------------------------------------
                 
                 // Move heads down (fast, single-threaded)
-                for column in 0..MATRIX_COLS {
-                    matrix_heads[column] += matrix_speeds[column] as i32;
-                    if matrix_heads[column] > (MATRIX_ROWS as i32 + 30) {
-                        let seed = (column as u32 * 2654435761).wrapping_add(frame_count as u32);
-                        matrix_heads[column] = -((seed % 30) as i32);
-                        matrix_speeds[column] = 1 + (seed % 3);
+                for col in 0..MATRIX_COLS {
+                    matrix_heads[col] += matrix_speeds[col] as i32;
+                    if matrix_heads[col] > (MATRIX_ROWS as i32 + 30) {
+                        let seed = (col as u32 * 2654435761).wrapping_add(frame_count as u32);
+                        matrix_heads[col] = -((seed % 30) as i32);
+                        matrix_speeds[col] = 1 + (seed % 3);
                     }
                 }
                 
                 // Clear with black using SSE2
                 unsafe {
                     #[cfg(target_arch = "x86_64")]
-                    crate::graphics::simd::fill_row_sse2(buffer_pointer, buffer_length, black);
+                    crate::graphics::simd::fill_row_sse2(buf_ptr, buf_len, black);
                     #[cfg(not(target_arch = "x86_64"))]
                     bg.buffer.fill(black);
                 }
@@ -6551,12 +6558,12 @@ match i {
                 // Each core renders its portion of the 240 columns simultaneously
                 // -------------------------------------------------------------
                 let params = super::MatrixRenderParams {
-                    buffer_pointer,
-                    buffer_length,
+                    buf_ptr,
+                    buf_len,
                     width,
                     height,
-                    matrix_chars: matrix_chars.as_pointer(),
-                    matrix_heads: matrix_heads.as_pointer(),
+                    matrix_chars: matrix_chars.as_ptr(),
+                    matrix_heads: matrix_heads.as_ptr(),
                     holo_intensity: core::ptr::null(),  // No holo modifier
                     matrix_rows: MATRIX_ROWS,
                 };
@@ -6702,33 +6709,33 @@ match active_mode {
             
             // Window buttons with symbols (LARGE and visible)
             // Close button (red with X) - 12px radius
-            let button_y = 13u32;
+            let btn_y = 13u32;
             let button_r = 10u32;
             let button_close_x = w - 50;
             let button_minimum_x = w - 80;
             let button_maximum_x = w - 110;
             
             // Close button (X)
-            win.fill_circle(button_close_x, button_y, button_r, 0xFFFF4444);
-            win.draw_rect(button_close_x, button_y, 1, 1, 0xFFFF6666); // Highlight
+            win.fill_circle(button_close_x, btn_y, button_r, 0xFFFF4444);
+            win.draw_rect(button_close_x, btn_y, 1, 1, 0xFFFF6666); // Highlight
             // Draw bold X
             for t in 0..7 {
-                win.set_pixel(button_close_x - 5 + t, button_y - 5 + t, 0xFFFFFFFF);
-                win.set_pixel(button_close_x - 4 + t, button_y - 5 + t, 0xFFFFFFFF);
-                win.set_pixel(button_close_x + 5 - t, button_y - 5 + t, 0xFFFFFFFF);
-                win.set_pixel(button_close_x + 4 - t, button_y - 5 + t, 0xFFFFFFFF);
+                win.set_pixel(button_close_x - 5 + t, btn_y - 5 + t, 0xFFFFFFFF);
+                win.set_pixel(button_close_x - 4 + t, btn_y - 5 + t, 0xFFFFFFFF);
+                win.set_pixel(button_close_x + 5 - t, btn_y - 5 + t, 0xFFFFFFFF);
+                win.set_pixel(button_close_x + 4 - t, btn_y - 5 + t, 0xFFFFFFFF);
             }
             
             // Minimize button (-)
-            win.fill_circle(button_minimum_x, button_y, button_r, 0xFFFFCC00);
+            win.fill_circle(button_minimum_x, btn_y, button_r, 0xFFFFCC00);
             // Draw bold -
-            win.fill_rect(button_minimum_x - 5, button_y - 1, 10, 3, 0xFF000000);
+            win.fill_rect(button_minimum_x - 5, btn_y - 1, 10, 3, 0xFF000000);
             
             // Maximize button (?)
-            win.fill_circle(button_maximum_x, button_y, button_r, 0xFF44DD44);
+            win.fill_circle(button_maximum_x, btn_y, button_r, 0xFF44DD44);
             // Draw bold square
-            win.draw_rect(button_maximum_x - 5, button_y - 5, 10, 10, 0xFF000000);
-            win.draw_rect(button_maximum_x - 4, button_y - 4, 8, 8, 0xFF000000);
+            win.draw_rect(button_maximum_x - 5, btn_y - 5, 10, 10, 0xFF000000);
+            win.draw_rect(button_maximum_x - 4, btn_y - 4, 8, 8, 0xFF000000);
             
             // Content area - different rendering for Browser mode
             let content_y = 35u32;
@@ -6746,18 +6753,18 @@ match active_mode {
                 win.draw_rect(10, url_bar_y, w - 20, 32, 0xFF3C3C3C);
                 
                 // Navigation buttons with icons
-                let button_bg: u32 = 0xFF2D2D2D;
+                let btn_bg: u32 = 0xFF2D2D2D;
                 
                 // Back button (?)
-                win.fill_rect(14, url_bar_y + 4, 24, 24, button_bg);
+                win.fill_rect(14, url_bar_y + 4, 24, 24, btn_bg);
                 win.draw_text("<", 22, url_bar_y + 10, 0xFFAAAAAA);
                 
                 // Forward button (?)
-                win.fill_rect(42, url_bar_y + 4, 24, 24, button_bg);
+                win.fill_rect(42, url_bar_y + 4, 24, 24, btn_bg);
                 win.draw_text(">", 50, url_bar_y + 10, 0xFFAAAAAA);
                 
                 // Refresh button (?)
-                win.fill_rect(70, url_bar_y + 4, 24, 24, button_bg);
+                win.fill_rect(70, url_bar_y + 4, 24, 24, btn_bg);
                 win.draw_text("R", 78, url_bar_y + 10, 0xFFAAAAAA);
                 
                 // View toggle button
@@ -6838,7 +6845,7 @@ match active_mode {
                 // Dark background for image area
                 win.fill_rect(10, content_y, w - 20, h - content_y - 30, 0xFF1A1A1A);
                 
-                if let Some(ref image) = image_viewer_data {
+                if let Some(ref img) = image_viewer_data {
                     // Calculate display area
                     let view_w = w - 40;
                     let view_h = h - content_y - 60;
@@ -6846,8 +6853,8 @@ match active_mode {
                     let view_y = content_y + 10;
                     
                     // Apply zoom
-                    let scaled_w = (image.width as f32 * image_viewer_zoom) as u32;
-                    let scaled_h = (image.height as f32 * image_viewer_zoom) as u32;
+                    let scaled_w = (img.width as f32 * image_viewer_zoom) as u32;
+                    let scaled_h = (img.height as f32 * image_viewer_zoom) as u32;
                     
                     // Center image with offset
                     let center_x = view_x as i32 + (view_w as i32 / 2) + image_viewer_offset_x;
@@ -6856,22 +6863,22 @@ match active_mode {
                     let image_y = center_y - (scaled_h as i32 / 2);
                     
                     // Draw scaled image (simple nearest neighbor)
-                    for dy in 0..scaled_h.minimum(view_h) {
+                    for dy in 0..scaled_h.min(view_h) {
                         let screen_y = image_y + dy as i32;
                         if screen_y < view_y as i32 || screen_y >= (view_y + view_h) as i32 {
                             continue;
                         }
                         
-                        let source_y = ((dy as f32 / image_viewer_zoom) as u32).minimum(image.height - 1);
+                        let source_y = ((dy as f32 / image_viewer_zoom) as u32).min(img.height - 1);
                         
-                        for dx in 0..scaled_w.minimum(view_w) {
+                        for dx in 0..scaled_w.min(view_w) {
                             let screen_x = image_x + dx as i32;
                             if screen_x < view_x as i32 || screen_x >= (view_x + view_w) as i32 {
                                 continue;
                             }
                             
-                            let source_x = ((dx as f32 / image_viewer_zoom) as u32).minimum(image.width - 1);
-                            let pixel = image.get_pixel(source_x, source_y);
+                            let source_x = ((dx as f32 / image_viewer_zoom) as u32).min(img.width - 1);
+                            let pixel = img.get_pixel(source_x, source_y);
                             
                             // Only draw non-transparent pixels
                             if (pixel >> 24) > 0 {
@@ -6882,10 +6889,10 @@ match active_mode {
                     
                     // Image border
                     win.draw_rect(
-                        (image_x.maximum(view_x as i32)) as u32,
-                        (image_y.maximum(view_y as i32)) as u32,
-                        scaled_w.minimum(view_w),
-                        scaled_h.minimum(view_h),
+                        (image_x.max(view_x as i32)) as u32,
+                        (image_y.max(view_y as i32)) as u32,
+                        scaled_w.min(view_w),
+                        scaled_h.min(view_h),
                         0xFF444444
                     );
                 } else {
@@ -6930,7 +6937,7 @@ match active_mode {
                 let code_y = content_y + tab_bar_h;
                 let code_w = w - gutter_w;
                 let code_h = h.saturating_sub(content_y + tab_bar_h + status_h);
-                let visible_lines_count = (code_h / line_h).maximum(1) as usize;
+                let visible_lines_count = (code_h / line_h).max(1) as usize;
                 
                 // Update scroll
                 if editor_state.cursor_line < editor_state.scroll_y {
@@ -6948,7 +6955,7 @@ match active_mode {
                 }).unwrap_or("untitled");
                 let dirty_marker = if editor_state.dirty { " *" } else { "" };
                 let tab_label = format!("  {}{}", tab_name, dirty_marker);
-                let tab_w = ((tab_label.len() as u32 + 2) * char_w).minimum(w);
+                let tab_w = ((tab_label.len() as u32 + 2) * char_w).min(w);
                 win.fill_rect(0, content_y, tab_w, tab_bar_h, COLOR_TAB_ACTIVE);
                 // Tab bottom accent line
                 win.fill_rect(0, content_y + tab_bar_h - 2, tab_w, 2, COLOR_STATUS_BG);
@@ -7005,7 +7012,7 @@ match active_mode {
                     if is_current {
                         let blink_on = (editor_state.blink_counter / 30) % 2 == 0;
                         if blink_on {
-                            let cx = code_x + 4 + (editor_state.cursor_column as u32 * char_w);
+                            let cx = code_x + 4 + (editor_state.cursor_col as u32 * char_w);
                             win.fill_rect(cx, ly, 2, line_h, COLOR_CURSOR);
                         }
                     }
@@ -7016,7 +7023,7 @@ match active_mode {
                     let sb_x = w - 10;
                     let sb_h = code_h;
                     let total = editor_state.lines.len() as u32;
-                    let thumb_h = ((visible_lines_count as u32 * sb_h) / total).maximum(20);
+                    let thumb_h = ((visible_lines_count as u32 * sb_h) / total).max(20);
                     let maximum_scroll_value = total.saturating_sub(visible_lines_count as u32);
                     let thumb_y = if maximum_scroll_value > 0 {
                         (editor_state.scroll_y as u32 * (sb_h - thumb_h)) / maximum_scroll_value
@@ -7030,8 +7037,8 @@ match active_mode {
                 win.fill_rect(0, status_y, w, status_h, COLOR_STATUS_BG);
                 
                 // Left: file info
-                let status_left = if let Some(ref message) = editor_state.status_message {
-                    format!("  {}", message)
+                let status_left = if let Some(ref msg) = editor_state.status_message {
+                    format!("  {}", msg)
                 } else {
                     let dirty_str = if editor_state.dirty { " [Modified]" } else { "" };
                     let fname = editor_state.file_path.as_deref().unwrap_or("untitled");
@@ -7043,7 +7050,7 @@ match active_mode {
                 let status_right = format!(
                     "Ln {}, Col {}  {}  UTF-8  TrustCode",
                     editor_state.cursor_line + 1,
-                    editor_state.cursor_column + 1,
+                    editor_state.cursor_col + 1,
                     editor_state.language.name(),
                 );
                 let right_x = w.saturating_sub((status_right.len() as u32 * char_w) + 8);
@@ -7056,7 +7063,7 @@ match active_mode {
                 
             // Calculate visible range with scroll support
             let total_lines = shell_output.len();
-            let visible_lines = MAXIMUM_VISIBLE_LINES.minimum(maximum_lines);
+            let visible_lines = MAXIMUM_VISIBLE_LINES.min(maximum_lines);
             
             // Auto-scroll to bottom when new content is added (unless user scrolled up)
             let maximum_scroll = total_lines.saturating_sub(visible_lines);
@@ -7065,7 +7072,7 @@ match active_mode {
             }
             
             let start_index = scroll_offset;
-            let end_index = (start_index + visible_lines).minimum(total_lines);
+            let end_index = (start_index + visible_lines).min(total_lines);
             
             for (i, line) in shell_output.iter().skip(start_index).take(visible_lines).enumerate() {
                 let y = content_y + (i as u32) * line_height;
@@ -7118,7 +7125,7 @@ match active_mode {
                 
                 // Calculate thumb size and position
                 let thumb_ratio = visible_lines as f32 / total_lines as f32;
-                let thumb_h = ((scrollbar_h as f32 * thumb_ratio) as u32).maximum(20);
+                let thumb_h = ((scrollbar_h as f32 * thumb_ratio) as u32).max(20);
                 let scroll_ratio = if maximum_scroll > 0 { 
                     scroll_offset as f32 / maximum_scroll as f32 
                 } else { 
@@ -7175,18 +7182,18 @@ match active_mode {
         // LAYER 2.5: COMMAND HISTORY PANEL (Top right corner)
         // -------------------------------------------------------------------
         if let Some(hist) = compositor.get_layer_mut(history_layer) {
-            let hardware = hist.width;
+            let hw = hist.width;
             let hh = hist.height;
             
             // Semi-transparent dark background
             hist.clear(0xD8181818);
             
             // Border
-            hist.draw_rect(0, 0, hardware, hh, 0xFF444444);
-            hist.draw_rect(1, 1, hardware - 2, hh - 2, 0xFF333333);
+            hist.draw_rect(0, 0, hw, hh, 0xFF444444);
+            hist.draw_rect(1, 1, hw - 2, hh - 2, 0xFF333333);
             
             // Title bar
-            hist.fill_rect(2, 2, hardware - 4, 20, 0xFF252525);
+            hist.fill_rect(2, 2, hw - 4, 20, 0xFF252525);
             hist.draw_text("Command History", 8, 6, 0xFFAAAAAA);
             
             // History entries
@@ -7509,7 +7516,7 @@ match item {
         }
         
         let now = crate::cpu::tsc::read_tsc();
-        if now - last_second_tsc >= tsc_frequency {
+        if now - last_second_tsc >= tsc_freq {
             fps = frame_in_second;
             render_fps = render_in_second;
             frame_in_second = 0;
@@ -7589,7 +7596,7 @@ pub(super) fn command_cosmic_desktop() {
     let mut frame_count = 0u64;
     
     // FPS tracking with VSync target
-    let tsc_frequency = crate::cpu::tsc::frequency_hz();
+    let tsc_freq = crate::cpu::tsc::frequency_hz();
     let mut fps = 0u32;
     let mut frame_in_second = 0u32;
     let mut last_second_tsc = crate::cpu::tsc::read_tsc();
@@ -7601,7 +7608,7 @@ pub(super) fn command_cosmic_desktop() {
     
     // Target frame time for ~60 FPS (VSync simulation)
     let target_fps = 60u64;
-    let frame_tsc_target = tsc_frequency / target_fps;
+    let frame_tsc_target = tsc_freq / target_fps;
     let mut last_frame_tsc = crate::cpu::tsc::read_tsc();
     
     // -------------------------------------------------------------------
@@ -7752,7 +7759,7 @@ pub(super) fn command_cosmic_desktop() {
         }
         
         // Check if anything changed that requires redraw
-        let mouse_moved = (mx - previous_mx).absolute() > 0.5 || (my - previous_my).absolute() > 0.5;
+        let mouse_moved = (mx - previous_mx).abs() > 0.5 || (my - previous_my).abs() > 0.5;
         let state_changed = use_matrix_theme != previous_theme || active_app != previous_app || click_this_frame || dragging;
         
         // Matrix theme always animates (rain effect), so always redraw
@@ -7762,7 +7769,7 @@ pub(super) fn command_cosmic_desktop() {
             frame_count += 1;
             frame_in_second += 1;
             let now = crate::cpu::tsc::read_tsc();
-            if now - last_second_tsc >= tsc_frequency {
+            if now - last_second_tsc >= tsc_freq {
                 fps = frame_in_second;
                 frame_in_second = 0;
                 last_second_tsc = now;
@@ -7779,7 +7786,7 @@ pub(super) fn command_cosmic_desktop() {
         // ---------------------------------------------------------------
         // THEME SELECTION
         // ---------------------------------------------------------------
-        let (bg, panel_bg, surface, surface_hover, accent, text_pri, text_sector, 
+        let (bg, panel_bg, surface, surface_hover, accent, text_pri, text_sec, 
              header_bg, close_bg, maximum_bg, minimum_bg, success, warning) = 
             if use_matrix_theme {
                 (matrix::BG_BASE, matrix::PANEL_BG, matrix::SURFACE, matrix::SURFACE_HOVER,
@@ -7800,7 +7807,7 @@ pub(super) fn command_cosmic_desktop() {
         let surface_hover_u32 = surface_hover.to_u32();
         let accent_u32 = accent.to_u32();
         let text_pri_u32 = text_pri.to_u32();
-        let text_sector_u32 = text_sector.to_u32();
+        let text_sector_u32 = text_sec.to_u32();
         let header_bg_u32 = header_bg.to_u32();
         let close_bg_u32 = close_bg.to_u32();
         let maximum_bg_u32 = maximum_bg.to_u32();
@@ -7831,20 +7838,20 @@ pub(super) fn command_cosmic_desktop() {
         let bar_h = 36u32;
         let column_width = width / MATRIX_COLS as u32;
         
-        for column in 0..MATRIX_COLS {
-            let (y_position, speed, seed) = matrix_cols[column];
-            let x = (column as u32 * column_width) + column_width / 2;
+        for col in 0..MATRIX_COLS {
+            let (y_position, speed, seed) = matrix_cols[col];
+            let x = (col as u32 * column_width) + column_width / 2;
             
             // Update position
             let new_y = y_position + speed as i32;
             let new_y = if new_y > height as i32 + (MATRIX_TRAIL_LENGTH as i32 * MATRIX_CHAR_H as i32) {
                 let new_seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
-                matrix_cols[column].2 = new_seed;
+                matrix_cols[col].2 = new_seed;
                 -((new_seed % (height / 2)) as i32)
             } else {
                 new_y
             };
-            matrix_cols[column].0 = new_y;
+            matrix_cols[col].0 = new_y;
             
             // Draw falling trail with DEPTH EFFECT based on speed
             // Slow columns = far (dim, grayish) | Fast columns = near (bright, vivid green)
@@ -7944,7 +7951,7 @@ unsafe { core::str::from_utf8_unchecked(&char_str[..1]) };
             }
             // Right diagonal going up (longer)
             for i in 0..50 {
-                fill_rect(check_cx - 20 + i + t, check_cy + i.minimum(29) - (i.saturating_sub(29)), 4, 4, green_main);
+                fill_rect(check_cx - 20 + i + t, check_cy + i.min(29) - (i.saturating_sub(29)), 4, 4, green_main);
             }
         }
         
@@ -8034,8 +8041,8 @@ match i {
                 },
                 2 => { // Grid (apps)
                     for row in 0..2 {
-                        for column in 0..2 {
-                            draw_rect(cx - 10 + column * 12, cy - 10 + row * 12, 8, 8, icon_color);
+                        for col in 0..2 {
+                            draw_rect(cx - 10 + col * 12, cy - 10 + row * 12, 8, 8, icon_color);
                         }
                     }
                 },
@@ -8090,14 +8097,14 @@ match i {
         draw_text(&title_text, win_x_u32 + 12, win_y_u32 + 10, green_main);
         
         // Window control buttons (right side) - 3 circles
-        let button_y = win_y_u32 + 10;
+        let btn_y = win_y_u32 + 10;
         let close_x = win_x_u32 + win_w_u32 - 60;
         // Red close
-        fill_circle(close_x, button_y + 6, 6, 0xFFFF5555u32);
+        fill_circle(close_x, btn_y + 6, 6, 0xFFFF5555u32);
         // Yellow maximize  
-        fill_circle(close_x + 18, button_y + 6, 6, 0xFFFFDD55u32);
+        fill_circle(close_x + 18, btn_y + 6, 6, 0xFFFFDD55u32);
         // Green minimize
-        fill_circle(close_x + 36, button_y + 6, 6, 0xFF55FF55u32);
+        fill_circle(close_x + 36, btn_y + 6, 6, 0xFF55FF55u32);
         
         // Content area - GREEN TEXT like reference image
         let content_x = win_x_u32 + 15;
@@ -8215,8 +8222,8 @@ unsafe { core::str::from_utf8_unchecked(&search_text[..search_length]) };
             
             // Menu items
             menu_hover = -1;
-            for (index, item) in menu_items.iter().enumerate() {
-                let item_y = menu_y + 40 + (index as u32 * 24);
+            for (idx, item) in menu_items.iter().enumerate() {
+                let item_y = menu_y + 40 + (idx as u32 * 24);
                 
                 if *item == "---" {
                     // Separator line
@@ -8227,7 +8234,7 @@ unsafe { core::str::from_utf8_unchecked(&search_text[..search_length]) };
                                        my >= item_y as f32 && my < (item_y + 24) as f32;
                     
                     if item_hovered {
-                        menu_hover = index as i32;
+                        menu_hover = idx as i32;
                         fill_rect(menu_x + 2, item_y, menu_w - 4, 24, 0xFF1A2A1Au32);
                         
                         // Handle click on menu item
@@ -8295,7 +8302,7 @@ match *item {
         let my_u32 = my as u32;
         // Simple arrow cursor
         for i in 0..12u32 {
-            fill_rect(mx_u32, my_u32 + i, (12 - i).maximum(1), 1, green_main);
+            fill_rect(mx_u32, my_u32 + i, (12 - i).max(1), 1, green_main);
         }
         
         // ---------------------------------------------------------------
@@ -8310,7 +8317,7 @@ match *item {
         frame_in_second += 1;
         
         let now = crate::cpu::tsc::read_tsc();
-        if now - last_second_tsc >= tsc_frequency {
+        if now - last_second_tsc >= tsc_freq {
             fps = frame_in_second;
             frame_in_second = 0;
             last_second_tsc = now;

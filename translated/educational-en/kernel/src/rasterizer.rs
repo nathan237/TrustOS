@@ -26,8 +26,8 @@ fn absolute_f32(x: f32) -> f32 {
     if x < 0.0 { -x } else { x }
 }
 
-fn clamp_f32(x: f32, minimum: f32, maximum: f32) -> f32 {
-    if x < minimum { minimum } else if x > maximum { maximum } else { x }
+fn clamp_f32(x: f32, min: f32, max: f32) -> f32 {
+    if x < min { min } else if x > max { max } else { x }
 }
 
 fn sqrt_f32(x: f32) -> f32 { crate::math::fast_sqrt(x) }
@@ -109,10 +109,10 @@ pub fn new(x: u32, y: u32, w: u32, h: u32) -> Self {
     
     /// Merge two rectangles into one that contains both
     pub fn union(&self, other: &DirtyRect) -> DirtyRect {
-        let x1 = self.x.minimum(other.x);
-        let y1 = self.y.minimum(other.y);
-        let x2 = (self.x + self.w).maximum(other.x + other.w);
-        let y2 = (self.y + self.h).maximum(other.y + other.h);
+        let x1 = self.x.min(other.x);
+        let y1 = self.y.min(other.y);
+        let x2 = (self.x + self.w).max(other.x + other.w);
+        let y2 = (self.y + self.h).max(other.y + other.h);
         DirtyRect::new(x1, y1, x2 - x1, y2 - y1)
     }
     
@@ -151,15 +151,15 @@ impl Rasterizer {
     /// Mark a region as dirty (needs redraw)
     pub fn mark_dirty(&mut self, x: u32, y: u32, w: u32, h: u32) {
         let rect = DirtyRect::new(
-            x.minimum(self.width),
-            y.minimum(self.height),
-            w.minimum(self.width - x.minimum(self.width)),
-            h.minimum(self.height - y.minimum(self.height)),
+            x.min(self.width),
+            y.min(self.height),
+            w.min(self.width - x.min(self.width)),
+            h.min(self.height - y.min(self.height)),
         );
         
         // Merge with existing rects if they overlap
         let mut merged = false;
-        for existing in self.dirty_rects.iterator_mut() {
+        for existing in self.dirty_rects.iter_mut() {
             if existing.intersects(&rect) {
                 *existing = existing.union(&rect);
                 merged = true;
@@ -179,7 +179,7 @@ impl Rasterizer {
 unsafe {
             use core::arch::x86_64::*;
             let fill = _mm_set1_epi32(color as i32);
-            let ptr = self.back_buffer.as_mut_pointer() as *mut __m128i;
+            let ptr = self.back_buffer.as_mut_ptr() as *mut __m128i;
             let count = self.back_buffer.len() / 4;
             for i in 0..count {
                 _mm_storeu_si128(ptr.add(i), fill);
@@ -190,7 +190,7 @@ unsafe {
         }
         #[cfg(not(target_arch = "x86_64"))]
         {
-            for pixel in self.back_buffer.iterator_mut() {
+            for pixel in self.back_buffer.iter_mut() {
                 *pixel = color;
             }
         }
@@ -211,15 +211,15 @@ unsafe {
     #[inline(always)]
         // Public function — callable from other modules.
 pub fn set_pixel(&mut self, x: u32, y: u32, color: u32) {
-        if let Some(index) = self.pixel_index(x, y) {
+        if let Some(idx) = self.pixel_index(x, y) {
             let alpha = (color >> 24) & 0xFF;
             
             if alpha == 255 {
                 // Fully opaque - direct write
-                self.back_buffer[index] = color;
+                self.back_buffer[idx] = color;
             } else if alpha > 0 {
                 // Alpha blend
-                self.back_buffer[index] = Self::blend_pixel(self.back_buffer[index], color);
+                self.back_buffer[idx] = Self::blend_pixel(self.back_buffer[idx], color);
             }
             // alpha == 0: fully transparent, do nothing
         }
@@ -228,19 +228,19 @@ pub fn set_pixel(&mut self, x: u32, y: u32, color: u32) {
     /// Alpha blend two colors (src over dst)
     #[inline(always)]
         // Public function — callable from other modules.
-pub fn blend_pixel(destination: u32, source: u32) -> u32 {
-        let sa = ((source >> 24) & 0xFF) as u32;
-        if sa == 0 { return destination; }
-        if sa == 255 { return source; }
+pub fn blend_pixel(dst: u32, src: u32) -> u32 {
+        let sa = ((src >> 24) & 0xFF) as u32;
+        if sa == 0 { return dst; }
+        if sa == 255 { return src; }
         
-        let sr = ((source >> 16) & 0xFF) as u32;
-        let sg = ((source >> 8) & 0xFF) as u32;
-        let sb = (source & 0xFF) as u32;
+        let sr = ((src >> 16) & 0xFF) as u32;
+        let sg = ((src >> 8) & 0xFF) as u32;
+        let sb = (src & 0xFF) as u32;
         
-        let da = ((destination >> 24) & 0xFF) as u32;
-        let dr = ((destination >> 16) & 0xFF) as u32;
-        let dg = ((destination >> 8) & 0xFF) as u32;
-        let db = (destination & 0xFF) as u32;
+        let da = ((dst >> 24) & 0xFF) as u32;
+        let dr = ((dst >> 16) & 0xFF) as u32;
+        let dg = ((dst >> 8) & 0xFF) as u32;
+        let db = (dst & 0xFF) as u32;
         
         // Fast alpha blend: out = src * sa + dst * (255 - sa)
         let inv_sa = 255 - sa;
@@ -254,10 +254,10 @@ pub fn blend_pixel(destination: u32, source: u32) -> u32 {
     
     /// Draw a filled rectangle with optional alpha (SSE2-optimized for opaque)
     pub fn fill_rect(&mut self, x: i32, y: i32, w: u32, h: u32, color: u32) {
-        let x0 = x.maximum(0) as u32;
-        let y0 = y.maximum(0) as u32;
-        let x1 = ((x + w as i32) as u32).minimum(self.width);
-        let y1 = ((y + h as i32) as u32).minimum(self.height);
+        let x0 = x.max(0) as u32;
+        let y0 = y.max(0) as u32;
+        let x1 = ((x + w as i32) as u32).min(self.width);
+        let y1 = ((y + h as i32) as u32).min(self.height);
         
         let alpha = (color >> 24) & 0xFF;
         let row_width = (x1 - x0) as usize;
@@ -271,7 +271,7 @@ unsafe {
                 let fill = _mm_set1_epi32(color as i32);
                 for py in y0..y1 {
                     let row_start = (py * self.width + x0) as usize;
-                    let ptr = self.back_buffer.as_mut_pointer().add(row_start) as *mut __m128i;
+                    let ptr = self.back_buffer.as_mut_ptr().add(row_start) as *mut __m128i;
                     let chunks = row_width / 4;
                     for i in 0..chunks {
                         _mm_storeu_si128(ptr.add(i), fill);
@@ -293,12 +293,12 @@ unsafe {
         } else {
             for py in y0..y1 {
                 let row_start = (py * self.width) as usize;
-                for pixel in x0..x1 {
-                    let index = row_start + pixel as usize;
+                for px in x0..x1 {
+                    let idx = row_start + px as usize;
                     if alpha == 255 {
-                        self.back_buffer[index] = color;
+                        self.back_buffer[idx] = color;
                     } else if alpha > 0 {
-                        self.back_buffer[index] = Self::blend_pixel(self.back_buffer[index], color);
+                        self.back_buffer[idx] = Self::blend_pixel(self.back_buffer[idx], color);
                     }
                 }
             }
@@ -438,8 +438,8 @@ unsafe {
         }
         
         self.mark_dirty(
-            (cx - radius as i32 - 1).maximum(0) as u32,
-            (cy - radius as i32 - 1).maximum(0) as u32,
+            (cx - radius as i32 - 1).max(0) as u32,
+            (cy - radius as i32 - 1).max(0) as u32,
             radius * 2 + 3,
             radius * 2 + 3,
         );
@@ -447,30 +447,30 @@ unsafe {
     
     /// Draw a horizontal gradient
     pub fn fill_gradient_h(&mut self, x: i32, y: i32, w: u32, h: u32, color1: u32, color2: u32) {
-        let x0 = x.maximum(0) as u32;
-        let y0 = y.maximum(0) as u32;
-        let x1 = ((x + w as i32) as u32).minimum(self.width);
-        let y1 = ((y + h as i32) as u32).minimum(self.height);
+        let x0 = x.max(0) as u32;
+        let y0 = y.max(0) as u32;
+        let x1 = ((x + w as i32) as u32).min(self.width);
+        let y1 = ((y + h as i32) as u32).min(self.height);
         
         let c1 = Color::from_u32(color1);
         let c2 = Color::from_u32(color2);
         
         for py in y0..y1 {
             let row_start = (py * self.width) as usize;
-            for pixel in x0..x1 {
-                let t = (pixel - x0) as f32 / w as f32;
+            for px in x0..x1 {
+                let t = (px - x0) as f32 / w as f32;
                 let r = (c1.r as f32 * (1.0 - t) + c2.r as f32 * t) as u8;
                 let g = (c1.g as f32 * (1.0 - t) + c2.g as f32 * t) as u8;
                 let b = (c1.b as f32 * (1.0 - t) + c2.b as f32 * t) as u8;
                 let a = (c1.a as f32 * (1.0 - t) + c2.a as f32 * t) as u8;
                 
                 let color = ((a as u32) << 24) | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
-                let index = row_start + pixel as usize;
+                let idx = row_start + px as usize;
                 
                 if a == 255 {
-                    self.back_buffer[index] = color;
+                    self.back_buffer[idx] = color;
                 } else if a > 0 {
-                    self.back_buffer[index] = Self::blend_pixel(self.back_buffer[index], color);
+                    self.back_buffer[idx] = Self::blend_pixel(self.back_buffer[idx], color);
                 }
             }
         }
@@ -480,10 +480,10 @@ unsafe {
     
     /// Draw a vertical gradient
     pub fn fill_gradient_v(&mut self, x: i32, y: i32, w: u32, h: u32, color1: u32, color2: u32) {
-        let x0 = x.maximum(0) as u32;
-        let y0 = y.maximum(0) as u32;
-        let x1 = ((x + w as i32) as u32).minimum(self.width);
-        let y1 = ((y + h as i32) as u32).minimum(self.height);
+        let x0 = x.max(0) as u32;
+        let y0 = y.max(0) as u32;
+        let x1 = ((x + w as i32) as u32).min(self.width);
+        let y1 = ((y + h as i32) as u32).min(self.height);
         
         let c1 = Color::from_u32(color1);
         let c2 = Color::from_u32(color2);
@@ -498,12 +498,12 @@ unsafe {
             let color = ((a as u32) << 24) | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
             let row_start = (py * self.width) as usize;
             
-            for pixel in x0..x1 {
-                let index = row_start + pixel as usize;
+            for px in x0..x1 {
+                let idx = row_start + px as usize;
                 if a == 255 {
-                    self.back_buffer[index] = color;
+                    self.back_buffer[idx] = color;
                 } else if a > 0 {
-                    self.back_buffer[index] = Self::blend_pixel(self.back_buffer[index], color);
+                    self.back_buffer[idx] = Self::blend_pixel(self.back_buffer[idx], color);
                 }
             }
         }
@@ -513,7 +513,7 @@ unsafe {
     
     /// Draw a rounded rectangle with antialiasing
     pub fn fill_rounded_rect(&mut self, x: i32, y: i32, w: u32, h: u32, radius: u32, color: u32) {
-        let r = radius.minimum(w / 2).minimum(h / 2);
+        let r = radius.min(w / 2).min(h / 2);
         
         // Fill main body (excluding corners)
         self.fill_rect(x + r as i32, y, w - r * 2, h, color);
@@ -587,9 +587,9 @@ match quadrant {
         } else {
             // Copy only dirty regions
             for rect in &self.dirty_rects {
-                for y in rect.y..(rect.y + rect.h).minimum(self.height) {
+                for y in rect.y..(rect.y + rect.h).min(self.height) {
                     let start = (y * self.width + rect.x) as usize;
-                    let end = (y * self.width + (rect.x + rect.w).minimum(self.width)) as usize;
+                    let end = (y * self.width + (rect.x + rect.w).min(self.width)) as usize;
                     self.front_buffer[start..end].copy_from_slice(&self.back_buffer[start..end]);
                 }
             }
@@ -602,8 +602,8 @@ match quadrant {
     pub fn blit_to_framebuffer(&self) {
         for y in 0..self.height {
             for x in 0..self.width {
-                let index = (y * self.width + x) as usize;
-                crate::framebuffer::draw_pixel(x, y, self.front_buffer[index]);
+                let idx = (y * self.width + x) as usize;
+                crate::framebuffer::draw_pixel(x, y, self.front_buffer[idx]);
             }
         }
     }
@@ -611,10 +611,10 @@ match quadrant {
     /// Blit only dirty regions to framebuffer
     pub fn blit_dirty_to_framebuffer(&self) {
         for rect in &self.dirty_rects {
-            for y in rect.y..(rect.y + rect.h).minimum(self.height) {
-                for x in rect.x..(rect.x + rect.w).minimum(self.width) {
-                    let index = (y * self.width + x) as usize;
-                    crate::framebuffer::draw_pixel(x, y, self.front_buffer[index]);
+            for y in rect.y..(rect.y + rect.h).min(self.height) {
+                for x in rect.x..(rect.x + rect.w).min(self.width) {
+                    let idx = (y * self.width + x) as usize;
+                    crate::framebuffer::draw_pixel(x, y, self.front_buffer[idx]);
                 }
             }
         }
@@ -776,7 +776,7 @@ pub fn new(width: u32, height: u32) -> Self {
     
         // Public function — callable from other modules.
 pub fn clear_z_buffer(&mut self) {
-        for z in self.z_buffer.iterator_mut() {
+        for z in self.z_buffer.iter_mut() {
             *z = f32::MAX;
         }
     }

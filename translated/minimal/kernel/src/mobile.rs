@@ -35,113 +35,113 @@ use crate::framebuffer;
 
 
 
-const RK_: u32 = 0xFF050606;
-const JJ_: u32 = 0xFF070B09;
-const ELB_: u32 = 0xFF0A0F0C;
-const ELA_: u32 = 0xFF0D1310;
+const SM_: u32 = 0xFF050606;
+const DW_: u32 = 0xFF070B09;
+const EOM_: u32 = 0xFF0A0F0C;
+const EOL_: u32 = 0xFF0D1310;
 
 const I_: u32 = 0xFF00FF66;
-const AG_: u32 = 0xFF00CC55;
-const BK_: u32 = 0xFF00AA44;
-const X_: u32 = 0xFF008844;
-const BH_: u32 = 0xFF006633;
-const P_: u32 = 0xFF003B1A;
+const AH_: u32 = 0xFF00CC55;
+const BM_: u32 = 0xFF00AA44;
+const Y_: u32 = 0xFF008844;
+const BJ_: u32 = 0xFF006633;
+const Q_: u32 = 0xFF003B1A;
 
-const EC_: u32 = 0xFFB0B2B0;
-const GC_: u32 = 0xFF8C8E8C;
-const AT_: u32 = 0xFF606260;
-const AJ_: u32 = 0xFF3A3C3A;
+const EP_: u32 = 0xFFB0B2B0;
+const GR_: u32 = 0xFF8C8E8C;
+const AW_: u32 = 0xFF606260;
+const AP_: u32 = 0xFF3A3C3A;
 
-const EKY_: u32 = 0xFFFFD166;
-const DC_: u32 = 0xFFFF5555;
-const EKZ_: u32 = 0xFF4ECDC4;
+const EOJ_: u32 = 0xFFFFD166;
+const DJ_: u32 = 0xFFFF5555;
+const EOK_: u32 = 0xFF4ECDC4;
 
-const AC_: u32 = 0xFFE0E8E4;
-const N_: u32 = 0xFF8A9890;
-const ELN_: u32 = 0xFF00CC55;
-
-
-
-
-
-
-pub const DRX_: u32 = 1179;
-pub const DRU_: u32 = 2556;
-
-pub const DRW_: u32 = 393;
-pub const DRV_: u32 = 852;
-
-pub const CCM_: u32 = 195;
-pub const CCL_: u32 = 90;
-
-
-
-
-pub const DAH_: u32 = 498;
-pub const DAG_: u32 = 1080;
+const AB_: u32 = 0xFFE0E8E4;
+const O_: u32 = 0xFF8A9890;
+const EOY_: u32 = 0xFF00CC55;
 
 
 
 
 
-const AIF_: u32 = 44;
-const GH_: u32 = 90;
-const IC_: u32 = 5;
-const BWR_: u32 = 134;
+
+pub const DVQ_: u32 = 1179;
+pub const DVN_: u32 = 2556;
+
+pub const DVP_: u32 = 393;
+pub const DVO_: u32 = 852;
+
+pub const CFX_: u32 = 195;
+pub const CFW_: u32 = 90;
 
 
-const EJ_: u32 = 3;
-const BV_: u32 = 72;
-const NO_: u32 = 18;
-const CBF_: u32 = 18;
-const UB_: u32 = BV_ + CBF_ + 24; 
-const TS_: u32 = 20; 
 
 
-const HV_: usize = 5;
-const BU_: u32 = 52;
-const ABD_: u32 = 20;
-const SS_: u32 = 12;
+pub const DDZ_: u32 = 498;
+pub const DDY_: u32 = 1080;
 
 
-pub const HL_: u32 = 36;
 
 
-const ZX_: u32 = 20;
+
+const AKB_: u32 = 44;
+const GY_: u32 = 90;
+const IW_: u32 = 5;
+const BZX_: u32 = 134;
 
 
-const BGR_: u32 = 16;
-const BGS_: u32 = 14;
+const EX_: u32 = 3;
+const BX_: u32 = 72;
+const OP_: u32 = 18;
+const CEQ_: u32 = 18;
+const VJ_: u32 = BX_ + CEQ_ + 24; 
+const UY_: u32 = 20; 
+
+
+const IP_: usize = 5;
+const BV_: u32 = 52;
+const ACT_: u32 = 20;
+const TZ_: u32 = 12;
+
+
+pub const ID_: u32 = 36;
+
+
+const ABJ_: u32 = 20;
+
+
+const BIV_: u32 = 16;
+const BIW_: u32 = 14;
 
 
 
 
 
 #[derive(Clone, Copy)]
-pub struct Ix {
-    pub j: &'static str,
-    pub caf: u8,
-    pub mm: u32,
+pub struct Dq {
+    pub name: &'static str,
+    pub icon_idx: u8,
+    pub accent: u32,
 }
 
 
-const IM_: &[Ix] = &[
-    Ix { j: "Terminal",  caf: 0,  mm: 0xFF20CC60 },
-    Ix { j: "Files",     caf: 1,  mm: 0xFFDDAA30 },
-    Ix { j: "Editor",    caf: 2,  mm: 0xFF5090E0 },
-    Ix { j: "Calc",      caf: 3,  mm: 0xFFCC6633 },
-    Ix { j: "Network",   caf: 4,  mm: 0xFF40AADD },
-    Ix { j: "Games",     caf: 5,  mm: 0xFFCC4444 },
-    Ix { j: "Browser",   caf: 6,  mm: 0xFF4488DD },
-    Ix { j: "TrustEd",   caf: 7,  mm: 0xFF9060D0 },
-    Ix { j: "Settings",  caf: 8,  mm: 0xFF9988BB },
-    Ix { j: "About",     caf: 9,  mm: 0xFF40CC80 },
-    Ix { j: "Music",     caf: 10, mm: 0xFFFF6090 },
-    Ix { j: "Chess",     caf: 11, mm: 0xFFD4A854 },
+const JF_: &[Dq] = &[
+    Dq { name: "Terminal",  icon_idx: 0,  accent: 0xFF20CC60 },
+    Dq { name: "Files",     icon_idx: 1,  accent: 0xFFDDAA30 },
+    Dq { name: "Editor",    icon_idx: 2,  accent: 0xFF5090E0 },
+    Dq { name: "Calc",      icon_idx: 3,  accent: 0xFFCC6633 },
+    Dq { name: "Network",   icon_idx: 4,  accent: 0xFF40AADD },
+    Dq { name: "Games",     icon_idx: 5,  accent: 0xFFCC4444 },
+    Dq { name: "Browser",   icon_idx: 6,  accent: 0xFF4488DD },
+    Dq { name: "TrustEd",   icon_idx: 7,  accent: 0xFF9060D0 },
+    Dq { name: "Settings",  icon_idx: 8,  accent: 0xFF9988BB },
+    Dq { name: "About",     icon_idx: 9,  accent: 0xFF40CC80 },
+    Dq { name: "Music",     icon_idx: 10, accent: 0xFFFF6090 },
+    Dq { name: "Chess",     icon_idx: 11, accent: 0xFFD4A854 },
 ];
 
 
-const AQM_: [usize; HV_] = [0, 1, 6, 10, 8];
+const ASP_: [usize; IP_] = [0, 1, 6, 10, 8];
 
 
 
@@ -149,261 +149,261 @@ const AQM_: [usize; HV_] = [0, 1, 6, 10, 8];
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum MobileView {
-    Lo,
-    Zv,
-    Apa,
-    Wc,
+    Home,
+    AppFullscreen,
+    AppSwitcher,
+    ControlCenter,
 }
 
 #[derive(Clone)]
 pub struct MobileState {
-    pub gh: bool,
-    pub bls: MobileView,
-    pub fcj: Option<u32>,
-    pub tps: i32,
-    pub tpr: i32,
-    pub wws: i32,
-    pub dzl: u8,
-    pub uvs: u8,
-    pub kyf: i32,
-    pub kyg: i32,
-    pub kyb: bool,
-    pub kyc: bool,
-    pub kyd: bool,
-    pub dod: u64,
-    pub hmx: i32,
-    pub job: String,
-    pub kid: Vec<(u32, u8)>,
-    pub bso: String,
+    pub active: bool,
+    pub view: MobileView,
+    pub active_app_id: Option<u32>,
+    pub home_scroll_x: i32,
+    pub home_page: i32,
+    pub switcher_scroll_x: i32,
+    pub cc_progress: u8,
+    pub notif_progress: u8,
+    pub gesture_start_x: i32,
+    pub gesture_start_y: i32,
+    pub gesture_active: bool,
+    pub gesture_from_bottom: bool,
+    pub gesture_from_top: bool,
+    pub anim_frame: u64,
+    pub highlighted_icon: i32,
+    pub ezu: String,
+    pub closing_cards: Vec<(u32, u8)>,
+    pub time_str: String,
     
-    pub dxp: i32,
-    pub ddi: i32,
-    pub att: u32,
-    pub azc: u32,
+    pub vp_x: i32,
+    pub vp_y: i32,
+    pub vp_w: u32,
+    pub vp_h: u32,
     
-    pub gnh: bool,
+    pub music_dropdown_open: bool,
     
-    pub lnc: u8,
+    pub music_viz_mode: u8,
     
-    pub dwq: Vec<String>,
+    pub term_lines: Vec<String>,
     
-    pub pse: String,
+    pub term_input: String,
     
-    pub aqu: String,
+    pub calc_display: String,
     
-    pub fec: u8,
+    pub calc_op: u8,
     
-    pub coz: i64,
+    pub calc_operand: i64,
     
-    pub dzk: bool,
+    pub calc_fresh: bool,
     
-    pub gha: i32,
+    pub files_selected: i32,
     
-    pub dqu: u8,
+    pub files_depth: u8,
     
-    pub mey: i32,
+    pub settings_selected: i32,
     
-    pub gsk: [bool; 6],
+    pub settings_toggles: [bool; 6],
     
-    pub kxp: i32,
+    pub games_selected: i32,
     
-    pub hbi: u8,
+    pub browser_page: u8,
     
-    pub isk: u32,
+    pub editor_cursor_line: u32,
     
-    pub gfy: u8,
+    pub editor_tab: u8,
     
-    pub cpd: i32,
+    pub chess_selected: i32,
     
-    pub hct: u8,
+    pub chess_turn: u8,
 }
 
 impl MobileState {
     pub const fn new() -> Self {
         Self {
-            gh: false,
-            bls: MobileView::Lo,
-            fcj: None,
-            tps: 0,
-            tpr: 0,
-            wws: 0,
-            dzl: 0,
-            uvs: 0,
-            kyf: 0,
-            kyg: 0,
-            kyb: false,
-            kyc: false,
-            kyd: false,
-            dod: 0,
-            hmx: -1,
-            job: String::new(),
-            kid: Vec::new(),
-            bso: String::new(),
-            dxp: 0,
-            ddi: 0,
-            att: DAH_,
-            azc: DAG_,
-            gnh: false,
-            lnc: 0,
-            dwq: Vec::new(),
-            pse: String::new(),
-            aqu: String::new(),
-            fec: 0,
-            coz: 0,
-            dzk: false,
-            gha: -1,
-            dqu: 0,
-            mey: -1,
-            gsk: [true, false, false, false, true, true],
-            kxp: -1,
-            hbi: 0,
-            isk: 0,
-            gfy: 0,
-            cpd: -1,
-            hct: 0,
+            active: false,
+            view: MobileView::Home,
+            active_app_id: None,
+            home_scroll_x: 0,
+            home_page: 0,
+            switcher_scroll_x: 0,
+            cc_progress: 0,
+            notif_progress: 0,
+            gesture_start_x: 0,
+            gesture_start_y: 0,
+            gesture_active: false,
+            gesture_from_bottom: false,
+            gesture_from_top: false,
+            anim_frame: 0,
+            highlighted_icon: -1,
+            ezu: String::new(),
+            closing_cards: Vec::new(),
+            time_str: String::new(),
+            vp_x: 0,
+            vp_y: 0,
+            vp_w: DDZ_,
+            vp_h: DDY_,
+            music_dropdown_open: false,
+            music_viz_mode: 0,
+            term_lines: Vec::new(),
+            term_input: String::new(),
+            calc_display: String::new(),
+            calc_op: 0,
+            calc_operand: 0,
+            calc_fresh: false,
+            files_selected: -1,
+            files_depth: 0,
+            settings_selected: -1,
+            settings_toggles: [true, false, false, false, true, true],
+            games_selected: -1,
+            browser_page: 0,
+            editor_cursor_line: 0,
+            editor_tab: 0,
+            chess_selected: -1,
+            chess_turn: 0,
         }
     }
 }
 
 
 
-pub fn nbi(wf: u32, aav: u32) -> (i32, i32, u32, u32) {
+pub fn hjt(screen_w: u32, screen_h: u32) -> (i32, i32, u32, u32) {
     
-    let azc = aav;
-    let att = (aav * CCL_ / CCM_).v(wf);
-    let fp = ((wf.ao(att)) / 2) as i32;
-    let iz = 0i32;
-    (fp, iz, att, azc)
+    let vp_h = screen_h;
+    let vp_w = (screen_h * CFW_ / CFX_).min(screen_w);
+    let vx = ((screen_w.saturating_sub(vp_w)) / 2) as i32;
+    let vy = 0i32;
+    (vx, vy, vp_w, vp_h)
 }
 
 
 
 
 
-fn cb(b: i32, c: i32, text: &str, s: u32) {
-    crate::graphics::scaling::kri(b, c, text, s);
+fn draw_text(x: i32, y: i32, text: &str, color: u32) {
+    crate::graphics::scaling::ekr(x, y, text, color);
 }
 
-fn np(cx: i32, c: i32, text: &str, s: u32) {
-    let d = crate::graphics::scaling::clj(text) as i32;
-    cb(cx - d / 2, c, text, s);
+fn draw_text_centered(cx: i32, y: i32, text: &str, color: u32) {
+    let w = crate::graphics::scaling::auh(text) as i32;
+    draw_text(cx - w / 2, y, text, color);
 }
 
-fn bmi() -> u32 {
-    crate::graphics::scaling::bmi()
+fn agg() -> u32 {
+    crate::graphics::scaling::agg()
 }
 
 
-fn mf(b: i32, c: i32, d: u32, i: u32, dy: u32, s: u32) {
-    if d == 0 || i == 0 { return; }
-    let m = dy.v(d / 2).v(i / 2);
-    if m == 0 {
-        if b >= 0 && c >= 0 { framebuffer::ah(b as u32, c as u32, d, i, s); }
+fn draw_rounded_rect(x: i32, y: i32, w: u32, h: u32, radius: u32, color: u32) {
+    if w == 0 || h == 0 { return; }
+    let r = radius.min(w / 2).min(h / 2);
+    if r == 0 {
+        if x >= 0 && y >= 0 { framebuffer::fill_rect(x as u32, y as u32, w, h, color); }
         return;
     }
-    let yi = d as i32;
-    let gd = i as i32;
-    let jl = m as i32;
+    let ld = w as i32;
+    let hi = h as i32;
+    let dk = r as i32;
     
-    fip(b, c + jl, yi, gd - jl * 2, s);
-    fip(b + jl, c, yi - jl * 2, jl, s);
-    fip(b + jl, c + gd - jl, yi - jl * 2, jl, s);
+    cjl(x, y + dk, ld, hi - dk * 2, color);
+    cjl(x + dk, y, ld - dk * 2, dk, color);
+    cjl(x + dk, y + hi - dk, ld - dk * 2, dk, color);
     
-    let uv = jl * jl;
-    for bg in 0..jl {
-        let dx = iua(uv - bg * bg);
-        fip(b + jl - dx, c + jl - bg - 1, dx, 1, s);
-        fip(b + yi - jl, c + jl - bg - 1, dx, 1, s);
-        fip(b + jl - dx, c + gd - jl + bg, dx, 1, s);
-        fip(b + yi - jl, c + gd - jl + bg, dx, 1, s);
+    let ju = dk * dk;
+    for ad in 0..dk {
+        let dx = emg(ju - ad * ad);
+        cjl(x + dk - dx, y + dk - ad - 1, dx, 1, color);
+        cjl(x + ld - dk, y + dk - ad - 1, dx, 1, color);
+        cjl(x + dk - dx, y + hi - dk + ad, dx, 1, color);
+        cjl(x + ld - dk, y + hi - dk + ad, dx, 1, color);
     }
 }
 
 
-fn tf(b: i32, c: i32, d: u32, i: u32, dy: u32, s: u32) {
-    if d == 0 || i == 0 { return; }
-    let m = dy.v(d / 2).v(i / 2);
-    let yi = d as i32;
-    let gd = i as i32;
-    let jl = m as i32;
-    if m == 0 {
-        if b >= 0 && c >= 0 { framebuffer::lx(b as u32, c as u32, d, i, s); }
+fn iu(x: i32, y: i32, w: u32, h: u32, radius: u32, color: u32) {
+    if w == 0 || h == 0 { return; }
+    let r = radius.min(w / 2).min(h / 2);
+    let ld = w as i32;
+    let hi = h as i32;
+    let dk = r as i32;
+    if r == 0 {
+        if x >= 0 && y >= 0 { framebuffer::draw_rect(x as u32, y as u32, w, h, color); }
         return;
     }
     
-    for y in (b + jl)..(b + yi - jl) {
-        ayl(y, c, s);
-        ayl(y, c + gd - 1, s);
+    for p in (x + dk)..(x + ld - dk) {
+        aag(p, y, color);
+        aag(p, y + hi - 1, color);
     }
-    for x in (c + jl)..(c + gd - jl) {
-        ayl(b, x, s);
-        ayl(b + yi - 1, x, s);
+    for o in (y + dk)..(y + hi - dk) {
+        aag(x, o, color);
+        aag(x + ld - 1, o, color);
     }
     
-    let uv = jl * jl;
-    let mut jcv = jl;
-    for bg in 0..=jl {
-        let dx = iua(uv - bg * bg);
+    let ju = dk * dk;
+    let mut esj = dk;
+    for ad in 0..=dk {
+        let dx = emg(ju - ad * ad);
         
-        for ax in dx..=jcv {
+        for ax in dx..=esj {
             
-            ayl(b + jl - ax, c + jl - bg, s);
+            aag(x + dk - ax, y + dk - ad, color);
             
-            ayl(b + yi - 1 - jl + ax, c + jl - bg, s);
+            aag(x + ld - 1 - dk + ax, y + dk - ad, color);
             
-            ayl(b + jl - ax, c + gd - 1 - jl + bg, s);
+            aag(x + dk - ax, y + hi - 1 - dk + ad, color);
             
-            ayl(b + yi - 1 - jl + ax, c + gd - 1 - jl + bg, s);
+            aag(x + ld - 1 - dk + ax, y + hi - 1 - dk + ad, color);
         }
-        jcv = dx;
+        esj = dx;
     }
 }
 
 
-fn fip(b: i32, c: i32, d: i32, i: i32, s: u32) {
-    if d <= 0 || i <= 0 || b + d <= 0 || c + i <= 0 { return; }
-    let fy = b.am(0) as u32;
-    let fo = c.am(0) as u32;
-    let dn = (b + d).am(0) as u32;
-    let dp = (c + i).am(0) as u32;
-    if dn > fy && dp > fo {
-        framebuffer::ah(fy, fo, dn - fy, dp - fo, s);
+fn cjl(x: i32, y: i32, w: i32, h: i32, color: u32) {
+    if w <= 0 || h <= 0 || x + w <= 0 || y + h <= 0 { return; }
+    let bm = x.max(0) as u32;
+    let az = y.max(0) as u32;
+    let x1 = (x + w).max(0) as u32;
+    let y1 = (y + h).max(0) as u32;
+    if x1 > bm && y1 > az {
+        framebuffer::fill_rect(bm, az, x1 - bm, y1 - az, color);
     }
 }
 
-fn ayl(b: i32, c: i32, s: u32) {
-    if b >= 0 && c >= 0 {
-        framebuffer::sf(b as u32, c as u32, s);
+fn aag(x: i32, y: i32, color: u32) {
+    if x >= 0 && y >= 0 {
+        framebuffer::put_pixel(x as u32, y as u32, color);
     }
 }
 
-fn iua(p: i32) -> i32 {
-    if p <= 0 { return 0; }
-    let mut b = p;
-    let mut c = (b + 1) / 2;
-    while c < b { b = c; c = (b + p / b) / 2; }
-    b
+fn emg(v: i32) -> i32 {
+    if v <= 0 { return 0; }
+    let mut x = v;
+    let mut y = (x + 1) / 2;
+    while y < x { x = y; y = (x + v / x) / 2; }
+    x
 }
 
 
-fn qku(c: i32, b: i32) -> u32 {
-    let ax = if b < 0 { -b } else { b };
-    let bga = if c < 0 { -c } else { c };
+fn jxw(y: i32, x: i32) -> u32 {
+    let ax = if x < 0 { -x } else { x };
+    let aet = if y < 0 { -y } else { y };
     
-    let bvq = if b >= 0 {
-        if c >= 0 {
-            if ax >= bga { 0 } else { 1 }
+    let amb = if x >= 0 {
+        if y >= 0 {
+            if ax >= aet { 0 } else { 1 }
         } else {
-            if ax >= bga { 7 } else { 6 }
+            if ax >= aet { 7 } else { 6 }
         }
     } else {
-        if c >= 0 {
-            if ax >= bga { 3 } else { 2 }
+        if y >= 0 {
+            if ax >= aet { 3 } else { 2 }
         } else {
-            if ax >= bga { 4 } else { 5 }
+            if ax >= aet { 4 } else { 5 }
         }
     };
-    bvq
+    amb
 }
 
 
@@ -411,171 +411,171 @@ fn qku(c: i32, b: i32) -> u32 {
 
 
 
-fn iru(b: i32, c: i32, d: u32, i: u32, jyj: u32, adh: u32) {
-    if d == 0 || i == 0 { return; }
-    let mru = b.am(0) as u32;
-    let mry = c.am(0) as u32;
+fn ekn(x: i32, y: i32, w: u32, h: u32, _radius: u32, opacity: u32) {
+    if w == 0 || h == 0 { return; }
+    let hdb = x.max(0) as u32;
+    let hdf = y.max(0) as u32;
     
-    framebuffer::ih(mru, mry, d, i, 0x000000, (adh * 7 / 10).v(255));
+    framebuffer::co(hdb, hdf, w, h, 0x000000, (opacity * 7 / 10).min(255));
     
-    framebuffer::ih(mru, mry, d, i, 0x001A0A, (adh * 2 / 10).v(255));
+    framebuffer::co(hdb, hdf, w, h, 0x001A0A, (opacity * 2 / 10).min(255));
     
-    let mfm = i / 4;
-    for br in 0..mfm {
-        let dw = ((mfm - br) * 18 / mfm).v(255);
-        if dw > 0 {
-            framebuffer::ih(mru, mry + br, d, 1, 0xFFFFFF, dw);
+    let guv = h / 4;
+    for row in 0..guv {
+        let alpha = ((guv - row) * 18 / guv).min(255);
+        if alpha > 0 {
+            framebuffer::co(hdb, hdf + row, w, 1, 0xFFFFFF, alpha);
         }
     }
     
-    tf(b, c, d, i, jyj, AJ_);
+    iu(x, y, w, h, _radius, AP_);
 }
 
 
 
 
 
-pub fn hgw(fp: i32, iz: i32, gm: u32, qdz: u32, bso: &str, eln: u64) {
-    let b = fp;
-    let c = iz;
-    let d = gm;
-    let i = AIF_;
+pub fn draw_status_bar(vx: i32, vy: i32, bt: u32, _vh: u32, time_str: &str, _frame: u64) {
+    let x = vx;
+    let y = vy;
+    let w = bt;
+    let h = AKB_;
 
     
-    framebuffer::ih(b.am(0) as u32, c.am(0) as u32, d, i, 0x040A06, 180);
-    framebuffer::ih(b.am(0) as u32, c.am(0) as u32, d, i, 0x00AA44, 8);
+    framebuffer::co(x.max(0) as u32, y.max(0) as u32, w, h, 0x040A06, 180);
+    framebuffer::co(x.max(0) as u32, y.max(0) as u32, w, h, 0x00AA44, 8);
 
     
-    framebuffer::ah(b.am(0) as u32, (c + i as i32 - 1).am(0) as u32, d, 1, AJ_);
+    framebuffer::fill_rect(x.max(0) as u32, (y + h as i32 - 1).max(0) as u32, w, 1, AP_);
 
     
-    let dt = bmi();
-    np(b + d as i32 / 2, c + 14, bso, EC_);
+    let aq = agg();
+    draw_text_centered(x + w as i32 / 2, y + 14, time_str, EP_);
 
     
-    cb(b + 12, c + 14, "TrustOS", AG_);
+    draw_text(x + 12, y + 14, "TrustOS", AH_);
 
     
-    let kb = b + d as i32 - 12;
+    let da = x + w as i32 - 12;
     
-    let bx = (kb - 24).am(0) as u32;
-    let je = (c + 16).am(0) as u32;
-    framebuffer::lx(bx, je, 18, 10, AT_);
-    framebuffer::ah(bx + 18, je + 3, 2, 4, AT_);
-    framebuffer::ah(bx + 2, je + 2, 14, 6, AG_); 
+    let bx = (da - 24).max(0) as u32;
+    let dc = (y + 16).max(0) as u32;
+    framebuffer::draw_rect(bx, dc, 18, 10, AW_);
+    framebuffer::fill_rect(bx + 18, dc + 3, 2, 4, AW_);
+    framebuffer::fill_rect(bx + 2, dc + 2, 14, 6, AH_); 
 
     
-    let fx = (kb - 50) as i32;
-    let lw = c + 24;
-    for mz in 0..3u32 {
-        let m = 2 + mz * 3;
-        let uv = (m * m) as i32;
-        let jl = m.ao(1);
-        let lwt = (jl * jl) as i32;
-        for bg in 0..=m as i32 {
-            for dx in -(m as i32)..=(m as i32) {
-                let us = dx * dx + bg * bg;
-                if us <= uv && us >= lwt && bg <= 0 {
-                    let bj = if mz == 0 { AG_ } else { X_ };
-                    ayl(fx + dx, lw + bg, bj);
+    let wx = (da - 50) as i32;
+    let wy = y + 24;
+    for dq in 0..3u32 {
+        let r = 2 + dq * 3;
+        let ju = (r * r) as i32;
+        let dk = r.saturating_sub(1);
+        let gpi = (dk * dk) as i32;
+        for ad in 0..=r as i32 {
+            for dx in -(r as i32)..=(r as i32) {
+                let jq = dx * dx + ad * ad;
+                if jq <= ju && jq >= gpi && ad <= 0 {
+                    let col = if dq == 0 { AH_ } else { Y_ };
+                    aag(wx + dx, wy + ad, col);
                 }
             }
         }
     }
-    ayl(fx, lw + 1, AG_); 
+    aag(wx, wy + 1, AH_); 
 }
 
 
 
 
 
-pub fn nnc(
-    fp: i32, iz: i32, gm: u32, me: u32,
-    tou: i32, eln: u64,
+pub fn htk(
+    vx: i32, vy: i32, bt: u32, ex: u32,
+    highlighted: i32, _frame: u64,
 ) {
-    let bo = IM_.len() as u32;
-    let lk = (bo + EJ_ - 1) / EJ_;
+    let ae = JF_.len() as u32;
+    let rows = (ae + EX_ - 1) / EX_;
 
     
     
-    const AFT_: u32 = 138;
-    let ipd = iz + AIF_ as i32;
-    let ipc = iz + me as i32 - GH_ as i32 - IC_ as i32 - AFT_ as i32;
-    let nd = (ipc - ipd).am(0) as u32;
+    const AHN_: u32 = 138;
+    let eiv = vy + AKB_ as i32;
+    let eiu = vy + ex as i32 - GY_ as i32 - IW_ as i32 - AHN_ as i32;
+    let en = (eiu - eiv).max(0) as u32;
 
     
-    let ftv = 36u32;
-    let pgy = 14u32;
-    let bco = gm.ao(pgy * 2);
-    let cmt = fp + pgy as i32;
-    let blb = ipd + 10;
+    let cqd = 36u32;
+    let jdu = 14u32;
+    let acm = bt.saturating_sub(jdu * 2);
+    let ava = vx + jdu as i32;
+    let agz = eiv + 10;
     
-    mf(cmt, blb, bco, ftv, 12, 0xFF0A120E);
-    tf(cmt, blb, bco, ftv, 12, AJ_);
+    draw_rounded_rect(ava, agz, acm, cqd, 12, 0xFF0A120E);
+    iu(ava, agz, acm, cqd, 12, AP_);
     
-    let fnl = cmt + 12;
-    let fnm = blb + 8;
+    let cmn = ava + 12;
+    let cmo = agz + 8;
     
-    for bg in -4i32..=4 {
+    for ad in -4i32..=4 {
         for dx in -4i32..=4 {
-            let us = dx * dx + bg * bg;
-            if us >= 9 && us <= 16 {
-                ayl(fnl + dx, fnm + bg, AT_);
+            let jq = dx * dx + ad * ad;
+            if jq >= 9 && jq <= 16 {
+                aag(cmn + dx, cmo + ad, AW_);
             }
         }
     }
     
-    ayl(fnl + 4, fnm + 4, AT_);
-    ayl(fnl + 5, fnm + 5, AT_);
-    ayl(fnl + 6, fnm + 6, AT_);
+    aag(cmn + 4, cmo + 4, AW_);
+    aag(cmn + 5, cmo + 5, AW_);
+    aag(cmn + 6, cmo + 6, AW_);
     
-    cb(cmt + 26, blb + 10, "Search", N_);
+    draw_text(ava + 26, agz + 10, "Search", O_);
 
     
-    let hly = blb + ftv as i32 + 10;
-    let ero = (ipc - hly).am(0) as u32;
+    let dra = agz + cqd as i32 + 10;
+    let cah = (eiu - dra).max(0) as u32;
 
     
-    let lal = gm.ao(TS_ * 2);
+    let fzm = bt.saturating_sub(UY_ * 2);
     
-    let acc = lal / EJ_; 
-    let lao = fp + TS_ as i32;
+    let cell_w = fzm / EX_; 
+    let fzp = vx + UY_ as i32;
 
-    let mmf = lk * UB_;
-    let drk = hly + (ero as i32 - mmf as i32) / 2;
+    let gzp = rows * VJ_;
+    let bmq = dra + (cah as i32 - gzp as i32) / 2;
 
-    for a in 0..bo {
-        let bj = a % EJ_;
-        let br = a / EJ_;
-        let bjf = &IM_[a as usize];
+    for i in 0..ae {
+        let col = i % EX_;
+        let row = i / EX_;
+        let afz = &JF_[i as usize];
 
         
-        let fg = lao + (bj * acc) as i32 + (acc as i32 - BV_ as i32) / 2;
-        let og = drk + (br * UB_) as i32;
-        let jbj = tou == a as i32;
+        let bi = fzp + (col * cell_w) as i32 + (cell_w as i32 - BX_ as i32) / 2;
+        let gg = bmq + (row * VJ_) as i32;
+        let erm = highlighted == i as i32;
 
         
         
-        mf(fg, og, BV_, BV_, NO_, 0xFF060A06);
-        if jbj {
-            tf(fg, og, BV_, BV_, NO_, bjf.mm);
+        draw_rounded_rect(bi, gg, BX_, BX_, OP_, 0xFF060A06);
+        if erm {
+            iu(bi, gg, BX_, BX_, OP_, afz.accent);
             
-            tf(fg - 1, og - 1, BV_ + 2, BV_ + 2, NO_ + 1, P_);
+            iu(bi - 1, gg - 1, BX_ + 2, BX_ + 2, OP_ + 1, Q_);
         } else {
-            tf(fg, og, BV_, BV_, NO_, AJ_);
+            iu(bi, gg, BX_, BX_, OP_, AP_);
         }
 
         
-        let ads = if jbj { bjf.mm } else { BH_ };
-        let cx = fg + BV_ as i32 / 2;
-        let ae = og + BV_ as i32 / 2;
-        nnd(cx, ae, bjf.caf, ads, jbj);
+        let oy = if erm { afz.accent } else { BJ_ };
+        let cx = bi + BX_ as i32 / 2;
+        let u = gg + BX_ as i32 / 2;
+        htl(cx, u, afz.icon_idx, oy, erm);
 
         
-        let bbw = if jbj { I_ } else { N_ };
-        let mj = fg + BV_ as i32 / 2;
-        let ct = og + BV_ as i32 + 2;
-        np(mj, ct, bjf.j, bbw);
+        let ace = if erm { I_ } else { O_ };
+        let fe = bi + BX_ as i32 / 2;
+        let ly = gg + BX_ as i32 + 2;
+        draw_text_centered(fe, ly, afz.name, ace);
     }
 }
 
@@ -583,51 +583,51 @@ pub fn nnc(
 
 
 
-pub fn irs(fp: i32, iz: i32, gm: u32, me: u32, tov: i32, eln: u64) {
-    let eoz = iz + me as i32 - GH_ as i32 - IC_ as i32;
-    let eay = fp + SS_ as i32;
-    let hgn = gm - SS_ * 2;
-    let cjz = GH_ - 10; 
+pub fn draw_dock(vx: i32, vy: i32, bt: u32, ex: u32, highlighted_dock: i32, _frame: u64) {
+    let byv = vy + ex as i32 - GY_ as i32 - IW_ as i32;
+    let bsb = vx + TZ_ as i32;
+    let dnl = bt - TZ_ * 2;
+    let atn = GY_ - 10; 
 
     
-    iru(eay, eoz, hgn, cjz, ABD_, 200);
+    ekn(bsb, byv, dnl, atn, ACT_, 200);
     
-    framebuffer::ih(
-        (eay + ABD_ as i32).am(0) as u32,
-        eoz.am(0) as u32,
-        hgn.ao(ABD_ * 2), 1,
-        AT_, 120,
+    framebuffer::co(
+        (bsb + ACT_ as i32).max(0) as u32,
+        byv.max(0) as u32,
+        dnl.saturating_sub(ACT_ * 2), 1,
+        AW_, 120,
     );
 
     
-    let aza = HV_ as u32 * BU_ + (HV_ as u32 - 1) * 12;
-    let ql = eay + (hgn as i32 - aza as i32) / 2;
-    let bem = eoz + (cjz as i32 - BU_ as i32) / 2;
+    let aaj = IP_ as u32 * BV_ + (IP_ as u32 - 1) * 12;
+    let start_x = bsb + (dnl as i32 - aaj as i32) / 2;
+    let adu = byv + (atn as i32 - BV_ as i32) / 2;
 
-    for (di, &com) in AQM_.iter().cf() {
-        let bjf = &IM_[com];
-        let fg = ql + (di as u32 * (BU_ + 12)) as i32;
-        let fmb = tov == di as i32;
+    for (di, &awc) in ASP_.iter().enumerate() {
+        let afz = &JF_[awc];
+        let bi = start_x + (di as u32 * (BV_ + 12)) as i32;
+        let clm = highlighted_dock == di as i32;
 
         
-        mf(fg, bem, BU_, BU_, 12, 0xFF060A06);
-        if fmb {
-            tf(fg, bem, BU_, BU_, 12, bjf.mm);
+        draw_rounded_rect(bi, adu, BV_, BV_, 12, 0xFF060A06);
+        if clm {
+            iu(bi, adu, BV_, BV_, 12, afz.accent);
         } else {
-            tf(fg, bem, BU_, BU_, 12, AJ_);
+            iu(bi, adu, BV_, BV_, 12, AP_);
         }
 
         
-        let sci = if fmb { bjf.mm } else { BH_ };
-        let cx = fg + BU_ as i32 / 2;
-        let ae = bem + BU_ as i32 / 2;
-        nnd(cx, ae, bjf.caf, sci, fmb);
+        let lii = if clm { afz.accent } else { BJ_ };
+        let cx = bi + BV_ as i32 / 2;
+        let u = adu + BV_ as i32 / 2;
+        htl(cx, u, afz.icon_idx, lii, clm);
 
         
-        let bbw = if fmb { I_ } else { N_ };
-        let mj = fg + BU_ as i32 / 2;
-        let ct = bem + BU_ as i32 + 2;
-        np(mj, ct, bjf.j, bbw);
+        let ace = if clm { I_ } else { O_ };
+        let fe = bi + BV_ as i32 / 2;
+        let ly = adu + BV_ as i32 + 2;
+        draw_text_centered(fe, ly, afz.name, ace);
     }
 }
 
@@ -635,70 +635,70 @@ pub fn irs(fp: i32, iz: i32, gm: u32, me: u32, tov: i32, eln: u64) {
 
 
 
-pub fn irt(fp: i32, iz: i32, gm: u32, me: u32) {
-    let lo = BWR_;
-    let tn = IC_;
-    let bx = fp + (gm as i32 - lo as i32) / 2;
-    let je = iz + me as i32 - tn as i32 - 4;
-    mf(bx, je, lo, tn, 3, EC_);
+pub fn ekm(vx: i32, vy: i32, bt: u32, ex: u32) {
+    let ek = BZX_;
+    let hs = IW_;
+    let bx = vx + (bt as i32 - ek as i32) / 2;
+    let dc = vy + ex as i32 - hs as i32 - 4;
+    draw_rounded_rect(bx, dc, ek, hs, 3, EP_);
 }
 
 
 
 
 
-pub fn sbe(fp: i32, iz: i32, gm: u32, dq: &str, eln: u64) {
-    let i = HL_;
+pub fn lhn(vx: i32, vy: i32, bt: u32, title: &str, _frame: u64) {
+    let h = ID_;
     
-    framebuffer::ih(fp.am(0) as u32, iz.am(0) as u32, gm, i, 0x0A1A0A, 220);
+    framebuffer::co(vx.max(0) as u32, vy.max(0) as u32, bt, h, 0x0A1A0A, 220);
     
-    framebuffer::ah((fp).am(0) as u32, (iz + i as i32 - 1).am(0) as u32, gm, 1, AT_);
+    framebuffer::fill_rect((vx).max(0) as u32, (vy + h as i32 - 1).max(0) as u32, bt, 1, AW_);
     
-    framebuffer::ih(fp.am(0) as u32, iz.am(0) as u32, gm, 1, 0x00FF66, 15);
+    framebuffer::co(vx.max(0) as u32, vy.max(0) as u32, bt, 1, 0x00FF66, 15);
     
-    np(fp + gm as i32 / 2, iz + 10, dq, AC_);
+    draw_text_centered(vx + bt as i32 / 2, vy + 10, title, AB_);
     
-    cb(fp + 10, iz + 10, "<", AG_);
+    draw_text(vx + 10, vy + 10, "<", AH_);
 }
 
 
 
 
 
-pub fn sbo(
-    fp: i32, iz: i32, gm: u32, me: u32,
-    ee: &[(u32, &str)], 
-    cms: i32, eln: u64,
+pub fn lhx(
+    vx: i32, vy: i32, bt: u32, ex: u32,
+    windows: &[(u32, &str)], 
+    scroll_x: i32, _frame: u64,
 ) {
     
-    framebuffer::ih(fp.am(0) as u32, iz.am(0) as u32, gm, me, 0x000000, 180);
+    framebuffer::co(vx.max(0) as u32, vy.max(0) as u32, bt, ex, 0x000000, 180);
 
-    if ee.is_empty() {
-        np(fp + gm as i32 / 2, iz + me as i32 / 2, "No apps open", N_);
+    if windows.is_empty() {
+        draw_text_centered(vx + bt as i32 / 2, vy + ex as i32 / 2, "No apps open", O_);
         return;
     }
 
     
-    let bpw = (gm * 7 / 10).v(400);
-    let bgg = (me * 5 / 10).v(600);
-    let gcg = iz + (me as i32 - bgg as i32) / 2;
+    let aji = (bt * 7 / 10).min(400);
+    let aev = (ex * 5 / 10).min(600);
+    let cuv = vy + (ex as i32 - aev as i32) / 2;
 
-    let xju = ee.len() as u32 * bpw + (ee.len() as u32).ao(1) * BGR_;
-    let ql = fp + (gm as i32 - xju as i32) / 2 - cms;
+    let plm = windows.len() as u32 * aji + (windows.len() as u32).saturating_sub(1) * BIV_;
+    let start_x = vx + (bt as i32 - plm as i32) / 2 - scroll_x;
 
-    for (a, &(ajq, dq)) in ee.iter().cf() {
-        let cx = ql + (a as u32 * (bpw + BGR_)) as i32;
+    for (i, &(sa, title)) in windows.iter().enumerate() {
+        let cx = start_x + (i as u32 * (aji + BIV_)) as i32;
         
-        mf(cx, gcg, bpw, bgg, BGS_, 0xFF0A0A0A);
-        tf(cx, gcg, bpw, bgg, BGS_, AT_);
+        draw_rounded_rect(cx, cuv, aji, aev, BIW_, 0xFF0A0A0A);
+        iu(cx, cuv, aji, aev, BIW_, AW_);
         
-        framebuffer::ih(cx.am(0) as u32, gcg.am(0) as u32, bpw, 28, 0x0A1A0A, 220);
-        cb(cx + 10, gcg + 6, dq, AC_);
+        framebuffer::co(cx.max(0) as u32, cuv.max(0) as u32, aji, 28, 0x0A1A0A, 220);
+        draw_text(cx + 10, cuv + 6, title, AB_);
         
-        let bdr = cx + bpw as i32 - 20;
-        cb(bdr, gcg + 6, "X", DC_);
+        let adl = cx + aji as i32 - 20;
+        draw_text(adl, cuv + 6, "X", DJ_);
         
-        np(cx + bpw as i32 / 2, gcg + bgg as i32 / 2, dq, N_);
+        draw_text_centered(cx + aji as i32 / 2, cuv + aev as i32 / 2, title, O_);
     }
 }
 
@@ -706,56 +706,56 @@ pub fn sbo(
 
 
 
-pub fn sck(fp: i32, iz: i32, gm: u32, qdz: u32, li: u8, eln: u64) {
-    if li == 0 { return; }
-    let i = (340u32 * li as u32 / 100).am(1);
-    let d = gm.ao(24);
-    let b = fp + 12;
-    let c = iz;
+pub fn lik(vx: i32, vy: i32, bt: u32, _vh: u32, progress: u8, _frame: u64) {
+    if progress == 0 { return; }
+    let h = (340u32 * progress as u32 / 100).max(1);
+    let w = bt.saturating_sub(24);
+    let x = vx + 12;
+    let y = vy;
 
     
-    iru(b, c, d, i, ZX_, 230);
+    ekn(x, y, w, h, ABJ_, 230);
     
-    framebuffer::ih(
-        (b + ZX_ as i32).am(0) as u32, c.am(0) as u32,
-        d.ao(ZX_ * 2), 1, EC_, 60,
+    framebuffer::co(
+        (x + ABJ_ as i32).max(0) as u32, y.max(0) as u32,
+        w.saturating_sub(ABJ_ * 2), 1, EP_, 60,
     );
 
-    if i < 100 { return; } 
+    if h < 100 { return; } 
 
-    let cx = b + d as i32 / 2;
-    let mut ty = c + 20;
+    let cx = x + w as i32 / 2;
+    let mut ty = y + 20;
 
     
-    cb(b + 16, ty, "Brightness", AC_);
+    draw_text(x + 16, ty, "Brightness", AB_);
     ty += 20;
-    let lo = d - 40;
-    framebuffer::ah((b + 20).am(0) as u32, ty.am(0) as u32, lo, 6, AJ_);
-    framebuffer::ah((b + 20).am(0) as u32, ty.am(0) as u32, lo * 7 / 10, 6, AG_);
+    let ek = w - 40;
+    framebuffer::fill_rect((x + 20).max(0) as u32, ty.max(0) as u32, ek, 6, AP_);
+    framebuffer::fill_rect((x + 20).max(0) as u32, ty.max(0) as u32, ek * 7 / 10, 6, AH_);
     ty += 24;
 
     
-    cb(b + 16, ty, "Volume", AC_);
+    draw_text(x + 16, ty, "Volume", AB_);
     ty += 20;
-    framebuffer::ah((b + 20).am(0) as u32, ty.am(0) as u32, lo, 6, AJ_);
-    framebuffer::ah((b + 20).am(0) as u32, ty.am(0) as u32, lo * 5 / 10, 6, AG_);
+    framebuffer::fill_rect((x + 20).max(0) as u32, ty.max(0) as u32, ek, 6, AP_);
+    framebuffer::fill_rect((x + 20).max(0) as u32, ty.max(0) as u32, ek * 5 / 10, 6, AH_);
     ty += 24;
 
     
-    let bll = 50u32;
-    let ezt = 10u32;
-    let mkt = ["WiFi", "BT", "Air", "DND"];
-    let ptd = [true, false, false, false];
-    let xkr = mkt.len() as u32 * bll + (mkt.len() as u32 - 1) * ezt;
-    let xgz = b + (d as i32 - xkr as i32) / 2;
+    let tile_size = 50u32;
+    let cek = 10u32;
+    let gyt = ["WiFi", "BT", "Air", "DND"];
+    let jmn = [true, false, false, false];
+    let pmg = gyt.len() as u32 * tile_size + (gyt.len() as u32 - 1) * cek;
+    let pjk = x + (w as i32 - pmg as i32) / 2;
 
-    for (a, &cu) in mkt.iter().cf() {
-        let gx = xgz + (a as u32 * (bll + ezt)) as i32;
-        let ei = if ptd[a] { P_ } else { RK_ };
-        let acu = if ptd[a] { AG_ } else { AJ_ };
-        mf(gx, ty, bll, bll, 10, ei);
-        tf(gx, ty, bll, bll, 10, acu);
-        np(gx + bll as i32 / 2, ty + bll as i32 / 2 - 7, cu, AC_);
+    for (i, &label) in gyt.iter().enumerate() {
+        let bu = pjk + (i as u32 * (tile_size + cek)) as i32;
+        let bg = if jmn[i] { Q_ } else { SM_ };
+        let border = if jmn[i] { AH_ } else { AP_ };
+        draw_rounded_rect(bu, ty, tile_size, tile_size, 10, bg);
+        iu(bu, ty, tile_size, tile_size, 10, border);
+        draw_text_centered(bu + tile_size as i32 / 2, ty + tile_size as i32 / 2 - 7, label, AB_);
     }
 }
 
@@ -763,13 +763,13 @@ pub fn sck(fp: i32, iz: i32, gm: u32, qdz: u32, li: u8, eln: u64) {
 
 
 
-pub fn sex(fp: i32, iz: i32, gm: u32, me: u32) {
+pub fn lkk(vx: i32, vy: i32, bt: u32, ex: u32) {
     
-    tf(fp - 3, iz - 3, gm + 6, me + 6, 18, P_);
+    iu(vx - 3, vy - 3, bt + 6, ex + 6, 18, Q_);
     
-    tf(fp - 2, iz - 2, gm + 4, me + 4, 16, EC_);
+    iu(vx - 2, vy - 2, bt + 4, ex + 4, 16, EP_);
     
-    tf(fp - 1, iz - 1, gm + 2, me + 2, 14, AT_);
+    iu(vx - 1, vy - 1, bt + 2, ex + 2, 14, AW_);
 }
 
 
@@ -779,180 +779,180 @@ pub fn sex(fp: i32, iz: i32, gm: u32, me: u32) {
 #[derive(Clone, Copy, PartialEq)]
 pub enum MobileAction {
     None,
-    Atc,
-    Bof,
-    Bnx,
-    Bdp,
-    Bkr(u8),      
-    Bks(u8),  
-    Bcm,
-    Bzn(u32),
-    Bmx,
-    Chp,
-    Bmw,
-    Bmv(u8),
+    GoHome,
+    OpenSwitcher,
+    OpenControlCenter,
+    CloseControlCenter,
+    LaunchApp(u8),      
+    LaunchDockApp(u8),  
+    BackFromApp,
+    CloseSwitcherCard(u32),
+    MusicTogglePlay,
+    MusicStop,
+    MusicToggleDropdown,
+    MusicSetVizMode(u8),
     
     CalcButton(u8),
     
-    Bhb(u8),
+    FilesTap(u8),
     
-    Bha,
+    FilesBack,
     
-    Bso(u8),
+    SettingsTap(u8),
     
-    Bhu(u8),
+    GamesTap(u8),
     
-    Agv(u8),
+    BrowserNav(u8),
     
-    Bfu(u8),
+    EditorTap(u8),
     
-    Arm(u8),
+    EditorSwitchTab(u8),
     
-    Bdl(u8),
+    ChessTap(u8),
     
-    Bmu,
+    MusicAppToggle,
     
-    Buc,
+    TermSubmit,
 }
 
 
 
-pub fn tjt(
-    g: &mut MobileState,
-    id: GestureEvent,
+pub fn mhv(
+    state: &mut MobileState,
+    event: GestureEvent,
 ) -> MobileAction {
-    match id {
-        GestureEvent::Btz(b, c) => {
-            g.kyf = b;
-            g.kyg = c;
-            g.kyb = true;
-            g.kyc = c > g.azc as i32 - 60;
-            g.kyd = c < 44;
+    match event {
+        GestureEvent::TapDown(x, y) => {
+            state.gesture_start_x = x;
+            state.gesture_start_y = y;
+            state.gesture_active = true;
+            state.gesture_from_bottom = y > state.vp_h as i32 - 60;
+            state.gesture_from_top = y < 44;
             
-            if g.bls == MobileView::Lo {
-                g.hmx = obw(b, c, g.att, g.azc);
+            if state.view == MobileView::Home {
+                state.highlighted_icon = iew(x, y, state.vp_w, state.vp_h);
             }
             MobileAction::None
         }
-        GestureEvent::Bua(b, c) => {
-            g.kyb = false;
-            let dx = b - g.kyf;
-            let bg = c - g.kyg;
-            let la = iua(dx * dx + bg * bg);
+        GestureEvent::TapUp(x, y) => {
+            state.gesture_active = false;
+            let dx = x - state.gesture_start_x;
+            let ad = y - state.gesture_start_y;
+            let em = emg(dx * dx + ad * ad);
 
-            if la < 15 {
+            if em < 15 {
                 
-                return tlf(g, b, c);
+                return miq(state, x, y);
             }
 
             
-            if bg.gp() > dx.gp() && bg.gp() > 30 {
-                if bg < 0 {
+            if ad.abs() > dx.abs() && ad.abs() > 30 {
+                if ad < 0 {
                     
-                    if g.kyc {
+                    if state.gesture_from_bottom {
                         
-                        if g.bls == MobileView::Zv {
-                            return MobileAction::Atc;
-                        } else if g.bls == MobileView::Lo {
-                            return MobileAction::Bof;
+                        if state.view == MobileView::AppFullscreen {
+                            return MobileAction::GoHome;
+                        } else if state.view == MobileView::Home {
+                            return MobileAction::OpenSwitcher;
                         }
                     }
-                    if g.bls == MobileView::Wc {
-                        return MobileAction::Bdp;
+                    if state.view == MobileView::ControlCenter {
+                        return MobileAction::CloseControlCenter;
                     }
                 } else {
                     
-                    if g.kyd && g.bls == MobileView::Lo {
-                        return MobileAction::Bnx;
+                    if state.gesture_from_top && state.view == MobileView::Home {
+                        return MobileAction::OpenControlCenter;
                     }
                 }
             }
 
-            g.hmx = -1;
+            state.highlighted_icon = -1;
             MobileAction::None
         }
-        GestureEvent::Fw(jyn, iij) => {
-            MobileAction::None
-        }
-    }
-}
-
-fn tlf(g: &mut MobileState, b: i32, c: i32) -> MobileAction {
-    match g.bls {
-        MobileView::Lo => {
-            
-            let oor = tpd(b, c, g.att, g.azc, g.gnh);
-            if oor != MobileAction::None {
-                return oor;
-            }
-            
-            let w = obw(b, c, g.att, g.azc);
-            if w >= 0 && (w as usize) < IM_.len() {
-                g.hmx = -1;
-                return MobileAction::Bkr(w as u8);
-            }
-            
-            let nmk = tpc(b, c, g.att, g.azc);
-            if nmk >= 0 {
-                return MobileAction::Bks(nmk as u8);
-            }
-            MobileAction::None
-        }
-        MobileView::Zv => {
-            
-            if c < HL_ as i32 && b < 40 {
-                return MobileAction::Bcm;
-            }
-            
-            if let Some(com) = g.fcj {
-                let alk = c - HL_ as i32;
-                return tiy(g, com, b, alk);
-            }
-            MobileAction::None
-        }
-        MobileView::Apa => {
-            
-            MobileAction::Atc
-        }
-        MobileView::Wc => {
+        GestureEvent::Move(_x, _y) => {
             MobileAction::None
         }
     }
 }
 
+fn miq(state: &mut MobileState, x: i32, y: i32) -> MobileAction {
+    match state.view {
+        MobileView::Home => {
+            
+            let ipb = mlt(x, y, state.vp_w, state.vp_h, state.music_dropdown_open);
+            if ipb != MobileAction::None {
+                return ipb;
+            }
+            
+            let idx = iew(x, y, state.vp_w, state.vp_h);
+            if idx >= 0 && (idx as usize) < JF_.len() {
+                state.highlighted_icon = -1;
+                return MobileAction::LaunchApp(idx as u8);
+            }
+            
+            let htc = mls(x, y, state.vp_w, state.vp_h);
+            if htc >= 0 {
+                return MobileAction::LaunchDockApp(htc as u8);
+            }
+            MobileAction::None
+        }
+        MobileView::AppFullscreen => {
+            
+            if y < ID_ as i32 && x < 40 {
+                return MobileAction::BackFromApp;
+            }
+            
+            if let Some(awc) = state.active_app_id {
+                let ta = y - ID_ as i32;
+                return mhh(state, awc, x, ta);
+            }
+            MobileAction::None
+        }
+        MobileView::AppSwitcher => {
+            
+            MobileAction::GoHome
+        }
+        MobileView::ControlCenter => {
+            MobileAction::None
+        }
+    }
+}
 
 
-fn tiy(g: &MobileState, com: u32, b: i32, c: i32) -> MobileAction {
-    let gm = g.att;
-    let me = g.azc;
-    let ov = 14i32;
 
-    match com {
+fn mhh(state: &MobileState, awc: u32, x: i32, y: i32) -> MobileAction {
+    let bt = state.vp_w;
+    let ex = state.vp_h;
+    let pad = 14i32;
+
+    match awc {
         
         3 => {
-            let fg = ov;
-            let adc = (gm as i32 - ov * 2) as u32;
-            let cjy = 60i32;
-            let qx = 44i32;
-            let aib = 6i32;
-            let pm = ((adc - 6 * 3) / 4) as i32;
-            let nzt = 10 + cjy + 14;
+            let bi = pad;
+            let oo = (bt as i32 - pad * 2) as u32;
+            let atm = 60i32;
+            let hn = 44i32;
+            let rj = 6i32;
+            let gu = ((oo - 6 * 3) / 4) as i32;
+            let icx = 10 + atm + 14;
             
-            if c >= nzt {
-                let br = (c - nzt) / (qx + aib);
-                let bj = (b - fg) / (pm + aib);
-                if br >= 0 && br < 5 && bj >= 0 && bj < 4 {
+            if y >= icx {
+                let row = (y - icx) / (hn + rj);
+                let col = (x - bi) / (gu + rj);
+                if row >= 0 && row < 5 && col >= 0 && col < 4 {
                     
-                    let qsk: [[u8; 4]; 5] = [
+                    let kej: [[u8; 4]; 5] = [
                         [16, 17, 18, 14], 
                         [7,  8,  9,  13], 
                         [4,  5,  6,  12], 
                         [1,  2,  3,  11], 
                         [0,  10, 15, 255],
                     ];
-                    let aj = qsk[br as usize][bj as usize];
-                    if aj != 255 {
-                        return MobileAction::CalcButton(aj);
+                    let code = kej[row as usize][col as usize];
+                    if code != 255 {
+                        return MobileAction::CalcButton(code);
                     }
                 }
             }
@@ -960,64 +960,64 @@ fn tiy(g: &MobileState, com: u32, b: i32, c: i32) -> MobileAction {
         }
         
         1 => {
-            let ph = 40i32;
-            let hjt = 32;
-            if c >= hjt {
-                let w = (c - hjt) / ph;
-                if w >= 0 && w < 8 {
-                    return MobileAction::Bhb(w as u8);
+            let ep = 40i32;
+            let dpv = 32;
+            if y >= dpv {
+                let idx = (y - dpv) / ep;
+                if idx >= 0 && idx < 8 {
+                    return MobileAction::FilesTap(idx as u8);
                 }
             }
             
-            if c < 28 && b < 80 && g.dqu > 0 {
-                return MobileAction::Bha;
+            if y < 28 && x < 80 && state.files_depth > 0 {
+                return MobileAction::FilesBack;
             }
             MobileAction::None
         }
         
         8 => {
-            let ph = 52i32;
-            let hjt = 10;
-            if c >= hjt {
-                let w = (c - hjt) / ph;
-                if w >= 0 && w < 6 {
-                    return MobileAction::Bso(w as u8);
+            let ep = 52i32;
+            let dpv = 10;
+            if y >= dpv {
+                let idx = (y - dpv) / ep;
+                if idx >= 0 && idx < 6 {
+                    return MobileAction::SettingsTap(idx as u8);
                 }
             }
             MobileAction::None
         }
         
         5 => {
-            let bgg = 56i32;
-            let kgo = 8i32;
-            let nus = 34;
-            if c >= nus {
-                let w = (c - nus) / (bgg + kgo);
-                if w >= 0 && w < 5 {
-                    return MobileAction::Bhu(w as u8);
+            let aev = 56i32;
+            let fkx = 8i32;
+            let hzc = 34;
+            if y >= hzc {
+                let idx = (y - hzc) / (aev + fkx);
+                if idx >= 0 && idx < 5 {
+                    return MobileAction::GamesTap(idx as u8);
                 }
             }
             MobileAction::None
         }
         
         6 => {
-            let cgi = 40;
+            let arr = 40;
             
-            if c >= 4 && c < 34 {
-                return MobileAction::Agv(0);
+            if y >= 4 && y < 34 {
+                return MobileAction::BrowserNav(0);
             }
-            if g.hbi == 0 {
+            if state.browser_page == 0 {
                 
-                let eue = cgi + 84;
-                let oji = 20;
-                if c >= eue && c < eue + oji * 3 {
-                    let w = (c - eue) / oji;
-                    return MobileAction::Agv(w as u8 + 1);
+                let cbm = arr + 84;
+                let ikj = 20;
+                if y >= cbm && y < cbm + ikj * 3 {
+                    let idx = (y - cbm) / ikj;
+                    return MobileAction::BrowserNav(idx as u8 + 1);
                 }
             } else {
                 
-                if c >= cgi {
-                    return MobileAction::Agv(0);
+                if y >= arr {
+                    return MobileAction::BrowserNav(0);
                 }
             }
             MobileAction::None
@@ -1025,54 +1025,54 @@ fn tiy(g: &MobileState, com: u32, b: i32, c: i32) -> MobileAction {
         
         2 => {
             
-            if c < 26 {
-                if b < 80 {
-                    return MobileAction::Arm(0);
+            if y < 26 {
+                if x < 80 {
+                    return MobileAction::EditorSwitchTab(0);
                 } else {
-                    return MobileAction::Arm(1);
+                    return MobileAction::EditorSwitchTab(1);
                 }
             }
             
-            let gy = 16;
-            let dez = 30;
-            if c >= dez {
-                let line = (c - dez) / gy;
+            let bw = 16;
+            let code_start = 30;
+            if y >= code_start {
+                let line = (y - code_start) / bw;
                 if line >= 0 && line < 12 {
-                    return MobileAction::Bfu(line as u8);
+                    return MobileAction::EditorTap(line as u8);
                 }
             }
             MobileAction::None
         }
         
         11 => {
-            let aly = (gm as i32 - 16).v((me.ao(HL_ + 80)) as i32).v(400);
-            let cell = aly / 8;
-            let aoj = (gm as i32 - aly) / 2;
-            let apl = 10;
-            if b >= aoj && b < aoj + aly && c >= apl && c < apl + aly {
-                let bj = (b - aoj) / cell;
-                let br = (c - apl) / cell;
-                let im = (br * 8 + bj) as u8;
-                return MobileAction::Bdl(im);
+            let tg = (bt as i32 - 16).min((ex.saturating_sub(ID_ + 80)) as i32).min(400);
+            let cell = tg / 8;
+            let un = (bt as i32 - tg) / 2;
+            let ve = 10;
+            if x >= un && x < un + tg && y >= ve && y < ve + tg {
+                let col = (x - un) / cell;
+                let row = (y - ve) / cell;
+                let cu = (row * 8 + col) as u8;
+                return MobileAction::ChessTap(cu);
             }
             MobileAction::None
         }
         
         10 => {
-            let adc = (gm as i32 - ov * 2) as u32;
-            let byh = adc.v(200);
+            let oo = (bt as i32 - pad * 2) as u32;
+            let anm = oo.min(200);
             
-            let cdw = byh as i32 + 16 + 20 + 28 + 20 + 14;
-            let pm = 48i32;
-            let qx = 36i32;
-            let aib = 10i32;
-            let aza = 5 * pm + 4 * aib;
-            let kfe = ov + ((adc as i32 - aza) / 2);
-            if c >= cdw && c < cdw + qx {
-                for a in 0..5 {
-                    let bx = kfe + a * (pm + aib);
-                    if b >= bx && b < bx + pm {
-                        return MobileAction::Bmu;
+            let aqc = anm as i32 + 16 + 20 + 28 + 20 + 14;
+            let gu = 48i32;
+            let hn = 36i32;
+            let rj = 10i32;
+            let aaj = 5 * gu + 4 * rj;
+            let fjx = pad + ((oo as i32 - aaj) / 2);
+            if y >= aqc && y < aqc + hn {
+                for i in 0..5 {
+                    let bx = fjx + i * (gu + rj);
+                    if x >= bx && x < bx + gu {
+                        return MobileAction::MusicAppToggle;
                     }
                 }
             }
@@ -1081,9 +1081,9 @@ fn tiy(g: &MobileState, com: u32, b: i32, c: i32) -> MobileAction {
         
         0 => {
             
-            let nd = me.ao(HL_ + 20);
-            if c > nd as i32 - 40 {
-                return MobileAction::Buc;
+            let en = ex.saturating_sub(ID_ + 20);
+            if y > en as i32 - 40 {
+                return MobileAction::TermSubmit;
             }
             MobileAction::None
         }
@@ -1094,39 +1094,39 @@ fn tiy(g: &MobileState, com: u32, b: i32, c: i32) -> MobileAction {
 
 #[derive(Clone, Copy)]
 pub enum GestureEvent {
-    Btz(i32, i32),
-    Bua(i32, i32),
-    Fw(i32, i32),
+    TapDown(i32, i32),
+    TapUp(i32, i32),
+    Move(i32, i32),
 }
 
 
 
 
 
-fn obw(b: i32, c: i32, gm: u32, me: u32) -> i32 {
-    let bo = IM_.len() as u32;
-    let lk = (bo + EJ_ - 1) / EJ_;
-    const AFT_: u32 = 138;
-    let ipd = AIF_ as i32;
-    let ipc = me as i32 - GH_ as i32 - IC_ as i32 - AFT_ as i32;
+fn iew(x: i32, y: i32, bt: u32, ex: u32) -> i32 {
+    let ae = JF_.len() as u32;
+    let rows = (ae + EX_ - 1) / EX_;
+    const AHN_: u32 = 138;
+    let eiv = AKB_ as i32;
+    let eiu = ex as i32 - GY_ as i32 - IW_ as i32 - AHN_ as i32;
     
-    let hly = ipd + 56;
-    let ero = (ipc - hly).am(0) as u32;
+    let dra = eiv + 56;
+    let cah = (eiu - dra).max(0) as u32;
 
-    let lal = gm.ao(TS_ * 2);
-    let acc = lal / EJ_;
-    let lao = TS_ as i32;
+    let fzm = bt.saturating_sub(UY_ * 2);
+    let cell_w = fzm / EX_;
+    let fzp = UY_ as i32;
 
-    let mmf = lk * UB_;
-    let drk = hly + (ero as i32 - mmf as i32) / 2;
+    let gzp = rows * VJ_;
+    let bmq = dra + (cah as i32 - gzp as i32) / 2;
 
-    for a in 0..bo {
-        let bj = a % EJ_;
-        let br = a / EJ_;
-        let fg = lao + (bj * acc) as i32 + (acc as i32 - BV_ as i32) / 2;
-        let og = drk + (br * UB_) as i32;
-        if b >= fg && b < fg + BV_ as i32 && c >= og && c < og + BV_ as i32 {
-            return a as i32;
+    for i in 0..ae {
+        let col = i % EX_;
+        let row = i / EX_;
+        let bi = fzp + (col * cell_w) as i32 + (cell_w as i32 - BX_ as i32) / 2;
+        let gg = bmq + (row * VJ_) as i32;
+        if x >= bi && x < bi + BX_ as i32 && y >= gg && y < gg + BX_ as i32 {
+            return i as i32;
         }
     }
     -1
@@ -1134,57 +1134,57 @@ fn obw(b: i32, c: i32, gm: u32, me: u32) -> i32 {
 
 
 
-fn tpd(b: i32, c: i32, gm: u32, me: u32, gfo: bool) -> MobileAction {
-    const LO_: u32 = 130;
-    const QR_: u32 = 14;
-    const GI_: u32 = 26;
-    let fys = gm.ao(QR_ * 2);
-    let fbh = QR_ as i32;
-    let hte = crate::visualizer::IR_ as u32;
-    let itn = if gfo { hte * GI_ + 8 } else { 0 };
-    let fbi = me as i32 - GH_ as i32 - IC_ as i32 - LO_ as i32 - 8 - itn as i32;
+fn mlt(x: i32, y: i32, bt: u32, ex: u32, dropdown_open: bool) -> MobileAction {
+    const MI_: u32 = 130;
+    const RL_: u32 = 14;
+    const GZ_: u32 = 26;
+    let csu = bt.saturating_sub(RL_ * 2);
+    let cfd = RL_ as i32;
+    let dvo = crate::visualizer::JJ_ as u32;
+    let elx = if dropdown_open { dvo * GZ_ + 8 } else { 0 };
+    let cfe = ex as i32 - GY_ as i32 - IW_ as i32 - MI_ as i32 - 8 - elx as i32;
 
-    let aku = LO_ + itn;
+    let sn = MI_ + elx;
 
     
-    if b < fbh || b > fbh + fys as i32 || c < fbi || c > fbi + aku as i32 {
+    if x < cfd || x > cfd + csu as i32 || y < cfe || y > cfe + sn as i32 {
         return MobileAction::None;
     }
 
     
-    let cce = fbi + 12;
-    if c >= cce && c < cce + 18 && b > fbh + fys as i32 / 2 {
-        return MobileAction::Bmw;
+    let apg = cfe + 12;
+    if y >= apg && y < apg + 18 && x > cfd + csu as i32 / 2 {
+        return MobileAction::MusicToggleDropdown;
     }
 
     
-    let ov = 14u32;
-    let fg = fbh + ov as i32;
-    let adc = fys.ao(ov * 2);
-    let cdw = fbi + 92;
-    let pm = 40i32;
-    let qx = 20i32;
-    let aib = 6i32;
-    let hsg = 5i32;
-    let mmb = hsg * pm + (hsg - 1) * aib;
-    let kff = fg + (adc as i32 - mmb) / 2;
+    let pad = 14u32;
+    let bi = cfd + pad as i32;
+    let oo = csu.saturating_sub(pad * 2);
+    let aqc = cfe + 92;
+    let gu = 40i32;
+    let hn = 20i32;
+    let rj = 6i32;
+    let dut = 5i32;
+    let gzm = dut * gu + (dut - 1) * rj;
+    let fjy = bi + (oo as i32 - gzm) / 2;
 
-    if c >= cdw && c <= cdw + qx {
-        for cvv in 0..5 {
-            let bx = kff + cvv * (pm + aib);
-            if b >= bx && b < bx + pm {
-                return MobileAction::Bmx;
+    if y >= aqc && y <= aqc + hn {
+        for bal in 0..5 {
+            let bx = fjy + bal * (gu + rj);
+            if x >= bx && x < bx + gu {
+                return MobileAction::MusicTogglePlay;
             }
         }
     }
 
     
-    if gfo {
-        let rua = fbi + LO_ as i32 + 4;
-        for hrm in 0..hte {
-            let ajd = rua + (hrm * GI_) as i32;
-            if c >= ajd && c < ajd + GI_ as i32 {
-                return MobileAction::Bmv(hrm as u8);
+    if dropdown_open {
+        let lby = cfe + MI_ as i32 + 4;
+        for mi in 0..dvo {
+            let ru = lby + (mi * GZ_) as i32;
+            if y >= ru && y < ru + GZ_ as i32 {
+                return MobileAction::MusicSetVizMode(mi as u8);
             }
         }
     }
@@ -1192,20 +1192,20 @@ fn tpd(b: i32, c: i32, gm: u32, me: u32, gfo: bool) -> MobileAction {
     MobileAction::None
 }
 
-fn tpc(b: i32, c: i32, gm: u32, me: u32) -> i32 {
-    let eoz = me as i32 - GH_ as i32 - IC_ as i32;
-    let eay = SS_ as i32;
-    let hgn = gm - SS_ * 2;
-    let cjz = GH_ - 10;
+fn mls(x: i32, y: i32, bt: u32, ex: u32) -> i32 {
+    let byv = ex as i32 - GY_ as i32 - IW_ as i32;
+    let bsb = TZ_ as i32;
+    let dnl = bt - TZ_ * 2;
+    let atn = GY_ - 10;
 
-    if c < eoz || c > eoz + cjz as i32 { return -1; }
+    if y < byv || y > byv + atn as i32 { return -1; }
 
-    let aza = HV_ as u32 * BU_ + (HV_ as u32 - 1) * 12;
-    let ql = eay + (hgn as i32 - aza as i32) / 2;
+    let aaj = IP_ as u32 * BV_ + (IP_ as u32 - 1) * 12;
+    let start_x = bsb + (dnl as i32 - aaj as i32) / 2;
 
-    for di in 0..HV_ {
-        let fg = ql + (di as u32 * (BU_ + 12)) as i32;
-        if b >= fg && b < fg + BU_ as i32 {
+    for di in 0..IP_ {
+        let bi = start_x + (di as u32 * (BV_ + 12)) as i32;
+        if x >= bi && x < bi + BV_ as i32 {
             return di as i32;
         }
     }
@@ -1216,21 +1216,21 @@ fn tpc(b: i32, c: i32, gm: u32, me: u32) -> i32 {
 
 
 
-pub fn xgr(g: &mut MobileState) {
-    g.dod = g.dod.cn(1);
+pub fn pjf(state: &mut MobileState) {
+    state.anim_frame = state.anim_frame.wrapping_add(1);
 
     
-    if g.bls == MobileView::Wc && g.dzl < 100 {
-        g.dzl = (g.dzl + 8).v(100);
+    if state.view == MobileView::ControlCenter && state.cc_progress < 100 {
+        state.cc_progress = (state.cc_progress + 8).min(100);
     }
-    if g.bls != MobileView::Wc && g.dzl > 0 {
-        g.dzl = g.dzl.ao(8);
+    if state.view != MobileView::ControlCenter && state.cc_progress > 0 {
+        state.cc_progress = state.cc_progress.saturating_sub(8);
     }
 
     
-    g.kid.zkb(|(ddq, yx)| {
-        *yx = yx.ao(4);
-        *yx > 0
+    state.closing_cards.retain_mut(|(_id, ln)| {
+        *ln = ln.saturating_sub(4);
+        *ln > 0
     });
 }
 
@@ -1238,161 +1238,161 @@ pub fn xgr(g: &mut MobileState) {
 
 
 
-fn nnd(cx: i32, ae: i32, caf: u8, s: u32, xzs: bool) {
-    match caf {
+fn htl(cx: i32, u: i32, icon_idx: u8, color: u32, _highlighted: bool) {
+    match icon_idx {
         0 => { 
-            tf(cx - 14, ae - 10, 28, 20, 3, s);
-            framebuffer::ah((cx - 13).am(0) as u32, (ae - 9).am(0) as u32, 26, 3, s);
+            iu(cx - 14, u - 10, 28, 20, 3, color);
+            framebuffer::fill_rect((cx - 13).max(0) as u32, (u - 9).max(0) as u32, 26, 3, color);
             
-            framebuffer::ah((cx - 11).am(0) as u32, (ae - 8).am(0) as u32, 2, 1, 0xFF0A0A0A);
-            framebuffer::ah((cx - 8).am(0) as u32, (ae - 8).am(0) as u32, 2, 1, 0xFF0A0A0A);
-            framebuffer::ah((cx - 5).am(0) as u32, (ae - 8).am(0) as u32, 2, 1, 0xFF0A0A0A);
+            framebuffer::fill_rect((cx - 11).max(0) as u32, (u - 8).max(0) as u32, 2, 1, 0xFF0A0A0A);
+            framebuffer::fill_rect((cx - 8).max(0) as u32, (u - 8).max(0) as u32, 2, 1, 0xFF0A0A0A);
+            framebuffer::fill_rect((cx - 5).max(0) as u32, (u - 8).max(0) as u32, 2, 1, 0xFF0A0A0A);
             
-            cb(cx - 8, ae - 2, ">", s);
-            framebuffer::ah((cx - 2).am(0) as u32, ae.am(0) as u32, 8, 2, s);
+            draw_text(cx - 8, u - 2, ">", color);
+            framebuffer::fill_rect((cx - 2).max(0) as u32, u.max(0) as u32, 8, 2, color);
         }
         1 => { 
-            framebuffer::ah((cx - 14).am(0) as u32, (ae - 8).am(0) as u32, 12, 5, s);
-            framebuffer::ah((cx - 14).am(0) as u32, (ae - 3).am(0) as u32, 28, 15, s);
-            framebuffer::ah((cx - 12).am(0) as u32, (ae - 1).am(0) as u32, 24, 11, 0xFF0A0A0A);
-            framebuffer::ah((cx - 8).am(0) as u32, (ae + 2).am(0) as u32, 16, 1, 0xFF303020);
-            framebuffer::ah((cx - 8).am(0) as u32, (ae + 5).am(0) as u32, 12, 1, 0xFF303020);
+            framebuffer::fill_rect((cx - 14).max(0) as u32, (u - 8).max(0) as u32, 12, 5, color);
+            framebuffer::fill_rect((cx - 14).max(0) as u32, (u - 3).max(0) as u32, 28, 15, color);
+            framebuffer::fill_rect((cx - 12).max(0) as u32, (u - 1).max(0) as u32, 24, 11, 0xFF0A0A0A);
+            framebuffer::fill_rect((cx - 8).max(0) as u32, (u + 2).max(0) as u32, 16, 1, 0xFF303020);
+            framebuffer::fill_rect((cx - 8).max(0) as u32, (u + 5).max(0) as u32, 12, 1, 0xFF303020);
         }
         2 => { 
-            framebuffer::ah((cx - 10).am(0) as u32, (ae - 12).am(0) as u32, 20, 24, s);
-            framebuffer::ah((cx + 4).am(0) as u32, (ae - 12).am(0) as u32, 6, 6, 0xFF0A0A0A);
-            framebuffer::ah((cx + 4).am(0) as u32, (ae - 12).am(0) as u32, 1, 6, s);
-            framebuffer::ah((cx + 4).am(0) as u32, (ae - 7).am(0) as u32, 6, 1, s);
-            framebuffer::ah((cx - 8).am(0) as u32, (ae - 6).am(0) as u32, 16, 16, 0xFF0A0A0A);
-            framebuffer::ah((cx - 6).am(0) as u32, (ae - 4).am(0) as u32, 6, 1, 0xFF6688CC);
-            framebuffer::ah((cx - 6).am(0) as u32, (ae - 2).am(0) as u32, 10, 1, s);
-            framebuffer::ah((cx - 6).am(0) as u32, ae.am(0) as u32, 8, 1, 0xFFCC8844);
-            framebuffer::ah((cx - 6).am(0) as u32, (ae + 2).am(0) as u32, 12, 1, s);
-            framebuffer::ah((cx - 6).am(0) as u32, (ae + 4).am(0) as u32, 4, 1, 0xFF88BB44);
-            framebuffer::ah((cx - 6).am(0) as u32, (ae + 6).am(0) as u32, 9, 1, s);
+            framebuffer::fill_rect((cx - 10).max(0) as u32, (u - 12).max(0) as u32, 20, 24, color);
+            framebuffer::fill_rect((cx + 4).max(0) as u32, (u - 12).max(0) as u32, 6, 6, 0xFF0A0A0A);
+            framebuffer::fill_rect((cx + 4).max(0) as u32, (u - 12).max(0) as u32, 1, 6, color);
+            framebuffer::fill_rect((cx + 4).max(0) as u32, (u - 7).max(0) as u32, 6, 1, color);
+            framebuffer::fill_rect((cx - 8).max(0) as u32, (u - 6).max(0) as u32, 16, 16, 0xFF0A0A0A);
+            framebuffer::fill_rect((cx - 6).max(0) as u32, (u - 4).max(0) as u32, 6, 1, 0xFF6688CC);
+            framebuffer::fill_rect((cx - 6).max(0) as u32, (u - 2).max(0) as u32, 10, 1, color);
+            framebuffer::fill_rect((cx - 6).max(0) as u32, u.max(0) as u32, 8, 1, 0xFFCC8844);
+            framebuffer::fill_rect((cx - 6).max(0) as u32, (u + 2).max(0) as u32, 12, 1, color);
+            framebuffer::fill_rect((cx - 6).max(0) as u32, (u + 4).max(0) as u32, 4, 1, 0xFF88BB44);
+            framebuffer::fill_rect((cx - 6).max(0) as u32, (u + 6).max(0) as u32, 9, 1, color);
         }
         3 => { 
-            tf(cx - 10, ae - 12, 20, 24, 2, s);
-            framebuffer::ah((cx - 8).am(0) as u32, (ae - 10).am(0) as u32, 16, 6, 0xFF1A3320);
-            cb(cx - 4, ae - 10, "42", 0xFF40FF40);
-            for br in 0..3u32 {
-                for bj in 0..3u32 {
-                    let bx = (cx as u32).nj(8) + bj * 6;
-                    let je = (ae as u32).nj(1) + br * 5;
-                    let bmc = if br == 2 && bj == 2 { 0xFFCC6633 } else { s };
-                    framebuffer::ah(bx.am(0), je.am(0), 4, 3, bmc);
+            iu(cx - 10, u - 12, 20, 24, 2, color);
+            framebuffer::fill_rect((cx - 8).max(0) as u32, (u - 10).max(0) as u32, 16, 6, 0xFF1A3320);
+            draw_text(cx - 4, u - 10, "42", 0xFF40FF40);
+            for row in 0..3u32 {
+                for col in 0..3u32 {
+                    let bx = (cx as u32).wrapping_sub(8) + col * 6;
+                    let dc = (u as u32).wrapping_sub(1) + row * 5;
+                    let ahl = if row == 2 && col == 2 { 0xFFCC6633 } else { color };
+                    framebuffer::fill_rect(bx.max(0), dc.max(0), 4, 3, ahl);
                 }
             }
         }
         4 => { 
-            let qff = cx;
-            let qfg = ae + 4;
-            for mz in 0..3u32 {
-                let m = 4 + mz * 4;
-                let uv = (m * m) as i32;
-                let jl = m.ao(2);
-                let lwt = (jl * jl) as i32;
-                for bg in 0..=m as i32 {
-                    for dx in -(m as i32)..=(m as i32) {
-                        let us = dx * dx + bg * bg;
-                        if us <= uv && us >= lwt && bg <= 0 {
-                            let yx = if mz == 0 { s } else { P_ };
-                            ayl(qff + dx, qfg + bg, yx);
+            let jts = cx;
+            let jtt = u + 4;
+            for dq in 0..3u32 {
+                let r = 4 + dq * 4;
+                let ju = (r * r) as i32;
+                let dk = r.saturating_sub(2);
+                let gpi = (dk * dk) as i32;
+                for ad in 0..=r as i32 {
+                    for dx in -(r as i32)..=(r as i32) {
+                        let jq = dx * dx + ad * ad;
+                        if jq <= ju && jq >= gpi && ad <= 0 {
+                            let ln = if dq == 0 { color } else { Q_ };
+                            aag(jts + dx, jtt + ad, ln);
                         }
                     }
                 }
             }
-            framebuffer::ah((cx - 1).am(0) as u32, (ae + 3).am(0) as u32, 3, 3, s);
+            framebuffer::fill_rect((cx - 1).max(0) as u32, (u + 3).max(0) as u32, 3, 3, color);
         }
         5 => { 
-            framebuffer::ah((cx - 12).am(0) as u32, (ae - 4).am(0) as u32, 24, 12, s);
-            framebuffer::ah((cx - 14).am(0) as u32, (ae - 2).am(0) as u32, 4, 8, s);
-            framebuffer::ah((cx + 10).am(0) as u32, (ae - 2).am(0) as u32, 4, 8, s);
-            framebuffer::ah((cx - 11).am(0) as u32, (ae - 3).am(0) as u32, 22, 10, 0xFF0A0A0A);
-            framebuffer::ah((cx - 9).am(0) as u32, (ae - 1).am(0) as u32, 5, 1, s);
-            framebuffer::ah((cx - 7).am(0) as u32, (ae - 3).am(0) as u32, 1, 5, s);
-            framebuffer::ah((cx + 5).am(0) as u32, (ae - 2).am(0) as u32, 2, 2, 0xFF4488DD);
-            framebuffer::ah((cx + 8).am(0) as u32, (ae - 1).am(0) as u32, 2, 2, DC_);
-            framebuffer::ah((cx + 5).am(0) as u32, (ae + 1).am(0) as u32, 2, 2, 0xFF44DD44);
-            framebuffer::ah((cx + 8).am(0) as u32, (ae + 2).am(0) as u32, 2, 2, 0xFFDDDD44);
+            framebuffer::fill_rect((cx - 12).max(0) as u32, (u - 4).max(0) as u32, 24, 12, color);
+            framebuffer::fill_rect((cx - 14).max(0) as u32, (u - 2).max(0) as u32, 4, 8, color);
+            framebuffer::fill_rect((cx + 10).max(0) as u32, (u - 2).max(0) as u32, 4, 8, color);
+            framebuffer::fill_rect((cx - 11).max(0) as u32, (u - 3).max(0) as u32, 22, 10, 0xFF0A0A0A);
+            framebuffer::fill_rect((cx - 9).max(0) as u32, (u - 1).max(0) as u32, 5, 1, color);
+            framebuffer::fill_rect((cx - 7).max(0) as u32, (u - 3).max(0) as u32, 1, 5, color);
+            framebuffer::fill_rect((cx + 5).max(0) as u32, (u - 2).max(0) as u32, 2, 2, 0xFF4488DD);
+            framebuffer::fill_rect((cx + 8).max(0) as u32, (u - 1).max(0) as u32, 2, 2, DJ_);
+            framebuffer::fill_rect((cx + 5).max(0) as u32, (u + 1).max(0) as u32, 2, 2, 0xFF44DD44);
+            framebuffer::fill_rect((cx + 8).max(0) as u32, (u + 2).max(0) as u32, 2, 2, 0xFFDDDD44);
         }
         6 => { 
-            for bg in -8i32..=8 {
+            for ad in -8i32..=8 {
                 for dx in -8i32..=8 {
-                    let us = dx * dx + bg * bg;
-                    if us <= 64 && us >= 49 {
-                        ayl(cx + dx, ae + bg, s);
+                    let jq = dx * dx + ad * ad;
+                    if jq <= 64 && jq >= 49 {
+                        aag(cx + dx, u + ad, color);
                     }
                 }
             }
             
-            framebuffer::ah((cx - 1).am(0) as u32, (ae - 7).am(0) as u32, 2, 14, s);
-            framebuffer::ah((cx - 7).am(0) as u32, (ae - 1).am(0) as u32, 14, 2, s);
+            framebuffer::fill_rect((cx - 1).max(0) as u32, (u - 7).max(0) as u32, 2, 14, color);
+            framebuffer::fill_rect((cx - 7).max(0) as u32, (u - 1).max(0) as u32, 14, 2, color);
         }
         7 => { 
             
-            tf(cx - 8, ae - 6, 16, 12, 1, s);
+            iu(cx - 8, u - 6, 16, 12, 1, color);
             
-            tf(cx - 4, ae - 10, 16, 12, 1, P_);
+            iu(cx - 4, u - 10, 16, 12, 1, Q_);
             
-            ayl(cx - 8, ae - 6, s); ayl(cx - 4, ae - 10, s);
-            ayl(cx + 7, ae - 6, s); ayl(cx + 11, ae - 10, s);
+            aag(cx - 8, u - 6, color); aag(cx - 4, u - 10, color);
+            aag(cx + 7, u - 6, color); aag(cx + 11, u - 10, color);
         }
         8 => { 
-            for bg in 0..18u32 {
+            for ad in 0..18u32 {
                 for dx in 0..18u32 {
-                    let ym = dx as i32 - 9;
-                    let wl = bg as i32 - 9;
-                    let dgk = ym * ym + wl * wl;
+                    let lh = dx as i32 - 9;
+                    let kf = ad as i32 - 9;
+                    let bgb = lh * lh + kf * kf;
                     
-                    if dgk >= 36 && dgk <= 81 {
-                        let hg = qku(wl, ym);
-                        if dgk > 56 {
+                    if bgb >= 36 && bgb <= 81 {
+                        let cc = jxw(kf, lh);
+                        if bgb > 56 {
                             
-                            if hg % 2 == 0 { ayl(cx - 9 + dx as i32, ae - 9 + bg as i32, s); }
+                            if cc % 2 == 0 { aag(cx - 9 + dx as i32, u - 9 + ad as i32, color); }
                         } else {
-                            ayl(cx - 9 + dx as i32, ae - 9 + bg as i32, s);
+                            aag(cx - 9 + dx as i32, u - 9 + ad as i32, color);
                         }
                     }
                     
-                    if dgk <= 9 {
-                        ayl(cx - 9 + dx as i32, ae - 9 + bg as i32, 0xFF0A0A0A);
+                    if bgb <= 9 {
+                        aag(cx - 9 + dx as i32, u - 9 + ad as i32, 0xFF0A0A0A);
                     }
                 }
             }
         }
         9 => { 
-            for bg in -8i32..=8 {
+            for ad in -8i32..=8 {
                 for dx in -8i32..=8 {
-                    let us = dx * dx + bg * bg;
-                    if us <= 64 && us >= 49 { ayl(cx + dx, ae + bg, s); }
+                    let jq = dx * dx + ad * ad;
+                    if jq <= 64 && jq >= 49 { aag(cx + dx, u + ad, color); }
                 }
             }
-            cb(cx - 2, ae - 6, "i", s);
+            draw_text(cx - 2, u - 6, "i", color);
         }
         10 => { 
             
-            framebuffer::ah((cx - 3).am(0) as u32, (ae + 2).am(0) as u32, 6, 4, s);
+            framebuffer::fill_rect((cx - 3).max(0) as u32, (u + 2).max(0) as u32, 6, 4, color);
             
-            framebuffer::ah((cx + 2).am(0) as u32, (ae - 8).am(0) as u32, 2, 12, s);
+            framebuffer::fill_rect((cx + 2).max(0) as u32, (u - 8).max(0) as u32, 2, 12, color);
             
-            framebuffer::ah((cx + 3).am(0) as u32, (ae - 8).am(0) as u32, 4, 2, s);
-            framebuffer::ah((cx + 5).am(0) as u32, (ae - 6).am(0) as u32, 2, 2, s);
+            framebuffer::fill_rect((cx + 3).max(0) as u32, (u - 8).max(0) as u32, 4, 2, color);
+            framebuffer::fill_rect((cx + 5).max(0) as u32, (u - 6).max(0) as u32, 2, 2, color);
         }
         11 => { 
             
-            framebuffer::ah((cx - 1).am(0) as u32, (ae - 10).am(0) as u32, 2, 6, s);
-            framebuffer::ah((cx - 3).am(0) as u32, (ae - 8).am(0) as u32, 6, 2, s);
+            framebuffer::fill_rect((cx - 1).max(0) as u32, (u - 10).max(0) as u32, 2, 6, color);
+            framebuffer::fill_rect((cx - 3).max(0) as u32, (u - 8).max(0) as u32, 6, 2, color);
             
-            framebuffer::ah((cx - 4).am(0) as u32, (ae - 4).am(0) as u32, 8, 10, s);
-            framebuffer::ah((cx - 3).am(0) as u32, (ae - 3).am(0) as u32, 6, 8, 0xFF0A0A0A);
+            framebuffer::fill_rect((cx - 4).max(0) as u32, (u - 4).max(0) as u32, 8, 10, color);
+            framebuffer::fill_rect((cx - 3).max(0) as u32, (u - 3).max(0) as u32, 6, 8, 0xFF0A0A0A);
             
-            framebuffer::ah((cx - 6).am(0) as u32, (ae + 5).am(0) as u32, 12, 3, s);
+            framebuffer::fill_rect((cx - 6).max(0) as u32, (u + 5).max(0) as u32, 12, 3, color);
         }
         _ => {
             
-            mf(cx - 12, ae - 12, 24, 24, 6, s);
-            cb(cx - 3, ae - 6, "?", 0xFF0A0A0A);
+            draw_rounded_rect(cx - 12, u - 12, 24, 24, 6, color);
+            draw_text(cx - 3, u - 6, "?", 0xFF0A0A0A);
         }
     }
 }
@@ -1401,195 +1401,195 @@ fn nnd(cx: i32, ae: i32, caf: u8, s: u32, xzs: bool) {
 
 
 
-pub fn qjm() -> usize { IM_.len() }
-pub fn kas(w: usize) -> &'static str { IM_[w].j }
-pub fn rzy(gk: usize) -> usize { AQM_[gk] }
-pub fn ymp() -> usize { HV_ }
+pub fn jwv() -> usize { JF_.len() }
+pub fn fhe(idx: usize) -> &'static str { JF_[idx].name }
+pub fn lgq(slot: usize) -> usize { ASP_[slot] }
+pub fn qdg() -> usize { IP_ }
 
 
 
 
 
 
-pub struct Adc {
-    pub uu: bool,
-    pub rf: f32,
-    pub abo: f32,
-    pub ato: f32,
-    pub aee: f32,
-    pub vs: f32,
-    pub axg: f32,
+pub struct Mr {
+    pub playing: bool,
+    pub beat: f32,
+    pub energy: f32,
+    pub sub_bass: f32,
+    pub bass: f32,
+    pub mid: f32,
+    pub treble: f32,
     pub frame: u64,
 }
 
 
 
 
-pub fn sdz(
-    fp: i32, iz: i32, gm: u32, me: u32,
-    audio: &Adc,
-    gfo: bool,
-    igo: u8,
+pub fn ljo(
+    vx: i32, vy: i32, bt: u32, ex: u32,
+    audio: &Mr,
+    dropdown_open: bool,
+    edu: u8,
 ) {
-    const LO_: u32 = 130;
-    const QR_: u32 = 14;
-    const DBM_: u32 = 16;
-    const GI_: u32 = 26;
+    const MI_: u32 = 130;
+    const RL_: u32 = 14;
+    const DFE_: u32 = 16;
+    const GZ_: u32 = 26;
 
-    let fys = gm.ao(QR_ * 2);
-    let fbh = fp + QR_ as i32;
+    let csu = bt.saturating_sub(RL_ * 2);
+    let cfd = vx + RL_ as i32;
     
-    let itn = if gfo { crate::visualizer::IR_ as u32 * GI_ + 8 } else { 0 };
-    let fbi = iz + me as i32 - GH_ as i32 - IC_ as i32 - LO_ as i32 - 8 - itn as i32;
-
-    
-    iru(fbh, fbi, fys, LO_, DBM_, 210);
-
-    let ov = 14u32;
-    let fg = fbh + ov as i32; 
-    let adc = fys.ao(ov * 2); 
-    let mut ae = fbi + 12;
+    let elx = if dropdown_open { crate::visualizer::JJ_ as u32 * GZ_ + 8 } else { 0 };
+    let cfe = vy + ex as i32 - GY_ as i32 - IW_ as i32 - MI_ as i32 - 8 - elx as i32;
 
     
-    let dq = if audio.uu { "Now Playing" } else { "Music" };
-    let ejy = if audio.uu { I_ } else { GC_ };
-    cb(fg, ae, dq, ejy);
+    ekn(cfd, cfe, csu, MI_, DFE_, 210);
+
+    let pad = 14u32;
+    let bi = cfd + pad as i32; 
+    let oo = csu.saturating_sub(pad * 2); 
+    let mut u = cfe + 12;
 
     
-    let czz = if (igo as usize) < crate::visualizer::OG_.len() {
-        crate::visualizer::OG_[igo as usize]
+    let title = if audio.playing { "Now Playing" } else { "Music" };
+    let bwl = if audio.playing { I_ } else { GR_ };
+    draw_text(bi, u, title, bwl);
+
+    
+    let bcu = if (edu as usize) < crate::visualizer::PE_.len() {
+        crate::visualizer::PE_[edu as usize]
     } else { "Sphere" };
-    let onw = crate::graphics::scaling::clj(czz) as i32;
-    let qkr = if gfo { "^" } else { "v" };
-    let fct = fg + adc as i32 - onw - 14;
-    cb(fct, ae, czz, BK_);
-    cb(fct + onw + 4, ae, qkr, I_);
+    let iog = crate::graphics::scaling::auh(bcu) as i32;
+    let jxt = if dropdown_open { "^" } else { "v" };
+    let cfx = bi + oo as i32 - iog - 14;
+    draw_text(cfx, u, bcu, BM_);
+    draw_text(cfx + iog + 4, u, jxt, I_);
 
-    ae += 20;
+    u += 20;
 
     
-    let tn = 8u32;
-    let mxv = 4u32;
-    let lo = (adc - mxv * 3) / 4;
-    let cdc: [(f32, u32, &str); 4] = [
-        (audio.ato, 0xFF00FF44, "SB"),
-        (audio.aee,     0xFF00CC88, "BA"),
-        (audio.vs,      0xFF00AACC, "MD"),
-        (audio.axg,   0xFF8866FF, "TR"),
+    let hs = 8u32;
+    let hgq = 4u32;
+    let ek = (oo - hgq * 3) / 4;
+    let apt: [(f32, u32, &str); 4] = [
+        (audio.sub_bass, 0xFF00FF44, "SB"),
+        (audio.bass,     0xFF00CC88, "BA"),
+        (audio.mid,      0xFF00AACC, "MD"),
+        (audio.treble,   0xFF8866FF, "TR"),
     ];
-    for (cvv, &(jy, s, cu)) in cdc.iter().cf() {
-        let bx = fg + (cvv as u32 * (lo + mxv)) as i32;
+    for (bal, &(level, color, label)) in apt.iter().enumerate() {
+        let bx = bi + (bal as u32 * (ek + hgq)) as i32;
         
-        framebuffer::ih(bx.am(0) as u32, ae.am(0) as u32, lo, tn, 0x112211, 150);
+        framebuffer::co(bx.max(0) as u32, u.max(0) as u32, ek, hs, 0x112211, 150);
         
-        let vi = if audio.uu {
-            (jy.v(1.0) * lo as f32) as u32
+        let fill = if audio.playing {
+            (level.min(1.0) * ek as f32) as u32
         } else { 0 };
-        if vi > 0 {
-            framebuffer::ah(bx.am(0) as u32, ae.am(0) as u32, vi, tn, s);
-            framebuffer::ih(bx.am(0) as u32, ae.am(0) as u32, vi, tn, 0xFFFFFF, 15);
+        if fill > 0 {
+            framebuffer::fill_rect(bx.max(0) as u32, u.max(0) as u32, fill, hs, color);
+            framebuffer::co(bx.max(0) as u32, u.max(0) as u32, fill, hs, 0xFFFFFF, 15);
         }
         
-        let zv = crate::graphics::scaling::clj(cu) as i32;
-        cb(bx + (lo as i32 - zv) / 2, ae - 1, cu, 0xFFAABBAA);
+        let mo = crate::graphics::scaling::auh(label) as i32;
+        draw_text(bx + (ek as i32 - mo) / 2, u - 1, label, 0xFFAABBAA);
     }
-    ae += tn as i32 + 8;
+    u += hs as i32 + 8;
 
     
-    let ddk = 36u32;
-    framebuffer::ih(fg.am(0) as u32, ae.am(0) as u32, adc, ddk, 0x030908, 160);
+    let beh = 36u32;
+    framebuffer::co(bi.max(0) as u32, u.max(0) as u32, oo, beh, 0x030908, 160);
     
-    framebuffer::ih(fg.am(0) as u32, ae.am(0) as u32, adc, 1, 0x00FF66, 25);
-    framebuffer::ih(fg.am(0) as u32, (ae + ddk as i32 - 1).am(0) as u32, adc, 1, 0x00FF66, 15);
+    framebuffer::co(bi.max(0) as u32, u.max(0) as u32, oo, 1, 0x00FF66, 25);
+    framebuffer::co(bi.max(0) as u32, (u + beh as i32 - 1).max(0) as u32, oo, 1, 0x00FF66, 15);
 
-    let bkl = ae + ddk as i32 / 2;
-    let wp = (ddk / 2 - 2) as f32;
+    let ags = u + beh as i32 / 2;
+    let kh = (beh / 2 - 2) as f32;
 
-    if audio.uu {
+    if audio.playing {
         
-        let jgk = adc.v(256) as usize;
-        for a in 0..jgk {
-            let ab = a as f32 / jgk as f32;
-            let ib = audio.frame as f32 * 0.06;
+        let eus = oo.min(256) as usize;
+        for i in 0..eus {
+            let t = i as f32 / eus as f32;
+            let phase = audio.frame as f32 * 0.06;
             
-            let bic = libm::st(ab * 12.0 + ib) * audio.abo;
-            let cuc = libm::st(ab * 28.0 + ib * 1.4) * audio.axg * 0.5;
-            let hym = libm::st(ab * 5.0 + ib * 0.7) * audio.aee * 0.7;
-            let qol = 1.0 + audio.rf * 0.6;
-            let byf = ((bic + cuc + hym) * qol).am(-1.0).v(1.0);
-            let mrv = (byf * wp) as i32;
+            let afq = libm::sinf(t * 12.0 + phase) * audio.energy;
+            let azn = libm::sinf(t * 28.0 + phase * 1.4) * audio.treble * 0.5;
+            let dyf = libm::sinf(t * 5.0 + phase * 0.7) * audio.bass * 0.7;
+            let kay = 1.0 + audio.beat * 0.6;
+            let ank = ((afq + azn + dyf) * kay).max(-1.0).min(1.0);
+            let hdc = (ank * kh) as i32;
 
-            let y = (fg + a as i32).am(0) as u32;
-            let x = ((bkl + mrv).am(ae + 2).v(ae + ddk as i32 - 3)) as u32;
+            let p = (bi + i as i32).max(0) as u32;
+            let o = ((ags + hdc).max(u + 2).min(u + beh as i32 - 3)) as u32;
 
             
-            let ght = 0xCC;
-            let coo = (audio.rf * 160.0).v(255.0) as u32;
-            let vpn = (audio.abo * 50.0).v(50.0) as u32;
-            let s = 0xFF000000 | (vpn << 16) | (ght << 8) | coo;
-            framebuffer::sf(y, x, s);
+            let cyh = 0xCC;
+            let awd = (audio.beat * 160.0).min(255.0) as u32;
+            let oau = (audio.energy * 50.0).min(50.0) as u32;
+            let color = 0xFF000000 | (oau << 16) | (cyh << 8) | awd;
+            framebuffer::put_pixel(p, o, color);
             
-            framebuffer::sf(y, x, 0xFF00FFCC);
+            framebuffer::put_pixel(p, o, 0xFF00FFCC);
         }
         
-        if audio.rf > 0.4 {
-            let ceq = ((audio.rf - 0.4) * 40.0).v(30.0) as u32;
-            framebuffer::ih(fg.am(0) as u32, ae.am(0) as u32, adc, ddk, 0x00FF88, ceq);
+        if audio.beat > 0.4 {
+            let flash = ((audio.beat - 0.4) * 40.0).min(30.0) as u32;
+            framebuffer::co(bi.max(0) as u32, u.max(0) as u32, oo, beh, 0x00FF88, flash);
         }
     } else {
         
-        framebuffer::ah((fg + 4).am(0) as u32, bkl.am(0) as u32, adc.ao(8), 1, 0xFF334433);
-        np(fg + adc as i32 / 2, bkl - 6, "---", 0xFF445544);
+        framebuffer::fill_rect((bi + 4).max(0) as u32, ags.max(0) as u32, oo.saturating_sub(8), 1, 0xFF334433);
+        draw_text_centered(bi + oo as i32 / 2, ags - 6, "---", 0xFF445544);
     }
-    ae += ddk as i32 + 8;
+    u += beh as i32 + 8;
 
     
-    let nhu: &[&str] = &["|<", "<<", if audio.uu { "||" } else { ">" }, ">>", ">|"];
-    let hsg = nhu.len() as u32;
-    let pm = 40u32;
-    let qx = 20u32;
-    let aib = 6u32;
-    let mmb = hsg * pm + (hsg - 1) * aib;
-    let kff = fg + (adc as i32 - mmb as i32) / 2;
+    let hpf: &[&str] = &["|<", "<<", if audio.playing { "||" } else { ">" }, ">>", ">|"];
+    let dut = hpf.len() as u32;
+    let gu = 40u32;
+    let hn = 20u32;
+    let rj = 6u32;
+    let gzm = dut * gu + (dut - 1) * rj;
+    let fjy = bi + (oo as i32 - gzm as i32) / 2;
 
-    for (cvv, &cu) in nhu.iter().cf() {
-        let bx = kff + (cvv as u32 * (pm + aib)) as i32;
-        let hpb = cvv == 2;
-        let ei = if hpb {
-            if audio.uu { 0x00AA55u32 } else { 0x005533u32 }
+    for (bal, &label) in hpf.iter().enumerate() {
+        let bx = fjy + (bal as u32 * (gu + rj)) as i32;
+        let dss = bal == 2;
+        let bg = if dss {
+            if audio.playing { 0x00AA55u32 } else { 0x005533u32 }
         } else {
             0x1A2A1Au32
         };
-        framebuffer::ih(bx.am(0) as u32, ae.am(0) as u32, pm, qx, ei, 190);
+        framebuffer::co(bx.max(0) as u32, u.max(0) as u32, gu, hn, bg, 190);
         
-        framebuffer::ih(bx.am(0) as u32, ae.am(0) as u32, pm, 1, 0x00FF88, 30);
-        let zv = crate::graphics::scaling::clj(cu) as i32;
-        let hpv = if hpb { 0xFF00FFAA } else { EC_ };
-        cb(bx + (pm as i32 - zv) / 2, ae + 4, cu, hpv);
+        framebuffer::co(bx.max(0) as u32, u.max(0) as u32, gu, 1, 0x00FF88, 30);
+        let mo = crate::graphics::scaling::auh(label) as i32;
+        let dtg = if dss { 0xFF00FFAA } else { EP_ };
+        draw_text(bx + (gu as i32 - mo) / 2, u + 4, label, dtg);
     }
-    ae += qx as i32 + 4;
+    u += hn as i32 + 4;
 
     
-    if gfo {
-        let koj = fbh + 8;
-        let njt = fys - 16;
-        let hte = crate::visualizer::IR_ as u32;
-        let rtz = hte * GI_ + 8;
+    if dropdown_open {
+        let fqx = cfd + 8;
+        let hqt = csu - 16;
+        let dvo = crate::visualizer::JJ_ as u32;
+        let lbx = dvo * GZ_ + 8;
         
-        iru(koj, ae, njt, rtz, 12, 230);
-        let mut bg = ae + 4;
-        for hrm in 0..hte {
-            let j = crate::visualizer::OG_[hrm as usize];
-            let qe = hrm as u8 == igo;
-            if qe {
-                framebuffer::ih((koj + 4).am(0) as u32, bg.am(0) as u32, njt - 8, GI_, 0x00FF66, 30);
+        ekn(fqx, u, hqt, lbx, 12, 230);
+        let mut ad = u + 4;
+        for mi in 0..dvo {
+            let name = crate::visualizer::PE_[mi as usize];
+            let hd = mi as u8 == edu;
+            if hd {
+                framebuffer::co((fqx + 4).max(0) as u32, ad.max(0) as u32, hqt - 8, GZ_, 0x00FF66, 30);
             }
-            let tzy = if qe { I_ } else { N_ };
-            let feq = if qe { "> " } else { "  " };
+            let muq = if hd { I_ } else { O_ };
+            let cgv = if hd { "> " } else { "  " };
             use alloc::format;
-            let cu = format!("{}{}", feq, j);
-            cb(koj + 12, bg + 6, &cu, tzy);
-            bg += GI_ as i32;
+            let label = format!("{}{}", cgv, name);
+            draw_text(fqx + 12, ad + 6, &label, muq);
+            ad += GZ_ as i32;
         }
     }
 }
@@ -1600,176 +1600,176 @@ pub fn sdz(
 
 
 
-pub fn sdy(
-    fp: i32, iz: i32, gm: u32, me: u32,
-    com: u32, frame: u64, audio: &Adc,
-    g: &MobileState,
+pub fn ljn(
+    vx: i32, vy: i32, bt: u32, ex: u32,
+    awc: u32, frame: u64, audio: &Mr,
+    state: &MobileState,
 ) {
-    let gl = iz + HL_ as i32;
-    let nd = me.ao(HL_ + 20);
+    let bn = vy + ID_ as i32;
+    let en = ex.saturating_sub(ID_ + 20);
     
-    framebuffer::ih(fp.am(0) as u32, gl.am(0) as u32, gm, nd, 0x050A06, 220);
+    framebuffer::co(vx.max(0) as u32, bn.max(0) as u32, bt, en, 0x050A06, 220);
 
-    match com {
-        0 => sbp(fp, gl, gm, nd, frame, g),
-        1 => sbj(fp, gl, gm, nd, g),
-        2 => sbi(fp, gl, gm, nd, frame, g),
-        3 => sbg(fp, gl, gm, nd, frame, g),
-        4 => sbm(fp, gl, gm, nd, frame),
-        5 => sbk(fp, gl, gm, nd, g),
-        6 => sbf(fp, gl, gm, nd, g),
-        7 => sbq(fp, gl, gm, nd, frame),
-        8 => sbn(fp, gl, gm, nd, g),
-        9 => sbd(fp, gl, gm, nd, frame),
-        10 => sbl(fp, gl, gm, nd, frame, audio),
-        11 => sbh(fp, gl, gm, nd, g),
+    match awc {
+        0 => lhy(vx, bn, bt, en, frame, state),
+        1 => lhs(vx, bn, bt, en, state),
+        2 => lhr(vx, bn, bt, en, frame, state),
+        3 => lhp(vx, bn, bt, en, frame, state),
+        4 => lhv(vx, bn, bt, en, frame),
+        5 => lht(vx, bn, bt, en, state),
+        6 => lho(vx, bn, bt, en, state),
+        7 => lhz(vx, bn, bt, en, frame),
+        8 => lhw(vx, bn, bt, en, state),
+        9 => lhm(vx, bn, bt, en, frame),
+        10 => lhu(vx, bn, bt, en, frame, audio),
+        11 => lhq(vx, bn, bt, en, state),
         _ => {
-            np(fp + gm as i32 / 2, gl + nd as i32 / 2, "Unknown App", N_);
+            draw_text_centered(vx + bt as i32 / 2, bn + en as i32 / 2, "Unknown App", O_);
         }
     }
 }
 
 
-fn sbp(fp: i32, ae: i32, gm: u32, bm: u32, frame: u64, g: &MobileState) {
-    let ov = 10i32;
-    let fg = fp + ov;
+fn lhy(vx: i32, u: i32, bt: u32, ch: u32, frame: u64, state: &MobileState) {
+    let pad = 10i32;
+    let bi = vx + pad;
 
     
-    framebuffer::ih(fp.am(0) as u32, ae.am(0) as u32, gm, 24, 0x0A1A0A, 200);
-    cb(fg, ae + 4, "trustos@mobile:~$", I_);
+    framebuffer::co(vx.max(0) as u32, u.max(0) as u32, bt, 24, 0x0A1A0A, 200);
+    draw_text(bi, u + 4, "trustos@mobile:~$", I_);
 
-    let gy = 16i32;
-    let mut ct = ae + 28;
+    let bw = 16i32;
+    let mut ly = u + 28;
 
     
-    if g.dwq.is_empty() {
-        let xue = [
+    if state.term_lines.is_empty() {
+        let puj = [
             "TrustOS v2.0 — Mobile Shell",
             "Type 'help' for available commands.",
             "",
         ];
-        for line in &xue {
-            if ct + gy > ae + bm as i32 - 40 { break; }
-            let s = if line.cj("TrustOS") { AG_ } else { N_ };
-            cb(fg, ct, line, s);
-            ct += gy;
+        for line in &puj {
+            if ly + bw > u + ch as i32 - 40 { break; }
+            let color = if line.starts_with("TrustOS") { AH_ } else { O_ };
+            draw_text(bi, ly, line, color);
+            ly += bw;
         }
     }
 
     
-    let ayf = ((bm as i32 - 68) / gy).am(1) as usize;
-    let ay = if g.dwq.len() > ayf { g.dwq.len() - ayf } else { 0 };
-    for line in &g.dwq[ay..] {
-        if ct + gy > ae + bm as i32 - 40 { break; }
-        let s = if line.cj("$") { I_ }
-                    else if line.cj("TrustOS") { AG_ }
-                    else { N_ };
-        cb(fg, ct, line, s);
-        ct += gy;
+    let aac = ((ch as i32 - 68) / bw).max(1) as usize;
+    let start = if state.term_lines.len() > aac { state.term_lines.len() - aac } else { 0 };
+    for line in &state.term_lines[start..] {
+        if ly + bw > u + ch as i32 - 40 { break; }
+        let color = if line.starts_with("$") { I_ }
+                    else if line.starts_with("TrustOS") { AH_ }
+                    else { O_ };
+        draw_text(bi, ly, line, color);
+        ly += bw;
     }
 
     
-    let alf = ae + bm as i32 - 36;
-    framebuffer::ih(fp.am(0) as u32, alf.am(0) as u32, gm, 32, 0x0A1A0A, 200);
-    let aau = alloc::format!("$ {}", g.pse);
-    cb(fg, alf + 8, &aau, I_);
+    let sv = u + ch as i32 - 36;
+    framebuffer::co(vx.max(0) as u32, sv.max(0) as u32, bt, 32, 0x0A1A0A, 200);
+    let nh = alloc::format!("$ {}", state.term_input);
+    draw_text(bi, sv + 8, &nh, I_);
     
     if (frame / 30) % 2 == 0 {
-        let lf = fg + crate::graphics::scaling::clj(&aau) as i32 + 2;
-        framebuffer::ah(lf.am(0) as u32, (alf + 8).am(0) as u32, 8, 14, I_);
+        let cursor_x = bi + crate::graphics::scaling::auh(&nh) as i32 + 2;
+        framebuffer::fill_rect(cursor_x.max(0) as u32, (sv + 8).max(0) as u32, 8, 14, I_);
     }
     
-    np(fp + gm as i32 / 2, alf - 14, "Tap here to run a command", AT_);
+    draw_text_centered(vx + bt as i32 / 2, sv - 14, "Tap here to run a command", AW_);
 }
 
 
-fn sbj(fp: i32, ae: i32, gm: u32, bm: u32, g: &MobileState) {
-    let ov = 10i32;
-    let fg = fp + ov;
+fn lhs(vx: i32, u: i32, bt: u32, ch: u32, state: &MobileState) {
+    let pad = 10i32;
+    let bi = vx + pad;
 
     
-    framebuffer::ih(fp.am(0) as u32, ae.am(0) as u32, gm, 28, 0x0A120E, 200);
-    let ltb = if g.dqu == 0 { "/home/user/" } else { "/home/user/Documents/" };
-    if g.dqu > 0 {
-        cb(fg, ae + 6, "< Back", I_);
-        let ars = crate::graphics::scaling::clj(ltb) as i32;
-        cb(fp + gm as i32 - ov - ars, ae + 6, ltb, AG_);
+    framebuffer::co(vx.max(0) as u32, u.max(0) as u32, bt, 28, 0x0A120E, 200);
+    let gmp = if state.files_depth == 0 { "/home/user/" } else { "/home/user/Documents/" };
+    if state.files_depth > 0 {
+        draw_text(bi, u + 6, "< Back", I_);
+        let wl = crate::graphics::scaling::auh(gmp) as i32;
+        draw_text(vx + bt as i32 - pad - wl, u + 6, gmp, AH_);
     } else {
-        cb(fg, ae + 6, ltb, AG_);
+        draw_text(bi, u + 6, gmp, AH_);
     }
 
     
-    let sly: [(&str, &str, u32); 8] = [
+    let lqm: [(&str, &str, u32); 8] = [
         ("Documents", "DIR", 0xFFDDAA30),
         ("Downloads", "DIR", 0xFFDDAA30),
         ("Pictures",  "DIR", 0xFFDDAA30),
         ("Music",     "DIR", 0xFF4488DD),
-        ("readme.md", "4KB", N_),
-        ("config.toml","2KB", N_),
-        ("notes.txt", "1KB", N_),
+        ("readme.md", "4KB", O_),
+        ("config.toml","2KB", O_),
+        ("notes.txt", "1KB", O_),
         ("photo.png", "3MB", 0xFF9060D0),
     ];
-    let slz: [(&str, &str, u32); 6] = [
+    let lqn: [(&str, &str, u32); 6] = [
         ("project.rs", "12KB", 0xFF6688CC),
         ("report.pdf", "2MB", 0xFFCC4444),
         ("budget.csv", "8KB", 0xFF40CC80),
-        ("slides.md",  "6KB", N_),
+        ("slides.md",  "6KB", O_),
         ("backup.zip", "45MB", 0xFF9060D0),
-        ("todo.txt",   "1KB", N_),
+        ("todo.txt",   "1KB", O_),
     ];
 
-    let ph = 40u32;
-    let mut ahm = ae + 32;
+    let ep = 40u32;
+    let mut qz = u + 32;
 
-    if g.dqu == 0 {
-        for (a, &(j, aw, s)) in sly.iter().cf() {
-            if ahm + ph as i32 > ae + bm as i32 { break; }
-            let qe = g.gha == a as i32;
-            let ei = if qe { 0x0A2A15 } else { 0x060A08 };
-            framebuffer::ih(fp.am(0) as u32, ahm.am(0) as u32, gm, ph, ei, 180);
-            framebuffer::ah((fp + 8).am(0) as u32, (ahm + ph as i32 - 1).am(0) as u32, gm.ao(16), 1, AJ_);
-            let trd = if aw == "DIR" { ">" } else { "-" };
-            let csp = if qe { I_ } else { s };
-            cb(fg, ahm + 12, trd, csp);
-            cb(fg + 16, ahm + 12, j, csp);
-            let kp = crate::graphics::scaling::clj(aw) as i32;
-            cb(fp + gm as i32 - ov - kp, ahm + 12, aw, AT_);
-            ahm += ph as i32;
+    if state.files_depth == 0 {
+        for (i, &(name, size, color)) in lqm.iter().enumerate() {
+            if qz + ep as i32 > u + ch as i32 { break; }
+            let hd = state.files_selected == i as i32;
+            let bg = if hd { 0x0A2A15 } else { 0x060A08 };
+            framebuffer::co(vx.max(0) as u32, qz.max(0) as u32, bt, ep, bg, 180);
+            framebuffer::fill_rect((vx + 8).max(0) as u32, (qz + ep as i32 - 1).max(0) as u32, bt.saturating_sub(16), 1, AP_);
+            let mng = if size == "DIR" { ">" } else { "-" };
+            let ayi = if hd { I_ } else { color };
+            draw_text(bi, qz + 12, mng, ayi);
+            draw_text(bi + 16, qz + 12, name, ayi);
+            let dy = crate::graphics::scaling::auh(size) as i32;
+            draw_text(vx + bt as i32 - pad - dy, qz + 12, size, AW_);
+            qz += ep as i32;
         }
     } else {
-        for (a, &(j, aw, s)) in slz.iter().cf() {
-            if ahm + ph as i32 > ae + bm as i32 { break; }
-            let qe = g.gha == a as i32;
-            let ei = if qe { 0x0A2A15 } else { 0x060A08 };
-            framebuffer::ih(fp.am(0) as u32, ahm.am(0) as u32, gm, ph, ei, 180);
-            framebuffer::ah((fp + 8).am(0) as u32, (ahm + ph as i32 - 1).am(0) as u32, gm.ao(16), 1, AJ_);
-            let csp = if qe { I_ } else { s };
-            cb(fg, ahm + 12, "-", csp);
-            cb(fg + 16, ahm + 12, j, csp);
-            let kp = crate::graphics::scaling::clj(aw) as i32;
-            cb(fp + gm as i32 - ov - kp, ahm + 12, aw, AT_);
-            ahm += ph as i32;
+        for (i, &(name, size, color)) in lqn.iter().enumerate() {
+            if qz + ep as i32 > u + ch as i32 { break; }
+            let hd = state.files_selected == i as i32;
+            let bg = if hd { 0x0A2A15 } else { 0x060A08 };
+            framebuffer::co(vx.max(0) as u32, qz.max(0) as u32, bt, ep, bg, 180);
+            framebuffer::fill_rect((vx + 8).max(0) as u32, (qz + ep as i32 - 1).max(0) as u32, bt.saturating_sub(16), 1, AP_);
+            let ayi = if hd { I_ } else { color };
+            draw_text(bi, qz + 12, "-", ayi);
+            draw_text(bi + 16, qz + 12, name, ayi);
+            let dy = crate::graphics::scaling::auh(size) as i32;
+            draw_text(vx + bt as i32 - pad - dy, qz + 12, size, AW_);
+            qz += ep as i32;
         }
     }
 }
 
 
-fn sbi(fp: i32, ae: i32, gm: u32, bm: u32, frame: u64, g: &MobileState) {
-    let ov = 10i32;
-    let fg = fp + ov;
+fn lhr(vx: i32, u: i32, bt: u32, ch: u32, frame: u64, state: &MobileState) {
+    let pad = 10i32;
+    let bi = vx + pad;
 
     
-    framebuffer::ih(fp.am(0) as u32, ae.am(0) as u32, gm, 26, 0x0A1A10, 200);
-    let xab = if g.gfy == 0 { I_ } else { AT_ };
-    let xac = if g.gfy == 1 { I_ } else { AT_ };
-    cb(fg, ae + 6, "main.rs", xab);
-    cb(fg + 80, ae + 6, "lib.rs", xac);
+    framebuffer::co(vx.max(0) as u32, u.max(0) as u32, bt, 26, 0x0A1A10, 200);
+    let pcn = if state.editor_tab == 0 { I_ } else { AW_ };
+    let pco = if state.editor_tab == 1 { I_ } else { AW_ };
+    draw_text(bi, u + 6, "main.rs", pcn);
+    draw_text(bi + 80, u + 6, "lib.rs", pco);
     
-    let xoa = if g.gfy == 0 { fg } else { fg + 80 };
-    framebuffer::ah(xoa.am(0) as u32, (ae + 24).am(0) as u32, 50, 2, I_);
+    let ppj = if state.editor_tab == 0 { bi } else { bi + 80 };
+    framebuffer::fill_rect(ppj.max(0) as u32, (u + 24).max(0) as u32, 50, 2, I_);
 
     
-    let rlj = [
+    let kuu = [
         (1, "fn main() {"),
         (2, "    let os = TrustOS::new();"),
         (3, "    os.init_hardware();"),
@@ -1783,7 +1783,7 @@ fn sbi(fp: i32, ae: i32, gm: u32, bm: u32, frame: u64, g: &MobileState) {
         (11, "    os.run_forever();"),
         (12, "}"),
     ];
-    let rlk = [
+    let kuv = [
         (1, "pub mod kernel;"),
         (2, "pub mod desktop;"),
         (3, "pub mod mobile;"),
@@ -1798,139 +1798,139 @@ fn sbi(fp: i32, ae: i32, gm: u32, bm: u32, frame: u64, g: &MobileState) {
         (12, ""),
     ];
 
-    let rlf = if g.gfy == 0 { &rlj } else { &rlk };
+    let kuq = if state.editor_tab == 0 { &kuu } else { &kuv };
 
-    let gy = 16i32;
-    let mut ct = ae + 30;
-    for &(num, line) in rlf.iter() {
-        if ct + gy > ae + bm as i32 { break; }
+    let bw = 16i32;
+    let mut ly = u + 30;
+    for &(num, line) in kuq.iter() {
+        if ly + bw > u + ch as i32 { break; }
         use alloc::format;
-        let ajh = format!("{:3}", num);
+        let rw = format!("{:3}", num);
         
-        let afb = (num - 1) as u32 == g.isk;
-        if afb {
-            framebuffer::ih(fp.am(0) as u32, ct.am(0) as u32, gm, gy as u32, 0x1A2A1A, 120);
+        let is_current = (num - 1) as u32 == state.editor_cursor_line;
+        if is_current {
+            framebuffer::co(vx.max(0) as u32, ly.max(0) as u32, bt, bw as u32, 0x1A2A1A, 120);
         }
-        cb(fg, ct, &ajh, if afb { I_ } else { AT_ });
+        draw_text(bi, ly, &rw, if is_current { I_ } else { AW_ });
         
-        let s = if line.contains("fn ") { 0xFF6688CC }
+        let color = if line.contains("fn ") { 0xFF6688CC }
             else if line.contains("let ") || line.contains("pub ") { 0xFF8866FF }
             else if line.contains("//") { 0xFF556655 }
             else if line.contains("TrustOS") || line.contains("mod ") { I_ }
-            else { N_ };
-        cb(fg + 30, ct, line, s);
-        ct += gy;
+            else { O_ };
+        draw_text(bi + 30, ly, line, color);
+        ly += bw;
     }
     
     if (frame / 30) % 2 == 0 {
-        let ot = ae + 30 + g.isk as i32 * gy;
-        if ot >= ae + 30 && ot < ae + bm as i32 {
-            framebuffer::ah((fg + 30).am(0) as u32, ot.am(0) as u32, 2, 14, I_);
+        let cursor_y = u + 30 + state.editor_cursor_line as i32 * bw;
+        if cursor_y >= u + 30 && cursor_y < u + ch as i32 {
+            framebuffer::fill_rect((bi + 30).max(0) as u32, cursor_y.max(0) as u32, 2, 14, I_);
         }
     }
 }
 
 
-fn sbg(fp: i32, ae: i32, gm: u32, bm: u32, eln: u64, g: &MobileState) {
-    let ov = 14i32;
-    let fg = fp + ov;
-    let adc = (gm as i32 - ov * 2) as u32;
+fn lhp(vx: i32, u: i32, bt: u32, ch: u32, _frame: u64, state: &MobileState) {
+    let pad = 14i32;
+    let bi = vx + pad;
+    let oo = (bt as i32 - pad * 2) as u32;
 
     
-    let cjy = 60u32;
-    framebuffer::ih(fg.am(0) as u32, (ae + 10).am(0) as u32, adc, cjy, 0x0A1A10, 220);
-    tf(fg, ae + 10, adc, cjy, 8, AJ_);
-    let nlt = if g.aqu.is_empty() { "0" } else { &g.aqu };
-    let qd = crate::graphics::scaling::clj(nlt) as i32;
-    cb(fg + adc as i32 - qd - 10, ae + 30, nlt, I_);
+    let atm = 60u32;
+    framebuffer::co(bi.max(0) as u32, (u + 10).max(0) as u32, oo, atm, 0x0A1A10, 220);
+    iu(bi, u + 10, oo, atm, 8, AP_);
+    let hsm = if state.calc_display.is_empty() { "0" } else { &state.calc_display };
+    let gr = crate::graphics::scaling::auh(hsm) as i32;
+    draw_text(bi + oo as i32 - gr - 10, u + 30, hsm, I_);
 
     
-    let qsj = [
+    let kei = [
         ["C", "+/-", "%", "/"],
         ["7", "8", "9", "x"],
         ["4", "5", "6", "-"],
         ["1", "2", "3", "+"],
         ["0", ".", "=", ""],
     ];
-    let qx = 44u32;
-    let aib = 6u32;
-    let pm = (adc - aib * 3) / 4;
-    let mut je = ae + 10 + cjy as i32 + 14;
+    let hn = 44u32;
+    let rj = 6u32;
+    let gu = (oo - rj * 3) / 4;
+    let mut dc = u + 10 + atm as i32 + 14;
 
-    for br in &qsj {
-        let mut bx = fg;
-        for &cu in br {
-            if cu.is_empty() { bx += (pm + aib) as i32; continue; }
-            let ogl = oh!(cu, "/" | "x" | "-" | "+" | "=");
-            let txl = oh!(cu, "C" | "+/-" | "%");
-            let ei = if ogl { 0xFF008844u32 }
-                     else if txl { 0xFF333833 }
+    for row in &kei {
+        let mut bx = bi;
+        for &label in row {
+            if label.is_empty() { bx += (gu + rj) as i32; continue; }
+            let iid = matches!(label, "/" | "x" | "-" | "+" | "=");
+            let mso = matches!(label, "C" | "+/-" | "%");
+            let bg = if iid { 0xFF008844u32 }
+                     else if mso { 0xFF333833 }
                      else { 0xFF1A221A };
-            mf(bx, je, pm, qx, 8, ei);
-            tf(bx, je, pm, qx, 8, AJ_);
-            let hpv = if ogl { I_ } else { AC_ };
-            np(bx + pm as i32 / 2, je + 14, cu, hpv);
-            bx += (pm + aib) as i32;
+            draw_rounded_rect(bx, dc, gu, hn, 8, bg);
+            iu(bx, dc, gu, hn, 8, AP_);
+            let dtg = if iid { I_ } else { AB_ };
+            draw_text_centered(bx + gu as i32 / 2, dc + 14, label, dtg);
+            bx += (gu + rj) as i32;
         }
-        je += (qx + aib) as i32;
+        dc += (hn + rj) as i32;
     }
 }
 
 
-fn sbm(fp: i32, ae: i32, gm: u32, bm: u32, frame: u64) {
-    let ov = 12i32;
-    let fg = fp + ov;
-    let adc = gm as i32 - ov * 2;
+fn lhv(vx: i32, u: i32, bt: u32, ch: u32, frame: u64) {
+    let pad = 12i32;
+    let bi = vx + pad;
+    let oo = bt as i32 - pad * 2;
 
-    let mut ct = ae + 10;
-    let wga = 28i32;
-
-    
-    cb(fg, ct, "WiFi", I_);
-    cb(fg + adc - 24, ct, "ON", AG_);
-    ct += wga;
-    framebuffer::ih(fg.am(0) as u32, ct.am(0) as u32, adc as u32, 40, 0x0A120E, 180);
-    cb(fg + 8, ct + 12, "TrustNet-5G", AC_);
-    cb(fg + adc - 80, ct + 12, "Connected", AG_);
-    ct += 48;
+    let mut ly = u + 10;
+    let oms = 28i32;
 
     
-    cb(fg, ct, "Network Info", I_);
-    ct += 22;
-    let co = [
+    draw_text(bi, ly, "WiFi", I_);
+    draw_text(bi + oo - 24, ly, "ON", AH_);
+    ly += oms;
+    framebuffer::co(bi.max(0) as u32, ly.max(0) as u32, oo as u32, 40, 0x0A120E, 180);
+    draw_text(bi + 8, ly + 12, "TrustNet-5G", AB_);
+    draw_text(bi + oo - 80, ly + 12, "Connected", AH_);
+    ly += 48;
+
+    
+    draw_text(bi, ly, "Network Info", I_);
+    ly += 22;
+    let info = [
         ("IP Address:", "192.168.1.42"),
         ("Subnet:", "255.255.255.0"),
         ("Gateway:", "192.168.1.1"),
         ("DNS:", "8.8.8.8"),
         ("MAC:", "AA:BB:CC:DD:EE:FF"),
     ];
-    for &(cu, bn) in &co {
-        if ct + 18 > ae + bm as i32 { break; }
-        cb(fg + 8, ct, cu, N_);
-        let mqc = crate::graphics::scaling::clj(bn) as i32;
-        cb(fg + adc - mqc - 8, ct, bn, AC_);
-        ct += 20;
+    for &(label, value) in &info {
+        if ly + 18 > u + ch as i32 { break; }
+        draw_text(bi + 8, ly, label, O_);
+        let hbz = crate::graphics::scaling::auh(value) as i32;
+        draw_text(bi + oo - hbz - 8, ly, value, AB_);
+        ly += 20;
     }
-    ct += 10;
+    ly += 10;
 
     
-    cb(fg, ct, "Signal", I_);
-    ct += 20;
-    let lo = (adc - 16) as u32;
-    framebuffer::ah((fg + 8).am(0) as u32, ct.am(0) as u32, lo, 8, AJ_);
-    let cug = ((frame % 100) as u32 * lo / 100).am(lo * 7 / 10);
-    framebuffer::ah((fg + 8).am(0) as u32, ct.am(0) as u32, cug, 8, AG_);
+    draw_text(bi, ly, "Signal", I_);
+    ly += 20;
+    let ek = (oo - 16) as u32;
+    framebuffer::fill_rect((bi + 8).max(0) as u32, ly.max(0) as u32, ek, 8, AP_);
+    let ash = ((frame % 100) as u32 * ek / 100).max(ek * 7 / 10);
+    framebuffer::fill_rect((bi + 8).max(0) as u32, ly.max(0) as u32, ash, 8, AH_);
 }
 
 
-fn sbk(fp: i32, ae: i32, gm: u32, bm: u32, g: &MobileState) {
-    let ov = 12i32;
-    let fg = fp + ov;
-    let adc = (gm as i32 - ov * 2) as u32;
+fn lht(vx: i32, u: i32, bt: u32, ch: u32, state: &MobileState) {
+    let pad = 12i32;
+    let bi = vx + pad;
+    let oo = (bt as i32 - pad * 2) as u32;
 
-    cb(fg, ae + 10, "Games Library", I_);
+    draw_text(bi, u + 10, "Games Library", I_);
 
-    let tad = [
+    let mbc = [
         ("Snake", "Classic arcade", 0xFF44DD44),
         ("Chess", "Strategy board game", 0xFFD4A854),
         ("3D FPS", "Raycasting demo", 0xFF4488DD),
@@ -1938,173 +1938,173 @@ fn sbk(fp: i32, ae: i32, gm: u32, bm: u32, g: &MobileState) {
         ("NES", "NES emulator", 0xFFCC4444),
     ];
 
-    let bgg = 56u32;
-    let kgo = 8u32;
-    let mut ub = ae + 34;
+    let aev = 56u32;
+    let fkx = 8u32;
+    let mut jh = u + 34;
 
-    for (a, &(j, desc, mm)) in tad.iter().cf() {
-        if ub + bgg as i32 > ae + bm as i32 { break; }
-        let qe = g.kxp == a as i32;
-        let ei = if qe { 0xFF0C1610 } else { 0xFF080C0A };
-        let acu = if qe { I_ } else { AJ_ };
-        mf(fg, ub, adc, bgg, 10, ei);
-        tf(fg, ub, adc, bgg, 10, acu);
+    for (i, &(name, desc, accent)) in mbc.iter().enumerate() {
+        if jh + aev as i32 > u + ch as i32 { break; }
+        let hd = state.games_selected == i as i32;
+        let bg = if hd { 0xFF0C1610 } else { 0xFF080C0A };
+        let border = if hd { I_ } else { AP_ };
+        draw_rounded_rect(bi, jh, oo, aev, 10, bg);
+        iu(bi, jh, oo, aev, 10, border);
         
-        framebuffer::ah(fg.am(0) as u32, (ub + 8).am(0) as u32, 3, bgg - 16, mm);
+        framebuffer::fill_rect(bi.max(0) as u32, (jh + 8).max(0) as u32, 3, aev - 16, accent);
         
-        cb(fg + 14, ub + 10, j, mm);
+        draw_text(bi + 14, jh + 10, name, accent);
         
-        cb(fg + 14, ub + 28, desc, N_);
+        draw_text(bi + 14, jh + 28, desc, O_);
         
-        let qsl = if qe { ">>>" } else { ">" };
-        let hbk = if qe { I_ } else { AT_ };
-        cb(fp + gm as i32 - ov - 30, ub + 16, qsl, hbk);
-        ub += (bgg + kgo) as i32;
+        let kek = if hd { ">>>" } else { ">" };
+        let djr = if hd { I_ } else { AW_ };
+        draw_text(vx + bt as i32 - pad - 30, jh + 16, kek, djr);
+        jh += (aev + fkx) as i32;
     }
 }
 
 
-fn sbf(fp: i32, ae: i32, gm: u32, bm: u32, g: &MobileState) {
-    let ov = 8i32;
-    let fg = fp + ov;
-    let adc = (gm as i32 - ov * 2) as u32;
+fn lho(vx: i32, u: i32, bt: u32, ch: u32, state: &MobileState) {
+    let pad = 8i32;
+    let bi = vx + pad;
+    let oo = (bt as i32 - pad * 2) as u32;
 
     
-    let pxl = 30u32;
-    mf(fg, ae + 4, adc, pxl, 10, 0xFF0A120E);
-    tf(fg, ae + 4, adc, pxl, 10, AJ_);
-    let url = match g.hbi {
+    let jpk = 30u32;
+    draw_rounded_rect(bi, u + 4, oo, jpk, 10, 0xFF0A120E);
+    iu(bi, u + 4, oo, jpk, 10, AP_);
+    let url = match state.browser_page {
         0 => "https://trustos.local",
         1 => "https://trustos.local/docs",
         2 => "https://trustos.local/source",
         3 => "https://trustos.local/downloads",
         _ => "https://trustos.local",
     };
-    cb(fg + 10, ae + 12, url, N_);
+    draw_text(bi + 10, u + 12, url, O_);
 
     
-    let cgi = ae + 40;
-    framebuffer::ih(fp.am(0) as u32, cgi.am(0) as u32, gm, bm - 40, 0x0C140E, 200);
+    let arr = u + 40;
+    framebuffer::co(vx.max(0) as u32, arr.max(0) as u32, bt, ch - 40, 0x0C140E, 200);
 
-    let mut ct = cgi + 10;
-    match g.hbi {
+    let mut ly = arr + 10;
+    match state.browser_page {
         0 => {
-            cb(fg + 4, ct, "Welcome to TrustOS", I_); ct += 24;
-            cb(fg + 4, ct, "A secure, minimal operating system", N_); ct += 20;
-            cb(fg + 4, ct, "built with Rust.", N_); ct += 30;
-            cb(fg + 4, ct, "> Documentation", 0xFF4488DD); ct += 20;
-            cb(fg + 4, ct, "> Source Code", 0xFF4488DD); ct += 20;
-            cb(fg + 4, ct, "> Downloads", 0xFF4488DD);
+            draw_text(bi + 4, ly, "Welcome to TrustOS", I_); ly += 24;
+            draw_text(bi + 4, ly, "A secure, minimal operating system", O_); ly += 20;
+            draw_text(bi + 4, ly, "built with Rust.", O_); ly += 30;
+            draw_text(bi + 4, ly, "> Documentation", 0xFF4488DD); ly += 20;
+            draw_text(bi + 4, ly, "> Source Code", 0xFF4488DD); ly += 20;
+            draw_text(bi + 4, ly, "> Downloads", 0xFF4488DD);
         }
         1 => {
-            cb(fg + 4, ct, "Documentation", I_); ct += 24;
-            cb(fg + 4, ct, "1. Getting Started", 0xFF4488DD); ct += 20;
-            cb(fg + 4, ct, "   Install TrustOS on bare metal", N_); ct += 16;
-            cb(fg + 4, ct, "   or run in QEMU/VirtualBox.", N_); ct += 24;
-            cb(fg + 4, ct, "2. Mobile Mode", 0xFF4488DD); ct += 20;
-            cb(fg + 4, ct, "   Portrait UI for small screens.", N_); ct += 24;
-            cb(fg + 4, ct, "3. Desktop Mode", 0xFF4488DD); ct += 20;
-            cb(fg + 4, ct, "   Full windowed environment.", N_); ct += 24;
-            cb(fg + 4, ct, "4. Audio System", 0xFF4488DD); ct += 20;
-            cb(fg + 4, ct, "   HD Audio with DMA.", N_); ct += 30;
-            cb(fg + 4, ct, "< Back to Home", AG_);
+            draw_text(bi + 4, ly, "Documentation", I_); ly += 24;
+            draw_text(bi + 4, ly, "1. Getting Started", 0xFF4488DD); ly += 20;
+            draw_text(bi + 4, ly, "   Install TrustOS on bare metal", O_); ly += 16;
+            draw_text(bi + 4, ly, "   or run in QEMU/VirtualBox.", O_); ly += 24;
+            draw_text(bi + 4, ly, "2. Mobile Mode", 0xFF4488DD); ly += 20;
+            draw_text(bi + 4, ly, "   Portrait UI for small screens.", O_); ly += 24;
+            draw_text(bi + 4, ly, "3. Desktop Mode", 0xFF4488DD); ly += 20;
+            draw_text(bi + 4, ly, "   Full windowed environment.", O_); ly += 24;
+            draw_text(bi + 4, ly, "4. Audio System", 0xFF4488DD); ly += 20;
+            draw_text(bi + 4, ly, "   HD Audio with DMA.", O_); ly += 30;
+            draw_text(bi + 4, ly, "< Back to Home", AH_);
         }
         2 => {
-            cb(fg + 4, ct, "Source Code", I_); ct += 24;
-            cb(fg + 4, ct, "Repository:", N_); ct += 20;
-            cb(fg + 4, ct, "  github.com/trustos/kernel", 0xFF4488DD); ct += 24;
-            cb(fg + 4, ct, "Language: Rust (no_std)", N_); ct += 20;
-            cb(fg + 4, ct, "LOC: ~25,000", N_); ct += 20;
-            cb(fg + 4, ct, "License: MIT", N_); ct += 30;
-            cb(fg + 4, ct, "< Back to Home", AG_);
+            draw_text(bi + 4, ly, "Source Code", I_); ly += 24;
+            draw_text(bi + 4, ly, "Repository:", O_); ly += 20;
+            draw_text(bi + 4, ly, "  github.com/trustos/kernel", 0xFF4488DD); ly += 24;
+            draw_text(bi + 4, ly, "Language: Rust (no_std)", O_); ly += 20;
+            draw_text(bi + 4, ly, "LOC: ~25,000", O_); ly += 20;
+            draw_text(bi + 4, ly, "License: MIT", O_); ly += 30;
+            draw_text(bi + 4, ly, "< Back to Home", AH_);
         }
         3 => {
-            cb(fg + 4, ct, "Downloads", I_); ct += 24;
-            cb(fg + 4, ct, "TrustOS v2.0 ISO", 0xFF4488DD); ct += 20;
-            cb(fg + 4, ct, "  Size: 12 MB | x86_64", N_); ct += 24;
-            cb(fg + 4, ct, "TrustOS v2.0 aarch64", 0xFF4488DD); ct += 20;
-            cb(fg + 4, ct, "  Size: 14 MB | ARM64", N_); ct += 24;
-            cb(fg + 4, ct, "VBox Appliance (.ova)", 0xFF4488DD); ct += 20;
-            cb(fg + 4, ct, "  Size: 50 MB | Pre-configured", N_); ct += 30;
-            cb(fg + 4, ct, "< Back to Home", AG_);
+            draw_text(bi + 4, ly, "Downloads", I_); ly += 24;
+            draw_text(bi + 4, ly, "TrustOS v2.0 ISO", 0xFF4488DD); ly += 20;
+            draw_text(bi + 4, ly, "  Size: 12 MB | x86_64", O_); ly += 24;
+            draw_text(bi + 4, ly, "TrustOS v2.0 aarch64", 0xFF4488DD); ly += 20;
+            draw_text(bi + 4, ly, "  Size: 14 MB | ARM64", O_); ly += 24;
+            draw_text(bi + 4, ly, "VBox Appliance (.ova)", 0xFF4488DD); ly += 20;
+            draw_text(bi + 4, ly, "  Size: 50 MB | Pre-configured", O_); ly += 30;
+            draw_text(bi + 4, ly, "< Back to Home", AH_);
         }
         _ => {
-            cb(fg + 4, ct, "Page not found", N_);
+            draw_text(bi + 4, ly, "Page not found", O_);
         }
     }
 
     
-    ct = ae + bm as i32 - 18;
-    framebuffer::ah((fg + 4).am(0) as u32, (ct - 4).am(0) as u32, adc - 8, 1, AJ_);
-    cb(fg + 4, ct, "TrustOS Browser v1.0", AT_);
+    ly = u + ch as i32 - 18;
+    framebuffer::fill_rect((bi + 4).max(0) as u32, (ly - 4).max(0) as u32, oo - 8, 1, AP_);
+    draw_text(bi + 4, ly, "TrustOS Browser v1.0", AW_);
 }
 
 
-fn sbq(fp: i32, ae: i32, gm: u32, bm: u32, frame: u64) {
-    let ov = 10i32;
-    let fg = fp + ov;
-    let adc = (gm as i32 - ov * 2) as u32;
+fn lhz(vx: i32, u: i32, bt: u32, ch: u32, frame: u64) {
+    let pad = 10i32;
+    let bi = vx + pad;
+    let oo = (bt as i32 - pad * 2) as u32;
 
     
-    framebuffer::ih(fp.am(0) as u32, ae.am(0) as u32, gm, 28, 0x0A120E, 200);
-    let mlu = ["Move", "Rot", "Scale", "Add"];
-    let mut gx = fg;
-    for bxo in &mlu {
-        cb(gx, ae + 7, bxo, GC_);
-        gx += 50;
+    framebuffer::co(vx.max(0) as u32, u.max(0) as u32, bt, 28, 0x0A120E, 200);
+    let gzk = ["Move", "Rot", "Scale", "Add"];
+    let mut bu = bi;
+    for tool in &gzk {
+        draw_text(bu, u + 7, tool, GR_);
+        bu += 50;
     }
 
     
-    let ekn = ae + 32;
-    let azb = bm.ao(60);
-    framebuffer::ih(fp.am(0) as u32, ekn.am(0) as u32, gm, azb, 0x030806, 220);
+    let bws = u + 32;
+    let aak = ch.saturating_sub(60);
+    framebuffer::co(vx.max(0) as u32, bws.max(0) as u32, bt, aak, 0x030806, 220);
 
     
-    let nis = fp + gm as i32 / 2;
-    let niu = ekn + azb as i32 / 2;
-    for a in 0..8u32 {
-        let l = (a as i32 - 4) * 20;
-        framebuffer::ih(fp.am(0) as u32, (niu + l).am(0) as u32, gm, 1, 0x002A15, 40);
-        framebuffer::ih((nis + l).am(0) as u32, ekn.am(0) as u32, 1, azb, 0x002A15, 40);
+    let hpz = vx + bt as i32 / 2;
+    let hqb = bws + aak as i32 / 2;
+    for i in 0..8u32 {
+        let offset = (i as i32 - 4) * 20;
+        framebuffer::co(vx.max(0) as u32, (hqb + offset).max(0) as u32, bt, 1, 0x002A15, 40);
+        framebuffer::co((hpz + offset).max(0) as u32, bws.max(0) as u32, 1, aak, 0x002A15, 40);
     }
 
     
-    let ab = frame as f32 * 0.03;
-    let fuu = libm::st(ab);
-    let ffx = libm::zq(ab);
-    let e = 40.0f32;
-    let nhx: [(f32, f32, f32); 8] = [
-        (-e, -e, -e), (e, -e, -e), (e, e, -e), (-e, e, -e),
-        (-e, -e,  e), (e, -e,  e), (e, e,  e), (-e, e,  e),
+    let t = frame as f32 * 0.03;
+    let cqr = libm::sinf(t);
+    let chs = libm::cosf(t);
+    let j = 40.0f32;
+    let hpi: [(f32, f32, f32); 8] = [
+        (-j, -j, -j), (j, -j, -j), (j, j, -j), (-j, j, -j),
+        (-j, -j,  j), (j, -j,  j), (j, j,  j), (-j, j,  j),
     ];
-    let bu: [(usize, usize); 12] = [
+    let edges: [(usize, usize); 12] = [
         (0,1),(1,2),(2,3),(3,0), (4,5),(5,6),(6,7),(7,4),
         (0,4),(1,5),(2,6),(3,7),
     ];
-    let nv = |ai: (f32, f32, f32)| -> (i32, i32) {
-        let kb = ai.0 * ffx - ai.2 * fuu;
-        let agv = ai.0 * fuu + ai.2 * ffx;
-        let ix = ai.1 * libm::zq(ab * 0.7) - agv * libm::st(ab * 0.7);
-        (nis + kb as i32, niu + ix as i32)
+    let project = |aa: (f32, f32, f32)| -> (i32, i32) {
+        let da = aa.0 * chs - aa.2 * cqr;
+        let qp = aa.0 * cqr + aa.2 * chs;
+        let cm = aa.1 * libm::cosf(t * 0.7) - qp * libm::sinf(t * 0.7);
+        (hpz + da as i32, hqb + cm as i32)
     };
-    for &(q, o) in &bu {
-        let (dn, dp) = nv(nhx[q]);
-        let (hy, jz) = nv(nhx[o]);
-        ahj(dn, dp, hy, jz, AG_);
+    for &(a, b) in &edges {
+        let (x1, y1) = project(hpi[a]);
+        let (x2, y2) = project(hpi[b]);
+        draw_line(x1, y1, x2, y2, AH_);
     }
 
     
-    let edf = ekn + azb as i32 - 20;
-    cb(fg, edf, "Vertices: 8  Faces: 6  Edges: 12", AT_);
+    let btj = bws + aak as i32 - 20;
+    draw_text(bi, btj, "Vertices: 8  Faces: 6  Edges: 12", AW_);
 }
 
 
-fn sbn(fp: i32, ae: i32, gm: u32, bm: u32, g: &MobileState) {
-    let ov = 12i32;
-    let fg = fp + ov;
-    let adc = (gm as i32 - ov * 2) as u32;
+fn lhw(vx: i32, u: i32, bt: u32, ch: u32, state: &MobileState) {
+    let pad = 12i32;
+    let bi = vx + pad;
+    let oo = (bt as i32 - pad * 2) as u32;
 
-    let bar = [
+    let abj = [
         ("WiFi", "Wireless connection", 0xFF40CC80),
         ("Bluetooth", "Paired devices", 0xFF4488DD),
         ("Airplane", "Radio off", 0xFFCC8844),
@@ -2113,49 +2113,49 @@ fn sbn(fp: i32, ae: i32, gm: u32, bm: u32, g: &MobileState) {
         ("Notifications", "Push alerts", 0xFF40AADD),
     ];
 
-    let ph = 52u32;
-    let mut ix = ae + 10;
-    for (a, &(dq, desc, mm)) in bar.iter().cf() {
-        if ix + ph as i32 > ae + bm as i32 { break; }
-        let qe = g.mey == a as i32;
-        let ei = if qe { 0x0A1A12 } else { 0x080C0A };
-        framebuffer::ih(fg.am(0) as u32, ix.am(0) as u32, adc, ph, ei, 180);
-        framebuffer::ah((fg + 4).am(0) as u32, (ix + ph as i32 - 1).am(0) as u32, adc - 8, 1, AJ_);
+    let ep = 52u32;
+    let mut cm = u + 10;
+    for (i, &(title, desc, accent)) in abj.iter().enumerate() {
+        if cm + ep as i32 > u + ch as i32 { break; }
+        let hd = state.settings_selected == i as i32;
+        let bg = if hd { 0x0A1A12 } else { 0x080C0A };
+        framebuffer::co(bi.max(0) as u32, cm.max(0) as u32, oo, ep, bg, 180);
+        framebuffer::fill_rect((bi + 4).max(0) as u32, (cm + ep as i32 - 1).max(0) as u32, oo - 8, 1, AP_);
         
-        framebuffer::ah((fg + 8).am(0) as u32, (ix + 20).am(0) as u32, 4, 4, mm);
-        cb(fg + 20, ix + 10, dq, AC_);
-        cb(fg + 20, ix + 28, desc, N_);
+        framebuffer::fill_rect((bi + 8).max(0) as u32, (cm + 20).max(0) as u32, 4, 4, accent);
+        draw_text(bi + 20, cm + 10, title, AB_);
+        draw_text(bi + 20, cm + 28, desc, O_);
         
-        let mlp = a < g.gsk.len() && g.gsk[a];
-        let mls = fp + gm as i32 - ov - 44;
-        let xis = if mlp { 0xFF008844 } else { 0xFF333833 };
-        mf(mls, ix + 14, 40, 22, 11, xis);
+        let gzh = i < state.settings_toggles.len() && state.settings_toggles[i];
+        let gzi = vx + bt as i32 - pad - 44;
+        let pkr = if gzh { 0xFF008844 } else { 0xFF333833 };
+        draw_rounded_rect(gzi, cm + 14, 40, 22, 11, pkr);
         
-        let etq = if mlp { mls + 20 } else { mls + 2 };
-        mf(etq, ix + 16, 18, 18, 9, if mlp { I_ } else { AT_ });
-        ix += ph as i32;
+        let cbf = if gzh { gzi + 20 } else { gzi + 2 };
+        draw_rounded_rect(cbf, cm + 16, 18, 18, 9, if gzh { I_ } else { AW_ });
+        cm += ep as i32;
     }
 }
 
 
-fn sbd(fp: i32, ae: i32, gm: u32, bm: u32, eln: u64) {
-    let ov = 14i32;
-    let fg = fp + ov;
+fn lhm(vx: i32, u: i32, bt: u32, ch: u32, _frame: u64) {
+    let pad = 14i32;
+    let bi = vx + pad;
 
-    let yv = fp + gm as i32 / 2;
-    let mut ct = ae + 20;
-
-    
-    np(yv, ct, "TrustOS", I_);
-    ct += 24;
-    np(yv, ct, "v2.0.0", AG_);
-    ct += 30;
+    let center_x = vx + bt as i32 / 2;
+    let mut ly = u + 20;
 
     
-    framebuffer::ah((fg + 20).am(0) as u32, ct.am(0) as u32, gm.ao(68), 1, AJ_);
-    ct += 16;
+    draw_text_centered(center_x, ly, "TrustOS", I_);
+    ly += 24;
+    draw_text_centered(center_x, ly, "v2.0.0", AH_);
+    ly += 30;
 
-    let co = [
+    
+    framebuffer::fill_rect((bi + 20).max(0) as u32, ly.max(0) as u32, bt.saturating_sub(68), 1, AP_);
+    ly += 16;
+
+    let info = [
         ("Kernel:", "TrustOS Microkernel"),
         ("Arch:", "x86_64 / aarch64"),
         ("License:", "MIT"),
@@ -2166,160 +2166,160 @@ fn sbd(fp: i32, ae: i32, gm: u32, bm: u32, eln: u64) {
         ("Uptime:", "4h 23m"),
     ];
 
-    for &(cu, bn) in &co {
-        if ct + 20 > ae + bm as i32 { break; }
-        cb(fg, ct, cu, N_);
-        let mqc = crate::graphics::scaling::clj(bn) as i32;
-        cb(fp + gm as i32 - ov - mqc, ct, bn, AC_);
-        ct += 22;
+    for &(label, value) in &info {
+        if ly + 20 > u + ch as i32 { break; }
+        draw_text(bi, ly, label, O_);
+        let hbz = crate::graphics::scaling::auh(value) as i32;
+        draw_text(vx + bt as i32 - pad - hbz, ly, value, AB_);
+        ly += 22;
     }
 }
 
 
-fn sbl(fp: i32, ae: i32, gm: u32, bm: u32, frame: u64, audio: &Adc) {
-    let ov = 14i32;
-    let fg = fp + ov;
-    let adc = (gm as i32 - ov * 2) as u32;
+fn lhu(vx: i32, u: i32, bt: u32, ch: u32, frame: u64, audio: &Mr) {
+    let pad = 14i32;
+    let bi = vx + pad;
+    let oo = (bt as i32 - pad * 2) as u32;
 
     
-    let byh = adc.v(200);
-    let gyz = fp + (gm as i32 - byh as i32) / 2;
-    let mut ct = ae + 14;
-    mf(gyz, ct, byh, byh, 14, 0xFF0A1A10);
-    tf(gyz, ct, byh, byh, 14, AJ_);
+    let anm = oo.min(200);
+    let dhx = vx + (bt as i32 - anm as i32) / 2;
+    let mut ly = u + 14;
+    draw_rounded_rect(dhx, ly, anm, anm, 14, 0xFF0A1A10);
+    iu(dhx, ly, anm, anm, 14, AP_);
 
     
-    if audio.uu {
-        let cgd = gyz + byh as i32 / 2;
-        let bkl = ct + byh as i32 / 2;
-        let lne = 16u32;
-        let lo = byh / (lne * 2);
-        for a in 0..lne {
-            let ab = a as f32 / lne as f32;
-            let ib = frame as f32 * 0.08 + ab * 6.28;
-            let byf = (libm::st(ib) * audio.abo + audio.aee * 0.5).am(0.1).v(1.0);
-            let i = (byf * (byh as f32 * 0.4)) as u32;
-            let bx = gyz + 10 + (a * (lo * 2)) as i32;
-            let je = ct + byh as i32 / 2 + (byh as i32 / 4 - i as i32).am(0);
-            let at = (128.0 + byf * 127.0).v(255.0) as u32;
-            framebuffer::ah(bx.am(0) as u32, je.am(0) as u32, lo, i, 0xFF000000 | (at << 8) | 0x40);
+    if audio.playing {
+        let arn = dhx + anm as i32 / 2;
+        let ags = ly + anm as i32 / 2;
+        let gim = 16u32;
+        let ek = anm / (gim * 2);
+        for i in 0..gim {
+            let t = i as f32 / gim as f32;
+            let phase = frame as f32 * 0.08 + t * 6.28;
+            let ank = (libm::sinf(phase) * audio.energy + audio.bass * 0.5).max(0.1).min(1.0);
+            let h = (ank * (anm as f32 * 0.4)) as u32;
+            let bx = dhx + 10 + (i * (ek * 2)) as i32;
+            let dc = ly + anm as i32 / 2 + (anm as i32 / 4 - h as i32).max(0);
+            let g = (128.0 + ank * 127.0).min(255.0) as u32;
+            framebuffer::fill_rect(bx.max(0) as u32, dc.max(0) as u32, ek, h, 0xFF000000 | (g << 8) | 0x40);
         }
     } else {
-        np(gyz + byh as i32 / 2, ct + byh as i32 / 2 - 6, "No Track", N_);
+        draw_text_centered(dhx + anm as i32 / 2, ly + anm as i32 / 2 - 6, "No Track", O_);
     }
-    ct += byh as i32 + 16;
+    ly += anm as i32 + 16;
 
     
-    let dq = if audio.uu { "Untitled (2) - Lo-Fi" } else { "No Track Playing" };
-    np(fp + gm as i32 / 2, ct, dq, AC_);
-    ct += 20;
-    np(fp + gm as i32 / 2, ct, "TrustOS Audio", N_);
-    ct += 28;
+    let title = if audio.playing { "Untitled (2) - Lo-Fi" } else { "No Track Playing" };
+    draw_text_centered(vx + bt as i32 / 2, ly, title, AB_);
+    ly += 20;
+    draw_text_centered(vx + bt as i32 / 2, ly, "TrustOS Audio", O_);
+    ly += 28;
 
     
-    let lo = adc - 20;
-    framebuffer::ah((fg + 10).am(0) as u32, ct.am(0) as u32, lo, 4, AJ_);
-    if audio.uu {
-        let li = (frame % 300) as u32 * lo / 300;
-        framebuffer::ah((fg + 10).am(0) as u32, ct.am(0) as u32, li, 4, I_);
+    let ek = oo - 20;
+    framebuffer::fill_rect((bi + 10).max(0) as u32, ly.max(0) as u32, ek, 4, AP_);
+    if audio.playing {
+        let progress = (frame % 300) as u32 * ek / 300;
+        framebuffer::fill_rect((bi + 10).max(0) as u32, ly.max(0) as u32, progress, 4, I_);
     }
-    ct += 20;
+    ly += 20;
 
     
-    let rrh = ["|<", "<<", if audio.uu { "||" } else { ">" }, ">>", ">|"];
-    let pm = 48u32;
-    let qx = 36u32;
-    let aib = 10u32;
-    let aza = 5 * pm + 4 * aib;
-    let kfe = fg + (adc as i32 - aza as i32) / 2;
-    for (a, &cu) in rrh.iter().cf() {
-        let bx = kfe + (a as u32 * (pm + aib)) as i32;
-        let hpb = a == 2;
-        let ei = if hpb { if audio.uu { 0xFF005533 } else { 0xFF003322 } } else { 0xFF1A2A1A };
-        mf(bx, ct, pm, qx, 10, ei);
-        let hpv = if hpb { I_ } else { EC_ };
-        np(bx + pm as i32 / 2, ct + 10, cu, hpv);
+    let kzz = ["|<", "<<", if audio.playing { "||" } else { ">" }, ">>", ">|"];
+    let gu = 48u32;
+    let hn = 36u32;
+    let rj = 10u32;
+    let aaj = 5 * gu + 4 * rj;
+    let fjx = bi + (oo as i32 - aaj as i32) / 2;
+    for (i, &label) in kzz.iter().enumerate() {
+        let bx = fjx + (i as u32 * (gu + rj)) as i32;
+        let dss = i == 2;
+        let bg = if dss { if audio.playing { 0xFF005533 } else { 0xFF003322 } } else { 0xFF1A2A1A };
+        draw_rounded_rect(bx, ly, gu, hn, 10, bg);
+        let dtg = if dss { I_ } else { EP_ };
+        draw_text_centered(bx + gu as i32 / 2, ly + 10, label, dtg);
     }
-    ct += qx as i32 + 16;
+    ly += hn as i32 + 16;
 
     
-    let qmn = ["Sub", "Bass", "Mid", "Treble"];
-    let qmq = [audio.ato, audio.aee, audio.vs, audio.axg];
-    let qmm: [u32; 4] = [0xFF00FF44, 0xFF00CC88, 0xFF00AACC, 0xFF8866FF];
-    let ikl = (adc - 12) / 4;
-    for (a, (&j, &ap)) in qmn.iter().fca(qmq.iter()).cf() {
-        let bx = fg + (a as u32 * (ikl + 4)) as i32;
-        framebuffer::ih(bx.am(0) as u32, ct.am(0) as u32, ikl, 10, 0x112211, 150);
-        let vi = if audio.uu { (ap.v(1.0) * ikl as f32) as u32 } else { 0 };
-        if vi > 0 {
-            framebuffer::ah(bx.am(0) as u32, ct.am(0) as u32, vi, 10, qmm[a]);
+    let jzh = ["Sub", "Bass", "Mid", "Treble"];
+    let jzj = [audio.sub_bass, audio.bass, audio.mid, audio.treble];
+    let jzg: [u32; 4] = [0xFF00FF44, 0xFF00CC88, 0xFF00AACC, 0xFF8866FF];
+    let efy = (oo - 12) / 4;
+    for (i, (&name, &val)) in jzh.iter().zip(jzj.iter()).enumerate() {
+        let bx = bi + (i as u32 * (efy + 4)) as i32;
+        framebuffer::co(bx.max(0) as u32, ly.max(0) as u32, efy, 10, 0x112211, 150);
+        let fill = if audio.playing { (val.min(1.0) * efy as f32) as u32 } else { 0 };
+        if fill > 0 {
+            framebuffer::fill_rect(bx.max(0) as u32, ly.max(0) as u32, fill, 10, jzg[i]);
         }
-        np(bx + ikl as i32 / 2, ct + 12, j, AT_);
+        draw_text_centered(bx + efy as i32 / 2, ly + 12, name, AW_);
     }
 }
 
 
-fn sbh(fp: i32, ae: i32, gm: u32, bm: u32, g: &MobileState) {
-    let ov = 8i32;
+fn lhq(vx: i32, u: i32, bt: u32, ch: u32, state: &MobileState) {
+    let pad = 8i32;
 
     
-    let aly = (gm as i32 - ov * 2).v(bm as i32 - 60).v(400);
-    let cell = aly / 8;
-    let aoj = fp + (gm as i32 - aly) / 2;
-    let apl = ae + 10;
+    let tg = (bt as i32 - pad * 2).min(ch as i32 - 60).min(400);
+    let cell = tg / 8;
+    let un = vx + (bt as i32 - tg) / 2;
+    let ve = u + 10;
 
-    let wgv = if g.cpd >= 0 { g.cpd / 8 } else { -1 };
-    let wgu = if g.cpd >= 0 { g.cpd % 8 } else { -1 };
+    let onj = if state.chess_selected >= 0 { state.chess_selected / 8 } else { -1 };
+    let oni = if state.chess_selected >= 0 { state.chess_selected % 8 } else { -1 };
 
     
-    for br in 0..8u32 {
-        for bj in 0..8u32 {
-            let dio = (br + bj) % 2 == 0;
-            let qe = br as i32 == wgv && bj as i32 == wgu;
-            let s = if qe { 0xFF2A5A2A }
-                       else if dio { 0xFF2A3A2A }
+    for row in 0..8u32 {
+        for col in 0..8u32 {
+            let bhj = (row + col) % 2 == 0;
+            let hd = row as i32 == onj && col as i32 == oni;
+            let color = if hd { 0xFF2A5A2A }
+                       else if bhj { 0xFF2A3A2A }
                        else { 0xFF0A140A };
-            let cx = aoj + (bj * cell as u32) as i32;
-            let ix = apl + (br * cell as u32) as i32;
-            framebuffer::ah(cx.am(0) as u32, ix.am(0) as u32, cell as u32, cell as u32, s);
+            let cx = un + (col * cell as u32) as i32;
+            let cm = ve + (row * cell as u32) as i32;
+            framebuffer::fill_rect(cx.max(0) as u32, cm.max(0) as u32, cell as u32, cell as u32, color);
             
-            if qe {
+            if hd {
                 
-                framebuffer::ah(cx.am(0) as u32, ix.am(0) as u32, cell as u32, 2, I_);
-                framebuffer::ah(cx.am(0) as u32, (ix + cell - 2).am(0) as u32, cell as u32, 2, I_);
+                framebuffer::fill_rect(cx.max(0) as u32, cm.max(0) as u32, cell as u32, 2, I_);
+                framebuffer::fill_rect(cx.max(0) as u32, (cm + cell - 2).max(0) as u32, cell as u32, 2, I_);
                 
-                framebuffer::ah(cx.am(0) as u32, ix.am(0) as u32, 2, cell as u32, I_);
-                framebuffer::ah((cx + cell - 2).am(0) as u32, ix.am(0) as u32, 2, cell as u32, I_);
+                framebuffer::fill_rect(cx.max(0) as u32, cm.max(0) as u32, 2, cell as u32, I_);
+                framebuffer::fill_rect((cx + cell - 2).max(0) as u32, cm.max(0) as u32, 2, cell as u32, I_);
             }
         }
     }
 
     
-    tf(aoj - 1, apl - 1, aly as u32 + 2, aly as u32 + 2, 2, AT_);
+    iu(un - 1, ve - 1, tg as u32 + 2, tg as u32 + 2, 2, AW_);
 
     
-    let ovq = ["R", "N", "B", "Q", "K", "B", "N", "R"];
-    for bj in 0..8 {
-        let cx = aoj + bj * cell + cell / 2;
+    let iuv = ["R", "N", "B", "Q", "K", "B", "N", "R"];
+    for col in 0..8 {
+        let cx = un + col * cell + cell / 2;
         
-        np(cx, apl + 7 * cell + cell / 2 - 6, ovq[bj as usize], 0xFFDDDDDD);
-        np(cx, apl + 6 * cell + cell / 2 - 6, "P", 0xFFDDDDDD);
+        draw_text_centered(cx, ve + 7 * cell + cell / 2 - 6, iuv[col as usize], 0xFFDDDDDD);
+        draw_text_centered(cx, ve + 6 * cell + cell / 2 - 6, "P", 0xFFDDDDDD);
         
-        np(cx, apl + cell / 2 - 6, ovq[bj as usize], 0xFFD4A854);
-        np(cx, apl + cell + cell / 2 - 6, "P", 0xFFD4A854);
+        draw_text_centered(cx, ve + cell / 2 - 6, iuv[col as usize], 0xFFD4A854);
+        draw_text_centered(cx, ve + cell + cell / 2 - 6, "P", 0xFFD4A854);
     }
 
     
-    let uo = apl + aly + 8;
-    let gvd = if g.hct == 0 { "White to move" } else { "Black to move" };
-    let ifg = if g.hct == 0 { 0xFFDDDDDD } else { 0xFFD4A854 };
-    np(fp + gm as i32 / 2, uo, gvd, ifg);
+    let status_y = ve + tg + 8;
+    let dfw = if state.chess_turn == 0 { "White to move" } else { "Black to move" };
+    let ecu = if state.chess_turn == 0 { 0xFFDDDDDD } else { 0xFFD4A854 };
+    draw_text_centered(vx + bt as i32 / 2, status_y, dfw, ecu);
 
-    if g.cpd >= 0 {
-        let wrn = alloc::format!("Selected: {}{}", 
-            (b'a' + (g.cpd % 8) as u8) as char,
-            8 - g.cpd / 8);
-        np(fp + gm as i32 / 2, uo + 18, &wrn, AG_);
+    if state.chess_selected >= 0 {
+        let ovf = alloc::format!("Selected: {}{}", 
+            (b'a' + (state.chess_selected % 8) as u8) as char,
+            8 - state.chess_selected / 8);
+        draw_text_centered(vx + bt as i32 / 2, status_y + 18, &ovf, AH_);
     }
 }
 
@@ -2327,27 +2327,27 @@ fn sbh(fp: i32, ae: i32, gm: u32, bm: u32, g: &MobileState) {
 
 
 
-fn ahj(fy: i32, fo: i32, dn: i32, dp: i32, s: u32) {
-    let dx = (dn - fy).gp();
-    let bg = -(dp - fo).gp();
-    let cr = if fy < dn { 1 } else { -1 };
-    let cq = if fo < dp { 1 } else { -1 };
-    let mut rq = dx + bg;
-    let mut cx = fy;
-    let mut ae = fo;
+fn draw_line(bm: i32, az: i32, x1: i32, y1: i32, color: u32) {
+    let dx = (x1 - bm).abs();
+    let ad = -(y1 - az).abs();
+    let am = if bm < x1 { 1 } else { -1 };
+    let ak = if az < y1 { 1 } else { -1 };
+    let mut err = dx + ad;
+    let mut cx = bm;
+    let mut u = az;
     loop {
-        ayl(cx, ae, s);
-        if cx == dn && ae == dp { break; }
-        let agl = 2 * rq;
-        if agl >= bg {
-            if cx == dn { break; }
-            rq += bg;
-            cx += cr;
+        aag(cx, u, color);
+        if cx == x1 && u == y1 { break; }
+        let pg = 2 * err;
+        if pg >= ad {
+            if cx == x1 { break; }
+            err += ad;
+            cx += am;
         }
-        if agl <= dx {
-            if ae == dp { break; }
-            rq += dx;
-            ae += cq;
+        if pg <= dx {
+            if u == y1 { break; }
+            err += dx;
+            u += ak;
         }
     }
 }

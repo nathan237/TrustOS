@@ -11,20 +11,20 @@ use alloc::vec::Vec;
 pub struct TaskId(pub u64);
 
 impl TaskId {
-    pub const Cfh: TaskId = TaskId(0);
+    pub const Alg: TaskId = TaskId(0);
 }
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TaskState {
     
-    At,
+    Ready,
     
-    Ai,
+    Running,
     
-    Hj,
+    Blocked,
     
-    Hh,
+    Terminated,
 }
 
 
@@ -32,72 +32,72 @@ pub enum TaskState {
 #[repr(usize)]
 pub enum TaskPriority {
     
-    Eg = 0,
+    Low = 0,
     
-    M = 1,
+    Normal = 1,
     
-    Ao = 2,
+    High = 2,
     
-    Dfs = 3,
+    RealTime = 3,
 }
 
 
 #[derive(Debug)]
 pub struct Task {
     
-    pub ad: TaskId,
+    pub id: TaskId,
     
-    pub j: String,
+    pub name: String,
     
-    pub g: TaskState,
+    pub state: TaskState,
     
-    pub abv: TaskPriority,
+    pub priority: TaskPriority,
     
-    pub ngl: Option<u8>,
+    pub cpu_affinity: Option<u8>,
     
-    pub bme: Vec<u64>,
+    pub capabilities: Vec<u64>,
     
-    pub tu: Option<TaskId>,
+    pub parent: Option<TaskId>,
     
-    pub cdu: AtomicU64,
+    pub cpu_time: AtomicU64,
 }
 
 impl Task {
     
-    pub fn new(j: String, abv: TaskPriority) -> Self {
+    pub fn new(name: String, priority: TaskPriority) -> Self {
         Self {
-            ad: super::uup(),
-            j,
-            g: TaskState::At,
-            abv,
-            ngl: None,
-            bme: Vec::new(),
-            tu: super::eoh(),
-            cdu: AtomicU64::new(0),
+            id: super::nki(),
+            name,
+            state: TaskState::Ready,
+            priority,
+            cpu_affinity: None,
+            capabilities: Vec::new(),
+            parent: super::byk(),
+            cpu_time: AtomicU64::new(0),
         }
     }
     
     
-    pub fn usw() -> Self {
+    pub fn njb() -> Self {
         Self {
-            ad: TaskId::Cfh,
-            j: String::from("idle"),
-            g: TaskState::Ai,
-            abv: TaskPriority::Eg,
-            ngl: None,
-            bme: Vec::new(),
-            tu: None,
-            cdu: AtomicU64::new(0),
+            id: TaskId::Alg,
+            name: String::from("idle"),
+            state: TaskState::Running,
+            priority: TaskPriority::Low,
+            cpu_affinity: None,
+            capabilities: Vec::new(),
+            parent: None,
+            cpu_time: AtomicU64::new(0),
         }
     }
     
     
-    pub fn or(&self) {
-        self.cdu.fetch_add(1, Ordering::Relaxed);
+    pub fn tick(&self) {
+        self.cpu_time.fetch_add(1, Ordering::Relaxed);
     }
     
     
-    pub fn ysw(&self) -> u64 {
-        self.cdu.load(Ordering::Relaxed)
+    pub fn qhl(&self) -> u64 {
+        self.cpu_time.load(Ordering::Relaxed)
     }
 }

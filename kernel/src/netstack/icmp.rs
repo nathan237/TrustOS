@@ -15,6 +15,9 @@ static PING_RESPONSES: Mutex<Vec<PingResponse>> = Mutex::new(Vec::new());
 /// ICMP error responses (time exceeded, destination unreachable)
 static ICMP_ERRORS: Mutex<Vec<IcmpError>> = Mutex::new(Vec::new());
 
+/// MEM-03: cap on the static ICMP queues (BUG-001).
+const ICMP_QUEUE_MAX: usize = 64;
+
 /// ICMP error info (for traceroute / scan detection)
 #[derive(Debug, Clone, Copy)]
 pub struct IcmpError {
@@ -81,16 +84,15 @@ pub fn handle_packet(data: &[u8], ttl: u8, source_ip: [u8; 4]) {
     
     match type_ {
         ICMP_ECHO_REQUEST => {
-            crate::serial_println!("[ICMP] Echo request id={} seq={}", id, seq);
-            send_echo_reply(id, seq, &data[8..]);
+            crate::serial_println!("[ICMP] Echo request from {}.{}.{}.{} id={} seq={}",
+                source_ip[0], source_ip[1], source_ip[2], source_ip[3], id, seq);
+            send_echo_reply(source_ip, id, seq, &data[8..]);
         }
         ICMP_ECHO_REPLY => {
             crate::serial_println!("[ICMP] Echo reply id={} seq={} ttl={}", id, seq, ttl);
-            PING_RESPONSES.lock().push(PingResponse {
-                seq,
-                ttl,
-                success: true,
-            });
+            let mut q = PING_RESPONSES.lock();
+            if q.len() >= ICMP_QUEUE_MAX { q.remove(0); }
+            q.push(PingResponse { seq, ttl, success: true });
         }
         ICMP_TIME_EXCEEDED | ICMP_DEST_UNREACHABLE => {
             // Extract embedded IP header from ICMP error payload
@@ -105,7 +107,9 @@ pub fn handle_packet(data: &[u8], ttl: u8, source_ip: [u8; 4]) {
                     source_ip[0], source_ip[1], source_ip[2], source_ip[3],
                     code,
                     orig_dest[0], orig_dest[1], orig_dest[2], orig_dest[3]);
-                ICMP_ERRORS.lock().push(IcmpError {
+                let mut q = ICMP_ERRORS.lock();
+                if q.len() >= ICMP_QUEUE_MAX { q.remove(0); }
+                q.push(IcmpError {
                     error_type: type_,
                     code,
                     source_ip,
@@ -155,7 +159,7 @@ pub fn send_echo_request(dest_ip: [u8; 4], id: u16, seq: u16) -> Result<(), &'st
 }
 
 /// Send ICMP echo reply
-fn send_echo_reply(id: u16, seq: u16, payload: &[u8]) {
+fn send_echo_reply(dest_ip: [u8; 4], id: u16, seq: u16, payload: &[u8]) {
     // Build ICMP echo reply
     let mut packet = Vec::new();
     
@@ -171,8 +175,11 @@ fn send_echo_reply(id: u16, seq: u16, payload: &[u8]) {
     packet[2] = (csum >> 8) as u8;
     packet[3] = (csum & 0xFF) as u8;
     
-    // TODO: Send back to source IP (need to track source in handle_packet)
-    crate::serial_println!("[ICMP] Would send echo reply id={} seq={}", id, seq);
+    // Send back to source IP
+    match crate::netstack::ip::send_packet(dest_ip, 1, &packet) {
+        Ok(()) => crate::serial_println!("[ICMP] Echo reply sent to {}.{}.{}.{}", dest_ip[0], dest_ip[1], dest_ip[2], dest_ip[3]),
+        Err(e) => crate::serial_println!("[ICMP] Echo reply FAILED: {}", e),
+    }
 }
 
 /// Wait for ping response

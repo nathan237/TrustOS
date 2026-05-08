@@ -2,154 +2,154 @@
 
 
 
-use alloc::string::{String, Gd};
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::fmt;
-use crate::tls13::{TlsSession, TlsError, nmh};
+use crate::tls13::{TlsSession, TlsError, hsy};
 use crate::netstack::tcp;
 
 
-fn slv() {
+fn lqj() {
     
-    if !crate::netstack::dhcp::flz() {
+    if !crate::netstack::dhcp::clk() {
         crate::serial_println!("[HTTPS] Waiting for network (DHCP)...");
-        crate::netstack::dhcp::ay();
+        crate::netstack::dhcp::start();
         
         
-        let ay = crate::logger::lh();
-        while !crate::netstack::dhcp::flz() {
+        let start = crate::logger::eg();
+        while !crate::netstack::dhcp::clk() {
             crate::netstack::poll();
             
-            if crate::logger::lh().ao(ay) > 5000 {
+            if crate::logger::eg().saturating_sub(start) > 5000 {
                 crate::serial_println!("[HTTPS] DHCP timeout, continuing anyway");
                 break;
             }
             
             
-            crate::thread::cix();
+            crate::thread::ajc();
         }
         
-        if crate::netstack::dhcp::flz() {
+        if crate::netstack::dhcp::clk() {
             crate::serial_println!("[HTTPS] Network ready");
         }
     }
 }
 
 
-pub struct Xa {
-    pub wt: u16,
-    pub zk: Vec<(String, String)>,
-    pub gj: Vec<u8>,
+pub struct Jz {
+    pub status_code: u16,
+    pub headers: Vec<(String, String)>,
+    pub body: Vec<u8>,
 }
 
-impl Xa {
-    pub fn hax(&self) -> String {
-        String::azw(&self.gj).bkc()
+impl Jz {
+    pub fn body_string(&self) -> String {
+        String::from_utf8_lossy(&self.body).into_owned()
     }
 }
 
 
 #[derive(Debug)]
 pub enum HttpsError {
-    Wj,
-    Rv,
+    DnsError,
+    ConnectionFailed,
     TlsError(TlsError),
-    Oi,
-    Xf,
+    Timeout,
+    InvalidResponse,
 }
 
 impl fmt::Display for HttpsError {
-    fn fmt(&self, bb: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            HttpsError::Wj => write!(bb, "DNS resolution failed"),
-            HttpsError::Rv => write!(bb, "Connection failed"),
-            HttpsError::TlsError(aa) => write!(bb, "TLS error: {:?}", aa),
-            HttpsError::Oi => write!(bb, "Connection timeout"),
-            HttpsError::Xf => write!(bb, "Invalid HTTP response"),
+            HttpsError::DnsError => write!(f, "DNS resolution failed"),
+            HttpsError::ConnectionFailed => write!(f, "Connection failed"),
+            HttpsError::TlsError(e) => write!(f, "TLS error: {:?}", e),
+            HttpsError::Timeout => write!(f, "Connection timeout"),
+            HttpsError::InvalidResponse => write!(f, "Invalid HTTP response"),
         }
     }
 }
 
 impl From<TlsError> for HttpsError {
-    fn from(aa: TlsError) -> Self {
-        HttpsError::TlsError(aa)
+    fn from(e: TlsError) -> Self {
+        HttpsError::TlsError(e)
     }
 }
 
 
-pub fn get(url: &str) -> Result<Xa, HttpsError> {
-    nyc(url, 0)
+pub fn get(url: &str) -> Result<Jz, HttpsError> {
+    ibn(url, 0)
 }
 
 
-fn nyc(url: &str, eo: u32) -> Result<Xa, HttpsError> {
-    if eo > 5 {
-        return Err(HttpsError::Xf);
+fn ibn(url: &str, depth: u32) -> Result<Jz, HttpsError> {
+    if depth > 5 {
+        return Err(HttpsError::InvalidResponse);
     }
     
     
-    let (kh, path, port) = vcn(url)?;
+    let (host, path, port) = nqn(url)?;
     
-    crate::serial_println!("[HTTPS] GET https://{}:{}{}", kh, port, path);
-    
-    
-    slv();
+    crate::serial_println!("[HTTPS] GET https://{}:{}{}", host, port, path);
     
     
-    let ip = crate::netstack::dns::ayo(&kh)
-        .ok_or(HttpsError::Wj)?;
-    
-    crate::serial_println!("[HTTPS] Resolved {} -> {}.{}.{}.{}", kh, ip[0], ip[1], ip[2], ip[3]);
+    lqj();
     
     
-    let ey = tcp::cue(ip, port)
-        .jd(|_| HttpsError::Rv)?;
+    let ip = crate::netstack::dns::yb(&host)
+        .ok_or(HttpsError::DnsError)?;
+    
+    crate::serial_println!("[HTTPS] Resolved {} -> {}.{}.{}.{}", host, ip[0], ip[1], ip[2], ip[3]);
     
     
-    if !tcp::dnd(ip, port, ey, 5000) {
-        return Err(HttpsError::Rv);
+    let src_port = tcp::azp(ip, port)
+        .map_err(|_| HttpsError::ConnectionFailed)?;
+    
+    
+    if !tcp::bjy(ip, port, src_port, 5000) {
+        return Err(HttpsError::ConnectionFailed);
     }
     
     crate::serial_println!("[HTTPS] TCP connected, starting TLS handshake");
     
     
-    let mut he = TlsSession::new(&kh);
+    let mut by = TlsSession::new(&host);
     
     
     {
-        let mut baq = |f: &[u8]| -> Result<(), TlsError> {
-            tcp::dlo(ip, port, ey, f)
-                .jd(|_| TlsError::Rv)
+        let mut send = |data: &[u8]| -> Result<(), TlsError> {
+            tcp::bjc(ip, port, src_port, data)
+                .map_err(|_| TlsError::ConnectionFailed)
         };
         
-        let mut lyi = 0u32;
-        let mut ehf = |k: &mut [u8]| -> Result<usize, TlsError> {
+        let mut gqs = 0u32;
+        let mut recv = |buf: &mut [u8]| -> Result<usize, TlsError> {
             
             for _ in 0..100 {
                 crate::netstack::poll();
                 
-                if let Some(f) = tcp::cme(ip, port, ey) {
-                    let len = f.len().v(k.len());
-                    k[..len].dg(&f[..len]);
-                    lyi = 0;
+                if let Some(data) = tcp::aus(ip, port, src_port) {
+                    let len = data.len().min(buf.len());
+                    buf[..len].copy_from_slice(&data[..len]);
+                    gqs = 0;
                     return Ok(len);
                 }
                 
                 
-                crate::thread::cix();
+                crate::thread::ajc();
             }
             
-            lyi += 1;
-            if lyi > 50 {
+            gqs += 1;
+            if gqs > 50 {
                 
                 crate::serial_println!("[TLS] Too many recv attempts, giving up");
-                return Err(TlsError::Ahe);
+                return Err(TlsError::ConnectionClosed);
             }
             
-            Err(TlsError::Zn)
+            Err(TlsError::WouldBlock)
         };
         
-        nmh(&mut he, &mut baq, &mut ehf)?;
+        hsy(&mut by, &mut send, &mut recv)?;
     }
     
     crate::serial_println!("[HTTPS] TLS handshake complete");
@@ -162,180 +162,180 @@ fn nyc(url: &str, eo: u32) -> Result<Xa, HttpsError> {
          Accept: */*\r\n\
          Connection: close\r\n\
          \r\n",
-        path, kh
+        path, host
     );
     
     
-    let ktj = he.npy(request.as_bytes())?;
-    tcp::dlo(ip, port, ey, &ktj)
-        .jd(|_| HttpsError::Rv)?;
+    let fur = by.encrypt(request.as_bytes())?;
+    tcp::bjc(ip, port, src_port, &fur)
+        .map_err(|_| HttpsError::ConnectionFailed)?;
     
     crate::serial_println!("[HTTPS] Request sent, waiting for response");
     
     
-    let mut dva = Vec::new();
+    let mut bon = Vec::new();
     
     for _ in 0..200 {
         crate::netstack::poll();
         
-        if let Some(f) = tcp::cme(ip, port, ey) {
+        if let Some(data) = tcp::aus(ip, port, src_port) {
             
-            if let Some(ajk) = vmt(&mut he, &f) {
-                dva.bk(&ajk);
+            if let Some(ry) = nym(&mut by, &data) {
+                bon.extend_from_slice(&ry);
             }
         }
         
         
-        if dva.len() > 12 {
+        if bon.len() > 12 {
             
-            if dva.ee(4).any(|d| d == b"\r\n\r\n") {
+            if bon.windows(4).any(|w| w == b"\r\n\r\n") {
                 
-                if tyt(&dva) {
+                if mto(&bon) {
                     break;
                 }
             }
         }
         
         
-        if tcp::bqr(ip, port, ey) {
+        if tcp::fin_received(ip, port, src_port) {
             break;
         }
         
-        crate::thread::cix();
+        crate::thread::ajc();
     }
     
     
-    let _ = tcp::bwx(ip, port, ey);
+    let _ = tcp::ams(ip, port, src_port);
     
     
-    let mk = vcm(&dva)?;
+    let fa = nqm(&bon)?;
     
     
-    if mk.wt >= 300 && mk.wt < 400 {
+    if fa.status_code >= 300 && fa.status_code < 400 {
         
-        for (j, bn) in &mk.zk {
-            if j.aqn() == "location" {
-                let fsk = if bn.cj("http://") || bn.cj("https://") {
-                    bn.clone()
-                } else if bn.cj("/") {
-                    alloc::format!("https://{}:{}{}", kh, port, bn)
+        for (name, value) in &fa.headers {
+            if name.to_lowercase() == "location" {
+                let cpe = if value.starts_with("http://") || value.starts_with("https://") {
+                    value.clone()
+                } else if value.starts_with("/") {
+                    alloc::format!("https://{}:{}{}", host, port, value)
                 } else {
-                    let gzr = match path.bhx('/') {
-                        Some(a) => &path[..=a],
+                    let dij = match path.rfind('/') {
+                        Some(i) => &path[..=i],
                         None => "/",
                     };
-                    alloc::format!("https://{}:{}{}{}", kh, port, gzr, bn)
+                    alloc::format!("https://{}:{}{}{}", host, port, dij, value)
                 };
-                crate::serial_println!("[HTTPS] Redirect {} -> {}", mk.wt, fsk);
+                crate::serial_println!("[HTTPS] Redirect {} -> {}", fa.status_code, cpe);
                 
-                if fsk.cj("http://") {
-                    return crate::netstack::http::get(&fsk)
-                        .map(|m| Xa {
-                            wt: m.wt,
-                            zk: m.zk,
-                            gj: m.gj,
+                if cpe.starts_with("http://") {
+                    return crate::netstack::http::get(&cpe)
+                        .map(|r| Jz {
+                            status_code: r.status_code,
+                            headers: r.headers,
+                            body: r.body,
                         })
-                        .jd(|_| HttpsError::Rv);
+                        .map_err(|_| HttpsError::ConnectionFailed);
                 }
-                return nyc(&fsk, eo + 1);
+                return ibn(&cpe, depth + 1);
             }
         }
     }
     
-    Ok(mk)
+    Ok(fa)
 }
 
 
-fn kol(f: &[u8]) -> Vec<u8> {
+fn fra(data: &[u8]) -> Vec<u8> {
     let mut result = Vec::new();
-    let mut u = 0;
+    let mut pos = 0;
     
-    while u < f.len() {
+    while pos < data.len() {
         
-        let mut cfx = u;
-        while cfx + 1 < f.len() {
-            if f[cfx] == b'\r' && f[cfx + 1] == b'\n' {
+        let mut ari = pos;
+        while ari + 1 < data.len() {
+            if data[ari] == b'\r' && data[ari + 1] == b'\n' {
                 break;
             }
-            cfx += 1;
+            ari += 1;
         }
         
-        if cfx + 1 >= f.len() {
+        if ari + 1 >= data.len() {
             break;
         }
         
         
-        let als = core::str::jg(&f[u..cfx]).unwrap_or("0");
-        let als = als.adk(';').next().unwrap_or("0").em();
-        let aiw = usize::wa(als, 16).unwrap_or(0);
+        let td = core::str::from_utf8(&data[pos..ari]).unwrap_or("0");
+        let td = td.split(';').next().unwrap_or("0").trim();
+        let rs = usize::from_str_radix(td, 16).unwrap_or(0);
         
-        if aiw == 0 {
+        if rs == 0 {
             break;
         }
         
-        let fet = cfx + 2;
-        let fes = fet + aiw;
+        let cgz = ari + 2;
+        let cgy = cgz + rs;
         
-        if fes > f.len() {
-            result.bk(&f[fet..]);
+        if cgy > data.len() {
+            result.extend_from_slice(&data[cgz..]);
             break;
         }
         
-        result.bk(&f[fet..fes]);
-        u = fes + 2;
+        result.extend_from_slice(&data[cgz..cgy]);
+        pos = cgy + 2;
     }
     
     result
 }
 
 
-fn vcn(url: &str) -> Result<(String, String, u16), HttpsError> {
-    let url = url.blj("https://").unwrap_or(url);
+fn nqn(url: &str) -> Result<(String, String, u16), HttpsError> {
+    let url = url.strip_prefix("https://").unwrap_or(url);
     
     
-    let (bej, path) = if let Some(plg) = url.du('/') {
-        (&url[..plg], &url[plg..])
+    let (host_port, path) = if let Some(slash_pos) = url.find('/') {
+        (&url[..slash_pos], &url[slash_pos..])
     } else {
         (url, "/")
     };
     
     
-    let (kh, port) = if let Some(dfa) = bej.bhx(':') {
-        let frc = &bej[dfa + 1..];
-        let port = frc.parse().unwrap_or(443);
-        (&bej[..dfa], port)
+    let (host, port) = if let Some(bfk) = host_port.rfind(':') {
+        let bva = &host_port[bfk + 1..];
+        let port = bva.parse().unwrap_or(443);
+        (&host_port[..bfk], port)
     } else {
-        (bej, 443u16)
+        (host_port, 443u16)
     };
     
-    Ok((String::from(kh), String::from(path), port))
+    Ok((String::from(host), String::from(path), port))
 }
 
 
-fn vmt(he: &mut TlsSession, f: &[u8]) -> Option<Vec<u8>> {
+fn nym(by: &mut TlsSession, data: &[u8]) -> Option<Vec<u8>> {
     let mut result = Vec::new();
-    let mut u = 0;
+    let mut pos = 0;
     
-    while u + 5 <= f.len() {
-        let go = u16::oa([f[u + 3], f[u + 4]]) as usize;
+    while pos + 5 <= data.len() {
+        let length = u16::from_be_bytes([data[pos + 3], data[pos + 4]]) as usize;
         
-        if u + 5 + go > f.len() {
+        if pos + 5 + length > data.len() {
             break;
         }
         
-        if let Ok(Some(ajk)) = he.jkd(&f[u..u + 5 + go]) {
+        if let Ok(Some(ry)) = by.process_record(&data[pos..pos + 5 + length]) {
             
-            if let Some((&ahg, ca)) = ajk.zpf() {
-                if ahg == 23 || ahg == 0 {
+            if let Some((&content_type, content)) = ry.split_last() {
+                if content_type == 23 || content_type == 0 {
                     
-                    result.bk(ca);
+                    result.extend_from_slice(content);
                 }
             } else {
-                result.bk(&ajk);
+                result.extend_from_slice(&ry);
             }
         }
         
-        u += 5 + go;
+        pos += 5 + length;
     }
     
     if result.is_empty() {
@@ -346,29 +346,29 @@ fn vmt(he: &mut TlsSession, f: &[u8]) -> Option<Vec<u8>> {
 }
 
 
-fn tyt(f: &[u8]) -> bool {
-    let eam = String::azw(f);
+fn mto(data: &[u8]) -> bool {
+    let brp = String::from_utf8_lossy(data);
     
     
-    if let Some(hmt) = eam.du("\r\n\r\n") {
-        let zk = &eam[..hmt];
+    if let Some(dri) = brp.find("\r\n\r\n") {
+        let headers = &brp[..dri];
         
         
-        for line in zk.ak() {
-            if line.aqn().cj("content-length:") {
-                if let Some(uea) = line.adk(':').goc(1) {
-                    if let Ok(byy) = uea.em().parse::<usize>() {
-                        let cvy = hmt + 4;
-                        return f.len() >= cvy + byy;
+        for line in headers.lines() {
+            if line.to_lowercase().starts_with("content-length:") {
+                if let Some(len_str) = line.split(':').nth(1) {
+                    if let Ok(anw) = len_str.trim().parse::<usize>() {
+                        let bao = dri + 4;
+                        return data.len() >= bao + anw;
                     }
                 }
             }
         }
         
         
-        if zk.aqn().contains("transfer-encoding: chunked") {
+        if headers.to_lowercase().contains("transfer-encoding: chunked") {
             
-            return eam.contains("0\r\n\r\n") || eam.pp("0\r\n");
+            return brp.contains("0\r\n\r\n") || brp.ends_with("0\r\n");
         }
         
         
@@ -379,57 +379,57 @@ fn tyt(f: &[u8]) -> bool {
 }
 
 
-fn vcm(f: &[u8]) -> Result<Xa, HttpsError> {
-    let eam = String::azw(f);
+fn nqm(data: &[u8]) -> Result<Jz, HttpsError> {
+    let brp = String::from_utf8_lossy(data);
     
     
-    let pom = eam.du("\r\n").ok_or(HttpsError::Xf)?;
-    let bli = &eam[..pom];
+    let jip = brp.find("\r\n").ok_or(HttpsError::InvalidResponse)?;
+    let ahd = &brp[..jip];
     
     
-    let ek: Vec<&str> = bli.ayt().collect();
-    if ek.len() < 2 {
-        return Err(HttpsError::Xf);
+    let au: Vec<&str> = ahd.split_whitespace().collect();
+    if au.len() < 2 {
+        return Err(HttpsError::InvalidResponse);
     }
     
-    let wt: u16 = ek[1].parse().jd(|_| HttpsError::Xf)?;
+    let status_code: u16 = au[1].parse().map_err(|_| HttpsError::InvalidResponse)?;
     
     
-    let hmt = eam.du("\r\n\r\n").ok_or(HttpsError::Xf)?;
-    let lbx = &eam[pom + 2..hmt];
+    let dri = brp.find("\r\n\r\n").ok_or(HttpsError::InvalidResponse)?;
+    let gam = &brp[jip + 2..dri];
     
     
-    let mut zk = Vec::new();
-    for line in lbx.ak() {
-        if let Some(dfa) = line.du(':') {
-            let j = line[..dfa].em().to_string();
-            let bn = line[dfa + 1..].em().to_string();
-            zk.push((j, bn));
+    let mut headers = Vec::new();
+    for line in gam.lines() {
+        if let Some(bfk) = line.find(':') {
+            let name = line[..bfk].trim().to_string();
+            let value = line[bfk + 1..].trim().to_string();
+            headers.push((name, value));
         }
     }
     
     
-    let cvy = hmt + 4;
-    let fry = if cvy < f.len() {
-        &f[cvy..]
+    let bao = dri + 4;
+    let cou = if bao < data.len() {
+        &data[bao..]
     } else {
         &[] as &[u8]
     };
     
     
-    let jbc = lbx.aqn().contains("transfer-encoding") 
-        && lbx.aqn().contains("chunked");
+    let erh = gam.to_lowercase().contains("transfer-encoding") 
+        && gam.to_lowercase().contains("chunked");
     
-    let gj = if jbc {
-        crate::serial_println!("[HTTPS] Decoding chunked transfer encoding ({} raw bytes)", fry.len());
-        kol(fry)
+    let body = if erh {
+        crate::serial_println!("[HTTPS] Decoding chunked transfer encoding ({} raw bytes)", cou.len());
+        fra(cou)
     } else {
-        fry.ip()
+        cou.to_vec()
     };
     
-    Ok(Xa {
-        wt,
-        zk,
-        gj,
+    Ok(Jz {
+        status_code,
+        headers,
+        body,
     })
 }

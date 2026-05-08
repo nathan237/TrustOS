@@ -157,7 +157,7 @@ pub struct Process {
     /// Controlling TTY index (None = no controlling terminal)
     pub controlling_tty: Option<u32>,
     /// Root directory (for chroot)
-    pub root_directory: String,
+    pub root_dir: String,
     /// Real user ID
     pub uid: u32,
     /// Real group ID
@@ -220,7 +220,7 @@ impl Process {
             pgid: pid,
             sid: pid,
             controlling_tty: None,
-            root_directory: String::from("/"),
+            root_dir: String::from("/"),
             uid: crate::auth::current_uid(),
             gid: crate::auth::current_gid(),
             euid: crate::auth::current_uid(),
@@ -230,7 +230,7 @@ impl Process {
     }
     
     /// Allocate a new file descriptor
-    pub fn allocator_fd(&mut self, vfs_fd: i32) -> i32 {
+    pub fn alloc_fd(&mut self, vfs_fd: i32) -> i32 {
         let fd = self.next_fd;
         self.next_fd += 1;
         self.fd_table.insert(fd, FdEntry { vfs_fd, flags: 0 });
@@ -291,7 +291,7 @@ impl ProcessTable {
         }
     }
     
-    fn allocator_pid(&self) -> Pid {
+    fn alloc_pid(&self) -> Pid {
         self.next_pid.fetch_add(1, Ordering::SeqCst)
     }
 }
@@ -326,13 +326,13 @@ pub fn init() {
 pub fn create(name: &str, ppid: Pid) -> Result<Pid, &'static str> {
     let mut table = PROCESS_TABLE.write();
     
-    let pid = table.allocator_pid();
-    let mut process = Process::new(pid, ppid, name, ProcessFlags(ProcessFlags::NONE));
+    let pid = table.alloc_pid();
+    let mut proc = Process::new(pid, ppid, name, ProcessFlags(ProcessFlags::NONE));
     
     // Inherit cwd and env from parent
     if let Some(parent) = table.processes.get(&ppid) {
-        process.cwd = parent.cwd.clone();
-        process.env = parent.env.clone();
+        proc.cwd = parent.cwd.clone();
+        proc.env = parent.env.clone();
     }
     
     // Add to parent's children
@@ -340,8 +340,8 @@ pub fn create(name: &str, ppid: Pid) -> Result<Pid, &'static str> {
         parent.children.push(pid);
     }
     
-    process.state = ProcessState::Ready;
-    table.processes.insert(pid, process);
+    proc.state = ProcessState::Ready;
+    table.processes.insert(pid, proc);
     
     crate::log_debug!("[PROC] Created process {} ({})", pid, name);
     Ok(pid)
@@ -356,7 +356,7 @@ pub fn fork() -> Result<Pid, &'static str> {
     let current = current_pid();
     
     // Read parent data while holding read lock
-    let (name, cwd, env, fd_table, next_fd, parent_cr3, memory, uid, gid, euid, egid, umask, pgid, sid, controlling_tty, root_directory) = {
+    let (name, cwd, env, fd_table, next_fd, parent_cr3, memory, uid, gid, euid, egid, umask, pgid, sid, controlling_tty, root_dir) = {
         let table = PROCESS_TABLE.read();
         let parent = table.processes.get(&current)
             .ok_or("Current process not found")?;
@@ -376,7 +376,7 @@ pub fn fork() -> Result<Pid, &'static str> {
             parent.pgid,
             parent.sid,
             parent.controlling_tty,
-            parent.root_directory.clone(),
+            parent.root_dir.clone(),
         )
     };
     
@@ -406,7 +406,7 @@ match crate::memory::cow::clone_cow(parent_cr3) {
     
     // Allocate PID and insert child under write lock
     let mut table = PROCESS_TABLE.write();
-    let pid = table.allocator_pid();
+    let pid = table.alloc_pid();
     
     let child = Process {
         pid,
@@ -428,7 +428,7 @@ match crate::memory::cow::clone_cow(parent_cr3) {
         pgid,       // inherits parent's process group
         sid,        // inherits parent's session
         controlling_tty,
-        root_directory,
+        root_dir,
         uid,
         gid,
         euid,
@@ -453,12 +453,12 @@ pub fn exit(code: i32) {
     let current = current_pid();
     let mut table = PROCESS_TABLE.write();
     
-    if let Some(process) = table.processes.get_mut(&current) {
-        process.state = ProcessState::Zombie;
-        process.exit_code = code;
+    if let Some(proc) = table.processes.get_mut(&current) {
+        proc.state = ProcessState::Zombie;
+        proc.exit_code = code;
         
         // Reparent children to init
-        let children: Vec<Pid> = process.children.drain(..).collect();
+        let children: Vec<Pid> = proc.children.drain(..).collect();
         for child_pid in children {
             if let Some(child) = table.processes.get_mut(&child_pid) {
                 child.ppid = PID_INITIALIZE;
@@ -476,13 +476,13 @@ pub fn exit(code: i32) {
 pub fn wait(pid: Pid) -> Result<i32, &'static str> {
     let mut table = PROCESS_TABLE.write();
     
-    let process = table.processes.get(&pid).ok_or("Process not found")?;
+    let proc = table.processes.get(&pid).ok_or("Process not found")?;
     
-    if process.state != ProcessState::Zombie {
+    if proc.state != ProcessState::Zombie {
         return Err("Process not yet exited");
     }
     
-    let exit_code = process.exit_code;
+    let exit_code = proc.exit_code;
     
     // Remove from process table
     table.processes.remove(&pid);
@@ -513,11 +513,11 @@ pub fn current_credentials() -> (u32, u32, u32, u32) {
 /// Set real and effective uid (setuid semantics)
 pub fn set_uid(pid: Pid, uid: u32) -> Result<(), &'static str> {
     let mut table = PROCESS_TABLE.write();
-    let process = table.processes.get_mut(&pid).ok_or("No such process")?;
+    let proc = table.processes.get_mut(&pid).ok_or("No such process")?;
     // Root can set to any uid; non-root can only set to their real uid
-    if process.euid == 0 || uid == process.uid {
-        process.uid = uid;
-        process.euid = uid;
+    if proc.euid == 0 || uid == proc.uid {
+        proc.uid = uid;
+        proc.euid = uid;
         Ok(())
     } else {
         Err("EPERM")
@@ -527,10 +527,10 @@ pub fn set_uid(pid: Pid, uid: u32) -> Result<(), &'static str> {
 /// Set real and effective gid (setgid semantics)
 pub fn set_gid(pid: Pid, gid: u32) -> Result<(), &'static str> {
     let mut table = PROCESS_TABLE.write();
-    let process = table.processes.get_mut(&pid).ok_or("No such process")?;
-    if process.euid == 0 || gid == process.gid {
-        process.gid = gid;
-        process.egid = gid;
+    let proc = table.processes.get_mut(&pid).ok_or("No such process")?;
+    if proc.euid == 0 || gid == proc.gid {
+        proc.gid = gid;
+        proc.egid = gid;
         Ok(())
     } else {
         Err("EPERM")
@@ -540,9 +540,9 @@ pub fn set_gid(pid: Pid, gid: u32) -> Result<(), &'static str> {
 /// Set umask, returns previous umask
 pub fn set_umask(pid: Pid, mask: u32) -> u32 {
     let mut table = PROCESS_TABLE.write();
-    if let Some(process) = table.processes.get_mut(&pid) {
-        let old = process.umask;
-        process.umask = mask & 0o777;
+    if let Some(proc) = table.processes.get_mut(&pid) {
+        let old = proc.umask;
+        proc.umask = mask & 0o777;
         old
     } else {
         0o022
@@ -585,8 +585,8 @@ pub fn is_running(pid: Pid) -> bool {
 
 /// Set process state
 pub fn set_state(pid: Pid, state: ProcessState) {
-    if let Some(process) = PROCESS_TABLE.write().processes.get_mut(&pid) {
-        process.state = state;
+    if let Some(proc) = PROCESS_TABLE.write().processes.get_mut(&pid) {
+        proc.state = state;
     }
 }
 
@@ -595,7 +595,7 @@ pub fn list() -> Vec<(Pid, String, ProcessState)> {
     PROCESS_TABLE.read()
         .processes
         .iter()
-        .map(|(pid, process)| (*pid, process.name.clone(), process.state))
+        .map(|(pid, proc)| (*pid, proc.name.clone(), proc.state))
         .collect()
 }
 
@@ -612,8 +612,8 @@ pub fn kill(pid: Pid) -> Result<(), &'static str> {
     
     let mut table = PROCESS_TABLE.write();
     
-    if let Some(process) = table.processes.get_mut(&pid) {
-        process.state = ProcessState::Dead;
+    if let Some(proc) = table.processes.get_mut(&pid) {
+        proc.state = ProcessState::Dead;
         crate::log_debug!("[PROC] Process {} killed", pid);
         Ok(())
     } else {
@@ -644,9 +644,9 @@ pub fn start_running(pid: Pid) {
 /// Record that a process has exited.  Marks it Zombie in the table.
 pub fn finish(pid: Pid, exit_code: i32) {
     let mut table = PROCESS_TABLE.write();
-    if let Some(process) = table.processes.get_mut(&pid) {
-        process.state = ProcessState::Zombie;
-        process.exit_code = exit_code;
+    if let Some(proc) = table.processes.get_mut(&pid) {
+        proc.state = ProcessState::Zombie;
+        proc.exit_code = exit_code;
         crate::log_debug!("[PROC] Process {} exited with code {}", pid, exit_code);
     }
 }
@@ -656,8 +656,8 @@ pub fn reap(pid: Pid) {
     let mut table = PROCESS_TABLE.write();
     
     // Reparent children to kernel (PID 0)
-    if let Some(process) = table.processes.get(&pid) {
-        let children: Vec<Pid> = process.children.clone();
+    if let Some(proc) = table.processes.get(&pid) {
+        let children: Vec<Pid> = proc.children.clone();
         for child_pid in children {
             if let Some(child) = table.processes.get_mut(&child_pid) {
                 child.ppid = PID_KERNEL;
@@ -675,8 +675,8 @@ pub fn reap(pid: Pid) {
 
 /// Update a process's memory layout in the table.
 pub fn set_memory(pid: Pid, memory: MemoryLayout) {
-    if let Some(process) = PROCESS_TABLE.write().processes.get_mut(&pid) {
-        process.memory = memory;
+    if let Some(proc) = PROCESS_TABLE.write().processes.get_mut(&pid) {
+        proc.memory = memory;
     }
 }
 
@@ -685,10 +685,10 @@ pub fn print_tree() {
     let table = PROCESS_TABLE.read();
     
     fn print_process(table: &ProcessTable, pid: Pid, depth: usize) {
-        if let Some(process) = table.processes.get(&pid) {
+        if let Some(proc) = table.processes.get(&pid) {
             let indent: String = (0..depth).map(|_| "  ").collect();
-            crate::serial_println!("{}[{}] {} ({:?})", indent, pid, process.name, process.state);
-            for child in &process.children {
+            crate::serial_println!("{}[{}] {} ({:?})", indent, pid, proc.name, proc.state);
+            for child in &proc.children {
                 print_process(table, *child, depth + 1);
             }
         }
@@ -701,26 +701,26 @@ pub fn print_tree() {
 /// Terminate a process immediately
 pub fn terminate(pid: Pid) {
     let mut table = PROCESS_TABLE.write();
-    if let Some(process) = table.processes.get_mut(&pid) {
-        process.state = ProcessState::Zombie;
-        process.exit_code = -9; // SIGKILL
+    if let Some(proc) = table.processes.get_mut(&pid) {
+        proc.state = ProcessState::Zombie;
+        proc.exit_code = -9; // SIGKILL
     }
 }
 
 /// Stop a process (SIGSTOP)
 pub fn stop(pid: Pid) {
     let mut table = PROCESS_TABLE.write();
-    if let Some(process) = table.processes.get_mut(&pid) {
-        process.state = ProcessState::Stopped;
+    if let Some(proc) = table.processes.get_mut(&pid) {
+        proc.state = ProcessState::Stopped;
     }
 }
 
 /// Resume a stopped process (SIGCONT)
 pub fn resume(pid: Pid) {
     let mut table = PROCESS_TABLE.write();
-    if let Some(process) = table.processes.get_mut(&pid) {
-        if process.state == ProcessState::Stopped {
-            process.state = ProcessState::Ready;
+    if let Some(proc) = table.processes.get_mut(&pid) {
+        if proc.state == ProcessState::Stopped {
+            proc.state = ProcessState::Ready;
         }
     }
 }
@@ -738,10 +738,10 @@ pub fn get_context(pid: Pid) -> Option<CpuContext> {
 }
 
 /// Set the CPU context for a process (used by ptrace)
-pub fn set_context(pid: Pid, context: &CpuContext) -> Result<(), &'static str> {
+pub fn set_context(pid: Pid, ctx: &CpuContext) -> Result<(), &'static str> {
     let mut table = PROCESS_TABLE.write();
-    if let Some(process) = table.processes.get_mut(&pid) {
-        process.context = context.clone();
+    if let Some(proc) = table.processes.get_mut(&pid) {
+        proc.context = ctx.clone();
         Ok(())
     } else {
         Err("Process not found")
@@ -757,8 +757,8 @@ pub fn set_pgid(pid: Pid, pgid: Pid) -> Result<(), &'static str> {
     let mut table = PROCESS_TABLE.write();
     let target_pid = if pid == 0 { current_pid() } else { pid };
     let new_pgid = if pgid == 0 { target_pid } else { pgid };
-    let process = table.processes.get_mut(&target_pid).ok_or("No such process")?;
-    process.pgid = new_pgid;
+    let proc = table.processes.get_mut(&target_pid).ok_or("No such process")?;
+    proc.pgid = new_pgid;
     Ok(())
 }
 
@@ -781,22 +781,22 @@ pub fn get_sid(pid: Pid) -> u32 {
 pub fn setsid() -> Result<u32, &'static str> {
     let pid = current_pid();
     let mut table = PROCESS_TABLE.write();
-    let process = table.processes.get_mut(&pid).ok_or("No such process")?;
+    let proc = table.processes.get_mut(&pid).ok_or("No such process")?;
     // Must not already be a process group leader
-    if process.pgid == pid {
+    if proc.pgid == pid {
         // Already a pgid leader — POSIX says EPERM, but we allow it for simplicity
     }
-    process.sid = pid;
-    process.pgid = pid;
-    process.controlling_tty = None;
+    proc.sid = pid;
+    proc.pgid = pid;
+    proc.controlling_tty = None;
     Ok(pid)
 }
 
 /// Set controlling TTY for current process
-pub fn set_controlling_tty(pid: Pid, tty_index: u32) {
+pub fn set_controlling_tty(pid: Pid, tty_idx: u32) {
     let mut table = PROCESS_TABLE.write();
-    if let Some(process) = table.processes.get_mut(&pid) {
-        process.controlling_tty = Some(tty_index);
+    if let Some(proc) = table.processes.get_mut(&pid) {
+        proc.controlling_tty = Some(tty_idx);
     }
 }
 
@@ -809,19 +809,19 @@ pub fn get_controlling_tty(pid: Pid) -> Option<u32> {
 /// Change root directory for a process (chroot)
 pub fn chroot(pid: Pid, new_root: &str) -> Result<(), &'static str> {
     let mut table = PROCESS_TABLE.write();
-    let process = table.processes.get_mut(&pid).ok_or("No such process")?;
+    let proc = table.processes.get_mut(&pid).ok_or("No such process")?;
     // Only root can chroot
-    if process.euid != 0 {
+    if proc.euid != 0 {
         return Err("EPERM");
     }
-    process.root_directory = String::from(new_root);
+    proc.root_dir = String::from(new_root);
     Ok(())
 }
 
 /// Get root directory for a process
 pub fn get_root_directory(pid: Pid) -> String {
     let table = PROCESS_TABLE.read();
-    table.processes.get(&pid).map(|p| p.root_directory.clone()).unwrap_or_else(|| String::from("/"))
+    table.processes.get(&pid).map(|p| p.root_dir.clone()).unwrap_or_else(|| String::from("/"))
 }
 
 /// Get all PIDs in a process group

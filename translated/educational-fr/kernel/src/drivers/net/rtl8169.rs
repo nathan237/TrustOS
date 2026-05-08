@@ -123,8 +123,8 @@ const DESCRIPTOR_LS: u32   = 1 << 28;  // Last Segment
 struct Descriptor {
     opts1: u32,  // OWN | EOR | FS | LS | length
     opts2: u32,  // VLAN tag, offload flags
-    buffer_lo: u32, // buffer physical address low
-    buffer_hi: u32, // buffer physical address high
+    buf_lo: u32, // buffer physical address low
+    buf_hi: u32, // buffer physical address high
 }
 
 // Implémentation de trait — remplit un contrat comportemental.
@@ -133,8 +133,8 @@ impl Default for Descriptor {
         Self {
             opts1: 0,
             opts2: 0,
-            buffer_lo: 0,
-            buffer_hi: 0,
+            buf_lo: 0,
+            buf_hi: 0,
         }
     }
 }
@@ -149,22 +149,22 @@ pub struct Rtl8169Driver {
     mac: [u8; 6],
 
     // Descriptor rings
-    receive_descs: Vec<Descriptor>,
-    transmit_descs: Vec<Descriptor>,
-    receive_buffers: Vec<Vec<u8>>,
-    transmit_buffers: Vec<Vec<u8>>,
+    rx_descs: Vec<Descriptor>,
+    tx_descs: Vec<Descriptor>,
+    rx_buffers: Vec<Vec<u8>>,
+    tx_buffers: Vec<Vec<u8>>,
 
     // Ring indices
-    receive_cur: usize,
-    transmit_cur: usize,
+    rx_cur: usize,
+    tx_cur: usize,
 
     // Statistics
-    transmit_packets: AtomicU64,
-    receive_packets: AtomicU64,
-    transmit_bytes: AtomicU64,
-    receive_bytes: AtomicU64,
-    transmit_errors: AtomicU64,
-    receive_errors: AtomicU64,
+    tx_packets: AtomicU64,
+    rx_packets: AtomicU64,
+    tx_bytes: AtomicU64,
+    rx_bytes: AtomicU64,
+    tx_errors: AtomicU64,
+    rx_errors: AtomicU64,
 
     // State
     link_up: AtomicBool,
@@ -179,18 +179,18 @@ pub fn new() -> Self {
             status: DriverStatus::Unloaded,
             mmio_base: 0,
             mac: [0x52, 0x54, 0x00, 0x81, 0x69, 0x00],
-            receive_descs: Vec::new(),
-            transmit_descs: Vec::new(),
-            receive_buffers: Vec::new(),
-            transmit_buffers: Vec::new(),
-            receive_cur: 0,
-            transmit_cur: 0,
-            transmit_packets: AtomicU64::new(0),
-            receive_packets: AtomicU64::new(0),
-            transmit_bytes: AtomicU64::new(0),
-            receive_bytes: AtomicU64::new(0),
-            transmit_errors: AtomicU64::new(0),
-            receive_errors: AtomicU64::new(0),
+            rx_descs: Vec::new(),
+            tx_descs: Vec::new(),
+            rx_buffers: Vec::new(),
+            tx_buffers: Vec::new(),
+            rx_cur: 0,
+            tx_cur: 0,
+            tx_packets: AtomicU64::new(0),
+            rx_packets: AtomicU64::new(0),
+            tx_bytes: AtomicU64::new(0),
+            rx_bytes: AtomicU64::new(0),
+            tx_errors: AtomicU64::new(0),
+            rx_errors: AtomicU64::new(0),
             link_up: AtomicBool::new(false),
             initialized: AtomicBool::new(false),
         }
@@ -200,47 +200,47 @@ pub fn new() -> Self {
 
     fn read8(&self, offset: u32) -> u8 {
         if self.mmio_base == 0 { return 0; }
-        let address = (self.mmio_base + offset as u64) as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+        let addr = (self.mmio_base + offset as u64) as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u8;
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { read_volatile(address) }
+unsafe { read_volatile(addr) }
     }
 
-    fn write8(&self, offset: u32, value: u8) {
+    fn write8(&self, offset: u32, val: u8) {
         if self.mmio_base == 0 { return; }
-        let address = (self.mmio_base + offset as u64) as *mut u8;
+        let addr = (self.mmio_base + offset as u64) as *mut u8;
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { write_volatile(address, value); }
+unsafe { write_volatile(addr, val); }
     }
 
     fn read16(&self, offset: u32) -> u16 {
         if self.mmio_base == 0 { return 0; }
-        let address = (self.mmio_base + offset as u64) as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+        let addr = (self.mmio_base + offset as u64) as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u16;
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { read_volatile(address) }
+unsafe { read_volatile(addr) }
     }
 
-    fn write16(&self, offset: u32, value: u16) {
+    fn write16(&self, offset: u32, val: u16) {
         if self.mmio_base == 0 { return; }
-        let address = (self.mmio_base + offset as u64) as *mut u16;
+        let addr = (self.mmio_base + offset as u64) as *mut u16;
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { write_volatile(address, value); }
+unsafe { write_volatile(addr, val); }
     }
 
     fn read32(&self, offset: u32) -> u32 {
         if self.mmio_base == 0 { return 0; }
-        let address = (self.mmio_base + offset as u64) as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+        let addr = (self.mmio_base + offset as u64) as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u32;
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { read_volatile(address) }
+unsafe { read_volatile(addr) }
     }
 
-    fn write32(&self, offset: u32, value: u32) {
+    fn write32(&self, offset: u32, val: u32) {
         if self.mmio_base == 0 { return; }
-        let address = (self.mmio_base + offset as u64) as *mut u32;
+        let addr = (self.mmio_base + offset as u64) as *mut u32;
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { write_volatile(address, value); }
+unsafe { write_volatile(addr, val); }
     }
 
     /// Convert virtual address to physical (HHDM)
@@ -297,43 +297,43 @@ const HHDM_OFFSET: u64 = 0xFFFF_8000_0000_0000;
     }
 
     /// Initialize RX descriptor ring and buffers
-    fn initialize_receive(&mut self) {
+    fn init_rx(&mut self) {
         crate::log_debug!("[RTL8169] Initializing RX ring ({} descriptors)", NUMBER_RECEIVE_DESCRIPTOR);
 
-        self.receive_descs = vec![Descriptor::default(); NUMBER_RECEIVE_DESCRIPTOR];
-        self.receive_buffers = Vec::with_capacity(NUMBER_RECEIVE_DESCRIPTOR);
+        self.rx_descs = vec![Descriptor::default(); NUMBER_RECEIVE_DESCRIPTOR];
+        self.rx_buffers = Vec::with_capacity(NUMBER_RECEIVE_DESCRIPTOR);
 
         for i in 0..NUMBER_RECEIVE_DESCRIPTOR {
             let buffer = vec![0u8; RECEIVE_BUFFER_SIZE];
-            let physical = Self::virt_to_physical(buffer.as_pointer() as u64);
+            let phys = Self::virt_to_physical(buffer.as_ptr() as u64);
 
             let mut flags = DESCRIPTOR_OWN | (RECEIVE_BUFFER_SIZE as u32 & 0x3FFF);
             if i == NUMBER_RECEIVE_DESCRIPTOR - 1 {
                 flags |= DESCRIPTOR_EOR; // Mark end of ring
             }
 
-            self.receive_descs[i].opts1 = flags;
-            self.receive_descs[i].opts2 = 0;
-            self.receive_descs[i].buffer_lo = physical as u32;
-            self.receive_descs[i].buffer_hi = (physical >> 32) as u32;
+            self.rx_descs[i].opts1 = flags;
+            self.rx_descs[i].opts2 = 0;
+            self.rx_descs[i].buf_lo = phys as u32;
+            self.rx_descs[i].buf_hi = (phys >> 32) as u32;
 
-            self.receive_buffers.push(buffer);
+            self.rx_buffers.push(buffer);
         }
 
         // Write RX descriptor ring address
-        let ring_physical = Self::virt_to_physical(self.receive_descs.as_pointer() as u64);
-        self.write32(REGISTER_RDSAR, ring_physical as u32);
-        self.write32(REGISTER_RDSAR_HI, (ring_physical >> 32) as u32);
+        let ring_phys = Self::virt_to_physical(self.rx_descs.as_ptr() as u64);
+        self.write32(REGISTER_RDSAR, ring_phys as u32);
+        self.write32(REGISTER_RDSAR_HI, (ring_phys >> 32) as u32);
 
-        self.receive_cur = 0;
+        self.rx_cur = 0;
     }
 
     /// Initialize TX descriptor ring and buffers
-    fn initialize_transmit(&mut self) {
+    fn init_tx(&mut self) {
         crate::log_debug!("[RTL8169] Initializing TX ring ({} descriptors)", NUMBER_TRANSMIT_DESCRIPTOR);
 
-        self.transmit_descs = vec![Descriptor::default(); NUMBER_TRANSMIT_DESCRIPTOR];
-        self.transmit_buffers = Vec::with_capacity(NUMBER_TRANSMIT_DESCRIPTOR);
+        self.tx_descs = vec![Descriptor::default(); NUMBER_TRANSMIT_DESCRIPTOR];
+        self.tx_buffers = Vec::with_capacity(NUMBER_TRANSMIT_DESCRIPTOR);
 
         for i in 0..NUMBER_TRANSMIT_DESCRIPTOR {
             let buffer = vec![0u8; RECEIVE_BUFFER_SIZE];
@@ -343,22 +343,22 @@ const HHDM_OFFSET: u64 = 0xFFFF_8000_0000_0000;
                 flags |= DESCRIPTOR_EOR; // Mark end of ring
             }
 
-            self.transmit_descs[i].opts1 = flags;
-            self.transmit_descs[i].opts2 = 0;
+            self.tx_descs[i].opts1 = flags;
+            self.tx_descs[i].opts2 = 0;
 
-            let physical = Self::virt_to_physical(buffer.as_pointer() as u64);
-            self.transmit_descs[i].buffer_lo = physical as u32;
-            self.transmit_descs[i].buffer_hi = (physical >> 32) as u32;
+            let phys = Self::virt_to_physical(buffer.as_ptr() as u64);
+            self.tx_descs[i].buf_lo = phys as u32;
+            self.tx_descs[i].buf_hi = (phys >> 32) as u32;
 
-            self.transmit_buffers.push(buffer);
+            self.tx_buffers.push(buffer);
         }
 
         // Write TX descriptor ring address
-        let ring_physical = Self::virt_to_physical(self.transmit_descs.as_pointer() as u64);
-        self.write32(REGISTER_TNPDS, ring_physical as u32);
-        self.write32(REGISTER_TNPDS_HI, (ring_physical >> 32) as u32);
+        let ring_phys = Self::virt_to_physical(self.tx_descs.as_ptr() as u64);
+        self.write32(REGISTER_TNPDS, ring_phys as u32);
+        self.write32(REGISTER_TNPDS_HI, (ring_phys >> 32) as u32);
 
-        self.transmit_cur = 0;
+        self.tx_cur = 0;
     }
 
     /// Configure and enable the NIC
@@ -397,14 +397,14 @@ const HHDM_OFFSET: u64 = 0xFFFF_8000_0000_0000;
 
     /// Check and update link status
     fn check_link(&mut self) {
-        let physical = self.read32(REGISTER_PHYSICAL_STATUS);
-        let up = physical & PHYSICAL_STATUS_LINK != 0;
+        let phy = self.read32(REGISTER_PHYSICAL_STATUS);
+        let up = phy & PHYSICAL_STATUS_LINK != 0;
         self.link_up.store(up, Ordering::SeqCst);
 
         if up {
-            let speed = if physical & PHYSICAL_STATUS_1000M != 0 {
+            let speed = if phy & PHYSICAL_STATUS_1000M != 0 {
                 1000
-            } else if physical & PHYSICAL_STATUS_100M != 0 {
+            } else if phy & PHYSICAL_STATUS_100M != 0 {
                 100
             } else {
                 10
@@ -419,7 +419,7 @@ const HHDM_OFFSET: u64 = 0xFFFF_8000_0000_0000;
 // ============================================================================
 
 impl Driver for Rtl8169Driver {
-    fn information(&self) -> &DriverInformation {
+    fn info(&self) -> &DriverInformation {
         &DRIVER_INFORMATION
     }
 
@@ -435,7 +435,7 @@ impl Driver for Rtl8169Driver {
         // Map MMIO (256 bytes is the standard register space)
         const RTL8169_MMIO_SIZE: usize = 4096;
         self.mmio_base = crate::memory::map_mmio(bar0, RTL8169_MMIO_SIZE)
-            .map_error(|e| {
+            .map_err(|e| {
                 crate::serial_println!("[RTL8169] map_mmio failed: {}", e);
                 "Failed to map RTL8169 MMIO"
             })?;
@@ -449,8 +449,8 @@ impl Driver for Rtl8169Driver {
         self.read_mac();
 
         // Initialize descriptor rings
-        self.initialize_receive();
-        self.initialize_transmit();
+        self.init_rx();
+        self.init_tx();
 
         // Configure and enable
         self.enable();
@@ -511,10 +511,10 @@ impl NetworkDriver for Rtl8169Driver {
 
     fn link_speed(&self) -> u32 {
         if self.mmio_base == 0 { return 0; }
-        let physical = self.read32(REGISTER_PHYSICAL_STATUS);
-        if physical & PHYSICAL_STATUS_1000M != 0 { 1000 }
-        else if physical & PHYSICAL_STATUS_100M != 0 { 100 }
-        else if physical & PHYSICAL_STATUS_10M != 0 { 10 }
+        let phy = self.read32(REGISTER_PHYSICAL_STATUS);
+        if phy & PHYSICAL_STATUS_1000M != 0 { 1000 }
+        else if phy & PHYSICAL_STATUS_100M != 0 { 100 }
+        else if phy & PHYSICAL_STATUS_10M != 0 { 10 }
         else { 0 }
     }
 
@@ -525,44 +525,44 @@ impl NetworkDriver for Rtl8169Driver {
         if data.len() > RECEIVE_BUFFER_SIZE { return Err("Packet too large"); }
         if data.len() < 14 { return Err("Packet too small"); }
 
-        let index = self.transmit_cur;
+        let idx = self.tx_cur;
 
         // Wait for descriptor to become available (OWN bit cleared by NIC)
         let mut timeout = 10_000;
-        while self.transmit_descs[index].opts1 & DESCRIPTOR_OWN != 0 {
+        while self.tx_descs[idx].opts1 & DESCRIPTOR_OWN != 0 {
             timeout -= 1;
             if timeout == 0 {
-                self.transmit_errors.fetch_add(1, Ordering::Relaxed);
+                self.tx_errors.fetch_add(1, Ordering::Relaxed);
                 return Err("TX timeout — descriptor still owned by NIC");
             }
             core::hint::spin_loop();
         }
 
         // Copy packet data to TX buffer
-        let buffer = &mut self.transmit_buffers[index];
+        let buffer = &mut self.tx_buffers[idx];
         buffer[..data.len()].copy_from_slice(data);
 
         // Update descriptor physical address (buffer may have moved)
-        let physical = Self::virt_to_physical(buffer.as_pointer() as u64);
-        self.transmit_descs[index].buffer_lo = physical as u32;
-        self.transmit_descs[index].buffer_hi = (physical >> 32) as u32;
+        let phys = Self::virt_to_physical(buffer.as_ptr() as u64);
+        self.tx_descs[idx].buf_lo = phys as u32;
+        self.tx_descs[idx].buf_hi = (phys >> 32) as u32;
 
         // Set descriptor flags: OWN + FS + LS + length (+ EOR if last)
         let mut flags = DESCRIPTOR_OWN | DESCRIPTOR_FILESYSTEM | DESCRIPTOR_LS | (data.len() as u32 & 0x3FFF);
-        if index == NUMBER_TRANSMIT_DESCRIPTOR - 1 {
+        if idx == NUMBER_TRANSMIT_DESCRIPTOR - 1 {
             flags |= DESCRIPTOR_EOR;
         }
-        self.transmit_descs[index].opts1 = flags;
-        self.transmit_descs[index].opts2 = 0;
+        self.tx_descs[idx].opts1 = flags;
+        self.tx_descs[idx].opts2 = 0;
 
         // Notify NIC: poll TX normal priority queue
         self.write8(REGISTER_TPPOLL, TPPOLL_NPQ);
 
         // Advance ring index
-        self.transmit_cur = (self.transmit_cur + 1) % NUMBER_TRANSMIT_DESCRIPTOR;
+        self.tx_cur = (self.tx_cur + 1) % NUMBER_TRANSMIT_DESCRIPTOR;
 
-        self.transmit_packets.fetch_add(1, Ordering::Relaxed);
-        self.transmit_bytes.fetch_add(data.len() as u64, Ordering::Relaxed);
+        self.tx_packets.fetch_add(1, Ordering::Relaxed);
+        self.tx_bytes.fetch_add(data.len() as u64, Ordering::Relaxed);
 
         Ok(())
     }
@@ -570,8 +570,8 @@ impl NetworkDriver for Rtl8169Driver {
     fn receive(&mut self) -> Option<Vec<u8>> {
         if !self.initialized.load(Ordering::Relaxed) { return None; }
 
-        let index = self.receive_cur;
-        let opts1 = self.receive_descs[index].opts1;
+        let idx = self.rx_cur;
+        let opts1 = self.rx_descs[idx].opts1;
 
         // Check if NIC has released this descriptor (OWN bit cleared)
         if opts1 & DESCRIPTOR_OWN != 0 {
@@ -581,33 +581,33 @@ impl NetworkDriver for Rtl8169Driver {
         // Check for first+last segment (we only support single-segment packets)
         if opts1 & (DESCRIPTOR_FILESYSTEM | DESCRIPTOR_LS) != (DESCRIPTOR_FILESYSTEM | DESCRIPTOR_LS) {
             // Multi-descriptor packet — reclaim and skip
-            self.receive_errors.fetch_add(1, Ordering::Relaxed);
-            self.reclaim_receive(index);
+            self.rx_errors.fetch_add(1, Ordering::Relaxed);
+            self.reclaim_rx(idx);
             return None;
         }
 
         // Extract packet length (bits 0..13, minus 4 for CRC)
         let length = (opts1 & 0x3FFF) as usize;
         if length < 4 || length > RECEIVE_BUFFER_SIZE {
-            self.receive_errors.fetch_add(1, Ordering::Relaxed);
-            self.reclaim_receive(index);
+            self.rx_errors.fetch_add(1, Ordering::Relaxed);
+            self.reclaim_rx(idx);
             return None;
         }
 
         let packet_length = length - 4; // Strip CRC
         if packet_length == 0 {
-            self.reclaim_receive(index);
+            self.reclaim_rx(idx);
             return None;
         }
 
         // Copy packet data
-        let packet = self.receive_buffers[index][..packet_length].to_vec();
+        let packet = self.rx_buffers[idx][..packet_length].to_vec();
 
         // Reclaim descriptor
-        self.reclaim_receive(index);
+        self.reclaim_rx(idx);
 
-        self.receive_packets.fetch_add(1, Ordering::Relaxed);
-        self.receive_bytes.fetch_add(packet_length as u64, Ordering::Relaxed);
+        self.rx_packets.fetch_add(1, Ordering::Relaxed);
+        self.rx_bytes.fetch_add(packet_length as u64, Ordering::Relaxed);
 
         Some(packet)
     }
@@ -616,28 +616,28 @@ impl NetworkDriver for Rtl8169Driver {
         if !self.initialized.load(Ordering::Relaxed) { return; }
 
         // Read and acknowledge interrupt status
-        let interrupt_handler = self.read16(REGISTER_INTERRUPT_HANDLER);
-        if interrupt_handler != 0 {
-            self.write16(REGISTER_INTERRUPT_HANDLER, interrupt_handler); // Clear by writing back
+        let isr = self.read16(REGISTER_INTERRUPT_HANDLER);
+        if isr != 0 {
+            self.write16(REGISTER_INTERRUPT_HANDLER, isr); // Clear by writing back
         }
 
         // Update link status on link change
-        if interrupt_handler & INT_LINK_CHG != 0 {
-            let physical = self.read32(REGISTER_PHYSICAL_STATUS);
-            self.link_up.store(physical & PHYSICAL_STATUS_LINK != 0, Ordering::SeqCst);
+        if isr & INT_LINK_CHG != 0 {
+            let phy = self.read32(REGISTER_PHYSICAL_STATUS);
+            self.link_up.store(phy & PHYSICAL_STATUS_LINK != 0, Ordering::SeqCst);
         }
     }
 
     fn stats(&self) -> NetStats {
         NetStats {
-            transmit_packets: self.transmit_packets.load(Ordering::Relaxed),
-            receive_packets: self.receive_packets.load(Ordering::Relaxed),
-            transmit_bytes: self.transmit_bytes.load(Ordering::Relaxed),
-            receive_bytes: self.receive_bytes.load(Ordering::Relaxed),
-            transmit_errors: self.transmit_errors.load(Ordering::Relaxed),
-            receive_errors: self.receive_errors.load(Ordering::Relaxed),
-            transmit_dropped: 0,
-            receive_dropped: 0,
+            tx_packets: self.tx_packets.load(Ordering::Relaxed),
+            rx_packets: self.rx_packets.load(Ordering::Relaxed),
+            tx_bytes: self.tx_bytes.load(Ordering::Relaxed),
+            rx_bytes: self.rx_bytes.load(Ordering::Relaxed),
+            tx_errors: self.tx_errors.load(Ordering::Relaxed),
+            rx_errors: self.rx_errors.load(Ordering::Relaxed),
+            tx_dropped: 0,
+            rx_dropped: 0,
         }
     }
 
@@ -657,14 +657,14 @@ impl NetworkDriver for Rtl8169Driver {
 // Bloc d'implémentation — définit les méthodes du type ci-dessus.
 impl Rtl8169Driver {
     /// Reclaim an RX descriptor back to the NIC
-    fn reclaim_receive(&mut self, index: usize) {
+    fn reclaim_rx(&mut self, idx: usize) {
         let mut flags = DESCRIPTOR_OWN | (RECEIVE_BUFFER_SIZE as u32 & 0x3FFF);
-        if index == NUMBER_RECEIVE_DESCRIPTOR - 1 {
+        if idx == NUMBER_RECEIVE_DESCRIPTOR - 1 {
             flags |= DESCRIPTOR_EOR;
         }
-        self.receive_descs[index].opts1 = flags;
-        self.receive_descs[index].opts2 = 0;
-        self.receive_cur = (self.receive_cur + 1) % NUMBER_RECEIVE_DESCRIPTOR;
+        self.rx_descs[idx].opts1 = flags;
+        self.rx_descs[idx].opts2 = 0;
+        self.rx_cur = (self.rx_cur + 1) % NUMBER_RECEIVE_DESCRIPTOR;
     }
 }
 

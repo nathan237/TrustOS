@@ -35,13 +35,13 @@ pub fn set_interrupted() {
 pub(crate) // Variable atomique — accès thread-safe sans verrou.
 static CAPTURE_MODE: AtomicBool = AtomicBool::new(false);
 /// Buffer for captured output during pipe execution
-static CAPTURE_BUFFER: SpinMutex<String> = SpinMutex::new(String::new());
+static CAPTURE_BUF: SpinMutex<String> = SpinMutex::new(String::new());
 
 /// Append text to the capture buffer (called from print macros when capture mode is on)
 pub fn capture_write(s: &str) {
     if CAPTURE_MODE.load(core::sync::atomic::Ordering::Relaxed) {
-        let mut buffer = CAPTURE_BUFFER.lock();
-        buffer.push_str(s);
+        let mut buf = CAPTURE_BUF.lock();
+        buf.push_str(s);
     }
 }
 
@@ -53,19 +53,17 @@ pub fn is_capturing() -> bool {
 /// Clear the capture buffer and return its contents.
 /// Used by the desktop terminal to retrieve command output.
 pub fn take_captured() -> String {
-    let mut buffer = CAPTURE_BUFFER.lock();
-    let s = buffer.clone();
-    buffer.clear();
-    s
+    let mut buf = CAPTURE_BUF.lock();
+    core::mem::take(&mut *buf)
 }
 
 /// Draw a solid block cursor at the current console position (no cursor movement).
 /// Uses fill_rect directly to avoid non-ASCII character encoding issues.
 #[inline]
 fn show_cursor_block() {
-    let (column, row) = crate::framebuffer::get_cursor();
+    let (col, row) = crate::framebuffer::get_cursor();
     crate::framebuffer::fill_rect(
-        (column * 8) as u32, (row * 16) as u32, 8, 16, COLOR_GREEN,
+        (col * 8) as u32, (row * 16) as u32, 8, 16, COLOR_GREEN,
     );
 }
 
@@ -77,8 +75,8 @@ fn show_cursor_block() {
 #[repr(C)]
 // Structure publique — visible à l'extérieur de ce module.
 pub struct MatrixRenderParams {
-    pub buffer_pointer: *mut u32,
-    pub buffer_length: usize,
+    pub buf_ptr: *mut u32,
+    pub buf_len: usize,
     pub width: u32,
     pub height: u32,
     pub matrix_chars: *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
@@ -103,8 +101,8 @@ pub(super) fn render_matrix_columns_parallel(start: usize, end: usize, data: *mu
     let params = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe { &*(data as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const MatrixRenderParams) };
-    let buffer_pointer = params.buffer_pointer;
-    let buffer_length = params.buffer_length;
+    let buf_ptr = params.buf_ptr;
+    let buf_len = params.buf_len;
     let width = params.width;
     let height = params.height;
     let holo_pointer = params.holo_intensity;
@@ -113,16 +111,16 @@ const MatrixRenderParams) };
     
     let column_width = 8u32;
     
-    for column in start..end {
-        if column >= 240 { break; }
+    for col in start..end {
+        if col >= 240 { break; }
         
-        let x = column as u32 * column_width;
+        let x = col as u32 * column_width;
         if x >= width { continue; }
         
         let head = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { *params.matrix_heads.add(column) };
-        let start_row = (head - 5).maximum(0) as usize;
-        let end_row = if head + 30 < 0 { 0 } else { ((head + 30) as usize).minimum(matrix_rows) };
+unsafe { *params.matrix_heads.add(col) };
+        let start_row = (head - 5).max(0) as usize;
+        let end_row = if head + 30 < 0 { 0 } else { ((head + 30) as usize).min(matrix_rows) };
         
         for row in start_row..end_row {
             let y = row as u32 * 16;
@@ -139,7 +137,7 @@ unsafe { *params.matrix_heads.add(column) };
                 255 - (dist as u32 * 8)
             } else if dist <= 28 {
                 // Safely calculate fade to avoid underflow
-                let factor = ((dist - 12) as u32).minimum(15) * 16;
+                let factor = ((dist - 12) as u32).min(15) * 16;
                 let fade = 255u32.saturating_sub(factor);
                 (160 * fade) / 255
             } else {
@@ -147,7 +145,7 @@ unsafe { *params.matrix_heads.add(column) };
             };
             
             // Flat index for matrix access
-            let flat_index = column * matrix_rows + row;
+            let flat_index = col * matrix_rows + row;
             
             // Apply holo intensity modifier if present
             // Character to use (may be overridden by holo)
@@ -181,14 +179,14 @@ unsafe { *params.matrix_chars.add(flat_index) as char };
                     
                     if bits != 0 {
                         let x_usize = x as usize;
-                        if bits & 0x80 != 0 { let index = row_offset + x_usize; if index < buffer_length { *buffer_pointer.add(index) = color; } }
-                        if bits & 0x40 != 0 { let index = row_offset + x_usize + 1; if index < buffer_length { *buffer_pointer.add(index) = color; } }
-                        if bits & 0x20 != 0 { let index = row_offset + x_usize + 2; if index < buffer_length { *buffer_pointer.add(index) = color; } }
-                        if bits & 0x10 != 0 { let index = row_offset + x_usize + 3; if index < buffer_length { *buffer_pointer.add(index) = color; } }
-                        if bits & 0x08 != 0 { let index = row_offset + x_usize + 4; if index < buffer_length { *buffer_pointer.add(index) = color; } }
-                        if bits & 0x04 != 0 { let index = row_offset + x_usize + 5; if index < buffer_length { *buffer_pointer.add(index) = color; } }
-                        if bits & 0x02 != 0 { let index = row_offset + x_usize + 6; if index < buffer_length { *buffer_pointer.add(index) = color; } }
-                        if bits & 0x01 != 0 { let index = row_offset + x_usize + 7; if index < buffer_length { *buffer_pointer.add(index) = color; } }
+                        if bits & 0x80 != 0 { let idx = row_offset + x_usize; if idx < buf_len { *buf_ptr.add(idx) = color; } }
+                        if bits & 0x40 != 0 { let idx = row_offset + x_usize + 1; if idx < buf_len { *buf_ptr.add(idx) = color; } }
+                        if bits & 0x20 != 0 { let idx = row_offset + x_usize + 2; if idx < buf_len { *buf_ptr.add(idx) = color; } }
+                        if bits & 0x10 != 0 { let idx = row_offset + x_usize + 3; if idx < buf_len { *buf_ptr.add(idx) = color; } }
+                        if bits & 0x08 != 0 { let idx = row_offset + x_usize + 4; if idx < buf_len { *buf_ptr.add(idx) = color; } }
+                        if bits & 0x04 != 0 { let idx = row_offset + x_usize + 5; if idx < buf_len { *buf_ptr.add(idx) = color; } }
+                        if bits & 0x02 != 0 { let idx = row_offset + x_usize + 6; if idx < buf_len { *buf_ptr.add(idx) = color; } }
+                        if bits & 0x01 != 0 { let idx = row_offset + x_usize + 7; if idx < buf_len { *buf_ptr.add(idx) = color; } }
                     }
                 }
             }
@@ -215,7 +213,7 @@ const SHELL_COMMANDS: &[&str] = &[
     "hwtest", "keytest", "hexdump", "xxd", "panic",
     // Hardware debug toolkit
     "hwdiag", "cpudump", "stacktrace", "backtrace", "bootlog", "postcode",
-    "ioport", "rdmsr", "wrmsr", "cpuid", "memmap", "watchdog",
+    "ioport", "rdmsr", "wrmsr", "cpuid", "memmap", "watchdog", "drv",
     // Desktop GUI (multi-layer compositor)
     "desktop", "gui", "mobile", "cosmic", "open", "trustedit",
     // Kernel signature
@@ -237,7 +235,7 @@ const SHELL_COMMANDS: &[&str] = &[
     // ThinkPad EC / Power
     "fan", "temp", "sensors", "cpufreq", "speedstep",
     // Network
-    "ifconfig", "ip", "ipconfig", "ping", "curl", "wget", "download",
+    "ifconfig", "ip", "ipconfig", "wifi", "ping", "curl", "wget", "download",
     "nslookup", "dig", "arp", "route", "netstat",
     // Unix utilities  
     "which", "file", "chmod", "ln", "sort", "uniq", "cut",
@@ -253,6 +251,10 @@ const SHELL_COMMANDS: &[&str] = &[
     "lab", "trustlab",
     // TrustProbe
     "hwscan", "trustprobe", "probe",
+    // HWDiag
+    "hwdbg", "hwdebug",
+    // Marionet
+    "marionet", "mario",
     // Fun
     "neofetch", "matrix", "cowsay", "rain",
     // Showcase
@@ -272,6 +274,8 @@ const SHELL_COMMANDS: &[&str] = &[
     "cut", "tr", "tee", "xargs", "chmod", "chown", "ln", "readlink",
     "watch", "timeout", "tar", "gzip", "zip", "unzip",
     "service", "systemctl", "crontab", "at", "read",
+    // Debug / network console
+    "netconsole", "nc", "strace",
 ];
 
 /// Run the kernel shell
@@ -293,17 +297,17 @@ pub fn run() -> ! {
     // Run startup script (.trustrc)
     unix::run_trustrc();
     
-    let mut command_buffer = [0u8; 512];
+    let mut cmd_buffer = [0u8; 512];
     
         // Boucle infinie — tourne jusqu'à un `break` explicite.
 loop {
         print_prompt();
         
         // Read command with autocomplete support
-        let len = read_line_with_autocomplete(&mut command_buffer);
+        let len = read_line_with_autocomplete(&mut cmd_buffer);
         
         // Parse and execute
-        let command_str = core::str::from_utf8(&command_buffer[..len]).unwrap_or("");
+        let command_str = core::str::from_utf8(&cmd_buffer[..len]).unwrap_or("");
         clear_interrupted(); // Reset Ctrl+C flag before each command
         execute_command(command_str.trim());
     }
@@ -315,7 +319,7 @@ fn read_line_with_autocomplete(buffer: &mut [u8]) -> usize {
                           KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_HOME, KEY_END, KEY_DELETE,
                           KEY_PGUP, KEY_PGDOWN};
     
-    let mut position: usize = 0;
+    let mut pos: usize = 0;
     let mut cursor: usize = 0;
     let mut suggestions: Vec<&str> = Vec::new();
     let mut suggestion_index: i32 = -1; // -1 means no suggestion selected
@@ -354,7 +358,7 @@ loop {
         if let Some(c) = read_char() {
             // Auto-snap to live view on any non-scroll keypress
             if c != KEY_PGUP && c != KEY_PGDOWN && crate::framebuffer::is_scrolled_back() {
-                let (_column, row) = crate::framebuffer::restore_live_view();
+                let (_col, row) = crate::framebuffer::restore_live_view();
                 input_row = row;
                 // current_line already contains prompt + typed text (scrollback tracks it).
                 // Just position the cursor at the right spot within the input.
@@ -362,7 +366,7 @@ loop {
             }
             
             // Hide cursor before processing
-            let under_cursor = if cursor < position { buffer[cursor] as char } else { ' ' };
+            let under_cursor = if cursor < pos { buffer[cursor] as char } else { ' ' };
             crate::print_framebuffer_only!("{}", under_cursor);
             crate::print_framebuffer_only!("\x08");
             cursor_visible = true;
@@ -378,20 +382,20 @@ match c {
                     if suggestion_index >= 0 && (suggestion_index as usize) < suggestions.len() {
                         let selected = suggestions[suggestion_index as usize];
                         clear_suggestions_at_row(input_row, suggestions.len());
-                        clear_line_display(input_column_start, input_row, position);
+                        clear_line_display(input_column_start, input_row, pos);
                         let bytes = selected.as_bytes();
-                        let len = bytes.len().minimum(buffer.len() - 1);
+                        let len = bytes.len().min(buffer.len() - 1);
                         buffer[..len].copy_from_slice(&bytes[..len]);
-                        position = len;
+                        pos = len;
                         cursor = len;
-                        for i in 0..position {
+                        for i in 0..pos {
                             crate::print!("{}", buffer[i] as char);
                         }
                     } else if showing_suggestions {
                         clear_suggestions_at_row(input_row, suggestions.len());
                     }
                     crate::println!();
-                    let cmd = core::str::from_utf8(&buffer[..position]).unwrap_or("");
+                    let cmd = core::str::from_utf8(&buffer[..pos]).unwrap_or("");
                     if !cmd.trim().is_empty() {
                         add_to_history(cmd);
                     }
@@ -400,24 +404,24 @@ match c {
                 b'\t' => {
                     // Tab: complete with first/selected suggestion
                     if !suggestions.is_empty() {
-                        let index = if suggestion_index >= 0 { suggestion_index as usize } else { 0 };
-                        let selected = suggestions[index];
+                        let idx = if suggestion_index >= 0 { suggestion_index as usize } else { 0 };
+                        let selected = suggestions[idx];
                         clear_suggestions_at_row(input_row, suggestions.len());
-                        clear_line_display(input_column_start, input_row, position);
+                        clear_line_display(input_column_start, input_row, pos);
                         let bytes = selected.as_bytes();
-                        let len = bytes.len().minimum(buffer.len() - 1);
+                        let len = bytes.len().min(buffer.len() - 1);
                         buffer[..len].copy_from_slice(&bytes[..len]);
-                        position = len;
+                        pos = len;
                         cursor = len;
-                        for i in 0..position {
+                        for i in 0..pos {
                             crate::print!("{}", buffer[i] as char);
                         }
                         suggestion_index = -1;
                         showing_suggestions = false;
                         suggestions.clear();
-                        if position < buffer.len() - 1 {
-                            buffer[position] = b' ';
-                            position += 1;
+                        if pos < buffer.len() - 1 {
+                            buffer[pos] = b' ';
+                            pos += 1;
                             cursor += 1;
                             crate::print!(" ");
                         }
@@ -440,22 +444,22 @@ match c {
                             clear_suggestions_at_row(input_row, suggestions.len());
                             crate::framebuffer::set_cursor(input_column_start + cursor, input_row);
                         }
-                        for i in cursor..position {
+                        for i in cursor..pos {
                             buffer[i - 1] = buffer[i];
                         }
-                        position = position.saturating_sub(1);
+                        pos = pos.saturating_sub(1);
                         cursor = cursor.saturating_sub(1);
                         crate::print_framebuffer_only!("\x08");
-                        for i in cursor..position {
+                        for i in cursor..pos {
                             crate::print!("{}", buffer[i] as char);
                         }
                         crate::print_framebuffer_only!(" ");
-                        for _ in cursor..=position {
+                        for _ in cursor..=pos {
                             crate::print_framebuffer_only!("\x08");
                         }
                         // Update and show suggestions
-                        update_suggestions(buffer, position, &mut suggestions);
-                        if !suggestions.is_empty() && position > 0 {
+                        update_suggestions(buffer, pos, &mut suggestions);
+                        if !suggestions.is_empty() && pos > 0 {
                             show_suggestions_at_row(input_row, &suggestions, suggestion_index);
                             showing_suggestions = true;
                             crate::framebuffer::set_cursor(input_column_start + cursor, input_row);
@@ -466,21 +470,21 @@ match c {
                     }
                 }
                 KEY_UP => {
-                    if position == 0 {
+                    if pos == 0 {
                         // No input: navigate history
-                        if let Some(previous) = history_previous() {
-                            let bytes = previous.as_bytes();
-                            let len = bytes.len().minimum(buffer.len() - 1);
+                        if let Some(prev) = history_previous() {
+                            let bytes = prev.as_bytes();
+                            let len = bytes.len().min(buffer.len() - 1);
                             buffer[..len].copy_from_slice(&bytes[..len]);
-                            position = len;
+                            pos = len;
                             cursor = len;
-                            crate::print!("{}", &previous[..len]);
+                            crate::print!("{}", &prev[..len]);
                         }
                     } else {
                         // Has input: show/navigate suggestions
                         if !showing_suggestions {
                             // First UP press: show suggestions
-                            update_suggestions(buffer, position, &mut suggestions);
+                            update_suggestions(buffer, pos, &mut suggestions);
                             if !suggestions.is_empty() {
                                 suggestion_index = 0;
                                 show_suggestions_at_row(input_row, &suggestions, suggestion_index);
@@ -502,18 +506,18 @@ match c {
                     }
                 }
                 KEY_DOWN => {
-                    if position == 0 {
+                    if pos == 0 {
                         // No input: navigate history
                         if let Some(next) = history_next() {
                             let bytes = next.as_bytes();
-                            let len = bytes.len().minimum(buffer.len() - 1);
+                            let len = bytes.len().min(buffer.len() - 1);
                             buffer[..len].copy_from_slice(&bytes[..len]);
-                            position = len;
+                            pos = len;
                             cursor = len;
                             crate::print!("{}", &next[..len]);
                         } else {
-                            clear_line_display(input_column_start, input_row, position);
-                            position = 0;
+                            clear_line_display(input_column_start, input_row, pos);
+                            pos = 0;
                             cursor = 0;
                         }
                     } else if showing_suggestions && !suggestions.is_empty() {
@@ -534,7 +538,7 @@ match c {
                     }
                 }
                 KEY_RIGHT => {
-                    if cursor < position {
+                    if cursor < pos {
                         crate::print!("{}", buffer[cursor] as char);
                         cursor += 1;
                     }
@@ -546,30 +550,30 @@ match c {
                     }
                 }
                 KEY_END => {
-                    while cursor < position {
+                    while cursor < pos {
                         crate::print!("{}", buffer[cursor] as char);
                         cursor += 1;
                     }
                 }
                 KEY_DELETE => {
-                    if cursor < position {
+                    if cursor < pos {
                         if showing_suggestions {
                             clear_suggestions_at_row(input_row, suggestions.len());
                             crate::framebuffer::set_cursor(input_column_start + cursor, input_row);
                         }
-                        for i in cursor..position.saturating_sub(1) {
+                        for i in cursor..pos.saturating_sub(1) {
                             buffer[i] = buffer[i + 1];
                         }
-                        position = position.saturating_sub(1);
-                        for i in cursor..position {
+                        pos = pos.saturating_sub(1);
+                        for i in cursor..pos {
                             crate::print!("{}", buffer[i] as char);
                         }
                         crate::print_framebuffer_only!(" ");
-                        for _ in cursor..=position {
+                        for _ in cursor..=pos {
                             crate::print_framebuffer_only!("\x08");
                         }
-                        update_suggestions(buffer, position, &mut suggestions);
-                        if !suggestions.is_empty() && position > 0 {
+                        update_suggestions(buffer, pos, &mut suggestions);
+                        if !suggestions.is_empty() && pos > 0 {
                             show_suggestions_at_row(input_row, &suggestions, suggestion_index);
                             showing_suggestions = true;
                             crate::framebuffer::set_cursor(input_column_start + cursor, input_row);
@@ -595,7 +599,7 @@ match c {
                 27 => {
                     // Escape - reset scroll to bottom (live view)
                     if crate::framebuffer::is_scrolled_back() {
-                        let (_column, row) = crate::framebuffer::restore_live_view();
+                        let (_col, row) = crate::framebuffer::restore_live_view();
                         input_row = row;
                         // current_line already has the content; just position cursor
                         crate::framebuffer::set_cursor(input_column_start + cursor, input_row);
@@ -610,7 +614,7 @@ match c {
                     crate::print_color!(COLOR_RED, "^C");
                     crate::println!();
                     set_interrupted();
-                    position = 0;
+                    pos = 0;
                     break;
                 }
                 12 => {
@@ -621,14 +625,14 @@ match c {
                     }
                     crate::framebuffer::clear();
                     print_prompt();
-                    for i in 0..position {
+                    for i in 0..pos {
                         crate::print!("{}", buffer[i] as char);
                     }
-                    for _ in cursor..position {
+                    for _ in cursor..pos {
                         crate::print_framebuffer_only!("\x08");
                     }
                 }
-                c if c >= 0x20 && c < 0x7F && position < buffer.len() - 1 => {
+                c if c >= 0x20 && c < 0x7F && pos < buffer.len() - 1 => {
                     // Printable character
                     // First, restore cursor to input line if suggestions were showing
                     if showing_suggestions {
@@ -636,23 +640,23 @@ match c {
                         crate::framebuffer::set_cursor(input_column_start + cursor, input_row);
                     }
                     
-                    if cursor < position {
-                        for i in (cursor..position).rev() {
+                    if cursor < pos {
+                        for i in (cursor..pos).rev() {
                             buffer[i + 1] = buffer[i];
                         }
                     }
                     buffer[cursor] = c;
-                    position += 1;
+                    pos += 1;
                     cursor += 1;
-                    for i in cursor - 1..position {
+                    for i in cursor - 1..pos {
                         crate::print!("{}", buffer[i] as char);
                     }
-                    for _ in cursor..position {
+                    for _ in cursor..pos {
                         crate::print_framebuffer_only!("\x08");
                     }
                     
                     // Update and show suggestions if we have matches
-                    update_suggestions(buffer, position, &mut suggestions);
+                    update_suggestions(buffer, pos, &mut suggestions);
                     if !suggestions.is_empty() {
                         show_suggestions_at_row(input_row, &suggestions, suggestion_index);
                         showing_suggestions = true;
@@ -678,17 +682,19 @@ match c {
                 if cursor_visible {
                     show_cursor_block();
                 } else {
-                    let under_cursor = if cursor < position { buffer[cursor] as char } else { ' ' };
+                    let under_cursor = if cursor < pos { buffer[cursor] as char } else { ' ' };
                     crate::print_framebuffer_only!("{}", under_cursor);
                     crate::print_framebuffer_only!("\x08");
                 }
             }
             // Poll network stack while idle (DHCP, packet RX, etc.)
+            // Delay net polling for first ~5s after shell start to avoid crashes
+            // when NIC is fresh from PXE boot (gives user time to type netconsole cmd)
             {
                                 // Variable atomique — accès thread-safe sans verrou.
 static POLL_DIVISOR: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
                 let count = POLL_DIVISOR.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
-                if count % 5000 == 0 {
+                if count > 500_000 && count % 5000 == 0 {
                     crate::netstack::poll();
                 }
                 // Poll mesh network more frequently for RPC responsiveness
@@ -705,23 +711,23 @@ static POLL_DIVISOR: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU
     }
     
     // Hide cursor before returning
-    let under_cursor = if cursor < position { buffer[cursor] as char } else { ' ' };
+    let under_cursor = if cursor < pos { buffer[cursor] as char } else { ' ' };
     crate::print_framebuffer_only!("{}", under_cursor);
-    if cursor < position { crate::print_framebuffer_only!("\x08"); }
+    if cursor < pos { crate::print_framebuffer_only!("\x08"); }
     
-    buffer[position] = 0;
-    position
+    buffer[pos] = 0;
+    pos
 }
 
 /// Update autocomplete suggestions based on current input
-fn update_suggestions(buffer: &[u8], position: usize, suggestions: &mut Vec<&'static str>) {
+fn update_suggestions(buffer: &[u8], pos: usize, suggestions: &mut Vec<&'static str>) {
     suggestions.clear();
-    if position == 0 {
+    if pos == 0 {
         return;
     }
     
     let input = // Correspondance de motifs — branchement exhaustif de Rust.
-match core::str::from_utf8(&buffer[..position]) {
+match core::str::from_utf8(&buffer[..pos]) {
         Ok(s) => s,
         Err(_) => return,
     };
@@ -743,7 +749,7 @@ match core::str::from_utf8(&buffer[..position]) {
 
 /// Display suggestions starting from the row below input.
 /// Uses raw drawing to avoid corrupting the scrollback buffer.
-fn show_suggestions_at_row(input_row: usize, suggestions: &[&str], selected_index: i32) {
+fn show_suggestions_at_row(input_row: usize, suggestions: &[&str], selected_idx: i32) {
     if suggestions.is_empty() {
         return;
     }
@@ -758,7 +764,7 @@ fn show_suggestions_at_row(input_row: usize, suggestions: &[&str], selected_inde
         let row = input_row + 1 + i;
         if row >= maximum_row { break; } // Stop rendering off-screen
         crate::framebuffer::clear_char_row(row);
-        if i as i32 == selected_index {
+        if i as i32 == selected_idx {
             let prefix = alloc::format!(" > {}", cmd);
             crate::framebuffer::draw_text_raw(0, row, &prefix, fg, bg);
         } else {
@@ -782,11 +788,11 @@ fn clear_suggestions_at_row(input_row: usize, count: usize) {
 
 /// Clear the current input line display (from input_col_start to end of input).
 /// Uses raw pixel clearing for the character cells, then repositions the console cursor.
-fn clear_line_display(input_column_start: usize, input_row: usize, position: usize) {
+fn clear_line_display(input_column_start: usize, input_row: usize, pos: usize) {
     let (width, _) = crate::framebuffer::get_dimensions();
     let cols = (width as usize) / 8; // CHAR_WIDTH = 8
     // Clear from input_col_start to end of typed text (plus some margin)
-    let clear_length = (position + 2).minimum(cols.saturating_sub(input_column_start));
+    let clear_length = (pos + 2).min(cols.saturating_sub(input_column_start));
     // Draw spaces directly on the framebuffer (bypasses Writer/scrollback)
     let spaces: alloc::string::String = core::iter::repeat(' ').take(clear_length).collect();
     crate::framebuffer::draw_text_raw(input_column_start, input_row, &spaces, 0xFF000000, 0xFF000000);
@@ -824,9 +830,9 @@ fn print_prompt() {
 
 /// Read a line from keyboard input (public for REPL use)
 pub fn read_line() -> alloc::string::String {
-    let mut buffer = [0u8; 512];
-    let len = crate::keyboard::read_line(&mut buffer);
-    core::str::from_utf8(&buffer[..len]).unwrap_or("").into()
+    let mut buf = [0u8; 512];
+    let len = crate::keyboard::read_line(&mut buf);
+    core::str::from_utf8(&buf[..len]).unwrap_or("").into()
 }
 
 /// Execute a shell command (handles pipes and redirection)
@@ -901,8 +907,8 @@ fn capture_command(cmd: &str, piped_input: Option<String>) -> String {
     // Enable capture mode
     CAPTURE_MODE.store(true, core::sync::atomic::Ordering::SeqCst);
     {
-        let mut buffer = CAPTURE_BUFFER.lock();
-        buffer.clear();
+        let mut buf = CAPTURE_BUF.lock();
+        buf.clear();
     }
     
     // Run the command (output goes to capture buffer via print macros)
@@ -910,15 +916,15 @@ fn capture_command(cmd: &str, piped_input: Option<String>) -> String {
     
     // Disable capture mode and return captured output
     CAPTURE_MODE.store(false, core::sync::atomic::Ordering::SeqCst);
-    let buffer = CAPTURE_BUFFER.lock();
-    buffer.clone()
+    let mut buf = CAPTURE_BUF.lock();
+    core::mem::take(&mut *buf)
 }
 
 /// Execute a single command, possibly with piped stdin
 fn execute_single(cmd: &str, piped_input: Option<String>) {
     
     // Handle output redirection (skip > inside parentheses or quotes)
-    let (command_part, redirect) = {
+    let (cmd_part, redirect) = {
         let mut redir_position: Option<usize> = None;
         let mut paren_depth: i32 = 0;
         let mut in_single_quote = false;
@@ -926,9 +932,9 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         let bytes = cmd.as_bytes();
         let mut i = 0;
         while i < bytes.len() {
-            let character = bytes[i] as char;
+            let ch = bytes[i] as char;
                         // Correspondance de motifs — branchement exhaustif de Rust.
-match character {
+match ch {
                 '\'' if !in_double_quote => in_single_quote = !in_single_quote,
                 '"' if !in_single_quote => in_double_quote = !in_double_quote,
                 '(' if !in_single_quote && !in_double_quote => paren_depth += 1,
@@ -943,21 +949,21 @@ match character {
             }
             i += 1;
         }
-        if let Some(position) = redir_position {
-            let append = cmd[position..].starts_with(">>");
+        if let Some(pos) = redir_position {
+            let append = cmd[pos..].starts_with(">>");
             let file = if append {
-                cmd[position + 2..].trim()
+                cmd[pos + 2..].trim()
             } else {
-                cmd[position + 1..].trim()
+                cmd[pos + 1..].trim()
             };
-            (cmd[..position].trim(), Some((file, append)))
+            (cmd[..pos].trim(), Some((file, append)))
         } else {
             (cmd, None)
         }
     };
     
     // Split into command and arguments
-    let parts: Vec<&str> = command_part.split_whitespace().collect();
+    let parts: Vec<&str> = cmd_part.split_whitespace().collect();
     if parts.is_empty() {
         return;
     }
@@ -966,12 +972,12 @@ match character {
     let command = parts[0];
     if let Some(alias_value) = unix::get_alias(command) {
         // Re-execute with expanded alias
-        let new_command = if parts.len() > 1 {
+        let new_cmd = if parts.len() > 1 {
             alloc::format!("{} {}", alias_value, parts[1..].join(" "))
         } else {
             alias_value
         };
-        execute_command(&new_command);
+        execute_command(&new_cmd);
         return;
     }
     let command = parts[0];
@@ -1008,9 +1014,9 @@ match command {
         "date" => commands::command_date(),
         "whoami" => commands::command_whoami(),
         "hostname" => commands::command_hostname(),
-        "id" => commands::command_id(),
+        "id" => commands::cmd_id(),
         "env" | "printenv" => commands::command_env(),
-        "history" => commands::command_history(),
+        "history" => commands::cmd_history(),
         "ps" => commands::command_ps(),
         "free" => commands::command_free(),
         "df" => commands::command_df(),
@@ -1166,6 +1172,7 @@ match args[0] {
         "daw" | "trustdaw" => vm::command_daw(args),
         "ifconfig" | "ip" => vm::command_ifconfig(),
         "ipconfig" => vm::command_ipconfig(args),
+        "wifi" => commands::command_wifi(args),
         "ping" => vm::command_ping(args),
         "tcpsyn" => vm::command_tcpsyn(args),
         "httpget" => vm::command_httpget(args),
@@ -1236,7 +1243,7 @@ match args[0] {
         "xargs" => unix::command_xargs(args, piped_input.as_deref()),
         "chmod" => unix::command_chmod(args),
         "chown" => unix::command_chown(args),
-        "ln" => unix::command_line(args),
+        "ln" => unix::cmd_ln(args),
         "readlink" => unix::command_readlink(args),
         "watch" => unix::command_watch(args),
         "timeout" => unix::command_timeout(args),
@@ -1252,7 +1259,7 @@ match args[0] {
         "read" => unix::command_read(args),
 
         "yes" => unix::command_yes(args),
-        "seq" => unix::command_sequence(args),
+        "seq" => unix::cmd_seq(args),
         "sleep" => unix::command_sleep(args),
         "kill" => unix::command_kill(args),
         "killall" => unix::command_killall(args),
@@ -1333,6 +1340,8 @@ match args[0] {
         "cpuid" => unix::command_cpuid(args),
         "memmap" => unix::command_memmap(),
         "watchdog" | "wdt" => unix::command_watchdog(args),
+        "drv" | "driver" => unix::command_driver(args),
+        "netconsole" | "nc" => unix::command_netconsole(args),
 
         // -- ThinkPad EC: Fan, Thermal, CPU Frequency --
         "fan" => crate::drivers::thinkpad_ec::command_fan(args),
@@ -1348,6 +1357,8 @@ match args[0] {
         "trustview" | "tv" => apps::command_trustview(args),
         "lab" | "trustlab" => apps::command_lab(args),
         "hwscan" | "trustprobe" | "probe" => apps::command_hwscan(args),
+        "hwdbg" | "hwdebug" => crate::hwdiag::handle_hwdbg_command(args),
+        "marionet" | "mario" => crate::marionet::handle_command(args),
         "trustlang" | "tl" => apps::command_trustlang(args),
         "trustlang_showcase" | "tl_showcase" => apps::command_trustlang_showcase(),
         "film" | "trustos_film" => apps::command_trustos_film(),

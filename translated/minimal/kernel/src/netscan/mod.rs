@@ -23,45 +23,45 @@ use alloc::string::String;
 use alloc::format;
 
 
-pub fn aot(ip: [u8; 4]) -> String {
+pub fn uw(ip: [u8; 4]) -> String {
     format!("{}.{}.{}.{}", ip[0], ip[1], ip[2], ip[3])
 }
 
 
-pub fn eqs(ed: [u8; 6]) -> String {
+pub fn bzx(mac: [u8; 6]) -> String {
     format!("{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
-        ed[0], ed[1], ed[2], ed[3], ed[4], ed[5])
+        mac[0], mac[1], mac[2], mac[3], mac[4], mac[5])
 }
 
 
-pub fn ewb(e: &str) -> Option<[u8; 4]> {
-    let ek: alloc::vec::Vec<&str> = e.adk('.').collect();
-    if ek.len() != 4 { return None; }
+pub fn bof(j: &str) -> Option<[u8; 4]> {
+    let au: alloc::vec::Vec<&str> = j.split('.').collect();
+    if au.len() != 4 { return None; }
     Some([
-        ek[0].parse().bq()?,
-        ek[1].parse().bq()?,
-        ek[2].parse().bq()?,
-        ek[3].parse().bq()?,
+        au[0].parse().ok()?,
+        au[1].parse().ok()?,
+        au[2].parse().ok()?,
+        au[3].parse().ok()?,
     ])
 }
 
 
-pub fn lzr(cd: &str) -> Option<[u8; 4]> {
-    if let Some(ip) = ewb(cd) {
+pub fn gri(target: &str) -> Option<[u8; 4]> {
+    if let Some(ip) = bof(target) {
         Some(ip)
     } else {
-        crate::netstack::dns::ayo(cd)
+        crate::netstack::dns::yb(target)
     }
 }
 
 
-pub const AAL_: &[u16] = &[
+pub const ABY_: &[u16] = &[
     21, 22, 23, 25, 53, 80, 110, 111, 135, 139, 143, 443, 445,
     993, 995, 1433, 1521, 3306, 3389, 5432, 5900, 6379, 8080, 8443, 9200,
 ];
 
 
-pub const BHM_: &[u16] = &[
+pub const BJQ_: &[u16] = &[
     7, 9, 13, 21, 22, 23, 25, 26, 37, 53, 79, 80, 81, 88, 106, 110, 111,
     113, 119, 135, 139, 143, 144, 179, 199, 389, 427, 443, 444, 445, 465,
     513, 514, 515, 543, 544, 548, 554, 587, 631, 646, 873, 990, 993, 995,
@@ -74,7 +74,7 @@ pub const BHM_: &[u16] = &[
 ];
 
 
-pub fn fui(port: u16) -> &'static str {
+pub fn cqk(port: u16) -> &'static str {
     match port {
         7 => "echo",
         9 => "discard",

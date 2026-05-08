@@ -10,57 +10,57 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 
-const CL_: u64 = 4096;
+const CS_: u64 = 4096;
 
 
-static TG_: Mutex<Option<Aso>> = Mutex::new(None);
+static UN_: Mutex<Option<Sj>> = Mutex::new(None);
 
 
-static LJ_: AtomicU64 = AtomicU64::new(0);
+static MD_: AtomicU64 = AtomicU64::new(0);
 
-static QJ_: AtomicU64 = AtomicU64::new(0);
+static RG_: AtomicU64 = AtomicU64::new(0);
 
 
-struct Aso {
+struct Sj {
     
-    cdf: Vec<u64>,
+    bitmap: Vec<u64>,
     
-    blz: u64,
+    base_phys: u64,
     
-    agc: usize,
+    total_frames: usize,
     
-    lok: usize,
+    next_hint: usize,
 }
 
-impl Aso {
+impl Sj {
     
     fn alloc(&mut self) -> Option<u64> {
-        let aoh = self.cdf.len();
+        let um = self.bitmap.len();
         
         
-        for l in 0..aoh {
-            let w = (self.lok + l) % aoh;
-            let od = self.cdf[w];
+        for offset in 0..um {
+            let idx = (self.next_hint + offset) % um;
+            let fx = self.bitmap[idx];
             
-            if od == u64::O {
+            if fx == u64::MAX {
                 continue; 
             }
             
             
-            let ga = (!od).pvv() as usize;
-            let ebv = w * 64 + ga;
+            let bf = (!fx).trailing_zeros() as usize;
+            let bss = idx * 64 + bf;
             
-            if ebv >= self.agc {
+            if bss >= self.total_frames {
                 continue;
             }
             
             
-            self.cdf[w] |= 1u64 << ga;
-            self.lok = w;
+            self.bitmap[idx] |= 1u64 << bf;
+            self.next_hint = idx;
             
-            QJ_.fetch_add(1, Ordering::Relaxed);
+            RG_.fetch_add(1, Ordering::Relaxed);
             
-            return Some(self.blz + ebv as u64 * CL_);
+            return Some(self.base_phys + bss as u64 * CS_);
         }
         
         None 
@@ -68,290 +68,296 @@ impl Aso {
     
     
     
-    fn qgr(&mut self, ul: u64) -> Option<u64> {
-        let ulf = if ul <= self.blz {
+    fn alloc_below(&mut self, jm: u64) -> Option<u64> {
+        let ncx = if jm <= self.base_phys {
             return None;
         } else {
-            ((ul - self.blz) / CL_) as usize
+            ((jm - self.base_phys) / CS_) as usize
         };
-        let mh = ulf.v(self.agc);
-        let aoh = (mh + 63) / 64;
+        let cap = ncx.min(self.total_frames);
+        let um = (cap + 63) / 64;
         
-        for w in 0..aoh {
-            let od = self.cdf[w];
-            if od == u64::O {
+        for idx in 0..um {
+            let fx = self.bitmap[idx];
+            if fx == u64::MAX {
                 continue;
             }
-            let ga = (!od).pvv() as usize;
-            let ebv = w * 64 + ga;
-            if ebv >= mh {
+            let bf = (!fx).trailing_zeros() as usize;
+            let bss = idx * 64 + bf;
+            if bss >= cap {
                 continue;
             }
-            self.cdf[w] |= 1u64 << ga;
-            QJ_.fetch_add(1, Ordering::Relaxed);
-            return Some(self.blz + ebv as u64 * CL_);
+            self.bitmap[idx] |= 1u64 << bf;
+            RG_.fetch_add(1, Ordering::Relaxed);
+            return Some(self.base_phys + bss as u64 * CS_);
         }
         None
     }
     
     
-    fn aez(&mut self, ht: u64) {
-        if ht < self.blz {
+    fn free(&mut self, phys: u64) {
+        if phys < self.base_phys {
             return;
         }
-        let ebv = ((ht - self.blz) / CL_) as usize;
-        if ebv >= self.agc {
+        let bss = ((phys - self.base_phys) / CS_) as usize;
+        if bss >= self.total_frames {
             return;
         }
-        let pzq = ebv / 64;
-        let deh = ebv % 64;
+        let jrg = bss / 64;
+        let bew = bss % 64;
         
-        if self.cdf[pzq] & (1u64 << deh) != 0 {
-            self.cdf[pzq] &= !(1u64 << deh);
-            QJ_.fetch_sub(1, Ordering::Relaxed);
+        if self.bitmap[jrg] & (1u64 << bew) != 0 {
+            self.bitmap[jrg] &= !(1u64 << bew);
+            RG_.fetch_sub(1, Ordering::Relaxed);
         }
     }
 }
 
 
-pub struct Adt {
-    pub ar: u64,
-    pub go: u64,
+pub struct Mw {
+    pub base: u64,
+    pub length: u64,
 }
 
 
 
 
 
-pub fn init(fau: &[Adt], dhz: u64, cre: u64) {
-    if fau.is_empty() {
+pub fn init(cew: &[Mw], bgx: u64, atz: u64) {
+    if cew.is_empty() {
         crate::serial_println!("[FRAME] No usable regions — frame allocator disabled");
         return;
     }
     
     
-    let uol = fau.iter().map(|m| m.ar).v().unwrap();
-    let uls = fau.iter().map(|m| m.ar + m.go).am().unwrap();
+    let nfj = match cew.iter().map(|r| r.base).min() {
+        Some(v) => v,
+        None => { crate::serial_println!("[FRAME] BUG: no min in non-empty regions"); return; }
+    };
+    let ndf = match cew.iter().map(|r| r.base + r.length).max() {
+        Some(v) => v,
+        None => { crate::serial_println!("[FRAME] BUG: no max in non-empty regions"); return; }
+    };
     
     
-    let blz = uol & !(CL_ - 1);
-    let ieb = (uls + CL_ - 1) & !(CL_ - 1);
-    let agc = ((ieb - blz) / CL_) as usize;
+    let base_phys = nfj & !(CS_ - 1);
+    let eca = (ndf + CS_ - 1) & !(CS_ - 1);
+    let total_frames = ((eca - base_phys) / CS_) as usize;
     
     
-    let qpq = (agc + 63) / 64;
-    let mut cdf = vec![u64::O; qpq];
+    let kca = (total_frames + 63) / 64;
+    let mut bitmap = vec![u64::MAX; kca];
     
     
-    for aoz in fau {
-        let lyo = (aoz.ar.am(blz) - blz) / CL_;
-        let exn = ((aoz.ar + aoz.go).v(ieb) - blz) / CL_;
+    for qd in cew {
+        let gqx = (qd.base.max(base_phys) - base_phys) / CS_;
+        let cdf = ((qd.base + qd.length).min(eca) - base_phys) / CS_;
         
-        for frame in lyo..exn {
-            let od = frame as usize / 64;
-            let ga = frame as usize % 64;
-            cdf[od] &= !(1u64 << ga);
+        for frame in gqx..cdf {
+            let fx = frame as usize / 64;
+            let bf = frame as usize % 64;
+            bitmap[fx] &= !(1u64 << bf);
         }
     }
     
     
-    let ecv = dhz + cre;
-    if dhz >= blz && dhz < ieb {
-        let wsu = ((dhz - blz) / CL_) as usize;
-        let gge = (((ecv.v(ieb)) - blz) / CL_) as usize;
-        for frame in wsu..gge {
-            let od = frame / 64;
-            let ga = frame % 64;
-            cdf[od] |= 1u64 << ga;
+    let heap_end = bgx + atz;
+    if bgx >= base_phys && bgx < eca {
+        let owg = ((bgx - base_phys) / CS_) as usize;
+        let civ = (((heap_end.min(eca)) - base_phys) / CS_) as usize;
+        for frame in owg..civ {
+            let fx = frame / 64;
+            let bf = frame % 64;
+            bitmap[fx] |= 1u64 << bf;
         }
     }
     
     
     
-    if blz < 0x10_0000 {
-        let uin = (0x10_0000u64.v(ieb) - blz) / CL_;
-        for frame in 0..uin as usize {
-            let od = frame / 64;
-            let ga = frame % 64;
-            cdf[od] |= 1u64 << ga;
+    if base_phys < 0x10_0000 {
+        let nax = (0x10_0000u64.min(eca) - base_phys) / CS_;
+        for frame in 0..nax as usize {
+            let fx = frame / 64;
+            let bf = frame % 64;
+            bitmap[fx] |= 1u64 << bf;
         }
     }
     
     
-    let mut ivu: u64 = 0;
-    for a in 0..agc {
-        let od = a / 64;
-        let ga = a % 64;
-        if cdf[od] & (1u64 << ga) == 0 {
-            ivu += 1;
+    let mut enj: u64 = 0;
+    for i in 0..total_frames {
+        let fx = i / 64;
+        let bf = i % 64;
+        if bitmap[fx] & (1u64 << bf) == 0 {
+            enj += 1;
         }
     }
-    let pxp = agc as u64 - ivu;
+    let jpo = total_frames as u64 - enj;
     
-    LJ_.store(agc as u64, Ordering::SeqCst);
-    QJ_.store(pxp, Ordering::SeqCst);
+    MD_.store(total_frames as u64, Ordering::SeqCst);
+    RG_.store(jpo, Ordering::SeqCst);
     
     crate::serial_println!("[FRAME] Allocator ready: {} total frames, {} free ({} MB), {} used",
-        agc, ivu, ivu * 4 / 1024, pxp);
+        total_frames, enj, enj * 4 / 1024, jpo);
     
-    *TG_.lock() = Some(Aso {
-        cdf,
-        blz,
-        agc,
-        lok: 0,
+    *UN_.lock() = Some(Sj {
+        bitmap,
+        base_phys,
+        total_frames,
+        next_hint: 0,
     });
 }
 
 
 
-pub fn fcq() -> Option<u64> {
-    TG_.lock().as_mut()?.alloc()
+pub fn cfv() -> Option<u64> {
+    UN_.lock().as_mut()?.alloc()
 }
 
 
-pub fn apt(ht: u64) {
-    if let Some(alloc) = TG_.lock().as_mut() {
-        alloc.aez(ht);
+pub fn vk(phys: u64) {
+    if let Some(alloc) = UN_.lock().as_mut() {
+        alloc.free(phys);
     }
 }
 
 
-pub fn azg() -> Option<u64> {
-    let ht = fcq()?;
-    let hp = crate::memory::lr();
-    let ju = ht + hp;
-    core::sync::atomic::cxt(core::sync::atomic::Ordering::SeqCst);
+pub fn aan() -> Option<u64> {
+    let phys = cfv()?;
+    let bz = crate::memory::hhdm_offset();
+    let virt = phys + bz;
+    core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);
     unsafe {
-        core::ptr::ahx(ju as *mut u8, 0, CL_ as usize);
+        core::ptr::write_bytes(virt as *mut u8, 0, CS_ as usize);
     }
-    Some(ht)
+    Some(phys)
 }
 
 
 
-pub fn qgt() -> Option<u64> {
-    TG_.lock().as_mut()?.qgr(0x1_0000_0000)
+pub fn juv() -> Option<u64> {
+    UN_.lock().as_mut()?.alloc_below(0x1_0000_0000)
 }
 
 
-pub fn yer() -> Option<u64> {
-    let ht = qgt()?;
-    let hp = crate::memory::lr();
-    let ju = ht + hp;
-    core::sync::atomic::cxt(core::sync::atomic::Ordering::SeqCst);
+pub fn pxz() -> Option<u64> {
+    let phys = juv()?;
+    let bz = crate::memory::hhdm_offset();
+    let virt = phys + bz;
+    core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);
     unsafe {
-        core::ptr::ahx(ju as *mut u8, 0, CL_ as usize);
+        core::ptr::write_bytes(virt as *mut u8, 0, CS_ as usize);
     }
-    Some(ht)
+    Some(phys)
 }
 
 
-pub fn cm() -> (u64, u64) {
-    (LJ_.load(Ordering::Relaxed), QJ_.load(Ordering::Relaxed))
+pub fn stats() -> (u64, u64) {
+    (MD_.load(Ordering::Relaxed), RG_.load(Ordering::Relaxed))
 }
 
 
-pub fn eyj() -> (usize, usize) {
-    let mut cg = 0usize;
-    let mut gv = 0usize;
+pub fn cdp() -> (usize, usize) {
+    let mut passed = 0usize;
+    let mut bv = 0usize;
 
     
-    match fcq() {
-        Some(ht) => {
-            if ht & 0xFFF == 0 {
+    match cfv() {
+        Some(phys) => {
+            if phys & 0xFFF == 0 {
                 crate::serial_println!("[FRAME-TEST] alloc page-aligned: PASS");
-                cg += 1;
+                passed += 1;
             } else {
-                crate::serial_println!("[FRAME-TEST] alloc NOT page-aligned ({:#x}): FAIL", ht);
-                gv += 1;
+                crate::serial_println!("[FRAME-TEST] alloc NOT page-aligned ({:#x}): FAIL", phys);
+                bv += 1;
             }
-            apt(ht);
+            vk(phys);
         }
         None => {
             crate::serial_println!("[FRAME-TEST] alloc returned None: FAIL");
-            gv += 1;
+            bv += 1;
         }
     }
 
     
-    match azg() {
-        Some(ht) => {
-            let hp = crate::memory::lr();
-            let awl = unsafe { core::slice::anh((ht + hp) as *const u8, 4096) };
-            if awl.iter().xx(|&o| o == 0) {
+    match aan() {
+        Some(phys) => {
+            let bz = crate::memory::hhdm_offset();
+            let za = unsafe { core::slice::from_raw_parts((phys + bz) as *const u8, 4096) };
+            if za.iter().all(|&b| b == 0) {
                 crate::serial_println!("[FRAME-TEST] alloc_zeroed all zeros: PASS");
-                cg += 1;
+                passed += 1;
             } else {
                 crate::serial_println!("[FRAME-TEST] alloc_zeroed NOT zeroed: FAIL");
-                gv += 1;
+                bv += 1;
             }
-            apt(ht);
+            vk(phys);
         }
         None => {
             crate::serial_println!("[FRAME-TEST] alloc_zeroed returned None: FAIL");
-            gv += 1;
+            bv += 1;
         }
     }
 
     
-    if let Some(swu) = fcq() {
-        apt(swu);
-        if fcq().is_some() {
+    if let Some(frame1) = cfv() {
+        vk(frame1);
+        if cfv().is_some() {
             crate::serial_println!("[FRAME-TEST] free + realloc: PASS");
-            cg += 1;
+            passed += 1;
             
         } else {
             crate::serial_println!("[FRAME-TEST] realloc after free: FAIL");
-            gv += 1;
+            bv += 1;
         }
     }
 
     
-    let mut vj = alloc::vec::Vec::new();
-    let mut mkh = true;
+    let mut frames = alloc::vec::Vec::new();
+    let mut gyi = true;
     for _ in 0..16 {
-        match fcq() {
-            Some(bb) => {
-                if vj.contains(&bb) {
-                    crate::serial_println!("[FRAME-TEST] duplicate frame {:#x}: FAIL", bb);
-                    mkh = false;
+        match cfv() {
+            Some(f) => {
+                if frames.contains(&f) {
+                    crate::serial_println!("[FRAME-TEST] duplicate frame {:#x}: FAIL", f);
+                    gyi = false;
                     break;
                 }
-                vj.push(bb);
+                frames.push(f);
             }
             None => {
                 crate::serial_println!("[FRAME-TEST] OOM during multi-alloc: FAIL");
-                mkh = false;
+                gyi = false;
                 break;
             }
         }
     }
-    for bb in &vj {
-        apt(*bb);
+    for f in &frames {
+        vk(*f);
     }
-    if mkh {
+    if gyi {
         crate::serial_println!("[FRAME-TEST] 16 unique frames: PASS");
-        cg += 1;
+        passed += 1;
     } else {
-        gv += 1;
+        bv += 1;
     }
 
     
-    let (_, gvw) = cm();
-    if let Some(bb) = fcq() {
-        let (_, gvu) = cm();
-        if gvu == gvw + 1 {
+    let (_, used_before) = stats();
+    if let Some(f) = cfv() {
+        let (_, used_after) = stats();
+        if used_after == used_before + 1 {
             crate::serial_println!("[FRAME-TEST] stats consistent: PASS");
-            cg += 1;
+            passed += 1;
         } else {
-            crate::serial_println!("[FRAME-TEST] stats before={} after={}: FAIL", gvw, gvu);
-            gv += 1;
+            crate::serial_println!("[FRAME-TEST] stats before={} after={}: FAIL", used_before, used_after);
+            bv += 1;
         }
-        apt(bb);
+        vk(f);
     } else {
         crate::serial_println!("[FRAME-TEST] stats test alloc failed: FAIL");
-        gv += 1;
+        bv += 1;
     }
 
-    (cg, gv)
+    (passed, bv)
 }

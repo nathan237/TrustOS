@@ -87,19 +87,19 @@ pub fn current() -> &'static Self {
         #[cfg(target_arch = "x86_64")]
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-            let self_pointer: u64;
+            let self_ptr: u64;
             core::arch::asm!(
                 "mov {}, gs:[0]",
-                out(reg) self_pointer,
+                out(reg) self_ptr,
                 options(pure, nomem, nostack)
             );
             
             // Fallback if GS not set up yet (early boot)
-            if self_pointer == 0 {
+            if self_ptr == 0 {
                 return &PERCPU_BLOCKS[0];
             }
             
-            return &*(self_pointer as *const Self);
+            return &*(self_ptr as *const Self);
         }
         #[cfg(not(target_arch = "x86_64"))]
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
@@ -273,7 +273,7 @@ unsafe { Some(&PERCPU_BLOCKS[cpu_id as usize]) }
 }
 
 /// Get number of active CPUs
-pub fn number_cpus() -> usize {
+pub fn num_cpus() -> usize {
     NUMBER_CPUS.load(Ordering::Relaxed)
 }
 

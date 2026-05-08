@@ -96,8 +96,8 @@ pub struct NetworkStats {
 #[repr(C, packed)]
 // Public structure — visible outside this module.
 pub struct EthernetHeader {
-    pub destination_mac: [u8; 6],
-    pub source_mac: [u8; 6],
+    pub dst_mac: [u8; 6],
+    pub src_mac: [u8; 6],
     pub ethertype: u16,
 }
 
@@ -228,7 +228,7 @@ pub fn detect_platform() -> Platform {
     // Method 1: CPUID leaf 0x40000000 (hypervisor brand string)
     // rbx is reserved by LLVM — save/restore via stack, capture via rsi
     #[cfg(target_arch = "x86_64")]
-    let (hv_maximum, signal_bytes) = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+    let (hv_max, signal_bytes) = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
         let a: u32;
         let b: u32;
@@ -254,8 +254,8 @@ unsafe {
         (a, sig)
     };
     #[cfg(not(target_arch = "x86_64"))]
-    let (hv_maximum, signal_bytes): (u32, [u8; 12]) = (0, [0u8; 12]);
-    if hv_maximum >= 0x40000000 {
+    let (hv_max, signal_bytes): (u32, [u8; 12]) = (0, [0u8; 12]);
+    if hv_max >= 0x40000000 {
         
         if let Ok(s) = core::str::from_utf8(&signal_bytes) {
             crate::serial_println!("[NET] Hypervisor CPUID: '{}'", s);
@@ -274,8 +274,8 @@ unsafe {
     }
     
     // Method 2: ACPI OEM ID
-    if let Some(information) = crate::acpi::get_information() {
-        let oem = information.oem_id.trim();
+    if let Some(info) = crate::acpi::get_information() {
+        let oem = info.oem_id.trim();
         if oem.eq_ignore_ascii_case("VBOX") {
             return Platform::VirtualBox;
         } else if oem.eq_ignore_ascii_case("BOCHS") || oem.eq_ignore_ascii_case("BXPC") {
@@ -285,9 +285,9 @@ unsafe {
     
     // Method 3: PCI device hints
     let pci_devs = crate::pci::get_devices();
-    for device in &pci_devs {
+    for dev in &pci_devs {
                 // Pattern matching — Rust's exhaustive branching construct.
-match device.vendor_id {
+match dev.vendor_id {
             0x80EE => return Platform::VirtualBox, // VirtualBox vendor
             0x15AD => return Platform::VMware,     // VMware vendor
             0x1234 => return Platform::Qemu,       // QEMU stdvga
@@ -346,29 +346,29 @@ match platform {
     }
     
     // Take first network device
-    let device = &network_devices[0];
-    let driver = identify_driver(device.vendor_id, device.device_id);
+    let dev = &network_devices[0];
+    let driver = identify_driver(dev.vendor_id, dev.device_id);
     
     // Store NIC info
     let nic_information = NicInformation {
-        vendor_id: device.vendor_id,
-        device_id: device.device_id,
-        vendor_name: String::from(device.vendor_name()),
+        vendor_id: dev.vendor_id,
+        device_id: dev.device_id,
+        vendor_name: String::from(dev.vendor_name()),
         driver: String::from(driver),
-        bar0: device.bar_address(0).unwrap_or(0),
-        irq: device.interrupt_line,
+        bar0: dev.bar_address(0).unwrap_or(0),
+        irq: dev.interrupt_line,
     };
     
     crate::log!("[NET] NIC: {:04X}:{:04X} {} [{}] BAR0={:#X} IRQ={}",
-        device.vendor_id, device.device_id, 
-        driver, device.vendor_name(),
+        dev.vendor_id, dev.device_id, 
+        driver, dev.vendor_name(),
         nic_information.bar0, nic_information.irq);
     
     *NIC_INFORMATION.lock() = Some(nic_information);
     
     // Enable bus mastering for DMA
-    crate::pci::enable_bus_master(device);
-    crate::pci::enable_memory_space(device);
+    crate::pci::enable_bus_master(dev);
+    crate::pci::enable_memory_space(dev);
     
     // If virtio-net driver is initialized, get real MAC, otherwise generate one
     let mac = if crate::virtio_net::is_initialized() {
@@ -499,8 +499,8 @@ pub fn receive_packet() -> Option<Vec<u8>> {
     }
     
     // Fallback to queue-based
-    let mut receive = RECEIVE_QUEUE.lock();
-    if let Some(packet) = receive.pop_front() {
+    let mut rx = RECEIVE_QUEUE.lock();
+    if let Some(packet) = rx.pop_front() {
         let mut stats = STATS.lock();
         stats.packets_received += 1;
         stats.bytes_received += packet.len() as u64;
@@ -512,8 +512,8 @@ pub fn receive_packet() -> Option<Vec<u8>> {
 
 /// Simulate receiving a packet (for testing)
 pub fn inject_packet(data: Vec<u8>) {
-    let mut receive = RECEIVE_QUEUE.lock();
-    receive.push_back(data);
+    let mut rx = RECEIVE_QUEUE.lock();
+    rx.push_back(data);
 }
 
 /// Send an ARP request
@@ -551,7 +551,7 @@ pub fn send_arp_request(target_ip: Ipv4Address) -> Result<(), &'static str> {
 pub fn send_ping(target_ip: Ipv4Address) -> Result<PingResult, &'static str> {
     // Sequence number
     static SEQ: AtomicU64 = AtomicU64::new(1);
-    let sequence = SEQ.fetch_add(1, Ordering::Relaxed) as u16;
+    let seq = SEQ.fetch_add(1, Ordering::Relaxed) as u16;
     
     // Clear old responses
     crate::netstack::icmp::clear_responses();
@@ -561,41 +561,41 @@ pub fn send_ping(target_ip: Ipv4Address) -> Result<PingResult, &'static str> {
     
     // Send ICMP echo request via network stack
     let ip_bytes = target_ip.as_bytes();
-    crate::netstack::icmp::send_echo_request([ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3]], 0x1234, sequence)?;
+    crate::netstack::icmp::send_echo_request([ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3]], 0x1234, seq)?;
     
     // Poll network for responses (timeout 1 second)
-    let response = crate::netstack::icmp::wait_for_response(sequence, 1000);
+    let response = crate::netstack::icmp::wait_for_response(seq, 1000);
     
     // Calculate elapsed time in microseconds
     let elapsed_micros = crate::cpu::tsc::now_micros().saturating_sub(start_micros);
     
     // Convert to milliseconds for display, but show sub-millisecond precision
-    let time_mouse = if elapsed_micros < 1000 {
+    let time_ms = if elapsed_micros < 1000 {
         // Less than 1ms - round up to 1ms for display but we have the real value
         1
     } else {
         (elapsed_micros / 1000) as u32
     };
     
-    if let Some(response) = response {
+    if let Some(resp) = response {
         // Update stats
         let mut stats = STATS.lock();
         stats.packets_received += 1;
         stats.bytes_received += 64; // ICMP reply size
         
         Ok(PingResult {
-            sequence: response.sequence,
-            ttl: response.ttl,
-            time_mouse,
+            seq: resp.seq,
+            ttl: resp.ttl,
+            time_ms,
             time_us: elapsed_micros,
             success: true,
         })
     } else {
         // Timeout
         Ok(PingResult {
-            sequence,
+            seq,
             ttl: 0,
-            time_mouse,
+            time_ms,
             time_us: elapsed_micros,
             success: false,
         })
@@ -606,9 +606,9 @@ pub fn send_ping(target_ip: Ipv4Address) -> Result<PingResult, &'static str> {
 #[derive(Debug, Clone)]
 // Public structure — visible outside this module.
 pub struct PingResult {
-    pub sequence: u16,
+    pub seq: u16,
     pub ttl: u8,
-    pub time_mouse: u32,
+    pub time_ms: u32,
     pub time_us: u64,  // Microsecond precision from TSC
     pub success: bool,
 }
@@ -754,7 +754,7 @@ pub fn has_real_driver() -> bool {
 pub fn get_driver_stats() -> (u64, u64, u64, u64) {
     if crate::drivers::net::has_driver() {
         let stats = crate::drivers::net::stats();
-        (stats.transmit_packets, stats.receive_packets, stats.transmit_bytes, stats.receive_bytes)
+        (stats.tx_packets, stats.rx_packets, stats.tx_bytes, stats.rx_bytes)
     } else if crate::virtio_net::is_initialized() {
         crate::virtio_net::get_stats()
     } else {

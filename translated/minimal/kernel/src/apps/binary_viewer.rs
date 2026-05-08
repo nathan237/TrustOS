@@ -9,67 +9,67 @@ use alloc::vec::Vec;
 use alloc::format;
 use alloc::collections::BTreeMap;
 
-use crate::binary_analysis::{Rn, Ga, Go, Dc, Sb, XrefType};
+use crate::binary_analysis::{Hg, Ct, Cy, Bj, Hp, XrefType};
 
 
 const J_: u32 = 28;
 
 
 
-const JJ_: u32       = 0xFF0D1117;  
-const HN_: u32      = 0xFF161B22;  
-const JK_: u32     = 0xFF21262D;  
-const ZK_: u32   = 0xFF1F3A5F;  
-const ZJ_: u32      = 0xFF1C2333;  
-const DDM_: u32       = 0xFF0D1117;  
+const DW_: u32       = 0xFF0D1117;  
+const CJ_: u32      = 0xFF161B22;  
+const DX_: u32     = 0xFF21262D;  
+const AAW_: u32   = 0xFF1F3A5F;  
+const AAV_: u32      = 0xFF1C2333;  
+const DHG_: u32       = 0xFF0D1117;  
 
-const HR_: u32      = 0xFF8B949E;  
-const BNV_: u32       = 0xFFC9D1D9;  
-const BNP_: u32     = 0xFF7EE787;  
-const BNX_: u32  = 0xFF79C0FF;  
-const AOP_: u32  = 0xFFD2A8FF;  
-const AON_: u32 = 0xFFFFA657;  
-const AOL_: u32   = 0xFF8B949E;  
-const BNW_: u32     = 0xFFFF7B72;  
-const AOQ_: u32    = 0xFF7EE787;  
-const AOM_: u32    = 0xFFFFFFFF;  
-const AOT_: u32      = 0xFFC9D1D9;  
-const BOE_: u32 = 0xFFFFA657;  
-const AAJ_: u32    = 0xFF8B949E;  
-const AAG_: u32      = 0xFFFF7B72;  
-const AOK_: u32      = 0xFF79C0FF;  
-const AOO_: u32      = 0xFFFFA657;  
-const BOA_: u32 = 0xFF30363D;  
-const BOK_: u32      = 0xFFD2A8FF;  
+const IJ_: u32      = 0xFF8B949E;  
+const BQN_: u32       = 0xFFC9D1D9;  
+const BQH_: u32     = 0xFF7EE787;  
+const BQP_: u32  = 0xFF79C0FF;  
+const AQP_: u32  = 0xFFD2A8FF;  
+const AQN_: u32 = 0xFFFFA657;  
+const AQL_: u32   = 0xFF8B949E;  
+const BQO_: u32     = 0xFFFF7B72;  
+const AQQ_: u32    = 0xFF7EE787;  
+const AQM_: u32    = 0xFFFFFFFF;  
+const AQT_: u32      = 0xFFC9D1D9;  
+const BQV_: u32 = 0xFFFFA657;  
+const ABW_: u32    = 0xFF8B949E;  
+const ABV_: u32      = 0xFFFF7B72;  
+const AQK_: u32      = 0xFF79C0FF;  
+const AQO_: u32      = 0xFFFFA657;  
+const BQR_: u32 = 0xFF30363D;  
+const BRB_: u32      = 0xFFD2A8FF;  
 
 
 
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum ActivePanel {
-    Js,
-    Ir,
-    Hn,
-    V,
+    Navigation,
+    HexView,
+    Disassembly,
+    Info,
 }
 
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum NavItem {
-    Ato,           
-    Axc,   
-    Qm(usize),
-    Ayk,   
-    Ga(usize),
-    Azo,          
-    Go(usize),
-    Asq,        
-    Bs(usize),
-    Azi,          
-    Azh(usize),
+    Header,           
+    ProgramHeaders,   
+    Gz(usize),
+    SectionHeaders,   
+    Ct(usize),
+    Symbols,          
+    Cy(usize),
+    Functions,        
+    Aq(usize),
+    Strings,          
+    StringItem(usize),
     DynamicInfo,      
-    Aud,          
-    Alz,      
+    Imports,          
+    Relocations,      
 }
 
 
@@ -77,241 +77,241 @@ pub enum NavItem {
 
 pub struct BinaryViewerState {
     
-    pub ln: Rn,
+    pub analysis: Hg,
     
-    pub bjd: ActivePanel,
+    pub active_panel: ActivePanel,
     
     
-    pub bag: Vec<(NavItem, u8, String)>,  
-    pub gnk: usize,
-    pub dad: usize,
-    pub arm: [bool; 8],  
+    pub nav_items: Vec<(NavItem, u8, String)>,  
+    pub nav_scroll: usize,
+    pub nav_selected: usize,
+    pub nav_expanded: [bool; 8],  
 
     
-    pub cyl: usize,       
-    pub cfk: usize,     
-    pub toj: usize,       
+    pub hex_offset: usize,       
+    pub hex_selected: usize,     
+    pub hex_cursor: usize,       
 
     
-    pub eow: usize,     
-    pub bze: usize,  
+    pub disasm_index: usize,     
+    pub disasm_selected: usize,  
     
     
-    pub esn: usize,
-    pub zl: Vec<String>,
+    pub info_scroll: usize,
+    pub info_lines: Vec<String>,
     
     
-    pub cwt: u64,
+    pub current_addr: u64,
     
     
-    pub wn: String,
+    pub file_path: String,
     
     
-    pub bcn: bool,
-    pub bla: String,
-    pub chq: Vec<u64>,
-    pub wfq: usize,
+    pub search_active: bool,
+    pub search_query: String,
+    pub search_results: Vec<u64>,
+    pub search_result_idx: usize,
 }
 
 impl BinaryViewerState {
     
-    pub fn new(ln: Rn, path: &str) -> Self {
-        let mut g = BinaryViewerState {
-            ln,
-            bjd: ActivePanel::Hn,
-            bag: Vec::new(),
-            gnk: 0,
-            dad: 0,
-            arm: [true, false, true, false, true, false, false, false], 
-            cyl: 0,
-            cfk: 0,
-            toj: 0,
-            eow: 0,
-            bze: 0,
-            esn: 0,
-            zl: Vec::new(),
-            cwt: 0,
-            wn: String::from(path),
-            bcn: false,
-            bla: String::new(),
-            chq: Vec::new(),
-            wfq: 0,
+    pub fn new(analysis: Hg, path: &str) -> Self {
+        let mut state = BinaryViewerState {
+            analysis,
+            active_panel: ActivePanel::Disassembly,
+            nav_items: Vec::new(),
+            nav_scroll: 0,
+            nav_selected: 0,
+            nav_expanded: [true, false, true, false, true, false, false, false], 
+            hex_offset: 0,
+            hex_selected: 0,
+            hex_cursor: 0,
+            disasm_index: 0,
+            disasm_selected: 0,
+            info_scroll: 0,
+            info_lines: Vec::new(),
+            current_addr: 0,
+            file_path: String::from(path),
+            search_active: false,
+            search_query: String::new(),
+            search_results: Vec::new(),
+            search_result_idx: 0,
         };
         
         
-        g.cwt = g.ln.elf.co.bt;
+        state.current_addr = state.analysis.elf.info.entry;
         
         
-        if let Some(w) = g.ln.instructions.iter().qf(|a| a.re == g.cwt) {
-            g.bze = w;
-            g.eow = w.ao(5); 
+        if let Some(idx) = state.analysis.instructions.iter().position(|i| i.address == state.current_addr) {
+            state.disasm_selected = idx;
+            state.disasm_index = idx.saturating_sub(5); 
         }
         
         
-        if let Some(l) = g.ln.mot(g.cwt) {
-            g.cyl = (l as usize) & !0xF; 
-            g.cfk = l as usize;
+        if let Some(offset) = state.analysis.vaddr_to_offset(state.current_addr) {
+            state.hex_offset = (offset as usize) & !0xF; 
+            state.hex_selected = offset as usize;
         }
         
         
-        g.exl();
+        state.rebuild_nav_tree();
         
         
-        g.gvp();
+        state.update_info_panel();
         
-        g
+        state
     }
 
     
-    pub fn exl(&mut self) {
-        self.bag.clear();
+    pub fn rebuild_nav_tree(&mut self) {
+        self.nav_items.clear();
         
         
-        self.bag.push((NavItem::Ato, 0, format!(
+        self.nav_items.push((NavItem::Header, 0, format!(
             "[H] ELF Header — {} {} {}",
-            self.ln.elf.co.gfz,
-            self.ln.elf.co.czk,
-            self.ln.elf.co.class
+            self.analysis.elf.info.elf_type,
+            self.analysis.elf.info.machine,
+            self.analysis.elf.info.class
         )));
         
         
-        let egp = self.ln.elf.dku.len();
-        let vhc = if self.arm[1] { "[-]" } else { "[+]" };
-        self.bag.push((NavItem::Axc, 0, format!(
-            "{} Program Headers ({})", vhc, egp
+        let bur = self.analysis.elf.programs.len();
+        let nty = if self.nav_expanded[1] { "[-]" } else { "[+]" };
+        self.nav_items.push((NavItem::ProgramHeaders, 0, format!(
+            "{} Program Headers ({})", nty, bur
         )));
-        if self.arm[1] {
-            for (a, afv) in self.ln.elf.dku.iter().cf() {
-                self.bag.push((NavItem::Qm(a), 1, format!(
+        if self.nav_expanded[1] {
+            for (i, qc) in self.analysis.elf.programs.iter().enumerate() {
+                self.nav_items.push((NavItem::Gz(i), 1, format!(
                     "  {:6} 0x{:08X} {:>6} {}",
-                    afv.ddc(),
-                    afv.uy,
-                    afv.jfv,
-                    afv.kwm(),
+                    qc.type_name(),
+                    qc.vaddr,
+                    qc.memsz,
+                    qc.flags_string(),
                 )));
             }
         }
         
         
-        let wlo = self.ln.elf.aeo.len();
-        let wlp = if self.arm[2] { "[-]" } else { "[+]" };
-        self.bag.push((NavItem::Ayk, 0, format!(
-            "{} Sections ({})", wlp, wlo
+        let oqp = self.analysis.elf.sections.len();
+        let oqq = if self.nav_expanded[2] { "[-]" } else { "[+]" };
+        self.nav_items.push((NavItem::SectionHeaders, 0, format!(
+            "{} Sections ({})", oqq, oqp
         )));
-        if self.arm[2] {
-            for (a, zw) in self.ln.elf.aeo.iter().cf() {
-                let j = if zw.j.is_empty() { "(null)" } else { &zw.j };
-                self.bag.push((NavItem::Ga(a), 1, format!(
+        if self.nav_expanded[2] {
+            for (i, lx) in self.analysis.elf.sections.iter().enumerate() {
+                let name = if lx.name.is_empty() { "(null)" } else { &lx.name };
+                self.nav_items.push((NavItem::Ct(i), 1, format!(
                     "  {:<16} {:8} 0x{:08X} {:>6}",
-                    j,
-                    zw.ddc(),
-                    zw.ag,
-                    zw.aw,
+                    name,
+                    lx.type_name(),
+                    lx.addr,
+                    lx.size,
                 )));
             }
         }
         
         
-        let mil = self.ln.elf.bot.len() + self.ln.elf.dqj.len();
-        let wwv = if self.arm[3] { "[-]" } else { "[+]" };
-        self.bag.push((NavItem::Azo, 0, format!(
-            "{} Symbols ({})", wwv, mil
+        let gwv = self.analysis.elf.symbols.len() + self.analysis.elf.dynamic_symbols.len();
+        let ozj = if self.nav_expanded[3] { "[-]" } else { "[+]" };
+        self.nav_items.push((NavItem::Symbols, 0, format!(
+            "{} Symbols ({})", ozj, gwv
         )));
-        if self.arm[3] {
+        if self.nav_expanded[3] {
             
-            let mut pqm: Vec<(usize, &Go)> = self.ln.elf.bot.iter()
-                .rh(self.ln.elf.dqj.iter())
-                .cf()
-                .hi(|(_, e)| !e.j.is_empty() && e.bn != 0)
+            let mut jki: Vec<(usize, &Cy)> = self.analysis.elf.symbols.iter()
+                .chain(self.analysis.elf.dynamic_symbols.iter())
+                .enumerate()
+                .filter(|(_, j)| !j.name.is_empty() && j.value != 0)
                 .collect();
-            pqm.bxf(|(_, e)| e.bn);
-            for (a, aaw) in pqm.iter().take(200) {
-                let pa = match aaw.gtt {
+            jki.sort_by_key(|(_, j)| j.value);
+            for (i, sym) in jki.iter().take(200) {
+                let icon = match sym.sym_type {
                     2 => "fn",  
                     1 => "obj", 
                     _ => "  ",
                 };
-                self.bag.push((NavItem::Go(*a), 1, format!(
+                self.nav_items.push((NavItem::Cy(*i), 1, format!(
                     "  {} {:<24} 0x{:08X} {}",
-                    pa, 
-                    if aaw.j.len() > 24 { &aaw.j[..24] } else { &aaw.j },
-                    aaw.bn,
-                    aaw.qpo(),
+                    icon, 
+                    if sym.name.len() > 24 { &sym.name[..24] } else { &sym.name },
+                    sym.value,
+                    sym.binding_name(),
                 )));
             }
         }
         
         
-        let szg = self.ln.xrefs.ajb.len();
-        let svh = if self.arm[4] { "[-]" } else { "[+]" };
-        self.bag.push((NavItem::Asq, 0, format!(
-            "{} Functions ({})", svh, szg
+        let mal = self.analysis.xrefs.functions.len();
+        let lxf = if self.nav_expanded[4] { "[-]" } else { "[+]" };
+        self.nav_items.push((NavItem::Functions, 0, format!(
+            "{} Functions ({})", lxf, mal
         )));
-        if self.arm[4] {
-            for (a, ke) in self.ln.xrefs.ajb.iter().cf().take(200) {
-                let j = if ke.j.is_empty() {
-                    format!("sub_{:X}", ke.bt)
+        if self.nav_expanded[4] {
+            for (i, func) in self.analysis.xrefs.functions.iter().enumerate().take(200) {
+                let name = if func.name.is_empty() {
+                    format!("sub_{:X}", func.entry)
                 } else {
-                    ke.j.clone()
+                    func.name.clone()
                 };
-                self.bag.push((NavItem::Bs(a), 1, format!(
+                self.nav_items.push((NavItem::Aq(i), 1, format!(
                     "  fn {:<24} 0x{:08X} ({} insns)",
-                    if j.len() > 24 { &j[..24] } else { &j },
-                    ke.bt,
-                    ke.jak,
+                    if name.len() > 24 { &name[..24] } else { &name },
+                    func.entry,
+                    func.instruction_count,
                 )));
             }
         }
         
         
-        let wuw = self.ln.elf.pd.len();
-        let wux = if self.arm[5] { "[-]" } else { "[+]" };
-        self.bag.push((NavItem::Azi, 0, format!(
-            "{} Strings ({})", wux, wuw
+        let oxv = self.analysis.elf.strings.len();
+        let oxw = if self.nav_expanded[5] { "[-]" } else { "[+]" };
+        self.nav_items.push((NavItem::Strings, 0, format!(
+            "{} Strings ({})", oxw, oxv
         )));
-        if self.arm[5] {
-            for (a, e) in self.ln.elf.pd.iter().cf().take(100) {
-                let display = if e.ca.len() > 30 {
-                    format!("\"{}...\"", &e.ca[..30])
+        if self.nav_expanded[5] {
+            for (i, j) in self.analysis.elf.strings.iter().enumerate().take(100) {
+                let display = if j.content.len() > 30 {
+                    format!("\"{}...\"", &j.content[..30])
                 } else {
-                    format!("\"{}\"", e.ca)
+                    format!("\"{}\"", j.content)
                 };
-                let xqf = e.uy.unwrap_or(0);
-                self.bag.push((NavItem::Azh(a), 1, format!(
-                    "  0x{:08X} {}", xqf, display
+                let pqy = j.vaddr.unwrap_or(0);
+                self.nav_items.push((NavItem::StringItem(i), 1, format!(
+                    "  0x{:08X} {}", pqy, display
                 )));
             }
         }
         
         
-        if !self.ln.elf.djt.is_empty() || !self.ln.elf.hhn.is_empty() {
-            let shw = if self.arm[6] { "[-]" } else { "[+]" };
-            self.bag.push((NavItem::DynamicInfo, 0, format!(
-                "{} Dynamic Linking", shw
+        if !self.analysis.elf.needed_libs.is_empty() || !self.analysis.elf.dynamic.is_empty() {
+            let lmz = if self.nav_expanded[6] { "[-]" } else { "[+]" };
+            self.nav_items.push((NavItem::DynamicInfo, 0, format!(
+                "{} Dynamic Linking", lmz
             )));
-            if self.arm[6] {
-                for uek in &self.ln.elf.djt {
-                    self.bag.push((NavItem::Aud, 1, format!("  NEEDED: {}", uek)));
+            if self.nav_expanded[6] {
+                for lib in &self.analysis.elf.needed_libs {
+                    self.nav_items.push((NavItem::Imports, 1, format!("  NEEDED: {}", lib)));
                 }
-                if let Some(ahp) = &self.ln.elf.interpreter {
-                    self.bag.push((NavItem::Aud, 1, format!("  INTERP: {}", ahp)));
+                if let Some(interp) = &self.analysis.elf.interpreter {
+                    self.nav_items.push((NavItem::Imports, 1, format!("  INTERP: {}", interp)));
                 }
             }
         }
         
         
-        if !self.ln.elf.bwp.is_empty() {
-            let vuj = self.ln.elf.bwp.len();
-            let vuk = if self.arm[7] { "[-]" } else { "[+]" };
-            self.bag.push((NavItem::Alz, 0, format!(
-                "{} Relocations ({})", vuk, vuj
+        if !self.analysis.elf.relocations.is_empty() {
+            let oeo = self.analysis.elf.relocations.len();
+            let oep = if self.nav_expanded[7] { "[-]" } else { "[+]" };
+            self.nav_items.push((NavItem::Relocations, 0, format!(
+                "{} Relocations ({})", oep, oeo
             )));
-            if self.arm[7] {
-                for dbb in self.ln.elf.bwp.iter().take(100) {
-                    let ezj = if dbb.ezj.is_empty() { "-" } else { &dbb.ezj };
-                    self.bag.push((NavItem::Alz, 1, format!(
+            if self.nav_expanded[7] {
+                for bdg in self.analysis.elf.relocations.iter().take(100) {
+                    let sym_name = if bdg.sym_name.is_empty() { "-" } else { &bdg.sym_name };
+                    self.nav_items.push((NavItem::Relocations, 1, format!(
                         "  0x{:08X} {} + 0x{:X}",
-                        dbb.l, ezj, dbb.fcn
+                        bdg.offset, sym_name, bdg.addend
                     )));
                 }
             }
@@ -319,480 +319,480 @@ impl BinaryViewerState {
     }
 
     
-    pub fn dhq(&mut self, ag: u64) {
-        self.cwt = ag;
+    pub fn goto_address(&mut self, addr: u64) {
+        self.current_addr = addr;
         
         
-        if let Some(w) = self.ln.instructions.iter().qf(|a| a.re >= ag) {
-            self.bze = w;
-            self.eow = w.ao(5);
+        if let Some(idx) = self.analysis.instructions.iter().position(|i| i.address >= addr) {
+            self.disasm_selected = idx;
+            self.disasm_index = idx.saturating_sub(5);
         }
         
         
-        if let Some(l) = self.ln.mot(ag) {
-            let dz = l as usize;
-            self.cfk = dz;
-            self.cyl = dz & !0xF;
+        if let Some(offset) = self.analysis.vaddr_to_offset(addr) {
+            let off = offset as usize;
+            self.hex_selected = off;
+            self.hex_offset = off & !0xF;
         }
         
         
-        self.gvp();
+        self.update_info_panel();
     }
 
     
-    pub fn gvp(&mut self) {
-        self.zl.clear();
-        let ag = self.cwt;
+    pub fn update_info_panel(&mut self) {
+        self.info_lines.clear();
+        let addr = self.current_addr;
         
         
-        self.zl.push(format!("Address: 0x{:016X}", ag));
-        self.zl.push(String::new());
+        self.info_lines.push(format!("Address: 0x{:016X}", addr));
+        self.info_lines.push(String::new());
         
         
-        if let Some(zw) = self.ln.elf.wfz(ag) {
-            self.zl.push(format!("Section: {} [{}]", zw.j, zw.ddc()));
-            self.zl.push(format!("  Range: 0x{:X}..0x{:X}", zw.ag, zw.ag + zw.aw));
-            self.zl.push(format!("  Flags: {}", zw.kwm()));
+        if let Some(lx) = self.analysis.elf.section_for_addr(addr) {
+            self.info_lines.push(format!("Section: {} [{}]", lx.name, lx.type_name()));
+            self.info_lines.push(format!("  Range: 0x{:X}..0x{:X}", lx.addr, lx.addr + lx.size));
+            self.info_lines.push(format!("  Flags: {}", lx.flags_string()));
         }
         
         
-        if let Some(ezj) = self.ln.elf.blw.get(&ag) {
-            self.zl.push(String::new());
-            self.zl.push(format!("Symbol: {}", ezj));
+        if let Some(sym_name) = self.analysis.elf.addr_to_symbol.get(&addr) {
+            self.info_lines.push(String::new());
+            self.info_lines.push(format!("Symbol: {}", sym_name));
         }
         
         
-        if let Some(ke) = self.ln.xrefs.szk(ag) {
-            self.zl.push(String::new());
-            let j = if ke.j.is_empty() {
-                format!("sub_{:X}", ke.bt)
+        if let Some(func) = self.analysis.xrefs.function_at(addr) {
+            self.info_lines.push(String::new());
+            let name = if func.name.is_empty() {
+                format!("sub_{:X}", func.entry)
             } else {
-                ke.j.clone()
+                func.name.clone()
             };
-            self.zl.push(format!("Function: {}", j));
-            self.zl.push(format!("  Entry: 0x{:X}", ke.bt));
-            self.zl.push(format!("  End:   0x{:X}", ke.ci));
-            self.zl.push(format!("  Instructions: {}", ke.jak));
-            self.zl.push(format!("  Basic blocks: {}", ke.ikx));
+            self.info_lines.push(format!("Function: {}", name));
+            self.info_lines.push(format!("  Entry: 0x{:X}", func.entry));
+            self.info_lines.push(format!("  End:   0x{:X}", func.end));
+            self.info_lines.push(format!("  Instructions: {}", func.instruction_count));
+            self.info_lines.push(format!("  Basic blocks: {}", func.basic_blocks));
             
-            if !ke.imr.is_empty() {
-                self.zl.push(String::new());
-                self.zl.push(String::from("Calls to:"));
-                for cd in &ke.imr {
-                    let j = self.ln.elf.blw.get(cd)
-                        .abn()
-                        .unwrap_or_else(|| format!("0x{:X}", cd));
-                    self.zl.push(format!("  -> {}", j));
+            if !func.calls_to.is_empty() {
+                self.info_lines.push(String::new());
+                self.info_lines.push(String::from("Calls to:"));
+                for target in &func.calls_to {
+                    let name = self.analysis.elf.addr_to_symbol.get(target)
+                        .cloned()
+                        .unwrap_or_else(|| format!("0x{:X}", target));
+                    self.info_lines.push(format!("  -> {}", name));
                 }
             }
-            if !ke.imq.is_empty() {
-                self.zl.push(String::new());
-                self.zl.push(String::from("Called from:"));
-                for nbn in &ke.imq {
-                    let j = self.ln.elf.blw.get(nbn)
-                        .abn()
-                        .unwrap_or_else(|| format!("0x{:X}", nbn));
-                    self.zl.push(format!("  <- {}", j));
+            if !func.called_from.is_empty() {
+                self.info_lines.push(String::new());
+                self.info_lines.push(String::from("Called from:"));
+                for caller in &func.called_from {
+                    let name = self.analysis.elf.addr_to_symbol.get(caller)
+                        .cloned()
+                        .unwrap_or_else(|| format!("0x{:X}", caller));
+                    self.info_lines.push(format!("  <- {}", name));
                 }
             }
         }
         
         
-        let ihw = self.ln.xrefs.ihw(ag);
-        if !ihw.is_empty() {
-            self.zl.push(String::new());
-            self.zl.push(format!("Xrefs TO 0x{:X} ({}):", ag, ihw.len()));
-            for bta in ihw.iter().take(20) {
-                let bde = match bta.dnl {
-                    XrefType::En => "CALL",
-                    XrefType::Nh => "JMP ",
-                    XrefType::Ahd => "Jcc ",
-                    XrefType::Aaw => "DATA",
+        let xrefs_to = self.analysis.xrefs.xrefs_to(addr);
+        if !xrefs_to.is_empty() {
+            self.info_lines.push(String::new());
+            self.info_lines.push(format!("Xrefs TO 0x{:X} ({}):", addr, xrefs_to.len()));
+            for aks in xrefs_to.iter().take(20) {
+                let ws = match aks.xref_type {
+                    XrefType::Call => "CALL",
+                    XrefType::Jump => "JMP ",
+                    XrefType::ConditionalJump => "Jcc ",
+                    XrefType::DataRef => "DATA",
                 };
-                self.zl.push(format!("  {} from 0x{:X}", bde, bta.from));
+                self.info_lines.push(format!("  {} from 0x{:X}", ws, aks.from));
             }
         }
         
         
-        let gxa = self.ln.xrefs.gxa(ag);
-        if !gxa.is_empty() {
-            self.zl.push(String::new());
-            self.zl.push(format!("Xrefs FROM 0x{:X} ({}):", ag, gxa.len()));
-            for bta in gxa.iter().take(20) {
-                let bde = match bta.dnl {
-                    XrefType::En => "CALL",
-                    XrefType::Nh => "JMP ",
-                    XrefType::Ahd => "Jcc ",
-                    XrefType::Aaw => "DATA",
+        let xrefs_from = self.analysis.xrefs.xrefs_from(addr);
+        if !xrefs_from.is_empty() {
+            self.info_lines.push(String::new());
+            self.info_lines.push(format!("Xrefs FROM 0x{:X} ({}):", addr, xrefs_from.len()));
+            for aks in xrefs_from.iter().take(20) {
+                let ws = match aks.xref_type {
+                    XrefType::Call => "CALL",
+                    XrefType::Jump => "JMP ",
+                    XrefType::ConditionalJump => "Jcc ",
+                    XrefType::DataRef => "DATA",
                 };
-                let fwf = self.ln.elf.blw.get(&bta.wh)
-                    .abn()
-                    .unwrap_or_else(|| format!("0x{:X}", bta.wh));
-                self.zl.push(format!("  {} -> {}", bde, fwf));
+                let cri = self.analysis.elf.addr_to_symbol.get(&aks.to)
+                    .cloned()
+                    .unwrap_or_else(|| format!("0x{:X}", aks.to));
+                self.info_lines.push(format!("  {} -> {}", ws, cri));
             }
         }
         
         
-        if let Some(fi) = self.ln.tvj(ag) {
-            self.zl.push(String::new());
-            self.zl.push(String::from("Instruction:"));
-            self.zl.push(format!("  {} {}", fi.bes, fi.bvs));
-            let toi: Vec<String> = fi.bf.iter().map(|o| format!("{:02X}", o)).collect();
-            self.zl.push(format!("  Bytes: {}", toi.rr(" ")));
-            self.zl.push(format!("  Size: {} bytes", fi.bf.len()));
-            if let Some(ref byv) = fi.byv {
-                self.zl.push(format!("  Note: {}", byv));
+        if let Some(inst) = self.analysis.instruction_at(addr) {
+            self.info_lines.push(String::new());
+            self.info_lines.push(String::from("Instruction:"));
+            self.info_lines.push(format!("  {} {}", inst.mnemonic, inst.operands_str));
+            let mla: Vec<String> = inst.bytes.iter().map(|b| format!("{:02X}", b)).collect();
+            self.info_lines.push(format!("  Bytes: {}", mla.join(" ")));
+            self.info_lines.push(format!("  Size: {} bytes", inst.bytes.len()));
+            if let Some(ref comment) = inst.comment {
+                self.info_lines.push(format!("  Note: {}", comment));
             }
-            if let Some(cd) = fi.ena {
-                self.zl.push(format!("  Target: 0x{:X}", cd));
+            if let Some(target) = inst.branch_target {
+                self.info_lines.push(format!("  Target: 0x{:X}", target));
             }
         }
     }
 
     
-    pub fn vr(&mut self, bs: char) {
-        match bs {
+    pub fn handle_key(&mut self, key: char) {
+        match key {
             
             '\t' => {
-                self.bjd = match self.bjd {
-                    ActivePanel::Js => ActivePanel::Ir,
-                    ActivePanel::Ir => ActivePanel::Hn,
-                    ActivePanel::Hn => ActivePanel::V,
-                    ActivePanel::V => ActivePanel::Js,
+                self.active_panel = match self.active_panel {
+                    ActivePanel::Navigation => ActivePanel::HexView,
+                    ActivePanel::HexView => ActivePanel::Disassembly,
+                    ActivePanel::Disassembly => ActivePanel::Info,
+                    ActivePanel::Info => ActivePanel::Navigation,
                 };
             },
             
-            'U' => self.dlm(),   
-            'D' => self.eid(), 
-            'L' => self.mco(), 
-            'R' => self.mcq(), 
+            'U' => self.scroll_up(),   
+            'D' => self.scroll_down(), 
+            'L' => self.scroll_left(), 
+            'R' => self.scroll_right(), 
             
-            '\n' | '\r' => self.lqh(),
+            '\n' | '\r' => self.on_enter(),
             
             'g' | 'G' => {
-                self.bcn = !self.bcn;
-                if self.bcn {
-                    self.bla.clear();
+                self.search_active = !self.search_active;
+                if self.search_active {
+                    self.search_query.clear();
                 }
             },
             
-            '0'..='9' | 'a'..='f' | 'A'..='F' if self.bcn => {
-                self.bla.push(bs);
+            '0'..='9' | 'a'..='f' | 'A'..='F' if self.search_active => {
+                self.search_query.push(key);
             },
             
-            '\x08' if self.bcn => {
-                self.bla.pop();
+            '\x08' if self.search_active => {
+                self.search_query.pop();
             },
             
-            'x' | 'X' => self.svl(),
+            'x' | 'X' => self.follow_xref(),
             _ => {}
         }
     }
     
     
-    pub fn crc(&mut self, scancode: u8) {
+    pub fn handle_scancode(&mut self, scancode: u8) {
         match scancode {
-            0x48 => self.dlm(),    
-            0x50 => self.eid(),  
-            0x4B => self.mco(),  
-            0x4D => self.mcq(), 
+            0x48 => self.scroll_up(),    
+            0x50 => self.scroll_down(),  
+            0x4B => self.scroll_left(),  
+            0x4D => self.scroll_right(), 
             0x49 => {                    
-                for _ in 0..20 { self.dlm(); }
+                for _ in 0..20 { self.scroll_up(); }
             },
             0x51 => {                    
-                for _ in 0..20 { self.eid(); }
+                for _ in 0..20 { self.scroll_down(); }
             },
-            0x47 => self.tgp(), 
-            0x4F => self.tgo(),   
+            0x47 => self.go_to_start(), 
+            0x4F => self.go_to_end(),   
             0x0F => {                    
-                self.bjd = match self.bjd {
-                    ActivePanel::Js => ActivePanel::Ir,
-                    ActivePanel::Ir => ActivePanel::Hn,
-                    ActivePanel::Hn => ActivePanel::V,
-                    ActivePanel::V => ActivePanel::Js,
+                self.active_panel = match self.active_panel {
+                    ActivePanel::Navigation => ActivePanel::HexView,
+                    ActivePanel::HexView => ActivePanel::Disassembly,
+                    ActivePanel::Disassembly => ActivePanel::Info,
+                    ActivePanel::Info => ActivePanel::Navigation,
                 };
             },
-            0x1C => self.lqh(),     
+            0x1C => self.on_enter(),     
             _ => {}
         }
     }
 
-    fn dlm(&mut self) {
-        match self.bjd {
-            ActivePanel::Js => {
-                if self.dad > 0 {
-                    self.dad -= 1;
-                    if self.dad < self.gnk {
-                        self.gnk = self.dad;
+    fn scroll_up(&mut self) {
+        match self.active_panel {
+            ActivePanel::Navigation => {
+                if self.nav_selected > 0 {
+                    self.nav_selected -= 1;
+                    if self.nav_selected < self.nav_scroll {
+                        self.nav_scroll = self.nav_selected;
                     }
                 }
             },
-            ActivePanel::Ir => {
-                if self.cyl >= 16 {
-                    self.cyl -= 16;
+            ActivePanel::HexView => {
+                if self.hex_offset >= 16 {
+                    self.hex_offset -= 16;
                 }
-                if self.cfk >= 16 {
-                    self.cfk -= 16;
+                if self.hex_selected >= 16 {
+                    self.hex_selected -= 16;
                 }
             },
-            ActivePanel::Hn => {
-                if self.bze > 0 {
-                    self.bze -= 1;
-                    if self.bze < self.eow {
-                        self.eow = self.bze;
+            ActivePanel::Disassembly => {
+                if self.disasm_selected > 0 {
+                    self.disasm_selected -= 1;
+                    if self.disasm_selected < self.disasm_index {
+                        self.disasm_index = self.disasm_selected;
                     }
                     
-                    if let Some(fi) = self.ln.instructions.get(self.bze) {
-                        self.cwt = fi.re;
-                        self.gvp();
+                    if let Some(inst) = self.analysis.instructions.get(self.disasm_selected) {
+                        self.current_addr = inst.address;
+                        self.update_info_panel();
                     }
                 }
             },
-            ActivePanel::V => {
-                if self.esn > 0 {
-                    self.esn -= 1;
+            ActivePanel::Info => {
+                if self.info_scroll > 0 {
+                    self.info_scroll -= 1;
                 }
             },
         }
     }
 
-    fn eid(&mut self) {
-        match self.bjd {
-            ActivePanel::Js => {
-                if self.dad + 1 < self.bag.len() {
-                    self.dad += 1;
+    fn scroll_down(&mut self) {
+        match self.active_panel {
+            ActivePanel::Navigation => {
+                if self.nav_selected + 1 < self.nav_items.len() {
+                    self.nav_selected += 1;
                 }
             },
-            ActivePanel::Ir => {
-                if self.cyl + 16 < self.ln.f.len() {
-                    self.cyl += 16;
+            ActivePanel::HexView => {
+                if self.hex_offset + 16 < self.analysis.data.len() {
+                    self.hex_offset += 16;
                 }
-                self.cfk += 16;
-                if self.cfk >= self.ln.f.len() {
-                    self.cfk = self.ln.f.len().ao(1);
+                self.hex_selected += 16;
+                if self.hex_selected >= self.analysis.data.len() {
+                    self.hex_selected = self.analysis.data.len().saturating_sub(1);
                 }
             },
-            ActivePanel::Hn => {
-                if self.bze + 1 < self.ln.instructions.len() {
-                    self.bze += 1;
+            ActivePanel::Disassembly => {
+                if self.disasm_selected + 1 < self.analysis.instructions.len() {
+                    self.disasm_selected += 1;
                     
-                    if let Some(fi) = self.ln.instructions.get(self.bze) {
-                        self.cwt = fi.re;
-                        self.gvp();
+                    if let Some(inst) = self.analysis.instructions.get(self.disasm_selected) {
+                        self.current_addr = inst.address;
+                        self.update_info_panel();
                     }
                 }
             },
-            ActivePanel::V => {
-                if self.esn + 1 < self.zl.len() {
-                    self.esn += 1;
+            ActivePanel::Info => {
+                if self.info_scroll + 1 < self.info_lines.len() {
+                    self.info_scroll += 1;
                 }
             },
         }
     }
 
-    fn mco(&mut self) {
+    fn scroll_left(&mut self) {
         
-        for _ in 0..10 { self.dlm(); }
+        for _ in 0..10 { self.scroll_up(); }
     }
 
-    fn mcq(&mut self) {
+    fn scroll_right(&mut self) {
         
-        for _ in 0..10 { self.eid(); }
+        for _ in 0..10 { self.scroll_down(); }
     }
 
-    fn tgp(&mut self) {
-        match self.bjd {
-            ActivePanel::Js => { self.dad = 0; self.gnk = 0; },
-            ActivePanel::Ir => { self.cyl = 0; self.cfk = 0; },
-            ActivePanel::Hn => { self.eow = 0; self.bze = 0; },
-            ActivePanel::V => { self.esn = 0; },
+    fn go_to_start(&mut self) {
+        match self.active_panel {
+            ActivePanel::Navigation => { self.nav_selected = 0; self.nav_scroll = 0; },
+            ActivePanel::HexView => { self.hex_offset = 0; self.hex_selected = 0; },
+            ActivePanel::Disassembly => { self.disasm_index = 0; self.disasm_selected = 0; },
+            ActivePanel::Info => { self.info_scroll = 0; },
         }
     }
 
-    fn tgo(&mut self) {
-        match self.bjd {
-            ActivePanel::Js => {
-                self.dad = self.bag.len().ao(1);
+    fn go_to_end(&mut self) {
+        match self.active_panel {
+            ActivePanel::Navigation => {
+                self.nav_selected = self.nav_items.len().saturating_sub(1);
             },
-            ActivePanel::Ir => {
-                let qv = self.ln.f.len().ao(16);
-                self.cyl = qv & !0xF;
-                self.cfk = qv;
+            ActivePanel::HexView => {
+                let last = self.analysis.data.len().saturating_sub(16);
+                self.hex_offset = last & !0xF;
+                self.hex_selected = last;
             },
-            ActivePanel::Hn => {
-                self.bze = self.ln.instructions.len().ao(1);
+            ActivePanel::Disassembly => {
+                self.disasm_selected = self.analysis.instructions.len().saturating_sub(1);
             },
-            ActivePanel::V => {
-                self.esn = self.zl.len().ao(1);
+            ActivePanel::Info => {
+                self.info_scroll = self.info_lines.len().saturating_sub(1);
             },
         }
     }
 
-    fn lqh(&mut self) {
-        match self.bjd {
-            ActivePanel::Js => {
-                if let Some((item, _, _)) = self.bag.get(self.dad) {
+    fn on_enter(&mut self) {
+        match self.active_panel {
+            ActivePanel::Navigation => {
+                if let Some((item, _, _)) = self.nav_items.get(self.nav_selected) {
                     match *item {
-                        NavItem::Ato => {
+                        NavItem::Header => {
                             
-                            self.dhq(self.ln.elf.co.bt);
+                            self.goto_address(self.analysis.elf.info.entry);
                         },
-                        NavItem::Axc => {
-                            self.arm[1] = !self.arm[1];
-                            self.exl();
+                        NavItem::ProgramHeaders => {
+                            self.nav_expanded[1] = !self.nav_expanded[1];
+                            self.rebuild_nav_tree();
                         },
-                        NavItem::Qm(a) => {
-                            if let Some(afv) = self.ln.elf.dku.get(a) {
-                                self.dhq(afv.uy);
+                        NavItem::Gz(i) => {
+                            if let Some(qc) = self.analysis.elf.programs.get(i) {
+                                self.goto_address(qc.vaddr);
                             }
                         },
-                        NavItem::Ayk => {
-                            self.arm[2] = !self.arm[2];
-                            self.exl();
+                        NavItem::SectionHeaders => {
+                            self.nav_expanded[2] = !self.nav_expanded[2];
+                            self.rebuild_nav_tree();
                         },
-                        NavItem::Ga(a) => {
-                            if let Some(zw) = self.ln.elf.aeo.get(a) {
-                                if zw.ag != 0 {
-                                    self.dhq(zw.ag);
+                        NavItem::Ct(i) => {
+                            if let Some(lx) = self.analysis.elf.sections.get(i) {
+                                if lx.addr != 0 {
+                                    self.goto_address(lx.addr);
                                 } else {
                                     
-                                    self.cyl = zw.l as usize & !0xF;
-                                    self.cfk = zw.l as usize;
-                                    self.bjd = ActivePanel::Ir;
+                                    self.hex_offset = lx.offset as usize & !0xF;
+                                    self.hex_selected = lx.offset as usize;
+                                    self.active_panel = ActivePanel::HexView;
                                 }
                             }
                         },
-                        NavItem::Azo => {
-                            self.arm[3] = !self.arm[3];
-                            self.exl();
+                        NavItem::Symbols => {
+                            self.nav_expanded[3] = !self.nav_expanded[3];
+                            self.rebuild_nav_tree();
                         },
-                        NavItem::Go(a) => {
-                            let qgq: Vec<&Go> = self.ln.elf.bot.iter()
-                                .rh(self.ln.elf.dqj.iter())
-                                .hi(|e| !e.j.is_empty() && e.bn != 0)
+                        NavItem::Cy(i) => {
+                            let jut: Vec<&Cy> = self.analysis.elf.symbols.iter()
+                                .chain(self.analysis.elf.dynamic_symbols.iter())
+                                .filter(|j| !j.name.is_empty() && j.value != 0)
                                 .collect();
-                            if let Some(aaw) = qgq.get(a) {
-                                self.dhq(aaw.bn);
+                            if let Some(sym) = jut.get(i) {
+                                self.goto_address(sym.value);
                             }
                         },
-                        NavItem::Asq => {
-                            self.arm[4] = !self.arm[4];
-                            self.exl();
+                        NavItem::Functions => {
+                            self.nav_expanded[4] = !self.nav_expanded[4];
+                            self.rebuild_nav_tree();
                         },
-                        NavItem::Bs(a) => {
-                            if let Some(ke) = self.ln.xrefs.ajb.get(a) {
-                                self.dhq(ke.bt);
+                        NavItem::Aq(i) => {
+                            if let Some(func) = self.analysis.xrefs.functions.get(i) {
+                                self.goto_address(func.entry);
                             }
                         },
-                        NavItem::Azi => {
-                            self.arm[5] = !self.arm[5];
-                            self.exl();
+                        NavItem::Strings => {
+                            self.nav_expanded[5] = !self.nav_expanded[5];
+                            self.rebuild_nav_tree();
                         },
-                        NavItem::Azh(a) => {
-                            if let Some(e) = self.ln.elf.pd.get(a) {
-                                if let Some(uy) = e.uy {
-                                    self.dhq(uy);
+                        NavItem::StringItem(i) => {
+                            if let Some(j) = self.analysis.elf.strings.get(i) {
+                                if let Some(vaddr) = j.vaddr {
+                                    self.goto_address(vaddr);
                                 }
                             }
                         },
                         NavItem::DynamicInfo => {
-                            self.arm[6] = !self.arm[6];
-                            self.exl();
+                            self.nav_expanded[6] = !self.nav_expanded[6];
+                            self.rebuild_nav_tree();
                         },
-                        NavItem::Alz => {
-                            self.arm[7] = !self.arm[7];
-                            self.exl();
+                        NavItem::Relocations => {
+                            self.nav_expanded[7] = !self.nav_expanded[7];
+                            self.rebuild_nav_tree();
                         },
-                        NavItem::Aud => {},
+                        NavItem::Imports => {},
                     }
                 }
             },
-            ActivePanel::Hn => {
+            ActivePanel::Disassembly => {
                 
-                if let Some(fi) = self.ln.instructions.get(self.bze) {
-                    if let Some(cd) = fi.ena {
-                        self.dhq(cd);
+                if let Some(inst) = self.analysis.instructions.get(self.disasm_selected) {
+                    if let Some(target) = inst.branch_target {
+                        self.goto_address(target);
                     }
                 }
             },
-            ActivePanel::Ir => {
+            ActivePanel::HexView => {
                 
-                if let Some(uy) = self.ln.osf(self.cfk as u64) {
-                    self.dhq(uy);
-                    self.bjd = ActivePanel::Hn;
+                if let Some(vaddr) = self.analysis.offset_to_vaddr(self.hex_selected as u64) {
+                    self.goto_address(vaddr);
+                    self.active_panel = ActivePanel::Disassembly;
                 }
             },
-            ActivePanel::V => {},
+            ActivePanel::Info => {},
         }
 
         
-        if self.bcn && !self.bla.is_empty() {
-            if let Ok(ag) = u64::wa(&self.bla, 16) {
-                self.dhq(ag);
-                self.bcn = false;
+        if self.search_active && !self.search_query.is_empty() {
+            if let Ok(addr) = u64::from_str_radix(&self.search_query, 16) {
+                self.goto_address(addr);
+                self.search_active = false;
             }
         }
     }
 
-    fn svl(&mut self) {
+    fn follow_xref(&mut self) {
         
-        let xrefs = self.ln.xrefs.gxa(self.cwt);
-        if let Some(bta) = xrefs.fv() {
-            self.dhq(bta.wh);
+        let xrefs = self.analysis.xrefs.xrefs_from(self.current_addr);
+        if let Some(aks) = xrefs.first() {
+            self.goto_address(aks.to);
         }
     }
 
     
-    pub fn ago(&mut self, amr: i32, aio: i32, aog: u32, biz: u32) {
-        let nd = biz.ao(J_ + 24) as i32; 
-        let eve = (aog as i32 * 25) / 100; 
-        let fko = (aog as i32 * 25) / 100; 
-        let geu = (aog as i32 * 30) / 100; 
+    pub fn handle_click(&mut self, sk: i32, qn: i32, ul: u32, afy: u32) {
+        let en = afy.saturating_sub(J_ + 24) as i32; 
+        let cbv = (ul as i32 * 25) / 100; 
+        let cko = (ul as i32 * 25) / 100; 
+        let cwn = (ul as i32 * 30) / 100; 
         
 
-        let bbs = 20i32;
-        let bfm = 20i32;
-        let nfr = (J_ as i32) + bbs;
+        let acc = 20i32;
+        let aej = 20i32;
+        let hnl = (J_ as i32) + acc;
 
         
-        if aio < nfr || aio > biz as i32 - bfm {
+        if qn < hnl || qn > afy as i32 - aej {
             return; 
         }
 
-        let gy = 14i32;
-        let atd = ((aio - nfr) / gy) as usize;
+        let bw = 14i32;
+        let xf = ((qn - hnl) / bw) as usize;
 
-        if amr < eve {
+        if sk < cbv {
             
-            self.bjd = ActivePanel::Js;
-            let dew = self.gnk + atd;
-            if dew < self.bag.len() {
-                self.dad = dew;
-                self.lqh(); 
+            self.active_panel = ActivePanel::Navigation;
+            let bfi = self.nav_scroll + xf;
+            if bfi < self.nav_items.len() {
+                self.nav_selected = bfi;
+                self.on_enter(); 
             }
-        } else if amr < eve + fko {
+        } else if sk < cbv + cko {
             
-            self.bjd = ActivePanel::Ir;
-            let kia = self.cyl + atd * 16;
-            if kia < self.ln.f.len() {
-                self.cfk = kia;
-                if let Some(uy) = self.ln.osf(kia as u64) {
-                    self.cwt = uy;
-                    self.gvp();
+            self.active_panel = ActivePanel::HexView;
+            let flz = self.hex_offset + xf * 16;
+            if flz < self.analysis.data.len() {
+                self.hex_selected = flz;
+                if let Some(vaddr) = self.analysis.offset_to_vaddr(flz as u64) {
+                    self.current_addr = vaddr;
+                    self.update_info_panel();
                 }
             }
-        } else if amr < eve + fko + geu {
+        } else if sk < cbv + cko + cwn {
             
-            self.bjd = ActivePanel::Hn;
-            let khz = self.eow + atd;
-            if khz < self.ln.instructions.len() {
-                self.bze = khz;
-                self.cwt = self.ln.instructions[khz].re;
-                self.gvp();
+            self.active_panel = ActivePanel::Disassembly;
+            let fly = self.disasm_index + xf;
+            if fly < self.analysis.instructions.len() {
+                self.disasm_selected = fly;
+                self.current_addr = self.analysis.instructions[fly].address;
+                self.update_info_panel();
             }
         } else {
             
-            self.bjd = ActivePanel::V;
+            self.active_panel = ActivePanel::Info;
         }
     }
 }
@@ -801,346 +801,346 @@ impl BinaryViewerState {
 
 
 
-pub fn kqv(
-    g: &BinaryViewerState,
-    fx: i32, lw: i32, hk: u32, mg: u32,
-    acd: &dyn Fn(i32, i32, &str, u32),
+pub fn draw_binary_viewer(
+    state: &BinaryViewerState,
+    wx: i32, wy: i32, ca: u32, er: u32,
+    draw_text_fn: &dyn Fn(i32, i32, &str, u32),
 ) {
-    let bxn = J_ as i32;
-    let bfm = 20i32;
-    let bbs = 20i32;
+    let ana = J_ as i32;
+    let aej = 20i32;
+    let acc = 20i32;
     
-    let tc = fx + 1;
-    let gl = lw + bxn;
-    let ur = hk.ao(2) as i32;
-    let nd = (mg as i32) - bxn - bfm;
+    let ho = wx + 1;
+    let bn = wy + ana;
+    let hy = ca.saturating_sub(2) as i32;
+    let en = (er as i32) - ana - aej;
     
-    if ur < 200 || nd < 100 {
+    if hy < 200 || en < 100 {
         return;
     }
 
     
-    let eve = (ur * 25) / 100;
-    let fko = (ur * 25) / 100;
-    let geu = (ur * 30) / 100;
-    let izw = ur - eve - fko - geu;
+    let cbv = (hy * 25) / 100;
+    let cko = (hy * 25) / 100;
+    let cwn = (hy * 30) / 100;
+    let eql = hy - cbv - cko - cwn;
 
-    let lno = tc;
-    let fkp = lno + eve;
-    let ire = fkp + fko;
-    let leb = ire + geu;
-
-    
-    crate::framebuffer::ah(fx as u32, (lw + bxn) as u32, hk, mg - bxn as u32, JJ_);
+    let gis = ho;
+    let ckp = gis + cbv;
+    let ekf = ckp + cko;
+    let czs = ekf + cwn;
 
     
-    let zk = [
-        (lno, eve, "Navigation", ActivePanel::Js),
-        (fkp, fko, "Hex View", ActivePanel::Ir),
-        (ire, geu, "Disassembly", ActivePanel::Hn),
-        (leb, izw, "Info / Xrefs", ActivePanel::V),
+    crate::framebuffer::fill_rect(wx as u32, (wy + ana) as u32, ca, er - ana as u32, DW_);
+
+    
+    let headers = [
+        (gis, cbv, "Navigation", ActivePanel::Navigation),
+        (ckp, cko, "Hex View", ActivePanel::HexView),
+        (ekf, cwn, "Disassembly", ActivePanel::Disassembly),
+        (czs, eql, "Info / Xrefs", ActivePanel::Info),
     ];
 
-    for (y, ars, cu, vbh) in &zk {
-        let ei = if *vbh == g.bjd { 0xFF1F6FEB } else { JK_ };
-        crate::framebuffer::ah(*y as u32, gl as u32, *ars as u32, bbs as u32, ei);
-        acd(*y + 4, gl + 3, cu, AOM_);
+    for (p, wl, label, panel) in &headers {
+        let bg = if *panel == state.active_panel { 0xFF1F6FEB } else { DX_ };
+        crate::framebuffer::fill_rect(*p as u32, bn as u32, *wl as u32, acc as u32, bg);
+        draw_text_fn(*p + 4, bn + 3, label, AQM_);
     }
 
     
-    for y in &[fkp, ire, leb] {
-        crate::framebuffer::ah(*y as u32, (gl + bbs) as u32, 1, nd as u32, BOA_);
+    for p in &[ckp, ekf, czs] {
+        crate::framebuffer::fill_rect(*p as u32, (bn + acc) as u32, 1, en as u32, BQR_);
     }
 
-    let atg = gl + bbs;
-    let ans = nd - bbs;
-    let gy = 14i32;
-    let act = (ans / gy) as usize;
+    let xg = bn + acc;
+    let ug = en - acc;
+    let bw = 14i32;
+    let oe = (ug / bw) as usize;
 
     
-    seg(g, lno, atg, eve, act, gy, acd);
+    lju(state, gis, xg, cbv, oe, bw, draw_text_fn);
 
     
-    sdn(g, fkp + 2, atg, fko - 4, act, gy, acd);
+    ljd(state, ckp + 2, xg, cko - 4, oe, bw, draw_text_fn);
 
     
-    scp(g, ire + 2, atg, geu - 4, act, gy, acd);
+    lio(state, ekf + 2, xg, cwn - 4, oe, bw, draw_text_fn);
 
     
-    krc(g, leb + 2, atg, izw - 4, act, gy, acd);
+    draw_info_panel(state, czs + 2, xg, eql - 4, oe, bw, draw_text_fn);
 
     
-    let uo = lw + mg as i32 - bfm;
-    crate::framebuffer::ah(fx as u32, uo as u32, hk, bfm as u32, JK_);
+    let status_y = wy + er as i32 - aej;
+    crate::framebuffer::fill_rect(wx as u32, status_y as u32, ca, aej as u32, DX_);
 
     
-    let awz = format!(
+    let summary = format!(
         " {} | {} | {} insns | {} syms | {} funcs",
-        g.wn,
-        g.ln.elf.co.gfz,
-        g.ln.instructions.len(),
-        g.ln.elf.bot.len() + g.ln.elf.dqj.len(),
-        g.ln.xrefs.ajb.len(),
+        state.file_path,
+        state.analysis.elf.info.elf_type,
+        state.analysis.instructions.len(),
+        state.analysis.elf.symbols.len() + state.analysis.elf.dynamic_symbols.len(),
+        state.analysis.xrefs.functions.len(),
     );
-    acd(fx + 4, uo + 3, &awz, AAJ_);
+    draw_text_fn(wx + 4, status_y + 3, &summary, ABW_);
 
     
-    let elz = format!("0x{:016X} ", g.cwt);
-    let qfs = fx + hk as i32 - (elz.len() as i32 * 8) - 4;
-    acd(qfs, uo + 3, &elz, HR_);
+    let bkp = format!("0x{:016X} ", state.current_addr);
+    let jua = wx + ca as i32 - (bkp.len() as i32 * 8) - 4;
+    draw_text_fn(jua, status_y + 3, &bkp, IJ_);
 
     
-    if g.bcn {
-        let blb = lw + bxn + 2;
-        let kp = 250i32;
-        let kl = 20i32;
-        let cr = fx + hk as i32 / 2 - kp / 2;
-        crate::framebuffer::ah(cr as u32, blb as u32, kp as u32, kl as u32, 0xFF1F6FEB);
-        let aau = format!("Go to: 0x{}_", g.bla);
-        acd(cr + 4, blb + 3, &aau, 0xFFFFFFFF);
+    if state.search_active {
+        let agz = wy + ana + 2;
+        let dy = 250i32;
+        let dw = 20i32;
+        let am = wx + ca as i32 / 2 - dy / 2;
+        crate::framebuffer::fill_rect(am as u32, agz as u32, dy as u32, dw as u32, 0xFF1F6FEB);
+        let nh = format!("Go to: 0x{}_", state.search_query);
+        draw_text_fn(am + 4, agz + 3, &nh, 0xFFFFFFFF);
     }
 }
 
 
-fn seg(
-    g: &BinaryViewerState,
-    b: i32, c: i32, d: i32,
-    iw: usize, gy: i32,
-    acd: &dyn Fn(i32, i32, &str, u32),
+fn lju(
+    state: &BinaryViewerState,
+    x: i32, y: i32, w: i32,
+    visible: usize, bw: i32,
+    draw_text_fn: &dyn Fn(i32, i32, &str, u32),
 ) {
-    let ay = g.gnk;
-    let ci = (ay + iw).v(g.bag.len());
+    let start = state.nav_scroll;
+    let end = (start + visible).min(state.nav_items.len());
 
-    for (afj, w) in (ay..ci).cf() {
-        let ct = c + (afj as i32) * gy;
-        let (item, crn, text) = &g.bag[w];
+    for (pt, idx) in (start..end).enumerate() {
+        let ly = y + (pt as i32) * bw;
+        let (item, axq, text) = &state.nav_items[idx];
 
         
-        if w == g.dad {
-            let ei = if g.bjd == ActivePanel::Js { ZK_ } else { ZJ_ };
-            crate::framebuffer::ah(b as u32, ct as u32, d as u32, gy as u32, ei);
+        if idx == state.nav_selected {
+            let bg = if state.active_panel == ActivePanel::Navigation { AAW_ } else { AAV_ };
+            crate::framebuffer::fill_rect(x as u32, ly as u32, w as u32, bw as u32, bg);
         }
 
         
-        let s = match item {
-            NavItem::Ato | NavItem::Axc | NavItem::Ayk |
-            NavItem::Azo | NavItem::Asq | NavItem::Azi |
-            NavItem::DynamicInfo | NavItem::Alz => BOE_,
-            NavItem::Bs(_) => AAG_,
-            NavItem::Go(_) => AOP_,
-            NavItem::Azh(_) => AOQ_,
-            _ => AOT_,
+        let color = match item {
+            NavItem::Header | NavItem::ProgramHeaders | NavItem::SectionHeaders |
+            NavItem::Symbols | NavItem::Functions | NavItem::Strings |
+            NavItem::DynamicInfo | NavItem::Relocations => BQV_,
+            NavItem::Aq(_) => ABV_,
+            NavItem::Cy(_) => AQP_,
+            NavItem::StringItem(_) => AQQ_,
+            _ => AQT_,
         };
 
         
-        let aem = (d / 8).am(4) as usize;
-        let display = if text.len() > aem {
-            &text[..aem]
+        let nd = (w / 8).max(4) as usize;
+        let display = if text.len() > nd {
+            &text[..nd]
         } else {
             text
         };
 
-        acd(b + 2 + (*crn as i32 * 8), ct + 1, display, s);
+        draw_text_fn(x + 2 + (*axq as i32 * 8), ly + 1, display, color);
     }
 }
 
 
-fn sdn(
-    g: &BinaryViewerState,
-    b: i32, c: i32, dxx: i32,
-    iw: usize, gy: i32,
-    acd: &dyn Fn(i32, i32, &str, u32),
+fn ljd(
+    state: &BinaryViewerState,
+    x: i32, y: i32, _w: i32,
+    visible: usize, bw: i32,
+    draw_text_fn: &dyn Fn(i32, i32, &str, u32),
 ) {
-    let f = &g.ln.f;
-    let cun = g.cyl;
+    let data = &state.analysis.data;
+    let azv = state.hex_offset;
 
-    for line in 0..iw {
-        let l = cun + line * 16;
-        if l >= f.len() { break; }
+    for line in 0..visible {
+        let offset = azv + line * 16;
+        if offset >= data.len() { break; }
 
-        let ct = c + (line as i32) * gy;
-        let ci = (l + 16).v(f.len());
-        let jj = &f[l..ci];
+        let ly = y + (line as i32) * bw;
+        let end = (offset + 16).min(data.len());
+        let df = &data[offset..end];
 
         
-        if l <= g.cfk && g.cfk < l + 16 {
-            let ei = if g.bjd == ActivePanel::Ir { ZK_ } else { ZJ_ };
-            crate::framebuffer::ah(b as u32, ct as u32, 400, gy as u32, ei);
+        if offset <= state.hex_selected && state.hex_selected < offset + 16 {
+            let bg = if state.active_panel == ActivePanel::HexView { AAW_ } else { AAV_ };
+            crate::framebuffer::fill_rect(x as u32, ly as u32, 400, bw as u32, bg);
         }
 
         
-        let dyd = format!("{:06X}", l);
-        acd(b, ct + 1, &dyd, HR_);
+        let bqd = format!("{:06X}", offset);
+        draw_text_fn(x, ly + 1, &bqd, IJ_);
 
         
-        let mut bng = b + 56;
-        for (a, &o) in jj.iter().cf() {
-            if a == 8 { bng += 4; } 
-            let quz = format!("{:02X}", o);
+        let mut aib = x + 56;
+        for (i, &b) in df.iter().enumerate() {
+            if i == 8 { aib += 4; } 
+            let kgo = format!("{:02X}", b);
             
             
-            let bj = if o == 0 {
+            let col = if b == 0 {
                 0xFF484F58 
-            } else if o >= 0x20 && o < 0x7F {
-                BNV_ 
+            } else if b >= 0x20 && b < 0x7F {
+                BQN_ 
             } else {
-                AON_ 
+                AQN_ 
             };
-            acd(bng, ct + 1, &quz, bj);
-            bng += 20;
+            draw_text_fn(aib, ly + 1, &kgo, col);
+            aib += 20;
         }
 
         
-        let ikb = b + 56 + 16 * 20 + 12;
-        let mut ax = ikb;
-        for &o in jj {
-            let bm = if o >= 0x20 && o < 0x7F { o as char } else { '.' };
-            let mut k = [0u8; 4];
-            let e = bm.hia(&mut k);
-            let bj = if o >= 0x20 && o < 0x7F { BNP_ } else { 0xFF484F58 };
-            acd(ax, ct + 1, e, bj);
+        let efq = x + 56 + 16 * 20 + 12;
+        let mut ax = efq;
+        for &b in df {
+            let ch = if b >= 0x20 && b < 0x7F { b as char } else { '.' };
+            let mut buf = [0u8; 4];
+            let j = ch.encode_utf8(&mut buf);
+            let col = if b >= 0x20 && b < 0x7F { BQH_ } else { 0xFF484F58 };
+            draw_text_fn(ax, ly + 1, j, col);
             ax += 8;
         }
     }
 }
 
 
-fn scp(
-    g: &BinaryViewerState,
-    b: i32, c: i32, d: i32,
-    iw: usize, gy: i32,
-    acd: &dyn Fn(i32, i32, &str, u32),
+fn lio(
+    state: &BinaryViewerState,
+    x: i32, y: i32, w: i32,
+    visible: usize, bw: i32,
+    draw_text_fn: &dyn Fn(i32, i32, &str, u32),
 ) {
-    let edl = &g.ln.instructions;
-    if edl.is_empty() {
-        acd(b + 4, c + 20, "No code to display", AOL_);
+    let btl = &state.analysis.instructions;
+    if btl.is_empty() {
+        draw_text_fn(x + 4, y + 20, "No code to display", AQL_);
         return;
     }
 
     
-    let ay = g.eow;
-    let ci = (ay + iw).v(edl.len());
+    let start = state.disasm_index;
+    let end = (start + visible).min(btl.len());
 
-    for (afj, w) in (ay..ci).cf() {
-        let fi = &edl[w];
-        let ct = c + (afj as i32) * gy;
+    for (pt, idx) in (start..end).enumerate() {
+        let inst = &btl[idx];
+        let ly = y + (pt as i32) * bw;
 
         
-        if w == g.bze {
-            let ei = if g.bjd == ActivePanel::Hn { ZK_ } else { ZJ_ };
-            crate::framebuffer::ah(b as u32, ct as u32, d as u32, gy as u32, ei);
+        if idx == state.disasm_selected {
+            let bg = if state.active_panel == ActivePanel::Disassembly { AAW_ } else { AAV_ };
+            crate::framebuffer::fill_rect(x as u32, ly as u32, w as u32, bw as u32, bg);
         }
 
         
-        if g.ln.xrefs.txn(fi.re) {
-            if let Some(j) = g.ln.elf.blw.get(&fi.re) {
+        if state.analysis.xrefs.is_function_entry(inst.address) {
+            if let Some(name) = state.analysis.elf.addr_to_symbol.get(&inst.address) {
                 
-                let cu = format!("<{}>:", j);
-                let aem = (d / 8).am(4) as usize;
-                let display = if cu.len() > aem { &cu[..aem] } else { &cu };
-                acd(b + 2, ct + 1, display, BNW_);
+                let label = format!("<{}>:", name);
+                let nd = (w / 8).max(4) as usize;
+                let display = if label.len() > nd { &label[..nd] } else { &label };
+                draw_text_fn(x + 2, ly + 1, display, BQO_);
                 continue; 
             }
         }
 
-        let mut cx = b + 2;
+        let mut cx = x + 2;
 
         
-        let dyd = format!("{:08X}", fi.re);
-        acd(cx, ct + 1, &dyd, HR_);
+        let bqd = format!("{:08X}", inst.address);
+        draw_text_fn(cx, ly + 1, &bqd, IJ_);
         cx += 72;
 
         
-        let aal = fi.bf.len().v(6);
-        let mut hcb = String::new();
-        for o in &fi.bf[..aal] {
-            hcb.t(&format!("{:02X}", o));
+        let nb = inst.bytes.len().min(6);
+        let mut dkf = String::new();
+        for b in &inst.bytes[..nb] {
+            dkf.push_str(&format!("{:02X}", b));
         }
-        if fi.bf.len() > 6 { hcb.t(".."); }
+        if inst.bytes.len() > 6 { dkf.push_str(".."); }
         
-        while hcb.len() < 14 { hcb.push(' '); }
-        acd(cx, ct + 1, &hcb, 0xFF484F58);
+        while dkf.len() < 14 { dkf.push(' '); }
+        draw_text_fn(cx, ly + 1, &dkf, 0xFF484F58);
         cx += 116;
 
         
-        let uoz = if fi.etc {
-            AOK_
-        } else if fi.etg || fi.etd {
-            AOO_
-        } else if fi.edy {
-            AAG_
+        let nfs = if inst.is_call {
+            AQK_
+        } else if inst.is_jump || inst.is_cond_jump {
+            AQO_
+        } else if inst.is_ret {
+            ABV_
         } else {
-            BNX_
+            BQP_
         };
-        let uoy = format!("{:<7}", fi.bes);
-        acd(cx, ct + 1, &uoy, uoz);
+        let nfr = format!("{:<7}", inst.mnemonic);
+        draw_text_fn(cx, ly + 1, &nfr, nfs);
         cx += 60;
 
         
-        let oma = ((d - (cx - b)) / 8).am(1) as usize;
-        let bvr = if fi.bvs.len() > oma {
-            &fi.bvs[..oma]
+        let imp = ((w - (cx - x)) / 8).max(1) as usize;
+        let operands = if inst.operands_str.len() > imp {
+            &inst.operands_str[..imp]
         } else {
-            &fi.bvs
+            &inst.operands_str
         };
 
         
-        let uyq = if fi.bvs.cj("0x") || fi.bvs.contains("0x") {
-            AON_
+        let nnl = if inst.operands_str.starts_with("0x") || inst.operands_str.contains("0x") {
+            AQN_
         } else {
-            AOP_
+            AQP_
         };
-        acd(cx, ct + 1, bvr, uyq);
+        draw_text_fn(cx, ly + 1, operands, nnl);
 
         
-        if let Some(ref byv) = fi.byv {
-            let kjz = format!(" ; {}", byv);
-            let pbq = d - (cx - b) - (bvr.len() as i32 * 8);
-            if pbq > 24 {
-                let olo = (pbq / 8) as usize;
-                let display = if kjz.len() > olo { &kjz[..olo] } else { &kjz };
-                acd(cx + (bvr.len() as i32 * 8), ct + 1, display, AOL_);
+        if let Some(ref comment) = inst.comment {
+            let fnw = format!(" ; {}", comment);
+            let izm = w - (cx - x) - (operands.len() as i32 * 8);
+            if izm > 24 {
+                let imh = (izm / 8) as usize;
+                let display = if fnw.len() > imh { &fnw[..imh] } else { &fnw };
+                draw_text_fn(cx + (operands.len() as i32 * 8), ly + 1, display, AQL_);
             }
         }
     }
 }
 
 
-fn krc(
-    g: &BinaryViewerState,
-    b: i32, c: i32, dxx: i32,
-    iw: usize, gy: i32,
-    acd: &dyn Fn(i32, i32, &str, u32),
+fn draw_info_panel(
+    state: &BinaryViewerState,
+    x: i32, y: i32, _w: i32,
+    visible: usize, bw: i32,
+    draw_text_fn: &dyn Fn(i32, i32, &str, u32),
 ) {
-    let ay = g.esn;
-    let ci = (ay + iw).v(g.zl.len());
+    let start = state.info_scroll;
+    let end = (start + visible).min(state.info_lines.len());
 
-    for (afj, w) in (ay..ci).cf() {
-        let ct = c + (afj as i32) * gy;
-        let line = &g.zl[w];
+    for (pt, idx) in (start..end).enumerate() {
+        let ly = y + (pt as i32) * bw;
+        let line = &state.info_lines[idx];
 
         
-        let bj = if line.cj("Address:") || line.cj("Section:") ||
-                     line.cj("Symbol:") || line.cj("Function:") ||
-                     line.cj("Instruction:") {
-            AOM_
-        } else if line.cj("Xrefs") {
-            BOK_
-        } else if line.cj("  ->") || line.cj("  <-") {
-            AOK_
-        } else if line.cj("  CALL") || line.cj("  JMP") || line.cj("  Jcc") {
-            AOO_
-        } else if line.cj("  DATA") {
-            AOQ_
-        } else if line.cj("Calls to:") || line.cj("Called from:") {
-            AAG_
+        let col = if line.starts_with("Address:") || line.starts_with("Section:") ||
+                     line.starts_with("Symbol:") || line.starts_with("Function:") ||
+                     line.starts_with("Instruction:") {
+            AQM_
+        } else if line.starts_with("Xrefs") {
+            BRB_
+        } else if line.starts_with("  ->") || line.starts_with("  <-") {
+            AQK_
+        } else if line.starts_with("  CALL") || line.starts_with("  JMP") || line.starts_with("  Jcc") {
+            AQO_
+        } else if line.starts_with("  DATA") {
+            AQQ_
+        } else if line.starts_with("Calls to:") || line.starts_with("Called from:") {
+            ABV_
         } else {
-            AOT_
+            AQT_
         };
 
         
-        let aem = 40usize; 
-        let display = if line.len() > aem { &line[..aem] } else { line };
-        acd(b + 2, ct + 1, display, bj);
+        let nd = 40usize; 
+        let display = if line.len() > nd { &line[..nd] } else { line };
+        draw_text_fn(x + 2, ly + 1, display, col);
     }
 }

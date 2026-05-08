@@ -9,7 +9,7 @@
 /// On RISC-V, system calls use ECALL instruction which generates a
 /// synchronous exception handled via the stvec trap vector.
 /// No special MSR-like setup needed (unlike x86_64 SYSCALL).
-pub fn initialize_syscall(_handler_address: u64) {
+pub fn initialize_syscall(_handler_addr: u64) {
     // ECALL-based syscalls are handled through the trap vector.
     // The stvec setup is done in the interrupt initialization.
 }

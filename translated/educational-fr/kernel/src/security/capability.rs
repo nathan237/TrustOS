@@ -91,9 +91,9 @@ pub enum CapabilityType {
     
     // === Execution and sandboxing ===
     /// Shell command execution
-    ShellExecute,
+    ShellExec,
     /// ELF binary loading and execution
-    ExecuteBinary,
+    ExecBinary,
     /// Cryptographic operations (AES-NI, TLS key material, RNG)
     Crypto,
     
@@ -129,11 +129,11 @@ match self {
             
             // Moderate risk — can affect other processes or network
             Self::Process | Self::Network | Self::Device | Self::Usb |
-            Self::Scheduler | Self::Debug | Self::ShellExecute | Self::LinuxCompat => 2,
+            Self::Scheduler | Self::Debug | Self::ShellExec | Self::LinuxCompat => 2,
             
             // High risk — direct hardware access
             Self::PortIO | Self::Interrupt | Self::Dma | Self::BlockDeviceWrite |
-            Self::Syscall | Self::ExecuteBinary | Self::Hypervisor => 3,
+            Self::Syscall | Self::ExecBinary | Self::Hypervisor => 3,
             
             // Very dangerous — data destruction possible
             Self::PartitionManagement | Self::Power => 4,
@@ -144,7 +144,7 @@ match self {
             // Dynamic types — default to moderate risk; override via registry
             Self::Dynamic(id) => DYNAMIC_TYPE_REGISTRY.lock()
                 .get(&(*id))
-                .map(|information| information.danger_level)
+                .map(|info| info.danger_level)
                 .unwrap_or(2),
         }
     }
@@ -162,11 +162,11 @@ match self {
             Self::Framebuffer | Self::Graphics | Self::WaylandCompositor |
             Self::Media => "Display",
             Self::Power | Self::Scheduler | Self::Debug | Self::Syscall => "System",
-            Self::ShellExecute | Self::ExecuteBinary | Self::LinuxCompat |
+            Self::ShellExec | Self::ExecBinary | Self::LinuxCompat |
             Self::Hypervisor => "Execution",
             Self::Dynamic(id) => DYNAMIC_TYPE_REGISTRY.lock()
                 .get(&(*id))
-                .map(|information| information.category)
+                .map(|info| info.category)
                 .unwrap_or("Dynamic"),
         }
     }
@@ -342,13 +342,13 @@ pub fn register_dynamic_type(
     description: &str,
 ) -> u32 {
     let id = NEXT_DYNAMIC_TYPE_ID.fetch_add(1, Ordering::Relaxed) as u32;
-    let information = DynamicTypeInformation {
+    let info = DynamicTypeInformation {
         name: String::from(name),
-        danger_level: danger_level.minimum(5),
+        danger_level: danger_level.min(5),
         category,
         description: String::from(description),
     };
-    DYNAMIC_TYPE_REGISTRY.lock().insert(id, information);
+    DYNAMIC_TYPE_REGISTRY.lock().insert(id, info);
     crate::log_debug!("Registered dynamic capability type: {} (id={})", name, id);
     id
 }

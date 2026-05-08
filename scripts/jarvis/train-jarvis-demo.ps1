@@ -128,7 +128,10 @@ foreach ($line in $r.Split("`n")) {
 Write-Host "`n=== TRAINING DEMO COMPLETE ===" -ForegroundColor Green
 
 # Save full log
-$results -join "`n" | Out-File -FilePath "C:\Users\nathan\Documents\Scripts\OSrust\jarvis_training_log.txt" -Encoding UTF8
-Write-Host "Full log: jarvis_training_log.txt"
+$LogDir = Join-Path $PSScriptRoot "..\..\logs\jarvis"
+New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
+$LogPath = Join-Path $LogDir "jarvis_training_log.txt"
+$results -join "`n" | Out-File -FilePath $LogPath -Encoding UTF8
+Write-Host "Full log: $LogPath"
 
 $c.Close()

@@ -122,8 +122,8 @@ pub fn new(width: usize, height: usize, depth: usize) -> Self {
     
     /// Helper to convert 2D coords to flat index
     #[inline]
-    fn index(column: usize, row: usize) -> usize {
-        column * MATRIX_ROWS + row
+    fn idx(col: usize, row: usize) -> usize {
+        col * MATRIX_ROWS + row
     }
     
         // Public function — callable from other modules.
@@ -160,9 +160,9 @@ match self.render_mode {
     fn compute_intensity_map(&mut self, shape: Shape3D) {
         if shape == Shape3D::None {
             // No shape - all normal
-            for column in 0..MATRIX_COLS {
+            for col in 0..MATRIX_COLS {
                 for row in 0..MATRIX_ROWS {
-                    self.intensity_map[Self::index(column, row)] = ColorMod::Normal;
+                    self.intensity_map[Self::idx(col, row)] = ColorMod::Normal;
                 }
             }
             return;
@@ -174,10 +174,10 @@ match self.render_mode {
         // Shape center and size
         let cx = self.screen_width as f32 / 2.0;
         let cy = self.screen_height as f32 / 2.0;
-        let shape_radius = (self.screen_width.minimum(self.screen_height) as f32) * 0.25;
+        let shape_radius = (self.screen_width.min(self.screen_height) as f32) * 0.25;
         
-        for column in 0..MATRIX_COLS {
-            let x = column as f32 * cell_w + cell_w / 2.0;
+        for col in 0..MATRIX_COLS {
+            let x = col as f32 * cell_w + cell_w / 2.0;
             
             for row in 0..MATRIX_ROWS {
                 let y = row as f32 * cell_h + cell_h / 2.0;
@@ -203,7 +203,7 @@ match self.render_mode {
                 }
                 
                 // Determine color modifier
-                self.intensity_map[Self::index(column, row)] = if minimum_sdf.absolute() < EDGE_THRESHOLD {
+                self.intensity_map[Self::idx(col, row)] = if minimum_sdf.abs() < EDGE_THRESHOLD {
                     // ON EDGE
                     ColorMod::Edge
                 } else if any_inside {
@@ -230,11 +230,11 @@ match self.render_mode {
     pub fn get_u8_intensity_map(&self) -> Vec<u8> {
         let mut result = vec![0u8; MATRIX_COLS * MATRIX_ROWS];
         
-        for column in 0..MATRIX_COLS {
+        for col in 0..MATRIX_COLS {
             for row in 0..MATRIX_ROWS {
-                let index = Self::index(column, row);
-                result[index] = // Pattern matching — Rust's exhaustive branching construct.
-match self.intensity_map[index] {
+                let idx = Self::idx(col, row);
+                result[idx] = // Pattern matching — Rust's exhaustive branching construct.
+match self.intensity_map[idx] {
                     ColorMod::Normal => 0,
                     ColorMod::Edge => 1,
                     ColorMod::Inside(gradient) => {
@@ -254,9 +254,9 @@ match self.intensity_map[index] {
     /// The desktop rain uses this to modify its colors
     #[inline]
         // Public function — callable from other modules.
-pub fn get_color_mod(&self, column: usize, row: usize) -> ColorMod {
-        if column < MATRIX_COLS && row < MATRIX_ROWS {
-            self.intensity_map[Self::index(column, row)]
+pub fn get_color_mod(&self, col: usize, row: usize) -> ColorMod {
+        if col < MATRIX_COLS && row < MATRIX_ROWS {
+            self.intensity_map[Self::idx(col, row)]
         } else {
             ColorMod::Normal
         }
@@ -279,12 +279,12 @@ match self.render_mode {
     /// Returns the final color (ARGB format)
     #[inline]
         // Public function — callable from other modules.
-pub fn apply_color_mod(&self, base_green: u32, column: usize, row: usize) -> u32 {
+pub fn apply_color_mod(&self, base_green: u32, col: usize, row: usize) -> u32 {
                 // Pattern matching — Rust's exhaustive branching construct.
-match self.get_color_mod(column, row) {
+match self.get_color_mod(col, row) {
             ColorMod::Normal => {
                 // Normal rain - keep color as is (but never pure green)
-                let g = base_green.minimum(238);
+                let g = base_green.min(238);
                 0xFF000000 | (g << 8)
             }
             ColorMod::Edge => {
@@ -316,7 +316,7 @@ match self.get_color_mod(column, row) {
         // Apply rotation around Y axis
         let cos_r = libm::cosf(self.rotation);
         let sin_r = libm::sinf(self.rotation);
-        let receive = x * cos_r - z * sin_r;
+        let rx = x * cos_r - z * sin_r;
         let rz = x * sin_r + z * cos_r;
         let ry = y;
         
@@ -324,7 +324,7 @@ match self.get_color_mod(column, row) {
 match shape {
             Shape3D::Cube => {
                 let size = 0.7;
-                let dx = libm::fabsf(receive) - size;
+                let dx = libm::fabsf(rx) - size;
                 let dy = libm::fabsf(ry) - size;
                 let dz = libm::fabsf(rz) - size;
                 let mx = libm::fmaxf(dx, 0.0);
@@ -337,13 +337,13 @@ match shape {
             
             Shape3D::Sphere => {
                 let radius = 0.8;
-                libm::sqrtf(receive * receive + ry * ry + rz * rz) - radius
+                libm::sqrtf(rx * rx + ry * ry + rz * rz) - radius
             }
             
             Shape3D::Torus => {
                 let major = 0.6;
                 let minor = 0.25;
-                let q = libm::sqrtf(receive * receive + rz * rz) - major;
+                let q = libm::sqrtf(rx * rx + rz * rz) - major;
                 libm::sqrtf(q * q + ry * ry) - minor
             }
             
@@ -356,13 +356,13 @@ match shape {
                 
                 let s1x = helix_radius * libm::cosf(angle);
                 let s1z = helix_radius * libm::sinf(angle);
-                let dx1 = receive - s1x;
+                let dx1 = rx - s1x;
                 let dz1 = rz - s1z;
                 let d1 = libm::sqrtf(dx1 * dx1 + dz1 * dz1) - strand_radius;
                 
                 let s2x = helix_radius * libm::cosf(angle + core::f32::consts::PI);
                 let s2z = helix_radius * libm::sinf(angle + core::f32::consts::PI);
-                let dx2 = receive - s2x;
+                let dx2 = rx - s2x;
                 let dz2 = rz - s2z;
                 let d2 = libm::sqrtf(dx2 * dx2 + dz2 * dz2) - strand_radius;
                 

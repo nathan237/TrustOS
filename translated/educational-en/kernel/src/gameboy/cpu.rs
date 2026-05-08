@@ -13,8 +13,8 @@ const FLAG_C: u8 = 0x10;
 
 // Trait definition — declares a shared interface that types can implement.
 pub trait GbBus {
-    fn read(&mut self, address: u16) -> u8;
-    fn write(&mut self, address: u16, value: u8);
+    fn read(&mut self, addr: u16) -> u8;
+    fn write(&mut self, addr: u16, val: u8);
 }
 
 // Public structure — visible outside this module.
@@ -90,9 +90,9 @@ impl GbBus) -> u16 {
 
     // Stack
     fn push16(&mut self, bus: &mut // Implementation block — defines methods for the type above.
-impl GbBus, value: u16) {
-        self.sp = self.sp.wrapping_sub(1); bus.write(self.sp, (value >> 8) as u8);
-        self.sp = self.sp.wrapping_sub(1); bus.write(self.sp, value as u8);
+impl GbBus, val: u16) {
+        self.sp = self.sp.wrapping_sub(1); bus.write(self.sp, (val >> 8) as u8);
+        self.sp = self.sp.wrapping_sub(1); bus.write(self.sp, val as u8);
     }
     fn pop16(&mut self, bus: &mut // Implementation block — defines methods for the type above.
 impl GbBus) -> u16 {
@@ -102,7 +102,7 @@ impl GbBus) -> u16 {
     }
 
     // Register index decode (bits 0-2 or 3-5 of opcode)
-    fn get_register(&self, r: u8, bus: &mut // Implementation block — defines methods for the type above.
+    fn get_reg(&self, r: u8, bus: &mut // Implementation block — defines methods for the type above.
 impl GbBus) -> u8 {
                 // Pattern matching — Rust's exhaustive branching construct.
 match r & 7 {
@@ -111,7 +111,7 @@ match r & 7 {
             _ => 0,
         }
     }
-    fn set_register(&mut self, r: u8, v: u8, bus: &mut // Implementation block — defines methods for the type above.
+    fn set_reg(&mut self, r: u8, v: u8, bus: &mut // Implementation block — defines methods for the type above.
 impl GbBus) {
                 // Pattern matching — Rust's exhaustive branching construct.
 match r & 7 {
@@ -153,14 +153,14 @@ match r & 7 {
     }
 
     // ======== CB prefix helpers ========
-    fn callback_rlc(&mut self, v: u8) -> u8 { let c = v >> 7; let r = (v << 1) | c; self.set_flags(r == 0, false, false, c != 0); r }
-    fn callback_rrc(&mut self, v: u8) -> u8 { let c = v & 1; let r = (v >> 1) | (c << 7); self.set_flags(r == 0, false, false, c != 0); r }
-    fn callback_rl(&mut self, v: u8) -> u8 { let oc = if self.cf() { 1u8 } else { 0 }; let c = v >> 7; let r = (v << 1) | oc; self.set_flags(r == 0, false, false, c != 0); r }
-    fn callback_rr(&mut self, v: u8) -> u8 { let oc = if self.cf() { 1u8 } else { 0 }; let c = v & 1; let r = (v >> 1) | (oc << 7); self.set_flags(r == 0, false, false, c != 0); r }
-    fn callback_sla(&mut self, v: u8) -> u8 { let c = v >> 7; let r = v << 1; self.set_flags(r == 0, false, false, c != 0); r }
-    fn callback_sra(&mut self, v: u8) -> u8 { let c = v & 1; let r = (v >> 1) | (v & 0x80); self.set_flags(r == 0, false, false, c != 0); r }
-    fn callback_swap(&mut self, v: u8) -> u8 { let r = (v >> 4) | (v << 4); self.set_flags(r == 0, false, false, false); r }
-    fn callback_srl(&mut self, v: u8) -> u8 { let c = v & 1; let r = v >> 1; self.set_flags(r == 0, false, false, c != 0); r }
+    fn cb_rlc(&mut self, v: u8) -> u8 { let c = v >> 7; let r = (v << 1) | c; self.set_flags(r == 0, false, false, c != 0); r }
+    fn cb_rrc(&mut self, v: u8) -> u8 { let c = v & 1; let r = (v >> 1) | (c << 7); self.set_flags(r == 0, false, false, c != 0); r }
+    fn cb_rl(&mut self, v: u8) -> u8 { let oc = if self.cf() { 1u8 } else { 0 }; let c = v >> 7; let r = (v << 1) | oc; self.set_flags(r == 0, false, false, c != 0); r }
+    fn cb_rr(&mut self, v: u8) -> u8 { let oc = if self.cf() { 1u8 } else { 0 }; let c = v & 1; let r = (v >> 1) | (oc << 7); self.set_flags(r == 0, false, false, c != 0); r }
+    fn cb_sla(&mut self, v: u8) -> u8 { let c = v >> 7; let r = v << 1; self.set_flags(r == 0, false, false, c != 0); r }
+    fn cb_sra(&mut self, v: u8) -> u8 { let c = v & 1; let r = (v >> 1) | (v & 0x80); self.set_flags(r == 0, false, false, c != 0); r }
+    fn cb_swap(&mut self, v: u8) -> u8 { let r = (v >> 4) | (v << 4); self.set_flags(r == 0, false, false, false); r }
+    fn cb_srl(&mut self, v: u8) -> u8 { let c = v & 1; let r = v >> 1; self.set_flags(r == 0, false, false, c != 0); r }
 
     // ======== Other helpers ========
     fn inc8(&mut self, v: u8) -> u8 {
@@ -317,22 +317,22 @@ match op {
             // ===== 0x40-0x7F: LD r,r (+ HALT) =====
             0x76 => { self.halted = true; 1 }
             0x40..=0x75 | 0x77..=0x7F => {
-                let destination = (op >> 3) & 7;
-                let source = op & 7;
-                let v = self.get_register(source, bus);
-                self.set_register(destination, v, bus);
-                if source == 6 || destination == 6 { 2 } else { 1 }
+                let dst = (op >> 3) & 7;
+                let src = op & 7;
+                let v = self.get_reg(src, bus);
+                self.set_reg(dst, v, bus);
+                if src == 6 || dst == 6 { 2 } else { 1 }
             }
 
             // ===== 0x80-0xBF: ALU A,r =====
-            0x80..=0x87 => { let v = self.get_register(op & 7, bus); self.alu_add(v); if op & 7 == 6 { 2 } else { 1 } }
-            0x88..=0x8F => { let v = self.get_register(op & 7, bus); self.alu_adc(v); if op & 7 == 6 { 2 } else { 1 } }
-            0x90..=0x97 => { let v = self.get_register(op & 7, bus); self.alu_sub(v); if op & 7 == 6 { 2 } else { 1 } }
-            0x98..=0x9F => { let v = self.get_register(op & 7, bus); self.alu_sbc(v); if op & 7 == 6 { 2 } else { 1 } }
-            0xA0..=0xA7 => { let v = self.get_register(op & 7, bus); self.alu_and(v); if op & 7 == 6 { 2 } else { 1 } }
-            0xA8..=0xAF => { let v = self.get_register(op & 7, bus); self.alu_xor(v); if op & 7 == 6 { 2 } else { 1 } }
-            0xB0..=0xB7 => { let v = self.get_register(op & 7, bus); self.alu_or(v); if op & 7 == 6 { 2 } else { 1 } }
-            0xB8..=0xBF => { let v = self.get_register(op & 7, bus); self.alu_cp(v); if op & 7 == 6 { 2 } else { 1 } }
+            0x80..=0x87 => { let v = self.get_reg(op & 7, bus); self.alu_add(v); if op & 7 == 6 { 2 } else { 1 } }
+            0x88..=0x8F => { let v = self.get_reg(op & 7, bus); self.alu_adc(v); if op & 7 == 6 { 2 } else { 1 } }
+            0x90..=0x97 => { let v = self.get_reg(op & 7, bus); self.alu_sub(v); if op & 7 == 6 { 2 } else { 1 } }
+            0x98..=0x9F => { let v = self.get_reg(op & 7, bus); self.alu_sbc(v); if op & 7 == 6 { 2 } else { 1 } }
+            0xA0..=0xA7 => { let v = self.get_reg(op & 7, bus); self.alu_and(v); if op & 7 == 6 { 2 } else { 1 } }
+            0xA8..=0xAF => { let v = self.get_reg(op & 7, bus); self.alu_xor(v); if op & 7 == 6 { 2 } else { 1 } }
+            0xB0..=0xB7 => { let v = self.get_reg(op & 7, bus); self.alu_or(v); if op & 7 == 6 { 2 } else { 1 } }
+            0xB8..=0xBF => { let v = self.get_reg(op & 7, bus); self.alu_cp(v); if op & 7 == 6 { 2 } else { 1 } }
 
             // ===== 0xC0-0xFF: Control flow, stack, misc =====
             0xC0 => { if !self.zf() { self.pc = self.pop16(bus); 5 } else { 2 } }
@@ -346,7 +346,7 @@ match op {
             0xC8 => { if self.zf() { self.pc = self.pop16(bus); 5 } else { 2 } }
             0xC9 => { self.pc = self.pop16(bus); 4 }
             0xCA => { let a = self.fetch16(bus); if self.zf() { self.pc = a; 4 } else { 3 } }
-            0xCB => { return self.execute_callback(bus); }
+            0xCB => { return self.execute_cb(bus); }
             0xCC => { let a = self.fetch16(bus); if self.zf() { self.push16(bus, self.pc); self.pc = a; 6 } else { 3 } }
             0xCD => { let a = self.fetch16(bus); self.push16(bus, self.pc); self.pc = a; 6 }
             0xCE => { let v = self.fetch8(bus); self.alu_adc(v); 2 }
@@ -409,36 +409,36 @@ match op {
     }
 
     // ======== CB-prefix (256 bit/shift/rotate opcodes) ========
-    fn execute_callback(&mut self, bus: &mut // Implementation block — defines methods for the type above.
+    fn execute_cb(&mut self, bus: &mut // Implementation block — defines methods for the type above.
 impl GbBus) -> u32 {
-        let callback = self.fetch8(bus);
-        let r = callback & 7;
-        let v = self.get_register(r, bus);
+        let cb = self.fetch8(bus);
+        let r = cb & 7;
+        let v = self.get_reg(r, bus);
         let is_hl = r == 6;
 
                 // Pattern matching — Rust's exhaustive branching construct.
-match callback {
-            0x00..=0x07 => { let result = self.callback_rlc(v); self.set_register(r, result, bus); }
-            0x08..=0x0F => { let result = self.callback_rrc(v); self.set_register(r, result, bus); }
-            0x10..=0x17 => { let result = self.callback_rl(v); self.set_register(r, result, bus); }
-            0x18..=0x1F => { let result = self.callback_rr(v); self.set_register(r, result, bus); }
-            0x20..=0x27 => { let result = self.callback_sla(v); self.set_register(r, result, bus); }
-            0x28..=0x2F => { let result = self.callback_sra(v); self.set_register(r, result, bus); }
-            0x30..=0x37 => { let result = self.callback_swap(v); self.set_register(r, result, bus); }
-            0x38..=0x3F => { let result = self.callback_srl(v); self.set_register(r, result, bus); }
+match cb {
+            0x00..=0x07 => { let res = self.cb_rlc(v); self.set_reg(r, res, bus); }
+            0x08..=0x0F => { let res = self.cb_rrc(v); self.set_reg(r, res, bus); }
+            0x10..=0x17 => { let res = self.cb_rl(v); self.set_reg(r, res, bus); }
+            0x18..=0x1F => { let res = self.cb_rr(v); self.set_reg(r, res, bus); }
+            0x20..=0x27 => { let res = self.cb_sla(v); self.set_reg(r, res, bus); }
+            0x28..=0x2F => { let res = self.cb_sra(v); self.set_reg(r, res, bus); }
+            0x30..=0x37 => { let res = self.cb_swap(v); self.set_reg(r, res, bus); }
+            0x38..=0x3F => { let res = self.cb_srl(v); self.set_reg(r, res, bus); }
             0x40..=0x7F => {
-                let bit = (callback >> 3) & 7;
+                let bit = (cb >> 3) & 7;
                 let z = (v >> bit) & 1 == 0;
                 self.f = (if z { FLAG_Z } else { 0 }) | FLAG_H | (self.f & FLAG_C);
                 return if is_hl { 3 } else { 2 };
             }
             0x80..=0xBF => {
-                let bit = (callback >> 3) & 7;
-                self.set_register(r, v & !(1 << bit), bus);
+                let bit = (cb >> 3) & 7;
+                self.set_reg(r, v & !(1 << bit), bus);
             }
             0xC0..=0xFF => {
-                let bit = (callback >> 3) & 7;
-                self.set_register(r, v | (1 << bit), bus);
+                let bit = (cb >> 3) & 7;
+                self.set_reg(r, v | (1 << bit), bus);
             }
         }
         if is_hl { 4 } else { 2 }

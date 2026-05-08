@@ -12,25 +12,25 @@ extern crate alloc;
 use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::format;
-use super::{kw, nk, apm,
-            T_, F_, O_, AK_, AO_, AW_, BO_, BB_};
+use super::{eh, ew, qu,
+            P_, F_, M_, AC_, AK_, AN_, BG_, AU_};
 
 
 pub struct EditorState {
     
-    pub ak: Vec<String>,
+    pub lines: Vec<String>,
     
-    pub gn: usize,
+    pub cursor_line: usize,
     
-    pub hn: usize,
+    pub cursor_col: usize,
     
-    pub jc: usize,
+    pub scroll: usize,
     
-    pub an: Vec<String>,
+    pub output: Vec<String>,
     
-    pub bhp: bool,
+    pub output_focused: bool,
     
-    pub evv: usize,
+    pub output_scroll: usize,
     
     pub frame: u64,
 }
@@ -38,7 +38,7 @@ pub struct EditorState {
 impl EditorState {
     pub fn new() -> Self {
         Self {
-            ak: alloc::vec![
+            lines: alloc::vec![
                 String::from("// TrustLang — write code here"),
                 String::from("fn main() {"),
                 String::from("    let x = 42;"),
@@ -46,415 +46,415 @@ impl EditorState {
                 String::from("    print(x * 2);"),
                 String::from("}"),
             ],
-            gn: 1,
-            hn: 0,
-            jc: 0,
-            an: alloc::vec![String::from("Press Ctrl+R to run")],
-            bhp: false,
-            evv: 0,
+            cursor_line: 1,
+            cursor_col: 0,
+            scroll: 0,
+            output: alloc::vec![String::from("Press Ctrl+R to run")],
+            output_focused: false,
+            output_scroll: 0,
             frame: 0,
         }
     }
     
-    pub fn vr(&mut self, bs: u8) {
-        use crate::keyboard::{V_, U_, AH_, AI_, AM_, AQ_};
+    pub fn handle_key(&mut self, key: u8) {
+        use crate::keyboard::{T_, S_, AI_, AJ_, AM_, AO_};
         
         self.frame += 1;
         
-        match bs {
-            V_ => {
-                if self.bhp {
-                    self.evv = self.evv.ao(1);
-                } else if self.gn > 0 {
-                    self.gn -= 1;
-                    self.inu();
+        match key {
+            T_ => {
+                if self.output_focused {
+                    self.output_scroll = self.output_scroll.saturating_sub(1);
+                } else if self.cursor_line > 0 {
+                    self.cursor_line -= 1;
+                    self.clamp_col();
                 }
             }
-            U_ => {
-                if self.bhp {
-                    self.evv += 1;
-                } else if self.gn + 1 < self.ak.len() {
-                    self.gn += 1;
-                    self.inu();
-                }
-            }
-            AH_ => {
-                if !self.bhp && self.hn > 0 {
-                    self.hn -= 1;
+            S_ => {
+                if self.output_focused {
+                    self.output_scroll += 1;
+                } else if self.cursor_line + 1 < self.lines.len() {
+                    self.cursor_line += 1;
+                    self.clamp_col();
                 }
             }
             AI_ => {
-                if !self.bhp {
-                    let ark = self.ak.get(self.gn)
-                        .map(|dm| dm.len()).unwrap_or(0);
-                    if self.hn < ark {
-                        self.hn += 1;
+                if !self.output_focused && self.cursor_col > 0 {
+                    self.cursor_col -= 1;
+                }
+            }
+            AJ_ => {
+                if !self.output_focused {
+                    let wh = self.lines.get(self.cursor_line)
+                        .map(|l| l.len()).unwrap_or(0);
+                    if self.cursor_col < wh {
+                        self.cursor_col += 1;
                     }
                 }
             }
             AM_ => {
-                if self.bhp {
-                    self.evv = self.evv.ao(5);
+                if self.output_focused {
+                    self.output_scroll = self.output_scroll.saturating_sub(5);
                 } else {
-                    self.gn = self.gn.ao(10);
-                    self.inu();
+                    self.cursor_line = self.cursor_line.saturating_sub(10);
+                    self.clamp_col();
                 }
             }
-            AQ_ => {
-                if self.bhp {
-                    self.evv += 5;
+            AO_ => {
+                if self.output_focused {
+                    self.output_scroll += 5;
                 } else {
-                    self.gn = (self.gn + 10).v(self.ak.len().ao(1));
-                    self.inu();
+                    self.cursor_line = (self.cursor_line + 10).min(self.lines.len().saturating_sub(1));
+                    self.clamp_col();
                 }
             }
             
             0x12 => {
-                self.pep();
+                self.run_code();
             }
             
             0x13 => {
-                self.ftm();
+                self.save_file();
             }
             
             0x0D | 0x0A => {
-                if !self.bhp {
+                if !self.output_focused {
                     
-                    if self.gn < self.ak.len() {
-                        let bj = self.hn.v(self.ak[self.gn].len());
-                        let kr = self.ak[self.gn].pmk(bj);
-                        self.gn += 1;
-                        self.ak.insert(self.gn, kr);
-                        self.hn = 0;
+                    if self.cursor_line < self.lines.len() {
+                        let col = self.cursor_col.min(self.lines[self.cursor_line].len());
+                        let ef = self.lines[self.cursor_line].split_off(col);
+                        self.cursor_line += 1;
+                        self.lines.insert(self.cursor_line, ef);
+                        self.cursor_col = 0;
                     } else {
-                        self.ak.push(String::new());
-                        self.gn = self.ak.len() - 1;
-                        self.hn = 0;
+                        self.lines.push(String::new());
+                        self.cursor_line = self.lines.len() - 1;
+                        self.cursor_col = 0;
                     }
                 }
             }
             
             0x08 => {
-                if !self.bhp {
-                    if self.hn > 0 {
-                        self.hn -= 1;
-                        if self.gn < self.ak.len() {
-                            self.ak[self.gn].remove(self.hn);
+                if !self.output_focused {
+                    if self.cursor_col > 0 {
+                        self.cursor_col -= 1;
+                        if self.cursor_line < self.lines.len() {
+                            self.lines[self.cursor_line].remove(self.cursor_col);
                         }
-                    } else if self.gn > 0 {
+                    } else if self.cursor_line > 0 {
                         
-                        let cv = self.ak.remove(self.gn);
-                        self.gn -= 1;
-                        self.hn = self.ak[self.gn].len();
-                        self.ak[self.gn].t(&cv);
+                        let current = self.lines.remove(self.cursor_line);
+                        self.cursor_line -= 1;
+                        self.cursor_col = self.lines[self.cursor_line].len();
+                        self.lines[self.cursor_line].push_str(&current);
                     }
                 }
             }
             
             0x0F => {
-                self.bhp = !self.bhp;
+                self.output_focused = !self.output_focused;
             }
             _ => {}
         }
     }
     
-    pub fn fka(&mut self, bm: char) {
-        if self.bhp { return; }
+    pub fn handle_char(&mut self, ch: char) {
+        if self.output_focused { return; }
         
         self.frame += 1;
         
-        if self.gn >= self.ak.len() {
-            self.ak.push(String::new());
-            self.gn = self.ak.len() - 1;
+        if self.cursor_line >= self.lines.len() {
+            self.lines.push(String::new());
+            self.cursor_line = self.lines.len() - 1;
         }
         
-        self.ak[self.gn].insert(self.hn, bm);
-        self.hn += 1;
+        self.lines[self.cursor_line].insert(self.cursor_col, ch);
+        self.cursor_col += 1;
     }
     
     
-    pub fn ago(&mut self, b: i32, c: i32, d: u32, i: u32) {
-        let dt = super::nk();
-        let kq = super::apm() + 1;
-        if kq <= 0 || dt <= 0 { return; }
+    pub fn handle_click(&mut self, x: i32, y: i32, w: u32, h: u32) {
+        let aq = super::ew();
+        let ee = super::qu() + 1;
+        if ee <= 0 || aq <= 0 { return; }
 
         
-        let hhs = (i as i32 * 60 / 100).am(kq * 3);
-        let hua = hhs + 2;
+        let doj = (h as i32 * 60 / 100).max(ee * 3);
+        let dwb = doj + 2;
 
-        if c >= hua {
+        if y >= dwb {
             
-            self.bhp = true;
+            self.output_focused = true;
         } else {
             
-            self.bhp = false;
+            self.output_focused = false;
 
             
-            let bdt = kq;
-            if c < bdt { return; } 
+            let adn = ee;
+            if y < adn { return; } 
 
-            let bqy = 4 * dt;
-            let br = ((c - bdt) / kq) as usize;
-            let bj = ((b - bqy).am(0) / dt) as usize;
+            let ajv = 4 * aq;
+            let row = ((y - adn) / ee) as usize;
+            let col = ((x - ajv).max(0) / aq) as usize;
 
-            self.gn = (self.jc + br).v(self.ak.len().ao(1));
-            let ark = self.ak.get(self.gn).map(|dm| dm.len()).unwrap_or(0);
-            self.hn = bj.v(ark);
+            self.cursor_line = (self.scroll + row).min(self.lines.len().saturating_sub(1));
+            let wh = self.lines.get(self.cursor_line).map(|l| l.len()).unwrap_or(0);
+            self.cursor_col = col.min(wh);
             self.frame += 1; 
         }
     }
 
-    fn inu(&mut self) {
-        let ark = self.ak.get(self.gn)
-            .map(|dm| dm.len()).unwrap_or(0);
-        if self.hn > ark {
-            self.hn = ark;
+    fn clamp_col(&mut self) {
+        let wh = self.lines.get(self.cursor_line)
+            .map(|l| l.len()).unwrap_or(0);
+        if self.cursor_col > wh {
+            self.cursor_col = wh;
         }
     }
     
     
-    pub fn ftm(&mut self) {
-        let iy: String = self.ak.iter()
-            .map(|dm| dm.as_str())
+    pub fn save_file(&mut self) {
+        let source: String = self.lines.iter()
+            .map(|l| l.as_str())
             .collect::<Vec<_>>()
-            .rr("\n");
+            .join("\n");
         
-        match crate::vfs::ns("/mnt/trustfs/editor.tl", iy.as_bytes()) {
+        match crate::vfs::write_file("/mnt/trustfs/editor.tl", source.as_bytes()) {
             Ok(()) => {
                 
-                let _ = crate::vfs::wxb();
-                self.an.clear();
-                self.an.push(String::from("=== Saved ==="));
-                self.an.push(format!("Wrote {} bytes to /mnt/trustfs/editor.tl", iy.len()));
-                self.an.push(String::from("File persisted to disk (WAL protected)"));
+                let _ = crate::vfs::jkk();
+                self.output.clear();
+                self.output.push(String::from("=== Saved ==="));
+                self.output.push(format!("Wrote {} bytes to /mnt/trustfs/editor.tl", source.len()));
+                self.output.push(String::from("File persisted to disk (WAL protected)"));
             }
-            Err(aa) => {
-                self.an.clear();
-                self.an.push(format!("Save error: {:?}", aa));
-                self.an.push(String::from("Try: file saved to ramfs as fallback"));
+            Err(e) => {
+                self.output.clear();
+                self.output.push(format!("Save error: {:?}", e));
+                self.output.push(String::from("Try: file saved to ramfs as fallback"));
                 
-                let _ = crate::ramfs::fh(|fs| {
-                    if !fs.aja("editor.tl") { let _ = fs.touch("editor.tl"); }
-                    fs.ns("editor.tl", iy.as_bytes())
+                let _ = crate::ramfs::bh(|fs| {
+                    if !fs.exists("editor.tl") { let _ = fs.touch("editor.tl"); }
+                    fs.write_file("editor.tl", source.as_bytes())
                 });
             }
         }
     }
 
     
-    pub fn pep(&mut self) {
-        self.an.clear();
-        self.an.push(String::from("=== Running ==="));
+    pub fn run_code(&mut self) {
+        self.output.clear();
+        self.output.push(String::from("=== Running ==="));
         
         
-        let iy: String = self.ak.iter()
-            .map(|dm| dm.as_str())
+        let source: String = self.lines.iter()
+            .map(|l| l.as_str())
             .collect::<Vec<_>>()
-            .rr("\n");
+            .join("\n");
         
         
-        self.an.push(format!("Source: {} lines, {} bytes", self.ak.len(), iy.len()));
+        self.output.push(format!("Source: {} lines, {} bytes", self.lines.len(), source.len()));
         
         
-        match crate::trustlang::vw(&iy) {
+        match crate::trustlang::run(&source) {
             Ok(result) => {
-                self.an.push(format!("=> {}", result));
+                self.output.push(format!("=> {}", result));
             }
-            Err(aa) => {
-                self.an.push(format!("Error: {}", aa));
+            Err(e) => {
+                self.output.push(format!("Error: {}", e));
             }
         }
         
-        self.an.push(String::from("=== Done ==="));
-        self.bhp = true;
+        self.output.push(String::from("=== Done ==="));
+        self.output_focused = true;
     }
 }
 
 
-pub fn po(g: &EditorState, b: i32, c: i32, d: u32, i: u32) {
-    let dt = nk();
-    let kq = apm() + 1;
-    if kq <= 0 || dt <= 0 { return; }
+pub fn draw(state: &EditorState, x: i32, y: i32, w: u32, h: u32) {
+    let aq = ew();
+    let ee = qu() + 1;
+    if ee <= 0 || aq <= 0 { return; }
     
     
-    let hhs = (i as i32 * 60 / 100).am(kq * 3);
-    let hua = c + hhs + 2;
-    let oti = i as i32 - hhs - 4;
+    let doj = (h as i32 * 60 / 100).max(ee * 3);
+    let dwb = y + doj + 2;
+    let ita = h as i32 - doj - 4;
     
     
     
-    let dh = if g.bhp { "Editor (Ctrl+O)" } else { "Editor [active]" };
-    let tnw = if !g.bhp { O_ } else { F_ };
-    kw(b, c, dh, tnw);
+    let header = if state.output_focused { "Editor (Ctrl+O)" } else { "Editor [active]" };
+    let mko = if !state.output_focused { M_ } else { F_ };
+    eh(x, y, header, mko);
     
     
     let hint = "[Ctrl+S] save [Ctrl+R] run";
-    let hmy = b + d as i32 - (hint.len() as i32 * dt) - 2;
-    kw(hmy, c, hint, AK_);
+    let drk = x + w as i32 - (hint.len() as i32 * aq) - 2;
+    eh(drk, y, hint, AC_);
     
-    let bdt = c + kq;
-    let byr = hhs - kq;
-    let mpk = (byr / kq) as usize;
+    let adn = y + ee;
+    let anu = doj - ee;
+    let hbp = (anu / ee) as usize;
     
     
-    let jc = if g.gn >= g.jc + mpk {
-        g.gn - mpk + 1
-    } else if g.gn < g.jc {
-        g.gn
+    let scroll = if state.cursor_line >= state.scroll + hbp {
+        state.cursor_line - hbp + 1
+    } else if state.cursor_line < state.scroll {
+        state.cursor_line
     } else {
-        g.jc
+        state.scroll
     };
     
-    let bqy = 4 * dt; 
-    let bds = b + bqy;
+    let ajv = 4 * aq; 
+    let adm = x + ajv;
     
-    let ci = (jc + mpk).v(g.ak.len());
-    let mut ae = bdt;
+    let end = (scroll + hbp).min(state.lines.len());
+    let mut u = adn;
     
-    for a in jc..ci {
+    for i in scroll..end {
         
-        let csd = format!("{:>3}", a + 1);
-        kw(b, ae, &csd, F_);
+        let axw = format!("{:>3}", i + 1);
+        eh(x, u, &axw, F_);
         
         
-        if a == g.gn && !g.bhp {
-            crate::framebuffer::ah(
-                bds as u32, ae as u32,
-                d.ao(bqy as u32), kq as u32,
+        if i == state.cursor_line && !state.output_focused {
+            crate::framebuffer::fill_rect(
+                adm as u32, u as u32,
+                w.saturating_sub(ajv as u32), ee as u32,
                 0xFF1C2128,
             );
         }
         
         
-        irv(bds, ae, &g.ak[a], d.ao(bqy as u32));
+        eko(adm, u, &state.lines[i], w.saturating_sub(ajv as u32));
         
         
-        if a == g.gn && !g.bhp {
-            if (g.frame / 25) % 2 == 0 {
-                let lf = bds + (g.hn as i32 * dt);
-                crate::framebuffer::ah(
-                    lf as u32, ae as u32,
-                    2, kq as u32,
-                    O_,
+        if i == state.cursor_line && !state.output_focused {
+            if (state.frame / 25) % 2 == 0 {
+                let cursor_x = adm + (state.cursor_col as i32 * aq);
+                crate::framebuffer::fill_rect(
+                    cursor_x as u32, u as u32,
+                    2, ee as u32,
+                    M_,
                 );
             }
         }
         
-        ae += kq;
+        u += ee;
     }
     
     
-    crate::framebuffer::ah(b as u32, (hua - 1) as u32, d, 1, 0xFF30363D);
+    crate::framebuffer::fill_rect(x as u32, (dwb - 1) as u32, w, 1, 0xFF30363D);
     
     
-    if oti <= 0 { return; }
+    if ita <= 0 { return; }
     
-    let uzt = if g.bhp { "Output [active]" } else { "Output (Ctrl+O)" };
-    let uzq = if g.bhp { AK_ } else { F_ };
-    kw(b, hua, uzt, uzq);
+    let noi = if state.output_focused { "Output [active]" } else { "Output (Ctrl+O)" };
+    let nof = if state.output_focused { AC_ } else { F_ };
+    eh(x, dwb, noi, nof);
     
-    let uzv = hua + kq;
-    let xsa = ((oti - kq) / kq) as usize;
-    let otf = g.evv.v(g.an.len().ao(1));
-    let uzs = (otf + xsa).v(g.an.len());
+    let nok = dwb + ee;
+    let psj = ((ita - ee) / ee) as usize;
+    let isx = state.output_scroll.min(state.output.len().saturating_sub(1));
+    let noh = (isx + psj).min(state.output.len());
     
-    let mut qw = uzv;
-    for a in otf..uzs {
-        let line = &g.an[a];
-        let s = if line.cj("Error:") {
-            AW_
-        } else if line.cj("=>") {
+    let mut hk = nok;
+    for i in isx..noh {
+        let line = &state.output[i];
+        let color = if line.starts_with("Error:") {
+            AN_
+        } else if line.starts_with("=>") {
+            AC_
+        } else if line.starts_with("===") {
             AK_
-        } else if line.cj("===") {
-            AO_
         } else {
-            T_
+            P_
         };
         
-        kw(b + 4, qw, line, s);
-        qw += kq;
+        eh(x + 4, hk, line, color);
+        hk += ee;
     }
 }
 
 
-fn irv(b: i32, c: i32, line: &str, yaw: u32) {
-    let dt = nk();
-    let fmj = ["fn", "let", "mut", "if", "else", "for", "while", "return", 
+fn eko(x: i32, y: i32, line: &str, _max_w: u32) {
+    let aq = ew();
+    let clr = ["fn", "let", "mut", "if", "else", "for", "while", "return", 
                      "true", "false", "struct", "enum", "match", "pub", "use",
                      "const", "static", "impl", "self", "loop", "break", "continue"];
     
-    let mut cx = b;
-    let bw: Vec<char> = line.bw().collect();
-    let len = bw.len();
-    let mut a = 0;
+    let mut cx = x;
+    let chars: Vec<char> = line.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
     
-    while a < len {
-        let bm = bw[a];
+    while i < len {
+        let ch = chars[i];
         
         
-        if bm == '/' && a + 1 < len && bw[a + 1] == '/' {
+        if ch == '/' && i + 1 < len && chars[i + 1] == '/' {
             
-            let kr: String = bw[a..].iter().collect();
-            kw(cx, c, &kr, F_);
+            let ef: String = chars[i..].iter().collect();
+            eh(cx, y, &ef, F_);
             return;
         }
         
         
-        if bm == '"' {
-            let ay = a;
-            a += 1;
-            while a < len && bw[a] != '"' {
-                if bw[a] == '\\' { a += 1; } 
-                a += 1;
+        if ch == '"' {
+            let start = i;
+            i += 1;
+            while i < len && chars[i] != '"' {
+                if chars[i] == '\\' { i += 1; } 
+                i += 1;
             }
-            if a < len { a += 1; } 
-            let e: String = bw[ay..a].iter().collect();
-            kw(cx, c, &e, AK_);
-            cx += e.len() as i32 * dt;
+            if i < len { i += 1; } 
+            let j: String = chars[start..i].iter().collect();
+            eh(cx, y, &j, AC_);
+            cx += j.len() as i32 * aq;
             continue;
         }
         
         
-        if bm.atb() {
-            let ay = a;
-            while a < len && (bw[a].atb() || bw[a] == '.' || bw[a] == 'x') {
-                a += 1;
+        if ch.is_ascii_digit() {
+            let start = i;
+            while i < len && (chars[i].is_ascii_digit() || chars[i] == '.' || chars[i] == 'x') {
+                i += 1;
             }
-            let num: String = bw[ay..a].iter().collect();
-            kw(cx, c, &num, BB_);
-            cx += num.len() as i32 * dt;
+            let num: String = chars[start..i].iter().collect();
+            eh(cx, y, &num, AU_);
+            cx += num.len() as i32 * aq;
             continue;
         }
         
         
-        if bm.bvb() || bm == '_' {
-            let ay = a;
-            while a < len && (bw[a].bvb() || bw[a] == '_') {
-                a += 1;
+        if ch.is_ascii_alphanumeric() || ch == '_' {
+            let start = i;
+            while i < len && (chars[i].is_ascii_alphanumeric() || chars[i] == '_') {
+                i += 1;
             }
-            let od: String = bw[ay..a].iter().collect();
-            let s = if fmj.contains(&od.as_str()) {
-                BO_
-            } else if od.bw().next().map(|r| r.crs()).unwrap_or(false) {
-                AO_ 
+            let fx: String = chars[start..i].iter().collect();
+            let color = if clr.contains(&fx.as_str()) {
+                BG_
+            } else if fx.chars().next().map(|c| c.is_ascii_uppercase()).unwrap_or(false) {
+                AK_ 
             } else {
-                T_
+                P_
             };
-            kw(cx, c, &od, s);
-            cx += od.len() as i32 * dt;
+            eh(cx, y, &fx, color);
+            cx += fx.len() as i32 * aq;
             continue;
         }
         
         
-        let s = match bm {
-            '(' | ')' | '{' | '}' | '[' | ']' => AO_,
-            '=' | '+' | '-' | '*' | '/' | '<' | '>' | '!' | '&' | '|' => O_,
+        let color = match ch {
+            '(' | ')' | '{' | '}' | '[' | ']' => AK_,
+            '=' | '+' | '-' | '*' | '/' | '<' | '>' | '!' | '&' | '|' => M_,
             ';' | ':' | ',' | '.' => F_,
-            _ => T_,
+            _ => P_,
         };
-        let e = alloc::format!("{}", bm);
-        kw(cx, c, &e, s);
-        cx += dt;
-        a += 1;
+        let j = alloc::format!("{}", ch);
+        eh(cx, y, &j, color);
+        cx += aq;
+        i += 1;
     }
 }

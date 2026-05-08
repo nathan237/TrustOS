@@ -41,7 +41,7 @@ impl BinaryFile {
             return None;
         }
 
-        let end = (offset + 16).minimum(self.data.len());
+        let end = (offset + 16).min(self.data.len());
         let chunk = &self.data[offset..end];
 
         let mut hex = String::new();
@@ -64,8 +64,8 @@ impl BinaryFile {
     }
 
     /// Get instruction at or near an address
-    pub fn instruction_at(&self, address: u64) -> Option<&Instruction> {
-        self.instructions.iter().find(|i| i.address == address)
+    pub fn instruction_at(&self, addr: u64) -> Option<&Instruction> {
+        self.instructions.iter().find(|i| i.address == addr)
     }
 
     /// Get instructions in an address range
@@ -122,9 +122,9 @@ impl BinaryFile {
     pub fn summary(&self) -> String {
         format!(
             "{} | {} | {} | {} bytes | {} sections | {} symbols | {} instructions | {}",
-            self.elf.information.class,
-            self.elf.information.machine,
-            self.elf.information.elf_type,
+            self.elf.info.class,
+            self.elf.info.machine,
+            self.elf.info.elf_type,
             self.data.len(),
             self.elf.sections.len(),
             self.elf.symbols.len() + self.elf.dynamic_symbols.len(),
@@ -167,7 +167,7 @@ pub fn analyze(data: &[u8]) -> Result<BinaryFile, &'static str> {
             let size = section.size as usize;
             if start + size <= data.len() && size > 0 {
                 let code = &data[start..start + size];
-                let mut disasm = disasm::Disassembler::new(code, section.address);
+                let mut disasm = disasm::Disassembler::new(code, section.addr);
                 let mut insts = disasm.disassemble_all();
                 all_instructions.append(&mut insts);
             }
@@ -178,10 +178,10 @@ pub fn analyze(data: &[u8]) -> Result<BinaryFile, &'static str> {
     all_instructions.sort_by_key(|i| i.address);
 
     // Step 3: Annotate with symbols and syscall info
-    disasm::annotate_instructions(&mut all_instructions, &elf.address_to_symbol);
+    disasm::annotate_instructions(&mut all_instructions, &elf.addr_to_symbol);
 
     // Step 4: Build cross-references
-    let xrefs = xrefs::XrefDatabase::build(&all_instructions, &elf.address_to_symbol);
+    let xrefs = xrefs::XrefDatabase::build(&all_instructions, &elf.addr_to_symbol);
 
     Ok(BinaryFile {
         data: data.to_vec(),
@@ -199,10 +199,10 @@ pub fn is_elf(data: &[u8]) -> bool {
 /// Analyze from a VFS path
 pub fn analyze_path(path: &str) -> Result<BinaryFile, &'static str> {
     let fd = crate::vfs::open(path, crate::vfs::OpenFlags(crate::vfs::OpenFlags::O_RDONLY))
-        .map_error(|_| "Failed to open file")?;
+        .map_err(|_| "Failed to open file")?;
 
-    let status = crate::vfs::status(path).map_error(|_| "Failed to stat file")?;
-    let size = status.size as usize;
+    let stat = crate::vfs::stat(path).map_err(|_| "Failed to stat file")?;
+    let size = stat.size as usize;
 
     if size > 32 * 1024 * 1024 {
         crate::vfs::close(fd).ok();
@@ -210,7 +210,7 @@ pub fn analyze_path(path: &str) -> Result<BinaryFile, &'static str> {
     }
 
     let mut data = alloc::vec![0u8; size];
-    crate::vfs::read(fd, &mut data).map_error(|_| "Failed to read file")?;
+    crate::vfs::read(fd, &mut data).map_err(|_| "Failed to read file")?;
     crate::vfs::close(fd).ok();
 
     analyze(&data)

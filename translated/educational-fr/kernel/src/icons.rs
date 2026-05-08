@@ -118,11 +118,11 @@ pub fn draw_calculator_icon(x: u32, y: u32, color: u32, _bg: u32) {
     
     // Buttons grid (4x4)
     for row in 0..4 {
-        for column in 0..4 {
-            let bx = x + 6 + column * 5;
+        for col in 0..4 {
+            let bx = x + 6 + col * 5;
             let by = y + 14 + row * 4;
-            let button_color = if column == 3 { 0xFF44AA44 } else { 0xFF333333 };
-            framebuffer::fill_rect(bx, by, 4, 3, button_color);
+            let btn_color = if col == 3 { 0xFF44AA44 } else { 0xFF333333 };
+            framebuffer::fill_rect(bx, by, 4, 3, btn_color);
         }
     }
 }
@@ -227,9 +227,9 @@ fn darken(color: u32, factor: f32) -> u32 {
 
 /// Lighten a color by a factor (> 1.0)
 fn lighten(color: u32, factor: f32) -> u32 {
-    let r = (((color >> 16) & 0xFF) as f32 * factor).minimum(255.0);
-    let g = (((color >> 8) & 0xFF) as f32 * factor).minimum(255.0);
-    let b = ((color & 0xFF) as f32 * factor).minimum(255.0);
+    let r = (((color >> 16) & 0xFF) as f32 * factor).min(255.0);
+    let g = (((color >> 8) & 0xFF) as f32 * factor).min(255.0);
+    let b = ((color & 0xFF) as f32 * factor).min(255.0);
     0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32)
 }
 
@@ -242,10 +242,10 @@ fn draw_filled_circle(cx: u32, cy: u32, r: u32, color: u32) {
     for dy in -r..=r {
         for dx in -r..=r {
             if dx * dx + dy * dy <= r * r {
-                let pixel = cx + dx;
+                let px = cx + dx;
                 let py = cy + dy;
-                if pixel >= 0 && py >= 0 {
-                    framebuffer::put_pixel(pixel as u32, py as u32, color);
+                if px >= 0 && py >= 0 {
+                    framebuffer::put_pixel(px as u32, py as u32, color);
                 }
             }
         }
@@ -260,7 +260,7 @@ fn draw_circle(cx: u32, cy: u32, r: u32, color: u32) {
     
     let mut x = r;
     let mut y = 0;
-    let mut error = 0;
+    let mut err = 0;
     
     while x >= y {
         put_pixel_safe(cx + x, cy + y, color);
@@ -273,10 +273,10 @@ fn draw_circle(cx: u32, cy: u32, r: u32, color: u32) {
         put_pixel_safe(cx + x, cy - y, color);
         
         y += 1;
-        error += 1 + 2 * y;
-        if 2 * (error - x) + 1 > 0 {
+        err += 1 + 2 * y;
+        if 2 * (err - x) + 1 > 0 {
             x -= 1;
-            error += 1 - 2 * x;
+            err += 1 - 2 * x;
         }
     }
 }
@@ -346,9 +346,9 @@ pub fn draw_opengl_icon(x: u32, y: u32, color: u32, _bg: u32) {
     let size: i32 = 8;
     
     // Helper to put pixel with i32 coords
-    let put = |pixel: i32, py: i32, c: u32| {
-        if pixel >= 0 && py >= 0 {
-            framebuffer::put_pixel(pixel as u32, py as u32, c);
+    let put = |px: i32, py: i32, c: u32| {
+        if px >= 0 && py >= 0 {
+            framebuffer::put_pixel(px as u32, py as u32, c);
         }
     };
     
@@ -411,20 +411,20 @@ pub fn draw_browser_icon(x: u32, y: u32, color: u32, _bg: u32) {
     // Draw globe (outer circle)
     for angle in 0..360 {
         let rad = (angle as f32) * 3.14159 / 180.0;
-        let pixel = cx + (cosf(rad) * 12.0) as i32;
+        let px = cx + (cosf(rad) * 12.0) as i32;
         let py = cy + (sinf(rad) * 12.0) as i32;
-        if pixel >= 0 && py >= 0 {
-            framebuffer::put_pixel(pixel as u32, py as u32, color);
+        if px >= 0 && py >= 0 {
+            framebuffer::put_pixel(px as u32, py as u32, color);
         }
     }
     
     // Inner globe (smaller circle)
     for angle in 0..360 {
         let rad = (angle as f32) * 3.14159 / 180.0;
-        let pixel = cx + (cosf(rad) * 8.0) as i32;
+        let px = cx + (cosf(rad) * 8.0) as i32;
         let py = cy + (sinf(rad) * 8.0) as i32;
-        if pixel >= 0 && py >= 0 {
-            framebuffer::put_pixel(pixel as u32, py as u32, dark);
+        if px >= 0 && py >= 0 {
+            framebuffer::put_pixel(px as u32, py as u32, dark);
         }
     }
     
@@ -438,18 +438,18 @@ pub fn draw_browser_icon(x: u32, y: u32, color: u32, _bg: u32) {
     
     // Horizontal equator
     for dx in -12i32..=12 {
-        let pixel = cx + dx;
-        if pixel >= 0 {
-            framebuffer::put_pixel(pixel as u32, cy as u32, light);
+        let px = cx + dx;
+        if px >= 0 {
+            framebuffer::put_pixel(px as u32, cy as u32, light);
         }
     }
     
     // Curved latitude lines (simplified as horizontal lines at offsets)
     for dx in -10i32..=10 {
-        let pixel = cx + dx;
-        if pixel >= 0 {
-            framebuffer::put_pixel(pixel as u32, (cy - 6) as u32, dark);
-            framebuffer::put_pixel(pixel as u32, (cy + 6) as u32, dark);
+        let px = cx + dx;
+        if px >= 0 {
+            framebuffer::put_pixel(px as u32, (cy - 6) as u32, dark);
+            framebuffer::put_pixel(px as u32, (cy + 6) as u32, dark);
         }
     }
     
@@ -468,9 +468,9 @@ pub fn draw_model_editor_icon(x: u32, y: u32, color: u32, _bg: u32) {
     let cy = y as i32 + 16;
     
     // Draw wireframe cube (simplified)
-    let put = |pixel: i32, py: i32, c: u32| {
-        if pixel >= 0 && py >= 0 {
-            framebuffer::put_pixel(pixel as u32, py as u32, c);
+    let put = |px: i32, py: i32, c: u32| {
+        if px >= 0 && py >= 0 {
+            framebuffer::put_pixel(px as u32, py as u32, c);
         }
     };
     

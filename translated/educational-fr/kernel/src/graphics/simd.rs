@@ -19,19 +19,19 @@ use core::arch::x86_64::*;
 #[cfg(target_arch = "x86_64")]
 #[inline]
 pub // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe fn fill_row_sse2(destination: *mut u32, count: usize, color: u32) {
+unsafe fn fill_row_sse2(dst: *mut u32, count: usize, color: u32) {
     if count == 0 { return; }
     
     // Broadcast color to all 4 lanes of XMM register
     let color_vec = _mm_set1_epi32(color as i32);
     
-    let mut ptr = destination;
+    let mut ptr = dst;
     let mut remaining = count;
     
     // Handle unaligned head (up to 3 pixels)
     let align_offset = (ptr as usize) & 15; // 16-byte alignment
     if align_offset != 0 {
-        let pixels_to_align = ((16 - align_offset) / 4).minimum(remaining);
+        let pixels_to_align = ((16 - align_offset) / 4).min(remaining);
         for _ in 0..pixels_to_align {
             *ptr = color;
             ptr = ptr.add(1);
@@ -67,12 +67,12 @@ unsafe fn fill_row_sse2(destination: *mut u32, count: usize, color: u32) {
 #[cfg(target_arch = "x86_64")]
 #[inline]
 pub // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe fn copy_row_sse2(destination: *mut u32, source: *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+unsafe fn copy_row_sse2(dst: *mut u32, src: *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u32, count: usize) {
     if count == 0 { return; }
     
-    let mut destination_pointer = destination;
-    let mut source_pointer = source;
+    let mut destination_pointer = dst;
+    let mut source_pointer = src;
     let mut remaining = count;
     
     // Process 16 pixels at a time
@@ -138,12 +138,12 @@ const __m128i);
 #[cfg(target_arch = "x86_64")]
 #[inline]
 pub // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe fn copy_row_sse2_nt(destination: *mut u32, source: *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+unsafe fn copy_row_sse2_nt(dst: *mut u32, src: *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u32, count: usize) {
     if count == 0 { return; }
 
-    let dst8 = destination as *mut u64;
-    let src8 = source as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+    let dst8 = dst as *mut u64;
+    let src8 = src as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u64;
     let pairs = count / 2;  // Process 2 pixels (8 bytes) at a time
     let mut i = 0usize;
@@ -197,7 +197,7 @@ const u64;
 
     // Odd tail pixel
     if count & 1 != 0 {
-        *destination.add(count - 1) = *source.add(count - 1);
+        *dst.add(count - 1) = *src.add(count - 1);
     }
 
     // Fence: guarantee all NT stores are globally visible before DMA reads
@@ -208,11 +208,11 @@ const u64;
 #[cfg(target_arch = "x86_64")]
 #[inline]
 pub // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe fn fill_row_sse2_nt(destination: *mut u32, count: usize, color: u32) {
+unsafe fn fill_row_sse2_nt(dst: *mut u32, count: usize, color: u32) {
     if count == 0 { return; }
 
     let color64 = (color as u64) | ((color as u64) << 32);
-    let dst8 = destination as *mut u64;
+    let dst8 = dst as *mut u64;
     let pairs = count / 2;
     let mut i = 0usize;
 
@@ -245,7 +245,7 @@ unsafe fn fill_row_sse2_nt(destination: *mut u32, count: usize, color: u32) {
     }
 
     if count & 1 != 0 {
-        *destination.add(count - 1) = color;
+        *dst.add(count - 1) = color;
     }
 
     core::arch::asm!("sfence", options(nostack));
@@ -261,10 +261,10 @@ unsafe fn fill_row_sse2_nt(destination: *mut u32, count: usize, color: u32) {
 #[cfg(target_arch = "x86_64")]
 #[inline]
 pub // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe fn blend_row_sse2(destination: *mut u32, source: *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+unsafe fn blend_row_sse2(dst: *mut u32, src: *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u32, count: usize) {
-    let mut destination_pointer = destination;
-    let mut source_pointer = source;
+    let mut destination_pointer = dst;
+    let mut source_pointer = src;
     let mut remaining = count;
 
     let zero = _mm_setzero_si128();
@@ -311,7 +311,7 @@ const __m128i);
         let source_mul = _mm_mullo_epi16(s_lo, a_lo);
         let destination_mul = _mm_mullo_epi16(d_lo, inv_a_lo);
         let sum_lo = _mm_add_epi16(_mm_add_epi16(source_mul, destination_mul), _mm_set1_epi16(128));
-        let result_lo = _mm_srli_epi16(sum_lo, 8);
+        let res_lo = _mm_srli_epi16(sum_lo, 8);
 
         // --- Pixels 2-3 ---
         let s_hi = _mm_unpackhi_epi8(s, zero);
@@ -324,10 +324,10 @@ const __m128i);
         let source_mul_hi = _mm_mullo_epi16(s_hi, a_hi);
         let destination_mul_hi = _mm_mullo_epi16(d_hi, inv_a_hi);
         let sum_hi = _mm_add_epi16(_mm_add_epi16(source_mul_hi, destination_mul_hi), _mm_set1_epi16(128));
-        let result_hi = _mm_srli_epi16(sum_hi, 8);
+        let res_hi = _mm_srli_epi16(sum_hi, 8);
 
         // Pack 16-bit results back to 8-bit: [p0 p1 p2 p3]
-        let result = _mm_packus_epi16(result_lo, result_hi);
+        let result = _mm_packus_epi16(res_lo, res_hi);
         // Force alpha to 0xFF (fully opaque output)
         let result = _mm_or_si128(result, _mm_set1_epi32(0xFF000000u32 as i32));
         _mm_storeu_si128(destination_pointer as *mut __m128i, result);
@@ -353,26 +353,26 @@ const __m128i);
 /// Fast single pixel alpha blend
 #[inline(always)]
 // Fonction publique — appelable depuis d'autres modules.
-pub fn blend_pixel_fast(source: u32, destination: u32) -> u32 {
-    let alpha = (source >> 24) as u32;
-    if alpha == 0 { return destination; }
-    if alpha == 255 { return source; }
+pub fn blend_pixel_fast(src: u32, dst: u32) -> u32 {
+    let alpha = (src >> 24) as u32;
+    if alpha == 0 { return dst; }
+    if alpha == 255 { return src; }
     
     let inv_alpha = 255 - alpha;
     
-    let sr = (source >> 16) & 0xFF;
-    let sg = (source >> 8) & 0xFF;
-    let sb = source & 0xFF;
+    let sr = (src >> 16) & 0xFF;
+    let sg = (src >> 8) & 0xFF;
+    let sb = src & 0xFF;
     
-    let dr = (destination >> 16) & 0xFF;
-    let dg = (destination >> 8) & 0xFF;
-    let db = destination & 0xFF;
+    let dr = (dst >> 16) & 0xFF;
+    let dg = (dst >> 8) & 0xFF;
+    let db = dst & 0xFF;
     
     // result = (src * alpha + dst * (255 - alpha)) / 255
     // Use (x * a + 127) / 255 ≈ (x * a + 128) >> 8 for speed
-    let r = ((sr * alpha + dr * inv_alpha + 128) >> 8).minimum(255);
-    let g = ((sg * alpha + dg * inv_alpha + 128) >> 8).minimum(255);
-    let b = ((sb * alpha + db * inv_alpha + 128) >> 8).minimum(255);
+    let r = ((sr * alpha + dr * inv_alpha + 128) >> 8).min(255);
+    let g = ((sg * alpha + dg * inv_alpha + 128) >> 8).min(255);
+    let b = ((sb * alpha + db * inv_alpha + 128) >> 8).min(255);
     
     0xFF000000 | (r << 16) | (g << 8) | b
 }
@@ -387,18 +387,18 @@ pub fn blend_pixel_fast(source: u32, destination: u32) -> u32 {
 #[cfg(target_arch = "x86_64")]
 #[inline]
 pub // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe fn blend_fill_row_sse2(destination: *mut u32, count: usize, color: u32, alpha: u32) {
+unsafe fn blend_fill_row_sse2(dst: *mut u32, count: usize, color: u32, alpha: u32) {
     if count == 0 { return; }
     if alpha == 0 { return; }
     if alpha >= 255 {
-        fill_row_sse2(destination, count, color | 0xFF000000);
+        fill_row_sse2(dst, count, color | 0xFF000000);
         return;
     }
 
     let inv_a = 255 - alpha;
 
     // Use only broadcast intrinsics (_mm_set1_*) to avoid LLVM vector legalization issues
-    let source_pixel = _mm_set1_epi32(color as i32);
+    let src_px = _mm_set1_epi32(color as i32);
     let alpha_vec = _mm_set1_epi16(alpha as i16);
     let inv_a_vec = _mm_set1_epi16(inv_a as i16);
     let round_vec = _mm_set1_epi16(128);
@@ -406,12 +406,12 @@ unsafe fn blend_fill_row_sse2(destination: *mut u32, count: usize, color: u32, a
     let alpha_mask = _mm_set1_epi32(0xFF000000u32 as i32);
 
     // Pre-expand source color to 16-bit and pre-multiply by alpha (constant for entire row)
-    let s_lo = _mm_unpacklo_epi8(source_pixel, zero);
-    let s_hi = _mm_unpackhi_epi8(source_pixel, zero);
+    let s_lo = _mm_unpacklo_epi8(src_px, zero);
+    let s_hi = _mm_unpackhi_epi8(src_px, zero);
     let source_a_lo = _mm_mullo_epi16(s_lo, alpha_vec);
     let source_a_hi = _mm_mullo_epi16(s_hi, alpha_vec);
 
-    let mut ptr = destination;
+    let mut ptr = dst;
     let mut remaining = count;
 
     // Process 4 pixels at a time
@@ -423,16 +423,16 @@ const __m128i);
         let d_lo = _mm_unpacklo_epi8(d, zero);
         let destination_mul_lo = _mm_mullo_epi16(d_lo, inv_a_vec);
         let sum_lo = _mm_add_epi16(_mm_add_epi16(source_a_lo, destination_mul_lo), round_vec);
-        let result_lo = _mm_srli_epi16(sum_lo, 8);
+        let res_lo = _mm_srli_epi16(sum_lo, 8);
 
         // Pixels 2-3
         let d_hi = _mm_unpackhi_epi8(d, zero);
         let destination_mul_hi = _mm_mullo_epi16(d_hi, inv_a_vec);
         let sum_hi = _mm_add_epi16(_mm_add_epi16(source_a_hi, destination_mul_hi), round_vec);
-        let result_hi = _mm_srli_epi16(sum_hi, 8);
+        let res_hi = _mm_srli_epi16(sum_hi, 8);
 
         // Pack back to 8-bit and force alpha to 0xFF
-        let result = _mm_packus_epi16(result_lo, result_hi);
+        let result = _mm_packus_epi16(res_lo, res_hi);
         let result = _mm_or_si128(result, alpha_mask);
         _mm_storeu_si128(ptr as *mut __m128i, result);
 
@@ -449,9 +449,9 @@ const __m128i);
         let dr = ((existing >> 16) & 0xFF) as u32;
         let dg = ((existing >> 8) & 0xFF) as u32;
         let db = (existing & 0xFF) as u32;
-        let r = ((sr * alpha + dr * inv_a + 128) >> 8).minimum(255);
-        let g = ((sg * alpha + dg * inv_a + 128) >> 8).minimum(255);
-        let b = ((sb * alpha + db * inv_a + 128) >> 8).minimum(255);
+        let r = ((sr * alpha + dr * inv_a + 128) >> 8).min(255);
+        let g = ((sg * alpha + dg * inv_a + 128) >> 8).min(255);
+        let b = ((sb * alpha + db * inv_a + 128) >> 8).min(255);
         *ptr = 0xFF000000 | (r << 16) | (g << 8) | b;
         ptr = ptr.add(1);
     }
@@ -464,9 +464,9 @@ const __m128i);
 /// Clear entire framebuffer with SSE2
 #[cfg(target_arch = "x86_64")]
 pub // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe fn clear_framebuffer_sse2(framebuffer: *mut u32, width: usize, height: usize, pitch_pixels: usize, color: u32) {
+unsafe fn clear_framebuffer_sse2(fb: *mut u32, width: usize, height: usize, pitch_pixels: usize, color: u32) {
     for y in 0..height {
-        let row = framebuffer.add(y * pitch_pixels);
+        let row = fb.add(y * pitch_pixels);
         fill_row_sse2(row, width, color);
     }
 }
@@ -475,19 +475,19 @@ unsafe fn clear_framebuffer_sse2(framebuffer: *mut u32, width: usize, height: us
 #[cfg(target_arch = "x86_64")]
 pub // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe fn blit_to_framebuffer_sse2(
-    framebuffer: *mut u32,
+    fb: *mut u32,
     framebuffer_pitch: usize,
-    source: *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+    src: *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u32,
-    source_width: usize,
+    src_width: usize,
     source_height: usize,
-    destination_x: usize,
-    destination_y: usize,
+    dst_x: usize,
+    dst_y: usize,
 ) {
     for y in 0..source_height {
-        let source_row = source.add(y * source_width);
-        let destination_row = framebuffer.add((destination_y + y) * framebuffer_pitch + destination_x);
-        copy_row_sse2(destination_row, source_row, source_width);
+        let source_row = src.add(y * src_width);
+        let destination_row = fb.add((dst_y + y) * framebuffer_pitch + dst_x);
+        copy_row_sse2(destination_row, source_row, src_width);
     }
 }
 
@@ -539,10 +539,10 @@ const NONE: Option<CachedGlyph> = None;
     
     /// Get or create a cached glyph
     pub fn get_glyph(&mut self, c: char) -> &CachedGlyph {
-        let index = (c as usize) & 127;
+        let idx = (c as usize) & 127;
         
-        if self.glyphs[index].is_none() || 
-           self.glyphs[index].as_ref().map(|g| g.fg_color) != Some(self.current_fg) {
+        if self.glyphs[idx].is_none() || 
+           self.glyphs[idx].as_ref().map(|g| g.fg_color) != Some(self.current_fg) {
             // Render and cache the glyph
             let glyph_data = crate::framebuffer::font::get_glyph(c);
             let mut pixels = [0u32; 128];
@@ -555,7 +555,7 @@ const NONE: Option<CachedGlyph> = None;
                 }
             }
             
-            self.glyphs[index] = Some(CachedGlyph {
+            self.glyphs[idx] = Some(CachedGlyph {
                 pixels,
                 width: 8,
                 height: 16,
@@ -563,7 +563,8 @@ const NONE: Option<CachedGlyph> = None;
             });
         }
         
-        self.glyphs[index].as_ref().unwrap()
+        // SAFETY: just set above in this function
+        self.glyphs[idx].as_ref().unwrap_or_else(|| unreachable!())
     }
     
     /// Draw a cached glyph to a buffer
@@ -652,7 +653,7 @@ pub fn fill_buffer_fast(buffer: &mut [u32], color: u32) {
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
         if buffer.len() >= 4 {
-            fill_row_sse2(buffer.as_mut_pointer(), buffer.len(), color);
+            fill_row_sse2(buffer.as_mut_ptr(), buffer.len(), color);
             return;
         }
     }
@@ -661,34 +662,34 @@ unsafe {
 }
 
 /// Safe wrapper for SSE2 copy
-pub fn copy_buffer_fast(destination: &mut [u32], source: &[u32]) {
-    let count = destination.len().minimum(source.len());
+pub fn copy_buffer_fast(dst: &mut [u32], src: &[u32]) {
+    let count = dst.len().min(src.len());
     #[cfg(target_arch = "x86_64")]
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
         if count >= 4 {
-            copy_row_sse2(destination.as_mut_pointer(), source.as_pointer(), count);
+            copy_row_sse2(dst.as_mut_ptr(), src.as_ptr(), count);
             return;
         }
     }
     // Fallback
-    destination[..count].copy_from_slice(&source[..count]);
+    dst[..count].copy_from_slice(&src[..count]);
 }
 
 /// Safe wrapper for SSE2 alpha blend
-pub fn blend_buffer_fast(destination: &mut [u32], source: &[u32]) {
-    let count = destination.len().minimum(source.len());
+pub fn blend_buffer_fast(dst: &mut [u32], src: &[u32]) {
+    let count = dst.len().min(src.len());
     #[cfg(target_arch = "x86_64")]
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
         if count >= 2 {
-            blend_row_sse2(destination.as_mut_pointer(), source.as_pointer(), count);
+            blend_row_sse2(dst.as_mut_ptr(), src.as_ptr(), count);
             return;
         }
     }
     // Fallback
     for i in 0..count {
-        destination[i] = blend_pixel_fast(source[i], destination[i]);
+        dst[i] = blend_pixel_fast(src[i], dst[i]);
     }
 }
 
@@ -717,7 +718,7 @@ unsafe {
             "cpuid",
             "mov {out}, ebx",
             "mov rbx, {tmp_rbx}",
-            temporary_rbx = out(reg) _,
+            tmp_rbx = out(reg) _,
             out = out(reg) ebx,
             inout("eax") 7u32 => _,
             inout("ecx") 0u32 => _,
@@ -734,11 +735,11 @@ unsafe {
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2")]
 pub // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe fn fill_row_avx2(destination: *mut u32, count: usize, color: u32) {
+unsafe fn fill_row_avx2(dst: *mut u32, count: usize, color: u32) {
     if count == 0 { return; }
 
     let color_vec = _mm256_set1_epi32(color as i32);
-    let mut ptr = destination;
+    let mut ptr = dst;
     let mut remaining = count;
 
     // Process 32 pixels per unrolled iteration
@@ -767,12 +768,12 @@ unsafe fn fill_row_avx2(destination: *mut u32, count: usize, color: u32) {
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2")]
 pub // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe fn copy_row_avx2(destination: *mut u32, source: *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+unsafe fn copy_row_avx2(dst: *mut u32, src: *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u32, count: usize) {
     if count == 0 { return; }
 
-    let mut d = destination;
-    let mut s = source;
+    let mut d = dst;
+    let mut s = src;
     let mut remaining = count;
 
     // Process 32 pixels per unrolled iteration
@@ -812,34 +813,34 @@ const __m256i));
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2")]
 pub // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe fn blend_row_avx2(destination: *mut u32, source: *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+unsafe fn blend_row_avx2(dst: *mut u32, src: *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u32, count: usize) {
     if count == 0 { return; }
 
     let zero = _mm256_setzero_si256();
     let half = _mm256_set1_epi16(128);
 
-    let mut d = destination;
-    let mut s = source;
+    let mut d = dst;
+    let mut s = src;
     let mut remaining = count;
 
     // Process 8 pixels at a time using AVX2
     while remaining >= 8 {
-        let source_pixel = _mm256_loadu_si256(s as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+        let src_px = _mm256_loadu_si256(s as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const __m256i);
         let destination_pixel = _mm256_loadu_si256(d as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const __m256i);
 
         // Check if all pixels are fully opaque or transparent
-        let alpha_mask = _mm256_srli_epi32(source_pixel, 24);
+        let alpha_mask = _mm256_srli_epi32(src_px, 24);
         let all_opaque = _mm256_cmpeq_epi32(alpha_mask, _mm256_set1_epi32(0xFF));
         let all_zero = _mm256_cmpeq_epi32(alpha_mask, zero);
 
         if _mm256_movemask_epi8(all_opaque) == -1i32 {
-            _mm256_storeu_si256(d as *mut __m256i, source_pixel);
+            _mm256_storeu_si256(d as *mut __m256i, src_px);
         } else if _mm256_movemask_epi8(all_zero) != -1i32 {
             // Process lo 4 pixels
-            let source_lo = _mm256_unpacklo_epi8(source_pixel, zero);
+            let source_lo = _mm256_unpacklo_epi8(src_px, zero);
             let destination_lo = _mm256_unpacklo_epi8(destination_pixel, zero);
 
             // Extract alpha and broadcast to all channels for lo
@@ -855,7 +856,7 @@ const __m256i);
             let result_lo = _mm256_srli_epi16(blended_lo, 8);
 
             // Process hi 4 pixels
-            let source_hi = _mm256_unpackhi_epi8(source_pixel, zero);
+            let source_hi = _mm256_unpackhi_epi8(src_px, zero);
             let destination_hi = _mm256_unpackhi_epi8(destination_pixel, zero);
 
             let alpha_hi = _mm256_shufflehi_epi16(
@@ -891,11 +892,11 @@ const __m256i);
 #[cfg(target_arch = "x86_64")]
 #[inline]
 pub // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe fn fill_row_fast(destination: *mut u32, count: usize, color: u32) {
+unsafe fn fill_row_fast(dst: *mut u32, count: usize, color: u32) {
     if has_avx2() {
-        fill_row_avx2(destination, count, color);
+        fill_row_avx2(dst, count, color);
     } else {
-        fill_row_sse2(destination, count, color);
+        fill_row_sse2(dst, count, color);
     }
 }
 
@@ -903,12 +904,12 @@ unsafe fn fill_row_fast(destination: *mut u32, count: usize, color: u32) {
 #[cfg(target_arch = "x86_64")]
 #[inline]
 pub // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe fn copy_row_fast(destination: *mut u32, source: *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+unsafe fn copy_row_fast(dst: *mut u32, src: *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u32, count: usize) {
     if has_avx2() {
-        copy_row_avx2(destination, source, count);
+        copy_row_avx2(dst, src, count);
     } else {
-        copy_row_sse2(destination, source, count);
+        copy_row_sse2(dst, src, count);
     }
 }
 
@@ -916,11 +917,11 @@ const u32, count: usize) {
 #[cfg(target_arch = "x86_64")]
 #[inline]
 pub // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe fn blend_row_fast(destination: *mut u32, source: *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+unsafe fn blend_row_fast(dst: *mut u32, src: *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u32, count: usize) {
     if has_avx2() {
-        blend_row_avx2(destination, source, count);
+        blend_row_avx2(dst, src, count);
     } else {
-        blend_row_sse2(destination, source, count);
+        blend_row_sse2(dst, src, count);
     }
 }

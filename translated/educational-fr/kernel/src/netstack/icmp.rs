@@ -27,7 +27,7 @@ pub struct IcmpError {
     pub code: u8,
     pub source_ip: [u8; 4],   // IP of the router that sent the error
     pub original_dest: [u8; 4], // original destination (from embedded IP header)
-    pub original_protocol: u8,     // original protocol
+    pub original_proto: u8,     // original protocol
     pub original_id: u16,       // identification from original IP header
 }
 
@@ -35,7 +35,7 @@ pub struct IcmpError {
 #[derive(Debug, Clone, Copy)]
 // Structure publique — visible à l'extérieur de ce module.
 pub struct PingResponse {
-    pub sequence: u16,
+    pub seq: u16,
     pub ttl: u8,
     pub success: bool,
 }
@@ -83,18 +83,18 @@ pub fn handle_packet(data: &[u8], ttl: u8, source_ip: [u8; 4]) {
     let type_ = data[0];
     let code = data[1];
     let id = u16::from_be_bytes([data[4], data[5]]);
-    let sequence = u16::from_be_bytes([data[6], data[7]]);
+    let seq = u16::from_be_bytes([data[6], data[7]]);
     
         // Correspondance de motifs — branchement exhaustif de Rust.
 match type_ {
         ICMP_ECHO_REQUEST => {
-            crate::serial_println!("[ICMP] Echo request id={} seq={}", id, sequence);
-            send_echo_reply(id, sequence, &data[8..]);
+            crate::serial_println!("[ICMP] Echo request id={} seq={}", id, seq);
+            send_echo_reply(id, seq, &data[8..]);
         }
         ICMP_ECHO_REPLY => {
-            crate::serial_println!("[ICMP] Echo reply id={} seq={} ttl={}", id, sequence, ttl);
+            crate::serial_println!("[ICMP] Echo reply id={} seq={} ttl={}", id, seq, ttl);
             PING_RESPONSES.lock().push(PingResponse {
-                sequence,
+                seq,
                 ttl,
                 success: true,
             });
@@ -117,7 +117,7 @@ match type_ {
                     code,
                     source_ip,
                     original_dest: orig_dest,
-                    original_protocol: orig_protocol,
+                    original_proto: orig_protocol,
                     original_id: orig_id,
                 });
             }
@@ -129,7 +129,7 @@ match type_ {
 }
 
 /// Send ICMP echo request (ping)
-pub fn send_echo_request(dest_ip: [u8; 4], id: u16, sequence: u16) -> Result<(), &'static str> {
+pub fn send_echo_request(dest_ip: [u8; 4], id: u16, seq: u16) -> Result<(), &'static str> {
     // Build ICMP echo request
     let mut packet = Vec::new();
     
@@ -138,10 +138,10 @@ pub fn send_echo_request(dest_ip: [u8; 4], id: u16, sequence: u16) -> Result<(),
     packet.push(0); // Code
     packet.push(0); packet.push(0); // Checksum (will calculate)
     packet.extend_from_slice(&id.to_be_bytes());
-    packet.extend_from_slice(&sequence.to_be_bytes());
+    packet.extend_from_slice(&seq.to_be_bytes());
     
     // Payload (timestamp + padding)
-    let timestamp = crate::time::uptime_mouse() as u32;
+    let timestamp = crate::time::uptime_ms() as u32;
     packet.extend_from_slice(&timestamp.to_be_bytes());
     for i in 0..52 {
         packet.push((0x10 + i) as u8); // Pattern data
@@ -156,13 +156,13 @@ pub fn send_echo_request(dest_ip: [u8; 4], id: u16, sequence: u16) -> Result<(),
     crate::netstack::ip::send_packet(dest_ip, 1, &packet)?;
     
     crate::serial_println!("[ICMP] Sent echo request to {}.{}.{}.{} id={} seq={}", 
-        dest_ip[0], dest_ip[1], dest_ip[2], dest_ip[3], id, sequence);
+        dest_ip[0], dest_ip[1], dest_ip[2], dest_ip[3], id, seq);
     
     Ok(())
 }
 
 /// Send ICMP echo reply
-fn send_echo_reply(id: u16, sequence: u16, payload: &[u8]) {
+fn send_echo_reply(id: u16, seq: u16, payload: &[u8]) {
     // Build ICMP echo reply
     let mut packet = Vec::new();
     
@@ -170,7 +170,7 @@ fn send_echo_reply(id: u16, sequence: u16, payload: &[u8]) {
     packet.push(0); // Code
     packet.push(0); packet.push(0); // Checksum (will calculate)
     packet.extend_from_slice(&id.to_be_bytes());
-    packet.extend_from_slice(&sequence.to_be_bytes());
+    packet.extend_from_slice(&seq.to_be_bytes());
     packet.extend_from_slice(payload);
     
     // Calculate checksum
@@ -179,11 +179,11 @@ fn send_echo_reply(id: u16, sequence: u16, payload: &[u8]) {
     packet[3] = (csum & 0xFF) as u8;
     
     // TODO: Send back to source IP (need to track source in handle_packet)
-    crate::serial_println!("[ICMP] Would send echo reply id={} seq={}", id, sequence);
+    crate::serial_println!("[ICMP] Would send echo reply id={} seq={}", id, seq);
 }
 
 /// Wait for ping response
-pub fn wait_for_response(sequence: u16, timeout_mouse: u32) -> Option<PingResponse> {
+pub fn wait_for_response(seq: u16, timeout_ms: u32) -> Option<PingResponse> {
     let start = crate::logger::get_ticks();
     let mut spins: u32 = 0;
     
@@ -194,14 +194,14 @@ loop {
 
         // Check if we have a response
         let mut responses = PING_RESPONSES.lock();
-        if let Some(position) = responses.iter().position(|r| r.sequence == sequence) {
-            let response = responses.remove(position);
+        if let Some(pos) = responses.iter().position(|r| r.seq == seq) {
+            let response = responses.remove(pos);
             return Some(response);
         }
         drop(responses);
         
         // Check timeout
-        if crate::logger::get_ticks() - start > timeout_mouse as u64 {
+        if crate::logger::get_ticks() - start > timeout_ms as u64 {
             return None;
         }
 
@@ -221,7 +221,7 @@ pub fn clear_responses() {
 }
 
 /// Wait for an ICMP error (time-exceeded or dest-unreachable) for a specific destination
-pub fn wait_for_error(dest_ip: [u8; 4], timeout_mouse: u32) -> Option<IcmpError> {
+pub fn wait_for_error(dest_ip: [u8; 4], timeout_ms: u32) -> Option<IcmpError> {
     let start = crate::logger::get_ticks();
     let mut spins: u32 = 0;
         // Boucle infinie — tourne jusqu'à un `break` explicite.
@@ -229,12 +229,12 @@ loop {
         crate::netstack::poll();
 
         let mut errors = ICMP_ERRORS.lock();
-        if let Some(position) = errors.iter().position(|e| e.original_dest == dest_ip) {
-            return Some(errors.remove(position));
+        if let Some(pos) = errors.iter().position(|e| e.original_dest == dest_ip) {
+            return Some(errors.remove(pos));
         }
         drop(errors);
 
-        if crate::logger::get_ticks().saturating_sub(start) > timeout_mouse as u64 {
+        if crate::logger::get_ticks().saturating_sub(start) > timeout_ms as u64 {
             return None;
         }
         spins = spins.wrapping_add(1);
@@ -244,7 +244,7 @@ loop {
 }
 
 /// Wait for either a ping response OR an ICMP error (for traceroute)
-pub fn wait_for_response_or_error(sequence: u16, dest_ip: [u8; 4], timeout_mouse: u32) -> TracerouteResult {
+pub fn wait_for_response_or_error(seq: u16, dest_ip: [u8; 4], timeout_ms: u32) -> TracerouteResult {
     let start = crate::logger::get_ticks();
     let mut spins: u32 = 0;
         // Boucle infinie — tourne jusqu'à un `break` explicite.
@@ -254,24 +254,24 @@ loop {
         // Check for echo reply (reached destination)
         {
             let mut responses = PING_RESPONSES.lock();
-            if let Some(position) = responses.iter().position(|r| r.sequence == sequence) {
-                let response = responses.remove(position);
+            if let Some(pos) = responses.iter().position(|r| r.seq == seq) {
+                let resp = responses.remove(pos);
                 let elapsed = crate::logger::get_ticks().saturating_sub(start);
-                return TracerouteResult::Reached { ip: dest_ip, ttl: response.ttl, rtt_mouse: elapsed };
+                return TracerouteResult::Reached { ip: dest_ip, ttl: resp.ttl, rtt_ms: elapsed };
             }
         }
 
         // Check for ICMP error (intermediate hop)
         {
             let mut errors = ICMP_ERRORS.lock();
-            if let Some(position) = errors.iter().position(|e| e.original_dest == dest_ip) {
-                let error = errors.remove(position);
+            if let Some(pos) = errors.iter().position(|e| e.original_dest == dest_ip) {
+                let err = errors.remove(pos);
                 let elapsed = crate::logger::get_ticks().saturating_sub(start);
-                return TracerouteResult::Hop { ip: error.source_ip, rtt_mouse: elapsed, error_type: error.error_type };
+                return TracerouteResult::Hop { ip: err.source_ip, rtt_ms: elapsed, error_type: err.error_type };
             }
         }
 
-        if crate::logger::get_ticks().saturating_sub(start) > timeout_mouse as u64 {
+        if crate::logger::get_ticks().saturating_sub(start) > timeout_ms as u64 {
             return TracerouteResult::Timeout;
         }
         spins = spins.wrapping_add(1);
@@ -289,7 +289,7 @@ pub fn clear_errors() {
 #[derive(Debug, Clone, Copy)]
 // Énumération — un type qui peut être l'une de plusieurs variantes.
 pub enum TracerouteResult {
-    Hop { ip: [u8; 4], rtt_mouse: u64, error_type: u8 },
-    Reached { ip: [u8; 4], ttl: u8, rtt_mouse: u64 },
+    Hop { ip: [u8; 4], rtt_ms: u64, error_type: u8 },
+    Reached { ip: [u8; 4], ttl: u8, rtt_ms: u64 },
     Timeout,
 }

@@ -137,14 +137,14 @@ impl ConsoleManager {
         // Fonction publique — appelable depuis d'autres modules.
 pub fn create_console(&mut self, vm_id: u64, name: &str) -> usize {
         let console = VirtConsole::new(vm_id, name);
-        let index = self.consoles.len();
+        let idx = self.consoles.len();
         self.consoles.push(console);
-        index
+        idx
     }
     
         // Fonction publique — appelable depuis d'autres modules.
 pub fn get_console(&mut self, vm_id: u64) -> Option<&mut VirtConsole> {
-        self.consoles.iterator_mut().find(|c| c.vm_id == vm_id)
+        self.consoles.iter_mut().find(|c| c.vm_id == vm_id)
     }
     
         // Fonction publique — appelable depuis d'autres modules.
@@ -154,32 +154,32 @@ pub fn remove_console(&mut self, vm_id: u64) {
 }
 
 /// Global console manager
-static CONSOLE_MANAGER: Mutex<ConsoleManager> = Mutex::new(ConsoleManager::new());
+static CONSOLE_MGR: Mutex<ConsoleManager> = Mutex::new(ConsoleManager::new());
 
 /// Get console for a VM
 pub fn get_console(vm_id: u64) -> Option<spin::MutexGuard<'static, ConsoleManager>> {
-    let manager = CONSOLE_MANAGER.lock();
-    Some(manager)
+    let mgr = CONSOLE_MGR.lock();
+    Some(mgr)
 }
 
 /// Create a console for a VM
 pub fn create_console(vm_id: u64, name: &str) -> usize {
-    CONSOLE_MANAGER.lock().create_console(vm_id, name)
+    CONSOLE_MGR.lock().create_console(vm_id, name)
 }
 
 /// Write a character to a VM's console by console index
-pub fn write_char(console_id: usize, character: char) {
-    let mut manager = CONSOLE_MANAGER.lock();
-    if console_id < manager.consoles.len() {
-        manager.consoles[console_id].write_byte(character as u8);
+pub fn write_char(console_id: usize, ch: char) {
+    let mut mgr = CONSOLE_MGR.lock();
+    if console_id < mgr.consoles.len() {
+        mgr.consoles[console_id].write_byte(ch as u8);
     }
 }
 
 /// Handle console I/O port access from guest
 pub fn handle_console_io(vm_id: u64, port: u16, is_write: bool, value: u8) -> u8 {
-    let mut manager = CONSOLE_MANAGER.lock();
+    let mut mgr = CONSOLE_MGR.lock();
     
-    if let Some(console) = manager.get_console(vm_id) {
+    if let Some(console) = mgr.get_console(vm_id) {
                 // Correspondance de motifs — branchement exhaustif de Rust.
 match port {
             // Data port (COM1 style)
@@ -215,16 +215,16 @@ match port {
 
 /// Inject input to a VM's console
 pub fn inject_input(vm_id: u64, data: &[u8]) {
-    let mut manager = CONSOLE_MANAGER.lock();
-    if let Some(console) = manager.get_console(vm_id) {
+    let mut mgr = CONSOLE_MGR.lock();
+    if let Some(console) = mgr.get_console(vm_id) {
         console.inject_input(data);
     }
 }
 
 /// Get output from a VM's console
 pub fn get_output(vm_id: u64) -> String {
-    let mut manager = CONSOLE_MANAGER.lock();
-    if let Some(console) = manager.get_console(vm_id) {
+    let mut mgr = CONSOLE_MGR.lock();
+    if let Some(console) = mgr.get_console(vm_id) {
         console.drain_output_string()
     } else {
         String::new()

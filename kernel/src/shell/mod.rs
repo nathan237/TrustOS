@@ -37,9 +37,20 @@ pub(crate) static CAPTURE_MODE: AtomicBool = AtomicBool::new(false);
 static CAPTURE_BUF: SpinMutex<String> = SpinMutex::new(String::new());
 
 /// Append text to the capture buffer (called from print macros when capture mode is on)
+/// MEM-01: cap to 1 MiB to prevent unbounded heap growth (BUG-001).
 pub fn capture_write(s: &str) {
     if CAPTURE_MODE.load(core::sync::atomic::Ordering::Relaxed) {
+        const CAPTURE_BUF_MAX: usize = 1 << 20; // 1 MiB
         let mut buf = CAPTURE_BUF.lock();
+        if buf.len() + s.len() > CAPTURE_BUF_MAX {
+            // Drop oldest half to keep recent output
+            let drop_to = CAPTURE_BUF_MAX / 2;
+            if buf.len() > drop_to {
+                let split = buf.len() - drop_to;
+                let tail = String::from(&buf[split..]);
+                *buf = tail;
+            }
+        }
         buf.push_str(s);
     }
 }
@@ -197,7 +208,7 @@ pub const SHELL_COMMANDS: &[&str] = &[
     "hwtest", "keytest", "hexdump", "xxd", "panic", "usertest", "userland-audit",
     // Hardware debug toolkit
     "hwdiag", "cpudump", "stacktrace", "backtrace", "bootlog", "postcode",
-    "ioport", "rdmsr", "wrmsr", "cpuid", "memmap", "watchdog", "drv",
+    "ioport", "rdmsr", "wrmsr", "cpuid", "memmap", "watchdog", "tco", "drv",
     // Desktop GUI (multi-layer compositor)
     "desktop", "gui", "mobile", "cosmic", "open", "trustedit",
     // Kernel signature
@@ -209,15 +220,17 @@ pub const SHELL_COMMANDS: &[&str] = &[
     // Tasks
     "tasks", "jobs", "threads",
     // Disk
-    "disk", "dd", "ahci", "fdisk", "partitions", "diskscan",
+    "disk", "dd", "ahci", "fdisk", "partitions", "diskscan", "bios",
     // Hardware
-    "lspci", "lshw", "hwinfo", "gpu", "gpuexec", "sdma", "neural", "gpufw", "a11y",
+    "lspci", "lshw", "hwinfo", "gpu", "gpudbg", "gpuexec", "gpumap", "sdma", "neural", "gpufw", "gputrain", "gpuml", "hivemind", "a11y",
     // USB / checkm8
     "lsusb", "checkm8",
     // Audio
-    "beep", "audio", "synth", "play", "vizfx",
-    // ThinkPad EC / Power
+    "beep", "audio", "synth", "live", "play", "vizfx",
+    "d1", "d2", "d3", "d4", "d5", "d6", "d7", "d8", "hush", "beat", "beatlab", "studio",
+    // ThinkPad EC / Power / Thermal
     "fan", "temp", "sensors", "cpufreq", "speedstep",
+    "thermal", "smbus", "i2c",
     // Network
     "ifconfig", "ip", "ipconfig", "wifi", "ping", "curl", "wget", "download",
     "nslookup", "dig", "arp", "route", "netstat",
@@ -324,10 +337,11 @@ fn read_line_with_autocomplete(buffer: &mut [u8]) -> usize {
         crate::framebuffer::set_cursor(input_col_start, input_row);
     }
     
-    // Cursor blinking state
+    // Cursor blinking state — synced to JARVIS heartbeat
     let mut cursor_visible = true;
     let mut blink_counter: u32 = 0;
-    const BLINK_INTERVAL: u32 = 500000;
+    #[cfg(feature = "jarvis")]
+    let mut heartbeat_tick_counter: u32 = 0;
     
     history_reset();
     
@@ -652,12 +666,20 @@ fn read_line_with_autocomplete(buffer: &mut [u8]) -> usize {
             // Re-show cursor after key processing
             show_cursor_block();
         } else {
-            // No input - handle cursor blinking
+            // No input — cursor blinks at JARVIS's heartbeat rhythm
+            // Fallback to ~500ms blink if heartbeat returns 0 or garbage
             blink_counter += 1;
-            if blink_counter >= BLINK_INTERVAL {
+            #[cfg(feature = "jarvis")]
+            let blink_interval = {
+                let raw = crate::jarvis::heartbeat::cursor_blink_interval();
+                if raw >= 50_000 && raw <= 2_000_000 { raw } else { 500_000 }
+            };
+            #[cfg(not(feature = "jarvis"))]
+            let blink_interval = 500_000u32;
+            if blink_counter >= blink_interval {
                 blink_counter = 0;
                 cursor_visible = !cursor_visible;
-                
+
                 if cursor_visible {
                     show_cursor_block();
                 } else {
@@ -666,22 +688,39 @@ fn read_line_with_autocomplete(buffer: &mut [u8]) -> usize {
                     crate::print_fb_only!("\x08");
                 }
             }
-            // Poll network stack while idle (DHCP, packet RX, etc.)
-            // Delay net polling for first ~5s after shell start to avoid crashes
-            // when NIC is fresh from PXE boot (gives user time to type netconsole cmd)
+            // Update JARVIS heartbeat periodically (~every 50ms worth of spin loops)
+            #[cfg(feature = "jarvis")]
+            {
+                heartbeat_tick_counter += 1;
+                if heartbeat_tick_counter >= 50_000 {
+                    heartbeat_tick_counter = 0;
+                    crate::jarvis::heartbeat::tick();
+                }
+            }
+            // Poll network stack while idle (DHCP, packet RX, remote shell, etc.)
+            // Must be frequent enough to answer ARP and process UDP before timeouts
             {
                 static POLL_DIVISOR: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
                 let count = POLL_DIVISOR.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
-                if count > 500_000 && count % 5000 == 0 {
+                if count % 4 == 0 {
                     crate::netstack::poll();
                 }
-                // Poll mesh network more frequently for RPC responsiveness
-                if count % 100 == 0 && crate::jarvis::mesh::is_active() {
+                // Poll mesh network for RPC responsiveness
+                #[cfg(feature = "jarvis")]
+                if count % 50 == 0 && crate::jarvis::mesh::is_active() {
                     crate::jarvis::mesh_poll();
                 }
                 // Poll Jarvis mentor serial commands (learn from external AI)
+                #[cfg(feature = "jarvis")]
                 if count % 10000 == 0 {
                     crate::jarvis::mentor::poll_serial();
+                }
+                // JARVIS background training — separate from network poll
+                // Poll network immediately after training_tick to avoid starvation
+                #[cfg(feature = "jarvis")]
+                if count % 5000 == 0 {
+                    crate::jarvis::training_loop::training_tick();
+                    crate::netstack::poll();
                 }
             }
             for _ in 0..100 { core::hint::spin_loop(); }
@@ -1044,10 +1083,16 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
 
         // -- desktop module: COSMIC, Showcase, Benchmark, Signature, Security --
         "benchmark" | "bench" => desktop::cmd_benchmark(args),
+        // TODO: cmd_mtbench / cmd_trace / cmd_selftest handlers were removed; re-enable when reimplemented
+        // "mtbench" | "bench-mt" | "smpbench" => commands::cmd_mtbench(args),
+        // "trace" => commands::cmd_trace(args),
+        // "selftest" | "self-test" | "validate" => commands::cmd_selftest(args),
         "showcase" => desktop::cmd_showcase(args),
         "showcase-jarvis" | "jarvis-showcase" | "jdemo" => desktop::cmd_showcase_jarvis(args),
+        #[cfg(feature = "extras")]
         "showcase3d" | "demo3d" => desktop::cmd_showcase3d(),
         "demo" | "tutorial" | "tour" => desktop::cmd_demo(args),
+        #[cfg(feature = "extras")]
         "filled3d" => desktop::cmd_filled3d(),
         "desktop" | "gui" => desktop::launch_desktop_env(None),
         "mobile" => desktop::launch_mobile_env(),
@@ -1130,17 +1175,40 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         "diskscan" => vm::cmd_diskscan(args),
         "lspci" => vm::cmd_lspci(args),
         "lshw" | "hwinfo" => vm::cmd_lshw(),
+        #[cfg(feature = "amdgpu")]
         "gpu" => vm::cmd_gpu(args),
+        #[cfg(feature = "amdgpu")]
+        "gpudbg" => vm::cmd_gpu(&["dump"]),
+        #[cfg(feature = "amdgpu")]
         "gpuexec" | "gpurun" | "gpuagent" => commands::cmd_gpuexec(args),
+        #[cfg(feature = "amdgpu")]
+        "gpumap" => vm::cmd_gpumap(args),
+        #[cfg(feature = "amdgpu")]
         "sdma" | "dma" => commands::cmd_sdma(args),
+        #[cfg(feature = "amdgpu")]
         "neural" | "nn" | "gemm" => commands::cmd_neural(args),
+        #[cfg(feature = "amdgpu")]
         "gpufw" | "firmware" => commands::cmd_gpufw(args),
         "a11y" | "accessibility" => vm::cmd_a11y(args),
         "beep" => vm::cmd_beep(args),
         "audio" => vm::cmd_audio(args),
         "synth" => vm::cmd_synth(args),
+        "live" | "strudel" => vm::cmd_live(args),
+        "d1" => vm::cmd_track(0, args),
+        "d2" => vm::cmd_track(1, args),
+        "d3" => vm::cmd_track(2, args),
+        "d4" => vm::cmd_track(3, args),
+        "d5" => vm::cmd_track(4, args),
+        "d6" => vm::cmd_track(5, args),
+        "d7" => vm::cmd_track(6, args),
+        "d8" => vm::cmd_track(7, args),
+        "hush" => { let _ = crate::audio::strudel_hush(); crate::println_color!(0x00FF88, "Hush"); },
+        "beat" | "beatlab" | "studio" => beat_mode::enter(),
+        #[cfg(feature = "daw")]
         "play" => vm::cmd_play(args),
+        #[cfg(feature = "daw")]
         "vizfx" | "liveviz" => vm::cmd_vizfx(args),
+        #[cfg(feature = "daw")]
         "daw" | "trustdaw" => vm::cmd_daw(args),
         "ifconfig" | "ip" => vm::cmd_ifconfig(),
         "ipconfig" => vm::cmd_ipconfig(args),
@@ -1255,6 +1323,7 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
 
         "mount" => unix::cmd_mount(args),
         "umount" => unix::cmd_umount(args),
+        "mkfs" => unix::cmd_mkfs(args),
         "fsck" => unix::cmd_fsck(args),
 
         "sync" => unix::cmd_sync(),
@@ -1265,6 +1334,7 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
 
         "source" | "." => unix::cmd_source(args),
         "set" => unix::cmd_set(args),
+        "config" | "cfg" => unix::cmd_config(args),
 
         "printf" => unix::cmd_printf(args),
         "test" | "[" => unix::cmd_test_expr(args),
@@ -1312,6 +1382,7 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         "cpuid" => unix::cmd_cpuid(args),
         "memmap" => unix::cmd_memmap(),
         "watchdog" | "wdt" => unix::cmd_watchdog(args),
+        "tco" => unix::cmd_tco(args),
         "drv" | "driver" => unix::cmd_drv(args),
         "netconsole" | "nc" => unix::cmd_netconsole(args),
         "remoteshell" | "rsh" => unix::cmd_remoteshell(args),
@@ -1320,6 +1391,8 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         "fan" => crate::drivers::thinkpad_ec::cmd_fan(args),
         "temp" | "sensors" => crate::drivers::thinkpad_ec::cmd_temp(args),
         "cpufreq" | "speedstep" => crate::drivers::thinkpad_ec::cmd_cpufreq(args),
+        "thermal" => crate::thermal::cmd_thermal(args),
+        "smbus" | "i2c" => crate::drivers::smbus::cmd_smbus(args),
 
         // -- apps module: TrustLang, Film, Transpile, Video, Lab, Gterm, Wayland --
         "wayland" | "wl" => apps::cmd_wayland(args),
@@ -1332,16 +1405,28 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         "hwscan" | "trustprobe" | "probe" => apps::cmd_hwscan(args),
         "hwdbg" | "hwdebug" => crate::hwdiag::handle_hwdbg_command(args),
         "marionet" | "mario" => crate::marionet::handle_command(args),
+        "electro" | "elec" | "power" => crate::electro::handle_command(args),
         "trustlang" | "tl" => apps::cmd_trustlang(args),
         "trustlang_showcase" | "tl_showcase" => apps::cmd_trustlang_showcase(),
         "film" | "trustos_film" => apps::cmd_trustos_film(),
         "trailer" | "trustos_trailer" => trailer::cmd_trustos_trailer(),
         "video" => apps::cmd_video(args),
 
+        // -- WOA — World of Ants --
+        #[cfg(feature = "woa")]
+        "woa" | "worldofants" | "ants" => crate::woa::run(),
+
+        // -- BIOS dump/transfer --
+        "bios" => unix::cmd_bios(args),
+
         // -- Jarvis AI assistant --
+        #[cfg(feature = "jarvis")]
         "jarvis" | "j" | "ai" | "assistant" => jarvis::cmd_jarvis(args),
+        #[cfg(feature = "jarvis")]
         "mesh" | "jarvis-mesh" | "jmesh" => commands::cmd_mesh(args),
+        #[cfg(feature = "jarvis")]
         "pxe" | "pxeboot" | "replicate" => commands::cmd_pxe(args),
+        #[cfg(feature = "jarvis")]
         "guardian" | "pact" | "gardien" => commands::cmd_guardian(args),
 
         "" => {}
@@ -1370,6 +1455,8 @@ mod network;        // Browser, Sandbox, Container, HTML rendering       (~830 l
 mod unix;           // Unix utility stubs and POSIX commands             (~2400 lines)
 mod apps;           // TrustLang, Film, Transpile, Video, Lab, Gterm    (~3930 lines)
 mod trailer;        // TrustOS Trailer -- 2-min cinematic showcase         (~900 lines)
+#[cfg(feature = "jarvis")]
 mod jarvis;         // Jarvis AI assistant — NLU + planner + executor     (~600 lines)
 pub(crate) mod scripting;  // Shell scripting engine — variables, if/for/while    (~640 lines)
 mod editor;         // TrustEdit — nano-like terminal text editor          (~520 lines)
+mod beat_mode;      // TrustBeatLab — interactive live-coding REPL

@@ -9,186 +9,186 @@
 use alloc::vec::Vec;
 
 
-fn eql(b: f32) -> f32 {
-    let mrp = b as i32;
-    if b < mrp as f32 { (mrp - 1) as f32 } else { mrp as f32 }
+fn bzt(x: f32) -> f32 {
+    let hcx = x as i32;
+    if x < hcx as f32 { (hcx - 1) as f32 } else { hcx as f32 }
 }
 
-fn pec(b: f32) -> f32 {
-    eql(b + 0.5)
+fn jbk(x: f32) -> f32 {
+    bzt(x + 0.5)
 }
 
-fn ckn(b: f32) -> f32 {
-    b - eql(b)
+fn atu(x: f32) -> f32 {
+    x - bzt(x)
 }
 
-fn iip(b: f32) -> f32 {
-    if b < 0.0 { -b } else { b }
+fn eev(x: f32) -> f32 {
+    if x < 0.0 { -x } else { x }
 }
 
-fn khs(b: f32, v: f32, am: f32) -> f32 {
-    if b < v { v } else if b > am { am } else { b }
+fn fls(x: f32, min: f32, max: f32) -> f32 {
+    if x < min { min } else if x > max { max } else { x }
 }
 
-fn jre(b: f32) -> f32 { crate::math::ahn(b) }
+fn fbi(x: f32) -> f32 { crate::math::ra(x) }
 
-fn pkz(b: f32) -> f32 { crate::math::lz(b) }
+fn jgj(x: f32) -> f32 { crate::math::eu(x) }
 
-fn ngf(b: f32) -> f32 { crate::math::rk(b) }
+fn hny(x: f32) -> f32 { crate::math::hr(x) }
 
-fn xaq(b: f32) -> f32 { crate::math::nsw(b) }
+fn pda(x: f32) -> f32 { crate::math::hxv(x) }
 
 
 #[derive(Clone, Copy, Debug)]
 pub struct Color {
-    pub m: u8,
-    pub at: u8,
-    pub o: u8,
-    pub q: u8,
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+    pub a: u8,
 }
 
 impl Color {
-    pub const fn new(m: u8, at: u8, o: u8, q: u8) -> Self {
-        Self { m, at, o, q }
+    pub const fn new(r: u8, g: u8, b: u8, a: u8) -> Self {
+        Self { r, g, b, a }
     }
     
-    pub const fn zi(r: u32) -> Self {
+    pub const fn from_u32(c: u32) -> Self {
         Self {
-            q: ((r >> 24) & 0xFF) as u8,
-            m: ((r >> 16) & 0xFF) as u8,
-            at: ((r >> 8) & 0xFF) as u8,
-            o: (r & 0xFF) as u8,
+            a: ((c >> 24) & 0xFF) as u8,
+            r: ((c >> 16) & 0xFF) as u8,
+            g: ((c >> 8) & 0xFF) as u8,
+            b: (c & 0xFF) as u8,
         }
     }
     
-    pub const fn lv(self) -> u32 {
-        ((self.q as u32) << 24) | ((self.m as u32) << 16) | ((self.at as u32) << 8) | (self.o as u32)
+    pub const fn to_u32(self) -> u32 {
+        ((self.a as u32) << 24) | ((self.r as u32) << 16) | ((self.g as u32) << 8) | (self.b as u32)
     }
     
-    pub const fn xt(m: u8, at: u8, o: u8) -> Self {
-        Self { m, at, o, q: 255 }
+    pub const fn rgb(r: u8, g: u8, b: u8) -> Self {
+        Self { r, g, b, a: 255 }
     }
     
-    pub const fn dbi(m: u8, at: u8, o: u8, q: u8) -> Self {
-        Self { m, at, o, q }
+    pub const fn bdl(r: u8, g: u8, b: u8, a: u8) -> Self {
+        Self { r, g, b, a }
     }
     
     
-    pub const Anl: Self = Self::new(0, 0, 0, 0);
-    pub const Ox: Self = Self::new(0, 0, 0, 255);
-    pub const Zm: Self = Self::new(255, 255, 255, 255);
-    pub const Bqa: Self = Self::new(255, 0, 0, 255);
-    pub const Bht: Self = Self::new(0, 255, 0, 255);
-    pub const Bci: Self = Self::new(0, 0, 255, 255);
+    pub const TRANSPARENT: Self = Self::new(0, 0, 0, 0);
+    pub const BLACK: Self = Self::new(0, 0, 0, 255);
+    pub const WHITE: Self = Self::new(255, 255, 255, 255);
+    pub const Acz: Self = Self::new(255, 0, 0, 255);
+    pub const Zf: Self = Self::new(0, 255, 0, 255);
+    pub const Wn: Self = Self::new(0, 0, 255, 255);
 }
 
 
 #[derive(Clone, Copy, Debug)]
 pub struct DirtyRect {
-    pub b: u32,
-    pub c: u32,
-    pub d: u32,
-    pub i: u32,
+    pub x: u32,
+    pub y: u32,
+    pub w: u32,
+    pub h: u32,
 }
 
 impl DirtyRect {
-    pub fn new(b: u32, c: u32, d: u32, i: u32) -> Self {
-        Self { b, c, d, i }
+    pub fn new(x: u32, y: u32, w: u32, h: u32) -> Self {
+        Self { x, y, w, h }
     }
     
     
-    pub fn far(&self, gq: &DirtyRect) -> DirtyRect {
-        let dn = self.b.v(gq.b);
-        let dp = self.c.v(gq.c);
-        let hy = (self.b + self.d).am(gq.b + gq.d);
-        let jz = (self.c + self.i).am(gq.c + gq.i);
-        DirtyRect::new(dn, dp, hy - dn, jz - dp)
+    pub fn union(&self, other: &DirtyRect) -> DirtyRect {
+        let x1 = self.x.min(other.x);
+        let y1 = self.y.min(other.y);
+        let x2 = (self.x + self.w).max(other.x + other.w);
+        let y2 = (self.y + self.h).max(other.y + other.h);
+        DirtyRect::new(x1, y1, x2 - x1, y2 - y1)
     }
     
     
-    pub fn jao(&self, gq: &DirtyRect) -> bool {
-        !(self.b + self.d <= gq.b || gq.b + gq.d <= self.b ||
-          self.c + self.i <= gq.c || gq.c + gq.i <= self.c)
+    pub fn intersects(&self, other: &DirtyRect) -> bool {
+        !(self.x + self.w <= other.x || other.x + other.w <= self.x ||
+          self.y + self.h <= other.y || other.y + other.h <= self.y)
     }
 }
 
 
 pub struct Rasterizer {
-    pub z: u32,
-    pub ac: u32,
-    pub hkn: Vec<u32>,
-    pub aqt: Vec<u32>,
-    pub dpz: Vec<DirtyRect>,
-    pub asw: bool,
+    pub width: u32,
+    pub height: u32,
+    pub front_buffer: Vec<u32>,
+    pub back_buffer: Vec<u32>,
+    pub dirty_rects: Vec<DirtyRect>,
+    pub full_redraw: bool,
 }
 
 impl Rasterizer {
     
-    pub fn new(z: u32, ac: u32) -> Self {
-        let aw = (z * ac) as usize;
+    pub fn new(width: u32, height: u32) -> Self {
+        let size = (width * height) as usize;
         Self {
-            z,
-            ac,
-            hkn: alloc::vec![0xFF000000; aw],
-            aqt: alloc::vec![0xFF000000; aw],
-            dpz: Vec::new(),
-            asw: true,
+            width,
+            height,
+            front_buffer: alloc::vec![0xFF000000; size],
+            back_buffer: alloc::vec![0xFF000000; size],
+            dirty_rects: Vec::new(),
+            full_redraw: true,
         }
     }
     
     
-    pub fn jey(&mut self, b: u32, c: u32, d: u32, i: u32) {
-        let ha = DirtyRect::new(
-            b.v(self.z),
-            c.v(self.ac),
-            d.v(self.z - b.v(self.z)),
-            i.v(self.ac - c.v(self.ac)),
+    pub fn mark_dirty(&mut self, x: u32, y: u32, w: u32, h: u32) {
+        let rect = DirtyRect::new(
+            x.min(self.width),
+            y.min(self.height),
+            w.min(self.width - x.min(self.width)),
+            h.min(self.height - y.min(self.height)),
         );
         
         
-        let mut hrj = false;
-        for xy in self.dpz.el() {
-            if xy.jao(&ha) {
-                *xy = xy.far(&ha);
-                hrj = true;
+        let mut duf = false;
+        for ku in self.dirty_rects.iter_mut() {
+            if ku.intersects(&rect) {
+                *ku = ku.union(&rect);
+                duf = true;
                 break;
             }
         }
         
-        if !hrj {
-            self.dpz.push(ha);
+        if !duf {
+            self.dirty_rects.push(rect);
         }
     }
     
     
-    pub fn clear(&mut self, s: u32) {
+    pub fn clear(&mut self, color: u32) {
         #[cfg(target_arch = "x86_64")]
         unsafe {
             use core::arch::x86_64::*;
-            let vi = els(s as i32);
-            let ptr = self.aqt.mw() as *mut acb;
-            let az = self.aqt.len() / 4;
-            for a in 0..az {
-                ccs(ptr.add(a), vi);
+            let fill = _mm_set1_epi32(color as i32);
+            let ptr = self.back_buffer.as_mut_ptr() as *mut __m128i;
+            let count = self.back_buffer.len() / 4;
+            for i in 0..count {
+                _mm_storeu_si128(ptr.add(i), fill);
             }
-            for a in (az * 4)..self.aqt.len() {
-                self.aqt[a] = s;
+            for i in (count * 4)..self.back_buffer.len() {
+                self.back_buffer[i] = color;
             }
         }
         #[cfg(not(target_arch = "x86_64"))]
         {
-            for il in self.aqt.el() {
-                *il = s;
+            for ct in self.back_buffer.iter_mut() {
+                *ct = color;
             }
         }
-        self.asw = true;
+        self.full_redraw = true;
     }
     
     
     #[inline(always)]
-    fn vih(&self, b: u32, c: u32) -> Option<usize> {
-        if b < self.z && c < self.ac {
-            Some((c * self.z + b) as usize)
+    fn pixel_index(&self, x: u32, y: u32) -> Option<usize> {
+        if x < self.width && y < self.height {
+            Some((y * self.width + x) as usize)
         } else {
             None
         }
@@ -196,16 +196,16 @@ impl Rasterizer {
     
     
     #[inline(always)]
-    pub fn aht(&mut self, b: u32, c: u32, s: u32) {
-        if let Some(w) = self.vih(b, c) {
-            let dw = (s >> 24) & 0xFF;
+    pub fn set_pixel(&mut self, x: u32, y: u32, color: u32) {
+        if let Some(idx) = self.pixel_index(x, y) {
+            let alpha = (color >> 24) & 0xFF;
             
-            if dw == 255 {
+            if alpha == 255 {
                 
-                self.aqt[w] = s;
-            } else if dw > 0 {
+                self.back_buffer[idx] = color;
+            } else if alpha > 0 {
                 
-                self.aqt[w] = Self::ilr(self.aqt[w], s);
+                self.back_buffer[idx] = Self::egx(self.back_buffer[idx], color);
             }
             
         }
@@ -213,189 +213,189 @@ impl Rasterizer {
     
     
     #[inline(always)]
-    pub fn ilr(cs: u32, cy: u32) -> u32 {
-        let bcm = ((cy >> 24) & 0xFF) as u32;
-        if bcm == 0 { return cs; }
-        if bcm == 255 { return cy; }
+    pub fn egx(dst: u32, src: u32) -> u32 {
+        let acl = ((src >> 24) & 0xFF) as u32;
+        if acl == 0 { return dst; }
+        if acl == 255 { return src; }
         
-        let adz = ((cy >> 16) & 0xFF) as u32;
-        let bsi = ((cy >> 8) & 0xFF) as u32;
-        let is = (cy & 0xFF) as u32;
+        let pb = ((src >> 16) & 0xFF) as u32;
+        let akl = ((src >> 8) & 0xFF) as u32;
+        let cv = (src & 0xFF) as u32;
         
-        let rte = ((cs >> 24) & 0xFF) as u32;
-        let ahh = ((cs >> 16) & 0xFF) as u32;
-        let bgs = ((cs >> 8) & 0xFF) as u32;
-        let ng = (cs & 0xFF) as u32;
+        let lbi = ((dst >> 24) & 0xFF) as u32;
+        let qw = ((dst >> 16) & 0xFF) as u32;
+        let afb = ((dst >> 8) & 0xFF) as u32;
+        let fu = (dst & 0xFF) as u32;
         
         
-        let jaq = 255 - bcm;
-        let efx = (adz * bcm + ahh * jaq) / 255;
-        let uxl = (bsi * bcm + bgs * jaq) / 255;
-        let uwu = (is * bcm + ng * jaq) / 255;
-        let uws = bcm + (rte * jaq) / 255;
+        let eqx = 255 - acl;
+        let or = (pb * acl + qw * eqx) / 255;
+        let nml = (akl * acl + afb * eqx) / 255;
+        let nmc = (cv * acl + fu * eqx) / 255;
+        let nmb = acl + (lbi * eqx) / 255;
         
-        (uws << 24) | (efx << 16) | (uxl << 8) | uwu
+        (nmb << 24) | (or << 16) | (nml << 8) | nmc
     }
     
     
-    pub fn ah(&mut self, b: i32, c: i32, d: u32, i: u32, s: u32) {
-        let fy = b.am(0) as u32;
-        let fo = c.am(0) as u32;
-        let dn = ((b + d as i32) as u32).v(self.z);
-        let dp = ((c + i as i32) as u32).v(self.ac);
+    pub fn fill_rect(&mut self, x: i32, y: i32, w: u32, h: u32, color: u32) {
+        let bm = x.max(0) as u32;
+        let az = y.max(0) as u32;
+        let x1 = ((x + w as i32) as u32).min(self.width);
+        let y1 = ((y + h as i32) as u32).min(self.height);
         
-        let dw = (s >> 24) & 0xFF;
-        let cml = (dn - fy) as usize;
+        let alpha = (color >> 24) & 0xFF;
+        let auv = (x1 - bm) as usize;
         
-        if dw == 255 && cml >= 4 {
+        if alpha == 255 && auv >= 4 {
             
             #[cfg(target_arch = "x86_64")]
             unsafe {
                 use core::arch::x86_64::*;
-                let vi = els(s as i32);
-                for x in fo..dp {
-                    let mu = (x * self.z + fy) as usize;
-                    let ptr = self.aqt.mw().add(mu) as *mut acb;
-                    let btq = cml / 4;
-                    for a in 0..btq {
-                        ccs(ptr.add(a), vi);
+                let fill = _mm_set1_epi32(color as i32);
+                for o in az..y1 {
+                    let fk = (o * self.width + bm) as usize;
+                    let ptr = self.back_buffer.as_mut_ptr().add(fk) as *mut __m128i;
+                    let chunks = auv / 4;
+                    for i in 0..chunks {
+                        _mm_storeu_si128(ptr.add(i), fill);
                     }
-                    for a in (btq * 4)..cml {
-                        self.aqt[mu + a] = s;
+                    for i in (chunks * 4)..auv {
+                        self.back_buffer[fk + i] = color;
                     }
                 }
             }
             #[cfg(not(target_arch = "x86_64"))]
             {
-                for x in fo..dp {
-                    let mu = (x * self.z + fy) as usize;
-                    for a in 0..cml {
-                        self.aqt[mu + a] = s;
+                for o in az..y1 {
+                    let fk = (o * self.width + bm) as usize;
+                    for i in 0..auv {
+                        self.back_buffer[fk + i] = color;
                     }
                 }
             }
         } else {
-            for x in fo..dp {
-                let mu = (x * self.z) as usize;
-                for y in fy..dn {
-                    let w = mu + y as usize;
-                    if dw == 255 {
-                        self.aqt[w] = s;
-                    } else if dw > 0 {
-                        self.aqt[w] = Self::ilr(self.aqt[w], s);
+            for o in az..y1 {
+                let fk = (o * self.width) as usize;
+                for p in bm..x1 {
+                    let idx = fk + p as usize;
+                    if alpha == 255 {
+                        self.back_buffer[idx] = color;
+                    } else if alpha > 0 {
+                        self.back_buffer[idx] = Self::egx(self.back_buffer[idx], color);
                     }
                 }
             }
         }
         
-        self.jey(fy, fo, dn - fy, dp - fo);
+        self.mark_dirty(bm, az, x1 - bm, y1 - az);
     }
     
     
-    pub fn lx(&mut self, b: i32, c: i32, d: u32, i: u32, s: u32) {
+    pub fn draw_rect(&mut self, x: i32, y: i32, w: u32, h: u32, color: u32) {
         
-        self.ah(b, c, d, 1, s);
-        self.ah(b, c + i as i32 - 1, d, 1, s);
+        self.fill_rect(x, y, w, 1, color);
+        self.fill_rect(x, y + h as i32 - 1, w, 1, color);
         
-        self.ah(b, c, 1, i, s);
-        self.ah(b + d as i32 - 1, c, 1, i, s);
+        self.fill_rect(x, y, 1, h, color);
+        self.fill_rect(x + w as i32 - 1, y, 1, h, color);
     }
     
     
-    pub fn krd(&mut self, fy: f32, fo: f32, dn: f32, dp: f32, s: u32) {
-        let jrs = iip(dp - fo) > iip(dn - fy);
+    pub fn draw_line_aa(&mut self, bm: f32, az: f32, x1: f32, y1: f32, color: u32) {
+        let fbr = eev(y1 - az) > eev(x1 - bm);
         
-        let (fy, fo, dn, dp) = if jrs {
-            (fo, fy, dp, dn)
+        let (bm, az, x1, y1) = if fbr {
+            (az, bm, y1, x1)
         } else {
-            (fy, fo, dn, dp)
+            (bm, az, x1, y1)
         };
         
-        let (fy, fo, dn, dp) = if fy > dn {
-            (dn, dp, fy, fo)
+        let (bm, az, x1, y1) = if bm > x1 {
+            (x1, y1, bm, az)
         } else {
-            (fy, fo, dn, dp)
+            (bm, az, x1, y1)
         };
         
-        let dx = dn - fy;
-        let bg = dp - fo;
-        let drj = if dx == 0.0 { 1.0 } else { bg / dx };
+        let dx = x1 - bm;
+        let ad = y1 - az;
+        let bmo = if dx == 0.0 { 1.0 } else { ad / dx };
         
         
-        let ihs = pec(fy);
-        let ddm = fo + drj * (ihs - fy);
-        let elh = 1.0 - ckn(fy + 0.5);
-        let ihu = ihs as i32;
-        let jxq = eql(ddm) as i32;
+        let eel = jbk(bm);
+        let bei = az + bmo * (eel - bm);
+        let bxe = 1.0 - atu(bm + 0.5);
+        let een = eel as i32;
+        let ffq = bzt(bei) as i32;
         
-        if jrs {
-            self.cgo(jxq, ihu, s, (1.0 - ckn(ddm)) * elh);
-            self.cgo(jxq + 1, ihu, s, ckn(ddm) * elh);
+        if fbr {
+            self.plot_aa(ffq, een, color, (1.0 - atu(bei)) * bxe);
+            self.plot_aa(ffq + 1, een, color, atu(bei) * bxe);
         } else {
-            self.cgo(ihu, jxq, s, (1.0 - ckn(ddm)) * elh);
-            self.cgo(ihu, jxq + 1, s, ckn(ddm) * elh);
+            self.plot_aa(een, ffq, color, (1.0 - atu(bei)) * bxe);
+            self.plot_aa(een, ffq + 1, color, atu(bei) * bxe);
         }
         
-        let mut edn = ddm + drj;
+        let mut btm = bei + bmo;
         
         
-        let ihs = pec(dn);
-        let ddm = dp + drj * (ihs - dn);
-        let elh = ckn(dn + 0.5);
-        let ihv = ihs as i32;
-        let jxr = eql(ddm) as i32;
+        let eel = jbk(x1);
+        let bei = y1 + bmo * (eel - x1);
+        let bxe = atu(x1 + 0.5);
+        let eeo = eel as i32;
+        let ffr = bzt(bei) as i32;
         
-        if jrs {
-            self.cgo(jxr, ihv, s, (1.0 - ckn(ddm)) * elh);
-            self.cgo(jxr + 1, ihv, s, ckn(ddm) * elh);
+        if fbr {
+            self.plot_aa(ffr, eeo, color, (1.0 - atu(bei)) * bxe);
+            self.plot_aa(ffr + 1, eeo, color, atu(bei) * bxe);
         } else {
-            self.cgo(ihv, jxr, s, (1.0 - ckn(ddm)) * elh);
-            self.cgo(ihv, jxr + 1, s, ckn(ddm) * elh);
+            self.plot_aa(eeo, ffr, color, (1.0 - atu(bei)) * bxe);
+            self.plot_aa(eeo, ffr + 1, color, atu(bei) * bxe);
         }
         
         
-        for b in (ihu + 1)..ihv {
-            if jrs {
-                self.cgo(eql(edn) as i32, b, s, 1.0 - ckn(edn));
-                self.cgo(eql(edn) as i32 + 1, b, s, ckn(edn));
+        for x in (een + 1)..eeo {
+            if fbr {
+                self.plot_aa(bzt(btm) as i32, x, color, 1.0 - atu(btm));
+                self.plot_aa(bzt(btm) as i32 + 1, x, color, atu(btm));
             } else {
-                self.cgo(b, eql(edn) as i32, s, 1.0 - ckn(edn));
-                self.cgo(b, eql(edn) as i32 + 1, s, ckn(edn));
+                self.plot_aa(x, bzt(btm) as i32, color, 1.0 - atu(btm));
+                self.plot_aa(x, bzt(btm) as i32 + 1, color, atu(btm));
             }
-            edn += drj;
+            btm += bmo;
         }
     }
     
     
     #[inline(always)]
-    fn cgo(&mut self, b: i32, c: i32, s: u32, hj: f32) {
-        if b >= 0 && c >= 0 && (b as u32) < self.z && (c as u32) < self.ac {
-            let kce = ((s >> 24) & 0xFF) as f32;
-            let usl = (kce * khs(hj, 0.0, 1.0)) as u32;
-            let qpx = (usl << 24) | (s & 0x00FFFFFF);
-            self.aht(b as u32, c as u32, qpx);
+    fn plot_aa(&mut self, x: i32, y: i32, color: u32, intensity: f32) {
+        if x >= 0 && y >= 0 && (x as u32) < self.width && (y as u32) < self.height {
+            let fih = ((color >> 24) & 0xFF) as f32;
+            let niq = (fih * fls(intensity, 0.0, 1.0)) as u32;
+            let kcg = (niq << 24) | (color & 0x00FFFFFF);
+            self.set_pixel(x as u32, y as u32, kcg);
         }
     }
     
     
-    pub fn ymz(&mut self, cx: i32, ae: i32, dy: u32, s: u32) {
-        let m = dy as f32;
-        let yca = m * m;
+    pub fn qdo(&mut self, cx: i32, u: i32, radius: u32, color: u32) {
+        let r = radius as f32;
+        let pxg = r * r;
         
-        for c in -(dy as i32)..=(dy as i32) {
-            for b in -(dy as i32)..=(dy as i32) {
-                let dgk = (b * b + c * c) as f32;
-                let la = jre(dgk);
+        for y in -(radius as i32)..=(radius as i32) {
+            for x in -(radius as i32)..=(radius as i32) {
+                let bgb = (x * x + y * y) as f32;
+                let em = fbi(bgb);
                 
                 
-                let dqm = iip(la - m);
+                let bma = eev(em - r);
                 
-                if dqm < 1.5 {
+                if bma < 1.5 {
                     
-                    let p = iip(la - m + 0.5);
-                    let hj = 1.0 - if p < 1.0 { p } else { 1.0 };
-                    if hj > 0.0 {
-                        self.cgo(cx + b, ae + c, s, hj);
+                    let v = eev(em - r + 0.5);
+                    let intensity = 1.0 - if v < 1.0 { v } else { 1.0 };
+                    if intensity > 0.0 {
+                        self.plot_aa(cx + x, u + y, color, intensity);
                     }
                 }
             }
@@ -403,201 +403,201 @@ impl Rasterizer {
     }
     
     
-    pub fn hji(&mut self, cx: i32, ae: i32, dy: u32, s: u32) {
-        let m = dy as f32;
+    pub fn fill_circle_aa(&mut self, cx: i32, u: i32, radius: u32, color: u32) {
+        let r = radius as f32;
         
-        for c in -(dy as i32 + 1)..=(dy as i32 + 1) {
-            for b in -(dy as i32 + 1)..=(dy as i32 + 1) {
-                let la = jre((b * b + c * c) as f32);
+        for y in -(radius as i32 + 1)..=(radius as i32 + 1) {
+            for x in -(radius as i32 + 1)..=(radius as i32 + 1) {
+                let em = fbi((x * x + y * y) as f32);
                 
-                if la <= m - 0.5 {
+                if em <= r - 0.5 {
                     
-                    self.aht((cx + b) as u32, (ae + c) as u32, s);
-                } else if la < m + 0.5 {
+                    self.set_pixel((cx + x) as u32, (u + y) as u32, color);
+                } else if em < r + 0.5 {
                     
-                    let hj = 1.0 - khs(la - m + 0.5, 0.0, 1.0);
-                    self.cgo(cx + b, ae + c, s, hj);
+                    let intensity = 1.0 - fls(em - r + 0.5, 0.0, 1.0);
+                    self.plot_aa(cx + x, u + y, color, intensity);
                 }
             }
         }
         
-        self.jey(
-            (cx - dy as i32 - 1).am(0) as u32,
-            (ae - dy as i32 - 1).am(0) as u32,
-            dy * 2 + 3,
-            dy * 2 + 3,
+        self.mark_dirty(
+            (cx - radius as i32 - 1).max(0) as u32,
+            (u - radius as i32 - 1).max(0) as u32,
+            radius * 2 + 3,
+            radius * 2 + 3,
         );
     }
     
     
-    pub fn nts(&mut self, b: i32, c: i32, d: u32, i: u32, bjo: u32, btr: u32) {
-        let fy = b.am(0) as u32;
-        let fo = c.am(0) as u32;
-        let dn = ((b + d as i32) as u32).v(self.z);
-        let dp = ((c + i as i32) as u32).v(self.ac);
+    pub fn fill_gradient_h(&mut self, x: i32, y: i32, w: u32, h: u32, agh: u32, ale: u32) {
+        let bm = x.max(0) as u32;
+        let az = y.max(0) as u32;
+        let x1 = ((x + w as i32) as u32).min(self.width);
+        let y1 = ((y + h as i32) as u32).min(self.height);
         
-        let rw = Color::zi(bjo);
-        let tx = Color::zi(btr);
+        let hw = Color::from_u32(agh);
+        let jf = Color::from_u32(ale);
         
-        for x in fo..dp {
-            let mu = (x * self.z) as usize;
-            for y in fy..dn {
-                let ab = (y - fy) as f32 / d as f32;
-                let m = (rw.m as f32 * (1.0 - ab) + tx.m as f32 * ab) as u8;
-                let at = (rw.at as f32 * (1.0 - ab) + tx.at as f32 * ab) as u8;
-                let o = (rw.o as f32 * (1.0 - ab) + tx.o as f32 * ab) as u8;
-                let q = (rw.q as f32 * (1.0 - ab) + tx.q as f32 * ab) as u8;
+        for o in az..y1 {
+            let fk = (o * self.width) as usize;
+            for p in bm..x1 {
+                let t = (p - bm) as f32 / w as f32;
+                let r = (hw.r as f32 * (1.0 - t) + jf.r as f32 * t) as u8;
+                let g = (hw.g as f32 * (1.0 - t) + jf.g as f32 * t) as u8;
+                let b = (hw.b as f32 * (1.0 - t) + jf.b as f32 * t) as u8;
+                let a = (hw.a as f32 * (1.0 - t) + jf.a as f32 * t) as u8;
                 
-                let s = ((q as u32) << 24) | ((m as u32) << 16) | ((at as u32) << 8) | (o as u32);
-                let w = mu + y as usize;
+                let color = ((a as u32) << 24) | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
+                let idx = fk + p as usize;
                 
-                if q == 255 {
-                    self.aqt[w] = s;
-                } else if q > 0 {
-                    self.aqt[w] = Self::ilr(self.aqt[w], s);
+                if a == 255 {
+                    self.back_buffer[idx] = color;
+                } else if a > 0 {
+                    self.back_buffer[idx] = Self::egx(self.back_buffer[idx], color);
                 }
             }
         }
         
-        self.jey(fy, fo, dn - fy, dp - fo);
+        self.mark_dirty(bm, az, x1 - bm, y1 - az);
     }
     
     
-    pub fn kvv(&mut self, b: i32, c: i32, d: u32, i: u32, bjo: u32, btr: u32) {
-        let fy = b.am(0) as u32;
-        let fo = c.am(0) as u32;
-        let dn = ((b + d as i32) as u32).v(self.z);
-        let dp = ((c + i as i32) as u32).v(self.ac);
+    pub fn fill_gradient_v(&mut self, x: i32, y: i32, w: u32, h: u32, agh: u32, ale: u32) {
+        let bm = x.max(0) as u32;
+        let az = y.max(0) as u32;
+        let x1 = ((x + w as i32) as u32).min(self.width);
+        let y1 = ((y + h as i32) as u32).min(self.height);
         
-        let rw = Color::zi(bjo);
-        let tx = Color::zi(btr);
+        let hw = Color::from_u32(agh);
+        let jf = Color::from_u32(ale);
         
-        for x in fo..dp {
-            let ab = (x - fo) as f32 / i as f32;
-            let m = (rw.m as f32 * (1.0 - ab) + tx.m as f32 * ab) as u8;
-            let at = (rw.at as f32 * (1.0 - ab) + tx.at as f32 * ab) as u8;
-            let o = (rw.o as f32 * (1.0 - ab) + tx.o as f32 * ab) as u8;
-            let q = (rw.q as f32 * (1.0 - ab) + tx.q as f32 * ab) as u8;
+        for o in az..y1 {
+            let t = (o - az) as f32 / h as f32;
+            let r = (hw.r as f32 * (1.0 - t) + jf.r as f32 * t) as u8;
+            let g = (hw.g as f32 * (1.0 - t) + jf.g as f32 * t) as u8;
+            let b = (hw.b as f32 * (1.0 - t) + jf.b as f32 * t) as u8;
+            let a = (hw.a as f32 * (1.0 - t) + jf.a as f32 * t) as u8;
             
-            let s = ((q as u32) << 24) | ((m as u32) << 16) | ((at as u32) << 8) | (o as u32);
-            let mu = (x * self.z) as usize;
+            let color = ((a as u32) << 24) | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
+            let fk = (o * self.width) as usize;
             
-            for y in fy..dn {
-                let w = mu + y as usize;
-                if q == 255 {
-                    self.aqt[w] = s;
-                } else if q > 0 {
-                    self.aqt[w] = Self::ilr(self.aqt[w], s);
+            for p in bm..x1 {
+                let idx = fk + p as usize;
+                if a == 255 {
+                    self.back_buffer[idx] = color;
+                } else if a > 0 {
+                    self.back_buffer[idx] = Self::egx(self.back_buffer[idx], color);
                 }
             }
         }
         
-        self.jey(fy, fo, dn - fy, dp - fo);
+        self.mark_dirty(bm, az, x1 - bm, y1 - az);
     }
     
     
-    pub fn afp(&mut self, b: i32, c: i32, d: u32, i: u32, dy: u32, s: u32) {
-        let m = dy.v(d / 2).v(i / 2);
+    pub fn fill_rounded_rect(&mut self, x: i32, y: i32, w: u32, h: u32, radius: u32, color: u32) {
+        let r = radius.min(w / 2).min(h / 2);
         
         
-        self.ah(b + m as i32, c, d - m * 2, i, s);
-        self.ah(b, c + m as i32, m, i - m * 2, s);
-        self.ah(b + d as i32 - m as i32, c + m as i32, m, i - m * 2, s);
+        self.fill_rect(x + r as i32, y, w - r * 2, h, color);
+        self.fill_rect(x, y + r as i32, r, h - r * 2, color);
+        self.fill_rect(x + w as i32 - r as i32, y + r as i32, r, h - r * 2, color);
         
         
         
-        self.iuo(b + m as i32, c + m as i32, m, s, 2);
+        self.fill_corner_aa(x + r as i32, y + r as i32, r, color, 2);
         
-        self.iuo(b + d as i32 - m as i32 - 1, c + m as i32, m, s, 1);
+        self.fill_corner_aa(x + w as i32 - r as i32 - 1, y + r as i32, r, color, 1);
         
-        self.iuo(b + m as i32, c + i as i32 - m as i32 - 1, m, s, 3);
+        self.fill_corner_aa(x + r as i32, y + h as i32 - r as i32 - 1, r, color, 3);
         
-        self.iuo(b + d as i32 - m as i32 - 1, c + i as i32 - m as i32 - 1, m, s, 0);
+        self.fill_corner_aa(x + w as i32 - r as i32 - 1, y + h as i32 - r as i32 - 1, r, color, 0);
     }
     
     
-    fn iuo(&mut self, cx: i32, ae: i32, dy: u32, s: u32, vov: u8) {
-        let m = dy as f32;
+    fn fill_corner_aa(&mut self, cx: i32, u: i32, radius: u32, color: u32, quadrant: u8) {
+        let r = radius as f32;
         
-        let (xwi, fze): (core::ops::Cke<i32>, core::ops::Cke<i32>) = match vov {
-            0 => (0..=(dy as i32), 0..=(dy as i32)),       
-            1 => (0..=(dy as i32), -(dy as i32)..=0),      
-            2 => (-(dy as i32)..=0, -(dy as i32)..=0),     
-            3 => (-(dy as i32)..=0, 0..=(dy as i32)),      
+        let (x_range, ctb): (core::ops::RangeInclusive<i32>, core::ops::RangeInclusive<i32>) = match quadrant {
+            0 => (0..=(radius as i32), 0..=(radius as i32)),       
+            1 => (0..=(radius as i32), -(radius as i32)..=0),      
+            2 => (-(radius as i32)..=0, -(radius as i32)..=0),     
+            3 => (-(radius as i32)..=0, 0..=(radius as i32)),      
             _ => return,
         };
         
-        for bg in fze {
-            for dx in xwi.clone() {
-                let la = jre((dx * dx + bg * bg) as f32);
+        for ad in ctb {
+            for dx in x_range.clone() {
+                let em = fbi((dx * dx + ad * ad) as f32);
                 
-                if la <= m - 0.5 {
-                    self.aht((cx + dx) as u32, (ae + bg) as u32, s);
-                } else if la < m + 0.5 {
-                    let hj = 1.0 - khs(la - m + 0.5, 0.0, 1.0);
-                    self.cgo(cx + dx, ae + bg, s, hj);
+                if em <= r - 0.5 {
+                    self.set_pixel((cx + dx) as u32, (u + ad) as u32, color);
+                } else if em < r + 0.5 {
+                    let intensity = 1.0 - fls(em - r + 0.5, 0.0, 1.0);
+                    self.plot_aa(cx + dx, u + ad, color, intensity);
                 }
             }
         }
     }
     
     
-    pub fn gfj(&mut self, b: i32, c: i32, d: u32, i: u32, cou: u32, s: u32) {
-        let kce = ((s >> 24) & 0xFF) as f32;
-        let dls = s & 0x00FFFFFF;
+    pub fn draw_shadow(&mut self, x: i32, y: i32, w: u32, h: u32, awi: u32, color: u32) {
+        let fih = ((color >> 24) & 0xFF) as f32;
+        let bjd = color & 0x00FFFFFF;
         
-        for o in 0..cou {
-            let ab = (cou - o) as f32 / cou as f32;
-            let dw = (kce * ab * 0.5) as u32;
-            let r = (dw << 24) | dls;
+        for b in 0..awi {
+            let t = (awi - b) as f32 / awi as f32;
+            let alpha = (fih * t * 0.5) as u32;
+            let c = (alpha << 24) | bjd;
             
-            self.ah(
-                b - o as i32,
-                c - o as i32,
-                d + o * 2,
-                i + o * 2,
-                r,
+            self.fill_rect(
+                x - b as i32,
+                y - b as i32,
+                w + b * 2,
+                h + b * 2,
+                c,
             );
         }
     }
     
     
-    pub fn sv(&mut self) {
-        if self.asw {
+    pub fn ii(&mut self) {
+        if self.full_redraw {
             
-            self.hkn.dg(&self.aqt);
-            self.asw = false;
+            self.front_buffer.copy_from_slice(&self.back_buffer);
+            self.full_redraw = false;
         } else {
             
-            for ha in &self.dpz {
-                for c in ha.c..(ha.c + ha.i).v(self.ac) {
-                    let ay = (c * self.z + ha.b) as usize;
-                    let ci = (c * self.z + (ha.b + ha.d).v(self.z)) as usize;
-                    self.hkn[ay..ci].dg(&self.aqt[ay..ci]);
+            for rect in &self.dirty_rects {
+                for y in rect.y..(rect.y + rect.h).min(self.height) {
+                    let start = (y * self.width + rect.x) as usize;
+                    let end = (y * self.width + (rect.x + rect.w).min(self.width)) as usize;
+                    self.front_buffer[start..end].copy_from_slice(&self.back_buffer[start..end]);
                 }
             }
         }
         
-        self.dpz.clear();
+        self.dirty_rects.clear();
     }
     
     
-    pub fn ygp(&self) {
-        for c in 0..self.ac {
-            for b in 0..self.z {
-                let w = (c * self.z + b) as usize;
-                crate::framebuffer::draw_pixel(b, c, self.hkn[w]);
+    pub fn pyx(&self) {
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let idx = (y * self.width + x) as usize;
+                crate::framebuffer::draw_pixel(x, y, self.front_buffer[idx]);
             }
         }
     }
     
     
-    pub fn ygm(&self) {
-        for ha in &self.dpz {
-            for c in ha.c..(ha.c + ha.i).v(self.ac) {
-                for b in ha.b..(ha.b + ha.d).v(self.z) {
-                    let w = (c * self.z + b) as usize;
-                    crate::framebuffer::draw_pixel(b, c, self.hkn[w]);
+    pub fn pyu(&self) {
+        for rect in &self.dirty_rects {
+            for y in rect.y..(rect.y + rect.h).min(self.height) {
+                for x in rect.x..(rect.x + rect.w).min(self.width) {
+                    let idx = (y * self.width + x) as usize;
+                    crate::framebuffer::draw_pixel(x, y, self.front_buffer[idx]);
                 }
             }
         }
@@ -607,39 +607,39 @@ impl Rasterizer {
 
 #[derive(Clone, Copy, Debug)]
 pub struct Vec3 {
-    pub b: f32,
-    pub c: f32,
-    pub av: f32,
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
 }
 
 impl Vec3 {
-    pub const fn new(b: f32, c: f32, av: f32) -> Self {
-        Self { b, c, av }
+    pub const fn new(x: f32, y: f32, z: f32) -> Self {
+        Self { x, y, z }
     }
     
-    pub fn amb(&self, gq: &Vec3) -> f32 {
-        self.b * gq.b + self.c * gq.c + self.av * gq.av
+    pub fn dot(&self, other: &Vec3) -> f32 {
+        self.x * other.x + self.y * other.y + self.z * other.z
     }
     
-    pub fn bjr(&self, gq: &Vec3) -> Vec3 {
+    pub fn cross(&self, other: &Vec3) -> Vec3 {
         Vec3 {
-            b: self.c * gq.av - self.av * gq.c,
-            c: self.av * gq.b - self.b * gq.av,
-            av: self.b * gq.c - self.c * gq.b,
+            x: self.y * other.z - self.z * other.y,
+            y: self.z * other.x - self.x * other.z,
+            z: self.x * other.y - self.y * other.x,
         }
     }
     
-    pub fn go(&self) -> f32 {
-        jre(self.b * self.b + self.c * self.c + self.av * self.av)
+    pub fn length(&self) -> f32 {
+        fbi(self.x * self.x + self.y * self.y + self.z * self.z)
     }
     
-    pub fn all(&self) -> Vec3 {
-        let len = self.go();
+    pub fn normalize(&self) -> Vec3 {
+        let len = self.length();
         if len > 0.0 {
             Vec3 {
-                b: self.b / len,
-                c: self.c / len,
-                av: self.av / len,
+                x: self.x / len,
+                y: self.y / len,
+                z: self.z / len,
             }
         } else {
             *self
@@ -650,13 +650,13 @@ impl Vec3 {
 
 #[derive(Clone, Copy, Debug)]
 pub struct Mat4 {
-    pub ef: [[f32; 4]; 4],
+    pub m: [[f32; 4]; 4],
 }
 
 impl Mat4 {
-    pub const fn fky() -> Self {
+    pub const fn identity() -> Self {
         Self {
-            ef: [
+            m: [
                 [1.0, 0.0, 0.0, 0.0],
                 [0.0, 1.0, 0.0, 0.0],
                 [0.0, 0.0, 1.0, 0.0],
@@ -666,64 +666,64 @@ impl Mat4 {
     }
     
     
-    pub fn chi(hg: f32) -> Self {
-        let r = ngf(hg);
-        let e = pkz(hg);
+    pub fn rotation_y(cc: f32) -> Self {
+        let c = hny(cc);
+        let j = jgj(cc);
         Self {
-            ef: [
-                [r, 0.0, e, 0.0],
+            m: [
+                [c, 0.0, j, 0.0],
                 [0.0, 1.0, 0.0, 0.0],
-                [-e, 0.0, r, 0.0],
+                [-j, 0.0, c, 0.0],
                 [0.0, 0.0, 0.0, 1.0],
             ],
         }
     }
     
     
-    pub fn dlk(hg: f32) -> Self {
-        let r = ngf(hg);
-        let e = pkz(hg);
+    pub fn rotation_x(cc: f32) -> Self {
+        let c = hny(cc);
+        let j = jgj(cc);
         Self {
-            ef: [
+            m: [
                 [1.0, 0.0, 0.0, 0.0],
-                [0.0, r, -e, 0.0],
-                [0.0, e, r, 0.0],
+                [0.0, c, -j, 0.0],
+                [0.0, j, c, 0.0],
                 [0.0, 0.0, 0.0, 1.0],
             ],
         }
     }
     
     
-    pub fn aqf(ckm: f32, dyk: f32, bhl: f32, adt: f32) -> Self {
-        let bb = 1.0 / xaq(ckm / 2.0);
+    pub fn vq(fov: f32, bqh: f32, near: f32, far: f32) -> Self {
+        let f = 1.0 / pda(fov / 2.0);
         Self {
-            ef: [
-                [bb / dyk, 0.0, 0.0, 0.0],
-                [0.0, bb, 0.0, 0.0],
-                [0.0, 0.0, (adt + bhl) / (bhl - adt), -1.0],
-                [0.0, 0.0, (2.0 * adt * bhl) / (bhl - adt), 0.0],
+            m: [
+                [f / bqh, 0.0, 0.0, 0.0],
+                [0.0, f, 0.0, 0.0],
+                [0.0, 0.0, (far + near) / (near - far), -1.0],
+                [0.0, 0.0, (2.0 * far * near) / (near - far), 0.0],
             ],
         }
     }
     
     
-    pub fn pvx(&self, ai: Vec3) -> Vec3 {
-        let d = self.ef[0][3] * ai.b + self.ef[1][3] * ai.c + self.ef[2][3] * ai.av + self.ef[3][3];
+    pub fn transform_point(&self, aa: Vec3) -> Vec3 {
+        let w = self.m[0][3] * aa.x + self.m[1][3] * aa.y + self.m[2][3] * aa.z + self.m[3][3];
         Vec3 {
-            b: (self.ef[0][0] * ai.b + self.ef[1][0] * ai.c + self.ef[2][0] * ai.av + self.ef[3][0]) / d,
-            c: (self.ef[0][1] * ai.b + self.ef[1][1] * ai.c + self.ef[2][1] * ai.av + self.ef[3][1]) / d,
-            av: (self.ef[0][2] * ai.b + self.ef[1][2] * ai.c + self.ef[2][2] * ai.av + self.ef[3][2]) / d,
+            x: (self.m[0][0] * aa.x + self.m[1][0] * aa.y + self.m[2][0] * aa.z + self.m[3][0]) / w,
+            y: (self.m[0][1] * aa.x + self.m[1][1] * aa.y + self.m[2][1] * aa.z + self.m[3][1]) / w,
+            z: (self.m[0][2] * aa.x + self.m[1][2] * aa.y + self.m[2][2] * aa.z + self.m[3][2]) / w,
         }
     }
     
     
-    pub fn mul(&self, gq: &Mat4) -> Mat4 {
-        let mut result = Mat4::fky();
-        for a in 0..4 {
-            for fb in 0..4 {
-                result.ef[a][fb] = 0.0;
-                for eh in 0..4 {
-                    result.ef[a][fb] += self.ef[a][eh] * gq.ef[eh][fb];
+    pub fn mul(&self, other: &Mat4) -> Mat4 {
+        let mut result = Mat4::identity();
+        for i in 0..4 {
+            for ay in 0..4 {
+                result.m[i][ay] = 0.0;
+                for k in 0..4 {
+                    result.m[i][ay] += self.m[i][k] * other.m[k][ay];
                 }
             }
         }
@@ -733,82 +733,82 @@ impl Mat4 {
 
 
 pub struct Renderer3D {
-    pub z: u32,
-    pub ac: u32,
-    pub cob: Vec<f32>,
+    pub width: u32,
+    pub height: u32,
+    pub z_buffer: Vec<f32>,
 }
 
 impl Renderer3D {
-    pub fn new(z: u32, ac: u32) -> Self {
+    pub fn new(width: u32, height: u32) -> Self {
         Self {
-            z,
-            ac,
-            cob: alloc::vec![f32::O; (z * ac) as usize],
+            width,
+            height,
+            z_buffer: alloc::vec![f32::MAX; (width * height) as usize],
         }
     }
     
-    pub fn rbj(&mut self) {
-        for av in self.cob.el() {
-            *av = f32::O;
-        }
-    }
-    
-    
-    pub fn nv(&self, ai: Vec3, imt: f32) -> Option<(i32, i32, f32)> {
-        let av = ai.av + imt;
-        if av <= 0.1 { return None; }
-        
-        let bv = 200.0 / av;
-        let cr = (self.z as f32 / 2.0 + ai.b * bv) as i32;
-        let cq = (self.ac as f32 / 2.0 - ai.c * bv) as i32;
-        
-        Some((cr, cq, av))
-    }
-    
-    
-    pub fn bzg(&mut self, awq: &mut Rasterizer, pr: Vec3, pf: Vec3, imt: f32, s: u32) {
-        if let (Some((dn, dp, _)), Some((hy, jz, _))) = (self.nv(pr, imt), self.nv(pf, imt)) {
-            awq.krd(dn as f32, dp as f32, hy as f32, jz as f32, s);
+    pub fn clear_z_buffer(&mut self) {
+        for z in self.z_buffer.iter_mut() {
+            *z = f32::MAX;
         }
     }
     
     
-    pub fn gfg(&mut self, awq: &mut Rasterizer, pn: Vec3, aw: f32, chh: &Mat4, s: u32) {
-        let e = aw / 2.0;
+    pub fn project(&self, aa: Vec3, camera_z: f32) -> Option<(i32, i32, f32)> {
+        let z = aa.z + camera_z;
+        if z <= 0.1 { return None; }
+        
+        let scale = 200.0 / z;
+        let am = (self.width as f32 / 2.0 + aa.x * scale) as i32;
+        let ak = (self.height as f32 / 2.0 - aa.y * scale) as i32;
+        
+        Some((am, ak, z))
+    }
+    
+    
+    pub fn draw_line_3d(&mut self, zh: &mut Rasterizer, gw: Vec3, gn: Vec3, camera_z: f32, color: u32) {
+        if let (Some((x1, y1, _)), Some((x2, y2, _))) = (self.project(gw, camera_z), self.project(gn, camera_z)) {
+            zh.draw_line_aa(x1 as f32, y1 as f32, x2 as f32, y2 as f32, color);
+        }
+    }
+    
+    
+    pub fn draw_cube(&mut self, zh: &mut Rasterizer, center: Vec3, size: f32, rotation: &Mat4, color: u32) {
+        let j = size / 2.0;
         
         
-        let lm = [
-            Vec3::new(-e, -e, -e),
-            Vec3::new(e, -e, -e),
-            Vec3::new(e, e, -e),
-            Vec3::new(-e, e, -e),
-            Vec3::new(-e, -e, e),
-            Vec3::new(e, -e, e),
-            Vec3::new(e, e, e),
-            Vec3::new(-e, e, e),
+        let vertices = [
+            Vec3::new(-j, -j, -j),
+            Vec3::new(j, -j, -j),
+            Vec3::new(j, j, -j),
+            Vec3::new(-j, j, -j),
+            Vec3::new(-j, -j, j),
+            Vec3::new(j, -j, j),
+            Vec3::new(j, j, j),
+            Vec3::new(-j, j, j),
         ];
         
         
-        let dxc: Vec<Vec3> = lm.iter()
-            .map(|p| {
-                let cmk = chh.pvx(*p);
+        let bpr: Vec<Vec3> = vertices.iter()
+            .map(|v| {
+                let auu = rotation.transform_point(*v);
                 Vec3::new(
-                    cmk.b + pn.b,
-                    cmk.c + pn.c,
-                    cmk.av + pn.av,
+                    auu.x + center.x,
+                    auu.y + center.y,
+                    auu.z + center.z,
                 )
             })
             .collect();
         
         
-        let bu = [
+        let edges = [
             (0, 1), (1, 2), (2, 3), (3, 0),  
             (4, 5), (5, 6), (6, 7), (7, 4),  
             (0, 4), (1, 5), (2, 6), (3, 7),  
         ];
         
-        for (hnh, hni) in bu {
-            self.bzg(awq, dxc[hnh], dxc[hni], 5.0, s);
+        for (i1, i2) in edges {
+            self.draw_line_3d(zh, bpr[i1], bpr[i2], 5.0, color);
         }
     }
 }

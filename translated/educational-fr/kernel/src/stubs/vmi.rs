@@ -27,4 +27,4 @@ pub fn is_enabled() -> bool { false }
 // Fonction publique — appelable depuis d'autres modules.
 pub fn list_all_vms() -> Vec<(u64, String, &'static str)> { Vec::new() }
 // Fonction publique — appelable depuis d'autres modules.
-pub fn build_guest_memory_map(_maximum_regions: usize) -> Vec<MemoryRegion> { Vec::new() }
+pub fn build_guest_memory_map(_max_regions: usize) -> Vec<MemoryRegion> { Vec::new() }

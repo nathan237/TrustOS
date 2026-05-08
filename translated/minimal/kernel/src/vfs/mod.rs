@@ -3,7 +3,7 @@
 
 
 
-use alloc::string::{String, Gd};
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
@@ -21,226 +21,226 @@ pub mod ext4;
 pub mod ntfs;
 
 
-pub type Fo = i32;
+pub type Cm = i32;
 
 
-pub type I = u64;
+pub type K = u64;
 
 
 #[derive(Clone, Copy, Debug)]
 pub struct OpenFlags(pub u32);
 
 impl OpenFlags {
-    pub const OO_: u32 = 0;
-    pub const OP_: u32 = 1;
-    pub const DYK_: u32 = 2;
-    pub const ON_: u32 = 0o100;
-    pub const BCG_: u32 = 0o1000;
-    pub const BCF_: u32 = 0o2000;
+    pub const PM_: u32 = 0;
+    pub const PN_: u32 = 1;
+    pub const ECB_: u32 = 2;
+    pub const PL_: u32 = 0o100;
+    pub const BEJ_: u32 = 0o1000;
+    pub const BEI_: u32 = 0o2000;
     
-    pub fn bob(&self) -> bool {
-        (self.0 & 3) != Self::OP_
+    pub fn readable(&self) -> bool {
+        (self.0 & 3) != Self::PN_
     }
     
-    pub fn bjb(&self) -> bool {
-        (self.0 & 3) != Self::OO_
+    pub fn writable(&self) -> bool {
+        (self.0 & 3) != Self::PM_
     }
     
-    pub fn avp(&self) -> bool {
-        (self.0 & Self::ON_) != 0
+    pub fn create(&self) -> bool {
+        (self.0 & Self::PL_) != 0
     }
     
-    pub fn bte(&self) -> bool {
-        (self.0 & Self::BCF_) != 0
+    pub fn append(&self) -> bool {
+        (self.0 & Self::BEI_) != 0
     }
 }
 
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FileType {
-    Ea,
-    K,
-    Mv,
-    Bj,
-    Anh,
-    Yc,
+    Regular,
+    Directory,
+    CharDevice,
+    Ak,
+    Symlink,
+    Pipe,
     Socket,
 }
 
 
 #[derive(Clone, Debug)]
 pub struct Stat {
-    pub dd: I,
-    pub kd: FileType,
-    pub aw: u64,
-    pub xk: u64,
-    pub py: u32,
-    pub ev: u32,      
-    pub pi: u32,
-    pub pw: u32,
-    pub byi: u64,     
-    pub bnp: u64,     
-    pub cpq: u64,     
+    pub ino: K,
+    pub file_type: FileType,
+    pub size: u64,
+    pub blocks: u64,
+    pub block_size: u32,
+    pub mode: u32,      
+    pub uid: u32,
+    pub gid: u32,
+    pub atime: u64,     
+    pub mtime: u64,     
+    pub ctime: u64,     
 }
 
 impl Default for Stat {
     fn default() -> Self {
         Self {
-            dd: 0,
-            kd: FileType::Ea,
-            aw: 0,
-            xk: 0,
-            py: 512,
-            ev: 0o644,
-            pi: 0,
-            pw: 0,
-            byi: 0,
-            bnp: 0,
-            cpq: 0,
+            ino: 0,
+            file_type: FileType::Regular,
+            size: 0,
+            blocks: 0,
+            block_size: 512,
+            mode: 0o644,
+            uid: 0,
+            gid: 0,
+            atime: 0,
+            mtime: 0,
+            ctime: 0,
         }
     }
 }
 
 
 #[derive(Clone, Debug)]
-pub struct Br {
-    pub j: String,
-    pub dd: I,
-    pub kd: FileType,
+pub struct Ap {
+    pub name: String,
+    pub ino: K,
+    pub file_type: FileType,
 }
 
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VfsError {
-    N,
-    Jt,
-    Ri,
-    Lz,
-    Tc,
-    Bnj,
-    Pr,
-    Bjs,
-    Tq,
-    Av,
-    Cib,
-    Jg,
-    Dju,
-    Bz,
-    Rq,
+    NotFound,
+    PermissionDenied,
+    AlreadyExists,
+    NotDirectory,
+    IsDirectory,
+    NotEmpty,
+    InvalidPath,
+    InvalidData,
+    NoSpace,
+    IoError,
+    NotSupported,
+    BadFd,
+    TooManyOpenFiles,
+    ReadOnly,
+    Busy,
 }
 
-pub type B<T> = Result<T, VfsError>;
+pub type E<T> = Result<T, VfsError>;
 
 
-pub trait Et: Send + Sync {
-    fn read(&self, l: u64, k: &mut [u8]) -> B<usize>;
-    fn write(&self, l: u64, k: &[u8]) -> B<usize>;
-    fn hm(&self) -> B<Stat>;
-    fn dmu(&self, aw: u64) -> B<()> { 
-        let _ = aw;
-        Err(VfsError::Cib) 
+pub trait Bx: Send + Sync {
+    fn read(&self, offset: u64, buf: &mut [u8]) -> E<usize>;
+    fn write(&self, offset: u64, buf: &[u8]) -> E<usize>;
+    fn stat(&self) -> E<Stat>;
+    fn truncate(&self, size: u64) -> E<()> { 
+        let _ = size;
+        Err(VfsError::NotSupported) 
     }
-    fn sync(&self) -> B<()> { Ok(()) }
+    fn sync(&self) -> E<()> { Ok(()) }
 }
 
 
-pub trait Ep: Send + Sync {
-    fn cga(&self, j: &str) -> B<I>;
-    fn brx(&self) -> B<Vec<Br>>;
-    fn avp(&self, j: &str, kd: FileType) -> B<I>;
-    fn cnm(&self, j: &str) -> B<()>;
-    fn hm(&self) -> B<Stat>;
+pub trait Bv: Send + Sync {
+    fn lookup(&self, name: &str) -> E<K>;
+    fn readdir(&self) -> E<Vec<Ap>>;
+    fn create(&self, name: &str, file_type: FileType) -> E<K>;
+    fn unlink(&self, name: &str) -> E<()>;
+    fn stat(&self) -> E<Stat>;
 }
 
 
-pub trait Cc: Send + Sync {
-    fn j(&self) -> &str;
-    fn cbm(&self) -> I;
-    fn era(&self, dd: I) -> B<Arc<dyn Et>>;
-    fn dhl(&self, dd: I) -> B<Arc<dyn Ep>>;
-    fn hm(&self, dd: I) -> B<Stat>;
-    fn sync(&self) -> B<()> { Ok(()) }
+pub trait Au: Send + Sync {
+    fn name(&self) -> &str;
+    fn root_inode(&self) -> K;
+    fn get_file(&self, ino: K) -> E<Arc<dyn Bx>>;
+    fn get_dir(&self, ino: K) -> E<Arc<dyn Bv>>;
+    fn stat(&self, ino: K) -> E<Stat>;
+    fn sync(&self) -> E<()> { Ok(()) }
 }
 
 
-struct Bmp {
+struct Abm {
     path: String,
-    fs: Arc<dyn Cc>,
+    fs: Arc<dyn Au>,
 }
 
 
-struct Tt {
-    dd: I,
-    abs: usize,
-    l: u64,
+struct Il {
+    ino: K,
+    mount_idx: usize,
+    offset: u64,
     flags: OpenFlags,
 }
 
 
 struct Vfs {
-    ajf: Vec<Bmp>,
-    awi: BTreeMap<Fo, Tt>,
-    bca: AtomicU64,
+    mounts: Vec<Abm>,
+    open_files: BTreeMap<Cm, Il>,
+    next_fd: AtomicU64,
 }
 
 impl Vfs {
     const fn new() -> Self {
         Self {
-            ajf: Vec::new(),
-            awi: BTreeMap::new(),
-            bca: AtomicU64::new(3), 
+            mounts: Vec::new(),
+            open_files: BTreeMap::new(),
+            next_fd: AtomicU64::new(3), 
         }
     }
     
-    fn jzz(&self) -> Fo {
-        self.bca.fetch_add(1, Ordering::SeqCst) as Fo
+    fn alloc_fd(&self) -> Cm {
+        self.next_fd.fetch_add(1, Ordering::SeqCst) as Cm
     }
 }
 
-static Bi: RwLock<Vfs> = RwLock::new(Vfs::new());
+static Aj: RwLock<Vfs> = RwLock::new(Vfs::new());
 
 
 
-pub fn mfc() {
+pub fn gul() {
     
-    let (abs, dd) = match aqj("/dev/console") {
-        Ok(m) => m,
+    let (mount_idx, ino) = match resolve_path("/dev/console") {
+        Ok(r) => r,
         Err(_) => {
             crate::serial_println!("[VFS] Warning: /dev/console not found, stdio unavailable");
             return;
         }
     };
 
-    let mut vfs = Bi.write();
+    let mut vfs = Aj.write();
     
-    vfs.awi.insert(0, Tt {
-        dd,
-        abs,
-        l: 0,
+    vfs.open_files.insert(0, Il {
+        ino,
+        mount_idx,
+        offset: 0,
         flags: OpenFlags(0), 
     });
     
-    vfs.awi.insert(1, Tt {
-        dd,
-        abs,
-        l: 0,
+    vfs.open_files.insert(1, Il {
+        ino,
+        mount_idx,
+        offset: 0,
         flags: OpenFlags(1), 
     });
     
-    vfs.awi.insert(2, Tt {
-        dd,
-        abs,
-        l: 0,
+    vfs.open_files.insert(2, Il {
+        ino,
+        mount_idx,
+        offset: 0,
         flags: OpenFlags(1), 
     });
 }
 
 
-pub fn khv() {
-    let mut vfs = Bi.write();
-    vfs.awi.remove(&0);
-    vfs.awi.remove(&1);
-    vfs.awi.remove(&2);
+pub fn flv() {
+    let mut vfs = Aj.write();
+    vfs.open_files.remove(&0);
+    vfs.open_files.remove(&1);
+    vfs.open_files.remove(&2);
 }
 
 
@@ -249,66 +249,66 @@ pub fn init() {
     
     
     if let Ok(devfs) = devfs::DevFs::new() {
-        beu("/dev", Arc::new(devfs)).bq();
+        abd("/dev", Arc::new(devfs)).ok();
         crate::log_debug!("[VFS] Mounted devfs at /dev");
     }
     
     
     if let Ok(procfs) = procfs::ProcFs::new() {
-        beu("/proc", Arc::new(procfs)).bq();
+        abd("/proc", Arc::new(procfs)).ok();
         crate::log_debug!("[VFS] Mounted procfs at /proc");
     }
     
     
-    let mut jmt = false;
+    let mut eyx = false;
     
-    if crate::virtio_blk::ky() {
-        let backend = Arc::new(fat32::Bvw);
-        let aty = crate::virtio_blk::aty();
-        match trustfs::TrustFs::new(backend, aty) {
+    if crate::virtio_blk::is_initialized() {
+        let backend = Arc::new(fat32::Agd);
+        let capacity = crate::virtio_blk::capacity();
+        match trustfs::TrustFs::new(backend, capacity) {
             Ok(trustfs) => {
-                beu("/", Arc::new(trustfs)).bq();
+                abd("/", Arc::new(trustfs)).ok();
                 crate::log!("[VFS] Mounted TrustFS at / (virtio-blk, persistent)");
-                jmt = true;
+                eyx = true;
             }
-            Err(aa) => {
-                crate::log!("[VFS] TrustFS mount on virtio-blk failed: {:?}", aa);
+            Err(e) => {
+                crate::log!("[VFS] TrustFS mount on virtio-blk failed: {:?}", e);
             }
         }
     }
     
     
-    if !jmt && crate::drivers::ahci::ky() {
-        let ik = crate::drivers::ahci::bhh();
+    if !eyx && crate::drivers::ahci::is_initialized() {
+        let devices = crate::drivers::ahci::adz();
         
         
-        for ba in &ik {
-            if ba.agw > 64 {
+        for s in &devices {
+            if s.sector_count > 64 {
                 
                 let mut probe = alloc::vec![0u8; 512];
-                if crate::drivers::ahci::ain(ba.kg, 0, 1, &mut probe).is_ok() {
+                if crate::drivers::ahci::read_sectors(s.port_num, 0, 1, &mut probe).is_ok() {
                     if probe.len() >= 4 && &probe[0..4] == b"TWAV" {
-                        crate::log!("[VFS] Skipping AHCI port {} (TWAV audio data disk)", ba.kg);
+                        crate::log!("[VFS] Skipping AHCI port {} (TWAV audio data disk)", s.port_num);
                         continue;
                     }
                 }
-                let backend = Arc::new(fat32::AhciBlockReader::new(ba.kg as usize, 0));
-                match trustfs::TrustFs::new(backend, ba.agw) {
+                let backend = Arc::new(fat32::AhciBlockReader::new(s.port_num as usize, 0));
+                match trustfs::TrustFs::new(backend, s.sector_count) {
                     Ok(trustfs) => {
-                        beu("/", Arc::new(trustfs)).bq();
-                        crate::log!("[VFS] Mounted TrustFS at / (AHCI port {}, persistent)", ba.kg);
-                        jmt = true;
+                        abd("/", Arc::new(trustfs)).ok();
+                        crate::log!("[VFS] Mounted TrustFS at / (AHCI port {}, persistent)", s.port_num);
+                        eyx = true;
                         break;
                     }
-                    Err(aa) => {
-                        crate::log_debug!("[VFS] TrustFS on AHCI port {} failed: {:?}", ba.kg, aa);
+                    Err(e) => {
+                        crate::log_debug!("[VFS] TrustFS on AHCI port {} failed: {:?}", s.port_num, e);
                     }
                 }
             }
         }
     }
     
-    if !jmt {
+    if !eyx {
         crate::log_debug!("[VFS] No block device, root will be ramfs");
     }
     
@@ -316,8 +316,8 @@ pub fn init() {
     #[cfg(target_arch = "x86_64")]
     {
         crate::log_debug!("[VFS] Looking for FAT32 partitions...");
-        if let Some(src) = fat32::xmq() {
-            beu("/mnt/fat32", src).bq();
+        if let Some(fat32_fs) = fat32::pnx() {
+            abd("/mnt/fat32", fat32_fs).ok();
             crate::log!("[VFS] Mounted FAT32 at /mnt/fat32");
         } else {
             crate::log_debug!("[VFS] No FAT32 partition found");
@@ -328,8 +328,8 @@ pub fn init() {
     #[cfg(target_arch = "x86_64")]
     {
         crate::log_debug!("[VFS] Looking for NTFS partitions...");
-        if let Some(uwb) = ntfs::xmr() {
-            beu("/mnt/ntfs", uwb).bq();
+        if let Some(ntfs_fs) = ntfs::pny() {
+            abd("/mnt/ntfs", ntfs_fs).ok();
             crate::log!("[VFS] Mounted NTFS at /mnt/ntfs");
         } else {
             crate::log_debug!("[VFS] No NTFS partition found");
@@ -340,55 +340,59 @@ pub fn init() {
 }
 
 
-pub fn beu(path: &str, fs: Arc<dyn Cc>) -> B<()> {
-    let mut vfs = Bi.write();
+pub fn abd(path: &str, fs: Arc<dyn Au>) -> E<()> {
+    let mut vfs = Aj.write();
     
     
-    for sn in &vfs.ajf {
-        if sn.path == path {
-            return Err(VfsError::Rq);
+    for ic in &vfs.mounts {
+        if ic.path == path {
+            return Err(VfsError::Busy);
         }
     }
     
-    vfs.ajf.push(Bmp {
+    vfs.mounts.push(Abm {
         path: String::from(path),
         fs,
     });
     
     
-    vfs.ajf.bxe(|q, o| o.path.len().cmp(&q.path.len()));
+    vfs.mounts.sort_by(|a, b| b.path.len().cmp(&a.path.len()));
     
     Ok(())
 }
 
 
-pub fn xob(path: &str) -> B<()> {
-    let mut vfs = Bi.write();
+pub fn ppk(path: &str) -> E<()> {
+    let mut vfs = Aj.write();
     
-    let w = vfs.ajf.iter().qf(|sn| sn.path == path)
-        .ok_or(VfsError::N)?;
+    let idx = vfs.mounts.iter().position(|ic| ic.path == path)
+        .ok_or(VfsError::NotFound)?;
     
     
-    if vfs.ajf[w].path == "/" {
-        return Err(VfsError::Jt);
+    if vfs.mounts[idx].path == "/" {
+        return Err(VfsError::PermissionDenied);
     }
     
-    vfs.ajf.remove(w);
+    vfs.mounts.remove(idx);
     Ok(())
 }
 
 
-fn stk(path: &str) -> Option<(usize, String)> {
-    let vfs = Bi.read();
+fn lvz(path: &str) -> Option<(usize, String)> {
+    let vfs = Aj.read();
     
-    for (w, sn) in vfs.ajf.iter().cf() {
-        if path == sn.path || path.cj(&format!("{}/", sn.path)) || sn.path == "/" {
-            let atj = if sn.path == "/" {
+    for (idx, ic) in vfs.mounts.iter().enumerate() {
+        if path == ic.path
+            || (path.starts_with(&ic.path)
+                && path.as_bytes().get(ic.path.len()) == Some(&b'/'))
+            || ic.path == "/"
+        {
+            let xj = if ic.path == "/" {
                 path.to_string()
             } else {
-                path.blj(&sn.path).unwrap_or("/").to_string()
+                path.strip_prefix(&ic.path).unwrap_or("/").to_string()
             };
-            return Some((w, if atj.is_empty() { "/".to_string() } else { atj }));
+            return Some((idx, if xj.is_empty() { "/".to_string() } else { xj }));
         }
     }
     
@@ -396,270 +400,269 @@ fn stk(path: &str) -> Option<(usize, String)> {
 }
 
 
-fn aqj(path: &str) -> B<(usize, I)> {
-    let (abs, atj) = stk(path).ok_or(VfsError::N)?;
+fn resolve_path(path: &str) -> E<(usize, K)> {
+    let (mount_idx, xj) = lvz(path).ok_or(VfsError::NotFound)?;
     
-    let vfs = Bi.read();
-    let fs = &vfs.ajf[abs].fs;
+    let vfs = Aj.read();
+    let fs = &vfs.mounts[mount_idx].fs;
     
-    if atj == "/" || atj.is_empty() {
-        return Ok((abs, fs.cbm()));
+    if xj == "/" || xj.is_empty() {
+        return Ok((mount_idx, fs.root_inode()));
     }
     
     
-    let mut kmw = fs.cbm();
-    let rnb: Vec<&str> = atj.adk('/').hi(|e| !e.is_empty()).collect();
+    let mut fpq = fs.root_inode();
     
-    for ffm in rnb {
-        let te = fs.dhl(kmw)?;
-        kmw = te.cga(ffm)?;
+    for chn in xj.split('/').filter(|j| !j.is_empty()) {
+        let it = fs.get_dir(fpq)?;
+        fpq = it.lookup(chn)?;
     }
     
-    Ok((abs, kmw))
+    Ok((mount_idx, fpq))
 }
 
 
-pub fn aji(path: &str, flags: OpenFlags) -> B<Fo> {
-    let (abs, dd) = match aqj(path) {
+pub fn open(path: &str, flags: OpenFlags) -> E<Cm> {
+    let (mount_idx, ino) = match resolve_path(path) {
         Ok(result) => result,
-        Err(VfsError::N) if flags.avp() => {
+        Err(VfsError::NotFound) if flags.create() => {
             
-            let bhs = jiq(path);
-            let it = fdf(path);
+            let parent_path = ewe(path);
+            let filename = basename(path);
             
-            let (abs, dak) = aqj(&bhs)?;
-            let vfs = Bi.read();
-            let fs = &vfs.ajf[abs].fs;
-            let hug = fs.dhl(dak)?;
-            let dd = hug.avp(it, FileType::Ea)?;
+            let (mount_idx, parent_ino) = resolve_path(&parent_path)?;
+            let vfs = Aj.read();
+            let fs = &vfs.mounts[mount_idx].fs;
+            let dwd = fs.get_dir(parent_ino)?;
+            let ino = dwd.create(filename, FileType::Regular)?;
             drop(vfs);
             
-            (abs, dd)
+            (mount_idx, ino)
         }
-        Err(aa) => return Err(aa),
+        Err(e) => return Err(e),
     };
     
     
     {
-        let vfs = Bi.read();
-        if let Ok(apc) = vfs.ajf[abs].fs.hm(dd) {
+        let vfs = Aj.read();
+        if let Ok(uz) = vfs.mounts[mount_idx].fs.stat(ino) {
             
-            let xtp  = flags.bob();
-            let xtq = flags.bjb();
-            let hsm = (if xtp { 4 } else { 0 }) | (if xtq { 2 } else { 0 });
-            if hsm > 0 && !qzk(&apc, hsm) {
-                return Err(VfsError::Jt);
+            let ptt  = flags.readable();
+            let ptu = flags.writable();
+            let duy = (if ptt { 4 } else { 0 }) | (if ptu { 2 } else { 0 });
+            if duy > 0 && !kjl(&uz, duy) {
+                return Err(VfsError::PermissionDenied);
             }
         }
     }
     
-    let da = {
-        let vfs = Bi.read();
-        vfs.jzz()
+    let fd = {
+        let vfs = Aj.read();
+        vfs.alloc_fd()
     };
     
-    let mut vfs = Bi.write();
-    vfs.awi.insert(da, Tt {
-        dd,
-        abs,
-        l: 0,
+    let mut vfs = Aj.write();
+    vfs.open_files.insert(fd, Il {
+        ino,
+        mount_idx,
+        offset: 0,
         flags,
     });
     
     
-    crate::lab_mode::trace_bus::fj(
-        crate::lab_mode::trace_bus::EventCategory::Cc,
+    crate::lab_mode::trace_bus::emit(
+        crate::lab_mode::trace_bus::EventCategory::Au,
         alloc::format!("open(\"{}\")", path),
-        da as u64,
+        fd as u64,
     );
     
-    Ok(da)
+    Ok(fd)
 }
 
 
-pub fn read(da: Fo, k: &mut [u8]) -> B<usize> {
-    let (abs, dd, l) = {
-        let vfs = Bi.read();
-        let file = vfs.awi.get(&da).ok_or(VfsError::Jg)?;
-        if !file.flags.bob() {
-            return Err(VfsError::Jt);
+pub fn read(fd: Cm, buf: &mut [u8]) -> E<usize> {
+    let (mount_idx, ino, offset) = {
+        let vfs = Aj.read();
+        let file = vfs.open_files.get(&fd).ok_or(VfsError::BadFd)?;
+        if !file.flags.readable() {
+            return Err(VfsError::PermissionDenied);
         }
-        (file.abs, file.dd, file.l)
+        (file.mount_idx, file.ino, file.offset)
     };
     
-    let cjl = {
-        let vfs = Bi.read();
-        let fs = &vfs.ajf[abs].fs;
-        let kvr = fs.era(dd)?;
-        kvr.read(l, k)?
+    let atf = {
+        let vfs = Aj.read();
+        let fs = &vfs.mounts[mount_idx].fs;
+        let fwp = fs.get_file(ino)?;
+        fwp.read(offset, buf)?
     };
     
     
-    let mut vfs = Bi.write();
-    if let Some(file) = vfs.awi.ds(&da) {
-        file.l += cjl as u64;
+    let mut vfs = Aj.write();
+    if let Some(file) = vfs.open_files.get_mut(&fd) {
+        file.offset += atf as u64;
     }
     
-    Ok(cjl)
+    Ok(atf)
 }
 
 
-pub fn write(da: Fo, k: &[u8]) -> B<usize> {
-    let (abs, dd, l, bte) = {
-        let vfs = Bi.read();
-        let file = vfs.awi.get(&da).ok_or(VfsError::Jg)?;
-        if !file.flags.bjb() {
-            return Err(VfsError::Jt);
+pub fn write(fd: Cm, buf: &[u8]) -> E<usize> {
+    let (mount_idx, ino, offset, append) = {
+        let vfs = Aj.read();
+        let file = vfs.open_files.get(&fd).ok_or(VfsError::BadFd)?;
+        if !file.flags.writable() {
+            return Err(VfsError::PermissionDenied);
         }
-        (file.abs, file.dd, file.l, file.flags.bte())
+        (file.mount_idx, file.ino, file.offset, file.flags.append())
     };
     
-    let fbt = if bte {
-        let vfs = Bi.read();
-        let fs = &vfs.ajf[abs].fs;
-        let hm = fs.hm(dd)?;
-        hm.aw
+    let cfn = if append {
+        let vfs = Aj.read();
+        let fs = &vfs.mounts[mount_idx].fs;
+        let stat = fs.stat(ino)?;
+        stat.size
     } else {
-        l
+        offset
     };
     
-    let cjm = {
-        let vfs = Bi.read();
-        let fs = &vfs.ajf[abs].fs;
-        let kvr = fs.era(dd)?;
-        kvr.write(fbt, k)?
+    let atg = {
+        let vfs = Aj.read();
+        let fs = &vfs.mounts[mount_idx].fs;
+        let fwp = fs.get_file(ino)?;
+        fwp.write(cfn, buf)?
     };
     
     
-    let mut vfs = Bi.write();
-    if let Some(file) = vfs.awi.ds(&da) {
-        file.l = fbt + cjm as u64;
+    let mut vfs = Aj.write();
+    if let Some(file) = vfs.open_files.get_mut(&fd) {
+        file.offset = cfn + atg as u64;
     }
     
     
-    crate::lab_mode::trace_bus::fj(
-        crate::lab_mode::trace_bus::EventCategory::Cc,
-        alloc::format!("write fd={} {} bytes", da, cjm),
-        cjm as u64,
+    crate::lab_mode::trace_bus::emit(
+        crate::lab_mode::trace_bus::EventCategory::Au,
+        alloc::format!("write fd={} {} bytes", fd, atg),
+        atg as u64,
     );
     
-    Ok(cjm)
+    Ok(atg)
 }
 
 
-pub fn agj(da: Fo) -> B<()> {
+pub fn close(fd: Cm) -> E<()> {
     
-    crate::lab_mode::trace_bus::fj(
-        crate::lab_mode::trace_bus::EventCategory::Cc,
-        alloc::format!("close fd={}", da),
-        da as u64,
+    crate::lab_mode::trace_bus::emit(
+        crate::lab_mode::trace_bus::EventCategory::Au,
+        alloc::format!("close fd={}", fd),
+        fd as u64,
     );
     
-    let mut vfs = Bi.write();
-    vfs.awi.remove(&da).ok_or(VfsError::Jg)?;
+    let mut vfs = Aj.write();
+    vfs.open_files.remove(&fd).ok_or(VfsError::BadFd)?;
     Ok(())
 }
 
 
-pub fn wgl(da: Fo, l: i64, gwp: i32) -> B<u64> {
-    let mut vfs = Bi.write();
-    let file = vfs.awi.ds(&da).ok_or(VfsError::Jg)?;
+pub fn onc(fd: Cm, offset: i64, whence: i32) -> E<u64> {
+    let mut vfs = Aj.write();
+    let file = vfs.open_files.get_mut(&fd).ok_or(VfsError::BadFd)?;
     
-    let opz = match gwp {
-        0 => l as u64,                          
-        1 => (file.l as i64 + l) as u64,   
+    let iqd = match whence {
+        0 => offset as u64,                          
+        1 => (file.offset as i64 + offset) as u64,   
         2 => {
             
             drop(vfs);
-            let aw = {
-                let vfs = Bi.read();
-                let gol = vfs.awi.get(&da).ok_or(VfsError::Jg)?;
-                let fs = &vfs.ajf[gol.abs].fs;
-                fs.hm(gol.dd)?.aw
+            let size = {
+                let vfs = Aj.read();
+                let open_file = vfs.open_files.get(&fd).ok_or(VfsError::BadFd)?;
+                let fs = &vfs.mounts[open_file.mount_idx].fs;
+                fs.stat(open_file.ino)?.size
             };
-            let mut vfs = Bi.write();
-            let file = vfs.awi.ds(&da).ok_or(VfsError::Jg)?;
-            file.l = (aw as i64 + l) as u64;
-            return Ok(file.l);
+            let mut vfs = Aj.write();
+            let file = vfs.open_files.get_mut(&fd).ok_or(VfsError::BadFd)?;
+            file.offset = (size as i64 + offset) as u64;
+            return Ok(file.offset);
         }
-        _ => return Err(VfsError::Pr),
+        _ => return Err(VfsError::InvalidPath),
     };
     
-    file.l = opz;
-    Ok(opz)
+    file.offset = iqd;
+    Ok(iqd)
 }
 
 
-pub fn hm(path: &str) -> B<Stat> {
-    let (abs, dd) = aqj(path)?;
-    let vfs = Bi.read();
-    let fs = &vfs.ajf[abs].fs;
-    fs.hm(dd)
+pub fn stat(path: &str) -> E<Stat> {
+    let (mount_idx, ino) = resolve_path(path)?;
+    let vfs = Aj.read();
+    let fs = &vfs.mounts[mount_idx].fs;
+    fs.stat(ino)
 }
 
 
-pub fn brx(path: &str) -> B<Vec<Br>> {
-    let (abs, dd) = aqj(path)?;
-    let vfs = Bi.read();
-    let fs = &vfs.ajf[abs].fs;
-    let te = fs.dhl(dd)?;
-    te.brx()
+pub fn readdir(path: &str) -> E<Vec<Ap>> {
+    let (mount_idx, ino) = resolve_path(path)?;
+    let vfs = Aj.read();
+    let fs = &vfs.mounts[mount_idx].fs;
+    let it = fs.get_dir(ino)?;
+    it.readdir()
 }
 
 
-pub fn ut(path: &str) -> B<()> {
-    let bhs = jiq(path);
-    let fgu = fdf(path);
+pub fn mkdir(path: &str) -> E<()> {
+    let parent_path = ewe(path);
+    let cil = basename(path);
     
-    let (abs, dak) = aqj(&bhs)?;
-    let vfs = Bi.read();
-    let fs = &vfs.ajf[abs].fs;
-    let hug = fs.dhl(dak)?;
-    hug.avp(fgu, FileType::K)?;
+    let (mount_idx, parent_ino) = resolve_path(&parent_path)?;
+    let vfs = Aj.read();
+    let fs = &vfs.mounts[mount_idx].fs;
+    let dwd = fs.get_dir(parent_ino)?;
+    dwd.create(cil, FileType::Directory)?;
     Ok(())
 }
 
 
-pub fn uot(path: &str) -> B<()> {
-    let path = path.bdd('/');
+pub fn nfn(path: &str) -> E<()> {
+    let path = path.trim_end_matches('/');
     if path.is_empty() || path == "/" {
         return Ok(()); 
     }
     
     
-    if ut(path).is_ok() {
+    if mkdir(path).is_ok() {
         return Ok(());
     }
     
     
-    let tu = jiq(path);
-    if !tu.is_empty() && tu != "/" {
-        uot(&tu)?;
+    let parent = ewe(path);
+    if !parent.is_empty() && parent != "/" {
+        nfn(&parent)?;
     }
     
     
-    ut(path)
+    mkdir(path)
 }
 
 
-pub fn cnm(path: &str) -> B<()> {
-    let bhs = jiq(path);
-    let it = fdf(path);
+pub fn unlink(path: &str) -> E<()> {
+    let parent_path = ewe(path);
+    let filename = basename(path);
     
-    let (abs, dak) = aqj(&bhs)?;
-    let vfs = Bi.read();
-    let fs = &vfs.ajf[abs].fs;
-    let hug = fs.dhl(dak)?;
-    hug.cnm(it)
+    let (mount_idx, parent_ino) = resolve_path(&parent_path)?;
+    let vfs = Aj.read();
+    let fs = &vfs.mounts[mount_idx].fs;
+    let dwd = fs.get_dir(parent_ino)?;
+    dwd.unlink(filename)
 }
 
 
-fn jiq(path: &str) -> String {
-    if let Some(u) = path.bhx('/') {
-        if u == 0 {
+fn ewe(path: &str) -> String {
+    if let Some(pos) = path.rfind('/') {
+        if pos == 0 {
             "/".to_string()
         } else {
-            path[..u].to_string()
+            path[..pos].to_string()
         }
     } else {
         "/".to_string()
@@ -667,18 +670,18 @@ fn jiq(path: &str) -> String {
 }
 
 
-fn fdf(path: &str) -> &str {
-    if let Some(u) = path.bhx('/') {
-        &path[u + 1..]
+fn basename(path: &str) -> &str {
+    if let Some(pos) = path.rfind('/') {
+        &path[pos + 1..]
     } else {
         path
     }
 }
 
 
-pub fn hqa() -> Vec<(String, String)> {
-    let vfs = Bi.read();
-    vfs.ajf.iter().map(|sn| (sn.path.clone(), sn.fs.j().to_string())).collect()
+pub fn dtl() -> Vec<(String, String)> {
+    let vfs = Aj.read();
+    vfs.mounts.iter().map(|ic| (ic.path.clone(), ic.fs.name().to_string())).collect()
 }
 
 
@@ -686,50 +689,50 @@ pub fn hqa() -> Vec<(String, String)> {
 
 
 
-pub fn uis(da: Fo, l: i64, gwp: u32) -> B<u64> {
-    wgl(da, l, gwp as i32)
+pub fn nbd(fd: Cm, offset: i64, whence: u32) -> E<u64> {
+    onc(fd, offset, whence as i32)
 }
 
 
-static Aps: RwLock<String> = RwLock::new(String::new());
+static Ri: RwLock<String> = RwLock::new(String::new());
 
 
-pub fn iwx() -> String {
-    let jv = Aps.read();
-    if jv.is_empty() {
+pub fn eof() -> String {
+    let cwd = Ri.read();
+    if cwd.is_empty() {
         "/".to_string()
     } else {
-        jv.clone()
+        cwd.clone()
     }
 }
 
 
-pub fn qyj(path: &str) -> B<()> {
+pub fn kir(path: &str) -> E<()> {
     
-    let wtk = hm(path)?;
-    if wtk.kd != FileType::K {
-        return Err(VfsError::Lz);
+    let owo = stat(path)?;
+    if owo.file_type != FileType::Directory {
+        return Err(VfsError::NotDirectory);
     }
     
     
-    let lnt = if path.cj('/') {
+    let giz = if path.starts_with('/') {
         path.to_string()
     } else {
-        let cv = iwx();
-        if cv == "/" {
+        let current = eof();
+        if current == "/" {
             format!("/{}", path)
         } else {
-            format!("{}/{}", cv, path)
+            format!("{}/{}", current, path)
         }
     };
     
-    *Aps.write() = lnt;
+    *Ri.write() = giz;
     Ok(())
 }
 
 
-pub fn yxo() {
-    *Aps.write() = "/".to_string();
+pub fn qkz() {
+    *Ri.write() = "/".to_string();
 }
 
 
@@ -737,54 +740,54 @@ pub fn yxo() {
 
 
 
-pub fn mq(path: &str) -> B<Vec<u8>> {
-    let da = aji(path, OpenFlags(OpenFlags::OO_))?;
+pub fn read_file(path: &str) -> E<Vec<u8>> {
+    let fd = open(path, OpenFlags(OpenFlags::PM_))?;
     
     
-    let wtj = hm(path)?;
-    let aw = wtj.aw as usize;
+    let own = stat(path)?;
+    let size = own.size as usize;
     
     
-    let mut bi = alloc::vec![0u8; aw.am(1024)];
-    let mut l = 0;
-    while l < bi.len() {
-        let bo = read(da, &mut bi[l..])?;
-        if bo == 0 { break; }
-        l += bo;
+    let mut buffer = alloc::vec![0u8; size.max(1024)];
+    let mut offset = 0;
+    while offset < buffer.len() {
+        let ae = read(fd, &mut buffer[offset..])?;
+        if ae == 0 { break; }
+        offset += ae;
     }
-    bi.dmu(l);
+    buffer.truncate(offset);
     
-    agj(da)?;
-    Ok(bi)
+    close(fd)?;
+    Ok(buffer)
 }
 
 
-pub fn lxu(path: &str) -> B<String> {
-    let bf = mq(path)?;
-    String::jg(bf).jd(|_| VfsError::Bjs)
+pub fn gqh(path: &str) -> E<String> {
+    let bytes = read_file(path)?;
+    String::from_utf8(bytes).map_err(|_| VfsError::InvalidData)
 }
 
 
-pub fn ns(path: &str, f: &[u8]) -> B<()> {
+pub fn write_file(path: &str, data: &[u8]) -> E<()> {
     
-    let _ = ut(path); 
+    let _ = mkdir(path); 
     
-    let da = aji(path, OpenFlags(OpenFlags::OP_ | OpenFlags::ON_ | OpenFlags::BCG_))?;
-    let mut l = 0;
-    while l < f.len() {
-        let bo = write(da, &f[l..])?;
-        if bo == 0 { break; }
-        l += bo;
+    let fd = open(path, OpenFlags(OpenFlags::PN_ | OpenFlags::PL_ | OpenFlags::BEJ_))?;
+    let mut offset = 0;
+    while offset < data.len() {
+        let ae = write(fd, &data[offset..])?;
+        if ae == 0 { break; }
+        offset += ae;
     }
-    agj(da)?;
+    close(fd)?;
     Ok(())
 }
 
 
-pub fn wxb() -> B<()> {
-    let vfs = Bi.read();
-    for beu in vfs.ajf.iter() {
-        let _ = beu.fs.sync();
+pub fn jkk() -> E<()> {
+    let vfs = Aj.read();
+    for abd in vfs.mounts.iter() {
+        let _ = abd.fs.sync();
     }
     
     let _ = block_cache::sync();
@@ -792,118 +795,118 @@ pub fn wxb() -> B<()> {
 }
 
 
-pub fn ksb(bns: Fo) -> B<Fo> {
-    let vfs = Bi.read();
-    let file = vfs.awi.get(&bns).ok_or(VfsError::Jg)?;
-    let bdu = Tt {
-        dd: file.dd,
-        abs: file.abs,
-        l: file.l,
+pub fn ftn(old_fd: Cm) -> E<Cm> {
+    let vfs = Aj.read();
+    let file = vfs.open_files.get(&old_fd).ok_or(VfsError::BadFd)?;
+    let copy = Il {
+        ino: file.ino,
+        mount_idx: file.mount_idx,
+        offset: file.offset,
         flags: file.flags,
     };
-    let anp = vfs.jzz();
+    let ue = vfs.alloc_fd();
     drop(vfs);
-    let mut vfs = Bi.write();
-    vfs.awi.insert(anp, bdu);
-    Ok(anp)
+    let mut vfs = Aj.write();
+    vfs.open_files.insert(ue, copy);
+    Ok(ue)
 }
 
 
-pub fn noj(bns: Fo, anp: Fo) -> B<Fo> {
-    if bns == anp {
-        if Bi.read().awi.bgm(&bns) { return Ok(anp); }
-        return Err(VfsError::Jg);
+pub fn hui(old_fd: Cm, ue: Cm) -> E<Cm> {
+    if old_fd == ue {
+        if Aj.read().open_files.contains_key(&old_fd) { return Ok(ue); }
+        return Err(VfsError::BadFd);
     }
-    let vfs = Bi.read();
-    let file = vfs.awi.get(&bns).ok_or(VfsError::Jg)?;
-    let bdu = Tt {
-        dd: file.dd,
-        abs: file.abs,
-        l: file.l,
+    let vfs = Aj.read();
+    let file = vfs.open_files.get(&old_fd).ok_or(VfsError::BadFd)?;
+    let copy = Il {
+        ino: file.ino,
+        mount_idx: file.mount_idx,
+        offset: file.offset,
         flags: file.flags,
     };
     drop(vfs);
-    let mut vfs = Bi.write();
-    vfs.awi.remove(&anp);
-    vfs.awi.insert(anp, bdu);
-    Ok(anp)
+    let mut vfs = Aj.write();
+    vfs.open_files.remove(&ue);
+    vfs.open_files.insert(ue, copy);
+    Ok(ue)
 }
 
 
-pub fn syo(da: Fo) -> B<Stat> {
-    let vfs = Bi.read();
-    let file = vfs.awi.get(&da).ok_or(VfsError::Jg)?;
-    let abs = file.abs;
-    let dd = file.dd;
-    let fs = &vfs.ajf[abs].fs;
-    fs.hm(dd)
-}
-
-
-
-
-
-
-pub struct Ye {
-    
-    pub bob: bool,
-    
-    pub bjb: bool,
-    
-    pub zt: bool,
-    
-    pub fkc: bool,
+pub fn lzw(fd: Cm) -> E<Stat> {
+    let vfs = Aj.read();
+    let file = vfs.open_files.get(&fd).ok_or(VfsError::BadFd)?;
+    let mount_idx = file.mount_idx;
+    let ino = file.ino;
+    let fs = &vfs.mounts[mount_idx].fs;
+    fs.stat(ino)
 }
 
 
 
-pub fn owj(da: Fo) -> Option<Ye> {
+
+
+
+pub struct Kk {
     
-    if da == 0 {
-        return Some(Ye {
-            bob: crate::keyboard::hmo(),
-            bjb: false,
-            zt: false,
-            fkc: false,
+    pub readable: bool,
+    
+    pub writable: bool,
+    
+    pub error: bool,
+    
+    pub hangup: bool,
+}
+
+
+
+pub fn ivm(fd: Cm) -> Option<Kk> {
+    
+    if fd == 0 {
+        return Some(Kk {
+            readable: crate::keyboard::has_input(),
+            writable: false,
+            error: false,
+            hangup: false,
         });
     }
     
-    if da == 1 || da == 2 {
-        return Some(Ye {
-            bob: false,
-            bjb: true,
-            zt: false,
-            fkc: false,
+    if fd == 1 || fd == 2 {
+        return Some(Kk {
+            readable: false,
+            writable: true,
+            error: false,
+            hangup: false,
         });
     }
     
-    if crate::pipe::gkh(da) {
-        let (cyk, lbi, jjd) = crate::pipe::poll(da);
-        return Some(Ye {
-            bob: cyk,
-            bjb: lbi,
-            zt: false,
-            fkc: jjd,
+    if crate::pipe::dab(fd) {
+        let (has_data, gab, ewo) = crate::pipe::poll(fd);
+        return Some(Kk {
+            readable: has_data,
+            writable: gab,
+            error: false,
+            hangup: ewo,
         });
     }
     
-    if crate::netstack::socket::tyx(da) {
-        let cyk = crate::netstack::socket::tna(da);
-        return Some(Ye {
-            bob: cyk,
-            bjb: true, 
-            zt: false,
-            fkc: false,
+    if crate::netstack::socket::mts(fd) {
+        let has_data = crate::netstack::socket::mjy(fd);
+        return Some(Kk {
+            readable: has_data,
+            writable: true, 
+            error: false,
+            hangup: false,
         });
     }
     
-    let vfs = Bi.read();
-    if vfs.awi.bgm(&da) {
-        return Some(Ye {
-            bob: true,
-            bjb: true,
-            zt: false,
-            fkc: false,
+    let vfs = Aj.read();
+    if vfs.open_files.contains_key(&fd) {
+        return Some(Kk {
+            readable: true,
+            writable: true,
+            error: false,
+            hangup: false,
         });
     }
     
@@ -916,91 +919,91 @@ pub fn owj(da: Fo) -> Option<Ye> {
 
 
 
-pub fn qzk(apc: &Stat, pzb: u32) -> bool {
-    let (pi, pw, ahl, bqj) = crate::process::dfk();
+pub fn kjl(uz: &Stat, want: u32) -> bool {
+    let (uid, gid, euid, egid) = crate::process::bfs();
     
-    if ahl == 0 { return true; }
+    if euid == 0 { return true; }
 
-    let ev = apc.ev;
-    let fs = if ahl == apc.pi {
-        (ev >> 6) & 7 
-    } else if bqj == apc.pw {
-        (ev >> 3) & 7 
+    let mode = uz.mode;
+    let bits = if euid == uz.uid {
+        (mode >> 6) & 7 
+    } else if egid == uz.gid {
+        (mode >> 3) & 7 
     } else {
-        ev & 7 
+        mode & 7 
     };
-    (fs & pzb) == pzb
+    (bits & want) == want
 }
 
 
-pub fn ral(path: &str, ev: u32) -> B<()> {
-    let (_, _, ahl, _) = crate::process::dfk();
-    let apc = hm(path)?;
+pub fn kkf(path: &str, mode: u32) -> E<()> {
+    let (_, _, euid, _) = crate::process::bfs();
+    let uz = stat(path)?;
     
-    if ahl != 0 && ahl != apc.pi {
-        return Err(VfsError::Jt);
+    if euid != 0 && euid != uz.uid {
+        return Err(VfsError::PermissionDenied);
     }
-    let (abs, dd) = aqj(path)?;
-    let vfs = Bi.read();
-    let _ = piy(&*vfs.ajf[abs].fs, dd, ev);
+    let (mount_idx, ino) = resolve_path(path)?;
+    let vfs = Aj.read();
+    let _ = jfd(&*vfs.mounts[mount_idx].fs, ino, mode);
     Ok(())
 }
 
 
-pub fn srh(da: Fo, ev: u32) -> B<()> {
-    let (_, _, ahl, _) = crate::process::dfk();
-    let vfs = Bi.read();
-    let file = vfs.awi.get(&da).ok_or(VfsError::Jg)?;
-    let abs = file.abs;
-    let dd = file.dd;
-    let apc = vfs.ajf[abs].fs.hm(dd)?;
-    if ahl != 0 && ahl != apc.pi {
-        return Err(VfsError::Jt);
+pub fn lum(fd: Cm, mode: u32) -> E<()> {
+    let (_, _, euid, _) = crate::process::bfs();
+    let vfs = Aj.read();
+    let file = vfs.open_files.get(&fd).ok_or(VfsError::BadFd)?;
+    let mount_idx = file.mount_idx;
+    let ino = file.ino;
+    let uz = vfs.mounts[mount_idx].fs.stat(ino)?;
+    if euid != 0 && euid != uz.uid {
+        return Err(VfsError::PermissionDenied);
     }
-    let _ = piy(&*vfs.ajf[abs].fs, dd, ev);
+    let _ = jfd(&*vfs.mounts[mount_idx].fs, ino, mode);
     Ok(())
 }
 
 
-pub fn ran(path: &str, pi: u32, pw: u32) -> B<()> {
-    let (abs, dd) = aqj(path)?;
-    let vfs = Bi.read();
-    let _ = piz(&*vfs.ajf[abs].fs, dd, pi, pw);
+pub fn kkh(path: &str, uid: u32, gid: u32) -> E<()> {
+    let (mount_idx, ino) = resolve_path(path)?;
+    let vfs = Aj.read();
+    let _ = jfe(&*vfs.mounts[mount_idx].fs, ino, uid, gid);
     Ok(())
 }
 
 
-pub fn sri(da: Fo, pi: u32, pw: u32) -> B<()> {
-    let vfs = Bi.read();
-    let file = vfs.awi.get(&da).ok_or(VfsError::Jg)?;
-    let _ = piz(&*vfs.ajf[file.abs].fs, file.dd, pi, pw);
+pub fn luo(fd: Cm, uid: u32, gid: u32) -> E<()> {
+    let vfs = Aj.read();
+    let file = vfs.open_files.get(&fd).ok_or(VfsError::BadFd)?;
+    let _ = jfe(&*vfs.mounts[file.mount_idx].fs, file.ino, uid, gid);
     Ok(())
 }
 
 
-fn piy(qby: &dyn crate::vfs::Cc, dd: I, ev: u32) -> B<()> {
+fn jfd(_fs: &dyn crate::vfs::Au, ino: K, mode: u32) -> E<()> {
     
-    BAL_.lock().insert(dd, Avr { ev: Some(ev), pi: None, pw: None });
+    BCN_.lock().insert(ino, Ts { mode: Some(mode), uid: None, gid: None });
     Ok(())
 }
 
 
-fn piz(qby: &dyn crate::vfs::Cc, dd: I, pi: u32, pw: u32) -> B<()> {
-    let mut cte = BAL_.lock();
-    let bt = cte.bt(dd).gom(Avr { ev: None, pi: None, pw: None });
-    if pi != 0xFFFFFFFF { bt.pi = Some(pi); }
-    if pw != 0xFFFFFFFF { bt.pw = Some(pw); }
+fn jfe(_fs: &dyn crate::vfs::Au, ino: K, uid: u32, gid: u32) -> E<()> {
+    let mut ayx = BCN_.lock();
+    let entry = ayx.entry(ino).or_insert(Ts { mode: None, uid: None, gid: None });
+    if uid != 0xFFFFFFFF { entry.uid = Some(uid); }
+    if gid != 0xFFFFFFFF { entry.gid = Some(gid); }
     Ok(())
 }
 
 
 #[derive(Clone, Debug)]
-struct Avr {
-    ev: Option<u32>,
-    pi: Option<u32>,
-    pw: Option<u32>,
+struct Ts {
+    mode: Option<u32>,
+    uid: Option<u32>,
+    gid: Option<u32>,
 }
 
 use spin::Mutex as SpinMutex;
 use alloc::collections::BTreeMap as OverlayMap;
-static BAL_: SpinMutex<OverlayMap<I, Avr>> = SpinMutex::new(OverlayMap::new());
+static BCN_: SpinMutex<OverlayMap<K, Ts>> = SpinMutex::new(OverlayMap::new());

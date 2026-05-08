@@ -61,11 +61,11 @@ const BCM_DMA_CS: u64 = 0x00; // Control & Status
 const BCM_DMA_TI: u64 = 0x08; // Transfer Information
 const BCM_DMA_DEBUG: u64 = 0x20; // Debug
 
-fn safe_read(address: u64) -> Option<u32> {
-    if address == 0 { return None; }
+fn safe_read(addr: u64) -> Option<u32> {
+    if addr == 0 { return None; }
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        let ptr = address as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+        let ptr = addr as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u32;
         Some(core::ptr::read_volatile(ptr))
     }
@@ -135,8 +135,8 @@ pub fn scan_dma_engines() -> String {
         let mut smmu_found = false;
         
         for &(base, _size, name) in SMMU_BASES_ARM {
-            if let Some(value) = safe_read(base) {
-                if value != 0 && value != 0xFFFFFFFF {
+            if let Some(val) = safe_read(base) {
+                if val != 0 && val != 0xFFFFFFFF {
                     output.push_str(&format!("\x01G[FOUND]\x01W {} @ 0x{:08X}\n", name, base));
                     output.push_str(&probe_smmuv3(base));
                     smmu_found = true;
@@ -157,9 +157,9 @@ pub fn scan_dma_engines() -> String {
         output.push_str(&format!("{}\n", "-".repeat(65)));
         
         for &(base, size, name) in DMA_CONTROLLERS_ARM {
-            let value = safe_read(base);
+            let val = safe_read(base);
             let status = // Pattern matching — Rust's exhaustive branching construct.
-match value {
+match val {
                 Some(v) if v != 0 && v != 0xFFFFFFFF => {
                     // Try to identify the DMA type
                     let periph_id = safe_read(base + 0xFE0);
@@ -216,15 +216,15 @@ match periph_id {
         output.push_str("\x01Y--- Intel VT-d / AMD-Vi Detection ---\x01W\n");
         
         for &(base, name) in IOMMU_DETECT_X86 {
-            if let Some(value) = safe_read(base) {
-                if value != 0 && value != 0xFFFFFFFF {
+            if let Some(val) = safe_read(base) {
+                if val != 0 && val != 0xFFFFFFFF {
                     output.push_str(&format!("\x01G[FOUND]\x01W {} @ 0x{:08X} = 0x{:08X}\n",
-                        name, base, value));
+                        name, base, val));
                     
                     // Read capability register
-                    if let Some(capability) = safe_read(base + 0x08) {
-                        let sagaw = (capability >> 8) & 0x1F;
-                        output.push_str(&format!("  Capability: 0x{:08X} SAGAW={}\n", capability, sagaw));
+                    if let Some(cap) = safe_read(base + 0x08) {
+                        let sagaw = (cap >> 8) & 0x1F;
+                        output.push_str(&format!("  Capability: 0x{:08X} SAGAW={}\n", cap, sagaw));
                     }
                 } else {
                     output.push_str(&format!("\x01Y[EMPTY]\x01W {} @ 0x{:08X}\n", name, base));

@@ -173,7 +173,7 @@ impl Vec4 {
 
         // Fonction publique — appelable depuis d'autres modules.
 pub fn to_vec3(&self) -> Vec3 {
-        if self.w.absolute() > 0.0001 {
+        if self.w.abs() > 0.0001 {
             Vec3::new(self.x / self.w, self.y / self.w, self.z / self.w)
         } else {
             Vec3::new(self.x, self.y, self.z)

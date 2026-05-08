@@ -12,7 +12,7 @@ use super::tables::SdtHeader;
 #[repr(C, packed)]
 struct MadtHeader {
     /// Local APIC physical address
-    local_apic_address: u32,
+    local_apic_addr: u32,
     /// Flags (bit 0 = dual 8259 PICs present)
     flags: u32,
 }
@@ -62,7 +62,7 @@ struct IoApicEntry {
     /// Reserved
     _reserved: u8,
     /// I/O APIC physical address
-    io_apic_address: u32,
+    io_apic_addr: u32,
     /// Global System Interrupt Base
     gsi_base: u32,
 }
@@ -100,7 +100,7 @@ struct LocalApicAddrOverrideEntry {
     /// Reserved
     _reserved: u16,
     /// 64-bit Local APIC address
-    local_apic_address: u64,
+    local_apic_addr: u64,
 }
 
 /// Local x2APIC entry (type 9)
@@ -189,9 +189,9 @@ unsafe {
 const MadtHeader) 
     };
     
-    let mut local_apic_address = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+    let mut local_apic_addr = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { 
-        core::ptr::read_unaligned(core::ptr::address_of!(madt_header.local_apic_address)) 
+        core::ptr::read_unaligned(core::ptr::addr_of!(madt_header.local_apic_addr)) 
     } as u64;
     
     let mut local_apics = Vec::new();
@@ -221,7 +221,7 @@ match entry_header.entry_type {
 unsafe { &*(offset as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const LocalApicEntry) };
                     let flags = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::read_unaligned(core::ptr::address_of!(entry.flags)) };
+unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(entry.flags)) };
                     
                     local_apics.push(LocalApic {
                         apic_id: entry.apic_id as u32,
@@ -236,14 +236,14 @@ unsafe { core::ptr::read_unaligned(core::ptr::address_of!(entry.flags)) };
                     let entry = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { &*(offset as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const IoApicEntry) };
-                    let address = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::read_unaligned(core::ptr::address_of!(entry.io_apic_address)) };
+                    let addr = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(entry.io_apic_addr)) };
                     let gsi_base = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::read_unaligned(core::ptr::address_of!(entry.gsi_base)) };
+unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(entry.gsi_base)) };
                     
                     io_apics.push(IoApic {
                         id: entry.io_apic_id,
-                        address: address as u64,
+                        address: addr as u64,
                         gsi_base,
                     });
                 }
@@ -254,9 +254,9 @@ unsafe { core::ptr::read_unaligned(core::ptr::address_of!(entry.gsi_base)) };
 unsafe { &*(offset as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const IntSourceOverrideEntry) };
                     let gsi = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::read_unaligned(core::ptr::address_of!(entry.gsi)) };
+unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(entry.gsi)) };
                     let flags = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::read_unaligned(core::ptr::address_of!(entry.flags)) };
+unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(entry.flags)) };
                     
                     overrides.push(IntSourceOverride {
                         source: entry.source,
@@ -271,9 +271,9 @@ unsafe { core::ptr::read_unaligned(core::ptr::address_of!(entry.flags)) };
                     let entry = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { &*(offset as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const LocalApicAddrOverrideEntry) };
-                    local_apic_address = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+                    local_apic_addr = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { 
-                        core::ptr::read_unaligned(core::ptr::address_of!(entry.local_apic_address)) 
+                        core::ptr::read_unaligned(core::ptr::addr_of!(entry.local_apic_addr)) 
                     };
                 }
             }
@@ -283,7 +283,7 @@ unsafe {
 unsafe { &*(offset as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const LocalApicNmiEntry) };
                     let flags = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::read_unaligned(core::ptr::address_of!(entry.flags)) };
+unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(entry.flags)) };
                     nmi_entries.push(LocalApicNmiInformation {
                         processor_uid: entry.acpi_processor_uid,
                         lint: entry.lint,
@@ -298,11 +298,11 @@ unsafe { core::ptr::read_unaligned(core::ptr::address_of!(entry.flags)) };
 unsafe { &*(offset as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const X2ApicEntry) };
                     let x2apic_id = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::read_unaligned(core::ptr::address_of!(entry.x2apic_id)) };
+unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(entry.x2apic_id)) };
                     let flags = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::read_unaligned(core::ptr::address_of!(entry.flags)) };
+unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(entry.flags)) };
                     let uid = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::read_unaligned(core::ptr::address_of!(entry.acpi_processor_uid)) };
+unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(entry.acpi_processor_uid)) };
                     
                     local_apics.push(LocalApic {
                         apic_id: x2apic_id,
@@ -320,5 +320,5 @@ unsafe { core::ptr::read_unaligned(core::ptr::address_of!(entry.acpi_processor_u
         offset += entry_header.length as u64;
     }
     
-    Some((local_apic_address, local_apics, io_apics, overrides, nmi_entries))
+    Some((local_apic_addr, local_apics, io_apics, overrides, nmi_entries))
 }

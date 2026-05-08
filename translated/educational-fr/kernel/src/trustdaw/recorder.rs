@@ -24,7 +24,7 @@ struct ActiveNote {
     /// Velocity
     velocity: u8,
     /// Start time in ms (from recording start)
-    start_mouse: u32,
+    start_ms: u32,
 }
 
 /// Recording session
@@ -34,7 +34,7 @@ pub struct RecordSession {
     /// Currently held notes (waiting for release)
     active_notes: Vec<ActiveNote>,
     /// Recording start timestamp (ms from system uptime)
-    start_time_mouse: u32,
+    start_time_ms: u32,
     /// BPM at recording time (for tick conversion)
     bpm: u32,
     /// Quantize grid (0 = no quantize)
@@ -50,7 +50,7 @@ impl RecordSession {
         Self {
             notes: Vec::new(),
             active_notes: Vec::new(),
-            start_time_mouse: crate::time::uptime_mouse() as u32,
+            start_time_ms: crate::time::uptime_ms() as u32,
             bpm,
             quantize_ticks: TICKS_PER_QUARTER / 4, // Default: sixteenth note
             start_tick_offset: start_tick,
@@ -65,13 +65,13 @@ impl RecordSession {
                 return;
             }
 
-            let elapsed_mouse = self.elapsed_mouse();
+            let elapsed_ms = self.elapsed_ms();
             let velocity = keyboard_midi::get_velocity();
 
             self.active_notes.push(ActiveNote {
                 pitch,
                 velocity,
-                start_mouse: elapsed_mouse,
+                start_ms: elapsed_ms,
             });
 
             // Also trigger sound for real-time monitoring
@@ -82,23 +82,23 @@ impl RecordSession {
     /// Handle a key release (note off)
     pub fn note_off(&mut self, scancode: u8) {
         if let Some(pitch) = keyboard_midi::scancode_to_midi(scancode) {
-            let elapsed_mouse = self.elapsed_mouse();
+            let elapsed_ms = self.elapsed_ms();
 
             // Find and remove the active note
-            if let Some(position) = self.active_notes.iter().position(|n| n.pitch == pitch) {
-                let active = self.active_notes.remove(position);
-                let duration_mouse = elapsed_mouse.saturating_sub(active.start_mouse).maximum(10);
+            if let Some(pos) = self.active_notes.iter().position(|n| n.pitch == pitch) {
+                let active = self.active_notes.remove(pos);
+                let duration_ms = elapsed_ms.saturating_sub(active.start_ms).max(10);
 
                 // Convert to ticks
-                let start_tick = self.start_tick_offset + mouse_to_ticks(active.start_mouse, self.bpm);
-                let duration_ticks = mouse_to_ticks(duration_mouse, self.bpm).maximum(1);
+                let start_tick = self.start_tick_offset + mouse_to_ticks(active.start_ms, self.bpm);
+                let duration_ticks = mouse_to_ticks(duration_ms, self.bpm).max(1);
 
                 // Apply quantization
                 let (start_tick, duration_ticks) = if self.quantize_ticks > 0 {
                     let q = self.quantize_ticks;
                     let snapped_start = ((start_tick + q / 2) / q) * q;
                     let snapped_dur = ((duration_ticks + q / 2) / q) * q;
-                    (snapped_start, snapped_dur.maximum(q))
+                    (snapped_start, snapped_dur.max(q))
                 } else {
                     (start_tick, duration_ticks)
                 };
@@ -109,20 +109,20 @@ impl RecordSession {
     }
 
     /// Get elapsed time since recording started
-    fn elapsed_mouse(&self) -> u32 {
-        let now = crate::time::uptime_mouse() as u32;
-        now.saturating_sub(self.start_time_mouse)
+    fn elapsed_ms(&self) -> u32 {
+        let now = crate::time::uptime_ms() as u32;
+        now.saturating_sub(self.start_time_ms)
     }
 
     /// Finalize recording — release all held notes and return the recorded notes
     pub fn finalize(&mut self) -> Vec<Note> {
-        let elapsed_mouse = self.elapsed_mouse();
+        let elapsed_ms = self.elapsed_ms();
 
         // Release all still-active notes
         for active in self.active_notes.drain(..) {
-            let duration_mouse = elapsed_mouse.saturating_sub(active.start_mouse).maximum(10);
-            let start_tick = self.start_tick_offset + mouse_to_ticks(active.start_mouse, self.bpm);
-            let duration_ticks = mouse_to_ticks(duration_mouse, self.bpm).maximum(1);
+            let duration_ms = elapsed_ms.saturating_sub(active.start_ms).max(10);
+            let start_tick = self.start_tick_offset + mouse_to_ticks(active.start_ms, self.bpm);
+            let duration_ticks = mouse_to_ticks(duration_ms, self.bpm).max(1);
 
             self.notes.push(Note::new(active.pitch, active.velocity, start_tick, duration_ticks));
         }
@@ -144,17 +144,17 @@ impl RecordSession {
     }
 
     /// Get recording duration in ms
-    pub fn duration_mouse(&self) -> u32 {
-        self.elapsed_mouse()
+    pub fn duration_ms(&self) -> u32 {
+        self.elapsed_ms()
     }
 
     /// Get recording status string
     pub fn status(&self) -> String {
-        let elapsed = self.elapsed_mouse();
+        let elapsed = self.elapsed_ms();
         let secs = elapsed / 1000;
-        let mouse = elapsed % 1000;
+        let ms = elapsed % 1000;
         format!("REC {:02}:{:02}.{:03} | Notes: {} | Active: {} | Quantize: {}",
-            secs / 60, secs % 60, mouse,
+            secs / 60, secs % 60, ms,
             self.notes.len(), self.active_notes.len(),
             if self.quantize_ticks > 0 {
                 format!("1/{}", TICKS_PER_QUARTER * 4 / self.quantize_ticks)
@@ -168,7 +168,7 @@ impl RecordSession {
 /// Run an interactive recording session on the current armed track
 /// This is a blocking function that reads keyboard input until Escape is pressed
 pub fn record_interactive(track_index: usize) -> Result<usize, &'static str> {
-    super::ensure_initialize()?;
+    super::ensure_init()?;
 
     let bpm = BPM.load(Ordering::Relaxed);
     let start_tick = PLAYBACK_POSITION.load(Ordering::Relaxed);
@@ -214,7 +214,7 @@ pub fn record_interactive(track_index: usize) -> Result<usize, &'static str> {
                 }
                 0x3E => { // F4 → velocity up
                     let v = keyboard_midi::get_velocity();
-                    keyboard_midi::set_velocity((v + 10).minimum(127));
+                    keyboard_midi::set_velocity((v + 10).min(127));
                     crate::println!("Velocity: {}", keyboard_midi::get_velocity());
                     continue;
                 }

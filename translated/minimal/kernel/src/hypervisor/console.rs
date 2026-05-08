@@ -10,67 +10,67 @@ use alloc::collections::VecDeque;
 use spin::Mutex;
 
 
-const MM_: usize = 4096;
+const NL_: usize = 4096;
 
 
 pub struct VirtConsole {
     
-    fk: u64,
+    vm_id: u64,
     
-    dkh: VecDeque<u8>,
+    output_buffer: VecDeque<u8>,
     
-    xn: VecDeque<u8>,
+    input_buffer: VecDeque<u8>,
     
-    gfw: bool,
+    cxa: bool,
     
-    ueu: String,
+    line_buffer: String,
     
-    j: String,
+    name: String,
 }
 
 impl VirtConsole {
-    pub fn new(fk: u64, j: &str) -> Self {
+    pub fn new(vm_id: u64, name: &str) -> Self {
         VirtConsole {
-            fk,
-            dkh: VecDeque::fc(MM_),
-            xn: VecDeque::fc(MM_),
-            gfw: true,
-            ueu: String::new(),
-            j: String::from(j),
+            vm_id,
+            output_buffer: VecDeque::with_capacity(NL_),
+            input_buffer: VecDeque::with_capacity(NL_),
+            cxa: true,
+            line_buffer: String::new(),
+            name: String::from(name),
         }
     }
     
     
-    pub fn cco(&mut self, hf: u8) {
-        if self.dkh.len() < MM_ {
-            self.dkh.agt(hf);
+    pub fn write_byte(&mut self, byte: u8) {
+        if self.output_buffer.len() < NL_ {
+            self.output_buffer.push_back(byte);
         }
         
         
-        let r = hf as char;
-        crate::serial_print!("{}", r);
+        let c = byte as char;
+        crate::serial_print!("{}", c);
     }
     
     
-    pub fn write_str(&mut self, e: &str) {
-        for hf in e.bf() {
-            self.cco(hf);
+    pub fn write_str(&mut self, j: &str) {
+        for byte in j.bytes() {
+            self.write_byte(byte);
         }
     }
     
     
-    pub fn dlb(&mut self) -> Option<u8> {
-        self.xn.awp()
+    pub fn read_byte(&mut self) -> Option<u8> {
+        self.input_buffer.pop_front()
     }
     
     
-    pub fn hmo(&self) -> bool {
-        !self.xn.is_empty()
+    pub fn has_input(&self) -> bool {
+        !self.input_buffer.is_empty()
     }
     
     
-    pub fn yye(&self) -> u8 {
-        if self.xn.is_empty() {
+    pub fn qlm(&self) -> u8 {
+        if self.input_buffer.is_empty() {
             0x00 
         } else {
             0x01 
@@ -78,8 +78,8 @@ impl VirtConsole {
     }
     
     
-    pub fn zel(&self) -> u8 {
-        if self.dkh.len() < MM_ {
+    pub fn qqb(&self) -> u8 {
+        if self.output_buffer.len() < NL_ {
             0x20 
         } else {
             0x00 
@@ -87,115 +87,115 @@ impl VirtConsole {
     }
     
     
-    pub fn hoa(&mut self, f: &[u8]) {
-        for &hf in f {
-            if self.xn.len() < MM_ {
-                self.xn.agt(hf);
+    pub fn inject_input(&mut self, data: &[u8]) {
+        for &byte in data {
+            if self.input_buffer.len() < NL_ {
+                self.input_buffer.push_back(byte);
             }
         }
     }
     
     
-    pub fn yxz(&mut self, line: &str) {
-        self.hoa(line.as_bytes());
-        self.hoa(b"\n");
+    pub fn qli(&mut self, line: &str) {
+        self.inject_input(line.as_bytes());
+        self.inject_input(b"\n");
     }
     
     
-    pub fn kqu(&mut self) -> Vec<u8> {
-        self.dkh.bbk(..).collect()
+    pub fn drain_output(&mut self) -> Vec<u8> {
+        self.output_buffer.drain(..).collect()
     }
     
     
-    pub fn saz(&mut self) -> String {
-        let bf: Vec<u8> = self.kqu();
-        String::azw(&bf).bkc()
+    pub fn drain_output_string(&mut self) -> String {
+        let bytes: Vec<u8> = self.drain_output();
+        String::from_utf8_lossy(&bytes).into_owned()
     }
     
     
-    pub fn zez(&self) -> String {
-        let bf: Vec<u8> = self.dkh.iter().hu().collect();
-        String::azw(&bf).bkc()
+    pub fn qqg(&self) -> String {
+        let bytes: Vec<u8> = self.output_buffer.iter().copied().collect();
+        String::from_utf8_lossy(&bytes).into_owned()
     }
 }
 
 
 pub struct ConsoleManager {
-    byx: Vec<VirtConsole>,
+    consoles: Vec<VirtConsole>,
 }
 
 impl ConsoleManager {
     pub const fn new() -> Self {
         ConsoleManager {
-            byx: Vec::new(),
+            consoles: Vec::new(),
         }
     }
     
-    pub fn fgb(&mut self, fk: u64, j: &str) -> usize {
-        let console = VirtConsole::new(fk, j);
-        let w = self.byx.len();
-        self.byx.push(console);
-        w
+    pub fn create_console(&mut self, vm_id: u64, name: &str) -> usize {
+        let console = VirtConsole::new(vm_id, name);
+        let idx = self.consoles.len();
+        self.consoles.push(console);
+        idx
     }
     
-    pub fn ghy(&mut self, fk: u64) -> Option<&mut VirtConsole> {
-        self.byx.el().du(|r| r.fk == fk)
+    pub fn get_console(&mut self, vm_id: u64) -> Option<&mut VirtConsole> {
+        self.consoles.iter_mut().find(|c| c.vm_id == vm_id)
     }
     
-    pub fn vuu(&mut self, fk: u64) {
-        self.byx.ajm(|r| r.fk != fk);
+    pub fn oew(&mut self, vm_id: u64) {
+        self.consoles.retain(|c| c.vm_id != vm_id);
     }
 }
 
 
-static JS_: Mutex<ConsoleManager> = Mutex::new(ConsoleManager::new());
+static KK_: Mutex<ConsoleManager> = Mutex::new(ConsoleManager::new());
 
 
-pub fn ghy(fk: u64) -> Option<spin::Aki<'static, ConsoleManager>> {
-    let aas = JS_.lock();
-    Some(aas)
+pub fn get_console(vm_id: u64) -> Option<spin::MutexGuard<'static, ConsoleManager>> {
+    let ng = KK_.lock();
+    Some(ng)
 }
 
 
-pub fn fgb(fk: u64, j: &str) -> usize {
-    JS_.lock().fgb(fk, j)
+pub fn create_console(vm_id: u64, name: &str) -> usize {
+    KK_.lock().create_console(vm_id, name)
 }
 
 
-pub fn write_char(bjq: usize, bm: char) {
-    let mut aas = JS_.lock();
-    if bjq < aas.byx.len() {
-        aas.byx[bjq].cco(bm as u8);
+pub fn write_char(console_id: usize, ch: char) {
+    let mut ng = KK_.lock();
+    if console_id < ng.consoles.len() {
+        ng.consoles[console_id].write_byte(ch as u8);
     }
 }
 
 
-pub fn oac(fk: u64, port: u16, rm: bool, bn: u8) -> u8 {
-    let mut aas = JS_.lock();
+pub fn idg(vm_id: u64, port: u16, is_write: bool, value: u8) -> u8 {
+    let mut ng = KK_.lock();
     
-    if let Some(console) = aas.ghy(fk) {
+    if let Some(console) = ng.get_console(vm_id) {
         match port {
             
             0x3F8 => {
-                if rm {
-                    console.cco(bn);
+                if is_write {
+                    console.write_byte(value);
                     0
                 } else {
-                    console.dlb().unwrap_or(0)
+                    console.read_byte().unwrap_or(0)
                 }
             }
             
             0x3FD => {
                 let mut status = 0x60; 
-                if console.hmo() {
+                if console.has_input() {
                     status |= 0x01; 
                 }
                 status
             }
             
             0xE9 => {
-                if rm {
-                    console.cco(bn);
+                if is_write {
+                    console.write_byte(value);
                 }
                 0
             }
@@ -207,18 +207,18 @@ pub fn oac(fk: u64, port: u16, rm: bool, bn: u8) -> u8 {
 }
 
 
-pub fn hoa(fk: u64, f: &[u8]) {
-    let mut aas = JS_.lock();
-    if let Some(console) = aas.ghy(fk) {
-        console.hoa(f);
+pub fn inject_input(vm_id: u64, data: &[u8]) {
+    let mut ng = KK_.lock();
+    if let Some(console) = ng.get_console(vm_id) {
+        console.inject_input(data);
     }
 }
 
 
-pub fn teh(fk: u64) -> String {
-    let mut aas = JS_.lock();
-    if let Some(console) = aas.ghy(fk) {
-        console.saz()
+pub fn mdo(vm_id: u64) -> String {
+    let mut ng = KK_.lock();
+    if let Some(console) = ng.get_console(vm_id) {
+        console.drain_output_string()
     } else {
         String::new()
     }

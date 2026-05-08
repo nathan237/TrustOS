@@ -14,7 +14,7 @@ pub mod syscall_arch;
 
 
 #[inline(always)]
-pub fn bhd() {
+pub fn acb() {
     unsafe {
         core::arch::asm!("wfi", options(nomem, nostack, preserves_flags));
     }

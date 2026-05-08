@@ -12,6 +12,8 @@
 
 
 
+pub mod netconsole;
+
 use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::format;
@@ -23,23 +25,23 @@ use spin::Mutex;
 
 
 
-static AYV_: AtomicU8 = AtomicU8::new(0);
+static BAW_: AtomicU8 = AtomicU8::new(0);
 
 
 
-pub fn jjr(aj: u8) {
-    AYV_.store(aj, Ordering::Relaxed);
+pub fn ewx(code: u8) {
+    BAW_.store(code, Ordering::Relaxed);
     #[cfg(target_arch = "x86_64")]
     unsafe {
-        core::arch::asm!("out dx, al", in("dx") 0x80u16, in("al") aj, options(nostack, preserves_flags));
+        core::arch::asm!("out dx, al", in("dx") 0x80u16, in("al") code, options(nostack, preserves_flags));
         
-        core::arch::asm!("out dx, al", in("dx") 0xE9u16, in("al") aj, options(nostack, preserves_flags));
+        core::arch::asm!("out dx, al", in("dx") 0xE9u16, in("al") code, options(nostack, preserves_flags));
     }
 }
 
 
-pub fn oie() -> u8 {
-    AYV_.load(Ordering::Relaxed)
+pub fn ijk() -> u8 {
+    BAW_.load(Ordering::Relaxed)
 }
 
 
@@ -47,76 +49,76 @@ pub fn oie() -> u8 {
 
 
 
-const AEV_: usize = 32;
+const AGP_: usize = 32;
 
 
 struct CheckpointLog {
-    ch: [(u64, u8, &'static str); AEV_],
-    az: usize,
+    entries: [(u64, u8, &'static str); AGP_],
+    count: usize,
 }
 
 impl CheckpointLog {
     const fn new() -> Self {
         Self {
-            ch: [(0, 0, ""); AEV_],
-            az: 0,
+            entries: [(0, 0, ""); AGP_],
+            count: 0,
         }
     }
-    fn push(&mut self, bt: (u64, u8, &'static str)) {
-        if self.az < AEV_ {
-            self.ch[self.az] = bt;
-            self.az += 1;
+    fn push(&mut self, entry: (u64, u8, &'static str)) {
+        if self.count < AGP_ {
+            self.entries[self.count] = entry;
+            self.count += 1;
         }
     }
-    fn iter(&self) -> core::slice::Dah<'_, (u64, u8, &'static str)> {
-        self.ch[..self.az].iter()
+    fn iter(&self) -> core::slice::Iter<'_, (u64, u8, &'static str)> {
+        self.entries[..self.count].iter()
     }
     fn is_empty(&self) -> bool {
-        self.az == 0
+        self.count == 0
     }
-    fn gai(&self) -> &[(u64, u8, &'static str)] {
-        &self.ch[..self.az]
+    fn as_slice(&self) -> &[(u64, u8, &'static str)] {
+        &self.entries[..self.count]
     }
 }
 
-static Apo: Mutex<CheckpointLog> = Mutex::new(CheckpointLog::new());
+static Re: Mutex<CheckpointLog> = Mutex::new(CheckpointLog::new());
 
 
-pub const CKP_:     u8 = 0x10;
-pub const EAU_:     u8 = 0x11;
-pub const CKK_:             u8 = 0x20;
-pub const CKL_:             u8 = 0x21;
-pub const CKI_:      u8 = 0x22;
-pub const CKG_:            u8 = 0x30;
-pub const CKH_:            u8 = 0x31;
-pub const CKR_:             u8 = 0x32;
-pub const EAW_:          u8 = 0x40;
-pub const EAV_:            u8 = 0x41;
-pub const EAX_:          u8 = 0x42;
-pub const CKN_:             u8 = 0x50;
-pub const CKJ_:            u8 = 0x51;
-pub const CKM_:         u8 = 0x60;
-pub const CKS_:             u8 = 0x70;
-pub const CKO_:         u8 = 0x80;
-pub const CKQ_:     u8 = 0xAA;
-pub const BDL_:           u8 = 0xFF;
+pub const CNY_:     u8 = 0x10;
+pub const EEL_:     u8 = 0x11;
+pub const CNT_:             u8 = 0x20;
+pub const CNU_:             u8 = 0x21;
+pub const CNR_:      u8 = 0x22;
+pub const CNP_:            u8 = 0x30;
+pub const CNQ_:            u8 = 0x31;
+pub const COA_:             u8 = 0x32;
+pub const EEN_:          u8 = 0x40;
+pub const EEM_:            u8 = 0x41;
+pub const EEO_:          u8 = 0x42;
+pub const CNW_:             u8 = 0x50;
+pub const CNS_:            u8 = 0x51;
+pub const CNV_:         u8 = 0x60;
+pub const COB_:             u8 = 0x70;
+pub const CNX_:         u8 = 0x80;
+pub const CNZ_:     u8 = 0xAA;
+pub const BFO_:           u8 = 0xFF;
 
 
-pub fn cpc(aj: u8, j: &'static str) {
-    jjr(aj);
-    let tsc = ow();
-    crate::serial_println!("[POST 0x{:02X}] {}", aj, j);
+pub fn awn(code: u8, name: &'static str) {
+    ewx(code);
+    let tsc = ey();
+    crate::serial_println!("[POST 0x{:02X}] {}", code, name);
 
     
-    if let Some(mut log) = Apo.try_lock() {
-        log.push((tsc, aj, j));
+    if let Some(mut log) = Re.try_lock() {
+        log.push((tsc, code, name));
     }
 }
 
 
-pub fn nxv() -> Vec<(u64, u8, &'static str)> {
-    let log = Apo.lock();
-    log.gai().ip()
+pub fn fyl() -> Vec<(u64, u8, &'static str)> {
+    let log = Re.lock();
+    log.as_slice().to_vec()
 }
 
 
@@ -125,38 +127,38 @@ pub fn nxv() -> Vec<(u64, u8, &'static str)> {
 
 
 #[cfg(target_arch = "x86_64")]
-pub fn hab(ard: u32, uk: u32) {
-    if ard == 0 { return; }
-    let fgv = 1193180u32 / ard;
+pub fn diw(we: u32, duration_ms: u32) {
+    if we == 0 { return; }
+    let divisor = 1193180u32 / we;
 
     unsafe {
         
         core::arch::asm!("out dx, al", in("dx") 0x43u16, in("al") 0xB6u8, options(nostack, preserves_flags));
-        core::arch::asm!("out dx, al", in("dx") 0x42u16, in("al") (fgv & 0xFF) as u8, options(nostack, preserves_flags));
-        core::arch::asm!("out dx, al", in("dx") 0x42u16, in("al") ((fgv >> 8) & 0xFF) as u8, options(nostack, preserves_flags));
+        core::arch::asm!("out dx, al", in("dx") 0x42u16, in("al") (divisor & 0xFF) as u8, options(nostack, preserves_flags));
+        core::arch::asm!("out dx, al", in("dx") 0x42u16, in("al") ((divisor >> 8) & 0xFF) as u8, options(nostack, preserves_flags));
 
         
-        let ap: u8;
-        core::arch::asm!("in al, dx", in("dx") 0x61u16, bd("al") ap, options(nostack, preserves_flags));
-        let ea = ap | 0x03;
-        core::arch::asm!("out dx, al", in("dx") 0x61u16, in("al") ea, options(nostack, preserves_flags));
+        let val: u8;
+        core::arch::asm!("in al, dx", in("dx") 0x61u16, out("al") val, options(nostack, preserves_flags));
+        let on = val | 0x03;
+        core::arch::asm!("out dx, al", in("dx") 0x61u16, in("al") on, options(nostack, preserves_flags));
 
         
-        nat(uk);
+        cuo(duration_ms);
 
         
-        let dz = ap & !0x03;
-        core::arch::asm!("out dx, al", in("dx") 0x61u16, in("al") dz, options(nostack, preserves_flags));
+        let off = val & !0x03;
+        core::arch::asm!("out dx, al", in("dx") 0x61u16, in("al") off, options(nostack, preserves_flags));
     }
 }
 
 #[cfg(not(target_arch = "x86_64"))]
-pub fn hab(xzj: u32, xyx: u32) {}
+pub fn diw(_frequency_hz: u32, _duration_ms: u32) {}
 
 
-pub fn yfs()    { hab(1000, 100); }  
-pub fn yft()  { hab(500, 200); nat(100); hab(500, 200); } 
-pub fn qoo() { hab(200, 500); } 
+pub fn pym()    { diw(1000, 100); }  
+pub fn pyn()  { diw(500, 200); cuo(100); diw(500, 200); } 
+pub fn kbb() { diw(200, 500); } 
 
 
 
@@ -165,66 +167,66 @@ pub fn qoo() { hab(200, 500); }
 
 
 #[cfg(target_arch = "x86_64")]
-pub fn pnt(lky: usize) -> Vec<(u64, u64)> {
-    let mut vj = Vec::new();
+pub fn jid(max_frames: usize) -> Vec<(u64, u64)> {
+    let mut frames = Vec::new();
     let mut rbp: u64;
     
     unsafe {
-        core::arch::asm!("mov {}, rbp", bd(reg) rbp);
+        core::arch::asm!("mov {}, rbp", out(reg) rbp);
     }
     
-    let jcb = 0xFFFF_8000_0000_0000u64; 
+    let esa = 0xFFFF_8000_0000_0000u64; 
     
-    for _ in 0..lky {
-        if rbp == 0 || rbp < jcb {
+    for _ in 0..max_frames {
+        if rbp == 0 || rbp < esa {
             break;
         }
         
         
-        let nvz = rbp as *const u64;
+        let hzy = rbp as *const u64;
         
         
-        let dbg = unsafe { core::ptr::read_volatile(nvz.add(1)) };
-        let oxk = unsafe { core::ptr::read_volatile(nvz) };
+        let bdk = unsafe { core::ptr::read_volatile(hzy.add(1)) };
+        let iwf = unsafe { core::ptr::read_volatile(hzy) };
         
-        if dbg == 0 {
+        if bdk == 0 {
             break;
         }
         
-        vj.push((dbg, rbp));
+        frames.push((bdk, rbp));
         
         
-        if oxk <= rbp {
+        if iwf <= rbp {
             break;
         }
-        rbp = oxk;
+        rbp = iwf;
     }
     
-    vj
+    frames
 }
 
 #[cfg(not(target_arch = "x86_64"))]
-pub fn pnt(yau: usize) -> Vec<(u64, u64)> {
+pub fn jid(_max_frames: usize) -> Vec<(u64, u64)> {
     Vec::new()
 }
 
 
-pub fn ivi(lky: usize) -> Vec<String> {
-    let mut ak = Vec::new();
-    ak.push(String::from("  Stack Backtrace:"));
-    ak.push(String::from("  ─────────────────────────────────────────────"));
+pub fn enf(max_frames: usize) -> Vec<String> {
+    let mut lines = Vec::new();
+    lines.push(String::from("  Stack Backtrace:"));
+    lines.push(String::from("  ─────────────────────────────────────────────"));
     
-    let vj = pnt(lky);
-    if vj.is_empty() {
-        ak.push(String::from("  <no frames — frame pointers may be omitted>"));
-        ak.push(String::from("  Hint: build with RUSTFLAGS=\"-Cforce-frame-pointers=yes\""));
+    let frames = jid(max_frames);
+    if frames.is_empty() {
+        lines.push(String::from("  <no frames — frame pointers may be omitted>"));
+        lines.push(String::from("  Hint: build with RUSTFLAGS=\"-Cforce-frame-pointers=yes\""));
     } else {
-        for (a, (dbg, rbp)) in vj.iter().cf() {
-            ak.push(format!("  #{:>2}: 0x{:016x}  (rbp=0x{:016x})", a, dbg, rbp));
+        for (i, (bdk, rbp)) in frames.iter().enumerate() {
+            lines.push(format!("  #{:>2}: 0x{:016x}  (rbp=0x{:016x})", i, bdk, rbp));
         }
     }
     
-    ak
+    lines
 }
 
 
@@ -233,64 +235,64 @@ pub fn ivi(lky: usize) -> Vec<String> {
 
 
 #[cfg(target_arch = "x86_64")]
-pub fn ivz() -> Vec<String> {
-    let mut ak = Vec::new();
+pub fn enn() -> Vec<String> {
+    let mut lines = Vec::new();
     
     let rax: u64; let rcx: u64; let rdx: u64;
     let rsi: u64; let rdi: u64; let rsp: u64; let rbp: u64;
     let r8: u64;  let r9: u64;  let r10: u64; let r11: u64;
     let r12: u64; let r13: u64; let r14: u64; let r15: u64;
     let rflags: u64;
-    let akb: u64; let ngx: u64; let jm: u64; let cr4: u64;
-    let aap: u16; let bjw: u16; let cqf: u16; let fs: u16; let ckx: u16; let rv: u16;
+    let cr0: u64; let cr2: u64; let cr3: u64; let cr4: u64;
+    let cs: u16; let ds: u16; let es: u16; let fs: u16; let gs: u16; let ss: u16;
     
     unsafe {
-        core::arch::asm!("mov {}, rax", bd(reg) rax);
+        core::arch::asm!("mov {}, rax", out(reg) rax);
         
-        core::arch::asm!("mov {}, rcx", bd(reg) rcx);
-        core::arch::asm!("mov {}, rdx", bd(reg) rdx);
-        core::arch::asm!("mov {}, rsi", bd(reg) rsi);
-        core::arch::asm!("mov {}, rdi", bd(reg) rdi);
-        core::arch::asm!("mov {}, rsp", bd(reg) rsp);
-        core::arch::asm!("mov {}, rbp", bd(reg) rbp);
-        core::arch::asm!("mov {}, r8",  bd(reg) r8);
-        core::arch::asm!("mov {}, r9",  bd(reg) r9);
-        core::arch::asm!("mov {}, r10", bd(reg) r10);
-        core::arch::asm!("mov {}, r11", bd(reg) r11);
-        core::arch::asm!("mov {}, r12", bd(reg) r12);
-        core::arch::asm!("mov {}, r13", bd(reg) r13);
-        core::arch::asm!("mov {}, r14", bd(reg) r14);
-        core::arch::asm!("mov {}, r15", bd(reg) r15);
-        core::arch::asm!("pushfq; pop {}", bd(reg) rflags);
-        core::arch::asm!("mov {}, cr0", bd(reg) akb);
-        core::arch::asm!("mov {}, cr2", bd(reg) ngx);
-        core::arch::asm!("mov {}, cr3", bd(reg) jm);
-        core::arch::asm!("mov {}, cr4", bd(reg) cr4);
-        core::arch::asm!("mov {:x}, cs", bd(reg) aap);
-        core::arch::asm!("mov {:x}, ds", bd(reg) bjw);
-        core::arch::asm!("mov {:x}, es", bd(reg) cqf);
-        core::arch::asm!("mov {:x}, fs", bd(reg) fs);
-        core::arch::asm!("mov {:x}, gs", bd(reg) ckx);
-        core::arch::asm!("mov {:x}, ss", bd(reg) rv);
+        core::arch::asm!("mov {}, rcx", out(reg) rcx);
+        core::arch::asm!("mov {}, rdx", out(reg) rdx);
+        core::arch::asm!("mov {}, rsi", out(reg) rsi);
+        core::arch::asm!("mov {}, rdi", out(reg) rdi);
+        core::arch::asm!("mov {}, rsp", out(reg) rsp);
+        core::arch::asm!("mov {}, rbp", out(reg) rbp);
+        core::arch::asm!("mov {}, r8",  out(reg) r8);
+        core::arch::asm!("mov {}, r9",  out(reg) r9);
+        core::arch::asm!("mov {}, r10", out(reg) r10);
+        core::arch::asm!("mov {}, r11", out(reg) r11);
+        core::arch::asm!("mov {}, r12", out(reg) r12);
+        core::arch::asm!("mov {}, r13", out(reg) r13);
+        core::arch::asm!("mov {}, r14", out(reg) r14);
+        core::arch::asm!("mov {}, r15", out(reg) r15);
+        core::arch::asm!("pushfq; pop {}", out(reg) rflags);
+        core::arch::asm!("mov {}, cr0", out(reg) cr0);
+        core::arch::asm!("mov {}, cr2", out(reg) cr2);
+        core::arch::asm!("mov {}, cr3", out(reg) cr3);
+        core::arch::asm!("mov {}, cr4", out(reg) cr4);
+        core::arch::asm!("mov {:x}, cs", out(reg) cs);
+        core::arch::asm!("mov {:x}, ds", out(reg) ds);
+        core::arch::asm!("mov {:x}, es", out(reg) es);
+        core::arch::asm!("mov {:x}, fs", out(reg) fs);
+        core::arch::asm!("mov {:x}, gs", out(reg) gs);
+        core::arch::asm!("mov {:x}, ss", out(reg) ss);
     }
     
-    ak.push(String::from("  ╔══════════════════════════════════════════════════╗"));
-    ak.push(String::from("  ║         FULL CPU STATE DUMP                     ║"));
-    ak.push(String::from("  ╚══════════════════════════════════════════════════╝"));
+    lines.push(String::from("  ╔══════════════════════════════════════════════════╗"));
+    lines.push(String::from("  ║         FULL CPU STATE DUMP                     ║"));
+    lines.push(String::from("  ╚══════════════════════════════════════════════════╝"));
     
-    ak.push(String::from("  ── General Purpose Registers ──"));
-    ak.push(format!("  RAX = 0x{:016x}   RBX = <LLVM reserved>", rax));
-    ak.push(format!("  RCX = 0x{:016x}   RDX = 0x{:016x}", rcx, rdx));
-    ak.push(format!("  RSI = 0x{:016x}   RDI = 0x{:016x}", rsi, rdi));
-    ak.push(format!("  RSP = 0x{:016x}   RBP = 0x{:016x}", rsp, rbp));
-    ak.push(format!("  R8  = 0x{:016x}   R9  = 0x{:016x}", r8, r9));
-    ak.push(format!("  R10 = 0x{:016x}   R11 = 0x{:016x}", r10, r11));
-    ak.push(format!("  R12 = 0x{:016x}   R13 = 0x{:016x}", r12, r13));
-    ak.push(format!("  R14 = 0x{:016x}   R15 = 0x{:016x}", r14, r15));
+    lines.push(String::from("  ── General Purpose Registers ──"));
+    lines.push(format!("  RAX = 0x{:016x}   RBX = <LLVM reserved>", rax));
+    lines.push(format!("  RCX = 0x{:016x}   RDX = 0x{:016x}", rcx, rdx));
+    lines.push(format!("  RSI = 0x{:016x}   RDI = 0x{:016x}", rsi, rdi));
+    lines.push(format!("  RSP = 0x{:016x}   RBP = 0x{:016x}", rsp, rbp));
+    lines.push(format!("  R8  = 0x{:016x}   R9  = 0x{:016x}", r8, r9));
+    lines.push(format!("  R10 = 0x{:016x}   R11 = 0x{:016x}", r10, r11));
+    lines.push(format!("  R12 = 0x{:016x}   R13 = 0x{:016x}", r12, r13));
+    lines.push(format!("  R14 = 0x{:016x}   R15 = 0x{:016x}", r14, r15));
     
-    ak.push(String::from(""));
-    ak.push(String::from("  ── RFLAGS ──"));
-    ak.push(format!("  RFLAGS = 0x{:016x}", rflags));
+    lines.push(String::from(""));
+    lines.push(String::from("  ── RFLAGS ──"));
+    lines.push(format!("  RFLAGS = 0x{:016x}", rflags));
     let mut flags = Vec::new();
     if rflags & (1 << 0) != 0 { flags.push("CF"); }
     if rflags & (1 << 2) != 0 { flags.push("PF"); }
@@ -302,24 +304,24 @@ pub fn ivz() -> Vec<String> {
     if rflags & (1 << 11) != 0 { flags.push("OF"); }
     if rflags & (1 << 14) != 0 { flags.push("NT"); }
     if rflags & (1 << 21) != 0 { flags.push("ID"); }
-    ak.push(format!("           [{}]", flags.rr(" | ")));
+    lines.push(format!("           [{}]", flags.join(" | ")));
     
-    ak.push(String::from(""));
-    ak.push(String::from("  ── Control Registers ──"));
-    ak.push(format!("  CR0 = 0x{:016x}", akb));
-    ak.push(format!("  CR2 = 0x{:016x}  (last page fault addr)", ngx));
-    ak.push(format!("  CR3 = 0x{:016x}  (page table root)", jm));
-    ak.push(format!("  CR4 = 0x{:016x}", cr4));
+    lines.push(String::from(""));
+    lines.push(String::from("  ── Control Registers ──"));
+    lines.push(format!("  CR0 = 0x{:016x}", cr0));
+    lines.push(format!("  CR2 = 0x{:016x}  (last page fault addr)", cr2));
+    lines.push(format!("  CR3 = 0x{:016x}  (page table root)", cr3));
+    lines.push(format!("  CR4 = 0x{:016x}", cr4));
     
-    ak.push(String::from(""));
-    ak.push(String::from("  ── Segment Registers ──"));
-    ak.push(format!("  CS=0x{:04x}  DS=0x{:04x}  ES=0x{:04x}  FS=0x{:04x}  GS=0x{:04x}  SS=0x{:04x}", aap, bjw, cqf, fs, ckx, rv));
+    lines.push(String::from(""));
+    lines.push(String::from("  ── Segment Registers ──"));
+    lines.push(format!("  CS=0x{:04x}  DS=0x{:04x}  ES=0x{:04x}  FS=0x{:04x}  GS=0x{:04x}  SS=0x{:04x}", cs, ds, es, fs, gs, ss));
     
     
-    ak.push(String::from(""));
-    ak.push(String::from("  ── Model Specific Registers ──"));
+    lines.push(String::from(""));
+    lines.push(String::from("  ── Model Specific Registers ──"));
     
-    let uqk: &[(u32, &str)] = &[
+    let ngw: &[(u32, &str)] = &[
         (0xC000_0080, "IA32_EFER"),
         (0xC000_0081, "IA32_STAR"),
         (0xC000_0082, "IA32_LSTAR"),
@@ -336,18 +338,18 @@ pub fn ivz() -> Vec<String> {
         (0x0000_0277, "IA32_PAT"),
     ];
     
-    for &(lmz, j) in uqk {
-        match fsg(lmz) {
-            Some(ap) => ak.push(format!("  0x{:08X} ({:<24}) = 0x{:016x}", lmz, j, ap)),
-            None      => ak.push(format!("  0x{:08X} ({:<24}) = <GPF — not available>", lmz, j)),
+    for &(msr_id, name) in ngw {
+        match rf(msr_id) {
+            Some(val) => lines.push(format!("  0x{:08X} ({:<24}) = 0x{:016x}", msr_id, name, val)),
+            None      => lines.push(format!("  0x{:08X} ({:<24}) = <GPF — not available>", msr_id, name)),
         }
     }
     
-    ak
+    lines
 }
 
 #[cfg(not(target_arch = "x86_64"))]
-pub fn ivz() -> Vec<String> {
+pub fn enn() -> Vec<String> {
     vec![String::from("  Full CPU dump only available on x86_64")]
 }
 
@@ -357,58 +359,58 @@ pub fn ivz() -> Vec<String> {
 
 
 #[cfg(target_arch = "x86_64")]
-pub fn cfn(port: u16) -> u8 {
-    let ap: u8;
-    unsafe { core::arch::asm!("in al, dx", in("dx") port, bd("al") ap, options(nostack, preserves_flags)); }
-    ap
+pub fn om(port: u16) -> u8 {
+    let val: u8;
+    unsafe { core::arch::asm!("in al, dx", in("dx") port, out("al") val, options(nostack, preserves_flags)); }
+    val
 }
 
 
 #[cfg(target_arch = "x86_64")]
-pub fn jar(port: u16) -> u16 {
-    let ap: u16;
-    unsafe { core::arch::asm!("in ax, dx", in("dx") port, bd("ax") ap, options(nostack, preserves_flags)); }
-    ap
+pub fn eqz(port: u16) -> u16 {
+    let val: u16;
+    unsafe { core::arch::asm!("in ax, dx", in("dx") port, out("ax") val, options(nostack, preserves_flags)); }
+    val
 }
 
 
 #[cfg(target_arch = "x86_64")]
-pub fn jac(port: u16) -> u32 {
-    let ap: u32;
-    unsafe { core::arch::asm!("in eax, dx", in("dx") port, bd("eax") ap, options(nostack, preserves_flags)); }
-    ap
+pub fn eqp(port: u16) -> u32 {
+    let val: u32;
+    unsafe { core::arch::asm!("in eax, dx", in("dx") port, out("eax") val, options(nostack, preserves_flags)); }
+    val
 }
 
 
 #[cfg(target_arch = "x86_64")]
-pub fn bkt(port: u16, ap: u8) {
-    unsafe { core::arch::asm!("out dx, al", in("dx") port, in("al") ap, options(nostack, preserves_flags)); }
+pub fn vp(port: u16, val: u8) {
+    unsafe { core::arch::asm!("out dx, al", in("dx") port, in("al") val, options(nostack, preserves_flags)); }
 }
 
 
 #[cfg(target_arch = "x86_64")]
-pub fn jie(port: u16, ap: u16) {
-    unsafe { core::arch::asm!("out dx, ax", in("dx") port, in("ax") ap, options(nostack, preserves_flags)); }
+pub fn evw(port: u16, val: u16) {
+    unsafe { core::arch::asm!("out dx, ax", in("dx") port, in("ax") val, options(nostack, preserves_flags)); }
 }
 
 
 #[cfg(target_arch = "x86_64")]
-pub fn jic(port: u16, ap: u32) {
-    unsafe { core::arch::asm!("out dx, eax", in("dx") port, in("eax") ap, options(nostack, preserves_flags)); }
+pub fn evv(port: u16, val: u32) {
+    unsafe { core::arch::asm!("out dx, eax", in("dx") port, in("eax") val, options(nostack, preserves_flags)); }
 }
 
 #[cfg(not(target_arch = "x86_64"))]
-pub fn cfn(gxk: u16) -> u8 { 0 }
+pub fn om(_port: u16) -> u8 { 0 }
 #[cfg(not(target_arch = "x86_64"))]
-pub fn jar(gxk: u16) -> u16 { 0 }
+pub fn eqz(_port: u16) -> u16 { 0 }
 #[cfg(not(target_arch = "x86_64"))]
-pub fn jac(gxk: u16) -> u32 { 0 }
+pub fn eqp(_port: u16) -> u32 { 0 }
 #[cfg(not(target_arch = "x86_64"))]
-pub fn bkt(gxk: u16, msx: u8) {}
+pub fn vp(_port: u16, _val: u8) {}
 #[cfg(not(target_arch = "x86_64"))]
-pub fn jie(gxk: u16, msx: u16) {}
+pub fn evw(_port: u16, _val: u16) {}
 #[cfg(not(target_arch = "x86_64"))]
-pub fn jic(gxk: u16, msx: u32) {}
+pub fn evv(_port: u16, _val: u32) {}
 
 
 
@@ -416,46 +418,46 @@ pub fn jic(gxk: u16, msx: u32) {}
 
 
 #[cfg(target_arch = "x86_64")]
-pub fn fsg(msr: u32) -> Option<u64> {
+pub fn rf(msr: u32) -> Option<u64> {
     
     
-    let hh: u32;
-    let gd: u32;
+    let lo: u32;
+    let hi: u32;
     unsafe {
         core::arch::asm!(
             "rdmsr",
             in("ecx") msr,
-            bd("eax") hh,
-            bd("edx") gd,
+            out("eax") lo,
+            out("edx") hi,
             options(nostack, preserves_flags),
         );
     }
-    Some(((gd as u64) << 32) | (hh as u64))
+    Some(((hi as u64) << 32) | (lo as u64))
 }
 
 #[cfg(not(target_arch = "x86_64"))]
-pub fn fsg(qde: u32) -> Option<u64> {
+pub fn rf(_msr: u32) -> Option<u64> {
     None
 }
 
 
 #[cfg(target_arch = "x86_64")]
-pub fn fbs(msr: u32, bn: u64) {
-    let hh = bn as u32;
-    let gd = (bn >> 32) as u32;
+pub fn cfm(msr: u32, value: u64) {
+    let lo = value as u32;
+    let hi = (value >> 32) as u32;
     unsafe {
         core::arch::asm!(
             "wrmsr",
             in("ecx") msr,
-            in("eax") hh,
-            in("edx") gd,
+            in("eax") lo,
+            in("edx") hi,
             options(nostack, preserves_flags),
         );
     }
 }
 
 #[cfg(not(target_arch = "x86_64"))]
-pub fn fbs(qde: u32, msy: u64) {}
+pub fn cfm(_msr: u32, hdm: u64) {}
 
 
 
@@ -463,7 +465,7 @@ pub fn fbs(qde: u32, msy: u64) {}
 
 
 #[cfg(target_arch = "x86_64")]
-pub fn ozl(awa: u32, bxj: u32) -> (u32, u32, u32, u32) {
+pub fn ixx(leaf: u32, subleaf: u32) -> (u32, u32, u32, u32) {
     let eax: u32;
     let ebx: u32;
     let ecx: u32;
@@ -475,67 +477,67 @@ pub fn ozl(awa: u32, bxj: u32) -> (u32, u32, u32, u32) {
             "cpuid",
             "mov {ebx_out:e}, ebx",
             "pop rbx",
-            inout("eax") awa => eax,
-            inout("ecx") bxj => ecx,
-            ish = bd(reg) ebx,
-            bd("edx") edx,
+            inout("eax") leaf => eax,
+            inout("ecx") subleaf => ecx,
+            ebx_out = out(reg) ebx,
+            out("edx") edx,
         );
     }
     (eax, ebx, ecx, edx)
 }
 
 #[cfg(not(target_arch = "x86_64"))]
-pub fn ozl(yaj: u32, yde: u32) -> (u32, u32, u32, u32) {
+pub fn ixx(_leaf: u32, _subleaf: u32) -> (u32, u32, u32, u32) {
     (0, 0, 0, 0)
 }
 
 
-pub fn ghj(awa: u32, bxj: u32) -> Vec<String> {
-    let mut ak = Vec::new();
-    let (eax, ebx, ecx, edx) = ozl(awa, bxj);
-    ak.push(format!("  CPUID leaf=0x{:08x} subleaf=0x{:08x}", awa, bxj));
-    ak.push(format!("  EAX = 0x{:08x}  ({:032b})", eax, eax));
-    ak.push(format!("  EBX = 0x{:08x}  ({:032b})", ebx, ebx));
-    ak.push(format!("  ECX = 0x{:08x}  ({:032b})", ecx, ecx));
-    ak.push(format!("  EDX = 0x{:08x}  ({:032b})", edx, edx));
+pub fn cya(leaf: u32, subleaf: u32) -> Vec<String> {
+    let mut lines = Vec::new();
+    let (eax, ebx, ecx, edx) = ixx(leaf, subleaf);
+    lines.push(format!("  CPUID leaf=0x{:08x} subleaf=0x{:08x}", leaf, subleaf));
+    lines.push(format!("  EAX = 0x{:08x}  ({:032b})", eax, eax));
+    lines.push(format!("  EBX = 0x{:08x}  ({:032b})", ebx, ebx));
+    lines.push(format!("  ECX = 0x{:08x}  ({:032b})", ecx, ecx));
+    lines.push(format!("  EDX = 0x{:08x}  ({:032b})", edx, edx));
     
     
-    match awa {
+    match leaf {
         0 => {
             
-            let acs = [
-                ebx.ho(),
-                edx.ho(),
-                ecx.ho(),
+            let vendor = [
+                ebx.to_le_bytes(),
+                edx.to_le_bytes(),
+                ecx.to_le_bytes(),
             ];
-            let gvz: Vec<u8> = acs.iter().iva(|o| o.iter().hu()).collect();
-            if let Ok(e) = core::str::jg(&gvz) {
-                ak.push(format!("  → Vendor: \"{}\"  Max leaf: {}", e, eax));
+            let bpw: Vec<u8> = vendor.iter().flat_map(|b| b.iter().copied()).collect();
+            if let Ok(j) = core::str::from_utf8(&bpw) {
+                lines.push(format!("  → Vendor: \"{}\"  Max leaf: {}", j, eax));
             }
         }
         1 => {
-            let bxi = eax & 0xF;
+            let stepping = eax & 0xF;
             let model = ((eax >> 4) & 0xF) | (((eax >> 16) & 0xF) << 4);
             let family = ((eax >> 8) & 0xF) + ((eax >> 20) & 0xFF);
-            ak.push(format!("  → Family={} Model={} Stepping={}", family, model, bxi));
-            ak.push(format!("  → Features: SSE3={} PCLMUL={} SSSE3={} SSE4.1={} SSE4.2={} AES={} AVX={}",
+            lines.push(format!("  → Family={} Model={} Stepping={}", family, model, stepping));
+            lines.push(format!("  → Features: SSE3={} PCLMUL={} SSSE3={} SSE4.1={} SSE4.2={} AES={} AVX={}",
                 ecx & 1, (ecx >> 1) & 1, (ecx >> 9) & 1, (ecx >> 19) & 1, (ecx >> 20) & 1, (ecx >> 25) & 1, (ecx >> 28) & 1));
-            ak.push(format!("  → Features: FPU={} TSC={} MSR={} APIC={} SSE={} SSE2={} HTT={}",
+            lines.push(format!("  → Features: FPU={} TSC={} MSR={} APIC={} SSE={} SSE2={} HTT={}",
                 edx & 1, (edx >> 4) & 1, (edx >> 5) & 1, (edx >> 9) & 1, (edx >> 25) & 1, (edx >> 26) & 1, (edx >> 28) & 1));
         }
         0x8000_0002..=0x8000_0004 => {
             
-            let bf: Vec<u8> = [eax, ebx, ecx, edx].iter()
-                .iva(|p| p.ho())
+            let bytes: Vec<u8> = [eax, ebx, ecx, edx].iter()
+                .flat_map(|v| v.to_le_bytes())
                 .collect();
-            if let Ok(e) = core::str::jg(&bf) {
-                ak.push(format!("  → Brand: \"{}\"", e.bdd('\0')));
+            if let Ok(j) = core::str::from_utf8(&bytes) {
+                lines.push(format!("  → Brand: \"{}\"", j.trim_end_matches('\0')));
             }
         }
         _ => {}
     }
     
-    ak
+    lines
 }
 
 
@@ -543,8 +545,8 @@ pub fn ghj(awa: u32, bxj: u32) -> Vec<String> {
 
 
 
-pub fn vbm() {
-    jjr(BDL_);
+pub fn npv() {
+    ewx(BFO_);
     
     crate::serial_println!("╔════════════════════════════════════════════════════════╗");
     crate::serial_println!("║              TRUSTOS CRASH DUMP                       ║");
@@ -552,13 +554,13 @@ pub fn vbm() {
     
     
     crate::serial_println!("── CPU Registers ──");
-    for line in &ivz() {
+    for line in &enn() {
         crate::serial_println!("{}", line);
     }
     
     
     crate::serial_println!("");
-    for line in &ivi(32) {
+    for line in &enf(32) {
         crate::serial_println!("{}", line);
     }
     
@@ -566,52 +568,52 @@ pub fn vbm() {
     #[cfg(target_arch = "x86_64")]
     {
         let rsp: u64;
-        unsafe { core::arch::asm!("mov {}, rsp", bd(reg) rsp); }
+        unsafe { core::arch::asm!("mov {}, rsp", out(reg) rsp); }
         crate::serial_println!("");
         crate::serial_println!("  ── Stack Dump (RSP=0x{:016x}, 256 bytes) ──", rsp);
-        let ahu = rsp as *const u8;
-        for br in 0..16 {
-            let l = br * 16;
-            let ag = rsp + l as u64;
-            let mut nu = String::new();
+        let stack_ptr = rsp as *const u8;
+        for row in 0..16 {
+            let offset = row * 16;
+            let addr = rsp + offset as u64;
+            let mut ga = String::new();
             let mut ascii = String::new();
-            for bj in 0..16 {
-                let hf = unsafe { core::ptr::read_volatile(ahu.add(l + bj)) };
-                nu.t(&format!("{:02x} ", hf));
-                if hf >= 0x20 && hf < 0x7f {
-                    ascii.push(hf as char);
+            for col in 0..16 {
+                let byte = unsafe { core::ptr::read_volatile(stack_ptr.add(offset + col)) };
+                ga.push_str(&format!("{:02x} ", byte));
+                if byte >= 0x20 && byte < 0x7f {
+                    ascii.push(byte as char);
                 } else {
                     ascii.push('.');
                 }
             }
-            crate::serial_println!("  {:016x}: {} |{}|", ag, nu, ascii);
+            crate::serial_println!("  {:016x}: {} |{}|", addr, ga, ascii);
         }
     }
     
     
     crate::serial_println!("");
     crate::serial_println!("  ── Boot Checkpoints ──");
-    if let Some(log) = Apo.try_lock() {
+    if let Some(log) = Re.try_lock() {
         if log.is_empty() {
             crate::serial_println!("  <no checkpoints recorded>");
         }
-        for (tsc, aj, j) in log.iter() {
-            crate::serial_println!("  [TSC {:>16}] POST 0x{:02X}: {}", tsc, aj, j);
+        for (tsc, code, name) in log.iter() {
+            crate::serial_println!("  [TSC {:>16}] POST 0x{:02X}: {}", tsc, code, name);
         }
     }
     
     
     crate::serial_println!("");
     crate::serial_println!("  ── Heap State ──");
-    let cm = crate::devtools::jfu();
+    let stats = crate::devtools::dbe();
     crate::serial_println!("  allocs={}, deallocs={}, live={}, peak={}",
-        cm.cok, cm.dpr, cm.czi, cm.gpe);
+        stats.alloc_count, stats.dealloc_count, stats.live_allocs, stats.peak_heap_used);
     
     crate::serial_println!("════════════════════════════════════════════════════════════");
     crate::serial_println!("Collect this output via serial cable (115200 8N1) for analysis.");
     
     
-    qoo();
+    kbb();
 }
 
 
@@ -619,11 +621,11 @@ pub fn vbm() {
 
 
 
-pub fn yob(e: &str) {
+pub fn qei(j: &str) {
     #[cfg(target_arch = "x86_64")]
-    for hf in e.bf() {
+    for byte in j.bytes() {
         unsafe {
-            core::arch::asm!("out dx, al", in("dx") 0xE9u16, in("al") hf, options(nostack, preserves_flags));
+            core::arch::asm!("out dx, al", in("dx") 0xE9u16, in("al") byte, options(nostack, preserves_flags));
         }
     }
 }
@@ -633,25 +635,25 @@ pub fn yob(e: &str) {
 
 
 
-pub fn nvq() -> Vec<String> {
-    let mut ak = Vec::new();
-    ak.push(String::from("  Physical Memory Map (from Limine bootloader):"));
-    ak.push(String::from("  ─────────────────────────────────────────────────────────────"));
-    ak.push(format!("  {:>18}  {:>18}  {:>12}  {}", "Start", "End", "Size", "Type"));
+pub fn fxh() -> Vec<String> {
+    let mut lines = Vec::new();
+    lines.push(String::from("  Physical Memory Map (from Limine bootloader):"));
+    lines.push(String::from("  ─────────────────────────────────────────────────────────────"));
+    lines.push(format!("  {:>18}  {:>18}  {:>12}  {}", "Start", "End", "Size", "Type"));
     
     
-    let afx = crate::memory::tdz();
-    if afx.is_empty() {
-        ak.push(String::from("  <memory map not stored — add memory::store_memory_map() to boot>"));
+    let regions = crate::memory::mdl();
+    if regions.is_empty() {
+        lines.push(String::from("  <memory map not stored — add memory::store_memory_map() to boot>"));
     } else {
-        let mut pvh: u64 = 0;
-        let mut pvd: u64 = 0;
-        for (ar, go, xnp) in &afx {
-            let ci = ar + go;
-            let gs = go / 1024;
-            let bde = match xnp {
-                0 => { pvh += go; "USABLE" },
-                1 => { pvd += go; "RESERVED" },
+        let mut job: u64 = 0;
+        let mut jnx: u64 = 0;
+        for (base, length, typ) in &regions {
+            let end = base + length;
+            let size_kb = length / 1024;
+            let ws = match typ {
+                0 => { job += length; "USABLE" },
+                1 => { jnx += length; "RESERVED" },
                 2 => "ACPI RECLAIM",
                 3 => "ACPI NVS",
                 4 => "BAD MEMORY",
@@ -660,13 +662,13 @@ pub fn nvq() -> Vec<String> {
                 7 => "FRAMEBUFFER",
                 _ => "UNKNOWN",
             };
-            ak.push(format!("  0x{:016x}  0x{:016x}  {:>8} KB  {}", ar, ci, gs, bde));
+            lines.push(format!("  0x{:016x}  0x{:016x}  {:>8} KB  {}", base, end, size_kb, ws));
         }
-        ak.push(String::from("  ─────────────────────────────────────────────────────────────"));
-        ak.push(format!("  Total usable: {} MB   Reserved: {} MB", pvh / 1024 / 1024, pvd / 1024 / 1024));
+        lines.push(String::from("  ─────────────────────────────────────────────────────────────"));
+        lines.push(format!("  Total usable: {} MB   Reserved: {} MB", job / 1024 / 1024, jnx / 1024 / 1024));
     }
     
-    ak
+    lines
 }
 
 
@@ -674,137 +676,137 @@ pub fn nvq() -> Vec<String> {
 
 
 
-pub fn syw() -> Vec<String> {
-    let mut ak = Vec::new();
+pub fn mab() -> Vec<String> {
+    let mut lines = Vec::new();
     
-    ak.push(String::from("╔══════════════════════════════════════════════════════════════╗"));
-    ak.push(String::from("║           TRUSTOS HARDWARE DIAGNOSTIC REPORT                ║"));
-    ak.push(String::from("╚══════════════════════════════════════════════════════════════╝"));
-    
-    
-    ak.push(String::from(""));
-    ak.push(String::from("━━━ CPU IDENTIFICATION ━━━"));
-    
-    ak.lg(ghj(0, 0));
-    ak.push(String::from(""));
-    
-    ak.lg(ghj(1, 0));
-    ak.push(String::from(""));
-    
-    ak.lg(ghj(0x8000_0002, 0));
-    ak.lg(ghj(0x8000_0003, 0));
-    ak.lg(ghj(0x8000_0004, 0));
+    lines.push(String::from("╔══════════════════════════════════════════════════════════════╗"));
+    lines.push(String::from("║           TRUSTOS HARDWARE DIAGNOSTIC REPORT                ║"));
+    lines.push(String::from("╚══════════════════════════════════════════════════════════════╝"));
     
     
-    ak.push(String::from(""));
-    ak.push(String::from("━━━ CPU REGISTERS ━━━"));
-    ak.lg(ivz());
+    lines.push(String::from(""));
+    lines.push(String::from("━━━ CPU IDENTIFICATION ━━━"));
+    
+    lines.extend(cya(0, 0));
+    lines.push(String::from(""));
+    
+    lines.extend(cya(1, 0));
+    lines.push(String::from(""));
+    
+    lines.extend(cya(0x8000_0002, 0));
+    lines.extend(cya(0x8000_0003, 0));
+    lines.extend(cya(0x8000_0004, 0));
     
     
-    ak.push(String::from(""));
-    ak.push(String::from("━━━ MEMORY MAP ━━━"));
-    ak.lg(nvq());
+    lines.push(String::from(""));
+    lines.push(String::from("━━━ CPU REGISTERS ━━━"));
+    lines.extend(enn());
     
     
-    ak.push(String::from(""));
-    ak.push(String::from("━━━ HEAP STATUS ━━━"));
-    let cm = crate::devtools::jfu();
-    ak.push(format!("  Allocations: {}   Deallocations: {}", cm.cok, cm.dpr));
-    ak.push(format!("  Live allocs: {}   Peak heap: {}   Largest single: {}", cm.czi, cm.gpe, cm.etu));
-    ak.push(format!("  Heap free: {} KB", crate::memory::heap::aez() / 1024));
+    lines.push(String::from(""));
+    lines.push(String::from("━━━ MEMORY MAP ━━━"));
+    lines.extend(fxh());
     
     
-    ak.push(String::from(""));
-    ak.push(String::from("━━━ PCI DEVICES ━━━"));
-    let jix = crate::pci::arx();
-    if jix.is_empty() {
-        ak.push(String::from("  <no PCI devices found>"));
+    lines.push(String::from(""));
+    lines.push(String::from("━━━ HEAP STATUS ━━━"));
+    let stats = crate::devtools::dbe();
+    lines.push(format!("  Allocations: {}   Deallocations: {}", stats.alloc_count, stats.dealloc_count));
+    lines.push(format!("  Live allocs: {}   Peak heap: {}   Largest single: {}", stats.live_allocs, stats.peak_heap_used, stats.largest_alloc));
+    lines.push(format!("  Heap free: {} KB", crate::memory::heap::free() / 1024));
+    
+    
+    lines.push(String::from(""));
+    lines.push(String::from("━━━ PCI DEVICES ━━━"));
+    let ccn = crate::pci::scan();
+    if ccn.is_empty() {
+        lines.push(String::from("  <no PCI devices found>"));
     } else {
-        for ba in &jix {
-            ak.push(format!("  {:02x}:{:02x}.{} [{:04x}:{:04x}] class={:02x}{:02x} {}",
-                ba.aq, ba.de, ba.gw,
-                ba.ml, ba.mx,
-                ba.ajz, ba.adl,
-                ba.bpz()));
+        for s in &ccn {
+            lines.push(format!("  {:02x}:{:02x}.{} [{:04x}:{:04x}] class={:02x}{:02x} {}",
+                s.bus, s.device, s.function,
+                s.vendor_id, s.device_id,
+                s.class_code, s.subclass,
+                s.class_name()));
         }
     }
     
     
-    ak.push(String::from(""));
-    ak.push(String::from("━━━ BOOT CHECKPOINTS ━━━"));
-    let gdm = nxv();
-    if gdm.is_empty() {
-        ak.push(String::from("  <no checkpoints recorded>"));
+    lines.push(String::from(""));
+    lines.push(String::from("━━━ BOOT CHECKPOINTS ━━━"));
+    let cvs = fyl();
+    if cvs.is_empty() {
+        lines.push(String::from("  <no checkpoints recorded>"));
     } else {
-        for (tsc, aj, j) in &gdm {
-            ak.push(format!("  [TSC {:>16}] POST 0x{:02X}: {}", tsc, aj, j));
+        for (tsc, code, name) in &cvs {
+            lines.push(format!("  [TSC {:>16}] POST 0x{:02X}: {}", tsc, code, name));
         }
     }
     
     
-    ak.push(String::from(""));
-    ak.push(String::from("━━━ CURRENT STACK TRACE ━━━"));
-    ak.lg(ivi(16));
+    lines.push(String::from(""));
+    lines.push(String::from("━━━ CURRENT STACK TRACE ━━━"));
+    lines.extend(enf(16));
     
     
-    ak.push(String::from(""));
-    ak.push(String::from("━━━ SERIAL PORT STATUS ━━━"));
+    lines.push(String::from(""));
+    lines.push(String::from("━━━ SERIAL PORT STATUS ━━━"));
     #[cfg(target_arch = "x86_64")]
     {
-        let eum = cfn(0x3F8 + 5);
-        let umq = cfn(0x3F8 + 4);
-        let izk = cfn(0x3F8 + 1);
-        ak.push(format!("  COM1 (0x3F8): LSR=0x{:02x} MCR=0x{:02x} IER=0x{:02x}", eum, umq, izk));
-        ak.push(format!("    Data Ready: {}  TX Empty: {}  Break: {}  Error: {}",
-            eum & 1 != 0, eum & (1 << 5) != 0, eum & (1 << 4) != 0, eum & (1 << 7) != 0));
+        let bht = om(0x3F8 + 5);
+        let ghe = om(0x3F8 + 4);
+        let eqd = om(0x3F8 + 1);
+        lines.push(format!("  COM1 (0x3F8): LSR=0x{:02x} MCR=0x{:02x} IER=0x{:02x}", bht, ghe, eqd));
+        lines.push(format!("    Data Ready: {}  TX Empty: {}  Break: {}  Error: {}",
+            bht & 1 != 0, bht & (1 << 5) != 0, bht & (1 << 4) != 0, bht & (1 << 7) != 0));
     }
     #[cfg(not(target_arch = "x86_64"))]
-    ak.push(String::from("  <serial port status not available on this arch>"));
+    lines.push(String::from("  <serial port status not available on this arch>"));
     
-    ak.push(String::from(""));
-    ak.push(String::from("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"));
-    ak.push(String::from("Tip: Use serial cable (115200 8N1) to capture this output."));
-    ak.push(String::from("     Run `hwdiag > serial` to send to serial only."));
+    lines.push(String::from(""));
+    lines.push(String::from("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"));
+    lines.push(String::from("Tip: Use serial cable (115200 8N1) to capture this output."));
+    lines.push(String::from("     Run `hwdiag > serial` to send to serial only."));
     
-    ak
+    lines
 }
 
 
 
 
 
-static AJU_: AtomicBool = AtomicBool::new(false);
-static YO_: AtomicU64 = AtomicU64::new(0);
-static BIX_: AtomicU64 = AtomicU64::new(5000); 
+static ALP_: AtomicBool = AtomicBool::new(false);
+static ZR_: AtomicU64 = AtomicU64::new(0);
+static BLD_: AtomicU64 = AtomicU64::new(5000); 
 
 
-pub fn xtw(sg: u64) {
-    BIX_.store(sg, Ordering::Relaxed);
-    YO_.store(0, Ordering::Relaxed);
-    AJU_.store(true, Ordering::Relaxed);
-    crate::serial_println!("[WATCHDOG] Enabled with {} ms timeout", sg);
+pub fn pua(timeout_ms: u64) {
+    BLD_.store(timeout_ms, Ordering::Relaxed);
+    ZR_.store(0, Ordering::Relaxed);
+    ALP_.store(true, Ordering::Relaxed);
+    crate::serial_println!("[WATCHDOG] Enabled with {} ms timeout", timeout_ms);
 }
 
 
-pub fn xtx() {
-    YO_.store(0, Ordering::Relaxed);
+pub fn puc() {
+    ZR_.store(0, Ordering::Relaxed);
 }
 
 
-pub fn jwm(oog: u64) {
-    if !AJU_.load(Ordering::Relaxed) {
+pub fn watchdog_tick(ms_elapsed: u64) {
+    if !ALP_.load(Ordering::Relaxed) {
         return;
     }
-    let az = YO_.fetch_add(oog, Ordering::Relaxed) + oog;
-    if az >= BIX_.load(Ordering::Relaxed) {
-        YO_.store(0, Ordering::Relaxed);
-        crate::serial_println!("!!! WATCHDOG TIMEOUT !!! System may be hung ({} ms)", az);
+    let count = ZR_.fetch_add(ms_elapsed, Ordering::Relaxed) + ms_elapsed;
+    if count >= BLD_.load(Ordering::Relaxed) {
+        ZR_.store(0, Ordering::Relaxed);
+        crate::serial_println!("!!! WATCHDOG TIMEOUT !!! System may be hung ({} ms)", count);
         
     }
 }
 
-pub fn xtv() {
-    AJU_.store(false, Ordering::Relaxed);
+pub fn ptz() {
+    ALP_.store(false, Ordering::Relaxed);
     crate::serial_println!("[WATCHDOG] Disabled");
 }
 
@@ -814,25 +816,25 @@ pub fn xtv() {
 
 
 #[cfg(target_arch = "x86_64")]
-fn ow() -> u64 {
-    let hh: u32;
-    let gd: u32;
+pub fn ey() -> u64 {
+    let lo: u32;
+    let hi: u32;
     unsafe {
-        core::arch::asm!("rdtsc", bd("eax") hh, bd("edx") gd, options(nostack, preserves_flags));
+        core::arch::asm!("rdtsc", out("eax") lo, out("edx") hi, options(nostack, preserves_flags));
     }
-    ((gd as u64) << 32) | (hh as u64)
+    ((hi as u64) << 32) | (lo as u64)
 }
 
 #[cfg(not(target_arch = "x86_64"))]
-fn ow() -> u64 { 0 }
+pub fn ey() -> u64 { 0 }
 
 
-fn nat(jn: u32) {
+fn cuo(dh: u32) {
     
     
-    let ay = ow();
-    let cd = ay + (jn as u64) * 1_000_000; 
-    while ow() < cd {
-        core::hint::hc();
+    let start = ey();
+    let target = start + (dh as u64) * 1_000_000; 
+    while ey() < target {
+        core::hint::spin_loop();
     }
 }

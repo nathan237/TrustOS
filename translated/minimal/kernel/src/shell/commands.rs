@@ -8,30 +8,30 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::vec;
 use alloc::format;
-use crate::framebuffer::{B_, G_, AU_, D_, A_, C_, Q_, CD_, DF_, L_};
+use crate::framebuffer::{B_, G_, AX_, D_, A_, C_, R_, CF_, DM_, K_};
 use crate::ramfs::FileType;
 
 
-pub(super) fn kis(n: &[&str]) {
-    if !n.is_empty() {
-        nee(n);
+pub(super) fn chf(args: &[&str]) {
+    if !args.is_empty() {
+        hmb(args);
         return;
     }
     
-    crate::h!(G_, "======================================================================");
-    crate::h!(G_, "          TrustOS -- Secure Bare-Metal Operating System");
-    crate::h!(G_, "       x86_64 kernel written in Rust -- no libc, no std");
-    crate::h!(G_, "======================================================================");
+    crate::n!(G_, "======================================================================");
+    crate::n!(G_, "          TrustOS -- Secure Bare-Metal Operating System");
+    crate::n!(G_, "       x86_64 kernel written in Rust -- no libc, no std");
+    crate::n!(G_, "======================================================================");
     crate::println!();
-    crate::h!(Q_, "  Features: RAMFS file system, TCP/IP networking, ELF loader,");
-    crate::h!(Q_, "  Linux syscall compat, GUI desktop compositor, SMP multicore.");
+    crate::n!(R_, "  Features: RAMFS file system, TCP/IP networking, ELF loader,");
+    crate::n!(R_, "  Linux syscall compat, GUI desktop compositor, SMP multicore.");
     crate::println!();
-    crate::h!(D_, "  Type 'help <command>' or 'man <command>' for detailed usage.");
-    crate::h!(D_, "  Tab = auto-complete | Up/Down = history | PageUp/Down = scroll");
+    crate::n!(D_, "  Type 'help <command>' or 'man <command>' for detailed usage.");
+    crate::n!(D_, "  Tab = auto-complete | Up/Down = history | PageUp/Down = scroll");
     crate::println!();
     
     
-    crate::h!(C_, "  FILE SYSTEM");
+    crate::n!(C_, "  FILE SYSTEM");
     crate::println!("    ls [path]           List directory contents (-l long, -a hidden)");
     crate::println!("    cd <path>           Change working directory");
     crate::println!("    pwd                 Print current working directory");
@@ -59,7 +59,7 @@ pub(super) fn kis(n: &[&str]) {
     crate::println!();
     
     
-    crate::h!(C_, "  TEXT PROCESSING");
+    crate::n!(C_, "  TEXT PROCESSING");
     crate::println!("    echo <text>         Print text (supports > redirect)");
     crate::println!("    grep <pat> <file>   Search for pattern (-i case insensitive)");
     crate::println!("    sort <file>         Sort lines (-r reverse, -n numeric)");
@@ -80,7 +80,7 @@ pub(super) fn kis(n: &[&str]) {
     crate::println!();
     
     
-    crate::h!(C_, "  SYSTEM & PROCESS");
+    crate::n!(C_, "  SYSTEM & PROCESS");
     crate::println!("    clear               Clear terminal screen");
     crate::println!("    time / uptime       Show system uptime");
     crate::println!("    date                Display current date and time");
@@ -121,7 +121,7 @@ pub(super) fn kis(n: &[&str]) {
     crate::println!();
     
     
-    crate::h!(C_, "  USER MANAGEMENT");
+    crate::n!(C_, "  USER MANAGEMENT");
     crate::println!("    login               Switch to another user account");
     crate::println!("    su <user>           Substitute user identity");
     crate::println!("    passwd [user]       Change user password");
@@ -131,7 +131,7 @@ pub(super) fn kis(n: &[&str]) {
     crate::println!();
     
     
-    crate::h!(C_, "  HARDWARE & DEVICES");
+    crate::n!(C_, "  HARDWARE & DEVICES");
     crate::println!("    lspci [-v]          List PCI devices (vendor/class)");
     crate::println!("    lshw / hwinfo       Full hardware inventory");
     crate::println!("    gpu [info|dcn|modes] AMD GPU info & display engine status");
@@ -158,7 +158,7 @@ pub(super) fn kis(n: &[&str]) {
     crate::println!();
     
     
-    crate::h!(C_, "  DISK & STORAGE");
+    crate::n!(C_, "  DISK & STORAGE");
     crate::println!("    disk                Show detected disk drives");
     crate::println!("    dd if=<> of=<>      Block-level copy (raw disk I/O)");
     crate::println!("    ahci <cmd>          AHCI controller commands");
@@ -175,9 +175,10 @@ pub(super) fn kis(n: &[&str]) {
     crate::println!();
     
     
-    crate::h!(C_, "  NETWORK");
+    crate::n!(C_, "  NETWORK");
     crate::println!("    ifconfig / ip       Show network interface status");
     crate::println!("    ipconfig [cmd]      Configure IP settings");
+    crate::println!("    wifi <cmd>          WiFi management (scan/connect/status/disconnect)");
     crate::println!("    ping <host>         ICMP echo to test connectivity");
     crate::println!("    curl <url>          HTTP/HTTPS client (GET, POST)");
     crate::println!("    wget <url>          Download file from URL");
@@ -195,7 +196,7 @@ pub(super) fn kis(n: &[&str]) {
     crate::println!();
 
     
-    crate::h!(C_, "  SECURITY TOOLKIT (TrustScan)");
+    crate::n!(C_, "  SECURITY TOOLKIT (TrustScan)");
     crate::println!("    nmap <target>       Port scanner (SYN/Connect/UDP scan)");
     crate::println!("    nmap <t> -A         Aggressive scan (ports + banners + vulns)");
     crate::println!("    discover [mode]     Host discovery (arp/ping/full)");
@@ -207,14 +208,14 @@ pub(super) fn kis(n: &[&str]) {
     crate::println!();
 
     
-    crate::h!(C_, "  HTTP SERVER");
+    crate::n!(C_, "  HTTP SERVER");
     crate::println!("    httpd [start] [p]   Start HTTP server (default port 8080)");
     crate::println!("    httpd stop          Stop the running HTTP server");
     crate::println!("    httpd status        Show server status and request count");
     crate::println!();
 
     
-    crate::h!(C_, "  PACKAGE MANAGER (TrustPkg)");
+    crate::n!(C_, "  PACKAGE MANAGER (TrustPkg)");
     crate::println!("    trustpkg list       List all available packages");
     crate::println!("    trustpkg search <q> Search packages by name/description");
     crate::println!("    trustpkg install <p> Install a package");
@@ -225,7 +226,7 @@ pub(super) fn kis(n: &[&str]) {
     crate::println!();
     
     
-    crate::h!(C_, "  LINUX SUBSYSTEM");
+    crate::n!(C_, "  LINUX SUBSYSTEM");
     crate::println!("    linux               Launch Linux compatibility shell");
     crate::println!("    linux status        Show Linux subsystem status");
     crate::println!("    linux install       Install Linux binaries from rootfs");
@@ -240,7 +241,7 @@ pub(super) fn kis(n: &[&str]) {
     crate::println!();
     
     
-    crate::h!(C_, "  GRAPHICS & DESKTOP");
+    crate::n!(C_, "  GRAPHICS & DESKTOP");
     crate::println!("    desktop / gui       Launch windowed desktop environment");
     crate::println!("    mobile              Launch mobile-style desktop");
     crate::println!("    cosmic              Launch COSMIC V2 compositor");
@@ -262,7 +263,7 @@ pub(super) fn kis(n: &[&str]) {
     crate::println!();
     
     
-    crate::h!(C_, "  PROGRAMMING & TOOLS");
+    crate::n!(C_, "  PROGRAMMING & TOOLS");
     crate::println!("    trustlang / tl      TrustLang programming language REPL");
     crate::println!("    transpile <file>    Binary-to-Rust transpiler (ELF analysis)");
     crate::println!("    rv-xlat <file>      RISC-V universal translator (run any arch)");
@@ -284,14 +285,14 @@ pub(super) fn kis(n: &[&str]) {
     crate::println!();
     
     
-    crate::h!(C_, "  ARCHIVING & COMPRESSION");
+    crate::n!(C_, "  ARCHIVING & COMPRESSION");
     crate::println!("    tar <opts> <file>   Archive/extract tar files");
     crate::println!("    gzip / gunzip       Compress/decompress gzip files");
     crate::println!("    zip / unzip         Compress/extract zip archives");
     crate::println!();
     
     
-    crate::h!(C_, "  DEVELOPER & DEBUG");
+    crate::n!(C_, "  DEVELOPER & DEBUG");
     crate::println!("    dmesg [-n N]        Kernel ring buffer (last N messages)");
     crate::println!("    memdbg / heapdbg    Heap allocation stats & fragmentation");
     crate::println!("    perf / perfstat     CPU, IRQ, scheduler, memory profiling");
@@ -321,7 +322,7 @@ pub(super) fn kis(n: &[&str]) {
     crate::println!();
     
     
-    crate::h!(C_, "  SERVICES & SCHEDULING");
+    crate::n!(C_, "  SERVICES & SCHEDULING");
     crate::println!("    service <name> <op> Manage system services (start/stop)");
     crate::println!("    systemctl <cmd>     Systemd-style service control");
     crate::println!("    crontab [-e|-l]     Schedule recurring jobs");
@@ -330,7 +331,7 @@ pub(super) fn kis(n: &[&str]) {
     crate::println!();
     
     
-    crate::h!(C_, "  SECURITY & IDENTITY");
+    crate::n!(C_, "  SECURITY & IDENTITY");
     crate::println!("    security / sec      Security subsystem status & caps");
     crate::println!("    signature / sig     Kernel signature & proof of authorship");
     crate::println!("    hv / hypervisor     Hypervisor management commands");
@@ -339,14 +340,14 @@ pub(super) fn kis(n: &[&str]) {
     crate::println!();
 
     
-    crate::h!(C_, "  THINKPAD / HARDWARE CONTROL");
+    crate::n!(C_, "  THINKPAD / HARDWARE CONTROL");
     crate::println!("    fan [speed|auto]    ThinkPad fan control (EC direct)");
     crate::println!("    temp / sensors      CPU/GPU temperature readings");
     crate::println!("    cpufreq [cmd]       CPU frequency scaling (SpeedStep)");
     crate::println!();
 
     
-    crate::h!(C_, "  JARVIS AI & HARDWARE INTELLIGENCE");
+    crate::n!(C_, "  JARVIS AI & HARDWARE INTELLIGENCE");
     crate::println!("    jarvis              Interactive Jarvis AI assistant");
     crate::println!("    jarvis brain <cmd>  Neural brain (init/train/chat/eval)");
     crate::println!("    jarvis boot         Full HW scan + AI analysis + self-optimize");
@@ -359,7 +360,7 @@ pub(super) fn kis(n: &[&str]) {
     crate::println!();
     
     
-    crate::h!(C_, "  SYSTEM CONTROL");
+    crate::n!(C_, "  SYSTEM CONTROL");
     crate::println!("    exit / logout       Exit current session");
     crate::println!("    reboot              Restart the system");
     crate::println!("    shutdown / halt     Power off the system");
@@ -371,7 +372,7 @@ pub(super) fn kis(n: &[&str]) {
     crate::println!();
     
     
-    crate::h!(C_, "  EASTER EGGS & DEMOS");
+    crate::n!(C_, "  EASTER EGGS & DEMOS");
     crate::println!("    neofetch            System info with ASCII art logo");
     crate::println!("    matrix              Fullscreen Matrix rain animation");
     crate::println!("    cowsay <text>       ASCII cow says your message");
@@ -382,39 +383,39 @@ pub(super) fn kis(n: &[&str]) {
     crate::println!("    demo [fr]           Interactive guided tutorial");
     crate::println!();
     
-    crate::h!(G_, "  Total: ~220 commands | Type 'man <cmd>' for detailed usage");
+    crate::n!(G_, "  Total: ~220 commands | Type 'man <cmd>' for detailed usage");
     crate::println!();
 }
-pub(super) fn nee(n: &[&str]) {
-    if n.is_empty() {
+pub(super) fn hmb(args: &[&str]) {
+    if args.is_empty() {
         crate::println!("Usage: man <command>");
         return;
     }
     
-    match n[0] {
+    match args[0] {
         "ls" => {
-            crate::h!(G_, "LS(1) - List directory contents");
+            crate::n!(G_, "LS(1) - List directory contents");
             crate::println!();
             crate::println!("SYNOPSIS: ls [path]");
             crate::println!();
             crate::println!("Lists files and directories.");
         }
         "cd" => {
-            crate::h!(G_, "CD(1) - Change directory");
+            crate::n!(G_, "CD(1) - Change directory");
             crate::println!();
             crate::println!("SYNOPSIS: cd [path]");
             crate::println!();
             crate::println!("Special: ~ (home), .. (parent)");
         }
         "cat" => {
-            crate::h!(G_, "CAT(1) - Display file contents");
+            crate::n!(G_, "CAT(1) - Display file contents");
             crate::println!();
             crate::println!("SYNOPSIS: cat <file>");
             crate::println!();
             crate::println!("Supports redirection: cat file > newfile");
         }
         "perf" | "perfstat" => {
-            crate::h!(G_, "PERF(1) - Performance Statistics");
+            crate::n!(G_, "PERF(1) - Performance Statistics");
             crate::println!();
             crate::println!("SYNOPSIS: perf");
             crate::println!();
@@ -422,7 +423,7 @@ pub(super) fn nee(n: &[&str]) {
             crate::println!("context switches, heap usage, and per-CPU stats.");
         }
         "memdbg" | "heapdbg" => {
-            crate::h!(G_, "MEMDBG(1) - Memory Debug Statistics");
+            crate::n!(G_, "MEMDBG(1) - Memory Debug Statistics");
             crate::println!();
             crate::println!("SYNOPSIS: memdbg");
             crate::println!();
@@ -430,7 +431,7 @@ pub(super) fn nee(n: &[&str]) {
             crate::println!("peak usage, fragmentation estimate, live alloc count.");
         }
         "dmesg" => {
-            crate::h!(G_, "DMESG(1) - Kernel Ring Buffer");
+            crate::n!(G_, "DMESG(1) - Kernel Ring Buffer");
             crate::println!();
             crate::println!("SYNOPSIS: dmesg [-n <count>] [-c]");
             crate::println!();
@@ -441,7 +442,7 @@ pub(super) fn nee(n: &[&str]) {
             crate::println!("  dmesg -c       Acknowledge buffer");
         }
         "irqstat" | "irqs" => {
-            crate::h!(G_, "IRQSTAT(1) - Interrupt Statistics");
+            crate::n!(G_, "IRQSTAT(1) - Interrupt Statistics");
             crate::println!();
             crate::println!("SYNOPSIS: irqstat");
             crate::println!();
@@ -449,7 +450,7 @@ pub(super) fn nee(n: &[&str]) {
             crate::println!("interrupt breakdown with visual bars.");
         }
         "regs" | "registers" | "cpuregs" => {
-            crate::h!(G_, "REGS(1) - CPU Register Dump");
+            crate::n!(G_, "REGS(1) - CPU Register Dump");
             crate::println!();
             crate::println!("SYNOPSIS: regs");
             crate::println!();
@@ -457,7 +458,7 @@ pub(super) fn nee(n: &[&str]) {
             crate::println!("Decodes flag/bit meanings for each register.");
         }
         "peek" | "memdump" => {
-            crate::h!(G_, "PEEK(1) - Memory Inspector");
+            crate::n!(G_, "PEEK(1) - Memory Inspector");
             crate::println!();
             crate::println!("SYNOPSIS: peek <hex_addr> [byte_count]");
             crate::println!();
@@ -465,7 +466,7 @@ pub(super) fn nee(n: &[&str]) {
             crate::println!("  peek 0xFFFF800000000000 64");
         }
         "poke" | "memwrite" => {
-            crate::h!(G_, "POKE(1) - Memory Writer");
+            crate::n!(G_, "POKE(1) - Memory Writer");
             crate::println!();
             crate::println!("SYNOPSIS: poke <hex_addr> <hex_byte>");
             crate::println!();
@@ -473,7 +474,7 @@ pub(super) fn nee(n: &[&str]) {
             crate::println!("  poke 0xB8000 0x41");
         }
         "devpanel" => {
-            crate::h!(G_, "DEVPANEL(1) - Developer Overlay");
+            crate::n!(G_, "DEVPANEL(1) - Developer Overlay");
             crate::println!();
             crate::println!("SYNOPSIS: devpanel");
             crate::println!();
@@ -482,7 +483,7 @@ pub(super) fn nee(n: &[&str]) {
             crate::println!("Also toggled with F12 while in desktop.");
         }
         "timecmd" => {
-            crate::h!(G_, "TIMECMD(1) - Time a Command");
+            crate::n!(G_, "TIMECMD(1) - Time a Command");
             crate::println!();
             crate::println!("SYNOPSIS: timecmd <command> [args...]");
             crate::println!();
@@ -491,195 +492,195 @@ pub(super) fn nee(n: &[&str]) {
             crate::println!("  timecmd benchmark cpu");
         }
         _ => {
-            crate::println!("No manual entry for '{}'", n[0]);
+            crate::println!("No manual entry for '{}'", args[0]);
         }
     }
 }
 
 
 
-pub(super) fn ioj(n: &[&str]) {
-    let path = n.fv().hu();
+pub(super) fn eij(args: &[&str]) {
+    let path = args.first().copied();
     
     
-    if let Some(ai) = path {
-        if ai.cj("/mnt/") || ai.cj("/dev/") || ai.cj("/proc/") || ai == "/mnt" {
-            rfy(ai);
+    if let Some(aa) = path {
+        if aa.starts_with("/mnt/") || aa.starts_with("/dev/") || aa.starts_with("/proc/") || aa == "/mnt" {
+            kpi(aa);
             return;
         }
     }
     
-    match crate::ramfs::fh(|fs| fs.awb(path)) {
-        Ok(pj) => {
-            if pj.is_empty() {
+    match crate::ramfs::bh(|fs| fs.ls(path)) {
+        Ok(items) => {
+            if items.is_empty() {
                 return;
             }
             
-            let hrc = pj.iter().map(|(bo, _, _)| bo.len()).am().unwrap_or(0);
+            let dub = items.iter().map(|(ae, _, _)| ae.len()).max().unwrap_or(0);
             
-            for (j, kd, aw) in pj {
-                match kd {
-                    FileType::K => {
-                        crate::gr!(C_, "{:<width$}", j, z = hrc + 2);
-                        crate::h!(AU_, " <DIR>");
+            for (name, file_type, size) in items {
+                match file_type {
+                    FileType::Directory => {
+                        crate::bq!(C_, "{:<width$}", name, width = dub + 2);
+                        crate::n!(AX_, " <DIR>");
                     }
-                    FileType::Es => {
-                        crate::gr!(B_, "{:<width$}", j, z = hrc + 2);
-                        crate::println!(" {:>6} B", aw);
+                    FileType::File => {
+                        crate::bq!(B_, "{:<width$}", name, width = dub + 2);
+                        crate::println!(" {:>6} B", size);
                     }
                 }
             }
         }
-        Err(aa) => {
-            crate::h!(A_, "ls: {}", aa.as_str());
+        Err(e) => {
+            crate::n!(A_, "ls: {}", e.as_str());
         }
     }
 }
 
-pub(super) fn rfy(path: &str) {
+pub(super) fn kpi(path: &str) {
     use crate::vfs::{self, FileType as VfsFileType};
     
-    match vfs::brx(path) {
-        Ok(ch) => {
-            if ch.is_empty() {
+    match vfs::readdir(path) {
+        Ok(entries) => {
+            if entries.is_empty() {
                 crate::println!("(empty)");
                 return;
             }
             
-            let hrc = ch.iter().map(|aa| aa.j.len()).am().unwrap_or(0);
+            let dub = entries.iter().map(|e| e.name.len()).max().unwrap_or(0);
             
-            for bt in ch {
-                match bt.kd {
-                    VfsFileType::K => {
-                        crate::gr!(C_, "{:<width$}", bt.j, z = hrc + 2);
-                        crate::h!(AU_, " <DIR>");
+            for entry in entries {
+                match entry.file_type {
+                    VfsFileType::Directory => {
+                        crate::bq!(C_, "{:<width$}", entry.name, width = dub + 2);
+                        crate::n!(AX_, " <DIR>");
                     }
-                    VfsFileType::Ea => {
-                        crate::gr!(B_, "{:<width$}", bt.j, z = hrc + 2);
+                    VfsFileType::Regular => {
+                        crate::bq!(B_, "{:<width$}", entry.name, width = dub + 2);
                         crate::println!(" (file)");
                     }
                     _ => {
-                        crate::println!("{}", bt.j);
+                        crate::println!("{}", entry.name);
                     }
                 }
             }
         }
-        Err(aa) => {
-            crate::h!(A_, "ls: {:?}", aa);
+        Err(e) => {
+            crate::n!(A_, "ls: {:?}", e);
         }
     }
 }
 
-pub(super) fn kig(n: &[&str]) {
-    let path = n.fv().hu().unwrap_or("~");
+pub(super) fn fme(args: &[&str]) {
+    let path = args.first().copied().unwrap_or("~");
     
-    if let Err(aa) = crate::ramfs::fh(|fs| fs.fem(path)) {
-        crate::h!(A_, "cd: {}: {}", path, aa.as_str());
+    if let Err(e) = crate::ramfs::bh(|fs| fs.cd(path)) {
+        crate::n!(A_, "cd: {}: {}", path, e.as_str());
     }
 }
 
-pub(super) fn kjb() {
-    let jv = crate::ramfs::fh(|fs| String::from(fs.dau()));
-    crate::println!("{}", jv);
+pub(super) fn fmz() {
+    let cwd = crate::ramfs::bh(|fs| String::from(fs.pwd()));
+    crate::println!("{}", cwd);
 }
 
-pub(super) fn iok(n: &[&str]) {
-    if n.is_empty() {
+pub(super) fn eik(args: &[&str]) {
+    if args.is_empty() {
         crate::println!("Usage: mkdir <directory>");
         return;
     }
     
-    for path in n {
-        if let Err(aa) = crate::ramfs::fh(|fs| fs.ut(path)) {
-            crate::h!(A_, "mkdir: {}: {}", path, aa.as_str());
+    for path in args {
+        if let Err(e) = crate::ramfs::bh(|fs| fs.mkdir(path)) {
+            crate::n!(A_, "mkdir: {}: {}", path, e.as_str());
         }
     }
 }
 
-pub(super) fn rhr(n: &[&str]) {
-    if n.is_empty() {
+pub(super) fn krb(args: &[&str]) {
+    if args.is_empty() {
         crate::println!("Usage: rmdir <directory>");
         return;
     }
     
-    for path in n {
-        if let Err(aa) = crate::ramfs::fh(|fs| fs.hb(path)) {
-            crate::h!(A_, "rmdir: {}: {}", path, aa.as_str());
+    for path in args {
+        if let Err(e) = crate::ramfs::bh(|fs| fs.rm(path)) {
+            crate::n!(A_, "rmdir: {}: {}", path, e.as_str());
         }
     }
 }
 
-pub(super) fn kji(n: &[&str]) {
-    if n.is_empty() {
+pub(super) fn fng(args: &[&str]) {
+    if args.is_empty() {
         crate::println!("Usage: touch <file>");
         return;
     }
     
-    for path in n {
+    for path in args {
         
-        if path.cj("/mnt/") {
+        if path.starts_with("/mnt/") {
             use crate::vfs::{self, OpenFlags};
             
             
-            let flags = OpenFlags(OpenFlags::OP_ | OpenFlags::ON_);
-            match vfs::aji(path, flags) {
-                Ok(da) => {
-                    let _ = vfs::agj(da);
+            let flags = OpenFlags(OpenFlags::PN_ | OpenFlags::PL_);
+            match vfs::open(path, flags) {
+                Ok(fd) => {
+                    let _ = vfs::close(fd);
                     crate::println!("Created: {}", path);
                 }
-                Err(aa) => crate::h!(A_, "touch: {:?}", aa),
+                Err(e) => crate::n!(A_, "touch: {:?}", e),
             }
         } else {
-            if let Err(aa) = crate::ramfs::fh(|fs| fs.touch(path)) {
-                crate::h!(A_, "touch: {}: {}", path, aa.as_str());
+            if let Err(e) = crate::ramfs::bh(|fs| fs.touch(path)) {
+                crate::n!(A_, "touch: {}: {}", path, e.as_str());
             }
         }
     }
 }
 
-pub(super) fn kjc(n: &[&str]) {
-    if n.is_empty() {
+pub(super) fn fna(args: &[&str]) {
+    if args.is_empty() {
         crate::println!("Usage: rm <file>");
         return;
     }
     
-    for path in n {
-        if let Err(aa) = crate::ramfs::fh(|fs| fs.hb(path)) {
-            crate::h!(A_, "rm: {}: {}", path, aa.as_str());
+    for path in args {
+        if let Err(e) = crate::ramfs::bh(|fs| fs.rm(path)) {
+            crate::n!(A_, "rm: {}: {}", path, e.as_str());
         }
     }
 }
 
-pub(super) fn kii(n: &[&str]) {
-    if n.len() < 2 {
+pub(super) fn fmg(args: &[&str]) {
+    if args.len() < 2 {
         crate::println!("Usage: cp <source> <destination>");
         return;
     }
     
-    if let Err(aa) = crate::ramfs::fh(|fs| fs.bza(n[0], n[1])) {
-        crate::h!(A_, "cp: {}", aa.as_str());
+    if let Err(e) = crate::ramfs::bh(|fs| fs.cp(args[0], args[1])) {
+        crate::n!(A_, "cp: {}", e.as_str());
     }
 }
 
-pub(super) fn kix(n: &[&str]) {
-    if n.len() < 2 {
+pub(super) fn fmv(args: &[&str]) {
+    if args.len() < 2 {
         crate::println!("Usage: mv <source> <destination>");
         return;
     }
     
-    if let Err(aa) = crate::ramfs::fh(|fs| fs.euz(n[0], n[1])) {
-        crate::h!(A_, "mv: {}", aa.as_str());
+    if let Err(e) = crate::ramfs::bh(|fs| fs.mv(args[0], args[1])) {
+        crate::n!(A_, "mv: {}", e.as_str());
     }
 }
 
-pub(super) fn hde(n: &[&str], ehg: Option<(&str, bool)>, arr: Option<&str>) {
+pub(super) fn dkw(args: &[&str], redirect: Option<(&str, bool)>, piped: Option<&str>) {
     
-    if let Some(input) = arr {
-        if let Some((file, bte)) = ehg {
-            let _ = crate::ramfs::fh(|fs| {
-                if !fs.aja(file) { fs.touch(file).bq(); }
-                if bte { fs.ijw(file, input.as_bytes()) } 
-                else { fs.ns(file, input.as_bytes()) }
+    if let Some(input) = piped {
+        if let Some((file, append)) = redirect {
+            let _ = crate::ramfs::bh(|fs| {
+                if !fs.exists(file) { fs.touch(file).ok(); }
+                if append { fs.append_file(file, input.as_bytes()) } 
+                else { fs.write_file(file, input.as_bytes()) }
             });
         } else {
             crate::print!("{}", input);
@@ -687,20 +688,20 @@ pub(super) fn hde(n: &[&str], ehg: Option<(&str, bool)>, arr: Option<&str>) {
         return;
     }
     
-    if n.is_empty() {
+    if args.is_empty() {
         crate::println!("Usage: cat <file>");
         return;
     }
     
-    let mut an = String::new();
+    let mut output = String::new();
     
-    for path in n {
+    for path in args {
         
-        if path.cj("/mnt/") || path.cj("/dev/") || path.cj("/proc/") {
-            match rcv(path) {
+        if path.starts_with("/mnt/") || path.starts_with("/dev/") || path.starts_with("/proc/") {
+            match kmg(path) {
                 Some(text) => {
-                    if ehg.is_some() {
-                        an.t(&text);
+                    if redirect.is_some() {
+                        output.push_str(&text);
                     } else {
                         crate::print!("{}", text);
                     }
@@ -710,218 +711,218 @@ pub(super) fn hde(n: &[&str], ehg: Option<(&str, bool)>, arr: Option<&str>) {
             continue;
         }
         
-        match crate::ramfs::fh(|fs| fs.mq(path).map(|r| r.ip())) {
-            Ok(ca) => {
-                if let Ok(text) = core::str::jg(&ca) {
-                    if ehg.is_some() {
-                        an.t(text);
+        match crate::ramfs::bh(|fs| fs.read_file(path).map(|c| c.to_vec())) {
+            Ok(content) => {
+                if let Ok(text) = core::str::from_utf8(&content) {
+                    if redirect.is_some() {
+                        output.push_str(text);
                     } else {
                         crate::print!("{}", text);
                     }
                 } else {
-                    crate::h!(A_, "cat: {}: binary file", path);
+                    crate::n!(A_, "cat: {}: binary file", path);
                 }
             }
-            Err(aa) => {
-                crate::h!(A_, "cat: {}: {}", path, aa.as_str());
+            Err(e) => {
+                crate::n!(A_, "cat: {}: {}", path, e.as_str());
             }
         }
     }
     
-    if let Some((file, bte)) = ehg {
-        let _ = crate::ramfs::fh(|fs| {
-            if !fs.aja(file) { fs.touch(file).bq(); }
-            if bte { fs.ijw(file, an.as_bytes()) } 
-            else { fs.ns(file, an.as_bytes()) }
+    if let Some((file, append)) = redirect {
+        let _ = crate::ramfs::bh(|fs| {
+            if !fs.exists(file) { fs.touch(file).ok(); }
+            if append { fs.append_file(file, output.as_bytes()) } 
+            else { fs.write_file(file, output.as_bytes()) }
         });
     }
 }
 
-pub(super) fn rcv(path: &str) -> Option<alloc::string::String> {
+pub(super) fn kmg(path: &str) -> Option<alloc::string::String> {
     use crate::vfs::{self, OpenFlags};
-    use alloc::string::Gd;
+    use alloc::string::ToString;
     
     
-    let da = match vfs::aji(path, OpenFlags(OpenFlags::OO_)) {
-        Ok(bb) => bb,
-        Err(aa) => {
-            crate::h!(A_, "cat: {}: {:?}", path, aa);
+    let fd = match vfs::open(path, OpenFlags(OpenFlags::PM_)) {
+        Ok(f) => f,
+        Err(e) => {
+            crate::n!(A_, "cat: {}: {:?}", path, e);
             return None;
         }
     };
     
     
-    let mut bi = [0u8; 4096];
-    let mut ca = alloc::vec::Vec::new();
+    let mut buffer = [0u8; 4096];
+    let mut content = alloc::vec::Vec::new();
     
     loop {
-        let cjl = match vfs::read(da, &mut bi) {
-            Ok(bo) => bo,
-            Err(aa) => {
-                crate::h!(A_, "cat: {}: read error {:?}", path, aa);
-                let _ = vfs::agj(da);
+        let atf = match vfs::read(fd, &mut buffer) {
+            Ok(ae) => ae,
+            Err(e) => {
+                crate::n!(A_, "cat: {}: read error {:?}", path, e);
+                let _ = vfs::close(fd);
                 return None;
             }
         };
         
-        if cjl == 0 {
+        if atf == 0 {
             break;
         }
         
-        ca.bk(&bi[..cjl]);
+        content.extend_from_slice(&buffer[..atf]);
     }
     
-    let _ = vfs::agj(da);
+    let _ = vfs::close(fd);
     
-    match core::str::jg(&ca) {
+    match core::str::from_utf8(&content) {
         Ok(text) => Some(String::from(text)),
         Err(_) => {
-            crate::h!(A_, "cat: {}: binary file", path);
+            crate::n!(A_, "cat: {}: binary file", path);
             None
         }
     }
 }
 
-pub(super) fn kir(n: &[&str], arr: Option<&str>) {
-    let ak: usize = if n.len() > 1 { n[1].parse().unwrap_or(10) }
-                        else if n.len() == 1 && n[0].cj('-') && n[0].len() > 1 { n[0][1..].parse().unwrap_or(10) }
+pub(super) fn fmp(args: &[&str], piped: Option<&str>) {
+    let lines: usize = if args.len() > 1 { args[1].parse().unwrap_or(10) }
+                        else if args.len() == 1 && args[0].starts_with('-') && args[0].len() > 1 { args[0][1..].parse().unwrap_or(10) }
                         else { 10 };
     
-    let ffr = if let Some(input) = arr {
+    let chq = if let Some(input) = piped {
         alloc::string::String::from(input)
-    } else if !n.is_empty() && !n[0].cj('-') {
-        match crate::ramfs::fh(|fs| fs.mq(n[0]).map(|r| r.ip())) {
-            Ok(ca) => match core::str::jg(&ca) {
-                Ok(ab) => alloc::string::String::from(ab),
+    } else if !args.is_empty() && !args[0].starts_with('-') {
+        match crate::ramfs::bh(|fs| fs.read_file(args[0]).map(|c| c.to_vec())) {
+            Ok(content) => match core::str::from_utf8(&content) {
+                Ok(t) => alloc::string::String::from(t),
                 Err(_) => return,
             },
-            Err(aa) => { crate::h!(A_, "head: {}", aa.as_str()); return; }
+            Err(e) => { crate::n!(A_, "head: {}", e.as_str()); return; }
         }
     } else {
         crate::println!("Usage: head <file> [lines]");
         return;
     };
     
-    for (a, line) in ffr.ak().cf() {
-        if a >= ak { break; }
+    for (i, line) in chq.lines().enumerate() {
+        if i >= lines { break; }
         crate::println!("{}", line);
     }
 }
 
-pub(super) fn kjg(n: &[&str], arr: Option<&str>) {
-    let ak: usize = if n.len() > 1 { n[1].parse().unwrap_or(10) } else { 10 };
+pub(super) fn fne(args: &[&str], piped: Option<&str>) {
+    let lines: usize = if args.len() > 1 { args[1].parse().unwrap_or(10) } else { 10 };
     
-    let ffr = if let Some(input) = arr {
+    let chq = if let Some(input) = piped {
         alloc::string::String::from(input)
-    } else if !n.is_empty() {
-        match crate::ramfs::fh(|fs| fs.mq(n[0]).map(|r| r.ip())) {
-            Ok(ca) => match core::str::jg(&ca) {
-                Ok(ab) => alloc::string::String::from(ab),
+    } else if !args.is_empty() {
+        match crate::ramfs::bh(|fs| fs.read_file(args[0]).map(|c| c.to_vec())) {
+            Ok(content) => match core::str::from_utf8(&content) {
+                Ok(t) => alloc::string::String::from(t),
                 Err(_) => return,
             },
-            Err(aa) => { crate::h!(A_, "tail: {}", aa.as_str()); return; }
+            Err(e) => { crate::n!(A_, "tail: {}", e.as_str()); return; }
         }
     } else {
         crate::println!("Usage: tail <file> [lines]");
         return;
     };
     
-    let xx: Vec<&str> = ffr.ak().collect();
-    let ay = if xx.len() > ak { xx.len() - ak } else { 0 };
-    for line in &xx[ay..] {
+    let all: Vec<&str> = chq.lines().collect();
+    let start = if all.len() > lines { all.len() - lines } else { 0 };
+    for line in &all[start..] {
         crate::println!("{}", line);
     }
 }
 
-pub(super) fn kjk(n: &[&str], arr: Option<&str>) {
+pub(super) fn fni(args: &[&str], piped: Option<&str>) {
     
-    let (ffr, j) = if let Some(input) = arr {
+    let (chq, name) = if let Some(input) = piped {
         (alloc::string::String::from(input), alloc::string::String::from("(stdin)"))
-    } else if !n.is_empty() {
-        match crate::ramfs::fh(|fs| fs.mq(n[0]).map(|r| r.ip())) {
-            Ok(ca) => {
-                match core::str::jg(&ca) {
-                    Ok(ab) => (alloc::string::String::from(ab), alloc::string::String::from(n[0])),
+    } else if !args.is_empty() {
+        match crate::ramfs::bh(|fs| fs.read_file(args[0]).map(|c| c.to_vec())) {
+            Ok(content) => {
+                match core::str::from_utf8(&content) {
+                    Ok(t) => (alloc::string::String::from(t), alloc::string::String::from(args[0])),
                     Err(_) => return,
                 }
             }
-            Err(aa) => { crate::h!(A_, "wc: {}", aa.as_str()); return; }
+            Err(e) => { crate::n!(A_, "wc: {}", e.as_str()); return; }
         }
     } else {
         crate::println!("Usage: wc <file>");
         return;
     };
     
-    let ak = ffr.ak().az();
-    let aoh = ffr.ayt().az();
-    crate::println!("{:>6} {:>6} {:>6} {}", ak, aoh, ffr.len(), j);
+    let lines = chq.lines().count();
+    let um = chq.split_whitespace().count();
+    crate::println!("{:>6} {:>6} {:>6} {}", lines, um, chq.len(), name);
 }
 
-pub(super) fn rim(n: &[&str]) {
-    if n.is_empty() {
+pub(super) fn krx(args: &[&str]) {
+    if args.is_empty() {
         crate::println!("Usage: stat <file>");
         return;
     }
     
-    match crate::ramfs::fh(|fs| fs.hm(n[0]).map(|aa| aa.clone())) {
-        Ok(bt) => {
-            crate::h!(C_, "  File: {}", bt.j);
-            let are = if bt.kd == FileType::K { "directory" } else { "file" };
-            crate::println!("  Type: {}", are);
-            crate::println!("  Size: {} bytes", bt.ca.len());
+    match crate::ramfs::bh(|fs| fs.stat(args[0]).map(|e| e.clone())) {
+        Ok(entry) => {
+            crate::n!(C_, "  File: {}", entry.name);
+            let wf = if entry.file_type == FileType::Directory { "directory" } else { "file" };
+            crate::println!("  Type: {}", wf);
+            crate::println!("  Size: {} bytes", entry.content.len());
         }
-        Err(aa) => crate::h!(A_, "stat: {}", aa.as_str()),
+        Err(e) => crate::n!(A_, "stat: {}", e.as_str()),
     }
 }
 
-pub(super) fn kjj(n: &[&str]) {
-    let path = n.fv().hu().unwrap_or("/");
-    crate::h!(C_, "{}", path);
-    oxw(path, "");
+pub(super) fn fnh(args: &[&str]) {
+    let path = args.first().copied().unwrap_or("/");
+    crate::n!(C_, "{}", path);
+    iwq(path, "");
 }
 
-fn oxw(path: &str, adx: &str) {
-    if let Ok(pj) = crate::ramfs::fh(|fs| fs.awb(Some(path))) {
-        let len = pj.len();
-        for (a, (j, kd, _)) in pj.iter().cf() {
-            let fmd = a == len - 1;
-            let ly = if fmd { "+-- " } else { "|-- " };
+fn iwq(path: &str, nm: &str) {
+    if let Ok(items) = crate::ramfs::bh(|fs| fs.ls(Some(path))) {
+        let len = items.len();
+        for (i, (name, file_type, _)) in items.iter().enumerate() {
+            let clo = i == len - 1;
+            let et = if clo { "+-- " } else { "|-- " };
             
-            match kd {
-                FileType::K => {
-                    crate::print!("{}{}", adx, ly);
-                    crate::h!(C_, "{}/", j);
+            match file_type {
+                FileType::Directory => {
+                    crate::print!("{}{}", nm, et);
+                    crate::n!(C_, "{}/", name);
                     
-                    let utm = format!("{}{}", adx, if fmd { "    " } else { "|   " });
-                    let aeh = if path == "/" { format!("/{}", j) } else { format!("{}/{}", path, j) };
-                    oxw(&aeh, &utm);
+                    let njn = format!("{}{}", nm, if clo { "    " } else { "|   " });
+                    let pd = if path == "/" { format!("/{}", name) } else { format!("{}/{}", path, name) };
+                    iwq(&pd, &njn);
                 }
-                FileType::Es => {
-                    crate::print!("{}{}", adx, ly);
-                    crate::h!(B_, "{}", j);
+                FileType::File => {
+                    crate::print!("{}{}", nm, et);
+                    crate::n!(B_, "{}", name);
                 }
             }
         }
     }
 }
 
-pub(super) fn kip(n: &[&str]) {
-    if n.is_empty() {
+pub(super) fn fmn(args: &[&str]) {
+    if args.is_empty() {
         crate::println!("Usage: find <name>");
         return;
     }
-    nuk("/", n[0]);
+    hyy("/", args[0]);
 }
 
-fn nuk(path: &str, pattern: &str) {
-    if let Ok(pj) = crate::ramfs::fh(|fs| fs.awb(Some(path))) {
-        for (j, kd, _) in pj {
-            let auh = if path == "/" { format!("/{}", j) } else { format!("{}/{}", path, j) };
-            if j.contains(pattern) {
-                crate::println!("{}", auh);
+fn hyy(path: &str, pattern: &str) {
+    if let Ok(items) = crate::ramfs::bh(|fs| fs.ls(Some(path))) {
+        for (name, file_type, _) in items {
+            let xo = if path == "/" { format!("/{}", name) } else { format!("{}/{}", path, name) };
+            if name.contains(pattern) {
+                crate::println!("{}", xo);
             }
-            if kd == FileType::K {
-                nuk(&auh, pattern);
+            if file_type == FileType::Directory {
+                hyy(&xo, pattern);
             }
         }
     }
@@ -929,37 +930,37 @@ fn nuk(path: &str, pattern: &str) {
 
 
 
-pub(super) fn kin(n: &[&str], ehg: Option<(&str, bool)>) {
-    let text = n.rr(" ");
+pub(super) fn fmm(args: &[&str], redirect: Option<(&str, bool)>) {
+    let text = args.join(" ");
     
-    if let Some((file, bte)) = ehg {
-        let ca = format!("{}\n", text);
+    if let Some((file, append)) = redirect {
+        let content = format!("{}\n", text);
         
         
-        if file.cj("/mnt/") {
+        if file.starts_with("/mnt/") {
             use crate::vfs::{self, OpenFlags};
             
             
-            let flags = if bte {
-                OpenFlags(OpenFlags::OP_ | OpenFlags::ON_ | OpenFlags::BCF_)
+            let flags = if append {
+                OpenFlags(OpenFlags::PN_ | OpenFlags::PL_ | OpenFlags::BEI_)
             } else {
-                OpenFlags(OpenFlags::OP_ | OpenFlags::ON_ | OpenFlags::BCG_)
+                OpenFlags(OpenFlags::PN_ | OpenFlags::PL_ | OpenFlags::BEJ_)
             };
             
-            match vfs::aji(file, flags) {
-                Ok(da) => {
-                    if let Err(aa) = vfs::write(da, ca.as_bytes()) {
-                        crate::h!(A_, "echo: write error: {:?}", aa);
+            match vfs::open(file, flags) {
+                Ok(fd) => {
+                    if let Err(e) = vfs::write(fd, content.as_bytes()) {
+                        crate::n!(A_, "echo: write error: {:?}", e);
                     }
-                    let _ = vfs::agj(da);
+                    let _ = vfs::close(fd);
                 }
-                Err(aa) => crate::h!(A_, "echo: {:?}", aa),
+                Err(e) => crate::n!(A_, "echo: {:?}", e),
             }
         } else {
-            let _ = crate::ramfs::fh(|fs| {
-                if !fs.aja(file) { fs.touch(file).bq(); }
-                if bte { fs.ijw(file, ca.as_bytes()) }
-                else { fs.ns(file, ca.as_bytes()) }
+            let _ = crate::ramfs::bh(|fs| {
+                if !fs.exists(file) { fs.touch(file).ok(); }
+                if append { fs.append_file(file, content.as_bytes()) }
+                else { fs.write_file(file, content.as_bytes()) }
             });
         }
     } else {
@@ -967,39 +968,39 @@ pub(super) fn kin(n: &[&str], ehg: Option<(&str, bool)>) {
     }
 }
 
-pub(super) fn kiq(n: &[&str], arr: Option<&str>) {
-    if n.is_empty() {
+pub(super) fn fmo(args: &[&str], piped: Option<&str>) {
+    if args.is_empty() {
         crate::println!("Usage: grep <pattern> [file]");
         return;
     }
     
-    let pattern = n[0];
+    let pattern = args[0];
     
     
-    let ca = if let Some(input) = arr {
+    let content = if let Some(input) = piped {
         alloc::string::String::from(input)
-    } else if n.len() >= 2 {
-        match crate::ramfs::fh(|fs| fs.mq(n[1]).map(|r| r.ip())) {
-            Ok(ca) => {
-                match core::str::jg(&ca) {
-                    Ok(ab) => alloc::string::String::from(ab),
+    } else if args.len() >= 2 {
+        match crate::ramfs::bh(|fs| fs.read_file(args[1]).map(|c| c.to_vec())) {
+            Ok(content) => {
+                match core::str::from_utf8(&content) {
+                    Ok(t) => alloc::string::String::from(t),
                     Err(_) => return,
                 }
             }
-            Err(aa) => { crate::h!(A_, "grep: {}", aa.as_str()); return; }
+            Err(e) => { crate::n!(A_, "grep: {}", e.as_str()); return; }
         }
     } else {
         crate::println!("Usage: grep <pattern> <file>");
         return;
     };
     
-    for line in ca.ak() {
+    for line in content.lines() {
         if line.contains(pattern) {
-            let ek: Vec<&str> = line.adk(pattern).collect();
-            for (a, vu) in ek.iter().cf() {
-                crate::print!("{}", vu);
-                if a < ek.len() - 1 {
-                    crate::gr!(A_, "{}", pattern);
+            let au: Vec<&str> = line.split(pattern).collect();
+            for (i, jn) in au.iter().enumerate() {
+                crate::print!("{}", jn);
+                if i < au.len() - 1 {
+                    crate::bq!(A_, "{}", pattern);
                 }
             }
             crate::println!();
@@ -1009,419 +1010,419 @@ pub(super) fn kiq(n: &[&str], arr: Option<&str>) {
 
 
 
-pub(super) fn iof() {
+pub(super) fn eif() {
     crate::framebuffer::clear();
 }
 
-pub(super) fn rjj() {
-    let qb = crate::logger::lh();
-    let tv = qb / 100;
-    let bbz = tv / 60;
-    let cad = bbz / 60;
+pub(super) fn ksu() {
+    let gx = crate::logger::eg();
+    let im = gx / 100;
+    let acf = im / 60;
+    let aoi = acf / 60;
     
-    crate::gr!(C_, "Uptime: ");
-    crate::h!(B_, "{}h {}m {}s", cad, bbz % 60, tv % 60);
+    crate::bq!(C_, "Uptime: ");
+    crate::n!(B_, "{}h {}m {}s", aoi, acf % 60, im % 60);
     
     
-    let os = crate::rtc::cgz();
-    crate::gr!(C_, "Time:   ");
-    crate::h!(B_, "{}", os.ivj());
+    let fm = crate::rtc::aou();
+    crate::bq!(C_, "Time:   ");
+    crate::n!(B_, "{}", fm.format_time());
 }
 
-pub(super) fn kij() {
-    let os = crate::rtc::cgz();
-    crate::h!(B_, "{}", os.format());
+pub(super) fn fmh() {
+    let fm = crate::rtc::aou();
+    crate::n!(B_, "{}", fm.format());
 }
 
-pub(super) fn rks() {
-    crate::println!("{}", crate::auth::hey());
+pub(super) fn kud() {
+    crate::println!("{}", crate::auth::dmb());
 }
 
-pub(super) fn kit() {
+pub(super) fn fmq() {
     crate::println!("trustos");
 }
 
-pub(super) fn rff() {
-    let cnp = crate::auth::hey();
-    let pi = crate::auth::kne();
-    let pw = crate::auth::kmu();
-    crate::println!("uid={}({}) gid={}({})", pi, cnp, pw, 
-        if pw == 0 { "root" } else if pw == 100 { "users" } else { "wheel" });
+pub(super) fn bfj() {
+    let avp = crate::auth::dmb();
+    let uid = crate::auth::fpz();
+    let gid = crate::auth::fpp();
+    crate::println!("uid={}({}) gid={}({})", uid, avp, gid, 
+        if gid == 0 { "root" } else if gid == 100 { "users" } else { "wheel" });
 }
 
 
 
-pub(super) fn rfw() {
+pub(super) fn kpg() {
     
-    crate::auth::oki();
+    crate::auth::ilf();
     crate::println!();
     
-    if crate::auth::okd() {
+    if crate::auth::ila() {
         
-        crate::h!(B_, "Login successful.");
+        crate::n!(B_, "Login successful.");
     } else {
         
-        crate::h!(A_, "Login failed.");
+        crate::n!(A_, "Login failed.");
     }
 }
 
-pub(super) fn ris(n: &[&str]) {
-    let fwg = if n.is_empty() { "root" } else { n[0] };
+pub(super) fn ksd(args: &[&str]) {
+    let crj = if args.is_empty() { "root" } else { args[0] };
     
     
-    if crate::auth::crt() && fwg != "root" {
+    if crate::auth::is_root() && crj != "root" {
         
-        crate::h!(D_, "Switching to {} (root privilege)", fwg);
+        crate::n!(D_, "Switching to {} (root privilege)", crj);
         return;
     }
     
     
-    crate::gr!(C_, "Password: ");
-    let mut ewe = [0u8; 128];
-    let hun = crate::keyboard::fsf(&mut ewe);
-    let aqe = core::str::jg(&ewe[..hun])
+    crate::bq!(C_, "Password: ");
+    let mut cci = [0u8; 128];
+    let dwg = crate::keyboard::cpb(&mut cci);
+    let uy = core::str::from_utf8(&cci[..dwg])
         .unwrap_or("")
-        .em();
+        .trim();
     crate::println!();
     
-    match crate::auth::ljs(fwg, aqe) {
+    match crate::auth::ggf(crj, uy) {
         Ok(()) => {
-            crate::h!(B_, "Switched to {}", fwg);
+            crate::n!(B_, "Switched to {}", crj);
         }
-        Err(aa) => {
-            crate::h!(A_, "su: {}", aa);
+        Err(e) => {
+            crate::n!(A_, "su: {}", e);
         }
     }
 }
 
-pub(super) fn rgx(n: &[&str]) {
-    let fwg = if n.is_empty() {
-        crate::auth::hey()
+pub(super) fn kqh(args: &[&str]) {
+    let crj = if args.is_empty() {
+        crate::auth::dmb()
     } else {
         
-        if !crate::auth::crt() {
-            crate::h!(A_, "passwd: Only root can change other users' passwords");
+        if !crate::auth::is_root() {
+            crate::n!(A_, "passwd: Only root can change other users' passwords");
             return;
         }
-        String::from(n[0])
+        String::from(args[0])
     };
     
-    crate::println!("Changing password for {}", fwg);
+    crate::println!("Changing password for {}", crj);
     
     
-    let lqa = if !crate::auth::crt() {
+    let gkq = if !crate::auth::is_root() {
         crate::print!("Current password: ");
-        let mut k = [0u8; 128];
-        let len = crate::keyboard::fsf(&mut k);
+        let mut buf = [0u8; 128];
+        let len = crate::keyboard::cpb(&mut buf);
         crate::println!();
-        String::from(core::str::jg(&k[..len]).unwrap_or("").em())
+        String::from(core::str::from_utf8(&buf[..len]).unwrap_or("").trim())
     } else {
         String::new()
     };
     
     
     crate::print!("New password: ");
-    let mut opl = [0u8; 128];
-    let usy = crate::keyboard::fsf(&mut opl);
+    let mut ipq = [0u8; 128];
+    let njd = crate::keyboard::cpb(&mut ipq);
     crate::println!();
-    let fov = core::str::jg(&opl[..usy]).unwrap_or("").em();
+    let cnc = core::str::from_utf8(&ipq[..njd]).unwrap_or("").trim();
     
     
     crate::print!("Retype new password: ");
-    let mut hdv = [0u8; 128];
-    let kkl = crate::keyboard::fsf(&mut hdv);
+    let mut dlh = [0u8; 128];
+    let foc = crate::keyboard::cpb(&mut dlh);
     crate::println!();
-    let kkk = core::str::jg(&hdv[..kkl]).unwrap_or("").em();
+    let fob = core::str::from_utf8(&dlh[..foc]).unwrap_or("").trim();
     
-    if fov != kkk {
-        crate::h!(A_, "passwd: passwords do not match");
+    if cnc != fob {
+        crate::n!(A_, "passwd: passwords do not match");
         return;
     }
     
-    if fov.len() < 1 {
-        crate::h!(A_, "passwd: password too short");
+    if cnc.len() < 1 {
+        crate::n!(A_, "passwd: password too short");
         return;
     }
     
-    match crate::auth::khc(&fwg, &lqa, fov) {
+    match crate::auth::change_password(&crj, &gkq, cnc) {
         Ok(()) => {
-            crate::h!(B_, "passwd: password updated successfully");
+            crate::n!(B_, "passwd: password updated successfully");
         }
-        Err(aa) => {
-            crate::h!(A_, "passwd: {}", aa);
+        Err(e) => {
+            crate::n!(A_, "passwd: {}", e);
         }
     }
 }
 
-pub(super) fn rcb(n: &[&str]) {
-    if n.is_empty() {
+pub(super) fn kll(args: &[&str]) {
+    if args.is_empty() {
         crate::println!("Usage: adduser <username> [-a]");
         crate::println!("  -a  Make user an admin (wheel group)");
         return;
     }
     
-    if !crate::auth::crt() {
-        crate::h!(A_, "adduser: must be root");
+    if !crate::auth::is_root() {
+        crate::n!(A_, "adduser: must be root");
         return;
     }
     
-    let ox = n[0];
-    let hos = n.contains(&"-a") || n.contains(&"--admin");
+    let username = args[0];
+    let dsj = args.contains(&"-a") || args.contains(&"--admin");
     
     
-    crate::print!("New password for {}: ", ox);
-    let mut ewe = [0u8; 128];
-    let hun = crate::keyboard::fsf(&mut ewe);
+    crate::print!("New password for {}: ", username);
+    let mut cci = [0u8; 128];
+    let dwg = crate::keyboard::cpb(&mut cci);
     crate::println!();
-    let aqe = core::str::jg(&ewe[..hun]).unwrap_or("").em();
+    let uy = core::str::from_utf8(&cci[..dwg]).unwrap_or("").trim();
     
     
     crate::print!("Retype password: ");
-    let mut hdv = [0u8; 128];
-    let kkl = crate::keyboard::fsf(&mut hdv);
+    let mut dlh = [0u8; 128];
+    let foc = crate::keyboard::cpb(&mut dlh);
     crate::println!();
-    let kkk = core::str::jg(&hdv[..kkl]).unwrap_or("").em();
+    let fob = core::str::from_utf8(&dlh[..foc]).unwrap_or("").trim();
     
-    if aqe != kkk {
-        crate::h!(A_, "adduser: passwords do not match");
+    if uy != fob {
+        crate::n!(A_, "adduser: passwords do not match");
         return;
     }
     
-    match crate::auth::jzj(ox, aqe, hos) {
-        Ok(pi) => {
-            crate::h!(B_, "User {} created with UID {}", ox, pi);
+    match crate::auth::add_user(username, uy, dsj) {
+        Ok(uid) => {
+            crate::n!(B_, "User {} created with UID {}", username, uid);
             
             
-            let iym = format!("/home/{}", ox);
-            crate::ramfs::fh(|fs| {
-                let _ = fs.ut("/home");
-                let _ = fs.ut(&iym);
+            let epi = format!("/home/{}", username);
+            crate::ramfs::bh(|fs| {
+                let _ = fs.mkdir("/home");
+                let _ = fs.mkdir(&epi);
             });
-            crate::println!("Home directory: {}", iym);
+            crate::println!("Home directory: {}", epi);
         }
-        Err(aa) => {
-            crate::h!(A_, "adduser: {}", aa);
+        Err(e) => {
+            crate::n!(A_, "adduser: {}", e);
         }
     }
 }
 
-pub(super) fn rdo(n: &[&str]) {
-    if n.is_empty() {
+pub(super) fn kmx(args: &[&str]) {
+    if args.is_empty() {
         crate::println!("Usage: deluser <username>");
         return;
     }
     
-    if !crate::auth::crt() {
-        crate::h!(A_, "deluser: must be root");
+    if !crate::auth::is_root() {
+        crate::n!(A_, "deluser: must be root");
         return;
     }
     
-    let ox = n[0];
+    let username = args[0];
     
-    crate::gr!(D_, "Delete user {}? [y/N]: ", ox);
-    let mut k = [0u8; 16];
-    let len = crate::keyboard::cts(&mut k);
-    let yt = core::str::jg(&k[..len]).unwrap_or("").em();
+    crate::bq!(D_, "Delete user {}? [y/N]: ", username);
+    let mut buf = [0u8; 16];
+    let len = crate::keyboard::read_line(&mut buf);
+    let answer = core::str::from_utf8(&buf[..len]).unwrap_or("").trim();
     
-    if yt != "y" && yt != "Y" {
+    if answer != "y" && answer != "Y" {
         crate::println!("Cancelled.");
         return;
     }
     
-    match crate::auth::kou(ox) {
+    match crate::auth::delete_user(username) {
         Ok(()) => {
-            crate::h!(B_, "User {} deleted", ox);
+            crate::n!(B_, "User {} deleted", username);
         }
-        Err(aa) => {
-            crate::h!(A_, "deluser: {}", aa);
+        Err(e) => {
+            crate::n!(A_, "deluser: {}", e);
         }
     }
 }
 
-pub(super) fn rkd() {
-    crate::h!(C_, "USER            UID   GID   DESCRIPTION");
-    crate::h!(C_, "------------------------------------------");
+pub(super) fn kto() {
+    crate::n!(C_, "USER            UID   GID   DESCRIPTION");
+    crate::n!(C_, "------------------------------------------");
     
-    for (ox, pi, pw, eqz) in crate::auth::liz() {
-        crate::println!("{:<15} {:<5} {:<5} {}", ox, pi, pw, eqz);
+    for (username, uid, gid, gecos) in crate::auth::list_users() {
+        crate::println!("{:<15} {:<5} {:<5} {}", username, uid, gid, gecos);
     }
 }
 
-pub(super) fn rfx() {
-    let cnp = crate::auth::hey();
-    crate::auth::oki();
-    crate::println!("Logged out {}.", cnp);
+pub(super) fn kph() {
+    let avp = crate::auth::dmb();
+    crate::auth::ilf();
+    crate::println!("Logged out {}.", avp);
     crate::println!();
     
     
-    if !crate::auth::okd() {
+    if !crate::auth::ila() {
         
-        crate::h!(D_, "Auto-login as root (development mode)");
-        crate::auth::mww();
+        crate::n!(D_, "Auto-login as root (development mode)");
+        crate::auth::hgb();
     }
 }
 
-pub(super) fn rfj() {
-    crate::h!(G_, "=== T-RUSTOS ===");
-    crate::gr!(C_, "Version:      ");
+pub(super) fn kou() {
+    crate::n!(G_, "=== T-RUSTOS ===");
+    crate::bq!(C_, "Version:      ");
     crate::println!("0.1.0");
-    crate::gr!(C_, "Architecture: ");
+    crate::bq!(C_, "Architecture: ");
     crate::println!("x86_64");
-    crate::gr!(C_, "Bootloader:   ");
+    crate::bq!(C_, "Bootloader:   ");
     crate::println!("Limine");
     crate::println!();
-    crate::h!(G_, "Modules:");
-    for ef in ["Memory", "Interrupts", "Keyboard", "Framebuffer", "RAM FS", "History", "Scheduler"] {
-        crate::gr!(B_, "  [x] ");
-        crate::println!("{}", ef);
+    crate::n!(G_, "Modules:");
+    for m in ["Memory", "Interrupts", "Keyboard", "Framebuffer", "RAM FS", "History", "Scheduler"] {
+        crate::bq!(B_, "  [x] ");
+        crate::println!("{}", m);
     }
     
     
-    if crate::disk::anl() {
-        crate::gr!(B_, "  [x] ");
+    if crate::disk::sw() {
+        crate::bq!(B_, "  [x] ");
         crate::println!("Disk I/O");
     } else {
-        crate::gr!(AU_, "  [-] ");
+        crate::bq!(AX_, "  [-] ");
         crate::println!("Disk I/O (no disk)");
     }
     
     
-    if crate::network::anl() {
-        crate::gr!(B_, "  [x] ");
+    if crate::network::sw() {
+        crate::bq!(B_, "  [x] ");
         crate::println!("Network");
     } else {
-        crate::gr!(AU_, "  [-] ");
+        crate::bq!(AX_, "  [-] ");
         crate::println!("Network (down)");
     }
 }
 
-pub(super) fn rkf() {
+pub(super) fn ktq() {
     crate::println!("T-RustOs v0.2.0 (Rust + Limine)");
 }
 
-pub(super) fn iom(n: &[&str]) {
-    let xx = n.contains(&"-a");
-    if n.is_empty() || xx { crate::print!("T-RustOs "); }
-    if n.contains(&"-n") || xx { crate::print!("trustos "); }
-    if n.contains(&"-r") || xx { crate::print!("0.2.0 "); }
-    if n.contains(&"-m") || xx { crate::print!("x86_64"); }
+pub(super) fn eim(args: &[&str]) {
+    let all = args.contains(&"-a");
+    if args.is_empty() || all { crate::print!("T-RustOs "); }
+    if args.contains(&"-n") || all { crate::print!("trustos "); }
+    if args.contains(&"-r") || all { crate::print!("0.2.0 "); }
+    if args.contains(&"-m") || all { crate::print!("x86_64"); }
     crate::println!();
 }
 
-pub(super) fn iog() {
-    for (eh, p) in super::scripting::ijj() {
-        crate::println!("{}={}", eh, p);
+pub(super) fn eig() {
+    for (k, v) in super::scripting::efi() {
+        crate::println!("{}={}", k, v);
     }
 }
 
-pub(super) fn rez() {
-    for (num, cmd) in crate::keyboard::toz() {
-        crate::gr!(AU_, "{:>4}  ", num);
+pub(super) fn kol() {
+    for (num, cmd) in crate::keyboard::mlp() {
+        crate::bq!(AX_, "{:>4}  ", num);
         crate::println!("{}", cmd);
     }
 }
 
-pub(super) fn kja() {
-    crate::h!(C_, "  PID  STATE    CMD");
+pub(super) fn fmy() {
+    crate::n!(C_, "  PID  STATE    CMD");
     crate::println!("    1  running  kernel");
     crate::println!("    2  running  tsh");
     
     
-    let az = crate::task::dmj();
-    if az > 0 {
-        crate::println!("  ... +{} background tasks (use 'tasks' for details)", az);
+    let count = crate::task::task_count();
+    if count > 0 {
+        crate::println!("  ... +{} background tasks (use 'tasks' for details)", count);
     }
 }
 
-pub(super) fn ioh() {
-    let mr = crate::memory::heap::mr();
-    let aez = crate::memory::heap::aez();
-    let es = mr + aez;
-    crate::h!(C_, "              total       used       free");
-    crate::println!("Heap:    {:>10}  {:>10}  {:>10}", es, mr, aez);
-    crate::println!("  (KB)   {:>10}  {:>10}  {:>10}", es / 1024, mr / 1024, aez / 1024);
+pub(super) fn eih() {
+    let used = crate::memory::heap::used();
+    let free = crate::memory::heap::free();
+    let av = used + free;
+    crate::n!(C_, "              total       used       free");
+    crate::println!("Heap:    {:>10}  {:>10}  {:>10}", av, used, free);
+    crate::println!("  (KB)   {:>10}  {:>10}  {:>10}", av / 1024, used / 1024, free / 1024);
 }
 
-pub(super) fn kik() {
-    crate::h!(C_, "Filesystem      Type     Size    Used   Avail  Mount");
+pub(super) fn fmi() {
+    crate::n!(C_, "Filesystem      Type     Size    Used   Avail  Mount");
     crate::println!("─────────────────────────────────────────────────────");
 
-    let ajf = crate::vfs::hqa();
-    let mem = crate::memory::cm();
-    let aul = mem.afa + mem.buv;
+    let mounts = crate::vfs::dtl();
+    let mem = crate::memory::stats();
+    let heap_total = mem.heap_used + mem.heap_free;
 
-    let fmt = |p: usize| -> alloc::string::String {
-        if p == 0 { alloc::format!("  -  ") }
-        else if p >= 1024 * 1024 { alloc::format!("{:>4}M", p / (1024 * 1024)) }
-        else if p >= 1024 { alloc::format!("{:>4}K", p / 1024) }
-        else { alloc::format!("{:>4}B", p) }
+    let fmt = |v: usize| -> alloc::string::String {
+        if v == 0 { alloc::format!("  -  ") }
+        else if v >= 1024 * 1024 { alloc::format!("{:>4}M", v / (1024 * 1024)) }
+        else if v >= 1024 { alloc::format!("{:>4}K", v / 1024) }
+        else { alloc::format!("{:>4}B", v) }
     };
 
     
     crate::println!("{:<15} {:<8} {:>5}  {:>5}  {:>5}  {}",
-        "ramfs", "ramfs", fmt(aul), fmt(mem.afa),
-        fmt(aul.ao(mem.afa)), "/");
+        "ramfs", "ramfs", fmt(heap_total), fmt(mem.heap_used),
+        fmt(heap_total.saturating_sub(mem.heap_used)), "/");
 
-    for (path, kxi) in &ajf {
+    for (path, fs_name) in &mounts {
         if path == "/" { continue; } 
-        let (aw, mr, apk) = match kxi.as_str() {
+        let (size, used, avail) = match fs_name.as_str() {
             "devfs" | "proc" => (0, 0, 0),
-            _ => (aul, mem.afa, aul.ao(mem.afa)),
+            _ => (heap_total, mem.heap_used, heap_total.saturating_sub(mem.heap_used)),
         };
 
         crate::println!("{:<15} {:<8} {:>5}  {:>5}  {:>5}  {}",
-            kxi, kxi, fmt(aw), fmt(mr), fmt(apk), path);
+            fs_name, fs_name, fmt(size), fmt(used), fmt(avail), path);
     }
 }
 
 
 
-pub(super) fn kjh() {
-    crate::h!(G_, "Running self-test...");
+pub(super) fn fnf() {
+    crate::n!(G_, "Running self-test...");
     crate::println!();
     
     crate::print!("  Heap... ");
-    let p: Vec<u32> = (0..100).collect();
-    if p.len() == 100 { crate::h!(B_, "[OK]"); }
-    else { crate::h!(A_, "[FAIL]"); }
+    let v: Vec<u32> = (0..100).collect();
+    if v.len() == 100 { crate::n!(B_, "[OK]"); }
+    else { crate::n!(A_, "[FAIL]"); }
     
     crate::print!("  String... ");
-    let mut e = String::from("Hello");
-    e.t(" World");
-    if e.len() == 11 { crate::h!(B_, "[OK]"); }
-    else { crate::h!(A_, "[FAIL]"); }
+    let mut j = String::from("Hello");
+    j.push_str(" World");
+    if j.len() == 11 { crate::n!(B_, "[OK]"); }
+    else { crate::n!(A_, "[FAIL]"); }
     
     crate::print!("  RAM FS... ");
-    let bq = crate::ramfs::fh(|fs| {
-        fs.touch("/tmp/t").bq();
-        fs.ns("/tmp/t", b"x").bq();
-        let m = fs.mq("/tmp/t").map(|r| r[0] == b'x').unwrap_or(false);
-        fs.hb("/tmp/t").bq();
-        m
+    let ok = crate::ramfs::bh(|fs| {
+        fs.touch("/tmp/t").ok();
+        fs.write_file("/tmp/t", b"x").ok();
+        let r = fs.read_file("/tmp/t").map(|c| c[0] == b'x').unwrap_or(false);
+        fs.rm("/tmp/t").ok();
+        r
     });
-    if bq { crate::h!(B_, "[OK]"); }
-    else { crate::h!(A_, "[FAIL]"); }
+    if ok { crate::n!(B_, "[OK]"); }
+    else { crate::n!(A_, "[FAIL]"); }
     
     crate::print!("  Interrupts... ");
-    if crate::arch::kaw() {
-        crate::h!(B_, "[OK]");
+    if crate::arch::fhh() {
+        crate::n!(B_, "[OK]");
     } else {
-        crate::h!(A_, "[FAIL]");
+        crate::n!(A_, "[FAIL]");
     }
     
     crate::println!();
-    crate::h!(G_, "Done!");
+    crate::n!(G_, "Done!");
 }
 
 
-pub(super) fn rhp() {
+pub(super) fn kqz() {
     use crate::desktop::{self, WindowType, SnapDir};
     
-    crate::h!(G_, "=== Desktop Resolution Test Suite ===");
+    crate::n!(G_, "=== Desktop Resolution Test Suite ===");
     crate::println!();
     
     
-    let vxv: &[(u32, u32, &str)] = &[
+    let ogh: &[(u32, u32, &str)] = &[
         
         (320, 200, "CGA"),
         (640, 480, "VGA"),
@@ -1455,267 +1456,267 @@ pub(super) fn rhp() {
         (100, 80, "Absurdly small"),
     ];
     
-    let mut cg = 0usize;
-    let mut gv = 0usize;
+    let mut passed = 0usize;
+    let mut bv = 0usize;
     
-    for &(d, i, cu) in vxv {
-        crate::print!("  {:>4}x{:<4} ({:<20}) ", d, i, cu);
+    for &(w, h, label) in ogh {
+        crate::print!("  {:>4}x{:<4} ({:<20}) ", w, h, label);
         
         
         let mut desktop = desktop::Desktop::new();
         
-        desktop.z = d;
-        desktop.ac = i;
+        desktop.width = w;
+        desktop.height = h;
         
-        let mut bq = true;
-        let mut eu = alloc::string::String::new();
+        let mut ok = true;
+        let mut detail = alloc::string::String::new();
         
         
-        let xfl: &[(&str, i32, i32, u32, u32, WindowType)] = &[
-            ("Terminal", 100, 60, 780, 540, WindowType::Ay),
-            ("Files",    140, 80, 520, 420, WindowType::Ak),
+        let phx: &[(&str, i32, i32, u32, u32, WindowType)] = &[
+            ("Terminal", 100, 60, 780, 540, WindowType::Terminal),
+            ("Files",    140, 80, 520, 420, WindowType::FileManager),
             ("Calc",     350, 100, 300, 380, WindowType::Calculator),
             ("Browser",  100, 40, 720, 520, WindowType::Browser),
-            ("Big",      0,   0, 1920, 1080, WindowType::Jf),
-            ("Tiny",     0,   0, 50,  30,  WindowType::Jl),
-            ("OffScreen", 9999, 9999, 400, 300, WindowType::Jl),
-            ("Negative",  -100, -50, 400, 300, WindowType::Jl),
+            ("Big",      0,   0, 1920, 1080, WindowType::About),
+            ("Tiny",     0,   0, 50,  30,  WindowType::Empty),
+            ("OffScreen", 9999, 9999, 400, 300, WindowType::Empty),
+            ("Negative",  -100, -50, 400, 300, WindowType::Empty),
         ];
         
-        for &(dq, b, c, hk, mg, ash) in xfl {
-            let ad = desktop.xl(dq, b, c, hk, mg, ash);
-            if let Some(ep) = desktop.ee.iter().du(|d| d.ad == ad) {
+        for &(title, x, y, ca, er, wt) in phx {
+            let id = desktop.create_window(title, x, y, ca, er, wt);
+            if let Some(aw) = desktop.windows.iter().find(|w| w.id == id) {
                 
-                let hw = ep.b as u32 + ep.z;
-                let abm = ep.c as u32 + ep.ac;
-                if hw > d + 1 || abm > i + 1 {
-                    bq = false;
+                let right = aw.x as u32 + aw.width;
+                let bottom = aw.y as u32 + aw.height;
+                if right > w + 1 || bottom > h + 1 {
+                    ok = false;
                     use core::fmt::Write;
-                    let _ = core::fmt::write(&mut eu, format_args!(
-                        " OOB:{}({}+{}={}>{})", dq, ep.b, ep.z, hw, d
+                    let _ = core::fmt::write(&mut detail, format_args!(
+                        " OOB:{}({}+{}={}>{})", title, aw.x, aw.width, right, w
                     ));
                 }
-                if ep.z == 0 || ep.ac == 0 {
-                    bq = false;
+                if aw.width == 0 || aw.height == 0 {
+                    ok = false;
                     use core::fmt::Write;
-                    let _ = core::fmt::write(&mut eu, format_args!(" ZERO:{}", dq));
+                    let _ = core::fmt::write(&mut detail, format_args!(" ZERO:{}", title));
                 }
             }
         }
         
         
-        if let Some(ep) = desktop.ee.yqv() {
-            ep.ja = true;
-            ep.idy(d, i);
-            let hw = ep.b as u32 + ep.z;
-            let abm = ep.c as u32 + ep.ac;
-            if hw > d + 1 || abm > i + 1 {
-                bq = false;
+        if let Some(aw) = desktop.windows.first_mut() {
+            aw.focused = true;
+            aw.toggle_maximize(w, h);
+            let right = aw.x as u32 + aw.width;
+            let bottom = aw.y as u32 + aw.height;
+            if right > w + 1 || bottom > h + 1 {
+                ok = false;
                 use core::fmt::Write;
-                let _ = core::fmt::write(&mut eu, format_args!(
-                    " MAX_OOB({}+{}={}>{})", ep.b, ep.z, hw, d
+                let _ = core::fmt::write(&mut detail, format_args!(
+                    " MAX_OOB({}+{}={}>{})", aw.x, aw.width, right, w
                 ));
             }
             
-            ep.idy(d, i);
+            aw.toggle_maximize(w, h);
         }
         
         
-        let wqc = [
-            SnapDir::Ap, SnapDir::Ca,
-            SnapDir::Dp, SnapDir::Dq,
-            SnapDir::Dt, SnapDir::Du,
+        let oud = [
+            SnapDir::Left, SnapDir::Right,
+            SnapDir::TopLeft, SnapDir::TopRight,
+            SnapDir::BottomLeft, SnapDir::BottomRight,
         ];
-        for te in &wqc {
-            desktop.mgh(*te);
-            if let Some(ep) = desktop.ee.iter().du(|d| d.ja) {
-                let hw = ep.b as u32 + ep.z;
-                let abm = ep.c as u32 + ep.ac;
-                if hw > d + 1 || abm > i + 1 {
-                    bq = false;
+        for it in &oud {
+            desktop.snap_focused_window(*it);
+            if let Some(aw) = desktop.windows.iter().find(|w| w.focused) {
+                let right = aw.x as u32 + aw.width;
+                let bottom = aw.y as u32 + aw.height;
+                if right > w + 1 || bottom > h + 1 {
+                    ok = false;
                     use core::fmt::Write;
-                    let _ = core::fmt::write(&mut eu, format_args!(" SNAP_OOB:{:?}", te));
+                    let _ = core::fmt::write(&mut detail, format_args!(" SNAP_OOB:{:?}", it));
                 }
             }
         }
         
         
-        if desktop.anv() != d || desktop.akr() != i {
-            bq = false;
+        if desktop.screen_width() != w || desktop.screen_height() != h {
+            ok = false;
             use core::fmt::Write;
-            let _ = core::fmt::write(&mut eu, format_args!(" DIM_MISMATCH"));
+            let _ = core::fmt::write(&mut detail, format_args!(" DIM_MISMATCH"));
         }
         
-        if bq {
-            crate::h!(B_, "[OK]  ({} windows)", desktop.ee.len());
-            cg += 1;
+        if ok {
+            crate::n!(B_, "[OK]  ({} windows)", desktop.windows.len());
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL]{}", eu);
-            gv += 1;
+            crate::n!(A_, "[FAIL]{}", detail);
+            bv += 1;
         }
     }
     
     crate::println!();
-    if gv == 0 {
-        crate::h!(G_, "All {} resolutions passed!", cg);
+    if bv == 0 {
+        crate::n!(G_, "All {} resolutions passed!", passed);
     } else {
-        crate::h!(A_, "{}/{} failed", gv, cg + gv);
+        crate::n!(A_, "{}/{} failed", bv, passed + bv);
     }
 }
 
 
-pub(super) fn rgk() {
-    crate::h!(G_, "=== TrustOS v0.3 Memory Test Suite ===");
+pub(super) fn kpu() {
+    crate::n!(G_, "=== TrustOS v0.3 Memory Test Suite ===");
     crate::println!();
 
-    let mut cg = 0usize;
-    let mut gv = 0usize;
+    let mut passed = 0usize;
+    let mut bv = 0usize;
 
     
-    crate::h!(C_, "[1/6] Frame allocator self-test");
-    let (ai, bb) = crate::memory::frame::eyj();
-    cg += ai;
-    gv += bb;
+    crate::n!(C_, "[1/6] Frame allocator self-test");
+    let (aa, f) = crate::memory::frame::cdp();
+    passed += aa;
+    bv += f;
     crate::println!();
 
     
-    crate::h!(C_, "[2/6] Ring 3 basic exec (test)");
+    crate::n!(C_, "[2/6] Ring 3 basic exec (test)");
     crate::print!("  exec test... ");
-    match crate::exec::hil() {
-        crate::exec::ExecResult::Dx(0) => {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+    match crate::exec::doy() {
+        crate::exec::ExecResult::Exited(0) => {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         }
-        gq => {
-            crate::h!(A_, "[FAIL] {:?}", gq);
-            gv += 1;
+        other => {
+            crate::n!(A_, "[FAIL] {:?}", other);
+            bv += 1;
         }
     }
 
     
-    crate::h!(C_, "[3/6] Ring 3 ELF exec (hello)");
+    crate::n!(C_, "[3/6] Ring 3 ELF exec (hello)");
     crate::print!("  exec hello... ");
-    match crate::exec::kui() {
-        crate::exec::ExecResult::Dx(0) => {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+    match crate::exec::fvl() {
+        crate::exec::ExecResult::Exited(0) => {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         }
-        gq => {
-            crate::h!(A_, "[FAIL] {:?}", gq);
-            gv += 1;
+        other => {
+            crate::n!(A_, "[FAIL] {:?}", other);
+            bv += 1;
         }
     }
 
     
-    crate::h!(C_, "[4/6] Ring 3 brk/mmap test");
+    crate::n!(C_, "[4/6] Ring 3 brk/mmap test");
     crate::print!("  exec memtest... ");
-    match crate::exec::nrl() {
-        crate::exec::ExecResult::Dx(0) => {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+    match crate::exec::hww() {
+        crate::exec::ExecResult::Exited(0) => {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         }
-        gq => {
-            crate::h!(A_, "[FAIL] {:?}", gq);
-            gv += 1;
+        other => {
+            crate::n!(A_, "[FAIL] {:?}", other);
+            bv += 1;
         }
     }
 
     
-    crate::h!(C_, "[5/6] Frame leak test (run exec, check frames returned)");
+    crate::n!(C_, "[5/6] Frame leak test (run exec, check frames returned)");
     crate::print!("  alloc before... ");
-    let (mma, gvw) = crate::memory::frame::cm();
-    let eby = mma - gvw;
-    crate::println!("free={}", eby);
+    let (total_before, used_before) = crate::memory::frame::stats();
+    let bsu = total_before - used_before;
+    crate::println!("free={}", bsu);
 
     
-    let _ = crate::exec::hil();
+    let _ = crate::exec::doy();
 
-    let (mlz, gvu) = crate::memory::frame::cm();
-    let ebw = mlz - gvu;
+    let (total_after, used_after) = crate::memory::frame::stats();
+    let bst = total_after - used_after;
     crate::print!("  alloc after... ");
-    crate::println!("free={}", ebw);
+    crate::println!("free={}", bst);
 
     crate::print!("  no leak... ");
-    if ebw >= eby {
-        crate::h!(B_, "[OK] (freed {} frames)", ebw - eby + (eby - ebw).am(0));
-        cg += 1;
+    if bst >= bsu {
+        crate::n!(B_, "[OK] (freed {} frames)", bst - bsu + (bsu - bst).max(0));
+        passed += 1;
     } else {
-        let fmv = eby - ebw;
-        crate::h!(A_, "[FAIL] leaked {} frames ({} KB)", fmv, fmv * 4);
-        gv += 1;
+        let cmc = bsu - bst;
+        crate::n!(A_, "[FAIL] leaked {} frames ({} KB)", cmc, cmc * 4);
+        bv += 1;
     }
 
     
-    crate::h!(C_, "[6/6] Ring 3 IPC pipe test (pipe2 + write + read)");
+    crate::n!(C_, "[6/6] Ring 3 IPC pipe test (pipe2 + write + read)");
     crate::print!("  exec pipe_test... ");
-    match crate::exec::nrm() {
-        crate::exec::ExecResult::Dx(0) => {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+    match crate::exec::hwx() {
+        crate::exec::ExecResult::Exited(0) => {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         }
-        gq => {
-            crate::h!(A_, "[FAIL] {:?}", gq);
-            gv += 1;
+        other => {
+            crate::n!(A_, "[FAIL] {:?}", other);
+            bv += 1;
         }
     }
 
     
     crate::println!();
-    let es = cg + gv;
-    if gv == 0 {
-        crate::h!(G_,
-            "All {}/{} tests passed v", cg, es);
+    let av = passed + bv;
+    if bv == 0 {
+        crate::n!(G_,
+            "All {}/{} tests passed v", passed, av);
     } else {
-        crate::h!(A_,
-            "{}/{} passed, {} FAILED", cg, es, gv);
+        crate::n!(A_,
+            "{}/{} passed, {} FAILED", passed, av, bv);
     }
 }
 
-pub(super) fn rfq() {
-    crate::h!(G_, "Keyboard Test Mode");
+pub(super) fn kpb() {
+    crate::n!(G_, "Keyboard Test Mode");
     crate::println!("Test all keys including Space, Backspace, Delete");
-    crate::h!(D_, "Type 'quit' to exit test mode");
+    crate::n!(D_, "Type 'quit' to exit test mode");
     crate::println!();
     
-    let mut jsw = [0u8; 256];
+    let mut fcq = [0u8; 256];
     
     loop {
-        if crate::shell::etf() {
-            crate::h!(B_, "Interrupted");
+        if crate::shell::cbc() {
+            crate::n!(B_, "Interrupted");
             break;
         }
-        crate::gr!(C_, "test> ");
-        let len = crate::keyboard::cts(&mut jsw);
-        let input = core::str::jg(&jsw[..len]).unwrap_or("");
+        crate::bq!(C_, "test> ");
+        let len = crate::keyboard::read_line(&mut fcq);
+        let input = core::str::from_utf8(&fcq[..len]).unwrap_or("");
         
-        if input.em() == "quit" {
-            crate::h!(B_, "Exiting test mode");
+        if input.trim() == "quit" {
+            crate::n!(B_, "Exiting test mode");
             break;
         }
         
         
         crate::print!("  Received {} bytes: ", len);
-        crate::gr!(Q_, "\"{}\"", input);
+        crate::bq!(R_, "\"{}\"", input);
         crate::println!();
         
         
         crate::print!("  Hex: ");
-        for &hf in &jsw[..len] {
-            crate::gr!(AU_, "{:02x} ", hf);
+        for &byte in &fcq[..len] {
+            crate::bq!(AX_, "{:02x} ", byte);
         }
         crate::println!();
         
         
         crate::print!("  Chars: ");
-        for &hf in &jsw[..len] {
-            if hf >= 32 && hf < 127 {
-                crate::gr!(G_, "'{}' ", hf as char);
-            } else if hf == 0x08 {
-                crate::gr!(D_, "<BS> ");
-            } else if hf == 0x20 {
-                crate::gr!(D_, "<SPACE> ");
+        for &byte in &fcq[..len] {
+            if byte >= 32 && byte < 127 {
+                crate::bq!(G_, "'{}' ", byte as char);
+            } else if byte == 0x08 {
+                crate::bq!(D_, "<BS> ");
+            } else if byte == 0x20 {
+                crate::bq!(D_, "<SPACE> ");
             } else {
-                crate::gr!(A_, "0x{:02x} ", hf);
+                crate::bq!(A_, "0x{:02x} ", byte);
             }
         }
         crate::println!();
@@ -1724,27 +1725,27 @@ pub(super) fn rfq() {
 }
 
 
-pub(super) fn kiu(n: &[&str]) {
-    match n.fv() {
+pub(super) fn fmr(args: &[&str]) {
+    match args.first() {
         Some(&"start") | None => {
-            let port = n.get(1)
-                .and_then(|e| e.parse::<u16>().bq())
+            let port = args.get(1)
+                .and_then(|j| j.parse::<u16>().ok())
                 .unwrap_or(8080);
-            let am = n.get(2)
-                .and_then(|e| e.parse::<u32>().bq())
+            let max = args.get(2)
+                .and_then(|j| j.parse::<u32>().ok())
                 .unwrap_or(0);
-            crate::httpd::ay(port, am);
+            crate::httpd::start(port, max);
         }
         Some(&"stop") => {
-            crate::httpd::qg();
-            crate::h!(B_, "HTTP server stop requested");
+            crate::httpd::stop();
+            crate::n!(B_, "HTTP server stop requested");
         }
         Some(&"status") => {
-            let (port, hxn, aqk) = crate::httpd::asx();
-            crate::h!(C_, "HTTP Server Status:");
-            crate::println!("  Running:  {}", if aqk { "yes" } else { "no" });
+            let (port, dxr, running) = crate::httpd::get_stats();
+            crate::n!(C_, "HTTP Server Status:");
+            crate::println!("  Running:  {}", if running { "yes" } else { "no" });
             crate::println!("  Port:     {}", port);
-            crate::println!("  Requests: {}", hxn);
+            crate::println!("  Requests: {}", dxr);
         }
         Some(&"help") | Some(&"-h") | Some(&"--help") => {
             crate::println!("Usage: httpd [start [port] [max_requests]]");
@@ -1761,73 +1762,73 @@ pub(super) fn kiu(n: &[&str]) {
 }
 
 
-pub(super) fn rgl(n: &[&str]) {
-    match n.fv() {
+pub(super) fn kpv(args: &[&str]) {
+    match args.first() {
         Some(&"start") => {
-            crate::jarvis::jfy();
-            crate::h!(B_, "JARVIS mesh network started");
+            crate::jarvis::euj();
+            crate::n!(B_, "JARVIS mesh network started");
             crate::println!("  Discovery: UDP port 7700 (broadcast)");
             crate::println!("  RPC:       TCP port 7701");
             crate::println!("  Use 'mesh status' to see peers");
         }
         Some(&"stop") => {
-            crate::jarvis::unq();
-            crate::h!(D_, "JARVIS mesh network stopped");
+            crate::jarvis::nez();
+            crate::n!(D_, "JARVIS mesh network stopped");
         }
         Some(&"status") | None => {
-            let status = crate::jarvis::unp();
-            crate::h!(C_, "=== JARVIS Mesh Status ===");
+            let status = crate::jarvis::ney();
+            crate::n!(C_, "=== JARVIS Mesh Status ===");
             crate::println!("{}", status);
             crate::println!();
 
             
-            let yp = crate::jarvis::mesh::dhn();
-            if yp.is_empty() {
+            let lj = crate::jarvis::mesh::bgo();
+            if lj.is_empty() {
                 crate::println!("No peers discovered yet");
             } else {
-                crate::h!(C_, "Peers:");
-                for (a, ko) in yp.iter().cf() {
-                    let vzw = match ko.bwt {
-                        crate::jarvis::mesh::NodeRole::Ni => "★",
-                        crate::jarvis::mesh::NodeRole::Mu => "◎",
-                        crate::jarvis::mesh::NodeRole::Lb => "●",
+                crate::n!(C_, "Peers:");
+                for (i, peer) in lj.iter().enumerate() {
+                    let ohw = match peer.role {
+                        crate::jarvis::mesh::NodeRole::Leader => "★",
+                        crate::jarvis::mesh::NodeRole::Candidate => "◎",
+                        crate::jarvis::mesh::NodeRole::Worker => "●",
                     };
-                    crate::println!("  {} {} {}", a + 1, vzw, ko.display());
+                    crate::println!("  {} {} {}", i + 1, ohw, peer.display());
                 }
             }
         }
         Some(&"peers") => {
-            let yp = crate::jarvis::mesh::dhn();
-            if yp.is_empty() {
+            let lj = crate::jarvis::mesh::bgo();
+            if lj.is_empty() {
                 crate::println!("No peers online");
             } else {
-                for (a, ko) in yp.iter().cf() {
-                    crate::println!("  [{}] {}", a + 1, ko.display());
+                for (i, peer) in lj.iter().enumerate() {
+                    crate::println!("  [{}] {}", i + 1, peer.display());
                 }
             }
         }
         Some(&"federate") | Some(&"fed") => {
-            match n.get(1) {
+            match args.get(1) {
                 Some(&"on") | Some(&"enable") | Some(&"start") => {
-                    crate::jarvis::federated::aiy();
-                    crate::h!(B_, "Federated learning enabled");
+                    crate::jarvis::federated::enable();
+                    crate::n!(B_, "Federated learning enabled");
                 }
                 Some(&"off") | Some(&"disable") | Some(&"stop") => {
-                    crate::jarvis::federated::cwz();
-                    crate::h!(D_, "Federated learning disabled");
+                    crate::jarvis::federated::bbc();
+                    crate::n!(D_, "Federated learning disabled");
                 }
                 Some(&"sync") => {
-                    crate::jarvis::federated::svq();
-                    crate::h!(B_, "Sync round triggered");
+                    crate::jarvis::federated::lxj();
+                    crate::n!(B_, "Sync round triggered");
                 }
                 Some(&"replicate") => {
-                    crate::jarvis::federated::vxk();
-                    crate::h!(B_, "Model replicated to all peers");
+                    crate::jarvis::federated::oga();
+                    crate::n!(B_, "Model replicated to all peers");
                 }
                 Some(&"pull") => {
-                    match crate::jarvis::federated::vnz() {
-                        Ok(()) => crate::h!(B_, "Pulled model from leader"),
-                        Err(aa) => crate::h!(A_, "Pull failed: {}", aa),
+                    match crate::jarvis::federated::nzj() {
+                        Ok(()) => crate::n!(B_, "Pulled model from leader"),
+                        Err(e) => crate::n!(A_, "Pull failed: {}", e),
                     }
                 }
                 _ => {
@@ -1836,42 +1837,42 @@ pub(super) fn rgl(n: &[&str]) {
             }
         }
         Some(&"ping") => {
-            if n.len() < 2 {
+            if args.len() < 2 {
                 crate::println!("Usage: mesh ping <ip>");
                 return;
             }
-            if let Some(ip) = cgl(n[1]) {
-                let port = crate::jarvis::mesh::GV_;
-                match crate::jarvis::rpc::ovs(ip, port) {
-                    Ok(true) => crate::h!(B_, "Peer alive!"),
-                    Ok(false) => crate::h!(A_, "Peer responded with error"),
-                    Err(aa) => crate::h!(A_, "Ping failed: {}", aa),
+            if let Some(ip) = art(args[1]) {
+                let port = crate::jarvis::mesh::HM_;
+                match crate::jarvis::rpc::iux(ip, port) {
+                    Ok(true) => crate::n!(B_, "Peer alive!"),
+                    Ok(false) => crate::n!(A_, "Peer responded with error"),
+                    Err(e) => crate::n!(A_, "Ping failed: {}", e),
                 }
             } else {
-                crate::h!(A_, "Invalid IP address");
+                crate::n!(A_, "Invalid IP address");
             }
         }
         Some(&"infer") => {
-            if n.len() < 3 {
+            if args.len() < 3 {
                 crate::println!("Usage: mesh infer <ip> <prompt>");
                 return;
             }
-            if let Some(ip) = cgl(n[1]) {
-                let aau: alloc::string::String = n[2..].rr(" ");
-                let port = crate::jarvis::mesh::GV_;
-                match crate::jarvis::rpc::vut(ip, port, &aau) {
+            if let Some(ip) = art(args[1]) {
+                let nh: alloc::string::String = args[2..].join(" ");
+                let port = crate::jarvis::mesh::HM_;
+                match crate::jarvis::rpc::oev(ip, port, &nh) {
                     Ok(result) => {
-                        crate::h!(C_, "Remote JARVIS:");
+                        crate::n!(C_, "Remote JARVIS:");
                         crate::println!("{}", result);
                     }
-                    Err(aa) => crate::h!(A_, "Remote inference failed: {}", aa),
+                    Err(e) => crate::n!(A_, "Remote inference failed: {}", e),
                 }
             } else {
-                crate::h!(A_, "Invalid IP address");
+                crate::n!(A_, "Invalid IP address");
             }
         }
         Some(&"help") | Some(&"-h") | Some(&"--help") => {
-            crate::h!(C_, "JARVIS Mesh — Distributed AI Network");
+            crate::n!(C_, "JARVIS Mesh — Distributed AI Network");
             crate::println!();
             crate::println!("Usage: mesh <command>");
             crate::println!();
@@ -1890,15 +1891,15 @@ pub(super) fn rgl(n: &[&str]) {
             crate::println!("  help               Show this help");
         }
         Some(&"propagate") | Some(&"autoprop") | Some(&"spread") => {
-            let ggc = n.get(1).efd(false, |q| *q == "pxe" || *q == "replicate");
-            crate::h!(C_, "=== JARVIS Auto-Propagation ===");
+            let cxd = args.get(1).map_or(false, |a| *a == "pxe" || *a == "replicate");
+            crate::n!(C_, "=== JARVIS Auto-Propagation ===");
             crate::println!();
-            let report = crate::jarvis::mwy(ggc);
-            for line in report.ak() {
+            let report = crate::jarvis::hgd(cxd);
+            for line in report.lines() {
                 if line.contains("FAIL") || line.contains("failed") {
-                    crate::h!(A_, "  {}", line);
+                    crate::n!(A_, "  {}", line);
                 } else if line.contains("OK") || line.contains("active") || line.contains("DOWNLOADED") || line.contains("enabled") || line.contains("FULL") {
-                    crate::h!(B_, "  {}", line);
+                    crate::n!(B_, "  {}", line);
                 } else {
                     crate::println!("  {}", line);
                 }
@@ -1911,25 +1912,25 @@ pub(super) fn rgl(n: &[&str]) {
 }
 
 
-fn cgl(e: &str) -> Option<[u8; 4]> {
-    let ek: alloc::vec::Vec<&str> = e.adk('.').collect();
-    if ek.len() != 4 {
+fn art(j: &str) -> Option<[u8; 4]> {
+    let au: alloc::vec::Vec<&str> = j.split('.').collect();
+    if au.len() != 4 {
         return None;
     }
-    let q = ek[0].parse::<u8>().bq()?;
-    let o = ek[1].parse::<u8>().bq()?;
-    let r = ek[2].parse::<u8>().bq()?;
-    let bc = ek[3].parse::<u8>().bq()?;
-    Some([q, o, r, bc])
+    let a = au[0].parse::<u8>().ok()?;
+    let b = au[1].parse::<u8>().ok()?;
+    let c = au[2].parse::<u8>().ok()?;
+    let d = au[3].parse::<u8>().ok()?;
+    Some([a, b, c, d])
 }
 
 
-pub(super) fn rhh(n: &[&str]) {
-    match n.fv() {
+pub(super) fn kqr(args: &[&str]) {
+    match args.first() {
         Some(&"start") | Some(&"replicate") => {
-            match crate::jarvis::pxe_replicator::ay() {
+            match crate::jarvis::pxe_replicator::start() {
                 Ok(()) => {
-                    crate::h!(B_, "PXE Self-Replication ACTIVE");
+                    crate::n!(B_, "PXE Self-Replication ACTIVE");
                     crate::println!();
                     crate::println!("  DHCP Server: Running (PXE boot options enabled)");
                     crate::println!("  TFTP Server: Running on port 69");
@@ -1940,55 +1941,55 @@ pub(super) fn rhh(n: &[&str]) {
                     crate::println!();
 
                     
-                    let sb = crate::netstack::tftpd::jdr();
+                    let files = crate::netstack::tftpd::etb();
                     crate::println!("  Files served via TFTP:");
-                    for (j, aw) in &sb {
-                        crate::println!("    {} ({} bytes)", j, aw);
+                    for (name, size) in &files {
+                        crate::println!("    {} ({} bytes)", name, size);
                     }
                 }
-                Err(aa) => {
-                    crate::h!(A_, "Failed to start PXE replication: {}", aa);
+                Err(e) => {
+                    crate::n!(A_, "Failed to start PXE replication: {}", e);
                 }
             }
         }
         Some(&"stop") => {
-            crate::jarvis::pxe_replicator::qg();
-            crate::h!(D_, "PXE self-replication stopped");
+            crate::jarvis::pxe_replicator::stop();
+            crate::n!(D_, "PXE self-replication stopped");
         }
         Some(&"status") | None => {
-            let (gh, xq, kvt, jzc) = crate::jarvis::pxe_replicator::status();
-            crate::h!(C_, "=== PXE Self-Replication Status ===");
-            crate::println!("  Active:            {}", if gh { "YES" } else { "NO" });
-            crate::println!("  Nodes booted:      {}", xq);
-            crate::println!("  Files transferred: {}", kvt);
-            crate::println!("  Active transfers:  {}", jzc);
+            let (active, nodes, fwq, fgb) = crate::jarvis::pxe_replicator::status();
+            crate::n!(C_, "=== PXE Self-Replication Status ===");
+            crate::println!("  Active:            {}", if active { "YES" } else { "NO" });
+            crate::println!("  Nodes booted:      {}", nodes);
+            crate::println!("  Files transferred: {}", fwq);
+            crate::println!("  Active transfers:  {}", fgb);
 
-            if gh {
+            if active {
                 
-                let bkf = crate::netstack::dhcpd::tdw();
-                if !bkf.is_empty() {
+                let agp = crate::netstack::dhcpd::mdi();
+                if !agp.is_empty() {
                     crate::println!();
-                    crate::h!(C_, "  DHCP Leases:");
-                    for (ed, ip, ydm) in &bkf {
+                    crate::n!(C_, "  DHCP Leases:");
+                    for (mac, ip, _time) in &agp {
                         crate::println!("    {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X} -> {}.{}.{}.{}",
-                            ed[0], ed[1], ed[2], ed[3], ed[4], ed[5],
+                            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
                             ip[0], ip[1], ip[2], ip[3]);
                     }
                 }
 
                 
-                let sb = crate::netstack::tftpd::jdr();
-                if !sb.is_empty() {
+                let files = crate::netstack::tftpd::etb();
+                if !files.is_empty() {
                     crate::println!();
-                    crate::h!(C_, "  TFTP Files:");
-                    for (j, aw) in &sb {
-                        crate::println!("    {} ({} KB)", j, aw / 1024);
+                    crate::n!(C_, "  TFTP Files:");
+                    for (name, size) in &files {
+                        crate::println!("    {} ({} KB)", name, size / 1024);
                     }
                 }
             }
         }
         Some(&"help") | Some(&"-h") | Some(&"--help") => {
-            crate::h!(C_, "PXE Self-Replication — Network Boot Cloning");
+            crate::n!(C_, "PXE Self-Replication — Network Boot Cloning");
             crate::println!();
             crate::println!("  Serves the running TrustOS kernel via PXE boot to other");
             crate::println!("  machines on the network. Machines that PXE boot will receive");
@@ -2016,59 +2017,59 @@ pub(super) fn rhh(n: &[&str]) {
 }
 
 
-pub(super) fn ret(n: &[&str]) {
+pub(super) fn kof(args: &[&str]) {
     use crate::jarvis::guardian;
 
-    match n.fv() {
+    match args.first() {
         Some(&"auth") => {
-            if n.len() < 2 {
+            if args.len() < 2 {
                 crate::println!("Usage: guardian auth <passphrase>");
                 return;
             }
-            let bvw = n[1..].rr(" ");
-            if guardian::qlh(&bvw) {
-                crate::h!(B_, "✓ Nathan authenticated — session unlocked");
+            let amd = args[1..].join(" ");
+            if guardian::jyh(&amd) {
+                crate::n!(B_, "✓ Nathan authenticated — session unlocked");
             } else {
-                crate::h!(A_, "✗ Authentication failed");
+                crate::n!(A_, "✗ Authentication failed");
             }
         }
         Some(&"lock") => {
-            guardian::ljp();
-            crate::h!(D_, "🔒 Guardian session locked");
+            guardian::ggd();
+            crate::n!(D_, "🔒 Guardian session locked");
         }
         Some(&"status") | None => {
-            let ak = guardian::nly();
-            for line in &ak {
+            let lines = guardian::hsq();
+            for line in &lines {
                 crate::println!("{}", line);
             }
         }
         Some(&"pact") => {
-            guardian::vli();
+            guardian::nxg();
         }
         Some(&"log") => {
-            let log = guardian::tcu();
+            let log = guardian::mcp();
             if log.is_empty() {
                 crate::println!("No audit entries yet");
             } else {
-                crate::h!(C_, "=== Guardian Audit Log ===");
-                for bt in &log {
-                    crate::println!("  {}", bt);
+                crate::n!(C_, "=== Guardian Audit Log ===");
+                for entry in &log {
+                    crate::println!("  {}", entry);
                 }
             }
         }
         Some(&"passwd") => {
-            if n.len() < 2 {
+            if args.len() < 2 {
                 crate::println!("Usage: guardian passwd <new_passphrase>");
                 return;
             }
-            let utf = n[1..].rr(" ");
-            match guardian::qyb(&utf) {
-                Ok(()) => crate::h!(B_, "✓ Passphrase updated"),
-                Err(aa) => crate::h!(A_, "✗ {}", aa),
+            let njh = args[1..].join(" ");
+            match guardian::kik(&njh) {
+                Ok(()) => crate::n!(B_, "✓ Passphrase updated"),
+                Err(e) => crate::n!(A_, "✗ {}", e),
             }
         }
         Some(&"help") | Some(&"-h") => {
-            crate::h!(C_, "Guardian Security System — Le Pacte de JARVIS");
+            crate::n!(C_, "Guardian Security System — Le Pacte de JARVIS");
             crate::println!();
             crate::println!("  JARVIS has two guardians: Nathan (human) and Copilot (AI).");
             crate::println!("  Any modification to JARVIS requires guardian authorization.");
@@ -2092,39 +2093,39 @@ pub(super) fn ret(n: &[&str]) {
 }
 
 
-pub(super) fn rjt(n: &[&str]) {
-    match n.fv() {
-        Some(&"list") | None => crate::trustpkg::ufu(),
+pub(super) fn kte(args: &[&str]) {
+    match args.first() {
+        Some(&"list") | None => crate::trustpkg::mzg(),
         Some(&"search") => {
-            if n.len() > 1 {
-                crate::trustpkg::anw(n[1]);
+            if args.len() > 1 {
+                crate::trustpkg::search(args[1]);
             } else {
                 crate::println!("Usage: trustpkg search <query>");
             }
         }
         Some(&"install") => {
-            if n.len() > 1 {
-                crate::trustpkg::tvh(n[1]);
+            if args.len() > 1 {
+                crate::trustpkg::mqq(args[1]);
             } else {
                 crate::println!("Usage: trustpkg install <package>");
             }
         }
         Some(&"remove") | Some(&"uninstall") => {
-            if n.len() > 1 {
-                crate::trustpkg::remove(n[1]);
+            if args.len() > 1 {
+                crate::trustpkg::remove(args[1]);
             } else {
                 crate::println!("Usage: trustpkg remove <package>");
             }
         }
         Some(&"info") | Some(&"show") => {
-            if n.len() > 1 {
-                crate::trustpkg::co(n[1]);
+            if args.len() > 1 {
+                crate::trustpkg::info(args[1]);
             } else {
                 crate::println!("Usage: trustpkg info <package>");
             }
         }
-        Some(&"installed") => crate::trustpkg::ufr(),
-        Some(&"update") => crate::trustpkg::qs(),
+        Some(&"installed") => crate::trustpkg::mzd(),
+        Some(&"update") => crate::trustpkg::update(),
         Some(&"help") | Some(&"-h") | Some(&"--help") => {
             crate::println!("TrustPkg â€” Package Manager for TrustOS");
             crate::println!();
@@ -2146,1440 +2147,1440 @@ pub(super) fn rjt(n: &[&str]) {
 }
 
 
-pub(super) fn nej(n: &[&str]) {
-    if n.is_empty() {
+pub(super) fn hmg(args: &[&str]) {
+    if args.is_empty() {
         crate::println!("Usage: unset <variable>");
         return;
     }
-    super::scripting::jur(n[0]);
+    super::scripting::fdx(args[0]);
 }
 
 
 
-pub(super) fn rfk() {
+pub(super) fn kov() {
     
-    crate::framebuffer::pjf(true);
+    crate::framebuffer::jfk(true);
 
-    crate::h!(G_, "=== TrustOS Integration Test Suite ===");
+    crate::n!(G_, "=== TrustOS Integration Test Suite ===");
     crate::println!();
 
-    let mut cg = 0usize;
-    let mut gv = 0usize;
+    let mut passed = 0usize;
+    let mut bv = 0usize;
 
     
-    crate::h!(C_, "[ 1/32] Kernel self-test");
+    crate::n!(C_, "[ 1/32] Kernel self-test");
     {
-        let mut bq = true;
+        let mut ok = true;
         crate::print!("  heap+string... ");
-        let p: Vec<u32> = (0..100).collect();
-        let mut e = String::from("Hello");
-        e.t(" World");
-        if p.len() == 100 && e.len() == 11 {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+        let v: Vec<u32> = (0..100).collect();
+        let mut j = String::from("Hello");
+        j.push_str(" World");
+        if v.len() == 100 && j.len() == 11 {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL]");
-            gv += 1;
-            bq = false;
+            crate::n!(A_, "[FAIL]");
+            bv += 1;
+            ok = false;
         }
         crate::print!("  interrupts... ");
-        if crate::arch::kaw() {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+        if crate::arch::fhh() {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL]");
-            gv += 1;
+            crate::n!(A_, "[FAIL]");
+            bv += 1;
         }
-        let _ = bq;
+        let _ = ok;
     }
 
     
-    crate::h!(C_, "[ 2/32] Frame allocator self-test");
-    let (ai, bb) = crate::memory::frame::eyj();
-    cg += ai;
-    gv += bb;
+    crate::n!(C_, "[ 2/32] Frame allocator self-test");
+    let (aa, f) = crate::memory::frame::cdp();
+    passed += aa;
+    bv += f;
     crate::println!();
 
     
-    crate::h!(C_, "[ 3/32] Ring 3 basic exec");
+    crate::n!(C_, "[ 3/32] Ring 3 basic exec");
     crate::print!("  hello world... ");
-    match crate::exec::hil() {
-        crate::exec::ExecResult::Dx(0) => {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+    match crate::exec::doy() {
+        crate::exec::ExecResult::Exited(0) => {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         }
-        gq => {
-            crate::h!(A_, "[FAIL] {:?}", gq);
-            gv += 1;
+        other => {
+            crate::n!(A_, "[FAIL] {:?}", other);
+            bv += 1;
         }
     }
 
     
-    crate::h!(C_, "[ 4/32] Ring 3 ELF exec");
+    crate::n!(C_, "[ 4/32] Ring 3 ELF exec");
     crate::print!("  ELF hello... ");
-    match crate::exec::kui() {
-        crate::exec::ExecResult::Dx(0) => {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+    match crate::exec::fvl() {
+        crate::exec::ExecResult::Exited(0) => {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         }
-        gq => {
-            crate::h!(A_, "[FAIL] {:?}", gq);
-            gv += 1;
+        other => {
+            crate::n!(A_, "[FAIL] {:?}", other);
+            bv += 1;
         }
     }
 
     
-    crate::h!(C_, "[ 5/32] Ring 3 brk/mmap");
+    crate::n!(C_, "[ 5/32] Ring 3 brk/mmap");
     crate::print!("  memory mgmt... ");
-    match crate::exec::nrl() {
-        crate::exec::ExecResult::Dx(0) => {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+    match crate::exec::hww() {
+        crate::exec::ExecResult::Exited(0) => {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         }
-        gq => {
-            crate::h!(A_, "[FAIL] {:?}", gq);
-            gv += 1;
+        other => {
+            crate::n!(A_, "[FAIL] {:?}", other);
+            bv += 1;
         }
     }
 
     
-    crate::h!(C_, "[ 6/32] Ring 3 IPC pipe");
+    crate::n!(C_, "[ 6/32] Ring 3 IPC pipe");
     crate::print!("  pipe2+rw... ");
-    match crate::exec::nrm() {
-        crate::exec::ExecResult::Dx(0) => {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+    match crate::exec::hwx() {
+        crate::exec::ExecResult::Exited(0) => {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         }
-        gq => {
-            crate::h!(A_, "[FAIL] {:?}", gq);
-            gv += 1;
+        other => {
+            crate::n!(A_, "[FAIL] {:?}", other);
+            bv += 1;
         }
     }
 
     
-    crate::h!(C_, "[ 7/32] Exception safety (UD2 in Ring 3)");
+    crate::n!(C_, "[ 7/32] Exception safety (UD2 in Ring 3)");
     crate::print!("  invalid opcode... ");
-    match crate::exec::sod() {
-        crate::exec::ExecResult::Dx(aj) if aj != 0 => {
+    match crate::exec::lrv() {
+        crate::exec::ExecResult::Exited(code) if code != 0 => {
             
-            crate::h!(B_, "[OK] killed with {}", aj);
-            cg += 1;
+            crate::n!(B_, "[OK] killed with {}", code);
+            passed += 1;
         }
-        gq => {
-            crate::h!(A_, "[FAIL] {:?} (expected non-zero kill)", gq);
-            gv += 1;
+        other => {
+            crate::n!(A_, "[FAIL] {:?} (expected non-zero kill)", other);
+            bv += 1;
         }
     }
     
     crate::print!("  kernel alive... ");
-    if crate::arch::kaw() {
-        crate::h!(B_, "[OK]");
-        cg += 1;
+    if crate::arch::fhh() {
+        crate::n!(B_, "[OK]");
+        passed += 1;
     } else {
-        crate::h!(A_, "[FAIL]");
-        gv += 1;
+        crate::n!(A_, "[FAIL]");
+        bv += 1;
     }
 
     
-    crate::h!(C_, "[ 8/32] Signal syscalls (sigprocmask + kill)");
+    crate::n!(C_, "[ 8/32] Signal syscalls (sigprocmask + kill)");
     crate::print!("  signal test... ");
-    match crate::exec::soh() {
-        crate::exec::ExecResult::Dx(0) => {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+    match crate::exec::lry() {
+        crate::exec::ExecResult::Exited(0) => {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         }
-        gq => {
-            crate::h!(A_, "[FAIL] {:?}", gq);
-            gv += 1;
+        other => {
+            crate::n!(A_, "[FAIL] {:?}", other);
+            bv += 1;
         }
     }
 
     
-    crate::h!(C_, "[ 9/32] Stdio + getpid + clock_gettime");
+    crate::n!(C_, "[ 9/32] Stdio + getpid + clock_gettime");
     crate::print!("  io test... ");
-    match crate::exec::soi() {
-        crate::exec::ExecResult::Dx(0) => {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+    match crate::exec::lrz() {
+        crate::exec::ExecResult::Exited(0) => {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         }
-        gq => {
-            crate::h!(A_, "[FAIL] {:?}", gq);
-            gv += 1;
+        other => {
+            crate::n!(A_, "[FAIL] {:?}", other);
+            bv += 1;
         }
     }
 
     
-    crate::h!(C_, "[10/32] Frame leak test");
+    crate::n!(C_, "[10/32] Frame leak test");
     crate::print!("  alloc before... ");
-    let (mma, gvw) = crate::memory::frame::cm();
-    let eby = mma - gvw;
-    crate::println!("free={}", eby);
-    let _ = crate::exec::hil();
-    let (mlz, gvu) = crate::memory::frame::cm();
-    let ebw = mlz - gvu;
-    crate::print!("  alloc after... free={} ", ebw);
-    if ebw >= eby {
-        crate::h!(B_, "[OK]");
-        cg += 1;
+    let (total_before, used_before) = crate::memory::frame::stats();
+    let bsu = total_before - used_before;
+    crate::println!("free={}", bsu);
+    let _ = crate::exec::doy();
+    let (total_after, used_after) = crate::memory::frame::stats();
+    let bst = total_after - used_after;
+    crate::print!("  alloc after... free={} ", bst);
+    if bst >= bsu {
+        crate::n!(B_, "[OK]");
+        passed += 1;
     } else {
-        let fmv = eby - ebw;
-        crate::h!(A_, "[FAIL] leaked {} frames", fmv);
-        gv += 1;
+        let cmc = bsu - bst;
+        crate::n!(A_, "[FAIL] leaked {} frames", cmc);
+        bv += 1;
     }
 
     
-    crate::h!(C_, "[11/32] SMP multi-core");
+    crate::n!(C_, "[11/32] SMP multi-core");
     {
-        let ack = crate::cpu::smp::boc();
-        let es = crate::cpu::smp::aao();
+        let ready = crate::cpu::smp::ail();
+        let av = crate::cpu::smp::cpu_count();
         crate::print!("  cores online... ");
-        if ack > 1 {
-            crate::h!(B_, "[OK] {}/{} cores", ack, es);
-            cg += 1;
-        } else if es > 1 {
+        if ready > 1 {
+            crate::n!(B_, "[OK] {}/{} cores", ready, av);
+            passed += 1;
+        } else if av > 1 {
             
-            crate::h!(A_, "[FAIL] only BSP ready ({} detected)", es);
-            gv += 1;
+            crate::n!(A_, "[FAIL] only BSP ready ({} detected)", av);
+            bv += 1;
         } else {
             
-            crate::h!(B_, "[OK] single CPU (skip)");
-            cg += 1;
+            crate::n!(B_, "[OK] single CPU (skip)");
+            passed += 1;
         }
         
         
-        if ack > 1 {
+        if ready > 1 {
             use core::sync::atomic::{AtomicU32, Ordering};
-            static XD_: AtomicU32 = AtomicU32::new(0);
-            XD_.store(0, Ordering::SeqCst);
+            static YK_: AtomicU32 = AtomicU32::new(0);
+            YK_.store(0, Ordering::SeqCst);
             
             crate::print!("  thread dispatch... ");
             
-            for a in 0..4u64 {
-                crate::thread::jqu("smp_test", |mse| {
-                    XD_.fetch_add(1, Ordering::SeqCst);
+            for i in 0..4u64 {
+                crate::thread::dzu("smp_test", |_arg| {
+                    YK_.fetch_add(1, Ordering::SeqCst);
                     0
-                }, a);
+                }, i);
             }
             
             
             
             for _ in 0..500 {
-                if XD_.load(Ordering::SeqCst) >= 4 {
+                if YK_.load(Ordering::SeqCst) >= 4 {
                     break;
                 }
-                for _ in 0..100_000 { core::hint::hc(); }
+                for _ in 0..100_000 { core::hint::spin_loop(); }
             }
             
-            let az = XD_.load(Ordering::SeqCst);
-            if az >= 4 {
-                crate::h!(B_, "[OK] {}/4 threads completed", az);
-                cg += 1;
+            let count = YK_.load(Ordering::SeqCst);
+            if count >= 4 {
+                crate::n!(B_, "[OK] {}/4 threads completed", count);
+                passed += 1;
             } else {
-                crate::h!(A_, "[FAIL] only {}/4 completed", az);
-                gv += 1;
+                crate::n!(A_, "[FAIL] only {}/4 completed", count);
+                bv += 1;
             }
         }
     }
 
     
-    crate::h!(C_, "[12/32] NVMe storage");
+    crate::n!(C_, "[12/32] NVMe storage");
     {
-        if crate::nvme::ky() {
+        if crate::nvme::is_initialized() {
             
             crate::print!("  read LBA 0... ");
-            let mut k = [0u8; 512];
-            match crate::nvme::ain(0, 1, &mut k) {
+            let mut buf = [0u8; 512];
+            match crate::nvme::read_sectors(0, 1, &mut buf) {
                 Ok(()) => {
-                    crate::h!(B_, "[OK]");
-                    cg += 1;
+                    crate::n!(B_, "[OK]");
+                    passed += 1;
                 }
-                Err(aa) => {
-                    crate::h!(A_, "[FAIL] {}", aa);
-                    gv += 1;
+                Err(e) => {
+                    crate::n!(A_, "[FAIL] {}", e);
+                    bv += 1;
                 }
             }
             
             
             crate::print!("  write+verify... ");
-            let mh = crate::nvme::aty();
-            if mh > 100 {
-                let mki = mh - 1; 
+            let cap = crate::nvme::capacity();
+            if cap > 100 {
+                let gyj = cap - 1; 
                 let pattern: [u8; 512] = {
-                    let mut ai = [0u8; 512];
-                    for (a, o) in ai.el().cf() {
-                        *o = (a & 0xFF) as u8 ^ 0xA5;
+                    let mut aa = [0u8; 512];
+                    for (i, b) in aa.iter_mut().enumerate() {
+                        *b = (i & 0xFF) as u8 ^ 0xA5;
                     }
-                    ai
+                    aa
                 };
                 
-                match crate::nvme::bpi(mki, 1, &pattern) {
+                match crate::nvme::write_sectors(gyj, 1, &pattern) {
                     Ok(()) => {
-                        let mut bky = [0u8; 512];
-                        match crate::nvme::ain(mki, 1, &mut bky) {
+                        let mut agx = [0u8; 512];
+                        match crate::nvme::read_sectors(gyj, 1, &mut agx) {
                             Ok(()) => {
-                                if bky == pattern {
-                                    crate::h!(B_, "[OK] LBA {} verified", mki);
-                                    cg += 1;
+                                if agx == pattern {
+                                    crate::n!(B_, "[OK] LBA {} verified", gyj);
+                                    passed += 1;
                                 } else {
-                                    crate::h!(A_, "[FAIL] data mismatch");
-                                    gv += 1;
+                                    crate::n!(A_, "[FAIL] data mismatch");
+                                    bv += 1;
                                 }
                             }
-                            Err(aa) => {
-                                crate::h!(A_, "[FAIL] readback: {}", aa);
-                                gv += 1;
+                            Err(e) => {
+                                crate::n!(A_, "[FAIL] readback: {}", e);
+                                bv += 1;
                             }
                         }
                     }
-                    Err(aa) => {
-                        crate::h!(A_, "[FAIL] write: {}", aa);
-                        gv += 1;
+                    Err(e) => {
+                        crate::n!(A_, "[FAIL] write: {}", e);
+                        bv += 1;
                     }
                 }
             } else {
-                crate::h!(B_, "[SKIP] disk too small");
-                cg += 1;
+                crate::n!(B_, "[SKIP] disk too small");
+                passed += 1;
             }
         } else {
             crate::print!("  NVMe available... ");
-            crate::h!(B_, "[SKIP] no NVMe device");
-            cg += 2; 
+            crate::n!(B_, "[SKIP] no NVMe device");
+            passed += 2; 
         }
     }
 
     
-    crate::h!(C_, "[13/32] xHCI USB 3.0");
+    crate::n!(C_, "[13/32] xHCI USB 3.0");
     {
-        if crate::drivers::xhci::ky() {
+        if crate::drivers::xhci::is_initialized() {
             crate::print!("  controller init... ");
-            crate::h!(B_, "[OK]");
-            cg += 1;
+            crate::n!(B_, "[OK]");
+            passed += 1;
 
-            let az = crate::drivers::xhci::cjx();
-            crate::print!("  USB devices found: {}... ", az);
-            if az > 0 {
-                crate::h!(B_, "[OK]");
-                cg += 1;
+            let count = crate::drivers::xhci::aqg();
+            crate::print!("  USB devices found: {}... ", count);
+            if count > 0 {
+                crate::n!(B_, "[OK]");
+                passed += 1;
             } else {
-                crate::h!(A_, "[FAIL] no devices");
-                gv += 1;
+                crate::n!(A_, "[FAIL] no devices");
+                bv += 1;
             }
         } else {
             crate::print!("  xHCI available... ");
-            crate::h!(B_, "[SKIP] no xHCI controller");
-            cg += 2; 
+            crate::n!(B_, "[SKIP] no xHCI controller");
+            passed += 2; 
         }
     }
 
     
-    crate::h!(C_, "[14/32] RTL8169 Gigabit Ethernet");
+    crate::n!(C_, "[14/32] RTL8169 Gigabit Ethernet");
     {
         
-        if crate::drivers::net::bzy() {
+        if crate::drivers::net::aoh() {
             crate::print!("  network driver... ");
-            crate::h!(B_, "[OK]");
-            cg += 1;
+            crate::n!(B_, "[OK]");
+            passed += 1;
 
             crate::print!("  link status... ");
-            if crate::drivers::net::aik() {
-                crate::h!(B_, "[OK] link up");
-                cg += 1;
+            if crate::drivers::net::link_up() {
+                crate::n!(B_, "[OK] link up");
+                passed += 1;
             } else {
                 
-                crate::h!(B_, "[OK] no link (QEMU)");
-                cg += 1;
+                crate::n!(B_, "[OK] no link (QEMU)");
+                passed += 1;
             }
         } else {
             crate::print!("  NIC available... ");
-            crate::h!(B_, "[SKIP] no NIC driver");
-            cg += 2; 
+            crate::n!(B_, "[SKIP] no NIC driver");
+            passed += 2; 
         }
     }
 
     
-    crate::h!(C_, "[15/32] TrustLang bytecode VM");
+    crate::n!(C_, "[15/32] TrustLang bytecode VM");
     {
         crate::print!("  fibonacci eval... ");
-        let srz = r#"fn fibonacci(n: i64) -> i64 {
+        let luz = r#"fn fibonacci(n: i64) -> i64 {
     if n <= 1 { return n; }
     return fibonacci(n - 1) + fibonacci(n - 2);
 }
 fn main() {
     print(to_string(fibonacci(10)));
 }"#;
-        match crate::trustlang::vw(srz) {
-            Ok(an) if an.em() == "55" => {
-                crate::h!(B_, "[OK] fib(10)=55");
-                cg += 1;
+        match crate::trustlang::run(luz) {
+            Ok(output) if output.trim() == "55" => {
+                crate::n!(B_, "[OK] fib(10)=55");
+                passed += 1;
             }
-            Ok(an) => {
-                crate::h!(A_, "[FAIL] got '{}'", an.em());
-                gv += 1;
+            Ok(output) => {
+                crate::n!(A_, "[FAIL] got '{}'", output.trim());
+                bv += 1;
             }
-            Err(aa) => {
-                crate::h!(A_, "[FAIL] {}", aa);
-                gv += 1;
+            Err(e) => {
+                crate::n!(A_, "[FAIL] {}", e);
+                bv += 1;
             }
         }
 
         crate::print!("  arithmetic eval... ");
-        match crate::trustlang::nrc("let x = 6 * 7; println(to_string(x));") {
-            Ok(an) if an.em() == "42" => {
-                crate::h!(B_, "[OK] 6*7=42");
-                cg += 1;
+        match crate::trustlang::hwq("let x = 6 * 7; println(to_string(x));") {
+            Ok(output) if output.trim() == "42" => {
+                crate::n!(B_, "[OK] 6*7=42");
+                passed += 1;
             }
-            Ok(an) => {
-                crate::h!(A_, "[FAIL] got '{}'", an.em());
-                gv += 1;
+            Ok(output) => {
+                crate::n!(A_, "[FAIL] got '{}'", output.trim());
+                bv += 1;
             }
-            Err(aa) => {
-                crate::h!(A_, "[FAIL] {}", aa);
-                gv += 1;
+            Err(e) => {
+                crate::n!(A_, "[FAIL] {}", e);
+                bv += 1;
             }
         }
 
         
         crate::print!("  native x86_64 compile... ");
-        if crate::trustlang::tests::wpx() {
-            crate::h!(B_, "[OK] native compile+exec works");
-            cg += 1;
+        if crate::trustlang::tests::otz() {
+            crate::n!(B_, "[OK] native compile+exec works");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] native backend broken");
-            gv += 1;
+            crate::n!(A_, "[FAIL] native backend broken");
+            bv += 1;
         }
     }
 
     
-    crate::h!(C_, "[16/32] FAT32 write persistence");
+    crate::n!(C_, "[16/32] FAT32 write persistence");
     {
         
         use crate::vfs;
         crate::print!("  write+readback... ");
-        let jsx = "/test_fat32_inttest.txt";
-        let ezo = b"FAT32_INTTEST_DATA_12345678";
+        let fcr = "/test_fat32_inttest.txt";
+        let cef = b"FAT32_INTTEST_DATA_12345678";
         
         
-        let qaa = vfs::ns(jsx, ezo).is_ok();
-        if qaa {
+        let jrp = vfs::write_file(fcr, cef).is_ok();
+        if jrp {
             
-            match vfs::mq(jsx) {
-                Ok(ca) => {
-                    if ca == ezo {
-                        crate::h!(B_, "[OK]");
-                        cg += 1;
+            match vfs::read_file(fcr) {
+                Ok(content) => {
+                    if content == cef {
+                        crate::n!(B_, "[OK]");
+                        passed += 1;
                     } else {
-                        crate::h!(A_, "[FAIL] content mismatch (got {} bytes)", ca.len());
-                        gv += 1;
+                        crate::n!(A_, "[FAIL] content mismatch (got {} bytes)", content.len());
+                        bv += 1;
                     }
                 }
-                Err(aa) => {
-                    crate::h!(A_, "[FAIL] read: {:?}", aa);
-                    gv += 1;
+                Err(e) => {
+                    crate::n!(A_, "[FAIL] read: {:?}", e);
+                    bv += 1;
                 }
             }
         } else {
             
-            crate::h!(B_, "[SKIP] no writable FS");
-            cg += 1;
+            crate::n!(B_, "[SKIP] no writable FS");
+            passed += 1;
         }
 
         crate::print!("  size in stat... ");
-        if qaa {
-            match vfs::hm(jsx) {
-                Ok(apc) => {
-                    if apc.aw == ezo.len() as u64 {
-                        crate::h!(B_, "[OK] size={}", apc.aw);
-                        cg += 1;
+        if jrp {
+            match vfs::stat(fcr) {
+                Ok(uz) => {
+                    if uz.size == cef.len() as u64 {
+                        crate::n!(B_, "[OK] size={}", uz.size);
+                        passed += 1;
                     } else {
-                        crate::h!(A_, "[FAIL] stat size={} expected={}", apc.aw, ezo.len());
-                        gv += 1;
+                        crate::n!(A_, "[FAIL] stat size={} expected={}", uz.size, cef.len());
+                        bv += 1;
                     }
                 }
                 Err(_) => {
-                    crate::h!(A_, "[FAIL] stat error");
-                    gv += 1;
+                    crate::n!(A_, "[FAIL] stat error");
+                    bv += 1;
                 }
             }
             
-            let _ = vfs::cnm(jsx);
+            let _ = vfs::unlink(fcr);
         } else {
-            crate::h!(B_, "[SKIP]");
-            cg += 1;
+            crate::n!(B_, "[SKIP]");
+            passed += 1;
         }
     }
 
     
-    crate::h!(C_, "[17/32] DHCP lease renewal");
+    crate::n!(C_, "[17/32] DHCP lease renewal");
     {
         crate::print!("  DHCP bound... ");
-        if crate::netstack::dhcp::flz() {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+        if crate::netstack::dhcp::clk() {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
             
-            crate::h!(B_, "[SKIP] not bound");
-            cg += 1;
+            crate::n!(B_, "[SKIP] not bound");
+            passed += 1;
         }
 
         crate::print!("  config valid... ");
-        match crate::netstack::dhcp::nxw() {
-            Some((ip, hs, nt, dns)) => {
-                let twl = ip != [0,0,0,0];
-                let ukc = hs != [0,0,0,0];
-                if twl && ukc {
-                    crate::h!(B_, "[OK] {}.{}.{}.{}", ip[0], ip[1], ip[2], ip[3]);
-                    cg += 1;
+        match crate::netstack::dhcp::ibj() {
+            Some((ip, mask, fz, dns)) => {
+                let mrs = ip != [0,0,0,0];
+                let ncb = mask != [0,0,0,0];
+                if mrs && ncb {
+                    crate::n!(B_, "[OK] {}.{}.{}.{}", ip[0], ip[1], ip[2], ip[3]);
+                    passed += 1;
                 } else {
-                    crate::h!(A_, "[FAIL] ip={:?} mask={:?}", ip, hs);
-                    gv += 1;
+                    crate::n!(A_, "[FAIL] ip={:?} mask={:?}", ip, mask);
+                    bv += 1;
                 }
-                let _ = (nt, dns);
+                let _ = (fz, dns);
             }
             None => {
-                crate::h!(B_, "[SKIP] no config");
-                cg += 1;
+                crate::n!(B_, "[SKIP] no config");
+                passed += 1;
             }
         }
     }
 
     
-    crate::h!(C_, "[18/32] VirtIO interrupt support");
+    crate::n!(C_, "[18/32] VirtIO interrupt support");
     {
         crate::print!("  virtio-net init... ");
-        if crate::virtio_net::ky() {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+        if crate::virtio_net::is_initialized() {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(B_, "[SKIP] no virtio-net");
-            cg += 1;
+            crate::n!(B_, "[SKIP] no virtio-net");
+            passed += 1;
         }
 
         crate::print!("  virtio-blk init... ");
-        if crate::virtio_blk::ky() {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+        if crate::virtio_blk::is_initialized() {
+            crate::n!(B_, "[OK]");
+            passed += 1;
 
             
             crate::print!("  blk read LBA 0... ");
-            let mut k = [0u8; 512];
-            match crate::virtio_blk::ain(0, 1, &mut k) {
+            let mut buf = [0u8; 512];
+            match crate::virtio_blk::read_sectors(0, 1, &mut buf) {
                 Ok(()) => {
-                    crate::h!(B_, "[OK]");
-                    cg += 1;
+                    crate::n!(B_, "[OK]");
+                    passed += 1;
                 }
-                Err(aa) => {
-                    crate::h!(A_, "[FAIL] {}", aa);
-                    gv += 1;
+                Err(e) => {
+                    crate::n!(A_, "[FAIL] {}", e);
+                    bv += 1;
                 }
             }
         } else {
-            crate::h!(B_, "[SKIP] no virtio-blk");
-            cg += 2; 
+            crate::n!(B_, "[SKIP] no virtio-blk");
+            passed += 2; 
         }
     }
 
     
-    crate::h!(C_, "[19/32] IPv6 + NDP");
+    crate::n!(C_, "[19/32] IPv6 + NDP");
     {
         crate::print!("  IPv6 enabled... ");
-        if crate::netstack::ipv6::zu() {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+        if crate::netstack::ipv6::lq() {
+            crate::n!(B_, "[OK]");
+            passed += 1;
 
             crate::print!("  link-local addr... ");
-            let ag = crate::netstack::ipv6::jdo();
-            if ag.txx() {
-                crate::h!(B_, "[OK] {}", ag);
-                cg += 1;
+            let addr = crate::netstack::ipv6::esz();
+            if addr.is_link_local() {
+                crate::n!(B_, "[OK] {}", addr);
+                passed += 1;
             } else {
-                crate::h!(A_, "[FAIL] not link-local: {}", ag);
-                gv += 1;
+                crate::n!(A_, "[FAIL] not link-local: {}", addr);
+                bv += 1;
             }
         } else {
-            crate::h!(B_, "[SKIP] IPv6 not enabled");
-            cg += 2;
+            crate::n!(B_, "[SKIP] IPv6 not enabled");
+            passed += 2;
         }
     }
 
     
-    crate::h!(C_, "[20/32] Kernel pipe blocking");
+    crate::n!(C_, "[20/32] Kernel pipe blocking");
     {
         crate::print!("  pipe create... ");
-        let (cbh, civ) = crate::pipe::avp();
-        if cbh > 0 && civ > 0 {
-            crate::h!(B_, "[OK] r={} w={}", cbh, civ);
-            cg += 1;
+        let (aot, asu) = crate::pipe::create();
+        if aot > 0 && asu > 0 {
+            crate::n!(B_, "[OK] r={} w={}", aot, asu);
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL]");
-            gv += 1;
+            crate::n!(A_, "[FAIL]");
+            bv += 1;
         }
 
         crate::print!("  pipe write... ");
-        let f = b"pipe_test_42";
-        let gwz = crate::pipe::write(civ, f);
-        if gwz == f.len() as i64 {
-            crate::h!(B_, "[OK] {} bytes", gwz);
-            cg += 1;
+        let data = b"pipe_test_42";
+        let dgu = crate::pipe::write(asu, data);
+        if dgu == data.len() as i64 {
+            crate::n!(B_, "[OK] {} bytes", dgu);
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] wrote {}", gwz);
-            gv += 1;
+            crate::n!(A_, "[FAIL] wrote {}", dgu);
+            bv += 1;
         }
 
         crate::print!("  pipe read... ");
-        let mut k = [0u8; 32];
-        let bo = crate::pipe::read(cbh, &mut k);
-        if bo == f.len() as i64 && &k[..bo as usize] == f {
-            crate::h!(B_, "[OK] {} bytes", bo);
-            cg += 1;
+        let mut buf = [0u8; 32];
+        let ae = crate::pipe::read(aot, &mut buf);
+        if ae == data.len() as i64 && &buf[..ae as usize] == data {
+            crate::n!(B_, "[OK] {} bytes", ae);
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] read {}", bo);
-            gv += 1;
+            crate::n!(A_, "[FAIL] read {}", ae);
+            bv += 1;
         }
 
         crate::print!("  pipe EOF... ");
-        crate::pipe::agj(civ);
-        let gni = crate::pipe::read(cbh, &mut k);
-        if gni == 0 {
-            crate::h!(B_, "[OK] EOF after close");
-            cg += 1;
+        crate::pipe::close(asu);
+        let dbm = crate::pipe::read(aot, &mut buf);
+        if dbm == 0 {
+            crate::n!(B_, "[OK] EOF after close");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] expected 0, got {}", gni);
-            gv += 1;
+            crate::n!(A_, "[FAIL] expected 0, got {}", dbm);
+            bv += 1;
         }
-        crate::pipe::agj(cbh);
+        crate::pipe::close(aot);
     }
 
     
-    crate::h!(C_, "[21/32] TrustScan utilities");
+    crate::n!(C_, "[21/32] TrustScan utilities");
     {
         
         crate::print!("  format_ip... ");
-        let e = crate::netscan::aot([10, 0, 2, 15]);
-        if e == "10.0.2.15" {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+        let j = crate::netscan::uw([10, 0, 2, 15]);
+        if j == "10.0.2.15" {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] got '{}'", e);
-            gv += 1;
+            crate::n!(A_, "[FAIL] got '{}'", j);
+            bv += 1;
         }
 
         
         crate::print!("  format_mac... ");
-        let ef = crate::netscan::eqs([0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF]);
-        if ef == "AA:BB:CC:DD:EE:FF" {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+        let m = crate::netscan::bzx([0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF]);
+        if m == "AA:BB:CC:DD:EE:FF" {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] got '{}'", ef);
-            gv += 1;
+            crate::n!(A_, "[FAIL] got '{}'", m);
+            bv += 1;
         }
 
         
         crate::print!("  parse_ip valid... ");
-        if crate::netscan::ewb("192.168.1.100") == Some([192, 168, 1, 100]) {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+        if crate::netscan::bof("192.168.1.100") == Some([192, 168, 1, 100]) {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL]");
-            gv += 1;
+            crate::n!(A_, "[FAIL]");
+            bv += 1;
         }
 
         
         crate::print!("  parse_ip invalid... ");
-        if crate::netscan::ewb("not.an.ip") == None
-            && crate::netscan::ewb("1.2.3") == None
+        if crate::netscan::bof("not.an.ip") == None
+            && crate::netscan::bof("1.2.3") == None
         {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL]");
-            gv += 1;
+            crate::n!(A_, "[FAIL]");
+            bv += 1;
         }
 
         
         crate::print!("  service_name DB... ");
-        let fer = [
+        let cgx = [
             (22, "ssh"), (80, "http"), (443, "https"), (3306, "mysql"),
             (6379, "redis"), (27017, "mongodb"), (53, "dns"), (21, "ftp"),
         ];
-        let dyf = fer.iter().xx(|&(port, qy)| {
-            crate::netscan::fui(port) == qy
+        let bqe = cgx.iter().all(|&(port, expected)| {
+            crate::netscan::cqk(port) == expected
         });
-        if dyf {
-            crate::h!(B_, "[OK] 8/8 mappings correct");
-            cg += 1;
+        if bqe {
+            crate::n!(B_, "[OK] 8/8 mappings correct");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL]");
-            gv += 1;
+            crate::n!(A_, "[FAIL]");
+            bv += 1;
         }
 
         
         crate::print!("  port lists... ");
-        let bza = crate::netscan::AAL_.len();
-        let aaz = crate::netscan::BHM_.len();
-        if bza == 25 && aaz == 100 {
-            crate::h!(B_, "[OK] common={} top={}", bza, aaz);
-            cg += 1;
+        let cp = crate::netscan::ABY_.len();
+        let tp = crate::netscan::BJQ_.len();
+        if cp == 25 && tp == 100 {
+            crate::n!(B_, "[OK] common={} top={}", cp, tp);
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] common={} top={}", bza, aaz);
-            gv += 1;
+            crate::n!(A_, "[FAIL] common={} top={}", cp, tp);
+            bv += 1;
         }
     }
 
     
-    crate::h!(C_, "[22/32] TrustScan port scanner config");
+    crate::n!(C_, "[22/32] TrustScan port scanner config");
     {
         use crate::netscan::port_scanner::*;
 
         
         crate::print!("  ScanConfig defaults... ");
         let cfg = ScanConfig::new([10, 0, 2, 1]);
-        if cfg.cd == [10, 0, 2, 1]
-            && cfg.cmr == ScanType::Uu
-            && cfg.sg == 1500
-            && cfg.ern == false
-            && cfg.xf.len() == crate::netscan::AAL_.len()
+        if cfg.target == [10, 0, 2, 1]
+            && cfg.scan_type == ScanType::Syn
+            && cfg.timeout_ms == 1500
+            && cfg.grab_banner == false
+            && cfg.ports.len() == crate::netscan::ABY_.len()
         {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL]");
-            gv += 1;
+            crate::n!(A_, "[FAIL]");
+            bv += 1;
         }
 
         
         crate::print!("  builder chain... ");
-        let inb = ScanConfig::new([192, 168, 1, 1])
-            .jxa(alloc::vec![80, 443, 8080])
-            .jxd(ScanType::Wa)
-            .jxb(500)
-            .pzo(true);
-        if inb.xf == alloc::vec![80u16, 443, 8080]
-            && inb.cmr == ScanType::Wa
-            && inb.sg == 500
-            && inb.ern == true
+        let ehl = ScanConfig::new([192, 168, 1, 1])
+            .with_ports(alloc::vec![80, 443, 8080])
+            .with_type(ScanType::Connect)
+            .with_timeout(500)
+            .with_banner(true);
+        if ehl.ports == alloc::vec![80u16, 443, 8080]
+            && ehl.scan_type == ScanType::Connect
+            && ehl.timeout_ms == 500
+            && ehl.grab_banner == true
         {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL]");
-            gv += 1;
+            crate::n!(A_, "[FAIL]");
+            bv += 1;
         }
 
         
         crate::print!("  with_range... ");
-        let inc = ScanConfig::new([10, 0, 0, 1]).xuy(1, 100);
-        if inc.xf.len() == 100 && inc.xf[0] == 1 && inc.xf[99] == 100 {
-            crate::h!(B_, "[OK] 100 ports");
-            cg += 1;
+        let ehm = ScanConfig::new([10, 0, 0, 1]).with_range(1, 100);
+        if ehm.ports.len() == 100 && ehm.ports[0] == 1 && ehm.ports[99] == 100 {
+            crate::n!(B_, "[OK] 100 ports");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] got {} ports", inc.xf.len());
-            gv += 1;
+            crate::n!(A_, "[FAIL] got {} ports", ehm.ports.len());
+            bv += 1;
         }
 
         
         crate::print!("  PortState enum... ");
-        if PortState::Ck.as_str() == "open"
-            && PortState::Dk.as_str() == "closed"
-            && PortState::Kl.as_str() == "filtered"
-            && PortState::Xx.as_str() == "open|filtered"
+        if PortState::Open.as_str() == "open"
+            && PortState::Closed.as_str() == "closed"
+            && PortState::Filtered.as_str() == "filtered"
+            && PortState::OpenFiltered.as_str() == "open|filtered"
         {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL]");
-            gv += 1;
+            crate::n!(A_, "[FAIL]");
+            bv += 1;
         }
 
         
         crate::print!("  with_top_ports... ");
-        let ncd = ScanConfig::new([0; 4]).jxc();
-        if ncd.xf.len() == 100 {
-            crate::h!(B_, "[OK] 100 ports");
-            cg += 1;
+        let hke = ScanConfig::new([0; 4]).with_top_ports();
+        if hke.ports.len() == 100 {
+            crate::n!(B_, "[OK] 100 ports");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] got {} ports", ncd.xf.len());
-            gv += 1;
+            crate::n!(A_, "[FAIL] got {} ports", hke.ports.len());
+            bv += 1;
         }
     }
 
     
-    crate::h!(C_, "[23/32] TrustScan sniffer engine");
+    crate::n!(C_, "[23/32] TrustScan sniffer engine");
     {
         use crate::netscan::sniffer;
 
         
         crate::print!("  start/stop capture... ");
-        let pzc = sniffer::edu();
-        sniffer::gtb();
-        let mtm = sniffer::edu();
-        sniffer::gth();
-        let mtn = sniffer::edu();
-        if !pzc && mtm && !mtn {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+        let jqt = sniffer::btp();
+        sniffer::deu();
+        let hdu = sniffer::btp();
+        sniffer::dex();
+        let hdv = sniffer::btp();
+        if !jqt && hdu && !hdv {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] was={} start={} stop={}",
-                pzc, mtm, mtn);
-            gv += 1;
+            crate::n!(A_, "[FAIL] was={} start={} stop={}",
+                jqt, hdu, hdv);
+            bv += 1;
         }
 
         
         crate::print!("  capture stats... ");
-        sniffer::gtb();
-        let (az, bf, cox) = sniffer::asx();
-        sniffer::gth();
+        sniffer::deu();
+        let (count, bytes, awl) = sniffer::get_stats();
+        sniffer::dex();
         
-        if az == 0 && bf == 0 && cox == 0 {
-            crate::h!(B_, "[OK] 0/0/0");
-            cg += 1;
+        if count == 0 && bytes == 0 && awl == 0 {
+            crate::n!(B_, "[OK] 0/0/0");
+            passed += 1;
         } else {
-            crate::h!(B_, "[OK] c={} b={} buf={}", az, bf, cox);
-            cg += 1; 
+            crate::n!(B_, "[OK] c={} b={} buf={}", count, bytes, awl);
+            passed += 1; 
         }
 
         
         crate::print!("  Protocol enum... ");
-        if sniffer::Protocol::Vj.as_str() == "ARP"
-            && sniffer::Protocol::Mk.as_str() == "TCP"
-            && sniffer::Protocol::Aja.as_str() == "HTTP"
-            && sniffer::Protocol::Abd.as_str() == "DNS"
-            && sniffer::Protocol::Anp.as_str() == "TLS"
-            && sniffer::Protocol::F(0).as_str() == "???"
+        if sniffer::Protocol::Arp.as_str() == "ARP"
+            && sniffer::Protocol::Tcp.as_str() == "TCP"
+            && sniffer::Protocol::Http.as_str() == "HTTP"
+            && sniffer::Protocol::Dns.as_str() == "DNS"
+            && sniffer::Protocol::Tls.as_str() == "TLS"
+            && sniffer::Protocol::Unknown(0).as_str() == "???"
         {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL]");
-            gv += 1;
+            crate::n!(A_, "[FAIL]");
+            bv += 1;
         }
 
         
         crate::print!("  hex_dump format... ");
-        let ezo = [0x48, 0x65, 0x6C, 0x6C, 0x6F]; 
-        let epk = sniffer::obs(&ezo, 5);
-        if epk.contains("0000") && epk.contains("48 65 6C 6C 6F") && epk.contains("|Hello|") {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+        let cef = [0x48, 0x65, 0x6C, 0x6C, 0x6F]; 
+        let byz = sniffer::iet(&cef, 5);
+        if byz.contains("0000") && byz.contains("48 65 6C 6C 6F") && byz.contains("|Hello|") {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] '{}'", epk.em());
-            gv += 1;
+            crate::n!(A_, "[FAIL] '{}'", byz.trim());
+            bv += 1;
         }
 
         
         crate::print!("  packet dissect... ");
-        sniffer::gtb();
+        sniffer::deu();
         {
             
-            let mut bfy = alloc::vec![0u8; 42];
+            let mut aes = alloc::vec![0u8; 42];
             
-            bfy[0..6].dg(&[0xFF,0xFF,0xFF,0xFF,0xFF,0xFF]);
+            aes[0..6].copy_from_slice(&[0xFF,0xFF,0xFF,0xFF,0xFF,0xFF]);
             
-            bfy[6..12].dg(&[0x52,0x54,0x00,0x12,0x34,0x56]);
+            aes[6..12].copy_from_slice(&[0x52,0x54,0x00,0x12,0x34,0x56]);
             
-            bfy[12] = 0x08; bfy[13] = 0x06;
+            aes[12] = 0x08; aes[13] = 0x06;
             
-            bfy[14] = 0x00; bfy[15] = 0x01;
-            bfy[16] = 0x08; bfy[17] = 0x00;
-            bfy[18] = 6; bfy[19] = 4;
+            aes[14] = 0x00; aes[15] = 0x01;
+            aes[16] = 0x08; aes[17] = 0x00;
+            aes[18] = 6; aes[19] = 4;
             
-            bfy[20] = 0x00; bfy[21] = 0x01;
+            aes[20] = 0x00; aes[21] = 0x01;
             
-            bfy[28] = 10; bfy[29] = 0; bfy[30] = 2; bfy[31] = 15;
+            aes[28] = 10; aes[29] = 0; aes[30] = 2; aes[31] = 15;
             
-            bfy[38] = 10; bfy[39] = 0; bfy[40] = 2; bfy[41] = 1;
+            aes[38] = 10; aes[39] = 0; aes[40] = 2; aes[41] = 1;
 
-            sniffer::jkc(&bfy);
+            sniffer::exa(&aes);
         }
-        let fqx = sniffer::jjc(1);
-        sniffer::gth();
-        if fqx.len() == 1 && fqx[0].protocol == sniffer::Protocol::Vj {
-            crate::h!(B_, "[OK] ARP dissected");
-            cg += 1;
+        let coe = sniffer::ewn(1);
+        sniffer::dex();
+        if coe.len() == 1 && coe[0].protocol == sniffer::Protocol::Arp {
+            crate::n!(B_, "[OK] ARP dissected");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] got {} packets", fqx.len());
-            gv += 1;
+            crate::n!(A_, "[FAIL] got {} packets", coe.len());
+            bv += 1;
         }
     }
 
     
-    crate::h!(C_, "[24/32] TrustScan vulnerability scanner");
+    crate::n!(C_, "[24/32] TrustScan vulnerability scanner");
     {
         use crate::netscan::vuln;
 
         
         crate::print!("  Severity enum... ");
-        if vuln::Severity::V.as_str() == "INFO"
-            && vuln::Severity::Eg.as_str() == "LOW"
-            && vuln::Severity::Bc.as_str() == "MEDIUM"
-            && vuln::Severity::Ao.as_str() == "HIGH"
-            && vuln::Severity::Aj.as_str() == "CRITICAL"
+        if vuln::Severity::Info.as_str() == "INFO"
+            && vuln::Severity::Low.as_str() == "LOW"
+            && vuln::Severity::Medium.as_str() == "MEDIUM"
+            && vuln::Severity::High.as_str() == "HIGH"
+            && vuln::Severity::Critical.as_str() == "CRITICAL"
         {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL]");
-            gv += 1;
+            crate::n!(A_, "[FAIL]");
+            bv += 1;
         }
 
         
         crate::print!("  Finding struct... ");
-        let bb = vuln::Au {
+        let f = vuln::Ad {
             port: 22,
-            xi: "ssh",
-            qj: vuln::Severity::Bc,
-            dq: String::from("Test finding"),
-            dc: String::from("Test desc"),
-            aws: String::from("Test rec"),
+            service: "ssh",
+            severity: vuln::Severity::Medium,
+            title: String::from("Test finding"),
+            description: String::from("Test desc"),
+            recommendation: String::from("Test rec"),
         };
-        if bb.port == 22 && bb.xi == "ssh" && bb.qj == vuln::Severity::Bc {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+        if f.port == 22 && f.service == "ssh" && f.severity == vuln::Severity::Medium {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL]");
-            gv += 1;
+            crate::n!(A_, "[FAIL]");
+            bv += 1;
         }
 
         
         crate::print!("  scan empty... ");
-        let nq = vuln::arx([127, 0, 0, 1], &[]);
-        if nq.is_empty() {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+        let fw = vuln::scan([127, 0, 0, 1], &[]);
+        if fw.is_empty() {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] got {} findings", nq.len());
-            gv += 1;
+            crate::n!(A_, "[FAIL] got {} findings", fw.len());
+            bv += 1;
         }
 
         
         crate::print!("  format_report... ");
-        let xda = alloc::vec![
-            vuln::Au {
+        let pfj = alloc::vec![
+            vuln::Ad {
                 port: 23,
-                xi: "telnet",
-                qj: vuln::Severity::Ao,
-                dq: String::from("Telnet detected"),
-                dc: String::from("Unencrypted remote access"),
-                aws: String::from("Use SSH instead"),
+                service: "telnet",
+                severity: vuln::Severity::High,
+                title: String::from("Telnet detected"),
+                description: String::from("Unencrypted remote access"),
+                recommendation: String::from("Use SSH instead"),
             },
         ];
-        let report = vuln::fix([127, 0, 0, 1], &xda);
+        let report = vuln::format_report([127, 0, 0, 1], &pfj);
         if report.contains("Telnet") && report.contains("HIGH") {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL]");
-            gv += 1;
+            crate::n!(A_, "[FAIL]");
+            bv += 1;
         }
     }
 
     
-    crate::h!(C_, "[25/32] TrustScan traceroute + discovery");
+    crate::n!(C_, "[25/32] TrustScan traceroute + discovery");
     {
         
         crate::print!("  TraceConfig default... ");
-        let asb = crate::netscan::traceroute::TraceConfig::default();
-        if asb.fnv == 30 && asb.oya == 3 && asb.sg == 2000 {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+        let wo = crate::netscan::traceroute::TraceConfig::default();
+        if wo.max_hops == 30 && wo.probes_per_hop == 3 && wo.timeout_ms == 2000 {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL]");
-            gv += 1;
+            crate::n!(A_, "[FAIL]");
+            bv += 1;
         }
 
         
         crate::print!("  TraceHop struct... ");
-        let bhe = crate::netscan::traceroute::Anq {
-            gjd: 1,
+        let afg = crate::netscan::traceroute::Qn {
+            hop_num: 1,
             ip: Some([10, 0, 2, 1]),
-            ajc: None,
-            bcj: [5, 3, 4],
-            gqi: false,
+            hostname: None,
+            rtt_ms: [5, 3, 4],
+            reached: false,
         };
-        if bhe.gjd == 1 && bhe.ip == Some([10, 0, 2, 1]) && !bhe.gqi {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+        if afg.hop_num == 1 && afg.ip == Some([10, 0, 2, 1]) && !afg.reached {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL]");
-            gv += 1;
+            crate::n!(A_, "[FAIL]");
+            bv += 1;
         }
 
         
         crate::print!("  HostInfo struct... ");
-        let gd = crate::netscan::discovery::Pp {
+        let hi = crate::netscan::discovery::Gn {
             ip: [192, 168, 1, 1],
-            ed: Some([0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF]),
-            ajc: Some(String::from("gateway")),
-            akv: Some(64),
-            bcj: 5,
-            fpv: "Linux/Unix/macOS",
+            mac: Some([0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF]),
+            hostname: Some(String::from("gateway")),
+            ttl: Some(64),
+            rtt_ms: 5,
+            os_hint: "Linux/Unix/macOS",
         };
-        if gd.ip == [192, 168, 1, 1]
-            && gd.ed == Some([0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF])
-            && gd.akv == Some(64)
-            && gd.fpv == "Linux/Unix/macOS"
+        if hi.ip == [192, 168, 1, 1]
+            && hi.mac == Some([0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF])
+            && hi.ttl == Some(64)
+            && hi.os_hint == "Linux/Unix/macOS"
         {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL]");
-            gv += 1;
+            crate::n!(A_, "[FAIL]");
+            bv += 1;
         }
 
         
         crate::print!("  CaptureFilter default... ");
-        let vq = crate::netscan::sniffer::CaptureFilter::default();
-        if vq.jh.is_none() && vq.pz.is_none()
-            && vq.port.is_none() && vq.protocol.is_none()
+        let cf = crate::netscan::sniffer::CaptureFilter::default();
+        if cf.src_ip.is_none() && cf.dst_ip.is_none()
+            && cf.port.is_none() && cf.protocol.is_none()
         {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL]");
-            gv += 1;
+            crate::n!(A_, "[FAIL]");
+            bv += 1;
         }
 
         
         crate::print!("  BannerResult struct... ");
-        let avi = crate::netscan::banner::Ago {
+        let yi = crate::netscan::banner::Od {
             port: 80,
-            xi: "http",
+            service: "http",
             banner: String::from("Apache/2.4.41 (Ubuntu)"),
-            dk: Some(String::from("Apache")),
+            version: Some(String::from("Apache")),
         };
-        if avi.port == 80 && avi.xi == "http"
-            && avi.dk.ahz() == Some("Apache")
+        if yi.port == 80 && yi.service == "http"
+            && yi.version.as_deref() == Some("Apache")
         {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL]");
-            gv += 1;
+            crate::n!(A_, "[FAIL]");
+            bv += 1;
         }
     }
 
     
-    crate::h!(C_, "[26/32] Shell scripting variables");
+    crate::n!(C_, "[26/32] Shell scripting variables");
     {
         
         crate::print!("  set_var/get_var... ");
-        super::scripting::fuk("TEST_VAR", "hello");
-        if super::scripting::cqx("TEST_VAR").ahz() == Some("hello") {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+        super::scripting::cql("TEST_VAR", "hello");
+        if super::scripting::axh("TEST_VAR").as_deref() == Some("hello") {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL]");
-            gv += 1;
+            crate::n!(A_, "[FAIL]");
+            bv += 1;
         }
 
         
         crate::print!("  unset_var... ");
-        super::scripting::jur("TEST_VAR");
-        if super::scripting::cqx("TEST_VAR").is_none() {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+        super::scripting::fdx("TEST_VAR");
+        if super::scripting::axh("TEST_VAR").is_none() {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL]");
-            gv += 1;
+            crate::n!(A_, "[FAIL]");
+            bv += 1;
         }
 
         
         crate::print!("  default vars (HOME, USER, SHELL)... ");
-        let iym = super::scripting::cqx("HOME");
-        let cnp = super::scripting::cqx("USER");
-        let wms = super::scripting::cqx("SHELL");
-        if iym.is_some() && cnp.is_some() && wms.is_some() {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+        let epi = super::scripting::axh("HOME");
+        let avp = super::scripting::axh("USER");
+        let orq = super::scripting::axh("SHELL");
+        if epi.is_some() && avp.is_some() && orq.is_some() {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL]");
-            gv += 1;
+            crate::n!(A_, "[FAIL]");
+            bv += 1;
         }
 
         
         crate::print!("  all_vars()... ");
-        let xx = super::scripting::ijj();
-        if xx.len() >= 5 {
-            crate::h!(B_, "[OK] {} vars", xx.len());
-            cg += 1;
+        let all = super::scripting::efi();
+        if all.len() >= 5 {
+            crate::n!(B_, "[OK] {} vars", all.len());
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] only {} vars", xx.len());
-            gv += 1;
+            crate::n!(A_, "[FAIL] only {} vars", all.len());
+            bv += 1;
         }
     }
 
     
-    crate::h!(C_, "[27/32] Shell variable expansion");
+    crate::n!(C_, "[27/32] Shell variable expansion");
     {
         
         crate::print!("  $USER expansion... ");
-        super::scripting::fuk("USER", "root");
-        let tg = super::scripting::cxo("hello $USER");
-        if tg == "hello root" {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+        super::scripting::cql("USER", "root");
+        let expanded = super::scripting::bbm("hello $USER");
+        if expanded == "hello root" {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] got '{}'", tg);
-            gv += 1;
+            crate::n!(A_, "[FAIL] got '{}'", expanded);
+            bv += 1;
         }
 
         
         crate::print!("  ${{VAR}} expansion... ");
-        let tg = super::scripting::cxo("${USER}name");
-        if tg == "rootname" {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+        let expanded = super::scripting::bbm("${USER}name");
+        if expanded == "rootname" {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] got '{}'", tg);
-            gv += 1;
+            crate::n!(A_, "[FAIL] got '{}'", expanded);
+            bv += 1;
         }
 
         
         crate::print!("  $((3+4*2)) arithmetic... ");
-        let tg = super::scripting::cxo("$((3+4*2))");
-        if tg == "11" {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+        let expanded = super::scripting::bbm("$((3+4*2))");
+        if expanded == "11" {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] got '{}'", tg);
-            gv += 1;
+            crate::n!(A_, "[FAIL] got '{}'", expanded);
+            bv += 1;
         }
 
         
         crate::print!("  ${{UNSET:-fallback}}... ");
-        super::scripting::jur("UNSET_TEST");
-        let tg = super::scripting::cxo("${UNSET_TEST:-fallback}");
-        if tg == "fallback" {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+        super::scripting::fdx("UNSET_TEST");
+        let expanded = super::scripting::bbm("${UNSET_TEST:-fallback}");
+        if expanded == "fallback" {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] got '{}'", tg);
-            gv += 1;
+            crate::n!(A_, "[FAIL] got '{}'", expanded);
+            bv += 1;
         }
     }
 
     
-    crate::h!(C_, "[28/32] Shell arithmetic engine");
+    crate::n!(C_, "[28/32] Shell arithmetic engine");
     {
         
         crate::print!("  eval_arithmetic(\"2+3\")... ");
-        let m = super::scripting::hii("2+3");
-        if m == 5 {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+        let r = super::scripting::dov("2+3");
+        if r == 5 {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] got {}", m);
-            gv += 1;
+            crate::n!(A_, "[FAIL] got {}", r);
+            bv += 1;
         }
 
         
         crate::print!("  eval_arithmetic(\"2+3*4\")... ");
-        let m = super::scripting::hii("2+3*4");
-        if m == 14 {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+        let r = super::scripting::dov("2+3*4");
+        if r == 14 {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] got {}", m);
-            gv += 1;
+            crate::n!(A_, "[FAIL] got {}", r);
+            bv += 1;
         }
 
         
         crate::print!("  eval_arithmetic(\"(2+3)*4\")... ");
-        let m = super::scripting::hii("(2+3)*4");
-        if m == 20 {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+        let r = super::scripting::dov("(2+3)*4");
+        if r == 20 {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] got {}", m);
-            gv += 1;
+            crate::n!(A_, "[FAIL] got {}", r);
+            bv += 1;
         }
 
         
         crate::print!("  eval_arithmetic(\"17%5\")... ");
-        let m = super::scripting::hii("17%5");
-        if m == 2 {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+        let r = super::scripting::dov("17%5");
+        if r == 2 {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] got {}", m);
-            gv += 1;
+            crate::n!(A_, "[FAIL] got {}", r);
+            bv += 1;
         }
     }
 
     
-    crate::h!(C_, "[29/32] HTTP server infrastructure");
+    crate::n!(C_, "[29/32] HTTP server infrastructure");
     {
         
         crate::print!("  is_running() == false... ");
-        if !crate::httpd::dsi() {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+        if !crate::httpd::is_running() {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL]");
-            gv += 1;
+            crate::n!(A_, "[FAIL]");
+            bv += 1;
         }
 
         
         crate::print!("  get_stats()... ");
-        let (port, vxm, aqk) = crate::httpd::asx();
-        if !aqk && vxm == 0 {
-            crate::h!(B_, "[OK] port={}", port);
-            cg += 1;
+        let (port, reqs, running) = crate::httpd::get_stats();
+        if !running && reqs == 0 {
+            crate::n!(B_, "[OK] port={}", port);
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL]");
-            gv += 1;
+            crate::n!(A_, "[FAIL]");
+            bv += 1;
         }
 
         
         crate::print!("  tcp::listen_on/stop_listening... ");
-        crate::netstack::tcp::jdt(9999, 2);
-        crate::netstack::tcp::mhr(9999);
-        crate::h!(B_, "[OK]");
-        cg += 1;
+        crate::netstack::tcp::etd(9999, 2);
+        crate::netstack::tcp::gwj(9999);
+        crate::n!(B_, "[OK]");
+        passed += 1;
 
         
         crate::print!("  accept_connection(9998) = None... ");
-        if crate::netstack::tcp::iir(9998).is_none() {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+        if crate::netstack::tcp::eew(9998).is_none() {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL]");
-            gv += 1;
+            crate::n!(A_, "[FAIL]");
+            bv += 1;
         }
     }
 
     
-    crate::h!(C_, "[30/32] TrustPkg package manager");
+    crate::n!(C_, "[30/32] TrustPkg package manager");
     {
         
         crate::print!("  total_count() > 0... ");
-        let es = crate::trustpkg::cus();
-        if es > 0 {
-            crate::h!(B_, "[OK] {} packages", es);
-            cg += 1;
+        let av = crate::trustpkg::total_count();
+        if av > 0 {
+            crate::n!(B_, "[OK] {} packages", av);
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL]");
-            gv += 1;
+            crate::n!(A_, "[FAIL]");
+            bv += 1;
         }
 
         
         crate::print!("  installed_count() > 0... ");
-        let adw = crate::trustpkg::leu();
-        if adw > 0 {
-            crate::h!(B_, "[OK] {} installed", adw);
-            cg += 1;
+        let installed = crate::trustpkg::gcy();
+        if installed > 0 {
+            crate::n!(B_, "[OK] {} installed", installed);
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL]");
-            gv += 1;
+            crate::n!(A_, "[FAIL]");
+            bv += 1;
         }
 
         
         crate::print!("  package_exists(coreutils)... ");
-        if crate::trustpkg::otn("coreutils") {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+        if crate::trustpkg::itd("coreutils") {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL]");
-            gv += 1;
+            crate::n!(A_, "[FAIL]");
+            bv += 1;
         }
 
         
         crate::print!("  !package_exists(nonexistent)... ");
-        if !crate::trustpkg::otn("nonexistent_pkg_12345") {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+        if !crate::trustpkg::itd("nonexistent_pkg_12345") {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL]");
-            gv += 1;
+            crate::n!(A_, "[FAIL]");
+            bv += 1;
         }
     }
 
     
     
     
-    crate::h!(C_, "[31/32] VM Debug Monitor");
+    crate::n!(C_, "[31/32] VM Debug Monitor");
     {
         
         crate::print!("  debug_monitor::init()... ");
         crate::hypervisor::debug_monitor::init();
-        if crate::hypervisor::debug_monitor::ky() && crate::hypervisor::debug_monitor::rl() {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+        if crate::hypervisor::debug_monitor::is_initialized() && crate::hypervisor::debug_monitor::is_active() {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL]");
-            gv += 1;
+            crate::n!(A_, "[FAIL]");
+            bv += 1;
         }
 
         
         crate::print!("  record_event (I/O)... ");
-        crate::hypervisor::debug_monitor::bry(
-            999, crate::hypervisor::debug_monitor::DebugCategory::Iu,
-            0x3F8, crate::hypervisor::debug_monitor::HandleStatus::Gw,
+        crate::hypervisor::debug_monitor::akj(
+            999, crate::hypervisor::debug_monitor::DebugCategory::IoPortIn,
+            0x3F8, crate::hypervisor::debug_monitor::HandleStatus::Handled,
             0x1000, 1, "COM1 test",
         );
-        if crate::hypervisor::debug_monitor::jtr() >= 1 {
-            crate::h!(B_, "[OK] events={}", crate::hypervisor::debug_monitor::jtr());
-            cg += 1;
+        if crate::hypervisor::debug_monitor::fdf() >= 1 {
+            crate::n!(B_, "[OK] events={}", crate::hypervisor::debug_monitor::fdf());
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL]");
-            gv += 1;
+            crate::n!(A_, "[FAIL]");
+            bv += 1;
         }
 
         
         crate::print!("  record_event (unhandled MSR)... ");
-        crate::hypervisor::debug_monitor::bry(
-            999, crate::hypervisor::debug_monitor::DebugCategory::Hx,
-            0xDEAD, crate::hypervisor::debug_monitor::HandleStatus::Id,
+        crate::hypervisor::debug_monitor::akj(
+            999, crate::hypervisor::debug_monitor::DebugCategory::MsrRead,
+            0xDEAD, crate::hypervisor::debug_monitor::HandleStatus::Unhandled,
             0x2000, 2, "unknown MSR",
         );
-        if crate::hypervisor::debug_monitor::jup() >= 1 {
-            crate::h!(B_, "[OK] unhandled={}", crate::hypervisor::debug_monitor::jup());
-            cg += 1;
+        if crate::hypervisor::debug_monitor::fdw() >= 1 {
+            crate::n!(B_, "[OK] unhandled={}", crate::hypervisor::debug_monitor::fdw());
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL]");
-            gv += 1;
+            crate::n!(A_, "[FAIL]");
+            bv += 1;
         }
 
         
         crate::print!("  get_dashboard()... ");
-        let hfc = crate::hypervisor::debug_monitor::kym();
-        if hfc.contains("TRUST") && hfc.len() > 100 {
-            crate::h!(B_, "[OK] {} chars", hfc.len());
-            cg += 1;
+        let dmg = crate::hypervisor::debug_monitor::fym();
+        if dmg.contains("TRUST") && dmg.len() > 100 {
+            crate::n!(B_, "[OK] {} chars", dmg.len());
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL]");
-            gv += 1;
+            crate::n!(A_, "[FAIL]");
+            bv += 1;
         }
 
         
         crate::print!("  get_gaps_report()... ");
-        let ckr = crate::hypervisor::debug_monitor::kyr();
-        if ckr.contains("MSR") || ckr.contains("unhandled") {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+        let gaps = crate::hypervisor::debug_monitor::fyr();
+        if gaps.contains("MSR") || gaps.contains("unhandled") {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL]");
-            gv += 1;
+            crate::n!(A_, "[FAIL]");
+            bv += 1;
         }
 
         
-        crate::hypervisor::debug_monitor::apa();
-        crate::hypervisor::debug_monitor::qg();
+        crate::hypervisor::debug_monitor::reset();
+        crate::hypervisor::debug_monitor::stop();
     }
 
     
     
     
-    crate::h!(C_, "[32/32] Crypto Self-Test (NIST vectors)");
+    crate::n!(C_, "[32/32] Crypto Self-Test (NIST vectors)");
     {
-        let (ai, bb) = crate::tls13::crypto::xrh();
-        let cze = ["AES-128", "SHA-256 empty", "SHA-256 abc", "X25519", "AES-GCM", "HMAC-SHA256"];
-        let xjw = ai + bb;
-        for (a, cu) in cze.iter().cf() {
-            if a < xjw {
-                if a < ai {
-                    crate::h!(B_, "  {}... [OK]", cu);
+        let (aa, f) = crate::tls13::crypto::prr();
+        let labels = ["AES-128", "SHA-256 empty", "SHA-256 abc", "X25519", "AES-GCM", "HMAC-SHA256"];
+        let plp = aa + f;
+        for (i, label) in labels.iter().enumerate() {
+            if i < plp {
+                if i < aa {
+                    crate::n!(B_, "  {}... [OK]", label);
                 } else {
-                    crate::h!(A_, "  {}... [FAIL]", cu);
+                    crate::n!(A_, "  {}... [FAIL]", label);
                 }
             }
         }
-        cg += ai;
-        gv += bb;
+        passed += aa;
+        bv += f;
     }
 
     
     
-    crate::framebuffer::pjf(false);
+    crate::framebuffer::jfk(false);
 
     crate::println!();
-    let es = cg + gv;
-    if gv == 0 {
-        crate::h!(G_,
-            "=== ALL {}/{} TESTS PASSED ===", cg, es);
+    let av = passed + bv;
+    if bv == 0 {
+        crate::n!(G_,
+            "=== ALL {}/{} TESTS PASSED ===", passed, av);
     } else {
-        crate::h!(A_,
-            "=== {}/{} passed, {} FAILED ===", cg, es, gv);
+        crate::n!(A_,
+            "=== {}/{} passed, {} FAILED ===", passed, av, bv);
     }
 }
 
 
 
 
-pub(super) fn rdn() {
-    crate::h!(G_, "=== TrustOS New Features Debug Test ===");
+pub(super) fn kmw() {
+    crate::n!(G_, "=== TrustOS New Features Debug Test ===");
     crate::println!();
 
-    let mut cg = 0usize;
-    let mut gv = 0usize;
+    let mut passed = 0usize;
+    let mut bv = 0usize;
 
     
     
     
-    crate::h!(C_, "[1/6] USB Mass Storage API");
+    crate::n!(C_, "[1/6] USB Mass Storage API");
     {
         
         crate::print!("  is_mass_storage(0x08,0x06,0x50)... ");
-        if crate::drivers::usb_storage::ogh(0x08, 0x06, 0x50) {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+        if crate::drivers::usb_storage::iib(0x08, 0x06, 0x50) {
+            crate::n!(B_, "[OK]");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] expected true");
-            gv += 1;
+            crate::n!(A_, "[FAIL] expected true");
+            bv += 1;
         }
 
         crate::print!("  is_mass_storage(0x03,0x01,0x02)... ");
-        if !crate::drivers::usb_storage::ogh(0x03, 0x01, 0x02) {
-            crate::h!(B_, "[OK] correctly false");
-            cg += 1;
+        if !crate::drivers::usb_storage::iib(0x03, 0x01, 0x02) {
+            crate::n!(B_, "[OK] correctly false");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] expected false");
-            gv += 1;
+            crate::n!(A_, "[FAIL] expected false");
+            bv += 1;
         }
 
         
         crate::print!("  device_count()... ");
-        let az = crate::drivers::usb_storage::cjx();
-        crate::h!(B_, "[OK] count={}", az);
-        cg += 1;
+        let count = crate::drivers::usb_storage::aqg();
+        crate::n!(B_, "[OK] count={}", count);
+        passed += 1;
 
         crate::print!("  list_devices()... ");
-        let ik = crate::drivers::usb_storage::bhh();
-        crate::h!(B_, "[OK] listed={}", ik.len());
-        cg += 1;
+        let devices = crate::drivers::usb_storage::adz();
+        crate::n!(B_, "[OK] listed={}", devices.len());
+        passed += 1;
 
         
         crate::print!("  is_available()... ");
-        let apk = crate::drivers::usb_storage::anl();
-        if az > 0 && apk || az == 0 && !apk {
-            crate::h!(B_, "[OK] avail={}", apk);
-            cg += 1;
+        let avail = crate::drivers::usb_storage::sw();
+        if count > 0 && avail || count == 0 && !avail {
+            crate::n!(B_, "[OK] avail={}", avail);
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] avail={} but count={}", apk, az);
-            gv += 1;
+            crate::n!(A_, "[FAIL] avail={} but count={}", avail, count);
+            bv += 1;
         }
 
         
         crate::print!("  get_block_device(999)... ");
-        if crate::drivers::usb_storage::tcx(999).is_none() {
-            crate::h!(B_, "[OK] None as expected");
-            cg += 1;
+        if crate::drivers::usb_storage::ibh(999).is_none() {
+            crate::n!(B_, "[OK] None as expected");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] should be None");
-            gv += 1;
+            crate::n!(A_, "[FAIL] should be None");
+            bv += 1;
         }
 
         
         crate::print!("  read_sectors(999,..)... ");
-        let mut k = [0u8; 512];
-        match crate::drivers::usb_storage::ain(999, 0, 1, &mut k) {
+        let mut buf = [0u8; 512];
+        match crate::drivers::usb_storage::read_sectors(999, 0, 1, &mut buf) {
             Err(_) => {
-                crate::h!(B_, "[OK] error as expected");
-                cg += 1;
+                crate::n!(B_, "[OK] error as expected");
+                passed += 1;
             }
             Ok(_) => {
-                crate::h!(A_, "[FAIL] should have returned error");
-                gv += 1;
+                crate::n!(A_, "[FAIL] should have returned error");
+                bv += 1;
             }
         }
     }
@@ -3587,97 +3588,97 @@ pub(super) fn rdn() {
     
     
     
-    crate::h!(C_, "[2/6] xHCI Bulk Transfer Infrastructure");
+    crate::n!(C_, "[2/6] xHCI Bulk Transfer Infrastructure");
     {
         crate::print!("  xhci initialized... ");
-        if crate::drivers::xhci::ky() {
-            crate::h!(B_, "[OK]");
-            cg += 1;
+        if crate::drivers::xhci::is_initialized() {
+            crate::n!(B_, "[OK]");
+            passed += 1;
 
-            let az = crate::drivers::xhci::cjx();
+            let count = crate::drivers::xhci::aqg();
             crate::print!("  USB device count... ");
-            crate::h!(B_, "[OK] {}", az);
-            cg += 1;
+            crate::n!(B_, "[OK] {}", count);
+            passed += 1;
         } else {
-            crate::h!(B_, "[SKIP] no xHCI controller");
-            cg += 2;
+            crate::n!(B_, "[SKIP] no xHCI controller");
+            passed += 2;
         }
     }
 
     
     
     
-    crate::h!(C_, "[3/6] ext4 Filesystem Driver");
+    crate::n!(C_, "[3/6] ext4 Filesystem Driver");
     {
         
         crate::print!("  EXT4_SUPER_MAGIC=0xEF53... ");
         
         
-        crate::h!(B_, "[OK] constant verified");
-        cg += 1;
+        crate::n!(B_, "[OK] constant verified");
+        passed += 1;
 
         
         crate::print!("  probe(zeroed device)... ");
-        struct Ary;
-        impl crate::vfs::fat32::Bj for Ary {
-            fn xr(&self, msu: u64, bi: &mut [u8]) -> Result<(), ()> {
-                for o in bi.el() { *o = 0; }
+        struct Se;
+        impl crate::vfs::fat32::Ak for Se {
+            fn read_sector(&self, _sector: u64, buffer: &mut [u8]) -> Result<(), ()> {
+                for b in buffer.iter_mut() { *b = 0; }
                 Ok(())
             }
-            fn aby(&self, msu: u64, qbi: &[u8]) -> Result<(), ()> {
+            fn write_sector(&self, _sector: u64, _buffer: &[u8]) -> Result<(), ()> {
                 Err(())
             }
-            fn zn(&self) -> usize { 512 }
+            fn sector_size(&self) -> usize { 512 }
         }
-        let sqw = Ary;
-        if !crate::vfs::ext4::probe(&sqw) {
-            crate::h!(B_, "[OK] correctly rejected");
-            cg += 1;
+        let lue = Se;
+        if !crate::vfs::ext4::probe(&lue) {
+            crate::n!(B_, "[OK] correctly rejected");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] should reject zeroed disk");
-            gv += 1;
+            crate::n!(A_, "[FAIL] should reject zeroed disk");
+            bv += 1;
         }
 
         
         crate::print!("  probe(valid magic)... ");
-        struct Bgq;
-        impl crate::vfs::fat32::Bj for Bgq {
-            fn xr(&self, jk: u64, bi: &mut [u8]) -> Result<(), ()> {
-                for o in bi.el() { *o = 0; }
+        struct Ys;
+        impl crate::vfs::fat32::Ak for Ys {
+            fn read_sector(&self, dj: u64, buffer: &mut [u8]) -> Result<(), ()> {
+                for b in buffer.iter_mut() { *b = 0; }
                 
                 
-                if jk == 2 {
+                if dj == 2 {
                     
-                    bi[0x38] = 0x53;  
-                    bi[0x39] = 0xEF;  
+                    buffer[0x38] = 0x53;  
+                    buffer[0x39] = 0xEF;  
                 }
                 Ok(())
             }
-            fn aby(&self, msu: u64, qbi: &[u8]) -> Result<(), ()> {
+            fn write_sector(&self, _sector: u64, _buffer: &[u8]) -> Result<(), ()> {
                 Err(())
             }
-            fn zn(&self) -> usize { 512 }
+            fn sector_size(&self) -> usize { 512 }
         }
-        let sqx = Bgq;
-        if crate::vfs::ext4::probe(&sqx) {
-            crate::h!(B_, "[OK] magic detected");
-            cg += 1;
+        let luf = Ys;
+        if crate::vfs::ext4::probe(&luf) {
+            crate::n!(B_, "[OK] magic detected");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] should detect valid magic");
-            gv += 1;
+            crate::n!(A_, "[FAIL] should detect valid magic");
+            bv += 1;
         }
 
         
         crate::print!("  mount(zeroed device)... ");
-        let qkf = alloc::sync::Arc::new(Ary);
-        match crate::vfs::ext4::beu(qkf) {
-            Err(aa) => {
-                crate::h!(B_, "[OK] rejected: {}", aa);
-                cg += 1;
+        let jxj = alloc::sync::Arc::new(Se);
+        match crate::vfs::ext4::abd(jxj) {
+            Err(e) => {
+                crate::n!(B_, "[OK] rejected: {}", e);
+                passed += 1;
             }
             Ok(_) => {
-                crate::h!(A_, "[FAIL] should reject zeroed disk");
-                gv += 1;
+                crate::n!(A_, "[FAIL] should reject zeroed disk");
+                bv += 1;
             }
         }
     }
@@ -3685,221 +3686,221 @@ pub(super) fn rdn() {
     
     
     
-    crate::h!(C_, "[4/6] HDA Audio Enhancements");
+    crate::n!(C_, "[4/6] HDA Audio Enhancements");
     {
         
         crate::print!("  set_volume(75)... ");
-        crate::drivers::hda::chv(75).bq(); 
-        let api = crate::drivers::hda::nyu();
-        if api == 75 {
-            crate::h!(B_, "[OK] vol={}", api);
-            cg += 1;
+        crate::drivers::hda::set_volume(75).ok(); 
+        let vd = crate::drivers::hda::ica();
+        if vd == 75 {
+            crate::n!(B_, "[OK] vol={}", vd);
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] expected 75, got {}", api);
-            gv += 1;
+            crate::n!(A_, "[FAIL] expected 75, got {}", vd);
+            bv += 1;
         }
 
         crate::print!("  set_volume(100) clamp... ");
-        crate::drivers::hda::chv(255).bq(); 
-        let api = crate::drivers::hda::nyu();
-        if api == 100 {
-            crate::h!(B_, "[OK] clamped to 100");
-            cg += 1;
+        crate::drivers::hda::set_volume(255).ok(); 
+        let vd = crate::drivers::hda::ica();
+        if vd == 100 {
+            crate::n!(B_, "[OK] clamped to 100");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] expected 100, got {}", api);
-            gv += 1;
+            crate::n!(A_, "[FAIL] expected 100, got {}", vd);
+            bv += 1;
         }
 
         
-        crate::drivers::hda::chv(80).bq();
+        crate::drivers::hda::set_volume(80).ok();
 
         
         crate::print!("  generate_sine(440, 100)... ");
-        let un = crate::drivers::hda::ghw(440, 100, 20000);
+        let jo = crate::drivers::hda::cyi(440, 100, 20000);
         
-        let qy = 4800 * 2;
-        if un.len() == qy {
-            crate::h!(B_, "[OK] {} samples", un.len());
-            cg += 1;
+        let expected = 4800 * 2;
+        if jo.len() == expected {
+            crate::n!(B_, "[OK] {} samples", jo.len());
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] expected {}, got {}", qy, un.len());
-            gv += 1;
+            crate::n!(A_, "[FAIL] expected {}, got {}", expected, jo.len());
+            bv += 1;
         }
 
         
         crate::print!("  sine fade-in/out... ");
-        let fv = un[0].gp();
-        let qv = un[un.len() - 2].gp(); 
-        if fv < 500 && qv < 500 {
-            crate::h!(B_, "[OK] first={} last={}", fv, qv);
-            cg += 1;
+        let first = jo[0].abs();
+        let last = jo[jo.len() - 2].abs(); 
+        if first < 500 && last < 500 {
+            crate::n!(B_, "[OK] first={} last={}", first, last);
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] first={} last={} (should be near 0)", fv, qv);
-            gv += 1;
+            crate::n!(A_, "[FAIL] first={} last={} (should be near 0)", first, last);
+            bv += 1;
         }
 
         
         crate::print!("  sine peak amplitude... ");
-        let lti = un.iter().map(|e| e.gp()).am().unwrap_or(0);
-        if lti > 5000 {
-            crate::h!(B_, "[OK] peak={}", lti);
-            cg += 1;
+        let gms = jo.iter().map(|j| j.abs()).max().unwrap_or(0);
+        if gms > 5000 {
+            crate::n!(B_, "[OK] peak={}", gms);
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] peak={} (too quiet)", lti);
-            gv += 1;
+            crate::n!(A_, "[FAIL] peak={} (too quiet)", gms);
+            bv += 1;
         }
     }
 
     
     
     
-    crate::h!(C_, "[5/6] HDA WAV Parser & Music Sequencer");
+    crate::n!(C_, "[5/6] HDA WAV Parser & Music Sequencer");
     {
         
         crate::print!("  parse_wav(valid)... ");
-        let mut bxv = [0u8; 80];
+        let mut anf = [0u8; 80];
         
-        bxv[0..4].dg(b"RIFF");
-        let yy: u32 = 72;
-        bxv[4..8].dg(&yy.ho());
-        bxv[8..12].dg(b"WAVE");
+        anf[0..4].copy_from_slice(b"RIFF");
+        let file_size: u32 = 72;
+        anf[4..8].copy_from_slice(&file_size.to_le_bytes());
+        anf[8..12].copy_from_slice(b"WAVE");
         
-        bxv[12..16].dg(b"fmt ");
-        bxv[16..20].dg(&16u32.ho()); 
-        bxv[20..22].dg(&1u16.ho()); 
-        bxv[22..24].dg(&2u16.ho()); 
-        bxv[24..28].dg(&44100u32.ho()); 
-        bxv[28..32].dg(&(44100u32 * 4).ho()); 
-        bxv[32..34].dg(&4u16.ho()); 
-        bxv[34..36].dg(&16u16.ho()); 
+        anf[12..16].copy_from_slice(b"fmt ");
+        anf[16..20].copy_from_slice(&16u32.to_le_bytes()); 
+        anf[20..22].copy_from_slice(&1u16.to_le_bytes()); 
+        anf[22..24].copy_from_slice(&2u16.to_le_bytes()); 
+        anf[24..28].copy_from_slice(&44100u32.to_le_bytes()); 
+        anf[28..32].copy_from_slice(&(44100u32 * 4).to_le_bytes()); 
+        anf[32..34].copy_from_slice(&4u16.to_le_bytes()); 
+        anf[34..36].copy_from_slice(&16u16.to_le_bytes()); 
         
-        bxv[36..40].dg(b"data");
-        bxv[40..44].dg(&36u32.ho()); 
+        anf[36..40].copy_from_slice(b"data");
+        anf[40..44].copy_from_slice(&36u32.to_le_bytes()); 
         
 
-        match crate::drivers::hda::jiu(&bxv) {
-            Ok(co) => {
-                if co.lq == 2 && co.auy == 44100 && co.emv == 16 {
-                    crate::h!(B_, "[OK] ch={} rate={} bits={}", 
-                        co.lq, co.auy, co.emv);
-                    cg += 1;
+        match crate::drivers::hda::ewj(&anf) {
+            Ok(info) => {
+                if info.channels == 2 && info.sample_rate == 44100 && info.bits_per_sample == 16 {
+                    crate::n!(B_, "[OK] ch={} rate={} bits={}", 
+                        info.channels, info.sample_rate, info.bits_per_sample);
+                    passed += 1;
                 } else {
-                    crate::h!(A_, "[FAIL] wrong values: ch={} rate={} bits={}", 
-                        co.lq, co.auy, co.emv);
-                    gv += 1;
+                    crate::n!(A_, "[FAIL] wrong values: ch={} rate={} bits={}", 
+                        info.channels, info.sample_rate, info.bits_per_sample);
+                    bv += 1;
                 }
             }
-            Err(aa) => {
-                crate::h!(A_, "[FAIL] {}", aa);
-                gv += 1;
+            Err(e) => {
+                crate::n!(A_, "[FAIL] {}", e);
+                bv += 1;
             }
         }
 
         
         crate::print!("  parse_wav(invalid)... ");
-        match crate::drivers::hda::jiu(&[0u8; 10]) {
+        match crate::drivers::hda::ewj(&[0u8; 10]) {
             Err(_) => {
-                crate::h!(B_, "[OK] rejected");
-                cg += 1;
+                crate::n!(B_, "[OK] rejected");
+                passed += 1;
             }
             Ok(_) => {
-                crate::h!(A_, "[FAIL] should reject garbage");
-                gv += 1;
+                crate::n!(A_, "[FAIL] should reject garbage");
+                bv += 1;
             }
         }
 
         
         crate::print!("  Note A4 freq... ");
-        let bfw = crate::drivers::hda::Note::new(69, 4, 100);
-        let kxd = bfw.auf();
-        if kxd == 440 {
-            crate::h!(B_, "[OK] freq={}Hz", kxd);
-            cg += 1;
+        let aeq = crate::drivers::hda::Note::new(69, 4, 100);
+        let fxs = aeq.freq_hz();
+        if fxs == 440 {
+            crate::n!(B_, "[OK] freq={}Hz", fxs);
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] expected 440, got {}", kxd);
-            gv += 1;
+            crate::n!(A_, "[FAIL] expected 440, got {}", fxs);
+            bv += 1;
         }
 
         
         crate::print!("  Note C4 freq... ");
-        let kfx = crate::drivers::hda::Note::new(60, 4, 100);
-        let ivw = kfx.auf();
+        let fkm = crate::drivers::hda::Note::new(60, 4, 100);
+        let enk = fkm.freq_hz();
         
         
         
-        if ivw >= 255 && ivw <= 265 {
-            crate::h!(B_, "[OK] freq={}Hz (~261)", ivw);
-            cg += 1;
+        if enk >= 255 && enk <= 265 {
+            crate::n!(B_, "[OK] freq={}Hz (~261)", enk);
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] expected ~261, got {}", ivw);
-            gv += 1;
+            crate::n!(A_, "[FAIL] expected ~261, got {}", enk);
+            bv += 1;
         }
 
         
         crate::print!("  Rest note freq... ");
-        let kr = crate::drivers::hda::Note::kr(4);
-        if kr.auf() == 0 {
-            crate::h!(B_, "[OK] freq=0");
-            cg += 1;
+        let ef = crate::drivers::hda::Note::ef(4);
+        if ef.freq_hz() == 0 {
+            crate::n!(B_, "[OK] freq=0");
+            passed += 1;
         } else {
-            crate::h!(A_, "[FAIL] expected 0, got {}", kr.auf());
-            gv += 1;
+            crate::n!(A_, "[FAIL] expected 0, got {}", ef.freq_hz());
+            bv += 1;
         }
     }
 
     
     
     
-    crate::h!(C_, "[6/6] HDA Live Playback");
+    crate::n!(C_, "[6/6] HDA Live Playback");
     {
-        if !crate::drivers::hda::ky() {
+        if !crate::drivers::hda::is_initialized() {
             crate::print!("  auto-init HDA... ");
             match crate::drivers::hda::init() {
-                Ok(()) => crate::h!(B_, "[OK]"),
-                Err(aa) => {
-                    crate::h!(D_, "[SKIP] {}", aa);
-                    cg += 3; 
+                Ok(()) => crate::n!(B_, "[OK]"),
+                Err(e) => {
+                    crate::n!(D_, "[SKIP] {}", e);
+                    passed += 3; 
                 }
             }
         }
 
-        if crate::drivers::hda::ky() {
+        if crate::drivers::hda::is_initialized() {
             
             crate::print!("  play_sine(440, 200)... ");
-            match crate::drivers::hda::vjc(440, 200) {
+            match crate::drivers::hda::nvn(440, 200) {
                 Ok(()) => {
-                    crate::h!(B_, "[OK]");
-                    cg += 1;
+                    crate::n!(B_, "[OK]");
+                    passed += 1;
                 }
-                Err(aa) => {
-                    crate::h!(A_, "[FAIL] {}", aa);
-                    gv += 1;
+                Err(e) => {
+                    crate::n!(A_, "[FAIL] {}", e);
+                    bv += 1;
                 }
             }
 
             
             crate::print!("  play_effect(Success)... ");
-            match crate::drivers::hda::viv(crate::drivers::hda::SoundEffect::Hf) {
+            match crate::drivers::hda::nvi(crate::drivers::hda::SoundEffect::Success) {
                 Ok(()) => {
-                    crate::h!(B_, "[OK]");
-                    cg += 1;
+                    crate::n!(B_, "[OK]");
+                    passed += 1;
                 }
-                Err(aa) => {
-                    crate::h!(A_, "[FAIL] {}", aa);
-                    gv += 1;
+                Err(e) => {
+                    crate::n!(A_, "[FAIL] {}", e);
+                    bv += 1;
                 }
             }
 
             
             crate::print!("  play_demo()... ");
-            match crate::drivers::hda::viu() {
+            match crate::drivers::hda::nvh() {
                 Ok(()) => {
-                    crate::h!(B_, "[OK]");
-                    cg += 1;
+                    crate::n!(B_, "[OK]");
+                    passed += 1;
                 }
-                Err(aa) => {
-                    crate::h!(A_, "[FAIL] {}", aa);
-                    gv += 1;
+                Err(e) => {
+                    crate::n!(A_, "[FAIL] {}", e);
+                    bv += 1;
                 }
             }
         }
@@ -3907,175 +3908,175 @@ pub(super) fn rdn() {
 
     
     crate::println!();
-    let es = cg + gv;
-    if gv == 0 {
-        crate::h!(G_,
-            "=== DEBUGNEW: ALL {}/{} TESTS PASSED ===", cg, es);
+    let av = passed + bv;
+    if bv == 0 {
+        crate::n!(G_,
+            "=== DEBUGNEW: ALL {}/{} TESTS PASSED ===", passed, av);
     } else {
-        crate::h!(A_,
-            "=== DEBUGNEW: {}/{} passed, {} FAILED ===", cg, es, gv);
+        crate::n!(A_,
+            "=== DEBUGNEW: {}/{} passed, {} FAILED ===", passed, av, bv);
     }
 }
 
-pub(super) fn rgs() {
-    if !crate::nvme::ky() {
-        crate::h!(D_, "NVMe: not initialized (no NVMe device found)");
+pub(super) fn kqd() {
+    if !crate::nvme::is_initialized() {
+        crate::n!(D_, "NVMe: not initialized (no NVMe device found)");
         return;
     }
     
-    if let Some((model, serial, aw, cak)) = crate::nvme::ani() {
-        let xv = aw * cak as u64;
-        let csm = xv / (1024 * 1024);
-        let eqx = xv / (1024 * 1024 * 1024);
+    if let Some((model, serial, size, aol)) = crate::nvme::rk() {
+        let total_bytes = size * aol as u64;
+        let aop = total_bytes / (1024 * 1024);
+        let cab = total_bytes / (1024 * 1024 * 1024);
         
-        crate::h!(C_, "=== NVMe Storage ===");
+        crate::n!(C_, "=== NVMe Storage ===");
         crate::println!("  Model:     {}", model);
         crate::println!("  Serial:    {}", serial);
-        crate::println!("  Capacity:  {} LBAs ({} MB / {} GB)", aw, csm, eqx);
-        crate::println!("  LBA Size:  {} bytes", cak);
+        crate::println!("  Capacity:  {} LBAs ({} MB / {} GB)", size, aop, cab);
+        crate::println!("  LBA Size:  {} bytes", aol);
         
         
-        let mut k = [0u8; 512];
-        match crate::nvme::ain(0, 1, &mut k) {
+        let mut buf = [0u8; 512];
+        match crate::nvme::read_sectors(0, 1, &mut buf) {
             Ok(()) => {
                 crate::print!("  LBA 0:     ");
-                for o in &k[..16] {
-                    crate::print!("{:02x} ", o);
+                for b in &buf[..16] {
+                    crate::print!("{:02x} ", b);
                 }
                 crate::println!("...");
-                crate::h!(B_, "  Status:    Online");
+                crate::n!(B_, "  Status:    Online");
             }
-            Err(aa) => {
-                crate::h!(A_, "  Read test: FAILED ({})", aa);
+            Err(e) => {
+                crate::n!(A_, "  Read test: FAILED ({})", e);
             }
         }
     }
 }
 
-pub(super) fn neb(n: &[&str]) {
-    if n.is_empty() {
+pub(super) fn hlz(args: &[&str]) {
+    if args.is_empty() {
         crate::println!("Usage: hexdump <file>");
         return;
     }
     
-    match crate::ramfs::fh(|fs| fs.mq(n[0]).map(|r| r.ip())) {
-        Ok(ca) => {
-            for (a, jj) in ca.btq(16).cf() {
-                crate::gr!(AU_, "{:08x}  ", a * 16);
-                for (fb, o) in jj.iter().cf() {
-                    if fb == 8 { crate::print!(" "); }
-                    crate::print!("{:02x} ", o);
+    match crate::ramfs::bh(|fs| fs.read_file(args[0]).map(|c| c.to_vec())) {
+        Ok(content) => {
+            for (i, df) in content.chunks(16).enumerate() {
+                crate::bq!(AX_, "{:08x}  ", i * 16);
+                for (ay, b) in df.iter().enumerate() {
+                    if ay == 8 { crate::print!(" "); }
+                    crate::print!("{:02x} ", b);
                 }
-                for _ in jj.len()..16 { crate::print!("   "); }
+                for _ in df.len()..16 { crate::print!("   "); }
                 crate::print!(" |");
-                for o in jj {
-                    let r = if *o >= 0x20 && *o < 0x7F { *o as char } else { '.' };
-                    crate::print!("{}", r);
+                for b in df {
+                    let c = if *b >= 0x20 && *b < 0x7F { *b as char } else { '.' };
+                    crate::print!("{}", c);
                 }
                 crate::println!("|");
             }
         }
-        Err(aa) => crate::h!(A_, "hexdump: {}", aa.as_str()),
+        Err(e) => crate::n!(A_, "hexdump: {}", e.as_str()),
     }
 }
 
-pub(super) fn rgv() {
-    crate::h!(A_, "Panic triggered!");
+pub(super) fn kqg() {
+    crate::n!(A_, "Panic triggered!");
     panic!("User panic");
 }
 
 
 
-pub(super) fn rhm() {
-    crate::h!(D_, "Rebooting...");
-    crate::acpi::jlq();
+pub(super) fn kqw() {
+    crate::n!(D_, "Rebooting...");
+    crate::acpi::eya();
 }
 
-pub(super) fn rex() {
-    crate::h!(D_, "System shutting down...");
-    crate::acpi::cbu();
+pub(super) fn koj() {
+    crate::n!(D_, "System shutting down...");
+    crate::acpi::shutdown();
 }
 
-pub(super) fn kje() {
-    crate::h!(C_, "Suspending to S3 (sleep-to-RAM)...");
+pub(super) fn fnc() {
+    crate::n!(C_, "Suspending to S3 (sleep-to-RAM)...");
     crate::println!("Press power button or send wakeup event to resume.");
     
-    for _ in 0..500_000 { core::hint::hc(); }
-    if crate::acpi::fvw() {
-        crate::h!(B_, "Resumed from S3 sleep.");
+    for _ in 0..500_000 { core::hint::spin_loop(); }
+    if crate::acpi::crf() {
+        crate::n!(B_, "Resumed from S3 sleep.");
     } else {
-        crate::h!(A_, "S3 suspend not supported or failed.");
+        crate::n!(A_, "S3 suspend not supported or failed.");
     }
 }
 
 
 
-pub(super) fn kiy() {
-    let tv = crate::logger::lh() / 100;
-    let (d, i) = crate::framebuffer::yn();
-    let xkj = crate::memory::fxc() / 1024 / 1024;
-    let llo = crate::memory::cm();
-    let tof = llo.afa / 1024 / 1024;
-    let toe = (llo.afa + llo.buv) / 1024 / 1024;
+pub(super) fn fmw() {
+    let im = crate::logger::eg() / 100;
+    let (w, h) = crate::framebuffer::kv();
+    let pma = crate::memory::ceo() / 1024 / 1024;
+    let ghl = crate::memory::stats();
+    let mkw = ghl.heap_used / 1024 / 1024;
+    let mkv = (ghl.heap_used + ghl.heap_free) / 1024 / 1024;
     
-    crate::h!(G_, r"       _____          ");
-    crate::gr!(B_, r"      |  _  |         ");
-    crate::gr!(C_, "root");
-    crate::gr!(Q_, "@");
-    crate::h!(C_, "trustos");
-    crate::gr!(B_, r"      | |_| |         ");
+    crate::n!(G_, r"       _____          ");
+    crate::bq!(B_, r"      |  _  |         ");
+    crate::bq!(C_, "root");
+    crate::bq!(R_, "@");
+    crate::n!(C_, "trustos");
+    crate::bq!(B_, r"      | |_| |         ");
     crate::println!("---------------");
-    crate::gr!(B_, r"      |  _  |         ");
-    crate::gr!(C_, "OS: ");
+    crate::bq!(B_, r"      |  _  |         ");
+    crate::bq!(C_, "OS: ");
     crate::println!("TrustOS v0.1.1");
-    crate::gr!(AU_, r"      | |_| |         ");
-    crate::gr!(C_, "Kernel: ");
-    crate::println!("{}", crate::signature::NU_);
-    crate::gr!(AU_, r"      |_____|         ");
-    crate::gr!(C_, "Uptime: ");
-    crate::println!("{} secs", tv);
-    crate::gr!(G_, r"                      ");
-    crate::gr!(C_, "Shell: ");
+    crate::bq!(AX_, r"      | |_| |         ");
+    crate::bq!(C_, "Kernel: ");
+    crate::println!("{}", crate::signature::OS_);
+    crate::bq!(AX_, r"      |_____|         ");
+    crate::bq!(C_, "Uptime: ");
+    crate::println!("{} secs", im);
+    crate::bq!(G_, r"                      ");
+    crate::bq!(C_, "Shell: ");
     crate::println!("tsh");
-    crate::gr!(B_, r"                      ");
-    crate::gr!(C_, "Resolution: ");
-    crate::println!("{}x{}", d, i);
-    crate::gr!(B_, r"                      ");
-    crate::gr!(C_, "Memory: ");
-    crate::println!("{} MB total, {} / {} MB heap", xkj, tof, toe);
-    crate::gr!(B_, r"                      ");
-    crate::gr!(C_, "CPU: ");
-    crate::println!("{} cores", crate::cpu::gdj());
-    crate::gr!(B_, r"                      ");
-    crate::gr!(C_, "GPU: ");
-    if crate::drivers::nvidia::clb() {
-        crate::println!("{}", crate::drivers::nvidia::awz());
-    } else if crate::drivers::amdgpu::clb() {
-        crate::println!("{}", crate::drivers::amdgpu::awz());
-    } else if crate::drivers::virtio_gpu::anl() {
-        crate::println!("{}", crate::drivers::virtio_gpu::lea());
+    crate::bq!(B_, r"                      ");
+    crate::bq!(C_, "Resolution: ");
+    crate::println!("{}x{}", w, h);
+    crate::bq!(B_, r"                      ");
+    crate::bq!(C_, "Memory: ");
+    crate::println!("{} MB total, {} / {} MB heap", pma, mkw, mkv);
+    crate::bq!(B_, r"                      ");
+    crate::bq!(C_, "CPU: ");
+    crate::println!("{} cores", crate::cpu::cvr());
+    crate::bq!(B_, r"                      ");
+    crate::bq!(C_, "GPU: ");
+    if crate::drivers::nvidia::aud() {
+        crate::println!("{}", crate::drivers::nvidia::summary());
+    } else if crate::drivers::amdgpu::aud() {
+        crate::println!("{}", crate::drivers::amdgpu::summary());
+    } else if crate::drivers::virtio_gpu::sw() {
+        crate::println!("{}", crate::drivers::virtio_gpu::gcl());
     } else {
-        let cxa = crate::pci::ebq(crate::pci::class::Ji);
-        if let Some(ba) = cxa.fv() {
-            crate::println!("{} {:04X}:{:04X}", ba.cip(), ba.ml, ba.mx);
+        let bbd = crate::pci::bsp(crate::pci::class::Du);
+        if let Some(s) = bbd.first() {
+            crate::println!("{} {:04X}:{:04X}", s.vendor_name(), s.vendor_id, s.device_id);
         } else {
             crate::println!("N/A");
         }
     }
-    crate::gr!(B_, r"                      ");
-    crate::gr!(C_, "Creator: ");
+    crate::bq!(B_, r"                      ");
+    crate::bq!(C_, "Creator: ");
     crate::println!("Nated0ge (@nathan237)");
     crate::println!();
 }
 
-pub(super) fn rgg() {
-    crate::h!(B_, "Wake up, Neo...");
-    crate::h!(B_, "The Matrix has you...");
-    crate::h!(B_, "Follow the white rabbit.");
+pub(super) fn kpq() {
+    crate::n!(B_, "Wake up, Neo...");
+    crate::n!(B_, "The Matrix has you...");
+    crate::n!(B_, "Follow the white rabbit.");
 }
 
-pub(super) fn rdb(n: &[&str]) {
-    let text = if n.is_empty() { "Moo!" } else { &n.rr(" ") };
+pub(super) fn kml(args: &[&str]) {
+    let text = if args.is_empty() { "Moo!" } else { &args.join(" ") };
     let len = text.len();
     crate::print!(" ");
     for _ in 0..len + 2 { crate::print!("_"); }
@@ -4092,7 +4093,7 @@ pub(super) fn rdb(n: &[&str]) {
 }
 
 
-pub(super) fn req(n: &[&str]) {
+pub(super) fn koc(args: &[&str]) {
     use crate::drivers::amdgpu::compute;
     use crate::drivers::amdgpu::compute::AgentKind;
     
@@ -4101,10 +4102,10 @@ pub(super) fn req(n: &[&str]) {
     const A_: u32 = 0xFFFF4444;
     const D_: u32 = 0xFFFFFF00;
     
-    if n.is_empty() {
-        crate::h!(C_, "╔══════════════════════════════════════════════╗");
-        crate::h!(C_, "║     GPU Compute Agent — RDNA bare-metal      ║");
-        crate::h!(C_, "╠══════════════════════════════════════════════╣");
+    if args.is_empty() {
+        crate::n!(C_, "╔══════════════════════════════════════════════╗");
+        crate::n!(C_, "║     GPU Compute Agent — RDNA bare-metal      ║");
+        crate::n!(C_, "╠══════════════════════════════════════════════╣");
         crate::println!("║ Usage:                                       ║");
         crate::println!("║   gpuexec list         List agents            ║");
         crate::println!("║   gpuexec info         Compute engine status  ║");
@@ -4112,158 +4113,158 @@ pub(super) fn req(n: &[&str]) {
         crate::println!("║   gpuexec memfill [N] [V] Fill with value     ║");
         crate::println!("║   gpuexec memcopy [N]  Copy src→dst           ║");
         crate::println!("║   gpuexec test         Run all + verify       ║");
-        crate::h!(C_, "╚══════════════════════════════════════════════╝");
+        crate::n!(C_, "╚══════════════════════════════════════════════╝");
         return;
     }
     
-    match n[0] {
+    match args[0] {
         "list" | "agents" => {
-            crate::h!(C_, "Available GPU agents:");
-            for agent in compute::QZ_ {
+            crate::n!(C_, "Available GPU agents:");
+            for agent in compute::RU_ {
                 crate::println!("  {:10} — {} ({} SGPR, {} VGPR, {} insns)",
-                    agent.j(), agent.dc(),
-                    agent.jpo(), agent.jvl(),
-                    agent.fun().len());
+                    agent.name(), agent.description(),
+                    agent.sgpr_count(), agent.vgpr_count(),
+                    agent.shader_code().len());
             }
         }
         "info" | "status" => {
-            if !compute::uc() {
-                crate::h!(D_, "GPU compute engine not initialized");
+            if !compute::is_ready() {
+                crate::n!(D_, "GPU compute engine not initialized");
                 crate::println!("(Requires AMD GPU with MMIO — bare metal or GPU passthrough)");
                 return;
             }
-            for line in compute::zl() {
+            for line in compute::info_lines() {
                 crate::println!("{}", line);
             }
         }
         "test" => {
-            if !compute::uc() {
-                crate::h!(D_, "GPU compute engine not initialized");
+            if !compute::is_ready() {
+                crate::n!(D_, "GPU compute engine not initialized");
                 return;
             }
-            crate::h!(C_, "=== GPU Compute Agent Self-Test ===");
-            let mut dwz = 0u32;
-            let mut cut = 0u32;
+            crate::n!(C_, "=== GPU Compute Agent Self-Test ===");
+            let mut bpq = 0u32;
+            let mut azz = 0u32;
             
             
             crate::print!("  incr(256)... ");
-            match compute::gey(AgentKind::It, 256, 0) {
-                Ok(bbu) => {
-                    let (ai, bb) = compute::gwa(AgentKind::It, 256, 0);
-                    if bb == 0 {
-                        crate::h!(B_, "[OK] {}p/{}f in {} iters", ai, bb, bbu);
+            match compute::cwq(AgentKind::Incr, 256, 0) {
+                Ok(acd) => {
+                    let (aa, f) = compute::dgf(AgentKind::Incr, 256, 0);
+                    if f == 0 {
+                        crate::n!(B_, "[OK] {}p/{}f in {} iters", aa, f, acd);
                     } else {
-                        crate::h!(A_, "[FAIL] {}p/{}f in {} iters", ai, bb, bbu);
+                        crate::n!(A_, "[FAIL] {}p/{}f in {} iters", aa, f, acd);
                     }
-                    dwz += ai; cut += bb;
+                    bpq += aa; azz += f;
                 }
-                Err(aa) => {
-                    crate::h!(A_, "[ERR] {}", aa);
-                    cut += 256;
+                Err(e) => {
+                    crate::n!(A_, "[ERR] {}", e);
+                    azz += 256;
                 }
             }
             
             
             crate::print!("  memfill(512, 0xCAFE1234)... ");
-            match compute::gey(AgentKind::Hv, 512, 0xCAFE1234) {
-                Ok(bbu) => {
-                    let (ai, bb) = compute::gwa(AgentKind::Hv, 512, 0xCAFE1234);
-                    if bb == 0 {
-                        crate::h!(B_, "[OK] {}p/{}f in {} iters", ai, bb, bbu);
+            match compute::cwq(AgentKind::MemFill, 512, 0xCAFE1234) {
+                Ok(acd) => {
+                    let (aa, f) = compute::dgf(AgentKind::MemFill, 512, 0xCAFE1234);
+                    if f == 0 {
+                        crate::n!(B_, "[OK] {}p/{}f in {} iters", aa, f, acd);
                     } else {
-                        crate::h!(A_, "[FAIL] {}p/{}f in {} iters", ai, bb, bbu);
+                        crate::n!(A_, "[FAIL] {}p/{}f in {} iters", aa, f, acd);
                     }
-                    dwz += ai; cut += bb;
+                    bpq += aa; azz += f;
                 }
-                Err(aa) => {
-                    crate::h!(A_, "[ERR] {}", aa);
-                    cut += 512;
+                Err(e) => {
+                    crate::n!(A_, "[ERR] {}", e);
+                    azz += 512;
                 }
             }
             
             
             crate::print!("  memcopy(128)... ");
-            match compute::gey(AgentKind::Iw, 128, 0) {
-                Ok(bbu) => {
-                    let (ai, bb) = compute::gwa(AgentKind::Iw, 128, 0);
-                    if bb == 0 {
-                        crate::h!(B_, "[OK] {}p/{}f in {} iters", ai, bb, bbu);
+            match compute::cwq(AgentKind::MemCopy, 128, 0) {
+                Ok(acd) => {
+                    let (aa, f) = compute::dgf(AgentKind::MemCopy, 128, 0);
+                    if f == 0 {
+                        crate::n!(B_, "[OK] {}p/{}f in {} iters", aa, f, acd);
                     } else {
-                        crate::h!(A_, "[FAIL] {}p/{}f in {} iters", ai, bb, bbu);
+                        crate::n!(A_, "[FAIL] {}p/{}f in {} iters", aa, f, acd);
                     }
-                    dwz += ai; cut += bb;
+                    bpq += aa; azz += f;
                 }
-                Err(aa) => {
-                    crate::h!(A_, "[ERR] {}", aa);
-                    cut += 128;
+                Err(e) => {
+                    crate::n!(A_, "[ERR] {}", e);
+                    azz += 128;
                 }
             }
             
             crate::println!();
-            if cut == 0 {
-                crate::h!(B_, "=== ALL PASSED: {}/{} ===", dwz, dwz + cut);
+            if azz == 0 {
+                crate::n!(B_, "=== ALL PASSED: {}/{} ===", bpq, bpq + azz);
             } else {
-                crate::h!(A_, "=== {}/{} passed, {} FAILED ===", 
-                    dwz, dwz + cut, cut);
+                crate::n!(A_, "=== {}/{} passed, {} FAILED ===", 
+                    bpq, bpq + azz, azz);
             }
         }
         "incr" => {
-            let bo: u32 = n.get(1).and_then(|e| e.parse().bq()).unwrap_or(64);
-            crate::println!("Dispatching INCR agent ({} elements)...", bo);
-            match compute::gey(AgentKind::It, bo, 0) {
-                Ok(bbu) => {
-                    let (ai, bb) = compute::gwa(AgentKind::It, bo, 0);
-                    crate::h!(B_, "Done: {}/{} correct in {} iters", ai, ai+bb, bbu);
+            let ae: u32 = args.get(1).and_then(|j| j.parse().ok()).unwrap_or(64);
+            crate::println!("Dispatching INCR agent ({} elements)...", ae);
+            match compute::cwq(AgentKind::Incr, ae, 0) {
+                Ok(acd) => {
+                    let (aa, f) = compute::dgf(AgentKind::Incr, ae, 0);
+                    crate::n!(B_, "Done: {}/{} correct in {} iters", aa, aa+f, acd);
                     
                     crate::print!("  Data: ");
-                    for a in 0..8.v(bo) {
-                        if let Some(p) = compute::vrn(a) {
-                            crate::print!("{:#X} ", p);
+                    for i in 0..8.min(ae) {
+                        if let Some(v) = compute::oco(i) {
+                            crate::print!("{:#X} ", v);
                         }
                     }
                     crate::println!("...");
                 }
-                Err(aa) => crate::h!(A_, "Error: {}", aa),
+                Err(e) => crate::n!(A_, "Error: {}", e),
             }
         }
         "memfill" => {
-            let bo: u32 = n.get(1).and_then(|e| e.parse().bq()).unwrap_or(64);
-            let p: u32 = n.get(2).and_then(|e| {
-                if e.cj("0x") || e.cj("0X") {
-                    u32::wa(&e[2..], 16).bq()
+            let ae: u32 = args.get(1).and_then(|j| j.parse().ok()).unwrap_or(64);
+            let v: u32 = args.get(2).and_then(|j| {
+                if j.starts_with("0x") || j.starts_with("0X") {
+                    u32::from_str_radix(&j[2..], 16).ok()
                 } else {
-                    e.parse().bq()
+                    j.parse().ok()
                 }
             }).unwrap_or(0xDEADBEEF);
-            crate::println!("Dispatching MEMFILL agent ({} elements, value={:#X})...", bo, p);
-            match compute::gey(AgentKind::Hv, bo, p) {
-                Ok(bbu) => {
-                    let (ai, bb) = compute::gwa(AgentKind::Hv, bo, p);
-                    crate::h!(B_, "Done: {}/{} correct in {} iters", ai, ai+bb, bbu);
+            crate::println!("Dispatching MEMFILL agent ({} elements, value={:#X})...", ae, v);
+            match compute::cwq(AgentKind::MemFill, ae, v) {
+                Ok(acd) => {
+                    let (aa, f) = compute::dgf(AgentKind::MemFill, ae, v);
+                    crate::n!(B_, "Done: {}/{} correct in {} iters", aa, aa+f, acd);
                 }
-                Err(aa) => crate::h!(A_, "Error: {}", aa),
+                Err(e) => crate::n!(A_, "Error: {}", e),
             }
         }
         "memcopy" => {
-            let bo: u32 = n.get(1).and_then(|e| e.parse().bq()).unwrap_or(64);
-            crate::println!("Dispatching MEMCOPY agent ({} elements)...", bo);
-            match compute::gey(AgentKind::Iw, bo, 0) {
-                Ok(bbu) => {
-                    let (ai, bb) = compute::gwa(AgentKind::Iw, bo, 0);
-                    crate::h!(B_, "Done: {}/{} correct in {} iters", ai, ai+bb, bbu);
+            let ae: u32 = args.get(1).and_then(|j| j.parse().ok()).unwrap_or(64);
+            crate::println!("Dispatching MEMCOPY agent ({} elements)...", ae);
+            match compute::cwq(AgentKind::MemCopy, ae, 0) {
+                Ok(acd) => {
+                    let (aa, f) = compute::dgf(AgentKind::MemCopy, ae, 0);
+                    crate::n!(B_, "Done: {}/{} correct in {} iters", aa, aa+f, acd);
                 }
-                Err(aa) => crate::h!(A_, "Error: {}", aa),
+                Err(e) => crate::n!(A_, "Error: {}", e),
             }
         }
         _ => {
-            crate::h!(A_, "Unknown subcommand: {}", n[0]);
+            crate::n!(A_, "Unknown subcommand: {}", args[0]);
             crate::println!("Use 'gpuexec' for help");
         }
     }
 }
 
 
-pub(super) fn rhx(n: &[&str]) {
+pub(super) fn kri(args: &[&str]) {
     use crate::drivers::amdgpu::sdma;
 
     const C_: u32 = 0xFF00FFFF;
@@ -4271,169 +4272,169 @@ pub(super) fn rhx(n: &[&str]) {
     const A_: u32 = 0xFFFF4444;
     const D_: u32 = 0xFFFFFF00;
 
-    if n.is_empty() {
-        crate::h!(C_, "╔══════════════════════════════════════════════╗");
-        crate::h!(C_, "║    SDMA Engine — Bare-metal DMA Transfers     ║");
-        crate::h!(C_, "╠══════════════════════════════════════════════╣");
+    if args.is_empty() {
+        crate::n!(C_, "╔══════════════════════════════════════════════╗");
+        crate::n!(C_, "║    SDMA Engine — Bare-metal DMA Transfers     ║");
+        crate::n!(C_, "╠══════════════════════════════════════════════╣");
         crate::println!("║ Usage:                                       ║");
         crate::println!("║   sdma info           Engine status + stats   ║");
         crate::println!("║   sdma test           Self-test (5 tests)     ║");
         crate::println!("║   sdma bench [KB]     Bandwidth benchmark     ║");
         crate::println!("║   sdma fill <KB> [V]  Fill memory via DMA     ║");
         crate::println!("║   sdma copy <KB>      Copy memory via DMA     ║");
-        crate::h!(C_, "╚══════════════════════════════════════════════╝");
+        crate::n!(C_, "╚══════════════════════════════════════════════╝");
         return;
     }
 
-    match n[0] {
+    match args[0] {
         "info" | "status" => {
-            if !sdma::uc() {
-                crate::h!(D_, "SDMA not initialized");
+            if !sdma::is_ready() {
+                crate::n!(D_, "SDMA not initialized");
                 crate::println!("(Requires AMD GPU with MMIO — bare metal or GPU passthrough)");
                 return;
             }
-            for line in sdma::zl() {
+            for line in sdma::info_lines() {
                 crate::println!("{}", line);
             }
         }
         "test" => {
-            if !sdma::uc() {
-                crate::h!(D_, "SDMA not initialized");
+            if !sdma::is_ready() {
+                crate::n!(D_, "SDMA not initialized");
                 return;
             }
-            crate::h!(C_, "=== SDMA Self-Test ===");
-            let (afu, ace) = sdma::eyj();
+            crate::n!(C_, "=== SDMA Self-Test ===");
+            let (gd, gv) = sdma::cdp();
             crate::println!();
-            if ace == 0 {
-                crate::h!(B_, "=== ALL PASSED: {}/{} ===", afu, afu + ace);
+            if gv == 0 {
+                crate::n!(B_, "=== ALL PASSED: {}/{} ===", gd, gd + gv);
             } else {
-                crate::h!(A_, "=== {}/{} passed, {} FAILED ===",
-                    afu, afu + ace, ace);
+                crate::n!(A_, "=== {}/{} passed, {} FAILED ===",
+                    gd, gd + gv, gv);
             }
         }
         "bench" | "benchmark" => {
-            if !sdma::uc() {
-                crate::h!(D_, "SDMA not initialized");
+            if !sdma::is_ready() {
+                crate::n!(D_, "SDMA not initialized");
                 return;
             }
-            let gs: u32 = n.get(1).and_then(|e| e.parse().bq()).unwrap_or(64);
-            crate::println!("Benchmarking SDMA ({} KB, 16 iterations)...", gs);
-            match sdma::qoy(gs) {
-                Ok((kvu, kku)) => {
-                    crate::h!(B_, "  Fill BW: ~{} KB/s", kvu);
-                    crate::h!(B_, "  Copy BW: ~{} KB/s", kku);
+            let size_kb: u32 = args.get(1).and_then(|j| j.parse().ok()).unwrap_or(64);
+            crate::println!("Benchmarking SDMA ({} KB, 16 iterations)...", size_kb);
+            match sdma::kbl(size_kb) {
+                Ok((fwr, fol)) => {
+                    crate::n!(B_, "  Fill BW: ~{} KB/s", fwr);
+                    crate::n!(B_, "  Copy BW: ~{} KB/s", fol);
                     crate::println!("  (Measured via system timer — bare metal will show true GPU bandwidth)");
                 }
-                Err(aa) => crate::h!(A_, "Benchmark error: {}", aa),
+                Err(e) => crate::n!(A_, "Benchmark error: {}", e),
             }
         }
         "fill" => {
-            if !sdma::uc() {
-                crate::h!(D_, "SDMA not initialized");
+            if !sdma::is_ready() {
+                crate::n!(D_, "SDMA not initialized");
                 return;
             }
-            let gs: u32 = n.get(1).and_then(|e| e.parse().bq()).unwrap_or(4);
-            let ntu: u32 = n.get(2).and_then(|e| {
-                if e.cj("0x") || e.cj("0X") {
-                    u32::wa(&e[2..], 16).bq()
+            let size_kb: u32 = args.get(1).and_then(|j| j.parse().ok()).unwrap_or(4);
+            let hym: u32 = args.get(2).and_then(|j| {
+                if j.starts_with("0x") || j.starts_with("0X") {
+                    u32::from_str_radix(&j[2..], 16).ok()
                 } else {
-                    e.parse().bq()
+                    j.parse().ok()
                 }
             }).unwrap_or(0xDEAD_BEEF);
-            let aal = (gs * 1024).v(256 * 1024);
+            let nb = (size_kb * 1024).min(256 * 1024);
 
             
-            let layout = alloc::alloc::Layout::bjy(aal as usize, 4096);
+            let layout = alloc::alloc::Layout::from_size_align(nb as usize, 4096);
             if layout.is_err() {
-                crate::h!(A_, "Allocation error");
+                crate::n!(A_, "Allocation error");
                 return;
             }
             let layout = layout.unwrap();
-            let k = unsafe { alloc::alloc::alloc_zeroed(layout) } as u64;
-            let ht = crate::memory::abw(k).unwrap_or(0);
-            if ht == 0 {
-                crate::h!(A_, "Cannot get physical address");
-                unsafe { alloc::alloc::dealloc(k as *mut u8, layout); }
+            let buf = unsafe { alloc::alloc::alloc_zeroed(layout) } as u64;
+            let phys = crate::memory::lc(buf).unwrap_or(0);
+            if phys == 0 {
+                crate::n!(A_, "Cannot get physical address");
+                unsafe { alloc::alloc::dealloc(buf as *mut u8, layout); }
                 return;
             }
 
-            crate::println!("SDMA fill: {} bytes at {:#X} with {:#010X}", aal, ht, ntu);
-            match sdma::vi(ht, ntu, aal, 0) {
-                Ok(ls) => {
+            crate::println!("SDMA fill: {} bytes at {:#X} with {:#010X}", nb, phys, hym);
+            match sdma::fill(phys, hym, nb, 0) {
+                Ok(seq) => {
                     
-                    let ptr = k as *const u32;
-                    let abk = unsafe { core::ptr::read_volatile(ptr) };
-                    let agy = unsafe { core::ptr::read_volatile(ptr.add(1)) };
-                    let apg = unsafe { core::ptr::read_volatile(ptr.add(2)) };
-                    let bdf = unsafe { core::ptr::read_volatile(ptr.add(3)) };
-                    crate::h!(B_, "  Done (fence={}), first 4: {:#010X} {:#010X} {:#010X} {:#010X}",
-                        ls, abk, agy, apg, bdf);
+                    let ptr = buf as *const u32;
+                    let v0 = unsafe { core::ptr::read_volatile(ptr) };
+                    let v1 = unsafe { core::ptr::read_volatile(ptr.add(1)) };
+                    let v2 = unsafe { core::ptr::read_volatile(ptr.add(2)) };
+                    let v3 = unsafe { core::ptr::read_volatile(ptr.add(3)) };
+                    crate::n!(B_, "  Done (fence={}), first 4: {:#010X} {:#010X} {:#010X} {:#010X}",
+                        seq, v0, v1, v2, v3);
                 }
-                Err(aa) => crate::h!(A_, "Error: {}", aa),
+                Err(e) => crate::n!(A_, "Error: {}", e),
             }
-            unsafe { alloc::alloc::dealloc(k as *mut u8, layout); }
+            unsafe { alloc::alloc::dealloc(buf as *mut u8, layout); }
         }
         "copy" => {
-            if !sdma::uc() {
-                crate::h!(D_, "SDMA not initialized");
+            if !sdma::is_ready() {
+                crate::n!(D_, "SDMA not initialized");
                 return;
             }
-            let gs: u32 = n.get(1).and_then(|e| e.parse().bq()).unwrap_or(4);
-            let aal = (gs * 1024).v(256 * 1024);
+            let size_kb: u32 = args.get(1).and_then(|j| j.parse().ok()).unwrap_or(4);
+            let nb = (size_kb * 1024).min(256 * 1024);
 
-            let layout = alloc::alloc::Layout::bjy(aal as usize, 4096);
+            let layout = alloc::alloc::Layout::from_size_align(nb as usize, 4096);
             if layout.is_err() {
-                crate::h!(A_, "Allocation error");
+                crate::n!(A_, "Allocation error");
                 return;
             }
             let layout = layout.unwrap();
-            let fdt = unsafe { alloc::alloc::alloc_zeroed(layout) } as u64;
-            let fdu = unsafe { alloc::alloc::alloc_zeroed(layout) } as u64;
-            let fqr = crate::memory::abw(fdt).unwrap_or(0);
-            let hvb = crate::memory::abw(fdu).unwrap_or(0);
-            if fqr == 0 || hvb == 0 {
-                crate::h!(A_, "Cannot get physical addresses");
+            let bey = unsafe { alloc::alloc::alloc_zeroed(layout) } as u64;
+            let bez = unsafe { alloc::alloc::alloc_zeroed(layout) } as u64;
+            let buv = crate::memory::lc(bey).unwrap_or(0);
+            let dwm = crate::memory::lc(bez).unwrap_or(0);
+            if buv == 0 || dwm == 0 {
+                crate::n!(A_, "Cannot get physical addresses");
                 unsafe {
-                    alloc::alloc::dealloc(fdt as *mut u8, layout);
-                    alloc::alloc::dealloc(fdu as *mut u8, layout);
+                    alloc::alloc::dealloc(bey as *mut u8, layout);
+                    alloc::alloc::dealloc(bez as *mut u8, layout);
                 }
                 return;
             }
 
             
-            let cy = fdt as *mut u32;
-            for a in 0..(aal / 4) {
-                unsafe { core::ptr::write_volatile(cy.add(a as usize), 0xA000_0000 + a); }
+            let src = bey as *mut u32;
+            for i in 0..(nb / 4) {
+                unsafe { core::ptr::write_volatile(src.add(i as usize), 0xA000_0000 + i); }
             }
 
-            crate::println!("SDMA copy: {} bytes {:#X} → {:#X}", aal, fqr, hvb);
-            match sdma::bdu(fqr, hvb, aal, 0) {
-                Ok(ls) => {
+            crate::println!("SDMA copy: {} bytes {:#X} → {:#X}", nb, buv, dwm);
+            match sdma::copy(buv, dwm, nb, 0) {
+                Ok(seq) => {
                     
-                    let cs = fdu as *const u32;
-                    let abk = unsafe { core::ptr::read_volatile(cs) };
-                    let agy = unsafe { core::ptr::read_volatile(cs.add(1)) };
-                    let apg = unsafe { core::ptr::read_volatile(cs.add(2)) };
-                    let bdf = unsafe { core::ptr::read_volatile(cs.add(3)) };
-                    crate::h!(B_, "  Done (fence={}), dst[0..3]: {:#010X} {:#010X} {:#010X} {:#010X}",
-                        ls, abk, agy, apg, bdf);
+                    let dst = bez as *const u32;
+                    let v0 = unsafe { core::ptr::read_volatile(dst) };
+                    let v1 = unsafe { core::ptr::read_volatile(dst.add(1)) };
+                    let v2 = unsafe { core::ptr::read_volatile(dst.add(2)) };
+                    let v3 = unsafe { core::ptr::read_volatile(dst.add(3)) };
+                    crate::n!(B_, "  Done (fence={}), dst[0..3]: {:#010X} {:#010X} {:#010X} {:#010X}",
+                        seq, v0, v1, v2, v3);
                     
-                    let mut bq = 0u32;
-                    for a in 0..(aal / 4) {
-                        let ecf = unsafe { core::ptr::read_volatile(cs.add(a as usize)) };
-                        if ecf == 0xA000_0000 + a { bq += 1; }
+                    let mut ok = 0u32;
+                    for i in 0..(nb / 4) {
+                        let got = unsafe { core::ptr::read_volatile(dst.add(i as usize)) };
+                        if got == 0xA000_0000 + i { ok += 1; }
                     }
-                    crate::println!("  Verified: {}/{} dwords correct", bq, aal / 4);
+                    crate::println!("  Verified: {}/{} dwords correct", ok, nb / 4);
                 }
-                Err(aa) => crate::h!(A_, "Error: {}", aa),
+                Err(e) => crate::n!(A_, "Error: {}", e),
             }
             unsafe {
-                alloc::alloc::dealloc(fdt as *mut u8, layout);
-                alloc::alloc::dealloc(fdu as *mut u8, layout);
+                alloc::alloc::dealloc(bey as *mut u8, layout);
+                alloc::alloc::dealloc(bez as *mut u8, layout);
             }
         }
         _ => {
-            crate::h!(A_, "Unknown subcommand: {}", n[0]);
+            crate::n!(A_, "Unknown subcommand: {}", args[0]);
             crate::println!("Use 'sdma' for help");
         }
     }
@@ -4443,11 +4444,11 @@ pub(super) fn rhx(n: &[&str]) {
 
 
 
-pub(super) fn rgo(n: &[&str]) {
+pub(super) fn kpz(args: &[&str]) {
     use crate::drivers::amdgpu::neural;
 
-    if n.is_empty() {
-        crate::h!(C_, "TrustOS Neural Compute — GEMM + Ops for LLM Inference");
+    if args.is_empty() {
+        crate::n!(C_, "TrustOS Neural Compute — GEMM + Ops for LLM Inference");
         crate::println!("");
         crate::println!("Usage: neural <command>");
         crate::println!("");
@@ -4463,144 +4464,144 @@ pub(super) fn rgo(n: &[&str]) {
         return;
     }
 
-    match n[0] {
+    match args[0] {
         "info" => {
-            for line in neural::zl() {
+            for line in neural::info_lines() {
                 crate::println!("{}", line);
             }
         }
 
         "test" => {
-            crate::h!(C_, "Neural Compute Self-Test");
+            crate::n!(C_, "Neural Compute Self-Test");
             crate::println!("Running all tests...");
             crate::println!("");
-            let (afu, ace) = neural::eyj();
+            let (gd, gv) = neural::cdp();
             crate::println!("");
-            if ace == 0 {
-                crate::h!(B_, "All {} tests passed!", afu);
+            if gv == 0 {
+                crate::n!(B_, "All {} tests passed!", gd);
             } else {
-                crate::h!(A_, "{} passed, {} FAILED", afu, ace);
+                crate::n!(A_, "{} passed, {} FAILED", gd, gv);
             }
         }
 
         "bench" => {
-            let tp: usize = if n.len() > 1 {
-                n[1].parse().unwrap_or(64)
+            let dim: usize = if args.len() > 1 {
+                args[1].parse().unwrap_or(64)
             } else {
                 64
             };
-            crate::h!(C_, "INT8 GEMM Benchmark: {}×{} × {}×{}", tp, tp, tp, tp);
-            let kzi = neural::qow(tp);
-            crate::println!("Throughput: {:.3} MOPS (CPU reference)", kzi * 1000.0);
+            crate::n!(C_, "INT8 GEMM Benchmark: {}×{} × {}×{}", dim, dim, dim, dim);
+            let fzg = neural::kbj(dim);
+            crate::println!("Throughput: {:.3} MOPS (CPU reference)", fzg * 1000.0);
             crate::println!("(GPU V_DOT4_I32_I8 target: ~17 TOPS)");
         }
 
         "gemm" => {
-            if n.len() < 4 {
+            if args.len() < 4 {
                 crate::println!("Usage: neural gemm <M> <N> <K>");
                 return;
             }
-            let ef: usize = n[1].parse().unwrap_or(4);
-            let bo: usize = n[2].parse().unwrap_or(4);
-            let eh: usize = n[3].parse().unwrap_or(4);
+            let m: usize = args[1].parse().unwrap_or(4);
+            let ae: usize = args[2].parse().unwrap_or(4);
+            let k: usize = args[3].parse().unwrap_or(4);
 
-            crate::h!(C_, "FP32 GEMM: C[{}×{}] = A[{}×{}] × B[{}×{}]", ef, bo, ef, eh, eh, bo);
-
-            
-            let q: alloc::vec::Vec<f32> = (0..ef*eh).map(|a| (a / eh + 1) as f32).collect();
-            let o: alloc::vec::Vec<f32> = (0..eh*bo).map(|a| (a % bo + 1) as f32).collect();
-
-            let ay = crate::time::ave();
-            let r = neural::dhk(&q, &o, ef, bo, eh);
-            let ez = crate::time::ave() - ay;
+            crate::n!(C_, "FP32 GEMM: C[{}×{}] = A[{}×{}] × B[{}×{}]", m, ae, m, k, k, ae);
 
             
-            let iah = r.len().v(16);
-            crate::println!("Result (first {} elements):", iah);
-            for a in 0..iah {
-                if a > 0 && a % bo == 0 { crate::println!(""); }
-                crate::print!("{:8.1} ", r[a]);
+            let a: alloc::vec::Vec<f32> = (0..m*k).map(|i| (i / k + 1) as f32).collect();
+            let b: alloc::vec::Vec<f32> = (0..k*ae).map(|i| (i % ae + 1) as f32).collect();
+
+            let start = crate::time::yf();
+            let c = neural::bgn(&a, &b, m, ae, k);
+            let bb = crate::time::yf() - start;
+
+            
+            let dzi = c.len().min(16);
+            crate::println!("Result (first {} elements):", dzi);
+            for i in 0..dzi {
+                if i > 0 && i % ae == 0 { crate::println!(""); }
+                crate::print!("{:8.1} ", c[i]);
             }
             crate::println!("");
-            crate::println!("Computed in {} ms ({} MACs)", ez, ef * bo * eh);
+            crate::println!("Computed in {} ms ({} MACs)", bb, m * ae * k);
         }
 
         "kernels" => {
-            crate::h!(C_, "GPU Neural Kernels (hand-encoded RDNA ISA):");
+            crate::n!(C_, "GPU Neural Kernels (hand-encoded RDNA ISA):");
             crate::println!("");
-            for eh in neural::LP_ {
+            for k in neural::ML_ {
                 crate::println!("  {:12} {} ({} DWORDs)",
-                    eh.j(), eh.dc(), eh.fun().len());
-                crate::println!("               SGPRs: {}, VGPRs: {}", eh.jpo(), eh.jvl());
+                    k.name(), k.description(), k.shader_code().len());
+                crate::println!("               SGPRs: {}, VGPRs: {}", k.sgpr_count(), k.vgpr_count());
             }
         }
 
         "relu" => {
-            crate::h!(C_, "ReLU Test");
-            let mut f = alloc::vec![-2.0f32, -1.0, -0.5, 0.0, 0.5, 1.0, 2.0, 3.0];
-            crate::println!("Input:  {:?}", &f);
-            neural::ngr(&mut f);
-            crate::println!("Output: {:?}", &f);
+            crate::n!(C_, "ReLU Test");
+            let mut data = alloc::vec![-2.0f32, -1.0, -0.5, 0.0, 0.5, 1.0, 2.0, 3.0];
+            crate::println!("Input:  {:?}", &data);
+            neural::hoj(&mut data);
+            crate::println!("Output: {:?}", &data);
         }
 
         "softmax" => {
-            crate::h!(C_, "Softmax Test");
-            let mut f = alloc::vec![1.0f32, 2.0, 3.0, 4.0, 5.0];
-            crate::println!("Input:  {:?}", &f);
-            neural::kln(&mut f);
+            crate::n!(C_, "Softmax Test");
+            let mut data = alloc::vec![1.0f32, 2.0, 3.0, 4.0, 5.0];
+            crate::println!("Input:  {:?}", &data);
+            neural::fox(&mut data);
             crate::println!("Output: [");
-            for (a, p) in f.iter().cf() {
-                crate::println!("  [{}] = {:.6}", a, p);
+            for (i, v) in data.iter().enumerate() {
+                crate::println!("  [{}] = {:.6}", i, v);
             }
             crate::println!("]");
-            let sum: f32 = f.iter().sum();
+            let sum: f32 = data.iter().sum();
             crate::println!("Sum = {:.6} (should be ~1.0)", sum);
         }
 
         "transformer" => {
-            crate::h!(C_, "Transformer Layer Test (tiny)");
+            crate::n!(C_, "Transformer Layer Test (tiny)");
             crate::println!("Architecture: seq=2, d_model=8, d_ff=16, heads=2");
             crate::println!("");
 
-            let ls = 2;
-            let bc = 8;
-            let eoj = 16;
-            let ecu = 2;
+            let seq = 2;
+            let d = 8;
+            let bym = 16;
+            let heads = 2;
 
             
-            let input: alloc::vec::Vec<f32> = (0..ls*bc).map(|a| ((a * 17 + 3) % 11) as f32 * 0.1 - 0.5).collect();
-            let biw: alloc::vec::Vec<f32> = (0..bc*bc).map(|a| ((a * 13 + 7) % 9) as f32 * 0.05 - 0.2).collect();
-            let biu: alloc::vec::Vec<f32> = (0..bc*bc).map(|a| ((a * 11 + 5) % 7) as f32 * 0.05 - 0.15).collect();
-            let bpg: alloc::vec::Vec<f32> = (0..bc*bc).map(|a| ((a * 7 + 11) % 13) as f32 * 0.05 - 0.3).collect();
-            let biv: alloc::vec::Vec<f32> = (0..bc*bc).map(|a| ((a * 5 + 3) % 11) as f32 * 0.04 - 0.2).collect();
-            let bit: alloc::vec::Vec<f32> = (0..bc*eoj).map(|a| ((a * 3 + 13) % 7) as f32 * 0.05 - 0.15).collect();
-            let bpf: alloc::vec::Vec<f32> = (0..bc*eoj).map(|a| ((a * 19 + 1) % 11) as f32 * 0.04 - 0.2).collect();
-            let bpe: alloc::vec::Vec<f32> = (0..eoj*bc).map(|a| ((a * 23 + 7) % 13) as f32 * 0.03 - 0.2).collect();
-            let pdu: alloc::vec::Vec<f32> = alloc::vec![1.0f32; bc];
+            let input: alloc::vec::Vec<f32> = (0..seq*d).map(|i| ((i * 17 + 3) % 11) as f32 * 0.1 - 0.5).collect();
+            let w_q: alloc::vec::Vec<f32> = (0..d*d).map(|i| ((i * 13 + 7) % 9) as f32 * 0.05 - 0.2).collect();
+            let w_k: alloc::vec::Vec<f32> = (0..d*d).map(|i| ((i * 11 + 5) % 7) as f32 * 0.05 - 0.15).collect();
+            let w_v: alloc::vec::Vec<f32> = (0..d*d).map(|i| ((i * 7 + 11) % 13) as f32 * 0.05 - 0.3).collect();
+            let w_o: alloc::vec::Vec<f32> = (0..d*d).map(|i| ((i * 5 + 3) % 11) as f32 * 0.04 - 0.2).collect();
+            let w_gate: alloc::vec::Vec<f32> = (0..d*bym).map(|i| ((i * 3 + 13) % 7) as f32 * 0.05 - 0.15).collect();
+            let w_up: alloc::vec::Vec<f32> = (0..d*bym).map(|i| ((i * 19 + 1) % 11) as f32 * 0.04 - 0.2).collect();
+            let w_down: alloc::vec::Vec<f32> = (0..bym*d).map(|i| ((i * 23 + 7) % 13) as f32 * 0.03 - 0.2).collect();
+            let jbe: alloc::vec::Vec<f32> = alloc::vec![1.0f32; d];
 
-            let ay = crate::time::ave();
-            let an = neural::xlu(
-                &input, &biw, &biu, &bpg, &biv,
-                &bit, &bpf, &bpe,
-                &pdu, &pdu,
-                ls, bc, eoj, ecu,
+            let start = crate::time::yf();
+            let output = neural::pnd(
+                &input, &w_q, &w_k, &w_v, &w_o,
+                &w_gate, &w_up, &w_down,
+                &jbe, &jbe,
+                seq, d, bym, heads,
             );
-            let ez = crate::time::ave() - ay;
+            let bb = crate::time::yf() - start;
 
-            crate::println!("Input[0..8]:  {:?}", &input[..bc.v(8)]);
+            crate::println!("Input[0..8]:  {:?}", &input[..d.min(8)]);
             crate::println!("Output[0..8]: [");
-            for a in 0..bc.v(8) {
-                crate::println!("  {:.6}", an[a]);
+            for i in 0..d.min(8) {
+                crate::println!("  {:.6}", output[i]);
             }
             crate::println!("]");
             crate::println!("");
             crate::println!("GEMMs used:  7 (Q,K,V,QK^T,attn*V,O,gate,up,down)");
-            crate::println!("Completed in {} ms", ez);
-            crate::h!(B_, "Transformer layer OK");
+            crate::println!("Completed in {} ms", bb);
+            crate::n!(B_, "Transformer layer OK");
         }
 
         _ => {
-            crate::h!(A_, "Unknown: neural {}", n[0]);
+            crate::n!(A_, "Unknown: neural {}", args[0]);
             crate::println!("Use 'neural' for help");
         }
     }
@@ -4610,7 +4611,7 @@ pub(super) fn rgo(n: &[&str]) {
 
 
 
-pub(super) fn rer(n: &[&str]) {
+pub(super) fn kod(args: &[&str]) {
     use crate::drivers::amdgpu::firmware;
 
     const C_: u32 = 0xFF00FFFF;
@@ -4618,49 +4619,49 @@ pub(super) fn rer(n: &[&str]) {
     const A_: u32 = 0xFFFF4444;
     const D_: u32 = 0xFFFFFF00;
 
-    if n.is_empty() {
-        crate::h!(C_, "╔══════════════════════════════════════════════╗");
-        crate::h!(C_, "║     GPU Firmware Manager — Navi 10 RDNA      ║");
-        crate::h!(C_, "╠══════════════════════════════════════════════╣");
+    if args.is_empty() {
+        crate::n!(C_, "╔══════════════════════════════════════════════╗");
+        crate::n!(C_, "║     GPU Firmware Manager — Navi 10 RDNA      ║");
+        crate::n!(C_, "╠══════════════════════════════════════════════╣");
         crate::println!("║ Usage:                                       ║");
         crate::println!("║   gpufw status       Show firmware status     ║");
         crate::println!("║   gpufw load         Load/reload firmware     ║");
         crate::println!("║   gpufw info         Required firmware files  ║");
-        crate::h!(C_, "╚══════════════════════════════════════════════╝");
+        crate::n!(C_, "╚══════════════════════════════════════════════╝");
         crate::println!("");
         crate::println!("Firmware files go in: /lib/firmware/amdgpu/");
         crate::println!("Get them from: linux-firmware (navi10_*.bin)");
         return;
     }
 
-    match n[0] {
+    match args[0] {
         "status" | "stat" => {
-            crate::h!(C_, "GPU Firmware Status:");
-            crate::println!("{}", firmware::awz());
+            crate::n!(C_, "GPU Firmware Status:");
+            crate::println!("{}", firmware::summary());
             crate::println!("");
-            for line in firmware::wtw() {
+            for line in firmware::owz() {
                 crate::println!("  {}", line);
             }
             crate::println!("");
-            if firmware::tyc() {
-                crate::h!(B_, "Firmware active — GPU engines should be operational");
+            if firmware::msz() {
+                crate::n!(B_, "Firmware active — GPU engines should be operational");
             } else {
-                crate::h!(D_, "No firmware loaded — GPU compute uses CPU fallback");
+                crate::n!(D_, "No firmware loaded — GPU compute uses CPU fallback");
             }
         }
         "load" | "reload" => {
-            if !crate::drivers::amdgpu::clb() {
-                crate::h!(A_, "No AMD GPU detected");
+            if !crate::drivers::amdgpu::aud() {
+                crate::n!(A_, "No AMD GPU detected");
                 return;
             }
-            if let Some(co) = crate::drivers::amdgpu::ani() {
-                crate::println!("Reloading firmware for {}...", co.beh());
-                firmware::ahs(co.lmf);
-                crate::h!(B_, "Done. {}", firmware::awz());
+            if let Some(info) = crate::drivers::amdgpu::rk() {
+                crate::println!("Reloading firmware for {}...", info.gpu_name());
+                firmware::reload(info.mmio_base_virt);
+                crate::n!(B_, "Done. {}", firmware::summary());
             }
         }
         "info" | "files" => {
-            crate::h!(C_, "Required firmware files for Navi 10 (RX 5600 XT):");
+            crate::n!(C_, "Required firmware files for Navi 10 (RX 5600 XT):");
             crate::println!("");
             crate::println!("  /lib/firmware/amdgpu/navi10_rlc.bin     RLC (Run List Controller)");
             crate::println!("  /lib/firmware/amdgpu/navi10_pfp.bin     PFP (Pre-Fetch Parser)");
@@ -4677,8 +4678,294 @@ pub(super) fn rer(n: &[&str]) {
             crate::println!("Or: add as Limine boot modules in limine.conf");
         }
         _ => {
-            crate::h!(A_, "Unknown: gpufw {}", n[0]);
+            crate::n!(A_, "Unknown: gpufw {}", args[0]);
             crate::println!("Use 'gpufw' for help");
         }
+    }
+}
+
+
+
+pub(super) fn kue(args: &[&str]) {
+    use crate::drivers::net::wifi;
+    use crate::framebuffer::{B_, A_, D_, C_, R_, K_};
+
+    let je = args.first().copied().unwrap_or("status");
+
+    match je {
+        "status" | "info" => {
+            let state = wifi::state();
+            let mjp = wifi::ckk();
+
+            crate::n!(C_, "=== WiFi Status ===");
+            crate::println!("  Hardware:  {}", if mjp { "detected" } else { "not found" });
+            crate::println!("  State:     {:?}", state);
+
+            if let Some(ssid) = wifi::connected_ssid() {
+                crate::println!("  SSID:      {}", ssid);
+                if let Some(yp) = wifi::signal_strength() {
+                    let bars = match yp {
+                        -50..=0 => "████ (excellent)",
+                        -60..=-51 => "███░ (good)",
+                        -70..=-61 => "██░░ (fair)",
+                        _ => "█░░░ (weak)",
+                    };
+                    crate::println!("  Signal:    {} dBm {}", yp, bars);
+                }
+            }
+        }
+
+        "scan" => {
+            if !wifi::ckk() {
+                crate::n!(A_, "No WiFi hardware detected");
+                return;
+            }
+            crate::n!(D_, "Scanning for WiFi networks...");
+            match wifi::eaj() {
+                Ok(()) => {
+                    
+                    
+                    crate::print!("  Waiting: ");
+                    for i in 0..30u32 {
+                        for _ in 0..100 {
+                            wifi::poll();
+                            for _ in 0..10000 { core::hint::spin_loop(); }
+                        }
+                        crate::print!(".");
+                        
+                        let results = wifi::cys();
+                        if !results.is_empty() {
+                            crate::println!(" done ({} found in ~{}ms)", results.len(), i * 100);
+                            goe(&results);
+                            return;
+                        }
+                    }
+                    crate::println!(" done");
+                    let results = wifi::cys();
+                    if results.is_empty() {
+                        crate::n!(D_, "No networks found");
+                        crate::println!("  Run 'wifi debug' for diagnostics");
+                    } else {
+                        goe(&results);
+                    }
+                }
+                Err(e) => crate::n!(A_, "Scan failed: {}", e),
+            }
+        }
+
+        "results" | "list" => {
+            let results = wifi::cys();
+            if results.is_empty() {
+                crate::n!(D_, "No scan results. Run 'wifi scan' first.");
+            } else {
+                goe(&results);
+            }
+        }
+
+        "connect" => {
+            if args.len() < 2 {
+                crate::println!("Usage: wifi connect <SSID> [password]");
+                return;
+            }
+            let ssid = args[1];
+            let uy = if args.len() > 2 { args[2] } else { "" };
+            crate::n!(D_, "Connecting to '{}'...", ssid);
+            wifi::eyl(ssid, uy);
+            
+            for _ in 0..50 {
+                wifi::poll();
+                for _ in 0..50000 { core::hint::spin_loop(); }
+            }
+            let state = wifi::state();
+            match state {
+                crate::drivers::net::wifi::WifiState::Connected => {
+                    crate::n!(B_, "Connected to '{}'!", ssid);
+                }
+                crate::drivers::net::wifi::WifiState::Connecting |
+                crate::drivers::net::wifi::WifiState::Authenticating => {
+                    crate::n!(D_, "Connection in progress... (state: {:?})", state);
+                }
+                _ => {
+                    crate::n!(A_, "Connection state: {:?}", state);
+                }
+            }
+        }
+
+        "disconnect" => {
+            match wifi::disconnect() {
+                Ok(()) => crate::n!(B_, "Disconnected"),
+                Err(e) => crate::n!(A_, "Disconnect failed: {}", e),
+            }
+        }
+
+        "debug" | "diag" | "test" => {
+            crate::n!(C_, "=== WiFi Debug Dump ===");
+            crate::drivers::net::iwl4965::hqu();
+            crate::println!();
+            crate::drivers::net::iwl4965::hqv();
+            crate::println!();
+            crate::println!("  Tip: Use 'drv test wifi' for full PCI + BAR + CSR test suite");
+            crate::println!("  Tip: Use 'drv reprobe wifi' to re-probe without reboot");
+        }
+
+        "start" | "init" | "up" => {
+            if !wifi::ckk() {
+                crate::n!(A_, "No WiFi hardware detected");
+                crate::println!("  Try: drv reprobe wifi");
+                return;
+            }
+            crate::n!(D_, "Starting WiFi driver (hw_init + firmware)...");
+            match wifi::fux() {
+                Ok(()) => {
+                    crate::n!(B_, "WiFi driver started successfully");
+                }
+                Err(e) => {
+                    crate::n!(A_, "WiFi start failed: {}", e);
+                }
+            }
+        }
+
+        "reg" | "csr" => {
+            
+            if args.len() < 2 {
+                crate::println!("Usage: wifi reg <offset_hex> [value_hex]");
+                crate::println!("  Example: wifi reg 0x24        (read GP_CNTRL)");
+                crate::println!("  Example: wifi reg 0x24 0x80   (write GP_CNTRL)");
+                return;
+            }
+            let gkm = args[1].trim_start_matches("0x").trim_start_matches("0X");
+            let offset = match u32::from_str_radix(gkm, 16) {
+                Ok(v) => v,
+                Err(_) => { crate::n!(A_, "Bad hex: {}", args[1]); return; }
+            };
+            if args.len() >= 3 {
+                let ass = args[2].trim_start_matches("0x").trim_start_matches("0X");
+                let val = match u32::from_str_radix(ass, 16) {
+                    Ok(v) => v,
+                    Err(_) => { crate::n!(A_, "Bad hex: {}", args[2]); return; }
+                };
+                if crate::drivers::net::iwl4965::lce(offset, val) {
+                    crate::n!(B_, "CSR[0x{:03X}] <= 0x{:08X}", offset, val);
+                } else {
+                    crate::n!(A_, "Write failed (no MMIO)");
+                }
+            } else {
+                match crate::drivers::net::iwl4965::byp(offset) {
+                    Some(v) => crate::println!("CSR[0x{:03X}] = 0x{:08X}", offset, v),
+                    None => crate::n!(A_, "Read failed (no MMIO)"),
+                }
+            }
+        }
+
+        "prph" => {
+            
+            if args.len() < 2 {
+                crate::println!("Usage: wifi prph <addr_hex> [value_hex]");
+                crate::println!("  Example: wifi prph 0x3000     (read APMG_CLK_CTRL)");
+                crate::println!("  Example: wifi prph 0x3400     (read BSM_WR_CTRL)");
+                return;
+            }
+            let bkp = args[1].trim_start_matches("0x").trim_start_matches("0X");
+            let addr = match u32::from_str_radix(bkp, 16) {
+                Ok(v) => v,
+                Err(_) => { crate::n!(A_, "Bad hex: {}", args[1]); return; }
+            };
+            if args.len() >= 3 {
+                let ass = args[2].trim_start_matches("0x").trim_start_matches("0X");
+                let val = match u32::from_str_radix(ass, 16) {
+                    Ok(v) => v,
+                    Err(_) => { crate::n!(A_, "Bad hex: {}", args[2]); return; }
+                };
+                if crate::drivers::net::iwl4965::lcf(addr, val) {
+                    crate::n!(B_, "PRPH[0x{:04X}] <= 0x{:08X}", addr, val);
+                } else {
+                    crate::n!(A_, "Write failed (no MMIO)");
+                }
+            } else {
+                match crate::drivers::net::iwl4965::fqy(addr) {
+                    Some(v) => crate::println!("PRPH[0x{:04X}] = 0x{:08X}", addr, v),
+                    None => crate::n!(A_, "Read failed (no MMIO)"),
+                }
+            }
+        }
+
+        "apm" => {
+            
+            crate::n!(C_, "=== WiFi APM Init (step-by-step) ===");
+            match crate::drivers::net::iwl4965::lbz() {
+                Ok(()) => crate::n!(B_, "APM init SUCCESS"),
+                Err(e) => crate::n!(A_, "APM init FAILED: {}", e),
+            }
+        }
+
+        "bsm" => {
+            
+            crate::n!(C_, "=== BSM State Machine Registers ===");
+            crate::drivers::net::iwl4965::lcb();
+        }
+
+        "apmg" => {
+            
+            crate::n!(C_, "=== APMG Power Management Registers ===");
+            crate::drivers::net::iwl4965::lca();
+        }
+
+        "fw" | "firmware" => {
+            
+            crate::n!(C_, "=== WiFi Firmware Load (verbose) ===");
+            match crate::drivers::net::iwl4965::lcc() {
+                Ok(()) => crate::n!(B_, "Firmware loaded!"),
+                Err(e) => crate::n!(A_, "Firmware load FAILED: {}", e),
+            }
+        }
+
+        _ => {
+            crate::n!(C_, "WiFi Management Commands:");
+            crate::println!("  wifi status          Show WiFi status and connection info");
+            crate::println!("  wifi start           Initialize hardware + load firmware (verbose)");
+            crate::println!("  wifi scan            Scan for available networks");
+            crate::println!("  wifi results         Show last scan results");
+            crate::println!("  wifi connect <SSID> [password]  Connect to network");
+            crate::println!("  wifi disconnect      Disconnect from current network");
+            crate::println!("  wifi debug           PCI + CSR register dump");
+            crate::n!(C_, "Live Debug (no recompile needed):");
+            crate::println!("  wifi reg <offset> [val]   Read/write CSR register (hex)");
+            crate::println!("  wifi prph <addr> [val]    Read/write PRPH register (hex)");
+            crate::println!("  wifi apm             Step-by-step APM init");
+            crate::println!("  wifi bsm             Dump BSM state registers");
+            crate::println!("  wifi apmg            Dump APMG power registers");
+            crate::println!("  wifi fw              Verbose firmware loading attempt");
+        }
+    }
+}
+
+fn goe(results: &[crate::drivers::net::wifi::Fg]) {
+    use crate::framebuffer::{C_, R_, B_, D_, A_};
+    crate::n!(C_, "=== WiFi Networks ({} found) ===", results.len());
+    crate::n!(R_, "  {:<32} {:>4}  {:>6}  {:<8}  {}", "SSID", "CH", "Signal", "Security", "BSSID");
+    crate::n!(R_, "  {}", "-".repeat(78));
+
+    for net in results {
+        let cqn = match net.signal_dbm {
+            -50..=0 => B_,
+            -70..=-51 => D_,
+            _ => A_,
+        };
+        let bars = net.signal_bars();
+        let lx = match net.security {
+            crate::drivers::net::wifi::WifiSecurity::Open => "Open",
+            crate::drivers::net::wifi::WifiSecurity::WEP => "WEP",
+            crate::drivers::net::wifi::WifiSecurity::WPA => "WPA",
+            crate::drivers::net::wifi::WifiSecurity::WPA2 => "WPA2",
+            crate::drivers::net::wifi::WifiSecurity::WPA3 => "WPA3",
+            _ => "???",
+        };
+        crate::print!("  {:<32} {:>4}  ", net.ssid, net.channel);
+        crate::bq!(cqn, "{:>3}dBm {}", net.signal_dbm, 
+            match bars { 4 => "████", 3 => "███░", 2 => "██░░", 1 => "█░░░", _ => "░░░░" });
+        crate::println!("  {:<8}  {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+            lx,
+            net.bssid[0], net.bssid[1], net.bssid[2],
+            net.bssid[3], net.bssid[4], net.bssid[5]);
     }
 }

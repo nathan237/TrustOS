@@ -68,6 +68,18 @@ pub struct CpuCapabilities {
     pub max_physical_cpus: u8,
     pub apic_id: u8,
     
+    // String operations
+    pub erms: bool,          // Enhanced REP MOVSB/STOSB (Ivy Bridge+)
+    pub fsgsbase: bool,      // RDFSBASE/WRFSBASE/RDGSBASE/WRGSBASE
+
+    // Memory management extensions
+    pub pcid: bool,          // Process-Context Identifiers (CPUID.1.ECX[17])
+    pub invpcid: bool,       // INVPCID instruction (CPUID.7.EBX[10])
+
+    // Transactional memory (Intel TSX)
+    pub hle: bool,           // Hardware Lock Elision (CPUID.7.EBX[4])
+    pub rtm: bool,           // Restricted Transactional Memory (CPUID.7.EBX[11])
+
     // TSC frequency (calibrated)
     pub tsc_frequency_hz: u64,
 }
@@ -116,6 +128,12 @@ impl CpuCapabilities {
             max_logical_cpus: 1,
             max_physical_cpus: 1,
             apic_id: 0,
+            erms: false,
+            fsgsbase: false,
+            pcid: false,
+            invpcid: false,
+            hle: false,
+            rtm: false,
             tsc_frequency_hz: 0,
         };
         
@@ -174,6 +192,7 @@ impl CpuCapabilities {
             caps.rdrand = (cpuid_1.ecx & (1 << 30)) != 0;
             caps.vmx = (cpuid_1.ecx & (1 << 5)) != 0;
             caps.tsc_deadline = (cpuid_1.ecx & (1 << 24)) != 0;
+            caps.pcid = (cpuid_1.ecx & (1 << 17)) != 0;
             
             // EDX features
             caps.tsc = (cpuid_1.edx & (1 << 4)) != 0;
@@ -192,6 +211,11 @@ impl CpuCapabilities {
             caps.rdseed = (cpuid_7.ebx & (1 << 18)) != 0;
             caps.smap = (cpuid_7.ebx & (1 << 20)) != 0;
             caps.umip = (cpuid_7.ecx & (1 << 2)) != 0;
+            caps.erms = (cpuid_7.ebx & (1 << 9)) != 0;
+            caps.fsgsbase = (cpuid_7.ebx & (1 << 0)) != 0;
+            caps.invpcid = (cpuid_7.ebx & (1 << 10)) != 0;
+            caps.hle = (cpuid_7.ebx & (1 << 4)) != 0;
+            caps.rtm = (cpuid_7.ebx & (1 << 11)) != 0;
         }
         
         // Extended CPUID
@@ -262,8 +286,12 @@ pub fn init() {
         caps.vendor, caps.family, caps.model);
     crate::serial_println!("[CPU] TSC: {} (invariant: {}, freq: {} MHz)", 
         caps.tsc, caps.tsc_invariant, caps.tsc_frequency_hz / 1_000_000);
-    crate::serial_println!("[CPU] SIMD: SSE={} SSE2={} SSE4.2={} AVX={} AVX2={} FMA={}", 
-        caps.sse, caps.sse2, caps.sse4_2, caps.avx, caps.avx2, caps.fma);
+    crate::serial_println!("[CPU] SIMD: SSE={} SSE2={} SSE4.2={} AVX={} AVX2={} AVX512F={} FMA={}", 
+        caps.sse, caps.sse2, caps.sse4_2, caps.avx, caps.avx2, caps.avx512f, caps.fma);
+    crate::serial_println!("[CPU] FastOps: ERMS={} FSGSBASE={} TSC_DEADLINE={} RDTSCP={}",
+        caps.erms, caps.fsgsbase, caps.tsc_deadline, caps.rdtscp);
+    crate::serial_println!("[CPU] MM: PCID={} INVPCID={}  TSX: HLE={} RTM={}",
+        caps.pcid, caps.invpcid, caps.hle, caps.rtm);
     crate::serial_println!("[CPU] Crypto: AES-NI={} PCLMULQDQ={} SHA={} RDRAND={}", 
         caps.aesni, caps.pclmulqdq, caps.sha_ext, caps.rdrand);
     crate::serial_println!("[CPU] Security: SMEP={} SMAP={} NX={}", 
@@ -278,6 +306,11 @@ pub fn init() {
     // Enable AVX if available (required for AVX2+FMA SIMD kernels)
     if caps.avx {
         simd::enable_avx();
+    }
+    
+    // Enable AVX-512 if available (boosts JARVIS neural matmul 2-4x)
+    if caps.avx512f {
+        simd::enable_avx512();
     }
     
     // Initialize high-precision TSC

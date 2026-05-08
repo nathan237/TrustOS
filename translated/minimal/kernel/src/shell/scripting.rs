@@ -17,157 +17,157 @@ use alloc::format;
 use spin::Mutex;
 
 
-static PN_: Mutex<BTreeMap<String, String>> = Mutex::new(BTreeMap::new());
+static QK_: Mutex<BTreeMap<String, String>> = Mutex::new(BTreeMap::new());
 
 
-static AYS_: core::sync::atomic::AtomicI32 = core::sync::atomic::AtomicI32::new(0);
+static BAT_: core::sync::atomic::AtomicI32 = core::sync::atomic::AtomicI32::new(0);
 
 
 pub fn init() {
-    let mut agz = PN_.lock();
-    agz.insert(String::from("HOME"), String::from("/"));
-    agz.insert(String::from("USER"), String::from("root"));
-    agz.insert(String::from("SHELL"), String::from("/bin/tsh"));
-    agz.insert(String::from("PATH"), String::from("/bin:/usr/bin:/sbin"));
-    agz.insert(String::from("PWD"), String::from("/"));
-    agz.insert(String::from("HOSTNAME"), String::from("trustos"));
-    agz.insert(String::from("TERM"), String::from("xterm-256color"));
-    agz.insert(String::from("LANG"), String::from("en_US.UTF-8"));
-    agz.insert(String::from("PS1"), String::from("\\u@\\h:\\w$ "));
-    agz.insert(String::from("OSTYPE"), String::from("trustos"));
-    agz.insert(String::from("EDITOR"), String::from("trustedit"));
+    let mut qq = QK_.lock();
+    qq.insert(String::from("HOME"), String::from("/"));
+    qq.insert(String::from("USER"), String::from("root"));
+    qq.insert(String::from("SHELL"), String::from("/bin/tsh"));
+    qq.insert(String::from("PATH"), String::from("/bin:/usr/bin:/sbin"));
+    qq.insert(String::from("PWD"), String::from("/"));
+    qq.insert(String::from("HOSTNAME"), String::from("trustos"));
+    qq.insert(String::from("TERM"), String::from("xterm-256color"));
+    qq.insert(String::from("LANG"), String::from("en_US.UTF-8"));
+    qq.insert(String::from("PS1"), String::from("\\u@\\h:\\w$ "));
+    qq.insert(String::from("OSTYPE"), String::from("trustos"));
+    qq.insert(String::from("EDITOR"), String::from("trustedit"));
 }
 
 
-pub fn fuk(j: &str, bn: &str) {
-    PN_.lock().insert(String::from(j), String::from(bn));
+pub fn cql(name: &str, value: &str) {
+    QK_.lock().insert(String::from(name), String::from(value));
 }
 
 
-pub fn cqx(j: &str) -> Option<String> {
-    PN_.lock().get(j).abn()
+pub fn axh(name: &str) -> Option<String> {
+    QK_.lock().get(name).cloned()
 }
 
 
-pub fn jur(j: &str) {
-    PN_.lock().remove(j);
+pub fn fdx(name: &str) {
+    QK_.lock().remove(name);
 }
 
 
-pub fn ijj() -> Vec<(String, String)> {
-    PN_.lock().iter().map(|(eh, p)| (eh.clone(), p.clone())).collect()
+pub fn efi() -> Vec<(String, String)> {
+    QK_.lock().iter().map(|(k, v)| (k.clone(), v.clone())).collect()
 }
 
 
-pub fn zmy(aj: i32) {
-    AYS_.store(aj, core::sync::atomic::Ordering::SeqCst);
+pub fn qvv(code: i32) {
+    BAT_.store(code, core::sync::atomic::Ordering::SeqCst);
 }
 
 
-pub fn nyb() -> i32 {
-    AYS_.load(core::sync::atomic::Ordering::SeqCst)
+pub fn ibm() -> i32 {
+    BAT_.load(core::sync::atomic::Ordering::SeqCst)
 }
 
 
 
-pub fn cxo(input: &str) -> String {
-    let mut result = String::fc(input.len());
-    let bf = input.as_bytes();
-    let mut a = 0;
+pub fn bbm(input: &str) -> String {
+    let mut result = String::with_capacity(input.len());
+    let bytes = input.as_bytes();
+    let mut i = 0;
 
-    while a < bf.len() {
-        if bf[a] == b'$' && a + 1 < bf.len() {
-            let next = bf[a + 1];
+    while i < bytes.len() {
+        if bytes[i] == b'$' && i + 1 < bytes.len() {
+            let next = bytes[i + 1];
 
             
             if next == b'?' {
                 
-                result.t(&format!("{}", nyb()));
-                a += 2;
+                result.push_str(&format!("{}", ibm()));
+                i += 2;
                 continue;
             }
             if next == b'$' {
                 
-                result.t("1");
-                a += 2;
+                result.push_str("1");
+                i += 2;
                 continue;
             }
             if next == b'#' {
                 
-                result.t("0");
-                a += 2;
+                result.push_str("0");
+                i += 2;
                 continue;
             }
 
             
-            if next == b'(' && a + 2 < bf.len() && bf[a + 2] == b'(' {
-                if let Some(ci) = sti(input, a + 2) {
-                    let expr = &input[a + 3..ci];
-                    let ap = hii(expr);
-                    result.t(&format!("{}", ap));
-                    a = ci + 2; 
+            if next == b'(' && i + 2 < bytes.len() && bytes[i + 2] == b'(' {
+                if let Some(end) = lvx(input, i + 2) {
+                    let expr = &input[i + 3..end];
+                    let val = dov(expr);
+                    result.push_str(&format!("{}", val));
+                    i = end + 2; 
                     continue;
                 }
             }
 
             
             if next == b'(' {
-                if let Some(ci) = stj(input, a + 1) {
-                    let cmd = &input[a + 2..ci];
-                    let an = rms(cmd);
-                    result.t(an.em());
-                    a = ci + 1;
+                if let Some(end) = lvy(input, i + 1) {
+                    let cmd = &input[i + 2..end];
+                    let output = kwa(cmd);
+                    result.push_str(output.trim());
+                    i = end + 1;
                     continue;
                 }
             }
 
             
             if next == b'{' {
-                if let Some(agj) = input[a + 2..].du('}') {
-                    let xqq = &input[a + 2..a + 2 + agj];
-                    let bn = spd(xqq);
-                    result.t(&bn);
-                    a = a + 3 + agj;
+                if let Some(close) = input[i + 2..].find('}') {
+                    let pre = &input[i + 2..i + 2 + close];
+                    let value = lsn(pre);
+                    result.push_str(&value);
+                    i = i + 3 + close;
                     continue;
                 }
             }
 
             
-            let ay = a + 1;
-            let mut ci = ay;
-            while ci < bf.len() && (bf[ci].bvb() || bf[ci] == b'_') {
-                ci += 1;
+            let start = i + 1;
+            let mut end = start;
+            while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_') {
+                end += 1;
             }
-            if ci > ay {
-                let j = &input[ay..ci];
-                if let Some(ap) = cqx(j) {
-                    result.t(&ap);
+            if end > start {
+                let name = &input[start..end];
+                if let Some(val) = axh(name) {
+                    result.push_str(&val);
                 }
                 
-                a = ci;
+                i = end;
                 continue;
             }
 
             
             result.push('$');
-            a += 1;
-        } else if bf[a] == b'\\' && a + 1 < bf.len() {
+            i += 1;
+        } else if bytes[i] == b'\\' && i + 1 < bytes.len() {
             
-            match bf[a + 1] {
+            match bytes[i + 1] {
                 b'n' => result.push('\n'),
                 b't' => result.push('\t'),
                 b'\\' => result.push('\\'),
                 b'$' => result.push('$'),
                 b'"' => result.push('"'),
-                gq => {
+                other => {
                     result.push('\\');
-                    result.push(gq as char);
+                    result.push(other as char);
                 }
             }
-            a += 2;
+            i += 2;
         } else {
-            result.push(bf[a] as char);
-            a += 1;
+            result.push(bytes[i] as char);
+            i += 1;
         }
     }
 
@@ -175,246 +175,246 @@ pub fn cxo(input: &str) -> String {
 }
 
 
-fn spd(avc: &str) -> String {
+fn lsn(ye: &str) -> String {
     
-    if avc.cj('#') {
-        let j = &avc[1..];
-        return format!("{}", cqx(j).map(|p| p.len()).unwrap_or(0));
+    if ye.starts_with('#') {
+        let name = &ye[1..];
+        return format!("{}", axh(name).map(|v| v.len()).unwrap_or(0));
     }
 
     
-    if let Some(u) = avc.du(":-") {
-        let j = &avc[..u];
-        let default = &avc[u + 2..];
-        return cqx(j).unwrap_or_else(|| String::from(default));
+    if let Some(pos) = ye.find(":-") {
+        let name = &ye[..pos];
+        let default = &ye[pos + 2..];
+        return axh(name).unwrap_or_else(|| String::from(default));
     }
 
     
-    if let Some(u) = avc.du(":=") {
-        let j = &avc[..u];
-        let default = &avc[u + 2..];
-        if let Some(ap) = cqx(j) {
-            return ap;
+    if let Some(pos) = ye.find(":=") {
+        let name = &ye[..pos];
+        let default = &ye[pos + 2..];
+        if let Some(val) = axh(name) {
+            return val;
         }
-        fuk(j, default);
+        cql(name, default);
         return String::from(default);
     }
 
     
-    if let Some(u) = avc.du(":+") {
-        let j = &avc[..u];
-        let bdj = &avc[u + 2..];
-        return if cqx(j).is_some() { String::from(bdj) } else { String::new() };
+    if let Some(pos) = ye.find(":+") {
+        let name = &ye[..pos];
+        let adf = &ye[pos + 2..];
+        return if axh(name).is_some() { String::from(adf) } else { String::new() };
     }
 
     
-    cqx(avc).age()
+    axh(ye).unwrap_or_default()
 }
 
 
-fn rms(cmd: &str) -> String {
+fn kwa(cmd: &str) -> String {
     
     use core::sync::atomic::Ordering;
-    super::DE_.store(true, Ordering::SeqCst);
+    super::DL_.store(true, Ordering::SeqCst);
     {
-        let mut k = super::HO_.lock();
-        k.clear();
+        let mut buf = super::IG_.lock();
+        buf.clear();
     }
 
-    super::azu(cmd);
+    super::aav(cmd);
 
-    super::DE_.store(false, Ordering::SeqCst);
-    let k = super::HO_.lock();
-    k.clone()
+    super::DL_.store(false, Ordering::SeqCst);
+    let buf = super::IG_.lock();
+    buf.clone()
 }
 
-fn stj(e: &str, lqs: usize) -> Option<usize> {
-    let bf = e.as_bytes();
-    let mut eo = 0;
-    for a in lqs..bf.len() {
-        if bf[a] == b'(' { eo += 1; }
-        if bf[a] == b')' {
-            eo -= 1;
-            if eo == 0 { return Some(a); }
+fn lvy(j: &str, open_pos: usize) -> Option<usize> {
+    let bytes = j.as_bytes();
+    let mut depth = 0;
+    for i in open_pos..bytes.len() {
+        if bytes[i] == b'(' { depth += 1; }
+        if bytes[i] == b')' {
+            depth -= 1;
+            if depth == 0 { return Some(i); }
         }
     }
     None
 }
 
-fn sti(e: &str, lqs: usize) -> Option<usize> {
-    let bf = e.as_bytes();
-    let mut eo = 0;
-    let mut a = lqs;
-    while a < bf.len() {
-        if bf[a] == b'(' { eo += 1; }
-        if bf[a] == b')' {
-            eo -= 1;
-            if eo == 0 && a + 1 < bf.len() && bf[a + 1] == b')' {
-                return Some(a);
+fn lvx(j: &str, open_pos: usize) -> Option<usize> {
+    let bytes = j.as_bytes();
+    let mut depth = 0;
+    let mut i = open_pos;
+    while i < bytes.len() {
+        if bytes[i] == b'(' { depth += 1; }
+        if bytes[i] == b')' {
+            depth -= 1;
+            if depth == 0 && i + 1 < bytes.len() && bytes[i + 1] == b')' {
+                return Some(i);
             }
         }
-        a += 1;
+        i += 1;
     }
     None
 }
 
 
 
-pub fn hii(expr: &str) -> i64 {
-    let tg = cxo(expr);
-    let eb = xjd(&tg);
-    bey(&eb, &mut 0)
+pub fn dov(expr: &str) -> i64 {
+    let expanded = bbm(expr);
+    let tokens = pkv(&expanded);
+    parse_expr(&tokens, &mut 0)
 }
 
-fn xjd(expr: &str) -> Vec<ArithToken> {
-    let mut eb = Vec::new();
-    let bf = expr.as_bytes();
-    let mut a = 0;
+fn pkv(expr: &str) -> Vec<ArithToken> {
+    let mut tokens = Vec::new();
+    let bytes = expr.as_bytes();
+    let mut i = 0;
 
-    while a < bf.len() {
-        match bf[a] {
-            b' ' | b'\t' => { a += 1; }
-            b'+' => { eb.push(ArithToken::Yd); a += 1; }
-            b'-' => { eb.push(ArithToken::Tm); a += 1; }
-            b'*' => { eb.push(ArithToken::Mul); a += 1; }
-            b'/' => { eb.push(ArithToken::Div); a += 1; }
-            b'%' => { eb.push(ArithToken::Xp); a += 1; }
-            b'(' => { eb.push(ArithToken::Kr); a += 1; }
-            b')' => { eb.push(ArithToken::Jv); a += 1; }
+    while i < bytes.len() {
+        match bytes[i] {
+            b' ' | b'\t' => { i += 1; }
+            b'+' => { tokens.push(ArithToken::Plus); i += 1; }
+            b'-' => { tokens.push(ArithToken::Minus); i += 1; }
+            b'*' => { tokens.push(ArithToken::Mul); i += 1; }
+            b'/' => { tokens.push(ArithToken::Div); i += 1; }
+            b'%' => { tokens.push(ArithToken::Mod); i += 1; }
+            b'(' => { tokens.push(ArithToken::LParen); i += 1; }
+            b')' => { tokens.push(ArithToken::RParen); i += 1; }
             b'0'..=b'9' => {
-                let ay = a;
-                while a < bf.len() && bf[a].atb() { a += 1; }
-                let bo: i64 = expr[ay..a].parse().unwrap_or(0);
-                eb.push(ArithToken::Adn(bo));
+                let start = i;
+                while i < bytes.len() && bytes[i].is_ascii_digit() { i += 1; }
+                let ae: i64 = expr[start..i].parse().unwrap_or(0);
+                tokens.push(ArithToken::Num(ae));
             }
-            _ => { a += 1; } 
+            _ => { i += 1; } 
         }
     }
-    eb
+    tokens
 }
 
 #[derive(Debug, Clone)]
-enum ArithToken { Adn(i64), Yd, Tm, Mul, Div, Xp, Kr, Jv }
+enum ArithToken { Num(i64), Plus, Minus, Mul, Div, Mod, LParen, RParen }
 
-fn bey(eb: &[ArithToken], u: &mut usize) -> i64 {
-    let mut fd = fqi(eb, u);
-    while *u < eb.len() {
-        match &eb[*u] {
-            ArithToken::Yd => { *u += 1; fd += fqi(eb, u); }
-            ArithToken::Tm => { *u += 1; fd -= fqi(eb, u); }
+fn parse_expr(tokens: &[ArithToken], pos: &mut usize) -> i64 {
+    let mut left = cnv(tokens, pos);
+    while *pos < tokens.len() {
+        match &tokens[*pos] {
+            ArithToken::Plus => { *pos += 1; left += cnv(tokens, pos); }
+            ArithToken::Minus => { *pos += 1; left -= cnv(tokens, pos); }
             _ => break,
         }
     }
-    fd
+    left
 }
 
-fn fqi(eb: &[ArithToken], u: &mut usize) -> i64 {
-    let mut fd = dkn(eb, u);
-    while *u < eb.len() {
-        match &eb[*u] {
-            ArithToken::Mul => { *u += 1; fd *= dkn(eb, u); }
+fn cnv(tokens: &[ArithToken], pos: &mut usize) -> i64 {
+    let mut left = bip(tokens, pos);
+    while *pos < tokens.len() {
+        match &tokens[*pos] {
+            ArithToken::Mul => { *pos += 1; left *= bip(tokens, pos); }
             ArithToken::Div => {
-                *u += 1;
-                let m = dkn(eb, u);
-                if m != 0 { fd /= m; }
+                *pos += 1;
+                let r = bip(tokens, pos);
+                if r != 0 { left /= r; }
             }
-            ArithToken::Xp => {
-                *u += 1;
-                let m = dkn(eb, u);
-                if m != 0 { fd %= m; }
+            ArithToken::Mod => {
+                *pos += 1;
+                let r = bip(tokens, pos);
+                if r != 0 { left %= r; }
             }
             _ => break,
         }
     }
-    fd
+    left
 }
 
-fn dkn(eb: &[ArithToken], u: &mut usize) -> i64 {
-    if *u >= eb.len() { return 0; }
-    match &eb[*u] {
-        ArithToken::Adn(bo) => { let p = *bo; *u += 1; p }
-        ArithToken::Tm => { *u += 1; -dkn(eb, u) }
-        ArithToken::Yd => { *u += 1; dkn(eb, u) }
-        ArithToken::Kr => {
-            *u += 1;
-            let p = bey(eb, u);
-            if *u < eb.len() { *u += 1; } 
-            p
+fn bip(tokens: &[ArithToken], pos: &mut usize) -> i64 {
+    if *pos >= tokens.len() { return 0; }
+    match &tokens[*pos] {
+        ArithToken::Num(ae) => { let v = *ae; *pos += 1; v }
+        ArithToken::Minus => { *pos += 1; -bip(tokens, pos) }
+        ArithToken::Plus => { *pos += 1; bip(tokens, pos) }
+        ArithToken::LParen => {
+            *pos += 1;
+            let v = parse_expr(tokens, pos);
+            if *pos < tokens.len() { *pos += 1; } 
+            v
         }
-        _ => { *u += 1; 0 }
+        _ => { *pos += 1; 0 }
     }
 }
 
 
 
-pub fn soo(ak: &[&str], w: &mut usize) -> bool {
-    if *w >= ak.len() { return false; }
-    let fv = ak[*w].em();
-    if !fv.cj("if ") { return false; }
+pub fn lsc(lines: &[&str], idx: &mut usize) -> bool {
+    if *idx >= lines.len() { return false; }
+    let first = lines[*idx].trim();
+    if !first.starts_with("if ") { return false; }
 
     
-    let mut btl: Vec<&str> = Vec::new();
-    let mut eo = 0;
-    let ay = *w;
+    let mut akz: Vec<&str> = Vec::new();
+    let mut depth = 0;
+    let start = *idx;
 
-    while *w < ak.len() {
-        let line = ak[*w].em();
-        if line.cj("if ") { eo += 1; }
-        if line == "fi" { eo -= 1; }
-        btl.push(line);
-        *w += 1;
-        if eo == 0 { break; }
+    while *idx < lines.len() {
+        let line = lines[*idx].trim();
+        if line.starts_with("if ") { depth += 1; }
+        if line == "fi" { depth -= 1; }
+        akz.push(line);
+        *idx += 1;
+        if depth == 0 { break; }
     }
 
     
-    let mut jq: Vec<(Option<&str>, Vec<&str>)> = Vec::new();
-    let mut gdx: Option<&str> = None;
-    let mut ipy: Vec<&str> = Vec::new();
-    let mut jad = 0;
+    let mut segments: Vec<(Option<&str>, Vec<&str>)> = Vec::new();
+    let mut cwa: Option<&str> = None;
+    let mut ejk: Vec<&str> = Vec::new();
+    let mut eqq = 0;
 
-    for &line in &btl {
-        if jad == 0 {
-            if line.cj("if ") && jq.is_empty() {
-                let mo = line.blj("if ").unwrap().em();
-                let mo = mo.ezc("; then").or_else(|| mo.ezc(" then")).unwrap_or(mo);
-                gdx = Some(mo);
-                jad = 0;
+    for &line in &akz {
+        if eqq == 0 {
+            if line.starts_with("if ") && segments.is_empty() {
+                let fc = line.strip_prefix("if ").unwrap().trim();
+                let fc = fc.strip_suffix("; then").or_else(|| fc.strip_suffix(" then")).unwrap_or(fc);
+                cwa = Some(fc);
+                eqq = 0;
                 continue;
             }
             if line == "then" { continue; }
-            if line.cj("elif ") {
-                jq.push((gdx, core::mem::take(&mut ipy)));
-                let mo = line.blj("elif ").unwrap().em();
-                let mo = mo.ezc("; then").or_else(|| mo.ezc(" then")).unwrap_or(mo);
-                gdx = Some(mo);
+            if line.starts_with("elif ") {
+                segments.push((cwa, core::mem::take(&mut ejk)));
+                let fc = line.strip_prefix("elif ").unwrap().trim();
+                let fc = fc.strip_suffix("; then").or_else(|| fc.strip_suffix(" then")).unwrap_or(fc);
+                cwa = Some(fc);
                 continue;
             }
             if line == "else" {
-                jq.push((gdx, core::mem::take(&mut ipy)));
-                gdx = None; 
+                segments.push((cwa, core::mem::take(&mut ejk)));
+                cwa = None; 
                 continue;
             }
             if line == "fi" {
-                jq.push((gdx, core::mem::take(&mut ipy)));
+                segments.push((cwa, core::mem::take(&mut ejk)));
                 break;
             }
         }
 
         
-        if line.cj("if ") { jad += 1; }
-        if line == "fi" { jad -= 1; }
-        ipy.push(line);
+        if line.starts_with("if ") { eqq += 1; }
+        if line == "fi" { eqq -= 1; }
+        ejk.push(line);
     }
 
     
-    for (mo, gj) in &jq {
-        let wnc = match mo {
+    for (fc, body) in &segments {
+        let orw = match fc {
             None => true, 
-            Some(r) => nrb(r),
+            Some(c) => hwp(c),
         };
-        if wnc {
-            for &line in gj {
-                super::azu(line);
+        if orw {
+            for &line in body {
+                super::aav(line);
             }
             break;
         }
@@ -424,70 +424,70 @@ pub fn soo(ak: &[&str], w: &mut usize) -> bool {
 }
 
 
-pub fn son(ak: &[&str], w: &mut usize) -> bool {
-    if *w >= ak.len() { return false; }
-    let fv = ak[*w].em();
-    if !fv.cj("for ") { return false; }
+pub fn lsb(lines: &[&str], idx: &mut usize) -> bool {
+    if *idx >= lines.len() { return false; }
+    let first = lines[*idx].trim();
+    if !first.starts_with("for ") { return false; }
 
     
-    let mut btl: Vec<&str> = Vec::new();
-    let mut eo = 0;
-    while *w < ak.len() {
-        let line = ak[*w].em();
-        if line.cj("for ") || line.cj("while ") { eo += 1; }
-        if line == "done" { eo -= 1; }
-        btl.push(line);
-        *w += 1;
-        if eo == 0 { break; }
+    let mut akz: Vec<&str> = Vec::new();
+    let mut depth = 0;
+    while *idx < lines.len() {
+        let line = lines[*idx].trim();
+        if line.starts_with("for ") || line.starts_with("while ") { depth += 1; }
+        if line == "done" { depth -= 1; }
+        akz.push(line);
+        *idx += 1;
+        if depth == 0 { break; }
     }
 
     
-    let dh = btl[0];
-    let jzq = dh.blj("for ").unwrap().em();
+    let header = akz[0];
+    let fgl = header.strip_prefix("for ").unwrap().trim();
 
     
-    let (igg, hqb) = if let Some(u) = jzq.du(" in ") {
-        (&jzq[..u], &jzq[u + 4..])
+    let (edn, dtm) = if let Some(pos) = fgl.find(" in ") {
+        (&fgl[..pos], &fgl[pos + 4..])
     } else {
         return true; 
     };
 
-    let hqb = hqb.ezc("; do")
-        .or_else(|| hqb.ezc(" do"))
-        .unwrap_or(hqb);
+    let dtm = dtm.strip_suffix("; do")
+        .or_else(|| dtm.strip_suffix(" do"))
+        .unwrap_or(dtm);
 
     
-    let spe = cxo(hqb);
-    let pj: Vec<&str> = spe.ayt().collect();
+    let lso = bbm(dtm);
+    let items: Vec<&str> = lso.split_whitespace().collect();
 
     
-    let mut gj: Vec<&str> = Vec::new();
-    let mut flj = false;
-    for &line in &btl[1..] {
-        if line == "do" { flj = true; continue; }
+    let mut body: Vec<&str> = Vec::new();
+    let mut cla = false;
+    for &line in &akz[1..] {
+        if line == "do" { cla = true; continue; }
         if line == "done" { break; }
-        if flj { gj.push(line); }
+        if cla { body.push(line); }
         
-        if !flj && btl[0].contains("; do") {
-            flj = true;
-            gj.push(line);
+        if !cla && akz[0].contains("; do") {
+            cla = true;
+            body.push(line);
         }
     }
     
-    if btl[0].pp("; do") || btl[0].pp(" do") {
-        gj.clear();
-        for &line in &btl[1..] {
+    if akz[0].ends_with("; do") || akz[0].ends_with(" do") {
+        body.clear();
+        for &line in &akz[1..] {
             if line == "done" { break; }
-            gj.push(line);
+            body.push(line);
         }
     }
 
     
-    for item in &pj {
-        fuk(igg, item);
-        for &line in &gj {
-            let tg = cxo(line);
-            super::azu(&tg);
+    for item in &items {
+        cql(edn, item);
+        for &line in &body {
+            let expanded = bbm(line);
+            super::aav(&expanded);
         }
     }
 
@@ -495,55 +495,55 @@ pub fn son(ak: &[&str], w: &mut usize) -> bool {
 }
 
 
-pub fn sov(ak: &[&str], w: &mut usize) -> bool {
-    if *w >= ak.len() { return false; }
-    let fv = ak[*w].em();
-    if !fv.cj("while ") { return false; }
+pub fn lsg(lines: &[&str], idx: &mut usize) -> bool {
+    if *idx >= lines.len() { return false; }
+    let first = lines[*idx].trim();
+    if !first.starts_with("while ") { return false; }
 
     
-    let mut btl: Vec<&str> = Vec::new();
-    let mut eo = 0;
-    while *w < ak.len() {
-        let line = ak[*w].em();
-        if line.cj("for ") || line.cj("while ") { eo += 1; }
-        if line == "done" { eo -= 1; }
-        btl.push(line);
-        *w += 1;
-        if eo == 0 { break; }
+    let mut akz: Vec<&str> = Vec::new();
+    let mut depth = 0;
+    while *idx < lines.len() {
+        let line = lines[*idx].trim();
+        if line.starts_with("for ") || line.starts_with("while ") { depth += 1; }
+        if line == "done" { depth -= 1; }
+        akz.push(line);
+        *idx += 1;
+        if depth == 0 { break; }
     }
 
     
-    let dh = btl[0];
-    let mo = dh.blj("while ").unwrap().em();
-    let mo = mo.ezc("; do")
-        .or_else(|| mo.ezc(" do"))
-        .unwrap_or(mo);
+    let header = akz[0];
+    let fc = header.strip_prefix("while ").unwrap().trim();
+    let fc = fc.strip_suffix("; do")
+        .or_else(|| fc.strip_suffix(" do"))
+        .unwrap_or(fc);
 
     
-    let mut gj: Vec<&str> = Vec::new();
-    let sua = btl[0].contains("; do") || btl[0].pp(" do");
-    if sua {
-        for &line in &btl[1..] {
+    let mut body: Vec<&str> = Vec::new();
+    let lwi = akz[0].contains("; do") || akz[0].ends_with(" do");
+    if lwi {
+        for &line in &akz[1..] {
             if line == "done" { break; }
-            gj.push(line);
+            body.push(line);
         }
     } else {
-        let mut flj = false;
-        for &line in &btl[1..] {
-            if line == "do" { flj = true; continue; }
+        let mut cla = false;
+        for &line in &akz[1..] {
+            if line == "do" { cla = true; continue; }
             if line == "done" { break; }
-            if flj { gj.push(line); }
+            if cla { body.push(line); }
         }
     }
 
     
-    let mut atc = 0;
-    while nrb(mo) && atc < 1000 {
-        for &line in &gj {
-            let tg = cxo(line);
-            super::azu(&tg);
+    let mut xe = 0;
+    while hwp(fc) && xe < 1000 {
+        for &line in &body {
+            let expanded = bbm(line);
+            super::aav(&expanded);
         }
-        atc += 1;
+        xe += 1;
     }
 
     true
@@ -556,91 +556,91 @@ pub fn sov(ak: &[&str], w: &mut usize) -> bool {
 
 
 
-fn nrb(mo: &str) -> bool {
-    let mo = mo.em();
+fn hwp(fc: &str) -> bool {
+    let fc = fc.trim();
 
     
-    if mo.cj("[ ") && mo.pp(" ]") {
-        let ff = &mo[2..mo.len() - 2].em();
-        return kue(ff);
+    if fc.starts_with("[ ") && fc.ends_with(" ]") {
+        let inner = &fc[2..fc.len() - 2].trim();
+        return fvk(inner);
     }
 
     
-    if mo.cj("test ") {
-        let ff = &mo[5..].em();
-        return kue(ff);
+    if fc.starts_with("test ") {
+        let inner = &fc[5..].trim();
+        return fvk(inner);
     }
 
     
-    if mo == "true" { return true; }
-    if mo == "false" { return false; }
+    if fc == "true" { return true; }
+    if fc == "false" { return false; }
 
     
     
-    let tg = cxo(mo);
-    super::DE_.store(true, core::sync::atomic::Ordering::SeqCst);
-    { super::HO_.lock().clear(); }
-    super::azu(&tg);
-    super::DE_.store(false, core::sync::atomic::Ordering::SeqCst);
-    nyb() == 0
+    let expanded = bbm(fc);
+    super::DL_.store(true, core::sync::atomic::Ordering::SeqCst);
+    { super::IG_.lock().clear(); }
+    super::aav(&expanded);
+    super::DL_.store(false, core::sync::atomic::Ordering::SeqCst);
+    ibm() == 0
 }
 
 
-fn kue(expr: &str) -> bool {
-    let tg = cxo(expr);
-    let ek: Vec<&str> = tg.ayt().collect();
+fn fvk(expr: &str) -> bool {
+    let expanded = bbm(expr);
+    let au: Vec<&str> = expanded.split_whitespace().collect();
     
-    match ek.gai() {
+    match au.as_slice() {
         
-        ["-z", e] => e.is_empty(),
-        ["-n", e] => !e.is_empty(),
-        ["-f", path] => crate::ramfs::fh(|fs| {
-            fs.hm(path).map(|aa| aa.kd == crate::ramfs::FileType::Es).unwrap_or(false)
+        ["-z", j] => j.is_empty(),
+        ["-n", j] => !j.is_empty(),
+        ["-f", path] => crate::ramfs::bh(|fs| {
+            fs.stat(path).map(|e| e.file_type == crate::ramfs::FileType::File).unwrap_or(false)
         }),
-        ["-d", path] => crate::ramfs::fh(|fs| {
-            fs.hm(path).map(|aa| aa.kd == crate::ramfs::FileType::K).unwrap_or(false)
+        ["-d", path] => crate::ramfs::bh(|fs| {
+            fs.stat(path).map(|e| e.file_type == crate::ramfs::FileType::Directory).unwrap_or(false)
         }),
-        ["-e", path] => crate::ramfs::fh(|fs| fs.aja(path)),
+        ["-e", path] => crate::ramfs::bh(|fs| fs.exists(path)),
         
-        [q, "=", o] | [q, "==", o] => q == o,
-        [q, "!=", o] => q != o,
+        [a, "=", b] | [a, "==", b] => a == b,
+        [a, "!=", b] => a != b,
         
-        [q, "-eq", o] => q.parse::<i64>().bq() == o.parse::<i64>().bq(),
-        [q, "-ne", o] => q.parse::<i64>().bq() != o.parse::<i64>().bq(),
-        [q, "-lt", o] => q.parse::<i64>().unwrap_or(0) < o.parse::<i64>().unwrap_or(0),
-        [q, "-gt", o] => q.parse::<i64>().unwrap_or(0) > o.parse::<i64>().unwrap_or(0),
-        [q, "-le", o] => q.parse::<i64>().unwrap_or(0) <= o.parse::<i64>().unwrap_or(0),
-        [q, "-ge", o] => q.parse::<i64>().unwrap_or(0) >= o.parse::<i64>().unwrap_or(0),
+        [a, "-eq", b] => a.parse::<i64>().ok() == b.parse::<i64>().ok(),
+        [a, "-ne", b] => a.parse::<i64>().ok() != b.parse::<i64>().ok(),
+        [a, "-lt", b] => a.parse::<i64>().unwrap_or(0) < b.parse::<i64>().unwrap_or(0),
+        [a, "-gt", b] => a.parse::<i64>().unwrap_or(0) > b.parse::<i64>().unwrap_or(0),
+        [a, "-le", b] => a.parse::<i64>().unwrap_or(0) <= b.parse::<i64>().unwrap_or(0),
+        [a, "-ge", b] => a.parse::<i64>().unwrap_or(0) >= b.parse::<i64>().unwrap_or(0),
         
-        ["!", kr @ ..] => !kue(&kr.rr(" ")),
+        ["!", ef @ ..] => !fvk(&ef.join(" ")),
         
-        [e] => !e.is_empty(),
+        [j] => !j.is_empty(),
         _ => false,
     }
 }
 
 
-pub fn sos(eib: &str) {
-    let ak: Vec<&str> = eib.ak().collect();
-    let mut w = 0;
+pub fn lse(script: &str) {
+    let lines: Vec<&str> = script.lines().collect();
+    let mut idx = 0;
     
-    while w < ak.len() {
-        let line = ak[w].em();
+    while idx < lines.len() {
+        let line = lines[idx].trim();
         
         
-        if line.is_empty() || line.cj('#') {
-            w += 1;
+        if line.is_empty() || line.starts_with('#') {
+            idx += 1;
             continue;
         }
 
         
-        if soo(&ak, &mut w) { continue; }
-        if son(&ak, &mut w) { continue; }
-        if sov(&ak, &mut w) { continue; }
+        if lsc(&lines, &mut idx) { continue; }
+        if lsb(&lines, &mut idx) { continue; }
+        if lsg(&lines, &mut idx) { continue; }
 
         
-        let tg = cxo(line);
-        super::azu(&tg);
-        w += 1;
+        let expanded = bbm(line);
+        super::aav(&expanded);
+        idx += 1;
     }
 }

@@ -67,7 +67,7 @@ pub enum DriverStatus {
 /// Base trait for all drivers
 pub trait Driver: Send + Sync {
     /// Get driver information
-    fn information(&self) -> &DriverInformation;
+    fn info(&self) -> &DriverInformation;
     
     /// Initialize the driver with a PCI device
     fn probe(&mut self, pci_device: &crate::pci::PciDevice) -> Result<(), &'static str>;
@@ -87,7 +87,7 @@ pub trait Driver: Send + Sync {
 
 /// Registered driver entry
 struct RegisteredDriver {
-    information: DriverInformation,
+    info: DriverInformation,
     factory: fn() -> Box<dyn Driver>,
 }
 
@@ -98,48 +98,48 @@ static REGISTRY: Mutex<Vec<RegisteredDriver>> = Mutex::new(Vec::new());
 static LOADED: Mutex<Vec<Box<dyn Driver>>> = Mutex::new(Vec::new());
 
 /// Register a driver factory
-pub fn register(information: DriverInformation, factory: fn() -> Box<dyn Driver>) {
+pub fn register(info: DriverInformation, factory: fn() -> Box<dyn Driver>) {
     let mut registry = REGISTRY.lock();
-    crate::log_debug!("[DRIVERS] Registered: {} v{}", information.name, information.version);
-    registry.push(RegisteredDriver { information, factory });
+    crate::log_debug!("[DRIVERS] Registered: {} v{}", info.name, info.version);
+    registry.push(RegisteredDriver { info, factory });
 }
 
 /// Find and load driver for a PCI device
-pub fn probe_device(pci_device: &crate::pci::PciDevice) -> Option<usize> {
+pub fn probe_device(pci_dev: &crate::pci::PciDevice) -> Option<usize> {
     let registry = REGISTRY.lock();
     
     for entry in registry.iter() {
         // Network drivers are handled by drivers::net::probe_device
-        if entry.information.category == DriverCategory::Network {
+        if entry.info.category == DriverCategory::Network {
             continue;
         }
-        for &(vendor, device) in entry.information.vendor_ids {
+        for &(vendor, device) in entry.info.vendor_ids {
             // Match vendor:device or vendor:any (0xFFFF)
-            if pci_device.vendor_id == vendor && 
-               (device == 0xFFFF || pci_device.device_id == device) {
+            if pci_dev.vendor_id == vendor && 
+               (device == 0xFFFF || pci_dev.device_id == device) {
                 
                 // Create driver instance
                 let mut driver = (entry.factory)();
                 
                 // Try to probe
-                match driver.probe(pci_device) {
+                match driver.probe(pci_dev) {
                     Ok(()) => {
                         crate::log!("[DRIVERS] Loaded {} for {:04X}:{:04X}",
-                            entry.information.name, pci_device.vendor_id, pci_device.device_id);
+                            entry.info.name, pci_dev.vendor_id, pci_dev.device_id);
                         
                         // Start driver
                         if let Err(e) = driver.start() {
-                            crate::log_warn!("[DRIVERS] Failed to start {}: {}", entry.information.name, e);
+                            crate::log_warn!("[DRIVERS] Failed to start {}: {}", entry.info.name, e);
                             return None;
                         }
                         
                         let mut loaded = LOADED.lock();
-                        let index = loaded.len();
+                        let idx = loaded.len();
                         loaded.push(driver);
-                        return Some(index);
+                        return Some(idx);
                     }
                     Err(e) => {
-                        crate::log_debug!("[DRIVERS] {} probe failed: {}", entry.information.name, e);
+                        crate::log_debug!("[DRIVERS] {} probe failed: {}", entry.info.name, e);
                     }
                 }
             }
@@ -156,7 +156,7 @@ pub fn loaded_count() -> usize {
 
 /// List all registered drivers
 pub fn list_registered() -> Vec<DriverInformation> {
-    REGISTRY.lock().iter().map(|e| e.information.clone()).collect()
+    REGISTRY.lock().iter().map(|e| e.info.clone()).collect()
 }
 
 /// Initialize driver subsystem and register built-in drivers
@@ -179,12 +179,12 @@ pub fn probe_storage() {
     
     let devices = crate::pci::get_devices();
     
-    for device in &devices {
+    for dev in &devices {
         // AHCI Controller (class 0x01, subclass 0x06, prog_if 0x01)
-        if device.class_code == 0x01 && device.subclass == 0x06 && device.prog_if == 0x01 {
+        if dev.class_code == 0x01 && dev.subclass == 0x06 && dev.prog_if == 0x01 {
             crate::serial_println!("[AHCI] Controller detected at {:02X}:{:02X}.{} (BAR5={:#x})",
-                device.bus, device.device, device.function, device.bar[5]);
-            let bar5 = device.bar[5] as u64;
+                dev.bus, dev.device, dev.function, dev.bar[5]);
+            let bar5 = dev.bar[5] as u64;
             if ahci::init(bar5) {
                 crate::serial_println!("[DRIVERS] AHCI controller initialized");
                 // Identify all devices to get sector counts
@@ -193,7 +193,7 @@ pub fn probe_storage() {
         }
         
         // IDE Controller (class 0x01, subclass 0x01)
-        if device.class_code == 0x01 && device.subclass == 0x01 {
+        if dev.class_code == 0x01 && dev.subclass == 0x01 {
             // Try IDE in compatibility mode
             if ata::initialize_ide() {
                 crate::serial_println!("[DRIVERS] IDE controller initialized");
@@ -201,16 +201,16 @@ pub fn probe_storage() {
         }
         
         // NVMe Controller (class 0x01, subclass 0x08)
-        if device.class_code == 0x01 && device.subclass == 0x08 {
+        if dev.class_code == 0x01 && dev.subclass == 0x08 {
             crate::serial_println!("[DRIVERS] NVMe controller at {:02X}:{:02X}.{} ({:04X}:{:04X})",
-                device.bus, device.device, device.function, device.vendor_id, device.device_id);
+                dev.bus, dev.device, dev.function, dev.vendor_id, dev.device_id);
             // NVMe init is handled in Phase 10 (disk init) before probe_storage
         }
         
         // USB Controller (class 0x0C, subclass 0x03)
-        if device.class_code == 0x0C && device.subclass == 0x03 {
+        if dev.class_code == 0x0C && dev.subclass == 0x03 {
             let usb_type = // Pattern matching — Rust's exhaustive branching construct.
-match device.prog_if {
+match dev.prog_if {
                 0x00 => "UHCI (USB 1.0)",
                 0x10 => "OHCI (USB 1.1)",
                 0x20 => "EHCI (USB 2.0)",
@@ -218,14 +218,14 @@ match device.prog_if {
                 _ => "Unknown USB",
             };
             crate::serial_println!("[USB] Controller detected: {} at {:02X}:{:02X}.{} (BAR0={:#x})", 
-                usb_type, device.bus, device.device, device.function, device.bar[0]);
+                usb_type, dev.bus, dev.device, dev.function, dev.bar[0]);
             
             // Initialize xHCI controller (USB 3.0)
-            if device.prog_if == 0x30 {
+            if dev.prog_if == 0x30 {
                 // Use proper 64-bit BAR decoding
-                let bar0 = device.bar_address(0).unwrap_or(device.bar[0] as u64);
-                crate::pci::enable_bus_master(device);
-                crate::pci::enable_memory_space(device);
+                let bar0 = dev.bar_address(0).unwrap_or(dev.bar[0] as u64);
+                crate::pci::enable_bus_master(dev);
+                crate::pci::enable_memory_space(dev);
                 if xhci::init(bar0) {
                     crate::serial_println!("[DRIVERS] xHCI controller initialized with {} devices", 
                         xhci::device_count());
@@ -242,8 +242,8 @@ match device.prog_if {
     
     // Print storage summary
     if crate::nvme::is_initialized() {
-        if let Some((model, _serial, size, lba_size)) = crate::nvme::get_information() {
-            let mb = (size * lba_size as u64) / (1024 * 1024);
+        if let Some((model, _serial, size, lba_sz)) = crate::nvme::get_information() {
+            let mb = (size * lba_sz as u64) / (1024 * 1024);
             crate::serial_println!("[DRIVERS] Storage: NVMe {} ({} MB)", model, mb);
         }
     } else if ahci::is_initialized() {
@@ -265,8 +265,8 @@ pub fn auto_probe() {
     let devices = crate::pci::scan();
     let mut loaded = 0;
     
-    for device in &devices {
-        if probe_device(device).is_some() {
+    for dev in &devices {
+        if probe_device(dev).is_some() {
             loaded += 1;
         }
     }

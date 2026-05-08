@@ -77,7 +77,7 @@ pub enum SocketState {
 pub struct SockAddrIn {
     pub sin_family: u16,      // AF_INET = 2
     pub sin_port: u16,        // Port (network byte order)
-    pub sin_address: u32,        // IPv4 address (network byte order)
+    pub sin_addr: u32,        // IPv4 address (network byte order)
     pub sin_zero: [u8; 8],    // Padding
 }
 
@@ -91,14 +91,14 @@ pub fn new(ip: [u8; 4], port: u16) -> Self {
         Self {
             sin_family: AddressFamily::Inet as u16,
             sin_port: port.to_be(),
-            sin_address: u32::from_be_bytes(ip),
+            sin_addr: u32::from_be_bytes(ip),
             sin_zero: [0; 8],
         }
     }
     
         // Public function — callable from other modules.
 pub fn ip(&self) -> [u8; 4] {
-        self.sin_address.to_be_bytes()
+        self.sin_addr.to_be_bytes()
     }
     
         // Public function — callable from other modules.
@@ -112,26 +112,26 @@ pub fn port(&self) -> u16 {
 // Public structure — visible outside this module.
 pub struct Socket {
     pub family: AddressFamily,
-    pub socket_type: SocketType,
+    pub sock_type: SocketType,
     pub protocol: u32,
     pub state: SocketState,
     
     // Local binding
-    pub local_address: Option<SockAddrIn>,
+    pub local_addr: Option<SockAddrIn>,
     pub local_port: u16,
     
     // Remote address (for connected sockets)
-    pub remote_address: Option<SockAddrIn>,
+    pub remote_addr: Option<SockAddrIn>,
     
     // TCP connection state
-    pub tcp_source_port: u16,
+    pub tcp_src_port: u16,
     
     // Receive buffer
-    pub receive_buffer: Vec<u8>,
-    pub receive_closed: bool,
+    pub rx_buffer: Vec<u8>,
+    pub rx_closed: bool,
     
     // Send buffer
-    pub transmit_buffer: Vec<u8>,
+    pub tx_buffer: Vec<u8>,
     
     // Non-blocking mode
     pub non_blocking: bool,
@@ -144,19 +144,19 @@ pub struct Socket {
 // Implementation block — defines methods for the type above.
 impl Socket {
         // Public function — callable from other modules.
-pub fn new(family: AddressFamily, socket_type: SocketType, protocol: u32) -> Self {
+pub fn new(family: AddressFamily, sock_type: SocketType, protocol: u32) -> Self {
         Self {
             family,
-            socket_type,
+            sock_type,
             protocol,
             state: SocketState::Created,
-            local_address: None,
+            local_addr: None,
             local_port: 0,
-            remote_address: None,
-            tcp_source_port: 0,
-            receive_buffer: Vec::new(),
-            receive_closed: false,
-            transmit_buffer: Vec::new(),
+            remote_addr: None,
+            tcp_src_port: 0,
+            rx_buffer: Vec::new(),
+            rx_closed: false,
+            tx_buffer: Vec::new(),
             non_blocking: false,
             backlog: 0,
             pending_connections: Vec::new(),
@@ -172,9 +172,9 @@ static NEXT_SOCKET_FD: AtomicI32 = AtomicI32::new(100); // Start at 100 to avoid
 static NEXT_EPHEMERAL_PORT: AtomicU16 = AtomicU16::new(49152);
 
 /// Create a new socket
-pub fn socket(domain: u16, socket_type: u32, protocol: u32) -> Result<i32, i32> {
+pub fn socket(domain: u16, sock_type: u32, protocol: u32) -> Result<i32, i32> {
     let family = AddressFamily::from(domain);
-    let stype = SocketType::from(socket_type & 0xFF); // Mask off SOCK_NONBLOCK etc.
+    let stype = SocketType::from(sock_type & 0xFF); // Mask off SOCK_NONBLOCK etc.
     
     // Validate
     if family != AddressFamily::Inet {
@@ -182,49 +182,49 @@ pub fn socket(domain: u16, socket_type: u32, protocol: u32) -> Result<i32, i32> 
         return Err(-22); // EINVAL
     }
     
-    let socket = Socket::new(family, stype, protocol);
+    let sock = Socket::new(family, stype, protocol);
     let fd = NEXT_SOCKET_FD.fetch_add(1, Ordering::Relaxed);
     
-    SOCKET_TABLE.lock().insert(fd, socket);
+    SOCKET_TABLE.lock().insert(fd, sock);
     
     crate::serial_println!("[SOCKET] Created socket fd={} type={:?}", fd, stype);
     Ok(fd)
 }
 
 /// Bind socket to local address
-pub fn bind(fd: i32, address: &SockAddrIn) -> Result<(), i32> {
+pub fn bind(fd: i32, addr: &SockAddrIn) -> Result<(), i32> {
     let mut table = SOCKET_TABLE.lock();
-    let socket = table.get_mut(&fd).ok_or(-9)?; // EBADF
+    let sock = table.get_mut(&fd).ok_or(-9)?; // EBADF
     
-    if socket.state != SocketState::Created {
+    if sock.state != SocketState::Created {
         return Err(-22); // EINVAL
     }
     
-    socket.local_address = Some(*address);
-    socket.local_port = address.port();
-    socket.state = SocketState::Bound;
+    sock.local_addr = Some(*addr);
+    sock.local_port = addr.port();
+    sock.state = SocketState::Bound;
     
-    crate::serial_println!("[SOCKET] Bound fd={} to port {}", fd, address.port());
+    crate::serial_println!("[SOCKET] Bound fd={} to port {}", fd, addr.port());
     Ok(())
 }
 
 /// Listen on a socket
 pub fn listen(fd: i32, backlog: u32) -> Result<(), i32> {
     let mut table = SOCKET_TABLE.lock();
-    let socket = table.get_mut(&fd).ok_or(-9)?;
+    let sock = table.get_mut(&fd).ok_or(-9)?;
     
-    if socket.socket_type != SocketType::Stream {
+    if sock.sock_type != SocketType::Stream {
         return Err(-95); // EOPNOTSUPP
     }
     
-    if socket.state != SocketState::Bound {
+    if sock.state != SocketState::Bound {
         return Err(-22); // EINVAL
     }
     
-    socket.state = SocketState::Listening;
-    socket.backlog = backlog.maximum(1);
-    let port = socket.local_port;
-    let bl = socket.backlog;
+    sock.state = SocketState::Listening;
+    sock.backlog = backlog.max(1);
+    let port = sock.local_port;
+    let bl = sock.backlog;
     drop(table);
 
     // Register with TCP listener infrastructure
@@ -234,41 +234,41 @@ pub fn listen(fd: i32, backlog: u32) -> Result<(), i32> {
 }
 
 /// Accept an incoming connection on a listening socket
-pub fn accept(fd: i32, address_pointer: u64, address_length_pointer: u64) -> Result<i32, i32> {
+pub fn accept(fd: i32, addr_ptr: u64, addr_len_ptr: u64) -> Result<i32, i32> {
     let listen_port = {
         let table = SOCKET_TABLE.lock();
-        let socket = table.get(&fd).ok_or(-9i32)?; // EBADF
-        if socket.state != SocketState::Listening {
+        let sock = table.get(&fd).ok_or(-9i32)?; // EBADF
+        if sock.state != SocketState::Listening {
             return Err(-22); // EINVAL
         }
-        socket.local_port
+        sock.local_port
     };
 
     // Poll for an accepted connection (with timeout)
     for _ in 0..2000 {
         crate::netstack::poll();
 
-        if let Some((source_port, remote_ip, remote_port)) =
+        if let Some((src_port, remote_ip, remote_port)) =
             crate::netstack::tcp::accept_connection(listen_port)
         {
             let new_fd = NEXT_SOCKET_FD.fetch_add(1, Ordering::Relaxed);
             let mut new_socket = Socket::new(AddressFamily::Inet, SocketType::Stream, 0);
             new_socket.state = SocketState::Connected;
-            new_socket.local_port = source_port;
-            new_socket.tcp_source_port = source_port;
-            new_socket.remote_address = Some(SockAddrIn::new(remote_ip, remote_port));
+            new_socket.local_port = src_port;
+            new_socket.tcp_src_port = src_port;
+            new_socket.remote_addr = Some(SockAddrIn::new(remote_ip, remote_port));
             SOCKET_TABLE.lock().insert(new_fd, new_socket);
 
             // Write peer address if the caller requested it
-            if address_pointer != 0 && address_length_pointer != 0 {
+            if addr_ptr != 0 && addr_len_ptr != 0 {
                 let sa = SockAddrIn::new(remote_ip, remote_port);
-                if crate::memory::validate_user_pointer(address_pointer, core::mem::size_of::<SockAddrIn>(), true) {
+                if crate::memory::validate_user_pointer(addr_ptr, core::mem::size_of::<SockAddrIn>(), true) {
                                         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { *(address_pointer as *mut SockAddrIn) = sa; }
+unsafe { *(addr_ptr as *mut SockAddrIn) = sa; }
                 }
-                if crate::memory::validate_user_pointer(address_length_pointer, 4, true) {
+                if crate::memory::validate_user_pointer(addr_len_ptr, 4, true) {
                                         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { *(address_length_pointer as *mut u32) = core::mem::size_of::<SockAddrIn>() as u32; }
+unsafe { *(addr_len_ptr as *mut u32) = core::mem::size_of::<SockAddrIn>() as u32; }
                 }
             }
 
@@ -289,42 +289,42 @@ unsafe { *(address_length_pointer as *mut u32) = core::mem::size_of::<SockAddrIn
 }
 
 /// Connect to remote address
-pub fn connect(fd: i32, address: &SockAddrIn) -> Result<(), i32> {
+pub fn connect(fd: i32, addr: &SockAddrIn) -> Result<(), i32> {
     // First, initiate the connection
-    let (socket_type, local_port) = {
+    let (sock_type, local_port) = {
         let mut table = SOCKET_TABLE.lock();
-        let socket = table.get_mut(&fd).ok_or(-9)?;
+        let sock = table.get_mut(&fd).ok_or(-9)?;
         
-        if socket.state != SocketState::Created && socket.state != SocketState::Bound {
+        if sock.state != SocketState::Created && sock.state != SocketState::Bound {
             return Err(-106); // EISCONN
         }
         
         // Assign ephemeral port if not bound
-        if socket.local_port == 0 {
-            socket.local_port = NEXT_EPHEMERAL_PORT.fetch_add(1, Ordering::Relaxed);
+        if sock.local_port == 0 {
+            sock.local_port = NEXT_EPHEMERAL_PORT.fetch_add(1, Ordering::Relaxed);
         }
         
-        socket.remote_address = Some(*address);
-        socket.state = SocketState::Connecting;
+        sock.remote_addr = Some(*addr);
+        sock.state = SocketState::Connecting;
         
-        (socket.socket_type, socket.local_port)
+        (sock.sock_type, sock.local_port)
     };
     
-    let dest_ip = address.ip();
-    let dest_port = address.port();
+    let dest_ip = addr.ip();
+    let dest_port = addr.port();
     
     crate::serial_println!(
         "[SOCKET] Connecting fd={} to {}.{}.{}.{}:{}",
         fd, dest_ip[0], dest_ip[1], dest_ip[2], dest_ip[3], dest_port
     );
     
-    if socket_type == SocketType::Stream {
+    if sock_type == SocketType::Stream {
         // TCP: Send SYN
         match crate::netstack::tcp::send_syn(dest_ip, dest_port) {
-            Ok(source_port) => {
+            Ok(src_port) => {
                 let mut table = SOCKET_TABLE.lock();
-                if let Some(socket) = table.get_mut(&fd) {
-                    socket.tcp_source_port = source_port;
+                if let Some(sock) = table.get_mut(&fd) {
+                    sock.tcp_src_port = src_port;
                 }
             }
             Err(e) => {
@@ -340,8 +340,8 @@ pub fn connect(fd: i32, address: &SockAddrIn) -> Result<(), i32> {
             // Check if connected
             if crate::netstack::tcp::is_connected(dest_ip, dest_port) {
                 let mut table = SOCKET_TABLE.lock();
-                if let Some(socket) = table.get_mut(&fd) {
-                    socket.state = SocketState::Connected;
+                if let Some(sock) = table.get_mut(&fd) {
+                    sock.state = SocketState::Connected;
                 }
                 crate::serial_println!("[SOCKET] Connected fd={}", fd);
                 return Ok(());
@@ -355,8 +355,8 @@ pub fn connect(fd: i32, address: &SockAddrIn) -> Result<(), i32> {
     } else {
         // UDP: Just mark as "connected" (remembers remote address)
         let mut table = SOCKET_TABLE.lock();
-        if let Some(socket) = table.get_mut(&fd) {
-            socket.state = SocketState::Connected;
+        if let Some(sock) = table.get_mut(&fd) {
+            sock.state = SocketState::Connected;
         }
         Ok(())
     }
@@ -364,16 +364,16 @@ pub fn connect(fd: i32, address: &SockAddrIn) -> Result<(), i32> {
 
 /// Send data on a connected socket
 pub fn send(fd: i32, data: &[u8], _flags: u32) -> Result<usize, i32> {
-    let (socket_type, remote, tcp_port, local_port) = {
+    let (sock_type, remote, tcp_port, local_port) = {
         let table = SOCKET_TABLE.lock();
-        let socket = table.get(&fd).ok_or(-9)?;
+        let sock = table.get(&fd).ok_or(-9)?;
         
-        if socket.state != SocketState::Connected {
+        if sock.state != SocketState::Connected {
             return Err(-107); // ENOTCONN
         }
         
-        let remote = socket.remote_address.ok_or(-89)?; // EDESTADDRREQ
-        (socket.socket_type, remote, socket.tcp_source_port, socket.local_port)
+        let remote = sock.remote_addr.ok_or(-89)?; // EDESTADDRREQ
+        (sock.sock_type, remote, sock.tcp_src_port, sock.local_port)
     };
     
     // Bounds check
@@ -382,17 +382,17 @@ pub fn send(fd: i32, data: &[u8], _flags: u32) -> Result<usize, i32> {
     }
     
         // Pattern matching — Rust's exhaustive branching construct.
-match socket_type {
+match sock_type {
         SocketType::Stream => {
             // TCP send
             crate::netstack::tcp::send_data(remote.ip(), remote.port(), tcp_port, data)
-                .map_error(|_| -104)?; // ECONNRESET
+                .map_err(|_| -104)?; // ECONNRESET
             Ok(data.len())
         }
         SocketType::Dgram => {
             // UDP send
             crate::netstack::udp::send_to(remote.ip(), remote.port(), local_port, data)
-                .map_error(|_| -101)?; // ENETUNREACH
+                .map_err(|_| -101)?; // ENETUNREACH
             Ok(data.len())
         }
         _ => Err(-95), // EOPNOTSUPP
@@ -400,31 +400,31 @@ match socket_type {
 }
 
 /// Receive data from a connected socket
-pub fn recv(fd: i32, buffer: &mut [u8], _flags: u32) -> Result<usize, i32> {
-    let (socket_type, remote, tcp_port) = {
+pub fn recv(fd: i32, buf: &mut [u8], _flags: u32) -> Result<usize, i32> {
+    let (sock_type, remote, tcp_port) = {
         let table = SOCKET_TABLE.lock();
-        let socket = table.get(&fd).ok_or(-9)?;
+        let sock = table.get(&fd).ok_or(-9)?;
         
-        if socket.state != SocketState::Connected {
+        if sock.state != SocketState::Connected {
             return Err(-107); // ENOTCONN
         }
         
-        let remote = socket.remote_address.ok_or(-107)?;
-        (socket.socket_type, remote, socket.tcp_source_port)
+        let remote = sock.remote_addr.ok_or(-107)?;
+        (sock.sock_type, remote, sock.tcp_src_port)
     };
     
     // Poll network first
     crate::netstack::poll();
     
         // Pattern matching — Rust's exhaustive branching construct.
-match socket_type {
+match sock_type {
         SocketType::Stream => {
             // Check for data in TCP receive buffer
             let data = crate::netstack::tcp::receive_data(remote.ip(), remote.port(), tcp_port);
             
             if let Some(data) = data {
-                let len = data.len().minimum(buffer.len());
-                buffer[..len].copy_from_slice(&data[..len]);
+                let len = data.len().min(buf.len());
+                buf[..len].copy_from_slice(&data[..len]);
                 Ok(len)
             } else {
                 // No data available
@@ -434,12 +434,12 @@ match socket_type {
         SocketType::Dgram => {
             let local_port = {
                 let table = SOCKET_TABLE.lock();
-                let socket = table.get(&fd).ok_or(-9)?;
-                socket.local_port
+                let sock = table.get(&fd).ok_or(-9)?;
+                sock.local_port
             };
             if let Some(data) = crate::netstack::udp::recv_on(local_port) {
-                let len = data.len().minimum(buffer.len());
-                buffer[..len].copy_from_slice(&data[..len]);
+                let len = data.len().min(buf.len());
+                buf[..len].copy_from_slice(&data[..len]);
                 Ok(len)
             } else {
                 Err(-11) // EAGAIN
@@ -451,12 +451,12 @@ match socket_type {
 
 /// Close a socket
 pub fn close(fd: i32) -> Result<(), i32> {
-    let socket = SOCKET_TABLE.lock().remove(&fd).ok_or(-9)?;
+    let sock = SOCKET_TABLE.lock().remove(&fd).ok_or(-9)?;
     
     // Send FIN for TCP
-    if socket.socket_type == SocketType::Stream && socket.state == SocketState::Connected {
-        if let Some(remote) = socket.remote_address {
-            let _ = crate::netstack::tcp::send_fin(remote.ip(), remote.port(), socket.tcp_source_port);
+    if sock.sock_type == SocketType::Stream && sock.state == SocketState::Connected {
+        if let Some(remote) = sock.remote_addr {
+            let _ = crate::netstack::tcp::send_fin(remote.ip(), remote.port(), sock.tcp_src_port);
         }
     }
     
@@ -465,20 +465,20 @@ pub fn close(fd: i32) -> Result<(), i32> {
 }
 
 /// Send to a specific address (for UDP)
-pub fn sendto(fd: i32, data: &[u8], _flags: u32, address: &SockAddrIn) -> Result<usize, i32> {
-    let (socket_type, local_port) = {
+pub fn sendto(fd: i32, data: &[u8], _flags: u32, addr: &SockAddrIn) -> Result<usize, i32> {
+    let (sock_type, local_port) = {
         let mut table = SOCKET_TABLE.lock();
-        let socket = table.get_mut(&fd).ok_or(-9)?;
+        let sock = table.get_mut(&fd).ok_or(-9)?;
         
         // Assign ephemeral port if needed
-        if socket.local_port == 0 {
-            socket.local_port = NEXT_EPHEMERAL_PORT.fetch_add(1, Ordering::Relaxed);
+        if sock.local_port == 0 {
+            sock.local_port = NEXT_EPHEMERAL_PORT.fetch_add(1, Ordering::Relaxed);
         }
         
-        (socket.socket_type, socket.local_port)
+        (sock.sock_type, sock.local_port)
     };
     
-    if socket_type != SocketType::Dgram {
+    if sock_type != SocketType::Dgram {
         return Err(-95); // EOPNOTSUPP
     }
     
@@ -487,33 +487,33 @@ pub fn sendto(fd: i32, data: &[u8], _flags: u32, address: &SockAddrIn) -> Result
         return Err(-90); // EMSGSIZE
     }
     
-    crate::netstack::udp::send_to(address.ip(), address.port(), local_port, data)
-        .map_error(|_| -101)?;
+    crate::netstack::udp::send_to(addr.ip(), addr.port(), local_port, data)
+        .map_err(|_| -101)?;
     
     Ok(data.len())
 }
 
 /// Receive from any address (for UDP)
-pub fn recvfrom(fd: i32, buffer: &mut [u8], _flags: u32, address_out: Option<&mut SockAddrIn>) -> Result<usize, i32> {
+pub fn recvfrom(fd: i32, buf: &mut [u8], _flags: u32, addr_out: Option<&mut SockAddrIn>) -> Result<usize, i32> {
     let local_port = {
         let table = SOCKET_TABLE.lock();
-        let socket = table.get(&fd).ok_or(-9)?;
+        let sock = table.get(&fd).ok_or(-9)?;
         
-        if socket.socket_type != SocketType::Dgram {
+        if sock.sock_type != SocketType::Dgram {
             return Err(-95);
         }
         
-        socket.local_port
+        sock.local_port
     };
     
     // Poll network
     crate::netstack::poll();
     
-    if let Some((data, source_ip, source_port)) = crate::netstack::udp::recv_from(local_port) {
-        let len = data.len().minimum(buffer.len());
-        buffer[..len].copy_from_slice(&data[..len]);
-        if let Some(address_out) = address_out {
-            *address_out = SockAddrIn::new(source_ip, source_port);
+    if let Some((data, src_ip, src_port)) = crate::netstack::udp::recv_from(local_port) {
+        let len = data.len().min(buf.len());
+        buf[..len].copy_from_slice(&data[..len]);
+        if let Some(addr_out) = addr_out {
+            *addr_out = SockAddrIn::new(src_ip, src_port);
         }
         Ok(len)
     } else {
@@ -524,7 +524,7 @@ pub fn recvfrom(fd: i32, buffer: &mut [u8], _flags: u32, address_out: Option<&mu
 /// Set socket options
 pub fn setsockopt(fd: i32, level: i32, optname: i32, optval: &[u8]) -> Result<(), i32> {
     let mut table = SOCKET_TABLE.lock();
-    let socket = table.get_mut(&fd).ok_or(-9)?;
+    let sock = table.get_mut(&fd).ok_or(-9)?;
     
     // SOL_SOCKET = 1
     // SO_REUSEADDR = 2
@@ -537,7 +537,7 @@ pub fn setsockopt(fd: i32, level: i32, optname: i32, optval: &[u8]) -> Result<()
         }
         (1, 4) => {
             // Non-blocking mode
-            socket.non_blocking = optval.first().copied().unwrap_or(0) != 0;
+            sock.non_blocking = optval.first().copied().unwrap_or(0) != 0;
             Ok(())
         }
         _ => {
@@ -550,7 +550,7 @@ pub fn setsockopt(fd: i32, level: i32, optname: i32, optval: &[u8]) -> Result<()
 /// Get socket options
 pub fn getsockopt(fd: i32, level: i32, optname: i32, optval: &mut [u8]) -> Result<usize, i32> {
     let table = SOCKET_TABLE.lock();
-    let socket = table.get(&fd).ok_or(-9)?;
+    let sock = table.get(&fd).ok_or(-9)?;
     
         // Pattern matching — Rust's exhaustive branching construct.
 match (level, optname) {
@@ -583,10 +583,10 @@ pub fn get_state(fd: i32) -> Option<SocketState> {
 /// Check if socket has data available for reading
 pub fn has_readable_data(fd: i32) -> bool {
     let table = SOCKET_TABLE.lock();
-    if let Some(socket) = table.get(&fd) {
-        if socket.state == SocketState::Connected {
-            if let Some(address) = &socket.remote_address {
-                return crate::netstack::tcp::receive_data(address.ip(), address.port(), socket.tcp_source_port).is_some();
+    if let Some(sock) = table.get(&fd) {
+        if sock.state == SocketState::Connected {
+            if let Some(addr) = &sock.remote_addr {
+                return crate::netstack::tcp::receive_data(addr.ip(), addr.port(), sock.tcp_src_port).is_some();
             }
         }
     }

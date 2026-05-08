@@ -98,15 +98,15 @@ match bytes[0] {
         return None;
     }
     let octave: u8 = {
-        let mut value = 0u8;
+        let mut val = 0u8;
         for &b in rest {
             if b >= b'0' && b <= b'9' {
-                value = value * 10 + (b - b'0');
+                val = val * 10 + (b - b'0');
             } else {
                 return None;
             }
         }
-        value
+        val
     };
 
     // MIDI note = (octave + 1) × 12 + base + semitone

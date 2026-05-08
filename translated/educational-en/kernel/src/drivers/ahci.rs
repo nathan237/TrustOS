@@ -21,14 +21,14 @@ use core::ptr;
 #[derive(Clone, Copy)]
 // Enumeration — a type that can be one of several variants.
 pub enum FisType {
-    RegisterH2D = 0x27,      // Register FIS - Host to Device
-    RegisterD2H = 0x34,      // Register FIS - Device to Host
+    RegH2D = 0x27,      // Register FIS - Host to Device
+    RegD2H = 0x34,      // Register FIS - Device to Host
     DmaActivate = 0x39, // DMA Activate FIS
     DmaSetup = 0x41,    // DMA Setup FIS
     Data = 0x46,        // Data FIS
     Bist = 0x58,        // BIST Activate FIS
     PioSetup = 0x5F,    // PIO Setup FIS
-    DeviceBits = 0xA1,     // Set Device Bits FIS
+    DevBits = 0xA1,     // Set Device Bits FIS
 }
 
 /// FIS Register Host to Device
@@ -64,7 +64,7 @@ pub struct FisRegisterH2D {
 impl FisRegisterH2D {
     pub const fn new() -> Self {
         Self {
-            fis_type: FisType::RegisterH2D as u8,
+            fis_type: FisType::RegH2D as u8,
             pmport_c: 0,
             command: 0,
             featurel: 0,
@@ -221,9 +221,9 @@ pub struct HbaCommandList {
 
 /// Memory allocated for each active port
 pub struct PortMemory {
-    pub command_list: Box<HbaCommandList>,
+    pub cmd_list: Box<HbaCommandList>,
     pub fis: Box<HbaFis>,
-    pub command_tables: [Box<HbaCommandTable>; 8],  // 8 command tables
+    pub cmd_tables: [Box<HbaCommandTable>; 8],  // 8 command tables
 }
 
 // Implementation block — defines methods for the type above.
@@ -231,10 +231,10 @@ impl PortMemory {
         // Public function — callable from other modules.
 pub fn new() -> Self {
         Self {
-            command_list: Box::new(HbaCommandList { headers: [HbaCmdHeader::new(); 32] }),
+            cmd_list: Box::new(HbaCommandList { headers: [HbaCmdHeader::new(); 32] }),
             fis: Box::new(// SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { core::mem::zeroed() }),
-            command_tables: core::array::from_fn(|_| Box::new(// SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+            cmd_tables: core::array::from_fn(|_| Box::new(// SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { core::mem::zeroed() })),
         }
     }
@@ -245,7 +245,7 @@ unsafe { core::mem::zeroed() })),
 // Public structure — visible outside this module.
 pub struct HbaMemory {
     /// Host Capabilities
-    pub capability: u32,
+    pub cap: u32,
     /// Global Host Control
     pub ghc: u32,
     /// Interrupt Status
@@ -255,13 +255,13 @@ pub struct HbaMemory {
     /// Version
     pub vs: u32,
     /// Command Completion Coalescing Control
-    pub ccc_controller: u32,
+    pub ccc_ctl: u32,
     /// Command Completion Coalescing Ports
     pub ccc_ports: u32,
     /// Enclosure Management Location
     pub em_loc: u32,
     /// Enclosure Management Control
-    pub em_controller: u32,
+    pub em_ctl: u32,
     /// Host Capabilities Extended
     pub cap2: u32,
     /// BIOS/OS Handoff Control and Status
@@ -283,7 +283,7 @@ pub struct HbaPort {
     /// Command List Base Address
     pub clb: u64,
     /// FIS Base Address
-    pub framebuffer: u64,
+    pub fb: u64,
     /// Interrupt Status
     pub is: u32,
     /// Interrupt Enable
@@ -331,7 +331,7 @@ pub enum AhciDeviceType {
 #[derive(Debug, Clone)]
 // Public structure — visible outside this module.
 pub struct AhciPort {
-    pub port_number: u8,
+    pub port_num: u8,
     pub device_type: AhciDeviceType,
     pub sector_count: u64,
     pub model: String,
@@ -340,8 +340,8 @@ pub struct AhciPort {
 
 /// AHCI Controller state
 pub struct AhciController {
-    pub base_address: u64,
-    pub virt_address: u64,
+    pub base_addr: u64,
+    pub virt_addr: u64,
     pub ports: Vec<AhciPort>,
     pub port_memory: Vec<Option<PortMemory>>,
     pub initialized: bool,
@@ -467,9 +467,9 @@ unsafe { &mut *(abar_virt as *mut HbaMemory) };
     crate::serial_println!("[AHCI] Version {}.{}", major, minor);
     
     let pi = hba.pi;
-    let capability = hba.capability;
-    let number_command_slots = ((capability >> 8) & 0x1F) + 1;
-    let s64a = (capability >> 31) & 1 != 0; // 64-bit addressing capable
+    let cap = hba.cap;
+    let number_command_slots = ((cap >> 8) & 0x1F) + 1;
+    let s64a = (cap >> 31) & 1 != 0; // 64-bit addressing capable
     
     crate::serial_println!("[AHCI] {} ports implemented, {} command slots, 64-bit DMA: {}", 
         pi.count_ones(), number_command_slots, s64a);
@@ -499,7 +499,7 @@ unsafe { &mut *(abar_virt as *mut HbaMemory) };
     for i in 0..32 {
         if pi & (1 << i) != 0 {
             let port = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &mut *(hba.ports.as_mut_pointer().add(i)) };
+unsafe { &mut *(hba.ports.as_mut_ptr().add(i)) };
             
             let ssts = port.ssts;
             let det = ssts & 0x0F;
@@ -526,7 +526,7 @@ match sig {
                     stop_command(port);
                     
                     // Set Command List Base Address
-                    let clb_physical = virt_to_physical(&*mem.command_list as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+                    let clb_physical = virt_to_physical(&*mem.cmd_list as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const _ as u64);
                     
                     // Set FIS Base Address
@@ -542,7 +542,7 @@ const _ as u64);
                     }
                     
                     port.clb = clb_physical;
-                    port.framebuffer = framebuffer_physical;
+                    port.fb = framebuffer_physical;
                     
                     // Clear interrupt status
                     port.is = 0xFFFFFFFF;
@@ -556,7 +556,7 @@ const _ as u64);
                     port_memory[i] = Some(mem);
                     
                     ports.push(AhciPort {
-                        port_number: i as u8,
+                        port_num: i as u8,
                         device_type,
                         sector_count: 0,
                         model: String::from("Unknown"),
@@ -570,8 +570,8 @@ const _ as u64);
     let has_devices = !ports.is_empty();
     
     *CONTROLLER.lock() = Some(AhciController {
-        base_address: abar_physical,
-        virt_address: abar_virt,
+        base_addr: abar_physical,
+        virt_addr: abar_virt,
         ports,
         port_memory,
         initialized: has_devices,
@@ -600,21 +600,21 @@ pub fn is_initialized() -> bool {
 
 /// Identify a device and get its sector count
 /// Must be called after init() to populate device info
-pub fn identify_device(port_number: u8) -> Result<u64, &'static str> {
-    let mut controller = CONTROLLER.lock();
-    let controller = controller.as_mut().ok_or("AHCI not initialized")?;
+pub fn identify_device(port_num: u8) -> Result<u64, &'static str> {
+    let mut ctrl = CONTROLLER.lock();
+    let controller = ctrl.as_mut().ok_or("AHCI not initialized")?;
     
     if !controller.initialized {
         return Err("AHCI not initialized");
     }
     
-    let port_memory = controller.port_memory[port_number as usize].as_mut()
+    let port_memory = controller.port_memory[port_num as usize].as_mut()
         .ok_or("Port memory not allocated")?;
     
     let hba = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &mut *(controller.virt_address as *mut HbaMemory) };
+unsafe { &mut *(controller.virt_addr as *mut HbaMemory) };
     let port = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &mut *(hba.ports.as_mut_pointer().add(port_number as usize)) };
+unsafe { &mut *(hba.ports.as_mut_ptr().add(port_num as usize)) };
     
     // Clear interrupt status
     port.is = 0xFFFFFFFF;
@@ -623,14 +623,14 @@ unsafe { &mut *(hba.ports.as_mut_pointer().add(port_number as usize)) };
     let slot = find_cmdslot(port).ok_or("No free command slot")?;
     
     // Get command header
-    let command_header = &mut port_memory.command_list.headers[slot as usize];
+    let command_header = &mut port_memory.cmd_list.headers[slot as usize];
     
     // Setup command header for IDENTIFY
     command_header.flags = 5;  // CFL = 5 DWORDs
     command_header.prdtl = 1;  // One PRDT entry
     command_header.prdbc = 0;
     
-    let command_table = &mut *port_memory.command_tables[slot as usize];
+    let command_table = &mut *port_memory.cmd_tables[slot as usize];
     let command_table_physical = virt_to_physical(command_table as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const _ as u64);
     command_header.ctba = command_table_physical;
@@ -642,16 +642,16 @@ const _ as u64);
     
     // Allocate a buffer for IDENTIFY data (512 bytes)
     let mut identify_buffer = vec![0u8; 512];
-    let buffer_physical = virt_to_physical(identify_buffer.as_pointer() as u64);
+    let buffer_phys = virt_to_physical(identify_buffer.as_ptr() as u64);
     
     // Setup PRDT entry
-    command_table.prdt[0].dba = buffer_physical;
+    command_table.prdt[0].dba = buffer_phys;
     command_table.prdt[0].dbc_i = (512 - 1) | (1 << 31);  // 512 bytes, interrupt on completion
     
     // Setup command FIS (Register H2D) for IDENTIFY
     let cfis = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &mut *(command_table.cfis.as_mut_pointer() as *mut FisRegisterH2D) };
-    cfis.fis_type = FisType::RegisterH2D as u8;
+unsafe { &mut *(command_table.cfis.as_mut_ptr() as *mut FisRegisterH2D) };
+    cfis.fis_type = FisType::RegH2D as u8;
     cfis.pmport_c = 0x80;  // Command bit
     cfis.command = ATA_COMMAND_IDENTIFY;
     cfis.device = 0;  // Master device
@@ -702,7 +702,7 @@ loop {
     // Words 100-103: Total addressable sectors (48-bit LBA)
     let words = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { 
-        core::slice::from_raw_parts(identify_buffer.as_pointer() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+        core::slice::from_raw_parts(identify_buffer.as_ptr() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u16, 256) 
     };
     
@@ -743,13 +743,13 @@ const u16, 256)
     let serial = String::from(serial.trim());
     
     crate::serial_println!("[AHCI] Port {}: {} sectors ({} MB), model: {}, serial: {}", 
-        port_number, sector_count, sector_count / 2048, model, serial);
+        port_num, sector_count, sector_count / 2048, model, serial);
     
     // Update port info in controller
-    if let Some(port_information) = controller.ports.iterator_mut().find(|p| p.port_number == port_number) {
-        port_information.sector_count = sector_count;
-        port_information.model = model;
-        port_information.serial = serial;
+    if let Some(port_info) = controller.ports.iter_mut().find(|p| p.port_num == port_num) {
+        port_info.sector_count = sector_count;
+        port_info.model = model;
+        port_info.serial = serial;
     }
     
     Ok(sector_count)
@@ -759,13 +759,13 @@ const u16, 256)
 pub fn identify_all_devices() {
     let port_nums: Vec<u8> = {
         CONTROLLER.lock().as_ref()
-            .map(|c| c.ports.iter().map(|p| p.port_number).collect())
+            .map(|c| c.ports.iter().map(|p| p.port_num).collect())
             .unwrap_or_default()
     };
     
-    for port_number in port_nums {
-        if let Err(e) = identify_device(port_number) {
-            crate::serial_println!("[AHCI] Failed to identify port {}: {}", port_number, e);
+    for port_num in port_nums {
+        if let Err(e) = identify_device(port_num) {
+            crate::serial_println!("[AHCI] Failed to identify port {}: {}", port_num, e);
         }
     }
 }
@@ -775,7 +775,7 @@ pub fn identify_all_devices() {
 /// lba: starting logical block address
 /// count: number of sectors to read (max 128)
 /// buffer: destination buffer (must be count * 512 bytes)
-pub fn read_sectors(port_number: u8, lba: u64, count: u16, buffer: &mut [u8]) -> Result<usize, &'static str> {
+pub fn read_sectors(port_num: u8, lba: u64, count: u16, buffer: &mut [u8]) -> Result<usize, &'static str> {
     if count == 0 || count > 128 {
         return Err("Invalid sector count (1-128)");
     }
@@ -785,25 +785,25 @@ pub fn read_sectors(port_number: u8, lba: u64, count: u16, buffer: &mut [u8]) ->
         return Err("Buffer too small");
     }
     
-    let mut controller = CONTROLLER.lock();
-    let controller = controller.as_mut().ok_or("AHCI not initialized")?;
+    let mut ctrl = CONTROLLER.lock();
+    let controller = ctrl.as_mut().ok_or("AHCI not initialized")?;
     
     if !controller.initialized {
         return Err("AHCI not initialized");
     }
     
     // Find port info
-    let port_index = controller.ports.iter().position(|p| p.port_number == port_number)
+    let port_index = controller.ports.iter().position(|p| p.port_num == port_num)
         .ok_or("Port not found")?;
     
-    let port_memory = controller.port_memory[port_number as usize].as_mut()
+    let port_memory = controller.port_memory[port_num as usize].as_mut()
         .ok_or("Port memory not allocated")?;
     
     // Access HBA port registers
     let hba = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &mut *(controller.virt_address as *mut HbaMemory) };
+unsafe { &mut *(controller.virt_addr as *mut HbaMemory) };
     let port = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &mut *(hba.ports.as_mut_pointer().add(port_number as usize)) };
+unsafe { &mut *(hba.ports.as_mut_ptr().add(port_num as usize)) };
     
     // Clear interrupt status
     port.is = 0xFFFFFFFF;
@@ -812,7 +812,7 @@ unsafe { &mut *(hba.ports.as_mut_pointer().add(port_number as usize)) };
     let slot = find_cmdslot(port).ok_or("No free command slot")?;
     
     // Get command header
-    let command_header = &mut port_memory.command_list.headers[slot as usize];
+    let command_header = &mut port_memory.cmd_list.headers[slot as usize];
     
     // Setup command header
     // CFL (Command FIS Length) = 5 DWORDs = 20 bytes / 4 = 5
@@ -822,7 +822,7 @@ unsafe { &mut *(hba.ports.as_mut_pointer().add(port_number as usize)) };
     command_header.prdbc = 0;  // Clear bytes count
     
     // Setup command table address
-    let command_table = &mut *port_memory.command_tables[slot as usize];
+    let command_table = &mut *port_memory.cmd_tables[slot as usize];
     let command_table_physical = virt_to_physical(command_table as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const _ as u64);
     command_header.ctba = command_table_physical;
@@ -834,14 +834,14 @@ const _ as u64);
     
     // Setup PRDT entry - point to buffer
     // We need physical address of buffer
-    let buffer_physical = virt_to_physical(buffer.as_pointer() as u64);
-    command_table.prdt[0].dba = buffer_physical;
+    let buffer_phys = virt_to_physical(buffer.as_ptr() as u64);
+    command_table.prdt[0].dba = buffer_phys;
     command_table.prdt[0].dbc_i = ((required_size - 1) as u32) | (1 << 31);  // Byte count - 1, interrupt on completion
     
     // Setup command FIS (Register H2D)
     let cfis = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &mut *(command_table.cfis.as_mut_pointer() as *mut FisRegisterH2D) };
-    cfis.fis_type = FisType::RegisterH2D as u8;
+unsafe { &mut *(command_table.cfis.as_mut_ptr() as *mut FisRegisterH2D) };
+    cfis.fis_type = FisType::RegH2D as u8;
     cfis.pmport_c = 0x80;  // Command (bit 7 = 1)
     cfis.command = ATA_COMMAND_READ_DMA_EXT;
     
@@ -905,7 +905,7 @@ loop {
 }
 
 /// Write sectors to a port
-pub fn write_sectors(port_number: u8, lba: u64, count: u16, buffer: &[u8]) -> Result<usize, &'static str> {
+pub fn write_sectors(port_num: u8, lba: u64, count: u16, buffer: &[u8]) -> Result<usize, &'static str> {
     if count == 0 || count > 128 {
         return Err("Invalid sector count (1-128)");
     }
@@ -915,33 +915,33 @@ pub fn write_sectors(port_number: u8, lba: u64, count: u16, buffer: &[u8]) -> Re
         return Err("Buffer too small");
     }
     
-    let mut controller = CONTROLLER.lock();
-    let controller = controller.as_mut().ok_or("AHCI not initialized")?;
+    let mut ctrl = CONTROLLER.lock();
+    let controller = ctrl.as_mut().ok_or("AHCI not initialized")?;
     
     if !controller.initialized {
         return Err("AHCI not initialized");
     }
     
-    let port_memory = controller.port_memory[port_number as usize].as_mut()
+    let port_memory = controller.port_memory[port_num as usize].as_mut()
         .ok_or("Port memory not allocated")?;
     
     let hba = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &mut *(controller.virt_address as *mut HbaMemory) };
+unsafe { &mut *(controller.virt_addr as *mut HbaMemory) };
     let port = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &mut *(hba.ports.as_mut_pointer().add(port_number as usize)) };
+unsafe { &mut *(hba.ports.as_mut_ptr().add(port_num as usize)) };
     
     port.is = 0xFFFFFFFF;
     
     let slot = find_cmdslot(port).ok_or("No free command slot")?;
     
-    let command_header = &mut port_memory.command_list.headers[slot as usize];
+    let command_header = &mut port_memory.cmd_list.headers[slot as usize];
     
     // Write bit is bit 6 in flags
     command_header.flags = 5 | (1 << 6);  // CFL = 5, Write = 1
     command_header.prdtl = 1;
     command_header.prdbc = 0;
     
-    let command_table = &mut *port_memory.command_tables[slot as usize];
+    let command_table = &mut *port_memory.cmd_tables[slot as usize];
     let command_table_physical = virt_to_physical(command_table as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const _ as u64);
     command_header.ctba = command_table_physical;
@@ -951,13 +951,13 @@ unsafe {
         ptr::write_bytes(command_table as *mut HbaCommandTable, 0, 1);
     }
     
-    let buffer_physical = virt_to_physical(buffer.as_pointer() as u64);
-    command_table.prdt[0].dba = buffer_physical;
+    let buffer_phys = virt_to_physical(buffer.as_ptr() as u64);
+    command_table.prdt[0].dba = buffer_phys;
     command_table.prdt[0].dbc_i = ((required_size - 1) as u32) | (1 << 31);
     
     let cfis = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &mut *(command_table.cfis.as_mut_pointer() as *mut FisRegisterH2D) };
-    cfis.fis_type = FisType::RegisterH2D as u8;
+unsafe { &mut *(command_table.cfis.as_mut_ptr() as *mut FisRegisterH2D) };
+    cfis.fis_type = FisType::RegH2D as u8;
     cfis.pmport_c = 0x80;
     cfis.command = ATA_COMMAND_WRITE_DMA_EXT;
     
@@ -1012,32 +1012,32 @@ loop {
 }
 
 /// Flush write cache on a port (FLUSH CACHE EXT command)
-pub fn flush_cache(port_number: u8) -> Result<(), &'static str> {
-    let mut controller = CONTROLLER.lock();
-    let controller = controller.as_mut().ok_or("AHCI not initialized")?;
+pub fn flush_cache(port_num: u8) -> Result<(), &'static str> {
+    let mut ctrl = CONTROLLER.lock();
+    let controller = ctrl.as_mut().ok_or("AHCI not initialized")?;
     
     if !controller.initialized {
         return Err("AHCI not initialized");
     }
     
-    let port_memory = controller.port_memory[port_number as usize].as_mut()
+    let port_memory = controller.port_memory[port_num as usize].as_mut()
         .ok_or("Port memory not allocated")?;
     
     let hba = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &mut *(controller.virt_address as *mut HbaMemory) };
+unsafe { &mut *(controller.virt_addr as *mut HbaMemory) };
     let port = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &mut *(hba.ports.as_mut_pointer().add(port_number as usize)) };
+unsafe { &mut *(hba.ports.as_mut_ptr().add(port_num as usize)) };
     
     port.is = 0xFFFFFFFF;
     
     let slot = find_cmdslot(port).ok_or("No free command slot")?;
     
-    let command_header = &mut port_memory.command_list.headers[slot as usize];
+    let command_header = &mut port_memory.cmd_list.headers[slot as usize];
     command_header.flags = 5; // CFL = 5, no write, no prefetch
     command_header.prdtl = 0; // No data transfer
     command_header.prdbc = 0;
     
-    let command_table = &mut *port_memory.command_tables[slot as usize];
+    let command_table = &mut *port_memory.cmd_tables[slot as usize];
     let command_table_physical = virt_to_physical(command_table as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const _ as u64);
     command_header.ctba = command_table_physical;
@@ -1048,8 +1048,8 @@ unsafe {
     }
     
     let cfis = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &mut *(command_table.cfis.as_mut_pointer() as *mut FisRegisterH2D) };
-    cfis.fis_type = FisType::RegisterH2D as u8;
+unsafe { &mut *(command_table.cfis.as_mut_ptr() as *mut FisRegisterH2D) };
+    cfis.fis_type = FisType::RegH2D as u8;
     cfis.pmport_c = 0x80;
     cfis.command = ATA_COMMAND_FLUSH_CACHE_EXT;
     cfis.device = 0x40;
@@ -1100,38 +1100,38 @@ use crate::security::storage;
 /// This is the preferred API for userspace programs.
 /// Kernel code can use read_sectors() directly.
 pub fn secure_read_sectors(
-    port_number: u8,
+    port_num: u8,
     lba: u64,
     count: u16,
     buffer: &mut [u8],
     task_id: u64,
 ) -> Result<usize, StorageError> {
-    let disk = DiskId(port_number);
+    let disk = DiskId(port_num);
     let op = StorageOperation::ReadSectors;
     
     // Check security
     storage::check_operation(disk, op, task_id)
-        .map_error(StorageError::Security)?;
+        .map_err(StorageError::Security)?;
     
     // Audit the operation
     storage::audit_operation(task_id, disk, op, true);
     
     // Perform the read
-    read_sectors(port_number, lba, count, buffer)
-        .map_error(StorageError::Io)
+    read_sectors(port_num, lba, count, buffer)
+        .map_err(StorageError::Io)
 }
 
 /// Secure write sectors - checks permissions before writing
 /// 
 /// Writing requires elevated privileges (danger level 2).
 pub fn secure_write_sectors(
-    port_number: u8,
+    port_num: u8,
     lba: u64,
     count: u16,
     buffer: &[u8],
     task_id: u64,
 ) -> Result<usize, StorageError> {
-    let disk = DiskId(port_number);
+    let disk = DiskId(port_num);
     let op = StorageOperation::WriteSectors;
     
     // Check security
@@ -1147,18 +1147,18 @@ pub fn secure_write_sectors(
     storage::audit_operation(task_id, disk, op, true);
     
     // Perform the write
-    write_sectors(port_number, lba, count, buffer)
-        .map_error(StorageError::Io)
+    write_sectors(port_num, lba, count, buffer)
+        .map_err(StorageError::Io)
 }
 
 /// Secure format disk - VERY dangerous, requires explicit unlock
 /// 
 /// This zeros out the entire disk. Danger level 5.
 pub fn secure_format_disk(
-    port_number: u8,
+    port_num: u8,
     task_id: u64,
 ) -> Result<(), StorageError> {
-    let disk = DiskId(port_number);
+    let disk = DiskId(port_num);
     let op = StorageOperation::LowLevelFormat;
     
     // Check security - requires disk to be unlocked
@@ -1168,16 +1168,16 @@ pub fn secure_format_disk(
             storage::audit_operation(task_id, disk, op, false);
             crate::log_warn!(
                 "[AHCI] FORMAT DENIED: task {} tried to format disk {} without permission",
-                task_id, port_number
+                task_id, port_num
             );
             return Err(StorageError::Security(e));
         }
     }
     
-    crate::log_warn!("[AHCI] !!! FORMATTING DISK {} - ALL DATA WILL BE LOST !!!", port_number);
+    crate::log_warn!("[AHCI] !!! FORMATTING DISK {} - ALL DATA WILL BE LOST !!!", port_num);
     
     // Get disk size
-    let disk_information = get_port_information(port_number).ok_or(StorageError::Io("Port not found"))?;
+    let disk_information = get_port_information(port_num).ok_or(StorageError::Io("Port not found"))?;
     let total_sectors = disk_information.sector_count;
     
     if total_sectors == 0 {
@@ -1190,8 +1190,8 @@ pub fn secure_format_disk(
     // Format in chunks
     let mut formatted = 0u64;
     while formatted < total_sectors {
-        write_sectors(port_number, formatted, 1, &zero_buffer)
-            .map_error(StorageError::Io)?;
+        write_sectors(port_num, formatted, 1, &zero_buffer)
+            .map_err(StorageError::Io)?;
         formatted += 1;
         
         // Progress every 1000 sectors
@@ -1201,7 +1201,7 @@ pub fn secure_format_disk(
     }
     
     storage::audit_operation(task_id, disk, op, true);
-    crate::log!("[AHCI] Disk {} formatted successfully ({} sectors)", port_number, total_sectors);
+    crate::log!("[AHCI] Disk {} formatted successfully ({} sectors)", port_num, total_sectors);
     
     Ok(())
 }
@@ -1228,8 +1228,8 @@ match self {
 }
 
 /// Get port info for a specific port
-pub fn get_port_information(port_number: u8) -> Option<AhciPort> {
-    let controller = CONTROLLER.lock();
-    let controller = controller.as_ref()?;
-    controller.ports.iter().find(|p| p.port_number == port_number).cloned()
+pub fn get_port_information(port_num: u8) -> Option<AhciPort> {
+    let ctrl = CONTROLLER.lock();
+    let controller = ctrl.as_ref()?;
+    controller.ports.iter().find(|p| p.port_num == port_num).cloned()
 }

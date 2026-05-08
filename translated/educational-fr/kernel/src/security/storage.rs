@@ -106,9 +106,9 @@ pub fn lock_disk(disk: DiskId) {
 }
 
 /// Unlock a disk for dangerous operations (requires kernel capability)
-pub fn unlock_disk(disk: DiskId, capability: CapabilityId) -> Result<(), SecurityError> {
+pub fn unlock_disk(disk: DiskId, cap: CapabilityId) -> Result<(), SecurityError> {
     // Verify caller has kernel-level access
-    super::validate(capability, CapabilityRights::ALL)?;
+    super::validate(cap, CapabilityRights::ALL)?;
     
     LOCKED_DISKS.lock().remove(&disk);
     crate::log_warn!("[STORAGE_SEC] Disk {} UNLOCKED for dangerous operations", disk.0);
@@ -121,8 +121,8 @@ pub fn is_disk_locked(disk: DiskId) -> bool {
 }
 
 /// Grant storage privilege to a task (root only)
-pub fn grant_storage_privilege(task_id: u64, capability: CapabilityId) -> Result<(), SecurityError> {
-    super::validate(capability, CapabilityRights::GRANT)?;
+pub fn grant_storage_privilege(task_id: u64, cap: CapabilityId) -> Result<(), SecurityError> {
+    super::validate(cap, CapabilityRights::GRANT)?;
     PRIVILEGED_TASKS.lock().insert(task_id);
     crate::log!("[STORAGE_SEC] Task {} granted storage privileges", task_id);
     Ok(())

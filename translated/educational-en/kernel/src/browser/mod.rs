@@ -242,8 +242,8 @@ pub fn new(width: u32, height: u32) -> Self {
         };
         
         if status_code >= 400 {
-            let message = alloc::format!("HTTP {}", status_code);
-            self.status = BrowserStatus::Error(message.clone());
+            let msg = alloc::format!("HTTP {}", status_code);
+            self.status = BrowserStatus::Error(msg.clone());
             self.raw_html = alloc::format!(
                 "<html><body><h1>HTTP Error {}</h1><p>The server returned an error for {}</p></body></html>",
                 status_code, full_url
@@ -381,7 +381,7 @@ match crate::netstack::http::get(&url) {
     
     /// Scroll the page
     pub fn scroll(&mut self, delta: i32) {
-        self.scroll_y = (self.scroll_y + delta).maximum(0);
+        self.scroll_y = (self.scroll_y + delta).max(0);
     }
     
     /// Check if a point hits a link
@@ -617,16 +617,16 @@ match crate::netstack::http::get(&url) {
     /// Type a character into the focused input
     pub fn type_char(&mut self, c: char) {
         if let Some(ref name) = self.focused_input.clone() {
-            let value = self.form_inputs.entry(name.clone()).or_insert_with(String::new);
-            value.push(c);
+            let val = self.form_inputs.entry(name.clone()).or_insert_with(String::new);
+            val.push(c);
         }
     }
 
     /// Backspace in focused input
     pub fn backspace_input(&mut self) {
         if let Some(ref name) = self.focused_input.clone() {
-            if let Some(value) = self.form_inputs.get_mut(name) {
-                value.pop();
+            if let Some(val) = self.form_inputs.get_mut(name) {
+                val.pop();
             }
         }
     }
@@ -717,25 +717,25 @@ fn collect_resources(nodes: &[HtmlNode]) -> Vec<(String, String)> {
                         // Pattern matching — Rust's exhaustive branching construct.
 match el.tag.as_str() {
                 "img" => {
-                    if let Some(source) = el.attribute("src") {
-                        if !source.is_empty() && !source.starts_with("data:") {
-                            resources.push(("img".to_string(), source.to_string()));
+                    if let Some(src) = el.attr("src") {
+                        if !src.is_empty() && !src.starts_with("data:") {
+                            resources.push(("img".to_string(), src.to_string()));
                         }
                     }
                 }
                 "link" => {
                     // CSS stylesheets
-                    let relative = el.attribute("rel").unwrap_or("");
-                    if relative == "stylesheet" {
-                        if let Some(href) = el.attribute("href") {
+                    let rel = el.attr("rel").unwrap_or("");
+                    if rel == "stylesheet" {
+                        if let Some(href) = el.attr("href") {
                             if !href.is_empty() {
                                 resources.push(("css".to_string(), href.to_string()));
                             }
                         }
                     }
                     // Favicon
-                    if relative.contains("icon") {
-                        if let Some(href) = el.attribute("href") {
+                    if rel.contains("icon") {
+                        if let Some(href) = el.attr("href") {
                             if !href.is_empty() {
                                 resources.push(("icon".to_string(), href.to_string()));
                             }
@@ -743,9 +743,9 @@ match el.tag.as_str() {
                     }
                 }
                 "script" => {
-                    if let Some(source) = el.attribute("src") {
-                        if !source.is_empty() {
-                            resources.push(("script".to_string(), source.to_string()));
+                    if let Some(src) = el.attr("src") {
+                        if !src.is_empty() {
+                            resources.push(("script".to_string(), src.to_string()));
                         }
                     }
                 }
@@ -818,15 +818,15 @@ fn parse_set_cookie(header: &str, default_domain: &str) -> Option<Cookie> {
         http_only: false,
     };
 
-    for attribute in parts {
-        let attribute = attribute.trim().to_lowercase();
-        if attribute.starts_with("domain=") {
-            cookie.domain = attribute[7..].trim_start_matches('.').to_string();
-        } else if attribute.starts_with("path=") {
-            cookie.path = attribute[5..].to_string();
-        } else if attribute == "secure" {
+    for attr in parts {
+        let attr = attr.trim().to_lowercase();
+        if attr.starts_with("domain=") {
+            cookie.domain = attr[7..].trim_start_matches('.').to_string();
+        } else if attr.starts_with("path=") {
+            cookie.path = attr[5..].to_string();
+        } else if attr == "secure" {
             cookie.secure = true;
-        } else if attribute == "httponly" {
+        } else if attr == "httponly" {
             cookie.http_only = true;
         }
         // Ignore Max-Age, Expires, SameSite for now
@@ -840,7 +840,7 @@ fn collect_script_content(nodes: &[HtmlNode]) -> Vec<String> {
     let mut scripts = Vec::new();
     for node in nodes {
         if let HtmlNode::Element(el) = node {
-            if el.tag == "script" && el.attribute("src").is_none() {
+            if el.tag == "script" && el.attr("src").is_none() {
                 let mut text = String::new();
                 for child in &el.children {
                     if let HtmlNode::Text(t) = child {

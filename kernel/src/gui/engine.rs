@@ -574,10 +574,17 @@ pub fn show_progress(title: &str, message: &str, percent: u8) {
         .with_duration(30000)); // Long timeout for progress
 }
 
-/// Get active notifications for rendering
+/// Get active notifications for rendering.
+/// MEM-04: fast path when empty (called every render frame, ~60Hz).
 pub fn get_notifications() -> Vec<Toast> {
     let mut notifs = NOTIFICATIONS.lock();
+    if notifs.is_empty() {
+        return Vec::new();
+    }
     notifs.retain(|n| !n.is_expired());
+    if notifs.is_empty() {
+        return Vec::new();
+    }
     notifs.clone()
 }
 

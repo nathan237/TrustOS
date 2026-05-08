@@ -4,48 +4,48 @@
 
 use alloc::vec::Vec;
 use alloc::string::String;
-use super::protocol::{Op, Afu, kys};
+use super::protocol::{Gd, Ny, fys};
 
 
 pub struct Display {
     
-    pub nzc: Vec<Op>,
+    pub globals: Vec<Gd>,
     
     
-    pub ltm: Vec<Afu>,
+    pub pending_events: Vec<Ny>,
     
     
-    pub jct: u32,
+    pub last_sync: u32,
 }
 
 impl Display {
     pub fn new() -> Self {
         Self {
-            nzc: kys(),
-            ltm: Vec::new(),
-            jct: 0,
+            globals: fys(),
+            pending_events: Vec::new(),
+            last_sync: 0,
         }
     }
     
     
-    pub fn sync(&mut self, qvp: u32) {
+    pub fn sync(&mut self, callback_id: u32) {
         
-        self.jct = qvp;
+        self.last_sync = callback_id;
     }
     
     
-    pub fn ytq(&self) -> &[Op] {
-        &self.nzc
+    pub fn qih(&self) -> &[Gd] {
+        &self.globals
     }
     
     
-    pub fn zhd(&mut self, id: Afu) {
-        self.ltm.push(id);
+    pub fn qrp(&mut self, event: Ny) {
+        self.pending_events.push(event);
     }
     
     
-    pub fn hjx(&mut self) -> Vec<Afu> {
-        core::mem::take(&mut self.ltm)
+    pub fn flush(&mut self) -> Vec<Ny> {
+        core::mem::take(&mut self.pending_events)
     }
 }
 
@@ -57,79 +57,79 @@ impl Default for Display {
 
 
 #[derive(Debug, Clone)]
-pub struct Dd {
-    pub ad: u32,
-    pub j: String,
-    pub ujk: String,
+pub struct Output {
+    pub id: u32,
+    pub name: String,
+    pub make: String,
     pub model: String,
-    pub b: i32,
-    pub c: i32,
-    pub vho: i32,  
-    pub vhn: i32, 
-    pub wvw: Subpixel,
-    pub xlt: Transform,
-    pub bv: i32,
-    pub gmv: Vec<Awm>,
-    pub eog: usize,
+    pub x: i32,
+    pub y: i32,
+    pub physical_width: i32,  
+    pub physical_height: i32, 
+    pub subpixel: Subpixel,
+    pub transform: Transform,
+    pub scale: i32,
+    pub modes: Vec<Ue>,
+    pub current_mode: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Subpixel {
-    F = 0,
+    Unknown = 0,
     None = 1,
-    Cyl = 2,
-    Cyk = 3,
-    Dlm = 4,
-    Dll = 5,
+    HorizontalRgb = 2,
+    HorizontalBgr = 3,
+    VerticalRgb = 4,
+    VerticalBgr = 5,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Transform {
-    M = 0,
-    Ckw = 1,
-    Cku = 2,
-    Ckv = 3,
-    Cdr = 4,
-    Cdu = 5,
-    Cds = 6,
-    Cdt = 7,
+    Normal = 0,
+    Rotate90 = 1,
+    Rotate180 = 2,
+    Rotate270 = 3,
+    Flipped = 4,
+    FlippedRotate90 = 5,
+    FlippedRotate180 = 6,
+    FlippedRotate270 = 7,
 }
 
 #[derive(Debug, Clone)]
-pub struct Awm {
-    pub z: i32,
-    pub ac: i32,
-    pub gqr: i32, 
+pub struct Ue {
+    pub width: i32,
+    pub height: i32,
+    pub refresh: i32, 
     pub flags: u32,   
 }
 
-impl Dd {
-    pub fn new(ad: u32, z: u32, ac: u32) -> Self {
+impl Output {
+    pub fn new(id: u32, width: u32, height: u32) -> Self {
         Self {
-            ad,
-            j: String::from("TrustOS-1"),
-            ujk: String::from("TrustOS"),
+            id,
+            name: String::from("TrustOS-1"),
+            make: String::from("TrustOS"),
             model: String::from("Virtual Display"),
-            b: 0,
-            c: 0,
-            vho: (z * 254 / 96) as i32, 
-            vhn: (ac * 254 / 96) as i32,
-            wvw: Subpixel::F,
-            xlt: Transform::M,
-            bv: 1,
-            gmv: alloc::vec![
-                Awm {
-                    z: z as i32,
-                    ac: ac as i32,
-                    gqr: 60000, 
+            x: 0,
+            y: 0,
+            physical_width: (width * 254 / 96) as i32, 
+            physical_height: (height * 254 / 96) as i32,
+            subpixel: Subpixel::Unknown,
+            transform: Transform::Normal,
+            scale: 1,
+            modes: alloc::vec![
+                Ue {
+                    width: width as i32,
+                    height: height as i32,
+                    refresh: 60000, 
                     flags: 3, 
                 }
             ],
-            eog: 0,
+            current_mode: 0,
         }
     }
     
-    pub fn eog(&self) -> &Awm {
-        &self.gmv[self.eog]
+    pub fn current_mode(&self) -> &Ue {
+        &self.modes[self.current_mode]
     }
 }

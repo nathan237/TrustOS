@@ -11,38 +11,38 @@ use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU64, Ordering};
 
 
-pub const BM_: u64 = 4096;
+pub const BO_: u64 = 4096;
 
 
-pub const NY_: u64 = 2 * 1024 * 1024;
+pub const OW_: u64 = 2 * 1024 * 1024;
 
 
-pub const NM_: u64 = 1024 * 1024 * 1024;
+pub const ON_: u64 = 1024 * 1024 * 1024;
 
 
 pub mod flags {
-    pub const Cz: u64 = 1 << 0;
-    pub const Ff: u64 = 1 << 1;
-    pub const Gq: u64 = 1 << 2;
-    pub const AJX_: u64 = 1 << 3;
-    pub const DEI_: u64 = 1 << 4;
-    pub const Bbh: u64 = 1 << 5;
-    pub const Beb: u64 = 1 << 6;
-    pub const DT_: u64 = 1 << 7;  
-    pub const Bhr: u64 = 1 << 8;
-    pub const DL_: u64 = 1 << 63;
+    pub const Bg: u64 = 1 << 0;
+    pub const Cg: u64 = 1 << 1;
+    pub const Cz: u64 = 1 << 2;
+    pub const ALS_: u64 = 1 << 3;
+    pub const DIC_: u64 = 1 << 4;
+    pub const Wc: u64 = 1 << 5;
+    pub const Xm: u64 = 1 << 6;
+    pub const EE_: u64 = 1 << 7;  
+    pub const Zd: u64 = 1 << 8;
+    pub const DT_: u64 = 1 << 63;
     
     
-    pub const Axk: u64 = Cz | Ff | Gq;
+    pub const Uq: u64 = Bg | Cg | Cz;
     
     
-    pub const Dfq: u64 = Cz | Gq;
+    pub const Bbj: u64 = Bg | Cz;
     
     
-    pub const Bqh: u64 = Cz | Ff | Gq | DL_;
+    pub const Adh: u64 = Bg | Cg | Cz | DT_;
     
     
-    pub const Bqf: u64 = Cz | Gq | DL_;
+    pub const Adf: u64 = Bg | Cz | DT_;
 }
 
 
@@ -51,36 +51,36 @@ pub mod flags {
 pub struct NptEntry(u64);
 
 impl NptEntry {
-    pub const fn azs() -> Self {
+    pub const fn empty() -> Self {
         Self(0)
     }
     
-    pub const fn new(ki: u64, flags: u64) -> Self {
-        Self((ki & 0x000F_FFFF_FFFF_F000) | flags)
+    pub const fn new(phys_addr: u64, flags: u64) -> Self {
+        Self((phys_addr & 0x000F_FFFF_FFFF_F000) | flags)
     }
     
     #[inline]
-    pub fn xo(&self) -> bool {
-        (self.0 & flags::Cz) != 0
+    pub fn is_present(&self) -> bool {
+        (self.0 & flags::Bg) != 0
     }
     
     #[inline]
-    pub fn jbl(&self) -> bool {
-        (self.0 & flags::DT_) != 0
+    pub fn is_huge(&self) -> bool {
+        (self.0 & flags::EE_) != 0
     }
     
     #[inline]
-    pub fn edz(&self) -> bool {
-        (self.0 & flags::Ff) != 0
+    pub fn is_writable(&self) -> bool {
+        (self.0 & flags::Cg) != 0
     }
     
     #[inline]
-    pub fn clc(&self) -> bool {
-        (self.0 & flags::DL_) == 0
+    pub fn is_executable(&self) -> bool {
+        (self.0 & flags::DT_) == 0
     }
     
     #[inline]
-    pub fn ki(&self) -> u64 {
+    pub fn phys_addr(&self) -> u64 {
         self.0 & 0x000F_FFFF_FFFF_F000
     }
     
@@ -89,15 +89,15 @@ impl NptEntry {
         self.0 & 0xFFF0_0000_0000_0FFF
     }
     
-    pub fn oj(&mut self, ki: u64, flags: u64) {
-        self.0 = (ki & 0x000F_FFFF_FFFF_F000) | flags;
+    pub fn set(&mut self, phys_addr: u64, flags: u64) {
+        self.0 = (phys_addr & 0x000F_FFFF_FFFF_F000) | flags;
     }
     
     pub fn clear(&mut self) {
         self.0 = 0;
     }
     
-    pub fn js(&self) -> u64 {
+    pub fn dm(&self) -> u64 {
         self.0
     }
 }
@@ -105,333 +105,333 @@ impl NptEntry {
 
 #[repr(C, align(4096))]
 pub struct NptTable {
-    ch: [NptEntry; 512],
+    entries: [NptEntry; 512],
 }
 
 impl NptTable {
     pub const fn new() -> Self {
         Self {
-            ch: [NptEntry::azs(); 512],
+            entries: [NptEntry::empty(); 512],
         }
     }
     
     #[inline]
-    pub fn bt(&self, index: usize) -> &NptEntry {
-        &self.ch[index]
+    pub fn entry(&self, index: usize) -> &NptEntry {
+        &self.entries[index]
     }
     
     #[inline]
-    pub fn epx(&mut self, index: usize) -> &mut NptEntry {
-        &mut self.ch[index]
+    pub fn entry_mut(&mut self, index: usize) -> &mut NptEntry {
+        &mut self.entries[index]
     }
     
-    pub fn ki(&self) -> u64 {
-        let ju = self as *const _ as u64;
-        ju.nj(crate::memory::lr())
+    pub fn phys_addr(&self) -> u64 {
+        let virt = self as *const _ as u64;
+        virt.wrapping_sub(crate::memory::hhdm_offset())
     }
 }
 
 
 pub struct Npt {
     
-    wc: Box<NptTable>,
+    pml4: Box<NptTable>,
     
     
     tables: Vec<Box<NptTable>>,
     
     
-    dht: u64,
+    guest_memory_size: u64,
     
     
-    fkt: u64,
+    host_phys_base: u64,
     
     
-    ajv: u32,
+    asid: u32,
 }
 
 impl Npt {
     
-    pub fn new(ajv: u32) -> Self {
+    pub fn new(asid: u32) -> Self {
         Self {
-            wc: Box::new(NptTable::new()),
+            pml4: Box::new(NptTable::new()),
             tables: Vec::new(),
-            dht: 0,
-            fkt: 0,
-            ajv,
+            guest_memory_size: 0,
+            host_phys_base: 0,
+            asid,
         }
     }
     
     
-    pub fn lnp(&self) -> u64 {
-        self.wc.ki()
+    pub fn ncr3(&self) -> u64 {
+        self.pml4.phys_addr()
     }
     
     
-    pub fn jm(&self) -> u64 {
-        self.lnp()
+    pub fn cr3(&self) -> u64 {
+        self.ncr3()
     }
     
     
-    pub fn ajv(&self) -> u32 {
-        self.ajv
+    pub fn asid(&self) -> u32 {
+        self.asid
     }
     
     
     
     
-    pub fn jew(
+    pub fn map_range(
         &mut self,
-        axy: u64,
-        die: u64,
-        aw: u64,
-        dao: u64,
+        zy: u64,
+        bha: u64,
+        size: u64,
+        bda: u64,
     ) -> Result<(), &'static str> {
-        let mut l = 0u64;
+        let mut offset = 0u64;
         
-        while l < aw {
-            let pe = axy + l;
-            let dif = die + l;
-            let ia = aw - l;
+        while offset < size {
+            let gm = zy + offset;
+            let bhb = bha + offset;
+            let ck = size - offset;
             
             
-            if ia >= NM_ 
-                && (pe & (NM_ - 1)) == 0 
-                && (dif & (NM_ - 1)) == 0 
+            if ck >= ON_ 
+                && (gm & (ON_ - 1)) == 0 
+                && (bhb & (ON_ - 1)) == 0 
             {
-                self.ujm(pe, dif, dao)?;
-                l += NM_;
-            } else if ia >= NY_ 
-                && (pe & (NY_ - 1)) == 0 
-                && (dif & (NY_ - 1)) == 0 
+                self.map_1gb_page(gm, bhb, bda)?;
+                offset += ON_;
+            } else if ck >= OW_ 
+                && (gm & (OW_ - 1)) == 0 
+                && (bhb & (OW_ - 1)) == 0 
             {
-                self.ujo(pe, dif, dao)?;
-                l += NY_;
+                self.map_2mb_page(gm, bhb, bda)?;
+                offset += OW_;
             } else {
-                self.lkh(pe, dif, dao)?;
-                l += BM_;
+                self.map_4kb_page(gm, bhb, bda)?;
+                offset += BO_;
             }
         }
         
-        self.dht = self.dht.am(axy + aw);
-        if self.fkt == 0 {
-            self.fkt = die;
+        self.guest_memory_size = self.guest_memory_size.max(zy + size);
+        if self.host_phys_base == 0 {
+            self.host_phys_base = bha;
         }
         
         Ok(())
     }
     
     
-    fn lkh(&mut self, pe: u64, dif: u64, dao: u64) -> Result<(), &'static str> {
-        let wd = ((pe >> 39) & 0x1FF) as usize;
-        let ru = ((pe >> 30) & 0x1FF) as usize;
-        let rn = ((pe >> 21) & 0x1FF) as usize;
-        let yf = ((pe >> 12) & 0x1FF) as usize;
+    fn map_4kb_page(&mut self, gm: u64, bhb: u64, bda: u64) -> Result<(), &'static str> {
+        let lu = ((gm >> 39) & 0x1FF) as usize;
+        let jc = ((gm >> 30) & 0x1FF) as usize;
+        let iw = ((gm >> 21) & 0x1FF) as usize;
+        let mw = ((gm >> 12) & 0x1FF) as usize;
         
         
-        let hvm: *mut NptTable = &mut *self.wc;
-        let auu = self.dqo(hvm, wd)?;
-        let ss = unsafe { &mut *((auu + crate::memory::lr()) as *mut NptTable) };
+        let dwr: *mut NptTable = &mut *self.pml4;
+        let xz = self.ensure_table_at(dwr, lu)?;
+        let jt = unsafe { &mut *((xz + crate::memory::hhdm_offset()) as *mut NptTable) };
         
         
-        let ayi = self.dqo(ss as *mut _, ru)?;
-        let sr = unsafe { &mut *((ayi + crate::memory::lr()) as *mut NptTable) };
+        let aae = self.ensure_table_at(jt as *mut _, jc)?;
+        let js = unsafe { &mut *((aae + crate::memory::hhdm_offset()) as *mut NptTable) };
         
         
-        let bwe = self.dqo(sr as *mut _, rn)?;
-        let se = unsafe { &mut *((bwe + crate::memory::lr()) as *mut NptTable) };
+        let amj = self.ensure_table_at(js as *mut _, iw)?;
+        let jd = unsafe { &mut *((amj + crate::memory::hhdm_offset()) as *mut NptTable) };
         
         
-        se.epx(yf).oj(dif, dao);
-        
-        Ok(())
-    }
-    
-    
-    fn ujo(&mut self, pe: u64, dif: u64, dao: u64) -> Result<(), &'static str> {
-        let wd = ((pe >> 39) & 0x1FF) as usize;
-        let ru = ((pe >> 30) & 0x1FF) as usize;
-        let rn = ((pe >> 21) & 0x1FF) as usize;
-        
-        
-        let hvm: *mut NptTable = &mut *self.wc;
-        let auu = self.dqo(hvm, wd)?;
-        let ss = unsafe { &mut *((auu + crate::memory::lr()) as *mut NptTable) };
-        
-        
-        let ayi = self.dqo(ss as *mut _, ru)?;
-        let sr = unsafe { &mut *((ayi + crate::memory::lr()) as *mut NptTable) };
-        
-        
-        sr.epx(rn).oj(dif, dao | flags::DT_);
+        jd.entry_mut(mw).set(bhb, bda);
         
         Ok(())
     }
     
     
-    fn ujm(&mut self, pe: u64, dif: u64, dao: u64) -> Result<(), &'static str> {
-        let wd = ((pe >> 39) & 0x1FF) as usize;
-        let ru = ((pe >> 30) & 0x1FF) as usize;
+    fn map_2mb_page(&mut self, gm: u64, bhb: u64, bda: u64) -> Result<(), &'static str> {
+        let lu = ((gm >> 39) & 0x1FF) as usize;
+        let jc = ((gm >> 30) & 0x1FF) as usize;
+        let iw = ((gm >> 21) & 0x1FF) as usize;
         
         
-        let hvm: *mut NptTable = &mut *self.wc;
-        let auu = self.dqo(hvm, wd)?;
-        let ss = unsafe { &mut *((auu + crate::memory::lr()) as *mut NptTable) };
+        let dwr: *mut NptTable = &mut *self.pml4;
+        let xz = self.ensure_table_at(dwr, lu)?;
+        let jt = unsafe { &mut *((xz + crate::memory::hhdm_offset()) as *mut NptTable) };
         
         
-        ss.epx(ru).oj(dif, dao | flags::DT_);
+        let aae = self.ensure_table_at(jt as *mut _, jc)?;
+        let js = unsafe { &mut *((aae + crate::memory::hhdm_offset()) as *mut NptTable) };
+        
+        
+        js.entry_mut(iw).set(bhb, bda | flags::EE_);
         
         Ok(())
     }
     
     
-    fn dqo(&mut self, lsd: *mut NptTable, index: usize) -> Result<u64, &'static str> {
-        let tu = unsafe { &mut *lsd };
+    fn map_1gb_page(&mut self, gm: u64, bhb: u64, bda: u64) -> Result<(), &'static str> {
+        let lu = ((gm >> 39) & 0x1FF) as usize;
+        let jc = ((gm >> 30) & 0x1FF) as usize;
         
-        if !tu.bt(index).xo() {
+        
+        let dwr: *mut NptTable = &mut *self.pml4;
+        let xz = self.ensure_table_at(dwr, lu)?;
+        let jt = unsafe { &mut *((xz + crate::memory::hhdm_offset()) as *mut NptTable) };
+        
+        
+        jt.entry_mut(jc).set(bhb, bda | flags::EE_);
+        
+        Ok(())
+    }
+    
+    
+    fn ensure_table_at(&mut self, gmd: *mut NptTable, index: usize) -> Result<u64, &'static str> {
+        let parent = unsafe { &mut *gmd };
+        
+        if !parent.entry(index).is_present() {
             
-            let css = Box::new(NptTable::new());
-            let cig = css.ki();
-            self.tables.push(css);
+            let ayl = Box::new(NptTable::new());
+            let asj = ayl.phys_addr();
+            self.tables.push(ayl);
             
             
-            tu.epx(index).oj(cig, flags::Cz | flags::Ff | flags::Gq);
-            Ok(cig)
+            parent.entry_mut(index).set(asj, flags::Bg | flags::Cg | flags::Cz);
+            Ok(asj)
         } else {
-            Ok(tu.bt(index).ki())
+            Ok(parent.entry(index).phys_addr())
         }
     }
     
     
-    pub fn zub(&mut self, pe: u64) -> Result<(), &'static str> {
-        let wd = ((pe >> 39) & 0x1FF) as usize;
-        let ru = ((pe >> 30) & 0x1FF) as usize;
-        let rn = ((pe >> 21) & 0x1FF) as usize;
-        let yf = ((pe >> 12) & 0x1FF) as usize;
+    pub fn rbh(&mut self, gm: u64) -> Result<(), &'static str> {
+        let lu = ((gm >> 39) & 0x1FF) as usize;
+        let jc = ((gm >> 30) & 0x1FF) as usize;
+        let iw = ((gm >> 21) & 0x1FF) as usize;
+        let mw = ((gm >> 12) & 0x1FF) as usize;
         
         
-        if !self.wc.bt(wd).xo() {
+        if !self.pml4.entry(lu).is_present() {
             return Ok(());  
         }
         
-        let auu = self.wc.bt(wd).ki();
-        let ss = unsafe { &mut *((auu + crate::memory::lr()) as *mut NptTable) };
+        let xz = self.pml4.entry(lu).phys_addr();
+        let jt = unsafe { &mut *((xz + crate::memory::hhdm_offset()) as *mut NptTable) };
         
-        if !ss.bt(ru).xo() {
+        if !jt.entry(jc).is_present() {
             return Ok(());
         }
         
-        if ss.bt(ru).jbl() {
+        if jt.entry(jc).is_huge() {
             
-            ss.epx(ru).clear();
+            jt.entry_mut(jc).clear();
             return Ok(());
         }
         
-        let ayi = ss.bt(ru).ki();
-        let sr = unsafe { &mut *((ayi + crate::memory::lr()) as *mut NptTable) };
+        let aae = jt.entry(jc).phys_addr();
+        let js = unsafe { &mut *((aae + crate::memory::hhdm_offset()) as *mut NptTable) };
         
-        if !sr.bt(rn).xo() {
+        if !js.entry(iw).is_present() {
             return Ok(());
         }
         
-        if sr.bt(rn).jbl() {
+        if js.entry(iw).is_huge() {
             
-            sr.epx(rn).clear();
+            js.entry_mut(iw).clear();
             return Ok(());
         }
         
-        let bwe = sr.bt(rn).ki();
-        let se = unsafe { &mut *((bwe + crate::memory::lr()) as *mut NptTable) };
+        let amj = js.entry(iw).phys_addr();
+        let jd = unsafe { &mut *((amj + crate::memory::hhdm_offset()) as *mut NptTable) };
         
         
-        se.epx(yf).clear();
+        jd.entry_mut(mw).clear();
         
         Ok(())
     }
     
     
-    pub fn dmr(&self, pe: u64) -> Option<u64> {
-        let wd = ((pe >> 39) & 0x1FF) as usize;
-        let ru = ((pe >> 30) & 0x1FF) as usize;
-        let rn = ((pe >> 21) & 0x1FF) as usize;
-        let yf = ((pe >> 12) & 0x1FF) as usize;
+    pub fn translate(&self, gm: u64) -> Option<u64> {
+        let lu = ((gm >> 39) & 0x1FF) as usize;
+        let jc = ((gm >> 30) & 0x1FF) as usize;
+        let iw = ((gm >> 21) & 0x1FF) as usize;
+        let mw = ((gm >> 12) & 0x1FF) as usize;
         
-        if !self.wc.bt(wd).xo() {
+        if !self.pml4.entry(lu).is_present() {
             return None;
         }
         
-        let auu = self.wc.bt(wd).ki();
-        let ss = unsafe { &*((auu + crate::memory::lr()) as *const NptTable) };
+        let xz = self.pml4.entry(lu).phys_addr();
+        let jt = unsafe { &*((xz + crate::memory::hhdm_offset()) as *const NptTable) };
         
-        if !ss.bt(ru).xo() {
+        if !jt.entry(jc).is_present() {
             return None;
         }
         
-        if ss.bt(ru).jbl() {
+        if jt.entry(jc).is_huge() {
             
-            let ar = ss.bt(ru).ki();
-            return Some(ar | (pe & (NM_ - 1)));
+            let base = jt.entry(jc).phys_addr();
+            return Some(base | (gm & (ON_ - 1)));
         }
         
-        let ayi = ss.bt(ru).ki();
-        let sr = unsafe { &*((ayi + crate::memory::lr()) as *const NptTable) };
+        let aae = jt.entry(jc).phys_addr();
+        let js = unsafe { &*((aae + crate::memory::hhdm_offset()) as *const NptTable) };
         
-        if !sr.bt(rn).xo() {
+        if !js.entry(iw).is_present() {
             return None;
         }
         
-        if sr.bt(rn).jbl() {
+        if js.entry(iw).is_huge() {
             
-            let ar = sr.bt(rn).ki();
-            return Some(ar | (pe & (NY_ - 1)));
+            let base = js.entry(iw).phys_addr();
+            return Some(base | (gm & (OW_ - 1)));
         }
         
-        let bwe = sr.bt(rn).ki();
-        let se = unsafe { &*((bwe + crate::memory::lr()) as *const NptTable) };
+        let amj = js.entry(iw).phys_addr();
+        let jd = unsafe { &*((amj + crate::memory::hhdm_offset()) as *const NptTable) };
         
-        if !se.bt(yf).xo() {
+        if !jd.entry(mw).is_present() {
             return None;
         }
         
         
-        let ar = se.bt(yf).ki();
-        Some(ar | (pe & (BM_ - 1)))
+        let base = jd.entry(mw).phys_addr();
+        Some(base | (gm & (BO_ - 1)))
     }
     
     
     
-    pub fn pjp(&mut self, aw: u64) -> Result<(), &'static str> {
-        self.jew(0, 0, aw, flags::Axk)
+    pub fn setup_identity_mapping(&mut self, size: u64) -> Result<(), &'static str> {
+        self.map_range(0, 0, size, flags::Uq)
     }
     
     
-    pub fn wkx(
+    pub fn setup_guest_memory(
         &mut self,
-        die: u64,
-        aw: u64,
+        bha: u64,
+        size: u64,
     ) -> Result<(), &'static str> {
         
-        self.jew(0, die, aw, flags::Axk)?;
+        self.map_range(0, bha, size, flags::Uq)?;
         
-        self.fkt = die;
-        self.dht = aw;
+        self.host_phys_base = bha;
+        self.guest_memory_size = size;
         
         Ok(())
     }
     
     
-    pub fn yys(&self) {
+    pub fn qlw(&self) {
         unsafe {
-            super::ofh(0, self.ajv);
+            super::ihj(0, self.asid);
         }
     }
     
     
-    pub fn cm(&self) -> Bnl {
-        Bnl {
-            xah: 1 + self.tables.len(),  
-            dht: self.dht,
-            fkt: self.fkt,
-            ajv: self.ajv,
+    pub fn stats(&self) -> Abt {
+        Abt {
+            table_count: 1 + self.tables.len(),  
+            guest_memory_size: self.guest_memory_size,
+            host_phys_base: self.host_phys_base,
+            asid: self.asid,
         }
     }
 }
@@ -445,72 +445,72 @@ impl Drop for Npt {
 
 
 #[derive(Debug)]
-pub struct Bnl {
-    pub xah: usize,
-    pub dht: u64,
-    pub fkt: u64,
-    pub ajv: u32,
+pub struct Abt {
+    pub table_count: usize,
+    pub guest_memory_size: u64,
+    pub host_phys_base: u64,
+    pub asid: u32,
 }
 
 
 pub struct AsidAllocator {
-    loh: AtomicU64,
-    lkr: u32,
+    next_asid: AtomicU64,
+    max_asid: u32,
 }
 
 impl AsidAllocator {
-    pub const fn new(lkr: u32) -> Self {
+    pub const fn new(max_asid: u32) -> Self {
         Self {
-            loh: AtomicU64::new(1),  
-            lkr,
+            next_asid: AtomicU64::new(1),  
+            max_asid,
         }
     }
     
     
-    pub fn ijo(&self) -> Option<u32> {
-        let ajv = self.loh.fetch_add(1, Ordering::SeqCst);
-        if ajv as u32 >= self.lkr {
+    pub fn allocate(&self) -> Option<u32> {
+        let asid = self.next_asid.fetch_add(1, Ordering::SeqCst);
+        if asid as u32 >= self.max_asid {
             
-            self.loh.store(1, Ordering::SeqCst);
+            self.next_asid.store(1, Ordering::SeqCst);
             Some(1)
         } else {
-            Some(ajv as u32)
+            Some(asid as u32)
         }
     }
     
     
-    pub fn aez(&self, ajv: u32) {
+    pub fn free(&self, asid: u32) {
         
         unsafe {
-            super::ofh(0, ajv);
+            super::ihj(0, asid);
         }
     }
 }
 
 
-static AKV_: AsidAllocator = AsidAllocator::new(65536);
+static AMQ_: AsidAllocator = AsidAllocator::new(65536);
 
 
-pub fn mva() -> Option<u32> {
-    AKV_.ijo()
+pub fn hev() -> Option<u32> {
+    AMQ_.allocate()
 }
 
 
-pub fn sxb(ajv: u32) {
-    AKV_.aez(ajv);
+pub fn lyo(asid: u32) {
+    AMQ_.free(asid);
 }
 
 
-pub fn ykn(fe: &[u8]) -> Result<Npt, &'static str> {
-    let ajv = mva().ok_or("Failed to allocate ASID")?;
-    let mut npt = Npt::new(ajv);
+pub fn qbu(guest_memory: &[u8]) -> Result<Npt, &'static str> {
+    let asid = hev().ok_or("Failed to allocate ASID")?;
+    let mut npt = Npt::new(asid);
     
     
-    let tie = fe.fq() as u64;
-    let die = tie.nj(crate::memory::lr());
+    let mgn = guest_memory.as_ptr() as u64;
+    let bha = mgn.wrapping_sub(crate::memory::hhdm_offset());
     
     
-    npt.wkx(die, fe.len() as u64)?;
+    npt.setup_guest_memory(bha, guest_memory.len() as u64)?;
     
     Ok(npt)
 }

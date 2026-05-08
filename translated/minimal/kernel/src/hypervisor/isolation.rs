@@ -22,30 +22,30 @@ pub enum MemoryProtection {
     
     None = 0,
     
-    Bz = 0b001,
+    ReadOnly = 0b001,
     
-    Jx = 0b011,
+    ReadWrite = 0b011,
     
-    Cwg = 0b100,
+    ExecuteOnly = 0b100,
     
-    Ckg = 0b101,
+    ReadExecute = 0b101,
     
-    Bqt = 0b111,
+    ReadWriteExecute = 0b111,
 }
 
 impl MemoryProtection {
     
-    pub fn ogr(&self) -> bool {
+    pub fn is_readable(&self) -> bool {
         (*self as u64) & 0b001 != 0
     }
     
     
-    pub fn edz(&self) -> bool {
+    pub fn is_writable(&self) -> bool {
         (*self as u64) & 0b010 != 0
     }
     
     
-    pub fn clc(&self) -> bool {
+    pub fn is_executable(&self) -> bool {
         (*self as u64) & 0b100 != 0
     }
 }
@@ -58,61 +58,61 @@ impl MemoryProtection {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum RegionType {
     
-    Jw,
+    Ram,
     
-    Aqc,
+    Code,
     
-    Ckt,
+    RoData,
     
-    Ckz,
+    RwData,
     
-    Azf,
+    Stack,
     
-    Nn,
+    Mmio,
     
-    Nw,
+    Reserved,
     
-    Cmv,
+    Shared,
 }
 
 
 #[derive(Debug, Clone)]
 pub struct MemoryRegion {
-    pub ay: u64,
-    pub aw: u64,
-    pub bwo: RegionType,
-    pub ewx: MemoryProtection,
-    pub j: &'static str,
+    pub start: u64,
+    pub size: u64,
+    pub region_type: RegionType,
+    pub protection: MemoryProtection,
+    pub name: &'static str,
 }
 
 impl MemoryRegion {
-    pub fn new(ay: u64, aw: u64, bwo: RegionType, j: &'static str) -> Self {
-        let ewx = match bwo {
-            RegionType::Jw => MemoryProtection::Bqt,
-            RegionType::Aqc => MemoryProtection::Ckg,
-            RegionType::Ckt => MemoryProtection::Bz,
-            RegionType::Ckz => MemoryProtection::Jx,
-            RegionType::Azf => MemoryProtection::Jx,
-            RegionType::Nn => MemoryProtection::Jx,
-            RegionType::Nw => MemoryProtection::None,
-            RegionType::Cmv => MemoryProtection::Jx,
+    pub fn new(start: u64, size: u64, region_type: RegionType, name: &'static str) -> Self {
+        let protection = match region_type {
+            RegionType::Ram => MemoryProtection::ReadWriteExecute,
+            RegionType::Code => MemoryProtection::ReadExecute,
+            RegionType::RoData => MemoryProtection::ReadOnly,
+            RegionType::RwData => MemoryProtection::ReadWrite,
+            RegionType::Stack => MemoryProtection::ReadWrite,
+            RegionType::Mmio => MemoryProtection::ReadWrite,
+            RegionType::Reserved => MemoryProtection::None,
+            RegionType::Shared => MemoryProtection::ReadWrite,
         };
         
         MemoryRegion {
-            ay,
-            aw,
-            bwo,
-            ewx,
-            j,
+            start,
+            size,
+            region_type,
+            protection,
+            name,
         }
     }
     
-    pub fn ci(&self) -> u64 {
-        self.ay + self.aw
+    pub fn end(&self) -> u64 {
+        self.start + self.size
     }
     
-    pub fn contains(&self, ag: u64) -> bool {
-        ag >= self.ay && ag < self.ci()
+    pub fn contains(&self, addr: u64) -> bool {
+        addr >= self.start && addr < self.end()
     }
 }
 
@@ -121,17 +121,17 @@ impl MemoryRegion {
 
 
 
-pub struct Bam {
-    pub fk: u64,
-    pub afx: Vec<MemoryRegion>,
-    pub mmi: u64,
+pub struct Vu {
+    pub vm_id: u64,
+    pub regions: Vec<MemoryRegion>,
+    pub gzr: u64,
 }
 
-impl Bam {
+impl Vu {
     
-    pub fn new(fk: u64, afc: usize) -> Self {
-        let mmi = (afc * 1024 * 1024) as u64;
-        let mut afx = Vec::new();
+    pub fn new(vm_id: u64, memory_mb: usize) -> Self {
+        let gzr = (memory_mb * 1024 * 1024) as u64;
+        let mut regions = Vec::new();
         
         
         
@@ -139,44 +139,44 @@ impl Bam {
         
         
         
-        afx.push(MemoryRegion::new(0x0000, 0x1000, RegionType::Nw, "null_guard"));
-        afx.push(MemoryRegion::new(0x1000, 0x7000, RegionType::Aqc, "code"));
-        afx.push(MemoryRegion::new(0x8000, 0x8000, RegionType::Azf, "stack"));
+        regions.push(MemoryRegion::new(0x0000, 0x1000, RegionType::Reserved, "null_guard"));
+        regions.push(MemoryRegion::new(0x1000, 0x7000, RegionType::Code, "code"));
+        regions.push(MemoryRegion::new(0x8000, 0x8000, RegionType::Stack, "stack"));
         
-        let bjt = 0x10000u64;
-        let cpv = mmi.ao(bjt);
-        if cpv > 0 {
-            afx.push(MemoryRegion::new(bjt, cpv, RegionType::Jw, "data"));
+        let data_start = 0x10000u64;
+        let data_size = gzr.saturating_sub(data_start);
+        if data_size > 0 {
+            regions.push(MemoryRegion::new(data_start, data_size, RegionType::Ram, "data"));
         }
         
-        Bam {
-            fk,
-            afx,
-            mmi,
+        Vu {
+            vm_id,
+            regions,
+            gzr,
         }
     }
     
     
-    pub fn sto(&self, ag: u64) -> Option<&MemoryRegion> {
-        self.afx.iter().du(|m| m.contains(ag))
+    pub fn find_region(&self, addr: u64) -> Option<&MemoryRegion> {
+        self.regions.iter().find(|r| r.contains(addr))
     }
     
     
-    pub fn yen(&mut self, aoz: MemoryRegion) {
+    pub fn pxv(&mut self, qd: MemoryRegion) {
         
-        self.afx.push(aoz);
+        self.regions.push(qd);
     }
     
     
-    pub fn yhv(&self, ag: u64, rm: bool, jbh: bool) -> bool {
-        if let Some(aoz) = self.sto(ag) {
-            if rm && !aoz.ewx.edz() {
+    pub fn pzk(&self, addr: u64, is_write: bool, erk: bool) -> bool {
+        if let Some(qd) = self.find_region(addr) {
+            if is_write && !qd.protection.is_writable() {
                 return false;
             }
-            if jbh && !aoz.ewx.clc() {
+            if erk && !qd.protection.is_executable() {
                 return false;
             }
-            if !rm && !jbh && !aoz.ewx.ogr() {
+            if !is_write && !erk && !qd.protection.is_readable() {
                 return false;
             }
             true
@@ -195,83 +195,83 @@ impl Bam {
 pub enum ViolationType {
     Read,
     Write,
-    Ahw,
-    Jx,
-    Cqp,
+    Execute,
+    ReadWrite,
+    WriteExecute,
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Lj {
-    pub fk: u64,
-    pub hmc: u64,
-    pub hmb: Option<u64>,
-    pub igm: ViolationType,
-    pub aet: u64,
-    pub wb: u64,
+pub struct Ev {
+    pub vm_id: u64,
+    pub guest_physical: u64,
+    pub drb: Option<u64>,
+    pub violation_type: ViolationType,
+    pub timestamp_ms: u64,
+    pub guest_rip: u64,
 }
 
-static BIJ_: Mutex<Vec<Lj>> = Mutex::new(Vec::new());
-static BII_: AtomicU64 = AtomicU64::new(0);
+static BKQ_: Mutex<Vec<Ev>> = Mutex::new(Vec::new());
+static BKP_: AtomicU64 = AtomicU64::new(0);
 
 
-pub fn pau(
-    fk: u64,
-    hmc: u64,
-    hmb: Option<u64>,
-    spa: u64,
-    wb: u64,
+pub fn iyv(
+    vm_id: u64,
+    guest_physical: u64,
+    drb: Option<u64>,
+    exit_qualification: u64,
+    guest_rip: u64,
 ) {
-    let igm = vel(spa);
+    let violation_type = nrp(exit_qualification);
     
-    let xrr = Lj {
-        fk,
-        hmc,
-        hmb,
-        igm,
-        aet: crate::time::lc(),
-        wb,
+    let psc = Ev {
+        vm_id,
+        guest_physical,
+        drb,
+        violation_type,
+        timestamp_ms: crate::time::uptime_ms(),
+        guest_rip,
     };
     
-    BII_.fetch_add(1, Ordering::SeqCst);
+    BKP_.fetch_add(1, Ordering::SeqCst);
     
-    let mut log = BIJ_.lock();
+    let mut log = BKQ_.lock();
     if log.len() >= 100 {
         log.remove(0); 
     }
-    log.push(xrr);
+    log.push(psc);
     
     crate::serial_println!(
         "[EPT] Violation: VM {} GPA=0x{:X} type={:?} at RIP=0x{:X}",
-        fk, hmc, igm, wb
+        vm_id, guest_physical, violation_type, guest_rip
     );
 }
 
 
-fn vel(lwp: u64) -> ViolationType {
-    let read = (lwp & 1) != 0;
-    let write = (lwp & 2) != 0;
-    let bna = (lwp & 4) != 0;
+fn nrp(qualification: u64) -> ViolationType {
+    let read = (qualification & 1) != 0;
+    let write = (qualification & 2) != 0;
+    let execute = (qualification & 4) != 0;
     
-    match (read, write, bna) {
-        (true, true, _) => ViolationType::Jx,
-        (_, true, true) => ViolationType::Cqp,
+    match (read, write, execute) {
+        (true, true, _) => ViolationType::ReadWrite,
+        (_, true, true) => ViolationType::WriteExecute,
         (_, true, _) => ViolationType::Write,
-        (_, _, true) => ViolationType::Ahw,
+        (_, _, true) => ViolationType::Execute,
         _ => ViolationType::Read,
     }
 }
 
 
-pub fn pyh() -> u64 {
-    BII_.load(Ordering::SeqCst)
+pub fn jqd() -> u64 {
+    BKP_.load(Ordering::SeqCst)
 }
 
 
-pub fn vte(az: usize) -> Vec<Lj> {
-    let log = BIJ_.lock();
-    let ay = if log.len() > az { log.len() - az } else { 0 };
-    log[ay..].ip()
+pub fn odq(count: usize) -> Vec<Ev> {
+    let log = BKQ_.lock();
+    let start = if log.len() > count { log.len() - count } else { 0 };
+    log[start..].to_vec()
 }
 
 
@@ -280,67 +280,67 @@ pub fn vte(az: usize) -> Vec<Lj> {
 
 
 #[derive(Debug, Clone)]
-pub struct Aer {
-    pub cg: bool,
+pub struct Ni {
+    pub passed: bool,
     pub message: &'static str,
-    pub qj: SecuritySeverity,
+    pub severity: SecuritySeverity,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SecuritySeverity {
-    V,
-    Oo,
-    Aj,
+    Info,
+    Warning,
+    Critical,
 }
 
 
-pub fn yic(layout: &Bam) -> Vec<Aer> {
-    let mut fer = Vec::new();
+pub fn pzr(layout: &Vu) -> Vec<Ni> {
+    let mut cgx = Vec::new();
     
     
-    let tmv = layout.afx.iter()
-        .any(|m| m.ay == 0 && m.bwo == RegionType::Nw);
+    let mjt = layout.regions.iter()
+        .any(|r| r.start == 0 && r.region_type == RegionType::Reserved);
     
-    fer.push(Aer {
-        cg: tmv,
+    cgx.push(Ni {
+        passed: mjt,
         message: "Null pointer guard page",
-        qj: SecuritySeverity::Aj,
+        severity: SecuritySeverity::Critical,
     });
     
     
-    let tnd = layout.afx.iter()
-        .any(|m| m.ewx == MemoryProtection::Bqt && 
-             m.bwo != RegionType::Jw);
+    let mkb = layout.regions.iter()
+        .any(|r| r.protection == MemoryProtection::ReadWriteExecute && 
+             r.region_type != RegionType::Ram);
     
-    fer.push(Aer {
-        cg: !tnd,
+    cgx.push(Ni {
+        passed: !mkb,
         message: "W^X (no writable+executable regions)",
-        qj: SecuritySeverity::Oo,
+        severity: SecuritySeverity::Warning,
     });
     
     
-    let wsc = layout.afx.iter()
-        .hi(|m| m.bwo == RegionType::Azf)
-        .xx(|m| !m.ewx.clc());
+    let ovt = layout.regions.iter()
+        .filter(|r| r.region_type == RegionType::Stack)
+        .all(|r| !r.protection.is_executable());
     
-    fer.push(Aer {
-        cg: wsc,
+    cgx.push(Ni {
+        passed: ovt,
         message: "Stack is non-executable",
-        qj: SecuritySeverity::Aj,
+        severity: SecuritySeverity::Critical,
     });
     
     
-    let rlh = layout.afx.iter()
-        .hi(|m| m.bwo == RegionType::Aqc)
-        .xx(|m| !m.ewx.edz());
+    let kus = layout.regions.iter()
+        .filter(|r| r.region_type == RegionType::Code)
+        .all(|r| !r.protection.is_writable());
     
-    fer.push(Aer {
-        cg: rlh,
+    cgx.push(Ni {
+        passed: kus,
         message: "Code sections are read-only",
-        qj: SecuritySeverity::Oo,
+        severity: SecuritySeverity::Warning,
     });
     
-    fer
+    cgx
 }
 
 
@@ -349,54 +349,54 @@ pub fn yic(layout: &Bam) -> Vec<Aer> {
 
 
 #[derive(Debug, Clone, Default)]
-pub struct Aup {
-    pub jtu: u64,
-    pub zby: u64,
-    pub zkn: u64,
-    pub zoe: u64,
-    pub cnt: u64,
+pub struct Tf {
+    pub fdh: u64,
+    pub mapped_pages: u64,
+    pub rwx_pages: u64,
+    pub shared_pages: u64,
+    pub violations: u64,
 }
 
-static BIP_: Mutex<BTreeMap<u64, Aup>> = Mutex::new(BTreeMap::new());
+static BKV_: Mutex<BTreeMap<u64, Tf>> = Mutex::new(BTreeMap::new());
 
 
-pub fn yti(fk: u64) -> Aup {
-    BIP_.lock().get(&fk).abn().age()
-}
-
-
-pub fn zuu(fk: u64, unx: Aup) {
-    BIP_.lock().insert(fk, unx);
+pub fn qhy(vm_id: u64) -> Tf {
+    BKV_.lock().get(&vm_id).cloned().unwrap_or_default()
 }
 
 
+pub fn rbq(vm_id: u64, metrics: Tf) {
+    BKV_.lock().insert(vm_id, metrics);
+}
 
 
 
 
-pub fn ppw() -> bool {
+
+
+pub fn jjv() -> bool {
     
-    let mh = super::vmx::bcg(0x48C);
+    let cap = super::vmx::ach(0x48C);
     
-    (mh & 1) != 0
+    (cap & 1) != 0
 }
 
 
-pub fn zqa() -> bool {
-    let mh = super::vmx::bcg(0x48C);
+pub fn qxy() -> bool {
+    let cap = super::vmx::ach(0x48C);
     
-    (mh & (1 << 21)) != 0
+    (cap & (1 << 21)) != 0
 }
 
 
-pub fn zpz() -> bool {
-    let mh = super::vmx::bcg(0x48C);
+pub fn qxx() -> bool {
+    let cap = super::vmx::ach(0x48C);
     
-    (mh & (1 << 17)) != 0
+    (cap & (1 << 17)) != 0
 }
 
 
-pub fn ytd() -> u8 {
-    let mh = super::vmx::bcg(0x48C);
-    ((mh >> 8) & 0xFF) as u8
+pub fn qht() -> u8 {
+    let cap = super::vmx::ach(0x48C);
+    ((cap >> 8) & 0xFF) as u8
 }

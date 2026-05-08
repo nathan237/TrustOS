@@ -10,180 +10,180 @@
 use core::sync::atomic::{AtomicU64, AtomicBool, Ordering};
 
 
-const CXK_: u64 = 60;
+const DBC_: u64 = 60;
 
 
-const IA_: u64 = 16_666;
+const IU_: u64 = 16_666;
 
 
-const DTI_: u64 = 33_333;
+const DXA_: u64 = 33_333;
 
 
-const NB_: usize = 16;
+const OA_: usize = 16;
 
 
-static OK_: AtomicU64 = AtomicU64::new(0);
+static PI_: AtomicU64 = AtomicU64::new(0);
 
 
-static ASL_: [AtomicU64; NB_] = {
-    const Dm: AtomicU64 = AtomicU64::new(16_666);
-    [Dm; NB_]
+static AUP_: [AtomicU64; OA_] = {
+    const Bm: AtomicU64 = AtomicU64::new(16_666);
+    [Bm; OA_]
 };
-static ASJ_: AtomicU64 = AtomicU64::new(0);
+static AUN_: AtomicU64 = AtomicU64::new(0);
 
 
-static BFZ_: AtomicU64 = AtomicU64::new(60);
+static BID_: AtomicU64 = AtomicU64::new(60);
 
 
-static ABE_: AtomicU64 = AtomicU64::new(0);
+static ACU_: AtomicU64 = AtomicU64::new(0);
 
 
-static LJ_: AtomicU64 = AtomicU64::new(0);
+static MD_: AtomicU64 = AtomicU64::new(0);
 
 
-static AEF_: AtomicU64 = AtomicU64::new(0);
+static AFZ_: AtomicU64 = AtomicU64::new(0);
 
 
-static AJT_: AtomicBool = AtomicBool::new(true);
+static ALO_: AtomicBool = AtomicBool::new(true);
 
 
 pub fn init() {
-    let iu = super::engine::awf();
-    OK_.store(iu + IA_, Ordering::SeqCst);
-    ABE_.store(0, Ordering::Relaxed);
-    LJ_.store(0, Ordering::Relaxed);
-    ASJ_.store(0, Ordering::Relaxed);
-    crate::serial_println!("[VSYNC] Initialized: target {}fps ({}us/frame)", CXK_, IA_);
+    let cy = super::engine::yy();
+    PI_.store(cy + IU_, Ordering::SeqCst);
+    ACU_.store(0, Ordering::Relaxed);
+    MD_.store(0, Ordering::Relaxed);
+    AUN_.store(0, Ordering::Relaxed);
+    crate::serial_println!("[VSYNC] Initialized: target {}fps ({}us/frame)", DBC_, IU_);
 }
 
 
 #[inline]
-pub fn yrj() -> u64 {
-    super::engine::awf()
+pub fn qgf() -> u64 {
+    super::engine::yy()
 }
 
 
 
-pub fn swy(ivr: u64) {
-    let iu = super::engine::awf();
-    let pcd = iu.ao(ivr);
-    AEF_.store(pcd, Ordering::Relaxed);
+pub fn lym(frame_start_us: u64) {
+    let cy = super::engine::yy();
+    let izy = cy.saturating_sub(frame_start_us);
+    AFZ_.store(izy, Ordering::Relaxed);
     
     
-    let w = ASJ_.fetch_add(1, Ordering::Relaxed) as usize % NB_;
-    ASL_[w].store(pcd, Ordering::Relaxed);
+    let idx = AUN_.fetch_add(1, Ordering::Relaxed) as usize % OA_;
+    AUP_[idx].store(izy, Ordering::Relaxed);
     
-    LJ_.fetch_add(1, Ordering::Relaxed);
+    MD_.fetch_add(1, Ordering::Relaxed);
     
-    if !AJT_.load(Ordering::Relaxed) {
+    if !ALO_.load(Ordering::Relaxed) {
         
-        pxi();
+        jph();
         return;
     }
     
-    let ean = OK_.load(Ordering::Relaxed);
+    let brq = PI_.load(Ordering::Relaxed);
     
-    if iu >= ean {
+    if cy >= brq {
         
-        ABE_.fetch_add(1, Ordering::Relaxed);
+        ACU_.fetch_add(1, Ordering::Relaxed);
         
-        let uss = iu + IA_;
-        OK_.store(uss, Ordering::Relaxed);
+        let nix = cy + IU_;
+        PI_.store(nix, Ordering::Relaxed);
     } else {
         
-        let ia = ean - iu;
-        qfh(ia);
+        let ck = brq - cy;
+        jtu(ck);
         
-        OK_.store(ean + IA_, Ordering::Relaxed);
+        PI_.store(brq + IU_, Ordering::Relaxed);
     }
     
-    pxi();
+    jph();
 }
 
 
 
 
 
-fn qfh(xay: u64) {
+fn jtu(target_us: u64) {
     
-    let kgm = xay.v(50_000);
-    let ay = super::engine::awf();
-    let ci = ay + kgm;
+    let fkv = target_us.min(50_000);
+    let start = super::engine::yy();
+    let end = start + fkv;
 
     
     
-    let mut gzn = 0u32;
-    const CFS_: u32 = 2_000_000;
+    let mut dif = 0u32;
+    const CJC_: u32 = 2_000_000;
 
     loop {
-        let iu = super::engine::awf();
-        if iu >= ci { break; }
+        let cy = super::engine::yy();
+        if cy >= end { break; }
         
-        gzn += 1;
-        if gzn >= CFS_ { break; }
-        core::hint::hc();
+        dif += 1;
+        if dif >= CJC_ { break; }
+        core::hint::spin_loop();
     }
 }
 
 
-fn pxi() {
-    let mut es: u64 = 0;
-    for a in 0..NB_ {
-        es += ASL_[a].load(Ordering::Relaxed);
+fn jph() {
+    let mut av: u64 = 0;
+    for i in 0..OA_ {
+        av += AUP_[i].load(Ordering::Relaxed);
     }
-    let gzj = es / NB_ as u64;
-    let tz = if gzj > 0 { 1_000_000 / gzj } else { 0 };
-    BFZ_.store(tz.v(999), Ordering::Relaxed);
+    let dic = av / OA_ as u64;
+    let fps = if dic > 0 { 1_000_000 / dic } else { 0 };
+    BID_.store(fps.min(999), Ordering::Relaxed);
 }
 
 
 #[inline]
-pub fn tz() -> u64 {
-    BFZ_.load(Ordering::Relaxed)
+pub fn fps() -> u64 {
+    BID_.load(Ordering::Relaxed)
 }
 
 
 #[inline]
-pub fn pce() -> u64 {
-    AEF_.load(Ordering::Relaxed)
+pub fn izz() -> u64 {
+    AFZ_.load(Ordering::Relaxed)
 }
 
 
 #[inline]
-pub fn yrk() -> u64 {
-    (AEF_.load(Ordering::Relaxed) * 100) / IA_
+pub fn qgg() -> u64 {
+    (AFZ_.load(Ordering::Relaxed) * 100) / IU_
 }
 
 
 #[inline]
-pub fn yns() -> u64 {
-    ABE_.load(Ordering::Relaxed)
+pub fn qef() -> u64 {
+    ACU_.load(Ordering::Relaxed)
 }
 
 
 #[inline]
-pub fn agc() -> u64 {
-    LJ_.load(Ordering::Relaxed)
+pub fn total_frames() -> u64 {
+    MD_.load(Ordering::Relaxed)
 }
 
 
-pub fn cuf(iq: bool) {
-    AJT_.store(iq, Ordering::SeqCst);
-    if iq {
+pub fn set_enabled(enabled: bool) {
+    ALO_.store(enabled, Ordering::SeqCst);
+    if enabled {
         
-        let iu = super::engine::awf();
-        OK_.store(iu + IA_, Ordering::SeqCst);
+        let cy = super::engine::yy();
+        PI_.store(cy + IU_, Ordering::SeqCst);
     }
 }
 
 
 #[inline]
-pub fn zu() -> bool {
-    AJT_.load(Ordering::Relaxed)
+pub fn lq() -> bool {
+    ALO_.load(Ordering::Relaxed)
 }
 
 
 #[inline]
-pub fn yrl() -> u64 {
-    IA_
+pub fn qgh() -> u64 {
+    IU_
 }

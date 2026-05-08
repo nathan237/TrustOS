@@ -31,71 +31,71 @@ use spin::Mutex;
 
 
 
-const CFH_: usize = 8;
+const CIQ_: usize = 8;
 
-struct Bll {
-    j: String,
-    iy: String,
+struct Aaw {
+    name: String,
+    source: String,
 }
 
 struct EffectRegistry {
-    bzl: Vec<Bll>,
-    dnx: Option<usize>,
+    effects: Vec<Aaw>,
+    active_idx: Option<usize>,
 }
 
 impl EffectRegistry {
     const fn new() -> Self {
         Self {
-            bzl: Vec::new(),
-            dnx: None,
+            effects: Vec::new(),
+            active_idx: None,
         }
     }
 }
 
-static Ev: Mutex<EffectRegistry> = Mutex::new(EffectRegistry::new());
+static Ca: Mutex<EffectRegistry> = Mutex::new(EffectRegistry::new());
 
 
 
-static ALA_: AtomicU32 = AtomicU32::new(0);
-static AKZ_: AtomicU32 = AtomicU32::new(0);
-static ALE_: AtomicU32 = AtomicU32::new(0);
-static ALD_: AtomicU32 = AtomicU32::new(0);
-static ALC_: AtomicU32 = AtomicU32::new(0);
-static ALF_: AtomicU32 = AtomicU32::new(0);
-static ALB_: AtomicU32 = AtomicU32::new(0);
-static ACJ_: AtomicU32 = AtomicU32::new(0);
-static IF_: AtomicBool = AtomicBool::new(false);
+static AMV_: AtomicU32 = AtomicU32::new(0);
+static AMU_: AtomicU32 = AtomicU32::new(0);
+static AMZ_: AtomicU32 = AtomicU32::new(0);
+static AMY_: AtomicU32 = AtomicU32::new(0);
+static AMX_: AtomicU32 = AtomicU32::new(0);
+static ANA_: AtomicU32 = AtomicU32::new(0);
+static AMW_: AtomicU32 = AtomicU32::new(0);
+static ADZ_: AtomicU32 = AtomicU32::new(0);
+static IZ_: AtomicBool = AtomicBool::new(false);
 
 
 
 
 
 
-pub fn wif(rf: f32, aee: f32, ato: f32, vs: f32,
-                      fkq: f32, axg: f32, abo: f32, frame: u32) {
-    ALA_.store(rf.bsr(), Ordering::Relaxed);
-    AKZ_.store(aee.bsr(), Ordering::Relaxed);
-    ALE_.store(ato.bsr(), Ordering::Relaxed);
-    ALD_.store(vs.bsr(), Ordering::Relaxed);
-    ALC_.store(fkq.bsr(), Ordering::Relaxed);
-    ALF_.store(axg.bsr(), Ordering::Relaxed);
-    ALB_.store(abo.bsr(), Ordering::Relaxed);
-    ACJ_.store(frame, Ordering::Relaxed);
+pub fn oon(beat: f32, bass: f32, sub_bass: f32, mid: f32,
+                      high_mid: f32, treble: f32, energy: f32, frame: u32) {
+    AMV_.store(beat.to_bits(), Ordering::Relaxed);
+    AMU_.store(bass.to_bits(), Ordering::Relaxed);
+    AMZ_.store(sub_bass.to_bits(), Ordering::Relaxed);
+    AMY_.store(mid.to_bits(), Ordering::Relaxed);
+    AMX_.store(high_mid.to_bits(), Ordering::Relaxed);
+    ANA_.store(treble.to_bits(), Ordering::Relaxed);
+    AMW_.store(energy.to_bits(), Ordering::Relaxed);
+    ADZ_.store(frame, Ordering::Relaxed);
 }
 
 
-pub fn tcw() -> f32 { f32::bhb(ALA_.load(Ordering::Relaxed)) }
-pub fn tcv() -> f32 { f32::bhb(AKZ_.load(Ordering::Relaxed)) }
-pub fn tet() -> f32 { f32::bhb(ALE_.load(Ordering::Relaxed)) }
-pub fn teb() -> f32 { f32::bhb(ALD_.load(Ordering::Relaxed)) }
-pub fn tdr() -> f32 { f32::bhb(ALC_.load(Ordering::Relaxed)) }
-pub fn tez() -> f32 { f32::bhb(ALF_.load(Ordering::Relaxed)) }
-pub fn tdo() -> f32 { f32::bhb(ALB_.load(Ordering::Relaxed)) }
-pub fn tdq() -> u32 { ACJ_.load(Ordering::Relaxed) }
+pub fn mcr() -> f32 { f32::from_bits(AMV_.load(Ordering::Relaxed)) }
+pub fn mcq() -> f32 { f32::from_bits(AMU_.load(Ordering::Relaxed)) }
+pub fn mdw() -> f32 { f32::from_bits(AMZ_.load(Ordering::Relaxed)) }
+pub fn mdm() -> f32 { f32::from_bits(AMY_.load(Ordering::Relaxed)) }
+pub fn mde() -> f32 { f32::from_bits(AMX_.load(Ordering::Relaxed)) }
+pub fn mea() -> f32 { f32::from_bits(ANA_.load(Ordering::Relaxed)) }
+pub fn mdb() -> f32 { f32::from_bits(AMW_.load(Ordering::Relaxed)) }
+pub fn mdd() -> u32 { ADZ_.load(Ordering::Relaxed) }
 
 
-pub fn rl() -> bool {
-    IF_.load(Ordering::Relaxed)
+pub fn is_active() -> bool {
+    IZ_.load(Ordering::Relaxed)
 }
 
 
@@ -103,41 +103,41 @@ pub fn rl() -> bool {
 
 
 
-pub fn iix(j: &str, iy: &str) -> Result<(), &'static str> {
-    let mut reg = Ev.lock();
-    if reg.bzl.len() >= CFH_ {
+pub fn eez(name: &str, source: &str) -> Result<(), &'static str> {
+    let mut reg = Ca.lock();
+    if reg.effects.len() >= CIQ_ {
         return Err("Maximum 8 effects reached — remove one first");
     }
-    if reg.bzl.iter().any(|aa| aa.j == j) {
+    if reg.effects.iter().any(|e| e.name == name) {
         return Err("Effect with this name already exists — use 'vizfx edit' to update");
     }
     
-    if let Err(aa) = crate::trustlang::feq(iy) {
-        crate::serial_println!("[VIZFX] Syntax error: {}", aa);
+    if let Err(e) = crate::trustlang::cgv(source) {
+        crate::serial_println!("[VIZFX] Syntax error: {}", e);
         return Err("TrustLang syntax error — check your script");
     }
-    reg.bzl.push(Bll {
-        j: String::from(j),
-        iy: String::from(iy),
+    reg.effects.push(Aaw {
+        name: String::from(name),
+        source: String::from(source),
     });
     
-    if reg.bzl.len() == 1 {
-        reg.dnx = Some(0);
-        IF_.store(true, Ordering::Relaxed);
+    if reg.effects.len() == 1 {
+        reg.active_idx = Some(0);
+        IZ_.store(true, Ordering::Relaxed);
     }
     Ok(())
 }
 
 
-pub fn sja(j: &str, iy: &str) -> Result<(), &'static str> {
+pub fn loh(name: &str, source: &str) -> Result<(), &'static str> {
     
-    if let Err(aa) = crate::trustlang::feq(iy) {
-        crate::serial_println!("[VIZFX] Syntax error: {}", aa);
+    if let Err(e) = crate::trustlang::cgv(source) {
+        crate::serial_println!("[VIZFX] Syntax error: {}", e);
         return Err("TrustLang syntax error — check your script");
     }
-    let mut reg = Ev.lock();
-    if let Some(sjg) = reg.bzl.el().du(|aa| aa.j == j) {
-        sjg.iy = String::from(iy);
+    let mut reg = Ca.lock();
+    if let Some(eff) = reg.effects.iter_mut().find(|e| e.name == name) {
+        eff.source = String::from(source);
         Ok(())
     } else {
         Err("Effect not found")
@@ -145,45 +145,45 @@ pub fn sja(j: &str, iy: &str) -> Result<(), &'static str> {
 }
 
 
-pub fn vuw(j: &str) -> Result<(), &'static str> {
-    let mut reg = Ev.lock();
-    let w = reg.bzl.iter().qf(|aa| aa.j == j)
+pub fn oey(name: &str) -> Result<(), &'static str> {
+    let mut reg = Ca.lock();
+    let idx = reg.effects.iter().position(|e| e.name == name)
         .ok_or("Effect not found")?;
-    reg.bzl.remove(w);
+    reg.effects.remove(idx);
     
-    match reg.dnx {
-        Some(a) if a == w => {
-            reg.dnx = if reg.bzl.is_empty() { None } else { Some(0) };
-            if reg.dnx.is_none() {
-                IF_.store(false, Ordering::Relaxed);
+    match reg.active_idx {
+        Some(i) if i == idx => {
+            reg.active_idx = if reg.effects.is_empty() { None } else { Some(0) };
+            if reg.active_idx.is_none() {
+                IZ_.store(false, Ordering::Relaxed);
             }
         }
-        Some(a) if a > w => reg.dnx = Some(a - 1),
+        Some(i) if i > idx => reg.active_idx = Some(i - 1),
         _ => {}
     }
     Ok(())
 }
 
 
-pub fn phq(j: &str) -> Result<(), &'static str> {
-    let mut reg = Ev.lock();
-    let w = reg.bzl.iter().qf(|aa| aa.j == j)
+pub fn jej(name: &str) -> Result<(), &'static str> {
+    let mut reg = Ca.lock();
+    let idx = reg.effects.iter().position(|e| e.name == name)
         .ok_or("Effect not found")?;
-    reg.dnx = Some(w);
-    IF_.store(true, Ordering::Relaxed);
+    reg.active_idx = Some(idx);
+    IZ_.store(true, Ordering::Relaxed);
     Ok(())
 }
 
 
-pub fn cwz() {
-    IF_.store(false, Ordering::Relaxed);
+pub fn bbc() {
+    IZ_.store(false, Ordering::Relaxed);
 }
 
 
-pub fn aiy() -> Result<(), &'static str> {
-    let reg = Ev.lock();
-    if reg.dnx.is_some() {
-        IF_.store(true, Ordering::Relaxed);
+pub fn enable() -> Result<(), &'static str> {
+    let reg = Ca.lock();
+    if reg.active_idx.is_some() {
+        IZ_.store(true, Ordering::Relaxed);
         Ok(())
     } else {
         Err("No effect selected")
@@ -191,17 +191,17 @@ pub fn aiy() -> Result<(), &'static str> {
 }
 
 
-pub fn ufq() -> Vec<(String, bool)> {
-    let reg = Ev.lock();
-    reg.bzl.iter().cf().map(|(a, aa)| {
-        (aa.j.clone(), reg.dnx == Some(a))
+pub fn mzc() -> Vec<(String, bool)> {
+    let reg = Ca.lock();
+    reg.effects.iter().enumerate().map(|(i, e)| {
+        (e.name.clone(), reg.active_idx == Some(i))
     }).collect()
 }
 
 
-pub fn teq(j: &str) -> Option<String> {
-    let reg = Ev.lock();
-    reg.bzl.iter().du(|aa| aa.j == j).map(|aa| aa.iy.clone())
+pub fn mdu(name: &str) -> Option<String> {
+    let reg = Ca.lock();
+    reg.effects.iter().find(|e| e.name == name).map(|e| e.source.clone())
 }
 
 
@@ -211,29 +211,29 @@ pub fn teq(j: &str) -> Option<String> {
 
 
 
-pub fn wbh() -> bool {
-    if !IF_.load(Ordering::Relaxed) {
+pub fn ojc() -> bool {
+    if !IZ_.load(Ordering::Relaxed) {
         return false;
     }
     
-    let iy = {
-        let reg = Ev.lock();
-        match reg.dnx {
-            Some(w) => reg.bzl.get(w).map(|aa| aa.iy.clone()),
+    let source = {
+        let reg = Ca.lock();
+        match reg.active_idx {
+            Some(idx) => reg.effects.get(idx).map(|e| e.source.clone()),
             None => None,
         }
     };
 
-    if let Some(cy) = iy {
+    if let Some(src) = source {
         
         
-        match crate::trustlang::vw(&cy) {
+        match crate::trustlang::run(&src) {
             Ok(_) => {}
-            Err(aa) => {
-                let frame = ACJ_.load(Ordering::Relaxed);
+            Err(e) => {
+                let frame = ADZ_.load(Ordering::Relaxed);
                 
                 if frame % 60 == 0 {
-                    crate::serial_println!("[VIZFX] Script error (frame {}): {}", frame, aa);
+                    crate::serial_println!("[VIZFX] Script error (frame {}): {}", frame, e);
                 }
             }
         }
@@ -248,8 +248,8 @@ pub fn wbh() -> bool {
 
 
 
-pub fn ugs() -> Result<(), &'static str> {
-    let iy = r#"fn main() {
+pub fn mzy() -> Result<(), &'static str> {
+    let source = r#"fn main() {
     let w = screen_w();
     let h = screen_h();
     let cx = w / 2;
@@ -270,12 +270,12 @@ pub fn ugs() -> Result<(), &'static str> {
         i = i + 1;
     }
 }"#;
-    iix("pulse-rings", iy)
+    eez("pulse-rings", source)
 }
 
 
-pub fn ugt() -> Result<(), &'static str> {
-    let iy = r#"fn main() {
+pub fn mzz() -> Result<(), &'static str> {
+    let source = r#"fn main() {
     let w = screen_w();
     let h = screen_h();
     let bar_w = w / 8;
@@ -295,12 +295,12 @@ pub fn ugt() -> Result<(), &'static str> {
     fill_rect(4 * bar_w, h - hm, bar_w - 2, hm, 0, 150, 255);
     fill_rect(5 * bar_w, h - tr, bar_w - 2, tr, 150, 0, 255);
 }"#;
-    iix("spectrum-bars", iy)
+    eez("spectrum-bars", source)
 }
 
 
-pub fn ugr() -> Result<(), &'static str> {
-    let iy = r#"fn main() {
+pub fn mzx() -> Result<(), &'static str> {
+    let source = r#"fn main() {
     let w = screen_w();
     let h = screen_h();
     let b = beat();
@@ -313,5 +313,5 @@ pub fn ugr() -> Result<(), &'static str> {
         fill_rect(w - thickness, 0, thickness, h, 0, intensity, intensity / 3);
     }
 }"#;
-    iix("beat-flash", iy)
+    eez("beat-flash", source)
 }

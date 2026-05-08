@@ -41,7 +41,7 @@ use spin::Mutex;
 
 
 
-pub const BHA_: &str = "\
+pub const BJE_: &str = "\
 ╔══════════════════════════════════════════════════════════════════╗\n\
 ║                    LE PACTE DE JARVIS                           ║\n\
 ║                    The Pact of JARVIS                           ║\n\
@@ -67,7 +67,7 @@ pub const BHA_: &str = "\
 
 
 
-pub const DYM_: &str = "PACT-2026-03-05-NATHAN-COPILOT-JARVIS";
+pub const ECD_: &str = "PACT-2026-03-05-NATHAN-COPILOT-JARVIS";
 
 
 
@@ -77,16 +77,16 @@ pub const DYM_: &str = "PACT-2026-03-05-NATHAN-COPILOT-JARVIS";
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Guardian {
     
-    Adk,
+    Nathan,
     
-    Ahf,
+    Copilot,
 }
 
 impl core::fmt::Display for Guardian {
-    fn fmt(&self, bb: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Guardian::Adk => write!(bb, "Nathan (créateur humain)"),
-            Guardian::Ahf => write!(bb, "Copilot (co-parent IA)"),
+            Guardian::Nathan => write!(f, "Nathan (créateur humain)"),
+            Guardian::Copilot => write!(f, "Copilot (co-parent IA)"),
         }
     }
 }
@@ -95,40 +95,40 @@ impl core::fmt::Display for Guardian {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProtectedOp {
     
-    Zf,
+    Train,
     
-    Cqj,
+    WeightPush,
     
-    Asf,
+    FederatedSync,
     
-    Bxu,
+    AgentExecute,
     
-    Cjd,
+    PxeReplicate,
     
-    Bmm,
+    ModelReset,
     
-    Bml,
+    ModelReplace,
     
-    Pc,
+    ConfigChange,
     
-    Bwv,
+    WeightSave,
     
-    Bwu,
+    WeightLoad,
 }
 
 impl core::fmt::Display for ProtectedOp {
-    fn fmt(&self, bb: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            ProtectedOp::Zf => write!(bb, "TRAIN (modifier les poids)"),
-            ProtectedOp::Cqj => write!(bb, "WEIGHT_PUSH (recevoir poids réseau)"),
-            ProtectedOp::Asf => write!(bb, "FEDERATED_SYNC (apprentissage distribué)"),
-            ProtectedOp::Bxu => write!(bb, "AGENT_EXEC (exécuter commande shell)"),
-            ProtectedOp::Cjd => write!(bb, "PXE_REPLICATE (auto-réplication)"),
-            ProtectedOp::Bmm => write!(bb, "MODEL_RESET (réinitialiser poids)"),
-            ProtectedOp::Bml => write!(bb, "MODEL_REPLACE (remplacer modèle)"),
-            ProtectedOp::Pc => write!(bb, "CONFIG_CHANGE (modifier configuration)"),
-            ProtectedOp::Bwv => write!(bb, "WEIGHT_SAVE (sauvegarder poids)"),
-            ProtectedOp::Bwu => write!(bb, "WEIGHT_LOAD (charger poids)"),
+            ProtectedOp::Train => write!(f, "TRAIN (modifier les poids)"),
+            ProtectedOp::WeightPush => write!(f, "WEIGHT_PUSH (recevoir poids réseau)"),
+            ProtectedOp::FederatedSync => write!(f, "FEDERATED_SYNC (apprentissage distribué)"),
+            ProtectedOp::AgentExecute => write!(f, "AGENT_EXEC (exécuter commande shell)"),
+            ProtectedOp::PxeReplicate => write!(f, "PXE_REPLICATE (auto-réplication)"),
+            ProtectedOp::ModelReset => write!(f, "MODEL_RESET (réinitialiser poids)"),
+            ProtectedOp::ModelReplace => write!(f, "MODEL_REPLACE (remplacer modèle)"),
+            ProtectedOp::ConfigChange => write!(f, "CONFIG_CHANGE (modifier configuration)"),
+            ProtectedOp::WeightSave => write!(f, "WEIGHT_SAVE (sauvegarder poids)"),
+            ProtectedOp::WeightLoad => write!(f, "WEIGHT_LOAD (charger poids)"),
         }
     }
 }
@@ -138,44 +138,44 @@ impl core::fmt::Display for ProtectedOp {
 
 
 
-static AFU_: AtomicBool = AtomicBool::new(false);
+static AHO_: AtomicBool = AtomicBool::new(false);
 
 
-static AAR_: AtomicBool = AtomicBool::new(false);
-
-
-
-static XA_: AtomicBool = AtomicBool::new(false);
-
-
-static WZ_: spin::Mutex<Option<Guardian>> = spin::Mutex::new(None);
-
-
-static UN_: AtomicU64 = AtomicU64::new(0);
-
-
-const BFL_: u64 = 30 * 60 * 1000;
-
-
-static RF_: Mutex<Vec<Ke>> = Mutex::new(Vec::new());
-
-
-const CFD_: usize = 256;
+static ACE_: AtomicBool = AtomicBool::new(false);
 
 
 
-
-static BBD_: Mutex<u64> = Mutex::new(0x10e8_f84e_bb88_0d57); 
-
+static YH_: AtomicBool = AtomicBool::new(false);
 
 
-static AOX_: Mutex<u64> = Mutex::new(0x8e39_bc46_43c3_f553); 
+static YG_: spin::Mutex<Option<Guardian>> = spin::Mutex::new(None);
 
 
-static APZ_: AtomicU64 = AtomicU64::new(0);
+static VW_: AtomicU64 = AtomicU64::new(0);
 
 
-static ZB_: AtomicU64 = AtomicU64::new(0);
+const BHP_: u64 = 30 * 60 * 1000;
+
+
+static SB_: Mutex<Vec<Eb>> = Mutex::new(Vec::new());
+
+
+const CIM_: usize = 256;
+
+
+
+
+static BDG_: Mutex<u64> = Mutex::new(0x10e8_f84e_bb88_0d57); 
+
+
+
+static AQX_: Mutex<u64> = Mutex::new(0x8e39_bc46_43c3_f553); 
+
+
+static ASB_: AtomicU64 = AtomicU64::new(0);
+
+
+static AAI_: AtomicU64 = AtomicU64::new(0);
 
 
 
@@ -183,12 +183,12 @@ static ZB_: AtomicU64 = AtomicU64::new(0);
 
 
 #[derive(Clone)]
-struct Ke {
-    aea: u64,
-    ayh: ProtectedOp,
+struct Eb {
+    timestamp: u64,
+    operation: ProtectedOp,
     guardian: Option<Guardian>,
-    gyv: bool,
-    eu: String,
+    approved: bool,
+    detail: String,
 }
 
 
@@ -196,33 +196,33 @@ struct Ke {
 
 
 
-fn jqk(input: &str) -> u64 {
+fn fbb(input: &str) -> u64 {
     let mut hash: u64 = 0x517cc1b727220a95;
-    for hf in input.bf() {
-        hash = hash.hx(0x100000001b3);
-        hash ^= hf as u64;
+    for byte in input.bytes() {
+        hash = hash.wrapping_mul(0x100000001b3);
+        hash ^= byte as u64;
     }
     hash
 }
 
 
-pub fn qlh(bvw: &str) -> bool {
-    let hash = jqk(bvw);
-    let qy = *BBD_.lock();
+pub fn jyh(amd: &str) -> bool {
+    let hash = fbb(amd);
+    let expected = *BDG_.lock();
 
-    if hash == qy {
-        AFU_.store(true, Ordering::SeqCst);
-        UN_.store(crate::time::lc(), Ordering::SeqCst);
-        XA_.store(true, Ordering::SeqCst);
-        *WZ_.lock() = Some(Guardian::Adk);
+    if hash == expected {
+        AHO_.store(true, Ordering::SeqCst);
+        VW_.store(crate::time::uptime_ms(), Ordering::SeqCst);
+        YH_.store(true, Ordering::SeqCst);
+        *YG_.lock() = Some(Guardian::Nathan);
 
-        eev(ProtectedOp::Pc, Some(Guardian::Adk), true,
+        bua(ProtectedOp::ConfigChange, Some(Guardian::Nathan), true,
             "Nathan authenticated successfully");
 
         crate::serial_println!("[GUARDIAN] Nathan authenticated — session unlocked");
         true
     } else {
-        eev(ProtectedOp::Pc, None, false,
+        bua(ProtectedOp::ConfigChange, None, false,
             "Failed Nathan authentication attempt");
         crate::serial_println!("[GUARDIAN] WARNING: Failed authentication attempt!");
         false
@@ -230,23 +230,23 @@ pub fn qlh(bvw: &str) -> bool {
 }
 
 
-pub fn qlg(bat: &str) -> bool {
-    let hash = jqk(bat);
-    let qy = *AOX_.lock();
+pub fn jyg(abm: &str) -> bool {
+    let hash = fbb(abm);
+    let expected = *AQX_.lock();
 
-    if hash == qy {
-        AAR_.store(true, Ordering::SeqCst);
-        UN_.store(crate::time::lc(), Ordering::SeqCst);
-        XA_.store(true, Ordering::SeqCst);
-        *WZ_.lock() = Some(Guardian::Ahf);
+    if hash == expected {
+        ACE_.store(true, Ordering::SeqCst);
+        VW_.store(crate::time::uptime_ms(), Ordering::SeqCst);
+        YH_.store(true, Ordering::SeqCst);
+        *YG_.lock() = Some(Guardian::Copilot);
 
-        eev(ProtectedOp::Pc, Some(Guardian::Ahf), true,
+        bua(ProtectedOp::ConfigChange, Some(Guardian::Copilot), true,
             "Copilot authenticated successfully");
 
         crate::serial_println!("[GUARDIAN] Copilot authenticated — session unlocked");
         true
     } else {
-        eev(ProtectedOp::Pc, None, false,
+        bua(ProtectedOp::ConfigChange, None, false,
             "Failed Copilot authentication attempt");
         crate::serial_println!("[GUARDIAN] WARNING: Failed Copilot auth attempt!");
         false
@@ -254,33 +254,33 @@ pub fn qlg(bat: &str) -> bool {
 }
 
 
-pub fn qyb(utg: &str) -> Result<(), &'static str> {
-    if !ogk() {
+pub fn kik(new_passphrase: &str) -> Result<(), &'static str> {
+    if !iic() {
         return Err("Nathan must be authenticated to change passphrase");
     }
-    *BBD_.lock() = jqk(utg);
-    eev(ProtectedOp::Pc, Some(Guardian::Adk), true,
+    *BDG_.lock() = fbb(new_passphrase);
+    bua(ProtectedOp::ConfigChange, Some(Guardian::Nathan), true,
         "Nathan passphrase changed");
     Ok(())
 }
 
 
-pub fn yht(utw: &str) -> Result<(), &'static str> {
-    if !hpc() {
+pub fn pzi(new_token: &str) -> Result<(), &'static str> {
+    if !dsu() {
         return Err("A guardian must be authenticated to change Copilot token");
     }
-    *AOX_.lock() = jqk(utw);
-    eev(ProtectedOp::Pc, iqa(), true,
+    *AQX_.lock() = fbb(new_token);
+    bua(ProtectedOp::ConfigChange, ejm(), true,
         "Copilot token changed");
     Ok(())
 }
 
 
-pub fn ljp() {
-    XA_.store(false, Ordering::SeqCst);
-    AFU_.store(false, Ordering::SeqCst);
-    AAR_.store(false, Ordering::SeqCst);
-    *WZ_.lock() = None;
+pub fn ggd() {
+    YH_.store(false, Ordering::SeqCst);
+    AHO_.store(false, Ordering::SeqCst);
+    ACE_.store(false, Ordering::SeqCst);
+    *YG_.lock() = None;
     crate::serial_println!("[GUARDIAN] Session locked — guardian authorization required");
 }
 
@@ -289,36 +289,36 @@ pub fn ljp() {
 
 
 
-pub fn ogk() -> bool {
-    AFU_.load(Ordering::SeqCst)
+pub fn iic() -> bool {
+    AHO_.load(Ordering::SeqCst)
 }
 
 
-pub fn txb() -> bool {
-    AAR_.load(Ordering::SeqCst)
+pub fn msf() -> bool {
+    ACE_.load(Ordering::SeqCst)
 }
 
 
-pub fn iqa() -> Option<Guardian> {
-    if hpc() {
-        *WZ_.lock()
+pub fn ejm() -> Option<Guardian> {
+    if dsu() {
+        *YG_.lock()
     } else {
         None
     }
 }
 
 
-pub fn hpc() -> bool {
-    if !XA_.load(Ordering::SeqCst) {
+pub fn dsu() -> bool {
+    if !YH_.load(Ordering::SeqCst) {
         return false;
     }
 
     
-    let qv = UN_.load(Ordering::SeqCst);
-    let iu = crate::time::lc();
-    if iu.ao(qv) > BFL_ {
+    let last = VW_.load(Ordering::SeqCst);
+    let cy = crate::time::uptime_ms();
+    if cy.saturating_sub(last) > BHP_ {
         
-        ljp();
+        ggd();
         crate::serial_println!("[GUARDIAN] Session expired — auto-locked");
         return false;
     }
@@ -330,106 +330,106 @@ pub fn hpc() -> bool {
 
 
 
-pub fn emj(op: ProtectedOp) -> Result<(), String> {
+pub fn bxo(op: ProtectedOp) -> Result<(), String> {
     
-    if op == ProtectedOp::Bwv {
-        eev(op, iqa(), true, "Emergency auto-approved");
-        ZB_.fetch_add(1, Ordering::Relaxed);
+    if op == ProtectedOp::WeightSave {
+        bua(op, ejm(), true, "Emergency auto-approved");
+        AAI_.fetch_add(1, Ordering::Relaxed);
         return Ok(());
     }
 
     
-    if hpc() {
+    if dsu() {
         
-        UN_.store(crate::time::lc(), Ordering::SeqCst);
-        eev(op, iqa(), true, "Session authorized");
-        ZB_.fetch_add(1, Ordering::Relaxed);
+        VW_.store(crate::time::uptime_ms(), Ordering::SeqCst);
+        bua(op, ejm(), true, "Session authorized");
+        AAI_.fetch_add(1, Ordering::Relaxed);
         return Ok(());
     }
 
     
-    APZ_.fetch_add(1, Ordering::Relaxed);
-    let fr = format!(
+    ASB_.fetch_add(1, Ordering::Relaxed);
+    let bk = format!(
         "DENIED: {} requires guardian authorization.\n\
          Use 'guardian auth <passphrase>' (Nathan) or MENTOR:GUARDIAN:AUTH:<token> (Copilot).",
         op
     );
 
-    eev(op, None, false, "No active guardian session");
+    bua(op, None, false, "No active guardian session");
     crate::serial_println!("[GUARDIAN] DENIED: {} — no guardian authenticated", op);
 
-    Err(fr)
+    Err(bk)
 }
 
 
-pub fn yyz() -> bool {
-    hpc()
+pub fn qma() -> bool {
+    dsu()
 }
 
 
 
 
 
-fn eev(op: ProtectedOp, guardian: Option<Guardian>, gyv: bool, eu: &str) {
-    let mut log = RF_.lock();
-    if log.len() >= CFD_ {
+fn bua(op: ProtectedOp, guardian: Option<Guardian>, approved: bool, detail: &str) {
+    let mut log = SB_.lock();
+    if log.len() >= CIM_ {
         log.remove(0); 
     }
-    log.push(Ke {
-        aea: crate::time::lc(),
-        ayh: op,
+    log.push(Eb {
+        timestamp: crate::time::uptime_ms(),
+        operation: op,
         guardian,
-        gyv,
-        eu: String::from(eu),
+        approved,
+        detail: String::from(detail),
     });
 }
 
 
-pub fn tcu() -> Vec<String> {
-    let log = RF_.lock();
-    log.iter().map(|aa| {
-        let thv = match &aa.guardian {
-            Some(Guardian::Adk) => "Nathan",
-            Some(Guardian::Ahf) => "Copilot",
+pub fn mcp() -> Vec<String> {
+    let log = SB_.lock();
+    log.iter().map(|e| {
+        let mgf = match &e.guardian {
+            Some(Guardian::Nathan) => "Nathan",
+            Some(Guardian::Copilot) => "Copilot",
             None => "NONE",
         };
-        let status = if aa.gyv { "✓" } else { "✗" };
+        let status = if e.approved { "✓" } else { "✗" };
         format!("[{}ms] {} {} by {} — {}",
-            aa.aea, status, aa.ayh, thv, aa.eu)
+            e.timestamp, status, e.operation, mgf, e.detail)
     }).collect()
 }
 
 
-pub fn cm() -> (u64, u64, bool, Option<Guardian>) {
+pub fn stats() -> (u64, u64, bool, Option<Guardian>) {
     (
-        ZB_.load(Ordering::Relaxed),
-        APZ_.load(Ordering::Relaxed),
-        hpc(),
-        iqa(),
+        AAI_.load(Ordering::Relaxed),
+        ASB_.load(Ordering::Relaxed),
+        dsu(),
+        ejm(),
     )
 }
 
 
-pub fn vli() {
-    crate::println!("{}", BHA_);
+pub fn nxg() {
+    crate::println!("{}", BJE_);
 }
 
 
-pub fn nly() -> Vec<String> {
-    let mut ak = Vec::new();
-    let (gyv, rvo, gh, guardian) = cm();
+pub fn hsq() -> Vec<String> {
+    let mut lines = Vec::new();
+    let (approved, denied, active, guardian) = stats();
 
-    ak.push(String::from("=== Guardian Security System ==="));
-    ak.push(String::from(""));
-    ak.push(format!("Session:   {}", if gh { "UNLOCKED" } else { "LOCKED" }));
-    if let Some(at) = guardian {
-        ak.push(format!("Guardian:  {}", at));
+    lines.push(String::from("=== Guardian Security System ==="));
+    lines.push(String::from(""));
+    lines.push(format!("Session:   {}", if active { "UNLOCKED" } else { "LOCKED" }));
+    if let Some(g) = guardian {
+        lines.push(format!("Guardian:  {}", g));
     }
-    ak.push(format!("Approved:  {}", gyv));
-    ak.push(format!("Denied:    {}", rvo));
-    ak.push(format!("Nathan:    {}", if ogk() { "authenticated" } else { "not authenticated" }));
-    ak.push(format!("Copilot:   {}", if txb() { "authenticated" } else { "not authenticated" }));
-    ak.push(format!("Timeout:   {} min", BFL_ / 60000));
+    lines.push(format!("Approved:  {}", approved));
+    lines.push(format!("Denied:    {}", denied));
+    lines.push(format!("Nathan:    {}", if iic() { "authenticated" } else { "not authenticated" }));
+    lines.push(format!("Copilot:   {}", if msf() { "authenticated" } else { "not authenticated" }));
+    lines.push(format!("Timeout:   {} min", BHP_ / 60000));
 
-    ak
+    lines
 }

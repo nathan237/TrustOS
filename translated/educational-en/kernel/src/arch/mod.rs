@@ -92,8 +92,8 @@ pub fn are_interrupts_enabled() -> bool {
 /// Flush a single TLB entry for the given virtual address
 #[inline(always)]
 // Public function — callable from other modules.
-pub fn flush_tlb(address: u64) {
-    platform::memory::flush_tlb(address);
+pub fn flush_tlb(addr: u64) {
+    platform::memory::flush_tlb(addr);
 }
 
 /// Flush the entire TLB
@@ -113,8 +113,8 @@ pub fn read_page_table_root() -> u64 {
 /// Write the page table root register
 #[inline(always)]
 // Public function — callable from other modules.
-pub fn write_page_table_root(value: u64) {
-    platform::memory::write_page_table_root(value);
+pub fn write_page_table_root(val: u64) {
+    platform::memory::write_page_table_root(val);
 }
 
 /// Read the current stack pointer

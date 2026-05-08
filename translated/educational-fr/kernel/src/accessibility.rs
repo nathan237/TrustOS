@@ -299,7 +299,7 @@ pub fn sticky_modifier_press(modifier: StickyModifier) -> bool {
     if !is_sticky_keys() { return false; }
     let state_lock = // Correspondance de motifs — branchement exhaustif de Rust.
 match modifier {
-        StickyModifier::Controller => &STICKY_CONTROLLER,
+        StickyModifier::Ctrl => &STICKY_CONTROLLER,
         StickyModifier::Alt => &STICKY_ALT,
         StickyModifier::Shift => &STICKY_SHIFT,
     };
@@ -316,9 +316,9 @@ match *state {
 /// Called after a non-modifier key is pressed. Clears latched modifiers.
 pub fn sticky_consume_latched() {
     if !is_sticky_keys() { return; }
-    let mut controller = STICKY_CONTROLLER.lock();
-    if *controller == StickyState::Latched { *controller = StickyState::Off; }
-    drop(controller);
+    let mut ctrl = STICKY_CONTROLLER.lock();
+    if *ctrl == StickyState::Latched { *ctrl = StickyState::Off; }
+    drop(ctrl);
     let mut alt = STICKY_ALT.lock();
     if *alt == StickyState::Latched { *alt = StickyState::Off; }
     drop(alt);
@@ -331,7 +331,7 @@ pub fn is_sticky_active(modifier: StickyModifier) -> bool {
     if !is_sticky_keys() { return false; }
     let state = // Correspondance de motifs — branchement exhaustif de Rust.
 match modifier {
-        StickyModifier::Controller => *STICKY_CONTROLLER.lock(),
+        StickyModifier::Ctrl => *STICKY_CONTROLLER.lock(),
         StickyModifier::Alt => *STICKY_ALT.lock(),
         StickyModifier::Shift => *STICKY_SHIFT.lock(),
     };
@@ -343,7 +343,7 @@ pub fn get_sticky_state(modifier: StickyModifier) -> StickyState {
     if !is_sticky_keys() { return StickyState::Off; }
         // Correspondance de motifs — branchement exhaustif de Rust.
 match modifier {
-        StickyModifier::Controller => *STICKY_CONTROLLER.lock(),
+        StickyModifier::Ctrl => *STICKY_CONTROLLER.lock(),
         StickyModifier::Alt => *STICKY_ALT.lock(),
         StickyModifier::Shift => *STICKY_SHIFT.lock(),
     }
@@ -353,7 +353,7 @@ match modifier {
 #[derive(Clone, Copy, PartialEq)]
 // Énumération — un type qui peut être l'une de plusieurs variantes.
 pub enum StickyModifier {
-    Controller,
+    Ctrl,
     Alt,
     Shift,
 }

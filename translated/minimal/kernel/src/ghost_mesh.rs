@@ -24,14 +24,14 @@ use alloc::vec::Vec;
 
 
 #[derive(Clone, Copy)]
-pub struct V3 { pub b: f32, pub c: f32, pub av: f32 }
+pub struct V3 { pub x: f32, pub y: f32, pub z: f32 }
 
 impl V3 {
-    pub const fn new(b: f32, c: f32, av: f32) -> Self { Self { b, c, av } }
+    pub const fn new(x: f32, y: f32, z: f32) -> Self { Self { x, y, z } }
 }
 
 #[derive(Clone, Copy)]
-pub struct D(pub u16, pub u16);
+pub struct H(pub u16, pub u16);
 
 
 
@@ -42,36 +42,36 @@ pub struct D(pub u16, pub u16);
 #[derive(Clone, Copy)]
 pub struct RainEffect {
     
-    pub tq: u8,
+    pub glow: u8,
     
-    pub eo: u8,
+    pub depth: u8,
     
-    pub bst: u8,
+    pub trail_boost: u8,
     
-    pub apb: u8,
+    pub ripple: u8,
     
-    pub tp: u8,
+    pub dim: u8,
     
-    pub aug: u8,
+    pub fresnel: u8,
     
-    pub amv: u8,
+    pub specular: u8,
     
-    pub atv: u8,
+    pub ao: u8,
     
-    pub axo: u8,
+    pub bloom: u8,
     
-    pub ys: u8,
+    pub scanline: u8,
     
-    pub ata: u8,
+    pub inner_glow: u8,
     
-    pub zc: u8,
+    pub shadow: u8,
 }
 
 impl RainEffect {
-    pub const Cq: Self = Self {
-        tq: 0, eo: 128, bst: 0, apb: 0, tp: 0,
-        aug: 0, amv: 0, atv: 0, axo: 0, ys: 0,
-        ata: 0, zc: 0,
+    pub const Bc: Self = Self {
+        glow: 0, depth: 128, trail_boost: 0, ripple: 0, dim: 0,
+        fresnel: 0, specular: 0, ao: 0, bloom: 0, scanline: 0,
+        inner_glow: 0, shadow: 0,
     };
 }
 
@@ -79,108 +79,108 @@ impl RainEffect {
 
 
 
-const IQ_: usize = 8;   
-const DY_: usize = 12;  
+const JI_: usize = 8;   
+const EJ_: usize = 12;  
 
 
 
 
 
-pub struct Air {
-    pub ikw: Vec<V3>,
-    pub gei: Vec<V3>,
-    pub bu: Vec<D>,
-    pub mpd: Vec<u8>,
+pub struct Pa {
+    pub base_verts: Vec<V3>,
+    pub deformed_verts: Vec<V3>,
+    pub edges: Vec<H>,
+    pub vert_bands: Vec<u8>,
 
-    pub cbn: i32,
-    pub boe: i32,
-    pub dlj: i32,
-    pub hxx: i32,
-    pub hxy: i32,
-    pub hxz: i32,
-    pub bv: i32,
-    pub eya: i32,
-    pub yv: i32,
-    pub uq: i32,
-
-    
-    pub btt: Vec<Vec<(i32, i32, u16, u8, i16)>>,
-    
-    
-    pub anc: Vec<(i32, i32)>,
+    pub rot_x: i32,
+    pub rot_y: i32,
+    pub rot_z: i32,
+    pub rot_speed_x: i32,
+    pub rot_speed_y: i32,
+    pub rot_speed_z: i32,
+    pub scale: i32,
+    pub scale_target: i32,
+    pub center_x: i32,
+    pub center_y: i32,
 
     
+    pub column_hits: Vec<Vec<(i32, i32, u16, u8, i16)>>,
     
-    pub eww: Vec<i16>,
     
-    pub bws: f32,
+    pub column_bounds: Vec<(i32, i32)>,
+
     
-    pub elk: i16,
-    pub elj: i16,
     
-    pub oy: i32,
+    pub projected_z: Vec<i16>,
+    
+    pub ripple_radius: f32,
+    
+    pub z_min: i16,
+    pub z_max: i16,
+    
+    pub col_w: i32,
 
     pub frame: u64,
-    pub bfi: f32,
-    pub ays: f32,
-    pub cib: f32,
-    pub cbw: f32,
-    pub ana: f32,
-    pub jr: bool,
+    pub smooth_sub_bass: f32,
+    pub smooth_bass: f32,
+    pub smooth_mid: f32,
+    pub smooth_treble: f32,
+    pub beat_pulse: f32,
+    pub initialized: bool,
     
-    pub eyt: i32,
-    pub dcd: i32,
+    pub spec_x: i32,
+    pub spec_y: i32,
     
-    pub bsj: i32,
-    pub dlt: i32,
+    pub shadow_y_start: i32,
+    pub shadow_y_end: i32,
     
-    pub dvw: i32,
+    pub shape_center_y: i32,
 }
 
-impl Air {
+impl Pa {
     pub const fn new() -> Self {
         Self {
-            ikw: Vec::new(),
-            gei: Vec::new(),
-            bu: Vec::new(),
-            mpd: Vec::new(),
-            cbn: 0, boe: 0, dlj: 0,
-            hxx: 6,
-            hxy: 10,
-            hxz: 2,
-            bv: 200,
-            eya: 200,
-            yv: 0, uq: 0,
-            btt: Vec::new(),
-            anc: Vec::new(),
-            eww: Vec::new(),
-            bws: 999.0,
-            elk: 0,
-            elj: 0,
-            oy: 8,
+            base_verts: Vec::new(),
+            deformed_verts: Vec::new(),
+            edges: Vec::new(),
+            vert_bands: Vec::new(),
+            rot_x: 0, rot_y: 0, rot_z: 0,
+            rot_speed_x: 6,
+            rot_speed_y: 10,
+            rot_speed_z: 2,
+            scale: 200,
+            scale_target: 200,
+            center_x: 0, center_y: 0,
+            column_hits: Vec::new(),
+            column_bounds: Vec::new(),
+            projected_z: Vec::new(),
+            ripple_radius: 999.0,
+            z_min: 0,
+            z_max: 0,
+            col_w: 8,
             frame: 0,
-            bfi: 0.0,
-            ays: 0.0,
-            cib: 0.0,
-            cbw: 0.0,
-            ana: 0.0,
-            jr: false,
-            eyt: 0,
-            dcd: 0,
-            bsj: 0,
-            dlt: 0,
-            dvw: 0,
+            smooth_sub_bass: 0.0,
+            smooth_bass: 0.0,
+            smooth_mid: 0.0,
+            smooth_treble: 0.0,
+            beat_pulse: 0.0,
+            initialized: false,
+            spec_x: 0,
+            spec_y: 0,
+            shadow_y_start: 0,
+            shadow_y_end: 0,
+            shape_center_y: 0,
         }
     }
 
-    fn aqz(&mut self) {
-        if self.jr { return; }
-        let (yu, bu, cdc) = tcm();
-        self.gei = yu.clone();
-        self.ikw = yu;
-        self.bu = bu;
-        self.mpd = cdc;
-        self.jr = true;
+    fn ensure_init(&mut self) {
+        if self.initialized { return; }
+        let (lm, edges, apt) = mcj();
+        self.deformed_verts = lm.clone();
+        self.base_verts = lm;
+        self.edges = edges;
+        self.vert_bands = apt;
+        self.initialized = true;
     }
 }
 
@@ -188,245 +188,245 @@ impl Air {
 
 
 
-fn tcm() -> (Vec<V3>, Vec<D>, Vec<u8>) {
-    let mut by = Vec::fc(IQ_ * DY_ + 2);
-    let mut cdc = Vec::fc(IQ_ * DY_ + 2);
-    let mut bu = Vec::new();
-    let akk: f32 = 3.14159265;
+fn mcj() -> (Vec<V3>, Vec<H>, Vec<u8>) {
+    let mut verts = Vec::with_capacity(JI_ * EJ_ + 2);
+    let mut apt = Vec::with_capacity(JI_ * EJ_ + 2);
+    let mut edges = Vec::new();
+    let pi: f32 = 3.14159265;
 
     
-    by.push(V3::new(0.0, -1.0, 0.0));
-    cdc.push(0);
+    verts.push(V3::new(0.0, -1.0, 0.0));
+    apt.push(0);
 
-    for ber in 0..IQ_ {
-        let avw = (ber as f32 + 1.0) / (IQ_ as f32 + 1.0);
-        let hg = -akk / 2.0 + akk * avw;
-        let c = st(hg);
-        let m = zq(hg);
-        let bti: u8 = match ber {
+    for ady in 0..JI_ {
+        let yt = (ady as f32 + 1.0) / (JI_ as f32 + 1.0);
+        let cc = -pi / 2.0 + pi * yt;
+        let y = sinf(cc);
+        let r = cosf(cc);
+        let akx: u8 = match ady {
             0     => 0,
             1     => 1,
             2 | 3 => 2,
             4 | 5 => 2,
             _     => 3,
         };
-        for ann in 0..DY_ {
-            let auo = 2.0 * akk * (ann as f32) / (DY_ as f32);
-            by.push(V3::new(m * zq(auo), c, m * st(auo)));
-            cdc.push(bti);
+        for ud in 0..EJ_ {
+            let xu = 2.0 * pi * (ud as f32) / (EJ_ as f32);
+            verts.push(V3::new(r * cosf(xu), y, r * sinf(xu)));
+            apt.push(akx);
         }
     }
 
     
-    by.push(V3::new(0.0, 1.0, 0.0));
-    cdc.push(3);
-    let lpc = by.len() - 1;
+    verts.push(V3::new(0.0, 1.0, 0.0));
+    apt.push(3);
+    let gjv = verts.len() - 1;
 
     
-    for ber in 0..IQ_ {
-        let ar = 1 + ber * DY_;
-        for ann in 0..DY_ {
-            let next = if ann + 1 < DY_ { ann + 1 } else { 0 };
-            bu.push(D((ar + ann) as u16, (ar + next) as u16));
+    for ady in 0..JI_ {
+        let base = 1 + ady * EJ_;
+        for ud in 0..EJ_ {
+            let next = if ud + 1 < EJ_ { ud + 1 } else { 0 };
+            edges.push(H((base + ud) as u16, (base + next) as u16));
         }
     }
 
     
-    for ann in 0..DY_ {
-        bu.push(D(0, (1 + ann) as u16));
-        for ber in 0..(IQ_ - 1) {
-            let q = 1 + ber * DY_ + ann;
-            let o = 1 + (ber + 1) * DY_ + ann;
-            bu.push(D(q as u16, o as u16));
+    for ud in 0..EJ_ {
+        edges.push(H(0, (1 + ud) as u16));
+        for ady in 0..(JI_ - 1) {
+            let a = 1 + ady * EJ_ + ud;
+            let b = 1 + (ady + 1) * EJ_ + ud;
+            edges.push(H(a as u16, b as u16));
         }
-        bu.push(D((1 + (IQ_ - 1) * DY_ + ann) as u16, lpc as u16));
+        edges.push(H((1 + (JI_ - 1) * EJ_ + ud) as u16, gjv as u16));
     }
 
-    (by, bu, cdc)
+    (verts, edges, apt)
 }
 
 
 
 
 
-fn dlw(foq: i32) -> i32 {
-    let ifh: i32 = 6283;
-    let mut q = foq % ifh;
-    if q < 0 { q += ifh; }
-    let fqt: i32 = 3141;
-    let (jyp, iaq) = if q > fqt { (q - fqt, -1i32) } else { (q, 1) };
-    let ai = fqt as i64;
-    let b = jyp as i64;
-    let zp = b * (ai - b);
-    let bzd = 5 * ai * ai - 4 * zp;
-    if bzd == 0 { return 0; }
-    (16 * zp * 1000 / bzd) as i32 * iaq
+fn bjf(mrad: i32) -> i32 {
+    let ecv: i32 = 6283;
+    let mut a = mrad % ecv;
+    if a < 0 { a += ecv; }
+    let cob: i32 = 3141;
+    let (a_n, dzm) = if a > cob { (a - cob, -1i32) } else { (a, 1) };
+    let aa = cob as i64;
+    let x = a_n as i64;
+    let mh = x * (aa - x);
+    let anz = 5 * aa * aa - 4 * mh;
+    if anz == 0 { return 0; }
+    (16 * mh * 1000 / anz) as i32 * dzm
 }
 
-fn dzw(foq: i32) -> i32 { dlw(foq + 1571) }
-fn st(m: f32) -> f32 { dlw((m * 1000.0) as i32) as f32 / 1000.0 }
-fn zq(m: f32) -> f32 { dzw((m * 1000.0) as i32) as f32 / 1000.0 }
+fn bre(mrad: i32) -> i32 { bjf(mrad + 1571) }
+fn sinf(r: f32) -> f32 { bjf((r * 1000.0) as i32) as f32 / 1000.0 }
+fn cosf(r: f32) -> f32 { bre((r * 1000.0) as i32) as f32 / 1000.0 }
 
 
-fn hpe(ap: i32) -> i32 {
-    if ap <= 0 { return 0; }
-    let mut b = ap;
-    let mut c = (b + 1) / 2;
-    while c < b { b = c; c = (b + ap / b) / 2; }
-    b
+fn dsw(val: i32) -> i32 {
+    if val <= 0 { return 0; }
+    let mut x = val;
+    let mut y = (x + 1) / 2;
+    while y < x { x = y; y = (x + val / x) / 2; }
+    x
 }
 
-fn cni(p: V3, kb: i32, ix: i32, agv: i32, e: i32) -> (i32, i32, i32) {
-    let fp = (p.b * e as f32) as i32;
-    let iz = (p.c * e as f32) as i32;
-    let ciq = (p.av * e as f32) as i32;
-    let (cr, cx) = (dlw(kb), dzw(kb));
-    let dp = (iz * cx - ciq * cr) / 1000;
-    let aeu = (iz * cr + ciq * cx) / 1000;
-    let (cq, ae) = (dlw(ix), dzw(ix));
-    let hy = (fp * ae + aeu * cq) / 1000;
-    let ahc = (-fp * cq + aeu * ae) / 1000;
-    let (nf, zr) = (dlw(agv), dzw(agv));
-    let ajr = (hy * zr - dp * nf) / 1000;
-    let dnn = (hy * nf + dp * zr) / 1000;
-    (ajr, dnn, ahc)
+fn avl(v: V3, da: i32, cm: i32, qp: i32, j: i32) -> (i32, i32, i32) {
+    let vx = (v.x * j as f32) as i32;
+    let vy = (v.y * j as f32) as i32;
+    let vz = (v.z * j as f32) as i32;
+    let (am, cx) = (bjf(da), bre(da));
+    let y1 = (vy * cx - vz * am) / 1000;
+    let po = (vy * am + vz * cx) / 1000;
+    let (ak, u) = (bjf(cm), bre(cm));
+    let x2 = (vx * u + po * ak) / 1000;
+    let qt = (-vx * ak + po * u) / 1000;
+    let (fq, mj) = (bjf(qp), bre(qp));
+    let x3 = (x2 * mj - y1 * fq) / 1000;
+    let bkf = (x2 * fq + y1 * mj) / 1000;
+    (x3, bkf, qt)
 }
 
-fn nv(b: i32, c: i32, av: i32, cx: i32, ae: i32) -> (i32, i32) {
-    let bc: i32 = 600;
-    let bzd = bc + av;
-    if bzd <= 10 { return (cx, ae); }
-    (cx + b * bc / bzd, ae - c * bc / bzd)
+fn project(x: i32, y: i32, z: i32, cx: i32, u: i32) -> (i32, i32) {
+    let d: i32 = 600;
+    let anz = d + z;
+    if anz <= 10 { return (cx, u); }
+    (cx + x * d / anz, u - y * d / anz)
 }
 
 
 
 
 
-pub fn qs(
-    g: &mut Air,
-    wf: u32, aav: u32,
-    cas: usize,
-    rf: f32, abo: f32,
-    ato: f32, aee: f32, vs: f32, axg: f32,
-    uu: bool,
+pub fn update(
+    state: &mut Pa,
+    screen_w: u32, screen_h: u32,
+    matrix_cols: usize,
+    beat: f32, energy: f32,
+    sub_bass: f32, bass: f32, mid: f32, treble: f32,
+    playing: bool,
 ) {
-    g.aqz();
-    g.frame = g.frame.cn(1);
-    g.yv = wf as i32 / 2;
-    g.uq = aav as i32 / 3;
+    state.ensure_init();
+    state.frame = state.frame.wrapping_add(1);
+    state.center_x = screen_w as i32 / 2;
+    state.center_y = screen_h as i32 / 3;
 
     
-    let bie = 0.15f32;
-    if uu {
-        g.bfi += (ato - g.bfi) * bie;
-        g.ays     += (aee     - g.ays)     * bie;
-        g.cib      += (vs      - g.cib)      * bie;
-        g.cbw   += (axg   - g.cbw)   * bie;
+    let afs = 0.15f32;
+    if playing {
+        state.smooth_sub_bass += (sub_bass - state.smooth_sub_bass) * afs;
+        state.smooth_bass     += (bass     - state.smooth_bass)     * afs;
+        state.smooth_mid      += (mid      - state.smooth_mid)      * afs;
+        state.smooth_treble   += (treble   - state.smooth_treble)   * afs;
     } else {
-        g.bfi *= 0.95;
-        g.ays     *= 0.95;
-        g.cib      *= 0.95;
-        g.cbw   *= 0.95;
+        state.smooth_sub_bass *= 0.95;
+        state.smooth_bass     *= 0.95;
+        state.smooth_mid      *= 0.95;
+        state.smooth_treble   *= 0.95;
     }
 
     
-    let iky = uu && rf > 0.5 && (ato + aee) > 0.4;
-    if iky { g.ana = 1.0; }
-    g.ana *= 0.90;  
+    let egj = playing && beat > 0.5 && (sub_bass + bass) > 0.4;
+    if egj { state.beat_pulse = 1.0; }
+    state.beat_pulse *= 0.90;  
 
     
-    if g.ana > 0.9 {
-        g.bws = 0.0;
+    if state.beat_pulse > 0.9 {
+        state.ripple_radius = 0.0;
     }
-    if g.bws < 600.0 {
-        g.bws += 6.0;
+    if state.ripple_radius < 600.0 {
+        state.ripple_radius += 6.0;
     }
 
     
-    let gzy = if uu {
-        ((g.bfi + g.ays) * 15.0 + rf * 8.0) as i32
+    let dir = if playing {
+        ((state.smooth_sub_bass + state.smooth_bass) * 15.0 + beat * 8.0) as i32
     } else { 0 };
-    g.cbn += g.hxx + gzy / 4;
-    g.boe += g.hxy + gzy;
-    g.dlj += g.hxz;
-    g.cbn %= 6283;
-    g.boe %= 6283;
-    g.dlj %= 6283;
+    state.rot_x += state.rot_speed_x + dir / 4;
+    state.rot_y += state.rot_speed_y + dir;
+    state.rot_z += state.rot_speed_z;
+    state.rot_x %= 6283;
+    state.rot_y %= 6283;
+    state.rot_z %= 6283;
 
     
-    g.eya = if uu {
-        140 + ((g.bfi + g.ays) * 30.0) as i32
-            + (g.ana * 30.0) as i32
+    state.scale_target = if playing {
+        140 + ((state.smooth_sub_bass + state.smooth_bass) * 30.0) as i32
+            + (state.beat_pulse * 30.0) as i32
     } else { 140 };
-    g.bv += (g.eya - g.bv) / 3;
-    if g.bv < 80 { g.bv = 80; }
-    if g.bv > 220 { g.bv = 220; }
+    state.scale += (state.scale_target - state.scale) / 3;
+    if state.scale < 80 { state.scale = 80; }
+    if state.scale > 220 { state.scale = 220; }
 
     
     
-    let gyo = [
-        g.bfi * 1.2,   
-        g.ays     * 1.0,   
-        g.cib      * 0.25,  
-        g.cbw   * 0.15,  
+    let dhq = [
+        state.smooth_sub_bass * 1.2,   
+        state.smooth_bass     * 1.0,   
+        state.smooth_mid      * 0.25,  
+        state.smooth_treble   * 0.15,  
     ];
-    let byj = g.ana * (0.3 + g.bfi * 0.3 + g.ays * 0.2);
-    for a in 0..g.ikw.len() {
-        let yu = g.ikw[a];
-        let bti = g.mpd[a] as usize;
-        let byf = if bti < 4 { gyo[bti] } else { abo * 0.2 };
-        let m = 1.0 + 0.35 * byf + byj * 0.25;
-        g.gei[a] = V3::new(yu.b * m, yu.c * m, yu.av * m);
+    let ann = state.beat_pulse * (0.3 + state.smooth_sub_bass * 0.3 + state.smooth_bass * 0.2);
+    for i in 0..state.base_verts.len() {
+        let lm = state.base_verts[i];
+        let akx = state.vert_bands[i] as usize;
+        let ank = if akx < 4 { dhq[akx] } else { energy * 0.2 };
+        let r = 1.0 + 0.35 * ank + ann * 0.25;
+        state.deformed_verts[i] = V3::new(lm.x * r, lm.y * r, lm.z * r);
     }
 
     
-    let (bv, kb, ix, agv) = (g.bv, g.cbn, g.boe, g.dlj);
-    let (cx, ae) = (g.yv, g.uq);
-    let pxy = g.gei.len();
-    let mut bwh: Vec<(i32, i32)> = Vec::fc(pxy);
-    g.eww.clear();
-    g.eww.pcn(pxy);
-    let mut fzj: i16 = i16::O;
-    let mut fzi: i16 = i16::Avc;
-    for p in &g.gei {
-        let (ajr, dnn, eli) = cni(*p, kb, ix, agv, bv);
-        bwh.push(nv(ajr, dnn, eli, cx, ae));
-        let dns = (eli as i16).am(-500).v(500);
-        g.eww.push(dns);
-        if dns < fzj { fzj = dns; }
-        if dns > fzi { fzi = dns; }
+    let (scale, da, cm, qp) = (state.scale, state.rot_x, state.rot_y, state.rot_z);
+    let (cx, u) = (state.center_x, state.center_y);
+    let jpu = state.deformed_verts.len();
+    let mut pverts: Vec<(i32, i32)> = Vec::with_capacity(jpu);
+    state.projected_z.clear();
+    state.projected_z.reserve(jpu);
+    let mut ctf: i16 = i16::MAX;
+    let mut cte: i16 = i16::MIN;
+    for v in &state.deformed_verts {
+        let (x3, bkf, bxf) = avl(*v, da, cm, qp, scale);
+        pverts.push(project(x3, bkf, bxf, cx, u));
+        let bkk = (bxf as i16).max(-500).min(500);
+        state.projected_z.push(bkk);
+        if bkk < ctf { ctf = bkk; }
+        if bkk > cte { cte = bkk; }
     }
-    g.elk = fzj;
-    g.elj = fzi;
+    state.z_min = ctf;
+    state.z_max = cte;
 
     
     
     
     
     {
-        let mut hac: i32 = i32::Avc;
-        let mut hag: i32 = cx;
-        let mut hah: i32 = ae;
+        let mut diy: i32 = i32::MIN;
+        let mut djc: i32 = cx;
+        let mut djd: i32 = u;
         
-        let uep: i32 = 500;  
-        let ueq: i32 = 700;
-        let uer: i32 = 500;
-        for (afj, p) in g.gei.iter().cf() {
+        let myg: i32 = 500;  
+        let myh: i32 = 700;
+        let myi: i32 = 500;
+        for (pt, v) in state.deformed_verts.iter().enumerate() {
             
-            let (vt, ahr, arn) = cni(*p, kb, ix, agv, 1000);
+            let (nx, re, wi) = avl(*v, da, cm, qp, 1000);
             
-            let amb = (vt * uep + ahr * ueq + arn * uer) / 1000;
-            if amb > hac {
-                hac = amb;
-                if afj < bwh.len() {
-                    hag = bwh[afj].0;
-                    hah = bwh[afj].1;
+            let dot = (nx * myg + re * myh + wi * myi) / 1000;
+            if dot > diy {
+                diy = dot;
+                if pt < pverts.len() {
+                    djc = pverts[pt].0;
+                    djd = pverts[pt].1;
                 }
             }
         }
-        g.eyt = hag;
-        g.dcd = hah;
+        state.spec_x = djc;
+        state.spec_y = djd;
     }
 
     
@@ -434,90 +434,90 @@ pub fn qs(
     {
         
         
-        let mut dhp: i32 = -1;
-        for &(_, wv) in g.anc.iter() {
-            if wv > dhp { dhp = wv; }
+        let mut bgr: i32 = -1;
+        for &(_, bmax) in state.column_bounds.iter() {
+            if bmax > bgr { bgr = bmax; }
         }
-        if dhp > 0 {
-            g.bsj = dhp;
-            g.dlt = dhp + 120; 
+        if bgr > 0 {
+            state.shadow_y_start = bgr;
+            state.shadow_y_end = bgr + 120; 
         } else {
-            g.bsj = 0;
-            g.dlt = 0;
+            state.shadow_y_start = 0;
+            state.shadow_y_end = 0;
         }
-        g.dvw = ae;
+        state.shape_center_y = u;
     }
 
     
-    let oy = if cas > 0 { wf as i32 / cas as i32 } else { 8 };
-    g.oy = oy;
+    let col_w = if matrix_cols > 0 { screen_w as i32 / matrix_cols as i32 } else { 8 };
+    state.col_w = col_w;
 
-    if g.btt.len() != cas {
-        g.btt.clear();
-        g.anc.clear();
-        for _ in 0..cas {
-            g.btt.push(Vec::new());
-            g.anc.push((-1, -1));
+    if state.column_hits.len() != matrix_cols {
+        state.column_hits.clear();
+        state.column_bounds.clear();
+        for _ in 0..matrix_cols {
+            state.column_hits.push(Vec::new());
+            state.column_bounds.push((-1, -1));
         }
     } else {
-        for i in g.btt.el() { i.clear(); }
-        for o in g.anc.el() { *o = (-1, -1); }
+        for h in state.column_hits.iter_mut() { h.clear(); }
+        for b in state.column_bounds.iter_mut() { *b = (-1, -1); }
     }
 
-    for (ksw, amd) in g.bu.iter().cf() {
-        let (fy, fo) = bwh[amd.0 as usize];
-        let (dn, dp) = bwh[amd.1 as usize];
+    for (ei, th) in state.edges.iter().enumerate() {
+        let (bm, az) = pverts[th.0 as usize];
+        let (x1, y1) = pverts[th.1 as usize];
         
-        let fzg = if (amd.0 as usize) < g.eww.len()
-                     && (amd.1 as usize) < g.eww.len() {
-            ((g.eww[amd.0 as usize] as i32
-            + g.eww[amd.1 as usize] as i32) / 2) as i16
+        let ctc = if (th.0 as usize) < state.projected_z.len()
+                     && (th.1 as usize) < state.projected_z.len() {
+            ((state.projected_z[th.0 as usize] as i32
+            + state.projected_z[th.1 as usize] as i32) / 2) as i16
         } else { 0 };
-        lxb(fy, fo, dn, dp, ksw as u16, fzg, oy, cas,
-                       aav as i32, &mut g.btt, &mut g.anc);
+        gpq(bm, az, x1, y1, ei as u16, ctc, col_w, matrix_cols,
+                       screen_h as i32, &mut state.column_hits, &mut state.column_bounds);
     }
 }
 
-fn lxb(
-    fy: i32, fo: i32, dn: i32, dp: i32,
-    cei: u16, fzg: i16, oy: i32, aur: usize, kl: i32,
-    buw: &mut [Vec<(i32, i32, u16, u8, i16)>],
-    eg: &mut [(i32, i32)],
+fn gpq(
+    bm: i32, az: i32, x1: i32, y1: i32,
+    aqk: u16, ctc: i16, col_w: i32, xx: usize, dw: i32,
+    hits: &mut [Vec<(i32, i32, u16, u8, i16)>],
+    bounds: &mut [(i32, i32)],
 ) {
-    if oy <= 0 { return; }
-    let dx = (dn - fy).gp();
-    let bg = (dp - fo).gp();
-    let au = dx.am(bg).am(1).v(2048);
-    let dcj = ((dn - fy) * 1024) / au;
-    let ejd = ((dp - fo) * 1024) / au;
-    let mut y = fy * 1024;
-    let mut x = fo * 1024;
+    if col_w <= 0 { return; }
+    let dx = (x1 - bm).abs();
+    let ad = (y1 - az).abs();
+    let steps = dx.max(ad).max(1).min(2048);
+    let avf = ((x1 - bm) * 1024) / steps;
+    let bwa = ((y1 - az) * 1024) / steps;
+    let mut p = bm * 1024;
+    let mut o = az * 1024;
 
     
-    let gpz = 8i32;
+    let dda = 8i32;
 
-    let oq = 2;
-    let mut e = 0;
-    while e <= au {
-        let cr = y / 1024;
-        let cq = x / 1024;
-        let r = cr / oy;
-        if r >= 0 && (r as usize) < aur && cq >= 0 && cq < kl {
-            let nc = r as usize;
+    let stride = 2;
+    let mut j = 0;
+    while j <= steps {
+        let am = p / 1024;
+        let ak = o / 1024;
+        let c = am / col_w;
+        if c >= 0 && (c as usize) < xx && ak >= 0 && ak < dw {
+            let ci = c as usize;
             
-            if buw[nc].len() < 64 {
-                let dnq = (cq - gpz).am(0);
-                let dnp = (cq + gpz).v(kl - 1);
-                buw[nc].push((dnq, dnp, cei, 255, fzg));
+            if hits[ci].len() < 64 {
+                let bki = (ak - dda).max(0);
+                let bkh = (ak + dda).min(dw - 1);
+                hits[ci].push((bki, bkh, aqk, 255, ctc));
             }
             
-            let (ref mut uj, ref mut wv) = eg[nc];
-            if *uj < 0 || cq < *uj { *uj = cq; }
-            if *wv < 0 || cq > *wv { *wv = cq; }
+            let (ref mut bmin, ref mut bmax) = bounds[ci];
+            if *bmin < 0 || ak < *bmin { *bmin = ak; }
+            if *bmax < 0 || ak > *bmax { *bmax = ak; }
         }
-        y += dcj * oq;
-        x += ejd * oq;
-        e += oq;
+        p += avf * stride;
+        o += bwa * stride;
+        j += stride;
     }
 }
 
@@ -528,279 +528,279 @@ fn lxb(
 
 
 #[inline]
-pub fn khf(
-    g: &Air,
-    bj: usize,
-    ayj: i32,
-    ana: f32,
-    abo: f32,
+pub fn fli(
+    state: &Pa,
+    col: usize,
+    pixel_y: i32,
+    beat_pulse: f32,
+    energy: f32,
 ) -> RainEffect {
-    if bj >= g.btt.len() { return RainEffect::Cq; }
+    if col >= state.column_hits.len() { return RainEffect::Bc; }
 
     
-    let ewr = bj as i32 * g.oy + g.oy / 2;
-    let dx = ewr - g.yv;
-    let bg = ayj - g.uq;
-    let la = hpe(dx * dx + bg * bg);
-    let exr = (la - g.bws as i32).gp();
-    let mak = 35i32;
-    let exs = if g.bws > 0.0 && g.bws < 550.0
-                      && exr < mak {
-        let yx = ((mak - exr) * 255 / mak) as u32;
-        let can = ((550.0 - g.bws) / 550.0).am(0.0);
-        (yx as f32 * can * 0.45).v(120.0) as u8
+    let ccs = col as i32 * state.col_w + state.col_w / 2;
+    let dx = ccs - state.center_x;
+    let ad = pixel_y - state.center_y;
+    let em = dsw(dx * dx + ad * ad);
+    let cdh = (em - state.ripple_radius as i32).abs();
+    let grt = 35i32;
+    let cdi = if state.ripple_radius > 0.0 && state.ripple_radius < 550.0
+                      && cdh < grt {
+        let ln = ((grt - cdh) * 255 / grt) as u32;
+        let life = ((550.0 - state.ripple_radius) / 550.0).max(0.0);
+        (ln as f32 * life * 0.45).min(120.0) as u8
     } else { 0u8 };
 
     
-    let buw = &g.btt[bj];
-    let mut had: u8 = 0;
-    let mut myw: i16 = 0;
-    for &(dnq, dnp, qbr, hj, xxh) in buw {
-        if ayj >= dnq && ayj <= dnp {
-            let pn = (dnq + dnp) / 2;
-            let la = (ayj - pn).gp();
-            let iv = ((dnp - dnq) / 2).am(1);
-            let yx = ((iv - la) * hj as i32 / iv).am(0) as u8;
-            if yx > had {
-                had = yx;
-                myw = xxh;
+    let hits = &state.column_hits[col];
+    let mut diz: u8 = 0;
+    let mut hhn: i16 = 0;
+    for &(bki, bkh, _eidx, intensity, z_val) in hits {
+        if pixel_y >= bki && pixel_y <= bkh {
+            let center = (bki + bkh) / 2;
+            let em = (pixel_y - center).abs();
+            let cw = ((bkh - bki) / 2).max(1);
+            let ln = ((cw - em) * intensity as i32 / cw).max(0) as u8;
+            if ln > diz {
+                diz = ln;
+                hhn = z_val;
             }
         }
     }
 
-    if had > 0 {
+    if diz > 0 {
         
-        let fdo = (had as u32 + (ana * 60.0) as u32).v(255) as u8;
+        let cgk = (diz as u32 + (beat_pulse * 60.0) as u32).min(255) as u8;
 
         
-        let jxs = (g.elj - g.elk).am(1) as i32;
-        let qaz = ((g.elj as i32 - myw as i32) * 255 / jxs).am(0).v(255) as u8;
+        let ffs = (state.z_max - state.z_min).max(1) as i32;
+        let jsg = ((state.z_max as i32 - hhn as i32) * 255 / ffs).max(0).min(255) as u8;
 
         
         
-        let sxm = {
-            let (uj, wv) = g.anc[bj];
-            if uj >= 0 && wv > uj {
-                let iv = ((wv - uj) / 2).am(1);
-                let uq = (uj + wv) / 2;
-                let ecb = (ayj - uq).gp();
+        let lyw = {
+            let (bmin, bmax) = state.column_bounds[col];
+            if bmin >= 0 && bmax > bmin {
+                let cw = ((bmax - bmin) / 2).max(1);
+                let center_y = (bmin + bmax) / 2;
+                let bsw = (pixel_y - center_y).abs();
                 
-                let hxr = (ecb as f32 / iv as f32).v(1.0);
-                (hxr * hxr * 255.0) as u8
+                let dxt = (bsw as f32 / cw as f32).min(1.0);
+                (dxt * dxt * 255.0) as u8
             } else { 0u8 }
         };
 
         
-        let wqt = {
-            let ftt = ewr - g.eyt;
-            let ftu = ayj - g.dcd;
-            let hze = hpe(ftt * ftt + ftu * ftu);
-            let fva = 45i32;
-            if hze < fva {
-                let ab = (fva - hze) as f32 / fva as f32;
-                (ab * ab * 255.0) as u8
+        let oup = {
+            let cqb = ccs - state.spec_x;
+            let cqc = pixel_y - state.spec_y;
+            let dyt = dsw(cqb * cqb + cqc * cqc);
+            let cqv = 45i32;
+            if dyt < cqv {
+                let t = (cqv - dyt) as f32 / cqv as f32;
+                (t * t * 255.0) as u8
             } else { 0u8 }
         };
 
         
-        let xlp = (had as u32 * 80 / 255).v(80) as u8;
+        let pmz = (diz as u32 * 80 / 255).min(80) as u8;
 
         
-        let qje = {
-            let (uj, wv) = g.anc[bj];
-            if uj >= 0 && wv > uj {
-                let iv = ((wv - uj) / 2).am(1);
-                let uq = (uj + wv) / 2;
-                let ecb = (ayj - uq).gp();
+        let jwm = {
+            let (bmin, bmax) = state.column_bounds[col];
+            if bmin >= 0 && bmax > bmin {
+                let cw = ((bmax - bmin) / 2).max(1);
+                let center_y = (bmin + bmax) / 2;
+                let bsw = (pixel_y - center_y).abs();
                 
-                let ksr = (ecb as f32 / iv as f32).v(1.0);
+                let fub = (bsw as f32 / cw as f32).min(1.0);
                 
-                let qmj = 1.0 - (qaz as f32 / 255.0); 
-                ((ksr * 0.4 + qmj * 0.3) * 120.0).v(120.0) as u8
+                let jzc = 1.0 - (jsg as f32 / 255.0); 
+                ((fub * 0.4 + jzc * 0.3) * 120.0).min(120.0) as u8
             } else { 0u8 }
         };
 
         
-        let qql = if fdo > 100 {
-            ((fdo as u32 - 100) * 200 / 155).v(200) as u8
+        let kcu = if cgk > 100 {
+            ((cgk as u32 - 100) * 200 / 155).min(200) as u8
         } else { 0u8 };
 
         
-        let wdz = 0u8; 
+        let olh = 0u8; 
 
         
-        let tuq = {
-            let hhh = ewr - g.yv;
-            let hhk = ayj - g.dvw;
-            let eok = hhh * hhh + hhk * hhk;
-            let dy = 80i32;
-            let bwl = dy * dy;
-            if eok < bwl {
-                let ab = 1.0 - (eok as f32 / bwl as f32);
-                (ab * 160.0) as u8
+        let mqd = {
+            let doa = ccs - state.center_x;
+            let doe = pixel_y - state.shape_center_y;
+            let byn = doa * doa + doe * doe;
+            let radius = 80i32;
+            let amn = radius * radius;
+            if byn < amn {
+                let t = 1.0 - (byn as f32 / amn as f32);
+                (t * 160.0) as u8
             } else { 0u8 }
         };
 
         return RainEffect {
-            tq: fdo,
-            eo: qaz,
-            bst: xlp,
-            apb: exs,
-            tp: 0,
-            aug: sxm,
-            amv: wqt,
-            atv: qje,
-            axo: qql,
-            ys: wdz,
-            ata: tuq,
-            zc: 0,
+            glow: cgk,
+            depth: jsg,
+            trail_boost: pmz,
+            ripple: cdi,
+            dim: 0,
+            fresnel: lyw,
+            specular: oup,
+            ao: jwm,
+            bloom: kcu,
+            scanline: olh,
+            inner_glow: mqd,
+            shadow: 0,
         };
     }
 
     
-    let (uj, wv) = g.anc[bj];
-    if uj >= 0 && wv > uj && ayj >= uj && ayj <= wv {
-        let xio = ayj - uj;
-        let xih = wv - ayj;
-        let xii = xio.v(xih);
-        let iv = (wv - uj) / 2;
-        if iv <= 0 {
-            return RainEffect { tq: 0, eo: 128, bst: 0, apb: exs, tp: 0,
-                aug: 0, amv: 0, atv: 0, axo: 0, ys: 0, ata: 0, zc: 0 };
+    let (bmin, bmax) = state.column_bounds[col];
+    if bmin >= 0 && bmax > bmin && pixel_y >= bmin && pixel_y <= bmax {
+        let pko = pixel_y - bmin;
+        let pkk = bmax - pixel_y;
+        let pkl = pko.min(pkk);
+        let cw = (bmax - bmin) / 2;
+        if cw <= 0 {
+            return RainEffect { glow: 0, depth: 128, trail_boost: 0, ripple: cdi, dim: 0,
+                fresnel: 0, specular: 0, ao: 0, bloom: 0, scanline: 0, inner_glow: 0, shadow: 0 };
         }
         
-        let uq = (uj + wv) / 2;
-        let ecb = (ayj - uq).gp();
-        let hxr = (ecb as f32 / iv as f32).v(1.0);
-        let sxn = (hxr * hxr * 180.0) as u8;
+        let center_y = (bmin + bmax) / 2;
+        let bsw = (pixel_y - center_y).abs();
+        let dxt = (bsw as f32 / cw as f32).min(1.0);
+        let lyx = (dxt * dxt * 180.0) as u8;
 
         
-        let wqu = {
-            let ftt = ewr - g.eyt;
-            let ftu = ayj - g.dcd;
-            let hze = hpe(ftt * ftt + ftu * ftu);
-            let fva = 55i32; 
-            if hze < fva {
-                let ab = (fva - hze) as f32 / fva as f32;
-                (ab * ab * 200.0) as u8
+        let ouq = {
+            let cqb = ccs - state.spec_x;
+            let cqc = pixel_y - state.spec_y;
+            let dyt = dsw(cqb * cqb + cqc * cqc);
+            let cqv = 55i32; 
+            if dyt < cqv {
+                let t = (cqv - dyt) as f32 / cqv as f32;
+                (t * t * 200.0) as u8
             } else { 0u8 }
         };
 
-        let qnj = 15u32 + 25 * (iv - xii).am(0) as u32 / iv as u32;
-        let fdo = (qnj + (abo * 15.0) as u32 + (ana * 25.0) as u32).v(75) as u8;
+        let kaa = 15u32 + 25 * (cw - pkl).max(0) as u32 / cw as u32;
+        let cgk = (kaa + (energy * 15.0) as u32 + (beat_pulse * 25.0) as u32).min(75) as u8;
 
         
-        let qjf = {
-            let ksr = (ecb as f32 / iv as f32).v(1.0);
-            (ksr * 0.5 * 100.0).v(100.0) as u8
+        let jwn = {
+            let fub = (bsw as f32 / cw as f32).min(1.0);
+            (fub * 0.5 * 100.0).min(100.0) as u8
         };
 
         
-        let qqm = if fdo > 50 {
-            ((fdo as u32 - 50) * 80 / 25).v(80) as u8
+        let kcv = if cgk > 50 {
+            ((cgk as u32 - 50) * 80 / 25).min(80) as u8
         } else { 0u8 };
 
         
-        let tur = {
-            let hhh = ewr - g.yv;
-            let hhk = ayj - g.dvw;
-            let eok = hhh * hhh + hhk * hhk;
-            let dy = 100i32;
-            let bwl = dy * dy;
-            if eok < bwl {
-                let ab = 1.0 - (eok as f32 / bwl as f32);
-                (ab * 200.0) as u8
+        let mqe = {
+            let doa = ccs - state.center_x;
+            let doe = pixel_y - state.shape_center_y;
+            let byn = doa * doa + doe * doe;
+            let radius = 100i32;
+            let amn = radius * radius;
+            if byn < amn {
+                let t = 1.0 - (byn as f32 / amn as f32);
+                (t * 200.0) as u8
             } else { 0u8 }
         };
 
         return RainEffect {
-            tq: fdo,
-            eo: 128,
-            bst: 20,
-            apb: exs,
-            tp: 0,
-            aug: sxn,
-            amv: wqu,
-            atv: qjf,
-            axo: qqm,
-            ys: 0,
-            ata: tur,
-            zc: 0,
+            glow: cgk,
+            depth: 128,
+            trail_boost: 20,
+            ripple: cdi,
+            dim: 0,
+            fresnel: lyx,
+            specular: ouq,
+            ao: jwn,
+            bloom: kcv,
+            scanline: 0,
+            inner_glow: mqe,
+            shadow: 0,
         };
     }
 
     
     
-    if uj >= 0 && wv > uj {
-        let adf = 60i32; 
-        let kqg = if ayj < uj {
-            uj - ayj
-        } else if ayj > wv {
-            ayj - wv
+    if bmin >= 0 && bmax > bmin {
+        let oq = 60i32; 
+        let fsl = if pixel_y < bmin {
+            bmin - pixel_y
+        } else if pixel_y > bmax {
+            pixel_y - bmax
         } else { 0 };
-        if kqg > 0 && kqg < adf {
+        if fsl > 0 && fsl < oq {
             
-            let rxn = ((adf - kqg) * 160 / adf) as u8;
+            let leq = ((oq - fsl) * 160 / oq) as u8;
             return RainEffect {
-                tq: 0, eo: 128, bst: 0, apb: exs,
-                tp: rxn, aug: 0, amv: 0,
-                atv: 0, axo: 0, ys: 0, ata: 0, zc: 0,
+                glow: 0, depth: 128, trail_boost: 0, ripple: cdi,
+                dim: leq, fresnel: 0, specular: 0,
+                ao: 0, bloom: 0, scanline: 0, inner_glow: 0, shadow: 0,
             };
         }
     }
 
     
-    if g.bsj > 0 && ayj > g.bsj && ayj < g.dlt {
+    if state.shadow_y_start > 0 && pixel_y > state.shadow_y_start && pixel_y < state.shadow_y_end {
         
-        let (uj, wv) = g.anc[bj];
+        let (bmin, bmax) = state.column_bounds[col];
         
         
-        let tnf = uj >= 0 || {
-            let fd = if bj > 0 { g.anc[bj - 1].0 >= 0 } else { false };
-            let hw = if bj + 1 < g.anc.len() { g.anc[bj + 1].0 >= 0 } else { false };
-            fd || hw
+        let mkd = bmin >= 0 || {
+            let left = if col > 0 { state.column_bounds[col - 1].0 >= 0 } else { false };
+            let right = if col + 1 < state.column_bounds.len() { state.column_bounds[col + 1].0 >= 0 } else { false };
+            left || right
         };
-        if tnf {
-            let wme = g.dlt - g.bsj;
-            let syi = ayj - g.bsj;
-            let pke = 1.0 - (syi as f32 / wme as f32);
-            let pkf = (pke * pke * 140.0) as u8; 
-            if pkf > 5 {
+        if mkd {
+            let orh = state.shadow_y_end - state.shadow_y_start;
+            let lzr = pixel_y - state.shadow_y_start;
+            let jgc = 1.0 - (lzr as f32 / orh as f32);
+            let jgd = (jgc * jgc * 140.0) as u8; 
+            if jgd > 5 {
                 return RainEffect {
-                    tq: 0, eo: 128, bst: 0, apb: exs,
-                    tp: 0, aug: 0, amv: 0,
-                    atv: 0, axo: 0, ys: 0, ata: 0, zc: pkf,
+                    glow: 0, depth: 128, trail_boost: 0, ripple: cdi,
+                    dim: 0, fresnel: 0, specular: 0,
+                    ao: 0, bloom: 0, scanline: 0, inner_glow: 0, shadow: jgd,
                 };
             }
         }
     }
 
     
-    if g.bsj > 0 && ayj > g.bsj && ayj < g.bsj + 200 {
+    if state.shadow_y_start > 0 && pixel_y > state.shadow_y_start && pixel_y < state.shadow_y_start + 200 {
         
-        let rlr = g.yv / g.oy.am(1);
-        let rlt = (bj as i32 - rlr).gp();
-        if rlt < 15 && (bj % 4 == 0 || bj % 4 == 1) {
-            let wmg = ayj - g.bsj;
-            let yx = 1.0 - (wmg as f32 / 200.0);
-            let ozs = (yx * yx * 80.0 * abo) as u8;
-            if ozs > 3 {
+        let kvc = state.center_x / state.col_w.max(1);
+        let kve = (col as i32 - kvc).abs();
+        if kve < 15 && (col % 4 == 0 || col % 4 == 1) {
+            let orj = pixel_y - state.shadow_y_start;
+            let ln = 1.0 - (orj as f32 / 200.0);
+            let iyd = (ln * ln * 80.0 * energy) as u8;
+            if iyd > 3 {
                 return RainEffect {
-                    tq: 0, eo: 128, bst: 0, apb: exs,
-                    tp: 0, aug: 0, amv: 0,
-                    atv: 0, axo: 0, ys: ozs, ata: 0, zc: 0,
+                    glow: 0, depth: 128, trail_boost: 0, ripple: cdi,
+                    dim: 0, fresnel: 0, specular: 0,
+                    ao: 0, bloom: 0, scanline: iyd, inner_glow: 0, shadow: 0,
                 };
             }
         }
     }
 
     
-    if exs > 0 {
-        return RainEffect { tq: 0, eo: 128, bst: 0, apb: exs, tp: 0,
-            aug: 0, amv: 0, atv: 0, axo: 0, ys: 0, ata: 0, zc: 0 };
+    if cdi > 0 {
+        return RainEffect { glow: 0, depth: 128, trail_boost: 0, ripple: cdi, dim: 0,
+            fresnel: 0, specular: 0, ao: 0, bloom: 0, scanline: 0, inner_glow: 0, shadow: 0 };
     }
 
-    RainEffect::Cq
+    RainEffect::Bc
 }
 
 
@@ -811,107 +811,107 @@ pub fn khf(
 
 
 #[inline]
-pub fn lmn(
-    bdm: u8, bji: u8, cdd: u8,
-    tq: u8, eo: u8, apb: u8,
-    aug: u8, amv: u8,
-    atv: u8, axo: u8, ys: u8, ata: u8, zc: u8,
-    rf: f32, abo: f32,
+pub fn gia(
+    adi: u8, agd: u8, apu: u8,
+    glow: u8, depth: u8, ripple: u8,
+    fresnel: u8, specular: u8,
+    ao: u8, bloom: u8, scanline: u8, inner_glow: u8, shadow: u8,
+    beat: f32, energy: f32,
 ) -> (u8, u8, u8) {
-    let mut m = bdm as f32;
-    let mut at = bji as f32;
-    let mut o = cdd as f32;
+    let mut r = adi as f32;
+    let mut g = agd as f32;
+    let mut b = apu as f32;
 
     
-    if zc > 5 {
-        let e = 1.0 - (zc as f32 / 255.0) * 0.6;
-        m *= e; at *= e; o *= e;
+    if shadow > 5 {
+        let j = 1.0 - (shadow as f32 / 255.0) * 0.6;
+        r *= j; g *= j; b *= j;
     }
 
     
-    if ys > 3 {
-        let acj = ys as f32 / 255.0;
-        m = (m + acj * 15.0).v(255.0);
-        at = (at + acj * 50.0).v(255.0);
-        o = (o + acj * 25.0).v(255.0);
+    if scanline > 3 {
+        let ob = scanline as f32 / 255.0;
+        r = (r + ob * 15.0).min(255.0);
+        g = (g + ob * 50.0).min(255.0);
+        b = (b + ob * 25.0).min(255.0);
     }
 
     
-    if atv > 0 && tq > 0 {
-        let ddw = 1.0 - (atv as f32 / 255.0) * 0.45;
-        m *= ddw;
-        at *= ddw;
-        o *= ddw;
+    if ao > 0 && glow > 0 {
+        let bep = 1.0 - (ao as f32 / 255.0) * 0.45;
+        r *= bep;
+        g *= bep;
+        b *= bep;
     }
 
-    if tq > 0 {
-        let ckq = tq as f32 / 255.0;
+    if glow > 0 {
+        let atx = glow as f32 / 255.0;
 
-        if tq > 80 {
+        if glow > 80 {
             
-            let rvt = 0.4 + 0.6 * (eo as f32 / 255.0);
-            let ckq = ckq * rvt;
-            let acn = rf * 0.2;
-            let agd = (140.0 + acn * 80.0 + abo * 60.0).v(255.0);
-            let ejs = 255.0f32;
-            let bov = (190.0 + acn * 40.0 + abo * 30.0).v(255.0);
-            m = (m * (1.0 - ckq) + agd * ckq).v(255.0);
-            at = (at * (1.0 - ckq) + ejs * ckq).v(255.0);
-            o = (o * (1.0 - ckq) + bov * ckq).v(255.0);
+            let ldj = 0.4 + 0.6 * (depth as f32 / 255.0);
+            let atx = atx * ldj;
+            let no = beat * 0.2;
+            let tr = (140.0 + no * 80.0 + energy * 60.0).min(255.0);
+            let bwi = 255.0f32;
+            let aiv = (190.0 + no * 40.0 + energy * 30.0).min(255.0);
+            r = (r * (1.0 - atx) + tr * atx).min(255.0);
+            g = (g * (1.0 - atx) + bwi * atx).min(255.0);
+            b = (b * (1.0 - atx) + aiv * atx).min(255.0);
         } else {
             
-            let bma = ckq * 2.5;
-            m = (m * (1.0 + bma)).v(255.0);
-            at = (at * (1.0 + bma)).v(255.0);
-            o = (o * (1.0 + bma)).v(255.0);
+            let ahj = atx * 2.5;
+            r = (r * (1.0 + ahj)).min(255.0);
+            g = (g * (1.0 + ahj)).min(255.0);
+            b = (b * (1.0 + ahj)).min(255.0);
         }
     }
 
     
-    if ata > 20 {
-        let crl = (ata as f32 - 20.0) / 235.0;
-        let crl = crl * crl; 
+    if inner_glow > 20 {
+        let axo = (inner_glow as f32 - 20.0) / 235.0;
+        let axo = axo * axo; 
         
-        m = (m + crl * 30.0).v(255.0);
-        at = (at + crl * 70.0).v(255.0);
-        o = (o + crl * 45.0).v(255.0);
+        r = (r + axo * 30.0).min(255.0);
+        g = (g + axo * 70.0).min(255.0);
+        b = (b + axo * 45.0).min(255.0);
     }
 
     
-    if aug > 120 {
-        let ggp = (aug as f32 - 120.0) / 135.0;
-        m = (m + ggp * 80.0).v(255.0);
-        at = (at + ggp * 120.0).v(255.0);
-        o = (o + ggp * 100.0).v(255.0);
+    if fresnel > 120 {
+        let cxm = (fresnel as f32 - 120.0) / 135.0;
+        r = (r + cxm * 80.0).min(255.0);
+        g = (g + cxm * 120.0).min(255.0);
+        b = (b + cxm * 100.0).min(255.0);
     }
 
     
-    if amv > 30 {
-        let cud = (amv as f32 - 30.0) / 225.0;
-        let cud = cud * cud;
-        m = (m + cud * 180.0).v(255.0);
-        at = (at + cud * 200.0).v(255.0);
-        o = (o + cud * 190.0).v(255.0);
+    if specular > 30 {
+        let azo = (specular as f32 - 30.0) / 225.0;
+        let azo = azo * azo;
+        r = (r + azo * 180.0).min(255.0);
+        g = (g + azo * 200.0).min(255.0);
+        b = (b + azo * 190.0).min(255.0);
     }
 
     
-    if axo > 10 {
-        let bl = axo as f32 / 255.0;
+    if bloom > 10 {
+        let bl = bloom as f32 / 255.0;
         
-        m = (m + bl * 40.0).v(255.0);
-        at = (at + bl * 55.0).v(255.0);
-        o = (o + bl * 45.0).v(255.0);
+        r = (r + bl * 40.0).min(255.0);
+        g = (g + bl * 55.0).min(255.0);
+        b = (b + bl * 45.0).min(255.0);
     }
 
     
-    if apb > 0 {
-        let pc = apb as f32 / 255.0;
-        m = (m + 20.0 * pc).v(255.0);
-        at = (at + 35.0 * pc).v(255.0);
-        o = (o + 30.0 * pc).v(255.0);
+    if ripple > 0 {
+        let rip = ripple as f32 / 255.0;
+        r = (r + 20.0 * rip).min(255.0);
+        g = (g + 35.0 * rip).min(255.0);
+        b = (b + 30.0 * rip).min(255.0);
     }
 
-    (m as u8, at as u8, o as u8)
+    (r as u8, g as u8, b as u8)
 }
 
 
@@ -921,12 +921,12 @@ pub fn lmn(
 
 
 #[inline]
-pub fn nez(g: &Air, bj: usize) -> u8 {
-    if bj >= g.anc.len() { return 100; }
-    let (uj, wv) = g.anc[bj];
-    if uj < 0 || wv <= uj { return 100; }
+pub fn hmz(state: &Pa, col: usize) -> u8 {
+    if col >= state.column_bounds.len() { return 100; }
+    let (bmin, bmax) = state.column_bounds[col];
+    if bmin < 0 || bmax <= bmin { return 100; }
     
-    let rpj = ((wv - uj) as u32).v(400);
-    let cgn = 100u32.ao(rpj * 55 / 400);
-    cgn.am(45) as u8
+    let kyh = ((bmax - bmin) as u32).min(400);
+    let aed = 100u32.saturating_sub(kyh * 55 / 400);
+    aed.max(45) as u8
 }

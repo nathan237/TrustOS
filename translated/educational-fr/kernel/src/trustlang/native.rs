@@ -54,7 +54,7 @@ impl FnCtx {
         }
     }
 
-    fn allocator_local(&mut self, name: &str) -> i32 {
+    fn alloc_local(&mut self, name: &str) -> i32 {
         if let Some(&off) = self.locals.get(name) {
             return off;
         }
@@ -95,13 +95,13 @@ impl NativeCompiler {
     }
 
     fn intern_string(&mut self, s: &str) -> usize {
-        if let Some(&index) = self.string_map.get(s) {
-            return index;
+        if let Some(&idx) = self.string_map.get(s) {
+            return idx;
         }
-        let index = self.strings.len();
+        let idx = self.strings.len();
         self.strings.push(String::from(s));
-        self.string_map.insert(String::from(s), index);
-        index
+        self.string_map.insert(String::from(s), idx);
+        idx
     }
 
     /// Map TrustLang builtin names to IDs matching vm.rs constants
@@ -147,7 +147,7 @@ match name {
         self.asm.bind_label(self.builtin_trampoline);
         // R15 holds the callback function pointer
         self.asm.call_r(Reg::R15);
-        self.asm.return_value();
+        self.asm.ret();
 
         // Phase 3: compile each function
         for item in &program.items {
@@ -157,7 +157,7 @@ match name {
         }
 
         // Resolve all jump/call patches
-        self.asm.resolve_patches().map_error(|e| String::from(e))?;
+        self.asm.resolve_patches().map_err(|e| String::from(e))?;
 
         let entry_label = self.func_labels.get("main")
             .ok_or_else(|| String::from("no main() function found"))?;
@@ -175,20 +175,20 @@ match name {
         let label = *self.func_labels.get(&decl.name)
             .ok_or_else(|| format!("function '{}' not registered", decl.name))?;
 
-        let mut context = FnCtx::new(label);
+        let mut ctx = FnCtx::new(label);
 
         // Register parameters as locals (passed via stack, pushed by caller)
         // Caller pushes args right-to-left, so first arg is at [rbp+16], etc.
         // We copy them to local slots in prologue.
         for (i, (name, _ty)) in decl.params.iter().enumerate() {
-            let off = context.allocator_local(name);
+            let off = ctx.alloc_local(name);
             // Will be filled during prologue copy below
             let _ = (i, off);
         }
 
         // Pre-scan body for additional locals to compute frame size
-        self.prescan_block_locals(&mut context, &decl.body);
-        let frame_size = context.frame_size();
+        self.prescan_block_locals(&mut ctx, &decl.body);
+        let frame_size = ctx.frame_size();
 
         // Emit label and prologue
         self.asm.bind_label(label);
@@ -198,13 +198,13 @@ match name {
         // Caller pushes args right-to-left, so at [rbp+16] = arg0, [rbp+24] = arg1, etc.
         for (i, (name, _ty)) in decl.params.iter().enumerate() {
             let source_offset = 16 + (i as i32) * 8;
-            let destination_offset = *context.locals.get(name).unwrap();
+            let destination_offset = *ctx.locals.get(name).unwrap();
             self.asm.mov_r_rbp_offset(Reg::Rax, source_offset);
             self.asm.mov_rbp_offset_r(destination_offset, Reg::Rax);
         }
 
         // Compile body
-        self.compile_block(&mut context, &decl.body)?;
+        self.compile_block(&mut ctx, &decl.body)?;
 
         // Default return 0 if no explicit return
         self.asm.mov_r_imm32(Reg::Rax, 0);
@@ -214,63 +214,63 @@ match name {
     }
 
     /// Pre-scan a block for let bindings to allocate local slots
-    fn prescan_block_locals(&self, context: &mut FnCtx, block: &Block) {
+    fn prescan_block_locals(&self, ctx: &mut FnCtx, block: &Block) {
         for stmt in &block.stmts {
                         // Correspondance de motifs — branchement exhaustif de Rust.
 match stmt {
-                Stmt::Let { name, .. } => { context.allocator_local(name); }
+                Stmt::Let { name, .. } => { ctx.alloc_local(name); }
                 Stmt::If { then_block, else_block, .. } => {
-                    self.prescan_block_locals(context, then_block);
-                    if let Some(eb) = else_block { self.prescan_block_locals(context, eb); }
+                    self.prescan_block_locals(ctx, then_block);
+                    if let Some(eb) = else_block { self.prescan_block_locals(ctx, eb); }
                 }
                 Stmt::While { body, .. } | Stmt::Loop(body) => {
-                    self.prescan_block_locals(context, body);
+                    self.prescan_block_locals(ctx, body);
                 }
                 Stmt::For { var, body, .. } => {
-                    context.allocator_local(var);
-                    context.allocator_local(&format!("__for_end_{}", var));
-                    self.prescan_block_locals(context, body);
+                    ctx.alloc_local(var);
+                    ctx.alloc_local(&format!("__for_end_{}", var));
+                    self.prescan_block_locals(ctx, body);
                 }
                 _ => {}
             }
         }
     }
 
-    fn compile_block(&mut self, context: &mut FnCtx, block: &Block) -> Result<(), String> {
+    fn compile_block(&mut self, ctx: &mut FnCtx, block: &Block) -> Result<(), String> {
         for stmt in &block.stmts {
-            self.compile_stmt(context, stmt)?;
+            self.compile_stmt(ctx, stmt)?;
         }
         Ok(())
     }
 
-    fn compile_stmt(&mut self, context: &mut FnCtx, stmt: &Stmt) -> Result<(), String> {
+    fn compile_stmt(&mut self, ctx: &mut FnCtx, stmt: &Stmt) -> Result<(), String> {
                 // Correspondance de motifs — branchement exhaustif de Rust.
 match stmt {
             Stmt::Let { name, init, .. } => {
-                let off = *context.locals.get(name).unwrap();
+                let off = *ctx.locals.get(name).unwrap();
                 if let Some(expr) = init {
-                    self.compile_expr(context, expr)?;
+                    self.compile_expr(ctx, expr)?;
                     self.asm.pop_r(Reg::Rax);
                     self.asm.mov_rbp_offset_r(off, Reg::Rax);
                 }
             }
             Stmt::Assign { target, value } => {
-                self.compile_expr(context, value)?;
-                self.compile_store(context, target)?;
+                self.compile_expr(ctx, value)?;
+                self.compile_store(ctx, target)?;
             }
-            Stmt::OperationAssign { op, target, value } => {
-                self.compile_expr(context, target)?;
-                self.compile_expr(context, value)?;
+            Stmt::OpAssign { op, target, value } => {
+                self.compile_expr(ctx, target)?;
+                self.compile_expr(ctx, value)?;
                 self.emit_binop(*op)?;
-                self.compile_store(context, &target.clone())?;
+                self.compile_store(ctx, &target.clone())?;
             }
             Stmt::Expr(expr) => {
-                self.compile_expr(context, expr)?;
+                self.compile_expr(ctx, expr)?;
                 self.asm.pop_r(Reg::Rax); // discard result
             }
-            Stmt::Return(value) => {
-                if let Some(expr) = value {
-                    self.compile_expr(context, expr)?;
+            Stmt::Return(val) => {
+                if let Some(expr) = val {
+                    self.compile_expr(ctx, expr)?;
                     self.asm.pop_r(Reg::Rax);
                 } else {
                     self.asm.mov_r_imm32(Reg::Rax, 0);
@@ -278,17 +278,17 @@ match stmt {
                 self.asm.epilogue();
             }
             Stmt::If { condition, then_block, else_block } => {
-                self.compile_expr(context, condition)?;
+                self.compile_expr(ctx, condition)?;
                 self.asm.pop_r(Reg::Rax);
                 self.asm.test_r_r(Reg::Rax, Reg::Rax);
                 let else_label = self.asm.new_label();
                 self.asm.jcc_label(Cc::E, else_label); // jump if zero (false)
-                self.compile_block(context, then_block)?;
+                self.compile_block(ctx, then_block)?;
                 if let Some(eb) = else_block {
                     let end_label = self.asm.new_label();
                     self.asm.jmp_label(end_label);
                     self.asm.bind_label(else_label);
-                    self.compile_block(context, eb)?;
+                    self.compile_block(ctx, eb)?;
                     self.asm.bind_label(end_label);
                 } else {
                     self.asm.bind_label(else_label);
@@ -297,58 +297,58 @@ match stmt {
             Stmt::While { condition, body } => {
                 let top = self.asm.new_label();
                 let end = self.asm.new_label();
-                context.loop_starts.push(top);
-                context.loop_ends.push(end);
+                ctx.loop_starts.push(top);
+                ctx.loop_ends.push(end);
 
                 self.asm.bind_label(top);
-                self.compile_expr(context, condition)?;
+                self.compile_expr(ctx, condition)?;
                 self.asm.pop_r(Reg::Rax);
                 self.asm.test_r_r(Reg::Rax, Reg::Rax);
                 self.asm.jcc_label(Cc::E, end);
-                self.compile_block(context, body)?;
+                self.compile_block(ctx, body)?;
                 self.asm.jmp_label(top);
                 self.asm.bind_label(end);
 
-                context.loop_starts.pop();
-                context.loop_ends.pop();
+                ctx.loop_starts.pop();
+                ctx.loop_ends.pop();
             }
             Stmt::For { var, iter, body } => {
                 if let Expr::Range { start, end } = iter {
-                    let var_off = *context.locals.get(var).unwrap();
+                    let var_off = *ctx.locals.get(var).unwrap();
                     let end_name = format!("__for_end_{}", var);
-                    let end_off = *context.locals.get(&end_name).unwrap();
+                    let end_off = *ctx.locals.get(&end_name).unwrap();
 
-                    self.compile_expr(context, start)?;
+                    self.compile_expr(ctx, start)?;
                     self.asm.pop_r(Reg::Rax);
                     self.asm.mov_rbp_offset_r(var_off, Reg::Rax);
 
-                    self.compile_expr(context, end)?;
+                    self.compile_expr(ctx, end)?;
                     self.asm.pop_r(Reg::Rax);
                     self.asm.mov_rbp_offset_r(end_off, Reg::Rax);
 
                     let top = self.asm.new_label();
-                    let end_label = self.asm.new_label();
-                    context.loop_starts.push(top);
-                    context.loop_ends.push(end_label);
+                    let end_lbl = self.asm.new_label();
+                    ctx.loop_starts.push(top);
+                    ctx.loop_ends.push(end_lbl);
 
                     self.asm.bind_label(top);
                     // var < end?
                     self.asm.mov_r_rbp_offset(Reg::Rax, var_off);
                     self.asm.mov_r_rbp_offset(Reg::Rcx, end_off);
                     self.asm.cmp_r_r(Reg::Rax, Reg::Rcx);
-                    self.asm.jcc_label(Cc::Ge, end_label);
+                    self.asm.jcc_label(Cc::Ge, end_lbl);
 
-                    self.compile_block(context, body)?;
+                    self.compile_block(ctx, body)?;
 
                     // var += 1
                     self.asm.mov_r_rbp_offset(Reg::Rax, var_off);
                     self.asm.add_r_imm32(Reg::Rax, 1);
                     self.asm.mov_rbp_offset_r(var_off, Reg::Rax);
                     self.asm.jmp_label(top);
-                    self.asm.bind_label(end_label);
+                    self.asm.bind_label(end_lbl);
 
-                    context.loop_starts.pop();
-                    context.loop_ends.pop();
+                    ctx.loop_starts.pop();
+                    ctx.loop_ends.pop();
                 } else {
                     return Err(String::from("for loop requires a range expression"));
                 }
@@ -356,22 +356,22 @@ match stmt {
             Stmt::Loop(body) => {
                 let top = self.asm.new_label();
                 let end = self.asm.new_label();
-                context.loop_starts.push(top);
-                context.loop_ends.push(end);
+                ctx.loop_starts.push(top);
+                ctx.loop_ends.push(end);
                 self.asm.bind_label(top);
-                self.compile_block(context, body)?;
+                self.compile_block(ctx, body)?;
                 self.asm.jmp_label(top);
                 self.asm.bind_label(end);
-                context.loop_starts.pop();
-                context.loop_ends.pop();
+                ctx.loop_starts.pop();
+                ctx.loop_ends.pop();
             }
             Stmt::Break => {
-                if let Some(&end) = context.loop_ends.last() {
+                if let Some(&end) = ctx.loop_ends.last() {
                     self.asm.jmp_label(end);
                 }
             }
             Stmt::Continue => {
-                if let Some(&top) = context.loop_starts.last() {
+                if let Some(&top) = ctx.loop_starts.last() {
                     self.asm.jmp_label(top);
                 }
             }
@@ -379,7 +379,7 @@ match stmt {
         Ok(())
     }
 
-    fn compile_expr(&mut self, context: &mut FnCtx, expr: &Expr) -> Result<(), String> {
+    fn compile_expr(&mut self, ctx: &mut FnCtx, expr: &Expr) -> Result<(), String> {
                 // Correspondance de motifs — branchement exhaustif de Rust.
 match expr {
             Expr::IntLit(v) => {
@@ -398,12 +398,12 @@ match expr {
             }
             Expr::StringLit(s) => {
                 // Push the string pool index as an i64
-                let index = self.intern_string(s);
-                self.asm.mov_r_imm64(Reg::Rax, index as i64);
+                let idx = self.intern_string(s);
+                self.asm.mov_r_imm64(Reg::Rax, idx as i64);
                 self.asm.push_r(Reg::Rax);
             }
             Expr::Ident(name) => {
-                if let Some(&off) = context.locals.get(name) {
+                if let Some(&off) = ctx.locals.get(name) {
                     self.asm.mov_r_rbp_offset(Reg::Rax, off);
                     self.asm.push_r(Reg::Rax);
                 } else {
@@ -411,16 +411,16 @@ match expr {
                 }
             }
             Expr::BinOp { op, left, right } => {
-                self.compile_expr(context, left)?;
-                self.compile_expr(context, right)?;
+                self.compile_expr(ctx, left)?;
+                self.compile_expr(ctx, right)?;
                 self.emit_binop(*op)?;
             }
             Expr::UnaryOp { op, expr } => {
-                self.compile_expr(context, expr)?;
+                self.compile_expr(ctx, expr)?;
                 self.asm.pop_r(Reg::Rax);
                                 // Correspondance de motifs — branchement exhaustif de Rust.
 match op {
-                    UnaryOp::Neg => self.asm.negative_r(Reg::Rax),
+                    UnaryOp::Neg => self.asm.neg_r(Reg::Rax),
                     UnaryOp::Not => {
                         self.asm.test_r_r(Reg::Rax, Reg::Rax);
                         self.asm.setcc(Cc::E, Reg::Rax);
@@ -441,7 +441,7 @@ match op {
                     }
                     // Evaluate and store each arg
                     for (i, argument) in args.iter().enumerate() {
-                        self.compile_expr(context, argument)?;
+                        self.compile_expr(ctx, argument)?;
                         self.asm.pop_r(Reg::Rax);
                         // Store at [rsp + i*8]
                         // mov [rsp + i*8], rax
@@ -464,7 +464,7 @@ match op {
                 } else if let Some(&func_label) = self.func_labels.get(func) {
                     // User function call: push args right-to-left, call, clean stack
                     for argument in args.iter().rev() {
-                        self.compile_expr(context, argument)?;
+                        self.compile_expr(ctx, argument)?;
                         // value already on stack from compile_expr
                     }
                     self.asm.call_label(func_label);
@@ -480,7 +480,7 @@ match op {
                 }
             }
             Expr::Cast { expr, ty } => {
-                self.compile_expr(context, expr)?;
+                self.compile_expr(ctx, expr)?;
                                 // Correspondance de motifs — branchement exhaustif de Rust.
 match ty {
                     Type::F64 => {
@@ -496,9 +496,9 @@ match ty {
             }
             Expr::Range { start, end } => {
                 // As a standalone expression, just eval start (for compatibility)
-                self.compile_expr(context, start)?;
+                self.compile_expr(ctx, start)?;
                 // Pop and discard end
-                self.compile_expr(context, end)?;
+                self.compile_expr(ctx, end)?;
                 self.asm.pop_r(Reg::Rax); // discard end
             }
             Expr::Index { .. } | Expr::Array(_) | Expr::Field { .. } | Expr::Block(_) => {
@@ -577,11 +577,11 @@ match ty {
     }
 
     /// Store the value on top of the eval stack to a target (variable)
-    fn compile_store(&mut self, context: &mut FnCtx, target: &Expr) -> Result<(), String> {
+    fn compile_store(&mut self, ctx: &mut FnCtx, target: &Expr) -> Result<(), String> {
                 // Correspondance de motifs — branchement exhaustif de Rust.
 match target {
             Expr::Ident(name) => {
-                if let Some(&off) = context.locals.get(name) {
+                if let Some(&off) = ctx.locals.get(name) {
                     self.asm.pop_r(Reg::Rax);
                     self.asm.mov_rbp_offset_r(off, Reg::Rax);
                 } else {
@@ -594,22 +594,22 @@ match target {
     }
 
     /// Emit mov [rsp + offset], reg
-    fn emit_mov_rsp_offset_r(&mut self, offset: i32, source: Reg) {
+    fn emit_mov_rsp_offset_r(&mut self, offset: i32, src: Reg) {
         // REX.W + mov [rsp + disp], src
         // Need SIB byte when base is rsp
         let mut rex: u8 = 0x48;
-        if source.needs_rex() { rex |= 0x04; }
+        if src.needs_rex() { rex |= 0x04; }
         self.asm.code.push(rex);
         self.asm.code.push(0x89);
         if offset == 0 {
-            self.asm.code.push(X86Asm::modrm(0b00, source.lo3(), 0x04)); // SIB follows
+            self.asm.code.push(X86Asm::modrm(0b00, src.lo3(), 0x04)); // SIB follows
             self.asm.code.push(0x24); // SIB: base=rsp, index=none
         } else if offset >= -128 && offset <= 127 {
-            self.asm.code.push(X86Asm::modrm(0b01, source.lo3(), 0x04));
+            self.asm.code.push(X86Asm::modrm(0b01, src.lo3(), 0x04));
             self.asm.code.push(0x24);
             self.asm.code.push(offset as u8);
         } else {
-            self.asm.code.push(X86Asm::modrm(0b10, source.lo3(), 0x04));
+            self.asm.code.push(X86Asm::modrm(0b10, src.lo3(), 0x04));
             self.asm.code.push(0x24);
             self.asm.code.extend_from_slice(&offset.to_le_bytes());
         }
@@ -642,7 +642,7 @@ unsafe fn execute_native(
         .ok_or_else(|| String::from("failed to allocate executable memory"))?;
 
     // Copy machine code
-    core::ptr::copy_nonoverlapping(code.as_pointer(), execute_memory, code.len());
+    core::ptr::copy_nonoverlapping(code.as_ptr(), execute_memory, code.len());
 
     // Entry point
     let entry: *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
@@ -652,14 +652,14 @@ const u8 = execute_memory.add(program.entry_offset);
     // R15 = builtin callback pointer (callee-saved)
     // We use inline asm to set R15 and call the entry point
     let result: i64;
-    let callback_pointer = builtin_callback as usize;
-    let entry_pointer = entry as usize;
+    let cb_ptr = builtin_callback as usize;
+    let entry_ptr = entry as usize;
 
     core::arch::asm!(
         "mov r15, {cb}",
         "call {entry}",
-        callback = in(reg) callback_pointer,
-        entry = in(reg) entry_pointer,
+        cb = in(reg) cb_ptr,
+        entry = in(reg) entry_ptr,
         out("rax") result,
         // Clobbers (everything the called code might touch)
         out("rcx") _, out("rdx") _, out("rsi") _, out("rdi") _,

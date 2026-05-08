@@ -45,7 +45,7 @@ unsafe fn new(buffer: *mut u32, width: u32, height: u32, stride: u32) -> Self {
     /// Create from a slice
     pub fn from_slice(buffer: &mut [u32], width: u32, height: u32) -> Self {
         Self {
-            buffer: buffer.as_mut_pointer(),
+            buffer: buffer.as_mut_ptr(),
             width,
             height,
             stride: width,
@@ -295,17 +295,17 @@ pub fn new(target: &'a mut FramebufferTarget) -> Self {
     }
 
     /// Draw an ellipse outline
-    pub fn ellipse(&mut self, cx: i32, cy: i32, receive: u32, ry: u32, color: Color2D, thickness: u32) {
+    pub fn ellipse(&mut self, cx: i32, cy: i32, rx: u32, ry: u32, color: Color2D, thickness: u32) {
         let style = PrimitiveStyle::with_stroke(color.to_rgb888(), thickness);
-        let _ = Ellipse::new(Point::new(cx - receive as i32, cy - ry as i32), EgSize::new(receive * 2, ry * 2))
+        let _ = Ellipse::new(Point::new(cx - rx as i32, cy - ry as i32), EgSize::new(rx * 2, ry * 2))
             .into_styled(style)
             .draw(self.target);
     }
 
     /// Fill an ellipse
-    pub fn fill_ellipse(&mut self, cx: i32, cy: i32, receive: u32, ry: u32, color: Color2D) {
+    pub fn fill_ellipse(&mut self, cx: i32, cy: i32, rx: u32, ry: u32, color: Color2D) {
         let style = PrimitiveStyle::with_fill(color.to_rgb888());
-        let _ = Ellipse::new(Point::new(cx - receive as i32, cy - ry as i32), EgSize::new(receive * 2, ry * 2))
+        let _ = Ellipse::new(Point::new(cx - rx as i32, cy - ry as i32), EgSize::new(rx * 2, ry * 2))
             .into_styled(style)
             .draw(self.target);
     }
@@ -352,12 +352,12 @@ pub fn new(target: &'a mut FramebufferTarget) -> Self {
             
             let py = y + row as i32;
             if py < 0 || py >= self.target.height as i32 { continue; }
-            let pixel_start = x.maximum(0) as u32;
-            let pixel_end = ((x + w as i32) as u32).minimum(self.target.width);
-            if pixel_end <= pixel_start { continue; }
+            let px_start = x.max(0) as u32;
+            let pixel_end = ((x + w as i32) as u32).min(self.target.width);
+            if pixel_end <= px_start { continue; }
             
-            let row_offset = (py as u32 * self.target.stride + pixel_start) as usize;
-            let fill_length = (pixel_end - pixel_start) as usize;
+            let row_offset = (py as u32 * self.target.stride + px_start) as usize;
+            let fill_length = (pixel_end - px_start) as usize;
             
             #[cfg(target_arch = "x86_64")]
                         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
@@ -370,9 +370,9 @@ unsafe {
             }
             #[cfg(not(target_arch = "x86_64"))]
             {
-                for column in 0..fill_length {
+                for col in 0..fill_length {
                                         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { *self.target.buffer.add(row_offset + column) = color; }
+unsafe { *self.target.buffer.add(row_offset + col) = color; }
                 }
             }
         }
@@ -383,31 +383,31 @@ unsafe { *self.target.buffer.add(row_offset + column) = color; }
         if h == 0 || w == 0 { return; }
         // Pre-compute a row of gradient colors
         let mut gradient_row = alloc::vec![0u32; w as usize];
-        for column in 0..w {
-            let t = column as f32 / w as f32;
+        for col in 0..w {
+            let t = col as f32 / w as f32;
             let r = (left.r as f32 + (right.r as f32 - left.r as f32) * t) as u8;
             let g = (left.g as f32 + (right.g as f32 - left.g as f32) * t) as u8;
             let b = (left.b as f32 + (right.b as f32 - left.b as f32) * t) as u8;
-            gradient_row[column as usize] = 0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
+            gradient_row[col as usize] = 0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
         }
         // Copy the same gradient row to every line
         for row in 0..h {
             let py = y + row as i32;
             if py < 0 || py >= self.target.height as i32 { continue; }
-            let pixel_start = x.maximum(0) as u32;
-            let pixel_end = ((x + w as i32) as u32).minimum(self.target.width);
-            if pixel_end <= pixel_start { continue; }
+            let px_start = x.max(0) as u32;
+            let pixel_end = ((x + w as i32) as u32).min(self.target.width);
+            if pixel_end <= px_start { continue; }
             
-            let source_off = (pixel_start as i32 - x).maximum(0) as usize;
-            let copy_length = (pixel_end - pixel_start) as usize;
-            let destination_offset = (py as u32 * self.target.stride + pixel_start) as usize;
+            let source_off = (px_start as i32 - x).max(0) as usize;
+            let copy_length = (pixel_end - px_start) as usize;
+            let destination_offset = (py as u32 * self.target.stride + px_start) as usize;
             
             #[cfg(target_arch = "x86_64")]
                         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
                 crate::graphics::simd::copy_row_sse2(
                     self.target.buffer.add(destination_offset),
-                    gradient_row.as_pointer().add(source_off),
+                    gradient_row.as_ptr().add(source_off),
                     copy_length,
                 );
             }
@@ -491,12 +491,12 @@ impl Sprite {
     pub fn draw(&self, target: &mut FramebufferTarget, x: i32, y: i32) {
         for sy in 0..self.height {
             for sx in 0..self.width {
-                let pixel = x + sx as i32;
+                let px = x + sx as i32;
                 let py = y + sy as i32;
-                if pixel >= 0 && py >= 0 {
+                if px >= 0 && py >= 0 {
                     let color = self.get(sx, sy);
                     if (color >> 24) > 0 { // Check alpha
-                        target.set_pixel(pixel as u32, py as u32, color);
+                        target.set_pixel(px as u32, py as u32, color);
                     }
                 }
             }
@@ -507,25 +507,25 @@ impl Sprite {
     pub fn draw_blended(&self, target: &mut FramebufferTarget, x: i32, y: i32) {
         for sy in 0..self.height {
             for sx in 0..self.width {
-                let pixel = x + sx as i32;
+                let px = x + sx as i32;
                 let py = y + sy as i32;
-                if pixel >= 0 && py >= 0 && (pixel as u32) < target.width && (py as u32) < target.height {
-                    let source = self.get(sx, sy);
-                    let source_a = ((source >> 24) & 0xFF) as f32 / 255.0;
+                if px >= 0 && py >= 0 && (px as u32) < target.width && (py as u32) < target.height {
+                    let src = self.get(sx, sy);
+                    let source_a = ((src >> 24) & 0xFF) as f32 / 255.0;
                     
                     if source_a > 0.0 {
                         if source_a >= 1.0 {
-                            target.set_pixel(pixel as u32, py as u32, source);
+                            target.set_pixel(px as u32, py as u32, src);
                         } else {
-                            let destination = target.get_pixel(pixel as u32, py as u32);
+                            let dst = target.get_pixel(px as u32, py as u32);
                             let destination_a = 1.0 - source_a;
                             
-                            let r = (((source >> 16) & 0xFF) as f32 * source_a + ((destination >> 16) & 0xFF) as f32 * destination_a) as u32;
-                            let g = (((source >> 8) & 0xFF) as f32 * source_a + ((destination >> 8) & 0xFF) as f32 * destination_a) as u32;
-                            let b = ((source & 0xFF) as f32 * source_a + (destination & 0xFF) as f32 * destination_a) as u32;
+                            let r = (((src >> 16) & 0xFF) as f32 * source_a + ((dst >> 16) & 0xFF) as f32 * destination_a) as u32;
+                            let g = (((src >> 8) & 0xFF) as f32 * source_a + ((dst >> 8) & 0xFF) as f32 * destination_a) as u32;
+                            let b = ((src & 0xFF) as f32 * source_a + (dst & 0xFF) as f32 * destination_a) as u32;
                             
                             let blended = 0xFF000000 | (r << 16) | (g << 8) | b;
-                            target.set_pixel(pixel as u32, py as u32, blended);
+                            target.set_pixel(px as u32, py as u32, blended);
                         }
                     }
                 }
@@ -539,8 +539,8 @@ impl Sprite {
         
         for y in 0..new_height {
             for x in 0..new_width {
-                let source_x = (x * self.width / new_width).minimum(self.width - 1);
-                let source_y = (y * self.height / new_height).minimum(self.height - 1);
+                let source_x = (x * self.width / new_width).min(self.width - 1);
+                let source_y = (y * self.height / new_height).min(self.height - 1);
                 scaled.set(x, y, self.get(source_x, source_y));
             }
         }

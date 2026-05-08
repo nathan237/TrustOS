@@ -153,9 +153,9 @@ type VfsResult<T> = Result<T, VfsError>;
 
 /// File operations trait - implemented by each filesystem
 pub trait FileOperations: Send + Sync {
-    fn read(&self, offset: u64, buffer: &mut [u8]) -> VfsResult<usize>;
-    fn write(&self, offset: u64, buffer: &[u8]) -> VfsResult<usize>;
-    fn status(&self) -> VfsResult<Stat>;
+    fn read(&self, offset: u64, buf: &mut [u8]) -> VfsResult<usize>;
+    fn write(&self, offset: u64, buf: &[u8]) -> VfsResult<usize>;
+    fn stat(&self) -> VfsResult<Stat>;
     fn truncate(&self, size: u64) -> VfsResult<()> { 
         let _ = size;
         Err(VfsError::NotSupported) 
@@ -169,7 +169,7 @@ pub trait DirectoryOperations: Send + Sync {
     fn readdir(&self) -> VfsResult<Vec<DirectoryEntry>>;
     fn create(&self, name: &str, file_type: FileType) -> VfsResult<Ino>;
     fn unlink(&self, name: &str) -> VfsResult<()>;
-    fn status(&self) -> VfsResult<Stat>;
+    fn stat(&self) -> VfsResult<Stat>;
 }
 
 /// Filesystem trait - mount point handler
@@ -177,8 +177,8 @@ pub trait FileSystem: Send + Sync {
     fn name(&self) -> &str;
     fn root_inode(&self) -> Ino;
     fn get_file(&self, ino: Ino) -> VfsResult<Arc<dyn FileOperations>>;
-    fn get_directory(&self, ino: Ino) -> VfsResult<Arc<dyn DirectoryOperations>>;
-    fn status(&self, ino: Ino) -> VfsResult<Stat>;
+    fn get_dir(&self, ino: Ino) -> VfsResult<Arc<dyn DirectoryOperations>>;
+    fn stat(&self, ino: Ino) -> VfsResult<Stat>;
     fn sync(&self) -> VfsResult<()> { Ok(()) }
 }
 
@@ -191,7 +191,7 @@ struct MountPoint {
 /// Open file handle
 struct OpenFile {
     ino: Ino,
-    mount_index: usize,
+    mount_idx: usize,
     offset: u64,
     flags: OpenFlags,
 }
@@ -213,7 +213,7 @@ impl Vfs {
         }
     }
     
-    fn allocator_fd(&self) -> Fd {
+    fn alloc_fd(&self) -> Fd {
         self.next_fd.fetch_add(1, Ordering::SeqCst) as Fd
     }
 }
@@ -225,7 +225,7 @@ static VFS: RwLock<Vfs> = RwLock::new(Vfs::new());
 /// Called before entering Ring 3 so user processes can do read(0)/write(1)/write(2).
 pub fn setup_stdio() {
     // Resolve /dev/console
-    let (mount_index, ino) = // Correspondance de motifs — branchement exhaustif de Rust.
+    let (mount_idx, ino) = // Correspondance de motifs — branchement exhaustif de Rust.
 match resolve_path("/dev/console") {
         Ok(r) => r,
         Err(_) => {
@@ -238,21 +238,21 @@ match resolve_path("/dev/console") {
     // fd 0 — stdin (read-only)
     vfs.open_files.insert(0, OpenFile {
         ino,
-        mount_index,
+        mount_idx,
         offset: 0,
         flags: OpenFlags(0), // O_RDONLY
     });
     // fd 1 — stdout (write-only)
     vfs.open_files.insert(1, OpenFile {
         ino,
-        mount_index,
+        mount_idx,
         offset: 0,
         flags: OpenFlags(1), // O_WRONLY
     });
     // fd 2 — stderr (write-only)
     vfs.open_files.insert(2, OpenFile {
         ino,
-        mount_index,
+        mount_idx,
         offset: 0,
         flags: OpenFlags(1), // O_WRONLY
     });
@@ -306,27 +306,27 @@ match trustfs::TrustFs::new(backend, capacity) {
         let devices = crate::drivers::ahci::list_devices();
         // Use the first non-optical AHCI port with sectors > 0
         // Skip disks that have TWAV magic (audio data disks)
-        for device in &devices {
-            if device.sector_count > 64 {
+        for dev in &devices {
+            if dev.sector_count > 64 {
                 // Check if this disk has TWAV magic — skip audio data disks
                 let mut probe = alloc::vec![0u8; 512];
-                if crate::drivers::ahci::read_sectors(device.port_number, 0, 1, &mut probe).is_ok() {
+                if crate::drivers::ahci::read_sectors(dev.port_num, 0, 1, &mut probe).is_ok() {
                     if probe.len() >= 4 && &probe[0..4] == b"TWAV" {
-                        crate::log!("[VFS] Skipping AHCI port {} (TWAV audio data disk)", device.port_number);
+                        crate::log!("[VFS] Skipping AHCI port {} (TWAV audio data disk)", dev.port_num);
                         continue;
                     }
                 }
-                let backend = Arc::new(fat32::AhciBlockReader::new(device.port_number as usize, 0));
+                let backend = Arc::new(fat32::AhciBlockReader::new(dev.port_num as usize, 0));
                                 // Correspondance de motifs — branchement exhaustif de Rust.
-match trustfs::TrustFs::new(backend, device.sector_count) {
+match trustfs::TrustFs::new(backend, dev.sector_count) {
                     Ok(trustfs) => {
                         mount("/", Arc::new(trustfs)).ok();
-                        crate::log!("[VFS] Mounted TrustFS at / (AHCI port {}, persistent)", device.port_number);
+                        crate::log!("[VFS] Mounted TrustFS at / (AHCI port {}, persistent)", dev.port_num);
                         root_mounted = true;
                         break;
                     }
                     Err(e) => {
-                        crate::log_debug!("[VFS] TrustFS on AHCI port {} failed: {:?}", device.port_number, e);
+                        crate::log_debug!("[VFS] TrustFS on AHCI port {} failed: {:?}", dev.port_num, e);
                     }
                 }
             }
@@ -341,8 +341,8 @@ match trustfs::TrustFs::new(backend, device.sector_count) {
     #[cfg(target_arch = "x86_64")]
     {
         crate::log_debug!("[VFS] Looking for FAT32 partitions...");
-        if let Some(fat32_filesystem) = fat32::try_mount_fat32() {
-            mount("/mnt/fat32", fat32_filesystem).ok();
+        if let Some(fat32_fs) = fat32::try_mount_fat32() {
+            mount("/mnt/fat32", fat32_fs).ok();
             crate::log!("[VFS] Mounted FAT32 at /mnt/fat32");
         } else {
             crate::log_debug!("[VFS] No FAT32 partition found");
@@ -353,8 +353,8 @@ match trustfs::TrustFs::new(backend, device.sector_count) {
     #[cfg(target_arch = "x86_64")]
     {
         crate::log_debug!("[VFS] Looking for NTFS partitions...");
-        if let Some(ntfs_filesystem) = ntfs::try_mount_ntfs() {
-            mount("/mnt/ntfs", ntfs_filesystem).ok();
+        if let Some(ntfs_fs) = ntfs::try_mount_ntfs() {
+            mount("/mnt/ntfs", ntfs_fs).ok();
             crate::log!("[VFS] Mounted NTFS at /mnt/ntfs");
         } else {
             crate::log_debug!("[VFS] No NTFS partition found");
@@ -390,15 +390,15 @@ pub fn mount(path: &str, fs: Arc<dyn FileSystem>) -> VfsResult<()> {
 pub fn umount(path: &str) -> VfsResult<()> {
     let mut vfs = VFS.write();
     
-    let index = vfs.mounts.iter().position(|mp| mp.path == path)
+    let idx = vfs.mounts.iter().position(|mp| mp.path == path)
         .ok_or(VfsError::NotFound)?;
     
     // Don't allow unmounting root
-    if vfs.mounts[index].path == "/" {
+    if vfs.mounts[idx].path == "/" {
         return Err(VfsError::PermissionDenied);
     }
     
-    vfs.mounts.remove(index);
+    vfs.mounts.remove(idx);
     Ok(())
 }
 
@@ -406,14 +406,18 @@ pub fn umount(path: &str) -> VfsResult<()> {
 fn find_mount(path: &str) -> Option<(usize, String)> {
     let vfs = VFS.read();
     
-    for (index, mp) in vfs.mounts.iter().enumerate() {
-        if path == mp.path || path.starts_with(&format!("{}/", mp.path)) || mp.path == "/" {
+    for (idx, mp) in vfs.mounts.iter().enumerate() {
+        if path == mp.path
+            || (path.starts_with(&mp.path)
+                && path.as_bytes().get(mp.path.len()) == Some(&b'/'))
+            || mp.path == "/"
+        {
             let relative = if mp.path == "/" {
                 path.to_string()
             } else {
                 path.strip_prefix(&mp.path).unwrap_or("/").to_string()
             };
-            return Some((index, if relative.is_empty() { "/".to_string() } else { relative }));
+            return Some((idx, if relative.is_empty() { "/".to_string() } else { relative }));
         }
     }
     
@@ -422,30 +426,29 @@ fn find_mount(path: &str) -> Option<(usize, String)> {
 
 /// Resolve a path to an inode
 fn resolve_path(path: &str) -> VfsResult<(usize, Ino)> {
-    let (mount_index, relative) = find_mount(path).ok_or(VfsError::NotFound)?;
+    let (mount_idx, relative) = find_mount(path).ok_or(VfsError::NotFound)?;
     
     let vfs = VFS.read();
-    let fs = &vfs.mounts[mount_index].fs;
+    let fs = &vfs.mounts[mount_idx].fs;
     
     if relative == "/" || relative.is_empty() {
-        return Ok((mount_index, fs.root_inode()));
+        return Ok((mount_idx, fs.root_inode()));
     }
     
     // Walk the path components
     let mut current_ino = fs.root_inode();
-    let components: Vec<&str> = relative.split('/').filter(|s| !s.is_empty()).collect();
     
-    for component in components {
-        let directory = fs.get_directory(current_ino)?;
+    for component in relative.split('/').filter(|s| !s.is_empty()) {
+        let directory = fs.get_dir(current_ino)?;
         current_ino = directory.lookup(component)?;
     }
     
-    Ok((mount_index, current_ino))
+    Ok((mount_idx, current_ino))
 }
 
 /// Open a file
 pub fn open(path: &str, flags: OpenFlags) -> VfsResult<Fd> {
-    let (mount_index, ino) = // Correspondance de motifs — branchement exhaustif de Rust.
+    let (mount_idx, ino) = // Correspondance de motifs — branchement exhaustif de Rust.
 match resolve_path(path) {
         Ok(result) => result,
         Err(VfsError::NotFound) if flags.create() => {
@@ -453,14 +456,14 @@ match resolve_path(path) {
             let parent_path = parent_of(path);
             let filename = basename(path);
             
-            let (mount_index, parent_ino) = resolve_path(&parent_path)?;
+            let (mount_idx, parent_ino) = resolve_path(&parent_path)?;
             let vfs = VFS.read();
-            let fs = &vfs.mounts[mount_index].fs;
-            let parent_directory = fs.get_directory(parent_ino)?;
+            let fs = &vfs.mounts[mount_idx].fs;
+            let parent_directory = fs.get_dir(parent_ino)?;
             let ino = parent_directory.create(filename, FileType::Regular)?;
             drop(vfs);
             
-            (mount_index, ino)
+            (mount_idx, ino)
         }
         Err(e) => return Err(e),
     };
@@ -468,7 +471,7 @@ match resolve_path(path) {
     // Permission check: verify caller has access
     {
         let vfs = VFS.read();
-        if let Ok(st) = vfs.mounts[mount_index].fs.status(ino) {
+        if let Ok(st) = vfs.mounts[mount_idx].fs.stat(ino) {
             // Determine needed permission from flags
             let want_read  = flags.readable();
             let want_write = flags.writable();
@@ -481,13 +484,13 @@ match resolve_path(path) {
     
     let fd = {
         let vfs = VFS.read();
-        vfs.allocator_fd()
+        vfs.alloc_fd()
     };
     
     let mut vfs = VFS.write();
     vfs.open_files.insert(fd, OpenFile {
         ino,
-        mount_index,
+        mount_idx,
         offset: 0,
         flags,
     });
@@ -503,21 +506,21 @@ match resolve_path(path) {
 }
 
 /// Read from a file descriptor
-pub fn read(fd: Fd, buffer: &mut [u8]) -> VfsResult<usize> {
-    let (mount_index, ino, offset) = {
+pub fn read(fd: Fd, buf: &mut [u8]) -> VfsResult<usize> {
+    let (mount_idx, ino, offset) = {
         let vfs = VFS.read();
         let file = vfs.open_files.get(&fd).ok_or(VfsError::BadFd)?;
         if !file.flags.readable() {
             return Err(VfsError::PermissionDenied);
         }
-        (file.mount_index, file.ino, file.offset)
+        (file.mount_idx, file.ino, file.offset)
     };
     
     let bytes_read = {
         let vfs = VFS.read();
-        let fs = &vfs.mounts[mount_index].fs;
+        let fs = &vfs.mounts[mount_idx].fs;
         let file_operations = fs.get_file(ino)?;
-        file_operations.read(offset, buffer)?
+        file_operations.read(offset, buf)?
     };
     
     // Update offset
@@ -530,30 +533,30 @@ pub fn read(fd: Fd, buffer: &mut [u8]) -> VfsResult<usize> {
 }
 
 /// Write to a file descriptor
-pub fn write(fd: Fd, buffer: &[u8]) -> VfsResult<usize> {
-    let (mount_index, ino, offset, append) = {
+pub fn write(fd: Fd, buf: &[u8]) -> VfsResult<usize> {
+    let (mount_idx, ino, offset, append) = {
         let vfs = VFS.read();
         let file = vfs.open_files.get(&fd).ok_or(VfsError::BadFd)?;
         if !file.flags.writable() {
             return Err(VfsError::PermissionDenied);
         }
-        (file.mount_index, file.ino, file.offset, file.flags.append())
+        (file.mount_idx, file.ino, file.offset, file.flags.append())
     };
     
     let write_offset = if append {
         let vfs = VFS.read();
-        let fs = &vfs.mounts[mount_index].fs;
-        let status = fs.status(ino)?;
-        status.size
+        let fs = &vfs.mounts[mount_idx].fs;
+        let stat = fs.stat(ino)?;
+        stat.size
     } else {
         offset
     };
     
     let bytes_written = {
         let vfs = VFS.read();
-        let fs = &vfs.mounts[mount_index].fs;
+        let fs = &vfs.mounts[mount_idx].fs;
         let file_operations = fs.get_file(ino)?;
-        file_operations.write(write_offset, buffer)?
+        file_operations.write(write_offset, buf)?
     };
     
     // Update offset
@@ -601,8 +604,8 @@ match whence {
             let size = {
                 let vfs = VFS.read();
                 let open_file = vfs.open_files.get(&fd).ok_or(VfsError::BadFd)?;
-                let fs = &vfs.mounts[open_file.mount_index].fs;
-                fs.status(open_file.ino)?.size
+                let fs = &vfs.mounts[open_file.mount_idx].fs;
+                fs.stat(open_file.ino)?.size
             };
             let mut vfs = VFS.write();
             let file = vfs.open_files.get_mut(&fd).ok_or(VfsError::BadFd)?;
@@ -617,19 +620,19 @@ match whence {
 }
 
 /// Get file statistics
-pub fn status(path: &str) -> VfsResult<Stat> {
-    let (mount_index, ino) = resolve_path(path)?;
+pub fn stat(path: &str) -> VfsResult<Stat> {
+    let (mount_idx, ino) = resolve_path(path)?;
     let vfs = VFS.read();
-    let fs = &vfs.mounts[mount_index].fs;
-    fs.status(ino)
+    let fs = &vfs.mounts[mount_idx].fs;
+    fs.stat(ino)
 }
 
 /// Read directory entries
 pub fn readdir(path: &str) -> VfsResult<Vec<DirectoryEntry>> {
-    let (mount_index, ino) = resolve_path(path)?;
+    let (mount_idx, ino) = resolve_path(path)?;
     let vfs = VFS.read();
-    let fs = &vfs.mounts[mount_index].fs;
-    let directory = fs.get_directory(ino)?;
+    let fs = &vfs.mounts[mount_idx].fs;
+    let directory = fs.get_dir(ino)?;
     directory.readdir()
 }
 
@@ -638,10 +641,10 @@ pub fn mkdir(path: &str) -> VfsResult<()> {
     let parent_path = parent_of(path);
     let dirname = basename(path);
     
-    let (mount_index, parent_ino) = resolve_path(&parent_path)?;
+    let (mount_idx, parent_ino) = resolve_path(&parent_path)?;
     let vfs = VFS.read();
-    let fs = &vfs.mounts[mount_index].fs;
-    let parent_directory = fs.get_directory(parent_ino)?;
+    let fs = &vfs.mounts[mount_idx].fs;
+    let parent_directory = fs.get_dir(parent_ino)?;
     parent_directory.create(dirname, FileType::Directory)?;
     Ok(())
 }
@@ -673,20 +676,20 @@ pub fn unlink(path: &str) -> VfsResult<()> {
     let parent_path = parent_of(path);
     let filename = basename(path);
     
-    let (mount_index, parent_ino) = resolve_path(&parent_path)?;
+    let (mount_idx, parent_ino) = resolve_path(&parent_path)?;
     let vfs = VFS.read();
-    let fs = &vfs.mounts[mount_index].fs;
-    let parent_directory = fs.get_directory(parent_ino)?;
+    let fs = &vfs.mounts[mount_idx].fs;
+    let parent_directory = fs.get_dir(parent_ino)?;
     parent_directory.unlink(filename)
 }
 
 /// Get parent path
 fn parent_of(path: &str) -> String {
-    if let Some(position) = path.rfind('/') {
-        if position == 0 {
+    if let Some(pos) = path.rfind('/') {
+        if pos == 0 {
             "/".to_string()
         } else {
-            path[..position].to_string()
+            path[..pos].to_string()
         }
     } else {
         "/".to_string()
@@ -695,8 +698,8 @@ fn parent_of(path: &str) -> String {
 
 /// Get basename
 fn basename(path: &str) -> &str {
-    if let Some(position) = path.rfind('/') {
-        &path[position + 1..]
+    if let Some(pos) = path.rfind('/') {
+        &path[pos + 1..]
     } else {
         path
     }
@@ -733,7 +736,7 @@ pub fn getcwd() -> String {
 /// Change current working directory
 pub fn chdir(path: &str) -> VfsResult<()> {
     // Verify the path exists and is a directory
-    let status_result = status(path)?;
+    let status_result = stat(path)?;
     if status_result.file_type != FileType::Directory {
         return Err(VfsError::NotDirectory);
     }
@@ -768,11 +771,11 @@ pub fn read_file(path: &str) -> VfsResult<Vec<u8>> {
     let fd = open(path, OpenFlags(OpenFlags::O_RDONLY))?;
     
     // Get file size
-    let status_information = status(path)?;
+    let status_information = stat(path)?;
     let size = status_information.size as usize;
     
     // Read all content
-    let mut buffer = alloc::vec![0u8; size.maximum(1024)];
+    let mut buffer = alloc::vec![0u8; size.max(1024)];
     let mut offset = 0;
     while offset < buffer.len() {
         let n = read(fd, &mut buffer[offset..])?;
@@ -788,7 +791,7 @@ pub fn read_file(path: &str) -> VfsResult<Vec<u8>> {
 /// Read entire file contents as String
 pub fn read_to_string(path: &str) -> VfsResult<String> {
     let bytes = read_file(path)?;
-    String::from_utf8(bytes).map_error(|_| VfsError::InvalidData)
+    String::from_utf8(bytes).map_err(|_| VfsError::InvalidData)
 }
 
 /// Write bytes to a file (creates or truncates)
@@ -824,11 +827,11 @@ pub fn dup_fd(old_fd: Fd) -> VfsResult<Fd> {
     let file = vfs.open_files.get(&old_fd).ok_or(VfsError::BadFd)?;
     let copy = OpenFile {
         ino: file.ino,
-        mount_index: file.mount_index,
+        mount_idx: file.mount_idx,
         offset: file.offset,
         flags: file.flags,
     };
-    let new_fd = vfs.allocator_fd();
+    let new_fd = vfs.alloc_fd();
     drop(vfs);
     let mut vfs = VFS.write();
     vfs.open_files.insert(new_fd, copy);
@@ -845,7 +848,7 @@ pub fn dup2_fd(old_fd: Fd, new_fd: Fd) -> VfsResult<Fd> {
     let file = vfs.open_files.get(&old_fd).ok_or(VfsError::BadFd)?;
     let copy = OpenFile {
         ino: file.ino,
-        mount_index: file.mount_index,
+        mount_idx: file.mount_idx,
         offset: file.offset,
         flags: file.flags,
     };
@@ -860,10 +863,10 @@ pub fn dup2_fd(old_fd: Fd, new_fd: Fd) -> VfsResult<Fd> {
 pub fn fstat_fd(fd: Fd) -> VfsResult<Stat> {
     let vfs = VFS.read();
     let file = vfs.open_files.get(&fd).ok_or(VfsError::BadFd)?;
-    let mount_index = file.mount_index;
+    let mount_idx = file.mount_idx;
     let ino = file.ino;
-    let fs = &vfs.mounts[mount_index].fs;
-    fs.status(ino)
+    let fs = &vfs.mounts[mount_idx].fs;
+    fs.stat(ino)
 }
 
 // ============================================================================
@@ -962,14 +965,14 @@ pub fn check_permission(st: &Stat, want: u32) -> bool {
 /// Change file mode bits
 pub fn chmod(path: &str, mode: u32) -> VfsResult<()> {
     let (_, _, euid, _) = crate::process::current_credentials();
-    let st = status(path)?;
+    let st = stat(path)?;
     // Only owner or root can chmod
     if euid != 0 && euid != st.uid {
         return Err(VfsError::PermissionDenied);
     }
-    let (mount_index, ino) = resolve_path(path)?;
+    let (mount_idx, ino) = resolve_path(path)?;
     let vfs = VFS.read();
-    let _ = set_file_mode(&*vfs.mounts[mount_index].fs, ino, mode);
+    let _ = set_file_mode(&*vfs.mounts[mount_idx].fs, ino, mode);
     Ok(())
 }
 
@@ -978,21 +981,21 @@ pub fn fchmod(fd: Fd, mode: u32) -> VfsResult<()> {
     let (_, _, euid, _) = crate::process::current_credentials();
     let vfs = VFS.read();
     let file = vfs.open_files.get(&fd).ok_or(VfsError::BadFd)?;
-    let mount_index = file.mount_index;
+    let mount_idx = file.mount_idx;
     let ino = file.ino;
-    let st = vfs.mounts[mount_index].fs.status(ino)?;
+    let st = vfs.mounts[mount_idx].fs.stat(ino)?;
     if euid != 0 && euid != st.uid {
         return Err(VfsError::PermissionDenied);
     }
-    let _ = set_file_mode(&*vfs.mounts[mount_index].fs, ino, mode);
+    let _ = set_file_mode(&*vfs.mounts[mount_idx].fs, ino, mode);
     Ok(())
 }
 
 /// Change file owner/group
 pub fn chown(path: &str, uid: u32, gid: u32) -> VfsResult<()> {
-    let (mount_index, ino) = resolve_path(path)?;
+    let (mount_idx, ino) = resolve_path(path)?;
     let vfs = VFS.read();
-    let _ = set_file_owner(&*vfs.mounts[mount_index].fs, ino, uid, gid);
+    let _ = set_file_owner(&*vfs.mounts[mount_idx].fs, ino, uid, gid);
     Ok(())
 }
 
@@ -1000,19 +1003,19 @@ pub fn chown(path: &str, uid: u32, gid: u32) -> VfsResult<()> {
 pub fn fchown(fd: Fd, uid: u32, gid: u32) -> VfsResult<()> {
     let vfs = VFS.read();
     let file = vfs.open_files.get(&fd).ok_or(VfsError::BadFd)?;
-    let _ = set_file_owner(&*vfs.mounts[file.mount_index].fs, file.ino, uid, gid);
+    let _ = set_file_owner(&*vfs.mounts[file.mount_idx].fs, file.ino, uid, gid);
     Ok(())
 }
 
 /// Helper: set mode bits in metadata overlay (works for ramfs/trustfs)
-fn set_file_mode(_filesystem: &dyn crate::vfs::FileSystem, ino: Ino, mode: u32) -> VfsResult<()> {
+fn set_file_mode(_fs: &dyn crate::vfs::FileSystem, ino: Ino, mode: u32) -> VfsResult<()> {
     // For ramfs/trustfs we can modify the inode's mode directly via the metadata overlay
     METADATA_OVERLAY.lock().insert(ino, MetadataOverride { mode: Some(mode), uid: None, gid: None });
     Ok(())
 }
 
 /// Helper: set owner in metadata overlay
-fn set_file_owner(_filesystem: &dyn crate::vfs::FileSystem, ino: Ino, uid: u32, gid: u32) -> VfsResult<()> {
+fn set_file_owner(_fs: &dyn crate::vfs::FileSystem, ino: Ino, uid: u32, gid: u32) -> VfsResult<()> {
     let mut overlay = METADATA_OVERLAY.lock();
     let entry = overlay.entry(ino).or_insert(MetadataOverride { mode: None, uid: None, gid: None });
     if uid != 0xFFFFFFFF { entry.uid = Some(uid); }

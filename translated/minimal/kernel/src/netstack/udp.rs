@@ -1,98 +1,92 @@
 
 
 use alloc::collections::BTreeMap;
+use alloc::collections::VecDeque;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU16, Ordering};
 use spin::Mutex;
 
 
-struct Bvf {
-    jh: [u8; 4],
-    ey: u16,
-    f: Vec<u8>,
+struct Afv {
+    src_ip: [u8; 4],
+    src_port: u16,
+    data: Vec<u8>,
 }
 
-static AHL_: Mutex<BTreeMap<u16, Vec<Bvf>>> = Mutex::new(BTreeMap::new());
-static CHV_: AtomicU16 = AtomicU16::new(49152);
+static AJH_: Mutex<BTreeMap<u16, VecDeque<Afv>>> = Mutex::new(BTreeMap::new());
+static CLE_: AtomicU16 = AtomicU16::new(49152);
 
-pub fn bur(f: &[u8], jh: [u8; 4]) {
-    if f.len() < 8 {
+pub fn alq(data: &[u8], src_ip: [u8; 4]) {
+    if data.len() < 8 {
         return;
     }
 
-    let ey = u16::oa([f[0], f[1]]);
-    let sa = u16::oa([f[2], f[3]]);
-    let ew = &f[8..];
+    let src_port = u16::from_be_bytes([data[0], data[1]]);
+    let dst_port = u16::from_be_bytes([data[2], data[3]]);
+    let payload = &data[8..];
 
     
-    if sa == 68 {
-        crate::netstack::dhcp::bur(ew);
-        return;
-    }
-
-    
-    if sa == 67 {
-        crate::netstack::dhcpd::bur(ew);
+    if dst_port == 68 {
+        crate::netstack::dhcp::alq(payload);
         return;
     }
 
     
-    if sa == 69 {
-        crate::netstack::tftpd::tkr(ew, jh, ey);
+    if dst_port == 67 {
+        crate::netstack::dhcpd::alq(payload);
         return;
     }
 
     
-    if crate::netstack::tftpd::tzf(sa) {
-        crate::netstack::tftpd::tlk(ew, jh, ey, sa);
+    if dst_port == 69 {
+        crate::netstack::tftpd::mif(payload, src_ip, src_port);
         return;
     }
 
-    let mut kb = AHL_.lock();
-    let queue = kb.bt(sa).clq(Vec::new);
+    
+    if crate::netstack::tftpd::mtx(dst_port) {
+        crate::netstack::tftpd::mit(payload, src_ip, src_port, dst_port);
+        return;
+    }
+
+    let mut da = AJH_.lock();
+    let queue = da.entry(dst_port).or_insert_with(VecDeque::new);
     if queue.len() < 32 {
-        queue.push(Bvf {
-            jh,
-            ey,
-            f: ew.ip(),
+        queue.push_back(Afv {
+            src_ip,
+            src_port,
+            data: payload.to_vec(),
         });
     }
 }
 
-pub fn muy() -> u16 {
-    CHV_.fetch_add(1, Ordering::Relaxed)
+pub fn heu() -> u16 {
+    CLE_.fetch_add(1, Ordering::Relaxed)
 }
 
-pub fn dlp(kv: [u8; 4], rz: u16, ey: u16, ew: &[u8]) -> Result<(), &'static str> {
-    let go = 8 + ew.len();
-    let mut ie = Vec::fc(go);
-    ie.bk(&ey.ft());
-    ie.bk(&rz.ft());
-    ie.bk(&(go as u16).ft());
-    ie.bk(&0u16.ft()); 
-    ie.bk(ew);
+pub fn azq(dest_ip: [u8; 4], dest_port: u16, src_port: u16, payload: &[u8]) -> Result<(), &'static str> {
+    let length = 8 + payload.len();
+    let mut segment = Vec::with_capacity(length);
+    segment.extend_from_slice(&src_port.to_be_bytes());
+    segment.extend_from_slice(&dest_port.to_be_bytes());
+    segment.extend_from_slice(&(length as u16).to_be_bytes());
+    segment.extend_from_slice(&0u16.to_be_bytes()); 
+    segment.extend_from_slice(payload);
 
-    crate::netstack::ip::blc(kv, 17, &ie)
+    crate::netstack::ip::aha(dest_ip, 17, &segment)
 }
 
-pub fn jlt(port: u16) -> Option<Vec<u8>> {
-    let mut kb = AHL_.lock();
-    let queue = kb.ds(&port)?;
-    if queue.is_empty() {
-        None
-    } else {
-        Some(queue.remove(0).f)
-    }
+pub fn eyc(port: u16) -> Option<Vec<u8>> {
+    let mut da = AJH_.lock();
+    let queue = da.get_mut(&port)?;
+    let dmz = queue.pop_front()?;
+    Some(dmz.data)
 }
 
 
-pub fn vtk(port: u16) -> Option<(Vec<u8>, [u8; 4], u16)> {
-    let mut kb = AHL_.lock();
-    let queue = kb.ds(&port)?;
-    if queue.is_empty() {
-        None
-    } else {
-        let kpt = queue.remove(0);
-        Some((kpt.f, kpt.jh, kpt.ey))
-    }
+pub fn odt(port: u16) -> Option<(Vec<u8>, [u8; 4], u16)> {
+    let mut da = AJH_.lock();
+    let queue = da.get_mut(&port)?;
+    let dmz = queue.pop_front()?;
+    Some((dmz.data, dmz.src_ip, dmz.src_port))
 }

@@ -23,7 +23,7 @@ pub struct LoadedBinary {
 
 /// A loaded memory segment
 pub struct Segment {
-    pub address: u64,
+    pub addr: u64,
     pub size: u64,
     pub data: Vec<u8>,
     pub flags: u32,
@@ -35,7 +35,7 @@ pub fn load_linux_binary(path: &str) -> Result<LoadedBinary, &'static str> {
     
     // Read the file
     let data = crate::linux::rootfs::read_file(path)
-        .map_error(|_| "file not found")?;
+        .map_err(|_| "file not found")?;
     
     // Parse ELF header
     if data.len() < 64 {
@@ -122,7 +122,7 @@ match p_type {
                 }
                 
                 segments.push(Segment {
-                    address: p_vaddr,
+                    addr: p_vaddr,
                     size: p_memsz,
                     data: segment_data,
                     flags: p_flags,

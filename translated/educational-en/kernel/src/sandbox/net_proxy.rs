@@ -60,27 +60,27 @@ struct RateLimiter {
     /// Timestamps of recent requests (ms)
     window: Vec<u64>,
     /// Max requests in the window
-    maximum_per_minute: u32,
+    max_per_minute: u32,
 }
 
 // Implementation block — defines methods for the type above.
 impl RateLimiter {
-    fn new(maximum_per_minute: u32) -> Self {
+    fn new(max_per_minute: u32) -> Self {
         Self {
             window: Vec::new(),
-            maximum_per_minute,
+            max_per_minute,
         }
     }
 
     /// Check if a request is allowed, and record it if so
     fn check_and_record(&mut self) -> bool {
-        let now = crate::time::uptime_mouse();
+        let now = crate::time::uptime_ms();
         let one_minute_ago = now.saturating_sub(60_000);
 
         // Remove old entries
         self.window.retain(|&ts| ts > one_minute_ago);
 
-        if self.window.len() as u32 >= self.maximum_per_minute {
+        if self.window.len() as u32 >= self.max_per_minute {
             false
         } else {
             self.window.push(now);
@@ -97,9 +97,9 @@ pub struct NetProxy {
     sandbox_id: SandboxId,
     rate_limiter: RateLimiter,
     /// Snapshot of relevant policy fields
-    maximum_response_bytes: usize,
+    max_response_bytes: usize,
     allow_redirects: bool,
-    maximum_redirect_depth: u8,
+    max_redirect_depth: u8,
     block_private_ips: bool,
     /// Request counter
     total_requests: usize,
@@ -113,10 +113,10 @@ impl NetProxy {
 pub fn new(sandbox_id: SandboxId, policy: &SandboxPolicy) -> Self {
         Self {
             sandbox_id,
-            rate_limiter: RateLimiter::new(policy.rate_limit_per_minimum),
-            maximum_response_bytes: policy.maximum_response_bytes,
+            rate_limiter: RateLimiter::new(policy.rate_limit_per_min),
+            max_response_bytes: policy.max_response_bytes,
             allow_redirects: policy.allow_redirects,
-            maximum_redirect_depth: policy.maximum_redirect_depth,
+            max_redirect_depth: policy.max_redirect_depth,
             block_private_ips: policy.block_private_ips,
             total_requests: 0,
             total_bytes: 0,
@@ -125,7 +125,7 @@ pub fn new(sandbox_id: SandboxId, policy: &SandboxPolicy) -> Self {
 
     /// Fetch a URL through the kernel proxy.
     /// This is the main entry point — all network access goes through here.
-    pub fn fetch(&mut self, url: &str, maximum_size: usize) -> Result<ProxiedResponse, ProxyError> {
+    pub fn fetch(&mut self, url: &str, max_size: usize) -> Result<ProxiedResponse, ProxyError> {
         // Step 1: Validate URL format
         if url.is_empty() {
             return Err(ProxyError::InvalidUrl);
@@ -151,7 +151,7 @@ pub fn new(sandbox_id: SandboxId, policy: &SandboxPolicy) -> Self {
         }
 
         // Step 4: Determine protocol and fetch
-        let effective_maximum = core::cmp::minimum(maximum_size, self.maximum_response_bytes);
+        let effective_maximum = core::cmp::min(max_size, self.max_response_bytes);
         let is_https = normalized.starts_with("https://");
 
         crate::serial_println!("[sandbox:{}] FETCH: {} (max {} bytes)", self.sandbox_id.0, normalized, effective_maximum);
@@ -169,30 +169,30 @@ pub fn new(sandbox_id: SandboxId, policy: &SandboxPolicy) -> Self {
     }
 
     /// Fetch via HTTP (port 80)
-    fn fetch_http(&self, url: &str, maximum_size: usize) -> Result<ProxiedResponse, ProxyError> {
+    fn fetch_http(&self, url: &str, max_size: usize) -> Result<ProxiedResponse, ProxyError> {
         // Use the kernel's HTTP client — which goes through the full
         // TCP/IP stack but is controlled by us
         match crate::netstack::http::get(url) {
-            Ok(response) => {
-                let content_type = response.headers.iter()
+            Ok(resp) => {
+                let content_type = resp.headers.iter()
                     .find(|(k, _)| k.to_ascii_lowercase() == "content-type")
                     .map(|(_, v)| v.clone())
                     .unwrap_or_else(|| String::from("text/html"));
 
-                let body = if response.body.len() > maximum_size {
+                let body = if resp.body.len() > max_size {
                     // Truncate to max size
                     crate::serial_println!("[sandbox:{}] Response truncated: {} -> {} bytes",
-                        self.sandbox_id.0, response.body.len(), maximum_size);
-                    response.body[..maximum_size].to_vec()
+                        self.sandbox_id.0, resp.body.len(), max_size);
+                    resp.body[..max_size].to_vec()
                 } else {
-                    response.body
+                    resp.body
                 };
 
                 Ok(ProxiedResponse {
-                    status_code: response.status_code,
+                    status_code: resp.status_code,
                     content_type,
                     body,
-                    headers: response.headers,
+                    headers: resp.headers,
                     was_cached: false,
                 })
             }
@@ -204,26 +204,26 @@ pub fn new(sandbox_id: SandboxId, policy: &SandboxPolicy) -> Self {
     }
 
     /// Fetch via HTTPS (port 443)
-    fn fetch_https(&self, url: &str, maximum_size: usize) -> Result<ProxiedResponse, ProxyError> {
+    fn fetch_https(&self, url: &str, max_size: usize) -> Result<ProxiedResponse, ProxyError> {
                 // Pattern matching — Rust's exhaustive branching construct.
 match crate::netstack::https::get(url) {
-            Ok(response) => {
-                let content_type = response.headers.iter()
+            Ok(resp) => {
+                let content_type = resp.headers.iter()
                     .find(|(k, _)| k.to_ascii_lowercase() == "content-type")
                     .map(|(_, v)| v.clone())
                     .unwrap_or_else(|| String::from("text/html"));
 
-                let body = if response.body.len() > maximum_size {
-                    response.body[..maximum_size].to_vec()
+                let body = if resp.body.len() > max_size {
+                    resp.body[..max_size].to_vec()
                 } else {
-                    response.body
+                    resp.body
                 };
 
                 Ok(ProxiedResponse {
-                    status_code: response.status_code,
+                    status_code: resp.status_code,
                     content_type,
                     body,
-                    headers: response.headers,
+                    headers: resp.headers,
                     was_cached: false,
                 })
             }

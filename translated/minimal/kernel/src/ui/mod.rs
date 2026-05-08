@@ -24,7 +24,7 @@ use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::format;
-use core::any::Eb;
+use core::any::Any;
 use spin::Mutex;
 
 use crate::drivers::virtio_gpu::{GpuSurface, Compositor};
@@ -36,203 +36,203 @@ use crate::drivers::virtio_gpu::{GpuSurface, Compositor};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Color {
-    pub m: u8,
-    pub at: u8,
-    pub o: u8,
-    pub q: u8,
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+    pub a: u8,
 }
 
 impl Color {
-    pub const fn new(m: u8, at: u8, o: u8, q: u8) -> Self {
-        Self { m, at, o, q }
+    pub const fn new(r: u8, g: u8, b: u8, a: u8) -> Self {
+        Self { r, g, b, a }
     }
     
-    pub const fn xt(m: u8, at: u8, o: u8) -> Self {
-        Self { m, at, o, q: 255 }
+    pub const fn rgb(r: u8, g: u8, b: u8) -> Self {
+        Self { r, g, b, a: 255 }
     }
     
-    pub const fn zi(s: u32) -> Self {
+    pub const fn from_u32(color: u32) -> Self {
         Self {
-            q: ((s >> 24) & 0xFF) as u8,
-            m: ((s >> 16) & 0xFF) as u8,
-            at: ((s >> 8) & 0xFF) as u8,
-            o: (s & 0xFF) as u8,
+            a: ((color >> 24) & 0xFF) as u8,
+            r: ((color >> 16) & 0xFF) as u8,
+            g: ((color >> 8) & 0xFF) as u8,
+            b: (color & 0xFF) as u8,
         }
     }
     
-    pub const fn lv(self) -> u32 {
-        ((self.q as u32) << 24) | ((self.m as u32) << 16) | ((self.at as u32) << 8) | (self.o as u32)
+    pub const fn to_u32(self) -> u32 {
+        ((self.a as u32) << 24) | ((self.r as u32) << 16) | ((self.g as u32) << 8) | (self.b as u32)
     }
     
-    pub fn fbo(self, q: u8) -> Self {
-        Self { q, ..self }
+    pub fn with_alpha(self, a: u8) -> Self {
+        Self { a, ..self }
     }
     
-    pub fn clh(self, bdk: u8) -> Self {
+    pub fn lighten(self, adg: u8) -> Self {
         Self {
-            m: self.m.akq(bdk),
-            at: self.at.akq(bdk),
-            o: self.o.akq(bdk),
-            q: self.q,
+            r: self.r.saturating_add(adg),
+            g: self.g.saturating_add(adg),
+            b: self.b.saturating_add(adg),
+            a: self.a,
         }
     }
     
-    pub fn cdz(self, bdk: u8) -> Self {
+    pub fn darken(self, adg: u8) -> Self {
         Self {
-            m: self.m.ao(bdk),
-            at: self.at.ao(bdk),
-            o: self.o.ao(bdk),
-            q: self.q,
+            r: self.r.saturating_sub(adg),
+            g: self.g.saturating_sub(adg),
+            b: self.b.saturating_sub(adg),
+            a: self.a,
         }
     }
     
     
-    pub const Anl: Color = Color::new(0, 0, 0, 0);
-    pub const Ox: Color = Color::xt(0, 0, 0);
-    pub const Zm: Color = Color::xt(255, 255, 255);
-    pub const Bqa: Color = Color::xt(255, 0, 0);
-    pub const Bht: Color = Color::xt(0, 255, 0);
-    pub const Bci: Color = Color::xt(0, 0, 255);
-    pub const Cqs: Color = Color::xt(255, 255, 0);
-    pub const Bzg: Color = Color::xt(0, 255, 255);
-    pub const Cgz: Color = Color::xt(255, 0, 255);
+    pub const TRANSPARENT: Color = Color::new(0, 0, 0, 0);
+    pub const BLACK: Color = Color::rgb(0, 0, 0);
+    pub const WHITE: Color = Color::rgb(255, 255, 255);
+    pub const Acz: Color = Color::rgb(255, 0, 0);
+    pub const Zf: Color = Color::rgb(0, 255, 0);
+    pub const Wn: Color = Color::rgb(0, 0, 255);
+    pub const Asf: Color = Color::rgb(255, 255, 0);
+    pub const Ahy: Color = Color::rgb(0, 255, 255);
+    pub const Amm: Color = Color::rgb(255, 0, 255);
 }
 
 
 #[derive(Clone)]
 pub struct Theme {
     
-    pub gay: Color,
-    pub fdh: Color,
-    pub ems: Color,
+    pub bg_primary: Color,
+    pub bg_secondary: Color,
+    pub bg_tertiary: Color,
     
     
-    pub bui: Color,
-    pub ebn: Color,
-    pub iui: Color,
+    pub fg_primary: Color,
+    pub fg_secondary: Color,
+    pub fg_disabled: Color,
     
     
-    pub mm: Color,
-    pub cof: Color,
-    pub fzq: Color,
+    pub accent: Color,
+    pub accent_hover: Color,
+    pub accent_pressed: Color,
     
     
-    pub dop: Color,
-    pub dor: Color,
-    pub dzj: Color,
-    pub kfp: Color,
+    pub button_bg: Color,
+    pub button_hover: Color,
+    pub button_pressed: Color,
+    pub button_disabled: Color,
     
     
-    pub acu: Color,
-    pub imc: Color,
+    pub border: Color,
+    pub border_focus: Color,
     
     
-    pub vx: Color,
-    pub ekt: Color,
-    pub zt: Color,
-    pub co: Color,
+    pub success: Color,
+    pub warning: Color,
+    pub error: Color,
+    pub info: Color,
     
     
-    pub avh: u32,
-    pub dek: u32,
-    pub ob: u32,
-    pub aoa: u32,
+    pub border_radius: u32,
+    pub border_width: u32,
+    pub padding: u32,
+    pub spacing: u32,
     
     
-    pub asv: u32,
-    pub nvl: u32,
-    pub nvk: u32,
+    pub font_size: u32,
+    pub font_size_small: u32,
+    pub font_size_large: u32,
 }
 
 impl Theme {
     
     pub fn dark() -> Self {
         Self {
-            gay: Color::zi(0xFF0A0E0B),
-            fdh: Color::zi(0xFF141A17),
-            ems: Color::zi(0xFF1E2620),
+            bg_primary: Color::from_u32(0xFF0A0E0B),
+            bg_secondary: Color::from_u32(0xFF141A17),
+            bg_tertiary: Color::from_u32(0xFF1E2620),
             
-            bui: Color::zi(0xFF00FF66),
-            ebn: Color::zi(0xFF00CC55),
-            iui: Color::zi(0xFF4A5A4E),
+            fg_primary: Color::from_u32(0xFF00FF66),
+            fg_secondary: Color::from_u32(0xFF00CC55),
+            fg_disabled: Color::from_u32(0xFF4A5A4E),
             
-            mm: Color::zi(0xFF00FF66),
-            cof: Color::zi(0xFF00CC55),
-            fzq: Color::zi(0xFF00AA44),
+            accent: Color::from_u32(0xFF00FF66),
+            accent_hover: Color::from_u32(0xFF00CC55),
+            accent_pressed: Color::from_u32(0xFF00AA44),
             
-            dop: Color::zi(0xFF1E2620),
-            dor: Color::zi(0xFF2A3630),
-            dzj: Color::zi(0xFF354540),
-            kfp: Color::zi(0xFF1A1A1A),
+            button_bg: Color::from_u32(0xFF1E2620),
+            button_hover: Color::from_u32(0xFF2A3630),
+            button_pressed: Color::from_u32(0xFF354540),
+            button_disabled: Color::from_u32(0xFF1A1A1A),
             
-            acu: Color::zi(0xFF2A3A2F),
-            imc: Color::zi(0xFF00FF66),
+            border: Color::from_u32(0xFF2A3A2F),
+            border_focus: Color::from_u32(0xFF00FF66),
             
-            vx: Color::zi(0xFF00FF66),
-            ekt: Color::zi(0xFFFFD166),
-            zt: Color::zi(0xFFFF6B6B),
-            co: Color::zi(0xFF4ECDC4),
+            success: Color::from_u32(0xFF00FF66),
+            warning: Color::from_u32(0xFFFFD166),
+            error: Color::from_u32(0xFFFF6B6B),
+            info: Color::from_u32(0xFF4ECDC4),
             
-            avh: 6,
-            dek: 1,
-            ob: 12,
-            aoa: 8,
+            border_radius: 6,
+            border_width: 1,
+            padding: 12,
+            spacing: 8,
             
-            asv: 14,
-            nvl: 12,
-            nvk: 18,
+            font_size: 14,
+            font_size_small: 12,
+            font_size_large: 18,
         }
     }
     
     
     pub fn light() -> Self {
         Self {
-            gay: Color::zi(0xFFF5F5F5),
-            fdh: Color::zi(0xFFFFFFFF),
-            ems: Color::zi(0xFFE8E8E8),
+            bg_primary: Color::from_u32(0xFFF5F5F5),
+            bg_secondary: Color::from_u32(0xFFFFFFFF),
+            bg_tertiary: Color::from_u32(0xFFE8E8E8),
             
-            bui: Color::zi(0xFF1A1A1A),
-            ebn: Color::zi(0xFF4A4A4A),
-            iui: Color::zi(0xFFAAAAAA),
+            fg_primary: Color::from_u32(0xFF1A1A1A),
+            fg_secondary: Color::from_u32(0xFF4A4A4A),
+            fg_disabled: Color::from_u32(0xFFAAAAAA),
             
-            mm: Color::zi(0xFF0066FF),
-            cof: Color::zi(0xFF0055DD),
-            fzq: Color::zi(0xFF0044BB),
+            accent: Color::from_u32(0xFF0066FF),
+            accent_hover: Color::from_u32(0xFF0055DD),
+            accent_pressed: Color::from_u32(0xFF0044BB),
             
-            dop: Color::zi(0xFFE8E8E8),
-            dor: Color::zi(0xFFDDDDDD),
-            dzj: Color::zi(0xFFCCCCCC),
-            kfp: Color::zi(0xFFF0F0F0),
+            button_bg: Color::from_u32(0xFFE8E8E8),
+            button_hover: Color::from_u32(0xFFDDDDDD),
+            button_pressed: Color::from_u32(0xFFCCCCCC),
+            button_disabled: Color::from_u32(0xFFF0F0F0),
             
-            acu: Color::zi(0xFFCCCCCC),
-            imc: Color::zi(0xFF0066FF),
+            border: Color::from_u32(0xFFCCCCCC),
+            border_focus: Color::from_u32(0xFF0066FF),
             
-            vx: Color::zi(0xFF22BB44),
-            ekt: Color::zi(0xFFFFAA00),
-            zt: Color::zi(0xFFDD3333),
-            co: Color::zi(0xFF2299DD),
+            success: Color::from_u32(0xFF22BB44),
+            warning: Color::from_u32(0xFFFFAA00),
+            error: Color::from_u32(0xFFDD3333),
+            info: Color::from_u32(0xFF2299DD),
             
-            avh: 6,
-            dek: 1,
-            ob: 12,
-            aoa: 8,
+            border_radius: 6,
+            border_width: 1,
+            padding: 12,
+            spacing: 8,
             
-            asv: 14,
-            nvl: 12,
-            nvk: 18,
+            font_size: 14,
+            font_size_small: 12,
+            font_size_large: 18,
         }
     }
 }
 
 
-static MR_: Mutex<Option<Theme>> = Mutex::new(None);
+static NP_: Mutex<Option<Theme>> = Mutex::new(None);
 
-pub fn bxb(theme: Theme) {
-    *MR_.lock() = Some(theme);
+pub fn set_theme(theme: Theme) {
+    *NP_.lock() = Some(theme);
 }
 
-pub fn yua() -> Theme {
-    MR_.lock().clone().unwrap_or_else(Theme::dark)
+pub fn qir() -> Theme {
+    NP_.lock().clone().unwrap_or_else(Theme::dark)
 }
 
 
@@ -242,101 +242,101 @@ pub fn yua() -> Theme {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Point {
-    pub b: i32,
-    pub c: i32,
+    pub x: i32,
+    pub y: i32,
 }
 
 impl Point {
-    pub const fn new(b: i32, c: i32) -> Self {
-        Self { b, c }
+    pub const fn new(x: i32, y: i32) -> Self {
+        Self { x, y }
     }
     
-    pub const Dh: Point = Point::new(0, 0);
+    pub const Bk: Point = Point::new(0, 0);
 }
 
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Size {
-    pub z: u32,
-    pub ac: u32,
+    pub width: u32,
+    pub height: u32,
 }
 
 impl Size {
-    pub const fn new(z: u32, ac: u32) -> Self {
-        Self { z, ac }
+    pub const fn new(width: u32, height: u32) -> Self {
+        Self { width, height }
     }
     
-    pub const Dh: Size = Size::new(0, 0);
+    pub const Bk: Size = Size::new(0, 0);
 }
 
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Rect {
-    pub b: i32,
-    pub c: i32,
-    pub z: u32,
-    pub ac: u32,
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
 }
 
 impl Rect {
-    pub const fn new(b: i32, c: i32, z: u32, ac: u32) -> Self {
-        Self { b, c, z, ac }
+    pub const fn new(x: i32, y: i32, width: u32, height: u32) -> Self {
+        Self { x, y, width, height }
     }
     
-    pub fn yrr(pr: Point, pf: Point) -> Self {
-        let b = pr.b.v(pf.b);
-        let c = pr.c.v(pf.c);
-        let z = (pr.b - pf.b).eki();
-        let ac = (pr.c - pf.c).eki();
-        Self { b, c, z, ac }
+    pub fn qgl(gw: Point, gn: Point) -> Self {
+        let x = gw.x.min(gn.x);
+        let y = gw.y.min(gn.y);
+        let width = (gw.x - gn.x).unsigned_abs();
+        let height = (gw.y - gn.y).unsigned_abs();
+        Self { x, y, width, height }
     }
     
-    pub fn contains(&self, nl: Point) -> bool {
-        nl.b >= self.b && nl.b < self.b + self.z as i32 &&
-        nl.c >= self.c && nl.c < self.c + self.ac as i32
+    pub fn contains(&self, point: Point) -> bool {
+        point.x >= self.x && point.x < self.x + self.width as i32 &&
+        point.y >= self.y && point.y < self.y + self.height as i32
     }
     
-    pub fn jao(&self, gq: &Rect) -> bool {
-        !(self.b + self.z as i32 <= gq.b ||
-          gq.b + gq.z as i32 <= self.b ||
-          self.c + self.ac as i32 <= gq.c ||
-          gq.c + gq.ac as i32 <= self.c)
+    pub fn intersects(&self, other: &Rect) -> bool {
+        !(self.x + self.width as i32 <= other.x ||
+          other.x + other.width as i32 <= self.x ||
+          self.y + self.height as i32 <= other.y ||
+          other.y + other.height as i32 <= self.y)
     }
     
-    pub fn hw(&self) -> i32 {
-        self.b + self.z as i32
+    pub fn right(&self) -> i32 {
+        self.x + self.width as i32
     }
     
-    pub fn abm(&self) -> i32 {
-        self.c + self.ac as i32
+    pub fn bottom(&self) -> i32 {
+        self.y + self.height as i32
     }
     
-    pub const Dh: Rect = Rect::new(0, 0, 0, 0);
+    pub const Bk: Rect = Rect::new(0, 0, 0, 0);
 }
 
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct EdgeInsets {
-    pub qc: u32,
-    pub hw: u32,
-    pub abm: u32,
-    pub fd: u32,
+    pub top: u32,
+    pub right: u32,
+    pub bottom: u32,
+    pub left: u32,
 }
 
 impl EdgeInsets {
-    pub const fn xx(bn: u32) -> Self {
-        Self { qc: bn, hw: bn, abm: bn, fd: bn }
+    pub const fn all(value: u32) -> Self {
+        Self { top: value, right: value, bottom: value, left: value }
     }
     
-    pub const fn wwy(cns: u32, dic: u32) -> Self {
-        Self { qc: cns, hw: dic, abm: cns, fd: dic }
+    pub const fn ozm(vertical: u32, horizontal: u32) -> Self {
+        Self { top: vertical, right: horizontal, bottom: vertical, left: horizontal }
     }
     
-    pub const fn uyk(qc: u32, hw: u32, abm: u32, fd: u32) -> Self {
-        Self { qc, hw, abm, fd }
+    pub const fn nnf(top: u32, right: u32, bottom: u32, left: u32) -> Self {
+        Self { top, right, bottom, left }
     }
     
-    pub const Dh: EdgeInsets = EdgeInsets::xx(0);
+    pub const Bk: EdgeInsets = EdgeInsets::all(0);
 }
 
 
@@ -346,48 +346,48 @@ impl EdgeInsets {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum MouseButton {
-    Ap,
-    Ca,
-    Chk,
+    Left,
+    Right,
+    Middle,
 }
 
 
 #[derive(Clone, Debug)]
 pub enum MouseEvent {
-    Fw { b: i32, c: i32 },
-    Fm { b: i32, c: i32, bdp: MouseButton },
-    Ek { b: i32, c: i32, bdp: MouseButton },
-    Vy { b: i32, c: i32, bdp: MouseButton },
-    Cum { b: i32, c: i32, bdp: MouseButton },
-    Yq { b: i32, c: i32, aaq: i32 },
-    Bfx,
-    Tf,
+    Move { x: i32, y: i32 },
+    Down { x: i32, y: i32, button: MouseButton },
+    Up { x: i32, y: i32, button: MouseButton },
+    Click { x: i32, y: i32, button: MouseButton },
+    DoubleClick { x: i32, y: i32, button: MouseButton },
+    Scroll { x: i32, y: i32, mk: i32 },
+    Enter,
+    Leave,
 }
 
 
 #[derive(Clone, Debug)]
 pub enum KeyEvent {
-    Fm { bs: char, modifiers: u8 },
-    Ek { bs: char, modifiers: u8 },
-    Bzj { r: char },
+    Down { key: char, modifiers: u8 },
+    Up { key: char, modifiers: u8 },
+    Char { c: char },
 }
 
 
 pub mod modifiers {
-    pub const Bri: u8 = 0x01;
-    pub const Bdf: u8 = 0x02;
-    pub const Bbi: u8 = 0x04;
-    pub const Dbp: u8 = 0x08;
+    pub const Adr: u8 = 0x01;
+    pub const Xc: u8 = 0x02;
+    pub const Wd: u8 = 0x04;
+    pub const Ayu: u8 = 0x08;
 }
 
 
 #[derive(Clone, Debug)]
 pub enum UiEvent {
-    Cp(MouseEvent),
-    Bki(KeyEvent),
-    Cdv,
-    Bct,
-    Ckm(Size),
+    Mouse(MouseEvent),
+    Key(KeyEvent),
+    Focus,
+    Blur,
+    Resize(Size),
 }
 
 
@@ -397,75 +397,75 @@ pub enum UiEvent {
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct WidgetState {
-    pub asy: bool,
-    pub vn: bool,
-    pub ja: bool,
-    pub dqa: bool,
-    pub iw: bool,
+    pub hovered: bool,
+    pub pressed: bool,
+    pub focused: bool,
+    pub disabled: bool,
+    pub visible: bool,
 }
 
 impl WidgetState {
     pub fn new() -> Self {
         Self {
-            iw: true,
+            visible: true,
             ..Default::default()
         }
     }
 }
 
 
-pub trait Cf {
+pub trait Aw {
     
-    fn ad(&self) -> u32;
-    
-    
-    fn eg(&self) -> Rect;
+    fn id(&self) -> u32;
     
     
-    fn cbq(&mut self, eg: Rect);
+    fn bounds(&self) -> Rect;
     
     
-    fn ctk(&self) -> Size {
+    fn set_bounds(&mut self, bounds: Rect);
+    
+    
+    fn preferred_size(&self) -> Size {
         Size::new(100, 30)
     }
     
     
-    fn zcu(&self) -> Size {
+    fn qpb(&self) -> Size {
         Size::new(0, 0)
     }
     
     
-    fn ate(&self) -> Size {
-        Size::new(u32::O, u32::O)
+    fn max_size(&self) -> Size {
+        Size::new(u32::MAX, u32::MAX)
     }
     
     
-    fn g(&self) -> WidgetState;
+    fn state(&self) -> WidgetState;
     
     
-    fn cbr(&mut self, g: WidgetState);
+    fn apc(&mut self, state: WidgetState);
     
     
-    fn ecj(&mut self, id: &UiEvent) -> bool {
+    fn btb(&mut self, event: &UiEvent) -> bool {
         false 
     }
     
     
-    fn tj(&self, surface: &mut GpuSurface, theme: &Theme);
+    fn render(&self, surface: &mut GpuSurface, theme: &Theme);
     
     
-    fn tpb(&self, nl: Point) -> bool {
-        self.eg().contains(nl)
+    fn mlr(&self, point: Point) -> bool {
+        self.bounds().contains(point)
     }
 }
 
 
-static CHX_: Mutex<u32> = Mutex::new(1);
+static CLG_: Mutex<u32> = Mutex::new(1);
 
-pub fn bvo() -> u32 {
-    let mut ad = CHX_.lock();
-    let result = *ad;
-    *ad += 1;
+pub fn ama() -> u32 {
+    let mut id = CLG_.lock();
+    let result = *id;
+    *id += 1;
     result
 }
 
@@ -474,131 +474,131 @@ pub fn bvo() -> u32 {
 
 
 
-pub struct Dy {
-    ad: u32,
-    eg: Rect,
-    g: WidgetState,
+pub struct Br {
+    id: u32,
+    bounds: Rect,
+    state: WidgetState,
     pub text: String,
-    pub s: Option<Color>,
+    pub color: Option<Color>,
     pub align: TextAlign,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
 pub enum TextAlign {
     #[default]
-    Ap,
-    Eo,
-    Ca,
+    Left,
+    Center,
+    Right,
 }
 
-impl Dy {
+impl Br {
     pub fn new(text: impl Into<String>) -> Self {
         Self {
-            ad: bvo(),
-            eg: Rect::Dh,
-            g: WidgetState::new(),
+            id: ama(),
+            bounds: Rect::Bk,
+            state: WidgetState::new(),
             text: text.into(),
-            s: None,
-            align: TextAlign::Ap,
+            color: None,
+            align: TextAlign::Left,
         }
     }
     
-    pub fn zwa(mut self, s: Color) -> Self {
-        self.s = Some(s);
+    pub fn rcm(mut self, color: Color) -> Self {
+        self.color = Some(color);
         self
     }
     
-    pub fn zvy(mut self, align: TextAlign) -> Self {
+    pub fn rck(mut self, align: TextAlign) -> Self {
         self.align = align;
         self
     }
 }
 
-impl Cf for Dy {
-    fn ad(&self) -> u32 { self.ad }
-    fn eg(&self) -> Rect { self.eg }
-    fn cbq(&mut self, eg: Rect) { self.eg = eg; }
-    fn g(&self) -> WidgetState { self.g }
-    fn cbr(&mut self, g: WidgetState) { self.g = g; }
+impl Aw for Br {
+    fn id(&self) -> u32 { self.id }
+    fn bounds(&self) -> Rect { self.bounds }
+    fn set_bounds(&mut self, bounds: Rect) { self.bounds = bounds; }
+    fn state(&self) -> WidgetState { self.state }
+    fn apc(&mut self, state: WidgetState) { self.state = state; }
     
-    fn ctk(&self) -> Size {
+    fn preferred_size(&self) -> Size {
         
-        Size::new((self.text.len() as u32 * 8).am(10), 16)
+        Size::new((self.text.len() as u32 * 8).max(10), 16)
     }
     
-    fn tj(&self, surface: &mut GpuSurface, theme: &Theme) {
-        if !self.g.iw { return; }
+    fn render(&self, surface: &mut GpuSurface, theme: &Theme) {
+        if !self.state.visible { return; }
         
-        let s = self.s.unwrap_or(theme.bui);
+        let color = self.color.unwrap_or(theme.fg_primary);
         
         
-        let b = match self.align {
-            TextAlign::Ap => self.eg.b,
-            TextAlign::Eo => self.eg.b + (self.eg.z as i32 - self.text.len() as i32 * 8) / 2,
-            TextAlign::Ca => self.eg.b + self.eg.z as i32 - self.text.len() as i32 * 8,
+        let x = match self.align {
+            TextAlign::Left => self.bounds.x,
+            TextAlign::Center => self.bounds.x + (self.bounds.width as i32 - self.text.len() as i32 * 8) / 2,
+            TextAlign::Right => self.bounds.x + self.bounds.width as i32 - self.text.len() as i32 * 8,
         };
         
-        cb(surface, b, self.eg.c, &self.text, s.lv());
+        draw_text(surface, x, self.bounds.y, &self.text, color.to_u32());
     }
 }
 
 
-pub struct Vs {
-    ad: u32,
-    eg: Rect,
-    g: WidgetState,
+pub struct Jl {
+    id: u32,
+    bounds: Rect,
+    state: WidgetState,
     pub text: String,
-    pub ctb: Option<Box<dyn Fn() + Send + Sync>>,
+    pub on_click: Option<Box<dyn Fn() + Send + Sync>>,
 }
 
-impl Vs {
+impl Jl {
     pub fn new(text: impl Into<String>) -> Self {
         Self {
-            ad: bvo(),
-            eg: Rect::Dh,
-            g: WidgetState::new(),
+            id: ama(),
+            bounds: Rect::Bk,
+            state: WidgetState::new(),
             text: text.into(),
-            ctb: None,
+            on_click: None,
         }
     }
     
-    pub fn ctb<G: Fn() + Send + Sync + 'static>(mut self, bb: G) -> Self {
-        self.ctb = Some(Box::new(bb));
+    pub fn on_click<F: Fn() + Send + Sync + 'static>(mut self, f: F) -> Self {
+        self.on_click = Some(Box::new(f));
         self
     }
 }
 
-impl Cf for Vs {
-    fn ad(&self) -> u32 { self.ad }
-    fn eg(&self) -> Rect { self.eg }
-    fn cbq(&mut self, eg: Rect) { self.eg = eg; }
-    fn g(&self) -> WidgetState { self.g }
-    fn cbr(&mut self, g: WidgetState) { self.g = g; }
+impl Aw for Jl {
+    fn id(&self) -> u32 { self.id }
+    fn bounds(&self) -> Rect { self.bounds }
+    fn set_bounds(&mut self, bounds: Rect) { self.bounds = bounds; }
+    fn state(&self) -> WidgetState { self.state }
+    fn apc(&mut self, state: WidgetState) { self.state = state; }
     
-    fn ctk(&self) -> Size {
-        Size::new((self.text.len() as u32 * 8 + 24).am(80), 32)
+    fn preferred_size(&self) -> Size {
+        Size::new((self.text.len() as u32 * 8 + 24).max(80), 32)
     }
     
-    fn ecj(&mut self, id: &UiEvent) -> bool {
-        match id {
-            UiEvent::Cp(MouseEvent::Bfx) => {
-                self.g.asy = true;
+    fn btb(&mut self, event: &UiEvent) -> bool {
+        match event {
+            UiEvent::Mouse(MouseEvent::Enter) => {
+                self.state.hovered = true;
                 true
             }
-            UiEvent::Cp(MouseEvent::Tf) => {
-                self.g.asy = false;
-                self.g.vn = false;
+            UiEvent::Mouse(MouseEvent::Leave) => {
+                self.state.hovered = false;
+                self.state.pressed = false;
                 true
             }
-            UiEvent::Cp(MouseEvent::Fm { bdp: MouseButton::Ap, .. }) => {
-                self.g.vn = true;
+            UiEvent::Mouse(MouseEvent::Down { button: MouseButton::Left, .. }) => {
+                self.state.pressed = true;
                 true
             }
-            UiEvent::Cp(MouseEvent::Ek { bdp: MouseButton::Ap, .. }) => {
-                if self.g.vn {
-                    self.g.vn = false;
-                    if let Some(ref ctb) = self.ctb {
-                        ctb();
+            UiEvent::Mouse(MouseEvent::Up { button: MouseButton::Left, .. }) => {
+                if self.state.pressed {
+                    self.state.pressed = false;
+                    if let Some(ref on_click) = self.on_click {
+                        on_click();
                     }
                 }
                 true
@@ -607,231 +607,231 @@ impl Cf for Vs {
         }
     }
     
-    fn tj(&self, surface: &mut GpuSurface, theme: &Theme) {
-        if !self.g.iw { return; }
+    fn render(&self, surface: &mut GpuSurface, theme: &Theme) {
+        if !self.state.visible { return; }
         
-        let ei = if self.g.dqa {
-            theme.kfp
-        } else if self.g.vn {
-            theme.dzj
-        } else if self.g.asy {
-            theme.dor
+        let bg = if self.state.disabled {
+            theme.button_disabled
+        } else if self.state.pressed {
+            theme.button_pressed
+        } else if self.state.hovered {
+            theme.button_hover
         } else {
-            theme.dop
+            theme.button_bg
         };
         
-        let lp = if self.g.dqa {
-            theme.iui
+        let fg = if self.state.disabled {
+            theme.fg_disabled
         } else {
-            theme.bui
+            theme.fg_primary
         };
         
         
-        surface.afp(
-            self.eg.b as u32,
-            self.eg.c as u32,
-            self.eg.z,
-            self.eg.ac,
-            theme.avh,
-            ei.lv()
+        surface.fill_rounded_rect(
+            self.bounds.x as u32,
+            self.bounds.y as u32,
+            self.bounds.width,
+            self.bounds.height,
+            theme.border_radius,
+            bg.to_u32()
         );
         
         
-        surface.mf(
-            self.eg.b as u32,
-            self.eg.c as u32,
-            self.eg.z,
-            self.eg.ac,
-            theme.avh,
-            if self.g.ja { theme.imc.lv() } else { theme.acu.lv() }
+        surface.draw_rounded_rect(
+            self.bounds.x as u32,
+            self.bounds.y as u32,
+            self.bounds.width,
+            self.bounds.height,
+            theme.border_radius,
+            if self.state.focused { theme.border_focus.to_u32() } else { theme.border.to_u32() }
         );
         
         
-        let wg = self.eg.b + (self.eg.z as i32 - self.text.len() as i32 * 8) / 2;
-        let sl = self.eg.c + (self.eg.ac as i32 - 16) / 2;
-        cb(surface, wg, sl, &self.text, lp.lv());
+        let kd = self.bounds.x + (self.bounds.width as i32 - self.text.len() as i32 * 8) / 2;
+        let ie = self.bounds.y + (self.bounds.height as i32 - 16) / 2;
+        draw_text(surface, kd, ie, &self.text, fg.to_u32());
     }
 }
 
 
-pub struct Bue {
-    ad: u32,
-    eg: Rect,
-    g: WidgetState,
+pub struct Afg {
+    id: u32,
+    bounds: Rect,
+    state: WidgetState,
     pub text: String,
-    pub fqy: String,
-    pub fgj: usize,
-    pub olw: usize,
+    pub placeholder: String,
+    pub cursor_pos: usize,
+    pub max_length: usize,
 }
 
-impl Bue {
+impl Afg {
     pub fn new() -> Self {
         Self {
-            ad: bvo(),
-            eg: Rect::Dh,
-            g: WidgetState::new(),
+            id: ama(),
+            bounds: Rect::Bk,
+            state: WidgetState::new(),
             text: String::new(),
-            fqy: String::new(),
-            fgj: 0,
-            olw: 256,
+            placeholder: String::new(),
+            cursor_pos: 0,
+            max_length: 256,
         }
     }
     
-    pub fn zwg(mut self, fqy: impl Into<String>) -> Self {
-        self.fqy = fqy.into();
+    pub fn rcs(mut self, placeholder: impl Into<String>) -> Self {
+        self.placeholder = placeholder.into();
         self
     }
 }
 
-impl Cf for Bue {
-    fn ad(&self) -> u32 { self.ad }
-    fn eg(&self) -> Rect { self.eg }
-    fn cbq(&mut self, eg: Rect) { self.eg = eg; }
-    fn g(&self) -> WidgetState { self.g }
-    fn cbr(&mut self, g: WidgetState) { self.g = g; }
+impl Aw for Afg {
+    fn id(&self) -> u32 { self.id }
+    fn bounds(&self) -> Rect { self.bounds }
+    fn set_bounds(&mut self, bounds: Rect) { self.bounds = bounds; }
+    fn state(&self) -> WidgetState { self.state }
+    fn apc(&mut self, state: WidgetState) { self.state = state; }
     
-    fn ctk(&self) -> Size {
+    fn preferred_size(&self) -> Size {
         Size::new(200, 32)
     }
     
-    fn ecj(&mut self, id: &UiEvent) -> bool {
-        match id {
-            UiEvent::Bki(KeyEvent::Bzj { r }) if self.g.ja => {
-                if self.text.len() < self.olw && !r.yzf() {
-                    self.text.insert(self.fgj, *r);
-                    self.fgj += 1;
+    fn btb(&mut self, event: &UiEvent) -> bool {
+        match event {
+            UiEvent::Key(KeyEvent::Char { c }) if self.state.focused => {
+                if self.text.len() < self.max_length && !c.is_control() {
+                    self.text.insert(self.cursor_pos, *c);
+                    self.cursor_pos += 1;
                 }
                 true
             }
-            UiEvent::Bki(KeyEvent::Fm { bs, .. }) if self.g.ja => {
-                match *bs {
+            UiEvent::Key(KeyEvent::Down { key, .. }) if self.state.focused => {
+                match *key {
                     '\x08' => { 
-                        if self.fgj > 0 {
-                            self.fgj -= 1;
-                            self.text.remove(self.fgj);
+                        if self.cursor_pos > 0 {
+                            self.cursor_pos -= 1;
+                            self.text.remove(self.cursor_pos);
                         }
                         true
                     }
                     _ => false
                 }
             }
-            UiEvent::Cp(MouseEvent::Vy { .. }) => {
-                self.g.ja = true;
+            UiEvent::Mouse(MouseEvent::Click { .. }) => {
+                self.state.focused = true;
                 true
             }
-            UiEvent::Bct => {
-                self.g.ja = false;
+            UiEvent::Blur => {
+                self.state.focused = false;
                 true
             }
             _ => false
         }
     }
     
-    fn tj(&self, surface: &mut GpuSurface, theme: &Theme) {
-        if !self.g.iw { return; }
+    fn render(&self, surface: &mut GpuSurface, theme: &Theme) {
+        if !self.state.visible { return; }
         
         
-        surface.afp(
-            self.eg.b as u32,
-            self.eg.c as u32,
-            self.eg.z,
-            self.eg.ac,
-            theme.avh,
-            theme.fdh.lv()
+        surface.fill_rounded_rect(
+            self.bounds.x as u32,
+            self.bounds.y as u32,
+            self.bounds.width,
+            self.bounds.height,
+            theme.border_radius,
+            theme.bg_secondary.to_u32()
         );
         
         
-        let aia = if self.g.ja {
-            theme.imc
-        } else if self.g.asy {
-            theme.cof
+        let ri = if self.state.focused {
+            theme.border_focus
+        } else if self.state.hovered {
+            theme.accent_hover
         } else {
-            theme.acu
+            theme.border
         };
         
-        surface.mf(
-            self.eg.b as u32,
-            self.eg.c as u32,
-            self.eg.z,
-            self.eg.ac,
-            theme.avh,
-            aia.lv()
+        surface.draw_rounded_rect(
+            self.bounds.x as u32,
+            self.bounds.y as u32,
+            self.bounds.width,
+            self.bounds.height,
+            theme.border_radius,
+            ri.to_u32()
         );
         
         
-        let sl = self.eg.c + (self.eg.ac as i32 - 16) / 2;
-        let wg = self.eg.b + theme.ob as i32;
+        let ie = self.bounds.y + (self.bounds.height as i32 - 16) / 2;
+        let kd = self.bounds.x + theme.padding as i32;
         
         if self.text.is_empty() {
-            cb(surface, wg, sl, &self.fqy, theme.iui.lv());
+            draw_text(surface, kd, ie, &self.placeholder, theme.fg_disabled.to_u32());
         } else {
-            cb(surface, wg, sl, &self.text, theme.bui.lv());
+            draw_text(surface, kd, ie, &self.text, theme.fg_primary.to_u32());
         }
         
         
-        if self.g.ja {
-            let lf = wg + (self.fgj as i32 * 8);
-            surface.ah(
-                lf as u32,
-                (sl + 2) as u32,
+        if self.state.focused {
+            let cursor_x = kd + (self.cursor_pos as i32 * 8);
+            surface.fill_rect(
+                cursor_x as u32,
+                (ie + 2) as u32,
                 2,
                 12,
-                theme.mm.lv()
+                theme.accent.to_u32()
             );
         }
     }
 }
 
 
-pub struct Bdk {
-    ad: u32,
-    eg: Rect,
-    g: WidgetState,
-    pub cpb: bool,
-    pub cu: String,
-    pub bks: Option<Box<dyn Fn(bool) + Send + Sync>>,
+pub struct Xg {
+    id: u32,
+    bounds: Rect,
+    state: WidgetState,
+    pub checked: bool,
+    pub label: String,
+    pub on_change: Option<Box<dyn Fn(bool) + Send + Sync>>,
 }
 
-impl Bdk {
-    pub fn new(cu: impl Into<String>) -> Self {
+impl Xg {
+    pub fn new(label: impl Into<String>) -> Self {
         Self {
-            ad: bvo(),
-            eg: Rect::Dh,
-            g: WidgetState::new(),
-            cpb: false,
-            cu: cu.into(),
-            bks: None,
+            id: ama(),
+            bounds: Rect::Bk,
+            state: WidgetState::new(),
+            checked: false,
+            label: label.into(),
+            on_change: None,
         }
     }
     
-    pub fn cpb(mut self, bn: bool) -> Self {
-        self.cpb = bn;
+    pub fn checked(mut self, value: bool) -> Self {
+        self.checked = value;
         self
     }
     
-    pub fn bks<G: Fn(bool) + Send + Sync + 'static>(mut self, bb: G) -> Self {
-        self.bks = Some(Box::new(bb));
+    pub fn on_change<F: Fn(bool) + Send + Sync + 'static>(mut self, f: F) -> Self {
+        self.on_change = Some(Box::new(f));
         self
     }
 }
 
-impl Cf for Bdk {
-    fn ad(&self) -> u32 { self.ad }
-    fn eg(&self) -> Rect { self.eg }
-    fn cbq(&mut self, eg: Rect) { self.eg = eg; }
-    fn g(&self) -> WidgetState { self.g }
-    fn cbr(&mut self, g: WidgetState) { self.g = g; }
+impl Aw for Xg {
+    fn id(&self) -> u32 { self.id }
+    fn bounds(&self) -> Rect { self.bounds }
+    fn set_bounds(&mut self, bounds: Rect) { self.bounds = bounds; }
+    fn state(&self) -> WidgetState { self.state }
+    fn apc(&mut self, state: WidgetState) { self.state = state; }
     
-    fn ctk(&self) -> Size {
-        Size::new(24 + self.cu.len() as u32 * 8 + 8, 24)
+    fn preferred_size(&self) -> Size {
+        Size::new(24 + self.label.len() as u32 * 8 + 8, 24)
     }
     
-    fn ecj(&mut self, id: &UiEvent) -> bool {
-        match id {
-            UiEvent::Cp(MouseEvent::Vy { bdp: MouseButton::Ap, .. }) => {
-                self.cpb = !self.cpb;
-                if let Some(ref bks) = self.bks {
-                    bks(self.cpb);
+    fn btb(&mut self, event: &UiEvent) -> bool {
+        match event {
+            UiEvent::Mouse(MouseEvent::Click { button: MouseButton::Left, .. }) => {
+                self.checked = !self.checked;
+                if let Some(ref on_change) = self.on_change {
+                    on_change(self.checked);
                 }
                 true
             }
@@ -839,94 +839,94 @@ impl Cf for Bdk {
         }
     }
     
-    fn tj(&self, surface: &mut GpuSurface, theme: &Theme) {
-        if !self.g.iw { return; }
+    fn render(&self, surface: &mut GpuSurface, theme: &Theme) {
+        if !self.state.visible { return; }
         
         
-        let gbj = 20u32;
-        let btm = self.eg.b as u32;
-        let bjk = self.eg.c as u32 + (self.eg.ac - gbj) / 2;
+        let cug = 20u32;
+        let ala = self.bounds.x as u32;
+        let agf = self.bounds.y as u32 + (self.bounds.height - cug) / 2;
         
-        let ei = if self.cpb { theme.mm } else { theme.fdh };
+        let bg = if self.checked { theme.accent } else { theme.bg_secondary };
         
-        surface.afp(btm, bjk, gbj, gbj, 4, ei.lv());
-        surface.mf(btm, bjk, gbj, gbj, 4, theme.acu.lv());
+        surface.fill_rounded_rect(ala, agf, cug, cug, 4, bg.to_u32());
+        surface.draw_rounded_rect(ala, agf, cug, cug, 4, theme.border.to_u32());
         
         
-        if self.cpb {
-            let cx = btm as i32 + 5;
-            let ae = bjk as i32 + 10;
-            surface.ahj(cx, ae, cx + 4, ae + 4, theme.gay.lv());
-            surface.ahj(cx + 4, ae + 4, cx + 12, ae - 4, theme.gay.lv());
+        if self.checked {
+            let cx = ala as i32 + 5;
+            let u = agf as i32 + 10;
+            surface.draw_line(cx, u, cx + 4, u + 4, theme.bg_primary.to_u32());
+            surface.draw_line(cx + 4, u + 4, cx + 12, u - 4, theme.bg_primary.to_u32());
         }
         
         
-        let wg = btm as i32 + gbj as i32 + 8;
-        let sl = self.eg.c + (self.eg.ac as i32 - 16) / 2;
-        cb(surface, wg, sl, &self.cu, theme.bui.lv());
+        let kd = ala as i32 + cug as i32 + 8;
+        let ie = self.bounds.y + (self.bounds.height as i32 - 16) / 2;
+        draw_text(surface, kd, ie, &self.label, theme.fg_primary.to_u32());
     }
 }
 
 
-pub struct Bpl {
-    ad: u32,
-    eg: Rect,
-    g: WidgetState,
-    pub bn: f32,  
-    pub pkn: bool,
+pub struct Acv {
+    id: u32,
+    bounds: Rect,
+    state: WidgetState,
+    pub value: f32,  
+    pub show_text: bool,
 }
 
-impl Bpl {
-    pub fn new(bn: f32) -> Self {
+impl Acv {
+    pub fn new(value: f32) -> Self {
         Self {
-            ad: bvo(),
-            eg: Rect::Dh,
-            g: WidgetState::new(),
-            bn: bn.qp(0.0, 1.0),
-            pkn: true,
+            id: ama(),
+            bounds: Rect::Bk,
+            state: WidgetState::new(),
+            value: value.clamp(0.0, 1.0),
+            show_text: true,
         }
     }
     
-    pub fn znt(&mut self, bn: f32) {
-        self.bn = bn.qp(0.0, 1.0);
+    pub fn qwp(&mut self, value: f32) {
+        self.value = value.clamp(0.0, 1.0);
     }
 }
 
-impl Cf for Bpl {
-    fn ad(&self) -> u32 { self.ad }
-    fn eg(&self) -> Rect { self.eg }
-    fn cbq(&mut self, eg: Rect) { self.eg = eg; }
-    fn g(&self) -> WidgetState { self.g }
-    fn cbr(&mut self, g: WidgetState) { self.g = g; }
+impl Aw for Acv {
+    fn id(&self) -> u32 { self.id }
+    fn bounds(&self) -> Rect { self.bounds }
+    fn set_bounds(&mut self, bounds: Rect) { self.bounds = bounds; }
+    fn state(&self) -> WidgetState { self.state }
+    fn apc(&mut self, state: WidgetState) { self.state = state; }
     
-    fn ctk(&self) -> Size {
+    fn preferred_size(&self) -> Size {
         Size::new(200, 20)
     }
     
-    fn tj(&self, surface: &mut GpuSurface, theme: &Theme) {
-        if !self.g.iw { return; }
+    fn render(&self, surface: &mut GpuSurface, theme: &Theme) {
+        if !self.state.visible { return; }
         
-        let b = self.eg.b as u32;
-        let c = self.eg.c as u32;
-        let d = self.eg.z;
-        let i = self.eg.ac;
-        
-        
-        surface.afp(b, c, d, i, i / 2, theme.ems.lv());
+        let x = self.bounds.x as u32;
+        let y = self.bounds.y as u32;
+        let w = self.bounds.width;
+        let h = self.bounds.height;
         
         
-        let eqh = ((d as f32 * self.bn) as u32).am(i);
-        if self.bn > 0.0 {
-            surface.afp(b, c, eqh, i, i / 2, theme.mm.lv());
+        surface.fill_rounded_rect(x, y, w, h, h / 2, theme.bg_tertiary.to_u32());
+        
+        
+        let bzr = ((w as f32 * self.value) as u32).max(h);
+        if self.value > 0.0 {
+            surface.fill_rounded_rect(x, y, bzr, h, h / 2, theme.accent.to_u32());
         }
         
         
-        if self.pkn {
-            let egl = (self.bn * 100.0) as u32;
-            let text = format!("{}%", egl);
-            let wg = b as i32 + (d as i32 - text.len() as i32 * 8) / 2;
-            let sl = c as i32 + (i as i32 - 16) / 2;
-            cb(surface, wg, sl, &text, theme.bui.lv());
+        if self.show_text {
+            let bup = (self.value * 100.0) as u32;
+            let text = format!("{}%", bup);
+            let kd = x as i32 + (w as i32 - text.len() as i32 * 8) / 2;
+            let ie = y as i32 + (h as i32 - 16) / 2;
+            draw_text(surface, kd, ie, &text, theme.fg_primary.to_u32());
         }
     }
 }
@@ -936,29 +936,29 @@ impl Cf for Bpl {
 
 
 
-pub fn cb(surface: &mut GpuSurface, b: i32, c: i32, text: &str, s: u32) {
-    let mut cx = b;
-    for r in text.bw() {
-        if cx >= 0 && (cx as u32) < surface.z && c >= 0 && (c as u32) < surface.ac {
-            ahi(surface, cx, c, r, s);
+pub fn draw_text(surface: &mut GpuSurface, x: i32, y: i32, text: &str, color: u32) {
+    let mut cx = x;
+    for c in text.chars() {
+        if cx >= 0 && (cx as u32) < surface.width && y >= 0 && (y as u32) < surface.height {
+            draw_char(surface, cx, y, c, color);
         }
         cx += 8;
     }
 }
 
 
-fn ahi(surface: &mut GpuSurface, b: i32, c: i32, r: char, s: u32) {
+fn draw_char(surface: &mut GpuSurface, x: i32, y: i32, c: char, color: u32) {
     
-    let ka = crate::framebuffer::font::ada(r);
+    let du = crate::framebuffer::font::ol(c);
     
-    for br in 0..16 {
-        let fs = ka[br];
-        for bj in 0..8 {
-            if (fs >> (7 - bj)) & 1 == 1 {
-                let y = b + bj as i32;
-                let x = c + br as i32;
-                if y >= 0 && x >= 0 {
-                    surface.aht(y as u32, x as u32, s);
+    for row in 0..16 {
+        let bits = du[row];
+        for col in 0..8 {
+            if (bits >> (7 - col)) & 1 == 1 {
+                let p = x + col as i32;
+                let o = y + row as i32;
+                if p >= 0 && o >= 0 {
+                    surface.set_pixel(p as u32, o as u32, color);
                 }
             }
         }
@@ -973,123 +973,123 @@ fn ahi(surface: &mut GpuSurface, b: i32, c: i32, r: char, s: u32) {
 #[derive(Clone, Copy, Debug, Default)]
 pub enum FlexDirection {
     #[default]
-    Aei,
-    Aaq,
+    Row,
+    Column,
 }
 
 
 #[derive(Clone, Copy, Debug, Default)]
 pub enum FlexAlign {
     #[default]
-    Oe,
-    Eo,
-    Wm,
-    Cnh,
-    Cng,
-    Cni,
+    Start,
+    Center,
+    End,
+    SpaceBetween,
+    SpaceAround,
+    SpaceEvenly,
 }
 
 
-pub struct Cdq {
-    pub sz: FlexDirection,
+pub struct Akg {
+    pub direction: FlexDirection,
     pub align: FlexAlign,
-    pub ipq: FlexAlign,
-    pub qi: u32,
-    pub ob: EdgeInsets,
+    pub cross_align: FlexAlign,
+    pub gap: u32,
+    pub padding: EdgeInsets,
 }
 
-impl Cdq {
-    pub fn br() -> Self {
+impl Akg {
+    pub fn row() -> Self {
         Self {
-            sz: FlexDirection::Aei,
-            align: FlexAlign::Oe,
-            ipq: FlexAlign::Eo,
-            qi: 8,
-            ob: EdgeInsets::xx(8),
+            direction: FlexDirection::Row,
+            align: FlexAlign::Start,
+            cross_align: FlexAlign::Center,
+            gap: 8,
+            padding: EdgeInsets::all(8),
         }
     }
     
     pub fn column() -> Self {
         Self {
-            sz: FlexDirection::Aaq,
-            align: FlexAlign::Oe,
-            ipq: FlexAlign::Oe,
-            qi: 8,
-            ob: EdgeInsets::xx(8),
+            direction: FlexDirection::Column,
+            align: FlexAlign::Start,
+            cross_align: FlexAlign::Start,
+            gap: 8,
+            padding: EdgeInsets::all(8),
         }
     }
     
     
-    pub fn layout(&self, container: Rect, zf: &mut [&mut dyn Cf]) {
-        if zf.is_empty() { return; }
+    pub fn layout(&self, container: Rect, children: &mut [&mut dyn Aw]) {
+        if children.is_empty() { return; }
         
-        let yz = container.b + self.ob.fd as i32;
-        let jae = container.c + self.ob.qc as i32;
-        let aii = container.z.ao(self.ob.fd + self.ob.hw);
-        let leq = container.ac.ao(self.ob.qc + self.ob.abm);
+        let lp = container.x + self.padding.left as i32;
+        let eqr = container.y + self.padding.top as i32;
+        let rn = container.width.saturating_sub(self.padding.left + self.padding.right);
+        let gcv = container.height.saturating_sub(self.padding.top + self.padding.bottom);
         
         
-        let mut iek = 0u32;
-        let mut jff = 0u32;
+        let mut ecf = 0u32;
+        let mut etz = 0u32;
         
-        for aeh in zf.iter() {
-            let bwa = aeh.ctk();
-            match self.sz {
-                FlexDirection::Aei => {
-                    iek += bwa.z;
-                    jff = jff.am(bwa.ac);
+        for pd in children.iter() {
+            let amg = pd.preferred_size();
+            match self.direction {
+                FlexDirection::Row => {
+                    ecf += amg.width;
+                    etz = etz.max(amg.height);
                 }
-                FlexDirection::Aaq => {
-                    iek += bwa.ac;
-                    jff = jff.am(bwa.z);
+                FlexDirection::Column => {
+                    ecf += amg.height;
+                    etz = etz.max(amg.width);
                 }
             }
         }
-        iek += self.qi * (zf.len() as u32 - 1);
+        ecf += self.gap * (children.len() as u32 - 1);
         
         
-        let oku = match self.sz {
-            FlexDirection::Aei => aii,
-            FlexDirection::Aaq => leq,
+        let ilq = match self.direction {
+            FlexDirection::Row => rn,
+            FlexDirection::Column => gcv,
         };
         
-        let mut u = match self.align {
-            FlexAlign::Oe => 0,
-            FlexAlign::Eo => ((oku as i32 - iek as i32) / 2).am(0) as u32,
-            FlexAlign::Wm => oku.ao(iek),
+        let mut pos = match self.align {
+            FlexAlign::Start => 0,
+            FlexAlign::Center => ((ilq as i32 - ecf as i32) / 2).max(0) as u32,
+            FlexAlign::End => ilq.saturating_sub(ecf),
             _ => 0,
         };
         
         
-        for aeh in zf.el() {
-            let bwa = aeh.ctk();
+        for pd in children.iter_mut() {
+            let amg = pd.preferred_size();
             
-            let (b, c, d, i) = match self.sz {
-                FlexDirection::Aei => {
-                    let kma = match self.ipq {
-                        FlexAlign::Oe => 0,
-                        FlexAlign::Eo => ((leq as i32 - bwa.ac as i32) / 2).am(0) as u32,
-                        FlexAlign::Wm => leq.ao(bwa.ac),
+            let (x, y, w, h) = match self.direction {
+                FlexDirection::Row => {
+                    let fpd = match self.cross_align {
+                        FlexAlign::Start => 0,
+                        FlexAlign::Center => ((gcv as i32 - amg.height as i32) / 2).max(0) as u32,
+                        FlexAlign::End => gcv.saturating_sub(amg.height),
                         _ => 0,
                     };
-                    (yz + u as i32, jae + kma as i32, bwa.z, bwa.ac)
+                    (lp + pos as i32, eqr + fpd as i32, amg.width, amg.height)
                 }
-                FlexDirection::Aaq => {
-                    let kma = match self.ipq {
-                        FlexAlign::Oe => 0,
-                        FlexAlign::Eo => ((aii as i32 - bwa.z as i32) / 2).am(0) as u32,
-                        FlexAlign::Wm => aii.ao(bwa.z),
+                FlexDirection::Column => {
+                    let fpd = match self.cross_align {
+                        FlexAlign::Start => 0,
+                        FlexAlign::Center => ((rn as i32 - amg.width as i32) / 2).max(0) as u32,
+                        FlexAlign::End => rn.saturating_sub(amg.width),
                         _ => 0,
                     };
-                    (yz + kma as i32, jae + u as i32, bwa.z, bwa.ac)
+                    (lp + fpd as i32, eqr + pos as i32, amg.width, amg.height)
                 }
             };
             
-            aeh.cbq(Rect::new(b, c, d, i));
+            pd.set_bounds(Rect::new(x, y, w, h));
             
-            u += match self.sz {
-                FlexDirection::Aei => bwa.z + self.qi,
-                FlexDirection::Aaq => bwa.ac + self.qi,
+            pos += match self.direction {
+                FlexDirection::Row => amg.width + self.gap,
+                FlexDirection::Column => amg.height + self.gap,
             };
         }
     }
@@ -1101,6 +1101,6 @@ impl Cdq {
 
 
 pub fn init() {
-    bxb(Theme::dark());
+    set_theme(Theme::dark());
     crate::serial_println!("[UI] Toolkit initialized with dark theme");
 }

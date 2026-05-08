@@ -64,7 +64,7 @@ pub struct Package {
     pub version: &'static str,
     pub description: &'static str,
     pub category: PkgCategory,
-    pub size_keyboard: u32,
+    pub size_kb: u32,
     pub dependencies: &'static [&'static str],
     pub status: PkgStatus,
 }
@@ -76,48 +76,48 @@ static INSTALLED: Mutex<Vec<String>> = Mutex::new(Vec::new());
 fn catalog() -> Vec<Package> {
     vec![
         // System
-        Package { name: "coreutils", version: "1.0.0", description: "Core POSIX utilities (ls, cp, mv, cat, grep, sort)", category: PkgCategory::System, size_keyboard: 48, dependencies: &[], status: PkgStatus::Installed },
-        Package { name: "tsh", version: "1.0.0", description: "TrustOS Shell — command interpreter with pipes and scripting", category: PkgCategory::System, size_keyboard: 64, dependencies: &[], status: PkgStatus::Installed },
-        Package { name: "init", version: "1.0.0", description: "System initialization and service manager", category: PkgCategory::System, size_keyboard: 16, dependencies: &[], status: PkgStatus::Installed },
-        Package { name: "devtools", version: "1.0.0", description: "Developer tools: profiler, dmesg, memdbg, peek/poke", category: PkgCategory::Development, size_keyboard: 32, dependencies: &[], status: PkgStatus::Installed },
+        Package { name: "coreutils", version: "1.0.0", description: "Core POSIX utilities (ls, cp, mv, cat, grep, sort)", category: PkgCategory::System, size_kb: 48, dependencies: &[], status: PkgStatus::Installed },
+        Package { name: "tsh", version: "1.0.0", description: "TrustOS Shell — command interpreter with pipes and scripting", category: PkgCategory::System, size_kb: 64, dependencies: &[], status: PkgStatus::Installed },
+        Package { name: "init", version: "1.0.0", description: "System initialization and service manager", category: PkgCategory::System, size_kb: 16, dependencies: &[], status: PkgStatus::Installed },
+        Package { name: "devtools", version: "1.0.0", description: "Developer tools: profiler, dmesg, memdbg, peek/poke", category: PkgCategory::Development, size_kb: 32, dependencies: &[], status: PkgStatus::Installed },
 
         // Network
-        Package { name: "netstack", version: "1.0.0", description: "TCP/IP network stack (ARP, DHCP, DNS, TCP, UDP)", category: PkgCategory::Network, size_keyboard: 96, dependencies: &[], status: PkgStatus::Installed },
-        Package { name: "curl", version: "1.0.0", description: "HTTP client for web requests (curl, wget)", category: PkgCategory::Network, size_keyboard: 24, dependencies: &["netstack"], status: PkgStatus::Installed },
-        Package { name: "httpd", version: "1.0.0", description: "HTTP server — serve web pages from TrustOS", category: PkgCategory::Network, size_keyboard: 32, dependencies: &["netstack"], status: PkgStatus::Available },
-        Package { name: "browser", version: "1.0.0", description: "Text-mode web browser with HTML/CSS rendering", category: PkgCategory::Network, size_keyboard: 56, dependencies: &["netstack", "curl"], status: PkgStatus::Installed },
-        Package { name: "tls13", version: "1.0.0", description: "TLS 1.3 cryptographic library (AES-GCM, ChaCha20, x25519)", category: PkgCategory::Security, size_keyboard: 80, dependencies: &[], status: PkgStatus::Installed },
+        Package { name: "netstack", version: "1.0.0", description: "TCP/IP network stack (ARP, DHCP, DNS, TCP, UDP)", category: PkgCategory::Network, size_kb: 96, dependencies: &[], status: PkgStatus::Installed },
+        Package { name: "curl", version: "1.0.0", description: "HTTP client for web requests (curl, wget)", category: PkgCategory::Network, size_kb: 24, dependencies: &["netstack"], status: PkgStatus::Installed },
+        Package { name: "httpd", version: "1.0.0", description: "HTTP server — serve web pages from TrustOS", category: PkgCategory::Network, size_kb: 32, dependencies: &["netstack"], status: PkgStatus::Available },
+        Package { name: "browser", version: "1.0.0", description: "Text-mode web browser with HTML/CSS rendering", category: PkgCategory::Network, size_kb: 56, dependencies: &["netstack", "curl"], status: PkgStatus::Installed },
+        Package { name: "tls13", version: "1.0.0", description: "TLS 1.3 cryptographic library (AES-GCM, ChaCha20, x25519)", category: PkgCategory::Security, size_kb: 80, dependencies: &[], status: PkgStatus::Installed },
 
         // Security
-        Package { name: "trustscan", version: "1.0.0", description: "Network security toolkit (port scan, sniffer, vuln scanner)", category: PkgCategory::Security, size_keyboard: 64, dependencies: &["netstack"], status: PkgStatus::Installed },
-        Package { name: "firewall", version: "0.1.0", description: "Packet filtering firewall with iptables-like rules", category: PkgCategory::Security, size_keyboard: 28, dependencies: &["netstack"], status: PkgStatus::Available },
-        Package { name: "auth", version: "1.0.0", description: "User authentication and access control", category: PkgCategory::Security, size_keyboard: 16, dependencies: &[], status: PkgStatus::Installed },
+        Package { name: "trustscan", version: "1.0.0", description: "Network security toolkit (port scan, sniffer, vuln scanner)", category: PkgCategory::Security, size_kb: 64, dependencies: &["netstack"], status: PkgStatus::Installed },
+        Package { name: "firewall", version: "0.1.0", description: "Packet filtering firewall with iptables-like rules", category: PkgCategory::Security, size_kb: 28, dependencies: &["netstack"], status: PkgStatus::Available },
+        Package { name: "auth", version: "1.0.0", description: "User authentication and access control", category: PkgCategory::Security, size_kb: 16, dependencies: &[], status: PkgStatus::Installed },
 
         // Development
-        Package { name: "trustlang", version: "1.0.0", description: "TrustLang programming language (compiler + bytecode VM)", category: PkgCategory::Development, size_keyboard: 96, dependencies: &[], status: PkgStatus::Installed },
-        Package { name: "elftools", version: "1.0.0", description: "ELF binary analysis tools (objdump, readelf, disasm)", category: PkgCategory::Development, size_keyboard: 40, dependencies: &[], status: PkgStatus::Installed },
-        Package { name: "git", version: "0.1.0", description: "Version control system (basic clone, commit, log)", category: PkgCategory::Development, size_keyboard: 64, dependencies: &["netstack"], status: PkgStatus::Available },
-        Package { name: "scripting", version: "1.0.0", description: "Shell scripting engine (variables, if/for/while, arithmetic)", category: PkgCategory::Development, size_keyboard: 24, dependencies: &["tsh"], status: PkgStatus::Available },
+        Package { name: "trustlang", version: "1.0.0", description: "TrustLang programming language (compiler + bytecode VM)", category: PkgCategory::Development, size_kb: 96, dependencies: &[], status: PkgStatus::Installed },
+        Package { name: "elftools", version: "1.0.0", description: "ELF binary analysis tools (objdump, readelf, disasm)", category: PkgCategory::Development, size_kb: 40, dependencies: &[], status: PkgStatus::Installed },
+        Package { name: "git", version: "0.1.0", description: "Version control system (basic clone, commit, log)", category: PkgCategory::Development, size_kb: 64, dependencies: &["netstack"], status: PkgStatus::Available },
+        Package { name: "scripting", version: "1.0.0", description: "Shell scripting engine (variables, if/for/while, arithmetic)", category: PkgCategory::Development, size_kb: 24, dependencies: &["tsh"], status: PkgStatus::Available },
 
         // Games
-        Package { name: "snake", version: "1.0.0", description: "Classic Snake game", category: PkgCategory::Games, size_keyboard: 8, dependencies: &[], status: PkgStatus::Installed },
-        Package { name: "chess", version: "1.0.0", description: "Chess engine with AI opponent (minimax + alpha-beta)", category: PkgCategory::Games, size_keyboard: 48, dependencies: &[], status: PkgStatus::Installed },
-        Package { name: "doom", version: "0.1.0", description: "3D raycasting FPS game engine", category: PkgCategory::Games, size_keyboard: 64, dependencies: &[], status: PkgStatus::Installed },
-        Package { name: "nes", version: "1.0.0", description: "NES emulator (6502 CPU, 2C02 PPU, iNES ROMs)", category: PkgCategory::Games, size_keyboard: 56, dependencies: &[], status: PkgStatus::Installed },
-        Package { name: "gameboy", version: "1.0.0", description: "Game Boy emulator (LR35902, MBC1/3/5)", category: PkgCategory::Games, size_keyboard: 48, dependencies: &[], status: PkgStatus::Installed },
-        Package { name: "tetris", version: "0.1.0", description: "Tetris — falling blocks puzzle", category: PkgCategory::Games, size_keyboard: 8, dependencies: &[], status: PkgStatus::Available },
+        Package { name: "snake", version: "1.0.0", description: "Classic Snake game", category: PkgCategory::Games, size_kb: 8, dependencies: &[], status: PkgStatus::Installed },
+        Package { name: "chess", version: "1.0.0", description: "Chess engine with AI opponent (minimax + alpha-beta)", category: PkgCategory::Games, size_kb: 48, dependencies: &[], status: PkgStatus::Installed },
+        Package { name: "doom", version: "0.1.0", description: "3D raycasting FPS game engine", category: PkgCategory::Games, size_kb: 64, dependencies: &[], status: PkgStatus::Installed },
+        Package { name: "nes", version: "1.0.0", description: "NES emulator (6502 CPU, 2C02 PPU, iNES ROMs)", category: PkgCategory::Games, size_kb: 56, dependencies: &[], status: PkgStatus::Installed },
+        Package { name: "gameboy", version: "1.0.0", description: "Game Boy emulator (LR35902, MBC1/3/5)", category: PkgCategory::Games, size_kb: 48, dependencies: &[], status: PkgStatus::Installed },
+        Package { name: "tetris", version: "0.1.0", description: "Tetris — falling blocks puzzle", category: PkgCategory::Games, size_kb: 8, dependencies: &[], status: PkgStatus::Available },
 
         // Multimedia
-        Package { name: "cosmic", version: "1.0.0", description: "COSMIC desktop environment (window manager + compositor)", category: PkgCategory::Multimedia, size_keyboard: 256, dependencies: &[], status: PkgStatus::Installed },
-        Package { name: "synth", version: "1.0.0", description: "TrustSynth — polyphonic audio synthesizer", category: PkgCategory::Multimedia, size_keyboard: 32, dependencies: &[], status: PkgStatus::Installed },
-        Package { name: "video", version: "1.0.0", description: "TrustVideo — custom video codec and player", category: PkgCategory::Multimedia, size_keyboard: 40, dependencies: &[], status: PkgStatus::Installed },
-        Package { name: "imageview", version: "1.0.0", description: "Image viewer with PPM/BMP support", category: PkgCategory::Multimedia, size_keyboard: 16, dependencies: &[], status: PkgStatus::Installed },
+        Package { name: "cosmic", version: "1.0.0", description: "COSMIC desktop environment (window manager + compositor)", category: PkgCategory::Multimedia, size_kb: 256, dependencies: &[], status: PkgStatus::Installed },
+        Package { name: "synth", version: "1.0.0", description: "TrustSynth — polyphonic audio synthesizer", category: PkgCategory::Multimedia, size_kb: 32, dependencies: &[], status: PkgStatus::Installed },
+        Package { name: "video", version: "1.0.0", description: "TrustVideo — custom video codec and player", category: PkgCategory::Multimedia, size_kb: 40, dependencies: &[], status: PkgStatus::Installed },
+        Package { name: "imageview", version: "1.0.0", description: "Image viewer with PPM/BMP support", category: PkgCategory::Multimedia, size_kb: 16, dependencies: &[], status: PkgStatus::Installed },
 
         // Utilities
-        Package { name: "hypervisor", version: "1.0.0", description: "Type-1 hypervisor (VT-x / AMD SVM)", category: PkgCategory::Utilities, size_keyboard: 192, dependencies: &[], status: PkgStatus::Installed },
-        Package { name: "lab", version: "1.0.0", description: "TrustLab — real-time OS introspection laboratory", category: PkgCategory::Utilities, size_keyboard: 48, dependencies: &[], status: PkgStatus::Installed },
-        Package { name: "jarvis", version: "1.0.0", description: "Jarvis AI assistant — natural language OS control", category: PkgCategory::Utilities, size_keyboard: 32, dependencies: &[], status: PkgStatus::Installed },
-        Package { name: "wayland", version: "1.0.0", description: "Wayland compositor (native display server)", category: PkgCategory::Utilities, size_keyboard: 64, dependencies: &[], status: PkgStatus::Installed },
+        Package { name: "hypervisor", version: "1.0.0", description: "Type-1 hypervisor (VT-x / AMD SVM)", category: PkgCategory::Utilities, size_kb: 192, dependencies: &[], status: PkgStatus::Installed },
+        Package { name: "lab", version: "1.0.0", description: "TrustLab — real-time OS introspection laboratory", category: PkgCategory::Utilities, size_kb: 48, dependencies: &[], status: PkgStatus::Installed },
+        Package { name: "jarvis", version: "1.0.0", description: "Jarvis AI assistant — natural language OS control", category: PkgCategory::Utilities, size_kb: 32, dependencies: &[], status: PkgStatus::Installed },
+        Package { name: "wayland", version: "1.0.0", description: "Wayland compositor (native display server)", category: PkgCategory::Utilities, size_kb: 64, dependencies: &[], status: PkgStatus::Installed },
     ]
 }
 
@@ -151,7 +151,7 @@ pub fn list_packages() {
 
         crate::print!("    ");
         crate::print_color!(color, "{:<16}", pkg.name);
-        crate::print!(" {:<11} v{:<8} {:>4} KB  ", status_str, pkg.version, pkg.size_keyboard);
+        crate::print!(" {:<11} v{:<8} {:>4} KB  ", status_str, pkg.version, pkg.size_kb);
         crate::println!("{}", pkg.description);
     }
 
@@ -225,7 +225,7 @@ pub fn install(name: &str) {
                 "=".repeat(i + 1), " ".repeat(4 - i), (i + 1) * 20);
         }
         crate::println!();
-        crate::println!("  Unpacking {} ({} KB)...", pkg.name, pkg.size_keyboard);
+        crate::println!("  Unpacking {} ({} KB)...", pkg.name, pkg.size_kb);
         for _ in 0..100_000 { core::hint::spin_loop(); }
         crate::println!("  Configuring {}...", pkg.name);
         for _ in 0..100_000 { core::hint::spin_loop(); }
@@ -262,8 +262,8 @@ pub fn remove(name: &str) {
         }
     }
 
-    if let Some(position) = installed.iter().position(|n| n.as_str() == name) {
-        installed.remove(position);
+    if let Some(pos) = installed.iter().position(|n| n.as_str() == name) {
+        installed.remove(pos);
         crate::println!("  Removing {}...", name);
         for _ in 0..100_000 { core::hint::spin_loop(); }
 
@@ -280,7 +280,7 @@ pub fn remove(name: &str) {
 }
 
 /// Show package info
-pub fn information(name: &str) {
+pub fn info(name: &str) {
     let cat = catalog();
     let installed = INSTALLED.lock();
 
@@ -291,7 +291,7 @@ pub fn information(name: &str) {
         crate::println_color!(crate::framebuffer::COLOR_CYAN, "Package: {}", pkg.name);
         crate::println!("  Version:     {}", pkg.version);
         crate::println!("  Category:    {}", pkg.category.name());
-        crate::println!("  Size:        {} KB", pkg.size_keyboard);
+        crate::println!("  Size:        {} KB", pkg.size_kb);
         crate::println!("  Status:      {}", if is_installed { "installed" } else { "available" });
         crate::println!("  Description: {}", pkg.description);
         if !pkg.dependencies.is_empty() {

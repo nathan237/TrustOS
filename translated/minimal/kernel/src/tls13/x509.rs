@@ -8,58 +8,58 @@ use alloc::string::String;
 
 
 mod asn1_tags {
-    pub const Byi: u8 = 0x01;
-    pub const Cyt: u8 = 0x02;
-    pub const BLD_: u8 = 0x03;
-    pub const DXJ_: u8 = 0x04;
-    pub const Dcv: u8 = 0x05;
-    pub const Ddi: u8 = 0x06;
-    pub const EJS_: u8 = 0x0C;
-    pub const EBC_: u8 = 0x13;
-    pub const DQA_: u8 = 0x16;
-    pub const BID_: u8 = 0x17;
-    pub const ASS_: u8 = 0x18;
-    pub const Qp: u8 = 0x30;
-    pub const Cli: u8 = 0x31;
-    pub const BOT_: u8 = 0xA0;
-    pub const DGQ_: u8 = 0xA1;
-    pub const DGR_: u8 = 0xA2;
-    pub const BOU_: u8 = 0xA3;
+    pub const Ahh: u8 = 0x01;
+    pub const Axe: u8 = 0x02;
+    pub const BNV_: u8 = 0x03;
+    pub const EBA_: u8 = 0x04;
+    pub const Azs: u8 = 0x05;
+    pub const Azv: u8 = 0x06;
+    pub const ENG_: u8 = 0x0C;
+    pub const EET_: u8 = 0x13;
+    pub const DTU_: u8 = 0x16;
+    pub const BKK_: u8 = 0x17;
+    pub const AUW_: u8 = 0x18;
+    pub const Ha: u8 = 0x30;
+    pub const Aox: u8 = 0x31;
+    pub const BRK_: u8 = 0xA0;
+    pub const DKJ_: u8 = 0xA1;
+    pub const DKK_: u8 = 0xA2;
+    pub const BRL_: u8 = 0xA3;
 }
 
 
-fn ouj(f: &[u8], u: &mut usize) -> Option<usize> {
-    if *u >= f.len() {
+fn itw(data: &[u8], pos: &mut usize) -> Option<usize> {
+    if *pos >= data.len() {
         return None;
     }
     
-    let fv = f[*u];
-    *u += 1;
+    let first = data[*pos];
+    *pos += 1;
     
-    if fv < 0x80 {
-        Some(fv as usize)
-    } else if fv == 0x81 {
-        if *u >= f.len() {
+    if first < 0x80 {
+        Some(first as usize)
+    } else if first == 0x81 {
+        if *pos >= data.len() {
             return None;
         }
-        let len = f[*u] as usize;
-        *u += 1;
+        let len = data[*pos] as usize;
+        *pos += 1;
         Some(len)
-    } else if fv == 0x82 {
-        if *u + 1 >= f.len() {
+    } else if first == 0x82 {
+        if *pos + 1 >= data.len() {
             return None;
         }
-        let len = ((f[*u] as usize) << 8) | (f[*u + 1] as usize);
-        *u += 2;
+        let len = ((data[*pos] as usize) << 8) | (data[*pos + 1] as usize);
+        *pos += 2;
         Some(len)
-    } else if fv == 0x83 {
-        if *u + 2 >= f.len() {
+    } else if first == 0x83 {
+        if *pos + 2 >= data.len() {
             return None;
         }
-        let len = ((f[*u] as usize) << 16) 
-            | ((f[*u + 1] as usize) << 8) 
-            | (f[*u + 2] as usize);
-        *u += 3;
+        let len = ((data[*pos] as usize) << 16) 
+            | ((data[*pos + 1] as usize) << 8) 
+            | (data[*pos + 2] as usize);
+        *pos += 3;
         Some(len)
     } else {
         None
@@ -67,150 +67,150 @@ fn ouj(f: &[u8], u: &mut usize) -> Option<usize> {
 }
 
 
-fn aut<'a>(f: &'a [u8], u: &mut usize) -> Option<(u8, &'a [u8])> {
-    if *u >= f.len() {
+fn parse_element<'a>(data: &'a [u8], pos: &mut usize) -> Option<(u8, &'a [u8])> {
+    if *pos >= data.len() {
         return None;
     }
     
-    let ll = f[*u];
-    *u += 1;
+    let tag = data[*pos];
+    *pos += 1;
     
-    let len = ouj(f, u)?;
+    let len = itw(data, pos)?;
     
-    if *u + len > f.len() {
+    if *pos + len > data.len() {
         return None;
     }
     
-    let bn = &f[*u..*u + len];
-    *u += len;
+    let value = &data[*pos..*pos + len];
+    *pos += len;
     
-    Some((ll, bn))
+    Some((tag, value))
 }
 
 
 #[derive(Debug)]
 pub struct Certificate {
     
-    pub js: Vec<u8>,
+    pub dm: Vec<u8>,
     
-    pub icc: Option<String>,
+    pub subject_cn: Option<String>,
     
-    pub lgr: Option<String>,
+    pub issuer_cn: Option<String>,
     
-    pub jhg: Option<String>,
+    pub evf: Option<String>,
     
-    pub jhf: Option<String>,
+    pub eve: Option<String>,
     
-    pub grg: Vec<String>,
+    pub san: Vec<String>,
     
-    pub lwc: Vec<u8>,
+    pub pubkey_algo: Vec<u8>,
     
-    pub cbd: Vec<u8>,
+    pub pubkey: Vec<u8>,
 }
 
 impl Certificate {
     
-    pub fn parse(f: &[u8]) -> Option<Self> {
-        let mut u = 0;
+    pub fn parse(data: &[u8]) -> Option<Self> {
+        let mut pos = 0;
         
         
-        let (ll, qxu) = aut(f, &mut u)?;
-        if ll != asn1_tags::Qp {
+        let (tag, cert_data) = parse_element(data, &mut pos)?;
+        if tag != asn1_tags::Ha {
             return None;
         }
         
-        let mut qxv = 0;
+        let mut kif = 0;
         
         
-        let (ll, dmk) = aut(qxu, &mut qxv)?;
-        if ll != asn1_tags::Qp {
+        let (tag, tbs_data) = parse_element(cert_data, &mut kif)?;
+        if tag != asn1_tags::Ha {
             return None;
         }
         
         
-        let mut dml = 0;
+        let mut bjn = 0;
         
         
-        if dml < dmk.len() && dmk[dml] == asn1_tags::BOT_ {
-            let _ = aut(dmk, &mut dml)?;
+        if bjn < tbs_data.len() && tbs_data[bjn] == asn1_tags::BRK_ {
+            let _ = parse_element(tbs_data, &mut bjn)?;
         }
         
         
-        let _ = aut(dmk, &mut dml)?;
+        let _ = parse_element(tbs_data, &mut bjn)?;
         
         
-        let _ = aut(dmk, &mut dml)?;
+        let _ = parse_element(tbs_data, &mut bjn)?;
         
         
-        let (ll, tzt) = aut(dmk, &mut dml)?;
-        let lgr = if ll == asn1_tags::Qp {
-            nsj(tzt)
+        let (tag, issuer_data) = parse_element(tbs_data, &mut bjn)?;
+        let issuer_cn = if tag == asn1_tags::Ha {
+            hxl(issuer_data)
         } else {
             None
         };
         
         
-        let (ll, xqn) = aut(dmk, &mut dml)?;
-        let (jhg, jhf) = if ll == asn1_tags::Qp {
-            vej(xqn)
+        let (tag, validity_data) = parse_element(tbs_data, &mut bjn)?;
+        let (evf, eve) = if tag == asn1_tags::Ha {
+            nro(validity_data)
         } else {
             (None, None)
         };
         
         
-        let (ll, wvs) = aut(dmk, &mut dml)?;
-        let icc = if ll == asn1_tags::Qp {
-            nsj(wvs)
+        let (tag, subject_data) = parse_element(tbs_data, &mut bjn)?;
+        let subject_cn = if tag == asn1_tags::Ha {
+            hxl(subject_data)
         } else {
             None
         };
         
         
-        let (ll, wrf) = aut(dmk, &mut dml)?;
-        let (lwc, cbd) = if ll == asn1_tags::Qp {
-            vdt(wrf)
+        let (tag, spki_data) = parse_element(tbs_data, &mut bjn)?;
+        let (pubkey_algo, pubkey) = if tag == asn1_tags::Ha {
+            nrf(spki_data)
         } else {
             (Vec::new(), Vec::new())
         };
         
         
-        let mut grg = Vec::new();
-        while dml < dmk.len() {
-            if let Some((ll, spw)) = aut(dmk, &mut dml) {
-                if ll == asn1_tags::BOU_ {
+        let mut san = Vec::new();
+        while bjn < tbs_data.len() {
+            if let Some((tag, ext_wrapper)) = parse_element(tbs_data, &mut bjn) {
+                if tag == asn1_tags::BRL_ {
                     
-                    let mut fid = 0;
-                    if let Some((_, itk)) = aut(spw, &mut fid) {
-                        grg = vdm(itk);
+                    let mut cjd = 0;
+                    if let Some((_, extensions)) = parse_element(ext_wrapper, &mut cjd) {
+                        san = nrb(extensions);
                     }
                 }
             }
         }
         
         Some(Certificate {
-            js: f.ip(),
-            icc,
-            lgr,
-            jhg,
-            jhf,
-            grg,
-            lwc,
-            cbd,
+            dm: data.to_vec(),
+            subject_cn,
+            issuer_cn,
+            evf,
+            eve,
+            san,
+            pubkey_algo,
+            pubkey,
         })
     }
     
     
-    pub fn xqk(&self, ajc: &str) -> bool {
+    pub fn valid_for_hostname(&self, hostname: &str) -> bool {
         
-        for j in &self.grg {
-            if olg(j, ajc) {
+        for name in &self.san {
+            if ilz(name, hostname) {
                 return true;
             }
         }
         
         
-        if let Some(rla) = &self.icc {
-            if olg(rla, ajc) {
+        if let Some(cn) = &self.subject_cn {
+            if ilz(cn, hostname) {
                 return true;
             }
         }
@@ -220,21 +220,21 @@ impl Certificate {
 }
 
 
-fn nsj(f: &[u8]) -> Option<String> {
+fn hxl(data: &[u8]) -> Option<String> {
     
-    let rlb = [0x55, 0x04, 0x03];
+    let kum = [0x55, 0x04, 0x03];
     
-    let mut u = 0;
-    while u < f.len() {
-        if let Some((ll, vqz)) = aut(f, &mut u) {
-            if ll == asn1_tags::Cli {
-                let mut wjl = 0;
-                if let Some((_, ozu)) = aut(vqz, &mut wjl) {
-                    let mut pid = 0;
-                    if let Some((_, htm)) = aut(ozu, &mut pid) {
-                        if htm == rlb {
-                            if let Some((_, bn)) = aut(ozu, &mut pid) {
-                                return Some(String::azw(bn).bkc());
+    let mut pos = 0;
+    while pos < data.len() {
+        if let Some((tag, rdn_set)) = parse_element(data, &mut pos) {
+            if tag == asn1_tags::Aox {
+                let mut opi = 0;
+                if let Some((_, rdn_seq)) = parse_element(rdn_set, &mut opi) {
+                    let mut jes = 0;
+                    if let Some((_, oid)) = parse_element(rdn_seq, &mut jes) {
+                        if oid == kum {
+                            if let Some((_, value)) = parse_element(rdn_seq, &mut jes) {
+                                return Some(String::from_utf8_lossy(value).into_owned());
                             }
                         }
                     }
@@ -249,12 +249,12 @@ fn nsj(f: &[u8]) -> Option<String> {
 }
 
 
-fn vej(f: &[u8]) -> (Option<String>, Option<String>) {
-    let mut u = 0;
+fn nro(data: &[u8]) -> (Option<String>, Option<String>) {
+    let mut pos = 0;
     
-    let jhg = if let Some((ll, bn)) = aut(f, &mut u) {
-        if ll == asn1_tags::BID_ || ll == asn1_tags::ASS_ {
-            Some(String::azw(bn).bkc())
+    let evf = if let Some((tag, value)) = parse_element(data, &mut pos) {
+        if tag == asn1_tags::BKK_ || tag == asn1_tags::AUW_ {
+            Some(String::from_utf8_lossy(value).into_owned())
         } else {
             None
         }
@@ -262,9 +262,9 @@ fn vej(f: &[u8]) -> (Option<String>, Option<String>) {
         None
     };
     
-    let jhf = if let Some((ll, bn)) = aut(f, &mut u) {
-        if ll == asn1_tags::BID_ || ll == asn1_tags::ASS_ {
-            Some(String::azw(bn).bkc())
+    let eve = if let Some((tag, value)) = parse_element(data, &mut pos) {
+        if tag == asn1_tags::BKK_ || tag == asn1_tags::AUW_ {
+            Some(String::from_utf8_lossy(value).into_owned())
         } else {
             None
         }
@@ -272,19 +272,19 @@ fn vej(f: &[u8]) -> (Option<String>, Option<String>) {
         None
     };
     
-    (jhg, jhf)
+    (evf, eve)
 }
 
 
-fn vdt(f: &[u8]) -> (Vec<u8>, Vec<u8>) {
-    let mut u = 0;
+fn nrf(data: &[u8]) -> (Vec<u8>, Vec<u8>) {
+    let mut pos = 0;
     
     
-    let qgc = if let Some((ll, qge)) = aut(f, &mut u) {
-        if ll == asn1_tags::Qp {
-            let mut qgd = 0;
-            if let Some((_, htm)) = aut(qge, &mut qgd) {
-                htm.ip()
+    let juh = if let Some((tag, algo_seq)) = parse_element(data, &mut pos) {
+        if tag == asn1_tags::Ha {
+            let mut jui = 0;
+            if let Some((_, oid)) = parse_element(algo_seq, &mut jui) {
+                oid.to_vec()
             } else {
                 Vec::new()
             }
@@ -296,10 +296,10 @@ fn vdt(f: &[u8]) -> (Vec<u8>, Vec<u8>) {
     };
     
     
-    let cbd = if let Some((ll, bn)) = aut(f, &mut u) {
-        if ll == asn1_tags::BLD_ && !bn.is_empty() {
+    let pubkey = if let Some((tag, value)) = parse_element(data, &mut pos) {
+        if tag == asn1_tags::BNV_ && !value.is_empty() {
             
-            bn[1..].ip()
+            value[1..].to_vec()
         } else {
             Vec::new()
         }
@@ -307,32 +307,32 @@ fn vdt(f: &[u8]) -> (Vec<u8>, Vec<u8>) {
         Vec::new()
     };
     
-    (qgc, cbd)
+    (juh, pubkey)
 }
 
 
-fn vdm(itk: &[u8]) -> Vec<String> {
+fn nrb(extensions: &[u8]) -> Vec<String> {
     
-    let wcn = [0x55, 0x1D, 0x11];
+    let oka = [0x55, 0x1D, 0x11];
     let mut result = Vec::new();
     
-    let mut u = 0;
-    while u < itk.len() {
-        if let Some((ll, hiq)) = aut(itk, &mut u) {
-            if ll == asn1_tags::Qp {
-                let mut fid = 0;
-                if let Some((_, htm)) = aut(hiq, &mut fid) {
-                    if htm == wcn {
+    let mut pos = 0;
+    while pos < extensions.len() {
+        if let Some((tag, ext_seq)) = parse_element(extensions, &mut pos) {
+            if tag == asn1_tags::Ha {
+                let mut cjd = 0;
+                if let Some((_, oid)) = parse_element(ext_seq, &mut cjd) {
+                    if oid == oka {
                         
-                        if fid < hiq.len() && hiq[fid] == asn1_tags::Byi {
-                            let _ = aut(hiq, &mut fid);
+                        if cjd < ext_seq.len() && ext_seq[cjd] == asn1_tags::Ahh {
+                            let _ = parse_element(ext_seq, &mut cjd);
                         }
                         
                         
-                        if let Some((_, uwz)) = aut(hiq, &mut fid) {
-                            let mut wco = 0;
-                            if let Some((_, wcp)) = aut(uwz, &mut wco) {
-                                result = vck(wcp);
+                        if let Some((_, octet)) = parse_element(ext_seq, &mut cjd) {
+                            let mut okb = 0;
+                            if let Some((_, san_seq)) = parse_element(octet, &mut okb) {
+                                result = nqj(san_seq);
                             }
                         }
                     }
@@ -347,22 +347,22 @@ fn vdm(itk: &[u8]) -> Vec<String> {
 }
 
 
-fn vck(f: &[u8]) -> Vec<String> {
+fn nqj(data: &[u8]) -> Vec<String> {
     let mut result = Vec::new();
-    let mut u = 0;
+    let mut pos = 0;
     
-    while u < f.len() {
-        let ll = f[u];
-        u += 1;
+    while pos < data.len() {
+        let tag = data[pos];
+        pos += 1;
         
-        if let Some(len) = ouj(f, &mut u) {
-            if u + len <= f.len() {
+        if let Some(len) = itw(data, &mut pos) {
+            if pos + len <= data.len() {
                 
-                if ll == 0x82 {
-                    let j = String::azw(&f[u..u + len]).bkc();
-                    result.push(j);
+                if tag == 0x82 {
+                    let name = String::from_utf8_lossy(&data[pos..pos + len]).into_owned();
+                    result.push(name);
                 }
-                u += len;
+                pos += len;
             } else {
                 break;
             }
@@ -375,72 +375,72 @@ fn vck(f: &[u8]) -> Vec<String> {
 }
 
 
-fn olg(pattern: &str, ajc: &str) -> bool {
-    let pattern = pattern.aqn();
-    let ajc = ajc.aqn();
+fn ilz(pattern: &str, hostname: &str) -> bool {
+    let pattern = pattern.to_lowercase();
+    let hostname = hostname.to_lowercase();
     
-    if pattern.cj("*.") {
+    if pattern.starts_with("*.") {
         
-        let cif = &pattern[2..];
-        if let Some(fgw) = ajc.du('.') {
-            return &ajc[fgw + 1..] == cif;
+        let asi = &pattern[2..];
+        if let Some(dot_pos) = hostname.find('.') {
+            return &hostname[dot_pos + 1..] == asi;
         }
         false
     } else {
-        pattern == ajc
+        pattern == hostname
     }
 }
 
 
-pub fn vbz(f: &[u8]) -> Vec<Certificate> {
+pub fn nqa(data: &[u8]) -> Vec<Certificate> {
     let mut result = Vec::new();
     
-    if f.len() < 7 {
+    if data.len() < 7 {
         return result;
     }
     
     
-    let mut u = 4;
+    let mut pos = 4;
     
     
-    if u >= f.len() {
+    if pos >= data.len() {
         return result;
     }
-    let rrl = f[u] as usize;
-    u += 1 + rrl;
+    let lae = data[pos] as usize;
+    pos += 1 + lae;
     
     
-    if u + 3 > f.len() {
+    if pos + 3 > data.len() {
         return result;
     }
-    let liw = ((f[u] as usize) << 16)
-        | ((f[u + 1] as usize) << 8)
-        | (f[u + 2] as usize);
-    u += 3;
+    let gfq = ((data[pos] as usize) << 16)
+        | ((data[pos + 1] as usize) << 8)
+        | (data[pos + 2] as usize);
+    pos += 3;
     
-    let hpx = u + liw;
+    let dti = pos + gfq;
     
-    while u + 3 <= hpx {
+    while pos + 3 <= dti {
         
-        let kha = ((f[u] as usize) << 16)
-            | ((f[u + 1] as usize) << 8)
-            | (f[u + 2] as usize);
-        u += 3;
+        let fld = ((data[pos] as usize) << 16)
+            | ((data[pos + 1] as usize) << 8)
+            | (data[pos + 2] as usize);
+        pos += 3;
         
-        if u + kha > f.len() {
+        if pos + fld > data.len() {
             break;
         }
         
         
-        if let Some(qxt) = Certificate::parse(&f[u..u + kha]) {
-            result.push(qxt);
+        if let Some(cert) = Certificate::parse(&data[pos..pos + fld]) {
+            result.push(cert);
         }
-        u += kha;
+        pos += fld;
         
         
-        if u + 2 <= hpx {
-            let hip = u16::oa([f[u], f[u + 1]]) as usize;
-            u += 2 + hip;
+        if pos + 2 <= dti {
+            let dpc = u16::from_be_bytes([data[pos], data[pos + 1]]) as usize;
+            pos += 2 + dpc;
         }
     }
     

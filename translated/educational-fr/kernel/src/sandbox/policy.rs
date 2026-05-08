@@ -164,8 +164,8 @@ fn is_dangerous_url(url: &str) -> Option<&'static str> {
 
 /// Extract domain from URL
 pub fn extract_domain(url: &str) -> Option<&str> {
-    let without_scheme = if let Some(position) = url.find("://") {
-        &url[position + 3..]
+    let without_scheme = if let Some(pos) = url.find("://") {
+        &url[pos + 3..]
     } else {
         url
     };
@@ -192,8 +192,8 @@ fn extract_port(url: &str) -> u16 {
     let is_https = lower.starts_with("https://");
     let default_port = if is_https { 443 } else { 80 };
 
-    let without_scheme = if let Some(position) = url.find("://") {
-        &url[position + 3..]
+    let without_scheme = if let Some(pos) = url.find("://") {
+        &url[pos + 3..]
     } else {
         url
     };
@@ -217,9 +217,9 @@ pub struct SandboxPolicy {
     /// Allowed content types
     pub allowed_content: Vec<ContentFilter>,
     /// Max requests per minute (0 = unlimited)
-    pub rate_limit_per_minimum: u32,
+    pub rate_limit_per_min: u32,
     /// Max response body size in bytes
-    pub maximum_response_bytes: usize,
+    pub max_response_bytes: usize,
     /// Block all JavaScript execution
     pub block_javascript: bool,
     /// Block inline scripts in HTML
@@ -229,7 +229,7 @@ pub struct SandboxPolicy {
     /// Allow redirects
     pub allow_redirects: bool,
     /// Max redirect depth
-    pub maximum_redirect_depth: u8,
+    pub max_redirect_depth: u8,
     /// Block private/internal IPs (SSRF protection)
     pub block_private_ips: bool,
     /// Log all requests (even allowed)
@@ -261,13 +261,13 @@ match preset {
                 ContentFilter::AllowImages,
                 ContentFilter::AllowText,
             ],
-            rate_limit_per_minimum: 30,
-            maximum_response_bytes: 512 * 1024, // 512 KB
+            rate_limit_per_min: 30,
+            max_response_bytes: 512 * 1024, // 512 KB
             block_javascript: true,
             block_inline_scripts: true,
             block_external_scripts: true,
             allow_redirects: true,
-            maximum_redirect_depth: 2,
+            max_redirect_depth: 2,
             block_private_ips: true,
             log_all: true,
             blocked_substrings: Vec::new(),
@@ -295,13 +295,13 @@ match preset {
                 ContentFilter::AllowJavaScript,
                 ContentFilter::AllowFonts,
             ],
-            rate_limit_per_minimum: 60,
-            maximum_response_bytes: 1024 * 1024, // 1 MB
+            rate_limit_per_min: 60,
+            max_response_bytes: 1024 * 1024, // 1 MB
             block_javascript: false,
             block_inline_scripts: false,
             block_external_scripts: false,
             allow_redirects: true,
-            maximum_redirect_depth: 5,
+            max_redirect_depth: 5,
             block_private_ips: true,
             log_all: false,
             blocked_substrings: Vec::new(),
@@ -322,13 +322,13 @@ match preset {
                 ContentFilter::AllowJavaScript,
                 ContentFilter::AllowFonts,
             ],
-            rate_limit_per_minimum: 120,
-            maximum_response_bytes: 4 * 1024 * 1024, // 4 MB
+            rate_limit_per_min: 120,
+            max_response_bytes: 4 * 1024 * 1024, // 4 MB
             block_javascript: false,
             block_inline_scripts: false,
             block_external_scripts: false,
             allow_redirects: true,
-            maximum_redirect_depth: 10,
+            max_redirect_depth: 10,
             block_private_ips: true, // always block SSRF
             log_all: false,
             blocked_substrings: Vec::new(),
@@ -431,11 +431,11 @@ match filter {
             "Policy: {:?}\n  Domain rules: {} allow, {} deny\n  Rate limit: {}/min\n  Max response: {} KB\n  JS: {}\n  Redirects: {} (max depth {})\n  SSRF protection: {}\n  Log all: {}",
             self.preset,
             allows, denies,
-            self.rate_limit_per_minimum,
-            self.maximum_response_bytes / 1024,
+            self.rate_limit_per_min,
+            self.max_response_bytes / 1024,
             if self.block_javascript { "BLOCKED" } else { "sandboxed" },
             if self.allow_redirects { "allowed" } else { "blocked" },
-            self.maximum_redirect_depth,
+            self.max_redirect_depth,
             if self.block_private_ips { "ON" } else { "OFF" },
             if self.log_all { "yes" } else { "no" },
         )

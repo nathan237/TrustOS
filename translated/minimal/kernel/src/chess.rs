@@ -14,30 +14,30 @@ use alloc::format;
 
 
 
-pub const Y: i8 = 0;
-pub const DBT_: i8 = 1;
-pub const AJZ_: i8 = 2;
-pub const AJY_: i8 = 3;
-pub const AKA_: i8 = 4;
-pub const BJE_: i8 = 5;
-pub const BJD_: i8 = 6;
-pub const BLO_: i8 = -1;
-pub const ANO_: i8 = -2;
-pub const ANM_: i8 = -3;
-pub const ANP_: i8 = -4;
-pub const BLP_: i8 = -5;
-pub const ANN_: i8 = -6;
+pub const Q: i8 = 0;
+pub const DFO_: i8 = 1;
+pub const ALU_: i8 = 2;
+pub const ALT_: i8 = 3;
+pub const ALV_: i8 = 4;
+pub const BLJ_: i8 = 5;
+pub const BLI_: i8 = 6;
+pub const BOH_: i8 = -1;
+pub const APS_: i8 = -2;
+pub const APQ_: i8 = -3;
+pub const APT_: i8 = -4;
+pub const BOI_: i8 = -5;
+pub const APR_: i8 = -6;
 
 
-fn aun(ai: i8) -> bool { ai > 0 }
+fn xr(aa: i8) -> bool { aa > 0 }
 
-fn din(ai: i8) -> bool { ai < 0 }
+fn bhi(aa: i8) -> bool { aa < 0 }
 
-fn bkv(ai: i8) -> i8 { if ai < 0 { -ai } else { ai } }
+fn agw(aa: i8) -> i8 { if aa < 0 { -aa } else { aa } }
 
 
-fn ovp(ai: i8) -> i32 {
-    match bkv(ai) {
+fn iuu(aa: i8) -> i32 {
+    match agw(aa) {
         1 => 100,   
         2 => 320,   
         3 => 330,   
@@ -49,27 +49,27 @@ fn ovp(ai: i8) -> i32 {
 }
 
 
-pub fn zfc(ai: i8) -> char {
-    match ai {
+pub fn qqi(aa: i8) -> char {
+    match aa {
         1  => '\u{2659}', 
         2  => '\u{2658}', 
         3  => '\u{2657}', 
         4  => '\u{2656}', 
         5  => '\u{2655}', 
         6  => '\u{2654}', 
-        -1 => '\u{265G}', 
+        -1 => '\u{265F}', 
         -2 => '\u{265E}', 
-        -3 => '\u{265Bdy}', 
+        -3 => '\u{265D}', 
         -4 => '\u{265C}', 
-        -5 => '\u{265Byb}', 
-        -6 => '\u{265Bxd}', 
+        -5 => '\u{265B}', 
+        -6 => '\u{265A}', 
         _  => ' ',
     }
 }
 
 
-pub fn hvd(ai: i8) -> char {
-    match ai {
+pub fn dwn(aa: i8) -> char {
+    match aa {
         1  => 'P', 2  => 'N', 3  => 'B', 4  => 'R', 5  => 'Q', 6  => 'K',
         -1 => 'p', -2 => 'n', -3 => 'b', -4 => 'r', -5 => 'q', -6 => 'k',
         _  => ' ',
@@ -77,8 +77,8 @@ pub fn hvd(ai: i8) -> char {
 }
 
 
-pub fn zfd(ai: i8) -> u32 {
-    if aun(ai) { 0xFFFFFFFF } else { 0xFF1A1A1A }
+pub fn qqj(aa: i8) -> u32 {
+    if xr(aa) { 0xFFFFFFFF } else { 0xFF1A1A1A }
 }
 
 
@@ -87,184 +87,184 @@ pub fn zfd(ai: i8) -> u32 {
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum GamePhase {
-    Ce,
-    Aam,
-    Mw,
-    Up,
-    Yg,
+    Playing,
+    Check,
+    Checkmate,
+    Stalemate,
+    Promotion,
 }
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum InputMode {
-    Uk,   
-    Amj,  
+    SelectPiece,   
+    SelectTarget,  
 }
 
 pub struct ChessState {
-    pub mn: [i8; 64],
-    pub axi: bool,
-    pub na: Option<usize>,     
-    pub gi: usize,               
-    pub blr: Vec<usize>,     
-    pub ib: GamePhase,
-    pub edj: InputMode,
+    pub board: [i8; 64],
+    pub white_turn: bool,
+    pub selected: Option<usize>,     
+    pub cursor: usize,               
+    pub valid_moves: Vec<usize>,     
+    pub phase: GamePhase,
+    pub input_mode: InputMode,
     pub message: String,
-    pub gnd: Vec<String>,
+    pub move_history: Vec<String>,
     
-    pub mqm: bool,
-    pub kdo: bool,
-    pub mqn: bool,
-    pub mqo: bool,
-    pub kdp: bool,
-    pub kdq: bool,
+    pub white_king_moved: bool,
+    pub black_king_moved: bool,
+    pub white_rook_a_moved: bool,
+    pub white_rook_h_moved: bool,
+    pub black_rook_a_moved: bool,
+    pub black_rook_h_moved: bool,
     
-    pub bgx: Option<usize>, 
+    pub en_passant_target: Option<usize>, 
     
-    pub jkh: Option<usize>,
+    pub promotion_square: Option<usize>,
     
-    pub mqa: bool,
-    pub qga: bool,
-    pub fzz: i32,
-    pub ajn: u32,
+    pub vs_ai: bool,
+    pub ai_thinking: bool,
+    pub ai_depth: i32,
+    pub rng_state: u32,
     
-    pub jcn: Option<usize>,
-    pub jco: Option<usize>,
+    pub last_move_from: Option<usize>,
+    pub last_move_to: Option<usize>,
     
-    pub dgo: Option<usize>,     
-    pub epb: Option<i8>,   
-    pub kqq: i32,           
-    pub kqr: i32,           
+    pub drag_from: Option<usize>,     
+    pub dragging_piece: Option<i8>,   
+    pub drag_pixel_x: i32,           
+    pub drag_pixel_y: i32,           
     
-    pub fyr: u64,
-    pub fdl: u64,
-    pub ezv: bool,
-    pub dww: u64,       
-    pub uco: u64,           
-    pub ezw: bool,         
+    pub white_time_ms: u64,
+    pub black_time_ms: u64,
+    pub timer_enabled: bool,
+    pub timer_initial_ms: u64,       
+    pub last_tick_ms: u64,           
+    pub timer_started: bool,         
 }
 
 impl ChessState {
     pub fn new() -> Self {
-        let mut g = ChessState {
-            mn: [Y; 64],
-            axi: true,
-            na: None,
-            gi: 52, 
-            blr: Vec::new(),
-            ib: GamePhase::Ce,
-            edj: InputMode::Uk,
+        let mut state = ChessState {
+            board: [Q; 64],
+            white_turn: true,
+            selected: None,
+            cursor: 52, 
+            valid_moves: Vec::new(),
+            phase: GamePhase::Playing,
+            input_mode: InputMode::SelectPiece,
             message: String::from("White to move"),
-            gnd: Vec::new(),
-            mqm: false,
-            kdo: false,
-            mqn: false,
-            mqo: false,
-            kdp: false,
-            kdq: false,
-            bgx: None,
-            jkh: None,
-            mqa: true,
-            qga: false,
-            fzz: 2,
-            ajn: 12345,
-            jcn: None,
-            jco: None,
+            move_history: Vec::new(),
+            white_king_moved: false,
+            black_king_moved: false,
+            white_rook_a_moved: false,
+            white_rook_h_moved: false,
+            black_rook_a_moved: false,
+            black_rook_h_moved: false,
+            en_passant_target: None,
+            promotion_square: None,
+            vs_ai: true,
+            ai_thinking: false,
+            ai_depth: 2,
+            rng_state: 12345,
+            last_move_from: None,
+            last_move_to: None,
             
-            dgo: None,
-            epb: None,
-            kqq: 0,
-            kqr: 0,
+            drag_from: None,
+            dragging_piece: None,
+            drag_pixel_x: 0,
+            drag_pixel_y: 0,
             
-            fyr: 600_000,  
-            fdl: 600_000,
-            ezv: false,
-            dww: 600_000,
-            uco: 0,
-            ezw: false,
+            white_time_ms: 600_000,  
+            black_time_ms: 600_000,
+            timer_enabled: false,
+            timer_initial_ms: 600_000,
+            last_tick_ms: 0,
+            timer_started: false,
         };
-        g.ttf();
-        g
+        state.init_board();
+        state
     }
 
-    fn ttf(&mut self) {
+    fn init_board(&mut self) {
         
-        self.mn[0] = ANP_;
-        self.mn[1] = ANO_;
-        self.mn[2] = ANM_;
-        self.mn[3] = BLP_;
-        self.mn[4] = ANN_;
-        self.mn[5] = ANM_;
-        self.mn[6] = ANO_;
-        self.mn[7] = ANP_;
-        for a in 8..16 {
-            self.mn[a] = BLO_;
+        self.board[0] = APT_;
+        self.board[1] = APS_;
+        self.board[2] = APQ_;
+        self.board[3] = BOI_;
+        self.board[4] = APR_;
+        self.board[5] = APQ_;
+        self.board[6] = APS_;
+        self.board[7] = APT_;
+        for i in 8..16 {
+            self.board[i] = BOH_;
         }
         
-        for a in 48..56 {
-            self.mn[a] = DBT_;
+        for i in 48..56 {
+            self.board[i] = DFO_;
         }
-        self.mn[56] = AKA_;
-        self.mn[57] = AJZ_;
-        self.mn[58] = AJY_;
-        self.mn[59] = BJE_;
-        self.mn[60] = BJD_;
-        self.mn[61] = AJY_;
-        self.mn[62] = AJZ_;
-        self.mn[63] = AKA_;
+        self.board[56] = ALV_;
+        self.board[57] = ALU_;
+        self.board[58] = ALT_;
+        self.board[59] = BLJ_;
+        self.board[60] = BLI_;
+        self.board[61] = ALT_;
+        self.board[62] = ALU_;
+        self.board[63] = ALV_;
     }
 
     
 
-    fn br(im: usize) -> usize { im / 8 }
-    fn bj(im: usize) -> usize { im % 8 }
-    fn im(br: usize, bj: usize) -> usize { br * 8 + bj }
+    fn row(cu: usize) -> usize { cu / 8 }
+    fn col(cu: usize) -> usize { cu % 8 }
+    fn cu(row: usize, col: usize) -> usize { row * 8 + col }
 
-    fn gsv(im: usize) -> String {
-        let file = (b'a' + Self::bj(im) as u8) as char;
-        let vqe = (b'1' + (7 - Self::br(im)) as u8) as char;
-        format!("{}{}", file, vqe)
+    fn der(cu: usize) -> String {
+        let file = (b'a' + Self::col(cu) as u8) as char;
+        let obi = (b'1' + (7 - Self::row(cu)) as u8) as char;
+        format!("{}{}", file, obi)
     }
 
     
 
-    pub fn vr(&mut self, bs: u8) {
-        use crate::keyboard::{V_, U_, AH_, AI_};
+    pub fn handle_key(&mut self, key: u8) {
+        use crate::keyboard::{T_, S_, AI_, AJ_};
 
-        if self.ib == GamePhase::Mw || self.ib == GamePhase::Up {
-            if bs == b'r' || bs == b'R' {
+        if self.phase == GamePhase::Checkmate || self.phase == GamePhase::Stalemate {
+            if key == b'r' || key == b'R' {
                 *self = ChessState::new();
             }
             return;
         }
 
         
-        if self.ib == GamePhase::Yg {
-            if let Some(im) = self.jkh {
-                let iot: i8 = if Self::br(im) == 0 { 1 } else { -1 };
-                match bs {
-                    b'q' | b'Q' | b'1' => { self.mn[im] = BJE_ * iot; self.iut(); }
-                    b'r' | b'R' | b'2' => { self.mn[im] = AKA_ * iot; self.iut(); }
-                    b'b' | b'B' | b'3' => { self.mn[im] = AJY_ * iot; self.iut(); }
-                    b'n' | b'N' | b'4' => { self.mn[im] = AJZ_ * iot; self.iut(); }
+        if self.phase == GamePhase::Promotion {
+            if let Some(cu) = self.promotion_square {
+                let eip: i8 = if Self::row(cu) == 0 { 1 } else { -1 };
+                match key {
+                    b'q' | b'Q' | b'1' => { self.board[cu] = BLJ_ * eip; self.finish_promotion(); }
+                    b'r' | b'R' | b'2' => { self.board[cu] = ALV_ * eip; self.finish_promotion(); }
+                    b'b' | b'B' | b'3' => { self.board[cu] = ALT_ * eip; self.finish_promotion(); }
+                    b'n' | b'N' | b'4' => { self.board[cu] = ALU_ * eip; self.finish_promotion(); }
                     _ => {}
                 }
             }
             return;
         }
 
-        match bs {
-            V_    => { if self.gi >= 8 { self.gi -= 8; } },
-            U_  => { if self.gi < 56 { self.gi += 8; } },
-            AH_  => { if self.gi % 8 > 0 { self.gi -= 1; } },
-            AI_ => { if self.gi % 8 < 7 { self.gi += 1; } },
+        match key {
+            T_    => { if self.cursor >= 8 { self.cursor -= 8; } },
+            S_  => { if self.cursor < 56 { self.cursor += 8; } },
+            AI_  => { if self.cursor % 8 > 0 { self.cursor -= 1; } },
+            AJ_ => { if self.cursor % 8 < 7 { self.cursor += 1; } },
             0x0D | b' ' => { 
-                self.tkv();
+                self.handle_select();
             },
             0x1B => { 
-                self.na = None;
-                self.blr.clear();
-                self.edj = InputMode::Uk;
-                self.message = if self.axi {
+                self.selected = None;
+                self.valid_moves.clear();
+                self.input_mode = InputMode::SelectPiece;
+                self.message = if self.white_turn {
                     String::from("White to move")
                 } else {
                     String::from("Black to move")
@@ -274,21 +274,21 @@ impl ChessState {
                 *self = ChessState::new();
             },
             b't' | b'T' => {
-                self.xiz();
+                self.toggle_timer();
             },
             b'+' | b'=' => {
-                if self.ezv {
-                    self.rsr();
+                if self.timer_enabled {
+                    self.cycle_timer_preset();
                 }
             },
             b'd' | b'D' => {
                 
-                self.fzz = match self.fzz {
+                self.ai_depth = match self.ai_depth {
                     1 => 2,
                     2 => 3,
                     _ => 1,
                 };
-                self.message = match self.fzz {
+                self.message = match self.ai_depth {
                     1 => String::from("AI: Easy (depth 1)"),
                     2 => String::from("AI: Medium (depth 2)"),
                     _ => String::from("AI: Hard (depth 3)"),
@@ -298,181 +298,181 @@ impl ChessState {
         }
     }
 
-    fn tkv(&mut self) {
-        match self.edj {
-            InputMode::Uk => {
-                let xe = self.mn[self.gi];
-                if xe == Y { return; }
+    fn handle_select(&mut self) {
+        match self.input_mode {
+            InputMode::SelectPiece => {
+                let piece = self.board[self.cursor];
+                if piece == Q { return; }
                 
-                if self.axi && !aun(xe) { 
+                if self.white_turn && !xr(piece) { 
                     self.message = String::from("Select a white piece");
                     return; 
                 }
-                if !self.axi && !din(xe) { 
+                if !self.white_turn && !bhi(piece) { 
                     self.message = String::from("Select a black piece");
                     return; 
                 }
                 
-                self.blr = self.erb(self.gi);
-                if self.blr.is_empty() {
+                self.valid_moves = self.get_legal_moves(self.cursor);
+                if self.valid_moves.is_empty() {
                     self.message = String::from("No legal moves for this piece");
                     return;
                 }
-                self.na = Some(self.gi);
-                self.edj = InputMode::Amj;
-                let j = Self::gsv(self.gi);
-                self.message = format!("Move {} from {}", hvd(xe), j);
+                self.selected = Some(self.cursor);
+                self.input_mode = InputMode::SelectTarget;
+                let name = Self::der(self.cursor);
+                self.message = format!("Move {} from {}", dwn(piece), name);
             },
-            InputMode::Amj => {
-                let from = match self.na {
-                    Some(im) => im,
-                    None => { self.edj = InputMode::Uk; return; }
+            InputMode::SelectTarget => {
+                let from = match self.selected {
+                    Some(cu) => cu,
+                    None => { self.input_mode = InputMode::SelectPiece; return; }
                 };
                 
                 
-                let jsn = self.mn[self.gi];
-                if jsn != Y {
-                    let hpa = (self.axi && aun(jsn)) || 
-                                 (!self.axi && din(jsn));
-                    if hpa {
+                let fck = self.board[self.cursor];
+                if fck != Q {
+                    let dsr = (self.white_turn && xr(fck)) || 
+                                 (!self.white_turn && bhi(fck));
+                    if dsr {
                         
-                        self.blr = self.erb(self.gi);
-                        if !self.blr.is_empty() {
-                            self.na = Some(self.gi);
-                            let j = Self::gsv(self.gi);
-                            self.message = format!("Move {} from {}", hvd(jsn), j);
+                        self.valid_moves = self.get_legal_moves(self.cursor);
+                        if !self.valid_moves.is_empty() {
+                            self.selected = Some(self.cursor);
+                            let name = Self::der(self.cursor);
+                            self.message = format!("Move {} from {}", dwn(fck), name);
                         }
                         return;
                     }
                 }
 
-                if !self.blr.contains(&self.gi) {
+                if !self.valid_moves.contains(&self.cursor) {
                     self.message = String::from("Invalid move");
                     return;
                 }
 
                 
-                self.jet(from, self.gi);
+                self.make_move(from, self.cursor);
             },
         }
     }
 
-    fn jet(&mut self, from: usize, wh: usize) {
-        let xe = self.mn[from];
-        let bjm = self.mn[wh];
+    fn make_move(&mut self, from: usize, to: usize) {
+        let piece = self.board[from];
+        let captured = self.board[to];
         
         
-        let upw = format!("{}{}{}", hvd(xe), Self::gsv(from), Self::gsv(wh));
-        self.gnd.push(upw);
+        let ngj = format!("{}{}{}", dwn(piece), Self::der(from), Self::der(to));
+        self.move_history.push(ngj);
         
         
-        self.jcn = Some(from);
-        self.jco = Some(wh);
+        self.last_move_from = Some(from);
+        self.last_move_to = Some(to);
 
         
-        if bkv(xe) == 1 && Some(wh) == self.bgx {
+        if agw(piece) == 1 && Some(to) == self.en_passant_target {
             
-            if aun(xe) {
-                self.mn[wh + 8] = Y; 
+            if xr(piece) {
+                self.board[to + 8] = Q; 
             } else {
-                self.mn[wh - 8] = Y; 
+                self.board[to - 8] = Q; 
             }
         }
 
         
-        if bkv(xe) == 6 {
-            let nep = Self::bj(wh) as i32 - Self::bj(from) as i32;
-            if nep == 2 {
+        if agw(piece) == 6 {
+            let hml = Self::col(to) as i32 - Self::col(from) as i32;
+            if hml == 2 {
                 
-                self.mn[wh - 1] = self.mn[wh + 1]; 
-                self.mn[wh + 1] = Y;
-            } else if nep == -2 {
+                self.board[to - 1] = self.board[to + 1]; 
+                self.board[to + 1] = Q;
+            } else if hml == -2 {
                 
-                self.mn[wh + 1] = self.mn[wh - 2]; 
-                self.mn[wh - 2] = Y;
+                self.board[to + 1] = self.board[to - 2]; 
+                self.board[to - 2] = Q;
             }
         }
 
         
-        self.mn[wh] = xe;
-        self.mn[from] = Y;
+        self.board[to] = piece;
+        self.board[from] = Q;
 
         
-        if bkv(xe) == 6 {
-            if aun(xe) { self.mqm = true; }
-            else { self.kdo = true; }
+        if agw(piece) == 6 {
+            if xr(piece) { self.white_king_moved = true; }
+            else { self.black_king_moved = true; }
         }
-        if bkv(xe) == 4 {
-            if from == 56 { self.mqn = true; }
-            if from == 63 { self.mqo = true; }
-            if from == 0 { self.kdp = true; }
-            if from == 7 { self.kdq = true; }
+        if agw(piece) == 4 {
+            if from == 56 { self.white_rook_a_moved = true; }
+            if from == 63 { self.white_rook_h_moved = true; }
+            if from == 0 { self.black_rook_a_moved = true; }
+            if from == 7 { self.black_rook_h_moved = true; }
         }
 
         
-        self.bgx = None;
-        if bkv(xe) == 1 {
-            let wal = Self::br(wh) as i32 - Self::br(from) as i32;
-            if wal.gp() == 2 {
+        self.en_passant_target = None;
+        if agw(piece) == 1 {
+            let oik = Self::row(to) as i32 - Self::row(from) as i32;
+            if oik.abs() == 2 {
                 
-                self.bgx = Some(((from as i32 + wh as i32) / 2) as usize);
+                self.en_passant_target = Some(((from as i32 + to as i32) / 2) as usize);
             }
         }
 
         
-        if bkv(xe) == 1 && (Self::br(wh) == 0 || Self::br(wh) == 7) {
-            self.ib = GamePhase::Yg;
-            self.jkh = Some(wh);
+        if agw(piece) == 1 && (Self::row(to) == 0 || Self::row(to) == 7) {
+            self.phase = GamePhase::Promotion;
+            self.promotion_square = Some(to);
             self.message = String::from("Promote: Q/R/B/N");
-            self.na = None;
-            self.blr.clear();
-            self.edj = InputMode::Uk;
+            self.selected = None;
+            self.valid_moves.clear();
+            self.input_mode = InputMode::SelectPiece;
             return;
         }
 
-        self.nuq();
+        self.finish_turn();
     }
 
-    fn iut(&mut self) {
-        self.jkh = None;
-        self.nuq();
+    fn finish_promotion(&mut self) {
+        self.promotion_square = None;
+        self.finish_turn();
     }
 
-    fn nuq(&mut self) {
-        self.axi = !self.axi;
-        self.na = None;
-        self.blr.clear();
-        self.edj = InputMode::Uk;
+    fn finish_turn(&mut self) {
+        self.white_turn = !self.white_turn;
+        self.selected = None;
+        self.valid_moves.clear();
+        self.input_mode = InputMode::SelectPiece;
 
         
-        if self.ezv && !self.ezw {
-            self.ezw = true;
+        if self.timer_enabled && !self.timer_started {
+            self.timer_started = true;
         }
 
         
-        let lds = self.txr(self.axi);
-        let oat = self.tmb(self.axi);
+        let gce = self.is_in_check(self.white_turn);
+        let idv = self.has_any_legal_moves(self.white_turn);
 
-        if lds && !oat {
-            self.ib = GamePhase::Mw;
-            self.message = if self.axi {
+        if gce && !idv {
+            self.phase = GamePhase::Checkmate;
+            self.message = if self.white_turn {
                 String::from("Checkmate! Black wins!")
             } else {
                 String::from("Checkmate! White wins!")
             };
-        } else if !lds && !oat {
-            self.ib = GamePhase::Up;
+        } else if !gce && !idv {
+            self.phase = GamePhase::Stalemate;
             self.message = String::from("Stalemate — Draw!");
-        } else if lds {
-            self.ib = GamePhase::Aam;
-            self.message = if self.axi {
+        } else if gce {
+            self.phase = GamePhase::Check;
+            self.message = if self.white_turn {
                 String::from("White in check!")
             } else {
                 String::from("Black in check!")
             };
         } else {
-            self.ib = GamePhase::Ce;
-            self.message = if self.axi {
+            self.phase = GamePhase::Playing;
+            self.message = if self.white_turn {
                 String::from("White to move")
             } else {
                 String::from("Black to move")
@@ -480,9 +480,9 @@ impl ChessState {
         }
 
         
-        if self.mqa && !self.axi && self.ib == GamePhase::Ce || 
-           (self.mqa && !self.axi && self.ib == GamePhase::Aam) {
-            self.qfz();
+        if self.vs_ai && !self.white_turn && self.phase == GamePhase::Playing || 
+           (self.vs_ai && !self.white_turn && self.phase == GamePhase::Check) {
+            self.ai_move();
         }
     }
 
@@ -491,233 +491,233 @@ impl ChessState {
     
 
     
-    fn tec(&self, im: usize) -> Vec<usize> {
-        let xe = self.mn[im];
-        if xe == Y { return Vec::new(); }
-        let cfs = aun(xe);
-        let mut bev = Vec::new();
-        let br = Self::br(im);
-        let bj = Self::bj(im);
+    fn get_moves(&self, cu: usize) -> Vec<usize> {
+        let piece = self.board[cu];
+        if piece == Q { return Vec::new(); }
+        let arg = xr(piece);
+        let mut aeb = Vec::new();
+        let row = Self::row(cu);
+        let col = Self::col(cu);
 
-        match bkv(xe) {
+        match agw(piece) {
             1 => { 
-                let te: i32 = if cfs { -1 } else { 1 };
-                let dwe = if cfs { 6 } else { 1 };
+                let it: i32 = if arg { -1 } else { 1 };
+                let bpd = if arg { 6 } else { 1 };
                 
                 
-                let iwd = im as i32 + te * 8;
-                if iwd >= 0 && iwd < 64 && self.mn[iwd as usize] == Y {
-                    bev.push(iwd as usize);
+                let enq = cu as i32 + it * 8;
+                if enq >= 0 && enq < 64 && self.board[enq as usize] == Q {
+                    aeb.push(enq as usize);
                     
-                    if br == dwe {
-                        let iwe = im as i32 + te * 16;
-                        if iwe >= 0 && iwe < 64 && self.mn[iwe as usize] == Y {
-                            bev.push(iwe as usize);
+                    if row == bpd {
+                        let enr = cu as i32 + it * 16;
+                        if enr >= 0 && enr < 64 && self.board[enr as usize] == Q {
+                            aeb.push(enr as usize);
                         }
                     }
                 }
                 
-                for bmr in [-1i32, 1] {
-                    let djs = bj as i32 + bmr;
-                    if djs >= 0 && djs < 8 {
-                        let cd = (br as i32 + te) * 8 + djs;
-                        if cd >= 0 && cd < 64 {
-                            let ab = cd as usize;
-                            let aaz = self.mn[ab];
-                            if (aaz != Y && aun(aaz) != cfs) || Some(ab) == self.bgx {
-                                bev.push(ab);
+                for aht in [-1i32, 1] {
+                    let bia = col as i32 + aht;
+                    if bia >= 0 && bia < 8 {
+                        let target = (row as i32 + it) * 8 + bia;
+                        if target >= 0 && target < 64 {
+                            let t = target as usize;
+                            let tp = self.board[t];
+                            if (tp != Q && xr(tp) != arg) || Some(t) == self.en_passant_target {
+                                aeb.push(t);
                             }
                         }
                     }
                 }
             },
             2 => { 
-                let bkr: [(i32, i32); 8] = [
+                let agv: [(i32, i32); 8] = [
                     (-2,-1),(-2,1),(-1,-2),(-1,2),(1,-2),(1,2),(2,-1),(2,1)
                 ];
-                for (ahh, bmr) in bkr {
-                    let nr = br as i32 + ahh;
-                    let djs = bj as i32 + bmr;
-                    if nr >= 0 && nr < 8 && djs >= 0 && djs < 8 {
-                        let ab = Self::im(nr as usize, djs as usize);
-                        let aaz = self.mn[ab];
-                        if aaz == Y || aun(aaz) != cfs {
-                            bev.push(ab);
+                for (qw, aht) in agv {
+                    let nr = row as i32 + qw;
+                    let bia = col as i32 + aht;
+                    if nr >= 0 && nr < 8 && bia >= 0 && bia < 8 {
+                        let t = Self::cu(nr as usize, bia as usize);
+                        let tp = self.board[t];
+                        if tp == Q || xr(tp) != arg {
+                            aeb.push(t);
                         }
                     }
                 }
             },
             3 => { 
-                self.mgc(im, cfs, &[(-1,-1),(-1,1),(1,-1),(1,1)], &mut bev);
+                self.slider_moves(cu, arg, &[(-1,-1),(-1,1),(1,-1),(1,1)], &mut aeb);
             },
             4 => { 
-                self.mgc(im, cfs, &[(-1,0),(1,0),(0,-1),(0,1)], &mut bev);
+                self.slider_moves(cu, arg, &[(-1,0),(1,0),(0,-1),(0,1)], &mut aeb);
             },
             5 => { 
-                self.mgc(im, cfs, &[(-1,-1),(-1,1),(1,-1),(1,1),(-1,0),(1,0),(0,-1),(0,1)], &mut bev);
+                self.slider_moves(cu, arg, &[(-1,-1),(-1,1),(1,-1),(1,1),(-1,0),(1,0),(0,-1),(0,1)], &mut aeb);
             },
             6 => { 
-                let bkr: [(i32, i32); 8] = [
+                let agv: [(i32, i32); 8] = [
                     (-1,-1),(-1,0),(-1,1),(0,-1),(0,1),(1,-1),(1,0),(1,1)
                 ];
-                for (ahh, bmr) in bkr {
-                    let nr = br as i32 + ahh;
-                    let djs = bj as i32 + bmr;
-                    if nr >= 0 && nr < 8 && djs >= 0 && djs < 8 {
-                        let ab = Self::im(nr as usize, djs as usize);
-                        let aaz = self.mn[ab];
-                        if aaz == Y || aun(aaz) != cfs {
-                            bev.push(ab);
+                for (qw, aht) in agv {
+                    let nr = row as i32 + qw;
+                    let bia = col as i32 + aht;
+                    if nr >= 0 && nr < 8 && bia >= 0 && bia < 8 {
+                        let t = Self::cu(nr as usize, bia as usize);
+                        let tp = self.board[t];
+                        if tp == Q || xr(tp) != arg {
+                            aeb.push(t);
                         }
                     }
                 }
                 
-                if cfs && !self.mqm && im == 60 {
+                if arg && !self.white_king_moved && cu == 60 {
                     
-                    if !self.mqo && self.mn[61] == Y && self.mn[62] == Y {
-                        if !self.czb(60, false) && !self.czb(61, false) && !self.czb(62, false) {
-                            bev.push(62);
+                    if !self.white_rook_h_moved && self.board[61] == Q && self.board[62] == Q {
+                        if !self.is_square_attacked(60, false) && !self.is_square_attacked(61, false) && !self.is_square_attacked(62, false) {
+                            aeb.push(62);
                         }
                     }
                     
-                    if !self.mqn && self.mn[59] == Y && self.mn[58] == Y && self.mn[57] == Y {
-                        if !self.czb(60, false) && !self.czb(59, false) && !self.czb(58, false) {
-                            bev.push(58);
+                    if !self.white_rook_a_moved && self.board[59] == Q && self.board[58] == Q && self.board[57] == Q {
+                        if !self.is_square_attacked(60, false) && !self.is_square_attacked(59, false) && !self.is_square_attacked(58, false) {
+                            aeb.push(58);
                         }
                     }
                 }
-                if !cfs && !self.kdo && im == 4 {
+                if !arg && !self.black_king_moved && cu == 4 {
                     
-                    if !self.kdq && self.mn[5] == Y && self.mn[6] == Y {
-                        if !self.czb(4, true) && !self.czb(5, true) && !self.czb(6, true) {
-                            bev.push(6);
+                    if !self.black_rook_h_moved && self.board[5] == Q && self.board[6] == Q {
+                        if !self.is_square_attacked(4, true) && !self.is_square_attacked(5, true) && !self.is_square_attacked(6, true) {
+                            aeb.push(6);
                         }
                     }
                     
-                    if !self.kdp && self.mn[3] == Y && self.mn[2] == Y && self.mn[1] == Y {
-                        if !self.czb(4, true) && !self.czb(3, true) && !self.czb(2, true) {
-                            bev.push(2);
+                    if !self.black_rook_a_moved && self.board[3] == Q && self.board[2] == Q && self.board[1] == Q {
+                        if !self.is_square_attacked(4, true) && !self.is_square_attacked(3, true) && !self.is_square_attacked(2, true) {
+                            aeb.push(2);
                         }
                     }
                 }
             },
             _ => {},
         }
-        bev
+        aeb
     }
 
-    fn mgc(&self, im: usize, cfs: bool, dgh: &[(i32, i32)], bev: &mut Vec<usize>) {
-        let br = Self::br(im) as i32;
-        let bj = Self::bj(im) as i32;
-        for &(ahh, bmr) in dgh {
-            let mut m = br + ahh;
-            let mut r = bj + bmr;
-            while m >= 0 && m < 8 && r >= 0 && r < 8 {
-                let ab = Self::im(m as usize, r as usize);
-                let aaz = self.mn[ab];
-                if aaz == Y {
-                    bev.push(ab);
+    fn slider_moves(&self, cu: usize, arg: bool, bfy: &[(i32, i32)], aeb: &mut Vec<usize>) {
+        let row = Self::row(cu) as i32;
+        let col = Self::col(cu) as i32;
+        for &(qw, aht) in bfy {
+            let mut r = row + qw;
+            let mut c = col + aht;
+            while r >= 0 && r < 8 && c >= 0 && c < 8 {
+                let t = Self::cu(r as usize, c as usize);
+                let tp = self.board[t];
+                if tp == Q {
+                    aeb.push(t);
                 } else {
-                    if aun(aaz) != cfs {
-                        bev.push(ab); 
+                    if xr(tp) != arg {
+                        aeb.push(t); 
                     }
                     break; 
                 }
-                m += ahh;
-                r += bmr;
+                r += qw;
+                c += aht;
             }
         }
     }
 
     
-    fn erb(&self, im: usize) -> Vec<usize> {
-        let xe = self.mn[im];
-        if xe == Y { return Vec::new(); }
-        let cfs = aun(xe);
-        let dkw = self.tec(im);
-        let mut oit = Vec::new();
-        for &cd in &dkw {
+    fn get_legal_moves(&self, cu: usize) -> Vec<usize> {
+        let piece = self.board[cu];
+        if piece == Q { return Vec::new(); }
+        let arg = xr(piece);
+        let bit = self.get_moves(cu);
+        let mut ijw = Vec::new();
+        for &target in &bit {
             
-            let mut bdu = self.mn;
+            let mut copy = self.board;
             
-            if bkv(xe) == 1 && Some(cd) == self.bgx {
-                if cfs { bdu[cd + 8] = Y; } else { bdu[cd - 8] = Y; }
+            if agw(piece) == 1 && Some(target) == self.en_passant_target {
+                if arg { copy[target + 8] = Q; } else { copy[target - 8] = Q; }
             }
             
-            if bkv(xe) == 6 {
-                let fem = Self::bj(cd) as i32 - Self::bj(im) as i32;
-                if fem == 2 { bdu[cd - 1] = bdu[cd + 1]; bdu[cd + 1] = Y; }
-                if fem == -2 { bdu[cd + 1] = bdu[cd - 2]; bdu[cd - 2] = Y; }
+            if agw(piece) == 6 {
+                let cd = Self::col(target) as i32 - Self::col(cu) as i32;
+                if cd == 2 { copy[target - 1] = copy[target + 1]; copy[target + 1] = Q; }
+                if cd == -2 { copy[target + 1] = copy[target - 2]; copy[target - 2] = Q; }
             }
-            bdu[cd] = xe;
-            bdu[im] = Y;
-            if !Self::ogc(&bdu, cfs) {
-                oit.push(cd);
+            copy[target] = piece;
+            copy[cu] = Q;
+            if !Self::ihy(&copy, arg) {
+                ijw.push(target);
             }
         }
-        oit
+        ijw
     }
 
     
-    fn txr(&self, jws: bool) -> bool {
-        Self::ogc(&self.mn, jws)
+    fn is_in_check(&self, white_king: bool) -> bool {
+        Self::ihy(&self.board, white_king)
     }
 
-    fn ogc(mn: &[i8; 64], jws: bool) -> bool {
+    fn ihy(board: &[i8; 64], white_king: bool) -> bool {
         
-        let ubl = if jws { BJD_ } else { ANN_ };
-        let ubm = match mn.iter().qf(|&ai| ai == ubl) {
-            Some(im) => im,
+        let mvu = if white_king { BLI_ } else { APR_ };
+        let mvv = match board.iter().position(|&aa| aa == mvu) {
+            Some(cu) => cu,
             None => return false,
         };
-        Self::ogv(mn, ubm, !jws)
+        Self::iik(board, mvv, !white_king)
     }
 
     
-    fn czb(&self, im: usize, kfq: bool) -> bool {
-        Self::ogv(&self.mn, im, kfq)
+    fn is_square_attacked(&self, cu: usize, by_white: bool) -> bool {
+        Self::iik(&self.board, cu, by_white)
     }
 
-    fn ogv(mn: &[i8; 64], im: usize, kfq: bool) -> bool {
-        for a in 0..64 {
-            let ai = mn[a];
-            if ai == Y { continue; }
-            if aun(ai) != kfq { continue; }
+    fn iik(board: &[i8; 64], cu: usize, by_white: bool) -> bool {
+        for i in 0..64 {
+            let aa = board[i];
+            if aa == Q { continue; }
+            if xr(aa) != by_white { continue; }
             
-            let br = a / 8;
-            let bj = a % 8;
-            let agd = im / 8;
-            let asb = im % 8;
+            let row = i / 8;
+            let col = i % 8;
+            let tr = cu / 8;
+            let wo = cu % 8;
 
-            match bkv(ai) {
+            match agw(aa) {
                 1 => { 
-                    let te: i32 = if aun(ai) { -1 } else { 1 };
-                    if agd as i32 == br as i32 + te && (asb as i32 - bj as i32).gp() == 1 {
+                    let it: i32 = if xr(aa) { -1 } else { 1 };
+                    if tr as i32 == row as i32 + it && (wo as i32 - col as i32).abs() == 1 {
                         return true;
                     }
                 },
                 2 => { 
-                    let ahh = (agd as i32 - br as i32).gp();
-                    let bmr = (asb as i32 - bj as i32).gp();
-                    if (ahh == 2 && bmr == 1) || (ahh == 1 && bmr == 2) {
+                    let qw = (tr as i32 - row as i32).abs();
+                    let aht = (wo as i32 - col as i32).abs();
+                    if (qw == 2 && aht == 1) || (qw == 1 && aht == 2) {
                         return true;
                     }
                 },
                 3 => { 
-                    if Self::mwn(mn, a, im) { return true; }
+                    if Self::hfu(board, i, cu) { return true; }
                 },
                 4 => { 
-                    if Self::mwo(mn, a, im) { return true; }
+                    if Self::hfv(board, i, cu) { return true; }
                 },
                 5 => { 
-                    if Self::mwn(mn, a, im) || Self::mwo(mn, a, im) {
+                    if Self::hfu(board, i, cu) || Self::hfv(board, i, cu) {
                         return true;
                     }
                 },
                 6 => { 
-                    let ahh = (agd as i32 - br as i32).gp();
-                    let bmr = (asb as i32 - bj as i32).gp();
-                    if ahh <= 1 && bmr <= 1 && (ahh + bmr) > 0 {
+                    let qw = (tr as i32 - row as i32).abs();
+                    let aht = (wo as i32 - col as i32).abs();
+                    if qw <= 1 && aht <= 1 && (qw + aht) > 0 {
                         return true;
                     }
                 },
@@ -727,48 +727,48 @@ impl ChessState {
         false
     }
 
-    fn mwn(mn: &[i8; 64], from: usize, wh: usize) -> bool {
-        let (xb, gc) = (from / 8, from % 8);
-        let (agd, asb) = (wh / 8, wh % 8);
-        let ahh = agd as i32 - xb as i32;
-        let bmr = asb as i32 - gc as i32;
-        if ahh.gp() != bmr.gp() || ahh == 0 { return false; }
-        let adz = if ahh > 0 { 1 } else { -1 };
-        let jt = if bmr > 0 { 1 } else { -1 };
-        let mut m = xb as i32 + adz;
-        let mut r = gc as i32 + jt;
-        while (m, r) != (agd as i32, asb as i32) {
-            if mn[(m * 8 + r) as usize] != Y { return false; }
-            m += adz;
-            r += jt;
+    fn hfu(board: &[i8; 64], from: usize, to: usize) -> bool {
+        let (ko, br) = (from / 8, from % 8);
+        let (tr, wo) = (to / 8, to % 8);
+        let qw = tr as i32 - ko as i32;
+        let aht = wo as i32 - br as i32;
+        if qw.abs() != aht.abs() || qw == 0 { return false; }
+        let pb = if qw > 0 { 1 } else { -1 };
+        let dr = if aht > 0 { 1 } else { -1 };
+        let mut r = ko as i32 + pb;
+        let mut c = br as i32 + dr;
+        while (r, c) != (tr as i32, wo as i32) {
+            if board[(r * 8 + c) as usize] != Q { return false; }
+            r += pb;
+            c += dr;
         }
         true
     }
 
-    fn mwo(mn: &[i8; 64], from: usize, wh: usize) -> bool {
-        let (xb, gc) = (from / 8, from % 8);
-        let (agd, asb) = (wh / 8, wh % 8);
-        if xb != agd && gc != asb { return false; }
-        if xb == agd {
-            let (hh, gd) = if gc < asb { (gc, asb) } else { (asb, gc) };
-            for r in (hh + 1)..gd {
-                if mn[xb * 8 + r] != Y { return false; }
+    fn hfv(board: &[i8; 64], from: usize, to: usize) -> bool {
+        let (ko, br) = (from / 8, from % 8);
+        let (tr, wo) = (to / 8, to % 8);
+        if ko != tr && br != wo { return false; }
+        if ko == tr {
+            let (lo, hi) = if br < wo { (br, wo) } else { (wo, br) };
+            for c in (lo + 1)..hi {
+                if board[ko * 8 + c] != Q { return false; }
             }
         } else {
-            let (hh, gd) = if xb < agd { (xb, agd) } else { (agd, xb) };
-            for m in (hh + 1)..gd {
-                if mn[m * 8 + gc] != Y { return false; }
+            let (lo, hi) = if ko < tr { (ko, tr) } else { (tr, ko) };
+            for r in (lo + 1)..hi {
+                if board[r * 8 + br] != Q { return false; }
             }
         }
         true
     }
 
-    fn tmb(&self, xui: bool) -> bool {
-        for im in 0..64 {
-            let ai = self.mn[im];
-            if ai == Y { continue; }
-            if aun(ai) != xui { continue; }
-            if !self.erb(im).is_empty() {
+    fn has_any_legal_moves(&self, white_side: bool) -> bool {
+        for cu in 0..64 {
+            let aa = self.board[cu];
+            if aa == Q { continue; }
+            if xr(aa) != white_side { continue; }
+            if !self.get_legal_moves(cu).is_empty() {
                 return true;
             }
         }
@@ -779,142 +779,142 @@ impl ChessState {
     
     
 
-    fn snq(&self) -> i32 {
-        let mut ol: i32 = 0;
-        for im in 0..64 {
-            let ai = self.mn[im];
-            if ai == Y { continue; }
-            let ap = ovp(ai);
-            if aun(ai) { ol += ap; } else { ol -= ap; }
+    fn evaluate(&self) -> i32 {
+        let mut score: i32 = 0;
+        for cu in 0..64 {
+            let aa = self.board[cu];
+            if aa == Q { continue; }
+            let val = iuu(aa);
+            if xr(aa) { score += val; } else { score -= val; }
             
             
-            let m = Self::br(im);
-            let r = Self::bj(im);
-            let nbz = match (m, r) {
+            let r = Self::row(cu);
+            let c = Self::col(cu);
+            let hkb = match (r, c) {
                 (3, 3) | (3, 4) | (4, 3) | (4, 4) => 15,
                 (2, 2) | (2, 5) | (5, 2) | (5, 5) => 8,
                 _ => 0,
             };
-            if aun(ai) { ol += nbz; } else { ol -= nbz; }
+            if xr(aa) { score += hkb; } else { score -= hkb; }
         }
-        ol
+        score
     }
 
-    fn lly(&mut self, eo: i32, mut dw: i32, mut dyu: i32, omh: bool) -> i32 {
-        if eo == 0 {
-            return self.snq();
+    fn minimax(&mut self, depth: i32, mut alpha: i32, mut bqo: i32, maximizing: bool) -> i32 {
+        if depth == 0 {
+            return self.evaluate();
         }
 
-        let gso = omh; 
-        let mut bdn;
+        let den = maximizing; 
+        let mut adj;
         
-        if omh {
-            bdn = -100000;
-            'outer_max: for im in 0..64 {
-                let ai = self.mn[im];
-                if ai == Y || !aun(ai) { continue; }
-                let bev = self.erb(im);
-                for &cd in &bev {
-                    let ehz = self.mn;
-                    let hyq = self.bgx;
+        if maximizing {
+            adj = -100000;
+            'outer_max: for cu in 0..64 {
+                let aa = self.board[cu];
+                if aa == Q || !xr(aa) { continue; }
+                let aeb = self.get_legal_moves(cu);
+                for &target in &aeb {
+                    let bvq = self.board;
+                    let dyh = self.en_passant_target;
                     
                     
-                    if bkv(ai) == 1 && Some(cd) == self.bgx {
-                        self.mn[cd + 8] = Y;
+                    if agw(aa) == 1 && Some(target) == self.en_passant_target {
+                        self.board[target + 8] = Q;
                     }
-                    self.mn[cd] = ai;
-                    self.mn[im] = Y;
+                    self.board[target] = aa;
+                    self.board[cu] = Q;
                     
                     
-                    self.bgx = None;
-                    if bkv(ai) == 1 && (Self::br(cd) as i32 - Self::br(im) as i32).gp() == 2 {
-                        self.bgx = Some(((im + cd) / 2) as usize);
+                    self.en_passant_target = None;
+                    if agw(aa) == 1 && (Self::row(target) as i32 - Self::row(cu) as i32).abs() == 2 {
+                        self.en_passant_target = Some(((cu + target) / 2) as usize);
                     }
                     
-                    let ol = self.lly(eo - 1, dw, dyu, false);
+                    let score = self.minimax(depth - 1, alpha, bqo, false);
                     
-                    self.mn = ehz;
-                    self.bgx = hyq;
+                    self.board = bvq;
+                    self.en_passant_target = dyh;
                     
-                    if ol > bdn { bdn = ol; }
-                    if ol > dw { dw = ol; }
-                    if dyu <= dw { break 'outer_max; }
+                    if score > adj { adj = score; }
+                    if score > alpha { alpha = score; }
+                    if bqo <= alpha { break 'outer_max; }
                 }
             }
         } else {
-            bdn = 100000;
-            'outer_min: for im in 0..64 {
-                let ai = self.mn[im];
-                if ai == Y || !din(ai) { continue; }
-                let bev = self.erb(im);
-                for &cd in &bev {
-                    let ehz = self.mn;
-                    let hyq = self.bgx;
+            adj = 100000;
+            'outer_min: for cu in 0..64 {
+                let aa = self.board[cu];
+                if aa == Q || !bhi(aa) { continue; }
+                let aeb = self.get_legal_moves(cu);
+                for &target in &aeb {
+                    let bvq = self.board;
+                    let dyh = self.en_passant_target;
                     
-                    if bkv(ai) == 1 && Some(cd) == self.bgx {
-                        self.mn[cd - 8] = Y;
+                    if agw(aa) == 1 && Some(target) == self.en_passant_target {
+                        self.board[target - 8] = Q;
                     }
-                    self.mn[cd] = ai;
-                    self.mn[im] = Y;
+                    self.board[target] = aa;
+                    self.board[cu] = Q;
                     
-                    self.bgx = None;
-                    if bkv(ai) == 1 && (Self::br(cd) as i32 - Self::br(im) as i32).gp() == 2 {
-                        self.bgx = Some(((im + cd) / 2) as usize);
+                    self.en_passant_target = None;
+                    if agw(aa) == 1 && (Self::row(target) as i32 - Self::row(cu) as i32).abs() == 2 {
+                        self.en_passant_target = Some(((cu + target) / 2) as usize);
                     }
                     
-                    let ol = self.lly(eo - 1, dw, dyu, true);
+                    let score = self.minimax(depth - 1, alpha, bqo, true);
                     
-                    self.mn = ehz;
-                    self.bgx = hyq;
+                    self.board = bvq;
+                    self.en_passant_target = dyh;
                     
-                    if ol < bdn { bdn = ol; }
-                    if ol < dyu { dyu = ol; }
-                    if dyu <= dw { break 'outer_min; }
+                    if score < adj { adj = score; }
+                    if score < bqo { bqo = score; }
+                    if bqo <= alpha { break 'outer_min; }
                 }
             }
         }
-        bdn
+        adj
     }
 
-    fn qfz(&mut self) {
-        let mut myr: Option<usize> = None;
-        let mut myu: Option<usize> = None;
-        let mut haf = 100000i32; 
+    fn ai_move(&mut self) {
+        let mut hhi: Option<usize> = None;
+        let mut hhl: Option<usize> = None;
+        let mut djb = 100000i32; 
         
-        for im in 0..64 {
-            let ai = self.mn[im];
-            if ai == Y || !din(ai) { continue; }
-            let bev = self.erb(im);
-            for &cd in &bev {
-                let ehz = self.mn;
-                let hyq = self.bgx;
+        for cu in 0..64 {
+            let aa = self.board[cu];
+            if aa == Q || !bhi(aa) { continue; }
+            let aeb = self.get_legal_moves(cu);
+            for &target in &aeb {
+                let bvq = self.board;
+                let dyh = self.en_passant_target;
                 
-                if bkv(ai) == 1 && Some(cd) == self.bgx {
-                    self.mn[cd - 8] = Y;
+                if agw(aa) == 1 && Some(target) == self.en_passant_target {
+                    self.board[target - 8] = Q;
                 }
-                self.mn[cd] = ai;
-                self.mn[im] = Y;
+                self.board[target] = aa;
+                self.board[cu] = Q;
                 
-                self.bgx = None;
-                if bkv(ai) == 1 && (Self::br(cd) as i32 - Self::br(im) as i32).gp() == 2 {
-                    self.bgx = Some(((im + cd) / 2) as usize);
+                self.en_passant_target = None;
+                if agw(aa) == 1 && (Self::row(target) as i32 - Self::row(cu) as i32).abs() == 2 {
+                    self.en_passant_target = Some(((cu + target) / 2) as usize);
                 }
                 
-                let ol = self.lly(self.fzz, -100000, 100000, true);
+                let score = self.minimax(self.ai_depth, -100000, 100000, true);
                 
-                self.mn = ehz;
-                self.bgx = hyq;
+                self.board = bvq;
+                self.en_passant_target = dyh;
                 
-                if ol < haf {
-                    haf = ol;
-                    myr = Some(im);
-                    myu = Some(cd);
+                if score < djb {
+                    djb = score;
+                    hhi = Some(cu);
+                    hhl = Some(target);
                 }
             }
         }
         
-        if let (Some(from), Some(wh)) = (myr, myu) {
-            self.jet(from, wh);
+        if let (Some(from), Some(to)) = (hhi, hhl) {
+            self.make_move(from, to);
         }
     }
 
@@ -923,18 +923,18 @@ impl ChessState {
     
 
     
-    pub fn oli(&self) -> i32 {
-        let mut pzi = 0i32;
-        let mut mzi = 0i32;
-        for im in 0..64 {
-            let ai = self.mn[im];
-            if ai == Y { continue; }
-            let ap = ovp(ai);
+    pub fn material_score(&self) -> i32 {
+        let mut jrb = 0i32;
+        let mut hhy = 0i32;
+        for cu in 0..64 {
+            let aa = self.board[cu];
+            if aa == Q { continue; }
+            let val = iuu(aa);
             
-            if bkv(ai) == 6 { continue; }
-            if aun(ai) { pzi += ap; } else { mzi += ap; }
+            if agw(aa) == 6 { continue; }
+            if xr(aa) { jrb += val; } else { hhy += val; }
         }
-        pzi - mzi
+        jrb - hhy
     }
 
     
@@ -943,68 +943,68 @@ impl ChessState {
 
     
     
-    pub fn oai(&mut self, bj: i32, br: i32) -> bool {
-        if bj < 0 || bj > 7 || br < 0 || br > 7 { return false; }
-        let im = br as usize * 8 + bj as usize;
+    pub fn handle_mouse_click(&mut self, col: i32, row: i32) -> bool {
+        if col < 0 || col > 7 || row < 0 || row > 7 { return false; }
+        let cu = row as usize * 8 + col as usize;
         
-        if self.ib == GamePhase::Mw || self.ib == GamePhase::Up {
+        if self.phase == GamePhase::Checkmate || self.phase == GamePhase::Stalemate {
             return false;
         }
-        if self.ib == GamePhase::Yg {
+        if self.phase == GamePhase::Promotion {
             return false; 
         }
 
-        let xe = self.mn[im];
+        let piece = self.board[cu];
         
-        match self.edj {
-            InputMode::Uk => {
-                if xe == Y { return false; }
+        match self.input_mode {
+            InputMode::SelectPiece => {
+                if piece == Q { return false; }
                 
-                let hpa = (self.axi && aun(xe)) || (!self.axi && din(xe));
-                if !hpa { return false; }
+                let dsr = (self.white_turn && xr(piece)) || (!self.white_turn && bhi(piece));
+                if !dsr { return false; }
                 
                 
-                self.blr = self.erb(im);
-                if self.blr.is_empty() {
+                self.valid_moves = self.get_legal_moves(cu);
+                if self.valid_moves.is_empty() {
                     self.message = String::from("No legal moves for this piece");
                     return true;
                 }
-                self.na = Some(im);
-                self.gi = im;
-                self.edj = InputMode::Amj;
-                let j = Self::gsv(im);
-                self.message = format!("Move {} from {}", hvd(xe), j);
+                self.selected = Some(cu);
+                self.cursor = cu;
+                self.input_mode = InputMode::SelectTarget;
+                let name = Self::der(cu);
+                self.message = format!("Move {} from {}", dwn(piece), name);
                 
                 
-                self.dgo = Some(im);
-                self.epb = Some(xe);
+                self.drag_from = Some(cu);
+                self.dragging_piece = Some(piece);
                 return true;
             },
-            InputMode::Amj => {
+            InputMode::SelectTarget => {
                 
-                if xe != Y {
-                    let hpa = (self.axi && aun(xe)) || (!self.axi && din(xe));
-                    if hpa {
-                        self.blr = self.erb(im);
-                        if !self.blr.is_empty() {
-                            self.na = Some(im);
-                            self.gi = im;
-                            let j = Self::gsv(im);
-                            self.message = format!("Move {} from {}", hvd(xe), j);
+                if piece != Q {
+                    let dsr = (self.white_turn && xr(piece)) || (!self.white_turn && bhi(piece));
+                    if dsr {
+                        self.valid_moves = self.get_legal_moves(cu);
+                        if !self.valid_moves.is_empty() {
+                            self.selected = Some(cu);
+                            self.cursor = cu;
+                            let name = Self::der(cu);
+                            self.message = format!("Move {} from {}", dwn(piece), name);
                             
-                            self.dgo = Some(im);
-                            self.epb = Some(xe);
+                            self.drag_from = Some(cu);
+                            self.dragging_piece = Some(piece);
                         }
                         return true;
                     }
                 }
                 
                 
-                if self.blr.contains(&im) {
-                    if let Some(from) = self.na {
-                        self.dgo = None;
-                        self.epb = None;
-                        self.jet(from, im);
+                if self.valid_moves.contains(&cu) {
+                    if let Some(from) = self.selected {
+                        self.drag_from = None;
+                        self.dragging_piece = None;
+                        self.make_move(from, cu);
                         return true;
                     }
                 } else {
@@ -1016,36 +1016,37 @@ impl ChessState {
     }
 
     
-    pub fn lay(&mut self, bj: i32, br: i32) {
-        if self.dgo.is_none() || self.epb.is_none() {
+    pub fn handle_mouse_release(&mut self, col: i32, row: i32) {
+        let from = match self.drag_from.take() {
+            Some(f) => f,
+            None => return,
+        };
+        if self.dragging_piece.is_none() {
             return;
         }
+        self.dragging_piece = None;
         
-        let from = self.dgo.unwrap();
-        self.dgo = None;
-        self.epb = None;
-        
-        if bj < 0 || bj > 7 || br < 0 || br > 7 {
+        if col < 0 || col > 7 || row < 0 || row > 7 {
             
             return;
         }
         
-        let im = br as usize * 8 + bj as usize;
+        let cu = row as usize * 8 + col as usize;
         
         
-        if im == from { return; }
+        if cu == from { return; }
         
         
-        if self.blr.contains(&im) {
-            self.jet(from, im);
+        if self.valid_moves.contains(&cu) {
+            self.make_move(from, cu);
         }
         
     }
 
     
-    pub fn pxc(&mut self, y: i32, x: i32) {
-        self.kqq = y;
-        self.kqr = x;
+    pub fn update_drag_position(&mut self, p: i32, o: i32) {
+        self.drag_pixel_x = p;
+        self.drag_pixel_y = o;
     }
 
     
@@ -1053,61 +1054,61 @@ impl ChessState {
     
 
     
-    pub fn xiz(&mut self) {
-        self.ezv = !self.ezv;
-        if self.ezv {
-            self.fyr = self.dww;
-            self.fdl = self.dww;
-            self.ezw = false;
-            self.message = format!("Timer ON — {}min/side", self.dww / 60_000);
+    pub fn toggle_timer(&mut self) {
+        self.timer_enabled = !self.timer_enabled;
+        if self.timer_enabled {
+            self.white_time_ms = self.timer_initial_ms;
+            self.black_time_ms = self.timer_initial_ms;
+            self.timer_started = false;
+            self.message = format!("Timer ON — {}min/side", self.timer_initial_ms / 60_000);
         } else {
             self.message = String::from("Timer OFF");
         }
     }
 
     
-    pub fn rsr(&mut self) {
-        let hvx: [u64; 6] = [60_000, 180_000, 300_000, 600_000, 900_000, 1_800_000];
-        let rrw = hvx.iter().qf(|&ab| ab == self.dww).unwrap_or(3);
-        let jgx = (rrw + 1) % hvx.len();
-        self.dww = hvx[jgx];
-        self.fyr = self.dww;
-        self.fdl = self.dww;
-        self.ezw = false;
-        let bbz = self.dww / 60_000;
-        let tv = (self.dww % 60_000) / 1000;
-        if tv > 0 {
-            self.message = format!("Timer: {}m{}s/side", bbz, tv);
+    pub fn cycle_timer_preset(&mut self) {
+        let dwu: [u64; 6] = [60_000, 180_000, 300_000, 600_000, 900_000, 1_800_000];
+        let lak = dwu.iter().position(|&t| t == self.timer_initial_ms).unwrap_or(3);
+        let euz = (lak + 1) % dwu.len();
+        self.timer_initial_ms = dwu[euz];
+        self.white_time_ms = self.timer_initial_ms;
+        self.black_time_ms = self.timer_initial_ms;
+        self.timer_started = false;
+        let acf = self.timer_initial_ms / 60_000;
+        let im = (self.timer_initial_ms % 60_000) / 1000;
+        if im > 0 {
+            self.message = format!("Timer: {}m{}s/side", acf, im);
         } else {
-            self.message = format!("Timer: {}min/side", bbz);
+            self.message = format!("Timer: {}min/side", acf);
         }
     }
 
     
-    pub fn xgt(&mut self, oz: u64) {
-        if !self.ezv || !self.ezw { return; }
-        if self.ib == GamePhase::Mw || self.ib == GamePhase::Up { return; }
+    pub fn tick_timer(&mut self, elapsed_ms: u64) {
+        if !self.timer_enabled || !self.timer_started { return; }
+        if self.phase == GamePhase::Checkmate || self.phase == GamePhase::Stalemate { return; }
         
-        if self.axi {
-            self.fyr = self.fyr.ao(oz);
-            if self.fyr == 0 {
-                self.ib = GamePhase::Mw; 
+        if self.white_turn {
+            self.white_time_ms = self.white_time_ms.saturating_sub(elapsed_ms);
+            if self.white_time_ms == 0 {
+                self.phase = GamePhase::Checkmate; 
                 self.message = String::from("Time's up! Black wins!");
             }
         } else {
-            self.fdl = self.fdl.ao(oz);
-            if self.fdl == 0 {
-                self.ib = GamePhase::Mw;
+            self.black_time_ms = self.black_time_ms.saturating_sub(elapsed_ms);
+            if self.black_time_ms == 0 {
+                self.phase = GamePhase::Checkmate;
                 self.message = String::from("Time's up! White wins!");
             }
         }
     }
 
     
-    pub fn ivj(jn: u64) -> String {
-        let jtw = jn / 1000;
-        let bbz = jtw / 60;
-        let tv = jtw % 60;
-        format!("{:02}:{:02}", bbz, tv)
+    pub fn format_time(dh: u64) -> String {
+        let fdj = dh / 1000;
+        let acf = fdj / 60;
+        let im = fdj % 60;
+        format!("{:02}:{:02}", acf, im)
     }
 }

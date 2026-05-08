@@ -106,7 +106,7 @@ pub struct Pattern {
     /// Pattern name (stored as bytes for no_std)
     pub name: [u8; 16],
     /// Name length
-    pub name_length: usize,
+    pub name_len: usize,
     /// Steps in this pattern
     pub steps: Vec<Step>,
     /// Tempo in BPM
@@ -120,16 +120,16 @@ pub struct Pattern {
 // Bloc d'implémentation — définit les méthodes du type ci-dessus.
 impl Pattern {
     /// Create a new empty pattern
-    pub fn new(name: &str, number_steps: usize, bpm: u16) -> Self {
-        let n = number_steps.minimum(MAXIMUM_STEPS).maximum(1);
+    pub fn new(name: &str, num_steps: usize, bpm: u16) -> Self {
+        let n = num_steps.min(MAXIMUM_STEPS).max(1);
         let mut name_buffer = [0u8; 16];
         let name_bytes = name.as_bytes();
-        let len = name_bytes.len().minimum(16);
+        let len = name_bytes.len().min(16);
         name_buffer[..len].copy_from_slice(&name_bytes[..len]);
 
         Self {
             name: name_buffer,
-            name_length: len,
+            name_len: len,
             steps: vec![Step::rest(); n],
             bpm,
             waveform: Waveform::Square,
@@ -139,7 +139,7 @@ impl Pattern {
 
     /// Get pattern name as &str
     pub fn name_str(&self) -> &str {
-        core::str::from_utf8(&self.name[..self.name_length]).unwrap_or("???")
+        core::str::from_utf8(&self.name[..self.name_len]).unwrap_or("???")
     }
 
     /// Number of steps
@@ -148,24 +148,24 @@ impl Pattern {
     }
 
     /// Set a step by index
-    pub fn set_step(&mut self, index: usize, step: Step) {
-        if index < self.steps.len() {
-            self.steps[index] = step;
+    pub fn set_step(&mut self, idx: usize, step: Step) {
+        if idx < self.steps.len() {
+            self.steps[idx] = step;
         }
     }
 
     /// Set a note at a step by name (e.g., "C4")
-    pub fn set_note(&mut self, index: usize, note_name: &str) -> Result<(), &'static str> {
-        if index >= self.steps.len() {
+    pub fn set_note(&mut self, idx: usize, note_name: &str) -> Result<(), &'static str> {
+        if idx >= self.steps.len() {
             return Err("Step index out of range");
         }
         if note_name == "--" || note_name == "." || note_name.is_empty() {
-            self.steps[index] = Step::rest();
+            self.steps[idx] = Step::rest();
             return Ok(());
         }
         let midi = tables::note_name_to_midi(note_name)
             .ok_or("Invalid note name")?;
-        self.steps[index] = Step::note(midi);
+        self.steps[idx] = Step::note(midi);
         Ok(())
     }
 
@@ -176,13 +176,13 @@ impl Pattern {
     }
 
     /// Calculate duration of one step in milliseconds
-    pub fn step_duration_mouse(&self) -> u32 {
+    pub fn step_duration_ms(&self) -> u32 {
         (60_000) / (self.bpm as u32 * STEPS_PER_BEAT)
     }
 
     /// Total pattern duration in milliseconds
-    pub fn total_duration_mouse(&self) -> u32 {
-        self.step_duration_mouse() * self.steps.len() as u32
+    pub fn total_duration_ms(&self) -> u32 {
+        self.step_duration_ms() * self.steps.len() as u32
     }
 
     /// Render one full loop of this pattern into stereo i16 samples
@@ -230,8 +230,8 @@ impl Pattern {
         let mut s = String::new();
         s.push_str(&format!("Pattern: \"{}\" | {} steps | {} BPM | {} | {}ms/step\n",
             self.name_str(), self.steps.len(), self.bpm,
-            self.waveform.name(), self.step_duration_mouse()));
-        s.push_str(&format!("Total duration: {}ms\n\n", self.total_duration_mouse()));
+            self.waveform.name(), self.step_duration_ms()));
+        s.push_str(&format!("Total duration: {}ms\n\n", self.total_duration_ms()));
 
         // Step numbers header
         s.push_str(" Step: ");
@@ -307,13 +307,13 @@ pub fn new() -> Self {
     }
 
     /// Get a pattern by index
-    pub fn get(&self, index: usize) -> Option<&Pattern> {
-        self.patterns.get(index)
+    pub fn get(&self, idx: usize) -> Option<&Pattern> {
+        self.patterns.get(idx)
     }
 
     /// Get a mutable pattern by index
-    pub fn get_mut(&mut self, index: usize) -> Option<&mut Pattern> {
-        self.patterns.get_mut(index)
+    pub fn get_mut(&mut self, idx: usize) -> Option<&mut Pattern> {
+        self.patterns.get_mut(idx)
     }
 
     /// Get a pattern by name
@@ -323,14 +323,14 @@ pub fn new() -> Self {
 
     /// Get a mutable pattern by name
     pub fn get_by_name_mut(&mut self, name: &str) -> Option<&mut Pattern> {
-        let index = self.find(name)?;
-        self.get_mut(index)
+        let idx = self.find(name)?;
+        self.get_mut(idx)
     }
 
     /// Remove a pattern by name
     pub fn remove(&mut self, name: &str) -> Result<(), &'static str> {
-        let index = self.find(name).ok_or("Pattern not found")?;
-        self.patterns.remove(index);
+        let idx = self.find(name).ok_or("Pattern not found")?;
+        self.patterns.remove(idx);
         Ok(())
     }
 

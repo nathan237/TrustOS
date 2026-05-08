@@ -4,12 +4,12 @@
 
 
 
-pub fn noy() {
+pub fn hut() {
     
-    super::memory::ktf();
+    super::memory::fun();
 }
 
 
 
 
-pub const Bcj: &str = "Limine";
+pub const Wo: &str = "Limine";

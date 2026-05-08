@@ -160,24 +160,24 @@ const SWITCHER_CARD_RADIUS: u32 = 14;
 // Public structure — visible outside this module.
 pub struct MobileApp {
     pub name: &'static str,
-    pub icon_index: u8,
+    pub icon_idx: u8,
     pub accent: u32,
 }
 
 /// All home screen apps — same order/colors as desktop dock sidebar
 const MOBILE_APPS: &[MobileApp] = &[
-    MobileApp { name: "Terminal",  icon_index: 0,  accent: 0xFF20CC60 },
-    MobileApp { name: "Files",     icon_index: 1,  accent: 0xFFDDAA30 },
-    MobileApp { name: "Editor",    icon_index: 2,  accent: 0xFF5090E0 },
-    MobileApp { name: "Calc",      icon_index: 3,  accent: 0xFFCC6633 },
-    MobileApp { name: "Network",   icon_index: 4,  accent: 0xFF40AADD },
-    MobileApp { name: "Games",     icon_index: 5,  accent: 0xFFCC4444 },
-    MobileApp { name: "Browser",   icon_index: 6,  accent: 0xFF4488DD },
-    MobileApp { name: "TrustEd",   icon_index: 7,  accent: 0xFF9060D0 },
-    MobileApp { name: "Settings",  icon_index: 8,  accent: 0xFF9988BB },
-    MobileApp { name: "About",     icon_index: 9,  accent: 0xFF40CC80 },
-    MobileApp { name: "Music",     icon_index: 10, accent: 0xFFFF6090 },
-    MobileApp { name: "Chess",     icon_index: 11, accent: 0xFFD4A854 },
+    MobileApp { name: "Terminal",  icon_idx: 0,  accent: 0xFF20CC60 },
+    MobileApp { name: "Files",     icon_idx: 1,  accent: 0xFFDDAA30 },
+    MobileApp { name: "Editor",    icon_idx: 2,  accent: 0xFF5090E0 },
+    MobileApp { name: "Calc",      icon_idx: 3,  accent: 0xFFCC6633 },
+    MobileApp { name: "Network",   icon_idx: 4,  accent: 0xFF40AADD },
+    MobileApp { name: "Games",     icon_idx: 5,  accent: 0xFFCC4444 },
+    MobileApp { name: "Browser",   icon_idx: 6,  accent: 0xFF4488DD },
+    MobileApp { name: "TrustEd",   icon_idx: 7,  accent: 0xFF9060D0 },
+    MobileApp { name: "Settings",  icon_idx: 8,  accent: 0xFF9988BB },
+    MobileApp { name: "About",     icon_idx: 9,  accent: 0xFF40CC80 },
+    MobileApp { name: "Music",     icon_idx: 10, accent: 0xFFFF6090 },
+    MobileApp { name: "Chess",     icon_idx: 11, accent: 0xFFD4A854 },
 ];
 
 /// Dock pinned apps: Terminal, Files, Browser, Music, Settings
@@ -234,7 +234,7 @@ pub struct MobileState {
     /// Calculator: display value
     pub calc_display: String,
     /// Calculator: pending operation (0=none, 1=+, 2=-, 3=*, 4=/)
-    pub calc_operation: u8,
+    pub calc_op: u8,
     /// Calculator: stored operand
     pub calc_operand: i64,
     /// Calculator: just pressed = (reset on next digit)
@@ -292,7 +292,7 @@ impl MobileState {
             term_lines: Vec::new(),
             term_input: String::new(),
             calc_display: String::new(),
-            calc_operation: 0,
+            calc_op: 0,
             calc_operand: 0,
             calc_fresh: false,
             files_selected: -1,
@@ -314,7 +314,7 @@ impl MobileState {
 pub fn calculate_viewport(screen_w: u32, screen_h: u32) -> (i32, i32, u32, u32) {
     // Height-limited: use full screen height, calculate width from aspect
     let vp_h = screen_h;
-    let vp_w = (screen_h * IPHONE16_ASPECT_DEN / IPHONE16_ASPECT_NUMBER).minimum(screen_w);
+    let vp_w = (screen_h * IPHONE16_ASPECT_DEN / IPHONE16_ASPECT_NUMBER).min(screen_w);
     let vx = ((screen_w.saturating_sub(vp_w)) / 2) as i32;
     let vy = 0i32;
     (vx, vy, vp_w, vp_h)
@@ -340,7 +340,7 @@ fn char_width() -> u32 {
 /// Rounded filled rect — identical to desktop.rs implementation
 fn draw_rounded_rect(x: i32, y: i32, w: u32, h: u32, radius: u32, color: u32) {
     if w == 0 || h == 0 { return; }
-    let r = radius.minimum(w / 2).minimum(h / 2);
+    let r = radius.min(w / 2).min(h / 2);
     if r == 0 {
         if x >= 0 && y >= 0 { framebuffer::fill_rect(x as u32, y as u32, w, h, color); }
         return;
@@ -366,7 +366,7 @@ fn draw_rounded_rect(x: i32, y: i32, w: u32, h: u32, radius: u32, color: u32) {
 /// Rounded rect border — identical to desktop.rs
 fn draw_rounded_rect_border(x: i32, y: i32, w: u32, h: u32, radius: u32, color: u32) {
     if w == 0 || h == 0 { return; }
-    let r = radius.minimum(w / 2).minimum(h / 2);
+    let r = radius.min(w / 2).min(h / 2);
     let wi = w as i32;
     let hi = h as i32;
     let ri = r as i32;
@@ -375,13 +375,13 @@ fn draw_rounded_rect_border(x: i32, y: i32, w: u32, h: u32, radius: u32, color: 
         return;
     }
     // Straight edges
-    for pixel in (x + ri)..(x + wi - ri) {
-        put_pixel(pixel, y, color);
-        put_pixel(pixel, y + hi - 1, color);
+    for px in (x + ri)..(x + wi - ri) {
+        put_px(px, y, color);
+        put_px(px, y + hi - 1, color);
     }
     for py in (y + ri)..(y + hi - ri) {
-        put_pixel(x, py, color);
-        put_pixel(x + wi - 1, py, color);
+        put_px(x, py, color);
+        put_px(x + wi - 1, py, color);
     }
     // Quarter-circle corners
     let r2 = ri * ri;
@@ -391,13 +391,13 @@ fn draw_rounded_rect_border(x: i32, y: i32, w: u32, h: u32, radius: u32, color: 
         // Draw arc pixels from last_x down to dx
         for ax in dx..=last_x {
             // TL
-            put_pixel(x + ri - ax, y + ri - dy, color);
+            put_px(x + ri - ax, y + ri - dy, color);
             // TR
-            put_pixel(x + wi - 1 - ri + ax, y + ri - dy, color);
+            put_px(x + wi - 1 - ri + ax, y + ri - dy, color);
             // BL
-            put_pixel(x + ri - ax, y + hi - 1 - ri + dy, color);
+            put_px(x + ri - ax, y + hi - 1 - ri + dy, color);
             // BR
-            put_pixel(x + wi - 1 - ri + ax, y + hi - 1 - ri + dy, color);
+            put_px(x + wi - 1 - ri + ax, y + hi - 1 - ri + dy, color);
         }
         last_x = dx;
     }
@@ -406,16 +406,16 @@ fn draw_rounded_rect_border(x: i32, y: i32, w: u32, h: u32, radius: u32, color: 
 /// Signed fill_rect helper
 fn fill_rect_s(x: i32, y: i32, w: i32, h: i32, color: u32) {
     if w <= 0 || h <= 0 || x + w <= 0 || y + h <= 0 { return; }
-    let x0 = x.maximum(0) as u32;
-    let y0 = y.maximum(0) as u32;
-    let x1 = (x + w).maximum(0) as u32;
-    let y1 = (y + h).maximum(0) as u32;
+    let x0 = x.max(0) as u32;
+    let y0 = y.max(0) as u32;
+    let x1 = (x + w).max(0) as u32;
+    let y1 = (y + h).max(0) as u32;
     if x1 > x0 && y1 > y0 {
         framebuffer::fill_rect(x0, y0, x1 - x0, y1 - y0, color);
     }
 }
 
-fn put_pixel(x: i32, y: i32, color: u32) {
+fn put_px(x: i32, y: i32, color: u32) {
     if x >= 0 && y >= 0 {
         framebuffer::put_pixel(x as u32, y as u32, color);
     }
@@ -457,16 +457,16 @@ fn atan2_approx_octant(y: i32, x: i32) -> u32 {
 /// Frosted glass panel (same as desktop title bars / start menu)
 fn draw_glass_panel(x: i32, y: i32, w: u32, h: u32, _radius: u32, opacity: u32) {
     if w == 0 || h == 0 { return; }
-    let xu = x.maximum(0) as u32;
-    let yu = y.maximum(0) as u32;
+    let xu = x.max(0) as u32;
+    let yu = y.max(0) as u32;
     // Dark frosted base
-    framebuffer::fill_rect_alpha(xu, yu, w, h, 0x000000, (opacity * 7 / 10).minimum(255));
+    framebuffer::fill_rect_alpha(xu, yu, w, h, 0x000000, (opacity * 7 / 10).min(255));
     // Green tinted overlay
-    framebuffer::fill_rect_alpha(xu, yu, w, h, 0x001A0A, (opacity * 2 / 10).minimum(255));
+    framebuffer::fill_rect_alpha(xu, yu, w, h, 0x001A0A, (opacity * 2 / 10).min(255));
     // Glass shine gradient (top 25%)
     let shine_h = h / 4;
     for row in 0..shine_h {
-        let alpha = ((shine_h - row) * 18 / shine_h).minimum(255);
+        let alpha = ((shine_h - row) * 18 / shine_h).min(255);
         if alpha > 0 {
             framebuffer::fill_rect_alpha(xu, yu + row, w, 1, 0xFFFFFF, alpha);
         }
@@ -486,11 +486,11 @@ pub fn draw_status_bar(vx: i32, vy: i32, vw: u32, _vh: u32, time_str: &str, _fra
     let h = STATUS_BAR_H;
 
     // Frosted glass background (same as desktop taskbar style)
-    framebuffer::fill_rect_alpha(x.maximum(0) as u32, y.maximum(0) as u32, w, h, 0x040A06, 180);
-    framebuffer::fill_rect_alpha(x.maximum(0) as u32, y.maximum(0) as u32, w, h, 0x00AA44, 8);
+    framebuffer::fill_rect_alpha(x.max(0) as u32, y.max(0) as u32, w, h, 0x040A06, 180);
+    framebuffer::fill_rect_alpha(x.max(0) as u32, y.max(0) as u32, w, h, 0x00AA44, 8);
 
     // Bottom separator — chrome dim
-    framebuffer::fill_rect(x.maximum(0) as u32, (y + h as i32 - 1).maximum(0) as u32, w, 1, CHROME_GHOST);
+    framebuffer::fill_rect(x.max(0) as u32, (y + h as i32 - 1).max(0) as u32, w, 1, CHROME_GHOST);
 
     // Time (centered, bright chrome)
     let cw = char_width();
@@ -500,16 +500,16 @@ pub fn draw_status_bar(vx: i32, vy: i32, vw: u32, _vh: u32, time_str: &str, _fra
     draw_text(x + 12, y + 14, "TrustOS", GREEN_SECONDARY);
 
     // Right: battery + signal indicators
-    let receive = x + w as i32 - 12;
+    let rx = x + w as i32 - 12;
     // Battery icon: small rect
-    let bx = (receive - 24).maximum(0) as u32;
-    let by = (y + 16).maximum(0) as u32;
+    let bx = (rx - 24).max(0) as u32;
+    let by = (y + 16).max(0) as u32;
     framebuffer::draw_rect(bx, by, 18, 10, CHROME_DIM);
     framebuffer::fill_rect(bx + 18, by + 3, 2, 4, CHROME_DIM);
     framebuffer::fill_rect(bx + 2, by + 2, 14, 6, GREEN_SECONDARY); // fill
 
     // WiFi arcs (3 arcs, small)
-    let wx = (receive - 50) as i32;
+    let wx = (rx - 50) as i32;
     let wy = y + 24;
     for ring in 0..3u32 {
         let r = 2 + ring * 3;
@@ -520,13 +520,13 @@ pub fn draw_status_bar(vx: i32, vy: i32, vw: u32, _vh: u32, time_str: &str, _fra
             for dx in -(r as i32)..=(r as i32) {
                 let d2 = dx * dx + dy * dy;
                 if d2 <= r2 && d2 >= r2i && dy <= 0 {
-                    let column = if ring == 0 { GREEN_SECONDARY } else { GREEN_MUTED };
-                    put_pixel(wx + dx, wy + dy, column);
+                    let col = if ring == 0 { GREEN_SECONDARY } else { GREEN_MUTED };
+                    put_px(wx + dx, wy + dy, col);
                 }
             }
         }
     }
-    put_pixel(wx, wy + 1, GREEN_SECONDARY); // center dot
+    put_px(wx, wy + 1, GREEN_SECONDARY); // center dot
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -545,7 +545,7 @@ pub fn draw_home_screen(
     const MUSIC_WIDGET_ZONE: u32 = 138;
     let content_top = vy + STATUS_BAR_H as i32;
     let content_bottom = vy + vh as i32 - DOCK_H as i32 - GESTURE_BAR_H as i32 - MUSIC_WIDGET_ZONE as i32;
-    let content_h = (content_bottom - content_top).maximum(0) as u32;
+    let content_h = (content_bottom - content_top).max(0) as u32;
 
     // ── Search bar ──
     let search_h = 36u32;
@@ -564,20 +564,20 @@ pub fn draw_home_screen(
         for dx in -4i32..=4 {
             let d2 = dx * dx + dy * dy;
             if d2 >= 9 && d2 <= 16 {
-                put_pixel(mag_x + dx, mag_y + dy, CHROME_DIM);
+                put_px(mag_x + dx, mag_y + dy, CHROME_DIM);
             }
         }
     }
     // Handle
-    put_pixel(mag_x + 4, mag_y + 4, CHROME_DIM);
-    put_pixel(mag_x + 5, mag_y + 5, CHROME_DIM);
-    put_pixel(mag_x + 6, mag_y + 6, CHROME_DIM);
+    put_px(mag_x + 4, mag_y + 4, CHROME_DIM);
+    put_px(mag_x + 5, mag_y + 5, CHROME_DIM);
+    put_px(mag_x + 6, mag_y + 6, CHROME_DIM);
     // Placeholder text
     draw_text(search_x + 26, search_y + 10, "Search", TEXT_SECONDARY);
 
     // Grid starts below the search bar
     let grid_area_top = search_y + search_h as i32 + 10;
-    let grid_area_h = (content_bottom - grid_area_top).maximum(0) as u32;
+    let grid_area_h = (content_bottom - grid_area_top).max(0) as u32;
 
     // Calculate grid with EQUAL spacing: distribute icons evenly across width
     let grid_inner_w = vw.saturating_sub(GRID_PADDING_X * 2);
@@ -589,12 +589,12 @@ pub fn draw_home_screen(
     let grid_start_y = grid_area_top + (grid_area_h as i32 - total_grid_h as i32) / 2;
 
     for i in 0..n {
-        let column = i % GRID_COLS;
+        let col = i % GRID_COLS;
         let row = i / GRID_COLS;
         let app = &MOBILE_APPS[i as usize];
 
         // Center each icon within its evenly-sized cell
-        let ix = grid_start_x + (column * cell_w) as i32 + (cell_w as i32 - ICON_SIZE as i32) / 2;
+        let ix = grid_start_x + (col * cell_w) as i32 + (cell_w as i32 - ICON_SIZE as i32) / 2;
         let iy = grid_start_y + (row * ICON_CELL_H) as i32;
         let is_highlighted = highlighted == i as i32;
 
@@ -613,7 +613,7 @@ pub fn draw_home_screen(
         let draw_color = if is_highlighted { app.accent } else { GREEN_SUBTLE };
         let cx = ix + ICON_SIZE as i32 / 2;
         let cy = iy + ICON_SIZE as i32 / 2;
-        draw_icon_art(cx, cy, app.icon_index, draw_color, is_highlighted);
+        draw_icon_art(cx, cy, app.icon_idx, draw_color, is_highlighted);
 
         // === Label below icon ===
         let label_color = if is_highlighted { GREEN_PRIMARY } else { TEXT_SECONDARY };
@@ -637,8 +637,8 @@ pub fn draw_dock(vx: i32, vy: i32, vw: u32, vh: u32, highlighted_dock: i32, _fra
     draw_glass_panel(dock_x, dock_y, dock_w, dock_h, DOCK_RADIUS, 200);
     // Top chrome edge
     framebuffer::fill_rect_alpha(
-        (dock_x + DOCK_RADIUS as i32).maximum(0) as u32,
-        dock_y.maximum(0) as u32,
+        (dock_x + DOCK_RADIUS as i32).max(0) as u32,
+        dock_y.max(0) as u32,
         dock_w.saturating_sub(DOCK_RADIUS * 2), 1,
         CHROME_DIM, 120,
     );
@@ -665,7 +665,7 @@ pub fn draw_dock(vx: i32, vy: i32, vw: u32, vh: u32, highlighted_dock: i32, _fra
         let draw_column = if is_hl { app.accent } else { GREEN_SUBTLE };
         let cx = ix + DOCK_ICON_SIZE as i32 / 2;
         let cy = icon_y + DOCK_ICON_SIZE as i32 / 2;
-        draw_icon_art(cx, cy, app.icon_index, draw_column, is_hl);
+        draw_icon_art(cx, cy, app.icon_idx, draw_column, is_hl);
 
         // Label below dock icon
         let label_color = if is_hl { GREEN_PRIMARY } else { TEXT_SECONDARY };
@@ -694,11 +694,11 @@ pub fn draw_gesture_bar(vx: i32, vy: i32, vw: u32, vh: u32) {
 pub fn draw_app_bar(vx: i32, vy: i32, vw: u32, title: &str, _frame: u64) {
     let h = APP_BAR_H;
     // Frosted glass
-    framebuffer::fill_rect_alpha(vx.maximum(0) as u32, vy.maximum(0) as u32, vw, h, 0x0A1A0A, 220);
+    framebuffer::fill_rect_alpha(vx.max(0) as u32, vy.max(0) as u32, vw, h, 0x0A1A0A, 220);
     // Bottom edge
-    framebuffer::fill_rect((vx).maximum(0) as u32, (vy + h as i32 - 1).maximum(0) as u32, vw, 1, CHROME_DIM);
+    framebuffer::fill_rect((vx).max(0) as u32, (vy + h as i32 - 1).max(0) as u32, vw, 1, CHROME_DIM);
     // Green accent line at top
-    framebuffer::fill_rect_alpha(vx.maximum(0) as u32, vy.maximum(0) as u32, vw, 1, 0x00FF66, 15);
+    framebuffer::fill_rect_alpha(vx.max(0) as u32, vy.max(0) as u32, vw, 1, 0x00FF66, 15);
     // Title centered
     draw_text_centered(vx + vw as i32 / 2, vy + 10, title, TEXT_PRIMARY);
     // Back arrow (left)
@@ -715,7 +715,7 @@ pub fn draw_app_switcher(
     scroll_x: i32, _frame: u64,
 ) {
     // Dark overlay
-    framebuffer::fill_rect_alpha(vx.maximum(0) as u32, vy.maximum(0) as u32, vw, vh, 0x000000, 180);
+    framebuffer::fill_rect_alpha(vx.max(0) as u32, vy.max(0) as u32, vw, vh, 0x000000, 180);
 
     if windows.is_empty() {
         draw_text_centered(vx + vw as i32 / 2, vy + vh as i32 / 2, "No apps open", TEXT_SECONDARY);
@@ -723,8 +723,8 @@ pub fn draw_app_switcher(
     }
 
     // Card dimensions: proportional to viewport
-    let card_w = (vw * 7 / 10).minimum(400);
-    let card_h = (vh * 5 / 10).minimum(600);
+    let card_w = (vw * 7 / 10).min(400);
+    let card_h = (vh * 5 / 10).min(600);
     let card_y = vy + (vh as i32 - card_h as i32) / 2;
 
     let total_cards_w = windows.len() as u32 * card_w + (windows.len() as u32).saturating_sub(1) * SWITCHER_CARD_GAP;
@@ -736,7 +736,7 @@ pub fn draw_app_switcher(
         draw_rounded_rect(cx, card_y, card_w, card_h, SWITCHER_CARD_RADIUS, 0xFF0A0A0A);
         draw_rounded_rect_border(cx, card_y, card_w, card_h, SWITCHER_CARD_RADIUS, CHROME_DIM);
         // Title bar
-        framebuffer::fill_rect_alpha(cx.maximum(0) as u32, card_y.maximum(0) as u32, card_w, 28, 0x0A1A0A, 220);
+        framebuffer::fill_rect_alpha(cx.max(0) as u32, card_y.max(0) as u32, card_w, 28, 0x0A1A0A, 220);
         draw_text(cx + 10, card_y + 6, title, TEXT_PRIMARY);
         // Close X
         let close_x = cx + card_w as i32 - 20;
@@ -752,7 +752,7 @@ pub fn draw_app_switcher(
 
 pub fn draw_control_center(vx: i32, vy: i32, vw: u32, _vh: u32, progress: u8, _frame: u64) {
     if progress == 0 { return; }
-    let h = (340u32 * progress as u32 / 100).maximum(1);
+    let h = (340u32 * progress as u32 / 100).max(1);
     let w = vw.saturating_sub(24);
     let x = vx + 12;
     let y = vy;
@@ -761,7 +761,7 @@ pub fn draw_control_center(vx: i32, vy: i32, vw: u32, _vh: u32, progress: u8, _f
     draw_glass_panel(x, y, w, h, CC_RADIUS, 230);
     // Bright Chrome top edge
     framebuffer::fill_rect_alpha(
-        (x + CC_RADIUS as i32).maximum(0) as u32, y.maximum(0) as u32,
+        (x + CC_RADIUS as i32).max(0) as u32, y.max(0) as u32,
         w.saturating_sub(CC_RADIUS * 2), 1, CHROME_BRIGHT, 60,
     );
 
@@ -774,15 +774,15 @@ pub fn draw_control_center(vx: i32, vy: i32, vw: u32, _vh: u32, progress: u8, _f
     draw_text(x + 16, ty, "Brightness", TEXT_PRIMARY);
     ty += 20;
     let bar_w = w - 40;
-    framebuffer::fill_rect((x + 20).maximum(0) as u32, ty.maximum(0) as u32, bar_w, 6, CHROME_GHOST);
-    framebuffer::fill_rect((x + 20).maximum(0) as u32, ty.maximum(0) as u32, bar_w * 7 / 10, 6, GREEN_SECONDARY);
+    framebuffer::fill_rect((x + 20).max(0) as u32, ty.max(0) as u32, bar_w, 6, CHROME_GHOST);
+    framebuffer::fill_rect((x + 20).max(0) as u32, ty.max(0) as u32, bar_w * 7 / 10, 6, GREEN_SECONDARY);
     ty += 24;
 
     // Volume bar
     draw_text(x + 16, ty, "Volume", TEXT_PRIMARY);
     ty += 20;
-    framebuffer::fill_rect((x + 20).maximum(0) as u32, ty.maximum(0) as u32, bar_w, 6, CHROME_GHOST);
-    framebuffer::fill_rect((x + 20).maximum(0) as u32, ty.maximum(0) as u32, bar_w * 5 / 10, 6, GREEN_SECONDARY);
+    framebuffer::fill_rect((x + 20).max(0) as u32, ty.max(0) as u32, bar_w, 6, CHROME_GHOST);
+    framebuffer::fill_rect((x + 20).max(0) as u32, ty.max(0) as u32, bar_w * 5 / 10, 6, GREEN_SECONDARY);
     ty += 24;
 
     // Toggle tiles (WiFi, Bluetooth, Airplane, DND)
@@ -892,7 +892,7 @@ match event {
             }
 
             // Swipe detection
-            if dy.absolute() > dx.absolute() && dy.absolute() > 30 {
+            if dy.abs() > dx.abs() && dy.abs() > 30 {
                 if dy < 0 {
                     // Swipe up
                     if state.gesture_from_bottom {
@@ -933,10 +933,10 @@ match state.view {
                 return music_button;
             }
             // Check grid icons
-            let index = hit_test_grid(x, y, state.vp_w, state.vp_h);
-            if index >= 0 && (index as usize) < MOBILE_APPS.len() {
+            let idx = hit_test_grid(x, y, state.vp_w, state.vp_h);
+            if idx >= 0 && (idx as usize) < MOBILE_APPS.len() {
                 state.highlighted_icon = -1;
-                return MobileAction::LaunchApp(index as u8);
+                return MobileAction::LaunchApp(idx as u8);
             }
             // Check dock
             let dock_index = hit_test_dock(x, y, state.vp_w, state.vp_h);
@@ -981,15 +981,15 @@ match app_index {
             let ix = pad;
             let iw = (vw as i32 - pad * 2) as u32;
             let display_h = 60i32;
-            let button_h = 44i32;
-            let button_gap = 6i32;
-            let button_w = ((iw - 6 * 3) / 4) as i32;
+            let btn_h = 44i32;
+            let btn_gap = 6i32;
+            let btn_w = ((iw - 6 * 3) / 4) as i32;
             let grid_top = 10 + display_h + 14;
             // Map to button grid
             if y >= grid_top {
-                let row = (y - grid_top) / (button_h + button_gap);
-                let column = (x - ix) / (button_w + button_gap);
-                if row >= 0 && row < 5 && column >= 0 && column < 4 {
+                let row = (y - grid_top) / (btn_h + btn_gap);
+                let col = (x - ix) / (btn_w + btn_gap);
+                if row >= 0 && row < 5 && col >= 0 && col < 4 {
                     // Encode: row*4 + col → map to CalcButton code
                     let button_map: [[u8; 4]; 5] = [
                         [16, 17, 18, 14], // C, +/-, %, /
@@ -998,7 +998,7 @@ match app_index {
                         [1,  2,  3,  11], // 1, 2, 3, +
                         [0,  10, 15, 255],// 0, ., =, (empty)
                     ];
-                    let code = button_map[row as usize][column as usize];
+                    let code = button_map[row as usize][col as usize];
                     if code != 255 {
                         return MobileAction::CalcButton(code);
                     }
@@ -1011,9 +1011,9 @@ match app_index {
             let row_h = 40i32;
             let first_row_y = 32;
             if y >= first_row_y {
-                let index = (y - first_row_y) / row_h;
-                if index >= 0 && index < 8 {
-                    return MobileAction::FilesTap(index as u8);
+                let idx = (y - first_row_y) / row_h;
+                if idx >= 0 && idx < 8 {
+                    return MobileAction::FilesTap(idx as u8);
                 }
             }
             // Back button in path bar
@@ -1027,9 +1027,9 @@ match app_index {
             let row_h = 52i32;
             let first_row_y = 10;
             if y >= first_row_y {
-                let index = (y - first_row_y) / row_h;
-                if index >= 0 && index < 6 {
-                    return MobileAction::SettingsTap(index as u8);
+                let idx = (y - first_row_y) / row_h;
+                if idx >= 0 && idx < 6 {
+                    return MobileAction::SettingsTap(idx as u8);
                 }
             }
             MobileAction::None
@@ -1040,9 +1040,9 @@ match app_index {
             let card_gap = 8i32;
             let first_card_y = 34;
             if y >= first_card_y {
-                let index = (y - first_card_y) / (card_h + card_gap);
-                if index >= 0 && index < 5 {
-                    return MobileAction::GamesTap(index as u8);
+                let idx = (y - first_card_y) / (card_h + card_gap);
+                if idx >= 0 && idx < 5 {
+                    return MobileAction::GamesTap(idx as u8);
                 }
             }
             MobileAction::None
@@ -1059,8 +1059,8 @@ match app_index {
                 let links_y = page_y + 84;
                 let link_h = 20;
                 if y >= links_y && y < links_y + link_h * 3 {
-                    let index = (y - links_y) / link_h;
-                    return MobileAction::BrowserNav(index as u8 + 1);
+                    let idx = (y - links_y) / link_h;
+                    return MobileAction::BrowserNav(idx as u8 + 1);
                 }
             } else {
                 // Sub-page: any tap on content area goes home
@@ -1093,14 +1093,14 @@ match app_index {
         }
         // ── Chess ──
         11 => {
-            let board_size = (vw as i32 - 16).minimum((vh.saturating_sub(APP_BAR_H + 80)) as i32).minimum(400);
+            let board_size = (vw as i32 - 16).min((vh.saturating_sub(APP_BAR_H + 80)) as i32).min(400);
             let cell = board_size / 8;
             let board_x = (vw as i32 - board_size) / 2;
             let board_y = 10;
             if x >= board_x && x < board_x + board_size && y >= board_y && y < board_y + board_size {
-                let column = (x - board_x) / cell;
+                let col = (x - board_x) / cell;
                 let row = (y - board_y) / cell;
-                let sq = (row * 8 + column) as u8;
+                let sq = (row * 8 + col) as u8;
                 return MobileAction::ChessTap(sq);
             }
             MobileAction::None
@@ -1108,18 +1108,18 @@ match app_index {
         // ── Music (fullscreen) ──
         10 => {
             let iw = (vw as i32 - pad * 2) as u32;
-            let art_size = iw.minimum(200);
+            let art_size = iw.min(200);
             // Controls area approximately at: art_size + 16 + 20 + 28 + 20 = below art
             let controller_y = art_size as i32 + 16 + 20 + 28 + 20 + 14;
-            let button_w = 48i32;
-            let button_h = 36i32;
-            let button_gap = 10i32;
-            let total_w = 5 * button_w + 4 * button_gap;
+            let btn_w = 48i32;
+            let btn_h = 36i32;
+            let btn_gap = 10i32;
+            let total_w = 5 * btn_w + 4 * btn_gap;
             let button_start = pad + ((iw as i32 - total_w) / 2);
-            if y >= controller_y && y < controller_y + button_h {
+            if y >= controller_y && y < controller_y + btn_h {
                 for i in 0..5 {
-                    let bx = button_start + i * (button_w + button_gap);
-                    if x >= bx && x < bx + button_w {
+                    let bx = button_start + i * (btn_w + btn_gap);
+                    if x >= bx && x < bx + btn_w {
                         return MobileAction::MusicAppToggle;
                     }
                 }
@@ -1162,7 +1162,7 @@ const MUSIC_WIDGET_ZONE: u32 = 138;
     let content_bottom = vh as i32 - DOCK_H as i32 - GESTURE_BAR_H as i32 - MUSIC_WIDGET_ZONE as i32;
     // Search bar occupies 36+10+10 = 56px from content_top
     let grid_area_top = content_top + 56;
-    let grid_area_h = (content_bottom - grid_area_top).maximum(0) as u32;
+    let grid_area_h = (content_bottom - grid_area_top).max(0) as u32;
 
     let grid_inner_w = vw.saturating_sub(GRID_PADDING_X * 2);
     let cell_w = grid_inner_w / GRID_COLS;
@@ -1172,9 +1172,9 @@ const MUSIC_WIDGET_ZONE: u32 = 138;
     let grid_start_y = grid_area_top + (grid_area_h as i32 - total_grid_h as i32) / 2;
 
     for i in 0..n {
-        let column = i % GRID_COLS;
+        let col = i % GRID_COLS;
         let row = i / GRID_COLS;
-        let ix = grid_start_x + (column * cell_w) as i32 + (cell_w as i32 - ICON_SIZE as i32) / 2;
+        let ix = grid_start_x + (col * cell_w) as i32 + (cell_w as i32 - ICON_SIZE as i32) / 2;
         let iy = grid_start_y + (row * ICON_CELL_H) as i32;
         if x >= ix && x < ix + ICON_SIZE as i32 && y >= iy && y < iy + ICON_SIZE as i32 {
             return i as i32;
@@ -1216,17 +1216,17 @@ const DROPDOWN_ITEM_H: u32 = 26;
     let ix = widget_x + pad as i32;
     let iw = widget_w.saturating_sub(pad * 2);
     let controller_y = widget_y + 92;
-    let button_w = 40i32;
-    let button_h = 20i32;
-    let button_gap = 6i32;
+    let btn_w = 40i32;
+    let btn_h = 20i32;
+    let btn_gap = 6i32;
     let n_btns = 5i32;
-    let total_button_w = n_btns * button_w + (n_btns - 1) * button_gap;
-    let button_start_x = ix + (iw as i32 - total_button_w) / 2;
+    let total_btn_w = n_btns * btn_w + (n_btns - 1) * btn_gap;
+    let btn_start_x = ix + (iw as i32 - total_btn_w) / 2;
 
-    if y >= controller_y && y <= controller_y + button_h {
+    if y >= controller_y && y <= controller_y + btn_h {
         for bi in 0..5 {
-            let bx = button_start_x + bi * (button_w + button_gap);
-            if x >= bx && x < bx + button_w {
+            let bx = btn_start_x + bi * (btn_w + btn_gap);
+            if x >= bx && x < bx + btn_w {
                 return MobileAction::MusicTogglePlay;
             }
         }
@@ -1275,7 +1275,7 @@ pub fn tick_animations(state: &mut MobileState) {
 
     // Control center slide
     if state.view == MobileView::ControlCenter && state.cc_progress < 100 {
-        state.cc_progress = (state.cc_progress + 8).minimum(100);
+        state.cc_progress = (state.cc_progress + 8).min(100);
     }
     if state.view != MobileView::ControlCenter && state.cc_progress > 0 {
         state.cc_progress = state.cc_progress.saturating_sub(8);
@@ -1292,50 +1292,50 @@ pub fn tick_animations(state: &mut MobileState) {
 // Icon Pixel Art — exact same as desktop sidebar icons
 // ═══════════════════════════════════════════════════════════════
 
-fn draw_icon_art(cx: i32, cy: i32, icon_index: u8, color: u32, _highlighted: bool) {
+fn draw_icon_art(cx: i32, cy: i32, icon_idx: u8, color: u32, _highlighted: bool) {
         // Pattern matching — Rust's exhaustive branching construct.
-match icon_index {
+match icon_idx {
         0 => { // Terminal: rounded rect with >_ prompt
             draw_rounded_rect_border(cx - 14, cy - 10, 28, 20, 3, color);
-            framebuffer::fill_rect((cx - 13).maximum(0) as u32, (cy - 9).maximum(0) as u32, 26, 3, color);
+            framebuffer::fill_rect((cx - 13).max(0) as u32, (cy - 9).max(0) as u32, 26, 3, color);
             // Traffic light dots
-            framebuffer::fill_rect((cx - 11).maximum(0) as u32, (cy - 8).maximum(0) as u32, 2, 1, 0xFF0A0A0A);
-            framebuffer::fill_rect((cx - 8).maximum(0) as u32, (cy - 8).maximum(0) as u32, 2, 1, 0xFF0A0A0A);
-            framebuffer::fill_rect((cx - 5).maximum(0) as u32, (cy - 8).maximum(0) as u32, 2, 1, 0xFF0A0A0A);
+            framebuffer::fill_rect((cx - 11).max(0) as u32, (cy - 8).max(0) as u32, 2, 1, 0xFF0A0A0A);
+            framebuffer::fill_rect((cx - 8).max(0) as u32, (cy - 8).max(0) as u32, 2, 1, 0xFF0A0A0A);
+            framebuffer::fill_rect((cx - 5).max(0) as u32, (cy - 8).max(0) as u32, 2, 1, 0xFF0A0A0A);
             // >_
             draw_text(cx - 8, cy - 2, ">", color);
-            framebuffer::fill_rect((cx - 2).maximum(0) as u32, cy.maximum(0) as u32, 8, 2, color);
+            framebuffer::fill_rect((cx - 2).max(0) as u32, cy.max(0) as u32, 8, 2, color);
         }
         1 => { // Files: folder
-            framebuffer::fill_rect((cx - 14).maximum(0) as u32, (cy - 8).maximum(0) as u32, 12, 5, color);
-            framebuffer::fill_rect((cx - 14).maximum(0) as u32, (cy - 3).maximum(0) as u32, 28, 15, color);
-            framebuffer::fill_rect((cx - 12).maximum(0) as u32, (cy - 1).maximum(0) as u32, 24, 11, 0xFF0A0A0A);
-            framebuffer::fill_rect((cx - 8).maximum(0) as u32, (cy + 2).maximum(0) as u32, 16, 1, 0xFF303020);
-            framebuffer::fill_rect((cx - 8).maximum(0) as u32, (cy + 5).maximum(0) as u32, 12, 1, 0xFF303020);
+            framebuffer::fill_rect((cx - 14).max(0) as u32, (cy - 8).max(0) as u32, 12, 5, color);
+            framebuffer::fill_rect((cx - 14).max(0) as u32, (cy - 3).max(0) as u32, 28, 15, color);
+            framebuffer::fill_rect((cx - 12).max(0) as u32, (cy - 1).max(0) as u32, 24, 11, 0xFF0A0A0A);
+            framebuffer::fill_rect((cx - 8).max(0) as u32, (cy + 2).max(0) as u32, 16, 1, 0xFF303020);
+            framebuffer::fill_rect((cx - 8).max(0) as u32, (cy + 5).max(0) as u32, 12, 1, 0xFF303020);
         }
         2 => { // Editor: document with code
-            framebuffer::fill_rect((cx - 10).maximum(0) as u32, (cy - 12).maximum(0) as u32, 20, 24, color);
-            framebuffer::fill_rect((cx + 4).maximum(0) as u32, (cy - 12).maximum(0) as u32, 6, 6, 0xFF0A0A0A);
-            framebuffer::fill_rect((cx + 4).maximum(0) as u32, (cy - 12).maximum(0) as u32, 1, 6, color);
-            framebuffer::fill_rect((cx + 4).maximum(0) as u32, (cy - 7).maximum(0) as u32, 6, 1, color);
-            framebuffer::fill_rect((cx - 8).maximum(0) as u32, (cy - 6).maximum(0) as u32, 16, 16, 0xFF0A0A0A);
-            framebuffer::fill_rect((cx - 6).maximum(0) as u32, (cy - 4).maximum(0) as u32, 6, 1, 0xFF6688CC);
-            framebuffer::fill_rect((cx - 6).maximum(0) as u32, (cy - 2).maximum(0) as u32, 10, 1, color);
-            framebuffer::fill_rect((cx - 6).maximum(0) as u32, cy.maximum(0) as u32, 8, 1, 0xFFCC8844);
-            framebuffer::fill_rect((cx - 6).maximum(0) as u32, (cy + 2).maximum(0) as u32, 12, 1, color);
-            framebuffer::fill_rect((cx - 6).maximum(0) as u32, (cy + 4).maximum(0) as u32, 4, 1, 0xFF88BB44);
-            framebuffer::fill_rect((cx - 6).maximum(0) as u32, (cy + 6).maximum(0) as u32, 9, 1, color);
+            framebuffer::fill_rect((cx - 10).max(0) as u32, (cy - 12).max(0) as u32, 20, 24, color);
+            framebuffer::fill_rect((cx + 4).max(0) as u32, (cy - 12).max(0) as u32, 6, 6, 0xFF0A0A0A);
+            framebuffer::fill_rect((cx + 4).max(0) as u32, (cy - 12).max(0) as u32, 1, 6, color);
+            framebuffer::fill_rect((cx + 4).max(0) as u32, (cy - 7).max(0) as u32, 6, 1, color);
+            framebuffer::fill_rect((cx - 8).max(0) as u32, (cy - 6).max(0) as u32, 16, 16, 0xFF0A0A0A);
+            framebuffer::fill_rect((cx - 6).max(0) as u32, (cy - 4).max(0) as u32, 6, 1, 0xFF6688CC);
+            framebuffer::fill_rect((cx - 6).max(0) as u32, (cy - 2).max(0) as u32, 10, 1, color);
+            framebuffer::fill_rect((cx - 6).max(0) as u32, cy.max(0) as u32, 8, 1, 0xFFCC8844);
+            framebuffer::fill_rect((cx - 6).max(0) as u32, (cy + 2).max(0) as u32, 12, 1, color);
+            framebuffer::fill_rect((cx - 6).max(0) as u32, (cy + 4).max(0) as u32, 4, 1, 0xFF88BB44);
+            framebuffer::fill_rect((cx - 6).max(0) as u32, (cy + 6).max(0) as u32, 9, 1, color);
         }
         3 => { // Calculator
             draw_rounded_rect_border(cx - 10, cy - 12, 20, 24, 2, color);
-            framebuffer::fill_rect((cx - 8).maximum(0) as u32, (cy - 10).maximum(0) as u32, 16, 6, 0xFF1A3320);
+            framebuffer::fill_rect((cx - 8).max(0) as u32, (cy - 10).max(0) as u32, 16, 6, 0xFF1A3320);
             draw_text(cx - 4, cy - 10, "42", 0xFF40FF40);
             for row in 0..3u32 {
-                for column in 0..3u32 {
-                    let bx = (cx as u32).wrapping_sub(8) + column * 6;
+                for col in 0..3u32 {
+                    let bx = (cx as u32).wrapping_sub(8) + col * 6;
                     let by = (cy as u32).wrapping_sub(1) + row * 5;
-                    let button = if row == 2 && column == 2 { 0xFFCC6633 } else { color };
-                    framebuffer::fill_rect(bx.maximum(0), by.maximum(0), 4, 3, button);
+                    let btn = if row == 2 && col == 2 { 0xFFCC6633 } else { color };
+                    framebuffer::fill_rect(bx.max(0), by.max(0), 4, 3, btn);
                 }
             }
         }
@@ -1352,37 +1352,37 @@ match icon_index {
                         let d2 = dx * dx + dy * dy;
                         if d2 <= r2 && d2 >= r2i && dy <= 0 {
                             let fade = if ring == 0 { color } else { GREEN_GHOST };
-                            put_pixel(acx + dx, acy + dy, fade);
+                            put_px(acx + dx, acy + dy, fade);
                         }
                     }
                 }
             }
-            framebuffer::fill_rect((cx - 1).maximum(0) as u32, (cy + 3).maximum(0) as u32, 3, 3, color);
+            framebuffer::fill_rect((cx - 1).max(0) as u32, (cy + 3).max(0) as u32, 3, 3, color);
         }
         5 => { // Games: controller
-            framebuffer::fill_rect((cx - 12).maximum(0) as u32, (cy - 4).maximum(0) as u32, 24, 12, color);
-            framebuffer::fill_rect((cx - 14).maximum(0) as u32, (cy - 2).maximum(0) as u32, 4, 8, color);
-            framebuffer::fill_rect((cx + 10).maximum(0) as u32, (cy - 2).maximum(0) as u32, 4, 8, color);
-            framebuffer::fill_rect((cx - 11).maximum(0) as u32, (cy - 3).maximum(0) as u32, 22, 10, 0xFF0A0A0A);
-            framebuffer::fill_rect((cx - 9).maximum(0) as u32, (cy - 1).maximum(0) as u32, 5, 1, color);
-            framebuffer::fill_rect((cx - 7).maximum(0) as u32, (cy - 3).maximum(0) as u32, 1, 5, color);
-            framebuffer::fill_rect((cx + 5).maximum(0) as u32, (cy - 2).maximum(0) as u32, 2, 2, 0xFF4488DD);
-            framebuffer::fill_rect((cx + 8).maximum(0) as u32, (cy - 1).maximum(0) as u32, 2, 2, ACCENT_RED);
-            framebuffer::fill_rect((cx + 5).maximum(0) as u32, (cy + 1).maximum(0) as u32, 2, 2, 0xFF44DD44);
-            framebuffer::fill_rect((cx + 8).maximum(0) as u32, (cy + 2).maximum(0) as u32, 2, 2, 0xFFDDDD44);
+            framebuffer::fill_rect((cx - 12).max(0) as u32, (cy - 4).max(0) as u32, 24, 12, color);
+            framebuffer::fill_rect((cx - 14).max(0) as u32, (cy - 2).max(0) as u32, 4, 8, color);
+            framebuffer::fill_rect((cx + 10).max(0) as u32, (cy - 2).max(0) as u32, 4, 8, color);
+            framebuffer::fill_rect((cx - 11).max(0) as u32, (cy - 3).max(0) as u32, 22, 10, 0xFF0A0A0A);
+            framebuffer::fill_rect((cx - 9).max(0) as u32, (cy - 1).max(0) as u32, 5, 1, color);
+            framebuffer::fill_rect((cx - 7).max(0) as u32, (cy - 3).max(0) as u32, 1, 5, color);
+            framebuffer::fill_rect((cx + 5).max(0) as u32, (cy - 2).max(0) as u32, 2, 2, 0xFF4488DD);
+            framebuffer::fill_rect((cx + 8).max(0) as u32, (cy - 1).max(0) as u32, 2, 2, ACCENT_RED);
+            framebuffer::fill_rect((cx + 5).max(0) as u32, (cy + 1).max(0) as u32, 2, 2, 0xFF44DD44);
+            framebuffer::fill_rect((cx + 8).max(0) as u32, (cy + 2).max(0) as u32, 2, 2, 0xFFDDDD44);
         }
         6 => { // Browser: globe
             for dy in -8i32..=8 {
                 for dx in -8i32..=8 {
                     let d2 = dx * dx + dy * dy;
                     if d2 <= 64 && d2 >= 49 {
-                        put_pixel(cx + dx, cy + dy, color);
+                        put_px(cx + dx, cy + dy, color);
                     }
                 }
             }
             // Meridian + equator
-            framebuffer::fill_rect((cx - 1).maximum(0) as u32, (cy - 7).maximum(0) as u32, 2, 14, color);
-            framebuffer::fill_rect((cx - 7).maximum(0) as u32, (cy - 1).maximum(0) as u32, 14, 2, color);
+            framebuffer::fill_rect((cx - 1).max(0) as u32, (cy - 7).max(0) as u32, 2, 14, color);
+            framebuffer::fill_rect((cx - 7).max(0) as u32, (cy - 1).max(0) as u32, 14, 2, color);
         }
         7 => { // TrustEd: 3D cube wireframe
             // Front face
@@ -1390,8 +1390,8 @@ match icon_index {
             // Back face offset
             draw_rounded_rect_border(cx - 4, cy - 10, 16, 12, 1, GREEN_GHOST);
             // Connecting edges
-            put_pixel(cx - 8, cy - 6, color); put_pixel(cx - 4, cy - 10, color);
-            put_pixel(cx + 7, cy - 6, color); put_pixel(cx + 11, cy - 10, color);
+            put_px(cx - 8, cy - 6, color); put_px(cx - 4, cy - 10, color);
+            put_px(cx + 7, cy - 6, color); put_px(cx + 11, cy - 10, color);
         }
         8 => { // Settings: gear
             for dy in 0..18u32 {
@@ -1404,14 +1404,14 @@ match icon_index {
                         let angle = atan2_approx_octant(ddy, ddx);
                         if dist2 > 56 {
                             // teeth
-                            if angle % 2 == 0 { put_pixel(cx - 9 + dx as i32, cy - 9 + dy as i32, color); }
+                            if angle % 2 == 0 { put_px(cx - 9 + dx as i32, cy - 9 + dy as i32, color); }
                         } else {
-                            put_pixel(cx - 9 + dx as i32, cy - 9 + dy as i32, color);
+                            put_px(cx - 9 + dx as i32, cy - 9 + dy as i32, color);
                         }
                     }
                     // Inner hole
                     if dist2 <= 9 {
-                        put_pixel(cx - 9 + dx as i32, cy - 9 + dy as i32, 0xFF0A0A0A);
+                        put_px(cx - 9 + dx as i32, cy - 9 + dy as i32, 0xFF0A0A0A);
                     }
                 }
             }
@@ -1420,29 +1420,29 @@ match icon_index {
             for dy in -8i32..=8 {
                 for dx in -8i32..=8 {
                     let d2 = dx * dx + dy * dy;
-                    if d2 <= 64 && d2 >= 49 { put_pixel(cx + dx, cy + dy, color); }
+                    if d2 <= 64 && d2 >= 49 { put_px(cx + dx, cy + dy, color); }
                 }
             }
             draw_text(cx - 2, cy - 6, "i", color);
         }
         10 => { // Music: note
             // Note head
-            framebuffer::fill_rect((cx - 3).maximum(0) as u32, (cy + 2).maximum(0) as u32, 6, 4, color);
+            framebuffer::fill_rect((cx - 3).max(0) as u32, (cy + 2).max(0) as u32, 6, 4, color);
             // Stem
-            framebuffer::fill_rect((cx + 2).maximum(0) as u32, (cy - 8).maximum(0) as u32, 2, 12, color);
+            framebuffer::fill_rect((cx + 2).max(0) as u32, (cy - 8).max(0) as u32, 2, 12, color);
             // Flag
-            framebuffer::fill_rect((cx + 3).maximum(0) as u32, (cy - 8).maximum(0) as u32, 4, 2, color);
-            framebuffer::fill_rect((cx + 5).maximum(0) as u32, (cy - 6).maximum(0) as u32, 2, 2, color);
+            framebuffer::fill_rect((cx + 3).max(0) as u32, (cy - 8).max(0) as u32, 4, 2, color);
+            framebuffer::fill_rect((cx + 5).max(0) as u32, (cy - 6).max(0) as u32, 2, 2, color);
         }
         11 => { // Chess: chess piece (king)
             // Cross on top
-            framebuffer::fill_rect((cx - 1).maximum(0) as u32, (cy - 10).maximum(0) as u32, 2, 6, color);
-            framebuffer::fill_rect((cx - 3).maximum(0) as u32, (cy - 8).maximum(0) as u32, 6, 2, color);
+            framebuffer::fill_rect((cx - 1).max(0) as u32, (cy - 10).max(0) as u32, 2, 6, color);
+            framebuffer::fill_rect((cx - 3).max(0) as u32, (cy - 8).max(0) as u32, 6, 2, color);
             // Body
-            framebuffer::fill_rect((cx - 4).maximum(0) as u32, (cy - 4).maximum(0) as u32, 8, 10, color);
-            framebuffer::fill_rect((cx - 3).maximum(0) as u32, (cy - 3).maximum(0) as u32, 6, 8, 0xFF0A0A0A);
+            framebuffer::fill_rect((cx - 4).max(0) as u32, (cy - 4).max(0) as u32, 8, 10, color);
+            framebuffer::fill_rect((cx - 3).max(0) as u32, (cy - 3).max(0) as u32, 6, 8, 0xFF0A0A0A);
             // Base
-            framebuffer::fill_rect((cx - 6).maximum(0) as u32, (cy + 5).maximum(0) as u32, 12, 3, color);
+            framebuffer::fill_rect((cx - 6).max(0) as u32, (cy + 5).max(0) as u32, 12, 3, color);
         }
         _ => {
             // Generic app icon: rounded square with ?
@@ -1458,7 +1458,7 @@ match icon_index {
 
 pub fn app_count() -> usize { MOBILE_APPS.len() }
 // Public function — callable from other modules.
-pub fn app_name(index: usize) -> &'static str { MOBILE_APPS[index].name }
+pub fn app_name(idx: usize) -> &'static str { MOBILE_APPS[idx].name }
 // Public function — callable from other modules.
 pub fn dock_app_index(slot: usize) -> usize { DOCK_APPS[slot] }
 // Public function — callable from other modules.
@@ -1542,14 +1542,14 @@ const DROPDOWN_ITEM_H: u32 = 26;
     for (bi, &(level, color, label)) in bands.iter().enumerate() {
         let bx = ix + (bi as u32 * (bar_w + bar_gap)) as i32;
         // Track background
-        framebuffer::fill_rect_alpha(bx.maximum(0) as u32, cy.maximum(0) as u32, bar_w, bar_h, 0x112211, 150);
+        framebuffer::fill_rect_alpha(bx.max(0) as u32, cy.max(0) as u32, bar_w, bar_h, 0x112211, 150);
         // Fill level
         let fill = if audio.playing {
-            (level.minimum(1.0) * bar_w as f32) as u32
+            (level.min(1.0) * bar_w as f32) as u32
         } else { 0 };
         if fill > 0 {
-            framebuffer::fill_rect(bx.maximum(0) as u32, cy.maximum(0) as u32, fill, bar_h, color);
-            framebuffer::fill_rect_alpha(bx.maximum(0) as u32, cy.maximum(0) as u32, fill, bar_h, 0xFFFFFF, 15);
+            framebuffer::fill_rect(bx.max(0) as u32, cy.max(0) as u32, fill, bar_h, color);
+            framebuffer::fill_rect_alpha(bx.max(0) as u32, cy.max(0) as u32, fill, bar_h, 0xFFFFFF, 15);
         }
         // Label (centered in bar)
         let lw = crate::graphics::scaling::measure_text_width(label) as i32;
@@ -1559,17 +1559,17 @@ const DROPDOWN_ITEM_H: u32 = 26;
 
     // ── Waveform visualizer (compact oscilloscope) ──
     let wave_h = 36u32;
-    framebuffer::fill_rect_alpha(ix.maximum(0) as u32, cy.maximum(0) as u32, iw, wave_h, 0x030908, 160);
+    framebuffer::fill_rect_alpha(ix.max(0) as u32, cy.max(0) as u32, iw, wave_h, 0x030908, 160);
     // Border lines
-    framebuffer::fill_rect_alpha(ix.maximum(0) as u32, cy.maximum(0) as u32, iw, 1, 0x00FF66, 25);
-    framebuffer::fill_rect_alpha(ix.maximum(0) as u32, (cy + wave_h as i32 - 1).maximum(0) as u32, iw, 1, 0x00FF66, 15);
+    framebuffer::fill_rect_alpha(ix.max(0) as u32, cy.max(0) as u32, iw, 1, 0x00FF66, 25);
+    framebuffer::fill_rect_alpha(ix.max(0) as u32, (cy + wave_h as i32 - 1).max(0) as u32, iw, 1, 0x00FF66, 15);
 
     let mid_y = cy + wave_h as i32 / 2;
     let half_h = (wave_h / 2 - 2) as f32;
 
     if audio.playing {
         // Animated waveform using frame counter + energy/beat
-        let n_points = iw.minimum(256) as usize;
+        let n_points = iw.min(256) as usize;
         for i in 0..n_points {
             let t = i as f32 / n_points as f32;
             let phase = audio.frame as f32 * 0.06;
@@ -1578,29 +1578,29 @@ const DROPDOWN_ITEM_H: u32 = 26;
             let s2 = libm::sinf(t * 28.0 + phase * 1.4) * audio.treble * 0.5;
             let s3 = libm::sinf(t * 5.0 + phase * 0.7) * audio.bass * 0.7;
             let beat_amp = 1.0 + audio.beat * 0.6;
-            let amp = ((s1 + s2 + s3) * beat_amp).maximum(-1.0).minimum(1.0);
+            let amp = ((s1 + s2 + s3) * beat_amp).max(-1.0).min(1.0);
             let y_off = (amp * half_h) as i32;
 
-            let pixel = (ix + i as i32).maximum(0) as u32;
-            let py = ((mid_y + y_off).maximum(cy + 2).minimum(cy + wave_h as i32 - 3)) as u32;
+            let px = (ix + i as i32).max(0) as u32;
+            let py = ((mid_y + y_off).max(cy + 2).min(cy + wave_h as i32 - 3)) as u32;
 
             // Green base + beat-reactive cyan
             let g_value = 0xCC;
-            let b_value = (audio.beat * 160.0).minimum(255.0) as u32;
-            let r_value = (audio.energy * 50.0).minimum(50.0) as u32;
+            let b_value = (audio.beat * 160.0).min(255.0) as u32;
+            let r_value = (audio.energy * 50.0).min(50.0) as u32;
             let color = 0xFF000000 | (r_value << 16) | (g_value << 8) | b_value;
-            framebuffer::put_pixel(pixel, py, color);
+            framebuffer::put_pixel(px, py, color);
             // Bright tip
-            framebuffer::put_pixel(pixel, py, 0xFF00FFCC);
+            framebuffer::put_pixel(px, py, 0xFF00FFCC);
         }
         // Beat flash
         if audio.beat > 0.4 {
-            let flash = ((audio.beat - 0.4) * 40.0).minimum(30.0) as u32;
-            framebuffer::fill_rect_alpha(ix.maximum(0) as u32, cy.maximum(0) as u32, iw, wave_h, 0x00FF88, flash);
+            let flash = ((audio.beat - 0.4) * 40.0).min(30.0) as u32;
+            framebuffer::fill_rect_alpha(ix.max(0) as u32, cy.max(0) as u32, iw, wave_h, 0x00FF88, flash);
         }
     } else {
         // Idle: flat line
-        framebuffer::fill_rect((ix + 4).maximum(0) as u32, mid_y.maximum(0) as u32, iw.saturating_sub(8), 1, 0xFF334433);
+        framebuffer::fill_rect((ix + 4).max(0) as u32, mid_y.max(0) as u32, iw.saturating_sub(8), 1, 0xFF334433);
         draw_text_centered(ix + iw as i32 / 2, mid_y - 6, "---", 0xFF445544);
     }
     cy += wave_h as i32 + 8;
@@ -1608,28 +1608,28 @@ const DROPDOWN_ITEM_H: u32 = 26;
     // ── Controls row: |<  <<  PLAY/PAUSE  >>  >| ──
     let controller_icons: &[&str] = &["|<", "<<", if audio.playing { "||" } else { ">" }, ">>", ">|"];
     let n_btns = controller_icons.len() as u32;
-    let button_w = 40u32;
-    let button_h = 20u32;
-    let button_gap = 6u32;
-    let total_button_w = n_btns * button_w + (n_btns - 1) * button_gap;
-    let button_start_x = ix + (iw as i32 - total_button_w as i32) / 2;
+    let btn_w = 40u32;
+    let btn_h = 20u32;
+    let btn_gap = 6u32;
+    let total_btn_w = n_btns * btn_w + (n_btns - 1) * btn_gap;
+    let btn_start_x = ix + (iw as i32 - total_btn_w as i32) / 2;
 
     for (bi, &label) in controller_icons.iter().enumerate() {
-        let bx = button_start_x + (bi as u32 * (button_w + button_gap)) as i32;
+        let bx = btn_start_x + (bi as u32 * (btn_w + btn_gap)) as i32;
         let is_play = bi == 2;
         let bg = if is_play {
             if audio.playing { 0x00AA55u32 } else { 0x005533u32 }
         } else {
             0x1A2A1Au32
         };
-        framebuffer::fill_rect_alpha(bx.maximum(0) as u32, cy.maximum(0) as u32, button_w, button_h, bg, 190);
+        framebuffer::fill_rect_alpha(bx.max(0) as u32, cy.max(0) as u32, btn_w, btn_h, bg, 190);
         // Top shine
-        framebuffer::fill_rect_alpha(bx.maximum(0) as u32, cy.maximum(0) as u32, button_w, 1, 0x00FF88, 30);
+        framebuffer::fill_rect_alpha(bx.max(0) as u32, cy.max(0) as u32, btn_w, 1, 0x00FF88, 30);
         let lw = crate::graphics::scaling::measure_text_width(label) as i32;
         let lcolor = if is_play { 0xFF00FFAA } else { CHROME_BRIGHT };
-        draw_text(bx + (button_w as i32 - lw) / 2, cy + 4, label, lcolor);
+        draw_text(bx + (btn_w as i32 - lw) / 2, cy + 4, label, lcolor);
     }
-    cy += button_h as i32 + 4;
+    cy += btn_h as i32 + 4;
 
     // ── Visualizer mode dropdown panel ──
     if dropdown_open {
@@ -1644,7 +1644,7 @@ const DROPDOWN_ITEM_H: u32 = 26;
             let name = crate::visualizer::MODE_NAMES[mi as usize];
             let is_selected = mi as u8 == viz_mode;
             if is_selected {
-                framebuffer::fill_rect_alpha((dd_x + 4).maximum(0) as u32, dy.maximum(0) as u32, dd_w - 8, DROPDOWN_ITEM_H, 0x00FF66, 30);
+                framebuffer::fill_rect_alpha((dd_x + 4).max(0) as u32, dy.max(0) as u32, dd_w - 8, DROPDOWN_ITEM_H, 0x00FF66, 30);
             }
             let item_color = if is_selected { GREEN_PRIMARY } else { TEXT_SECONDARY };
             let check = if is_selected { "> " } else { "  " };
@@ -1670,7 +1670,7 @@ pub fn draw_mobile_app_content(
     let content_y = vy + APP_BAR_H as i32;
     let content_h = vh.saturating_sub(APP_BAR_H + 20);
     // Dark app background
-    framebuffer::fill_rect_alpha(vx.maximum(0) as u32, content_y.maximum(0) as u32, vw, content_h, 0x050A06, 220);
+    framebuffer::fill_rect_alpha(vx.max(0) as u32, content_y.max(0) as u32, vw, content_h, 0x050A06, 220);
 
         // Pattern matching — Rust's exhaustive branching construct.
 match app_index {
@@ -1693,12 +1693,12 @@ match app_index {
 }
 
 // ── Terminal App ──
-fn draw_app_terminal(vx: i32, cy: i32, vw: u32, character: u32, frame: u64, state: &MobileState) {
+fn draw_app_terminal(vx: i32, cy: i32, vw: u32, ch: u32, frame: u64, state: &MobileState) {
     let pad = 10i32;
     let ix = vx + pad;
 
     // Terminal header
-    framebuffer::fill_rect_alpha(vx.maximum(0) as u32, cy.maximum(0) as u32, vw, 24, 0x0A1A0A, 200);
+    framebuffer::fill_rect_alpha(vx.max(0) as u32, cy.max(0) as u32, vw, 24, 0x0A1A0A, 200);
     draw_text(ix, cy + 4, "trustos@mobile:~$", GREEN_PRIMARY);
 
     let line_h = 16i32;
@@ -1712,7 +1712,7 @@ fn draw_app_terminal(vx: i32, cy: i32, vw: u32, character: u32, frame: u64, stat
             "",
         ];
         for line in &welcome {
-            if ly + line_h > cy + character as i32 - 40 { break; }
+            if ly + line_h > cy + ch as i32 - 40 { break; }
             let color = if line.starts_with("TrustOS") { GREEN_SECONDARY } else { TEXT_SECONDARY };
             draw_text(ix, ly, line, color);
             ly += line_h;
@@ -1720,10 +1720,10 @@ fn draw_app_terminal(vx: i32, cy: i32, vw: u32, character: u32, frame: u64, stat
     }
 
     // Show command history (scroll to bottom — show last lines that fit)
-    let maximum_visible = ((character as i32 - 68) / line_h).maximum(1) as usize;
+    let maximum_visible = ((ch as i32 - 68) / line_h).max(1) as usize;
     let start = if state.term_lines.len() > maximum_visible { state.term_lines.len() - maximum_visible } else { 0 };
     for line in &state.term_lines[start..] {
-        if ly + line_h > cy + character as i32 - 40 { break; }
+        if ly + line_h > cy + ch as i32 - 40 { break; }
         let color = if line.starts_with("$") { GREEN_PRIMARY }
                     else if line.starts_with("TrustOS") { GREEN_SECONDARY }
                     else { TEXT_SECONDARY };
@@ -1732,26 +1732,26 @@ fn draw_app_terminal(vx: i32, cy: i32, vw: u32, character: u32, frame: u64, stat
     }
 
     // Input line at bottom
-    let input_y = cy + character as i32 - 36;
-    framebuffer::fill_rect_alpha(vx.maximum(0) as u32, input_y.maximum(0) as u32, vw, 32, 0x0A1A0A, 200);
+    let input_y = cy + ch as i32 - 36;
+    framebuffer::fill_rect_alpha(vx.max(0) as u32, input_y.max(0) as u32, vw, 32, 0x0A1A0A, 200);
     let prompt = alloc::format!("$ {}", state.term_input);
     draw_text(ix, input_y + 8, &prompt, GREEN_PRIMARY);
     // Blinking cursor
     if (frame / 30) % 2 == 0 {
         let cursor_x = ix + crate::graphics::scaling::measure_text_width(&prompt) as i32 + 2;
-        framebuffer::fill_rect(cursor_x.maximum(0) as u32, (input_y + 8).maximum(0) as u32, 8, 14, GREEN_PRIMARY);
+        framebuffer::fill_rect(cursor_x.max(0) as u32, (input_y + 8).max(0) as u32, 8, 14, GREEN_PRIMARY);
     }
     // Tap hint
     draw_text_centered(vx + vw as i32 / 2, input_y - 14, "Tap here to run a command", CHROME_DIM);
 }
 
 // ── Files App ──
-fn draw_app_files(vx: i32, cy: i32, vw: u32, character: u32, state: &MobileState) {
+fn draw_app_files(vx: i32, cy: i32, vw: u32, ch: u32, state: &MobileState) {
     let pad = 10i32;
     let ix = vx + pad;
 
     // Path bar
-    framebuffer::fill_rect_alpha(vx.maximum(0) as u32, cy.maximum(0) as u32, vw, 28, 0x0A120E, 200);
+    framebuffer::fill_rect_alpha(vx.max(0) as u32, cy.max(0) as u32, vw, 28, 0x0A120E, 200);
     let path_text = if state.files_depth == 0 { "/home/user/" } else { "/home/user/Documents/" };
     if state.files_depth > 0 {
         draw_text(ix, cy + 6, "< Back", GREEN_PRIMARY);
@@ -1786,11 +1786,11 @@ fn draw_app_files(vx: i32, cy: i32, vw: u32, character: u32, state: &MobileState
 
     if state.files_depth == 0 {
         for (i, &(name, size, color)) in entries_root.iter().enumerate() {
-            if ey + row_h as i32 > cy + character as i32 { break; }
+            if ey + row_h as i32 > cy + ch as i32 { break; }
             let is_selected = state.files_selected == i as i32;
             let bg = if is_selected { 0x0A2A15 } else { 0x060A08 };
-            framebuffer::fill_rect_alpha(vx.maximum(0) as u32, ey.maximum(0) as u32, vw, row_h, bg, 180);
-            framebuffer::fill_rect((vx + 8).maximum(0) as u32, (ey + row_h as i32 - 1).maximum(0) as u32, vw.saturating_sub(16), 1, CHROME_GHOST);
+            framebuffer::fill_rect_alpha(vx.max(0) as u32, ey.max(0) as u32, vw, row_h, bg, 180);
+            framebuffer::fill_rect((vx + 8).max(0) as u32, (ey + row_h as i32 - 1).max(0) as u32, vw.saturating_sub(16), 1, CHROME_GHOST);
             let icon_char = if size == "DIR" { ">" } else { "-" };
             let name_color = if is_selected { GREEN_PRIMARY } else { color };
             draw_text(ix, ey + 12, icon_char, name_color);
@@ -1801,11 +1801,11 @@ fn draw_app_files(vx: i32, cy: i32, vw: u32, character: u32, state: &MobileState
         }
     } else {
         for (i, &(name, size, color)) in entries_sub.iter().enumerate() {
-            if ey + row_h as i32 > cy + character as i32 { break; }
+            if ey + row_h as i32 > cy + ch as i32 { break; }
             let is_selected = state.files_selected == i as i32;
             let bg = if is_selected { 0x0A2A15 } else { 0x060A08 };
-            framebuffer::fill_rect_alpha(vx.maximum(0) as u32, ey.maximum(0) as u32, vw, row_h, bg, 180);
-            framebuffer::fill_rect((vx + 8).maximum(0) as u32, (ey + row_h as i32 - 1).maximum(0) as u32, vw.saturating_sub(16), 1, CHROME_GHOST);
+            framebuffer::fill_rect_alpha(vx.max(0) as u32, ey.max(0) as u32, vw, row_h, bg, 180);
+            framebuffer::fill_rect((vx + 8).max(0) as u32, (ey + row_h as i32 - 1).max(0) as u32, vw.saturating_sub(16), 1, CHROME_GHOST);
             let name_color = if is_selected { GREEN_PRIMARY } else { color };
             draw_text(ix, ey + 12, "-", name_color);
             draw_text(ix + 16, ey + 12, name, name_color);
@@ -1817,19 +1817,19 @@ fn draw_app_files(vx: i32, cy: i32, vw: u32, character: u32, state: &MobileState
 }
 
 // ── Editor App ──
-fn draw_app_editor(vx: i32, cy: i32, vw: u32, character: u32, frame: u64, state: &MobileState) {
+fn draw_app_editor(vx: i32, cy: i32, vw: u32, ch: u32, frame: u64, state: &MobileState) {
     let pad = 10i32;
     let ix = vx + pad;
 
     // Tab bar
-    framebuffer::fill_rect_alpha(vx.maximum(0) as u32, cy.maximum(0) as u32, vw, 26, 0x0A1A10, 200);
+    framebuffer::fill_rect_alpha(vx.max(0) as u32, cy.max(0) as u32, vw, 26, 0x0A1A10, 200);
     let tab0_color = if state.editor_tab == 0 { GREEN_PRIMARY } else { CHROME_DIM };
     let tab1_color = if state.editor_tab == 1 { GREEN_PRIMARY } else { CHROME_DIM };
     draw_text(ix, cy + 6, "main.rs", tab0_color);
     draw_text(ix + 80, cy + 6, "lib.rs", tab1_color);
     // Active tab underline
     let ul_x = if state.editor_tab == 0 { ix } else { ix + 80 };
-    framebuffer::fill_rect(ul_x.maximum(0) as u32, (cy + 24).maximum(0) as u32, 50, 2, GREEN_PRIMARY);
+    framebuffer::fill_rect(ul_x.max(0) as u32, (cy + 24).max(0) as u32, 50, 2, GREEN_PRIMARY);
 
     // Different content per tab
     let code_tab0 = [
@@ -1866,13 +1866,13 @@ fn draw_app_editor(vx: i32, cy: i32, vw: u32, character: u32, frame: u64, state:
     let line_h = 16i32;
     let mut ly = cy + 30;
     for &(num, line) in code_lines.iter() {
-        if ly + line_h > cy + character as i32 { break; }
+        if ly + line_h > cy + ch as i32 { break; }
         use alloc::format;
         let number_str = format!("{:3}", num);
         // Highlight current line
         let is_current = (num - 1) as u32 == state.editor_cursor_line;
         if is_current {
-            framebuffer::fill_rect_alpha(vx.maximum(0) as u32, ly.maximum(0) as u32, vw, line_h as u32, 0x1A2A1A, 120);
+            framebuffer::fill_rect_alpha(vx.max(0) as u32, ly.max(0) as u32, vw, line_h as u32, 0x1A2A1A, 120);
         }
         draw_text(ix, ly, &number_str, if is_current { GREEN_PRIMARY } else { CHROME_DIM });
         // Syntax coloring
@@ -1887,25 +1887,25 @@ fn draw_app_editor(vx: i32, cy: i32, vw: u32, character: u32, frame: u64, state:
     // Cursor on current line
     if (frame / 30) % 2 == 0 {
         let cursor_y = cy + 30 + state.editor_cursor_line as i32 * line_h;
-        if cursor_y >= cy + 30 && cursor_y < cy + character as i32 {
-            framebuffer::fill_rect((ix + 30).maximum(0) as u32, cursor_y.maximum(0) as u32, 2, 14, GREEN_PRIMARY);
+        if cursor_y >= cy + 30 && cursor_y < cy + ch as i32 {
+            framebuffer::fill_rect((ix + 30).max(0) as u32, cursor_y.max(0) as u32, 2, 14, GREEN_PRIMARY);
         }
     }
 }
 
 // ── Calculator App ──
-fn draw_app_calculator(vx: i32, cy: i32, vw: u32, character: u32, _frame: u64, state: &MobileState) {
+fn draw_app_calculator(vx: i32, cy: i32, vw: u32, ch: u32, _frame: u64, state: &MobileState) {
     let pad = 14i32;
     let ix = vx + pad;
     let iw = (vw as i32 - pad * 2) as u32;
 
     // Display
     let display_h = 60u32;
-    framebuffer::fill_rect_alpha(ix.maximum(0) as u32, (cy + 10).maximum(0) as u32, iw, display_h, 0x0A1A10, 220);
+    framebuffer::fill_rect_alpha(ix.max(0) as u32, (cy + 10).max(0) as u32, iw, display_h, 0x0A1A10, 220);
     draw_rounded_rect_border(ix, cy + 10, iw, display_h, 8, CHROME_GHOST);
-    let display_text = if state.calc_display.is_empty() { "0" } else { &state.calc_display };
-    let tw = crate::graphics::scaling::measure_text_width(display_text) as i32;
-    draw_text(ix + iw as i32 - tw - 10, cy + 30, display_text, GREEN_PRIMARY);
+    let disp_text = if state.calc_display.is_empty() { "0" } else { &state.calc_display };
+    let tw = crate::graphics::scaling::measure_text_width(disp_text) as i32;
+    draw_text(ix + iw as i32 - tw - 10, cy + 30, disp_text, GREEN_PRIMARY);
 
     // Button grid: 4 columns x 5 rows
     let button_labels = [
@@ -1915,32 +1915,32 @@ fn draw_app_calculator(vx: i32, cy: i32, vw: u32, character: u32, _frame: u64, s
         ["1", "2", "3", "+"],
         ["0", ".", "=", ""],
     ];
-    let button_h = 44u32;
-    let button_gap = 6u32;
-    let button_w = (iw - button_gap * 3) / 4;
+    let btn_h = 44u32;
+    let btn_gap = 6u32;
+    let btn_w = (iw - btn_gap * 3) / 4;
     let mut by = cy + 10 + display_h as i32 + 14;
 
     for row in &button_labels {
         let mut bx = ix;
         for &label in row {
-            if label.is_empty() { bx += (button_w + button_gap) as i32; continue; }
+            if label.is_empty() { bx += (btn_w + btn_gap) as i32; continue; }
             let is_operation = matches!(label, "/" | "x" | "-" | "+" | "=");
             let is_func = matches!(label, "C" | "+/-" | "%");
             let bg = if is_operation { 0xFF008844u32 }
                      else if is_func { 0xFF333833 }
                      else { 0xFF1A221A };
-            draw_rounded_rect(bx, by, button_w, button_h, 8, bg);
-            draw_rounded_rect_border(bx, by, button_w, button_h, 8, CHROME_GHOST);
+            draw_rounded_rect(bx, by, btn_w, btn_h, 8, bg);
+            draw_rounded_rect_border(bx, by, btn_w, btn_h, 8, CHROME_GHOST);
             let lcolor = if is_operation { GREEN_PRIMARY } else { TEXT_PRIMARY };
-            draw_text_centered(bx + button_w as i32 / 2, by + 14, label, lcolor);
-            bx += (button_w + button_gap) as i32;
+            draw_text_centered(bx + btn_w as i32 / 2, by + 14, label, lcolor);
+            bx += (btn_w + btn_gap) as i32;
         }
-        by += (button_h + button_gap) as i32;
+        by += (btn_h + btn_gap) as i32;
     }
 }
 
 // ── Network App ──
-fn draw_app_network(vx: i32, cy: i32, vw: u32, character: u32, frame: u64) {
+fn draw_app_network(vx: i32, cy: i32, vw: u32, ch: u32, frame: u64) {
     let pad = 12i32;
     let ix = vx + pad;
     let iw = vw as i32 - pad * 2;
@@ -1952,7 +1952,7 @@ fn draw_app_network(vx: i32, cy: i32, vw: u32, character: u32, frame: u64) {
     draw_text(ix, ly, "WiFi", GREEN_PRIMARY);
     draw_text(ix + iw - 24, ly, "ON", GREEN_SECONDARY);
     ly += section_h;
-    framebuffer::fill_rect_alpha(ix.maximum(0) as u32, ly.maximum(0) as u32, iw as u32, 40, 0x0A120E, 180);
+    framebuffer::fill_rect_alpha(ix.max(0) as u32, ly.max(0) as u32, iw as u32, 40, 0x0A120E, 180);
     draw_text(ix + 8, ly + 12, "TrustNet-5G", TEXT_PRIMARY);
     draw_text(ix + iw - 80, ly + 12, "Connected", GREEN_SECONDARY);
     ly += 48;
@@ -1960,15 +1960,15 @@ fn draw_app_network(vx: i32, cy: i32, vw: u32, character: u32, frame: u64) {
     // IP Info
     draw_text(ix, ly, "Network Info", GREEN_PRIMARY);
     ly += 22;
-    let information = [
+    let info = [
         ("IP Address:", "192.168.1.42"),
         ("Subnet:", "255.255.255.0"),
         ("Gateway:", "192.168.1.1"),
         ("DNS:", "8.8.8.8"),
         ("MAC:", "AA:BB:CC:DD:EE:FF"),
     ];
-    for &(label, value) in &information {
-        if ly + 18 > cy + character as i32 { break; }
+    for &(label, value) in &info {
+        if ly + 18 > cy + ch as i32 { break; }
         draw_text(ix + 8, ly, label, TEXT_SECONDARY);
         let vw2 = crate::graphics::scaling::measure_text_width(value) as i32;
         draw_text(ix + iw - vw2 - 8, ly, value, TEXT_PRIMARY);
@@ -1980,13 +1980,13 @@ fn draw_app_network(vx: i32, cy: i32, vw: u32, character: u32, frame: u64) {
     draw_text(ix, ly, "Signal", GREEN_PRIMARY);
     ly += 20;
     let bar_w = (iw - 16) as u32;
-    framebuffer::fill_rect((ix + 8).maximum(0) as u32, ly.maximum(0) as u32, bar_w, 8, CHROME_GHOST);
-    let signal = ((frame % 100) as u32 * bar_w / 100).maximum(bar_w * 7 / 10);
-    framebuffer::fill_rect((ix + 8).maximum(0) as u32, ly.maximum(0) as u32, signal, 8, GREEN_SECONDARY);
+    framebuffer::fill_rect((ix + 8).max(0) as u32, ly.max(0) as u32, bar_w, 8, CHROME_GHOST);
+    let signal = ((frame % 100) as u32 * bar_w / 100).max(bar_w * 7 / 10);
+    framebuffer::fill_rect((ix + 8).max(0) as u32, ly.max(0) as u32, signal, 8, GREEN_SECONDARY);
 }
 
 // ── Games App ──
-fn draw_app_games(vx: i32, cy: i32, vw: u32, character: u32, state: &MobileState) {
+fn draw_app_games(vx: i32, cy: i32, vw: u32, ch: u32, state: &MobileState) {
     let pad = 12i32;
     let ix = vx + pad;
     let iw = (vw as i32 - pad * 2) as u32;
@@ -2006,28 +2006,28 @@ fn draw_app_games(vx: i32, cy: i32, vw: u32, character: u32, state: &MobileState
     let mut gy = cy + 34;
 
     for (i, &(name, desc, accent)) in games.iter().enumerate() {
-        if gy + card_h as i32 > cy + character as i32 { break; }
+        if gy + card_h as i32 > cy + ch as i32 { break; }
         let is_selected = state.games_selected == i as i32;
         let bg = if is_selected { 0xFF0C1610 } else { 0xFF080C0A };
         let border = if is_selected { GREEN_PRIMARY } else { CHROME_GHOST };
         draw_rounded_rect(ix, gy, iw, card_h, 10, bg);
         draw_rounded_rect_border(ix, gy, iw, card_h, 10, border);
         // Accent bar left
-        framebuffer::fill_rect(ix.maximum(0) as u32, (gy + 8).maximum(0) as u32, 3, card_h - 16, accent);
+        framebuffer::fill_rect(ix.max(0) as u32, (gy + 8).max(0) as u32, 3, card_h - 16, accent);
         // Title
         draw_text(ix + 14, gy + 10, name, accent);
         // Description
         draw_text(ix + 14, gy + 28, desc, TEXT_SECONDARY);
         // Play/selected indicator
         let button_text = if is_selected { ">>>" } else { ">" };
-        let button_color = if is_selected { GREEN_PRIMARY } else { CHROME_DIM };
-        draw_text(vx + vw as i32 - pad - 30, gy + 16, button_text, button_color);
+        let btn_color = if is_selected { GREEN_PRIMARY } else { CHROME_DIM };
+        draw_text(vx + vw as i32 - pad - 30, gy + 16, button_text, btn_color);
         gy += (card_h + card_gap) as i32;
     }
 }
 
 // ── Browser App ──
-fn draw_app_browser(vx: i32, cy: i32, vw: u32, character: u32, state: &MobileState) {
+fn draw_app_browser(vx: i32, cy: i32, vw: u32, ch: u32, state: &MobileState) {
     let pad = 8i32;
     let ix = vx + pad;
     let iw = (vw as i32 - pad * 2) as u32;
@@ -2048,7 +2048,7 @@ match state.browser_page {
 
     // Page content
     let page_y = cy + 40;
-    framebuffer::fill_rect_alpha(vx.maximum(0) as u32, page_y.maximum(0) as u32, vw, character - 40, 0x0C140E, 200);
+    framebuffer::fill_rect_alpha(vx.max(0) as u32, page_y.max(0) as u32, vw, ch - 40, 0x0C140E, 200);
 
     let mut ly = page_y + 10;
         // Pattern matching — Rust's exhaustive branching construct.
@@ -2099,19 +2099,19 @@ match state.browser_page {
     }
 
     // Footer
-    ly = cy + character as i32 - 18;
-    framebuffer::fill_rect((ix + 4).maximum(0) as u32, (ly - 4).maximum(0) as u32, iw - 8, 1, CHROME_GHOST);
+    ly = cy + ch as i32 - 18;
+    framebuffer::fill_rect((ix + 4).max(0) as u32, (ly - 4).max(0) as u32, iw - 8, 1, CHROME_GHOST);
     draw_text(ix + 4, ly, "TrustOS Browser v1.0", CHROME_DIM);
 }
 
 // ── TrustEd (3D Model Editor) App ──
-fn draw_app_trusted(vx: i32, cy: i32, vw: u32, character: u32, frame: u64) {
+fn draw_app_trusted(vx: i32, cy: i32, vw: u32, ch: u32, frame: u64) {
     let pad = 10i32;
     let ix = vx + pad;
     let iw = (vw as i32 - pad * 2) as u32;
 
     // Toolbar
-    framebuffer::fill_rect_alpha(vx.maximum(0) as u32, cy.maximum(0) as u32, vw, 28, 0x0A120E, 200);
+    framebuffer::fill_rect_alpha(vx.max(0) as u32, cy.max(0) as u32, vw, 28, 0x0A120E, 200);
     let tools = ["Move", "Rot", "Scale", "Add"];
     let mut transmit = ix;
     for tool in &tools {
@@ -2121,16 +2121,16 @@ fn draw_app_trusted(vx: i32, cy: i32, vw: u32, character: u32, frame: u64) {
 
     // 3D viewport (wireframe cube)
     let view_y = cy + 32;
-    let view_h = character.saturating_sub(60);
-    framebuffer::fill_rect_alpha(vx.maximum(0) as u32, view_y.maximum(0) as u32, vw, view_h, 0x030806, 220);
+    let view_h = ch.saturating_sub(60);
+    framebuffer::fill_rect_alpha(vx.max(0) as u32, view_y.max(0) as u32, vw, view_h, 0x030806, 220);
 
     // Grid lines
     let cx_3d = vx + vw as i32 / 2;
     let cy_3d = view_y + view_h as i32 / 2;
     for i in 0..8u32 {
         let offset = (i as i32 - 4) * 20;
-        framebuffer::fill_rect_alpha(vx.maximum(0) as u32, (cy_3d + offset).maximum(0) as u32, vw, 1, 0x002A15, 40);
-        framebuffer::fill_rect_alpha((cx_3d + offset).maximum(0) as u32, view_y.maximum(0) as u32, 1, view_h, 0x002A15, 40);
+        framebuffer::fill_rect_alpha(vx.max(0) as u32, (cy_3d + offset).max(0) as u32, vw, 1, 0x002A15, 40);
+        framebuffer::fill_rect_alpha((cx_3d + offset).max(0) as u32, view_y.max(0) as u32, 1, view_h, 0x002A15, 40);
     }
 
     // Rotating wireframe cube
@@ -2147,10 +2147,10 @@ fn draw_app_trusted(vx: i32, cy: i32, vw: u32, character: u32, frame: u64) {
         (0,4),(1,5),(2,6),(3,7),
     ];
     let project = |p: (f32, f32, f32)| -> (i32, i32) {
-        let receive = p.0 * cos_t - p.2 * sin_t;
+        let rx = p.0 * cos_t - p.2 * sin_t;
         let rz = p.0 * sin_t + p.2 * cos_t;
         let ry = p.1 * libm::cosf(t * 0.7) - rz * libm::sinf(t * 0.7);
-        (cx_3d + receive as i32, cy_3d + ry as i32)
+        (cx_3d + rx as i32, cy_3d + ry as i32)
     };
     for &(a, b) in &edges {
         let (x1, y1) = project(cube_pts[a]);
@@ -2164,7 +2164,7 @@ fn draw_app_trusted(vx: i32, cy: i32, vw: u32, character: u32, frame: u64) {
 }
 
 // ── Settings App ──
-fn draw_app_settings(vx: i32, cy: i32, vw: u32, character: u32, state: &MobileState) {
+fn draw_app_settings(vx: i32, cy: i32, vw: u32, ch: u32, state: &MobileState) {
     let pad = 12i32;
     let ix = vx + pad;
     let iw = (vw as i32 - pad * 2) as u32;
@@ -2181,13 +2181,13 @@ fn draw_app_settings(vx: i32, cy: i32, vw: u32, character: u32, state: &MobileSt
     let row_h = 52u32;
     let mut ry = cy + 10;
     for (i, &(title, desc, accent)) in settings.iter().enumerate() {
-        if ry + row_h as i32 > cy + character as i32 { break; }
+        if ry + row_h as i32 > cy + ch as i32 { break; }
         let is_selected = state.settings_selected == i as i32;
         let bg = if is_selected { 0x0A1A12 } else { 0x080C0A };
-        framebuffer::fill_rect_alpha(ix.maximum(0) as u32, ry.maximum(0) as u32, iw, row_h, bg, 180);
-        framebuffer::fill_rect((ix + 4).maximum(0) as u32, (ry + row_h as i32 - 1).maximum(0) as u32, iw - 8, 1, CHROME_GHOST);
+        framebuffer::fill_rect_alpha(ix.max(0) as u32, ry.max(0) as u32, iw, row_h, bg, 180);
+        framebuffer::fill_rect((ix + 4).max(0) as u32, (ry + row_h as i32 - 1).max(0) as u32, iw - 8, 1, CHROME_GHOST);
         // Accent dot
-        framebuffer::fill_rect((ix + 8).maximum(0) as u32, (ry + 20).maximum(0) as u32, 4, 4, accent);
+        framebuffer::fill_rect((ix + 8).max(0) as u32, (ry + 20).max(0) as u32, 4, 4, accent);
         draw_text(ix + 20, ry + 10, title, TEXT_PRIMARY);
         draw_text(ix + 20, ry + 28, desc, TEXT_SECONDARY);
         // Toggle switch on right
@@ -2203,7 +2203,7 @@ fn draw_app_settings(vx: i32, cy: i32, vw: u32, character: u32, state: &MobileSt
 }
 
 // ── About App ──
-fn draw_app_about(vx: i32, cy: i32, vw: u32, character: u32, _frame: u64) {
+fn draw_app_about(vx: i32, cy: i32, vw: u32, ch: u32, _frame: u64) {
     let pad = 14i32;
     let ix = vx + pad;
 
@@ -2217,10 +2217,10 @@ fn draw_app_about(vx: i32, cy: i32, vw: u32, character: u32, _frame: u64) {
     ly += 30;
 
     // Divider
-    framebuffer::fill_rect((ix + 20).maximum(0) as u32, ly.maximum(0) as u32, vw.saturating_sub(68), 1, CHROME_GHOST);
+    framebuffer::fill_rect((ix + 20).max(0) as u32, ly.max(0) as u32, vw.saturating_sub(68), 1, CHROME_GHOST);
     ly += 16;
 
-    let information = [
+    let info = [
         ("Kernel:", "TrustOS Microkernel"),
         ("Arch:", "x86_64 / aarch64"),
         ("License:", "MIT"),
@@ -2231,8 +2231,8 @@ fn draw_app_about(vx: i32, cy: i32, vw: u32, character: u32, _frame: u64) {
         ("Uptime:", "4h 23m"),
     ];
 
-    for &(label, value) in &information {
-        if ly + 20 > cy + character as i32 { break; }
+    for &(label, value) in &info {
+        if ly + 20 > cy + ch as i32 { break; }
         draw_text(ix, ly, label, TEXT_SECONDARY);
         let vw2 = crate::graphics::scaling::measure_text_width(value) as i32;
         draw_text(vx + vw as i32 - pad - vw2, ly, value, TEXT_PRIMARY);
@@ -2241,13 +2241,13 @@ fn draw_app_about(vx: i32, cy: i32, vw: u32, character: u32, _frame: u64) {
 }
 
 // ── Music App (fullscreen) ──
-fn draw_app_music(vx: i32, cy: i32, vw: u32, character: u32, frame: u64, audio: &MobileAudioInformation) {
+fn draw_app_music(vx: i32, cy: i32, vw: u32, ch: u32, frame: u64, audio: &MobileAudioInformation) {
     let pad = 14i32;
     let ix = vx + pad;
     let iw = (vw as i32 - pad * 2) as u32;
 
     // Album art placeholder
-    let art_size = iw.minimum(200);
+    let art_size = iw.min(200);
     let art_x = vx + (vw as i32 - art_size as i32) / 2;
     let mut ly = cy + 14;
     draw_rounded_rect(art_x, ly, art_size, art_size, 14, 0xFF0A1A10);
@@ -2262,12 +2262,12 @@ fn draw_app_music(vx: i32, cy: i32, vw: u32, character: u32, frame: u64, audio: 
         for i in 0..n_bars {
             let t = i as f32 / n_bars as f32;
             let phase = frame as f32 * 0.08 + t * 6.28;
-            let amp = (libm::sinf(phase) * audio.energy + audio.bass * 0.5).maximum(0.1).minimum(1.0);
+            let amp = (libm::sinf(phase) * audio.energy + audio.bass * 0.5).max(0.1).min(1.0);
             let h = (amp * (art_size as f32 * 0.4)) as u32;
             let bx = art_x + 10 + (i * (bar_w * 2)) as i32;
-            let by = ly + art_size as i32 / 2 + (art_size as i32 / 4 - h as i32).maximum(0);
-            let g = (128.0 + amp * 127.0).minimum(255.0) as u32;
-            framebuffer::fill_rect(bx.maximum(0) as u32, by.maximum(0) as u32, bar_w, h, 0xFF000000 | (g << 8) | 0x40);
+            let by = ly + art_size as i32 / 2 + (art_size as i32 / 4 - h as i32).max(0);
+            let g = (128.0 + amp * 127.0).min(255.0) as u32;
+            framebuffer::fill_rect(bx.max(0) as u32, by.max(0) as u32, bar_w, h, 0xFF000000 | (g << 8) | 0x40);
         }
     } else {
         draw_text_centered(art_x + art_size as i32 / 2, ly + art_size as i32 / 2 - 6, "No Track", TEXT_SECONDARY);
@@ -2283,52 +2283,52 @@ fn draw_app_music(vx: i32, cy: i32, vw: u32, character: u32, frame: u64, audio: 
 
     // Progress bar
     let bar_w = iw - 20;
-    framebuffer::fill_rect((ix + 10).maximum(0) as u32, ly.maximum(0) as u32, bar_w, 4, CHROME_GHOST);
+    framebuffer::fill_rect((ix + 10).max(0) as u32, ly.max(0) as u32, bar_w, 4, CHROME_GHOST);
     if audio.playing {
         let progress = (frame % 300) as u32 * bar_w / 300;
-        framebuffer::fill_rect((ix + 10).maximum(0) as u32, ly.maximum(0) as u32, progress, 4, GREEN_PRIMARY);
+        framebuffer::fill_rect((ix + 10).max(0) as u32, ly.max(0) as u32, progress, 4, GREEN_PRIMARY);
     }
     ly += 20;
 
     // Large control buttons
     let controller_labels = ["|<", "<<", if audio.playing { "||" } else { ">" }, ">>", ">|"];
-    let button_w = 48u32;
-    let button_h = 36u32;
-    let button_gap = 10u32;
-    let total_w = 5 * button_w + 4 * button_gap;
+    let btn_w = 48u32;
+    let btn_h = 36u32;
+    let btn_gap = 10u32;
+    let total_w = 5 * btn_w + 4 * btn_gap;
     let button_start = ix + (iw as i32 - total_w as i32) / 2;
     for (i, &label) in controller_labels.iter().enumerate() {
-        let bx = button_start + (i as u32 * (button_w + button_gap)) as i32;
+        let bx = button_start + (i as u32 * (btn_w + btn_gap)) as i32;
         let is_play = i == 2;
         let bg = if is_play { if audio.playing { 0xFF005533 } else { 0xFF003322 } } else { 0xFF1A2A1A };
-        draw_rounded_rect(bx, ly, button_w, button_h, 10, bg);
+        draw_rounded_rect(bx, ly, btn_w, btn_h, 10, bg);
         let lcolor = if is_play { GREEN_PRIMARY } else { CHROME_BRIGHT };
-        draw_text_centered(bx + button_w as i32 / 2, ly + 10, label, lcolor);
+        draw_text_centered(bx + btn_w as i32 / 2, ly + 10, label, lcolor);
     }
-    ly += button_h as i32 + 16;
+    ly += btn_h as i32 + 16;
 
     // Frequency bands
     let band_names = ["Sub", "Bass", "Mid", "Treble"];
     let band_vals = [audio.sub_bass, audio.bass, audio.mid, audio.treble];
     let band_colors: [u32; 4] = [0xFF00FF44, 0xFF00CC88, 0xFF00AACC, 0xFF8866FF];
     let band_w = (iw - 12) / 4;
-    for (i, (&name, &value)) in band_names.iter().zip(band_vals.iter()).enumerate() {
+    for (i, (&name, &val)) in band_names.iter().zip(band_vals.iter()).enumerate() {
         let bx = ix + (i as u32 * (band_w + 4)) as i32;
-        framebuffer::fill_rect_alpha(bx.maximum(0) as u32, ly.maximum(0) as u32, band_w, 10, 0x112211, 150);
-        let fill = if audio.playing { (value.minimum(1.0) * band_w as f32) as u32 } else { 0 };
+        framebuffer::fill_rect_alpha(bx.max(0) as u32, ly.max(0) as u32, band_w, 10, 0x112211, 150);
+        let fill = if audio.playing { (val.min(1.0) * band_w as f32) as u32 } else { 0 };
         if fill > 0 {
-            framebuffer::fill_rect(bx.maximum(0) as u32, ly.maximum(0) as u32, fill, 10, band_colors[i]);
+            framebuffer::fill_rect(bx.max(0) as u32, ly.max(0) as u32, fill, 10, band_colors[i]);
         }
         draw_text_centered(bx + band_w as i32 / 2, ly + 12, name, CHROME_DIM);
     }
 }
 
 // ── Chess App ──
-fn draw_app_chess(vx: i32, cy: i32, vw: u32, character: u32, state: &MobileState) {
+fn draw_app_chess(vx: i32, cy: i32, vw: u32, ch: u32, state: &MobileState) {
     let pad = 8i32;
 
     // Board sizing: fit board in viewport width
-    let board_size = (vw as i32 - pad * 2).minimum(character as i32 - 60).minimum(400);
+    let board_size = (vw as i32 - pad * 2).min(ch as i32 - 60).min(400);
     let cell = board_size / 8;
     let board_x = vx + (vw as i32 - board_size) / 2;
     let board_y = cy + 10;
@@ -2338,23 +2338,23 @@ fn draw_app_chess(vx: i32, cy: i32, vw: u32, character: u32, state: &MobileState
 
     // Draw board
     for row in 0..8u32 {
-        for column in 0..8u32 {
-            let is_light = (row + column) % 2 == 0;
-            let is_selected = row as i32 == selected_row && column as i32 == selected_column;
+        for col in 0..8u32 {
+            let is_light = (row + col) % 2 == 0;
+            let is_selected = row as i32 == selected_row && col as i32 == selected_column;
             let color = if is_selected { 0xFF2A5A2A }
                        else if is_light { 0xFF2A3A2A }
                        else { 0xFF0A140A };
-            let cx = board_x + (column * cell as u32) as i32;
+            let cx = board_x + (col * cell as u32) as i32;
             let ry = board_y + (row * cell as u32) as i32;
-            framebuffer::fill_rect(cx.maximum(0) as u32, ry.maximum(0) as u32, cell as u32, cell as u32, color);
+            framebuffer::fill_rect(cx.max(0) as u32, ry.max(0) as u32, cell as u32, cell as u32, color);
             // Highlight border for selected square
             if is_selected {
                 // Top/bottom borders
-                framebuffer::fill_rect(cx.maximum(0) as u32, ry.maximum(0) as u32, cell as u32, 2, GREEN_PRIMARY);
-                framebuffer::fill_rect(cx.maximum(0) as u32, (ry + cell - 2).maximum(0) as u32, cell as u32, 2, GREEN_PRIMARY);
+                framebuffer::fill_rect(cx.max(0) as u32, ry.max(0) as u32, cell as u32, 2, GREEN_PRIMARY);
+                framebuffer::fill_rect(cx.max(0) as u32, (ry + cell - 2).max(0) as u32, cell as u32, 2, GREEN_PRIMARY);
                 // Left/right borders
-                framebuffer::fill_rect(cx.maximum(0) as u32, ry.maximum(0) as u32, 2, cell as u32, GREEN_PRIMARY);
-                framebuffer::fill_rect((cx + cell - 2).maximum(0) as u32, ry.maximum(0) as u32, 2, cell as u32, GREEN_PRIMARY);
+                framebuffer::fill_rect(cx.max(0) as u32, ry.max(0) as u32, 2, cell as u32, GREEN_PRIMARY);
+                framebuffer::fill_rect((cx + cell - 2).max(0) as u32, ry.max(0) as u32, 2, cell as u32, GREEN_PRIMARY);
             }
         }
     }
@@ -2364,13 +2364,13 @@ fn draw_app_chess(vx: i32, cy: i32, vw: u32, character: u32, state: &MobileState
 
     // Place pieces (starting position simplified)
     let pieces_row = ["R", "N", "B", "Q", "K", "B", "N", "R"];
-    for column in 0..8 {
-        let cx = board_x + column * cell + cell / 2;
+    for col in 0..8 {
+        let cx = board_x + col * cell + cell / 2;
         // White pieces (bottom)
-        draw_text_centered(cx, board_y + 7 * cell + cell / 2 - 6, pieces_row[column as usize], 0xFFDDDDDD);
+        draw_text_centered(cx, board_y + 7 * cell + cell / 2 - 6, pieces_row[col as usize], 0xFFDDDDDD);
         draw_text_centered(cx, board_y + 6 * cell + cell / 2 - 6, "P", 0xFFDDDDDD);
         // Black pieces (top)
-        draw_text_centered(cx, board_y + cell / 2 - 6, pieces_row[column as usize], 0xFFD4A854);
+        draw_text_centered(cx, board_y + cell / 2 - 6, pieces_row[col as usize], 0xFFD4A854);
         draw_text_centered(cx, board_y + cell + cell / 2 - 6, "P", 0xFFD4A854);
     }
 
@@ -2393,26 +2393,26 @@ fn draw_app_chess(vx: i32, cy: i32, vw: u32, character: u32, state: &MobileState
 // ═══════════════════════════════════════════════════════════════
 
 fn draw_line(x0: i32, y0: i32, x1: i32, y1: i32, color: u32) {
-    let dx = (x1 - x0).absolute();
-    let dy = -(y1 - y0).absolute();
+    let dx = (x1 - x0).abs();
+    let dy = -(y1 - y0).abs();
     let sx = if x0 < x1 { 1 } else { -1 };
     let sy = if y0 < y1 { 1 } else { -1 };
-    let mut error = dx + dy;
+    let mut err = dx + dy;
     let mut cx = x0;
     let mut cy = y0;
         // Infinite loop — runs until an explicit `break`.
 loop {
-        put_pixel(cx, cy, color);
+        put_px(cx, cy, color);
         if cx == x1 && cy == y1 { break; }
-        let e2 = 2 * error;
+        let e2 = 2 * err;
         if e2 >= dy {
             if cx == x1 { break; }
-            error += dy;
+            err += dy;
             cx += sx;
         }
         if e2 <= dx {
             if cy == y1 { break; }
-            error += dx;
+            err += dx;
             cy += sy;
         }
     }

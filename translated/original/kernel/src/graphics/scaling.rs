@@ -83,6 +83,50 @@ pub fn auto_detect_scale(fb_width: u32, fb_height: u32) -> u32 {
     factor
 }
 
+/// Auto-detect a UI layout scale factor based on resolution.
+///
+/// Unlike text scaling (`auto_detect_scale`), this applies gentler scaling to
+/// UI chrome (taskbar, dock, title bars) so they look proportional on any
+/// resolution without becoming oversized.
+///
+/// Heuristics (physical pixel count, not DPI):
+/// - Width >= 3840 (4K)  → 2x UI chrome
+/// - Width >= 2560 (QHD) → 1.5x → rounded to nearest 1.5x via 3/2
+/// - Width >= 1920 (FHD) → 1x
+/// - Otherwise           → 1x
+///
+/// Returns (numerator, denominator) for rational scaling (avoids floats).
+pub fn auto_detect_ui_scale(fb_width: u32, _fb_height: u32) -> (u32, u32) {
+    if fb_width >= 3840 {
+        (2, 1) // 2x
+    } else if fb_width >= 2560 {
+        (3, 2) // 1.5x
+    } else {
+        (1, 1) // 1x
+    }
+}
+
+/// UI scale numerator (set by init)
+static UI_SCALE_NUM: AtomicU32 = AtomicU32::new(1);
+/// UI scale denominator (set by init)
+static UI_SCALE_DEN: AtomicU32 = AtomicU32::new(1);
+
+/// Scale a UI dimension by the current UI scale factor.
+#[inline]
+pub fn scale_ui(value: u32) -> u32 {
+    let n = UI_SCALE_NUM.load(Ordering::Relaxed);
+    let d = UI_SCALE_DEN.load(Ordering::Relaxed);
+    (value * n + d / 2) / d // rounded division
+}
+
+/// Initialize UI scale factor (call once during desktop init).
+pub fn init_ui_scale(fb_width: u32, fb_height: u32) {
+    let (n, d) = auto_detect_ui_scale(fb_width, fb_height);
+    UI_SCALE_NUM.store(n, Ordering::SeqCst);
+    UI_SCALE_DEN.store(d, Ordering::SeqCst);
+    crate::serial_println!("[Scaling] UI chrome scale: {}x/{} for {}x{}", n, d, fb_width, fb_height);
+}
+
 /// Initialize the scaling system with auto-detection.
 ///
 /// Call this after framebuffer is initialized, during desktop init.

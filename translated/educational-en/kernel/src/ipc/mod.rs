@@ -30,13 +30,13 @@ pub fn init() {
 }
 
 // Public function — callable from other modules.
-pub fn send_raw(character: u64) {
-    crate::log_debug!("IPC send {}", character);
+pub fn send_raw(ch: u64) {
+    crate::log_debug!("IPC send {}", ch);
 }
 
 // Public function — callable from other modules.
-pub fn receive_raw(character: u64) -> u64 {
-    crate::log_debug!("IPC recv {}", character);
+pub fn receive_raw(ch: u64) -> u64 {
+    crate::log_debug!("IPC recv {}", ch);
     0
 }
 
@@ -78,10 +78,10 @@ pub fn receive(channel: ChannelId) -> Result<Message, IpcError> {
     let channels = CHANNELS.lock();
     let channel = channels.get(&channel).ok_or(IpcError::ChannelNotFound)?;
     
-    let message = channel.receive()?;
+    let msg = channel.receive()?;
     MESSAGES_RECEIVED.fetch_add(1, Ordering::Relaxed);
     
-    Ok(message)
+    Ok(msg)
 }
 
 /// Try receive message (non-blocking)
@@ -91,9 +91,9 @@ pub fn try_receive(channel: ChannelId) -> Result<Option<Message>, IpcError> {
     
         // Pattern matching — Rust's exhaustive branching construct.
 match channel.try_receive() {
-        Ok(message) => {
+        Ok(msg) => {
             MESSAGES_RECEIVED.fetch_add(1, Ordering::Relaxed);
-            Ok(Some(message))
+            Ok(Some(msg))
         }
         Err(IpcError::WouldBlock) => Ok(None),
         Err(e) => Err(e),

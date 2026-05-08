@@ -78,8 +78,8 @@ fn draw_logo_procedural(cx: u32, cy: u32, scale: u32) {
 /// Draw a filled rectangle
 fn draw_filled_rect(x: u32, y: u32, w: u32, h: u32, color: u32) {
     for py in y..(y + h) {
-        for pixel in x..(x + w) {
-            super::put_pixel(pixel, py, color);
+        for px in x..(x + w) {
+            super::put_pixel(px, py, color);
         }
     }
 }
@@ -87,9 +87,9 @@ fn draw_filled_rect(x: u32, y: u32, w: u32, h: u32, color: u32) {
 /// Draw rectangle outline
 fn draw_rect_outline(x: u32, y: u32, w: u32, h: u32, color: u32) {
     // Top and bottom
-    for pixel in x..(x + w) {
-        super::put_pixel(pixel, y, color);
-        super::put_pixel(pixel, y + h - 1, color);
+    for px in x..(x + w) {
+        super::put_pixel(px, y, color);
+        super::put_pixel(px, y + h - 1, color);
     }
     // Left and right
     for py in y..(y + h) {
@@ -104,9 +104,9 @@ fn draw_filled_circle(cx: u32, cy: u32, r: u32, color: u32) {
     for dy in -(r as i32)..(r as i32 + 1) {
         for dx in -(r as i32)..(r as i32 + 1) {
             if dx * dx + dy * dy <= r_sq {
-                let pixel = (cx as i32 + dx) as u32;
+                let px = (cx as i32 + dx) as u32;
                 let py = (cy as i32 + dy) as u32;
-                super::put_pixel(pixel, py, color);
+                super::put_pixel(px, py, color);
             }
         }
     }
@@ -121,9 +121,9 @@ fn draw_arc(cx: u32, cy: u32, r_inner: u32, r_outer: u32, color: u32) {
         for dx in -(r_outer as i32)..(r_outer as i32 + 1) {
             let d_sq = dx * dx + dy * dy;
             if d_sq >= r_inner_sq && d_sq <= r_outer_sq {
-                let pixel = (cx as i32 + dx) as u32;
+                let px = (cx as i32 + dx) as u32;
                 let py = (cy as i32 + dy) as u32;
-                super::put_pixel(pixel, py, color);
+                super::put_pixel(px, py, color);
             }
         }
     }
@@ -147,19 +147,19 @@ fn draw_shield(x: u32, y: u32, w: u32, h: u32, fill_color: u32, outline_color: u
     // Draw shield body (upper rectangle portion)
     let rect_h = h * 2 / 3;
     for py in y..(y + rect_h) {
-        for pixel in x..(x + w) {
+        for px in x..(x + w) {
             // Slight transparency effect based on distance from center
-            let dist_from_center = if pixel < x + half_w { 
-                x + half_w - pixel 
+            let dist_from_center = if px < x + half_w { 
+                x + half_w - px 
             } else { 
-                pixel - (x + half_w) 
+                px - (x + half_w) 
             };
             let shade = if dist_from_center < w / 6 {
                 fill_color
             } else {
                 blend_colors(fill_color, 0xFF000000, 20)
             };
-            super::put_pixel(pixel, py, shade);
+            super::put_pixel(px, py, shade);
         }
     }
     
@@ -171,16 +171,16 @@ fn draw_shield(x: u32, y: u32, w: u32, h: u32, fill_color: u32, outline_color: u
         if current_half_w > 0 {
             let left = x + half_w - current_half_w;
             let right = x + half_w + current_half_w;
-            for pixel in left..right {
-                super::put_pixel(pixel, py, fill_color);
+            for px in left..right {
+                super::put_pixel(px, py, fill_color);
             }
         }
     }
     
     // Draw outline
     // Top edge
-    for pixel in x..(x + w) {
-        super::put_pixel(pixel, y, outline_color);
+    for px in x..(x + w) {
+        super::put_pixel(px, y, outline_color);
     }
     // Left and right edges (upper part)
     for py in y..(y + rect_h) {
@@ -202,7 +202,7 @@ fn draw_shield(x: u32, y: u32, w: u32, h: u32, fill_color: u32, outline_color: u
 
 /// Draw checkmark
 fn draw_checkmark(x: u32, y: u32, size: u32, color: u32) {
-    let thickness = core::cmp::maximum(2, size / 8);
+    let thickness = core::cmp::max(2, size / 8);
     
     // First stroke: short diagonal down-left to center-bottom
     let start_x = x;
@@ -221,11 +221,11 @@ fn draw_checkmark(x: u32, y: u32, size: u32, color: u32) {
 
 /// Draw a thick line using Bresenham's algorithm
 fn draw_thick_line(x0: u32, y0: u32, x1: u32, y1: u32, thickness: u32, color: u32) {
-    let dx = (x1 as i32 - x0 as i32).absolute();
-    let dy = (y1 as i32 - y0 as i32).absolute();
+    let dx = (x1 as i32 - x0 as i32).abs();
+    let dy = (y1 as i32 - y0 as i32).abs();
     let sx: i32 = if x0 < x1 { 1 } else { -1 };
     let sy: i32 = if y0 < y1 { 1 } else { -1 };
-    let mut error = dx - dy;
+    let mut err = dx - dy;
     
     let mut x = x0 as i32;
     let mut y = y0 as i32;
@@ -247,13 +247,13 @@ loop {
             break;
         }
         
-        let e2 = 2 * error;
+        let e2 = 2 * err;
         if e2 > -dy {
-            error -= dy;
+            err -= dy;
             x += sx;
         }
         if e2 < dx {
-            error += dx;
+            err += dx;
             y += sy;
         }
     }
@@ -283,7 +283,7 @@ fn draw_robot_arms(x: u32, y: u32, w: u32, h: u32, color: u32) {
 
 /// Blend two colors (simple alpha blend)
 fn blend_colors(color1: u32, color2: u32, alpha: u32) -> u32 {
-    let alpha = alpha.minimum(255);
+    let alpha = alpha.min(255);
     let inv_alpha = 255 - alpha;
     
     let r1 = (color1 >> 16) & 0xFF;
@@ -330,8 +330,8 @@ fn draw_title_text(cx: u32, y: u32, _scale: u32) {
     
     // Draw each character
     for (i, c) in title.chars().enumerate() {
-        let pixel = start_x + (i as u32) * char_w;
-        draw_char_at(c, pixel as usize, y as usize, LOGO_GREEN_BRIGHT, 0xFF000000);
+        let px = start_x + (i as u32) * char_w;
+        draw_char_at(c, px as usize, y as usize, LOGO_GREEN_BRIGHT, 0xFF000000);
     }
 }
 
@@ -343,9 +343,9 @@ fn draw_tagline(cx: u32, y: u32, _scale: u32) {
     let start_x = cx.saturating_sub(tagline_length * char_w / 2);
     
     for (i, c) in tagline.chars().enumerate() {
-        let pixel = start_x + (i as u32) * char_w;
+        let px = start_x + (i as u32) * char_w;
         // Use dimmer green for tagline
-        draw_char_at(c, pixel as usize, y as usize, LOGO_GREEN_MEDIUM, 0xFF000000);
+        draw_char_at(c, px as usize, y as usize, LOGO_GREEN_MEDIUM, 0xFF000000);
     }
 }
 
@@ -355,10 +355,10 @@ fn draw_char_at(c: char, x: usize, y: usize, fg: u32, bg: u32) {
     
     for row in 0..16 {
         let bits = glyph[row];
-        for column in 0..8 {
-            let color = if (bits >> (7 - column)) & 1 == 1 { fg } else { bg };
+        for col in 0..8 {
+            let color = if (bits >> (7 - col)) & 1 == 1 { fg } else { bg };
             if color != bg {  // Only draw foreground
-                super::put_pixel((x + column) as u32, (y + row) as u32, color);
+                super::put_pixel((x + col) as u32, (y + row) as u32, color);
             }
         }
     }
@@ -369,7 +369,7 @@ fn draw_matrix_rain(width: u32, height: u32) {
     // Simple pseudo-random using a seed
     let mut seed: u32 = 12345;
     
-    let pseudo_random = |s: &mut u32| -> u32 {
+    let pseudo_rand = |s: &mut u32| -> u32 {
         *s = s.wrapping_mul(1103515245).wrapping_add(12345);
         (*s >> 16) & 0x7FFF
     };
@@ -379,9 +379,9 @@ fn draw_matrix_rain(width: u32, height: u32) {
     
     for _ in 0..200 {
         // Left side
-        let x = pseudo_random(&mut seed) % side_width;
-        let y = pseudo_random(&mut seed) % height;
-        let intensity = (pseudo_random(&mut seed) % 4) as u8;
+        let x = pseudo_rand(&mut seed) % side_width;
+        let y = pseudo_rand(&mut seed) % height;
+        let intensity = (pseudo_rand(&mut seed) % 4) as u8;
         let color = // Pattern matching — Rust's exhaustive branching construct.
 match intensity {
             0 => LOGO_GREEN_DARKER,
@@ -389,13 +389,13 @@ match intensity {
             2 => LOGO_GREEN_MEDIUM,
             _ => LOGO_GREEN_BRIGHT,
         };
-        let c = (b'0' + (pseudo_random(&mut seed) % 75) as u8) as char;
+        let c = (b'0' + (pseudo_rand(&mut seed) % 75) as u8) as char;
         draw_char_at(c, x as usize, y as usize, color, 0xFF000000);
         
         // Right side
-        let x = width - side_width + pseudo_random(&mut seed) % side_width;
-        let y = pseudo_random(&mut seed) % height;
-        let intensity = (pseudo_random(&mut seed) % 4) as u8;
+        let x = width - side_width + pseudo_rand(&mut seed) % side_width;
+        let y = pseudo_rand(&mut seed) % height;
+        let intensity = (pseudo_rand(&mut seed) % 4) as u8;
         let color = // Pattern matching — Rust's exhaustive branching construct.
 match intensity {
             0 => LOGO_GREEN_DARKER,
@@ -403,7 +403,7 @@ match intensity {
             2 => LOGO_GREEN_MEDIUM,
             _ => LOGO_GREEN_BRIGHT,
         };
-        let c = (b'0' + (pseudo_random(&mut seed) % 75) as u8) as char;
+        let c = (b'0' + (pseudo_rand(&mut seed) % 75) as u8) as char;
         draw_char_at(c, x as usize, y as usize, color, 0xFF000000);
     }
 }
@@ -462,8 +462,8 @@ pub fn initialize_boot_splash() {
     let initialize_text = "Initializing...";
     let initialize_y = bar_y + bar_h + 8;
     for (i, c) in initialize_text.chars().enumerate() {
-        let pixel = bar_x + (i as u32) * 8;
-        draw_char_at(c, pixel as usize, initialize_y as usize, SPLASH_TEXT_DIM, SPLASH_BG);
+        let px = bar_x + (i as u32) * 8;
+        draw_char_at(c, px as usize, initialize_y as usize, SPLASH_TEXT_DIM, SPLASH_BG);
     }
 }
 
@@ -482,7 +482,7 @@ pub fn update_boot_splash(phase: u32, message: &str) {
 
     // Calculate progress percentage
     let progress = ((phase + 1) * 100) / BOOT_TOTAL_PHASES;
-    let filled_w = (bar_w * progress.minimum(100)) / 100;
+    let filled_w = (bar_w * progress.min(100)) / 100;
 
     // Draw filled portion
     if filled_w > 0 {
@@ -496,8 +496,8 @@ pub fn update_boot_splash(phase: u32, message: &str) {
 
     // Draw phase message
     for (i, c) in message.chars().enumerate() {
-        let pixel = bar_x + (i as u32) * 8;
-        draw_char_at(c, pixel as usize, message_y as usize, SPLASH_TEXT_BRIGHT, SPLASH_BG);
+        let px = bar_x + (i as u32) * 8;
+        draw_char_at(c, px as usize, message_y as usize, SPLASH_TEXT_BRIGHT, SPLASH_BG);
     }
 
     // Draw percentage right of bar
@@ -505,30 +505,30 @@ pub fn update_boot_splash(phase: u32, message: &str) {
         "100%"
     } else {
         static mut PCT_BUFFER: [u8; 5] = [0; 5];
-        let buffer = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+        let buf = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { &mut PCT_BUFFER };
         let tens = (progress / 10) as u8;
         let ones = (progress % 10) as u8;
         if progress >= 10 {
-            buffer[0] = b' ';
-            buffer[1] = b'0' + tens;
-            buffer[2] = b'0' + ones;
-            buffer[3] = b'%';
-            buffer[4] = 0;
+            buf[0] = b' ';
+            buf[1] = b'0' + tens;
+            buf[2] = b'0' + ones;
+            buf[3] = b'%';
+            buf[4] = 0;
         } else {
-            buffer[0] = b' ';
-            buffer[1] = b' ';
-            buffer[2] = b'0' + ones;
-            buffer[3] = b'%';
-            buffer[4] = 0;
+            buf[0] = b' ';
+            buf[1] = b' ';
+            buf[2] = b'0' + ones;
+            buf[3] = b'%';
+            buf[4] = 0;
         }
                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::str::from_utf8_unchecked(&buffer[..4]) }
+unsafe { core::str::from_utf8_unchecked(&buf[..4]) }
     };
     let pct_x = bar_x + bar_w + 8;
     for (i, c) in pct_text.chars().enumerate() {
-        let pixel = pct_x + (i as u32) * 8;
-        draw_char_at(c, pixel as usize, bar_y as usize, SPLASH_BAR_FG, SPLASH_BG);
+        let px = pct_x + (i as u32) * 8;
+        draw_char_at(c, px as usize, bar_y as usize, SPLASH_BAR_FG, SPLASH_BG);
     }
 }
 

@@ -336,7 +336,7 @@ match parse_ipv4(server_ip) {
     };
     
     // Connexion TCP
-    let source_port = // Correspondance de motifs — branchement exhaustif de Rust.
+    let src_port = // Correspondance de motifs — branchement exhaustif de Rust.
 match crate::netstack::tcp::send_syn(ip, server_port) {
         Ok(p) => p,
         Err(e) => {
@@ -348,7 +348,7 @@ match crate::netstack::tcp::send_syn(ip, server_port) {
         }
     };
     
-    let established = crate::netstack::tcp::wait_for_established(ip, server_port, source_port, 2000);
+    let established = crate::netstack::tcp::wait_for_established(ip, server_port, src_port, 2000);
     if !established {
         crate::println_color!(COLOR_RED, "      ERROR: Connection timeout");
         crate::println!("      Make sure the server is running on port {}", server_port);
@@ -364,7 +364,7 @@ match crate::netstack::tcp::send_syn(ip, server_port) {
         package_path, server_ip
     );
     
-    if let Err(e) = crate::netstack::tcp::send_payload(ip, server_port, source_port, request.as_bytes()) {
+    if let Err(e) = crate::netstack::tcp::send_payload(ip, server_port, src_port, request.as_bytes()) {
         crate::println_color!(COLOR_RED, "      ERROR: Failed to send request: {}", e);
         crate::netstack::dhcp::resume();
         return;
@@ -393,7 +393,7 @@ const MAXIMUM_SIZE: usize = 8 * 1024 * 1024; // 8 MB max
         let mut batch_size = 0usize;
         
         // Batch receive: drain all available data at once
-        while let Some(data) = crate::netstack::tcp::recv_data(ip, server_port, source_port) {
+        while let Some(data) = crate::netstack::tcp::recv_data(ip, server_port, src_port) {
             got_data = true;
             batch_size += data.len();
             
@@ -407,18 +407,18 @@ const MAXIMUM_SIZE: usize = 8 * 1024 * 1024; // 8 MB max
         }
         
         // Afficher la progression (only when significant change)
-        let keyboard = received_data.len() / 1024;
-        if keyboard >= last_progress + 25 || (keyboard > 0 && last_progress == 0) {
+        let kb = received_data.len() / 1024;
+        if kb >= last_progress + 25 || (kb > 0 && last_progress == 0) {
             let elapsed = crate::logger::get_ticks().saturating_sub(start);
-            let speed_kbps = if elapsed > 0 { (keyboard as u64 * 1000) / elapsed } else { 0 };
-            crate::print!("\r      Downloaded: {} KB ({} KB/s)    ", keyboard, speed_kbps);
-            last_progress = keyboard;
+            let speed_kbps = if elapsed > 0 { (kb as u64 * 1000) / elapsed } else { 0 };
+            crate::print!("\r      Downloaded: {} KB ({} KB/s)    ", kb, speed_kbps);
+            last_progress = kb;
         }
         
         // Periodically flush pending ACKs (every 5ms for faster throughput)
         let now = crate::logger::get_ticks();
         if now.saturating_sub(last_acknowledge_flush) >= 5 {
-            crate::netstack::tcp::flush_pending_acks(ip, server_port, source_port);
+            crate::netstack::tcp::flush_pending_acks(ip, server_port, src_port);
             last_acknowledge_flush = now;
         }
         
@@ -426,9 +426,9 @@ const MAXIMUM_SIZE: usize = 8 * 1024 * 1024; // 8 MB max
             idle_count = idle_count.saturating_add(1);
             
             // Check for FIN or excessive idle
-            if crate::netstack::tcp::fin_received(ip, server_port, source_port) {
+            if crate::netstack::tcp::fin_received(ip, server_port, src_port) {
                 // Flush final ACK
-                crate::netstack::tcp::flush_pending_acks(ip, server_port, source_port);
+                crate::netstack::tcp::flush_pending_acks(ip, server_port, src_port);
                 break;
             }
             
@@ -451,13 +451,13 @@ const MAXIMUM_SIZE: usize = 8 * 1024 * 1024; // 8 MB max
         }
     }
     
-    let _ = crate::netstack::tcp::send_fin(ip, server_port, source_port);
+    let _ = crate::netstack::tcp::send_fin(ip, server_port, src_port);
     crate::println!();
     
-    let elapsed_mouse = crate::logger::get_ticks().saturating_sub(start);
+    let elapsed_ms = crate::logger::get_ticks().saturating_sub(start);
     let total_keyboard = received_data.len() / 1024;
-    let average_speed = if elapsed_mouse > 0 { (total_keyboard as u64 * 1000) / elapsed_mouse } else { 0 };
-    crate::println_color!(COLOR_GREEN, "      Transfer complete: {} KB in {}ms ({} KB/s)", total_keyboard, elapsed_mouse, average_speed);
+    let average_speed = if elapsed_ms > 0 { (total_keyboard as u64 * 1000) / elapsed_ms } else { 0 };
+    crate::println_color!(COLOR_GREEN, "      Transfer complete: {} KB in {}ms ({} KB/s)", total_keyboard, elapsed_ms, average_speed);
     
     if received_data.is_empty() {
         crate::println_color!(COLOR_RED, "      ERROR: No data received");
@@ -1067,31 +1067,31 @@ match args[i] {
     
         // Correspondance de motifs — branchement exhaustif de Rust.
 match crate::image::load(path) {
-        Some(image) => {
+        Some(img) => {
             crate::println_color!(COLOR_GREEN, "Image loaded successfully!");
-            crate::println!("  Size: {} x {} pixels", image.width, image.height);
-            crate::println!("  Memory: {} KB", (image.pixels.len() * 4) / 1024);
+            crate::println!("  Size: {} x {} pixels", img.width, img.height);
+            crate::println!("  Memory: {} KB", (img.pixels.len() * 4) / 1024);
             
             if information_only {
                 return;
             }
             
             // Calculate final dimensions
-            let dest_w = width.unwrap_or(image.width);
-            let dest_h = height.unwrap_or(image.height);
+            let dest_w = width.unwrap_or(img.width);
+            let dest_h = height.unwrap_or(img.height);
             
             // Calculate position (center if not specified)
-            let (framebuffer_width, framebuffer_height) = crate::framebuffer::get_dimensions();
-            let x = position_x.unwrap_or_else(|| ((framebuffer_width - dest_w) / 2) as i32);
-            let y = position_y.unwrap_or_else(|| ((framebuffer_height - dest_h) / 2) as i32);
+            let (fb_width, fb_height) = crate::framebuffer::get_dimensions();
+            let x = position_x.unwrap_or_else(|| ((fb_width - dest_w) / 2) as i32);
+            let y = position_y.unwrap_or_else(|| ((fb_height - dest_h) / 2) as i32);
             
             crate::println!("  Drawing at ({}, {}) size {}x{}", x, y, dest_w, dest_h);
             
             // Draw the image
-            if dest_w == image.width && dest_h == image.height {
-                image.draw(x, y);
+            if dest_w == img.width && dest_h == img.height {
+                img.draw(x, y);
             } else {
-                image.draw_scaled(x, y, dest_w, dest_h);
+                img.draw_scaled(x, y, dest_w, dest_h);
             }
             
             crate::framebuffer::swap_buffers();
@@ -1110,44 +1110,44 @@ pub(super) fn command_imgdemo(args: &[&str]) {
     
     crate::println_color!(COLOR_CYAN, "Image Demo: {}", demo_type);
     
-    let (framebuffer_width, framebuffer_height) = crate::framebuffer::get_dimensions();
+    let (fb_width, fb_height) = crate::framebuffer::get_dimensions();
     
         // Correspondance de motifs — branchement exhaustif de Rust.
 match demo_type {
         "gradient" => {
             // Vertical gradient
-            let image = crate::image::create_gradient_v(
+            let img = crate::image::create_gradient_v(
                 200, 200, 
                 0xFF0066FF,  // Blue top
                 0xFF00FF66   // Green bottom
             );
-            let x = ((framebuffer_width - 200) / 2) as i32;
-            let y = ((framebuffer_height - 200) / 2) as i32;
-            image.draw(x, y);
+            let x = ((fb_width - 200) / 2) as i32;
+            let y = ((fb_height - 200) / 2) as i32;
+            img.draw(x, y);
             crate::println_color!(COLOR_GREEN, "Displayed gradient at center");
         }
         "checker" => {
             // Checkerboard pattern
-            let image = crate::image::create_checkerboard(
+            let img = crate::image::create_checkerboard(
                 256, 256, 32,
                 0xFFFFFFFF,  // White
                 0xFF000000   // Black
             );
-            let x = ((framebuffer_width - 256) / 2) as i32;
-            let y = ((framebuffer_height - 256) / 2) as i32;
-            image.draw(x, y);
+            let x = ((fb_width - 256) / 2) as i32;
+            let y = ((fb_height - 256) / 2) as i32;
+            img.draw(x, y);
             crate::println_color!(COLOR_GREEN, "Displayed checkerboard at center");
         }
         "trustos" => {
             // TrustOS logo colors pattern
-            let image = crate::image::create_gradient_v(
+            let img = crate::image::create_gradient_v(
                 300, 100,
                 0xFF00D26A,  // Accent green
                 0xFF0A0E0B   // Dark background
             );
-            let x = ((framebuffer_width - 300) / 2) as i32;
-            let y = ((framebuffer_height - 100) / 2) as i32;
-            image.draw(x, y);
+            let x = ((fb_width - 300) / 2) as i32;
+            let y = ((fb_height - 100) / 2) as i32;
+            img.draw(x, y);
             
             // Draw a decorative border
             let border_color = 0xFF00D26A;
@@ -1164,37 +1164,37 @@ match demo_type {
         }
         "colors" => {
             // Color test pattern
-            let mut image = crate::image::Image::new(256, 256);
+            let mut img = crate::image::Image::new(256, 256);
             for y in 0..256 {
                 for x in 0..256 {
                     let r = x as u32;
                     let g = y as u32;
                     let b = ((x + y) / 2) as u32;
                     let color = 0xFF000000 | (r << 16) | (g << 8) | b;
-                    image.set_pixel(x, y, color);
+                    img.set_pixel(x, y, color);
                 }
             }
-            let x = ((framebuffer_width - 256) / 2) as i32;
-            let y = ((framebuffer_height - 256) / 2) as i32;
-            image.draw(x, y);
+            let x = ((fb_width - 256) / 2) as i32;
+            let y = ((fb_height - 256) / 2) as i32;
+            img.draw(x, y);
             crate::println_color!(COLOR_GREEN, "Displayed color test pattern");
         }
         "alpha" => {
             // Demonstrate alpha blending
             // First, draw a red background square
             let bg = crate::image::create_solid(200, 200, 0xFFFF0000);
-            let x = ((framebuffer_width - 200) / 2) as i32;
-            let y = ((framebuffer_height - 200) / 2) as i32;
+            let x = ((fb_width - 200) / 2) as i32;
+            let y = ((fb_height - 200) / 2) as i32;
             bg.draw(x, y);
             
             // Then draw a semi-transparent blue overlay
             let mut overlay = crate::image::Image::new(200, 200);
             for py in 0..200u32 {
-                for pixel in 0..200u32 {
+                for px in 0..200u32 {
                     // Alpha varies from 0 to 200 based on position
-                    let alpha = (pixel + py) / 2;
+                    let alpha = (px + py) / 2;
                     let color = (alpha << 24) | 0x000000FF;  // Semi-transparent blue
-                    overlay.set_pixel(pixel, py, color);
+                    overlay.set_pixel(px, py, color);
                 }
             }
             overlay.draw(x, y);
@@ -1361,40 +1361,40 @@ pub(super) fn command_disk() {
     
     // ── AHCI/SATA ──
     if crate::drivers::ahci::is_initialized() {
-        for device in crate::drivers::ahci::list_devices() {
-            let size_mb = (device.sector_count * 512) / (1024 * 1024);
+        for dev in crate::drivers::ahci::list_devices() {
+            let size_mb = (dev.sector_count * 512) / (1024 * 1024);
             crate::println!();
-            crate::print_color!(COLOR_GREEN, "[AHCI Port {}] ", device.port_number);
-            crate::println!("{}", device.model);
-            crate::println!("  Serial:    {}", device.serial);
-            crate::println!("  Capacity:  {} MB ({} sectors)", size_mb, device.sector_count);
-            crate::println!("  Type:      {:?}", device.device_type);
+            crate::print_color!(COLOR_GREEN, "[AHCI Port {}] ", dev.port_num);
+            crate::println!("{}", dev.model);
+            crate::println!("  Serial:    {}", dev.serial);
+            crate::println!("  Capacity:  {} MB ({} sectors)", size_mb, dev.sector_count);
+            crate::println!("  Type:      {:?}", dev.device_type);
             crate::println!("  Interface: SATA (AHCI)");
             device_count += 1;
         }
     }
     
     // ── IDE/ATA ──
-    for driver in crate::drivers::ata::list_drives() {
-        if driver.present {
-            let size_mb = (driver.sector_count * 512) / (1024 * 1024);
-            let character = // Correspondance de motifs — branchement exhaustif de Rust.
-match driver.channel {
+    for drv in crate::drivers::ata::list_drives() {
+        if drv.present {
+            let size_mb = (drv.sector_count * 512) / (1024 * 1024);
+            let ch = // Correspondance de motifs — branchement exhaustif de Rust.
+match drv.channel {
                 crate::drivers::ata::IdeChannel::Primary => "Primary",
                 crate::drivers::ata::IdeChannel::Secondary => "Secondary",
             };
-            let position = // Correspondance de motifs — branchement exhaustif de Rust.
-match driver.position {
+            let pos = // Correspondance de motifs — branchement exhaustif de Rust.
+match drv.position {
                 crate::drivers::ata::DrivePosition::Master => "Master",
                 crate::drivers::ata::DrivePosition::Slave => "Slave",
             };
             crate::println!();
-            crate::print_color!(COLOR_GREEN, "[IDE {} {}] ", character, position);
-            crate::println!("{}", driver.model);
-            crate::println!("  Serial:    {}", driver.serial);
-            crate::println!("  Capacity:  {} MB ({} sectors)", size_mb, driver.sector_count);
-            crate::println!("  LBA48:     {}", if driver.lba48 { "Yes" } else { "No (28-bit)" });
-            crate::println!("  ATAPI:     {}", if driver.atapi { "Yes" } else { "No" });
+            crate::print_color!(COLOR_GREEN, "[IDE {} {}] ", ch, pos);
+            crate::println!("{}", drv.model);
+            crate::println!("  Serial:    {}", drv.serial);
+            crate::println!("  Capacity:  {} MB ({} sectors)", size_mb, drv.sector_count);
+            crate::println!("  LBA48:     {}", if drv.lba48 { "Yes" } else { "No (28-bit)" });
+            crate::println!("  ATAPI:     {}", if drv.atapi { "Yes" } else { "No" });
             crate::println!("  Interface: IDE/ATA (PIO)");
             device_count += 1;
         }
@@ -1402,12 +1402,12 @@ match driver.position {
     
     // ── VirtIO ──
     if crate::virtio_blk::is_initialized() {
-        let capability = crate::virtio_blk::capacity();
-        let size_mb = (capability * 512) / (1024 * 1024);
+        let cap = crate::virtio_blk::capacity();
+        let size_mb = (cap * 512) / (1024 * 1024);
         let ro = crate::virtio_blk::is_read_only();
         crate::println!();
         crate::println_color!(COLOR_GREEN, "[VirtIO Block Device]");
-        crate::println!("  Capacity:  {} MB ({} sectors)", size_mb, capability);
+        crate::println!("  Capacity:  {} MB ({} sectors)", size_mb, cap);
         crate::println!("  Read-Only: {}", if ro { "Yes" } else { "No" });
         crate::println!("  Interface: VirtIO (paravirtual)");
         device_count += 1;
@@ -1426,9 +1426,9 @@ match driver.position {
     
     // ── RAM Disk ──
     crate::println!();
-    if let Some(information) = crate::disk::get_information() {
+    if let Some(info) = crate::disk::get_information() {
         crate::println_color!(COLOR_DARK_GREEN, "[RAM Disk]");
-        crate::println!("  Size:      {} KB ({} sectors)", information.sectors / 2, information.sectors);
+        crate::println!("  Size:      {} KB ({} sectors)", info.sectors / 2, info.sectors);
         
         let (reads, writes, bytes_r, bytes_w) = crate::disk::get_stats();
         crate::println!("  Stats:     {} reads ({} B), {} writes ({} B)", reads, bytes_r, writes, bytes_w);
@@ -1482,7 +1482,7 @@ match args[1].parse() {
         let text = args[2..].join(" ");
         let mut data = [0u8; 512];
         let bytes = text.as_bytes();
-        let len = bytes.len().minimum(512);
+        let len = bytes.len().min(512);
         data[..len].copy_from_slice(&bytes[..len]);
         
                 // Correspondance de motifs — branchement exhaustif de Rust.
@@ -1512,12 +1512,12 @@ match crate::disk::read_sectors(sector, 1, &mut buffer) {
             // Hexdump first 256 bytes
             for row in 0..16 {
                 crate::print_color!(COLOR_DARK_GREEN, "{:04X}: ", row * 16);
-                for column in 0..16 {
-                    crate::print!("{:02X} ", buffer[row * 16 + column]);
+                for col in 0..16 {
+                    crate::print!("{:02X} ", buffer[row * 16 + col]);
                 }
                 crate::print!(" |");
-                for column in 0..16 {
-                    let b = buffer[row * 16 + column];
+                for col in 0..16 {
+                    let b = buffer[row * 16 + col];
                     if b >= 0x20 && b < 0x7F {
                         crate::print!("{}", b as char);
                     } else {
@@ -1550,13 +1550,13 @@ pub(super) fn command_ahci(args: &[&str]) {
         }
         
         crate::println!("Found {} device(s):", devices.len());
-        for device in &devices {
+        for dev in &devices {
             crate::println!();
-            crate::print_color!(COLOR_GREEN, "  Port {}: ", device.port_number);
-            crate::println!("{:?}", device.device_type);
-            crate::println!("    Model:   {}", device.model);
-            crate::println!("    Serial:  {}", device.serial);
-            crate::println!("    Sectors: {}", device.sector_count);
+            crate::print_color!(COLOR_GREEN, "  Port {}: ", dev.port_num);
+            crate::println!("{:?}", dev.device_type);
+            crate::println!("    Model:   {}", dev.model);
+            crate::println!("    Serial:  {}", dev.serial);
+            crate::println!("    Sectors: {}", dev.sector_count);
         }
         
         crate::println!();
@@ -1606,12 +1606,12 @@ match crate::drivers::ahci::read_sectors(port, sector, 1, &mut buffer) {
                     // Hexdump first 256 bytes
                     for row in 0..16 {
                         crate::print_color!(COLOR_DARK_GREEN, "{:04X}: ", row * 16);
-                        for column in 0..16 {
-                            crate::print!("{:02X} ", buffer[row * 16 + column]);
+                        for col in 0..16 {
+                            crate::print!("{:02X} ", buffer[row * 16 + col]);
                         }
                         crate::print!(" |");
-                        for column in 0..16 {
-                            let b = buffer[row * 16 + column];
+                        for col in 0..16 {
+                            let b = buffer[row * 16 + col];
                             if b >= 0x20 && b < 0x7F {
                                 crate::print!("{}", b as char);
                             } else {
@@ -1654,7 +1654,7 @@ match args[2].parse() {
             let text = args[3..].join(" ");
             let mut buffer = alloc::vec![0u8; 512];
             let bytes = text.as_bytes();
-            let len = bytes.len().minimum(512);
+            let len = bytes.len().min(512);
             buffer[..len].copy_from_slice(&bytes[..len]);
             
             crate::println!("Writing {} bytes to sector {} on AHCI port {}...", len, sector, port);
@@ -1702,11 +1702,11 @@ pub(super) fn command_fdisk(args: &[&str]) {
             return;
         }
         
-        for device in devices {
-            crate::println_color!(COLOR_GREEN, "--- Disk {} ({:?}) ---", device.port_number, device.device_type);
+        for dev in devices {
+            crate::println_color!(COLOR_GREEN, "--- Disk {} ({:?}) ---", dev.port_num, dev.device_type);
             
                         // Correspondance de motifs — branchement exhaustif de Rust.
-match partition::read_from_ahci(device.port_number) {
+match partition::read_from_ahci(dev.port_num) {
                 Ok(table) => {
                     partition::print_partition_table(&table);
                 }
@@ -1776,15 +1776,15 @@ match state {
             crate::network::NetworkState::Error => crate::println_color!(COLOR_RED, "ERROR"),
         }
         crate::println!("      HWaddr: {}", mac);
-        if let Some(address) = ip {
-            crate::println!("      inet:   {}", address);
+        if let Some(addr) = ip {
+            crate::println!("      inet:   {}", addr);
         }
         
         // Use driver stats for accuracy
-        let (transmit_pkts, receive_pkts, transmit_bytes, receive_bytes) = crate::network::get_driver_stats();
+        let (tx_pkts, rx_pkts, tx_bytes, rx_bytes) = crate::network::get_driver_stats();
         crate::println!();
-        crate::println!("      RX packets: {}  bytes: {}", receive_pkts, receive_bytes);
-        crate::println!("      TX packets: {}  bytes: {}", transmit_pkts, transmit_bytes);
+        crate::println!("      RX packets: {}  bytes: {}", rx_pkts, rx_bytes);
+        crate::println!("      TX packets: {}  bytes: {}", tx_pkts, tx_bytes);
         
         let stats = crate::network::get_stats();
         if stats.errors > 0 {
@@ -1954,7 +1954,7 @@ match crate::netstack::dns::resolve("example.com") {
 
         // The scan should complete without panicking — that's the main test
         crate::println_color!(COLOR_GREEN, "[OK] {} open, {} closed, {} filtered ({} ms)",
-            stats.open, stats.closed, stats.filtered, stats.elapsed_mouse);
+            stats.open, stats.closed, stats.filtered, stats.elapsed_ms);
         passed += 1;
 
         // Print any open ports found
@@ -2048,8 +2048,8 @@ match crate::netscan::banner::grab_banner(web_target, 80, 3000) {
                 crate::println_color!(COLOR_GREEN, "[OK] {} in buffer", pkts.len());
                 for p in pkts.iter().take(3) {
                     crate::println!("    [{:<4}] {} {}", p.protocol.as_str(),
-                        p.source_ip.map(|i| crate::netscan::format_ip(i)).unwrap_or_else(|| alloc::string::String::from("?")),
-                        p.information);
+                        p.src_ip.map(|i| crate::netscan::format_ip(i)).unwrap_or_else(|| alloc::string::String::from("?")),
+                        p.info);
                 }
                 passed += 1;
             } else {
@@ -2080,10 +2080,10 @@ match crate::netscan::banner::grab_banner(web_target, 80, 3000) {
             passed += 1;
 
             for h in &hops {
-                crate::print!("    {:>2}  ", h.hop_number);
+                crate::print!("    {:>2}  ", h.hop_num);
                 if let Some(ip) = h.ip {
                     crate::print!("{:<16}", crate::netscan::format_ip(ip));
-                    for &rtt in &h.rtt_mouse {
+                    for &rtt in &h.rtt_ms {
                         if rtt == 0 { crate::print!("*    "); }
                         else { crate::print!("{} ms  ", rtt); }
                     }
@@ -2230,19 +2230,19 @@ match result.state {
             crate::netscan::port_scanner::PortState::Closed => COLOR_RED,
         };
 
-        let protocol = // Correspondance de motifs — branchement exhaustif de Rust.
+        let proto = // Correspondance de motifs — branchement exhaustif de Rust.
 match scan_type {
             crate::netscan::port_scanner::ScanType::Udp => "udp",
             _ => "tcp",
         };
 
-        crate::print!("{}/{:<6}", result.port, protocol);
+        crate::print!("{}/{:<6}", result.port, proto);
         crate::print_color!(state_color, " {:<14}", result.state.as_str());
         crate::println!(" {}", result.service);
     }
 
     crate::println!();
-    crate::println!("Scan complete: {} ports scanned in {} ms", stats.total_ports, stats.elapsed_mouse);
+    crate::println!("Scan complete: {} ports scanned in {} ms", stats.total_ports, stats.elapsed_ms);
     crate::println!("  {} open, {} closed, {} filtered",
         stats.open, stats.closed, stats.filtered);
 
@@ -2275,7 +2275,7 @@ match f.severity {
                     crate::netscan::vuln::Severity::High => COLOR_RED,
                     crate::netscan::vuln::Severity::Medium => COLOR_YELLOW,
                     crate::netscan::vuln::Severity::Low => COLOR_CYAN,
-                    crate::netscan::vuln::Severity::Information => COLOR_WHITE,
+                    crate::netscan::vuln::Severity::Info => COLOR_WHITE,
                 };
                 crate::print_color!(sev_color, "[{}] ", f.severity.as_str());
                 crate::println!("{}/{} — {}", f.port, f.service, f.title);
@@ -2379,7 +2379,7 @@ match crate::network::get_ipv4_config() {
                 crate::println_color!(COLOR_GREEN, "{:<20}{:<6}{:<8}{}",
                     ip_str,
                     host.ttl.map(|t| alloc::format!("{}", t)).unwrap_or_else(|| alloc::string::String::from("-")),
-                    alloc::format!("{}ms", host.rtt_mouse),
+                    alloc::format!("{}ms", host.rtt_ms),
                     host.os_hint);
             }
             crate::println!();
@@ -2488,14 +2488,14 @@ match subcmd {
             crate::println!("No.  Time      Protocol  Source              Destination         Info");
             crate::println!("{}", "-".repeat(90));
 
-            for (i, packet) in packets.iter().rev().enumerate() {
-                let source = packet.source_ip.map(|ip| crate::netscan::format_ip(ip))
-                    .unwrap_or_else(|| crate::netscan::format_mac(packet.source_mac));
-                let destination = packet.destination_ip.map(|ip| crate::netscan::format_ip(ip))
-                    .unwrap_or_else(|| crate::netscan::format_mac(packet.destination_mac));
+            for (i, pkt) in packets.iter().rev().enumerate() {
+                let src = pkt.src_ip.map(|ip| crate::netscan::format_ip(ip))
+                    .unwrap_or_else(|| crate::netscan::format_mac(pkt.src_mac));
+                let dst = pkt.dst_ip.map(|ip| crate::netscan::format_ip(ip))
+                    .unwrap_or_else(|| crate::netscan::format_mac(pkt.dst_mac));
 
                 let protocol_color = // Correspondance de motifs — branchement exhaustif de Rust.
-match packet.protocol {
+match pkt.protocol {
                     crate::netscan::sniffer::Protocol::Tcp => COLOR_CYAN,
                     crate::netscan::sniffer::Protocol::Udp => COLOR_BLUE,
                     crate::netscan::sniffer::Protocol::Http => COLOR_GREEN,
@@ -2506,10 +2506,10 @@ match packet.protocol {
                     _ => COLOR_WHITE,
                 };
 
-                crate::print!("{:<5}{:<10}", i + 1, packet.timestamp_mouse);
-                crate::print_color!(protocol_color, "{:<10}", packet.protocol.as_str());
-                crate::print!("{:<20}{:<20}", source, destination);
-                crate::println!("{}", &packet.information[..packet.information.len().minimum(40)]);
+                crate::print!("{:<5}{:<10}", i + 1, pkt.timestamp_ms);
+                crate::print_color!(protocol_color, "{:<10}", pkt.protocol.as_str());
+                crate::print!("{:<20}{:<20}", src, dst);
+                crate::println!("{}", &pkt.info[..pkt.info.len().min(40)]);
             }
 
             let (total_count, total_bytes, buffered) = crate::netscan::sniffer::get_stats();
@@ -2518,14 +2518,14 @@ match packet.protocol {
                 total_count, total_bytes, buffered);
         }
         "hex" => {
-            let index = args.get(1).and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
-            let packets = crate::netscan::sniffer::peek_captured_packets(index + 1);
-            if let Some(packet) = packets.get(index) {
+            let idx = args.get(1).and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
+            let packets = crate::netscan::sniffer::peek_captured_packets(idx + 1);
+            if let Some(pkt) = packets.get(idx) {
                 crate::println_color!(COLOR_CYAN, "Packet #{} — {} bytes — {}",
-                    index + 1, packet.length, packet.protocol.as_str());
-                crate::println!("{}", crate::netscan::sniffer::hex_dump(&packet.raw_data, 128));
+                    idx + 1, pkt.length, pkt.protocol.as_str());
+                crate::println!("{}", crate::netscan::sniffer::hex_dump(&pkt.raw_data, 128));
             } else {
-                crate::println_color!(COLOR_YELLOW, "No packet at index {}", index);
+                crate::println_color!(COLOR_YELLOW, "No packet at index {}", idx);
             }
         }
         "stats" => {
@@ -2621,7 +2621,7 @@ match f.severity {
             crate::netscan::vuln::Severity::High => COLOR_RED,
             crate::netscan::vuln::Severity::Medium => COLOR_YELLOW,
             crate::netscan::vuln::Severity::Low => COLOR_CYAN,
-            crate::netscan::vuln::Severity::Information => COLOR_GRAY,
+            crate::netscan::vuln::Severity::Info => COLOR_GRAY,
         };
         crate::print_color!(sev_color, "[{:<8}] ", f.severity.as_str());
         crate::println!("{}/{} — {}", f.port, f.service, f.title);
@@ -2647,18 +2647,18 @@ pub(super) fn command_traceroute_real(args: &[&str]) {
         return;
     };
 
-    let maximum_hops = args.get(1).and_then(|s| s.parse::<u8>().ok()).unwrap_or(30);
+    let max_hops = args.get(1).and_then(|s| s.parse::<u8>().ok()).unwrap_or(30);
 
     crate::println!("traceroute to {} ({}), {} hops max, 60 byte packets",
-        host, crate::netscan::format_ip(ip), maximum_hops);
+        host, crate::netscan::format_ip(ip), max_hops);
 
-    let hops = crate::netscan::traceroute::trace(ip, maximum_hops, 2000);
+    let hops = crate::netscan::traceroute::trace(ip, max_hops, 2000);
 
     for hop in &hops {
-        crate::print!("{:>2}  ", hop.hop_number);
+        crate::print!("{:>2}  ", hop.hop_num);
         if let Some(hop_ip) = hop.ip {
             crate::print!("{:<18}", crate::netscan::format_ip(hop_ip));
-            for &rtt in &hop.rtt_mouse {
+            for &rtt in &hop.rtt_ms {
                 if rtt == 0 {
                     crate::print!("*      ");
                 } else {
@@ -2703,21 +2703,21 @@ match crate::network::send_ping(ip) {
                 if result.success {
                     success_count += 1;
                     total_us += result.time_us;
-                    minimum_us = minimum_us.minimum(result.time_us);
-                    maximum_us = maximum_us.maximum(result.time_us);
+                    minimum_us = minimum_us.min(result.time_us);
+                    maximum_us = maximum_us.max(result.time_us);
                     
                     // Show microsecond precision
                     if result.time_us < 1000 {
                         crate::println!("64 bytes from {}: icmp_seq={} ttl={} time={} us", 
-                            ip, result.sequence, result.ttl, result.time_us);
+                            ip, result.seq, result.ttl, result.time_us);
                     } else {
-                        let mouse = result.time_us / 1000;
+                        let ms = result.time_us / 1000;
                         let us_frac = (result.time_us % 1000) / 10;
                         crate::println!("64 bytes from {}: icmp_seq={} ttl={} time={}.{:02} ms", 
-                            ip, result.sequence, result.ttl, mouse, us_frac);
+                            ip, result.seq, result.ttl, ms, us_frac);
                     }
                 } else {
-                    crate::println_color!(COLOR_YELLOW, "Request timeout for icmp_seq {}", result.sequence);
+                    crate::println_color!(COLOR_YELLOW, "Request timeout for icmp_seq {}", result.seq);
                 }
             }
             Err(e) => {
@@ -2877,14 +2877,14 @@ pub(super) fn command_traceroute(args: &[&str]) {
 // -- Audio Commands --
 
 pub(super) fn command_beep(args: &[&str]) {
-    let frequency = args.first()
+    let freq = args.first()
         .and_then(|s| s.parse::<u32>().ok())
         .unwrap_or(440);
     let duration = args.get(1)
         .and_then(|s| s.parse::<u32>().ok())
         .unwrap_or(500);
 
-    if frequency < 20 || frequency > 20000 {
+    if freq < 20 || freq > 20000 {
         crate::println_color!(COLOR_RED, "Frequency must be 20-20000 Hz");
         return;
     }
@@ -2906,9 +2906,9 @@ match crate::drivers::hda::init() {
         }
     }
 
-    crate::println!("Playing {}Hz for {}ms...", frequency, duration);
+    crate::println!("Playing {}Hz for {}ms...", freq, duration);
         // Correspondance de motifs — branchement exhaustif de Rust.
-match crate::drivers::hda::play_tone(frequency, duration) {
+match crate::drivers::hda::play_tone(freq, duration) {
         Ok(()) => {
             // Show DMA position info for debugging
             let lpib = crate::drivers::hda::get_lpib();
@@ -2959,8 +2959,8 @@ match crate::drivers::hda::init() {
             }
             crate::println!("Playing test scale...");
             let notes = [262, 294, 330, 349, 392, 440, 494, 523]; // C4 to C5
-            for &frequency in &notes {
-                let _ = crate::drivers::hda::play_tone(frequency, 200);
+            for &freq in &notes {
+                let _ = crate::drivers::hda::play_tone(freq, 200);
             }
             crate::println_color!(COLOR_GREEN, "Done");
         }
@@ -2981,7 +2981,7 @@ match crate::drivers::hda::init() {
         }
         Some("gpio") => {
             // audio gpio <0|1|2> — set GPIO DATA value on AFG
-            let value = // Correspondance de motifs — branchement exhaustif de Rust.
+            let val = // Correspondance de motifs — branchement exhaustif de Rust.
 match args.get(1).and_then(|s| s.parse::<u8>().ok()) {
                 Some(v) => v,
                 None => {
@@ -2992,8 +2992,8 @@ match args.get(1).and_then(|s| s.parse::<u8>().ok()) {
                 }
             };
                         // Correspondance de motifs — branchement exhaustif de Rust.
-match crate::drivers::hda::set_gpio(value) {
-                Ok(()) => crate::println_color!(COLOR_GREEN, "GPIO DATA set to {:#04X}", value),
+match crate::drivers::hda::set_gpio(val) {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "GPIO DATA set to {:#04X}", val),
                 Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
             }
         }
@@ -3040,7 +3040,7 @@ match crate::audio::play_note(note_name, duration) {
         }
         Some("freq") => {
             // synth freq 440 [duration_ms]
-            let frequency = // Correspondance de motifs — branchement exhaustif de Rust.
+            let freq = // Correspondance de motifs — branchement exhaustif de Rust.
 match args.get(1).and_then(|s| s.parse::<u32>().ok()) {
                 Some(f) => f,
                 None => {
@@ -3051,13 +3051,13 @@ match args.get(1).and_then(|s| s.parse::<u32>().ok()) {
             let duration = args.get(2)
                 .and_then(|s| s.parse::<u32>().ok())
                 .unwrap_or(500);
-            if frequency < 20 || frequency > 20000 {
+            if freq < 20 || freq > 20000 {
                 crate::println_color!(COLOR_RED, "Frequency must be 20-20000 Hz");
                 return;
             }
-            crate::println!("Synth: {}Hz for {}ms", frequency, duration);
+            crate::println!("Synth: {}Hz for {}ms", freq, duration);
                         // Correspondance de motifs — branchement exhaustif de Rust.
-match crate::audio::play_frequency(frequency, duration) {
+match crate::audio::play_frequency(freq, duration) {
                 Ok(()) => crate::println_color!(COLOR_GREEN, "Done"),
                 Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
             }
@@ -3448,9 +3448,9 @@ match crate::trustdaw::live_viz::remove_effect(args[1]) {
             }
                         // Correspondance de motifs — branchement exhaustif de Rust.
 match crate::trustdaw::live_viz::get_source(args[1]) {
-                Some(source) => {
+                Some(src) => {
                     crate::println_color!(COLOR_CYAN, "─── {} ───", args[1]);
-                    crate::println!("{}", source);
+                    crate::println!("{}", src);
                     crate::println_color!(COLOR_CYAN, "─────────────────");
                 }
                 None => crate::println_color!(COLOR_RED, "Effect not found: {}", args[1]),
@@ -3529,6 +3529,18 @@ pub(super) fn command_play(args: &[&str]) {
         crate::println!("  [Esc] Exit");
                 // Correspondance de motifs — branchement exhaustif de Rust.
 match crate::trustdaw::audio_viz::play_untitled2() {
+            Ok(()) => crate::println!("Playback complete"),
+            Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+        }
+        return;
+    }
+
+    // TrustAnthem
+    if path == "anthem" || path == "trustanthem" || path == "TrustAnthem" {
+        crate::println_color!(COLOR_GREEN, "Playing 'TrustAnthem' — The TrustOS Anthem...");
+        crate::println!("  [Esc] Exit");
+                // Correspondance de motifs — branchement exhaustif de Rust.
+match crate::trustdaw::audio_viz::play_anthem() {
             Ok(()) => crate::println!("Playback complete"),
             Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
         }
@@ -3636,7 +3648,7 @@ match crate::trustdaw::recorder::record_interactive(track_index) {
             let track_index = args.get(1).and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
             let bars = args.get(2).and_then(|s| s.parse::<u32>().ok()).unwrap_or(4);
                         // Correspondance de motifs — branchement exhaustif de Rust.
-match crate::trustdaw::ensure_initialize().and_then(|_| {
+match crate::trustdaw::ensure_init().and_then(|_| {
                 let project = crate::trustdaw::PROJECT.lock();
                 let project = project.as_ref().ok_or("No project")?;
                 let track = project.tracks.get(track_index).ok_or("Invalid track index")?;
@@ -3744,11 +3756,11 @@ match crate::trustdaw::audio_viz::play_file(path) {
                         // Correspondance de motifs — branchement exhaustif de Rust.
 match crate::trustdaw::export_wav(path) {
                 Ok(size) => {
-                    let (secs, mouse) = crate::trustdaw::wav_export::duration_information(
+                    let (secs, ms) = crate::trustdaw::wav_export::duration_information(
                         size / 2, crate::trustdaw::SAMPLE_RATE, 2
                     );
                     crate::println_color!(COLOR_GREEN, "Exported: {} ({} bytes, {}:{:02}.{:03})",
-                        path, size, secs / 60, secs % 60, mouse);
+                        path, size, secs / 60, secs % 60, ms);
                 }
                 Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
             }
@@ -3834,17 +3846,17 @@ match args.get(1) {
             };
                         // Correspondance de motifs — branchement exhaustif de Rust.
 match crate::trustdaw::add_track(name) {
-                Ok(index) => crate::println_color!(COLOR_GREEN, "Track {} \"{}\" added", index, name),
+                Ok(idx) => crate::println_color!(COLOR_GREEN, "Track {} \"{}\" added", idx, name),
                 Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
             }
         }
         Some("rm") | Some("remove") | Some("del") => {
                         // Correspondance de motifs — branchement exhaustif de Rust.
 match args.get(1).and_then(|s| s.parse::<usize>().ok()) {
-                Some(index) => {
+                Some(idx) => {
                                         // Correspondance de motifs — branchement exhaustif de Rust.
-match crate::trustdaw::remove_track(index) {
-                        Ok(()) => crate::println_color!(COLOR_GREEN, "Track {} removed", index),
+match crate::trustdaw::remove_track(idx) {
+                        Ok(()) => crate::println_color!(COLOR_GREEN, "Track {} removed", idx),
                         Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
                     }
                 }
@@ -3859,27 +3871,27 @@ match crate::trustdaw::remove_track(index) {
                 crate::println_color!(COLOR_YELLOW, "Usage: daw track wave <#> <sine|square|saw|triangle|noise>");
                 return;
             }
-            let index = // Correspondance de motifs — branchement exhaustif de Rust.
+            let idx = // Correspondance de motifs — branchement exhaustif de Rust.
 match args[1].parse::<usize>() {
                 Ok(i) => i,
                 Err(_) => { crate::println_color!(COLOR_RED, "Invalid track index"); return; }
             };
                         // Correspondance de motifs — branchement exhaustif de Rust.
-match crate::trustdaw::set_track_waveform(index, args[2]) {
-                Ok(()) => crate::println_color!(COLOR_GREEN, "Track {} waveform set to {}", index, args[2]),
+match crate::trustdaw::set_track_waveform(idx, args[2]) {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "Track {} waveform set to {}", idx, args[2]),
                 Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
             }
         }
         Some("notes") => {
-            let index = args.get(1).and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
+            let idx = args.get(1).and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
                         // Correspondance de motifs — branchement exhaustif de Rust.
-match crate::trustdaw::list_notes(index) {
+match crate::trustdaw::list_notes(idx) {
                 Ok(s) => crate::println!("{}", s),
                 Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
             }
         }
         Some("clear") => {
-            let index = // Correspondance de motifs — branchement exhaustif de Rust.
+            let idx = // Correspondance de motifs — branchement exhaustif de Rust.
 match args.get(1).and_then(|s| s.parse::<usize>().ok()) {
                 Some(i) => i,
                 None => { crate::println_color!(COLOR_YELLOW, "Usage: daw track clear <#>"); return; }
@@ -3887,7 +3899,7 @@ match args.get(1).and_then(|s| s.parse::<usize>().ok()) {
             let cleared = {
                 let mut project = crate::trustdaw::PROJECT.lock();
                 if let Some(proj) = project.as_mut() {
-                    if let Some(track) = proj.tracks.get_mut(index) {
+                    if let Some(track) = proj.tracks.get_mut(idx) {
                         let count = track.notes.len();
                         track.clear();
                         Ok(count)
@@ -3896,7 +3908,7 @@ match args.get(1).and_then(|s| s.parse::<usize>().ok()) {
             };
                         // Correspondance de motifs — branchement exhaustif de Rust.
 match cleared {
-                Ok(n) => crate::println_color!(COLOR_GREEN, "Cleared {} notes from track {}", n, index),
+                Ok(n) => crate::println_color!(COLOR_GREEN, "Cleared {} notes from track {}", n, idx),
                 Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
             }
         }
@@ -3905,7 +3917,7 @@ match cleared {
                 crate::println_color!(COLOR_YELLOW, "Usage: daw track transpose <#> <semitones>");
                 return;
             }
-            let index = // Correspondance de motifs — branchement exhaustif de Rust.
+            let idx = // Correspondance de motifs — branchement exhaustif de Rust.
 match args[1].parse::<usize>() {
                 Ok(i) => i,
                 Err(_) => { crate::println_color!(COLOR_RED, "Invalid track index"); return; }
@@ -3918,7 +3930,7 @@ match args[2].parse::<i8>() {
             let result = {
                 let mut project = crate::trustdaw::PROJECT.lock();
                 if let Some(proj) = project.as_mut() {
-                    if let Some(track) = proj.tracks.get_mut(index) {
+                    if let Some(track) = proj.tracks.get_mut(idx) {
                         track.transpose(semi);
                         Ok(())
                     } else { Err("Invalid track index") }
@@ -3926,7 +3938,7 @@ match args[2].parse::<i8>() {
             };
                         // Correspondance de motifs — branchement exhaustif de Rust.
 match result {
-                Ok(()) => crate::println_color!(COLOR_GREEN, "Track {} transposed by {} semitones", index, semi),
+                Ok(()) => crate::println_color!(COLOR_GREEN, "Track {} transposed by {} semitones", idx, semi),
                 Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
             }
         }
@@ -4027,13 +4039,13 @@ match args.first().copied() {
                 crate::println_color!(COLOR_YELLOW, "Usage: daw mixer vol <track#> <0-255>");
                 return;
             }
-            let index = // Correspondance de motifs — branchement exhaustif de Rust.
+            let idx = // Correspondance de motifs — branchement exhaustif de Rust.
 match args[1].parse::<usize>() { Ok(i) => i, Err(_) => { crate::println_color!(COLOR_RED, "Invalid track"); return; } };
             let vol = // Correspondance de motifs — branchement exhaustif de Rust.
 match args[2].parse::<u8>() { Ok(v) => v, Err(_) => { crate::println_color!(COLOR_RED, "Invalid volume (0-255)"); return; } };
                         // Correspondance de motifs — branchement exhaustif de Rust.
-match crate::trustdaw::set_track_volume(index, vol) {
-                Ok(()) => crate::println_color!(COLOR_GREEN, "Track {} volume: {}", index, vol),
+match crate::trustdaw::set_track_volume(idx, vol) {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "Track {} volume: {}", idx, vol),
                 Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
             }
         }
@@ -4042,42 +4054,42 @@ match crate::trustdaw::set_track_volume(index, vol) {
                 crate::println_color!(COLOR_YELLOW, "Usage: daw mixer pan <track#> <-100..+100>");
                 return;
             }
-            let index = // Correspondance de motifs — branchement exhaustif de Rust.
+            let idx = // Correspondance de motifs — branchement exhaustif de Rust.
 match args[1].parse::<usize>() { Ok(i) => i, Err(_) => { crate::println_color!(COLOR_RED, "Invalid track"); return; } };
             let pan = // Correspondance de motifs — branchement exhaustif de Rust.
 match args[2].parse::<i8>() { Ok(p) => p, Err(_) => { crate::println_color!(COLOR_RED, "Invalid pan (-100 to +100)"); return; } };
                         // Correspondance de motifs — branchement exhaustif de Rust.
-match crate::trustdaw::set_track_pan(index, pan) {
+match crate::trustdaw::set_track_pan(idx, pan) {
                 Ok(()) => {
                     let desc = if pan == 0 { "Center".into() } else if pan > 0 { alloc::format!("Right {}", pan) } else { alloc::format!("Left {}", -pan) };
-                    crate::println_color!(COLOR_GREEN, "Track {} pan: {}", index, desc);
+                    crate::println_color!(COLOR_GREEN, "Track {} pan: {}", idx, desc);
                 }
                 Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
             }
         }
         Some("mute") => {
-            let index = // Correspondance de motifs — branchement exhaustif de Rust.
+            let idx = // Correspondance de motifs — branchement exhaustif de Rust.
 match args.get(1).and_then(|s| s.parse::<usize>().ok()) {
                 Some(i) => i,
                 None => { crate::println_color!(COLOR_YELLOW, "Usage: daw mixer mute <track#>"); return; }
             };
                         // Correspondance de motifs — branchement exhaustif de Rust.
-match crate::trustdaw::toggle_mute(index) {
+match crate::trustdaw::toggle_mute(idx) {
                 Ok(muted) => crate::println_color!(if muted { COLOR_YELLOW } else { COLOR_GREEN },
-                    "Track {} {}", index, if muted { "MUTED" } else { "unmuted" }),
+                    "Track {} {}", idx, if muted { "MUTED" } else { "unmuted" }),
                 Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
             }
         }
         Some("solo") => {
-            let index = // Correspondance de motifs — branchement exhaustif de Rust.
+            let idx = // Correspondance de motifs — branchement exhaustif de Rust.
 match args.get(1).and_then(|s| s.parse::<usize>().ok()) {
                 Some(i) => i,
                 None => { crate::println_color!(COLOR_YELLOW, "Usage: daw mixer solo <track#>"); return; }
             };
                         // Correspondance de motifs — branchement exhaustif de Rust.
-match crate::trustdaw::toggle_solo(index) {
+match crate::trustdaw::toggle_solo(idx) {
                 Ok(solo) => crate::println_color!(if solo { COLOR_YELLOW } else { COLOR_GREEN },
-                    "Track {} {}", index, if solo { "SOLO" } else { "un-solo'd" }),
+                    "Track {} {}", idx, if solo { "SOLO" } else { "un-solo'd" }),
                 Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
             }
         }
@@ -4101,35 +4113,35 @@ pub(super) fn command_lspci(args: &[&str]) {
     crate::println_color!(COLOR_CYAN, "PCI Devices ({} found):", devices.len());
     crate::println!();
     
-    for device in &devices {
+    for dev in &devices {
         // Basic format: Bus:Device.Function VendorID:DeviceID Class
         crate::print_color!(COLOR_GREEN, "{:02X}:{:02X}.{} ", 
-            device.bus, device.device, device.function);
-        crate::print!("{:04X}:{:04X} ", device.vendor_id, device.device_id);
+            dev.bus, dev.device, dev.function);
+        crate::print!("{:04X}:{:04X} ", dev.vendor_id, dev.device_id);
         
-        let subclass_name = device.subclass_name();
+        let subclass_name = dev.subclass_name();
         if subclass_name.is_empty() {
-            crate::print!("{}", device.class_name());
+            crate::print!("{}", dev.class_name());
         } else {
             crate::print!("{}", subclass_name);
         }
         
-        crate::println_color!(COLOR_YELLOW, " [{}]", device.vendor_name());
+        crate::println_color!(COLOR_YELLOW, " [{}]", dev.vendor_name());
         
         if verbose {
             crate::println!("        Class: {:02X}:{:02X} ProgIF: {:02X} Rev: {:02X}",
-                device.class_code, device.subclass, device.prog_if, device.revision);
+                dev.class_code, dev.subclass, dev.prog_if, dev.revision);
             
-            if device.interrupt_line != 0xFF && device.interrupt_pin != 0 {
+            if dev.interrupt_line != 0xFF && dev.interrupt_pin != 0 {
                 crate::println!("        IRQ: {} (pin {})", 
-                    device.interrupt_line, device.interrupt_pin);
+                    dev.interrupt_line, dev.interrupt_pin);
             }
             
             // Show BARs
             for i in 0..6 {
-                if let Some(address) = device.bar_address(i) {
-                    let bar_type = if device.bar_is_memory(i) { "MEM" } else { "I/O" };
-                    crate::println!("        BAR{}: {:#010X} [{}]", i, address, bar_type);
+                if let Some(addr) = dev.bar_address(i) {
+                    let bar_type = if dev.bar_is_memory(i) { "MEM" } else { "I/O" };
+                    crate::println!("        BAR{}: {:#010X} [{}]", i, addr, bar_type);
                 }
             }
             crate::println!();
@@ -4164,11 +4176,11 @@ pub(super) fn command_lshw() {
         .filter(|d| d.class_code == crate::pci::class::MASS_STORAGE)
         .collect();
     crate::println_color!(COLOR_GREEN, "Storage Controllers ({}):", storage.len());
-    for device in &storage {
+    for dev in &storage {
         crate::println!("  {:04X}:{:04X} {} [{}]", 
-            device.vendor_id, device.device_id, 
-            device.subclass_name(),
-            device.vendor_name());
+            dev.vendor_id, dev.device_id, 
+            dev.subclass_name(),
+            dev.vendor_name());
     }
     crate::println!();
     
@@ -4177,11 +4189,11 @@ pub(super) fn command_lshw() {
         .filter(|d| d.class_code == crate::pci::class::NETWORK)
         .collect();
     crate::println_color!(COLOR_GREEN, "Network Controllers ({}):", network.len());
-    for device in &network {
+    for dev in &network {
         crate::println!("  {:04X}:{:04X} {} [{}]",
-            device.vendor_id, device.device_id,
-            device.subclass_name(),
-            device.vendor_name());
+            dev.vendor_id, dev.device_id,
+            dev.subclass_name(),
+            dev.vendor_name());
     }
     crate::println!();
     
@@ -4190,11 +4202,11 @@ pub(super) fn command_lshw() {
         .filter(|d| d.class_code == crate::pci::class::DISPLAY)
         .collect();
     crate::println_color!(COLOR_GREEN, "Display ({}):", display.len());
-    for device in &display {
+    for dev in &display {
         crate::println!("  {:04X}:{:04X} {} [{}]",
-            device.vendor_id, device.device_id,
-            device.subclass_name(),
-            device.vendor_name());
+            dev.vendor_id, dev.device_id,
+            dev.subclass_name(),
+            dev.vendor_name());
     }
     crate::println!();
     
@@ -4204,11 +4216,11 @@ pub(super) fn command_lshw() {
                  && d.subclass == crate::pci::serial::USB)
         .collect();
     crate::println_color!(COLOR_GREEN, "USB Controllers ({}):", usb.len());
-    for device in &usb {
+    for dev in &usb {
         crate::println!("  {:04X}:{:04X} {} [{}]",
-            device.vendor_id, device.device_id,
-            device.subclass_name(),
-            device.vendor_name());
+            dev.vendor_id, dev.device_id,
+            dev.subclass_name(),
+            dev.vendor_name());
     }
     crate::println!();
     
@@ -4241,17 +4253,17 @@ match subcmd {
                 found_gpu = true;
                 crate::println_color!(COLOR_GREEN, "NVIDIA GPU:");
                 crate::println!("  {}", crate::drivers::nvidia::summary());
-                if let Some(information) = crate::drivers::nvidia::get_information() {
+                if let Some(info) = crate::drivers::nvidia::get_information() {
                     crate::println!("  PCI: {:04X}:{:04X} rev {:02X} at {:02X}:{:02X}.{}",
-                        information.vendor_id, information.device_id, information.revision,
-                        information.bus, information.device, information.function);
+                        info.vendor_id, info.device_id, info.revision,
+                        info.bus, info.device, info.function);
                     crate::println!("  Chipset: {} (id {:#04X}, step {:#04X})",
-                        information.chipset_name(), information.chipset_id, information.stepping);
-                    crate::println!("  VRAM: {} MB", information.vram_size / (1024 * 1024));
-                    crate::println!("  PCIe: Gen{} x{}", information.pcie_generator, information.pcie_width);
-                    crate::println!("  MMIO: {:#X} ({}MB)", information.mmio_base, information.mmio_size / (1024 * 1024));
-                    if information.vram_base > 0 {
-                        crate::println!("  VRAM aperture: {:#X}", information.vram_base);
+                        info.chipset_name(), info.chipset_id, info.stepping);
+                    crate::println!("  VRAM: {} MB", info.vram_size / (1024 * 1024));
+                    crate::println!("  PCIe: Gen{} x{}", info.pcie_gen, info.pcie_width);
+                    crate::println!("  MMIO: {:#X} ({}MB)", info.mmio_base, info.mmio_size / (1024 * 1024));
+                    if info.vram_base > 0 {
+                        crate::println!("  VRAM aperture: {:#X}", info.vram_base);
                     }
                     crate::println!("  2D Accel: {}", if crate::drivers::nvidia::is_accel_ready() { "READY" } else { "N/A" });
                 }
@@ -4262,7 +4274,7 @@ match subcmd {
             if crate::drivers::amdgpu::is_detected() {
                 found_gpu = true;
                 crate::println_color!(COLOR_GREEN, "AMD GPU:");
-                for line in crate::drivers::amdgpu::information_lines() {
+                for line in crate::drivers::amdgpu::info_lines() {
                     crate::println!("{}", line);
                 }
                 crate::println!();
@@ -4288,10 +4300,10 @@ match subcmd {
                 let display_devs = crate::pci::find_by_class(crate::pci::class::DISPLAY);
                 if !display_devs.is_empty() {
                     crate::println_color!(COLOR_GREEN, "Display controllers found:");
-                    for device in &display_devs {
+                    for dev in &display_devs {
                         crate::println!("  {:04X}:{:04X} {} [{}]", 
-                            device.vendor_id, device.device_id,
-                            device.subclass_name(), device.vendor_name());
+                            dev.vendor_id, dev.device_id,
+                            dev.subclass_name(), dev.vendor_name());
                     }
                 }
             }
@@ -4301,7 +4313,7 @@ match subcmd {
             crate::println!();
             
             if crate::drivers::amdgpu::dcn::is_ready() {
-                for line in crate::drivers::amdgpu::dcn::information_lines() {
+                for line in crate::drivers::amdgpu::dcn::info_lines() {
                     crate::println!("{}", line);
                 }
             } else {
@@ -4337,12 +4349,12 @@ match subcmd {
             let fs = crate::accessibility::get_font_size();
             let cs = crate::accessibility::get_cursor_size();
             let sk = crate::accessibility::is_sticky_keys();
-            let mouse = crate::accessibility::get_mouse_speed();
+            let ms = crate::accessibility::get_mouse_speed();
             crate::println!("  High Contrast : {}", if hc { "ON" } else { "OFF" });
             crate::println!("  Font Size     : {}", fs.label());
             crate::println!("  Cursor Size   : {}", cs.label());
             crate::println!("  Sticky Keys   : {}", if sk { "ON" } else { "OFF" });
-            crate::println!("  Mouse Speed   : {}", mouse.label());
+            crate::println!("  Mouse Speed   : {}", ms.label());
             crate::println!();
             crate::println!("Shortcuts: Win+H = toggle high contrast");
             crate::println!("Settings:  Win+I > keys 5-9 to adjust");
@@ -4416,9 +4428,9 @@ match args[1].parse() {
     crate::println!("Sending TCP SYN to {}:{}...", args[0], port);
         // Correspondance de motifs — branchement exhaustif de Rust.
 match crate::netstack::tcp::send_syn(ip, port) {
-        Ok(source_port) => {
-            crate::println!("SYN sent to {}:{} (src port {})", args[0], port, source_port);
-            let established = crate::netstack::tcp::wait_for_established(ip, port, source_port, 1000);
+        Ok(src_port) => {
+            crate::println!("SYN sent to {}:{} (src port {})", args[0], port, src_port);
+            let established = crate::netstack::tcp::wait_for_established(ip, port, src_port, 1000);
             if established {
                 crate::println!("SYN-ACK received (connection established)");
             } else {
@@ -4486,7 +4498,7 @@ fn do_http_get(host_input: &str, port: u16, path: &str, host_header: &str) {
     };
 
     crate::println!("Connecting to {}:{}...", host_input, port);
-    let source_port = // Correspondance de motifs — branchement exhaustif de Rust.
+    let src_port = // Correspondance de motifs — branchement exhaustif de Rust.
 match crate::netstack::tcp::send_syn(ip, port) {
         Ok(p) => p,
         Err(e) => {
@@ -4495,7 +4507,7 @@ match crate::netstack::tcp::send_syn(ip, port) {
         }
     };
 
-    let established = crate::netstack::tcp::wait_for_established(ip, port, source_port, 1000);
+    let established = crate::netstack::tcp::wait_for_established(ip, port, src_port, 1000);
     if !established {
         crate::println_color!(COLOR_YELLOW, "Connection timeout");
         return;
@@ -4508,7 +4520,7 @@ match crate::netstack::tcp::send_syn(ip, port) {
     request.push_str(host_header);
     request.push_str("\r\nConnection: close\r\n\r\n");
 
-    if let Err(e) = crate::netstack::tcp::send_payload(ip, port, source_port, request.as_bytes()) {
+    if let Err(e) = crate::netstack::tcp::send_payload(ip, port, src_port, request.as_bytes()) {
         crate::println_color!(COLOR_RED, "send failed: {}", e);
         return;
     }
@@ -4521,7 +4533,7 @@ match crate::netstack::tcp::send_syn(ip, port) {
 loop {
         crate::netstack::poll();
         let mut got_data = false;
-        while let Some(data) = crate::netstack::tcp::recv_data(ip, port, source_port) {
+        while let Some(data) = crate::netstack::tcp::recv_data(ip, port, src_port) {
             got_data = true;
             total_bytes += data.len();
             if let Ok(text) = core::str::from_utf8(&data) {
@@ -4533,7 +4545,7 @@ loop {
 
         if !got_data {
             idle_spins = idle_spins.saturating_add(1);
-            if crate::netstack::tcp::fin_received(ip, port, source_port) || idle_spins > 200_000 {
+            if crate::netstack::tcp::fin_received(ip, port, src_port) || idle_spins > 200_000 {
                 break;
             }
         } else {
@@ -4545,7 +4557,7 @@ loop {
         }
         crate::arch::halt();
     }
-    let _ = crate::netstack::tcp::send_fin(ip, port, source_port);
+    let _ = crate::netstack::tcp::send_fin(ip, port, src_port);
     crate::println!("\n--- end ({} bytes) ---", total_bytes);
     if total_bytes == 0 {
         crate::println_color!(COLOR_YELLOW, "No response body received");
@@ -4567,16 +4579,16 @@ pub(super) fn parse_url_simple(url: &str) -> Option<(String, u16, String)> {
     };
     
     // Split host and path
-    let (host_port, path) = if let Some(index) = rest.find('/') {
-        (&rest[..index], &rest[index..])
+    let (host_port, path) = if let Some(idx) = rest.find('/') {
+        (&rest[..idx], &rest[idx..])
     } else {
         (rest, "/")
     };
     
     // Split host and port
-    let (host, port) = if let Some(index) = host_port.find(':') {
-        let host = &host_port[..index];
-        let port_str = &host_port[index+1..];
+    let (host, port) = if let Some(idx) = host_port.find(':') {
+        let host = &host_port[..idx];
+        let port_str = &host_port[idx+1..];
         let port = port_str.parse::<u16>().unwrap_or(default_port);
         (host, port)
     } else {
@@ -4593,11 +4605,11 @@ pub(super) fn parse_url_simple(url: &str) -> Option<(String, u16, String)> {
 /// HTTP GET that returns a string (for GUI shell)
 pub(super) fn do_http_get_string(host: &str, ip: [u8; 4], port: u16, path: &str) -> Result<String, &'static str> {
     // Send SYN
-    let source_port = crate::netstack::tcp::send_syn(ip, port)
-        .map_error(|_| "SYN failed")?;
+    let src_port = crate::netstack::tcp::send_syn(ip, port)
+        .map_err(|_| "SYN failed")?;
     
     // Wait for connection
-    if !crate::netstack::tcp::wait_for_established(ip, port, source_port, 1000) {
+    if !crate::netstack::tcp::wait_for_established(ip, port, src_port, 1000) {
         return Err("Connection timeout");
     }
     
@@ -4610,8 +4622,8 @@ pub(super) fn do_http_get_string(host: &str, ip: [u8; 4], port: u16, path: &str)
     request.push_str("\r\nUser-Agent: TrustOS/0.1\r\nConnection: close\r\n\r\n");
     
     // Send request
-    crate::netstack::tcp::send_payload(ip, port, source_port, request.as_bytes())
-        .map_error(|_| "Send failed")?;
+    crate::netstack::tcp::send_payload(ip, port, src_port, request.as_bytes())
+        .map_err(|_| "Send failed")?;
     
     // Receive response
     let mut response = String::new();
@@ -4623,7 +4635,7 @@ loop {
         crate::netstack::poll();
         let mut got_data = false;
         
-        while let Some(data) = crate::netstack::tcp::recv_data(ip, port, source_port) {
+        while let Some(data) = crate::netstack::tcp::recv_data(ip, port, src_port) {
             got_data = true;
             if let Ok(text) = core::str::from_utf8(&data) {
                 response.push_str(text);
@@ -4632,7 +4644,7 @@ loop {
         
         if !got_data {
             idle_spins = idle_spins.saturating_add(1);
-            if crate::netstack::tcp::fin_received(ip, port, source_port) || idle_spins > 100_000 {
+            if crate::netstack::tcp::fin_received(ip, port, src_port) || idle_spins > 100_000 {
                 break;
             }
         } else {
@@ -4652,7 +4664,7 @@ loop {
         crate::arch::halt();
     }
     
-    let _ = crate::netstack::tcp::send_fin(ip, port, source_port);
+    let _ = crate::netstack::tcp::send_fin(ip, port, src_port);
     
     if response.is_empty() {
         return Err("No response received");
@@ -5070,9 +5082,9 @@ fn execute_shell_script(script: &str, args: &[&str]) {
         if expanded.starts_with("for ") {
             // Parse: "for VAR in val1 val2 ...; do" or multi-line
             let rest = expanded.trim_start_matches("for ").trim();
-            if let Some(in_position) = rest.find(" in ") {
-                let var_name = &rest[..in_position];
-                let values_str = rest[in_position + 4..].trim();
+            if let Some(in_pos) = rest.find(" in ") {
+                let var_name = &rest[..in_pos];
+                let values_str = rest[in_pos + 4..].trim();
                 let values_str = values_str.trim_end_matches("; do").trim_end_matches(";do").trim();
                 let values: Vec<&str> = values_str.split_whitespace().collect();
 
@@ -5097,8 +5109,8 @@ fn execute_shell_script(script: &str, args: &[&str]) {
 
                 // Execute body for each value
                 let body: Vec<&str> = lines[body_start..body_end].to_vec();
-                for value in &values {
-                    vars.insert(String::from(var_name), String::from(*value));
+                for val in &values {
+                    vars.insert(String::from(var_name), String::from(*val));
                     for body_line in &body {
                         let bl = body_line.trim();
                         if bl.is_empty() || bl.starts_with('#') || bl == "do" { continue; }
@@ -5125,12 +5137,12 @@ fn execute_shell_line(line: &str, vars: &mut alloc::collections::BTreeMap<alloc:
     if line.is_empty() || line.starts_with('#') { return; }
 
     // Variable assignment: VAR=value
-    if let Some(eq_position) = line.find('=') {
-        if eq_position > 0 && line[..eq_position].chars().all(|c| c.is_ascii_alphanumeric() || c == '_') && !line.starts_with('=') {
-            let var = &line[..eq_position];
-            let value = line[eq_position + 1..].trim();
-            let value = strip_shell_quotes(value);
-            vars.insert(String::from(var), value);
+    if let Some(eq_pos) = line.find('=') {
+        if eq_pos > 0 && line[..eq_pos].chars().all(|c| c.is_ascii_alphanumeric() || c == '_') && !line.starts_with('=') {
+            let var = &line[..eq_pos];
+            let val = line[eq_pos + 1..].trim();
+            let val = strip_shell_quotes(val);
+            vars.insert(String::from(var), val);
             return;
         }
     }
@@ -5146,19 +5158,19 @@ match cmd {
             if rest == "-n" {
                 // echo -n: no output
             } else if rest.starts_with("-n ") {
-                let message = strip_shell_quotes(&rest[3..]);
-                crate::print!("{}", message);
+                let msg = strip_shell_quotes(&rest[3..]);
+                crate::print!("{}", msg);
             } else if rest.starts_with("-e ") {
-                let message = strip_shell_quotes(&rest[3..]);
-                crate::println!("{}", message);
+                let msg = strip_shell_quotes(&rest[3..]);
+                crate::println!("{}", msg);
             } else {
-                let message = strip_shell_quotes(rest);
-                crate::println!("{}", message);
+                let msg = strip_shell_quotes(rest);
+                crate::println!("{}", msg);
             }
         }
         "printf" => {
-            let message = strip_shell_quotes(rest);
-            crate::print!("{}", message);
+            let msg = strip_shell_quotes(rest);
+            crate::print!("{}", msg);
         }
         "cat" => {
             // Try to read and display file content
@@ -5179,10 +5191,10 @@ match cmd {
         }
         "export" => {
             // export VAR=value or export VAR
-            if let Some(eq_position) = rest.find('=') {
-                let var = &rest[..eq_position];
-                let value = strip_shell_quotes(&rest[eq_position + 1..]);
-                vars.insert(alloc::string::String::from(var), value);
+            if let Some(eq_pos) = rest.find('=') {
+                let var = &rest[..eq_pos];
+                let val = strip_shell_quotes(&rest[eq_pos + 1..]);
+                vars.insert(alloc::string::String::from(var), val);
             }
         }
         "env" | "printenv" => {
@@ -5236,8 +5248,8 @@ fn expand_shell_vars_map(line: &str, vars: &alloc::collections::BTreeMap<alloc::
                 // ${VAR} syntax
                 if let Some(close) = chars[i + 2..].iter().position(|&c| c == '}') {
                     let var: String = chars[i + 2..i + 2 + close].iter().collect();
-                    if let Some(value) = vars.get(&var) {
-                        result.push_str(value);
+                    if let Some(val) = vars.get(&var) {
+                        result.push_str(val);
                     }
                     i += close + 3;
                     continue;
@@ -5261,8 +5273,8 @@ fn expand_shell_vars_map(line: &str, vars: &alloc::collections::BTreeMap<alloc::
             }
             if end > start {
                 let var: String = chars[start..end].iter().collect();
-                if let Some(value) = vars.get(&var) {
-                    result.push_str(value);
+                if let Some(val) = vars.get(&var) {
+                    result.push_str(val);
                 }
                 i = end;
             } else {
@@ -5411,7 +5423,7 @@ pub(super) fn resolve_program_path(name: &str) -> String {
 /// Check if a file exists
 pub(super) fn file_exists(path: &str) -> bool {
     // Try VFS first
-    if crate::vfs::status(path).is_ok() {
+    if crate::vfs::stat(path).is_ok() {
         return true;
     }
     // Fallback to ramfs
@@ -5491,7 +5503,7 @@ match crate::hypervisor::vmx::check_vmx_support() {
                         crate::println!("    NPT supported:      {}", if features.npt { "Yes" } else { "No" });
                         crate::println!("    NRIP Save:          {}", if features.nrip_save { "Yes" } else { "No" });
                         crate::println!("    Flush by ASID:      {}", if features.flush_by_asid { "Yes" } else { "No" });
-                        crate::println!("    Available ASIDs:    {}", features.number_asids);
+                        crate::println!("    Available ASIDs:    {}", features.num_asids);
                         crate::println!("    AVIC:               {}", if features.avic { "Yes" } else { "No" });
                     } else {
                         crate::print_color!(COLOR_RED, "Error: ");
@@ -5537,7 +5549,7 @@ match crate::hypervisor::shutdown() {
                 crate::println!("Recent VM Events:");
                 for event in events {
                     crate::println!("  [{:>6}ms] VM {} - {:?}", 
-                        event.timestamp_mouse, event.vm_id, event.event_type);
+                        event.timestamp_ms, event.vm_id, event.event_type);
                 }
             }
         }
@@ -5596,8 +5608,8 @@ match crate::hypervisor::shutdown() {
             if events.is_empty() {
                 crate::println!("No SMC calls intercepted.");
             } else {
-                for event in &events {
-                    crate::println!("  {}", crate::hypervisor::arm_hv::mmio_spy::format_smc_event(event));
+                for ev in &events {
+                    crate::println!("  {}", crate::hypervisor::arm_hv::mmio_spy::format_smc_event(ev));
                 }
                 crate::println!("\nTotal SMC events: {}",
                     crate::hypervisor::arm_hv::mmio_spy::total_smc_events());
@@ -5819,7 +5831,7 @@ match args[0] {
                 return;
             }
             let name = args[1];
-            let memory_mb: usize = args[2].parse().unwrap_or(16);
+            let mem_mb: usize = args[2].parse().unwrap_or(16);
             
             if !crate::hypervisor::is_enabled() {
                 crate::print_color!(COLOR_YELLOW, "Warning: ");
@@ -5828,10 +5840,10 @@ match args[0] {
             }
             
                         // Correspondance de motifs — branchement exhaustif de Rust.
-match crate::hypervisor::create_vm(name, memory_mb) {
+match crate::hypervisor::create_vm(name, mem_mb) {
                 Ok(id) => {
                     crate::print_color!(COLOR_GREEN, "? ");
-                    crate::println!("Created VM '{}' with ID {} ({}MB RAM)", name, id, memory_mb);
+                    crate::println!("Created VM '{}' with ID {} ({}MB RAM)", name, id, mem_mb);
                 }
                 Err(e) => {
                     crate::print_color!(COLOR_RED, "? ");
@@ -5876,14 +5888,14 @@ match crate::hypervisor::start_vm_with_guest(id, guest) {
             }
             
             // Linux guests need more memory
-            let memory_mb = if guest.starts_with("linux") || guest.ends_with(".bzimage") {
+            let mem_mb = if guest.starts_with("linux") || guest.ends_with(".bzimage") {
                 64
             } else {
                 4
             };
             
                         // Correspondance de motifs — branchement exhaustif de Rust.
-match crate::hypervisor::create_vm(guest, memory_mb) {
+match crate::hypervisor::create_vm(guest, mem_mb) {
                 Ok(id) => {
                     crate::println!("Running guest '{}'...", guest);
                                         // Correspondance de motifs — branchement exhaustif de Rust.
@@ -6139,7 +6151,7 @@ match detect_cpu_vendor() {
             } else {
                 128
             };
-            let len = len.minimum(4096); // Cap at 4KB
+            let len = len.min(4096); // Cap at 4KB
             
             match crate::hypervisor::cpu_vendor() {
                 crate::hypervisor::CpuVendor::Amd => {
@@ -6152,19 +6164,19 @@ match detect_cpu_vendor() {
                             for row_start in (0..data.len()).step_by(16) {
                                 crate::print!("  {:08X}: ", gpa as usize + row_start);
                                 // Hex bytes
-                                for column in 0..16 {
-                                    if row_start + column < data.len() {
-                                        crate::print!("{:02X} ", data[row_start + column]);
+                                for col in 0..16 {
+                                    if row_start + col < data.len() {
+                                        crate::print!("{:02X} ", data[row_start + col]);
                                     } else {
                                         crate::print!("   ");
                                     }
-                                    if column == 7 { crate::print!(" "); }
+                                    if col == 7 { crate::print!(" "); }
                                 }
                                 // ASCII
                                 crate::print!(" |");
-                                for column in 0..16 {
-                                    if row_start + column < data.len() {
-                                        let b = data[row_start + column];
+                                for col in 0..16 {
+                                    if row_start + col < data.len() {
+                                        let b = data[row_start + col];
                                         if b >= 0x20 && b < 0x7F {
                                             crate::print!("{}", b as char);
                                         } else {
@@ -6318,17 +6330,17 @@ match crate::hypervisor::cpu_vendor() {
                             // Dump stack contents as potential return addresses
                             crate::println!("  Stack contents (potential return addresses):");
                             for i in 0..depth {
-                                let address = rsp + (i as u64 * 8);
-                                if let Some(data) = vm.read_guest_memory(address, 8) {
-                                    let value = u64::from_le_bytes([
+                                let addr = rsp + (i as u64 * 8);
+                                if let Some(data) = vm.read_guest_memory(addr, 8) {
+                                    let val = u64::from_le_bytes([
                                         data[0], data[1], data[2], data[3],
                                         data[4], data[5], data[6], data[7],
                                     ]);
                                     // Heuristic: show only values that look like kernel addresses
-                                    let marker = if value > 0xFFFF_8000_0000_0000 { " <-- kernel addr" }
-                                        else if value > 0x1000 && value < 0x1_0000_0000 { " <-- possible code" }
+                                    let marker = if val > 0xFFFF_8000_0000_0000 { " <-- kernel addr" }
+                                        else if val > 0x1000 && val < 0x1_0000_0000 { " <-- possible code" }
                                         else { "" };
-                                    crate::println!("  [{:2}] RSP+{:04X}: {:016X}{}", i, i * 8, value, marker);
+                                    crate::println!("  [{:2}] RSP+{:04X}: {:016X}{}", i, i * 8, val, marker);
                                 } else {
                                     crate::println!("  [{:2}] RSP+{:04X}: <outside guest memory>", i, i * 8);
                                     break;
@@ -6340,7 +6352,7 @@ match crate::hypervisor::cpu_vendor() {
                                 crate::println!();
                                 crate::println!("  Frame pointer chain (RBP=0x{:X}):", rbp);
                                 let mut frame = rbp;
-                                for i in 0..depth.minimum(32) {
+                                for i in 0..depth.min(32) {
                                     if frame < 0x1000 || frame >= vm.memory_size as u64 - 16 { break; }
                                     if let Some(data) = vm.read_guest_memory(frame, 16) {
                                         let next_rbp = u64::from_le_bytes([
@@ -6463,7 +6475,7 @@ match sub {
                 None
             };
             let memory_index = if initrd_path.is_some() { 3 } else { 2 };
-            let memory_mb: usize = if args.len() > memory_index {
+            let mem_mb: usize = if args.len() > memory_index {
                 args[memory_index].parse().unwrap_or(128)
             } else {
                 128
@@ -6517,11 +6529,11 @@ match crate::vfs::read_file(path) {
             }
             
             // Create VM with specified memory
-            crate::println!("Creating VM ({} MB RAM)...", memory_mb);
+            crate::println!("Creating VM ({} MB RAM)...", mem_mb);
             crate::println!("Cmdline: {}", cmdline);
             
                         // Correspondance de motifs — branchement exhaustif de Rust.
-match crate::hypervisor::create_vm("linux-guest", memory_mb) {
+match crate::hypervisor::create_vm("linux-guest", mem_mb) {
                 Ok(id) => {
                     crate::println!("Booting Linux in VM #{}...", id);
                     
@@ -6550,7 +6562,7 @@ match result {
                         crate::hypervisor::CpuVendor::Intel => {
                             // For Intel, use linux_vm module
                             let config = crate::hypervisor::linux_vm::LinuxVmConfig {
-                                memory_mb: memory_mb,
+                                memory_mb: mem_mb,
                                 cmdline: cmdline.clone(),
                                 ..Default::default()
                             };
@@ -6823,23 +6835,23 @@ fn analyze_elf(data: &[u8]) -> String {
         return String::from("      Not a valid ELF file");
     }
     
-    let mut information = String::new();
+    let mut info = String::new();
     
     let class = data[4]; // 1=32-bit, 2=64-bit
     let endian = data[5]; // 1=little, 2=big
     let elf_type = u16::from_le_bytes([data[16], data[17]]);
     let machine = u16::from_le_bytes([data[18], data[19]]);
     
-    information.push_str(&format!("      File size: {} bytes\n", data.len()));
-    information.push_str(&format!("      Architecture: {}\n", if class == 2 { "x86_64 (64-bit)" } else { "x86 (32-bit)" }));
-    information.push_str(&format!("      Endian: {}\n", if endian == 1 { "Little" } else { "Big" }));
-    information.push_str(&format!("      Type: {}\n", // Correspondance de motifs — branchement exhaustif de Rust.
+    info.push_str(&format!("      File size: {} bytes\n", data.len()));
+    info.push_str(&format!("      Architecture: {}\n", if class == 2 { "x86_64 (64-bit)" } else { "x86 (32-bit)" }));
+    info.push_str(&format!("      Endian: {}\n", if endian == 1 { "Little" } else { "Big" }));
+    info.push_str(&format!("      Type: {}\n", // Correspondance de motifs — branchement exhaustif de Rust.
 match elf_type {
         2 => "Executable",
         3 => "Shared object (PIE)",
         _ => "Other",
     }));
-    information.push_str(&format!("      Machine: {}\n", // Correspondance de motifs — branchement exhaustif de Rust.
+    info.push_str(&format!("      Machine: {}\n", // Correspondance de motifs — branchement exhaustif de Rust.
 match machine {
         0x3E => "x86-64",
         0x03 => "i386",
@@ -6852,7 +6864,7 @@ match machine {
             data[24], data[25], data[26], data[27],
             data[28], data[29], data[30], data[31],
         ]);
-        information.push_str(&format!("      Entry point: 0x{:x}\n", entry));
+        info.push_str(&format!("      Entry point: 0x{:x}\n", entry));
         
         // Check linking type
         let ph_off = u64::from_le_bytes([data[32], data[33], data[34], data[35], data[36], data[37], data[38], data[39]]) as usize;
@@ -6868,13 +6880,13 @@ match machine {
             }
         }
         
-        information.push_str(&format!("      Linking: {}\n", if has_interp { "Dynamic (needs ld-linux.so)" } else { "Static" }));
+        info.push_str(&format!("      Linking: {}\n", if has_interp { "Dynamic (needs ld-linux.so)" } else { "Static" }));
     }
     
-    information.push_str("\n      ? Valid Linux ELF binary detected!");
-    information.push_str("\n      Note: Execution requires x86_64 CPU emulation (slow)");
+    info.push_str("\n      ? Valid Linux ELF binary detected!");
+    info.push_str("\n      Note: Execution requires x86_64 CPU emulation (slow)");
     
-    information
+    info
 }
 
 /// Package manager shortcut — routes apt-get/apk/dpkg through the Linux subsystem
@@ -6987,8 +6999,8 @@ match subcmd {
             
                         // Correspondance de motifs — branchement exhaustif de Rust.
 match elf_information {
-                Ok(information) => {
-                    crate::println_color!(COLOR_GREEN, "{}", information);
+                Ok(info) => {
+                    crate::println_color!(COLOR_GREEN, "{}", info);
                 }
                 Err(_) => {
                     crate::println_color!(COLOR_RED, "      Could not read binary: {}", binary);
@@ -7313,7 +7325,7 @@ fn download_from_local_server(filename: &str, save_path: &str) {
         crate::println_color!(COLOR_YELLOW, "      Warning: No ARP response yet");
     }
     
-    let source_port = // Correspondance de motifs — branchement exhaustif de Rust.
+    let src_port = // Correspondance de motifs — branchement exhaustif de Rust.
 match crate::netstack::tcp::send_syn(server_ip, server_port) {
         Ok(p) => {
             crate::serial_println!("[DOWNLOAD] SYN sent, src_port={}", p);
@@ -7330,7 +7342,7 @@ match crate::netstack::tcp::send_syn(server_ip, server_port) {
     };
     
     crate::println!("      Waiting for connection...");
-    if !crate::netstack::tcp::wait_for_established(server_ip, server_port, source_port, 3000) {
+    if !crate::netstack::tcp::wait_for_established(server_ip, server_port, src_port, 3000) {
         crate::serial_println!("[DOWNLOAD] Connection timeout!");
         crate::println_color!(COLOR_RED, "      ERROR: Connection timeout");
         crate::println!("      Check: ping 192.168.56.1");
@@ -7349,7 +7361,7 @@ match crate::netstack::tcp::send_syn(server_ip, server_port) {
         filename
     );
     
-    if let Err(e) = crate::netstack::tcp::send_payload(server_ip, server_port, source_port, request.as_bytes()) {
+    if let Err(e) = crate::netstack::tcp::send_payload(server_ip, server_port, src_port, request.as_bytes()) {
         crate::println_color!(COLOR_RED, "      ERROR: {}", e);
         crate::netstack::dhcp::resume();
         return;
@@ -7370,7 +7382,7 @@ loop {
         }
         
         let mut got_data = false;
-        while let Some(chunk) = crate::netstack::tcp::recv_data(server_ip, server_port, source_port) {
+        while let Some(chunk) = crate::netstack::tcp::recv_data(server_ip, server_port, src_port) {
             got_data = true;
             if data.len() + chunk.len() > 8 * 1024 * 1024 {
                 break;
@@ -7379,25 +7391,25 @@ loop {
         }
         
         // Progress display
-        let keyboard = data.len() / 1024;
-        if keyboard >= last_progress + 50 || (keyboard > 0 && last_progress == 0) {
+        let kb = data.len() / 1024;
+        if kb >= last_progress + 50 || (kb > 0 && last_progress == 0) {
             let elapsed = crate::logger::get_ticks().saturating_sub(start);
-            let speed = if elapsed > 0 { (keyboard as u64 * 1000) / elapsed } else { 0 };
-            crate::print!("\r      {} KB downloaded ({} KB/s)          ", keyboard, speed);
-            last_progress = keyboard;
+            let speed = if elapsed > 0 { (kb as u64 * 1000) / elapsed } else { 0 };
+            crate::print!("\r      {} KB downloaded ({} KB/s)          ", kb, speed);
+            last_progress = kb;
         }
         
         // Flush ACKs frequently
         let now = crate::logger::get_ticks();
         if now.saturating_sub(last_acknowledge_flush) >= 5 {
-            crate::netstack::tcp::flush_pending_acks(server_ip, server_port, source_port);
+            crate::netstack::tcp::flush_pending_acks(server_ip, server_port, src_port);
             last_acknowledge_flush = now;
         }
         
         if !got_data {
             idle_count += 1;
-            if crate::netstack::tcp::fin_received(server_ip, server_port, source_port) {
-                crate::netstack::tcp::flush_pending_acks(server_ip, server_port, source_port);
+            if crate::netstack::tcp::fin_received(server_ip, server_port, src_port) {
+                crate::netstack::tcp::flush_pending_acks(server_ip, server_port, src_port);
                 break;
             }
             if idle_count > 100_000 {
@@ -7414,7 +7426,7 @@ loop {
         }
     }
     
-    let _ = crate::netstack::tcp::send_fin(server_ip, server_port, source_port);
+    let _ = crate::netstack::tcp::send_fin(server_ip, server_port, src_port);
     
     let elapsed = crate::logger::get_ticks().saturating_sub(start);
     let total_keyboard = data.len() / 1024;

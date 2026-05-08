@@ -31,17 +31,17 @@ static BYTE_COUNT: AtomicU64 = AtomicU64::new(0);
 #[derive(Debug, Clone)]
 // Public structure — visible outside this module.
 pub struct CapturedPacket {
-    pub timestamp_mouse: u64,
+    pub timestamp_ms: u64,
     pub length: usize,
     pub protocol: Protocol,
-    pub source_ip: Option<[u8; 4]>,
-    pub destination_ip: Option<[u8; 4]>,
-    pub source_port: Option<u16>,
-    pub destination_port: Option<u16>,
-    pub source_mac: [u8; 6],
-    pub destination_mac: [u8; 6],
+    pub src_ip: Option<[u8; 4]>,
+    pub dst_ip: Option<[u8; 4]>,
+    pub src_port: Option<u16>,
+    pub dst_port: Option<u16>,
+    pub src_mac: [u8; 6],
+    pub dst_mac: [u8; 6],
     pub flags: u8,           // TCP flags if applicable
-    pub information: String,        // Human-readable summary
+    pub info: String,        // Human-readable summary
     pub raw_data: Vec<u8>,   // First 128 bytes of raw packet
 }
 
@@ -85,8 +85,8 @@ match self {
 #[derive(Debug, Clone, Default)]
 // Public structure — visible outside this module.
 pub struct CaptureFilter {
-    pub source_ip: Option<[u8; 4]>,
-    pub destination_ip: Option<[u8; 4]>,
+    pub src_ip: Option<[u8; 4]>,
+    pub dst_ip: Option<[u8; 4]>,
     pub port: Option<u16>,
     pub protocol: Option<Protocol>,
 }
@@ -126,14 +126,14 @@ pub fn packet_count() -> u64 {
 
 /// Get captured packets (drains buffer)
 pub fn get_captured_packets() -> Vec<CapturedPacket> {
-    let mut buffer = CAPTURE_BUFFER.lock();
-    buffer.drain(..).collect()
+    let mut buf = CAPTURE_BUFFER.lock();
+    buf.drain(..).collect()
 }
 
 /// Get captured packets without draining (peek)
 pub fn peek_captured_packets(count: usize) -> Vec<CapturedPacket> {
-    let buffer = CAPTURE_BUFFER.lock();
-    buffer.iter().rev().take(count).cloned().collect()
+    let buf = CAPTURE_BUFFER.lock();
+    buf.iter().rev().take(count).cloned().collect()
 }
 
 /// Process a raw packet for capture analysis
@@ -151,124 +151,124 @@ pub fn process_packet(raw: &[u8]) {
 
     let packet = dissect_packet(raw);
 
-    let mut buffer = CAPTURE_BUFFER.lock();
-    if buffer.len() >= MAXIMUM_CAPTURE_PACKETS {
-        buffer.pop_front();
+    let mut buf = CAPTURE_BUFFER.lock();
+    if buf.len() >= MAXIMUM_CAPTURE_PACKETS {
+        buf.pop_front();
     }
-    buffer.push_back(packet);
+    buf.push_back(packet);
 }
 
 /// Dissect a raw Ethernet frame into a CapturedPacket
 fn dissect_packet(raw: &[u8]) -> CapturedPacket {
-    let destination_mac = [raw[0], raw[1], raw[2], raw[3], raw[4], raw[5]];
-    let source_mac = [raw[6], raw[7], raw[8], raw[9], raw[10], raw[11]];
+    let dst_mac = [raw[0], raw[1], raw[2], raw[3], raw[4], raw[5]];
+    let src_mac = [raw[6], raw[7], raw[8], raw[9], raw[10], raw[11]];
     let ethertype = u16::from_be_bytes([raw[12], raw[13]]);
 
-    let timestamp_mouse = crate::logger::get_ticks();
-    let raw_data = raw[..raw.len().minimum(128)].to_vec();
+    let timestamp_ms = crate::logger::get_ticks();
+    let raw_data = raw[..raw.len().min(128)].to_vec();
 
         // Pattern matching — Rust's exhaustive branching construct.
 match ethertype {
-        0x0806 => dissect_arp(&raw[14..], destination_mac, source_mac, timestamp_mouse, raw_data, raw.len()),
-        0x0800 => dissect_ipv4(&raw[14..], destination_mac, source_mac, timestamp_mouse, raw_data, raw.len()),
+        0x0806 => dissect_arp(&raw[14..], dst_mac, src_mac, timestamp_ms, raw_data, raw.len()),
+        0x0800 => dissect_ipv4(&raw[14..], dst_mac, src_mac, timestamp_ms, raw_data, raw.len()),
         0x86DD => CapturedPacket {
-            timestamp_mouse,
+            timestamp_ms,
             length: raw.len(),
             protocol: Protocol::Ipv6,
-            source_ip: None,
-            destination_ip: None,
-            source_port: None,
-            destination_port: None,
-            source_mac,
-            destination_mac,
+            src_ip: None,
+            dst_ip: None,
+            src_port: None,
+            dst_port: None,
+            src_mac,
+            dst_mac,
             flags: 0,
-            information: String::from("IPv6 packet"),
+            info: String::from("IPv6 packet"),
             raw_data,
         },
         _ => CapturedPacket {
-            timestamp_mouse,
+            timestamp_ms,
             length: raw.len(),
             protocol: Protocol::Unknown(0),
-            source_ip: None,
-            destination_ip: None,
-            source_port: None,
-            destination_port: None,
-            source_mac,
-            destination_mac,
+            src_ip: None,
+            dst_ip: None,
+            src_port: None,
+            dst_port: None,
+            src_mac,
+            dst_mac,
             flags: 0,
-            information: format!("EtherType 0x{:04X}", ethertype),
+            info: format!("EtherType 0x{:04X}", ethertype),
             raw_data,
         },
     }
 }
 
-fn dissect_arp(data: &[u8], destination_mac: [u8; 6], source_mac: [u8; 6], ts: u64, raw: Vec<u8>, len: usize) -> CapturedPacket {
-    let mut information = String::from("ARP");
-    let mut source_ip = None;
-    let mut destination_ip = None;
+fn dissect_arp(data: &[u8], dst_mac: [u8; 6], src_mac: [u8; 6], ts: u64, raw: Vec<u8>, len: usize) -> CapturedPacket {
+    let mut info = String::from("ARP");
+    let mut src_ip = None;
+    let mut dst_ip = None;
 
     if data.len() >= 28 {
         let op = u16::from_be_bytes([data[6], data[7]]);
         let sender = [data[14], data[15], data[16], data[17]];
         let target = [data[24], data[25], data[26], data[27]];
-        source_ip = Some(sender);
-        destination_ip = Some(target);
+        src_ip = Some(sender);
+        dst_ip = Some(target);
 
-        information = // Pattern matching — Rust's exhaustive branching construct.
+        info = // Pattern matching — Rust's exhaustive branching construct.
 match op {
             1 => format!("Who has {}? Tell {}", super::format_ip(target), super::format_ip(sender)),
-            2 => format!("{} is at {}", super::format_ip(sender), super::format_mac(source_mac)),
+            2 => format!("{} is at {}", super::format_ip(sender), super::format_mac(src_mac)),
             _ => format!("ARP op={}", op),
         };
     }
 
     CapturedPacket {
-        timestamp_mouse: ts, length: len, protocol: Protocol::Arp,
-        source_ip, destination_ip, source_port: None, destination_port: None,
-        source_mac, destination_mac, flags: 0, information, raw_data: raw,
+        timestamp_ms: ts, length: len, protocol: Protocol::Arp,
+        src_ip, dst_ip, src_port: None, dst_port: None,
+        src_mac, dst_mac, flags: 0, info, raw_data: raw,
     }
 }
 
-fn dissect_ipv4(data: &[u8], destination_mac: [u8; 6], source_mac: [u8; 6], ts: u64, raw: Vec<u8>, len: usize) -> CapturedPacket {
+fn dissect_ipv4(data: &[u8], dst_mac: [u8; 6], src_mac: [u8; 6], ts: u64, raw: Vec<u8>, len: usize) -> CapturedPacket {
     if data.len() < 20 {
         return CapturedPacket {
-            timestamp_mouse: ts, length: len, protocol: Protocol::Unknown(0),
-            source_ip: None, destination_ip: None, source_port: None, destination_port: None,
-            source_mac, destination_mac, flags: 0, information: String::from("Malformed IPv4"), raw_data: raw,
+            timestamp_ms: ts, length: len, protocol: Protocol::Unknown(0),
+            src_ip: None, dst_ip: None, src_port: None, dst_port: None,
+            src_mac, dst_mac, flags: 0, info: String::from("Malformed IPv4"), raw_data: raw,
         };
     }
 
     let ihl = (data[0] & 0x0F) as usize;
-    let header_length = ihl * 4;
+    let header_len = ihl * 4;
     let protocol = data[9];
-    let source_ip = [data[12], data[13], data[14], data[15]];
-    let destination_ip = [data[16], data[17], data[18], data[19]];
+    let src_ip = [data[12], data[13], data[14], data[15]];
+    let dst_ip = [data[16], data[17], data[18], data[19]];
 
-    if data.len() < header_length {
+    if data.len() < header_len {
         return CapturedPacket {
-            timestamp_mouse: ts, length: len, protocol: Protocol::Unknown(protocol),
-            source_ip: Some(source_ip), destination_ip: Some(destination_ip), source_port: None, destination_port: None,
-            source_mac, destination_mac, flags: 0, information: format!("IPv4 proto={}", protocol), raw_data: raw,
+            timestamp_ms: ts, length: len, protocol: Protocol::Unknown(protocol),
+            src_ip: Some(src_ip), dst_ip: Some(dst_ip), src_port: None, dst_port: None,
+            src_mac, dst_mac, flags: 0, info: format!("IPv4 proto={}", protocol), raw_data: raw,
         };
     }
 
-    let payload = &data[header_length..];
+    let payload = &data[header_len..];
 
         // Pattern matching — Rust's exhaustive branching construct.
 match protocol {
-        1 => dissect_icmp(payload, source_ip, destination_ip, destination_mac, source_mac, ts, raw, len),
-        6 => dissect_tcp(payload, source_ip, destination_ip, destination_mac, source_mac, ts, raw, len),
-        17 => dissect_udp(payload, source_ip, destination_ip, destination_mac, source_mac, ts, raw, len),
+        1 => dissect_icmp(payload, src_ip, dst_ip, dst_mac, src_mac, ts, raw, len),
+        6 => dissect_tcp(payload, src_ip, dst_ip, dst_mac, src_mac, ts, raw, len),
+        17 => dissect_udp(payload, src_ip, dst_ip, dst_mac, src_mac, ts, raw, len),
         _ => CapturedPacket {
-            timestamp_mouse: ts, length: len, protocol: Protocol::Unknown(protocol),
-            source_ip: Some(source_ip), destination_ip: Some(destination_ip), source_port: None, destination_port: None,
-            source_mac, destination_mac, flags: 0, information: format!("IP Proto {}", protocol), raw_data: raw,
+            timestamp_ms: ts, length: len, protocol: Protocol::Unknown(protocol),
+            src_ip: Some(src_ip), dst_ip: Some(dst_ip), src_port: None, dst_port: None,
+            src_mac, dst_mac, flags: 0, info: format!("IP Proto {}", protocol), raw_data: raw,
         },
     }
 }
 
-fn dissect_icmp(data: &[u8], source_ip: [u8; 4], destination_ip: [u8; 4], destination_mac: [u8; 6], source_mac: [u8; 6], ts: u64, raw: Vec<u8>, len: usize) -> CapturedPacket {
-    let information = if data.len() >= 8 {
+fn dissect_icmp(data: &[u8], src_ip: [u8; 4], dst_ip: [u8; 4], dst_mac: [u8; 6], src_mac: [u8; 6], ts: u64, raw: Vec<u8>, len: usize) -> CapturedPacket {
+    let info = if data.len() >= 8 {
         let icmp_type = data[0];
         let code = data[1];
                 // Pattern matching — Rust's exhaustive branching construct.
@@ -284,34 +284,34 @@ match icmp_type {
     };
 
     CapturedPacket {
-        timestamp_mouse: ts, length: len, protocol: Protocol::Icmp,
-        source_ip: Some(source_ip), destination_ip: Some(destination_ip), source_port: None, destination_port: None,
-        source_mac, destination_mac, flags: 0, information, raw_data: raw,
+        timestamp_ms: ts, length: len, protocol: Protocol::Icmp,
+        src_ip: Some(src_ip), dst_ip: Some(dst_ip), src_port: None, dst_port: None,
+        src_mac, dst_mac, flags: 0, info, raw_data: raw,
     }
 }
 
-fn dissect_tcp(data: &[u8], source_ip: [u8; 4], destination_ip: [u8; 4], destination_mac: [u8; 6], source_mac: [u8; 6], ts: u64, raw: Vec<u8>, len: usize) -> CapturedPacket {
+fn dissect_tcp(data: &[u8], src_ip: [u8; 4], dst_ip: [u8; 4], dst_mac: [u8; 6], src_mac: [u8; 6], ts: u64, raw: Vec<u8>, len: usize) -> CapturedPacket {
     if data.len() < 20 {
         return CapturedPacket {
-            timestamp_mouse: ts, length: len, protocol: Protocol::Tcp,
-            source_ip: Some(source_ip), destination_ip: Some(destination_ip), source_port: None, destination_port: None,
-            source_mac, destination_mac, flags: 0, information: String::from("TCP (truncated)"), raw_data: raw,
+            timestamp_ms: ts, length: len, protocol: Protocol::Tcp,
+            src_ip: Some(src_ip), dst_ip: Some(dst_ip), src_port: None, dst_port: None,
+            src_mac, dst_mac, flags: 0, info: String::from("TCP (truncated)"), raw_data: raw,
         };
     }
 
-    let source_port = u16::from_be_bytes([data[0], data[1]]);
-    let destination_port = u16::from_be_bytes([data[2], data[3]]);
-    let sequence = u32::from_be_bytes([data[4], data[5], data[6], data[7]]);
+    let src_port = u16::from_be_bytes([data[0], data[1]]);
+    let dst_port = u16::from_be_bytes([data[2], data[3]]);
+    let seq = u32::from_be_bytes([data[4], data[5], data[6], data[7]]);
     let tcp_flags = data[13];
     let data_offset = (data[12] >> 4) as usize * 4;
-    let payload_length = if data.len() > data_offset { data.len() - data_offset } else { 0 };
+    let payload_len = if data.len() > data_offset { data.len() - data_offset } else { 0 };
 
     // Detect higher-level protocol
-    let protocol = if destination_port == 80 || source_port == 80 || destination_port == 8080 || source_port == 8080 {
+    let protocol = if dst_port == 80 || src_port == 80 || dst_port == 8080 || src_port == 8080 {
         Protocol::Http
-    } else if destination_port == 443 || source_port == 443 {
+    } else if dst_port == 443 || src_port == 443 {
         Protocol::Tls
-    } else if destination_port == 53 || source_port == 53 {
+    } else if dst_port == 53 || src_port == 53 {
         Protocol::Dns
     } else {
         Protocol::Tcp
@@ -326,51 +326,51 @@ fn dissect_tcp(data: &[u8], source_ip: [u8; 4], destination_ip: [u8; 4], destina
     if tcp_flags & 0x08 != 0 { flag_str.push_str("[PSH]"); }
     if flag_str.is_empty() { flag_str.push_str("[...]"); }
 
-    let information = format!("{} -> {} {} seq={} len={}", source_port, destination_port, flag_str, sequence, payload_length);
+    let info = format!("{} -> {} {} seq={} len={}", src_port, dst_port, flag_str, seq, payload_len);
 
     CapturedPacket {
-        timestamp_mouse: ts, length: len, protocol,
-        source_ip: Some(source_ip), destination_ip: Some(destination_ip),
-        source_port: Some(source_port), destination_port: Some(destination_port),
-        source_mac, destination_mac, flags: tcp_flags, information, raw_data: raw,
+        timestamp_ms: ts, length: len, protocol,
+        src_ip: Some(src_ip), dst_ip: Some(dst_ip),
+        src_port: Some(src_port), dst_port: Some(dst_port),
+        src_mac, dst_mac, flags: tcp_flags, info, raw_data: raw,
     }
 }
 
-fn dissect_udp(data: &[u8], source_ip: [u8; 4], destination_ip: [u8; 4], destination_mac: [u8; 6], source_mac: [u8; 6], ts: u64, raw: Vec<u8>, len: usize) -> CapturedPacket {
+fn dissect_udp(data: &[u8], src_ip: [u8; 4], dst_ip: [u8; 4], dst_mac: [u8; 6], src_mac: [u8; 6], ts: u64, raw: Vec<u8>, len: usize) -> CapturedPacket {
     if data.len() < 8 {
         return CapturedPacket {
-            timestamp_mouse: ts, length: len, protocol: Protocol::Udp,
-            source_ip: Some(source_ip), destination_ip: Some(destination_ip), source_port: None, destination_port: None,
-            source_mac, destination_mac, flags: 0, information: String::from("UDP (truncated)"), raw_data: raw,
+            timestamp_ms: ts, length: len, protocol: Protocol::Udp,
+            src_ip: Some(src_ip), dst_ip: Some(dst_ip), src_port: None, dst_port: None,
+            src_mac, dst_mac, flags: 0, info: String::from("UDP (truncated)"), raw_data: raw,
         };
     }
 
-    let source_port = u16::from_be_bytes([data[0], data[1]]);
-    let destination_port = u16::from_be_bytes([data[2], data[3]]);
+    let src_port = u16::from_be_bytes([data[0], data[1]]);
+    let dst_port = u16::from_be_bytes([data[2], data[3]]);
     let udp_length = u16::from_be_bytes([data[4], data[5]]);
 
-    let protocol = if destination_port == 53 || source_port == 53 {
+    let protocol = if dst_port == 53 || src_port == 53 {
         Protocol::Dns
-    } else if destination_port == 67 || destination_port == 68 || source_port == 67 || source_port == 68 {
+    } else if dst_port == 67 || dst_port == 68 || src_port == 67 || src_port == 68 {
         Protocol::Dhcp
     } else {
         Protocol::Udp
     };
 
-    let information = format!("{} -> {} len={}", source_port, destination_port, udp_length);
+    let info = format!("{} -> {} len={}", src_port, dst_port, udp_length);
 
     CapturedPacket {
-        timestamp_mouse: ts, length: len, protocol,
-        source_ip: Some(source_ip), destination_ip: Some(destination_ip),
-        source_port: Some(source_port), destination_port: Some(destination_port),
-        source_mac, destination_mac, flags: 0, information, raw_data: raw,
+        timestamp_ms: ts, length: len, protocol,
+        src_ip: Some(src_ip), dst_ip: Some(dst_ip),
+        src_port: Some(src_port), dst_port: Some(dst_port),
+        src_mac, dst_mac, flags: 0, info, raw_data: raw,
     }
 }
 
 /// Hex dump of raw packet data
-pub fn hex_dump(data: &[u8], maximum_bytes: usize) -> String {
+pub fn hex_dump(data: &[u8], max_bytes: usize) -> String {
     let mut output = String::new();
-    let len = data.len().minimum(maximum_bytes);
+    let len = data.len().min(max_bytes);
 
     for (i, chunk) in data[..len].chunks(16).enumerate() {
         output.push_str(&format!("{:04X}  ", i * 16));

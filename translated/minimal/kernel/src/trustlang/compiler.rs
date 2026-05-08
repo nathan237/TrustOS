@@ -9,385 +9,385 @@ use alloc::collections::BTreeMap;
 use alloc::format;
 
 use super::parser::*;
-use super::vm::{Op, Bs, Aaf, imj};
+use super::vm::{Op, Aq, Lf, ehg};
 
 
 struct Compiler {
-    ajb: Vec<Bs>,
-    iwb: BTreeMap<String, usize>, 
-    pd: Vec<String>,
-    fvr: BTreeMap<String, usize>,
+    functions: Vec<Aq>,
+    func_map: BTreeMap<String, usize>, 
+    strings: Vec<String>,
+    string_map: BTreeMap<String, usize>,
 }
 
 
 struct FnCompiler {
-    aj: Vec<u8>,
-    bbx: BTreeMap<String, u8>,
-    gnr: u8,
-    bvf: Vec<usize>,      
-    euj: Vec<Vec<usize>>, 
+    code: Vec<u8>,
+    locals: BTreeMap<String, u8>,
+    next_local: u8,
+    loop_starts: Vec<usize>,      
+    loop_breaks: Vec<Vec<usize>>, 
 }
 
 impl Compiler {
     fn new() -> Self {
         Self {
-            ajb: Vec::new(),
-            iwb: BTreeMap::new(),
-            pd: Vec::new(),
-            fvr: BTreeMap::new(),
+            functions: Vec::new(),
+            func_map: BTreeMap::new(),
+            strings: Vec::new(),
+            string_map: BTreeMap::new(),
         }
     }
 
-    fn lfb(&mut self, e: &str) -> u16 {
-        if let Some(&w) = self.fvr.get(e) {
-            return w as u16;
+    fn intern_string(&mut self, j: &str) -> u16 {
+        if let Some(&idx) = self.string_map.get(j) {
+            return idx as u16;
         }
-        let w = self.pd.len();
-        self.pd.push(String::from(e));
-        self.fvr.insert(String::from(e), w);
-        w as u16
+        let idx = self.strings.len();
+        self.strings.push(String::from(j));
+        self.string_map.insert(String::from(j), idx);
+        idx as u16
     }
 
-    fn vud(&mut self, alo: &Program) {
-        for (a, item) in alo.pj.iter().cf() {
-            if let Item::Bs(bb) = item {
-                self.iwb.insert(bb.j.clone(), a);
+    fn register_functions(&mut self, program: &Program) {
+        for (i, item) in program.items.iter().enumerate() {
+            if let Item::Aq(f) = item {
+                self.func_map.insert(f.name.clone(), i);
             }
         }
     }
 
-    fn kkc(&mut self, alo: &Program) -> Result<Aaf, String> {
-        self.vud(alo);
+    fn compile_program(&mut self, program: &Program) -> Result<Lf, String> {
+        self.register_functions(program);
 
-        for item in &alo.pj {
+        for item in &program.items {
             match item {
-                Item::Bs(bb) => self.kkb(bb)?,
-                Item::Yx(_) => {} 
+                Item::Aq(f) => self.compile_fn(f)?,
+                Item::Struct(_) => {} 
             }
         }
 
-        let bt = self.iwb.get("main")
+        let entry = self.func_map.get("main")
             .ok_or_else(|| String::from("no main() function found"))?;
-        let bt = *bt;
+        let entry = *entry;
 
-        Ok(Aaf {
-            ajb: self.ajb.clone(),
-            pd: self.pd.clone(),
-            bt,
+        Ok(Lf {
+            functions: self.functions.clone(),
+            strings: self.strings.clone(),
+            entry,
         })
     }
 
-    fn kkb(&mut self, aqy: &Abu) -> Result<(), String> {
-        let mut gc = FnCompiler::new();
+    fn compile_fn(&mut self, decl: &Md) -> Result<(), String> {
+        let mut br = FnCompiler::new();
 
         
-        for (j, msw) in &aqy.oi {
-            gc.ija(j);
+        for (name, _ty) in &decl.params {
+            br.add_local(name);
         }
 
         
-        self.cjp(&mut gc, &aqy.gj)?;
+        self.compile_block(&mut br, &decl.body)?;
 
         
-        if gc.aj.qv().hu() != Some(Op::Hd as u8) {
-            gc.aif(&mut self.pd, Op::Adz);
-            gc.ism(0); 
-            gc.aif(&mut self.pd, Op::Hd);
+        if br.code.last().copied() != Some(Op::Return as u8) {
+            br.emit_op(&mut self.strings, Op::PushI64);
+            br.emit_i64(0); 
+            br.emit_op(&mut self.strings, Op::Return);
         }
 
-        let ke = Bs {
-            j: aqy.j.clone(),
-            qkm: aqy.oi.len() as u8,
-            bbx: gc.gnr,
-            aj: gc.aj,
+        let func = Aq {
+            name: decl.name.clone(),
+            arity: decl.params.len() as u8,
+            locals: br.next_local,
+            code: br.code,
         };
-        self.ajb.push(ke);
+        self.functions.push(func);
         Ok(())
     }
 
-    fn cjp(&mut self, gc: &mut FnCompiler, block: &Dj) -> Result<(), String> {
-        for stmt in &block.boq {
-            self.kkd(gc, stmt)?;
+    fn compile_block(&mut self, br: &mut FnCompiler, block: &Bl) -> Result<(), String> {
+        for stmt in &block.stmts {
+            self.compile_stmt(br, stmt)?;
         }
         Ok(())
     }
 
-    fn kkd(&mut self, gc: &mut FnCompiler, stmt: &Stmt) -> Result<(), String> {
+    fn compile_stmt(&mut self, br: &mut FnCompiler, stmt: &Stmt) -> Result<(), String> {
         match stmt {
-            Stmt::Pu { j, init, .. } => {
-                let gk = gc.ija(j);
+            Stmt::Let { name, init, .. } => {
+                let slot = br.add_local(name);
                 if let Some(expr) = init {
-                    self.aex(gc, expr)?;
-                    gc.aif(&mut self.pd, Op::Qv);
-                    gc.aj.push(gk);
+                    self.compile_expr(br, expr)?;
+                    br.emit_op(&mut self.strings, Op::StoreLocal);
+                    br.code.push(slot);
                 }
             }
-            Stmt::Vk { cd, bn } => {
-                self.aex(gc, bn)?;
-                self.hdr(gc, cd)?;
+            Stmt::Assign { target, value } => {
+                self.compile_expr(br, value)?;
+                self.compile_store(br, target)?;
             }
-            Stmt::Xw { op, cd, bn } => {
-                self.aex(gc, cd)?;
-                self.aex(gc, bn)?;
+            Stmt::OpAssign { op, target, value } => {
+                self.compile_expr(br, target)?;
+                self.compile_expr(br, value)?;
                 
-                let mpp = match op {
-                    BinOp::Add => Op::Zq,
-                    BinOp::Sub => Op::Azl,
-                    BinOp::Mul => Op::Avv,
-                    BinOp::Div => Op::Ara,
-                    _ => Op::Zq,
+                let hbt = match op {
+                    BinOp::Add => Op::AddI,
+                    BinOp::Sub => Op::SubI,
+                    BinOp::Mul => Op::MulI,
+                    BinOp::Div => Op::DivI,
+                    _ => Op::AddI,
                 };
-                gc.aif(&mut self.pd, mpp);
-                self.hdr(gc, cd)?;
+                br.emit_op(&mut self.strings, hbt);
+                self.compile_store(br, target)?;
             }
             Stmt::Expr(expr) => {
-                self.aex(gc, expr)?;
-                gc.aif(&mut self.pd, Op::Bpg); 
+                self.compile_expr(br, expr)?;
+                br.emit_op(&mut self.strings, Op::Pop); 
             }
-            Stmt::Hd(ap) => {
-                if let Some(expr) = ap {
-                    self.aex(gc, expr)?;
+            Stmt::Return(val) => {
+                if let Some(expr) = val {
+                    self.compile_expr(br, expr)?;
                 } else {
-                    gc.aif(&mut self.pd, Op::Adz);
-                    gc.ism(0);
+                    br.emit_op(&mut self.strings, Op::PushI64);
+                    br.emit_i64(0);
                 }
-                gc.aif(&mut self.pd, Op::Hd);
+                br.emit_op(&mut self.strings, Op::Return);
             }
-            Stmt::Gx { mo, cne, ckc } => {
-                self.aex(gc, mo)?;
-                let ohj = gc.hhy(Op::Ajk);
+            Stmt::If { fc, avj, atp } => {
+                self.compile_expr(br, fc)?;
+                let iit = br.emit_jump(Op::JumpIfFalse);
 
-                self.cjp(gc, cne)?;
+                self.compile_block(br, avj)?;
 
-                if let Some(ske) = ckc {
-                    let uat = gc.hhy(Op::Nh);
-                    gc.ewf(ohj);
-                    self.cjp(gc, ske)?;
-                    gc.ewf(uat);
+                if let Some(else_blk) = atp {
+                    let mvg = br.emit_jump(Op::Jump);
+                    br.patch_jump(iit);
+                    self.compile_block(br, else_blk)?;
+                    br.patch_jump(mvg);
                 } else {
-                    gc.ewf(ohj);
+                    br.patch_jump(iit);
                 }
             }
-            Stmt::La { mo, gj } => {
-                let eul = gc.aj.len();
-                gc.bvf.push(eul);
-                gc.euj.push(Vec::new());
+            Stmt::While { fc, body } => {
+                let cbp = br.code.len();
+                br.loop_starts.push(cbp);
+                br.loop_breaks.push(Vec::new());
 
-                self.aex(gc, mo)?;
-                let kun = gc.hhy(Op::Ajk);
+                self.compile_expr(br, fc)?;
+                let fvq = br.emit_jump(Op::JumpIfFalse);
 
-                self.cjp(gc, gj)?;
-                gc.isn(eul);
+                self.compile_block(br, body)?;
+                br.emit_jump_to(cbp);
 
-                gc.ewf(kun);
+                br.patch_jump(fvq);
 
                 
-                let fdq = gc.euj.pop().age();
-                for o in fdq { gc.ewf(o); }
-                gc.bvf.pop();
+                let cgl = br.loop_breaks.pop().unwrap_or_default();
+                for b in cgl { br.patch_jump(b); }
+                br.loop_starts.pop();
             }
-            Stmt::Ll { bfp, iter, gj } => {
+            Stmt::For { ael, iter, body } => {
                 
-                let gk = gc.ija(bfp);
+                let slot = br.add_local(ael);
                 
-                if let Expr::Nt { ay, ci } = iter {
-                    self.aex(gc, ay)?;
-                    gc.aif(&mut self.pd, Op::Qv);
-                    gc.aj.push(gk);
+                if let Expr::Range { start, end } = iter {
+                    self.compile_expr(br, start)?;
+                    br.emit_op(&mut self.strings, Op::StoreLocal);
+                    br.code.push(slot);
 
                     
-                    let nqc = gc.ija(&format!("__for_end_{}", gk));
-                    self.aex(gc, ci)?;
-                    gc.aif(&mut self.pd, Op::Qv);
-                    gc.aj.push(nqc);
+                    let hvv = br.add_local(&format!("__for_end_{}", slot));
+                    self.compile_expr(br, end)?;
+                    br.emit_op(&mut self.strings, Op::StoreLocal);
+                    br.code.push(hvv);
 
-                    let eul = gc.aj.len();
-                    gc.bvf.push(eul);
-                    gc.euj.push(Vec::new());
-
-                    
-                    gc.aif(&mut self.pd, Op::Ti);
-                    gc.aj.push(gk);
-                    gc.aif(&mut self.pd, Op::Ti);
-                    gc.aj.push(nqc);
-                    gc.aif(&mut self.pd, Op::Auy);
-
-                    let kun = gc.hhy(Op::Ajk);
-                    self.cjp(gc, gj)?;
+                    let cbp = br.code.len();
+                    br.loop_starts.push(cbp);
+                    br.loop_breaks.push(Vec::new());
 
                     
-                    gc.aif(&mut self.pd, Op::Ti);
-                    gc.aj.push(gk);
-                    gc.aif(&mut self.pd, Op::Adz);
-                    gc.ism(1);
-                    gc.aif(&mut self.pd, Op::Zq);
-                    gc.aif(&mut self.pd, Op::Qv);
-                    gc.aj.push(gk);
+                    br.emit_op(&mut self.strings, Op::LoadLocal);
+                    br.code.push(slot);
+                    br.emit_op(&mut self.strings, Op::LoadLocal);
+                    br.code.push(hvv);
+                    br.emit_op(&mut self.strings, Op::LtI);
 
-                    gc.isn(eul);
-                    gc.ewf(kun);
+                    let fvq = br.emit_jump(Op::JumpIfFalse);
+                    self.compile_block(br, body)?;
 
-                    let fdq = gc.euj.pop().age();
-                    for o in fdq { gc.ewf(o); }
-                    gc.bvf.pop();
+                    
+                    br.emit_op(&mut self.strings, Op::LoadLocal);
+                    br.code.push(slot);
+                    br.emit_op(&mut self.strings, Op::PushI64);
+                    br.emit_i64(1);
+                    br.emit_op(&mut self.strings, Op::AddI);
+                    br.emit_op(&mut self.strings, Op::StoreLocal);
+                    br.code.push(slot);
+
+                    br.emit_jump_to(cbp);
+                    br.patch_jump(fvq);
+
+                    let cgl = br.loop_breaks.pop().unwrap_or_default();
+                    for b in cgl { br.patch_jump(b); }
+                    br.loop_starts.pop();
                 } else {
                     return Err(String::from("for loop requires a range expression"));
                 }
             }
-            Stmt::Pz(gj) => {
-                let eul = gc.aj.len();
-                gc.bvf.push(eul);
-                gc.euj.push(Vec::new());
+            Stmt::Loop(body) => {
+                let cbp = br.code.len();
+                br.loop_starts.push(cbp);
+                br.loop_breaks.push(Vec::new());
 
-                self.cjp(gc, gj)?;
-                gc.isn(eul);
+                self.compile_block(br, body)?;
+                br.emit_jump_to(cbp);
 
-                let fdq = gc.euj.pop().age();
-                for o in fdq { gc.ewf(o); }
-                gc.bvf.pop();
+                let cgl = br.loop_breaks.pop().unwrap_or_default();
+                for b in cgl { br.patch_jump(b); }
+                br.loop_starts.pop();
             }
-            Stmt::Vr => {
-                let fb = gc.hhy(Op::Nh);
-                if let Some(fdq) = gc.euj.dsq() {
-                    fdq.push(fb);
+            Stmt::Break => {
+                let ay = br.emit_jump(Op::Jump);
+                if let Some(cgl) = br.loop_breaks.last_mut() {
+                    cgl.push(ay);
                 }
             }
-            Stmt::Cg => {
-                if let Some(&ay) = gc.bvf.qv() {
-                    gc.isn(ay);
+            Stmt::Continue => {
+                if let Some(&start) = br.loop_starts.last() {
+                    br.emit_jump_to(start);
                 }
             }
         }
         Ok(())
     }
 
-    fn aex(&mut self, gc: &mut FnCompiler, expr: &Expr) -> Result<(), String> {
+    fn compile_expr(&mut self, br: &mut FnCompiler, expr: &Expr) -> Result<(), String> {
         match expr {
-            Expr::Ta(p) => {
-                gc.aif(&mut self.pd, Op::Adz);
-                gc.ism(*p);
+            Expr::IntLit(v) => {
+                br.emit_op(&mut self.strings, Op::PushI64);
+                br.emit_i64(*v);
             }
-            Expr::Wq(p) => {
-                gc.aif(&mut self.pd, Op::Bpq);
-                gc.skh(*p);
+            Expr::FloatLit(v) => {
+                br.emit_op(&mut self.strings, Op::PushF64);
+                br.emit_f64(*v);
             }
-            Expr::Yw(e) => {
-                let w = self.lfb(e);
-                gc.aif(&mut self.pd, Op::Bpr);
-                gc.isp(w);
+            Expr::StringLit(j) => {
+                let idx = self.intern_string(j);
+                br.emit_op(&mut self.strings, Op::PushStr);
+                br.emit_u16(idx);
             }
-            Expr::Rp(o) => {
-                gc.aif(&mut self.pd, Op::Bpp);
-                gc.aj.push(if *o { 1 } else { 0 });
+            Expr::BoolLit(b) => {
+                br.emit_op(&mut self.strings, Op::PushBool);
+                br.code.push(if *b { 1 } else { 0 });
             }
-            Expr::Kq(j) => {
-                if let Some(&gk) = gc.bbx.get(j) {
-                    gc.aif(&mut self.pd, Op::Ti);
-                    gc.aj.push(gk);
+            Expr::Ident(name) => {
+                if let Some(&slot) = br.locals.get(name) {
+                    br.emit_op(&mut self.strings, Op::LoadLocal);
+                    br.code.push(slot);
                 } else {
-                    return Err(format!("undefined variable: {}", j));
+                    return Err(format!("undefined variable: {}", name));
                 }
             }
-            Expr::BinOp { op, fd, hw } => {
-                self.aex(gc, fd)?;
-                self.aex(gc, hw)?;
-                let mpp = match op {
-                    BinOp::Add => Op::Zq,
-                    BinOp::Sub => Op::Azl,
-                    BinOp::Mul => Op::Avv,
-                    BinOp::Div => Op::Ara,
-                    BinOp::Xp => Op::Bmj,
-                    BinOp::Eq => Op::Bga,
-                    BinOp::Xu => Op::Bnc,
-                    BinOp::Lt => Op::Auy,
-                    BinOp::Jn => Op::Bik,
-                    BinOp::Xm => Op::Bkz,
-                    BinOp::Wx => Op::Bhw,
-                    BinOp::Ex => Op::Ex,
-                    BinOp::Fx => Op::Fx,
-                    BinOp::Vm => Op::Vm,
-                    BinOp::Vn => Op::Vn,
-                    BinOp::Vo => Op::Vo,
-                    BinOp::Ob => Op::Ob,
-                    BinOp::Oc => Op::Oc,
+            Expr::BinOp { op, left, right } => {
+                self.compile_expr(br, left)?;
+                self.compile_expr(br, right)?;
+                let hbt = match op {
+                    BinOp::Add => Op::AddI,
+                    BinOp::Sub => Op::SubI,
+                    BinOp::Mul => Op::MulI,
+                    BinOp::Div => Op::DivI,
+                    BinOp::Mod => Op::ModI,
+                    BinOp::Eq => Op::EqI,
+                    BinOp::NotEq => Op::NeI,
+                    BinOp::Lt => Op::LtI,
+                    BinOp::Gt => Op::GtI,
+                    BinOp::LtEq => Op::LeI,
+                    BinOp::GtEq => Op::GeI,
+                    BinOp::And => Op::And,
+                    BinOp::Or => Op::Or,
+                    BinOp::BitAnd => Op::BitAnd,
+                    BinOp::BitOr => Op::BitOr,
+                    BinOp::BitXor => Op::BitXor,
+                    BinOp::Shl => Op::Shl,
+                    BinOp::Shr => Op::Shr,
                 };
-                gc.aif(&mut self.pd, mpp);
+                br.emit_op(&mut self.strings, hbt);
             }
             Expr::UnaryOp { op, expr } => {
-                self.aex(gc, expr)?;
+                self.compile_expr(br, expr)?;
                 match op {
-                    UnaryOp::Neg => gc.aif(&mut self.pd, Op::Bnd),
-                    UnaryOp::Np => gc.aif(&mut self.pd, Op::Np),
+                    UnaryOp::Neg => br.emit_op(&mut self.strings, Op::NegI),
+                    UnaryOp::Not => br.emit_op(&mut self.strings, Op::Not),
                 }
             }
-            Expr::En { ke, n } => {
+            Expr::Call { func, args } => {
                 
-                if let Some(kdf) = imj(ke) {
-                    for ji in n {
-                        self.aex(gc, ji)?;
+                if let Some(bid) = ehg(func) {
+                    for db in args {
+                        self.compile_expr(br, db)?;
                     }
-                    gc.aif(&mut self.pd, Op::Bdi);
-                    gc.aj.push(kdf);
-                    gc.aj.push(n.len() as u8);
-                } else if let Some(&ssa) = self.iwb.get(ke) {
+                    br.emit_op(&mut self.strings, Op::CallBuiltin);
+                    br.code.push(bid);
+                    br.code.push(args.len() as u8);
+                } else if let Some(&fidx) = self.func_map.get(func) {
                     
-                    for ji in n {
-                        self.aex(gc, ji)?;
+                    for db in args {
+                        self.compile_expr(br, db)?;
                     }
-                    gc.aif(&mut self.pd, Op::En);
-                    gc.isp(ssa as u16);
-                    gc.aj.push(n.len() as u8);
+                    br.emit_op(&mut self.strings, Op::Call);
+                    br.emit_u16(fidx as u16);
+                    br.code.push(args.len() as u8);
                 } else {
-                    return Err(format!("undefined function: {}", ke));
+                    return Err(format!("undefined function: {}", func));
                 }
             }
             Expr::Index { array, index } => {
-                self.aex(gc, array)?;
-                self.aex(gc, index)?;
-                gc.aif(&mut self.pd, Op::Bby);
+                self.compile_expr(br, array)?;
+                self.compile_expr(br, index)?;
+                br.emit_op(&mut self.strings, Op::ArrayGet);
             }
-            Expr::U(hhx) => {
-                for fhm in hhx {
-                    self.aex(gc, fhm)?;
+            Expr::Array(doo) => {
+                for cit in doo {
+                    self.compile_expr(br, cit)?;
                 }
-                gc.aif(&mut self.pd, Op::Avz);
-                gc.isp(hhx.len() as u16);
+                br.emit_op(&mut self.strings, Op::NewArray);
+                br.emit_u16(doo.len() as u16);
             }
-            Expr::Nt { ay, ci } => {
+            Expr::Range { start, end } => {
                 
                 
-                self.aex(gc, ay)?;
-                self.aex(gc, ci)?;
+                self.compile_expr(br, start)?;
+                self.compile_expr(br, end)?;
                 
-                gc.aif(&mut self.pd, Op::Avz);
-                gc.isp(2);
+                br.emit_op(&mut self.strings, Op::NewArray);
+                br.emit_u16(2);
             }
-            Expr::Apu { expr, ty } => {
-                self.aex(gc, expr)?;
+            Expr::Cast { expr, ty } => {
+                self.compile_expr(br, expr)?;
                 match ty {
-                    Type::R => gc.aif(&mut self.pd, Op::Biy),
-                    Type::Ab => gc.aif(&mut self.pd, Op::Bgk),
+                    Type::F64 => br.emit_op(&mut self.strings, Op::I64toF64),
+                    Type::I64 => br.emit_op(&mut self.strings, Op::F64toI64),
                     _ => {} 
                 }
             }
-            Expr::Dj(block) => {
-                self.cjp(gc, block)?;
+            Expr::Bl(block) => {
+                self.compile_block(br, block)?;
             }
-            Expr::Asg { .. } => {
+            Expr::Field { .. } => {
                 return Err(String::from("struct field access not yet supported"));
             }
         }
         Ok(())
     }
 
-    fn hdr(&mut self, gc: &mut FnCompiler, cd: &Expr) -> Result<(), String> {
-        match cd {
-            Expr::Kq(j) => {
-                if let Some(&gk) = gc.bbx.get(j) {
-                    gc.aif(&mut self.pd, Op::Qv);
-                    gc.aj.push(gk);
+    fn compile_store(&mut self, br: &mut FnCompiler, target: &Expr) -> Result<(), String> {
+        match target {
+            Expr::Ident(name) => {
+                if let Some(&slot) = br.locals.get(name) {
+                    br.emit_op(&mut self.strings, Op::StoreLocal);
+                    br.code.push(slot);
                 } else {
-                    return Err(format!("undefined variable: {}", j));
+                    return Err(format!("undefined variable: {}", name));
                 }
             }
             Expr::Index { array, index } => {
@@ -399,29 +399,29 @@ impl Compiler {
                 
                 
                 
-                if let Expr::Kq(mwh) = array.as_ref() {
-                    if let Some(&mwi) = gc.bbx.get(mwh) {
+                if let Expr::Ident(arr_name) = array.as_ref() {
+                    if let Some(&arr_slot) = br.locals.get(arr_name) {
                         
-                        let psd = gc.gnr;
-                        gc.gnr += 1;
+                        let jls = br.next_local;
+                        br.next_local += 1;
                         
-                        gc.aif(&mut self.pd, Op::Qv);
-                        gc.aj.push(psd);
+                        br.emit_op(&mut self.strings, Op::StoreLocal);
+                        br.code.push(jls);
                         
-                        gc.aif(&mut self.pd, Op::Ti);
-                        gc.aj.push(mwi);
+                        br.emit_op(&mut self.strings, Op::LoadLocal);
+                        br.code.push(arr_slot);
                         
-                        self.aex(gc, index)?;
+                        self.compile_expr(br, index)?;
                         
-                        gc.aif(&mut self.pd, Op::Ti);
-                        gc.aj.push(psd);
+                        br.emit_op(&mut self.strings, Op::LoadLocal);
+                        br.code.push(jls);
                         
-                        gc.aif(&mut self.pd, Op::Bbz);
+                        br.emit_op(&mut self.strings, Op::ArraySet);
                         
-                        gc.aif(&mut self.pd, Op::Qv);
-                        gc.aj.push(mwi);
+                        br.emit_op(&mut self.strings, Op::StoreLocal);
+                        br.code.push(arr_slot);
                     } else {
-                        return Err(format!("undefined variable: {}", mwh));
+                        return Err(format!("undefined variable: {}", arr_name));
                     }
                 } else {
                     return Err(String::from("array index assignment requires a variable"));
@@ -436,66 +436,66 @@ impl Compiler {
 impl FnCompiler {
     fn new() -> Self {
         Self {
-            aj: Vec::new(),
-            bbx: BTreeMap::new(),
-            gnr: 0,
-            bvf: Vec::new(),
-            euj: Vec::new(),
+            code: Vec::new(),
+            locals: BTreeMap::new(),
+            next_local: 0,
+            loop_starts: Vec::new(),
+            loop_breaks: Vec::new(),
         }
     }
 
-    fn ija(&mut self, j: &str) -> u8 {
-        if let Some(&gk) = self.bbx.get(j) {
-            return gk;
+    fn add_local(&mut self, name: &str) -> u8 {
+        if let Some(&slot) = self.locals.get(name) {
+            return slot;
         }
-        let gk = self.gnr;
-        self.bbx.insert(String::from(j), gk);
-        self.gnr += 1;
-        gk
+        let slot = self.next_local;
+        self.locals.insert(String::from(name), slot);
+        self.next_local += 1;
+        slot
     }
 
-    fn aif(&mut self, ydd: &mut Vec<String>, op: Op) {
-        self.aj.push(op as u8);
+    fn emit_op(&mut self, _strings: &mut Vec<String>, op: Op) {
+        self.code.push(op as u8);
     }
 
-    fn ism(&mut self, p: i64) {
-        self.aj.bk(&p.ho());
+    fn emit_i64(&mut self, v: i64) {
+        self.code.extend_from_slice(&v.to_le_bytes());
     }
 
-    fn skh(&mut self, p: f64) {
-        self.aj.bk(&p.ho());
+    fn emit_f64(&mut self, v: f64) {
+        self.code.extend_from_slice(&v.to_le_bytes());
     }
 
-    fn isp(&mut self, p: u16) {
-        self.aj.bk(&p.ho());
-    }
-
-    
-    fn hhy(&mut self, op: Op) -> usize {
-        self.aj.push(op as u8);
-        let w = self.aj.len();
-        self.aj.push(0); 
-        self.aj.push(0);
-        w
+    fn emit_u16(&mut self, v: u16) {
+        self.code.extend_from_slice(&v.to_le_bytes());
     }
 
     
-    fn ewf(&mut self, w: usize) {
-        let cd = self.aj.len() as u16;
-        self.aj[w] = (cd & 0xFF) as u8;
-        self.aj[w + 1] = ((cd >> 8) & 0xFF) as u8;
+    fn emit_jump(&mut self, op: Op) -> usize {
+        self.code.push(op as u8);
+        let idx = self.code.len();
+        self.code.push(0); 
+        self.code.push(0);
+        idx
     }
 
     
-    fn isn(&mut self, cd: usize) {
-        self.aj.push(Op::Nh as u8);
-        self.aj.push((cd & 0xFF) as u8);
-        self.aj.push(((cd >> 8) & 0xFF) as u8);
+    fn patch_jump(&mut self, idx: usize) {
+        let target = self.code.len() as u16;
+        self.code[idx] = (target & 0xFF) as u8;
+        self.code[idx + 1] = ((target >> 8) & 0xFF) as u8;
+    }
+
+    
+    fn emit_jump_to(&mut self, target: usize) {
+        self.code.push(Op::Jump as u8);
+        self.code.push((target & 0xFF) as u8);
+        self.code.push(((target >> 8) & 0xFF) as u8);
     }
 }
 
 
-pub fn rmx(alo: &Program) -> Result<Aaf, String> {
+pub fn kwd(program: &Program) -> Result<Lf, String> {
     let mut compiler = Compiler::new();
-    compiler.kkc(alo)
+    compiler.compile_program(program)
 }

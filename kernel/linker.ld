@@ -18,6 +18,7 @@ SECTIONS
         __text_start = .;
         KEEP(*(.text.kmain))
         *(.text .text.*)
+        *(.ltext .ltext.*)
         __text_end = .;
     } :text
 
@@ -26,6 +27,7 @@ SECTIONS
     .rodata : {
         __rodata_start = .;
         *(.rodata .rodata.*)
+        *(.lrodata .lrodata.*)
     } :rodata
     
     /* Limine requests sections - must be in rodata for Limine to find them */
@@ -47,10 +49,12 @@ SECTIONS
 
     .data : {
         *(.data .data.*)
+        *(.ldata .ldata.*)
     } :data
 
     .bss : {
         *(.bss .bss.*)
+        *(.lbss .lbss.*)
         *(COMMON)
     } :data
 

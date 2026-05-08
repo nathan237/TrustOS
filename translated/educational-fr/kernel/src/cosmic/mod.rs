@@ -49,8 +49,8 @@ impl Rect {
     }
     
         // Fonction publique — appelable depuis d'autres modules.
-pub fn contains(&self, pixel: f32, py: f32) -> bool {
-        pixel >= self.x && pixel < self.x + self.width &&
+pub fn contains(&self, px: f32, py: f32) -> bool {
+        px >= self.x && px < self.x + self.width &&
         py >= self.y && py < self.y + self.height
     }
     
@@ -147,9 +147,9 @@ pub fn with_alpha(self, a: f32) -> Self {
         // Fonction publique — appelable depuis d'autres modules.
 pub fn lighten(self, amount: f32) -> Self {
         Self {
-            r: (self.r + amount).minimum(1.0),
-            g: (self.g + amount).minimum(1.0),
-            b: (self.b + amount).minimum(1.0),
+            r: (self.r + amount).min(1.0),
+            g: (self.g + amount).min(1.0),
+            b: (self.b + amount).min(1.0),
             a: self.a,
         }
     }
@@ -157,9 +157,9 @@ pub fn lighten(self, amount: f32) -> Self {
         // Fonction publique — appelable depuis d'autres modules.
 pub fn darken(self, amount: f32) -> Self {
         Self {
-            r: (self.r - amount).maximum(0.0),
-            g: (self.g - amount).maximum(0.0),
-            b: (self.b - amount).maximum(0.0),
+            r: (self.r - amount).max(0.0),
+            g: (self.g - amount).max(0.0),
+            b: (self.b - amount).max(0.0),
             a: self.a,
         }
     }
@@ -228,7 +228,7 @@ pub enum KeyboardEvent {
 #[derive(Clone, Copy, Debug, Default)]
 // Structure publique — visible à l'extérieur de ce module.
 pub struct Modifiers {
-    pub controller: bool,
+    pub ctrl: bool,
     pub alt: bool,
     pub shift: bool,
     pub super_key: bool,

@@ -42,15 +42,19 @@ pub fn init() {
     let root_cap = Capability::root();
     CAPABILITIES.lock().insert(root_cap.id, root_cap);
     
-    // Initialize CPU security features (SMEP, SMAP, UMIP)
+    // Initialize CPU security features (SMEP, UMIP)
     let features = cpu_features::init();
-    
+
+    // CR0.WP (Write Protect) — deferred until all kernel .data/.bss writes are done
+    // Enabling too early can page-fault on Limine-mapped RO pages
+    // TODO: enable after full kernel init phase
+
     // Initialize subsystem isolation boundaries (issue #1)
     isolation::init_subsystem_capabilities();
     
-    crate::log!("[SECURITY] Initialized - SMEP:{} SMAP:{} UMIP:{} subsystems:{}",
+    crate::log!("[SECURITY] Initialized - SMEP:{} SMAP:{} UMIP:{} CR0.WP:off subsystems:{}",
         if features.smep { "ON" } else { "off" },
-        if features.smap { "avail" } else { "off" },
+        if features.smap { "ON" } else { "off" },
         if features.umip { "ON" } else { "off" },
         isolation::subsystem_count()
     );

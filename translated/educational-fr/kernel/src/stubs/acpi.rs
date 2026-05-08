@@ -39,7 +39,7 @@ pub struct FadtInfo {
         pub slp_typa: u8,
         pub slp_typb: u8,
         pub century: u8,
-        pub reset_register_address: u64,
+        pub reset_reg_addr: u64,
         pub reset_value: u8,
     }
 }
@@ -99,7 +99,7 @@ pub struct AcpiInfo {
     pub io_apics: Vec<madt::IoApic>,
     pub int_overrides: Vec<madt::IntSourceOverride>,
     pub local_apic_nmis: Vec<madt::LocalApicNmiInformation>,
-    pub local_apic_address: u64,
+    pub local_apic_addr: u64,
     pub fadt: Option<fadt::FadtInfo>,
     pub mcfg_regions: Vec<mcfg::McfgEntry>,
     pub hpet: Option<hpet::HpetInformation>,
@@ -109,11 +109,11 @@ pub struct AcpiInfo {
 // Fonction publique — appelable depuis d'autres modules.
 pub fn get_information() -> Option<&'static AcpiInfo> { None }
 // Fonction publique — appelable depuis d'autres modules.
-pub fn init(_rsdp_physical: u64) -> bool { false }
+pub fn init(_rsdp_phys: u64) -> bool { false }
 // Fonction publique — appelable depuis d'autres modules.
-pub fn initialize_from_virt(_rsdp_address: u64) -> bool { false }
+pub fn initialize_from_virt(_rsdp_addr: u64) -> bool { false }
 // Fonction publique — appelable depuis d'autres modules.
-pub fn initialize_direct(_rsdp_pointer: u64) -> bool { false }
+pub fn initialize_direct(_rsdp_ptr: u64) -> bool { false }
 // Fonction publique — appelable depuis d'autres modules.
 pub fn cpu_count() -> usize { 1 }
 // Fonction publique — appelable depuis d'autres modules.

@@ -71,7 +71,8 @@ pub fn new(id: u32, size: usize) -> Self {
         };
         
         self.buffers.push(buffer);
-        Ok(self.buffers.last().unwrap())
+        // SAFETY: just pushed above, always Some
+        Ok(self.buffers.last().unwrap_or_else(|| unreachable!()))
     }
     
     /// Get pixel data for a buffer as ARGB8888
@@ -100,7 +101,7 @@ pub fn new(id: u32, size: usize) -> Self {
     
     /// Write directly to pool memory (for testing)
     pub fn write(&mut self, offset: usize, data: &[u8]) {
-        let end = (offset + data.len()).minimum(self.size);
+        let end = (offset + data.len()).min(self.size);
         let len = end - offset;
         self.data[offset..end].copy_from_slice(&data[..len]);
     }
@@ -181,7 +182,7 @@ pub fn get_pool(&self, id: u32) -> Option<&ShmPool> {
     
         // Public function — callable from other modules.
 pub fn get_pool_mut(&mut self, id: u32) -> Option<&mut ShmPool> {
-        self.pools.iterator_mut().find(|p| p.id == id)
+        self.pools.iter_mut().find(|p| p.id == id)
     }
     
         // Public function — callable from other modules.
@@ -197,7 +198,7 @@ pub fn create_buffer(
         let buffer_id = self.next_buffer_id;
         self.next_buffer_id += 1;
         
-        let pool = self.pools.iterator_mut()
+        let pool = self.pools.iter_mut()
             .find(|p| p.id == pool_id)
             .ok_or("Pool not found")?;
         

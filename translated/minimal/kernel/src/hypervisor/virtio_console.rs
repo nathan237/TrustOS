@@ -10,79 +10,79 @@ use alloc::boxed::Box;
 use spin::Mutex;
 
 
-const UX_: usize = 4096;
+const WG_: usize = 4096;
 
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PortState {
-    Dk,
-    Ck,
-    At,
+    Closed,
+    Open,
+    Ready,
 }
 
 
 pub struct ConsolePort {
     
-    pub ad: u32,
+    pub id: u32,
     
-    pub j: String,
+    pub name: String,
     
-    pub g: PortState,
+    pub state: PortState,
     
-    xn: VecDeque<u8>,
+    input_buffer: VecDeque<u8>,
     
-    dkh: VecDeque<u8>,
+    output_buffer: VecDeque<u8>,
     
-    lqg: Option<fn(&[u8])>,
+    on_data: Option<fn(&[u8])>,
 }
 
 impl ConsolePort {
-    pub fn new(ad: u32, j: &str) -> Self {
+    pub fn new(id: u32, name: &str) -> Self {
         Self {
-            ad,
-            j: String::from(j),
-            g: PortState::Dk,
-            xn: VecDeque::fc(UX_),
-            dkh: VecDeque::fc(UX_),
-            lqg: None,
+            id,
+            name: String::from(name),
+            state: PortState::Closed,
+            input_buffer: VecDeque::with_capacity(WG_),
+            output_buffer: VecDeque::with_capacity(WG_),
+            on_data: None,
         }
     }
 
     
-    pub fn write(&mut self, f: &[u8]) -> usize {
-        let bfz = UX_.ao(self.dkh.len());
-        let dwy = f.len().v(bfz);
-        for &hf in &f[..dwy] {
-            self.dkh.agt(hf);
+    pub fn write(&mut self, data: &[u8]) -> usize {
+        let available = WG_.saturating_sub(self.output_buffer.len());
+        let bpo = data.len().min(available);
+        for &byte in &data[..bpo] {
+            self.output_buffer.push_back(byte);
         }
-        dwy
+        bpo
     }
 
     
-    pub fn write_str(&mut self, e: &str) -> usize {
-        self.write(e.as_bytes())
+    pub fn write_str(&mut self, j: &str) -> usize {
+        self.write(j.as_bytes())
     }
 
     
-    pub fn read(&mut self, k: &mut [u8]) -> usize {
-        let ajp = k.len().v(self.xn.len());
-        for a in 0..ajp {
-            k[a] = self.xn.awp().unwrap_or(0);
+    pub fn read(&mut self, buf: &mut [u8]) -> usize {
+        let rz = buf.len().min(self.input_buffer.len());
+        for i in 0..rz {
+            buf[i] = self.input_buffer.pop_front().unwrap_or(0);
         }
-        ajp
+        rz
     }
 
     
-    pub fn cts(&mut self) -> Option<String> {
+    pub fn read_line(&mut self) -> Option<String> {
         
-        let uua = self.xn.iter().qf(|&o| o == b'\n');
+        let njx = self.input_buffer.iter().position(|&b| b == b'\n');
         
-        if let Some(u) = uua {
+        if let Some(pos) = njx {
             let mut line = String::new();
-            for _ in 0..=u {
-                if let Some(hf) = self.xn.awp() {
-                    if hf != b'\n' && hf != b'\r' {
-                        line.push(hf as char);
+            for _ in 0..=pos {
+                if let Some(byte) = self.input_buffer.pop_front() {
+                    if byte != b'\n' && byte != b'\r' {
+                        line.push(byte as char);
                     }
                 }
             }
@@ -93,118 +93,118 @@ impl ConsolePort {
     }
 
     
-    pub fn cyk(&self) -> bool {
-        !self.xn.is_empty()
+    pub fn has_data(&self) -> bool {
+        !self.input_buffer.is_empty()
     }
 
     
-    pub(crate) fn chb(&mut self, f: &[u8]) {
-        for &hf in f {
-            if self.xn.len() < UX_ {
-                self.xn.agt(hf);
+    pub(crate) fn receive(&mut self, data: &[u8]) {
+        for &byte in data {
+            if self.input_buffer.len() < WG_ {
+                self.input_buffer.push_back(byte);
             }
         }
         
-        if let Some(fed) = self.lqg {
-            fed(f);
+        if let Some(callback) = self.on_data {
+            callback(data);
         }
     }
 
     
-    pub(crate) fn kqu(&mut self) -> Vec<u8> {
-        self.dkh.bbk(..).collect()
+    pub(crate) fn drain_output(&mut self) -> Vec<u8> {
+        self.output_buffer.drain(..).collect()
     }
 
     
-    pub fn zmp(&mut self, fed: fn(&[u8])) {
-        self.lqg = Some(fed);
+    pub fn qvm(&mut self, callback: fn(&[u8])) {
+        self.on_data = Some(callback);
     }
 }
 
 
 pub struct VirtioConsole {
     
-    pub fk: u64,
+    pub vm_id: u64,
     
-    xf: Vec<ConsolePort>,
+    ports: Vec<ConsolePort>,
     
-    uqq: bool,
+    multiport: bool,
 }
 
 impl VirtioConsole {
     
-    pub fn new(fk: u64) -> Self {
+    pub fn new(vm_id: u64) -> Self {
         let mut console = Self {
-            fk,
-            xf: Vec::new(),
-            uqq: true,
+            vm_id,
+            ports: Vec::new(),
+            multiport: true,
         };
         
-        console.mtx("console");
+        console.add_port("console");
         console
     }
 
     
-    pub fn mtx(&mut self, j: &str) -> u32 {
-        let ad = self.xf.len() as u32;
-        self.xf.push(ConsolePort::new(ad, j));
-        ad
+    pub fn add_port(&mut self, name: &str) -> u32 {
+        let id = self.ports.len() as u32;
+        self.ports.push(ConsolePort::new(id, name));
+        id
     }
 
     
-    pub fn port(&self, ad: u32) -> Option<&ConsolePort> {
-        self.xf.get(ad as usize)
+    pub fn port(&self, id: u32) -> Option<&ConsolePort> {
+        self.ports.get(id as usize)
     }
 
     
-    pub fn owp(&mut self, ad: u32) -> Option<&mut ConsolePort> {
-        self.xf.ds(ad as usize)
+    pub fn port_mut(&mut self, id: u32) -> Option<&mut ConsolePort> {
+        self.ports.get_mut(id as usize)
     }
 
     
-    pub fn jep(&mut self) -> &mut ConsolePort {
-        if self.xf.is_empty() {
-            self.mtx("console");
+    pub fn main_port(&mut self) -> &mut ConsolePort {
+        if self.ports.is_empty() {
+            self.add_port("console");
         }
-        &mut self.xf[0]
+        &mut self.ports[0]
     }
 
     
-    pub fn write(&mut self, f: &[u8]) -> usize {
-        self.jep().write(f)
+    pub fn write(&mut self, data: &[u8]) -> usize {
+        self.main_port().write(data)
     }
 
     
-    pub fn print(&mut self, e: &str) -> usize {
-        self.jep().write_str(e)
+    pub fn print(&mut self, j: &str) -> usize {
+        self.main_port().write_str(j)
     }
 
     
-    pub fn read(&mut self, k: &mut [u8]) -> usize {
-        self.jep().read(k)
+    pub fn read(&mut self, buf: &mut [u8]) -> usize {
+        self.main_port().read(buf)
     }
 
     
-    pub fn cts(&mut self) -> Option<String> {
-        self.jep().cts()
+    pub fn read_line(&mut self) -> Option<String> {
+        self.main_port().read_line()
     }
 
     
-    pub fn cyk(&self) -> bool {
-        self.xf.fv().efd(false, |ai| ai.cyk())
+    pub fn has_data(&self) -> bool {
+        self.ports.first().map_or(false, |aa| aa.has_data())
     }
 
     
-    pub fn yvr(&mut self, luv: u32, f: &[u8]) {
-        if let Some(port) = self.owp(luv) {
-            port.chb(f);
+    pub fn qjz(&mut self, port_id: u32, data: &[u8]) {
+        if let Some(port) = self.port_mut(port_id) {
+            port.receive(data);
         }
     }
 
     
-    pub fn yvq(&mut self, luv: u32) -> Vec<u8> {
-        if let Some(port) = self.owp(luv) {
-            port.kqu()
+    pub fn qjy(&mut self, port_id: u32) -> Vec<u8> {
+        if let Some(port) = self.port_mut(port_id) {
+            port.drain_output()
         } else {
             Vec::new()
         }
@@ -214,87 +214,87 @@ impl VirtioConsole {
 
 pub struct ConsoleManager {
     
-    byx: Vec<VirtioConsole>,
+    consoles: Vec<VirtioConsole>,
 }
 
 impl ConsoleManager {
     pub const fn new() -> Self {
         Self {
-            byx: Vec::new(),
+            consoles: Vec::new(),
         }
     }
 
     
-    pub fn fgb(&mut self, fk: u64) -> &mut VirtioConsole {
+    pub fn create_console(&mut self, vm_id: u64) -> &mut VirtioConsole {
         
-        if let Some(w) = self.byx.iter().qf(|r| r.fk == fk) {
-            return &mut self.byx[w];
+        if let Some(idx) = self.consoles.iter().position(|c| c.vm_id == vm_id) {
+            return &mut self.consoles[idx];
         }
         
-        self.byx.push(VirtioConsole::new(fk));
-        self.byx.dsq().unwrap()
+        self.consoles.push(VirtioConsole::new(vm_id));
+        self.consoles.last_mut().unwrap()
     }
 
     
-    pub fn ghy(&self, fk: u64) -> Option<&VirtioConsole> {
-        self.byx.iter().du(|r| r.fk == fk)
+    pub fn get_console(&self, vm_id: u64) -> Option<&VirtioConsole> {
+        self.consoles.iter().find(|c| c.vm_id == vm_id)
     }
 
     
-    pub fn kyl(&mut self, fk: u64) -> Option<&mut VirtioConsole> {
-        self.byx.el().du(|r| r.fk == fk)
+    pub fn get_console_mut(&mut self, vm_id: u64) -> Option<&mut VirtioConsole> {
+        self.consoles.iter_mut().find(|c| c.vm_id == vm_id)
     }
 
     
-    pub fn vuu(&mut self, fk: u64) {
-        self.byx.ajm(|r| r.fk != fk);
+    pub fn oew(&mut self, vm_id: u64) {
+        self.consoles.retain(|c| c.vm_id != vm_id);
     }
 }
 
 
-static BOS_: Mutex<ConsoleManager> = Mutex::new(ConsoleManager::new());
+static BRJ_: Mutex<ConsoleManager> = Mutex::new(ConsoleManager::new());
 
 
-pub fn hdx() -> spin::Aki<'static, ConsoleManager> {
-    BOS_.lock()
+pub fn dlj() -> spin::MutexGuard<'static, ConsoleManager> {
+    BRJ_.lock()
 }
 
 
-pub fn fgb(fk: u64) {
-    hdx().fgb(fk);
+pub fn create_console(vm_id: u64) {
+    dlj().create_console(vm_id);
 }
 
 
-pub fn zxc(fk: u64, f: &[u8]) -> usize {
-    if let Some(console) = hdx().kyl(fk) {
-        console.write(f)
+pub fn rdo(vm_id: u64, data: &[u8]) -> usize {
+    if let Some(console) = dlj().get_console_mut(vm_id) {
+        console.write(data)
     } else {
         0
     }
 }
 
 
-pub fn zhs(fk: u64, k: &mut [u8]) -> usize {
-    if let Some(console) = hdx().kyl(fk) {
-        console.read(k)
+pub fn qse(vm_id: u64, buf: &mut [u8]) -> usize {
+    if let Some(console) = dlj().get_console_mut(vm_id) {
+        console.read(buf)
     } else {
         0
     }
 }
 
 
-pub fn zvm(fk: u64) -> bool {
-    if let Some(console) = hdx().ghy(fk) {
-        console.cyk()
+pub fn rcb(vm_id: u64) -> bool {
+    if let Some(console) = dlj().get_console(vm_id) {
+        console.has_data()
     } else {
         false
     }
 }
 
 
-pub fn zhx(fk: u64) -> Option<String> {
-    if let Some(console) = hdx().kyl(fk) {
-        console.cts()
+pub fn qsj(vm_id: u64) -> Option<String> {
+    if let Some(console) = dlj().get_console_mut(vm_id) {
+        console.read_line()
     } else {
         None
     }
@@ -305,13 +305,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn zrj() {
+    fn qzd() {
         let mut port = ConsolePort::new(0, "test");
-        port.chb(b"Hello, World!\n");
+        port.receive(b"Hello, World!\n");
         
-        assert!(port.cyk());
+        assert!(port.has_data());
         
-        let line = port.cts();
+        let line = port.read_line();
         assert_eq!(line, Some(String::from("Hello, World!")));
     }
 }

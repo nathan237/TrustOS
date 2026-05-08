@@ -907,7 +907,7 @@ impl VirtioGpu {
             core::hint::spin_loop();
         }
         
-        let dma = self.dma_buf.as_ref().unwrap();
+        let dma = self.dma_buf.as_ref().ok_or("DMA buffer not initialized")?;
         let resp_type = unsafe { dma.read_at::<GpuCtrlHdr>(resp_offset) }.ctrl_type;
         controlq.free_desc(d_resp);
         controlq.free_desc(d_cmd);
@@ -934,7 +934,7 @@ impl VirtioGpu {
             return Err("GET_DISPLAY_INFO failed");
         }
         
-        let dma = self.dma_buf.as_ref().unwrap();
+        let dma = self.dma_buf.as_ref().ok_or("DMA buffer not initialized")?;
         let resp: GpuRespDisplayInfo = unsafe { dma.read_at(512) };
         
         for (i, pm) in resp.pmodes.iter().enumerate() {
@@ -1276,7 +1276,7 @@ impl VirtioGpu {
         }
         
         // Check responses
-        let dma = self.dma_buf.as_ref().unwrap();
+        let dma = self.dma_buf.as_ref().ok_or("DMA buffer not initialized")?;
         let t_resp = unsafe { dma.read_at::<GpuCtrlHdr>(512) }.ctrl_type;
         let f_resp = unsafe { dma.read_at::<GpuCtrlHdr>(768) }.ctrl_type;
         

@@ -29,7 +29,7 @@ pub fn new() -> Self {
 
 // Implémentation de trait — remplit un contrat comportemental.
 impl Driver for Rtl8139Driver {
-    fn information(&self) -> &DriverInformation {
+    fn info(&self) -> &DriverInformation {
         &DRIVER_INFORMATION
     }
     

@@ -96,7 +96,7 @@ const SECTOR_SIZE: usize = 512;
 // Structure publique — visible à l'extérieur de ce module.
 pub struct VirtqDesc {
     /// Guest physical address of the buffer
-    pub address: u64,
+    pub addr: u64,
     /// Length of the buffer
     pub len: u32,
     /// Descriptor flags (NEXT=1, WRITE=2, INDIRECT=4)
@@ -122,11 +122,11 @@ pub struct VirtioBlkState {
     /// Device status register
     pub device_status: u8,
     /// ISR status (bit 0 = used buffer notification, bit 1 = config change)
-    pub interrupt_handler_status: u8,
+    pub isr_status: u8,
     /// Block device capacity in sectors
     pub capacity_sectors: u64,
     /// Queue last seen available index
-    pub last_avail_index: u16,
+    pub last_avail_idx: u16,
 }
 
 // Implémentation de trait — remplit un contrat comportemental.
@@ -141,9 +141,9 @@ impl Default for VirtioBlkState {
             queue_pfn: 0,
             queue_size: 128, // Max 128 descriptors
             device_status: 0,
-            interrupt_handler_status: 0,
+            isr_status: 0,
             capacity_sectors: 64, // 64 sectors = 32KB default (overridden by VM)
-            last_avail_index: 0,
+            last_avail_idx: 0,
         }
     }
 }
@@ -176,9 +176,9 @@ match offset {
             0x12 => self.device_status as u32,
             // ISR status (reading clears it)
             0x13 => {
-                let value = self.interrupt_handler_status as u32;
-                self.interrupt_handler_status = 0;
-                value
+                let val = self.isr_status as u32;
+                self.isr_status = 0;
+                val
             }
             // Device-specific: capacity low 32 bits
             0x14 => (self.capacity_sectors & 0xFFFF_FFFF) as u32,
@@ -223,8 +223,8 @@ match offset {
                     self.guest_features = 0;
                     self.queue_pfn = 0;
                     self.queue_select = 0;
-                    self.interrupt_handler_status = 0;
-                    self.last_avail_index = 0;
+                    self.isr_status = 0;
+                    self.last_avail_idx = 0;
                 }
             }
             _ => {}
@@ -264,8 +264,8 @@ match offset {
         
         let mut processed = 0usize;
         
-        while self.last_avail_index != avail_index {
-            let ring_index = (self.last_avail_index as usize) % queue_size;
+        while self.last_avail_idx != avail_index {
+            let ring_index = (self.last_avail_idx as usize) % queue_size;
             let ring_offset = avail_base_aligned + 4 + ring_index * 2;
             
             if ring_offset + 2 > guest_memory.len() {
@@ -304,11 +304,11 @@ match offset {
                 guest_memory[used_base_aligned + 3] = bytes[1];
             }
             
-            self.last_avail_index = self.last_avail_index.wrapping_add(1);
+            self.last_avail_idx = self.last_avail_idx.wrapping_add(1);
             processed += 1;
             
             // Set ISR bit for used buffer notification
-            self.interrupt_handler_status |= 1;
+            self.isr_status |= 1;
         }
         
         processed
@@ -320,36 +320,36 @@ match offset {
         guest_memory: &mut [u8],
         storage: &mut [u8],
         descriptor_base: usize,
-        first_descriptor: usize,
+        first_desc: usize,
         queue_size: usize,
     ) -> usize {
         // Read the first descriptor (request header: type + sector)
-        let header = self.read_descriptor(guest_memory, descriptor_base, first_descriptor);
-        if header.address as usize + 16 > guest_memory.len() {
+        let header = self.read_desc(guest_memory, descriptor_base, first_desc);
+        if header.addr as usize + 16 > guest_memory.len() {
             return 0;
         }
         
         // Parse request header
         let req_type = u32::from_le_bytes([
-            guest_memory[header.address as usize],
-            guest_memory[header.address as usize + 1],
-            guest_memory[header.address as usize + 2],
-            guest_memory[header.address as usize + 3],
+            guest_memory[header.addr as usize],
+            guest_memory[header.addr as usize + 1],
+            guest_memory[header.addr as usize + 2],
+            guest_memory[header.addr as usize + 3],
         ]);
         let sector = u64::from_le_bytes([
-            guest_memory[header.address as usize + 8],
-            guest_memory[header.address as usize + 9],
-            guest_memory[header.address as usize + 10],
-            guest_memory[header.address as usize + 11],
-            guest_memory[header.address as usize + 12],
-            guest_memory[header.address as usize + 13],
-            guest_memory[header.address as usize + 14],
-            guest_memory[header.address as usize + 15],
+            guest_memory[header.addr as usize + 8],
+            guest_memory[header.addr as usize + 9],
+            guest_memory[header.addr as usize + 10],
+            guest_memory[header.addr as usize + 11],
+            guest_memory[header.addr as usize + 12],
+            guest_memory[header.addr as usize + 13],
+            guest_memory[header.addr as usize + 14],
+            guest_memory[header.addr as usize + 15],
         ]);
         
         // Follow chain: header → data descriptor(s) → status descriptor
-        let mut total_length = 0usize;
-        let mut current = first_descriptor;
+        let mut total_len = 0usize;
+        let mut current = first_desc;
         let mut data_descs: [(u64, u32, u16); 16] = [(0, 0, 0); 16];
         let mut data_count = 0usize;
         let mut status_descriptor: Option<(u64, u32)> = None;
@@ -357,7 +357,7 @@ match offset {
         
                 // Boucle infinie — tourne jusqu'à un `break` explicite.
 loop {
-            let desc = self.read_descriptor(guest_memory, descriptor_base, current);
+            let desc = self.read_desc(guest_memory, descriptor_base, current);
             
             if is_first {
                 is_first = false;
@@ -365,17 +365,17 @@ loop {
                 // WRITE flag = device writes to this buffer
                 // Could be data (for read requests) or status
                 if desc.len == 1 {
-                    status_descriptor = Some((desc.address, desc.len));
+                    status_descriptor = Some((desc.addr, desc.len));
                 } else {
                     if data_count < 16 {
-                        data_descs[data_count] = (desc.address, desc.len, desc.flags);
+                        data_descs[data_count] = (desc.addr, desc.len, desc.flags);
                         data_count += 1;
                     }
                 }
             } else {
                 // No WRITE flag = device reads from this buffer (data for write requests)
                 if data_count < 16 {
-                    data_descs[data_count] = (desc.address, desc.len, desc.flags);
+                    data_descs[data_count] = (desc.addr, desc.len, desc.flags);
                     data_count += 1;
                 }
             }
@@ -384,7 +384,7 @@ loop {
                 // No NEXT flag — end of chain
                 // If we didn't find a status desc yet, the last one is status
                 if status_descriptor.is_none() && desc.len == 1 {
-                    status_descriptor = Some((desc.address, desc.len));
+                    status_descriptor = Some((desc.addr, desc.len));
                     if data_count > 0 {
                         data_count -= 1; // Remove it from data list
                     }
@@ -405,12 +405,12 @@ match req_type {
                 // Read from storage into guest memory
                 let mut offset = sector as usize * SECTOR_SIZE;
                 for i in 0..data_count {
-                    let (address, len, _) = data_descs[i];
-                    let address = address as usize;
+                    let (addr, len, _) = data_descs[i];
+                    let addr = addr as usize;
                     let len = len as usize;
-                    if offset + len <= storage.len() && address + len <= guest_memory.len() {
-                        guest_memory[address..address + len].copy_from_slice(&storage[offset..offset + len]);
-                        total_length += len;
+                    if offset + len <= storage.len() && addr + len <= guest_memory.len() {
+                        guest_memory[addr..addr + len].copy_from_slice(&storage[offset..offset + len]);
+                        total_len += len;
                     }
                     offset += len;
                 }
@@ -420,12 +420,12 @@ match req_type {
                 // Write from guest memory into storage
                 let mut offset = sector as usize * SECTOR_SIZE;
                 for i in 0..data_count {
-                    let (address, len, _) = data_descs[i];
-                    let address = address as usize;
+                    let (addr, len, _) = data_descs[i];
+                    let addr = addr as usize;
                     let len = len as usize;
-                    if offset + len <= storage.len() && address + len <= guest_memory.len() {
-                        storage[offset..offset + len].copy_from_slice(&guest_memory[address..address + len]);
-                        total_length += len;
+                    if offset + len <= storage.len() && addr + len <= guest_memory.len() {
+                        storage[offset..offset + len].copy_from_slice(&guest_memory[addr..addr + len]);
+                        total_len += len;
                     }
                     offset += len;
                 }
@@ -438,12 +438,12 @@ match req_type {
             req_type::VIRTIO_BLOCK_T_GET_ID => {
                 // Write device ID string
                 let id_str = b"trustos-virtio-blk\0";
-                if let Some((address, _, _)) = data_descs.first() {
-                    let address = *address as usize;
-                    let copy_length = id_str.len().minimum(20);
-                    if address + copy_length <= guest_memory.len() {
-                        guest_memory[address..address + copy_length].copy_from_slice(&id_str[..copy_length]);
-                        total_length += copy_length;
+                if let Some((addr, _, _)) = data_descs.first() {
+                    let addr = *addr as usize;
+                    let copy_length = id_str.len().min(20);
+                    if addr + copy_length <= guest_memory.len() {
+                        guest_memory[addr..addr + copy_length].copy_from_slice(&id_str[..copy_length]);
+                        total_len += copy_length;
                     }
                 }
                 status::VIRTIO_BLOCK_S_OK
@@ -452,26 +452,26 @@ match req_type {
         };
         
         // Write status byte
-        if let Some((address, _)) = status_descriptor {
-            let address = address as usize;
-            if address < guest_memory.len() {
-                guest_memory[address] = result_status;
-                total_length += 1;
+        if let Some((addr, _)) = status_descriptor {
+            let addr = addr as usize;
+            if addr < guest_memory.len() {
+                guest_memory[addr] = result_status;
+                total_len += 1;
             }
         }
         
-        total_length
+        total_len
     }
     
     /// Read a virtqueue descriptor from guest memory
-    fn read_descriptor(&self, guest_memory: &[u8], descriptor_base: usize, index: usize) -> VirtqDesc {
+    fn read_desc(&self, guest_memory: &[u8], descriptor_base: usize, index: usize) -> VirtqDesc {
         let offset = descriptor_base + index * 16;
         if offset + 16 > guest_memory.len() {
             return VirtqDesc::default();
         }
         
         VirtqDesc {
-            address: u64::from_le_bytes([
+            addr: u64::from_le_bytes([
                 guest_memory[offset], guest_memory[offset + 1],
                 guest_memory[offset + 2], guest_memory[offset + 3],
                 guest_memory[offset + 4], guest_memory[offset + 5],
@@ -524,15 +524,15 @@ pub struct VirtioConsoleState {
     /// Device status
     pub device_status: u8,
     /// ISR status
-    pub interrupt_handler_status: u8,
+    pub isr_status: u8,
     /// Console columns
     pub cols: u16,
     /// Console rows
     pub rows: u16,
     /// Maximum number of ports
-    pub maximum_number_ports: u32,
+    pub max_nr_ports: u32,
     /// Transmitq last available index
-    pub transmit_last_avail_index: u16,
+    pub tx_last_avail_idx: u16,
 }
 
 // Implémentation de trait — remplit un contrat comportemental.
@@ -546,11 +546,11 @@ impl Default for VirtioConsoleState {
             queue_pfn_1: 0,
             queue_size: 64,
             device_status: 0,
-            interrupt_handler_status: 0,
+            isr_status: 0,
             cols: 80,
             rows: 25,
-            maximum_number_ports: 1,
-            transmit_last_avail_index: 0,
+            max_nr_ports: 1,
+            tx_last_avail_idx: 0,
         }
     }
 }
@@ -576,14 +576,14 @@ match self.queue_select {
             0x0E => self.queue_select as u32,
             0x12 => self.device_status as u32,
             0x13 => {
-                let value = self.interrupt_handler_status as u32;
-                self.interrupt_handler_status = 0;
-                value
+                let val = self.isr_status as u32;
+                self.isr_status = 0;
+                val
             }
             // Console config
             0x14 => self.cols as u32,
             0x16 => self.rows as u32,
-            0x18 => self.maximum_number_ports,
+            0x18 => self.max_nr_ports,
             _ => 0,
         }
     }
@@ -619,14 +619,14 @@ match self.queue_select {
                     self.queue_pfn_0 = 0;
                     self.queue_pfn_1 = 0;
                     self.queue_select = 0;
-                    self.interrupt_handler_status = 0;
-                    self.transmit_last_avail_index = 0;
+                    self.isr_status = 0;
+                    self.tx_last_avail_idx = 0;
                 }
             }
             // Emergency write — guest writes a character directly
             0x1C => {
-                let character = (value & 0xFF) as u8;
-                crate::serial_print!("{}", character as char);
+                let ch = (value & 0xFF) as u8;
+                crate::serial_print!("{}", ch as char);
             }
             _ => {}
         }
@@ -658,8 +658,8 @@ match self.queue_select {
         
         let mut total_bytes = 0usize;
         
-        while self.transmit_last_avail_index != avail_index {
-            let ring_index = (self.transmit_last_avail_index as usize) % queue_size;
+        while self.tx_last_avail_idx != avail_index {
+            let ring_index = (self.tx_last_avail_idx as usize) % queue_size;
             let ring_offset = avail_base_aligned + 4 + ring_index * 2;
             
             if ring_offset + 2 > guest_memory.len() {
@@ -674,7 +674,7 @@ match self.queue_select {
             // Read descriptor and output data
             let offset = descriptor_base + descriptor_index * 16;
             if offset + 16 <= guest_memory.len() {
-                let address = u64::from_le_bytes([
+                let addr = u64::from_le_bytes([
                     guest_memory[offset], guest_memory[offset + 1],
                     guest_memory[offset + 2], guest_memory[offset + 3],
                     guest_memory[offset + 4], guest_memory[offset + 5],
@@ -686,16 +686,16 @@ match self.queue_select {
                 ]) as usize;
                 
                 // Output each byte to serial
-                if address + len <= guest_memory.len() {
+                if addr + len <= guest_memory.len() {
                     for i in 0..len {
-                        crate::serial_print!("{}", guest_memory[address + i] as char);
+                        crate::serial_print!("{}", guest_memory[addr + i] as char);
                     }
                     total_bytes += len;
                 }
             }
             
-            self.transmit_last_avail_index = self.transmit_last_avail_index.wrapping_add(1);
-            self.interrupt_handler_status |= 1;
+            self.tx_last_avail_idx = self.tx_last_avail_idx.wrapping_add(1);
+            self.isr_status |= 1;
         }
         
         total_bytes

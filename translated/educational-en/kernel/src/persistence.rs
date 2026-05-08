@@ -85,8 +85,8 @@ fn find_ahci_disk() -> Option<u8> {
         if port.sector_count > 0 {
             // Try to read a sector to verify it's working
             let mut buffer = [0u8; 512];
-            if crate::drivers::ahci::read_sectors(port.port_number, 0, 1, &mut buffer).is_ok() {
-                return Some(port.port_number);
+            if crate::drivers::ahci::read_sectors(port.port_num, 0, 1, &mut buffer).is_ok() {
+                return Some(port.port_num);
             }
         }
     }
@@ -168,7 +168,7 @@ pub fn save_file(path: &str, data: &[u8]) -> Result<(), &'static str> {
     let mut header_buffer = [0u8; 512];
     let mut header = if check_persistence_exists(port) {
         crate::drivers::ahci::read_sectors(port, PERSIST_START_SECTOR, 1, &mut header_buffer)
-            .map_error(|_| "Failed to read header")?;
+            .map_err(|_| "Failed to read header")?;
         parse_header(&header_buffer)?
     } else {
         // Create new header
@@ -225,7 +225,7 @@ unsafe { core::mem::transmute(entry_header) };
         sector_buffer.copy_from_slice(&entry_data[offset..offset + 512]);
         
         crate::drivers::ahci::write_sectors(port, sector, 1, &sector_buffer)
-            .map_error(|_| "Failed to write data sector")?;
+            .map_err(|_| "Failed to write data sector")?;
     }
     
     // Update header
@@ -242,7 +242,7 @@ unsafe { core::mem::transmute(entry_header) };
     header_out[24..28].copy_from_slice(&header.checksum.to_le_bytes());
     
     crate::drivers::ahci::write_sectors(port, PERSIST_START_SECTOR, 1, &header_out)
-        .map_error(|_| "Failed to write header")?;
+        .map_err(|_| "Failed to write header")?;
     
     crate::serial_println!("[PERSIST] Saved {} successfully", path);
     Ok(())
@@ -256,7 +256,7 @@ fn restore_all() -> Result<(), &'static str> {
     // Read header
     let mut header_buffer = [0u8; 512];
     crate::drivers::ahci::read_sectors(port, PERSIST_START_SECTOR, 1, &mut header_buffer)
-        .map_error(|_| "Failed to read header")?;
+        .map_err(|_| "Failed to read header")?;
     
     let header = parse_header(&header_buffer)?;
     
@@ -287,9 +287,9 @@ fn restore_all() -> Result<(), &'static str> {
         let mut sector_buffer = [0u8; 512];
         
         crate::drivers::ahci::read_sectors(port, sector, 1, &mut sector_buffer)
-            .map_error(|_| "Failed to read data sector")?;
+            .map_err(|_| "Failed to read data sector")?;
         
-        let copy_length = core::cmp::minimum(512, all_data.len() - offset);
+        let copy_length = core::cmp::min(512, all_data.len() - offset);
         all_data[offset..offset + copy_length].copy_from_slice(&sector_buffer[..copy_length]);
     }
     
@@ -362,12 +362,12 @@ match core::str::from_utf8(&all_data[offset..offset + path_length]) {
 }
 
 /// Parse header from buffer
-fn parse_header(buffer: &[u8; 512]) -> Result<PersistHeader, &'static str> {
-    if &buffer[0..8] != PERSIST_MAGIC {
+fn parse_header(buf: &[u8; 512]) -> Result<PersistHeader, &'static str> {
+    if &buf[0..8] != PERSIST_MAGIC {
         return Err("Invalid magic signature");
     }
     
-    let version = u32::from_le_bytes([buffer[8], buffer[9], buffer[10], buffer[11]]);
+    let version = u32::from_le_bytes([buf[8], buf[9], buf[10], buf[11]]);
     if version != PERSIST_VERSION {
         return Err("Incompatible version");
     }
@@ -375,12 +375,12 @@ fn parse_header(buffer: &[u8; 512]) -> Result<PersistHeader, &'static str> {
     Ok(PersistHeader {
         magic: *PERSIST_MAGIC,
         version,
-        entry_count: u32::from_le_bytes([buffer[12], buffer[13], buffer[14], buffer[15]]),
+        entry_count: u32::from_le_bytes([buf[12], buf[13], buf[14], buf[15]]),
         total_size: u64::from_le_bytes([
-            buffer[16], buffer[17], buffer[18], buffer[19],
-            buffer[20], buffer[21], buffer[22], buffer[23],
+            buf[16], buf[17], buf[18], buf[19],
+            buf[20], buf[21], buf[22], buf[23],
         ]),
-        checksum: u32::from_le_bytes([buffer[24], buffer[25], buffer[26], buffer[27]]),
+        checksum: u32::from_le_bytes([buf[24], buf[25], buf[26], buf[27]]),
         _reserved: [0; 484],
     })
 }
@@ -402,7 +402,7 @@ pub fn clear() -> Result<(), &'static str> {
     // Write empty header
     let header_out = [0u8; 512];
     crate::drivers::ahci::write_sectors(port, PERSIST_START_SECTOR, 1, &header_out)
-        .map_error(|_| "Failed to clear persistence")?;
+        .map_err(|_| "Failed to clear persistence")?;
     
     crate::serial_println!("[PERSIST] Persistence data cleared");
     Ok(())

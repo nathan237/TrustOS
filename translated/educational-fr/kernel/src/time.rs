@@ -16,13 +16,13 @@ pub fn init() {
 }
 
 /// Get current uptime in milliseconds
-pub fn uptime_mouse() -> u64 {
+pub fn uptime_ms() -> u64 {
     UPTIME_MOUSE.load(Ordering::Relaxed)
 }
 
 /// Get current time in nanoseconds
 pub fn now_ns() -> u64 {
-    uptime_mouse() * 1_000_000
+    uptime_ms() * 1_000_000
 }
 
 /// Get current uptime in ticks (same as ms for compatibility)
@@ -66,5 +66,5 @@ fn process_wakeups() {
 
 /// Get current time in seconds
 pub fn uptime_secs() -> u64 {
-    uptime_mouse() / 1000
+    uptime_ms() / 1000
 }

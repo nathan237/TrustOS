@@ -18,42 +18,42 @@ impl Port {
     
     
     #[inline(always)]
-    pub unsafe fn ady(&self) -> u8 {
-        cpu::cfn(self.port)
+    pub unsafe fn read_u8(&self) -> u8 {
+        cpu::om(self.port)
     }
     
     
     #[inline(always)]
-    pub unsafe fn cvj(&self, ap: u8) {
-        cpu::bkt(self.port, ap);
+    pub unsafe fn write_u8(&self, val: u8) {
+        cpu::vp(self.port, val);
     }
     
     
     #[inline(always)]
-    pub unsafe fn alp(&self) -> u16 {
-        cpu::jar(self.port)
+    pub unsafe fn read_u16(&self) -> u16 {
+        cpu::eqz(self.port)
     }
     
     
     #[inline(always)]
-    pub unsafe fn aqr(&self, ap: u16) {
-        cpu::jie(self.port, ap);
+    pub unsafe fn write_u16(&self, val: u16) {
+        cpu::evw(self.port, val);
     }
     
     
     #[inline(always)]
-    pub unsafe fn za(&self) -> u32 {
-        cpu::jac(self.port)
+    pub unsafe fn read_u32(&self) -> u32 {
+        cpu::eqp(self.port)
     }
     
     
     #[inline(always)]
-    pub unsafe fn sx(&self, ap: u32) {
-        cpu::jic(self.port, ap);
+    pub unsafe fn write_u32(&self, val: u32) {
+        cpu::evv(self.port, val);
     }
     
     
-    pub const fn zfx(&self) -> u16 {
+    pub const fn qqt(&self) -> u16 {
         self.port
     }
 }

@@ -10,168 +10,168 @@ use spin::Mutex;
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
 pub struct ArpPacket {
-    pub ock: u16,       
-    pub frq: u16,       
-    pub tpg: u8,         
-    pub hvh: u8,         
-    pub ayh: u16,   
-    pub eik: [u8; 6],
-    pub eij: [u8; 4],
-    pub jsl: [u8; 6],
-    pub blk: [u8; 4],
+    pub htype: u16,       
+    pub ptype: u16,       
+    pub hlen: u8,         
+    pub plen: u8,         
+    pub operation: u16,   
+    pub sender_mac: [u8; 6],
+    pub sender_ip: [u8; 4],
+    pub target_mac: [u8; 6],
+    pub target_ip: [u8; 4],
 }
 
 impl ArpPacket {
-    pub const Am: usize = 28;
+    pub const Z: usize = 28;
     
-    pub fn parse(f: &[u8]) -> Option<Self> {
-        if f.len() < Self::Am {
+    pub fn parse(data: &[u8]) -> Option<Self> {
+        if data.len() < Self::Z {
             return None;
         }
-        Some(unsafe { core::ptr::md(f.fq() as *const Self) })
+        Some(unsafe { core::ptr::read_unaligned(data.as_ptr() as *const Self) })
     }
     
-    pub fn ayh(&self) -> u16 {
-        u16::eqv(self.ayh)
+    pub fn operation(&self) -> u16 {
+        u16::from_be(self.operation)
     }
 }
 
 
-static RC_: Mutex<BTreeMap<u32, [u8; 6]>> = Mutex::new(BTreeMap::new());
+static RY_: Mutex<BTreeMap<u32, [u8; 6]>> = Mutex::new(BTreeMap::new());
 
 
-pub fn bur(f: &[u8]) {
-    let ex = match ArpPacket::parse(f) {
-        Some(ai) => ai,
+pub fn alq(data: &[u8]) {
+    let be = match ArpPacket::parse(data) {
+        Some(aa) => aa,
         None => return,
     };
     
     
-    if u16::eqv(ex.ock) != 1 || u16::eqv(ex.frq) != 0x0800 {
+    if u16::from_be(be.htype) != 1 || u16::from_be(be.ptype) != 0x0800 {
         return;
     }
     
-    let eij = u32::oa(ex.eij);
+    let sender_ip = u32::from_be_bytes(be.sender_ip);
     
     
     {
-        let mut bdq = RC_.lock();
-        bdq.insert(eij, ex.eik);
+        let mut adk = RY_.lock();
+        adk.insert(sender_ip, be.sender_mac);
     }
     
-    match ex.ayh() {
+    match be.operation() {
         1 => {
             
-            lba(&ex);
+            handle_request(&be);
         }
         2 => {
             
             crate::log_debug!("[ARP] Reply from {}.{}.{}.{} = {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
-                ex.eij[0], ex.eij[1], ex.eij[2], ex.eij[3],
-                ex.eik[0], ex.eik[1], ex.eik[2],
-                ex.eik[3], ex.eik[4], ex.eik[5]);
+                be.sender_ip[0], be.sender_ip[1], be.sender_ip[2], be.sender_ip[3],
+                be.sender_mac[0], be.sender_mac[1], be.sender_mac[2],
+                be.sender_mac[3], be.sender_mac[4], be.sender_mac[5]);
         }
         _ => {}
     }
 }
 
 
-fn lba(ex: &ArpPacket) {
+fn handle_request(be: &ArpPacket) {
     
-    let aro = match crate::network::gif() {
+    let wj = match crate::network::cyp() {
         Some((_, Some(ip), _)) => ip,
         _ => return,
     };
     
-    let xaw = u32::oa(ex.blk);
-    let uzm = aro.as_bytes();
-    let uzn = u32::oa(*uzm);
+    let pdf = u32::from_be_bytes(be.target_ip);
+    let nob = wj.as_bytes();
+    let noc = u32::from_be_bytes(*nob);
     
-    if xaw != uzn {
+    if pdf != noc {
         return; 
     }
     
     
-    let _ = whm(ex.eij, ex.eik);
+    let _ = onz(be.sender_ip, be.sender_mac);
 }
 
 
-fn whm(blk: [u8; 4], jsl: [u8; 6]) -> Result<(), &'static str> {
-    let lqz = crate::drivers::net::cez()
-        .or_else(crate::network::ckt)
+fn onz(target_ip: [u8; 4], target_mac: [u8; 6]) -> Result<(), &'static str> {
+    let glf = crate::drivers::net::aqt()
+        .or_else(crate::network::aqu)
         .ok_or("No MAC")?;
-    let aro = match crate::network::gif() {
+    let wj = match crate::network::cyp() {
         Some((_, Some(ip), _)) => *ip.as_bytes(),
         _ => return Err("No IP"),
     };
     
-    let mut ex = Vec::fc(ArpPacket::Am);
-    ex.bk(&1u16.ft());      
-    ex.bk(&0x0800u16.ft()); 
-    ex.push(6);                                     
-    ex.push(4);                                     
-    ex.bk(&2u16.ft());      
-    ex.bk(&lqz);                 
-    ex.bk(&aro);                  
-    ex.bk(&jsl);              
-    ex.bk(&blk);               
+    let mut be = Vec::with_capacity(ArpPacket::Z);
+    be.extend_from_slice(&1u16.to_be_bytes());      
+    be.extend_from_slice(&0x0800u16.to_be_bytes()); 
+    be.push(6);                                     
+    be.push(4);                                     
+    be.extend_from_slice(&2u16.to_be_bytes());      
+    be.extend_from_slice(&glf);                 
+    be.extend_from_slice(&wj);                  
+    be.extend_from_slice(&target_mac);              
+    be.extend_from_slice(&target_ip);               
     
-    crate::netstack::fug(jsl, crate::netstack::ethertype::Aot, &ex)?;
+    crate::netstack::cdq(target_mac, crate::netstack::ethertype::Qz, &be)?;
     
     crate::log_debug!("[ARP] Sent reply to {}.{}.{}.{}",
-        blk[0], blk[1], blk[2], blk[3]);
+        target_ip[0], target_ip[1], target_ip[2], target_ip[3]);
     
     Ok(())
 }
 
 
-pub fn eii(blk: [u8; 4]) -> Result<(), &'static str> {
-    let lqz = crate::drivers::net::cez()
-        .or_else(crate::network::ckt)
+pub fn bos(target_ip: [u8; 4]) -> Result<(), &'static str> {
+    let glf = crate::drivers::net::aqt()
+        .or_else(crate::network::aqu)
         .ok_or("No MAC")?;
-    let aro = match crate::network::gif() {
+    let wj = match crate::network::cyp() {
         Some((_, Some(ip), _)) => *ip.as_bytes(),
         _ => return Err("No IP"),
     };
     
-    let mut ex = Vec::fc(ArpPacket::Am);
-    ex.bk(&1u16.ft());      
-    ex.bk(&0x0800u16.ft()); 
-    ex.push(6);                                     
-    ex.push(4);                                     
-    ex.bk(&1u16.ft());      
-    ex.bk(&lqz);                 
-    ex.bk(&aro);                  
-    ex.bk(&[0; 6]);                  
-    ex.bk(&blk);               
+    let mut be = Vec::with_capacity(ArpPacket::Z);
+    be.extend_from_slice(&1u16.to_be_bytes());      
+    be.extend_from_slice(&0x0800u16.to_be_bytes()); 
+    be.push(6);                                     
+    be.push(4);                                     
+    be.extend_from_slice(&1u16.to_be_bytes());      
+    be.extend_from_slice(&glf);                 
+    be.extend_from_slice(&wj);                  
+    be.extend_from_slice(&[0; 6]);                  
+    be.extend_from_slice(&target_ip);               
     
-    let nad = [0xFF; 6];
-    crate::netstack::fug(nad, crate::netstack::ethertype::Aot, &ex)?;
+    let hiq = [0xFF; 6];
+    crate::netstack::cdq(hiq, crate::netstack::ethertype::Qz, &be)?;
     
     crate::log_debug!("[ARP] Sent request for {}.{}.{}.{}",
-        blk[0], blk[1], blk[2], blk[3]);
+        target_ip[0], target_ip[1], target_ip[2], target_ip[3]);
     
     Ok(())
 }
 
 
-pub fn cga(ip: u32) -> Option<[u8; 6]> {
-    RC_.lock().get(&ip).hu()
+pub fn lookup(ip: u32) -> Option<[u8; 6]> {
+    RY_.lock().get(&ip).copied()
 }
 
 
-pub fn ayo(ip: [u8; 4]) -> Option<[u8; 6]> {
-    let flx = u32::oa(ip);
-    cga(flx)
+pub fn yb(ip: [u8; 4]) -> Option<[u8; 6]> {
+    let clj = u32::from_be_bytes(ip);
+    lookup(clj)
 }
 
 
-pub fn yhe() -> usize {
-    RC_.lock().len()
+pub fn pzb() -> usize {
+    RY_.lock().len()
 }
 
 
-pub fn ch() -> alloc::vec::Vec<(u32, [u8; 6])> {
-    let bdq = RC_.lock();
-    bdq.iter().map(|(ip, ed)| (*ip, *ed)).collect()
+pub fn entries() -> alloc::vec::Vec<(u32, [u8; 6])> {
+    let adk = RY_.lock();
+    adk.iter().map(|(ip, mac)| (*ip, *mac)).collect()
 }

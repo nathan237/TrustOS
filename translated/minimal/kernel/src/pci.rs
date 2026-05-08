@@ -10,177 +10,177 @@ use crate::arch::Port;
 use spin::Mutex;
 
 
-const BCS_: u16 = 0xCF8;
-const BCT_: u16 = 0xCFC;
+const BEV_: u16 = 0xCF8;
+const BEW_: u16 = 0xCFC;
 
 
 pub mod class {
-    pub const Cot: u8 = 0x00;
-    pub const FK_: u8 = 0x01;
-    pub const Qa: u8 = 0x02;
-    pub const Ji: u8 = 0x03;
-    pub const Blx: u8 = 0x04;
-    pub const Chb: u8 = 0x05;
-    pub const Vl: u8 = 0x06;
-    pub const CTI_: u8 = 0x07;
-    pub const BKY_: u8 = 0x08;
-    pub const Cfl: u8 = 0x09;
-    pub const Cal: u8 = 0x0A;
-    pub const Civ: u8 = 0x0B;
-    pub const PJ_: u8 = 0x0C;
-    pub const Bwi: u8 = 0x0D;
-    pub const Cfm: u8 = 0x0E;
-    pub const Clb: u8 = 0x0F;
-    pub const Cbg: u8 = 0x10;
-    pub const CTH_: u8 = 0x11;
+    pub const Arf: u8 = 0x00;
+    pub const FZ_: u8 = 0x01;
+    pub const Gr: u8 = 0x02;
+    pub const Du: u8 = 0x03;
+    pub const Abd: u8 = 0x04;
+    pub const Amo: u8 = 0x05;
+    pub const Jk: u8 = 0x06;
+    pub const CWZ_: u8 = 0x07;
+    pub const BNP_: u8 = 0x08;
+    pub const Alk: u8 = 0x09;
+    pub const Aik: u8 = 0x0A;
+    pub const Anj: u8 = 0x0B;
+    pub const QG_: u8 = 0x0C;
+    pub const Agk: u8 = 0x0D;
+    pub const All: u8 = 0x0E;
+    pub const Aoq: u8 = 0x0F;
+    pub const Aiy: u8 = 0x10;
+    pub const CWY_: u8 = 0x11;
 }
 
 
 pub mod storage {
-    pub const Clc: u8 = 0x00;
-    pub const Cff: u8 = 0x01;
-    pub const Cww: u8 = 0x02;
-    pub const Cze: u8 = 0x03;
-    pub const Cje: u8 = 0x04;
-    pub const Bxl: u8 = 0x05;
-    pub const Cla: u8 = 0x06;
-    pub const Dgj: u8 = 0x07;
-    pub const Cht: u8 = 0x08;  
+    pub const Aor: u8 = 0x00;
+    pub const Ale: u8 = 0x01;
+    pub const Avy: u8 = 0x02;
+    pub const Axp: u8 = 0x03;
+    pub const Ank: u8 = 0x04;
+    pub const Agy: u8 = 0x05;
+    pub const Aop: u8 = 0x06;
+    pub const Bbl: u8 = 0x07;
+    pub const Amx: u8 = 0x08;  
 }
 
 
 pub mod network {
-    pub const Cbm: u8 = 0x00;
-    pub const EIL_: u8 = 0x01;
-    pub const Cws: u8 = 0x02;
-    pub const Crf: u8 = 0x03;
-    pub const Czi: u8 = 0x04;
-    pub const Ddr: u8 = 0x06;
-    pub const Bjb: u8 = 0x07;
+    pub const Aje: u8 = 0x00;
+    pub const EMA_: u8 = 0x01;
+    pub const Avt: u8 = 0x02;
+    pub const Asq: u8 = 0x03;
+    pub const Axt: u8 = 0x04;
+    pub const Bab: u8 = 0x06;
+    pub const Zu: u8 = 0x07;
 }
 
 
 pub mod bridge {
-    pub const Ces: u8 = 0x00;
-    pub const Cfr: u8 = 0x01;
-    pub const Cut: u8 = 0x02;
-    pub const Dbn: u8 = 0x03;
-    pub const CIU_: u8 = 0x04;
-    pub const Ddp: u8 = 0x05;
-    pub const Dcu: u8 = 0x06;
-    pub const Csj: u8 = 0x07;
-    pub const Dfd: u8 = 0x08;
-    pub const DZF_: u8 = 0x09;
-    pub const DQZ_: u8 = 0x0A;
+    pub const Akx: u8 = 0x00;
+    pub const Alq: u8 = 0x01;
+    pub const Auf: u8 = 0x02;
+    pub const Ays: u8 = 0x03;
+    pub const CMD_: u8 = 0x04;
+    pub const Azz: u8 = 0x05;
+    pub const Azr: u8 = 0x06;
+    pub const Ath: u8 = 0x07;
+    pub const Baw: u8 = 0x08;
+    pub const ECW_: u8 = 0x09;
+    pub const DUT_: u8 = 0x0A;
 }
 
 
 pub mod serial {
-    pub const Cwu: u8 = 0x00;
-    pub const Aos: u8 = 0x01;
-    pub const Dhv: u8 = 0x02;
-    pub const Any: u8 = 0x03;
-    pub const Cwt: u8 = 0x04;
-    pub const Cma: u8 = 0x05;
-    pub const Bjb: u8 = 0x06;
-    pub const Czf: u8 = 0x07;
+    pub const Avv: u8 = 0x00;
+    pub const Qy: u8 = 0x01;
+    pub const Bcx: u8 = 0x02;
+    pub const Qs: u8 = 0x03;
+    pub const Avu: u8 = 0x04;
+    pub const Apo: u8 = 0x05;
+    pub const Zu: u8 = 0x06;
+    pub const Axq: u8 = 0x07;
 }
 
 
 pub mod usb {
-    pub const Buz: u8 = 0x00;
-    pub const Bnp: u8 = 0x10;
-    pub const Ark: u8 = 0x20;
-    pub const Bbe: u8 = 0x30;
+    pub const Afp: u8 = 0x00;
+    pub const Abw: u8 = 0x10;
+    pub const Rv: u8 = 0x20;
+    pub const Wa: u8 = 0x30;
 }
 
 
 #[derive(Debug, Clone)]
-pub struct S {
-    pub aq: u8,
-    pub de: u8,
-    pub gw: u8,
-    pub ml: u16,
-    pub mx: u16,
-    pub ajz: u8,
-    pub adl: u8,
-    pub frg: u8,
-    pub afe: u8,
-    pub lbw: u8,
-    pub esw: u8,
-    pub jan: u8,
+pub struct L {
+    pub bus: u8,
+    pub device: u8,
+    pub function: u8,
+    pub vendor_id: u16,
+    pub device_id: u16,
+    pub class_code: u8,
+    pub subclass: u8,
+    pub prog_if: u8,
+    pub revision: u8,
+    pub header_type: u8,
+    pub interrupt_line: u8,
+    pub interrupt_pin: u8,
     pub bar: [u32; 6],
 }
 
-impl S {
+impl L {
     
-    pub fn bpz(&self) -> &'static str {
-        match self.ajz {
-            class::Cot => "Unclassified",
-            class::FK_ => "Mass Storage",
-            class::Qa => "Network Controller",
-            class::Ji => "Display Controller",
-            class::Blx => "Multimedia",
-            class::Chb => "Memory Controller",
-            class::Vl => "Bridge",
-            class::CTI_ => "Communication",
-            class::BKY_ => "Peripheral",
-            class::Cfl => "Input Device",
-            class::Cal => "Docking Station",
-            class::Civ => "Processor",
-            class::PJ_ => "Serial Bus",
-            class::Bwi => "Wireless",
-            class::Cfm => "Intelligent I/O",
-            class::Clb => "Satellite",
-            class::Cbg => "Encryption",
-            class::CTH_ => "Signal Processing",
+    pub fn class_name(&self) -> &'static str {
+        match self.class_code {
+            class::Arf => "Unclassified",
+            class::FZ_ => "Mass Storage",
+            class::Gr => "Network Controller",
+            class::Du => "Display Controller",
+            class::Abd => "Multimedia",
+            class::Amo => "Memory Controller",
+            class::Jk => "Bridge",
+            class::CWZ_ => "Communication",
+            class::BNP_ => "Peripheral",
+            class::Alk => "Input Device",
+            class::Aik => "Docking Station",
+            class::Anj => "Processor",
+            class::QG_ => "Serial Bus",
+            class::Agk => "Wireless",
+            class::All => "Intelligent I/O",
+            class::Aoq => "Satellite",
+            class::Aiy => "Encryption",
+            class::CWY_ => "Signal Processing",
             _ => "Unknown",
         }
     }
     
     
-    pub fn bor(&self) -> &'static str {
-        match (self.ajz, self.adl) {
+    pub fn subclass_name(&self) -> &'static str {
+        match (self.class_code, self.subclass) {
             
-            (class::FK_, storage::Cff) => "IDE Controller",
-            (class::FK_, storage::Cla) => "SATA Controller",
-            (class::FK_, storage::Cht) => "NVMe Controller",
-            (class::FK_, storage::Cje) => "RAID Controller",
-            (class::FK_, storage::Clc) => "SCSI Controller",
-            (class::FK_, storage::Bxl) => "ATA Controller",
-            
-            
-            (class::Qa, network::Cbm) => "Ethernet",
-            (class::Qa, network::Bjb) => "InfiniBand",
+            (class::FZ_, storage::Ale) => "IDE Controller",
+            (class::FZ_, storage::Aop) => "SATA Controller",
+            (class::FZ_, storage::Amx) => "NVMe Controller",
+            (class::FZ_, storage::Ank) => "RAID Controller",
+            (class::FZ_, storage::Aor) => "SCSI Controller",
+            (class::FZ_, storage::Agy) => "ATA Controller",
             
             
-            (class::Ji, 0x00) => "VGA Compatible",
-            (class::Ji, 0x01) => "XGA Controller",
-            (class::Ji, 0x02) => "3D Controller",
+            (class::Gr, network::Aje) => "Ethernet",
+            (class::Gr, network::Zu) => "InfiniBand",
             
             
-            (class::Vl, bridge::Ces) => "Host Bridge",
-            (class::Vl, bridge::Cfr) => "ISA Bridge",
-            (class::Vl, bridge::CIU_) => "PCI-to-PCI Bridge",
+            (class::Du, 0x00) => "VGA Compatible",
+            (class::Du, 0x01) => "XGA Controller",
+            (class::Du, 0x02) => "3D Controller",
             
             
-            (class::PJ_, serial::Any) => match self.frg {
-                usb::Buz => "USB UHCI",
-                usb::Bnp => "USB OHCI",
-                usb::Ark => "USB 2.0 EHCI",
-                usb::Bbe => "USB 3.0 xHCI",
+            (class::Jk, bridge::Akx) => "Host Bridge",
+            (class::Jk, bridge::Alq) => "ISA Bridge",
+            (class::Jk, bridge::CMD_) => "PCI-to-PCI Bridge",
+            
+            
+            (class::QG_, serial::Qs) => match self.prog_if {
+                usb::Afp => "USB UHCI",
+                usb::Abw => "USB OHCI",
+                usb::Rv => "USB 2.0 EHCI",
+                usb::Wa => "USB 3.0 xHCI",
                 0xFE => "USB Device",
                 _ => "USB Controller",
             },
-            (class::PJ_, serial::Cma) => "SMBus",
+            (class::QG_, serial::Apo) => "SMBus",
             
             _ => "",
         }
     }
     
     
-    pub fn cip(&self) -> &'static str {
-        match self.ml {
+    pub fn vendor_name(&self) -> &'static str {
+        match self.vendor_id {
             0x8086 => "Intel",
             0x1022 => "AMD",
             0x10DE => "NVIDIA",
@@ -201,12 +201,12 @@ impl S {
     }
     
     
-    pub fn tyh(&self) -> bool {
-        self.lbw & 0x80 != 0
+    pub fn is_multifunction(&self) -> bool {
+        self.header_type & 0x80 != 0
     }
     
     
-    pub fn cje(&self, index: usize) -> Option<u64> {
+    pub fn bar_address(&self, index: usize) -> Option<u64> {
         if index >= 6 {
             return None;
         }
@@ -219,13 +219,13 @@ impl S {
         
         if bar & 1 == 0 {
             
-            let gzq = (bar >> 1) & 0x3;
-            match gzq {
+            let bqj = (bar >> 1) & 0x3;
+            match bqj {
                 0 => Some((bar & 0xFFFFFFF0) as u64), 
                 2 if index < 5 => {
                     
-                    let afq = self.bar[index + 1] as u64;
-                    Some(((afq << 32) | (bar & 0xFFFFFFF0) as u64))
+                    let high = self.bar[index + 1] as u64;
+                    Some(((high << 32) | (bar & 0xFFFFFFF0) as u64))
                 }
                 _ => None,
             }
@@ -236,7 +236,7 @@ impl S {
     }
     
     
-    pub fn mxx(&self, index: usize) -> bool {
+    pub fn bar_is_memory(&self, index: usize) -> bool {
         if index >= 6 {
             return false;
         }
@@ -244,7 +244,7 @@ impl S {
     }
     
     
-    pub fn yfl(&self, index: usize) -> bool {
+    pub fn pyk(&self, index: usize) -> bool {
         if index >= 6 {
             return false;
         }
@@ -253,39 +253,39 @@ impl S {
 }
 
 
-static Ry: Mutex<Vec<S>> = Mutex::new(Vec::new());
+static Hm: Mutex<Vec<L>> = Mutex::new(Vec::new());
 
 
-static BSW_: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
+static BVS_: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
 
-static SV_: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
+static NU_: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
 
-static ABS_: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
+static ADI_: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
 
-static ABR_: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
+static ADH_: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
 
 
-fn ttk() {
-    if let Some(co) = crate::acpi::ani() {
-        if let Some(fv) = co.eut.fv() {
-            let ar = fv.bps;
-            let aw = fv.aw() as usize;
-            let cca = fv.cca;
-            let cej = fv.cej;
+fn mpd() {
+    if let Some(info) = crate::acpi::rk() {
+        if let Some(first) = info.mcfg_regions.first() {
+            let base = first.base_address;
+            let size = first.size() as usize;
+            let start_bus = first.start_bus;
+            let end_bus = first.end_bus;
             
             crate::serial_println!("[PCI] PCIe ECAM detected: base={:#x} size={:#x} buses={}-{}",
-                ar, aw, cca, cej);
+                base, size, start_bus, end_bus);
             
-            match crate::memory::bki(ar, aw) {
-                Ok(ju) => {
-                    BSW_.store(ar, core::sync::atomic::Ordering::SeqCst);
-                    SV_.store(ju, core::sync::atomic::Ordering::SeqCst);
-                    ABS_.store(cca, core::sync::atomic::Ordering::SeqCst);
-                    ABR_.store(cej, core::sync::atomic::Ordering::SeqCst);
-                    crate::serial_println!("[PCI] PCIe ECAM mapped at virt={:#x}", ju);
+            match crate::memory::yv(base, size) {
+                Ok(virt) => {
+                    BVS_.store(base, core::sync::atomic::Ordering::SeqCst);
+                    NU_.store(virt, core::sync::atomic::Ordering::SeqCst);
+                    ADI_.store(start_bus, core::sync::atomic::Ordering::SeqCst);
+                    ADH_.store(end_bus, core::sync::atomic::Ordering::SeqCst);
+                    crate::serial_println!("[PCI] PCIe ECAM mapped at virt={:#x}", virt);
                 }
-                Err(aa) => {
-                    crate::serial_println!("[PCI] Failed to map ECAM: {} — using legacy PIO only", aa);
+                Err(e) => {
+                    crate::serial_println!("[PCI] Failed to map ECAM: {} — using legacy PIO only", e);
                 }
             }
         }
@@ -293,193 +293,199 @@ fn ttk() {
 }
 
 
-pub fn sij(aq: u8, de: u8, gw: u8, l: u16) -> Option<u32> {
-    let ju = SV_.load(core::sync::atomic::Ordering::Relaxed);
-    if ju == 0 { return None; }
-    let ay = ABS_.load(core::sync::atomic::Ordering::Relaxed);
-    let ci = ABR_.load(core::sync::atomic::Ordering::Relaxed);
-    if aq < ay || aq > ci || de > 31 || gw > 7 || l > 4092 {
-        return None;
-    }
-    let ag = ju
-        + ((aq - ay) as u64) * (32 * 8 * 4096)
-        + (de as u64) * (8 * 4096)
-        + (gw as u64) * 4096
-        + (l & 0xFFC) as u64;
-    Some(unsafe { core::ptr::read_volatile(ag as *const u32) })
+pub fn qhs() -> Option<u64> {
+    let virt = NU_.load(core::sync::atomic::Ordering::Relaxed);
+    if virt == 0 { None } else { Some(virt) }
 }
 
 
-pub fn sik(aq: u8, de: u8, gw: u8, l: u16, bn: u32) -> bool {
-    let ju = SV_.load(core::sync::atomic::Ordering::Relaxed);
-    if ju == 0 { return false; }
-    let ay = ABS_.load(core::sync::atomic::Ordering::Relaxed);
-    let ci = ABR_.load(core::sync::atomic::Ordering::Relaxed);
-    if aq < ay || aq > ci || de > 31 || gw > 7 || l > 4092 {
+pub fn cwz(bus: u8, device: u8, function: u8, offset: u16) -> Option<u32> {
+    let virt = NU_.load(core::sync::atomic::Ordering::Relaxed);
+    if virt == 0 { return None; }
+    let start = ADI_.load(core::sync::atomic::Ordering::Relaxed);
+    let end = ADH_.load(core::sync::atomic::Ordering::Relaxed);
+    if bus < start || bus > end || device > 31 || function > 7 || offset > 4092 {
+        return None;
+    }
+    let addr = virt
+        + ((bus - start) as u64) * (32 * 8 * 4096)
+        + (device as u64) * (8 * 4096)
+        + (function as u64) * 4096
+        + (offset & 0xFFC) as u64;
+    Some(unsafe { core::ptr::read_volatile(addr as *const u32) })
+}
+
+
+pub fn huw(bus: u8, device: u8, function: u8, offset: u16, value: u32) -> bool {
+    let virt = NU_.load(core::sync::atomic::Ordering::Relaxed);
+    if virt == 0 { return false; }
+    let start = ADI_.load(core::sync::atomic::Ordering::Relaxed);
+    let end = ADH_.load(core::sync::atomic::Ordering::Relaxed);
+    if bus < start || bus > end || device > 31 || function > 7 || offset > 4092 {
         return false;
     }
-    let ag = ju
-        + ((aq - ay) as u64) * (32 * 8 * 4096)
-        + (de as u64) * (8 * 4096)
-        + (gw as u64) * 4096
-        + (l & 0xFFC) as u64;
-    unsafe { core::ptr::write_volatile(ag as *mut u32, bn); }
+    let addr = virt
+        + ((bus - start) as u64) * (32 * 8 * 4096)
+        + (device as u64) * (8 * 4096)
+        + (function as u64) * 4096
+        + (offset & 0xFFC) as u64;
+    unsafe { core::ptr::write_volatile(addr as *mut u32, value); }
     true
 }
 
 
 
-pub fn zex(ba: &S, l: u16) -> u32 {
-    if let Some(ap) = sij(ba.aq, ba.de, ba.gw, l) {
-        return ap;
+pub fn qqe(s: &L, offset: u16) -> u32 {
+    if let Some(val) = cwz(s.bus, s.device, s.function, offset) {
+        return val;
     }
     
-    if l < 256 {
-        return aon(ba.aq, ba.de, ba.gw, l as u8);
+    if offset < 256 {
+        return ms(s.bus, s.device, s.function, offset as u8);
     }
     0xFFFFFFFF 
 }
 
 
-pub fn zey(ba: &S, l: u16, bn: u32) {
-    if sik(ba.aq, ba.de, ba.gw, l, bn) {
+pub fn qqf(s: &L, offset: u16, value: u32) {
+    if huw(s.bus, s.device, s.function, offset, value) {
         return;
     }
-    if l < 256 {
-        aso(ba.aq, ba.de, ba.gw, l as u8, bn);
+    if offset < 256 {
+        qj(s.bus, s.device, s.function, offset as u8, value);
     }
 }
 
 
-pub fn yog() -> bool {
-    SV_.load(core::sync::atomic::Ordering::Relaxed) != 0
+pub fn lnl() -> bool {
+    NU_.load(core::sync::atomic::Ordering::Relaxed) != 0
 }
 
 
-pub fn aon(aq: u8, de: u8, gw: u8, l: u8) -> u32 {
-    let re: u32 = 
+pub fn ms(bus: u8, device: u8, function: u8, offset: u8) -> u32 {
+    let address: u32 = 
         (1 << 31) |                       
-        ((aq as u32) << 16) |            
-        ((de as u32) << 11) |         
-        ((gw as u32) << 8) |        
-        ((l as u32) & 0xFC);         
+        ((bus as u32) << 16) |            
+        ((device as u32) << 11) |         
+        ((function as u32) << 8) |        
+        ((offset as u32) & 0xFC);         
     
-    let mut fzv: Port<u32> = Port::new(BCS_);
-    let mut axr: Port<u32> = Port::new(BCT_);
+    let mut ctj: Port<u32> = Port::new(BEV_);
+    let mut zu: Port<u32> = Port::new(BEW_);
     
     unsafe {
-        fzv.write(re);
-        axr.read()
+        ctj.write(address);
+        zu.read()
     }
 }
 
 
-pub fn aso(aq: u8, de: u8, gw: u8, l: u8, bn: u32) {
-    let re: u32 = 
+pub fn qj(bus: u8, device: u8, function: u8, offset: u8, value: u32) {
+    let address: u32 = 
         (1 << 31) |
-        ((aq as u32) << 16) |
-        ((de as u32) << 11) |
-        ((gw as u32) << 8) |
-        ((l as u32) & 0xFC);
+        ((bus as u32) << 16) |
+        ((device as u32) << 11) |
+        ((function as u32) << 8) |
+        ((offset as u32) & 0xFC);
     
-    let mut fzv: Port<u32> = Port::new(BCS_);
-    let mut axr: Port<u32> = Port::new(BCT_);
+    let mut ctj: Port<u32> = Port::new(BEV_);
+    let mut zu: Port<u32> = Port::new(BEW_);
     
     unsafe {
-        fzv.write(re);
-        axr.write(bn);
+        ctj.write(address);
+        zu.write(value);
     }
 }
 
 
-pub fn byw(aq: u8, de: u8, gw: u8, l: u8) -> u16 {
-    let bn = aon(aq, de, gw, l & 0xFC);
-    ((bn >> ((l & 2) * 8)) & 0xFFFF) as u16
+pub fn vf(bus: u8, device: u8, function: u8, offset: u8) -> u16 {
+    let value = ms(bus, device, function, offset & 0xFC);
+    ((value >> ((offset & 2) * 8)) & 0xFFFF) as u16
 }
 
 
-pub fn enw(aq: u8, de: u8, gw: u8, l: u8) -> u8 {
-    let bn = aon(aq, de, gw, l & 0xFC);
-    ((bn >> ((l & 3) * 8)) & 0xFF) as u8
+pub fn yn(bus: u8, device: u8, function: u8, offset: u8) -> u8 {
+    let value = ms(bus, device, function, offset & 0xFC);
+    ((value >> ((offset & 3) * 8)) & 0xFF) as u8
 }
 
 
-pub fn yju(aq: u8, de: u8, gw: u8, l: u8, bn: u8) {
-    let ciz = l & 0xFC;
-    let acn = (l & 3) * 8;
-    let aft = aon(aq, de, gw, ciz);
-    let hs = !(0xFFu32 << acn);
-    let new = (aft & hs) | ((bn as u32) << acn);
-    aso(aq, de, gw, ciz, new);
+pub fn qbb(bus: u8, device: u8, function: u8, offset: u8, value: u8) {
+    let asw = offset & 0xFC;
+    let no = (offset & 3) * 8;
+    let qb = ms(bus, device, function, asw);
+    let mask = !(0xFFu32 << no);
+    let new = (qb & mask) | ((value as u32) << no);
+    qj(bus, device, function, asw, new);
 }
 
 
-pub fn yjt(aq: u8, de: u8, gw: u8, l: u8, bn: u16) {
-    let ciz = l & 0xFC;
-    let acn = (l & 2) * 8;
-    let aft = aon(aq, de, gw, ciz);
-    let hs = !(0xFFFFu32 << acn);
-    let new = (aft & hs) | ((bn as u32) << acn);
-    aso(aq, de, gw, ciz, new);
+pub fn qba(bus: u8, device: u8, function: u8, offset: u8, value: u16) {
+    let asw = offset & 0xFC;
+    let no = (offset & 2) * 8;
+    let qb = ms(bus, device, function, asw);
+    let mask = !(0xFFFFu32 << no);
+    let new = (qb & mask) | ((value as u32) << no);
+    qj(bus, device, function, asw, new);
 }
 
 
-fn pgc(aq: u8, de: u8, gw: u8) -> Option<S> {
-    let pyc = aon(aq, de, gw, 0x00);
-    let ml = (pyc & 0xFFFF) as u16;
+fn jdc(bus: u8, device: u8, function: u8) -> Option<L> {
+    let jpy = ms(bus, device, function, 0x00);
+    let vendor_id = (jpy & 0xFFFF) as u16;
     
-    if ml == 0xFFFF || ml == 0x0000 {
+    if vendor_id == 0xFFFF || vendor_id == 0x0000 {
         return None;
     }
     
-    let mx = ((pyc >> 16) & 0xFFFF) as u16;
+    let device_id = ((jpy >> 16) & 0xFFFF) as u16;
     
-    let inv = aon(aq, de, gw, 0x08);
-    let afe = (inv & 0xFF) as u8;
-    let frg = ((inv >> 8) & 0xFF) as u8;
-    let adl = ((inv >> 16) & 0xFF) as u8;
-    let ajz = ((inv >> 24) & 0xFF) as u8;
+    let eib = ms(bus, device, function, 0x08);
+    let revision = (eib & 0xFF) as u8;
+    let prog_if = ((eib >> 8) & 0xFF) as u8;
+    let subclass = ((eib >> 16) & 0xFF) as u8;
+    let class_code = ((eib >> 24) & 0xFF) as u8;
     
-    let tnz = aon(aq, de, gw, 0x0C);
-    let lbw = ((tnz >> 16) & 0xFF) as u8;
+    let mkq = ms(bus, device, function, 0x0C);
+    let header_type = ((mkq >> 16) & 0xFF) as u8;
     
-    let oew = aon(aq, de, gw, 0x3C);
-    let esw = (oew & 0xFF) as u8;
-    let jan = ((oew >> 8) & 0xFF) as u8;
+    let iha = ms(bus, device, function, 0x3C);
+    let interrupt_line = (iha & 0xFF) as u8;
+    let interrupt_pin = ((iha >> 8) & 0xFF) as u8;
     
     
     let mut bar = [0u32; 6];
-    for a in 0..6 {
-        bar[a] = aon(aq, de, gw, 0x10 + (a as u8 * 4));
+    for i in 0..6 {
+        bar[i] = ms(bus, device, function, 0x10 + (i as u8 * 4));
     }
     
-    Some(S {
-        aq,
-        de,
-        gw,
-        ml,
-        mx,
-        ajz,
-        adl,
-        frg,
-        afe,
-        lbw,
-        esw,
-        jan,
+    Some(L {
+        bus,
+        device,
+        function,
+        vendor_id,
+        device_id,
+        class_code,
+        subclass,
+        prog_if,
+        revision,
+        header_type,
+        interrupt_line,
+        interrupt_pin,
         bar,
     })
 }
 
 
-fn wdp(aq: u8, de: u8, ik: &mut Vec<S>) {
-    if let Some(ba) = pgc(aq, de, 0) {
-        let uqo = ba.tyh();
-        ik.push(ba);
+fn okx(bus: u8, device: u8, devices: &mut Vec<L>) {
+    if let Some(s) = jdc(bus, device, 0) {
+        let nhc = s.is_multifunction();
+        devices.push(s);
         
-        if uqo {
-            for gw in 1..8 {
-                if let Some(ba) = pgc(aq, de, gw) {
-                    ik.push(ba);
+        if nhc {
+            for function in 1..8 {
+                if let Some(s) = jdc(bus, device, function) {
+                    devices.push(s);
                 }
             }
         }
@@ -487,46 +493,46 @@ fn wdp(aq: u8, de: u8, ik: &mut Vec<S>) {
 }
 
 
-pub fn arx() -> Vec<S> {
-    let mut ik = Vec::new();
+pub fn scan() -> Vec<L> {
+    let mut devices = Vec::new();
     
     
-    let mut ouy = false;
-    for de in 0..32 {
-        let test = aon(0, de, 0, 0);
+    let mut iuf = false;
+    for device in 0..32 {
+        let test = ms(0, device, 0, 0);
         if test != 0xFFFFFFFF && test != 0x00000000 {
-            ouy = true;
+            iuf = true;
             break;
         }
     }
     
-    if !ouy {
+    if !iuf {
         crate::log_warn!("[PCI] No PCI bus detected - scanning anyway...");
     }
     
     
     
     
-    let mut gmf: u8 = 0;
+    let mut dbb: u8 = 0;
     
-    for aq in 0..=255u8 {
-        let mut nvu = false;
-        for de in 0..32 {
-            let cvu = ik.len();
-            wdp(aq, de, &mut ik);
-            if ik.len() > cvu {
-                nvu = true;
+    for bus in 0..=255u8 {
+        let mut hzs = false;
+        for device in 0..32 {
+            let bak = devices.len();
+            okx(bus, device, &mut devices);
+            if devices.len() > bak {
+                hzs = true;
                 
-                for ba in &ik[cvu..] {
-                    if ba.ajz == class::Vl && ba.adl == 0x04 {
+                for s in &devices[bak..] {
+                    if s.class_code == class::Jk && s.subclass == 0x04 {
                         
-                        let pgz = (crate::pci::aon(ba.aq, ba.de, ba.gw, 0x18) >> 8) as u8;
-                        let ppi = (crate::pci::aon(ba.aq, ba.de, ba.gw, 0x18) >> 16) as u8;
-                        if ppi > gmf {
-                            gmf = ppi;
+                        let jdv = (crate::pci::ms(s.bus, s.device, s.function, 0x18) >> 8) as u8;
+                        let jjk = (crate::pci::ms(s.bus, s.device, s.function, 0x18) >> 16) as u8;
+                        if jjk > dbb {
+                            dbb = jjk;
                         }
-                        if pgz > gmf {
-                            gmf = pgz;
+                        if jdv > dbb {
+                            dbb = jdv;
                         }
                     }
                 }
@@ -535,126 +541,126 @@ pub fn arx() -> Vec<S> {
         
         
         
-        if aq >= gmf && aq > 0 && !nvu {
+        if bus >= dbb && bus > 0 && !hzs {
             
-            if aq > gmf + 2 {
+            if bus > dbb + 2 {
                 break;
             }
         }
     }
     
-    ik
+    devices
 }
 
 
 pub fn init() {
     
-    ttk();
+    mpd();
     
-    let ik = arx();
-    let az = ik.len();
+    let devices = scan();
+    let count = devices.len();
     
-    crate::log!("[PCI] Found {} devices:", az);
+    crate::log!("[PCI] Found {} devices:", count);
     
-    for ba in &ik {
-        let bor = ba.bor();
-        if bor.is_empty() {
+    for s in &devices {
+        let subclass_name = s.subclass_name();
+        if subclass_name.is_empty() {
             crate::log!("[PCI]   {:02X}:{:02X}.{} {:04X}:{:04X} {} ({})",
-                ba.aq, ba.de, ba.gw,
-                ba.ml, ba.mx,
-                ba.bpz(),
-                ba.cip());
+                s.bus, s.device, s.function,
+                s.vendor_id, s.device_id,
+                s.class_name(),
+                s.vendor_name());
         } else {
             crate::log!("[PCI]   {:02X}:{:02X}.{} {:04X}:{:04X} {} - {} ({})",
-                ba.aq, ba.de, ba.gw,
-                ba.ml, ba.mx,
-                ba.bpz(),
-                bor,
-                ba.cip());
+                s.bus, s.device, s.function,
+                s.vendor_id, s.device_id,
+                s.class_name(),
+                subclass_name,
+                s.vendor_name());
         }
     }
     
-    *Ry.lock() = ik;
+    *Hm.lock() = devices;
 }
 
 
-pub fn fjm() -> Vec<S> {
-    Ry.lock().clone()
+pub fn aqs() -> Vec<L> {
+    Hm.lock().clone()
 }
 
 
-pub fn ebq(ajz: u8) -> Vec<S> {
-    Ry.lock().iter()
-        .hi(|bc| bc.ajz == ajz)
-        .abn()
+pub fn bsp(class_code: u8) -> Vec<L> {
+    Hm.lock().iter()
+        .filter(|d| d.class_code == class_code)
+        .cloned()
         .collect()
 }
 
 
-pub fn yqq(ajz: u8, adl: u8) -> Vec<S> {
-    Ry.lock().iter()
-        .hi(|bc| bc.ajz == ajz && bc.adl == adl)
-        .abn()
+pub fn qfs(class_code: u8, subclass: u8) -> Vec<L> {
+    Hm.lock().iter()
+        .filter(|d| d.class_code == class_code && d.subclass == subclass)
+        .cloned()
         .collect()
 }
 
 
-pub fn sta(ml: u16, mx: u16) -> Option<S> {
-    Ry.lock().iter()
-        .du(|bc| bc.ml == ml && bc.mx == mx)
-        .abn()
+pub fn lvs(vendor_id: u16, device_id: u16) -> Option<L> {
+    Hm.lock().iter()
+        .find(|d| d.vendor_id == vendor_id && d.device_id == device_id)
+        .cloned()
 }
 
 
-pub fn yqr(ajz: u8) -> Option<S> {
-    Ry.lock().iter()
-        .du(|bc| bc.ajz == ajz)
-        .abn()
+pub fn qft(class_code: u8) -> Option<L> {
+    Hm.lock().iter()
+        .find(|d| d.class_code == class_code)
+        .cloned()
 }
 
 
-pub fn fhp(ba: &S) {
-    let ro = byw(ba.aq, ba.de, ba.gw, 0x04);
-    let hsp = ro | 0x04; 
-    aso(ba.aq, ba.de, ba.gw, 0x04, hsp as u32);
+pub fn bzi(s: &L) {
+    let command = vf(s.bus, s.device, s.function, 0x04);
+    let dvb = command | 0x04; 
+    qj(s.bus, s.device, s.function, 0x04, dvb as u32);
     crate::log_debug!("[PCI] Bus mastering enabled for {:02X}:{:02X}.{}", 
-        ba.aq, ba.de, ba.gw);
+        s.bus, s.device, s.function);
 }
 
 
-pub fn fhq(ba: &S) {
-    let ro = byw(ba.aq, ba.de, ba.gw, 0x04);
-    let hsp = ro | 0x02; 
-    aso(ba.aq, ba.de, ba.gw, 0x04, hsp as u32);
+pub fn bzj(s: &L) {
+    let command = vf(s.bus, s.device, s.function, 0x04);
+    let dvb = command | 0x02; 
+    qj(s.bus, s.device, s.function, 0x04, dvb as u32);
 }
 
 
-pub fn ypd(ba: &S) {
-    let ro = byw(ba.aq, ba.de, ba.gw, 0x04);
-    let hsp = ro | 0x01; 
-    aso(ba.aq, ba.de, ba.gw, 0x04, hsp as u32);
+pub fn qev(s: &L) {
+    let command = vf(s.bus, s.device, s.function, 0x04);
+    let dvb = command | 0x01; 
+    qj(s.bus, s.device, s.function, 0x04, dvb as u32);
 }
 
 
 
-pub fn ebr(ba: &S, cap_id: u8) -> Option<u8> {
+pub fn bsq(s: &L, cap_id: u8) -> Option<u8> {
     
-    let status = byw(ba.aq, ba.de, ba.gw, 0x06);
+    let status = vf(s.bus, s.device, s.function, 0x06);
     if status & (1 << 4) == 0 {
         return None; 
     }
     
     
-    let mut cdq = enw(ba.aq, ba.de, ba.gw, 0x34);
-    let mut bxs = 0u32;
+    let mut qg = yn(s.bus, s.device, s.function, 0x34);
+    let mut anc = 0u32;
     
-    while cdq != 0 && bxs < 48 {
-        let cap_type = enw(ba.aq, ba.de, ba.gw, cdq);
+    while qg != 0 && anc < 48 {
+        let cap_type = yn(s.bus, s.device, s.function, qg);
         if cap_type == cap_id {
-            return Some(cdq);
+            return Some(qg);
         }
-        cdq = enw(ba.aq, ba.de, ba.gw, cdq + 1);
-        bxs += 1;
+        qg = yn(s.bus, s.device, s.function, qg + 1);
+        anc += 1;
     }
     
     None
@@ -662,20 +668,20 @@ pub fn ebr(ba: &S, cap_id: u8) -> Option<u8> {
 
 
 
-pub fn stp(ba: &S) -> Vec<(u8, u8, u8, u32, u32)> {
-    let mut dr = Vec::new();
+pub fn lwc(s: &L) -> Vec<(u8, u8, u8, u32, u32)> {
+    let mut caps = Vec::new();
     
     
-    let status = byw(ba.aq, ba.de, ba.gw, 0x06);
+    let status = vf(s.bus, s.device, s.function, 0x06);
     if status & (1 << 4) == 0 {
-        return dr;
+        return caps;
     }
     
-    let mut cdq = enw(ba.aq, ba.de, ba.gw, 0x34);
-    let mut bxs = 0u32;
+    let mut qg = yn(s.bus, s.device, s.function, 0x34);
+    let mut anc = 0u32;
     
-    while cdq != 0 && bxs < 48 {
-        let cap_type = enw(ba.aq, ba.de, ba.gw, cdq);
+    while qg != 0 && anc < 48 {
+        let cap_type = yn(s.bus, s.device, s.function, qg);
         
         if cap_type == 0x09 { 
             
@@ -687,46 +693,46 @@ pub fn stp(ba: &S) -> Vec<(u8, u8, u8, u32, u32)> {
             
             
             
-            let ind = enw(ba.aq, ba.de, ba.gw, cdq + 3);
-            let bar = enw(ba.aq, ba.de, ba.gw, cdq + 4);
-            let l = aon(ba.aq, ba.de, ba.gw, cdq + 8);
-            let go = aon(ba.aq, ba.de, ba.gw, cdq + 12);
+            let ehn = yn(s.bus, s.device, s.function, qg + 3);
+            let bar = yn(s.bus, s.device, s.function, qg + 4);
+            let offset = ms(s.bus, s.device, s.function, qg + 8);
+            let length = ms(s.bus, s.device, s.function, qg + 12);
             
-            dr.push((cdq, ind, bar, l, go));
+            caps.push((qg, ehn, bar, offset, length));
         }
         
-        cdq = enw(ba.aq, ba.de, ba.gw, cdq + 1);
-        bxs += 1;
+        qg = yn(s.bus, s.device, s.function, qg + 1);
+        anc += 1;
     }
     
-    dr
+    caps
 }
 
 
-pub fn vsd(ba: &S, kgl: u8) -> u32 {
+pub fn ocv(s: &L, cap_offset: u8) -> u32 {
     
-    aon(ba.aq, ba.de, ba.gw, kgl + 16)
+    ms(s.bus, s.device, s.function, cap_offset + 16)
 }
 
 
-pub fn ywc() -> String {
-    let ik = Ry.lock();
+pub fn qkg() -> String {
+    let devices = Hm.lock();
     
-    let (mut storage, mut network, mut display, mut usb, mut nac) = (0, 0, 0, 0, 0);
-    for bc in ik.iter() {
-        match bc.ajz {
-            class::FK_ => storage += 1,
-            class::Qa => network += 1,
-            class::Ji => display += 1,
-            class::Vl => nac += 1,
-            class::PJ_ if bc.adl == serial::Any => usb += 1,
+    let (mut storage, mut network, mut display, mut usb, mut bridges) = (0, 0, 0, 0, 0);
+    for d in devices.iter() {
+        match d.class_code {
+            class::FZ_ => storage += 1,
+            class::Gr => network += 1,
+            class::Du => display += 1,
+            class::Jk => bridges += 1,
+            class::QG_ if d.subclass == serial::Qs => usb += 1,
             _ => {}
         }
     }
     
     format!(
         "PCI: {} devices (Storage:{}, Network:{}, Display:{}, USB:{}, Bridges:{})",
-        ik.len(), storage, network, display, usb, nac
+        devices.len(), storage, network, display, usb, bridges
     )
 }
 
@@ -736,177 +742,177 @@ pub fn ywc() -> String {
 
 
 pub mod cap_id {
-    pub const Acu: u8 = 0x05;
-    pub const Akb: u8 = 0x11;
-    pub const Ddo: u8 = 0x10;
+    pub const Mp: u8 = 0x05;
+    pub const Pl: u8 = 0x11;
+    pub const Azy: u8 = 0x10;
 }
 
 
 
-pub fn ook(rwg: u8) -> u32 {
-    0xFEE0_0000 | ((rwg as u32) << 12)
+pub fn ios(dest_apic_id: u8) -> u32 {
+    0xFEE0_0000 | ((dest_apic_id as u32) << 12)
 }
 
 
 
-pub fn ool(wj: u8) -> u32 {
-    wj as u32 
+pub fn iot(vector: u8) -> u32 {
+    vector as u32 
 }
 
 
 
-pub fn sla(ba: &S, wj: u8) -> Option<u8> {
-    let aqv = ebr(ba, cap_id::Acu)?;
+pub fn lpr(s: &L, vector: u8) -> Option<u8> {
+    let wa = bsq(s, cap_id::Mp)?;
     
     
-    let efo = byw(ba.aq, ba.de, ba.gw, aqv + 2);
-    let edt = (efo & (1 << 7)) != 0;
+    let akd = vf(s.bus, s.device, s.function, wa + 2);
+    let arf = (akd & (1 << 7)) != 0;
     
     
-    let rrj = efo & !(1u16 << 0); 
-    aso(ba.aq, ba.de, ba.gw, (aqv + 2) & 0xFC, 
-        (aon(ba.aq, ba.de, ba.gw, (aqv + 2) & 0xFC) 
-            & !(0xFFFF << (((aqv + 2) & 2) * 8)))
-            | ((rrj as u32) << (((aqv + 2) & 2) * 8)));
+    let lac = akd & !(1u16 << 0); 
+    qj(s.bus, s.device, s.function, (wa + 2) & 0xFC, 
+        (ms(s.bus, s.device, s.function, (wa + 2) & 0xFC) 
+            & !(0xFFFF << (((wa + 2) & 2) * 8)))
+            | ((lac as u32) << (((wa + 2) & 2) * 8)));
     
     
-    let ag = ook(0); 
-    aso(ba.aq, ba.de, ba.gw, aqv + 4, ag);
+    let addr = ios(0); 
+    qj(s.bus, s.device, s.function, wa + 4, addr);
     
     
-    let bbj = if edt {
+    let data_offset = if arf {
         
-        aso(ba.aq, ba.de, ba.gw, aqv + 8, 0);
-        aqv + 12
+        qj(s.bus, s.device, s.function, wa + 8, 0);
+        wa + 12
     } else {
-        aqv + 8
+        wa + 8
     };
     
-    let f = ool(wj);
+    let data = iot(vector);
     
-    let xy = aon(ba.aq, ba.de, ba.gw, bbj & 0xFC);
-    let acn = ((bbj & 2) * 8) as u32;
-    let hs = !(0xFFFF << acn);
-    let uty = (xy & hs) | ((f as u32) << acn);
-    aso(ba.aq, ba.de, ba.gw, bbj & 0xFC, uty);
-    
-    
-    let hsq = (efo & !(0x7 << 4)) | (1 << 0); 
-    let rrg = aon(ba.aq, ba.de, ba.gw, (aqv + 2) & 0xFC);
-    let fgd = ((aqv + 2) & 2) * 8;
-    let rri = !(0xFFFF << fgd);
-    let rrk = (rrg & rri as u32) | ((hsq as u32) << fgd);
-    aso(ba.aq, ba.de, ba.gw, (aqv + 2) & 0xFC, rrk);
+    let ku = ms(s.bus, s.device, s.function, data_offset & 0xFC);
+    let no = ((data_offset & 2) * 8) as u32;
+    let mask = !(0xFFFF << no);
+    let njv = (ku & mask) | ((data as u32) << no);
+    qj(s.bus, s.device, s.function, data_offset & 0xFC, njv);
     
     
-    let cmd = byw(ba.aq, ba.de, ba.gw, 0x04);
-    aso(ba.aq, ba.de, ba.gw, 0x04, (cmd | (1 << 10)) as u32);
+    let giy = (akd & !(0x7 << 4)) | (1 << 0); 
+    let kzx = ms(s.bus, s.device, s.function, (wa + 2) & 0xFC);
+    let chw = ((wa + 2) & 2) * 8;
+    let laa = !(0xFFFF << chw);
+    let lad = (kzx & laa as u32) | ((giy as u32) << chw);
+    qj(s.bus, s.device, s.function, (wa + 2) & 0xFC, lad);
+    
+    
+    let cmd = vf(s.bus, s.device, s.function, 0x04);
+    qj(s.bus, s.device, s.function, 0x04, (cmd | (1 << 10)) as u32);
     
     crate::serial_println!("[PCI] MSI enabled for {:02X}:{:02X}.{} vector={} {}",
-        ba.aq, ba.de, ba.gw, wj,
-        if edt { "64-bit" } else { "32-bit" });
+        s.bus, s.device, s.function, vector,
+        if arf { "64-bit" } else { "32-bit" });
     
-    Some(aqv)
+    Some(wa)
 }
 
 
-pub fn slb(ba: &S, wj: u8) -> Option<u8> {
-    let aqv = ebr(ba, cap_id::Akb)?;
+pub fn lps(s: &L, vector: u8) -> Option<u8> {
+    let wa = bsq(s, cap_id::Pl)?;
     
     
-    let efo = byw(ba.aq, ba.de, ba.gw, aqv + 2);
-    let prp = (efo & 0x7FF) + 1;
+    let akd = vf(s.bus, s.device, s.function, wa + 2);
+    let fci = (akd & 0x7FF) + 1;
     
     
-    let pro = aon(ba.aq, ba.de, ba.gw, aqv + 4);
-    let prm = (pro & 0x7) as usize;
-    let xak = (pro & !0x7) as u64;
+    let jlh = ms(s.bus, s.device, s.function, wa + 4);
+    let jlf = (jlh & 0x7) as usize;
+    let pcv = (jlh & !0x7) as u64;
     
     
-    let kbx = match ba.cje(prm) {
-        Some(q) => q,
+    let fib = match s.bar_address(jlf) {
+        Some(a) => a,
         None => {
-            crate::serial_println!("[PCI] MSI-X: BAR{} not configured", prm);
+            crate::serial_println!("[PCI] MSI-X: BAR{} not configured", jlf);
             return None;
         }
     };
     
     
-    let cig = kbx + xak;
-    let xal = (prp as usize) * 16;
-    let ejk = match crate::memory::bki(cig, xal.am(4096)) {
-        Ok(p) => p,
-        Err(aa) => {
-            crate::serial_println!("[PCI] MSI-X: Failed to map table: {}", aa);
+    let asj = fib + pcv;
+    let pcw = (fci as usize) * 16;
+    let bwf = match crate::memory::yv(asj, pcw.max(4096)) {
+        Ok(v) => v,
+        Err(e) => {
+            crate::serial_println!("[PCI] MSI-X: Failed to map table: {}", e);
             return None;
         }
     };
     
     
-    let nhv = aon(ba.aq, ba.de, ba.gw, (aqv + 2) & 0xFC);
-    let fgd = ((aqv + 2) & 2) * 8;
+    let hpg = ms(s.bus, s.device, s.function, (wa + 2) & 0xFC);
+    let chw = ((wa + 2) & 2) * 8;
     
-    let usr = (efo | (1 << 15) | (1 << 14)) as u32;
-    let bnm = (nhv & !(0xFFFF << fgd)) | (usr << fgd);
-    aso(ba.aq, ba.de, ba.gw, (aqv + 2) & 0xFC, bnm);
+    let niw = (akd | (1 << 15) | (1 << 14)) as u32;
+    let masked = (hpg & !(0xFFFF << chw)) | (niw << chw);
+    qj(s.bus, s.device, s.function, (wa + 2) & 0xFC, masked);
     
     
-    let ggi = ejk;
+    let cxg = bwf;
     unsafe {
         
-        core::ptr::write_volatile(ggi as *mut u32, ook(0));
+        core::ptr::write_volatile(cxg as *mut u32, ios(0));
         
-        core::ptr::write_volatile((ggi + 4) as *mut u32, 0);
+        core::ptr::write_volatile((cxg + 4) as *mut u32, 0);
         
-        core::ptr::write_volatile((ggi + 8) as *mut u32, ool(wj));
+        core::ptr::write_volatile((cxg + 8) as *mut u32, iot(vector));
         
-        core::ptr::write_volatile((ggi + 12) as *mut u32, 0);
+        core::ptr::write_volatile((cxg + 12) as *mut u32, 0);
     }
     
     
-    let xok = (efo | (1 << 15)) & !(1 << 14);
-    let ssv = (nhv & !(0xFFFF << fgd)) | ((xok as u32) << fgd);
-    aso(ba.aq, ba.de, ba.gw, (aqv + 2) & 0xFC, ssv);
+    let pps = (akd | (1 << 15)) & !(1 << 14);
+    let lvp = (hpg & !(0xFFFF << chw)) | ((pps as u32) << chw);
+    qj(s.bus, s.device, s.function, (wa + 2) & 0xFC, lvp);
     
     
-    let cmd = byw(ba.aq, ba.de, ba.gw, 0x04);
-    aso(ba.aq, ba.de, ba.gw, 0x04, (cmd | (1 << 10)) as u32);
+    let cmd = vf(s.bus, s.device, s.function, 0x04);
+    qj(s.bus, s.device, s.function, 0x04, (cmd | (1 << 10)) as u32);
     
     crate::serial_println!("[PCI] MSI-X enabled for {:02X}:{:02X}.{} vector={} table_size={}",
-        ba.aq, ba.de, ba.gw, wj, prp);
+        s.bus, s.device, s.function, vector, fci);
     
-    Some(aqv)
+    Some(wa)
 }
 
 
-pub fn ypg(ba: &S, wj: u8) -> bool {
-    if slb(ba, wj).is_some() {
+pub fn qey(s: &L, vector: u8) -> bool {
+    if lps(s, vector).is_some() {
         return true;
     }
-    if sla(ba, wj).is_some() {
+    if lpr(s, vector).is_some() {
         return true;
     }
     false
 }
 
 
-pub fn yme(ba: &S) {
-    if let Some(aqv) = ebr(ba, cap_id::Acu) {
-        let efo = byw(ba.aq, ba.de, ba.gw, aqv + 2);
-        let hsq = efo & !(1u16 << 0);
-        let xy = aon(ba.aq, ba.de, ba.gw, (aqv + 2) & 0xFC);
-        let acn = ((aqv + 2) & 2) * 8;
-        let hs = !(0xFFFF << acn);
-        aso(ba.aq, ba.de, ba.gw, (aqv + 2) & 0xFC,
-            (xy & hs as u32) | ((hsq as u32) << acn));
+pub fn qda(s: &L) {
+    if let Some(wa) = bsq(s, cap_id::Mp) {
+        let akd = vf(s.bus, s.device, s.function, wa + 2);
+        let giy = akd & !(1u16 << 0);
+        let ku = ms(s.bus, s.device, s.function, (wa + 2) & 0xFC);
+        let no = ((wa + 2) & 2) * 8;
+        let mask = !(0xFFFF << no);
+        qj(s.bus, s.device, s.function, (wa + 2) & 0xFC,
+            (ku & mask as u32) | ((giy as u32) << no));
     }
 }
 
 
-pub fn ywi(ba: &S) -> (bool, bool) {
-    let uqg = ebr(ba, cap_id::Acu).is_some();
-    let uqh = ebr(ba, cap_id::Akb).is_some();
-    (uqg, uqh)
+pub fn qkn(s: &L) -> (bool, bool) {
+    let ngq = bsq(s, cap_id::Mp).is_some();
+    let ngr = bsq(s, cap_id::Pl).is_some();
+    (ngq, ngr)
 }
 
 
@@ -916,49 +922,49 @@ pub fn ywi(ba: &S) -> (bool, bool) {
 
 
 
-pub fn yfm(ba: &S, fda: usize) -> u64 {
-    if fda >= 6 {
+pub fn pyl(s: &L, bar_index: usize) -> u64 {
+    if bar_index >= 6 {
         return 0;
     }
-    let doi = (0x10 + fda * 4) as u8;
-    let evs = aon(ba.aq, ba.de, ba.gw, doi);
+    let bku = (0x10 + bar_index * 4) as u8;
+    let ccb = ms(s.bus, s.device, s.function, bku);
     
-    if evs == 0 {
+    if ccb == 0 {
         return 0; 
     }
     
-    let ogd = evs & 1 != 0;
-    let edt = !ogd && ((evs >> 1) & 0x3) == 2;
+    let czy = ccb & 1 != 0;
+    let arf = !czy && ((ccb >> 1) & 0x3) == 2;
     
     
-    let cmd = byw(ba.aq, ba.de, ba.gw, 0x04);
-    aso(ba.aq, ba.de, ba.gw, 0x04, (cmd & !0x03) as u32);
+    let cmd = vf(s.bus, s.device, s.function, 0x04);
+    qj(s.bus, s.device, s.function, 0x04, (cmd & !0x03) as u32);
     
     
-    aso(ba.aq, ba.de, ba.gw, doi, 0xFFFFFFFF);
-    let bky = aon(ba.aq, ba.de, ba.gw, doi);
+    qj(s.bus, s.device, s.function, bku, 0xFFFFFFFF);
+    let agx = ms(s.bus, s.device, s.function, bku);
     
-    aso(ba.aq, ba.de, ba.gw, doi, evs);
+    qj(s.bus, s.device, s.function, bku, ccb);
     
-    let aw = if ogd {
-        let hs = bky & 0xFFFFFFFC;
-        if hs == 0 { 0 } else { ((!hs) + 1) as u64 & 0xFFFF }
-    } else if edt && fda < 5 {
-        let ikq = (0x10 + (fda + 1) * 4) as u8;
-        let lqw = aon(ba.aq, ba.de, ba.gw, ikq);
-        aso(ba.aq, ba.de, ba.gw, ikq, 0xFFFFFFFF);
-        let lxy = aon(ba.aq, ba.de, ba.gw, ikq);
-        aso(ba.aq, ba.de, ba.gw, ikq, lqw);
+    let size = if czy {
+        let mask = agx & 0xFFFFFFFC;
+        if mask == 0 { 0 } else { ((!mask) + 1) as u64 & 0xFFFF }
+    } else if arf && bar_index < 5 {
+        let ege = (0x10 + (bar_index + 1) * 4) as u8;
+        let gle = ms(s.bus, s.device, s.function, ege);
+        qj(s.bus, s.device, s.function, ege, 0xFFFFFFFF);
+        let gqk = ms(s.bus, s.device, s.function, ege);
+        qj(s.bus, s.device, s.function, ege, gle);
         
-        let auh = ((lxy as u64) << 32) | (bky & 0xFFFFFFF0) as u64;
-        if auh == 0 { 0 } else { (!auh).cn(1) }
+        let xo = ((gqk as u64) << 32) | (agx & 0xFFFFFFF0) as u64;
+        if xo == 0 { 0 } else { (!xo).wrapping_add(1) }
     } else {
-        let hs = bky & 0xFFFFFFF0;
-        if hs == 0 { 0 } else { ((!hs) + 1) as u64 }
+        let mask = agx & 0xFFFFFFF0;
+        if mask == 0 { 0 } else { ((!mask) + 1) as u64 }
     };
     
     
-    aso(ba.aq, ba.de, ba.gw, 0x04, cmd as u32);
+    qj(s.bus, s.device, s.function, 0x04, cmd as u32);
     
-    aw
+    size
 }

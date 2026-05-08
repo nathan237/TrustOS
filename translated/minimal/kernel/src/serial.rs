@@ -12,7 +12,7 @@ use spin::Mutex;
 use core::fmt;
 
 
-static CSE_: Mutex<()> = Mutex::new(());
+static CVV_: Mutex<()> = Mutex::new(());
 
 
 pub fn init() {
@@ -20,48 +20,54 @@ pub fn init() {
 }
 
 
-struct Bsm;
+struct Aes;
 
-impl fmt::Write for Bsm {
-    fn write_str(&mut self, e: &str) -> fmt::Result {
-        crate::arch::serial::ahx(e.as_bytes());
+impl fmt::Write for Aes {
+    fn write_str(&mut self, j: &str) -> fmt::Result {
+        crate::arch::serial::write_bytes(j.as_bytes());
         Ok(())
     }
 }
 
 
 #[doc(hidden)]
-pub fn elt(n: fmt::Arguments) {
+pub fn bxg(args: fmt::Arguments) {
     use core::fmt::Write;
     
     
-    crate::devtools::qwh(n);
+    crate::devtools::khl(args);
     
     
-    crate::arch::cvh(|| {
-        let qci = CSE_.lock();
-        let mut fyy = Bsm;
-        fyy.write_fmt(n).expect("Printing to serial failed");
+    if crate::debug::netconsole::lq() && crate::memory::heap::free() > 0 {
+        let j = alloc::format!("{}", args);
+        crate::debug::netconsole::onu(&j);
+    }
+    
+    
+    crate::arch::bag(|| {
+        let jso = CVV_.lock();
+        let mut writer = Aes;
+        writer.write_fmt(args).expect("Printing to serial failed");
     });
 }
 
 
-pub fn dlb() -> Option<u8> {
-    crate::arch::cvh(|| {
-        crate::arch::serial::dlb()
+pub fn read_byte() -> Option<u8> {
+    crate::arch::bag(|| {
+        crate::arch::serial::read_byte()
     })
 }
 
 
-pub fn xmu() -> Option<u8> {
-    dlb()
+pub fn poa() -> Option<u8> {
+    read_byte()
 }
 
 
 #[macro_export]
 macro_rules! serial_print {
-    ($($ji:tt)*) => {
-        $crate::serial::elt(format_args!($($ji)*))
+    ($($db:tt)*) => {
+        $crate::serial::bxg(format_args!($($db)*))
     };
 }
 
@@ -70,7 +76,7 @@ macro_rules! serial_print {
 macro_rules! serial_println {
     () => ($crate::serial_print!("\n"));
     ($fmt:expr) => ($crate::serial_print!(concat!($fmt, "\n")));
-    ($fmt:expr, $($ji:tt)*) => ($crate::serial_print!(
-        concat!($fmt, "\n"), $($ji)*
+    ($fmt:expr, $($db:tt)*) => ($crate::serial_print!(
+        concat!($fmt, "\n"), $($db)*
     ));
 }

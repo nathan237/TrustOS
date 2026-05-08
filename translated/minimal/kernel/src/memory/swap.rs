@@ -13,314 +13,314 @@ use spin::Mutex;
 use core::sync::atomic::{AtomicBool, AtomicU64, AtomicU32, Ordering};
 
 
-const BM_: u64 = 4096;
+const BO_: u64 = 4096;
 
 
-const AFF_: usize = 65536;
+const AGZ_: usize = 65536;
 
 
-pub type Kz = u32;
+pub type Ep = u32;
 
 
 #[derive(Clone, Copy, Debug)]
-struct Azn {
+struct Vg {
     
-    ki: u64,
+    phys_addr: u64,
     
-    gk: Kz,
+    slot: Ep,
     
-    jm: u64,
+    cr3: u64,
     
-    vd: u64,
+    virt_addr: u64,
     
-    gxp: u32,
+    access_count: u32,
     
-    jcl: u64,
+    last_access: u64,
 }
 
 
-struct Ut {
+struct Jc {
     
-    iq: bool,
+    enabled: bool,
     
-    ich: Option<&'static str>,
+    swap_path: Option<&'static str>,
     
-    gsq: Vec<bool>,
+    slot_bitmap: Vec<bool>,
     
-    guu: usize,
+    total_slots: usize,
     
-    dxf: usize,
+    used_slots: usize,
     
-    gts: BTreeMap<(u64, u64), Kz>,
+    swap_map: BTreeMap<(u64, u64), Ep>,
     
-    evw: BTreeMap<(u64, u64), Azn>,
+    page_tracker: BTreeMap<(u64, u64), Vg>,
 }
 
-static Oa: Mutex<Ut> = Mutex::new(Ut {
-    iq: false,
-    ich: None,
-    gsq: Vec::new(),
-    guu: 0,
-    dxf: 0,
-    gts: BTreeMap::new(),
-    evw: BTreeMap::new(),
+static Ga: Mutex<Jc> = Mutex::new(Jc {
+    enabled: false,
+    swap_path: None,
+    slot_bitmap: Vec::new(),
+    total_slots: 0,
+    used_slots: 0,
+    swap_map: BTreeMap::new(),
+    page_tracker: BTreeMap::new(),
 });
 
 
-static BCO_: AtomicU64 = AtomicU64::new(0);
-static BCN_: AtomicU64 = AtomicU64::new(0);
-static JB_: AtomicBool = AtomicBool::new(false);
+static BER_: AtomicU64 = AtomicU64::new(0);
+static BEQ_: AtomicU64 = AtomicU64::new(0);
+static JU_: AtomicBool = AtomicBool::new(false);
 
 
-pub fn init(ich: &'static str, afz: u64) {
-    let cuj = (afz / BM_) as usize;
-    let cuj = cuj.v(AFF_);
+pub fn init(swap_path: &'static str, size_bytes: u64) {
+    let azs = (size_bytes / BO_) as usize;
+    let azs = azs.min(AGZ_);
     
-    let mut g = Oa.lock();
-    g.gsq = alloc::vec![false; cuj];
-    g.guu = cuj;
-    g.dxf = 0;
-    g.iq = true;
-    g.ich = Some(ich);
+    let mut state = Ga.lock();
+    state.slot_bitmap = alloc::vec![false; azs];
+    state.total_slots = azs;
+    state.used_slots = 0;
+    state.enabled = true;
+    state.swap_path = Some(swap_path);
     
-    JB_.store(true, Ordering::SeqCst);
+    JU_.store(true, Ordering::SeqCst);
     crate::serial_println!("[SWAP] Initialized: {} slots ({} MB), path={}",
-        cuj, (cuj * 4096) / (1024 * 1024), ich);
+        azs, (azs * 4096) / (1024 * 1024), swap_path);
 }
 
 
-pub fn ypb(ulr: usize) {
-    let cuj = ulr.v(AFF_);
-    let mut g = Oa.lock();
-    g.gsq = alloc::vec![false; cuj];
-    g.guu = cuj;
-    g.dxf = 0;
-    g.iq = true;
-    JB_.store(true, Ordering::SeqCst);
-    crate::serial_println!("[SWAP] Anonymous swap: {} slots ({} KB)", cuj, cuj * 4);
+pub fn qet(max_pages: usize) {
+    let azs = max_pages.min(AGZ_);
+    let mut state = Ga.lock();
+    state.slot_bitmap = alloc::vec![false; azs];
+    state.total_slots = azs;
+    state.used_slots = 0;
+    state.enabled = true;
+    JU_.store(true, Ordering::SeqCst);
+    crate::serial_println!("[SWAP] Anonymous swap: {} slots ({} KB)", azs, azs * 4);
 }
 
 
-pub fn wwm(path: &str) -> Result<(), &'static str> {
+pub fn ozc(path: &str) -> Result<(), &'static str> {
     
-    let aw = 64 * 1024 * 1024u64;
+    let size = 64 * 1024 * 1024u64;
     
-    let wtp: &'static str = Box::fmu(alloc::string::String::from(path).lfh());
-    init(wtp, aw);
+    let owt: &'static str = Box::leak(alloc::string::String::from(path).into_boxed_str());
+    init(owt, size);
     Ok(())
 }
 
 
-pub fn wwl(qdh: &str) -> Result<(), &'static str> {
-    let mut g = Oa.lock();
-    if !g.iq {
+pub fn ozb(jsq: &str) -> Result<(), &'static str> {
+    let mut state = Ga.lock();
+    if !state.enabled {
         return Err("Swap not enabled");
     }
     
     
-    g.iq = false;
-    g.dxf = 0;
-    g.gts.clear();
-    JB_.store(false, Ordering::SeqCst);
+    state.enabled = false;
+    state.used_slots = 0;
+    state.swap_map.clear();
+    JU_.store(false, Ordering::SeqCst);
     crate::serial_println!("[SWAP] Disabled");
     Ok(())
 }
 
 
-pub fn zu() -> bool {
-    JB_.load(Ordering::Relaxed)
+pub fn lq() -> bool {
+    JU_.load(Ordering::Relaxed)
 }
 
 
-fn qgw(g: &mut Ut) -> Option<Kz> {
-    for (a, mr) in g.gsq.el().cf() {
-        if !*mr {
-            *mr = true;
-            g.dxf += 1;
-            return Some((a + 1) as Kz); 
+fn jux(state: &mut Jc) -> Option<Ep> {
+    for (i, used) in state.slot_bitmap.iter_mut().enumerate() {
+        if !*used {
+            *used = true;
+            state.used_slots += 1;
+            return Some((i + 1) as Ep); 
         }
     }
     None
 }
 
 
-fn nwb(g: &mut Ut, gk: Kz) {
-    if gk == 0 { return; }
-    let w = (gk - 1) as usize;
-    if w < g.gsq.len() {
-        g.gsq[w] = false;
-        g.dxf = g.dxf.ao(1);
+fn iaa(state: &mut Jc, slot: Ep) {
+    if slot == 0 { return; }
+    let idx = (slot - 1) as usize;
+    if idx < state.slot_bitmap.len() {
+        state.slot_bitmap[idx] = false;
+        state.used_slots = state.used_slots.saturating_sub(1);
     }
 }
 
 
-pub fn xlm(jm: u64, vd: u64, ki: u64) {
-    if !JB_.load(Ordering::Relaxed) { return; }
+pub fn pmx(cr3: u64, virt_addr: u64, phys_addr: u64) {
+    if !JU_.load(Ordering::Relaxed) { return; }
     
-    let bs = (jm, vd & !0xFFF);
-    let bt = Azn {
-        ki,
-        gk: 0,
-        jm,
-        vd: vd & !0xFFF,
-        gxp: 1,
-        jcl: crate::logger::lh(),
+    let key = (cr3, virt_addr & !0xFFF);
+    let entry = Vg {
+        phys_addr,
+        slot: 0,
+        cr3,
+        virt_addr: virt_addr & !0xFFF,
+        access_count: 1,
+        last_access: crate::logger::eg(),
     };
     
-    Oa.lock().evw.insert(bs, bt);
+    Ga.lock().page_tracker.insert(key, entry);
 }
 
 
-pub fn ztl(jm: u64, vd: u64) {
-    if !JB_.load(Ordering::Relaxed) { return; }
+pub fn rau(cr3: u64, virt_addr: u64) {
+    if !JU_.load(Ordering::Relaxed) { return; }
     
-    let bs = (jm, vd & !0xFFF);
-    let mut g = Oa.lock();
-    if let Some(bt) = g.evw.ds(&bs) {
-        bt.gxp = bt.gxp.akq(1);
-        bt.jcl = crate::logger::lh();
+    let key = (cr3, virt_addr & !0xFFF);
+    let mut state = Ga.lock();
+    if let Some(entry) = state.page_tracker.get_mut(&key) {
+        entry.access_count = entry.access_count.saturating_add(1);
+        entry.last_access = crate::logger::eg();
     }
 }
 
 
-pub fn zul(jm: u64, vd: u64) {
-    if !JB_.load(Ordering::Relaxed) { return; }
+pub fn rbo(cr3: u64, virt_addr: u64) {
+    if !JU_.load(Ordering::Relaxed) { return; }
     
-    let bs = (jm, vd & !0xFFF);
-    let mut g = Oa.lock();
-    if let Some(bt) = g.evw.remove(&bs) {
-        if bt.gk != 0 {
-            nwb(&mut g, bt.gk);
+    let key = (cr3, virt_addr & !0xFFF);
+    let mut state = Ga.lock();
+    if let Some(entry) = state.page_tracker.remove(&key) {
+        if entry.slot != 0 {
+            iaa(&mut state, entry.slot);
         }
     }
-    g.gts.remove(&bs);
+    state.swap_map.remove(&key);
 }
 
 
 
-fn wgt(g: &Ut) -> Option<(u64, u64, u64)> {
-    let mut bdn: Option<(&(u64, u64), &Azn)> = None;
-    let mut haf = u64::O;
+fn onh(state: &Jc) -> Option<(u64, u64, u64)> {
+    let mut adj: Option<(&(u64, u64), &Vg)> = None;
+    let mut djb = u64::MAX;
     
-    for (bs, bt) in g.evw.iter() {
+    for (key, entry) in state.page_tracker.iter() {
         
-        if bt.ki == 0 { continue; }
+        if entry.phys_addr == 0 { continue; }
         
-        if bt.jm == 0 { continue; }
+        if entry.cr3 == 0 { continue; }
         
         
         
-        let ol = bt.jcl.mbq(bt.gxp as u64 + 1);
-        if ol < haf {
-            haf = ol;
-            bdn = Some((bs, bt));
+        let score = entry.last_access.saturating_mul(entry.access_count as u64 + 1);
+        if score < djb {
+            djb = score;
+            adj = Some((key, entry));
         }
     }
     
-    bdn.map(|(_, bt)| (bt.jm, bt.vd, bt.ki))
+    adj.map(|(_, entry)| (entry.cr3, entry.virt_addr, entry.phys_addr))
 }
 
 
 
-pub fn xmm() -> Option<u64> {
-    let mut g = Oa.lock();
-    if !g.iq { return None; }
+pub fn pnu() -> Option<u64> {
+    let mut state = Ga.lock();
+    if !state.enabled { return None; }
     
-    let (jm, vd, ki) = wgt(&g)?;
-    let gk = qgw(&mut g)?;
-    
-    
-    
-    xvt(&g, gk, ki);
+    let (cr3, virt_addr, phys_addr) = onh(&state)?;
+    let slot = jux(&mut state)?;
     
     
-    let bs = (jm, vd);
-    if let Some(bt) = g.evw.ds(&bs) {
-        bt.ki = 0; 
-        bt.gk = gk;
+    
+    pve(&state, slot, phys_addr);
+    
+    
+    let key = (cr3, virt_addr);
+    if let Some(entry) = state.page_tracker.get_mut(&key) {
+        entry.phys_addr = 0; 
+        entry.slot = slot;
     }
-    g.gts.insert(bs, gk);
+    state.swap_map.insert(key, slot);
     
     
     
-    xoi(jm, vd, gk);
+    ppr(cr3, virt_addr, slot);
     
-    BCO_.fetch_add(1, Ordering::Relaxed);
+    BER_.fetch_add(1, Ordering::Relaxed);
     
     crate::log_debug!("[SWAP] Evicted page cr3={:#x} virt={:#x} -> slot {}",
-        jm, vd, gk);
+        cr3, virt_addr, slot);
     
-    Some(ki)
+    Some(phys_addr)
 }
 
 
 
-pub fn tla(jm: u64, bha: u64) -> bool {
-    let mph = bha & !0xFFF;
-    let bs = (jm, mph);
+pub fn mim(cr3: u64, aff: u64) -> bool {
+    let hbn = aff & !0xFFF;
+    let key = (cr3, hbn);
     
-    let mut g = Oa.lock();
-    let gk = match g.gts.get(&bs) {
-        Some(&e) => e,
+    let mut state = Ga.lock();
+    let slot = match state.swap_map.get(&key) {
+        Some(&j) => j,
         None => return false,
     };
     
-    if gk == 0 { return false; }
+    if slot == 0 { return false; }
     
     
-    let fow = match crate::memory::frame::azg() {
-        Some(bb) => bb,
+    let cnd = match crate::memory::frame::aan() {
+        Some(f) => f,
         None => return false, 
     };
     
     
-    vsq(&g, gk, fow);
+    odf(&state, slot, cnd);
     
     
-    if let Some(bt) = g.evw.ds(&bs) {
-        bt.ki = fow;
-        let uxu = bt.gk;
-        bt.gk = 0;
-        bt.gxp = 1;
-        bt.jcl = crate::logger::lh();
-        nwb(&mut g, uxu);
+    if let Some(entry) = state.page_tracker.get_mut(&key) {
+        entry.phys_addr = cnd;
+        let nmv = entry.slot;
+        entry.slot = 0;
+        entry.access_count = 1;
+        entry.last_access = crate::logger::eg();
+        iaa(&mut state, nmv);
     }
-    g.gts.remove(&bs);
+    state.swap_map.remove(&key);
     
-    drop(g);
+    drop(state);
     
     
-    vur(jm, mph, fow);
+    oet(cr3, hbn, cnd);
     
-    BCN_.fetch_add(1, Ordering::Relaxed);
+    BEQ_.fetch_add(1, Ordering::Relaxed);
     
     crate::log_debug!("[SWAP] Paged in cr3={:#x} virt={:#x} phys={:#x}",
-        jm, mph, fow);
+        cr3, hbn, cnd);
     
     true
 }
 
 
-pub fn cm() -> Bts {
-    let g = Oa.lock();
-    Bts {
-        iq: g.iq,
-        guu: g.guu,
-        dxf: g.dxf,
-        vbc: BCO_.load(Ordering::Relaxed),
-        vbb: BCN_.load(Ordering::Relaxed),
-        xlo: g.evw.len(),
+pub fn stats() -> Afd {
+    let state = Ga.lock();
+    Afd {
+        enabled: state.enabled,
+        total_slots: state.total_slots,
+        used_slots: state.used_slots,
+        pages_swapped_out: BER_.load(Ordering::Relaxed),
+        pages_swapped_in: BEQ_.load(Ordering::Relaxed),
+        tracked_pages: state.page_tracker.len(),
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct Bts {
-    pub iq: bool,
-    pub guu: usize,
-    pub dxf: usize,
-    pub vbc: u64,
-    pub vbb: u64,
-    pub xlo: usize,
+pub struct Afd {
+    pub enabled: bool,
+    pub total_slots: usize,
+    pub used_slots: usize,
+    pub pages_swapped_out: u64,
+    pub pages_swapped_in: u64,
+    pub tracked_pages: usize,
 }
 
 
@@ -331,59 +331,59 @@ pub struct Bts {
 
 
 
-static BGQ_: Mutex<BTreeMap<Kz, Vec<u8>>> = Mutex::new(BTreeMap::new());
+static BIU_: Mutex<BTreeMap<Ep, Vec<u8>>> = Mutex::new(BTreeMap::new());
 
 
 
 
-const PI_: u64 = 8;
+const QF_: u64 = 8;
 
 
-fn pqf() -> u64 {
-    let mh = crate::nvme::aty();
-    let pqg = (AFF_ as u64) * PI_;
-    if mh > pqg {
-        mh - pqg
+fn jkb() -> u64 {
+    let cap = crate::nvme::capacity();
+    let jkc = (AGZ_ as u64) * QF_;
+    if cap > jkc {
+        cap - jkc
     } else {
         0 
     }
 }
 
-fn xvt(gxl: &Ut, gk: Kz, ki: u64) {
-    let hp = crate::memory::lr();
-    let cy = unsafe { core::slice::anh((ki + hp) as *const u8, BM_ as usize) };
+fn pve(_state: &Jc, slot: Ep, phys_addr: u64) {
+    let bz = crate::memory::hhdm_offset();
+    let src = unsafe { core::slice::from_raw_parts((phys_addr + bz) as *const u8, BO_ as usize) };
     
     
-    if crate::nvme::ky() {
-        let qa = pqf() + ((gk as u64 - 1) * PI_);
-        if crate::nvme::bpi(qa, PI_ as usize, cy).is_ok() {
+    if crate::nvme::is_initialized() {
+        let hb = jkb() + ((slot as u64 - 1) * QF_);
+        if crate::nvme::write_sectors(hb, QF_ as usize, src).is_ok() {
             return;
         }
     }
     
     
-    let mut bcd = BGQ_.lock();
-    bcd.insert(gk, cy.ip());
+    let mut acg = BIU_.lock();
+    acg.insert(slot, src.to_vec());
 }
 
-fn vsq(gxl: &Ut, gk: Kz, ki: u64) {
-    let hp = crate::memory::lr();
-    let cs = unsafe { core::slice::bef((ki + hp) as *mut u8, BM_ as usize) };
+fn odf(_state: &Jc, slot: Ep, phys_addr: u64) {
+    let bz = crate::memory::hhdm_offset();
+    let dst = unsafe { core::slice::from_raw_parts_mut((phys_addr + bz) as *mut u8, BO_ as usize) };
     
     
-    if crate::nvme::ky() {
-        let qa = pqf() + ((gk as u64 - 1) * PI_);
-        if crate::nvme::ain(qa, PI_ as usize, cs).is_ok() {
+    if crate::nvme::is_initialized() {
+        let hb = jkb() + ((slot as u64 - 1) * QF_);
+        if crate::nvme::read_sectors(hb, QF_ as usize, dst).is_ok() {
             return;
         }
     }
     
     
-    let bcd = BGQ_.lock();
-    if let Some(f) = bcd.get(&gk) {
-        cs[..f.len()].dg(f);
+    let acg = BIU_.lock();
+    if let Some(data) = acg.get(&slot) {
+        dst[..data.len()].copy_from_slice(data);
     } else {
-        cs.vi(0);
+        dst.fill(0);
     }
 }
 
@@ -392,76 +392,76 @@ fn vsq(gxl: &Ut, gk: Kz, ki: u64) {
 
 
 
-fn xoi(jm: u64, vd: u64, gk: Kz) {
-    let hp = crate::memory::lr();
+fn ppr(cr3: u64, virt_addr: u64, slot: Ep) {
+    let bz = crate::memory::hhdm_offset();
     
     
-    let wc = unsafe { &mut *((jm + hp) as *mut [u64; 512]) };
-    let wd = ((vd >> 39) & 0x1FF) as usize;
-    if wc[wd] & 1 == 0 { return; }
+    let pml4 = unsafe { &mut *((cr3 + bz) as *mut [u64; 512]) };
+    let lu = ((virt_addr >> 39) & 0x1FF) as usize;
+    if pml4[lu] & 1 == 0 { return; }
     
-    let auu = wc[wd] & !0xFFF;
-    let ss = unsafe { &mut *((auu + hp) as *mut [u64; 512]) };
-    let ru = ((vd >> 30) & 0x1FF) as usize;
-    if ss[ru] & 1 == 0 { return; }
+    let xz = pml4[lu] & !0xFFF;
+    let jt = unsafe { &mut *((xz + bz) as *mut [u64; 512]) };
+    let jc = ((virt_addr >> 30) & 0x1FF) as usize;
+    if jt[jc] & 1 == 0 { return; }
     
-    let ayi = ss[ru] & !0xFFF;
-    let sr = unsafe { &mut *((ayi + hp) as *mut [u64; 512]) };
-    let rn = ((vd >> 21) & 0x1FF) as usize;
-    if sr[rn] & 1 == 0 { return; }
-    if sr[rn] & (1 << 7) != 0 { return; } 
+    let aae = jt[jc] & !0xFFF;
+    let js = unsafe { &mut *((aae + bz) as *mut [u64; 512]) };
+    let iw = ((virt_addr >> 21) & 0x1FF) as usize;
+    if js[iw] & 1 == 0 { return; }
+    if js[iw] & (1 << 7) != 0 { return; } 
     
-    let bwe = sr[rn] & !0xFFF;
-    let se = unsafe { &mut *((bwe + hp) as *mut [u64; 512]) };
-    let yf = ((vd >> 12) & 0x1FF) as usize;
-    
-    
+    let amj = js[iw] & !0xFFF;
+    let jd = unsafe { &mut *((amj + bz) as *mut [u64; 512]) };
+    let mw = ((virt_addr >> 12) & 0x1FF) as usize;
     
     
     
-    se[yf] = ((gk as u64) << 1) | (1u64 << 62);
+    
+    
+    jd[mw] = ((slot as u64) << 1) | (1u64 << 62);
     
     
     #[cfg(target_arch = "x86_64")]
-    unsafe { core::arch::asm!("invlpg [{}]", in(reg) vd, options(nostack, preserves_flags)); }
+    unsafe { core::arch::asm!("invlpg [{}]", in(reg) virt_addr, options(nostack, preserves_flags)); }
 }
 
 
-fn vur(jm: u64, vd: u64, ki: u64) {
-    let hp = crate::memory::lr();
+fn oet(cr3: u64, virt_addr: u64, phys_addr: u64) {
+    let bz = crate::memory::hhdm_offset();
     
-    let wc = unsafe { &mut *((jm + hp) as *mut [u64; 512]) };
-    let wd = ((vd >> 39) & 0x1FF) as usize;
-    if wc[wd] & 1 == 0 { return; }
+    let pml4 = unsafe { &mut *((cr3 + bz) as *mut [u64; 512]) };
+    let lu = ((virt_addr >> 39) & 0x1FF) as usize;
+    if pml4[lu] & 1 == 0 { return; }
     
-    let auu = wc[wd] & !0xFFF;
-    let ss = unsafe { &mut *((auu + hp) as *mut [u64; 512]) };
-    let ru = ((vd >> 30) & 0x1FF) as usize;
-    if ss[ru] & 1 == 0 { return; }
+    let xz = pml4[lu] & !0xFFF;
+    let jt = unsafe { &mut *((xz + bz) as *mut [u64; 512]) };
+    let jc = ((virt_addr >> 30) & 0x1FF) as usize;
+    if jt[jc] & 1 == 0 { return; }
     
-    let ayi = ss[ru] & !0xFFF;
-    let sr = unsafe { &mut *((ayi + hp) as *mut [u64; 512]) };
-    let rn = ((vd >> 21) & 0x1FF) as usize;
-    if sr[rn] & 1 == 0 { return; }
+    let aae = jt[jc] & !0xFFF;
+    let js = unsafe { &mut *((aae + bz) as *mut [u64; 512]) };
+    let iw = ((virt_addr >> 21) & 0x1FF) as usize;
+    if js[iw] & 1 == 0 { return; }
     
-    let bwe = sr[rn] & !0xFFF;
-    let se = unsafe { &mut *((bwe + hp) as *mut [u64; 512]) };
-    let yf = ((vd >> 12) & 0x1FF) as usize;
+    let amj = js[iw] & !0xFFF;
+    let jd = unsafe { &mut *((amj + bz) as *mut [u64; 512]) };
+    let mw = ((virt_addr >> 12) & 0x1FF) as usize;
     
     
     let flags: u64 = 1 | (1 << 1) | (1 << 2); 
-    se[yf] = (ki & !0xFFF) | flags;
+    jd[mw] = (phys_addr & !0xFFF) | flags;
     
     #[cfg(target_arch = "x86_64")]
-    unsafe { core::arch::asm!("invlpg [{}]", in(reg) vd, options(nostack, preserves_flags)); }
+    unsafe { core::arch::asm!("invlpg [{}]", in(reg) virt_addr, options(nostack, preserves_flags)); }
 }
 
 
-pub fn zab(jkm: u64) -> bool {
-    (jkm & 1) == 0 && (jkm & (1u64 << 62)) != 0
+pub fn qmz(pte_value: u64) -> bool {
+    (pte_value & 1) == 0 && (pte_value & (1u64 << 62)) != 0
 }
 
 
-pub fn zqi(jkm: u64) -> Kz {
-    ((jkm >> 1) & 0x7FFF_FFFF) as Kz
+pub fn qyf(pte_value: u64) -> Ep {
+    ((pte_value >> 1) & 0x7FFF_FFFF) as Ep
 }

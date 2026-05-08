@@ -8,7 +8,7 @@ use alloc::string::String;
 use alloc::format;
 use crate::audio::synth::{Waveform, Envelope};
 
-use super::FM_;
+use super::GB_;
 
 
 
@@ -18,46 +18,46 @@ use super::FM_;
 #[derive(Debug, Clone, Copy)]
 pub struct Note {
     
-    pub jb: u8,
+    pub pitch: u8,
     
-    pub qm: u8,
+    pub velocity: u8,
     
-    pub vb: u32,
+    pub start_tick: u32,
     
-    pub bbn: u32,
+    pub duration_ticks: u32,
 }
 
 impl Note {
     
-    pub fn new(jb: u8, qm: u8, vb: u32, bbn: u32) -> Self {
+    pub fn new(pitch: u8, velocity: u8, start_tick: u32, duration_ticks: u32) -> Self {
         Self {
-            jb: jb.v(127),
-            qm: qm.v(127),
-            vb,
-            bbn: bbn.am(1),
+            pitch: pitch.min(127),
+            velocity: velocity.min(127),
+            start_tick,
+            duration_ticks: duration_ticks.max(1),
         }
     }
 
     
-    pub fn ckg(&self) -> u32 {
-        self.vb + self.bbn
+    pub fn end_tick(&self) -> u32 {
+        self.start_tick + self.duration_ticks
     }
 
     
-    pub fn j(&self) -> String {
-        let bkp = crate::audio::tables::dtf(self.jb);
-        let cgg = crate::audio::tables::efk(self.jb);
-        format!("{}{}", bkp, cgg)
+    pub fn name(&self) -> String {
+        let agu = crate::audio::tables::bno(self.pitch);
+        let octave = crate::audio::tables::bui(self.pitch);
+        format!("{}{}", agu, octave)
     }
 
     
-    pub fn uk(&self, kz: u32) -> u32 {
-        pta(self.bbn, kz)
+    pub fn duration_ms(&self, bpm: u32) -> u32 {
+        jmk(self.duration_ticks, bpm)
     }
 
     
-    pub fn gtc(&self, kz: u32) -> u32 {
-        pta(self.vb, kz)
+    pub fn start_ms(&self, bpm: u32) -> u32 {
+        jmk(self.start_tick, bpm)
     }
 }
 
@@ -68,134 +68,134 @@ impl Note {
 
 pub struct Track {
     
-    j: [u8; 32],
+    name: [u8; 32],
     
-    baf: usize,
+    name_len: usize,
     
-    pub ts: Vec<Note>,
+    pub notes: Vec<Note>,
     
-    pub ve: Waveform,
+    pub waveform: Waveform,
     
-    pub qr: Envelope,
+    pub envelope: Envelope,
     
-    pub s: u32,
+    pub color: u32,
     
-    pub mwg: bool,
+    pub armed: bool,
 }
 
 impl Track {
     
-    pub fn new(j: &str) -> Self {
-        let mut djr = [0u8; 32];
-        let bf = j.as_bytes();
-        let len = bf.len().v(32);
-        djr[..len].dg(&bf[..len]);
+    pub fn new(name: &str) -> Self {
+        let mut bhz = [0u8; 32];
+        let bytes = name.as_bytes();
+        let len = bytes.len().min(32);
+        bhz[..len].copy_from_slice(&bytes[..len]);
 
         Self {
-            j: djr,
-            baf: len,
-            ts: Vec::new(),
-            ve: Waveform::Dg,
-            qr: Envelope::iqt(),
-            s: 0x4488FF, 
-            mwg: false,
+            name: bhz,
+            name_len: len,
+            notes: Vec::new(),
+            waveform: Waveform::Sine,
+            envelope: Envelope::eka(),
+            color: 0x4488FF, 
+            armed: false,
         }
     }
 
     
-    pub fn amj(&self) -> &str {
-        core::str::jg(&self.j[..self.baf]).unwrap_or("???")
+    pub fn name_str(&self) -> &str {
+        core::str::from_utf8(&self.name[..self.name_len]).unwrap_or("???")
     }
 
     
-    pub fn axn(&mut self, jp: Note) {
+    pub fn add_note(&mut self, note: Note) {
         
-        let u = self.ts.zev(|bo| bo.vb < jp.vb);
-        self.ts.insert(u, jp);
+        let pos = self.notes.partition_point(|ae| ae.start_tick < note.start_tick);
+        self.notes.insert(pos, note);
     }
 
     
-    pub fn pbr(&mut self, index: usize) -> Option<Note> {
-        if index < self.ts.len() {
-            Some(self.ts.remove(index))
+    pub fn remove_note(&mut self, index: usize) -> Option<Note> {
+        if index < self.notes.len() {
+            Some(self.notes.remove(index))
         } else {
             None
         }
     }
 
     
-    pub fn zjh(&mut self, ay: u32, ci: u32) {
-        self.ts.ajm(|bo| bo.vb < ay || bo.vb >= ci);
+    pub fn qtr(&mut self, start: u32, end: u32) {
+        self.notes.retain(|ae| ae.start_tick < start || ae.start_tick >= end);
     }
 
     
-    pub fn uvq(&self, or: u32) -> Vec<&Note> {
-        self.ts.iter()
-            .hi(|bo| bo.vb <= or && or < bo.ckg())
+    pub fn notes_at_tick(&self, tick: u32) -> Vec<&Note> {
+        self.notes.iter()
+            .filter(|ae| ae.start_tick <= tick && tick < ae.end_tick())
             .collect()
     }
 
     
-    pub fn zdx(&self, ay: u32, ci: u32) -> Vec<&Note> {
-        self.ts.iter()
-            .hi(|bo| bo.vb < ci && bo.ckg() > ay)
+    pub fn qpr(&self, start: u32, end: u32) -> Vec<&Note> {
+        self.notes.iter()
+            .filter(|ae| ae.start_tick < end && ae.end_tick() > start)
             .collect()
     }
 
     
-    pub fn ckg(&self) -> u32 {
-        self.ts.iter().map(|bo| bo.ckg()).am().unwrap_or(0)
+    pub fn end_tick(&self) -> u32 {
+        self.notes.iter().map(|ae| ae.end_tick()).max().unwrap_or(0)
     }
 
     
-    pub fn uve(&self) -> usize {
-        self.ts.len()
+    pub fn nkw(&self) -> usize {
+        self.notes.len()
     }
 
     
     pub fn clear(&mut self) {
-        self.ts.clear();
+        self.notes.clear();
     }
 
     
-    pub fn zha(&mut self, erp: u32) {
-        if erp == 0 { return; }
-        for jp in &mut self.ts {
-            let dlf = jp.vb % erp;
-            if dlf > erp / 2 {
-                jp.vb += erp - dlf;
+    pub fn qrm(&mut self, grid_ticks: u32) {
+        if grid_ticks == 0 { return; }
+        for note in &mut self.notes {
+            let bix = note.start_tick % grid_ticks;
+            if bix > grid_ticks / 2 {
+                note.start_tick += grid_ticks - bix;
             } else {
-                jp.vb -= dlf;
+                note.start_tick -= bix;
             }
             
-            let isb = jp.bbn % erp;
-            if isb > erp / 2 {
-                jp.bbn += erp - isb;
-            } else if jp.bbn > isb {
-                jp.bbn -= isb;
+            let ekx = note.duration_ticks % grid_ticks;
+            if ekx > grid_ticks / 2 {
+                note.duration_ticks += grid_ticks - ekx;
+            } else if note.duration_ticks > ekx {
+                note.duration_ticks -= ekx;
             }
-            if jp.bbn == 0 {
-                jp.bbn = erp;
+            if note.duration_ticks == 0 {
+                note.duration_ticks = grid_ticks;
             }
         }
     }
 
     
-    pub fn xmc(&mut self, wgz: i8) {
-        for jp in &mut self.ts {
-            let utl = jp.jb as i16 + wgz as i16;
-            jp.jb = utl.qp(0, 127) as u8;
+    pub fn transpose(&mut self, semitones: i8) {
+        for note in &mut self.notes {
+            let njm = note.pitch as i16 + semitones as i16;
+            note.pitch = njm.clamp(0, 127) as u8;
         }
     }
 
     
-    pub fn acn(&mut self, qb: i32) {
-        for jp in &mut self.ts {
-            let lod = jp.vb as i64 + qb as i64;
-            jp.vb = lod.am(0) as u32;
+    pub fn no(&mut self, gx: i32) {
+        for note in &mut self.notes {
+            let gji = note.start_tick as i64 + gx as i64;
+            note.start_tick = gji.max(0) as u32;
         }
         
-        self.ts.bxf(|bo| bo.vb);
+        self.notes.sort_by_key(|ae| ae.start_tick);
     }
 }
 
@@ -206,21 +206,21 @@ impl Track {
 
 pub struct Project {
     
-    j: [u8; 64],
+    name: [u8; 64],
     
-    baf: usize,
+    name_len: usize,
     
-    pub af: Vec<Track>,
+    pub tracks: Vec<Track>,
     
-    pub kz: u16,
+    pub bpm: u16,
     
-    pub pth: u8,
+    pub time_sig_num: u8,
     
-    pub xhb: u8,
+    pub time_sig_den: u8,
 }
 
 
-static S_: [u32; 16] = [
+static U_: [u32; 16] = [
     0x4488FF, 
     0xFF4444, 
     0x44FF44, 
@@ -241,63 +241,63 @@ static S_: [u32; 16] = [
 
 impl Project {
     
-    pub fn new(j: &str, kz: u16) -> Self {
-        let mut djr = [0u8; 64];
-        let bf = j.as_bytes();
-        let len = bf.len().v(64);
-        djr[..len].dg(&bf[..len]);
+    pub fn new(name: &str, bpm: u16) -> Self {
+        let mut bhz = [0u8; 64];
+        let bytes = name.as_bytes();
+        let len = bytes.len().min(64);
+        bhz[..len].copy_from_slice(&bytes[..len]);
 
         Self {
-            j: djr,
-            baf: len,
-            af: Vec::new(),
-            kz,
-            pth: 4,
-            xhb: 4,
+            name: bhz,
+            name_len: len,
+            tracks: Vec::new(),
+            bpm,
+            time_sig_num: 4,
+            time_sig_den: 4,
         }
     }
 
     
-    pub fn amj(&self) -> &str {
-        core::str::jg(&self.j[..self.baf]).unwrap_or("???")
+    pub fn name_str(&self) -> &str {
+        core::str::from_utf8(&self.name[..self.name_len]).unwrap_or("???")
     }
 
     
-    pub fn jzi(&mut self, j: &str) -> Result<usize, &'static str> {
-        if self.af.len() >= FM_ {
+    pub fn add_track(&mut self, name: &str) -> Result<usize, &'static str> {
+        if self.tracks.len() >= GB_ {
             return Err("Maximum tracks reached");
         }
-        let w = self.af.len();
-        let mut track = Track::new(j);
-        track.s = S_[w % S_.len()];
-        self.af.push(track);
-        Ok(w)
+        let idx = self.tracks.len();
+        let mut track = Track::new(name);
+        track.color = U_[idx % U_.len()];
+        self.tracks.push(track);
+        Ok(idx)
     }
 
     
-    pub fn lza(&mut self, index: usize) -> Result<(), &'static str> {
-        if index >= self.af.len() {
+    pub fn remove_track(&mut self, index: usize) -> Result<(), &'static str> {
+        if index >= self.tracks.len() {
             return Err("Invalid track index");
         }
-        self.af.remove(index);
+        self.tracks.remove(index);
         Ok(())
     }
 
     
-    pub fn oiu(&self) -> u32 {
-        self.af.iter().map(|ab| ab.ckg()).am().unwrap_or(0)
+    pub fn length_ticks(&self) -> u32 {
+        self.tracks.iter().map(|t| t.end_tick()).max().unwrap_or(0)
     }
 
     
-    pub fn zaq(&self) -> u32 {
-        let qb = self.oiu();
-        let cij = super::AE_ * self.pth as u32;
-        (qb + cij - 1) / cij
+    pub fn qni(&self) -> u32 {
+        let gx = self.length_ticks();
+        let ask = super::AF_ * self.time_sig_num as u32;
+        (gx + ask - 1) / ask
     }
 
     
-    pub fn xli(&self) -> usize {
-        self.af.len()
+    pub fn pmt(&self) -> usize {
+        self.tracks.len()
     }
 }
 
@@ -306,28 +306,28 @@ impl Project {
 
 
 
-pub fn pta(qb: u32, kz: u32) -> u32 {
-    if kz == 0 { return 0; }
+pub fn jmk(gx: u32, bpm: u32) -> u32 {
+    if bpm == 0 { return 0; }
     
-    (qb as u64 * 60_000 / (kz as u64 * super::AE_ as u64)) as u32
+    (gx as u64 * 60_000 / (bpm as u64 * super::AF_ as u64)) as u32
 }
 
 
-pub fn hse(jn: u32, kz: u32) -> u32 {
-    if jn == 0 { return 0; }
+pub fn duq(dh: u32, bpm: u32) -> u32 {
+    if dh == 0 { return 0; }
     
-    (jn as u64 * kz as u64 * super::AE_ as u64 / 60_000) as u32
+    (dh as u64 * bpm as u64 * super::AF_ as u64 / 60_000) as u32
 }
 
 
-pub fn jtg(qb: u32, kz: u32) -> u32 {
-    if kz == 0 { return 0; }
+pub fn fcy(gx: u32, bpm: u32) -> u32 {
+    if bpm == 0 { return 0; }
     
-    (qb as u64 * super::BR_ as u64 * 60 / (kz as u64 * super::AE_ as u64)) as u32
+    (gx as u64 * super::BT_ as u64 * 60 / (bpm as u64 * super::AF_ as u64)) as u32
 }
 
 
-pub fn zln(un: u32, kz: u32) -> u32 {
-    if un == 0 { return 0; }
-    (un as u64 * kz as u64 * super::AE_ as u64 / (super::BR_ as u64 * 60)) as u32
+pub fn qup(jo: u32, bpm: u32) -> u32 {
+    if jo == 0 { return 0; }
+    (jo as u64 * bpm as u64 * super::AF_ as u64 / (super::BT_ as u64 * 60)) as u32
 }

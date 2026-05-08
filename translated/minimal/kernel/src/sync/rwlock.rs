@@ -13,255 +13,255 @@ pub struct RwLock<T> {
     
     
     
-    g: AtomicU32,
-    f: UnsafeCell<T>,
+    state: AtomicU32,
+    data: UnsafeCell<T>,
 }
 
-const Ux: u32 = 0x8000_0000;
-const AZZ_: u32 = Ux - 1;
+const Jf: u32 = 0x8000_0000;
+const BCB_: u32 = Jf - 1;
 
 unsafe impl<T: Send> Send for RwLock<T> {}
 unsafe impl<T: Send + Sync> Sync for RwLock<T> {}
 
 impl<T> RwLock<T> {
-    pub const fn new(f: T) -> Self {
+    pub const fn new(data: T) -> Self {
         Self {
-            g: AtomicU32::new(0),
-            f: UnsafeCell::new(f),
+            state: AtomicU32::new(0),
+            data: UnsafeCell::new(data),
         }
     }
     
     
-    pub fn read(&self) -> Yn<T> {
+    pub fn read(&self) -> Kn<T> {
         loop {
-            let g = self.g.load(Ordering::Relaxed);
+            let state = self.state.load(Ordering::Relaxed);
             
             
-            if g >= Ux {
-                core::hint::hc();
-                crate::scheduler::gxc();
+            if state >= Jf {
+                core::hint::spin_loop();
+                crate::scheduler::dgw();
                 continue;
             }
             
             
-            if g >= AZZ_ {
+            if state >= BCB_ {
                 
-                core::hint::hc();
-                crate::scheduler::gxc();
+                core::hint::spin_loop();
+                crate::scheduler::dgw();
                 continue;
             }
             
-            if self.g.kka(
-                g,
-                g + 1,
+            if self.state.compare_exchange_weak(
+                state,
+                state + 1,
                 Ordering::Acquire,
                 Ordering::Relaxed
             ).is_ok() {
-                return Yn { lock: self };
+                return Kn { lock: self };
             }
         }
     }
     
     
-    pub fn mnf(&self) -> Option<Yn<T>> {
-        let g = self.g.load(Ordering::Relaxed);
+    pub fn try_read(&self) -> Option<Kn<T>> {
+        let state = self.state.load(Ordering::Relaxed);
         
-        if g >= Ux || g >= AZZ_ {
+        if state >= Jf || state >= BCB_ {
             return None;
         }
         
-        if self.g.compare_exchange(
-            g,
-            g + 1,
+        if self.state.compare_exchange(
+            state,
+            state + 1,
             Ordering::Acquire,
             Ordering::Relaxed
         ).is_ok() {
-            Some(Yn { lock: self })
+            Some(Kn { lock: self })
         } else {
             None
         }
     }
     
     
-    pub fn write(&self) -> Ud<T> {
+    pub fn write(&self) -> Is<T> {
         loop {
             
-            if self.g.kka(
+            if self.state.compare_exchange_weak(
                 0,
-                Ux,
+                Jf,
                 Ordering::Acquire,
                 Ordering::Relaxed
             ).is_ok() {
-                return Ud { lock: self };
+                return Is { lock: self };
             }
             
-            core::hint::hc();
-            crate::scheduler::gxc();
+            core::hint::spin_loop();
+            crate::scheduler::dgw();
         }
     }
     
     
-    pub fn ifb(&self) -> Option<Ud<T>> {
-        if self.g.compare_exchange(
+    pub fn try_write(&self) -> Option<Is<T>> {
+        if self.state.compare_exchange(
             0,
-            Ux,
+            Jf,
             Ordering::Acquire,
             Ordering::Relaxed
         ).is_ok() {
-            Some(Ud { lock: self })
+            Some(Is { lock: self })
         } else {
             None
         }
     }
     
     
-    pub fn zin(&self) -> u32 {
-        let g = self.g.load(Ordering::Relaxed);
-        if g >= Ux { 0 } else { g }
+    pub fn qsz(&self) -> u32 {
+        let state = self.state.load(Ordering::Relaxed);
+        if state >= Jf { 0 } else { state }
     }
     
     
-    pub fn zae(&self) -> bool {
-        self.g.load(Ordering::Relaxed) >= Ux
+    pub fn qnc(&self) -> bool {
+        self.state.load(Ordering::Relaxed) >= Jf
     }
 }
 
-pub struct Yn<'a, T> {
+pub struct Kn<'a, T> {
     lock: &'a RwLock<T>,
 }
 
-impl<T> Deref for Yn<'_, T> {
-    type Zb = T;
+impl<T> Deref for Kn<'_, T> {
+    type Target = T;
     
     fn deref(&self) -> &T {
-        unsafe { &*self.lock.f.get() }
+        unsafe { &*self.lock.data.get() }
     }
 }
 
-impl<T> Drop for Yn<'_, T> {
+impl<T> Drop for Kn<'_, T> {
     fn drop(&mut self) {
-        self.lock.g.fetch_sub(1, Ordering::Release);
+        self.lock.state.fetch_sub(1, Ordering::Release);
     }
 }
 
-pub struct Ud<'a, T> {
+pub struct Is<'a, T> {
     lock: &'a RwLock<T>,
 }
 
-impl<T> Deref for Ud<'_, T> {
-    type Zb = T;
+impl<T> Deref for Is<'_, T> {
+    type Target = T;
     
     fn deref(&self) -> &T {
-        unsafe { &*self.lock.f.get() }
+        unsafe { &*self.lock.data.get() }
     }
 }
 
-impl<T> DerefMut for Ud<'_, T> {
-    fn kph(&mut self) -> &mut T {
-        unsafe { &mut *self.lock.f.get() }
+impl<T> DerefMut for Is<'_, T> {
+    fn deref_mut(&mut self) -> &mut T {
+        unsafe { &mut *self.lock.data.get() }
     }
 }
 
-impl<T> Drop for Ud<'_, T> {
+impl<T> Drop for Is<'_, T> {
     fn drop(&mut self) {
-        self.lock.g.store(0, Ordering::Release);
+        self.lock.state.store(0, Ordering::Release);
     }
 }
 
 
-pub struct Aej<T> {
-    hxc: AtomicU32,
-    fyy: AtomicU32,
-    f: UnsafeCell<T>,
+pub struct Na<T> {
+    readers: AtomicU32,
+    writer: AtomicU32,
+    data: UnsafeCell<T>,
 }
 
-unsafe impl<T: Send> Send for Aej<T> {}
-unsafe impl<T: Send + Sync> Sync for Aej<T> {}
+unsafe impl<T: Send> Send for Na<T> {}
+unsafe impl<T: Send + Sync> Sync for Na<T> {}
 
-impl<T> Aej<T> {
-    pub const fn new(f: T) -> Self {
+impl<T> Na<T> {
+    pub const fn new(data: T) -> Self {
         Self {
-            hxc: AtomicU32::new(0),
-            fyy: AtomicU32::new(0),
-            f: UnsafeCell::new(f),
+            readers: AtomicU32::new(0),
+            writer: AtomicU32::new(0),
+            data: UnsafeCell::new(data),
         }
     }
     
-    pub fn read(&self) -> Amc<T> {
+    pub fn read(&self) -> Qb<T> {
         loop {
             
-            while self.fyy.load(Ordering::Relaxed) != 0 {
-                core::hint::hc();
+            while self.writer.load(Ordering::Relaxed) != 0 {
+                core::hint::spin_loop();
             }
             
             
-            self.hxc.fetch_add(1, Ordering::Acquire);
+            self.readers.fetch_add(1, Ordering::Acquire);
             
             
-            if self.fyy.load(Ordering::Relaxed) == 0 {
-                return Amc { lock: self };
+            if self.writer.load(Ordering::Relaxed) == 0 {
+                return Qb { lock: self };
             }
             
             
-            self.hxc.fetch_sub(1, Ordering::Release);
+            self.readers.fetch_sub(1, Ordering::Release);
         }
     }
     
-    pub fn write(&self) -> Aek<T> {
+    pub fn write(&self) -> Nb<T> {
         
-        while self.fyy.compare_exchange(
+        while self.writer.compare_exchange(
             0, 1,
             Ordering::Acquire,
             Ordering::Relaxed
         ).is_err() {
-            core::hint::hc();
+            core::hint::spin_loop();
         }
         
         
-        while self.hxc.load(Ordering::Relaxed) != 0 {
-            core::hint::hc();
+        while self.readers.load(Ordering::Relaxed) != 0 {
+            core::hint::spin_loop();
         }
         
-        Aek { lock: self }
+        Nb { lock: self }
     }
 }
 
-pub struct Amc<'a, T> {
-    lock: &'a Aej<T>,
+pub struct Qb<'a, T> {
+    lock: &'a Na<T>,
 }
 
-impl<T> Deref for Amc<'_, T> {
-    type Zb = T;
+impl<T> Deref for Qb<'_, T> {
+    type Target = T;
     fn deref(&self) -> &T {
-        unsafe { &*self.lock.f.get() }
+        unsafe { &*self.lock.data.get() }
     }
 }
 
-impl<T> Drop for Amc<'_, T> {
+impl<T> Drop for Qb<'_, T> {
     fn drop(&mut self) {
-        self.lock.hxc.fetch_sub(1, Ordering::Release);
+        self.lock.readers.fetch_sub(1, Ordering::Release);
     }
 }
 
-pub struct Aek<'a, T> {
-    lock: &'a Aej<T>,
+pub struct Nb<'a, T> {
+    lock: &'a Na<T>,
 }
 
-impl<T> Deref for Aek<'_, T> {
-    type Zb = T;
+impl<T> Deref for Nb<'_, T> {
+    type Target = T;
     fn deref(&self) -> &T {
-        unsafe { &*self.lock.f.get() }
+        unsafe { &*self.lock.data.get() }
     }
 }
 
-impl<T> DerefMut for Aek<'_, T> {
-    fn kph(&mut self) -> &mut T {
-        unsafe { &mut *self.lock.f.get() }
+impl<T> DerefMut for Nb<'_, T> {
+    fn deref_mut(&mut self) -> &mut T {
+        unsafe { &mut *self.lock.data.get() }
     }
 }
 
-impl<T> Drop for Aek<'_, T> {
+impl<T> Drop for Nb<'_, T> {
     fn drop(&mut self) {
-        self.lock.fyy.store(0, Ordering::Release);
+        self.lock.writer.store(0, Ordering::Release);
     }
 }

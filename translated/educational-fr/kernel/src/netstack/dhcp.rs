@@ -67,7 +67,7 @@ const END: u8 = 255;
 /// DHCP state machine
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum DhcpState {
-    Initialize,
+    Init,
     Selecting,
     Requesting,
     Bound,
@@ -92,7 +92,7 @@ struct DhcpClient {
 
 // État global partagé protégé par un Mutex (verrou d'exclusion mutuelle).
 static CLIENT: Mutex<DhcpClient> = Mutex::new(DhcpClient {
-    state: DhcpState::Initialize,
+    state: DhcpState::Init,
     xid: 0x12345678,
     offered_ip: [0; 4],
     server_ip: [0; 4],
@@ -116,7 +116,7 @@ pub fn start() {
     BOUND.store(false, Ordering::SeqCst);
     
     let mut client = CLIENT.lock();
-    client.state = DhcpState::Initialize;
+    client.state = DhcpState::Init;
     client.xid = generate_xid();
     client.retries = 0;
     drop(client);
@@ -239,13 +239,13 @@ fn send_dhcp_packet(payload: &[u8]) -> Result<(), &'static str> {
 }
 
 /// Send a unicast DHCP packet to a specific server
-fn send_dhcp_unicast(payload: &[u8], source_ip: [u8; 4], destination_ip: [u8; 4]) -> Result<(), &'static str> {
+fn send_dhcp_unicast(payload: &[u8], src_ip: [u8; 4], dst_ip: [u8; 4]) -> Result<(), &'static str> {
     // Resolve server MAC via ARP (or use gateway MAC)
-    let destination_mac = crate::netstack::arp::resolve(destination_ip).unwrap_or([0xFF; 6]);
-    send_dhcp_ip_packet(payload, source_ip, destination_ip, destination_mac)
+    let dst_mac = crate::netstack::arp::resolve(dst_ip).unwrap_or([0xFF; 6]);
+    send_dhcp_ip_packet(payload, src_ip, dst_ip, dst_mac)
 }
 
-fn send_dhcp_ip_packet(payload: &[u8], source_ip: [u8; 4], destination_ip: [u8; 4], destination_mac: [u8; 6]) -> Result<(), &'static str> {
+fn send_dhcp_ip_packet(payload: &[u8], src_ip: [u8; 4], dst_ip: [u8; 4], dst_mac: [u8; 6]) -> Result<(), &'static str> {
     let mut udp = Vec::with_capacity(8 + payload.len());
     udp.extend_from_slice(&68u16.to_be_bytes()); // src port
     udp.extend_from_slice(&67u16.to_be_bytes()); // dst port
@@ -259,8 +259,8 @@ fn send_dhcp_ip_packet(payload: &[u8], source_ip: [u8; 4], destination_ip: [u8; 
     ip.extend_from_slice(&[0, 0, 0, 0]); // id + flags
     ip.push(64); ip.push(17); // TTL, protocol
     ip.extend_from_slice(&0u16.to_be_bytes()); // checksum
-    ip.extend_from_slice(&source_ip);
-    ip.extend_from_slice(&destination_ip);
+    ip.extend_from_slice(&src_ip);
+    ip.extend_from_slice(&dst_ip);
     
     let mut sum: u32 = 0;
     for i in (0..20).step_by(2) { sum += ((ip[i] as u32) << 8) | (ip[i + 1] as u32); }
@@ -269,7 +269,7 @@ fn send_dhcp_ip_packet(payload: &[u8], source_ip: [u8; 4], destination_ip: [u8; 
     ip[10] = (csum >> 8) as u8; ip[11] = (csum & 0xFF) as u8;
     ip.extend_from_slice(&udp);
     
-    crate::netstack::send_frame(destination_mac, crate::netstack::ethertype::IPV4, &ip)
+    crate::netstack::send_frame(dst_mac, crate::netstack::ethertype::IPV4, &ip)
 }
 
 // Fonction publique — appelable depuis d'autres modules.
@@ -349,7 +349,7 @@ match msg_type {
         }
         msg_type::NAK => {
             crate::log_warn!("[DHCP] NAK, restarting");
-            CLIENT.lock().state = DhcpState::Initialize;
+            CLIENT.lock().state = DhcpState::Init;
             BOUND.store(false, Ordering::SeqCst);
             let _ = send_discover();
         }
@@ -367,16 +367,16 @@ pub fn poll() {
 match c.state {
         DhcpState::Bound => {
             // Check lease timers (ticks are in ms)
-            let elapsed_mouse = now.saturating_sub(c.bound_time);
+            let elapsed_ms = now.saturating_sub(c.bound_time);
             let lease_mouse = (c.lease_time as u64) * 1000;
             let t1 = lease_mouse / 2;        // 50% of lease → Renewing
             let t2 = lease_mouse * 7 / 8;    // 87.5% of lease → Rebinding
             
-            if elapsed_mouse >= t2 {
+            if elapsed_ms >= t2 {
                 crate::serial_println!("[DHCP] T2 expired, rebinding");
                 drop(c);
                 let _ = send_rebind();
-            } else if elapsed_mouse >= t1 {
+            } else if elapsed_ms >= t1 {
                 crate::serial_println!("[DHCP] T1 expired, renewing");
                 drop(c);
                 let _ = send_renew();
@@ -384,11 +384,11 @@ match c.state {
         }
         DhcpState::Renewing => {
             // Retry renew every 30s, fall back to rebind at T2
-            let elapsed_mouse = now.saturating_sub(c.bound_time);
+            let elapsed_ms = now.saturating_sub(c.bound_time);
             let lease_mouse = (c.lease_time as u64) * 1000;
             let t2 = lease_mouse * 7 / 8;
             
-            if elapsed_mouse >= t2 {
+            if elapsed_ms >= t2 {
                 crate::serial_println!("[DHCP] Renew failed, rebinding");
                 drop(c);
                 let _ = send_rebind();
@@ -399,12 +399,12 @@ match c.state {
         }
         DhcpState::Rebinding => {
             // Retry rebind every 30s, expire at lease end
-            let elapsed_mouse = now.saturating_sub(c.bound_time);
+            let elapsed_ms = now.saturating_sub(c.bound_time);
             let lease_mouse = (c.lease_time as u64) * 1000;
             
-            if elapsed_mouse >= lease_mouse {
+            if elapsed_ms >= lease_mouse {
                 crate::log_warn!("[DHCP] Lease expired, restarting");
-                c.state = DhcpState::Initialize;
+                c.state = DhcpState::Init;
                 c.retries = 0;
                 drop(c);
                 BOUND.store(false, Ordering::SeqCst);
@@ -415,24 +415,37 @@ match c.state {
             }
         }
         DhcpState::Selecting | DhcpState::Requesting => {
-            let timeout = if c.state == DhcpState::Initialize { 1000 } else { 3000 };
+            let timeout = if c.state == DhcpState::Init { 1000 } else { 3000 };
             if now.saturating_sub(c.last_send) > timeout {
                 c.retries += 1;
-                if c.retries > 5 { c.state = DhcpState::Initialize; c.xid = generate_xid(); c.retries = 0; }
+                if c.retries > 5 { c.state = DhcpState::Init; c.xid = generate_xid(); c.retries = 0; }
                 let state = c.state;
                 drop(c);
                                 // Correspondance de motifs — branchement exhaustif de Rust.
 match state {
-                    DhcpState::Initialize | DhcpState::Selecting => { let _ = send_discover(); }
+                    DhcpState::Init | DhcpState::Selecting => { let _ = send_discover(); }
                     DhcpState::Requesting => { let _ = send_request(); }
                     _ => {}
                 }
             }
         }
-        DhcpState::Initialize => {
+        DhcpState::Init => {
             if now.saturating_sub(c.last_send) > 1000 {
                 c.retries += 1;
-                if c.retries > 5 { c.xid = generate_xid(); c.retries = 0; }
+                if c.retries > 10 {
+                    // DHCP failed after ~10s — apply static fallback IP
+                    drop(c);
+                    ENABLED.store(false, Ordering::SeqCst);
+                    crate::log!("[DHCP] No server found, applying fallback 10.0.0.2/24");
+                    crate::network::set_ip(
+                        crate::network::Ipv4Address::new(10, 0, 0, 2),
+                        crate::network::Ipv4Address::new(255, 255, 255, 0),
+                        crate::network::Ipv4Address::new(10, 0, 0, 1),
+                    );
+                    BOUND.store(true, Ordering::SeqCst);
+                    return;
+                }
+                if c.retries > 5 { c.xid = generate_xid(); }
                 drop(c);
                 let _ = send_discover();
             }

@@ -14,7 +14,7 @@ use alloc::format;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU64, Ordering};
 
-use super::probe::T;
+use super::probe::N;
 
 
 
@@ -22,52 +22,52 @@ use super::probe::T;
 
 
 #[derive(Clone)]
-pub struct Cd {
-    pub gb: InsightCategory,
-    pub qj: InsightSeverity,
-    pub dq: String,
-    pub eu: String,
-    pub hr: String,
+pub struct Av {
+    pub category: InsightCategory,
+    pub severity: InsightSeverity,
+    pub title: String,
+    pub detail: String,
+    pub action: String,
 }
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum InsightCategory {
-    Yb,
-    Oy,
-    De,
-    Tv,
-    Aoz,
-    Nx,
+    Performance,
+    Bottleneck,
+    Security,
+    Opportunity,
+    Anomaly,
+    Fx,
 }
 
 #[derive(Clone, Copy, PartialEq, Ord, PartialOrd, Eq)]
 pub enum InsightSeverity {
-    V,
-    Os,
-    Ajd,
-    Aj,
+    Info,
+    Advisory,
+    Important,
+    Critical,
 }
 
 impl InsightCategory {
     pub fn as_str(&self) -> &'static str {
         match self {
-            InsightCategory::Yb => "PERF",
-            InsightCategory::Oy => "BOTTLENECK",
-            InsightCategory::De => "SECURITY",
-            InsightCategory::Tv => "OPPORTUNITY",
-            InsightCategory::Aoz => "ANOMALY",
-            InsightCategory::Nx => "RESOURCE",
+            InsightCategory::Performance => "PERF",
+            InsightCategory::Bottleneck => "BOTTLENECK",
+            InsightCategory::Security => "SECURITY",
+            InsightCategory::Opportunity => "OPPORTUNITY",
+            InsightCategory::Anomaly => "ANOMALY",
+            InsightCategory::Fx => "RESOURCE",
         }
     }
 
-    pub fn s(&self) -> &'static str {
+    pub fn color(&self) -> &'static str {
         match self {
-            InsightCategory::Yb => "\x01G",
-            InsightCategory::Oy => "\x01R",
-            InsightCategory::De => "\x01M",
-            InsightCategory::Tv => "\x01C",
-            InsightCategory::Aoz => "\x01Y",
-            InsightCategory::Nx => "\x01W",
+            InsightCategory::Performance => "\x01G",
+            InsightCategory::Bottleneck => "\x01R",
+            InsightCategory::Security => "\x01M",
+            InsightCategory::Opportunity => "\x01C",
+            InsightCategory::Anomaly => "\x01Y",
+            InsightCategory::Fx => "\x01W",
         }
     }
 }
@@ -75,293 +75,293 @@ impl InsightCategory {
 impl InsightSeverity {
     pub fn as_str(&self) -> &'static str {
         match self {
-            InsightSeverity::V => "INFO",
-            InsightSeverity::Os => "NOTE",
-            InsightSeverity::Ajd => "WARN",
-            InsightSeverity::Aj => "CRIT",
+            InsightSeverity::Info => "INFO",
+            InsightSeverity::Advisory => "NOTE",
+            InsightSeverity::Important => "WARN",
+            InsightSeverity::Critical => "CRIT",
         }
     }
 }
 
 
 #[derive(Clone)]
-pub struct Si {
+pub struct Ht {
     
-    pub fut: SimdTier,
+    pub simd_tier: SimdTier,
     
-    pub mok: bool,
+    pub use_gpu: bool,
     
-    pub jhx: usize,
+    pub optimal_batch_size: usize,
     
-    pub bll: usize,
+    pub tile_size: usize,
     
-    pub mqw: u32,
+    pub worker_threads: u32,
     
-    pub olu: usize,
+    pub max_gen_tokens: usize,
     
-    pub jea: f32,
+    pub lr_factor: f32,
     
-    pub kbu: bool,
+    pub background_learning: bool,
     
-    pub ocp: bool,
+    pub hw_monitoring: bool,
     
-    pub ibx: String,
+    pub strategy: String,
 }
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum SimdTier {
-    Bsf,
-    Qu,
-    Ow,
-    Apj,
-    Tp,   
-    Ate,
+    Scalar,
+    Sse2,
+    Avx2,
+    Avx512,
+    Neon,   
+    GpuGemm,
 }
 
 impl SimdTier {
     pub fn as_str(&self) -> &'static str {
         match self {
-            SimdTier::Bsf => "scalar",
-            SimdTier::Qu => "SSE2",
-            SimdTier::Ow => "AVX2",
-            SimdTier::Apj => "AVX-512",
-            SimdTier::Tp => "NEON",
-            SimdTier::Ate => "GPU-GEMM",
+            SimdTier::Scalar => "scalar",
+            SimdTier::Sse2 => "SSE2",
+            SimdTier::Avx2 => "AVX2",
+            SimdTier::Avx512 => "AVX-512",
+            SimdTier::Neon => "NEON",
+            SimdTier::GpuGemm => "GPU-GEMM",
         }
     }
 }
 
 
-static UC_: AtomicU64 = AtomicU64::new(0);
-static AIY_: AtomicU64 = AtomicU64::new(0);
-static AKP_: AtomicU64 = AtomicU64::new(0);
+static VK_: AtomicU64 = AtomicU64::new(0);
+static AKU_: AtomicU64 = AtomicU64::new(0);
+static AMJ_: AtomicU64 = AtomicU64::new(0);
 
 
 
 
 
 
-pub fn mvq(cc: &T) -> Vec<Cd> {
-    let mut abp = Vec::new();
+pub fn hfd(ai: &N) -> Vec<Av> {
+    let mut nu = Vec::new();
 
-    qhx(&mut abp, cc);
-    qia(&mut abp, cc);
-    qid(&mut abp, cc);
-    qib(&mut abp, cc);
-    qic(&mut abp, cc);
-    qhv(&mut abp, cc);
+    jvv(&mut nu, ai);
+    jvx(&mut nu, ai);
+    jwa(&mut nu, ai);
+    jvy(&mut nu, ai);
+    jvz(&mut nu, ai);
+    jvt(&mut nu, ai);
 
     
-    abp.bxe(|q, o| o.qj.cmp(&q.qj));
+    nu.sort_by(|a, b| b.severity.cmp(&a.severity));
 
-    abp
+    nu
 }
 
-fn qhx(abp: &mut Vec<Cd>, cc: &T) {
+fn jvv(nu: &mut Vec<Av>, ai: &N) {
     
-    if cc.drm {
-        abp.push(Cd {
-            gb: InsightCategory::Yb,
-            qj: InsightSeverity::V,
-            dq: String::from("AVX-512 detected"),
-            eu: String::from("CPU supports 512-bit SIMD — 8x FP32 lanes"),
-            hr: String::from("Enable AVX-512 matmul kernels for 8x neural throughput"),
+    if ai.has_avx512 {
+        nu.push(Av {
+            category: InsightCategory::Performance,
+            severity: InsightSeverity::Info,
+            title: String::from("AVX-512 detected"),
+            detail: String::from("CPU supports 512-bit SIMD — 8x FP32 lanes"),
+            action: String::from("Enable AVX-512 matmul kernels for 8x neural throughput"),
         });
-    } else if cc.bzx {
-        abp.push(Cd {
-            gb: InsightCategory::Tv,
-            qj: InsightSeverity::Os,
-            dq: String::from("AVX2 available, no AVX-512"),
-            eu: String::from("256-bit SIMD available — 4x FP32 lanes"),
-            hr: String::from("Use AVX2 GEMM with 8×4 tile blocking for inference"),
+    } else if ai.has_avx2 {
+        nu.push(Av {
+            category: InsightCategory::Opportunity,
+            severity: InsightSeverity::Advisory,
+            title: String::from("AVX2 available, no AVX-512"),
+            detail: String::from("256-bit SIMD available — 4x FP32 lanes"),
+            action: String::from("Use AVX2 GEMM with 8×4 tile blocking for inference"),
         });
-    } else if !cc.dro {
-        abp.push(Cd {
-            gb: InsightCategory::Oy,
-            qj: InsightSeverity::Ajd,
-            dq: String::from("No SIMD detected"),
-            eu: String::from("Scalar-only compute — inference will be slow"),
-            hr: String::from("Use smallest model variant, reduce batch size"),
+    } else if !ai.has_sse2 {
+        nu.push(Av {
+            category: InsightCategory::Bottleneck,
+            severity: InsightSeverity::Important,
+            title: String::from("No SIMD detected"),
+            detail: String::from("Scalar-only compute — inference will be slow"),
+            action: String::from("Use smallest model variant, reduce batch size"),
         });
     }
 
     
-    if cc.azj >= 8 {
-        abp.push(Cd {
-            gb: InsightCategory::Tv,
-            qj: InsightSeverity::V,
-            dq: format!("{}-core CPU detected", cc.azj),
-            eu: String::from("Multi-core parallelism available for background tasks"),
-            hr: String::from("Enable parallel training + inference on separate cores"),
+    if ai.cpu_cores >= 8 {
+        nu.push(Av {
+            category: InsightCategory::Opportunity,
+            severity: InsightSeverity::Info,
+            title: format!("{}-core CPU detected", ai.cpu_cores),
+            detail: String::from("Multi-core parallelism available for background tasks"),
+            action: String::from("Enable parallel training + inference on separate cores"),
         });
-    } else if cc.azj == 1 {
-        abp.push(Cd {
-            gb: InsightCategory::Oy,
-            qj: InsightSeverity::Os,
-            dq: String::from("Single-core system"),
-            eu: String::from("No parallelism — all tasks sequential"),
-            hr: String::from("Disable background learning, prioritize inference"),
+    } else if ai.cpu_cores == 1 {
+        nu.push(Av {
+            category: InsightCategory::Bottleneck,
+            severity: InsightSeverity::Advisory,
+            title: String::from("Single-core system"),
+            detail: String::from("No parallelism — all tasks sequential"),
+            action: String::from("Disable background learning, prioritize inference"),
         });
     }
 
     
-    if cc.bqz {
-        abp.push(Cd {
-            gb: InsightCategory::Yb,
-            qj: InsightSeverity::Ajd,
-            dq: format!("GPU available: {}", cc.beh),
-            eu: format!("{} CUs, {} MB VRAM", cc.erk, cc.dhr),
-            hr: String::from("Offload matrix operations to GPU GEMM dispatch"),
+    if ai.has_gpu {
+        nu.push(Av {
+            category: InsightCategory::Performance,
+            severity: InsightSeverity::Important,
+            title: format!("GPU available: {}", ai.gpu_name),
+            detail: format!("{} CUs, {} MB VRAM", ai.gpu_compute_units, ai.gpu_vram_mb),
+            action: String::from("Offload matrix operations to GPU GEMM dispatch"),
         });
     }
 }
 
-fn qia(abp: &mut Vec<Cd>, cc: &T) {
-    let amo = cc.ccf / (1024 * 1024);
+fn jvx(nu: &mut Vec<Av>, ai: &N) {
+    let ram_mb = ai.total_ram_bytes / (1024 * 1024);
 
-    if amo < 256 {
-        abp.push(Cd {
-            gb: InsightCategory::Oy,
-            qj: InsightSeverity::Aj,
-            dq: format!("Very low RAM: {} MB", amo),
-            eu: String::from("Model + optimizer may not fit in memory"),
-            hr: String::from("Use INT8 quantization, disable Adam (use SGD), reduce context"),
+    if ram_mb < 256 {
+        nu.push(Av {
+            category: InsightCategory::Bottleneck,
+            severity: InsightSeverity::Critical,
+            title: format!("Very low RAM: {} MB", ram_mb),
+            detail: String::from("Model + optimizer may not fit in memory"),
+            action: String::from("Use INT8 quantization, disable Adam (use SGD), reduce context"),
         });
-    } else if amo < 1024 {
-        abp.push(Cd {
-            gb: InsightCategory::Oy,
-            qj: InsightSeverity::Os,
-            dq: format!("Limited RAM: {} MB", amo),
-            eu: String::from("Model fits but optimizer state is tight"),
-            hr: String::from("Limit gradient accumulation buffer, reduce max_seq"),
+    } else if ram_mb < 1024 {
+        nu.push(Av {
+            category: InsightCategory::Bottleneck,
+            severity: InsightSeverity::Advisory,
+            title: format!("Limited RAM: {} MB", ram_mb),
+            detail: String::from("Model fits but optimizer state is tight"),
+            action: String::from("Limit gradient accumulation buffer, reduce max_seq"),
         });
     } else {
-        abp.push(Cd {
-            gb: InsightCategory::Nx,
-            qj: InsightSeverity::V,
-            dq: format!("Adequate RAM: {} MB", amo),
-            eu: String::from("Full model + Adam optimizer + large context fits"),
-            hr: String::from("Enable full training pipeline with gradient accumulation"),
+        nu.push(Av {
+            category: InsightCategory::Fx,
+            severity: InsightSeverity::Info,
+            title: format!("Adequate RAM: {} MB", ram_mb),
+            detail: String::from("Full model + Adam optimizer + large context fits"),
+            action: String::from("Enable full training pipeline with gradient accumulation"),
         });
     }
 
     
-    let bne = if cc.drr > 0 {
-        cc.ecw as f32 / cc.drr as f32
+    let heap_pct = if ai.heap_size_bytes > 0 {
+        ai.heap_used_bytes as f32 / ai.heap_size_bytes as f32
     } else { 0.0 };
 
-    if bne > 0.85 {
-        abp.push(Cd {
-            gb: InsightCategory::Oy,
-            qj: InsightSeverity::Aj,
-            dq: format!("Heap pressure: {:.0}% used", bne * 100.0),
-            eu: format!("{} KB free of {} KB", cc.erx / 1024, cc.drr / 1024),
-            hr: String::from("Free cached data, reduce model context window"),
+    if heap_pct > 0.85 {
+        nu.push(Av {
+            category: InsightCategory::Bottleneck,
+            severity: InsightSeverity::Critical,
+            title: format!("Heap pressure: {:.0}% used", heap_pct * 100.0),
+            detail: format!("{} KB free of {} KB", ai.heap_free_bytes / 1024, ai.heap_size_bytes / 1024),
+            action: String::from("Free cached data, reduce model context window"),
         });
     }
 }
 
-fn qid(abp: &mut Vec<Cd>, cc: &T) {
-    if cc.aqm.is_empty() {
-        abp.push(Cd {
-            gb: InsightCategory::Aoz,
-            qj: InsightSeverity::Os,
-            dq: String::from("No storage detected"),
-            eu: String::from("Cannot persist weights or data — RAM-only mode"),
-            hr: String::from("Disable weight persistence, use RAM-only training"),
+fn jwa(nu: &mut Vec<Av>, ai: &N) {
+    if ai.storage_devices.is_empty() {
+        nu.push(Av {
+            category: InsightCategory::Anomaly,
+            severity: InsightSeverity::Advisory,
+            title: String::from("No storage detected"),
+            detail: String::from("Cannot persist weights or data — RAM-only mode"),
+            action: String::from("Disable weight persistence, use RAM-only training"),
         });
     } else {
-        let lbe = cc.aqm.iter().any(|e| e.kk == super::probe::StorageKind::Xv);
-        if lbe {
-            abp.push(Cd {
-                gb: InsightCategory::Yb,
-                qj: InsightSeverity::V,
-                dq: String::from("NVMe storage available"),
-                eu: String::from("Fast I/O for weight checkpoints and data loading"),
-                hr: String::from("Enable aggressive checkpointing (every 100 steps)"),
+        let fzx = ai.storage_devices.iter().any(|j| j.kind == super::probe::StorageKind::Nvme);
+        if fzx {
+            nu.push(Av {
+                category: InsightCategory::Performance,
+                severity: InsightSeverity::Info,
+                title: String::from("NVMe storage available"),
+                detail: String::from("Fast I/O for weight checkpoints and data loading"),
+                action: String::from("Enable aggressive checkpointing (every 100 steps)"),
             });
         }
     }
 }
 
-fn qib(abp: &mut Vec<Cd>, cc: &T) {
-    if cc.bzz && cc.aik {
-        abp.push(Cd {
-            gb: InsightCategory::Tv,
-            qj: InsightSeverity::V,
-            dq: String::from("Network active"),
-            eu: String::from("Could receive training data or firmware updates"),
-            hr: String::from("Enable network mentoring protocol alongside serial"),
+fn jvy(nu: &mut Vec<Av>, ai: &N) {
+    if ai.has_network && ai.link_up {
+        nu.push(Av {
+            category: InsightCategory::Opportunity,
+            severity: InsightSeverity::Info,
+            title: String::from("Network active"),
+            detail: String::from("Could receive training data or firmware updates"),
+            action: String::from("Enable network mentoring protocol alongside serial"),
         });
-    } else if !cc.bzz {
-        abp.push(Cd {
-            gb: InsightCategory::Nx,
-            qj: InsightSeverity::V,
-            dq: String::from("Isolated system (no network)"),
-            eu: String::from("Air-gapped — good for security analysis"),
-            hr: String::from("Use serial mentoring only for external communication"),
+    } else if !ai.has_network {
+        nu.push(Av {
+            category: InsightCategory::Fx,
+            severity: InsightSeverity::Info,
+            title: String::from("Isolated system (no network)"),
+            detail: String::from("Air-gapped — good for security analysis"),
+            action: String::from("Use serial mentoring only for external communication"),
         });
     }
 }
 
-fn qic(abp: &mut Vec<Cd>, cc: &T) {
-    if cc.cfe {
-        abp.push(Cd {
-            gb: InsightCategory::De,
-            qj: InsightSeverity::V,
-            dq: String::from("Hardware AES available"),
-            eu: String::from("AES-NI for fast encryption of sensitive data"),
-            hr: String::from("Use HW AES for weight encryption at rest"),
+fn jvz(nu: &mut Vec<Av>, ai: &N) {
+    if ai.has_aesni {
+        nu.push(Av {
+            category: InsightCategory::Security,
+            severity: InsightSeverity::Info,
+            title: String::from("Hardware AES available"),
+            detail: String::from("AES-NI for fast encryption of sensitive data"),
+            action: String::from("Use HW AES for weight encryption at rest"),
         });
     }
 
-    if !cc.crd {
-        abp.push(Cd {
-            gb: InsightCategory::De,
-            qj: InsightSeverity::Os,
-            dq: String::from("No hardware RNG"),
-            eu: String::from("RDRAND not available — using software PRNG"),
-            hr: String::from("Seed PRNG from TSC entropy, use longer initialization"),
+    if !ai.has_rdrand {
+        nu.push(Av {
+            category: InsightCategory::Security,
+            severity: InsightSeverity::Advisory,
+            title: String::from("No hardware RNG"),
+            detail: String::from("RDRAND not available — using software PRNG"),
+            action: String::from("Seed PRNG from TSC entropy, use longer initialization"),
         });
     }
 
     
-    abp.push(Cd {
-        gb: InsightCategory::De,
-        qj: InsightSeverity::V,
-        dq: format!("Running at {} on {}", cc.jjz, cc.arch),
-        eu: String::from("Full hardware access — no OS filtering"),
-        hr: String::from("Direct register access enabled for all probing"),
+    nu.push(Av {
+        category: InsightCategory::Security,
+        severity: InsightSeverity::Info,
+        title: format!("Running at {} on {}", ai.privilege_level, ai.arch),
+        detail: String::from("Full hardware access — no OS filtering"),
+        action: String::from("Direct register access enabled for all probing"),
     });
 }
 
-fn qhv(abp: &mut Vec<Cd>, cc: &T) {
-    match cc.arch {
+fn jvt(nu: &mut Vec<Av>, ai: &N) {
+    match ai.arch {
         "x86_64" => {
-            abp.push(Cd {
-                gb: InsightCategory::Nx,
-                qj: InsightSeverity::V,
-                dq: String::from("x86_64 platform"),
-                eu: String::from("Full CPUID, PCI, ACPI detection available"),
-                hr: String::from("Use native SSE2/AVX paths for max performance"),
+            nu.push(Av {
+                category: InsightCategory::Fx,
+                severity: InsightSeverity::Info,
+                title: String::from("x86_64 platform"),
+                detail: String::from("Full CPUID, PCI, ACPI detection available"),
+                action: String::from("Use native SSE2/AVX paths for max performance"),
             });
         }
         "aarch64" => {
-            abp.push(Cd {
-                gb: InsightCategory::Tv,
-                qj: InsightSeverity::Os,
-                dq: String::from("AArch64 platform"),
-                eu: String::from("NEON SIMD + TrustZone probing available"),
-                hr: String::from("Scan TrustZone boundaries, use NEON for inference"),
+            nu.push(Av {
+                category: InsightCategory::Opportunity,
+                severity: InsightSeverity::Advisory,
+                title: String::from("AArch64 platform"),
+                detail: String::from("NEON SIMD + TrustZone probing available"),
+                action: String::from("Scan TrustZone boundaries, use NEON for inference"),
             });
         }
         "riscv64" => {
-            abp.push(Cd {
-                gb: InsightCategory::Tv,
-                qj: InsightSeverity::Os,
-                dq: String::from("RISC-V platform"),
-                eu: String::from("Native RISC-V — no translation needed"),
-                hr: String::from("Run binaries natively, use V-extension if available"),
+            nu.push(Av {
+                category: InsightCategory::Opportunity,
+                severity: InsightSeverity::Advisory,
+                title: String::from("RISC-V platform"),
+                detail: String::from("Native RISC-V — no translation needed"),
+                action: String::from("Run binaries natively, use V-extension if available"),
             });
         }
         _ => {}
@@ -373,76 +373,76 @@ fn qhv(abp: &mut Vec<Cd>, cc: &T) {
 
 
 
-pub fn nxn(cc: &T) -> Si {
+pub fn ibc(ai: &N) -> Ht {
     
-    let fut = if cc.bqz {
-        SimdTier::Ate
-    } else if cc.drm {
-        SimdTier::Apj
-    } else if cc.bzx {
-        SimdTier::Ow
-    } else if cc.dro {
-        SimdTier::Qu
-    } else if cc.arch == "aarch64" {
-        SimdTier::Tp
+    let simd_tier = if ai.has_gpu {
+        SimdTier::GpuGemm
+    } else if ai.has_avx512 {
+        SimdTier::Avx512
+    } else if ai.has_avx2 {
+        SimdTier::Avx2
+    } else if ai.has_sse2 {
+        SimdTier::Sse2
+    } else if ai.arch == "aarch64" {
+        SimdTier::Neon
     } else {
-        SimdTier::Bsf
+        SimdTier::Scalar
     };
 
     
-    let bll = match fut {
-        SimdTier::Apj => 32,
-        SimdTier::Ow => 16,
-        SimdTier::Qu => 8,
-        SimdTier::Ate => 64,
+    let tile_size = match simd_tier {
+        SimdTier::Avx512 => 32,
+        SimdTier::Avx2 => 16,
+        SimdTier::Sse2 => 8,
+        SimdTier::GpuGemm => 64,
         _ => 4,
     };
 
     
-    let amo = cc.ccf / (1024 * 1024);
-    let osv = if amo >= 4096 { 16 }
-        else if amo >= 2048 { 8 }
-        else if amo >= 1024 { 4 }
-        else if amo >= 512 { 2 }
+    let ram_mb = ai.total_ram_bytes / (1024 * 1024);
+    let ism = if ram_mb >= 4096 { 16 }
+        else if ram_mb >= 2048 { 8 }
+        else if ram_mb >= 1024 { 4 }
+        else if ram_mb >= 512 { 2 }
         else { 1 };
 
     
-    let olt = if amo >= 2048 { 256 }
-        else if amo >= 512 { 128 }
+    let imk = if ram_mb >= 2048 { 256 }
+        else if ram_mb >= 512 { 128 }
         else { 64 };
 
     
-    let pzs = if cc.azj > 2 {
-        cc.azj - 1 
+    let jri = if ai.cpu_cores > 2 {
+        ai.cpu_cores - 1 
     } else {
         1
     };
 
     
-    let jea = if cc.cwl > 0.7 { 1.5 }
-        else if cc.cwl > 0.4 { 1.0 }
+    let lr_factor = if ai.compute_score > 0.7 { 1.5 }
+        else if ai.compute_score > 0.4 { 1.0 }
         else { 0.5 };
 
     
-    let myz = cc.azj >= 4 && amo >= 1024;
+    let hhq = ai.cpu_cores >= 4 && ram_mb >= 1024;
 
-    let ibx = format!(
+    let strategy = format!(
         "{}→{}tile, {}batch, {}workers, lr×{:.1}, gen≤{}tok, bg={}",
-        fut.as_str(), bll, osv, pzs,
-        jea, olt, myz
+        simd_tier.as_str(), tile_size, ism, jri,
+        lr_factor, imk, hhq
     );
 
-    Si {
-        fut,
-        mok: cc.bqz,
-        jhx: osv,
-        bll,
-        mqw: pzs,
-        olu: olt,
-        jea,
-        kbu: myz,
-        ocp: true,
-        ibx,
+    Ht {
+        simd_tier,
+        use_gpu: ai.has_gpu,
+        optimal_batch_size: ism,
+        tile_size,
+        worker_threads: jri,
+        max_gen_tokens: imk,
+        lr_factor,
+        background_learning: hhq,
+        hw_monitoring: true,
+        strategy,
     }
 }
 
@@ -451,32 +451,32 @@ pub fn nxn(cc: &T) -> Si {
 
 
 
-pub fn zit(fhl: u64) {
-    UC_.fetch_add(1, Ordering::Relaxed);
-    AIY_.fetch_add(fhl, Ordering::Relaxed);
+pub fn qte(cis: u64) {
+    VK_.fetch_add(1, Ordering::Relaxed);
+    AKU_.fetch_add(cis, Ordering::Relaxed);
 
     
-    let az = UC_.load(Ordering::Relaxed);
-    if az > 10 {
-        let abl = AIY_.load(Ordering::Relaxed) / az;
-        if fhl > abl * 3 {
-            AKP_.fetch_add(1, Ordering::Relaxed);
+    let count = VK_.load(Ordering::Relaxed);
+    if count > 10 {
+        let ns = AKU_.load(Ordering::Relaxed) / count;
+        if cis > ns * 3 {
+            AMJ_.fetch_add(1, Ordering::Relaxed);
             crate::serial_println!("[JARVIS-HW] Anomaly: inference took {}µs (avg={}µs)",
-                fhl, abl);
+                cis, ns);
         }
     }
 }
 
 
-pub fn mxc() -> u64 {
-    let az = UC_.load(Ordering::Relaxed);
-    if az == 0 { return 0; }
-    AIY_.load(Ordering::Relaxed) / az
+pub fn hgg() -> u64 {
+    let count = VK_.load(Ordering::Relaxed);
+    if count == 0 { return 0; }
+    AKU_.load(Ordering::Relaxed) / count
 }
 
 
-pub fn mvu() -> u64 {
-    AKP_.load(Ordering::Relaxed)
+pub fn hfg() -> u64 {
+    AMJ_.load(Ordering::Relaxed)
 }
 
 
@@ -484,45 +484,45 @@ pub fn mvu() -> u64 {
 
 
 
-pub fn svu(abp: &[Cd]) -> String {
-    let mut e = String::new();
-    e.t("\x01C═══ JARVIS Hardware Analysis ═══\x01W\n\n");
+pub fn lxm(nu: &[Av]) -> String {
+    let mut j = String::new();
+    j.push_str("\x01C═══ JARVIS Hardware Analysis ═══\x01W\n\n");
 
-    for ckz in abp {
-        e.t(&format!("{}{} [{}]\x01W {}\n",
-            ckz.gb.s(),
-            ckz.gb.as_str(),
-            ckz.qj.as_str(),
-            ckz.dq));
-        e.t(&format!("  {}\n", ckz.eu));
-        e.t(&format!("  \x01G→ {}\x01W\n\n", ckz.hr));
+    for insight in nu {
+        j.push_str(&format!("{}{} [{}]\x01W {}\n",
+            insight.category.color(),
+            insight.category.as_str(),
+            insight.severity.as_str(),
+            insight.title));
+        j.push_str(&format!("  {}\n", insight.detail));
+        j.push_str(&format!("  \x01G→ {}\x01W\n\n", insight.action));
     }
 
     
-    let az = UC_.load(Ordering::Relaxed);
-    if az > 0 {
-        e.t(&format!("\x01Y═══ Live Monitor ═══\x01W\n"));
-        e.t(&format!("  Inferences: {}\n", az));
-        e.t(&format!("  Avg latency: {} µs\n", mxc()));
-        e.t(&format!("  Anomalies: {}\n", mvu()));
+    let count = VK_.load(Ordering::Relaxed);
+    if count > 0 {
+        j.push_str(&format!("\x01Y═══ Live Monitor ═══\x01W\n"));
+        j.push_str(&format!("  Inferences: {}\n", count));
+        j.push_str(&format!("  Avg latency: {} µs\n", hgg()));
+        j.push_str(&format!("  Anomalies: {}\n", hfg()));
     }
 
-    e
+    j
 }
 
 
-pub fn nvr(aqg: &Si) -> String {
-    let mut e = String::new();
-    e.t("\x01C═══ JARVIS Execution Plan ═══\x01W\n\n");
-    e.t(&format!("  SIMD:         {}\n", aqg.fut.as_str()));
-    e.t(&format!("  GPU:          {}\n", if aqg.mok { "ENABLED" } else { "disabled" }));
-    e.t(&format!("  Batch size:   {}\n", aqg.jhx));
-    e.t(&format!("  Tile size:    {}×{}\n", aqg.bll, aqg.bll));
-    e.t(&format!("  Workers:      {}\n", aqg.mqw));
-    e.t(&format!("  Max gen:      {} tokens\n", aqg.olu));
-    e.t(&format!("  LR factor:    ×{:.1}\n", aqg.jea));
-    e.t(&format!("  Background:   {}\n", if aqg.kbu { "ON" } else { "OFF" }));
-    e.t(&format!("  Monitoring:   {}\n", if aqg.ocp { "ON" } else { "OFF" }));
-    e.t(&format!("\n  \x01CStrategy:\x01W {}\n", aqg.ibx));
-    e
+pub fn hzp(vr: &Ht) -> String {
+    let mut j = String::new();
+    j.push_str("\x01C═══ JARVIS Execution Plan ═══\x01W\n\n");
+    j.push_str(&format!("  SIMD:         {}\n", vr.simd_tier.as_str()));
+    j.push_str(&format!("  GPU:          {}\n", if vr.use_gpu { "ENABLED" } else { "disabled" }));
+    j.push_str(&format!("  Batch size:   {}\n", vr.optimal_batch_size));
+    j.push_str(&format!("  Tile size:    {}×{}\n", vr.tile_size, vr.tile_size));
+    j.push_str(&format!("  Workers:      {}\n", vr.worker_threads));
+    j.push_str(&format!("  Max gen:      {} tokens\n", vr.max_gen_tokens));
+    j.push_str(&format!("  LR factor:    ×{:.1}\n", vr.lr_factor));
+    j.push_str(&format!("  Background:   {}\n", if vr.background_learning { "ON" } else { "OFF" }));
+    j.push_str(&format!("  Monitoring:   {}\n", if vr.hw_monitoring { "ON" } else { "OFF" }));
+    j.push_str(&format!("\n  \x01CStrategy:\x01W {}\n", vr.strategy));
+    j
 }

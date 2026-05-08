@@ -419,45 +419,149 @@ impl Oscillator {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Low-Pass Filter — warms up harsh digital oscillators
+// Multi-Mode Filter — Chamberlin SVF (LP / HP / BP + resonance)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// Two-pole cascaded low-pass filter (integer DSP, −12 dB/octave)
-/// Removes harsh high-frequency aliasing artifacts and adds analog warmth.
-#[derive(Debug, Clone, Copy)]
-struct LowPassFilter {
-    y1: i32,    // first pole state
-    y2: i32,    // second pole state
-    alpha: u32, // coefficient in Q16 (65536 = full bypass)
+/// Filter selection for the per-voice / per-track multi-mode filter.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum FilterMode {
+    /// No filtering, dry signal passes through.
+    Off,
+    /// 12 dB/oct low-pass.
+    LowPass,
+    /// 12 dB/oct high-pass.
+    HighPass,
+    /// 6 dB/oct band-pass.
+    BandPass,
 }
 
-impl LowPassFilter {
-    /// Create a bypass filter (no filtering)
-    fn bypass() -> Self {
-        Self { y1: 0, y2: 0, alpha: 65536 }
+impl FilterMode {
+    pub fn short_name(&self) -> &'static str {
+        match self {
+            FilterMode::Off => "--",
+            FilterMode::LowPass => "LP",
+            FilterMode::HighPass => "HP",
+            FilterMode::BandPass => "BP",
+        }
     }
 
-    /// Set cutoff frequency using bilinear-transform approximation
-    fn set_cutoff(&mut self, cutoff_hz: u32) {
-        // w = 2π × fc / fs (scaled ×1000 for integer math)
-        let w = (6283u64 * cutoff_hz as u64) / SAMPLE_RATE as u64;
-        // alpha = w / (1000 + w) in Q16
-        self.alpha = ((w << 16) / (1000 + w)).min(65536) as u32;
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "off" | "none" | "bypass" => Some(FilterMode::Off),
+            "lp" | "lpf" | "low" | "lowpass" => Some(FilterMode::LowPass),
+            "hp" | "hpf" | "high" | "highpass" => Some(FilterMode::HighPass),
+            "bp" | "bpf" | "band" | "bandpass" => Some(FilterMode::BandPass),
+            _ => None,
+        }
+    }
+}
+
+/// Chamberlin state-variable filter (integer DSP).
+///
+/// Outputs LP, HP, BP from the same pair of state variables. Stable up to
+/// roughly `SAMPLE_RATE / 6` (≈8 kHz @ 48 kHz). Cutoff is auto-clamped.
+#[derive(Debug, Clone, Copy)]
+pub struct MultiModeFilter {
+    mode: FilterMode,
+    /// Frequency coefficient in Q15 (0..32767)
+    f: i32,
+    /// Damping coefficient in Q15 (32768 = no resonance, lower = more)
+    q: i32,
+    low: i32,
+    band: i32,
+}
+
+impl MultiModeFilter {
+    /// Construct a filter in bypass mode.
+    pub fn off() -> Self {
+        Self { mode: FilterMode::Off, f: 0, q: 32768, low: 0, band: 0 }
     }
 
-    /// Process one sample through 2-pole cascaded LPF
-    fn process(&mut self, input: i32) -> i32 {
-        let a = self.alpha as i64;
-        // First pole
-        self.y1 += (((input - self.y1) as i64 * a) >> 16) as i32;
-        // Second pole (cascaded for steeper rolloff)
-        self.y2 += (((self.y1 - self.y2) as i64 * a) >> 16) as i32;
-        self.y2
+    pub fn set_mode(&mut self, mode: FilterMode) {
+        if self.mode != mode {
+            self.reset();
+        }
+        self.mode = mode;
     }
 
-    fn reset(&mut self) {
-        self.y1 = 0;
-        self.y2 = 0;
+    pub fn mode(&self) -> FilterMode {
+        self.mode
+    }
+
+    /// Set the cutoff frequency in Hz. Clamped to a stable Chamberlin range.
+    pub fn set_cutoff(&mut self, cutoff_hz: u32) {
+        let max = SAMPLE_RATE / 6;
+        let fc = cutoff_hz.clamp(20, max);
+        // f_q15 ≈ 2π·fc/fs in Q15 = (6283·fc·32768) / (fs·1000)
+        let f = ((6283u64 * fc as u64 * 32768) / (SAMPLE_RATE as u64 * 1000)) as i32;
+        self.f = f.min(32767);
+    }
+
+    /// Set resonance amount: 0 = none, 255 = near self-oscillation.
+    pub fn set_resonance(&mut self, q: u8) {
+        // Map q → damping in Q15. q=0 → 32768 (no res), q=255 → ~4208.
+        let damping = 32768i32 - (q as i32 * 112);
+        self.q = damping.max(2048);
+    }
+
+    /// Process a single sample.
+    pub fn process(&mut self, input: i32) -> i32 {
+        if matches!(self.mode, FilterMode::Off) {
+            return input;
+        }
+        let f = self.f as i64;
+        let q = self.q as i64;
+        // low += f * band
+        self.low = self.low.wrapping_add(((f * self.band as i64) >> 15) as i32);
+        // high = input - low - q * band
+        let qband = ((q * self.band as i64) >> 15) as i32;
+        let high = input.wrapping_sub(self.low).wrapping_sub(qband);
+        // band += f * high
+        self.band = self.band.wrapping_add(((f * high as i64) >> 15) as i32);
+        // Soft clamp to keep state from running away on transients
+        self.low = self.low.clamp(-262_144, 262_144);
+        self.band = self.band.clamp(-262_144, 262_144);
+        match self.mode {
+            FilterMode::LowPass => self.low,
+            FilterMode::HighPass => high,
+            FilterMode::BandPass => self.band,
+            FilterMode::Off => input,
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.low = 0;
+        self.band = 0;
+    }
+}
+
+// Backwards-compat alias for existing call sites (treats LPF as the default
+// auto-warmth filter from the original implementation).
+type LowPassFilter = MultiModeFilter;
+impl MultiModeFilter {
+    /// Compatibility constructor matching the legacy `LowPassFilter::bypass()`.
+    pub fn bypass() -> Self {
+        Self::off()
+    }
+}
+
+/// Per-note filter override. `mode == Off` means "use waveform-based auto warmth".
+#[derive(Debug, Clone, Copy)]
+pub struct FilterSettings {
+    pub mode: FilterMode,
+    pub cutoff_hz: u32,
+    pub resonance: u8,
+}
+
+impl FilterSettings {
+    /// Sentinel: keep the legacy waveform-based warmth filter.
+    pub const fn auto() -> Self {
+        Self { mode: FilterMode::Off, cutoff_hz: 0, resonance: 0 }
+    }
+
+    /// Build an explicit filter override.
+    pub const fn explicit(mode: FilterMode, cutoff_hz: u32, resonance: u8) -> Self {
+        Self { mode, cutoff_hz, resonance }
     }
 }
 
@@ -503,6 +607,19 @@ impl Voice {
 
     /// Start playing a note
     pub fn note_on(&mut self, note: u8, velocity: u8, waveform: Waveform, envelope: Envelope) {
+        self.note_on_with_filter(note, velocity, waveform, envelope, FilterSettings::auto());
+    }
+
+    /// Start playing a note with explicit filter override.
+    /// `FilterSettings::auto()` keeps the legacy waveform-based warmth filter.
+    pub fn note_on_with_filter(
+        &mut self,
+        note: u8,
+        velocity: u8,
+        waveform: Waveform,
+        envelope: Envelope,
+        filter: FilterSettings,
+    ) {
         let freq = MIDI_FREQ[note.min(127) as usize];
 
         // Primary oscillator
@@ -520,26 +637,38 @@ impl Voice {
         self.velocity = velocity;
         self.active = true;
 
-        // Setup low-pass filter cutoff based on waveform character
+        // Filter setup: explicit override wins, otherwise legacy waveform warmth.
         self.filter.reset();
-        match waveform {
-            Waveform::Sine => {
-                // Sine is already pure — bypass
-                self.filter = LowPassFilter::bypass();
+        match filter.mode {
+            FilterMode::Off => {
+                // Legacy auto-warmth based on waveform character
+                match waveform {
+                    Waveform::Sine => {
+                        self.filter = MultiModeFilter::off();
+                    }
+                    Waveform::Triangle => {
+                        let cutoff = (freq * 12).max(400).min(16000);
+                        self.filter.set_mode(FilterMode::LowPass);
+                        self.filter.set_resonance(0);
+                        self.filter.set_cutoff(cutoff);
+                    }
+                    Waveform::Square | Waveform::Sawtooth => {
+                        let cutoff = (freq * 8).max(300).min(12000);
+                        self.filter.set_mode(FilterMode::LowPass);
+                        self.filter.set_resonance(0);
+                        self.filter.set_cutoff(cutoff);
+                    }
+                    Waveform::Noise => {
+                        self.filter.set_mode(FilterMode::LowPass);
+                        self.filter.set_resonance(0);
+                        self.filter.set_cutoff(6000);
+                    }
+                }
             }
-            Waveform::Triangle => {
-                // Fairly clean — gentle filtering
-                let cutoff = (freq * 12).max(400).min(16000);
-                self.filter.set_cutoff(cutoff);
-            }
-            Waveform::Square | Waveform::Sawtooth => {
-                // These have strong harmonics — warmer filtering
-                let cutoff = (freq * 8).max(300).min(12000);
-                self.filter.set_cutoff(cutoff);
-            }
-            Waveform::Noise => {
-                // Tame the harsh white noise
-                self.filter.set_cutoff(6000);
+            mode => {
+                self.filter.set_mode(mode);
+                self.filter.set_resonance(filter.resonance);
+                self.filter.set_cutoff(filter.cutoff_hz.max(20));
             }
         }
     }
@@ -608,6 +737,8 @@ pub struct SynthEngine {
     pub envelope: Envelope,
     /// Master volume (0-255)
     pub master_volume: u8,
+    /// Filter override applied to every new voice. `auto()` = legacy warmth.
+    pub filter: FilterSettings,
 }
 
 impl SynthEngine {
@@ -619,6 +750,7 @@ impl SynthEngine {
             waveform: Waveform::Sine,
             envelope: Envelope::default_env(),
             master_volume: 200,
+            filter: FilterSettings::auto(),
         }
     }
 
@@ -632,12 +764,17 @@ impl SynthEngine {
         self.envelope = Envelope::new(attack_ms, decay_ms, sustain_pct, release_ms);
     }
 
+    /// Replace the engine-level filter override.
+    pub fn set_filter(&mut self, filter: FilterSettings) {
+        self.filter = filter;
+    }
+
     /// Play a note (finds a free voice or steals the oldest)
     pub fn note_on(&mut self, note: u8, velocity: u8) {
         // Find a free voice
         let voice_idx = self.find_free_voice();
         let voice = &mut self.voices[voice_idx];
-        voice.note_on(note, velocity, self.waveform, self.envelope);
+        voice.note_on_with_filter(note, velocity, self.waveform, self.envelope, self.filter);
     }
 
     /// Release a note (by MIDI note number)

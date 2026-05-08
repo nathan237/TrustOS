@@ -47,7 +47,7 @@ pub fn lock(&self) -> SpinLockGuard<T> {
         ).is_err() {
             // Exponential backoff with spin hint
             spin_count += 1;
-            for _ in 0..(1 << spin_count.minimum(6)) {
+            for _ in 0..(1 << spin_count.min(6)) {
                 core::hint::spin_loop();
             }
         }
@@ -288,12 +288,12 @@ pub fn inc(&self) -> u32 {
     
     #[inline]
         // Fonction publique — appelable depuis d'autres modules.
-pub fn decrypt(&self) -> u32 {
-        let previous = self.count.fetch_sub(1, Ordering::Release);
-        if previous == 1 {
+pub fn dec(&self) -> u32 {
+        let prev = self.count.fetch_sub(1, Ordering::Release);
+        if prev == 1 {
             core::sync::atomic::fence(Ordering::Acquire);
         }
-        previous - 1
+        prev - 1
     }
     
     #[inline]
@@ -305,7 +305,7 @@ pub fn get(&self) -> u32 {
 
 /// Sequence lock for read-heavy workloads
 pub struct SequenceLock<T> {
-    sequence: AtomicU64,
+    seq: AtomicU64,
     data: UnsafeCell<T>,
 }
 
@@ -320,7 +320,7 @@ impl<T: Send + Sync> Sync for SequenceLock<T> {}
 impl<T: Copy> SequenceLock<T> {
     pub const fn new(data: T) -> Self {
         Self {
-            sequence: AtomicU64::new(0),
+            seq: AtomicU64::new(0),
             data: UnsafeCell::new(data),
         }
     }
@@ -329,7 +329,7 @@ impl<T: Copy> SequenceLock<T> {
     pub fn read(&self) -> T {
                 // Boucle infinie — tourne jusqu'à un `break` explicite.
 loop {
-            let seq1 = self.sequence.load(Ordering::Acquire);
+            let seq1 = self.seq.load(Ordering::Acquire);
             if seq1 & 1 != 0 {
                 // Writer active, spin
                 core::hint::spin_loop();
@@ -339,7 +339,7 @@ loop {
             let value = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe { *self.data.get() };
             
-            let seq2 = self.sequence.load(Ordering::Acquire);
+            let seq2 = self.seq.load(Ordering::Acquire);
             if seq1 == seq2 {
                 return value;
             }
@@ -351,12 +351,12 @@ unsafe { *self.data.get() };
     /// Write value
     pub fn write(&self, value: T) {
         // Increment to odd (write in progress)
-        self.sequence.fetch_add(1, Ordering::Acquire);
+        self.seq.fetch_add(1, Ordering::Acquire);
         
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe { *self.data.get() = value };
         
         // Increment to even (write complete)
-        self.sequence.fetch_add(1, Ordering::Release);
+        self.seq.fetch_add(1, Ordering::Release);
     }
 }

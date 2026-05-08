@@ -94,7 +94,7 @@ pub struct CommandResult {
     /// Standard error
     pub stderr: String,
     /// Execution time in milliseconds
-    pub duration_mouse: u64,
+    pub duration_ms: u64,
 }
 
 // Bloc d'implémentation — définit les méthodes du type ci-dessus.
@@ -105,7 +105,7 @@ pub fn success(stdout: String) -> Self {
             exit_code: 0,
             stdout,
             stderr: String::new(),
-            duration_mouse: 0,
+            duration_ms: 0,
         }
     }
 
@@ -115,7 +115,7 @@ pub fn error(code: i32, stderr: String) -> Self {
             exit_code: code,
             stdout: String::new(),
             stderr,
-            duration_mouse: 0,
+            duration_ms: 0,
         }
     }
 }
@@ -132,13 +132,13 @@ pub struct LinuxSetupHeader {
     pub syssize: u32,
     pub ram_size: u16,
     pub vid_mode: u16,
-    pub root_device: u16,
+    pub root_dev: u16,
     pub boot_flag: u16,
     pub jump: u16,
     pub header: u32,           // "HdrS" magic
     pub version: u16,
     pub realmode_swtch: u32,
-    pub start_system_seg: u16,
+    pub start_sys_seg: u16,
     pub kernel_version: u16,
     pub type_of_loader: u8,
     pub loadflags: u8,
@@ -147,14 +147,14 @@ pub struct LinuxSetupHeader {
     pub ramdisk_image: u32,
     pub ramdisk_size: u32,
     pub bootsect_kludge: u32,
-    pub heap_end_pointer: u16,
+    pub heap_end_ptr: u16,
     pub ext_loader_ver: u8,
     pub ext_loader_type: u8,
-    pub command_line_pointer: u32,
-    pub initrd_address_maximum: u32,
+    pub cmd_line_ptr: u32,
+    pub initrd_addr_max: u32,
     pub kernel_alignment: u32,
     pub relocatable_kernel: u8,
-    pub minimum_alignment: u8,
+    pub min_alignment: u8,
     pub xloadflags: u16,
     pub cmdline_size: u32,
     pub hardware_subarch: u32,
@@ -163,7 +163,7 @@ pub struct LinuxSetupHeader {
     pub payload_length: u32,
     pub setup_data: u64,
     pub pref_address: u64,
-    pub initialize_size: u32,
+    pub init_size: u32,
     pub handover_offset: u32,
 }
 
@@ -173,35 +173,35 @@ pub struct LinuxSetupHeader {
 #[derive(Clone)]
 // Structure publique — visible à l'extérieur de ce module.
 pub struct BootParams {
-    pub screen_information: [u8; 64],
-    pub apm_bios_information: [u8; 20],
+    pub screen_info: [u8; 64],
+    pub apm_bios_info: [u8; 20],
     pub _pad1: [u8; 4],
-    pub tboot_address: u64,
-    pub ist_information: [u8; 16],
+    pub tboot_addr: u64,
+    pub ist_info: [u8; 16],
     pub _pad2: [u8; 16],
-    pub hd0_information: [u8; 16],
-    pub hd1_information: [u8; 16],
-    pub system_descriptor_table: [u8; 16],
+    pub hd0_info: [u8; 16],
+    pub hd1_info: [u8; 16],
+    pub sys_desc_table: [u8; 16],
     pub olpc_ofw_header: [u8; 16],
     pub ext_ramdisk_image: u32,
     pub ext_ramdisk_size: u32,
-    pub ext_command_line_pointer: u32,
+    pub ext_cmd_line_ptr: u32,
     pub _pad3: [u8; 116],
-    pub edid_information: [u8; 128],
-    pub efi_information: [u8; 32],
-    pub alt_memory_k: u32,
+    pub edid_info: [u8; 128],
+    pub efi_info: [u8; 32],
+    pub alt_mem_k: u32,
     pub scratch: u32,
     pub e820_entries: u8,
     pub eddbuf_entries: u8,
-    pub edd_mbr_signal_buffer_entries: u8,
+    pub edd_mbr_sig_buf_entries: u8,
     pub kbd_status: u8,
     pub secure_boot: u8,
     pub _pad4: [u8; 2],
     pub sentinel: u8,
     pub _pad5: [u8; 1],
-    pub header: LinuxSetupHeader,
+    pub hdr: LinuxSetupHeader,
     pub _pad6: [u8; 36],
-    pub edd_mbr_signal_buffer: [u32; 16],
+    pub edd_mbr_sig_buffer: [u32; 16],
     pub e820_table: [E820Entry; 128],
     pub _pad7: [u8; 48],
     pub eddbuf: [u8; 492],
@@ -214,7 +214,7 @@ pub struct BootParams {
 #[derive(Debug, Clone, Copy, Default)]
 // Structure publique — visible à l'extérieur de ce module.
 pub struct E820Entry {
-    pub address: u64,
+    pub addr: u64,
     pub size: u64,
     pub entry_type: u32,
     pub _pad: u32,
@@ -240,7 +240,7 @@ const UNUSABLE: u32 = 5;
 pub struct PackageInformation {
     pub name: &'static str,
     pub version: &'static str,
-    pub size_keyboard: u32,
+    pub size_kb: u32,
     pub description: &'static str,
     pub deps: &'static [&'static str],
 }
@@ -248,140 +248,140 @@ pub struct PackageInformation {
 /// Available packages in the simulated repository
 const REPO_PACKAGES: &[PackageInformation] = &[
     // Editors
-    PackageInformation { name: "vim", version: "9.0.2127-r0", size_keyboard: 1824, description: "Improved vi-style text editor", deps: &["ncurses-libs", "vim-common"] },
-    PackageInformation { name: "vim-common", version: "9.0.2127-r0", size_keyboard: 6240, description: "Vim common files", deps: &[] },
-    PackageInformation { name: "nano", version: "7.2-r1", size_keyboard: 612, description: "Nano text editor", deps: &["ncurses-libs"] },
-    PackageInformation { name: "emacs", version: "29.1-r0", size_keyboard: 48000, description: "GNU Emacs editor", deps: &[] },
-    PackageInformation { name: "micro", version: "2.0.13-r0", size_keyboard: 11264, description: "Modern terminal text editor", deps: &[] },
-    PackageInformation { name: "helix", version: "23.10-r0", size_keyboard: 24576, description: "Post-modern modal text editor", deps: &[] },
+    PackageInformation { name: "vim", version: "9.0.2127-r0", size_kb: 1824, description: "Improved vi-style text editor", deps: &["ncurses-libs", "vim-common"] },
+    PackageInformation { name: "vim-common", version: "9.0.2127-r0", size_kb: 6240, description: "Vim common files", deps: &[] },
+    PackageInformation { name: "nano", version: "7.2-r1", size_kb: 612, description: "Nano text editor", deps: &["ncurses-libs"] },
+    PackageInformation { name: "emacs", version: "29.1-r0", size_kb: 48000, description: "GNU Emacs editor", deps: &[] },
+    PackageInformation { name: "micro", version: "2.0.13-r0", size_kb: 11264, description: "Modern terminal text editor", deps: &[] },
+    PackageInformation { name: "helix", version: "23.10-r0", size_kb: 24576, description: "Post-modern modal text editor", deps: &[] },
     // Shells
-    PackageInformation { name: "bash", version: "5.2.21-r0", size_keyboard: 1320, description: "The GNU Bourne Again shell", deps: &["ncurses-libs"] },
-    PackageInformation { name: "zsh", version: "5.9.0-r0", size_keyboard: 3200, description: "Z shell", deps: &["ncurses-libs"] },
-    PackageInformation { name: "fish", version: "3.7.0-r0", size_keyboard: 6400, description: "Friendly interactive shell", deps: &["ncurses-libs"] },
-    PackageInformation { name: "dash", version: "0.5.12-r0", size_keyboard: 96, description: "POSIX compliant shell", deps: &[] },
+    PackageInformation { name: "bash", version: "5.2.21-r0", size_kb: 1320, description: "The GNU Bourne Again shell", deps: &["ncurses-libs"] },
+    PackageInformation { name: "zsh", version: "5.9.0-r0", size_kb: 3200, description: "Z shell", deps: &["ncurses-libs"] },
+    PackageInformation { name: "fish", version: "3.7.0-r0", size_kb: 6400, description: "Friendly interactive shell", deps: &["ncurses-libs"] },
+    PackageInformation { name: "dash", version: "0.5.12-r0", size_kb: 96, description: "POSIX compliant shell", deps: &[] },
     // Libraries
-    PackageInformation { name: "ncurses-libs", version: "6.4_p20231125-r0", size_keyboard: 308, description: "Ncurses libraries", deps: &[] },
-    PackageInformation { name: "openssl", version: "3.1.4-r5", size_keyboard: 7168, description: "Toolkit for SSL/TLS", deps: &["ca-certificates"] },
-    PackageInformation { name: "ca-certificates", version: "20240226-r0", size_keyboard: 680, description: "Common CA certificates PEM files", deps: &[] },
-    PackageInformation { name: "libcurl", version: "8.5.0-r0", size_keyboard: 512, description: "The multiprotocol file transfer library", deps: &["openssl"] },
-    PackageInformation { name: "libffi", version: "3.4.4-r3", size_keyboard: 52, description: "Portable foreign function interface library", deps: &[] },
+    PackageInformation { name: "ncurses-libs", version: "6.4_p20231125-r0", size_kb: 308, description: "Ncurses libraries", deps: &[] },
+    PackageInformation { name: "openssl", version: "3.1.4-r5", size_kb: 7168, description: "Toolkit for SSL/TLS", deps: &["ca-certificates"] },
+    PackageInformation { name: "ca-certificates", version: "20240226-r0", size_kb: 680, description: "Common CA certificates PEM files", deps: &[] },
+    PackageInformation { name: "libcurl", version: "8.5.0-r0", size_kb: 512, description: "The multiprotocol file transfer library", deps: &["openssl"] },
+    PackageInformation { name: "libffi", version: "3.4.4-r3", size_kb: 52, description: "Portable foreign function interface library", deps: &[] },
     // Network tools
-    PackageInformation { name: "curl", version: "8.5.0-r0", size_keyboard: 356, description: "URL retrieval utility and library", deps: &["ca-certificates", "libcurl"] },
-    PackageInformation { name: "wget", version: "1.21.4-r0", size_keyboard: 480, description: "Network utility to retrieve files from the Web", deps: &["openssl"] },
-    PackageInformation { name: "git", version: "2.43.0-r0", size_keyboard: 14336, description: "Distributed version control system", deps: &["openssl", "curl", "perl"] },
-    PackageInformation { name: "openssh", version: "9.6_p1-r0", size_keyboard: 3072, description: "Port of OpenBSD's free SSH release", deps: &["openssl"] },
-    PackageInformation { name: "nmap", version: "7.94-r0", size_keyboard: 5120, description: "Network exploration and security scanner", deps: &[] },
-    PackageInformation { name: "tcpdump", version: "4.99.4-r1", size_keyboard: 640, description: "Network packet analyzer", deps: &[] },
-    PackageInformation { name: "socat", version: "1.8.0.0-r0", size_keyboard: 384, description: "Multipurpose relay for binary protocols", deps: &[] },
-    PackageInformation { name: "iperf3", version: "3.16-r0", size_keyboard: 192, description: "Network bandwidth measurement tool", deps: &[] },
-    PackageInformation { name: "bind-tools", version: "9.18.24-r0", size_keyboard: 2048, description: "ISC BIND DNS tools (dig)", deps: &[] },
-    PackageInformation { name: "mtr", version: "0.95-r2", size_keyboard: 192, description: "Network diagnostic tool", deps: &[] },
-    PackageInformation { name: "wireguard-tools", version: "1.0.20210914-r3", size_keyboard: 64, description: "WireGuard VPN tools", deps: &[] },
-    PackageInformation { name: "openvpn", version: "2.6.8-r0", size_keyboard: 1024, description: "VPN solution", deps: &["openssl"] },
-    PackageInformation { name: "lynx", version: "2.8.9-r5", size_keyboard: 2048, description: "Text-mode web browser", deps: &[] },
+    PackageInformation { name: "curl", version: "8.5.0-r0", size_kb: 356, description: "URL retrieval utility and library", deps: &["ca-certificates", "libcurl"] },
+    PackageInformation { name: "wget", version: "1.21.4-r0", size_kb: 480, description: "Network utility to retrieve files from the Web", deps: &["openssl"] },
+    PackageInformation { name: "git", version: "2.43.0-r0", size_kb: 14336, description: "Distributed version control system", deps: &["openssl", "curl", "perl"] },
+    PackageInformation { name: "openssh", version: "9.6_p1-r0", size_kb: 3072, description: "Port of OpenBSD's free SSH release", deps: &["openssl"] },
+    PackageInformation { name: "nmap", version: "7.94-r0", size_kb: 5120, description: "Network exploration and security scanner", deps: &[] },
+    PackageInformation { name: "tcpdump", version: "4.99.4-r1", size_kb: 640, description: "Network packet analyzer", deps: &[] },
+    PackageInformation { name: "socat", version: "1.8.0.0-r0", size_kb: 384, description: "Multipurpose relay for binary protocols", deps: &[] },
+    PackageInformation { name: "iperf3", version: "3.16-r0", size_kb: 192, description: "Network bandwidth measurement tool", deps: &[] },
+    PackageInformation { name: "bind-tools", version: "9.18.24-r0", size_kb: 2048, description: "ISC BIND DNS tools (dig)", deps: &[] },
+    PackageInformation { name: "mtr", version: "0.95-r2", size_kb: 192, description: "Network diagnostic tool", deps: &[] },
+    PackageInformation { name: "wireguard-tools", version: "1.0.20210914-r3", size_kb: 64, description: "WireGuard VPN tools", deps: &[] },
+    PackageInformation { name: "openvpn", version: "2.6.8-r0", size_kb: 1024, description: "VPN solution", deps: &["openssl"] },
+    PackageInformation { name: "lynx", version: "2.8.9-r5", size_kb: 2048, description: "Text-mode web browser", deps: &[] },
     // Languages
-    PackageInformation { name: "python3", version: "3.11.8-r0", size_keyboard: 25600, description: "High-level scripting language", deps: &["libffi", "openssl"] },
-    PackageInformation { name: "perl", version: "5.38.2-r0", size_keyboard: 16384, description: "Larry Wall's Practical Extraction and Report Language", deps: &[] },
-    PackageInformation { name: "gcc", version: "13.2.1_git20231014-r0", size_keyboard: 102400, description: "The GNU Compiler Collection", deps: &["binutils", "musl-dev"] },
-    PackageInformation { name: "rust", version: "1.75.0-r0", size_keyboard: 204800, description: "The Rust programming language", deps: &["gcc", "musl-dev"] },
-    PackageInformation { name: "nodejs", version: "20.11.1-r0", size_keyboard: 30720, description: "JavaScript runtime built on V8", deps: &["openssl", "libffi"] },
-    PackageInformation { name: "go", version: "1.21.6-r0", size_keyboard: 143360, description: "Go programming language", deps: &[] },
-    PackageInformation { name: "ruby", version: "3.2.3-r0", size_keyboard: 12288, description: "Ruby programming language", deps: &[] },
-    PackageInformation { name: "php83", version: "8.3.2-r0", size_keyboard: 15360, description: "PHP programming language", deps: &[] },
-    PackageInformation { name: "lua5.4", version: "5.4.6-r2", size_keyboard: 256, description: "Lua programming language", deps: &[] },
-    PackageInformation { name: "zig", version: "0.11.0-r0", size_keyboard: 51200, description: "Zig programming language", deps: &[] },
-    PackageInformation { name: "nim", version: "2.0.2-r0", size_keyboard: 10240, description: "Nim programming language", deps: &[] },
-    PackageInformation { name: "openjdk17-jre", version: "17.0.10-r0", size_keyboard: 204800, description: "OpenJDK 17 Runtime", deps: &[] },
-    PackageInformation { name: "elixir", version: "1.16.1-r0", size_keyboard: 7680, description: "Elixir programming language", deps: &[] },
-    PackageInformation { name: "clang", version: "17.0.5-r0", size_keyboard: 81920, description: "C language family frontend for LLVM", deps: &[] },
-    PackageInformation { name: "cmake", version: "3.27.8-r0", size_keyboard: 9728, description: "Cross-platform build system", deps: &[] },
+    PackageInformation { name: "python3", version: "3.11.8-r0", size_kb: 25600, description: "High-level scripting language", deps: &["libffi", "openssl"] },
+    PackageInformation { name: "perl", version: "5.38.2-r0", size_kb: 16384, description: "Larry Wall's Practical Extraction and Report Language", deps: &[] },
+    PackageInformation { name: "gcc", version: "13.2.1_git20231014-r0", size_kb: 102400, description: "The GNU Compiler Collection", deps: &["binutils", "musl-dev"] },
+    PackageInformation { name: "rust", version: "1.75.0-r0", size_kb: 204800, description: "The Rust programming language", deps: &["gcc", "musl-dev"] },
+    PackageInformation { name: "nodejs", version: "20.11.1-r0", size_kb: 30720, description: "JavaScript runtime built on V8", deps: &["openssl", "libffi"] },
+    PackageInformation { name: "go", version: "1.21.6-r0", size_kb: 143360, description: "Go programming language", deps: &[] },
+    PackageInformation { name: "ruby", version: "3.2.3-r0", size_kb: 12288, description: "Ruby programming language", deps: &[] },
+    PackageInformation { name: "php83", version: "8.3.2-r0", size_kb: 15360, description: "PHP programming language", deps: &[] },
+    PackageInformation { name: "lua5.4", version: "5.4.6-r2", size_kb: 256, description: "Lua programming language", deps: &[] },
+    PackageInformation { name: "zig", version: "0.11.0-r0", size_kb: 51200, description: "Zig programming language", deps: &[] },
+    PackageInformation { name: "nim", version: "2.0.2-r0", size_kb: 10240, description: "Nim programming language", deps: &[] },
+    PackageInformation { name: "openjdk17-jre", version: "17.0.10-r0", size_kb: 204800, description: "OpenJDK 17 Runtime", deps: &[] },
+    PackageInformation { name: "elixir", version: "1.16.1-r0", size_kb: 7680, description: "Elixir programming language", deps: &[] },
+    PackageInformation { name: "clang", version: "17.0.5-r0", size_kb: 81920, description: "C language family frontend for LLVM", deps: &[] },
+    PackageInformation { name: "cmake", version: "3.27.8-r0", size_kb: 9728, description: "Cross-platform build system", deps: &[] },
     // Build tools
-    PackageInformation { name: "binutils", version: "2.41-r0", size_keyboard: 8192, description: "Tools necessary to build programs", deps: &[] },
-    PackageInformation { name: "musl-dev", version: "1.2.4_git20230717-r4", size_keyboard: 1024, description: "musl C library development files", deps: &[] },
-    PackageInformation { name: "make", version: "4.4.1-r2", size_keyboard: 272, description: "GNU make utility", deps: &[] },
-    PackageInformation { name: "nasm", version: "2.16.01-r0", size_keyboard: 640, description: "Netwide Assembler", deps: &[] },
+    PackageInformation { name: "binutils", version: "2.41-r0", size_kb: 8192, description: "Tools necessary to build programs", deps: &[] },
+    PackageInformation { name: "musl-dev", version: "1.2.4_git20230717-r4", size_kb: 1024, description: "musl C library development files", deps: &[] },
+    PackageInformation { name: "make", version: "4.4.1-r2", size_kb: 272, description: "GNU make utility", deps: &[] },
+    PackageInformation { name: "nasm", version: "2.16.01-r0", size_kb: 640, description: "Netwide Assembler", deps: &[] },
     // Debug tools
-    PackageInformation { name: "gdb", version: "14.1-r0", size_keyboard: 12800, description: "GNU debugger", deps: &[] },
-    PackageInformation { name: "valgrind", version: "3.22.0-r0", size_keyboard: 22528, description: "Memory debugging tool", deps: &[] },
-    PackageInformation { name: "strace", version: "6.7-r0", size_keyboard: 580, description: "System call tracer", deps: &[] },
-    PackageInformation { name: "ltrace", version: "0.7.3-r8", size_keyboard: 384, description: "Library call tracer", deps: &[] },
-    PackageInformation { name: "lsof", version: "4.99.3-r0", size_keyboard: 320, description: "List open files", deps: &[] },
+    PackageInformation { name: "gdb", version: "14.1-r0", size_kb: 12800, description: "GNU debugger", deps: &[] },
+    PackageInformation { name: "valgrind", version: "3.22.0-r0", size_kb: 22528, description: "Memory debugging tool", deps: &[] },
+    PackageInformation { name: "strace", version: "6.7-r0", size_kb: 580, description: "System call tracer", deps: &[] },
+    PackageInformation { name: "ltrace", version: "0.7.3-r8", size_kb: 384, description: "Library call tracer", deps: &[] },
+    PackageInformation { name: "lsof", version: "4.99.3-r0", size_kb: 320, description: "List open files", deps: &[] },
     // Servers
-    PackageInformation { name: "nginx", version: "1.24.0-r15", size_keyboard: 2048, description: "HTTP and reverse proxy server", deps: &["openssl"] },
-    PackageInformation { name: "apache2", version: "2.4.58-r0", size_keyboard: 5120, description: "Apache HTTP Server", deps: &[] },
-    PackageInformation { name: "haproxy", version: "2.8.5-r0", size_keyboard: 3072, description: "TCP/HTTP Load Balancer", deps: &[] },
-    PackageInformation { name: "dnsmasq", version: "2.90-r0", size_keyboard: 384, description: "Lightweight DNS/DHCP server", deps: &[] },
-    PackageInformation { name: "squid", version: "6.6-r0", size_keyboard: 7680, description: "HTTP caching proxy", deps: &[] },
+    PackageInformation { name: "nginx", version: "1.24.0-r15", size_kb: 2048, description: "HTTP and reverse proxy server", deps: &["openssl"] },
+    PackageInformation { name: "apache2", version: "2.4.58-r0", size_kb: 5120, description: "Apache HTTP Server", deps: &[] },
+    PackageInformation { name: "haproxy", version: "2.8.5-r0", size_kb: 3072, description: "TCP/HTTP Load Balancer", deps: &[] },
+    PackageInformation { name: "dnsmasq", version: "2.90-r0", size_kb: 384, description: "Lightweight DNS/DHCP server", deps: &[] },
+    PackageInformation { name: "squid", version: "6.6-r0", size_kb: 7680, description: "HTTP caching proxy", deps: &[] },
     // Databases
-    PackageInformation { name: "redis", version: "7.2.4-r0", size_keyboard: 4096, description: "In-memory data structure store", deps: &[] },
-    PackageInformation { name: "postgresql16", version: "16.2-r0", size_keyboard: 15360, description: "PostgreSQL database server", deps: &[] },
-    PackageInformation { name: "mariadb", version: "10.11.6-r0", size_keyboard: 25600, description: "MariaDB database server", deps: &[] },
-    PackageInformation { name: "sqlite", version: "3.44.2-r0", size_keyboard: 1024, description: "SQLite database engine", deps: &[] },
+    PackageInformation { name: "redis", version: "7.2.4-r0", size_kb: 4096, description: "In-memory data structure store", deps: &[] },
+    PackageInformation { name: "postgresql16", version: "16.2-r0", size_kb: 15360, description: "PostgreSQL database server", deps: &[] },
+    PackageInformation { name: "mariadb", version: "10.11.6-r0", size_kb: 25600, description: "MariaDB database server", deps: &[] },
+    PackageInformation { name: "sqlite", version: "3.44.2-r0", size_kb: 1024, description: "SQLite database engine", deps: &[] },
     // Containers & cloud
-    PackageInformation { name: "docker-cli", version: "24.0.7-r0", size_keyboard: 50000, description: "Docker container runtime", deps: &[] },
-    PackageInformation { name: "podman", version: "4.8.3-r0", size_keyboard: 40960, description: "Daemonless container engine", deps: &[] },
-    PackageInformation { name: "helm", version: "3.14.0-r0", size_keyboard: 15360, description: "Kubernetes package manager", deps: &[] },
-    PackageInformation { name: "kubectl", version: "1.29.1-r0", size_keyboard: 20480, description: "Kubernetes CLI", deps: &[] },
-    PackageInformation { name: "terraform", version: "1.7.2-r0", size_keyboard: 81920, description: "Infrastructure as code", deps: &[] },
-    PackageInformation { name: "ansible", version: "9.2.0-r0", size_keyboard: 25600, description: "IT automation tool", deps: &[] },
+    PackageInformation { name: "docker-cli", version: "24.0.7-r0", size_kb: 50000, description: "Docker container runtime", deps: &[] },
+    PackageInformation { name: "podman", version: "4.8.3-r0", size_kb: 40960, description: "Daemonless container engine", deps: &[] },
+    PackageInformation { name: "helm", version: "3.14.0-r0", size_kb: 15360, description: "Kubernetes package manager", deps: &[] },
+    PackageInformation { name: "kubectl", version: "1.29.1-r0", size_kb: 20480, description: "Kubernetes CLI", deps: &[] },
+    PackageInformation { name: "terraform", version: "1.7.2-r0", size_kb: 81920, description: "Infrastructure as code", deps: &[] },
+    PackageInformation { name: "ansible", version: "9.2.0-r0", size_kb: 25600, description: "IT automation tool", deps: &[] },
     // System utilities
-    PackageInformation { name: "coreutils", version: "9.4-r1", size_keyboard: 6400, description: "GNU core utilities", deps: &[] },
-    PackageInformation { name: "findutils", version: "4.9.0-r5", size_keyboard: 640, description: "GNU find utilities", deps: &[] },
-    PackageInformation { name: "grep", version: "3.11-r0", size_keyboard: 320, description: "GNU grep", deps: &[] },
-    PackageInformation { name: "sed", version: "4.9-r2", size_keyboard: 224, description: "GNU stream editor", deps: &[] },
-    PackageInformation { name: "gawk", version: "5.3.0-r0", size_keyboard: 1024, description: "GNU awk", deps: &[] },
-    PackageInformation { name: "diffutils", version: "3.10-r0", size_keyboard: 384, description: "GNU diff utilities", deps: &[] },
-    PackageInformation { name: "patch", version: "2.7.6-r10", size_keyboard: 128, description: "GNU patch", deps: &[] },
-    PackageInformation { name: "less", version: "643-r0", size_keyboard: 192, description: "Pager program", deps: &[] },
-    PackageInformation { name: "file", version: "5.45-r1", size_keyboard: 640, description: "File type identification", deps: &[] },
-    PackageInformation { name: "iproute2", version: "6.7.0-r0", size_keyboard: 1024, description: "IP routing utilities", deps: &[] },
-    PackageInformation { name: "util-linux", version: "2.39.3-r0", size_keyboard: 4096, description: "System utilities", deps: &[] },
-    PackageInformation { name: "procps", version: "4.0.4-r0", size_keyboard: 480, description: "Process monitoring utilities", deps: &[] },
-    PackageInformation { name: "shadow", version: "4.14.3-r0", size_keyboard: 480, description: "User/group management", deps: &[] },
-    PackageInformation { name: "e2fsprogs", version: "1.47.0-r5", size_keyboard: 2048, description: "Ext2/3/4 filesystem utilities", deps: &[] },
+    PackageInformation { name: "coreutils", version: "9.4-r1", size_kb: 6400, description: "GNU core utilities", deps: &[] },
+    PackageInformation { name: "findutils", version: "4.9.0-r5", size_kb: 640, description: "GNU find utilities", deps: &[] },
+    PackageInformation { name: "grep", version: "3.11-r0", size_kb: 320, description: "GNU grep", deps: &[] },
+    PackageInformation { name: "sed", version: "4.9-r2", size_kb: 224, description: "GNU stream editor", deps: &[] },
+    PackageInformation { name: "gawk", version: "5.3.0-r0", size_kb: 1024, description: "GNU awk", deps: &[] },
+    PackageInformation { name: "diffutils", version: "3.10-r0", size_kb: 384, description: "GNU diff utilities", deps: &[] },
+    PackageInformation { name: "patch", version: "2.7.6-r10", size_kb: 128, description: "GNU patch", deps: &[] },
+    PackageInformation { name: "less", version: "643-r0", size_kb: 192, description: "Pager program", deps: &[] },
+    PackageInformation { name: "file", version: "5.45-r1", size_kb: 640, description: "File type identification", deps: &[] },
+    PackageInformation { name: "iproute2", version: "6.7.0-r0", size_kb: 1024, description: "IP routing utilities", deps: &[] },
+    PackageInformation { name: "util-linux", version: "2.39.3-r0", size_kb: 4096, description: "System utilities", deps: &[] },
+    PackageInformation { name: "procps", version: "4.0.4-r0", size_kb: 480, description: "Process monitoring utilities", deps: &[] },
+    PackageInformation { name: "shadow", version: "4.14.3-r0", size_kb: 480, description: "User/group management", deps: &[] },
+    PackageInformation { name: "e2fsprogs", version: "1.47.0-r5", size_kb: 2048, description: "Ext2/3/4 filesystem utilities", deps: &[] },
     // Compression
-    PackageInformation { name: "gzip", version: "1.13-r0", size_keyboard: 96, description: "GNU zip compression", deps: &[] },
-    PackageInformation { name: "bzip2", version: "1.0.8-r6", size_keyboard: 128, description: "Block-sorting compressor", deps: &[] },
-    PackageInformation { name: "xz", version: "5.4.5-r0", size_keyboard: 256, description: "XZ Utils compression", deps: &[] },
-    PackageInformation { name: "zstd", version: "1.5.5-r8", size_keyboard: 384, description: "Zstandard compression", deps: &[] },
-    PackageInformation { name: "zip", version: "3.0-r12", size_keyboard: 192, description: "Create ZIP archives", deps: &[] },
-    PackageInformation { name: "unzip", version: "6.0-r14", size_keyboard: 192, description: "Extract ZIP archives", deps: &[] },
-    PackageInformation { name: "p7zip", version: "17.05-r0", size_keyboard: 2048, description: "7-Zip file archiver", deps: &[] },
+    PackageInformation { name: "gzip", version: "1.13-r0", size_kb: 96, description: "GNU zip compression", deps: &[] },
+    PackageInformation { name: "bzip2", version: "1.0.8-r6", size_kb: 128, description: "Block-sorting compressor", deps: &[] },
+    PackageInformation { name: "xz", version: "5.4.5-r0", size_kb: 256, description: "XZ Utils compression", deps: &[] },
+    PackageInformation { name: "zstd", version: "1.5.5-r8", size_kb: 384, description: "Zstandard compression", deps: &[] },
+    PackageInformation { name: "zip", version: "3.0-r12", size_kb: 192, description: "Create ZIP archives", deps: &[] },
+    PackageInformation { name: "unzip", version: "6.0-r14", size_kb: 192, description: "Extract ZIP archives", deps: &[] },
+    PackageInformation { name: "p7zip", version: "17.05-r0", size_kb: 2048, description: "7-Zip file archiver", deps: &[] },
     // Media
-    PackageInformation { name: "ffmpeg", version: "6.1.1-r0", size_keyboard: 20480, description: "Complete multimedia framework", deps: &[] },
-    PackageInformation { name: "imagemagick", version: "7.1.1-r0", size_keyboard: 15360, description: "Image manipulation tools", deps: &[] },
-    PackageInformation { name: "mpv", version: "0.37.0-r0", size_keyboard: 5120, description: "Media player", deps: &[] },
+    PackageInformation { name: "ffmpeg", version: "6.1.1-r0", size_kb: 20480, description: "Complete multimedia framework", deps: &[] },
+    PackageInformation { name: "imagemagick", version: "7.1.1-r0", size_kb: 15360, description: "Image manipulation tools", deps: &[] },
+    PackageInformation { name: "mpv", version: "0.37.0-r0", size_kb: 5120, description: "Media player", deps: &[] },
     // Modern CLI tools
-    PackageInformation { name: "ripgrep", version: "14.1.0-r0", size_keyboard: 6144, description: "Fast recursive grep alternative (rg)", deps: &[] },
-    PackageInformation { name: "fd", version: "9.0.0-r0", size_keyboard: 3072, description: "Simple fast alternative to find", deps: &[] },
-    PackageInformation { name: "bat", version: "0.24.0-r0", size_keyboard: 5120, description: "Cat clone with syntax highlighting", deps: &[] },
-    PackageInformation { name: "exa", version: "0.10.1-r3", size_keyboard: 1536, description: "Modern replacement for ls", deps: &[] },
-    PackageInformation { name: "fzf", version: "0.44.1-r0", size_keyboard: 3072, description: "Fuzzy finder", deps: &[] },
-    PackageInformation { name: "dust", version: "0.8.6-r0", size_keyboard: 2048, description: "Intuitive version of du", deps: &[] },
-    PackageInformation { name: "hyperfine", version: "1.18.0-r0", size_keyboard: 2048, description: "Command-line benchmarking tool", deps: &[] },
-    PackageInformation { name: "tokei", version: "12.1.2-r4", size_keyboard: 3072, description: "Code statistics tool", deps: &[] },
+    PackageInformation { name: "ripgrep", version: "14.1.0-r0", size_kb: 6144, description: "Fast recursive grep alternative (rg)", deps: &[] },
+    PackageInformation { name: "fd", version: "9.0.0-r0", size_kb: 3072, description: "Simple fast alternative to find", deps: &[] },
+    PackageInformation { name: "bat", version: "0.24.0-r0", size_kb: 5120, description: "Cat clone with syntax highlighting", deps: &[] },
+    PackageInformation { name: "exa", version: "0.10.1-r3", size_kb: 1536, description: "Modern replacement for ls", deps: &[] },
+    PackageInformation { name: "fzf", version: "0.44.1-r0", size_kb: 3072, description: "Fuzzy finder", deps: &[] },
+    PackageInformation { name: "dust", version: "0.8.6-r0", size_kb: 2048, description: "Intuitive version of du", deps: &[] },
+    PackageInformation { name: "hyperfine", version: "1.18.0-r0", size_kb: 2048, description: "Command-line benchmarking tool", deps: &[] },
+    PackageInformation { name: "tokei", version: "12.1.2-r4", size_kb: 3072, description: "Code statistics tool", deps: &[] },
     // VCS
-    PackageInformation { name: "mercurial", version: "6.6.3-r0", size_keyboard: 7680, description: "Mercurial version control", deps: &[] },
-    PackageInformation { name: "subversion", version: "1.14.3-r0", size_keyboard: 5120, description: "Subversion version control", deps: &[] },
-    PackageInformation { name: "fossil", version: "2.23-r0", size_keyboard: 3072, description: "Fossil version control", deps: &[] },
+    PackageInformation { name: "mercurial", version: "6.6.3-r0", size_kb: 7680, description: "Mercurial version control", deps: &[] },
+    PackageInformation { name: "subversion", version: "1.14.3-r0", size_kb: 5120, description: "Subversion version control", deps: &[] },
+    PackageInformation { name: "fossil", version: "2.23-r0", size_kb: 3072, description: "Fossil version control", deps: &[] },
     // Misc
-    PackageInformation { name: "htop", version: "3.3.0-r0", size_keyboard: 216, description: "Interactive process viewer", deps: &["ncurses-libs"] },
-    PackageInformation { name: "neofetch", version: "7.1.0-r3", size_keyboard: 76, description: "CLI system information tool", deps: &["bash"] },
-    PackageInformation { name: "tree", version: "2.1.1-r0", size_keyboard: 48, description: "Directory listing in tree-like format", deps: &[] },
-    PackageInformation { name: "jq", version: "1.7.1-r0", size_keyboard: 312, description: "Lightweight JSON processor", deps: &[] },
-    PackageInformation { name: "tmux", version: "3.3a-r5", size_keyboard: 424, description: "Terminal multiplexer", deps: &["ncurses-libs"] },
-    PackageInformation { name: "screen", version: "4.9.1-r0", size_keyboard: 640, description: "Terminal multiplexer", deps: &[] },
-    PackageInformation { name: "bc", version: "1.07.1-r4", size_keyboard: 128, description: "Calculator language", deps: &[] },
-    PackageInformation { name: "ncdu", version: "2.3-r0", size_keyboard: 192, description: "NCurses disk usage", deps: &[] },
-    PackageInformation { name: "ranger", version: "1.9.3-r6", size_keyboard: 640, description: "Console file manager", deps: &[] },
-    PackageInformation { name: "mc", version: "4.8.31-r0", size_keyboard: 3072, description: "Midnight Commander file manager", deps: &[] },
-    PackageInformation { name: "cowsay", version: "3.04-r2", size_keyboard: 24, description: "Talking cow", deps: &[] },
-    PackageInformation { name: "figlet", version: "2.2.5-r3", size_keyboard: 128, description: "Large text banners", deps: &[] },
-    PackageInformation { name: "sl", version: "5.05-r0", size_keyboard: 24, description: "Steam locomotive", deps: &[] },
-    PackageInformation { name: "fortune", version: "0.1-r2", size_keyboard: 1024, description: "Fortune cookie program", deps: &[] },
-    PackageInformation { name: "py3-pip", version: "23.3.2-r0", size_keyboard: 5120, description: "Python package installer", deps: &["python3"] },
-    PackageInformation { name: "certbot", version: "2.8.0-r0", size_keyboard: 3072, description: "ACME client for Let's Encrypt", deps: &[] },
-    PackageInformation { name: "fail2ban", version: "1.0.2-r0", size_keyboard: 2048, description: "Intrusion prevention", deps: &[] },
+    PackageInformation { name: "htop", version: "3.3.0-r0", size_kb: 216, description: "Interactive process viewer", deps: &["ncurses-libs"] },
+    PackageInformation { name: "neofetch", version: "7.1.0-r3", size_kb: 76, description: "CLI system information tool", deps: &["bash"] },
+    PackageInformation { name: "tree", version: "2.1.1-r0", size_kb: 48, description: "Directory listing in tree-like format", deps: &[] },
+    PackageInformation { name: "jq", version: "1.7.1-r0", size_kb: 312, description: "Lightweight JSON processor", deps: &[] },
+    PackageInformation { name: "tmux", version: "3.3a-r5", size_kb: 424, description: "Terminal multiplexer", deps: &["ncurses-libs"] },
+    PackageInformation { name: "screen", version: "4.9.1-r0", size_kb: 640, description: "Terminal multiplexer", deps: &[] },
+    PackageInformation { name: "bc", version: "1.07.1-r4", size_kb: 128, description: "Calculator language", deps: &[] },
+    PackageInformation { name: "ncdu", version: "2.3-r0", size_kb: 192, description: "NCurses disk usage", deps: &[] },
+    PackageInformation { name: "ranger", version: "1.9.3-r6", size_kb: 640, description: "Console file manager", deps: &[] },
+    PackageInformation { name: "mc", version: "4.8.31-r0", size_kb: 3072, description: "Midnight Commander file manager", deps: &[] },
+    PackageInformation { name: "cowsay", version: "3.04-r2", size_kb: 24, description: "Talking cow", deps: &[] },
+    PackageInformation { name: "figlet", version: "2.2.5-r3", size_kb: 128, description: "Large text banners", deps: &[] },
+    PackageInformation { name: "sl", version: "5.05-r0", size_kb: 24, description: "Steam locomotive", deps: &[] },
+    PackageInformation { name: "fortune", version: "0.1-r2", size_kb: 1024, description: "Fortune cookie program", deps: &[] },
+    PackageInformation { name: "py3-pip", version: "23.3.2-r0", size_kb: 5120, description: "Python package installer", deps: &["python3"] },
+    PackageInformation { name: "certbot", version: "2.8.0-r0", size_kb: 3072, description: "ACME client for Let's Encrypt", deps: &[] },
+    PackageInformation { name: "fail2ban", version: "1.0.2-r0", size_kb: 2048, description: "Intrusion prevention", deps: &[] },
 ];
 
 fn find_package(name: &str) -> Option<&'static PackageInformation> {
@@ -517,10 +517,10 @@ loop {
         for server in &candidates {
             let url = alloc::format!("{}/repo/index", server);
             crate::serial_println!("[TSL-PKG] Trying server: {}", url);
-            if let Ok(response) = crate::netstack::http::get(&url) {
-                if response.status_code == 200 && response.body.len() > 10 {
+            if let Ok(resp) = crate::netstack::http::get(&url) {
+                if resp.status_code == 200 && resp.body.len() > 10 {
                     crate::serial_println!("[TSL-PKG] Server found: {} ({} bytes index)",
-                        server, response.body.len());
+                        server, resp.body.len());
                     return Some(server.clone());
                 }
             }
@@ -534,12 +534,12 @@ loop {
         crate::serial_println!("[TSL-PKG] Downloading: {}", url);
                 // Correspondance de motifs — branchement exhaustif de Rust.
 match crate::netstack::http::get(&url) {
-            Ok(response) if response.status_code == 200 && !response.body.is_empty() => {
-                crate::serial_println!("[TSL-PKG] Downloaded {} bytes for {}", response.body.len(), name);
-                Some(response.body)
+            Ok(resp) if resp.status_code == 200 && !resp.body.is_empty() => {
+                crate::serial_println!("[TSL-PKG] Downloaded {} bytes for {}", resp.body.len(), name);
+                Some(resp.body)
             }
-            Ok(response) => {
-                crate::serial_println!("[TSL-PKG] Server returned {} for {}", response.status_code, name);
+            Ok(resp) => {
+                crate::serial_println!("[TSL-PKG] Server returned {} for {}", resp.status_code, name);
                 None
             }
             Err(e) => {
@@ -1143,12 +1143,12 @@ match subcmd {
                 if self.online_mode {
                     // Query server for total available packages
                     let mut total_avail = REPO_PACKAGES.len();
-                    if let Some(ref server) = self.pkg_server {
-                        let information_url = alloc::format!("{}/repo", server);
-                        if let Ok(response) = crate::netstack::http::get(&information_url) {
+                    if let Some(ref srv) = self.pkg_server {
+                        let information_url = alloc::format!("{}/repo", srv);
+                        if let Ok(resp) = crate::netstack::http::get(&information_url) {
                             // Parse "total_available" from JSON response
-                            if let Some(position) = response.body.windows(17).position(|w| w == b"total_available\":") {
-                                let rest = &response.body[position + 17..];
+                            if let Some(pos) = resp.body.windows(17).position(|w| w == b"total_available\":") {
+                                let rest = &resp.body[pos + 17..];
                                 let number_end = rest.iter().position(|&b| !b.is_ascii_digit() && b != b' ').unwrap_or(rest.len());
                                 let number_str = core::str::from_utf8(&rest[..number_end]).unwrap_or("").trim();
                                 if let Ok(n) = number_str.parse::<usize>() {
@@ -1160,7 +1160,7 @@ match subcmd {
                     out.push_str(&format!("{} packages available (live).\n", total_avail));
                 } else {
                     out.push_str(&format!("{} packages can be upgraded. Run 'apt-get upgrade' to see them.\n",
-                        REPO_PACKAGES.len().saturating_sub(self.installed_packages.len()).minimum(8)));
+                        REPO_PACKAGES.len().saturating_sub(self.installed_packages.len()).min(8)));
                 }
                 self.repo_updated = true;
                 Ok(CommandResult::success(out))
@@ -1221,15 +1221,15 @@ match subcmd {
                 // Try dynamic download for packages not in local repo
                 let mut dynamic_installed = 0u32;
                 if !dynamic_pkgs.is_empty() {
-                    let server = self.pkg_server.clone().unwrap_or_default();
+                    let srv = self.pkg_server.clone().unwrap_or_default();
                     for &dyn_name in &dynamic_pkgs {
                         out.push_str(&format!("Resolving {} via package server...\n", dyn_name));
-                        if let Some(data) = self.download_package(&server, dyn_name) {
+                        if let Some(data) = self.download_package(&srv, dyn_name) {
                             let dl_size = data.len();
                             self.total_bytes_downloaded += dl_size;
                             let files = self.extract_package_to_ramfs(&data);
                             if files > 0 {
-                                out.push_str(&format!("Get:1 {}/repo/pool/{}.pkg [{} B]\n", server, dyn_name, dl_size));
+                                out.push_str(&format!("Get:1 {}/repo/pool/{}.pkg [{} B]\n", srv, dyn_name, dl_size));
                                 out.push_str(&format!("  -> Downloaded {} bytes, extracted {} files\n", dl_size, files));
                                 // Extract version from first line of data ("PKG name version")
                                 let ver_str = core::str::from_utf8(&data).unwrap_or("")
@@ -1260,7 +1260,7 @@ match subcmd {
 
                 // Show what will be installed
                 let new_names: Vec<&str> = to_install.iter().map(|p| p.name).collect();
-                let total_size: u32 = to_install.iter().map(|p| p.size_keyboard).sum();
+                let total_size: u32 = to_install.iter().map(|p| p.size_kb).sum();
 
                 out.push_str("The following NEW packages will be installed:\n  ");
                 out.push_str(&new_names.join(" "));
@@ -1277,12 +1277,12 @@ match subcmd {
 
                 for pkg in &to_install {
                     if is_online {
-                        let server = server.as_deref().unwrap();
+                        let srv = server.as_deref().unwrap();
                         out.push_str(&format!("Get:1 {}/repo/pool/{}.pkg {} [{} kB]\n",
-                            server, pkg.name, pkg.version, pkg.size_keyboard));
+                            srv, pkg.name, pkg.version, pkg.size_kb));
 
                         // Real HTTP download
-                        if let Some(data) = self.download_package(server, pkg.name) {
+                        if let Some(data) = self.download_package(srv, pkg.name) {
                             let dl_size = data.len();
                             self.total_bytes_downloaded += dl_size;
                             let files = self.extract_package_to_ramfs(&data);
@@ -1293,7 +1293,7 @@ match subcmd {
                         }
                     } else {
                         out.push_str(&format!("Get:1 http://dl-cdn.alpinelinux.org/alpine/v3.19/main x86_64 {} {} [{} kB]\n",
-                            pkg.name, pkg.version, pkg.size_keyboard));
+                            pkg.name, pkg.version, pkg.size_kb));
                     }
                 }
                 if is_online {
@@ -1324,7 +1324,7 @@ match subcmd {
                 }
 
                 if !not_found.is_empty() {
-                    return Ok(CommandResult { exit_code: 1, stdout: out, stderr: String::new(), duration_mouse: 0 });
+                    return Ok(CommandResult { exit_code: 1, stdout: out, stderr: String::new(), duration_ms: 0 });
                 }
                 Ok(CommandResult::success(out))
             }
@@ -1343,9 +1343,9 @@ match subcmd {
                 let mut freed_keyboard = 0u32;
                 for &name in pkg_args {
                     if name.starts_with('-') { continue; }
-                    if let Some(position) = self.installed_packages.iter().position(|(n, _)| *n == name) {
-                        let (pname, pver) = self.installed_packages.remove(position);
-                        let size = find_package(pname).map(|p| p.size_keyboard).unwrap_or(100);
+                    if let Some(pos) = self.installed_packages.iter().position(|(n, _)| *n == name) {
+                        let (pname, pver) = self.installed_packages.remove(pos);
+                        let size = find_package(pname).map(|p| p.size_kb).unwrap_or(100);
                         out.push_str(&format!("Removing {} ({}) ...\n", pname, pver));
                         freed_keyboard += size * 3;
                         removed += 1;
@@ -1396,17 +1396,17 @@ match subcmd {
                             ""
                         };
                         out.push_str(&format!("{}/{} {} x86_64{}\n  {}\n\n",
-                            pkg.name, pkg.version, pkg.size_keyboard, installed, pkg.description));
+                            pkg.name, pkg.version, pkg.size_kb, installed, pkg.description));
                         count += 1;
                     }
                 }
                 // Search server (Alpine CDN proxy) for more results
                 if self.online_mode {
-                    if let Some(ref server) = self.pkg_server {
-                        let search_url = alloc::format!("{}/repo/search?q={}", server, pkg_args[0]);
-                        if let Ok(response) = crate::netstack::http::get(&search_url) {
-                            if response.status_code == 200 {
-                                let text = core::str::from_utf8(&response.body).unwrap_or("");
+                    if let Some(ref srv) = self.pkg_server {
+                        let search_url = alloc::format!("{}/repo/search?q={}", srv, pkg_args[0]);
+                        if let Ok(resp) = crate::netstack::http::get(&search_url) {
+                            if resp.status_code == 200 {
+                                let text = core::str::from_utf8(&resp.body).unwrap_or("");
                                 for line in text.lines() {
                                     if line.is_empty() || line == "No results" { continue; }
                                     // Format: "name version size_kb arch nfiles deps description"

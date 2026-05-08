@@ -68,7 +68,8 @@ impl ShmPool {
         };
         
         self.buffers.push(buffer);
-        Ok(self.buffers.last().unwrap())
+        // SAFETY: just pushed above, always Some
+        Ok(self.buffers.last().unwrap_or_else(|| unreachable!()))
     }
     
     /// Get pixel data for a buffer as ARGB8888

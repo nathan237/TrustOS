@@ -82,23 +82,23 @@ const ANSI_COLORS: [u32; 16] = [
 // Public structure — visible outside this module.
 pub struct Cell {
     /// Unicode character
-    pub character: char,
+    pub ch: char,
     /// Foreground color (ARGB)
     pub fg: u32,
     /// Background color (ARGB)
     pub bg: u32,
     /// Cell attributes
-    pub attribute: CellAttr,
+    pub attr: CellAttr,
 }
 
 // Trait implementation — fulfills a behavioral contract.
 impl Default for Cell {
     fn default() -> Self {
         Self {
-            character: ' ',
+            ch: ' ',
             fg: FG_GREEN,
             bg: BG_BLACK,
-            attribute: CellAttr::default(),
+            attr: CellAttr::default(),
         }
     }
 }
@@ -228,13 +228,13 @@ pub struct GraphicsTerminal {
     
     /// Scrollback buffer (previous lines)
     scrollback: VecDeque<Vec<Cell>>,
-    scrollback_maximum: usize,
+    scrollback_max: usize,
     
     /// Current scroll offset (0 = bottom, showing current screen)
     scroll_offset: usize,
     
     /// Current text attributes
-    current_attribute: CellAttr,
+    current_attr: CellAttr,
     current_fg: u32,
     current_bg: u32,
     
@@ -287,9 +287,9 @@ impl GraphicsTerminal {
             blink_counter: 0,
             grid,
             scrollback: VecDeque::new(),
-            scrollback_maximum: 1000,
+            scrollback_max: 1000,
             scroll_offset: 0,
-            current_attribute: CellAttr::default(),
+            current_attr: CellAttr::default(),
             current_fg: FG_GREEN,
             current_bg: BG_BLACK,
             parse_state: ParseState::Normal,
@@ -356,7 +356,7 @@ match c {
             '\t' => {
                 // Tab: move to next 8-column boundary
                 let next_tab = ((self.cursor_x / 8) + 1) * 8;
-                self.cursor_x = next_tab.minimum(self.cols - 1);
+                self.cursor_x = next_tab.min(self.cols - 1);
             }
             '\x07' => {
                 // Bell - could trigger visual bell
@@ -449,8 +449,8 @@ match c {
     
     fn execute_csi(&mut self, cmd: char) {
         let params = &self.csi_params;
-        let p0 = params.first().copied().unwrap_or(1).maximum(1);
-        let p1 = params.get(1).copied().unwrap_or(1).maximum(1);
+        let p0 = params.first().copied().unwrap_or(1).max(1);
+        let p1 = params.get(1).copied().unwrap_or(1).max(1);
         
                 // Pattern matching — Rust's exhaustive branching construct.
 match cmd {
@@ -460,11 +460,11 @@ match cmd {
             }
             'B' => {
                 // Cursor down
-                self.cursor_y = (self.cursor_y + p0).minimum(self.rows - 1);
+                self.cursor_y = (self.cursor_y + p0).min(self.rows - 1);
             }
             'C' => {
                 // Cursor right
-                self.cursor_x = (self.cursor_x + p0).minimum(self.cols - 1);
+                self.cursor_x = (self.cursor_x + p0).min(self.cols - 1);
             }
             'D' => {
                 // Cursor left
@@ -473,7 +473,7 @@ match cmd {
             'E' => {
                 // Cursor next line
                 self.cursor_x = 0;
-                self.cursor_y = (self.cursor_y + p0).minimum(self.rows - 1);
+                self.cursor_y = (self.cursor_y + p0).min(self.rows - 1);
             }
             'F' => {
                 // Cursor previous line
@@ -482,14 +482,14 @@ match cmd {
             }
             'G' => {
                 // Cursor horizontal absolute
-                self.cursor_x = (p0 - 1).minimum(self.cols - 1);
+                self.cursor_x = (p0 - 1).min(self.cols - 1);
             }
             'H' | 'f' => {
                 // Cursor position (row, col)
-                let row = params.first().copied().unwrap_or(1).maximum(1);
-                let column = params.get(1).copied().unwrap_or(1).maximum(1);
-                self.cursor_y = (row - 1).minimum(self.rows - 1);
-                self.cursor_x = (column - 1).minimum(self.cols - 1);
+                let row = params.first().copied().unwrap_or(1).max(1);
+                let col = params.get(1).copied().unwrap_or(1).max(1);
+                self.cursor_y = (row - 1).min(self.rows - 1);
+                self.cursor_x = (col - 1).min(self.cols - 1);
             }
             'J' => {
                 // Erase in display
@@ -580,40 +580,40 @@ match mode {
 match p {
                 0 => {
                     // Reset all attributes
-                    self.current_attribute = CellAttr::default();
+                    self.current_attr = CellAttr::default();
                     self.current_fg = FG_GREEN;
                     self.current_bg = BG_BLACK;
                 }
-                1 => self.current_attribute.bold = true,
-                2 => self.current_attribute.dim = true,
-                3 => self.current_attribute.italic = true,
-                4 => self.current_attribute.underline = true,
-                5 => self.current_attribute.blink = true,
-                7 => self.current_attribute.reverse = true,
-                8 => self.current_attribute.hidden = true,
-                9 => self.current_attribute.strikethrough = true,
-                21 => self.current_attribute.bold = false,
+                1 => self.current_attr.bold = true,
+                2 => self.current_attr.dim = true,
+                3 => self.current_attr.italic = true,
+                4 => self.current_attr.underline = true,
+                5 => self.current_attr.blink = true,
+                7 => self.current_attr.reverse = true,
+                8 => self.current_attr.hidden = true,
+                9 => self.current_attr.strikethrough = true,
+                21 => self.current_attr.bold = false,
                 22 => {
-                    self.current_attribute.bold = false;
-                    self.current_attribute.dim = false;
+                    self.current_attr.bold = false;
+                    self.current_attr.dim = false;
                 }
-                23 => self.current_attribute.italic = false,
-                24 => self.current_attribute.underline = false,
-                25 => self.current_attribute.blink = false,
-                27 => self.current_attribute.reverse = false,
-                28 => self.current_attribute.hidden = false,
-                29 => self.current_attribute.strikethrough = false,
+                23 => self.current_attr.italic = false,
+                24 => self.current_attr.underline = false,
+                25 => self.current_attr.blink = false,
+                27 => self.current_attr.reverse = false,
+                28 => self.current_attr.hidden = false,
+                29 => self.current_attr.strikethrough = false,
                 // Foreground colors
                 30..=37 => {
-                    let index = (p - 30) as usize;
-                    self.current_fg = ANSI_COLORS[index];
+                    let idx = (p - 30) as usize;
+                    self.current_fg = ANSI_COLORS[idx];
                 }
                 38 => {
                     // Extended foreground
                     if i + 2 < params.len() && params[i + 1] == 5 {
                         // 256-color mode
-                        let index = params[i + 2] as usize;
-                        self.current_fg = self.color_256(index);
+                        let idx = params[i + 2] as usize;
+                        self.current_fg = self.color_256(idx);
                         i += 2;
                     } else if i + 4 < params.len() && params[i + 1] == 2 {
                         // 24-bit RGB
@@ -627,14 +627,14 @@ match p {
                 39 => self.current_fg = FG_GREEN, // Default foreground
                 // Background colors
                 40..=47 => {
-                    let index = (p - 40) as usize;
-                    self.current_bg = ANSI_COLORS[index];
+                    let idx = (p - 40) as usize;
+                    self.current_bg = ANSI_COLORS[idx];
                 }
                 48 => {
                     // Extended background
                     if i + 2 < params.len() && params[i + 1] == 5 {
-                        let index = params[i + 2] as usize;
-                        self.current_bg = self.color_256(index);
+                        let idx = params[i + 2] as usize;
+                        self.current_bg = self.color_256(idx);
                         i += 2;
                     } else if i + 4 < params.len() && params[i + 1] == 2 {
                         let r = params[i + 2] as u32;
@@ -647,13 +647,13 @@ match p {
                 49 => self.current_bg = BG_BLACK, // Default background
                 // Bright foreground colors
                 90..=97 => {
-                    let index = (p - 90 + 8) as usize;
-                    self.current_fg = ANSI_COLORS[index];
+                    let idx = (p - 90 + 8) as usize;
+                    self.current_fg = ANSI_COLORS[idx];
                 }
                 // Bright background colors
                 100..=107 => {
-                    let index = (p - 100 + 8) as usize;
-                    self.current_bg = ANSI_COLORS[index];
+                    let idx = (p - 100 + 8) as usize;
+                    self.current_bg = ANSI_COLORS[idx];
                 }
                 _ => {}
             }
@@ -662,22 +662,22 @@ match p {
     }
     
     /// Convert 256-color index to RGB
-    fn color_256(&self, index: usize) -> u32 {
-        if index < 16 {
-            ANSI_COLORS[index]
-        } else if index < 232 {
+    fn color_256(&self, idx: usize) -> u32 {
+        if idx < 16 {
+            ANSI_COLORS[idx]
+        } else if idx < 232 {
             // 6x6x6 color cube
-            let index = index - 16;
-            let r = (index / 36) % 6;
-            let g = (index / 6) % 6;
-            let b = index % 6;
+            let idx = idx - 16;
+            let r = (idx / 36) % 6;
+            let g = (idx / 6) % 6;
+            let b = idx % 6;
             let r = if r > 0 { r * 40 + 55 } else { 0 };
             let g = if g > 0 { g * 40 + 55 } else { 0 };
             let b = if b > 0 { b * 40 + 55 } else { 0 };
             0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32)
         } else {
             // Grayscale ramp
-            let gray = (index - 232) * 10 + 8;
+            let gray = (idx - 232) * 10 + 8;
             0xFF000000 | ((gray as u32) << 16) | ((gray as u32) << 8) | (gray as u32)
         }
     }
@@ -694,9 +694,9 @@ match p {
     
     fn execute_osc(&mut self) {
         // Parse OSC command
-        if let Some(index) = self.osc_buffer.find(';') {
-            let cmd = &self.osc_buffer[..index];
-            let data = &self.osc_buffer[index + 1..];
+        if let Some(idx) = self.osc_buffer.find(';') {
+            let cmd = &self.osc_buffer[..idx];
+            let data = &self.osc_buffer[idx + 1..];
             
                         // Pattern matching — Rust's exhaustive branching construct.
 match cmd {
@@ -723,28 +723,28 @@ match cmd {
             self.newline();
         }
         
-        let index = self.cursor_y as usize * self.cols as usize + self.cursor_x as usize;
-        if index < self.grid.len() {
+        let idx = self.cursor_y as usize * self.cols as usize + self.cursor_x as usize;
+        if idx < self.grid.len() {
             // Apply current attributes
-            let (fg, bg) = if self.current_attribute.reverse {
+            let (fg, bg) = if self.current_attr.reverse {
                 (self.current_bg, self.current_fg)
             } else {
                 (self.current_fg, self.current_bg)
             };
             
-            let fg = if self.current_attribute.bold {
+            let fg = if self.current_attr.bold {
                 self.brighten(fg)
-            } else if self.current_attribute.dim {
+            } else if self.current_attr.dim {
                 self.dim_color(fg)
             } else {
                 fg
             };
             
-            self.grid[index] = Cell {
-                character: c,
+            self.grid[idx] = Cell {
+                ch: c,
                 fg,
                 bg,
-                attribute: self.current_attribute,
+                attr: self.current_attr,
             };
         }
         
@@ -753,13 +753,13 @@ match cmd {
     
     /// Brighten a color (for bold text)
     fn brighten(&self, color: u32) -> u32 {
-        let r = ((color >> 16) & 0xFF).minimum(255);
-        let g = ((color >> 8) & 0xFF).minimum(255);
-        let b = (color & 0xFF).minimum(255);
+        let r = ((color >> 16) & 0xFF).min(255);
+        let g = ((color >> 8) & 0xFF).min(255);
+        let b = (color & 0xFF).min(255);
         
-        let r = (r + (255 - r) / 3).minimum(255);
-        let g = (g + (255 - g) / 3).minimum(255);
-        let b = (b + (255 - b) / 3).minimum(255);
+        let r = (r + (255 - r) / 3).min(255);
+        let g = (g + (255 - g) / 3).min(255);
+        let b = (b + (255 - b) / 3).min(255);
         
         0xFF000000 | (r << 16) | (g << 8) | b
     }
@@ -789,7 +789,7 @@ match cmd {
         self.scrollback.push_back(top_line);
         
         // Trim scrollback if needed
-        while self.scrollback.len() > self.scrollback_maximum {
+        while self.scrollback.len() > self.scrollback_max {
             self.scrollback.pop_front();
         }
         
@@ -896,7 +896,7 @@ match cmd {
     pub fn reset(&mut self) {
         self.cursor_x = 0;
         self.cursor_y = 0;
-        self.current_attribute = CellAttr::default();
+        self.current_attr = CellAttr::default();
         self.current_fg = FG_GREEN;
         self.current_bg = BG_BLACK;
         self.cursor_visible = true;
@@ -932,19 +932,19 @@ match cmd {
         // Draw all cells with SSE2 row fills
         for y in 0..self.rows as usize {
             for x in 0..self.cols as usize {
-                let index = y * self.cols as usize + x;
-                let cell = &self.grid[index];
+                let idx = y * self.cols as usize + x;
+                let cell = &self.grid[idx];
                 
                 // Draw cell background with SSE2
                 self.draw_cell_bg_fast(&mut buffer, width, x as u32, y as u32, cell.bg);
                 
                 // Draw character
-                if cell.character != ' ' {
-                    self.draw_char(&mut buffer, width as u32, x as u32, y as u32, cell.character, cell.fg);
+                if cell.ch != ' ' {
+                    self.draw_char(&mut buffer, width as u32, x as u32, y as u32, cell.ch, cell.fg);
                 }
                 
                 // Draw underline if needed
-                if cell.attribute.underline {
+                if cell.attr.underline {
                     self.draw_underline_fast(&mut buffer, width, x as u32, y as u32, cell.fg);
                 }
             }
@@ -971,19 +971,19 @@ match cmd {
     
     /// Fast cell background using SSE2 row fills
     fn draw_cell_bg_fast(&self, buffer: &mut [u32], width: usize, cx: u32, cy: u32, bg: u32) {
-        let pixel_x = cx as usize * self.cell_width as usize;
-        let pixel_y = cy as usize * self.cell_height as usize;
+        let px_x = cx as usize * self.cell_width as usize;
+        let px_y = cy as usize * self.cell_height as usize;
         let cell_w = self.cell_width as usize;
         
         // Fill each row of the cell with SSE2
         for dy in 0..self.cell_height as usize {
-            let row_start = (pixel_y + dy) * width + pixel_x;
+            let row_start = (px_y + dy) * width + px_x;
             if row_start + cell_w <= buffer.len() {
                 #[cfg(target_arch = "x86_64")]
                                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
                     crate::graphics::simd::fill_row_sse2(
-                        buffer.as_mut_pointer().add(row_start),
+                        buffer.as_mut_ptr().add(row_start),
                         cell_w,
                         bg
                     );
@@ -997,14 +997,14 @@ unsafe {
     }
 
     fn draw_cell_bg(&self, buffer: &mut [u32], width: u32, cx: u32, cy: u32, bg: u32) {
-        let pixel_x = cx * self.cell_width as u32;
-        let pixel_y = cy * self.cell_height as u32;
+        let px_x = cx * self.cell_width as u32;
+        let px_y = cy * self.cell_height as u32;
         
         for dy in 0..self.cell_height as u32 {
             for dx in 0..self.cell_width as u32 {
-                let index = ((pixel_y + dy) * width + pixel_x + dx) as usize;
-                if index < buffer.len() {
-                    buffer[index] = bg;
+                let idx = ((px_y + dy) * width + px_x + dx) as usize;
+                if idx < buffer.len() {
+                    buffer[idx] = bg;
                 }
             }
         }
@@ -1012,17 +1012,17 @@ unsafe {
     
     fn draw_char(&self, buffer: &mut [u32], width: u32, cx: u32, cy: u32, c: char, fg: u32) {
         let glyph = crate::framebuffer::font::get_glyph(c);
-        let pixel_x = cx * self.cell_width as u32;
-        let pixel_y = cy * self.cell_height as u32;
+        let px_x = cx * self.cell_width as u32;
+        let px_y = cy * self.cell_height as u32;
         
         for (row_index, &row) in glyph.iter().enumerate() {
             for bit in 0..8 {
                 if (row >> (7 - bit)) & 1 == 1 {
-                    let x = pixel_x + bit;
-                    let y = pixel_y + row_index as u32;
-                    let index = (y * width + x) as usize;
-                    if index < buffer.len() {
-                        buffer[index] = fg;
+                    let x = px_x + bit;
+                    let y = px_y + row_index as u32;
+                    let idx = (y * width + x) as usize;
+                    if idx < buffer.len() {
+                        buffer[idx] = fg;
                     }
                 }
             }
@@ -1030,30 +1030,30 @@ unsafe {
     }
     
     fn draw_underline(&self, buffer: &mut [u32], width: u32, cx: u32, cy: u32, fg: u32) {
-        let pixel_x = cx * self.cell_width as u32;
-        let pixel_y = cy * self.cell_height as u32 + self.cell_height as u32 - 2;
+        let px_x = cx * self.cell_width as u32;
+        let px_y = cy * self.cell_height as u32 + self.cell_height as u32 - 2;
         
         for dx in 0..self.cell_width as u32 {
-            let index = (pixel_y * width + pixel_x + dx) as usize;
-            if index < buffer.len() {
-                buffer[index] = fg;
+            let idx = (px_y * width + px_x + dx) as usize;
+            if idx < buffer.len() {
+                buffer[idx] = fg;
             }
         }
     }
     
     /// Fast underline using SSE2
     fn draw_underline_fast(&self, buffer: &mut [u32], width: usize, cx: u32, cy: u32, fg: u32) {
-        let pixel_x = cx as usize * self.cell_width as usize;
-        let pixel_y = cy as usize * self.cell_height as usize + self.cell_height as usize - 2;
+        let px_x = cx as usize * self.cell_width as usize;
+        let px_y = cy as usize * self.cell_height as usize + self.cell_height as usize - 2;
         let cell_w = self.cell_width as usize;
         
-        let start = pixel_y * width + pixel_x;
+        let start = px_y * width + px_x;
         if start + cell_w <= buffer.len() {
             #[cfg(target_arch = "x86_64")]
                         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
                 crate::graphics::simd::fill_row_sse2(
-                    buffer.as_mut_pointer().add(start),
+                    buffer.as_mut_ptr().add(start),
                     cell_w,
                     fg
                 );
@@ -1066,17 +1066,17 @@ unsafe {
     }
     
     fn draw_cursor(&self, buffer: &mut [u32], width: u32) {
-        let pixel_x = self.cursor_x as u32 * self.cell_width as u32;
-        let pixel_y = self.cursor_y as u32 * self.cell_height as u32;
+        let px_x = self.cursor_x as u32 * self.cell_width as u32;
+        let px_y = self.cursor_y as u32 * self.cell_height as u32;
         
         // Block cursor
         for dy in 0..self.cell_height as u32 {
             for dx in 0..self.cell_width as u32 {
-                let index = ((pixel_y + dy) * width + pixel_x + dx) as usize;
-                if index < buffer.len() {
+                let idx = ((px_y + dy) * width + px_x + dx) as usize;
+                if idx < buffer.len() {
                     // XOR with cursor color for visibility
-                    let existing = buffer[index];
-                    buffer[index] = existing ^ CURSOR_COLOR;
+                    let existing = buffer[idx];
+                    buffer[idx] = existing ^ CURSOR_COLOR;
                 }
             }
         }
@@ -1084,13 +1084,13 @@ unsafe {
     
     /// Fast cursor drawing using SSE2
     fn draw_cursor_fast(&self, buffer: &mut [u32], width: usize) {
-        let pixel_x = self.cursor_x as usize * self.cell_width as usize;
-        let pixel_y = self.cursor_y as usize * self.cell_height as usize;
+        let px_x = self.cursor_x as usize * self.cell_width as usize;
+        let px_y = self.cursor_y as usize * self.cell_height as usize;
         let cell_w = self.cell_width as usize;
         
         // Block cursor - XOR with cursor color
         for dy in 0..self.cell_height as usize {
-            let row_start = (pixel_y + dy) * width + pixel_x;
+            let row_start = (px_y + dy) * width + px_x;
             if row_start + cell_w <= buffer.len() {
                 for dx in 0..cell_w {
                     let existing = buffer[row_start + dx];
@@ -1109,9 +1109,9 @@ unsafe {
         
         for y in 0..height {
             for x in 1..(width - 1) {
-                let index = (y * width + x) as usize;
+                let idx = (y * width + x) as usize;
                 let left = buffer[(y * width + x - 1) as usize];
-                let center = buffer[index];
+                let center = buffer[idx];
                 let right = buffer[(y * width + x + 1) as usize];
                 
                 // Only apply glow to green pixels
@@ -1120,10 +1120,10 @@ unsafe {
                 let g_right = (right >> 8) & 0xFF;
                 
                 if g_center > 100 || g_left > 100 || g_right > 100 {
-                    let glow = ((g_left + g_center * 2 + g_right) / 4).minimum(255);
+                    let glow = ((g_left + g_center * 2 + g_right) / 4).min(255);
                     let r = (center >> 16) & 0xFF;
                     let b = center & 0xFF;
-                    temporary[index] = 0xFF000000 | (r << 16) | (glow << 8) | b;
+                    temporary[idx] = 0xFF000000 | (r << 16) | (glow << 8) | b;
                 }
             }
         }
@@ -1140,12 +1140,12 @@ unsafe {
             let row_end = ((y + 1) * width) as usize;
             
             if row_end <= buffer.len() {
-                for index in row_start..row_end.minimum(row_start + width as usize) {
-                    let pixel = buffer[index];
+                for idx in row_start..row_end.min(row_start + width as usize) {
+                    let pixel = buffer[idx];
                     let r = ((pixel >> 16) & 0xFF) * intensity / 255;
                     let g = ((pixel >> 8) & 0xFF) * intensity / 255;
                     let b = (pixel & 0xFF) * intensity / 255;
-                    buffer[index] = 0xFF000000 | (r << 16) | (g << 8) | b;
+                    buffer[idx] = 0xFF000000 | (r << 16) | (g << 8) | b;
                 }
             }
         }

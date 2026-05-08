@@ -45,38 +45,38 @@ const CONTEXT_3: u8 = 0xA3;
 }
 
 /// Parse ASN.1 length
-fn parse_length(data: &[u8], position: &mut usize) -> Option<usize> {
-    if *position >= data.len() {
+fn parse_length(data: &[u8], pos: &mut usize) -> Option<usize> {
+    if *pos >= data.len() {
         return None;
     }
     
-    let first = data[*position];
-    *position += 1;
+    let first = data[*pos];
+    *pos += 1;
     
     if first < 0x80 {
         Some(first as usize)
     } else if first == 0x81 {
-        if *position >= data.len() {
+        if *pos >= data.len() {
             return None;
         }
-        let len = data[*position] as usize;
-        *position += 1;
+        let len = data[*pos] as usize;
+        *pos += 1;
         Some(len)
     } else if first == 0x82 {
-        if *position + 1 >= data.len() {
+        if *pos + 1 >= data.len() {
             return None;
         }
-        let len = ((data[*position] as usize) << 8) | (data[*position + 1] as usize);
-        *position += 2;
+        let len = ((data[*pos] as usize) << 8) | (data[*pos + 1] as usize);
+        *pos += 2;
         Some(len)
     } else if first == 0x83 {
-        if *position + 2 >= data.len() {
+        if *pos + 2 >= data.len() {
             return None;
         }
-        let len = ((data[*position] as usize) << 16) 
-            | ((data[*position + 1] as usize) << 8) 
-            | (data[*position + 2] as usize);
-        *position += 3;
+        let len = ((data[*pos] as usize) << 16) 
+            | ((data[*pos + 1] as usize) << 8) 
+            | (data[*pos + 2] as usize);
+        *pos += 3;
         Some(len)
     } else {
         None
@@ -84,22 +84,22 @@ fn parse_length(data: &[u8], position: &mut usize) -> Option<usize> {
 }
 
 /// Parse an ASN.1 element
-fn parse_element<'a>(data: &'a [u8], position: &mut usize) -> Option<(u8, &'a [u8])> {
-    if *position >= data.len() {
+fn parse_element<'a>(data: &'a [u8], pos: &mut usize) -> Option<(u8, &'a [u8])> {
+    if *pos >= data.len() {
         return None;
     }
     
-    let tag = data[*position];
-    *position += 1;
+    let tag = data[*pos];
+    *pos += 1;
     
-    let len = parse_length(data, position)?;
+    let len = parse_length(data, pos)?;
     
-    if *position + len > data.len() {
+    if *pos + len > data.len() {
         return None;
     }
     
-    let value = &data[*position..*position + len];
-    *position += len;
+    let value = &data[*pos..*pos + len];
+    *pos += len;
     
     Some((tag, value))
 }
@@ -130,10 +130,10 @@ pub struct Certificate {
 impl Certificate {
     /// Parse a DER-encoded X.509 certificate
     pub fn parse(data: &[u8]) -> Option<Self> {
-        let mut position = 0;
+        let mut pos = 0;
         
         // Certificate SEQUENCE
-        let (tag, cert_data) = parse_element(data, &mut position)?;
+        let (tag, cert_data) = parse_element(data, &mut pos)?;
         if tag != asn1_tags::SEQUENCE {
             return None;
         }
@@ -243,16 +243,16 @@ fn extract_cn(data: &[u8]) -> Option<String> {
     // OID for commonName: 2.5.4.3 = 55 04 03
     let cn_oid = [0x55, 0x04, 0x03];
     
-    let mut position = 0;
-    while position < data.len() {
-        if let Some((tag, rdn_set)) = parse_element(data, &mut position) {
+    let mut pos = 0;
+    while pos < data.len() {
+        if let Some((tag, rdn_set)) = parse_element(data, &mut pos) {
             if tag == asn1_tags::SET {
-                let mut set_position = 0;
-                if let Some((_, rdn_sequence)) = parse_element(rdn_set, &mut set_position) {
+                let mut set_pos = 0;
+                if let Some((_, rdn_seq)) = parse_element(rdn_set, &mut set_pos) {
                     let mut sequence_position = 0;
-                    if let Some((_, oid)) = parse_element(rdn_sequence, &mut sequence_position) {
+                    if let Some((_, oid)) = parse_element(rdn_seq, &mut sequence_position) {
                         if oid == cn_oid {
-                            if let Some((_, value)) = parse_element(rdn_sequence, &mut sequence_position) {
+                            if let Some((_, value)) = parse_element(rdn_seq, &mut sequence_position) {
                                 return Some(String::from_utf8_lossy(value).into_owned());
                             }
                         }
@@ -269,9 +269,9 @@ fn extract_cn(data: &[u8]) -> Option<String> {
 
 /// Parse Validity SEQUENCE
 fn parse_validity(data: &[u8]) -> (Option<String>, Option<String>) {
-    let mut position = 0;
+    let mut pos = 0;
     
-    let not_before = if let Some((tag, value)) = parse_element(data, &mut position) {
+    let not_before = if let Some((tag, value)) = parse_element(data, &mut pos) {
         if tag == asn1_tags::UTC_TIME || tag == asn1_tags::GENERALIZED_TIME {
             Some(String::from_utf8_lossy(value).into_owned())
         } else {
@@ -281,7 +281,7 @@ fn parse_validity(data: &[u8]) -> (Option<String>, Option<String>) {
         None
     };
     
-    let not_after = if let Some((tag, value)) = parse_element(data, &mut position) {
+    let not_after = if let Some((tag, value)) = parse_element(data, &mut pos) {
         if tag == asn1_tags::UTC_TIME || tag == asn1_tags::GENERALIZED_TIME {
             Some(String::from_utf8_lossy(value).into_owned())
         } else {
@@ -296,13 +296,13 @@ fn parse_validity(data: &[u8]) -> (Option<String>, Option<String>) {
 
 /// Parse Subject Public Key Info
 fn parse_spki(data: &[u8]) -> (Vec<u8>, Vec<u8>) {
-    let mut position = 0;
+    let mut pos = 0;
     
     // Algorithm
-    let algo = if let Some((tag, algo_sequence)) = parse_element(data, &mut position) {
+    let algo = if let Some((tag, algo_seq)) = parse_element(data, &mut pos) {
         if tag == asn1_tags::SEQUENCE {
             let mut algo_position = 0;
-            if let Some((_, oid)) = parse_element(algo_sequence, &mut algo_position) {
+            if let Some((_, oid)) = parse_element(algo_seq, &mut algo_position) {
                 oid.to_vec()
             } else {
                 Vec::new()
@@ -315,7 +315,7 @@ fn parse_spki(data: &[u8]) -> (Vec<u8>, Vec<u8>) {
     };
     
     // Public key (BIT STRING)
-    let pubkey = if let Some((tag, value)) = parse_element(data, &mut position) {
+    let pubkey = if let Some((tag, value)) = parse_element(data, &mut pos) {
         if tag == asn1_tags::BIT_STRING && !value.is_empty() {
             // Skip the unused bits count
             value[1..].to_vec()
@@ -335,23 +335,23 @@ fn parse_san_extension(extensions: &[u8]) -> Vec<String> {
     let san_oid = [0x55, 0x1D, 0x11];
     let mut result = Vec::new();
     
-    let mut position = 0;
-    while position < extensions.len() {
-        if let Some((tag, ext_sequence)) = parse_element(extensions, &mut position) {
+    let mut pos = 0;
+    while pos < extensions.len() {
+        if let Some((tag, ext_seq)) = parse_element(extensions, &mut pos) {
             if tag == asn1_tags::SEQUENCE {
                 let mut ext_position = 0;
-                if let Some((_, oid)) = parse_element(ext_sequence, &mut ext_position) {
+                if let Some((_, oid)) = parse_element(ext_seq, &mut ext_position) {
                     if oid == san_oid {
                         // Skip critical (if present)
-                        if ext_position < ext_sequence.len() && ext_sequence[ext_position] == asn1_tags::BOOLEAN {
-                            let _ = parse_element(ext_sequence, &mut ext_position);
+                        if ext_position < ext_seq.len() && ext_seq[ext_position] == asn1_tags::BOOLEAN {
+                            let _ = parse_element(ext_seq, &mut ext_position);
                         }
                         
                         // Extension value (OCTET STRING containing SEQUENCE)
-                        if let Some((_, octet)) = parse_element(ext_sequence, &mut ext_position) {
+                        if let Some((_, octet)) = parse_element(ext_seq, &mut ext_position) {
                             let mut san_position = 0;
-                            if let Some((_, san_sequence)) = parse_element(octet, &mut san_position) {
-                                result = parse_general_names(san_sequence);
+                            if let Some((_, san_seq)) = parse_element(octet, &mut san_position) {
+                                result = parse_general_names(san_seq);
                             }
                         }
                     }
@@ -368,20 +368,20 @@ fn parse_san_extension(extensions: &[u8]) -> Vec<String> {
 /// Parse GeneralNames sequence
 fn parse_general_names(data: &[u8]) -> Vec<String> {
     let mut result = Vec::new();
-    let mut position = 0;
+    let mut pos = 0;
     
-    while position < data.len() {
-        let tag = data[position];
-        position += 1;
+    while pos < data.len() {
+        let tag = data[pos];
+        pos += 1;
         
-        if let Some(len) = parse_length(data, &mut position) {
-            if position + len <= data.len() {
+        if let Some(len) = parse_length(data, &mut pos) {
+            if pos + len <= data.len() {
                 // Context-specific [2] = dNSName
                 if tag == 0x82 {
-                    let name = String::from_utf8_lossy(&data[position..position + len]).into_owned();
+                    let name = String::from_utf8_lossy(&data[pos..pos + len]).into_owned();
                     result.push(name);
                 }
-                position += len;
+                pos += len;
             } else {
                 break;
             }
@@ -401,8 +401,8 @@ fn matches_hostname(pattern: &str, hostname: &str) -> bool {
     if pattern.starts_with("*.") {
         // Wildcard match
         let suffix = &pattern[2..];
-        if let Some(dot_position) = hostname.find('.') {
-            return &hostname[dot_position + 1..] == suffix;
+        if let Some(dot_pos) = hostname.find('.') {
+            return &hostname[dot_pos + 1..] == suffix;
         }
         false
     } else {
@@ -419,47 +419,47 @@ pub fn parse_certificate_chain(data: &[u8]) -> Vec<Certificate> {
     }
     
     // Skip handshake header (1 + 3 bytes)
-    let mut position = 4;
+    let mut pos = 4;
     
     // Certificate request context (1 byte length + data)
-    if position >= data.len() {
+    if pos >= data.len() {
         return result;
     }
-    let context_length = data[position] as usize;
-    position += 1 + context_length;
+    let context_length = data[pos] as usize;
+    pos += 1 + context_length;
     
     // Certificate list length (3 bytes)
-    if position + 3 > data.len() {
+    if pos + 3 > data.len() {
         return result;
     }
-    let list_length = ((data[position] as usize) << 16)
-        | ((data[position + 1] as usize) << 8)
-        | (data[position + 2] as usize);
-    position += 3;
+    let list_length = ((data[pos] as usize) << 16)
+        | ((data[pos + 1] as usize) << 8)
+        | (data[pos + 2] as usize);
+    pos += 3;
     
-    let list_end = position + list_length;
+    let list_end = pos + list_length;
     
-    while position + 3 <= list_end {
+    while pos + 3 <= list_end {
         // Certificate entry length (3 bytes)
-        let cert_length = ((data[position] as usize) << 16)
-            | ((data[position + 1] as usize) << 8)
-            | (data[position + 2] as usize);
-        position += 3;
+        let cert_length = ((data[pos] as usize) << 16)
+            | ((data[pos + 1] as usize) << 8)
+            | (data[pos + 2] as usize);
+        pos += 3;
         
-        if position + cert_length > data.len() {
+        if pos + cert_length > data.len() {
             break;
         }
         
         // Parse certificate
-        if let Some(cert) = Certificate::parse(&data[position..position + cert_length]) {
+        if let Some(cert) = Certificate::parse(&data[pos..pos + cert_length]) {
             result.push(cert);
         }
-        position += cert_length;
+        pos += cert_length;
         
         // Skip extensions (2 bytes length + data)
-        if position + 2 <= list_end {
-            let ext_length = u16::from_be_bytes([data[position], data[position + 1]]) as usize;
-            position += 2 + ext_length;
+        if pos + 2 <= list_end {
+            let ext_length = u16::from_be_bytes([data[pos], data[pos + 1]]) as usize;
+            pos += 2 + ext_length;
         }
     }
     

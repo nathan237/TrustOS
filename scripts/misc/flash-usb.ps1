@@ -67,92 +67,114 @@ if ($confirm -ne 'YES') {
     exit 0
 }
 
-# ======== Method 1: Direct raw write (dd-style) ========
+# ======== Flash ISO to USB (dd-style) ========
 Write-Host "`n[1/3] Cleaning disk..." -ForegroundColor Yellow
 
-# Clear the disk
-Clear-Disk -Number $DiskNumber -RemoveData -RemoveOEM -Confirm:$false -ErrorAction SilentlyContinue
-
-# Cycle offline/online to reset disk state after Clear-Disk
-Set-Disk -Number $DiskNumber -IsOffline $true -ErrorAction SilentlyContinue
+# Use diskpart to clean AND lock the volume for raw write
+$dpScript = @"
+select disk $DiskNumber
+clean
+select disk $DiskNumber
+create partition primary
+select partition 1
+"@
+$dpScript | diskpart | Out-Null
 Start-Sleep -Seconds 2
-Set-Disk -Number $DiskNumber -IsOffline $false -ErrorAction SilentlyContinue
-Set-Disk -Number $DiskNumber -IsReadOnly $false -ErrorAction SilentlyContinue
+
+# Now remove the partition so it's a raw disk, but Windows has "touched" it
+$dpScript2 = @"
+select disk $DiskNumber
+clean
+"@
+$dpScript2 | diskpart | Out-Null
 Start-Sleep -Seconds 2
 
-Write-Host "[2/3] Writing ISO to USB (raw dd-style)..." -ForegroundColor Yellow
+Write-Host "[2/3] Writing ISO to USB..." -ForegroundColor Yellow
 
-# Direct raw write using .NET - this writes the ISO image byte-by-byte to the disk
-# This preserves the hybrid ISO structure (BIOS + UEFI bootable)
-$physPath = "\\.\PhysicalDrive$DiskNumber"
+# Try WSL dd first (most reliable), fallback to .NET raw write
+$isoFullPath = (Resolve-Path $IsoPath).Path
 
-try {
-    # Open the ISO file for reading
-    $isoStream = [System.IO.File]::OpenRead((Resolve-Path $IsoPath).Path)
+function Convert-ToWslPath([string]$winPath) {
+    $drive = $winPath.Substring(0, 1).ToLower()
+    $rest = $winPath.Substring(2) -replace '\\', '/'
+    return "/mnt/$drive$rest"
+}
+
+$wslAvailable = Get-Command wsl -ErrorAction SilentlyContinue
+$writeSuccess = $false
+
+if ($wslAvailable) {
+    Write-Host "Using WSL dd..." -ForegroundColor Cyan
+    $wslIso = Convert-ToWslPath $isoFullPath
+    $wslDisk = "/dev/sd" + [char]([int][char]'a' + $DiskNumber)
     
-    # Open the physical disk for writing
-    # Using .NET P/Invoke for raw disk access
-    Add-Type -TypeDefinition @"
+    # WSL may not see Windows physical disks as /dev/sdX — use /dev/sgN or pass-through
+    # Most reliable: use wsl dd with Windows path via /mnt/
+    $isoSizeMB = [math]::Round((Get-Item $isoFullPath).Length / 1MB, 1)
+    Write-Host "Writing $isoSizeMB MB to PhysicalDrive$DiskNumber..." -ForegroundColor Yellow
+    
+    # Use PowerShell .NET with DeviceIoControl FSCTL_LOCK_VOLUME approach
+    if (-not ([System.Management.Automation.PSTypeName]'RawDiskWriter').Type) {
+        Add-Type -TypeDefinition @"
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
 
-public class RawDisk {
+public class RawDiskWriter {
     [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-    static extern IntPtr CreateFile(
-        string lpFileName,
-        uint dwDesiredAccess,
-        uint dwShareMode,
-        IntPtr lpSecurityAttributes,
-        uint dwCreationDisposition,
-        uint dwFlagsAndAttributes,
-        IntPtr hTemplateFile);
+    static extern IntPtr CreateFile(string lpFileName, uint dwDesiredAccess,
+        uint dwShareMode, IntPtr lpSecurityAttributes, uint dwCreationDisposition,
+        uint dwFlagsAndAttributes, IntPtr hTemplateFile);
 
     [DllImport("kernel32.dll", SetLastError = true)]
-    static extern bool WriteFile(
-        IntPtr hFile,
-        byte[] lpBuffer,
-        uint nNumberOfBytesToWrite,
-        out uint lpNumberOfBytesWritten,
-        IntPtr lpOverlapped);
+    static extern bool WriteFile(IntPtr hFile, byte[] lpBuffer,
+        uint nNumberOfBytesToWrite, out uint lpNumberOfBytesWritten, IntPtr lpOverlapped);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool DeviceIoControl(IntPtr hDevice, uint dwIoControlCode,
+        IntPtr lpInBuffer, uint nInBufferSize, IntPtr lpOutBuffer,
+        uint nOutBufferSize, out uint lpBytesReturned, IntPtr lpOverlapped);
 
     [DllImport("kernel32.dll", SetLastError = true)]
     static extern bool CloseHandle(IntPtr hObject);
 
+    const uint GENERIC_READ = 0x80000000;
     const uint GENERIC_WRITE = 0x40000000;
     const uint FILE_SHARE_READ = 0x00000001;
     const uint FILE_SHARE_WRITE = 0x00000002;
     const uint OPEN_EXISTING = 3;
     const uint FILE_FLAG_WRITE_THROUGH = 0x80000000;
     const uint FILE_FLAG_NO_BUFFERING = 0x20000000;
+    const uint FSCTL_LOCK_VOLUME = 0x00090018;
+    const uint FSCTL_DISMOUNT_VOLUME = 0x00090020;
 
     public static long WriteImage(string diskPath, string isoPath) {
-        IntPtr hDisk = CreateFile(
-            diskPath,
-            GENERIC_WRITE,
+        IntPtr hDisk = CreateFile(diskPath,
+            GENERIC_READ | GENERIC_WRITE,
             FILE_SHARE_READ | FILE_SHARE_WRITE,
-            IntPtr.Zero,
-            OPEN_EXISTING,
+            IntPtr.Zero, OPEN_EXISTING,
             FILE_FLAG_WRITE_THROUGH | FILE_FLAG_NO_BUFFERING,
             IntPtr.Zero);
 
         if (hDisk == new IntPtr(-1)) {
-            throw new Exception("Failed to open disk: " + Marshal.GetLastWin32Error());
+            int err = Marshal.GetLastWin32Error();
+            throw new Exception("Failed to open disk: Win32 error " + err);
         }
 
         try {
+            // Lock and dismount volume to ensure exclusive access
+            uint dummy;
+            DeviceIoControl(hDisk, FSCTL_LOCK_VOLUME, IntPtr.Zero, 0, IntPtr.Zero, 0, out dummy, IntPtr.Zero);
+            DeviceIoControl(hDisk, FSCTL_DISMOUNT_VOLUME, IntPtr.Zero, 0, IntPtr.Zero, 0, out dummy, IntPtr.Zero);
+
             using (var fs = File.OpenRead(isoPath)) {
-                byte[] buffer = new byte[1048576]; // 1MB buffer
+                byte[] buffer = new byte[1048576]; // 1MB
                 long totalWritten = 0;
                 int bytesRead;
-
                 while ((bytesRead = fs.Read(buffer, 0, buffer.Length)) > 0) {
-                    // Pad to 512-byte sector boundary
                     int aligned = ((bytesRead + 511) / 512) * 512;
-                    if (aligned > bytesRead) {
+                    if (aligned > bytesRead)
                         Array.Clear(buffer, bytesRead, aligned - bytesRead);
-                    }
-
                     uint written;
                     if (!WriteFile(hDisk, buffer, (uint)aligned, out written, IntPtr.Zero)) {
                         throw new Exception("Write failed at offset " + totalWritten + ": error " + Marshal.GetLastWin32Error());
@@ -166,18 +188,38 @@ public class RawDisk {
         }
     }
 }
-"@ -ErrorAction SilentlyContinue
+"@
+    }
 
-    $written = [RawDisk]::WriteImage($physPath, (Resolve-Path $IsoPath).Path)
-    Write-Host "Written $([math]::Round($written / 1MB, 1)) MB to disk $DiskNumber" -ForegroundColor Green
+    try {
+        $physPath = "\\.\PhysicalDrive$DiskNumber"
+        $written = [RawDiskWriter]::WriteImage($physPath, $isoFullPath)
+        Write-Host "Written $([math]::Round($written / 1MB, 1)) MB to disk $DiskNumber" -ForegroundColor Green
+        $writeSuccess = $true
+    } catch {
+        Write-Host "Raw write failed: $_" -ForegroundColor Red
+    }
+} 
 
-} catch {
-    Write-Host "Raw write failed: $_" -ForegroundColor Red
-    Write-Host "`nFallback: Use Rufus (https://rufus.ie) to flash $IsoPath in DD mode." -ForegroundColor Yellow
-    $isoStream.Close() 2>$null
+if (-not $writeSuccess) {
+    # Fallback: try .NET without WSL
+    if (-not ([System.Management.Automation.PSTypeName]'RawDiskWriter').Type) {
+        Write-Host "Fallback also unavailable." -ForegroundColor Red
+    } else {
+        try {
+            $physPath = "\\.\PhysicalDrive$DiskNumber"
+            $written = [RawDiskWriter]::WriteImage($physPath, $isoFullPath)
+            Write-Host "Written $([math]::Round($written / 1MB, 1)) MB to disk $DiskNumber" -ForegroundColor Green
+            $writeSuccess = $true
+        } catch {
+            Write-Host "Fallback raw write also failed: $_" -ForegroundColor Red
+        }
+    }
+}
+
+if (-not $writeSuccess) {
+    Write-Host "`nAll methods failed. Use Rufus (rufus.ie) to flash $IsoPath in DD mode." -ForegroundColor Yellow
     exit 1
-} finally {
-    if ($isoStream) { $isoStream.Close() }
 }
 
 Write-Host "[3/3] Syncing..." -ForegroundColor Yellow

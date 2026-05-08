@@ -66,7 +66,7 @@ fn read_guest_physical_svm(vm_id: u64, gpa: u64, len: usize) -> Option<Vec<u8>> 
 }
 
 /// Read from VMX VM guest memory
-fn read_guest_physical_vmx(_vm_id: u64, _gpa: u64, _length: usize) -> Option<Vec<u8>> {
+fn read_guest_physical_vmx(_vm_id: u64, _gpa: u64, _len: usize) -> Option<Vec<u8>> {
     // VMX VMs use the VMS static - access through vm module
     // For now, VMX memory reading goes through EPT walk
     None
@@ -91,8 +91,8 @@ pub fn read_guest_u32(vm_id: u64, gpa: u64) -> Option<u32> {
 
 /// Read a null-terminated string from guest memory (max 256 bytes)
 pub fn read_guest_string(vm_id: u64, gpa: u64, maximum_length: usize) -> Option<String> {
-    let maximum = if maximum_length > 256 { 256 } else { maximum_length };
-    let data = read_guest_physical(vm_id, gpa, maximum)?;
+    let max = if maximum_length > 256 { 256 } else { maximum_length };
+    let data = read_guest_physical(vm_id, gpa, max)?;
     let end = data.iter().position(|&b| b == 0).unwrap_or(data.len());
     String::from_utf8(data[..end].to_vec()).ok()
 }
@@ -126,8 +126,8 @@ pub fn guest_virt_to_physical(vm_id: u64, guest_cr3: u64, vaddr: u64) -> Option<
     
     // Check for 1GB page
     if pdpte & (1 << 7) != 0 {
-        let physical = (pdpte & 0x000F_FFFF_C000_0000) | (vaddr & 0x3FFF_FFFF);
-        return Some(physical);
+        let phys = (pdpte & 0x000F_FFFF_C000_0000) | (vaddr & 0x3FFF_FFFF);
+        return Some(phys);
     }
     
     // Read PD entry
@@ -137,8 +137,8 @@ pub fn guest_virt_to_physical(vm_id: u64, guest_cr3: u64, vaddr: u64) -> Option<
     
     // Check for 2MB page
     if pde & (1 << 7) != 0 {
-        let physical = (pde & 0x000F_FFFF_FFE0_0000) | (vaddr & 0x1F_FFFF);
-        return Some(physical);
+        let phys = (pde & 0x000F_FFFF_FFE0_0000) | (vaddr & 0x1F_FFFF);
+        return Some(phys);
     }
     
     // Read PT entry (4KB page)
@@ -146,8 +146,8 @@ pub fn guest_virt_to_physical(vm_id: u64, guest_cr3: u64, vaddr: u64) -> Option<
     let pte = read_guest_u64(vm_id, pt_base + pt_index * 8)?;
     if pte & 1 == 0 { return None; }
     
-    let physical = (pte & 0x000F_FFFF_FFFF_F000) | offset;
-    Some(physical)
+    let phys = (pte & 0x000F_FFFF_FFFF_F000) | offset;
+    Some(phys)
 }
 
 /// Read bytes from a guest virtual address
@@ -160,7 +160,7 @@ pub fn read_guest_virt(vm_id: u64, guest_cr3: u64, vaddr: u64, len: usize) -> Op
     while remaining > 0 {
         let gpa = guest_virt_to_physical(vm_id, guest_cr3, cur_vaddr)?;
         let page_offset = (cur_vaddr & 0xFFF) as usize;
-        let chunk = core::cmp::minimum(remaining, 4096 - page_offset);
+        let chunk = core::cmp::min(remaining, 4096 - page_offset);
         
         let data = read_guest_physical(vm_id, gpa, chunk)?;
         result.extend_from_slice(&data);
@@ -287,7 +287,7 @@ pub struct GuestProcess {
     /// Parent PID
     pub ppid: u32,
     /// Virtual address of task_struct
-    pub task_address: u64,
+    pub task_addr: u64,
     /// Memory size (mm->total_vm pages)
     pub vm_pages: u64,
 }
@@ -312,7 +312,7 @@ pub struct LinuxOffsets {
     /// Offset of total_vm in mm_struct
     pub mm_total_vm: usize,
     /// Offset of init_task symbol (virtual address in guest kernel)
-    pub initialize_task_address: u64,
+    pub init_task_addr: u64,
 }
 
 // Bloc d'implémentation — définit les méthodes du type ci-dessus.
@@ -327,7 +327,7 @@ impl LinuxOffsets {
             parent: 0x568,        // offsetof(task_struct, real_parent)
             mm: 0x478,            // offsetof(task_struct, mm)
             mm_total_vm: 0x80,    // offsetof(mm_struct, total_vm)
-            initialize_task_address: 0,    // Must be discovered from System.map or kallsyms
+            init_task_addr: 0,    // Must be discovered from System.map or kallsyms
         }
     }
     
@@ -341,7 +341,7 @@ impl LinuxOffsets {
             parent: 0x4D0,
             mm: 0x458,
             mm_total_vm: 0x80,
-            initialize_task_address: 0,
+            init_task_addr: 0,
         }
     }
 }
@@ -358,11 +358,11 @@ pub fn enumerate_linux_processes(
     let mut processes = Vec::new();
     let maximum_procs = 512; // Safety limit
     
-    if offsets.initialize_task_address == 0 {
+    if offsets.init_task_addr == 0 {
         return processes;
     }
     
-    let initialize_task = offsets.initialize_task_address;
+    let initialize_task = offsets.init_task_addr;
     let mut current = initialize_task;
     
     for _ in 0..maximum_procs {
@@ -423,7 +423,7 @@ match read_guest_virt(vm_id, guest_cr3, current + offsets.pid as u64, 4) {
             comm,
             state,
             ppid,
-            task_address: current,
+            task_addr: current,
             vm_pages,
         });
         
@@ -488,7 +488,7 @@ pub struct GuestMemoryRegion {
 
 /// Build a memory map for a guest VM based on standard x86 layout
 pub fn build_guest_memory_map(memory_mb: usize) -> Vec<GuestMemoryRegion> {
-    let memory_bytes = (memory_mb * 1024 * 1024) as u64;
+    let mem_bytes = (memory_mb * 1024 * 1024) as u64;
     let mut regions = Vec::new();
     
     // Standard x86 memory layout:
@@ -509,11 +509,11 @@ pub fn build_guest_memory_map(memory_mb: usize) -> Vec<GuestMemoryRegion> {
     });
     
     // 0x0010_0000 - end: Extended memory
-    let extended_end = if memory_bytes > 0x1_0000_0000 {
+    let extended_end = if mem_bytes > 0x1_0000_0000 {
         // If >4GB, split around the PCI hole
         0xC000_0000u64 // Stop at 3GB (PCI hole at 3-4GB)
     } else {
-        core::cmp::minimum(memory_bytes, 0xC000_0000)
+        core::cmp::min(mem_bytes, 0xC000_0000)
     };
     
     regions.push(GuestMemoryRegion {
@@ -532,8 +532,8 @@ pub fn build_guest_memory_map(memory_mb: usize) -> Vec<GuestMemoryRegion> {
     });
     
     // Above 4GB if applicable
-    if memory_bytes > 0x1_0000_0000 {
-        let above_4g = memory_bytes - 0xC000_0000; // Amount that didn't fit below 3GB
+    if mem_bytes > 0x1_0000_0000 {
+        let above_4g = mem_bytes - 0xC000_0000; // Amount that didn't fit below 3GB
         regions.push(GuestMemoryRegion {
             base: 0x1_0000_0000,
             size: above_4g,
@@ -575,7 +575,7 @@ pub struct SyscallTrap {
     /// Captured syscalls
     pub captured: Vec<CapturedSyscall>,
     /// Max captured entries
-    pub maximum_entries: usize,
+    pub max_entries: usize,
 }
 
 /// A captured syscall from the guest
@@ -583,7 +583,7 @@ pub struct SyscallTrap {
 // Structure publique — visible à l'extérieur de ce module.
 pub struct CapturedSyscall {
     pub vm_id: u64,
-    pub syscall_number: u64,
+    pub syscall_nr: u64,
     pub arg0: u64,
     pub arg1: u64,
     pub arg2: u64,
@@ -599,7 +599,7 @@ pub fn new() -> Self {
             filter: Vec::new(),
             active: false,
             captured: Vec::new(),
-            maximum_entries: 1024,
+            max_entries: 1024,
         }
     }
     
@@ -612,18 +612,18 @@ pub fn new() -> Self {
             return;
         }
         
-        if self.captured.len() >= self.maximum_entries {
+        if self.captured.len() >= self.max_entries {
             self.captured.remove(0); // Ring behavior
         }
         
         self.captured.push(CapturedSyscall {
             vm_id,
-            syscall_number: nr,
+            syscall_nr: nr,
             arg0: a0,
             arg1: a1,
             arg2: a2,
             rip,
-            timestamp: crate::time::uptime_mouse(),
+            timestamp: crate::time::uptime_ms(),
         });
         
         // Emit to trace bus

@@ -50,17 +50,17 @@ pub struct BootImageHeaderV2 {
     /// Size of the kernel in bytes
     pub kernel_size: u32,
     /// Physical load address of the kernel
-    pub kernel_address: u32,
+    pub kernel_addr: u32,
     /// Size of the ramdisk in bytes (0 for TrustOS)
     pub ramdisk_size: u32,
     /// Physical load address of the ramdisk
-    pub ramdisk_address: u32,
+    pub ramdisk_addr: u32,
     /// Size of second-stage bootloader (0)
     pub second_size: u32,
     /// Physical load address of second-stage (unused)
-    pub second_address: u32,
+    pub second_addr: u32,
     /// Physical address of device tree / tags
-    pub tags_address: u32,
+    pub tags_addr: u32,
     /// Flash page size (usually 4096)
     pub page_size: u32,
     /// Header version (2)
@@ -86,22 +86,22 @@ pub struct BootImageHeaderV2 {
     /// Size of DTB (Device Tree Blob) appended after ramdisk
     pub dtb_size: u32,
     /// Physical load address for DTB
-    pub dtb_address: u64,
+    pub dtb_addr: u64,
 }
 
 // Implementation block — defines methods for the type above.
 impl BootImageHeaderV2 {
     /// Create a new boot image header for TrustOS
-    pub fn new_trustos(kernel_size: u32, kernel_address: u32) -> Self {
+    pub fn new_trustos(kernel_size: u32, kernel_addr: u32) -> Self {
         let mut header = Self {
             magic: *BOOT_MAGIC,
             kernel_size,
-            kernel_address,
+            kernel_addr,
             ramdisk_size: 0,
-            ramdisk_address: 0x01000000,      // Standard ramdisk addr (unused)
+            ramdisk_addr: 0x01000000,      // Standard ramdisk addr (unused)
             second_size: 0,
-            second_address: 0,
-            tags_address: 0x00000100,
+            second_addr: 0,
+            tags_addr: 0x00000100,
             page_size: BOOT_PAGE_SIZE,
             header_version: 2,
             os_version: Self::pack_os_version(1, 0, 0, 2026, 2), // TrustOS v1.0.0
@@ -113,7 +113,7 @@ impl BootImageHeaderV2 {
             recovery_dtbo_offset: 0,
             header_size: core::mem::size_of::<Self>() as u32,
             dtb_size: 0,
-            dtb_address: 0,
+            dtb_addr: 0,
         };
 
         // Set product name
@@ -194,10 +194,10 @@ pub struct FdtHeader {
     pub totalsize: u32,
     pub off_dt_struct: u32,
     pub off_dt_strings: u32,
-    pub off_memory_rsvmap: u32,
+    pub off_mem_rsvmap: u32,
     pub version: u32,
     pub last_comp_version: u32,
-    pub boot_cpuid_physical: u32,
+    pub boot_cpuid_phys: u32,
     pub size_dt_strings: u32,
     pub size_dt_struct: u32,
 }
@@ -218,7 +218,7 @@ const u32).read_unaligned());
 
     /// Read header from a physical address
     pub     // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe fn from_pointer(ptr: *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe fn from_ptr(ptr: *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u8) -> Option<&'static Self> {
         if !Self::validate(ptr) {
             return None;
@@ -246,11 +246,11 @@ pub struct DtbInfo {
     pub dtb_size: u32,
     /// Detected SoC model (from /model or /compatible)
     pub model: [u8; 64],
-    pub model_length: usize,
+    pub model_len: usize,
     /// Memory base address (from /memory reg)
-    pub memory_base: u64,
+    pub mem_base: u64,
     /// Memory size (from /memory reg)
-    pub memory_size: u64,
+    pub mem_size: u64,
     /// Serial port base address (from /chosen stdout-path)
     pub serial_base: u64,
 }
@@ -262,9 +262,9 @@ impl Default for DtbInfo {
             dtb_base: 0,
             dtb_size: 0,
             model: [0u8; 64],
-            model_length: 0,
-            memory_base: 0,
-            memory_size: 0,
+            model_len: 0,
+            mem_base: 0,
+            mem_size: 0,
             serial_base: 0,
         }
     }
@@ -276,15 +276,15 @@ impl DtbInfo {
     pub     // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe fn from_dtb_pointer(ptr: *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u8) -> Option<Self> {
-        let header = FdtHeader::from_pointer(ptr)?;
-        let mut information = DtbInfo::default();
-        information.dtb_base = ptr as u64;
-        information.dtb_size = header.total_size();
+        let header = FdtHeader::from_ptr(ptr)?;
+        let mut info = DtbInfo::default();
+        info.dtb_base = ptr as u64;
+        info.dtb_size = header.total_size();
 
         // DTB is valid but full parsing requires more code.
         // For now, we just record the base/size so the kernel can
         // pass it to a proper DTB parser later.
-        Some(information)
+        Some(info)
     }
 }
 

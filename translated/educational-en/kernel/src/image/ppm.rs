@@ -87,7 +87,7 @@ fn parse_p3(data: &[u8]) -> Option<Image> {
 /// Parse P6 (binary) PPM
 fn parse_p6(data: &[u8]) -> Option<Image> {
     // Find the header end (after max value and whitespace)
-    let mut position = 0;
+    let mut pos = 0;
     let mut width = 0u32;
     let mut height = 0u32;
     let mut maximum_value = 0u32;
@@ -96,9 +96,9 @@ fn parse_p6(data: &[u8]) -> Option<Image> {
     let mut number_buffer = [0u8; 16];
     let mut number_length = 0;
     
-    while position < data.len() && header_stage < 3 {
-        let c = data[position];
-        position += 1;
+    while pos < data.len() && header_stage < 3 {
+        let c = data[pos];
+        pos += 1;
         
         if in_comment {
             if c == b'\n' { in_comment = false; }
@@ -139,7 +139,7 @@ match header_stage {
     }
     
     // Parse pixel data
-    let pixel_data = &data[position..];
+    let pixel_data = &data[pos..];
     let bytes_per_pixel = if maximum_value > 255 { 6 } else { 3 };
     
     if pixel_data.len() < (width * height) as usize * bytes_per_pixel {
@@ -179,21 +179,21 @@ match header_stage {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /// Save image as PPM (P6 binary format)
-pub fn save_ppm(image: &Image, path: &str) -> Result<(), &'static str> {
-    let data = create_ppm(image);
-    crate::vfs::write_file(path, &data).map_error(|_| "Failed to write file")
+pub fn save_ppm(img: &Image, path: &str) -> Result<(), &'static str> {
+    let data = create_ppm(img);
+    crate::vfs::write_file(path, &data).map_err(|_| "Failed to write file")
 }
 
 /// Create a PPM file from an Image
-pub fn create_ppm(image: &Image) -> Vec<u8> {
+pub fn create_ppm(img: &Image) -> Vec<u8> {
     use alloc::format;
     
-    let header = format!("P6\n{} {}\n255\n", image.width, image.height);
-    let mut data = Vec::with_capacity(header.len() + (image.width * image.height * 3) as usize);
+    let header = format!("P6\n{} {}\n255\n", img.width, img.height);
+    let mut data = Vec::with_capacity(header.len() + (img.width * img.height * 3) as usize);
     
     data.extend_from_slice(header.as_bytes());
     
-    for pixel in &image.pixels {
+    for pixel in &img.pixels {
         let r = ((pixel >> 16) & 0xFF) as u8;
         let g = ((pixel >> 8) & 0xFF) as u8;
         let b = (pixel & 0xFF) as u8;

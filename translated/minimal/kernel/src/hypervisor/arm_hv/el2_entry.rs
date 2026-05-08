@@ -23,7 +23,7 @@
 
 
 
-use super::{Atg, Sw, hcr, nfh};
+use super::{Ss, Ic, hcr, hnf};
 use super::stage2::Stage2Tables;
 use super::trap_handler;
 use super::vgic::VirtualGic;
@@ -32,7 +32,7 @@ use super::mmio_spy;
 use core::sync::atomic::{AtomicBool, Ordering};
 
 
-static ADG_: AtomicBool = AtomicBool::new(false);
+static AEW_: AtomicBool = AtomicBool::new(false);
 
 
 
@@ -41,7 +41,7 @@ static ADG_: AtomicBool = AtomicBool::new(false);
 
 
 
-pub fn tvi() {
+pub fn mqr() {
     #[cfg(target_arch = "aarch64")]
     unsafe {
         
@@ -113,9 +113,9 @@ pub fn tvi() {
 
             "3:",
 
-            gup = bd(reg) _,
-            zqn = aaw sjv,
-            yyt = aaw sju,
+            tmp = out(reg) _,
+            sync_handler = sym el2_sync_entry,
+            irq_handler = sym el2_irq_entry,
             options(nostack)
         );
     }
@@ -124,20 +124,20 @@ pub fn tvi() {
 
 #[cfg(target_arch = "aarch64")]
 #[no_mangle]
-extern "C" fn sjv() {
+extern "C" fn el2_sync_entry() {
     
     let esr: u64;
-    let adt: u64;
-    let esb: u64;
+    let far: u64;
+    let hpfar: u64;
 
     unsafe {
         core::arch::asm!(
             "mrs {esr}, esr_el2",
             "mrs {far}, far_el2",
             "mrs {hpfar}, hpfar_el2",
-            esr = bd(reg) esr,
-            adt = bd(reg) adt,
-            esb = bd(reg) esb,
+            esr = out(reg) esr,
+            far = out(reg) far,
+            hpfar = out(reg) hpfar,
             options(nomem, nostack)
         );
     }
@@ -145,28 +145,28 @@ extern "C" fn sjv() {
     
     
     unsafe {
-        let regs = &mut TT_.b;
-        let hr = trap_handler::tld(esr, adt, esb, regs);
+        let regs = &mut UZ_.x;
+        let action = trap_handler::mio(esr, far, hpfar, regs);
 
-        match hr {
-            trap_handler::TrapAction::Gw => {
+        match action {
+            trap_handler::TrapAction::Handled => {
                 
-                let npn: u64;
-                core::arch::asm!("mrs {e}, elr_el2", aa = bd(reg) npn, options(nomem, nostack));
-                let odh = if (esr >> 25) & 1 != 0 { 4u64 } else { 2u64 };
-                core::arch::asm!("msr elr_el2, {e}", aa = in(reg) npn + odh, options(nomem, nostack));
+                let elr: u64;
+                core::arch::asm!("mrs {e}, elr_el2", e = out(reg) elr, options(nomem, nostack));
+                let il = if (esr >> 25) & 1 != 0 { 4u64 } else { 2u64 };
+                core::arch::asm!("msr elr_el2, {e}", e = in(reg) elr + il, options(nomem, nostack));
             }
-            trap_handler::TrapAction::Bhj => {
+            trap_handler::TrapAction::ForwardSmc => {
                 
-                
-                
-            }
-            trap_handler::TrapAction::Auf => {
                 
                 
             }
-            trap_handler::TrapAction::Ath => {
-                ADG_.store(false, Ordering::Release);
+            trap_handler::TrapAction::InjectFault => {
+                
+                
+            }
+            trap_handler::TrapAction::GuestHalt => {
+                AEW_.store(false, Ordering::Release);
             }
         }
     }
@@ -175,31 +175,31 @@ extern "C" fn sjv() {
 
 #[cfg(target_arch = "aarch64")]
 #[no_mangle]
-extern "C" fn sju() {
+extern "C" fn el2_irq_entry() {
     unsafe {
-        super::vgic::tjl(&mut BIH_);
+        super::vgic::mhr(&mut BKO_);
     }
 }
 
 
-static mut TT_: Atg = Atg {
-    b: [0; 31],
-    wql: 0,
-    bzm: 0,
-    mgy: 0,
-    wfb: 0,
-    xnc: 0,
-    xnd: 0,
-    xbl: 0,
-    ujj: 0,
-    xqt: 0,
-    snk: 0,
-    sra: 0,
-    tql: 0,
+static mut UZ_: Ss = Ss {
+    x: [0; 31],
+    sp_el1: 0,
+    elr_el1: 0,
+    spsr_el1: 0,
+    sctlr_el1: 0,
+    ttbr0_el1: 0,
+    ttbr1_el1: 0,
+    tcr_el1: 0,
+    mair_el1: 0,
+    vbar_el1: 0,
+    esr_el2: 0,
+    far_el2: 0,
+    hpfar_el2: 0,
 };
 
 
-static mut BIH_: VirtualGic = VirtualGic::new();
+static mut BKO_: VirtualGic = VirtualGic::new();
 
 
 
@@ -209,26 +209,26 @@ static mut BIH_: VirtualGic = VirtualGic::new();
 
 
 
-pub fn ypm(config: &Sw) -> ! {
+pub fn qfd(config: &Ic) -> ! {
     
-    if !super::fma() {
+    if !super::cll() {
         panic!("ARM hypervisor requires EL2! Current EL is lower.");
     }
 
     
-    let mut cuc = Stage2Tables::new(1); 
+    let mut azn = Stage2Tables::new(1); 
 
     
-    cuc.ujs(config.hmd, config.hme);
+    azn.map_ram(config.guest_ram_base, config.guest_ram_size);
 
     
-    for &(ar, aw) in &config.iew {
-        let cu = mmio_spy::eda(ar);
-        cuc.guw(ar, aw, cu);
+    for &(base, size) in &config.trapped_mmio {
+        let label = mmio_spy::btg(base);
+        azn.trap_mmio(base, size, label);
     }
 
     
-    let lbp = nfh(config);
+    let hcr_val = hnf(config);
 
     
     #[cfg(target_arch = "aarch64")]
@@ -237,22 +237,22 @@ pub fn ypm(config: &Sw) -> ! {
         core::arch::asm!(
             "msr hcr_el2, {hcr}",
             "isb",
-            hcr = in(reg) lbp,
+            hcr = in(reg) hcr_val,
             options(nomem, nostack)
         );
 
         
-        let fbe = cuc.fbe();
+        let vttbr = azn.vttbr();
         core::arch::asm!(
             "msr vttbr_el2, {vttbr}",
             "isb",
-            fbe = in(reg) fbe,
+            vttbr = in(reg) vttbr,
             options(nomem, nostack)
         );
 
         
         
-        let pyy: u64 = (24 << 0)     
+        let vtcr: u64 = (24 << 0)     
                        | (0b01 << 6)   
                        | (0b01 << 8)   
                        | (0b01 << 10)  
@@ -262,27 +262,27 @@ pub fn ypm(config: &Sw) -> ! {
         core::arch::asm!(
             "msr vtcr_el2, {vtcr}",
             "isb",
-            pyy = in(reg) pyy,
+            vtcr = in(reg) vtcr,
             options(nomem, nostack)
         );
     }
 
     
-    tvi();
+    mqr();
 
     
     unsafe {
-        BIH_.init();
+        BKO_.init();
     }
 
     
     unsafe {
-        TT_.b[0] = config.ixj;    
-        TT_.bzm = config.hma;  
-        TT_.mgy = 0x3C5;              
+        UZ_.x[0] = config.guest_dtb;    
+        UZ_.elr_el1 = config.guest_entry;  
+        UZ_.spsr_el1 = 0x3C5;              
     }
 
-    ADG_.store(true, Ordering::Release);
+    AEW_.store(true, Ordering::Release);
 
     
     #[cfg(target_arch = "aarch64")]
@@ -304,63 +304,63 @@ pub fn ypm(config: &Sw) -> ! {
             "isb",
             
             "eret",
-            bt = in(reg) config.hma,
-            zpg = in(reg) 0x3C5u64,
-            azq = in(reg) config.ixj,
-            options(jhe)
+            entry = in(reg) config.guest_entry,
+            spsr = in(reg) 0x3C5u64,
+            dtb = in(reg) config.guest_dtb,
+            options(noreturn)
         );
     }
 
     #[cfg(not(target_arch = "aarch64"))]
     loop {
-        core::hint::hc();
+        core::hint::spin_loop();
     }
 }
 
 
-pub fn yzj() -> bool {
-    ADG_.load(Ordering::Acquire)
+pub fn qmj() -> bool {
+    AEW_.load(Ordering::Acquire)
 }
 
 
-pub fn tes() -> alloc::string::String {
+pub fn mdv() -> alloc::string::String {
     use alloc::format;
-    let uov = mmio_spy::mmj();
-    let wpv = mmio_spy::jty();
+    let nfo = mmio_spy::gzs();
+    let otx = mmio_spy::fdl();
 
-    let mut e = format!(
+    let mut j = format!(
         "=== TrustOS EL2 Hypervisor Spy Report ===\n\
          MMIO accesses intercepted: {}\n\
          SMC calls intercepted: {}\n",
-        uov, wpv
+        nfo, otx
     );
 
     
-    let cm = mmio_spy::nld();
-    if !cm.is_empty() {
-        e.t("\n--- Device Activity ---\n");
-        for (j, exj, fbu) in &cm {
-            e.t(&format!("  {:<20} R:{:<6} W:{}\n", j, exj, fbu));
+    let stats = mmio_spy::hrz();
+    if !stats.is_empty() {
+        j.push_str("\n--- Device Activity ---\n");
+        for (name, reads, writes) in &stats {
+            j.push_str(&format!("  {:<20} R:{:<6} W:{}\n", name, reads, writes));
         }
     }
 
     
-    let fsj = mmio_spy::paq(10);
-    if !fsj.is_empty() {
-        e.t("\n--- Recent MMIO (newest first) ---\n");
-        for aiz in &fsj {
-            e.t(&format!("  {}\n", mmio_spy::svw(aiz)));
+    let cpd = mmio_spy::iyt(10);
+    if !cpd.is_empty() {
+        j.push_str("\n--- Recent MMIO (newest first) ---\n");
+        for rt in &cpd {
+            j.push_str(&format!("  {}\n", mmio_spy::lxo(rt)));
         }
     }
 
     
-    let pll = mmio_spy::lyf(5);
-    if !pll.is_empty() {
-        e.t("\n--- Recent SMC Calls ---\n");
-        for aiz in &pll {
-            e.t(&format!("  {}\n", mmio_spy::nvs(aiz)));
+    let jgq = mmio_spy::gqq(5);
+    if !jgq.is_empty() {
+        j.push_str("\n--- Recent SMC Calls ---\n");
+        for rt in &jgq {
+            j.push_str(&format!("  {}\n", mmio_spy::hzq(rt)));
         }
     }
 
-    e
+    j
 }

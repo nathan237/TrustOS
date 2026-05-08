@@ -25,7 +25,7 @@ struct FrameAllocator {
     /// Bitmap: each bit = one 4 KB frame. bit set = allocated.
     bitmap: Vec<u64>,
     /// Base physical address (lowest tracked frame)
-    base_physical: u64,
+    base_phys: u64,
     /// Total number of frames tracked
     total_frames: usize,
     /// Hint: index of last allocation (speeds up linear scan)
@@ -40,8 +40,8 @@ impl FrameAllocator {
         
         // Start scanning from hint
         for offset in 0..words {
-            let index = (self.next_hint + offset) % words;
-            let word = self.bitmap[index];
+            let idx = (self.next_hint + offset) % words;
+            let word = self.bitmap[idx];
             
             if word == u64::MAX {
                 continue; // all 64 frames in this word are taken
@@ -49,19 +49,19 @@ impl FrameAllocator {
             
             // Find first zero bit
             let bit = (!word).trailing_zeros() as usize;
-            let frame_index = index * 64 + bit;
+            let frame_index = idx * 64 + bit;
             
             if frame_index >= self.total_frames {
                 continue;
             }
             
             // Mark as allocated
-            self.bitmap[index] |= 1u64 << bit;
-            self.next_hint = index;
+            self.bitmap[idx] |= 1u64 << bit;
+            self.next_hint = idx;
             
             USED_FRAMES.fetch_add(1, Ordering::Relaxed);
             
-            return Some(self.base_physical + frame_index as u64 * FRAME_SIZE);
+            return Some(self.base_phys + frame_index as u64 * FRAME_SIZE);
         }
         
         None // Out of memory
@@ -69,38 +69,38 @@ impl FrameAllocator {
     
     /// Allocate a physical frame with address below `limit`.
     /// Used for DMA-safe allocations (e.g. below 4 GB for 32-bit DMA devices).
-    fn allocator_below(&mut self, limit: u64) -> Option<u64> {
-        let maximum_frame_index = if limit <= self.base_physical {
+    fn alloc_below(&mut self, limit: u64) -> Option<u64> {
+        let maximum_frame_index = if limit <= self.base_phys {
             return None;
         } else {
-            ((limit - self.base_physical) / FRAME_SIZE) as usize
+            ((limit - self.base_phys) / FRAME_SIZE) as usize
         };
-        let capability = maximum_frame_index.minimum(self.total_frames);
-        let words = (capability + 63) / 64;
+        let cap = maximum_frame_index.min(self.total_frames);
+        let words = (cap + 63) / 64;
         
-        for index in 0..words {
-            let word = self.bitmap[index];
+        for idx in 0..words {
+            let word = self.bitmap[idx];
             if word == u64::MAX {
                 continue;
             }
             let bit = (!word).trailing_zeros() as usize;
-            let frame_index = index * 64 + bit;
-            if frame_index >= capability {
+            let frame_index = idx * 64 + bit;
+            if frame_index >= cap {
                 continue;
             }
-            self.bitmap[index] |= 1u64 << bit;
+            self.bitmap[idx] |= 1u64 << bit;
             USED_FRAMES.fetch_add(1, Ordering::Relaxed);
-            return Some(self.base_physical + frame_index as u64 * FRAME_SIZE);
+            return Some(self.base_phys + frame_index as u64 * FRAME_SIZE);
         }
         None
     }
     
     /// Free a previously allocated frame
-    fn free(&mut self, physical: u64) {
-        if physical < self.base_physical {
+    fn free(&mut self, phys: u64) {
+        if phys < self.base_phys {
             return;
         }
-        let frame_index = ((physical - self.base_physical) / FRAME_SIZE) as usize;
+        let frame_index = ((phys - self.base_phys) / FRAME_SIZE) as usize;
         if frame_index >= self.total_frames {
             return;
         }
@@ -131,13 +131,21 @@ pub fn init(usable_regions: &[PhysicalRegion], heap_physical: u64, heap_size: u6
     }
     
     // Determine the physical address range to track
-    let minimum_physical = usable_regions.iter().map(|r| r.base).minimum().unwrap();
-    let maximum_physical = usable_regions.iter().map(|r| r.base + r.length).maximum().unwrap();
+    let minimum_physical = // Pattern matching — Rust's exhaustive branching construct.
+match usable_regions.iter().map(|r| r.base).min() {
+        Some(v) => v,
+        None => { crate::serial_println!("[FRAME] BUG: no min in non-empty regions"); return; }
+    };
+    let maximum_physical = // Pattern matching — Rust's exhaustive branching construct.
+match usable_regions.iter().map(|r| r.base + r.length).max() {
+        Some(v) => v,
+        None => { crate::serial_println!("[FRAME] BUG: no max in non-empty regions"); return; }
+    };
     
     // Align min down and max up to FRAME_SIZE
-    let base_physical = minimum_physical & !(FRAME_SIZE - 1);
+    let base_phys = minimum_physical & !(FRAME_SIZE - 1);
     let top_physical = (maximum_physical + FRAME_SIZE - 1) & !(FRAME_SIZE - 1);
-    let total_frames = ((top_physical - base_physical) / FRAME_SIZE) as usize;
+    let total_frames = ((top_physical - base_phys) / FRAME_SIZE) as usize;
     
     // Allocate bitmap (all bits set = all allocated by default)
     let bitmap_words = (total_frames + 63) / 64;
@@ -145,8 +153,8 @@ pub fn init(usable_regions: &[PhysicalRegion], heap_physical: u64, heap_size: u6
     
     // Mark usable regions as FREE (clear bits)
     for region in usable_regions {
-        let region_start = (region.base.maximum(base_physical) - base_physical) / FRAME_SIZE;
-        let region_end = ((region.base + region.length).minimum(top_physical) - base_physical) / FRAME_SIZE;
+        let region_start = (region.base.max(base_phys) - base_phys) / FRAME_SIZE;
+        let region_end = ((region.base + region.length).min(top_physical) - base_phys) / FRAME_SIZE;
         
         for frame in region_start..region_end {
             let word = frame as usize / 64;
@@ -157,9 +165,9 @@ pub fn init(usable_regions: &[PhysicalRegion], heap_physical: u64, heap_size: u6
     
     // Mark heap region as USED (set bits)
     let heap_end = heap_physical + heap_size;
-    if heap_physical >= base_physical && heap_physical < top_physical {
-        let start_frame = ((heap_physical - base_physical) / FRAME_SIZE) as usize;
-        let end_frame = (((heap_end.minimum(top_physical)) - base_physical) / FRAME_SIZE) as usize;
+    if heap_physical >= base_phys && heap_physical < top_physical {
+        let start_frame = ((heap_physical - base_phys) / FRAME_SIZE) as usize;
+        let end_frame = (((heap_end.min(top_physical)) - base_phys) / FRAME_SIZE) as usize;
         for frame in start_frame..end_frame {
             let word = frame / 64;
             let bit = frame % 64;
@@ -169,8 +177,8 @@ pub fn init(usable_regions: &[PhysicalRegion], heap_physical: u64, heap_size: u6
     
     // Also mark the first 1 MB as used (legacy BIOS area, etc.)
     // Only applies when physical RAM starts below 1MB (x86, not ARM/RISC-V)
-    if base_physical < 0x10_0000 {
-        let low_end = (0x10_0000u64.minimum(top_physical) - base_physical) / FRAME_SIZE;
+    if base_phys < 0x10_0000 {
+        let low_end = (0x10_0000u64.min(top_physical) - base_phys) / FRAME_SIZE;
         for frame in 0..low_end as usize {
             let word = frame / 64;
             let bit = frame % 64;
@@ -197,7 +205,7 @@ pub fn init(usable_regions: &[PhysicalRegion], heap_physical: u64, heap_size: u6
     
     *FRAME_ALLOCATOR.lock() = Some(FrameAllocator {
         bitmap,
-        base_physical,
+        base_phys,
         total_frames,
         next_hint: 0,
     });
@@ -210,42 +218,42 @@ pub fn allocator_frame() -> Option<u64> {
 }
 
 /// Free a physical frame previously returned by `alloc_frame`.
-pub fn free_frame(physical: u64) {
+pub fn free_frame(phys: u64) {
     if let Some(alloc) = FRAME_ALLOCATOR.lock().as_mut() {
-        alloc.free(physical);
+        alloc.free(phys);
     }
 }
 
 /// Allocate a zeroed physical frame (convenience wrapper).
 pub fn allocator_frame_zeroed() -> Option<u64> {
-    let physical = allocator_frame()?;
+    let phys = allocator_frame()?;
     let hhdm = crate::memory::hhdm_offset();
-    let virt = physical + hhdm;
+    let virt = phys + hhdm;
     core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
         core::ptr::write_bytes(virt as *mut u8, 0, FRAME_SIZE as usize);
     }
-    Some(physical)
+    Some(phys)
 }
 
 /// Allocate a physical frame guaranteed below 4 GB (for 32-bit DMA devices).
 /// Returns the page-aligned physical address, or `None` if no low frame available.
 pub fn allocator_frame_below_4g() -> Option<u64> {
-    FRAME_ALLOCATOR.lock().as_mut()?.allocator_below(0x1_0000_0000)
+    FRAME_ALLOCATOR.lock().as_mut()?.alloc_below(0x1_0000_0000)
 }
 
 /// Allocate a zeroed physical frame below 4 GB (DMA-safe).
 pub fn allocator_frame_below_4g_zeroed() -> Option<u64> {
-    let physical = allocator_frame_below_4g()?;
+    let phys = allocator_frame_below_4g()?;
     let hhdm = crate::memory::hhdm_offset();
-    let virt = physical + hhdm;
+    let virt = phys + hhdm;
     core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
         core::ptr::write_bytes(virt as *mut u8, 0, FRAME_SIZE as usize);
     }
-    Some(physical)
+    Some(phys)
 }
 
 /// Return (total, used) frame counts.
@@ -260,15 +268,15 @@ pub fn self_test() -> (usize, usize) {
 
     // Test 1: Basic allocation returns page-aligned address
     match allocator_frame() {
-        Some(physical) => {
-            if physical & 0xFFF == 0 {
+        Some(phys) => {
+            if phys & 0xFFF == 0 {
                 crate::serial_println!("[FRAME-TEST] alloc page-aligned: PASS");
                 passed += 1;
             } else {
-                crate::serial_println!("[FRAME-TEST] alloc NOT page-aligned ({:#x}): FAIL", physical);
+                crate::serial_println!("[FRAME-TEST] alloc NOT page-aligned ({:#x}): FAIL", phys);
                 failed += 1;
             }
-            free_frame(physical);
+            free_frame(phys);
         }
         None => {
             crate::serial_println!("[FRAME-TEST] alloc returned None: FAIL");
@@ -278,10 +286,10 @@ pub fn self_test() -> (usize, usize) {
 
     // Test 2: Zeroed allocation
     match allocator_frame_zeroed() {
-        Some(physical) => {
+        Some(phys) => {
             let hhdm = crate::memory::hhdm_offset();
             let page = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::slice::from_raw_parts((physical + hhdm) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe { core::slice::from_raw_parts((phys + hhdm) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u8, 4096) };
             if page.iter().all(|&b| b == 0) {
                 crate::serial_println!("[FRAME-TEST] alloc_zeroed all zeros: PASS");
@@ -290,7 +298,7 @@ const u8, 4096) };
                 crate::serial_println!("[FRAME-TEST] alloc_zeroed NOT zeroed: FAIL");
                 failed += 1;
             }
-            free_frame(physical);
+            free_frame(phys);
         }
         None => {
             crate::serial_println!("[FRAME-TEST] alloc_zeroed returned None: FAIL");

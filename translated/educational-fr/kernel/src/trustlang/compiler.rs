@@ -40,13 +40,13 @@ impl Compiler {
     }
 
     fn intern_string(&mut self, s: &str) -> u16 {
-        if let Some(&index) = self.string_map.get(s) {
-            return index as u16;
+        if let Some(&idx) = self.string_map.get(s) {
+            return idx as u16;
         }
-        let index = self.strings.len();
+        let idx = self.strings.len();
         self.strings.push(String::from(s));
-        self.string_map.insert(String::from(s), index);
-        index as u16
+        self.string_map.insert(String::from(s), idx);
+        idx as u16
     }
 
     fn register_functions(&mut self, program: &Program) {
@@ -92,9 +92,9 @@ match item {
 
         // Ensure return at end
         if fc.code.last().copied() != Some(Op::Return as u8) {
-            fc.emit_operation(&mut self.strings, Op::PushI64);
+            fc.emit_op(&mut self.strings, Op::PushI64);
             fc.emit_i64(0); // default return 0
-            fc.emit_operation(&mut self.strings, Op::Return);
+            fc.emit_op(&mut self.strings, Op::Return);
         }
 
         let func = Function {
@@ -121,7 +121,7 @@ match stmt {
                 let slot = fc.add_local(name);
                 if let Some(expr) = init {
                     self.compile_expr(fc, expr)?;
-                    fc.emit_operation(&mut self.strings, Op::StoreLocal);
+                    fc.emit_op(&mut self.strings, Op::StoreLocal);
                     fc.code.push(slot);
                 }
             }
@@ -129,7 +129,7 @@ match stmt {
                 self.compile_expr(fc, value)?;
                 self.compile_store(fc, target)?;
             }
-            Stmt::OperationAssign { op, target, value } => {
+            Stmt::OpAssign { op, target, value } => {
                 self.compile_expr(fc, target)?;
                 self.compile_expr(fc, value)?;
                 // Emit the binary op (assume i64 for now)
@@ -141,21 +141,21 @@ match op {
                     BinOp::Div => Op::DivI,
                     _ => Op::AddI,
                 };
-                fc.emit_operation(&mut self.strings, vm_operation);
+                fc.emit_op(&mut self.strings, vm_operation);
                 self.compile_store(fc, target)?;
             }
             Stmt::Expr(expr) => {
                 self.compile_expr(fc, expr)?;
-                fc.emit_operation(&mut self.strings, Op::Pop); // discard result
+                fc.emit_op(&mut self.strings, Op::Pop); // discard result
             }
-            Stmt::Return(value) => {
-                if let Some(expr) = value {
+            Stmt::Return(val) => {
+                if let Some(expr) = val {
                     self.compile_expr(fc, expr)?;
                 } else {
-                    fc.emit_operation(&mut self.strings, Op::PushI64);
+                    fc.emit_op(&mut self.strings, Op::PushI64);
                     fc.emit_i64(0);
                 }
-                fc.emit_operation(&mut self.strings, Op::Return);
+                fc.emit_op(&mut self.strings, Op::Return);
             }
             Stmt::If { condition, then_block, else_block } => {
                 self.compile_expr(fc, condition)?;
@@ -163,10 +163,10 @@ match op {
 
                 self.compile_block(fc, then_block)?;
 
-                if let Some(else_block) = else_block {
+                if let Some(else_blk) = else_block {
                     let jump_end = fc.emit_jump(Op::Jump);
                     fc.patch_jump(jump_else);
-                    self.compile_block(fc, else_block)?;
+                    self.compile_block(fc, else_blk)?;
                     fc.patch_jump(jump_end);
                 } else {
                     fc.patch_jump(jump_else);
@@ -196,13 +196,13 @@ match op {
                 // For Range { start, end }: init var=start, while var < end, var += 1
                 if let Expr::Range { start, end } = iter {
                     self.compile_expr(fc, start)?;
-                    fc.emit_operation(&mut self.strings, Op::StoreLocal);
+                    fc.emit_op(&mut self.strings, Op::StoreLocal);
                     fc.code.push(slot);
 
                     // Compile end to a temporary
                     let end_slot = fc.add_local(&format!("__for_end_{}", slot));
                     self.compile_expr(fc, end)?;
-                    fc.emit_operation(&mut self.strings, Op::StoreLocal);
+                    fc.emit_op(&mut self.strings, Op::StoreLocal);
                     fc.code.push(end_slot);
 
                     let loop_start = fc.code.len();
@@ -210,22 +210,22 @@ match op {
                     fc.loop_breaks.push(Vec::new());
 
                     // Condition: var < end
-                    fc.emit_operation(&mut self.strings, Op::LoadLocal);
+                    fc.emit_op(&mut self.strings, Op::LoadLocal);
                     fc.code.push(slot);
-                    fc.emit_operation(&mut self.strings, Op::LoadLocal);
+                    fc.emit_op(&mut self.strings, Op::LoadLocal);
                     fc.code.push(end_slot);
-                    fc.emit_operation(&mut self.strings, Op::LtI);
+                    fc.emit_op(&mut self.strings, Op::LtI);
 
                     let exit_jump = fc.emit_jump(Op::JumpIfFalse);
                     self.compile_block(fc, body)?;
 
                     // Increment: var += 1
-                    fc.emit_operation(&mut self.strings, Op::LoadLocal);
+                    fc.emit_op(&mut self.strings, Op::LoadLocal);
                     fc.code.push(slot);
-                    fc.emit_operation(&mut self.strings, Op::PushI64);
+                    fc.emit_op(&mut self.strings, Op::PushI64);
                     fc.emit_i64(1);
-                    fc.emit_operation(&mut self.strings, Op::AddI);
-                    fc.emit_operation(&mut self.strings, Op::StoreLocal);
+                    fc.emit_op(&mut self.strings, Op::AddI);
+                    fc.emit_op(&mut self.strings, Op::StoreLocal);
                     fc.code.push(slot);
 
                     fc.emit_jump_to(loop_start);
@@ -269,25 +269,25 @@ match op {
                 // Correspondance de motifs — branchement exhaustif de Rust.
 match expr {
             Expr::IntLit(v) => {
-                fc.emit_operation(&mut self.strings, Op::PushI64);
+                fc.emit_op(&mut self.strings, Op::PushI64);
                 fc.emit_i64(*v);
             }
             Expr::FloatLit(v) => {
-                fc.emit_operation(&mut self.strings, Op::PushF64);
+                fc.emit_op(&mut self.strings, Op::PushF64);
                 fc.emit_f64(*v);
             }
             Expr::StringLit(s) => {
-                let index = self.intern_string(s);
-                fc.emit_operation(&mut self.strings, Op::PushStr);
-                fc.emit_u16(index);
+                let idx = self.intern_string(s);
+                fc.emit_op(&mut self.strings, Op::PushStr);
+                fc.emit_u16(idx);
             }
             Expr::BoolLit(b) => {
-                fc.emit_operation(&mut self.strings, Op::PushBool);
+                fc.emit_op(&mut self.strings, Op::PushBool);
                 fc.code.push(if *b { 1 } else { 0 });
             }
             Expr::Ident(name) => {
                 if let Some(&slot) = fc.locals.get(name) {
-                    fc.emit_operation(&mut self.strings, Op::LoadLocal);
+                    fc.emit_op(&mut self.strings, Op::LoadLocal);
                     fc.code.push(slot);
                 } else {
                     return Err(format!("undefined variable: {}", name));
@@ -317,14 +317,14 @@ match op {
                     BinOp::Shl => Op::Shl,
                     BinOp::Shr => Op::Shr,
                 };
-                fc.emit_operation(&mut self.strings, vm_operation);
+                fc.emit_op(&mut self.strings, vm_operation);
             }
             Expr::UnaryOp { op, expr } => {
                 self.compile_expr(fc, expr)?;
                                 // Correspondance de motifs — branchement exhaustif de Rust.
 match op {
-                    UnaryOp::Neg => fc.emit_operation(&mut self.strings, Op::NegativeI),
-                    UnaryOp::Not => fc.emit_operation(&mut self.strings, Op::Not),
+                    UnaryOp::Neg => fc.emit_op(&mut self.strings, Op::NegI),
+                    UnaryOp::Not => fc.emit_op(&mut self.strings, Op::Not),
                 }
             }
             Expr::Call { func, args } => {
@@ -333,7 +333,7 @@ match op {
                     for argument in args {
                         self.compile_expr(fc, argument)?;
                     }
-                    fc.emit_operation(&mut self.strings, Op::CallBuiltin);
+                    fc.emit_op(&mut self.strings, Op::CallBuiltin);
                     fc.code.push(bid);
                     fc.code.push(args.len() as u8);
                 } else if let Some(&fidx) = self.func_map.get(func) {
@@ -341,7 +341,7 @@ match op {
                     for argument in args {
                         self.compile_expr(fc, argument)?;
                     }
-                    fc.emit_operation(&mut self.strings, Op::Call);
+                    fc.emit_op(&mut self.strings, Op::Call);
                     fc.emit_u16(fidx as u16);
                     fc.code.push(args.len() as u8);
                 } else {
@@ -351,13 +351,13 @@ match op {
             Expr::Index { array, index } => {
                 self.compile_expr(fc, array)?;
                 self.compile_expr(fc, index)?;
-                fc.emit_operation(&mut self.strings, Op::ArrayGet);
+                fc.emit_op(&mut self.strings, Op::ArrayGet);
             }
             Expr::Array(elems) => {
-                for element in elems {
-                    self.compile_expr(fc, element)?;
+                for elem in elems {
+                    self.compile_expr(fc, elem)?;
                 }
-                fc.emit_operation(&mut self.strings, Op::NewArray);
+                fc.emit_op(&mut self.strings, Op::NewArray);
                 fc.emit_u16(elems.len() as u16);
             }
             Expr::Range { start, end } => {
@@ -366,15 +366,15 @@ match op {
                 self.compile_expr(fc, start)?;
                 self.compile_expr(fc, end)?;
                 // Store as two values (start, end) — handled at VM level
-                fc.emit_operation(&mut self.strings, Op::NewArray);
+                fc.emit_op(&mut self.strings, Op::NewArray);
                 fc.emit_u16(2);
             }
             Expr::Cast { expr, ty } => {
                 self.compile_expr(fc, expr)?;
                                 // Correspondance de motifs — branchement exhaustif de Rust.
 match ty {
-                    Type::F64 => fc.emit_operation(&mut self.strings, Op::I64toF64),
-                    Type::I64 => fc.emit_operation(&mut self.strings, Op::F64toI64),
+                    Type::F64 => fc.emit_op(&mut self.strings, Op::I64toF64),
+                    Type::I64 => fc.emit_op(&mut self.strings, Op::F64toI64),
                     _ => {} // No-op for other casts
                 }
             }
@@ -393,7 +393,7 @@ match ty {
 match target {
             Expr::Ident(name) => {
                 if let Some(&slot) = fc.locals.get(name) {
-                    fc.emit_operation(&mut self.strings, Op::StoreLocal);
+                    fc.emit_op(&mut self.strings, Op::StoreLocal);
                     fc.code.push(slot);
                 } else {
                     return Err(format!("undefined variable: {}", name));
@@ -414,20 +414,20 @@ match target {
                         let temporary_slot = fc.next_local;
                         fc.next_local += 1;
                         // Store value to temp
-                        fc.emit_operation(&mut self.strings, Op::StoreLocal);
+                        fc.emit_op(&mut self.strings, Op::StoreLocal);
                         fc.code.push(temporary_slot);
                         // Load array
-                        fc.emit_operation(&mut self.strings, Op::LoadLocal);
+                        fc.emit_op(&mut self.strings, Op::LoadLocal);
                         fc.code.push(arr_slot);
                         // Compile index expression
                         self.compile_expr(fc, index)?;
                         // Load value back from temp
-                        fc.emit_operation(&mut self.strings, Op::LoadLocal);
+                        fc.emit_op(&mut self.strings, Op::LoadLocal);
                         fc.code.push(temporary_slot);
                         // ArraySet: pops array, index, value → pushes modified array
-                        fc.emit_operation(&mut self.strings, Op::ArraySet);
+                        fc.emit_op(&mut self.strings, Op::ArraySet);
                         // Store modified array back
-                        fc.emit_operation(&mut self.strings, Op::StoreLocal);
+                        fc.emit_op(&mut self.strings, Op::StoreLocal);
                         fc.code.push(arr_slot);
                     } else {
                         return Err(format!("undefined variable: {}", arr_name));
@@ -464,7 +464,7 @@ impl FnCompiler {
         slot
     }
 
-    fn emit_operation(&mut self, _strings: &mut Vec<String>, op: Op) {
+    fn emit_op(&mut self, _strings: &mut Vec<String>, op: Op) {
         self.code.push(op as u8);
     }
 
@@ -483,17 +483,17 @@ impl FnCompiler {
     /// Emit a jump instruction, return the index to patch later
     fn emit_jump(&mut self, op: Op) -> usize {
         self.code.push(op as u8);
-        let index = self.code.len();
+        let idx = self.code.len();
         self.code.push(0); // placeholder
         self.code.push(0);
-        index
+        idx
     }
 
     /// Patch a jump to point to the current position
-    fn patch_jump(&mut self, index: usize) {
+    fn patch_jump(&mut self, idx: usize) {
         let target = self.code.len() as u16;
-        self.code[index] = (target & 0xFF) as u8;
-        self.code[index + 1] = ((target >> 8) & 0xFF) as u8;
+        self.code[idx] = (target & 0xFF) as u8;
+        self.code[idx + 1] = ((target >> 8) & 0xFF) as u8;
     }
 
     /// Emit a jump to a known target

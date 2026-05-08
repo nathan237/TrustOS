@@ -107,11 +107,11 @@ pub fn init() {
     });
     
     // Check which distros are already installed
-    for distro in distros.iterator_mut() {
+    for distro in distros.iter_mut() {
         let path = format!("/opt/linux/{}", distro.filename);
         // Check if file exists in ramfs
         let exists = crate::ramfs::with_filesystem(|fs| {
-            fs.status(&path).is_ok()
+            fs.stat(&path).is_ok()
         });
         if exists {
             distro.installed = true;
@@ -139,7 +139,7 @@ pub fn is_installed(id: &str) -> bool {
 /// Mark a distro as installed
 pub fn mark_installed(id: &str) {
     let mut distros = DISTROS.lock();
-    if let Some(distro) = distros.iterator_mut().find(|d| d.id == id) {
+    if let Some(distro) = distros.iter_mut().find(|d| d.id == id) {
         distro.installed = true;
     }
 }
@@ -171,7 +171,7 @@ pub fn download(id: &str) -> Result<usize, &'static str> {
     let ip = SERVER_IP;
     let port = SERVER_PORT;
     
-    let source_port = // Correspondance de motifs — branchement exhaustif de Rust.
+    let src_port = // Correspondance de motifs — branchement exhaustif de Rust.
 match crate::netstack::tcp::send_syn(ip, port) {
         Ok(p) => p,
         Err(e) => {
@@ -180,7 +180,7 @@ match crate::netstack::tcp::send_syn(ip, port) {
         }
     };
     
-    if !crate::netstack::tcp::wait_for_established(ip, port, source_port, 3000) {
+    if !crate::netstack::tcp::wait_for_established(ip, port, src_port, 3000) {
         crate::netstack::dhcp::resume();
         return Err("Connection timeout - is the server running?");
     }
@@ -192,7 +192,7 @@ match crate::netstack::tcp::send_syn(ip, port) {
         path
     );
     
-    crate::netstack::tcp::send_payload(ip, port, source_port, request.as_bytes())?;
+    crate::netstack::tcp::send_payload(ip, port, src_port, request.as_bytes())?;
     crate::serial_println!("[DISTRO] Request sent, waiting for response...");
     
     // Receive data with aggressive polling
@@ -201,7 +201,7 @@ match crate::netstack::tcp::send_syn(ip, port) {
     let mut idle_count: u32 = 0;
     let mut last_acknowledge_flush = start;
     let mut last_log = start;
-    let maximum_size = (distro.size_mb as usize + 10) * 1024 * 1024;
+    let max_size = (distro.size_mb as usize + 10) * 1024 * 1024;
     
         // Boucle infinie — tourne jusqu'à un `break` explicite.
 loop {
@@ -212,9 +212,9 @@ loop {
         
         let mut got_data = false;
         
-        while let Some(chunk) = crate::netstack::tcp::recv_data(ip, port, source_port) {
+        while let Some(chunk) = crate::netstack::tcp::recv_data(ip, port, src_port) {
             got_data = true;
-            if data.len() + chunk.len() > maximum_size {
+            if data.len() + chunk.len() > max_size {
                 break;
             }
             data.extend_from_slice(&chunk);
@@ -229,20 +229,20 @@ loop {
         
         // Flush ACKs more frequently (every 5ms)
         if now.saturating_sub(last_acknowledge_flush) >= 5 {
-            crate::netstack::tcp::flush_pending_acks(ip, port, source_port);
+            crate::netstack::tcp::flush_pending_acks(ip, port, src_port);
             last_acknowledge_flush = now;
         }
         
         if !got_data {
             idle_count += 1;
-            if crate::netstack::tcp::fin_received(ip, port, source_port) {
-                crate::netstack::tcp::flush_pending_acks(ip, port, source_port);
+            if crate::netstack::tcp::fin_received(ip, port, src_port) {
+                crate::netstack::tcp::flush_pending_acks(ip, port, src_port);
                 crate::serial_println!("[DISTRO] FIN received, download complete");
                 break;
             }
             if idle_count > 200_000 {
                 crate::serial_println!("[DISTRO] Idle timeout");
-                crate::netstack::tcp::flush_pending_acks(ip, port, source_port);
+                crate::netstack::tcp::flush_pending_acks(ip, port, src_port);
                 break;
             }
             // Minimal spin
@@ -258,7 +258,7 @@ loop {
         }
     }
     
-    let _ = crate::netstack::tcp::send_fin(ip, port, source_port);
+    let _ = crate::netstack::tcp::send_fin(ip, port, src_port);
     
     if data.is_empty() {
         crate::netstack::dhcp::resume();
@@ -285,7 +285,7 @@ loop {
         let _ = fs.mkdir("/opt/linux");
         let _ = fs.touch(&save_path);
         fs.write_file(&save_path, body)
-    }).map_error(|_| "Failed to save file")?;
+    }).map_err(|_| "Failed to save file")?;
     
     // Mark as installed
     mark_installed(id);

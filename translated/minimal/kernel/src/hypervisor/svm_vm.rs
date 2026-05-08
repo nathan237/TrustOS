@@ -15,39 +15,39 @@ use core::sync::atomic::{AtomicU64, Ordering};
 use spin::Mutex;
 
 use super::{HypervisorError, Result};
-use super::svm::{self, SvmExitCode, SvmFeatures, Ban};
+use super::svm::{self, SvmExitCode, SvmFeatures, Vv};
 use super::svm::vmcb::{Vmcb, control_offsets, state_offsets, clean_bits};
 use super::svm::npt::{Npt, flags as npt_flags};
-use super::mmio::{self, Eh};
+use super::mmio::{self, Bt};
 use super::ioapic::IoApicState;
 use super::hpet::HpetState;
 use super::pci::PciBus;
 use super::virtio_blk::{VirtioBlkState, VirtioConsoleState};
 
 
-static CHW_: AtomicU64 = AtomicU64::new(1);
+static CLF_: AtomicU64 = AtomicU64::new(1);
 
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SvmVmState {
-    Cu,
-    Ai,
-    Cl,
-    Af,
-    Gu,
+    Created,
+    Running,
+    Paused,
+    Stopped,
+    Crashed,
 }
 
 
 #[derive(Debug, Clone, Default)]
 pub struct SvmVmStats {
-    pub ait: u64,
-    pub bmp: u64,
-    pub ank: u64,
-    pub bkn: u64,
-    pub axz: u64,
-    pub cay: u64,     
-    pub gwh: u64, 
-    pub jap: u64,    
+    pub vmexits: u64,
+    pub cpuid_exits: u64,
+    pub io_exits: u64,
+    pub msr_exits: u64,
+    pub hlt_exits: u64,
+    pub npf_exits: u64,     
+    pub vmmcall_exits: u64, 
+    pub intr_exits: u64,    
 }
 
 
@@ -75,39 +75,39 @@ pub struct SvmGuestRegs {
 
 pub struct SvmVirtualMachine {
     
-    pub ad: u64,
+    pub id: u64,
     
-    pub j: String,
+    pub name: String,
     
-    pub g: SvmVmState,
+    pub state: SvmVmState,
     
-    pub apy: usize,
+    pub memory_size: usize,
     
-    pub cm: SvmVmStats,
+    pub stats: SvmVmStats,
     
     pub(crate) vmcb: Option<Box<Vmcb>>,
     
     npt: Option<Npt>,
     
-    fe: Vec<u8>,
+    guest_memory: Vec<u8>,
     
-    pub(crate) ej: SvmGuestRegs,
+    pub(crate) guest_regs: SvmGuestRegs,
     
-    pub ajv: u32,
+    pub asid: u32,
     
-    bjq: Option<usize>,
+    console_id: Option<usize>,
     
     features: SvmFeatures,
     
-    pub ku: LapicState,
+    pub lapic: LapicState,
     
     pub pic: PicState,
     
-    pub abu: PitState,
+    pub pit: PitState,
     
-    pub vjn: u64,
+    pub pm_timer_start: u64,
     
-    ion: u8,
+    cmos_index: u8,
     
     pub ioapic: IoApicState,
     
@@ -115,57 +115,57 @@ pub struct SvmVirtualMachine {
     
     pub pci: PciBus,
     
-    pub lub: u64,
+    pub pit_last_inject: u64,
     
-    pub fuh: VecDeque<u8>,
+    pub serial_input_buffer: VecDeque<u8>,
     
-    pub hzs: u8,
+    pub serial_ier: u8,
     
-    pub pie: u8,
+    pub serial_fcr: u8,
     
-    pub mpj: Vec<u8>,
+    pub virtio_blk_storage: Vec<u8>,
     
-    pub xru: u8,
+    pub virtio_blk_status: u8,
     
-    pub xrv: u8,
+    pub virtio_console_status: u8,
     
-    pub jvr: VirtioBlkState,
+    pub virtio_blk_state: VirtioBlkState,
     
-    pub jvs: VirtioConsoleState,
+    pub virtio_console_state: VirtioConsoleState,
 }
 
 
 #[derive(Debug, Clone)]
 pub struct LapicState {
     
-    pub bnh: u32,
+    pub icr: u32,
     
-    pub fel: u32,
+    pub ccr: u32,
     
-    pub dgc: u32,
+    pub dcr: u32,
     
-    pub atq: u32,
+    pub timer_lvt: u32,
     
-    pub bim: u32,
+    pub svr: u32,
     
-    pub guv: u32,
+    pub tpr: u32,
     
-    pub iq: bool,
+    pub enabled: bool,
     
-    pub fmr: u64,
+    pub last_tick_exit: u64,
 }
 
 impl Default for LapicState {
     fn default() -> Self {
         Self {
-            bnh: 0,
-            fel: 0,
-            dgc: 0,
-            atq: 0x0001_0000, 
-            bim: 0x1FF,             
-            guv: 0,
-            iq: false,
-            fmr: 0,
+            icr: 0,
+            ccr: 0,
+            dcr: 0,
+            timer_lvt: 0x0001_0000, 
+            svr: 0x1FF,             
+            tpr: 0,
+            enabled: false,
+            last_tick_exit: 0,
         }
     }
 }
@@ -174,37 +174,37 @@ impl Default for LapicState {
 #[derive(Debug, Clone)]
 pub struct PicState {
     
-    pub ayd: u8,
+    pub master_icw_phase: u8,
     
-    pub bxd: u8,
+    pub slave_icw_phase: u8,
     
-    pub eun: u8,
+    pub master_imr: u8,
     
-    pub gsp: u8,
+    pub slave_imr: u8,
     
-    pub cgc: u8,
+    pub master_vector_base: u8,
     
-    pub eyo: u8,
+    pub slave_vector_base: u8,
     
-    pub dji: u8,
+    pub master_isr: u8,
     
-    pub jfb: u8,
+    pub master_irr: u8,
     
-    pub jr: bool,
+    pub initialized: bool,
 }
 
 impl Default for PicState {
     fn default() -> Self {
         Self {
-            ayd: 0,
-            bxd: 0,
-            eun: 0xFF, 
-            gsp: 0xFF,
-            cgc: 0x08, 
-            eyo: 0x70,
-            dji: 0,
-            jfb: 0,
-            jr: false,
+            master_icw_phase: 0,
+            slave_icw_phase: 0,
+            master_imr: 0xFF, 
+            slave_imr: 0xFF,
+            master_vector_base: 0x08, 
+            slave_vector_base: 0x70,
+            master_isr: 0,
+            master_irr: 0,
+            initialized: false,
         }
     }
 }
@@ -213,33 +213,33 @@ impl Default for PicState {
 #[derive(Debug, Clone)]
 pub struct PitChannel {
     
-    pub ahs: u16,
+    pub reload: u16,
     
-    pub az: u16,
+    pub count: u16,
     
-    pub ev: u8,
+    pub mode: u8,
     
-    pub vz: u8,
+    pub access: u8,
     
-    pub czf: bool,
-    pub gkx: u16,
+    pub latched: bool,
+    pub latch_value: u16,
     
-    pub ccp: bool,
+    pub write_hi_pending: bool,
     
-    pub an: bool,
+    pub output: bool,
 }
 
 impl Default for PitChannel {
     fn default() -> Self {
         Self {
-            ahs: 0xFFFF,
-            az: 0xFFFF,
-            ev: 0,
-            vz: 3, 
-            czf: false,
-            gkx: 0,
-            ccp: false,
-            an: false,
+            reload: 0xFFFF,
+            count: 0xFFFF,
+            mode: 0,
+            access: 3, 
+            latched: false,
+            latch_value: 0,
+            write_hi_pending: false,
+            output: false,
         }
     }
 }
@@ -247,13 +247,13 @@ impl Default for PitChannel {
 
 #[derive(Debug, Clone)]
 pub struct PitState {
-    pub lq: [PitChannel; 3],
+    pub channels: [PitChannel; 3],
 }
 
 impl Default for PitState {
     fn default() -> Self {
         Self {
-            lq: [
+            channels: [
                 PitChannel::default(),
                 PitChannel::default(),
                 PitChannel::default(),
@@ -264,187 +264,187 @@ impl Default for PitState {
 
 impl SvmVirtualMachine {
     
-    pub fn new(j: &str, afc: usize) -> Result<Self> {
+    pub fn new(name: &str, memory_mb: usize) -> Result<Self> {
         
-        if !svm::gkj() {
-            return Err(HypervisorError::Btq);
+        if !svm::is_supported() {
+            return Err(HypervisorError::SvmNotSupported);
         }
         
-        let ad = CHW_.fetch_add(1, Ordering::SeqCst);
-        let apy = afc * 1024 * 1024;
-        let features = svm::fjn();
+        let id = CLF_.fetch_add(1, Ordering::SeqCst);
+        let memory_size = memory_mb * 1024 * 1024;
+        let features = svm::ckb();
         
         
-        let fe = alloc::vec![0u8; apy];
+        let guest_memory = alloc::vec![0u8; memory_size];
         
         
-        let ajv = super::svm::npt::mva().unwrap_or(1);
+        let asid = super::svm::npt::hev().unwrap_or(1);
         
         
-        let bjq = super::console::fgb(ad, j);
+        let console_id = super::console::create_console(id, name);
         
         
-        super::virtfs::nhj(ad);
+        super::virtfs::hot(id);
         
         crate::serial_println!("[SVM-VM {}] Created '{}' with {} MB RAM, ASID={}", 
-                              ad, j, afc, ajv);
+                              id, name, memory_mb, asid);
         
         
-        crate::lab_mode::trace_bus::epu(
-            ad, &format!("CREATED '{}' mem={}MB ASID={}", j, afc, ajv)
+        crate::lab_mode::trace_bus::bzh(
+            id, &format!("CREATED '{}' mem={}MB ASID={}", name, memory_mb, asid)
         );
         
         
-        super::api::eps(
-            super::api::VmEventType::Cu,
-            ad,
-            super::api::VmEventData::Cj(format!("SVM VM '{}' created", j)),
+        super::api::bzf(
+            super::api::VmEventType::Created,
+            id,
+            super::api::VmEventData::Az(format!("SVM VM '{}' created", name)),
         );
         
         Ok(SvmVirtualMachine {
-            ad,
-            j: String::from(j),
-            g: SvmVmState::Cu,
-            apy,
-            cm: SvmVmStats::default(),
+            id,
+            name: String::from(name),
+            state: SvmVmState::Created,
+            memory_size,
+            stats: SvmVmStats::default(),
             vmcb: None,
             npt: None,
-            fe,
-            ej: SvmGuestRegs::default(),
-            ajv,
-            bjq: Some(bjq),
+            guest_memory,
+            guest_regs: SvmGuestRegs::default(),
+            asid,
+            console_id: Some(console_id),
             features,
-            ku: LapicState::default(),
+            lapic: LapicState::default(),
             pic: PicState::default(),
-            abu: PitState::default(),
-            vjn: 0,
-            ion: 0,
+            pit: PitState::default(),
+            pm_timer_start: 0,
+            cmos_index: 0,
             ioapic: IoApicState::default(),
             hpet: HpetState::default(),
             pci: PciBus::default(),
-            lub: 0,
-            fuh: VecDeque::fc(256),
-            hzs: 0,
-            pie: 0,
-            mpj: alloc::vec![0u8; 64 * 512], 
-            xru: 0,
-            xrv: 0,
-            jvr: VirtioBlkState::fc(64 * 512),
-            jvs: VirtioConsoleState::default(),
+            pit_last_inject: 0,
+            serial_input_buffer: VecDeque::with_capacity(256),
+            serial_ier: 0,
+            serial_fcr: 0,
+            virtio_blk_storage: alloc::vec![0u8; 64 * 512], 
+            virtio_blk_status: 0,
+            virtio_console_status: 0,
+            virtio_blk_state: VirtioBlkState::with_capacity(64 * 512),
+            virtio_console_state: VirtioConsoleState::default(),
         })
     }
     
     
-    pub fn cfp(&mut self) -> Result<()> {
-        crate::serial_println!("[SVM-VM {}] Initializing VMCB and NPT...", self.ad);
+    pub fn initialize(&mut self) -> Result<()> {
+        crate::serial_println!("[SVM-VM {}] Initializing VMCB and NPT...", self.id);
         
         
         let mut vmcb = Vmcb::new();
         
         
-        vmcb.wki();
+        vmcb.setup_basic_intercepts();
         
         
-        vmcb.elc(control_offsets::ATX_, self.ajv as u64);
-        
-        
-        
-        let ofk = alloc::vec![0xFFu8; 12288]; 
-        let twk = ofk.fq() as u64;
-        let ofl = twk - crate::memory::lr();
-        vmcb.wjd(ofl);
-        
-        core::mem::forget(ofk);
-        crate::serial_println!("[SVM-VM {}] IOPM allocated at HPA=0x{:X}", self.ad, ofl);
+        vmcb.write_control(control_offsets::AWB_, self.asid as u64);
         
         
         
-        let oon = alloc::vec![0xFFu8; 8192]; 
-        let uqj = oon.fq() as u64;
-        let ooo = uqj - crate::memory::lr();
-        vmcb.wjg(ooo);
-        core::mem::forget(oon);
-        crate::serial_println!("[SVM-VM {}] MSRPM allocated at HPA=0x{:X}", self.ad, ooo);
+        let ihm = alloc::vec![0xFFu8; 12288]; 
+        let mrr = ihm.as_ptr() as u64;
+        let ihn = mrr - crate::memory::hhdm_offset();
+        vmcb.set_iopm_base(ihn);
+        
+        core::mem::forget(ihm);
+        crate::serial_println!("[SVM-VM {}] IOPM allocated at HPA=0x{:X}", self.id, ihn);
+        
+        
+        
+        let iox = alloc::vec![0xFFu8; 8192]; 
+        let ngv = iox.as_ptr() as u64;
+        let ioy = ngv - crate::memory::hhdm_offset();
+        vmcb.set_msrpm_base(ioy);
+        core::mem::forget(iox);
+        crate::serial_println!("[SVM-VM {}] MSRPM allocated at HPA=0x{:X}", self.id, ioy);
         
         
         if self.features.npt {
-            let mut npt = Npt::new(self.ajv);
+            let mut npt = Npt::new(self.asid);
             
             
-            let tia = self.fe.fq() as u64;
-            let ixk = tia - crate::memory::lr();
+            let mgj = self.guest_memory.as_ptr() as u64;
+            let eop = mgj - crate::memory::hhdm_offset();
             
-            if let Err(aa) = npt.jew(
+            if let Err(e) = npt.map_range(
                 0,                          
-                ixk,             
-                self.apy as u64,    
-                npt_flags::Axk,             
+                eop,             
+                self.memory_size as u64,    
+                npt_flags::Uq,             
             ) {
-                crate::serial_println!("[SVM-VM {}] NPT mapping failed: {}", self.ad, aa);
-                return Err(HypervisorError::Cid);
+                crate::serial_println!("[SVM-VM {}] NPT mapping failed: {}", self.id, e);
+                return Err(HypervisorError::NptViolation);
             }
             
             
-            let ore = npt.jm();
+            let irb = npt.cr3();
             
             
             
-            vmcb.elc(control_offsets::BBU_, ore);
+            vmcb.write_control(control_offsets::BDX_, irb);
             
             
-            let mut ord = vmcb.cgx(control_offsets::VU_);
-            ord |= 1; 
-            vmcb.elc(control_offsets::VU_, ord);
+            let mut ira = vmcb.read_control(control_offsets::XD_);
+            ira |= 1; 
+            vmcb.write_control(control_offsets::XD_, ira);
             
-            crate::serial_println!("[SVM-VM {}] NPT enabled, N_CR3=0x{:X}", self.ad, ore);
+            crate::serial_println!("[SVM-VM {}] NPT enabled, N_CR3=0x{:X}", self.id, irb);
             
             self.npt = Some(npt);
         } else {
             
-            crate::serial_println!("[SVM-VM {}] NPT not available, using shadow paging", self.ad);
+            crate::serial_println!("[SVM-VM {}] NPT not available, using shadow paging", self.id);
         }
         
         
-        vmcb.elc(control_offsets::BHG_, 0); 
+        vmcb.write_control(control_offsets::BJK_, 0); 
         
         self.vmcb = Some(Box::new(vmcb));
         
-        crate::serial_println!("[SVM-VM {}] Initialization complete", self.ad);
+        crate::serial_println!("[SVM-VM {}] Initialization complete", self.id);
         
         Ok(())
     }
     
     
-    pub fn diy(&mut self, f: &[u8], dst: u64) -> Result<()> {
-        let l = dst as usize;
+    pub fn load_binary(&mut self, data: &[u8], load_address: u64) -> Result<()> {
+        let offset = load_address as usize;
         
-        if l + f.len() > self.fe.len() {
-            return Err(HypervisorError::Ns);
+        if offset + data.len() > self.guest_memory.len() {
+            return Err(HypervisorError::OutOfMemory);
         }
         
-        self.fe[l..l + f.len()].dg(f);
+        self.guest_memory[offset..offset + data.len()].copy_from_slice(data);
         
         crate::serial_println!("[SVM-VM {}] Loaded {} bytes at GPA 0x{:X}", 
-                              self.ad, f.len(), dst);
+                              self.id, data.len(), load_address);
         
         Ok(())
     }
     
     
-    pub fn jpk(&mut self, mi: u64) -> Result<()> {
-        let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::Bd)?;
-        vmcb.jpk();
+    pub fn setup_real_mode(&mut self, entry_point: u64) -> Result<()> {
+        let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+        vmcb.setup_real_mode();
         
         
-        let kmb = (mi >> 4) << 4;
-        let ip = mi & 0xF;
+        let fpe = (entry_point >> 4) << 4;
+        let ip = entry_point & 0xF;
         
-        vmcb.abz(state_offsets::SJ_, kmb);
-        vmcb.abz(state_offsets::JU_, (kmb >> 4) as u64);
-        vmcb.abz(state_offsets::Aw, ip);
+        vmcb.write_state(state_offsets::TP_, fpe);
+        vmcb.write_state(state_offsets::KO_, (fpe >> 4) as u64);
+        vmcb.write_state(state_offsets::Af, ip);
         
         crate::serial_println!("[SVM-VM {}] Real mode: CS=0x{:X}, IP=0x{:X}", 
-                              self.ad, kmb >> 4, ip);
+                              self.id, fpe >> 4, ip);
         
         Ok(())
     }
@@ -452,237 +452,237 @@ impl SvmVirtualMachine {
     
     
     
-    pub fn yyb(&mut self, f: &[u8]) {
-        for &o in f {
-            self.fuh.agt(o);
+    pub fn qlk(&mut self, data: &[u8]) {
+        for &b in data {
+            self.serial_input_buffer.push_back(b);
         }
     }
     
     
-    pub fn iab(&mut self, mi: u64, ahu: u64) -> Result<()> {
-        let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::Bd)?;
-        vmcb.iab(mi);
+    pub fn setup_protected_mode(&mut self, entry_point: u64, stack_ptr: u64) -> Result<()> {
+        let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+        vmcb.setup_protected_mode(entry_point);
         
-        vmcb.abz(state_offsets::Aw, mi);
-        vmcb.abz(state_offsets::Hc, ahu);
+        vmcb.write_state(state_offsets::Af, entry_point);
+        vmcb.write_state(state_offsets::De, stack_ptr);
         
         crate::serial_println!("[SVM-VM {}] Protected mode: RIP=0x{:X}, RSP=0x{:X}", 
-                              self.ad, mi, ahu);
+                              self.id, entry_point, stack_ptr);
         
         Ok(())
     }
     
     
-    pub fn pjq(&mut self, mi: u64, ahu: u64, avg: u64) -> Result<()> {
-        let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::Bd)?;
-        vmcb.iab(mi);
+    pub fn setup_protected_mode_for_linux(&mut self, entry_point: u64, stack_ptr: u64, boot_params_addr: u64) -> Result<()> {
+        let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+        vmcb.setup_protected_mode(entry_point);
         
-        vmcb.abz(state_offsets::Aw, mi);
-        vmcb.abz(state_offsets::Hc, ahu);
-        
-        
+        vmcb.write_state(state_offsets::Af, entry_point);
+        vmcb.write_state(state_offsets::De, stack_ptr);
         
         
-        self.ej.rsi = avg;
         
         
-        self.ej.rbp = 0;
-        self.ej.rdi = 0;
+        self.guest_regs.rsi = boot_params_addr;
+        
+        
+        self.guest_regs.rbp = 0;
+        self.guest_regs.rdi = 0;
         
         crate::serial_println!("[SVM-VM {}] Linux protected mode: RIP=0x{:X}, RSP=0x{:X}, RSI(boot_params)=0x{:X}", 
-                              self.ad, mi, ahu, avg);
+                              self.id, entry_point, stack_ptr, boot_params_addr);
         
         Ok(())
     }
 
     
-    pub fn mfb(&mut self, mi: u64, ahu: u64, bnd: u64) -> Result<()> {
-        let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::Bd)?;
-        vmcb.mfb(mi, bnd);
+    pub fn setup_long_mode(&mut self, entry_point: u64, stack_ptr: u64, guest_cr3: u64) -> Result<()> {
+        let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+        vmcb.setup_long_mode(entry_point, guest_cr3);
         
-        vmcb.abz(state_offsets::Aw, mi);
-        vmcb.abz(state_offsets::Hc, ahu);
+        vmcb.write_state(state_offsets::Af, entry_point);
+        vmcb.write_state(state_offsets::De, stack_ptr);
         
         crate::serial_println!("[SVM-VM {}] Long mode: RIP=0x{:X}, RSP=0x{:X}, CR3=0x{:X}", 
-                              self.ad, mi, ahu, bnd);
+                              self.id, entry_point, stack_ptr, guest_cr3);
         
         Ok(())
     }
     
     
-    pub fn fvn(
+    pub fn start_linux(
         &mut self,
-        cwc: &[u8],
-        wx: &str,
-        apw: Option<&[u8]>,
+        bas: &[u8],
+        cmdline: &str,
+        initrd: Option<&[u8]>,
     ) -> Result<()> {
         use super::linux_loader;
         
         
         if self.vmcb.is_none() {
-            self.cfp()?;
+            self.initialize()?;
         }
         
-        crate::serial_println!("[SVM-VM {}] Loading Linux kernel ({} bytes)...", self.ad, cwc.len());
+        crate::serial_println!("[SVM-VM {}] Loading Linux kernel ({} bytes)...", self.id, bas.len());
         
         
-        let acf = linux_loader::oud(cwc)
-            .jd(|aa| {
-                crate::serial_println!("[SVM-VM {}] bzImage parse error: {:?}", self.ad, aa);
-                HypervisorError::Bjt
+        let ny = linux_loader::itr(bas)
+            .map_err(|e| {
+                crate::serial_println!("[SVM-VM {}] bzImage parse error: {:?}", self.id, e);
+                HypervisorError::InvalidGuest
             })?;
         
         crate::serial_println!("[SVM-VM {}] Kernel: protocol={}.{}, 64-bit={}, entry=0x{:X}",
-            self.ad, acf.dh.dk >> 8, acf.dh.dk & 0xFF,
-            acf.gtp, acf.hie);
+            self.id, ny.header.version >> 8, ny.header.version & 0xFF,
+            ny.supports_64bit, ny.entry_64);
         
         
-        let config = linux_loader::Acq {
-            wx: alloc::string::String::from(wx),
-            apy: self.apy as u64,
-            apw: apw.map(|bc| bc.ip()),
+        let config = linux_loader::Ml {
+            cmdline: alloc::string::String::from(cmdline),
+            memory_size: self.memory_size as u64,
+            initrd: initrd.map(|d| d.to_vec()),
         };
         
-        let aeq = linux_loader::ojt(&mut self.fe, &acf, &config)
-            .jd(|aa| {
-                crate::serial_println!("[SVM-VM {}] Linux load error: {:?}", self.ad, aa);
-                HypervisorError::Bjt
+        let pk = linux_loader::iku(&mut self.guest_memory, &ny, &config)
+            .map_err(|e| {
+                crate::serial_println!("[SVM-VM {}] Linux load error: {:?}", self.id, e);
+                HypervisorError::InvalidGuest
             })?;
         
         crate::serial_println!("[SVM-VM {}] Linux loaded: entry=0x{:X}, stack=0x{:X}, cr3=0x{:X}, gdt=0x{:X}",
-            self.ad, aeq.mi, aeq.ahu, aeq.jm, aeq.bun);
+            self.id, pk.entry_point, pk.stack_ptr, pk.cr3, pk.gdt_base);
         
         
         {
-            let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::Bd)?;
-            vmcb.wld(
-                aeq.mi,
-                aeq.ahu,
-                aeq.jm,
-                aeq.bun,
+            let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+            vmcb.setup_long_mode_for_linux(
+                pk.entry_point,
+                pk.stack_ptr,
+                pk.cr3,
+                pk.gdt_base,
                 39, 
             );
         }
         
         
-        self.ej.rsi = aeq.avg;
-        self.ej.rbp = 0;
-        self.ej.rdi = 0;
+        self.guest_regs.rsi = pk.boot_params_addr;
+        self.guest_regs.rbp = 0;
+        self.guest_regs.rdi = 0;
         
         crate::serial_println!("[SVM-VM {}] Starting Linux with RSI=0x{:X} (boot_params)", 
-            self.ad, aeq.avg);
+            self.id, pk.boot_params_addr);
         
         
-        self.g = SvmVmState::Ai;
-        crate::lab_mode::trace_bus::epu(self.ad, "LINUX_STARTED");
-        self.hyg()?;
+        self.state = SvmVmState::Running;
+        crate::lab_mode::trace_bus::bzh(self.id, "LINUX_STARTED");
+        self.run_loop()?;
         
         Ok(())
     }
     
     
-    pub fn ay(&mut self) -> Result<()> {
+    pub fn start(&mut self) -> Result<()> {
         if self.vmcb.is_none() {
-            self.cfp()?;
+            self.initialize()?;
         }
         
-        self.g = SvmVmState::Ai;
+        self.state = SvmVmState::Running;
         
-        crate::serial_println!("[SVM-VM {}] Starting execution...", self.ad);
-        crate::lab_mode::trace_bus::epu(self.ad, "STARTED");
+        crate::serial_println!("[SVM-VM {}] Starting execution...", self.id);
+        crate::lab_mode::trace_bus::bzh(self.id, "STARTED");
         
         
-        self.hyg()?;
+        self.run_loop()?;
         
         Ok(())
     }
     
     
-    fn hyg(&mut self) -> Result<()> {
+    fn run_loop(&mut self) -> Result<()> {
         
-        let ekr = {
-            let vmcb = self.vmcb.as_ref().ok_or(HypervisorError::Bd)?;
-            vmcb.ki()
+        let vmcb_phys = {
+            let vmcb = self.vmcb.as_ref().ok_or(HypervisorError::VmcbNotLoaded)?;
+            vmcb.phys_addr()
         };
         
         
-        let mut aph = Ban {
-            rax: self.ej.rax,
-            rbx: self.ej.rbx,
-            rcx: self.ej.rcx,
-            rdx: self.ej.rdx,
-            rsi: self.ej.rsi,
-            rdi: self.ej.rdi,
-            rbp: self.ej.rbp,
-            r8: self.ej.r8,
-            r9: self.ej.r9,
-            r10: self.ej.r10,
-            r11: self.ej.r11,
-            r12: self.ej.r12,
-            r13: self.ej.r13,
-            r14: self.ej.r14,
-            r15: self.ej.r15,
+        let mut vc = Vv {
+            rax: self.guest_regs.rax,
+            rbx: self.guest_regs.rbx,
+            rcx: self.guest_regs.rcx,
+            rdx: self.guest_regs.rdx,
+            rsi: self.guest_regs.rsi,
+            rdi: self.guest_regs.rdi,
+            rbp: self.guest_regs.rbp,
+            r8: self.guest_regs.r8,
+            r9: self.guest_regs.r9,
+            r10: self.guest_regs.r10,
+            r11: self.guest_regs.r11,
+            r12: self.guest_regs.r12,
+            r13: self.guest_regs.r13,
+            r14: self.guest_regs.r14,
+            r15: self.guest_regs.r15,
         };
         
-        crate::serial_println!("[SVM-VM {}] Entering VM loop, RSI=0x{:X}", self.ad, aph.rsi);
+        crate::serial_println!("[SVM-VM {}] Entering VM loop, RSI=0x{:X}", self.id, vc.rsi);
         
         loop {
-            if self.g != SvmVmState::Ai {
+            if self.state != SvmVmState::Running {
                 break;
             }
             
             
             
-            let mut jab = false;
+            let mut eqo = false;
             
             
             {
-                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::Bd)?;
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
                 
-                vmcb.abz(state_offsets::Hc, self.ej.rsp);
-                
-                
+                vmcb.write_state(state_offsets::De, self.guest_regs.rsp);
                 
                 
                 
-                let dox = clean_bits::Cfq      
-                          | clean_bits::Bxk      
-                          | clean_bits::Chs        
-                          | clean_bits::Cgk       
-                          | clean_bits::Bxm;     
-                vmcb.wik(dox);
                 
                 
-                if self.ku.iq && self.ku.bnh > 0 {
-                    let bnm = (self.ku.atq >> 16) & 1;
-                    if bnm == 0 {
-                        let mkx = (self.ku.atq >> 17) & 0x3;
-                        let wj = (self.ku.atq & 0xFF) as u64;
-                        let gfa = match self.ku.dgc & 0xB {
+                let blc = clean_bits::Alp      
+                          | clean_bits::Agx      
+                          | clean_bits::Amw        
+                          | clean_bits::Ame       
+                          | clean_bits::Agz;     
+                vmcb.set_clean_bits(blc);
+                
+                
+                if self.lapic.enabled && self.lapic.icr > 0 {
+                    let masked = (self.lapic.timer_lvt >> 16) & 1;
+                    if masked == 0 {
+                        let gyw = (self.lapic.timer_lvt >> 17) & 0x3;
+                        let vector = (self.lapic.timer_lvt & 0xFF) as u64;
+                        let cws = match self.lapic.dcr & 0xB {
                             0x0 => 2u64, 0x1 => 4, 0x2 => 8, 0x3 => 16,
                             0x8 => 32, 0x9 => 64, 0xA => 128, 0xB => 1,
                             _ => 1,
                         };
-                        let ez = self.cm.ait.ao(self.ku.fmr);
-                        let qb = (ez * 256) / gfa;
+                        let bb = self.stats.vmexits.saturating_sub(self.lapic.last_tick_exit);
+                        let gx = (bb * 256) / cws;
                         
-                        if qb >= self.ku.bnh as u64 {
-                            let rflags = vmcb.xs(state_offsets::Kv);
-                            if (rflags & 0x200) != 0 && wj > 0 {
-                                let ebh: u64 = wj
+                        if gx >= self.lapic.icr as u64 {
+                            let rflags = vmcb.read_state(state_offsets::Ek);
+                            if (rflags & 0x200) != 0 && vector > 0 {
+                                let bsi: u64 = vector
                                                    | (0u64 << 8)
                                                    | (1u64 << 31);
-                                vmcb.elc(control_offsets::GJ_, ebh);
-                                jab = true;
+                                vmcb.write_control(control_offsets::HA_, bsi);
+                                eqo = true;
                             }
-                            match mkx {
+                            match gyw {
                                 1 => {
-                                    self.ku.fmr = self.cm.ait;
-                                    self.ku.fel = self.ku.bnh;
+                                    self.lapic.last_tick_exit = self.stats.vmexits;
+                                    self.lapic.ccr = self.lapic.icr;
                                 }
                                 _ => {
-                                    self.ku.bnh = 0;
-                                    self.ku.fel = 0;
+                                    self.lapic.icr = 0;
+                                    self.lapic.ccr = 0;
                                 }
                             }
                         }
@@ -693,90 +693,90 @@ impl SvmVirtualMachine {
                 
                 
                 
-                if !jab {
-                    let vie = if self.abu.lq[0].ahs > 0 {
+                if !eqo {
+                    let nuw = if self.pit.channels[0].reload > 0 {
                         
                         
-                        let ahs = self.abu.lq[0].ahs as u64;
+                        let reload = self.pit.channels[0].reload as u64;
                         
-                        (ahs / 24).am(100).v(2000)
+                        (reload / 24).max(100).min(2000)
                     } else {
                         500 
                     };
                     
-                    let wov = self.cm.ait.ao(self.lub);
-                    if wov >= vie {
-                        let rflags = vmcb.xs(state_offsets::Kv);
+                    let ote = self.stats.vmexits.saturating_sub(self.pit_last_inject);
+                    if ote >= nuw {
+                        let rflags = vmcb.read_state(state_offsets::Ek);
                         if (rflags & 0x200) != 0 {
                             
-                            let wj = if let Some(bia) = self.ioapic.hli(0) {
-                                if !bia.bnm && bia.wj > 0 {
-                                    bia.wj as u64
+                            let vector = if let Some(afo) = self.ioapic.get_irq_route(0) {
+                                if !afo.masked && afo.vector > 0 {
+                                    afo.vector as u64
                                 } else {
                                     
-                                    self.pic.cgc as u64
+                                    self.pic.master_vector_base as u64
                                 }
                             } else {
-                                self.pic.cgc as u64
+                                self.pic.master_vector_base as u64
                             };
                             
-                            if wj > 0 {
-                                let ebh: u64 = wj
+                            if vector > 0 {
+                                let bsi: u64 = vector
                                                    | (0u64 << 8)
                                                    | (1u64 << 31);
-                                vmcb.elc(control_offsets::GJ_, ebh);
-                                jab = true;
+                                vmcb.write_control(control_offsets::HA_, bsi);
+                                eqo = true;
                             }
                         }
-                        self.lub = self.cm.ait;
+                        self.pit_last_inject = self.stats.vmexits;
                     }
                 }
                 
             } 
                 
             
-            if !jab {
+            if !eqo {
                 
-                let tqk = self.qyx();
-                if let Some(wj) = tqk {
+                let mmn = self.check_hpet_interrupts();
+                if let Some(vector) = mmn {
                     let vmcb = self.vmcb.as_mut().unwrap();
-                    let kmt = vmcb.cgx(control_offsets::GJ_);
-                    let kah = (kmt & (1u64 << 31)) != 0;
-                    if !kah {
-                        let rflags = vmcb.xs(state_offsets::Kv);
+                    let fpo = vmcb.read_control(control_offsets::HA_);
+                    let fgw = (fpo & (1u64 << 31)) != 0;
+                    if !fgw {
+                        let rflags = vmcb.read_state(state_offsets::Ek);
                         if (rflags & 0x200) != 0 { 
-                            let ebh: u64 = wj
+                            let bsi: u64 = vector
                                                | (0u64 << 8)    
                                                | (1u64 << 31);  
-                            vmcb.elc(control_offsets::GJ_, ebh);
+                            vmcb.write_control(control_offsets::HA_, bsi);
                         }
                     }
                 }
             }
             
             
-            if (self.hzs & 0x01) != 0 && !self.fuh.is_empty() {
-                let wj = if let Some(bia) = self.ioapic.hli(4) {
-                    if !bia.bnm && bia.wj > 0 {
-                        bia.wj as u64
+            if (self.serial_ier & 0x01) != 0 && !self.serial_input_buffer.is_empty() {
+                let vector = if let Some(afo) = self.ioapic.get_irq_route(4) {
+                    if !afo.masked && afo.vector > 0 {
+                        afo.vector as u64
                     } else {
-                        (self.pic.cgc + 4) as u64
+                        (self.pic.master_vector_base + 4) as u64
                     }
                 } else {
-                    (self.pic.cgc + 4) as u64
+                    (self.pic.master_vector_base + 4) as u64
                 };
                 
-                if wj > 0 {
+                if vector > 0 {
                     let vmcb = self.vmcb.as_mut().unwrap();
-                    let kmt = vmcb.cgx(control_offsets::GJ_);
-                    let kah = (kmt & (1u64 << 31)) != 0;
-                    if !kah {
-                        let rflags = vmcb.xs(state_offsets::Kv);
+                    let fpo = vmcb.read_control(control_offsets::HA_);
+                    let fgw = (fpo & (1u64 << 31)) != 0;
+                    if !fgw {
+                        let rflags = vmcb.read_state(state_offsets::Ek);
                         if (rflags & 0x200) != 0 {
-                            let ebh: u64 = wj
+                            let bsi: u64 = vector
                                                | (0u64 << 8)
                                                | (1u64 << 31);
-                            vmcb.elc(control_offsets::GJ_, ebh);
+                            vmcb.write_control(control_offsets::HA_, bsi);
                         }
                     }
                 }
@@ -784,575 +784,575 @@ impl SvmVirtualMachine {
             
             
             
-            unsafe { svm::rbl(); }
+            unsafe { svm::kky(); }
             
             
             unsafe {
-                svm::xsn(ekr, &mut aph);
+                svm::psu(vmcb_phys, &mut vc);
             }
             
             
-            unsafe { svm::wug(); }
+            unsafe { svm::oxh(); }
             
             
-            self.ej.rbx = aph.rbx;
-            self.ej.rcx = aph.rcx;
-            self.ej.rdx = aph.rdx;
-            self.ej.rsi = aph.rsi;
-            self.ej.rdi = aph.rdi;
-            self.ej.rbp = aph.rbp;
-            self.ej.r8 = aph.r8;
-            self.ej.r9 = aph.r9;
-            self.ej.r10 = aph.r10;
-            self.ej.r11 = aph.r11;
-            self.ej.r12 = aph.r12;
-            self.ej.r13 = aph.r13;
-            self.ej.r14 = aph.r14;
-            self.ej.r15 = aph.r15;
+            self.guest_regs.rbx = vc.rbx;
+            self.guest_regs.rcx = vc.rcx;
+            self.guest_regs.rdx = vc.rdx;
+            self.guest_regs.rsi = vc.rsi;
+            self.guest_regs.rdi = vc.rdi;
+            self.guest_regs.rbp = vc.rbp;
+            self.guest_regs.r8 = vc.r8;
+            self.guest_regs.r9 = vc.r9;
+            self.guest_regs.r10 = vc.r10;
+            self.guest_regs.r11 = vc.r11;
+            self.guest_regs.r12 = vc.r12;
+            self.guest_regs.r13 = vc.r13;
+            self.guest_regs.r14 = vc.r14;
+            self.guest_regs.r15 = vc.r15;
             
             
             {
-                let vmcb = self.vmcb.as_ref().ok_or(HypervisorError::Bd)?;
-                self.ej.rax = vmcb.xs(state_offsets::Me);
-                self.ej.rsp = vmcb.xs(state_offsets::Hc);
+                let vmcb = self.vmcb.as_ref().ok_or(HypervisorError::VmcbNotLoaded)?;
+                self.guest_regs.rax = vmcb.read_state(state_offsets::Fa);
+                self.guest_regs.rsp = vmcb.read_state(state_offsets::De);
             }
             
-            self.cm.ait += 1;
+            self.stats.vmexits += 1;
             
             
-            let ipf = self.tlo()?;
+            let eix = self.handle_vmexit_inline()?;
             
             
-            if self.cm.ait % 50 == 0 || !ipf {
-                let pc = {
-                    let vmcb = self.vmcb.as_ref().ok_or(HypervisorError::Bd)?;
-                    vmcb.xs(state_offsets::Aw)
+            if self.stats.vmexits % 50 == 0 || !eix {
+                let rip = {
+                    let vmcb = self.vmcb.as_ref().ok_or(HypervisorError::VmcbNotLoaded)?;
+                    vmcb.read_state(state_offsets::Af)
                 };
-                crate::lab_mode::trace_bus::nps(
-                    self.ad,
-                    self.ej.rax,
-                    self.ej.rbx,
-                    self.ej.rcx,
-                    self.ej.rdx,
-                    pc,
-                    self.ej.rsp,
+                crate::lab_mode::trace_bus::hvm(
+                    self.id,
+                    self.guest_regs.rax,
+                    self.guest_regs.rbx,
+                    self.guest_regs.rcx,
+                    self.guest_regs.rdx,
+                    rip,
+                    self.guest_regs.rsp,
                 );
             }
             
-            if !ipf {
+            if !eix {
                 break;
             }
             
             
-            aph.rax = self.ej.rax;
-            aph.rbx = self.ej.rbx;
-            aph.rcx = self.ej.rcx;
-            aph.rdx = self.ej.rdx;
-            aph.rsi = self.ej.rsi;
-            aph.rdi = self.ej.rdi;
-            aph.rbp = self.ej.rbp;
-            aph.r8 = self.ej.r8;
-            aph.r9 = self.ej.r9;
-            aph.r10 = self.ej.r10;
-            aph.r11 = self.ej.r11;
-            aph.r12 = self.ej.r12;
-            aph.r13 = self.ej.r13;
-            aph.r14 = self.ej.r14;
-            aph.r15 = self.ej.r15;
+            vc.rax = self.guest_regs.rax;
+            vc.rbx = self.guest_regs.rbx;
+            vc.rcx = self.guest_regs.rcx;
+            vc.rdx = self.guest_regs.rdx;
+            vc.rsi = self.guest_regs.rsi;
+            vc.rdi = self.guest_regs.rdi;
+            vc.rbp = self.guest_regs.rbp;
+            vc.r8 = self.guest_regs.r8;
+            vc.r9 = self.guest_regs.r9;
+            vc.r10 = self.guest_regs.r10;
+            vc.r11 = self.guest_regs.r11;
+            vc.r12 = self.guest_regs.r12;
+            vc.r13 = self.guest_regs.r13;
+            vc.r14 = self.guest_regs.r14;
+            vc.r15 = self.guest_regs.r15;
         }
         
-        if self.g == SvmVmState::Ai {
-            self.g = SvmVmState::Af;
+        if self.state == SvmVmState::Running {
+            self.state = SvmVmState::Stopped;
         }
         
-        crate::serial_println!("[SVM-VM {}] Stopped after {} VMEXITs", self.ad, self.cm.ait);
-        crate::lab_mode::trace_bus::epu(
-            self.ad, &format!("STOPPED after {} exits (cpuid={} io={} msr={} hlt={} vmcall={})",
-                self.cm.ait, self.cm.bmp, self.cm.ank,
-                self.cm.bkn, self.cm.axz, self.cm.gwh)
+        crate::serial_println!("[SVM-VM {}] Stopped after {} VMEXITs", self.id, self.stats.vmexits);
+        crate::lab_mode::trace_bus::bzh(
+            self.id, &format!("STOPPED after {} exits (cpuid={} io={} msr={} hlt={} vmcall={})",
+                self.stats.vmexits, self.stats.cpuid_exits, self.stats.io_exits,
+                self.stats.msr_exits, self.stats.hlt_exits, self.stats.vmmcall_exits)
         );
         
         Ok(())
     }
     
     
-    fn tlo(&mut self) -> Result<bool> {
+    fn handle_vmexit_inline(&mut self) -> Result<bool> {
         
-        let (nz, dqp, kum, wb, aqa) = {
-            let vmcb = self.vmcb.as_ref().ok_or(HypervisorError::Bd)?;
-            let ec = vmcb.cgx(control_offsets::Abm);
-            let sjm = vmcb.cgx(control_offsets::Abn);
-            let sjn = vmcb.cgx(control_offsets::Abo);
-            let pc = vmcb.xs(state_offsets::Aw);
-            let hta = if self.features.evl {
-                vmcb.cgx(control_offsets::AFY_)
+        let (exit_code, bmb, fvp, guest_rip, vo) = {
+            let vmcb = self.vmcb.as_ref().ok_or(HypervisorError::VmcbNotLoaded)?;
+            let ec = vmcb.read_control(control_offsets::Lv);
+            let lon = vmcb.read_control(control_offsets::Lx);
+            let loo = vmcb.read_control(control_offsets::Ly);
+            let rip = vmcb.read_state(state_offsets::Af);
+            let dvj = if self.features.nrip_save {
+                vmcb.read_control(control_offsets::AHS_)
             } else {
-                pc + 2 
+                rip + 2 
             };
-            (ec, sjm, sjn, pc, hta)
+            (ec, lon, loo, rip, dvj)
         };
         
-        let cxn = SvmExitCode::from(nz);
+        let exit = SvmExitCode::from(exit_code);
         
-        match cxn {
-            SvmExitCode::Bdu => {
-                self.cm.bmp += 1;
+        match exit {
+            SvmExitCode::Cpuid => {
+                self.stats.cpuid_exits += 1;
                 
-                crate::lab_mode::trace_bus::ept(
-                    self.ad, "CPUID", wb,
-                    &alloc::format!("EAX=0x{:X} ECX=0x{:X}", self.ej.rax, self.ej.rcx)
+                crate::lab_mode::trace_bus::bzg(
+                    self.id, "CPUID", guest_rip,
+                    &alloc::format!("EAX=0x{:X} ECX=0x{:X}", self.guest_regs.rax, self.guest_regs.rcx)
                 );
                 
-                super::debug_monitor::bry(
-                    self.ad, super::debug_monitor::DebugCategory::Ahg,
-                    self.ej.rax, super::debug_monitor::HandleStatus::Gw,
-                    wb, self.cm.ait,
-                    &alloc::format!("ECX=0x{:X}", self.ej.rcx),
+                super::debug_monitor::akj(
+                    self.id, super::debug_monitor::DebugCategory::CpuidLeaf,
+                    self.guest_regs.rax, super::debug_monitor::HandleStatus::Handled,
+                    guest_rip, self.stats.vmexits,
+                    &alloc::format!("ECX=0x{:X}", self.guest_regs.rcx),
                 );
-                self.lat();
-                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::Bd)?;
-                vmcb.abz(state_offsets::Aw, aqa);
+                self.handle_cpuid();
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                vmcb.write_state(state_offsets::Af, vo);
                 Ok(true)
             }
             
-            SvmExitCode::Bit => {
-                self.cm.axz += 1;
+            SvmExitCode::Hlt => {
+                self.stats.hlt_exits += 1;
                 
                 
                 {
-                    let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::Bd)?;
-                    vmcb.abz(state_offsets::Aw, aqa);
+                    let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                    vmcb.write_state(state_offsets::Af, vo);
                     
                     
-                    let rflags = vmcb.xs(state_offsets::Kv);
+                    let rflags = vmcb.read_state(state_offsets::Ek);
                     if (rflags & 0x200) != 0 { 
                         
-                        let wj = if self.ku.iq && (self.ku.atq & 0xFF) > 0 
-                            && ((self.ku.atq >> 16) & 1) == 0 {
-                            (self.ku.atq & 0xFF) as u64
+                        let vector = if self.lapic.enabled && (self.lapic.timer_lvt & 0xFF) > 0 
+                            && ((self.lapic.timer_lvt >> 16) & 1) == 0 {
+                            (self.lapic.timer_lvt & 0xFF) as u64
                         } else {
                             0x20
                         };
-                        let ebh: u64 = wj
+                        let bsi: u64 = vector
                                            | (0u64 << 8)    
                                            | (1u64 << 31);  
-                        vmcb.elc(control_offsets::GJ_, ebh);
+                        vmcb.write_control(control_offsets::HA_, bsi);
                     }
                 }
                 
                 
                 
-                if self.cm.axz > 5_000_000 {
-                    crate::serial_println!("[SVM-VM {}] Too many HLT exits ({}), stopping", self.ad, self.cm.axz);
-                    self.g = SvmVmState::Af;
+                if self.stats.hlt_exits > 5_000_000 {
+                    crate::serial_println!("[SVM-VM {}] Too many HLT exits ({}), stopping", self.id, self.stats.hlt_exits);
+                    self.state = SvmVmState::Stopped;
                     Ok(false)
                 } else {
                     
-                    if self.cm.axz % 10000 == 0 {
-                        crate::serial_println!("[SVM-VM {}] HLT count: {}", self.ad, self.cm.axz);
+                    if self.stats.hlt_exits % 10000 == 0 {
+                        crate::serial_println!("[SVM-VM {}] HLT count: {}", self.id, self.stats.hlt_exits);
                     }
                     Ok(true)
                 }
             }
             
-            SvmExitCode::Auo | SvmExitCode::Bjz => {
-                self.cm.ank += 1;
-                let port = ((dqp >> 16) & 0xFFFF) as u16;
-                let te = if oh!(cxn, SvmExitCode::Auo) { "IN" } else { "OUT" };
-                crate::lab_mode::trace_bus::npq(self.ad, te, port, self.ej.rax);
-                self.lav(dqp);
-                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::Bd)?;
-                vmcb.abz(state_offsets::Aw, aqa);
+            SvmExitCode::IoioIn | SvmExitCode::IoioOut => {
+                self.stats.io_exits += 1;
+                let port = ((bmb >> 16) & 0xFFFF) as u16;
+                let it = if matches!(exit, SvmExitCode::IoioIn) { "IN" } else { "OUT" };
+                crate::lab_mode::trace_bus::hvk(self.id, it, port, self.guest_regs.rax);
+                self.handle_io(bmb);
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                vmcb.write_state(state_offsets::Af, vo);
                 Ok(true)
             }
             
-            SvmExitCode::Hx | SvmExitCode::Jr => {
-                self.cm.bkn += 1;
-                let rm = oh!(cxn, SvmExitCode::Jr);
-                let uqi = if rm { "WRMSR" } else { "RDMSR" };
-                crate::lab_mode::trace_bus::ept(
-                    self.ad, uqi, wb,
-                    &alloc::format!("MSR=0x{:X}", self.ej.rcx)
+            SvmExitCode::MsrRead | SvmExitCode::MsrWrite => {
+                self.stats.msr_exits += 1;
+                let is_write = matches!(exit, SvmExitCode::MsrWrite);
+                let ngs = if is_write { "WRMSR" } else { "RDMSR" };
+                crate::lab_mode::trace_bus::bzg(
+                    self.id, ngs, guest_rip,
+                    &alloc::format!("MSR=0x{:X}", self.guest_regs.rcx)
                 );
-                self.laz(rm);
-                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::Bd)?;
-                vmcb.abz(state_offsets::Aw, aqa);
+                self.handle_msr(is_write);
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                vmcb.write_state(state_offsets::Af, vo);
                 Ok(true)
             }
             
-            SvmExitCode::Qe => {
-                self.cm.cay += 1;
-                let axy = kum;
-                let error_code = dqp;
+            SvmExitCode::NpfFault => {
+                self.stats.npf_exits += 1;
+                let zy = fvp;
+                let error_code = bmb;
                 
                 
-                let xsi = self.vmcb.as_ref().ok_or(HypervisorError::Bd)?;
-                let (srv, hod) = xsi.thy();
+                let psq = self.vmcb.as_ref().ok_or(HypervisorError::VmcbNotLoaded)?;
+                let (fetched, insn_bytes) = psq.guest_insn_bytes();
                 
                 
-                let aoq = mmio::cpw(&hod, srv, true);
+                let uu = mmio::awu(&insn_bytes, fetched, true);
                 
                 
-                let tlt = self.tko(axy, error_code, wb, aoq.as_ref());
+                let miv = self.handle_npf(zy, error_code, guest_rip, uu.as_ref());
                 
-                if tlt {
+                if miv {
                     
-                    if let Some(ref adr) = aoq {
-                        let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::Bd)?;
-                        vmcb.abz(state_offsets::Aw, wb + adr.ake as u64);
-                    } else if self.features.evl {
+                    if let Some(ref ox) = uu {
+                        let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                        vmcb.write_state(state_offsets::Af, guest_rip + ox.insn_len as u64);
+                    } else if self.features.nrip_save {
                         
-                        let vmcb = self.vmcb.as_ref().ok_or(HypervisorError::Bd)?;
-                        let hta = vmcb.cgx(control_offsets::AFY_);
-                        if hta > wb && hta < wb + 16 {
-                            let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::Bd)?;
-                            vmcb.abz(state_offsets::Aw, hta);
+                        let vmcb = self.vmcb.as_ref().ok_or(HypervisorError::VmcbNotLoaded)?;
+                        let dvj = vmcb.read_control(control_offsets::AHS_);
+                        if dvj > guest_rip && dvj < guest_rip + 16 {
+                            let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                            vmcb.write_state(state_offsets::Af, dvj);
                         } else {
                             
                             crate::serial_println!("[SVM-VM {}] NPF: decode failed, skipping 3 bytes at RIP=0x{:X}", 
-                                self.ad, wb);
-                            let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::Bd)?;
-                            vmcb.abz(state_offsets::Aw, wb + 3);
+                                self.id, guest_rip);
+                            let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                            vmcb.write_state(state_offsets::Af, guest_rip + 3);
                         }
                     } else {
                         
-                        crate::serial_println!("[SVM-VM {}] NPF: no decode/nrip, skipping 3 bytes", self.ad);
-                        let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::Bd)?;
-                        vmcb.abz(state_offsets::Aw, wb + 3);
+                        crate::serial_println!("[SVM-VM {}] NPF: no decode/nrip, skipping 3 bytes", self.id);
+                        let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                        vmcb.write_state(state_offsets::Af, guest_rip + 3);
                     }
                     Ok(true)
                 } else {
-                    crate::lab_mode::trace_bus::npr(
-                        self.ad, "NPF_VIOLATION", axy, error_code
+                    crate::lab_mode::trace_bus::hvl(
+                        self.id, "NPF_VIOLATION", zy, error_code
                     );
-                    super::debug_monitor::bry(
-                        self.ad, super::debug_monitor::DebugCategory::Qe,
-                        axy, super::debug_monitor::HandleStatus::Nd,
-                        wb, self.cm.ait,
+                    super::debug_monitor::akj(
+                        self.id, super::debug_monitor::DebugCategory::NpfFault,
+                        zy, super::debug_monitor::HandleStatus::Fatal,
+                        guest_rip, self.stats.vmexits,
                         &alloc::format!("err=0x{:X}", error_code),
                     );
                     crate::serial_println!("[SVM-VM {}] FATAL NPF: GPA=0x{:X}, Error=0x{:X}, RIP=0x{:X}", 
-                                          self.ad, axy, error_code, wb);
+                                          self.id, zy, error_code, guest_rip);
                     
-                    super::isolation::pau(
-                        self.ad,
-                        axy,
+                    super::isolation::iyv(
+                        self.id,
+                        zy,
                         None,
                         error_code,
-                        wb,
+                        guest_rip,
                     );
                     
-                    self.g = SvmVmState::Gu;
+                    self.state = SvmVmState::Crashed;
                     Ok(false)
                 }
             }
             
-            SvmExitCode::Bwa => {
-                self.cm.gwh += 1;
-                crate::lab_mode::trace_bus::ept(
-                    self.ad, "VMMCALL", wb,
+            SvmExitCode::Vmmcall => {
+                self.stats.vmmcall_exits += 1;
+                crate::lab_mode::trace_bus::bzg(
+                    self.id, "VMMCALL", guest_rip,
                     &alloc::format!("func=0x{:X} args=({:X},{:X},{:X})",
-                        self.ej.rax, self.ej.rbx,
-                        self.ej.rcx, self.ej.rdx)
+                        self.guest_regs.rax, self.guest_regs.rbx,
+                        self.guest_regs.rcx, self.guest_regs.rdx)
                 );
-                let mfp = self.tlp();
-                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::Bd)?;
-                vmcb.abz(state_offsets::Aw, aqa);
-                Ok(mfp)
+                let gux = self.handle_vmmcall();
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                vmcb.write_state(state_offsets::Af, vo);
+                Ok(gux)
             }
             
-            SvmExitCode::Qt => {
-                crate::lab_mode::trace_bus::epu(self.ad, "TRIPLE FAULT (shutdown)");
-                super::debug_monitor::bry(
-                    self.ad, super::debug_monitor::DebugCategory::Ahu,
-                    0xFF, super::debug_monitor::HandleStatus::Nd,
-                    wb, self.cm.ait, "TRIPLE FAULT",
+            SvmExitCode::Shutdown => {
+                crate::lab_mode::trace_bus::bzh(self.id, "TRIPLE FAULT (shutdown)");
+                super::debug_monitor::akj(
+                    self.id, super::debug_monitor::DebugCategory::Exception,
+                    0xFF, super::debug_monitor::HandleStatus::Fatal,
+                    guest_rip, self.stats.vmexits, "TRIPLE FAULT",
                 );
-                crate::serial_println!("[SVM-VM {}] Guest SHUTDOWN (triple fault)", self.ad);
-                self.g = SvmVmState::Gu;
+                crate::serial_println!("[SVM-VM {}] Guest SHUTDOWN (triple fault)", self.id);
+                self.state = SvmVmState::Crashed;
                 Ok(false)
             }
             
-            SvmExitCode::Bjr => {
-                self.cm.jap += 1;
+            SvmExitCode::Intr => {
+                self.stats.intr_exits += 1;
                 
                 Ok(true)
             }
             
             
-            SvmExitCode::Bwx => {
+            SvmExitCode::WriteCr0 => {
                 
                 
                 
-                let opn = dqp;
-                crate::lab_mode::trace_bus::ept(
-                    self.ad, "WRITE_CR0", wb,
-                    &alloc::format!("val=0x{:X}", opn)
+                let ips = bmb;
+                crate::lab_mode::trace_bus::bzg(
+                    self.id, "WRITE_CR0", guest_rip,
+                    &alloc::format!("val=0x{:X}", ips)
                 );
                 {
-                    let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::Bd)?;
+                    let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
                     
                     
-                    let wcg = opn | 0x10; 
-                    vmcb.hzw(wcg);
-                    vmcb.abz(state_offsets::Aw, aqa);
+                    let oju = ips | 0x10; 
+                    vmcb.set_cr0(oju);
+                    vmcb.write_state(state_offsets::Af, vo);
                 }
                 Ok(true)
             }
             
-            SvmExitCode::Bwy => {
+            SvmExitCode::WriteCr3 => {
                 
-                let usq = dqp;
+                let niv = bmb;
                 {
-                    let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::Bd)?;
-                    vmcb.mei(usq);
-                    vmcb.abz(state_offsets::Aw, aqa);
+                    let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                    vmcb.set_cr3(niv);
+                    vmcb.write_state(state_offsets::Af, vo);
                 }
                 Ok(true)
             }
             
-            SvmExitCode::Bwz => {
+            SvmExitCode::WriteCr4 => {
                 
-                let opo = dqp;
-                crate::lab_mode::trace_bus::ept(
-                    self.ad, "WRITE_CR4", wb,
-                    &alloc::format!("val=0x{:X}", opo)
+                let ipt = bmb;
+                crate::lab_mode::trace_bus::bzg(
+                    self.id, "WRITE_CR4", guest_rip,
+                    &alloc::format!("val=0x{:X}", ipt)
                 );
                 {
-                    let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::Bd)?;
-                    vmcb.mej(opo);
-                    vmcb.abz(state_offsets::Aw, aqa);
+                    let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                    vmcb.set_cr4(ipt);
+                    vmcb.write_state(state_offsets::Af, vo);
                 }
                 Ok(true)
             }
             
             
-            SvmExitCode::Bqo | SvmExitCode::Bqp | SvmExitCode::Bqq => {
+            SvmExitCode::ReadCr0 | SvmExitCode::ReadCr3 | SvmExitCode::ReadCr4 => {
                 
                 
-                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::Bd)?;
-                vmcb.abz(state_offsets::Aw, aqa);
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                vmcb.write_state(state_offsets::Af, vo);
                 Ok(true)
             }
             
-            SvmExitCode::Bdv => {
+            SvmExitCode::Cr0SelWrite => {
                 
-                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::Bd)?;
-                vmcb.abz(state_offsets::Aw, aqa);
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                vmcb.write_state(state_offsets::Af, vo);
                 Ok(true)
             }
             
             
             
-            SvmExitCode::Bxc => {
+            SvmExitCode::Xsetbv => {
                 
                 
-                let xwl = self.ej.rcx as u32;
-                let bn = (self.ej.rdx << 32) | (self.ej.rax & 0xFFFF_FFFF);
-                if xwl == 0 {
+                let pvs = self.guest_regs.rcx as u32;
+                let value = (self.guest_regs.rdx << 32) | (self.guest_regs.rax & 0xFFFF_FFFF);
+                if pvs == 0 {
                     
                     
-                    let grf = bn | 1; 
+                    let safe_value = value | 1; 
                     unsafe {
                         core::arch::asm!(
                             "xsetbv",
                             in("ecx") 0u32,
-                            in("edx") (grf >> 32) as u32,
-                            in("eax") grf as u32,
+                            in("edx") (safe_value >> 32) as u32,
+                            in("eax") safe_value as u32,
                         );
                     }
                 }
-                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::Bd)?;
-                vmcb.abz(state_offsets::Aw, aqa);
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                vmcb.write_state(state_offsets::Af, vo);
                 Ok(true)
             }
             
-            SvmExitCode::Bjw => {
+            SvmExitCode::Invd => {
                 
                 
-                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::Bd)?;
-                vmcb.abz(state_offsets::Aw, aqa);
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                vmcb.write_state(state_offsets::Af, vo);
                 Ok(true)
             }
             
-            SvmExitCode::Bjx => {
+            SvmExitCode::Invlpg => {
                 
                 
                 
-                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::Bd)?;
-                vmcb.abz(state_offsets::Aw, aqa);
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                vmcb.write_state(state_offsets::Af, vo);
                 Ok(true)
             }
             
-            SvmExitCode::Bwt => {
+            SvmExitCode::Wbinvd => {
                 
                 
                 unsafe { core::arch::asm!("wbinvd", options(nomem, nostack)); }
-                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::Bd)?;
-                vmcb.abz(state_offsets::Aw, aqa);
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                vmcb.write_state(state_offsets::Af, vo);
                 Ok(true)
             }
             
-            SvmExitCode::Bqm => {
+            SvmExitCode::Rdtsc => {
                 
-                let tsc = unsafe { core::arch::x86_64::dxw() };
-                self.ej.rax = tsc & 0xFFFF_FFFF;
-                self.ej.rdx = tsc >> 32;
-                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::Bd)?;
-                vmcb.abz(state_offsets::Aw, aqa);
+                let tsc = unsafe { core::arch::x86_64::_rdtsc() };
+                self.guest_regs.rax = tsc & 0xFFFF_FFFF;
+                self.guest_regs.rdx = tsc >> 32;
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                vmcb.write_state(state_offsets::Af, vo);
                 Ok(true)
             }
             
-            SvmExitCode::Uc => {
+            SvmExitCode::Rdtscp => {
                 
-                let tsc = unsafe { core::arch::x86_64::dxw() };
-                self.ej.rax = tsc & 0xFFFF_FFFF;
-                self.ej.rdx = tsc >> 32;
-                self.ej.rcx = 0; 
-                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::Bd)?;
-                vmcb.abz(state_offsets::Aw, aqa);
+                let tsc = unsafe { core::arch::x86_64::_rdtsc() };
+                self.guest_regs.rax = tsc & 0xFFFF_FFFF;
+                self.guest_regs.rdx = tsc >> 32;
+                self.guest_regs.rcx = 0; 
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                vmcb.write_state(state_offsets::Af, vo);
                 Ok(true)
             }
             
-            SvmExitCode::Bor => {
+            SvmExitCode::Pause => {
                 
-                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::Bd)?;
-                vmcb.abz(state_offsets::Aw, aqa);
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                vmcb.write_state(state_offsets::Af, vo);
                 Ok(true)
             }
             
-            SvmExitCode::Bmo | SvmExitCode::Bmz | SvmExitCode::Chq => {
+            SvmExitCode::Monitor | SvmExitCode::Mwait | SvmExitCode::MwaitConditional => {
                 
                 
-                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::Bd)?;
-                vmcb.abz(state_offsets::Aw, aqa);
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                vmcb.write_state(state_offsets::Af, vo);
                 Ok(true)
             }
             
-            SvmExitCode::Bvu => {
+            SvmExitCode::Vintr => {
                 
                 Ok(true)
             }
             
-            SvmExitCode::Bub => {
+            SvmExitCode::TaskSwitch => {
                 
                 
-                crate::serial_println!("[SVM-VM {}] TaskSwitch at RIP=0x{:X}", self.ad, wb);
-                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::Bd)?;
-                vmcb.abz(state_offsets::Aw, aqa);
+                crate::serial_println!("[SVM-VM {}] TaskSwitch at RIP=0x{:X}", self.id, guest_rip);
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                vmcb.write_state(state_offsets::Af, vo);
                 Ok(true)
             }
             
             
-            SvmExitCode::Cbx | SvmExitCode::Cbw |
-            SvmExitCode::Cbu | SvmExitCode::Cce |
-            SvmExitCode::Cbv | SvmExitCode::Cci |
-            SvmExitCode::Ccc | SvmExitCode::Ccb |
-            SvmExitCode::Cbt | SvmExitCode::Ccj => {
+            SvmExitCode::ExceptionDE | SvmExitCode::ExceptionDB |
+            SvmExitCode::ExceptionBP | SvmExitCode::ExceptionOF |
+            SvmExitCode::ExceptionBR | SvmExitCode::ExceptionUD |
+            SvmExitCode::ExceptionNM | SvmExitCode::ExceptionMF |
+            SvmExitCode::ExceptionAC | SvmExitCode::ExceptionXF => {
                 
-                let wj = (nz - 0x40) as u8;
-                if self.cm.ait < 200 {
+                let vector = (exit_code - 0x40) as u8;
+                if self.stats.vmexits < 200 {
                     crate::serial_println!("[SVM-VM {}] Exception #{} at RIP=0x{:X} — re-injecting", 
-                        self.ad, wj, wb);
+                        self.id, vector, guest_rip);
                 }
-                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::Bd)?;
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
                 
-                vmcb.hnz(wj, 3, None);
+                vmcb.inject_event(vector, 3, None);
                 Ok(true)
             }
             
-            SvmExitCode::Cbz => {
+            SvmExitCode::ExceptionGP => {
                 
-                let error_code = dqp as u32;
-                if self.cm.ait < 200 {
+                let error_code = bmb as u32;
+                if self.stats.vmexits < 200 {
                     crate::serial_println!("[SVM-VM {}] #GP(0x{:X}) at RIP=0x{:X}", 
-                        self.ad, error_code, wb);
+                        self.id, error_code, guest_rip);
                 }
-                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::Bd)?;
-                vmcb.hnz(13, 3, Some(error_code));
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                vmcb.inject_event(13, 3, Some(error_code));
                 Ok(true)
             }
             
-            SvmExitCode::Ccf => {
+            SvmExitCode::ExceptionPF => {
                 
-                let error_code = dqp as u32;
-                let bha = kum;
-                if self.cm.ait < 200 {
+                let error_code = bmb as u32;
+                let aff = fvp;
+                if self.stats.vmexits < 200 {
                     crate::serial_println!("[SVM-VM {}] #PF at 0x{:X} (err=0x{:X}) RIP=0x{:X}", 
-                        self.ad, bha, error_code, wb);
+                        self.id, aff, error_code, guest_rip);
                 }
-                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::Bd)?;
-                vmcb.abz(state_offsets::Agy, bha);
-                vmcb.hnz(14, 3, Some(error_code));
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                vmcb.write_state(state_offsets::Og, aff);
+                vmcb.inject_event(14, 3, Some(error_code));
                 Ok(true)
             }
             
-            SvmExitCode::Cby => {
+            SvmExitCode::ExceptionDF => {
                 
-                crate::serial_println!("[SVM-VM {}] DOUBLE FAULT at RIP=0x{:X}", self.ad, wb);
-                self.g = SvmVmState::Gu;
+                crate::serial_println!("[SVM-VM {}] DOUBLE FAULT at RIP=0x{:X}", self.id, guest_rip);
+                self.state = SvmVmState::Crashed;
                 Ok(false)
             }
             
-            SvmExitCode::Cch | SvmExitCode::Ccd |
-            SvmExitCode::Ccg => {
+            SvmExitCode::ExceptionTS | SvmExitCode::ExceptionNP |
+            SvmExitCode::ExceptionSS => {
                 
-                let wj = (nz - 0x40) as u8;
-                let error_code = dqp as u32;
-                if self.cm.ait < 200 {
+                let vector = (exit_code - 0x40) as u8;
+                let error_code = bmb as u32;
+                if self.stats.vmexits < 200 {
                     crate::serial_println!("[SVM-VM {}] Exception #{} (err=0x{:X}) at RIP=0x{:X}", 
-                        self.ad, wj, error_code, wb);
+                        self.id, vector, error_code, guest_rip);
                 }
-                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::Bd)?;
-                vmcb.hnz(wj, 3, Some(error_code));
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                vmcb.inject_event(vector, 3, Some(error_code));
                 Ok(true)
             }
             
-            SvmExitCode::Cca => {
+            SvmExitCode::ExceptionMC => {
                 
-                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::Bd)?;
-                vmcb.hnz(18, 3, None);
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                vmcb.inject_event(18, 3, None);
                 Ok(true)
             }
             
             _ => {
                 crate::serial_println!("[SVM-VM {}] Unhandled #VMEXIT: {:?} (0x{:X}) at RIP=0x{:X}", 
-                                      self.ad, cxn, nz, wb);
-                self.g = SvmVmState::Gu;
+                                      self.id, exit, exit_code, guest_rip);
+                self.state = SvmVmState::Crashed;
                 Ok(false)
             }
         }
     }
     
     
-    fn lat(&mut self) {
-        let awa = self.ej.rax as u32;
-        let bxj = self.ej.rcx as u32;
+    fn handle_cpuid(&mut self) {
+        let leaf = self.guest_regs.rax as u32;
+        let subleaf = self.guest_regs.rcx as u32;
         
         
-        match awa {
+        match leaf {
             
             0x4000_0000 => {
                 
-                self.ej.rax = 0x4000_0001;
-                self.ej.rbx = 0x7473_7254; 
-                self.ej.rcx = 0x7254_534F; 
-                self.ej.rdx = 0x534F_7473; 
+                self.guest_regs.rax = 0x4000_0001;
+                self.guest_regs.rbx = 0x7473_7254; 
+                self.guest_regs.rcx = 0x7254_534F; 
+                self.guest_regs.rdx = 0x534F_7473; 
                 return;
             }
             0x4000_0001 => {
                 
-                self.ej.rax = 0; 
-                self.ej.rbx = 0;
-                self.ej.rcx = 0;
-                self.ej.rdx = 0;
+                self.guest_regs.rax = 0; 
+                self.guest_regs.rbx = 0;
+                self.guest_regs.rcx = 0;
+                self.guest_regs.rdx = 0;
                 return;
             }
             _ => {}
         }
         
         
-        let (htx, fpy, hty, htz): (u32, u32, u32, u32);
+        let (out_eax, out_ebx, out_ecx, out_edx): (u32, u32, u32, u32);
         
         unsafe {
             core::arch::asm!(
@@ -1360,16 +1360,16 @@ impl SvmVirtualMachine {
                 "cpuid",
                 "mov {out_ebx:e}, ebx",
                 "pop rbx",
-                inout("eax") awa => htx,
-                inout("ecx") bxj => hty,
-                fpy = bd(reg) fpy,
-                bd("edx") htz,
+                inout("eax") leaf => out_eax,
+                inout("ecx") subleaf => out_ecx,
+                out_ebx = out(reg) out_ebx,
+                out("edx") out_edx,
             );
         }
         
-        let (mut eax, mut ebx, mut ecx, mut edx) = (htx, fpy, hty, htz);
+        let (mut eax, mut ebx, mut ecx, mut edx) = (out_eax, out_ebx, out_ecx, out_edx);
         
-        match awa {
+        match leaf {
             0x0000_0000 => {
                 
                 
@@ -1386,7 +1386,7 @@ impl SvmVirtualMachine {
             }
             0x0000_0007 => {
                 
-                if bxj == 0 {
+                if subleaf == 0 {
                     ebx &= !(1 << 0);  
                     ecx &= !(1 << 2);  
                     ecx &= !(1 << 4);  
@@ -1401,14 +1401,14 @@ impl SvmVirtualMachine {
             }
             0x0000_000B | 0x0000_001F => {
                 
-                if bxj == 0 {
+                if subleaf == 0 {
                     eax = 0; 
                     ebx = 1; 
-                    ecx = (1 << 8) | bxj; 
-                } else if bxj == 1 {
+                    ecx = (1 << 8) | subleaf; 
+                } else if subleaf == 1 {
                     eax = 0;
                     ebx = 1; 
-                    ecx = (2 << 8) | bxj; 
+                    ecx = (2 << 8) | subleaf; 
                 } else {
                     eax = 0;
                     ebx = 0;
@@ -1424,70 +1424,70 @@ impl SvmVirtualMachine {
             }
         }
         
-        self.ej.rax = eax as u64;
-        self.ej.rbx = ebx as u64;
-        self.ej.rcx = ecx as u64;
-        self.ej.rdx = edx as u64;
+        self.guest_regs.rax = eax as u64;
+        self.guest_regs.rbx = ebx as u64;
+        self.guest_regs.rcx = ecx as u64;
+        self.guest_regs.rdx = edx as u64;
     }
     
     
     
-    fn tko(&mut self, axy: u64, error_code: u64, wb: u64, aoq: Option<&Eh>) -> bool {
+    fn handle_npf(&mut self, zy: u64, error_code: u64, guest_rip: u64, uu: Option<&Bt>) -> bool {
         
-        const AYD_: u64 = 0xFEE0_0000;
-        const CDH_: u64 = 0xFEE0_1000;
-        const ADP_: u64 = 0xFEC0_0000;
-        const CCA_: u64 = 0xFEC0_1000;
-        const ADK_: u64 = 0xFED0_0000;
-        const CAO_: u64 = 0xFED0_1000;
+        const BAE_: u64 = 0xFEE0_0000;
+        const CGQ_: u64 = 0xFEE0_1000;
+        const AFG_: u64 = 0xFEC0_0000;
+        const CFL_: u64 = 0xFEC0_1000;
+        const AFA_: u64 = 0xFED0_0000;
+        const CDZ_: u64 = 0xFED0_1000;
         
-        match axy {
+        match zy {
             
-            AYD_..=CDH_ => {
-                self.tkf(axy, error_code, aoq);
+            BAE_..=CGQ_ => {
+                self.handle_lapic_mmio(zy, error_code, uu);
                 true
             }
             
-            ADP_..=CCA_ => {
-                self.tjy(axy, error_code, aoq);
+            AFG_..=CFL_ => {
+                self.handle_ioapic_mmio(zy, error_code, uu);
                 true
             }
             
-            ADK_..=CAO_ => {
-                self.tju(axy, error_code, aoq);
+            AFA_..=CDZ_ => {
+                self.handle_hpet_mmio(zy, error_code, uu);
                 true
             }
             
             0xA0000..=0xBFFFF => {
-                if self.cm.cay < 20 {
-                    crate::serial_println!("[SVM-VM {}] VGA FB access at 0x{:X}", self.ad, axy);
+                if self.stats.npf_exits < 20 {
+                    crate::serial_println!("[SVM-VM {}] VGA FB access at 0x{:X}", self.id, zy);
                 }
-                self.gmu(aoq, 0);
+                self.mmio_complete_read(uu, 0);
                 true
             }
             
             0xC0000..=0xFFFFF => {
-                self.gmu(aoq, 0);
+                self.mmio_complete_read(uu, 0);
                 true
             }
             
-            pe if pe < self.apy as u64 => {
+            gm if gm < self.memory_size as u64 => {
                 crate::serial_println!("[SVM-VM {}] NPF in guest RAM at 0x{:X}, err=0x{:X}, RIP=0x{:X}", 
-                    self.ad, pe, error_code, wb);
+                    self.id, gm, error_code, guest_rip);
                 false
             }
             
-            pe if pe >= 0x1_0000_0000 => {
-                if self.cm.cay < 50 {
-                    crate::serial_println!("[SVM-VM {}] High MMIO access at 0x{:X} (absorbed)", self.ad, pe);
+            gm if gm >= 0x1_0000_0000 => {
+                if self.stats.npf_exits < 50 {
+                    crate::serial_println!("[SVM-VM {}] High MMIO access at 0x{:X} (absorbed)", self.id, gm);
                 }
-                self.gmu(aoq, 0xFFFF_FFFF);
+                self.mmio_complete_read(uu, 0xFFFF_FFFF);
                 true
             }
             _ => {
-                if self.cm.cay < 50 {
+                if self.stats.npf_exits < 50 {
                     crate::serial_println!("[SVM-VM {}] NPF: GPA=0x{:X}, err=0x{:X}, RIP=0x{:X}", 
-                        self.ad, axy, error_code, wb);
+                        self.id, zy, error_code, guest_rip);
                 }
                 false
             }
@@ -1496,253 +1496,253 @@ impl SvmVirtualMachine {
     
     
     
-    fn lmg(&self, aoq: Option<&Eh>) -> u32 {
-        if let Some(adr) = aoq {
-            if let Some(gf) = adr.cag {
-                return mmio::old(gf, adr.aqc) as u32;
+    fn mmio_get_write_value(&self, uu: Option<&Bt>) -> u32 {
+        if let Some(ox) = uu {
+            if let Some(imm) = ox.immediate {
+                return mmio::ilw(imm, ox.operand_size) as u32;
             }
-            if let Some(alq) = adr.nw {
-                let ap = mmio::paf(&self.ej, alq);
-                return mmio::old(ap, adr.aqc) as u32;
+            if let Some(tb) = ox.register {
+                let val = mmio::iyl(&self.guest_regs, tb);
+                return mmio::ilw(val, ox.operand_size) as u32;
             }
         }
         
-        self.ej.rax as u32
+        self.guest_regs.rax as u32
     }
     
     
     
-    fn gmu(&mut self, aoq: Option<&Eh>, bn: u32) {
-        if let Some(adr) = aoq {
-            if !adr.rm {
-                if let Some(alq) = adr.nw {
+    fn mmio_complete_read(&mut self, uu: Option<&Bt>, value: u32) {
+        if let Some(ox) = uu {
+            if !ox.is_write {
+                if let Some(tb) = ox.register {
                     
                     
                     
-                    mmio::pzy(&mut self.ej, alq, bn as u64);
+                    mmio::jro(&mut self.guest_regs, tb, value as u64);
                     return;
                 }
             }
         }
         
-        self.ej.rax = bn as u64;
+        self.guest_regs.rax = value as u64;
     }
     
     
-    fn tkf(&mut self, pe: u64, error_code: u64, aoq: Option<&Eh>) {
-        let l = (pe & 0xFFF) as u32;
-        let rm = (error_code & 0x2) != 0; 
+    fn handle_lapic_mmio(&mut self, gm: u64, error_code: u64, uu: Option<&Bt>) {
+        let offset = (gm & 0xFFF) as u32;
+        let is_write = (error_code & 0x2) != 0; 
         
         
-        const ADW_: u32 = 0x020;
-        const ADY_: u32 = 0x030;
-        const UM_: u32 = 0x080;
-        const ADU_: u32 = 0x0B0;
-        const NW_: u32 = 0x0F0;
-        const CDJ_: u32 = 0x100;
-        const CDM_: u32 = 0x180;
-        const CDI_: u32 = 0x200;
-        const AYE_: u32 = 0x280;
-        const AYI_: u32 = 0x300;
-        const AYG_: u32 = 0x310;
-        const ID_: u32 = 0x320;
-        const AYN_: u32 = 0x330;
-        const AYM_: u32 = 0x340;
-        const AYJ_: u32 = 0x350;
-        const AYK_: u32 = 0x360;
-        const ADV_: u32 = 0x370;
-        const KN_: u32 = 0x380;
-        const ADX_: u32 = 0x390;
-        const NX_: u32 = 0x3E0;
+        const AFQ_: u32 = 0x020;
+        const AFS_: u32 = 0x030;
+        const VV_: u32 = 0x080;
+        const AFO_: u32 = 0x0B0;
+        const OU_: u32 = 0x0F0;
+        const CGS_: u32 = 0x100;
+        const CGV_: u32 = 0x180;
+        const CGR_: u32 = 0x200;
+        const BAF_: u32 = 0x280;
+        const BAJ_: u32 = 0x300;
+        const BAH_: u32 = 0x310;
+        const IX_: u32 = 0x320;
+        const BAO_: u32 = 0x330;
+        const BAN_: u32 = 0x340;
+        const BAK_: u32 = 0x350;
+        const BAL_: u32 = 0x360;
+        const AFP_: u32 = 0x370;
+        const LG_: u32 = 0x380;
+        const AFR_: u32 = 0x390;
+        const OV_: u32 = 0x3E0;
         
-        if rm {
-            let bn = self.lmg(aoq);
-            match l {
-                UM_ => {
-                    self.ku.guv = bn & 0xFF;
+        if is_write {
+            let value = self.mmio_get_write_value(uu);
+            match offset {
+                VV_ => {
+                    self.lapic.tpr = value & 0xFF;
                     
                     if let Some(ref mut vmcb) = self.vmcb {
-                        vmcb.sx(control_offsets::DBK_, bn & 0x0F);
+                        vmcb.write_u32(control_offsets::DFC_, value & 0x0F);
                     }
                 }
-                ADU_ => {
+                AFO_ => {
                     
                 }
-                NW_ => {
-                    self.ku.bim = bn;
-                    self.ku.iq = (bn & 0x100) != 0;
-                    if self.cm.ait < 1000 {
+                OU_ => {
+                    self.lapic.svr = value;
+                    self.lapic.enabled = (value & 0x100) != 0;
+                    if self.stats.vmexits < 1000 {
                         crate::serial_println!("[SVM-VM {}] LAPIC SVR=0x{:X} enabled={}", 
-                            self.ad, bn, self.ku.iq);
+                            self.id, value, self.lapic.enabled);
                     }
                 }
-                AYI_ => {
+                BAJ_ => {
                     
-                    if self.cm.ait < 1000 {
+                    if self.stats.vmexits < 1000 {
                         crate::serial_println!("[SVM-VM {}] LAPIC ICR write: 0x{:X} (IPI ignored, single vCPU)", 
-                            self.ad, bn);
+                            self.id, value);
                     }
                 }
-                AYG_ => {} 
-                ID_ => {
-                    self.ku.atq = bn;
-                    if self.cm.ait < 1000 {
-                        let wj = bn & 0xFF;
-                        let bnm = (bn >> 16) & 1;
-                        let ev = (bn >> 17) & 0x3;
-                        let upc = match ev {
+                BAH_ => {} 
+                IX_ => {
+                    self.lapic.timer_lvt = value;
+                    if self.stats.vmexits < 1000 {
+                        let vector = value & 0xFF;
+                        let masked = (value >> 16) & 1;
+                        let mode = (value >> 17) & 0x3;
+                        let nfu = match mode {
                             0 => "one-shot",
                             1 => "periodic",
                             2 => "TSC-deadline",
                             _ => "reserved",
                         };
                         crate::serial_println!("[SVM-VM {}] LAPIC timer LVT: vec={} mode={} masked={}", 
-                            self.ad, wj, upc, bnm);
+                            self.id, vector, nfu, masked);
                     }
                 }
-                AYJ_ | AYK_ | AYN_ | AYM_ | ADV_ => {
+                BAK_ | BAL_ | BAO_ | BAN_ | AFP_ => {
                     
                 }
-                KN_ => {
-                    self.ku.bnh = bn;
-                    self.ku.fel = bn; 
-                    self.ku.fmr = self.cm.ait;
-                    if self.cm.ait < 1000 && bn > 0 {
-                        crate::serial_println!("[SVM-VM {}] LAPIC timer ICR={} (timer armed)", self.ad, bn);
+                LG_ => {
+                    self.lapic.icr = value;
+                    self.lapic.ccr = value; 
+                    self.lapic.last_tick_exit = self.stats.vmexits;
+                    if self.stats.vmexits < 1000 && value > 0 {
+                        crate::serial_println!("[SVM-VM {}] LAPIC timer ICR={} (timer armed)", self.id, value);
                     }
                 }
-                NX_ => {
-                    self.ku.dgc = bn;
+                OV_ => {
+                    self.lapic.dcr = value;
                 }
-                AYE_ => {} 
+                BAF_ => {} 
                 _ => {
-                    if self.cm.ait < 200 {
+                    if self.stats.vmexits < 200 {
                         crate::serial_println!("[SVM-VM {}] LAPIC write offset=0x{:X} val=0x{:X}", 
-                            self.ad, l, bn);
+                            self.id, offset, value);
                     }
                 }
             }
         } else {
             
-            let bn: u32 = match l {
-                ADW_ => 0,                    
-                ADY_ => 0x0005_0014,     
-                UM_ => self.ku.guv,
-                NW_ => self.ku.bim,
-                CDJ_..=0x170 => 0,
-                CDM_..=0x1F0 => 0,
-                CDI_..=0x270 => 0,
-                AYE_ => 0,
-                AYI_ => 0,               
-                AYG_ => 0,
-                ID_ => self.ku.atq,
-                AYN_ => 0x0001_0000, 
-                AYM_ => 0x0001_0000,    
-                AYJ_ => 0x0001_0000,        
-                AYK_ => 0x0001_0000,        
-                ADV_ => 0x0001_0000,    
-                KN_ => self.ku.bnh,
-                ADX_ => {
+            let value: u32 = match offset {
+                AFQ_ => 0,                    
+                AFS_ => 0x0005_0014,     
+                VV_ => self.lapic.tpr,
+                OU_ => self.lapic.svr,
+                CGS_..=0x170 => 0,
+                CGV_..=0x1F0 => 0,
+                CGR_..=0x270 => 0,
+                BAF_ => 0,
+                BAJ_ => 0,               
+                BAH_ => 0,
+                IX_ => self.lapic.timer_lvt,
+                BAO_ => 0x0001_0000, 
+                BAN_ => 0x0001_0000,    
+                BAK_ => 0x0001_0000,        
+                BAL_ => 0x0001_0000,        
+                AFP_ => 0x0001_0000,    
+                LG_ => self.lapic.icr,
+                AFR_ => {
                     
-                    if self.ku.bnh > 0 {
-                        let ez = self.cm.ait.ao(self.ku.fmr);
-                        let gfa = match self.ku.dgc & 0xB {
+                    if self.lapic.icr > 0 {
+                        let bb = self.stats.vmexits.saturating_sub(self.lapic.last_tick_exit);
+                        let cws = match self.lapic.dcr & 0xB {
                             0x0 => 2u64, 0x1 => 4, 0x2 => 8, 0x3 => 16,
                             0x8 => 32, 0x9 => 64, 0xA => 128, 0xB => 1,
                             _ => 1,
                         };
-                        let qb = (ez * 256) / gfa;
-                        let ia = (self.ku.bnh as u64).ao(qb);
-                        ia as u32
+                        let gx = (bb * 256) / cws;
+                        let ck = (self.lapic.icr as u64).saturating_sub(gx);
+                        ck as u32
                     } else {
                         0
                     }
                 }
-                NX_ => self.ku.dgc,
+                OV_ => self.lapic.dcr,
                 _ => 0,
             };
-            self.gmu(aoq, bn);
+            self.mmio_complete_read(uu, value);
         }
     }
     
     
-    fn tjy(&mut self, pe: u64, error_code: u64, aoq: Option<&Eh>) {
-        let l = pe - super::ioapic::ADP_;
-        let rm = (error_code & 0x2) != 0;
+    fn handle_ioapic_mmio(&mut self, gm: u64, error_code: u64, uu: Option<&Bt>) {
+        let offset = gm - super::ioapic::AFG_;
+        let is_write = (error_code & 0x2) != 0;
         
-        if rm {
-            let bn = self.lmg(aoq);
-            self.ioapic.write(l, bn);
-            if self.cm.cay < 100 {
+        if is_write {
+            let value = self.mmio_get_write_value(uu);
+            self.ioapic.write(offset, value);
+            if self.stats.npf_exits < 100 {
                 crate::serial_println!("[SVM-VM {}] IOAPIC write offset=0x{:X} val=0x{:X}", 
-                    self.ad, l, bn);
+                    self.id, offset, value);
             }
         } else {
-            let bn = self.ioapic.read(l);
-            if self.cm.cay < 100 {
+            let value = self.ioapic.read(offset);
+            if self.stats.npf_exits < 100 {
                 crate::serial_println!("[SVM-VM {}] IOAPIC read offset=0x{:X} -> 0x{:X}", 
-                    self.ad, l, bn);
+                    self.id, offset, value);
             }
-            self.gmu(aoq, bn);
+            self.mmio_complete_read(uu, value);
         }
     }
     
     
-    fn tju(&mut self, pe: u64, error_code: u64, aoq: Option<&Eh>) {
-        let l = pe - super::hpet::ADK_;
-        let rm = (error_code & 0x2) != 0;
+    fn handle_hpet_mmio(&mut self, gm: u64, error_code: u64, uu: Option<&Bt>) {
+        let offset = gm - super::hpet::AFA_;
+        let is_write = (error_code & 0x2) != 0;
         
         
-        let aw = aoq.map(|bc| bc.aqc).unwrap_or(4);
+        let size = uu.map(|d| d.operand_size).unwrap_or(4);
         
-        if rm {
-            let bn = self.lmg(aoq) as u64;
-            self.hpet.write(l, bn, aw);
-            if self.cm.cay < 50 {
+        if is_write {
+            let value = self.mmio_get_write_value(uu) as u64;
+            self.hpet.write(offset, value, size);
+            if self.stats.npf_exits < 50 {
                 crate::serial_println!("[SVM-VM {}] HPET write offset=0x{:X} val=0x{:X} size={}", 
-                    self.ad, l, bn, aw);
+                    self.id, offset, value, size);
             }
         } else {
-            let bn = self.hpet.read(l, aw);
-            if self.cm.cay < 50 {
+            let value = self.hpet.read(offset, size);
+            if self.stats.npf_exits < 50 {
                 crate::serial_println!("[SVM-VM {}] HPET read offset=0x{:X} -> 0x{:X} size={}", 
-                    self.ad, l, bn, aw);
+                    self.id, offset, value, size);
             }
-            self.gmu(aoq, bn as u32);
+            self.mmio_complete_read(uu, value as u32);
         }
     }
     
     
     
-    fn qyx(&mut self) -> Option<u64> {
-        let xhl = self.hpet.qzy();
+    fn check_hpet_interrupts(&mut self) -> Option<u64> {
+        let pju = self.hpet.check_timers();
         
-        for (a, &(stw, lft)) in xhl.iter().cf() {
-            if !stw {
+        for (i, &(fired, gdo)) in pju.iter().enumerate() {
+            if !fired {
                 continue;
             }
             
             
-            if let Some(bia) = self.ioapic.hli(lft) {
-                if !bia.bnm && bia.wj > 0 {
+            if let Some(afo) = self.ioapic.get_irq_route(gdo) {
+                if !afo.masked && afo.vector > 0 {
                     
-                    self.hpet.cru |= 1 << a;
+                    self.hpet.isr |= 1 << i;
                     
                     
-                    let config = self.hpet.axe[a].config;
-                    let vgs = (config >> 3) & 1 != 0;
-                    if vgs {
+                    let config = self.hpet.timers[i].config;
+                    let ntp = (config >> 3) & 1 != 0;
+                    if ntp {
                         
-                        let dfd = self.hpet.axe[a].dpb;
-                        if dfd > 0 {
-                            self.hpet.axe[a].dpb = self.hpet.axe[a].dpb.cn(dfd);
+                        let bfm = self.hpet.timers[i].comparator;
+                        if bfm > 0 {
+                            self.hpet.timers[i].comparator = self.hpet.timers[i].comparator.wrapping_add(bfm);
                         }
                     } else {
                         
-                        self.hpet.axe[a].config &= !(1 << 2);
+                        self.hpet.timers[i].config &= !(1 << 2);
                     }
                     
-                    return Some(bia.wj as u64);
+                    return Some(afo.vector as u64);
                 }
             }
         }
@@ -1750,32 +1750,32 @@ impl SvmVirtualMachine {
     }
     
     
-    fn lav(&mut self, hnw: u64) {
-        let txq = (hnw & 1) != 0;
-        let port = ((hnw >> 16) & 0xFFFF) as u16;
-        let dds = match (hnw >> 4) & 0x7 {
+    fn handle_io(&mut self, drx: u64) {
+        let msq = (drx & 1) != 0;
+        let port = ((drx >> 16) & 0xFFFF) as u16;
+        let bek = match (drx >> 4) & 0x7 {
             0 => 1, 
             1 => 2, 
             2 => 4, 
             _ => 1,
         };
         
-        if txq {
+        if msq {
             
-            let bn: u32 = match port {
+            let value: u32 = match port {
                 
                 0x3F8 => {
                     
-                    if let Some(hf) = self.fuh.awp() {
-                        hf as u32
+                    if let Some(byte) = self.serial_input_buffer.pop_front() {
+                        byte as u32
                     } else {
                         0
                     }
                 }
-                0x3F9 => self.hzs as u32, 
+                0x3F9 => self.serial_ier as u32, 
                 0x3FA => {
                     
-                    if (self.hzs & 0x01) != 0 && !self.fuh.is_empty() {
+                    if (self.serial_ier & 0x01) != 0 && !self.serial_input_buffer.is_empty() {
                         0xC4 
                     } else {
                         0xC1 
@@ -1785,11 +1785,11 @@ impl SvmVirtualMachine {
                 0x3FC => 0x03,                  
                 0x3FD => {
                     
-                    let mut eum = 0x60u32; 
-                    if !self.fuh.is_empty() {
-                        eum |= 0x01; 
+                    let mut bht = 0x60u32; 
+                    if !self.serial_input_buffer.is_empty() {
+                        bht |= 0x01; 
                     }
-                    eum
+                    bht
                 }
                 0x3FE => 0xB0,                  
                 0x3FF => 0,                     
@@ -1807,35 +1807,35 @@ impl SvmVirtualMachine {
                 
                 0x20 => {
                     
-                    self.pic.dji as u32
+                    self.pic.master_isr as u32
                 }
-                0x21 => self.pic.eun as u32,  
+                0x21 => self.pic.master_imr as u32,  
                 0xA0 => 0,                           
-                0xA1 => self.pic.gsp as u32,   
+                0xA1 => self.pic.slave_imr as u32,   
                 
                 
                 0x40 | 0x41 | 0x42 => {
-                    let bm = (port - 0x40) as usize;
-                    let awo = &mut self.abu.lq[bm];
-                    if awo.czf {
-                        awo.czf = false;
-                        awo.gkx as u32
+                    let ch = (port - 0x40) as usize;
+                    let ze = &mut self.pit.channels[ch];
+                    if ze.latched {
+                        ze.latched = false;
+                        ze.latch_value as u32
                     } else {
                         
-                        let wos = awo.az.nj(
-                            (self.cm.ait & 0xFFFF) as u16
+                        let otd = ze.count.wrapping_sub(
+                            (self.stats.vmexits & 0xFFFF) as u16
                         );
-                        wos as u32
+                        otd as u32
                     }
                 }
                 0x43 => 0,                      
                 0x61 => 0x20,                   
                 
                 
-                0x70 => self.ion as u32,
+                0x70 => self.cmos_index as u32,
                 0x71 => {
                     
-                    (match self.ion {
+                    (match self.cmos_index {
                         0x00 => 0x00u32,  
                         0x02 => 0x30,  
                         0x04 => 0x12,  
@@ -1868,22 +1868,22 @@ impl SvmVirtualMachine {
                 0x3B0..=0x3DF => 0,             
                 
                 
-                0xCF8 => self.pci.ozx(),
+                0xCF8 => self.pci.read_config_address(),
                 0xCFC..=0xCFF => {
-                    let aok = (port - 0xCFC) as u8;
-                    self.pci.duw(aok)
+                    let uo = (port - 0xCFC) as u8;
+                    self.pci.read_config_data(uo)
                 }
                 
                 
                 0xC000..=0xC03F => {
-                    let l = port - 0xC000;
-                    self.jvs.crq(l)
+                    let offset = port - 0xC000;
+                    self.virtio_console_state.io_read(offset)
                 }
                 
                 
                 0xC040..=0xC07F => {
-                    let l = port - 0xC040;
-                    self.jvr.crq(l)
+                    let offset = port - 0xC040;
+                    self.virtio_blk_state.io_read(offset)
                 }
                 
                 
@@ -1893,14 +1893,14 @@ impl SvmVirtualMachine {
                 0xB008 => {
                     
                     
-                    let qb = self.cm.ait.hx(4); 
-                    (qb & 0xFFFF_FFFF) as u32
+                    let gx = self.stats.vmexits.wrapping_mul(4); 
+                    (gx & 0xFFFF_FFFF) as u32
                 }
                 0xB009..=0xB00B => {
                     
-                    let qb = self.cm.ait.hx(4);
-                    let aok = (port - 0xB008) as u32;
-                    ((qb >> (aok * 8)) & 0xFF) as u32
+                    let gx = self.stats.vmexits.wrapping_mul(4);
+                    let uo = (port - 0xB008) as u32;
+                    ((gx >> (uo * 8)) & 0xFF) as u32
                 }
                 0xB00C..=0xB03F => 0,  
                 
@@ -1911,48 +1911,48 @@ impl SvmVirtualMachine {
                 
                 _ => {
                     
-                    if self.cm.ank < 50 {
-                        crate::serial_println!("[SVM-VM {}] Unhandled IN port 0x{:X}", self.ad, port);
+                    if self.stats.io_exits < 50 {
+                        crate::serial_println!("[SVM-VM {}] Unhandled IN port 0x{:X}", self.id, port);
                     }
-                    super::debug_monitor::bry(
-                        self.ad, super::debug_monitor::DebugCategory::Iu,
-                        port as u64, super::debug_monitor::HandleStatus::Id,
-                        self.vmcb.as_ref().map(|p| p.xs(state_offsets::Aw)).unwrap_or(0),
-                        self.cm.ait, "",
+                    super::debug_monitor::akj(
+                        self.id, super::debug_monitor::DebugCategory::IoPortIn,
+                        port as u64, super::debug_monitor::HandleStatus::Unhandled,
+                        self.vmcb.as_ref().map(|v| v.read_state(state_offsets::Af)).unwrap_or(0),
+                        self.stats.vmexits, "",
                     );
                     0xFF
                 }
             };
-            self.ej.rax = (self.ej.rax & !0xFFFF_FFFF) | (bn as u64);
+            self.guest_regs.rax = (self.guest_regs.rax & !0xFFFF_FFFF) | (value as u64);
         } else {
             
-            let bn = self.ej.rax as u32;
+            let value = self.guest_regs.rax as u32;
             
             match port {
                 
                 0x3F8 => {
-                    let bm = (bn & 0xFF) as u8;
-                    crate::serial_print!("{}", bm as char);
-                    if let Some(bjq) = self.bjq {
-                        super::console::write_char(bjq, bm as char);
+                    let ch = (value & 0xFF) as u8;
+                    crate::serial_print!("{}", ch as char);
+                    if let Some(console_id) = self.console_id {
+                        super::console::write_char(console_id, ch as char);
                     }
                 }
                 
                 0x2F8 => {
-                    let bm = (bn & 0xFF) as u8;
-                    crate::serial_print!("{}", bm as char);
+                    let ch = (value & 0xFF) as u8;
+                    crate::serial_print!("{}", ch as char);
                 }
                 
                 0x3F9 => {
                     
-                    self.hzs = bn as u8;
+                    self.serial_ier = value as u8;
                 }
                 0x3FA => {
                     
-                    self.pie = bn as u8;
-                    if (bn & 0x02) != 0 {
+                    self.serial_fcr = value as u8;
+                    if (value & 0x02) != 0 {
                         
-                        self.fuh.clear();
+                        self.serial_input_buffer.clear();
                     }
                 }
                 0x3FB..=0x3FF => {} 
@@ -1962,112 +1962,112 @@ impl SvmVirtualMachine {
                 
                 0x20 => {
                     
-                    let p = bn as u8;
-                    if p & 0x10 != 0 {
+                    let v = value as u8;
+                    if v & 0x10 != 0 {
                         
-                        self.pic.ayd = 1;
-                        self.pic.dji = 0;
-                        self.pic.jfb = 0;
-                        if self.cm.ank < 200 {
-                            crate::serial_println!("[SVM-VM {}] PIC master: ICW1=0x{:02X}", self.ad, p);
+                        self.pic.master_icw_phase = 1;
+                        self.pic.master_isr = 0;
+                        self.pic.master_irr = 0;
+                        if self.stats.io_exits < 200 {
+                            crate::serial_println!("[SVM-VM {}] PIC master: ICW1=0x{:02X}", self.id, v);
                         }
-                    } else if p & 0x08 != 0 {
+                    } else if v & 0x08 != 0 {
                         
                     } else {
                         
-                        if p == 0x20 {
+                        if v == 0x20 {
                             
-                            self.pic.dji = 0;
+                            self.pic.master_isr = 0;
                         }
                     }
                 }
                 0x21 => {
                     
-                    let p = bn as u8;
-                    match self.pic.ayd {
+                    let v = value as u8;
+                    match self.pic.master_icw_phase {
                         1 => {
                             
-                            self.pic.cgc = p & 0xF8;
-                            self.pic.ayd = 2;
-                            if self.cm.ank < 200 {
-                                crate::serial_println!("[SVM-VM {}] PIC master: ICW2 vector_base=0x{:02X}", self.ad, p);
+                            self.pic.master_vector_base = v & 0xF8;
+                            self.pic.master_icw_phase = 2;
+                            if self.stats.io_exits < 200 {
+                                crate::serial_println!("[SVM-VM {}] PIC master: ICW2 vector_base=0x{:02X}", self.id, v);
                             }
                         }
                         2 => {
                             
-                            self.pic.ayd = 3;
+                            self.pic.master_icw_phase = 3;
                         }
                         3 => {
                             
-                            self.pic.ayd = 0;
-                            self.pic.jr = true;
-                            if self.cm.ank < 200 {
+                            self.pic.master_icw_phase = 0;
+                            self.pic.initialized = true;
+                            if self.stats.io_exits < 200 {
                                 crate::serial_println!("[SVM-VM {}] PIC master initialized: base=0x{:02X}", 
-                                    self.ad, self.pic.cgc);
+                                    self.id, self.pic.master_vector_base);
                             }
                         }
                         _ => {
                             
-                            self.pic.eun = p;
+                            self.pic.master_imr = v;
                         }
                     }
                 }
                 0xA0 => {
                     
-                    let p = bn as u8;
-                    if p & 0x10 != 0 {
-                        self.pic.bxd = 1;
-                    } else if p == 0x20 {
+                    let v = value as u8;
+                    if v & 0x10 != 0 {
+                        self.pic.slave_icw_phase = 1;
+                    } else if v == 0x20 {
                         
                     }
                 }
                 0xA1 => {
                     
-                    let p = bn as u8;
-                    match self.pic.bxd {
+                    let v = value as u8;
+                    match self.pic.slave_icw_phase {
                         1 => {
-                            self.pic.eyo = p & 0xF8;
-                            self.pic.bxd = 2;
-                            if self.cm.ank < 200 {
-                                crate::serial_println!("[SVM-VM {}] PIC slave: ICW2 vector_base=0x{:02X}", self.ad, p);
+                            self.pic.slave_vector_base = v & 0xF8;
+                            self.pic.slave_icw_phase = 2;
+                            if self.stats.io_exits < 200 {
+                                crate::serial_println!("[SVM-VM {}] PIC slave: ICW2 vector_base=0x{:02X}", self.id, v);
                             }
                         }
-                        2 => { self.pic.bxd = 3; }
-                        3 => { self.pic.bxd = 0; }
-                        _ => { self.pic.gsp = p; }
+                        2 => { self.pic.slave_icw_phase = 3; }
+                        3 => { self.pic.slave_icw_phase = 0; }
+                        _ => { self.pic.slave_imr = v; }
                     }
                 }
                 
                 
                 0x40 | 0x41 | 0x42 => {
-                    let bm = (port - 0x40) as usize;
-                    let p = bn as u8;
-                    let awo = &mut self.abu.lq[bm];
-                    match awo.vz {
+                    let ch = (port - 0x40) as usize;
+                    let v = value as u8;
+                    let ze = &mut self.pit.channels[ch];
+                    match ze.access {
                         1 => {
                             
-                            awo.ahs = (awo.ahs & 0xFF00) | p as u16;
-                            awo.az = awo.ahs;
+                            ze.reload = (ze.reload & 0xFF00) | v as u16;
+                            ze.count = ze.reload;
                         }
                         2 => {
                             
-                            awo.ahs = (awo.ahs & 0x00FF) | ((p as u16) << 8);
-                            awo.az = awo.ahs;
+                            ze.reload = (ze.reload & 0x00FF) | ((v as u16) << 8);
+                            ze.count = ze.reload;
                         }
                         3 => {
                             
-                            if awo.ccp {
-                                awo.ahs = (awo.ahs & 0x00FF) | ((p as u16) << 8);
-                                awo.az = awo.ahs;
-                                awo.ccp = false;
-                                if bm == 0 && self.cm.ank < 200 {
+                            if ze.write_hi_pending {
+                                ze.reload = (ze.reload & 0x00FF) | ((v as u16) << 8);
+                                ze.count = ze.reload;
+                                ze.write_hi_pending = false;
+                                if ch == 0 && self.stats.io_exits < 200 {
                                     crate::serial_println!("[SVM-VM {}] PIT ch0: reload={} ({} Hz)", 
-                                        self.ad, awo.ahs,
-                                        if awo.ahs > 0 { 1193182 / awo.ahs as u32 } else { 0 });
+                                        self.id, ze.reload,
+                                        if ze.reload > 0 { 1193182 / ze.reload as u32 } else { 0 });
                                 }
                             } else {
-                                awo.ahs = (awo.ahs & 0xFF00) | p as u16;
-                                awo.ccp = true;
+                                ze.reload = (ze.reload & 0xFF00) | v as u16;
+                                ze.write_hi_pending = true;
                             }
                         }
                         _ => {}
@@ -2075,27 +2075,27 @@ impl SvmVirtualMachine {
                 }
                 0x43 => {
                     
-                    let p = bn as u8;
-                    let channel = ((p >> 6) & 0x3) as usize;
-                    let vz = (p >> 4) & 0x3;
-                    let ev = (p >> 1) & 0x7;
+                    let v = value as u8;
+                    let channel = ((v >> 6) & 0x3) as usize;
+                    let access = (v >> 4) & 0x3;
+                    let mode = (v >> 1) & 0x7;
                     
                     if channel < 3 {
-                        if vz == 0 {
+                        if access == 0 {
                             
-                            self.abu.lq[channel].czf = true;
-                            self.abu.lq[channel].gkx = self.abu.lq[channel].az;
+                            self.pit.channels[channel].latched = true;
+                            self.pit.channels[channel].latch_value = self.pit.channels[channel].count;
                         } else {
-                            self.abu.lq[channel].vz = vz;
-                            self.abu.lq[channel].ev = ev;
-                            self.abu.lq[channel].ccp = false;
+                            self.pit.channels[channel].access = access;
+                            self.pit.channels[channel].mode = mode;
+                            self.pit.channels[channel].write_hi_pending = false;
                         }
                     }
                 }
                 
                 
                 0x70 => {
-                    self.ion = (bn as u8) & 0x7F; 
+                    self.cmos_index = (value as u8) & 0x7F; 
                 }
                 0x71 => {} 
                 
@@ -2113,50 +2113,50 @@ impl SvmVirtualMachine {
                 
                 
                 0xCF8 => {
-                    self.pci.dni(bn);
-                    if self.cm.ank < 200 {
-                        crate::serial_println!("[SVM-VM {}] PCI CFG ADDR = 0x{:08X}", self.ad, bn);
+                    self.pci.write_config_address(value);
+                    if self.stats.io_exits < 200 {
+                        crate::serial_println!("[SVM-VM {}] PCI CFG ADDR = 0x{:08X}", self.id, value);
                     }
                 }
                 0xCFC..=0xCFF => {
-                    let aok = (port - 0xCFC) as u8;
-                    self.pci.mra(aok, bn);
-                    if self.cm.ank < 200 {
-                        let (_, aq, ba, ke, reg) = {
-                            let ag = self.pci.dfe;
-                            (ag >> 31 != 0, (ag >> 16) as u8 & 0xFF, (ag >> 11) as u8 & 0x1F, (ag >> 8) as u8 & 0x7, ag as u8 & 0xFC)
+                    let uo = (port - 0xCFC) as u8;
+                    self.pci.write_config_data(uo, value);
+                    if self.stats.io_exits < 200 {
+                        let (_, bus, s, func, reg) = {
+                            let addr = self.pci.config_addr;
+                            (addr >> 31 != 0, (addr >> 16) as u8 & 0xFF, (addr >> 11) as u8 & 0x1F, (addr >> 8) as u8 & 0x7, addr as u8 & 0xFC)
                         };
                         crate::serial_println!("[SVM-VM {}] PCI CFG WRITE {:02X}:{:02X}.{} reg=0x{:02X} val=0x{:X}", 
-                            self.ad, aq, ba, ke, reg, bn);
+                            self.id, bus, s, func, reg, value);
                     }
                 }
                 
                 
                 0xC000..=0xC03F => {
-                    let l = port - 0xC000;
-                    let djy = self.jvs.edp(l, bn);
-                    if djy {
+                    let offset = port - 0xC000;
+                    let bif = self.virtio_console_state.io_write(offset, value);
+                    if bif {
                         
-                        self.jvs.vmv(&self.fe);
+                        self.virtio_console_state.process_transmitq(&self.guest_memory);
                     }
                 }
                 
                 
                 0xC040..=0xC07F => {
-                    let l = port - 0xC040;
-                    let djy = self.jvr.edp(l, bn);
-                    if djy {
+                    let offset = port - 0xC040;
+                    let bif = self.virtio_blk_state.io_write(offset, value);
+                    if bif {
                         
                         
-                        let wus = self.mpj.len();
-                        let wut = self.mpj.mw();
-                        let umx = self.fe.mw();
-                        let umw = self.fe.len();
+                        let oxr = self.virtio_blk_storage.len();
+                        let oxs = self.virtio_blk_storage.as_mut_ptr();
+                        let ned = self.guest_memory.as_mut_ptr();
+                        let nec = self.guest_memory.len();
                         
                         unsafe {
-                            let storage = core::slice::bef(wut, wus);
-                            let thz = core::slice::bef(umx, umw);
-                            self.jvr.vmr(thz, storage);
+                            let storage = core::slice::from_raw_parts_mut(oxs, oxr);
+                            let mgi = core::slice::from_raw_parts_mut(ned, nec);
+                            self.virtio_blk_state.process_queue(mgi, storage);
                         }
                     }
                 }
@@ -2166,43 +2166,43 @@ impl SvmVirtualMachine {
                 
                 
                 0xE9 => {
-                    let bm = (bn & 0xFF) as u8;
-                    crate::serial_print!("{}", bm as char);
+                    let ch = (value & 0xFF) as u8;
+                    crate::serial_print!("{}", ch as char);
                 }
                 0xED => {} 
                 
                 
                 0xB000..=0xB003 => {
                     
-                    if self.cm.ank < 100 {
-                        crate::serial_println!("[SVM-VM {}] ACPI PM1a_EVT write: port=0x{:X} val=0x{:X}", self.ad, port, bn);
+                    if self.stats.io_exits < 100 {
+                        crate::serial_println!("[SVM-VM {}] ACPI PM1a_EVT write: port=0x{:X} val=0x{:X}", self.id, port, value);
                     }
                 }
                 0xB004..=0xB005 => {
                     
-                    if self.cm.ank < 100 {
-                        crate::serial_println!("[SVM-VM {}] ACPI PM1a_CNT write: port=0x{:X} val=0x{:X}", self.ad, port, bn);
+                    if self.stats.io_exits < 100 {
+                        crate::serial_println!("[SVM-VM {}] ACPI PM1a_CNT write: port=0x{:X} val=0x{:X}", self.id, port, value);
                     }
                     
-                    if port == 0xB004 && (bn & 0x2000) != 0 {
-                        let dwb = (bn >> 10) & 0x7;
-                        crate::serial_println!("[SVM-VM {}] ACPI shutdown request: SLP_TYP={}", self.ad, dwb);
-                        if dwb == 5 {
-                            self.g = SvmVmState::Af;
+                    if port == 0xB004 && (value & 0x2000) != 0 {
+                        let bpa = (value >> 10) & 0x7;
+                        crate::serial_println!("[SVM-VM {}] ACPI shutdown request: SLP_TYP={}", self.id, bpa);
+                        if bpa == 5 {
+                            self.state = SvmVmState::Stopped;
                         }
                     }
                 }
                 0xB006..=0xB03F => {} 
                 
                 _ => {
-                    if self.cm.ank < 50 {
-                        crate::serial_println!("[SVM-VM {}] Unhandled OUT port 0x{:X} val=0x{:X}", self.ad, port, bn);
+                    if self.stats.io_exits < 50 {
+                        crate::serial_println!("[SVM-VM {}] Unhandled OUT port 0x{:X} val=0x{:X}", self.id, port, value);
                     }
-                    super::debug_monitor::bry(
-                        self.ad, super::debug_monitor::DebugCategory::Lr,
-                        port as u64, super::debug_monitor::HandleStatus::Id,
-                        self.vmcb.as_ref().map(|p| p.xs(state_offsets::Aw)).unwrap_or(0),
-                        self.cm.ait, &alloc::format!("val=0x{:X}", bn),
+                    super::debug_monitor::akj(
+                        self.id, super::debug_monitor::DebugCategory::IoPortOut,
+                        port as u64, super::debug_monitor::HandleStatus::Unhandled,
+                        self.vmcb.as_ref().map(|v| v.read_state(state_offsets::Af)).unwrap_or(0),
+                        self.stats.vmexits, &alloc::format!("val=0x{:X}", value),
                     );
                 }
             }
@@ -2210,250 +2210,250 @@ impl SvmVirtualMachine {
     }
     
     
-    fn laz(&mut self, rm: bool) {
-        let msr = self.ej.rcx as u32;
+    fn handle_msr(&mut self, is_write: bool) {
+        let msr = self.guest_regs.rcx as u32;
         
         
-        const KK_: u32 = 0x001B;
-        const CAW_: u32 = 0x00FE;
-        const AWM_: u32 = 0x0174;
-        const AWO_: u32 = 0x0175;
-        const AWN_: u32 = 0x0176;
-        const CAV_: u32 = 0x0179;
-        const AWJ_: u32 = 0x017A;
-        const NN_: u32 = 0x01A0;
-        const KL_: u32 = 0x0277;
-        const AWK_: u32 = 0x02FF;
-        const CN_: u32 = 0xC000_0080;
-        const VQ_: u32 = 0xC000_0081;
-        const VO_: u32 = 0xC000_0082;
-        const VK_: u32 = 0xC000_0083;
-        const VP_: u32 = 0xC000_0084;
-        const VL_: u32 = 0xC000_0100;
-        const VM_: u32 = 0xC000_0101;
-        const VN_: u32 = 0xC000_0102;
-        const OI_: u32 = 0xC000_0103;
+        const LD_: u32 = 0x001B;
+        const CEH_: u32 = 0x00FE;
+        const AYO_: u32 = 0x0174;
+        const AYQ_: u32 = 0x0175;
+        const AYP_: u32 = 0x0176;
+        const CEG_: u32 = 0x0179;
+        const AYM_: u32 = 0x017A;
+        const OO_: u32 = 0x01A0;
+        const LE_: u32 = 0x0277;
+        const AYN_: u32 = 0x02FF;
+        const IA32_EFER: u32 = 0xC000_0080;
+        const WZ_: u32 = 0xC000_0081;
+        const WX_: u32 = 0xC000_0082;
+        const WT_: u32 = 0xC000_0083;
+        const WY_: u32 = 0xC000_0084;
+        const WU_: u32 = 0xC000_0100;
+        const WV_: u32 = 0xC000_0101;
+        const WW_: u32 = 0xC000_0102;
+        const PG_: u32 = 0xC000_0103;
         
-        if rm {
-            let bn = (self.ej.rdx << 32) | (self.ej.rax & 0xFFFF_FFFF);
+        if is_write {
+            let value = (self.guest_regs.rdx << 32) | (self.guest_regs.rax & 0xFFFF_FFFF);
             
             match msr {
                 
-                VQ_ => {
+                WZ_ => {
                     let vmcb = self.vmcb.as_mut().unwrap();
-                    vmcb.abz(state_offsets::Bsb, bn);
+                    vmcb.write_state(state_offsets::Aek, value);
                 }
-                VO_ => {
+                WX_ => {
                     let vmcb = self.vmcb.as_mut().unwrap();
-                    vmcb.abz(state_offsets::Bko, bn);
+                    vmcb.write_state(state_offsets::Aar, value);
                 }
-                VK_ => {
+                WT_ => {
                     let vmcb = self.vmcb.as_mut().unwrap();
-                    vmcb.abz(state_offsets::Bde, bn);
+                    vmcb.write_state(state_offsets::Xb, value);
                 }
-                VP_ => {
+                WY_ => {
                     let vmcb = self.vmcb.as_mut().unwrap();
-                    vmcb.abz(state_offsets::Brh, bn);
+                    vmcb.write_state(state_offsets::Adq, value);
                 }
-                VN_ => {
+                WW_ => {
                     let vmcb = self.vmcb.as_mut().unwrap();
-                    vmcb.abz(state_offsets::AXR_, bn);
+                    vmcb.write_state(state_offsets::AZU_, value);
                 }
-                VL_ => {
+                WU_ => {
                     let vmcb = self.vmcb.as_mut().unwrap();
-                    vmcb.abz(state_offsets::ACK_, bn);
+                    vmcb.write_state(state_offsets::AEA_, value);
                 }
-                VM_ => {
+                WV_ => {
                     let vmcb = self.vmcb.as_mut().unwrap();
-                    vmcb.abz(state_offsets::ADE_, bn);
+                    vmcb.write_state(state_offsets::AEU_, value);
                 }
-                AWM_ => {
+                AYO_ => {
                     let vmcb = self.vmcb.as_mut().unwrap();
-                    vmcb.abz(state_offsets::BGT_, bn);
+                    vmcb.write_state(state_offsets::BIX_, value);
                 }
-                AWO_ => {
+                AYQ_ => {
                     let vmcb = self.vmcb.as_mut().unwrap();
-                    vmcb.abz(state_offsets::BGV_, bn);
+                    vmcb.write_state(state_offsets::BIZ_, value);
                 }
-                AWN_ => {
+                AYP_ => {
                     let vmcb = self.vmcb.as_mut().unwrap();
-                    vmcb.abz(state_offsets::BGU_, bn);
+                    vmcb.write_state(state_offsets::BIY_, value);
                 }
-                KL_ => {
+                LE_ => {
                     let vmcb = self.vmcb.as_mut().unwrap();
-                    vmcb.abz(state_offsets::Awo, bn);
+                    vmcb.write_state(state_offsets::Uf, value);
                 }
-                CN_ => {
+                IA32_EFER => {
                     let vmcb = self.vmcb.as_mut().unwrap();
                     
-                    let wch = bn | 0x1000; 
-                    vmcb.abz(state_offsets::Lh, wch);
+                    let ojv = value | 0x1000; 
+                    vmcb.write_state(state_offsets::Eu, ojv);
                 }
                 
-                KK_ | NN_ | AWJ_ |
-                AWK_ | OI_ => {}
+                LD_ | OO_ | AYM_ |
+                AYN_ | PG_ => {}
                 
                 0x0200..=0x020F => {}
                 
                 0x0400..=0x047F => {}
                 _ => {
-                    if self.cm.bkn < 100 {
-                        crate::serial_println!("[SVM-VM {}] WRMSR 0x{:X} = 0x{:X} (ignored)", self.ad, msr, bn);
+                    if self.stats.msr_exits < 100 {
+                        crate::serial_println!("[SVM-VM {}] WRMSR 0x{:X} = 0x{:X} (ignored)", self.id, msr, value);
                     }
-                    super::debug_monitor::bry(
-                        self.ad, super::debug_monitor::DebugCategory::Jr,
-                        msr as u64, super::debug_monitor::HandleStatus::Id,
-                        self.vmcb.as_ref().map(|p| p.xs(state_offsets::Aw)).unwrap_or(0),
-                        self.cm.ait, &alloc::format!("val=0x{:X}", bn),
+                    super::debug_monitor::akj(
+                        self.id, super::debug_monitor::DebugCategory::MsrWrite,
+                        msr as u64, super::debug_monitor::HandleStatus::Unhandled,
+                        self.vmcb.as_ref().map(|v| v.read_state(state_offsets::Af)).unwrap_or(0),
+                        self.stats.vmexits, &alloc::format!("val=0x{:X}", value),
                     );
                 }
             }
         } else {
             
-            let bn: u64 = match msr {
+            let value: u64 = match msr {
                 
-                VQ_ => {
+                WZ_ => {
                     let vmcb = self.vmcb.as_ref().unwrap();
-                    vmcb.xs(state_offsets::Bsb)
+                    vmcb.read_state(state_offsets::Aek)
                 }
-                VO_ => {
+                WX_ => {
                     let vmcb = self.vmcb.as_ref().unwrap();
-                    vmcb.xs(state_offsets::Bko)
+                    vmcb.read_state(state_offsets::Aar)
                 }
-                VK_ => {
+                WT_ => {
                     let vmcb = self.vmcb.as_ref().unwrap();
-                    vmcb.xs(state_offsets::Bde)
+                    vmcb.read_state(state_offsets::Xb)
                 }
-                VP_ => {
+                WY_ => {
                     let vmcb = self.vmcb.as_ref().unwrap();
-                    vmcb.xs(state_offsets::Brh)
+                    vmcb.read_state(state_offsets::Adq)
                 }
-                VN_ => {
+                WW_ => {
                     let vmcb = self.vmcb.as_ref().unwrap();
-                    vmcb.xs(state_offsets::AXR_)
+                    vmcb.read_state(state_offsets::AZU_)
                 }
-                VL_ => {
+                WU_ => {
                     let vmcb = self.vmcb.as_ref().unwrap();
-                    vmcb.xs(state_offsets::ACK_)
+                    vmcb.read_state(state_offsets::AEA_)
                 }
-                VM_ => {
+                WV_ => {
                     let vmcb = self.vmcb.as_ref().unwrap();
-                    vmcb.xs(state_offsets::ADE_)
+                    vmcb.read_state(state_offsets::AEU_)
                 }
-                AWM_ => {
+                AYO_ => {
                     let vmcb = self.vmcb.as_ref().unwrap();
-                    vmcb.xs(state_offsets::BGT_)
+                    vmcb.read_state(state_offsets::BIX_)
                 }
-                AWO_ => {
+                AYQ_ => {
                     let vmcb = self.vmcb.as_ref().unwrap();
-                    vmcb.xs(state_offsets::BGV_)
+                    vmcb.read_state(state_offsets::BIZ_)
                 }
-                AWN_ => {
+                AYP_ => {
                     let vmcb = self.vmcb.as_ref().unwrap();
-                    vmcb.xs(state_offsets::BGU_)
+                    vmcb.read_state(state_offsets::BIY_)
                 }
-                KL_ => {
+                LE_ => {
                     let vmcb = self.vmcb.as_ref().unwrap();
-                    vmcb.xs(state_offsets::Awo)
+                    vmcb.read_state(state_offsets::Uf)
                 }
-                CN_ => {
+                IA32_EFER => {
                     let vmcb = self.vmcb.as_ref().unwrap();
-                    vmcb.xs(state_offsets::Lh)
+                    vmcb.read_state(state_offsets::Eu)
                 }
                 
-                KK_ => 0xFEE0_0900,
+                LD_ => 0xFEE0_0900,
                 
-                CAW_ => 0,
+                CEH_ => 0,
                 
-                CAV_ => 0,
-                AWJ_ => 0,
+                CEG_ => 0,
+                AYM_ => 0,
                 
-                NN_ => 1, 
+                OO_ => 1, 
                 
-                AWK_ => 0x06,
+                AYN_ => 0x06,
                 
-                OI_ => 0,
+                PG_ => 0,
                 
                 0x0200..=0x020F => 0,
                 
                 0x0400..=0x047F => 0,
                 _ => {
-                    if self.cm.bkn < 100 {
-                        crate::serial_println!("[SVM-VM {}] RDMSR 0x{:X} = 0 (default)", self.ad, msr);
+                    if self.stats.msr_exits < 100 {
+                        crate::serial_println!("[SVM-VM {}] RDMSR 0x{:X} = 0 (default)", self.id, msr);
                     }
-                    super::debug_monitor::bry(
-                        self.ad, super::debug_monitor::DebugCategory::Hx,
-                        msr as u64, super::debug_monitor::HandleStatus::Id,
-                        self.vmcb.as_ref().map(|p| p.xs(state_offsets::Aw)).unwrap_or(0),
-                        self.cm.ait, "returned 0",
+                    super::debug_monitor::akj(
+                        self.id, super::debug_monitor::DebugCategory::MsrRead,
+                        msr as u64, super::debug_monitor::HandleStatus::Unhandled,
+                        self.vmcb.as_ref().map(|v| v.read_state(state_offsets::Af)).unwrap_or(0),
+                        self.stats.vmexits, "returned 0",
                     );
                     0
                 }
             };
             
-            self.ej.rax = bn & 0xFFFF_FFFF;
-            self.ej.rdx = bn >> 32;
+            self.guest_regs.rax = value & 0xFFFF_FFFF;
+            self.guest_regs.rdx = value >> 32;
         }
     }
     
     
-    fn tlp(&mut self) -> bool {
-        let gw = self.ej.rax;
-        let aai = self.ej.rbx;
-        let agf = self.ej.rcx;
-        let bfx = self.ej.rdx;
+    fn handle_vmmcall(&mut self) -> bool {
+        let function = self.guest_regs.rax;
+        let arg1 = self.guest_regs.rbx;
+        let arg2 = self.guest_regs.rcx;
+        let aer = self.guest_regs.rdx;
         
         crate::serial_println!("[SVM-VM {}] VMMCALL: func=0x{:X}, args=({:X}, {:X}, {:X})", 
-                              self.ad, gw, aai, agf, bfx);
+                              self.id, function, arg1, arg2, aer);
         
-        let (result, mfp): (i64, bool) = match gw {
+        let (result, gux): (i64, bool) = match function {
             
             0x00 => {
-                self.g = SvmVmState::Af;
+                self.state = SvmVmState::Stopped;
                 (0, false)
             }
             
             
             0x01 => {
-                self.tqt(aai);
+                self.hypercall_print(arg1);
                 (0, true)
             }
             
             
             0x02 => {
-                (unsafe { core::arch::x86_64::dxw() as i64 }, true)
+                (unsafe { core::arch::x86_64::_rdtsc() as i64 }, true)
             }
             
             _ => (-1, true), 
         };
         
         
-        self.ej.rax = result as u64;
+        self.guest_regs.rax = result as u64;
         
         
-        super::api::eps(
-            super::api::VmEventType::Acd,
-            self.ad,
-            super::api::VmEventData::Cfe { gw, result },
+        super::api::bzf(
+            super::api::VmEventType::Hypercall,
+            self.id,
+            super::api::VmEventData::HypercallInfo { function, result },
         );
         
-        mfp
+        gux
     }
     
     
-    fn tqt(&self, pe: u64) {
-        let l = pe as usize;
-        if l < self.fe.len() {
+    fn hypercall_print(&self, gm: u64) {
+        let offset = gm as usize;
+        if offset < self.guest_memory.len() {
             
-            let cat = (self.fe.len() - l).v(256);
-            let slice = &self.fe[l..l + cat];
+            let aoo = (self.guest_memory.len() - offset).min(256);
+            let slice = &self.guest_memory[offset..offset + aoo];
             
-            if let Some(uwd) = slice.iter().qf(|&r| r == 0) {
-                if let Ok(e) = core::str::jg(&slice[..uwd]) {
-                    crate::serial_println!("[SVM-VM {} PRINT] {}", self.ad, e);
-                    if let Some(bjq) = self.bjq {
-                        for bm in e.bw() {
-                            super::console::write_char(bjq, bm);
+            if let Some(null_pos) = slice.iter().position(|&c| c == 0) {
+                if let Ok(j) = core::str::from_utf8(&slice[..null_pos]) {
+                    crate::serial_println!("[SVM-VM {} PRINT] {}", self.id, j);
+                    if let Some(console_id) = self.console_id {
+                        for ch in j.chars() {
+                            super::console::write_char(console_id, ch);
                         }
                     }
                 }
@@ -2462,51 +2462,51 @@ impl SvmVirtualMachine {
     }
     
     
-    pub fn rb(&mut self) -> Result<()> {
-        if self.g == SvmVmState::Ai {
-            self.g = SvmVmState::Cl;
-            crate::serial_println!("[SVM-VM {}] Paused", self.ad);
+    pub fn pause(&mut self) -> Result<()> {
+        if self.state == SvmVmState::Running {
+            self.state = SvmVmState::Paused;
+            crate::serial_println!("[SVM-VM {}] Paused", self.id);
         }
         Ok(())
     }
     
     
-    pub fn anu(&mut self) -> Result<()> {
-        if self.g == SvmVmState::Cl {
-            self.g = SvmVmState::Ai;
-            crate::serial_println!("[SVM-VM {}] Resumed", self.ad);
+    pub fn resume(&mut self) -> Result<()> {
+        if self.state == SvmVmState::Paused {
+            self.state = SvmVmState::Running;
+            crate::serial_println!("[SVM-VM {}] Resumed", self.id);
         }
         Ok(())
     }
     
     
-    pub fn asx(&self) -> &SvmVmStats {
-        &self.cm
+    pub fn get_stats(&self) -> &SvmVmStats {
+        &self.stats
     }
     
     
-    pub fn drd(&self) -> SvmVmState {
-        self.g
+    pub fn get_state(&self) -> SvmVmState {
+        self.state
     }
     
     
-    pub fn duy(&self, pe: u64, len: usize) -> Option<&[u8]> {
-        let l = pe as usize;
-        if l + len <= self.fe.len() {
-            Some(&self.fe[l..l + len])
+    pub fn read_guest_memory(&self, gm: u64, len: usize) -> Option<&[u8]> {
+        let offset = gm as usize;
+        if offset + len <= self.guest_memory.len() {
+            Some(&self.guest_memory[offset..offset + len])
         } else {
             None
         }
     }
     
     
-    pub fn jxg(&mut self, pe: u64, f: &[u8]) -> Result<()> {
-        let l = pe as usize;
-        if l + f.len() <= self.fe.len() {
-            self.fe[l..l + f.len()].dg(f);
+    pub fn write_guest_memory(&mut self, gm: u64, data: &[u8]) -> Result<()> {
+        let offset = gm as usize;
+        if offset + data.len() <= self.guest_memory.len() {
+            self.guest_memory[offset..offset + data.len()].copy_from_slice(data);
             Ok(())
         } else {
-            Err(HypervisorError::Ns)
+            Err(HypervisorError::OutOfMemory)
         }
     }
 }
@@ -2514,56 +2514,56 @@ impl SvmVirtualMachine {
 impl Drop for SvmVirtualMachine {
     fn drop(&mut self) {
         
-        super::svm::npt::sxb(self.ajv);
+        super::svm::npt::lyo(self.asid);
         
         
-        if let Some(xyl) = self.bjq {
+        if let Some(_console_id) = self.console_id {
             
         }
         
         
-        super::virtfs::vuz(self.ad);
+        super::virtfs::ofb(self.id);
         
-        crate::serial_println!("[SVM-VM {}] Destroyed", self.ad);
+        crate::serial_println!("[SVM-VM {}] Destroyed", self.id);
     }
 }
 
 
-static XP_: Mutex<Vec<SvmVirtualMachine>> = Mutex::new(Vec::new());
+static YW_: Mutex<Vec<SvmVirtualMachine>> = Mutex::new(Vec::new());
 
 
-pub fn dpg(j: &str, afc: usize) -> Result<u64> {
-    let vm = SvmVirtualMachine::new(j, afc)?;
-    let ad = vm.ad;
-    XP_.lock().push(vm);
-    Ok(ad)
+pub fn blh(name: &str, memory_mb: usize) -> Result<u64> {
+    let vm = SvmVirtualMachine::new(name, memory_mb)?;
+    let id = vm.id;
+    YW_.lock().push(vm);
+    Ok(id)
 }
 
 
-pub fn coa<G, Ac>(ad: u64, bb: G) -> Option<Ac>
+pub fn avv<F, U>(id: u64, f: F) -> Option<U>
 where
-    G: FnOnce(&mut SvmVirtualMachine) -> Ac,
+    F: FnOnce(&mut SvmVirtualMachine) -> U,
 {
-    let mut bfr = XP_.lock();
-    bfr.el().du(|vm| vm.ad == ad).map(bb)
+    let mut aen = YW_.lock();
+    aen.iter_mut().find(|vm| vm.id == id).map(f)
 }
 
 
-pub fn hqc() -> Vec<(u64, String, SvmVmState)> {
-    XP_.lock()
+pub fn dtn() -> Vec<(u64, String, SvmVmState)> {
+    YW_.lock()
         .iter()
-        .map(|vm| (vm.ad, vm.j.clone(), vm.g))
+        .map(|vm| (vm.id, vm.name.clone(), vm.state))
         .collect()
 }
 
 
-pub fn ylw(ad: u64) -> Result<()> {
-    let mut bfr = XP_.lock();
-    if let Some(u) = bfr.iter().qf(|vm| vm.ad == ad) {
-        bfr.remove(u);
+pub fn qcv(id: u64) -> Result<()> {
+    let mut aen = YW_.lock();
+    if let Some(pos) = aen.iter().position(|vm| vm.id == id) {
+        aen.remove(pos);
         Ok(())
     } else {
-        Err(HypervisorError::Mo)
+        Err(HypervisorError::VmNotFound)
     }
 }
 
@@ -2576,89 +2576,89 @@ mod tests {
     use super::*;
 
     #[test]
-    fn zsc() {
+    fn qzw() {
         let pic = PicState::default();
-        assert_eq!(pic.eun, 0xFF);
-        assert_eq!(pic.gsp, 0xFF);
-        assert_eq!(pic.cgc, 0x08);
-        assert_eq!(pic.eyo, 0x70);
-        assert_eq!(pic.ayd, 0);
-        assert!(!pic.jr);
+        assert_eq!(pic.master_imr, 0xFF);
+        assert_eq!(pic.slave_imr, 0xFF);
+        assert_eq!(pic.master_vector_base, 0x08);
+        assert_eq!(pic.slave_vector_base, 0x70);
+        assert_eq!(pic.master_icw_phase, 0);
+        assert!(!pic.initialized);
     }
 
     #[test]
-    fn zsd() {
+    fn qzx() {
         let mut pic = PicState::default();
         
-        pic.ayd = 1;
-        pic.dji = 0;
+        pic.master_icw_phase = 1;
+        pic.master_isr = 0;
         
-        pic.cgc = 0x20;
-        pic.ayd = 2;
+        pic.master_vector_base = 0x20;
+        pic.master_icw_phase = 2;
         
-        pic.ayd = 3;
+        pic.master_icw_phase = 3;
         
-        pic.ayd = 0;
-        pic.jr = true;
-        assert_eq!(pic.cgc, 0x20);
-        assert!(pic.jr);
+        pic.master_icw_phase = 0;
+        pic.initialized = true;
+        assert_eq!(pic.master_vector_base, 0x20);
+        assert!(pic.initialized);
     }
 
     #[test]
-    fn zse() {
-        let abu = PitState::default();
-        assert_eq!(abu.lq[0].ahs, 0xFFFF);
-        assert_eq!(abu.lq[0].az, 0xFFFF);
-        assert_eq!(abu.lq[0].vz, 3);
-        assert!(!abu.lq[0].czf);
-        assert_eq!(abu.lq.len(), 3);
+    fn qzy() {
+        let pit = PitState::default();
+        assert_eq!(pit.channels[0].reload, 0xFFFF);
+        assert_eq!(pit.channels[0].count, 0xFFFF);
+        assert_eq!(pit.channels[0].access, 3);
+        assert!(!pit.channels[0].latched);
+        assert_eq!(pit.channels.len(), 3);
     }
 
     #[test]
-    fn zsf() {
-        let mut bm = PitChannel::default();
-        bm.vz = 3;
+    fn qzz() {
+        let mut ch = PitChannel::default();
+        ch.access = 3;
         
-        bm.ahs = (bm.ahs & 0xFF00) | 0x9C;
-        bm.ccp = true;
+        ch.reload = (ch.reload & 0xFF00) | 0x9C;
+        ch.write_hi_pending = true;
         
-        bm.ahs = (bm.ahs & 0x00FF) | (0x2E << 8);
-        bm.az = bm.ahs;
-        bm.ccp = false;
-        assert_eq!(bm.ahs, 0x2E9C);
-        assert_eq!(bm.az, 0x2E9C);
+        ch.reload = (ch.reload & 0x00FF) | (0x2E << 8);
+        ch.count = ch.reload;
+        ch.write_hi_pending = false;
+        assert_eq!(ch.reload, 0x2E9C);
+        assert_eq!(ch.count, 0x2E9C);
     }
 
     #[test]
-    fn zrw() {
-        let ku = LapicState::default();
-        assert_eq!(ku.bnh, 0);
-        assert!(!ku.iq);
-        assert_ne!(ku.atq & 0x0001_0000, 0); 
-        assert_eq!(ku.bim, 0x1FF);
+    fn qzq() {
+        let lapic = LapicState::default();
+        assert_eq!(lapic.icr, 0);
+        assert!(!lapic.enabled);
+        assert_ne!(lapic.timer_lvt & 0x0001_0000, 0); 
+        assert_eq!(lapic.svr, 0x1FF);
     }
 
     #[test]
-    fn zry() {
-        let mut ku = LapicState::default();
-        ku.bim = 0x1FF;
-        ku.iq = (ku.bim & 0x100) != 0;
-        assert!(ku.iq);
-        ku.bim = 0x0FF;
-        ku.iq = (ku.bim & 0x100) != 0;
-        assert!(!ku.iq);
+    fn qzs() {
+        let mut lapic = LapicState::default();
+        lapic.svr = 0x1FF;
+        lapic.enabled = (lapic.svr & 0x100) != 0;
+        assert!(lapic.enabled);
+        lapic.svr = 0x0FF;
+        lapic.enabled = (lapic.svr & 0x100) != 0;
+        assert!(!lapic.enabled);
     }
 
     #[test]
-    fn zrx() {
+    fn qzr() {
         let map = [(0x0u32, 2u64), (0x1, 4), (0x2, 8), (0x3, 16),
                     (0x8, 32), (0x9, 64), (0xA, 128), (0xB, 1)];
-        for &(dgc, qy) in &map {
-            let bc = match dgc & 0xB {
+        for &(dcr, expected) in &map {
+            let d = match dcr & 0xB {
                 0x0 => 2u64, 0x1 => 4, 0x2 => 8, 0x3 => 16,
                 0x8 => 32, 0x9 => 64, 0xA => 128, 0xB => 1, _ => 1,
             };
-            assert_eq!(bc, qy, "dcr=0x{:X}", dgc);
+            assert_eq!(d, expected, "dcr=0x{:X}", dcr);
         }
     }
 }

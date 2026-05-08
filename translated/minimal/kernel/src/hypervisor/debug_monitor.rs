@@ -18,49 +18,49 @@ use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use spin::Mutex;
 
 
-const CFT_: usize = 256;
+const CJD_: usize = 256;
 
-const AFG_: usize = 512;
+const AHA_: usize = 512;
 
-const DTJ_: usize = 128;
+const DXB_: usize = 128;
 
 
-static CT_: Mutex<Option<DebugMonitor>> = Mutex::new(None);
+static CZ_: Mutex<Option<DebugMonitor>> = Mutex::new(None);
 
-static SN_: AtomicBool = AtomicBool::new(false);
+static TT_: AtomicBool = AtomicBool::new(false);
 
-static ET_: AtomicU64 = AtomicU64::new(0);
+static FJ_: AtomicU64 = AtomicU64::new(0);
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum DebugCategory {
-    Iu,
-    Lr,
-    Hx,
-    Jr,
-    Ahg,
-    Qe,
-    Fv,
-    Acd,
-    Aqg,
-    Ahu,
-    Qg,
+    IoPortIn,
+    IoPortOut,
+    MsrRead,
+    MsrWrite,
+    CpuidLeaf,
+    NpfFault,
+    Interrupt,
+    Hypercall,
+    CrWrite,
+    Exception,
+    Other,
 }
 
 impl DebugCategory {
     pub fn as_str(&self) -> &'static str {
         match self {
-            Self::Iu => "I/O IN",
-            Self::Lr => "I/O OUT",
-            Self::Hx => "RDMSR",
-            Self::Jr => "WRMSR",
-            Self::Ahg => "CPUID",
-            Self::Qe => "NPF",
-            Self::Fv => "INTR",
-            Self::Acd => "VMCALL",
-            Self::Aqg => "CR WRITE",
-            Self::Ahu => "EXCEPTION",
-            Self::Qg => "OTHER",
+            Self::IoPortIn => "I/O IN",
+            Self::IoPortOut => "I/O OUT",
+            Self::MsrRead => "RDMSR",
+            Self::MsrWrite => "WRMSR",
+            Self::CpuidLeaf => "CPUID",
+            Self::NpfFault => "NPF",
+            Self::Interrupt => "INTR",
+            Self::Hypercall => "VMCALL",
+            Self::CrWrite => "CR WRITE",
+            Self::Exception => "EXCEPTION",
+            Self::Other => "OTHER",
         }
     }
 }
@@ -69,449 +69,449 @@ impl DebugCategory {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HandleStatus {
     
-    Gw,
+    Handled,
     
-    Azk,
+    Stubbed,
     
-    Id,
+    Unhandled,
     
-    Nd,
+    Fatal,
 }
 
 impl HandleStatus {
     pub fn as_str(&self) -> &'static str {
         match self {
-            Self::Gw => "OK",
-            Self::Azk => "STUB",
-            Self::Id => "MISS",
-            Self::Nd => "FATAL",
+            Self::Handled => "OK",
+            Self::Stubbed => "STUB",
+            Self::Unhandled => "MISS",
+            Self::Fatal => "FATAL",
         }
     }
 
-    pub fn cpk(&self) -> &'static str {
+    pub fn color_code(&self) -> &'static str {
         match self {
-            Self::Gw => "\x01G",    
-            Self::Azk => "\x01Y",    
-            Self::Id => "\x01R",  
-            Self::Nd => "\x01M",      
+            Self::Handled => "\x01G",    
+            Self::Stubbed => "\x01Y",    
+            Self::Unhandled => "\x01R",  
+            Self::Fatal => "\x01M",      
         }
     }
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Bei {
+pub struct Xr {
     
-    pub fk: u64,
+    pub vm_id: u64,
     
-    pub gb: DebugCategory,
+    pub category: DebugCategory,
     
-    pub cys: u64,
+    pub identifier: u64,
     
     pub status: HandleStatus,
     
-    pub wb: u64,
+    pub guest_rip: u64,
     
-    pub eu: String,
+    pub detail: String,
     
-    pub eqb: u64,
+    pub exit_number: u64,
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Bjm {
+pub struct Aad {
     
-    pub az: u64,
+    pub count: u64,
     
     pub status: HandleStatus,
     
-    pub nuv: u64,
+    pub first_rip: u64,
     
-    pub jcp: u64,
+    pub last_rip: u64,
     
-    pub j: String,
+    pub name: String,
     
-    pub etx: String,
+    pub last_detail: String,
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Buj {
-    pub eqb: u64,
-    pub gb: DebugCategory,
-    pub cys: u64,
+pub struct Afi {
+    pub exit_number: u64,
+    pub category: DebugCategory,
+    pub identifier: u64,
     pub status: HandleStatus,
-    pub wb: u64,
+    pub guest_rip: u64,
 }
 
 
 pub struct DebugMonitor {
     
-    pub cm: BTreeMap<(DebugCategory, u64), Bjm>,
+    pub stats: BTreeMap<(DebugCategory, u64), Aad>,
     
-    pub dcr: Vec<Buj>,
+    pub timeline: Vec<Afi>,
     
-    pub ido: usize,
+    pub timeline_pos: usize,
     
-    pub hcj: BTreeMap<DebugCategory, u64>,
+    pub category_counts: BTreeMap<DebugCategory, u64>,
     
-    pub gvn: BTreeMap<DebugCategory, u64>,
+    pub unhandled_counts: BTreeMap<DebugCategory, u64>,
     
-    pub ckr: Vec<(DebugCategory, u64, String, u64)>, 
+    pub gaps: Vec<(DebugCategory, u64, String, u64)>, 
     
-    pub lmp: Vec<u64>,
+    pub monitored_vms: Vec<u64>,
     
-    pub mdy: bool,
+    pub serial_log: bool,
     
-    pub wst: u64,
+    pub start_exit: u64,
 }
 
 impl DebugMonitor {
     pub fn new() -> Self {
         Self {
-            cm: BTreeMap::new(),
-            dcr: Vec::fc(AFG_),
-            ido: 0,
-            hcj: BTreeMap::new(),
-            gvn: BTreeMap::new(),
-            ckr: Vec::new(),
-            lmp: Vec::new(),
-            mdy: false,
-            wst: 0,
+            stats: BTreeMap::new(),
+            timeline: Vec::with_capacity(AHA_),
+            timeline_pos: 0,
+            category_counts: BTreeMap::new(),
+            unhandled_counts: BTreeMap::new(),
+            gaps: Vec::new(),
+            monitored_vms: Vec::new(),
+            serial_log: false,
+            start_exit: 0,
         }
     }
 
     
-    pub fn record(&mut self, id: Bei) {
+    pub fn record(&mut self, event: Xr) {
         
-        *self.hcj.bt(id.gb).gom(0) += 1;
+        *self.category_counts.entry(event.category).or_insert(0) += 1;
 
         
-        if oh!(id.status, HandleStatus::Id | HandleStatus::Nd) {
-            *self.gvn.bt(id.gb).gom(0) += 1;
+        if matches!(event.status, HandleStatus::Unhandled | HandleStatus::Fatal) {
+            *self.unhandled_counts.entry(event.category).or_insert(0) += 1;
         }
 
         
-        let bs = (id.gb, id.cys);
-        if let Some(hm) = self.cm.ds(&bs) {
-            hm.az += 1;
-            hm.status = id.status;
-            hm.jcp = id.wb;
-            hm.etx = id.eu.clone();
-        } else if self.cm.len() < CFT_ {
-            let j = odb(id.gb, id.cys);
-            self.cm.insert(bs, Bjm {
-                az: 1,
-                status: id.status,
-                nuv: id.wb,
-                jcp: id.wb,
-                j,
-                etx: id.eu.clone(),
+        let key = (event.category, event.identifier);
+        if let Some(stat) = self.stats.get_mut(&key) {
+            stat.count += 1;
+            stat.status = event.status;
+            stat.last_rip = event.guest_rip;
+            stat.last_detail = event.detail.clone();
+        } else if self.stats.len() < CJD_ {
+            let name = ifo(event.category, event.identifier);
+            self.stats.insert(key, Aad {
+                count: 1,
+                status: event.status,
+                first_rip: event.guest_rip,
+                last_rip: event.guest_rip,
+                name,
+                last_detail: event.detail.clone(),
             });
         }
 
         
-        let bt = Buj {
-            eqb: id.eqb,
-            gb: id.gb,
-            cys: id.cys,
-            status: id.status,
-            wb: id.wb,
+        let entry = Afi {
+            exit_number: event.exit_number,
+            category: event.category,
+            identifier: event.identifier,
+            status: event.status,
+            guest_rip: event.guest_rip,
         };
-        if self.dcr.len() < AFG_ {
-            self.dcr.push(bt);
+        if self.timeline.len() < AHA_ {
+            self.timeline.push(entry);
         } else {
-            self.dcr[self.ido] = bt;
+            self.timeline[self.timeline_pos] = entry;
         }
-        self.ido = (self.ido + 1) % AFG_;
+        self.timeline_pos = (self.timeline_pos + 1) % AHA_;
 
         
-        if self.mdy && !oh!(id.status, HandleStatus::Gw) {
+        if self.serial_log && !matches!(event.status, HandleStatus::Handled) {
             crate::serial_println!(
                 "[DBG] VM{} #{} {} 0x{:X} [{}] RIP=0x{:X} {}",
-                id.fk, id.eqb,
-                id.gb.as_str(), id.cys,
-                id.status.as_str(), id.wb, id.eu
+                event.vm_id, event.exit_number,
+                event.category.as_str(), event.identifier,
+                event.status.as_str(), event.guest_rip, event.detail
             );
         }
 
-        ET_.fetch_add(1, Ordering::Relaxed);
+        FJ_.fetch_add(1, Ordering::Relaxed);
     }
 }
 
 
 pub fn init() {
-    let mut bvm = CT_.lock();
-    *bvm = Some(DebugMonitor::new());
-    SN_.store(true, Ordering::SeqCst);
+    let mut alz = CZ_.lock();
+    *alz = Some(DebugMonitor::new());
+    TT_.store(true, Ordering::SeqCst);
     crate::serial_println!("[DEBUG_MONITOR] Initialized — recording all VM exits");
 }
 
 
-pub fn qg() {
-    SN_.store(false, Ordering::SeqCst);
+pub fn stop() {
+    TT_.store(false, Ordering::SeqCst);
     crate::serial_println!("[DEBUG_MONITOR] Stopped");
 }
 
 
-pub fn rl() -> bool {
-    SN_.load(Ordering::Relaxed)
+pub fn is_active() -> bool {
+    TT_.load(Ordering::Relaxed)
 }
 
 
-pub fn pje(iq: bool) {
-    if let Some(ref mut ach) = *CT_.lock() {
-        ach.mdy = iq;
+pub fn jfj(enabled: bool) {
+    if let Some(ref mut nz) = *CZ_.lock() {
+        nz.serial_log = enabled;
     }
 }
 
 
-pub fn bry(
-    fk: u64,
-    gb: DebugCategory,
-    cys: u64,
+pub fn akj(
+    vm_id: u64,
+    category: DebugCategory,
+    identifier: u64,
     status: HandleStatus,
-    wb: u64,
-    eqb: u64,
-    eu: &str,
+    guest_rip: u64,
+    exit_number: u64,
+    detail: &str,
 ) {
-    if !SN_.load(Ordering::Relaxed) {
+    if !TT_.load(Ordering::Relaxed) {
         return;
     }
 
-    if let Some(ref mut ach) = *CT_.lock() {
+    if let Some(ref mut nz) = *CZ_.lock() {
         
-        if !ach.lmp.is_empty() && !ach.lmp.contains(&fk) {
+        if !nz.monitored_vms.is_empty() && !nz.monitored_vms.contains(&vm_id) {
             return;
         }
 
-        ach.record(Bei {
-            fk,
-            gb,
-            cys,
+        nz.record(Xr {
+            vm_id,
+            category,
+            identifier,
             status,
-            wb,
-            eu: String::from(eu),
-            eqb,
+            guest_rip,
+            detail: String::from(detail),
+            exit_number,
         });
     }
 }
 
 
-pub fn kym() -> String {
-    let bvm = CT_.lock();
-    let ach = match bvm.as_ref() {
-        Some(ef) => ef,
+pub fn fym() -> String {
+    let alz = CZ_.lock();
+    let nz = match alz.as_ref() {
+        Some(m) => m,
         None => return String::from("Debug monitor not initialized. Run 'vm debug init' first."),
     };
 
-    let es = ET_.load(Ordering::Relaxed);
-    let mut bd = String::fc(4096);
+    let av = FJ_.load(Ordering::Relaxed);
+    let mut out = String::with_capacity(4096);
 
-    bd.t("\x01C╔══════════════════════════════════════════════════════════════╗\x01W\n");
-    bd.t("\x01C║\x01W   \x01GTRUST\x01WVM DEBUG MONITOR — Real-time VM Analysis            \x01C║\x01W\n");
-    bd.t("\x01C╚══════════════════════════════════════════════════════════════╝\x01W\n\n");
-
-    
-    bd.t(&format!("  \x01YTotal events:\x01W {}    \x01YActive:\x01W {}\n\n",
-        es, if rl() { "\x01Gyes\x01W" } else { "\x01Rno\x01W" }));
+    out.push_str("\x01C╔══════════════════════════════════════════════════════════════╗\x01W\n");
+    out.push_str("\x01C║\x01W   \x01GTRUST\x01WVM DEBUG MONITOR — Real-time VM Analysis            \x01C║\x01W\n");
+    out.push_str("\x01C╚══════════════════════════════════════════════════════════════╝\x01W\n\n");
 
     
-    bd.t("  \x01C── Category Breakdown ──────────────────────────────────────\x01W\n");
-    bd.t("  \x01YCategory      Total      Unhandled    Rate\x01W\n");
+    out.push_str(&format!("  \x01YTotal events:\x01W {}    \x01YActive:\x01W {}\n\n",
+        av, if is_active() { "\x01Gyes\x01W" } else { "\x01Rno\x01W" }));
 
-    let fej = [
-        DebugCategory::Iu, DebugCategory::Lr,
-        DebugCategory::Hx, DebugCategory::Jr,
-        DebugCategory::Ahg, DebugCategory::Qe,
-        DebugCategory::Fv, DebugCategory::Acd,
-        DebugCategory::Aqg, DebugCategory::Ahu,
+    
+    out.push_str("  \x01C── Category Breakdown ──────────────────────────────────────\x01W\n");
+    out.push_str("  \x01YCategory      Total      Unhandled    Rate\x01W\n");
+
+    let cgr = [
+        DebugCategory::IoPortIn, DebugCategory::IoPortOut,
+        DebugCategory::MsrRead, DebugCategory::MsrWrite,
+        DebugCategory::CpuidLeaf, DebugCategory::NpfFault,
+        DebugCategory::Interrupt, DebugCategory::Hypercall,
+        DebugCategory::CrWrite, DebugCategory::Exception,
     ];
 
-    for rx in &fej {
-        let az = ach.hcj.get(rx).hu().unwrap_or(0);
-        let gvm = ach.gvn.get(rx).hu().unwrap_or(0);
-        if az > 0 {
-            let jlc = if az > 0 { (gvm * 100) / az } else { 0 };
-            let s = if gvm == 0 { "\x01G" } else if jlc < 20 { "\x01Y" } else { "\x01R" };
-            bd.t(&format!("  {:<14}{:>8}    {}{:>8}\x01W    {}{}%\x01W\n",
-                rx.as_str(), az, s, gvm, s, jlc));
+    for hx in &cgr {
+        let count = nz.category_counts.get(hx).copied().unwrap_or(0);
+        let dga = nz.unhandled_counts.get(hx).copied().unwrap_or(0);
+        if count > 0 {
+            let exq = if count > 0 { (dga * 100) / count } else { 0 };
+            let color = if dga == 0 { "\x01G" } else if exq < 20 { "\x01Y" } else { "\x01R" };
+            out.push_str(&format!("  {:<14}{:>8}    {}{:>8}\x01W    {}{}%\x01W\n",
+                hx.as_str(), count, color, dga, color, exq));
         }
     }
-    bd.push('\n');
+    out.push('\n');
 
     
-    let mut ckr: Vec<_> = ach.cm.iter()
-        .hi(|((_, _), e)| oh!(e.status, HandleStatus::Id | HandleStatus::Azk))
+    let mut gaps: Vec<_> = nz.stats.iter()
+        .filter(|((_, _), j)| matches!(j.status, HandleStatus::Unhandled | HandleStatus::Stubbed))
         .collect();
-    ckr.bxe(|q, o| o.1.az.cmp(&q.1.az));
+    gaps.sort_by(|a, b| b.1.count.cmp(&a.1.count));
 
-    if !ckr.is_empty() {
-        bd.t("  \x01C── Missing/Stubbed Operations ──────────────────────────────\x01W\n");
-        bd.t("  \x01YCategory      ID             Name                   Count  Status\x01W\n");
+    if !gaps.is_empty() {
+        out.push_str("  \x01C── Missing/Stubbed Operations ──────────────────────────────\x01W\n");
+        out.push_str("  \x01YCategory      ID             Name                   Count  Status\x01W\n");
 
-        for ((rx, ad), hm) in ckr.iter().take(30) {
-            bd.t(&format!("  {}{:<14}\x01W0x{:<12X} {:<22} {:>5}  {}{}\x01W\n",
-                hm.status.cpk(),
-                rx.as_str(), ad,
-                if hm.j.len() > 22 { &hm.j[..22] } else { &hm.j },
-                hm.az, hm.status.cpk(), hm.status.as_str()));
+        for ((hx, id), stat) in gaps.iter().take(30) {
+            out.push_str(&format!("  {}{:<14}\x01W0x{:<12X} {:<22} {:>5}  {}{}\x01W\n",
+                stat.status.color_code(),
+                hx.as_str(), id,
+                if stat.name.len() > 22 { &stat.name[..22] } else { &stat.name },
+                stat.count, stat.status.color_code(), stat.status.as_str()));
         }
-        bd.push('\n');
+        out.push('\n');
     }
 
     
-    let mut lfn: Vec<_> = ach.cm.iter()
-        .hi(|((rx, _), _)| oh!(rx, DebugCategory::Iu | DebugCategory::Lr))
+    let mut gdi: Vec<_> = nz.stats.iter()
+        .filter(|((hx, _), _)| matches!(hx, DebugCategory::IoPortIn | DebugCategory::IoPortOut))
         .collect();
-    lfn.bxe(|q, o| o.1.az.cmp(&q.1.az));
+    gdi.sort_by(|a, b| b.1.count.cmp(&a.1.count));
 
-    if !lfn.is_empty() {
-        bd.t("  \x01C── Top I/O Ports (by frequency) ────────────────────────────\x01W\n");
-        bd.t("  \x01YDir    Port       Name                   Count  Status\x01W\n");
-        for ((rx, port), hm) in lfn.iter().take(20) {
-            let te = if oh!(rx, DebugCategory::Iu) { "IN " } else { "OUT" };
-            bd.t(&format!("  {}  0x{:04X}     {:<22} {:>6}  {}{}\x01W\n",
-                te, port,
-                if hm.j.len() > 22 { &hm.j[..22] } else { &hm.j },
-                hm.az, hm.status.cpk(), hm.status.as_str()));
+    if !gdi.is_empty() {
+        out.push_str("  \x01C── Top I/O Ports (by frequency) ────────────────────────────\x01W\n");
+        out.push_str("  \x01YDir    Port       Name                   Count  Status\x01W\n");
+        for ((hx, port), stat) in gdi.iter().take(20) {
+            let it = if matches!(hx, DebugCategory::IoPortIn) { "IN " } else { "OUT" };
+            out.push_str(&format!("  {}  0x{:04X}     {:<22} {:>6}  {}{}\x01W\n",
+                it, port,
+                if stat.name.len() > 22 { &stat.name[..22] } else { &stat.name },
+                stat.count, stat.status.color_code(), stat.status.as_str()));
         }
-        bd.push('\n');
+        out.push('\n');
     }
 
     
-    let mut lna: Vec<_> = ach.cm.iter()
-        .hi(|((rx, _), _)| oh!(rx, DebugCategory::Hx | DebugCategory::Jr))
+    let mut gil: Vec<_> = nz.stats.iter()
+        .filter(|((hx, _), _)| matches!(hx, DebugCategory::MsrRead | DebugCategory::MsrWrite))
         .collect();
-    lna.bxe(|q, o| o.1.az.cmp(&q.1.az));
+    gil.sort_by(|a, b| b.1.count.cmp(&a.1.count));
 
-    if !lna.is_empty() {
-        bd.t("  \x01C── MSR Access Log ──────────────────────────────────────────\x01W\n");
-        bd.t("  \x01YDir     MSR            Name                   Count  Status\x01W\n");
-        for ((rx, msr), hm) in lna.iter().take(20) {
-            let te = if oh!(rx, DebugCategory::Hx) { "READ " } else { "WRITE" };
-            bd.t(&format!("  {}  0x{:08X}     {:<22} {:>5}  {}{}\x01W\n",
-                te, msr,
-                if hm.j.len() > 22 { &hm.j[..22] } else { &hm.j },
-                hm.az, hm.status.cpk(), hm.status.as_str()));
+    if !gil.is_empty() {
+        out.push_str("  \x01C── MSR Access Log ──────────────────────────────────────────\x01W\n");
+        out.push_str("  \x01YDir     MSR            Name                   Count  Status\x01W\n");
+        for ((hx, msr), stat) in gil.iter().take(20) {
+            let it = if matches!(hx, DebugCategory::MsrRead) { "READ " } else { "WRITE" };
+            out.push_str(&format!("  {}  0x{:08X}     {:<22} {:>5}  {}{}\x01W\n",
+                it, msr,
+                if stat.name.len() > 22 { &stat.name[..22] } else { &stat.name },
+                stat.count, stat.status.color_code(), stat.status.as_str()));
         }
-        bd.push('\n');
+        out.push('\n');
     }
 
     
-    if !ach.dcr.is_empty() {
-        bd.t("  \x01C── Recent Timeline (last 20) ──────────────────────────────\x01W\n");
-        bd.t("  \x01YExit#      Category      ID             RIP              Status\x01W\n");
+    if !nz.timeline.is_empty() {
+        out.push_str("  \x01C── Recent Timeline (last 20) ──────────────────────────────\x01W\n");
+        out.push_str("  \x01YExit#      Category      ID             RIP              Status\x01W\n");
 
-        let len = ach.dcr.len();
-        let ay = if len > 20 { len - 20 } else { 0 };
-        for bt in &ach.dcr[ay..] {
-            bd.t(&format!("  {:>8}   {:<14}0x{:<12X} 0x{:<14X} {}{}\x01W\n",
-                bt.eqb, bt.gb.as_str(),
-                bt.cys, bt.wb,
-                bt.status.cpk(), bt.status.as_str()));
+        let len = nz.timeline.len();
+        let start = if len > 20 { len - 20 } else { 0 };
+        for entry in &nz.timeline[start..] {
+            out.push_str(&format!("  {:>8}   {:<14}0x{:<12X} 0x{:<14X} {}{}\x01W\n",
+                entry.exit_number, entry.category.as_str(),
+                entry.identifier, entry.guest_rip,
+                entry.status.color_code(), entry.status.as_str()));
         }
-        bd.push('\n');
+        out.push('\n');
     }
 
     
-    bd.t("  \x01C── Recommendations ────────────────────────────────────────\x01W\n");
-    let xkt: u64 = ach.gvn.alv().sum();
-    if xkt == 0 {
-        bd.t("  \x01G✓ All VM exits are handled! VM is fully functional.\x01W\n");
+    out.push_str("  \x01C── Recommendations ────────────────────────────────────────\x01W\n");
+    let pmi: u64 = nz.unhandled_counts.values().sum();
+    if pmi == 0 {
+        out.push_str("  \x01G✓ All VM exits are handled! VM is fully functional.\x01W\n");
     } else {
         
-        let moa: Vec<_> = ach.cm.iter()
-            .hi(|((rx, _), e)| 
-                oh!(rx, DebugCategory::Iu | DebugCategory::Lr)
-                && oh!(e.status, HandleStatus::Id))
+        let har: Vec<_> = nz.stats.iter()
+            .filter(|((hx, _), j)| 
+                matches!(hx, DebugCategory::IoPortIn | DebugCategory::IoPortOut)
+                && matches!(j.status, HandleStatus::Unhandled))
             .collect();
-        if !moa.is_empty() {
-            bd.t(&format!("  \x01R✗ {} unhandled I/O port(s)\x01W — implement handlers in handle_io()\n",
-                moa.len()));
-            for ((_, port), hm) in moa.iter().take(5) {
-                bd.t(&format!("    → 0x{:04X} {} ({}x)\n", port, hm.j, hm.az));
+        if !har.is_empty() {
+            out.push_str(&format!("  \x01R✗ {} unhandled I/O port(s)\x01W — implement handlers in handle_io()\n",
+                har.len()));
+            for ((_, port), stat) in har.iter().take(5) {
+                out.push_str(&format!("    → 0x{:04X} {} ({}x)\n", port, stat.name, stat.count));
             }
         }
 
-        let mob: Vec<_> = ach.cm.iter()
-            .hi(|((rx, _), e)| 
-                oh!(rx, DebugCategory::Hx | DebugCategory::Jr)
-                && oh!(e.status, HandleStatus::Id))
+        let has: Vec<_> = nz.stats.iter()
+            .filter(|((hx, _), j)| 
+                matches!(hx, DebugCategory::MsrRead | DebugCategory::MsrWrite)
+                && matches!(j.status, HandleStatus::Unhandled))
             .collect();
-        if !mob.is_empty() {
-            bd.t(&format!("  \x01R✗ {} unhandled MSR(s)\x01W — implement in handle_msr()\n",
-                mob.len()));
-            for ((_, msr), hm) in mob.iter().take(5) {
-                bd.t(&format!("    → 0x{:08X} {} ({}x)\n", msr, hm.j, hm.az));
+        if !has.is_empty() {
+            out.push_str(&format!("  \x01R✗ {} unhandled MSR(s)\x01W — implement in handle_msr()\n",
+                has.len()));
+            for ((_, msr), stat) in has.iter().take(5) {
+                out.push_str(&format!("    → 0x{:08X} {} ({}x)\n", msr, stat.name, stat.count));
             }
         }
 
-        let lpd: Vec<_> = ach.cm.iter()
-            .hi(|((rx, _), e)| 
-                oh!(rx, DebugCategory::Qe)
-                && oh!(e.status, HandleStatus::Id | HandleStatus::Nd))
+        let gjw: Vec<_> = nz.stats.iter()
+            .filter(|((hx, _), j)| 
+                matches!(hx, DebugCategory::NpfFault)
+                && matches!(j.status, HandleStatus::Unhandled | HandleStatus::Fatal))
             .collect();
-        if !lpd.is_empty() {
-            bd.t(&format!("  \x01R✗ {} unhandled NPF fault address(es)\x01W — add MMIO region handlers\n",
-                lpd.len()));
-            for ((_, pe), hm) in lpd.iter().take(5) {
-                bd.t(&format!("    → GPA 0x{:X} ({}x, last RIP=0x{:X})\n", pe, hm.az, hm.jcp));
+        if !gjw.is_empty() {
+            out.push_str(&format!("  \x01R✗ {} unhandled NPF fault address(es)\x01W — add MMIO region handlers\n",
+                gjw.len()));
+            for ((_, gm), stat) in gjw.iter().take(5) {
+                out.push_str(&format!("    → GPA 0x{:X} ({}x, last RIP=0x{:X})\n", gm, stat.count, stat.last_rip));
             }
         }
     }
 
-    bd.push('\n');
-    bd
+    out.push('\n');
+    out
 }
 
 
-pub fn kyr() -> String {
-    let bvm = CT_.lock();
-    let ach = match bvm.as_ref() {
-        Some(ef) => ef,
+pub fn fyr() -> String {
+    let alz = CZ_.lock();
+    let nz = match alz.as_ref() {
+        Some(m) => m,
         None => return String::from("Debug monitor not initialized."),
     };
 
-    let mut bd = String::fc(2048);
-    bd.t("\x01C═══ VM Debug: Unhandled Operations Report ═══\x01W\n\n");
+    let mut out = String::with_capacity(2048);
+    out.push_str("\x01C═══ VM Debug: Unhandled Operations Report ═══\x01W\n\n");
 
-    let mut ckr: Vec<_> = ach.cm.iter()
-        .hi(|((_, _), e)| !oh!(e.status, HandleStatus::Gw))
+    let mut gaps: Vec<_> = nz.stats.iter()
+        .filter(|((_, _), j)| !matches!(j.status, HandleStatus::Handled))
         .collect();
-    ckr.bxe(|q, o| o.1.az.cmp(&q.1.az));
+    gaps.sort_by(|a, b| b.1.count.cmp(&a.1.count));
 
-    if ckr.is_empty() {
-        bd.t("  \x01G✓ No gaps detected — all operations handled!\x01W\n");
+    if gaps.is_empty() {
+        out.push_str("  \x01G✓ No gaps detected — all operations handled!\x01W\n");
     } else {
-        bd.t(&format!("  \x01RFound {} unhandled/stubbed operations:\x01W\n\n", ckr.len()));
-        bd.t("  \x01YCategory      ID             Name                   Count  First RIP        Detail\x01W\n");
-        for ((rx, ad), hm) in &ckr {
-            let hsi = if hm.j.len() > 22 { &hm.j[..22] } else { &hm.j };
-            let kpl = if hm.etx.len() > 30 { &hm.etx[..30] } else { &hm.etx };
-            bd.t(&format!("  {}{:<14}\x01W0x{:<12X} {:<22} {:>5}  0x{:<14X} {}\n",
-                hm.status.cpk(), rx.as_str(), ad, hsi,
-                hm.az, hm.nuv, kpl));
+        out.push_str(&format!("  \x01RFound {} unhandled/stubbed operations:\x01W\n\n", gaps.len()));
+        out.push_str("  \x01YCategory      ID             Name                   Count  First RIP        Detail\x01W\n");
+        for ((hx, id), stat) in &gaps {
+            let duv = if stat.name.len() > 22 { &stat.name[..22] } else { &stat.name };
+            let frt = if stat.last_detail.len() > 30 { &stat.last_detail[..30] } else { &stat.last_detail };
+            out.push_str(&format!("  {}{:<14}\x01W0x{:<12X} {:<22} {:>5}  0x{:<14X} {}\n",
+                stat.status.color_code(), hx.as_str(), id, duv,
+                stat.count, stat.first_rip, frt));
         }
     }
 
-    bd.push('\n');
-    bd
+    out.push('\n');
+    out
 }
 
 
-pub fn nyd() -> String {
-    let bvm = CT_.lock();
-    let ach = match bvm.as_ref() {
-        Some(ef) => ef,
+pub fn ibo() -> String {
+    let alz = CZ_.lock();
+    let nz = match alz.as_ref() {
+        Some(m) => m,
         None => return String::from("Debug monitor not initialized."),
     };
 
-    let mut bd = String::fc(2048);
-    bd.t("\x01C═══ VM Debug: I/O Port Heatmap ═══\x01W\n\n");
+    let mut out = String::with_capacity(2048);
+    out.push_str("\x01C═══ VM Debug: I/O Port Heatmap ═══\x01W\n\n");
 
     
-    let bnz = [
+    let aef = [
         (0x000u64, 0x020, "DMA Controller"),
         (0x020, 0x040, "PIC 8259A"),
         (0x040, 0x064, "PIT 8254 Timer"),
@@ -531,140 +531,140 @@ pub fn nyd() -> String {
         (0xCF8, 0xD00, "PCI Config"),
     ];
 
-    bd.t("  \x01YPort Range     Device               IN Count   OUT Count  Status\x01W\n");
+    out.push_str("  \x01YPort Range     Device               IN Count   OUT Count  Status\x01W\n");
 
-    for (ay, ci, j) in &bnz {
-        let odo: u64 = ach.cm.iter()
-            .hi(|((rx, port), _)| oh!(rx, DebugCategory::Iu) && *port >= *ay && *port < *ci)
-            .map(|(_, e)| e.az)
+    for (start, end, name) in &aef {
+        let ify: u64 = nz.stats.iter()
+            .filter(|((hx, port), _)| matches!(hx, DebugCategory::IoPortIn) && *port >= *start && *port < *end)
+            .map(|(_, j)| j.count)
             .sum();
-        let ote: u64 = ach.cm.iter()
-            .hi(|((rx, port), _)| oh!(rx, DebugCategory::Lr) && *port >= *ay && *port < *ci)
-            .map(|(_, e)| e.az)
+        let isw: u64 = nz.stats.iter()
+            .filter(|((hx, port), _)| matches!(hx, DebugCategory::IoPortOut) && *port >= *start && *port < *end)
+            .map(|(_, j)| j.count)
             .sum();
         
-        if odo > 0 || ote > 0 {
-            let qjd = ach.cm.iter()
-                .any(|((rx, port), e)| 
-                    oh!(rx, DebugCategory::Iu | DebugCategory::Lr)
-                    && *port >= *ay && *port < *ci
-                    && oh!(e.status, HandleStatus::Id));
-            let status = if qjd { "\x01RMISS\x01W" } else { "\x01GOK\x01W" };
-            bd.t(&format!("  0x{:04X}-0x{:04X} {:<20} {:>8}   {:>8}   {}\n",
-                ay, ci - 1, j, odo, ote, status));
+        if ify > 0 || isw > 0 {
+            let jwk = nz.stats.iter()
+                .any(|((hx, port), j)| 
+                    matches!(hx, DebugCategory::IoPortIn | DebugCategory::IoPortOut)
+                    && *port >= *start && *port < *end
+                    && matches!(j.status, HandleStatus::Unhandled));
+            let status = if jwk { "\x01RMISS\x01W" } else { "\x01GOK\x01W" };
+            out.push_str(&format!("  0x{:04X}-0x{:04X} {:<20} {:>8}   {:>8}   {}\n",
+                start, end - 1, name, ify, isw, status));
         }
     }
 
     
-    let pwz: Vec<_> = ach.cm.iter()
-        .hi(|((rx, port), e)| 
-            oh!(rx, DebugCategory::Iu | DebugCategory::Lr)
-            && !bnz.iter().any(|(ay, ci, _)| *port >= *ay && *port < *ci))
+    let jpc: Vec<_> = nz.stats.iter()
+        .filter(|((hx, port), j)| 
+            matches!(hx, DebugCategory::IoPortIn | DebugCategory::IoPortOut)
+            && !aef.iter().any(|(start, end, _)| *port >= *start && *port < *end))
         .collect();
     
-    if !pwz.is_empty() {
-        bd.t("\n  \x01R── Unknown Ports ──\x01W\n");
-        for ((rx, port), hm) in &pwz {
-            let te = if oh!(rx, DebugCategory::Iu) { "IN " } else { "OUT" };
-            bd.t(&format!("  {} 0x{:04X}  {} ({}x) RIP=0x{:X}\n",
-                te, port, hm.j, hm.az, hm.jcp));
+    if !jpc.is_empty() {
+        out.push_str("\n  \x01R── Unknown Ports ──\x01W\n");
+        for ((hx, port), stat) in &jpc {
+            let it = if matches!(hx, DebugCategory::IoPortIn) { "IN " } else { "OUT" };
+            out.push_str(&format!("  {} 0x{:04X}  {} ({}x) RIP=0x{:X}\n",
+                it, port, stat.name, stat.count, stat.last_rip));
         }
     }
 
-    bd.push('\n');
-    bd
+    out.push('\n');
+    out
 }
 
 
-pub fn nyf() -> String {
-    let bvm = CT_.lock();
-    let ach = match bvm.as_ref() {
-        Some(ef) => ef,
+pub fn ibq() -> String {
+    let alz = CZ_.lock();
+    let nz = match alz.as_ref() {
+        Some(m) => m,
         None => return String::from("Debug monitor not initialized."),
     };
 
-    let mut bd = String::fc(2048);
-    bd.t("\x01C═══ VM Debug: MSR Access Report ═══\x01W\n\n");
+    let mut out = String::with_capacity(2048);
+    out.push_str("\x01C═══ VM Debug: MSR Access Report ═══\x01W\n\n");
 
-    let mut lmy: Vec<_> = ach.cm.iter()
-        .hi(|((rx, _), _)| oh!(rx, DebugCategory::Hx | DebugCategory::Jr))
+    let mut gik: Vec<_> = nz.stats.iter()
+        .filter(|((hx, _), _)| matches!(hx, DebugCategory::MsrRead | DebugCategory::MsrWrite))
         .collect();
-    lmy.bxf(|((_, msr), _)| *msr);
+    gik.sort_by_key(|((_, msr), _)| *msr);
 
-    if lmy.is_empty() {
-        bd.t("  No MSR accesses recorded.\n");
+    if gik.is_empty() {
+        out.push_str("  No MSR accesses recorded.\n");
     } else {
-        bd.t("  \x01YDir     MSR            Name                        Count  Value/Detail           Status\x01W\n");
-        for ((rx, msr), hm) in &lmy {
-            let te = if oh!(rx, DebugCategory::Hx) { "READ " } else { "WRITE" };
-            let hsi = if hm.j.len() > 26 { &hm.j[..26] } else { &hm.j };
-            let kpl = if hm.etx.len() > 20 { &hm.etx[..20] } else { &hm.etx };
-            bd.t(&format!("  {}  0x{:08X}     {:<26} {:>5}  {:<20}   {}{}\x01W\n",
-                te, msr, hsi, hm.az, kpl,
-                hm.status.cpk(), hm.status.as_str()));
+        out.push_str("  \x01YDir     MSR            Name                        Count  Value/Detail           Status\x01W\n");
+        for ((hx, msr), stat) in &gik {
+            let it = if matches!(hx, DebugCategory::MsrRead) { "READ " } else { "WRITE" };
+            let duv = if stat.name.len() > 26 { &stat.name[..26] } else { &stat.name };
+            let frt = if stat.last_detail.len() > 20 { &stat.last_detail[..20] } else { &stat.last_detail };
+            out.push_str(&format!("  {}  0x{:08X}     {:<26} {:>5}  {:<20}   {}{}\x01W\n",
+                it, msr, duv, stat.count, frt,
+                stat.status.color_code(), stat.status.as_str()));
         }
     }
 
-    bd.push('\n');
-    bd
+    out.push('\n');
+    out
 }
 
 
-pub fn nys(az: usize) -> String {
-    let bvm = CT_.lock();
-    let ach = match bvm.as_ref() {
-        Some(ef) => ef,
+pub fn ibz(count: usize) -> String {
+    let alz = CZ_.lock();
+    let nz = match alz.as_ref() {
+        Some(m) => m,
         None => return String::from("Debug monitor not initialized."),
     };
 
-    let mut bd = String::fc(2048);
-    bd.t("\x01C═══ VM Debug: Exit Timeline ═══\x01W\n\n");
+    let mut out = String::with_capacity(2048);
+    out.push_str("\x01C═══ VM Debug: Exit Timeline ═══\x01W\n\n");
 
-    if ach.dcr.is_empty() {
-        bd.t("  No events recorded yet.\n");
+    if nz.timeline.is_empty() {
+        out.push_str("  No events recorded yet.\n");
     } else {
-        let rym = az.v(ach.dcr.len());
-        let ay = ach.dcr.len() - rym;
+        let lfj = count.min(nz.timeline.len());
+        let start = nz.timeline.len() - lfj;
 
-        bd.t("  \x01YExit#      Category      ID             RIP              Name                   Status\x01W\n");
-        for bt in &ach.dcr[ay..] {
-            let j = odb(bt.gb, bt.cys);
-            let hsi = if j.len() > 22 { &j[..22] } else { &j };
-            bd.t(&format!("  {:>8}   {:<14}0x{:<12X} 0x{:<14X} {:<22} {}{}\x01W\n",
-                bt.eqb, bt.gb.as_str(),
-                bt.cys, bt.wb,
-                hsi,
-                bt.status.cpk(), bt.status.as_str()));
+        out.push_str("  \x01YExit#      Category      ID             RIP              Name                   Status\x01W\n");
+        for entry in &nz.timeline[start..] {
+            let name = ifo(entry.category, entry.identifier);
+            let duv = if name.len() > 22 { &name[..22] } else { &name };
+            out.push_str(&format!("  {:>8}   {:<14}0x{:<12X} 0x{:<14X} {:<22} {}{}\x01W\n",
+                entry.exit_number, entry.category.as_str(),
+                entry.identifier, entry.guest_rip,
+                duv,
+                entry.status.color_code(), entry.status.as_str()));
         }
     }
 
-    bd.push('\n');
-    bd
+    out.push('\n');
+    out
 }
 
 
-pub fn apa() {
-    if let Some(ref mut ach) = *CT_.lock() {
-        ach.cm.clear();
-        ach.dcr.clear();
-        ach.ido = 0;
-        ach.hcj.clear();
-        ach.gvn.clear();
-        ach.ckr.clear();
-        ET_.store(0, Ordering::Relaxed);
+pub fn reset() {
+    if let Some(ref mut nz) = *CZ_.lock() {
+        nz.stats.clear();
+        nz.timeline.clear();
+        nz.timeline_pos = 0;
+        nz.category_counts.clear();
+        nz.unhandled_counts.clear();
+        nz.gaps.clear();
+        FJ_.store(0, Ordering::Relaxed);
     }
 }
 
 
-pub fn jtr() -> u64 {
-    ET_.load(Ordering::Relaxed)
+pub fn fdf() -> u64 {
+    FJ_.load(Ordering::Relaxed)
 }
 
 
-pub fn jup() -> u64 {
-    let bvm = CT_.lock();
-    match bvm.as_ref() {
-        Some(ach) => ach.gvn.alv().sum(),
+pub fn fdw() -> u64 {
+    let alz = CZ_.lock();
+    match alz.as_ref() {
+        Some(nz) => nz.unhandled_counts.values().sum(),
         None => 0,
     }
 }
@@ -674,21 +674,21 @@ pub fn jup() -> u64 {
 
 
 
-fn odb(gb: DebugCategory, ad: u64) -> String {
-    match gb {
-        DebugCategory::Iu | DebugCategory::Lr => trm(ad as u16),
-        DebugCategory::Hx | DebugCategory::Jr => tro(ad as u32),
-        DebugCategory::Ahg => format!("CPUID leaf 0x{:X}", ad),
-        DebugCategory::Qe => trn(ad),
-        DebugCategory::Fv => format!("IRQ {}", ad),
-        DebugCategory::Acd => format!("VMCALL 0x{:X}", ad),
-        DebugCategory::Aqg => match ad {
+fn ifo(category: DebugCategory, id: u64) -> String {
+    match category {
+        DebugCategory::IoPortIn | DebugCategory::IoPortOut => mno(id as u16),
+        DebugCategory::MsrRead | DebugCategory::MsrWrite => mnq(id as u32),
+        DebugCategory::CpuidLeaf => format!("CPUID leaf 0x{:X}", id),
+        DebugCategory::NpfFault => mnp(id),
+        DebugCategory::Interrupt => format!("IRQ {}", id),
+        DebugCategory::Hypercall => format!("VMCALL 0x{:X}", id),
+        DebugCategory::CrWrite => match id {
             0 => String::from("CR0"),
             3 => String::from("CR3"),
             4 => String::from("CR4"),
-            _ => format!("CR{}", ad),
+            _ => format!("CR{}", id),
         },
-        DebugCategory::Ahu => match ad {
+        DebugCategory::Exception => match id {
             0 => String::from("#DE Divide Error"),
             1 => String::from("#DB Debug"),
             3 => String::from("#BP Breakpoint"),
@@ -697,13 +697,13 @@ fn odb(gb: DebugCategory, ad: u64) -> String {
             8 => String::from("#DF Double Fault"),
             13 => String::from("#GP General Protection"),
             14 => String::from("#PF Page Fault"),
-            _ => format!("Exception #{}", ad),
+            _ => format!("Exception #{}", id),
         },
-        DebugCategory::Qg => format!("0x{:X}", ad),
+        DebugCategory::Other => format!("0x{:X}", id),
     }
 }
 
-fn trm(port: u16) -> String {
+fn mno(port: u16) -> String {
     match port {
         0x00..=0x0F => String::from("DMA Controller 1"),
         0x20 => String::from("PIC Master CMD"),
@@ -752,7 +752,7 @@ fn trm(port: u16) -> String {
     }
 }
 
-fn tro(msr: u32) -> String {
+fn mnq(msr: u32) -> String {
     match msr {
         0x001B => String::from("IA32_APIC_BASE"),
         0x00FE => String::from("IA32_MTRRCAP"),
@@ -788,8 +788,8 @@ fn tro(msr: u32) -> String {
     }
 }
 
-fn trn(pe: u64) -> String {
-    match pe {
+fn mnp(gm: u64) -> String {
+    match gm {
         0x0000..=0x0FFF => String::from("Real-mode IVT/BDA"),
         0xA0000..=0xBFFFF => String::from("VGA Frame Buffer"),
         0xC0000..=0xDFFFF => String::from("ROM/BIOS Shadow"),
@@ -797,8 +797,8 @@ fn trn(pe: u64) -> String {
         0xFEC0_0000..=0xFEC0_0FFF => String::from("I/O APIC"),
         0xFED0_0000..=0xFED0_03FF => String::from("HPET"),
         0xFEE0_0000..=0xFEE0_0FFF => String::from("Local APIC"),
-        _ if pe >= 0x1_0000_0000 => String::from("High MMIO (>4GB)"),
-        _ => format!("GPA 0x{:X}", pe),
+        _ if gm >= 0x1_0000_0000 => String::from("High MMIO (>4GB)"),
+        _ => format!("GPA 0x{:X}", gm),
     }
 }
 
@@ -807,24 +807,24 @@ fn trn(pe: u64) -> String {
 
 
 
-pub fn ky() -> bool {
-    CT_.lock().is_some()
+pub fn is_initialized() -> bool {
+    CZ_.lock().is_some()
 }
 
 
-pub fn yhl(rx: DebugCategory) -> u64 {
-    let bvm = CT_.lock();
-    match bvm.as_ref() {
-        Some(ach) => ach.hcj.get(&rx).hu().unwrap_or(0),
+pub fn pzh(hx: DebugCategory) -> u64 {
+    let alz = CZ_.lock();
+    match alz.as_ref() {
+        Some(nz) => nz.category_counts.get(&hx).copied().unwrap_or(0),
         None => 0,
     }
 }
 
 
-pub fn ztm() -> usize {
-    let bvm = CT_.lock();
-    match bvm.as_ref() {
-        Some(ach) => ach.cm.len(),
+pub fn rav() -> usize {
+    let alz = CZ_.lock();
+    match alz.as_ref() {
+        Some(nz) => nz.stats.len(),
         None => 0,
     }
 }

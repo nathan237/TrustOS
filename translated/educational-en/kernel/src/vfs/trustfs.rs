@@ -139,7 +139,7 @@ match (self.mode >> 12) & 0xF {
         }
     }
     
-    fn is_directory(&self) -> bool {
+    fn is_dir(&self) -> bool {
         self.file_type() == FileType::Directory
     }
     
@@ -195,16 +195,16 @@ struct TrustFilesystemFile {
 
 // Trait implementation — fulfills a behavioral contract.
 impl FileOperations for TrustFilesystemFile {
-    fn read(&self, offset: u64, buffer: &mut [u8]) -> VfsResult<usize> {
-        self.fs.read_file(self.ino, offset, buffer)
+    fn read(&self, offset: u64, buf: &mut [u8]) -> VfsResult<usize> {
+        self.fs.read_file(self.ino, offset, buf)
     }
     
-    fn write(&self, offset: u64, buffer: &[u8]) -> VfsResult<usize> {
-        self.fs.write_file(self.ino, offset, buffer)
+    fn write(&self, offset: u64, buf: &[u8]) -> VfsResult<usize> {
+        self.fs.write_file(self.ino, offset, buf)
     }
     
-    fn status(&self) -> VfsResult<Stat> {
-        self.fs.status(self.ino)
+    fn stat(&self) -> VfsResult<Stat> {
+        self.fs.stat(self.ino)
     }
     
     fn truncate(&self, size: u64) -> VfsResult<()> {
@@ -240,8 +240,8 @@ impl DirectoryOperations for TrustFilesystemDirectory {
         self.fs.unlink(self.ino, name)
     }
     
-    fn status(&self) -> VfsResult<Stat> {
-        self.fs.status(self.ino)
+    fn stat(&self) -> VfsResult<Stat> {
+        self.fs.stat(self.ino)
     }
 }
 
@@ -256,28 +256,28 @@ struct TrustFilesystemInner {
 // Implementation block — defines methods for the type above.
 impl TrustFilesystemInner {
     /// Read a sector (via block cache if available)
-    fn read_sector(&self, sector: u64, buffer: &mut [u8; SECTOR_SIZE]) -> VfsResult<()> {
-        if super::block_cache::cached_read(sector, buffer).is_ok() {
+    fn read_sector(&self, sector: u64, buf: &mut [u8; SECTOR_SIZE]) -> VfsResult<()> {
+        if super::block_cache::cached_read(sector, buf).is_ok() {
             return Ok(());
         }
-        self.backend.read_sector(sector, buffer)
-            .map_error(|_| VfsError::IoError)
+        self.backend.read_sector(sector, buf)
+            .map_err(|_| VfsError::IoError)
     }
     
     /// Write a sector (via block cache if available)
-    fn write_sector(&self, sector: u64, buffer: &[u8; SECTOR_SIZE]) -> VfsResult<()> {
-        if super::block_cache::cached_write(sector, buffer).is_ok() {
+    fn write_sector(&self, sector: u64, buf: &[u8; SECTOR_SIZE]) -> VfsResult<()> {
+        if super::block_cache::cached_write(sector, buf).is_ok() {
             return Ok(());
         }
-        self.backend.write_sector(sector, buffer)
-            .map_error(|_| VfsError::IoError)
+        self.backend.write_sector(sector, buf)
+            .map_err(|_| VfsError::IoError)
     }
 
     /// Write a sector through the WAL for crash safety
-    fn write_sector_wal(&self, sector: u64, buffer: &[u8; SECTOR_SIZE]) -> VfsResult<()> {
+    fn write_sector_wal(&self, sector: u64, buf: &[u8; SECTOR_SIZE]) -> VfsResult<()> {
         // Log in WAL, then write through to cache/disk
-        let _ = super::wal::log_write(sector, buffer);
-        self.write_sector(sector, buffer)
+        let _ = super::wal::log_write(sector, buf);
+        self.write_sector(sector, buf)
     }
 
     /// Flush any pending WAL transaction to disk
@@ -286,7 +286,7 @@ impl TrustFilesystemInner {
         let write_fn = |sector: u64, data: &[u8; SECTOR_SIZE]| -> Result<(), ()> {
             backend.write_sector(sector, data)
         };
-        super::wal::commit(&write_fn).map_error(|_| VfsError::IoError)
+        super::wal::commit(&write_fn).map_err(|_| VfsError::IoError)
     }
     
     /// Read an inode from disk
@@ -303,10 +303,10 @@ impl TrustFilesystemInner {
         let sector = INODE_START_SECTOR + (ino as u64 / INODES_PER_SECTOR as u64);
         let offset = (ino as usize % INODES_PER_SECTOR) * core::mem::size_of::<DiskInode>();
         
-        let mut buffer = [0u8; SECTOR_SIZE];
-        self.read_sector(sector, &mut buffer)?;
+        let mut buf = [0u8; SECTOR_SIZE];
+        self.read_sector(sector, &mut buf)?;
         
-        let inode_pointer = buffer[offset..].as_pointer() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+        let inode_pointer = buf[offset..].as_ptr() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const DiskInode;
         let inode = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { *inode_pointer };
@@ -326,14 +326,14 @@ unsafe { *inode_pointer };
         let offset = (ino as usize % INODES_PER_SECTOR) * core::mem::size_of::<DiskInode>();
         
         // Read-modify-write
-        let mut buffer = [0u8; SECTOR_SIZE];
-        self.read_sector(sector, &mut buffer)?;
+        let mut buf = [0u8; SECTOR_SIZE];
+        self.read_sector(sector, &mut buf)?;
         
-        let inode_pointer = buffer[offset..].as_mut_pointer() as *mut DiskInode;
+        let inode_pointer = buf[offset..].as_mut_ptr() as *mut DiskInode;
                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { *inode_pointer = *inode; }
         
-        self.write_sector(sector, &buffer)?;
+        self.write_sector(sector, &buf)?;
         
         // Update cache
         {
@@ -346,7 +346,7 @@ unsafe { *inode_pointer = *inode; }
     }
     
     /// Allocate a new inode
-    fn allocator_inode(&self) -> VfsResult<Ino> {
+    fn alloc_inode(&self) -> VfsResult<Ino> {
         let mut sb = self.superblock.write();
         if sb.free_inodes == 0 {
             return Err(VfsError::NoSpace);
@@ -365,7 +365,7 @@ unsafe { *inode_pointer = *inode; }
     }
     
     /// Allocate a data block
-    fn allocator_block(&self) -> VfsResult<u32> {
+    fn alloc_block(&self) -> VfsResult<u32> {
         let mut sb = self.superblock.write();
         if sb.free_blocks == 0 {
             return Err(VfsError::NoSpace);
@@ -373,17 +373,17 @@ unsafe { *inode_pointer = *inode; }
         
         // Read bitmap
         for bitmap_sector in 0..BITMAP_SECTORS {
-            let mut buffer = [0u8; SECTOR_SIZE];
-            self.read_sector(BITMAP_START_SECTOR + bitmap_sector, &mut buffer)?;
+            let mut buf = [0u8; SECTOR_SIZE];
+            self.read_sector(BITMAP_START_SECTOR + bitmap_sector, &mut buf)?;
             
             for byte_index in 0..SECTOR_SIZE {
-                if buffer[byte_index] != 0xFF {
+                if buf[byte_index] != 0xFF {
                     // Found a byte with free bit
                     for bit in 0..8 {
-                        if (buffer[byte_index] & (1 << bit)) == 0 {
+                        if (buf[byte_index] & (1 << bit)) == 0 {
                             // Mark as used
-                            buffer[byte_index] |= 1 << bit;
-                            self.write_sector(BITMAP_START_SECTOR + bitmap_sector, &buffer)?;
+                            buf[byte_index] |= 1 << bit;
+                            self.write_sector(BITMAP_START_SECTOR + bitmap_sector, &buf)?;
                             
                             sb.free_blocks -= 1;
                             let block = (bitmap_sector as u32 * SECTOR_SIZE as u32 * 8)
@@ -411,12 +411,12 @@ unsafe { *inode_pointer = *inode; }
             return Err(VfsError::InvalidData);
         }
         
-        let mut buffer = [0u8; SECTOR_SIZE];
-        self.read_sector(BITMAP_START_SECTOR + bitmap_sector, &mut buffer)?;
+        let mut buf = [0u8; SECTOR_SIZE];
+        self.read_sector(BITMAP_START_SECTOR + bitmap_sector, &mut buf)?;
         
         // Clear the bit
-        buffer[byte_index] &= !(1 << bit);
-        self.write_sector(BITMAP_START_SECTOR + bitmap_sector, &buffer)?;
+        buf[byte_index] &= !(1 << bit);
+        self.write_sector(BITMAP_START_SECTOR + bitmap_sector, &buf)?;
         
         sb.free_blocks += 1;
         Ok(())
@@ -436,7 +436,7 @@ unsafe { *inode_pointer = *inode; }
             let mut ind_buffer = [0u8; SECTOR_SIZE];
             self.read_sector(DATA_START_SECTOR + inode.indirect as u64, &mut ind_buffer)?;
             let ptrs = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*(ind_buffer.as_pointer() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe { &*(ind_buffer.as_ptr() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const [u32; INDIRECT_PTRS]) };
             
             for &ptr in ptrs.iter() {
@@ -454,7 +454,7 @@ const [u32; INDIRECT_PTRS]) };
             let mut l1_buffer = [0u8; SECTOR_SIZE];
             self.read_sector(DATA_START_SECTOR + inode.double_indirect as u64, &mut l1_buffer)?;
             let l1_ptrs = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*(l1_buffer.as_pointer() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe { &*(l1_buffer.as_ptr() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const [u32; INDIRECT_PTRS]) };
             
             for &l2_block in l1_ptrs.iter() {
@@ -462,7 +462,7 @@ const [u32; INDIRECT_PTRS]) };
                     let mut l2_buffer = [0u8; SECTOR_SIZE];
                     self.read_sector(DATA_START_SECTOR + l2_block as u64, &mut l2_buffer)?;
                     let l2_ptrs = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*(l2_buffer.as_pointer() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe { &*(l2_buffer.as_ptr() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const [u32; INDIRECT_PTRS]) };
                     
                     for &data_block in l2_ptrs.iter() {
@@ -492,7 +492,7 @@ const [u32; INDIRECT_PTRS]) };
             let mut ind_buffer = [0u8; SECTOR_SIZE];
             self.read_sector(DATA_START_SECTOR + inode.indirect as u64, &mut ind_buffer)?;
             let ptrs = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*(ind_buffer.as_pointer() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe { &*(ind_buffer.as_ptr() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const [u32; INDIRECT_PTRS]) };
             Ok(ptrs[block_index - DIRECT_BLOCKS])
         } else if block_index < MAXIMUM_FILE_BLOCKS {
@@ -505,7 +505,7 @@ const [u32; INDIRECT_PTRS]) };
             let mut l1_buffer = [0u8; SECTOR_SIZE];
             self.read_sector(DATA_START_SECTOR + inode.double_indirect as u64, &mut l1_buffer)?;
             let l1_ptrs = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*(l1_buffer.as_pointer() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe { &*(l1_buffer.as_ptr() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const [u32; INDIRECT_PTRS]) };
             let l2_block = l1_ptrs[l1_index];
             if l2_block == 0 { return Ok(0); }
@@ -513,7 +513,7 @@ const [u32; INDIRECT_PTRS]) };
             let mut l2_buffer = [0u8; SECTOR_SIZE];
             self.read_sector(DATA_START_SECTOR + l2_block as u64, &mut l2_buffer)?;
             let l2_ptrs = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*(l2_buffer.as_pointer() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe { &*(l2_buffer.as_ptr() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const [u32; INDIRECT_PTRS]) };
             Ok(l2_ptrs[l2_index])
         } else {
@@ -522,26 +522,26 @@ const [u32; INDIRECT_PTRS]) };
     }
 
     /// Write a block pointer into the indirect block table
-    fn write_indirect_pointer(&self, inode: &mut DiskInode, index: usize, block_number: u32) -> VfsResult<()> {
+    fn write_indirect_ptr(&self, inode: &mut DiskInode, idx: usize, block_num: u32) -> VfsResult<()> {
         if inode.indirect == 0 {
-            inode.indirect = self.allocator_block()?;
+            inode.indirect = self.alloc_block()?;
             let zero = [0u8; SECTOR_SIZE];
             self.write_sector(DATA_START_SECTOR + inode.indirect as u64, &zero)?;
         }
         let mut ind_buffer = [0u8; SECTOR_SIZE];
         self.read_sector(DATA_START_SECTOR + inode.indirect as u64, &mut ind_buffer)?;
         let ptrs = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &mut *(ind_buffer.as_mut_pointer() as *mut [u32; INDIRECT_PTRS]) };
-        ptrs[index] = block_number;
+unsafe { &mut *(ind_buffer.as_mut_ptr() as *mut [u32; INDIRECT_PTRS]) };
+        ptrs[idx] = block_num;
         self.write_sector(DATA_START_SECTOR + inode.indirect as u64, &ind_buffer)
     }
 
     /// Write a block pointer into the double-indirect block table
-    fn write_double_indirect_pointer(&self, inode: &mut DiskInode, di_offset: usize, block_number: u32) -> VfsResult<()> {
+    fn write_double_indirect_ptr(&self, inode: &mut DiskInode, di_offset: usize, block_num: u32) -> VfsResult<()> {
         let zero = [0u8; SECTOR_SIZE];
         // Allocate top-level double-indirect block if needed
         if inode.double_indirect == 0 {
-            inode.double_indirect = self.allocator_block()?;
+            inode.double_indirect = self.alloc_block()?;
             self.write_sector(DATA_START_SECTOR + inode.double_indirect as u64, &zero)?;
         }
         let l1_index = di_offset / INDIRECT_PTRS;
@@ -550,10 +550,10 @@ unsafe { &mut *(ind_buffer.as_mut_pointer() as *mut [u32; INDIRECT_PTRS]) };
         let mut l1_buffer = [0u8; SECTOR_SIZE];
         self.read_sector(DATA_START_SECTOR + inode.double_indirect as u64, &mut l1_buffer)?;
         let l1_ptrs = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &mut *(l1_buffer.as_mut_pointer() as *mut [u32; INDIRECT_PTRS]) };
+unsafe { &mut *(l1_buffer.as_mut_ptr() as *mut [u32; INDIRECT_PTRS]) };
         // Allocate second-level block if needed
         if l1_ptrs[l1_index] == 0 {
-            l1_ptrs[l1_index] = self.allocator_block()?;
+            l1_ptrs[l1_index] = self.alloc_block()?;
             self.write_sector(DATA_START_SECTOR + inode.double_indirect as u64, &l1_buffer)?;
             self.write_sector(DATA_START_SECTOR + l1_ptrs[l1_index] as u64, &zero)?;
         }
@@ -562,20 +562,20 @@ unsafe { &mut *(l1_buffer.as_mut_pointer() as *mut [u32; INDIRECT_PTRS]) };
         let mut l2_buffer = [0u8; SECTOR_SIZE];
         self.read_sector(DATA_START_SECTOR + l2_block as u64, &mut l2_buffer)?;
         let l2_ptrs = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &mut *(l2_buffer.as_mut_pointer() as *mut [u32; INDIRECT_PTRS]) };
-        l2_ptrs[l2_index] = block_number;
+unsafe { &mut *(l2_buffer.as_mut_ptr() as *mut [u32; INDIRECT_PTRS]) };
+        l2_ptrs[l2_index] = block_num;
         self.write_sector(DATA_START_SECTOR + l2_block as u64, &l2_buffer)
     }
 
     /// Read file data (supports direct + indirect + double-indirect blocks, up to ~8MB)
-    fn read_file(&self, ino: Ino, offset: u64, buffer: &mut [u8]) -> VfsResult<usize> {
+    fn read_file(&self, ino: Ino, offset: u64, buf: &mut [u8]) -> VfsResult<usize> {
         let inode = self.read_inode(ino)?;
         
         if offset >= inode.size as u64 {
             return Ok(0); // EOF
         }
         
-        let to_read = core::cmp::minimum(buffer.len(), (inode.size as u64 - offset) as usize);
+        let to_read = core::cmp::min(buf.len(), (inode.size as u64 - offset) as usize);
         let mut bytes_read = 0;
         let mut file_offset = offset as usize;
         
@@ -589,8 +589,8 @@ unsafe { &mut *(l2_buffer.as_mut_pointer() as *mut [u32; INDIRECT_PTRS]) };
             let mut sector_buffer = [0u8; SECTOR_SIZE];
             self.read_sector(DATA_START_SECTOR + physical_block as u64, &mut sector_buffer)?;
             
-            let chunk_size = core::cmp::minimum(SECTOR_SIZE - block_offset, to_read - bytes_read);
-            buffer[bytes_read..bytes_read + chunk_size]
+            let chunk_size = core::cmp::min(SECTOR_SIZE - block_offset, to_read - bytes_read);
+            buf[bytes_read..bytes_read + chunk_size]
                 .copy_from_slice(&sector_buffer[block_offset..block_offset + chunk_size]);
             
             bytes_read += chunk_size;
@@ -601,14 +601,14 @@ unsafe { &mut *(l2_buffer.as_mut_pointer() as *mut [u32; INDIRECT_PTRS]) };
     }
     
     /// Write file data (supports direct + indirect + double-indirect blocks, up to ~8MB)
-    fn write_file(&self, ino: Ino, offset: u64, buffer: &[u8]) -> VfsResult<usize> {
+    fn write_file(&self, ino: Ino, offset: u64, buf: &[u8]) -> VfsResult<usize> {
         let mut inode = self.read_inode(ino)?;
         
         let mut bytes_written = 0;
         let mut file_offset = offset as usize;
         let maximum_blocks = MAXIMUM_FILE_BLOCKS;
         
-        while bytes_written < buffer.len() {
+        while bytes_written < buf.len() {
             let block_index = file_offset / SECTOR_SIZE;
             let block_offset = file_offset % SECTOR_SIZE;
             
@@ -617,14 +617,14 @@ unsafe { &mut *(l2_buffer.as_mut_pointer() as *mut [u32; INDIRECT_PTRS]) };
             // Resolve or allocate block
             let physical_block = self.resolve_block(&inode, block_index)?;
             let physical_block = if physical_block == 0 {
-                let new_block = self.allocator_block()?;
+                let new_block = self.alloc_block()?;
                 inode.blocks += 1;
                 if block_index < DIRECT_BLOCKS {
                     inode.direct[block_index] = new_block;
                 } else if block_index < DIRECT_BLOCKS + INDIRECT_PTRS {
-                    self.write_indirect_pointer(&mut inode, block_index - DIRECT_BLOCKS, new_block)?;
+                    self.write_indirect_ptr(&mut inode, block_index - DIRECT_BLOCKS, new_block)?;
                 } else {
-                    self.write_double_indirect_pointer(&mut inode, block_index - DIRECT_BLOCKS - INDIRECT_PTRS, new_block)?;
+                    self.write_double_indirect_ptr(&mut inode, block_index - DIRECT_BLOCKS - INDIRECT_PTRS, new_block)?;
                 }
                 new_block
             } else {
@@ -632,7 +632,7 @@ unsafe { &mut *(l2_buffer.as_mut_pointer() as *mut [u32; INDIRECT_PTRS]) };
             };
             
             let sector = DATA_START_SECTOR + physical_block as u64;
-            let chunk_size = core::cmp::minimum(SECTOR_SIZE - block_offset, buffer.len() - bytes_written);
+            let chunk_size = core::cmp::min(SECTOR_SIZE - block_offset, buf.len() - bytes_written);
             
             // Read-modify-write for partial blocks
             let mut sector_buffer = [0u8; SECTOR_SIZE];
@@ -641,7 +641,7 @@ unsafe { &mut *(l2_buffer.as_mut_pointer() as *mut [u32; INDIRECT_PTRS]) };
             }
             
             sector_buffer[block_offset..block_offset + chunk_size]
-                .copy_from_slice(&buffer[bytes_written..bytes_written + chunk_size]);
+                .copy_from_slice(&buf[bytes_written..bytes_written + chunk_size]);
             
             self.write_sector(sector, &sector_buffer)?;
             
@@ -650,7 +650,7 @@ unsafe { &mut *(l2_buffer.as_mut_pointer() as *mut [u32; INDIRECT_PTRS]) };
         }
         
         // Update size
-        let new_size = core::cmp::maximum(inode.size, (offset + bytes_written as u64) as u32);
+        let new_size = core::cmp::max(inode.size, (offset + bytes_written as u64) as u32);
         if new_size != inode.size {
             inode.size = new_size;
             inode.mtime = (crate::logger::get_ticks() / 100) as u32;
@@ -661,8 +661,8 @@ unsafe { &mut *(l2_buffer.as_mut_pointer() as *mut [u32; INDIRECT_PTRS]) };
     }
     
     /// Lookup name in directory
-    fn lookup(&self, directory_ino: Ino, name: &str) -> VfsResult<Ino> {
-        let entries = self.readdir(directory_ino)?;
+    fn lookup(&self, dir_ino: Ino, name: &str) -> VfsResult<Ino> {
+        let entries = self.readdir(dir_ino)?;
         for entry in entries {
             if entry.name == name {
                 return Ok(entry.ino);
@@ -672,9 +672,9 @@ unsafe { &mut *(l2_buffer.as_mut_pointer() as *mut [u32; INDIRECT_PTRS]) };
     }
     
     /// Read directory entries
-    fn readdir(&self, directory_ino: Ino) -> VfsResult<Vec<DirectoryEntry>> {
-        let inode = self.read_inode(directory_ino)?;
-        if !inode.is_directory() {
+    fn readdir(&self, dir_ino: Ino) -> VfsResult<Vec<DirectoryEntry>> {
+        let inode = self.read_inode(dir_ino)?;
+        if !inode.is_dir() {
             return Err(VfsError::NotDirectory);
         }
         
@@ -684,13 +684,13 @@ unsafe { &mut *(l2_buffer.as_mut_pointer() as *mut [u32; INDIRECT_PTRS]) };
         
         for i in 0..number_entries {
             let offset = (i * entry_size) as u64;
-            let mut buffer = [0u8; 32]; // DiskDirEntry is 32 bytes
-            self.read_file(directory_ino, offset, &mut buffer)?;
+            let mut buf = [0u8; 32]; // DiskDirEntry is 32 bytes
+            self.read_file(dir_ino, offset, &mut buf)?;
             
-            let entry_pointer = buffer.as_pointer() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+            let entry_ptr = buf.as_ptr() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const DiskDirectoryEntry;
             let disk_entry = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*entry_pointer };
+unsafe { &*entry_ptr };
             
             if disk_entry.inode != 0 {
                 let child_inode = self.read_inode(disk_entry.inode as Ino)?;
@@ -717,7 +717,7 @@ unsafe { &*entry_pointer };
         }
         
         // Allocate new inode
-        let new_ino = self.allocator_inode()?;
+        let new_ino = self.alloc_inode()?;
         let mut new_inode = DiskInode::default();
         new_inode.set_type(file_type);
         new_inode.nlink = 1;
@@ -735,7 +735,7 @@ unsafe { &*entry_pointer };
             name: [0; MAXIMUM_NAME_LENGTH],
         };
         let name_bytes = name.as_bytes();
-        let copy_length = core::cmp::minimum(name_bytes.len(), MAXIMUM_NAME_LENGTH);
+        let copy_length = core::cmp::min(name_bytes.len(), MAXIMUM_NAME_LENGTH);
         entry.name[..copy_length].copy_from_slice(&name_bytes[..copy_length]);
         
         let parent_inode = self.read_inode(parent_ino)?;
@@ -767,7 +767,7 @@ const u8,
                 let mut inode = self.read_inode(entry.ino)?;
                 
                 // Check if directory is empty
-                if inode.is_directory() && inode.size > 0 {
+                if inode.is_dir() && inode.size > 0 {
                     let children = self.readdir(entry.ino)?;
                     if !children.is_empty() {
                         return Err(VfsError::NotEmpty);
@@ -845,11 +845,11 @@ const u8,
                         let mut ind_buffer = [0u8; SECTOR_SIZE];
                         self.read_sector(DATA_START_SECTOR + inode.indirect as u64, &mut ind_buffer)?;
                         let ptrs = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &mut *(ind_buffer.as_mut_pointer() as *mut [u32; INDIRECT_PTRS]) };
-                        let index = block_index - DIRECT_BLOCKS;
-                        if ptrs[index] != 0 {
-                            let _ = self.free_block(ptrs[index]);
-                            ptrs[index] = 0;
+unsafe { &mut *(ind_buffer.as_mut_ptr() as *mut [u32; INDIRECT_PTRS]) };
+                        let idx = block_index - DIRECT_BLOCKS;
+                        if ptrs[idx] != 0 {
+                            let _ = self.free_block(ptrs[idx]);
+                            ptrs[idx] = 0;
                             inode.blocks = inode.blocks.saturating_sub(1);
                             self.write_sector(DATA_START_SECTOR + inode.indirect as u64, &ind_buffer)?;
                         }
@@ -870,7 +870,7 @@ unsafe { &mut *(ind_buffer.as_mut_pointer() as *mut [u32; INDIRECT_PTRS]) };
     }
     
     /// Get file statistics
-    fn status(&self, ino: Ino) -> VfsResult<Stat> {
+    fn stat(&self, ino: Ino) -> VfsResult<Stat> {
         let inode = self.read_inode(ino)?;
         Ok(Stat {
             ino,
@@ -895,11 +895,11 @@ unsafe { &mut *(ind_buffer.as_mut_pointer() as *mut [u32; INDIRECT_PTRS]) };
         let _ = super::block_cache::sync();
         // Write superblock
         let sb = self.superblock.read();
-        let mut buffer = [0u8; SECTOR_SIZE];
-        let sb_pointer = buffer.as_mut_pointer() as *mut Superblock;
+        let mut buf = [0u8; SECTOR_SIZE];
+        let sb_pointer = buf.as_mut_ptr() as *mut Superblock;
                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { *sb_pointer = *sb; }
-        self.write_sector(SUPERBLOCK_SECTOR, &buffer)?;
+        self.write_sector(SUPERBLOCK_SECTOR, &buf)?;
         
         *self.dirty.write() = false;
         crate::log_debug!("[TrustFS] sync complete");
@@ -917,11 +917,11 @@ impl TrustFs {
     /// Create new TrustFS on a block device, format if needed
     pub fn new(backend: Arc<dyn BlockDevice>, capacity: u64) -> VfsResult<Self> {
         // Try to read existing superblock
-        let mut buffer = [0u8; SECTOR_SIZE];
-        backend.read_sector(SUPERBLOCK_SECTOR, &mut buffer)
-            .map_error(|_| VfsError::IoError)?;
+        let mut buf = [0u8; SECTOR_SIZE];
+        backend.read_sector(SUPERBLOCK_SECTOR, &mut buf)
+            .map_err(|_| VfsError::IoError)?;
         
-        let sb_pointer = buffer.as_pointer() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+        let sb_pointer = buf.as_ptr() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const Superblock;
         let existing_sb = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { *sb_pointer };
@@ -936,11 +936,11 @@ unsafe { *sb_pointer };
         
         // Replay WAL if previous shutdown was unclean
         let backend_ref = &*backend;
-        let replay_read = |sector: u64, buffer: &mut [u8; SECTOR_SIZE]| -> Result<(), ()> {
-            backend_ref.read_sector(sector, buffer).map_error(|_| ())
+        let replay_read = |sector: u64, buf: &mut [u8; SECTOR_SIZE]| -> Result<(), ()> {
+            backend_ref.read_sector(sector, buf).map_err(|_| ())
         };
         let replay_write = |sector: u64, data: &[u8; SECTOR_SIZE]| -> Result<(), ()> {
-            backend_ref.write_sector(sector, data).map_error(|_| ())
+            backend_ref.write_sector(sector, data).map_err(|_| ())
         };
                 // Pattern matching — Rust's exhaustive branching construct.
 match super::wal::replay_if_needed(&replay_read, &replay_write) {
@@ -964,24 +964,24 @@ match super::wal::replay_if_needed(&replay_read, &replay_write) {
         let sb = Superblock::new(capacity);
         
         // Write superblock
-        let mut buffer = [0u8; SECTOR_SIZE];
-        let sb_pointer = buffer.as_mut_pointer() as *mut Superblock;
+        let mut buf = [0u8; SECTOR_SIZE];
+        let sb_pointer = buf.as_mut_ptr() as *mut Superblock;
                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { *sb_pointer = sb; }
-        backend.write_sector(SUPERBLOCK_SECTOR, &buffer)
-            .map_error(|_| VfsError::IoError)?;
+        backend.write_sector(SUPERBLOCK_SECTOR, &buf)
+            .map_err(|_| VfsError::IoError)?;
         
         // Clear inode table
-        let zero_buffer = [0u8; SECTOR_SIZE];
+        let zero_buf = [0u8; SECTOR_SIZE];
         for i in 0..INODE_SECTORS {
-            backend.write_sector(INODE_START_SECTOR + i, &zero_buffer)
-                .map_error(|_| VfsError::IoError)?;
+            backend.write_sector(INODE_START_SECTOR + i, &zero_buf)
+                .map_err(|_| VfsError::IoError)?;
         }
         
         // Clear bitmap
         for i in 0..BITMAP_SECTORS {
-            backend.write_sector(BITMAP_START_SECTOR + i, &zero_buffer)
-                .map_error(|_| VfsError::IoError)?;
+            backend.write_sector(BITMAP_START_SECTOR + i, &zero_buf)
+                .map_err(|_| VfsError::IoError)?;
         }
         
         // Create root directory (inode 1)
@@ -992,16 +992,16 @@ unsafe { *sb_pointer = sb; }
         
         let inode_sector = INODE_START_SECTOR;
         let mut inode_buffer = [0u8; SECTOR_SIZE];
-        let inode_pointer = inode_buffer[core::mem::size_of::<DiskInode>()..].as_mut_pointer() as *mut DiskInode;
+        let inode_pointer = inode_buffer[core::mem::size_of::<DiskInode>()..].as_mut_ptr() as *mut DiskInode;
                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { *inode_pointer = root_inode; }
         // Actually, inode 1 is at offset 1*32 = 32
         let root_offset = core::mem::size_of::<DiskInode>(); // Skip inode 0
-        let inode_pointer = inode_buffer[root_offset..].as_mut_pointer() as *mut DiskInode;
+        let inode_pointer = inode_buffer[root_offset..].as_mut_ptr() as *mut DiskInode;
                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { *inode_pointer = root_inode; }
         backend.write_sector(inode_sector, &inode_buffer)
-            .map_error(|_| VfsError::IoError)?;
+            .map_err(|_| VfsError::IoError)?;
         
         crate::log!("[TrustFS] Formatted: {} blocks, {} inodes", sb.total_blocks, sb.total_inodes);
         
@@ -1021,7 +1021,7 @@ impl FileSystem for TrustFs {
     
     fn get_file(&self, ino: Ino) -> VfsResult<Arc<dyn FileOperations>> {
         let inode = self.inner.read_inode(ino)?;
-        if inode.is_directory() {
+        if inode.is_dir() {
             return Err(VfsError::IsDirectory);
         }
         Ok(Arc::new(TrustFilesystemFile {
@@ -1030,9 +1030,9 @@ impl FileSystem for TrustFs {
         }))
     }
     
-    fn get_directory(&self, ino: Ino) -> VfsResult<Arc<dyn DirectoryOperations>> {
+    fn get_dir(&self, ino: Ino) -> VfsResult<Arc<dyn DirectoryOperations>> {
         let inode = self.inner.read_inode(ino)?;
-        if !inode.is_directory() {
+        if !inode.is_dir() {
             return Err(VfsError::NotDirectory);
         }
         Ok(Arc::new(TrustFilesystemDirectory {
@@ -1041,8 +1041,8 @@ impl FileSystem for TrustFs {
         }))
     }
     
-    fn status(&self, ino: Ino) -> VfsResult<Stat> {
-        self.inner.status(ino)
+    fn stat(&self, ino: Ino) -> VfsResult<Stat> {
+        self.inner.stat(ino)
     }
     
     fn sync(&self) -> VfsResult<()> {

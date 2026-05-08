@@ -42,13 +42,13 @@ pub fn new(instructions: Vec<Instruction>) -> Self {
         for inst in &self.instructions {
             // Track register values
             if inst.mnemonic == "mov" && inst.operands.len() >= 2 {
-                if let (Operand::Register(reg), Operand::Immediate(value)) = (&inst.operands[0], &inst.operands[1]) {
+                if let (Operand::Register(reg), Operand::Immediate(val)) = (&inst.operands[0], &inst.operands[1]) {
                                         // Pattern matching — Rust's exhaustive branching construct.
 match reg {
-                        Register::RAX | Register::EAX => self.rax_value = Some(*value as u64),
-                        Register::RDI => self.rdi_value = Some(*value as u64),
-                        Register::RSI => self.rsi_value = Some(*value as u64),
-                        Register::RDX => self.rdx_value = Some(*value as u64),
+                        Register::RAX | Register::EAX => self.rax_value = Some(*val as u64),
+                        Register::RDI => self.rdi_value = Some(*val as u64),
+                        Register::RSI => self.rsi_value = Some(*val as u64),
+                        Register::RDX => self.rdx_value = Some(*val as u64),
                         _ => {}
                     }
                 }
@@ -539,7 +539,7 @@ match sc.name {
         // Try to find the string that will be written
         for sc in &self.syscalls {
             if sc.name == "write" && sc.args.len() >= 2 {
-                let address = sc.args[1];
+                let addr = sc.args[1];
                 // This is a virtual address, we'd need to map it
                 // For now, just return empty
             }
@@ -585,23 +585,23 @@ match op {
                                 output.push_str(&format!("0x{:x}", v));
                             }
                         }
-                        Operand::Memory { base, index, scale, display } => {
+                        Operand::Memory { base, index, scale, disp } => {
                             output.push('[');
                             if let Some(b) = base {
                                 output.push_str(b.name());
                             }
-                            if let Some(index) = index {
+                            if let Some(idx) = index {
                                 output.push_str("+");
-                                output.push_str(index.name());
+                                output.push_str(idx.name());
                                 if *scale > 1 {
                                     output.push_str(&format!("*{}", scale));
                                 }
                             }
-                            if *display != 0 {
-                                if *display > 0 {
-                                    output.push_str(&format!("+0x{:x}", display));
+                            if *disp != 0 {
+                                if *disp > 0 {
+                                    output.push_str(&format!("+0x{:x}", disp));
                                 } else {
-                                    output.push_str(&format!("-0x{:x}", -display));
+                                    output.push_str(&format!("-0x{:x}", -disp));
                                 }
                             }
                             output.push(']');

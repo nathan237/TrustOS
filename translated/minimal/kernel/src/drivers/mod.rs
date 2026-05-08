@@ -32,111 +32,111 @@ use spin::Mutex;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DriverCategory {
-    As,
-    Og,
+    Network,
+    Storage,
     Display,
-    Jp,
-    Rj,
-    Any,
-    Qg,
+    Input,
+    Audio,
+    Qs,
+    Other,
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Co {
-    pub j: &'static str,
-    pub dk: &'static str,
-    pub gzh: &'static str,
-    pub gb: DriverCategory,
-    pub fye: &'static [(u16, u16)],  
+pub struct Bb {
+    pub name: &'static str,
+    pub version: &'static str,
+    pub author: &'static str,
+    pub category: DriverCategory,
+    pub vendor_ids: &'static [(u16, u16)],  
 }
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DriverStatus {
-    Aff,
-    Py,
-    Ai,
-    Q,
-    Ky,
+    Unloaded,
+    Loading,
+    Running,
+    Error,
+    Suspended,
 }
 
 
-pub trait Gi: Send + Sync {
+pub trait Cw: Send + Sync {
     
-    fn co(&self) -> &Co;
-    
-    
-    fn probe(&mut self, cgm: &crate::pci::S) -> Result<(), &'static str>;
+    fn info(&self) -> &Bb;
     
     
-    fn ay(&mut self) -> Result<(), &'static str>;
+    fn probe(&mut self, pci_device: &crate::pci::L) -> Result<(), &'static str>;
     
     
-    fn qg(&mut self) -> Result<(), &'static str>;
+    fn start(&mut self) -> Result<(), &'static str>;
+    
+    
+    fn stop(&mut self) -> Result<(), &'static str>;
     
     
     fn status(&self) -> DriverStatus;
     
     
-    fn eck(&mut self) {}
+    fn btc(&mut self) {}
 }
 
 
-struct Bqv {
-    co: Co,
-    fig: fn() -> Box<dyn Gi>,
+struct Adk {
+    info: Bb,
+    factory: fn() -> Box<dyn Cw>,
 }
 
 
-static Ev: Mutex<Vec<Bqv>> = Mutex::new(Vec::new());
+static Ca: Mutex<Vec<Adk>> = Mutex::new(Vec::new());
 
 
-static Bkl: Mutex<Vec<Box<dyn Gi>>> = Mutex::new(Vec::new());
+static Aao: Mutex<Vec<Box<dyn Cw>>> = Mutex::new(Vec::new());
 
 
-pub fn nw(co: Co, fig: fn() -> Box<dyn Gi>) {
-    let mut chc = Ev.lock();
-    crate::log_debug!("[DRIVERS] Registered: {} v{}", co.j, co.dk);
-    chc.push(Bqv { co, fig });
+pub fn register(info: Bb, factory: fn() -> Box<dyn Cw>) {
+    let mut ary = Ca.lock();
+    crate::log_debug!("[DRIVERS] Registered: {} v{}", info.name, info.version);
+    ary.push(Adk { info, factory });
 }
 
 
-pub fn lvo(sq: &crate::pci::S) -> Option<usize> {
-    let chc = Ev.lock();
+pub fn goi(go: &crate::pci::L) -> Option<usize> {
+    let ary = Ca.lock();
     
-    for bt in chc.iter() {
+    for entry in ary.iter() {
         
-        if bt.co.gb == DriverCategory::As {
+        if entry.info.category == DriverCategory::Network {
             continue;
         }
-        for &(acs, de) in bt.co.fye {
+        for &(vendor, device) in entry.info.vendor_ids {
             
-            if sq.ml == acs && 
-               (de == 0xFFFF || sq.mx == de) {
+            if go.vendor_id == vendor && 
+               (device == 0xFFFF || go.device_id == device) {
                 
                 
-                let mut rj = (bt.fig)();
+                let mut driver = (entry.factory)();
                 
                 
-                match rj.probe(sq) {
+                match driver.probe(go) {
                     Ok(()) => {
                         crate::log!("[DRIVERS] Loaded {} for {:04X}:{:04X}",
-                            bt.co.j, sq.ml, sq.mx);
+                            entry.info.name, go.vendor_id, go.device_id);
                         
                         
-                        if let Err(aa) = rj.ay() {
-                            crate::log_warn!("[DRIVERS] Failed to start {}: {}", bt.co.j, aa);
+                        if let Err(e) = driver.start() {
+                            crate::log_warn!("[DRIVERS] Failed to start {}: {}", entry.info.name, e);
                             return None;
                         }
                         
-                        let mut diz = Bkl.lock();
-                        let w = diz.len();
-                        diz.push(rj);
-                        return Some(w);
+                        let mut bhq = Aao.lock();
+                        let idx = bhq.len();
+                        bhq.push(driver);
+                        return Some(idx);
                     }
-                    Err(aa) => {
-                        crate::log_debug!("[DRIVERS] {} probe failed: {}", bt.co.j, aa);
+                    Err(e) => {
+                        crate::log_debug!("[DRIVERS] {} probe failed: {}", entry.info.name, e);
                     }
                 }
             }
@@ -147,13 +147,13 @@ pub fn lvo(sq: &crate::pci::S) -> Option<usize> {
 }
 
 
-pub fn ljl() -> usize {
-    Bkl.lock().len()
+pub fn gga() -> usize {
+    Aao.lock().len()
 }
 
 
-pub fn zba() -> Vec<Co> {
-    Ev.lock().iter().map(|aa| aa.co.clone()).collect()
+pub fn qnp() -> Vec<Bb> {
+    Ca.lock().iter().map(|e| e.info.clone()).collect()
 }
 
 
@@ -161,52 +161,52 @@ pub fn init() {
     crate::log!("[DRIVERS] Initializing driver framework...");
     
     
-    net::vuc();
+    net::oei();
     
     
     input::init();
     
-    let az = Ev.lock().len();
-    crate::log!("[DRIVERS] {} drivers registered", az);
+    let count = Ca.lock().len();
+    crate::log!("[DRIVERS] {} drivers registered", count);
 }
 
 
-pub fn lvr() {
+pub fn gom() {
     crate::serial_println!("[DRIVERS] Probing storage controllers...");
     
-    let ik = crate::pci::fjm();
+    let devices = crate::pci::aqs();
     
-    for ba in &ik {
+    for s in &devices {
         
-        if ba.ajz == 0x01 && ba.adl == 0x06 && ba.frg == 0x01 {
+        if s.class_code == 0x01 && s.subclass == 0x06 && s.prog_if == 0x01 {
             crate::serial_println!("[AHCI] Controller detected at {:02X}:{:02X}.{} (BAR5={:#x})",
-                ba.aq, ba.de, ba.gw, ba.bar[5]);
-            let gzp = ba.bar[5] as u64;
-            if ahci::init(gzp) {
+                s.bus, s.device, s.function, s.bar[5]);
+            let dih = s.bar[5] as u64;
+            if ahci::init(dih) {
                 crate::serial_println!("[DRIVERS] AHCI controller initialized");
                 
-                ahci::tri();
+                ahci::mnl();
             }
         }
         
         
-        if ba.ajz == 0x01 && ba.adl == 0x01 {
+        if s.class_code == 0x01 && s.subclass == 0x01 {
             
-            if ata::oem() {
+            if ata::igt() {
                 crate::serial_println!("[DRIVERS] IDE controller initialized");
             }
         }
         
         
-        if ba.ajz == 0x01 && ba.adl == 0x08 {
+        if s.class_code == 0x01 && s.subclass == 0x08 {
             crate::serial_println!("[DRIVERS] NVMe controller at {:02X}:{:02X}.{} ({:04X}:{:04X})",
-                ba.aq, ba.de, ba.gw, ba.ml, ba.mx);
+                s.bus, s.device, s.function, s.vendor_id, s.device_id);
             
         }
         
         
-        if ba.ajz == 0x0C && ba.adl == 0x03 {
-            let xpi = match ba.frg {
+        if s.class_code == 0x0C && s.subclass == 0x03 {
+            let pqi = match s.prog_if {
                 0x00 => "UHCI (USB 1.0)",
                 0x10 => "OHCI (USB 1.1)",
                 0x20 => "EHCI (USB 2.0)",
@@ -214,58 +214,58 @@ pub fn lvr() {
                 _ => "Unknown USB",
             };
             crate::serial_println!("[USB] Controller detected: {} at {:02X}:{:02X}.{} (BAR0={:#x})", 
-                xpi, ba.aq, ba.de, ba.gw, ba.bar[0]);
+                pqi, s.bus, s.device, s.function, s.bar[0]);
             
             
-            if ba.frg == 0x30 {
+            if s.prog_if == 0x30 {
                 
-                let aew = ba.cje(0).unwrap_or(ba.bar[0] as u64);
-                crate::pci::fhp(ba);
-                crate::pci::fhq(ba);
-                if xhci::init(aew) {
+                let bar0 = s.bar_address(0).unwrap_or(s.bar[0] as u64);
+                crate::pci::bzi(s);
+                crate::pci::bzj(s);
+                if xhci::init(bar0) {
                     crate::serial_println!("[DRIVERS] xHCI controller initialized with {} devices", 
-                        xhci::cjx());
+                        xhci::aqg());
                 }
             }
         }
     }
     
     
-    if !ahci::ky() && !ata::ky() {
+    if !ahci::is_initialized() && !ata::is_initialized() {
         crate::serial_println!("[DRIVERS] Trying legacy IDE ports...");
-        let _ = ata::oem();
+        let _ = ata::igt();
     }
     
     
-    if crate::nvme::ky() {
-        if let Some((model, msv, aw, cak)) = crate::nvme::ani() {
-            let csm = (aw * cak as u64) / (1024 * 1024);
-            crate::serial_println!("[DRIVERS] Storage: NVMe {} ({} MB)", model, csm);
+    if crate::nvme::is_initialized() {
+        if let Some((model, _serial, size, aol)) = crate::nvme::rk() {
+            let aop = (size * aol as u64) / (1024 * 1024);
+            crate::serial_println!("[DRIVERS] Storage: NVMe {} ({} MB)", model, aop);
         }
-    } else if ahci::ky() {
-        crate::serial_println!("[DRIVERS] Storage: AHCI with {} ports", ahci::nyj());
-    } else if ata::ky() {
-        crate::serial_println!("[DRIVERS] Storage: IDE with {} drives", ata::jdq().len());
+    } else if ahci::is_initialized() {
+        crate::serial_println!("[DRIVERS] Storage: AHCI with {} ports", ahci::ibt());
+    } else if ata::is_initialized() {
+        crate::serial_println!("[DRIVERS] Storage: IDE with {} drives", ata::eta().len());
     } else {
         crate::serial_println!("[DRIVERS] Storage: No persistent storage (using RAM disk)");
     }
 }
 
 
-pub fn oba() -> bool {
-    ahci::ky() || ata::ky() || crate::nvme::ky()
+pub fn ied() -> bool {
+    ahci::is_initialized() || ata::is_initialized() || crate::nvme::is_initialized()
 }
 
 
-pub fn yff() {
-    let ik = crate::pci::arx();
-    let mut diz = 0;
+pub fn pyh() {
+    let devices = crate::pci::scan();
+    let mut bhq = 0;
     
-    for ba in &ik {
-        if lvo(ba).is_some() {
-            diz += 1;
+    for s in &devices {
+        if goi(s).is_some() {
+            bhq += 1;
         }
     }
     
-    crate::log!("[DRIVERS] Auto-probe complete: {} drivers loaded", diz);
+    crate::log!("[DRIVERS] Auto-probe complete: {} drivers loaded", bhq);
 }

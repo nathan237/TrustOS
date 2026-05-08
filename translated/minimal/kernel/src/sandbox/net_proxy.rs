@@ -10,44 +10,44 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::format;
 
-use super::Ax;
-use super::policy::{SandboxPolicy, ggn};
+use super::Ag;
+use super::policy::{SandboxPolicy, cxk};
 
 
 
 
 #[derive(Debug, Clone)]
-pub struct Fz {
-    pub wt: u16,
-    pub ahg: String,
-    pub gj: Vec<u8>,
-    pub zk: Vec<(String, String)>,
-    pub mqh: bool,
+pub struct Cs {
+    pub status_code: u16,
+    pub content_type: String,
+    pub body: Vec<u8>,
+    pub headers: Vec<(String, String)>,
+    pub was_cached: bool,
 }
 
-impl Fz {
+impl Cs {
     
-    pub fn hax(&self) -> String {
-        String::azw(&self.gj).bkc()
+    pub fn body_string(&self) -> String {
+        String::from_utf8_lossy(&self.body).into_owned()
     }
 
     
-    pub fn oga(&self) -> bool {
-        self.ahg.contains("text/html") || self.ahg.contains("xhtml")
+    pub fn is_html(&self) -> bool {
+        self.content_type.contains("text/html") || self.content_type.contains("xhtml")
     }
 }
 
 
 #[derive(Debug)]
 pub enum ProxyError {
-    Beu(String),
-    Bqk,
-    Ckr,
-    Qd(String),
-    Wj,
+    DomainBlocked(String),
+    RateLimited,
+    ResponseTooLarge,
+    NetworkError(String),
+    DnsError,
     TlsError,
-    Oi,
-    Bjv,
+    Timeout,
+    InvalidUrl,
 }
 
 
@@ -55,31 +55,31 @@ pub enum ProxyError {
 
 struct RateLimiter {
     
-    bh: Vec<u64>,
+    window: Vec<u64>,
     
-    lld: u32,
+    max_per_minute: u32,
 }
 
 impl RateLimiter {
-    fn new(lld: u32) -> Self {
+    fn new(max_per_minute: u32) -> Self {
         Self {
-            bh: Vec::new(),
-            lld,
+            window: Vec::new(),
+            max_per_minute,
         }
     }
 
     
-    fn qyl(&mut self) -> bool {
-        let iu = crate::time::lc();
-        let uyj = iu.ao(60_000);
+    fn check_and_record(&mut self) -> bool {
+        let cy = crate::time::uptime_ms();
+        let nne = cy.saturating_sub(60_000);
 
         
-        self.bh.ajm(|&wi| wi > uyj);
+        self.window.retain(|&jy| jy > nne);
 
-        if self.bh.len() as u32 >= self.lld {
+        if self.window.len() as u32 >= self.max_per_minute {
             false
         } else {
-            self.bh.push(iu);
+            self.window.push(cy);
             true
         }
     }
@@ -90,153 +90,153 @@ impl RateLimiter {
 
 
 pub struct NetProxy {
-    afh: Ax,
-    ozj: RateLimiter,
+    sandbox_id: Ag,
+    rate_limiter: RateLimiter,
     
-    eur: usize,
-    fcr: bool,
-    fny: u8,
-    emx: bool,
+    max_response_bytes: usize,
+    allow_redirects: bool,
+    max_redirect_depth: u8,
+    block_private_ips: bool,
     
-    dxa: usize,
+    total_requests: usize,
     
-    xv: usize,
+    total_bytes: usize,
 }
 
 impl NetProxy {
-    pub fn new(afh: Ax, policy: &SandboxPolicy) -> Self {
+    pub fn new(sandbox_id: Ag, policy: &SandboxPolicy) -> Self {
         Self {
-            afh,
-            ozj: RateLimiter::new(policy.gqf),
-            eur: policy.eur,
-            fcr: policy.fcr,
-            fny: policy.fny,
-            emx: policy.emx,
-            dxa: 0,
-            xv: 0,
+            sandbox_id,
+            rate_limiter: RateLimiter::new(policy.rate_limit_per_min),
+            max_response_bytes: policy.max_response_bytes,
+            allow_redirects: policy.allow_redirects,
+            max_redirect_depth: policy.max_redirect_depth,
+            block_private_ips: policy.block_private_ips,
+            total_requests: 0,
+            total_bytes: 0,
         }
     }
 
     
     
-    pub fn hjd(&mut self, url: &str, ate: usize) -> Result<Fz, ProxyError> {
+    pub fn fetch(&mut self, url: &str, max_size: usize) -> Result<Cs, ProxyError> {
         
         if url.is_empty() {
-            return Err(ProxyError::Bjv);
+            return Err(ProxyError::InvalidUrl);
         }
 
         
-        let dto = self.gnx(url);
+        let bnu = self.normalize_url(url);
 
         
-        if !self.ozj.qyl() {
-            crate::serial_println!("[sandbox:{}] RATE LIMITED: {}", self.afh.0, dto);
-            return Err(ProxyError::Bqk);
+        if !self.rate_limiter.check_and_record() {
+            crate::serial_println!("[sandbox:{}] RATE LIMITED: {}", self.sandbox_id.0, bnu);
+            return Err(ProxyError::RateLimited);
         }
 
         
-        if self.emx {
-            if let Some(vh) = ggn(&dto) {
-                if self.tyo(vh) {
-                    crate::serial_println!("[sandbox:{}] SSRF BLOCKED: {}", self.afh.0, vh);
-                    return Err(ProxyError::Beu(format!("private IP: {}", vh)));
+        if self.block_private_ips {
+            if let Some(domain) = cxk(&bnu) {
+                if self.is_private_address(domain) {
+                    crate::serial_println!("[sandbox:{}] SSRF BLOCKED: {}", self.sandbox_id.0, domain);
+                    return Err(ProxyError::DomainBlocked(format!("private IP: {}", domain)));
                 }
             }
         }
 
         
-        let ksu = core::cmp::v(ate, self.eur);
-        let fmc = dto.cj("https://");
+        let fue = core::cmp::min(max_size, self.max_response_bytes);
+        let cln = bnu.starts_with("https://");
 
-        crate::serial_println!("[sandbox:{}] FETCH: {} (max {} bytes)", self.afh.0, dto, ksu);
+        crate::serial_println!("[sandbox:{}] FETCH: {} (max {} bytes)", self.sandbox_id.0, bnu, fue);
 
-        let mk = if fmc {
-            self.srt(&dto, ksu)?
+        let fa = if cln {
+            self.fetch_https(&bnu, fue)?
         } else {
-            self.srs(&dto, ksu)?
+            self.fetch_http(&bnu, fue)?
         };
 
-        self.dxa += 1;
-        self.xv += mk.gj.len();
+        self.total_requests += 1;
+        self.total_bytes += fa.body.len();
 
-        Ok(mk)
+        Ok(fa)
     }
 
     
-    fn srs(&self, url: &str, ate: usize) -> Result<Fz, ProxyError> {
+    fn fetch_http(&self, url: &str, max_size: usize) -> Result<Cs, ProxyError> {
         
         
         match crate::netstack::http::get(url) {
-            Ok(lj) => {
-                let ahg = lj.zk.iter()
-                    .du(|(eh, _)| eh.avd() == "content-type")
-                    .map(|(_, p)| p.clone())
+            Ok(eo) => {
+                let content_type = eo.headers.iter()
+                    .find(|(k, _)| k.to_ascii_lowercase() == "content-type")
+                    .map(|(_, v)| v.clone())
                     .unwrap_or_else(|| String::from("text/html"));
 
-                let gj = if lj.gj.len() > ate {
+                let body = if eo.body.len() > max_size {
                     
                     crate::serial_println!("[sandbox:{}] Response truncated: {} -> {} bytes",
-                        self.afh.0, lj.gj.len(), ate);
-                    lj.gj[..ate].ip()
+                        self.sandbox_id.0, eo.body.len(), max_size);
+                    eo.body[..max_size].to_vec()
                 } else {
-                    lj.gj
+                    eo.body
                 };
 
-                Ok(Fz {
-                    wt: lj.wt,
-                    ahg,
-                    gj,
-                    zk: lj.zk,
-                    mqh: false,
+                Ok(Cs {
+                    status_code: eo.status_code,
+                    content_type,
+                    body,
+                    headers: eo.headers,
+                    was_cached: false,
                 })
             }
-            Err(aa) => {
-                crate::serial_println!("[sandbox:{}] HTTP error: {}", self.afh.0, aa);
-                Err(ProxyError::Qd(String::from(aa)))
+            Err(e) => {
+                crate::serial_println!("[sandbox:{}] HTTP error: {}", self.sandbox_id.0, e);
+                Err(ProxyError::NetworkError(String::from(e)))
             }
         }
     }
 
     
-    fn srt(&self, url: &str, ate: usize) -> Result<Fz, ProxyError> {
+    fn fetch_https(&self, url: &str, max_size: usize) -> Result<Cs, ProxyError> {
         match crate::netstack::https::get(url) {
-            Ok(lj) => {
-                let ahg = lj.zk.iter()
-                    .du(|(eh, _)| eh.avd() == "content-type")
-                    .map(|(_, p)| p.clone())
+            Ok(eo) => {
+                let content_type = eo.headers.iter()
+                    .find(|(k, _)| k.to_ascii_lowercase() == "content-type")
+                    .map(|(_, v)| v.clone())
                     .unwrap_or_else(|| String::from("text/html"));
 
-                let gj = if lj.gj.len() > ate {
-                    lj.gj[..ate].ip()
+                let body = if eo.body.len() > max_size {
+                    eo.body[..max_size].to_vec()
                 } else {
-                    lj.gj
+                    eo.body
                 };
 
-                Ok(Fz {
-                    wt: lj.wt,
-                    ahg,
-                    gj,
-                    zk: lj.zk,
-                    mqh: false,
+                Ok(Cs {
+                    status_code: eo.status_code,
+                    content_type,
+                    body,
+                    headers: eo.headers,
+                    was_cached: false,
                 })
             }
-            Err(aa) => {
-                crate::serial_println!("[sandbox:{}] HTTPS error: {:?}", self.afh.0, aa);
-                match aa {
-                    crate::netstack::https::HttpsError::Wj => Err(ProxyError::Wj),
+            Err(e) => {
+                crate::serial_println!("[sandbox:{}] HTTPS error: {:?}", self.sandbox_id.0, e);
+                match e {
+                    crate::netstack::https::HttpsError::DnsError => Err(ProxyError::DnsError),
                     crate::netstack::https::HttpsError::TlsError(_) => Err(ProxyError::TlsError),
-                    crate::netstack::https::HttpsError::Oi => Err(ProxyError::Oi),
-                    _ => Err(ProxyError::Qd(format!("{:?}", aa))),
+                    crate::netstack::https::HttpsError::Timeout => Err(ProxyError::Timeout),
+                    _ => Err(ProxyError::NetworkError(format!("{:?}", e))),
                 }
             }
         }
     }
 
     
-    fn gnx(&self, url: &str) -> String {
-        if url.cj("http://") || url.cj("https://") {
+    fn normalize_url(&self, url: &str) -> String {
+        if url.starts_with("http://") || url.starts_with("https://") {
             String::from(url)
-        } else if url.cj("//") {
+        } else if url.starts_with("//") {
             format!("http:{}", url)
         } else {
             format!("http://{}", url)
@@ -244,24 +244,24 @@ impl NetProxy {
     }
 
     
-    fn tyo(&self, kh: &str) -> bool {
+    fn is_private_address(&self, host: &str) -> bool {
         
-        let vln = [
+        let nxj = [
             "localhost", "127.", "10.", "192.168.", "172.16.", "172.17.",
             "172.18.", "172.19.", "172.20.", "172.21.", "172.22.", "172.23.",
             "172.24.", "172.25.", "172.26.", "172.27.", "172.28.", "172.29.",
             "172.30.", "172.31.", "169.254.", "0.0.0.0", "[::]", "[::1]",
             "0.", "fc00:", "fd00:", "fe80:",
         ];
-        let pb = kh.avd();
-        for pattern in &vln {
-            if pb.cj(pattern) || pb == *pattern {
+        let gj = host.to_ascii_lowercase();
+        for pattern in &nxj {
+            if gj.starts_with(pattern) || gj == *pattern {
                 return true;
             }
         }
         
         
-        if kh.parse::<u32>().is_ok() {
+        if host.parse::<u32>().is_ok() {
             
             return true;
         }
@@ -269,7 +269,7 @@ impl NetProxy {
     }
 
     
-    pub fn cm(&self) -> (usize, usize) {
-        (self.dxa, self.xv)
+    pub fn stats(&self) -> (usize, usize) {
+        (self.total_requests, self.total_bytes)
     }
 }

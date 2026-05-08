@@ -83,7 +83,7 @@ pub fn init() -> Result<(), &'static str> {
     }
 
     // Ensure audio subsystem is ready
-    crate::audio::init().map_error(|_| "Failed to init audio subsystem")?;
+    crate::audio::init().map_err(|_| "Failed to init audio subsystem")?;
 
     // Create default project
     let project = Project::new("Untitled", 120);
@@ -102,7 +102,7 @@ pub fn init() -> Result<(), &'static str> {
 }
 
 /// Ensure DAW is initialized
-pub fn ensure_initialize() -> Result<(), &'static str> {
+pub fn ensure_init() -> Result<(), &'static str> {
     if !INITIALIZED.load(Ordering::Relaxed) {
         init()?;
     }
@@ -115,7 +115,7 @@ pub fn ensure_initialize() -> Result<(), &'static str> {
 
 /// Start playback from current position
 pub fn play() -> Result<(), &'static str> {
-    ensure_initialize()?;
+    ensure_init()?;
     if PLAYING.load(Ordering::Relaxed) {
         return Ok(()); // Already playing
     }
@@ -137,10 +137,10 @@ pub fn play() -> Result<(), &'static str> {
     PLAYING.store(true, Ordering::Relaxed);
 
     // Calculate duration
-    let duration_mouse = (samples.len() as u32 / 2) * 1000 / SAMPLE_RATE;
+    let duration_ms = (samples.len() as u32 / 2) * 1000 / SAMPLE_RATE;
 
     // Play through HDA
-    let result = crate::drivers::hda::write_samples_and_play(&samples, duration_mouse);
+    let result = crate::drivers::hda::write_samples_and_play(&samples, duration_ms);
 
     PLAYING.store(false, Ordering::Relaxed);
     result
@@ -173,7 +173,7 @@ pub fn set_bpm(bpm: u32) {
 
 /// Add a new track to the project
 pub fn add_track(name: &str) -> Result<usize, &'static str> {
-    ensure_initialize()?;
+    ensure_init()?;
     let mut project = PROJECT.lock();
     let project = project.as_mut().ok_or("No project")?;
     project.add_track(name)
@@ -181,7 +181,7 @@ pub fn add_track(name: &str) -> Result<usize, &'static str> {
 
 /// Remove a track by index
 pub fn remove_track(index: usize) -> Result<(), &'static str> {
-    ensure_initialize()?;
+    ensure_init()?;
     let mut project = PROJECT.lock();
     let project = project.as_mut().ok_or("No project")?;
     project.remove_track(index)
@@ -189,7 +189,7 @@ pub fn remove_track(index: usize) -> Result<(), &'static str> {
 
 /// Add a note to a track
 pub fn add_note(track_index: usize, note: u8, velocity: u8, start_tick: u32, duration_ticks: u32) -> Result<(), &'static str> {
-    ensure_initialize()?;
+    ensure_init()?;
     let mut project = PROJECT.lock();
     let project = project.as_mut().ok_or("No project")?;
     let track = project.tracks.get_mut(track_index).ok_or("Invalid track index")?;
@@ -199,7 +199,7 @@ pub fn add_note(track_index: usize, note: u8, velocity: u8, start_tick: u32, dur
 
 /// Set a track's waveform
 pub fn set_track_waveform(track_index: usize, waveform: &str) -> Result<(), &'static str> {
-    ensure_initialize()?;
+    ensure_init()?;
     let wf = crate::audio::synth::Waveform::from_str(waveform)
         .ok_or("Unknown waveform (sine/square/saw/triangle/noise)")?;
     let mut project = PROJECT.lock();
@@ -211,7 +211,7 @@ pub fn set_track_waveform(track_index: usize, waveform: &str) -> Result<(), &'st
 
 /// Set track volume in the mixer
 pub fn set_track_volume(track_index: usize, volume: u8) -> Result<(), &'static str> {
-    ensure_initialize()?;
+    ensure_init()?;
     let mut mixer = MIXER.lock();
     let mixer = mixer.as_mut().ok_or("Mixer not initialized")?;
     mixer.set_volume(track_index, volume)
@@ -219,7 +219,7 @@ pub fn set_track_volume(track_index: usize, volume: u8) -> Result<(), &'static s
 
 /// Set track pan in the mixer (-100 = full left, 0 = center, +100 = full right)
 pub fn set_track_pan(track_index: usize, pan: i8) -> Result<(), &'static str> {
-    ensure_initialize()?;
+    ensure_init()?;
     let mut mixer = MIXER.lock();
     let mixer = mixer.as_mut().ok_or("Mixer not initialized")?;
     mixer.set_pan(track_index, pan)
@@ -227,7 +227,7 @@ pub fn set_track_pan(track_index: usize, pan: i8) -> Result<(), &'static str> {
 
 /// Mute/unmute a track
 pub fn toggle_mute(track_index: usize) -> Result<bool, &'static str> {
-    ensure_initialize()?;
+    ensure_init()?;
     let mut mixer = MIXER.lock();
     let mixer = mixer.as_mut().ok_or("Mixer not initialized")?;
     mixer.toggle_mute(track_index)
@@ -235,7 +235,7 @@ pub fn toggle_mute(track_index: usize) -> Result<bool, &'static str> {
 
 /// Solo a track
 pub fn toggle_solo(track_index: usize) -> Result<bool, &'static str> {
-    ensure_initialize()?;
+    ensure_init()?;
     let mut mixer = MIXER.lock();
     let mixer = mixer.as_mut().ok_or("Mixer not initialized")?;
     mixer.toggle_solo(track_index)
@@ -250,7 +250,7 @@ pub fn status() -> String {
     let project = PROJECT.lock();
     let mixer = MIXER.lock();
     let bpm = BPM.load(Ordering::Relaxed);
-    let position = PLAYBACK_POSITION.load(Ordering::Relaxed);
+    let pos = PLAYBACK_POSITION.load(Ordering::Relaxed);
     let playing = PLAYING.load(Ordering::Relaxed);
     let recording = RECORDING.load(Ordering::Relaxed);
 
@@ -263,9 +263,9 @@ pub fn status() -> String {
         s.push_str(&format!("║ Project: {:<36}║\n", proj.name_str()));
         s.push_str(&format!("║ BPM: {:<3}  Tracks: {}/{:<22}║\n",
             bpm, proj.tracks.len(), MAXIMUM_TRACKS));
-        let bar = position / (TICKS_PER_QUARTER * 4);
-        let beat = (position % (TICKS_PER_QUARTER * 4)) / TICKS_PER_QUARTER;
-        let tick = position % TICKS_PER_QUARTER;
+        let bar = pos / (TICKS_PER_QUARTER * 4);
+        let beat = (pos % (TICKS_PER_QUARTER * 4)) / TICKS_PER_QUARTER;
+        let tick = pos % TICKS_PER_QUARTER;
         let state = if recording { "REC" } else if playing { "PLAY" } else { "STOP" };
         s.push_str(&format!("║ Position: {}:{:02}:{:03}  State: {:<14}║\n",
             bar + 1, beat + 1, tick, state));
@@ -301,7 +301,7 @@ pub fn status() -> String {
 
 /// List notes in a track
 pub fn list_notes(track_index: usize) -> Result<String, &'static str> {
-    ensure_initialize()?;
+    ensure_init()?;
     let project = PROJECT.lock();
     let project = project.as_ref().ok_or("No project")?;
     let track = project.tracks.get(track_index).ok_or("Invalid track index")?;
@@ -337,7 +337,7 @@ pub fn list_notes(track_index: usize) -> Result<String, &'static str> {
 
 /// Load a demo project with pre-made tracks
 pub fn load_demo() -> Result<(), &'static str> {
-    ensure_initialize()?;
+    ensure_init()?;
 
     let mut project = Project::new("Demo Song", 120);
 
@@ -409,7 +409,7 @@ pub fn load_demo() -> Result<(), &'static str> {
 
 /// Create a new empty project
 pub fn new_project(name: &str, bpm: u32) -> Result<(), &'static str> {
-    ensure_initialize()?;
+    ensure_init()?;
     let project = Project::new(name, bpm.clamp(30, 300) as u16);
     *PROJECT.lock() = Some(project);
     BPM.store(bpm.clamp(30, 300), Ordering::Relaxed);
@@ -419,7 +419,7 @@ pub fn new_project(name: &str, bpm: u32) -> Result<(), &'static str> {
 
 /// Export project to WAV file
 pub fn export_wav(path: &str) -> Result<usize, &'static str> {
-    ensure_initialize()?;
+    ensure_init()?;
     let project = PROJECT.lock();
     let project = project.as_ref().ok_or("No project")?;
     let mixer = MIXER.lock();

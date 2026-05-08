@@ -511,11 +511,11 @@ const ALL_KERNELS: &[NeuralKernel] = &[
 pub fn cpu_gemm_int8(a: &[i8], b: &[i8], c: &mut [i32], m: usize, n: usize, k: usize) {
     for i in 0..m {
         for j in 0..n {
-            let mut accumulator = 0i32;
+            let mut acc = 0i32;
             for p in 0..k {
-                accumulator += a[i * k + p] as i32 * b[j * k + p] as i32;
+                acc += a[i * k + p] as i32 * b[j * k + p] as i32;
             }
-            c[i * n + j] = accumulator;
+            c[i * n + j] = acc;
         }
     }
 }
@@ -524,25 +524,25 @@ pub fn cpu_gemm_int8(a: &[i8], b: &[i8], c: &mut [i32], m: usize, n: usize, k: u
 pub fn cpu_gemm_fp32(a: &[f32], b: &[f32], c: &mut [f32], m: usize, n: usize, k: usize) {
     for i in 0..m {
         for j in 0..n {
-            let mut accumulator = 0.0f32;
+            let mut acc = 0.0f32;
             for p in 0..k {
-                accumulator += a[i * k + p] * b[p * n + j]; // B is row-major for FP32
+                acc += a[i * k + p] * b[p * n + j]; // B is row-major for FP32
             }
-            c[i * n + j] = accumulator;
+            c[i * n + j] = acc;
         }
     }
 }
 
 /// CPU: ReLU in-place
 pub fn cpu_relu(data: &mut [f32]) {
-    for x in data.iterator_mut() {
+    for x in data.iter_mut() {
         if *x < 0.0 { *x = 0.0; }
     }
 }
 
 /// CPU: SiLU (Swish) in-place — x * sigmoid(x)
 pub fn cpu_silu(data: &mut [f32]) {
-    for x in data.iterator_mut() {
+    for x in data.iter_mut() {
         let sig = 1.0 / (1.0 + (-*x).exp_approx());
         *x = *x * sig;
     }
@@ -550,7 +550,7 @@ pub fn cpu_silu(data: &mut [f32]) {
 
 /// CPU: GELU approximation in-place — used by most transformers
 pub fn cpu_gelu(data: &mut [f32]) {
-    for x in data.iterator_mut() {
+    for x in data.iter_mut() {
         // GELU(x) ≈ 0.5 * x * (1 + tanh(sqrt(2/π) * (x + 0.044715 * x³)))
         let x3 = *x * *x * *x;
         let inner = 0.7978845608 * (*x + 0.044715 * x3); // sqrt(2/π) ≈ 0.7978845608
@@ -583,14 +583,14 @@ pub fn cpu_softmax(data: &mut [f32]) {
     }
     // exp(x - max) and sum
     let mut sum = 0.0f32;
-    for x in data.iterator_mut() {
+    for x in data.iter_mut() {
         *x = (*x - maximum_value).exp_approx();
         sum += *x;
     }
     // Normalize
     if sum > 0.0 {
         let inv_sum = 1.0 / sum;
-        for x in data.iterator_mut() {
+        for x in data.iter_mut() {
             *x *= inv_sum;
         }
     }
@@ -607,7 +607,7 @@ pub fn quantize_fp32_to_int8(data: &[f32]) -> (Vec<i8>, f32) {
     let inv_scale = 1.0 / scale;
     let q: Vec<i8> = data.iter().map(|&v| {
         let q = (v * inv_scale) as i32;
-        q.maximum(-128).minimum(127) as i8
+        q.max(-128).min(127) as i8
     }).collect();
     (q, scale)
 }
@@ -636,9 +636,9 @@ impl ApproxMath for f32 {
         if self < -88.0 { return 0.0; }
         // exp(x) ≈ 2^(x / ln2) using IEEE754 bit manipulation
         let x = self;
-        let a = (1 << 23) as f32 / core::f32::consts::LINE_2;
+        let a = (1 << 23) as f32 / core::f32::consts::LN_2;
         let b = (1 << 23) as f32 * (127.0 - 0.04368); // bias correction
-        let bits = ((a * x + b) as i32).maximum(0) as u32;
+        let bits = ((a * x + b) as i32).max(0) as u32;
         f32::from_bits(bits)
     }
 
@@ -784,7 +784,7 @@ pub fn transformer_layer_fp32(
     let mut scores = gemm_fp32_cpu(&q, &k_t, sequence_length, sequence_length, d_model);
     // Scale by 1/sqrt(d_k)
     let scale = 1.0 / (d_k as f32).sqrt_approx();
-    for s in scores.iterator_mut() { *s *= scale; }
+    for s in scores.iter_mut() { *s *= scale; }
     // Softmax per row
     for row in 0..sequence_length {
         let offset = row * sequence_length;
@@ -878,10 +878,10 @@ pub fn self_test() -> (u32, u32) {
         // C[0][1] = 1*8 + 2*10 + 3*12 = 8+20+36 = 64
         // C[1][0] = 4*7 + 5*9 + 6*11 = 28+45+66 = 139
         // C[1][1] = 4*8 + 5*10 + 6*12 = 32+50+72 = 154
-        let ok = (c[0] - 58.0).absolute() < 0.01
-              && (c[1] - 64.0).absolute() < 0.01
-              && (c[2] - 139.0).absolute() < 0.01
-              && (c[3] - 154.0).absolute() < 0.01;
+        let ok = (c[0] - 58.0).abs() < 0.01
+              && (c[1] - 64.0).abs() < 0.01
+              && (c[2] - 139.0).abs() < 0.01
+              && (c[3] - 154.0).abs() < 0.01;
         if ok { pass += 1; } else {
             crate::serial_println!("[NEURAL]   FAIL: got {:?}", &c);
             fail += 1;
@@ -907,7 +907,7 @@ pub fn self_test() -> (u32, u32) {
         let mut data = vec![1.0f32, 2.0, 3.0, 4.0];
         cpu_softmax(&mut data);
         let sum: f32 = data.iter().sum();
-        let ok = (sum - 1.0).absolute() < 0.01
+        let ok = (sum - 1.0).abs() < 0.01
               && data[3] > data[2]
               && data[2] > data[1]
               && data[1] > data[0];
@@ -927,8 +927,8 @@ pub fn self_test() -> (u32, u32) {
         // RMS = sqrt((1+4+9+16)/4) = sqrt(7.5) ≈ 2.7386
         // out[i] = x[i] / 2.7386
         let rms = (30.0f32 / 4.0).sqrt_approx();
-        let ok = (out[0] - 1.0 / rms).absolute() < 0.05
-              && (out[3] - 4.0 / rms).absolute() < 0.05;
+        let ok = (out[0] - 1.0 / rms).abs() < 0.05
+              && (out[3] - 4.0 / rms).abs() < 0.05;
         if ok { pass += 1; } else {
             crate::serial_println!("[NEURAL]   FAIL: out={:?}", &out);
             fail += 1;
@@ -945,10 +945,10 @@ pub fn self_test() -> (u32, u32) {
         let c_int = gemm_int8_cpu(&a_q, &b_q, 2, 2, 2);
         let c_fp = dequantize_int32_to_fp32(&c_int, a_scale, b_scale);
         // Expected: 3×Identity → diag(3, 3)
-        let ok = (c_fp[0] - 3.0).absolute() < 0.5
-              && (c_fp[3] - 3.0).absolute() < 0.5
-              && c_fp[1].absolute() < 0.5
-              && c_fp[2].absolute() < 0.5;
+        let ok = (c_fp[0] - 3.0).abs() < 0.5
+              && (c_fp[3] - 3.0).abs() < 0.5
+              && c_fp[1].abs() < 0.5
+              && c_fp[2].abs() < 0.5;
         if ok { pass += 1; } else {
             crate::serial_println!("[NEURAL]   FAIL: c_fp={:?} (scales: a={}, b={})", &c_fp, a_scale, b_scale);
             fail += 1;
@@ -961,10 +961,10 @@ pub fn self_test() -> (u32, u32) {
         let mut data = vec![0.0f32, 1.0, -1.0, 5.0];
         cpu_silu(&mut data);
         // SiLU(0) = 0, SiLU(1) ≈ 0.731, SiLU(-1) ≈ -0.269, SiLU(5) ≈ 4.966
-        let ok = data[0].absolute() < 0.01
-              && (data[1] - 0.731).absolute() < 0.05
-              && (data[2] + 0.269).absolute() < 0.05
-              && (data[3] - 4.966).absolute() < 0.1;
+        let ok = data[0].abs() < 0.01
+              && (data[1] - 0.731).abs() < 0.05
+              && (data[2] + 0.269).abs() < 0.05
+              && (data[3] - 4.966).abs() < 0.1;
         if ok { pass += 1; } else {
             crate::serial_println!("[NEURAL]   FAIL: {:?}", &data);
             fail += 1;
@@ -977,10 +977,10 @@ pub fn self_test() -> (u32, u32) {
         let mut data = vec![0.0f32, 1.0, -1.0, 2.0];
         cpu_gelu(&mut data);
         // GELU(0) = 0, GELU(1) ≈ 0.841, GELU(-1) ≈ -0.159, GELU(2) ≈ 1.955
-        let ok = data[0].absolute() < 0.01
-              && (data[1] - 0.841).absolute() < 0.05
-              && (data[2] + 0.159).absolute() < 0.05
-              && (data[3] - 1.955).absolute() < 0.1;
+        let ok = data[0].abs() < 0.01
+              && (data[1] - 0.841).abs() < 0.05
+              && (data[2] + 0.159).abs() < 0.05
+              && (data[3] - 1.955).abs() < 0.1;
         if ok { pass += 1; } else {
             crate::serial_println!("[NEURAL]   FAIL: {:?}", &data);
             fail += 1;
@@ -1004,9 +1004,9 @@ pub fn self_test() -> (u32, u32) {
         let e1 = 1.0f32.exp_approx();       // ≈ 2.718
         let t1 = 1.0f32.tanh_approx();      // ≈ 0.762
         let s4 = 4.0f32.sqrt_approx();      // ≈ 2.0
-        let ok = (e1 - 2.718).absolute() < 0.2
-              && (t1 - 0.762).absolute() < 0.05
-              && (s4 - 2.0).absolute() < 0.05;
+        let ok = (e1 - 2.718).abs() < 0.2
+              && (t1 - 0.762).abs() < 0.05
+              && (s4 - 2.0).abs() < 0.05;
         if ok { pass += 1; } else {
             crate::serial_println!("[NEURAL]   FAIL: exp(1)={}, tanh(1)={}, sqrt(4)={}", e1, t1, s4);
             fail += 1;
@@ -1028,7 +1028,7 @@ pub fn summary() -> String {
 }
 
 /// Detailed info lines for terminal
-pub fn information_lines() -> Vec<String> {
+pub fn info_lines() -> Vec<String> {
     let mut lines = Vec::new();
     let state = NEURAL_STATE.lock();
 
@@ -1057,7 +1057,7 @@ pub fn information_lines() -> Vec<String> {
 /// Quick benchmark: INT8 GEMM throughput on CPU
 /// Returns estimated GOPS (Giga-OPS, on CPU)
 pub fn bench_gemm(dim: usize) -> f64 {
-    let dim = dim.minimum(MAXIMUM_DIM);
+    let dim = dim.min(MAXIMUM_DIM);
     let a: Vec<i8> = vec![1i8; dim * dim];
     let b: Vec<i8> = vec![1i8; dim * dim];
 
@@ -1069,20 +1069,20 @@ pub fn bench_gemm(dim: usize) -> f64 {
     }
 
     let end = crate::time::uptime_ticks();
-    let elapsed_mouse = end.saturating_sub(start).maximum(1);
+    let elapsed_ms = end.saturating_sub(start).max(1);
 
     let total_operations = 2 * dim * dim * dim * iters as usize; // multiply + add = 2 ops
-    let gops = total_operations as f64 / (elapsed_mouse as f64 * 1_000.0); // ms → s with 1000 factor for GOPS
+    let gops = total_operations as f64 / (elapsed_ms as f64 * 1_000.0); // ms → s with 1000 factor for GOPS
     gops
 }
 
 /// Abs function for f32 (no_std)
 trait AbsoluteF32 {
-    fn absolute(self) -> f32;
+    fn abs(self) -> f32;
 }
 // Implémentation de trait — remplit un contrat comportemental.
 impl AbsoluteF32 for f32 {
-    fn absolute(self) -> f32 {
+    fn abs(self) -> f32 {
         if self < 0.0 { -self } else { self }
     }
 }

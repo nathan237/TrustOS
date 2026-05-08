@@ -121,14 +121,15 @@ browser = []
 # EDITION PROFILES — composable presets for trustos.ps1 -Edition X
 # ════════════════════════════════════════════════════════════════════════════
 
-## TrustStrudel — Bare-metal live coding (Tidal/Strudel clone)
-## Minimal boot: HDA audio + synth + network + shell. No JARVIS/GPU/extras.
-strudel = ["netstack"]
+## TrustStrudel — Bare-metal live coding (Tidal/Strudel clone).
+## Enables the `audio::strudel_dsl` chained-method DSL + `live dsl` shell op.
+## Pure logic, no extra deps; bundled into trustos-audio / trustos-audio-full.
+strudel = []
 
-## TrustOS Audio Edition — DAW + audio + GUI, no JARVIS/GPU/extras.
+## TrustOS Audio Edition — DAW + audio + GUI + live coding, no JARVIS/GPU/extras.
 ## Slim by default: no embedded samples (loads WAVs from VFS instead).
 ## Add `daw-samples` for the full ~29 MB built-in demo track.
-trustos-audio = ["hires-logo", "daw", "gui-stack"]
+trustos-audio = ["hires-logo", "daw", "strudel", "gui-stack"]
 trustos-audio-full = ["trustos-audio", "daw-samples"]
 
 ## TrustOS Server Edition — headless: net + storage + security tools

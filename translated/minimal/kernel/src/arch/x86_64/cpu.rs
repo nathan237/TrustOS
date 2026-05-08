@@ -4,33 +4,33 @@
 
 
 #[inline(always)]
-pub fn jln() -> u64 {
+pub fn exy() -> u64 {
     let rsp: u64;
     unsafe {
-        core::arch::asm!("mov {}, rsp", bd(reg) rsp, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("mov {}, rsp", out(reg) rsp, options(nomem, nostack, preserves_flags));
     }
     rsp
 }
 
 
 #[inline(always)]
-pub fn pae() -> u64 {
+pub fn iyk() -> u64 {
     let rbp: u64;
     unsafe {
-        core::arch::asm!("mov {}, rbp", bd(reg) rbp, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("mov {}, rbp", out(reg) rbp, options(nomem, nostack, preserves_flags));
     }
     rbp
 }
 
 
 #[inline(always)]
-pub fn zhr() -> u64 {
+pub fn qsd() -> u64 {
     let flags: u64;
     unsafe {
         core::arch::asm!(
             "pushfq",
             "pop {}",
-            bd(reg) flags,
+            out(reg) flags,
             options(nomem, preserves_flags)
         );
     }
@@ -39,7 +39,7 @@ pub fn zhr() -> u64 {
 
 
 #[inline(always)]
-pub fn jat() {
+pub fn erb() {
     unsafe {
         core::arch::asm!("out 0x80, al", in("al") 0u8, options(nomem, nostack, preserves_flags));
     }
@@ -47,7 +47,7 @@ pub fn jat() {
 
 
 #[inline(always)]
-pub fn hbf() {
+pub fn breakpoint() {
     unsafe {
         core::arch::asm!("int3", options(nomem, nostack));
     }
@@ -55,85 +55,85 @@ pub fn hbf() {
 
 
 #[inline(always)]
-pub unsafe fn lxk(msr: u32) -> u64 {
-    let (afq, ail): (u32, u32);
+pub unsafe fn gqa(msr: u32) -> u64 {
+    let (high, low): (u32, u32);
     core::arch::asm!(
         "rdmsr",
         in("ecx") msr,
-        bd("eax") ail,
-        bd("edx") afq,
+        out("eax") low,
+        out("edx") high,
         options(nomem, nostack, preserves_flags)
     );
-    ((afq as u64) << 32) | (ail as u64)
+    ((high as u64) << 32) | (low as u64)
 }
 
 
 #[inline(always)]
-pub unsafe fn ihm(msr: u32, bn: u64) {
-    let ail = bn as u32;
-    let afq = (bn >> 32) as u32;
+pub unsafe fn eei(msr: u32, value: u64) {
+    let low = value as u32;
+    let high = (value >> 32) as u32;
     core::arch::asm!(
         "wrmsr",
         in("ecx") msr,
-        in("eax") ail,
-        in("edx") afq,
+        in("eax") low,
+        in("edx") high,
         options(nomem, nostack, preserves_flags)
     );
 }
 
 
 #[inline(always)]
-pub unsafe fn zhl() -> u64 {
-    let ap: u64;
-    core::arch::asm!("mov {}, cr0", bd(reg) ap, options(nomem, nostack, preserves_flags));
-    ap
+pub unsafe fn qrx() -> u64 {
+    let val: u64;
+    core::arch::asm!("mov {}, cr0", out(reg) val, options(nomem, nostack, preserves_flags));
+    val
 }
 
 
 #[inline(always)]
-pub unsafe fn zwp(ap: u64) {
-    core::arch::asm!("mov cr0, {}", in(reg) ap, options(nomem, nostack, preserves_flags));
+pub unsafe fn rcz(val: u64) {
+    core::arch::asm!("mov cr0, {}", in(reg) val, options(nomem, nostack, preserves_flags));
 }
 
 
 #[inline(always)]
-pub unsafe fn zhm() -> u64 {
-    let ap: u64;
-    core::arch::asm!("mov {}, cr2", bd(reg) ap, options(nomem, nostack, preserves_flags));
-    ap
+pub unsafe fn qry() -> u64 {
+    let val: u64;
+    core::arch::asm!("mov {}, cr2", out(reg) val, options(nomem, nostack, preserves_flags));
+    val
 }
 
 
 #[inline(always)]
-pub unsafe fn ozy() -> u64 {
-    let ap: u64;
-    core::arch::asm!("mov {}, cr3", bd(reg) ap, options(nomem, nostack, preserves_flags));
-    ap
+pub unsafe fn iyh() -> u64 {
+    let val: u64;
+    core::arch::asm!("mov {}, cr3", out(reg) val, options(nomem, nostack, preserves_flags));
+    val
 }
 
 
 #[inline(always)]
-pub unsafe fn pzw(ap: u64) {
-    core::arch::asm!("mov cr3, {}", in(reg) ap, options(nomem, nostack, preserves_flags));
+pub unsafe fn jrm(val: u64) {
+    core::arch::asm!("mov cr3, {}", in(reg) val, options(nomem, nostack, preserves_flags));
 }
 
 
 #[inline(always)]
-pub unsafe fn zhn() -> u64 {
-    let ap: u64;
-    core::arch::asm!("mov {}, cr4", bd(reg) ap, options(nomem, nostack, preserves_flags));
-    ap
+pub unsafe fn qrz() -> u64 {
+    let val: u64;
+    core::arch::asm!("mov {}, cr4", out(reg) val, options(nomem, nostack, preserves_flags));
+    val
 }
 
 
 #[inline(always)]
-pub unsafe fn zwq(ap: u64) {
-    core::arch::asm!("mov cr4, {}", in(reg) ap, options(nomem, nostack, preserves_flags));
+pub unsafe fn rda(val: u64) {
+    core::arch::asm!("mov cr4, {}", in(reg) val, options(nomem, nostack, preserves_flags));
 }
 
 
 #[inline(always)]
-pub unsafe fn ipl(awa: u32, bxj: u32) -> (u32, u32, u32, u32) {
+pub unsafe fn st(leaf: u32, subleaf: u32) -> (u32, u32, u32, u32) {
     let (eax, ebx, ecx, edx): (u32, u32, u32, u32);
     
     core::arch::asm!(
@@ -141,10 +141,10 @@ pub unsafe fn ipl(awa: u32, bxj: u32) -> (u32, u32, u32, u32) {
         "cpuid",
         "mov {ebx_out:e}, ebx",
         "pop rbx",
-        inout("eax") awa => eax,
-        inout("ecx") bxj => ecx,
-        ish = bd(reg) ebx,
-        bd("edx") edx,
+        inout("eax") leaf => eax,
+        inout("ecx") subleaf => ecx,
+        ebx_out = out(reg) ebx,
+        out("edx") edx,
         options(nostack, preserves_flags)
     );
     (eax, ebx, ecx, edx)
@@ -152,34 +152,34 @@ pub unsafe fn ipl(awa: u32, bxj: u32) -> (u32, u32, u32, u32) {
 
 
 #[inline(always)]
-pub fn lxl() -> u64 {
-    let (afq, ail): (u32, u32);
+pub fn gqb() -> u64 {
+    let (high, low): (u32, u32);
     unsafe {
         core::arch::asm!(
             "rdtsc",
-            bd("eax") ail,
-            bd("edx") afq,
+            out("eax") low,
+            out("edx") high,
             options(nomem, nostack, preserves_flags)
         );
     }
-    ((afq as u64) << 32) | (ail as u64)
+    ((high as u64) << 32) | (low as u64)
 }
 
 
 #[inline(always)]
-pub fn cbg() -> Option<u64> {
-    let ap: u64;
-    let bq: u8;
+pub fn rdrand() -> Option<u64> {
+    let val: u64;
+    let ok: u8;
     unsafe {
         core::arch::asm!(
             "rdrand {}",
             "setc {}",
-            bd(reg) ap,
-            bd(reg_byte) bq,
+            out(reg) val,
+            out(reg_byte) ok,
             options(nomem, nostack)
         );
     }
-    if bq != 0 { Some(ap) } else { None }
+    if ok != 0 { Some(val) } else { None }
 }
 
 
@@ -188,91 +188,91 @@ pub fn cbg() -> Option<u64> {
 
 
 #[inline(always)]
-pub unsafe fn cfn(port: u16) -> u8 {
-    let ap: u8;
+pub unsafe fn om(port: u16) -> u8 {
+    let val: u8;
     core::arch::asm!(
         "in al, dx",
         in("dx") port,
-        bd("al") ap,
+        out("al") val,
         options(nomem, nostack, preserves_flags)
     );
-    ap
+    val
 }
 
 
 #[inline(always)]
-pub unsafe fn bkt(port: u16, ap: u8) {
+pub unsafe fn vp(port: u16, val: u8) {
     core::arch::asm!(
         "out dx, al",
         in("dx") port,
-        in("al") ap,
+        in("al") val,
         options(nomem, nostack, preserves_flags)
     );
 }
 
 
 #[inline(always)]
-pub unsafe fn jar(port: u16) -> u16 {
-    let ap: u16;
+pub unsafe fn eqz(port: u16) -> u16 {
+    let val: u16;
     core::arch::asm!(
         "in ax, dx",
         in("dx") port,
-        bd("ax") ap,
+        out("ax") val,
         options(nomem, nostack, preserves_flags)
     );
-    ap
+    val
 }
 
 
 #[inline(always)]
-pub unsafe fn jie(port: u16, ap: u16) {
+pub unsafe fn evw(port: u16, val: u16) {
     core::arch::asm!(
         "out dx, ax",
         in("dx") port,
-        in("ax") ap,
+        in("ax") val,
         options(nomem, nostack, preserves_flags)
     );
 }
 
 
 #[inline(always)]
-pub unsafe fn jac(port: u16) -> u32 {
-    let ap: u32;
+pub unsafe fn eqp(port: u16) -> u32 {
+    let val: u32;
     core::arch::asm!(
         "in eax, dx",
         in("dx") port,
-        bd("eax") ap,
+        out("eax") val,
         options(nomem, nostack, preserves_flags)
     );
-    ap
+    val
 }
 
 
 #[inline(always)]
-pub unsafe fn jic(port: u16, ap: u32) {
+pub unsafe fn evv(port: u16, val: u32) {
     core::arch::asm!(
         "out dx, eax",
         in("dx") port,
-        in("eax") ap,
+        in("eax") val,
         options(nomem, nostack, preserves_flags)
     );
 }
 
 
 pub mod msr {
-    pub const CN_: u32 = 0xC0000080;
-    pub const CAX_: u32 = 0xC0000081;
-    pub const CAU_: u32 = 0xC0000082;
-    pub const CAT_: u32 = 0xC0000084;
-    pub const DPX_: u32 = 0xC0000100;
-    pub const DPY_: u32 = 0xC0000101;
-    pub const DPZ_: u32 = 0xC0000102;
-    pub const KK_: u32 = 0x1B;
-    pub const KL_: u32 = 0x277;
+    pub const IA32_EFER: u32 = 0xC0000080;
+    pub const CEI_: u32 = 0xC0000081;
+    pub const CEF_: u32 = 0xC0000082;
+    pub const CEE_: u32 = 0xC0000084;
+    pub const DTR_: u32 = 0xC0000100;
+    pub const DTS_: u32 = 0xC0000101;
+    pub const DTT_: u32 = 0xC0000102;
+    pub const LD_: u32 = 0x1B;
+    pub const LE_: u32 = 0x277;
     
     
-    pub const BTG_: u64 = 1 << 0;  
-    pub const DLD_: u64 = 1 << 8;  
-    pub const DLC_: u64 = 1 << 10; 
-    pub const ARE_: u64 = 1 << 11; 
+    pub const BWC_: u64 = 1 << 0;  
+    pub const DOS_: u64 = 1 << 8;  
+    pub const DOR_: u64 = 1 << 10; 
+    pub const ATH_: u64 = 1 << 11; 
 }

@@ -92,8 +92,8 @@ pub fn new(width: u32, height: u32) -> Self {
     #[inline]
         // Public function — callable from other modules.
 pub fn sample_pixel(&self, x: u32, y: u32) -> u32 {
-        let x = x.minimum(self.width.saturating_sub(1));
-        let y = y.minimum(self.height.saturating_sub(1));
+        let x = x.min(self.width.saturating_sub(1));
+        let y = y.min(self.height.saturating_sub(1));
         self.data[(y * self.width + x) as usize]
     }
     
@@ -104,8 +104,8 @@ pub fn sample_pixel(&self, x: u32, y: u32) -> u32 {
         
         let x0 = x.floor() as u32;
         let y0 = y.floor() as u32;
-        let x1 = (x0 + 1).minimum(self.width - 1);
-        let y1 = (y0 + 1).minimum(self.height - 1);
+        let x1 = (x0 + 1).min(self.width - 1);
+        let y1 = (y0 + 1).min(self.height - 1);
         
         let fx = x.fract();
         let fy = y.fract();
@@ -162,7 +162,7 @@ pub struct Texture {
     pub target: u32,
     pub levels: Vec<TextureLevel>,
     pub mag_filter: u32,
-    pub minimum_filter: u32,
+    pub min_filter: u32,
     pub wrap_s: u32,
     pub wrap_t: u32,
 }
@@ -176,7 +176,7 @@ pub fn new(id: u32) -> Self {
             target: GL_TEXTURE_2D,
             levels: Vec::new(),
             mag_filter: GL_LINEAR,
-            minimum_filter: GL_NEAREST_MIPMAP_LINEAR,
+            min_filter: GL_NEAREST_MIPMAP_LINEAR,
             wrap_s: GL_REPEAT,
             wrap_t: GL_REPEAT,
         }
@@ -235,7 +235,7 @@ match format {
         let mut h = self.levels[0].height / 2;
         
         while w >= 1 && h >= 1 {
-            let previous = &self.levels[self.levels.len() - 1];
+            let prev = &self.levels[self.levels.len() - 1];
             let mut level = TextureLevel::new(w, h);
             
             // 2x2 box filter
@@ -244,10 +244,10 @@ match format {
                     let sx = x * 2;
                     let sy = y * 2;
                     
-                    let c00 = previous.sample_pixel(sx, sy);
-                    let c10 = previous.sample_pixel(sx + 1, sy);
-                    let c01 = previous.sample_pixel(sx, sy + 1);
-                    let c11 = previous.sample_pixel(sx + 1, sy + 1);
+                    let c00 = prev.sample_pixel(sx, sy);
+                    let c10 = prev.sample_pixel(sx + 1, sy);
+                    let c01 = prev.sample_pixel(sx, sy + 1);
+                    let c11 = prev.sample_pixel(sx + 1, sy + 1);
                     
                     let r = (((c00 >> 16) & 0xFF) + ((c10 >> 16) & 0xFF) 
                            + ((c01 >> 16) & 0xFF) + ((c11 >> 16) & 0xFF)) / 4;
@@ -265,8 +265,8 @@ match format {
             self.levels.push(level);
             
             if w == 1 && h == 1 { break; }
-            w = w.maximum(1) / 2;
-            h = h.maximum(1) / 2;
+            w = w.max(1) / 2;
+            h = h.max(1) / 2;
             if w == 0 { w = 1; }
             if h == 0 { h = 1; }
         }
@@ -364,7 +364,7 @@ pub fn gl_bind_texture(target: u32, texture: u32) {
 }
 
 /// Set texture parameter
-pub fn gl_tex_parameteri(target: u32, pname: u32, parameter: u32) {
+pub fn gl_tex_parameteri(target: u32, pname: u32, param: u32) {
     let mut state = TEXTURE_STATE.lock();
     
     let tex_id = // Pattern matching — Rust's exhaustive branching construct.
@@ -374,13 +374,13 @@ match target {
     };
     
     if let Some(id) = tex_id {
-        if let Some(Some(tex)) = state.textures.iterator_mut().find(|t| t.as_ref().map(|x| x.id) == Some(id)) {
+        if let Some(Some(tex)) = state.textures.iter_mut().find(|t| t.as_ref().map(|x| x.id) == Some(id)) {
                         // Pattern matching — Rust's exhaustive branching construct.
 match pname {
-                GL_TEXTURE_MAG_FILTER => tex.mag_filter = parameter,
-                GL_TEXTURE_MINIMUM_FILTER => tex.minimum_filter = parameter,
-                GL_TEXTURE_WRAP_S => tex.wrap_s = parameter,
-                GL_TEXTURE_WRAP_T => tex.wrap_t = parameter,
+                GL_TEXTURE_MAG_FILTER => tex.mag_filter = param,
+                GL_TEXTURE_MINIMUM_FILTER => tex.min_filter = param,
+                GL_TEXTURE_WRAP_S => tex.wrap_s = param,
+                GL_TEXTURE_WRAP_T => tex.wrap_t = param,
                 _ => {}
             }
         }
@@ -402,7 +402,7 @@ pub fn gl_tex_image_2d(
     let mut state = TEXTURE_STATE.lock();
     
     if let Some(id) = state.bound_2d {
-        if let Some(Some(tex)) = state.textures.iterator_mut().find(|t| t.as_ref().map(|x| x.id) == Some(id)) {
+        if let Some(Some(tex)) = state.textures.iter_mut().find(|t| t.as_ref().map(|x| x.id) == Some(id)) {
             tex.upload(width, height, format, data);
         }
     }
@@ -419,7 +419,7 @@ match target {
     };
     
     if let Some(id) = tex_id {
-        if let Some(Some(tex)) = state.textures.iterator_mut().find(|t| t.as_ref().map(|x| x.id) == Some(id)) {
+        if let Some(Some(tex)) = state.textures.iter_mut().find(|t| t.as_ref().map(|x| x.id) == Some(id)) {
             tex.generate_mipmaps();
         }
     }
@@ -469,8 +469,8 @@ pub fn gl_delete_textures(n: i32, textures: &[u32]) {
     for i in 0..(n as usize) {
         if i < textures.len() {
             let id = textures[i];
-            if let Some(position) = state.textures.iter().position(|t| t.as_ref().map(|x| x.id) == Some(id)) {
-                state.textures[position] = None;
+            if let Some(pos) = state.textures.iter().position(|t| t.as_ref().map(|x| x.id) == Some(id)) {
+                state.textures[pos] = None;
             }
             if state.bound_2d == Some(id) {
                 state.bound_2d = None;
@@ -490,8 +490,8 @@ pub fn create_checkerboard_texture(size: u32, color1: u32, color2: u32) -> Vec<u
     
     for y in 0..size {
         for x in 0..size {
-            let cx = x / check_size.maximum(1);
-            let cy = y / check_size.maximum(1);
+            let cx = x / check_size.max(1);
+            let cy = y / check_size.max(1);
             let color = if (cx + cy) % 2 == 0 { color1 } else { color2 };
             
             data.push(((color >> 16) & 0xFF) as u8); // R

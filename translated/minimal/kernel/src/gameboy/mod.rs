@@ -1,6 +1,6 @@
 
 
-#![allow(bgr)]
+#![allow(dead_code)]
 
 use alloc::vec;
 use alloc::vec::Vec;
@@ -9,43 +9,43 @@ pub mod gpu;
 pub mod timer;
 pub mod cpu;
 
-use cpu::Kn;
+use cpu::Eg;
 
 
-const BVM_: u32 = 17556;
+const BYS_: u32 = 17556;
 
 pub struct GameBoyEmulator {
     pub cpu: cpu::Cpu,
     pub gpu: gpu::Gpu,
     pub timer: timer::Timer,
-    pub on: cartridge::Cartridge,
+    pub cart: cartridge::Cartridge,
 
     
-    pub aec: Vec<u8>,       
-    pub bux: [u8; 127],    
+    pub wram: Vec<u8>,       
+    pub hram: [u8; 127],    
 
     
-    pub brc: u8,          
-    pub bhf: u8,          
-    pub cfu: u8,      
-    pub aow: u8,  
-    pub aox: u8,     
-    pub cht: u8,     
-    pub chs: u8,     
+    pub ie_reg: u8,          
+    pub if_reg: u8,          
+    pub joypad_reg: u8,      
+    pub joypad_buttons: u8,  
+    pub joypad_dirs: u8,     
+    pub serial_data: u8,     
+    pub serial_ctrl: u8,     
 
-    pub dvf: bool,
-    pub bbv: u32,
+    pub rom_loaded: bool,
+    pub key_state: u32,
 
     
-    pub atz: bool,
-    pub axj: u8,       
-    pub beq: u8,            
-    pub ecn: u8,           
-    pub eco: u8,           
-    pub ecp: u8,           
-    pub ecq: u8,           
-    pub ecr: u8,           
-    pub fkj: bool,
+    pub cgb_mode: bool,
+    pub wram_bank: u8,       
+    pub key1: u8,            
+    pub hdma1: u8,           
+    pub hdma2: u8,           
+    pub hdma3: u8,           
+    pub hdma4: u8,           
+    pub hdma5: u8,           
+    pub hdma_active: bool,
 }
 
 impl GameBoyEmulator {
@@ -54,76 +54,76 @@ impl GameBoyEmulator {
             cpu: cpu::Cpu::new(),
             gpu: gpu::Gpu::new(),
             timer: timer::Timer::new(),
-            on: cartridge::Cartridge::azs(),
-            aec: vec![0u8; 32768], 
-            bux: [0; 127],
-            brc: 0,
-            bhf: 0,
-            cfu: 0xCF,
-            aow: 0x0F,
-            aox: 0x0F,
-            cht: 0,
-            chs: 0,
-            dvf: false,
-            bbv: 0,
-            atz: false,
-            axj: 1,
-            beq: 0,
-            ecn: 0xFF,
-            eco: 0xFF,
-            ecp: 0xFF,
-            ecq: 0xFF,
-            ecr: 0xFF,
-            fkj: false,
+            cart: cartridge::Cartridge::empty(),
+            wram: vec![0u8; 32768], 
+            hram: [0; 127],
+            ie_reg: 0,
+            if_reg: 0,
+            joypad_reg: 0xCF,
+            joypad_buttons: 0x0F,
+            joypad_dirs: 0x0F,
+            serial_data: 0,
+            serial_ctrl: 0,
+            rom_loaded: false,
+            key_state: 0,
+            cgb_mode: false,
+            wram_bank: 1,
+            key1: 0,
+            hdma1: 0xFF,
+            hdma2: 0xFF,
+            hdma3: 0xFF,
+            hdma4: 0xFF,
+            hdma5: 0xFF,
+            hdma_active: false,
         }
     }
 
-    pub fn ljk(&mut self, f: &[u8]) -> bool {
-        if let Some(on) = cartridge::Cartridge::syh(f) {
+    pub fn load_rom(&mut self, data: &[u8]) -> bool {
+        if let Some(cart) = cartridge::Cartridge::lzq(data) {
             
-            let hov = on.eni == 0x80 || on.eni == 0xC0;
-            self.atz = hov;
-            self.on = on;
+            let dsm = cart.cgb_flag == 0x80 || cart.cgb_flag == 0xC0;
+            self.cgb_mode = dsm;
+            self.cart = cart;
             self.cpu = cpu::Cpu::new();
-            if hov {
+            if dsm {
                 
-                self.cpu.q = 0x11;
-                self.cpu.bb = 0x80; 
-                self.cpu.o = 0x00;
-                self.cpu.r = 0x00;
-                self.cpu.bc = 0xFF;
-                self.cpu.aa = 0x56;
-                self.cpu.i = 0x00;
-                self.cpu.dm = 0x0D;
+                self.cpu.a = 0x11;
+                self.cpu.f = 0x80; 
+                self.cpu.b = 0x00;
+                self.cpu.c = 0x00;
+                self.cpu.d = 0xFF;
+                self.cpu.e = 0x56;
+                self.cpu.h = 0x00;
+                self.cpu.l = 0x0D;
                 crate::serial_println!("[GB] CGB mode enabled (A=0x11)");
             }
             self.gpu = gpu::Gpu::new();
-            self.gpu.atz = hov;
-            if hov {
+            self.gpu.cgb_mode = dsm;
+            if dsm {
                 
                 
-                self.gpu.bdo[0] = 0xFF; self.gpu.bdo[1] = 0x7F;
+                self.gpu.bg_palette[0] = 0xFF; self.gpu.bg_palette[1] = 0x7F;
                 
-                self.gpu.bdo[2] = 0xB5; self.gpu.bdo[3] = 0x56;
+                self.gpu.bg_palette[2] = 0xB5; self.gpu.bg_palette[3] = 0x56;
                 
-                self.gpu.bdo[4] = 0x4A; self.gpu.bdo[5] = 0x29;
+                self.gpu.bg_palette[4] = 0x4A; self.gpu.bg_palette[5] = 0x29;
                 
-                self.gpu.bdo[6] = 0x00; self.gpu.bdo[7] = 0x00;
+                self.gpu.bg_palette[6] = 0x00; self.gpu.bg_palette[7] = 0x00;
                 
-                for a in 0..8 {
-                    self.gpu.fpk[a] = self.gpu.bdo[a];
+                for i in 0..8 {
+                    self.gpu.obj_palette[i] = self.gpu.bg_palette[i];
                 }
             }
             self.timer = timer::Timer::new();
-            for o in self.aec.el() { *o = 0; }
-            self.bux = [0; 127];
-            self.brc = 0;
-            self.bhf = 0;
-            self.axj = 1;
-            self.beq = 0;
-            self.fkj = false;
-            self.dvf = true;
-            crate::serial_println!("[GB] ROM loaded successfully (CGB={})", hov);
+            for b in self.wram.iter_mut() { *b = 0; }
+            self.hram = [0; 127];
+            self.ie_reg = 0;
+            self.if_reg = 0;
+            self.wram_bank = 1;
+            self.key1 = 0;
+            self.hdma_active = false;
+            self.rom_loaded = true;
+            crate::serial_println!("[GB] ROM loaded successfully (CGB={})", dsm);
             true
         } else {
             crate::serial_println!("[GB] Failed to load ROM");
@@ -131,145 +131,145 @@ impl GameBoyEmulator {
         }
     }
 
-    fn ujl(&mut self) -> Lf<'_> {
-        Lf {
-            aec: &mut self.aec,
-            bux: &mut self.bux,
+    fn nby(&mut self) -> Et<'_> {
+        Et {
+            wram: &mut self.wram,
+            hram: &mut self.hram,
             gpu: &mut self.gpu,
             timer: &mut self.timer,
-            on: &mut self.on,
-            brc: &mut self.brc,
-            bhf: &mut self.bhf,
-            cfu: &mut self.cfu,
-            aow: &self.aow,
-            aox: &self.aox,
-            cht: &mut self.cht,
-            chs: &mut self.chs,
-            atz: self.atz,
-            axj: &mut self.axj,
-            beq: &mut self.beq,
-            ecn: &mut self.ecn,
-            eco: &mut self.eco,
-            ecp: &mut self.ecp,
-            ecq: &mut self.ecq,
-            ecr: &mut self.ecr,
-            fkj: &mut self.fkj,
+            cart: &mut self.cart,
+            ie_reg: &mut self.ie_reg,
+            if_reg: &mut self.if_reg,
+            joypad_reg: &mut self.joypad_reg,
+            joypad_buttons: &self.joypad_buttons,
+            joypad_dirs: &self.joypad_dirs,
+            serial_data: &mut self.serial_data,
+            serial_ctrl: &mut self.serial_ctrl,
+            cgb_mode: self.cgb_mode,
+            wram_bank: &mut self.wram_bank,
+            key1: &mut self.key1,
+            hdma1: &mut self.hdma1,
+            hdma2: &mut self.hdma2,
+            hdma3: &mut self.hdma3,
+            hdma4: &mut self.hdma4,
+            hdma5: &mut self.hdma5,
+            hdma_active: &mut self.hdma_active,
         }
     }
 
     
     
     
-    pub fn vr(&mut self, bs: u8) {
-        match bs {
-            b'd' | b'D' | 0xF3 => self.aox &= !0x01, 
-            b'a' | b'A' | 0xF2 => self.aox &= !0x02, 
-            b'w' | b'W' | 0xF0 => self.aox &= !0x04, 
-            b's' | b'S' | 0xF1 => self.aox &= !0x08, 
-            b'x' | b'X' | b' ' => self.aow &= !0x01, 
-            b'z' | b'Z'        => self.aow &= !0x02, 
-            b'\r' | 10         => self.aow &= !0x08, 
-            b'c' | b'C'        => self.aow &= !0x04, 
+    pub fn handle_key(&mut self, key: u8) {
+        match key {
+            b'd' | b'D' | 0xF3 => self.joypad_dirs &= !0x01, 
+            b'a' | b'A' | 0xF2 => self.joypad_dirs &= !0x02, 
+            b'w' | b'W' | 0xF0 => self.joypad_dirs &= !0x04, 
+            b's' | b'S' | 0xF1 => self.joypad_dirs &= !0x08, 
+            b'x' | b'X' | b' ' => self.joypad_buttons &= !0x01, 
+            b'z' | b'Z'        => self.joypad_buttons &= !0x02, 
+            b'\r' | 10         => self.joypad_buttons &= !0x08, 
+            b'c' | b'C'        => self.joypad_buttons &= !0x04, 
             _ => {}
         }
-        self.bhf |= 0x10; 
+        self.if_reg |= 0x10; 
     }
 
-    pub fn avy(&mut self, bs: u8) {
-        match bs {
-            b'd' | b'D' | 0xF3 => self.aox |= 0x01,
-            b'a' | b'A' | 0xF2 => self.aox |= 0x02,
-            b'w' | b'W' | 0xF0 => self.aox |= 0x04,
-            b's' | b'S' | 0xF1 => self.aox |= 0x08,
-            b'x' | b'X' | b' ' => self.aow |= 0x01,
-            b'z' | b'Z'        => self.aow |= 0x02,
-            b'\r' | 10         => self.aow |= 0x08,
-            b'c' | b'C'        => self.aow |= 0x04,
+    pub fn handle_key_release(&mut self, key: u8) {
+        match key {
+            b'd' | b'D' | 0xF3 => self.joypad_dirs |= 0x01,
+            b'a' | b'A' | 0xF2 => self.joypad_dirs |= 0x02,
+            b'w' | b'W' | 0xF0 => self.joypad_dirs |= 0x04,
+            b's' | b'S' | 0xF1 => self.joypad_dirs |= 0x08,
+            b'x' | b'X' | b' ' => self.joypad_buttons |= 0x01,
+            b'z' | b'Z'        => self.joypad_buttons |= 0x02,
+            b'\r' | 10         => self.joypad_buttons |= 0x08,
+            b'c' | b'C'        => self.joypad_buttons |= 0x04,
             _ => {}
         }
     }
 
     
-    pub fn or(&mut self) {
-        if !self.dvf { return; }
+    pub fn tick(&mut self) {
+        if !self.rom_loaded { return; }
 
-        self.gpu.hkj = false;
-        let mut nvy: u32 = 0;
-        let mut pfe: u32 = 0;
-        const CFI_: u32 = 200_000; 
+        self.gpu.frame_ready = false;
+        let mut hzw: u32 = 0;
+        let mut jch: u32 = 0;
+        const CIR_: u32 = 200_000; 
 
-        while nvy < BVM_ {
-            pfe += 1;
-            if pfe > CFI_ {
+        while hzw < BYS_ {
+            jch += 1;
+            if jch > CIR_ {
                 
                 break;
             }
 
-            let ef = {
-                let mut aq = Lf {
-                    aec: &mut self.aec,
-                    bux: &mut self.bux,
+            let m = {
+                let mut bus = Et {
+                    wram: &mut self.wram,
+                    hram: &mut self.hram,
                     gpu: &mut self.gpu,
                     timer: &mut self.timer,
-                    on: &mut self.on,
-                    brc: &mut self.brc,
-                    bhf: &mut self.bhf,
-                    cfu: &mut self.cfu,
-                    aow: &self.aow,
-                    aox: &self.aox,
-                    cht: &mut self.cht,
-                    chs: &mut self.chs,
-                    atz: self.atz,
-                    axj: &mut self.axj,
-                    beq: &mut self.beq,
-                    ecn: &mut self.ecn,
-                    eco: &mut self.eco,
-                    ecp: &mut self.ecp,
-                    ecq: &mut self.ecq,
-                    ecr: &mut self.ecr,
-                    fkj: &mut self.fkj,
+                    cart: &mut self.cart,
+                    ie_reg: &mut self.ie_reg,
+                    if_reg: &mut self.if_reg,
+                    joypad_reg: &mut self.joypad_reg,
+                    joypad_buttons: &self.joypad_buttons,
+                    joypad_dirs: &self.joypad_dirs,
+                    serial_data: &mut self.serial_data,
+                    serial_ctrl: &mut self.serial_ctrl,
+                    cgb_mode: self.cgb_mode,
+                    wram_bank: &mut self.wram_bank,
+                    key1: &mut self.key1,
+                    hdma1: &mut self.hdma1,
+                    hdma2: &mut self.hdma2,
+                    hdma3: &mut self.hdma3,
+                    hdma4: &mut self.hdma4,
+                    hdma5: &mut self.hdma5,
+                    hdma_active: &mut self.hdma_active,
                 };
-                self.cpu.gu(&mut aq)
+                self.cpu.step(&mut bus)
             };
 
             
-            self.gpu.gu(ef);
-            self.timer.gu(ef);
+            self.gpu.step(m);
+            self.timer.step(m);
 
             
-            if self.gpu.jvi {
-                self.bhf |= 0x01;
-                self.gpu.jvi = false;
+            if self.gpu.vblank_irq {
+                self.if_reg |= 0x01;
+                self.gpu.vblank_irq = false;
             }
-            if self.gpu.eza {
-                self.bhf |= 0x02;
-                self.gpu.eza = false;
+            if self.gpu.stat_irq {
+                self.if_reg |= 0x02;
+                self.gpu.stat_irq = false;
             }
-            if self.timer.gkb {
-                self.bhf |= 0x04;
-                self.timer.gkb = false;
+            if self.timer.interrupt {
+                self.if_reg |= 0x04;
+                self.timer.interrupt = false;
             }
 
-            nvy += ef;
+            hzw += m;
         }
     }
 
     
-    pub fn tj(&self, bd: &mut [u32], efz: usize, fpz: usize) {
-        if !self.dvf {
-            self.vwe(bd, efz, fpz);
+    pub fn render(&self, out: &mut [u32], out_w: usize, out_h: usize) {
+        if !self.rom_loaded {
+            self.render_no_rom(out, out_w, out_h);
             return;
         }
 
-        let jri = gpu::EQ_;
-        let mhc = gpu::AHM_;
+        let fbk = gpu::FF_;
+        let gvv = gpu::AJJ_;
 
-        for c in 0..fpz {
-            let cq = c * mhc / fpz;
-            for b in 0..efz {
-                let cr = b * jri / efz;
-                let si = cq * jri + cr;
-                bd[c * efz + b] = if si < self.gpu.framebuffer.len() {
+        for y in 0..out_h {
+            let ak = y * gvv / out_h;
+            for x in 0..out_w {
+                let am = x * fbk / out_w;
+                let si = ak * fbk + am;
+                out[y * out_w + x] = if si < self.gpu.framebuffer.len() {
                     self.gpu.framebuffer[si]
                 } else {
                     0xFF081820
@@ -278,331 +278,331 @@ impl GameBoyEmulator {
         }
     }
 
-    fn vwe(&self, bd: &mut [u32], d: usize, i: usize) {
-        let ei = 0xFF081820u32;  
-        let lp = 0xFFE0F8D0u32;  
-        let csn = 0xFF346856u32;  
+    fn render_no_rom(&self, out: &mut [u32], w: usize, h: usize) {
+        let bg = 0xFF081820u32;  
+        let fg = 0xFFE0F8D0u32;  
+        let ayf = 0xFF346856u32;  
 
-        for ai in bd.el() { *ai = ei; }
-
-        
-        cb(bd, d, i, "GAME BOY", d / 2 - 32, i / 6, lp, 2);
-        cb(bd, d, i, "EMULATOR", d / 2 - 32, i / 6 + 20, csn, 2);
+        for aa in out.iter_mut() { *aa = bg; }
 
         
-        cb(bd, d, i, "INSERT ROM", d / 2 - 40, i / 2 - 10, lp, 2);
+        draw_text(out, w, h, "GAME BOY", w / 2 - 32, h / 6, fg, 2);
+        draw_text(out, w, h, "EMULATOR", w / 2 - 32, h / 6 + 20, ayf, 2);
 
         
-        let cx = d / 2;
-        let je = i * 5 / 8;
-        let nm = 60usize;
-        let adn = 80usize;
-        for b in (cx - nm/2)..=(cx + nm/2) {
-            if b < d {
-                if je < i { bd[je * d + b] = csn; }
-                if je + adn < i { bd[(je + adn) * d + b] = csn; }
+        draw_text(out, w, h, "INSERT ROM", w / 2 - 40, h / 2 - 10, fg, 2);
+
+        
+        let cx = w / 2;
+        let dc = h * 5 / 8;
+        let fv = 60usize;
+        let ov = 80usize;
+        for x in (cx - fv/2)..=(cx + fv/2) {
+            if x < w {
+                if dc < h { out[dc * w + x] = ayf; }
+                if dc + ov < h { out[(dc + ov) * w + x] = ayf; }
             }
         }
-        for c in je..=(je + adn) {
-            if c < i {
-                if cx - nm/2 < d { bd[c * d + (cx - nm/2)] = csn; }
-                if cx + nm/2 < d { bd[c * d + (cx + nm/2)] = csn; }
+        for y in dc..=(dc + ov) {
+            if y < h {
+                if cx - fv/2 < w { out[y * w + (cx - fv/2)] = ayf; }
+                if cx + fv/2 < w { out[y * w + (cx + fv/2)] = ayf; }
             }
         }
         
-        let kp = 40usize;
-        let kl = 36usize;
-        let cr = cx - kp / 2;
-        let cq = je + 8;
-        for c in cq..(cq + kl).v(i) {
-            for b in cr..(cr + kp).v(d) {
-                bd[c * d + b] = 0xFF88C070;
+        let dy = 40usize;
+        let dw = 36usize;
+        let am = cx - dy / 2;
+        let ak = dc + 8;
+        for y in ak..(ak + dw).min(h) {
+            for x in am..(am + dy).min(w) {
+                out[y * w + x] = 0xFF88C070;
             }
         }
 
         
-        cb(bd, d, i, "WASD:DPAD", d / 2 - 36, i - 50, csn, 1);
-        cb(bd, d, i, "X:A Z:B ENTER:START", d / 2 - 72, i - 38, csn, 1);
+        draw_text(out, w, h, "WASD:DPAD", w / 2 - 36, h - 50, ayf, 1);
+        draw_text(out, w, h, "X:A Z:B ENTER:START", w / 2 - 72, h - 38, ayf, 1);
     }
 }
 
 
-struct Lf<'a> {
-    aec: &'a mut Vec<u8>,
-    bux: &'a mut [u8; 127],
+struct Et<'a> {
+    wram: &'a mut Vec<u8>,
+    hram: &'a mut [u8; 127],
     gpu: &'a mut gpu::Gpu,
     timer: &'a mut timer::Timer,
-    on: &'a mut cartridge::Cartridge,
-    brc: &'a mut u8,
-    bhf: &'a mut u8,
-    cfu: &'a mut u8,
-    aow: &'a u8,
-    aox: &'a u8,
-    cht: &'a mut u8,
-    chs: &'a mut u8,
+    cart: &'a mut cartridge::Cartridge,
+    ie_reg: &'a mut u8,
+    if_reg: &'a mut u8,
+    joypad_reg: &'a mut u8,
+    joypad_buttons: &'a u8,
+    joypad_dirs: &'a u8,
+    serial_data: &'a mut u8,
+    serial_ctrl: &'a mut u8,
     
-    atz: bool,
-    axj: &'a mut u8,
-    beq: &'a mut u8,
-    ecn: &'a mut u8,
-    eco: &'a mut u8,
-    ecp: &'a mut u8,
-    ecq: &'a mut u8,
-    ecr: &'a mut u8,
-    fkj: &'a mut bool,
+    cgb_mode: bool,
+    wram_bank: &'a mut u8,
+    key1: &'a mut u8,
+    hdma1: &'a mut u8,
+    hdma2: &'a mut u8,
+    hdma3: &'a mut u8,
+    hdma4: &'a mut u8,
+    hdma5: &'a mut u8,
+    hdma_active: &'a mut bool,
 }
 
-impl Kn for Lf<'_> {
-    fn read(&mut self, ag: u16) -> u8 {
-        match ag {
+impl Eg for Et<'_> {
+    fn read(&mut self, addr: u16) -> u8 {
+        match addr {
             
-            0x0000..=0x7FFF => self.on.read(ag),
+            0x0000..=0x7FFF => self.cart.read(addr),
             
-            0x8000..=0x9FFF => self.gpu.jlp(ag),
+            0x8000..=0x9FFF => self.gpu.read_vram(addr),
             
-            0xA000..=0xBFFF => self.on.read(ag),
+            0xA000..=0xBFFF => self.cart.read(addr),
             
-            0xC000..=0xCFFF => self.aec[(ag as usize - 0xC000)],
+            0xC000..=0xCFFF => self.wram[(addr as usize - 0xC000)],
             
             0xD000..=0xDFFF => {
-                let om = if self.atz { (*self.axj).am(1) as usize } else { 1 };
-                let l = om * 0x1000 + (ag as usize - 0xD000);
-                if l < self.aec.len() { self.aec[l] } else { 0xFF }
+                let gi = if self.cgb_mode { (*self.wram_bank).max(1) as usize } else { 1 };
+                let offset = gi * 0x1000 + (addr as usize - 0xD000);
+                if offset < self.wram.len() { self.wram[offset] } else { 0xFF }
             },
             
-            0xE000..=0xEFFF => self.aec[(ag as usize - 0xE000)],
+            0xE000..=0xEFFF => self.wram[(addr as usize - 0xE000)],
             0xF000..=0xFDFF => {
-                let om = if self.atz { (*self.axj).am(1) as usize } else { 1 };
-                let l = om * 0x1000 + (ag as usize - 0xF000);
-                if l < self.aec.len() { self.aec[l] } else { 0xFF }
+                let gi = if self.cgb_mode { (*self.wram_bank).max(1) as usize } else { 1 };
+                let offset = gi * 0x1000 + (addr as usize - 0xF000);
+                if offset < self.wram.len() { self.wram[offset] } else { 0xFF }
             },
             
-            0xFE00..=0xFE9F => self.gpu.pai(ag),
+            0xFE00..=0xFE9F => self.gpu.read_oam(addr),
             
             0xFEA0..=0xFEFF => 0xFF,
             
             0xFF00 => {
-                let mut ap = *self.cfu & 0x30;
-                if ap & 0x10 == 0 { ap |= *self.aox; }
-                if ap & 0x20 == 0 { ap |= *self.aow; }
-                ap | 0xC0
+                let mut val = *self.joypad_reg & 0x30;
+                if val & 0x10 == 0 { val |= *self.joypad_dirs; }
+                if val & 0x20 == 0 { val |= *self.joypad_buttons; }
+                val | 0xC0
             }
-            0xFF01 => *self.cht,
-            0xFF02 => *self.chs,
-            0xFF04 => self.timer.pac(),
-            0xFF05 => self.timer.ejw,
-            0xFF06 => self.timer.fww,
-            0xFF07 => self.timer.ezl,
-            0xFF0F => *self.bhf,
+            0xFF01 => *self.serial_data,
+            0xFF02 => *self.serial_ctrl,
+            0xFF04 => self.timer.read_div(),
+            0xFF05 => self.timer.tima,
+            0xFF06 => self.timer.tma,
+            0xFF07 => self.timer.tac,
+            0xFF0F => *self.if_reg,
             
             0xFF10..=0xFF3F => 0xFF,
             
-            0xFF40 => self.gpu.amh,
-            0xFF41 => self.gpu.vso(),
-            0xFF42 => self.gpu.eyf,
-            0xFF43 => self.gpu.eye,
-            0xFF44 => if self.gpu.amh & 0x80 != 0 { self.gpu.ct } else { 0 },
-            0xFF45 => self.gpu.eey,
+            0xFF40 => self.gpu.lcdc,
+            0xFF41 => self.gpu.read_stat(),
+            0xFF42 => self.gpu.scy,
+            0xFF43 => self.gpu.scx,
+            0xFF44 => if self.gpu.lcdc & 0x80 != 0 { self.gpu.ly } else { 0 },
+            0xFF45 => self.gpu.lyc,
             0xFF46 => 0, 
-            0xFF47 => self.gpu.emt,
-            0xFF48 => self.gpu.fpm,
-            0xFF49 => self.gpu.fpn,
-            0xFF4A => self.gpu.lw,
-            0xFF4B => self.gpu.fx,
+            0xFF47 => self.gpu.bgp,
+            0xFF48 => self.gpu.obp0,
+            0xFF49 => self.gpu.obp1,
+            0xFF4A => self.gpu.wy,
+            0xFF4B => self.gpu.wx,
             
-            0xFF4D => *self.beq,                      
-            0xFF4F => self.gpu.fbb | 0xFE,       
-            0xFF51 => *self.ecn,
-            0xFF52 => *self.eco,
-            0xFF53 => *self.ecp,
-            0xFF54 => *self.ecq,
-            0xFF55 => *self.ecr,
-            0xFF68 => self.gpu.doj,                   
-            0xFF69 => self.gpu.vrg(),            
-            0xFF6A => self.gpu.dtv,                   
-            0xFF6B => self.gpu.vse(),            
-            0xFF70 => *self.axj,                 
+            0xFF4D => *self.key1,                      
+            0xFF4F => self.gpu.vram_bank | 0xFE,       
+            0xFF51 => *self.hdma1,
+            0xFF52 => *self.hdma2,
+            0xFF53 => *self.hdma3,
+            0xFF54 => *self.hdma4,
+            0xFF55 => *self.hdma5,
+            0xFF68 => self.gpu.bcps,                   
+            0xFF69 => self.gpu.read_bcpd(),            
+            0xFF6A => self.gpu.ocps,                   
+            0xFF6B => self.gpu.read_ocpd(),            
+            0xFF70 => *self.wram_bank,                 
             
-            0xFF80..=0xFFFE => self.bux[(ag - 0xFF80) as usize],
+            0xFF80..=0xFFFE => self.hram[(addr - 0xFF80) as usize],
             
-            0xFFFF => *self.brc,
+            0xFFFF => *self.ie_reg,
             _ => 0xFF,
         }
     }
 
-    fn write(&mut self, ag: u16, ap: u8) {
-        match ag {
+    fn write(&mut self, addr: u16, val: u8) {
+        match addr {
             
-            0x0000..=0x7FFF => self.on.write(ag, ap),
+            0x0000..=0x7FFF => self.cart.write(addr, val),
             
-            0x8000..=0x9FFF => self.gpu.mrd(ag, ap),
+            0x8000..=0x9FFF => self.gpu.write_vram(addr, val),
             
-            0xA000..=0xBFFF => self.on.write(ag, ap),
+            0xA000..=0xBFFF => self.cart.write(addr, val),
             
-            0xC000..=0xCFFF => self.aec[(ag as usize - 0xC000)] = ap,
+            0xC000..=0xCFFF => self.wram[(addr as usize - 0xC000)] = val,
             
             0xD000..=0xDFFF => {
-                let om = if self.atz { (*self.axj).am(1) as usize } else { 1 };
-                let l = om * 0x1000 + (ag as usize - 0xD000);
-                if l < self.aec.len() { self.aec[l] = ap; }
+                let gi = if self.cgb_mode { (*self.wram_bank).max(1) as usize } else { 1 };
+                let offset = gi * 0x1000 + (addr as usize - 0xD000);
+                if offset < self.wram.len() { self.wram[offset] = val; }
             },
             
-            0xE000..=0xEFFF => self.aec[(ag as usize - 0xE000)] = ap,
+            0xE000..=0xEFFF => self.wram[(addr as usize - 0xE000)] = val,
             0xF000..=0xFDFF => {
-                let om = if self.atz { (*self.axj).am(1) as usize } else { 1 };
-                let l = om * 0x1000 + (ag as usize - 0xF000);
-                if l < self.aec.len() { self.aec[l] = ap; }
+                let gi = if self.cgb_mode { (*self.wram_bank).max(1) as usize } else { 1 };
+                let offset = gi * 0x1000 + (addr as usize - 0xF000);
+                if offset < self.wram.len() { self.wram[offset] = val; }
             },
             
-            0xFE00..=0xFE9F => self.gpu.pzz(ag, ap),
+            0xFE00..=0xFE9F => self.gpu.write_oam(addr, val),
             
             0xFEA0..=0xFEFF => {}
             
-            0xFF00 => *self.cfu = ap & 0x30,
-            0xFF01 => *self.cht = ap,
-            0xFF02 => *self.chs = ap,
-            0xFF04 => self.timer.xvi(),
-            0xFF05 => self.timer.ejw = ap,
-            0xFF06 => self.timer.fww = ap,
-            0xFF07 => self.timer.ezl = ap,
-            0xFF0F => *self.bhf = ap,
+            0xFF00 => *self.joypad_reg = val & 0x30,
+            0xFF01 => *self.serial_data = val,
+            0xFF02 => *self.serial_ctrl = val,
+            0xFF04 => self.timer.write_div(),
+            0xFF05 => self.timer.tima = val,
+            0xFF06 => self.timer.tma = val,
+            0xFF07 => self.timer.tac = val,
+            0xFF0F => *self.if_reg = val,
             
             0xFF10..=0xFF3F => {}
             
             0xFF40 => {
-                let aft = self.gpu.amh;
-                self.gpu.amh = ap;
+                let qb = self.gpu.lcdc;
+                self.gpu.lcdc = val;
                 
-                if ap & 0x80 != 0 && aft & 0x80 == 0 {
-                    self.gpu.ct = 0;
-                    self.gpu.yl = 0;
-                    self.gpu.ev = 2;
-                    self.gpu.ekz = 0;
+                if val & 0x80 != 0 && qb & 0x80 == 0 {
+                    self.gpu.ly = 0;
+                    self.gpu.cycles = 0;
+                    self.gpu.mode = 2;
+                    self.gpu.window_line = 0;
                 }
             }
-            0xFF41 => self.gpu.hm = (self.gpu.hm & 0x07) | (ap & 0xF8),
-            0xFF42 => self.gpu.eyf = ap,
-            0xFF43 => self.gpu.eye = ap,
+            0xFF41 => self.gpu.stat = (self.gpu.stat & 0x07) | (val & 0xF8),
+            0xFF42 => self.gpu.scy = val,
+            0xFF43 => self.gpu.scx = val,
             0xFF44 => {} 
-            0xFF45 => self.gpu.eey = ap,
+            0xFF45 => self.gpu.lyc = val,
             0xFF46 => {
                 
-                let ar = (ap as u16) << 8;
-                for a in 0..160u16 {
-                    let hf = match ar + a {
-                        q @ 0x0000..=0x7FFF => self.on.read(q),
-                        q @ 0x8000..=0x9FFF => self.gpu.jlp(q),
-                        q @ 0xA000..=0xBFFF => self.on.read(q),
-                        q @ 0xC000..=0xCFFF => self.aec[(q as usize - 0xC000)],
-                        q @ 0xD000..=0xDFFF => {
-                            let om = if self.atz { (*self.axj).am(1) as usize } else { 1 };
-                            let l = om * 0x1000 + (q as usize - 0xD000);
-                            if l < self.aec.len() { self.aec[l] } else { 0 }
+                let base = (val as u16) << 8;
+                for i in 0..160u16 {
+                    let byte = match base + i {
+                        a @ 0x0000..=0x7FFF => self.cart.read(a),
+                        a @ 0x8000..=0x9FFF => self.gpu.read_vram(a),
+                        a @ 0xA000..=0xBFFF => self.cart.read(a),
+                        a @ 0xC000..=0xCFFF => self.wram[(a as usize - 0xC000)],
+                        a @ 0xD000..=0xDFFF => {
+                            let gi = if self.cgb_mode { (*self.wram_bank).max(1) as usize } else { 1 };
+                            let offset = gi * 0x1000 + (a as usize - 0xD000);
+                            if offset < self.wram.len() { self.wram[offset] } else { 0 }
                         },
                         _ => 0,
                     };
-                    self.gpu.pzz(0xFE00 + a, hf);
+                    self.gpu.write_oam(0xFE00 + i, byte);
                 }
             }
-            0xFF47 => self.gpu.emt = ap,
-            0xFF48 => self.gpu.fpm = ap,
-            0xFF49 => self.gpu.fpn = ap,
-            0xFF4A => self.gpu.lw = ap,
-            0xFF4B => self.gpu.fx = ap,
+            0xFF47 => self.gpu.bgp = val,
+            0xFF48 => self.gpu.obp0 = val,
+            0xFF49 => self.gpu.obp1 = val,
+            0xFF4A => self.gpu.wy = val,
+            0xFF4B => self.gpu.wx = val,
             
-            0xFF4D => *self.beq = (*self.beq & 0x80) | (ap & 0x01), 
-            0xFF4F => self.gpu.fbb = ap & 0x01,                  
-            0xFF51 => *self.ecn = ap,
-            0xFF52 => *self.eco = ap & 0xF0,
-            0xFF53 => *self.ecp = ap & 0x1F,
-            0xFF54 => *self.ecq = ap & 0xF0,
+            0xFF4D => *self.key1 = (*self.key1 & 0x80) | (val & 0x01), 
+            0xFF4F => self.gpu.vram_bank = val & 0x01,                  
+            0xFF51 => *self.hdma1 = val,
+            0xFF52 => *self.hdma2 = val & 0xF0,
+            0xFF53 => *self.hdma3 = val & 0x1F,
+            0xFF54 => *self.hdma4 = val & 0xF0,
             0xFF55 => {
                 
-                if self.atz {
-                    let cy = ((*self.ecn as u16) << 8) | (*self.eco as u16);
-                    let cs = 0x8000 | (((*self.ecp as u16) << 8) | (*self.ecq as u16));
-                    let len = ((ap as u16 & 0x7F) + 1) * 16;
+                if self.cgb_mode {
+                    let src = ((*self.hdma1 as u16) << 8) | (*self.hdma2 as u16);
+                    let dst = 0x8000 | (((*self.hdma3 as u16) << 8) | (*self.hdma4 as u16));
+                    let len = ((val as u16 & 0x7F) + 1) * 16;
                     
-                    if ap & 0x80 == 0 {
+                    if val & 0x80 == 0 {
                         
-                        for a in 0..len {
-                            let hf = match cy.cn(a) {
-                                q @ 0x0000..=0x7FFF => self.on.read(q),
-                                q @ 0x8000..=0x9FFF => self.gpu.jlp(q),
-                                q @ 0xA000..=0xBFFF => self.on.read(q),
-                                q @ 0xC000..=0xCFFF => self.aec[(q as usize - 0xC000)],
-                                q @ 0xD000..=0xDFFF => {
-                                    let om = (*self.axj).am(1) as usize;
-                                    let l = om * 0x1000 + (q as usize - 0xD000);
-                                    if l < self.aec.len() { self.aec[l] } else { 0 }
+                        for i in 0..len {
+                            let byte = match src.wrapping_add(i) {
+                                a @ 0x0000..=0x7FFF => self.cart.read(a),
+                                a @ 0x8000..=0x9FFF => self.gpu.read_vram(a),
+                                a @ 0xA000..=0xBFFF => self.cart.read(a),
+                                a @ 0xC000..=0xCFFF => self.wram[(a as usize - 0xC000)],
+                                a @ 0xD000..=0xDFFF => {
+                                    let gi = (*self.wram_bank).max(1) as usize;
+                                    let offset = gi * 0x1000 + (a as usize - 0xD000);
+                                    if offset < self.wram.len() { self.wram[offset] } else { 0 }
                                 },
                                 _ => 0xFF,
                             };
-                            self.gpu.mrd(cs.cn(a), hf);
+                            self.gpu.write_vram(dst.wrapping_add(i), byte);
                         }
-                        *self.ecr = 0xFF; 
+                        *self.hdma5 = 0xFF; 
                     } else {
                         
-                        for a in 0..len {
-                            let hf = match cy.cn(a) {
-                                q @ 0x0000..=0x7FFF => self.on.read(q),
-                                q @ 0xA000..=0xBFFF => self.on.read(q),
-                                q @ 0xC000..=0xCFFF => self.aec[(q as usize - 0xC000)],
-                                q @ 0xD000..=0xDFFF => {
-                                    let om = (*self.axj).am(1) as usize;
-                                    let l = om * 0x1000 + (q as usize - 0xD000);
-                                    if l < self.aec.len() { self.aec[l] } else { 0 }
+                        for i in 0..len {
+                            let byte = match src.wrapping_add(i) {
+                                a @ 0x0000..=0x7FFF => self.cart.read(a),
+                                a @ 0xA000..=0xBFFF => self.cart.read(a),
+                                a @ 0xC000..=0xCFFF => self.wram[(a as usize - 0xC000)],
+                                a @ 0xD000..=0xDFFF => {
+                                    let gi = (*self.wram_bank).max(1) as usize;
+                                    let offset = gi * 0x1000 + (a as usize - 0xD000);
+                                    if offset < self.wram.len() { self.wram[offset] } else { 0 }
                                 },
                                 _ => 0xFF,
                             };
-                            self.gpu.mrd(cs.cn(a), hf);
+                            self.gpu.write_vram(dst.wrapping_add(i), byte);
                         }
-                        *self.ecr = 0xFF;
+                        *self.hdma5 = 0xFF;
                     }
                 }
             }
-            0xFF68 => self.gpu.doj = ap,               
-            0xFF69 => self.gpu.xvh(ap),           
-            0xFF6A => self.gpu.dtv = ap,               
-            0xFF6B => self.gpu.xvo(ap),           
+            0xFF68 => self.gpu.bcps = val,               
+            0xFF69 => self.gpu.write_bcpd(val),           
+            0xFF6A => self.gpu.ocps = val,               
+            0xFF6B => self.gpu.write_ocpd(val),           
             0xFF70 => {
                 
-                *self.axj = ap & 0x07;
-                if *self.axj == 0 { *self.axj = 1; }
+                *self.wram_bank = val & 0x07;
+                if *self.wram_bank == 0 { *self.wram_bank = 1; }
             }
             
-            0xFF80..=0xFFFE => self.bux[(ag - 0xFF80) as usize] = ap,
+            0xFF80..=0xFFFE => self.hram[(addr - 0xFF80) as usize] = val,
             
-            0xFFFF => *self.brc = ap,
+            0xFFFF => *self.ie_reg = val,
             _ => {}
         }
     }
 }
 
 
-fn cb(bd: &mut [u32], d: usize, i: usize, text: &str, b: usize, c: usize, s: u32, bv: usize) {
-    let mut cx = b;
-    for bm in text.bf() {
-        let ka = ada(bm);
-        for br in 0..5usize {
-            for bj in 0..3usize {
-                if ka[br] & (1 << (2 - bj)) != 0 {
-                    for cq in 0..bv {
-                        for cr in 0..bv {
-                            let y = cx + bj * bv + cr;
-                            let x = c + br * bv + cq;
-                            if y < d && x < i { bd[x * d + y] = s; }
+fn draw_text(out: &mut [u32], w: usize, h: usize, text: &str, x: usize, y: usize, color: u32, scale: usize) {
+    let mut cx = x;
+    for ch in text.bytes() {
+        let du = ol(ch);
+        for row in 0..5usize {
+            for col in 0..3usize {
+                if du[row] & (1 << (2 - col)) != 0 {
+                    for ak in 0..scale {
+                        for am in 0..scale {
+                            let p = cx + col * scale + am;
+                            let o = y + row * scale + ak;
+                            if p < w && o < h { out[o * w + p] = color; }
                         }
                     }
                 }
             }
         }
-        cx += (3 + 1) * bv;
+        cx += (3 + 1) * scale;
     }
 }
 
-fn ada(bm: u8) -> [u8; 5] {
-    match bm {
+fn ol(ch: u8) -> [u8; 5] {
+    match ch {
         b'A' => [0b111, 0b101, 0b111, 0b101, 0b101],
         b'B' => [0b110, 0b101, 0b110, 0b101, 0b110],
         b'C' => [0b111, 0b100, 0b100, 0b100, 0b111],

@@ -43,95 +43,95 @@ pub use platform::syscall_arch;
 
 
 #[inline(always)]
-pub fn bhd() {
-    platform::bhd();
+pub fn acb() {
+    platform::acb();
 }
 
 
 #[inline(always)]
-pub fn hmj() -> ! {
+pub fn dre() -> ! {
     loop {
-        platform::bhd();
+        platform::acb();
     }
 }
 
 
 #[inline(always)]
-pub fn ofa() {
-    platform::interrupts::aiy();
+pub fn ihd() {
+    platform::interrupts::enable();
 }
 
 
 #[inline(always)]
-pub fn tvq() {
-    platform::interrupts::cwz();
+pub fn mra() {
+    platform::interrupts::bbc();
 }
 
 
 #[inline(always)]
-pub fn cvh<G, Ac>(bb: G) -> Ac
+pub fn bag<F, U>(f: F) -> U
 where
-    G: FnOnce() -> Ac,
+    F: FnOnce() -> U,
 {
-    platform::interrupts::cvh(bb)
+    platform::interrupts::bag(f)
 }
 
 
 #[inline(always)]
-pub fn kaw() -> bool {
-    platform::interrupts::gag()
+pub fn fhh() -> bool {
+    platform::interrupts::ctq()
 }
 
 
 #[inline(always)]
-pub fn ghg(ag: u64) {
-    platform::memory::ghg(ag);
+pub fn cxy(addr: u64) {
+    platform::memory::cxy(addr);
 }
 
 
 #[inline(always)]
-pub fn ivc() {
-    platform::memory::ivc();
+pub fn emz() {
+    platform::memory::emz();
 }
 
 
 #[inline(always)]
-pub fn dle() -> u64 {
-    platform::memory::dle()
+pub fn biw() -> u64 {
+    platform::memory::biw()
 }
 
 
 #[inline(always)]
-pub fn dnj(ap: u64) {
-    platform::memory::dnj(ap);
+pub fn bkc(val: u64) {
+    platform::memory::bkc(val);
 }
 
 
 #[inline(always)]
-pub fn jln() -> u64 {
-    platform::cpu::jln()
+pub fn exy() -> u64 {
+    platform::cpu::exy()
 }
 
 
 #[inline(always)]
-pub fn jat() {
-    platform::cpu::jat();
+pub fn erb() {
+    platform::cpu::erb();
 }
 
 
 #[inline(always)]
-pub fn hbf() {
-    platform::cpu::hbf();
+pub fn breakpoint() {
+    platform::cpu::breakpoint();
 }
 
 
 #[inline(always)]
-pub fn aea() -> u64 {
-    platform::timer::aea()
+pub fn timestamp() -> u64 {
+    platform::timer::timestamp()
 }
 
 
-pub const fn kav() -> &'static str {
+pub const fn fhg() -> &'static str {
     #[cfg(target_arch = "x86_64")]
     { "x86_64" }
     #[cfg(target_arch = "aarch64")]
@@ -141,10 +141,10 @@ pub const fn kav() -> &'static str {
 }
 
 
-pub const BM_: usize = 4096;
+pub const BO_: usize = 4096;
 
 
-pub const DSD_: u64 = {
+pub const DVW_: u64 = {
     #[cfg(target_arch = "x86_64")]
     { 0xFFFF_FFFF_8000_0000 } 
     #[cfg(target_arch = "aarch64")]
@@ -154,7 +154,7 @@ pub const DSD_: u64 = {
 };
 
 
-pub const DZU_: u32 = {
+pub const EDL_: u32 = {
     #[cfg(target_arch = "x86_64")]
     { 52 }
     #[cfg(target_arch = "aarch64")]
@@ -178,23 +178,23 @@ pub mod port_stub {
     use core::marker::PhantomData;
 
     
-    pub struct Port<T: Adw> {
-        qdi: PhantomData<T>,
+    pub struct Port<T: Mx> {
+        _phantom: PhantomData<T>,
         port: u16,
     }
 
     
-    pub trait Adw: Copy + Default {}
-    impl Adw for u8 {}
-    impl Adw for u16 {}
-    impl Adw for u32 {}
+    pub trait Mx: Copy + Default {}
+    impl Mx for u8 {}
+    impl Mx for u16 {}
+    impl Mx for u32 {}
 
-    impl<T: Adw> Port<T> {
+    impl<T: Mx> Port<T> {
         pub const fn new(port: u16) -> Self {
-            Self { qdi: PhantomData, port }
+            Self { _phantom: PhantomData, port }
         }
         pub unsafe fn read(&mut self) -> T { T::default() }
-        pub unsafe fn write(&mut self, msy: T) {}
+        pub unsafe fn write(&mut self, hdm: T) {}
     }
 }
 

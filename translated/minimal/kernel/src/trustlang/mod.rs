@@ -26,40 +26,40 @@ use alloc::vec::Vec;
 use alloc::format;
 
 
-pub fn vw(iy: &str) -> Result<String, String> {
-    let eb = lexer::fwz(iy)?;
-    let gzb = parser::parse(&eb)?;
-    let hby = compiler::rmx(&gzb)?;
-    vm::bna(&hby)
+pub fn run(source: &str) -> Result<String, String> {
+    let tokens = lexer::crv(source)?;
+    let dhy = parser::parse(&tokens)?;
+    let dkd = compiler::kwd(&dhy)?;
+    vm::execute(&dkd)
 }
 
 
-pub fn feq(iy: &str) -> Result<(), String> {
-    let eb = lexer::fwz(iy)?;
-    let xxx = parser::parse(&eb)?;
+pub fn cgv(source: &str) -> Result<(), String> {
+    let tokens = lexer::crv(source)?;
+    let pwr = parser::parse(&tokens)?;
     Ok(())
 }
 
 
 
-pub fn nrc(line: &str) -> Result<String, String> {
+pub fn hwq(line: &str) -> Result<String, String> {
     
     if line.contains("fn main") || line.contains("fn ") {
-        return vw(line);
+        return run(line);
     }
     
-    let fyx = format!("fn main() {{ {} }}", line);
-    vw(&fyx)
+    let wrapped = format!("fn main() {{ {} }}", line);
+    run(&wrapped)
 }
 
 
 
-pub fn rmy(iy: &str, qug: native::Bcv) -> Result<i64, String> {
-    let alo = native::hdq(iy)?;
-    unsafe { native::him(&alo, qug) }
+pub fn kwe(source: &str, builtin_cb: native::Ws) -> Result<i64, String> {
+    let program = native::dle(source)?;
+    unsafe { native::doz(&program, builtin_cb) }
 }
 
 
-pub fn wbi() -> (usize, usize, String) {
-    tests::jne()
+pub fn ojd() -> (usize, usize, String) {
+    tests::ezf()
 }

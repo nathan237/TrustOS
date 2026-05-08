@@ -23,6 +23,16 @@ const PS2_COMMAND: u16 = 0x64;
 pub fn init_i8042() {
     crate::serial_println!("[i8042] Initializing PS/2 keyboard controller...");
 
+    // Quick probe: if status port reads 0xFF, no i8042 exists (UEFI-only board)
+    {
+        let mut status = Port::<u8>::new(PS2_STATUS);
+        let val = unsafe { status.read() };
+        if val == 0xFF {
+            crate::serial_println!("[i8042] No PS/2 controller detected (status=0xFF) — skipping");
+            return;
+        }
+    }
+
     // 1. Disable both PS/2 ports while we configure
     i8042_cmd(0xAD); // disable first port  (keyboard)
     i8042_cmd(0xA7); // disable second port (mouse — may not exist)
@@ -93,9 +103,13 @@ fn i8042_cmd(cmd: u8) {
     let mut status = Port::<u8>::new(PS2_STATUS);
     let mut command = Port::<u8>::new(PS2_COMMAND);
     // Wait for input buffer empty (bit 1 = 0)
-    // Use large timeout for slow controllers (e.g. older laptops)
-    for _ in 0..1_000_000 {
+    // Bounded timeout — some boards have no i8042 and return 0xFF forever
+    for i in 0..50_000u32 {
         if unsafe { status.read() } & 0x02 == 0 { break; }
+        if i == 49_999 {
+            crate::serial_println!("[i8042] WARNING: cmd {:#04x} timeout", cmd);
+            return;
+        }
         core::hint::spin_loop();
     }
     unsafe { command.write(cmd); }
@@ -105,8 +119,9 @@ fn i8042_cmd(cmd: u8) {
 fn i8042_write_data(data: u8) {
     let mut status = Port::<u8>::new(PS2_STATUS);
     let mut port = Port::<u8>::new(PS2_DATA);
-    for _ in 0..1_000_000 {
+    for i in 0..5_000u32 {
         if unsafe { status.read() } & 0x02 == 0 { break; }
+        if i == 4_999 { return; }
         core::hint::spin_loop();
     }
     unsafe { port.write(data); }
@@ -116,7 +131,7 @@ fn i8042_write_data(data: u8) {
 fn i8042_read_data() -> u8 {
     let mut status = Port::<u8>::new(PS2_STATUS);
     let mut port = Port::<u8>::new(PS2_DATA);
-    for _ in 0..1_000_000 {
+    for _ in 0..5_000u32 {
         if unsafe { status.read() } & 0x01 != 0 {
             return unsafe { port.read() };
         }
@@ -408,6 +423,20 @@ pub fn handle_scancode(scancode: u8) {
     // Debug: log all scancodes (disabled — too noisy for serial automation)
     // crate::serial_println!("[KB-IRQ] scancode=0x{:02X}", scancode);
     
+    // USB Legacy debounce: some BIOS emulators send duplicate make codes.
+    // If we get the exact same non-release scancode twice in a row with no
+    // intervening break code, suppress the duplicate.
+    if scancode & 0x80 == 0 && scancode != 0xE0 && scancode != 0xE1 {
+        let prev = LAST_SCANCODE.swap(scancode, Ordering::SeqCst);
+        if prev == scancode {
+            // Same make code twice — suppress duplicate
+            return;
+        }
+    } else {
+        // Break code or prefix: reset debounce so next make code goes through
+        LAST_SCANCODE.store(0xFF, Ordering::SeqCst);
+    }
+
     // Handle E1 prefix (Pause/Break key: E1 1D 45 E1 9D C5)
     let skip = E1_SKIP.load(Ordering::SeqCst);
     if skip > 0 {

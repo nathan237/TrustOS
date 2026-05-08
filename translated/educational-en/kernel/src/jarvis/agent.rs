@@ -159,7 +159,7 @@ match target {
             lines.push(String::from("= Weight Statistics ="));
             if let Some(model) = super::MODEL.lock().as_ref() {
                 lines.push(format!("Token embed: {}", vec_stats(&model.token_embed)));
-                lines.push(format!("Pos embed:   {}", vec_stats(&model.position_embed)));
+                lines.push(format!("Pos embed:   {}", vec_stats(&model.pos_embed)));
                 for (i, layer) in model.layers.iter().enumerate() {
                     lines.push(format!("Layer {}:", i));
                     lines.push(format!("  W_q:    {}", vec_stats(&layer.w_q)));
@@ -305,10 +305,10 @@ match model_guard.as_ref() {
     engine.config.temperature = 0.5;
     let _ = engine.generate(model, prompt, maximum_tokens);
 
-    let elapsed_mouse = crate::time::uptime_ticks().saturating_sub(start).maximum(1);
-    let tokens_per_sector = (maximum_tokens as f32 * 1000.0) / elapsed_mouse as f32;
+    let elapsed_ms = crate::time::uptime_ticks().saturating_sub(start).max(1);
+    let tokens_per_sector = (maximum_tokens as f32 * 1000.0) / elapsed_ms as f32;
 
-    (tokens_per_sector, elapsed_mouse)
+    (tokens_per_sector, elapsed_ms)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -340,7 +340,7 @@ fn vec_stats(v: &[f32]) -> String {
     } else {
         0.0
     };
-    let minimum = v.iter().copied().fold(f32::INFINITY, f32::minimum);
-    let maximum = v.iter().copied().fold(f32::NEGATIVE_INFINITY, f32::maximum);
-    format!("n={} mean={:.4} std={:.4} min={:.3} max={:.3}", v.len(), mean, std, minimum, maximum)
+    let min = v.iter().copied().fold(f32::INFINITY, f32::min);
+    let max = v.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+    format!("n={} mean={:.4} std={:.4} min={:.3} max={:.3}", v.len(), mean, std, min, max)
 }

@@ -12,22 +12,22 @@
 use alloc::vec::Vec;
 use alloc::string::String;
 use alloc::format;
-use super::tables::{XC_, AFO_};
+use super::tables::{YJ_, AHI_};
 
 
-pub const BR_: u32 = 48000;
+pub const BT_: u32 = 48000;
 
-pub const Dv: u32 = 2;
+pub const Bq: u32 = 2;
 
-pub const DEH_: u32 = 2;
+pub const DIB_: u32 = 2;
 
-pub const BAE_: usize = 8;
+pub const BCG_: usize = 8;
 
-const EH_: u32 = 16;
+const EU_: u32 = 16;
 
-const JC_: u32 = 256;
+const JV_: u32 = 256;
 
-const CEM_: u16 = 0xACE1;
+const CHV_: u16 = 0xACE1;
 
 
 
@@ -36,44 +36,44 @@ const CEM_: u16 = 0xACE1;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Waveform {
-    Dg,
-    Gb,
-    Ft,
+    Sine,
+    Square,
+    Sawtooth,
     Triangle,
-    Cr,
+    Noise,
 }
 
 impl Waveform {
     
-    pub fn cko(e: &str) -> Option<Self> {
-        match e {
-            "sine" | "sin" | "s" => Some(Waveform::Dg),
-            "square" | "sq" | "q" => Some(Waveform::Gb),
-            "saw" | "sawtooth" | "w" => Some(Waveform::Ft),
+    pub fn atv(j: &str) -> Option<Self> {
+        match j {
+            "sine" | "sin" | "s" => Some(Waveform::Sine),
+            "square" | "sq" | "q" => Some(Waveform::Square),
+            "saw" | "sawtooth" | "w" => Some(Waveform::Sawtooth),
             "triangle" | "tri" | "t" => Some(Waveform::Triangle),
-            "noise" | "n" => Some(Waveform::Cr),
+            "noise" | "n" => Some(Waveform::Noise),
             _ => None,
         }
     }
 
     
-    pub fn dbz(&self) -> &'static str {
+    pub fn short_name(&self) -> &'static str {
         match self {
-            Waveform::Dg => "Sin",
-            Waveform::Gb => "Sqr",
-            Waveform::Ft => "Saw",
+            Waveform::Sine => "Sin",
+            Waveform::Square => "Sqr",
+            Waveform::Sawtooth => "Saw",
             Waveform::Triangle => "Tri",
-            Waveform::Cr => "Noi",
+            Waveform::Noise => "Noi",
         }
     }
 
-    pub fn j(&self) -> &'static str {
+    pub fn name(&self) -> &'static str {
         match self {
-            Waveform::Dg => "Sine",
-            Waveform::Gb => "Square",
-            Waveform::Ft => "Sawtooth",
+            Waveform::Sine => "Sine",
+            Waveform::Square => "Square",
+            Waveform::Sawtooth => "Sawtooth",
             Waveform::Triangle => "Triangle",
-            Waveform::Cr => "Noise",
+            Waveform::Noise => "Noise",
         }
     }
 }
@@ -85,10 +85,10 @@ impl Waveform {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum EnvState {
-    Cv,
-    Ape,
-    Ahi,
-    Ane,
+    Idle,
+    Attack,
+    Decay,
+    Sustain,
     Release,
 }
 
@@ -96,146 +96,146 @@ pub enum EnvState {
 #[derive(Debug, Clone, Copy)]
 pub struct Envelope {
     
-    pub gzd: u32,
+    pub attack_samples: u32,
     
-    pub hfn: u32,
+    pub decay_samples: u32,
     
-    pub fvx: i32,
+    pub sustain_level: i32,
     
-    pub chd: u32,
+    pub release_samples: u32,
     
-    g: EnvState,
+    state: EnvState,
     
-    jy: i32,
+    level: i32,
     
-    va: u32,
+    counter: u32,
 }
 
 impl Envelope {
     
-    pub fn new(gzc: u32, hfm: u32, icg: u32, hxk: u32) -> Self {
-        let wwd = (icg.v(100) as i32 * 32767) / 100;
+    pub fn new(attack_ms: u32, decay_ms: u32, sustain_pct: u32, release_ms: u32) -> Self {
+        let oyu = (sustain_pct.min(100) as i32 * 32767) / 100;
         Self {
-            gzd: hsd(gzc),
-            hfn: hsd(hfm),
-            fvx: wwd,
-            chd: hsd(hxk),
-            g: EnvState::Cv,
-            jy: 0,
-            va: 0,
+            attack_samples: dup(attack_ms),
+            decay_samples: dup(decay_ms),
+            sustain_level: oyu,
+            release_samples: dup(release_ms),
+            state: EnvState::Idle,
+            level: 0,
+            counter: 0,
         }
     }
 
     
-    pub fn iqt() -> Self {
+    pub fn eka() -> Self {
         Self::new(10, 50, 70, 100)
     }
 
     
-    pub fn uza() -> Self {
+    pub fn nnt() -> Self {
         Self::new(1, 1, 100, 10)
     }
 
     
-    pub fn hvi() -> Self {
+    pub fn dwp() -> Self {
         Self::new(2, 200, 0, 50)
     }
 
     
-    pub fn ov() -> Self {
+    pub fn pad() -> Self {
         Self::new(300, 100, 80, 500)
     }
 
     
-    pub fn dtq(&mut self) {
-        self.g = EnvState::Ape;
-        self.va = 0;
+    pub fn note_on(&mut self) {
+        self.state = EnvState::Attack;
+        self.counter = 0;
         
     }
 
     
-    pub fn djx(&mut self) {
-        if self.g != EnvState::Cv {
-            self.g = EnvState::Release;
-            self.va = 0;
+    pub fn note_off(&mut self) {
+        if self.state != EnvState::Idle {
+            self.state = EnvState::Release;
+            self.counter = 0;
         }
     }
 
     
-    pub fn or(&mut self) -> i32 {
-        match self.g {
-            EnvState::Cv => {
-                self.jy = 0;
+    pub fn tick(&mut self) -> i32 {
+        match self.state {
+            EnvState::Idle => {
+                self.level = 0;
             }
-            EnvState::Ape => {
-                if self.gzd == 0 {
-                    self.jy = 32767;
-                    self.g = EnvState::Ahi;
-                    self.va = 0;
+            EnvState::Attack => {
+                if self.attack_samples == 0 {
+                    self.level = 32767;
+                    self.state = EnvState::Decay;
+                    self.counter = 0;
                 } else {
-                    self.jy = ((self.va as i64 * 32767) / self.gzd as i64) as i32;
-                    self.va += 1;
-                    if self.va >= self.gzd {
-                        self.jy = 32767;
-                        self.g = EnvState::Ahi;
-                        self.va = 0;
+                    self.level = ((self.counter as i64 * 32767) / self.attack_samples as i64) as i32;
+                    self.counter += 1;
+                    if self.counter >= self.attack_samples {
+                        self.level = 32767;
+                        self.state = EnvState::Decay;
+                        self.counter = 0;
                     }
                 }
             }
-            EnvState::Ahi => {
-                if self.hfn == 0 {
-                    self.jy = self.fvx;
-                    self.g = EnvState::Ane;
+            EnvState::Decay => {
+                if self.decay_samples == 0 {
+                    self.level = self.sustain_level;
+                    self.state = EnvState::Sustain;
                 } else {
-                    let aaq = 32767 - self.fvx;
-                    self.jy = 32767 - ((self.va as i64 * aaq as i64) / self.hfn as i64) as i32;
-                    self.va += 1;
-                    if self.va >= self.hfn {
-                        self.jy = self.fvx;
-                        self.g = EnvState::Ane;
-                        self.va = 0;
+                    let mk = 32767 - self.sustain_level;
+                    self.level = 32767 - ((self.counter as i64 * mk as i64) / self.decay_samples as i64) as i32;
+                    self.counter += 1;
+                    if self.counter >= self.decay_samples {
+                        self.level = self.sustain_level;
+                        self.state = EnvState::Sustain;
+                        self.counter = 0;
                     }
                 }
             }
-            EnvState::Ane => {
-                self.jy = self.fvx;
+            EnvState::Sustain => {
+                self.level = self.sustain_level;
                 
             }
             EnvState::Release => {
-                if self.chd == 0 {
-                    self.jy = 0;
-                    self.g = EnvState::Cv;
+                if self.release_samples == 0 {
+                    self.level = 0;
+                    self.state = EnvState::Idle;
                 } else {
-                    let poa = if self.va == 0 { self.jy } else {
+                    let jih = if self.counter == 0 { self.level } else {
                         
                         
-                        self.fvx
+                        self.sustain_level
                     };
-                    self.jy = poa - ((self.va as i64 * poa as i64) / self.chd as i64) as i32;
-                    if self.jy < 0 { self.jy = 0; }
-                    self.va += 1;
-                    if self.va >= self.chd {
-                        self.jy = 0;
-                        self.g = EnvState::Cv;
+                    self.level = jih - ((self.counter as i64 * jih as i64) / self.release_samples as i64) as i32;
+                    if self.level < 0 { self.level = 0; }
+                    self.counter += 1;
+                    if self.counter >= self.release_samples {
+                        self.level = 0;
+                        self.state = EnvState::Idle;
                     }
                 }
             }
         }
-        self.jy
+        self.level
     }
 
     
-    pub fn edw(&self) -> bool {
-        self.g == EnvState::Cv
+    pub fn is_idle(&self) -> bool {
+        self.state == EnvState::Idle
     }
 
     
-    pub fn mhm(&self) -> &'static str {
-        match self.g {
-            EnvState::Cv => "Idle",
-            EnvState::Ape => "Atk",
-            EnvState::Ahi => "Dec",
-            EnvState::Ane => "Sus",
+    pub fn state_name(&self) -> &'static str {
+        match self.state {
+            EnvState::Idle => "Idle",
+            EnvState::Attack => "Atk",
+            EnvState::Decay => "Dec",
+            EnvState::Sustain => "Sus",
             EnvState::Release => "Rel",
         }
     }
@@ -249,172 +249,172 @@ impl Envelope {
 #[derive(Debug, Clone)]
 pub struct Oscillator {
     
-    pub ve: Waveform,
+    pub waveform: Waveform,
     
-    ib: u32,
+    phase: u32,
     
-    fqq: u32,
+    phase_inc: u32,
     
-    pub auf: u32,
+    pub freq_hz: u32,
     
-    cam: u16,
+    lfsr: u16,
 }
 
 impl Oscillator {
     
-    pub fn new(ve: Waveform, auf: u32) -> Self {
-        let fqq = Self::nbg(auf);
+    pub fn new(waveform: Waveform, freq_hz: u32) -> Self {
+        let phase_inc = Self::hjr(freq_hz);
         Self {
-            ve,
-            ib: 0,
-            fqq,
-            auf,
-            cam: CEM_,
+            waveform,
+            phase: 0,
+            phase_inc,
+            freq_hz,
+            lfsr: CHV_,
         }
     }
 
     
     
-    fn nbg(auf: u32) -> u32 {
+    fn hjr(freq_hz: u32) -> u32 {
         
-        ((auf as u64 * (JC_ as u64) << EH_) / BR_ as u64) as u32
+        ((freq_hz as u64 * (JV_ as u64) << EU_) / BT_ as u64) as u32
     }
 
     
-    pub fn wiw(&mut self, auf: u32) {
-        self.auf = auf;
-        self.fqq = Self::nbg(auf);
+    pub fn set_freq(&mut self, freq_hz: u32) {
+        self.freq_hz = freq_hz;
+        self.phase_inc = Self::hjr(freq_hz);
     }
 
     
-    pub fn znk(&mut self, jp: u8) {
-        let kx = AFO_[jp.v(127) as usize];
-        self.wiw(kx);
+    pub fn qwg(&mut self, note: u8) {
+        let freq = AHI_[note.min(127) as usize];
+        self.set_freq(freq);
     }
 
     
-    pub fn zjx(&mut self) {
-        self.ib = 0;
+    pub fn quf(&mut self) {
+        self.phase = 0;
     }
 
     
-    pub fn or(&mut self) -> i16 {
-        let yr = match self.ve {
-            Waveform::Dg => self.tbj(),
-            Waveform::Gb => self.tbl(),
-            Waveform::Ft => self.tbi(),
-            Waveform::Triangle => self.tbs(),
-            Waveform::Cr => self.tbg(),
+    pub fn tick(&mut self) -> i16 {
+        let sample = match self.waveform {
+            Waveform::Sine => self.gen_sine(),
+            Waveform::Square => self.gen_square(),
+            Waveform::Sawtooth => self.gen_sawtooth(),
+            Waveform::Triangle => self.gen_triangle(),
+            Waveform::Noise => self.gen_noise(),
         };
 
         
-        self.ib = self.ib.cn(self.fqq);
+        self.phase = self.phase.wrapping_add(self.phase_inc);
 
-        yr
+        sample
     }
 
     
-    fn tbj(&self) -> i16 {
-        let prn = (self.ib >> EH_) as usize & 0xFF;
-        let avw = (self.ib & 0xFFFF) as i32;
+    fn gen_sine(&self) -> i16 {
+        let jlg = (self.phase >> EU_) as usize & 0xFF;
+        let yt = (self.phase & 0xFFFF) as i32;
 
-        let cmq = XC_[prn] as i32;
-        let bic = XC_[(prn + 1) & 0xFF] as i32;
+        let auz = YJ_[jlg] as i32;
+        let afq = YJ_[(jlg + 1) & 0xFF] as i32;
 
         
-        let ahp = cmq + ((bic - cmq) * avw >> 16);
-        ahp as i16
+        let interp = auz + ((afq - auz) * yt >> 16);
+        interp as i16
     }
 
     
     
     
     
-    fn lus(&self, ai: u32) -> i32 {
-        let drz = self.fqq;
-        if drz == 0 { return 0; }
-        let awn = (JC_ << EH_) as u32;
+    fn poly_blep(&self, aa: u32) -> i32 {
+        let bmy = self.phase_inc;
+        if bmy == 0 { return 0; }
+        let zd = (JV_ << EU_) as u32;
 
         
-        if ai < drz {
-            let ab = ((ai as u64) << 16) / drz as u64;
-            let ab = ab as i32;
+        if aa < bmy {
+            let t = ((aa as u64) << 16) / bmy as u64;
+            let t = t as i32;
             
-            return 2 * ab - ((ab as i64 * ab as i64) >> 16) as i32 - 65536;
+            return 2 * t - ((t as i64 * t as i64) >> 16) as i32 - 65536;
         }
 
         
-        if ai > awn.ao(drz) {
-            let ab = (((ai as i64) - awn as i64) << 16) / drz as i64;
-            let ab = ab as i32;
+        if aa > zd.saturating_sub(bmy) {
+            let t = (((aa as i64) - zd as i64) << 16) / bmy as i64;
+            let t = t as i32;
             
-            return ((ab as i64 * ab as i64) >> 16) as i32 + 2 * ab + 65536;
+            return ((t as i64 * t as i64) >> 16) as i32 + 2 * t + 65536;
         }
 
         0
     }
 
     
-    fn tbl(&self) -> i16 {
-        let gpf = ((JC_ << EH_) - 1) as u32;
-        let iv = (128u32) << EH_;
-        let ai = self.ib & gpf;
+    fn gen_square(&self) -> i16 {
+        let dco = ((JV_ << EU_) - 1) as u32;
+        let cw = (128u32) << EU_;
+        let aa = self.phase & dco;
 
-        let lnf: i32 = if ai < iv { 24000 } else { -24000 };
+        let gin: i32 = if aa < cw { 24000 } else { -24000 };
 
         
-        let qqc = self.lus(ai);
-        let qqb = self.lus(ai.nj(iv) & gpf);
+        let kcl = self.poly_blep(aa);
+        let kck = self.poly_blep(aa.wrapping_sub(cw) & dco);
 
-        let yr = lnf
-            + ((qqc as i64 * 24000) >> 16) as i32
-            - ((qqb as i64 * 24000) >> 16) as i32;
+        let sample = gin
+            + ((kcl as i64 * 24000) >> 16) as i32
+            - ((kck as i64 * 24000) >> 16) as i32;
 
-        yr.qp(-32767, 32767) as i16
+        sample.clamp(-32767, 32767) as i16
     }
 
     
-    fn tbi(&self) -> i16 {
-        let gpf = ((JC_ << EH_) - 1) as u32;
-        let awn = (JC_ << EH_) as u64;
-        let ai = self.ib & gpf;
+    fn gen_sawtooth(&self) -> i16 {
+        let dco = ((JV_ << EU_) - 1) as u32;
+        let zd = (JV_ << EU_) as u64;
+        let aa = self.phase & dco;
 
         
-        let lnf = ((ai as i64 * 48000) / awn as i64 - 24000) as i32;
+        let gin = ((aa as i64 * 48000) / zd as i64 - 24000) as i32;
 
         
-        let qqa = self.lus(ai);
-        let rpf = ((qqa as i64 * 24000) >> 16) as i32;
+        let kcj = self.poly_blep(aa);
+        let kyd = ((kcj as i64 * 24000) >> 16) as i32;
 
-        (lnf - rpf).qp(-32767, 32767) as i16
+        (gin - kyd).clamp(-32767, 32767) as i16
     }
 
     
-    fn tbs(&self) -> i16 {
-        let gpf = ((JC_ << EH_) - 1) as u32;
-        let ai = self.ib & gpf;
-        let iv = (128u32) << EH_;
+    fn gen_triangle(&self) -> i16 {
+        let dco = ((JV_ << EU_) - 1) as u32;
+        let aa = self.phase & dco;
+        let cw = (128u32) << EU_;
 
-        if ai < iv {
+        if aa < cw {
             
-            ((ai as i64 * 48000 / iv as i64) - 24000) as i16
+            ((aa as i64 * 48000 / cw as i64) - 24000) as i16
         } else {
             
-            let vv = ((JC_ << EH_) as u32).nj(ai);
-            ((vv as i64 * 48000 / iv as i64) - 24000) as i16
+            let rev = ((JV_ << EU_) as u32).wrapping_sub(aa);
+            ((rev as i64 * 48000 / cw as i64) - 24000) as i16
         }
     }
 
     
-    fn tbg(&mut self) -> i16 {
+    fn gen_noise(&mut self) -> i16 {
         
-        let ga = self.cam & 1;
-        self.cam >>= 1;
-        if ga == 1 {
-            self.cam ^= 0xB400; 
+        let bf = self.lfsr & 1;
+        self.lfsr >>= 1;
+        if bf == 1 {
+            self.lfsr ^= 0xB400; 
         }
         
-        (self.cam as i16).hx(3) / 4 
+        (self.lfsr as i16).wrapping_mul(3) / 4 
     }
 }
 
@@ -426,38 +426,38 @@ impl Oscillator {
 
 #[derive(Debug, Clone, Copy)]
 struct LowPassFilter {
-    dp: i32,    
-    jz: i32,    
-    dw: u32, 
+    y1: i32,    
+    y2: i32,    
+    alpha: u32, 
 }
 
 impl LowPassFilter {
     
-    fn nav() -> Self {
-        Self { dp: 0, jz: 0, dw: 65536 }
+    fn hjg() -> Self {
+        Self { y1: 0, y2: 0, alpha: 65536 }
     }
 
     
-    fn mek(&mut self, rsl: u32) {
+    fn set_cutoff(&mut self, cutoff_hz: u32) {
         
-        let d = (6283u64 * rsl as u64) / BR_ as u64;
+        let w = (6283u64 * cutoff_hz as u64) / BT_ as u64;
         
-        self.dw = ((d << 16) / (1000 + d)).v(65536) as u32;
+        self.alpha = ((w << 16) / (1000 + w)).min(65536) as u32;
     }
 
     
     fn process(&mut self, input: i32) -> i32 {
-        let q = self.dw as i64;
+        let a = self.alpha as i64;
         
-        self.dp += (((input - self.dp) as i64 * q) >> 16) as i32;
+        self.y1 += (((input - self.y1) as i64 * a) >> 16) as i32;
         
-        self.jz += (((self.dp - self.jz) as i64 * q) >> 16) as i32;
-        self.jz
+        self.y2 += (((self.y1 - self.y2) as i64 * a) >> 16) as i32;
+        self.y2
     }
 
-    fn apa(&mut self) {
-        self.dp = 0;
-        self.jz = 0;
+    fn reset(&mut self) {
+        self.y1 = 0;
+        self.y2 = 0;
     }
 }
 
@@ -468,129 +468,129 @@ impl LowPassFilter {
 
 #[derive(Debug, Clone)]
 pub struct Voice {
-    pub fpw: Oscillator,
+    pub osc: Oscillator,
     
-    lqx: Oscillator,
+    osc2: Oscillator,
     pub env: Envelope,
     
-    hi: LowPassFilter,
+    filter: LowPassFilter,
     
-    pub jp: u8,
+    pub note: u8,
     
-    pub qm: u8,
+    pub velocity: u8,
     
-    pub gh: bool,
+    pub active: bool,
     
-    hha: u32,
+    drift_phase: u32,
     
-    ikv: u32,
+    base_inc: u32,
 }
 
 impl Voice {
     pub fn new() -> Self {
         Self {
-            fpw: Oscillator::new(Waveform::Dg, 440),
-            lqx: Oscillator::new(Waveform::Dg, 440),
-            env: Envelope::iqt(),
-            hi: LowPassFilter::nav(),
-            jp: 0,
-            qm: 0,
-            gh: false,
-            hha: 0,
-            ikv: 0,
+            osc: Oscillator::new(Waveform::Sine, 440),
+            osc2: Oscillator::new(Waveform::Sine, 440),
+            env: Envelope::eka(),
+            filter: LowPassFilter::hjg(),
+            note: 0,
+            velocity: 0,
+            active: false,
+            drift_phase: 0,
+            base_inc: 0,
         }
     }
 
     
-    pub fn dtq(&mut self, jp: u8, qm: u8, ve: Waveform, qr: Envelope) {
-        let kx = AFO_[jp.v(127) as usize];
+    pub fn note_on(&mut self, note: u8, velocity: u8, waveform: Waveform, envelope: Envelope) {
+        let freq = AHI_[note.min(127) as usize];
 
         
-        self.fpw = Oscillator::new(ve, kx);
-        self.ikv = self.fpw.fqq;
-        self.hha = 0;
+        self.osc = Oscillator::new(waveform, freq);
+        self.base_inc = self.osc.phase_inc;
+        self.drift_phase = 0;
 
         
-        let sxg = kx + (kx / 200).am(1);
-        self.lqx = Oscillator::new(ve, sxg);
+        let lyr = freq + (freq / 200).max(1);
+        self.osc2 = Oscillator::new(waveform, lyr);
 
-        self.env = qr;
-        self.env.dtq();
-        self.jp = jp;
-        self.qm = qm;
-        self.gh = true;
+        self.env = envelope;
+        self.env.note_on();
+        self.note = note;
+        self.velocity = velocity;
+        self.active = true;
 
         
-        self.hi.apa();
-        match ve {
-            Waveform::Dg => {
+        self.filter.reset();
+        match waveform {
+            Waveform::Sine => {
                 
-                self.hi = LowPassFilter::nav();
+                self.filter = LowPassFilter::hjg();
             }
             Waveform::Triangle => {
                 
-                let knh = (kx * 12).am(400).v(16000);
-                self.hi.mek(knh);
+                let fqc = (freq * 12).max(400).min(16000);
+                self.filter.set_cutoff(fqc);
             }
-            Waveform::Gb | Waveform::Ft => {
+            Waveform::Square | Waveform::Sawtooth => {
                 
-                let knh = (kx * 8).am(300).v(12000);
-                self.hi.mek(knh);
+                let fqc = (freq * 8).max(300).min(12000);
+                self.filter.set_cutoff(fqc);
             }
-            Waveform::Cr => {
+            Waveform::Noise => {
                 
-                self.hi.mek(6000);
+                self.filter.set_cutoff(6000);
             }
         }
     }
 
     
-    pub fn djx(&mut self) {
-        self.env.djx();
+    pub fn note_off(&mut self) {
+        self.env.note_off();
     }
 
     
-    pub fn or(&mut self) -> i16 {
-        if !self.gh {
+    pub fn tick(&mut self) -> i16 {
+        if !self.active {
             return 0;
         }
 
-        let smm = self.env.or();
-        if self.env.edw() {
-            self.gh = false;
+        let lqx = self.env.tick();
+        if self.env.is_idle() {
+            self.active = false;
             return 0;
         }
 
         
-        self.hha = self.hha.cn(19);  
-        let sgs = (self.hha >> 8) as usize & 0xFF;
-        let sgu = XC_[sgs] as i32;  
+        self.drift_phase = self.drift_phase.wrapping_add(19);  
+        let llh = (self.drift_phase >> 8) as usize & 0xFF;
+        let llj = YJ_[llh] as i32;  
         
-        let sgt = ((self.ikv as i64 * sgu as i64) / (32767 * 1250)) as i32;
-        self.fpw.fqq = (self.ikv as i32 + sgt).am(1) as u32;
+        let lli = ((self.base_inc as i64 * llj as i64) / (32767 * 1250)) as i32;
+        self.osc.phase_inc = (self.base_inc as i32 + lli).max(1) as u32;
 
         
-        let vqg = self.fpw.or() as i32;
-        let vqh = self.lqx.or() as i32;
-        let js = (vqg + vqh) / 2;
+        let obl = self.osc.tick() as i32;
+        let obm = self.osc2.tick() as i32;
+        let dm = (obl + obm) / 2;
 
         
-        let aud = self.hi.process(js);
+        let filtered = self.filter.process(dm);
 
         
-        let wct = if aud > 18000 {
-            18000 + (aud - 18000) / 4
-        } else if aud < -18000 {
-            -18000 + (aud + 18000) / 4
+        let oke = if filtered > 18000 {
+            18000 + (filtered - 18000) / 4
+        } else if filtered < -18000 {
+            -18000 + (filtered + 18000) / 4
         } else {
-            aud
+            filtered
         };
 
-        let xqz = self.qm as i32;
+        let prm = self.velocity as i32;
 
         
-        let yr = (wct * smm / 32767) * xqz / 127;
-        yr.qp(-32767, 32767) as i16
+        let sample = (oke * lqx / 32767) * prm / 127;
+        sample.clamp(-32767, 32767) as i16
     }
 }
 
@@ -601,200 +601,200 @@ impl Voice {
 
 pub struct SynthEngine {
     
-    pub ddh: [Voice; BAE_],
+    pub voices: [Voice; BCG_],
     
-    pub ve: Waveform,
+    pub waveform: Waveform,
     
-    pub qr: Envelope,
+    pub envelope: Envelope,
     
-    pub euo: u8,
+    pub master_volume: u8,
 }
 
 impl SynthEngine {
     
     pub fn new() -> Self {
-        let ddh = core::array::nwe(|_| Voice::new());
+        let voices = core::array::from_fn(|_| Voice::new());
         Self {
-            ddh,
-            ve: Waveform::Dg,
-            qr: Envelope::iqt(),
-            euo: 200,
+            voices,
+            waveform: Waveform::Sine,
+            envelope: Envelope::eka(),
+            master_volume: 200,
         }
     }
 
     
-    pub fn dvs(&mut self, azd: Waveform) {
-        self.ve = azd;
+    pub fn set_waveform(&mut self, aal: Waveform) {
+        self.waveform = aal;
     }
 
     
-    pub fn med(&mut self, gzc: u32, hfm: u32, icg: u32, hxk: u32) {
-        self.qr = Envelope::new(gzc, hfm, icg, hxk);
+    pub fn set_adsr(&mut self, attack_ms: u32, decay_ms: u32, sustain_pct: u32, release_ms: u32) {
+        self.envelope = Envelope::new(attack_ms, decay_ms, sustain_pct, release_ms);
     }
 
     
-    pub fn dtq(&mut self, jp: u8, qm: u8) {
+    pub fn note_on(&mut self, note: u8, velocity: u8) {
         
-        let jvz = self.nuh();
-        let bxt = &mut self.ddh[jvz];
-        bxt.dtq(jp, qm, self.ve, self.qr);
+        let feq = self.find_free_voice();
+        let and = &mut self.voices[feq];
+        and.note_on(note, velocity, self.waveform, self.envelope);
     }
 
     
-    pub fn djx(&mut self, jp: u8) {
-        for bxt in &mut self.ddh {
-            if bxt.gh && bxt.jp == jp {
-                bxt.djx();
+    pub fn note_off(&mut self, note: u8) {
+        for and in &mut self.voices {
+            if and.active && and.note == note {
+                and.note_off();
                 break;
             }
         }
     }
 
     
-    pub fn qgm(&mut self) {
-        for bxt in &mut self.ddh {
-            bxt.djx();
+    pub fn all_notes_off(&mut self) {
+        for and in &mut self.voices {
+            and.note_off();
         }
     }
 
     
     
-    pub fn tj(&mut self, bi: &mut [i16], evo: usize) -> usize {
-        let ptx = evo.v(bi.len() / 2); 
+    pub fn render(&mut self, buffer: &mut [i16], cbz: usize) -> usize {
+        let jnb = cbz.min(buffer.len() / 2); 
 
-        for a in 0..ptx {
+        for i in 0..jnb {
             
-            let mut bno: i32 = 0;
-            for bxt in &mut self.ddh {
-                if bxt.gh {
-                    bno += bxt.or() as i32;
+            let mut aif: i32 = 0;
+            for and in &mut self.voices {
+                if and.active {
+                    aif += and.tick() as i32;
                 }
             }
 
             
-            bno = bno * self.euo as i32 / 255;
+            aif = aif * self.master_volume as i32 / 255;
 
             
-            let yr = bno.qp(-32767, 32767) as i16;
+            let sample = aif.clamp(-32767, 32767) as i16;
 
             
-            bi[a * 2] = yr;
-            bi[a * 2 + 1] = yr;
+            buffer[i * 2] = sample;
+            buffer[i * 2 + 1] = sample;
         }
 
-        ptx
+        jnb
     }
 
     
-    pub fn lzf(&mut self, jp: u8, qm: u8, uk: u32) -> Vec<i16> {
-        let ayz = hsd(uk) as usize;
+    pub fn render_note(&mut self, note: u8, velocity: u8, duration_ms: u32) -> Vec<i16> {
+        let aai = dup(duration_ms) as usize;
         
-        let chd = self.qr.chd as usize;
-        let kxn = ayz + chd;
-        let mut bi = alloc::vec![0i16; kxn * 2]; 
+        let release_samples = self.envelope.release_samples as usize;
+        let fxz = aai + release_samples;
+        let mut buffer = alloc::vec![0i16; fxz * 2]; 
 
         
-        self.dtq(jp, qm);
+        self.note_on(note, velocity);
 
         
-        self.tj(&mut bi[..ayz * 2], ayz);
+        self.render(&mut buffer[..aai * 2], aai);
 
         
-        self.djx(jp);
+        self.note_off(note);
 
         
-        if chd > 0 {
-            self.tj(&mut bi[ayz * 2..], chd);
+        if release_samples > 0 {
+            self.render(&mut buffer[aai * 2..], release_samples);
         }
 
-        bi
+        buffer
     }
 
     
-    pub fn viz(&mut self, j: &str, uk: u32) -> Result<Vec<i16>, &'static str> {
-        let ti = super::tables::fpd(j)
+    pub fn play_note_by_name(&mut self, name: &str, duration_ms: u32) -> Result<Vec<i16>, &'static str> {
+        let midi_note = super::tables::cnh(name)
             .ok_or("Invalid note name (use e.g. C4, A#3, Bb5)")?;
-        Ok(self.lzf(ti, 100, uk))
+        Ok(self.render_note(midi_note, 100, duration_ms))
     }
 
     
-    pub fn vvv(&mut self, auf: u32, uk: u32) -> Vec<i16> {
-        let ayz = hsd(uk) as usize;
-        let chd = self.qr.chd as usize;
-        let kxn = ayz + chd;
-        let mut bi = alloc::vec![0i16; kxn * 2]; 
+    pub fn render_freq(&mut self, freq_hz: u32, duration_ms: u32) -> Vec<i16> {
+        let aai = dup(duration_ms) as usize;
+        let release_samples = self.envelope.release_samples as usize;
+        let fxz = aai + release_samples;
+        let mut buffer = alloc::vec![0i16; fxz * 2]; 
 
         
-        let jvz = self.nuh();
-        let bxt = &mut self.ddh[jvz];
-        bxt.fpw = Oscillator::new(self.ve, auf);
-        bxt.env = self.qr;
-        bxt.env.dtq();
-        bxt.jp = 69; 
-        bxt.qm = 100;
-        bxt.gh = true;
+        let feq = self.find_free_voice();
+        let and = &mut self.voices[feq];
+        and.osc = Oscillator::new(self.waveform, freq_hz);
+        and.env = self.envelope;
+        and.env.note_on();
+        and.note = 69; 
+        and.velocity = 100;
+        and.active = true;
 
         
-        self.tj(&mut bi[..ayz * 2], ayz);
+        self.render(&mut buffer[..aai * 2], aai);
         
-        self.ddh[jvz].djx();
-        if chd > 0 {
-            self.tj(&mut bi[ayz * 2..], chd);
+        self.voices[feq].note_off();
+        if release_samples > 0 {
+            self.render(&mut buffer[aai * 2..], release_samples);
         }
 
-        bi
+        buffer
     }
 
     
-    pub fn qfb(&self) -> usize {
-        self.ddh.iter().hi(|p| p.gh).az()
+    pub fn active_voice_count(&self) -> usize {
+        self.voices.iter().filter(|v| v.active).count()
     }
 
     
     pub fn status(&self) -> String {
-        let mut e = String::new();
-        e.t(&format!("TrustSynth Engine\n"));
-        e.t(&format!("  Waveform: {}\n", self.ve.j()));
-        e.t(&format!("  ADSR: A={}ms D={}ms S={}% R={}ms\n",
-            mbp(self.qr.gzd),
-            mbp(self.qr.hfn),
-            self.qr.fvx * 100 / 32767,
-            mbp(self.qr.chd)
+        let mut j = String::new();
+        j.push_str(&format!("TrustSynth Engine\n"));
+        j.push_str(&format!("  Waveform: {}\n", self.waveform.name()));
+        j.push_str(&format!("  ADSR: A={}ms D={}ms S={}% R={}ms\n",
+            gsj(self.envelope.attack_samples),
+            gsj(self.envelope.decay_samples),
+            self.envelope.sustain_level * 100 / 32767,
+            gsj(self.envelope.release_samples)
         ));
-        e.t(&format!("  Master Volume: {}/255\n", self.euo));
-        e.t(&format!("  Active Voices: {}/{}\n", self.qfb(), BAE_));
-        for (a, p) in self.ddh.iter().cf() {
-            if p.gh {
-                let bkp = super::tables::dtf(p.jp);
-                let cgg = super::tables::efk(p.jp);
-                e.t(&format!("    Voice {}: {}{} vel={} env={} wf={}\n",
-                    a, bkp, cgg, p.qm, p.env.mhm(), p.fpw.ve.dbz()));
+        j.push_str(&format!("  Master Volume: {}/255\n", self.master_volume));
+        j.push_str(&format!("  Active Voices: {}/{}\n", self.active_voice_count(), BCG_));
+        for (i, v) in self.voices.iter().enumerate() {
+            if v.active {
+                let agu = super::tables::bno(v.note);
+                let octave = super::tables::bui(v.note);
+                j.push_str(&format!("    Voice {}: {}{} vel={} env={} wf={}\n",
+                    i, agu, octave, v.velocity, v.env.state_name(), v.osc.waveform.short_name()));
             }
         }
-        e
+        j
     }
 
     
 
     
-    fn nuh(&self) -> usize {
+    fn find_free_voice(&self) -> usize {
         
-        for (a, p) in self.ddh.iter().cf() {
-            if !p.gh {
-                return a;
+        for (i, v) in self.voices.iter().enumerate() {
+            if !v.active {
+                return i;
             }
         }
         
-        let mut bdn = 0;
-        let mut kct = i32::O;
-        for (a, p) in self.ddh.iter().cf() {
-            if p.env.g == EnvState::Release && (p.env.jy as i32) < kct {
-                kct = p.env.jy as i32;
-                bdn = a;
+        let mut adj = 0;
+        let mut fiu = i32::MAX;
+        for (i, v) in self.voices.iter().enumerate() {
+            if v.env.state == EnvState::Release && (v.env.level as i32) < fiu {
+                fiu = v.env.level as i32;
+                adj = i;
             }
         }
-        if kct < i32::O {
-            return bdn;
+        if fiu < i32::MAX {
+            return adj;
         }
         
         0
@@ -806,11 +806,11 @@ impl SynthEngine {
 
 
 
-pub fn hsd(jn: u32) -> u32 {
-    (BR_ * jn) / 1000
+pub fn dup(dh: u32) -> u32 {
+    (BT_ * dh) / 1000
 }
 
 
-pub fn mbp(un: u32) -> u32 {
-    (un * 1000) / BR_
+pub fn gsj(jo: u32) -> u32 {
+    (jo * 1000) / BT_
 }

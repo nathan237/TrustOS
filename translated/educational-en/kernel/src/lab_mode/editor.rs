@@ -22,7 +22,7 @@ pub struct EditorState {
     /// Cursor line
     pub cursor_line: usize,
     /// Cursor column
-    pub cursor_column: usize,
+    pub cursor_col: usize,
     /// Scroll offset
     pub scroll: usize,
     /// Output from last run
@@ -49,7 +49,7 @@ pub fn new() -> Self {
                 String::from("}"),
             ],
             cursor_line: 1,
-            cursor_column: 0,
+            cursor_col: 0,
             scroll: 0,
             output: alloc::vec![String::from("Press Ctrl+R to run")],
             output_focused: false,
@@ -71,7 +71,7 @@ match key {
                     self.output_scroll = self.output_scroll.saturating_sub(1);
                 } else if self.cursor_line > 0 {
                     self.cursor_line -= 1;
-                    self.clamp_column();
+                    self.clamp_col();
                 }
             }
             KEY_DOWN => {
@@ -79,20 +79,20 @@ match key {
                     self.output_scroll += 1;
                 } else if self.cursor_line + 1 < self.lines.len() {
                     self.cursor_line += 1;
-                    self.clamp_column();
+                    self.clamp_col();
                 }
             }
             KEY_LEFT => {
-                if !self.output_focused && self.cursor_column > 0 {
-                    self.cursor_column -= 1;
+                if !self.output_focused && self.cursor_col > 0 {
+                    self.cursor_col -= 1;
                 }
             }
             KEY_RIGHT => {
                 if !self.output_focused {
                     let line_length = self.lines.get(self.cursor_line)
                         .map(|l| l.len()).unwrap_or(0);
-                    if self.cursor_column < line_length {
-                        self.cursor_column += 1;
+                    if self.cursor_col < line_length {
+                        self.cursor_col += 1;
                     }
                 }
             }
@@ -101,15 +101,15 @@ match key {
                     self.output_scroll = self.output_scroll.saturating_sub(5);
                 } else {
                     self.cursor_line = self.cursor_line.saturating_sub(10);
-                    self.clamp_column();
+                    self.clamp_col();
                 }
             }
             KEY_PGDOWN => {
                 if self.output_focused {
                     self.output_scroll += 5;
                 } else {
-                    self.cursor_line = (self.cursor_line + 10).minimum(self.lines.len().saturating_sub(1));
-                    self.clamp_column();
+                    self.cursor_line = (self.cursor_line + 10).min(self.lines.len().saturating_sub(1));
+                    self.clamp_col();
                 }
             }
             // Ctrl+R = run code
@@ -125,31 +125,31 @@ match key {
                 if !self.output_focused {
                     // Split line at cursor
                     if self.cursor_line < self.lines.len() {
-                        let column = self.cursor_column.minimum(self.lines[self.cursor_line].len());
-                        let rest = self.lines[self.cursor_line].split_off(column);
+                        let col = self.cursor_col.min(self.lines[self.cursor_line].len());
+                        let rest = self.lines[self.cursor_line].split_off(col);
                         self.cursor_line += 1;
                         self.lines.insert(self.cursor_line, rest);
-                        self.cursor_column = 0;
+                        self.cursor_col = 0;
                     } else {
                         self.lines.push(String::new());
                         self.cursor_line = self.lines.len() - 1;
-                        self.cursor_column = 0;
+                        self.cursor_col = 0;
                     }
                 }
             }
             // Backspace
             0x08 => {
                 if !self.output_focused {
-                    if self.cursor_column > 0 {
-                        self.cursor_column -= 1;
+                    if self.cursor_col > 0 {
+                        self.cursor_col -= 1;
                         if self.cursor_line < self.lines.len() {
-                            self.lines[self.cursor_line].remove(self.cursor_column);
+                            self.lines[self.cursor_line].remove(self.cursor_col);
                         }
                     } else if self.cursor_line > 0 {
                         // Join with previous line
                         let current = self.lines.remove(self.cursor_line);
                         self.cursor_line -= 1;
-                        self.cursor_column = self.lines[self.cursor_line].len();
+                        self.cursor_col = self.lines[self.cursor_line].len();
                         self.lines[self.cursor_line].push_str(&current);
                     }
                 }
@@ -163,7 +163,7 @@ match key {
     }
     
         // Public function — callable from other modules.
-pub fn handle_char(&mut self, character: char) {
+pub fn handle_char(&mut self, ch: char) {
         if self.output_focused { return; }
         
         self.frame += 1;
@@ -173,8 +173,8 @@ pub fn handle_char(&mut self, character: char) {
             self.cursor_line = self.lines.len() - 1;
         }
         
-        self.lines[self.cursor_line].insert(self.cursor_column, character);
-        self.cursor_column += 1;
+        self.lines[self.cursor_line].insert(self.cursor_col, ch);
+        self.cursor_col += 1;
     }
     
     /// Handle mouse click at (x, y) relative to content area
@@ -184,7 +184,7 @@ pub fn handle_char(&mut self, character: char) {
         if lh <= 0 || cw <= 0 { return; }
 
         // Same layout as draw(): 60% editor, 40% output
-        let editor_h = (h as i32 * 60 / 100).maximum(lh * 3);
+        let editor_h = (h as i32 * 60 / 100).max(lh * 3);
         let output_y = editor_h + 2;
 
         if y >= output_y {
@@ -200,20 +200,20 @@ pub fn handle_char(&mut self, character: char) {
 
             let gutter_w = 4 * cw;
             let row = ((y - code_y) / lh) as usize;
-            let column = ((x - gutter_w).maximum(0) / cw) as usize;
+            let col = ((x - gutter_w).max(0) / cw) as usize;
 
-            self.cursor_line = (self.scroll + row).minimum(self.lines.len().saturating_sub(1));
+            self.cursor_line = (self.scroll + row).min(self.lines.len().saturating_sub(1));
             let line_length = self.lines.get(self.cursor_line).map(|l| l.len()).unwrap_or(0);
-            self.cursor_column = column.minimum(line_length);
+            self.cursor_col = col.min(line_length);
             self.frame += 1; // reset blink
         }
     }
 
-    fn clamp_column(&mut self) {
+    fn clamp_col(&mut self) {
         let line_length = self.lines.get(self.cursor_line)
             .map(|l| l.len()).unwrap_or(0);
-        if self.cursor_column > line_length {
-            self.cursor_column = line_length;
+        if self.cursor_col > line_length {
+            self.cursor_col = line_length;
         }
     }
     
@@ -283,7 +283,7 @@ pub fn draw(state: &EditorState, x: i32, y: i32, w: u32, h: u32) {
     if lh <= 0 || cw <= 0 { return; }
     
     // Split: 60% editor, 40% output (vertically)
-    let editor_h = (h as i32 * 60 / 100).maximum(lh * 3);
+    let editor_h = (h as i32 * 60 / 100).max(lh * 3);
     let output_y = y + editor_h + 2;
     let output_h = h as i32 - editor_h - 4;
     
@@ -314,7 +314,7 @@ pub fn draw(state: &EditorState, x: i32, y: i32, w: u32, h: u32) {
     let gutter_w = 4 * cw; // Line number gutter
     let code_x = x + gutter_w;
     
-    let end = (scroll + visible_code).minimum(state.lines.len());
+    let end = (scroll + visible_code).min(state.lines.len());
     let mut cy = code_y;
     
     for i in scroll..end {
@@ -337,7 +337,7 @@ pub fn draw(state: &EditorState, x: i32, y: i32, w: u32, h: u32) {
         // Cursor
         if i == state.cursor_line && !state.output_focused {
             if (state.frame / 25) % 2 == 0 {
-                let cursor_x = code_x + (state.cursor_column as i32 * cw);
+                let cursor_x = code_x + (state.cursor_col as i32 * cw);
                 crate::framebuffer::fill_rect(
                     cursor_x as u32, cy as u32,
                     2, lh as u32,
@@ -361,8 +361,8 @@ pub fn draw(state: &EditorState, x: i32, y: i32, w: u32, h: u32) {
     
     let out_list_y = output_y + lh;
     let visible_out = ((output_h - lh) / lh) as usize;
-    let out_scroll = state.output_scroll.minimum(state.output.len().saturating_sub(1));
-    let out_end = (out_scroll + visible_out).minimum(state.output.len());
+    let out_scroll = state.output_scroll.min(state.output.len().saturating_sub(1));
+    let out_end = (out_scroll + visible_out).min(state.output.len());
     
     let mut oy = out_list_y;
     for i in out_scroll..out_end {
@@ -383,7 +383,7 @@ pub fn draw(state: &EditorState, x: i32, y: i32, w: u32, h: u32) {
 }
 
 /// Draw a line with basic syntax highlighting
-fn draw_highlighted_line(x: i32, y: i32, line: &str, _maximum_w: u32) {
+fn draw_highlighted_line(x: i32, y: i32, line: &str, _max_w: u32) {
     let cw = char_w();
     let keywords = ["fn", "let", "mut", "if", "else", "for", "while", "return", 
                      "true", "false", "struct", "enum", "match", "pub", "use",
@@ -395,10 +395,10 @@ fn draw_highlighted_line(x: i32, y: i32, line: &str, _maximum_w: u32) {
     let mut i = 0;
     
     while i < len {
-        let character = chars[i];
+        let ch = chars[i];
         
         // Comment: // to end of line
-        if character == '/' && i + 1 < len && chars[i + 1] == '/' {
+        if ch == '/' && i + 1 < len && chars[i + 1] == '/' {
             // Draw rest of line as comment
             let rest: String = chars[i..].iter().collect();
             draw_lab_text(cx, y, &rest, COLUMN_DIM);
@@ -406,7 +406,7 @@ fn draw_highlighted_line(x: i32, y: i32, line: &str, _maximum_w: u32) {
         }
         
         // String literal
-        if character == '"' {
+        if ch == '"' {
             let start = i;
             i += 1;
             while i < len && chars[i] != '"' {
@@ -421,7 +421,7 @@ fn draw_highlighted_line(x: i32, y: i32, line: &str, _maximum_w: u32) {
         }
         
         // Number
-        if character.is_ascii_digit() {
+        if ch.is_ascii_digit() {
             let start = i;
             while i < len && (chars[i].is_ascii_digit() || chars[i] == '.' || chars[i] == 'x') {
                 i += 1;
@@ -433,7 +433,7 @@ fn draw_highlighted_line(x: i32, y: i32, line: &str, _maximum_w: u32) {
         }
         
         // Identifier / keyword
-        if character.is_ascii_alphanumeric() || character == '_' {
+        if ch.is_ascii_alphanumeric() || ch == '_' {
             let start = i;
             while i < len && (chars[i].is_ascii_alphanumeric() || chars[i] == '_') {
                 i += 1;
@@ -453,13 +453,13 @@ fn draw_highlighted_line(x: i32, y: i32, line: &str, _maximum_w: u32) {
         
         // Operators and punctuation
         let color = // Pattern matching — Rust's exhaustive branching construct.
-match character {
+match ch {
             '(' | ')' | '{' | '}' | '[' | ']' => COLUMN_YELLOW,
             '=' | '+' | '-' | '*' | '/' | '<' | '>' | '!' | '&' | '|' => COLUMN_ACCENT,
             ';' | ':' | ',' | '.' => COLUMN_DIM,
             _ => COLUMN_TEXT,
         };
-        let s = alloc::format!("{}", character);
+        let s = alloc::format!("{}", ch);
         draw_lab_text(cx, y, &s, color);
         cx += cw;
         i += 1;

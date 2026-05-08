@@ -22,8 +22,8 @@ struct Rng(u64);
 
 impl Rng {
     fn new() -> Self {
-        let dv = crate::time::lc().hx(6364136223846793005).cn(1);
-        Self(if dv == 0 { 42 } else { dv })
+        let seed = crate::time::uptime_ms().wrapping_mul(6364136223846793005).wrapping_add(1);
+        Self(if seed == 0 { 42 } else { seed })
     }
 
     fn next(&mut self) -> u64 {
@@ -33,34 +33,34 @@ impl Rng {
         self.0
     }
 
-    fn cmb(&mut self, v: u64, am: u64) -> u64 {
-        v + (self.next() % (am - v + 1))
+    fn range(&mut self, min: u64, max: u64) -> u64 {
+        min + (self.next() % (max - min + 1))
     }
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Avi {
+pub struct Tq {
     
-    pub xz: String,
+    pub expression: String,
     
-    pub qy: i64,
+    pub expected: i64,
     
-    pub dah: [u8; 4],
+    pub node_ip: [u8; 4],
     
-    pub evj: String,
+    pub node_name: String,
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Zc {
-    pub dah: [u8; 4],
-    pub evj: String,
-    pub xz: String,
-    pub qy: i64,
-    pub ecf: i64,
-    pub dzv: bool,
-    pub ggz: bool,
+pub struct Ku {
+    pub node_ip: [u8; 4],
+    pub node_name: String,
+    pub expression: String,
+    pub expected: i64,
+    pub got: i64,
+    pub correct: bool,
+    pub file_written: bool,
 }
 
 
@@ -68,108 +68,108 @@ pub struct Zc {
 enum MathOp { Add, Sub, Mul }
 
 
-fn nxm(rng: &mut Rng, zdr: usize, dah: [u8; 4]) -> Avi {
+fn ibb(rng: &mut Rng, node_idx: usize, node_ip: [u8; 4]) -> Tq {
     let op = match rng.next() % 3 {
         0 => MathOp::Add,
         1 => MathOp::Sub,
         _ => MathOp::Mul,
     };
 
-    let (q, o, expr, result) = match op {
+    let (a, b, expr, result) = match op {
         MathOp::Add => {
-            let q = rng.cmb(100, 9999) as i64;
-            let o = rng.cmb(100, 9999) as i64;
-            (q, o, format!("{} + {}", q, o), q + o)
+            let a = rng.range(100, 9999) as i64;
+            let b = rng.range(100, 9999) as i64;
+            (a, b, format!("{} + {}", a, b), a + b)
         }
         MathOp::Sub => {
-            let q = rng.cmb(1000, 9999) as i64;
-            let o = rng.cmb(100, q as u64) as i64;
-            (q, o, format!("{} - {}", q, o), q - o)
+            let a = rng.range(1000, 9999) as i64;
+            let b = rng.range(100, a as u64) as i64;
+            (a, b, format!("{} - {}", a, b), a - b)
         }
         MathOp::Mul => {
-            let q = rng.cmb(10, 999) as i64;
-            let o = rng.cmb(2, 99) as i64;
-            (q, o, format!("{} * {}", q, o), q * o)
+            let a = rng.range(10, 999) as i64;
+            let b = rng.range(2, 99) as i64;
+            (a, b, format!("{} * {}", a, b), a * b)
         }
     };
 
-    let j = format!("node_{}.{}.{}.{}", dah[0], dah[1], dah[2], dah[3]);
+    let name = format!("node_{}.{}.{}.{}", node_ip[0], node_ip[1], node_ip[2], node_ip[3]);
 
-    Avi {
-        xz: expr,
-        qy: result,
-        dah,
-        evj: j,
+    Tq {
+        expression: expr,
+        expected: result,
+        node_ip,
+        node_name: name,
     }
 }
 
 
 
-fn vdz(ew: &[u8]) -> Option<&str> {
-    let e = core::str::jg(ew).bq()?;
-    e.blj("TASK_MATH:")
+fn nrh(payload: &[u8]) -> Option<&str> {
+    let j = core::str::from_utf8(payload).ok()?;
+    j.strip_prefix("TASK_MATH:")
 }
 
 
-fn itb(expr: &str) -> Option<i64> {
+fn elp(expr: &str) -> Option<i64> {
     
-    if let Some((fd, hw)) = expr.fve(" + ") {
-        let q: i64 = fd.em().parse().bq()?;
-        let o: i64 = hw.em().parse().bq()?;
-        return Some(q + o);
+    if let Some((left, right)) = expr.split_once(" + ") {
+        let a: i64 = left.trim().parse().ok()?;
+        let b: i64 = right.trim().parse().ok()?;
+        return Some(a + b);
     }
     
-    if let Some((fd, hw)) = expr.fve(" - ") {
-        let q: i64 = fd.em().parse().bq()?;
-        let o: i64 = hw.em().parse().bq()?;
-        return Some(q - o);
+    if let Some((left, right)) = expr.split_once(" - ") {
+        let a: i64 = left.trim().parse().ok()?;
+        let b: i64 = right.trim().parse().ok()?;
+        return Some(a - b);
     }
     
-    if let Some((fd, hw)) = expr.fve(" * ") {
-        let q: i64 = fd.em().parse().bq()?;
-        let o: i64 = hw.em().parse().bq()?;
-        return Some(q * o);
+    if let Some((left, right)) = expr.split_once(" * ") {
+        let a: i64 = left.trim().parse().ok()?;
+        let b: i64 = right.trim().parse().ok()?;
+        return Some(a * b);
     }
     None
 }
 
 
-pub fn tlg(ew: &[u8]) -> (super::rpc::Status, Vec<u8>) {
-    let expr = match vdz(ew) {
-        Some(aa) => aa,
-        None => return (super::rpc::Status::Q, b"Invalid task payload".ip()),
+pub fn mir(payload: &[u8]) -> (super::rpc::Status, Vec<u8>) {
+    let expr = match nrh(payload) {
+        Some(e) => e,
+        None => return (super::rpc::Status::Error, b"Invalid task payload".to_vec()),
     };
 
     
-    let yt = match itb(expr) {
-        Some(q) => q,
-        None => return (super::rpc::Status::Q, b"Cannot evaluate expression".ip()),
+    let answer = match elp(expr) {
+        Some(a) => a,
+        None => return (super::rpc::Status::Error, b"Cannot evaluate expression".to_vec()),
     };
 
     
-    let it = format!("/task_result.txt");
-    let ca = format!("expression: {}\nanswer: {}\nnode: local\n", expr, yt);
+    let filename = format!("/task_result.txt");
+    let content = format!("expression: {}\nanswer: {}\nnode: local\n", expr, answer);
 
-    let eqf = crate::ramfs::fh(|fs| {
-        let _ = fs.touch(&it);
-        fs.ns(&it, ca.as_bytes())
+    let bzq = crate::ramfs::bh(|fs| {
+        let _ = fs.touch(&filename);
+        fs.write_file(&filename, content.as_bytes())
     }).is_ok();
 
-    crate::serial_println!("[TASK] Computed: {} = {} (file={})", expr, yt, eqf);
+    crate::serial_println!("[TASK] Computed: {} = {} (file={})", expr, answer, bzq);
 
     
-    let mk = format!("RESULT:{}:{}", yt, if eqf { "FILE_OK" } else { "FILE_ERR" });
-    (super::rpc::Status::Ok, mk.cfq())
+    let fa = format!("RESULT:{}:{}", answer, if bzq { "FILE_OK" } else { "FILE_ERR" });
+    (super::rpc::Status::Ok, fa.into_bytes())
 }
 
 
-fn vea(f: &[u8]) -> Option<(i64, bool)> {
-    let e = core::str::jg(f).bq()?;
-    let e = e.blj("RESULT:")?;
-    let (qiw, status) = e.fve(':')?;
-    let yt: i64 = qiw.parse().bq()?;
-    let eqf = status == "FILE_OK";
-    Some((yt, eqf))
+fn nri(data: &[u8]) -> Option<(i64, bool)> {
+    let j = core::str::from_utf8(data).ok()?;
+    let j = j.strip_prefix("RESULT:")?;
+    let (answer_str, status) = j.split_once(':')?;
+    let answer: i64 = answer_str.parse().ok()?;
+    let bzq = status == "FILE_OK";
+    Some((answer, bzq))
 }
 
 
@@ -178,116 +178,116 @@ fn vea(f: &[u8]) -> Option<(i64, bool)> {
 
 
 
-pub fn wbf() -> Vec<Zc> {
-    let mut hd = Vec::new();
+pub fn oja() -> Vec<Ku> {
+    let mut results = Vec::new();
     let mut rng = Rng::new();
 
     
-    let yp = super::mesh::dhn();
-    let bsb = super::mesh::GV_;
+    let lj = super::mesh::bgo();
+    let rpc_port = super::mesh::HM_;
 
-    let xkl = yp.len() + 1; 
+    let pmc = lj.len() + 1; 
     crate::serial_println!("[TASK] Distributing math tasks to {} nodes ({} peers + self)",
-        xkl, yp.len());
+        pmc, lj.len());
 
     
-    let mut bcy: Vec<Avi> = Vec::new();
+    let mut tasks: Vec<Tq> = Vec::new();
 
     
-    let aro = crate::network::aou()
+    let wj = crate::network::rd()
         .map(|(ip, _, _)| *ip.as_bytes())
         .unwrap_or([127, 0, 0, 1]);
-    bcy.push(nxm(&mut rng, 0, aro));
+    tasks.push(ibb(&mut rng, 0, wj));
 
     
-    for (a, ko) in yp.iter().cf() {
-        bcy.push(nxm(&mut rng, a + 1, ko.ip));
+    for (i, peer) in lj.iter().enumerate() {
+        tasks.push(ibb(&mut rng, i + 1, peer.ip));
     }
 
     
     {
-        let task = &bcy[0];
-        let yt = itb(&task.xz).unwrap_or(0);
-        let it = "/task_result.txt";
-        let ca = format!("expression: {}\nanswer: {}\nnode: self\n", task.xz, yt);
-        let eqf = crate::ramfs::fh(|fs| {
-            let _ = fs.touch(it);
-            fs.ns(it, ca.as_bytes())
+        let task = &tasks[0];
+        let answer = elp(&task.expression).unwrap_or(0);
+        let filename = "/task_result.txt";
+        let content = format!("expression: {}\nanswer: {}\nnode: self\n", task.expression, answer);
+        let bzq = crate::ramfs::bh(|fs| {
+            let _ = fs.touch(filename);
+            fs.write_file(filename, content.as_bytes())
         }).is_ok();
 
-        hd.push(Zc {
-            dah: aro,
-            evj: format!("self ({}.{}.{}.{})", aro[0], aro[1], aro[2], aro[3]),
-            xz: task.xz.clone(),
-            qy: task.qy,
-            ecf: yt,
-            dzv: yt == task.qy,
-            ggz: eqf,
+        results.push(Ku {
+            node_ip: wj,
+            node_name: format!("self ({}.{}.{}.{})", wj[0], wj[1], wj[2], wj[3]),
+            expression: task.expression.clone(),
+            expected: task.expected,
+            got: answer,
+            correct: answer == task.expected,
+            file_written: bzq,
         });
     }
 
     
-    for (a, ko) in yp.iter().cf() {
-        let task = &bcy[a + 1];
-        let ew = format!("TASK_MATH:{}", task.xz);
+    for (i, peer) in lj.iter().enumerate() {
+        let task = &tasks[i + 1];
+        let payload = format!("TASK_MATH:{}", task.expression);
 
         crate::serial_println!("[TASK] Sending to {}.{}.{}.{}: {}",
-            ko.ip[0], ko.ip[1], ko.ip[2], ko.ip[3], task.xz);
+            peer.ip[0], peer.ip[1], peer.ip[2], peer.ip[3], task.expression);
 
-        match super::rpc::bto(ko.ip, bsb, super::rpc::Command::Azs, ew.as_bytes()) {
-            Ok((super::rpc::Status::Ok, lj)) => {
-                if let Some((yt, eqf)) = vea(&lj) {
-                    hd.push(Zc {
-                        dah: ko.ip,
-                        evj: format!("{}.{}.{}.{} ({})",
-                            ko.ip[0], ko.ip[1], ko.ip[2], ko.ip[3],
-                            ko.arch.j()),
-                        xz: task.xz.clone(),
-                        qy: task.qy,
-                        ecf: yt,
-                        dzv: yt == task.qy,
-                        ggz: eqf,
+        match super::rpc::alb(peer.ip, rpc_port, super::rpc::Command::TaskExecute, payload.as_bytes()) {
+            Ok((super::rpc::Status::Ok, eo)) => {
+                if let Some((answer, bzq)) = nri(&eo) {
+                    results.push(Ku {
+                        node_ip: peer.ip,
+                        node_name: format!("{}.{}.{}.{} ({})",
+                            peer.ip[0], peer.ip[1], peer.ip[2], peer.ip[3],
+                            peer.arch.name()),
+                        expression: task.expression.clone(),
+                        expected: task.expected,
+                        got: answer,
+                        correct: answer == task.expected,
+                        file_written: bzq,
                     });
                 } else {
-                    hd.push(Zc {
-                        dah: ko.ip,
-                        evj: format!("{}.{}.{}.{}", ko.ip[0], ko.ip[1], ko.ip[2], ko.ip[3]),
-                        xz: task.xz.clone(),
-                        qy: task.qy,
-                        ecf: 0,
-                        dzv: false,
-                        ggz: false,
+                    results.push(Ku {
+                        node_ip: peer.ip,
+                        node_name: format!("{}.{}.{}.{}", peer.ip[0], peer.ip[1], peer.ip[2], peer.ip[3]),
+                        expression: task.expression.clone(),
+                        expected: task.expected,
+                        got: 0,
+                        correct: false,
+                        file_written: false,
                     });
                 }
             }
-            Ok((status, lj)) => {
-                let rq = core::str::jg(&lj).unwrap_or("?");
-                crate::serial_println!("[TASK] Peer error: {:?} — {}", status, rq);
-                hd.push(Zc {
-                    dah: ko.ip,
-                    evj: format!("{}.{}.{}.{}", ko.ip[0], ko.ip[1], ko.ip[2], ko.ip[3]),
-                    xz: task.xz.clone(),
-                    qy: task.qy,
-                    ecf: 0,
-                    dzv: false,
-                    ggz: false,
+            Ok((status, eo)) => {
+                let err = core::str::from_utf8(&eo).unwrap_or("?");
+                crate::serial_println!("[TASK] Peer error: {:?} — {}", status, err);
+                results.push(Ku {
+                    node_ip: peer.ip,
+                    node_name: format!("{}.{}.{}.{}", peer.ip[0], peer.ip[1], peer.ip[2], peer.ip[3]),
+                    expression: task.expression.clone(),
+                    expected: task.expected,
+                    got: 0,
+                    correct: false,
+                    file_written: false,
                 });
             }
-            Err(aa) => {
+            Err(e) => {
                 crate::serial_println!("[TASK] RPC failed to {}.{}.{}.{}: {}",
-                    ko.ip[0], ko.ip[1], ko.ip[2], ko.ip[3], aa);
-                hd.push(Zc {
-                    dah: ko.ip,
-                    evj: format!("{}.{}.{}.{}", ko.ip[0], ko.ip[1], ko.ip[2], ko.ip[3]),
-                    xz: task.xz.clone(),
-                    qy: task.qy,
-                    ecf: 0,
-                    dzv: false,
-                    ggz: false,
+                    peer.ip[0], peer.ip[1], peer.ip[2], peer.ip[3], e);
+                results.push(Ku {
+                    node_ip: peer.ip,
+                    node_name: format!("{}.{}.{}.{}", peer.ip[0], peer.ip[1], peer.ip[2], peer.ip[3]),
+                    expression: task.expression.clone(),
+                    expected: task.expected,
+                    got: 0,
+                    correct: false,
+                    file_written: false,
                 });
             }
         }
     }
 
-    hd
+    results
 }

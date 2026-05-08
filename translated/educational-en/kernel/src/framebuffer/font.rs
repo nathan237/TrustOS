@@ -31,11 +31,11 @@ unsafe { FONT_MODE }
 /// Get glyph bitmap for a character (8x16 pixels)
 /// Returns array of 16 bytes, each byte is a row of 8 pixels
 pub fn get_glyph(c: char) -> [u8; 16] {
-    let index = c as usize;
-    if index < 32 || index > 126 {
+    let idx = c as usize;
+    if idx < 32 || idx > 126 {
         return FONT_DATA[0]; // Return space for unprintable
     }
-    FONT_DATA[index - 32]
+    FONT_DATA[idx - 32]
 }
 
 /// Draw a character with anti-aliasing to a buffer
@@ -82,15 +82,15 @@ pub fn draw_char_smooth(
         let next_bits = if row_index < 15 { glyph[row_index + 1] } else { 0 };
         
         for bit in 0..8u32 {
-            let pixel = x + bit;
-            if pixel >= width { continue; }
+            let px = x + bit;
+            if px >= width { continue; }
             
             let mask = 0x80 >> bit;
             let is_set = bits & mask != 0;
             
             if is_set {
                 // Foreground pixel
-                buffer[row_offset + pixel as usize] = fg_color;
+                buffer[row_offset + px as usize] = fg_color;
             } else {
                 // Check if this is an edge pixel that needs anti-aliasing
                 let left_set = bit > 0 && (bits & (mask << 1)) != 0;
@@ -118,7 +118,7 @@ pub fn draw_char_smooth(
                     bg_color
                 };
                 
-                buffer[row_offset + pixel as usize] = color;
+                buffer[row_offset + px as usize] = color;
             }
         }
     }
@@ -148,9 +148,9 @@ pub fn draw_char_sharp(
         
         for bit in 0..8u32 {
             if bits & (0x80 >> bit) != 0 {
-                let pixel = x + bit;
-                if pixel < width {
-                    buffer[row_offset + pixel as usize] = fg_color;
+                let px = x + bit;
+                if px < width {
+                    buffer[row_offset + px as usize] = fg_color;
                 }
             }
         }

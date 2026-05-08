@@ -367,7 +367,7 @@ impl Compositor {
                 continue;
             }
             
-            // MEDIUM PATH: Opaque layer - skip alpha blending per pixel
+            // MEDIUM PATH: Opaque layer - SSE2 row-level alpha blend
             if opacity == 255 {
                 for ly in 0..layer.height {
                     let screen_y = layer.y + ly;
@@ -375,7 +375,6 @@ impl Compositor {
                         continue;
                     }
                     
-                    // Copy row at once if possible
                     let src_start = (ly * layer.width) as usize;
                     let dst_start = (screen_y * self.screen_width + layer.x) as usize;
                     let row_len = layer.width.min(self.screen_width - layer.x) as usize;
@@ -383,16 +382,26 @@ impl Compositor {
                     if layer.x < self.screen_width 
                        && src_start + row_len <= layer.buffer.len()
                        && dst_start + row_len <= target_len {
-                        // Fast row copy for opaque content
-                        for i in 0..row_len {
-                            let src_color = layer.buffer[src_start + i];
-                            let src_alpha = (src_color >> 24) & 0xFF;
-                            if src_alpha > 200 { // Mostly opaque
-                                unsafe { *target_ptr.add(dst_start + i) = src_color; }
-                            } else if src_alpha > 0 {
-                                // Quick alpha blend
-                                let dst_color = unsafe { *target_ptr.add(dst_start + i) };
-                                unsafe { *target_ptr.add(dst_start + i) = alpha_blend(src_color, dst_color, src_alpha); }
+                        // SSE2 alpha blend: 4 pixels at a time with fast-skip for transparent/opaque
+                        #[cfg(target_arch = "x86_64")]
+                        unsafe {
+                            crate::graphics::simd::blend_row_sse2(
+                                target_ptr.add(dst_start),
+                                layer.buffer.as_ptr().add(src_start),
+                                row_len,
+                            );
+                        }
+                        #[cfg(not(target_arch = "x86_64"))]
+                        {
+                            for i in 0..row_len {
+                                let src_color = layer.buffer[src_start + i];
+                                let src_alpha = (src_color >> 24) & 0xFF;
+                                if src_alpha > 200 {
+                                    unsafe { *target_ptr.add(dst_start + i) = src_color; }
+                                } else if src_alpha > 0 {
+                                    let dst_color = unsafe { *target_ptr.add(dst_start + i) };
+                                    unsafe { *target_ptr.add(dst_start + i) = alpha_blend(src_color, dst_color, src_alpha); }
+                                }
                             }
                         }
                     }
@@ -400,44 +409,46 @@ impl Compositor {
                 continue;
             }
             
-            // SLOW PATH: Alpha blending with layer opacity
+            // SLOW PATH: Alpha blending with layer opacity — row-level SIMD
             for ly in 0..layer.height {
                 let screen_y = layer.y + ly;
                 if screen_y >= self.screen_height {
                     continue;
                 }
                 
-                for lx in 0..layer.width {
-                    let screen_x = layer.x + lx;
-                    if screen_x >= self.screen_width {
-                        continue;
-                    }
-                    
-                    let src_idx = (ly * layer.width + lx) as usize;
-                    let dst_idx = (screen_y * self.screen_width + screen_x) as usize;
-                    
-                    if src_idx >= layer.buffer.len() || dst_idx >= target_len {
-                        continue;
-                    }
-                    
-                    let src_color = layer.buffer[src_idx];
-                    let src_alpha = ((src_color >> 24) & 0xFF) as u32;
-                    
-                    // Skip fully transparent pixels
-                    if src_alpha == 0 {
-                        continue;
-                    }
-                    
-                    // Apply layer opacity
-                    let final_alpha = (src_alpha * opacity) / 255;
-                    
-                    if final_alpha >= 255 {
-                        // Fully opaque, just copy
-                        unsafe { *target_ptr.add(dst_idx) = src_color; }
-                    } else if final_alpha > 0 {
-                        // Alpha blend
-                        let dst_color = unsafe { *target_ptr.add(dst_idx) };
-                        unsafe { *target_ptr.add(dst_idx) = alpha_blend(src_color, dst_color, final_alpha); }
+                let src_start = (ly * layer.width) as usize;
+                let row_len = layer.width.min(self.screen_width.saturating_sub(layer.x)) as usize;
+                let dst_start = (screen_y * self.screen_width + layer.x) as usize;
+                
+                if layer.x >= self.screen_width 
+                   || src_start + row_len > layer.buffer.len()
+                   || dst_start + row_len > target_len {
+                    continue;
+                }
+                
+                // Pre-multiply source alpha by layer opacity, then SSE2 blend entire row
+                #[cfg(target_arch = "x86_64")]
+                unsafe {
+                    blend_row_with_opacity(
+                        target_ptr.add(dst_start),
+                        layer.buffer.as_ptr().add(src_start),
+                        row_len,
+                        opacity,
+                    );
+                }
+                #[cfg(not(target_arch = "x86_64"))]
+                {
+                    for i in 0..row_len {
+                        let src_color = layer.buffer[src_start + i];
+                        let src_alpha = ((src_color >> 24) & 0xFF) as u32;
+                        if src_alpha == 0 { continue; }
+                        let final_alpha = (src_alpha * opacity) / 255;
+                        if final_alpha >= 255 {
+                            unsafe { *target_ptr.add(dst_start + i) = src_color; }
+                        } else if final_alpha > 0 {
+                            let dst_color = unsafe { *target_ptr.add(dst_start + i) };
+                            unsafe { *target_ptr.add(dst_start + i) = alpha_blend(src_color, dst_color, final_alpha); }
+                        }
                     }
                 }
             }
@@ -459,8 +470,8 @@ impl Compositor {
         if self.gpu_target_ptr != 0 {
             // Trigger DMA transfer + flush (GPU display)
             let _ = crate::drivers::virtio_gpu::present_frame();
-            // Also write to MMIO framebuffer for VGA display visibility
-            self.writeback_mmio_nt();
+            // Skip MMIO writeback — GPU DMA handles display.
+            // The old writeback_mmio_nt() here was a redundant 4MB NT copy every frame.
             return;
         }
         
@@ -556,8 +567,8 @@ impl Compositor {
     }
 }
 
-/// Alpha blend two colors
-#[inline]
+/// Alpha blend two colors — uses >>8 approximation (matches SIMD path)
+#[inline(always)]
 fn alpha_blend(src: u32, dst: u32, alpha: u32) -> u32 {
     let inv_alpha = 255 - alpha;
     
@@ -569,11 +580,97 @@ fn alpha_blend(src: u32, dst: u32, alpha: u32) -> u32 {
     let dg = (dst >> 8) & 0xFF;
     let db = dst & 0xFF;
     
-    let r = (sr * alpha + dr * inv_alpha) / 255;
-    let g = (sg * alpha + dg * inv_alpha) / 255;
-    let b = (sb * alpha + db * inv_alpha) / 255;
+    let r = (sr * alpha + dr * inv_alpha + 128) >> 8;
+    let g = (sg * alpha + dg * inv_alpha + 128) >> 8;
+    let b = (sb * alpha + db * inv_alpha + 128) >> 8;
     
     0xFF000000 | (r << 16) | (g << 8) | b
+}
+
+/// Blend a row of src pixels onto dst, pre-multiplying each pixel's alpha by a uniform layer opacity.
+/// Uses SSE2 for 4-pixel-at-a-time processing.
+#[cfg(target_arch = "x86_64")]
+#[inline]
+unsafe fn blend_row_with_opacity(dst: *mut u32, src: *const u32, count: usize, opacity: u32) {
+    use core::arch::x86_64::*;
+    
+    let mut dst_ptr = dst;
+    let mut src_ptr = src;
+    let mut remaining = count;
+    
+    let zero = _mm_setzero_si128();
+    let opacity_vec = _mm_set1_epi16(opacity as i16);
+    let round_vec = _mm_set1_epi16(128);
+    let alpha_mask = _mm_set1_epi32(0xFF000000u32 as i32);
+    let max255 = _mm_set1_epi16(255);
+    
+    while remaining >= 4 {
+        let s = _mm_loadu_si128(src_ptr as *const __m128i);
+        
+        // Quick check: all transparent → skip
+        let s_alpha = _mm_srli_epi32(s, 24);
+        let all_zero = _mm_cmpeq_epi32(s_alpha, zero);
+        if _mm_movemask_epi8(all_zero) == 0xFFFF {
+            src_ptr = src_ptr.add(4);
+            dst_ptr = dst_ptr.add(4);
+            remaining -= 4;
+            continue;
+        }
+        
+        let d = _mm_loadu_si128(dst_ptr as *const __m128i);
+        
+        // --- Pixels 0-1 ---
+        let s_lo = _mm_unpacklo_epi8(s, zero);
+        let d_lo = _mm_unpacklo_epi8(d, zero);
+        
+        // Extract per-pixel alpha, multiply by layer opacity: final_alpha = (src_alpha * opacity) >> 8
+        let a0 = _mm_shufflelo_epi16(s_lo, 0xFF);
+        let a_lo = _mm_shufflehi_epi16(a0, 0xFF);
+        let fa_lo = _mm_srli_epi16(_mm_add_epi16(_mm_mullo_epi16(a_lo, opacity_vec), round_vec), 8);
+        let inv_fa_lo = _mm_sub_epi16(max255, fa_lo);
+        
+        let src_mul = _mm_mullo_epi16(s_lo, fa_lo);
+        let dst_mul = _mm_mullo_epi16(d_lo, inv_fa_lo);
+        let sum_lo = _mm_srli_epi16(_mm_add_epi16(_mm_add_epi16(src_mul, dst_mul), round_vec), 8);
+        
+        // --- Pixels 2-3 ---
+        let s_hi = _mm_unpackhi_epi8(s, zero);
+        let d_hi = _mm_unpackhi_epi8(d, zero);
+        
+        let a2 = _mm_shufflelo_epi16(s_hi, 0xFF);
+        let a_hi = _mm_shufflehi_epi16(a2, 0xFF);
+        let fa_hi = _mm_srli_epi16(_mm_add_epi16(_mm_mullo_epi16(a_hi, opacity_vec), round_vec), 8);
+        let inv_fa_hi = _mm_sub_epi16(max255, fa_hi);
+        
+        let src_mul_hi = _mm_mullo_epi16(s_hi, fa_hi);
+        let dst_mul_hi = _mm_mullo_epi16(d_hi, inv_fa_hi);
+        let sum_hi = _mm_srli_epi16(_mm_add_epi16(_mm_add_epi16(src_mul_hi, dst_mul_hi), round_vec), 8);
+        
+        // Pack and force opaque output
+        let result = _mm_packus_epi16(sum_lo, sum_hi);
+        let result = _mm_or_si128(result, alpha_mask);
+        _mm_storeu_si128(dst_ptr as *mut __m128i, result);
+        
+        src_ptr = src_ptr.add(4);
+        dst_ptr = dst_ptr.add(4);
+        remaining -= 4;
+    }
+    
+    // Scalar tail
+    for _ in 0..remaining {
+        let src_color = *src_ptr;
+        let src_alpha = ((src_color >> 24) & 0xFF) as u32;
+        if src_alpha > 0 {
+            let final_alpha = (src_alpha * opacity + 128) >> 8;
+            if final_alpha >= 255 {
+                *dst_ptr = src_color;
+            } else if final_alpha > 0 {
+                *dst_ptr = alpha_blend(src_color, *dst_ptr, final_alpha);
+            }
+        }
+        src_ptr = src_ptr.add(1);
+        dst_ptr = dst_ptr.add(1);
+    }
 }
 
 // ============================================================

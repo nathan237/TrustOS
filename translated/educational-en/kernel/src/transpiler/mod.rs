@@ -34,7 +34,7 @@ pub struct Instruction {
 pub enum Operand {
     Register(Register),
     Immediate(i64),
-    Memory { base: Option<Register>, index: Option<Register>, scale: u8, display: i64 },
+    Memory { base: Option<Register>, index: Option<Register>, scale: u8, disp: i64 },
     Label(String),
 }
 
@@ -70,11 +70,11 @@ match self {
     
         // Public function — callable from other modules.
 pub fn from_code(code: u8, rex_b: bool, size: u8) -> Self {
-        let index = if rex_b { code + 8 } else { code };
+        let idx = if rex_b { code + 8 } else { code };
                 // Pattern matching — Rust's exhaustive branching construct.
 match size {
             8 => // Pattern matching — Rust's exhaustive branching construct.
-match index {
+match idx {
                 0 => Register::RAX, 1 => Register::RCX, 2 => Register::RDX, 3 => Register::RBX,
                 4 => Register::RSP, 5 => Register::RBP, 6 => Register::RSI, 7 => Register::RDI,
                 8 => Register::R8, 9 => Register::R9, 10 => Register::R10, 11 => Register::R11,
@@ -82,7 +82,7 @@ match index {
                 _ => Register::RAX,
             },
             4 => // Pattern matching — Rust's exhaustive branching construct.
-match index {
+match idx {
                 0 => Register::EAX, 1 => Register::ECX, 2 => Register::EDX, 3 => Register::EBX,
                 4 => Register::ESP, 5 => Register::EBP, 6 => Register::ESI, 7 => Register::EDI,
                 _ => Register::EAX,
@@ -369,9 +369,9 @@ pub fn analyze_elf(data: &[u8]) -> Option<BinaryAnalysis> {
     }
     
     if text_size == 0 {
-        text_offset = 0x1000.minimum(data.len());
+        text_offset = 0x1000.min(data.len());
         text_vaddr = entry_point;
-        text_size = (data.len() - text_offset).minimum(0x10000);
+        text_size = (data.len() - text_offset).min(0x10000);
     }
     
     let entry_offset = if entry_point >= text_vaddr {
@@ -382,7 +382,7 @@ pub fn analyze_elf(data: &[u8]) -> Option<BinaryAnalysis> {
     
     let code_start = text_offset + entry_offset;
     let code = if code_start < data.len() {
-        &data[code_start..data.len().minimum(code_start + text_size)]
+        &data[code_start..data.len().min(code_start + text_size)]
     } else {
         return None;
     };
@@ -454,27 +454,27 @@ fn extract_strings(data: &[u8]) -> Vec<(u64, String)> {
 /// Désassembleur x86_64
 pub struct Disassembler<'a> {
     code: &'a [u8],
-    base_address: u64,
-    position: usize,
+    base_addr: u64,
+    pos: usize,
 }
 
 // Implementation block — defines methods for the type above.
 impl<'a> Disassembler<'a> {
         // Public function — callable from other modules.
-pub fn new(code: &'a [u8], base_address: u64) -> Self {
-        Self { code, base_address, position: 0 }
+pub fn new(code: &'a [u8], base_addr: u64) -> Self {
+        Self { code, base_addr, pos: 0 }
     }
     
         // Public function — callable from other modules.
 pub fn disassemble_all(&mut self) -> Vec<Instruction> {
         let mut instructions = Vec::new();
-        let maximum_instructions = 500; // Limit for safety
+        let max_instructions = 500; // Limit for safety
         
-        while self.position < self.code.len() && instructions.len() < maximum_instructions {
+        while self.pos < self.code.len() && instructions.len() < max_instructions {
             if let Some(inst) = self.next_instruction() {
-                let is_return_value = inst.mnemonic == "ret";
+                let is_ret = inst.mnemonic == "ret";
                 instructions.push(inst);
-                if is_return_value {
+                if is_ret {
                     break;
                 }
             } else {
@@ -486,23 +486,23 @@ pub fn disassemble_all(&mut self) -> Vec<Instruction> {
     }
     
     fn next_instruction(&mut self) -> Option<Instruction> {
-        let start_position = self.position;
-        let address = self.base_address + start_position as u64;
+        let start_position = self.pos;
+        let addr = self.base_addr + start_position as u64;
         
-        if self.position >= self.code.len() {
+        if self.pos >= self.code.len() {
             return None;
         }
         
         // Parse prefixes and REX
         let mut rex = 0u8;
-        let mut b = self.code[self.position];
+        let mut b = self.code[self.pos];
         
         // REX prefix (0x40-0x4F)
         if b >= 0x40 && b <= 0x4F {
             rex = b;
-            self.position += 1;
-            if self.position >= self.code.len() { return None; }
-            b = self.code[self.position];
+            self.pos += 1;
+            if self.pos >= self.code.len() { return None; }
+            b = self.code[self.pos];
         }
         
         let rex_w = (rex & 0x08) != 0;
@@ -515,19 +515,19 @@ pub fn disassemble_all(&mut self) -> Vec<Instruction> {
 match b {
             // SYSCALL
             0x0F if self.peek(1) == Some(0x05) => {
-                self.position += 2;
+                self.pos += 2;
                 ("syscall", vec![])
             }
             
             // RET
             0xC3 => {
-                self.position += 1;
+                self.pos += 1;
                 ("ret", vec![])
             }
             
             // XOR r/m64, r64
             0x31 => {
-                self.position += 1;
+                self.pos += 1;
                 if let Some(modrm) = self.read_modrm(rex_r, rex_b, size) {
                     ("xor", modrm)
                 } else {
@@ -538,7 +538,7 @@ match b {
             // MOV r64, imm64 (B8+rd)
             0xB8..=0xBF => {
                 let register_code = b - 0xB8;
-                self.position += 1;
+                self.pos += 1;
                 let imm = if rex_w {
                     self.read_imm64()?
                 } else {
@@ -550,7 +550,7 @@ match b {
             
             // MOV r/m64, imm32 (C7 /0)
             0xC7 => {
-                self.position += 1;
+                self.pos += 1;
                 if let Some(modrm) = self.read_modrm_with_imm32(rex_r, rex_b, size) {
                     ("mov", modrm)
                 } else {
@@ -560,7 +560,7 @@ match b {
             
             // LEA r64, m
             0x8D => {
-                self.position += 1;
+                self.pos += 1;
                 if let Some(modrm) = self.read_modrm(rex_r, rex_b, size) {
                     ("lea", modrm)
                 } else {
@@ -570,15 +570,15 @@ match b {
             
             // Unknown - skip 1 byte
             _ => {
-                self.position += 1;
+                self.pos += 1;
                 ("db", vec![Operand::Immediate(b as i64)])
             }
         };
         
-        let bytes = self.code[start_position..self.position].to_vec();
+        let bytes = self.code[start_position..self.pos].to_vec();
         
         Some(Instruction {
-            address: address,
+            address: addr,
             bytes,
             mnemonic: String::from(mnemonic),
             operands,
@@ -587,13 +587,13 @@ match b {
     }
     
     fn peek(&self, offset: usize) -> Option<u8> {
-        self.code.get(self.position + offset).copied()
+        self.code.get(self.pos + offset).copied()
     }
     
     fn read_modrm(&mut self, rex_r: bool, rex_b: bool, size: u8) -> Option<Vec<Operand>> {
-        if self.position >= self.code.len() { return None; }
-        let modrm = self.code[self.position];
-        self.position += 1;
+        if self.pos >= self.code.len() { return None; }
+        let modrm = self.code[self.pos];
+        self.pos += 1;
         
         let mod_bits = (modrm >> 6) & 0x03;
         let reg = (modrm >> 3) & 0x07;
@@ -606,9 +606,9 @@ match b {
     }
     
     fn read_modrm_with_imm32(&mut self, rex_r: bool, rex_b: bool, size: u8) -> Option<Vec<Operand>> {
-        if self.position >= self.code.len() { return None; }
-        let modrm = self.code[self.position];
-        self.position += 1;
+        if self.pos >= self.code.len() { return None; }
+        let modrm = self.code[self.pos];
+        self.pos += 1;
         
         let rm = modrm & 0x07;
         let rm_operation = Operand::Register(Register::from_code(rm, rex_b, size));
@@ -619,26 +619,26 @@ match b {
     }
     
     fn read_imm32(&mut self) -> Option<i32> {
-        if self.position + 4 > self.code.len() { return None; }
-        let value = i32::from_le_bytes([
-            self.code[self.position],
-            self.code[self.position + 1],
-            self.code[self.position + 2],
-            self.code[self.position + 3],
+        if self.pos + 4 > self.code.len() { return None; }
+        let val = i32::from_le_bytes([
+            self.code[self.pos],
+            self.code[self.pos + 1],
+            self.code[self.pos + 2],
+            self.code[self.pos + 3],
         ]);
-        self.position += 4;
-        Some(value)
+        self.pos += 4;
+        Some(val)
     }
     
     fn read_imm64(&mut self) -> Option<i64> {
-        if self.position + 8 > self.code.len() { return None; }
-        let value = i64::from_le_bytes([
-            self.code[self.position], self.code[self.position + 1],
-            self.code[self.position + 2], self.code[self.position + 3],
-            self.code[self.position + 4], self.code[self.position + 5],
-            self.code[self.position + 6], self.code[self.position + 7],
+        if self.pos + 8 > self.code.len() { return None; }
+        let val = i64::from_le_bytes([
+            self.code[self.pos], self.code[self.pos + 1],
+            self.code[self.pos + 2], self.code[self.pos + 3],
+            self.code[self.pos + 4], self.code[self.pos + 5],
+            self.code[self.pos + 6], self.code[self.pos + 7],
         ]);
-        self.position += 8;
-        Some(value)
+        self.pos += 8;
+        Some(val)
     }
 }

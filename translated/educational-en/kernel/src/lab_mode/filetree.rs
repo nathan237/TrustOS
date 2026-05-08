@@ -19,7 +19,7 @@ struct TreeNode {
     /// Full path
     path: String,
     /// Is this a directory?
-    is_directory: bool,
+    is_dir: bool,
     /// Depth level (0 = root)
     depth: usize,
     /// Is expanded? (only for dirs)
@@ -61,7 +61,7 @@ pub fn new() -> Self {
         self.nodes.push(TreeNode {
             name: String::from("/"),
             path: String::from("/"),
-            is_directory: true,
+            is_dir: true,
             depth: 0,
             expanded: true,
             size: 0,
@@ -103,7 +103,7 @@ pub fn new() -> Self {
             self.nodes.push(TreeNode {
                 name: name.clone(),
                 path: child_path.clone(),
-                is_directory: true,
+                is_dir: true,
                 depth: depth + 1,
                 expanded: is_expanded,
                 size: 0,
@@ -123,7 +123,7 @@ pub fn new() -> Self {
             self.nodes.push(TreeNode {
                 name: name.clone(),
                 path: fpath,
-                is_directory: false,
+                is_dir: false,
                 depth: depth + 1,
                 expanded: false,
                 size: *size as u64,
@@ -148,7 +148,7 @@ match key {
                 self.selected = self.selected.saturating_sub(10);
             }
             KEY_PGDOWN => {
-                self.selected = (self.selected + 10).minimum(self.nodes.len().saturating_sub(1));
+                self.selected = (self.selected + 10).min(self.nodes.len().saturating_sub(1));
             }
             // Enter = toggle expand/collapse
             0x0D | 0x0A => {
@@ -180,7 +180,7 @@ match key {
         if target < self.nodes.len() {
             self.selected = target;
             // If it's a directory, toggle expand/collapse
-            if self.nodes[target].is_directory {
+            if self.nodes[target].is_dir {
                 self.toggle_selected();
             }
         }
@@ -189,7 +189,7 @@ match key {
     /// Toggle expand/collapse on the selected directory
     fn toggle_selected(&mut self) {
         if self.selected >= self.nodes.len() { return; }
-        if !self.nodes[self.selected].is_directory { return; }
+        if !self.nodes[self.selected].is_dir { return; }
         
         self.nodes[self.selected].expanded = !self.nodes[self.selected].expanded;
         self.dirty = true;
@@ -199,7 +199,7 @@ match key {
     fn rebuild_with_state(&mut self) {
         // Save expanded paths
         let expanded_paths: Vec<String> = self.nodes.iter()
-            .filter(|n| n.is_directory && n.expanded)
+            .filter(|n| n.is_dir && n.expanded)
             .map(|n| n.path.clone())
             .collect();
         
@@ -211,7 +211,7 @@ match key {
         self.nodes.push(TreeNode {
             name: String::from("/"),
             path: String::from("/"),
-            is_directory: true,
+            is_dir: true,
             depth: 0,
             expanded: root_expanded,
             size: 0,
@@ -255,7 +255,7 @@ match key {
             self.nodes.push(TreeNode {
                 name: name.clone(),
                 path: child_path.clone(),
-                is_directory: true,
+                is_dir: true,
                 depth: depth + 1,
                 expanded: is_expanded,
                 size: 0,
@@ -274,7 +274,7 @@ match key {
             self.nodes.push(TreeNode {
                 name: name.clone(),
                 path: fpath,
-                is_directory: false,
+                is_dir: false,
                 depth: depth + 1,
                 expanded: false,
                 size: *size as u64,
@@ -313,7 +313,7 @@ pub fn draw(state: &FileTreeState, x: i32, y: i32, w: u32, h: u32) {
         state.scroll
     };
     
-    let end = (scroll + visible).minimum(state.nodes.len());
+    let end = (scroll + visible).min(state.nodes.len());
     let mut cy = list_y;
     
     for i in scroll..end {
@@ -330,7 +330,7 @@ pub fn draw(state: &FileTreeState, x: i32, y: i32, w: u32, h: u32) {
         let nx = x + indent;
         
         // Icon
-        let (icon, icon_color) = if node.is_directory {
+        let (icon, icon_color) = if node.is_dir {
             if node.expanded { ("v ", COLUMN_YELLOW) } else { ("> ", COLUMN_YELLOW) }
         } else {
             let ext_color = file_color(&node.name);
@@ -340,7 +340,7 @@ pub fn draw(state: &FileTreeState, x: i32, y: i32, w: u32, h: u32) {
         
         // Name
         let name_x = nx + 2 * cw;
-        let name_color = if node.is_directory {
+        let name_color = if node.is_dir {
             COLUMN_CYAN
         } else {
             file_color(&node.name)
@@ -356,7 +356,7 @@ pub fn draw(state: &FileTreeState, x: i32, y: i32, w: u32, h: u32) {
         draw_lab_text(name_x, cy, name, name_color);
         
         // Size (for files)
-        if !node.is_directory && node.size > 0 {
+        if !node.is_dir && node.size > 0 {
             let size_str = format_size(node.size);
             let sx = x + w as i32 - (size_str.len() as i32 * cw) - 4;
             if sx > name_x + (name.len() as i32 * cw) + cw {
@@ -371,8 +371,8 @@ pub fn draw(state: &FileTreeState, x: i32, y: i32, w: u32, h: u32) {
     // Scroll indicator
     if state.nodes.len() > visible {
         let track_h = list_h;
-        let thumb_h = ((visible as i32 * track_h) / state.nodes.len() as i32).maximum(8);
-        let thumb_position = (scroll as i32 * (track_h - thumb_h)) / state.nodes.len().saturating_sub(1).maximum(1) as i32;
+        let thumb_h = ((visible as i32 * track_h) / state.nodes.len() as i32).max(8);
+        let thumb_position = (scroll as i32 * (track_h - thumb_h)) / state.nodes.len().saturating_sub(1).max(1) as i32;
         let sb_x = (x + w as i32 - 3) as u32;
         crate::framebuffer::fill_rect(sb_x, list_y as u32, 2, track_h as u32, 0xFF21262D);
         crate::framebuffer::fill_rect(sb_x, (list_y + thumb_position) as u32, 2, thumb_h as u32, COLUMN_ACCENT);

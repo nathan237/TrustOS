@@ -767,7 +767,8 @@ impl<'a> CssParser<'a> {
         }
         
         let value = if values.len() == 1 {
-            values.into_iter().next().unwrap()
+            // SAFETY: just checked len() == 1
+            values.into_iter().next().unwrap_or(CssValue::Keyword(String::new()))
         } else {
             CssValue::Multiple(values)
         };

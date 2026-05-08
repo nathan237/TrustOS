@@ -111,10 +111,10 @@ pub fn init() {
 /// - rdi = arg1, rsi = arg2, rdx = arg3, r10 = arg4, r8 = arg5, r9 = arg6
 pub fn handle(num: u64, a1: u64, a2: u64, a3: u64) -> u64 {
     // Extended handle with all 6 args
-    let return_value = handle_full(num, a1, a2, a3, 0, 0, 0);
+    let ret = handle_full(num, a1, a2, a3, 0, 0, 0);
 
     // Emit structured syscall event to TrustLab trace bus
-    crate::lab_mode::trace_bus::emit_syscall(num, [a1, a2, a3], return_value);
+    crate::lab_mode::trace_bus::emit_syscall(num, [a1, a2, a3], ret);
 
     // Check for pending signals before returning to userspace
     let pid = crate::process::current_pid();
@@ -129,7 +129,7 @@ unsafe { crate::userland::return_from_ring3(-(signo as i32)); }
         }
     }
 
-    return_value as u64
+    ret as u64
 }
 
 /// Full syscall handler with all 6 arguments
@@ -305,26 +305,26 @@ unsafe { crate::userland::return_from_ring3(a1 as i32); }
     }
 }
 
-fn system_read(fd: i32, buffer_pointer: u64, count: usize) -> i64 {
-    if buffer_pointer == 0 || count == 0 {
+fn system_read(fd: i32, buf_ptr: u64, count: usize) -> i64 {
+    if buf_ptr == 0 || count == 0 {
         return errno::EINVAL;
     }
     
     // Validate user pointer - must be in user space and writable
-    if !validate_user_pointer(buffer_pointer, count, true) {
-        crate::log_warn!("[SYSCALL] read: invalid user pointer {:#x}", buffer_pointer);
+    if !validate_user_pointer(buf_ptr, count, true) {
+        crate::log_warn!("[SYSCALL] read: invalid user pointer {:#x}", buf_ptr);
         return errno::EFAULT;
     }
     
     // Pipe fd?
     if crate::pipe::is_pipe_fd(fd) {
         let buffer = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::slice::from_raw_parts_mut(buffer_pointer as *mut u8, count) };
+unsafe { core::slice::from_raw_parts_mut(buf_ptr as *mut u8, count) };
         return crate::pipe::read(fd, buffer);
     }
     
     let buffer = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::slice::from_raw_parts_mut(buffer_pointer as *mut u8, count) };
+unsafe { core::slice::from_raw_parts_mut(buf_ptr as *mut u8, count) };
         // Pattern matching — Rust's exhaustive branching construct.
 match crate::vfs::read(fd, buffer) {
         Ok(n) => n as i64,
@@ -332,19 +332,19 @@ match crate::vfs::read(fd, buffer) {
     }
 }
 
-fn system_write(fd: i32, buffer_pointer: u64, count: usize) -> i64 {
-    if buffer_pointer == 0 || count == 0 {
+fn system_write(fd: i32, buf_ptr: u64, count: usize) -> i64 {
+    if buf_ptr == 0 || count == 0 {
         return errno::EINVAL;
     }
     
     // Validate user pointer - must be in user space and readable
-    if !validate_user_pointer(buffer_pointer, count, false) {
-        crate::log_warn!("[SYSCALL] write: invalid user pointer {:#x}", buffer_pointer);
+    if !validate_user_pointer(buf_ptr, count, false) {
+        crate::log_warn!("[SYSCALL] write: invalid user pointer {:#x}", buf_ptr);
         return errno::EFAULT;
     }
     
     let buffer = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::slice::from_raw_parts(buffer_pointer as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe { core::slice::from_raw_parts(buf_ptr as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u8, count) };
     
     // stdout/stderr go to serial
@@ -365,9 +365,9 @@ match crate::vfs::write(fd, buffer) {
     }
 }
 
-fn system_open(path_pointer: u64, flags: u32) -> i64 {
+fn system_open(path_ptr: u64, flags: u32) -> i64 {
     let path = // Pattern matching — Rust's exhaustive branching construct.
-match read_cstring(path_pointer, 256) {
+match read_cstring(path_ptr, 256) {
         Some(s) => s,
         None => return errno::EFAULT,
     };
@@ -396,14 +396,14 @@ match crate::vfs::close(fd) {
 }
 
 /// pipe2(pipefd, flags) — create a pipe, write [read_fd, write_fd] to user buffer
-fn system_pipe2(pipefd_pointer: u64, _flags: u32) -> i64 {
-    if !validate_user_pointer(pipefd_pointer, 8, true) {
+fn system_pipe2(pipefd_ptr: u64, _flags: u32) -> i64 {
+    if !validate_user_pointer(pipefd_ptr, 8, true) {
         return errno::EFAULT;
     }
     let (read_fd, write_fd) = crate::pipe::create();
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        let ptr = pipefd_pointer as *mut i32;
+        let ptr = pipefd_ptr as *mut i32;
         *ptr = read_fd;
         *ptr.add(1) = write_fd;
     }
@@ -411,9 +411,9 @@ unsafe {
     0
 }
 
-fn system_mkdir(path_pointer: u64) -> i64 {
+fn system_mkdir(path_ptr: u64) -> i64 {
     let path = // Pattern matching — Rust's exhaustive branching construct.
-match read_cstring(path_pointer, 256) {
+match read_cstring(path_ptr, 256) {
         Some(s) => s,
         None => return errno::EFAULT,
     };
@@ -424,9 +424,9 @@ match crate::vfs::mkdir(&path) {
     }
 }
 
-fn system_unlink(path_pointer: u64) -> i64 {
+fn system_unlink(path_ptr: u64) -> i64 {
     let path = // Pattern matching — Rust's exhaustive branching construct.
-match read_cstring(path_pointer, 256) {
+match read_cstring(path_ptr, 256) {
         Some(s) => s,
         None => return errno::EFAULT,
     };
@@ -437,23 +437,23 @@ match crate::vfs::unlink(&path) {
     }
 }
 
-fn system_debug_print(buffer_pointer: u64, len: usize) -> i64 {
-    if buffer_pointer == 0 { return errno::EFAULT; }
+fn system_debug_print(buf_ptr: u64, len: usize) -> i64 {
+    if buf_ptr == 0 { return errno::EFAULT; }
     
     // Validate user pointer
-    if !validate_user_pointer(buffer_pointer, len, false) {
+    if !validate_user_pointer(buf_ptr, len, false) {
         return errno::EFAULT;
     }
     
     let buffer = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::slice::from_raw_parts(buffer_pointer as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe { core::slice::from_raw_parts(buf_ptr as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u8, len) };
     for &b in buffer { crate::serial_print!("{}", b as char); }
     len as i64
 }
 
 /// Safely read a C string from user space
-fn read_cstring(ptr: u64, maximum: usize) -> Option<alloc::string::String> {
+fn read_cstring(ptr: u64, max: usize) -> Option<alloc::string::String> {
     if ptr == 0 { return None; }
     
     // Validate the pointer is in user space
@@ -463,7 +463,7 @@ fn read_cstring(ptr: u64, maximum: usize) -> Option<alloc::string::String> {
     }
     
     let mut s = alloc::string::String::new();
-    for i in 0..maximum {
+    for i in 0..max {
         // Check each byte access is valid
         let byte_address = ptr + i as u64;
         if !is_user_address(byte_address) {
@@ -511,7 +511,7 @@ fn system_clone(flags: u64, stack: u64, entry: u64) -> i64 {
 /// Operations:
 /// - FUTEX_WAIT (0): Wait if *addr == val
 /// - FUTEX_WAKE (1): Wake up to val waiters
-fn system_futex(address: u64, op: u32, value: u32) -> i64 {
+fn system_futex(addr: u64, op: u32, val: u32) -> i64 {
         // Compile-time constant — evaluated at compilation, zero runtime cost.
 const FUTEX_WAIT: u32 = 0;
         // Compile-time constant — evaluated at compilation, zero runtime cost.
@@ -521,7 +521,7 @@ const FUTEX_PRIVATE_FLAG: u32 = 128;
     
     let op = op & !FUTEX_PRIVATE_FLAG;
     
-    if !is_user_address(address) {
+    if !is_user_address(addr) {
         return errno::EFAULT;
     }
     
@@ -530,9 +530,9 @@ match op {
         FUTEX_WAIT => {
             // Check if value matches
             let current = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { *(address as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe { *(addr as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u32) };
-            if current != value {
+            if current != val {
                 return errno::EAGAIN;
             }
             
@@ -560,33 +560,33 @@ const u32) };
 fn system_lseek(fd: i32, offset: i64, whence: u32) -> i64 {
         // Pattern matching — Rust's exhaustive branching construct.
 match crate::vfs::lseek(fd, offset, whence) {
-        Ok(position) => position as i64,
+        Ok(pos) => pos as i64,
         Err(_) => errno::EINVAL,
     }
 }
 
-fn system_getcwd(buffer: u64, size: usize) -> i64 {
-    if !validate_user_pointer(buffer, size, true) {
+fn system_getcwd(buf: u64, size: usize) -> i64 {
+    if !validate_user_pointer(buf, size, true) {
         return errno::EFAULT;
     }
     
     let cwd = crate::vfs::getcwd();
     let bytes = cwd.as_bytes();
-    let len = bytes.len().minimum(size - 1);
+    let len = bytes.len().min(size - 1);
     
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        let destination = core::slice::from_raw_parts_mut(buffer as *mut u8, size);
-        destination[..len].copy_from_slice(&bytes[..len]);
-        destination[len] = 0;
+        let dst = core::slice::from_raw_parts_mut(buf as *mut u8, size);
+        dst[..len].copy_from_slice(&bytes[..len]);
+        dst[len] = 0;
     }
     
-    buffer as i64
+    buf as i64
 }
 
-fn system_chdir(path_pointer: u64) -> i64 {
+fn system_chdir(path_ptr: u64) -> i64 {
     let path = // Pattern matching — Rust's exhaustive branching construct.
-match read_cstring(path_pointer, 256) {
+match read_cstring(path_ptr, 256) {
         Some(s) => s,
         None => return errno::EFAULT,
     };
@@ -687,55 +687,55 @@ match crate::signals::kill(pid as u32, sig as u32, sender_pid) {
 // ============================================================================
 
 /// Create a socket
-fn system_socket(domain: u16, socket_type: u32, protocol: u32) -> i64 {
+fn system_socket(domain: u16, sock_type: u32, protocol: u32) -> i64 {
         // Pattern matching — Rust's exhaustive branching construct.
-match crate::netstack::socket::socket(domain, socket_type, protocol) {
+match crate::netstack::socket::socket(domain, sock_type, protocol) {
         Ok(fd) => fd as i64,
         Err(e) => e as i64,
     }
 }
 
 /// Connect to a remote address
-fn system_connect(fd: i32, address_pointer: u64, address_length: usize) -> i64 {
+fn system_connect(fd: i32, addr_ptr: u64, addr_len: usize) -> i64 {
     use crate::netstack::socket::SockAddrIn;
     
-    if address_length < SockAddrIn::SIZE {
+    if addr_len < SockAddrIn::SIZE {
         return errno::EINVAL;
     }
     
-    if !validate_user_pointer(address_pointer, address_length, false) {
+    if !validate_user_pointer(addr_ptr, addr_len, false) {
         return errno::EFAULT;
     }
     
-    let address = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { *(address_pointer as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+    let addr = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { *(addr_ptr as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const SockAddrIn) };
     
         // Pattern matching — Rust's exhaustive branching construct.
-match crate::netstack::socket::connect(fd, &address) {
+match crate::netstack::socket::connect(fd, &addr) {
         Ok(()) => 0,
         Err(e) => e as i64,
     }
 }
 
 /// Bind socket to local address
-fn system_bind(fd: i32, address_pointer: u64, address_length: usize) -> i64 {
+fn system_bind(fd: i32, addr_ptr: u64, addr_len: usize) -> i64 {
     use crate::netstack::socket::SockAddrIn;
     
-    if address_length < SockAddrIn::SIZE {
+    if addr_len < SockAddrIn::SIZE {
         return errno::EINVAL;
     }
     
-    if !validate_user_pointer(address_pointer, address_length, false) {
+    if !validate_user_pointer(addr_ptr, addr_len, false) {
         return errno::EFAULT;
     }
     
-    let address = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { *(address_pointer as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+    let addr = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { *(addr_ptr as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const SockAddrIn) };
     
         // Pattern matching — Rust's exhaustive branching construct.
-match crate::netstack::socket::bind(fd, &address) {
+match crate::netstack::socket::bind(fd, &addr) {
         Ok(()) => 0,
         Err(e) => e as i64,
     }
@@ -751,36 +751,36 @@ match crate::netstack::socket::listen(fd, backlog) {
 }
 
 /// Accept a connection
-fn system_accept(fd: i32, address_pointer: u64, address_length_pointer: u64) -> i64 {
+fn system_accept(fd: i32, addr_ptr: u64, addr_len_ptr: u64) -> i64 {
         // Pattern matching — Rust's exhaustive branching construct.
-match crate::netstack::socket::accept(fd, address_pointer, address_length_pointer) {
+match crate::netstack::socket::accept(fd, addr_ptr, addr_len_ptr) {
         Ok(new_fd) => new_fd as i64,
         Err(e) => e as i64,
     }
 }
 
 /// Send data to connected socket
-fn system_sendto(fd: i32, buffer_pointer: u64, len: usize, flags: u32, address_pointer: u64, address_length: usize) -> i64 {
+fn system_sendto(fd: i32, buf_ptr: u64, len: usize, flags: u32, addr_ptr: u64, addr_len: usize) -> i64 {
     use crate::netstack::socket::SockAddrIn;
     
-    if !validate_user_pointer(buffer_pointer, len, false) {
+    if !validate_user_pointer(buf_ptr, len, false) {
         return errno::EFAULT;
     }
     
     let data = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::slice::from_raw_parts(buffer_pointer as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe { core::slice::from_raw_parts(buf_ptr as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u8, len) };
     
-    if address_pointer != 0 && address_length >= SockAddrIn::SIZE {
+    if addr_ptr != 0 && addr_len >= SockAddrIn::SIZE {
         // sendto with address
-        if !validate_user_pointer(address_pointer, address_length, false) {
+        if !validate_user_pointer(addr_ptr, addr_len, false) {
             return errno::EFAULT;
         }
-        let address = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { *(address_pointer as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+        let addr = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { *(addr_ptr as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const SockAddrIn) };
                 // Pattern matching — Rust's exhaustive branching construct.
-match crate::netstack::socket::sendto(fd, data, flags, &address) {
+match crate::netstack::socket::sendto(fd, data, flags, &addr) {
             Ok(n) => n as i64,
             Err(e) => e as i64,
         }
@@ -794,16 +794,16 @@ match crate::netstack::socket::sendto(fd, data, flags, &address) {
 }
 
 /// Receive data from socket
-fn system_recvfrom(fd: i32, buffer_pointer: u64, len: usize, flags: u32, address_pointer: u64, address_length_pointer: u64) -> i64 {
-    if !validate_user_pointer(buffer_pointer, len, true) {
+fn system_recvfrom(fd: i32, buf_ptr: u64, len: usize, flags: u32, addr_ptr: u64, addr_len_ptr: u64) -> i64 {
+    if !validate_user_pointer(buf_ptr, len, true) {
         return errno::EFAULT;
     }
     
-    let buffer = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::slice::from_raw_parts_mut(buffer_pointer as *mut u8, len) };
+    let buf = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { core::slice::from_raw_parts_mut(buf_ptr as *mut u8, len) };
     
     // For now, just use recv (ignore address output)
-    match crate::netstack::socket::recv(fd, buffer, flags) {
+    match crate::netstack::socket::recv(fd, buf, flags) {
         Ok(n) => n as i64,
         Err(e) => e as i64,
     }
@@ -819,97 +819,97 @@ match crate::netstack::socket::close(fd) {
 }
 
 /// Get local address of a socket
-fn system_getsockname(fd: i32, address_pointer: u64, address_length_pointer: u64) -> i64 {
+fn system_getsockname(fd: i32, addr_ptr: u64, addr_len_ptr: u64) -> i64 {
     use crate::netstack::socket::{SockAddrIn, SOCKET_TABLE};
 
-    if address_pointer == 0 || address_length_pointer == 0 {
+    if addr_ptr == 0 || addr_len_ptr == 0 {
         return errno::EFAULT;
     }
-    if !validate_user_pointer(address_length_pointer, 4, true) {
+    if !validate_user_pointer(addr_len_ptr, 4, true) {
         return errno::EFAULT;
     }
 
     let len = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { *(address_length_pointer as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe { *(addr_len_ptr as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u32) } as usize;
-    if len < SockAddrIn::SIZE || !validate_user_pointer(address_pointer, SockAddrIn::SIZE, true) {
+    if len < SockAddrIn::SIZE || !validate_user_pointer(addr_ptr, SockAddrIn::SIZE, true) {
         return errno::EINVAL;
     }
 
     let table = SOCKET_TABLE.lock();
-    let socket = // Pattern matching — Rust's exhaustive branching construct.
+    let sock = // Pattern matching — Rust's exhaustive branching construct.
 match table.get(&fd) {
         Some(s) => s,
         None => return errno::EBADF,
     };
 
-    let address = socket.local_address.unwrap_or_default();
+    let addr = sock.local_addr.unwrap_or_default();
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        *(address_pointer as *mut SockAddrIn) = address;
-        *(address_length_pointer as *mut u32) = SockAddrIn::SIZE as u32;
+        *(addr_ptr as *mut SockAddrIn) = addr;
+        *(addr_len_ptr as *mut u32) = SockAddrIn::SIZE as u32;
     }
     0
 }
 
 /// Get remote address of a connected socket
-fn system_getpeername(fd: i32, address_pointer: u64, address_length_pointer: u64) -> i64 {
+fn system_getpeername(fd: i32, addr_ptr: u64, addr_len_ptr: u64) -> i64 {
     use crate::netstack::socket::{SockAddrIn, SOCKET_TABLE};
 
-    if address_pointer == 0 || address_length_pointer == 0 {
+    if addr_ptr == 0 || addr_len_ptr == 0 {
         return errno::EFAULT;
     }
-    if !validate_user_pointer(address_length_pointer, 4, true) {
+    if !validate_user_pointer(addr_len_ptr, 4, true) {
         return errno::EFAULT;
     }
 
     let len = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { *(address_length_pointer as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe { *(addr_len_ptr as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u32) } as usize;
-    if len < SockAddrIn::SIZE || !validate_user_pointer(address_pointer, SockAddrIn::SIZE, true) {
+    if len < SockAddrIn::SIZE || !validate_user_pointer(addr_ptr, SockAddrIn::SIZE, true) {
         return errno::EINVAL;
     }
 
     let table = SOCKET_TABLE.lock();
-    let socket = // Pattern matching — Rust's exhaustive branching construct.
+    let sock = // Pattern matching — Rust's exhaustive branching construct.
 match table.get(&fd) {
         Some(s) => s,
         None => return errno::EBADF,
     };
 
-    let address = // Pattern matching — Rust's exhaustive branching construct.
-match socket.remote_address {
+    let addr = // Pattern matching — Rust's exhaustive branching construct.
+match sock.remote_addr {
         Some(a) => a,
         None => return -107, // ENOTCONN
     };
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        *(address_pointer as *mut SockAddrIn) = address;
-        *(address_length_pointer as *mut u32) = SockAddrIn::SIZE as u32;
+        *(addr_ptr as *mut SockAddrIn) = addr;
+        *(addr_len_ptr as *mut u32) = SockAddrIn::SIZE as u32;
     }
     0
 }
 
 /// sendmsg — extract iov[0] and optional addr from msghdr, delegate to sendto
-fn system_sendmsg(fd: i32, message_pointer: u64, flags: u32) -> i64 {
-    if message_pointer == 0 || !validate_user_pointer(message_pointer, 56, false) {
+fn system_sendmsg(fd: i32, msg_ptr: u64, flags: u32) -> i64 {
+    if msg_ptr == 0 || !validate_user_pointer(msg_ptr, 56, false) {
         return errno::EFAULT;
     }
     // struct msghdr layout (x86_64): name(8), namelen(4), pad(4), iov(8), iovlen(8), control(8), controllen(8), flags(4)
     let name_pointer = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { *(message_pointer as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe { *(msg_ptr as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u64) };
-    let name_length = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { *((message_pointer + 8) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+    let name_len = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { *((msg_ptr + 8) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u32) } as usize;
     let iov_pointer  = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { *((message_pointer + 16) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe { *((msg_ptr + 16) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u64) };
-    let iov_length  = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { *((message_pointer + 24) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+    let iov_len  = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { *((msg_ptr + 24) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u64) } as usize;
 
-    if iov_length == 0 || iov_pointer == 0 {
+    if iov_len == 0 || iov_pointer == 0 {
         return 0;
     }
     // Read first iovec {base: *u8, len: usize}
@@ -923,27 +923,27 @@ const u64) };
 unsafe { *((iov_pointer + 8) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u64) } as usize;
 
-    system_sendto(fd, base, len, flags, name_pointer, name_length)
+    system_sendto(fd, base, len, flags, name_pointer, name_len)
 }
 
 /// recvmsg — extract iov[0] from msghdr, delegate to recvfrom
-fn system_recvmsg(fd: i32, message_pointer: u64, flags: u32) -> i64 {
-    if message_pointer == 0 || !validate_user_pointer(message_pointer, 56, true) {
+fn system_recvmsg(fd: i32, msg_ptr: u64, flags: u32) -> i64 {
+    if msg_ptr == 0 || !validate_user_pointer(msg_ptr, 56, true) {
         return errno::EFAULT;
     }
     let name_pointer = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { *(message_pointer as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe { *(msg_ptr as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u64) };
     let name_length_pointer = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { (message_pointer + 8) as u64 };
+unsafe { (msg_ptr + 8) as u64 };
     let iov_pointer  = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { *((message_pointer + 16) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe { *((msg_ptr + 16) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u64) };
-    let iov_length  = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { *((message_pointer + 24) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+    let iov_len  = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { *((msg_ptr + 24) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u64) } as usize;
 
-    if iov_length == 0 || iov_pointer == 0 {
+    if iov_len == 0 || iov_pointer == 0 {
         return 0;
     }
     if !validate_user_pointer(iov_pointer, 16, false) {
@@ -981,31 +981,31 @@ match crate::netstack::socket::setsockopt(fd, level, optname, data) {
 }
 
 /// Get socket option
-fn system_getsockopt(fd: i32, level: i32, optname: i32, optval: u64, optlen_pointer: u64) -> i64 {
-    if optval == 0 || optlen_pointer == 0 {
+fn system_getsockopt(fd: i32, level: i32, optname: i32, optval: u64, optlen_ptr: u64) -> i64 {
+    if optval == 0 || optlen_ptr == 0 {
         return errno::EFAULT;
     }
     
-    if !validate_user_pointer(optlen_pointer, 4, true) {
+    if !validate_user_pointer(optlen_ptr, 4, true) {
         return errno::EFAULT;
     }
     
     let optlen = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { *(optlen_pointer as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe { *(optlen_ptr as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u32) } as usize;
     
     if optlen > 0 && !validate_user_pointer(optval, optlen, true) {
         return errno::EFAULT;
     }
     
-    let buffer = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+    let buf = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { core::slice::from_raw_parts_mut(optval as *mut u8, optlen) };
     
         // Pattern matching — Rust's exhaustive branching construct.
-match crate::netstack::socket::getsockopt(fd, level, optname, buffer) {
+match crate::netstack::socket::getsockopt(fd, level, optname, buf) {
         Ok(len) => {
                         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { *(optlen_pointer as *mut u32) = len as u32; }
+unsafe { *(optlen_ptr as *mut u32) = len as u32; }
             0
         }
         Err(e) => e as i64,

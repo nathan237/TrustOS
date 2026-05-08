@@ -4,7 +4,7 @@
 //! All commands related to running Linux inside TrustOS, VM management,
 //! disk persistence, and partition handling.
 
-use alloc::string::{String, ToString};
+use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::vec;
 use alloc::format;
@@ -1668,10 +1668,6 @@ pub(super) fn cmd_diskscan(_args: &[&str]) {
                     };
                     crate::println!("  Table:    {} ({} partition(s))", 
                         table_type, table.partitions.len());
-                    if table.has_windows() {
-                        crate::println_color!(COLOR_YELLOW,
-                            "  ⚠  Windows partitions detected — disk is protected from `install`/wipe.");
-                    }
                     
                     for part in &table.partitions {
                         crate::println!();
@@ -1681,9 +1677,6 @@ pub(super) fn cmd_diskscan(_args: &[&str]) {
                             part.start_lba, part.end_lba(), part.size_human());
                         if !part.name.is_empty() {
                             crate::println!("      Name: {}", part.name);
-                        }
-                        if part.partition_type.is_windows_owned() {
-                            crate::println_color!(COLOR_YELLOW, "      Owner: WINDOWS (protected)");
                         }
                         
                         // Probe filesystem on this partition
@@ -5521,24 +5514,6 @@ pub(super) fn cmd_gpu(args: &[&str]) {
                     crate::drivers::amdgpu::firmware::polaris_sdma_full_init(mmio);
                     crate::apic::watchdog_disarm();
                 }
-                "init-noctxsw" => {
-                    crate::println_color!(COLOR_YELLOW, "=== Full SDMA Init (AUTO_CTXSW off) ===");
-                    crate::apic::watchdog_arm(60_000);
-                    crate::drivers::amdgpu::firmware::polaris_sdma_full_init_no_ctxsw(mmio);
-                    crate::apic::watchdog_disarm();
-                }
-                "init-holdf32" => {
-                    crate::println_color!(COLOR_YELLOW, "=== Full SDMA Init (F32 held halted) ===");
-                    crate::apic::watchdog_arm(60_000);
-                    crate::drivers::amdgpu::firmware::polaris_sdma_full_init_hold_f32(mmio);
-                    crate::apic::watchdog_disarm();
-                }
-                "init-latef32" => {
-                    crate::println_color!(COLOR_YELLOW, "=== Full SDMA Init (F32 unhalted late) ===");
-                    crate::apic::watchdog_arm(60_000);
-                    crate::drivers::amdgpu::firmware::polaris_sdma_full_init_late_f32(mmio);
-                    crate::apic::watchdog_disarm();
-                }
                 "init-vram" => {
                     crate::println_color!(COLOR_YELLOW, "=== SDMA Init V15a — VRAM ring, no GMC ===");
                     crate::apic::watchdog_arm(60_000);
@@ -5594,11 +5569,11 @@ pub(super) fn cmd_gpu(args: &[&str]) {
                     const SDMA0_GFX_IB_BASE_HI:      u32 = 0x348E * 4;
                     const SDMA0_GFX_IB_SIZE:         u32 = 0x348F * 4;
                     const SDMA0_GFX_SKIP_CNTL:       u32 = 0x3490 * 4;
-                    const SDMA0_GFX_CONTEXT_STATUS:  u32 = 0x3491 * 4;
+                    const SDMA0_GFX_CONTEXT_CNTL:    u32 = 0x3491 * 4;
                     const SDMA0_GFX_DOORBELL:        u32 = 0x3492 * 4;
-                    const SDMA0_GFX_CONTEXT_CNTL:    u32 = 0x3493 * 4;
-                    const SDMA0_GFX_VIRTUAL_ADDR:    u32 = 0x34A7 * 4;
-                    const SDMA0_GFX_APE1_CNTL:       u32 = 0x34A8 * 4;
+                    const SDMA0_GFX_DOORBELL_OFFSET: u32 = 0x3493 * 4;
+                    const SDMA0_GFX_VIRTUAL_ADDR:    u32 = 0x349A * 4;
+                    const SDMA0_GFX_APE1_CNTL:       u32 = 0x349B * 4;
                     const SDMA0_GFX_MINOR_PTR_UPDATE:u32 = 0x349D * 4;
                     // HDP non-surface base (defaults to VRAM low, can absorb stray writes)
                     const POL_HDP_NONSURFACE_BASE:   u32 = 0x0B04;
@@ -5646,9 +5621,9 @@ pub(super) fn cmd_gpu(args: &[&str]) {
                     dump("IB_BASE_HI",                 SDMA0_GFX_IB_BASE_HI);
                     dump("IB_SIZE",                    SDMA0_GFX_IB_SIZE);
                     dump("SKIP_CNTL",                  SDMA0_GFX_SKIP_CNTL);
-                    dump("CONTEXT_STATUS",             SDMA0_GFX_CONTEXT_STATUS);
                     dump("CONTEXT_CNTL",               SDMA0_GFX_CONTEXT_CNTL);
                     dump("DOORBELL",                   SDMA0_GFX_DOORBELL);
+                    dump("DOORBELL_OFFSET",            SDMA0_GFX_DOORBELL_OFFSET);
                     dump("MINOR_PTR_UPDATE",           SDMA0_GFX_MINOR_PTR_UPDATE);
                     dump("VIRTUAL_ADDR",               SDMA0_GFX_VIRTUAL_ADDR);
                     dump("APE1_CNTL",                  SDMA0_GFX_APE1_CNTL);
@@ -5694,13 +5669,17 @@ pub(super) fn cmd_gpu(args: &[&str]) {
                     // === PF_STATUS bit decode (gmc_8_1_sh_mask.h) ===
                     let pfst = unsafe { mmio_read32(mmio, POL_VM_CTX0_PF_STATUS) };
                     if pfst != 0 {
-                        let prot  =  pfst        & 0xFF;
-                        let cid   = (pfst >> 12) & 0xFF;
-                        let rw    = (pfst >> 24) & 0x1;
-                        let vmid  = (pfst >> 25) & 0xF;
-                        let more  = (pfst >> 31) & 0x1;
+                        let more  =  pfst        & 0x1;
+                        let walk  = (pfst >> 1)  & 0x7;
+                        let perm  = (pfst >> 4)  & 0xF;
+                        let map   = (pfst >> 8)  & 0x1;
+                        let cid   = (pfst >> 9)  & 0xFF;
+                        let rw    = (pfst >> 17) & 0x1;
+                        let vmid  = (pfst >> 18) & 0xF;
+                        let prot  = (pfst >> 24) & 0xFF;
                         crate::println!("PF_STATUS decode {:#010X}:", pfst);
-                        crate::println!("  MORE_FAULTS={}", more);
+                        crate::println!("  MORE_FAULTS={} WALKER_ERR={} PERM_FAULT={:#X} MAPPING_ERR={}",
+                            more, walk, perm, map);
                         crate::println!("  CID={:#X} RW={} ({}) VMID={} PROTECTIONS={:#X}",
                             cid, rw, if rw == 1 {"WRITE"} else {"READ"}, vmid, prot);
                         // Polaris MC client IDs (subset, gmc_v8_0)
@@ -5727,7 +5706,7 @@ pub(super) fn cmd_gpu(args: &[&str]) {
                     crate::apic::watchdog_disarm();
                 }
                 "vm-dump" => {
-                    // Diagnostic ladder step 1 (memory/gpu_unified_memory.md):
+                    // Diagnostic ladder step 1 (memory/cp_sdma_debug_todo.md):
                     // dump every VM_CONTEXT0 / SYS_APR / L1_TLB register live and
                     // diff against expected values from polaris_gmc_init.
                     // Goal: confirm whether GMC writes actually stick on this HW.
@@ -5837,11 +5816,12 @@ pub(super) fn cmd_gpu(args: &[&str]) {
                     row("VM_CTX0_PF_MCCLIENT",  POL_VM_CTX0_PF_MCCLIENT, pfmc, None);
                     if pfst != 0 {
                         // gmc_8_1_sh_mask layout (CTX0_PF_STATUS):
-                        // gmc_v8 layout: PROT[7:0] CID[19:12] RW[24] VMID[28:25] MORE[31]
-                        let prot = pfst & 0xFF;
-                        let cid  = (pfst >> 12) & 0xFF;
-                        let rw   = (pfst >> 24) & 0x1;
-                        let vmid = (pfst >> 25) & 0xF;
+                        // [0] MORE [3:1] WALKER [7:4] PERMS [8] MAPPING
+                        // [16:9] CID [17] RW [21:18] VMID [31:24] PROTS
+                        let cid  = (pfst >> 9)  & 0xFF;
+                        let rw   = (pfst >> 17) & 0x1;
+                        let vmid = (pfst >> 18) & 0xF;
+                        let prot = (pfst >> 24) & 0xFF;
                         crate::println!("    decode: CID={:#X} VMID={} {} prot={:#X}  ADDR_MC={:#X}",
                             cid, vmid, if rw == 1 {"WR"} else {"RD"}, prot,
                             (pfad as u64) << 12);
@@ -5865,7 +5845,7 @@ pub(super) fn cmd_gpu(args: &[&str]) {
                     use crate::drivers::amdgpu::mmio_read32;
                     crate::apic::watchdog_arm(5_000);
                     const POL_VM_CTX0_PF_STATUS:   u32 = 0x536 * 4;
-                    const POL_VM_CTX0_PF_MCCLIENT: u32 = 0x538 * 4;
+                    const POL_VM_CTX0_PF_MCCLIENT: u32 = 0x537 * 4;
                     const POL_VM_CTX0_PF_ADDR:     u32 = 0x53E * 4;
                     const POL_VM_CTX0_CNTL:        u32 = 0x504 * 4;
                     const POL_MC_VM_FB_LOCATION: u32 = 0x809 * 4;
@@ -5892,14 +5872,14 @@ pub(super) fn cmd_gpu(args: &[&str]) {
                     let bah0  = unsafe { mmio_read32(mmio, POL_SDMA0_RB_BASE_HI) };
                     let ral0  = unsafe { mmio_read32(mmio, POL_SDMA0_RB_RPTR_ADDR_LO) };
                     let rah0  = unsafe { mmio_read32(mmio, POL_SDMA0_RB_RPTR_ADDR_HI) };
-                    // SDMA1 = SDMA0 + 0x200 dword indices on Polaris/sdma_v3_0.
-                    const POL_SDMA1_STATUS_REG: u32 = 0x360D * 4;
-                    const POL_SDMA1_F32_CNTL:   u32 = 0x3612 * 4;
-                    const POL_SDMA1_RB_RPTR:    u32 = 0x3683 * 4;
-                    const POL_SDMA1_RB_WPTR:    u32 = 0x3684 * 4;
-                    const POL_SDMA1_RB_CNTL:    u32 = 0x3680 * 4;
-                    const POL_SDMA1_RB_BASE:    u32 = 0x3681 * 4;
-                    const POL_SDMA1_RB_BASE_HI: u32 = 0x3682 * 4;
+                    // SDMA1 (offset +0x80 from SDMA0 in dword indices)
+                    const POL_SDMA1_STATUS_REG: u32 = 0x348D * 4;
+                    const POL_SDMA1_F32_CNTL:   u32 = 0x3492 * 4;
+                    const POL_SDMA1_RB_RPTR:    u32 = 0x3503 * 4;
+                    const POL_SDMA1_RB_WPTR:    u32 = 0x3504 * 4;
+                    const POL_SDMA1_RB_CNTL:    u32 = 0x3500 * 4;
+                    const POL_SDMA1_RB_BASE:    u32 = 0x3501 * 4;
+                    const POL_SDMA1_RB_BASE_HI: u32 = 0x3502 * 4;
                     let s1   = unsafe { mmio_read32(mmio, POL_SDMA1_STATUS_REG) };
                     let f1   = unsafe { mmio_read32(mmio, POL_SDMA1_F32_CNTL) };
                     let r1   = unsafe { mmio_read32(mmio, POL_SDMA1_RB_RPTR) };
@@ -5938,8 +5918,8 @@ pub(super) fn cmd_gpu(args: &[&str]) {
                     const POL_VM_INVALIDATE_REQUEST: u32 = 0x51E * 4;
                     const POL_SDMA0_F32_CNTL: u32 = 0x3412 * 4;
                     const POL_SDMA0_RB_CNTL:  u32 = 0x3480 * 4;
-                    const POL_SDMA1_F32_CNTL: u32 = 0x3612 * 4;
-                    const POL_SDMA1_RB_CNTL:  u32 = 0x3680 * 4;
+                    const POL_SDMA1_F32_CNTL: u32 = 0x3492 * 4;
+                    const POL_SDMA1_RB_CNTL:  u32 = 0x3500 * 4;
                     const POL_VM_CTX0_CNTL: u32 = 0x504 * 4;
                     let pre = unsafe { mmio_read32(mmio, POL_VM_CTX0_PF_STATUS) };
                     let ctx_pre = unsafe { mmio_read32(mmio, POL_VM_CTX0_CNTL) };
@@ -6286,17 +6266,6 @@ pub(super) fn cmd_gpu(args: &[&str]) {
                 "dump" => {
                     crate::drivers::amdgpu::firmware::polaris_sdma_dump(mmio);
                 }
-                "retire" => {
-                    crate::drivers::amdgpu::firmware::polaris_sdma_retire_diag(mmio);
-                }
-                "vadump" => {
-                    crate::drivers::amdgpu::firmware::polaris_sdma_va_diag(mmio);
-                }
-                "wrdiag" => {
-                    let count = args.get(2).and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
-                    let dest = args.get(3).copied().unwrap_or("fence");
-                    crate::drivers::amdgpu::firmware::polaris_sdma_write_linear_diag(mmio, count, dest);
-                }
                 "wptr" => {
                     let val = args.get(2).and_then(|s| {
                         if s.starts_with("0x") || s.starts_with("0X") {
@@ -6337,9 +6306,6 @@ pub(super) fn cmd_gpu(args: &[&str]) {
                     crate::println!("  gfx-init - GFX init: golden regs + SH_MEM + SPI/SQ (BEFORE cp-init!)");
                     crate::println!("  status  - register dump");
                     crate::println!("  dump    - detailed reg dump both engines");
-                    crate::println!("  retire  - focused RLC/RPTR/WB retire diagnostic");
-                    crate::println!("  vadump  - dump SDMA VMID VA/APE state");
-                    crate::println!("  wrdiag <cnt> [fence|ring|vram] - one WRITE_LINEAR diagnostic");
                     crate::println!("  alloc   - allocate system memory buffers");
                     crate::println!("  reset   - SRBM soft reset SDMA engines");
                     crate::println!("  golden  - apply golden regs (clk/pwr gating)");
@@ -6358,9 +6324,6 @@ pub(super) fn cmd_gpu(args: &[&str]) {
                     crate::println!("  vram-nop - NOP test with VRAM ring and VM_CONTEXT0 off");
                     crate::println!("  steptrace - full init + reg snapshots per step");
                     crate::println!("  init    - all steps at once (V13)");
-                    crate::println!("  init-noctxsw - full init with AUTO_CTXSW disabled");
-                    crate::println!("  init-holdf32 - full init with F32 kept halted");
-                    crate::println!("  init-latef32 - full init with F32 unhalted after CONTEXT/CNTL");
                 }
             }
         }
@@ -6948,199 +6911,6 @@ pub(super) fn cmd_curl(args: &[&str]) {
     } else {
         crate::println_color!(COLOR_RED, "Invalid URL");
     }
-}
-
-pub(super) fn cmd_camera(args: &[&str]) {
-    if args.is_empty() || args[0] == "help" {
-        crate::println_color!(COLOR_CYAN, "Camera endpoint tools");
-        crate::println!("Usage:");
-        crate::println!("  camera status");
-        crate::println!("  camera test <host> <port> [path] [host-header]");
-        crate::println!("  camera probe <http://host[:port]/path>");
-        crate::println!();
-        crate::println!("Examples:");
-        crate::println!("  camera test 10.0.2.2 8081 / localhost");
-        crate::println!("  camera probe http://10.0.2.2:8090/stream.mjpg");
-        crate::println!();
-        crate::println!("V1 validates network reachability and HTTP/MJPEG proxy headers.");
-        return;
-    }
-
-    match args[0] {
-        "status" => {
-            crate::println_color!(COLOR_CYAN, "Camera subsystem: V1 probe mode");
-            if crate::network::is_available() {
-                crate::println_color!(COLOR_GREEN, "Network: available");
-                if let Some((mac, ip, state)) = crate::network::get_interface() {
-                    crate::println!("Interface: state={:?} mac={} ip={}",
-                        state, mac, ip.map(|v| v.to_string()).unwrap_or_else(|| String::from("(none)")));
-                }
-            } else {
-                crate::println_color!(COLOR_RED, "Network: unavailable");
-            }
-            crate::println!("Supported now: HTTP/MJPEG proxy probe");
-            crate::println!("Next: RTSP DESCRIBE/SETUP/PLAY");
-        }
-        "test" => {
-            if args.len() < 3 {
-                crate::println!("Usage: camera test <host> <port> [path] [host-header]");
-                return;
-            }
-            let host = args[1];
-            let port: u16 = match args[2].parse() {
-                Ok(p) => p,
-                Err(_) => {
-                    crate::println_color!(COLOR_RED, "Invalid port");
-                    return;
-                }
-            };
-            let path = args.get(3).copied().unwrap_or("/");
-            let host_header = args.get(4).copied().unwrap_or(host);
-            camera_probe_http(host, port, path, host_header);
-        }
-        "probe" => {
-            if args.len() < 2 {
-                crate::println!("Usage: camera probe <http://host[:port]/path>");
-                return;
-            }
-            let (host, port, path, is_https) = match parse_http_url(args[1]) {
-                Some(v) => v,
-                None => {
-                    crate::println_color!(COLOR_RED, "Invalid URL");
-                    return;
-                }
-            };
-            if is_https {
-                crate::println_color!(COLOR_YELLOW, "camera probe V1 supports plain HTTP endpoints only");
-                return;
-            }
-            camera_probe_http(&host, port, &path, &host);
-        }
-        _ => {
-            crate::println_color!(COLOR_RED, "Unknown camera command");
-            crate::println!("Try: camera help");
-        }
-    }
-}
-
-fn camera_probe_http(host_input: &str, port: u16, path: &str, host_header: &str) {
-    let ip = if let Some(ip) = parse_ipv4(host_input) {
-        ip
-    } else if let Some(resolved) = crate::netstack::dns::resolve(host_input) {
-        resolved
-    } else {
-        crate::println_color!(COLOR_RED, "Unable to resolve camera host");
-        return;
-    };
-
-    crate::println_color!(COLOR_CYAN, "[camera] probing {}:{}{}", host_input, port, path);
-    let src_port = match crate::netstack::tcp::send_syn(ip, port) {
-        Ok(p) => p,
-        Err(e) => {
-            crate::println_color!(COLOR_RED, "[camera] SYN failed: {}", e);
-            return;
-        }
-    };
-
-    if !crate::netstack::tcp::wait_for_established(ip, port, src_port, 1500) {
-        crate::println_color!(COLOR_YELLOW, "[camera] connection timeout");
-        return;
-    }
-
-    let mut request = String::new();
-    request.push_str("GET ");
-    request.push_str(path);
-    request.push_str(" HTTP/1.1\r\nHost: ");
-    request.push_str(host_header);
-    request.push_str("\r\nAccept: multipart/x-mixed-replace,image/jpeg,*/*\r\nConnection: close\r\nUser-Agent: TrustOS-CameraProbe/0.1\r\n\r\n");
-
-    if let Err(e) = crate::netstack::tcp::send_payload(ip, port, src_port, request.as_bytes()) {
-        crate::println_color!(COLOR_RED, "[camera] send failed: {}", e);
-        return;
-    }
-
-    let start = crate::logger::get_ticks();
-    let mut total_bytes = 0usize;
-    let mut sample = String::new();
-    let mut content_type = String::new();
-    let mut status_line = String::new();
-
-    loop {
-        crate::netstack::poll();
-        while let Some(data) = crate::netstack::tcp::recv_data(ip, port, src_port) {
-            total_bytes += data.len();
-            if sample.len() < 1024 {
-                if let Ok(text) = core::str::from_utf8(&data) {
-                    for line in text.lines() {
-                        let trimmed = line.trim_end_matches('\r');
-                        if status_line.is_empty() && trimmed.starts_with("HTTP/") {
-                            status_line.push_str(trimmed);
-                        }
-                        if content_type.is_empty() && starts_with_ci(trimmed, "content-type:") {
-                            content_type.push_str(trimmed);
-                        }
-                        if sample.len() < 1024 {
-                            sample.push_str(trimmed);
-                            sample.push('\n');
-                        }
-                    }
-                } else if sample.is_empty() {
-                    sample.push_str("<binary data>\n");
-                }
-            }
-            if total_bytes >= 512 {
-                break;
-            }
-        }
-
-        if total_bytes >= 512 || crate::netstack::tcp::fin_received(ip, port, src_port) {
-            break;
-        }
-        if crate::logger::get_ticks().saturating_sub(start) > 2500 {
-            break;
-        }
-        crate::arch::halt();
-    }
-
-    let _ = crate::netstack::tcp::send_fin(ip, port, src_port);
-
-    if total_bytes == 0 {
-        crate::println_color!(COLOR_YELLOW, "[camera] connected, but no response bytes received");
-        return;
-    }
-
-    crate::println_color!(COLOR_GREEN, "[camera] endpoint reachable");
-    if !status_line.is_empty() {
-        crate::println!("Status: {}", status_line);
-    }
-    if !content_type.is_empty() {
-        crate::println!("Content-Type: {}", content_type);
-    } else {
-        crate::println_color!(COLOR_YELLOW, "Content-Type: not found in first response bytes");
-    }
-    crate::println!("Received: {} bytes", total_bytes);
-
-    if content_type.contains("multipart/x-mixed-replace") || content_type.contains("image/jpeg") {
-        crate::println_color!(COLOR_GREEN, "Stream type: camera-friendly HTTP/MJPEG");
-    } else {
-        crate::println_color!(COLOR_YELLOW, "Stream type: generic HTTP endpoint");
-    }
-}
-
-fn starts_with_ci(s: &str, prefix: &str) -> bool {
-    if s.len() < prefix.len() {
-        return false;
-    }
-    let a = s.as_bytes();
-    let b = prefix.as_bytes();
-    for i in 0..b.len() {
-        let ca = if a[i] >= b'A' && a[i] <= b'Z' { a[i] + 32 } else { a[i] };
-        let cb = if b[i] >= b'A' && b[i] <= b'Z' { b[i] + 32 } else { b[i] };
-        if ca != cb {
-            return false;
-        }
-    }
-    true
 }
 
 fn do_http_get(host_input: &str, port: u16, path: &str, host_header: &str) {
@@ -10517,12 +10287,12 @@ fn gpumap_probe_amd(mmio: u64) {
         ("VM_INV_RESPONSE",      0x51F * 4),     // 0x147C
         ("VM_FAULT_STATUS",      0x536 * 4),     // 0x14D8
         ("VM_FAULT_ADDR",        0x53E * 4),     // 0x14F8
-        // SDMA0 (Polaris / sdma_v3_0 dword offsets from oss_3_0_d.h)
-        ("SDMA0_STATUS",         0x340D * 4),    // 0xD034
-        ("SDMA0_F32_CNTL",       0x3412 * 4),    // 0xD048
-        ("SDMA0_GFX_RB_CNTL",    0x3480 * 4),    // 0xD200
-        ("SDMA0_GFX_RB_RPTR",    0x3483 * 4),    // 0xD20C
-        ("SDMA0_GFX_RB_WPTR",    0x3484 * 4),    // 0xD210
+        // SDMA0
+        ("SDMA0_STATUS",         0x3510 * 4),    // 0xD440
+        ("SDMA0_F32_CNTL",       0x3508 * 4),    // 0xD420
+        ("SDMA0_GFX_RB_CNTL",   0x340A * 4),    // 0xD028
+        ("SDMA0_GFX_RB_RPTR",   0x340D * 4),    // 0xD034
+        ("SDMA0_GFX_RB_WPTR",   0x340F * 4),    // 0xD03C
         // CP (Command Processor)
         ("CP_RB0_BASE",          0xC100),
         ("CP_RB0_CNTL",          0xC104),
@@ -10565,8 +10335,8 @@ fn gpumap_probe_amd(mmio: u64) {
     ));
     
     // Engine summary
-    let sdma0_status = unsafe { amdgpu::mmio_read32(mmio, 0x340D * 4) };
-    let sdma0_f32 = unsafe { amdgpu::mmio_read32(mmio, 0x3412 * 4) };
+    let sdma0_status = unsafe { amdgpu::mmio_read32(mmio, 0x3510 * 4) };
+    let sdma0_f32 = unsafe { amdgpu::mmio_read32(mmio, 0x3508 * 4) };
     let sdma_idle = sdma0_status & 1 != 0;
     let sdma_halted = sdma0_f32 & 1 != 0;
     

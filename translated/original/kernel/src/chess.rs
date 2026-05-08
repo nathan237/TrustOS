@@ -1017,12 +1017,13 @@ impl ChessState {
 
     /// Handle mouse release — complete drag & drop
     pub fn handle_mouse_release(&mut self, col: i32, row: i32) {
-        if self.drag_from.is_none() || self.dragging_piece.is_none() {
+        let from = match self.drag_from.take() {
+            Some(f) => f,
+            None => return,
+        };
+        if self.dragging_piece.is_none() {
             return;
         }
-        
-        let from = self.drag_from.unwrap();
-        self.drag_from = None;
         self.dragging_piece = None;
         
         if col < 0 || col > 7 || row < 0 || row > 7 {

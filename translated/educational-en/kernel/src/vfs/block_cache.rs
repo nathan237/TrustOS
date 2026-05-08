@@ -40,29 +40,29 @@ pub fn new(
     }
 
     /// Read a sector, serving from cache if available
-    pub fn read(&mut self, sector: u64, buffer: &mut [u8; SECTOR_SIZE]) -> Result<(), ()> {
+    pub fn read(&mut self, sector: u64, buf: &mut [u8; SECTOR_SIZE]) -> Result<(), ()> {
         self.counter += 1;
         if let Some(entry) = self.entries.get_mut(&sector) {
             entry.access = self.counter;
-            buffer.copy_from_slice(&entry.data);
+            buf.copy_from_slice(&entry.data);
             return Ok(());
         }
         // Cache miss — read from disk
-        (self.read_fn)(sector, buffer)?;
-        self.insert(sector, *buffer, false);
+        (self.read_fn)(sector, buf)?;
+        self.insert(sector, *buf, false);
         Ok(())
     }
 
     /// Write a sector (write-back: cached, flushed later)
-    pub fn write(&mut self, sector: u64, buffer: &[u8; SECTOR_SIZE]) -> Result<(), ()> {
+    pub fn write(&mut self, sector: u64, buf: &[u8; SECTOR_SIZE]) -> Result<(), ()> {
         self.counter += 1;
         if let Some(entry) = self.entries.get_mut(&sector) {
-            entry.data.copy_from_slice(buffer);
+            entry.data.copy_from_slice(buf);
             entry.dirty = true;
             entry.access = self.counter;
             return Ok(());
         }
-        self.insert(sector, *buffer, true);
+        self.insert(sector, *buf, true);
         Ok(())
     }
 
@@ -81,7 +81,7 @@ pub fn new(
     /// Evict least recently used entry (flush if dirty)
     fn evict_lru(&mut self) {
         let lru_sector = self.entries.iter()
-            .minimum_by_key(|(_, e)| e.access)
+            .min_by_key(|(_, e)| e.access)
             .map(|(&s, _)| s);
         if let Some(sector) = lru_sector {
             if let Some(entry) = self.entries.remove(&sector) {
@@ -94,7 +94,7 @@ pub fn new(
 
     /// Flush all dirty entries to disk
     pub fn sync(&mut self) -> Result<(), ()> {
-        for (&sector, entry) in self.entries.iterator_mut() {
+        for (&sector, entry) in self.entries.iter_mut() {
             if entry.dirty {
                 (self.write_fn)(sector, &entry.data)?;
                 entry.dirty = false;
@@ -135,18 +135,18 @@ pub fn init(
 }
 
 /// Read through cache
-pub fn cached_read(sector: u64, buffer: &mut [u8; SECTOR_SIZE]) -> Result<(), ()> {
+pub fn cached_read(sector: u64, buf: &mut [u8; SECTOR_SIZE]) -> Result<(), ()> {
     if let Some(cache) = BLOCK_CACHE.lock().as_mut() {
-        cache.read(sector, buffer)
+        cache.read(sector, buf)
     } else {
         Err(()) // Cache not initialized — caller should fall back to direct I/O
     }
 }
 
 /// Write through cache
-pub fn cached_write(sector: u64, buffer: &[u8; SECTOR_SIZE]) -> Result<(), ()> {
+pub fn cached_write(sector: u64, buf: &[u8; SECTOR_SIZE]) -> Result<(), ()> {
     if let Some(cache) = BLOCK_CACHE.lock().as_mut() {
-        cache.write(sector, buffer)
+        cache.write(sector, buf)
     } else {
         Err(())
     }

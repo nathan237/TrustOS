@@ -94,9 +94,9 @@ impl WallTexture {
                 } else {
                     // Brick with slight variation
                     let noise = ((x * 7 + y * 13) % 20) as u32;
-                    let r = 140u32.saturating_add(noise).minimum(180);
-                    let g = 60u32.saturating_add(noise / 2).minimum(80);
-                    let b = 30u32.saturating_add(noise / 3).minimum(50);
+                    let r = 140u32.saturating_add(noise).min(180);
+                    let g = 60u32.saturating_add(noise / 2).min(80);
+                    let b = 30u32.saturating_add(noise / 3).min(50);
                     pixels[y * TEX_SIZE + x] = 0xFF000000 | (r << 16) | (g << 8) | b;
                 }
             }
@@ -112,7 +112,7 @@ impl WallTexture {
                 // Stone pattern with pseudo-random noise
                 let noise = ((x * 31 + y * 17 + (x ^ y) * 7) % 40) as u32;
                 let base = 90u32;
-                let v = base.saturating_add(noise).minimum(140);
+                let v = base.saturating_add(noise).min(140);
                 pixels[y * TEX_SIZE + x] = 0xFF000000 | (v << 16) | (v << 8) | v;
             }
         }
@@ -163,7 +163,7 @@ impl WallTexture {
                 } else {
                     10u32 + noise / 2
                 };
-                pixels[y * TEX_SIZE + x] = 0xFF000000 | ((g / 4) << 16) | (g.minimum(200) << 8) | (g / 6);
+                pixels[y * TEX_SIZE + x] = 0xFF000000 | ((g / 4) << 16) | (g.min(200) << 8) | (g / 6);
             }
         }
         WallTexture { pixels }
@@ -242,7 +242,7 @@ pub struct Enemy {
     pub x: f32,
     pub y: f32,
     pub health: i32,
-    pub maximum_health: i32,
+    pub max_health: i32,
     pub state: EnemyState,
     pub attack_cooldown: u32,
     pub damage: i32,
@@ -306,9 +306,9 @@ fn create_level_1() -> Level {
         spawn_angle: 0.0,
         items,
         enemies: alloc::vec![
-            Enemy { x: 8.5, y: 3.5, health: 30, maximum_health: 30, state: EnemyState::Idle, attack_cooldown: 0, damage: 8, speed: 0.02, sight_range: 6.0, attack_range: 1.5 },
-            Enemy { x: 3.5, y: 8.5, health: 30, maximum_health: 30, state: EnemyState::Idle, attack_cooldown: 0, damage: 8, speed: 0.02, sight_range: 6.0, attack_range: 1.5 },
-            Enemy { x: 13.5, y: 5.5, health: 40, maximum_health: 40, state: EnemyState::Idle, attack_cooldown: 0, damage: 12, speed: 0.025, sight_range: 8.0, attack_range: 1.5 },
+            Enemy { x: 8.5, y: 3.5, health: 30, max_health: 30, state: EnemyState::Idle, attack_cooldown: 0, damage: 8, speed: 0.02, sight_range: 6.0, attack_range: 1.5 },
+            Enemy { x: 3.5, y: 8.5, health: 30, max_health: 30, state: EnemyState::Idle, attack_cooldown: 0, damage: 8, speed: 0.02, sight_range: 6.0, attack_range: 1.5 },
+            Enemy { x: 13.5, y: 5.5, health: 40, max_health: 40, state: EnemyState::Idle, attack_cooldown: 0, damage: 12, speed: 0.025, sight_range: 8.0, attack_range: 1.5 },
         ],
     }
 }
@@ -350,10 +350,10 @@ fn create_level_2() -> Level {
         spawn_angle: 0.0,
         items,
         enemies: alloc::vec![
-            Enemy { x: 5.5, y: 5.5, health: 40, maximum_health: 40, state: EnemyState::Idle, attack_cooldown: 0, damage: 10, speed: 0.025, sight_range: 7.0, attack_range: 1.5 },
-            Enemy { x: 10.5, y: 5.5, health: 40, maximum_health: 40, state: EnemyState::Idle, attack_cooldown: 0, damage: 10, speed: 0.025, sight_range: 7.0, attack_range: 1.5 },
-            Enemy { x: 5.5, y: 10.5, health: 40, maximum_health: 40, state: EnemyState::Idle, attack_cooldown: 0, damage: 10, speed: 0.025, sight_range: 7.0, attack_range: 1.5 },
-            Enemy { x: 10.5, y: 10.5, health: 50, maximum_health: 50, state: EnemyState::Idle, attack_cooldown: 0, damage: 15, speed: 0.03, sight_range: 8.0, attack_range: 1.5 },
+            Enemy { x: 5.5, y: 5.5, health: 40, max_health: 40, state: EnemyState::Idle, attack_cooldown: 0, damage: 10, speed: 0.025, sight_range: 7.0, attack_range: 1.5 },
+            Enemy { x: 10.5, y: 5.5, health: 40, max_health: 40, state: EnemyState::Idle, attack_cooldown: 0, damage: 10, speed: 0.025, sight_range: 7.0, attack_range: 1.5 },
+            Enemy { x: 5.5, y: 10.5, health: 40, max_health: 40, state: EnemyState::Idle, attack_cooldown: 0, damage: 10, speed: 0.025, sight_range: 7.0, attack_range: 1.5 },
+            Enemy { x: 10.5, y: 10.5, health: 50, max_health: 50, state: EnemyState::Idle, attack_cooldown: 0, damage: 15, speed: 0.03, sight_range: 8.0, attack_range: 1.5 },
         ],
     }
 }
@@ -408,7 +408,7 @@ pub struct Game3DState {
     z_buffer: Vec<f32>,  // Per-column depth for sprite clipping
 
     // RNG
-    random_generator_state: u32,
+    rng_state: u32,
 
     // Pre-computed sin/cos table for raycasting (one per screen column)
     ray_cos_table: Vec<f32>,
@@ -461,7 +461,7 @@ pub fn new() -> Self {
             kills: 0,
             z_buffer: Vec::new(),
 
-            random_generator_state: 12345,
+            rng_state: 12345,
 
             ray_cos_table: Vec::new(),
             ray_sin_table: Vec::new(),
@@ -478,27 +478,27 @@ pub fn new() -> Self {
         let fov = core::f32::consts::FRAC_PI_3;
         self.ray_cos_table.resize(w, 0.0);
         self.ray_sin_table.resize(w, 0.0);
-        for column in 0..w {
-            let ray_offset = (column as f32 / w as f32 - 0.5) * 2.0;
+        for col in 0..w {
+            let ray_offset = (col as f32 / w as f32 - 0.5) * 2.0;
             let ray_angle = self.player_angle + ray_offset * (fov / 2.0);
-            self.ray_cos_table[column] = ray_angle.cos();
-            self.ray_sin_table[column] = ray_angle.sin();
+            self.ray_cos_table[col] = ray_angle.cos();
+            self.ray_sin_table[col] = ray_angle.sin();
         }
         self.last_table_width = w;
         self.last_table_angle = self.player_angle;
     }
 
-    fn next_random_generator(&mut self) -> u32 {
-        self.random_generator_state ^= self.random_generator_state << 13;
-        self.random_generator_state ^= self.random_generator_state >> 17;
-        self.random_generator_state ^= self.random_generator_state << 5;
-        self.random_generator_state
+    fn next_rng(&mut self) -> u32 {
+        self.rng_state ^= self.rng_state << 13;
+        self.rng_state ^= self.rng_state >> 17;
+        self.rng_state ^= self.rng_state << 5;
+        self.rng_state
     }
 
     /// Load next level
-    fn load_level(&mut self, level_number: u32) {
+    fn load_level(&mut self, level_num: u32) {
         let level = // Pattern matching — Rust's exhaustive branching construct.
-match level_number {
+match level_num {
             2 => create_level_2(),
             _ => create_level_1(),
         };
@@ -508,9 +508,9 @@ match level_number {
         self.player_x = level.spawn_x;
         self.player_y = level.spawn_y;
         self.player_angle = level.spawn_angle;
-        self.current_level = level_number;
+        self.current_level = level_num;
         self.has_keycard = false;
-        self.message = Some((format!("Level {}", level_number), 120));
+        self.message = Some((format!("Level {}", level_num), 120));
     }
 
     /// Handle keyboard input
@@ -686,7 +686,7 @@ match self.map[my][mx] {
                                 // Pattern matching — Rust's exhaustive branching construct.
 match item.item_type {
                     ItemType::HealthPack => {
-                        self.player_health = (self.player_health + 25).minimum(100);
+                        self.player_health = (self.player_health + 25).min(100);
                         self.message = Some((alloc::string::String::from("+25 HP"), 60));
                     }
                     ItemType::DataChip => {
@@ -711,16 +711,16 @@ match item.item_type {
         // Hitscan: cast ray in look direction
         let ray_dx = self.player_angle.cos();
         let ray_dy = self.player_angle.sin();
-        let mut receive = self.player_x;
+        let mut rx = self.player_x;
         let mut ry = self.player_y;
         let step = 0.1;
 
         for _ in 0..120 { // Max range ~12 tiles
-            receive += ray_dx * step;
+            rx += ray_dx * step;
             ry += ray_dy * step;
 
             // Hit wall?
-            let mx = receive as usize;
+            let mx = rx as usize;
             let my = ry as usize;
             if mx >= MAP_W || my >= MAP_H { break; }
             if self.map[my][mx] != TILE_EMPTY { break; }
@@ -728,7 +728,7 @@ match item.item_type {
             // Hit enemy?
             for enemy in &mut self.enemies {
                 if enemy.state == EnemyState::Dead { continue; }
-                let edx = enemy.x - receive;
+                let edx = enemy.x - rx;
                 let edy = enemy.y - ry;
                 if edx * edx + edy * edy < 0.3 {
                     // Hit!
@@ -750,7 +750,7 @@ match item.item_type {
 
     /// Update enemy AI
     fn update_enemies(&mut self) {
-        let pixel = self.player_x;
+        let px = self.player_x;
         let py = self.player_y;
 
         for i in 0..self.enemies.len() {
@@ -758,7 +758,7 @@ match item.item_type {
 
             let ex = self.enemies[i].x;
             let ey = self.enemies[i].y;
-            let dx = pixel - ex;
+            let dx = px - ex;
             let dy = py - ey;
             let dist = (dx * dx + dy * dy).sqrt();
 
@@ -811,7 +811,7 @@ match self.enemies[i].state {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// Render the full game view into a pixel buffer
-    pub fn render(&mut self, buffer: &mut [u32], w: usize, h: usize) {
+    pub fn render(&mut self, buf: &mut [u32], w: usize, h: usize) {
         if w < 80 || h < 60 { return; }
 
         let hud_h = 40; // Bottom HUD height
@@ -821,11 +821,11 @@ match self.enemies[i].state {
         #[cfg(target_arch = "x86_64")]
                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-            crate::graphics::simd::fill_row_sse2(buffer.as_mut_pointer(), w * h, 0xFF000000);
+            crate::graphics::simd::fill_row_sse2(buf.as_mut_ptr(), w * h, 0xFF000000);
         }
         #[cfg(not(target_arch = "x86_64"))]
         {
-            buffer[..w * h].fill(0xFF000000);
+            buf[..w * h].fill(0xFF000000);
         }
 
         // Prepare z-buffer
@@ -836,44 +836,44 @@ unsafe {
         self.rebuild_ray_table(w);
 
         // Render ceiling and floor
-        self.render_floor_ceiling(buffer, w, view_h);
+        self.render_floor_ceiling(buf, w, view_h);
 
         // Raycasting — render walls (fills z_buffer)
-        self.render_walls(buffer, w, view_h);
+        self.render_walls(buf, w, view_h);
 
         // Render enemy sprites (uses z_buffer for clipping)
-        self.render_enemies(buffer, w, view_h);
+        self.render_enemies(buf, w, view_h);
 
         // Render item sprites (simple billboard circles)
-        self.render_items(buffer, w, view_h);
+        self.render_items(buf, w, view_h);
 
         // Render crosshair
-        self.render_crosshair(buffer, w, view_h);
+        self.render_crosshair(buf, w, view_h);
 
         // Render weapon
-        self.render_weapon(buffer, w, view_h);
+        self.render_weapon(buf, w, view_h);
 
         // Minimap
-        self.render_minimap(buffer, w, h);
+        self.render_minimap(buf, w, h);
 
         // HUD
-        self.render_hud(buffer, w, h, view_h);
+        self.render_hud(buf, w, h, view_h);
 
         // Damage flash overlay
         if self.flash_timer > 0 {
-            let alpha = (self.flash_timer as u32 * 8).minimum(80);
+            let alpha = (self.flash_timer as u32 * 8).min(80);
             for i in 0..w * view_h {
-                let r = ((buffer[i] >> 16) & 0xFF).saturating_add(alpha);
-                buffer[i] = (buffer[i] & 0xFF00FFFF) | (r.minimum(255) << 16);
+                let r = ((buf[i] >> 16) & 0xFF).saturating_add(alpha);
+                buf[i] = (buf[i] & 0xFF00FFFF) | (r.min(255) << 16);
             }
         }
 
         // Pickup flash
         if self.pickup_flash_timer > 0 {
-            let alpha = (self.pickup_flash_timer as u32 * 5).minimum(40);
+            let alpha = (self.pickup_flash_timer as u32 * 5).min(40);
             for i in 0..w * view_h {
-                let g = ((buffer[i] >> 8) & 0xFF).saturating_add(alpha);
-                buffer[i] = (buffer[i] & 0xFFFF00FF) | (g.minimum(255) << 8);
+                let g = ((buf[i] >> 8) & 0xFF).saturating_add(alpha);
+                buf[i] = (buf[i] & 0xFFFF00FF) | (g.min(255) << 8);
             }
         }
 
@@ -881,20 +881,20 @@ unsafe {
         if self.game_won || self.game_over {
             // Darken
             for i in 0..w * h {
-                let r = ((buffer[i] >> 16) & 0xFF) / 3;
-                let g = ((buffer[i] >> 8) & 0xFF) / 3;
-                let b = (buffer[i] & 0xFF) / 3;
-                buffer[i] = 0xFF000000 | (r << 16) | (g << 8) | b;
+                let r = ((buf[i] >> 16) & 0xFF) / 3;
+                let g = ((buf[i] >> 8) & 0xFF) / 3;
+                let b = (buf[i] & 0xFF) / 3;
+                buf[i] = 0xFF000000 | (r << 16) | (g << 8) | b;
             }
         }
 
         // Messages
-        if let Some((ref message, _)) = self.message {
-            self.draw_text_centered(buffer, w, view_h / 4, message, COLOR_HUD_GREEN);
+        if let Some((ref msg, _)) = self.message {
+            self.draw_text_centered(buf, w, view_h / 4, msg, COLOR_HUD_GREEN);
         }
     }
 
-    fn render_floor_ceiling(&self, buffer: &mut [u32], w: usize, h: usize) {
+    fn render_floor_ceiling(&self, buf: &mut [u32], w: usize, h: usize) {
         let half = h / 2;
 
         for y in 0..h {
@@ -907,7 +907,7 @@ unsafe {
                 // Floor - gradient from lighter near horizon to dark at bottom
                 let dist = (y - half) as u32;
                 let maximum_dist = half as u32;
-                let t = dist * 25 / maximum_dist.maximum(1);
+                let t = dist * 25 / maximum_dist.max(1);
                 let base = 6u32 + t;
                 0xFF000000 | ((base / 2) << 16) | ((base / 2) << 8) | (base / 2)
             };
@@ -916,7 +916,7 @@ unsafe {
                         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
                 crate::graphics::simd::fill_row_sse2(
-                    buffer.as_mut_pointer().add(y * w),
+                    buf.as_mut_ptr().add(y * w),
                     w,
                     color,
                 );
@@ -924,27 +924,27 @@ unsafe {
             #[cfg(not(target_arch = "x86_64"))]
             {
                 for x in 0..w {
-                    buffer[y * w + x] = color;
+                    buf[y * w + x] = color;
                 }
             }
         }
     }
 
-    fn render_walls(&mut self, buffer: &mut [u32], w: usize, h: usize) {
+    fn render_walls(&mut self, buf: &mut [u32], w: usize, h: usize) {
         let fov = core::f32::consts::FRAC_PI_3; // 60 degrees
         let half_h = h as f32 / 2.0;
 
-        for column in 0..w {
+        for col in 0..w {
             // Use pre-computed sin/cos from ray table
-            let ray_dx = self.ray_cos_table[column];
-            let ray_dy = self.ray_sin_table[column];
+            let ray_dx = self.ray_cos_table[col];
+            let ray_dy = self.ray_sin_table[col];
 
             // DDA Raycasting
             let mut map_x = self.player_x as i32;
             let mut map_y = self.player_y as i32;
 
-            let delta_dist_x = if ray_dx.absolute() < 1e-8 { 1e8 } else { (1.0 / ray_dx).absolute() };
-            let delta_dist_y = if ray_dy.absolute() < 1e-8 { 1e8 } else { (1.0 / ray_dy).absolute() };
+            let delta_dist_x = if ray_dx.abs() < 1e-8 { 1e8 } else { (1.0 / ray_dx).abs() };
+            let delta_dist_y = if ray_dy.abs() < 1e-8 { 1e8 } else { (1.0 / ray_dy).abs() };
 
             let (step_x, mut side_dist_x) = if ray_dx < 0.0 {
                 (-1i32, (self.player_x - map_x as f32) * delta_dist_x)
@@ -998,9 +998,9 @@ unsafe {
             if perp_dist <= 0.0 { continue; }
 
             // Wall height on screen
-            let wall_height = (h as f32 / perp_dist).minimum(h as f32 * 4.0);
-            let draw_start = ((half_h - wall_height / 2.0) as i32).maximum(0) as usize;
-            let draw_end = ((half_h + wall_height / 2.0) as i32).minimum(h as i32 - 1) as usize;
+            let wall_height = (h as f32 / perp_dist).min(h as f32 * 4.0);
+            let draw_start = ((half_h - wall_height / 2.0) as i32).max(0) as usize;
+            let draw_end = ((half_h + wall_height / 2.0) as i32).min(h as i32 - 1) as usize;
 
             // Texture coordinate (where on the wall face was hit)
             let wall_x = if side == 0 {
@@ -1030,7 +1030,7 @@ match wall_type {
                 let mut pixel = tex.sample(tex_x, tex_y);
 
                 // Distance fog (darken far walls)
-                let fog = (1.0 - (perp_dist / 12.0).minimum(1.0)).maximum(0.15);
+                let fog = (1.0 - (perp_dist / 12.0).min(1.0)).max(0.15);
                 let r = (((pixel >> 16) & 0xFF) as f32 * fog) as u32;
                 let g = (((pixel >> 8) & 0xFF) as f32 * fog) as u32;
                 let b = ((pixel & 0xFF) as f32 * fog) as u32;
@@ -1047,21 +1047,21 @@ match wall_type {
                 // Exit tile pulsing green tint
                 if wall_type == TILE_EXIT {
                     let pulse = ((self.frame as f32 * 0.1).sin() * 30.0 + 30.0) as u32;
-                    let g_value = ((pixel >> 8) & 0xFF).saturating_add(pulse).minimum(255);
+                    let g_value = ((pixel >> 8) & 0xFF).saturating_add(pulse).min(255);
                     pixel = (pixel & 0xFFFF00FF) | (g_value << 8);
                 }
 
-                buffer[y * w + column] = pixel;
+                buf[y * w + col] = pixel;
             }
 
             // Store depth for sprite clipping
-            if column < self.z_buffer.len() {
-                self.z_buffer[column] = perp_dist;
+            if col < self.z_buffer.len() {
+                self.z_buffer[col] = perp_dist;
             }
         }
     }
 
-    fn render_items(&self, buffer: &mut [u32], w: usize, h: usize) {
+    fn render_items(&self, buf: &mut [u32], w: usize, h: usize) {
         let half_h = h as f32 / 2.0;
 
         for item in &self.items {
@@ -1102,7 +1102,7 @@ match item.item_type {
             for dy_off in -half..=half {
                 let row = sy + half + dy_off;
                 if row < 0 || row >= h as i32 { continue; }
-                let row_width = half - dy_off.absolute();
+                let row_width = half - dy_off.abs();
                 for dx_off in -row_width..=row_width {
                     let cx = sx + half + dx_off;
                     if cx < 0 || cx >= w as i32 { continue; }
@@ -1113,13 +1113,13 @@ match item.item_type {
                     let g = (((color >> 8) & 0xFF) as f32 * pulse) as u32;
                     let b = ((color & 0xFF) as f32 * pulse) as u32;
 
-                    buffer[row as usize * w + cx as usize] = 0xFF000000 | (r << 16) | (g << 8) | b;
+                    buf[row as usize * w + cx as usize] = 0xFF000000 | (r << 16) | (g << 8) | b;
                 }
             }
         }
     }
 
-    fn render_enemies(&self, buffer: &mut [u32], w: usize, h: usize) {
+    fn render_enemies(&self, buf: &mut [u32], w: usize, h: usize) {
         let half_h = h as f32 / 2.0;
         let fov = core::f32::consts::FRAC_PI_3;
 
@@ -1159,7 +1159,7 @@ match enemy.state {
             };
 
             // Distance fog factor
-            let fog = (1.0 - (ty / 12.0).minimum(1.0)).maximum(0.2);
+            let fog = (1.0 - (ty / 12.0).min(1.0)).max(0.2);
 
             // Draw enemy as a humanoid shape (head + body + limbs)
             for dy_off in 0..sprite_h {
@@ -1190,7 +1190,7 @@ match enemy.state {
                     }
 
                     // Legs gap at bottom
-                    if t > 0.75 && dx_off.absolute() < 2 {
+                    if t > 0.75 && dx_off.abs() < 2 {
                         continue; // Gap between legs
                     }
 
@@ -1200,7 +1200,7 @@ match enemy.state {
                     let b = ((base_color & 0xFF) as f32 * fog) as u32;
                     let pixel = 0xFF000000 | (r << 16) | (g << 8) | b;
 
-                    buffer[row as usize * w + cx as usize] = pixel;
+                    buf[row as usize * w + cx as usize] = pixel;
                 }
             }
 
@@ -1212,56 +1212,56 @@ match enemy.state {
                     let eye_x = sx + sprite_w / 2 + ex_off;
                     if eye_x >= 0 && eye_x < w as i32 && eye_y >= 0 && eye_y < h as i32 {
                         if (eye_x as usize) < self.z_buffer.len() && ty < self.z_buffer[eye_x as usize] {
-                            buffer[eye_y as usize * w + eye_x as usize] = 0xFFFFFF00; // Yellow eyes
+                            buf[eye_y as usize * w + eye_x as usize] = 0xFFFFFF00; // Yellow eyes
                         }
                     }
                 }
             }
 
             // Health bar above enemy head (only if damaged)
-            if enemy.health < enemy.maximum_health && sprite_h > 10 {
+            if enemy.health < enemy.max_health && sprite_h > 10 {
                 let bar_y = sy - 4;
                 if bar_y >= 0 && bar_y < h as i32 {
-                    let bar_w = sprite_w.minimum(20) as usize;
-                    let fill_w = (enemy.health as f32 / enemy.maximum_health as f32 * bar_w as f32) as usize;
-                    let bar_start_x = (sx + sprite_w / 2 - bar_w as i32 / 2).maximum(0) as usize;
+                    let bar_w = sprite_w.min(20) as usize;
+                    let fill_w = (enemy.health as f32 / enemy.max_health as f32 * bar_w as f32) as usize;
+                    let bar_start_x = (sx + sprite_w / 2 - bar_w as i32 / 2).max(0) as usize;
                     for bx in 0..bar_w {
-                        let pixel = bar_start_x + bx;
-                        if pixel >= w { break; }
-                        if (pixel as usize) < self.z_buffer.len() && ty >= self.z_buffer[pixel] {
+                        let px = bar_start_x + bx;
+                        if px >= w { break; }
+                        if (px as usize) < self.z_buffer.len() && ty >= self.z_buffer[px] {
                             continue;
                         }
                         let color = if bx < fill_w { 0xFFFF0000 } else { 0xFF440000 };
-                        buffer[bar_y as usize * w + pixel] = color;
+                        buf[bar_y as usize * w + px] = color;
                     }
                 }
             }
         }
     }
 
-    fn render_crosshair(&self, buffer: &mut [u32], w: usize, h: usize) {
+    fn render_crosshair(&self, buf: &mut [u32], w: usize, h: usize) {
         let cx = w / 2;
         let cy = h / 2;
         let size = 4;
         let color = if self.shoot_flash > 0 { 0xFFFFFF00 } else { 0xAA00FF88 };
 
         // Horizontal line
-        for x in (cx.saturating_sub(size))..=(cx + size).minimum(w - 1) {
+        for x in (cx.saturating_sub(size))..=(cx + size).min(w - 1) {
             if x != cx { // Gap in center
-                buffer[cy * w + x] = color;
+                buf[cy * w + x] = color;
             }
         }
         // Vertical line
-        for y in (cy.saturating_sub(size))..=(cy + size).minimum(h - 1) {
+        for y in (cy.saturating_sub(size))..=(cy + size).min(h - 1) {
             if y != cy {
-                buffer[y * w + cx] = color;
+                buf[y * w + cx] = color;
             }
         }
         // Center dot
-        buffer[cy * w + cx] = if self.shoot_flash > 0 { 0xFFFFFFFF } else { 0xFF00FF88 };
+        buf[cy * w + cx] = if self.shoot_flash > 0 { 0xFFFFFFFF } else { 0xFF00FF88 };
     }
 
-    fn render_weapon(&self, buffer: &mut [u32], w: usize, h: usize) {
+    fn render_weapon(&self, buf: &mut [u32], w: usize, h: usize) {
         // Simple weapon sprite at bottom-center
         let bob_offset = if self.move_forward || self.move_back || self.strafe_left || self.strafe_right {
             (self.weapon_bob.sin() * 3.0) as i32
@@ -1279,20 +1279,20 @@ match enemy.state {
         // Barrel (thin horizontal rectangle)
         for y in 0..3usize {
             for x in 0..12usize {
-                let pixel = base_x + x;
+                let px = base_x + x;
                 let py = base_y.saturating_sub(8) + y;
-                if pixel < w && py < h {
-                    buffer[py * w + pixel] = barrel_color;
+                if px < w && py < h {
+                    buf[py * w + px] = barrel_color;
                 }
             }
         }
         // Grip (vertical rectangle below)
         for y in 0..8usize {
             for x in 0..6usize {
-                let pixel = base_x + 3 + x;
+                let px = base_x + 3 + x;
                 let py = base_y.saturating_sub(5) + y;
-                if pixel < w && py < h {
-                    buffer[py * w + pixel] = gun_color;
+                if px < w && py < h {
+                    buf[py * w + px] = gun_color;
                 }
             }
         }
@@ -1303,17 +1303,17 @@ match enemy.state {
             let flash_y = base_y.saturating_sub(7);
             for dy in 0..5usize {
                 for dx in 0..4usize {
-                    let pixel = flash_x + dx;
+                    let px = flash_x + dx;
                     let py = flash_y.saturating_sub(1) + dy;
-                    if pixel < w && py < h {
-                        buffer[py * w + pixel] = 0xFFFFFF88;
+                    if px < w && py < h {
+                        buf[py * w + px] = 0xFFFFFF88;
                     }
                 }
             }
         }
     }
 
-    fn render_minimap(&self, buffer: &mut [u32], w: usize, h: usize) {
+    fn render_minimap(&self, buf: &mut [u32], w: usize, h: usize) {
         let cell = 5;
         let map_w_pixel = MAP_W * cell;
         let map_h_pixel = MAP_H * cell;
@@ -1323,10 +1323,10 @@ match enemy.state {
         // Background
         for y in 0..map_h_pixel + 4 {
             for x in 0..map_w_pixel + 4 {
-                let pixel = offset_x - 2 + x;
+                let px = offset_x - 2 + x;
                 let py = offset_y - 2 + y;
-                if pixel < w && py < h {
-                    buffer[py * w + pixel] = 0xAA000000;
+                if px < w && py < h {
+                    buf[py * w + px] = 0xAA000000;
                 }
             }
         }
@@ -1343,10 +1343,10 @@ match self.map[my][mx] {
                 };
                 for dy in 0..cell {
                     for dx in 0..cell {
-                        let pixel = offset_x + mx * cell + dx;
+                        let px = offset_x + mx * cell + dx;
                         let py = offset_y + my * cell + dy;
-                        if pixel < w && py < h {
-                            buffer[py * w + pixel] = color;
+                        if px < w && py < h {
+                            buf[py * w + px] = color;
                         }
                     }
                 }
@@ -1354,29 +1354,29 @@ match self.map[my][mx] {
         }
 
         // Player dot
-        let pixel = offset_x + (self.player_x * cell as f32) as usize;
+        let px = offset_x + (self.player_x * cell as f32) as usize;
         let py = offset_y + (self.player_y * cell as f32) as usize;
         for dy in 0..3usize {
             for dx in 0..3usize {
-                let x = pixel + dx;
+                let x = px + dx;
                 let y = py + dy;
                 if x < w && y < h {
-                    buffer[y * w + x] = COLOR_MINIMAP_PLAYER;
+                    buf[y * w + x] = COLOR_MINIMAP_PLAYER;
                 }
             }
         }
 
         // Direction line
         let directory_length = 6.0;
-        let ex = pixel as f32 + self.player_angle.cos() * directory_length;
+        let ex = px as f32 + self.player_angle.cos() * directory_length;
         let ey = py as f32 + self.player_angle.sin() * directory_length;
         let steps = 8;
         for i in 0..steps {
             let t = i as f32 / steps as f32;
-            let lx = (pixel as f32 + (ex - pixel as f32) * t) as usize;
+            let lx = (px as f32 + (ex - px as f32) * t) as usize;
             let ly = (py as f32 + (ey - py as f32) * t) as usize;
             if lx < w && ly < h {
-                buffer[ly * w + lx] = COLOR_MINIMAP_PLAYER;
+                buf[ly * w + lx] = COLOR_MINIMAP_PLAYER;
             }
         }
 
@@ -1392,10 +1392,10 @@ match item.item_type {
                 ItemType::KeyCard => 0xFFFFAA00,
             };
             if ix > 0 && ix + 1 < w && iy > 0 && iy + 1 < h {
-                buffer[iy * w + ix] = ic;
-                buffer[iy * w + ix + 1] = ic;
-                buffer[(iy + 1) * w + ix] = ic;
-                buffer[(iy + 1) * w + ix + 1] = ic;
+                buf[iy * w + ix] = ic;
+                buf[iy * w + ix + 1] = ic;
+                buf[(iy + 1) * w + ix] = ic;
+                buf[(iy + 1) * w + ix + 1] = ic;
             }
         }
 
@@ -1406,26 +1406,26 @@ match item.item_type {
             let ey = offset_y + (enemy.y * cell as f32) as usize;
             let ec = 0xFFFF2222;
             if ex > 0 && ex + 1 < w && ey > 0 && ey + 1 < h {
-                buffer[ey * w + ex] = ec;
-                buffer[ey * w + ex + 1] = ec;
-                buffer[(ey + 1) * w + ex] = ec;
-                buffer[(ey + 1) * w + ex + 1] = ec;
+                buf[ey * w + ex] = ec;
+                buf[ey * w + ex + 1] = ec;
+                buf[(ey + 1) * w + ex] = ec;
+                buf[(ey + 1) * w + ex + 1] = ec;
             }
         }
     }
 
-    fn render_hud(&self, buffer: &mut [u32], w: usize, h: usize, view_h: usize) {
+    fn render_hud(&self, buf: &mut [u32], w: usize, h: usize, view_h: usize) {
         // HUD background
         for y in view_h..h {
             for x in 0..w {
-                buffer[y * w + x] = 0xFF0A120A;
+                buf[y * w + x] = 0xFF0A120A;
             }
         }
 
         // Top border
         for x in 0..w {
             if view_h < h {
-                buffer[view_h * w + x] = COLOR_HUD_GREEN;
+                buf[view_h * w + x] = COLOR_HUD_GREEN;
             }
         }
 
@@ -1433,93 +1433,93 @@ match item.item_type {
         let text_scale = 1;
 
         // Health bar
-        self.draw_text_at(buffer, w, h, 8, hud_y, "HP", COLOR_HUD_DIM);
+        self.draw_text_at(buf, w, h, 8, hud_y, "HP", COLOR_HUD_DIM);
         let bar_x = 28;
         let bar_w = 80;
         let bar_h = 10;
         // Background
         for y in 0..bar_h {
             for x in 0..bar_w {
-                let pixel = bar_x + x;
+                let px = bar_x + x;
                 let py = hud_y + 4 + y;
-                if pixel < w && py < h {
-                    buffer[py * w + pixel] = 0xFF1A1A1A;
+                if px < w && py < h {
+                    buf[py * w + px] = 0xFF1A1A1A;
                 }
             }
         }
         // Fill
-        let fill_w = (self.player_health as usize * bar_w / 100).minimum(bar_w);
+        let fill_w = (self.player_health as usize * bar_w / 100).min(bar_w);
         let hp_color = if self.player_health > 60 { COLOR_HEALTH }
                        else if self.player_health > 30 { 0xFFAAAA00 }
                        else { COLOR_DAMAGE };
         for y in 0..bar_h {
             for x in 0..fill_w {
-                let pixel = bar_x + x;
+                let px = bar_x + x;
                 let py = hud_y + 4 + y;
-                if pixel < w && py < h {
-                    buffer[py * w + pixel] = hp_color;
+                if px < w && py < h {
+                    buf[py * w + px] = hp_color;
                 }
             }
         }
 
         // Score
         let score_str = format!("SCORE:{}", self.player_score);
-        self.draw_text_at(buffer, w, h, 120, hud_y, &score_str, COLOR_HUD_GREEN);
+        self.draw_text_at(buf, w, h, 120, hud_y, &score_str, COLOR_HUD_GREEN);
 
         // Level
         let level_str = format!("LVL:{}", self.current_level);
-        self.draw_text_at(buffer, w, h, 240, hud_y, &level_str, COLOR_HUD_DIM);
+        self.draw_text_at(buf, w, h, 240, hud_y, &level_str, COLOR_HUD_DIM);
 
         // Keycard indicator
         if self.has_keycard {
-            self.draw_text_at(buffer, w, h, 310, hud_y, "[KEY]", 0xFFFFAA00);
+            self.draw_text_at(buf, w, h, 310, hud_y, "[KEY]", 0xFFFFAA00);
         }
 
         // Kill count
         let kill_str = format!("KILLS:{}", self.kills);
-        self.draw_text_at(buffer, w, h, 370, hud_y, &kill_str, COLOR_DAMAGE);
+        self.draw_text_at(buf, w, h, 370, hud_y, &kill_str, COLOR_DAMAGE);
 
         // Compass
         let compass_x = w - 60;
         let dirs = ["N", "E", "S", "W"];
         let angle_normalized = (self.player_angle + core::f32::consts::PI * 2.0) % (core::f32::consts::PI * 2.0);
         let directory_index = ((angle_normalized + core::f32::consts::FRAC_PI_4) / core::f32::consts::FRAC_PI_2) as usize % 4;
-        self.draw_text_at(buffer, w, h, compass_x, hud_y, dirs[directory_index], COLOR_HUD_GREEN);
+        self.draw_text_at(buf, w, h, compass_x, hud_y, dirs[directory_index], COLOR_HUD_GREEN);
 
         // Controls hint
-        self.draw_text_at(buffer, w, h, 8, hud_y + 18, "WASD:Move Arrows:Turn E:Use Space:Shoot", COLOR_HUD_DIM);
+        self.draw_text_at(buf, w, h, 8, hud_y + 18, "WASD:Move Arrows:Turn E:Use Space:Shoot", COLOR_HUD_DIM);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // TEXT RENDERING (simple built-in font to pixel buffer)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    fn draw_text_at(&self, buffer: &mut [u32], w: usize, h: usize, x: usize, y: usize, text: &str, color: u32) {
-        for (i, character) in text.chars().enumerate() {
+    fn draw_text_at(&self, buf: &mut [u32], w: usize, h: usize, x: usize, y: usize, text: &str, color: u32) {
+        for (i, ch) in text.chars().enumerate() {
             let cx = x + i * 7;
             if cx + 6 >= w { break; }
-            self.draw_char(buffer, w, h, cx, y, character, color);
+            self.draw_char(buf, w, h, cx, y, ch, color);
         }
     }
 
-    fn draw_text_centered(&self, buffer: &mut [u32], w: usize, y: usize, text: &str, color: u32) {
+    fn draw_text_centered(&self, buf: &mut [u32], w: usize, y: usize, text: &str, color: u32) {
         let text_w = text.len() * 7;
         let x = if text_w < w { (w - text_w) / 2 } else { 0 };
-        self.draw_text_at(buffer, w, w * (w / w), x, y, text, color); // h approximation
+        self.draw_text_at(buf, w, w * (w / w), x, y, text, color); // h approximation
         // Actually need h, use a safe bound
-        for (i, character) in text.chars().enumerate() {
+        for (i, ch) in text.chars().enumerate() {
             let cx = x + i * 7;
             if cx + 6 >= w { break; }
             // Just write if in bounds (buf size covers it)
-            let maximum_y = buffer.len() / w;
-            self.draw_char(buffer, w, maximum_y, cx, y, character, color);
+            let maximum_y = buf.len() / w;
+            self.draw_char(buf, w, maximum_y, cx, y, ch, color);
         }
     }
 
-    fn draw_char(&self, buffer: &mut [u32], w: usize, h: usize, x: usize, y: usize, character: char, color: u32) {
+    fn draw_char(&self, buf: &mut [u32], w: usize, h: usize, x: usize, y: usize, ch: char, color: u32) {
         // Tiny 5x7 bitmap font for HUD text
         let bitmap = // Pattern matching — Rust's exhaustive branching construct.
-match character {
+match ch {
             'A' => [0b01110, 0b10001, 0b10001, 0b11111, 0b10001, 0b10001, 0b10001],
             'B' => [0b11110, 0b10001, 0b10001, 0b11110, 0b10001, 0b10001, 0b11110],
             'C' => [0b01110, 0b10001, 0b10000, 0b10000, 0b10000, 0b10001, 0b01110],
@@ -1568,12 +1568,12 @@ match character {
         };
 
         for row in 0..7 {
-            for column in 0..5 {
-                if bitmap[row] & (1 << (4 - column)) != 0 {
-                    let pixel = x + column;
+            for col in 0..5 {
+                if bitmap[row] & (1 << (4 - col)) != 0 {
+                    let px = x + col;
                     let py = y + row;
-                    if pixel < w && py < h {
-                        buffer[py * w + pixel] = color;
+                    if px < w && py < h {
+                        buf[py * w + px] = color;
                     }
                 }
             }

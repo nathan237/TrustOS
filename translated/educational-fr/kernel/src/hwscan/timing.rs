@@ -19,16 +19,16 @@ use alloc::vec::Vec;
 fn read_cycle_counter() -> u64 {
     #[cfg(target_arch = "aarch64")]
     {
-        let count: u64;
+        let cnt: u64;
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
             core::arch::asm!(
                 "mrs {}, cntvct_el0",
-                out(reg) count,
+                out(reg) cnt,
                 options(nomem, nostack)
             );
         }
-        count
+        cnt
     }
     
     #[cfg(target_arch = "x86_64")]
@@ -49,16 +49,16 @@ unsafe {
     
     #[cfg(target_arch = "riscv64")]
     {
-        let count: u64;
+        let cnt: u64;
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
             core::arch::asm!(
                 "rdcycle {}",
-                out(reg) count,
+                out(reg) cnt,
                 options(nomem, nostack)
             );
         }
-        count
+        cnt
     }
 }
 
@@ -66,16 +66,16 @@ unsafe {
 fn get_timer_frequency() -> u64 {
     #[cfg(target_arch = "aarch64")]
     {
-        let frequency: u64;
+        let freq: u64;
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
             core::arch::asm!(
                 "mrs {}, cntfrq_el0",
-                out(reg) frequency,
+                out(reg) freq,
                 options(nomem, nostack)
             );
         }
-        frequency
+        freq
     }
     
     #[cfg(target_arch = "x86_64")]
@@ -92,7 +92,7 @@ unsafe {
 }
 
 /// Measure access time to a single address (in cycles)
-fn measure_access_time(address: u64, iterations: usize) -> (u64, u64, u64) {
+fn measure_access_time(addr: u64, iterations: usize) -> (u64, u64, u64) {
     let mut minimum_cycles = u64::MAX;
     let mut maximum_cycles = 0u64;
     let mut total_cycles = 0u64;
@@ -119,7 +119,7 @@ unsafe {
         
         // Attempt volatile read
         unsafe {
-            let ptr = address as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+            let ptr = addr as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u32;
             let _ = core::ptr::read_volatile(ptr);
         }
@@ -154,9 +154,9 @@ unsafe {
 }
 
 /// Classify access time anomalies
-fn classify_timing(average_cycles: u64, baseline_cycles: u64) -> (&'static str, &'static str) {
+fn classify_timing(avg_cycles: u64, baseline_cycles: u64) -> (&'static str, &'static str) {
     let ratio = if baseline_cycles > 0 {
-        (average_cycles * 100) / baseline_cycles
+        (avg_cycles * 100) / baseline_cycles
     } else {
         100
     };
@@ -177,8 +177,8 @@ pub fn run_timing_analysis(args: &str) -> String {
     
     output.push_str("\x01C== TrustProbe: Timing Side-Channel Analyzer ==\x01W\n\n");
     
-    let frequency = get_timer_frequency();
-    output.push_str(&format!("Timer frequency: {} Hz ({} MHz)\n", frequency, frequency / 1_000_000));
+    let freq = get_timer_frequency();
+    output.push_str(&format!("Timer frequency: {} Hz ({} MHz)\n", freq, freq / 1_000_000));
     
     let iterations = 10;
     
@@ -189,13 +189,13 @@ pub fn run_timing_analysis(args: &str) -> String {
     let baseline_address = &output as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const String as u64;
     let baseline_page = baseline_address & !0xFFF;
-    let (bl_minimum, bl_average, bl_maximum) = measure_access_time(baseline_page, iterations);
+    let (bl_min, bl_avg, bl_max) = measure_access_time(baseline_page, iterations);
     
     output.push_str(&format!("Baseline (kernel memory): min={} avg={} max={} cycles\n",
-        bl_minimum, bl_average, bl_maximum));
+        bl_min, bl_avg, bl_max));
     
-    let ns_per_cycle = if frequency > 0 { 1_000_000_000 / frequency } else { 1 };
-    output.push_str(&format!("  ~{} ns per access (avg)\n", bl_average * ns_per_cycle));
+    let ns_per_cycle = if freq > 0 { 1_000_000_000 / freq } else { 1 };
+    output.push_str(&format!("  ~{} ns per access (avg)\n", bl_avg * ns_per_cycle));
     
     // Step 2: Probe target regions
     output.push_str("\n\x01Y--- Region Timing Comparison ---\x01W\n");
@@ -233,17 +233,17 @@ const String as u64;
     
     let mut anomalies = Vec::new();
     
-    for (address, name) in &probe_regions {
-        let (p_minimum, p_average, p_maximum) = measure_access_time(*address, iterations);
-        let ratio = if bl_average > 0 { (p_average * 100) / bl_average } else { 0 };
-        let (class, color) = classify_timing(p_average, bl_average);
+    for (addr, name) in &probe_regions {
+        let (p_min, p_avg, p_max) = measure_access_time(*addr, iterations);
+        let ratio = if bl_avg > 0 { (p_avg * 100) / bl_avg } else { 0 };
+        let (class, color) = classify_timing(p_avg, bl_avg);
         
         output.push_str(&format!("0x{:010X}   {:<10} {:<10} {:<10} {:<10} {}{}\x01W ({})\n",
-            address, p_minimum, p_average, p_maximum,
+            addr, p_min, p_avg, p_max,
             format!("{}%", ratio), color, class, name));
         
         if ratio > 200 || ratio < 50 {
-            anomalies.push((*address, *name, ratio, class));
+            anomalies.push((*addr, *name, ratio, class));
         }
     }
     
@@ -252,9 +252,9 @@ const String as u64;
         output.push_str(&format!("\n\x01Y--- Anomaly Details ---\x01W\n"));
         output.push_str(&format!("Found {} timing anomalies:\n\n", anomalies.len()));
         
-        for (address, name, ratio, class) in &anomalies {
+        for (addr, name, ratio, class) in &anomalies {
             output.push_str(&format!("\x01R[{}]\x01W {} @ 0x{:010X} ({}% of baseline)\n",
-                class, name, address, ratio));
+                class, name, addr, ratio));
             
             if *ratio > 300 {
                 output.push_str("    Interpretation: This region likely triggers a fault/exception.\n");
@@ -270,7 +270,7 @@ const String as u64;
     output.push_str(&format!("\n\x01C== Timing Analysis Summary ==\x01W\n"));
     output.push_str(&format!("  Regions tested: {}\n", probe_regions.len()));
     output.push_str(&format!("  Anomalies: {}\n", anomalies.len()));
-    output.push_str(&format!("  Baseline: {} cycles ({} ns)\n", bl_average, bl_average * ns_per_cycle));
+    output.push_str(&format!("  Baseline: {} cycles ({} ns)\n", bl_avg, bl_avg * ns_per_cycle));
     
     if anomalies.iter().any(|(_, _, r, _)| *r > 500) {
         output.push_str("\n\x01R[!] High-latency regions detected — possible secure boundaries\x01W\n");

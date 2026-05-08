@@ -70,26 +70,71 @@ pub fn get_scale_factor() -> u32 {
 /// - Width >= 3840 (4K)  → 3x
 /// - Width >= 2560 (QHD) → 2x
 /// - Otherwise           → 1x
-pub fn auto_detect_scale(framebuffer_width: u32, framebuffer_height: u32) -> u32 {
-    let factor = if framebuffer_width >= 3840 {
+pub fn auto_detect_scale(fb_width: u32, fb_height: u32) -> u32 {
+    let factor = if fb_width >= 3840 {
         3
-    } else if framebuffer_width >= 2560 {
+    } else if fb_width >= 2560 {
         2
     } else {
         1
     };
     crate::serial_println!(
         "[Scaling] Auto-detected {}x scale for {}x{} framebuffer",
-        factor, framebuffer_width, framebuffer_height
+        factor, fb_width, fb_height
     );
     factor
+}
+
+/// Auto-detect a UI layout scale factor based on resolution.
+///
+/// Unlike text scaling (`auto_detect_scale`), this applies gentler scaling to
+/// UI chrome (taskbar, dock, title bars) so they look proportional on any
+/// resolution without becoming oversized.
+///
+/// Heuristics (physical pixel count, not DPI):
+/// - Width >= 3840 (4K)  → 2x UI chrome
+/// - Width >= 2560 (QHD) → 1.5x → rounded to nearest 1.5x via 3/2
+/// - Width >= 1920 (FHD) → 1x
+/// - Otherwise           → 1x
+///
+/// Returns (numerator, denominator) for rational scaling (avoids floats).
+pub fn auto_detect_ui_scale(fb_width: u32, _fb_height: u32) -> (u32, u32) {
+    if fb_width >= 3840 {
+        (2, 1) // 2x
+    } else if fb_width >= 2560 {
+        (3, 2) // 1.5x
+    } else {
+        (1, 1) // 1x
+    }
+}
+
+/// UI scale numerator (set by init)
+static UI_SCALE_NUMBER: AtomicU32 = AtomicU32::new(1);
+/// UI scale denominator (set by init)
+static UI_SCALE_DEN: AtomicU32 = AtomicU32::new(1);
+
+/// Scale a UI dimension by the current UI scale factor.
+#[inline]
+// Fonction publique — appelable depuis d'autres modules.
+pub fn scale_ui(value: u32) -> u32 {
+    let n = UI_SCALE_NUMBER.load(Ordering::Relaxed);
+    let d = UI_SCALE_DEN.load(Ordering::Relaxed);
+    (value * n + d / 2) / d // rounded division
+}
+
+/// Initialize UI scale factor (call once during desktop init).
+pub fn initialize_ui_scale(fb_width: u32, fb_height: u32) {
+    let (n, d) = auto_detect_ui_scale(fb_width, fb_height);
+    UI_SCALE_NUMBER.store(n, Ordering::SeqCst);
+    UI_SCALE_DEN.store(d, Ordering::SeqCst);
+    crate::serial_println!("[Scaling] UI chrome scale: {}x/{} for {}x{}", n, d, fb_width, fb_height);
 }
 
 /// Initialize the scaling system with auto-detection.
 ///
 /// Call this after framebuffer is initialized, during desktop init.
-pub fn init(framebuffer_width: u32, framebuffer_height: u32) {
-    let factor = auto_detect_scale(framebuffer_width, framebuffer_height);
+pub fn init(fb_width: u32, fb_height: u32) {
+    let factor = auto_detect_scale(fb_width, fb_height);
     set_scale_factor(factor);
 }
 
@@ -228,19 +273,19 @@ pub fn draw_scaled_char(x: u32, y: u32, c: char, color: u32) {
     }
 
     let glyph = crate::framebuffer::font::get_glyph(c);
-    let framebuffer_width = crate::framebuffer::width();
-    let framebuffer_height = crate::framebuffer::height();
+    let fb_width = crate::framebuffer::width();
+    let fb_height = crate::framebuffer::height();
 
     // Bounds check: skip if entirely off-screen
     let total_w = BASE_CHAR_WIDTH * factor;
     let total_h = BASE_CHAR_HEIGHT * factor;
-    if x >= framebuffer_width || y >= framebuffer_height {
+    if x >= fb_width || y >= fb_height {
         return;
     }
 
     // Clip extents
-    let maximum_pixel = framebuffer_width.minimum(x + total_w);
-    let maximum_py = framebuffer_height.minimum(y + total_h);
+    let maximum_pixel = fb_width.min(x + total_w);
+    let maximum_py = fb_height.min(y + total_h);
 
     for row in 0..BASE_CHAR_HEIGHT as usize {
         let bits = glyph[row];
@@ -252,9 +297,9 @@ pub fn draw_scaled_char(x: u32, y: u32, c: char, color: u32) {
             break;
         }
 
-        for column in 0..BASE_CHAR_WIDTH as usize {
-            if (bits >> (7 - column)) & 1 == 1 {
-                let base_pixel = x + (column as u32) * factor;
+        for col in 0..BASE_CHAR_WIDTH as usize {
+            if (bits >> (7 - col)) & 1 == 1 {
+                let base_pixel = x + (col as u32) * factor;
                 if base_pixel >= maximum_pixel {
                     break;
                 }
@@ -266,9 +311,9 @@ pub fn draw_scaled_char(x: u32, y: u32, c: char, color: u32) {
                         break;
                     }
                     for sx in 0..factor {
-                        let pixel = base_pixel + sx;
-                        if pixel < maximum_pixel {
-                            crate::framebuffer::put_pixel(pixel, py, color);
+                        let px = base_pixel + sx;
+                        if px < maximum_pixel {
+                            crate::framebuffer::put_pixel(px, py, color);
                         }
                     }
                 }
@@ -282,23 +327,23 @@ pub fn draw_scaled_char(x: u32, y: u32, c: char, color: u32) {
 /// Characters are spaced by `char_width()` (8 × factor) pixels apart.
 pub fn draw_scaled_text(x: i32, y: i32, text: &str, color: u32) {
     let cw = char_width() as i32;
-    let framebuffer_w = crate::framebuffer::width() as i32;
-    let framebuffer_h = crate::framebuffer::height() as i32;
+    let fb_w = crate::framebuffer::width() as i32;
+    let fb_h = crate::framebuffer::height() as i32;
 
-    if y < 0 || y >= framebuffer_h {
+    if y < 0 || y >= fb_h {
         return;
     }
 
     for (i, c) in text.chars().enumerate() {
-        let pixel = x + (i as i32) * cw;
-        if pixel >= framebuffer_w {
+        let px = x + (i as i32) * cw;
+        if px >= fb_w {
             break; // Past right edge
         }
-        if pixel + cw <= 0 {
+        if px + cw <= 0 {
             continue; // Left of screen
         }
-        if pixel >= 0 {
-            draw_scaled_char(pixel as u32, y as u32, c, color);
+        if px >= 0 {
+            draw_scaled_char(px as u32, y as u32, c, color);
         }
     }
 }
@@ -309,23 +354,23 @@ pub fn draw_scaled_text(x: i32, y: i32, text: &str, color: u32) {
 pub fn draw_text_at_scale(x: i32, y: i32, text: &str, color: u32, factor: u32) {
     let factor = factor.clamp(1, 3);
     let cw = (BASE_CHAR_WIDTH * factor) as i32;
-    let framebuffer_w = crate::framebuffer::width() as i32;
-    let framebuffer_h = crate::framebuffer::height() as i32;
+    let fb_w = crate::framebuffer::width() as i32;
+    let fb_h = crate::framebuffer::height() as i32;
 
-    if y < 0 || y >= framebuffer_h {
+    if y < 0 || y >= fb_h {
         return;
     }
 
     for (i, c) in text.chars().enumerate() {
-        let pixel = x + (i as i32) * cw;
-        if pixel >= framebuffer_w {
+        let px = x + (i as i32) * cw;
+        if px >= fb_w {
             break;
         }
-        if pixel + cw <= 0 {
+        if px + cw <= 0 {
             continue;
         }
-        if pixel >= 0 {
-            draw_char_at_scale(pixel as u32, y as u32, c, color, factor);
+        if px >= 0 {
+            draw_char_at_scale(px as u32, y as u32, c, color, factor);
         }
     }
 }
@@ -338,11 +383,11 @@ fn draw_char_at_scale(x: u32, y: u32, c: char, color: u32, factor: u32) {
     }
 
     let glyph = crate::framebuffer::font::get_glyph(c);
-    let framebuffer_width = crate::framebuffer::width();
-    let framebuffer_height = crate::framebuffer::height();
+    let fb_width = crate::framebuffer::width();
+    let fb_height = crate::framebuffer::height();
 
-    let maximum_pixel = framebuffer_width.minimum(x + BASE_CHAR_WIDTH * factor);
-    let maximum_py = framebuffer_height.minimum(y + BASE_CHAR_HEIGHT * factor);
+    let maximum_pixel = fb_width.min(x + BASE_CHAR_WIDTH * factor);
+    let maximum_py = fb_height.min(y + BASE_CHAR_HEIGHT * factor);
 
     for row in 0..BASE_CHAR_HEIGHT as usize {
         let bits = glyph[row];
@@ -354,9 +399,9 @@ fn draw_char_at_scale(x: u32, y: u32, c: char, color: u32, factor: u32) {
             break;
         }
 
-        for column in 0..BASE_CHAR_WIDTH as usize {
-            if (bits >> (7 - column)) & 1 == 1 {
-                let base_pixel = x + (column as u32) * factor;
+        for col in 0..BASE_CHAR_WIDTH as usize {
+            if (bits >> (7 - col)) & 1 == 1 {
+                let base_pixel = x + (col as u32) * factor;
                 if base_pixel >= maximum_pixel {
                     break;
                 }
@@ -366,9 +411,9 @@ fn draw_char_at_scale(x: u32, y: u32, c: char, color: u32, factor: u32) {
                         break;
                     }
                     for sx in 0..factor {
-                        let pixel = base_pixel + sx;
-                        if pixel < maximum_pixel {
-                            crate::framebuffer::put_pixel(pixel, py, color);
+                        let px = base_pixel + sx;
+                        if px < maximum_pixel {
+                            crate::framebuffer::put_pixel(px, py, color);
                         }
                     }
                 }
@@ -423,8 +468,8 @@ pub fn draw_scaled_cursor(
     fill_color: u32,
 ) {
     let factor = get_scale_factor();
-    let framebuffer_w = crate::framebuffer::width();
-    let framebuffer_h = crate::framebuffer::height();
+    let fb_w = crate::framebuffer::width();
+    let fb_h = crate::framebuffer::height();
 
     for (cy, row) in pattern.iter().enumerate() {
         for (cx, &pixel) in row.iter().enumerate() {
@@ -441,10 +486,10 @@ match pixel {
             // Scale the cursor pixel to a factor×factor block
             for sy in 0..factor {
                 for sx in 0..factor {
-                    let pixel = cursor_x + (cx as u32 * factor + sx) as i32;
+                    let px = cursor_x + (cx as u32 * factor + sx) as i32;
                     let py = cursor_y + (cy as u32 * factor + sy) as i32;
-                    if pixel >= 0 && py >= 0 && (pixel as u32) < framebuffer_w && (py as u32) < framebuffer_h {
-                        crate::framebuffer::put_pixel(pixel as u32, py as u32, color);
+                    if px >= 0 && py >= 0 && (px as u32) < fb_w && (py as u32) < fb_h {
+                        crate::framebuffer::put_pixel(px as u32, py as u32, color);
                     }
                 }
             }

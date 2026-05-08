@@ -123,13 +123,13 @@ pub struct GpuInformation {
     /// VRAM type description
     pub vram_type: &'static str,
     /// BAR0 MMIO base (physical)
-    pub mmio_base_physical: u64,
+    pub mmio_base_phys: u64,
     /// BAR0 MMIO base (virtual, mapped)
     pub mmio_base_virt: u64,
     /// BAR0 MMIO size
     pub mmio_size: u64,
     /// BAR2 VRAM aperture base (physical)
-    pub vram_aperture_physical: u64,
+    pub vram_aperture_phys: u64,
     /// BAR2 VRAM aperture size
     pub vram_aperture_size: u64,
     /// PCIe link speed
@@ -198,13 +198,13 @@ struct AmdGpuState {
     /// Whether the driver has been initialized
     initialized: bool,
     /// Detected GPU information
-    gpu_information: Option<GpuInformation>,
+    gpu_info: Option<GpuInformation>,
 }
 
 // État global partagé protégé par un Mutex (verrou d'exclusion mutuelle).
 static GPU_STATE: Mutex<AmdGpuState> = Mutex::new(AmdGpuState {
     initialized: false,
-    gpu_information: None,
+    gpu_info: None,
 });
 
 // Variable atomique — accès thread-safe sans verrou.
@@ -221,8 +221,8 @@ static GPU_DETECTED: AtomicBool = AtomicBool::new(false);
 #[inline]
 pub // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe fn mmio_read32(mmio_base: u64, offset: u32) -> u32 {
-    let address = mmio_base + offset as u64;
-    core::ptr::read_volatile(address as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+    let addr = mmio_base + offset as u64;
+    core::ptr::read_volatile(addr as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u32)
 }
 
@@ -233,8 +233,8 @@ const u32)
 #[inline]
 pub // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe fn mmio_write32(mmio_base: u64, offset: u32, value: u32) {
-    let address = mmio_base + offset as u64;
-    core::ptr::write_volatile(address as *mut u32, value);
+    let addr = mmio_base + offset as u64;
+    core::ptr::write_volatile(addr as *mut u32, value);
 }
 
 /// Read a 32-bit GPU register using indirect (indexed) access
@@ -268,20 +268,20 @@ unsafe fn mmio_write_indirect(mmio_base: u64, reg: u32, value: u32) {
 
 /// Detect the size of a PCI BAR by writing all-ones and reading back
 /// This is the standard PCI BAR sizing mechanism.
-fn detect_bar_size(device: &PciDevice, bar_index: usize) -> u64 {
+fn detect_bar_size(dev: &PciDevice, bar_index: usize) -> u64 {
     let bar_offset = 0x10 + (bar_index as u8 * 4);
     
     // Save original BAR value
-    let original = pci::config_read(device.bus, device.device, device.function, bar_offset);
+    let original = pci::config_read(dev.bus, dev.device, dev.function, bar_offset);
     
     // Write all ones
-    pci::config_write(device.bus, device.device, device.function, bar_offset, 0xFFFFFFFF);
+    pci::config_write(dev.bus, dev.device, dev.function, bar_offset, 0xFFFFFFFF);
     
     // Read back
-    let readback = pci::config_read(device.bus, device.device, device.function, bar_offset);
+    let readback = pci::config_read(dev.bus, dev.device, dev.function, bar_offset);
     
     // Restore original
-    pci::config_write(device.bus, device.device, device.function, bar_offset, original);
+    pci::config_write(dev.bus, dev.device, dev.function, bar_offset, original);
     
     if readback == 0 {
         return 0;
@@ -301,10 +301,10 @@ fn detect_bar_size(device: &PciDevice, bar_index: usize) -> u64 {
         if bar_type == 2 && bar_index < 5 {
             // 64-bit BAR: also check upper 32 bits
             let bar_hi_offset = bar_offset + 4;
-            let original_hi = pci::config_read(device.bus, device.device, device.function, bar_hi_offset);
-            pci::config_write(device.bus, device.device, device.function, bar_hi_offset, 0xFFFFFFFF);
-            let readback_hi = pci::config_read(device.bus, device.device, device.function, bar_hi_offset);
-            pci::config_write(device.bus, device.device, device.function, bar_hi_offset, original_hi);
+            let original_hi = pci::config_read(dev.bus, dev.device, dev.function, bar_hi_offset);
+            pci::config_write(dev.bus, dev.device, dev.function, bar_hi_offset, 0xFFFFFFFF);
+            let readback_hi = pci::config_read(dev.bus, dev.device, dev.function, bar_hi_offset);
+            pci::config_write(dev.bus, dev.device, dev.function, bar_hi_offset, original_hi);
             
             let full_mask = ((readback_hi as u64) << 32) | (mask as u64);
             if full_mask == 0 {
@@ -329,10 +329,10 @@ fn detect_bar_size(device: &PciDevice, bar_index: usize) -> u64 {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /// Read PCIe link speed and width from PCI Express capability
-fn read_pcie_link_information(device: &PciDevice) -> (u8, u8) {
-    if let Some(pcie_capability_offset) = pci::find_capability(device, pcie_cap::PCI_EXPRESS) {
+fn read_pcie_link_information(dev: &PciDevice) -> (u8, u8) {
+    if let Some(pcie_cap_offset) = pci::find_capability(dev, pcie_cap::PCI_EXPRESS) {
         // Link Status register is at PCI Express cap + 0x12
-        let link_status = pci::config_read16(device.bus, device.device, device.function, pcie_capability_offset + 0x12);
+        let link_status = pci::config_read16(dev.bus, dev.device, dev.function, pcie_cap_offset + 0x12);
         let speed = (link_status & 0xF) as u8;        // bits 3:0 = current link speed
         let width = ((link_status >> 4) & 0x3F) as u8; // bits 9:4 = negotiated width
         (speed, width)
@@ -502,21 +502,21 @@ unsafe {
 /// Returns the first AMD display device found, if any
 pub fn probe() -> Option<PciDevice> {
     // First: try known Navi 10 device IDs
-    for &device_id in NAVI10_DEVICE_IDS {
-        if let Some(device) = pci::find_by_id(AMD_VENDOR_ID, device_id) {
+    for &dev_id in NAVI10_DEVICE_IDS {
+        if let Some(dev) = pci::find_by_id(AMD_VENDOR_ID, dev_id) {
             crate::log!("[AMDGPU] Found Navi GPU: {:04X}:{:04X} at {:02X}:{:02X}.{}", 
-                device.vendor_id, device.device_id, device.bus, device.device, device.function);
-            return Some(device);
+                dev.vendor_id, dev.device_id, dev.bus, dev.device, dev.function);
+            return Some(dev);
         }
     }
     
     // Fallback: find any AMD display controller
     let display_devs = pci::find_by_class(pci::class::DISPLAY);
-    for device in display_devs {
-        if device.vendor_id == AMD_VENDOR_ID {
+    for dev in display_devs {
+        if dev.vendor_id == AMD_VENDOR_ID {
             crate::log!("[AMDGPU] Found AMD Display: {:04X}:{:04X} at {:02X}:{:02X}.{}", 
-                device.vendor_id, device.device_id, device.bus, device.device, device.function);
-            return Some(device);
+                dev.vendor_id, dev.device_id, dev.bus, dev.device, dev.function);
+            return Some(dev);
         }
     }
     
@@ -537,7 +537,7 @@ pub fn init() {
     crate::log!("[AMDGPU] ═══════════════════════════════════════════════════");
     
     // Step 1: Find AMD GPU on PCI bus
-    let device = // Correspondance de motifs — branchement exhaustif de Rust.
+    let dev = // Correspondance de motifs — branchement exhaustif de Rust.
 match probe() {
         Some(d) => d,
         None => {
@@ -560,25 +560,25 @@ match probe() {
     
     // Step 2: Enable PCI bus mastering and memory space access
     crate::log!("[AMDGPU] Enabling PCI bus mastering and memory space...");
-    pci::enable_bus_master(&device);
-    pci::enable_memory_space(&device);
+    pci::enable_bus_master(&dev);
+    pci::enable_memory_space(&dev);
     
     // Read and display PCI command/status
-    let cmd = pci::config_read16(device.bus, device.device, device.function, 0x04);
-    let status = pci::config_read16(device.bus, device.device, device.function, 0x06);
+    let cmd = pci::config_read16(dev.bus, dev.device, dev.function, 0x04);
+    let status = pci::config_read16(dev.bus, dev.device, dev.function, 0x06);
     crate::log!("[AMDGPU] PCI Command: {:#06X}  Status: {:#06X}", cmd, status);
     
     // Step 3: Detect BARs
     crate::log!("[AMDGPU] Detecting BARs...");
     
-    let mmio_physical = device.bar_address(bar::MMIO_REGISTERS).unwrap_or(0);
-    let mmio_size = detect_bar_size(&device, bar::MMIO_REGISTERS);
+    let mmio_physical = dev.bar_address(bar::MMIO_REGISTERS).unwrap_or(0);
+    let mmio_size = detect_bar_size(&dev, bar::MMIO_REGISTERS);
     
-    let vram_physical = device.bar_address(bar::VRAM_APERTURE).unwrap_or(0);
-    let vram_ap_size = detect_bar_size(&device, bar::VRAM_APERTURE);
+    let vram_physical = dev.bar_address(bar::VRAM_APERTURE).unwrap_or(0);
+    let vram_ap_size = detect_bar_size(&dev, bar::VRAM_APERTURE);
     
-    let doorbell_physical = device.bar_address(bar::DOORBELL).unwrap_or(0);
-    let doorbell_size = detect_bar_size(&device, bar::DOORBELL);
+    let doorbell_physical = dev.bar_address(bar::DOORBELL).unwrap_or(0);
+    let doorbell_size = detect_bar_size(&dev, bar::DOORBELL);
     
     crate::log!("[AMDGPU] BAR0 (MMIO):     phys={:#014X} size={:#X} ({} KB)", 
         mmio_physical, mmio_size, mmio_size / 1024);
@@ -609,9 +609,9 @@ match memory::map_mmio(mmio_physical, map_size) {
     };
     
     // Step 5: Read PCIe link info
-    let (link_speed, link_width) = read_pcie_link_information(&device);
-    let has_msi = pci::find_capability(&device, pcie_cap::MSI).is_some();
-    let has_msix = pci::find_capability(&device, pcie_cap::MSIX).is_some();
+    let (link_speed, link_width) = read_pcie_link_information(&dev);
+    let has_msi = pci::find_capability(&dev, pcie_cap::MSI).is_some();
+    let has_msix = pci::find_capability(&dev, pcie_cap::MSIX).is_some();
     
     crate::log!("[AMDGPU] PCIe: Gen{} x{}  MSI:{}  MSI-X:{}", 
         link_speed, link_width,
@@ -637,22 +637,22 @@ match asic_family {
     let vram_type = vram_type_string(mmio_virt);
     
     // Build GPU info struct  
-    let information = GpuInformation {
-        vendor_id: device.vendor_id,
-        device_id: device.device_id,
-        bus: device.bus,
-        device: device.device,
-        function: device.function,
-        revision: device.revision,
+    let info = GpuInformation {
+        vendor_id: dev.vendor_id,
+        device_id: dev.device_id,
+        bus: dev.bus,
+        device: dev.device,
+        function: dev.function,
+        revision: dev.revision,
         asic_family,
         chip_external_rev: chip_ext_rev,
         family_name,
         vram_size,
         vram_type,
-        mmio_base_physical: mmio_physical,
+        mmio_base_phys: mmio_physical,
         mmio_base_virt: mmio_virt,
         mmio_size: mmio_size,
-        vram_aperture_physical: vram_physical,
+        vram_aperture_phys: vram_physical,
         vram_aperture_size: vram_ap_size,
         pcie_link_speed: link_speed,
         pcie_link_width: link_width,
@@ -664,13 +664,13 @@ match asic_family {
     
     // Step 8: Print summary
     crate::log!("[AMDGPU] ───────────────────────────────────────────────────");
-    crate::log!("[AMDGPU] GPU: {}", information.gpu_name());
+    crate::log!("[AMDGPU] GPU: {}", info.gpu_name());
     crate::log!("[AMDGPU] PCI: {:04X}:{:04X} rev {:02X} at {:02X}:{:02X}.{}", 
-        information.vendor_id, information.device_id, information.revision,
-        information.bus, information.device, information.function);
+        info.vendor_id, info.device_id, info.revision,
+        info.bus, info.device, info.function);
     crate::log!("[AMDGPU] Family: {}", family_name);
-    crate::log!("[AMDGPU] VRAM: {} ({})", information.vram_string(), vram_type);
-    crate::log!("[AMDGPU] {}", information.pcie_link_string());
+    crate::log!("[AMDGPU] VRAM: {} ({})", info.vram_string(), vram_type);
+    crate::log!("[AMDGPU] {}", info.pcie_link_string());
     if compute_units > 0 {
         crate::log!("[AMDGPU] Compute Units: {}", compute_units);
     }
@@ -684,7 +684,7 @@ match asic_family {
     // Store state
     let mut state = GPU_STATE.lock();
     state.initialized = true;
-    state.gpu_information = Some(information);
+    state.gpu_info = Some(info);
     GPU_DETECTED.store(true, Ordering::SeqCst);
     drop(state);
     
@@ -712,19 +712,19 @@ pub fn is_detected() -> bool {
 
 /// Get GPU info (if detected)
 pub fn get_information() -> Option<GpuInformation> {
-    GPU_STATE.lock().gpu_information.clone()
+    GPU_STATE.lock().gpu_info.clone()
 }
 
 /// Get a summary string for display in terminal/desktop
 pub fn summary() -> String {
-    if let Some(information) = get_information() {
+    if let Some(info) = get_information() {
         format!("{} | {} {} | {} | CU:{}", 
-            information.gpu_name(),
-            information.vram_string(),
-            information.vram_type,
-            information.pcie_link_string(),
-            if information.compute_units > 0 { 
-                format!("{}", information.compute_units) 
+            info.gpu_name(),
+            info.vram_string(),
+            info.vram_type,
+            info.pcie_link_string(),
+            if info.compute_units > 0 { 
+                format!("{}", info.compute_units) 
             } else { 
                 String::from("?") 
             })
@@ -734,30 +734,30 @@ pub fn summary() -> String {
 }
 
 /// Get detailed info lines for terminal display
-pub fn information_lines() -> Vec<String> {
+pub fn info_lines() -> Vec<String> {
     let mut lines = Vec::new();
     
-    if let Some(information) = get_information() {
+    if let Some(info) = get_information() {
         lines.push(format!("╔══════════════════════════════════════════════╗"));
-        lines.push(format!("║        AMD GPU — {}        ║", information.gpu_name()));
+        lines.push(format!("║        AMD GPU — {}        ║", info.gpu_name()));
         lines.push(format!("╠══════════════════════════════════════════════╣"));
         lines.push(format!("║ PCI ID:    {:04X}:{:04X} rev {:02X}                 ║", 
-            information.vendor_id, information.device_id, information.revision));
+            info.vendor_id, info.device_id, info.revision));
         lines.push(format!("║ Location:  {:02X}:{:02X}.{}                          ║",
-            information.bus, information.device, information.function));
-        lines.push(format!("║ Family:    {}               ║", information.family_name));
-        lines.push(format!("║ VRAM:      {} ({})            ║", information.vram_string(), information.vram_type));
-        lines.push(format!("║ PCIe:      {}              ║", information.pcie_link_string()));
-        if information.compute_units > 0 {
-            lines.push(format!("║ CUs:       {}                               ║", information.compute_units));
+            info.bus, info.device, info.function));
+        lines.push(format!("║ Family:    {}               ║", info.family_name));
+        lines.push(format!("║ VRAM:      {} ({})            ║", info.vram_string(), info.vram_type));
+        lines.push(format!("║ PCIe:      {}              ║", info.pcie_link_string()));
+        if info.compute_units > 0 {
+            lines.push(format!("║ CUs:       {}                               ║", info.compute_units));
         }
         lines.push(format!("║ MMIO:      {:#X} ({} KB)        ║", 
-            information.mmio_base_virt, information.mmio_size / 1024));
+            info.mmio_base_virt, info.mmio_size / 1024));
         lines.push(format!("║ VRAM Apt:  {:#X} ({} MB)     ║",
-            information.vram_aperture_physical, information.vram_aperture_size / (1024 * 1024)));
+            info.vram_aperture_phys, info.vram_aperture_size / (1024 * 1024)));
         lines.push(format!("║ MSI: {}  MSI-X: {}                        ║",
-            if information.has_msi { "Yes" } else { "No " },
-            if information.has_msix { "Yes" } else { "No " }));
+            if info.has_msi { "Yes" } else { "No " },
+            if info.has_msix { "Yes" } else { "No " }));
         lines.push(format!("╚══════════════════════════════════════════════╝"));
     } else {
         lines.push(String::from("No AMD GPU detected"));

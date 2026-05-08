@@ -3,7 +3,7 @@
 
 
 
-use micromath::Wo;
+use micromath::F32Ext;
 use core::ops::{Add, Sub, Mul, Neg};
 
 
@@ -13,36 +13,36 @@ use core::ops::{Add, Sub, Mul, Neg};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Vec3 {
-    pub b: f32,
-    pub c: f32,
-    pub av: f32,
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
 }
 
 impl Vec3 {
-    pub const Dh: Vec3 = Vec3 { b: 0.0, c: 0.0, av: 0.0 };
-    pub const Cie: Vec3 = Vec3 { b: 1.0, c: 1.0, av: 1.0 };
-    pub const Dma: Vec3 = Vec3 { b: 1.0, c: 0.0, av: 0.0 };
-    pub const Dmf: Vec3 = Vec3 { b: 0.0, c: 1.0, av: 0.0 };
-    pub const Cqu: Vec3 = Vec3 { b: 0.0, c: 0.0, av: 1.0 };
+    pub const Bk: Vec3 = Vec3 { x: 0.0, y: 0.0, z: 0.0 };
+    pub const Amy: Vec3 = Vec3 { x: 1.0, y: 1.0, z: 1.0 };
+    pub const Bfo: Vec3 = Vec3 { x: 1.0, y: 0.0, z: 0.0 };
+    pub const Bfr: Vec3 = Vec3 { x: 0.0, y: 1.0, z: 0.0 };
+    pub const Ash: Vec3 = Vec3 { x: 0.0, y: 0.0, z: 1.0 };
 
     #[inline]
-    pub const fn new(b: f32, c: f32, av: f32) -> Self {
-        Self { b, c, av }
+    pub const fn new(x: f32, y: f32, z: f32) -> Self {
+        Self { x, y, z }
     }
 
     #[inline]
-    pub fn go(&self) -> f32 {
-        (self.b * self.b + self.c * self.c + self.av * self.av).ibi()
+    pub fn length(&self) -> f32 {
+        (self.x * self.x + self.y * self.y + self.z * self.z).sqrt()
     }
 
 #[inline]
-    pub fn all(&self) -> Self {
-        let len = self.go();
+    pub fn normalize(&self) -> Self {
+        let len = self.length();
         if len > 0.0001 {
             Self {
-                b: self.b / len,
-                c: self.c / len,
-                av: self.av / len,
+                x: self.x / len,
+                y: self.y / len,
+                z: self.z / len,
             }
         } else {
             *self
@@ -50,78 +50,78 @@ impl Vec3 {
     }
 
     #[inline]
-    pub fn amb(&self, gq: Vec3) -> f32 {
-        self.b * gq.b + self.c * gq.c + self.av * gq.av
+    pub fn dot(&self, other: Vec3) -> f32 {
+        self.x * other.x + self.y * other.y + self.z * other.z
     }
 
     #[inline]
-    pub fn bjr(&self, gq: Vec3) -> Self {
+    pub fn cross(&self, other: Vec3) -> Self {
         Self {
-            b: self.c * gq.av - self.av * gq.c,
-            c: self.av * gq.b - self.b * gq.av,
-            av: self.b * gq.c - self.c * gq.b,
+            x: self.y * other.z - self.z * other.y,
+            y: self.z * other.x - self.x * other.z,
+            z: self.x * other.y - self.y * other.x,
         }
     }
 
     #[inline]
-    pub fn csb(&self, gq: Vec3, ab: f32) -> Self {
+    pub fn lerp(&self, other: Vec3, t: f32) -> Self {
         Self {
-            b: self.b + (gq.b - self.b) * ab,
-            c: self.c + (gq.c - self.c) * ab,
-            av: self.av + (gq.av - self.av) * ab,
+            x: self.x + (other.x - self.x) * t,
+            y: self.y + (other.y - self.y) * t,
+            z: self.z + (other.z - self.z) * t,
         }
     }
 
     #[inline]
-    pub fn bv(&self, e: f32) -> Self {
+    pub fn scale(&self, j: f32) -> Self {
         Self {
-            b: self.b * e,
-            c: self.c * e,
-            av: self.av * e,
+            x: self.x * j,
+            y: self.y * j,
+            z: self.z * j,
         }
     }
 }
 
 impl Add for Vec3 {
-    type Dd = Self;
-    fn add(self, gq: Self) -> Self {
+    type Output = Self;
+    fn add(self, other: Self) -> Self {
         Self {
-            b: self.b + gq.b,
-            c: self.c + gq.c,
-            av: self.av + gq.av,
+            x: self.x + other.x,
+            y: self.y + other.y,
+            z: self.z + other.z,
         }
     }
 }
 
 impl Sub for Vec3 {
-    type Dd = Self;
-    fn sub(self, gq: Self) -> Self {
+    type Output = Self;
+    fn sub(self, other: Self) -> Self {
         Self {
-            b: self.b - gq.b,
-            c: self.c - gq.c,
-            av: self.av - gq.av,
+            x: self.x - other.x,
+            y: self.y - other.y,
+            z: self.z - other.z,
         }
     }
 }
 
 impl Neg for Vec3 {
-    type Dd = Self;
+    type Output = Self;
     fn neg(self) -> Self {
         Self {
-            b: -self.b,
-            c: -self.c,
-            av: -self.av,
+            x: -self.x,
+            y: -self.y,
+            z: -self.z,
         }
     }
 }
 
 impl Mul<f32> for Vec3 {
-    type Dd = Self;
-    fn mul(self, e: f32) -> Self {
+    type Output = Self;
+    fn mul(self, j: f32) -> Self {
         Self {
-            b: self.b * e,
-            c: self.c * e,
-            av: self.av * e,
+            x: self.x * j,
+            y: self.y * j,
+            z: self.z * j,
         }
     }
 }
@@ -132,26 +132,26 @@ impl Mul<f32> for Vec3 {
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Vec4 {
-    pub b: f32,
-    pub c: f32,
-    pub av: f32,
-    pub d: f32,
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub w: f32,
 }
 
 impl Vec4 {
-    pub const fn new(b: f32, c: f32, av: f32, d: f32) -> Self {
-        Self { b, c, av, d }
+    pub const fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
+        Self { x, y, z, w }
     }
 
-    pub const fn nwk(p: Vec3, d: f32) -> Self {
-        Self { b: p.b, c: p.c, av: p.av, d }
+    pub const fn iae(v: Vec3, w: f32) -> Self {
+        Self { x: v.x, y: v.y, z: v.z, w }
     }
 
-    pub fn xip(&self) -> Vec3 {
-        if self.d.gp() > 0.0001 {
-            Vec3::new(self.b / self.d, self.c / self.d, self.av / self.d)
+    pub fn to_vec3(&self) -> Vec3 {
+        if self.w.abs() > 0.0001 {
+            Vec3::new(self.x / self.w, self.y / self.w, self.z / self.w)
         } else {
-            Vec3::new(self.b, self.c, self.av)
+            Vec3::new(self.x, self.y, self.z)
         }
     }
 }
@@ -163,12 +163,12 @@ impl Vec4 {
 
 #[derive(Clone, Copy, Debug)]
 pub struct Mat4 {
-    pub ef: [[f32; 4]; 4],
+    pub m: [[f32; 4]; 4],
 }
 
 impl Mat4 {
-    pub const Sx: Mat4 = Mat4 {
-        ef: [
+    pub const Ie: Mat4 = Mat4 {
+        m: [
             [1.0, 0.0, 0.0, 0.0],
             [0.0, 1.0, 0.0, 0.0],
             [0.0, 0.0, 1.0, 0.0],
@@ -176,194 +176,194 @@ impl Mat4 {
         ],
     };
 
-    pub const fn new(ef: [[f32; 4]; 4]) -> Self {
-        Self { ef }
+    pub const fn new(m: [[f32; 4]; 4]) -> Self {
+        Self { m }
     }
 
     
-    pub fn mmx(b: f32, c: f32, av: f32) -> Self {
+    pub fn gzz(x: f32, y: f32, z: f32) -> Self {
         Self {
-            ef: [
+            m: [
                 [1.0, 0.0, 0.0, 0.0],
                 [0.0, 1.0, 0.0, 0.0],
                 [0.0, 0.0, 1.0, 0.0],
-                [b,   c,   av,   1.0],
+                [x,   y,   z,   1.0],
             ],
         }
     }
 
     
-    pub fn bv(b: f32, c: f32, av: f32) -> Self {
+    pub fn scale(x: f32, y: f32, z: f32) -> Self {
         Self {
-            ef: [
-                [b,   0.0, 0.0, 0.0],
-                [0.0, c,   0.0, 0.0],
-                [0.0, 0.0, av,   0.0],
+            m: [
+                [x,   0.0, 0.0, 0.0],
+                [0.0, y,   0.0, 0.0],
+                [0.0, 0.0, z,   0.0],
                 [0.0, 0.0, 0.0, 1.0],
             ],
         }
     }
 
     
-    pub fn dlk(hg: f32) -> Self {
-        let r = hg.cjt();
-        let e = hg.ayq();
+    pub fn rotation_x(cc: f32) -> Self {
+        let c = cc.cos();
+        let j = cc.sin();
         Self {
-            ef: [
+            m: [
                 [1.0, 0.0, 0.0, 0.0],
-                [0.0, r,   e,   0.0],
-                [0.0, -e,  r,   0.0],
+                [0.0, c,   j,   0.0],
+                [0.0, -j,  c,   0.0],
                 [0.0, 0.0, 0.0, 1.0],
             ],
         }
     }
 
     
-    pub fn chi(hg: f32) -> Self {
-        let r = hg.cjt();
-        let e = hg.ayq();
+    pub fn rotation_y(cc: f32) -> Self {
+        let c = cc.cos();
+        let j = cc.sin();
         Self {
-            ef: [
-                [r,   0.0, -e,  0.0],
+            m: [
+                [c,   0.0, -j,  0.0],
                 [0.0, 1.0, 0.0, 0.0],
-                [e,   0.0, r,   0.0],
+                [j,   0.0, c,   0.0],
                 [0.0, 0.0, 0.0, 1.0],
             ],
         }
     }
 
 
-    pub fn chh(gao: Vec3, hg: f32) -> Self {
-        let r = hg.cjt();
-        let e = hg.ayq();
-        let ab = 1.0 - r;
-        let b = gao.b;
-        let c = gao.c;
-        let av = gao.av;
+    pub fn rotation(ctt: Vec3, cc: f32) -> Self {
+        let c = cc.cos();
+        let j = cc.sin();
+        let t = 1.0 - c;
+        let x = ctt.x;
+        let y = ctt.y;
+        let z = ctt.z;
 
         Self {
-            ef: [
-                [ab*b*b + r,     ab*b*c + e*av,   ab*b*av - e*c,   0.0],
-                [ab*b*c - e*av,   ab*c*c + r,     ab*c*av + e*b,   0.0],
-                [ab*b*av + e*c,   ab*c*av - e*b,   ab*av*av + r,     0.0],
+            m: [
+                [t*x*x + c,     t*x*y + j*z,   t*x*z - j*y,   0.0],
+                [t*x*y - j*z,   t*y*y + c,     t*y*z + j*x,   0.0],
+                [t*x*z + j*y,   t*y*z - j*x,   t*z*z + c,     0.0],
                 [0.0,           0.0,           0.0,           1.0],
             ],
         }
     }
 
     
-    pub fn aqf(swj: f32, dyk: f32, bhl: f32, adt: f32) -> Self {
-        let bb = 1.0 / (swj / 2.0).mjs();
-        let gns = 1.0 / (bhl - adt);
+    pub fn vq(fov_radians: f32, bqh: f32, near: f32, far: f32) -> Self {
+        let f = 1.0 / (fov_radians / 2.0).tan();
+        let nf = 1.0 / (near - far);
 
         Self {
-            ef: [
-                [bb / dyk, 0.0, 0.0, 0.0],
-                [0.0, bb, 0.0, 0.0],
-                [0.0, 0.0, (adt + bhl) * gns, -1.0],
-                [0.0, 0.0, 2.0 * adt * bhl * gns, 0.0],
+            m: [
+                [f / bqh, 0.0, 0.0, 0.0],
+                [0.0, f, 0.0, 0.0],
+                [0.0, 0.0, (far + near) * nf, -1.0],
+                [0.0, 0.0, 2.0 * far * near * nf, 0.0],
             ],
         }
     }
 
     
-    pub fn uzk(fd: f32, hw: f32, abm: f32, qc: f32, bhl: f32, adt: f32) -> Self {
-        let hxt = hw - fd;
-        let idu = qc - abm;
-        let hkb = adt - bhl;
+    pub fn nnz(left: f32, right: f32, bottom: f32, top: f32, near: f32, far: f32) -> Self {
+        let dxv = right - left;
+        let ebw = top - bottom;
+        let dqa = far - near;
 
         Self {
-            ef: [
-                [2.0 / hxt, 0.0, 0.0, 0.0],
-                [0.0, 2.0 / idu, 0.0, 0.0],
-                [0.0, 0.0, -2.0 / hkb, 0.0],
-                [-(hw + fd) / hxt, -(qc + abm) / idu, -(adt + bhl) / hkb, 1.0],
+            m: [
+                [2.0 / dxv, 0.0, 0.0, 0.0],
+                [0.0, 2.0 / ebw, 0.0, 0.0],
+                [0.0, 0.0, -2.0 / dqa, 0.0],
+                [-(right + left) / dxv, -(top + bottom) / ebw, -(far + near) / dqa, 1.0],
             ],
         }
     }
 
     
-    pub fn kxg(fd: f32, hw: f32, abm: f32, qc: f32, bhl: f32, adt: f32) -> Self {
-        let hxt = hw - fd;
-        let idu = qc - abm;
-        let hkb = adt - bhl;
-        let gni = 2.0 * bhl;
+    pub fn fxv(left: f32, right: f32, bottom: f32, top: f32, near: f32, far: f32) -> Self {
+        let dxv = right - left;
+        let ebw = top - bottom;
+        let dqa = far - near;
+        let dbm = 2.0 * near;
 
         Self {
-            ef: [
-                [gni / hxt, 0.0, 0.0, 0.0],
-                [0.0, gni / idu, 0.0, 0.0],
-                [(hw + fd) / hxt, (qc + abm) / idu, -(adt + bhl) / hkb, -1.0],
-                [0.0, 0.0, -gni * adt / hkb, 0.0],
+            m: [
+                [dbm / dxv, 0.0, 0.0, 0.0],
+                [0.0, dbm / ebw, 0.0, 0.0],
+                [(right + left) / dxv, (top + bottom) / ebw, -(far + near) / dqa, -1.0],
+                [0.0, 0.0, -dbm * far / dqa, 0.0],
             ],
         }
     }
 
     
-    pub fn sxq(sy: [f32; 16]) -> Self {
+    pub fn lza(ik: [f32; 16]) -> Self {
         Self {
-            ef: [
-                [sy[0], sy[1], sy[2], sy[3]],
-                [sy[4], sy[5], sy[6], sy[7]],
-                [sy[8], sy[9], sy[10], sy[11]],
-                [sy[12], sy[13], sy[14], sy[15]],
+            m: [
+                [ik[0], ik[1], ik[2], ik[3]],
+                [ik[4], ik[5], ik[6], ik[7]],
+                [ik[8], ik[9], ik[10], ik[11]],
+                [ik[12], ik[13], ik[14], ik[15]],
             ],
         }
     }
 
     
-    pub fn ljv(ito: Vec3, cd: Vec3, bln: Vec3) -> Self {
-        let bb = (cd - ito).all();
-        let e = bb.bjr(bln).all();
-        let tm = e.bjr(bb);
+    pub fn ggh(eye: Vec3, target: Vec3, up: Vec3) -> Self {
+        let f = (target - eye).normalize();
+        let j = f.cross(up).normalize();
+        let iy = j.cross(f);
 
         Self {
-            ef: [
-                [e.b, tm.b, -bb.b, 0.0],
-                [e.c, tm.c, -bb.c, 0.0],
-                [e.av, tm.av, -bb.av, 0.0],
-                [-e.amb(ito), -tm.amb(ito), bb.amb(ito), 1.0],
+            m: [
+                [j.x, iy.x, -f.x, 0.0],
+                [j.y, iy.y, -f.y, 0.0],
+                [j.z, iy.z, -f.z, 0.0],
+                [-j.dot(eye), -iy.dot(eye), f.dot(eye), 1.0],
             ],
         }
     }
 
     
-    pub fn mul(&self, gq: &Mat4) -> Self {
+    pub fn mul(&self, other: &Mat4) -> Self {
         let mut result = [[0.0f32; 4]; 4];
 
-        for a in 0..4 {
-            for fb in 0..4 {
-                result[a][fb] = self.ef[a][0] * gq.ef[0][fb]
-                    + self.ef[a][1] * gq.ef[1][fb]
-                    + self.ef[a][2] * gq.ef[2][fb]
-                    + self.ef[a][3] * gq.ef[3][fb];
+        for i in 0..4 {
+            for ay in 0..4 {
+                result[i][ay] = self.m[i][0] * other.m[0][ay]
+                    + self.m[i][1] * other.m[1][ay]
+                    + self.m[i][2] * other.m[2][ay]
+                    + self.m[i][3] * other.m[3][ay];
             }
         }
 
-        Self { ef: result }
+        Self { m: result }
     }
 
     
-    pub fn pvy(&self, p: Vec4) -> Vec4 {
+    pub fn transform_vec4(&self, v: Vec4) -> Vec4 {
         Vec4 {
-            b: self.ef[0][0] * p.b + self.ef[1][0] * p.c + self.ef[2][0] * p.av + self.ef[3][0] * p.d,
-            c: self.ef[0][1] * p.b + self.ef[1][1] * p.c + self.ef[2][1] * p.av + self.ef[3][1] * p.d,
-            av: self.ef[0][2] * p.b + self.ef[1][2] * p.c + self.ef[2][2] * p.av + self.ef[3][2] * p.d,
-            d: self.ef[0][3] * p.b + self.ef[1][3] * p.c + self.ef[2][3] * p.av + self.ef[3][3] * p.d,
+            x: self.m[0][0] * v.x + self.m[1][0] * v.y + self.m[2][0] * v.z + self.m[3][0] * v.w,
+            y: self.m[0][1] * v.x + self.m[1][1] * v.y + self.m[2][1] * v.z + self.m[3][1] * v.w,
+            z: self.m[0][2] * v.x + self.m[1][2] * v.y + self.m[2][2] * v.z + self.m[3][2] * v.w,
+            w: self.m[0][3] * v.x + self.m[1][3] * v.y + self.m[2][3] * v.z + self.m[3][3] * v.w,
         }
     }
 
     
-    pub fn pvx(&self, p: Vec3) -> Vec3 {
-        let cnq = self.pvy(Vec4::nwk(p, 1.0));
-        cnq.xip()
+    pub fn transform_point(&self, v: Vec3) -> Vec3 {
+        let v4 = self.transform_vec4(Vec4::iae(v, 1.0));
+        v4.to_vec3()
     }
 
 }
 
 impl Default for Mat4 {
     fn default() -> Self {
-        Self::Sx
+        Self::Ie
     }
 }
 
@@ -373,6 +373,6 @@ impl Default for Mat4 {
 
 
 #[inline]
-pub fn kor(rve: f32) -> f32 {
-    rve * core::f32::consts::Eu / 180.0
+pub fn fre(degrees: f32) -> f32 {
+    degrees * core::f32::consts::PI / 180.0
 }

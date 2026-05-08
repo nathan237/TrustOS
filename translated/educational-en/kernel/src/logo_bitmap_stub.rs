@@ -25,13 +25,13 @@ pub fn logo_edge_pixel(_x: usize, _y: usize) -> bool {
 }
 
 /// Draw the full-color logo — no-op in slim build
-pub fn draw_logo(_pixel: u32, _py: u32) {}
+pub fn draw_logo(_px: u32, _py: u32) {}
 
 /// Draw the logo centered — no-op in slim build
 pub fn draw_logo_centered(_cx: u32, _cy: u32) {}
 
 /// Draw the logo with a green glow effect — no-op in slim build
-pub fn draw_logo_glow(_pixel: u32, _py: u32, _glow_intensity: u8) {}
+pub fn draw_logo_glow(_px: u32, _py: u32, _glow_intensity: u8) {}
 
 /// Access a single pixel as ARGB u32 — returns transparent in slim build
 #[inline]

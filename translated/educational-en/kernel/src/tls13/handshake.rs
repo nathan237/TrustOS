@@ -124,29 +124,29 @@ pub fn parse_server_hello(session: &mut TlsSession, data: &[u8]) -> Result<(), T
     session.transcript_hash.update(&data[..4 + length]);
     
     // Legacy version (skip)
-    let mut position = 4;
-    position += 2;
+    let mut pos = 4;
+    pos += 2;
     
     // Server random
-    if position + 32 > data.len() {
+    if pos + 32 > data.len() {
         return Err(TlsError::ProtocolError);
     }
-    session.server_random.copy_from_slice(&data[position..position + 32]);
-    position += 32;
+    session.server_random.copy_from_slice(&data[pos..pos + 32]);
+    pos += 32;
     
     // Legacy session ID
-    if position >= data.len() {
+    if pos >= data.len() {
         return Err(TlsError::ProtocolError);
     }
-    let session_id_length = data[position] as usize;
-    position += 1 + session_id_length;
+    let session_id_length = data[pos] as usize;
+    pos += 1 + session_id_length;
     
     // Cipher suite
-    if position + 2 > data.len() {
+    if pos + 2 > data.len() {
         return Err(TlsError::ProtocolError);
     }
-    let cipher_suite = u16::from_be_bytes([data[position], data[position + 1]]);
-    position += 2;
+    let cipher_suite = u16::from_be_bytes([data[pos], data[pos + 1]]);
+    pos += 2;
     
     if cipher_suite == CipherSuite::TLS_AES_128_GCM_SHA256 as u16 {
         session.cipher_suite = Some(CipherSuite::TLS_AES_128_GCM_SHA256);
@@ -155,24 +155,24 @@ pub fn parse_server_hello(session: &mut TlsSession, data: &[u8]) -> Result<(), T
     }
     
     // Compression (skip, must be 0)
-    position += 1;
+    pos += 1;
     
     // Extensions
-    if position + 2 > data.len() {
+    if pos + 2 > data.len() {
         return Err(TlsError::ProtocolError);
     }
-    let extensions_length = u16::from_be_bytes([data[position], data[position + 1]]) as usize;
-    position += 2;
+    let extensions_length = u16::from_be_bytes([data[pos], data[pos + 1]]) as usize;
+    pos += 2;
     
-    let extensions_end = position + extensions_length;
+    let extensions_end = pos + extensions_length;
     let mut server_public_key: Option<[u8; 32]> = None;
     
-    while position + 4 <= extensions_end {
-        let ext_type = u16::from_be_bytes([data[position], data[position + 1]]);
-        let ext_length = u16::from_be_bytes([data[position + 2], data[position + 3]]) as usize;
-        position += 4;
+    while pos + 4 <= extensions_end {
+        let ext_type = u16::from_be_bytes([data[pos], data[pos + 1]]);
+        let ext_length = u16::from_be_bytes([data[pos + 2], data[pos + 3]]) as usize;
+        pos += 4;
         
-        if position + ext_length > extensions_end {
+        if pos + ext_length > extensions_end {
             break;
         }
         
@@ -181,12 +181,12 @@ match ext_type {
             0x0033 => {
                 // key_share
                 if ext_length >= 36 {
-                    let group = u16::from_be_bytes([data[position], data[position + 1]]);
-                    let key_length = u16::from_be_bytes([data[position + 2], data[position + 3]]) as usize;
+                    let group = u16::from_be_bytes([data[pos], data[pos + 1]]);
+                    let key_length = u16::from_be_bytes([data[pos + 2], data[pos + 3]]) as usize;
                     
-                    if group == 0x001d && key_length == 32 && position + 4 + 32 <= extensions_end {
+                    if group == 0x001d && key_length == 32 && pos + 4 + 32 <= extensions_end {
                         let mut key = [0u8; 32];
-                        key.copy_from_slice(&data[position + 4..position + 4 + 32]);
+                        key.copy_from_slice(&data[pos + 4..pos + 4 + 32]);
                         server_public_key = Some(key);
                     }
                 }
@@ -197,7 +197,7 @@ match ext_type {
             _ => {}
         }
         
-        position += ext_length;
+        pos += ext_length;
     }
     
     // Compute shared secret
@@ -307,8 +307,8 @@ pub fn derive_application_secrets(session: &mut TlsSession, transcript_hash: &[u
     );
     
     // Reset sequence numbers
-    session.client_sequence = 0;
-    session.server_sequence = 0;
+    session.client_seq = 0;
+    session.server_seq = 0;
     
     Ok(())
 }

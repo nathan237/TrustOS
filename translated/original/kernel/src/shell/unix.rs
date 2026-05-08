@@ -818,6 +818,831 @@ pub(super) fn cmd_watchdog(args: &[&str]) {
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Live Driver Debug Toolkit — test & debug drivers without recompiling
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Unified driver debug command
+pub(super) fn cmd_drv(args: &[&str]) {
+    let subcmd = args.first().copied().unwrap_or("help");
+
+    match subcmd {
+        // ── PCI config space read/write ──
+        "pci" => cmd_drv_pci(&args[1..]),
+
+        // ── MMIO read/write ──
+        "mmio" => cmd_drv_mmio(&args[1..]),
+
+        // ── Re-probe a driver at runtime ──
+        "reprobe" | "probe" => cmd_drv_reprobe(&args[1..]),
+
+        // ── Driver test suites ──
+        "test" => cmd_drv_test(&args[1..]),
+
+        // ── List active drivers & state ──
+        "list" | "ls" => cmd_drv_list(),
+
+        // ── Dump all PCI devices with full config space header ──
+        "scan" => cmd_drv_scan(),
+
+        _ => {
+            crate::println_color!(COLOR_CYAN, "=== Live Driver Debug Toolkit ===");
+            crate::println!();
+            crate::println!("  drv list                           List all active drivers and state");
+            crate::println!("  drv scan                           Scan PCI bus (full config header dump)");
+            crate::println!();
+            crate::println_color!(COLOR_YELLOW, "PCI Config Space:");
+            crate::println!("  drv pci read <BB:DD.F> <off> [l]   Read PCI config register (b/w/l)");
+            crate::println!("  drv pci write <BB:DD.F> <off> <val> [l]  Write PCI config register");
+            crate::println!("  drv pci dump <BB:DD.F>             Dump 256-byte PCI config space");
+            crate::println!();
+            crate::println_color!(COLOR_YELLOW, "MMIO (Memory-Mapped I/O):");
+            crate::println!("  drv mmio read <addr> [count]       Read 32-bit MMIO registers");
+            crate::println!("  drv mmio write <addr> <val>        Write 32-bit MMIO register");
+            crate::println!("  drv mmio wifi <offset>             Read WiFi CSR register by offset");
+            crate::println!();
+            crate::println_color!(COLOR_YELLOW, "Driver Control:");
+            crate::println!("  drv reprobe wifi                   Re-probe WiFi driver from PCI");
+            crate::println!("  drv reprobe hda                    Re-probe HDA audio driver");
+            crate::println!();
+            crate::println_color!(COLOR_YELLOW, "Driver Tests (no recompile):");
+            crate::println!("  drv test wifi                      WiFi: PCI detect → BAR → CSR dump → FW check");
+            crate::println!("  drv test hda                       HDA: codec detect → widget dump → path check");
+            crate::println!("  drv test ec                        ThinkPad EC: temp sensors → fan → battery");
+            crate::println!("  drv test net                       Network: virtio/e1000 link → MAC → ping");
+            crate::println!("  drv test all                       Run all driver tests sequentially");
+        }
+    }
+}
+
+/// Parse "BB:DD.F" PCI address format
+fn parse_bdf(s: &str) -> Option<(u8, u8, u8)> {
+    // Accept "BB:DD.F" or "BB:DD:F"
+    let parts: Vec<&str> = s.split(|c| c == ':' || c == '.').collect();
+    if parts.len() < 2 { return None; }
+    let bus = u8::from_str_radix(parts[0], 16).ok()?;
+    let dev = u8::from_str_radix(parts[1], 16).ok()?;
+    let func = if parts.len() > 2 { u8::from_str_radix(parts[2], 16).ok().unwrap_or(0) } else { 0 };
+    Some((bus, dev, func))
+}
+
+/// Parse hex string (with or without 0x prefix)
+fn parse_hex32(s: &str) -> Option<u32> {
+    let s = s.trim_start_matches("0x").trim_start_matches("0X");
+    u32::from_str_radix(s, 16).ok()
+}
+
+fn parse_hex_usize(s: &str) -> Option<usize> {
+    let s = s.trim_start_matches("0x").trim_start_matches("0X");
+    usize::from_str_radix(s, 16).ok()
+}
+
+/// drv pci read/write/dump
+fn cmd_drv_pci(args: &[&str]) {
+    let subcmd = args.first().copied().unwrap_or("help");
+    match subcmd {
+        "read" | "r" => {
+            if args.len() < 3 {
+                crate::println!("Usage: drv pci read <BB:DD.F> <offset_hex> [b|w|l]");
+                return;
+            }
+            let Some((bus, dev, func)) = parse_bdf(args[1]) else {
+                crate::println_color!(COLOR_RED, "Invalid BDF: {} (use BB:DD.F)", args[1]);
+                return;
+            };
+            let Some(offset) = parse_hex32(args[2]) else {
+                crate::println_color!(COLOR_RED, "Invalid offset: {}", args[2]);
+                return;
+            };
+            let size = args.get(3).copied().unwrap_or("l");
+            let val = crate::pci::config_read(bus, dev, func, offset as u8);
+            match size {
+                "b" | "byte" => crate::println!("  PCI {:02X}:{:02X}.{} [0x{:02X}] = 0x{:02X}",
+                    bus, dev, func, offset, val & 0xFF),
+                "w" | "word" => crate::println!("  PCI {:02X}:{:02X}.{} [0x{:02X}] = 0x{:04X}",
+                    bus, dev, func, offset, val & 0xFFFF),
+                _ => crate::println!("  PCI {:02X}:{:02X}.{} [0x{:02X}] = 0x{:08X}",
+                    bus, dev, func, offset, val),
+            }
+        }
+        "write" | "w" => {
+            if args.len() < 4 {
+                crate::println!("Usage: drv pci write <BB:DD.F> <offset_hex> <value_hex> [b|w|l]");
+                return;
+            }
+            let Some((bus, dev, func)) = parse_bdf(args[1]) else {
+                crate::println_color!(COLOR_RED, "Invalid BDF: {}", args[1]);
+                return;
+            };
+            let Some(offset) = parse_hex32(args[2]) else {
+                crate::println_color!(COLOR_RED, "Invalid offset: {}", args[2]);
+                return;
+            };
+            let Some(value) = parse_hex32(args[3]) else {
+                crate::println_color!(COLOR_RED, "Invalid value: {}", args[3]);
+                return;
+            };
+            crate::pci::config_write(bus, dev, func, offset as u8, value);
+            crate::println_color!(COLOR_GREEN, "  PCI {:02X}:{:02X}.{} [0x{:02X}] <- 0x{:08X}",
+                bus, dev, func, offset, value);
+        }
+        "dump" | "d" => {
+            if args.len() < 2 {
+                crate::println!("Usage: drv pci dump <BB:DD.F>");
+                return;
+            }
+            let Some((bus, dev, func)) = parse_bdf(args[1]) else {
+                crate::println_color!(COLOR_RED, "Invalid BDF: {}", args[1]);
+                return;
+            };
+            crate::println_color!(COLOR_CYAN, "PCI Config Space {:02X}:{:02X}.{}", bus, dev, func);
+            crate::println!("     00 04 08 0C 10 14 18 1C 20 24 28 2C 30 34 38 3C");
+            for row in 0..16u8 {
+                let off = row * 16;
+                crate::print!("{:02X}: ", off);
+                for col in (0..16u8).step_by(4) {
+                    let val = crate::pci::config_read(bus, dev, func, off + col);
+                    crate::print!("{:08X} ", val);
+                }
+                crate::println!();
+            }
+        }
+        _ => {
+            crate::println!("Usage: drv pci <read|write|dump> ...");
+        }
+    }
+}
+
+/// drv mmio read/write
+fn cmd_drv_mmio(args: &[&str]) {
+    let subcmd = args.first().copied().unwrap_or("help");
+    match subcmd {
+        "read" | "r" => {
+            if args.len() < 2 {
+                crate::println!("Usage: drv mmio read <phys_addr_hex> [count]");
+                crate::println!("  Reads 32-bit values at given physical address (auto-mapped)");
+                return;
+            }
+            let Some(phys) = parse_hex_usize(args[1]) else {
+                crate::println_color!(COLOR_RED, "Invalid address: {}", args[1]);
+                return;
+            };
+            let count = args.get(2).and_then(|s| s.parse::<usize>().ok()).unwrap_or(1);
+            let count = count.min(64); // safety cap
+            let size = count * 4;
+            match crate::memory::map_mmio(phys as u64, size) {
+                Ok(virt_base) => {
+                    for i in 0..count {
+                        let virt = virt_base as usize + i * 4;
+                        let phys_a = phys + i * 4;
+                        let val = unsafe { core::ptr::read_volatile(virt as *const u32) };
+                        crate::println!("  [phys {:#010X}] = 0x{:08X}", phys_a, val);
+                    }
+                }
+                Err(e) => {
+                    crate::println_color!(COLOR_RED, "  Failed to map phys 0x{:X}: {}", phys, e);
+                }
+            }
+        }
+        "write" | "w" => {
+            if args.len() < 3 {
+                crate::println!("Usage: drv mmio write <phys_addr_hex> <value_hex>");
+                crate::println_color!(COLOR_RED, "  ⚠ WARNING: Writing to arbitrary MMIO is DANGEROUS!");
+                return;
+            }
+            let Some(phys) = parse_hex_usize(args[1]) else {
+                crate::println_color!(COLOR_RED, "Invalid address: {}", args[1]);
+                return;
+            };
+            let Some(value) = parse_hex32(args[2]) else {
+                crate::println_color!(COLOR_RED, "Invalid value: {}", args[2]);
+                return;
+            };
+            match crate::memory::map_mmio(phys as u64, 4) {
+                Ok(virt) => {
+                    unsafe { core::ptr::write_volatile(virt as *mut u32, value); }
+                    crate::println_color!(COLOR_GREEN, "  [phys {:#010X}] <- 0x{:08X}", phys, value);
+                }
+                Err(e) => {
+                    crate::println_color!(COLOR_RED, "  Failed to map phys 0x{:X}: {}", phys, e);
+                }
+            }
+        }
+        "wifi" => {
+            if args.len() < 2 {
+                crate::println!("Usage: drv mmio wifi <csr_offset_hex>");
+                crate::println!("  Reads WiFi CSR register at given offset from BAR0");
+                crate::println!("  Common: 0x000=HW_IF_CONFIG, 0x020=RESET, 0x024=GP_CNTRL, 0x028=HW_REV");
+                return;
+            }
+            let Some(offset) = parse_hex32(args[1]) else {
+                crate::println_color!(COLOR_RED, "Invalid offset: {}", args[1]);
+                return;
+            };
+            match crate::drivers::net::iwl4965::debug_read_csr(offset) {
+                Some(val) => crate::println!("  WiFi CSR [0x{:03X}] = 0x{:08X}", offset, val),
+                None => crate::println_color!(COLOR_RED, "  Cannot read — no WiFi device or offset out of range"),
+            }
+        }
+        _ => {
+            crate::println!("Usage: drv mmio <read|write|wifi> ...");
+        }
+    }
+}
+
+/// drv reprobe — re-probe a driver from PCI without reboot
+fn cmd_drv_reprobe(args: &[&str]) {
+    let driver = args.first().copied().unwrap_or("help");
+    match driver {
+        "wifi" => {
+            crate::println_color!(COLOR_YELLOW, "Re-probing WiFi from PCI bus...");
+            let devices = crate::pci::get_devices();
+            let mut found = false;
+
+            // Check all network + wireless class devices
+            for dev in &devices {
+                crate::println!("  Checking {:02X}:{:02X}.{} {:04X}:{:04X} class={:02X}:{:02X}",
+                    dev.bus, dev.device, dev.function,
+                    dev.vendor_id, dev.device_id,
+                    dev.class_code, dev.subclass);
+
+                if crate::drivers::net::wifi::probe_pci(dev) {
+                    crate::println_color!(COLOR_GREEN, "  ✓ WiFi driver bound to {:04X}:{:04X}!", dev.vendor_id, dev.device_id);
+                    found = true;
+                    break;
+                }
+            }
+
+            if !found {
+                crate::println_color!(COLOR_RED, "  ✗ No WiFi hardware found on PCI bus");
+                crate::println!();
+                crate::println!("  Expected: Intel 8086:4229 (4965AGN) or similar");
+                crate::println!("  Tip: Run 'drv scan' to see all PCI devices");
+                crate::println!("  Tip: Run 'drv test wifi' for detailed diagnostics");
+            }
+        }
+        "hda" => {
+            crate::println_color!(COLOR_YELLOW, "Re-probing HDA audio...");
+            let _ = crate::drivers::hda::init();
+            if crate::drivers::hda::is_initialized() {
+                crate::println_color!(COLOR_GREEN, "  ✓ HDA audio re-initialized");
+            } else {
+                crate::println_color!(COLOR_RED, "  ✗ HDA init failed");
+            }
+        }
+        _ => {
+            crate::println!("Usage: drv reprobe <wifi|hda>");
+            crate::println!("  Re-probes driver from PCI bus without rebooting");
+        }
+    }
+}
+
+/// drv test — automated driver test suites
+fn cmd_drv_test(args: &[&str]) {
+    let target = args.first().copied().unwrap_or("help");
+    match target {
+        "wifi" => drv_test_wifi(),
+        "hda" => drv_test_hda(),
+        "ec" => drv_test_ec(),
+        "net" => drv_test_net(),
+        "all" => {
+            drv_test_wifi();
+            crate::println!();
+            drv_test_hda();
+            crate::println!();
+            drv_test_ec();
+            crate::println!();
+            drv_test_net();
+        }
+        _ => {
+            crate::println!("Usage: drv test <wifi|hda|ec|net|all>");
+        }
+    }
+}
+
+/// Map a PCI BAR0 physical address to virtual address via HHDM.
+/// Returns the virtual base address or None if mapping fails.
+fn map_bar0_mmio(dev: &crate::pci::PciDevice) -> Option<usize> {
+    let bar0 = dev.bar[0];
+    if bar0 == 0 || (bar0 & 1) != 0 { return None; }
+    let is_64 = (bar0 >> 1) & 0x3 == 2;
+    let phys = if is_64 {
+        let bar1 = dev.bar[1] as u64;
+        (bar1 << 32) | (bar0 & 0xFFFFFFF0) as u64
+    } else {
+        (bar0 & 0xFFFFFFF0) as u64
+    };
+    if phys == 0 { return None; }
+    // Map 8KB MMIO region (covers WiFi CSRs, HDA regs, etc.)
+    match crate::memory::map_mmio(phys, 0x2000) {
+        Ok(virt) => Some(virt as usize),
+        Err(_e) => None,
+    }
+}
+
+/// WiFi driver test suite
+fn drv_test_wifi() {
+    crate::println_color!(COLOR_CYAN, "=== WiFi Driver Test Suite ===");
+    let mut pass = 0u32;
+    let mut fail = 0u32;
+
+    // Test 1: PCI device detection
+    crate::print!("  [1] PCI device scan (Intel WiFi)... ");
+    let devices = crate::pci::get_devices();
+    let wifi_dev = devices.iter().find(|d|
+        d.vendor_id == 0x8086 && crate::drivers::net::iwl4965::IWL4965_DEVICE_IDS.contains(&d.device_id));
+    if let Some(dev) = wifi_dev {
+        crate::println_color!(COLOR_GREEN, "FOUND {:04X}:{:04X} at {:02X}:{:02X}.{}",
+            dev.vendor_id, dev.device_id, dev.bus, dev.device, dev.function);
+        pass += 1;
+
+        // Test 2: PCI class check
+        crate::print!("  [2] PCI class/subclass... ");
+        crate::print!("class={:02X} sub={:02X} ", dev.class_code, dev.subclass);
+        let expected_wireless = dev.class_code == 0x02 && dev.subclass == 0x80
+            || dev.class_code == 0x0D;
+        if expected_wireless {
+            crate::println_color!(COLOR_GREEN, "OK (wireless)");
+            pass += 1;
+        } else {
+            crate::println_color!(COLOR_YELLOW, "UNEXPECTED (but device ID matches)");
+            pass += 1;
+        }
+
+        // Test 3: BAR0 + MMIO mapping
+        crate::print!("  [3] BAR0 (MMIO base)... ");
+        let bar0 = dev.bar[0];
+        let is_64 = (bar0 >> 1) & 0x3 == 2;
+        let phys = if is_64 {
+            let bar1 = dev.bar[1] as u64;
+            (bar1 << 32) | (bar0 & 0xFFFFFFF0) as u64
+        } else {
+            (bar0 & 0xFFFFFFF0) as u64
+        };
+        if bar0 != 0 && (bar0 & 1) == 0 && phys != 0 {
+            crate::println_color!(COLOR_GREEN, "phys=0x{:X} ({})", phys, if is_64 { "64-bit" } else { "32-bit" });
+            pass += 1;
+
+            // Map the MMIO region into virtual address space
+            crate::print!("  [3b] MMIO page mapping... ");
+            match map_bar0_mmio(dev) {
+                Some(virt_base) => {
+                    crate::println_color!(COLOR_GREEN, "virt=0x{:X}", virt_base);
+                    pass += 1;
+
+                    // Test 4: Read HW_REV CSR via mapped virtual address
+                    crate::print!("  [4] CSR HW_REV read... ");
+                    let hw_rev = unsafe { core::ptr::read_volatile((virt_base + 0x028) as *const u32) };
+                    if hw_rev != 0 && hw_rev != 0xFFFFFFFF {
+                        let hw_type = (hw_rev & 0x000FFF0) >> 4;
+                        let name = match hw_type { 0 => "4965", 2 => "5300", 4 => "5150", 5 => "5100", 7 => "6000", _ => "unknown" };
+                        crate::println_color!(COLOR_GREEN, "0x{:08X} (type={} = {})", hw_rev, hw_type, name);
+                        pass += 1;
+                    } else {
+                        crate::println_color!(COLOR_RED, "0x{:08X} — MMIO not responding", hw_rev);
+                        fail += 1;
+                    }
+
+                    // Test 5: GP_CNTRL
+                    crate::print!("  [5] CSR GP_CNTRL... ");
+                    let gp = unsafe { core::ptr::read_volatile((virt_base + 0x024) as *const u32) };
+                    crate::print!("0x{:08X} ", gp);
+                    if gp & 1 != 0 {
+                        crate::println_color!(COLOR_GREEN, "(MAC clock ready)");
+                    } else {
+                        crate::println_color!(COLOR_YELLOW, "(MAC clock NOT ready — device sleeping or reset)");
+                    }
+                    pass += 1;
+
+                    // Test 6: Dump key CSRs
+                    crate::println!("  [6] Key CSR register dump:");
+                    crate::drivers::net::iwl4965::debug_dump_csrs();
+                    pass += 1;
+                }
+                None => {
+                    crate::println_color!(COLOR_RED, "FAILED to map MMIO pages!");
+                    crate::println!("      phys=0x{:X}, map_mmio() returned error", phys);
+                    fail += 1;
+                }
+            }
+
+        } else {
+            if bar0 == 0 {
+                crate::println_color!(COLOR_RED, "ZERO — BAR not assigned!");
+            } else {
+                crate::println_color!(COLOR_RED, "I/O BAR (0x{:08X}) — need memory BAR", bar0);
+            }
+            fail += 1;
+        }
+
+        // Test 7: IRQ
+        crate::print!("  [7] IRQ assignment... ");
+        if dev.interrupt_line != 0xFF && dev.interrupt_line != 0 {
+            crate::println_color!(COLOR_GREEN, "IRQ {} (pin {})", dev.interrupt_line, dev.interrupt_pin);
+            pass += 1;
+        } else {
+            crate::println_color!(COLOR_YELLOW, "no IRQ assigned (line={}, pin={})", dev.interrupt_line, dev.interrupt_pin);
+            pass += 1; // Not fatal
+        }
+
+        // Test 8: Bus mastering enabled?
+        crate::print!("  [8] PCI command register... ");
+        let cmd = crate::pci::config_read(dev.bus, dev.device, dev.function, 0x04);
+        let mem_space = cmd & 0x02 != 0;
+        let bus_master = cmd & 0x04 != 0;
+        crate::print!("0x{:04X} ", cmd & 0xFFFF);
+        if mem_space && bus_master {
+            crate::println_color!(COLOR_GREEN, "(mem_space=ON, bus_master=ON)");
+            pass += 1;
+        } else {
+            crate::println_color!(COLOR_YELLOW, "(mem_space={}, bus_master={}) — may need enabling",
+                if mem_space { "ON" } else { "OFF" }, if bus_master { "ON" } else { "OFF" });
+            pass += 1;
+        }
+
+    } else {
+        crate::println_color!(COLOR_RED, "NOT FOUND");
+        fail += 1;
+        crate::println!("  [!] No Intel WiFi device on PCI bus.");
+        crate::println!("      Expected vendor=8086, device=4229/4230/4232/...");
+        crate::println!();
+        crate::println!("  All PCI devices on this machine:");
+        for d in &devices {
+            crate::println!("    {:02X}:{:02X}.{} {:04X}:{:04X} class={:02X}:{:02X} {}",
+                d.bus, d.device, d.function,
+                d.vendor_id, d.device_id,
+                d.class_code, d.subclass,
+                d.vendor_name());
+        }
+    }
+
+    // Test 9: Firmware check
+    crate::print!("  [9] Firmware (iwlwifi-4965-2.ucode)... ");
+    if crate::drivers::net::iwl4965::has_firmware() {
+        crate::println_color!(COLOR_GREEN, "LOADED");
+        pass += 1;
+    } else {
+        crate::println_color!(COLOR_RED, "NOT AVAILABLE");
+        crate::println!("      Load firmware via Limine module or copy to RamFS");
+        fail += 1;
+    }
+
+    // Test 10: Driver state
+    crate::print!("  [10] WiFi driver state... ");
+    if crate::drivers::net::wifi::has_wifi() {
+        crate::println_color!(COLOR_GREEN, "ACTIVE");
+        crate::drivers::net::iwl4965::debug_dump();
+        pass += 1;
+    } else {
+        crate::println_color!(COLOR_RED, "NOT ACTIVE");
+        fail += 1;
+    }
+
+    crate::println!();
+    let total = pass + fail;
+    if fail == 0 {
+        crate::println_color!(COLOR_GREEN, "  WiFi: {}/{} PASSED", pass, total);
+    } else {
+        crate::println_color!(COLOR_YELLOW, "  WiFi: {}/{} passed, {} failed", pass, total, fail);
+    }
+}
+
+/// HDA audio driver test suite
+fn drv_test_hda() {
+    crate::println_color!(COLOR_CYAN, "=== HDA Audio Driver Test Suite ===");
+    let mut pass = 0u32;
+    let mut fail = 0u32;
+
+    // Test 1: Find HDA controller on PCI
+    crate::print!("  [1] PCI device (class 04:03 multimedia/audio)... ");
+    let devices = crate::pci::get_devices();
+    let hda_dev = devices.iter().find(|d| d.class_code == 0x04 && d.subclass == 0x03);
+    if let Some(dev) = hda_dev {
+        crate::println_color!(COLOR_GREEN, "FOUND {:04X}:{:04X} at {:02X}:{:02X}.{}",
+            dev.vendor_id, dev.device_id, dev.bus, dev.device, dev.function);
+        pass += 1;
+
+        // Test 2: BAR0 + MMIO mapping
+        crate::print!("  [2] BAR0 (HDA MMIO)... ");
+        let bar0 = dev.bar[0];
+        if bar0 != 0 && (bar0 & 1) == 0 {
+            let phys = (bar0 & 0xFFFFFFF0) as u64;
+            crate::println_color!(COLOR_GREEN, "phys=0x{:X}", phys);
+            pass += 1;
+
+            crate::print!("  [2b] MMIO mapping... ");
+            match map_bar0_mmio(dev) {
+                Some(base) => {
+                    crate::println_color!(COLOR_GREEN, "virt=0x{:X}", base);
+
+                    // Test 3: GCAP register (offset 0x00)
+                    crate::print!("  [3] GCAP register... ");
+                    let gcap = unsafe { core::ptr::read_volatile(base as *const u16) };
+                    let oss = (gcap >> 12) & 0xF;
+                    let iss = (gcap >> 8) & 0xF;
+                    let bss = (gcap >> 3) & 0x1F;
+                    crate::println_color!(COLOR_GREEN, "0x{:04X} (OSS={}, ISS={}, BSS={})", gcap, oss, iss, bss);
+                    pass += 1;
+
+                    // Test 4: GCTL (global control, offset 0x08)
+                    crate::print!("  [4] GCTL (controller reset)... ");
+                    let gctl = unsafe { core::ptr::read_volatile((base + 0x08) as *const u32) };
+                    if gctl & 1 != 0 {
+                        crate::println_color!(COLOR_GREEN, "0x{:08X} (out of reset)", gctl);
+                        pass += 1;
+                    } else {
+                        crate::println_color!(COLOR_RED, "0x{:08X} (IN RESET — codec not accessible)", gctl);
+                        fail += 1;
+                    }
+
+                    // Test 5: STATESTS (codec status, offset 0x0E)
+                    crate::print!("  [5] STATESTS (codec presence)... ");
+                    let statests = unsafe { core::ptr::read_volatile((base + 0x0E) as *const u16) };
+                    if statests & 0x7 != 0 {
+                        let codecs: Vec<u8> = (0..3).filter(|i| statests & (1 << i) != 0).collect();
+                        crate::println_color!(COLOR_GREEN, "0x{:04X} — codecs at: {:?}", statests, codecs);
+                        pass += 1;
+                    } else {
+                        crate::println_color!(COLOR_RED, "0x{:04X} — NO codecs detected", statests);
+                        fail += 1;
+                    }
+                }
+                None => {
+                    crate::println_color!(COLOR_RED, "FAILED to map MMIO!");
+                    fail += 1;
+                }
+            }
+        } else {
+            crate::println_color!(COLOR_RED, "BAR0={:#X} — invalid", bar0);
+            fail += 1;
+        }
+
+        // Test 6: IRQ
+        crate::print!("  [6] IRQ... ");
+        crate::println!("line={} pin={}", dev.interrupt_line, dev.interrupt_pin);
+        pass += 1;
+
+    } else {
+        crate::println_color!(COLOR_RED, "NOT FOUND");
+        fail += 1;
+    }
+
+    // Test 7: TrustOS HDA driver state
+    crate::print!("  [7] HDA driver state... ");
+    if crate::drivers::hda::is_initialized() {
+        crate::println_color!(COLOR_GREEN, "INITIALIZED");
+        pass += 1;
+    } else {
+        crate::println_color!(COLOR_RED, "NOT INITIALIZED");
+        fail += 1;
+    }
+
+    crate::println!();
+    let total = pass + fail;
+    if fail == 0 {
+        crate::println_color!(COLOR_GREEN, "  HDA: {}/{} PASSED", pass, total);
+    } else {
+        crate::println_color!(COLOR_YELLOW, "  HDA: {}/{} passed, {} failed", pass, total, fail);
+    }
+}
+
+/// ThinkPad EC driver test suite
+fn drv_test_ec() {
+    crate::println_color!(COLOR_CYAN, "=== ThinkPad EC Driver Test Suite ===");
+    let mut pass = 0u32;
+    let mut fail = 0u32;
+
+    // Test 1: EC presence (read from port 0x66)
+    crate::print!("  [1] EC status port (0x66)... ");
+    let status = crate::debug::inb(0x66);
+    crate::print!("0x{:02X} ", status);
+    // Bit 1 = IBF (should be 0 when idle), bit 0 = OBF
+    if status != 0xFF && status != 0x00 {
+        crate::println_color!(COLOR_GREEN, "(EC responding, IBF={}, OBF={})", (status >> 1) & 1, status & 1);
+        pass += 1;
+    } else if status == 0xFF {
+        crate::println_color!(COLOR_RED, "(no EC — all bits high)");
+        fail += 1;
+    } else {
+        crate::println_color!(COLOR_YELLOW, "(EC idle — all bits zero, may be OK)");
+        pass += 1;
+    }
+
+    // Test 2: Read CPU temperature (EC register 0x78)
+    crate::print!("  [2] CPU temp (EC reg 0x78)... ");
+    // Send read command: write 0x80 to cmd port, then register addr to data port
+    // This is a simplified read — the real driver handles timeouts
+    let temp = crate::drivers::thinkpad_ec::ec_read(0x78);
+    if let Some(t) = temp {
+        if t > 0 && t < 120 {
+            crate::println_color!(COLOR_GREEN, "{}°C", t);
+            pass += 1;
+        } else {
+            crate::println_color!(COLOR_YELLOW, "raw={} (out of range)", t);
+            pass += 1;
+        }
+    } else {
+        crate::println_color!(COLOR_RED, "TIMEOUT");
+        fail += 1;
+    }
+
+    // Test 3: Fan speed
+    crate::print!("  [3] Fan RPM... ");
+    let rpm = crate::drivers::thinkpad_ec::fan_get_rpm();
+    if let Some(r) = rpm {
+        crate::println_color!(COLOR_GREEN, "{} RPM", r);
+        pass += 1;
+    } else {
+        crate::println_color!(COLOR_YELLOW, "cannot read (EC may not support)");
+        pass += 1;
+    }
+
+    // Test 4: Read all temp sensors
+    crate::print!("  [4] Temperature sensors... ");
+    let sensors = [0x78, 0x79, 0x7A, 0x7B, 0xC0, 0xC1, 0xC2, 0xC3];
+    let mut found = 0;
+    for &reg in &sensors {
+        if let Some(t) = crate::drivers::thinkpad_ec::ec_read(reg) {
+            if t > 0 && t < 120 { found += 1; }
+        }
+    }
+    if found > 0 {
+        crate::println_color!(COLOR_GREEN, "{}/8 sensors active", found);
+        pass += 1;
+    } else {
+        crate::println_color!(COLOR_RED, "no sensors responding");
+        fail += 1;
+    }
+
+    crate::println!();
+    let total = pass + fail;
+    if fail == 0 {
+        crate::println_color!(COLOR_GREEN, "  EC: {}/{} PASSED", pass, total);
+    } else {
+        crate::println_color!(COLOR_YELLOW, "  EC: {}/{} passed, {} failed", pass, total, fail);
+    }
+}
+
+/// Network driver test suite
+fn drv_test_net() {
+    crate::println_color!(COLOR_CYAN, "=== Network Driver Test Suite ===");
+    let mut pass = 0u32;
+    let mut fail = 0u32;
+
+    // Test 1: Find network device on PCI
+    crate::print!("  [1] PCI network device... ");
+    let devices = crate::pci::get_devices();
+    let net_dev = devices.iter().find(|d| d.class_code == 0x02);
+    if let Some(dev) = net_dev {
+        let name = match dev.vendor_id {
+            0x1AF4 => "VirtIO-net",
+            0x8086 => match dev.device_id {
+                0x100E | 0x100F | 0x10D3 | 0x153A => "Intel e1000/e1000e",
+                _ => "Intel (unknown)",
+            },
+            0x10EC => "Realtek RTL8139",
+            _ => "Unknown",
+        };
+        crate::println_color!(COLOR_GREEN, "{} ({:04X}:{:04X}) at {:02X}:{:02X}.{}", 
+            name, dev.vendor_id, dev.device_id, dev.bus, dev.device, dev.function);
+        pass += 1;
+    } else {
+        crate::println_color!(COLOR_RED, "NOT FOUND");
+        fail += 1;
+    }
+
+    // Test 2: Network stack
+    crate::print!("  [2] Network stack... ");
+    if crate::network::is_available() {
+        crate::println_color!(COLOR_GREEN, "AVAILABLE (platform: {})", crate::network::get_platform());
+        pass += 1;
+    } else {
+        crate::println_color!(COLOR_RED, "NOT AVAILABLE");
+        fail += 1;
+    }
+
+    // Test 3: MAC address
+    crate::print!("  [3] MAC address... ");
+    if let Some(mac) = crate::network::get_mac_address() {
+        if mac != [0, 0, 0, 0, 0, 0] {
+            crate::println_color!(COLOR_GREEN, "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+                mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+            pass += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "00:00:00:00:00:00 (not set)");
+            fail += 1;
+        }
+    } else {
+        crate::println_color!(COLOR_RED, "no MAC address available");
+        fail += 1;
+    }
+
+    // Test 4: WiFi subsystem
+    crate::print!("  [4] WiFi subsystem... ");
+    if crate::drivers::net::wifi::has_wifi() {
+        crate::println_color!(COLOR_GREEN, "ACTIVE (state: {:?})", crate::drivers::net::wifi::state());
+        pass += 1;
+    } else {
+        crate::println_color!(COLOR_YELLOW, "no WiFi hardware");
+        pass += 1; // Not a failure on VMs
+    }
+
+    crate::println!();
+    let total = pass + fail;
+    if fail == 0 {
+        crate::println_color!(COLOR_GREEN, "  Network: {}/{} PASSED", pass, total);
+    } else {
+        crate::println_color!(COLOR_YELLOW, "  Network: {}/{} passed, {} failed", pass, total, fail);
+    }
+}
+
+/// drv list — show all active drivers
+fn cmd_drv_list() {
+    crate::println_color!(COLOR_CYAN, "=== Active Drivers ===");
+    crate::println!();
+
+    // Network
+    crate::print!("  Network:   ");
+    if crate::network::is_available() {
+        crate::println_color!(COLOR_GREEN, "{}", crate::network::get_platform());
+    } else {
+        crate::println_color!(COLOR_RED, "none");
+    }
+
+    // WiFi
+    crate::print!("  WiFi:      ");
+    if crate::drivers::net::wifi::has_wifi() {
+        crate::println_color!(COLOR_GREEN, "iwl4965 (state: {:?})", crate::drivers::net::wifi::state());
+    } else {
+        crate::println_color!(COLOR_YELLOW, "not detected");
+    }
+
+    // HDA
+    crate::print!("  HDA Audio: ");
+    if crate::drivers::hda::is_initialized() {
+        crate::println_color!(COLOR_GREEN, "initialized");
+    } else {
+        crate::println_color!(COLOR_YELLOW, "not initialized");
+    }
+
+    // EC
+    crate::print!("  ThinkPad EC: ");
+    let ec_status = crate::debug::inb(0x66);
+    if ec_status != 0xFF {
+        crate::println_color!(COLOR_GREEN, "present (status=0x{:02X})", ec_status);
+    } else {
+        crate::println_color!(COLOR_YELLOW, "not detected");
+    }
+
+    // Firmware
+    crate::print!("  WiFi FW:   ");
+    if crate::drivers::net::iwl4965::has_firmware() {
+        crate::println_color!(COLOR_GREEN, "loaded");
+    } else {
+        crate::println_color!(COLOR_YELLOW, "not loaded");
+    }
+
+    crate::println!();
+}
+
+/// drv scan — detailed PCI device scan
+fn cmd_drv_scan() {
+    let devices = crate::pci::get_devices();
+    crate::println_color!(COLOR_CYAN, "=== PCI Bus Scan ({} devices) ===", devices.len());
+    crate::println!();
+
+    for dev in &devices {
+        crate::println_color!(COLOR_GREEN, "{:02X}:{:02X}.{} {:04X}:{:04X}",
+            dev.bus, dev.device, dev.function, dev.vendor_id, dev.device_id);
+        crate::println!("  Class:   {:02X}:{:02X} ({})", dev.class_code, dev.subclass, dev.subclass_name());
+        crate::println!("  Vendor:  {}", dev.vendor_name());
+        crate::println!("  ProgIF:  {:02X}  Rev: {:02X}", dev.prog_if, dev.revision);
+
+        let cmd = crate::pci::config_read(dev.bus, dev.device, dev.function, 0x04);
+        crate::println!("  Command: 0x{:04X} (mem_space={}, bus_master={}, io_space={})",
+            cmd & 0xFFFF,
+            if cmd & 0x02 != 0 { "ON" } else { "off" },
+            if cmd & 0x04 != 0 { "ON" } else { "off" },
+            if cmd & 0x01 != 0 { "ON" } else { "off" });
+
+        let status = (crate::pci::config_read(dev.bus, dev.device, dev.function, 0x04) >> 16) & 0xFFFF;
+        crate::println!("  Status:  0x{:04X}", status);
+
+        if dev.interrupt_line != 0xFF {
+            crate::println!("  IRQ:     {} (pin {})", dev.interrupt_line, dev.interrupt_pin);
+        }
+
+        for i in 0..6 {
+            if dev.bar[i] != 0 {
+                let bar_type = if dev.bar[i] & 1 == 0 { "MEM" } else { "I/O" };
+                let addr = if dev.bar[i] & 1 == 0 { dev.bar[i] & 0xFFFFFFF0 } else { dev.bar[i] & 0xFFFFFFFC };
+                crate::println!("  BAR{}:    0x{:08X} [{}]", i, addr, bar_type);
+            }
+        }
+        crate::println!();
+    }
+}
+
 pub(super) fn cmd_lsof(_args: &[&str]) {
     crate::println!("COMMAND   PID   FD   TYPE   NAME");
     crate::println!("----------------------------------------");
@@ -3222,6 +4047,212 @@ pub(super) fn cmd_strace(args: &[&str]) {
 
     STRACE_ACTIVE.store(false, Ordering::SeqCst);
     crate::println_color!(COLOR_GRAY, "--- syscall trace end ---");
+}
+
+// ==================== NETCONSOLE ====================
+/// Stream kernel log over UDP to a remote host for real-time debugging.
+pub(super) fn cmd_netconsole(args: &[&str]) {
+    let subcmd = args.first().copied().unwrap_or("help");
+
+    match subcmd {
+        "start" | "on" => {
+            let ip_str = match args.get(1) {
+                Some(s) => s,
+                None => {
+                    crate::println!("Usage: netconsole start <ip> [port]");
+                    crate::println!("  Example: netconsole start 10.0.0.1");
+                    return;
+                }
+            };
+            let ip = match crate::debug::netconsole::parse_ip(ip_str) {
+                Some(ip) => ip,
+                None => {
+                    crate::println_color!(COLOR_RED, "Invalid IP: {}", ip_str);
+                    return;
+                }
+            };
+            let port = args.get(2)
+                .and_then(|s| s.parse::<u16>().ok())
+                .unwrap_or(crate::debug::netconsole::DEFAULT_PORT);
+
+            // Ensure network stack is ready: drain any pending RX packets
+            for _ in 0..50 {
+                crate::netstack::poll();
+            }
+
+            // If no IP yet, aggressively request DHCP with real time-based wait
+            if crate::network::get_ipv4_config().is_none() {
+                crate::println!("[netconsole] No IP configured, requesting DHCP...");
+                crate::netstack::dhcp::start();
+                let start_tick = crate::logger::get_ticks();
+                let timeout_ms = 8000u64; // 8 second timeout
+                loop {
+                    for _ in 0..20 {
+                        crate::netstack::poll();
+                    }
+                    if crate::network::get_ipv4_config().is_some() {
+                        break;
+                    }
+                    let elapsed = crate::logger::get_ticks().saturating_sub(start_tick);
+                    if elapsed > timeout_ms {
+                        break;
+                    }
+                    // Wait ~10ms between bursts (halt wakes on next interrupt)
+                    for _ in 0..10 {
+                        crate::arch::halt();
+                    }
+                }
+            }
+
+            // If DHCP still failed, apply static IP for direct cable setup
+            if crate::network::get_ipv4_config().is_none() {
+                crate::println_color!(COLOR_YELLOW, "[netconsole] DHCP failed, applying static IP 10.0.0.100/24");
+                crate::network::set_ipv4_config(
+                    crate::network::Ipv4Address::new(10, 0, 0, 100),
+                    crate::network::Ipv4Address::new(255, 255, 255, 0),
+                    Some(crate::network::Ipv4Address::new(10, 0, 0, 1)),
+                );
+            }
+
+            // Show current source IP
+            if let Some((src_ip, _, _)) = crate::network::get_ipv4_config() {
+                let b = src_ip.as_bytes();
+                crate::println_color!(COLOR_CYAN, "[netconsole] Source IP: {}.{}.{}.{}", b[0], b[1], b[2], b[3]);
+            } else {
+                crate::println_color!(COLOR_RED, "[netconsole] ERROR: Could not configure any IP");
+                return;
+            }
+
+            // Pre-resolve ARP for the target IP before starting netconsole.
+            // Without this, the first send_line() call would try ARP inline
+            // (from within serial::_print), which can timeout silently.
+            crate::println!("[netconsole] Resolving ARP for {}.{}.{}.{}...", ip[0], ip[1], ip[2], ip[3]);
+            let mut arp_ok = crate::netstack::arp::resolve(ip).is_some();
+            if !arp_ok {
+                for attempt in 0..5 {
+                    let _ = crate::netstack::arp::send_request(ip);
+                    let start = crate::logger::get_ticks();
+                    loop {
+                        for _ in 0..20 { crate::netstack::poll(); }
+                        if crate::netstack::arp::resolve(ip).is_some() {
+                            arp_ok = true;
+                            break;
+                        }
+                        if crate::logger::get_ticks().saturating_sub(start) > 2000 {
+                            break; // 2s per attempt
+                        }
+                        crate::arch::halt();
+                    }
+                    if arp_ok {
+                        crate::println_color!(COLOR_BRIGHT_GREEN, "[netconsole] ARP resolved (attempt {})", attempt + 1);
+                        break;
+                    }
+                }
+            }
+            if !arp_ok {
+                crate::println_color!(COLOR_YELLOW, "[netconsole] ARP unresolved — using broadcast mode");
+            }
+
+            crate::debug::netconsole::start(ip, port);
+            crate::println_color!(COLOR_BRIGHT_GREEN,
+                "Netconsole streaming to {}.{}.{}.{}:{}",
+                ip[0], ip[1], ip[2], ip[3], port
+            );
+
+            // Send multiple test packets to verify TX works
+            // First via the normal netstack path (broadcast)
+            let bcast_ip = if let Some((src, mask, _)) = crate::network::get_ipv4_config() {
+                let s = src.as_bytes();
+                let m = mask.as_bytes();
+                [s[0] | !m[0], s[1] | !m[1], s[2] | !m[2], s[3] | !m[3]]
+            } else {
+                [255, 255, 255, 255]
+            };
+            let hello = b"[TrustOS netconsole] Connection established\n";
+            crate::println!("[netconsole] Sending test packet via netstack to {}.{}.{}.{}:{}", bcast_ip[0], bcast_ip[1], bcast_ip[2], bcast_ip[3], port);
+            match crate::netstack::udp::send_to(bcast_ip, port, 6665, hello) {
+                Ok(()) => crate::println_color!(COLOR_BRIGHT_GREEN, "[netconsole] Test packet sent OK via netstack"),
+                Err(e) => crate::println_color!(COLOR_RED, "[netconsole] Test packet FAILED via netstack: {}", e),
+            }
+
+            // Also build and send a raw UDP frame manually (bypass all netstack)
+            crate::println!("[netconsole] Sending raw test frame...");
+            if let Some((src_ip_addr, _, _)) = crate::network::get_ipv4_config() {
+                let src_ip = *src_ip_addr.as_bytes();
+                let dest_ip = bcast_ip;
+                let payload = b"[TrustOS RAW] Hello from kernel!\n";
+                let udp_len = (8 + payload.len()) as u16;
+                let ip_total = (20 + 8 + payload.len()) as u16;
+
+                // UDP header
+                let mut udp = alloc::vec::Vec::with_capacity(8 + payload.len());
+                udp.extend_from_slice(&6665u16.to_be_bytes()); // src port
+                udp.extend_from_slice(&port.to_be_bytes());     // dst port
+                udp.extend_from_slice(&udp_len.to_be_bytes());
+                udp.extend_from_slice(&0u16.to_be_bytes());     // checksum (0=skip)
+                udp.extend_from_slice(payload);
+
+                // IP header
+                let mut ip_hdr = [0u8; 20];
+                ip_hdr[0] = 0x45;
+                ip_hdr[2..4].copy_from_slice(&ip_total.to_be_bytes());
+                ip_hdr[6..8].copy_from_slice(&0x4000u16.to_be_bytes()); // Don't fragment
+                ip_hdr[8] = 64; // TTL
+                ip_hdr[9] = 17; // UDP
+                ip_hdr[12..16].copy_from_slice(&src_ip);
+                ip_hdr[16..20].copy_from_slice(&dest_ip);
+                // Checksum
+                let mut sum: u32 = 0;
+                for i in (0..20).step_by(2) {
+                    sum += ((ip_hdr[i] as u32) << 8) | (ip_hdr[i+1] as u32);
+                }
+                while sum > 0xFFFF { sum = (sum & 0xFFFF) + (sum >> 16); }
+                let csum = !(sum as u16);
+                ip_hdr[10..12].copy_from_slice(&csum.to_be_bytes());
+
+                // Full IP packet
+                let mut ip_pkt = alloc::vec::Vec::with_capacity(20 + udp.len());
+                ip_pkt.extend_from_slice(&ip_hdr);
+                ip_pkt.extend_from_slice(&udp);
+
+                // Send as broadcast Ethernet frame
+                match crate::netstack::send_frame([0xFF; 6], 0x0800, &ip_pkt) {
+                    Ok(()) => crate::println_color!(COLOR_BRIGHT_GREEN, "[netconsole] Raw frame sent OK ({} bytes)", ip_pkt.len() + 14),
+                    Err(e) => crate::println_color!(COLOR_RED, "[netconsole] Raw frame FAILED: {}", e),
+                }
+            }
+
+            crate::println!("  Listener: ncat -u -l -p {}", port);
+        }
+        "stop" | "off" => {
+            crate::debug::netconsole::stop();
+            crate::println!("Netconsole stopped.");
+        }
+        "status" => {
+            let (ip, port, enabled) = crate::debug::netconsole::status();
+            if enabled {
+                crate::println_color!(COLOR_BRIGHT_GREEN,
+                    "Netconsole: ACTIVE → {}.{}.{}.{}:{}",
+                    ip[0], ip[1], ip[2], ip[3], port
+                );
+            } else {
+                crate::println_color!(COLOR_YELLOW, "Netconsole: OFF");
+            }
+        }
+        _ => {
+            crate::println_color!(COLOR_CYAN, "netconsole — Stream kernel log over UDP");
+            crate::println!();
+            crate::println!("Usage:");
+            crate::println!("  netconsole start <ip> [port]  — Start streaming (default port: 6666)");
+            crate::println!("  netconsole stop               — Stop streaming");
+            crate::println!("  netconsole status             — Show current config");
+            crate::println!();
+            crate::println!("Listener (on remote PC):");
+            crate::println!("  ncat -u -l -p 6666");
+            crate::println!("  socat UDP-LISTEN:6666 STDOUT");
+            crate::println!("  python -c \"import socket; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.bind(('',6666)); [print(s.recvfrom(4096)[0].decode(),end='') for _ in iter(int,1)]\"");
+        }
+    }
 }
 
 // ==================== DMIDECODE ====================

@@ -2,359 +2,359 @@
 
 
 
-use alloc::string::{String, Gd};
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use alloc::vec;
 
-use super::{Su, HtmlNode, HtmlElement, Wz};
-use super::css_parser::{self, CssValue, FontWeight, FontStyle as Ctp, Sa, Mj, Yt, SelectorPart};
+use super::{Ia, HtmlNode, HtmlElement, Jy};
+use super::css_parser::{self, CssValue, FontWeight, FontStyle as CssFontStyle, Ho, Fd, Kq, SelectorPart};
 use crate::framebuffer;
 
 
-const MF_: u32 = 0xFFFFFFFF;           
-const CI_: u32 = 0xFF1A1A1A;         
-const AOI_: u32 = 0xFF0066CC;         
-const DFK_: u32 = 0xFF551A8B; 
-const DFI_: u32 = 0xFF000000;      
-const BMZ_: u32 = 0xFFF5F5F5;      
-const DFG_: u32 = 0xFFD63384;         
-const AOF_: u32 = 0xFFCCCCCC;           
-const BNL_: u32 = 0xFF0066CC; 
-const DFQ_: u32 = 0xFFF0F7FF;     
+const ND_: u32 = 0xFFFFFFFF;           
+const CM_: u32 = 0xFF1A1A1A;         
+const AQI_: u32 = 0xFF0066CC;         
+const DJD_: u32 = 0xFF551A8B; 
+const DJB_: u32 = 0xFF000000;      
+const BPR_: u32 = 0xFFF5F5F5;      
+const DIZ_: u32 = 0xFFD63384;         
+const AQF_: u32 = 0xFFCCCCCC;           
+const BQD_: u32 = 0xFF0066CC; 
+const DJJ_: u32 = 0xFFF0F7FF;     
 
 
 pub struct RenderContext {
-    pub b: i32,
-    pub c: i32,
-    pub dtb: u32,
-    pub acg: i32,
-    pub asv: FontSize,
-    pub bpt: bool,
-    pub gkl: bool,
-    pub esk: Option<String>,
-    pub czh: Vec<Wz>,
-    pub eeq: i32,
-    pub gjs: bool,
+    pub x: i32,
+    pub y: i32,
+    pub max_width: u32,
+    pub line_height: i32,
+    pub font_size: FontSize,
+    pub bold: bool,
+    pub italic: bool,
+    pub in_link: Option<String>,
+    pub links: Vec<Jy>,
+    pub list_depth: i32,
+    pub in_pre: bool,
     
-    pub agx: u32,
+    pub text_color: u32,
     
-    pub vp: Option<u32>,
+    pub bg_color: Option<u32>,
     
-    pub adh: f32,
+    pub opacity: f32,
     
-    pub dde: bool,
-    pub dmb: bool,
+    pub underline: bool,
+    pub strikethrough: bool,
     
-    pub jdp: Vec<i32>,
+    pub list_counters: Vec<i32>,
     
-    pub gjr: bool,
+    pub in_ordered_list: bool,
 }
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum FontSize {
-    Ew,
-    M,
-    Ht,
-    Aiv,
-    Atj,
-    Atk,
+    Small,
+    Normal,
+    Large,
+    H1,
+    H2,
+    H3,
 }
 
 impl FontSize {
-    fn ac(&self) -> i32 {
+    fn height(&self) -> i32 {
         match self {
-            FontSize::Ew => 12,
-            FontSize::M => 16,
-            FontSize::Ht => 18,
-            FontSize::Aiv => 32,
-            FontSize::Atj => 26,
-            FontSize::Atk => 20,
+            FontSize::Small => 12,
+            FontSize::Normal => 16,
+            FontSize::Large => 18,
+            FontSize::H1 => 32,
+            FontSize::H2 => 26,
+            FontSize::H3 => 20,
         }
     }
 }
 
 impl RenderContext {
-    pub fn new(z: u32) -> Self {
+    pub fn new(width: u32) -> Self {
         Self {
-            b: 16,
-            c: 16,
-            dtb: z - 32,
-            acg: 20,
-            asv: FontSize::M,
-            bpt: false,
-            gkl: false,
-            esk: None,
-            czh: Vec::new(),
-            eeq: 0,
-            gjs: false,
-            agx: CI_,
-            vp: None,
-            adh: 1.0,
-            dde: false,
-            dmb: false,
-            jdp: Vec::new(),
-            gjr: false,
+            x: 16,
+            y: 16,
+            max_width: width - 32,
+            line_height: 20,
+            font_size: FontSize::Normal,
+            bold: false,
+            italic: false,
+            in_link: None,
+            links: Vec::new(),
+            list_depth: 0,
+            in_pre: false,
+            text_color: CM_,
+            bg_color: None,
+            opacity: 1.0,
+            underline: false,
+            strikethrough: false,
+            list_counters: Vec::new(),
+            in_ordered_list: false,
         }
     }
     
-    fn agr(&mut self) {
-        self.b = 16 + (self.eeq * 24);
-        self.c += self.acg;
+    fn newline(&mut self) {
+        self.x = 16 + (self.list_depth * 24);
+        self.y += self.line_height;
     }
     
-    fn atm(&mut self) {
-        self.b += 6;
+    fn space(&mut self) {
+        self.x += 6;
     }
 }
 
 
-pub fn vvy(
-    doc: &Su,
-    b: i32,
-    c: i32,
-    z: u32,
-    ac: u32,
-    ug: i32,
-) -> Vec<Wz> {
+pub fn ofl(
+    doc: &Ia,
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+    scroll_y: i32,
+) -> Vec<Jy> {
     
-    framebuffer::ah(b as u32, c as u32, z, ac, MF_);
+    framebuffer::fill_rect(x as u32, y as u32, width, height, ND_);
     
-    let mut be = RenderContext::new(z);
-    be.c = c - ug;
+    let mut ab = RenderContext::new(width);
+    ab.y = y - scroll_y;
     
     
-    let nhp = nsn(&doc.xq);
-    let eze = if !nhp.is_empty() {
-        css_parser::lsx(&nhp)
+    let hpa = hxn(&doc.nodes);
+    let cea = if !hpa.is_empty() {
+        css_parser::parse_stylesheet(&hpa)
     } else {
-        Mj { bib: Vec::new() }
+        Fd { rules: Vec::new() }
     };
     
     
-    for anq in &doc.xq {
-        pby(&mut be, anq, &eze, b, c, z, ac);
+    for uf in &doc.nodes {
+        izt(&mut ab, uf, &cea, x, y, width, height);
     }
     
-    be.czh
+    ab.links
 }
 
 
-fn pby(
-    be: &mut RenderContext,
-    anq: &HtmlNode,
-    eze: &Mj,
-    bgi: i32,
-    yk: i32,
-    axq: u32,
-    aom: u32,
+fn izt(
+    ab: &mut RenderContext,
+    uf: &HtmlNode,
+    cea: &Fd,
+    aex: i32,
+    lg: i32,
+    zt: u32,
+    ur: u32,
 ) {
-    match anq {
+    match uf {
         HtmlNode::Text(text) => {
-            vwr(be, text, bgi, yk, axq, aom);
+            ofr(ab, text, aex, lg, zt, ur);
         }
-        HtmlNode::Na(ij) => {
-            vvq(be, ij, eze, bgi, yk, axq, aom);
+        HtmlNode::Element(el) => {
+            ofj(ab, el, cea, aex, lg, zt, ur);
         }
     }
 }
 
 
-fn vwr(
-    be: &mut RenderContext,
+fn ofr(
+    ab: &mut RenderContext,
     text: &str,
-    bgi: i32,
-    yk: i32,
-    axq: u32,
-    aom: u32,
+    aex: i32,
+    lg: i32,
+    zt: u32,
+    ur: u32,
 ) {
-    let s = if be.esk.is_some() { AOI_ } else { be.agx };
+    let color = if ab.in_link.is_some() { AQI_ } else { ab.text_color };
     
     
-    if be.gjs {
-        for line in text.ak() {
-            vwa(be, line, s, bgi, yk, axq, aom);
-            be.agr();
+    if ab.in_pre {
+        for line in text.lines() {
+            ofm(ab, line, color, aex, lg, zt, ur);
+            ab.newline();
         }
         return;
     }
     
     
-    let aoh: Vec<&str> = text.ayt().collect();
+    let um: Vec<&str> = text.split_whitespace().collect();
     
-    for od in aoh {
-        let xve = od.len() as i32 * 8; 
+    for fx in um {
+        let puz = fx.len() as i32 * 8; 
         
         
-        if be.b + xve > (bgi + axq as i32 - 16) && be.b > 16 + (be.eeq * 24) {
-            be.agr();
+        if ab.x + puz > (aex + zt as i32 - 16) && ab.x > 16 + (ab.list_depth * 24) {
+            ab.newline();
         }
         
-        vxc(be, od, s, bgi, yk, axq, aom);
-        be.atm();
+        ofw(ab, fx, color, aex, lg, zt, ur);
+        ab.space();
     }
 }
 
-fn vxc(
-    be: &mut RenderContext,
-    od: &str,
-    s: u32,
-    bgi: i32,
-    yk: i32,
-    axq: u32,
-    aom: u32,
+fn ofw(
+    ab: &mut RenderContext,
+    fx: &str,
+    color: u32,
+    aex: i32,
+    lg: i32,
+    zt: u32,
+    ur: u32,
 ) {
     
-    if be.c + be.acg < yk || be.c > yk + aom as i32 {
-        be.b += od.len() as i32 * 8;
+    if ab.y + ab.line_height < lg || ab.y > lg + ur as i32 {
+        ab.x += fx.len() as i32 * 8;
         return;
     }
     
     
-    let eud = be.b;
+    let cbk = ab.x;
     
     
-    for r in od.bw() {
-        if be.b >= bgi && be.b < bgi + axq as i32 - 8 {
-            ahi(be.b as u32, be.c as u32, r, s);
+    for c in fx.chars() {
+        if ab.x >= aex && ab.x < aex + zt as i32 - 8 {
+            draw_char(ab.x as u32, ab.y as u32, c, color);
         }
-        be.b += 8;
+        ab.x += 8;
     }
     
     
-    if let Some(cae) = &be.esk {
-        be.czh.push(Wz {
-            cae: cae.clone(),
-            b: eud,
-            c: be.c,
-            z: (be.b - eud) as u32,
-            ac: be.acg as u32,
+    if let Some(href) = &ab.in_link {
+        ab.links.push(Jy {
+            href: href.clone(),
+            x: cbk,
+            y: ab.y,
+            width: (ab.x - cbk) as u32,
+            height: ab.line_height as u32,
         });
         
         
-        if be.c >= yk && be.c < yk + aom as i32 {
-            framebuffer::ah(
-                eud as u32,
-                (be.c + be.acg - 2) as u32,
-                (be.b - eud) as u32,
+        if ab.y >= lg && ab.y < lg + ur as i32 {
+            framebuffer::fill_rect(
+                cbk as u32,
+                (ab.y + ab.line_height - 2) as u32,
+                (ab.x - cbk) as u32,
                 1,
-                AOI_,
+                AQI_,
             );
         }
     }
     
     
-    if be.dde && be.esk.is_none() {
-        let d = (be.b - eud) as u32;
-        if d > 0 && be.c >= yk && be.c < yk + aom as i32 {
-            framebuffer::ah(
-                eud as u32,
-                (be.c + be.acg - 2) as u32,
-                d, 1, s,
+    if ab.underline && ab.in_link.is_none() {
+        let w = (ab.x - cbk) as u32;
+        if w > 0 && ab.y >= lg && ab.y < lg + ur as i32 {
+            framebuffer::fill_rect(
+                cbk as u32,
+                (ab.y + ab.line_height - 2) as u32,
+                w, 1, color,
             );
         }
     }
     
     
-    if be.dmb {
-        let d = (be.b - eud) as u32;
-        if d > 0 && be.c >= yk && be.c < yk + aom as i32 {
-            framebuffer::ah(
-                eud as u32,
-                (be.c + be.acg / 2) as u32,
-                d, 1, be.agx,
+    if ab.strikethrough {
+        let w = (ab.x - cbk) as u32;
+        if w > 0 && ab.y >= lg && ab.y < lg + ur as i32 {
+            framebuffer::fill_rect(
+                cbk as u32,
+                (ab.y + ab.line_height / 2) as u32,
+                w, 1, ab.text_color,
             );
         }
     }
 }
 
-fn vwa(
-    be: &mut RenderContext,
+fn ofm(
+    ab: &mut RenderContext,
     line: &str,
-    s: u32,
-    bgi: i32,
-    yk: i32,
-    axq: u32,
-    aom: u32,
+    color: u32,
+    aex: i32,
+    lg: i32,
+    zt: u32,
+    ur: u32,
 ) {
-    if be.c + be.acg < yk || be.c > yk + aom as i32 {
+    if ab.y + ab.line_height < lg || ab.y > lg + ur as i32 {
         return;
     }
     
-    for r in line.bw() {
-        if be.b >= bgi && be.b < bgi + axq as i32 - 8 {
-            ahi(be.b as u32, be.c as u32, r, s);
+    for c in line.chars() {
+        if ab.x >= aex && ab.x < aex + zt as i32 - 8 {
+            draw_char(ab.x as u32, ab.y as u32, c, color);
         }
-        be.b += 8;
+        ab.x += 8;
     }
 }
 
 
-fn vvq(
-    be: &mut RenderContext,
-    ij: &HtmlElement,
-    eze: &Mj,
-    bgi: i32,
-    yk: i32,
-    axq: u32,
-    aom: u32,
+fn ofj(
+    ab: &mut RenderContext,
+    el: &HtmlElement,
+    cea: &Fd,
+    aex: i32,
+    lg: i32,
+    zt: u32,
+    ur: u32,
 ) {
-    let ll = ij.ll.as_str();
+    let tag = el.tag.as_str();
     
     
-    if oh!(ll, "head" | "script" | "style" | "meta" | "link" | "title") {
+    if matches!(tag, "head" | "script" | "style" | "meta" | "link" | "title") {
         return;
     }
     
     
-    let jnn = be.asv;
-    let pfp = be.bpt;
-    let pfq = be.esk.clone();
-    let pfu = be.gjs;
-    let pfx = be.agx;
-    let pfo = be.vp;
-    let pfs = be.adh;
-    let pfy = be.dde;
-    let pfw = be.dmb;
-    let pft = be.gjr;
+    let ezk = ab.font_size;
+    let jcq = ab.bold;
+    let jcr = ab.in_link.clone();
+    let jcu = ab.in_pre;
+    let jcw = ab.text_color;
+    let jcp = ab.bg_color;
+    let jcs = ab.opacity;
+    let jcx = ab.underline;
+    let jcv = ab.strikethrough;
+    let jct = ab.in_ordered_list;
     
     
-    if let Some(mhz) = ij.qn("style") {
-        qjx(be, mhz);
+    if let Some(style_str) = el.attr("style") {
+        jxd(ab, style_str);
     }
     
     
-    qkb(be, ij, eze);
+    jxf(ab, el, cea);
     
     
-    if let Some(kjx) = ij.qn("color") {
-        if let Some(r) = lsl(kjx) {
-            be.agx = r;
+    if let Some(fnu) = el.attr("color") {
+        if let Some(c) = gmk(fnu) {
+            ab.text_color = c;
         }
     }
-    if let Some(qpm) = ij.qn("bgcolor") {
-        if let Some(r) = lsl(qpm) {
-            be.vp = Some(r);
+    if let Some(bgcolor_str) = el.attr("bgcolor") {
+        if let Some(c) = gmk(bgcolor_str) {
+            ab.bg_color = Some(c);
         }
     }
     
     
-    if be.c >= i32::O / 4 {
-        be.asv = jnn;
-        be.acg = jnn.ac() + 4;
-        be.bpt = pfp;
-        be.esk = pfq;
-        be.gjs = pfu;
-        be.agx = pfx;
-        be.vp = pfo;
-        be.adh = pfs;
-        be.dde = pfy;
-        be.dmb = pfw;
-        be.gjr = pft;
+    if ab.y >= i32::MAX / 4 {
+        ab.font_size = ezk;
+        ab.line_height = ezk.height() + 4;
+        ab.bold = jcq;
+        ab.in_link = jcr;
+        ab.in_pre = jcu;
+        ab.text_color = jcw;
+        ab.bg_color = jcp;
+        ab.opacity = jcs;
+        ab.underline = jcx;
+        ab.strikethrough = jcv;
+        ab.in_ordered_list = jct;
         return;
     }
     
     
-    match ll {
+    match tag {
         
         "html" | "body" | "div" | "section" | "article" | "nav" | "header" | "footer" | "main" | 
         "noscript" | "span" | "form" | "label" | "fieldset" | "legend" | "details" | "summary" |
@@ -364,66 +364,66 @@ fn vvq(
         }
         
         "p" => {
-            be.agr();
-            be.c += 8; 
+            ab.newline();
+            ab.y += 8; 
         }
         
         "br" => {
-            be.agr();
+            ab.newline();
         }
         
         "hr" => {
-            be.agr();
-            be.c += 8;
-            if be.c >= yk && be.c < yk + aom as i32 {
-                framebuffer::ah(
-                    (bgi + 16) as u32,
-                    be.c as u32,
-                    axq - 32,
+            ab.newline();
+            ab.y += 8;
+            if ab.y >= lg && ab.y < lg + ur as i32 {
+                framebuffer::fill_rect(
+                    (aex + 16) as u32,
+                    ab.y as u32,
+                    zt - 32,
                     1,
-                    AOF_,
+                    AQF_,
                 );
             }
-            be.c += 16;
-            be.b = 16;
+            ab.y += 16;
+            ab.x = 16;
         }
         
         "h1" => {
-            be.agr();
-            be.c += 16;
-            be.asv = FontSize::Aiv;
-            be.acg = 40;
-            be.bpt = true;
+            ab.newline();
+            ab.y += 16;
+            ab.font_size = FontSize::H1;
+            ab.line_height = 40;
+            ab.bold = true;
         }
         
         "h2" => {
-            be.agr();
-            be.c += 12;
-            be.asv = FontSize::Atj;
-            be.acg = 32;
-            be.bpt = true;
+            ab.newline();
+            ab.y += 12;
+            ab.font_size = FontSize::H2;
+            ab.line_height = 32;
+            ab.bold = true;
         }
         
         "h3" | "h4" | "h5" | "h6" => {
-            be.agr();
-            be.c += 8;
-            be.asv = FontSize::Atk;
-            be.acg = 26;
-            be.bpt = true;
+            ab.newline();
+            ab.y += 8;
+            ab.font_size = FontSize::H3;
+            ab.line_height = 26;
+            ab.bold = true;
         }
         
         "a" => {
-            if let Some(cae) = ij.qn("href") {
-                be.esk = Some(cae.to_string());
+            if let Some(href) = el.attr("href") {
+                ab.in_link = Some(href.to_string());
             }
         }
         
         "strong" | "b" => {
-            be.bpt = true;
+            ab.bold = true;
         }
         
         "em" | "i" => {
-            be.gkl = true;
+            ab.italic = true;
         }
         
         "code" => {
@@ -431,69 +431,69 @@ fn vvq(
         }
         
         "pre" => {
-            be.agr();
-            be.c += 8;
-            be.gjs = true;
+            ab.newline();
+            ab.y += 8;
+            ab.in_pre = true;
             
-            if be.c >= yk {
-                framebuffer::ah(
-                    (bgi + 8) as u32,
-                    be.c as u32,
-                    axq - 16,
+            if ab.y >= lg {
+                framebuffer::fill_rect(
+                    (aex + 8) as u32,
+                    ab.y as u32,
+                    zt - 16,
                     100, 
-                    BMZ_,
+                    BPR_,
                 );
             }
         }
         
         "blockquote" => {
-            be.agr();
-            be.c += 8;
-            be.eeq += 1;
+            ab.newline();
+            ab.y += 8;
+            ab.list_depth += 1;
             
-            if be.c >= yk {
-                framebuffer::ah(
-                    (bgi + 12) as u32,
-                    be.c as u32,
+            if ab.y >= lg {
+                framebuffer::fill_rect(
+                    (aex + 12) as u32,
+                    ab.y as u32,
                     4,
                     80,
-                    BNL_,
+                    BQD_,
                 );
             }
         }
         
         "ul" | "ol" => {
-            be.agr();
-            be.eeq += 1;
-            if ll == "ol" {
-                be.gjr = true;
-                be.jdp.push(0);
+            ab.newline();
+            ab.list_depth += 1;
+            if tag == "ol" {
+                ab.in_ordered_list = true;
+                ab.list_counters.push(0);
             }
         }
         
         "li" => {
-            be.agr();
+            ab.newline();
             
-            if be.c >= yk && be.c < yk + aom as i32 {
-                if be.gjr {
+            if ab.y >= lg && ab.y < lg + ur as i32 {
+                if ab.in_ordered_list {
                     
-                    if let Some(va) = be.jdp.dsq() {
-                        *va += 1;
-                        let ajh = alloc::format!("{}.", va);
-                        let uwq = be.b - 20;
-                        for (a, r) in ajh.bw().cf() {
-                            ahi((uwq + a as i32 * 8) as u32, be.c as u32, r, CI_);
+                    if let Some(counter) = ab.list_counters.last_mut() {
+                        *counter += 1;
+                        let rw = alloc::format!("{}.", counter);
+                        let nlz = ab.x - 20;
+                        for (i, c) in rw.chars().enumerate() {
+                            draw_char((nlz + i as i32 * 8) as u32, ab.y as u32, c, CM_);
                         }
                     }
                 } else {
                     
-                    let qup = be.b - 12;
-                    framebuffer::ah(
-                        qup as u32,
-                        (be.c + 6) as u32,
+                    let kge = ab.x - 12;
+                    framebuffer::fill_rect(
+                        kge as u32,
+                        (ab.y + 6) as u32,
                         4,
                         4,
-                        CI_,
+                        CM_,
                     );
                 }
             }
@@ -501,188 +501,188 @@ fn vvq(
         
         "img" => {
             
-            let bdj = ij.qn("alt").unwrap_or("");
-            let cy = ij.qn("src").unwrap_or("");
+            let adf = el.attr("alt").unwrap_or("");
+            let src = el.attr("src").unwrap_or("");
             
             
-            let gjp = ij.qn("width")
-                .and_then(|d| d.bdd("px").parse::<u32>().bq())
+            let czn = el.attr("width")
+                .and_then(|w| w.trim_end_matches("px").parse::<u32>().ok())
                 .unwrap_or(120)
-                .v(axq.ao(32))
-                .am(40);
-            let ede = ij.qn("height")
-                .and_then(|i| i.bdd("px").parse::<u32>().bq())
+                .min(zt.saturating_sub(32))
+                .max(40);
+            let bti = el.attr("height")
+                .and_then(|h| h.trim_end_matches("px").parse::<u32>().ok())
                 .unwrap_or(60)
-                .v(300)
-                .am(20);
+                .min(300)
+                .max(20);
             
-            if be.c >= yk && be.c < yk + aom as i32 {
+            if ab.y >= lg && ab.y < lg + ur as i32 {
                 
-                framebuffer::ah(be.b as u32, be.c as u32, gjp, ede, 0xFFF0F0F0);
+                framebuffer::fill_rect(ab.x as u32, ab.y as u32, czn, bti, 0xFFF0F0F0);
                 
-                framebuffer::ah(be.b as u32, be.c as u32, gjp, 1, 0xFFDDDDDD);
-                framebuffer::ah(be.b as u32, (be.c + ede as i32 - 1) as u32, gjp, 1, 0xFFDDDDDD);
-                framebuffer::ah(be.b as u32, be.c as u32, 1, ede, 0xFFDDDDDD);
-                framebuffer::ah((be.b + gjp as i32 - 1) as u32, be.c as u32, 1, ede, 0xFFDDDDDD);
+                framebuffer::fill_rect(ab.x as u32, ab.y as u32, czn, 1, 0xFFDDDDDD);
+                framebuffer::fill_rect(ab.x as u32, (ab.y + bti as i32 - 1) as u32, czn, 1, 0xFFDDDDDD);
+                framebuffer::fill_rect(ab.x as u32, ab.y as u32, 1, bti, 0xFFDDDDDD);
+                framebuffer::fill_rect((ab.x + czn as i32 - 1) as u32, ab.y as u32, 1, bti, 0xFFDDDDDD);
                 
                 
-                let trg = "[IMG]";
-                let bel = be.b + (gjp as i32 / 2) - 20;
-                let bem = be.c + (ede as i32 / 2) - 12;
-                if ede > 24 {
-                    for (a, r) in trg.bw().cf() {
-                        ahi((bel + a as i32 * 8) as u32, bem as u32, r, 0xFF999999);
+                let mni = "[IMG]";
+                let adt = ab.x + (czn as i32 / 2) - 20;
+                let adu = ab.y + (bti as i32 / 2) - 12;
+                if bti > 24 {
+                    for (i, c) in mni.chars().enumerate() {
+                        draw_char((adt + i as i32 * 8) as u32, adu as u32, c, 0xFF999999);
                     }
                 }
                 
                 
-                let dgj = if !bdj.is_empty() {
-                    bdj
-                } else if !cy.is_empty() {
-                    cy.cmm('/').next().unwrap_or(cy)
+                let bga = if !adf.is_empty() {
+                    adf
+                } else if !src.is_empty() {
+                    src.rsplit('/').next().unwrap_or(src)
                 } else {
                     ""
                 };
-                if !dgj.is_empty() && ede > 40 {
-                    let aem = (gjp / 8).ao(2) as usize;
-                    let wg = be.b + 8;
-                    let sl = be.c + (ede as i32 / 2) + 4;
-                    for (a, r) in dgj.bw().take(aem).cf() {
-                        ahi((wg + a as i32 * 8) as u32, sl as u32, r, 0xFF666666);
+                if !bga.is_empty() && bti > 40 {
+                    let nd = (czn / 8).saturating_sub(2) as usize;
+                    let kd = ab.x + 8;
+                    let ie = ab.y + (bti as i32 / 2) + 4;
+                    for (i, c) in bga.chars().take(nd).enumerate() {
+                        draw_char((kd + i as i32 * 8) as u32, ie as u32, c, 0xFF666666);
                     }
                 }
             }
-            be.c += ede as i32 + 4;
+            ab.y += bti as i32 + 4;
         }
         
         "table" => {
-            be.agr();
-            be.c += 8;
+            ab.newline();
+            ab.y += 8;
         }
         
         "tr" => {
-            be.agr();
+            ab.newline();
         }
         
         "td" | "th" => {
-            be.b += 16;
+            ab.x += 16;
         }
         
         "input" => {
-            let tvc = ij.qn("type").unwrap_or("text");
-            match tvc {
+            let mqo = el.attr("type").unwrap_or("text");
+            match mqo {
                 "hidden" => {
                     return;
                 }
                 "submit" | "button" => {
                     
-                    let bn = ij.qn("value").unwrap_or("Submit");
-                    let hbn = (bn.len() as u32 * 8) + 24;
-                    let dzf = 28u32;
-                    if be.c >= yk && be.c < yk + aom as i32 {
-                        framebuffer::ah(be.b as u32, be.c as u32, hbn, dzf, 0xFFE8E8E8);
+                    let value = el.attr("value").unwrap_or("Submit");
+                    let dju = (value.len() as u32 * 8) + 24;
+                    let bqw = 28u32;
+                    if ab.y >= lg && ab.y < lg + ur as i32 {
+                        framebuffer::fill_rect(ab.x as u32, ab.y as u32, dju, bqw, 0xFFE8E8E8);
                         
-                        framebuffer::ah(be.b as u32, be.c as u32, hbn, 1, 0xFFBBBBBB);
-                        framebuffer::ah(be.b as u32, (be.c + dzf as i32 - 1) as u32, hbn, 1, 0xFFBBBBBB);
-                        framebuffer::ah(be.b as u32, be.c as u32, 1, dzf, 0xFFBBBBBB);
-                        framebuffer::ah((be.b + hbn as i32 - 1) as u32, be.c as u32, 1, dzf, 0xFFBBBBBB);
-                        for (a, r) in bn.bw().cf() {
-                            ahi((be.b + 12 + a as i32 * 8) as u32, (be.c + 6) as u32, r, CI_);
+                        framebuffer::fill_rect(ab.x as u32, ab.y as u32, dju, 1, 0xFFBBBBBB);
+                        framebuffer::fill_rect(ab.x as u32, (ab.y + bqw as i32 - 1) as u32, dju, 1, 0xFFBBBBBB);
+                        framebuffer::fill_rect(ab.x as u32, ab.y as u32, 1, bqw, 0xFFBBBBBB);
+                        framebuffer::fill_rect((ab.x + dju as i32 - 1) as u32, ab.y as u32, 1, bqw, 0xFFBBBBBB);
+                        for (i, c) in value.chars().enumerate() {
+                            draw_char((ab.x + 12 + i as i32 * 8) as u32, (ab.y + 6) as u32, c, CM_);
                         }
                     }
-                    be.b += hbn as i32 + 8;
+                    ab.x += dju as i32 + 8;
                 }
                 "checkbox" => {
-                    if be.c >= yk && be.c < yk + aom as i32 {
-                        framebuffer::ah(be.b as u32, (be.c + 2) as u32, 14, 14, 0xFFFFFFFF);
-                        framebuffer::ah(be.b as u32, (be.c + 2) as u32, 14, 1, 0xFF999999);
-                        framebuffer::ah(be.b as u32, (be.c + 15) as u32, 14, 1, 0xFF999999);
-                        framebuffer::ah(be.b as u32, (be.c + 2) as u32, 1, 14, 0xFF999999);
-                        framebuffer::ah((be.b + 13) as u32, (be.c + 2) as u32, 1, 14, 0xFF999999);
-                        if ij.qn("checked").is_some() {
-                            framebuffer::ah((be.b + 3) as u32, (be.c + 8) as u32, 8, 2, CI_);
-                            framebuffer::ah((be.b + 3) as u32, (be.c + 5) as u32, 2, 5, CI_);
+                    if ab.y >= lg && ab.y < lg + ur as i32 {
+                        framebuffer::fill_rect(ab.x as u32, (ab.y + 2) as u32, 14, 14, 0xFFFFFFFF);
+                        framebuffer::fill_rect(ab.x as u32, (ab.y + 2) as u32, 14, 1, 0xFF999999);
+                        framebuffer::fill_rect(ab.x as u32, (ab.y + 15) as u32, 14, 1, 0xFF999999);
+                        framebuffer::fill_rect(ab.x as u32, (ab.y + 2) as u32, 1, 14, 0xFF999999);
+                        framebuffer::fill_rect((ab.x + 13) as u32, (ab.y + 2) as u32, 1, 14, 0xFF999999);
+                        if el.attr("checked").is_some() {
+                            framebuffer::fill_rect((ab.x + 3) as u32, (ab.y + 8) as u32, 8, 2, CM_);
+                            framebuffer::fill_rect((ab.x + 3) as u32, (ab.y + 5) as u32, 2, 5, CM_);
                         }
                     }
-                    be.b += 20;
+                    ab.x += 20;
                 }
                 "radio" => {
-                    if be.c >= yk && be.c < yk + aom as i32 {
-                        framebuffer::ah(be.b as u32, (be.c + 2) as u32, 14, 14, 0xFFFFFFFF);
-                        framebuffer::ah(be.b as u32, (be.c + 2) as u32, 14, 1, 0xFF999999);
-                        framebuffer::ah(be.b as u32, (be.c + 15) as u32, 14, 1, 0xFF999999);
-                        framebuffer::ah(be.b as u32, (be.c + 2) as u32, 1, 14, 0xFF999999);
-                        framebuffer::ah((be.b + 13) as u32, (be.c + 2) as u32, 1, 14, 0xFF999999);
-                        if ij.qn("checked").is_some() {
-                            framebuffer::ah((be.b + 4) as u32, (be.c + 6) as u32, 6, 6, CI_);
+                    if ab.y >= lg && ab.y < lg + ur as i32 {
+                        framebuffer::fill_rect(ab.x as u32, (ab.y + 2) as u32, 14, 14, 0xFFFFFFFF);
+                        framebuffer::fill_rect(ab.x as u32, (ab.y + 2) as u32, 14, 1, 0xFF999999);
+                        framebuffer::fill_rect(ab.x as u32, (ab.y + 15) as u32, 14, 1, 0xFF999999);
+                        framebuffer::fill_rect(ab.x as u32, (ab.y + 2) as u32, 1, 14, 0xFF999999);
+                        framebuffer::fill_rect((ab.x + 13) as u32, (ab.y + 2) as u32, 1, 14, 0xFF999999);
+                        if el.attr("checked").is_some() {
+                            framebuffer::fill_rect((ab.x + 4) as u32, (ab.y + 6) as u32, 6, 6, CM_);
                         }
                     }
-                    be.b += 20;
+                    ab.x += 20;
                 }
                 _ => {
                     
-                    let fqy = ij.qn("placeholder").unwrap_or("");
-                    let bn = ij.qn("value").unwrap_or("");
-                    let dgj = if bn.is_empty() { fqy } else { bn };
-                    let est = 200u32.v(axq.ao(40));
-                    let jah = 26u32;
-                    if be.c >= yk && be.c < yk + aom as i32 {
-                        framebuffer::ah(be.b as u32, be.c as u32, est, jah, 0xFFFFFFFF);
-                        framebuffer::ah(be.b as u32, be.c as u32, est, 1, 0xFF999999);
-                        framebuffer::ah(be.b as u32, (be.c + jah as i32 - 1) as u32, est, 1, 0xFF999999);
-                        framebuffer::ah(be.b as u32, be.c as u32, 1, jah, 0xFF999999);
-                        framebuffer::ah((be.b + est as i32 - 1) as u32, be.c as u32, 1, jah, 0xFF999999);
-                        let agx = if bn.is_empty() { 0xFF999999 } else { CI_ };
-                        for (a, r) in dgj.bw().take((est / 8 - 2) as usize).cf() {
-                            ahi((be.b + 4 + a as i32 * 8) as u32, (be.c + 5) as u32, r, agx);
+                    let placeholder = el.attr("placeholder").unwrap_or("");
+                    let value = el.attr("value").unwrap_or("");
+                    let bga = if value.is_empty() { placeholder } else { value };
+                    let cax = 200u32.min(zt.saturating_sub(40));
+                    let eqt = 26u32;
+                    if ab.y >= lg && ab.y < lg + ur as i32 {
+                        framebuffer::fill_rect(ab.x as u32, ab.y as u32, cax, eqt, 0xFFFFFFFF);
+                        framebuffer::fill_rect(ab.x as u32, ab.y as u32, cax, 1, 0xFF999999);
+                        framebuffer::fill_rect(ab.x as u32, (ab.y + eqt as i32 - 1) as u32, cax, 1, 0xFF999999);
+                        framebuffer::fill_rect(ab.x as u32, ab.y as u32, 1, eqt, 0xFF999999);
+                        framebuffer::fill_rect((ab.x + cax as i32 - 1) as u32, ab.y as u32, 1, eqt, 0xFF999999);
+                        let text_color = if value.is_empty() { 0xFF999999 } else { CM_ };
+                        for (i, c) in bga.chars().take((cax / 8 - 2) as usize).enumerate() {
+                            draw_char((ab.x + 4 + i as i32 * 8) as u32, (ab.y + 5) as u32, c, text_color);
                         }
                     }
-                    be.b += est as i32 + 8;
+                    ab.x += cax as i32 + 8;
                 }
             }
         }
         
         "button" => {
             
-            let dzf = 28u32;
-            if be.c >= yk && be.c < yk + aom as i32 {
-                framebuffer::ah(be.b as u32, be.c as u32, 120, dzf, 0xFFE8E8E8);
-                framebuffer::ah(be.b as u32, be.c as u32, 120, 1, 0xFFBBBBBB);
-                framebuffer::ah(be.b as u32, (be.c + dzf as i32 - 1) as u32, 120, 1, 0xFFBBBBBB);
-                framebuffer::ah(be.b as u32, be.c as u32, 1, dzf, 0xFFBBBBBB);
-                framebuffer::ah(119 + be.b as u32, be.c as u32, 1, dzf, 0xFFBBBBBB);
+            let bqw = 28u32;
+            if ab.y >= lg && ab.y < lg + ur as i32 {
+                framebuffer::fill_rect(ab.x as u32, ab.y as u32, 120, bqw, 0xFFE8E8E8);
+                framebuffer::fill_rect(ab.x as u32, ab.y as u32, 120, 1, 0xFFBBBBBB);
+                framebuffer::fill_rect(ab.x as u32, (ab.y + bqw as i32 - 1) as u32, 120, 1, 0xFFBBBBBB);
+                framebuffer::fill_rect(ab.x as u32, ab.y as u32, 1, bqw, 0xFFBBBBBB);
+                framebuffer::fill_rect(119 + ab.x as u32, ab.y as u32, 1, bqw, 0xFFBBBBBB);
             }
-            be.c += 6;
+            ab.y += 6;
         }
         
         "textarea" => {
-            be.agr();
-            let jsj = core::cmp::v(axq.ao(32), 400);
-            let icu = 80u32;
-            if be.c >= yk && be.c < yk + aom as i32 {
-                framebuffer::ah(be.b as u32, be.c as u32, jsj, icu, 0xFFFFFFFF);
-                framebuffer::ah(be.b as u32, be.c as u32, jsj, 1, 0xFF999999);
-                framebuffer::ah(be.b as u32, (be.c + icu as i32 - 1) as u32, jsj, 1, 0xFF999999);
-                framebuffer::ah(be.b as u32, be.c as u32, 1, icu, 0xFF999999);
-                framebuffer::ah((be.b + jsj as i32 - 1) as u32, be.c as u32, 1, icu, 0xFF999999);
+            ab.newline();
+            let fch = core::cmp::min(zt.saturating_sub(32), 400);
+            let ebd = 80u32;
+            if ab.y >= lg && ab.y < lg + ur as i32 {
+                framebuffer::fill_rect(ab.x as u32, ab.y as u32, fch, ebd, 0xFFFFFFFF);
+                framebuffer::fill_rect(ab.x as u32, ab.y as u32, fch, 1, 0xFF999999);
+                framebuffer::fill_rect(ab.x as u32, (ab.y + ebd as i32 - 1) as u32, fch, 1, 0xFF999999);
+                framebuffer::fill_rect(ab.x as u32, ab.y as u32, 1, ebd, 0xFF999999);
+                framebuffer::fill_rect((ab.x + fch as i32 - 1) as u32, ab.y as u32, 1, ebd, 0xFF999999);
             }
-            be.c += icu as i32 + 8;
+            ab.y += ebd as i32 + 8;
         }
         
         "select" => {
-            let fub = 160u32.v(axq.ao(32));
-            let jog = 26u32;
-            if be.c >= yk && be.c < yk + aom as i32 {
-                framebuffer::ah(be.b as u32, be.c as u32, fub, jog, 0xFFFFFFFF);
-                framebuffer::ah(be.b as u32, be.c as u32, fub, 1, 0xFF999999);
-                framebuffer::ah(be.b as u32, (be.c + jog as i32 - 1) as u32, fub, 1, 0xFF999999);
-                framebuffer::ah(be.b as u32, be.c as u32, 1, jog, 0xFF999999);
-                framebuffer::ah((be.b + fub as i32 - 1) as u32, be.c as u32, 1, jog, 0xFF999999);
+            let cqh = 160u32.min(zt.saturating_sub(32));
+            let ezz = 26u32;
+            if ab.y >= lg && ab.y < lg + ur as i32 {
+                framebuffer::fill_rect(ab.x as u32, ab.y as u32, cqh, ezz, 0xFFFFFFFF);
+                framebuffer::fill_rect(ab.x as u32, ab.y as u32, cqh, 1, 0xFF999999);
+                framebuffer::fill_rect(ab.x as u32, (ab.y + ezz as i32 - 1) as u32, cqh, 1, 0xFF999999);
+                framebuffer::fill_rect(ab.x as u32, ab.y as u32, 1, ezz, 0xFF999999);
+                framebuffer::fill_rect((ab.x + cqh as i32 - 1) as u32, ab.y as u32, 1, ezz, 0xFF999999);
                 
-                framebuffer::ah((be.b + fub as i32 - 16) as u32, (be.c + 10) as u32, 8, 2, 0xFF666666);
-                framebuffer::ah((be.b + fub as i32 - 14) as u32, (be.c + 12) as u32, 4, 2, 0xFF666666);
+                framebuffer::fill_rect((ab.x + cqh as i32 - 16) as u32, (ab.y + 10) as u32, 8, 2, 0xFF666666);
+                framebuffer::fill_rect((ab.x + cqh as i32 - 14) as u32, (ab.y + 12) as u32, 4, 2, 0xFF666666);
             }
-            be.b += fub as i32 + 8;
+            ab.x += cqh as i32 + 8;
         }
         
         "option" | "optgroup" => {
@@ -691,159 +691,159 @@ fn vvq(
         }
         
         "small" | "sub" | "sup" => {
-            be.asv = FontSize::Ew;
-            be.acg = FontSize::Ew.ac() + 4;
+            ab.font_size = FontSize::Small;
+            ab.line_height = FontSize::Small.height() + 4;
         }
         
         "mark" => {
-            be.vp = Some(0xFFFFFF00); 
+            ab.bg_color = Some(0xFFFFFF00); 
         }
         
         "del" | "s" | "strike" => {
-            be.agx = 0xFF999999;
-            be.dmb = true;
+            ab.text_color = 0xFF999999;
+            ab.strikethrough = true;
         }
         
         "u" | "ins" => {
-            be.dde = true;
+            ab.underline = true;
         }
         
         "progress" => {
             
-            let aki: f32 = ij.qn("max").and_then(|p| p.parse().bq()).unwrap_or(1.0);
-            let her: f32 = ij.qn("value").and_then(|p| p.parse().bq()).unwrap_or(0.0);
-            let cgn = (her / aki).v(1.0).am(0.0);
-            let lo = 200u32.v(axq.ao(40));
-            let tn = 18u32;
-            if be.c >= yk && be.c < yk + aom as i32 {
+            let sh: f32 = el.attr("max").and_then(|v| v.parse().ok()).unwrap_or(1.0);
+            let dlw: f32 = el.attr("value").and_then(|v| v.parse().ok()).unwrap_or(0.0);
+            let aed = (dlw / sh).min(1.0).max(0.0);
+            let ek = 200u32.min(zt.saturating_sub(40));
+            let hs = 18u32;
+            if ab.y >= lg && ab.y < lg + ur as i32 {
                 
-                framebuffer::ah(be.b as u32, be.c as u32, lo, tn, 0xFFE0E0E0);
+                framebuffer::fill_rect(ab.x as u32, ab.y as u32, ek, hs, 0xFFE0E0E0);
                 
-                let akd = (lo as f32 * cgn) as u32;
-                if akd > 0 {
-                    framebuffer::ah(be.b as u32, be.c as u32, akd, tn, 0xFF4CAF50);
+                let rb = (ek as f32 * aed) as u32;
+                if rb > 0 {
+                    framebuffer::fill_rect(ab.x as u32, ab.y as u32, rb, hs, 0xFF4CAF50);
                 }
                 
-                framebuffer::ah(be.b as u32, be.c as u32, lo, 1, 0xFFBBBBBB);
-                framebuffer::ah(be.b as u32, (be.c + tn as i32 - 1) as u32, lo, 1, 0xFFBBBBBB);
-                framebuffer::ah(be.b as u32, be.c as u32, 1, tn, 0xFFBBBBBB);
-                framebuffer::ah((be.b + lo as i32 - 1) as u32, be.c as u32, 1, tn, 0xFFBBBBBB);
+                framebuffer::fill_rect(ab.x as u32, ab.y as u32, ek, 1, 0xFFBBBBBB);
+                framebuffer::fill_rect(ab.x as u32, (ab.y + hs as i32 - 1) as u32, ek, 1, 0xFFBBBBBB);
+                framebuffer::fill_rect(ab.x as u32, ab.y as u32, 1, hs, 0xFFBBBBBB);
+                framebuffer::fill_rect((ab.x + ek as i32 - 1) as u32, ab.y as u32, 1, hs, 0xFFBBBBBB);
                 
-                let jiy = alloc::format!("{}%", (cgn * 100.0) as u32);
-                let wg = be.b + (lo as i32 / 2) - (jiy.len() as i32 * 4);
-                for (a, r) in jiy.bw().cf() {
-                    ahi((wg + a as i32 * 8) as u32, (be.c + 1) as u32, r, CI_);
+                let ewk = alloc::format!("{}%", (aed * 100.0) as u32);
+                let kd = ab.x + (ek as i32 / 2) - (ewk.len() as i32 * 4);
+                for (i, c) in ewk.chars().enumerate() {
+                    draw_char((kd + i as i32 * 8) as u32, (ab.y + 1) as u32, c, CM_);
                 }
             }
-            be.b += lo as i32 + 8;
+            ab.x += ek as i32 + 8;
             return; 
         }
         
         "meter" => {
             
-            let hro: f32 = ij.qn("min").and_then(|p| p.parse().bq()).unwrap_or(0.0);
-            let aki: f32 = ij.qn("max").and_then(|p| p.parse().bq()).unwrap_or(1.0);
-            let her: f32 = ij.qn("value").and_then(|p| p.parse().bq()).unwrap_or(0.0);
-            let ail: f32 = ij.qn("low").and_then(|p| p.parse().bq()).unwrap_or(hro);
-            let afq: f32 = ij.qn("high").and_then(|p| p.parse().bq()).unwrap_or(aki);
-            let cmb = aki - hro;
-            let cgn = if cmb > 0.0 { ((her - hro) / cmb).v(1.0).am(0.0) } else { 0.0 };
-            let lo = 160u32.v(axq.ao(40));
-            let tn = 16u32;
+            let duj: f32 = el.attr("min").and_then(|v| v.parse().ok()).unwrap_or(0.0);
+            let sh: f32 = el.attr("max").and_then(|v| v.parse().ok()).unwrap_or(1.0);
+            let dlw: f32 = el.attr("value").and_then(|v| v.parse().ok()).unwrap_or(0.0);
+            let low: f32 = el.attr("low").and_then(|v| v.parse().ok()).unwrap_or(duj);
+            let high: f32 = el.attr("high").and_then(|v| v.parse().ok()).unwrap_or(sh);
+            let range = sh - duj;
+            let aed = if range > 0.0 { ((dlw - duj) / range).min(1.0).max(0.0) } else { 0.0 };
+            let ek = 160u32.min(zt.saturating_sub(40));
+            let hs = 16u32;
             
-            let ebo = if her < ail {
+            let bso = if dlw < low {
                 0xFFFF5722 
-            } else if her > afq {
+            } else if dlw > high {
                 0xFFFF5722 
             } else {
                 0xFF4CAF50 
             };
-            if be.c >= yk && be.c < yk + aom as i32 {
-                framebuffer::ah(be.b as u32, be.c as u32, lo, tn, 0xFFE0E0E0);
-                let akd = (lo as f32 * cgn) as u32;
-                if akd > 0 {
-                    framebuffer::ah(be.b as u32, be.c as u32, akd, tn, ebo);
+            if ab.y >= lg && ab.y < lg + ur as i32 {
+                framebuffer::fill_rect(ab.x as u32, ab.y as u32, ek, hs, 0xFFE0E0E0);
+                let rb = (ek as f32 * aed) as u32;
+                if rb > 0 {
+                    framebuffer::fill_rect(ab.x as u32, ab.y as u32, rb, hs, bso);
                 }
-                framebuffer::ah(be.b as u32, be.c as u32, lo, 1, 0xFFBBBBBB);
-                framebuffer::ah(be.b as u32, (be.c + tn as i32 - 1) as u32, lo, 1, 0xFFBBBBBB);
-                framebuffer::ah(be.b as u32, be.c as u32, 1, tn, 0xFFBBBBBB);
-                framebuffer::ah((be.b + lo as i32 - 1) as u32, be.c as u32, 1, tn, 0xFFBBBBBB);
+                framebuffer::fill_rect(ab.x as u32, ab.y as u32, ek, 1, 0xFFBBBBBB);
+                framebuffer::fill_rect(ab.x as u32, (ab.y + hs as i32 - 1) as u32, ek, 1, 0xFFBBBBBB);
+                framebuffer::fill_rect(ab.x as u32, ab.y as u32, 1, hs, 0xFFBBBBBB);
+                framebuffer::fill_rect((ab.x + ek as i32 - 1) as u32, ab.y as u32, 1, hs, 0xFFBBBBBB);
             }
-            be.b += lo as i32 + 8;
+            ab.x += ek as i32 + 8;
             return;
         }
         
         "dl" => {
-            be.agr();
+            ab.newline();
         }
         "dt" => {
-            be.agr();
-            be.bpt = true;
+            ab.newline();
+            ab.bold = true;
         }
         "dd" => {
-            be.agr();
-            be.b += 40; 
+            ab.newline();
+            ab.x += 40; 
         }
         
         "details" => {
-            be.agr();
-            be.c += 4;
+            ab.newline();
+            ab.y += 4;
             
-            if be.c >= yk && be.c < yk + aom as i32 {
-                let guz = be.b;
-                let aji = ij.qn("open").is_some();
-                if aji {
+            if ab.y >= lg && ab.y < lg + ur as i32 {
+                let dfu = ab.x;
+                let open = el.attr("open").is_some();
+                if open {
                     
-                    framebuffer::ah(guz as u32, be.c as u32, 8, 2, CI_);
-                    framebuffer::ah((guz + 1) as u32, (be.c + 2) as u32, 6, 2, CI_);
-                    framebuffer::ah((guz + 2) as u32, (be.c + 4) as u32, 4, 2, CI_);
+                    framebuffer::fill_rect(dfu as u32, ab.y as u32, 8, 2, CM_);
+                    framebuffer::fill_rect((dfu + 1) as u32, (ab.y + 2) as u32, 6, 2, CM_);
+                    framebuffer::fill_rect((dfu + 2) as u32, (ab.y + 4) as u32, 4, 2, CM_);
                 } else {
                     
-                    framebuffer::ah(guz as u32, be.c as u32, 2, 8, CI_);
-                    framebuffer::ah((guz + 2) as u32, (be.c + 1) as u32, 2, 6, CI_);
-                    framebuffer::ah((guz + 4) as u32, (be.c + 2) as u32, 2, 4, CI_);
+                    framebuffer::fill_rect(dfu as u32, ab.y as u32, 2, 8, CM_);
+                    framebuffer::fill_rect((dfu + 2) as u32, (ab.y + 1) as u32, 2, 6, CM_);
+                    framebuffer::fill_rect((dfu + 4) as u32, (ab.y + 2) as u32, 2, 4, CM_);
                 }
             }
-            be.b += 16; 
+            ab.x += 16; 
         }
         
         "summary" => {
-            be.bpt = true;
+            ab.bold = true;
         }
         
         "figure" => {
-            be.agr();
-            be.c += 8;
-            be.eeq += 1;
+            ab.newline();
+            ab.y += 8;
+            ab.list_depth += 1;
         }
         
         "figcaption" => {
-            be.agr();
-            be.asv = FontSize::Ew;
-            be.acg = FontSize::Ew.ac() + 4;
-            be.agx = 0xFF666666;
+            ab.newline();
+            ab.font_size = FontSize::Small;
+            ab.line_height = FontSize::Small.height() + 4;
+            ab.text_color = 0xFF666666;
         }
         
         "nav" => {
-            be.vp = Some(0xFFF8F8F8);
+            ab.bg_color = Some(0xFFF8F8F8);
         }
         
         "footer" => {
-            be.agr();
-            be.c += 16;
-            if be.c >= yk && be.c < yk + aom as i32 {
-                framebuffer::ah(
-                    (bgi + 16) as u32, be.c as u32, axq - 32, 1, AOF_,
+            ab.newline();
+            ab.y += 16;
+            if ab.y >= lg && ab.y < lg + ur as i32 {
+                framebuffer::fill_rect(
+                    (aex + 16) as u32, ab.y as u32, zt - 32, 1, AQF_,
                 );
             }
-            be.c += 8;
-            be.asv = FontSize::Ew;
-            be.acg = FontSize::Ew.ac() + 4;
-            be.agx = 0xFF666666;
+            ab.y += 8;
+            ab.font_size = FontSize::Small;
+            ab.line_height = FontSize::Small.height() + 4;
+            ab.text_color = 0xFF666666;
         }
         
         "header" => {
-            be.vp = Some(0xFFF0F0F0);
+            ab.bg_color = Some(0xFFF0F0F0);
         }
         
         "main" | "article" | "section" | "aside" => {
@@ -852,18 +852,18 @@ fn vvq(
         
         "video" | "audio" | "canvas" | "svg" | "iframe" | "embed" | "object" => {
             
-            let gpj = ij.qn("width")
-                .and_then(|d| d.bdd("px").parse::<u32>().bq())
+            let dcs = el.attr("width")
+                .and_then(|w| w.trim_end_matches("px").parse::<u32>().ok())
                 .unwrap_or(320)
-                .v(axq.ao(32));
-            let fqz = ij.qn("height")
-                .and_then(|i| i.bdd("px").parse::<u32>().bq())
+                .min(zt.saturating_sub(32));
+            let cof = el.attr("height")
+                .and_then(|h| h.trim_end_matches("px").parse::<u32>().ok())
                 .unwrap_or(180)
-                .v(400);
-            if be.c >= yk && be.c < yk + aom as i32 {
-                framebuffer::ah(be.b as u32, be.c as u32, gpj, fqz, 0xFF2C2C2C);
+                .min(400);
+            if ab.y >= lg && ab.y < lg + ur as i32 {
+                framebuffer::fill_rect(ab.x as u32, ab.y as u32, dcs, cof, 0xFF2C2C2C);
                 
-                let cu = match ll {
+                let label = match tag {
                     "video" => "[VIDEO]",
                     "audio" => "[AUDIO]",
                     "canvas" => "[CANVAS]",
@@ -871,188 +871,188 @@ fn vvq(
                     "iframe" => "[IFRAME]",
                     _ => "[EMBED]",
                 };
-                let mj = be.b + (gpj as i32 / 2) - (cu.len() as i32 * 4);
-                let ct = be.c + (fqz as i32 / 2) - 8;
-                for (a, r) in cu.bw().cf() {
-                    ahi((mj + a as i32 * 8) as u32, ct as u32, r, 0xFFAAAAAA);
+                let fe = ab.x + (dcs as i32 / 2) - (label.len() as i32 * 4);
+                let ly = ab.y + (cof as i32 / 2) - 8;
+                for (i, c) in label.chars().enumerate() {
+                    draw_char((fe + i as i32 * 8) as u32, ly as u32, c, 0xFFAAAAAA);
                 }
                 
-                if ll == "video" || ll == "audio" {
-                    let cx = be.b + gpj as i32 / 2;
-                    let ae = be.c + fqz as i32 / 2 + 12;
-                    for br in 0..16 {
-                        let d = 16 - br;
-                        framebuffer::ah((cx - 4) as u32, (ae + br) as u32, d as u32, 1, 0xFFFFFFFF);
+                if tag == "video" || tag == "audio" {
+                    let cx = ab.x + dcs as i32 / 2;
+                    let u = ab.y + cof as i32 / 2 + 12;
+                    for row in 0..16 {
+                        let w = 16 - row;
+                        framebuffer::fill_rect((cx - 4) as u32, (u + row) as u32, w as u32, 1, 0xFFFFFFFF);
                     }
                 }
                 
-                framebuffer::ah(be.b as u32, be.c as u32, gpj, 1, 0xFF555555);
-                framebuffer::ah(be.b as u32, (be.c + fqz as i32 - 1) as u32, gpj, 1, 0xFF555555);
-                framebuffer::ah(be.b as u32, be.c as u32, 1, fqz, 0xFF555555);
-                framebuffer::ah((be.b + gpj as i32 - 1) as u32, be.c as u32, 1, fqz, 0xFF555555);
+                framebuffer::fill_rect(ab.x as u32, ab.y as u32, dcs, 1, 0xFF555555);
+                framebuffer::fill_rect(ab.x as u32, (ab.y + cof as i32 - 1) as u32, dcs, 1, 0xFF555555);
+                framebuffer::fill_rect(ab.x as u32, ab.y as u32, 1, cof, 0xFF555555);
+                framebuffer::fill_rect((ab.x + dcs as i32 - 1) as u32, ab.y as u32, 1, cof, 0xFF555555);
             }
-            be.c += fqz as i32 + 4;
+            ab.y += cof as i32 + 4;
             return; 
         }
         
         "center" => {
-            be.agr();
-            be.b = bgi + (axq as i32 / 4);
+            ab.newline();
+            ab.x = aex + (zt as i32 / 4);
         }
         
         _ => {}
     }
     
     
-    for aeh in &ij.zf {
-        pby(be, aeh, eze, bgi, yk, axq, aom);
+    for pd in &el.children {
+        izt(ab, pd, cea, aex, lg, zt, ur);
     }
     
     
-    match ll {
+    match tag {
         "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => {
-            be.agr();
-            be.c += 8;
+            ab.newline();
+            ab.y += 8;
         }
         "p" => {
-            be.agr();
-            be.c += 8;
+            ab.newline();
+            ab.y += 8;
         }
         "ul" | "ol" => {
-            be.eeq -= 1;
-            be.jdp.pop();
-            be.agr();
+            ab.list_depth -= 1;
+            ab.list_counters.pop();
+            ab.newline();
         }
         "blockquote" => {
-            be.eeq -= 1;
-            be.agr();
+            ab.list_depth -= 1;
+            ab.newline();
         }
         "pre" => {
-            be.agr();
+            ab.newline();
         }
         "table" => {
-            be.agr();
+            ab.newline();
         }
         "dl" => {
-            be.agr();
-            be.c += 4;
+            ab.newline();
+            ab.y += 4;
         }
         "dt" | "dd" => {
-            be.agr();
+            ab.newline();
         }
         "details" => {
-            be.agr();
-            be.c += 4;
+            ab.newline();
+            ab.y += 4;
         }
         "figure" => {
-            be.eeq -= 1;
-            be.agr();
-            be.c += 8;
+            ab.list_depth -= 1;
+            ab.newline();
+            ab.y += 8;
         }
         "footer" | "header" | "nav" => {
-            be.agr();
+            ab.newline();
         }
         _ => {}
     }
     
-    be.asv = jnn;
-    be.acg = jnn.ac() + 4;
-    be.bpt = pfp;
-    be.esk = pfq;
-    be.gjs = pfu;
-    be.agx = pfx;
-    be.vp = pfo;
-    be.adh = pfs;
-    be.dde = pfy;
-    be.dmb = pfw;
-    be.gjr = pft;
+    ab.font_size = ezk;
+    ab.line_height = ezk.height() + 4;
+    ab.bold = jcq;
+    ab.in_link = jcr;
+    ab.in_pre = jcu;
+    ab.text_color = jcw;
+    ab.bg_color = jcp;
+    ab.opacity = jcs;
+    ab.underline = jcx;
+    ab.strikethrough = jcv;
+    ab.in_ordered_list = jct;
 }
 
 
-fn nsn(xq: &[HtmlNode]) -> String {
-    let mut eoe = String::new();
-    for anq in xq {
-        if let HtmlNode::Na(ij) = anq {
-            if ij.ll == "style" {
+fn hxn(nodes: &[HtmlNode]) -> String {
+    let mut blj = String::new();
+    for uf in nodes {
+        if let HtmlNode::Element(el) = uf {
+            if el.tag == "style" {
                 
-                for aeh in &ij.zf {
-                    if let HtmlNode::Text(text) = aeh {
-                        eoe.t(text);
-                        eoe.push('\n');
+                for pd in &el.children {
+                    if let HtmlNode::Text(text) = pd {
+                        blj.push_str(text);
+                        blj.push('\n');
                     }
                 }
             } else {
                 
-                let ncu = nsn(&ij.zf);
-                if !ncu.is_empty() {
-                    eoe.t(&ncu);
+                let hku = hxn(&el.children);
+                if !hku.is_empty() {
+                    blj.push_str(&hku);
                 }
             }
         }
     }
-    eoe
+    blj
 }
 
 
-fn ukk(bof: &Yt, ebd: &HtmlElement) -> bool {
-    let ek = &bof.bgw;
-    if ek.is_empty() {
+fn ncj(selector: &Kq, bse: &HtmlElement) -> bool {
+    let au = &selector.elements;
+    if au.is_empty() {
         return false;
     }
     
     
     
-    let mut mdg = 0;
-    let mut lhy: Option<usize> = None;
-    let mut oak = false;
+    let mut gto = 0;
+    let mut gfa: Option<usize> = None;
+    let mut idm = false;
     
-    for (a, vu) in ek.iter().cf() {
-        match vu {
-            SelectorPart::Cau | SelectorPart::Bdm | SelectorPart::Bbm | SelectorPart::Bst => {
-                oak = true;
-                mdg = a + 1;
-                lhy = None;
+    for (i, jn) in au.iter().enumerate() {
+        match jn {
+            SelectorPart::Descendant | SelectorPart::Child | SelectorPart::Adjacent | SelectorPart::Sibling => {
+                idm = true;
+                gto = i + 1;
+                gfa = None;
             }
-            SelectorPart::Azr(_) => {
-                if !oak {
-                    if let Some(ybx) = lhy {
+            SelectorPart::Tag(_) => {
+                if !idm {
+                    if let Some(_prev) = gfa {
                         
-                        mdg = a;
+                        gto = i;
                     }
                 }
-                lhy = Some(a);
+                gfa = Some(i);
             }
             _ => {}
         }
     }
     
-    let ie = &ek[mdg..];
+    let segment = &au[gto..];
     
-    for vu in ie {
-        match vu {
-            SelectorPart::Azr(ll) => {
-                if ebd.ll != *ll {
+    for jn in segment {
+        match jn {
+            SelectorPart::Tag(tag) => {
+                if bse.tag != *tag {
                     return false;
                 }
             }
-            SelectorPart::Bdo(class) => {
-                let sjw = ebd.qn("class").unwrap_or("");
-                if !sjw.ayt().any(|r| r == class.as_str()) {
+            SelectorPart::Class(class) => {
+                let los = bse.attr("class").unwrap_or("");
+                if !los.split_whitespace().any(|c| c == class.as_str()) {
                     return false;
                 }
             }
-            SelectorPart::Bjj(ad) => {
-                let sjx = ebd.qn("id").unwrap_or("");
-                if sjx != ad.as_str() {
+            SelectorPart::Id(id) => {
+                let lot = bse.attr("id").unwrap_or("");
+                if lot != id.as_str() {
                     return false;
                 }
             }
-            SelectorPart::Bvi => {}
-            SelectorPart::Ms(qn, ap) => {
-                match ebd.qn(qn) {
-                    Some(sjy) => {
-                        if let Some(qy) = ap {
-                            if sjy != qy.as_str() {
+            SelectorPart::Universal => {}
+            SelectorPart::Attribute(attr, val) => {
+                match bse.attr(attr) {
+                    Some(el_val) => {
+                        if let Some(expected) = val {
+                            if el_val != expected.as_str() {
                                 return false;
                             }
                         }
@@ -1060,128 +1060,128 @@ fn ukk(bof: &Yt, ebd: &HtmlElement) -> bool {
                     None => return false,
                 }
             }
-            SelectorPart::Bpn(_) => {} 
+            SelectorPart::Pseudo(_) => {} 
             _ => {} 
         }
     }
     
-    !ie.is_empty()
+    !segment.is_empty()
 }
 
 
-fn qkb(be: &mut RenderContext, ij: &HtmlElement, eze: &Mj) {
-    for agu in &eze.bib {
-        let ukj = agu.fud.iter().any(|fua| ukk(fua, ij));
-        if ukj {
-            mwa(be, &agu.dps);
+fn jxf(ab: &mut RenderContext, el: &HtmlElement, cea: &Fd) {
+    for qo in &cea.rules {
+        let nci = qo.selectors.iter().any(|sel| ncj(sel, el));
+        if nci {
+            hfn(ab, &qo.declarations);
         }
     }
 }
 
 
-fn mwa(be: &mut RenderContext, dps: &[Sa]) {
-    for aqy in dps {
-        match aqy.jki.as_str() {
+fn hfn(ab: &mut RenderContext, declarations: &[Ho]) {
+    for decl in declarations {
+        match decl.property.as_str() {
             "color" => {
-                if let Some(r) = nhq(&aqy.bn) {
-                    be.agx = r;
+                if let Some(c) = hpb(&decl.value) {
+                    ab.text_color = c;
                 }
             }
             "background-color" | "background" => {
-                if let Some(r) = nhq(&aqy.bn) {
-                    be.vp = Some(r);
+                if let Some(c) = hpb(&decl.value) {
+                    ab.bg_color = Some(c);
                 }
             }
             "font-size" => {
-                match &aqy.bn {
-                    CssValue::Acp(y, _) => {
-                        if *y <= 14.0 {
-                            be.asv = FontSize::Ew;
-                        } else if *y <= 18.0 {
-                            be.asv = FontSize::M;
-                        } else if *y <= 22.0 {
-                            be.asv = FontSize::Ht;
-                        } else if *y <= 28.0 {
-                            be.asv = FontSize::Atk;
-                        } else if *y <= 30.0 {
-                            be.asv = FontSize::Atj;
+                match &decl.value {
+                    CssValue::Length(p, _) => {
+                        if *p <= 14.0 {
+                            ab.font_size = FontSize::Small;
+                        } else if *p <= 18.0 {
+                            ab.font_size = FontSize::Normal;
+                        } else if *p <= 22.0 {
+                            ab.font_size = FontSize::Large;
+                        } else if *p <= 28.0 {
+                            ab.font_size = FontSize::H3;
+                        } else if *p <= 30.0 {
+                            ab.font_size = FontSize::H2;
                         } else {
-                            be.asv = FontSize::Aiv;
+                            ab.font_size = FontSize::H1;
                         }
-                        be.acg = be.asv.ac() + 4;
+                        ab.line_height = ab.font_size.height() + 4;
                     }
-                    CssValue::Bx(yo) => {
-                        match yo.as_str() {
-                            "small" | "x-small" | "xx-small" => be.asv = FontSize::Ew,
-                            "medium" => be.asv = FontSize::M,
-                            "large" => be.asv = FontSize::Ht,
-                            "x-large" | "xx-large" => be.asv = FontSize::Aiv,
+                    CssValue::Keyword(li) => {
+                        match li.as_str() {
+                            "small" | "x-small" | "xx-small" => ab.font_size = FontSize::Small,
+                            "medium" => ab.font_size = FontSize::Normal,
+                            "large" => ab.font_size = FontSize::Large,
+                            "x-large" | "xx-large" => ab.font_size = FontSize::H1,
                             _ => {}
                         }
-                        be.acg = be.asv.ac() + 4;
+                        ab.line_height = ab.font_size.height() + 4;
                     }
                     _ => {}
                 }
             }
             "font-weight" => {
-                match &aqy.bn {
-                    CssValue::Bx(yo) if yo == "bold" => be.bpt = true,
-                    CssValue::Bx(yo) if yo == "normal" => be.bpt = false,
-                    CssValue::L(bo) if *bo >= 700.0 => be.bpt = true,
+                match &decl.value {
+                    CssValue::Keyword(li) if li == "bold" => ab.bold = true,
+                    CssValue::Keyword(li) if li == "normal" => ab.bold = false,
+                    CssValue::Number(ae) if *ae >= 700.0 => ab.bold = true,
                     _ => {}
                 }
             }
             "font-style" => {
-                if let CssValue::Bx(yo) = &aqy.bn {
-                    be.gkl = yo == "italic" || yo == "oblique";
+                if let CssValue::Keyword(li) = &decl.value {
+                    ab.italic = li == "italic" || li == "oblique";
                 }
             }
             "display" => {
-                if let CssValue::Bx(yo) = &aqy.bn {
-                    if yo == "none" {
-                        be.c = i32::O / 2;
+                if let CssValue::Keyword(li) = &decl.value {
+                    if li == "none" {
+                        ab.y = i32::MAX / 2;
                     }
                 }
             }
             "text-align" => {
-                if let CssValue::Bx(yo) = &aqy.bn {
-                    match yo.as_str() {
-                        "center" => { be.b = be.dtb as i32 / 4; }
+                if let CssValue::Keyword(li) = &decl.value {
+                    match li.as_str() {
+                        "center" => { ab.x = ab.max_width as i32 / 4; }
                         _ => {}
                     }
                 }
             }
             "margin-top" | "padding-top" => {
-                if let CssValue::Acp(y, _) = &aqy.bn {
-                    be.c += *y as i32;
+                if let CssValue::Length(p, _) = &decl.value {
+                    ab.y += *p as i32;
                 }
             }
             "margin-bottom" | "padding-bottom" => {
                 
             }
             "visibility" => {
-                if let CssValue::Bx(yo) = &aqy.bn {
-                    if yo == "hidden" || yo == "collapse" {
-                        be.c = i32::O / 2;
+                if let CssValue::Keyword(li) = &decl.value {
+                    if li == "hidden" || li == "collapse" {
+                        ab.y = i32::MAX / 2;
                     }
                 }
             }
             "opacity" => {
-                match &aqy.bn {
-                    CssValue::L(bo) => {
-                        be.adh = bo.am(0.0).v(1.0) as f32;
+                match &decl.value {
+                    CssValue::Number(ae) => {
+                        ab.opacity = ae.max(0.0).min(1.0) as f32;
                     }
                     _ => {}
                 }
             }
             "text-decoration" | "text-decoration-line" => {
-                if let CssValue::Bx(yo) = &aqy.bn {
-                    match yo.as_str() {
-                        "underline" => be.dde = true,
-                        "line-through" => be.dmb = true,
+                if let CssValue::Keyword(li) = &decl.value {
+                    match li.as_str() {
+                        "underline" => ab.underline = true,
+                        "line-through" => ab.strikethrough = true,
                         "none" => {
-                            be.dde = false;
-                            be.dmb = false;
+                            ab.underline = false;
+                            ab.strikethrough = false;
                         }
                         _ => {}
                     }
@@ -1189,8 +1189,8 @@ fn mwa(be: &mut RenderContext, dps: &[Sa]) {
             }
             "text-transform" => {
                 
-                if let CssValue::Bx(yo) = &aqy.bn {
-                    match yo.as_str() {
+                if let CssValue::Keyword(li) = &decl.value {
+                    match li.as_str() {
                         "uppercase" | "lowercase" | "capitalize" | "none" => {
                             
                         }
@@ -1199,19 +1199,19 @@ fn mwa(be: &mut RenderContext, dps: &[Sa]) {
                 }
             }
             "line-height" => {
-                match &aqy.bn {
-                    CssValue::Acp(y, _) => {
-                        be.acg = *y as i32;
+                match &decl.value {
+                    CssValue::Length(p, _) => {
+                        ab.line_height = *p as i32;
                     }
-                    CssValue::L(bo) => {
-                        be.acg = (*bo as i32) * be.asv.ac();
+                    CssValue::Number(ae) => {
+                        ab.line_height = (*ae as i32) * ab.font_size.height();
                     }
                     _ => {}
                 }
             }
             "margin-left" | "padding-left" => {
-                if let CssValue::Acp(y, _) = &aqy.bn {
-                    be.b += *y as i32;
+                if let CssValue::Length(p, _) = &decl.value {
+                    ab.x += *p as i32;
                 }
             }
             "border" | "border-top" | "border-bottom" | "border-left" | "border-right" => {
@@ -1223,44 +1223,44 @@ fn mwa(be: &mut RenderContext, dps: &[Sa]) {
 }
 
 
-fn qjx(be: &mut RenderContext, mhz: &str) {
-    let dps = css_parser::vcr(mhz);
-    mwa(be, &dps);
+fn jxd(ab: &mut RenderContext, style_str: &str) {
+    let declarations = css_parser::nqq(style_str);
+    hfn(ab, &declarations);
 }
 
 
-fn nhq(bn: &CssValue) -> Option<u32> {
-    match bn {
-        CssValue::Color(r) => Some(*r),
-        CssValue::Bx(j) => lsl(j),
+fn hpb(value: &CssValue) -> Option<u32> {
+    match value {
+        CssValue::Color(c) => Some(*c),
+        CssValue::Keyword(name) => gmk(name),
         _ => None,
     }
 }
 
 
-fn lsl(e: &str) -> Option<u32> {
-    let e = e.em();
+fn gmk(j: &str) -> Option<u32> {
+    let j = j.trim();
     
     
-    if e.cj('#') {
-        let nu = &e[1..];
-        if nu.len() == 6 {
-            let m = u8::wa(&nu[0..2], 16).bq()?;
-            let at = u8::wa(&nu[2..4], 16).bq()?;
-            let o = u8::wa(&nu[4..6], 16).bq()?;
-            return Some(0xFF000000 | (m as u32) << 16 | (at as u32) << 8 | o as u32);
+    if j.starts_with('#') {
+        let ga = &j[1..];
+        if ga.len() == 6 {
+            let r = u8::from_str_radix(&ga[0..2], 16).ok()?;
+            let g = u8::from_str_radix(&ga[2..4], 16).ok()?;
+            let b = u8::from_str_radix(&ga[4..6], 16).ok()?;
+            return Some(0xFF000000 | (r as u32) << 16 | (g as u32) << 8 | b as u32);
         }
-        if nu.len() == 3 {
-            let m = u8::wa(&nu[0..1], 16).bq()? * 17;
-            let at = u8::wa(&nu[1..2], 16).bq()? * 17;
-            let o = u8::wa(&nu[2..3], 16).bq()? * 17;
-            return Some(0xFF000000 | (m as u32) << 16 | (at as u32) << 8 | o as u32);
+        if ga.len() == 3 {
+            let r = u8::from_str_radix(&ga[0..1], 16).ok()? * 17;
+            let g = u8::from_str_radix(&ga[1..2], 16).ok()? * 17;
+            let b = u8::from_str_radix(&ga[2..3], 16).ok()? * 17;
+            return Some(0xFF000000 | (r as u32) << 16 | (g as u32) << 8 | b as u32);
         }
         return None;
     }
     
     
-    match e.aqn().as_str() {
+    match j.to_lowercase().as_str() {
         "black" => Some(0xFF000000),
         "white" => Some(0xFFFFFFFF),
         "red" => Some(0xFFFF0000),
@@ -1294,22 +1294,22 @@ fn lsl(e: &str) -> Option<u32> {
 }
 
 
-fn ahi(b: u32, c: u32, r: char, s: u32) {
-    let font = tcy(r);
+fn draw_char(x: u32, y: u32, c: char, color: u32) {
+    let font = mcs(c);
     
-    for (br, hf) in font.iter().cf() {
-        for ga in 0..8 {
-            if (hf >> (7 - ga)) & 1 != 0 {
-                framebuffer::sf(b + ga, c + br as u32, s);
+    for (row, byte) in font.iter().enumerate() {
+        for bf in 0..8 {
+            if (byte >> (7 - bf)) & 1 != 0 {
+                framebuffer::put_pixel(x + bf, y + row as u32, color);
             }
         }
     }
 }
 
 
-fn tcy(r: char) -> [u8; 16] {
+fn mcs(c: char) -> [u8; 16] {
     
-    match r {
+    match c {
         ' ' => [0x00; 16],
         '!' => [0x00,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x00,0x18,0x18,0x00,0x00,0x00,0x00,0x00],
         '"' => [0x00,0x66,0x66,0x66,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00],

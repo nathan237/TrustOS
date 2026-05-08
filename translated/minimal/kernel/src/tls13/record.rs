@@ -4,248 +4,248 @@
 
 use alloc::vec::Vec;
 use super::{TlsSession, TlsState, TlsError, ContentType, HandshakeType};
-use super::crypto::{ijd, muf};
+use super::crypto::{efc, hee};
 use super::handshake;
 
 
-pub const DTL_: usize = 16384 + 256;
+pub const DXD_: usize = 16384 + 256;
 
 
-pub fn jkd(he: &mut TlsSession, f: &[u8]) -> Result<Option<Vec<u8>>, TlsError> {
-    if f.len() < 5 {
-        return Err(TlsError::Fs);
+pub fn process_record(by: &mut TlsSession, data: &[u8]) -> Result<Option<Vec<u8>>, TlsError> {
+    if data.len() < 5 {
+        return Err(TlsError::ProtocolError);
     }
     
-    let ahg = f[0];
-    let yak = u16::oa([f[1], f[2]]);
-    let go = u16::oa([f[3], f[4]]) as usize;
+    let content_type = data[0];
+    let pxb = u16::from_be_bytes([data[1], data[2]]);
+    let length = u16::from_be_bytes([data[3], data[4]]) as usize;
     
-    if f.len() < 5 + go {
-        return Err(TlsError::Fs);
+    if data.len() < 5 + length {
+        return Err(TlsError::ProtocolError);
     }
     
-    let ehd = &f[5..5 + go];
+    let bvf = &data[5..5 + length];
     
-    match ahg {
+    match content_type {
         20 => {
             
             Ok(None)
         }
         21 => {
             
-            if ehd.len() >= 2 {
-                let jy = ehd[0];
-                let desc = ehd[1];
-                crate::serial_println!("[TLS] Alert: level={} desc={}", jy, desc);
+            if bvf.len() >= 2 {
+                let level = bvf[0];
+                let desc = bvf[1];
+                crate::serial_println!("[TLS] Alert: level={} desc={}", level, desc);
                 
                 if desc == 0 {
                     
-                    he.g = TlsState::Dk;
+                    by.state = TlsState::Closed;
                 } else {
-                    he.g = TlsState::Q;
+                    by.state = TlsState::Error;
                 }
             }
-            Err(TlsError::Ahe)
+            Err(TlsError::ConnectionClosed)
         }
         22 => {
             
-            vmo(he, ehd)
+            nyi(by, bvf)
         }
         23 => {
             
-            if he.g == TlsState::Bsn {
+            if by.state == TlsState::ServerHelloReceived {
                 
-                vmn(he, ehd)
-            } else if he.g == TlsState::Kd {
+                nyh(by, bvf)
+            } else if by.state == TlsState::ApplicationData {
                 
-                let ajk = kop(he, ehd)?;
-                Ok(Some(ajk))
+                let ry = frc(by, bvf)?;
+                Ok(Some(ry))
             } else {
-                Err(TlsError::Oj)
+                Err(TlsError::UnexpectedMessage)
             }
         }
-        _ => Err(TlsError::Fs),
+        _ => Err(TlsError::ProtocolError),
     }
 }
 
 
-fn vmo(he: &mut TlsSession, f: &[u8]) -> Result<Option<Vec<u8>>, TlsError> {
-    if f.is_empty() {
-        return Err(TlsError::Fs);
+fn nyi(by: &mut TlsSession, data: &[u8]) -> Result<Option<Vec<u8>>, TlsError> {
+    if data.is_empty() {
+        return Err(TlsError::ProtocolError);
     }
     
-    let msg_type = f[0];
+    let msg_type = data[0];
     
     match msg_type {
         2 => {
             
-            handshake::vdq(he, f)?;
+            handshake::nrd(by, data)?;
             Ok(None)
         }
         _ => {
             crate::serial_println!("[TLS] Unexpected handshake type: {}", msg_type);
-            Err(TlsError::Oj)
+            Err(TlsError::UnexpectedMessage)
         }
     }
 }
 
 
-fn vmn(he: &mut TlsSession, f: &[u8]) -> Result<Option<Vec<u8>>, TlsError> {
+fn nyh(by: &mut TlsSession, data: &[u8]) -> Result<Option<Vec<u8>>, TlsError> {
     
-    let ajk = kop(he, f)?;
+    let ry = frc(by, data)?;
     
-    if ajk.is_empty() {
-        return Err(TlsError::Fs);
+    if ry.is_empty() {
+        return Err(TlsError::ProtocolError);
     }
     
     
-    let mut jzd = 0u8;
-    let mut nfq = ajk.len();
-    for a in (0..ajk.len()).vv() {
-        if ajk[a] != 0 {
-            jzd = ajk[a];
-            nfq = a;
+    let mut fgc = 0u8;
+    let mut hnk = ry.len();
+    for i in (0..ry.len()).rev() {
+        if ry[i] != 0 {
+            fgc = ry[i];
+            hnk = i;
             break;
         }
     }
     
-    if jzd != ContentType::Atm as u8 {
-        if jzd == ContentType::Bbo as u8 {
-            return Err(TlsError::Ahe);
+    if fgc != ContentType::Handshake as u8 {
+        if fgc == ContentType::Alert as u8 {
+            return Err(TlsError::ConnectionClosed);
         }
-        return Err(TlsError::Oj);
+        return Err(TlsError::UnexpectedMessage);
     }
     
-    let fkb = &ajk[..nfq];
+    let ckg = &ry[..hnk];
     
     
-    let mut u = 0;
-    while u + 4 <= fkb.len() {
-        let msg_type = fkb[u];
-        let gng = ((fkb[u + 1] as usize) << 16)
-            | ((fkb[u + 2] as usize) << 8)
-            | (fkb[u + 3] as usize);
+    let mut pos = 0;
+    while pos + 4 <= ckg.len() {
+        let msg_type = ckg[pos];
+        let dbl = ((ckg[pos + 1] as usize) << 16)
+            | ((ckg[pos + 2] as usize) << 8)
+            | (ckg[pos + 3] as usize);
         
-        if u + 4 + gng > fkb.len() {
+        if pos + 4 + dbl > ckg.len() {
             break;
         }
         
-        let fr = &fkb[u..u + 4 + gng];
+        let bk = &ckg[pos..pos + 4 + dbl];
         
         match msg_type {
             8 => {
                 
-                handshake::vce(he, fr)?;
+                handshake::nqe(by, bk)?;
             }
             11 => {
                 
-                handshake::vby(he, fr)?;
+                handshake::npz(by, bk)?;
             }
             15 => {
                 
-                handshake::vca(he, fr)?;
+                handshake::nqb(by, bk)?;
             }
             20 => {
                 
-                handshake::vch(he, fr)?;
+                handshake::nqh(by, bk)?;
                 
                 
-                let mut fxh = he.ape.clone();
-                let ape = fxh.bqs();
+                let mut csa = by.transcript_hash.clone();
+                let transcript_hash = csa.finalize();
                 
                 
-                let rbo = handshake::qtb(he);
-                let ktj = kti(he, ContentType::Atm, &rbo)?;
+                let klb = handshake::keu(by);
+                let fur = fuq(by, ContentType::Handshake, &klb)?;
                 
                 
-                handshake::rvw(he, &ape)?;
+                handshake::ldm(by, &transcript_hash)?;
                 
-                he.g = TlsState::Kd;
+                by.state = TlsState::ApplicationData;
                 
-                return Ok(Some(ktj));
+                return Ok(Some(fur));
             }
             4 => {
                 
-                he.ape.qs(fr);
+                by.transcript_hash.update(bk);
             }
             _ => {
                 crate::serial_println!("[TLS] Unknown encrypted handshake type: {}", msg_type);
             }
         }
         
-        u += 4 + gng;
+        pos += 4 + dbl;
     }
     
     Ok(None)
 }
 
 
-pub fn kti(he: &mut TlsSession, ahg: ContentType, ajk: &[u8]) -> Result<Vec<u8>, TlsError> {
+pub fn fuq(by: &mut TlsSession, content_type: ContentType, ry: &[u8]) -> Result<Vec<u8>, TlsError> {
     
-    let mut ff = Vec::fc(ajk.len() + 1);
-    ff.bk(ajk);
-    ff.push(ahg as u8);
+    let mut inner = Vec::with_capacity(ry.len() + 1);
+    inner.extend_from_slice(ry);
+    inner.push(content_type as u8);
     
     
-    let mut brn = [0u8; 12];
-    brn.dg(&he.inz);
-    let mdw = he.iny.ft();
-    for a in 0..8 {
-        brn[4 + a] ^= mdw[a];
+    let mut akh = [0u8; 12];
+    akh.copy_from_slice(&by.client_write_iv);
+    let gua = by.client_seq.to_be_bytes();
+    for i in 0..8 {
+        akh[4 + i] ^= gua[i];
     }
-    he.iny += 1;
+    by.client_seq += 1;
     
     
-    let blv = [
-        ContentType::Kd as u8,
+    let ahh = [
+        ContentType::ApplicationData as u8,
         0x03, 0x03, 
-        ((ff.len() + 16) >> 8) as u8,
-        (ff.len() + 16) as u8,
+        ((inner.len() + 16) >> 8) as u8,
+        (inner.len() + 16) as u8,
     ];
     
     
-    let afm = ijd(&he.ioa, &brn, &blv, &ff);
+    let pw = efc(&by.client_write_key, &akh, &ahh, &inner);
     
     
-    let mut record = Vec::fc(5 + afm.len());
-    record.push(ContentType::Kd as u8);
-    record.bk(&[0x03, 0x03]); 
-    record.bk(&(afm.len() as u16).ft());
-    record.bk(&afm);
+    let mut record = Vec::with_capacity(5 + pw.len());
+    record.push(ContentType::ApplicationData as u8);
+    record.extend_from_slice(&[0x03, 0x03]); 
+    record.extend_from_slice(&(pw.len() as u16).to_be_bytes());
+    record.extend_from_slice(&pw);
     
     Ok(record)
 }
 
 
-pub fn kop(he: &mut TlsSession, afm: &[u8]) -> Result<Vec<u8>, TlsError> {
-    if afm.len() < 16 {
-        return Err(TlsError::Aqq);
+pub fn frc(by: &mut TlsSession, pw: &[u8]) -> Result<Vec<u8>, TlsError> {
+    if pw.len() < 16 {
+        return Err(TlsError::DecryptionFailed);
     }
     
-    crate::serial_println!("[TLS] Decrypting {} bytes, seq={}", afm.len(), he.hzt);
+    crate::serial_println!("[TLS] Decrypting {} bytes, seq={}", pw.len(), by.server_seq);
     
     
-    let mut brn = [0u8; 12];
-    brn.dg(&he.hzu);
-    let mdw = he.hzt.ft();
-    for a in 0..8 {
-        brn[4 + a] ^= mdw[a];
+    let mut akh = [0u8; 12];
+    akh.copy_from_slice(&by.server_write_iv);
+    let gua = by.server_seq.to_be_bytes();
+    for i in 0..8 {
+        akh[4 + i] ^= gua[i];
     }
-    he.hzt += 1;
+    by.server_seq += 1;
     
-    crate::serial_println!("[TLS] Key={:02x?} Nonce={:02x?}", &he.gse[..8], &brn[..8]);
+    crate::serial_println!("[TLS] Key={:02x?} Nonce={:02x?}", &by.server_write_key[..8], &akh[..8]);
     
     
-    let blv = [
-        ContentType::Kd as u8,
+    let ahh = [
+        ContentType::ApplicationData as u8,
         0x03, 0x03,
-        (afm.len() >> 8) as u8,
-        afm.len() as u8,
+        (pw.len() >> 8) as u8,
+        pw.len() as u8,
     ];
     
     
-    let ajk = muf(&he.gse, &brn, &blv, afm)
-        .jd(|_| TlsError::Aqq)?;
+    let ry = hee(&by.server_write_key, &akh, &ahh, pw)
+        .map_err(|_| TlsError::DecryptionFailed)?;
     
-    Ok(ajk)
+    Ok(ry)
 }

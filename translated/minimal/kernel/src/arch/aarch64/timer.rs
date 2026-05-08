@@ -4,37 +4,37 @@
 
 
 #[inline(always)]
-pub fn aea() -> u64 {
-    let ap: u64;
+pub fn timestamp() -> u64 {
+    let val: u64;
     unsafe {
-        core::arch::asm!("mrs {}, CNTPCT_EL0", bd(reg) ap, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("mrs {}, CNTPCT_EL0", out(reg) val, options(nomem, nostack, preserves_flags));
     }
-    ap
+    val
 }
 
 
 #[inline(always)]
-pub fn fjc() -> u64 {
-    let ap: u64;
+pub fn frequency() -> u64 {
+    let val: u64;
     unsafe {
-        core::arch::asm!("mrs {}, CNTFRQ_EL0", bd(reg) ap, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("mrs {}, CNTFRQ_EL0", out(reg) val, options(nomem, nostack, preserves_flags));
     }
-    ap
+    val
 }
 
 
-pub fn wjr(bn: u64) {
+pub fn opn(value: u64) {
     unsafe {
         core::arch::asm!(
             "msr CNTP_CVAL_EL0, {}",
-            in(reg) bn,
+            in(reg) value,
             options(nomem, nostack, preserves_flags)
         );
     }
 }
 
 
-pub fn isr() {
+pub fn eli() {
     unsafe {
         core::arch::asm!(
             "msr CNTP_CTL_EL0, {}",
@@ -45,7 +45,7 @@ pub fn isr() {
 }
 
 
-pub fn rxz() {
+pub fn lfa() {
     unsafe {
         core::arch::asm!(
             "msr CNTP_CTL_EL0, {}",
@@ -56,15 +56,15 @@ pub fn rxz() {
 }
 
 
-pub fn jpd(qb: u64) {
-    let cv = aea();
-    wjr(cv + qb);
-    isr();
+pub fn fah(gx: u64) {
+    let current = timestamp();
+    opn(current + gx);
+    eli();
 }
 
 
-pub fn zno(ifz: u64) {
-    let kx = fjc();
-    let qb = (ifz * kx) / 1_000_000;
-    jpd(qb);
+pub fn qwk(us: u64) {
+    let freq = frequency();
+    let gx = (us * freq) / 1_000_000;
+    fah(gx);
 }

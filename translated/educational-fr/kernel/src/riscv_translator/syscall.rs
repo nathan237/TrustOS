@@ -55,13 +55,13 @@ pub enum UnifiedSyscall {
     Getegid,
     Getppid,
     Gettid,
-    ClockGettime,
+    Clock_gettime,
     Nanosleep,
     ExitGroup,
     Openat,
     Getdents64,
-    SetTidAddress,
-    ArchPrctl,
+    Set_tid_address,
+    Arch_prctl,
     Getrandom,
     Unknown(u64),
 }
@@ -119,11 +119,11 @@ match num {
             107 => UnifiedSyscall::Geteuid,
             108 => UnifiedSyscall::Getegid,
             110 => UnifiedSyscall::Getppid,
-            158 => UnifiedSyscall::ArchPrctl,
+            158 => UnifiedSyscall::Arch_prctl,
             186 => UnifiedSyscall::Gettid,
             217 => UnifiedSyscall::Getdents64,
-            218 => UnifiedSyscall::SetTidAddress,
-            228 => UnifiedSyscall::ClockGettime,
+            218 => UnifiedSyscall::Set_tid_address,
+            228 => UnifiedSyscall::Clock_gettime,
             231 => UnifiedSyscall::ExitGroup,
             257 => UnifiedSyscall::Openat,
             318 => UnifiedSyscall::Getrandom,
@@ -154,9 +154,9 @@ match num {
             80  => UnifiedSyscall::Fstat,
             93  => UnifiedSyscall::Exit,
             94  => UnifiedSyscall::ExitGroup,
-            96  => UnifiedSyscall::SetTidAddress,
+            96  => UnifiedSyscall::Set_tid_address,
             101 => UnifiedSyscall::Nanosleep,
-            113 => UnifiedSyscall::ClockGettime,
+            113 => UnifiedSyscall::Clock_gettime,
             124 => UnifiedSyscall::Kill,
             129 => UnifiedSyscall::Kill,     // kill
             160 => UnifiedSyscall::Uname,
@@ -245,13 +245,13 @@ match self {
             UnifiedSyscall::Getegid => "getegid",
             UnifiedSyscall::Getppid => "getppid",
             UnifiedSyscall::Gettid => "gettid",
-            UnifiedSyscall::ClockGettime => "clock_gettime",
+            UnifiedSyscall::Clock_gettime => "clock_gettime",
             UnifiedSyscall::Nanosleep => "nanosleep",
             UnifiedSyscall::ExitGroup => "exit_group",
             UnifiedSyscall::Openat => "openat",
             UnifiedSyscall::Getdents64 => "getdents64",
-            UnifiedSyscall::SetTidAddress => "set_tid_address",
-            UnifiedSyscall::ArchPrctl => "arch_prctl",
+            UnifiedSyscall::Set_tid_address => "set_tid_address",
+            UnifiedSyscall::Arch_prctl => "arch_prctl",
             UnifiedSyscall::Getrandom => "getrandom",
             UnifiedSyscall::Unknown(_) => "unknown",
         }
@@ -261,15 +261,15 @@ match self {
 /// Handle a syscall from the translated binary
 /// Returns (return_value, should_exit)
 pub fn handle_syscall(
-    source_arch: SourceArch,
+    src_arch: SourceArch,
     number: u64,
     args: &[u64; 6],
     mem: &mut super::interpreter::RvMemory,
 ) -> (i64, bool) {
-    let syscall = UnifiedSyscall::from_arch(source_arch, number);
+    let syscall = UnifiedSyscall::from_arch(src_arch, number);
 
     crate::serial_println!("[RV-XLAT] Syscall: {} ({}) from {} [args: 0x{:x}, 0x{:x}, 0x{:x}]",
-        syscall.name(), number, source_arch.name(), args[0], args[1], args[2]);
+        syscall.name(), number, src_arch.name(), args[0], args[1], args[2]);
 
         // Correspondance de motifs — branchement exhaustif de Rust.
 match syscall {
@@ -314,9 +314,9 @@ match syscall {
 
         UnifiedSyscall::Mmap => {
             // Simplified mmap — allocate memory at requested or arbitrary address
-            let address = args[0];
+            let addr = args[0];
             let len = args[1] as usize;
-            let allocator_address = if address != 0 { address } else { 0x4000_0000 + mem.total_allocated as u64 };
+            let allocator_address = if addr != 0 { addr } else { 0x4000_0000 + mem.total_allocated as u64 };
             if len > 0 && len <= 64 * 1024 * 1024 {
                 mem.map(allocator_address, len);
                 (allocator_address as i64, false)
@@ -343,7 +343,7 @@ match syscall {
 
         UnifiedSyscall::Uname => {
             // Write utsname struct to buffer
-            let buffer = args[0];
+            let buf = args[0];
             // Each field is 65 bytes in Linux utsname
             let fields = [
                 "TrustOS",                    // sysname
@@ -354,19 +354,19 @@ match syscall {
                 "trustos.local",              // domainname
             ];
             for (i, field) in fields.iter().enumerate() {
-                let _ = mem.write_string(buffer + (i * 65) as u64, field);
+                let _ = mem.write_string(buf + (i * 65) as u64, field);
             }
             (0, false)
         }
 
         UnifiedSyscall::Getcwd => {
-            let buffer = args[0];
-            let _ = mem.write_string(buffer, "/");
-            (buffer as i64, false)
+            let buf = args[0];
+            let _ = mem.write_string(buf, "/");
+            (buf as i64, false)
         }
 
-        UnifiedSyscall::SetTidAddress => (1000, false),
-        UnifiedSyscall::ArchPrctl => (0, false),
+        UnifiedSyscall::Set_tid_address => (1000, false),
+        UnifiedSyscall::Arch_prctl => (0, false),
 
         UnifiedSyscall::Open | UnifiedSyscall::Openat => {
             // Simplified — return ENOENT for most files
@@ -375,28 +375,28 @@ match syscall {
 
         UnifiedSyscall::Close => (0, false),
 
-        UnifiedSyscall::ClockGettime => {
+        UnifiedSyscall::Clock_gettime => {
             // Write a simple timespec
-            let buffer = args[1];
-            let _ = mem.write_u64(buffer, 1709664000); // some timestamp
-            let _ = mem.write_u64(buffer + 8, 0);      // nsec
+            let buf = args[1];
+            let _ = mem.write_u64(buf, 1709664000); // some timestamp
+            let _ = mem.write_u64(buf + 8, 0);      // nsec
             (0, false)
         }
 
         UnifiedSyscall::Getrandom => {
             // Fill buffer with pseudo-random bytes
-            let buffer = args[0];
+            let buf = args[0];
             let count = args[1] as usize;
-            let mut random_generator_state: u64 = 0xDEAD_BEEF_CAFE_1234;
+            let mut rng_state: u64 = 0xDEAD_BEEF_CAFE_1234;
             for i in 0..count {
-                random_generator_state = random_generator_state.wrapping_mul(6364136223846793005).wrapping_add(1);
-                let _ = mem.write_u8(buffer + i as u64, (random_generator_state >> 33) as u8);
+                rng_state = rng_state.wrapping_mul(6364136223846793005).wrapping_add(1);
+                let _ = mem.write_u8(buf + i as u64, (rng_state >> 33) as u8);
             }
             (count as i64, false)
         }
 
         UnifiedSyscall::Unknown(num) => {
-            crate::serial_println!("[RV-XLAT] WARNING: unhandled syscall {} from {}", num, source_arch.name());
+            crate::serial_println!("[RV-XLAT] WARNING: unhandled syscall {} from {}", num, src_arch.name());
             (-38i64, false) // ENOSYS
         }
 

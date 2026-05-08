@@ -11,7 +11,7 @@ use alloc::vec;
 use alloc::string::String;
 use alloc::format;
 
-use super::synth::{Waveform, Envelope, SynthEngine, BR_, Dv};
+use super::synth::{Waveform, Envelope, SynthEngine, BT_, Bq};
 use super::tables;
 
 
@@ -19,13 +19,13 @@ use super::tables;
 
 
 
-pub const AZV_: usize = 16;
+pub const BBX_: usize = 16;
 
-pub const FL_: usize = 64;
+pub const GA_: usize = 64;
 
-pub const DIY_: u16 = 120;
+pub const DMN_: u16 = 120;
 
-pub const BGI_: u32 = 4;
+pub const BIM_: u32 = 4;
 
 
 
@@ -35,54 +35,54 @@ pub const BGI_: u32 = 4;
 #[derive(Debug, Clone, Copy)]
 pub struct Step {
     
-    pub jp: u8,
+    pub note: u8,
     
-    pub qm: u8,
+    pub velocity: u8,
     
-    pub ve: Option<Waveform>,
+    pub waveform: Option<Waveform>,
 }
 
 impl Step {
     
-    pub fn kr() -> Self {
-        Self { jp: 255, qm: 0, ve: None }
+    pub fn ef() -> Self {
+        Self { note: 255, velocity: 0, waveform: None }
     }
 
     
-    pub fn jp(ti: u8) -> Self {
-        Self { jp: ti, qm: 100, ve: None }
+    pub fn note(midi_note: u8) -> Self {
+        Self { note: midi_note, velocity: 100, waveform: None }
     }
 
     
-    pub fn hsy(ti: u8, qm: u8) -> Self {
-        Self { jp: ti, qm, ve: None }
+    pub fn dvh(midi_note: u8, velocity: u8) -> Self {
+        Self { note: midi_note, velocity, waveform: None }
     }
 
     
-    pub fn zdw(ti: u8, qm: u8, azd: Waveform) -> Self {
-        Self { jp: ti, qm, ve: Some(azd) }
+    pub fn qpq(midi_note: u8, velocity: u8, aal: Waveform) -> Self {
+        Self { note: midi_note, velocity, waveform: Some(aal) }
     }
 
     
-    pub fn jbs(&self) -> bool {
-        self.jp == 255 || self.qm == 0
+    pub fn is_rest(&self) -> bool {
+        self.note == 255 || self.velocity == 0
     }
 
     
     pub fn display(&self) -> String {
-        if self.jbs() {
+        if self.is_rest() {
             String::from("--")
         } else {
-            let j = tables::dtf(self.jp);
-            let bvq = tables::efk(self.jp);
-            format!("{}{}", j, bvq)
+            let name = tables::bno(self.note);
+            let amb = tables::bui(self.note);
+            format!("{}{}", name, amb)
         }
     }
 
     
-    pub fn xty(&self) -> &'static str {
-        match self.ve {
-            Some(azd) => azd.dbz(),
+    pub fn wave_display(&self) -> &'static str {
+        match self.waveform {
+            Some(aal) => aal.short_name(),
             None => "..",
         }
     }
@@ -96,167 +96,167 @@ impl Step {
 #[derive(Clone)]
 pub struct Pattern {
     
-    pub j: [u8; 16],
+    pub name: [u8; 16],
     
-    pub baf: usize,
+    pub name_len: usize,
     
-    pub au: Vec<Step>,
+    pub steps: Vec<Step>,
     
-    pub kz: u16,
+    pub bpm: u16,
     
-    pub ve: Waveform,
+    pub waveform: Waveform,
     
-    pub qr: Envelope,
+    pub envelope: Envelope,
 }
 
 impl Pattern {
     
-    pub fn new(j: &str, aml: usize, kz: u16) -> Self {
-        let bo = aml.v(FL_).am(1);
-        let mut djr = [0u8; 16];
-        let bko = j.as_bytes();
-        let len = bko.len().v(16);
-        djr[..len].dg(&bko[..len]);
+    pub fn new(name: &str, num_steps: usize, bpm: u16) -> Self {
+        let ae = num_steps.min(GA_).max(1);
+        let mut bhz = [0u8; 16];
+        let agt = name.as_bytes();
+        let len = agt.len().min(16);
+        bhz[..len].copy_from_slice(&agt[..len]);
 
         Self {
-            j: djr,
-            baf: len,
-            au: vec![Step::kr(); bo],
-            kz,
-            ve: Waveform::Gb,
-            qr: Envelope::hvi(),
+            name: bhz,
+            name_len: len,
+            steps: vec![Step::ef(); ae],
+            bpm,
+            waveform: Waveform::Square,
+            envelope: Envelope::dwp(),
         }
     }
 
     
-    pub fn amj(&self) -> &str {
-        core::str::jg(&self.j[..self.baf]).unwrap_or("???")
+    pub fn name_str(&self) -> &str {
+        core::str::from_utf8(&self.name[..self.name_len]).unwrap_or("???")
     }
 
     
     pub fn len(&self) -> usize {
-        self.au.len()
+        self.steps.len()
     }
 
     
-    pub fn znq(&mut self, w: usize, gu: Step) {
-        if w < self.au.len() {
-            self.au[w] = gu;
+    pub fn qwm(&mut self, idx: usize, step: Step) {
+        if idx < self.steps.len() {
+            self.steps[idx] = step;
         }
     }
 
     
-    pub fn wjh(&mut self, w: usize, bkp: &str) -> Result<(), &'static str> {
-        if w >= self.au.len() {
+    pub fn set_note(&mut self, idx: usize, agu: &str) -> Result<(), &'static str> {
+        if idx >= self.steps.len() {
             return Err("Step index out of range");
         }
-        if bkp == "--" || bkp == "." || bkp.is_empty() {
-            self.au[w] = Step::kr();
+        if agu == "--" || agu == "." || agu.is_empty() {
+            self.steps[idx] = Step::ef();
             return Ok(());
         }
-        let ayg = tables::fpd(bkp)
+        let aad = tables::cnh(agu)
             .ok_or("Invalid note name")?;
-        self.au[w] = Step::jp(ayg);
+        self.steps[idx] = Step::note(aad);
         Ok(())
     }
 
     
-    pub fn pot(&self) -> u32 {
+    pub fn step_duration_samples(&self) -> u32 {
         
-        (60 * BR_) / (self.kz as u32 * BGI_)
+        (60 * BT_) / (self.bpm as u32 * BIM_)
     }
 
     
-    pub fn dwh(&self) -> u32 {
-        (60_000) / (self.kz as u32 * BGI_)
+    pub fn step_duration_ms(&self) -> u32 {
+        (60_000) / (self.bpm as u32 * BIM_)
     }
 
     
-    pub fn ief(&self) -> u32 {
-        self.dwh() * self.au.len() as u32
+    pub fn total_duration_ms(&self) -> u32 {
+        self.step_duration_ms() * self.steps.len() as u32
     }
 
     
-    pub fn tj(&self, engine: &mut SynthEngine) -> Vec<i16> {
-        let dwk = self.pot() as usize;
-        let ayz = dwk * self.au.len();
-        let mut bi = vec![0i16; ayz * Dv as usize];
+    pub fn render(&self, engine: &mut SynthEngine) -> Vec<i16> {
+        let bpf = self.step_duration_samples() as usize;
+        let aai = bpf * self.steps.len();
+        let mut buffer = vec![0i16; aai * Bq as usize];
 
         
-        let wcz = engine.ve;
-        let wcw = engine.qr;
-        engine.qr = self.qr;
+        let oki = engine.waveform;
+        let okg = engine.envelope;
+        engine.envelope = self.envelope;
 
-        for (a, gu) in self.au.iter().cf() {
-            if gu.jbs() {
+        for (i, step) in self.steps.iter().enumerate() {
+            if step.is_rest() {
                 
                 continue;
             }
 
             
-            let azd = gu.ve.unwrap_or(self.ve);
-            engine.dvs(azd);
+            let aal = step.waveform.unwrap_or(self.waveform);
+            engine.set_waveform(aal);
 
             
-            engine.dtq(gu.jp, gu.qm);
+            engine.note_on(step.note, step.velocity);
 
             
-            let l = a * dwk * Dv as usize;
-            let gbr = &mut bi[l..l + dwk * Dv as usize];
-            engine.tj(gbr, dwk);
+            let offset = i * bpf * Bq as usize;
+            let cul = &mut buffer[offset..offset + bpf * Bq as usize];
+            engine.render(cul, bpf);
 
             
-            engine.djx(gu.jp);
+            engine.note_off(step.note);
         }
 
         
-        engine.dvs(wcz);
-        engine.qr = wcw;
+        engine.set_waveform(oki);
+        engine.envelope = okg;
 
-        bi
+        buffer
     }
 
     
     pub fn display(&self) -> String {
-        let mut e = String::new();
-        e.t(&format!("Pattern: \"{}\" | {} steps | {} BPM | {} | {}ms/step\n",
-            self.amj(), self.au.len(), self.kz,
-            self.ve.j(), self.dwh()));
-        e.t(&format!("Total duration: {}ms\n\n", self.ief()));
+        let mut j = String::new();
+        j.push_str(&format!("Pattern: \"{}\" | {} steps | {} BPM | {} | {}ms/step\n",
+            self.name_str(), self.steps.len(), self.bpm,
+            self.waveform.name(), self.step_duration_ms()));
+        j.push_str(&format!("Total duration: {}ms\n\n", self.total_duration_ms()));
 
         
-        e.t(" Step: ");
-        for a in 0..self.au.len() {
-            e.t(&format!("{:>3}", a + 1));
+        j.push_str(" Step: ");
+        for i in 0..self.steps.len() {
+            j.push_str(&format!("{:>3}", i + 1));
         }
-        e.push('\n');
+        j.push('\n');
 
         
-        e.t(" Note: ");
-        for gu in &self.au {
-            e.t(&format!("{:>3}", gu.display()));
+        j.push_str(" Note: ");
+        for step in &self.steps {
+            j.push_str(&format!("{:>3}", step.display()));
         }
-        e.push('\n');
+        j.push('\n');
 
         
-        e.t("  Vel: ");
-        for gu in &self.au {
-            if gu.jbs() {
-                e.t(" --");
+        j.push_str("  Vel: ");
+        for step in &self.steps {
+            if step.is_rest() {
+                j.push_str(" --");
             } else {
-                e.t(&format!("{:>3}", gu.qm));
+                j.push_str(&format!("{:>3}", step.velocity));
             }
         }
-        e.push('\n');
+        j.push('\n');
 
         
-        e.t(" Wave: ");
-        for gu in &self.au {
-            e.t(&format!("{:>3}", gu.xty()));
+        j.push_str(" Wave: ");
+        for step in &self.steps {
+            j.push_str(&format!("{:>3}", step.wave_display()));
         }
-        e.push('\n');
+        j.push('\n');
 
-        e
+        j
     }
 }
 
@@ -266,134 +266,134 @@ impl Pattern {
 
 
 pub struct PatternBank {
-    pub clv: Vec<Pattern>,
+    pub patterns: Vec<Pattern>,
 }
 
 impl PatternBank {
     pub fn new() -> Self {
-        Self { clv: Vec::new() }
+        Self { patterns: Vec::new() }
     }
 
     
     pub fn add(&mut self, pattern: Pattern) -> Result<usize, &'static str> {
-        if self.clv.len() >= AZV_ {
+        if self.patterns.len() >= BBX_ {
             return Err("Maximum patterns reached (16)");
         }
         
-        let j = pattern.amj();
-        for ai in &self.clv {
-            if ai.amj() == j {
+        let name = pattern.name_str();
+        for aa in &self.patterns {
+            if aa.name_str() == name {
                 return Err("Pattern name already exists");
             }
         }
-        self.clv.push(pattern);
-        Ok(self.clv.len() - 1)
+        self.patterns.push(pattern);
+        Ok(self.patterns.len() - 1)
     }
 
     
-    pub fn du(&self, j: &str) -> Option<usize> {
-        self.clv.iter().qf(|ai| ai.amj() == j)
+    pub fn find(&self, name: &str) -> Option<usize> {
+        self.patterns.iter().position(|aa| aa.name_str() == name)
     }
 
     
-    pub fn get(&self, w: usize) -> Option<&Pattern> {
-        self.clv.get(w)
+    pub fn get(&self, idx: usize) -> Option<&Pattern> {
+        self.patterns.get(idx)
     }
 
     
-    pub fn ds(&mut self, w: usize) -> Option<&mut Pattern> {
-        self.clv.ds(w)
+    pub fn get_mut(&mut self, idx: usize) -> Option<&mut Pattern> {
+        self.patterns.get_mut(idx)
     }
 
     
-    pub fn nxt(&self, j: &str) -> Option<&Pattern> {
-        self.du(j).and_then(|a| self.get(a))
+    pub fn get_by_name(&self, name: &str) -> Option<&Pattern> {
+        self.find(name).and_then(|i| self.get(i))
     }
 
     
-    pub fn kyj(&mut self, j: &str) -> Option<&mut Pattern> {
-        let w = self.du(j)?;
-        self.ds(w)
+    pub fn get_by_name_mut(&mut self, name: &str) -> Option<&mut Pattern> {
+        let idx = self.find(name)?;
+        self.get_mut(idx)
     }
 
     
-    pub fn remove(&mut self, j: &str) -> Result<(), &'static str> {
-        let w = self.du(j).ok_or("Pattern not found")?;
-        self.clv.remove(w);
+    pub fn remove(&mut self, name: &str) -> Result<(), &'static str> {
+        let idx = self.find(name).ok_or("Pattern not found")?;
+        self.patterns.remove(idx);
         Ok(())
     }
 
     
-    pub fn aoy(&self) -> String {
-        if self.clv.is_empty() {
+    pub fn list(&self) -> String {
+        if self.patterns.is_empty() {
             return String::from("No patterns. Use 'synth pattern new <name>' to create one.\n");
         }
-        let mut e = String::new();
-        e.t(&format!("Patterns ({}/{}):\n", self.clv.len(), AZV_));
-        for (a, ai) in self.clv.iter().cf() {
-            e.t(&format!("  [{}] \"{}\" — {} steps, {} BPM, {}\n",
-                a, ai.amj(), ai.au.len(), ai.kz, ai.ve.j()));
+        let mut j = String::new();
+        j.push_str(&format!("Patterns ({}/{}):\n", self.patterns.len(), BBX_));
+        for (i, aa) in self.patterns.iter().enumerate() {
+            j.push_str(&format!("  [{}] \"{}\" — {} steps, {} BPM, {}\n",
+                i, aa.name_str(), aa.steps.len(), aa.bpm, aa.waveform.name()));
         }
-        e
+        j
     }
 
     
-    pub fn ojw(&mut self) {
+    pub fn load_presets(&mut self) {
         
         let mut arp = Pattern::new("arp", 16, 140);
-        arp.ve = Waveform::Dg;
-        arp.qr = Envelope::hvi();
-        let qko = [60, 63, 67, 72, 67, 63, 60, 63, 67, 72, 67, 63, 60, 63, 67, 72]; 
-        for (a, &bo) in qko.iter().cf() {
-            arp.au[a] = Step::hsy(bo, 90);
+        arp.waveform = Waveform::Sine;
+        arp.envelope = Envelope::dwp();
+        let jxq = [60, 63, 67, 72, 67, 63, 60, 63, 67, 72, 67, 63, 60, 63, 67, 72]; 
+        for (i, &ae) in jxq.iter().enumerate() {
+            arp.steps[i] = Step::dvh(ae, 90);
         }
         let _ = self.add(arp);
 
         
-        let mut jst = Pattern::new("techno", 16, 128);
-        jst.ve = Waveform::Dg;
-        jst.qr = Envelope::new(1, 80, 0, 30);
+        let mut fco = Pattern::new("techno", 16, 128);
+        fco.waveform = Waveform::Sine;
+        fco.envelope = Envelope::new(1, 80, 0, 30);
         
-        for a in (0..16).akt(4) {
-            jst.au[a] = Step::hsy(36, 127); 
+        for i in (0..16).step_by(4) {
+            fco.steps[i] = Step::dvh(36, 127); 
         }
-        let _ = self.add(jst);
+        let _ = self.add(fco);
 
         
-        let mut aee = Pattern::new("bass", 16, 120);
-        aee.ve = Waveform::Ft;
-        aee.qr = Envelope::new(5, 100, 60, 50);
-        let qnw: [u8; 16] = [36, 255, 36, 36, 39, 255, 39, 36, 43, 255, 43, 43, 41, 255, 41, 36];
-        for (a, &bo) in qnw.iter().cf() {
-            if bo != 255 {
-                aee.au[a] = Step::hsy(bo, 100);
+        let mut bass = Pattern::new("bass", 16, 120);
+        bass.waveform = Waveform::Sawtooth;
+        bass.envelope = Envelope::new(5, 100, 60, 50);
+        let kak: [u8; 16] = [36, 255, 36, 36, 39, 255, 39, 36, 43, 255, 43, 43, 41, 255, 41, 36];
+        for (i, &ae) in kak.iter().enumerate() {
+            if ae != 255 {
+                bass.steps[i] = Step::dvh(ae, 100);
             }
         }
-        let _ = self.add(aee);
+        let _ = self.add(bass);
 
         
-        let mut inm = Pattern::new("chiptune", 16, 150);
-        inm.ve = Waveform::Gb;
-        inm.qr = Envelope::new(2, 30, 80, 20);
-        let rak: [u8; 16] = [72, 74, 76, 72, 79, 255, 79, 255, 76, 74, 72, 74, 76, 72, 71, 255];
-        for (a, &bo) in rak.iter().cf() {
-            if bo != 255 {
-                inm.au[a] = Step::hsy(bo, 110);
+        let mut ehw = Pattern::new("chiptune", 16, 150);
+        ehw.waveform = Waveform::Square;
+        ehw.envelope = Envelope::new(2, 30, 80, 20);
+        let kke: [u8; 16] = [72, 74, 76, 72, 79, 255, 79, 255, 76, 74, 72, 74, 76, 72, 71, 255];
+        for (i, &ae) in kke.iter().enumerate() {
+            if ae != 255 {
+                ehw.steps[i] = Step::dvh(ae, 110);
             }
         }
-        let _ = self.add(inm);
+        let _ = self.add(ehw);
 
         
-        let mut ov = Pattern::new("pad", 8, 80);
-        ov.ve = Waveform::Triangle;
-        ov.qr = Envelope::ov();
+        let mut pad = Pattern::new("pad", 8, 80);
+        pad.waveform = Waveform::Triangle;
+        pad.envelope = Envelope::pad();
         
-        let vas: [u8; 8] = [60, 255, 64, 255, 67, 255, 72, 255]; 
-        for (a, &bo) in vas.iter().cf() {
-            if bo != 255 {
-                ov.au[a] = Step::hsy(bo, 80);
+        let npf: [u8; 8] = [60, 255, 64, 255, 67, 255, 72, 255]; 
+        for (i, &ae) in npf.iter().enumerate() {
+            if ae != 255 {
+                pad.steps[i] = Step::dvh(ae, 80);
             }
         }
-        let _ = self.add(ov);
+        let _ = self.add(pad);
     }
 }

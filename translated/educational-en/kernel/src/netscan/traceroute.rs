@@ -16,18 +16,18 @@ static TRACE_SEQUENCE: AtomicU16 = AtomicU16::new(1000);
 #[derive(Debug, Clone)]
 // Public structure — visible outside this module.
 pub struct TraceHop {
-    pub hop_number: u8,
+    pub hop_num: u8,
     pub ip: Option<[u8; 4]>,
     pub hostname: Option<String>,
-    pub rtt_mouse: [u64; 3],   // 3 probes per hop
+    pub rtt_ms: [u64; 3],   // 3 probes per hop
     pub reached: bool,      // true if this is the destination
 }
 
 /// Traceroute configuration
 pub struct TraceConfig {
-    pub maximum_hops: u8,
+    pub max_hops: u8,
     pub probes_per_hop: u8,
-    pub timeout_mouse: u32,
+    pub timeout_ms: u32,
     pub target: [u8; 4],
 }
 
@@ -35,34 +35,34 @@ pub struct TraceConfig {
 impl Default for TraceConfig {
     fn default() -> Self {
         Self {
-            maximum_hops: 30,
+            max_hops: 30,
             probes_per_hop: 3,
-            timeout_mouse: 2000,
+            timeout_ms: 2000,
             target: [0; 4],
         }
     }
 }
 
 /// Run a traceroute to the target
-pub fn trace(target: [u8; 4], maximum_hops: u8, timeout_mouse: u32) -> Vec<TraceHop> {
+pub fn trace(target: [u8; 4], max_hops: u8, timeout_ms: u32) -> Vec<TraceHop> {
     let mut hops = Vec::new();
 
     crate::netstack::icmp::clear_responses();
     crate::netstack::icmp::clear_errors();
 
-    for ttl in 1..=maximum_hops {
+    for ttl in 1..=max_hops {
         let mut hop = TraceHop {
-            hop_number: ttl,
+            hop_num: ttl,
             ip: None,
             hostname: None,
-            rtt_mouse: [0; 3],
+            rtt_ms: [0; 3],
             reached: false,
         };
 
         let mut got_response = false;
 
         for probe in 0..3 {
-            let sequence = TRACE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+            let seq = TRACE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
 
             crate::netstack::icmp::clear_responses();
             crate::netstack::icmp::clear_errors();
@@ -73,10 +73,10 @@ pub fn trace(target: [u8; 4], maximum_hops: u8, timeout_mouse: u32) -> Vec<Trace
             icmp_packet.push(0); // Code
             icmp_packet.push(0); icmp_packet.push(0); // Checksum (fill later)
             icmp_packet.extend_from_slice(&0x5CA1u16.to_be_bytes()); // ID
-            icmp_packet.extend_from_slice(&sequence.to_be_bytes());
+            icmp_packet.extend_from_slice(&seq.to_be_bytes());
 
             // Payload: timestamp
-            let ts = crate::time::uptime_mouse() as u32;
+            let ts = crate::time::uptime_ms() as u32;
             icmp_packet.extend_from_slice(&ts.to_be_bytes());
             for i in 0..20 {
                 icmp_packet.push((0x41 + i) as u8);
@@ -91,29 +91,29 @@ pub fn trace(target: [u8; 4], maximum_hops: u8, timeout_mouse: u32) -> Vec<Trace
 
             // Send via IP with custom TTL
             if crate::netstack::ip::send_packet_with_ttl(target, 1, &icmp_packet, ttl).is_err() {
-                hop.rtt_mouse[probe] = 0;
+                hop.rtt_ms[probe] = 0;
                 continue;
             }
 
             // Wait for either echo reply or time exceeded
-            let result = crate::netstack::icmp::wait_for_response_or_error(sequence, target, timeout_mouse);
+            let result = crate::netstack::icmp::wait_for_response_or_error(seq, target, timeout_ms);
             let elapsed = crate::logger::get_ticks().saturating_sub(start);
 
                         // Pattern matching — Rust's exhaustive branching construct.
 match result {
                 crate::netstack::icmp::TracerouteResult::Reached { ip, .. } => {
                     hop.ip = Some(ip);
-                    hop.rtt_mouse[probe] = elapsed;
+                    hop.rtt_ms[probe] = elapsed;
                     hop.reached = true;
                     got_response = true;
                 }
-                crate::netstack::icmp::TracerouteResult::Hop { ip, rtt_mouse, .. } => {
+                crate::netstack::icmp::TracerouteResult::Hop { ip, rtt_ms, .. } => {
                     hop.ip = Some(ip);
-                    hop.rtt_mouse[probe] = rtt_mouse;
+                    hop.rtt_ms[probe] = rtt_ms;
                     got_response = true;
                 }
                 crate::netstack::icmp::TracerouteResult::Timeout => {
-                    hop.rtt_mouse[probe] = 0; // Will display as *
+                    hop.rtt_ms[probe] = 0; // Will display as *
                 }
             }
         }
@@ -149,12 +149,12 @@ fn icmp_checksum(data: &[u8]) -> u16 {
 pub fn format_trace(hops: &[TraceHop]) -> String {
     let mut output = String::new();
     for hop in hops {
-        output.push_str(&format!("{:>2}  ", hop.hop_number));
+        output.push_str(&format!("{:>2}  ", hop.hop_num));
 
         if let Some(ip) = hop.ip {
             output.push_str(&super::format_ip(ip));
             output.push_str("  ");
-            for &rtt in &hop.rtt_mouse {
+            for &rtt in &hop.rtt_ms {
                 if rtt == 0 {
                     output.push_str("*  ");
                 } else if rtt < 1 {

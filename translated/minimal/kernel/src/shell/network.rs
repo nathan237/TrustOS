@@ -7,10 +7,10 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::vec;
 use alloc::format;
-use crate::framebuffer::{B_, G_, AU_, D_, A_, C_, Q_, CD_, DF_, L_};
+use crate::framebuffer::{B_, G_, AX_, D_, A_, C_, R_, CF_, DM_, K_};
 
-pub(super) fn rcs(n: &[&str]) {
-    if n.is_empty() {
+pub(super) fn kme(args: &[&str]) {
+    if args.is_empty() {
         crate::println!("TrustOS Web Browser");
         crate::println!("Usage: browse <url>");
         crate::println!("  Example: browse http://example.com");
@@ -20,8 +20,8 @@ pub(super) fn rcs(n: &[&str]) {
         return;
     }
     
-    let url = n[0];
-    let url = if !url.cj("http://") && !url.cj("https://") {
+    let url = args[0];
+    let url = if !url.starts_with("http://") && !url.starts_with("https://") {
         alloc::format!("http://{}", url)
     } else {
         String::from(url)
@@ -32,24 +32,24 @@ pub(super) fn rcs(n: &[&str]) {
     
     let mut browser = crate::browser::Browser::new(800, 600);
     
-    match browser.bvn(&url) {
+    match browser.navigate(&url) {
         Ok(()) => {
-            crate::h!(B_, "Page loaded successfully!");
+            crate::n!(B_, "Page loaded successfully!");
             
             
-            if let Some(ref doc) = browser.ama {
-                if !doc.dq.is_empty() {
-                    crate::println!("Title: {}", doc.dq);
+            if let Some(ref doc) = browser.document {
+                if !doc.title.is_empty() {
+                    crate::println!("Title: {}", doc.title);
                 }
                 
                 crate::println!("");
                 
                 
-                lzb(doc, 0);
+                gra(doc, 0);
             }
         }
-        Err(aa) => {
-            crate::h!(A_, "Failed to load page: {}", aa);
+        Err(e) => {
+            crate::n!(A_, "Failed to load page: {}", e);
         }
     }
 }
@@ -58,260 +58,260 @@ pub(super) fn rcs(n: &[&str]) {
 
 
 
-pub(super) fn rda(n: &[&str]) {
-    let air = n.fv().hu().unwrap_or("help");
-    match air {
+pub(super) fn kmk(args: &[&str]) {
+    let je = args.first().copied().unwrap_or("help");
+    match je {
         "status" | "info" => {
-            if n.len() >= 2 {
+            if args.len() >= 2 {
                 
-                let ad: u32 = n[1].parse().unwrap_or(0);
-                match crate::sandbox::container::roe(ad) {
-                    Some(e) => crate::println!("{}", e),
-                    None => crate::h!(A_, "Container #{} not found", ad),
+                let id: u32 = args[1].parse().unwrap_or(0);
+                match crate::sandbox::container::kxi(id) {
+                    Some(j) => crate::println!("{}", j),
+                    None => crate::n!(A_, "Container #{} not found", id),
                 }
             } else {
                 
-                crate::println!("{}", crate::sandbox::container::rth());
+                crate::println!("{}", crate::sandbox::container::lbk());
             }
         }
 
         "list" | "ls" => {
-            let bmm = crate::sandbox::container::ufp();
-            if bmm.is_empty() {
+            let containers = crate::sandbox::container::mzb();
+            if containers.is_empty() {
                 crate::println!("No containers.");
             } else {
-                crate::h!(C_, "Web Containers:");
+                crate::n!(C_, "Web Containers:");
                 crate::println!("  {:>4}  {:>10}  {:>3}  {}", "ID", "Health", "Def", "Name");
-                crate::println!("  {}", "-".afd(45));
-                for (ad, j, arh, txe) in &bmm {
-                    let ruz = if *txe { " * " } else { "   " };
-                    crate::println!("  {:>4}  {:>10?}  {}  {}", ad, arh, ruz, j);
+                crate::println!("  {}", "-".repeat(45));
+                for (id, name, health, is_default) in &containers {
+                    let lcx = if *is_default { " * " } else { "   " };
+                    crate::println!("  {:>4}  {:>10?}  {}  {}", id, health, lcx, name);
                 }
             }
         }
 
         "create" => {
             
-            let lvc = n.get(1).hu().unwrap_or("default");
-            let config = match lvc {
-                "secure" => crate::sandbox::container::ContainerConfig::hzi(),
-                "dev" => crate::sandbox::container::ContainerConfig::ba(),
+            let gnx = args.get(1).copied().unwrap_or("default");
+            let config = match gnx {
+                "secure" => crate::sandbox::container::ContainerConfig::secure(),
+                "dev" => crate::sandbox::container::ContainerConfig::s(),
                 _ => {
                     let mut cfg = crate::sandbox::container::ContainerConfig::default();
                     
-                    if lvc != "default" {
-                        cfg.j = String::from(lvc);
+                    if gnx != "default" {
+                        cfg.name = String::from(gnx);
                     }
                     cfg
                 }
             };
-            let mut bjs = crate::sandbox::container::CJ_.lock();
-            let ad = bjs.nha(config);
-            match bjs.pnz(ad) {
-                Ok(()) => crate::h!(B_, "Container #{} created and started", ad),
-                Err(aa) => crate::h!(A_, "Created #{} but failed to start: {:?}", ad, aa),
+            let mut agj = crate::sandbox::container::CN_.lock();
+            let id = agj.create_container(config);
+            match agj.start_container(id) {
+                Ok(()) => crate::n!(B_, "Container #{} created and started", id),
+                Err(e) => crate::n!(A_, "Created #{} but failed to start: {:?}", id, e),
             }
         }
 
         "go" | "navigate" | "open" => {
             
-            if n.len() < 2 {
+            if args.len() < 2 {
                 crate::println!("Usage: container go <url> [container_id]");
                 return;
             }
-            let url = n[1];
-            let kkq: Option<u32> = n.get(2).and_then(|e| e.parse().bq());
+            let url = args[1];
+            let foh: Option<u32> = args.get(2).and_then(|j| j.parse().ok());
 
-            crate::h!(C_, "[Container] Fetching {}...", url);
-            let mut bjs = crate::sandbox::container::CJ_.lock();
-            match bjs.bvn(kkq, url) {
-                Ok(lj) => {
-                    crate::h!(B_, "  Status: {} | {} | {} bytes",
-                        lj.wt, lj.ahg, lj.gj.len());
+            crate::n!(C_, "[Container] Fetching {}...", url);
+            let mut agj = crate::sandbox::container::CN_.lock();
+            match agj.navigate(foh, url) {
+                Ok(eo) => {
+                    crate::n!(B_, "  Status: {} | {} | {} bytes",
+                        eo.status_code, eo.content_type, eo.body.len());
 
-                    if lj.oga() {
-                        let iyx = lj.hax();
-                        let doc = crate::browser::html_parser::due(&iyx);
-                        if !doc.dq.is_empty() {
-                            crate::println!("  Title: {}", doc.dq);
+                    if eo.is_html() {
+                        let epr = eo.body_string();
+                        let doc = crate::browser::html_parser::boe(&epr);
+                        if !doc.title.is_empty() {
+                            crate::println!("  Title: {}", doc.title);
                         }
                         crate::println!();
-                        lzb(&doc, 0);
+                        gra(&doc, 0);
                     } else {
-                        let text = lj.hax();
-                        let hvz: String = text.bw().take(2000).collect();
-                        crate::println!("{}", hvz);
+                        let text = eo.body_string();
+                        let dww: String = text.chars().take(2000).collect();
+                        crate::println!("{}", dww);
                         if text.len() > 2000 {
                             crate::println!("  ... ({} bytes total)", text.len());
                         }
                     }
                 }
-                Err(aa) => {
-                    crate::h!(A_, "  Error: {:?}", aa);
+                Err(e) => {
+                    crate::n!(A_, "  Error: {:?}", e);
                 }
             }
         }
 
         "stop" => {
-            if n.len() < 2 {
+            if args.len() < 2 {
                 crate::println!("Usage: container stop <id>");
                 return;
             }
-            let ad: u32 = n[1].parse().unwrap_or(0);
-            let mut bjs = crate::sandbox::container::CJ_.lock();
-            match bjs.wun(ad) {
-                Ok(()) => crate::h!(B_, "Container #{} stopped", ad),
-                Err(aa) => crate::h!(A_, "Error: {:?}", aa),
+            let id: u32 = args[1].parse().unwrap_or(0);
+            let mut agj = crate::sandbox::container::CN_.lock();
+            match agj.stop_container(id) {
+                Ok(()) => crate::n!(B_, "Container #{} stopped", id),
+                Err(e) => crate::n!(A_, "Error: {:?}", e),
             }
         }
 
         "start" => {
-            if n.len() < 2 {
+            if args.len() < 2 {
                 crate::println!("Usage: container start <id>");
                 return;
             }
-            let ad: u32 = n[1].parse().unwrap_or(0);
-            let mut bjs = crate::sandbox::container::CJ_.lock();
-            match bjs.pnz(ad) {
-                Ok(()) => crate::h!(B_, "Container #{} started", ad),
-                Err(aa) => crate::h!(A_, "Error: {:?}", aa),
+            let id: u32 = args[1].parse().unwrap_or(0);
+            let mut agj = crate::sandbox::container::CN_.lock();
+            match agj.start_container(id) {
+                Ok(()) => crate::n!(B_, "Container #{} started", id),
+                Err(e) => crate::n!(A_, "Error: {:?}", e),
             }
         }
 
         "restart" => {
-            if n.len() < 2 {
+            if args.len() < 2 {
                 crate::println!("Usage: container restart <id>");
                 return;
             }
-            let ad: u32 = n[1].parse().unwrap_or(0);
-            let mut bjs = crate::sandbox::container::CJ_.lock();
-            match bjs.vyd(ad) {
-                Ok(()) => crate::h!(B_, "Container #{} restarted", ad),
-                Err(aa) => crate::h!(A_, "Error: {:?}", aa),
+            let id: u32 = args[1].parse().unwrap_or(0);
+            let mut agj = crate::sandbox::container::CN_.lock();
+            match agj.restart_container(id) {
+                Ok(()) => crate::n!(B_, "Container #{} restarted", id),
+                Err(e) => crate::n!(A_, "Error: {:?}", e),
             }
         }
 
         "destroy" | "rm" => {
-            if n.len() < 2 {
+            if args.len() < 2 {
                 crate::println!("Usage: container destroy <id>");
                 return;
             }
-            let ad: u32 = n[1].parse().unwrap_or(0);
-            let mut bjs = crate::sandbox::container::CJ_.lock();
-            match bjs.rwj(ad) {
-                Ok(()) => crate::h!(B_, "Container #{} destroyed", ad),
-                Err(aa) => crate::h!(A_, "Error: {:?}", aa),
+            let id: u32 = args[1].parse().unwrap_or(0);
+            let mut agj = crate::sandbox::container::CN_.lock();
+            match agj.destroy_container(id) {
+                Ok(()) => crate::n!(B_, "Container #{} destroyed", id),
+                Err(e) => crate::n!(A_, "Error: {:?}", e),
             }
         }
 
         "allow" => {
-            if n.len() < 3 {
+            if args.len() < 3 {
                 crate::println!("Usage: container allow <id> <domain>");
                 return;
             }
-            let ad: u32 = n[1].parse().unwrap_or(0);
-            let vh = n[2];
+            let id: u32 = args[1].parse().unwrap_or(0);
+            let domain = args[2];
             
-            let afh = {
-                let mut bjs = crate::sandbox::container::CJ_.lock();
-                if let Some(container) = bjs.ds(ad) {
-                    container.config.gyk.push(String::from(vh));
-                    container.afh
+            let sandbox_id = {
+                let mut agj = crate::sandbox::container::CN_.lock();
+                if let Some(container) = agj.get_mut(id) {
+                    container.config.allowed_domains.push(String::from(domain));
+                    container.sandbox_id
                 } else {
-                    crate::h!(A_, "Container #{} not found", ad);
+                    crate::n!(A_, "Container #{} not found", id);
                     return;
                 }
             };
             
-            if let Some(ary) = afh {
-                let mut aas = crate::sandbox::BD_.lock();
-                if let Some(is) = aas.ds(ary) {
-                    is.policy.kaf(vh);
+            if let Some(sid) = sandbox_id {
+                let mut ng = crate::sandbox::BE_.lock();
+                if let Some(cv) = ng.get_mut(sid) {
+                    cv.policy.allow_domain(domain);
                 }
             }
-            crate::h!(B_, "Domain '{}' allowed in container #{}", vh, ad);
+            crate::n!(B_, "Domain '{}' allowed in container #{}", domain, id);
         }
 
         "deny" | "block" => {
-            if n.len() < 3 {
+            if args.len() < 3 {
                 crate::println!("Usage: container deny <id> <domain>");
                 return;
             }
-            let ad: u32 = n[1].parse().unwrap_or(0);
-            let vh = n[2];
-            let afh = {
-                let mut bjs = crate::sandbox::container::CJ_.lock();
-                if let Some(container) = bjs.ds(ad) {
-                    container.config.hav.push(String::from(vh));
-                    container.afh
+            let id: u32 = args[1].parse().unwrap_or(0);
+            let domain = args[2];
+            let sandbox_id = {
+                let mut agj = crate::sandbox::container::CN_.lock();
+                if let Some(container) = agj.get_mut(id) {
+                    container.config.blocked_domains.push(String::from(domain));
+                    container.sandbox_id
                 } else {
-                    crate::h!(A_, "Container #{} not found", ad);
+                    crate::n!(A_, "Container #{} not found", id);
                     return;
                 }
             };
-            if let Some(ary) = afh {
-                let mut aas = crate::sandbox::BD_.lock();
-                if let Some(is) = aas.ds(ary) {
-                    is.policy.kpc(vh);
+            if let Some(sid) = sandbox_id {
+                let mut ng = crate::sandbox::BE_.lock();
+                if let Some(cv) = ng.get_mut(sid) {
+                    cv.policy.deny_domain(domain);
                 }
             }
-            crate::h!(B_, "Domain '{}' blocked in container #{}", vh, ad);
+            crate::n!(B_, "Domain '{}' blocked in container #{}", domain, id);
         }
 
         "watchdog" => {
-            crate::sandbox::container::jwm();
-            crate::h!(B_, "Watchdog tick executed.");
+            crate::sandbox::container::watchdog_tick();
+            crate::n!(B_, "Watchdog tick executed.");
         }
 
         "history" => {
-            if n.len() < 2 {
+            if args.len() < 2 {
                 crate::println!("Usage: container history <id>");
                 return;
             }
-            let ad: u32 = n[1].parse().unwrap_or(0);
-            let bjs = crate::sandbox::container::CJ_.lock();
-            if let Some(container) = bjs.get(ad) {
-                if container.adv.is_empty() {
+            let id: u32 = args[1].parse().unwrap_or(0);
+            let agj = crate::sandbox::container::CN_.lock();
+            if let Some(container) = agj.get(id) {
+                if container.history.is_empty() {
                     crate::println!("No navigation history.");
                 } else {
-                    crate::h!(C_, "Navigation history for container #{}:", ad);
-                    for (a, url) in container.adv.iter().cf() {
-                        crate::println!("  {}. {}", a + 1, url);
+                    crate::n!(C_, "Navigation history for container #{}:", id);
+                    for (i, url) in container.history.iter().enumerate() {
+                        crate::println!("  {}. {}", i + 1, url);
                     }
                 }
             } else {
-                crate::h!(A_, "Container #{} not found", ad);
+                crate::n!(A_, "Container #{} not found", id);
             }
         }
 
         _ => {
-            crate::h!(C_, "TrustOS Web Container -- persistent isolated web service daemon");
+            crate::n!(C_, "TrustOS Web Container -- persistent isolated web service daemon");
             crate::println!();
             crate::println!("Usage: container <command> [args...]");
             crate::println!();
-            crate::h!(Q_, "  Daemon:");
+            crate::n!(R_, "  Daemon:");
             crate::println!("    status [id]           Show daemon or container status");
             crate::println!("    list                  List all containers");
             crate::println!("    watchdog              Run watchdog health check");
             crate::println!();
-            crate::h!(Q_, "  Lifecycle:");
+            crate::n!(R_, "  Lifecycle:");
             crate::println!("    create [secure|dev]   Create a new container");
             crate::println!("    start <id>            Start a container");
             crate::println!("    stop <id>             Stop a container");
             crate::println!("    restart <id>          Restart a container");
             crate::println!("    destroy <id>          Remove a container");
             crate::println!();
-            crate::h!(Q_, "  Navigation:");
+            crate::n!(R_, "  Navigation:");
             crate::println!("    go <url> [id]         Navigate through container");
             crate::println!("    history <id>          Show navigation history");
             crate::println!();
-            crate::h!(Q_, "  Security:");
+            crate::n!(R_, "  Security:");
             crate::println!("    allow <id> <domain>   Allow domain access");
             crate::println!("    deny <id> <domain>    Block domain access");
             crate::println!();
-            crate::h!(D_, "  The default container is auto-started at boot.");
-            crate::h!(D_, "  All web traffic is proxied through the kernel.");
-            crate::h!(D_, "  Isolation: software (capabilities) | hardware (EPT - future)");
+            crate::n!(D_, "  The default container is auto-started at boot.");
+            crate::n!(D_, "  All web traffic is proxied through the kernel.");
+            crate::n!(D_, "  Isolation: software (capabilities) | hardware (EPT - future)");
         }
     }
 }
@@ -320,347 +320,347 @@ pub(super) fn rda(n: &[&str]) {
 
 
 
-pub(super) fn rhv(n: &[&str]) {
-    let air = n.fv().hu().unwrap_or("help");
-    match air {
+pub(super) fn krf(args: &[&str]) {
+    let je = args.first().copied().unwrap_or("help");
+    match je {
         "open" | "navigate" | "go" => {
             
-            if n.len() < 2 {
+            if args.len() < 2 {
                 crate::println!("Usage: sandbox open <url> [strict|moderate|permissive]");
                 return;
             }
-            let url = n[1];
-            let akl = match n.get(2).hu() {
-                Some("strict") => crate::sandbox::policy::PolicyPreset::Aet,
-                Some("permissive") => crate::sandbox::policy::PolicyPreset::Ads,
-                _ => crate::sandbox::policy::PolicyPreset::Ade,
+            let url = args[1];
+            let preset = match args.get(2).copied() {
+                Some("strict") => crate::sandbox::policy::PolicyPreset::Strict,
+                Some("permissive") => crate::sandbox::policy::PolicyPreset::Permissive,
+                _ => crate::sandbox::policy::PolicyPreset::Moderate,
             };
 
-            crate::h!(C_, "[Sandbox] Creating sandbox ({:?})...", akl);
-            let ad = crate::sandbox::avp(akl, Some(url));
-            crate::println!("  Sandbox #{} created", ad.0);
+            crate::n!(C_, "[Sandbox] Creating sandbox ({:?})...", preset);
+            let id = crate::sandbox::create(preset, Some(url));
+            crate::println!("  Sandbox #{} created", id.0);
 
-            crate::h!(C_, "[Sandbox] Navigating to {}...", url);
-            match crate::sandbox::bvn(ad, url) {
-                Ok(lj) => {
-                    crate::h!(B_, "  Status: {} | Content-Type: {} | {} bytes",
-                        lj.wt, lj.ahg, lj.gj.len());
+            crate::n!(C_, "[Sandbox] Navigating to {}...", url);
+            match crate::sandbox::navigate(id, url) {
+                Ok(eo) => {
+                    crate::n!(B_, "  Status: {} | Content-Type: {} | {} bytes",
+                        eo.status_code, eo.content_type, eo.body.len());
 
-                    if lj.oga() {
+                    if eo.is_html() {
                         
-                        let iyx = lj.hax();
-                        let doc = crate::browser::html_parser::due(&iyx);
-                        if !doc.dq.is_empty() {
-                            crate::println!("  Title: {}", doc.dq);
+                        let epr = eo.body_string();
+                        let doc = crate::browser::html_parser::boe(&epr);
+                        if !doc.title.is_empty() {
+                            crate::println!("  Title: {}", doc.title);
                         }
                         crate::println!();
-                        lzb(&doc, 0);
+                        gra(&doc, 0);
 
                         
-                        let aas = crate::sandbox::BD_.lock();
-                        let policy = aas.get(ad).map(|e| e.policy.ohg()).unwrap_or(false);
-                        drop(aas);
+                        let ng = crate::sandbox::BE_.lock();
+                        let policy = ng.get(id).map(|j| j.policy.js_allowed()).unwrap_or(false);
+                        drop(ng);
                         if policy {
-                            let mut lgz = crate::sandbox::js_sandbox::JsSandbox::new(
-                                ad, crate::sandbox::js_sandbox::JsSandboxConfig::default()
+                            let mut gej = crate::sandbox::js_sandbox::JsSandbox::new(
+                                id, crate::sandbox::js_sandbox::JsSandboxConfig::default()
                             );
-                            let hd = lgz.sop(&iyx);
-                            if !hd.is_empty() {
-                                crate::h!(D_, "\n  [JS] {} script(s) processed", hd.len());
-                                for (a, m) in hd.iter().cf() {
-                                    if m.cpn {
-                                        crate::h!(B_, "    Script {}: OK ({}ms)", a+1, m.oz);
+                            let results = gej.execute_inline_scripts(&epr);
+                            if !results.is_empty() {
+                                crate::n!(D_, "\n  [JS] {} script(s) processed", results.len());
+                                for (i, r) in results.iter().enumerate() {
+                                    if r.completed {
+                                        crate::n!(B_, "    Script {}: OK ({}ms)", i+1, r.elapsed_ms);
                                     } else {
-                                        crate::h!(A_, "    Script {}: {}", a+1,
-                                            m.zt.ahz().unwrap_or("failed"));
+                                        crate::n!(A_, "    Script {}: {}", i+1,
+                                            r.error.as_deref().unwrap_or("failed"));
                                     }
-                                    for line in &m.an {
+                                    for line in &r.output {
                                         crate::println!("      > {}", line);
                                     }
                                 }
                             }
                         } else {
-                            crate::h!(D_, "  [JS blocked by policy]");
+                            crate::n!(D_, "  [JS blocked by policy]");
                         }
                     } else {
                         
-                        let text = lj.hax();
-                        let hvz: String = text.bw().take(2000).collect();
-                        crate::println!("{}", hvz);
+                        let text = eo.body_string();
+                        let dww: String = text.chars().take(2000).collect();
+                        crate::println!("{}", dww);
                         if text.len() > 2000 {
                             crate::println!("  ... ({} bytes total)", text.len());
                         }
                     }
                 }
-                Err(aa) => {
-                    crate::h!(A_, "  Error: {:?}", aa);
+                Err(e) => {
+                    crate::n!(A_, "  Error: {:?}", e);
                 }
             }
         }
 
         "list" | "ls" => {
-            let bse = crate::sandbox::aoy();
-            if bse.is_empty() {
+            let sandboxes = crate::sandbox::list();
+            if sandboxes.is_empty() {
                 crate::println!("No active sandboxes.");
             } else {
-                crate::h!(C_, "Active sandboxes:");
+                crate::n!(C_, "Active sandboxes:");
                 crate::println!("  {:>4}  {:>10}  {}", "ID", "State", "Label");
-                crate::println!("  {}", "-".afd(40));
-                for (ad, cu, g) in &bse {
-                    crate::println!("  {:>4}  {:>10?}  {}", ad.0, g, cu);
+                crate::println!("  {}", "-".repeat(40));
+                for (id, label, state) in &sandboxes {
+                    crate::println!("  {:>4}  {:>10?}  {}", id.0, state, label);
                 }
             }
         }
 
         "status" | "info" => {
-            if n.len() < 2 {
+            if args.len() < 2 {
                 crate::println!("Usage: sandbox status <id>");
                 return;
             }
-            let asz: u64 = n[1].parse().unwrap_or(0);
-            let ad = crate::sandbox::Ax(asz);
-            match crate::sandbox::ibt(ad) {
-                Some(e) => crate::println!("{}", e),
-                None => crate::h!(A_, "Sandbox #{} not found", asz),
+            let xd: u64 = args[1].parse().unwrap_or(0);
+            let id = crate::sandbox::Ag(xd);
+            match crate::sandbox::status_string(id) {
+                Some(j) => crate::println!("{}", j),
+                None => crate::n!(A_, "Sandbox #{} not found", xd),
             }
         }
 
         "kill" | "destroy" | "close" => {
-            if n.len() < 2 {
+            if args.len() < 2 {
                 crate::println!("Usage: sandbox kill <id|all>");
                 return;
             }
-            if n[1] == "all" {
-                let bse = crate::sandbox::aoy();
-                for (ad, _, _) in &bse {
-                    let _ = crate::sandbox::hfy(*ad);
+            if args[1] == "all" {
+                let sandboxes = crate::sandbox::list();
+                for (id, _, _) in &sandboxes {
+                    let _ = crate::sandbox::destroy(*id);
                 }
-                crate::h!(B_, "All sandboxes destroyed.");
+                crate::n!(B_, "All sandboxes destroyed.");
             } else {
-                let asz: u64 = n[1].parse().unwrap_or(0);
-                let ad = crate::sandbox::Ax(asz);
-                match crate::sandbox::hfy(ad) {
-                    Ok(()) => crate::h!(B_, "Sandbox #{} destroyed.", asz),
-                    Err(aa) => crate::h!(A_, "Error: {:?}", aa),
+                let xd: u64 = args[1].parse().unwrap_or(0);
+                let id = crate::sandbox::Ag(xd);
+                match crate::sandbox::destroy(id) {
+                    Ok(()) => crate::n!(B_, "Sandbox #{} destroyed.", xd),
+                    Err(e) => crate::n!(A_, "Error: {:?}", e),
                 }
             }
         }
 
         "allow" => {
             
-            if n.len() < 3 {
+            if args.len() < 3 {
                 crate::println!("Usage: sandbox allow <id> <domain>");
                 crate::println!("  Example: sandbox allow 1 example.com");
                 crate::println!("  Example: sandbox allow 1 *.github.com");
                 return;
             }
-            let asz: u64 = n[1].parse().unwrap_or(0);
-            let vh = n[2];
-            let mut aas = crate::sandbox::BD_.lock();
-            if let Some(is) = aas.ds(crate::sandbox::Ax(asz)) {
-                is.policy.kaf(vh);
-                crate::h!(B_, "Domain '{}' allowed in sandbox #{}", vh, asz);
+            let xd: u64 = args[1].parse().unwrap_or(0);
+            let domain = args[2];
+            let mut ng = crate::sandbox::BE_.lock();
+            if let Some(cv) = ng.get_mut(crate::sandbox::Ag(xd)) {
+                cv.policy.allow_domain(domain);
+                crate::n!(B_, "Domain '{}' allowed in sandbox #{}", domain, xd);
             } else {
-                crate::h!(A_, "Sandbox #{} not found", asz);
+                crate::n!(A_, "Sandbox #{} not found", xd);
             }
         }
 
         "deny" | "block" => {
             
-            if n.len() < 3 {
+            if args.len() < 3 {
                 crate::println!("Usage: sandbox deny <id> <domain>");
                 return;
             }
-            let asz: u64 = n[1].parse().unwrap_or(0);
-            let vh = n[2];
-            let mut aas = crate::sandbox::BD_.lock();
-            if let Some(is) = aas.ds(crate::sandbox::Ax(asz)) {
-                is.policy.kpc(vh);
-                crate::h!(B_, "Domain '{}' blocked in sandbox #{}", vh, asz);
+            let xd: u64 = args[1].parse().unwrap_or(0);
+            let domain = args[2];
+            let mut ng = crate::sandbox::BE_.lock();
+            if let Some(cv) = ng.get_mut(crate::sandbox::Ag(xd)) {
+                cv.policy.deny_domain(domain);
+                crate::n!(B_, "Domain '{}' blocked in sandbox #{}", domain, xd);
             } else {
-                crate::h!(A_, "Sandbox #{} not found", asz);
+                crate::n!(A_, "Sandbox #{} not found", xd);
             }
         }
 
         "policy" => {
-            if n.len() < 2 {
+            if args.len() < 2 {
                 crate::println!("Usage: sandbox policy <id>");
                 return;
             }
-            let asz: u64 = n[1].parse().unwrap_or(0);
-            let aas = crate::sandbox::BD_.lock();
-            if let Some(is) = aas.get(crate::sandbox::Ax(asz)) {
-                crate::println!("{}", is.policy.awz());
+            let xd: u64 = args[1].parse().unwrap_or(0);
+            let ng = crate::sandbox::BE_.lock();
+            if let Some(cv) = ng.get(crate::sandbox::Ag(xd)) {
+                crate::println!("{}", cv.policy.summary());
             } else {
-                crate::h!(A_, "Sandbox #{} not found", asz);
+                crate::n!(A_, "Sandbox #{} not found", xd);
             }
         }
 
         "fs" => {
             
-            if n.len() < 3 {
+            if args.len() < 3 {
                 crate::println!("Usage: sandbox fs <id> <ls|tree|read|write|del> [path] [data]");
                 return;
             }
-            let asz: u64 = n[1].parse().unwrap_or(0);
-            let nwn = n[2];
-            let mut aas = crate::sandbox::BD_.lock();
-            if let Some(is) = aas.ds(crate::sandbox::Ax(asz)) {
-                match nwn {
+            let xd: u64 = args[1].parse().unwrap_or(0);
+            let iag = args[2];
+            let mut ng = crate::sandbox::BE_.lock();
+            if let Some(cv) = ng.get_mut(crate::sandbox::Ag(xd)) {
+                match iag {
                     "tree" => {
-                        crate::println!("{}", is.fio.iex());
+                        crate::println!("{}", cv.filesystem.tree());
                     }
                     "ls" => {
-                        let te = n.get(3).hu().unwrap_or("/");
-                        match is.fio.aoy(te) {
-                            Ok(ch) => {
-                                crate::h!(C_, "{}:", te);
-                                for (path, are, aw) in &ch {
-                                    let pa = if *are == &crate::sandbox::fs::SandboxFileType::K { "[D]" } else { "[F]" };
-                                    crate::println!("  {} {} ({} bytes)", pa, path, aw);
+                        let it = args.get(3).copied().unwrap_or("/");
+                        match cv.filesystem.list(it) {
+                            Ok(entries) => {
+                                crate::n!(C_, "{}:", it);
+                                for (path, wf, size) in &entries {
+                                    let icon = if *wf == &crate::sandbox::fs::SandboxFileType::Directory { "[D]" } else { "[F]" };
+                                    crate::println!("  {} {} ({} bytes)", icon, path, size);
                                 }
                             }
-                            Err(aa) => crate::h!(A_, "Error: {:?}", aa),
+                            Err(e) => crate::n!(A_, "Error: {:?}", e),
                         }
                     }
                     "read" => {
-                        let path = n.get(3).hu().unwrap_or("/");
-                        match is.fio.read(path) {
-                            Ok(f) => {
-                                let text = core::str::jg(f).unwrap_or("<binary>");
+                        let path = args.get(3).copied().unwrap_or("/");
+                        match cv.filesystem.read(path) {
+                            Ok(data) => {
+                                let text = core::str::from_utf8(data).unwrap_or("<binary>");
                                 crate::println!("{}", text);
                             }
-                            Err(aa) => crate::h!(A_, "Error: {:?}", aa),
+                            Err(e) => crate::n!(A_, "Error: {:?}", e),
                         }
                     }
                     "write" => {
-                        if n.len() < 5 {
+                        if args.len() < 5 {
                             crate::println!("Usage: sandbox fs <id> write <path> <data>");
                             return;
                         }
-                        let path = n[3];
-                        let f = n[4..].rr(" ");
-                        match is.fio.write(path, f.as_bytes(), "shell") {
-                            Ok(()) => crate::h!(B_, "Written {} bytes to {}", f.len(), path),
-                            Err(aa) => crate::h!(A_, "Error: {:?}", aa),
+                        let path = args[3];
+                        let data = args[4..].join(" ");
+                        match cv.filesystem.write(path, data.as_bytes(), "shell") {
+                            Ok(()) => crate::n!(B_, "Written {} bytes to {}", data.len(), path),
+                            Err(e) => crate::n!(A_, "Error: {:?}", e),
                         }
                     }
                     "del" | "rm" => {
-                        let path = n.get(3).hu().unwrap_or("");
-                        match is.fio.rvg(path) {
-                            Ok(()) => crate::h!(B_, "Deleted {}", path),
-                            Err(aa) => crate::h!(A_, "Error: {:?}", aa),
+                        let path = args.get(3).copied().unwrap_or("");
+                        match cv.filesystem.delete(path) {
+                            Ok(()) => crate::n!(B_, "Deleted {}", path),
+                            Err(e) => crate::n!(A_, "Error: {:?}", e),
                         }
                     }
-                    _ => crate::println!("Unknown fs command: {}", nwn),
+                    _ => crate::println!("Unknown fs command: {}", iag),
                 }
             } else {
-                crate::h!(A_, "Sandbox #{} not found", asz);
+                crate::n!(A_, "Sandbox #{} not found", xd);
             }
         }
 
         "js" | "eval" => {
             
-            if n.len() < 3 {
+            if args.len() < 3 {
                 crate::println!("Usage: sandbox js <id> <code>");
                 crate::println!("  Example: sandbox js 1 console.log('hello')");
                 return;
             }
-            let asz: u64 = n[1].parse().unwrap_or(0);
-            let aj = n[2..].rr(" ");
-            let aas = crate::sandbox::BD_.lock();
-            let aja = aas.get(crate::sandbox::Ax(asz)).is_some();
-            let uar = aas.get(crate::sandbox::Ax(asz))
-                .map(|e| e.policy.ohg()).unwrap_or(false);
-            drop(aas);
+            let xd: u64 = args[1].parse().unwrap_or(0);
+            let code = args[2..].join(" ");
+            let ng = crate::sandbox::BE_.lock();
+            let exists = ng.get(crate::sandbox::Ag(xd)).is_some();
+            let mvf = ng.get(crate::sandbox::Ag(xd))
+                .map(|j| j.policy.js_allowed()).unwrap_or(false);
+            drop(ng);
 
-            if !aja {
-                crate::h!(A_, "Sandbox #{} not found", asz);
+            if !exists {
+                crate::n!(A_, "Sandbox #{} not found", xd);
                 return;
             }
-            if !uar {
-                crate::h!(A_, "JavaScript is blocked by sandbox policy (use 'moderate' or 'permissive' preset)");
+            if !mvf {
+                crate::n!(A_, "JavaScript is blocked by sandbox policy (use 'moderate' or 'permissive' preset)");
                 return;
             }
 
-            let mut lgz = crate::sandbox::js_sandbox::JsSandbox::new(
-                crate::sandbox::Ax(asz),
+            let mut gej = crate::sandbox::js_sandbox::JsSandbox::new(
+                crate::sandbox::Ag(xd),
                 crate::sandbox::js_sandbox::JsSandboxConfig::default(),
             );
-            let result = lgz.bna(&aj);
-            if result.cpn {
-                crate::h!(B_, "= {}", result.jmj);
+            let result = gej.execute(&code);
+            if result.completed {
+                crate::n!(B_, "= {}", result.return_value);
             } else {
-                crate::h!(A_, "Error: {}", result.zt.ahz().unwrap_or("unknown"));
+                crate::n!(A_, "Error: {}", result.error.as_deref().unwrap_or("unknown"));
             }
-            for line in &result.an {
+            for line in &result.output {
                 crate::println!("  > {}", line);
             }
-            crate::h!(Q_, "  ({}ms)", result.oz);
+            crate::n!(R_, "  ({}ms)", result.elapsed_ms);
         }
 
         "audit" | "log" => {
-            if n.len() < 2 {
+            if args.len() < 2 {
                 
-                let aas = crate::sandbox::BD_.lock();
-                let log = aas.emi();
+                let ng = crate::sandbox::BE_.lock();
+                let log = ng.audit_log();
                 if log.is_empty() {
                     crate::println!("No audit entries.");
                 } else {
-                    crate::h!(C_, "Audit log ({} entries):", log.len());
-                    for bt in log.iter().vv().take(20) {
+                    crate::n!(C_, "Audit log ({} entries):", log.len());
+                    for entry in log.iter().rev().take(20) {
                         crate::println!("  [{}ms] #{} {:?}: {}",
-                            bt.aet, bt.afh.0,
-                            bt.hr, bt.eu);
+                            entry.timestamp_ms, entry.sandbox_id.0,
+                            entry.action, entry.detail);
                     }
                 }
             } else {
-                let asz: u64 = n[1].parse().unwrap_or(0);
-                let aas = crate::sandbox::BD_.lock();
-                let ch = aas.qlf(crate::sandbox::Ax(asz));
-                if ch.is_empty() {
-                    crate::println!("No audit entries for sandbox #{}", asz);
+                let xd: u64 = args[1].parse().unwrap_or(0);
+                let ng = crate::sandbox::BE_.lock();
+                let entries = ng.audit_for(crate::sandbox::Ag(xd));
+                if entries.is_empty() {
+                    crate::println!("No audit entries for sandbox #{}", xd);
                 } else {
-                    crate::h!(C_, "Audit for sandbox #{} ({} entries):", asz, ch.len());
-                    for bt in ch.iter().vv().take(20) {
+                    crate::n!(C_, "Audit for sandbox #{} ({} entries):", xd, entries.len());
+                    for entry in entries.iter().rev().take(20) {
                         crate::println!("  [{}ms] {:?}: {}",
-                            bt.aet, bt.hr, bt.eu);
+                            entry.timestamp_ms, entry.action, entry.detail);
                     }
                 }
             }
         }
 
         _ => {
-            crate::h!(C_, "TrustOS Web Sandbox -- Secure isolated web execution");
+            crate::n!(C_, "TrustOS Web Sandbox -- Secure isolated web execution");
             crate::println!();
             crate::println!("Usage: sandbox <command> [args...]");
             crate::println!();
-            crate::h!(Q_, "  Navigation:");
+            crate::n!(R_, "  Navigation:");
             crate::println!("    open <url> [preset]     Open URL in new sandbox");
             crate::println!("                             Presets: strict, moderate (default), permissive");
             crate::println!();
-            crate::h!(Q_, "  Sandbox Management:");
+            crate::n!(R_, "  Sandbox Management:");
             crate::println!("    list                    List active sandboxes");
             crate::println!("    status <id>             Show sandbox details & stats");
             crate::println!("    kill <id|all>           Destroy sandbox(es)");
             crate::println!("    audit [id]              View audit log");
             crate::println!();
-            crate::h!(Q_, "  Security Policy:");
+            crate::n!(R_, "  Security Policy:");
             crate::println!("    allow <id> <domain>     Add domain to allowlist");
             crate::println!("    deny <id> <domain>      Add domain to denylist");
             crate::println!("    policy <id>             Show policy config");
             crate::println!();
-            crate::h!(Q_, "  Sandboxed Filesystem:");
+            crate::n!(R_, "  Sandboxed Filesystem:");
             crate::println!("    fs <id> tree             Show filesystem tree");
             crate::println!("    fs <id> ls [dir]         List directory");
             crate::println!("    fs <id> read <path>      Read file");
             crate::println!("    fs <id> write <path> <d> Write data to file");
             crate::println!("    fs <id> del <path>       Delete file");
             crate::println!();
-            crate::h!(Q_, "  JavaScript (sandboxed):");
+            crate::n!(R_, "  JavaScript (sandboxed):");
             crate::println!("    js <id> <code>           Execute JS in sandbox");
             crate::println!();
-            crate::h!(D_, "  Security features:");
+            crate::n!(D_, "  Security features:");
             crate::println!("    - Capability-gated network (kernel proxy)");
             crate::println!("    - Domain allow/deny lists + SSRF protection");
             crate::println!("    - Rate limiting + response size limits");
@@ -672,44 +672,44 @@ pub(super) fn rhv(n: &[&str]) {
 }
 
 
-fn lzb(doc: &crate::browser::Su, xyr: usize) {
-    for anq in &doc.xq {
-        pbz(anq, 0);
+fn gra(doc: &crate::browser::Ia, _depth: usize) {
+    for uf in &doc.nodes {
+        izu(uf, 0);
     }
 }
 
 
-fn pbz(anq: &crate::browser::HtmlNode, eo: usize) {
-    match anq {
+fn izu(uf: &crate::browser::HtmlNode, depth: usize) {
+    match uf {
         crate::browser::HtmlNode::Text(text) => {
-            let text = text.em();
+            let text = text.trim();
             if !text.is_empty() {
                 crate::println!("{}", text);
             }
         }
-        crate::browser::HtmlNode::Na(ij) => {
-            let ll = ij.ll.as_str();
+        crate::browser::HtmlNode::Element(el) => {
+            let tag = el.tag.as_str();
             
             
-            if oh!(ll, "head" | "script" | "style" | "meta" | "link" | "title" | "noscript") {
+            if matches!(tag, "head" | "script" | "style" | "meta" | "link" | "title" | "noscript") {
                 return;
             }
             
             
-            match ll {
+            match tag {
                 "h1" => {
                     crate::println!("");
-                    crate::h!(C_, "=== {} ===", hlg(ij));
+                    crate::n!(C_, "=== {} ===", dqo(el));
                     return;
                 }
                 "h2" => {
                     crate::println!("");
-                    crate::h!(C_, "== {} ==", hlg(ij));
+                    crate::n!(C_, "== {} ==", dqo(el));
                     return;
                 }
                 "h3" | "h4" | "h5" | "h6" => {
                     crate::println!("");
-                    crate::h!(C_, "= {} =", hlg(ij));
+                    crate::n!(C_, "= {} =", dqo(el));
                     return;
                 }
                 "p" => {
@@ -722,25 +722,25 @@ fn pbz(anq: &crate::browser::HtmlNode, eo: usize) {
                     crate::println!("----------------------------------------");
                 }
                 "a" => {
-                    if let Some(cae) = ij.qn("href") {
-                        let text = hlg(ij);
+                    if let Some(href) = el.attr("href") {
+                        let text = dqo(el);
                         if !text.is_empty() {
-                            crate::h!(CD_, "[{}] ({})", text, cae);
+                            crate::n!(CF_, "[{}] ({})", text, href);
                         }
                     }
                     return;
                 }
                 "li" => {
-                    let crn = "  ".afd(eo);
-                    crate::print!("{}* ", crn);
+                    let axq = "  ".repeat(depth);
+                    crate::print!("{}* ", axq);
                 }
                 "pre" | "code" => {
-                    crate::h!(DF_, "{}", hlg(ij));
+                    crate::n!(DM_, "{}", dqo(el));
                     return;
                 }
                 "img" => {
-                    if let Some(bdj) = ij.qn("alt") {
-                        crate::println!("[Image: {}]", bdj);
+                    if let Some(adf) = el.attr("alt") {
+                        crate::println!("[Image: {}]", adf);
                     } else {
                         crate::println!("[Image]");
                     }
@@ -750,12 +750,12 @@ fn pbz(anq: &crate::browser::HtmlNode, eo: usize) {
             }
             
             
-            for aeh in &ij.zf {
-                pbz(aeh, eo + 1);
+            for pd in &el.children {
+                izu(pd, depth + 1);
             }
             
             
-            if oh!(ll, "p" | "div" | "section" | "article" | "ul" | "ol" | "table" | "tr") {
+            if matches!(tag, "p" | "div" | "section" | "article" | "ul" | "ol" | "table" | "tr") {
                 crate::println!("");
             }
         }
@@ -763,76 +763,76 @@ fn pbz(anq: &crate::browser::HtmlNode, eo: usize) {
 }
 
 
-fn hlg(ij: &crate::browser::HtmlElement) -> String {
-    use alloc::string::Gd;
+fn dqo(el: &crate::browser::HtmlElement) -> String {
+    use alloc::string::ToString;
     let mut result = String::new();
-    nev(&ij.zf, &mut result);
-    result.em().to_string()
+    hmx(&el.children, &mut result);
+    result.trim().to_string()
 }
 
 
-fn nev(xq: &[crate::browser::HtmlNode], result: &mut String) {
-    use alloc::string::Gd;
+fn hmx(nodes: &[crate::browser::HtmlNode], result: &mut String) {
+    use alloc::string::ToString;
     
-    for anq in xq {
-        match anq {
-            crate::browser::HtmlNode::Text(ab) => {
-                result.t(ab);
+    for uf in nodes {
+        match uf {
+            crate::browser::HtmlNode::Text(t) => {
+                result.push_str(t);
                 result.push(' ');
             }
-            crate::browser::HtmlNode::Na(ij) => {
-                nev(&ij.zf, result);
+            crate::browser::HtmlNode::Element(el) => {
+                hmx(&el.children, result);
             }
         }
     }
 }
 
 
-pub(super) fn fse(path: &str) -> Option<String> {
+pub(super) fn cpa(path: &str) -> Option<String> {
     
-    if let Ok(f) = crate::ramfs::fh(|fs| {
-        fs.mq(path).map(|slice| {
-            String::from(core::str::jg(slice).unwrap_or(""))
+    if let Ok(data) = crate::ramfs::bh(|fs| {
+        fs.read_file(path).map(|slice| {
+            String::from(core::str::from_utf8(slice).unwrap_or(""))
         })
     }) {
-        return Some(f);
+        return Some(data);
     }
 
     
-    match crate::vfs::aji(path, crate::vfs::OpenFlags(0)) {
-        Ok(da) => {
-            let mut k = [0u8; 4096];
-            let bo = crate::vfs::read(da, &mut k).unwrap_or(0);
-            crate::vfs::agj(da).bq();
-            Some(String::from(core::str::jg(&k[..bo]).unwrap_or("")))
+    match crate::vfs::open(path, crate::vfs::OpenFlags(0)) {
+        Ok(fd) => {
+            let mut buf = [0u8; 4096];
+            let ae = crate::vfs::read(fd, &mut buf).unwrap_or(0);
+            crate::vfs::close(fd).ok();
+            Some(String::from(core::str::from_utf8(&buf[..ae]).unwrap_or("")))
         }
         Err(_) => None,
     }
 }
 
 
-pub(super) fn jli(path: &str) -> Option<Vec<u8>> {
+pub(super) fn exu(path: &str) -> Option<Vec<u8>> {
     
-    if let Ok(f) = crate::ramfs::fh(|fs| {
-        fs.mq(path).map(|slice| slice.ip())
+    if let Ok(data) = crate::ramfs::bh(|fs| {
+        fs.read_file(path).map(|slice| slice.to_vec())
     }) {
-        return Some(f);
+        return Some(data);
     }
     
     
-    match crate::vfs::aji(path, crate::vfs::OpenFlags(0)) {
-        Ok(da) => {
-            let mut k = Vec::new();
-            let mut jj = [0u8; 4096];
+    match crate::vfs::open(path, crate::vfs::OpenFlags(0)) {
+        Ok(fd) => {
+            let mut buf = Vec::new();
+            let mut df = [0u8; 4096];
             loop {
-                match crate::vfs::read(da, &mut jj) {
+                match crate::vfs::read(fd, &mut df) {
                     Ok(0) => break,
-                    Ok(bo) => k.bk(&jj[..bo]),
+                    Ok(ae) => buf.extend_from_slice(&df[..ae]),
                     Err(_) => break,
                 }
             }
-            crate::vfs::agj(da).bq();
-            Some(k)
+            crate::vfs::close(fd).ok();
+            Some(buf)
         }
         Err(_) => None,
     }

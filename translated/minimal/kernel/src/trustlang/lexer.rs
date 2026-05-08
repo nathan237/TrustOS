@@ -11,355 +11,355 @@ use alloc::format;
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
     
-    Ta(i64),
-    Wq(f64),
-    Yw(String),
-    Rp(bool),
+    IntLit(i64),
+    FloatLit(f64),
+    StringLit(String),
+    BoolLit(bool),
 
     
-    Kq(String),
+    Ident(String),
     Fn,
-    Pu,
-    Bmy,
-    Gx,
-    Bfw,
-    La,
-    Ll,
-    Bjn,
-    Hd,
-    Yx,
-    Cfs,
-    Vr,
-    Cg,
-    Pz,
-    Bca,
+    Let,
+    Mut,
+    If,
+    Else,
+    While,
+    For,
+    In,
+    Return,
+    Struct,
+    Impl,
+    Break,
+    Continue,
+    Loop,
+    As,
 
     
-    Buv,
-    Buu,
-    But,
-    Buw,
-    Djx,
+    TypeI64,
+    TypeF64,
+    TypeBool,
+    TypeStr,
+    TypeVoid,
 
     
-    Yd,       
-    Tm,      
-    And,       
-    Bsx,      
-    Qk,    
+    Plus,       
+    Minus,      
+    Star,       
+    Slash,      
+    Percent,    
     Eq,         
-    Bfz,       
-    Xu,      
+    EqEq,       
+    NotEq,      
     Lt,         
-    Jn,         
-    Xm,       
-    Wx,       
-    Ex,        
-    Fx,         
-    Np,        
-    Bbs,  
-    Yc,       
-    Bdj,      
-    Ob,        
-    Oc,        
-    Bpd,     
-    Bmg,    
-    Bti,     
-    Bsy,    
+    Gt,         
+    LtEq,       
+    GtEq,       
+    And,        
+    Or,         
+    Not,        
+    Ampersand,  
+    Pipe,       
+    Caret,      
+    Shl,        
+    Shr,        
+    PlusEq,     
+    MinusEq,    
+    StarEq,     
+    SlashEq,    
 
     
-    Kr,     
-    Jv,     
-    Ajn,     
-    Yj,     
-    Ajo,   
-    Aed,   
+    LParen,     
+    RParen,     
+    LBrace,     
+    RBrace,     
+    LBracket,   
+    RBracket,   
 
     
-    Aar,      
-    Ayo,  
-    Ahb,      
-    Ov,      
-    Cdl,   
-    Bew,        
-    Bex,     
+    Comma,      
+    Semicolon,  
+    Colon,      
+    Arrow,      
+    FatArrow,   
+    Dot,        
+    DotDot,     
 
     
-    Im,
+    Eof,
 }
 
 
 #[derive(Debug, Clone)]
 pub struct Token {
-    pub kk: TokenKind,
+    pub kind: TokenKind,
     pub line: usize,
-    pub bj: usize,
+    pub col: usize,
 }
 
 
-pub fn fwz(iy: &str) -> Result<Vec<Token>, String> {
-    let mut eb = Vec::new();
-    let bw: Vec<char> = iy.bw().collect();
-    let mut u = 0;
+pub fn crv(source: &str) -> Result<Vec<Token>, String> {
+    let mut tokens = Vec::new();
+    let chars: Vec<char> = source.chars().collect();
+    let mut pos = 0;
     let mut line = 1;
-    let mut bj = 1;
+    let mut col = 1;
 
-    while u < bw.len() {
-        let bm = bw[u];
+    while pos < chars.len() {
+        let ch = chars[pos];
 
         
-        if bm == ' ' || bm == '\t' || bm == '\r' {
-            u += 1;
-            bj += 1;
+        if ch == ' ' || ch == '\t' || ch == '\r' {
+            pos += 1;
+            col += 1;
             continue;
         }
-        if bm == '\n' {
-            u += 1;
+        if ch == '\n' {
+            pos += 1;
             line += 1;
-            bj = 1;
+            col = 1;
             continue;
         }
 
         
-        if bm == '/' && u + 1 < bw.len() {
-            if bw[u + 1] == '/' {
+        if ch == '/' && pos + 1 < chars.len() {
+            if chars[pos + 1] == '/' {
                 
-                while u < bw.len() && bw[u] != '\n' { u += 1; }
+                while pos < chars.len() && chars[pos] != '\n' { pos += 1; }
                 continue;
             }
-            if bw[u + 1] == '*' {
+            if chars[pos + 1] == '*' {
                 
-                u += 2; bj += 2;
-                let mut eo = 1;
-                while u < bw.len() && eo > 0 {
-                    if bw[u] == '/' && u + 1 < bw.len() && bw[u + 1] == '*' {
-                        eo += 1; u += 1;
-                    } else if bw[u] == '*' && u + 1 < bw.len() && bw[u + 1] == '/' {
-                        eo -= 1; u += 1;
+                pos += 2; col += 2;
+                let mut depth = 1;
+                while pos < chars.len() && depth > 0 {
+                    if chars[pos] == '/' && pos + 1 < chars.len() && chars[pos + 1] == '*' {
+                        depth += 1; pos += 1;
+                    } else if chars[pos] == '*' && pos + 1 < chars.len() && chars[pos + 1] == '/' {
+                        depth -= 1; pos += 1;
                     }
-                    if bw[u] == '\n' { line += 1; bj = 0; }
-                    u += 1; bj += 1;
+                    if chars[pos] == '\n' { line += 1; col = 0; }
+                    pos += 1; col += 1;
                 }
                 continue;
             }
         }
 
-        let bii = bj;
+        let afu = col;
 
         
-        if bm.atb() {
-            let ay = u;
-            let mut lgb = false;
-            while u < bw.len() && (bw[u].atb() || bw[u] == '.' || bw[u] == '_') {
-                if bw[u] == '.' {
-                    if lgb { break; }
+        if ch.is_ascii_digit() {
+            let start = pos;
+            let mut gdu = false;
+            while pos < chars.len() && (chars[pos].is_ascii_digit() || chars[pos] == '.' || chars[pos] == '_') {
+                if chars[pos] == '.' {
+                    if gdu { break; }
                     
-                    if u + 1 < bw.len() && bw[u + 1] == '.' { break; }
-                    lgb = true;
+                    if pos + 1 < chars.len() && chars[pos + 1] == '.' { break; }
+                    gdu = true;
                 }
-                u += 1;
-                bj += 1;
+                pos += 1;
+                col += 1;
             }
-            let ajh: String = bw[ay..u].iter().hi(|&&r| r != '_').collect();
-            if lgb {
-                let ap = lsj(&ajh).jd(|_| format!("L{}:{}: invalid float '{}'", line, bii, ajh))?;
-                eb.push(Token { kk: TokenKind::Wq(ap), line, bj: bii });
+            let rw: String = chars[start..pos].iter().filter(|&&c| c != '_').collect();
+            if gdu {
+                let val = gmi(&rw).map_err(|_| format!("L{}:{}: invalid float '{}'", line, afu, rw))?;
+                tokens.push(Token { kind: TokenKind::FloatLit(val), line, col: afu });
             } else {
-                let ap = vcs(&ajh).jd(|_| format!("L{}:{}: invalid integer '{}'", line, bii, ajh))?;
-                eb.push(Token { kk: TokenKind::Ta(ap), line, bj: bii });
+                let val = nqr(&rw).map_err(|_| format!("L{}:{}: invalid integer '{}'", line, afu, rw))?;
+                tokens.push(Token { kind: TokenKind::IntLit(val), line, col: afu });
             }
             continue;
         }
 
         
-        if bm == '"' {
-            u += 1; bj += 1;
-            let mut e = String::new();
-            while u < bw.len() && bw[u] != '"' {
-                if bw[u] == '\\' && u + 1 < bw.len() {
-                    u += 1; bj += 1;
-                    match bw[u] {
-                        'n' => e.push('\n'),
-                        't' => e.push('\t'),
-                        'r' => e.push('\r'),
-                        '\\' => e.push('\\'),
-                        '"' => e.push('"'),
-                        '0' => e.push('\0'),
-                        _ => { e.push('\\'); e.push(bw[u]); }
+        if ch == '"' {
+            pos += 1; col += 1;
+            let mut j = String::new();
+            while pos < chars.len() && chars[pos] != '"' {
+                if chars[pos] == '\\' && pos + 1 < chars.len() {
+                    pos += 1; col += 1;
+                    match chars[pos] {
+                        'n' => j.push('\n'),
+                        't' => j.push('\t'),
+                        'r' => j.push('\r'),
+                        '\\' => j.push('\\'),
+                        '"' => j.push('"'),
+                        '0' => j.push('\0'),
+                        _ => { j.push('\\'); j.push(chars[pos]); }
                     }
                 } else {
-                    if bw[u] == '\n' { line += 1; bj = 0; }
-                    e.push(bw[u]);
+                    if chars[pos] == '\n' { line += 1; col = 0; }
+                    j.push(chars[pos]);
                 }
-                u += 1; bj += 1;
+                pos += 1; col += 1;
             }
-            if u >= bw.len() {
-                return Err(format!("L{}:{}: unterminated string", line, bii));
+            if pos >= chars.len() {
+                return Err(format!("L{}:{}: unterminated string", line, afu));
             }
-            u += 1; bj += 1; 
-            eb.push(Token { kk: TokenKind::Yw(e), line, bj: bii });
+            pos += 1; col += 1; 
+            tokens.push(Token { kind: TokenKind::StringLit(j), line, col: afu });
             continue;
         }
 
         
-        if bm == '\'' {
-            u += 1; bj += 1;
-            let r = if u < bw.len() && bw[u] == '\\' {
-                u += 1; bj += 1;
-                match bw.get(u) {
+        if ch == '\'' {
+            pos += 1; col += 1;
+            let c = if pos < chars.len() && chars[pos] == '\\' {
+                pos += 1; col += 1;
+                match chars.get(pos) {
                     Some('n') => '\n',
                     Some('t') => '\t',
                     Some('r') => '\r',
                     Some('0') => '\0',
                     Some('\\') => '\\',
                     Some('\'') => '\'',
-                    _ => return Err(format!("L{}:{}: invalid escape in char", line, bii)),
+                    _ => return Err(format!("L{}:{}: invalid escape in char", line, afu)),
                 }
-            } else if u < bw.len() {
-                bw[u]
+            } else if pos < chars.len() {
+                chars[pos]
             } else {
-                return Err(format!("L{}:{}: unterminated char", line, bii));
+                return Err(format!("L{}:{}: unterminated char", line, afu));
             };
-            u += 1; bj += 1;
-            if u >= bw.len() || bw[u] != '\'' {
-                return Err(format!("L{}:{}: unterminated char literal", line, bii));
+            pos += 1; col += 1;
+            if pos >= chars.len() || chars[pos] != '\'' {
+                return Err(format!("L{}:{}: unterminated char literal", line, afu));
             }
-            u += 1; bj += 1;
-            eb.push(Token { kk: TokenKind::Ta(r as i64), line, bj: bii });
+            pos += 1; col += 1;
+            tokens.push(Token { kind: TokenKind::IntLit(c as i64), line, col: afu });
             continue;
         }
 
         
-        if bm.gke() || bm == '_' {
-            let ay = u;
-            while u < bw.len() && (bw[u].bvb() || bw[u] == '_') {
-                u += 1; bj += 1;
+        if ch.is_ascii_alphabetic() || ch == '_' {
+            let start = pos;
+            while pos < chars.len() && (chars[pos].is_ascii_alphanumeric() || chars[pos] == '_') {
+                pos += 1; col += 1;
             }
-            let od: String = bw[ay..u].iter().collect();
-            let kk = match od.as_str() {
+            let fx: String = chars[start..pos].iter().collect();
+            let kind = match fx.as_str() {
                 "fn" => TokenKind::Fn,
-                "let" => TokenKind::Pu,
-                "mut" => TokenKind::Bmy,
-                "if" => TokenKind::Gx,
-                "else" => TokenKind::Bfw,
-                "while" => TokenKind::La,
-                "for" => TokenKind::Ll,
-                "in" => TokenKind::Bjn,
-                "return" => TokenKind::Hd,
-                "struct" => TokenKind::Yx,
-                "impl" => TokenKind::Cfs,
-                "break" => TokenKind::Vr,
-                "continue" => TokenKind::Cg,
-                "loop" => TokenKind::Pz,
-                "as" => TokenKind::Bca,
-                "true" => TokenKind::Rp(true),
-                "false" => TokenKind::Rp(false),
-                "i64" => TokenKind::Buv,
-                "f64" => TokenKind::Buu,
-                "bool" => TokenKind::But,
-                "str" => TokenKind::Buw,
-                _ => TokenKind::Kq(od),
+                "let" => TokenKind::Let,
+                "mut" => TokenKind::Mut,
+                "if" => TokenKind::If,
+                "else" => TokenKind::Else,
+                "while" => TokenKind::While,
+                "for" => TokenKind::For,
+                "in" => TokenKind::In,
+                "return" => TokenKind::Return,
+                "struct" => TokenKind::Struct,
+                "impl" => TokenKind::Impl,
+                "break" => TokenKind::Break,
+                "continue" => TokenKind::Continue,
+                "loop" => TokenKind::Loop,
+                "as" => TokenKind::As,
+                "true" => TokenKind::BoolLit(true),
+                "false" => TokenKind::BoolLit(false),
+                "i64" => TokenKind::TypeI64,
+                "f64" => TokenKind::TypeF64,
+                "bool" => TokenKind::TypeBool,
+                "str" => TokenKind::TypeStr,
+                _ => TokenKind::Ident(fx),
             };
-            eb.push(Token { kk, line, bj: bii });
+            tokens.push(Token { kind, line, col: afu });
             continue;
         }
 
         
-        if u + 1 < bw.len() {
-            let fxo: String = bw[u..u + 2].iter().collect();
-            let kk = match fxo.as_str() {
-                "==" => Some(TokenKind::Bfz),
-                "!=" => Some(TokenKind::Xu),
-                "<=" => Some(TokenKind::Xm),
-                ">=" => Some(TokenKind::Wx),
-                "&&" => Some(TokenKind::Ex),
-                "||" => Some(TokenKind::Fx),
-                "+=" => Some(TokenKind::Bpd),
-                "-=" => Some(TokenKind::Bmg),
-                "*=" => Some(TokenKind::Bti),
-                "/=" => Some(TokenKind::Bsy),
-                "->" => Some(TokenKind::Ov),
-                "=>" => Some(TokenKind::Cdl),
-                "<<" => Some(TokenKind::Ob),
-                ">>" => Some(TokenKind::Oc),
-                ".." => Some(TokenKind::Bex),
+        if pos + 1 < chars.len() {
+            let csc: String = chars[pos..pos + 2].iter().collect();
+            let kind = match csc.as_str() {
+                "==" => Some(TokenKind::EqEq),
+                "!=" => Some(TokenKind::NotEq),
+                "<=" => Some(TokenKind::LtEq),
+                ">=" => Some(TokenKind::GtEq),
+                "&&" => Some(TokenKind::And),
+                "||" => Some(TokenKind::Or),
+                "+=" => Some(TokenKind::PlusEq),
+                "-=" => Some(TokenKind::MinusEq),
+                "*=" => Some(TokenKind::StarEq),
+                "/=" => Some(TokenKind::SlashEq),
+                "->" => Some(TokenKind::Arrow),
+                "=>" => Some(TokenKind::FatArrow),
+                "<<" => Some(TokenKind::Shl),
+                ">>" => Some(TokenKind::Shr),
+                ".." => Some(TokenKind::DotDot),
                 _ => None,
             };
-            if let Some(eh) = kk {
-                eb.push(Token { kk: eh, line, bj: bii });
-                u += 2; bj += 2;
+            if let Some(k) = kind {
+                tokens.push(Token { kind: k, line, col: afu });
+                pos += 2; col += 2;
                 continue;
             }
         }
 
         
-        let kk = match bm {
-            '+' => TokenKind::Yd,
-            '-' => TokenKind::Tm,
-            '*' => TokenKind::And,
-            '/' => TokenKind::Bsx,
-            '%' => TokenKind::Qk,
+        let kind = match ch {
+            '+' => TokenKind::Plus,
+            '-' => TokenKind::Minus,
+            '*' => TokenKind::Star,
+            '/' => TokenKind::Slash,
+            '%' => TokenKind::Percent,
             '=' => TokenKind::Eq,
             '<' => TokenKind::Lt,
-            '>' => TokenKind::Jn,
-            '!' => TokenKind::Np,
-            '&' => TokenKind::Bbs,
-            '|' => TokenKind::Yc,
-            '^' => TokenKind::Bdj,
-            '(' => TokenKind::Kr,
-            ')' => TokenKind::Jv,
-            '{' => TokenKind::Ajn,
-            '}' => TokenKind::Yj,
-            '[' => TokenKind::Ajo,
-            ']' => TokenKind::Aed,
-            ',' => TokenKind::Aar,
-            ';' => TokenKind::Ayo,
-            ':' => TokenKind::Ahb,
-            '.' => TokenKind::Bew,
-            _ => return Err(format!("L{}:{}: unexpected character '{}'", line, bj, bm)),
+            '>' => TokenKind::Gt,
+            '!' => TokenKind::Not,
+            '&' => TokenKind::Ampersand,
+            '|' => TokenKind::Pipe,
+            '^' => TokenKind::Caret,
+            '(' => TokenKind::LParen,
+            ')' => TokenKind::RParen,
+            '{' => TokenKind::LBrace,
+            '}' => TokenKind::RBrace,
+            '[' => TokenKind::LBracket,
+            ']' => TokenKind::RBracket,
+            ',' => TokenKind::Comma,
+            ';' => TokenKind::Semicolon,
+            ':' => TokenKind::Colon,
+            '.' => TokenKind::Dot,
+            _ => return Err(format!("L{}:{}: unexpected character '{}'", line, col, ch)),
         };
-        eb.push(Token { kk, line, bj: bii });
-        u += 1; bj += 1;
+        tokens.push(Token { kind, line, col: afu });
+        pos += 1; col += 1;
     }
 
-    eb.push(Token { kk: TokenKind::Im, line, bj });
-    Ok(eb)
+    tokens.push(Token { kind: TokenKind::Eof, line, col });
+    Ok(tokens)
 }
 
 
-fn vcs(e: &str) -> Result<i64, ()> {
-    let mut ap: i64 = 0;
+fn nqr(j: &str) -> Result<i64, ()> {
+    let mut val: i64 = 0;
     let mut neg = false;
-    for (a, bm) in e.bw().cf() {
-        if a == 0 && bm == '-' { neg = true; continue; }
-        if !bm.atb() { return Err(()); }
-        ap = ap.rab(10).ok_or(())?;
-        ap = ap.ink((bm as i64) - 48).ok_or(())?;
+    for (i, ch) in j.chars().enumerate() {
+        if i == 0 && ch == '-' { neg = true; continue; }
+        if !ch.is_ascii_digit() { return Err(()); }
+        val = val.checked_mul(10).ok_or(())?;
+        val = val.checked_add((ch as i64) - 48).ok_or(())?;
     }
-    Ok(if neg { -ap } else { ap })
+    Ok(if neg { -val } else { val })
 }
 
 
-fn lsj(e: &str) -> Result<f64, ()> {
-    let mut ley: f64 = 0.0;
-    let mut nvw: f64 = 0.0;
-    let mut hkh: f64 = 1.0;
-    let mut odp = false;
+fn gmi(j: &str) -> Result<f64, ()> {
+    let mut gda: f64 = 0.0;
+    let mut hzu: f64 = 0.0;
+    let mut dqe: f64 = 1.0;
+    let mut ifz = false;
     let mut neg = false;
 
-    for (a, bm) in e.bw().cf() {
-        if a == 0 && bm == '-' { neg = true; continue; }
-        if bm == '.' { odp = true; continue; }
-        if !bm.atb() { return Err(()); }
-        let bc = (bm as u8 - b'0') as f64;
-        if odp {
-            hkh *= 10.0;
-            nvw += bc / hkh;
+    for (i, ch) in j.chars().enumerate() {
+        if i == 0 && ch == '-' { neg = true; continue; }
+        if ch == '.' { ifz = true; continue; }
+        if !ch.is_ascii_digit() { return Err(()); }
+        let d = (ch as u8 - b'0') as f64;
+        if ifz {
+            dqe *= 10.0;
+            hzu += d / dqe;
         } else {
-            ley = ley * 10.0 + bc;
+            gda = gda * 10.0 + d;
         }
     }
 
-    let ap = ley + nvw;
-    Ok(if neg { -ap } else { ap })
+    let val = gda + hzu;
+    Ok(if neg { -val } else { val })
 }

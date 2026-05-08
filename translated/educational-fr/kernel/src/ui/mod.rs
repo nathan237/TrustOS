@@ -145,7 +145,7 @@ pub struct Theme {
     pub success: Color,
     pub warning: Color,
     pub error: Color,
-    pub information: Color,
+    pub info: Color,
     
     // Dimensions
     pub border_radius: u32,
@@ -187,7 +187,7 @@ impl Theme {
             success: Color::from_u32(0xFF00FF66),
             warning: Color::from_u32(0xFFFFD166),
             error: Color::from_u32(0xFFFF6B6B),
-            information: Color::from_u32(0xFF4ECDC4),
+            info: Color::from_u32(0xFF4ECDC4),
             
             border_radius: 6,
             border_width: 1,
@@ -226,7 +226,7 @@ impl Theme {
             success: Color::from_u32(0xFF22BB44),
             warning: Color::from_u32(0xFFFFAA00),
             error: Color::from_u32(0xFFDD3333),
-            information: Color::from_u32(0xFF2299DD),
+            info: Color::from_u32(0xFF2299DD),
             
             border_radius: 6,
             border_width: 1,
@@ -311,10 +311,10 @@ impl Rect {
     
         // Fonction publique — appelable depuis d'autres modules.
 pub fn from_points(p1: Point, p2: Point) -> Self {
-        let x = p1.x.minimum(p2.x);
-        let y = p1.y.minimum(p2.y);
-        let width = (p1.x - p2.x).unsigned_absolute();
-        let height = (p1.y - p2.y).unsigned_absolute();
+        let x = p1.x.min(p2.x);
+        let y = p1.y.min(p2.y);
+        let width = (p1.x - p2.x).unsigned_abs();
+        let height = (p1.y - p2.y).unsigned_abs();
         Self { x, y, width, height }
     }
     
@@ -481,7 +481,7 @@ pub trait Widget {
     }
     
     /// Get maximum size
-    fn maximum_size(&self) -> Size {
+    fn max_size(&self) -> Size {
         Size::new(u32::MAX, u32::MAX)
     }
     
@@ -578,7 +578,7 @@ impl Widget for Label {
     
     fn preferred_size(&self) -> Size {
         // 8 pixels per character (using 8x16 font)
-        Size::new((self.text.len() as u32 * 8).maximum(10), 16)
+        Size::new((self.text.len() as u32 * 8).max(10), 16)
     }
     
     fn render(&self, surface: &mut GpuSurface, theme: &Theme) {
@@ -637,7 +637,7 @@ impl Widget for Button {
     fn set_state(&mut self, state: WidgetState) { self.state = state; }
     
     fn preferred_size(&self) -> Size {
-        Size::new((self.text.len() as u32 * 8 + 24).maximum(80), 32)
+        Size::new((self.text.len() as u32 * 8 + 24).max(80), 32)
     }
     
     fn handle_event(&mut self, event: &UiEvent) -> bool {
@@ -722,8 +722,8 @@ pub struct TextInput {
     state: WidgetState,
     pub text: String,
     pub placeholder: String,
-    pub cursor_position: usize,
-    pub maximum_length: usize,
+    pub cursor_pos: usize,
+    pub max_length: usize,
 }
 
 // Bloc d'implémentation — définit les méthodes du type ci-dessus.
@@ -736,8 +736,8 @@ pub fn new() -> Self {
             state: WidgetState::new(),
             text: String::new(),
             placeholder: String::new(),
-            cursor_position: 0,
-            maximum_length: 256,
+            cursor_pos: 0,
+            max_length: 256,
         }
     }
     
@@ -765,9 +765,9 @@ impl Widget for TextInput {
                 // Correspondance de motifs — branchement exhaustif de Rust.
 match event {
             UiEvent::Key(KeyEvent::Char { c }) if self.state.focused => {
-                if self.text.len() < self.maximum_length && !c.is_control() {
-                    self.text.insert(self.cursor_position, *c);
-                    self.cursor_position += 1;
+                if self.text.len() < self.max_length && !c.is_control() {
+                    self.text.insert(self.cursor_pos, *c);
+                    self.cursor_pos += 1;
                 }
                 true
             }
@@ -775,9 +775,9 @@ match event {
                                 // Correspondance de motifs — branchement exhaustif de Rust.
 match *key {
                     '\x08' => { // Backspace
-                        if self.cursor_position > 0 {
-                            self.cursor_position -= 1;
-                            self.text.remove(self.cursor_position);
+                        if self.cursor_pos > 0 {
+                            self.cursor_pos -= 1;
+                            self.text.remove(self.cursor_pos);
                         }
                         true
                     }
@@ -839,7 +839,7 @@ match *key {
         
         // Cursor
         if self.state.focused {
-            let cursor_x = text_x + (self.cursor_position as i32 * 8);
+            let cursor_x = text_x + (self.cursor_pos as i32 * 8);
             surface.fill_rect(
                 cursor_x as u32,
                 (text_y + 2) as u32,
@@ -995,7 +995,7 @@ impl Widget for ProgressBar {
         surface.fill_rounded_rect(x, y, w, h, h / 2, theme.bg_tertiary.to_u32());
         
         // Progress fill
-        let fill_width = ((w as f32 * self.value) as u32).maximum(h);
+        let fill_width = ((w as f32 * self.value) as u32).max(h);
         if self.value > 0.0 {
             surface.fill_rounded_rect(x, y, fill_width, h, h / 2, theme.accent.to_u32());
         }
@@ -1033,12 +1033,12 @@ fn draw_char(surface: &mut GpuSurface, x: i32, y: i32, c: char, color: u32) {
     
     for row in 0..16 {
         let bits = glyph[row];
-        for column in 0..8 {
-            if (bits >> (7 - column)) & 1 == 1 {
-                let pixel = x + column as i32;
+        for col in 0..8 {
+            if (bits >> (7 - col)) & 1 == 1 {
+                let px = x + col as i32;
                 let py = y + row as i32;
-                if pixel >= 0 && py >= 0 {
-                    surface.set_pixel(pixel as u32, py as u32, color);
+                if px >= 0 && py >= 0 {
+                    surface.set_pixel(px as u32, py as u32, color);
                 }
             }
         }
@@ -1123,11 +1123,11 @@ pub fn column() -> Self {
 match self.direction {
                 FlexDirection::Row => {
                     total_main += pref.width;
-                    maximum_cross = maximum_cross.maximum(pref.height);
+                    maximum_cross = maximum_cross.max(pref.height);
                 }
                 FlexDirection::Column => {
                     total_main += pref.height;
-                    maximum_cross = maximum_cross.maximum(pref.width);
+                    maximum_cross = maximum_cross.max(pref.width);
                 }
             }
         }
@@ -1140,16 +1140,16 @@ match self.direction {
             FlexDirection::Column => inner_h,
         };
         
-        let mut position = // Correspondance de motifs — branchement exhaustif de Rust.
+        let mut pos = // Correspondance de motifs — branchement exhaustif de Rust.
 match self.align {
             FlexAlign::Start => 0,
-            FlexAlign::Center => ((main_size as i32 - total_main as i32) / 2).maximum(0) as u32,
+            FlexAlign::Center => ((main_size as i32 - total_main as i32) / 2).max(0) as u32,
             FlexAlign::End => main_size.saturating_sub(total_main),
             _ => 0,
         };
         
         // Position each child
-        for child in children.iterator_mut() {
+        for child in children.iter_mut() {
             let pref = child.preferred_size();
             
             let (x, y, w, h) = // Correspondance de motifs — branchement exhaustif de Rust.
@@ -1158,27 +1158,27 @@ match self.direction {
                     let cross_position = // Correspondance de motifs — branchement exhaustif de Rust.
 match self.cross_align {
                         FlexAlign::Start => 0,
-                        FlexAlign::Center => ((inner_h as i32 - pref.height as i32) / 2).maximum(0) as u32,
+                        FlexAlign::Center => ((inner_h as i32 - pref.height as i32) / 2).max(0) as u32,
                         FlexAlign::End => inner_h.saturating_sub(pref.height),
                         _ => 0,
                     };
-                    (inner_x + position as i32, inner_y + cross_position as i32, pref.width, pref.height)
+                    (inner_x + pos as i32, inner_y + cross_position as i32, pref.width, pref.height)
                 }
                 FlexDirection::Column => {
                     let cross_position = // Correspondance de motifs — branchement exhaustif de Rust.
 match self.cross_align {
                         FlexAlign::Start => 0,
-                        FlexAlign::Center => ((inner_w as i32 - pref.width as i32) / 2).maximum(0) as u32,
+                        FlexAlign::Center => ((inner_w as i32 - pref.width as i32) / 2).max(0) as u32,
                         FlexAlign::End => inner_w.saturating_sub(pref.width),
                         _ => 0,
                     };
-                    (inner_x + cross_position as i32, inner_y + position as i32, pref.width, pref.height)
+                    (inner_x + cross_position as i32, inner_y + pos as i32, pref.width, pref.height)
                 }
             };
             
             child.set_bounds(Rect::new(x, y, w, h));
             
-            position += // Correspondance de motifs — branchement exhaustif de Rust.
+            pos += // Correspondance de motifs — branchement exhaustif de Rust.
 match self.direction {
                 FlexDirection::Row => pref.width + self.gap,
                 FlexDirection::Column => pref.height + self.gap,

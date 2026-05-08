@@ -54,8 +54,8 @@ pub struct CpuCapabilities {
     pub umip: bool,
     pub vmx: bool,
     pub svm: bool,
-    pub maximum_logical_cpus: u8,
-    pub maximum_physical_cpus: u8,
+    pub max_logical_cpus: u8,
+    pub max_physical_cpus: u8,
     pub tsc_frequency_hz: u64,
 }
 
@@ -94,8 +94,8 @@ pub fn detect() -> Self {
             umip: false,
             vmx: false,
             svm: false,
-            maximum_logical_cpus: 1,
-            maximum_physical_cpus: 1,
+            max_logical_cpus: 1,
+            max_physical_cpus: 1,
             tsc_frequency_hz: 1_000_000_000,
         }
     }

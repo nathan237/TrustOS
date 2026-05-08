@@ -13,13 +13,13 @@ use alloc::format;
 const H_: usize = 512;
 
 
-const CFX_: u16 = 0xAA55;
+const CJH_: u16 = 0xAA55;
 
 
-const BYD_: u64 = 0x5452415020494645;
+const CBJ_: u64 = 0x5452415020494645;
 
 
-const CFY_: u8 = 0xEE;
+const CJI_: u8 = 0xEE;
 
 
 
@@ -27,48 +27,48 @@ const CFY_: u8 = 0xEE;
 
 
 #[derive(Debug, Clone)]
-pub struct Akz {
+pub struct Pv {
     
-    pub aqb: u8,
+    pub number: u8,
     
-    pub aag: u64,
+    pub start_lba: u64,
     
-    pub fuw: u64,
+    pub size_sectors: u64,
     
-    pub duf: PartitionType,
+    pub partition_type: PartitionType,
     
-    pub cji: bool,
+    pub bootable: bool,
     
-    pub j: String,
+    pub name: String,
     
-    pub aar: Option<[u8; 16]>,
+    pub guid: Option<[u8; 16]>,
 }
 
-impl Akz {
+impl Pv {
     
-    pub fn afz(&self) -> u64 {
-        self.fuw * H_ as u64
+    pub fn size_bytes(&self) -> u64 {
+        self.size_sectors * H_ as u64
     }
     
     
-    pub fn ple(&self) -> String {
-        let bf = self.afz();
-        if bf >= 1024 * 1024 * 1024 * 1024 {
-            format!("{:.1} TB", bf as f64 / (1024.0 * 1024.0 * 1024.0 * 1024.0))
-        } else if bf >= 1024 * 1024 * 1024 {
-            format!("{:.1} GB", bf as f64 / (1024.0 * 1024.0 * 1024.0))
-        } else if bf >= 1024 * 1024 {
-            format!("{:.1} MB", bf as f64 / (1024.0 * 1024.0))
-        } else if bf >= 1024 {
-            format!("{:.1} KB", bf as f64 / 1024.0)
+    pub fn size_human(&self) -> String {
+        let bytes = self.size_bytes();
+        if bytes >= 1024 * 1024 * 1024 * 1024 {
+            format!("{:.1} TB", bytes as f64 / (1024.0 * 1024.0 * 1024.0 * 1024.0))
+        } else if bytes >= 1024 * 1024 * 1024 {
+            format!("{:.1} GB", bytes as f64 / (1024.0 * 1024.0 * 1024.0))
+        } else if bytes >= 1024 * 1024 {
+            format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
+        } else if bytes >= 1024 {
+            format!("{:.1} KB", bytes as f64 / 1024.0)
         } else {
-            format!("{} B", bf)
+            format!("{} B", bytes)
         }
     }
     
     
-    pub fn fhr(&self) -> u64 {
-        self.aag + self.fuw - 1
+    pub fn end_lba(&self) -> u64 {
+        self.start_lba + self.size_sectors - 1
     }
 }
 
@@ -76,149 +76,149 @@ impl Akz {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PartitionType {
     
-    Jl,
+    Empty,
     
-    Bgr,
+    Fat12,
     
-    Bgt,
+    Fat16Small,
     
-    Bgs,
+    Fat16,
     
-    Bgj,
+    Extended,
     
-    Asa,
+    Fat32,
     
-    Asc,
+    Fat32Lba,
     
-    Awf,
+    Ntfs,
     
-    Auw,
+    LinuxSwap,
     
-    Blc,
+    LinuxFilesystem,
     
-    Blf,
+    LinuxLvm,
     
-    Arn,
+    EfiSystem,
     
-    Bmf,
+    MicrosoftReserved,
     
-    Akg,
+    MicrosoftBasicData,
     
-    Bld,
+    LinuxFilesystemGpt,
     
-    Blh,
+    LinuxRoot,
     
-    Ble,
+    LinuxHome,
     
-    Bia,
+    GptProtective,
     
-    F(u8),
+    Unknown(u8),
     
-    Bvj([u8; 16]),
+    UnknownGpt([u8; 16]),
 }
 
 impl PartitionType {
     
-    pub fn syb(xnr: u8) -> Self {
-        match xnr {
-            0x00 => Self::Jl,
-            0x01 => Self::Bgr,
-            0x04 => Self::Bgt,
-            0x05 | 0x0F => Self::Bgj,
-            0x06 | 0x0E => Self::Bgs,
-            0x07 => Self::Awf,
-            0x0B => Self::Asa,
-            0x0C => Self::Asc,
-            0x82 => Self::Auw,
-            0x83 => Self::Blc,
-            0x8E => Self::Blf,
-            0xEE => Self::Bia,
-            0xEF => Self::Arn,
-            gq => Self::F(gq),
+    pub fn lzl(type_byte: u8) -> Self {
+        match type_byte {
+            0x00 => Self::Empty,
+            0x01 => Self::Fat12,
+            0x04 => Self::Fat16Small,
+            0x05 | 0x0F => Self::Extended,
+            0x06 | 0x0E => Self::Fat16,
+            0x07 => Self::Ntfs,
+            0x0B => Self::Fat32,
+            0x0C => Self::Fat32Lba,
+            0x82 => Self::LinuxSwap,
+            0x83 => Self::LinuxFilesystem,
+            0x8E => Self::LinuxLvm,
+            0xEE => Self::GptProtective,
+            0xEF => Self::EfiSystem,
+            other => Self::Unknown(other),
         }
     }
     
     
-    pub fn sxw(aar: &[u8; 16]) -> Self {
+    pub fn lzg(guid: &[u8; 16]) -> Self {
         
         
         
         
-        const BTH_: [u8; 16] = [
+        const BWD_: [u8; 16] = [
             0x28, 0x73, 0x2A, 0xC1, 0x1F, 0xF8, 0xD2, 0x11,
             0xBA, 0x4B, 0x00, 0xA0, 0xC9, 0x3E, 0xC9, 0x3B
         ];
         
         
-        const CHF_: [u8; 16] = [
+        const CKO_: [u8; 16] = [
             0xA2, 0xA0, 0xD0, 0xEB, 0xE5, 0xB9, 0x33, 0x44,
             0x87, 0xC0, 0x68, 0xB6, 0xB7, 0x26, 0x99, 0xC7
         ];
         
         
-        const CHG_: [u8; 16] = [
+        const CKP_: [u8; 16] = [
             0x16, 0xE3, 0xC9, 0xE3, 0x5C, 0x0B, 0xB8, 0x4D,
             0x81, 0x7D, 0xF9, 0x2D, 0xF0, 0x02, 0x15, 0xAE
         ];
         
         
-        const CEN_: [u8; 16] = [
+        const CHW_: [u8; 16] = [
             0xAF, 0x3D, 0xC6, 0x0F, 0x83, 0x84, 0x72, 0x47,
             0x8E, 0x79, 0x3D, 0x69, 0xD8, 0x47, 0x7D, 0xE4
         ];
         
         
-        const CEQ_: [u8; 16] = [
+        const CHZ_: [u8; 16] = [
             0x6D, 0xFD, 0x57, 0x06, 0xAB, 0xA4, 0xC4, 0x43,
             0x84, 0xE5, 0x09, 0x33, 0xC8, 0x4B, 0x4F, 0x4F
         ];
         
         
-        const CEP_: [u8; 16] = [
+        const CHY_: [u8; 16] = [
             0xE3, 0xBC, 0x68, 0x4F, 0xCD, 0xE8, 0xB1, 0x4D,
             0x96, 0xE7, 0xFB, 0xCA, 0xF9, 0x84, 0xB7, 0x09
         ];
         
         
-        const CEO_: [u8; 16] = [
+        const CHX_: [u8; 16] = [
             0xE1, 0xC7, 0x3A, 0x93, 0xB4, 0x2E, 0x13, 0x4F,
             0xB8, 0x44, 0x0E, 0x14, 0xE2, 0xAE, 0xF9, 0x15
         ];
         
-        if aar == &BTH_ { Self::Arn }
-        else if aar == &CHF_ { Self::Akg }
-        else if aar == &CHG_ { Self::Bmf }
-        else if aar == &CEN_ { Self::Bld }
-        else if aar == &CEQ_ { Self::Auw }
-        else if aar == &CEP_ { Self::Blh }
-        else if aar == &CEO_ { Self::Ble }
-        else if aar == &[0u8; 16] { Self::Jl }
-        else { Self::Bvj(*aar) }
+        if guid == &BWD_ { Self::EfiSystem }
+        else if guid == &CKO_ { Self::MicrosoftBasicData }
+        else if guid == &CKP_ { Self::MicrosoftReserved }
+        else if guid == &CHW_ { Self::LinuxFilesystemGpt }
+        else if guid == &CHZ_ { Self::LinuxSwap }
+        else if guid == &CHY_ { Self::LinuxRoot }
+        else if guid == &CHX_ { Self::LinuxHome }
+        else if guid == &[0u8; 16] { Self::Empty }
+        else { Self::UnknownGpt(*guid) }
     }
     
     
-    pub fn j(&self) -> &'static str {
+    pub fn name(&self) -> &'static str {
         match self {
-            Self::Jl => "Empty",
-            Self::Bgr => "FAT12",
-            Self::Bgt => "FAT16 (<32M)",
-            Self::Bgs => "FAT16",
-            Self::Bgj => "Extended",
-            Self::Asa => "FAT32",
-            Self::Asc => "FAT32 LBA",
-            Self::Awf => "NTFS/exFAT",
-            Self::Auw => "Linux swap",
-            Self::Blc => "Linux",
-            Self::Blf => "Linux LVM",
-            Self::Arn => "EFI System",
-            Self::Bmf => "MS Reserved",
-            Self::Akg => "MS Basic Data",
-            Self::Bld => "Linux",
-            Self::Blh => "Linux root",
-            Self::Ble => "Linux home",
-            Self::Bia => "GPT Protective",
-            Self::F(_) => "Unknown",
-            Self::Bvj(_) => "Unknown GPT",
+            Self::Empty => "Empty",
+            Self::Fat12 => "FAT12",
+            Self::Fat16Small => "FAT16 (<32M)",
+            Self::Fat16 => "FAT16",
+            Self::Extended => "Extended",
+            Self::Fat32 => "FAT32",
+            Self::Fat32Lba => "FAT32 LBA",
+            Self::Ntfs => "NTFS/exFAT",
+            Self::LinuxSwap => "Linux swap",
+            Self::LinuxFilesystem => "Linux",
+            Self::LinuxLvm => "Linux LVM",
+            Self::EfiSystem => "EFI System",
+            Self::MicrosoftReserved => "MS Reserved",
+            Self::MicrosoftBasicData => "MS Basic Data",
+            Self::LinuxFilesystemGpt => "Linux",
+            Self::LinuxRoot => "Linux root",
+            Self::LinuxHome => "Linux home",
+            Self::GptProtective => "GPT Protective",
+            Self::Unknown(_) => "Unknown",
+            Self::UnknownGpt(_) => "Unknown GPT",
         }
     }
 }
@@ -230,28 +230,28 @@ impl PartitionType {
 
 #[repr(C, packed)]
 #[derive(Clone, Copy)]
-struct Chi {
+struct Amt {
     
-    ilz: u8,
+    boot_flag: u8,
     
-    zpm: [u8; 3],
+    start_chs: [u8; 3],
     
-    duf: u8,
+    partition_type: u8,
     
-    ypk: [u8; 3],
+    end_chs: [u8; 3],
     
-    aag: u32,
+    start_lba: u32,
     
-    fuw: u32,
+    size_sectors: u32,
 }
 
 
 #[repr(C, packed)]
-struct Nm {
+struct Fu {
     
-    ygs: [u8; 446],
+    boot_code: [u8; 446],
     
-    aqd: [Chi; 4],
+    partitions: [Amt; 4],
     
     signature: u16,
 }
@@ -263,53 +263,53 @@ struct Nm {
 
 #[repr(C, packed)]
 #[derive(Clone, Copy)]
-struct Cem {
+struct Aku {
     
     signature: u64,
     
-    afe: u32,
+    revision: u32,
     
-    drp: u32,
+    bms: u32,
     
-    ywy: u32,
+    header_crc32: u32,
     
-    awt: u32,
+    reserved: u32,
     
-    kmx: u64,
+    fpr: u64,
     
-    yfi: u64,
+    backup_lba: u64,
     
-    yqw: u64,
+    first_usable_lba: u64,
     
-    zal: u64,
+    last_usable_lba: u64,
     
-    gex: [u8; 16],
+    disk_guid: [u8; 16],
     
-    ver: u64,
+    partition_entry_lba: u64,
     
-    uwk: u32,
+    num_partition_entries: u32,
     
-    ves: u32,
+    partition_entry_size: u32,
     
-    zeu: u32,
+    partition_entries_crc32: u32,
 }
 
 
 #[repr(C, packed)]
 #[derive(Clone, Copy)]
-struct Cen {
+struct Akv {
     
-    fxq: [u8; 16],
+    type_guid: [u8; 16],
     
-    lta: [u8; 16],
+    partition_guid: [u8; 16],
     
-    aag: u64,
+    start_lba: u64,
     
-    fhr: u64,
+    end_lba: u64,
     
-    fcv: u64,
+    attributes: u64,
     
-    j: [u16; 36],
+    name: [u16; 36],
 }
 
 
@@ -322,32 +322,32 @@ pub enum PartitionTableType {
     
     None,
     
-    Nm,
+    Fu,
     
-    Wu,
+    Gpt,
 }
 
 
 #[derive(Debug, Clone)]
 pub struct PartitionTable {
     
-    pub gud: PartitionTableType,
+    pub table_type: PartitionTableType,
     
-    pub aqd: Vec<Akz>,
+    pub partitions: Vec<Pv>,
     
-    pub gex: Option<[u8; 16]>,
+    pub disk_guid: Option<[u8; 16]>,
     
-    pub axf: u64,
+    pub zp: u64,
 }
 
 impl PartitionTable {
     
-    pub fn azs() -> Self {
+    pub fn empty() -> Self {
         Self {
-            gud: PartitionTableType::None,
-            aqd: Vec::new(),
-            gex: None,
-            axf: 0,
+            table_type: PartitionTableType::None,
+            partitions: Vec::new(),
+            disk_guid: None,
+            zp: 0,
         }
     }
 }
@@ -359,30 +359,30 @@ impl PartitionTable {
 
 
 
-pub fn hul<G>(xr: G, axf: u64) -> Result<PartitionTable, &'static str>
+pub fn dwf<F>(read_sector: F, zp: u64) -> Result<PartitionTable, &'static str>
 where
-    G: Fn(u64, &mut [u8]) -> Result<(), &'static str>,
+    F: Fn(u64, &mut [u8]) -> Result<(), &'static str>,
 {
-    let mut joc = [0u8; H_];
-    xr(0, &mut joc)?;
+    let mut ezv = [0u8; H_];
+    read_sector(0, &mut ezv)?;
     
     
-    let signature = u16::dj([joc[510], joc[511]]);
-    if signature != CFX_ {
-        return Ok(PartitionTable::azs());
+    let signature = u16::from_le_bytes([ezv[510], ezv[511]]);
+    if signature != CJH_ {
+        return Ok(PartitionTable::empty());
     }
     
     
-    let jfo = unsafe { &*(joc.fq() as *const Nm) };
+    let eue = unsafe { &*(ezv.as_ptr() as *const Fu) };
     
     
-    let tmz = jfo.aqd.iter()
-        .any(|ai| ai.duf == CFY_);
+    let mjx = eue.partitions.iter()
+        .any(|aa| aa.partition_type == CJI_);
     
-    if tmz {
+    if mjx {
         
-        match lsk(&xr, axf) {
-            Ok(gg) => return Ok(gg),
+        match gmj(&read_sector, zp) {
+            Ok(bs) => return Ok(bs),
             Err(_) => {
                 
             }
@@ -390,159 +390,159 @@ where
     }
     
     
-    lsp(jfo, axf)
+    gmm(eue, zp)
 }
 
 
-fn lsp(jfo: &Nm, axf: u64) -> Result<PartitionTable, &'static str> {
-    let mut aqd = Vec::new();
+fn gmm(eue: &Fu, zp: u64) -> Result<PartitionTable, &'static str> {
+    let mut partitions = Vec::new();
     
-    for (a, bt) in jfo.aqd.iter().cf() {
-        if bt.duf == 0 || bt.fuw == 0 {
+    for (i, entry) in eue.partitions.iter().enumerate() {
+        if entry.partition_type == 0 || entry.size_sectors == 0 {
             continue;
         }
         
-        let partition = Akz {
-            aqb: (a + 1) as u8,
-            aag: bt.aag as u64,
-            fuw: bt.fuw as u64,
-            duf: PartitionType::syb(bt.duf),
-            cji: bt.ilz == 0x80,
-            j: String::new(),
-            aar: None,
+        let partition = Pv {
+            number: (i + 1) as u8,
+            start_lba: entry.start_lba as u64,
+            size_sectors: entry.size_sectors as u64,
+            partition_type: PartitionType::lzl(entry.partition_type),
+            bootable: entry.boot_flag == 0x80,
+            name: String::new(),
+            guid: None,
         };
         
-        aqd.push(partition);
+        partitions.push(partition);
     }
     
     Ok(PartitionTable {
-        gud: PartitionTableType::Nm,
-        aqd,
-        gex: None,
-        axf,
+        table_type: PartitionTableType::Fu,
+        partitions,
+        disk_guid: None,
+        zp,
     })
 }
 
 
-fn lsk<G>(xr: &G, axf: u64) -> Result<PartitionTable, &'static str>
+fn gmj<F>(read_sector: &F, zp: u64) -> Result<PartitionTable, &'static str>
 where
-    G: Fn(u64, &mut [u8]) -> Result<(), &'static str>,
+    F: Fn(u64, &mut [u8]) -> Result<(), &'static str>,
 {
-    let mut phf = [0u8; H_];
-    xr(1, &mut phf)?;
+    let mut jdz = [0u8; H_];
+    read_sector(1, &mut jdz)?;
     
-    let dh = unsafe { &*(phf.fq() as *const Cem) };
+    let header = unsafe { &*(jdz.as_ptr() as *const Aku) };
     
     
-    if dh.signature != BYD_ {
+    if header.signature != CBJ_ {
         return Err("Invalid GPT signature");
     }
     
-    let mut aqd = Vec::new();
-    let acy = { dh.ves };
-    let htd = { dh.uwk };
-    let ktr = { dh.ver };
-    let rye = { dh.gex };
+    let mut partitions = Vec::new();
+    let oi = { header.partition_entry_size };
+    let dvn = { header.num_partition_entries };
+    let fuz = { header.partition_entry_lba };
+    let lfd = { header.disk_guid };
     
-    let ggh = H_ / acy as usize;
-    let dbu = (htd as usize + ggh - 1) / ggh;
+    let cxf = H_ / oi as usize;
+    let bdq = (dvn as usize + cxf - 1) / cxf;
     
-    let mut ouq = 1u8;
+    let mut itz = 1u8;
     
-    for cmu in 0..dbu {
-        let mut jk = [0u8; H_];
-        xr(ktr + cmu as u64, &mut jk)?;
+    for avb in 0..bdq {
+        let mut dj = [0u8; H_];
+        read_sector(fuz + avb as u64, &mut dj)?;
         
-        for bea in 0..ggh {
-            let l = bea * acy as usize;
-            if l + 128 > H_ {
+        for ado in 0..cxf {
+            let offset = ado * oi as usize;
+            if offset + 128 > H_ {
                 break;
             }
             
-            let bt = unsafe { 
-                &*(jk.fq().add(l) as *const Cen) 
+            let entry = unsafe { 
+                &*(dj.as_ptr().add(offset) as *const Akv) 
             };
             
             
-            let fxq = { bt.fxq };
-            let lta = { bt.lta };
-            let aag = { bt.aag };
-            let fhr = { bt.fhr };
-            let fcv = { bt.fcv };
-            let cxm = { bt.j };
+            let type_guid = { entry.type_guid };
+            let partition_guid = { entry.partition_guid };
+            let start_lba = { entry.start_lba };
+            let end_lba = { entry.end_lba };
+            let attributes = { entry.attributes };
+            let bbl = { entry.name };
             
             
-            if fxq == [0u8; 16] {
+            if type_guid == [0u8; 16] {
                 continue;
             }
             
             
-            let mut j = String::new();
-            for &r in &cxm {
-                if r == 0 {
+            let mut name = String::new();
+            for &c in &bbl {
+                if c == 0 {
                     break;
                 }
-                if r < 128 {
-                    j.push(r as u8 as char);
+                if c < 128 {
+                    name.push(c as u8 as char);
                 }
             }
             
-            let partition = Akz {
-                aqb: ouq,
-                aag,
-                fuw: fhr - aag + 1,
-                duf: PartitionType::sxw(&fxq),
-                cji: (fcv & 0x04) != 0, 
-                j,
-                aar: Some(lta),
+            let partition = Pv {
+                number: itz,
+                start_lba,
+                size_sectors: end_lba - start_lba + 1,
+                partition_type: PartitionType::lzg(&type_guid),
+                bootable: (attributes & 0x04) != 0, 
+                name,
+                guid: Some(partition_guid),
             };
             
-            aqd.push(partition);
-            ouq += 1;
+            partitions.push(partition);
+            itz += 1;
         }
     }
     
     Ok(PartitionTable {
-        gud: PartitionTableType::Wu,
-        aqd,
-        gex: Some(rye),
-        axf,
+        table_type: PartitionTableType::Gpt,
+        partitions,
+        disk_guid: Some(lfd),
+        zp,
     })
 }
 
 
-pub fn svt(aar: &[u8; 16]) -> String {
+pub fn lxl(guid: &[u8; 16]) -> String {
     
     
     format!(
         "{:02X}{:02X}{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}",
-        aar[3], aar[2], aar[1], aar[0],
-        aar[5], aar[4],
-        aar[7], aar[6],
-        aar[8], aar[9],
-        aar[10], aar[11], aar[12], aar[13], aar[14], aar[15]
+        guid[3], guid[2], guid[1], guid[0],
+        guid[5], guid[4],
+        guid[7], guid[6],
+        guid[8], guid[9],
+        guid[10], guid[11], guid[12], guid[13], guid[14], guid[15]
     )
 }
 
 
-pub fn oxt(gg: &PartitionTable) {
-    match gg.gud {
+pub fn iwn(bs: &PartitionTable) {
+    match bs.table_type {
         PartitionTableType::None => {
             crate::println!("No partition table found");
             return;
         }
-        PartitionTableType::Nm => {
+        PartitionTableType::Fu => {
             crate::println!("Partition table: MBR");
         }
-        PartitionTableType::Wu => {
+        PartitionTableType::Gpt => {
             crate::println!("Partition table: GPT");
-            if let Some(ref aar) = gg.gex {
-                crate::println!("Disk GUID: {}", svt(aar));
+            if let Some(ref guid) = bs.disk_guid {
+                crate::println!("Disk GUID: {}", lxl(guid));
             }
         }
     }
     
-    if gg.aqd.is_empty() {
+    if bs.partitions.is_empty() {
         crate::println!("No partitions found");
         return;
     }
@@ -551,20 +551,20 @@ pub fn oxt(gg: &PartitionTable) {
     crate::println!("  #  Boot  Start LBA     End LBA       Size       Type");
     crate::println!("  ─────────────────────────────────────────────────────────");
     
-    for ai in &gg.aqd {
-        let ilz = if ai.cji { "*" } else { " " };
+    for aa in &bs.partitions {
+        let boot_flag = if aa.bootable { "*" } else { " " };
         crate::println!(
             "  {}  {}     {:>12}  {:>12}  {:>10}   {}",
-            ai.aqb,
-            ilz,
-            ai.aag,
-            ai.fhr(),
-            ai.ple(),
-            ai.duf.j()
+            aa.number,
+            boot_flag,
+            aa.start_lba,
+            aa.end_lba(),
+            aa.size_human(),
+            aa.partition_type.name()
         );
         
-        if !ai.j.is_empty() {
-            crate::println!("                                              Name: {}", ai.j);
+        if !aa.name.is_empty() {
+            crate::println!("                                              Name: {}", aa.name);
         }
     }
 }
@@ -574,27 +574,27 @@ pub fn oxt(gg: &PartitionTable) {
 
 
 
-pub fn lxn(port: u8) -> Result<PartitionTable, &'static str> {
+pub fn gqd(port: u8) -> Result<PartitionTable, &'static str> {
     use super::ahci;
     
-    if !ahci::ky() {
+    if !ahci::is_initialized() {
         return Err("AHCI not initialized");
     }
     
     
-    let hgf = ahci::kyv(port).ok_or("Port not found")?;
-    let axf = hgf.agw;
+    let dne = ahci::fyw(port).ok_or("Port not found")?;
+    let zp = dne.sector_count;
     
     
-    let dld = |qa: u64, bi: &mut [u8]| -> Result<(), &'static str> {
-        if bi.len() < H_ {
+    let read_fn = |hb: u64, buffer: &mut [u8]| -> Result<(), &'static str> {
+        if buffer.len() < H_ {
             return Err("Buffer too small");
         }
-        let mut aae = [0u8; H_];
-        ahci::ain(port, qa, 1, &mut aae)?;
-        bi[..H_].dg(&aae);
+        let mut mx = [0u8; H_];
+        ahci::read_sectors(port, hb, 1, &mut mx)?;
+        buffer[..H_].copy_from_slice(&mx);
         Ok(())
     };
     
-    hul(dld, axf)
+    dwf(read_fn, zp)
 }

@@ -1271,6 +1271,7 @@ fn main() {
         crate::println_color!(0xFFFF4400, "  Effect 1: FIRE -- Procedural flames (5s)");
     }
     pause(1);
+    #[cfg(feature = "extras")]
     crate::video::player::render_realtime_timed("fire", vw, vh, 30, 5000);
     crate::framebuffer::clear();
 
@@ -1280,6 +1281,7 @@ fn main() {
         crate::println_color!(0xFF00FF44, "  Effect 2: MATRIX -- Digital rain (5s)");
     }
     pause(1);
+    #[cfg(feature = "extras")]
     crate::video::player::render_realtime_timed("matrix", vw, vh, 30, 5000);
     crate::framebuffer::clear();
 
@@ -1289,6 +1291,7 @@ fn main() {
         crate::println_color!(0xFFFF00FF, "  Effect 3: PLASMA -- Psychedelic plasma (5s)");
     }
     pause(1);
+    #[cfg(feature = "extras")]
     crate::video::player::render_realtime_timed("plasma", vw, vh, 30, 5000);
     crate::framebuffer::clear();
 
@@ -1305,6 +1308,7 @@ fn main() {
                "3D filaire avec projection perspective et ombrage de profondeur.");
     pause(2);
 
+    #[cfg(feature = "extras")]
     {
         let mut renderer = crate::formula3d::FormulaRenderer::new();
         renderer.set_scene(crate::formula3d::FormulaScene::Character);
@@ -1506,13 +1510,6 @@ fn main() {
         let outro_target = if freq > 0 { freq / 1000 * outro_ms } else { u64::MAX };
         let start_tsc = crate::cpu::tsc::read_tsc();
 
-        let mut renderer3d = crate::formula3d::FormulaRenderer::new();
-        renderer3d.set_scene(crate::formula3d::FormulaScene::Character);
-        renderer3d.wire_color = 0xFF00FFAA;
-        let vp_w = 160usize;
-        let vp_h = 160usize;
-        let mut vp_buf = alloc::vec![0u32; vp_w * vp_h];
-
         let mut frame = 0u32;
         loop {
             let elapsed = crate::cpu::tsc::read_tsc().saturating_sub(start_tsc);
@@ -1545,23 +1542,36 @@ fn main() {
             }
 
             // 3D character
-            renderer3d.update();
-            for p in vp_buf.iter_mut() { *p = 0x00000000; }
-            renderer3d.render(&mut vp_buf, vp_w, vp_h);
-            let vp_x = if vp_w < w { (w - vp_w) / 2 } else { 0 };
-            let vp_y = title_y + 16 * title_scale + 20;
-            for vy in 0..vp_h {
-                for vx in 0..vp_w {
-                    let src = vp_buf[vy * vp_w + vx];
-                    if src & 0x00FFFFFF != 0 {
-                        let dy = vp_y + vy;
-                        let dx = vp_x + vx;
-                        if dy < h && dx < w {
-                            buf[dy * w + dx] = src;
+            #[cfg(feature = "extras")]
+            let vp_y = {
+                let vp_w = 160usize;
+                let vp_h = 160usize;
+                let mut vp_buf = alloc::vec![0u32; vp_w * vp_h];
+                let mut renderer3d = crate::formula3d::FormulaRenderer::new();
+                renderer3d.set_scene(crate::formula3d::FormulaScene::Character);
+                renderer3d.wire_color = 0xFF00FFAA;
+                renderer3d.update();
+                for p in vp_buf.iter_mut() { *p = 0x00000000; }
+                renderer3d.render(&mut vp_buf, vp_w, vp_h);
+                let vp_x = if vp_w < w { (w - vp_w) / 2 } else { 0 };
+                let vp_y = title_y + 16 * title_scale + 20;
+                for vy in 0..vp_h {
+                    for vx in 0..vp_w {
+                        let src = vp_buf[vy * vp_w + vx];
+                        if src & 0x00FFFFFF != 0 {
+                            let dy = vp_y + vy;
+                            let dx = vp_x + vx;
+                            if dy < h && dx < w {
+                                buf[dy * w + dx] = src;
+                            }
                         }
                     }
                 }
-            }
+                vp_y
+            };
+            #[cfg(not(feature = "extras"))]
+            let vp_y = title_y + 16 * title_scale + 20;
+            let vp_h_hint = 160usize;
 
             // Hints
             let hints: &[(&str, u32)] = if lang == "fr" {
@@ -1581,7 +1591,7 @@ fn main() {
             };
 
             let hint_scale = 2;
-            let mut hy = vp_y + vp_h + 30;
+            let mut hy = vp_y + vp_h_hint + 30;
             for &(text, color) in hints {
                 let tw = text.len() * 8 * hint_scale;
                 let hx = if tw < w { (w - tw) / 2 } else { 0 };
@@ -1888,6 +1898,7 @@ pub(super) fn cmd_showcase(args: &[&str]) {
 
         // -- Scene 3: "TrustOS" + 3D + "Written in Rust by Nated0ge" --
         crate::serial_println!("[SHOWCASE] Scene 3: TrustOS title");
+        #[cfg(feature = "extras")]
         {
             // Special scene: TrustOS big title + 3D wireframe + credits
             let freq = crate::cpu::tsc::frequency_hz();
@@ -2161,8 +2172,9 @@ fn main() {
 
     let vw = sw as u16;
     let vh = sh as u16;
+    #[cfg(feature = "extras")]
     crate::video::player::render_realtime_timed("fire", vw, vh, 30, effect_duration);
-    
+
     // Restore console
     crate::framebuffer::clear();
     pause(2);
@@ -2171,8 +2183,9 @@ fn main() {
     crate::println_color!(0xFF00FF44, "? Demo 2/3: MATRIX RAIN -- Digital rain effect");
     pause(2);
 
+    #[cfg(feature = "extras")]
     crate::video::player::render_realtime_timed("matrix", vw, vh, 30, effect_duration);
-    
+
     crate::framebuffer::clear();
     pause(2);
 
@@ -2180,6 +2193,7 @@ fn main() {
     crate::println_color!(0xFFFF00FF, "? Demo 3/3: PLASMA -- Integer sine LUT psychedelic");
     pause(2);
 
+    #[cfg(feature = "extras")]
     crate::video::player::render_realtime_timed("plasma", vw, vh, 30, effect_duration);
     
     crate::framebuffer::clear();
@@ -2196,6 +2210,7 @@ fn main() {
     pause(2);
 
     // Render rotating 3D character using FormulaRenderer
+    #[cfg(feature = "extras")]
     {
         let mut renderer = crate::formula3d::FormulaRenderer::new();
         renderer.set_scene(crate::formula3d::FormulaScene::Character);
@@ -2619,11 +2634,13 @@ pub(super) fn cmd_showcase_jarvis(args: &[&str]) {
     crate::println_color!(0xFF00DDFF, "  $ jarvis brain init");
     crate::println!();
 
-    if !crate::jarvis::is_ready() {
-        crate::jarvis::init();
-    }
-
-    let has_brain = crate::jarvis::has_full_brain();
+    #[cfg(feature = "jarvis")]
+    let has_brain = {
+        if !crate::jarvis::is_ready() { crate::jarvis::init(); }
+        crate::jarvis::has_full_brain()
+    };
+    #[cfg(not(feature = "jarvis"))]
+    let has_brain = false;
     if has_brain {
         crate::println_color!(0xFF00FF88, "  [OK] Full brain loaded: 4,393,216 parameters");
     } else {
@@ -2646,26 +2663,33 @@ pub(super) fn cmd_showcase_jarvis(args: &[&str]) {
     crate::println!();
 
     // Generate text live
-    let response = crate::jarvis::generate("What is TrustOS?", 80);
-    let trimmed = response.trim();
-    if !trimmed.is_empty() {
-        // Print response character by character for dramatic effect
-        crate::print_color!(0xFF00FF64, "  JARVIS> ");
-        for c in trimmed.chars().take(200) {
-            crate::print_color!(0xFFCCFFDD, "{}", c);
-            // Tiny delay per character for typewriter effect
-            let char_start = crate::cpu::tsc::read_tsc();
-            let char_freq = crate::cpu::tsc::frequency_hz();
-            if char_freq > 0 {
-                let char_cycles = char_freq / 1000 * 30; // 30ms per char
-                while crate::cpu::tsc::read_tsc().saturating_sub(char_start) < char_cycles {
-                    core::hint::spin_loop();
+    #[cfg(feature = "jarvis")]
+    {
+        let response = crate::jarvis::generate("What is TrustOS?", 80);
+        let trimmed = response.trim();
+        if !trimmed.is_empty() {
+            // Print response character by character for dramatic effect
+            crate::print_color!(0xFF00FF64, "  JARVIS> ");
+            for c in trimmed.chars().take(200) {
+                crate::print_color!(0xFFCCFFDD, "{}", c);
+                // Tiny delay per character for typewriter effect
+                let char_start = crate::cpu::tsc::read_tsc();
+                let char_freq = crate::cpu::tsc::frequency_hz();
+                if char_freq > 0 {
+                    let char_cycles = char_freq / 1000 * 30; // 30ms per char
+                    while crate::cpu::tsc::read_tsc().saturating_sub(char_start) < char_cycles {
+                        core::hint::spin_loop();
+                    }
                 }
             }
+            crate::println!();
+        } else {
+            crate::println_color!(0xFF888888, "  (Inference requires full brain to be loaded)");
         }
-        crate::println!();
-    } else {
-        crate::println_color!(0xFF888888, "  (Inference requires full brain to be loaded)");
+    }
+    #[cfg(not(feature = "jarvis"))]
+    {
+        crate::println_color!(0xFF888888, "  (JARVIS feature not enabled)");
     }
     crate::println!();
     pause(5);
@@ -2690,21 +2714,28 @@ pub(super) fn cmd_showcase_jarvis(args: &[&str]) {
     pause(4);
 
     // Show live mesh status
-    let mesh_active = crate::jarvis::mesh::is_active();
-    let peers = crate::jarvis::mesh::peer_count();
-    if mesh_active {
-        crate::println_color!(0xFF00FF88, "  [LIVE] Mesh: ACTIVE");
-        crate::println_color!(0xFF00FF88, "  [LIVE] Peers: {}", peers);
-        let role = crate::jarvis::mesh::our_role();
-        let role_str = match role {
-            crate::jarvis::mesh::NodeRole::Leader => "Leader",
-            crate::jarvis::mesh::NodeRole::Candidate => "Candidate",
-            crate::jarvis::mesh::NodeRole::Worker => "Worker",
-        };
-        crate::println_color!(0xFF00FF88, "  [LIVE] Role:  {}", role_str);
-    } else {
-        crate::println_color!(0xFFFFCC00, "  [INFO] Mesh: not started (single node mode)");
-        crate::println_color!(0xFF888888, "  Run: jarvis brain propagate  (to join mesh)");
+    #[cfg(feature = "jarvis")]
+    {
+        let mesh_active = crate::jarvis::mesh::is_active();
+        let peers = crate::jarvis::mesh::peer_count();
+        if mesh_active {
+            crate::println_color!(0xFF00FF88, "  [LIVE] Mesh: ACTIVE");
+            crate::println_color!(0xFF00FF88, "  [LIVE] Peers: {}", peers);
+            let role = crate::jarvis::mesh::our_role();
+            let role_str = match role {
+                crate::jarvis::mesh::NodeRole::Leader => "Leader",
+                crate::jarvis::mesh::NodeRole::Candidate => "Candidate",
+                crate::jarvis::mesh::NodeRole::Worker => "Worker",
+            };
+            crate::println_color!(0xFF00FF88, "  [LIVE] Role:  {}", role_str);
+        } else {
+            crate::println_color!(0xFFFFCC00, "  [INFO] Mesh: not started (single node mode)");
+            crate::println_color!(0xFF888888, "  Run: jarvis brain propagate  (to join mesh)");
+        }
+    }
+    #[cfg(not(feature = "jarvis"))]
+    {
+        crate::println_color!(0xFFFFCC00, "  [INFO] Mesh: not available (JARVIS feature not enabled)");
     }
     crate::println!();
     pause(4);
@@ -2782,6 +2813,12 @@ pub(super) fn cmd_showcase_jarvis(args: &[&str]) {
 // 12 fullscreen scenes, 5 seconds each, hardware stats overlay
 // -------------------------------------------------------------------------------
 
+#[cfg(not(feature = "extras"))]
+pub fn cmd_showcase3d() {
+    // Stub: extras feature disabled
+}
+
+#[cfg(feature = "extras")]
 pub fn cmd_showcase3d() {
     use crate::gpu_emu::{PixelInput, PixelOutput};
 
@@ -3239,6 +3276,12 @@ pub fn cmd_showcase3d() {
 
 /// Test command: filled 3D rendering with flat shading
 /// Renders rotating cube, pyramid, and diamond with solid filled faces
+#[cfg(not(feature = "extras"))]
+pub fn cmd_filled3d() {
+    // Stub: extras feature disabled
+}
+
+#[cfg(feature = "extras")]
 pub fn cmd_filled3d() {
     use crate::formula3d::V3;
 
@@ -4153,29 +4196,29 @@ pub(super) fn cmd_cosmic_v2_with_app_timed(initial_app: Option<&str>, timeout_ms
     // A 3D volume of ASCII voxels projected to 2D with alignment-based intensity
     let mut holovolume = crate::holovolume::HoloVolume::new(
         width as usize / 8,   // ~160 chars wide
-        height as usize / 9,  // ~90 chars tall  
+        height as usize / 9,  // ~90 chars tall
         32                    // 32 Z-layers for depth
     );
     holovolume.render_mode = crate::holovolume::RenderMode::Hologram;
     let mut use_holovolume = false;  // Toggle with 'holo volume' command
-    
+
     // FAST MATRIX RENDERER - Ultra optimized with glyph caching
     let mut fast_renderer = crate::matrix_fast::FastMatrixRenderer::new();
     let mut use_fast_matrix = false;  // Braille mode is default now
-    
+
     // BRAILLE MATRIX - 8A-- resolution sub-pixel rendering (BOXED to avoid stack overflow)
     let mut braille_renderer = alloc::boxed::Box::new(crate::matrix_fast::BrailleMatrix::new());
     let mut use_braille = false;  // Formula mode is default now
     let mut show_fps = true;  // FPS display
-    
+
     // MATRIX 3D - Volumetric rain with 3D shapes (BOXED to avoid stack overflow)
     let mut matrix3d_renderer = alloc::boxed::Box::new(crate::matrix_fast::Matrix3D::new());
     let mut use_matrix3d = false;  // Toggle with 'matrix3d' command
-    
+
     // FORMULA 3D - Tsoding-inspired wireframe renderer (perspective projection)
     let mut formula_renderer = alloc::boxed::Box::new(crate::formula3d::FormulaRenderer::new());
     let mut use_formula = true;  // DEFAULT MODE - fastest renderer
-    
+
     // SHADER MATRIX - GPU-emulated pixel shader matrix rain
     let mut use_shader_matrix = false;  // Toggle with 'matrix shader' command
     let mut shader_time: f32 = 0.0;
@@ -4687,10 +4730,12 @@ pub(super) fn cmd_cosmic_v2_with_app_timed(initial_app: Option<&str>, timeout_ms
                             },
                             "holo off" => {
                                 holo_enabled = false;
-                                use_holovolume = false;
+                                #[cfg(feature = "extras")]
+                                { use_holovolume = false; }
                                 crate::graphics::holomatrix::set_enabled(false);
                                 shell_output.push(String::from("? HoloMatrix 3D disabled"));
                             },
+                            #[cfg(feature = "extras")]
                             "holo volume" | "holovolume" => {
                                 // Toggle volumetric ASCII raymarcher
                                 use_holovolume = !use_holovolume;
@@ -4705,21 +4750,25 @@ pub(super) fn cmd_cosmic_v2_with_app_timed(initial_app: Option<&str>, timeout_ms
                                     shell_output.push(String::from("  Back to Matrix Rain"));
                                 }
                             },
+                            #[cfg(feature = "extras")]
                             "holo dna" => {
                                 use_holovolume = true;
                                 holovolume.render_mode = crate::holovolume::RenderMode::DnaHelix;
                                 shell_output.push(String::from("? HoloVolume: DNA Helix"));
                             },
+                            #[cfg(feature = "extras")]
                             "holo cube" => {
                                 use_holovolume = true;
                                 holovolume.render_mode = crate::holovolume::RenderMode::RotatingCube;
                                 shell_output.push(String::from("? HoloVolume: Rotating Cube"));
                             },
+                            #[cfg(feature = "extras")]
                             "holo sphere" => {
                                 use_holovolume = true;
                                 holovolume.render_mode = crate::holovolume::RenderMode::Sphere;
                                 shell_output.push(String::from("? HoloVolume: Sphere"));
                             },
+                            #[cfg(feature = "extras")]
                             "holo rain" => {
                                 use_holovolume = true;
                                 holovolume.render_mode = crate::holovolume::RenderMode::MatrixRain;
@@ -4728,6 +4777,7 @@ pub(super) fn cmd_cosmic_v2_with_app_timed(initial_app: Option<&str>, timeout_ms
                             // -----------------------------------------------
                             // MATRIX RENDERER MODE COMMANDS
                             // -----------------------------------------------
+                            #[cfg(feature = "extras")]
                             "matrix formula" | "formula" | "formula3d" => {
                                 use_formula = true;
                                 use_braille = false;
@@ -4738,62 +4788,74 @@ pub(super) fn cmd_cosmic_v2_with_app_timed(initial_app: Option<&str>, timeout_ms
                                 shell_output.push(String::from("? FORMULA 3D: Wireframe perspective projection"));
                                 shell_output.push(String::from("  Commands: formula cube|pyramid|diamond|torus|sphere|grid|helix|multi"));
                             },
+                            #[cfg(feature = "extras")]
                             "formula cube" => {
                                 use_formula = true; use_braille = false; use_fast_matrix = false; use_matrix3d = false; use_shader_matrix = false;
                                 formula_renderer.set_scene(crate::formula3d::FormulaScene::Cube);
                                 shell_output.push(String::from("? FORMULA: Rotating Cube"));
                             },
+                            #[cfg(feature = "extras")]
                             "formula pyramid" => {
                                 use_formula = true; use_braille = false; use_fast_matrix = false; use_matrix3d = false; use_shader_matrix = false;
                                 formula_renderer.set_scene(crate::formula3d::FormulaScene::Pyramid);
                                 shell_output.push(String::from("? FORMULA: Pyramid"));
                             },
+                            #[cfg(feature = "extras")]
                             "formula diamond" => {
                                 use_formula = true; use_braille = false; use_fast_matrix = false; use_matrix3d = false; use_shader_matrix = false;
                                 formula_renderer.set_scene(crate::formula3d::FormulaScene::Diamond);
                                 shell_output.push(String::from("? FORMULA: Diamond octahedron"));
                             },
+                            #[cfg(feature = "extras")]
                             "formula torus" | "formula donut" => {
                                 use_formula = true; use_braille = false; use_fast_matrix = false; use_matrix3d = false; use_shader_matrix = false;
                                 formula_renderer.set_scene(crate::formula3d::FormulaScene::Torus);
                                 shell_output.push(String::from("? FORMULA: Torus (donut)"));
                             },
+                            #[cfg(feature = "extras")]
                             "formula sphere" => {
                                 use_formula = true; use_braille = false; use_fast_matrix = false; use_matrix3d = false; use_shader_matrix = false;
                                 formula_renderer.set_scene(crate::formula3d::FormulaScene::Icosphere);
                                 shell_output.push(String::from("? FORMULA: Icosphere"));
                             },
+                            #[cfg(feature = "extras")]
                             "formula grid" => {
                                 use_formula = true; use_braille = false; use_fast_matrix = false; use_matrix3d = false; use_shader_matrix = false;
                                 formula_renderer.set_scene(crate::formula3d::FormulaScene::Grid);
                                 shell_output.push(String::from("? FORMULA: Infinite grid"));
                             },
+                            #[cfg(feature = "extras")]
                             "formula helix" | "formula dna" => {
                                 use_formula = true; use_braille = false; use_fast_matrix = false; use_matrix3d = false; use_shader_matrix = false;
                                 formula_renderer.set_scene(crate::formula3d::FormulaScene::Helix);
                                 shell_output.push(String::from("? FORMULA: DNA helix"));
                             },
+                            #[cfg(feature = "extras")]
                             "formula multi" => {
                                 use_formula = true; use_braille = false; use_fast_matrix = false; use_matrix3d = false; use_shader_matrix = false;
                                 formula_renderer.set_scene(crate::formula3d::FormulaScene::Multi);
                                 shell_output.push(String::from("? FORMULA: Multi - orbiting shapes"));
                             },
+                            #[cfg(feature = "extras")]
                             "formula penger" | "formula penguin" | "penger" => {
                                 use_formula = true; use_braille = false; use_fast_matrix = false; use_matrix3d = false; use_shader_matrix = false;
                                 formula_renderer.set_scene(crate::formula3d::FormulaScene::Penger);
                                 shell_output.push(String::from("? FORMULA: Penger - hologram penguin ??"));
                             },
+                            #[cfg(feature = "extras")]
                             "formula trustos" | "formula title" | "trustos" | "trustos 3d" => {
                                 use_formula = true; use_braille = false; use_fast_matrix = false; use_matrix3d = false; use_shader_matrix = false;
                                 formula_renderer.set_scene(crate::formula3d::FormulaScene::TrustOs);
                                 formula_renderer.wire_color = 0xFF00CCFF;
                                 shell_output.push(String::from("? FORMULA: TrustOS 3D -- hologram scanline title"));
                             },
+                            #[cfg(feature = "extras")]
                             "formula holo" | "holo matrix" | "holomatrix" | "matrix holo" | "matrix 3d holo" => {
                                 use_formula = true; use_braille = false; use_fast_matrix = false; use_matrix3d = false; use_shader_matrix = false;
                                 formula_renderer.set_scene(crate::formula3d::FormulaScene::HoloMatrix);
                                 shell_output.push(String::from("? FORMULA: HoloMatrix 3D -- volumetric holographic rain"));
                             },
+                            #[cfg(feature = "extras")]
                             "matrix fast" => {
                                 use_formula = false;
                                 use_fast_matrix = true;
@@ -4802,6 +4864,7 @@ pub(super) fn cmd_cosmic_v2_with_app_timed(initial_app: Option<&str>, timeout_ms
                                 shell_output.push(String::from("? FAST MATRIX: Glyph-cached renderer"));
                                 shell_output.push(String::from("  Pre-computed u128 glyphs + LUT intensity"));
                             },
+                            #[cfg(feature = "extras")]
                             "matrix braille" => {
                                 use_formula = false;
                                 use_braille = true;
@@ -4810,6 +4873,7 @@ pub(super) fn cmd_cosmic_v2_with_app_timed(initial_app: Option<&str>, timeout_ms
                                 shell_output.push(String::from("? BRAILLE MATRIX: 8A-- sub-pixel resolution"));
                                 shell_output.push(String::from("  480A--272 virtual pixels via Unicode ??"));
                             },
+                            #[cfg(feature = "extras")]
                             "matrix legacy" => {
                                 use_formula = false;
                                 use_fast_matrix = false;
@@ -4819,6 +4883,7 @@ pub(super) fn cmd_cosmic_v2_with_app_timed(initial_app: Option<&str>, timeout_ms
                                 shell_output.push(String::from("? LEGACY MATRIX: Original renderer"));
                                 shell_output.push(String::from("  Per-pixel font lookup (slower)"));
                             },
+                            #[cfg(feature = "extras")]
                             "matrix3d" | "matrix 3d" => {
                                 use_formula = false;
                                 use_matrix3d = !use_matrix3d;
@@ -4832,6 +4897,7 @@ pub(super) fn cmd_cosmic_v2_with_app_timed(initial_app: Option<&str>, timeout_ms
                                     shell_output.push(String::from("? MATRIX 3D: Disabled, back to BRAILLE"));
                                 }
                             },
+                            #[cfg(feature = "extras")]
                             "matrix3d sphere" | "matrix 3d sphere" => {
                                 use_formula = false;
                                 use_matrix3d = true;
@@ -4841,6 +4907,7 @@ pub(super) fn cmd_cosmic_v2_with_app_timed(initial_app: Option<&str>, timeout_ms
                                 matrix3d_renderer.set_demo_shapes();
                                 shell_output.push(String::from("? MATRIX 3D: Sphere - rain flows around it"));
                             },
+                            #[cfg(feature = "extras")]
                             "matrix3d cube" | "matrix 3d cube" => {
                                 use_formula = false;
                                 use_matrix3d = true;
@@ -4850,6 +4917,7 @@ pub(super) fn cmd_cosmic_v2_with_app_timed(initial_app: Option<&str>, timeout_ms
                                 matrix3d_renderer.set_cube();
                                 shell_output.push(String::from("? MATRIX 3D: Rotating Cube"));
                             },
+                            #[cfg(feature = "extras")]
                             "matrix3d torus" | "matrix 3d torus" => {
                                 use_formula = false;
                                 use_matrix3d = true;
@@ -4860,6 +4928,7 @@ pub(super) fn cmd_cosmic_v2_with_app_timed(initial_app: Option<&str>, timeout_ms
                                 shell_output.push(String::from("? MATRIX 3D: Torus (donut shape)"));
                             },
                             // SHAPE OVERLAYS for BrailleMatrix (normal rain + shape traced by drops)
+                            #[cfg(feature = "extras")]
                             "matrix cube" => {
                                 use_formula = false;
                                 use_braille = true;
@@ -4869,6 +4938,7 @@ pub(super) fn cmd_cosmic_v2_with_app_timed(initial_app: Option<&str>, timeout_ms
                                 braille_renderer.set_shape(crate::matrix_fast::ShapeOverlay::Cube);
                                 shell_output.push(String::from("? MATRIX: Cube overlay - glyphs trace rotating cube"));
                             },
+                            #[cfg(feature = "extras")]
                             "matrix sphere" => {
                                 use_formula = false;
                                 use_braille = true;
@@ -4878,6 +4948,7 @@ pub(super) fn cmd_cosmic_v2_with_app_timed(initial_app: Option<&str>, timeout_ms
                                 braille_renderer.set_shape(crate::matrix_fast::ShapeOverlay::Sphere);
                                 shell_output.push(String::from("? MATRIX: Sphere overlay - glyphs trace sphere surface"));
                             },
+                            #[cfg(feature = "extras")]
                             "matrix torus" => {
                                 use_formula = false;
                                 use_braille = true;
@@ -4887,6 +4958,7 @@ pub(super) fn cmd_cosmic_v2_with_app_timed(initial_app: Option<&str>, timeout_ms
                                 braille_renderer.set_shape(crate::matrix_fast::ShapeOverlay::Torus);
                                 shell_output.push(String::from("? MATRIX: Torus overlay - glyphs trace spinning donut"));
                             },
+                            #[cfg(feature = "extras")]
                             "matrix dna" => {
                                 use_formula = false;
                                 use_braille = true;
@@ -4896,10 +4968,12 @@ pub(super) fn cmd_cosmic_v2_with_app_timed(initial_app: Option<&str>, timeout_ms
                                 braille_renderer.set_shape(crate::matrix_fast::ShapeOverlay::DNA);
                                 shell_output.push(String::from("? MATRIX: DNA overlay - glyphs trace double helix"));
                             },
+                            #[cfg(feature = "extras")]
                             "matrix off" | "matrix clear" | "matrix normal" => {
                                 braille_renderer.set_shape(crate::matrix_fast::ShapeOverlay::None);
                                 shell_output.push(String::from("? MATRIX: Shape overlay disabled - normal rain"));
                             },
+                            #[cfg(feature = "extras")]
                             "matrix shader" | "matrix gpu" => {
                                 use_shader_matrix = !use_shader_matrix;
                                 if use_shader_matrix {
@@ -4916,12 +4990,15 @@ pub(super) fn cmd_cosmic_v2_with_app_timed(initial_app: Option<&str>, timeout_ms
                                 }
                             },
                             "matrix" => {
+                                #[cfg(feature = "extras")]
                                 let mode = if use_formula { "FORMULA (wireframe 3D)" }
                                            else if use_shader_matrix { "SHADER (GPU-emulated pixel shader)" }
                                            else if use_matrix3d { "3D (volumetric shapes)" }
                                            else if use_braille { "BRAILLE (8A-- sub-pixel)" }
                                            else if use_fast_matrix { "FAST (glyph-cached)" }
                                            else { "LEGACY (per-pixel)" };
+                                #[cfg(not(feature = "extras"))]
+                                let mode = "STANDARD (matrix rain)";
                                 shell_output.push(format!("Matrix Renderer: {}", mode));
                                 shell_output.push(String::from("Commands: matrix formula | fast | braille | legacy | 3d | shader"));
                             },
@@ -6035,51 +6112,62 @@ pub(super) fn cmd_cosmic_v2_with_app_timed(initial_app: Option<&str>, timeout_ms
             let buf_ptr = bg.buffer.as_mut_ptr();
             let buf_len = bg.buffer.len();
             
-            // FAST PATH: Use optimized renderers
-            if use_formula {
-                // -------------------------------------------------------------
-                // FORMULA 3D: Tsoding-inspired wireframe perspective projection
-                // Cheapest renderer: Bresenham lines + depth coloring
-                // No fill, no textures, pure math beauty
-                // -------------------------------------------------------------
-                formula_renderer.update();
-                formula_renderer.render(&mut bg.buffer, width as usize, height as usize);
-            } else if use_shader_matrix {
-                // -------------------------------------------------------------
-                // SHADER MATRIX: Optimized cell-based Matrix rain
-                // Real MATRIX_GLYPHS_6X6 katakana, per-column depth parallax,
-                // SMP-parallel column bands, SSE2 background fill.
-                // ~12K glyph blits/frame vs 1M+ pixel shader calls.
-                // -------------------------------------------------------------
-                crate::gpu_emu::shader_matrix_render(
-                    buf_ptr,
-                    width as usize,
-                    height as usize,
-                );
-            } else if use_matrix3d {
-                // -------------------------------------------------------------
-                // MATRIX 3D: Volumetric rain with 3D shape collision
-                // -------------------------------------------------------------
-                matrix3d_renderer.update();
-                matrix3d_renderer.render(&mut bg.buffer, width as usize, height as usize);
-            } else if use_braille {
-                // -------------------------------------------------------------
-                // BRAILLE RENDERER: 8A-- resolution using Unicode Braille patterns
-                // NOTE: Renderer fills black itself, no need for bg.buffer.fill!
-                // -------------------------------------------------------------
-                braille_renderer.update();
-                braille_renderer.render(&mut bg.buffer, width as usize, height as usize);
-                // Holographic cube: ambient fill for dark face cells, then subtle edge hints
-                braille_renderer.render_cube_flow_layer(&mut bg.buffer, width as usize, height as usize);
-                braille_renderer.render_entity_layer(&mut bg.buffer, width as usize, height as usize);
-            } else if use_fast_matrix && !use_holovolume && !holo_enabled {
-                // -------------------------------------------------------------
-                // FAST MATRIX: Glyph-cached ultra-optimized renderer
-                // -------------------------------------------------------------
-                bg.buffer.fill(black);
-                fast_renderer.update();
-                fast_renderer.render(&mut bg.buffer, width as usize, height as usize);
-            } else if use_holovolume {
+            // FAST PATH: Use optimized renderers (extras feature only)
+            #[cfg(feature = "extras")]
+            let bg_handled_by_extras: bool;
+            #[cfg(not(feature = "extras"))]
+            let bg_handled_by_extras: bool = false;
+            #[cfg(feature = "extras")]
+            {
+                bg_handled_by_extras = if use_formula {
+                    // -------------------------------------------------------------
+                    // FORMULA 3D: Tsoding-inspired wireframe perspective projection
+                    // Cheapest renderer: Bresenham lines + depth coloring
+                    // No fill, no textures, pure math beauty
+                    // -------------------------------------------------------------
+                    formula_renderer.update();
+                    formula_renderer.render(&mut bg.buffer, width as usize, height as usize);
+                    true
+                } else if use_shader_matrix {
+                    // -------------------------------------------------------------
+                    // SHADER MATRIX: Optimized cell-based Matrix rain
+                    // Real MATRIX_GLYPHS_6X6 katakana, per-column depth parallax,
+                    // SMP-parallel column bands, SSE2 background fill.
+                    // ~12K glyph blits/frame vs 1M+ pixel shader calls.
+                    // -------------------------------------------------------------
+                    crate::gpu_emu::shader_matrix_render(
+                        buf_ptr,
+                        width as usize,
+                        height as usize,
+                    );
+                    true
+                } else if use_matrix3d {
+                    // -------------------------------------------------------------
+                    // MATRIX 3D: Volumetric rain with 3D shape collision
+                    // -------------------------------------------------------------
+                    matrix3d_renderer.update();
+                    matrix3d_renderer.render(&mut bg.buffer, width as usize, height as usize);
+                    true
+                } else if use_braille {
+                    // -------------------------------------------------------------
+                    // BRAILLE RENDERER: 8A-- resolution using Unicode Braille patterns
+                    // NOTE: Renderer fills black itself, no need for bg.buffer.fill!
+                    // -------------------------------------------------------------
+                    braille_renderer.update();
+                    braille_renderer.render(&mut bg.buffer, width as usize, height as usize);
+                    // Holographic cube: ambient fill for dark face cells, then subtle edge hints
+                    braille_renderer.render_cube_flow_layer(&mut bg.buffer, width as usize, height as usize);
+                    braille_renderer.render_entity_layer(&mut bg.buffer, width as usize, height as usize);
+                    true
+                } else if use_fast_matrix && !use_holovolume && !holo_enabled {
+                    // -------------------------------------------------------------
+                    // FAST MATRIX: Glyph-cached ultra-optimized renderer
+                    // -------------------------------------------------------------
+                    bg.buffer.fill(black);
+                    fast_renderer.update();
+                    fast_renderer.render(&mut bg.buffer, width as usize, height as usize);
+                    true
+                } else if use_holovolume {
                 // -------------------------------------------------------------
                 // HOLOVOLUME: Modifies Matrix rain colors based on 3D shape
                 // Uses the SAME rain animation, just modifies colors
@@ -6127,8 +6215,12 @@ pub(super) fn cmd_cosmic_v2_with_app_timed(initial_app: Option<&str>, timeout_ms
                     super::render_matrix_columns_parallel,
                     &params as *const super::MatrixRenderParams as *mut u8
                 );
-                
-            } else if holo_enabled {
+                true
+                } else { false };
+            } // end #[cfg(feature = "extras")]
+
+            if !bg_handled_by_extras {
+            if holo_enabled {
                 // -------------------------------------------------------------
                 // 3D BACKGROUND RENDERING (HoloMatrix or RayTracer)
                 // -------------------------------------------------------------
@@ -6494,8 +6586,9 @@ pub(super) fn cmd_cosmic_v2_with_app_timed(initial_app: Option<&str>, timeout_ms
                     &params as *const super::MatrixRenderParams as *mut u8
                 );
             }
+            } // end if !bg_handled_by_extras
         }
-        
+
         // -------------------------------------------------------------------
         // LAYER 1: DOCK (Left side)
         // -------------------------------------------------------------------

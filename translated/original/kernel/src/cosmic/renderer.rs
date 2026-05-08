@@ -20,9 +20,9 @@ pub struct CosmicRenderer {
 
 impl CosmicRenderer {
     /// Create a new renderer with given dimensions
-    pub fn new(width: u32, height: u32) -> Self {
-        let pixmap = Pixmap::new(width, height).expect("Failed to create pixmap");
-        Self { pixmap, width, height }
+    pub fn new(width: u32, height: u32) -> Option<Self> {
+        let pixmap = Pixmap::new(width, height)?;
+        Some(Self { pixmap, width, height })
     }
     
     /// Get dimensions
@@ -116,7 +116,10 @@ impl CosmicRenderer {
     
     /// Stroke a rounded rectangle border
     pub fn stroke_rounded_rect(&mut self, rect: Rect, radius: f32, color: Color, width: f32) {
-        let path = rounded_rect_path(rect, radius);
+        let path = match rounded_rect_path(rect, radius) {
+            Some(p) => p,
+            None => return,
+        };
         let mut paint = Paint::default();
         paint.set_color(to_skia_color(color));
         paint.anti_alias = true;
@@ -145,7 +148,10 @@ impl CosmicRenderer {
         }
         
         // Large circles use tiny-skia for quality
-        let path = circle_path(center, radius);
+        let path = match circle_path(center, radius) {
+            Some(p) => p,
+            None => return,
+        };
         let mut paint = Paint::default();
         paint.set_color(to_skia_color(color));
         paint.anti_alias = true;
@@ -474,17 +480,17 @@ fn to_skia_color(c: Color) -> SkiaColor {
     SkiaColor::from_rgba(c.r, c.g, c.b, c.a).unwrap_or(SkiaColor::BLACK)
 }
 
-fn rect_path(r: Rect) -> Path {
+fn rect_path(r: Rect) -> Option<Path> {
     let mut pb = PathBuilder::new();
     pb.move_to(r.x, r.y);
     pb.line_to(r.x + r.width, r.y);
     pb.line_to(r.x + r.width, r.y + r.height);
     pb.line_to(r.x, r.y + r.height);
     pb.close();
-    pb.finish().unwrap()
+    pb.finish()
 }
 
-fn rounded_rect_path(r: Rect, radius: f32) -> Path {
+fn rounded_rect_path(r: Rect, radius: f32) -> Option<Path> {
     let mut pb = PathBuilder::new();
     let rad = radius.min(r.width / 2.0).min(r.height / 2.0);
     
@@ -512,10 +518,10 @@ fn rounded_rect_path(r: Rect, radius: f32) -> Path {
     pb.quad_to(r.x, r.y, r.x + rad, r.y);
     
     pb.close();
-    pb.finish().unwrap()
+    pb.finish()
 }
 
-fn circle_path(center: Point, radius: f32) -> Path {
+fn circle_path(center: Point, radius: f32) -> Option<Path> {
     let mut pb = PathBuilder::new();
     
     // Approximate circle with bezier curves
@@ -545,7 +551,7 @@ fn circle_path(center: Point, radius: f32) -> Path {
     );
     pb.close();
     
-    pb.finish().unwrap()
+    pb.finish()
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

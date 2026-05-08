@@ -85,7 +85,7 @@ pub enum SvmExitCode {
     Intr = 0x60,
     Nmi = 0x61,
     Smi = 0x62,
-    Initialize = 0x63,
+    Init = 0x63,
     Vintr = 0x64,
     Cr0SelWrite = 0x65,
     IdtrRead = 0x66,
@@ -300,7 +300,7 @@ unsafe {
     }
     
     features.revision = (eax & 0xFF) as u8;
-    features.number_asids = ebx;
+    features.num_asids = ebx;
     features.npt = (edx & (1 << 0)) != 0;
     features.lbr_virt = (edx & (1 << 1)) != 0;
     features.svm_lock = (edx & (1 << 2)) != 0;
@@ -323,7 +323,7 @@ unsafe {
 // Public structure — visible outside this module.
 pub struct SvmFeatures {
     pub revision: u8,
-    pub number_asids: u32,
+    pub num_asids: u32,
     pub npt: bool,           // Nested Page Tables
     pub lbr_virt: bool,      // LBR Virtualization
     pub svm_lock: bool,      // SVM Lock
@@ -350,7 +350,7 @@ pub fn init() -> Result<(), &'static str> {
     }
     
     let features = get_features();
-    crate::serial_println!("[SVM] Revision: {}, ASIDs: {}", features.revision, features.number_asids);
+    crate::serial_println!("[SVM] Revision: {}, ASIDs: {}", features.revision, features.num_asids);
     crate::serial_println!("[SVM] NPT: {}, NRIP: {}, AVIC: {}", 
         features.npt, features.nrip_save, features.avic);
     
@@ -365,12 +365,12 @@ pub fn init() -> Result<(), &'static str> {
     unsafe {
         let save_area = Box::new(HostSaveArea::new());
         let save_area_pointer = Box::into_raw(save_area);
-        let physical_address = save_area_pointer as u64 - crate::memory::hhdm_offset();
+        let phys_addr = save_area_pointer as u64 - crate::memory::hhdm_offset();
         
-        write_msr(msr::VM_HSAVE_PA, physical_address);
+        write_msr(msr::VM_HSAVE_PA, phys_addr);
         HOST_SAVE_AREA = Some(Box::from_raw(save_area_pointer));
         
-        crate::serial_println!("[SVM] Host save area at phys {:#x}", physical_address);
+        crate::serial_println!("[SVM] Host save area at phys {:#x}", phys_addr);
     }
     
     SVM_INITIALIZED.store(true, Ordering::SeqCst);
@@ -389,7 +389,7 @@ pub fn is_initialized() -> bool {
 /// # Safety
 /// VMCB must be properly configured
 pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe fn vmrun(vmcb_physical: u64) {
+unsafe fn vmrun(vmcb_phys: u64) {
     core::arch::asm!(
         // Save host state
         "push rbx",
@@ -429,7 +429,7 @@ unsafe fn vmrun(vmcb_physical: u64) {
         "pop rcx",
         "pop rbx",
         
-        vmcb = in(reg) vmcb_physical,
+        vmcb = in(reg) vmcb_phys,
         options(nostack)
     );
 }
@@ -461,7 +461,7 @@ pub struct VmrunGuestRegs {
 /// # Safety
 /// VMCB must be properly configured, regs must point to valid VmrunGuestRegs
 pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe fn vmrun_with_regs(vmcb_physical: u64, regs: *mut VmrunGuestRegs) {
+unsafe fn vmrun_with_regs(vmcb_phys: u64, regs: *mut VmrunGuestRegs) {
     core::arch::asm!(
         // Save host callee-saved registers
         "push rbx",
@@ -538,7 +538,7 @@ unsafe fn vmrun_with_regs(vmcb_physical: u64, regs: *mut VmrunGuestRegs) {
         "pop r12",
         "pop rbx",
         
-        vmcb = in(reg) vmcb_physical,
+        vmcb = in(reg) vmcb_phys,
         in("r15") regs,
         options(nostack)
     );
@@ -547,10 +547,10 @@ unsafe fn vmrun_with_regs(vmcb_physical: u64, regs: *mut VmrunGuestRegs) {
 /// Execute VMSAVE instruction
 #[inline]
 pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe fn vmsave(vmcb_physical: u64) {
+unsafe fn vmsave(vmcb_phys: u64) {
     core::arch::asm!(
         "vmsave rax",
-        in("rax") vmcb_physical,
+        in("rax") vmcb_phys,
         options(nostack, preserves_flags)
     );
 }
@@ -558,10 +558,10 @@ unsafe fn vmsave(vmcb_physical: u64) {
 /// Execute VMLOAD instruction
 #[inline]
 pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe fn vmload(vmcb_physical: u64) {
+unsafe fn vmload(vmcb_phys: u64) {
     core::arch::asm!(
         "vmload rax",
-        in("rax") vmcb_physical,
+        in("rax") vmcb_phys,
         options(nostack, preserves_flags)
     );
 }

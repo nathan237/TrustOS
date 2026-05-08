@@ -17,242 +17,242 @@ use alloc::format;
 
 
 #[inline]
-fn efu() -> u64 {
-    crate::time::lc()
+fn bih() -> u64 {
+    crate::time::uptime_ms()
 }
 
 
 
 #[derive(Clone, Copy)]
 enum Pos {
-    Eo,
-    Dz(usize),   
-    Agq,    
+    Center,
+    Bs(usize),   
+    BlackScreen,    
 }
 
 
 
-struct Dn {
-    ak: &'static [&'static str],
-    apv: &'static [&'static str],
-    u: Pos,
-    arc: Option<usize>,
+struct Bn {
+    lines: &'static [&'static str],
+    highlights: &'static [&'static str],
+    pos: Pos,
+    focus: Option<usize>,
     
-    aie: u64,
+    dur_ms: u64,
     
-    bba: bool,
+    big: bool,
 }
 
 
 
 
-const LI_: u32 = 28;
-const CSR_: u32 = 28;
+const FI_: u32 = 28;
+const CWI_: u32 = 28;
 
-const ACT_: u64 = 350; 
+const AEJ_: u64 = 350; 
 
-const Jc: &[Dn] = &[
+const Ds: &[Bn] = &[
     
-    Dn { ak: &[""],
-        apv: &[], u: Pos::Agq, arc: None,
-        aie: 800, bba: true },
-    Dn { ak: &["Are you ready",  "to see the Matrix, Neo?"],
-        apv: &["Matrix", "Neo"], u: Pos::Agq, arc: None,
-        aie: 2200, bba: true },
-
-    
-    Dn { ak: &["You don't understand", "how your computer works."],
-        apv: &["don't", "computer"], u: Pos::Eo, arc: None,
-        aie: 2000, bba: true },
-    Dn { ak: &["This is TrustLab."],
-        apv: &["TrustLab"], u: Pos::Eo, arc: None,
-        aie: 1500, bba: true },
+    Bn { lines: &[""],
+        highlights: &[], pos: Pos::BlackScreen, focus: None,
+        dur_ms: 800, big: true },
+    Bn { lines: &["Are you ready",  "to see the Matrix, Neo?"],
+        highlights: &["Matrix", "Neo"], pos: Pos::BlackScreen, focus: None,
+        dur_ms: 2200, big: true },
 
     
-    Dn { ak: &["HARDWARE STATUS"],
-        apv: &["HARDWARE"], u: Pos::Dz(0), arc: Some(0),
-        aie: 500, bba: true },
-    Dn { ak: &["Real CPU. Real memory.", "Raw silicon."],
-        apv: &["CPU", "memory", "Raw"], u: Pos::Dz(0), arc: Some(0),
-        aie: 1500, bba: true },
-    Dn { ak: &["What Task Manager", "will never show you."],
-        apv: &["never"], u: Pos::Dz(0), arc: Some(0),
-        aie: 1200, bba: true },
+    Bn { lines: &["You don't understand", "how your computer works."],
+        highlights: &["don't", "computer"], pos: Pos::Center, focus: None,
+        dur_ms: 2000, big: true },
+    Bn { lines: &["This is TrustLab."],
+        highlights: &["TrustLab"], pos: Pos::Center, focus: None,
+        dur_ms: 1500, big: true },
 
     
-    Dn { ak: &["LIVE KERNEL TRACE"],
-        apv: &["KERNEL", "TRACE"], u: Pos::Dz(1), arc: Some(1),
-        aie: 500, bba: true },
-    Dn { ak: &["Every interrupt.", "Every syscall."],
-        apv: &["interrupt", "syscall"], u: Pos::Dz(1), arc: Some(1),
-        aie: 1500, bba: true },
-    Dn { ak: &["Raw kernel truth."],
-        apv: &["Raw", "truth"], u: Pos::Dz(1), arc: Some(1),
-        aie: 1200, bba: true },
+    Bn { lines: &["HARDWARE STATUS"],
+        highlights: &["HARDWARE"], pos: Pos::Bs(0), focus: Some(0),
+        dur_ms: 500, big: true },
+    Bn { lines: &["Real CPU. Real memory.", "Raw silicon."],
+        highlights: &["CPU", "memory", "Raw"], pos: Pos::Bs(0), focus: Some(0),
+        dur_ms: 1500, big: true },
+    Bn { lines: &["What Task Manager", "will never show you."],
+        highlights: &["never"], pos: Pos::Bs(0), focus: Some(0),
+        dur_ms: 1200, big: true },
 
     
-    Dn { ak: &["EXECUTION PIPELINE"],
-        apv: &["PIPELINE"], u: Pos::Dz(5), arc: Some(5),
-        aie: 500, bba: true },
-    Dn { ak: &["Watch data flow through", "the kernel in real time."],
-        apv: &["flow", "real time"], u: Pos::Dz(5), arc: Some(5),
-        aie: 1500, bba: true },
+    Bn { lines: &["LIVE KERNEL TRACE"],
+        highlights: &["KERNEL", "TRACE"], pos: Pos::Bs(1), focus: Some(1),
+        dur_ms: 500, big: true },
+    Bn { lines: &["Every interrupt.", "Every syscall."],
+        highlights: &["interrupt", "syscall"], pos: Pos::Bs(1), focus: Some(1),
+        dur_ms: 1500, big: true },
+    Bn { lines: &["Raw kernel truth."],
+        highlights: &["Raw", "truth"], pos: Pos::Bs(1), focus: Some(1),
+        dur_ms: 1200, big: true },
 
     
-    Dn { ak: &["HEX EDITOR"],
-        apv: &["HEX"], u: Pos::Dz(6), arc: Some(6),
-        aie: 500, bba: true },
-    Dn { ak: &["Raw bytes. Color-coded."],
-        apv: &["Raw", "bytes"], u: Pos::Dz(6), arc: Some(6),
-        aie: 1300, bba: true },
+    Bn { lines: &["EXECUTION PIPELINE"],
+        highlights: &["PIPELINE"], pos: Pos::Bs(5), focus: Some(5),
+        dur_ms: 500, big: true },
+    Bn { lines: &["Watch data flow through", "the kernel in real time."],
+        highlights: &["flow", "real time"], pos: Pos::Bs(5), focus: Some(5),
+        dur_ms: 1500, big: true },
 
     
-    Dn { ak: &["FILE SYSTEM"],
-        apv: &["FILE"], u: Pos::Dz(3), arc: Some(3),
-        aie: 500, bba: true },
-    Dn { ak: &["Live filesystem. In memory."],
-        apv: &["Live", "memory"], u: Pos::Dz(3), arc: Some(3),
-        aie: 1200, bba: true },
+    Bn { lines: &["HEX EDITOR"],
+        highlights: &["HEX"], pos: Pos::Bs(6), focus: Some(6),
+        dur_ms: 500, big: true },
+    Bn { lines: &["Raw bytes. Color-coded."],
+        highlights: &["Raw", "bytes"], pos: Pos::Bs(6), focus: Some(6),
+        dur_ms: 1300, big: true },
 
     
-    Dn { ak: &["TRUSTLANG EDITOR"],
-        apv: &["TRUSTLANG"], u: Pos::Dz(4), arc: Some(4),
-        aie: 500, bba: true },
-    Dn { ak: &["Write code inside the kernel.", "Execute it."],
-        apv: &["code", "kernel", "Execute"], u: Pos::Dz(4), arc: Some(4),
-        aie: 1500, bba: true },
+    Bn { lines: &["FILE SYSTEM"],
+        highlights: &["FILE"], pos: Pos::Bs(3), focus: Some(3),
+        dur_ms: 500, big: true },
+    Bn { lines: &["Live filesystem. In memory."],
+        highlights: &["Live", "memory"], pos: Pos::Bs(3), focus: Some(3),
+        dur_ms: 1200, big: true },
 
     
-    Dn { ak: &["52 COMMANDS"],
-        apv: &["52"], u: Pos::Dz(2), arc: Some(2),
-        aie: 500, bba: true },
-    Dn { ak: &["Full shell. All built-in."],
-        apv: &["shell", "built-in"], u: Pos::Dz(2), arc: Some(2),
-        aie: 1200, bba: true },
+    Bn { lines: &["TRUSTLANG EDITOR"],
+        highlights: &["TRUSTLANG"], pos: Pos::Bs(4), focus: Some(4),
+        dur_ms: 500, big: true },
+    Bn { lines: &["Write code inside the kernel.", "Execute it."],
+        highlights: &["code", "kernel", "Execute"], pos: Pos::Bs(4), focus: Some(4),
+        dur_ms: 1500, big: true },
 
     
-    Dn { ak: &["TrustLab is not a tool."],
-        apv: &["not"], u: Pos::Eo, arc: None,
-        aie: 1500, bba: true },
-    Dn { ak: &["Bare metal. Rust. Open source."],
-        apv: &["Rust", "Open source"], u: Pos::Eo, arc: None,
-        aie: 1500, bba: true },
-    Dn { ak: &["Boot it. Break it.", "Understand it."],
-        apv: &["Boot", "Break", "Understand"], u: Pos::Eo, arc: None,
-        aie: 2000, bba: true },
+    Bn { lines: &["52 COMMANDS"],
+        highlights: &["52"], pos: Pos::Bs(2), focus: Some(2),
+        dur_ms: 500, big: true },
+    Bn { lines: &["Full shell. All built-in."],
+        highlights: &["shell", "built-in"], pos: Pos::Bs(2), focus: Some(2),
+        dur_ms: 1200, big: true },
+
+    
+    Bn { lines: &["TrustLab is not a tool."],
+        highlights: &["not"], pos: Pos::Center, focus: None,
+        dur_ms: 1500, big: true },
+    Bn { lines: &["Bare metal. Rust. Open source."],
+        highlights: &["Rust", "Open source"], pos: Pos::Center, focus: None,
+        dur_ms: 1500, big: true },
+    Bn { lines: &["Boot it. Break it.", "Understand it."],
+        highlights: &["Boot", "Break", "Understand"], pos: Pos::Center, focus: None,
+        dur_ms: 2000, big: true },
 ];
 
 
 
 pub struct DemoState {
-    pub gh: bool,
-    pub bzb: usize,
+    pub active: bool,
+    pub current_slide: usize,
     
-    iav: u64,
+    slide_start_ms: u64,
     
-    fgn: u64,
+    demo_start_ms: u64,
     
-    dv: u32,
+    seed: u32,
     
-    jcs: usize,
+    last_slide: usize,
     
-    pub idl: u64,
-    pub cng: u64,
+    pub tick_in_slide: u64,
+    pub total_ticks: u64,
 }
 
 impl DemoState {
     pub fn new() -> Self {
         Self {
-            gh: false,
-            bzb: 0,
-            iav: 0,
-            fgn: 0,
-            dv: 12345,
-            jcs: usize::O,
-            idl: 0,
-            cng: 0,
+            active: false,
+            current_slide: 0,
+            slide_start_ms: 0,
+            demo_start_ms: 0,
+            seed: 12345,
+            last_slide: usize::MAX,
+            tick_in_slide: 0,
+            total_ticks: 0,
         }
     }
 
-    pub fn ay(&mut self) {
-        self.gh = true;
-        self.bzb = 0;
-        self.fgn = efu();
-        self.iav = self.fgn;
-        self.dv = (self.fgn & 0xFFFF) as u32 ^ 0xA5A5;
-        self.jcs = usize::O;
-        self.idl = 0;
-        self.cng = 0;
-        let alu: u64 = Jc.iter().map(|e| e.aie).sum();
+    pub fn start(&mut self) {
+        self.active = true;
+        self.current_slide = 0;
+        self.demo_start_ms = bih();
+        self.slide_start_ms = self.demo_start_ms;
+        self.seed = (self.demo_start_ms & 0xFFFF) as u32 ^ 0xA5A5;
+        self.last_slide = usize::MAX;
+        self.tick_in_slide = 0;
+        self.total_ticks = 0;
+        let total_ms: u64 = Ds.iter().map(|j| j.dur_ms).sum();
         crate::serial_println!("[DEMO] Started! now_ms={} total_script={}ms slides={}",
-            self.fgn, alu, Jc.len());
+            self.demo_start_ms, total_ms, Ds.len());
     }
 
-    pub fn qg(&mut self) {
-        self.gh = false;
+    pub fn stop(&mut self) {
+        self.active = false;
     }
 
     
-    pub fn or(&mut self) -> Option<usize> {
-        if !self.gh { return None; }
-        self.cng += 1;
+    pub fn tick(&mut self) -> Option<usize> {
+        if !self.active { return None; }
+        self.total_ticks += 1;
 
-        let ab = efu();
-        let ieg = ab - self.fgn;
+        let t = bih();
+        let total_elapsed_ms = t - self.demo_start_ms;
 
-        if self.bzb >= Jc.len() {
-            self.qg();
+        if self.current_slide >= Ds.len() {
+            self.stop();
             return None;
         }
 
         
-        let mut ipu: u64 = 0;
-        for a in 0..=self.bzb {
-            if a < Jc.len() {
-                ipu += Jc[a].aie;
+        let mut ejg: u64 = 0;
+        for i in 0..=self.current_slide {
+            if i < Ds.len() {
+                ejg += Ds[i].dur_ms;
             }
         }
 
         
-        if self.cng % 200 == 0 {
+        if self.total_ticks % 200 == 0 {
             crate::serial_println!("[DEMO] slide={} total={}ms deadline={}ms ticks={}",
-                self.bzb, ieg, ipu, self.cng);
+                self.current_slide, total_elapsed_ms, ejg, self.total_ticks);
         }
 
-        if ieg >= ipu {
+        if total_elapsed_ms >= ejg {
             
             crate::serial_println!("[DEMO] -> next slide {} at total={}ms (deadline={}ms)",
-                self.bzb + 1, ieg, ipu);
-            self.bzb += 1;
-            self.iav = ab;
-            self.idl = 0;
-            if self.bzb >= Jc.len() {
-                self.qg();
+                self.current_slide + 1, total_elapsed_ms, ejg);
+            self.current_slide += 1;
+            self.slide_start_ms = t;
+            self.tick_in_slide = 0;
+            if self.current_slide >= Ds.len() {
+                self.stop();
                 return None;
             }
-            return Jc[self.bzb].arc;
+            return Ds[self.current_slide].focus;
         }
 
-        self.idl += 1;
+        self.tick_in_slide += 1;
 
         
-        if self.jcs != self.bzb {
-            self.jcs = self.bzb;
-            return Jc[self.bzb].arc;
+        if self.last_slide != self.current_slide {
+            self.last_slide = self.current_slide;
+            return Ds[self.current_slide].focus;
         }
         None
     }
 
     
-    pub fn vr(&mut self, bs: u8) -> bool {
-        if !self.gh { return false; }
-        match bs {
-            0x1B => { self.qg(); true }
+    pub fn handle_key(&mut self, key: u8) -> bool {
+        if !self.active { return false; }
+        match key {
+            0x1B => { self.stop(); true }
             0x20 => {
-                self.bzb += 1;
-                self.iav = efu();
-                self.idl = 0;
-                if self.bzb >= Jc.len() { self.qg(); }
+                self.current_slide += 1;
+                self.slide_start_ms = bih();
+                self.tick_in_slide = 0;
+                if self.current_slide >= Ds.len() { self.stop(); }
                 true
             }
             _ => true
@@ -260,215 +260,215 @@ impl DemoState {
     }
 
     
-    fn wpn(&self) -> u64 {
-        efu() - self.iav
+    fn slide_elapsed_ms(&self) -> u64 {
+        bih() - self.slide_start_ms
     }
 
     
-    fn ieg(&self) -> u64 {
-        efu() - self.fgn
+    fn total_elapsed_ms(&self) -> u64 {
+        bih() - self.demo_start_ms
     }
 
     
-    fn das(&self, ang: u32) -> u32 {
-        let mut p = self.dv.cn(self.cng as u32).cn(ang);
-        p ^= p << 13;
-        p ^= p >> 17;
-        p ^= p << 5;
-        p
+    fn pseudo_rand(&self, ua: u32) -> u32 {
+        let mut v = self.seed.wrapping_add(self.total_ticks as u32).wrapping_add(ua);
+        v ^= v << 13;
+        v ^= v >> 17;
+        v ^= v << 5;
+        v
     }
 }
 
 
 
-struct Qj { b: i32, c: i32, d: u32, i: u32 }
+struct Gx { x: i32, y: i32, w: u32, h: u32 }
 
-fn vbl(fx: i32, lw: i32, hk: u32, mg: u32) -> [Qj; 7] {
-    let cx = fx + 2;
-    let ae = lw + LI_ as i32 + 2;
-    let dt = hk.ao(4);
-    let bm = mg.ao(LI_ + 4);
-    let qi = 4u32;
-    let nd = bm.ao(CSR_ + qi);
-    let oy = dt.ao(qi * 2) / 3;
-    let ph = nd.ao(qi) / 2;
-    let fy = cx;
-    let dn = cx + oy as i32 + qi as i32;
-    let hy = cx + (oy as i32 + qi as i32) * 2;
-    let fo = ae;
-    let dp = ae + ph as i32 + qi as i32;
-    let hdn = (dt as i32 - (hy - cx)).am(40) as u32;
-    let fxf = ph.ao(qi) / 2;
-    let ltz = ph.ao(fxf + qi);
-    let lua = fo + fxf as i32 + qi as i32;
+fn npu(wx: i32, wy: i32, ca: u32, er: u32) -> [Gx; 7] {
+    let cx = wx + 2;
+    let u = wy + FI_ as i32 + 2;
+    let aq = ca.saturating_sub(4);
+    let ch = er.saturating_sub(FI_ + 4);
+    let gap = 4u32;
+    let en = ch.saturating_sub(CWI_ + gap);
+    let col_w = aq.saturating_sub(gap * 2) / 3;
+    let ep = en.saturating_sub(gap) / 2;
+    let bm = cx;
+    let x1 = cx + col_w as i32 + gap as i32;
+    let x2 = cx + (col_w as i32 + gap as i32) * 2;
+    let az = u;
+    let y1 = u + ep as i32 + gap as i32;
+    let bye = (aq as i32 - (x2 - cx)).max(40) as u32;
+    let crz = ep.saturating_sub(gap) / 2;
+    let gnc = ep.saturating_sub(crz + gap);
+    let gnd = az + crz as i32 + gap as i32;
 
     [
-        Qj { b: fy, c: fo, d: oy, i: ph },
-        Qj { b: dn, c: fo, d: oy, i: fxf },
-        Qj { b: hy, c: fo, d: hdn, i: ph },
-        Qj { b: fy, c: dp, d: oy, i: ph },
-        Qj { b: dn, c: dp, d: oy, i: ph },
-        Qj { b: dn, c: lua, d: oy, i: ltz },
-        Qj { b: hy, c: dp, d: hdn, i: ph },
+        Gx { x: bm, y: az, w: col_w, h: ep },
+        Gx { x: x1, y: az, w: col_w, h: crz },
+        Gx { x: x2, y: az, w: bye, h: ep },
+        Gx { x: bm, y: y1, w: col_w, h: ep },
+        Gx { x: x1, y: y1, w: col_w, h: ep },
+        Gx { x: x1, y: gnd, w: col_w, h: gnc },
+        Gx { x: x2, y: y1, w: bye, h: ep },
     ]
 }
 
 
 
 
-fn ief() -> u64 {
-    Jc.iter().map(|e| e.aie).sum()
+fn total_duration_ms() -> u64 {
+    Ds.iter().map(|j| j.dur_ms).sum()
 }
 
 
-fn zor(bo: usize) -> u64 {
-    Jc[..bo].iter().map(|e| e.aie).sum()
+fn qxe(ae: usize) -> u64 {
+    Ds[..ae].iter().map(|j| j.dur_ms).sum()
 }
 
 
-pub fn seo(g: &DemoState, fx: i32, lw: i32, hk: u32, mg: u32) {
-    if !g.gh { return; }
-    if g.bzb >= Jc.len() { return; }
+pub fn ljz(state: &DemoState, wx: i32, wy: i32, ca: u32, er: u32) {
+    if !state.active { return; }
+    if state.current_slide >= Ds.len() { return; }
 
-    let dwa = &Jc[g.bzb];
-    let oz = g.wpn();
-    let bv: u32 = 3; 
+    let boz = &Ds[state.current_slide];
+    let elapsed_ms = state.slide_elapsed_ms();
+    let scale: u32 = 3; 
 
-    let ing = 8i32 * bv as i32;
-    let lir = 16i32 * bv as i32 + 8;
+    let ehs = 8i32 * scale as i32;
+    let gfl = 16i32 * scale as i32 + 8;
 
     
-    let din = oh!(dwa.u, Pos::Agq);
-    if din {
-        crate::framebuffer::ah(fx.am(0) as u32, lw.am(0) as u32, hk, mg, 0xFF000000);
-        sed(g, fx, lw, hk, mg);
+    let bhi = matches!(boz.pos, Pos::BlackScreen);
+    if bhi {
+        crate::framebuffer::fill_rect(wx.max(0) as u32, wy.max(0) as u32, ca, er, 0xFF000000);
+        ljs(state, wx, wy, ca, er);
     }
 
     
-    if !din && oz < ACT_ {
-        sdg(g, fx, lw, hk, mg, oz);
+    if !bhi && elapsed_ms < AEJ_ {
+        liz(state, wx, wy, ca, er, elapsed_ms);
     }
 
     
-    let ggs = 200u64;
-    let dw = if oz < ggs {
-        (oz * 255 / ggs).v(255) as u32
-    } else if oz > dwa.aie.ao(ggs) {
-        let rem = dwa.aie.ao(oz);
-        (rem * 255 / ggs).v(255) as u32
+    let cxp = 200u64;
+    let alpha = if elapsed_ms < cxp {
+        (elapsed_ms * 255 / cxp).min(255) as u32
+    } else if elapsed_ms > boz.dur_ms.saturating_sub(cxp) {
+        let rem = boz.dur_ms.saturating_sub(elapsed_ms);
+        (rem * 255 / cxp).min(255) as u32
     } else {
         255u32
     };
-    if dw < 8 { return; }
+    if alpha < 8 { return; }
 
     
-    let tnj = dwa.ak.iter().any(|dm| !dm.is_empty());
-    if !tnj { return; }
+    let mkg = boz.lines.iter().any(|l| !l.is_empty());
+    if !mkg { return; }
 
     
-    let cat = dwa.ak.iter().map(|dm| dm.len()).am().unwrap_or(1);
-    let keb = cat as i32 * ing;
-    let kdy = dwa.ak.len() as i32 * lir;
+    let aoo = boz.lines.iter().map(|l| l.len()).max().unwrap_or(1);
+    let fjn = aoo as i32 * ehs;
+    let fjm = boz.lines.len() as i32 * gfl;
 
     
-    let cls = vbl(fx, lw, hk, mg);
+    let aoq = npu(wx, wy, ca, er);
 
-    let (gx, ty) = match dwa.u {
-        Pos::Eo | Pos::Agq => {
-            (fx + (hk as i32 - keb) / 2,
-             lw + (mg as i32 - kdy) / 2)
+    let (bu, ty) = match boz.pos {
+        Pos::Center | Pos::BlackScreen => {
+            (wx + (ca as i32 - fjn) / 2,
+             wy + (er as i32 - fjm) / 2)
         }
-        Pos::Dz(w) => {
-            let ai = &cls[w.v(6)];
-            let bx = ai.b + (ai.d as i32 - keb) / 2;
-            let je = ai.c + (ai.i as i32 - kdy) / 2;
-            (bx.am(fx + 4).v(fx + hk as i32 - keb - 4),
-             je.am(lw + 32).v(lw + mg as i32 - kdy - 4))
+        Pos::Bs(idx) => {
+            let aa = &aoq[idx.min(6)];
+            let bx = aa.x + (aa.w as i32 - fjn) / 2;
+            let dc = aa.y + (aa.h as i32 - fjm) / 2;
+            (bx.max(wx + 4).min(wx + ca as i32 - fjn - 4),
+             dc.max(wy + 32).min(wy + er as i32 - fjm - 4))
         }
     };
 
     
-    let mut ct = ty;
-    for line in dwa.ak {
-        if line.is_empty() { ct += lir; continue; }
+    let mut ly = ty;
+    for line in boz.lines {
+        if line.is_empty() { ly += gfl; continue; }
         
-        irv(gx + 2, ct + 2, line, dwa.apv, bv, dw * 2 / 3, true);
+        eko(bu + 2, ly + 2, line, boz.highlights, scale, alpha * 2 / 3, true);
         
-        irv(gx, ct, line, dwa.apv, bv, dw, false);
-        ct += lir;
+        eko(bu, ly, line, boz.highlights, scale, alpha, false);
+        ly += gfl;
     }
 
     
-    let alu = ief();
-    let npl = g.ieg().v(alu);
-    let vmz = (npl as u32 * hk / alu.am(1) as u32).v(hk);
-    let ctm = (lw + mg as i32 - 3).am(0) as u32;
-    crate::framebuffer::ah(fx.am(0) as u32, ctm, hk, 3, 0xFF1C2128);
-    crate::framebuffer::ah(fx.am(0) as u32, ctm, vmz, 3, 0xFFFF2020);
+    let total_ms = total_duration_ms();
+    let hvh = state.total_elapsed_ms().min(total_ms);
+    let nyq = (hvh as u32 * ca / total_ms.max(1) as u32).min(ca);
+    let azc = (wy + er as i32 - 3).max(0) as u32;
+    crate::framebuffer::fill_rect(wx.max(0) as u32, azc, ca, 3, 0xFF1C2128);
+    crate::framebuffer::fill_rect(wx.max(0) as u32, azc, nyq, 3, 0xFFFF2020);
 
     
-    let tv = npl / 1000;
-    let jtw = alu / 1000;
-    let timer = format!("{}s/{}s", tv, jtw);
-    let jsr = super::nk();
-    let xhn = fx + hk as i32 - (timer.len() as i32 * jsr) - 8;
-    super::kw(xhn, ctm as i32 - 16, &timer, eot(0xFF8B949E, dw));
+    let im = hvh / 1000;
+    let fdj = total_ms / 1000;
+    let timer = format!("{}s/{}s", im, fdj);
+    let fcm = super::ew();
+    let pjw = wx + ca as i32 - (timer.len() as i32 * fcm) - 8;
+    super::eh(pjw, azc as i32 - 16, &timer, dim_color(0xFF8B949E, alpha));
 
     
-    super::kw(fx + 8, ctm as i32 - 16, "[Esc] stop  [Space] next",
-        eot(0xFF484F58, dw));
+    super::eh(wx + 8, azc as i32 - 16, "[Esc] stop  [Space] next",
+        dim_color(0xFF484F58, alpha));
 }
 
 
 
 
-fn sdg(g: &DemoState, fx: i32, lw: i32, hk: u32, mg: u32, oz: u64) {
-    let hj = ((ACT_ - oz) * 255 / ACT_).v(255) as u32;
-    if hj < 10 { return; }
+fn liz(state: &DemoState, wx: i32, wy: i32, ca: u32, er: u32, elapsed_ms: u64) {
+    let intensity = ((AEJ_ - elapsed_ms) * 255 / AEJ_).min(255) as u32;
+    if intensity < 10 { return; }
 
     
-    let hdp = 12u32;
-    let ajg = hk / hdp;
-    let bw = b"01?#@!$%&*<>{}[]|/\\~";
+    let dlc = 12u32;
+    let num_cols = ca / dlc;
+    let chars = b"01?#@!$%&*<>{}[]|/\\~";
 
-    for r in 0..ajg {
-        let dv = g.das(r * 7919 + 31);
-        let ffl = fx + (r * hdp) as i32;
-        let ig = (dv % 5 + 2) as i32;
-        let l = (g.cng as i32 * ig + dv as i32) % mg as i32;
+    for c in 0..num_cols {
+        let seed = state.pseudo_rand(c * 7919 + 31);
+        let chm = wx + (c * dlc) as i32;
+        let speed = (seed % 5 + 2) as i32;
+        let offset = (state.total_ticks as i32 * speed + seed as i32) % er as i32;
 
         
-        let az = (dv % 4 + 3) as i32;
-        for fb in 0..az {
-            let ae = lw + (l + fb * 14) % mg as i32;
-            let gck = ((dv >> (fb as u32 * 3)) as usize + g.cng as usize) % bw.len();
-            let bm = bw[gck] as char;
+        let count = (seed % 4 + 3) as i32;
+        for ay in 0..count {
+            let u = wy + (offset + ay * 14) % er as i32;
+            let cuy = ((seed >> (ay as u32 * 3)) as usize + state.total_ticks as usize) % chars.len();
+            let ch = chars[cuy] as char;
 
             
-            let kt = if fb == 0 { hj } else { hj * (az - fb) as u32 / az as u32 / 2 };
-            let at = (kt * 255 / 255).v(255);
-            let s = 0xFF000000 | ((at / 4) << 16) | (at << 8) | (at / 4);
+            let brightness = if ay == 0 { intensity } else { intensity * (count - ay) as u32 / count as u32 / 2 };
+            let g = (brightness * 255 / 255).min(255);
+            let color = 0xFF000000 | ((g / 4) << 16) | (g << 8) | (g / 4);
 
-            let mut k = [0u8; 1];
-            k[0] = bm as u8;
-            if let Ok(e) = core::str::jg(&k) {
-                crate::graphics::scaling::azp(ffl, ae, e, s, 1);
+            let mut buf = [0u8; 1];
+            buf[0] = ch as u8;
+            if let Ok(j) = core::str::from_utf8(&buf) {
+                crate::graphics::scaling::aat(chm, u, j, color, 1);
             }
         }
     }
 
     
-    let iko = (hj / 40).v(6);
-    for o in 0..iko {
-        let iks = g.das(o * 1337 + 42);
-        let pl = lw + (iks % mg) as i32;
-        let lo = (iks % (hk / 2)) + 20;
-        let ajx = fx + (iks % (hk / 3)) as i32;
-        let at = (iks % 100 + 50).v(200);
-        let s = 0xFF000000 | ((at / 6) << 16) | (at << 8) | ((at / 4) & 0xFF);
-        crate::framebuffer::ah(
-            ajx.am(0) as u32, pl.am(0) as u32,
-            lo.v(hk), 2, s,
+    let egb = (intensity / 40).min(6);
+    for b in 0..egb {
+        let egg = state.pseudo_rand(b * 1337 + 42);
+        let gk = wy + (egg % er) as i32;
+        let ek = (egg % (ca / 2)) + 20;
+        let pv = wx + (egg % (ca / 3)) as i32;
+        let g = (egg % 100 + 50).min(200);
+        let color = 0xFF000000 | ((g / 6) << 16) | (g << 8) | ((g / 4) & 0xFF);
+        crate::framebuffer::fill_rect(
+            pv.max(0) as u32, gk.max(0) as u32,
+            ek.min(ca), 2, color,
         );
     }
 }
@@ -476,36 +476,36 @@ fn sdg(g: &DemoState, fx: i32, lw: i32, hk: u32, mg: u32, oz: u64) {
 
 
 
-fn sed(g: &DemoState, fx: i32, lw: i32, hk: u32, mg: u32) {
-    let hdp = 10u32;
-    let ajg = hk / hdp;
-    let bw = b"01?#@$%&*<>{}[]|/\\~:;_=+-.";
+fn ljs(state: &DemoState, wx: i32, wy: i32, ca: u32, er: u32) {
+    let dlc = 10u32;
+    let num_cols = ca / dlc;
+    let chars = b"01?#@$%&*<>{}[]|/\\~:;_=+-.";
 
-    for r in 0..ajg {
-        let dv = g.das(r * 6271 + 17);
-        let ffl = fx + (r * hdp) as i32;
-        let ig = (dv % 3 + 1) as i32;
-        let l = (g.cng as i32 * ig + (dv as i32 * 37)) % (mg as i32 * 2);
+    for c in 0..num_cols {
+        let seed = state.pseudo_rand(c * 6271 + 17);
+        let chm = wx + (c * dlc) as i32;
+        let speed = (seed % 3 + 1) as i32;
+        let offset = (state.total_ticks as i32 * speed + (seed as i32 * 37)) % (er as i32 * 2);
 
         
-        let az = (dv % 8 + 8) as i32;
-        for fb in 0..az {
-            let ae = lw + (l + fb * 12) % mg as i32;
-            let gck = ((dv >> (fb as u32 * 2 + 1)) as usize + g.cng as usize) % bw.len();
-            let bm = bw[gck];
+        let count = (seed % 8 + 8) as i32;
+        for ay in 0..count {
+            let u = wy + (offset + ay * 12) % er as i32;
+            let cuy = ((seed >> (ay as u32 * 2 + 1)) as usize + state.total_ticks as usize) % chars.len();
+            let ch = chars[cuy];
 
             
-            let kt = if fb == 0 { 255u32 }
-                else { (200u32).ao(fb as u32 * 18) };
-            let at = kt.v(255);
-            let m = if fb == 0 { at / 2 } else { 0 };
-            let o = if fb == 0 { at / 3 } else { 0 };
-            let s = 0xFF000000 | (m << 16) | (at << 8) | o;
+            let brightness = if ay == 0 { 255u32 }
+                else { (200u32).saturating_sub(ay as u32 * 18) };
+            let g = brightness.min(255);
+            let r = if ay == 0 { g / 2 } else { 0 };
+            let b = if ay == 0 { g / 3 } else { 0 };
+            let color = 0xFF000000 | (r << 16) | (g << 8) | b;
 
-            let mut k = [0u8; 1];
-            k[0] = bm;
-            if let Ok(e) = core::str::jg(&k) {
-                crate::graphics::scaling::azp(ffl, ae, e, s, 1);
+            let mut buf = [0u8; 1];
+            buf[0] = ch;
+            if let Ok(j) = core::str::from_utf8(&buf) {
+                crate::graphics::scaling::aat(chm, u, j, color, 1);
             }
         }
     }
@@ -515,66 +515,66 @@ fn sed(g: &DemoState, fx: i32, lw: i32, hk: u32, mg: u32) {
 
 
 
-fn irv(b: i32, c: i32, line: &str, apv: &[&str],
-                         bv: u32, dw: u32, zc: bool)
+fn eko(x: i32, y: i32, line: &str, highlights: &[&str],
+                         scale: u32, alpha: u32, shadow: bool)
 {
-    let ing = 8i32 * bv as i32;
-    let mfj = eot(0xFF000000, dw);
-    let adg = eot(0xFFFF3030, dw);   
-    let mm = eot(0xFFFF6060, dw);   
-    let gio  = eot(0xFF00FF41, dw);   
+    let ehs = 8i32 * scale as i32;
+    let gus = dim_color(0xFF000000, alpha);
+    let normal = dim_color(0xFFFF3030, alpha);   
+    let accent = dim_color(0xFFFF6060, alpha);   
+    let cyz  = dim_color(0xFF00FF41, alpha);   
 
-    let mut cx = b;
-    let mut elb = String::new();
+    let mut cx = x;
+    let mut bxa = String::new();
 
-    let mut bw = line.bw().ltk();
-    while let Some(&bm) = bw.amm() {
-        if bm.etb() || bm == '\'' {
-            elb.push(bm);
-            bw.next();
+    let mut chars = line.chars().peekable();
+    while let Some(&ch) = chars.peek() {
+        if ch.is_alphanumeric() || ch == '\'' {
+            bxa.push(ch);
+            chars.next();
         } else {
-            if !elb.is_empty() {
-                let bj = if zc { mfj }
-                          else { ovm(&elb, apv, adg, mm, gio) };
-                crate::graphics::scaling::azp(cx, c, &elb, bj, bv);
-                cx += elb.len() as i32 * ing;
-                elb.clear();
+            if !bxa.is_empty() {
+                let col = if shadow { gus }
+                          else { iur(&bxa, highlights, normal, accent, cyz) };
+                crate::graphics::scaling::aat(cx, y, &bxa, col, scale);
+                cx += bxa.len() as i32 * ehs;
+                bxa.clear();
             }
-            let mut k = [0u8; 4];
-            let e = bm.hia(&mut k);
-            let bj = if zc { mfj } else { adg };
-            crate::graphics::scaling::azp(cx, c, e, bj, bv);
-            cx += ing;
-            bw.next();
+            let mut buf = [0u8; 4];
+            let j = ch.encode_utf8(&mut buf);
+            let col = if shadow { gus } else { normal };
+            crate::graphics::scaling::aat(cx, y, j, col, scale);
+            cx += ehs;
+            chars.next();
         }
     }
-    if !elb.is_empty() {
-        let bj = if zc { mfj }
-                  else { ovm(&elb, apv, adg, mm, gio) };
-        crate::graphics::scaling::azp(cx, c, &elb, bj, bv);
+    if !bxa.is_empty() {
+        let col = if shadow { gus }
+                  else { iur(&bxa, highlights, normal, accent, cyz) };
+        crate::graphics::scaling::aat(cx, y, &bxa, col, scale);
     }
 }
 
 
-fn ovm(od: &str, apv: &[&str], adg: u32, mm: u32, gio: u32) -> u32 {
-    for abe in apv {
-        if od.dha(abe) { return mm; }
+fn iur(fx: &str, highlights: &[&str], normal: u32, accent: u32, cyz: u32) -> u32 {
+    for hl in highlights {
+        if fx.eq_ignore_ascii_case(hl) { return accent; }
     }
-    match od {
-        "kernel" | "Kernel" | "KERNEL" => gio,
-        "TrustLab" | "TRUSTLAB" | "TrustOS" | "TRUSTOS" => mm,
-        "Matrix" | "MATRIX" => gio,
-        "Neo" | "NEO" => gio,
+    match fx {
+        "kernel" | "Kernel" | "KERNEL" => cyz,
+        "TrustLab" | "TRUSTLAB" | "TrustOS" | "TRUSTOS" => accent,
+        "Matrix" | "MATRIX" => cyz,
+        "Neo" | "NEO" => cyz,
         "Rust" | "RUST" => 0xFFD18616,
-        _ => adg,
+        _ => normal,
     }
 }
 
 
-fn eot(s: u32, dw: u32) -> u32 {
-    let q = dw.v(255);
-    let m = ((s >> 16) & 0xFF) * q / 255;
-    let at = ((s >> 8) & 0xFF) * q / 255;
-    let o = (s & 0xFF) * q / 255;
-    0xFF000000 | (m << 16) | (at << 8) | o
+fn dim_color(color: u32, alpha: u32) -> u32 {
+    let a = alpha.min(255);
+    let r = ((color >> 16) & 0xFF) * a / 255;
+    let g = ((color >> 8) & 0xFF) * a / 255;
+    let b = (color & 0xFF) * a / 255;
+    0xFF000000 | (r << 16) | (g << 8) | b
 }

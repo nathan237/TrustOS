@@ -33,103 +33,103 @@
 
 
 #[inline]
-fn mcs(y: f32, x: f32, cx: f32, ae: f32, m: f32) -> f32 {
-    let dx = y - cx;
-    let bg = x - ae;
-    libm::bon(dx * dx + bg * bg) - m
+fn gtb(p: f32, o: f32, cx: f32, u: f32, r: f32) -> f32 {
+    let dx = p - cx;
+    let ad = o - u;
+    libm::sqrtf(dx * dx + ad * ad) - r
 }
 
 
 
 #[inline]
-fn hzc(y: f32, x: f32, ax: f32, bga: f32, bx: f32, je: f32, m: f32) -> f32 {
-    let ouv = y - ax;
-    let ouw = x - bga;
-    let ilc = bx - ax;
-    let ild = je - bga;
-    let mxh = ilc * ilc + ild * ild;
-    let i = if mxh > 0.001 {
-        let ab = (ouv * ilc + ouw * ild) / mxh;
-        if ab < 0.0 { 0.0 } else if ab > 1.0 { 1.0 } else { ab }
+fn dyr(p: f32, o: f32, ax: f32, aet: f32, bx: f32, dc: f32, r: f32) -> f32 {
+    let iuc = p - ax;
+    let iud = o - aet;
+    let egn = bx - ax;
+    let ego = dc - aet;
+    let hgi = egn * egn + ego * ego;
+    let h = if hgi > 0.001 {
+        let t = (iuc * egn + iud * ego) / hgi;
+        if t < 0.0 { 0.0 } else if t > 1.0 { 1.0 } else { t }
     } else {
         0.0
     };
-    let dx = ouv - ilc * i;
-    let bg = ouw - ild * i;
-    libm::bon(dx * dx + bg * bg) - m
+    let dx = iuc - egn * h;
+    let ad = iud - ego * h;
+    libm::sqrtf(dx * dx + ad * ad) - r
 }
 
 
 
 #[inline]
-fn fpr(q: f32, o: f32, eh: f32) -> f32 {
-    let ohl = eh * 4.0;
-    let bc = ohl - libm::dhb(q - o);
-    let i = if bc > 0.0 { bc } else { 0.0 };
-    let ef = if q < o { q } else { o };
-    ef - i * i * 0.25 / ohl.am(0.001)
+fn cnl(a: f32, b: f32, k: f32) -> f32 {
+    let iiu = k * 4.0;
+    let d = iiu - libm::fabsf(a - b);
+    let h = if d > 0.0 { d } else { 0.0 };
+    let m = if a < b { a } else { b };
+    m - h * h * 0.25 / iiu.max(0.001)
 }
 
 
 
 
 
-pub struct Yl {
-    pub jr: bool,
-    pub d: f32,
-    pub i: f32,
+pub struct Km {
+    pub initialized: bool,
+    pub w: f32,
+    pub h: f32,
 
     
-    pub cux: f32,
-    pub gvb: f32,
-    pub fxl: f32,
-    pub gva: f32,
+    pub trunk_cx: f32,
+    pub trunk_top_y: f32,
+    pub trunk_bot_y: f32,
+    pub trunk_r: f32,
 
     
-    pub kgh: f32, pub gca: f32, pub enh: f32,  
-    pub hcf: f32, pub imu: f32, pub gcb: f32,  
-    pub hcg: f32, pub imv: f32, pub gcc: f32,  
+    pub can1_cx: f32, pub can1_cy: f32, pub can1_r: f32,  
+    pub can2_cx: f32, pub can2_cy: f32, pub can2_r: f32,  
+    pub can3_cx: f32, pub can3_cy: f32, pub can3_r: f32,  
 
     
-    pub kei: f32, pub kej: f32, pub kek: f32, pub kel: f32, pub kem: f32,
-    pub ken: f32, pub keo: f32, pub kep: f32, pub keq: f32, pub ker: f32,
+    pub br_l_ax: f32, pub br_l_ay: f32, pub br_l_bx: f32, pub br_l_by: f32, pub br_l_r: f32,
+    pub br_r_ax: f32, pub br_r_ay: f32, pub br_r_bx: f32, pub br_r_by: f32, pub br_r_r: f32,
 
     
-    pub maw: f32, pub max: f32, pub may: f32, pub jna: f32, pub maz: f32,
-    pub mba: f32, pub mbb: f32, pub mbc: f32, pub jnb: f32, pub mbd: f32,
+    pub rt_l_ax: f32, pub rt_l_ay: f32, pub rt_l_bx: f32, pub rt_l_by: f32, pub rt_l_r: f32,
+    pub rt_r_ax: f32, pub rt_r_ay: f32, pub rt_r_bx: f32, pub rt_r_by: f32, pub rt_r_r: f32,
 
     
-    pub jcg: f32,
-    pub lhr: f32,
-    pub lhs: f32,
+    pub lake_y: f32,
+    pub lake_left: f32,
+    pub lake_right: f32,
 
     
-    pub mnb: f32,
-    pub mnc: f32,
-    pub mnd: f32,
-    pub mna: f32,
+    pub tree_bb_left: f32,
+    pub tree_bb_right: f32,
+    pub tree_bb_top: f32,
+    pub tree_bb_bot: f32,
 
     
-    pub ihh: f32,
+    pub wind_phase: f32,
     pub frame: u64,
 }
 
-impl Yl {
+impl Km {
     pub const fn new() -> Self {
         Self {
-            jr: false,
-            d: 0.0, i: 0.0,
-            cux: 0.0, gvb: 0.0, fxl: 0.0, gva: 0.0,
-            kgh: 0.0, gca: 0.0, enh: 0.0,
-            hcf: 0.0, imu: 0.0, gcb: 0.0,
-            hcg: 0.0, imv: 0.0, gcc: 0.0,
-            kei: 0.0, kej: 0.0, kek: 0.0, kel: 0.0, kem: 0.0,
-            ken: 0.0, keo: 0.0, kep: 0.0, keq: 0.0, ker: 0.0,
-            maw: 0.0, max: 0.0, may: 0.0, jna: 0.0, maz: 0.0,
-            mba: 0.0, mbb: 0.0, mbc: 0.0, jnb: 0.0, mbd: 0.0,
-            jcg: 0.0, lhr: 0.0, lhs: 0.0,
-            mnb: 0.0, mnc: 0.0, mnd: 0.0, mna: 0.0,
-            ihh: 0.0, frame: 0,
+            initialized: false,
+            w: 0.0, h: 0.0,
+            trunk_cx: 0.0, trunk_top_y: 0.0, trunk_bot_y: 0.0, trunk_r: 0.0,
+            can1_cx: 0.0, can1_cy: 0.0, can1_r: 0.0,
+            can2_cx: 0.0, can2_cy: 0.0, can2_r: 0.0,
+            can3_cx: 0.0, can3_cy: 0.0, can3_r: 0.0,
+            br_l_ax: 0.0, br_l_ay: 0.0, br_l_bx: 0.0, br_l_by: 0.0, br_l_r: 0.0,
+            br_r_ax: 0.0, br_r_ay: 0.0, br_r_bx: 0.0, br_r_by: 0.0, br_r_r: 0.0,
+            rt_l_ax: 0.0, rt_l_ay: 0.0, rt_l_bx: 0.0, rt_l_by: 0.0, rt_l_r: 0.0,
+            rt_r_ax: 0.0, rt_r_ay: 0.0, rt_r_bx: 0.0, rt_r_by: 0.0, rt_r_r: 0.0,
+            lake_y: 0.0, lake_left: 0.0, lake_right: 0.0,
+            tree_bb_left: 0.0, tree_bb_right: 0.0, tree_bb_top: 0.0, tree_bb_bot: 0.0,
+            wind_phase: 0.0, frame: 0,
         }
     }
 }
@@ -140,76 +140,76 @@ impl Yl {
 
 
 
-pub fn yxt(e: &mut Yl, d: u32, i: u32) {
-    let d = d as f32;
-    let i = i as f32;
-    e.d = d;
-    e.i = i;
+pub fn qle(j: &mut Km, w: u32, h: u32) {
+    let w = w as f32;
+    let h = h as f32;
+    j.w = w;
+    j.h = h;
 
     
     
-    e.cux   = d * 0.30;
-    e.gvb = i * 0.48;      
-    e.fxl = i * 0.78;      
-    e.gva     = d * 0.010;     
+    j.trunk_cx   = w * 0.30;
+    j.trunk_top_y = h * 0.48;      
+    j.trunk_bot_y = h * 0.78;      
+    j.trunk_r     = w * 0.010;     
 
     
     
-    e.kgh = e.cux;
-    e.gca = i * 0.32;
-    e.enh  = d * 0.080;         
+    j.can1_cx = j.trunk_cx;
+    j.can1_cy = h * 0.32;
+    j.can1_r  = w * 0.080;         
 
     
-    e.hcf = e.cux - d * 0.063;   
-    e.imu = i * 0.38;
-    e.gcb  = d * 0.050;                
+    j.can2_cx = j.trunk_cx - w * 0.063;   
+    j.can2_cy = h * 0.38;
+    j.can2_r  = w * 0.050;                
 
     
-    e.hcg = e.cux + d * 0.063;
-    e.imv = i * 0.38;
-    e.gcc  = d * 0.050;
+    j.can3_cx = j.trunk_cx + w * 0.063;
+    j.can3_cy = h * 0.38;
+    j.can3_r  = w * 0.050;
 
     
-    let mzs = e.gva * 0.6;
+    let hii = j.trunk_r * 0.6;
     
-    e.kei = e.cux - mzs;
-    e.kej = e.gvb - i * 0.02;
-    e.kek = e.hcf + e.gcb * 0.3;
-    e.kel = e.imu + e.gcb * 0.4;
-    e.kem  = d * 0.005;                    
+    j.br_l_ax = j.trunk_cx - hii;
+    j.br_l_ay = j.trunk_top_y - h * 0.02;
+    j.br_l_bx = j.can2_cx + j.can2_r * 0.3;
+    j.br_l_by = j.can2_cy + j.can2_r * 0.4;
+    j.br_l_r  = w * 0.005;                    
     
-    e.ken = e.cux + mzs;
-    e.keo = e.gvb - i * 0.02;
-    e.kep = e.hcg - e.gcc * 0.3;
-    e.keq = e.imv + e.gcc * 0.4;
-    e.ker  = d * 0.005;
+    j.br_r_ax = j.trunk_cx + hii;
+    j.br_r_ay = j.trunk_top_y - h * 0.02;
+    j.br_r_bx = j.can3_cx - j.can3_r * 0.3;
+    j.br_r_by = j.can3_cy + j.can3_r * 0.4;
+    j.br_r_r  = w * 0.005;
 
     
-    e.maw = e.cux - e.gva * 0.3;
-    e.max = e.fxl;
-    e.may = e.cux - d * 0.025;
-    e.jna = e.fxl + i * 0.025;
-    e.maz  = d * 0.004;
+    j.rt_l_ax = j.trunk_cx - j.trunk_r * 0.3;
+    j.rt_l_ay = j.trunk_bot_y;
+    j.rt_l_bx = j.trunk_cx - w * 0.025;
+    j.rt_l_by = j.trunk_bot_y + h * 0.025;
+    j.rt_l_r  = w * 0.004;
 
-    e.mba = e.cux + e.gva * 0.3;
-    e.mbb = e.fxl;
-    e.mbc = e.cux + d * 0.025;
-    e.jnb = e.fxl + i * 0.025;
-    e.mbd  = d * 0.004;
-
-    
-    e.jcg     = i * 0.82;
-    e.lhr  = d * 0.08;
-    e.lhs = d * 0.92;
+    j.rt_r_ax = j.trunk_cx + j.trunk_r * 0.3;
+    j.rt_r_ay = j.trunk_bot_y;
+    j.rt_r_bx = j.trunk_cx + w * 0.025;
+    j.rt_r_by = j.trunk_bot_y + h * 0.025;
+    j.rt_r_r  = w * 0.004;
 
     
-    let adf = 60.0;
-    e.mnb  = (e.hcf - e.gcb - adf).am(0.0);
-    e.mnc = (e.hcg + e.gcc + adf).v(d);
-    e.mnd   = (e.gca - e.enh - adf).am(0.0);
-    e.mna   = (e.jna.am(e.jnb) + adf).v(i);
+    j.lake_y     = h * 0.82;
+    j.lake_left  = w * 0.08;
+    j.lake_right = w * 0.92;
 
-    e.jr = true;
+    
+    let oq = 60.0;
+    j.tree_bb_left  = (j.can2_cx - j.can2_r - oq).max(0.0);
+    j.tree_bb_right = (j.can3_cx + j.can3_r + oq).min(w);
+    j.tree_bb_top   = (j.can1_cy - j.can1_r - oq).max(0.0);
+    j.tree_bb_bot   = (j.rt_l_by.max(j.rt_r_by) + oq).min(h);
+
+    j.initialized = true;
 }
 
 
@@ -218,60 +218,60 @@ pub fn yxt(e: &mut Yl, d: u32, i: u32) {
 
 
 
-fn iey(y: f32, x: f32, e: &Yl) -> f32 {
+fn ecp(p: f32, o: f32, j: &Km) -> f32 {
     
-    let fbk = libm::st(e.ihh) * e.enh * 0.04;
-    let fbl = libm::st(e.ihh * 0.7 + 1.0) * e.enh * 0.015;
+    let cff = libm::sinf(j.wind_phase) * j.can1_r * 0.04;
+    let cfh = libm::sinf(j.wind_phase * 0.7 + 1.0) * j.can1_r * 0.015;
 
     
-    let xmj = hzc(
-        y, x,
-        e.cux, e.fxl,
-        e.cux + fbk * 0.1, e.gvb + fbl * 0.2,
-        e.gva,
+    let pnr = dyr(
+        p, o,
+        j.trunk_cx, j.trunk_bot_y,
+        j.trunk_cx + cff * 0.1, j.trunk_top_y + cfh * 0.2,
+        j.trunk_r,
     );
 
     
-    let rw = mcs(y, x, e.kgh + fbk, e.gca + fbl, e.enh);
-    let tx = mcs(y, x, e.hcf + fbk * 0.8, e.imu + fbl * 0.8, e.gcb);
-    let der = mcs(y, x, e.hcg + fbk * 0.8, e.imv + fbl * 0.8, e.gcc);
-    let qvz = fpr(rw, fpr(tx, der, 25.0), 25.0);
+    let hw = gtb(p, o, j.can1_cx + cff, j.can1_cy + cfh, j.can1_r);
+    let jf = gtb(p, o, j.can2_cx + cff * 0.8, j.can2_cy + cfh * 0.8, j.can2_r);
+    let bfc = gtb(p, o, j.can3_cx + cff * 0.8, j.can3_cy + cfh * 0.8, j.can3_r);
+    let khh = cnl(hw, cnl(jf, bfc, 25.0), 25.0);
 
     
-    let bl = hzc(
-        y, x,
-        e.kei + fbk * 0.1, e.kej + fbl * 0.2,
-        e.kek + fbk * 0.8, e.kel + fbl * 0.8,
-        e.kem,
+    let bl = dyr(
+        p, o,
+        j.br_l_ax + cff * 0.1, j.br_l_ay + cfh * 0.2,
+        j.br_l_bx + cff * 0.8, j.br_l_by + cfh * 0.8,
+        j.br_l_r,
     );
-    let avi = hzc(
-        y, x,
-        e.ken + fbk * 0.1, e.keo + fbl * 0.2,
-        e.kep + fbk * 0.8, e.keq + fbl * 0.8,
-        e.ker,
+    let yi = dyr(
+        p, o,
+        j.br_r_ax + cff * 0.1, j.br_r_ay + cfh * 0.2,
+        j.br_r_bx + cff * 0.8, j.br_r_by + cfh * 0.8,
+        j.br_r_r,
     );
-    let ket = fpr(bl, avi, 15.0);
+    let fjs = cnl(bl, yi, 15.0);
 
     
-    let vzl = hzc(y, x, e.maw, e.max, e.may, e.jna, e.maz);
-    let ftg = hzc(y, x, e.mba, e.mbb, e.mbc, e.jnb, e.mbd);
-    let wab = fpr(vzl, ftg, 10.0);
+    let ohn = dyr(p, o, j.rt_l_ax, j.rt_l_ay, j.rt_l_bx, j.rt_l_by, j.rt_l_r);
+    let cpr = dyr(p, o, j.rt_r_ax, j.rt_r_ay, j.rt_r_bx, j.rt_r_by, j.rt_r_r);
+    let oia = cnl(ohn, cpr, 10.0);
 
     
-    let iex = fpr(xmj, qvz, 18.0);
-    let iex = fpr(iex, ket, 12.0);
-    fpr(iex, wab, 10.0)
+    let tree = cnl(pnr, khh, 18.0);
+    let tree = cnl(tree, fjs, 12.0);
+    cnl(tree, oia, 10.0)
 }
 
 
 
-fn xmf(y: f32, x: f32, e: &Yl) -> (f32, f32) {
-    let cel = 3.0;
-    let dx = iey(y + cel, x, e) - iey(y - cel, x, e);
-    let bg = iey(y, x + cel, e) - iey(y, x - cel, e);
-    let len = libm::bon(dx * dx + bg * bg);
+fn pno(p: f32, o: f32, j: &Km) -> (f32, f32) {
+    let eps = 3.0;
+    let dx = ecp(p + eps, o, j) - ecp(p - eps, o, j);
+    let ad = ecp(p, o + eps, j) - ecp(p, o - eps, j);
+    let len = libm::sqrtf(dx * dx + ad * ad);
     if len > 0.001 {
-        (dx / len, bg / len)
+        (dx / len, ad / len)
     } else {
         (0.0, -1.0)
     }
@@ -286,147 +286,147 @@ fn xmf(y: f32, x: f32, e: &Yl) -> (f32, f32) {
 pub struct RainInteraction {
     
     
-    pub fzd: i32,
+    pub x_offset: i32,
     
-    pub kt: f32,
+    pub brightness: f32,
     
-    pub cpl: i16,
-    pub cwj: i16,
-    pub cwi: i16,
+    pub color_r: i16,
+    pub color_g: i16,
+    pub color_b: i16,
     
-    pub clp: bool,
+    pub on_surface: bool,
     
-    pub flk: bool,
+    pub in_lake: bool,
 }
 
 impl RainInteraction {
-    pub const Cq: Self = Self {
-        fzd: 0,
-        kt: 1.0,
-        cpl: 0, cwj: 0, cwi: 0,
-        clp: false,
-        flk: false,
+    pub const Bc: Self = Self {
+        x_offset: 0,
+        brightness: 1.0,
+        color_r: 0, color_g: 0, color_b: 0,
+        on_surface: false,
+        in_lake: false,
     };
 }
 
 
-pub fn qs(g: &mut Yl) {
-    if !g.jr { return; }
-    g.frame = g.frame.cn(1);
+pub fn update(state: &mut Km) {
+    if !state.initialized { return; }
+    state.frame = state.frame.wrapping_add(1);
     
-    g.ihh = (g.frame as f32) * 0.008;
+    state.wind_phase = (state.frame as f32) * 0.008;
 }
 
 
 
 
 
-pub fn zhb(e: &Yl, y: f32, x: f32) -> RainInteraction {
-    if !e.jr {
-        return RainInteraction::Cq;
+pub fn qrn(j: &Km, p: f32, o: f32) -> RainInteraction {
+    if !j.initialized {
+        return RainInteraction::Bc;
     }
 
     
-    let opc = y >= e.mnb && y <= e.mnc
-                 && x >= e.mnd  && x <= e.mna;
+    let ipi = p >= j.tree_bb_left && p <= j.tree_bb_right
+                 && o >= j.tree_bb_top  && o <= j.tree_bb_bot;
 
     
-    let odr = x >= e.jcg - 8.0
-                    && y >= e.lhr && y <= e.lhs;
+    let igb = o >= j.lake_y - 8.0
+                    && p >= j.lake_left && p <= j.lake_right;
 
-    if !opc && !odr {
-        return RainInteraction::Cq;
+    if !ipi && !igb {
+        return RainInteraction::Bc;
     }
 
     
     
     
-    if opc {
-        let fai = iey(y, x, e);
+    if ipi {
+        let ces = ecp(p, o, j);
 
-        const FV_: f32  = 15.0;   
-        const AWZ_: f32    = 8.0;    
-        const BVH_: f32 = 8.0;    
-        const Bjc: f32     = 45.0;   
+        const GK_: f32  = 15.0;   
+        const AZB_: f32    = 8.0;    
+        const BYO_: f32 = 8.0;    
+        const Zv: f32     = 45.0;   
 
-        if fai < Bjc {
+        if ces < Zv {
             
-            if fai < -AWZ_ {
-                let eo = (-fai - AWZ_).v(60.0);
-                let tp = (eo / 60.0).v(0.80);  
+            if ces < -AZB_ {
+                let depth = (-ces - AZB_).min(60.0);
+                let dim = (depth / 60.0).min(0.80);  
                 return RainInteraction {
-                    fzd: 0,
-                    kt: 0.20 + (1.0 - tp) * 0.3,  
-                    cpl: -10,
-                    cwj: 5,
-                    cwi: -15,
-                    clp: false,
-                    flk: false,
+                    x_offset: 0,
+                    brightness: 0.20 + (1.0 - dim) * 0.3,  
+                    color_r: -10,
+                    color_g: 5,
+                    color_b: -15,
+                    on_surface: false,
+                    in_lake: false,
                 };
             }
 
             
-            if libm::dhb(fai) <= FV_ {
-                let (vt, ahr) = xmf(y, x, e);
+            if libm::fabsf(ces) <= GK_ {
+                let (nx, re) = pno(p, o, j);
 
                 
                 
                 
-                let eqm = vt * BVH_;
+                let bzu = nx * BYO_;
 
                 
-                let gtq = 1.0 - libm::dhb(fai) / FV_;
-                let aaj = 1.3 + gtq * 0.7;  
+                let dfa = 1.0 - libm::fabsf(ces) / GK_;
+                let na = 1.3 + dfa * 0.7;  
 
                 
-                let btu = (20.0 + gtq * 30.0) as i16;
-                let bmh = (30.0 + gtq * 40.0) as i16;
-                let aiv = (25.0 + gtq * 30.0) as i16;
+                let alg = (20.0 + dfa * 30.0) as i16;
+                let ahp = (30.0 + dfa * 40.0) as i16;
+                let cb = (25.0 + dfa * 30.0) as i16;
 
                 return RainInteraction {
-                    fzd: eqm as i32,
-                    kt: aaj,
-                    cpl: btu,
-                    cwj: bmh,
-                    cwi: aiv,
-                    clp: true,
-                    flk: false,
+                    x_offset: bzu as i32,
+                    brightness: na,
+                    color_r: alg,
+                    color_g: ahp,
+                    color_b: cb,
+                    on_surface: true,
+                    in_lake: false,
                 };
             }
 
             
-            let itw = (fai - FV_) / (Bjc - FV_);
-            let itw = itw.am(0.0).v(1.0);
+            let emd = (ces - GK_) / (Zv - GK_);
+            let emd = emd.max(0.0).min(1.0);
 
             
             
-            let qwa = e.gca + e.enh * 0.6;
-            let qem = x < e.gvb + 30.0;
-            if x > qwa && qem && fai < 30.0 {
-                let iry = 1.0 - itw;
+            let khi = j.can1_cy + j.can1_r * 0.6;
+            let jtc = o < j.trunk_top_y + 30.0;
+            if o > khi && jtc && ces < 30.0 {
+                let ekt = 1.0 - emd;
                 return RainInteraction {
-                    fzd: 0,
-                    kt: 1.1 + iry * 0.3,
-                    cpl: (8.0 * iry) as i16,
-                    cwj: (15.0 * iry) as i16,
-                    cwi: (10.0 * iry) as i16,
-                    clp: false,
-                    flk: false,
+                    x_offset: 0,
+                    brightness: 1.1 + ekt * 0.3,
+                    color_r: (8.0 * ekt) as i16,
+                    color_g: (15.0 * ekt) as i16,
+                    color_b: (10.0 * ekt) as i16,
+                    on_surface: false,
+                    in_lake: false,
                 };
             }
 
             
-            let qou = x > e.gca + e.enh * 0.3;
-            if qou && fai < 35.0 {
-                let zc = 0.12 * (1.0 - itw);
+            let kbh = o > j.can1_cy + j.can1_r * 0.3;
+            if kbh && ces < 35.0 {
+                let shadow = 0.12 * (1.0 - emd);
                 return RainInteraction {
-                    fzd: 0,
-                    kt: 1.0 - zc,
-                    cpl: 0,
-                    cwj: 0,
-                    cwi: 0,
-                    clp: false,
-                    flk: false,
+                    x_offset: 0,
+                    brightness: 1.0 - shadow,
+                    color_r: 0,
+                    color_g: 0,
+                    color_b: 0,
+                    on_surface: false,
+                    in_lake: false,
                 };
             }
         }
@@ -435,43 +435,43 @@ pub fn zhb(e: &Yl, y: f32, x: f32) -> RainInteraction {
     
     
     
-    if odr {
-        let jcf = x - e.jcg;  
+    if igb {
+        let esd = o - j.lake_y;  
 
-        const FV_: f32 = 6.0;  
+        const GK_: f32 = 6.0;  
 
         
-        if libm::dhb(jcf) < FV_ {
-            let gtq = 1.0 - libm::dhb(jcf) / FV_;
+        if libm::fabsf(esd) < GK_ {
+            let dfa = 1.0 - libm::fabsf(esd) / GK_;
             
-            let jpx = libm::st(y * 0.05 + e.ihh * 3.0) * 0.3 + 0.7;
-            let aaj = 1.4 + gtq * jpx * 0.6;
+            let fav = libm::sinf(p * 0.05 + j.wind_phase * 3.0) * 0.3 + 0.7;
+            let na = 1.4 + dfa * fav * 0.6;
             return RainInteraction {
-                fzd: 0,
-                kt: aaj,
-                cpl: -10,
-                cwj: 10,
-                cwi: 50,   
-                clp: false,
-                flk: true,
+                x_offset: 0,
+                brightness: na,
+                color_r: -10,
+                color_g: 10,
+                color_b: 50,   
+                on_surface: false,
+                in_lake: true,
             };
         }
 
         
-        if jcf > FV_ {
-            let eo = (jcf - FV_).v(120.0) / 120.0;
-            let tp = 0.12 + eo * 0.55;  
+        if esd > GK_ {
+            let depth = (esd - GK_).min(120.0) / 120.0;
+            let dim = 0.12 + depth * 0.55;  
             return RainInteraction {
-                fzd: 0,
-                kt: 1.0 - tp,
-                cpl: -25,
-                cwj: -8,
-                cwi: 25,   
-                clp: false,
-                flk: true,
+                x_offset: 0,
+                brightness: 1.0 - dim,
+                color_r: -25,
+                color_g: -8,
+                color_b: 25,   
+                on_surface: false,
+                in_lake: true,
             };
         }
     }
 
-    RainInteraction::Cq
+    RainInteraction::Bc
 }

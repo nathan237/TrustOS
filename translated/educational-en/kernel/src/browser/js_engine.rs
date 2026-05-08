@@ -88,14 +88,14 @@ pub struct JsContext {
 impl JsContext {
         // Public function — callable from other modules.
 pub fn new() -> Self {
-        let mut context = Self {
+        let mut ctx = Self {
             global: BTreeMap::new(),
             console_output: Vec::new(),
         };
         
         // Add built-in objects
-        context.setup_builtins();
-        context
+        ctx.setup_builtins();
+        ctx
     }
     
     fn setup_builtins(&mut self) {
@@ -112,8 +112,8 @@ pub fn new() -> Self {
         let mut math = BTreeMap::new();
         math.insert("PI".to_string(), JsValue::Number(core::f64::consts::PI));
         math.insert("E".to_string(), JsValue::Number(core::f64::consts::E));
-        math.insert("LN2".to_string(), JsValue::Number(core::f64::consts::LINE_2));
-        math.insert("LN10".to_string(), JsValue::Number(core::f64::consts::LINE_10));
+        math.insert("LN2".to_string(), JsValue::Number(core::f64::consts::LN_2));
+        math.insert("LN10".to_string(), JsValue::Number(core::f64::consts::LN_10));
         math.insert("SQRT2".to_string(), JsValue::Number(core::f64::consts::SQRT_2));
         math.insert("random".to_string(), JsValue::NativeFunction("Math.random".to_string()));
         math.insert("floor".to_string(), JsValue::NativeFunction("Math.floor".to_string()));
@@ -241,8 +241,8 @@ match stmt {
                 Ok(JsValue::Undefined)
             }
             Statement::For(init, condition, update, body) => {
-                if let Some(initialize_stmt) = init {
-                    self.eval_statement(initialize_stmt)?;
+                if let Some(init_stmt) = init {
+                    self.eval_statement(init_stmt)?;
                 }
                 while condition.as_ref().map(|c| self.eval_expr(c).map(|v| v.to_bool()).unwrap_or(false)).unwrap_or(true) {
                     self.eval_statements(body)?;
@@ -281,16 +281,16 @@ match expr {
             Expr::Binary(op, left, right) => {
                 let lval = self.eval_expr(left)?;
                 let rval = self.eval_expr(right)?;
-                self.eval_binary_operation(op, lval, rval)
+                self.eval_binary_op(op, lval, rval)
             }
             Expr::Unary(op, operand) => {
-                let value = self.eval_expr(operand)?;
-                self.eval_unary_operation(op, value)
+                let val = self.eval_expr(operand)?;
+                self.eval_unary_op(op, val)
             }
             Expr::Call(callee, args) => {
                 // Handle method calls (obj.method(args)) by passing obj as receiver
-                let (func, receiver) = if let Expr::Member(object_expr, _prop) = callee.as_ref() {
-                    let recv = self.eval_expr(object_expr)?;
+                let (func, receiver) = if let Expr::Member(obj_expr, _prop) = callee.as_ref() {
+                    let recv = self.eval_expr(obj_expr)?;
                     let f = self.eval_expr(callee)?;
                     (f, Some(recv))
                 } else {
@@ -302,8 +302,8 @@ match expr {
                 }
                 self.call_function_with_receiver(func, argument_vals, receiver)
             }
-            Expr::Member(object, prop) => {
-                let object_value = self.eval_expr(object)?;
+            Expr::Member(obj, prop) => {
+                let object_value = self.eval_expr(obj)?;
                                 // Pattern matching — Rust's exhaustive branching construct.
 match &object_value {
                     JsValue::Object(map) => {
@@ -334,8 +334,8 @@ match prop.as_str() {
                             "flat" => Ok(JsValue::NativeFunction("Array.flat".to_string())),
                             "reduce" => Ok(JsValue::NativeFunction("Array.reduce".to_string())),
                             _ => {
-                                if let Ok(index) = prop.parse::<usize>() {
-                                    Ok(arr.get(index).cloned().unwrap_or(JsValue::Undefined))
+                                if let Ok(idx) = prop.parse::<usize>() {
+                                    Ok(arr.get(idx).cloned().unwrap_or(JsValue::Undefined))
                                 } else {
                                     Ok(JsValue::Undefined)
                                 }
@@ -382,9 +382,9 @@ match prop.as_str() {
                     _ => Ok(JsValue::Undefined),
                 }
             }
-            Expr::Index(object, index) => {
-                let object_value = self.eval_expr(object)?;
-                let index_value = self.eval_expr(index)?;
+            Expr::Index(obj, idx) => {
+                let object_value = self.eval_expr(obj)?;
+                let index_value = self.eval_expr(idx)?;
                                 // Pattern matching — Rust's exhaustive branching construct.
 match object_value {
                     JsValue::Array(arr) => {
@@ -407,15 +407,15 @@ match object_value {
             }
             Expr::Object(props) => {
                 let mut map = BTreeMap::new();
-                for (key, value) in props {
-                    map.insert(key.clone(), self.eval_expr(value)?);
+                for (key, val) in props {
+                    map.insert(key.clone(), self.eval_expr(val)?);
                 }
                 Ok(JsValue::Object(map))
             }
             Expr::Assign(name, value) => {
-                let value = self.eval_expr(value)?;
-                self.global.insert(name.clone(), value.clone());
-                Ok(value)
+                let val = self.eval_expr(value)?;
+                self.global.insert(name.clone(), val.clone());
+                Ok(val)
             }
             Expr::Ternary(condition, then_expr, else_expr) => {
                 if self.eval_expr(condition)?.to_bool() {
@@ -427,7 +427,7 @@ match object_value {
         }
     }
     
-    fn eval_binary_operation(&self, op: &str, left: JsValue, right: JsValue) -> Result<JsValue, String> {
+    fn eval_binary_op(&self, op: &str, left: JsValue, right: JsValue) -> Result<JsValue, String> {
                 // Pattern matching — Rust's exhaustive branching construct.
 match op {
             "+" => {
@@ -471,15 +471,15 @@ match op {
         }
     }
     
-    fn eval_unary_operation(&self, op: &str, value: JsValue) -> Result<JsValue, String> {
+    fn eval_unary_op(&self, op: &str, val: JsValue) -> Result<JsValue, String> {
                 // Pattern matching — Rust's exhaustive branching construct.
 match op {
-            "!" => Ok(JsValue::Boolean(!value.to_bool())),
-            "-" => Ok(JsValue::Number(-value.to_number())),
-            "+" => Ok(JsValue::Number(value.to_number())),
+            "!" => Ok(JsValue::Boolean(!val.to_bool())),
+            "-" => Ok(JsValue::Number(-val.to_number())),
+            "+" => Ok(JsValue::Number(val.to_number())),
             "typeof" => {
                 let t = // Pattern matching — Rust's exhaustive branching construct.
-match value {
+match val {
                     JsValue::Undefined => "undefined",
                     JsValue::Null => "object", // Historical quirk
                     JsValue::Boolean(_) => "boolean",
@@ -499,9 +499,9 @@ match value {
 match func {
             JsValue::NativeFunction(name) => self.call_native_with_receiver(&name, args, receiver),
             JsValue::Function(_name, params, body) => {
-                for (i, parameter) in params.iter().enumerate() {
-                    let value = args.get(i).cloned().unwrap_or(JsValue::Undefined);
-                    self.global.insert(parameter.clone(), value);
+                for (i, param) in params.iter().enumerate() {
+                    let val = args.get(i).cloned().unwrap_or(JsValue::Undefined);
+                    self.global.insert(param.clone(), val);
                 }
                 self.execute(&body)
             }
@@ -524,8 +524,8 @@ match name {
                 Ok(JsValue::Undefined)
             }
             "alert" => {
-                if let Some(message) = args.first() {
-                    self.console_output.push(format!("[ALERT] {}", message.to_string()));
+                if let Some(msg) = args.first() {
+                    self.console_output.push(format!("[ALERT] {}", msg.to_string()));
                 }
                 Ok(JsValue::Undefined)
             }
@@ -537,8 +537,8 @@ match name {
             // ── Math ───────────────────────────────────────────────────
             "Math.random" => {
                 let seed = crate::cpu::tsc::read_tsc();
-                let random = ((seed >> 16) as f64) / 65536.0;
-                Ok(JsValue::Number(random % 1.0))
+                let rand = ((seed >> 16) as f64) / 65536.0;
+                Ok(JsValue::Number(rand % 1.0))
             }
             "Math.floor" => {
                 let n = args.first().map(|v| v.to_number()).unwrap_or(0.0);
@@ -567,7 +567,7 @@ match name {
                 Ok(JsValue::Number(m))
             }
             "Math.max" => {
-                if args.is_empty() { return Ok(JsValue::Number(f64::NEGATIVE_INFINITY)); }
+                if args.is_empty() { return Ok(JsValue::Number(f64::NEG_INFINITY)); }
                 let mut m = args[0].to_number();
                 for a in &args[1..] { let v = a.to_number(); if v > m { m = v; } }
                 Ok(JsValue::Number(m))
@@ -667,8 +667,8 @@ match name {
                 Ok(self.parse_json(&s))
             }
             "JSON.stringify" => {
-                let value = args.first().cloned().unwrap_or(JsValue::Undefined);
-                Ok(JsValue::String(self.stringify_json(&value)))
+                let val = args.first().cloned().unwrap_or(JsValue::Undefined);
+                Ok(JsValue::String(self.stringify_json(&val)))
             }
 
             // ── Document DOM ───────────────────────────────────────────
@@ -793,11 +793,11 @@ match name {
                     let start = args.first().map(|v| v.to_number() as i64).unwrap_or(0);
                     let end = args.get(1).map(|v| v.to_number() as i64);
                     let len = s.len() as i64;
-                    let start = if start < 0 { (len + start).maximum(0) as usize } else { (start as usize).minimum(s.len()) };
+                    let start = if start < 0 { (len + start).max(0) as usize } else { (start as usize).min(s.len()) };
                     let end = // Pattern matching — Rust's exhaustive branching construct.
 match end {
-                        Some(e) if e < 0 => (len + e).maximum(0) as usize,
-                        Some(e) => (e as usize).minimum(s.len()),
+                        Some(e) if e < 0 => (len + e).max(0) as usize,
+                        Some(e) => (e as usize).min(s.len()),
                         None => s.len(),
                     };
                     if start <= end {
@@ -816,30 +816,30 @@ match end {
             }
             "String.split" => {
                 if let Some(JsValue::String(s)) = receiver.as_ref() {
-                    let separator = args.first().map(|v| v.to_string()).unwrap_or_default();
-                    let parts: Vec<JsValue> = if separator.is_empty() {
+                    let sep = args.first().map(|v| v.to_string()).unwrap_or_default();
+                    let parts: Vec<JsValue> = if sep.is_empty() {
                         s.chars().map(|c| JsValue::String(c.to_string())).collect()
                     } else {
-                        s.split(&separator).map(|p| JsValue::String(p.to_string())).collect()
+                        s.split(&sep).map(|p| JsValue::String(p.to_string())).collect()
                     };
                     Ok(JsValue::Array(parts))
                 } else { Ok(JsValue::Array(Vec::new())) }
             }
             "String.charAt" => {
                 if let Some(JsValue::String(s)) = receiver.as_ref() {
-                    let index = args.first().map(|v| v.to_number() as usize).unwrap_or(0);
-                    Ok(JsValue::String(s.chars().nth(index).map(|c| c.to_string()).unwrap_or_default()))
+                    let idx = args.first().map(|v| v.to_number() as usize).unwrap_or(0);
+                    Ok(JsValue::String(s.chars().nth(idx).map(|c| c.to_string()).unwrap_or_default()))
                 } else { Ok(JsValue::String(String::new())) }
             }
             "String.charCodeAt" => {
                 if let Some(JsValue::String(s)) = receiver.as_ref() {
-                    let index = args.first().map(|v| v.to_number() as usize).unwrap_or(0);
-                    Ok(JsValue::Number(s.chars().nth(index).map(|c| c as u32 as f64).unwrap_or(f64::NAN)))
+                    let idx = args.first().map(|v| v.to_number() as usize).unwrap_or(0);
+                    Ok(JsValue::Number(s.chars().nth(idx).map(|c| c as u32 as f64).unwrap_or(f64::NAN)))
                 } else { Ok(JsValue::Number(f64::NAN)) }
             }
             "String.repeat" => {
                 if let Some(JsValue::String(s)) = receiver.as_ref() {
-                    let count = args.first().map(|v| v.to_number() as usize).unwrap_or(0).minimum(10000);
+                    let count = args.first().map(|v| v.to_number() as usize).unwrap_or(0).min(10000);
                     Ok(JsValue::String(s.repeat(count)))
                 } else { Ok(JsValue::String(String::new())) }
             }
@@ -874,7 +874,7 @@ match end {
             // ── Number prototype methods ─────────────────────────────
             "Number.toFixed" => {
                 if let Some(JsValue::Number(n)) = receiver.as_ref() {
-                    let digits = args.first().map(|v| v.to_number() as usize).unwrap_or(0).minimum(20);
+                    let digits = args.first().map(|v| v.to_number() as usize).unwrap_or(0).min(20);
                     // Simple fixed-point formatting
                     let factor = libm::pow(10.0, digits as f64);
                     let rounded = round(*n * factor) / factor;
@@ -915,9 +915,9 @@ match end {
             }
             "Array.join" => {
                 if let Some(JsValue::Array(arr)) = receiver.as_ref() {
-                    let separator = args.first().map(|v| v.to_string()).unwrap_or(",".to_string());
+                    let sep = args.first().map(|v| v.to_string()).unwrap_or(",".to_string());
                     let parts: Vec<String> = arr.iter().map(|v| v.to_string()).collect();
-                    Ok(JsValue::String(parts.join(&separator)))
+                    Ok(JsValue::String(parts.join(&sep)))
                 } else { Ok(JsValue::String(String::new())) }
             }
             "Array.reverse" => {
@@ -949,11 +949,11 @@ match end {
                     let start = args.first().map(|v| v.to_number() as i64).unwrap_or(0);
                     let end = args.get(1).map(|v| v.to_number() as i64);
                     let len = arr.len() as i64;
-                    let start = if start < 0 { (len + start).maximum(0) as usize } else { (start as usize).minimum(arr.len()) };
+                    let start = if start < 0 { (len + start).max(0) as usize } else { (start as usize).min(arr.len()) };
                     let end = // Pattern matching — Rust's exhaustive branching construct.
 match end {
-                        Some(e) if e < 0 => (len + e).maximum(0) as usize,
-                        Some(e) => (e as usize).minimum(arr.len()),
+                        Some(e) if e < 0 => (len + e).max(0) as usize,
+                        Some(e) => (e as usize).min(arr.len()),
                         None => arr.len(),
                     };
                     Ok(JsValue::Array(arr[start..end].to_vec()))
@@ -1015,8 +1015,8 @@ match c {
                     let entry = entry.trim();
                     if let Some(colon) = entry.find(':') {
                         let key = entry[..colon].trim().trim_matches('"');
-                        let value = entry[colon+1..].trim();
-                        map.insert(key.to_string(), self.parse_json(value));
+                        let val = entry[colon+1..].trim();
+                        map.insert(key.to_string(), self.parse_json(val));
                     }
                 }
                 JsValue::Object(map)
@@ -1052,9 +1052,9 @@ match c {
     }
 
     /// JSON stringify
-    fn stringify_json(&self, value: &JsValue) -> String {
+    fn stringify_json(&self, val: &JsValue) -> String {
                 // Pattern matching — Rust's exhaustive branching construct.
-match value {
+match val {
             JsValue::Undefined | JsValue::Null => "null".to_string(),
             JsValue::Boolean(b) => if *b { "true" } else { "false" }.to_string(),
             JsValue::Number(n) => format!("{}", n),
@@ -1245,24 +1245,24 @@ pub enum Expr {
 }
 
 fn parse(tokens: &[Token]) -> Result<Vec<Statement>, String> {
-    let mut parser = Parser { tokens, position: 0 };
+    let mut parser = Parser { tokens, pos: 0 };
     parser.parse_statements()
 }
 
 struct Parser<'a> {
     tokens: &'a [Token],
-    position: usize,
+    pos: usize,
 }
 
 // Implementation block — defines methods for the type above.
 impl<'a> Parser<'a> {
     fn current(&self) -> &Token {
-        self.tokens.get(self.position).unwrap_or(&Token::Eof)
+        self.tokens.get(self.pos).unwrap_or(&Token::Eof)
     }
     
     fn advance(&mut self) {
-        if self.position < self.tokens.len() {
-            self.position += 1;
+        if self.pos < self.tokens.len() {
+            self.pos += 1;
         }
     }
     
@@ -1394,7 +1394,7 @@ match self.current() {
     fn parse_block_body(&mut self) -> Result<String, String> {
         // Simplified: just find matching brace
         let mut depth = 1;
-        let start = self.position;
+        let start = self.pos;
         while depth > 0 && !matches!(self.current(), Token::Eof) {
                         // Pattern matching — Rust's exhaustive branching construct.
 match self.current() {

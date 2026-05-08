@@ -5,1046 +5,1046 @@
 
 
 
-use alloc::string::{String, Gd};
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use alloc::vec;
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use alloc::format;
-use libm::{hjw, qxf, jmv, ibi, pwe};
+use libm::{floor, ceil, round, sqrt, trunc};
 
 
 #[derive(Debug, Clone)]
 pub enum JsValue {
-    Ba,
-    Gm,
-    Cb(bool),
-    L(f64),
+    Undefined,
+    Null,
+    Boolean(bool),
+    Number(f64),
     String(String),
-    Cw(BTreeMap<String, JsValue>),
-    U(Vec<JsValue>),
-    Bs(String, Vec<String>, String), 
-    H(String),
+    Object(BTreeMap<String, JsValue>),
+    Array(Vec<JsValue>),
+    Aq(String, Vec<String>, String), 
+    NativeFunction(String),
 }
 
 impl JsValue {
     
-    pub fn ezy(&self) -> bool {
+    pub fn to_bool(&self) -> bool {
         match self {
-            JsValue::Ba | JsValue::Gm => false,
-            JsValue::Cb(o) => *o,
-            JsValue::L(bo) => *bo != 0.0 && !bo.ogj(),
-            JsValue::String(e) => !e.is_empty(),
-            JsValue::Cw(_) | JsValue::U(_) => true,
-            JsValue::Bs(..) | JsValue::H(_) => true,
+            JsValue::Undefined | JsValue::Null => false,
+            JsValue::Boolean(b) => *b,
+            JsValue::Number(ae) => *ae != 0.0 && !ae.is_nan(),
+            JsValue::String(j) => !j.is_empty(),
+            JsValue::Object(_) | JsValue::Array(_) => true,
+            JsValue::Aq(..) | JsValue::NativeFunction(_) => true,
         }
     }
     
     
-    pub fn zo(&self) -> f64 {
+    pub fn to_number(&self) -> f64 {
         match self {
-            JsValue::Ba => f64::Lx,
-            JsValue::Gm => 0.0,
-            JsValue::Cb(true) => 1.0,
-            JsValue::Cb(false) => 0.0,
-            JsValue::L(bo) => *bo,
-            JsValue::String(e) => e.parse().unwrap_or(f64::Lx),
-            _ => f64::Lx,
+            JsValue::Undefined => f64::NAN,
+            JsValue::Null => 0.0,
+            JsValue::Boolean(true) => 1.0,
+            JsValue::Boolean(false) => 0.0,
+            JsValue::Number(ae) => *ae,
+            JsValue::String(j) => j.parse().unwrap_or(f64::NAN),
+            _ => f64::NAN,
         }
     }
     
     
     pub fn to_string(&self) -> String {
         match self {
-            JsValue::Ba => "undefined".to_string(),
-            JsValue::Gm => "null".to_string(),
-            JsValue::Cb(true) => "true".to_string(),
-            JsValue::Cb(false) => "false".to_string(),
-            JsValue::L(bo) => format!("{}", bo),
-            JsValue::String(e) => e.clone(),
-            JsValue::Cw(_) => "[object Object]".to_string(),
-            JsValue::U(sy) => {
-                let ek: Vec<String> = sy.iter().map(|p| p.to_string()).collect();
-                ek.rr(",")
+            JsValue::Undefined => "undefined".to_string(),
+            JsValue::Null => "null".to_string(),
+            JsValue::Boolean(true) => "true".to_string(),
+            JsValue::Boolean(false) => "false".to_string(),
+            JsValue::Number(ae) => format!("{}", ae),
+            JsValue::String(j) => j.clone(),
+            JsValue::Object(_) => "[object Object]".to_string(),
+            JsValue::Array(ik) => {
+                let au: Vec<String> = ik.iter().map(|v| v.to_string()).collect();
+                au.join(",")
             }
-            JsValue::Bs(j, ..) => format!("function {}() {{ [native code] }}", j),
-            JsValue::H(j) => format!("function {}() {{ [native code] }}", j),
+            JsValue::Aq(name, ..) => format!("function {}() {{ [native code] }}", name),
+            JsValue::NativeFunction(name) => format!("function {}() {{ [native code] }}", name),
         }
     }
 }
 
 
 pub struct JsContext {
-    pub apu: BTreeMap<String, JsValue>,
-    pub ffp: Vec<String>,
+    pub global: BTreeMap<String, JsValue>,
+    pub console_output: Vec<String>,
 }
 
 impl JsContext {
     pub fn new() -> Self {
-        let mut be = Self {
-            apu: BTreeMap::new(),
-            ffp: Vec::new(),
+        let mut ab = Self {
+            global: BTreeMap::new(),
+            console_output: Vec::new(),
         };
         
         
-        be.wkj();
-        be
+        ab.setup_builtins();
+        ab
     }
     
-    fn wkj(&mut self) {
+    fn setup_builtins(&mut self) {
         
         let mut console = BTreeMap::new();
-        console.insert("log".to_string(), JsValue::H("console.log".to_string()));
-        console.insert("warn".to_string(), JsValue::H("console.warn".to_string()));
-        console.insert("error".to_string(), JsValue::H("console.error".to_string()));
-        console.insert("info".to_string(), JsValue::H("console.log".to_string()));
-        console.insert("debug".to_string(), JsValue::H("console.log".to_string()));
-        self.apu.insert("console".to_string(), JsValue::Cw(console));
+        console.insert("log".to_string(), JsValue::NativeFunction("console.log".to_string()));
+        console.insert("warn".to_string(), JsValue::NativeFunction("console.warn".to_string()));
+        console.insert("error".to_string(), JsValue::NativeFunction("console.error".to_string()));
+        console.insert("info".to_string(), JsValue::NativeFunction("console.log".to_string()));
+        console.insert("debug".to_string(), JsValue::NativeFunction("console.log".to_string()));
+        self.global.insert("console".to_string(), JsValue::Object(console));
         
         
         let mut math = BTreeMap::new();
-        math.insert("PI".to_string(), JsValue::L(core::f64::consts::Eu));
-        math.insert("E".to_string(), JsValue::L(core::f64::consts::Se));
-        math.insert("LN2".to_string(), JsValue::L(core::f64::consts::IG_));
-        math.insert("LN10".to_string(), JsValue::L(core::f64::consts::DSP_));
-        math.insert("SQRT2".to_string(), JsValue::L(core::f64::consts::EGR_));
-        math.insert("random".to_string(), JsValue::H("Math.random".to_string()));
-        math.insert("floor".to_string(), JsValue::H("Math.floor".to_string()));
-        math.insert("ceil".to_string(), JsValue::H("Math.ceil".to_string()));
-        math.insert("round".to_string(), JsValue::H("Math.round".to_string()));
-        math.insert("abs".to_string(), JsValue::H("Math.abs".to_string()));
-        math.insert("sqrt".to_string(), JsValue::H("Math.sqrt".to_string()));
-        math.insert("min".to_string(), JsValue::H("Math.min".to_string()));
-        math.insert("max".to_string(), JsValue::H("Math.max".to_string()));
-        math.insert("pow".to_string(), JsValue::H("Math.pow".to_string()));
-        math.insert("sin".to_string(), JsValue::H("Math.sin".to_string()));
-        math.insert("cos".to_string(), JsValue::H("Math.cos".to_string()));
-        math.insert("tan".to_string(), JsValue::H("Math.tan".to_string()));
-        math.insert("log".to_string(), JsValue::H("Math.log".to_string()));
-        math.insert("sign".to_string(), JsValue::H("Math.sign".to_string()));
-        math.insert("trunc".to_string(), JsValue::H("Math.trunc".to_string()));
-        self.apu.insert("Math".to_string(), JsValue::Cw(math));
+        math.insert("PI".to_string(), JsValue::Number(core::f64::consts::PI));
+        math.insert("E".to_string(), JsValue::Number(core::f64::consts::E));
+        math.insert("LN2".to_string(), JsValue::Number(core::f64::consts::LN_2));
+        math.insert("LN10".to_string(), JsValue::Number(core::f64::consts::LN_10));
+        math.insert("SQRT2".to_string(), JsValue::Number(core::f64::consts::SQRT_2));
+        math.insert("random".to_string(), JsValue::NativeFunction("Math.random".to_string()));
+        math.insert("floor".to_string(), JsValue::NativeFunction("Math.floor".to_string()));
+        math.insert("ceil".to_string(), JsValue::NativeFunction("Math.ceil".to_string()));
+        math.insert("round".to_string(), JsValue::NativeFunction("Math.round".to_string()));
+        math.insert("abs".to_string(), JsValue::NativeFunction("Math.abs".to_string()));
+        math.insert("sqrt".to_string(), JsValue::NativeFunction("Math.sqrt".to_string()));
+        math.insert("min".to_string(), JsValue::NativeFunction("Math.min".to_string()));
+        math.insert("max".to_string(), JsValue::NativeFunction("Math.max".to_string()));
+        math.insert("pow".to_string(), JsValue::NativeFunction("Math.pow".to_string()));
+        math.insert("sin".to_string(), JsValue::NativeFunction("Math.sin".to_string()));
+        math.insert("cos".to_string(), JsValue::NativeFunction("Math.cos".to_string()));
+        math.insert("tan".to_string(), JsValue::NativeFunction("Math.tan".to_string()));
+        math.insert("log".to_string(), JsValue::NativeFunction("Math.log".to_string()));
+        math.insert("sign".to_string(), JsValue::NativeFunction("Math.sign".to_string()));
+        math.insert("trunc".to_string(), JsValue::NativeFunction("Math.trunc".to_string()));
+        self.global.insert("Math".to_string(), JsValue::Object(math));
         
         
-        let mut lgy = BTreeMap::new();
-        lgy.insert("parse".to_string(), JsValue::H("JSON.parse".to_string()));
-        lgy.insert("stringify".to_string(), JsValue::H("JSON.stringify".to_string()));
-        self.apu.insert("JSON".to_string(), JsValue::Cw(lgy));
+        let mut gei = BTreeMap::new();
+        gei.insert("parse".to_string(), JsValue::NativeFunction("JSON.parse".to_string()));
+        gei.insert("stringify".to_string(), JsValue::NativeFunction("JSON.stringify".to_string()));
+        self.global.insert("JSON".to_string(), JsValue::Object(gei));
         
         
-        let mut ama = BTreeMap::new();
-        ama.insert("getElementById".to_string(), JsValue::H("document.getElementById".to_string()));
-        ama.insert("querySelector".to_string(), JsValue::H("document.querySelector".to_string()));
-        ama.insert("querySelectorAll".to_string(), JsValue::H("document.querySelectorAll".to_string()));
-        ama.insert("createElement".to_string(), JsValue::H("document.createElement".to_string()));
-        ama.insert("createTextNode".to_string(), JsValue::H("document.createTextNode".to_string()));
-        ama.insert("write".to_string(), JsValue::H("document.write".to_string()));
-        ama.insert("title".to_string(), JsValue::String("TrustOS Browser".to_string()));
-        ama.insert("readyState".to_string(), JsValue::String("complete".to_string()));
+        let mut document = BTreeMap::new();
+        document.insert("getElementById".to_string(), JsValue::NativeFunction("document.getElementById".to_string()));
+        document.insert("querySelector".to_string(), JsValue::NativeFunction("document.querySelector".to_string()));
+        document.insert("querySelectorAll".to_string(), JsValue::NativeFunction("document.querySelectorAll".to_string()));
+        document.insert("createElement".to_string(), JsValue::NativeFunction("document.createElement".to_string()));
+        document.insert("createTextNode".to_string(), JsValue::NativeFunction("document.createTextNode".to_string()));
+        document.insert("write".to_string(), JsValue::NativeFunction("document.write".to_string()));
+        document.insert("title".to_string(), JsValue::String("TrustOS Browser".to_string()));
+        document.insert("readyState".to_string(), JsValue::String("complete".to_string()));
         
         
-        let mut gj = BTreeMap::new();
-        gj.insert("innerHTML".to_string(), JsValue::String(String::new()));
-        gj.insert("textContent".to_string(), JsValue::String(String::new()));
-        gj.insert("className".to_string(), JsValue::String(String::new()));
-        gj.insert("style".to_string(), JsValue::Cw(BTreeMap::new()));
-        gj.insert("appendChild".to_string(), JsValue::H("element.appendChild".to_string()));
-        gj.insert("children".to_string(), JsValue::U(Vec::new()));
-        gj.insert("tagName".to_string(), JsValue::String("BODY".to_string()));
-        ama.insert("body".to_string(), JsValue::Cw(gj));
-        self.apu.insert("document".to_string(), JsValue::Cw(ama));
+        let mut body = BTreeMap::new();
+        body.insert("innerHTML".to_string(), JsValue::String(String::new()));
+        body.insert("textContent".to_string(), JsValue::String(String::new()));
+        body.insert("className".to_string(), JsValue::String(String::new()));
+        body.insert("style".to_string(), JsValue::Object(BTreeMap::new()));
+        body.insert("appendChild".to_string(), JsValue::NativeFunction("element.appendChild".to_string()));
+        body.insert("children".to_string(), JsValue::Array(Vec::new()));
+        body.insert("tagName".to_string(), JsValue::String("BODY".to_string()));
+        document.insert("body".to_string(), JsValue::Object(body));
+        self.global.insert("document".to_string(), JsValue::Object(document));
         
         
-        let mut bh = BTreeMap::new();
-        bh.insert("innerWidth".to_string(), JsValue::L(1024.0));
-        bh.insert("innerHeight".to_string(), JsValue::L(768.0));
-        bh.insert("location".to_string(), JsValue::Cw(BTreeMap::new()));
-        bh.insert("navigator".to_string(), JsValue::Cw({
-            let mut jgl = BTreeMap::new();
-            jgl.insert("userAgent".to_string(), JsValue::String("TrustOS/1.0".to_string()));
-            jgl.insert("platform".to_string(), JsValue::String("TrustOS".to_string()));
-            jgl.insert("language".to_string(), JsValue::String("en-US".to_string()));
-            jgl
+        let mut window = BTreeMap::new();
+        window.insert("innerWidth".to_string(), JsValue::Number(1024.0));
+        window.insert("innerHeight".to_string(), JsValue::Number(768.0));
+        window.insert("location".to_string(), JsValue::Object(BTreeMap::new()));
+        window.insert("navigator".to_string(), JsValue::Object({
+            let mut eut = BTreeMap::new();
+            eut.insert("userAgent".to_string(), JsValue::String("TrustOS/1.0".to_string()));
+            eut.insert("platform".to_string(), JsValue::String("TrustOS".to_string()));
+            eut.insert("language".to_string(), JsValue::String("en-US".to_string()));
+            eut
         }));
-        self.apu.insert("window".to_string(), JsValue::Cw(bh));
+        self.global.insert("window".to_string(), JsValue::Object(window));
         
         
-        self.apu.insert("parseInt".to_string(), JsValue::H("parseInt".to_string()));
-        self.apu.insert("parseFloat".to_string(), JsValue::H("parseFloat".to_string()));
-        self.apu.insert("isNaN".to_string(), JsValue::H("isNaN".to_string()));
-        self.apu.insert("isFinite".to_string(), JsValue::H("isFinite".to_string()));
-        self.apu.insert("alert".to_string(), JsValue::H("alert".to_string()));
-        self.apu.insert("setTimeout".to_string(), JsValue::H("setTimeout".to_string()));
-        self.apu.insert("setInterval".to_string(), JsValue::H("setInterval".to_string()));
-        self.apu.insert("clearTimeout".to_string(), JsValue::H("clearTimeout".to_string()));
-        self.apu.insert("clearInterval".to_string(), JsValue::H("clearInterval".to_string()));
-        self.apu.insert("encodeURIComponent".to_string(), JsValue::H("encodeURIComponent".to_string()));
-        self.apu.insert("decodeURIComponent".to_string(), JsValue::H("decodeURIComponent".to_string()));
-        self.apu.insert("String".to_string(), JsValue::H("String".to_string()));
-        self.apu.insert("Number".to_string(), JsValue::H("Number".to_string()));
-        self.apu.insert("Boolean".to_string(), JsValue::H("Boolean".to_string()));
-        self.apu.insert("Array".to_string(), JsValue::H("Array".to_string()));
-        self.apu.insert("Object".to_string(), JsValue::H("Object".to_string()));
+        self.global.insert("parseInt".to_string(), JsValue::NativeFunction("parseInt".to_string()));
+        self.global.insert("parseFloat".to_string(), JsValue::NativeFunction("parseFloat".to_string()));
+        self.global.insert("isNaN".to_string(), JsValue::NativeFunction("isNaN".to_string()));
+        self.global.insert("isFinite".to_string(), JsValue::NativeFunction("isFinite".to_string()));
+        self.global.insert("alert".to_string(), JsValue::NativeFunction("alert".to_string()));
+        self.global.insert("setTimeout".to_string(), JsValue::NativeFunction("setTimeout".to_string()));
+        self.global.insert("setInterval".to_string(), JsValue::NativeFunction("setInterval".to_string()));
+        self.global.insert("clearTimeout".to_string(), JsValue::NativeFunction("clearTimeout".to_string()));
+        self.global.insert("clearInterval".to_string(), JsValue::NativeFunction("clearInterval".to_string()));
+        self.global.insert("encodeURIComponent".to_string(), JsValue::NativeFunction("encodeURIComponent".to_string()));
+        self.global.insert("decodeURIComponent".to_string(), JsValue::NativeFunction("decodeURIComponent".to_string()));
+        self.global.insert("String".to_string(), JsValue::NativeFunction("String".to_string()));
+        self.global.insert("Number".to_string(), JsValue::NativeFunction("Number".to_string()));
+        self.global.insert("Boolean".to_string(), JsValue::NativeFunction("Boolean".to_string()));
+        self.global.insert("Array".to_string(), JsValue::NativeFunction("Array".to_string()));
+        self.global.insert("Object".to_string(), JsValue::NativeFunction("Object".to_string()));
     }
     
     
-    pub fn bna(&mut self, aj: &str) -> Result<JsValue, String> {
-        let eb = fwz(aj)?;
-        let gzb = parse(&eb)?;
-        self.ggk(&gzb)
+    pub fn execute(&mut self, code: &str) -> Result<JsValue, String> {
+        let tokens = crv(code)?;
+        let dhy = parse(&tokens)?;
+        self.eval_statements(&dhy)
     }
     
     
-    fn ggk(&mut self, boq: &[Statement]) -> Result<JsValue, String> {
-        let mut result = JsValue::Ba;
-        for stmt in boq {
-            result = self.nre(stmt)?;
+    fn eval_statements(&mut self, stmts: &[Statement]) -> Result<JsValue, String> {
+        let mut result = JsValue::Undefined;
+        for stmt in stmts {
+            result = self.eval_statement(stmt)?;
         }
         Ok(result)
     }
     
     
-    fn nre(&mut self, stmt: &Statement) -> Result<JsValue, String> {
+    fn eval_statement(&mut self, stmt: &Statement) -> Result<JsValue, String> {
         match stmt {
-            Statement::Bvr(j, expr) => {
-                let bn = if let Some(aa) = expr {
-                    self.bbo(aa)?
+            Statement::Var(name, expr) => {
+                let value = if let Some(e) = expr {
+                    self.eval_expr(e)?
                 } else {
-                    JsValue::Ba
+                    JsValue::Undefined
                 };
-                self.apu.insert(j.clone(), bn);
-                Ok(JsValue::Ba)
+                self.global.insert(name.clone(), value);
+                Ok(JsValue::Undefined)
             }
-            Statement::Expr(expr) => self.bbo(expr),
-            Statement::Gx(mo, cne, ckc) => {
-                let rnn = self.bbo(mo)?;
-                if rnn.ezy() {
-                    self.ggk(cne)
-                } else if let Some(skf) = ckc {
-                    self.ggk(skf)
+            Statement::Expr(expr) => self.eval_expr(expr),
+            Statement::If(fc, avj, atp) => {
+                let kwr = self.eval_expr(fc)?;
+                if kwr.to_bool() {
+                    self.eval_statements(avj)
+                } else if let Some(else_stmts) = atp {
+                    self.eval_statements(else_stmts)
                 } else {
-                    Ok(JsValue::Ba)
+                    Ok(JsValue::Undefined)
                 }
             }
-            Statement::La(mo, gj) => {
-                while self.bbo(mo)?.ezy() {
-                    self.ggk(gj)?;
+            Statement::While(fc, body) => {
+                while self.eval_expr(fc)?.to_bool() {
+                    self.eval_statements(body)?;
                 }
-                Ok(JsValue::Ba)
+                Ok(JsValue::Undefined)
             }
-            Statement::Ll(init, mo, qs, gj) => {
-                if let Some(ttw) = init {
-                    self.nre(ttw)?;
+            Statement::For(init, fc, update, body) => {
+                if let Some(init_stmt) = init {
+                    self.eval_statement(init_stmt)?;
                 }
-                while mo.as_ref().map(|r| self.bbo(r).map(|p| p.ezy()).unwrap_or(false)).unwrap_or(true) {
-                    self.ggk(gj)?;
-                    if let Some(xop) = qs {
-                        self.bbo(xop)?;
+                while fc.as_ref().map(|c| self.eval_expr(c).map(|v| v.to_bool()).unwrap_or(false)).unwrap_or(true) {
+                    self.eval_statements(body)?;
+                    if let Some(upd) = update {
+                        self.eval_expr(upd)?;
                     }
                 }
-                Ok(JsValue::Ba)
+                Ok(JsValue::Undefined)
             }
-            Statement::Hd(expr) => {
-                if let Some(aa) = expr {
-                    self.bbo(aa)
+            Statement::Return(expr) => {
+                if let Some(e) = expr {
+                    self.eval_expr(e)
                 } else {
-                    Ok(JsValue::Ba)
+                    Ok(JsValue::Undefined)
                 }
             }
-            Statement::Bs(j, oi, gj) => {
-                self.apu.insert(
-                    j.clone(),
-                    JsValue::Bs(j.clone(), oi.clone(), gj.clone()),
+            Statement::Aq(name, params, body) => {
+                self.global.insert(
+                    name.clone(),
+                    JsValue::Aq(name.clone(), params.clone(), body.clone()),
                 );
-                Ok(JsValue::Ba)
+                Ok(JsValue::Undefined)
             }
-            Statement::Dj(boq) => self.ggk(boq),
+            Statement::Bl(stmts) => self.eval_statements(stmts),
         }
     }
     
     
-    fn bbo(&mut self, expr: &Expr) -> Result<JsValue, String> {
+    fn eval_expr(&mut self, expr: &Expr) -> Result<JsValue, String> {
         match expr {
-            Expr::Th(ugd) => Ok(ugd.clone()),
-            Expr::Lp(j) => {
-                self.apu.get(j).abn().ok_or_else(|| format!("ReferenceError: {} is not defined", j))
+            Expr::Literal(lit) => Ok(lit.clone()),
+            Expr::Identifier(name) => {
+                self.global.get(name).cloned().ok_or_else(|| format!("ReferenceError: {} is not defined", name))
             }
-            Expr::Rl(op, fd, hw) => {
-                let uiv = self.bbo(fd)?;
-                let wbq = self.bbo(hw)?;
-                self.snn(op, uiv, wbq)
+            Expr::Binary(op, left, right) => {
+                let nbg = self.eval_expr(left)?;
+                let ojj = self.eval_expr(right)?;
+                self.eval_binary_op(op, nbg, ojj)
             }
-            Expr::Baf(op, htq) => {
-                let ap = self.bbo(htq)?;
-                self.snp(op, ap)
+            Expr::Unary(op, dvw) => {
+                let val = self.eval_expr(dvw)?;
+                self.eval_unary_op(op, val)
             }
-            Expr::En(kgd, n) => {
+            Expr::Call(callee, args) => {
                 
-                let (ke, afw) = if let Expr::Avl(uwv, yby) = kgd.as_ref() {
-                    let ehf = self.bbo(uwv)?;
-                    let bb = self.bbo(kgd)?;
-                    (bb, Some(ehf))
+                let (func, receiver) = if let Expr::Member(obj_expr, _prop) = callee.as_ref() {
+                    let recv = self.eval_expr(obj_expr)?;
+                    let f = self.eval_expr(callee)?;
+                    (f, Some(recv))
                 } else {
-                    (self.bbo(kgd)?, None)
+                    (self.eval_expr(callee)?, None)
                 };
-                let mut mwf = Vec::new();
-                for ji in n {
-                    mwf.push(self.bbo(ji)?);
+                let mut hfq = Vec::new();
+                for db in args {
+                    hfq.push(self.eval_expr(db)?);
                 }
-                self.nbk(ke, mwf, afw)
+                self.call_function_with_receiver(func, hfq, receiver)
             }
-            Expr::Avl(lpq, frl) => {
-                let lpr = self.bbo(lpq)?;
-                match &lpr {
-                    JsValue::Cw(map) => {
-                        Ok(map.get(frl).abn().unwrap_or(JsValue::Ba))
+            Expr::Member(obj, prop) => {
+                let gkg = self.eval_expr(obj)?;
+                match &gkg {
+                    JsValue::Object(map) => {
+                        Ok(map.get(prop).cloned().unwrap_or(JsValue::Undefined))
                     }
-                    JsValue::U(sy) => {
-                        match frl.as_str() {
-                            "length" => Ok(JsValue::L(sy.len() as f64)),
-                            "push" => Ok(JsValue::H("Array.push".to_string())),
-                            "pop" => Ok(JsValue::H("Array.pop".to_string())),
-                            "shift" => Ok(JsValue::H("Array.shift".to_string())),
-                            "unshift" => Ok(JsValue::H("Array.unshift".to_string())),
-                            "join" => Ok(JsValue::H("Array.join".to_string())),
-                            "reverse" => Ok(JsValue::H("Array.reverse".to_string())),
-                            "indexOf" => Ok(JsValue::H("Array.indexOf".to_string())),
-                            "includes" => Ok(JsValue::H("Array.includes".to_string())),
-                            "slice" => Ok(JsValue::H("Array.slice".to_string())),
-                            "concat" => Ok(JsValue::H("Array.concat".to_string())),
-                            "map" => Ok(JsValue::H("Array.map".to_string())),
-                            "filter" => Ok(JsValue::H("Array.filter".to_string())),
-                            "forEach" => Ok(JsValue::H("Array.forEach".to_string())),
-                            "find" => Ok(JsValue::H("Array.find".to_string())),
-                            "some" => Ok(JsValue::H("Array.some".to_string())),
-                            "every" => Ok(JsValue::H("Array.every".to_string())),
-                            "sort" => Ok(JsValue::H("Array.sort".to_string())),
-                            "fill" => Ok(JsValue::H("Array.fill".to_string())),
-                            "flat" => Ok(JsValue::H("Array.flat".to_string())),
-                            "reduce" => Ok(JsValue::H("Array.reduce".to_string())),
+                    JsValue::Array(ik) => {
+                        match prop.as_str() {
+                            "length" => Ok(JsValue::Number(ik.len() as f64)),
+                            "push" => Ok(JsValue::NativeFunction("Array.push".to_string())),
+                            "pop" => Ok(JsValue::NativeFunction("Array.pop".to_string())),
+                            "shift" => Ok(JsValue::NativeFunction("Array.shift".to_string())),
+                            "unshift" => Ok(JsValue::NativeFunction("Array.unshift".to_string())),
+                            "join" => Ok(JsValue::NativeFunction("Array.join".to_string())),
+                            "reverse" => Ok(JsValue::NativeFunction("Array.reverse".to_string())),
+                            "indexOf" => Ok(JsValue::NativeFunction("Array.indexOf".to_string())),
+                            "includes" => Ok(JsValue::NativeFunction("Array.includes".to_string())),
+                            "slice" => Ok(JsValue::NativeFunction("Array.slice".to_string())),
+                            "concat" => Ok(JsValue::NativeFunction("Array.concat".to_string())),
+                            "map" => Ok(JsValue::NativeFunction("Array.map".to_string())),
+                            "filter" => Ok(JsValue::NativeFunction("Array.filter".to_string())),
+                            "forEach" => Ok(JsValue::NativeFunction("Array.forEach".to_string())),
+                            "find" => Ok(JsValue::NativeFunction("Array.find".to_string())),
+                            "some" => Ok(JsValue::NativeFunction("Array.some".to_string())),
+                            "every" => Ok(JsValue::NativeFunction("Array.every".to_string())),
+                            "sort" => Ok(JsValue::NativeFunction("Array.sort".to_string())),
+                            "fill" => Ok(JsValue::NativeFunction("Array.fill".to_string())),
+                            "flat" => Ok(JsValue::NativeFunction("Array.flat".to_string())),
+                            "reduce" => Ok(JsValue::NativeFunction("Array.reduce".to_string())),
                             _ => {
-                                if let Ok(w) = frl.parse::<usize>() {
-                                    Ok(sy.get(w).abn().unwrap_or(JsValue::Ba))
+                                if let Ok(idx) = prop.parse::<usize>() {
+                                    Ok(ik.get(idx).cloned().unwrap_or(JsValue::Undefined))
                                 } else {
-                                    Ok(JsValue::Ba)
+                                    Ok(JsValue::Undefined)
                                 }
                             }
                         }
                     }
-                    JsValue::String(e) => {
-                        match frl.as_str() {
-                            "length" => Ok(JsValue::L(e.len() as f64)),
-                            "toUpperCase" => Ok(JsValue::H("String.toUpperCase".to_string())),
-                            "toLowerCase" => Ok(JsValue::H("String.toLowerCase".to_string())),
-                            "trim" => Ok(JsValue::H("String.trim".to_string())),
-                            "trimStart" | "trimLeft" => Ok(JsValue::H("String.trimStart".to_string())),
-                            "trimEnd" | "trimRight" => Ok(JsValue::H("String.trimEnd".to_string())),
-                            "includes" => Ok(JsValue::H("String.includes".to_string())),
-                            "indexOf" => Ok(JsValue::H("String.indexOf".to_string())),
-                            "lastIndexOf" => Ok(JsValue::H("String.lastIndexOf".to_string())),
-                            "startsWith" => Ok(JsValue::H("String.startsWith".to_string())),
-                            "endsWith" => Ok(JsValue::H("String.endsWith".to_string())),
-                            "slice" => Ok(JsValue::H("String.slice".to_string())),
-                            "substring" => Ok(JsValue::H("String.substring".to_string())),
-                            "replace" => Ok(JsValue::H("String.replace".to_string())),
-                            "split" => Ok(JsValue::H("String.split".to_string())),
-                            "charAt" => Ok(JsValue::H("String.charAt".to_string())),
-                            "charCodeAt" => Ok(JsValue::H("String.charCodeAt".to_string())),
-                            "repeat" => Ok(JsValue::H("String.repeat".to_string())),
-                            "padStart" => Ok(JsValue::H("String.padStart".to_string())),
-                            "padEnd" => Ok(JsValue::H("String.padEnd".to_string())),
-                            "concat" => Ok(JsValue::H("String.concat".to_string())),
-                            "match" => Ok(JsValue::H("String.match".to_string())),
-                            "search" => Ok(JsValue::H("String.search".to_string())),
-                            _ => Ok(JsValue::Ba),
+                    JsValue::String(j) => {
+                        match prop.as_str() {
+                            "length" => Ok(JsValue::Number(j.len() as f64)),
+                            "toUpperCase" => Ok(JsValue::NativeFunction("String.toUpperCase".to_string())),
+                            "toLowerCase" => Ok(JsValue::NativeFunction("String.toLowerCase".to_string())),
+                            "trim" => Ok(JsValue::NativeFunction("String.trim".to_string())),
+                            "trimStart" | "trimLeft" => Ok(JsValue::NativeFunction("String.trimStart".to_string())),
+                            "trimEnd" | "trimRight" => Ok(JsValue::NativeFunction("String.trimEnd".to_string())),
+                            "includes" => Ok(JsValue::NativeFunction("String.includes".to_string())),
+                            "indexOf" => Ok(JsValue::NativeFunction("String.indexOf".to_string())),
+                            "lastIndexOf" => Ok(JsValue::NativeFunction("String.lastIndexOf".to_string())),
+                            "startsWith" => Ok(JsValue::NativeFunction("String.startsWith".to_string())),
+                            "endsWith" => Ok(JsValue::NativeFunction("String.endsWith".to_string())),
+                            "slice" => Ok(JsValue::NativeFunction("String.slice".to_string())),
+                            "substring" => Ok(JsValue::NativeFunction("String.substring".to_string())),
+                            "replace" => Ok(JsValue::NativeFunction("String.replace".to_string())),
+                            "split" => Ok(JsValue::NativeFunction("String.split".to_string())),
+                            "charAt" => Ok(JsValue::NativeFunction("String.charAt".to_string())),
+                            "charCodeAt" => Ok(JsValue::NativeFunction("String.charCodeAt".to_string())),
+                            "repeat" => Ok(JsValue::NativeFunction("String.repeat".to_string())),
+                            "padStart" => Ok(JsValue::NativeFunction("String.padStart".to_string())),
+                            "padEnd" => Ok(JsValue::NativeFunction("String.padEnd".to_string())),
+                            "concat" => Ok(JsValue::NativeFunction("String.concat".to_string())),
+                            "match" => Ok(JsValue::NativeFunction("String.match".to_string())),
+                            "search" => Ok(JsValue::NativeFunction("String.search".to_string())),
+                            _ => Ok(JsValue::Undefined),
                         }
                     }
-                    JsValue::L(ybl) => {
-                        match frl.as_str() {
-                            "toFixed" => Ok(JsValue::H("Number.toFixed".to_string())),
-                            "toString" => Ok(JsValue::H("Number.toString".to_string())),
-                            _ => Ok(JsValue::Ba),
+                    JsValue::Number(_n) => {
+                        match prop.as_str() {
+                            "toFixed" => Ok(JsValue::NativeFunction("Number.toFixed".to_string())),
+                            "toString" => Ok(JsValue::NativeFunction("Number.toString".to_string())),
+                            _ => Ok(JsValue::Undefined),
                         }
                     }
-                    _ => Ok(JsValue::Ba),
+                    _ => Ok(JsValue::Undefined),
                 }
             }
-            Expr::Index(lpq, w) => {
-                let lpr = self.bbo(lpq)?;
-                let odf = self.bbo(w)?;
-                match lpr {
-                    JsValue::U(sy) => {
-                        let a = odf.zo() as usize;
-                        Ok(sy.get(a).abn().unwrap_or(JsValue::Ba))
+            Expr::Index(obj, idx) => {
+                let gkg = self.eval_expr(obj)?;
+                let ifq = self.eval_expr(idx)?;
+                match gkg {
+                    JsValue::Array(ik) => {
+                        let i = ifq.to_number() as usize;
+                        Ok(ik.get(i).cloned().unwrap_or(JsValue::Undefined))
                     }
-                    JsValue::Cw(map) => {
-                        let bs = odf.to_string();
-                        Ok(map.get(&bs).abn().unwrap_or(JsValue::Ba))
+                    JsValue::Object(map) => {
+                        let key = ifq.to_string();
+                        Ok(map.get(&key).cloned().unwrap_or(JsValue::Undefined))
                     }
-                    _ => Ok(JsValue::Ba),
+                    _ => Ok(JsValue::Undefined),
                 }
             }
-            Expr::U(bgw) => {
-                let mut sy = Vec::new();
-                for ij in bgw {
-                    sy.push(self.bbo(ij)?);
+            Expr::Array(elements) => {
+                let mut ik = Vec::new();
+                for el in elements {
+                    ik.push(self.eval_expr(el)?);
                 }
-                Ok(JsValue::U(sy))
+                Ok(JsValue::Array(ik))
             }
-            Expr::Cw(gpy) => {
+            Expr::Object(dcz) => {
                 let mut map = BTreeMap::new();
-                for (bs, ap) in gpy {
-                    map.insert(bs.clone(), self.bbo(ap)?);
+                for (key, val) in dcz {
+                    map.insert(key.clone(), self.eval_expr(val)?);
                 }
-                Ok(JsValue::Cw(map))
+                Ok(JsValue::Object(map))
             }
-            Expr::Vk(j, bn) => {
-                let ap = self.bbo(bn)?;
-                self.apu.insert(j.clone(), ap.clone());
-                Ok(ap)
+            Expr::Assign(name, value) => {
+                let val = self.eval_expr(value)?;
+                self.global.insert(name.clone(), val.clone());
+                Ok(val)
             }
-            Expr::Bud(mo, mkp, ksz) => {
-                if self.bbo(mo)?.ezy() {
-                    self.bbo(mkp)
+            Expr::Ternary(fc, gyn, fuh) => {
+                if self.eval_expr(fc)?.to_bool() {
+                    self.eval_expr(gyn)
                 } else {
-                    self.bbo(ksz)
+                    self.eval_expr(fuh)
                 }
             }
         }
     }
     
-    fn snn(&self, op: &str, fd: JsValue, hw: JsValue) -> Result<JsValue, String> {
+    fn eval_binary_op(&self, op: &str, left: JsValue, right: JsValue) -> Result<JsValue, String> {
         match op {
             "+" => {
                 
-                match (&fd, &hw) {
-                    (JsValue::String(q), _) => Ok(JsValue::String(format!("{}{}", q, hw.to_string()))),
-                    (_, JsValue::String(o)) => Ok(JsValue::String(format!("{}{}", fd.to_string(), o))),
-                    _ => Ok(JsValue::L(fd.zo() + hw.zo())),
+                match (&left, &right) {
+                    (JsValue::String(a), _) => Ok(JsValue::String(format!("{}{}", a, right.to_string()))),
+                    (_, JsValue::String(b)) => Ok(JsValue::String(format!("{}{}", left.to_string(), b))),
+                    _ => Ok(JsValue::Number(left.to_number() + right.to_number())),
                 }
             }
-            "-" => Ok(JsValue::L(fd.zo() - hw.zo())),
-            "*" => Ok(JsValue::L(fd.zo() * hw.zo())),
-            "/" => Ok(JsValue::L(fd.zo() / hw.zo())),
-            "%" => Ok(JsValue::L(fd.zo() % hw.zo())),
-            "<" => Ok(JsValue::Cb(fd.zo() < hw.zo())),
-            ">" => Ok(JsValue::Cb(fd.zo() > hw.zo())),
-            "<=" => Ok(JsValue::Cb(fd.zo() <= hw.zo())),
-            ">=" => Ok(JsValue::Cb(fd.zo() >= hw.zo())),
+            "-" => Ok(JsValue::Number(left.to_number() - right.to_number())),
+            "*" => Ok(JsValue::Number(left.to_number() * right.to_number())),
+            "/" => Ok(JsValue::Number(left.to_number() / right.to_number())),
+            "%" => Ok(JsValue::Number(left.to_number() % right.to_number())),
+            "<" => Ok(JsValue::Boolean(left.to_number() < right.to_number())),
+            ">" => Ok(JsValue::Boolean(left.to_number() > right.to_number())),
+            "<=" => Ok(JsValue::Boolean(left.to_number() <= right.to_number())),
+            ">=" => Ok(JsValue::Boolean(left.to_number() >= right.to_number())),
             "==" | "===" => {
                 
-                Ok(JsValue::Cb(fd.to_string() == hw.to_string()))
+                Ok(JsValue::Boolean(left.to_string() == right.to_string()))
             }
             "!=" | "!==" => {
-                Ok(JsValue::Cb(fd.to_string() != hw.to_string()))
+                Ok(JsValue::Boolean(left.to_string() != right.to_string()))
             }
             "&&" => {
-                if !fd.ezy() {
-                    Ok(fd)
+                if !left.to_bool() {
+                    Ok(left)
                 } else {
-                    Ok(hw)
+                    Ok(right)
                 }
             }
             "||" => {
-                if fd.ezy() {
-                    Ok(fd)
+                if left.to_bool() {
+                    Ok(left)
                 } else {
-                    Ok(hw)
+                    Ok(right)
                 }
             }
             _ => Err(format!("Unknown operator: {}", op)),
         }
     }
     
-    fn snp(&self, op: &str, ap: JsValue) -> Result<JsValue, String> {
+    fn eval_unary_op(&self, op: &str, val: JsValue) -> Result<JsValue, String> {
         match op {
-            "!" => Ok(JsValue::Cb(!ap.ezy())),
-            "-" => Ok(JsValue::L(-ap.zo())),
-            "+" => Ok(JsValue::L(ap.zo())),
+            "!" => Ok(JsValue::Boolean(!val.to_bool())),
+            "-" => Ok(JsValue::Number(-val.to_number())),
+            "+" => Ok(JsValue::Number(val.to_number())),
             "typeof" => {
-                let ab = match ap {
-                    JsValue::Ba => "undefined",
-                    JsValue::Gm => "object", 
-                    JsValue::Cb(_) => "boolean",
-                    JsValue::L(_) => "number",
+                let t = match val {
+                    JsValue::Undefined => "undefined",
+                    JsValue::Null => "object", 
+                    JsValue::Boolean(_) => "boolean",
+                    JsValue::Number(_) => "number",
                     JsValue::String(_) => "string",
-                    JsValue::Cw(_) | JsValue::U(_) => "object",
-                    JsValue::Bs(..) | JsValue::H(_) => "function",
+                    JsValue::Object(_) | JsValue::Array(_) => "object",
+                    JsValue::Aq(..) | JsValue::NativeFunction(_) => "function",
                 };
-                Ok(JsValue::String(ab.to_string()))
+                Ok(JsValue::String(t.to_string()))
             }
             _ => Err(format!("Unknown unary operator: {}", op)),
         }
     }
     
-    fn nbk(&mut self, ke: JsValue, n: Vec<JsValue>, afw: Option<JsValue>) -> Result<JsValue, String> {
-        match ke {
-            JsValue::H(j) => self.qvn(&j, n, afw),
-            JsValue::Bs(blu, oi, gj) => {
-                for (a, evz) in oi.iter().cf() {
-                    let ap = n.get(a).abn().unwrap_or(JsValue::Ba);
-                    self.apu.insert(evz.clone(), ap);
+    fn call_function_with_receiver(&mut self, func: JsValue, args: Vec<JsValue>, receiver: Option<JsValue>) -> Result<JsValue, String> {
+        match func {
+            JsValue::NativeFunction(name) => self.call_native_with_receiver(&name, args, receiver),
+            JsValue::Aq(_name, params, body) => {
+                for (i, param) in params.iter().enumerate() {
+                    let val = args.get(i).cloned().unwrap_or(JsValue::Undefined);
+                    self.global.insert(param.clone(), val);
                 }
-                self.bna(&gj)
+                self.execute(&body)
             }
             _ => Err("TypeError: not a function".to_string()),
         }
     }
 
-    fn yhh(&mut self, ke: JsValue, n: Vec<JsValue>) -> Result<JsValue, String> {
-        self.nbk(ke, n, None)
+    fn pze(&mut self, func: JsValue, args: Vec<JsValue>) -> Result<JsValue, String> {
+        self.call_function_with_receiver(func, args, None)
     }
     
-    fn qvn(&mut self, j: &str, n: Vec<JsValue>, afw: Option<JsValue>) -> Result<JsValue, String> {
-        match j {
+    fn call_native_with_receiver(&mut self, name: &str, args: Vec<JsValue>, receiver: Option<JsValue>) -> Result<JsValue, String> {
+        match name {
             
             "console.log" | "console.warn" | "console.error" => {
-                let an: Vec<String> = n.iter().map(|p| p.to_string()).collect();
-                let line = an.rr(" ");
-                self.ffp.push(line);
-                Ok(JsValue::Ba)
+                let output: Vec<String> = args.iter().map(|v| v.to_string()).collect();
+                let line = output.join(" ");
+                self.console_output.push(line);
+                Ok(JsValue::Undefined)
             }
             "alert" => {
-                if let Some(fr) = n.fv() {
-                    self.ffp.push(format!("[ALERT] {}", fr.to_string()));
+                if let Some(bk) = args.first() {
+                    self.console_output.push(format!("[ALERT] {}", bk.to_string()));
                 }
-                Ok(JsValue::Ba)
+                Ok(JsValue::Undefined)
             }
 
             
-            "setTimeout" | "setInterval" => Ok(JsValue::L(0.0)),
-            "clearTimeout" | "clearInterval" => Ok(JsValue::Ba),
+            "setTimeout" | "setInterval" => Ok(JsValue::Number(0.0)),
+            "clearTimeout" | "clearInterval" => Ok(JsValue::Undefined),
 
             
             "Math.random" => {
-                let dv = crate::cpu::tsc::ow();
-                let vqa = ((dv >> 16) as f64) / 65536.0;
-                Ok(JsValue::L(vqa % 1.0))
+                let seed = crate::cpu::tsc::ey();
+                let obe = ((seed >> 16) as f64) / 65536.0;
+                Ok(JsValue::Number(obe % 1.0))
             }
             "Math.floor" => {
-                let bo = n.fv().map(|p| p.zo()).unwrap_or(0.0);
-                Ok(JsValue::L(hjw(bo)))
+                let ae = args.first().map(|v| v.to_number()).unwrap_or(0.0);
+                Ok(JsValue::Number(floor(ae)))
             }
             "Math.ceil" => {
-                let bo = n.fv().map(|p| p.zo()).unwrap_or(0.0);
-                Ok(JsValue::L(qxf(bo)))
+                let ae = args.first().map(|v| v.to_number()).unwrap_or(0.0);
+                Ok(JsValue::Number(ceil(ae)))
             }
             "Math.round" => {
-                let bo = n.fv().map(|p| p.zo()).unwrap_or(0.0);
-                Ok(JsValue::L(jmv(bo)))
+                let ae = args.first().map(|v| v.to_number()).unwrap_or(0.0);
+                Ok(JsValue::Number(round(ae)))
             }
             "Math.abs" => {
-                let bo = n.fv().map(|p| p.zo()).unwrap_or(0.0);
-                Ok(JsValue::L(libm::sqq(bo)))
+                let ae = args.first().map(|v| v.to_number()).unwrap_or(0.0);
+                Ok(JsValue::Number(libm::fabs(ae)))
             }
             "Math.sqrt" => {
-                let bo = n.fv().map(|p| p.zo()).unwrap_or(0.0);
-                Ok(JsValue::L(ibi(bo)))
+                let ae = args.first().map(|v| v.to_number()).unwrap_or(0.0);
+                Ok(JsValue::Number(sqrt(ae)))
             }
             "Math.min" => {
-                if n.is_empty() { return Ok(JsValue::L(f64::Att)); }
-                let mut ef = n[0].zo();
-                for q in &n[1..] { let p = q.zo(); if p < ef { ef = p; } }
-                Ok(JsValue::L(ef))
+                if args.is_empty() { return Ok(JsValue::Number(f64::INFINITY)); }
+                let mut m = args[0].to_number();
+                for a in &args[1..] { let v = a.to_number(); if v < m { m = v; } }
+                Ok(JsValue::Number(m))
             }
             "Math.max" => {
-                if n.is_empty() { return Ok(JsValue::L(f64::IP_)); }
-                let mut ef = n[0].zo();
-                for q in &n[1..] { let p = q.zo(); if p > ef { ef = p; } }
-                Ok(JsValue::L(ef))
+                if args.is_empty() { return Ok(JsValue::Number(f64::NEG_INFINITY)); }
+                let mut m = args[0].to_number();
+                for a in &args[1..] { let v = a.to_number(); if v > m { m = v; } }
+                Ok(JsValue::Number(m))
             }
             "Math.pow" => {
-                let ar = n.fv().map(|p| p.zo()).unwrap_or(0.0);
-                let bgz = n.get(1).map(|p| p.zo()).unwrap_or(0.0);
-                Ok(JsValue::L(libm::vke(ar, bgz)))
+                let base = args.first().map(|v| v.to_number()).unwrap_or(0.0);
+                let afe = args.get(1).map(|v| v.to_number()).unwrap_or(0.0);
+                Ok(JsValue::Number(libm::pow(base, afe)))
             }
             "Math.sin" => {
-                let bo = n.fv().map(|p| p.zo()).unwrap_or(0.0);
-                Ok(JsValue::L(libm::ayq(bo)))
+                let ae = args.first().map(|v| v.to_number()).unwrap_or(0.0);
+                Ok(JsValue::Number(libm::sin(ae)))
             }
             "Math.cos" => {
-                let bo = n.fv().map(|p| p.zo()).unwrap_or(0.0);
-                Ok(JsValue::L(libm::cjt(bo)))
+                let ae = args.first().map(|v| v.to_number()).unwrap_or(0.0);
+                Ok(JsValue::Number(libm::cos(ae)))
             }
             "Math.tan" => {
-                let bo = n.fv().map(|p| p.zo()).unwrap_or(0.0);
-                Ok(JsValue::L(libm::mjs(bo)))
+                let ae = args.first().map(|v| v.to_number()).unwrap_or(0.0);
+                Ok(JsValue::Number(libm::tan(ae)))
             }
             "Math.log" => {
-                let bo = n.fv().map(|p| p.zo()).unwrap_or(0.0);
-                Ok(JsValue::L(libm::log(bo)))
+                let ae = args.first().map(|v| v.to_number()).unwrap_or(0.0);
+                Ok(JsValue::Number(libm::log(ae)))
             }
             "Math.sign" => {
-                let bo = n.fv().map(|p| p.zo()).unwrap_or(0.0);
-                Ok(JsValue::L(if bo > 0.0 { 1.0 } else if bo < 0.0 { -1.0 } else { 0.0 }))
+                let ae = args.first().map(|v| v.to_number()).unwrap_or(0.0);
+                Ok(JsValue::Number(if ae > 0.0 { 1.0 } else if ae < 0.0 { -1.0 } else { 0.0 }))
             }
             "Math.trunc" => {
-                let bo = n.fv().map(|p| p.zo()).unwrap_or(0.0);
-                Ok(JsValue::L(pwe(bo)))
+                let ae = args.first().map(|v| v.to_number()).unwrap_or(0.0);
+                Ok(JsValue::Number(trunc(ae)))
             }
 
             
             "parseInt" => {
-                let e = n.fv().map(|p| p.to_string()).age();
-                let bo: f64 = e.em().parse().unwrap_or(f64::Lx);
-                Ok(JsValue::L(pwe(bo)))
+                let j = args.first().map(|v| v.to_string()).unwrap_or_default();
+                let ae: f64 = j.trim().parse().unwrap_or(f64::NAN);
+                Ok(JsValue::Number(trunc(ae)))
             }
             "parseFloat" => {
-                let e = n.fv().map(|p| p.to_string()).age();
-                let bo: f64 = e.em().parse().unwrap_or(f64::Lx);
-                Ok(JsValue::L(bo))
+                let j = args.first().map(|v| v.to_string()).unwrap_or_default();
+                let ae: f64 = j.trim().parse().unwrap_or(f64::NAN);
+                Ok(JsValue::Number(ae))
             }
             "isNaN" => {
-                let bo = n.fv().map(|p| p.zo()).unwrap_or(f64::Lx);
-                Ok(JsValue::Cb(bo.ogj()))
+                let ae = args.first().map(|v| v.to_number()).unwrap_or(f64::NAN);
+                Ok(JsValue::Boolean(ae.is_nan()))
             }
             "isFinite" => {
-                let bo = n.fv().map(|p| p.zo()).unwrap_or(f64::Lx);
-                Ok(JsValue::Cb(bo.dsg()))
+                let ae = args.first().map(|v| v.to_number()).unwrap_or(f64::NAN);
+                Ok(JsValue::Boolean(ae.is_finite()))
             }
 
             
-            "String" => Ok(JsValue::String(n.fv().map(|p| p.to_string()).age())),
-            "Number" => Ok(JsValue::L(n.fv().map(|p| p.zo()).unwrap_or(0.0))),
-            "Boolean" => Ok(JsValue::Cb(n.fv().map(|p| p.ezy()).unwrap_or(false))),
-            "Array" => Ok(JsValue::U(n)),
-            "Object" => Ok(JsValue::Cw(BTreeMap::new())),
+            "String" => Ok(JsValue::String(args.first().map(|v| v.to_string()).unwrap_or_default())),
+            "Number" => Ok(JsValue::Number(args.first().map(|v| v.to_number()).unwrap_or(0.0))),
+            "Boolean" => Ok(JsValue::Boolean(args.first().map(|v| v.to_bool()).unwrap_or(false))),
+            "Array" => Ok(JsValue::Array(args)),
+            "Object" => Ok(JsValue::Object(BTreeMap::new())),
 
             
             "encodeURIComponent" => {
-                let e = n.fv().map(|p| p.to_string()).age();
-                let mut ckd = String::new();
-                for o in e.bf() {
-                    if o.bvb() || b"-_.!~*'()".contains(&o) {
-                        ckd.push(o as char);
+                let j = args.first().map(|v| v.to_string()).unwrap_or_default();
+                let mut atq = String::new();
+                for b in j.bytes() {
+                    if b.is_ascii_alphanumeric() || b"-_.!~*'()".contains(&b) {
+                        atq.push(b as char);
                     } else {
-                        ckd.t(&format!("%{:02X}", o));
+                        atq.push_str(&format!("%{:02X}", b));
                     }
                 }
-                Ok(JsValue::String(ckd))
+                Ok(JsValue::String(atq))
             }
             "decodeURIComponent" => {
-                let e = n.fv().map(|p| p.to_string()).age();
-                let mut aoq = Vec::new();
-                let bf = e.as_bytes();
-                let mut a = 0;
-                while a < bf.len() {
-                    if bf[a] == b'%' && a + 2 < bf.len() {
-                        if let Ok(o) = u8::wa(core::str::jg(&bf[a+1..a+3]).unwrap_or("00"), 16) {
-                            aoq.push(o);
-                            a += 3;
+                let j = args.first().map(|v| v.to_string()).unwrap_or_default();
+                let mut uu = Vec::new();
+                let bytes = j.as_bytes();
+                let mut i = 0;
+                while i < bytes.len() {
+                    if bytes[i] == b'%' && i + 2 < bytes.len() {
+                        if let Ok(b) = u8::from_str_radix(core::str::from_utf8(&bytes[i+1..i+3]).unwrap_or("00"), 16) {
+                            uu.push(b);
+                            i += 3;
                             continue;
                         }
                     }
-                    aoq.push(bf[a]);
-                    a += 1;
+                    uu.push(bytes[i]);
+                    i += 1;
                 }
-                Ok(JsValue::String(String::jg(aoq).age()))
+                Ok(JsValue::String(String::from_utf8(uu).unwrap_or_default()))
             }
 
             
             "JSON.parse" => {
-                let e = n.fv().map(|p| p.to_string()).age();
-                Ok(self.lso(&e))
+                let j = args.first().map(|v| v.to_string()).unwrap_or_default();
+                Ok(self.parse_json(&j))
             }
             "JSON.stringify" => {
-                let ap = n.fv().abn().unwrap_or(JsValue::Ba);
-                Ok(JsValue::String(self.mhu(&ap)))
+                let val = args.first().cloned().unwrap_or(JsValue::Undefined);
+                Ok(JsValue::String(self.stringify_json(&val)))
             }
 
             
             "document.getElementById" | "document.querySelector" | "document.querySelectorAll" => {
                 
-                let yct = n.fv().map(|p| p.to_string()).age();
-                let mut ij = BTreeMap::new();
-                ij.insert("innerHTML".to_string(), JsValue::String(String::new()));
-                ij.insert("textContent".to_string(), JsValue::String(String::new()));
-                ij.insert("className".to_string(), JsValue::String(String::new()));
-                ij.insert("id".to_string(), JsValue::String(String::new()));
-                ij.insert("tagName".to_string(), JsValue::String("DIV".to_string()));
-                ij.insert("style".to_string(), JsValue::Cw(BTreeMap::new()));
-                ij.insert("children".to_string(), JsValue::U(Vec::new()));
-                ij.insert("parentNode".to_string(), JsValue::Gm);
-                ij.insert("setAttribute".to_string(), JsValue::H("element.setAttribute".to_string()));
-                ij.insert("getAttribute".to_string(), JsValue::H("element.getAttribute".to_string()));
-                ij.insert("appendChild".to_string(), JsValue::H("element.appendChild".to_string()));
-                ij.insert("removeChild".to_string(), JsValue::H("element.removeChild".to_string()));
-                ij.insert("addEventListener".to_string(), JsValue::H("element.addEventListener".to_string()));
-                ij.insert("classList".to_string(), JsValue::Cw({
+                let pxh = args.first().map(|v| v.to_string()).unwrap_or_default();
+                let mut el = BTreeMap::new();
+                el.insert("innerHTML".to_string(), JsValue::String(String::new()));
+                el.insert("textContent".to_string(), JsValue::String(String::new()));
+                el.insert("className".to_string(), JsValue::String(String::new()));
+                el.insert("id".to_string(), JsValue::String(String::new()));
+                el.insert("tagName".to_string(), JsValue::String("DIV".to_string()));
+                el.insert("style".to_string(), JsValue::Object(BTreeMap::new()));
+                el.insert("children".to_string(), JsValue::Array(Vec::new()));
+                el.insert("parentNode".to_string(), JsValue::Null);
+                el.insert("setAttribute".to_string(), JsValue::NativeFunction("element.setAttribute".to_string()));
+                el.insert("getAttribute".to_string(), JsValue::NativeFunction("element.getAttribute".to_string()));
+                el.insert("appendChild".to_string(), JsValue::NativeFunction("element.appendChild".to_string()));
+                el.insert("removeChild".to_string(), JsValue::NativeFunction("element.removeChild".to_string()));
+                el.insert("addEventListener".to_string(), JsValue::NativeFunction("element.addEventListener".to_string()));
+                el.insert("classList".to_string(), JsValue::Object({
                     let mut cl = BTreeMap::new();
-                    cl.insert("add".to_string(), JsValue::H("classList.add".to_string()));
-                    cl.insert("remove".to_string(), JsValue::H("classList.remove".to_string()));
-                    cl.insert("toggle".to_string(), JsValue::H("classList.toggle".to_string()));
-                    cl.insert("contains".to_string(), JsValue::H("classList.contains".to_string()));
+                    cl.insert("add".to_string(), JsValue::NativeFunction("classList.add".to_string()));
+                    cl.insert("remove".to_string(), JsValue::NativeFunction("classList.remove".to_string()));
+                    cl.insert("toggle".to_string(), JsValue::NativeFunction("classList.toggle".to_string()));
+                    cl.insert("contains".to_string(), JsValue::NativeFunction("classList.contains".to_string()));
                     cl
                 }));
-                if j == "document.querySelectorAll" {
-                    Ok(JsValue::U(vec![JsValue::Cw(ij)]))
+                if name == "document.querySelectorAll" {
+                    Ok(JsValue::Array(vec![JsValue::Object(el)]))
                 } else {
-                    Ok(JsValue::Cw(ij))
+                    Ok(JsValue::Object(el))
                 }
             }
             "document.createElement" => {
-                let ll = n.fv().map(|p| p.to_string()).unwrap_or("div".to_string());
-                let mut ij = BTreeMap::new();
-                ij.insert("tagName".to_string(), JsValue::String(ll.idx()));
-                ij.insert("innerHTML".to_string(), JsValue::String(String::new()));
-                ij.insert("textContent".to_string(), JsValue::String(String::new()));
-                ij.insert("className".to_string(), JsValue::String(String::new()));
-                ij.insert("style".to_string(), JsValue::Cw(BTreeMap::new()));
-                ij.insert("children".to_string(), JsValue::U(Vec::new()));
-                ij.insert("appendChild".to_string(), JsValue::H("element.appendChild".to_string()));
-                ij.insert("addEventListener".to_string(), JsValue::H("element.addEventListener".to_string()));
-                Ok(JsValue::Cw(ij))
+                let tag = args.first().map(|v| v.to_string()).unwrap_or("div".to_string());
+                let mut el = BTreeMap::new();
+                el.insert("tagName".to_string(), JsValue::String(tag.to_uppercase()));
+                el.insert("innerHTML".to_string(), JsValue::String(String::new()));
+                el.insert("textContent".to_string(), JsValue::String(String::new()));
+                el.insert("className".to_string(), JsValue::String(String::new()));
+                el.insert("style".to_string(), JsValue::Object(BTreeMap::new()));
+                el.insert("children".to_string(), JsValue::Array(Vec::new()));
+                el.insert("appendChild".to_string(), JsValue::NativeFunction("element.appendChild".to_string()));
+                el.insert("addEventListener".to_string(), JsValue::NativeFunction("element.addEventListener".to_string()));
+                Ok(JsValue::Object(el))
             }
             "document.createTextNode" => {
-                let text = n.fv().map(|p| p.to_string()).age();
+                let text = args.first().map(|v| v.to_string()).unwrap_or_default();
                 Ok(JsValue::String(text))
             }
             "document.write" => {
-                let text = n.fv().map(|p| p.to_string()).age();
-                self.ffp.push(format!("[document.write] {}", text));
-                Ok(JsValue::Ba)
+                let text = args.first().map(|v| v.to_string()).unwrap_or_default();
+                self.console_output.push(format!("[document.write] {}", text));
+                Ok(JsValue::Undefined)
             }
 
             
             "element.appendChild" | "element.removeChild" | "element.setAttribute" |
             "element.getAttribute" | "element.addEventListener" |
-            "classList.add" | "classList.remove" | "classList.toggle" => Ok(JsValue::Ba),
-            "classList.contains" => Ok(JsValue::Cb(false)),
+            "classList.add" | "classList.remove" | "classList.toggle" => Ok(JsValue::Undefined),
+            "classList.contains" => Ok(JsValue::Boolean(false)),
 
             
             "String.toUpperCase" => {
-                if let Some(JsValue::String(e)) = afw.as_ref().efx(n.fv()) {
-                    Ok(JsValue::String(e.idx()))
-                } else { Ok(JsValue::Ba) }
+                if let Some(JsValue::String(j)) = receiver.as_ref().or(args.first()) {
+                    Ok(JsValue::String(j.to_uppercase()))
+                } else { Ok(JsValue::Undefined) }
             }
             "String.toLowerCase" => {
-                if let Some(JsValue::String(e)) = afw.as_ref().efx(n.fv()) {
-                    Ok(JsValue::String(e.aqn()))
-                } else { Ok(JsValue::Ba) }
+                if let Some(JsValue::String(j)) = receiver.as_ref().or(args.first()) {
+                    Ok(JsValue::String(j.to_lowercase()))
+                } else { Ok(JsValue::Undefined) }
             }
             "String.trim" => {
-                if let Some(JsValue::String(e)) = afw.as_ref().efx(n.fv()) {
-                    Ok(JsValue::String(e.em().to_string()))
-                } else { Ok(JsValue::Ba) }
+                if let Some(JsValue::String(j)) = receiver.as_ref().or(args.first()) {
+                    Ok(JsValue::String(j.trim().to_string()))
+                } else { Ok(JsValue::Undefined) }
             }
             "String.trimStart" => {
-                if let Some(JsValue::String(e)) = afw.as_ref().efx(n.fv()) {
-                    Ok(JsValue::String(e.ifa().to_string()))
-                } else { Ok(JsValue::Ba) }
+                if let Some(JsValue::String(j)) = receiver.as_ref().or(args.first()) {
+                    Ok(JsValue::String(j.trim_start().to_string()))
+                } else { Ok(JsValue::Undefined) }
             }
             "String.trimEnd" => {
-                if let Some(JsValue::String(e)) = afw.as_ref().efx(n.fv()) {
-                    Ok(JsValue::String(e.eke().to_string()))
-                } else { Ok(JsValue::Ba) }
+                if let Some(JsValue::String(j)) = receiver.as_ref().or(args.first()) {
+                    Ok(JsValue::String(j.trim_end().to_string()))
+                } else { Ok(JsValue::Undefined) }
             }
             "String.includes" => {
-                if let Some(JsValue::String(e)) = afw.as_ref() {
-                    let anw = n.fv().map(|p| p.to_string()).age();
-                    Ok(JsValue::Cb(e.contains(&anw)))
-                } else { Ok(JsValue::Cb(false)) }
+                if let Some(JsValue::String(j)) = receiver.as_ref() {
+                    let search = args.first().map(|v| v.to_string()).unwrap_or_default();
+                    Ok(JsValue::Boolean(j.contains(&search)))
+                } else { Ok(JsValue::Boolean(false)) }
             }
             "String.indexOf" => {
-                if let Some(JsValue::String(e)) = afw.as_ref() {
-                    let anw = n.fv().map(|p| p.to_string()).age();
-                    Ok(JsValue::L(e.du(&anw).map(|a| a as f64).unwrap_or(-1.0)))
-                } else { Ok(JsValue::L(-1.0)) }
+                if let Some(JsValue::String(j)) = receiver.as_ref() {
+                    let search = args.first().map(|v| v.to_string()).unwrap_or_default();
+                    Ok(JsValue::Number(j.find(&search).map(|i| i as f64).unwrap_or(-1.0)))
+                } else { Ok(JsValue::Number(-1.0)) }
             }
             "String.lastIndexOf" => {
-                if let Some(JsValue::String(e)) = afw.as_ref() {
-                    let anw = n.fv().map(|p| p.to_string()).age();
-                    Ok(JsValue::L(e.bhx(&anw).map(|a| a as f64).unwrap_or(-1.0)))
-                } else { Ok(JsValue::L(-1.0)) }
+                if let Some(JsValue::String(j)) = receiver.as_ref() {
+                    let search = args.first().map(|v| v.to_string()).unwrap_or_default();
+                    Ok(JsValue::Number(j.rfind(&search).map(|i| i as f64).unwrap_or(-1.0)))
+                } else { Ok(JsValue::Number(-1.0)) }
             }
             "String.startsWith" => {
-                if let Some(JsValue::String(e)) = afw.as_ref() {
-                    let adx = n.fv().map(|p| p.to_string()).age();
-                    Ok(JsValue::Cb(e.cj(&adx)))
-                } else { Ok(JsValue::Cb(false)) }
+                if let Some(JsValue::String(j)) = receiver.as_ref() {
+                    let nm = args.first().map(|v| v.to_string()).unwrap_or_default();
+                    Ok(JsValue::Boolean(j.starts_with(&nm)))
+                } else { Ok(JsValue::Boolean(false)) }
             }
             "String.endsWith" => {
-                if let Some(JsValue::String(e)) = afw.as_ref() {
-                    let cif = n.fv().map(|p| p.to_string()).age();
-                    Ok(JsValue::Cb(e.pp(&cif)))
-                } else { Ok(JsValue::Cb(false)) }
+                if let Some(JsValue::String(j)) = receiver.as_ref() {
+                    let asi = args.first().map(|v| v.to_string()).unwrap_or_default();
+                    Ok(JsValue::Boolean(j.ends_with(&asi)))
+                } else { Ok(JsValue::Boolean(false)) }
             }
             "String.slice" | "String.substring" => {
-                if let Some(JsValue::String(e)) = afw.as_ref() {
-                    let ay = n.fv().map(|p| p.zo() as i64).unwrap_or(0);
-                    let ci = n.get(1).map(|p| p.zo() as i64);
-                    let len = e.len() as i64;
-                    let ay = if ay < 0 { (len + ay).am(0) as usize } else { (ay as usize).v(e.len()) };
-                    let ci = match ci {
-                        Some(aa) if aa < 0 => (len + aa).am(0) as usize,
-                        Some(aa) => (aa as usize).v(e.len()),
-                        None => e.len(),
+                if let Some(JsValue::String(j)) = receiver.as_ref() {
+                    let start = args.first().map(|v| v.to_number() as i64).unwrap_or(0);
+                    let end = args.get(1).map(|v| v.to_number() as i64);
+                    let len = j.len() as i64;
+                    let start = if start < 0 { (len + start).max(0) as usize } else { (start as usize).min(j.len()) };
+                    let end = match end {
+                        Some(e) if e < 0 => (len + e).max(0) as usize,
+                        Some(e) => (e as usize).min(j.len()),
+                        None => j.len(),
                     };
-                    if ay <= ci {
-                        Ok(JsValue::String(e[ay..ci].to_string()))
+                    if start <= end {
+                        Ok(JsValue::String(j[start..end].to_string()))
                     } else {
                         Ok(JsValue::String(String::new()))
                     }
                 } else { Ok(JsValue::String(String::new())) }
             }
             "String.replace" => {
-                if let Some(JsValue::String(e)) = afw.as_ref() {
-                    let from = n.fv().map(|p| p.to_string()).age();
-                    let wh = n.get(1).map(|p| p.to_string()).age();
-                    Ok(JsValue::String(e.zjr(&from, &wh, 1)))
+                if let Some(JsValue::String(j)) = receiver.as_ref() {
+                    let from = args.first().map(|v| v.to_string()).unwrap_or_default();
+                    let to = args.get(1).map(|v| v.to_string()).unwrap_or_default();
+                    Ok(JsValue::String(j.replacen(&from, &to, 1)))
                 } else { Ok(JsValue::String(String::new())) }
             }
             "String.split" => {
-                if let Some(JsValue::String(e)) = afw.as_ref() {
-                    let jol = n.fv().map(|p| p.to_string()).age();
-                    let ek: Vec<JsValue> = if jol.is_empty() {
-                        e.bw().map(|r| JsValue::String(r.to_string())).collect()
+                if let Some(JsValue::String(j)) = receiver.as_ref() {
+                    let fad = args.first().map(|v| v.to_string()).unwrap_or_default();
+                    let au: Vec<JsValue> = if fad.is_empty() {
+                        j.chars().map(|c| JsValue::String(c.to_string())).collect()
                     } else {
-                        e.adk(&jol).map(|ai| JsValue::String(ai.to_string())).collect()
+                        j.split(&fad).map(|aa| JsValue::String(aa.to_string())).collect()
                     };
-                    Ok(JsValue::U(ek))
-                } else { Ok(JsValue::U(Vec::new())) }
+                    Ok(JsValue::Array(au))
+                } else { Ok(JsValue::Array(Vec::new())) }
             }
             "String.charAt" => {
-                if let Some(JsValue::String(e)) = afw.as_ref() {
-                    let w = n.fv().map(|p| p.zo() as usize).unwrap_or(0);
-                    Ok(JsValue::String(e.bw().goc(w).map(|r| r.to_string()).age()))
+                if let Some(JsValue::String(j)) = receiver.as_ref() {
+                    let idx = args.first().map(|v| v.to_number() as usize).unwrap_or(0);
+                    Ok(JsValue::String(j.chars().nth(idx).map(|c| c.to_string()).unwrap_or_default()))
                 } else { Ok(JsValue::String(String::new())) }
             }
             "String.charCodeAt" => {
-                if let Some(JsValue::String(e)) = afw.as_ref() {
-                    let w = n.fv().map(|p| p.zo() as usize).unwrap_or(0);
-                    Ok(JsValue::L(e.bw().goc(w).map(|r| r as u32 as f64).unwrap_or(f64::Lx)))
-                } else { Ok(JsValue::L(f64::Lx)) }
+                if let Some(JsValue::String(j)) = receiver.as_ref() {
+                    let idx = args.first().map(|v| v.to_number() as usize).unwrap_or(0);
+                    Ok(JsValue::Number(j.chars().nth(idx).map(|c| c as u32 as f64).unwrap_or(f64::NAN)))
+                } else { Ok(JsValue::Number(f64::NAN)) }
             }
             "String.repeat" => {
-                if let Some(JsValue::String(e)) = afw.as_ref() {
-                    let az = n.fv().map(|p| p.zo() as usize).unwrap_or(0).v(10000);
-                    Ok(JsValue::String(e.afd(az)))
+                if let Some(JsValue::String(j)) = receiver.as_ref() {
+                    let count = args.first().map(|v| v.to_number() as usize).unwrap_or(0).min(10000);
+                    Ok(JsValue::String(j.repeat(count)))
                 } else { Ok(JsValue::String(String::new())) }
             }
             "String.padStart" => {
-                if let Some(JsValue::String(e)) = afw.as_ref() {
-                    let dwp = n.fv().map(|p| p.zo() as usize).unwrap_or(0);
-                    let ov = n.get(1).map(|p| p.to_string()).unwrap_or(" ".to_string());
-                    let mut result = e.clone();
-                    while result.len() < dwp { result = format!("{}{}", ov, result); }
-                    Ok(JsValue::String(result[result.len().ao(dwp)..].to_string()))
+                if let Some(JsValue::String(j)) = receiver.as_ref() {
+                    let bpi = args.first().map(|v| v.to_number() as usize).unwrap_or(0);
+                    let pad = args.get(1).map(|v| v.to_string()).unwrap_or(" ".to_string());
+                    let mut result = j.clone();
+                    while result.len() < bpi { result = format!("{}{}", pad, result); }
+                    Ok(JsValue::String(result[result.len().saturating_sub(bpi)..].to_string()))
                 } else { Ok(JsValue::String(String::new())) }
             }
             "String.padEnd" => {
-                if let Some(JsValue::String(e)) = afw.as_ref() {
-                    let dwp = n.fv().map(|p| p.zo() as usize).unwrap_or(0);
-                    let ov = n.get(1).map(|p| p.to_string()).unwrap_or(" ".to_string());
-                    let mut result = e.clone();
-                    while result.len() < dwp { result.t(&ov); }
-                    result.dmu(dwp);
+                if let Some(JsValue::String(j)) = receiver.as_ref() {
+                    let bpi = args.first().map(|v| v.to_number() as usize).unwrap_or(0);
+                    let pad = args.get(1).map(|v| v.to_string()).unwrap_or(" ".to_string());
+                    let mut result = j.clone();
+                    while result.len() < bpi { result.push_str(&pad); }
+                    result.truncate(bpi);
                     Ok(JsValue::String(result))
                 } else { Ok(JsValue::String(String::new())) }
             }
             "String.concat" => {
-                if let Some(JsValue::String(e)) = afw.as_ref() {
-                    let mut result = e.clone();
-                    for q in &n { result.t(&q.to_string()); }
+                if let Some(JsValue::String(j)) = receiver.as_ref() {
+                    let mut result = j.clone();
+                    for a in &args { result.push_str(&a.to_string()); }
                     Ok(JsValue::String(result))
                 } else { Ok(JsValue::String(String::new())) }
             }
-            "String.match" | "String.search" => Ok(JsValue::Gm), 
+            "String.match" | "String.search" => Ok(JsValue::Null), 
 
             
             "Number.toFixed" => {
-                if let Some(JsValue::L(bo)) = afw.as_ref() {
-                    let ird = n.fv().map(|p| p.zo() as usize).unwrap_or(0).v(20);
+                if let Some(JsValue::Number(ae)) = receiver.as_ref() {
+                    let eke = args.first().map(|v| v.to_number() as usize).unwrap_or(0).min(20);
                     
-                    let pv = libm::vke(10.0, ird as f64);
-                    let wae = jmv(*bo * pv) / pv;
-                    Ok(JsValue::String(format!("{:.prec$}", wae, zgd = ird)))
+                    let ha = libm::pow(10.0, eke as f64);
+                    let oic = round(*ae * ha) / ha;
+                    Ok(JsValue::String(format!("{:.prec$}", oic, prec = eke)))
                 } else { Ok(JsValue::String("NaN".to_string())) }
             }
             "Number.toString" => {
-                if let Some(JsValue::L(bo)) = afw.as_ref() {
-                    Ok(JsValue::String(format!("{}", bo)))
+                if let Some(JsValue::Number(ae)) = receiver.as_ref() {
+                    Ok(JsValue::String(format!("{}", ae)))
                 } else { Ok(JsValue::String(String::new())) }
             }
 
             
             "Array.push" => {
-                if let Some(JsValue::U(sy)) = afw.as_ref() {
-                    let mut fos = sy.clone();
-                    for q in n { fos.push(q); }
-                    let len = fos.len() as f64;
-                    Ok(JsValue::L(len))
-                } else { Ok(JsValue::L(0.0)) }
+                if let Some(JsValue::Array(ik)) = receiver.as_ref() {
+                    let mut cmz = ik.clone();
+                    for a in args { cmz.push(a); }
+                    let len = cmz.len() as f64;
+                    Ok(JsValue::Number(len))
+                } else { Ok(JsValue::Number(0.0)) }
             }
             "Array.pop" => {
-                if let Some(JsValue::U(sy)) = afw.as_ref() {
-                    let mut fos = sy.clone();
-                    Ok(fos.pop().unwrap_or(JsValue::Ba))
-                } else { Ok(JsValue::Ba) }
+                if let Some(JsValue::Array(ik)) = receiver.as_ref() {
+                    let mut cmz = ik.clone();
+                    Ok(cmz.pop().unwrap_or(JsValue::Undefined))
+                } else { Ok(JsValue::Undefined) }
             }
             "Array.shift" => {
-                if let Some(JsValue::U(sy)) = afw.as_ref() {
-                    if sy.is_empty() { return Ok(JsValue::Ba); }
-                    Ok(sy[0].clone())
-                } else { Ok(JsValue::Ba) }
+                if let Some(JsValue::Array(ik)) = receiver.as_ref() {
+                    if ik.is_empty() { return Ok(JsValue::Undefined); }
+                    Ok(ik[0].clone())
+                } else { Ok(JsValue::Undefined) }
             }
             "Array.unshift" => {
-                if let Some(JsValue::U(sy)) = afw.as_ref() {
-                    Ok(JsValue::L((sy.len() + n.len()) as f64))
-                } else { Ok(JsValue::L(0.0)) }
+                if let Some(JsValue::Array(ik)) = receiver.as_ref() {
+                    Ok(JsValue::Number((ik.len() + args.len()) as f64))
+                } else { Ok(JsValue::Number(0.0)) }
             }
             "Array.join" => {
-                if let Some(JsValue::U(sy)) = afw.as_ref() {
-                    let jol = n.fv().map(|p| p.to_string()).unwrap_or(",".to_string());
-                    let ek: Vec<String> = sy.iter().map(|p| p.to_string()).collect();
-                    Ok(JsValue::String(ek.rr(&jol)))
+                if let Some(JsValue::Array(ik)) = receiver.as_ref() {
+                    let fad = args.first().map(|v| v.to_string()).unwrap_or(",".to_string());
+                    let au: Vec<String> = ik.iter().map(|v| v.to_string()).collect();
+                    Ok(JsValue::String(au.join(&fad)))
                 } else { Ok(JsValue::String(String::new())) }
             }
             "Array.reverse" => {
-                if let Some(JsValue::U(sy)) = afw.as_ref() {
-                    let mut fos = sy.clone();
-                    fos.dbh();
-                    Ok(JsValue::U(fos))
-                } else { Ok(JsValue::U(Vec::new())) }
+                if let Some(JsValue::Array(ik)) = receiver.as_ref() {
+                    let mut cmz = ik.clone();
+                    cmz.reverse();
+                    Ok(JsValue::Array(cmz))
+                } else { Ok(JsValue::Array(Vec::new())) }
             }
             "Array.indexOf" => {
-                if let Some(JsValue::U(sy)) = afw.as_ref() {
-                    let anw = n.fv().abn().unwrap_or(JsValue::Ba);
-                    let mcv = anw.to_string();
-                    for (a, item) in sy.iter().cf() {
-                        if item.to_string() == mcv { return Ok(JsValue::L(a as f64)); }
+                if let Some(JsValue::Array(ik)) = receiver.as_ref() {
+                    let search = args.first().cloned().unwrap_or(JsValue::Undefined);
+                    let gte = search.to_string();
+                    for (i, item) in ik.iter().enumerate() {
+                        if item.to_string() == gte { return Ok(JsValue::Number(i as f64)); }
                     }
-                    Ok(JsValue::L(-1.0))
-                } else { Ok(JsValue::L(-1.0)) }
+                    Ok(JsValue::Number(-1.0))
+                } else { Ok(JsValue::Number(-1.0)) }
             }
             "Array.includes" => {
-                if let Some(JsValue::U(sy)) = afw.as_ref() {
-                    let anw = n.fv().abn().unwrap_or(JsValue::Ba);
-                    let mcv = anw.to_string();
-                    Ok(JsValue::Cb(sy.iter().any(|p| p.to_string() == mcv)))
-                } else { Ok(JsValue::Cb(false)) }
+                if let Some(JsValue::Array(ik)) = receiver.as_ref() {
+                    let search = args.first().cloned().unwrap_or(JsValue::Undefined);
+                    let gte = search.to_string();
+                    Ok(JsValue::Boolean(ik.iter().any(|v| v.to_string() == gte)))
+                } else { Ok(JsValue::Boolean(false)) }
             }
             "Array.slice" => {
-                if let Some(JsValue::U(sy)) = afw.as_ref() {
-                    let ay = n.fv().map(|p| p.zo() as i64).unwrap_or(0);
-                    let ci = n.get(1).map(|p| p.zo() as i64);
-                    let len = sy.len() as i64;
-                    let ay = if ay < 0 { (len + ay).am(0) as usize } else { (ay as usize).v(sy.len()) };
-                    let ci = match ci {
-                        Some(aa) if aa < 0 => (len + aa).am(0) as usize,
-                        Some(aa) => (aa as usize).v(sy.len()),
-                        None => sy.len(),
+                if let Some(JsValue::Array(ik)) = receiver.as_ref() {
+                    let start = args.first().map(|v| v.to_number() as i64).unwrap_or(0);
+                    let end = args.get(1).map(|v| v.to_number() as i64);
+                    let len = ik.len() as i64;
+                    let start = if start < 0 { (len + start).max(0) as usize } else { (start as usize).min(ik.len()) };
+                    let end = match end {
+                        Some(e) if e < 0 => (len + e).max(0) as usize,
+                        Some(e) => (e as usize).min(ik.len()),
+                        None => ik.len(),
                     };
-                    Ok(JsValue::U(sy[ay..ci].ip()))
-                } else { Ok(JsValue::U(Vec::new())) }
+                    Ok(JsValue::Array(ik[start..end].to_vec()))
+                } else { Ok(JsValue::Array(Vec::new())) }
             }
             "Array.concat" => {
-                if let Some(JsValue::U(sy)) = afw.as_ref() {
-                    let mut result = sy.clone();
-                    for q in n {
-                        if let JsValue::U(gq) = q { result.lg(gq); }
-                        else { result.push(q); }
+                if let Some(JsValue::Array(ik)) = receiver.as_ref() {
+                    let mut result = ik.clone();
+                    for a in args {
+                        if let JsValue::Array(other) = a { result.extend(other); }
+                        else { result.push(a); }
                     }
-                    Ok(JsValue::U(result))
-                } else { Ok(JsValue::U(Vec::new())) }
+                    Ok(JsValue::Array(result))
+                } else { Ok(JsValue::Array(Vec::new())) }
             }
             "Array.map" | "Array.filter" | "Array.forEach" | "Array.find" |
             "Array.some" | "Array.every" | "Array.sort" | "Array.fill" |
             "Array.flat" | "Array.reduce" => {
                 
-                if let Some(JsValue::U(sy)) = afw.as_ref() {
-                    Ok(JsValue::U(sy.clone()))
-                } else { Ok(JsValue::U(Vec::new())) }
+                if let Some(JsValue::Array(ik)) = receiver.as_ref() {
+                    Ok(JsValue::Array(ik.clone()))
+                } else { Ok(JsValue::Array(Vec::new())) }
             }
 
-            _ => Err(format!("Unknown native function: {}", j)),
+            _ => Err(format!("Unknown native function: {}", name)),
         }
     }
 
     
-    fn lso(&self, e: &str) -> JsValue {
-        let e = e.em();
-        if e.is_empty() { return JsValue::Gm; }
-        match e.as_bytes()[0] {
+    fn parse_json(&self, j: &str) -> JsValue {
+        let j = j.trim();
+        if j.is_empty() { return JsValue::Null; }
+        match j.as_bytes()[0] {
             b'"' => {
                 
-                if e.len() >= 2 && e.pp('"') {
-                    JsValue::String(e[1..e.len()-1].to_string())
-                } else { JsValue::Gm }
+                if j.len() >= 2 && j.ends_with('"') {
+                    JsValue::String(j[1..j.len()-1].to_string())
+                } else { JsValue::Null }
             }
             b'{' => {
                 
                 let mut map = BTreeMap::new();
-                let ff = &e[1..e.len().ao(1)];
-                let mut eo = 0i32;
-                let mut ay = 0;
-                let mut ch = Vec::new();
-                for (a, r) in ff.bw().cf() {
-                    match r {
-                        '{' | '[' => eo += 1,
-                        '}' | ']' => eo -= 1,
-                        ',' if eo == 0 => { ch.push(&ff[ay..a]); ay = a + 1; }
+                let inner = &j[1..j.len().saturating_sub(1)];
+                let mut depth = 0i32;
+                let mut start = 0;
+                let mut entries = Vec::new();
+                for (i, c) in inner.chars().enumerate() {
+                    match c {
+                        '{' | '[' => depth += 1,
+                        '}' | ']' => depth -= 1,
+                        ',' if depth == 0 => { entries.push(&inner[start..i]); start = i + 1; }
                         _ => {}
                     }
                 }
-                if ay < ff.len() { ch.push(&ff[ay..]); }
-                for bt in ch {
-                    let bt = bt.em();
-                    if let Some(cpj) = bt.du(':') {
-                        let bs = bt[..cpj].em().dcz('"');
-                        let ap = bt[cpj+1..].em();
-                        map.insert(bs.to_string(), self.lso(ap));
+                if start < inner.len() { entries.push(&inner[start..]); }
+                for entry in entries {
+                    let entry = entry.trim();
+                    if let Some(ald) = entry.find(':') {
+                        let key = entry[..ald].trim().trim_matches('"');
+                        let val = entry[ald+1..].trim();
+                        map.insert(key.to_string(), self.parse_json(val));
                     }
                 }
-                JsValue::Cw(map)
+                JsValue::Object(map)
             }
             b'[' => {
                 
-                let ff = &e[1..e.len().ao(1)];
-                let mut eo = 0i32;
-                let mut ay = 0;
-                let mut pj = Vec::new();
-                for (a, r) in ff.bw().cf() {
-                    match r {
-                        '{' | '[' => eo += 1,
-                        '}' | ']' => eo -= 1,
-                        ',' if eo == 0 => { pj.push(&ff[ay..a]); ay = a + 1; }
+                let inner = &j[1..j.len().saturating_sub(1)];
+                let mut depth = 0i32;
+                let mut start = 0;
+                let mut items = Vec::new();
+                for (i, c) in inner.chars().enumerate() {
+                    match c {
+                        '{' | '[' => depth += 1,
+                        '}' | ']' => depth -= 1,
+                        ',' if depth == 0 => { items.push(&inner[start..i]); start = i + 1; }
                         _ => {}
                     }
                 }
-                if !ff.em().is_empty() { pj.push(&ff[ay..]); }
-                JsValue::U(pj.iter().map(|a| self.lso(a.em())).collect())
+                if !inner.trim().is_empty() { items.push(&inner[start..]); }
+                JsValue::Array(items.iter().map(|i| self.parse_json(i.trim())).collect())
             }
-            b't' => JsValue::Cb(true),
-            b'f' => JsValue::Cb(false),
-            b'n' => JsValue::Gm,
+            b't' => JsValue::Boolean(true),
+            b'f' => JsValue::Boolean(false),
+            b'n' => JsValue::Null,
             _ => {
                 
-                if let Ok(bo) = e.parse::<f64>() {
-                    JsValue::L(bo)
-                } else { JsValue::Gm }
+                if let Ok(ae) = j.parse::<f64>() {
+                    JsValue::Number(ae)
+                } else { JsValue::Null }
             }
         }
     }
 
     
-    fn mhu(&self, ap: &JsValue) -> String {
-        match ap {
-            JsValue::Ba | JsValue::Gm => "null".to_string(),
-            JsValue::Cb(o) => if *o { "true" } else { "false" }.to_string(),
-            JsValue::L(bo) => format!("{}", bo),
-            JsValue::String(e) => format!("\"{}\"", e.replace('\\', "\\\\").replace('"', "\\\"")),
-            JsValue::U(sy) => {
-                let pj: Vec<String> = sy.iter().map(|p| self.mhu(p)).collect();
-                format!("[{}]", pj.rr(","))
+    fn stringify_json(&self, val: &JsValue) -> String {
+        match val {
+            JsValue::Undefined | JsValue::Null => "null".to_string(),
+            JsValue::Boolean(b) => if *b { "true" } else { "false" }.to_string(),
+            JsValue::Number(ae) => format!("{}", ae),
+            JsValue::String(j) => format!("\"{}\"", j.replace('\\', "\\\\").replace('"', "\\\"")),
+            JsValue::Array(ik) => {
+                let items: Vec<String> = ik.iter().map(|v| self.stringify_json(v)).collect();
+                format!("[{}]", items.join(","))
             }
-            JsValue::Cw(map) => {
-                let ch: Vec<String> = map.iter()
-                    .map(|(eh, p)| format!("\"{}\":{}", eh, self.mhu(p)))
+            JsValue::Object(map) => {
+                let entries: Vec<String> = map.iter()
+                    .map(|(k, v)| format!("\"{}\":{}", k, self.stringify_json(v)))
                     .collect();
-                format!("{{{}}}", ch.rr(","))
+                format!("{{{}}}", entries.join(","))
             }
-            JsValue::Bs(..) | JsValue::H(_) => "null".to_string(),
+            JsValue::Aq(..) | JsValue::NativeFunction(_) => "null".to_string(),
         }
     }
 }
@@ -1055,133 +1055,133 @@ impl JsContext {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
-    L(f64),
+    Number(f64),
     String(String),
-    Lp(String),
-    Bx(String),
-    Fb(String),
-    Da(char),
-    Im,
+    Identifier(String),
+    Keyword(String),
+    Operator(String),
+    Punctuation(char),
+    Eof,
 }
 
-fn fwz(aj: &str) -> Result<Vec<Token>, String> {
-    let mut eb = Vec::new();
-    let bw: Vec<char> = aj.bw().collect();
-    let mut a = 0;
+fn crv(code: &str) -> Result<Vec<Token>, String> {
+    let mut tokens = Vec::new();
+    let chars: Vec<char> = code.chars().collect();
+    let mut i = 0;
     
-    while a < bw.len() {
-        let r = bw[a];
+    while i < chars.len() {
+        let c = chars[i];
         
         
-        if r.fme() {
-            a += 1;
+        if c.is_whitespace() {
+            i += 1;
             continue;
         }
         
         
-        if r == '/' && a + 1 < bw.len() {
-            if bw[a + 1] == '/' {
+        if c == '/' && i + 1 < chars.len() {
+            if chars[i + 1] == '/' {
                 
-                while a < bw.len() && bw[a] != '\n' {
-                    a += 1;
+                while i < chars.len() && chars[i] != '\n' {
+                    i += 1;
                 }
                 continue;
             }
-            if bw[a + 1] == '*' {
+            if chars[i + 1] == '*' {
                 
-                a += 2;
-                while a + 1 < bw.len() && !(bw[a] == '*' && bw[a + 1] == '/') {
-                    a += 1;
+                i += 2;
+                while i + 1 < chars.len() && !(chars[i] == '*' && chars[i + 1] == '/') {
+                    i += 1;
                 }
-                a += 2;
+                i += 2;
                 continue;
             }
         }
         
         
-        if r.atb() || (r == '.' && a + 1 < bw.len() && bw[a + 1].atb()) {
-            let ay = a;
-            while a < bw.len() && (bw[a].atb() || bw[a] == '.') {
-                a += 1;
+        if c.is_ascii_digit() || (c == '.' && i + 1 < chars.len() && chars[i + 1].is_ascii_digit()) {
+            let start = i;
+            while i < chars.len() && (chars[i].is_ascii_digit() || chars[i] == '.') {
+                i += 1;
             }
-            let ajh: String = bw[ay..a].iter().collect();
-            let num: f64 = ajh.parse().unwrap_or(0.0);
-            eb.push(Token::L(num));
+            let rw: String = chars[start..i].iter().collect();
+            let num: f64 = rw.parse().unwrap_or(0.0);
+            tokens.push(Token::Number(num));
             continue;
         }
         
         
-        if r == '"' || r == '\'' {
-            let cgw = r;
-            a += 1;
-            let ay = a;
-            while a < bw.len() && bw[a] != cgw {
-                if bw[a] == '\\' && a + 1 < bw.len() {
-                    a += 2;
+        if c == '"' || c == '\'' {
+            let arw = c;
+            i += 1;
+            let start = i;
+            while i < chars.len() && chars[i] != arw {
+                if chars[i] == '\\' && i + 1 < chars.len() {
+                    i += 2;
                 } else {
-                    a += 1;
+                    i += 1;
                 }
             }
-            let e: String = bw[ay..a].iter().collect();
-            eb.push(Token::String(e));
-            a += 1; 
+            let j: String = chars[start..i].iter().collect();
+            tokens.push(Token::String(j));
+            i += 1; 
             continue;
         }
         
         
-        if r.jaz() || r == '_' || r == '$' {
-            let ay = a;
-            while a < bw.len() && (bw[a].etb() || bw[a] == '_' || bw[a] == '$') {
-                a += 1;
+        if c.is_alphabetic() || c == '_' || c == '$' {
+            let start = i;
+            while i < chars.len() && (chars[i].is_alphanumeric() || chars[i] == '_' || chars[i] == '$') {
+                i += 1;
             }
-            let od: String = bw[ay..a].iter().collect();
-            let fmj = ["var", "let", "const", "function", "if", "else", "for", "while", 
+            let fx: String = chars[start..i].iter().collect();
+            let clr = ["var", "let", "const", "function", "if", "else", "for", "while", 
                           "return", "true", "false", "null", "undefined", "typeof", "new"];
-            if fmj.contains(&od.as_str()) {
-                eb.push(Token::Bx(od));
+            if clr.contains(&fx.as_str()) {
+                tokens.push(Token::Keyword(fx));
             } else {
-                eb.push(Token::Lp(od));
+                tokens.push(Token::Identifier(fx));
             }
             continue;
         }
         
         
-        let pwn: String = bw[a..].iter().take(2).collect();
-        let psy: String = bw[a..].iter().take(3).collect();
+        let jov: String = chars[i..].iter().take(2).collect();
+        let jmi: String = chars[i..].iter().take(3).collect();
         
-        if ["===", "!=="].contains(&psy.as_str()) {
-            eb.push(Token::Fb(psy));
-            a += 3;
+        if ["===", "!=="].contains(&jmi.as_str()) {
+            tokens.push(Token::Operator(jmi));
+            i += 3;
             continue;
         }
         
         if ["==", "!=", "<=", ">=", "&&", "||", "++", "--", "+=", "-=", "*=", "/=", "=>"]
-            .contains(&pwn.as_str()) {
-            eb.push(Token::Fb(pwn));
-            a += 2;
+            .contains(&jov.as_str()) {
+            tokens.push(Token::Operator(jov));
+            i += 2;
             continue;
         }
         
         
-        if "+-*/%<>=!&|?:".contains(r) {
-            eb.push(Token::Fb(r.to_string()));
-            a += 1;
+        if "+-*/%<>=!&|?:".contains(c) {
+            tokens.push(Token::Operator(c.to_string()));
+            i += 1;
             continue;
         }
         
         
-        if "{}[]();,.".contains(r) {
-            eb.push(Token::Da(r));
-            a += 1;
+        if "{}[]();,.".contains(c) {
+            tokens.push(Token::Punctuation(c));
+            i += 1;
             continue;
         }
         
         
-        a += 1;
+        i += 1;
     }
     
-    eb.push(Token::Im);
-    Ok(eb)
+    tokens.push(Token::Eof);
+    Ok(tokens)
 }
 
 
@@ -1190,364 +1190,364 @@ fn fwz(aj: &str) -> Result<Vec<Token>, String> {
 
 #[derive(Debug, Clone)]
 pub enum Statement {
-    Bvr(String, Option<Expr>),
+    Var(String, Option<Expr>),
     Expr(Expr),
-    Gx(Expr, Vec<Statement>, Option<Vec<Statement>>),
-    La(Expr, Vec<Statement>),
-    Ll(Option<Box<Statement>>, Option<Expr>, Option<Expr>, Vec<Statement>),
-    Hd(Option<Expr>),
-    Bs(String, Vec<String>, String),
-    Dj(Vec<Statement>),
+    If(Expr, Vec<Statement>, Option<Vec<Statement>>),
+    While(Expr, Vec<Statement>),
+    For(Option<Box<Statement>>, Option<Expr>, Option<Expr>, Vec<Statement>),
+    Return(Option<Expr>),
+    Aq(String, Vec<String>, String),
+    Bl(Vec<Statement>),
 }
 
 #[derive(Debug, Clone)]
 pub enum Expr {
-    Th(JsValue),
-    Lp(String),
-    Rl(String, Box<Expr>, Box<Expr>),
-    Baf(String, Box<Expr>),
-    En(Box<Expr>, Vec<Expr>),
-    Avl(Box<Expr>, String),
+    Literal(JsValue),
+    Identifier(String),
+    Binary(String, Box<Expr>, Box<Expr>),
+    Unary(String, Box<Expr>),
+    Call(Box<Expr>, Vec<Expr>),
+    Member(Box<Expr>, String),
     Index(Box<Expr>, Box<Expr>),
-    U(Vec<Expr>),
-    Cw(Vec<(String, Expr)>),
-    Vk(String, Box<Expr>),
-    Bud(Box<Expr>, Box<Expr>, Box<Expr>),
+    Array(Vec<Expr>),
+    Object(Vec<(String, Expr)>),
+    Assign(String, Box<Expr>),
+    Ternary(Box<Expr>, Box<Expr>, Box<Expr>),
 }
 
-fn parse(eb: &[Token]) -> Result<Vec<Statement>, String> {
-    let mut parser = Parser { eb, u: 0 };
-    parser.lsw()
+fn parse(tokens: &[Token]) -> Result<Vec<Statement>, String> {
+    let mut parser = Parser { tokens, pos: 0 };
+    parser.parse_statements()
 }
 
 struct Parser<'a> {
-    eb: &'a [Token],
-    u: usize,
+    tokens: &'a [Token],
+    pos: usize,
 }
 
 impl<'a> Parser<'a> {
-    fn cv(&self) -> &Token {
-        self.eb.get(self.u).unwrap_or(&Token::Im)
+    fn current(&self) -> &Token {
+        self.tokens.get(self.pos).unwrap_or(&Token::Eof)
     }
     
-    fn nb(&mut self) {
-        if self.u < self.eb.len() {
-            self.u += 1;
+    fn advance(&mut self) {
+        if self.pos < self.tokens.len() {
+            self.pos += 1;
         }
     }
     
-    fn cem(&mut self, r: char) -> Result<(), String> {
-        if let Token::Da(ai) = self.cv() {
-            if *ai == r {
-                self.nb();
+    fn expect_punct(&mut self, c: char) -> Result<(), String> {
+        if let Token::Punctuation(aa) = self.current() {
+            if *aa == c {
+                self.advance();
                 return Ok(());
             }
         }
-        Err(format!("Expected '{}'", r))
+        Err(format!("Expected '{}'", c))
     }
     
-    fn lsw(&mut self) -> Result<Vec<Statement>, String> {
-        let mut boq = Vec::new();
+    fn parse_statements(&mut self) -> Result<Vec<Statement>, String> {
+        let mut stmts = Vec::new();
         
-        while !oh!(self.cv(), Token::Im | Token::Da('}')) {
-            boq.push(self.oun()?);
+        while !matches!(self.current(), Token::Eof | Token::Punctuation('}')) {
+            stmts.push(self.parse_statement()?);
         }
         
-        Ok(boq)
+        Ok(stmts)
     }
     
-    fn oun(&mut self) -> Result<Statement, String> {
-        match self.cv() {
-            Token::Bx(yo) if yo == "var" || yo == "let" || yo == "const" => {
-                self.nb();
-                if let Token::Lp(j) = self.cv().clone() {
-                    self.nb();
-                    let bn = if let Token::Fb(op) = self.cv() {
+    fn parse_statement(&mut self) -> Result<Statement, String> {
+        match self.current() {
+            Token::Keyword(li) if li == "var" || li == "let" || li == "const" => {
+                self.advance();
+                if let Token::Identifier(name) = self.current().clone() {
+                    self.advance();
+                    let value = if let Token::Operator(op) = self.current() {
                         if op == "=" {
-                            self.nb();
-                            Some(self.cgk()?)
+                            self.advance();
+                            Some(self.parse_expression()?)
                         } else {
                             None
                         }
                     } else {
                         None
                     };
-                    if let Token::Da(';') = self.cv() {
-                        self.nb();
+                    if let Token::Punctuation(';') = self.current() {
+                        self.advance();
                     }
-                    Ok(Statement::Bvr(j, bn))
+                    Ok(Statement::Var(name, value))
                 } else {
                     Err("Expected identifier after var".to_string())
                 }
             }
-            Token::Bx(yo) if yo == "if" => {
-                self.nb();
-                self.cem('(')?;
-                let mo = self.cgk()?;
-                self.cem(')')?;
-                let cne = self.lsf()?;
-                let ckc = if let Token::Bx(yo) = self.cv() {
-                    if yo == "else" {
-                        self.nb();
-                        Some(self.lsf()?)
+            Token::Keyword(li) if li == "if" => {
+                self.advance();
+                self.expect_punct('(')?;
+                let fc = self.parse_expression()?;
+                self.expect_punct(')')?;
+                let avj = self.parse_block_or_statement()?;
+                let atp = if let Token::Keyword(li) = self.current() {
+                    if li == "else" {
+                        self.advance();
+                        Some(self.parse_block_or_statement()?)
                     } else {
                         None
                     }
                 } else {
                     None
                 };
-                Ok(Statement::Gx(mo, cne, ckc))
+                Ok(Statement::If(fc, avj, atp))
             }
-            Token::Bx(yo) if yo == "while" => {
-                self.nb();
-                self.cem('(')?;
-                let mo = self.cgk()?;
-                self.cem(')')?;
-                let gj = self.lsf()?;
-                Ok(Statement::La(mo, gj))
+            Token::Keyword(li) if li == "while" => {
+                self.advance();
+                self.expect_punct('(')?;
+                let fc = self.parse_expression()?;
+                self.expect_punct(')')?;
+                let body = self.parse_block_or_statement()?;
+                Ok(Statement::While(fc, body))
             }
-            Token::Bx(yo) if yo == "return" => {
-                self.nb();
-                let bn = if let Token::Da(';') | Token::Da('}') = self.cv() {
+            Token::Keyword(li) if li == "return" => {
+                self.advance();
+                let value = if let Token::Punctuation(';') | Token::Punctuation('}') = self.current() {
                     None
                 } else {
-                    Some(self.cgk()?)
+                    Some(self.parse_expression()?)
                 };
-                if let Token::Da(';') = self.cv() {
-                    self.nb();
+                if let Token::Punctuation(';') = self.current() {
+                    self.advance();
                 }
-                Ok(Statement::Hd(bn))
+                Ok(Statement::Return(value))
             }
-            Token::Bx(yo) if yo == "function" => {
-                self.nb();
-                if let Token::Lp(j) = self.cv().clone() {
-                    self.nb();
-                    self.cem('(')?;
-                    let oi = self.lss()?;
-                    self.cem(')')?;
-                    self.cem('{')?;
+            Token::Keyword(li) if li == "function" => {
+                self.advance();
+                if let Token::Identifier(name) = self.current().clone() {
+                    self.advance();
+                    self.expect_punct('(')?;
+                    let params = self.parse_params()?;
+                    self.expect_punct(')')?;
+                    self.expect_punct('{')?;
                     
-                    let gj = self.vbx()?;
-                    Ok(Statement::Bs(j, oi, gj))
+                    let body = self.parse_block_body()?;
+                    Ok(Statement::Aq(name, params, body))
                 } else {
                     Err("Expected function name".to_string())
                 }
             }
-            Token::Da('{') => {
-                self.nb();
-                let boq = self.lsw()?;
-                self.cem('}')?;
-                Ok(Statement::Dj(boq))
+            Token::Punctuation('{') => {
+                self.advance();
+                let stmts = self.parse_statements()?;
+                self.expect_punct('}')?;
+                Ok(Statement::Bl(stmts))
             }
             _ => {
-                let expr = self.cgk()?;
-                if let Token::Da(';') = self.cv() {
-                    self.nb();
+                let expr = self.parse_expression()?;
+                if let Token::Punctuation(';') = self.current() {
+                    self.advance();
                 }
                 Ok(Statement::Expr(expr))
             }
         }
     }
     
-    fn lsf(&mut self) -> Result<Vec<Statement>, String> {
-        if let Token::Da('{') = self.cv() {
-            self.nb();
-            let boq = self.lsw()?;
-            self.cem('}')?;
-            Ok(boq)
+    fn parse_block_or_statement(&mut self) -> Result<Vec<Statement>, String> {
+        if let Token::Punctuation('{') = self.current() {
+            self.advance();
+            let stmts = self.parse_statements()?;
+            self.expect_punct('}')?;
+            Ok(stmts)
         } else {
-            Ok(vec![self.oun()?])
+            Ok(vec![self.parse_statement()?])
         }
     }
     
-    fn vbx(&mut self) -> Result<String, String> {
+    fn parse_block_body(&mut self) -> Result<String, String> {
         
-        let mut eo = 1;
-        let ay = self.u;
-        while eo > 0 && !oh!(self.cv(), Token::Im) {
-            match self.cv() {
-                Token::Da('{') => eo += 1,
-                Token::Da('}') => eo -= 1,
+        let mut depth = 1;
+        let start = self.pos;
+        while depth > 0 && !matches!(self.current(), Token::Eof) {
+            match self.current() {
+                Token::Punctuation('{') => depth += 1,
+                Token::Punctuation('}') => depth -= 1,
                 _ => {}
             }
-            if eo > 0 {
-                self.nb();
+            if depth > 0 {
+                self.advance();
             }
         }
-        self.nb(); 
+        self.advance(); 
         Ok(String::new()) 
     }
     
-    fn lss(&mut self) -> Result<Vec<String>, String> {
-        let mut oi = Vec::new();
-        while let Token::Lp(j) = self.cv().clone() {
-            oi.push(j);
-            self.nb();
-            if let Token::Da(',') = self.cv() {
-                self.nb();
+    fn parse_params(&mut self) -> Result<Vec<String>, String> {
+        let mut params = Vec::new();
+        while let Token::Identifier(name) = self.current().clone() {
+            params.push(name);
+            self.advance();
+            if let Token::Punctuation(',') = self.current() {
+                self.advance();
             } else {
                 break;
             }
         }
-        Ok(oi)
+        Ok(params)
     }
     
-    fn cgk(&mut self) -> Result<Expr, String> {
-        self.veb()
+    fn parse_expression(&mut self) -> Result<Expr, String> {
+        self.parse_ternary()
     }
     
-    fn veb(&mut self) -> Result<Expr, String> {
-        let mo = self.lsr()?;
-        if let Token::Fb(op) = self.cv() {
+    fn parse_ternary(&mut self) -> Result<Expr, String> {
+        let fc = self.parse_or()?;
+        if let Token::Operator(op) = self.current() {
             if op == "?" {
-                self.nb();
-                let mkp = self.cgk()?;
-                if let Token::Fb(op) = self.cv() {
+                self.advance();
+                let gyn = self.parse_expression()?;
+                if let Token::Operator(op) = self.current() {
                     if op == ":" {
-                        self.nb();
-                        let ksz = self.cgk()?;
-                        return Ok(Expr::Bud(Box::new(mo), Box::new(mkp), Box::new(ksz)));
+                        self.advance();
+                        let fuh = self.parse_expression()?;
+                        return Ok(Expr::Ternary(Box::new(fc), Box::new(gyn), Box::new(fuh)));
                     }
                 }
             }
         }
-        Ok(mo)
+        Ok(fc)
     }
     
-    fn lsr(&mut self) -> Result<Expr, String> {
-        let mut fd = self.hui()?;
-        while let Token::Fb(op) = self.cv() {
+    fn parse_or(&mut self) -> Result<Expr, String> {
+        let mut left = self.parse_and()?;
+        while let Token::Operator(op) = self.current() {
             if op == "||" {
                 let op = op.clone();
-                self.nb();
-                let hw = self.hui()?;
-                fd = Expr::Rl(op, Box::new(fd), Box::new(hw));
+                self.advance();
+                let right = self.parse_and()?;
+                left = Expr::Binary(op, Box::new(left), Box::new(right));
             } else {
                 break;
             }
         }
-        Ok(fd)
+        Ok(left)
     }
     
-    fn hui(&mut self) -> Result<Expr, String> {
-        let mut fd = self.oug()?;
-        while let Token::Fb(op) = self.cv() {
+    fn parse_and(&mut self) -> Result<Expr, String> {
+        let mut left = self.parse_equality()?;
+        while let Token::Operator(op) = self.current() {
             if op == "&&" {
                 let op = op.clone();
-                self.nb();
-                let hw = self.oug()?;
-                fd = Expr::Rl(op, Box::new(fd), Box::new(hw));
+                self.advance();
+                let right = self.parse_equality()?;
+                left = Expr::Binary(op, Box::new(left), Box::new(right));
             } else {
                 break;
             }
         }
-        Ok(fd)
+        Ok(left)
     }
     
-    fn oug(&mut self) -> Result<Expr, String> {
-        let mut fd = self.huj()?;
-        while let Token::Fb(op) = self.cv() {
+    fn parse_equality(&mut self) -> Result<Expr, String> {
+        let mut left = self.parse_comparison()?;
+        while let Token::Operator(op) = self.current() {
             if op == "==" || op == "!=" || op == "===" || op == "!==" {
                 let op = op.clone();
-                self.nb();
-                let hw = self.huj()?;
-                fd = Expr::Rl(op, Box::new(fd), Box::new(hw));
+                self.advance();
+                let right = self.parse_comparison()?;
+                left = Expr::Binary(op, Box::new(left), Box::new(right));
             } else {
                 break;
             }
         }
-        Ok(fd)
+        Ok(left)
     }
     
-    fn huj(&mut self) -> Result<Expr, String> {
-        let mut fd = self.got()?;
-        while let Token::Fb(op) = self.cv() {
+    fn parse_comparison(&mut self) -> Result<Expr, String> {
+        let mut left = self.parse_additive()?;
+        while let Token::Operator(op) = self.current() {
             if op == "<" || op == ">" || op == "<=" || op == ">=" {
                 let op = op.clone();
-                self.nb();
-                let hw = self.got()?;
-                fd = Expr::Rl(op, Box::new(fd), Box::new(hw));
+                self.advance();
+                let right = self.parse_additive()?;
+                left = Expr::Binary(op, Box::new(left), Box::new(right));
             } else {
                 break;
             }
         }
-        Ok(fd)
+        Ok(left)
     }
     
-    fn got(&mut self) -> Result<Expr, String> {
-        let mut fd = self.huk()?;
-        while let Token::Fb(op) = self.cv() {
+    fn parse_additive(&mut self) -> Result<Expr, String> {
+        let mut left = self.parse_multiplicative()?;
+        while let Token::Operator(op) = self.current() {
             if op == "+" || op == "-" {
                 let op = op.clone();
-                self.nb();
-                let hw = self.huk()?;
-                fd = Expr::Rl(op, Box::new(fd), Box::new(hw));
+                self.advance();
+                let right = self.parse_multiplicative()?;
+                left = Expr::Binary(op, Box::new(left), Box::new(right));
             } else {
                 break;
             }
         }
-        Ok(fd)
+        Ok(left)
     }
     
-    fn huk(&mut self) -> Result<Expr, String> {
-        let mut fd = self.fqk()?;
-        while let Token::Fb(op) = self.cv() {
+    fn parse_multiplicative(&mut self) -> Result<Expr, String> {
+        let mut left = self.parse_unary()?;
+        while let Token::Operator(op) = self.current() {
             if op == "*" || op == "/" || op == "%" {
                 let op = op.clone();
-                self.nb();
-                let hw = self.fqk()?;
-                fd = Expr::Rl(op, Box::new(fd), Box::new(hw));
+                self.advance();
+                let right = self.parse_unary()?;
+                left = Expr::Binary(op, Box::new(left), Box::new(right));
             } else {
                 break;
             }
         }
-        Ok(fd)
+        Ok(left)
     }
     
-    fn fqk(&mut self) -> Result<Expr, String> {
-        if let Token::Fb(op) = self.cv() {
+    fn parse_unary(&mut self) -> Result<Expr, String> {
+        if let Token::Operator(op) = self.current() {
             if op == "!" || op == "-" || op == "+" {
                 let op = op.clone();
-                self.nb();
-                let htq = self.fqk()?;
-                return Ok(Expr::Baf(op, Box::new(htq)));
+                self.advance();
+                let dvw = self.parse_unary()?;
+                return Ok(Expr::Unary(op, Box::new(dvw)));
             }
         }
-        if let Token::Bx(yo) = self.cv() {
-            if yo == "typeof" {
-                self.nb();
-                let htq = self.fqk()?;
-                return Ok(Expr::Baf("typeof".to_string(), Box::new(htq)));
+        if let Token::Keyword(li) = self.current() {
+            if li == "typeof" {
+                self.advance();
+                let dvw = self.parse_unary()?;
+                return Ok(Expr::Unary("typeof".to_string(), Box::new(dvw)));
             }
         }
-        self.hum()
+        self.parse_postfix()
     }
     
-    fn hum(&mut self) -> Result<Expr, String> {
-        let mut expr = self.lsu()?;
+    fn parse_postfix(&mut self) -> Result<Expr, String> {
+        let mut expr = self.parse_primary()?;
         
         loop {
-            match self.cv() {
-                Token::Da('.') => {
-                    self.nb();
-                    if let Token::Lp(frl) = self.cv().clone() {
-                        self.nb();
-                        expr = Expr::Avl(Box::new(expr), frl);
+            match self.current() {
+                Token::Punctuation('.') => {
+                    self.advance();
+                    if let Token::Identifier(prop) = self.current().clone() {
+                        self.advance();
+                        expr = Expr::Member(Box::new(expr), prop);
                     } else {
                         break;
                     }
                 }
-                Token::Da('[') => {
-                    self.nb();
-                    let index = self.cgk()?;
-                    self.cem(']')?;
+                Token::Punctuation('[') => {
+                    self.advance();
+                    let index = self.parse_expression()?;
+                    self.expect_punct(']')?;
                     expr = Expr::Index(Box::new(expr), Box::new(index));
                 }
-                Token::Da('(') => {
-                    self.nb();
-                    let n = self.vbr()?;
-                    self.cem(')')?;
-                    expr = Expr::En(Box::new(expr), n);
+                Token::Punctuation('(') => {
+                    self.advance();
+                    let args = self.parse_arguments()?;
+                    self.expect_punct(')')?;
+                    expr = Expr::Call(Box::new(expr), args);
                 }
                 _ => break,
             }
@@ -1556,112 +1556,112 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
     
-    fn lsu(&mut self) -> Result<Expr, String> {
-        match self.cv().clone() {
-            Token::L(bo) => {
-                self.nb();
-                Ok(Expr::Th(JsValue::L(bo)))
+    fn parse_primary(&mut self) -> Result<Expr, String> {
+        match self.current().clone() {
+            Token::Number(ae) => {
+                self.advance();
+                Ok(Expr::Literal(JsValue::Number(ae)))
             }
-            Token::String(e) => {
-                self.nb();
-                Ok(Expr::Th(JsValue::String(e)))
+            Token::String(j) => {
+                self.advance();
+                Ok(Expr::Literal(JsValue::String(j)))
             }
-            Token::Bx(yo) if yo == "true" => {
-                self.nb();
-                Ok(Expr::Th(JsValue::Cb(true)))
+            Token::Keyword(li) if li == "true" => {
+                self.advance();
+                Ok(Expr::Literal(JsValue::Boolean(true)))
             }
-            Token::Bx(yo) if yo == "false" => {
-                self.nb();
-                Ok(Expr::Th(JsValue::Cb(false)))
+            Token::Keyword(li) if li == "false" => {
+                self.advance();
+                Ok(Expr::Literal(JsValue::Boolean(false)))
             }
-            Token::Bx(yo) if yo == "null" => {
-                self.nb();
-                Ok(Expr::Th(JsValue::Gm))
+            Token::Keyword(li) if li == "null" => {
+                self.advance();
+                Ok(Expr::Literal(JsValue::Null))
             }
-            Token::Bx(yo) if yo == "undefined" => {
-                self.nb();
-                Ok(Expr::Th(JsValue::Ba))
+            Token::Keyword(li) if li == "undefined" => {
+                self.advance();
+                Ok(Expr::Literal(JsValue::Undefined))
             }
-            Token::Lp(j) => {
-                self.nb();
+            Token::Identifier(name) => {
+                self.advance();
                 
-                if let Token::Fb(op) = self.cv() {
+                if let Token::Operator(op) = self.current() {
                     if op == "=" {
-                        self.nb();
-                        let bn = self.cgk()?;
-                        return Ok(Expr::Vk(j, Box::new(bn)));
+                        self.advance();
+                        let value = self.parse_expression()?;
+                        return Ok(Expr::Assign(name, Box::new(value)));
                     }
                 }
-                Ok(Expr::Lp(j))
+                Ok(Expr::Identifier(name))
             }
-            Token::Da('(') => {
-                self.nb();
-                let expr = self.cgk()?;
-                self.cem(')')?;
+            Token::Punctuation('(') => {
+                self.advance();
+                let expr = self.parse_expression()?;
+                self.expect_punct(')')?;
                 Ok(expr)
             }
-            Token::Da('[') => {
-                self.nb();
-                let bgw = self.vbs()?;
-                self.cem(']')?;
-                Ok(Expr::U(bgw))
+            Token::Punctuation('[') => {
+                self.advance();
+                let elements = self.parse_array_elements()?;
+                self.expect_punct(']')?;
+                Ok(Expr::Array(elements))
             }
-            Token::Da('{') => {
-                self.nb();
-                let gpy = self.vcz()?;
-                self.cem('}')?;
-                Ok(Expr::Cw(gpy))
+            Token::Punctuation('{') => {
+                self.advance();
+                let dcz = self.parse_object_props()?;
+                self.expect_punct('}')?;
+                Ok(Expr::Object(dcz))
             }
-            _ => Err(format!("Unexpected token: {:?}", self.cv())),
+            _ => Err(format!("Unexpected token: {:?}", self.current())),
         }
     }
     
-    fn vbr(&mut self) -> Result<Vec<Expr>, String> {
-        let mut n = Vec::new();
-        if !oh!(self.cv(), Token::Da(')')) {
-            n.push(self.cgk()?);
-            while let Token::Da(',') = self.cv() {
-                self.nb();
-                n.push(self.cgk()?);
+    fn parse_arguments(&mut self) -> Result<Vec<Expr>, String> {
+        let mut args = Vec::new();
+        if !matches!(self.current(), Token::Punctuation(')')) {
+            args.push(self.parse_expression()?);
+            while let Token::Punctuation(',') = self.current() {
+                self.advance();
+                args.push(self.parse_expression()?);
             }
         }
-        Ok(n)
+        Ok(args)
     }
     
-    fn vbs(&mut self) -> Result<Vec<Expr>, String> {
-        let mut bgw = Vec::new();
-        if !oh!(self.cv(), Token::Da(']')) {
-            bgw.push(self.cgk()?);
-            while let Token::Da(',') = self.cv() {
-                self.nb();
-                if oh!(self.cv(), Token::Da(']')) {
+    fn parse_array_elements(&mut self) -> Result<Vec<Expr>, String> {
+        let mut elements = Vec::new();
+        if !matches!(self.current(), Token::Punctuation(']')) {
+            elements.push(self.parse_expression()?);
+            while let Token::Punctuation(',') = self.current() {
+                self.advance();
+                if matches!(self.current(), Token::Punctuation(']')) {
                     break;
                 }
-                bgw.push(self.cgk()?);
+                elements.push(self.parse_expression()?);
             }
         }
-        Ok(bgw)
+        Ok(elements)
     }
     
-    fn vcz(&mut self) -> Result<Vec<(String, Expr)>, String> {
-        let mut gpy = Vec::new();
-        while !oh!(self.cv(), Token::Da('}')) {
-            let bs = match self.cv().clone() {
-                Token::Lp(e) | Token::String(e) => {
-                    self.nb();
-                    e
+    fn parse_object_props(&mut self) -> Result<Vec<(String, Expr)>, String> {
+        let mut dcz = Vec::new();
+        while !matches!(self.current(), Token::Punctuation('}')) {
+            let key = match self.current().clone() {
+                Token::Identifier(j) | Token::String(j) => {
+                    self.advance();
+                    j
                 }
                 _ => return Err("Expected property name".to_string()),
             };
-            self.cem(':')?;
-            let bn = self.cgk()?;
-            gpy.push((bs, bn));
-            if let Token::Da(',') = self.cv() {
-                self.nb();
+            self.expect_punct(':')?;
+            let value = self.parse_expression()?;
+            dcz.push((key, value));
+            if let Token::Punctuation(',') = self.current() {
+                self.advance();
             } else {
                 break;
             }
         }
-        Ok(gpy)
+        Ok(dcz)
     }
 }

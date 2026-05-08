@@ -488,7 +488,7 @@ impl HdaController {
             }
 
             // Wait for codecs to initialize (~521 µs per spec, but some
-            // codecs — especially on older chipsets like ICH8 (Lenovo T61) —
+            // codecs — especially on older chipsets like ICH8 —
             // need significantly longer.  Retry up to 50 ms total.
             let mut statests = 0u16;
             for attempt in 0..10 {
@@ -942,7 +942,7 @@ impl HdaController {
                 let _ = self.codec_cmd(codec, nid, verb::SET_POWER_STATE, 0x00);
             }
             // AD1984/CX20549 need 50-100ms to fully transition D3→D0
-            HdaController::delay_us(100_000); // 100ms — critical for T61
+            HdaController::delay_us(100_000); // 100ms — critical for AD1984/CX20549 power-up
 
             // For AD1984: override pin configs that BIOS may have set incorrectly
             // Set all output pins to enable HP amp + output
@@ -970,8 +970,8 @@ impl HdaController {
                 (1u16 << 14) | (1 << 13) | (1 << 12) | 0x27);
 
             // ── GPIO1 enable — powers the external speaker/HP amplifier ──
-            // T61 ThinkPad: GPIO1=HIGH powers the amplifier (confirmed by amp pop test).
-            // Linux HP fixup inverts this (GPIO1=LOW=on), but T61 uses direct polarity.
+            // AD1984/CX20549: GPIO1=HIGH powers the amplifier.
+            // Linux HP fixup inverts this (GPIO1=LOW=on), but direct polarity is common.
             // Test data=0x01(GPIO1 LOW) = silence, data=0x03(GPIO1 HIGH) = sound.
             let _ = self.codec_cmd(codec, 1, verb::SET_GPIO_MASK, 0x02); // Enable GPIO1
             let _ = self.codec_cmd(codec, 1, verb::SET_GPIO_DIR,  0x02); // GPIO1 = output

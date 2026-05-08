@@ -1,7 +1,7 @@
 //! NVIDIA GPU Driver — NV50 (Tesla) Family
 //!
 //! Native NVIDIA GPU driver for TrustOS.
-//! Targets NVIDIA Quadro NVS 140M (G86/NV86) on ThinkPad T61.
+//! Supports NV50 (Tesla) family GPUs (G80–GT200), including Quadro NVS 140M.
 //!
 //! Architecture:
 //! - PCI detection (vendor 0x10DE, G80-G98 device IDs)
@@ -40,7 +40,7 @@ const SUPPORTED_DEVICE_IDS: &[(u16, u16, &str)] = &[
     (0x0190, 0x019F, "GeForce 8800"),
     // G84
     (0x0400, 0x040F, "GeForce 8600"),
-    // G86 — ThinkPad T61 Quadro NVS 140M
+    // G86 — Quadro NVS 140M / GeForce 8500
     (0x0420, 0x042F, "Quadro NVS 140M / GeForce 8500"),
     // G92
     (0x0600, 0x060F, "GeForce 8800/9800"),

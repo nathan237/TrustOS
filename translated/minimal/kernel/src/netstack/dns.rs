@@ -6,139 +6,139 @@ use alloc::collections::BTreeMap;
 use core::sync::atomic::{AtomicU16, Ordering};
 use spin::Mutex;
 
-static AFX_: AtomicU16 = AtomicU16::new(1);
+static AHR_: AtomicU16 = AtomicU16::new(1);
 
 
-struct Bet {
+struct Xw {
     ip: [u8; 4],
-    nsa: u64,
+    expire_tick: u64,
 }
 
 
-static AQL_: Mutex<BTreeMap<String, Bet>> = Mutex::new(BTreeMap::new());
+static ASO_: Mutex<BTreeMap<String, Xw>> = Mutex::new(BTreeMap::new());
 
 
-const BRZ_: u64 = 60_000;
+const BUV_: u64 = 60_000;
 
-fn xvq(k: &mut Vec<u8>, j: &str) -> bool {
-    for cu in j.adk('.') {
-        let len = cu.len();
+fn pvb(buf: &mut Vec<u8>, name: &str) -> bool {
+    for label in name.split('.') {
+        let len = label.len();
         if len == 0 || len > 63 {
             return false;
         }
-        k.push(len as u8);
-        k.bk(cu.as_bytes());
+        buf.push(len as u8);
+        buf.extend_from_slice(label.as_bytes());
     }
-    k.push(0);
+    buf.push(0);
     true
 }
 
-fn plf(f: &[u8], mut w: usize) -> Option<usize> {
+fn jgm(data: &[u8], mut idx: usize) -> Option<usize> {
     loop {
-        if w >= f.len() {
+        if idx >= data.len() {
             return None;
         }
-        let len = f[w];
+        let len = data[idx];
         if len & 0xC0 == 0xC0 {
-            if w + 1 >= f.len() {
+            if idx + 1 >= data.len() {
                 return None;
             }
-            return Some(w + 2);
+            return Some(idx + 2);
         }
         if len == 0 {
-            return Some(w + 1);
+            return Some(idx + 1);
         }
-        w += 1 + len as usize;
+        idx += 1 + len as usize;
     }
 }
 
-pub fn ayo(j: &str) -> Option<[u8; 4]> {
+pub fn yb(name: &str) -> Option<[u8; 4]> {
     
     {
-        let iu = crate::logger::lh();
-        let bdq = AQL_.lock();
-        if let Some(bt) = bdq.get(j) {
-            if iu < bt.nsa {
-                return Some(bt.ip);
+        let cy = crate::logger::eg();
+        let adk = ASO_.lock();
+        if let Some(entry) = adk.get(name) {
+            if cy < entry.expire_tick {
+                return Some(entry.ip);
             }
         }
     }
 
     
-    let gfc = crate::network::tdl();
-    let ey = crate::netstack::udp::muy();
-    let ad = AFX_.fetch_add(1, Ordering::Relaxed);
+    let dns_server = crate::network::mcy();
+    let src_port = crate::netstack::udp::heu();
+    let id = AHR_.fetch_add(1, Ordering::Relaxed);
 
-    let mut query = Vec::fc(64);
-    query.bk(&ad.ft());
-    query.bk(&0x0100u16.ft()); 
-    query.bk(&1u16.ft()); 
-    query.bk(&0u16.ft()); 
-    query.bk(&0u16.ft()); 
-    query.bk(&0u16.ft()); 
-    if !xvq(&mut query, j) {
+    let mut query = Vec::with_capacity(64);
+    query.extend_from_slice(&id.to_be_bytes());
+    query.extend_from_slice(&0x0100u16.to_be_bytes()); 
+    query.extend_from_slice(&1u16.to_be_bytes()); 
+    query.extend_from_slice(&0u16.to_be_bytes()); 
+    query.extend_from_slice(&0u16.to_be_bytes()); 
+    query.extend_from_slice(&0u16.to_be_bytes()); 
+    if !pvb(&mut query, name) {
         return None;
     }
-    query.bk(&1u16.ft()); 
-    query.bk(&1u16.ft()); 
+    query.extend_from_slice(&1u16.to_be_bytes()); 
+    query.extend_from_slice(&1u16.to_be_bytes()); 
 
-    let _ = crate::netstack::udp::dlp(gfc, 53, ey, &query);
+    let _ = crate::netstack::udp::azq(dns_server, 53, src_port, &query);
 
-    let ay = crate::logger::lh();
+    let start = crate::logger::eg();
     loop {
         crate::netstack::poll();
-        if let Some(lj) = crate::netstack::udp::jlt(ey) {
-            if lj.len() < 12 {
+        if let Some(eo) = crate::netstack::udp::eyc(src_port) {
+            if eo.len() < 12 {
                 continue;
             }
-            if u16::oa([lj[0], lj[1]]) != ad {
+            if u16::from_be_bytes([eo[0], eo[1]]) != id {
                 continue;
             }
-            let flags = u16::oa([lj[2], lj[3]]);
+            let flags = u16::from_be_bytes([eo[2], eo[3]]);
             if (flags & 0x8000) == 0 {
                 continue;
             }
-            let vou = u16::oa([lj[4], lj[5]]) as usize;
-            let qht = u16::oa([lj[6], lj[7]]) as usize;
+            let oab = u16::from_be_bytes([eo[4], eo[5]]) as usize;
+            let jvr = u16::from_be_bytes([eo[6], eo[7]]) as usize;
 
-            let mut w = 12;
-            for _ in 0..vou {
-                w = plf(&lj, w)?;
-                if w + 4 > lj.len() {
+            let mut idx = 12;
+            for _ in 0..oab {
+                idx = jgm(&eo, idx)?;
+                if idx + 4 > eo.len() {
                     return None;
                 }
-                w += 4; 
+                idx += 4; 
             }
 
-            for _ in 0..qht {
-                w = plf(&lj, w)?;
-                if w + 10 > lj.len() {
+            for _ in 0..jvr {
+                idx = jgm(&eo, idx)?;
+                if idx + 10 > eo.len() {
                     return None;
                 }
-                let hyf = u16::oa([lj[w], lj[w + 1]]);
-                let vqt = u16::oa([lj[w + 2], lj[w + 3]]);
-                let lxj = u16::oa([lj[w + 8], lj[w + 9]]) as usize;
-                w += 10;
-                if w + lxj > lj.len() {
+                let rtype = u16::from_be_bytes([eo[idx], eo[idx + 1]]);
+                let oby = u16::from_be_bytes([eo[idx + 2], eo[idx + 3]]);
+                let gpz = u16::from_be_bytes([eo[idx + 8], eo[idx + 9]]) as usize;
+                idx += 10;
+                if idx + gpz > eo.len() {
                     return None;
                 }
-                if hyf == 1 && vqt == 1 && lxj == 4 {
-                    let ip = [lj[w], lj[w + 1], lj[w + 2], lj[w + 3]];
+                if rtype == 1 && oby == 1 && gpz == 4 {
+                    let ip = [eo[idx], eo[idx + 1], eo[idx + 2], eo[idx + 3]];
                     
-                    let spi = crate::logger::lh() + BRZ_;
-                    AQL_.lock().insert(
-                        String::from(j),
-                        Bet { ip, nsa: spi },
+                    let lst = crate::logger::eg() + BUV_;
+                    ASO_.lock().insert(
+                        String::from(name),
+                        Xw { ip, expire_tick: lst },
                     );
                     return Some(ip);
                 }
-                w += lxj;
+                idx += gpz;
             }
         }
 
-        if crate::logger::lh().ao(ay) > 1500 {
+        if crate::logger::eg().saturating_sub(start) > 1500 {
             return None;
         }
-        core::hint::hc();
+        core::hint::spin_loop();
     }
 }

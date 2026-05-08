@@ -108,11 +108,11 @@ fn get_inner(url: &str, depth: u32) -> Result<HttpsResponse, HttpsError> {
     crate::serial_println!("[HTTPS] Resolved {} -> {}.{}.{}.{}", host, ip[0], ip[1], ip[2], ip[3]);
     
     // TCP connect
-    let source_port = tcp::send_syn(ip, port)
-        .map_error(|_| HttpsError::ConnectionFailed)?;
+    let src_port = tcp::send_syn(ip, port)
+        .map_err(|_| HttpsError::ConnectionFailed)?;
     
     // Wait for connection
-    if !tcp::wait_for_established(ip, port, source_port, 5000) {
+    if !tcp::wait_for_established(ip, port, src_port, 5000) {
         return Err(HttpsError::ConnectionFailed);
     }
     
@@ -124,19 +124,19 @@ fn get_inner(url: &str, depth: u32) -> Result<HttpsResponse, HttpsError> {
     // TLS handshake
     {
         let mut send = |data: &[u8]| -> Result<(), TlsError> {
-            tcp::send_payload(ip, port, source_port, data)
-                .map_error(|_| TlsError::ConnectionFailed)
+            tcp::send_payload(ip, port, src_port, data)
+                .map_err(|_| TlsError::ConnectionFailed)
         };
         
         let mut recv_attempts = 0u32;
-        let mut recv = |buffer: &mut [u8]| -> Result<usize, TlsError> {
+        let mut recv = |buf: &mut [u8]| -> Result<usize, TlsError> {
             // Poll and receive TCP data
             for _ in 0..100 {
                 crate::netstack::poll();
                 
-                if let Some(data) = tcp::recv_data(ip, port, source_port) {
-                    let len = data.len().minimum(buffer.len());
-                    buffer[..len].copy_from_slice(&data[..len]);
+                if let Some(data) = tcp::recv_data(ip, port, src_port) {
+                    let len = data.len().min(buf.len());
+                    buf[..len].copy_from_slice(&data[..len]);
                     recv_attempts = 0;
                     return Ok(len);
                 }
@@ -173,8 +173,8 @@ fn get_inner(url: &str, depth: u32) -> Result<HttpsResponse, HttpsError> {
     
     // Encrypt and send request
     let encrypted = session.encrypt(request.as_bytes())?;
-    tcp::send_payload(ip, port, source_port, &encrypted)
-        .map_error(|_| HttpsError::ConnectionFailed)?;
+    tcp::send_payload(ip, port, src_port, &encrypted)
+        .map_err(|_| HttpsError::ConnectionFailed)?;
     
     crate::serial_println!("[HTTPS] Request sent, waiting for response");
     
@@ -184,7 +184,7 @@ fn get_inner(url: &str, depth: u32) -> Result<HttpsResponse, HttpsError> {
     for _ in 0..200 {
         crate::netstack::poll();
         
-        if let Some(data) = tcp::recv_data(ip, port, source_port) {
+        if let Some(data) = tcp::recv_data(ip, port, src_port) {
             // Decrypt the record
             if let Some(plaintext) = process_tls_records(&mut session, &data) {
                 response_data.extend_from_slice(&plaintext);
@@ -203,7 +203,7 @@ fn get_inner(url: &str, depth: u32) -> Result<HttpsResponse, HttpsError> {
         }
         
         // Check for connection close
-        if tcp::fin_received(ip, port, source_port) {
+        if tcp::fin_received(ip, port, src_port) {
             break;
         }
         
@@ -211,7 +211,7 @@ fn get_inner(url: &str, depth: u32) -> Result<HttpsResponse, HttpsError> {
     }
     
     // Close connection
-    let _ = tcp::send_fin(ip, port, source_port);
+    let _ = tcp::send_fin(ip, port, src_port);
     
     // Parse HTTP response
     let response = parse_http_response(&response_data)?;
@@ -242,7 +242,7 @@ match path.rfind('/') {
                             headers: r.headers,
                             body: r.body,
                         })
-                        .map_error(|_| HttpsError::ConnectionFailed);
+                        .map_err(|_| HttpsError::ConnectionFailed);
                 }
                 return get_inner(&redirect_url, depth + 1);
             }
@@ -255,11 +255,11 @@ match path.rfind('/') {
 /// Decode chunked transfer encoding
 fn decode_chunked(data: &[u8]) -> Vec<u8> {
     let mut result = Vec::new();
-    let mut position = 0;
+    let mut pos = 0;
     
-    while position < data.len() {
+    while pos < data.len() {
         // Find end of chunk size line
-        let mut line_end = position;
+        let mut line_end = pos;
         while line_end + 1 < data.len() {
             if data[line_end] == b'\r' && data[line_end + 1] == b'\n' {
                 break;
@@ -272,7 +272,7 @@ fn decode_chunked(data: &[u8]) -> Vec<u8> {
         }
         
         // Parse hex chunk size
-        let size_str = core::str::from_utf8(&data[position..line_end]).unwrap_or("0");
+        let size_str = core::str::from_utf8(&data[pos..line_end]).unwrap_or("0");
         let size_str = size_str.split(';').next().unwrap_or("0").trim();
         let chunk_size = usize::from_str_radix(size_str, 16).unwrap_or(0);
         
@@ -289,7 +289,7 @@ fn decode_chunked(data: &[u8]) -> Vec<u8> {
         }
         
         result.extend_from_slice(&data[chunk_start..chunk_end]);
-        position = chunk_end + 2;
+        pos = chunk_end + 2;
     }
     
     result
@@ -300,8 +300,8 @@ fn parse_https_url(url: &str) -> Result<(String, String, u16), HttpsError> {
     let url = url.strip_prefix("https://").unwrap_or(url);
     
     // Split host and path
-    let (host_port, path) = if let Some(slash_position) = url.find('/') {
-        (&url[..slash_position], &url[slash_position..])
+    let (host_port, path) = if let Some(slash_pos) = url.find('/') {
+        (&url[..slash_pos], &url[slash_pos..])
     } else {
         (url, "/")
     };
@@ -321,16 +321,16 @@ fn parse_https_url(url: &str) -> Result<(String, String, u16), HttpsError> {
 /// Process TLS records and extract plaintext
 fn process_tls_records(session: &mut TlsSession, data: &[u8]) -> Option<Vec<u8>> {
     let mut result = Vec::new();
-    let mut position = 0;
+    let mut pos = 0;
     
-    while position + 5 <= data.len() {
-        let length = u16::from_be_bytes([data[position + 3], data[position + 4]]) as usize;
+    while pos + 5 <= data.len() {
+        let length = u16::from_be_bytes([data[pos + 3], data[pos + 4]]) as usize;
         
-        if position + 5 + length > data.len() {
+        if pos + 5 + length > data.len() {
             break;
         }
         
-        if let Ok(Some(plaintext)) = session.process_record(&data[position..position + 5 + length]) {
+        if let Ok(Some(plaintext)) = session.process_record(&data[pos..pos + 5 + length]) {
             // Skip the content type byte at the end
             if let Some((&content_type, content)) = plaintext.split_last() {
                 if content_type == 23 || content_type == 0 {
@@ -342,7 +342,7 @@ fn process_tls_records(session: &mut TlsSession, data: &[u8]) -> Option<Vec<u8>>
             }
         }
         
-        position += 5 + length;
+        pos += 5 + length;
     }
     
     if result.is_empty() {
@@ -363,10 +363,10 @@ fn is_response_complete(data: &[u8]) -> bool {
         // Check for Content-Length
         for line in headers.lines() {
             if line.to_lowercase().starts_with("content-length:") {
-                if let Some(length_str) = line.split(':').nth(1) {
-                    if let Ok(content_length) = length_str.trim().parse::<usize>() {
+                if let Some(len_str) = line.split(':').nth(1) {
+                    if let Ok(content_len) = len_str.trim().parse::<usize>() {
                         let body_start = headers_end + 4;
-                        return data.len() >= body_start + content_length;
+                        return data.len() >= body_start + content_len;
                     }
                 }
             }
@@ -399,7 +399,7 @@ fn parse_http_response(data: &[u8]) -> Result<HttpsResponse, HttpsError> {
         return Err(HttpsError::InvalidResponse);
     }
     
-    let status_code: u16 = parts[1].parse().map_error(|_| HttpsError::InvalidResponse)?;
+    let status_code: u16 = parts[1].parse().map_err(|_| HttpsError::InvalidResponse)?;
     
     // Find headers end
     let headers_end = data_str.find("\r\n\r\n").ok_or(HttpsError::InvalidResponse)?;

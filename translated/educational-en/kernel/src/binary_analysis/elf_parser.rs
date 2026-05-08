@@ -155,7 +155,7 @@ pub struct Section {
     /// Section flags (SHF_*)
     pub flags: u64,
     /// Virtual address
-    pub address: u64,
+    pub addr: u64,
     /// File offset
     pub offset: u64,
     /// Section size
@@ -163,7 +163,7 @@ pub struct Section {
     /// Link to another section
     pub link: u32,
     /// Additional info
-    pub information: u32,
+    pub info: u32,
     /// Alignment
     pub addralign: u64,
     /// Entry size for table sections
@@ -214,7 +214,7 @@ pub fn flags_string(&self) -> String {
     }
 
     /// Is this loaded into memory?
-    pub fn is_allocator(&self) -> bool {
+    pub fn is_alloc(&self) -> bool {
         self.flags & SHF_ALLOCATOR != 0
     }
 }
@@ -460,7 +460,7 @@ pub struct ElfInformation {
 // Public structure — visible outside this module.
 pub struct ElfAnalysis {
     /// Header info
-    pub information: ElfInformation,
+    pub info: ElfInformation,
     /// Program headers
     pub programs: Vec<ProgramHeader>,
     /// Section headers
@@ -480,9 +480,9 @@ pub struct ElfAnalysis {
     /// Needed shared libraries
     pub needed_libs: Vec<String>,
     /// Address → symbol name mapping (for disassembly annotation)
-    pub address_to_symbol: BTreeMap<u64, String>,
+    pub addr_to_symbol: BTreeMap<u64, String>,
     /// Raw data reference (for hex view)
-    raw_data_length: usize,
+    raw_data_len: usize,
 }
 
 // Implementation block — defines methods for the type above.
@@ -509,20 +509,20 @@ impl ElfAnalysis {
     }
 
     /// Get symbol at address
-    pub fn symbol_at(&self, address: u64) -> Option<&str> {
-        self.address_to_symbol.get(&address).map(|s| s.as_str())
+    pub fn symbol_at(&self, addr: u64) -> Option<&str> {
+        self.addr_to_symbol.get(&addr).map(|s| s.as_str())
     }
 
     /// Find which section an address belongs to
-    pub fn section_for_address(&self, address: u64) -> Option<&Section> {
+    pub fn section_for_addr(&self, addr: u64) -> Option<&Section> {
         self.sections.iter().find(|s| {
-            s.is_allocator() && address >= s.address && address < s.address + s.size
+            s.is_alloc() && addr >= s.addr && addr < s.addr + s.size
         })
     }
 
     /// Get file size
     pub fn file_size(&self) -> usize {
-        self.raw_data_length
+        self.raw_data_len
     }
 }
 
@@ -558,7 +558,7 @@ pub fn parse_elf(data: &[u8]) -> Result<ElfAnalysis, &'static str> {
     let e_shnum = u16le(data, 60);
     let e_shstrndx = u16le(data, 62);
 
-    let information = ElfInformation {
+    let info = ElfInformation {
         class: "ELF64",
         data: if data_encrypt == 1 { "Little Endian" } else { "Big Endian" },
         osabi:         // Pattern matching — Rust's exhaustive branching construct.
@@ -634,10 +634,10 @@ match e_machine {
     let dynamic_symbols = parse_symbol_table(data, &sections, SHT_DYNSYM);
 
     // ── Build address-to-symbol map ──
-    let mut address_to_symbol = BTreeMap::new();
+    let mut addr_to_symbol = BTreeMap::new();
     for sym in symbols.iter().chain(dynamic_symbols.iter()) {
         if sym.is_defined() && !sym.name.is_empty() {
-            address_to_symbol.insert(sym.value, sym.name.clone());
+            addr_to_symbol.insert(sym.value, sym.name.clone());
         }
     }
 
@@ -651,7 +651,7 @@ match e_machine {
     let strings = extract_all_strings(data, &sections, &programs);
 
     Ok(ElfAnalysis {
-        information,
+        info,
         programs,
         sections,
         symbols,
@@ -661,8 +661,8 @@ match e_machine {
         strings,
         interpreter,
         needed_libs,
-        address_to_symbol,
-        raw_data_length: data.len(),
+        addr_to_symbol,
+        raw_data_len: data.len(),
     })
 }
 
@@ -705,7 +705,7 @@ fn parse_sections(data: &[u8], shoff: usize, shentsize: usize, shnum: usize, shs
 
     // Second pass: build Section structs with names
     let mut sections = Vec::new();
-    for (i, &(sh_name, sh_type, flags, address, offset, size, link, information, addralign, entsize)) in raw_sections.iter().enumerate() {
+    for (i, &(sh_name, sh_type, flags, addr, offset, size, link, info, addralign, entsize)) in raw_sections.iter().enumerate() {
         let name = if let Some(strtab) = shstrtab_data {
             read_string_at(strtab, sh_name as usize)
         } else {
@@ -717,11 +717,11 @@ fn parse_sections(data: &[u8], shoff: usize, shentsize: usize, shnum: usize, shs
             name,
             sh_type,
             flags,
-            address,
+            addr,
             offset,
             size,
             link,
-            information,
+            info,
             addralign,
             entsize,
         });
@@ -853,11 +853,11 @@ fn parse_relocations(data: &[u8], sections: &[Section], dynsyms: &[Symbol]) -> V
             if off + entry_size > data.len() { break; }
 
             let r_offset = u64le(data, off);
-            let r_information = u64le(data, off + 8);
+            let r_info = u64le(data, off + 8);
             let r_addend = if is_rela { i64le(data, off + 16) } else { 0 };
 
-            let sym_index = (r_information >> 32) as u32;
-            let rtype = (r_information & 0xFFFFFFFF) as u32;
+            let sym_index = (r_info >> 32) as u32;
+            let rtype = (r_info & 0xFFFFFFFF) as u32;
 
             let sym_name = if (sym_index as usize) < dynsyms.len() {
                 dynsyms[sym_index as usize].name.clone()
@@ -905,8 +905,8 @@ fn extract_all_strings(data: &[u8], sections: &[Section], programs: &[ProgramHea
                 if current.len() >= 4 {
                     let file_offset = start + str_start;
                     // Compute vaddr if this section has one
-                    let vaddr = if section.is_allocator() && section.address > 0 {
-                        Some(section.address + str_start as u64)
+                    let vaddr = if section.is_alloc() && section.addr > 0 {
+                        Some(section.addr + str_start as u64)
                     } else {
                         None
                     };
@@ -925,8 +925,8 @@ fn extract_all_strings(data: &[u8], sections: &[Section], programs: &[ProgramHea
         // Flush remaining
         if current.len() >= 4 {
             let file_offset = start + str_start;
-            let vaddr = if section.is_allocator() && section.address > 0 {
-                Some(section.address + str_start as u64)
+            let vaddr = if section.is_alloc() && section.addr > 0 {
+                Some(section.addr + str_start as u64)
             } else {
                 None
             };

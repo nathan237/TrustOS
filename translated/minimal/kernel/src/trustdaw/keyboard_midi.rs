@@ -23,90 +23,90 @@
 
 
 #[derive(Debug, Clone, Copy)]
-pub struct Bk {
+pub struct Al {
     
     pub scancode: u8,
     
-    pub ti: u8,
+    pub midi_note: u8,
 }
 
 
 
-static CEW_: &[Bk] = &[
+static CIF_: &[Al] = &[
     
-    Bk { scancode: 0x2C, ti: 48 }, 
-    Bk { scancode: 0x2D, ti: 50 }, 
-    Bk { scancode: 0x2E, ti: 52 }, 
-    Bk { scancode: 0x2F, ti: 53 }, 
-    Bk { scancode: 0x30, ti: 55 }, 
-    Bk { scancode: 0x31, ti: 57 }, 
-    Bk { scancode: 0x32, ti: 59 }, 
-    Bk { scancode: 0x33, ti: 60 }, 
-    Bk { scancode: 0x34, ti: 62 }, 
-    Bk { scancode: 0x35, ti: 64 }, 
+    Al { scancode: 0x2C, midi_note: 48 }, 
+    Al { scancode: 0x2D, midi_note: 50 }, 
+    Al { scancode: 0x2E, midi_note: 52 }, 
+    Al { scancode: 0x2F, midi_note: 53 }, 
+    Al { scancode: 0x30, midi_note: 55 }, 
+    Al { scancode: 0x31, midi_note: 57 }, 
+    Al { scancode: 0x32, midi_note: 59 }, 
+    Al { scancode: 0x33, midi_note: 60 }, 
+    Al { scancode: 0x34, midi_note: 62 }, 
+    Al { scancode: 0x35, midi_note: 64 }, 
     
-    Bk { scancode: 0x1F, ti: 49 }, 
-    Bk { scancode: 0x20, ti: 51 }, 
+    Al { scancode: 0x1F, midi_note: 49 }, 
+    Al { scancode: 0x20, midi_note: 51 }, 
     
-    Bk { scancode: 0x22, ti: 54 }, 
-    Bk { scancode: 0x23, ti: 56 }, 
-    Bk { scancode: 0x24, ti: 58 }, 
+    Al { scancode: 0x22, midi_note: 54 }, 
+    Al { scancode: 0x23, midi_note: 56 }, 
+    Al { scancode: 0x24, midi_note: 58 }, 
     
-    Bk { scancode: 0x26, ti: 61 }, 
-    Bk { scancode: 0x27, ti: 63 }, 
+    Al { scancode: 0x26, midi_note: 61 }, 
+    Al { scancode: 0x27, midi_note: 63 }, 
 ];
 
 
-static CZQ_: &[Bk] = &[
+static DDI_: &[Al] = &[
     
-    Bk { scancode: 0x10, ti: 60 }, 
-    Bk { scancode: 0x11, ti: 62 }, 
-    Bk { scancode: 0x12, ti: 64 }, 
-    Bk { scancode: 0x13, ti: 65 }, 
-    Bk { scancode: 0x14, ti: 67 }, 
-    Bk { scancode: 0x15, ti: 69 }, 
-    Bk { scancode: 0x16, ti: 71 }, 
-    Bk { scancode: 0x17, ti: 72 }, 
-    Bk { scancode: 0x18, ti: 74 }, 
-    Bk { scancode: 0x19, ti: 76 }, 
+    Al { scancode: 0x10, midi_note: 60 }, 
+    Al { scancode: 0x11, midi_note: 62 }, 
+    Al { scancode: 0x12, midi_note: 64 }, 
+    Al { scancode: 0x13, midi_note: 65 }, 
+    Al { scancode: 0x14, midi_note: 67 }, 
+    Al { scancode: 0x15, midi_note: 69 }, 
+    Al { scancode: 0x16, midi_note: 71 }, 
+    Al { scancode: 0x17, midi_note: 72 }, 
+    Al { scancode: 0x18, midi_note: 74 }, 
+    Al { scancode: 0x19, midi_note: 76 }, 
     
-    Bk { scancode: 0x03, ti: 61 }, 
-    Bk { scancode: 0x04, ti: 63 }, 
+    Al { scancode: 0x03, midi_note: 61 }, 
+    Al { scancode: 0x04, midi_note: 63 }, 
     
-    Bk { scancode: 0x06, ti: 66 }, 
-    Bk { scancode: 0x07, ti: 68 }, 
-    Bk { scancode: 0x08, ti: 70 }, 
+    Al { scancode: 0x06, midi_note: 66 }, 
+    Al { scancode: 0x07, midi_note: 68 }, 
+    Al { scancode: 0x08, midi_note: 70 }, 
     
-    Bk { scancode: 0x0A, ti: 73 }, 
-    Bk { scancode: 0x0B, ti: 75 }, 
+    Al { scancode: 0x0A, midi_note: 73 }, 
+    Al { scancode: 0x0B, midi_note: 75 }, 
 ];
 
 
-static GW_: core::sync::atomic::AtomicI8 = core::sync::atomic::AtomicI8::new(0);
+static HN_: core::sync::atomic::AtomicI8 = core::sync::atomic::AtomicI8::new(0);
 
 
-static APX_: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(100);
+static ARZ_: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(100);
 
 use core::sync::atomic::Ordering;
 
 
 
-pub fn hyv(scancode: u8) -> Option<u8> {
-    let l = GW_.load(Ordering::Relaxed) as i16 * 12;
+pub fn dyl(scancode: u8) -> Option<u8> {
+    let offset = HN_.load(Ordering::Relaxed) as i16 * 12;
 
     
-    for hqs in CEW_ {
-        if hqs.scancode == scancode {
-            let jp = hqs.ti as i16 + l;
-            return if jp >= 0 && jp <= 127 { Some(jp as u8) } else { None };
+    for mapping in CIF_ {
+        if mapping.scancode == scancode {
+            let note = mapping.midi_note as i16 + offset;
+            return if note >= 0 && note <= 127 { Some(note as u8) } else { None };
         }
     }
 
     
-    for hqs in CZQ_ {
-        if hqs.scancode == scancode {
-            let jp = hqs.ti as i16 + l;
-            return if jp >= 0 && jp <= 127 { Some(jp as u8) } else { None };
+    for mapping in DDI_ {
+        if mapping.scancode == scancode {
+            let note = mapping.midi_note as i16 + offset;
+            return if note >= 0 && note <= 127 { Some(note as u8) } else { None };
         }
     }
 
@@ -114,45 +114,45 @@ pub fn hyv(scancode: u8) -> Option<u8> {
 }
 
 
-pub fn uwy() -> i8 {
-    let cv = GW_.load(Ordering::Relaxed);
-    if cv < 4 {
-        GW_.store(cv + 1, Ordering::Relaxed);
+pub fn nmf() -> i8 {
+    let current = HN_.load(Ordering::Relaxed);
+    if current < 4 {
+        HN_.store(current + 1, Ordering::Relaxed);
     }
-    GW_.load(Ordering::Relaxed)
+    HN_.load(Ordering::Relaxed)
 }
 
 
-pub fn uwx() -> i8 {
-    let cv = GW_.load(Ordering::Relaxed);
-    if cv > -4 {
-        GW_.store(cv - 1, Ordering::Relaxed);
+pub fn nme() -> i8 {
+    let current = HN_.load(Ordering::Relaxed);
+    if current > -4 {
+        HN_.store(current - 1, Ordering::Relaxed);
     }
-    GW_.load(Ordering::Relaxed)
+    HN_.load(Ordering::Relaxed)
 }
 
 
-pub fn ytj() -> i8 {
-    GW_.load(Ordering::Relaxed)
+pub fn qhz() -> i8 {
+    HN_.load(Ordering::Relaxed)
 }
 
 
-pub fn pjj(bxr: u8) {
-    APX_.store(bxr.v(127), Ordering::Relaxed);
+pub fn jfn(anb: u8) {
+    ARZ_.store(anb.min(127), Ordering::Relaxed);
 }
 
 
-pub fn hlm() -> u8 {
-    APX_.load(Ordering::Relaxed)
+pub fn dqs() -> u8 {
+    ARZ_.load(Ordering::Relaxed)
 }
 
 
-pub fn yzv(scancode: u8) -> bool {
-    hyv(scancode).is_some()
+pub fn qmu(scancode: u8) -> bool {
+    dyl(scancode).is_some()
 }
 
 
-pub fn nlx() -> &'static str {
+pub fn hsp() -> &'static str {
     concat!(
         "TrustDAW Virtual Piano — PC Keyboard Layout\n",
         "═══════════════════════════════════════════════\n",

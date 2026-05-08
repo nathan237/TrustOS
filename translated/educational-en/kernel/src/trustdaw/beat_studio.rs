@@ -191,11 +191,11 @@ pub fn on_note(velocity: u8, offset: i8) -> Self {
 pub struct BeatTrack {
     /// Track name
     pub name: [u8; 16],
-    pub name_length: usize,
+    pub name_len: usize,
     /// Step data
     pub steps: [BeatStep; MAXIMUM_STEPS],
     /// Number of active steps (16 or 32)
-    pub number_steps: usize,
+    pub num_steps: usize,
     /// Base MIDI note (e.g., Kick=36, Snare=38)
     pub base_note: u8,
     /// Waveform
@@ -222,14 +222,14 @@ impl BeatTrack {
 pub fn new(name: &str, base_note: u8, waveform: Waveform, color: u32, is_drum: bool) -> Self {
         let mut name_buffer = [0u8; 16];
         let bytes = name.as_bytes();
-        let len = bytes.len().minimum(16);
+        let len = bytes.len().min(16);
         name_buffer[..len].copy_from_slice(&bytes[..len]);
 
         Self {
             name: name_buffer,
-            name_length: len,
+            name_len: len,
             steps: [BeatStep::off(); MAXIMUM_STEPS],
-            number_steps: DEFAULT_STEPS,
+            num_steps: DEFAULT_STEPS,
             base_note,
             waveform,
             envelope: Envelope::pluck(),
@@ -244,19 +244,19 @@ pub fn new(name: &str, base_note: u8, waveform: Waveform, color: u32, is_drum: b
 
         // Public function — callable from other modules.
 pub fn name_str(&self) -> &str {
-        core::str::from_utf8(&self.name[..self.name_length]).unwrap_or("???")
+        core::str::from_utf8(&self.name[..self.name_len]).unwrap_or("???")
     }
 
     /// Toggle a step on/off
     pub fn toggle_step(&mut self, step: usize) {
-        if step < self.number_steps {
+        if step < self.num_steps {
             self.steps[step].active = !self.steps[step].active;
         }
     }
 
     /// Get the MIDI note for a given step
     pub fn note_at(&self, step: usize) -> u8 {
-        if step < self.number_steps && self.steps[step].active {
+        if step < self.num_steps && self.steps[step].active {
             let base = self.base_note as i16;
             let offset = self.steps[step].note_offset as i16;
             (base + offset).clamp(0, 127) as u8
@@ -267,7 +267,7 @@ pub fn name_str(&self) -> &str {
 
     /// Count active steps
     pub fn active_count(&self) -> usize {
-        self.steps[..self.number_steps].iter().filter(|s| s.active).count()
+        self.steps[..self.num_steps].iter().filter(|s| s.active).count()
     }
 }
 
@@ -297,7 +297,7 @@ pub struct BeatStudio {
 
     // Visualization
     pub scope_buffer: [i16; 256],
-    pub scope_position: usize,
+    pub scope_pos: usize,
     pub spectrum: [u8; 16],
 
     // Keyboard state (which keys are visually "pressed")
@@ -306,16 +306,16 @@ pub struct BeatStudio {
     pub velocity: u8,
 
     // Layout cache
-    framebuffer_w: u32,
-    framebuffer_h: u32,
+    fb_w: u32,
+    fb_h: u32,
 }
 
 // Implementation block — defines methods for the type above.
 impl BeatStudio {
     /// Create a new Beat Studio with default demo beat
     pub fn new() -> Self {
-        let framebuffer_w = crate::framebuffer::FRAMEBUFFER_WIDTH.load(Ordering::Relaxed) as u32;
-        let framebuffer_h = crate::framebuffer::FRAMEBUFFER_HEIGHT.load(Ordering::Relaxed) as u32;
+        let fb_w = crate::framebuffer::FRAMEBUFFER_WIDTH.load(Ordering::Relaxed) as u32;
+        let fb_h = crate::framebuffer::FRAMEBUFFER_HEIGHT.load(Ordering::Relaxed) as u32;
 
         let tracks = [
             BeatTrack::new("Kick",  36, Waveform::Sine,     colors::TRACK_COLORS[0], true),
@@ -339,13 +339,13 @@ impl BeatStudio {
             cursor_track: 0,
             cursor_step: 0,
             scope_buffer: [0i16; 256],
-            scope_position: 0,
+            scope_pos: 0,
             spectrum: [0u8; 16],
             keys_pressed: [false; 128],
             octave: 0,
             velocity: 100,
-            framebuffer_w,
-            framebuffer_h,
+            fb_w,
+            fb_h,
         };
 
         // Pre-load a demo beat pattern
@@ -421,8 +421,8 @@ impl BeatStudio {
         self.swing = 56; // subtle shuffle
 
         // Expand to 32 steps (2 bars) for variation
-        for t in self.tracks.iterator_mut() {
-            t.number_steps = 32;
+        for t in self.tracks.iter_mut() {
+            t.num_steps = 32;
             for s in 0..MAXIMUM_STEPS {
                 t.steps[s] = BeatStep::off();
             }
@@ -438,8 +438,8 @@ impl BeatStudio {
         self.tracks[6] = BeatTrack::new("Lead",    72, Waveform::Sawtooth, colors::TRACK_COLORS[6], false);
         self.tracks[7] = BeatTrack::new("Perc",    56, Waveform::Noise,    colors::TRACK_COLORS[7], true);
 
-        for t in self.tracks.iterator_mut() {
-            t.number_steps = 32;
+        for t in self.tracks.iter_mut() {
+            t.num_steps = 32;
         }
 
         // ─── Deep house envelopes (longer, smoother) ───
@@ -611,7 +611,7 @@ match i % 4 {
     // ═════════════════════════════════════════════════════════════════════════
 
     /// Base anthem track configuration (instruments, envelopes, volumes)
-    fn anthem_initialize(&mut self) {
+    fn anthem_init(&mut self) {
         self.bpm = 106;
         self.swing = 50; // straight for anthem clarity
 
@@ -624,8 +624,8 @@ match i % 4 {
         self.tracks[6] = BeatTrack::new("Lead",  72, Waveform::Sawtooth, colors::TRACK_COLORS[6], false);
         self.tracks[7] = BeatTrack::new("Arp",   72, Waveform::Triangle, colors::TRACK_COLORS[7], false);
 
-        for t in self.tracks.iterator_mut() {
-            t.number_steps = 32;
+        for t in self.tracks.iter_mut() {
+            t.num_steps = 32;
             for s in 0..MAXIMUM_STEPS { t.steps[s] = BeatStep::off(); }
         }
 
@@ -651,7 +651,7 @@ match i % 4 {
 
     /// INTRO — L'Éveil: heartbeat sub + floating pad + digital texture
     fn anthem_intro(&mut self) {
-        self.anthem_initialize();
+        self.anthem_init();
         // Only Sub + Pad + Texture active
         self.tracks[0].muted = true;  // Kick OFF
         self.tracks[1].muted = true;  // Snare OFF
@@ -673,7 +673,7 @@ match i % 4 {
 
         // Arp → Texture: digital boot blips (noise percussion)
         self.tracks[7] = BeatTrack::new("Texture", 72, Waveform::Noise, colors::TRACK_COLORS[7], true);
-        self.tracks[7].number_steps = 32;
+        self.tracks[7].num_steps = 32;
         self.tracks[7].envelope = Envelope::new(1, 15, 0, 5);
         self.tracks[7].volume = 50;
         self.tracks[7].steps[4]  = BeatStep::on(25);
@@ -686,7 +686,7 @@ match i % 4 {
 
     /// BUILD — L'Espoir: soft kick, ascending arp, warm bass
     fn anthem_build(&mut self) {
-        self.anthem_initialize();
+        self.anthem_init();
         self.tracks[1].muted = true;  // Snare still OFF
         self.tracks[6].muted = true;  // Lead still OFF
 
@@ -758,7 +758,7 @@ match i % 4 {
 
     /// DROP — La Révélation: full energy, punchy drums, the hook melody
     fn anthem_drop(&mut self) {
-        self.anthem_initialize();
+        self.anthem_init();
         // ALL tracks active
 
         // Kick: punchy four-on-floor + ghosts
@@ -860,7 +860,7 @@ match i % 4 { 0 => 80, 2 => 100, 1 => 35, _ => 50 };
 
     /// STABLE — La Maîtrise: C minor → C MAJOR! The TrustOS identity.
     fn anthem_stable(&mut self) {
-        self.anthem_initialize();
+        self.anthem_init();
 
         // Kick: simplified, confident
         self.tracks[0].volume = 210;
@@ -934,7 +934,7 @@ match i % 4 { 0 => 80, 2 => 100, 1 => 35, _ => 50 };
 
     /// OUTRO — Le Futur Souverain: pad + motif fading into silence
     fn anthem_outro(&mut self) {
-        self.anthem_initialize();
+        self.anthem_init();
         // Only Sub + Pad + Lead
         self.tracks[0].muted = true;  // Kick OFF
         self.tracks[1].muted = true;  // Snare OFF
@@ -991,8 +991,8 @@ match i % 4 { 0 => 80, 2 => 100, 1 => 35, _ => 50 };
         self.tracks[6] = BeatTrack::new("Lead",    75, Waveform::Sawtooth, colors::TRACK_COLORS[6], false);  // Eb5=75
         self.tracks[7] = BeatTrack::new("Perc",    63, Waveform::Noise,    colors::TRACK_COLORS[7], true);
 
-        for t in self.tracks.iterator_mut() {
-            t.number_steps = 32;
+        for t in self.tracks.iter_mut() {
+            t.num_steps = 32;
             for s in 0..MAXIMUM_STEPS { t.steps[s] = BeatStep::off(); }
             t.muted = false;
         }
@@ -1522,8 +1522,8 @@ match i % 4 { 0 => 80, 2 => 100, 1 => 35, _ => 50 };
         self.tracks[6] = BeatTrack::new("Lead",   81, Waveform::Square,   colors::TRACK_COLORS[6], false);  // A5=81
         self.tracks[7] = BeatTrack::new("Perc",   60, Waveform::Noise,    colors::TRACK_COLORS[7], true);
 
-        for t in self.tracks.iterator_mut() {
-            t.number_steps = 32;
+        for t in self.tracks.iter_mut() {
+            t.num_steps = 32;
             for s in 0..MAXIMUM_STEPS { t.steps[s] = BeatStep::off(); }
             t.muted = false;
         }
@@ -1915,16 +1915,16 @@ match i % 4 { 0 => 80, 2 => 100, 1 => 35, _ => 50 };
 
     fn track_label_w(&self) -> u32 { 120 }
 
-    fn scope_w(&self) -> u32 { self.framebuffer_w.saturating_sub(self.track_label_w() + self.grid_w()).maximum(120) }
+    fn scope_w(&self) -> u32 { self.fb_w.saturating_sub(self.track_label_w() + self.grid_w()).max(120) }
 
     fn grid_w(&self) -> u32 {
         // Each step pad is ~36px wide
-        let step_w = ((self.framebuffer_w - self.track_label_w() - 120) / self.tracks[0].number_steps as u32).maximum(20).minimum(44);
-        step_w * self.tracks[0].number_steps as u32
+        let step_w = ((self.fb_w - self.track_label_w() - 120) / self.tracks[0].num_steps as u32).max(20).min(44);
+        step_w * self.tracks[0].num_steps as u32
     }
 
     fn step_w(&self) -> u32 {
-        self.grid_w() / self.tracks[0].number_steps as u32
+        self.grid_w() / self.tracks[0].num_steps as u32
     }
 
     fn track_row_h(&self) -> u32 { 32 }
@@ -1934,13 +1934,13 @@ match i % 4 { 0 => 80, 2 => 100, 1 => 35, _ => 50 };
         24 + MAXIMUM_BEAT_TRACKS as u32 * self.track_row_h()
     }
 
-    fn sequence_y(&self) -> u32 { self.transport_h() }
-    fn sequence_grid_x(&self) -> u32 { self.track_label_w() }
+    fn seq_y(&self) -> u32 { self.transport_h() }
+    fn seq_grid_x(&self) -> u32 { self.track_label_w() }
     fn scope_x(&self) -> u32 { self.track_label_w() + self.grid_w() }
 
-    fn bottom_y(&self) -> u32 { self.sequence_y() + self.grid_h() + 2 }
-    fn bottom_h(&self) -> u32 { self.framebuffer_h.saturating_sub(self.bottom_y() + 48) }
-    fn status_y(&self) -> u32 { self.framebuffer_h.saturating_sub(48) }
+    fn bottom_y(&self) -> u32 { self.seq_y() + self.grid_h() + 2 }
+    fn bottom_h(&self) -> u32 { self.fb_h.saturating_sub(self.bottom_y() + 48) }
+    fn status_y(&self) -> u32 { self.fb_h.saturating_sub(48) }
 
     // ═════════════════════════════════════════════════════════════════════════
     // Full Draw
@@ -1948,10 +1948,10 @@ match i % 4 { 0 => 80, 2 => 100, 1 => 35, _ => 50 };
 
     /// Draw the entire Beat Studio UI
     pub fn draw(&self) {
-        if self.framebuffer_w == 0 || self.framebuffer_h == 0 { return; }
+        if self.fb_w == 0 || self.fb_h == 0 { return; }
 
         // Full background
-        crate::framebuffer::fill_rect(0, 0, self.framebuffer_w, self.framebuffer_h, colors::BG_DARK);
+        crate::framebuffer::fill_rect(0, 0, self.fb_w, self.fb_h, colors::BG_DARK);
 
         self.draw_transport();
         self.draw_track_labels();
@@ -1965,7 +1965,7 @@ match i % 4 { 0 => 80, 2 => 100, 1 => 35, _ => 50 };
 
     fn draw_transport(&self) {
         let h = self.transport_h();
-        crate::framebuffer::fill_rect(0, 0, self.framebuffer_w, h, colors::TRANSPORT_BG);
+        crate::framebuffer::fill_rect(0, 0, self.fb_w, h, colors::TRANSPORT_BG);
 
         // ♫ TrustDAW Beat Studio
         crate::framebuffer::draw_text("TrustDAW Beat Studio", 8, 4, colors::TEXT_ACCENT);
@@ -2002,7 +2002,7 @@ match i % 4 { 0 => 80, 2 => 100, 1 => 35, _ => 50 };
         crate::framebuffer::draw_text(&swing_str, bx + 240, 4, colors::TEXT_SECONDARY);
 
         // Steps display
-        let steps_str = format!("{} steps", self.tracks[0].number_steps);
+        let steps_str = format!("{} steps", self.tracks[0].num_steps);
         crate::framebuffer::draw_text(&steps_str, bx + 340, 4, colors::TEXT_SECONDARY);
 
         // Second line: key/mode info
@@ -2019,14 +2019,14 @@ match i % 4 { 0 => 80, 2 => 100, 1 => 35, _ => 50 };
         crate::framebuffer::draw_text(&vel_str, 420, 24, colors::TEXT_SECONDARY);
 
         // Transport border
-        crate::framebuffer::draw_hline(0, h - 1, self.framebuffer_w, colors::BORDER_BRIGHT);
+        crate::framebuffer::draw_hline(0, h - 1, self.fb_w, colors::BORDER_BRIGHT);
     }
 
     // ─── Track Labels (Left Panel) ──────────────────────────────────────
 
     fn draw_track_labels(&self) {
         let x = 0;
-        let y = self.sequence_y();
+        let y = self.seq_y();
         let w = self.track_label_w();
         let row_h = self.track_row_h();
 
@@ -2076,11 +2076,11 @@ match i % 4 { 0 => 80, 2 => 100, 1 => 35, _ => 50 };
     // ─── Step Sequencer Grid ────────────────────────────────────────────
 
     fn draw_step_grid(&self) {
-        let gx = self.sequence_grid_x();
-        let gy = self.sequence_y();
+        let gx = self.seq_grid_x();
+        let gy = self.seq_y();
         let software = self.step_w();
         let row_h = self.track_row_h();
-        let number_s = self.tracks[0].number_steps;
+        let number_s = self.tracks[0].num_steps;
 
         // Header: step numbers
         crate::framebuffer::fill_rect(gx, gy, self.grid_w(), 24, colors::BG_HEADER);
@@ -2109,8 +2109,8 @@ match i % 4 { 0 => 80, 2 => 100, 1 => 35, _ => 50 };
                 // Pad dimensions (with 2px margin)
                 let pad_x = sx + 2;
                 let pad_y = ry + 2;
-                let pad_w = software.saturating_sub(4).maximum(4);
-                let pad_h = row_h.saturating_sub(4).maximum(4);
+                let pad_w = software.saturating_sub(4).max(4);
+                let pad_h = row_h.saturating_sub(4).max(4);
 
                 // Determine pad color
                 let is_cursor = t == self.cursor_track && s == self.cursor_step;
@@ -2122,7 +2122,7 @@ match i % 4 { 0 => 80, 2 => 100, 1 => 35, _ => 50 };
                     } else {
                         // Use track color with velocity brightness
                         let brightness = step.velocity as u32 * 100 / 127;
-                        adjust_brightness(self.tracks[t].color, brightness.maximum(40))
+                        adjust_brightness(self.tracks[t].color, brightness.max(40))
                     }
                 } else if is_playhead {
                     colors::BG_ELEVATED  // Dimly lit when playhead passes
@@ -2149,8 +2149,8 @@ match i % 4 { 0 => 80, 2 => 100, 1 => 35, _ => 50 };
 
         // Playhead vertical line across the entire grid
         if self.playing {
-            let pixel = gx + self.current_step as u32 * software + software / 2;
-            crate::framebuffer::draw_vline(pixel, gy, self.grid_h(), colors::STEP_PLAYHEAD);
+            let px = gx + self.current_step as u32 * software + software / 2;
+            crate::framebuffer::draw_vline(px, gy, self.grid_h(), colors::STEP_PLAYHEAD);
         }
     }
 
@@ -2158,7 +2158,7 @@ match i % 4 { 0 => 80, 2 => 100, 1 => 35, _ => 50 };
 
     fn draw_scope(&self) {
         let sx = self.scope_x();
-        let sy = self.sequence_y();
+        let sy = self.seq_y();
         let software = self.scope_w();
         let sh = self.grid_h();
 
@@ -2179,21 +2179,21 @@ match i % 4 { 0 => 80, 2 => 100, 1 => 35, _ => 50 };
         crate::framebuffer::draw_hline(sx + 4, center_y, software - 8, colors::DIVIDER);
 
         // Draw waveform from scope buffer
-        let draw_w = (software - 8).minimum(256) as usize;
+        let draw_w = (software - 8).min(256) as usize;
         for i in 1..draw_w {
-            let idx1 = (self.scope_position + i - 1) % 256;
-            let idx2 = (self.scope_position + i) % 256;
+            let idx1 = (self.scope_pos + i - 1) % 256;
+            let idx2 = (self.scope_pos + i) % 256;
 
             let y1 = center_y as i32 - (self.scope_buffer[idx1] as i32 * scope_h as i32 / 2) / 32768;
             let y2 = center_y as i32 - (self.scope_buffer[idx2] as i32 * scope_h as i32 / 2) / 32768;
 
-            let py1 = (y1.maximum(scope_y as i32) as u32).minimum(scope_y + scope_h);
-            let py2 = (y2.maximum(scope_y as i32) as u32).minimum(scope_y + scope_h);
+            let py1 = (y1.max(scope_y as i32) as u32).min(scope_y + scope_h);
+            let py2 = (y2.max(scope_y as i32) as u32).min(scope_y + scope_h);
 
             // Draw vertical line between the two points
-            let minimum_y = py1.minimum(py2);
-            let maximum_y = py1.maximum(py2);
-            let line_h = (maximum_y - minimum_y).maximum(1);
+            let minimum_y = py1.min(py2);
+            let maximum_y = py1.max(py2);
+            let line_h = (maximum_y - minimum_y).max(1);
             crate::framebuffer::fill_rect(sx + 4 + i as u32, minimum_y, 1, line_h, colors::SCOPE_LINE);
         }
 
@@ -2207,11 +2207,11 @@ match i % 4 { 0 => 80, 2 => 100, 1 => 35, _ => 50 };
         let bar_area_y = spec_y + 20;
         let bar_area_h = spec_h - 24;
         let number_bars = 16usize;
-        let bar_w = ((software - 16) / number_bars as u32).maximum(4);
+        let bar_w = ((software - 16) / number_bars as u32).max(4);
 
         for i in 0..number_bars {
             let bx = sx + 8 + i as u32 * bar_w;
-            let level = self.spectrum[i].minimum(100) as u32;
+            let level = self.spectrum[i].min(100) as u32;
             let filled_h = bar_area_h * level / 100;
             let bar_y = bar_area_y + bar_area_h - filled_h;
 
@@ -2238,12 +2238,12 @@ match i % 4 { 0 => 80, 2 => 100, 1 => 35, _ => 50 };
         let by = self.bottom_y();
         let bh = self.bottom_h();
 
-        crate::framebuffer::draw_hline(0, by, self.framebuffer_w, colors::BORDER_BRIGHT);
+        crate::framebuffer::draw_hline(0, by, self.fb_w, colors::BORDER_BRIGHT);
 
         // Three panels side by side
         self.draw_mixer(0, by + 1, self.track_label_w(), bh);
         self.draw_visual_keyboard(self.track_label_w(), by + 1, self.grid_w(), bh);
-        self.draw_information_panel(self.scope_x(), by + 1, self.scope_w(), bh);
+        self.draw_info_panel(self.scope_x(), by + 1, self.scope_w(), bh);
     }
 
     // ─── Mixer Panel ────────────────────────────────────────────────────
@@ -2255,10 +2255,10 @@ match i % 4 { 0 => 80, 2 => 100, 1 => 35, _ => 50 };
         crate::framebuffer::draw_text("MIXER", x + 8, y + 4, colors::TEXT_DIM);
 
         let fader_h = h.saturating_sub(40);
-        let number_tracks = MAXIMUM_BEAT_TRACKS;
-        let fader_w = ((w - 8) / number_tracks as u32).maximum(8);
+        let num_tracks = MAXIMUM_BEAT_TRACKS;
+        let fader_w = ((w - 8) / num_tracks as u32).max(8);
 
-        for i in 0..number_tracks {
+        for i in 0..num_tracks {
             let fx = x + 4 + i as u32 * fader_w;
             let fy = y + 24;
 
@@ -2270,7 +2270,7 @@ match i % 4 { 0 => 80, 2 => 100, 1 => 35, _ => 50 };
             // Fader background
             let fader_x = fx + 2;
             let fader_y = fy + 18;
-            let fader_w_inner = fader_w.saturating_sub(6).maximum(3);
+            let fader_w_inner = fader_w.saturating_sub(6).max(3);
             let fader_h_inner = fader_h.saturating_sub(30);
 
             crate::framebuffer::fill_rect(fader_x, fader_y, fader_w_inner, fader_h_inner, colors::METER_BG);
@@ -2395,7 +2395,7 @@ match key_in_oct {
 
     // ─── Info Panel ─────────────────────────────────────────────────────
 
-    fn draw_information_panel(&self, x: u32, y: u32, w: u32, h: u32) {
+    fn draw_info_panel(&self, x: u32, y: u32, w: u32, h: u32) {
         crate::framebuffer::fill_rect(x, y, w, h, colors::BG_PANEL);
         crate::framebuffer::draw_vline(x, y, h, colors::BORDER);
 
@@ -2424,7 +2424,7 @@ match key_in_oct {
         crate::framebuffer::draw_text(&note_str, x + 8, ly, colors::TEXT_SECONDARY);
         ly += line_h;
 
-        let active_str = format!("Steps: {}/{}", t.active_count(), t.number_steps);
+        let active_str = format!("Steps: {}/{}", t.active_count(), t.num_steps);
         crate::framebuffer::draw_text(&active_str, x + 8, ly, colors::TEXT_SECONDARY);
         ly += line_h;
 
@@ -2439,7 +2439,7 @@ match key_in_oct {
         ly += line_h + 8;
 
         // Cursor position
-        let cur_str = format!("Step: {}/{}", self.cursor_step + 1, t.number_steps);
+        let cur_str = format!("Step: {}/{}", self.cursor_step + 1, t.num_steps);
         crate::framebuffer::draw_text(&cur_str, x + 8, ly, colors::TEXT_ACCENT);
         ly += line_h;
 
@@ -2457,8 +2457,8 @@ match key_in_oct {
 
     fn draw_status_bar(&self) {
         let sy = self.status_y();
-        crate::framebuffer::fill_rect(0, sy, self.framebuffer_w, 48, colors::TRANSPORT_BG);
-        crate::framebuffer::draw_hline(0, sy, self.framebuffer_w, colors::BORDER_BRIGHT);
+        crate::framebuffer::fill_rect(0, sy, self.fb_w, 48, colors::TRANSPORT_BG);
+        crate::framebuffer::draw_hline(0, sy, self.fb_w, colors::BORDER_BRIGHT);
 
         crate::framebuffer::draw_text(
             "[Space] Play/Stop  [Enter] Toggle Step  [R] Record  [Tab] Track  [+/-] BPM",
@@ -2479,7 +2479,7 @@ match key_in_oct {
     /// through consecutive empty steps.  Stereo delay/echo + vinyl noise + humanized timing.
     pub fn render_loop(&self) -> Vec<i16> {
         let step_samples = (60 * SAMPLE_RATE) / (self.bpm as u32 * 4); // 16th note duration
-        let total_steps = self.tracks[0].number_steps;
+        let total_steps = self.tracks[0].num_steps;
         let total_frames = step_samples as usize * total_steps;
         let total_samples = total_frames * CHANNELS as usize;
 
@@ -2528,7 +2528,7 @@ match key_in_oct {
                 let base_start = s * step_samples as usize;
                 rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
                 let jitter_samples = ((rng % 769) as i32 - 384) as isize; // ±8ms at 48kHz
-                let note_start = (base_start as isize + jitter_samples).maximum(0) as usize;
+                let note_start = (base_start as isize + jitter_samples).max(0) as usize;
 
                 let note_dur = step_samples as usize * note_steps;
 
@@ -2537,9 +2537,9 @@ match key_in_oct {
                     (note_dur as u32 * 1000) / SAMPLE_RATE);
 
                 for (j, &sample) in note_samples.iter().enumerate() {
-                    let index = note_start * CHANNELS as usize + j;
-                    if index < mix.len() {
-                        mix[index] += (sample as i32 * vol) / 255;
+                    let idx = note_start * CHANNELS as usize + j;
+                    if idx < mix.len() {
+                        mix[idx] += (sample as i32 * vol) / 255;
                     }
                 }
 
@@ -2567,7 +2567,7 @@ match key_in_oct {
 
         // ── Vinyl noise layer at ~-35dB (adds analog texture) ──
         let mut noise_lfsr: u16 = 0xACE1;
-        for sample in mix.iterator_mut() {
+        for sample in mix.iter_mut() {
             let bit = noise_lfsr & 1;
             noise_lfsr >>= 1;
             if bit == 1 { noise_lfsr ^= 0xB400; }
@@ -2589,19 +2589,19 @@ match key_in_oct {
     }
 
     /// Calculate step duration in milliseconds
-    pub fn step_duration_mouse(&self) -> u32 {
+    pub fn step_duration_ms(&self) -> u32 {
         60_000 / (self.bpm as u32 * 4) // 16th note at current BPM
     }
 
     /// Update scope buffer with recent audio
     pub fn update_scope(&mut self, samples: &[i16]) {
         // Take every Nth sample to fit in scope buffer
-        let step = (samples.len() / 256).maximum(1);
+        let step = (samples.len() / 256).max(1);
         for i in 0..256 {
-            let index = (i * step).minimum(samples.len().saturating_sub(1));
-            self.scope_buffer[i] = samples[index];
+            let idx = (i * step).min(samples.len().saturating_sub(1));
+            self.scope_buffer[i] = samples[idx];
         }
-        self.scope_position = 0;
+        self.scope_pos = 0;
     }
 
     /// Update fake spectrum from current beat state
@@ -2610,19 +2610,19 @@ match key_in_oct {
         for i in 0..16 {
             let mut level: u32 = 0;
             for t in &self.tracks {
-                if !t.muted && self.current_step < t.number_steps {
+                if !t.muted && self.current_step < t.num_steps {
                     let step = &t.steps[self.current_step];
                     if step.active {
                         // Each track contributes to nearby frequency bands
-                        let band = (t.base_note as u32 / 8).minimum(15);
-                        let distance = (band as i32 - i as i32).unsigned_absolute();
+                        let band = (t.base_note as u32 / 8).min(15);
+                        let distance = (band as i32 - i as i32).unsigned_abs();
                         if distance < 4 {
                             level += step.velocity as u32 * (4 - distance) / 4;
                         }
                     }
                 }
             }
-            self.spectrum[i] = level.minimum(100) as u8;
+            self.spectrum[i] = level.min(100) as u8;
         }
     }
 
@@ -2728,13 +2728,13 @@ match scancode {
 
                 // ── Arrow keys: navigate grid ──
                 0x4D => { // Right
-                    let maximum = studio.tracks[studio.cursor_track].number_steps;
-                    studio.cursor_step = (studio.cursor_step + 1) % maximum;
+                    let max = studio.tracks[studio.cursor_track].num_steps;
+                    studio.cursor_step = (studio.cursor_step + 1) % max;
                 }
                 0x4B => { // Left
-                    let maximum = studio.tracks[studio.cursor_track].number_steps;
+                    let max = studio.tracks[studio.cursor_track].num_steps;
                     if studio.cursor_step == 0 {
-                        studio.cursor_step = maximum - 1;
+                        studio.cursor_step = max - 1;
                     } else {
                         studio.cursor_step -= 1;
                     }
@@ -2752,18 +2752,18 @@ match scancode {
 
                 // ── +/- : BPM control ──
                 0x0D => { // = / + key
-                    studio.bpm = (studio.bpm + 5).minimum(300);
+                    studio.bpm = (studio.bpm + 5).min(300);
                 }
                 0x0C => { // - key
-                    studio.bpm = studio.bpm.saturating_sub(5).maximum(40);
+                    studio.bpm = studio.bpm.saturating_sub(5).max(40);
                 }
 
                 // ── Page Up/Down: octave ──
                 0x49 => { // Page Up
-                    studio.octave = (studio.octave + 1).minimum(4);
+                    studio.octave = (studio.octave + 1).min(4);
                 }
                 0x51 => { // Page Down
-                    studio.octave = (studio.octave - 1).maximum(-4);
+                    studio.octave = (studio.octave - 1).max(-4);
                 }
 
                 // ── M key: toggle mute on current track ──
@@ -2787,10 +2787,10 @@ match studio.tracks[ct].waveform {
 
                 // ── F2: toggle 16/32 steps ──
                 0x3C => {
-                    for t in studio.tracks.iterator_mut() {
-                        t.number_steps = if t.number_steps == 16 { 32 } else { 16 };
+                    for t in studio.tracks.iter_mut() {
+                        t.num_steps = if t.num_steps == 16 { 32 } else { 16 };
                     }
-                    if studio.cursor_step >= studio.tracks[0].number_steps {
+                    if studio.cursor_step >= studio.tracks[0].num_steps {
                         studio.cursor_step = 0;
                     }
                 }
@@ -2812,7 +2812,7 @@ match studio.tracks[ct].waveform {
                 // ── Backspace: clear all steps on current track ──
                 0x0E => {
                     let ct = studio.cursor_track;
-                    for s in 0..studio.tracks[ct].number_steps {
+                    for s in 0..studio.tracks[ct].num_steps {
                         studio.tracks[ct].steps[s] = BeatStep::off();
                     }
                 }
@@ -2830,8 +2830,8 @@ match studio.tracks[ct].waveform {
                             let offset = midi as i8 - base as i8;
                             studio.tracks[ct].steps[cs] = BeatStep::on_note(studio.velocity, offset);
                             // Auto-advance cursor
-                            let maximum = studio.tracks[ct].number_steps;
-                            studio.cursor_step = (studio.cursor_step + 1) % maximum;
+                            let max = studio.tracks[ct].num_steps;
+                            studio.cursor_step = (studio.cursor_step + 1) % max;
                         }
                     } else {
                         redraw = false;
@@ -2859,8 +2859,8 @@ match studio.tracks[ct].waveform {
 
 /// Animate the playhead during playback (blocking)
 fn animate_playhead(studio: &mut BeatStudio) {
-    let total_steps = studio.tracks[0].number_steps;
-    let step_mouse = studio.step_duration_mouse();
+    let total_steps = studio.tracks[0].num_steps;
+    let step_mouse = studio.step_duration_ms();
 
     for s in 0..total_steps {
         studio.current_step = s;
@@ -2895,7 +2895,7 @@ fn adjust_brightness(color: u32, brightness: u32) -> u32 {
     let r = ((color >> 16) & 0xFF) * brightness / 100;
     let g = ((color >> 8) & 0xFF) * brightness / 100;
     let b = (color & 0xFF) * brightness / 100;
-    (r.minimum(255) << 16) | (g.minimum(255) << 8) | b.minimum(255)
+    (r.min(255) << 16) | (g.min(255) << 8) | b.min(255)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2916,7 +2916,7 @@ struct MatrixColumn {
     /// Speed (pixels per tick)
     speed: u8,
     /// Trail length (characters)
-    trail_length: u8,
+    trail_len: u8,
     /// Active (visible on screen)
     active: bool,
     /// Random character offset (for variety)
@@ -2928,10 +2928,10 @@ struct MatrixColumn {
 /// Matrix visual state
 struct MatrixState {
     columns: Vec<MatrixColumn>,
-    number_cols: usize,
-    number_rows: usize,
-    framebuffer_w: u32,
-    framebuffer_h: u32,
+    num_cols: usize,
+    num_rows: usize,
+    fb_w: u32,
+    fb_h: u32,
     /// Frame counter for animation
     frame: u32,
     /// LFSR for pseudo-random
@@ -2943,12 +2943,12 @@ impl MatrixState {
     /// Create a new MatrixState matching the desktop depth-parallax style.
     /// 160 columns, speeds 1-3, 30-char trails, atmospheric green palette.
     fn new() -> Self {
-        let framebuffer_w = crate::framebuffer::FRAMEBUFFER_WIDTH.load(Ordering::Relaxed) as u32;
-        let framebuffer_h = crate::framebuffer::FRAMEBUFFER_HEIGHT.load(Ordering::Relaxed) as u32;
+        let fb_w = crate::framebuffer::FRAMEBUFFER_WIDTH.load(Ordering::Relaxed) as u32;
+        let fb_h = crate::framebuffer::FRAMEBUFFER_HEIGHT.load(Ordering::Relaxed) as u32;
 
                 // Compile-time constant — evaluated at compilation, zero runtime cost.
 const MATRIX_COLS: usize = 160;
-        let number_rows = (framebuffer_h / 16) as usize;
+        let num_rows = (fb_h / 16) as usize;
 
         let mut columns = Vec::with_capacity(MATRIX_COLS);
         let mut lfsr: u32 = 0xDEAD_BEEF;
@@ -2959,13 +2959,13 @@ const MATRIX_COLS: usize = 160;
             lfsr = lfsr_next(lfsr);
             let speed = (seed % 3) as u8 + 1;        // 1-3: depth parallax
             let trail = 30u8;                         // fixed 30-char trails
-            let start_y = -((seed % (number_rows as u32 / 2)) as i32);
+            let start_y = -((seed % (num_rows as u32 / 2)) as i32);
             let char_off = (seed.wrapping_mul(7919) % 94) as u8;
 
             columns.push(MatrixColumn {
                 head_y: start_y,
                 speed,
-                trail_length: trail,
+                trail_len: trail,
                 active: true,
                 char_offset: char_off,
                 flash: 100,
@@ -2974,10 +2974,10 @@ const MATRIX_COLS: usize = 160;
 
         Self {
             columns,
-            number_cols: MATRIX_COLS,
-            number_rows,
-            framebuffer_w,
-            framebuffer_h,
+            num_cols: MATRIX_COLS,
+            num_rows,
+            fb_w,
+            fb_h,
             frame: 0,
             lfsr,
         }
@@ -2987,16 +2987,16 @@ const MATRIX_COLS: usize = 160;
     fn tick(&mut self) {
         self.frame += 1;
 
-        for (i, column) in self.columns.iterator_mut().enumerate() {
-            column.head_y += column.speed as i32;
+        for (i, col) in self.columns.iter_mut().enumerate() {
+            col.head_y += col.speed as i32;
 
             // Wrap around when off-screen (like desktop)
-            let total_trail_h = column.trail_length as i32 * 16;
-            if column.head_y > (self.framebuffer_h as i32 + total_trail_h) {
+            let total_trail_h = col.trail_len as i32 * 16;
+            if col.head_y > (self.fb_h as i32 + total_trail_h) {
                 let seed = (i as u32).wrapping_mul(1103515245).wrapping_add(self.frame);
-                column.head_y = -((seed % (self.framebuffer_h / 2)) as i32);
-                column.speed = (seed % 3) as u8 + 1;
-                column.char_offset = ((seed.wrapping_mul(7919)) % 94) as u8;
+                col.head_y = -((seed % (self.fb_h / 2)) as i32);
+                col.speed = (seed % 3) as u8 + 1;
+                col.char_offset = ((seed.wrapping_mul(7919)) % 94) as u8;
             }
         }
     }
@@ -3004,10 +3004,10 @@ const MATRIX_COLS: usize = 160;
     /// Flash columns near a "beat hit"
     fn flash_beat(&mut self, intensity: u8) {
         // Flash random subset of columns
-        let count = (self.number_cols * intensity as usize / 255).maximum(3);
+        let count = (self.num_cols * intensity as usize / 255).max(3);
         for _ in 0..count {
             self.lfsr = lfsr_next(self.lfsr);
-            let column_index = (self.lfsr as usize) % self.number_cols;
+            let column_index = (self.lfsr as usize) % self.num_cols;
             self.columns[column_index].flash = 255;
             self.columns[column_index].active = true;
             self.columns[column_index].head_y = 0;
@@ -3017,34 +3017,34 @@ const MATRIX_COLS: usize = 160;
     }
 
     /// Draw the Matrix rain
-    fn draw(&self, step: usize, total_steps: usize, track_information: &str, bpm: u16, bar_beat: &str) {
+    fn draw(&self, step: usize, total_steps: usize, track_info: &str, bpm: u16, bar_beat: &str) {
         // Black background
-        crate::framebuffer::fill_rect(0, 0, self.framebuffer_w, self.framebuffer_h, 0x000000);
+        crate::framebuffer::fill_rect(0, 0, self.fb_w, self.fb_h, 0x000000);
 
         // Matrix glyph set — ASCII printable range simulating katakana
         const GLYPHS: &[u8] = b"@#$%&*0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!?<>{}[]|/\\~^";
 
         // Draw each column
-        for (column_index, column) in self.columns.iter().enumerate() {
-            if !column.active { continue; }
+        for (column_index, col) in self.columns.iter().enumerate() {
+            if !col.active { continue; }
 
             let x = column_index as u32 * 8;
 
-            for row_offset in 0..(column.trail_length as i32 + 1) {
-                let row = column.head_y - row_offset;
-                if row < 0 || row >= self.number_rows as i32 { continue; }
+            for row_offset in 0..(col.trail_len as i32 + 1) {
+                let row = col.head_y - row_offset;
+                if row < 0 || row >= self.num_rows as i32 { continue; }
 
                 let y = row as u32 * 16;
 
                 // Choose character — changes per frame for head, stable for trail
                 let char_index = if row_offset == 0 {
                     // Head: changes rapidly
-                    ((column.char_offset as u32 + self.frame * 3 + column_index as u32) % GLYPHS.len() as u32) as usize
+                    ((col.char_offset as u32 + self.frame * 3 + column_index as u32) % GLYPHS.len() as u32) as usize
                 } else {
                     // Trail: stable per position
-                    ((column.char_offset as u32 + row as u32 * 7 + column_index as u32 * 13) % GLYPHS.len() as u32) as usize
+                    ((col.char_offset as u32 + row as u32 * 7 + column_index as u32 * 13) % GLYPHS.len() as u32) as usize
                 };
-                let character = GLYPHS[char_index] as char;
+                let ch = GLYPHS[char_index] as char;
 
                 // Color gradient: head is bright white-green, trail fades to dark green
                 let brightness = if row_offset == 0 {
@@ -3052,28 +3052,28 @@ const MATRIX_COLS: usize = 160;
                     255u32
                 } else {
                     // Fade along trail
-                    let fade = 255u32.saturating_sub(row_offset as u32 * 255 / column.trail_length as u32);
-                    fade.maximum(20)
+                    let fade = 255u32.saturating_sub(row_offset as u32 * 255 / col.trail_len as u32);
+                    fade.max(20)
                 };
 
                 // Apply flash multiplier
-                let flash_mult = column.flash as u32;
-                let effective_b = (brightness * flash_mult / 100).minimum(255);
+                let flash_mult = col.flash as u32;
+                let effective_b = (brightness * flash_mult / 100).min(255);
 
                 // Green Matrix color with slight blue tint
                 let r = if row_offset == 0 { effective_b * 80 / 100 } else { effective_b * 10 / 100 };
                 let g = effective_b;
                 let b = if row_offset == 0 { effective_b * 60 / 100 } else { effective_b * 20 / 100 };
-                let color = ((r.minimum(255)) << 16) | ((g.minimum(255)) << 8) | b.minimum(255);
+                let color = ((r.min(255)) << 16) | ((g.min(255)) << 8) | b.min(255);
 
-                crate::framebuffer::draw_char_at(x, y, character, color);
+                crate::framebuffer::draw_char_at(x, y, ch, color);
             }
         }
 
         // ── Overlay: Step Progress Bar at bottom ──
-        let bar_y = self.framebuffer_h - 32;
+        let bar_y = self.fb_h - 32;
         let bar_h = 8;
-        let bar_w = self.framebuffer_w - 40;
+        let bar_w = self.fb_w - 40;
         let bar_x = 20;
 
         // Dark bar background
@@ -3098,28 +3098,28 @@ const MATRIX_COLS: usize = 160;
         // ── Overlay: Title text (Matrix-green on black box) ──
         let title = "TRUSTDAW // BEAT MATRIX";
         let title_w = title.len() as u32 * 8 + 16;
-        let title_x = (self.framebuffer_w - title_w) / 2;
+        let title_x = (self.fb_w - title_w) / 2;
         crate::framebuffer::fill_rect(title_x, 8, title_w, 24, 0x001100);
         crate::framebuffer::draw_rect(title_x, 8, title_w, 24, 0x00CC00);
         crate::framebuffer::draw_text(title, title_x + 8, 12, 0x00FF66);
 
         // ── Overlay: Track info ──
         let information_y = 40;
-        let information_w = track_information.len() as u32 * 8 + 16;
-        crate::framebuffer::fill_rect(8, information_y, information_w.minimum(self.framebuffer_w - 16), 20, 0x000800);
-        crate::framebuffer::draw_text(track_information, 16, information_y + 2, 0x00AA44);
+        let information_w = track_info.len() as u32 * 8 + 16;
+        crate::framebuffer::fill_rect(8, information_y, information_w.min(self.fb_w - 16), 20, 0x000800);
+        crate::framebuffer::draw_text(track_info, 16, information_y + 2, 0x00AA44);
 
         // ── Overlay: BPM & position ──
         let bpm_str = format!("{} BPM  {}", bpm, bar_beat);
         let bpm_w = bpm_str.len() as u32 * 8 + 16;
-        let bpm_x = self.framebuffer_w - bpm_w - 8;
+        let bpm_x = self.fb_w - bpm_w - 8;
         crate::framebuffer::fill_rect(bpm_x, information_y, bpm_w, 20, 0x000800);
         crate::framebuffer::draw_text(&bpm_str, bpm_x + 8, information_y + 2, 0x00CC66);
 
         // ── Overlay: Step counter (big text) ──
         let step_str = format!("{:02}/{:02}", step + 1, total_steps);
         let step_w = step_str.len() as u32 * 8 + 12;
-        let step_x = (self.framebuffer_w - step_w) / 2;
+        let step_x = (self.fb_w - step_w) / 2;
         let step_y = bar_y - 24;
         crate::framebuffer::fill_rect(step_x, step_y, step_w, 20, 0x001100);
         crate::framebuffer::draw_text(&step_str, step_x + 6, step_y + 2, 0x44FF88);
@@ -3137,29 +3137,29 @@ const MATRIX_COLS: usize = 160;
     /// Draw matrix rain matching the desktop's depth-parallax atmospheric style.
     /// No beat interaction — purely visual background.
     fn draw_rain(&self) {
-        crate::framebuffer::fill_rect(0, 0, self.framebuffer_w, self.framebuffer_h, 0xFF000000);
+        crate::framebuffer::fill_rect(0, 0, self.fb_w, self.fb_h, 0xFF000000);
 
                 // Compile-time constant — evaluated at compilation, zero runtime cost.
 const GLYPHS: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ@#$%&*+=<>[]{}|";
                 // Compile-time constant — evaluated at compilation, zero runtime cost.
-const TRAIL_LENGTH: i32 = 30;
+const TRAIL_LEN: i32 = 30;
                 // Compile-time constant — evaluated at compilation, zero runtime cost.
 const CHAR_H: i32 = 16;
 
-        let column_width = self.framebuffer_w / self.number_cols as u32;
+        let column_width = self.fb_w / self.num_cols as u32;
 
-        for (column_index, column) in self.columns.iter().enumerate() {
+        for (column_index, col) in self.columns.iter().enumerate() {
             let x = (column_index as u32 * column_width) + column_width / 2;
-            let head_y = column.head_y;
+            let head_y = col.head_y;
 
             // Depth from speed: 1=far(dim), 3=near(bright), matching desktop
-            let depth_factor_100 = ((column.speed as u32).saturating_sub(1)) * 50; // 0, 50, 100
+            let depth_factor_100 = ((col.speed as u32).saturating_sub(1)) * 50; // 0, 50, 100
             let brightness_mult = 30 + depth_factor_100 * 70 / 100; // 30..100%
             let saturation = 20 + depth_factor_100 * 80 / 100;      // 20..100%
 
-            for i in 0..TRAIL_LENGTH {
+            for i in 0..TRAIL_LEN {
                 let char_y = head_y - (i * CHAR_H);
-                if char_y < 0 || char_y >= self.framebuffer_h as i32 { continue; }
+                if char_y < 0 || char_y >= self.fb_h as i32 { continue; }
 
                 // Trail fading (same curve as desktop)
                 let base: u32 = if i == 0 { 255 }
@@ -3173,23 +3173,23 @@ const CHAR_H: i32 = 16;
                 let (r, g, b) = if i == 0 {
                     // Head: white-ish glow
                     let w = 140 * brightness_mult / 100;
-                    (w, brightness.maximum(w), w)
+                    (w, brightness.max(w), w)
                 } else {
                     // Trail: green with depth-based atmospheric tint
-                    let gray_tint = (15 * (100 - saturation) / 100).minimum(40);
-                    let blue_tint = (30 * (100 - saturation) / 100).minimum(50);
+                    let gray_tint = (15 * (100 - saturation) / 100).min(40);
+                    let blue_tint = (30 * (100 - saturation) / 100).min(50);
                     (gray_tint, brightness, blue_tint)
                 };
 
-                let color = ((r.minimum(255)) << 16) | ((g.minimum(255)) << 8) | b.minimum(255);
+                let color = ((r.min(255)) << 16) | ((g.min(255)) << 8) | b.min(255);
 
                 // Slow character mutation (frame / 12), matching desktop
-                let char_seed = column.char_offset as u32
+                let char_seed = col.char_offset as u32
                     + (i as u32 * 7919)
                     ^ (self.frame / 12);
-                let character = GLYPHS[(char_seed as usize) % GLYPHS.len()] as char;
+                let ch = GLYPHS[(char_seed as usize) % GLYPHS.len()] as char;
 
-                crate::framebuffer::draw_char_at(x, char_y as u32, character, color);
+                crate::framebuffer::draw_char_at(x, char_y as u32, ch, color);
             }
         }
     }
@@ -3205,14 +3205,14 @@ pub fn launch_matrix() -> Result<(), &'static str> {
     let mut matrix = MatrixState::new();
 
     // Initial draw
-    matrix.draw(0, studio.tracks[0].number_steps, "> INITIALIZING BEAT MATRIX...", studio.bpm, "1:1.1");
+    matrix.draw(0, studio.tracks[0].num_steps, "> INITIALIZING BEAT MATRIX...", studio.bpm, "1:1.1");
 
     // Render the audio
     let audio = studio.render_loop();
     studio.update_scope(&audio);
 
-    let total_steps = studio.tracks[0].number_steps;
-    let step_mouse = studio.step_duration_mouse();
+    let total_steps = studio.tracks[0].num_steps;
+    let step_mouse = studio.step_duration_ms();
     let total_dur_mouse = step_mouse * total_steps as u32;
 
     crate::serial_println!("[MATRIX] Funky House: {} BPM, {} steps, {}ms per step", studio.bpm, total_steps, step_mouse);
@@ -3296,26 +3296,26 @@ match f {
         matrix.draw(0, total_steps, outro_message, studio.bpm, "---");
 
         // Gradually darken: deactivate columns
-        let deactivate = matrix.number_cols / 40;
+        let deactivate = matrix.num_cols / 40;
         for c in 0..deactivate {
-            let index = (f as usize * deactivate + c) % matrix.number_cols;
-            matrix.columns[index].active = false;
+            let idx = (f as usize * deactivate + c) % matrix.num_cols;
+            matrix.columns[idx].active = false;
         }
 
         crate::cpu::tsc::delay_millis(80); // 80ms per frame
     }
 
     // Final black screen with message
-    crate::framebuffer::fill_rect(0, 0, matrix.framebuffer_w, matrix.framebuffer_h, 0x000000);
+    crate::framebuffer::fill_rect(0, 0, matrix.fb_w, matrix.fb_h, 0x000000);
     let final_msg = "TRUSTDAW BEAT MATRIX // BUILT ON TRUSTOS";
     let fw = final_msg.len() as u32 * 8;
-    let fx = (matrix.framebuffer_w - fw) / 2;
-    let fy = matrix.framebuffer_h / 2 - 8;
+    let fx = (matrix.fb_w - fw) / 2;
+    let fy = matrix.fb_h / 2 - 8;
     crate::framebuffer::draw_text(final_msg, fx, fy, 0x00FF44);
 
     let sub_message = "Bare-metal. No OS. Pure Rust.";
     let software = sub_message.len() as u32 * 8;
-    let sx = (matrix.framebuffer_w - software) / 2;
+    let sx = (matrix.fb_w - software) / 2;
     crate::framebuffer::draw_text(sub_message, sx, fy + 24, 0x008822);
 
     // Wait for key
@@ -3357,12 +3357,12 @@ struct NarrationCard {
 }
 
 /// Draw a cinematic narration overlay on top of the current screen (2× scaled text)
-fn draw_narration_overlay(card: &NarrationCard, framebuffer_w: u32, framebuffer_h: u32, phase: &str, progress: u32, total: u32) {
+fn draw_narration_overlay(card: &NarrationCard, fb_w: u32, fb_h: u32, phase: &str, progress: u32, total: u32) {
     // Taller box for 2× text: phase(32px) + title(32px) + subtitle(32px) + detail(32px) + progress(12px) + padding
     let box_h = 200u32;
-    let box_y = framebuffer_h.saturating_sub(box_h + 52); // above status bar
+    let box_y = fb_h.saturating_sub(box_h + 52); // above status bar
     let box_x = 16u32;
-    let box_w = framebuffer_w.saturating_sub(32);
+    let box_w = fb_w.saturating_sub(32);
 
     crate::framebuffer::fill_rect_alpha(box_x, box_y, box_w, box_h, 0x000000, 230);
 
@@ -3399,44 +3399,44 @@ fn draw_narration_overlay(card: &NarrationCard, framebuffer_w: u32, framebuffer_
 }
 
 /// Draw a full-screen cinematic title card (black bg, 2× scaled text)
-fn draw_title_card(framebuffer_w: u32, framebuffer_h: u32, line1: &str, line2: &str, line3: &str, accent: u32) {
-    crate::framebuffer::fill_rect(0, 0, framebuffer_w, framebuffer_h, 0x050510);
+fn draw_title_card(fb_w: u32, fb_h: u32, line1: &str, line2: &str, line3: &str, accent: u32) {
+    crate::framebuffer::fill_rect(0, 0, fb_w, fb_h, 0x050510);
 
     let scale = 2u32;
     let char_w = 8 * scale; // 16px per char at 2×
 
     // Accent line across screen
-    let mid_y = framebuffer_h / 2;
-    crate::framebuffer::fill_rect(0, mid_y - 80, framebuffer_w, 2, accent);
-    crate::framebuffer::fill_rect(0, mid_y + 80, framebuffer_w, 2, accent);
+    let mid_y = fb_h / 2;
+    crate::framebuffer::fill_rect(0, mid_y - 80, fb_w, 2, accent);
+    crate::framebuffer::fill_rect(0, mid_y + 80, fb_w, 2, accent);
 
     // Line 1 — centered, bright white
     let w1 = line1.len() as u32 * char_w;
     crate::graphics::scaling::draw_text_at_scale(
-        ((framebuffer_w.saturating_sub(w1)) / 2) as i32, (mid_y - 52) as i32,
+        ((fb_w.saturating_sub(w1)) / 2) as i32, (mid_y - 52) as i32,
         line1, 0xFFFFFF, scale);
 
     // Line 2 — centered, accent color
     let w2 = line2.len() as u32 * char_w;
     crate::graphics::scaling::draw_text_at_scale(
-        ((framebuffer_w.saturating_sub(w2)) / 2) as i32, (mid_y - 10) as i32,
+        ((fb_w.saturating_sub(w2)) / 2) as i32, (mid_y - 10) as i32,
         line2, accent, scale);
 
     // Line 3 — centered, brighter dim
     let w3 = line3.len() as u32 * char_w;
     crate::graphics::scaling::draw_text_at_scale(
-        ((framebuffer_w.saturating_sub(w3)) / 2) as i32, (mid_y + 36) as i32,
+        ((fb_w.saturating_sub(w3)) / 2) as i32, (mid_y + 36) as i32,
         line3, 0x99AABB, scale);
 }
 
 /// Wait for a given number of milliseconds, checking keyboard for Esc.
 /// Returns true if user pressed Esc (abort).
-fn wait_mouse_interruptible(total_mouse: u64) -> bool {
+fn wait_mouse_interruptible(total_ms: u64) -> bool {
     // Break into small chunks so we can check keyboard
     let chunk = 50u64; // Check keyboard every 50ms
-    let mut remaining = total_mouse;
+    let mut remaining = total_ms;
     while remaining > 0 {
-        let delay = remaining.minimum(chunk);
+        let delay = remaining.min(chunk);
         crate::cpu::tsc::delay_millis(delay);
         remaining -= delay;
         // Drain keyboard
@@ -3450,11 +3450,11 @@ fn wait_mouse_interruptible(total_mouse: u64) -> bool {
 
 /// Wait for a given number of milliseconds, checking for Esc OR Space.
 /// Returns 0=ok, 1=esc, 2=space.
-fn wait_mouse_skip(total_mouse: u64) -> u8 {
+fn wait_mouse_skip(total_ms: u64) -> u8 {
     let chunk = 50u64;
-    let mut remaining = total_mouse;
+    let mut remaining = total_ms;
     while remaining > 0 {
-        let delay = remaining.minimum(chunk);
+        let delay = remaining.min(chunk);
         crate::cpu::tsc::delay_millis(delay);
         remaining -= delay;
         while let Some(sc) = crate::keyboard::try_read_key() {
@@ -3472,13 +3472,13 @@ fn wait_mouse_skip(total_mouse: u64) -> u8 {
 
 /// Compute average audio energy (0..100) for a slice of audio samples
 fn compute_energy(audio: &[i16], start: usize, end: usize) -> u32 {
-    let s = start.minimum(audio.len());
-    let e = end.minimum(audio.len());
+    let s = start.min(audio.len());
+    let e = end.min(audio.len());
     if e <= s { return 0; }
     let slice = &audio[s..e];
-    let sum_absolute: u64 = slice.iter().map(|v| v.unsigned_absolute() as u64).sum();
-    let average = (sum_absolute / slice.len().maximum(1) as u64) as u32;
-    (average * 100 / 8000).minimum(100)
+    let sum_absolute: u64 = slice.iter().map(|v| v.unsigned_abs() as u64).sum();
+    let average = (sum_absolute / slice.len().max(1) as u64) as u32;
+    (average * 100 / 8000).min(100)
 }
 
 /// Draw a glowing, pulsing waveform overlay on top of the current framebuffer.
@@ -3487,15 +3487,15 @@ fn compute_energy(audio: &[i16], start: usize, end: usize) -> u32 {
 ///   outer purple haze → blue → cyan → bright core
 /// The waveform amplitude pulses with `energy` and breathes slowly.
 fn draw_glow_waveform(
-    framebuffer_w: u32, framebuffer_h: u32,
+    fb_w: u32, fb_h: u32,
     scope: &[i16; 256],
     energy: u32, // 0..100
     frame: u32,
 ) {
-    let wave_w = framebuffer_w * 72 / 100;
-    let wave_h = framebuffer_h * 34 / 100;
-    let wave_x = (framebuffer_w - wave_w) / 2;
-    let center_y = framebuffer_h / 2;
+    let wave_w = fb_w * 72 / 100;
+    let wave_h = fb_h * 34 / 100;
+    let wave_x = (fb_w - wave_w) / 2;
+    let center_y = fb_h / 2;
 
     // Pulse: base 35% + 65% from energy
     let pulse = 35 + energy * 65 / 100;
@@ -3508,7 +3508,7 @@ fn draw_glow_waveform(
     let amp_scale = pulse * breath_scale / 100;
 
     let number_pts: usize = 256;
-    let x_step = (wave_w / number_pts as u32).maximum(1);
+    let x_step = (wave_w / number_pts as u32).max(1);
 
     // Pre-compute Y positions
     let mut ys = [0i32; 256];
@@ -3524,9 +3524,9 @@ fn draw_glow_waveform(
         let y = ys[i];
         let cy = center_y as i32;
         let (top, h) = if y < cy {
-            (y.maximum(0) as u32, (cy - y).maximum(1) as u32)
+            (y.max(0) as u32, (cy - y).max(1) as u32)
         } else {
-            (cy.maximum(0) as u32, (y - cy).maximum(1) as u32)
+            (cy.max(0) as u32, (y - cy).max(1) as u32)
         };
         crate::framebuffer::fill_rect_alpha(x, top, x_step, h, 0x00DDCC, 18);
     }
@@ -3544,9 +3544,9 @@ fn draw_glow_waveform(
         for i in 0..number_pts {
             let x = wave_x + i as u32 * x_step;
             let y = ys[i];
-            let top = (y - half_h).maximum(0) as u32;
-            let bot = (y + half_h).minimum(framebuffer_h as i32) as u32;
-            let h = bot.saturating_sub(top).maximum(1);
+            let top = (y - half_h).max(0) as u32;
+            let bot = (y + half_h).min(fb_h as i32) as u32;
+            let h = bot.saturating_sub(top).max(1);
             crate::framebuffer::fill_rect_alpha(x, top, x_step, h, color, alpha);
         }
     }
@@ -3561,16 +3561,16 @@ fn draw_glow_waveform(
     crate::framebuffer::fill_rect_alpha(wave_x, bnd_bot, wave_w, 1, 0x00FFCC, 10);
 
     // ── Scanning beam — sweeps through the waveform area ──
-    let scan_y = bnd_top + (frame % wave_h.maximum(1));
+    let scan_y = bnd_top + (frame % wave_h.max(1));
     crate::framebuffer::fill_rect_alpha(wave_x, scan_y, wave_w, 2, 0x00FFCC, 18);
 }
 
 /// Draw the minimal cyberpunk HUD for the Phase-2 matrix waveform view.
 fn draw_cyber_hud(
-    framebuffer_w: u32, framebuffer_h: u32,
+    fb_w: u32, fb_h: u32,
     section_name: &str,
-    sector_index: usize,
-    loop_number: u32, total_loops: u32,
+    sec_idx: usize,
+    loop_num: u32, total_loops: u32,
     step: usize, total_steps: usize,
     bpm: u16,
 ) {
@@ -3580,13 +3580,13 @@ fn draw_cyber_hud(
     // ── Title: "NEON PROTOCOL" ──
     let title = "NEON PROTOCOL";
     let tw = title.len() as u32 * char_w;
-    let transmit = (framebuffer_w.saturating_sub(tw)) / 2;
+    let transmit = (fb_w.saturating_sub(tw)) / 2;
     crate::framebuffer::fill_rect_alpha(transmit.saturating_sub(12), 10, tw + 24, 36, 0x000000, 160);
     crate::graphics::scaling::draw_text_at_scale(transmit as i32, 14, title, 0x00FFCC, scale);
 
     // ── Section name ──
     let sn_w = section_name.len() as u32 * 8 + 16;
-    let sn_x = (framebuffer_w.saturating_sub(sn_w)) / 2;
+    let sn_x = (fb_w.saturating_sub(sn_w)) / 2;
     crate::framebuffer::fill_rect_alpha(sn_x.saturating_sub(4), 50, sn_w + 8, 20, 0x000000, 140);
     crate::framebuffer::draw_text(section_name, sn_x, 52, 0xBB44FF);
 
@@ -3597,16 +3597,16 @@ fn draw_cyber_hud(
     crate::framebuffer::draw_text(&bpm_s, 14, 12, 0x00AA88);
 
     // ── Section / loop counter (top-right) ──
-    let sector_s = format!("{}/8 L{}/{}", sector_index + 1, loop_number + 1, total_loops);
+    let sector_s = format!("{}/8 L{}/{}", sec_idx + 1, loop_num + 1, total_loops);
     let software = sector_s.len() as u32 * 8 + 16;
-    let sx = framebuffer_w.saturating_sub(software + 8);
+    let sx = fb_w.saturating_sub(software + 8);
     crate::framebuffer::fill_rect_alpha(sx, 8, software, 20, 0x000000, 140);
     crate::framebuffer::draw_text(&sector_s, sx + 8, 12, 0x00AA88);
 
     // ── Glowing progress bar (bottom) ──
-    let pb_y = framebuffer_h.saturating_sub(28);
+    let pb_y = fb_h.saturating_sub(28);
     let pb_h = 4u32;
-    let pb_w = framebuffer_w.saturating_sub(60);
+    let pb_w = fb_w.saturating_sub(60);
     let pb_x = 30u32;
     // Outer glow
     crate::framebuffer::fill_rect_alpha(pb_x.saturating_sub(6), pb_y.saturating_sub(6), pb_w + 12, pb_h + 12, 0x00FFCC, 6);
@@ -3629,8 +3629,8 @@ fn draw_cyber_hud(
     // ── Key label (bottom-right) ──
     let key_s = "Eb minor";
     let kw = key_s.len() as u32 * 8 + 8;
-    crate::framebuffer::fill_rect_alpha(framebuffer_w.saturating_sub(kw + 8), framebuffer_h.saturating_sub(48), kw, 16, 0x000000, 120);
-    crate::framebuffer::draw_text(key_s, framebuffer_w.saturating_sub(kw + 4), framebuffer_h.saturating_sub(46), 0x665588);
+    crate::framebuffer::fill_rect_alpha(fb_w.saturating_sub(kw + 8), fb_h.saturating_sub(48), kw, 16, 0x000000, 120);
+    crate::framebuffer::draw_text(key_s, fb_w.saturating_sub(kw + 4), fb_h.saturating_sub(46), 0x665588);
 }
 
 /// The main narrated showcase entry point
@@ -3638,8 +3638,8 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
     crate::audio::init().ok();
     crate::serial_println!("[SHOWCASE] Starting narrated showcase...");
 
-    let framebuffer_w = crate::framebuffer::FRAMEBUFFER_WIDTH.load(Ordering::Relaxed) as u32;
-    let framebuffer_h = crate::framebuffer::FRAMEBUFFER_HEIGHT.load(Ordering::Relaxed) as u32;
+    let fb_w = crate::framebuffer::FRAMEBUFFER_WIDTH.load(Ordering::Relaxed) as u32;
+    let fb_h = crate::framebuffer::FRAMEBUFFER_HEIGHT.load(Ordering::Relaxed) as u32;
 
     // Enable double buffering to eliminate flicker
     crate::framebuffer::initialize_double_buffer();
@@ -3649,7 +3649,7 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
     // INTRO TITLE CARD
     // ═══════════════════════════════════════════════════════════════════
 
-    draw_title_card(framebuffer_w, framebuffer_h,
+    draw_title_card(fb_w, fb_h,
         "T R U S T D A W",
         "Building a Funky House Track from Scratch",
         "Bare-Metal  //  No OS  //  Pure Rust  //  Real-Time Audio",
@@ -3658,7 +3658,7 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
     crate::framebuffer::swap_buffers();
     if wait_mouse_interruptible(6500) { showcase_cleanup(); return Ok(()); }
 
-    draw_title_card(framebuffer_w, framebuffer_h,
+    draw_title_card(fb_w, fb_h,
         "PHASE 1: BUILDING THE BEAT",
         "Watch each layer come to life, one track at a time",
         "100 BPM  //  C Minor  //  32 Steps (2 Bars)  //  Echo FX",
@@ -3681,8 +3681,8 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
     studio.bpm = reference.bpm;
     studio.swing = reference.swing;
     // Configure tracks (names, instruments, etc.) but keep all steps empty
-    for t in studio.tracks.iterator_mut() {
-        t.number_steps = 32;
+    for t in studio.tracks.iter_mut() {
+        t.num_steps = 32;
         for s in 0..MAXIMUM_STEPS {
             t.steps[s] = BeatStep::off();
         }
@@ -3695,8 +3695,8 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
     studio.tracks[5] = BeatTrack::new("Chords",   60, Waveform::Triangle, colors::TRACK_COLORS[5], false);
     studio.tracks[6] = BeatTrack::new("Lead",     72, Waveform::Sawtooth, colors::TRACK_COLORS[6], false);
     studio.tracks[7] = BeatTrack::new("Perc",     56, Waveform::Noise,    colors::TRACK_COLORS[7], true);
-    for t in studio.tracks.iterator_mut() {
-        t.number_steps = 32;
+    for t in studio.tracks.iter_mut() {
+        t.num_steps = 32;
     }
     // Copy envelopes and volumes from reference
     for i in 0..8 {
@@ -3705,7 +3705,7 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
         studio.tracks[i].muted = false;
     }
 
-    let step_mouse = studio.step_duration_mouse();
+    let step_mouse = studio.step_duration_ms();
     let total_steps = 32usize;
     let loop_dur_mouse = step_mouse * total_steps as u32;
 
@@ -3767,7 +3767,7 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
 
         // ── Title card for this track ──
         let card = &track_cards[track_index];
-        draw_title_card(framebuffer_w, framebuffer_h,
+        draw_title_card(fb_w, fb_h,
             &format!("TRACK {}/8", track_index + 1),
             card.title,
             card.detail,
@@ -3789,31 +3789,31 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
 
         // Draw initial state (empty track visible)
         studio.draw();
-        draw_narration_overlay(card, framebuffer_w, framebuffer_h, &phase_str, 0, steps_to_place.len() as u32);
+        draw_narration_overlay(card, fb_w, fb_h, &phase_str, 0, steps_to_place.len() as u32);
         crate::framebuffer::swap_buffers();
         crate::cpu::tsc::delay_millis(1200);
 
         // ── Animate placing each step one by one ──
-        for (place_index, &step_position) in steps_to_place.iter().enumerate() {
+        for (place_idx, &step_pos) in steps_to_place.iter().enumerate() {
             // Move cursor to this step
-            studio.cursor_step = step_position;
+            studio.cursor_step = step_pos;
 
             // Flash: draw with cursor on empty step (shows cursor moving)
             studio.draw();
-            let progress = place_index as u32;
+            let progress = place_idx as u32;
             let total = steps_to_place.len() as u32;
-            draw_narration_overlay(card, framebuffer_w, framebuffer_h, &phase_str, progress, total);
+            draw_narration_overlay(card, fb_w, fb_h, &phase_str, progress, total);
             crate::framebuffer::swap_buffers();
 
             // Brief pause to see cursor moving
             crate::cpu::tsc::delay_millis(200);
 
             // Place the step (copy from reference)
-            studio.tracks[track_index].steps[step_position] = reference.tracks[track_index].steps[step_position];
+            studio.tracks[track_index].steps[step_pos] = reference.tracks[track_index].steps[step_pos];
 
             // Redraw with the step now active (lit up)
             studio.draw();
-            draw_narration_overlay(card, framebuffer_w, framebuffer_h, &phase_str, progress + 1, total);
+            draw_narration_overlay(card, fb_w, fb_h, &phase_str, progress + 1, total);
             crate::framebuffer::swap_buffers();
 
             // Pause to see the step light up
@@ -3851,13 +3851,13 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
 
         // Animate playhead through 3 full loops while audio plays
         let mut escaped = false;
-        for _loop_number in 0..3u32 {
+        for _loop_num in 0..3u32 {
             for s in 0..total_steps {
                 studio.current_step = s;
                 studio.update_spectrum();
                 studio.draw();
                 let progress = (s as u32 * 100) / total_steps as u32;
-                draw_narration_overlay(&listen_card, framebuffer_w, framebuffer_h, &listen_str, progress, 100);
+                draw_narration_overlay(&listen_card, fb_w, fb_h, &listen_str, progress, 100);
                 crate::framebuffer::swap_buffers();
 
                                 // Pattern matching — Rust's exhaustive branching construct.
@@ -3886,7 +3886,7 @@ match wait_mouse_skip(step_mouse as u64) {
     // ═══════════════════════════════════════════════════════════════════
     crate::serial_println!("[SHOWCASE] Phase 2: Full mix playback");
 
-    draw_title_card(framebuffer_w, framebuffer_h,
+    draw_title_card(fb_w, fb_h,
         "PHASE 2: THE FULL MIX",
         "All 8 tracks together -- the complete Deep House groove",
         "Listen to how the layers combine with echo and sustain",
@@ -3911,14 +3911,14 @@ match wait_mouse_skip(step_mouse as u64) {
     studio.playing = true;
 
     let mut escaped = false;
-    for loop_number in 0..3u32 {
+    for loop_num in 0..3u32 {
         for s in 0..total_steps {
             studio.current_step = s;
             studio.update_spectrum();
             studio.draw();
-            let loop_label = format!("PHASE 2  //  LOOP {}/3", loop_number + 1);
+            let loop_label = format!("PHASE 2  //  LOOP {}/3", loop_num + 1);
             let progress = (s as u32 * 100) / total_steps as u32;
-            draw_narration_overlay(&mix_card, framebuffer_w, framebuffer_h, &loop_label, progress, 100);
+            draw_narration_overlay(&mix_card, fb_w, fb_h, &loop_label, progress, 100);
             crate::framebuffer::swap_buffers();
 
                         // Pattern matching — Rust's exhaustive branching construct.
@@ -3941,7 +3941,7 @@ match wait_mouse_skip(step_mouse as u64) {
     // ═══════════════════════════════════════════════════════════════════
     crate::serial_println!("[SHOWCASE] Phase 3: Matrix visualizer");
 
-    draw_title_card(framebuffer_w, framebuffer_h,
+    draw_title_card(fb_w, fb_h,
         "PHASE 3: ENTER THE MATRIX",
         "The same beat, visualized as a living data stream",
         "Matrix rain  //  Beat-reactive  //  Pure framebuffer rendering",
@@ -3972,7 +3972,7 @@ match f {
 
     let matrix_loops = 3u32;
     escaped = false;
-    for loop_number in 0..matrix_loops {
+    for loop_num in 0..matrix_loops {
         for s in 0..total_steps {
             studio.current_step = s;
 
@@ -3984,7 +3984,7 @@ match f {
             }
 
             // Track activity text
-            let mut active_str = format!("LOOP {}/{}  > ", loop_number + 1, matrix_loops);
+            let mut active_str = format!("LOOP {}/{}  > ", loop_num + 1, matrix_loops);
             for t in 0..8 {
                 if studio.tracks[t].steps[s].active && !studio.tracks[t].muted {
                     active_str.push_str(studio.tracks[t].name_str());
@@ -4032,23 +4032,23 @@ match f {
         crate::framebuffer::swap_buffers();
 
         // Deactivate columns gradually
-        let to_kill = matrix.number_cols / 30;
+        let to_kill = matrix.num_cols / 30;
         for c in 0..to_kill {
-            let index = (f as usize * to_kill + c) % matrix.number_cols;
-            matrix.columns[index].active = false;
+            let idx = (f as usize * to_kill + c) % matrix.num_cols;
+            matrix.columns[idx].active = false;
         }
 
         crate::cpu::tsc::delay_millis(100); // 100ms per frame
     }
 
     // Final credits screen
-    crate::framebuffer::fill_rect(0, 0, framebuffer_w, framebuffer_h, 0x020208);
+    crate::framebuffer::fill_rect(0, 0, fb_w, fb_h, 0x020208);
 
-    let mid = framebuffer_h / 2;
+    let mid = fb_h / 2;
 
     // Decorative lines
-    crate::framebuffer::fill_rect(framebuffer_w / 4, mid - 80, framebuffer_w / 2, 1, 0x00CCFF);
-    crate::framebuffer::fill_rect(framebuffer_w / 4, mid + 80, framebuffer_w / 2, 1, 0x00CCFF);
+    crate::framebuffer::fill_rect(fb_w / 4, mid - 80, fb_w / 2, 1, 0x00CCFF);
+    crate::framebuffer::fill_rect(fb_w / 4, mid + 80, fb_w / 2, 1, 0x00CCFF);
 
     let credits: [(&str, u32); 8] = [
         ("T R U S T D A W",                          0x00FF66),
@@ -4065,14 +4065,14 @@ match f {
     for (i, (text, color)) in credits.iter().enumerate() {
         if text.is_empty() { continue; }
         let tw = text.len() as u32 * 8;
-        let transmit = (framebuffer_w - tw) / 2;
+        let transmit = (fb_w - tw) / 2;
         crate::framebuffer::draw_text(text, transmit, start_y + i as u32 * 20, *color);
     }
 
     // Bottom tagline
     let tag = "Press any key to exit";
     let tw = tag.len() as u32 * 8;
-    crate::framebuffer::draw_text(tag, (framebuffer_w - tw) / 2, mid + 60, 0x556677);
+    crate::framebuffer::draw_text(tag, (fb_w - tw) / 2, mid + 60, 0x556677);
     crate::framebuffer::swap_buffers();
 
     // Wait for any key
@@ -4112,8 +4112,8 @@ pub fn launch_anthem_showcase() -> Result<(), &'static str> {
     crate::audio::init().ok();
     crate::serial_println!("[ANTHEM] Starting TrustOS Anthem...");
 
-    let framebuffer_w = crate::framebuffer::FRAMEBUFFER_WIDTH.load(Ordering::Relaxed) as u32;
-    let framebuffer_h = crate::framebuffer::FRAMEBUFFER_HEIGHT.load(Ordering::Relaxed) as u32;
+    let fb_w = crate::framebuffer::FRAMEBUFFER_WIDTH.load(Ordering::Relaxed) as u32;
+    let fb_h = crate::framebuffer::FRAMEBUFFER_HEIGHT.load(Ordering::Relaxed) as u32;
 
     crate::framebuffer::initialize_double_buffer();
     crate::framebuffer::set_double_buffer_mode(true);
@@ -4121,7 +4121,7 @@ pub fn launch_anthem_showcase() -> Result<(), &'static str> {
     // ═══════════════════════════════════════════════════════════════════
     // Grand title card
     // ═══════════════════════════════════════════════════════════════════
-    draw_title_card(framebuffer_w, framebuffer_h,
+    draw_title_card(fb_w, fb_h,
         "T R U S T O S    A N T H E M",
         "Renaissance Numerique",
         "Cm -> C Major  //  106 BPM  //  Tension -> Revelation -> Maitrise",
@@ -4177,13 +4177,13 @@ pub fn launch_anthem_showcase() -> Result<(), &'static str> {
     // ═══════════════════════════════════════════════════════════════════
     // Play each section with UI + narration
     // ═══════════════════════════════════════════════════════════════════
-    for (sector_index, sector) in sections.iter().enumerate() {
+    for (sec_idx, sec) in sections.iter().enumerate() {
         // Section title card
-        draw_title_card(framebuffer_w, framebuffer_h,
-            &format!("SECTION {}/5", sector_index + 1),
-            sector.title,
-            sector.detail,
-            sector.color,
+        draw_title_card(fb_w, fb_h,
+            &format!("SECTION {}/5", sec_idx + 1),
+            sec.title,
+            sec.detail,
+            sec.color,
         );
         crate::framebuffer::swap_buffers();
         if wait_mouse_interruptible(4500) { showcase_cleanup(); return Ok(()); }
@@ -4191,7 +4191,7 @@ pub fn launch_anthem_showcase() -> Result<(), &'static str> {
         // Configure this section's studio
         let mut studio = BeatStudio::new();
                 // Pattern matching — Rust's exhaustive branching construct.
-match sector_index {
+match sec_idx {
             0 => studio.anthem_intro(),
             1 => studio.anthem_build(),
             2 => studio.anthem_drop(),
@@ -4205,29 +4205,29 @@ match sector_index {
         let _ = crate::drivers::hda::start_looped_playback(&audio);
         studio.playing = true;
 
-        let step_mouse = studio.step_duration_mouse();
+        let step_mouse = studio.step_duration_ms();
         let total_steps = 32usize;
 
         let card = NarrationCard {
-            title: sector.title,
-            subtitle: sector.subtitle,
-            detail: sector.detail,
+            title: sec.title,
+            subtitle: sec.subtitle,
+            detail: sec.detail,
             frames: 0,
         };
 
         // Animate playhead for N loops
         let mut escaped = false;
-        for loop_number in 0..sector.loops {
+        for loop_num in 0..sec.loops {
             for s in 0..total_steps {
                 studio.current_step = s;
                 studio.update_spectrum();
                 studio.draw();
                 let phase_str = format!(
                     "SECTION {}/5  //  LOOP {}/{}",
-                    sector_index + 1, loop_number + 1, sector.loops
+                    sec_idx + 1, loop_num + 1, sec.loops
                 );
                 let progress = (s as u32 * 100) / total_steps as u32;
-                draw_narration_overlay(&card, framebuffer_w, framebuffer_h, &phase_str, progress, 100);
+                draw_narration_overlay(&card, fb_w, fb_h, &phase_str, progress, 100);
                 crate::framebuffer::swap_buffers();
 
                                 // Pattern matching — Rust's exhaustive branching construct.
@@ -4251,10 +4251,10 @@ match wait_mouse_skip(step_mouse as u64) {
     // ═══════════════════════════════════════════════════════════════════
     // Credits
     // ═══════════════════════════════════════════════════════════════════
-    crate::framebuffer::fill_rect(0, 0, framebuffer_w, framebuffer_h, 0x020208);
-    let mid = framebuffer_h / 2;
-    crate::framebuffer::fill_rect(framebuffer_w / 4, mid - 80, framebuffer_w / 2, 2, 0x00CCFF);
-    crate::framebuffer::fill_rect(framebuffer_w / 4, mid + 80, framebuffer_w / 2, 2, 0x00CCFF);
+    crate::framebuffer::fill_rect(0, 0, fb_w, fb_h, 0x020208);
+    let mid = fb_h / 2;
+    crate::framebuffer::fill_rect(fb_w / 4, mid - 80, fb_w / 2, 2, 0x00CCFF);
+    crate::framebuffer::fill_rect(fb_w / 4, mid + 80, fb_w / 2, 2, 0x00CCFF);
 
     let scale = 2u32;
     let char_w = 8 * scale;
@@ -4262,24 +4262,24 @@ match wait_mouse_skip(step_mouse as u64) {
     let title = "T R U S T O S   A N T H E M";
     let w1 = title.len() as u32 * char_w;
     crate::graphics::scaling::draw_text_at_scale(
-        ((framebuffer_w.saturating_sub(w1)) / 2) as i32, (mid - 55) as i32,
+        ((fb_w.saturating_sub(w1)) / 2) as i32, (mid - 55) as i32,
         title, 0x00FF66, scale);
 
     let sub = "Renaissance Numerique  --  Un futur souverain.";
     let w2 = sub.len() as u32 * char_w;
     crate::graphics::scaling::draw_text_at_scale(
-        ((framebuffer_w.saturating_sub(w2)) / 2) as i32, (mid - 10) as i32,
+        ((fb_w.saturating_sub(w2)) / 2) as i32, (mid - 10) as i32,
         sub, 0xCCCCDD, scale);
 
-    let information = "Composed on TrustOS  //  Bare-metal Rust  //  Native HDA Audio";
-    let w3 = information.len() as u32 * char_w;
+    let info = "Composed on TrustOS  //  Bare-metal Rust  //  Native HDA Audio";
+    let w3 = info.len() as u32 * char_w;
     crate::graphics::scaling::draw_text_at_scale(
-        ((framebuffer_w.saturating_sub(w3)) / 2) as i32, (mid + 30) as i32,
-        information, 0x88AACC, scale);
+        ((fb_w.saturating_sub(w3)) / 2) as i32, (mid + 30) as i32,
+        info, 0x88AACC, scale);
 
     let tag = "Press any key to exit";
     let tw = tag.len() as u32 * 8;
-    crate::framebuffer::draw_text(tag, (framebuffer_w - tw) / 2, mid + 65, 0x556677);
+    crate::framebuffer::draw_text(tag, (fb_w - tw) / 2, mid + 65, 0x556677);
     crate::framebuffer::swap_buffers();
 
         // Infinite loop — runs until an explicit `break`.
@@ -4305,8 +4305,8 @@ pub fn launch_trap_showcase() -> Result<(), &'static str> {
     crate::audio::init().ok();
     crate::serial_println!("[CYBER] 'Neon Protocol' — Creative Process + Full Song");
 
-    let framebuffer_w = crate::framebuffer::FRAMEBUFFER_WIDTH.load(Ordering::Relaxed) as u32;
-    let framebuffer_h = crate::framebuffer::FRAMEBUFFER_HEIGHT.load(Ordering::Relaxed) as u32;
+    let fb_w = crate::framebuffer::FRAMEBUFFER_WIDTH.load(Ordering::Relaxed) as u32;
+    let fb_h = crate::framebuffer::FRAMEBUFFER_HEIGHT.load(Ordering::Relaxed) as u32;
 
     crate::framebuffer::initialize_double_buffer();
     crate::framebuffer::set_double_buffer_mode(true);
@@ -4319,7 +4319,7 @@ pub fn launch_trap_showcase() -> Result<(), &'static str> {
     //  Build the beat track-by-track, each layer heard progressively.
     // ═══════════════════════════════════════════════════════════════════
 
-    draw_title_card(framebuffer_w, framebuffer_h,
+    draw_title_card(fb_w, fb_h,
         "T R U S T D A W",
         "\"NEON PROTOCOL\" — Creative Process",
         "Watch the beat come alive  |  100 BPM  |  Eb minor",
@@ -4330,7 +4330,7 @@ pub fn launch_trap_showcase() -> Result<(), &'static str> {
 
     // Load the DROP pattern (most complete), mute everything initially
     studio.load_trap_hook();
-    let step_mouse = studio.step_duration_mouse();
+    let step_mouse = studio.step_duration_ms();
     for t in 0..8 { studio.tracks[t].muted = true; }
 
     // Layers to add one-by-one: (track, display name, desc, loops, accent)
@@ -4350,7 +4350,7 @@ pub fn launch_trap_showcase() -> Result<(), &'static str> {
         studio.tracks[track_index].muted = false;
 
         // Brief layer title card
-        draw_title_card(framebuffer_w, framebuffer_h, name, desc, "", accent);
+        draw_title_card(fb_w, fb_h, name, desc, "", accent);
         crate::framebuffer::swap_buffers();
         if wait_mouse_interruptible(1800) { showcase_cleanup(); return Ok(()); }
 
@@ -4368,16 +4368,16 @@ pub fn launch_trap_showcase() -> Result<(), &'static str> {
         };
 
         let mut escaped = false;
-        for loop_number in 0..loops {
+        for loop_num in 0..loops {
             for s in 0..total_steps {
                 studio.current_step = s;
                 studio.update_spectrum();
 
                 for note in 0..128 { studio.keys_pressed[note] = false; }
-                for t_index in 0..8 {
-                    if studio.tracks[t_index].muted { continue; }
-                    if studio.tracks[t_index].steps[s].active {
-                        let midi = studio.tracks[t_index].note_at(s);
+                for t_idx in 0..8 {
+                    if studio.tracks[t_idx].muted { continue; }
+                    if studio.tracks[t_idx].steps[s].active {
+                        let midi = studio.tracks[t_idx].note_at(s);
                         if midi > 0 && midi < 128 {
                             studio.keys_pressed[midi as usize] = true;
                         }
@@ -4385,9 +4385,9 @@ pub fn launch_trap_showcase() -> Result<(), &'static str> {
                 }
 
                 studio.draw();
-                let label = format!("{} — Loop {}/{}", name, loop_number + 1, loops);
+                let label = format!("{} — Loop {}/{}", name, loop_num + 1, loops);
                 let progress = (s as u32 * 100) / total_steps as u32;
-                draw_narration_overlay(&card, framebuffer_w, framebuffer_h, &label, progress, 100);
+                draw_narration_overlay(&card, fb_w, fb_h, &label, progress, 100);
                 crate::framebuffer::swap_buffers();
 
                                 // Pattern matching — Rust's exhaustive branching construct.
@@ -4408,7 +4408,7 @@ match wait_mouse_skip(step_mouse as u64) {
     }
 
     // ── Full-mix celebration ──
-    draw_title_card(framebuffer_w, framebuffer_h,
+    draw_title_card(fb_w, fb_h,
         "ALL LAYERS ACTIVE",
         "The complete beat — \"Neon Protocol\"",
         "8 tracks  |  100 BPM  |  Eb minor",
@@ -4431,20 +4431,20 @@ match wait_mouse_skip(step_mouse as u64) {
         };
 
         let mut escaped = false;
-        for loop_number in 0..3u32 {
+        for loop_num in 0..3u32 {
             for s in 0..total_steps {
                 studio.current_step = s;
                 studio.update_spectrum();
                 for note in 0..128 { studio.keys_pressed[note] = false; }
-                for t_index in 0..8 {
-                    if !studio.tracks[t_index].muted && studio.tracks[t_index].steps[s].active {
-                        let midi = studio.tracks[t_index].note_at(s);
+                for t_idx in 0..8 {
+                    if !studio.tracks[t_idx].muted && studio.tracks[t_idx].steps[s].active {
+                        let midi = studio.tracks[t_idx].note_at(s);
                         if midi > 0 && midi < 128 { studio.keys_pressed[midi as usize] = true; }
                     }
                 }
                 studio.draw();
-                let label = format!("FULL MIX — Loop {}/3", loop_number + 1);
-                draw_narration_overlay(&card, framebuffer_w, framebuffer_h, &label, (s as u32 * 100) / total_steps as u32, 100);
+                let label = format!("FULL MIX — Loop {}/3", loop_num + 1);
+                draw_narration_overlay(&card, fb_w, fb_h, &label, (s as u32 * 100) / total_steps as u32, 100);
                 crate::framebuffer::swap_buffers();
                                 // Pattern matching — Rust's exhaustive branching construct.
 match wait_mouse_skip(step_mouse as u64) {
@@ -4469,7 +4469,7 @@ match wait_mouse_skip(step_mouse as u64) {
     //  Only the waveform overlay reacts to the audio.
     // ═══════════════════════════════════════════════════════════════════
 
-    draw_title_card(framebuffer_w, framebuffer_h,
+    draw_title_card(fb_w, fb_h,
         "ENTERING THE MATRIX",
         "\"NEON PROTOCOL\" — Full Song",
         "8 sections  |  Pulsing waveform  |  [Esc] Exit",
@@ -4496,17 +4496,17 @@ match wait_mouse_skip(step_mouse as u64) {
     for f in 0..30u32 {
         matrix.tick();
         matrix.draw_rain();
-        let message = // Pattern matching — Rust's exhaustive branching construct.
+        let msg = // Pattern matching — Rust's exhaustive branching construct.
 match f {
             0..=8   => "INITIALIZING NEON PROTOCOL...",
             9..=18  => "LOADING WAVEFORM ENGINE...",
             _       => "READY.",
         };
-        let message_w = message.len() as u32 * 16 + 32;
-        let mx = (framebuffer_w.saturating_sub(message_w)) / 2;
-        let my = framebuffer_h / 2 - 16;
+        let message_w = msg.len() as u32 * 16 + 32;
+        let mx = (fb_w.saturating_sub(message_w)) / 2;
+        let my = fb_h / 2 - 16;
         crate::framebuffer::fill_rect_alpha(mx.saturating_sub(8), my.saturating_sub(8), message_w + 16, 48, 0x000000, 180);
-        crate::graphics::scaling::draw_text_at_scale(mx as i32, my as i32, message, 0x00FFCC, 2);
+        crate::graphics::scaling::draw_text_at_scale(mx as i32, my as i32, msg, 0x00FFCC, 2);
         crate::framebuffer::swap_buffers();
         if wait_mouse_interruptible(80) { showcase_cleanup(); return Ok(()); }
     }
@@ -4518,9 +4518,9 @@ match f {
     let mut sector_boundaries: Vec<(usize, usize)> = Vec::new(); // (sec_idx, global_step)
     let mut global_step_count: usize = 0;
 
-    for sector in 0..8usize {
+    for sec in 0..8usize {
                 // Pattern matching — Rust's exhaustive branching construct.
-match sector {
+match sec {
             0 => studio.load_trap_intro(),
             1 => studio.load_trap_hook(),
             2 => studio.load_trap_verse(),
@@ -4531,14 +4531,14 @@ match sector {
             _ => studio.load_trap_outro(),
         }
         let section_audio = studio.render_loop();
-        for _lp in 0..sector_loops[sector] {
-            sector_boundaries.push((sector, global_step_count));
+        for _lp in 0..sector_loops[sec] {
+            sector_boundaries.push((sec, global_step_count));
             full_audio.extend_from_slice(&section_audio);
             global_step_count += total_steps;
         }
     }
 
-    let step_mouse = studio.step_duration_mouse();
+    let step_mouse = studio.step_duration_ms();
     let step_samp = (60u32 * 48000) / (studio.bpm as u32 * 4);
     let samp_per_step = step_samp as usize * 2; // stereo i16
     let total_global_steps = global_step_count;
@@ -4565,7 +4565,7 @@ match sector {
 
         // Extract scope data from the correct window in the full audio buffer
         let sa = g * samp_per_step;
-        let sb = ((g + 1) * samp_per_step).minimum(full_audio.len());
+        let sb = ((g + 1) * samp_per_step).min(full_audio.len());
         if sa < full_audio.len() {
             studio.update_scope(&full_audio[sa..sb]);
         }
@@ -4576,8 +4576,8 @@ match sector {
 
         // Render stack: matrix rain → glow waveform → HUD
         matrix.draw_rain();
-        draw_glow_waveform(framebuffer_w, framebuffer_h, &studio.scope_buffer, energy, matrix.frame);
-        draw_cyber_hud(framebuffer_w, framebuffer_h, sector_names[cur_sector], cur_sector,
+        draw_glow_waveform(fb_w, fb_h, &studio.scope_buffer, energy, matrix.frame);
+        draw_cyber_hud(fb_w, fb_h, sector_names[cur_sector], cur_sector,
             cur_loop, sector_loops[cur_sector], s, total_steps, studio.bpm);
 
         crate::framebuffer::swap_buffers();
@@ -4596,33 +4596,33 @@ match wait_mouse_skip(step_mouse as u64) {
     // ── Outro: gradually deactivate matrix columns ──
     for f in 0..50u32 {
         matrix.tick();
-        let deactivate = matrix.number_cols / 50;
+        let deactivate = matrix.num_cols / 50;
         for c in 0..deactivate {
-            let index = (f as usize * deactivate + c) % matrix.number_cols;
-            matrix.columns[index].active = false;
+            let idx = (f as usize * deactivate + c) % matrix.num_cols;
+            matrix.columns[idx].active = false;
         }
         matrix.draw_rain();
 
-        let message = // Pattern matching — Rust's exhaustive branching construct.
+        let msg = // Pattern matching — Rust's exhaustive branching construct.
 match f {
             0..=15  => "DISCONNECTING...",
             16..=30 => "SIGNAL LOST",
             _       => "NEON PROTOCOL // OFFLINE",
         };
-        let message_w = message.len() as u32 * 16 + 32;
-        let mx = (framebuffer_w.saturating_sub(message_w)) / 2;
-        let my = framebuffer_h / 2 - 16;
+        let message_w = msg.len() as u32 * 16 + 32;
+        let mx = (fb_w.saturating_sub(message_w)) / 2;
+        let my = fb_h / 2 - 16;
         crate::framebuffer::fill_rect_alpha(mx.saturating_sub(8), my.saturating_sub(8), message_w + 16, 48, 0x000000, 180);
-        crate::graphics::scaling::draw_text_at_scale(mx as i32, my as i32, message, 0x00FFCC, 2);
+        crate::graphics::scaling::draw_text_at_scale(mx as i32, my as i32, msg, 0x00FFCC, 2);
         crate::framebuffer::swap_buffers();
         crate::cpu::tsc::delay_millis(80);
     }
 
     // ── Credits ──
-    crate::framebuffer::fill_rect(0, 0, framebuffer_w, framebuffer_h, 0x050510);
-    let mid = framebuffer_h / 2;
-    crate::framebuffer::fill_rect(framebuffer_w / 4, mid - 80, framebuffer_w / 2, 2, 0x00FFCC);
-    crate::framebuffer::fill_rect(framebuffer_w / 4, mid + 80, framebuffer_w / 2, 2, 0x00FFCC);
+    crate::framebuffer::fill_rect(0, 0, fb_w, fb_h, 0x050510);
+    let mid = fb_h / 2;
+    crate::framebuffer::fill_rect(fb_w / 4, mid - 80, fb_w / 2, 2, 0x00FFCC);
+    crate::framebuffer::fill_rect(fb_w / 4, mid + 80, fb_w / 2, 2, 0x00FFCC);
 
     let scale = 2u32;
     let char_w = 8 * scale;
@@ -4630,24 +4630,24 @@ match f {
     let t1 = "\"NEON PROTOCOL\"";
     let w1 = t1.len() as u32 * char_w;
     crate::graphics::scaling::draw_text_at_scale(
-        ((framebuffer_w.saturating_sub(w1)) / 2) as i32, (mid - 55) as i32,
+        ((fb_w.saturating_sub(w1)) / 2) as i32, (mid - 55) as i32,
         t1, 0x00FFCC, scale);
 
     let t2 = "Cyberpunk Trap — 100 BPM — Eb minor";
     let w2 = t2.len() as u32 * char_w;
     crate::graphics::scaling::draw_text_at_scale(
-        ((framebuffer_w.saturating_sub(w2)) / 2) as i32, (mid - 10) as i32,
+        ((fb_w.saturating_sub(w2)) / 2) as i32, (mid - 10) as i32,
         t2, 0xCCCCDD, scale);
 
     let t3 = "Creative Process + Full Song — Bare Metal Rust";
     let w3 = t3.len() as u32 * char_w;
     crate::graphics::scaling::draw_text_at_scale(
-        ((framebuffer_w.saturating_sub(w3)) / 2) as i32, (mid + 30) as i32,
+        ((fb_w.saturating_sub(w3)) / 2) as i32, (mid + 30) as i32,
         t3, 0x8844CC, scale);
 
     let tag = "Press any key to exit";
     let tw = tag.len() as u32 * 8;
-    crate::framebuffer::draw_text(tag, (framebuffer_w - tw) / 2, mid + 65, 0x446688);
+    crate::framebuffer::draw_text(tag, (fb_w - tw) / 2, mid + 65, 0x446688);
     crate::framebuffer::swap_buffers();
 
         // Infinite loop — runs until an explicit `break`.

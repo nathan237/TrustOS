@@ -2492,3 +2492,237 @@ fn parse_duration(bytes: &[u8]) -> u8 {
 pub fn play_demo() -> Result<(), &'static str> {
     play_melody("E4q E4q F4q G4q G4q F4q E4q D4q C4q C4q D4q E4q E4q D4h", 120)
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// Live debug toolkit (added 2026-04-23)
+// ════════════════════════════════════════════════════════════════════════════
+
+/// Extra verbs not declared in the original `verb` module
+mod verb_extra {
+    /// Get pin sense response. Bit31 = jack present, bits[30:0] = impedance.
+    pub const GET_PIN_SENSE: u32     = 0xF09;
+    /// Trigger a fresh pin sense measurement before reading (impedance models).
+    pub const TRIGGER_PIN_SENSE: u32 = 0x709;
+}
+
+/// Send an arbitrary, pre-composed verb to a codec node and return the response.
+/// `verb_payload` is the bottom 20 bits already assembled by the caller:
+///   * 12-bit verb : `(verb_id << 8) | data8`
+///   * 4-bit verb  : `((verb_id & 0xF00) << 8) | payload16`
+///
+/// This is the equivalent of the Linux `hda-verb` tool — useful for trying
+/// codec quirks at runtime without rebuilding the kernel.
+pub fn send_verb_raw(codec: u8, nid: u16, verb_payload: u32) -> Result<u32, &'static str> {
+    let mut hda = HDA.lock();
+    let ctrl = hda.as_mut().ok_or("HDA: not initialized")?;
+    ctrl.send_verb(codec, nid, verb_payload & 0xFFFFF, 0)
+}
+
+/// Walk every pin complex on codec 0, trigger a fresh sense measurement and
+/// report jack presence, pin control, EAPD and impedance. Multi-line table.
+pub fn jacks() -> String {
+    let mut s = String::new();
+    let mut hda = HDA.lock();
+    let ctrl = match hda.as_mut() {
+        Some(c) => c,
+        None => { s.push_str("HDA: not initialized\n"); return s; }
+    };
+    if ctrl.codecs.is_empty() {
+        s.push_str("No codecs detected\n");
+        return s;
+    }
+    let codec = ctrl.codecs[0];
+    let pins: Vec<(u16, u32)> = ctrl.widgets.iter()
+        .filter(|w| w.widget_type == WidgetType::PinComplex)
+        .map(|w| (w.nid, w.pin_config))
+        .collect();
+
+    s.push_str(&format!("=== Pin Sense (codec {}) ===\n", codec));
+    s.push_str("NID  Device          Conn   PIN_CTL  EAPD   Jack  Sense\n");
+    for (nid, cfg) in &pins {
+        let dev = pin_default_device(*cfg);
+        let conn = match (*cfg >> 30) & 0x3 {
+            0 => "Jack",
+            1 => "None",
+            2 => "Fixed",
+            3 => "Both",
+            _ => "?",
+        };
+        let _ = ctrl.codec_cmd(codec, *nid, verb_extra::TRIGGER_PIN_SENSE, 0);
+        let pin_ctl = ctrl.codec_cmd(codec, *nid, verb::GET_PIN_CONTROL, 0).unwrap_or(0);
+        let eapd    = ctrl.codec_cmd(codec, *nid, verb::GET_EAPD, 0).unwrap_or(0);
+        let sense   = ctrl.codec_cmd(codec, *nid, verb_extra::GET_PIN_SENSE, 0).unwrap_or(0);
+        let presence = (sense >> 31) & 1;
+        let imp = sense & 0x7FFF_FFFF;
+        s.push_str(&format!(
+            "{:>3}  {:<14}  {:<5}  {:#04X}     {:#04X}   {}   {:#010X}\n",
+            nid, dev, conn,
+            pin_ctl & 0xFF, eapd & 0xFF,
+            if presence == 1 { "YES " } else { "no  " },
+            imp));
+    }
+    s
+}
+
+/// Read DMA stream 0 status flags and global error registers.
+pub fn errors() -> String {
+    let mut s = String::new();
+    let hda = HDA.lock();
+    let ctrl = match hda.as_ref() {
+        Some(c) => c,
+        None => { s.push_str("HDA: not initialized\n"); return s; }
+    };
+    let sd_base = ctrl.osd_base(0);
+    unsafe {
+        let sts     = ctrl.read8(sd_base + sd::STS);
+        let lpib    = ctrl.read32(sd_base + sd::LPIB);
+        let ctl0    = ctrl.read8(sd_base + sd::CTL);
+        let intsts  = ctrl.read32(reg::INTSTS);
+        let rirbsts = ctrl.read8(reg::RIRBSTS);
+        let corbsts = ctrl.read8(reg::CORBSTS);
+        s.push_str("=== Stream 0 status ===\n");
+        s.push_str(&format!("CTL[0]   = {:#04X}  (RUN={})\n", ctl0,
+            if ctl0 & sctl::RUN as u8 != 0 { "YES" } else { "no" }));
+        s.push_str(&format!("STS      = {:#04X}\n", sts));
+        s.push_str(&format!("  BCIS    (buffer complete) : {}\n",
+            if sts & ssts::BCIS    != 0 { "YES" } else { "no" }));
+        s.push_str(&format!("  FIFOE   (FIFO error)      : {}\n",
+            if sts & ssts::FIFOE   != 0 { "ERROR!" } else { "ok" }));
+        s.push_str(&format!("  DESE    (descriptor err)  : {}\n",
+            if sts & ssts::DESE    != 0 { "ERROR!" } else { "ok" }));
+        s.push_str(&format!("  FIFORDY                   : {}\n",
+            if sts & ssts::FIFORDY != 0 { "YES" } else { "no" }));
+        s.push_str(&format!("LPIB     = {} bytes\n", lpib));
+        s.push_str(&format!("INTSTS   = {:#010X}\n", intsts));
+        s.push_str(&format!("CORBSTS  = {:#04X}   RIRBSTS = {:#04X}\n", corbsts, rirbsts));
+    }
+    s
+}
+
+/// Soft reset: stop playback + reset stream descriptor (clears LPIB/FIFOs and
+/// reconfigures BDL/format). Codec state is preserved.
+pub fn soft_reset() {
+    let _ = stop();
+    reset_stream();
+}
+
+/// Lightweight one-shot LPIB sample for live monitoring loops.
+/// Returns (lpib_bytes, run_bit_set, sd_status_byte).
+pub fn lpib_sample() -> (u32, bool, u8) {
+    let hda = HDA.lock();
+    let ctrl = match hda.as_ref() { Some(c) => c, None => return (0, false, 0) };
+    let sd_base = ctrl.osd_base(0);
+    unsafe {
+        let lpib = ctrl.read32(sd_base + sd::LPIB);
+        let ctl0 = ctrl.read8(sd_base + sd::CTL);
+        let sts  = ctrl.read8(sd_base + sd::STS);
+        (lpib, ctl0 & sctl::RUN as u8 != 0, sts)
+    }
+}
+
+/// Walk DAC→...→Pin chain for every output path. Reports widget type, power
+/// state, output amp gain (L/R) and mute bit at each step.
+pub fn path_info() -> String {
+    let mut s = String::new();
+    let mut hda = HDA.lock();
+    let ctrl = match hda.as_mut() {
+        Some(c) => c,
+        None => { s.push_str("HDA: not initialized\n"); return s; }
+    };
+    if ctrl.codecs.is_empty() || ctrl.output_paths.is_empty() {
+        s.push_str("No active output path\n");
+        return s;
+    }
+    let codec = ctrl.codecs[0];
+    let paths = ctrl.output_paths.clone();
+    for (idx, p) in paths.iter().enumerate() {
+        s.push_str(&format!(
+            "\n=== Path[{}] {} (pin {} -> DAC {}) ===\n",
+            idx, p.device_type, p.pin_nid, p.dac_nid));
+        for (i, &nid) in p.path.iter().enumerate() {
+            let wcaps = ctrl.codec_cmd(codec, nid, verb::GET_PARAMETER,
+                verb::PARAM_AUDIO_CAPS as u8).unwrap_or(0);
+            let wtype = WidgetType::from_caps(wcaps);
+            let power = ctrl.codec_cmd(codec, nid, verb::GET_POWER_STATE, 0).unwrap_or(0);
+            // 4-bit GET_AMP_GAIN: payload bit15=output, bit13=left, bits[3:0]=index 0
+            let amp_l = ctrl.set_verb_16(codec, nid, verb::GET_AMP_GAIN, 0xA000).unwrap_or(0);
+            let amp_r = ctrl.set_verb_16(codec, nid, verb::GET_AMP_GAIN, 0x8000).unwrap_or(0);
+            let muted = (amp_l >> 7) & 1;
+            s.push_str(&format!(
+                "  [{}] NID {:<3} {:<22} D{}/D{}  ampL={:#04X} ampR={:#04X} {}\n",
+                i, nid, wtype.name(),
+                power & 0xF, (power >> 4) & 0xF,
+                amp_l & 0xFF, amp_r & 0xFF,
+                if muted == 1 { "MUTED!" } else { "" }));
+        }
+    }
+    s
+}
+
+/// Generate a sine tone with one channel zeroed for stereo isolation tests.
+/// `chan`: 0 = left only, 1 = right only, 2 = both (same as `generate_sine`).
+pub fn generate_sine_chan(freq_hz: u32, duration_ms: u32, amplitude: i16, chan: u8) -> Vec<i16> {
+    let mut samples = generate_sine(freq_hz, duration_ms, amplitude);
+    match chan {
+        0 => { // left only -> zero right
+            for i in (1..samples.len()).step_by(2) { samples[i] = 0; }
+        }
+        1 => { // right only -> zero left
+            for i in (0..samples.len()).step_by(2) { samples[i] = 0; }
+        }
+        _ => { /* both */ }
+    }
+    samples
+}
+
+/// Generate a logarithmic frequency sweep from `f_start` to `f_end` Hz over `duration_ms`.
+/// Stereo, fade-in/out applied. Useful to detect band-limiting and resonances.
+pub fn generate_sweep(f_start: u32, f_end: u32, duration_ms: u32, amplitude: i16) -> Vec<i16> {
+    let sample_rate = 48000u32;
+    let num_samples = (sample_rate as u64 * duration_ms as u64 / 1000) as usize;
+    let mut samples: Vec<i16> = Vec::with_capacity(num_samples * 2);
+    let vol = *VOLUME.lock() as i32;
+    let scaled_amp = (amplitude as i32 * vol / 100) as i16;
+
+    // Phase accumulator: u32 phase, increments by step each sample. Step is
+    // computed from instantaneous frequency interpolated linearly in log-space
+    // via 256-step lookup approximation (no float).
+    let mut phase: u32 = 0;
+    for i in 0..num_samples {
+        // Linear interpolation in frequency (good enough for audio sweep).
+        let f = f_start as u64 + (f_end as u64 - f_start as u64) * i as u64 / num_samples as u64;
+        let step = ((f * 256) / sample_rate as u64) as u32;
+        phase = phase.wrapping_add(step);
+        let s = sine_approx((phase & 0xFF) as u8, scaled_amp);
+        samples.push(s);
+        samples.push(s);
+    }
+    // 5 ms fade-in / out
+    let fade = (sample_rate as usize * 5 / 1000).min(num_samples / 2);
+    for i in 0..fade {
+        let factor = i as i32 * 256 / fade as i32;
+        samples[i * 2]     = (samples[i * 2]     as i32 * factor / 256) as i16;
+        samples[i * 2 + 1] = (samples[i * 2 + 1] as i32 * factor / 256) as i16;
+    }
+    for i in 0..fade {
+        let idx = num_samples - 1 - i;
+        let factor = i as i32 * 256 / fade as i32;
+        if idx * 2 + 1 < samples.len() {
+            samples[idx * 2]     = (samples[idx * 2]     as i32 * factor / 256) as i16;
+            samples[idx * 2 + 1] = (samples[idx * 2 + 1] as i32 * factor / 256) as i16;
+        }
+    }
+    samples
+}
+
+/// Play `generate_sine_chan` directly (blocking).
+pub fn play_sine_chan(freq_hz: u32, duration_ms: u32, chan: u8) -> Result<(), &'static str> {
+    let samples = generate_sine_chan(freq_hz, duration_ms, 24000, chan);
+    write_samples_and_play(&samples, duration_ms)
+}
+
+/// Play a frequency sweep (blocking).
+pub fn play_sweep(f_start: u32, f_end: u32, duration_ms: u32) -> Result<(), &'static str> {
+    let samples = generate_sweep(f_start, f_end, duration_ms, 24000);
+    write_samples_and_play(&samples, duration_ms)
+}

@@ -401,12 +401,12 @@ pub fn read_u8(&self, offset: usize) -> u8 {
     /// with the valid count at BYTES_FETCHED (offset 0x0D0).
     pub fn guest_insn_bytes(&self) -> (usize, [u8; 15]) {
         let count = self.data[control_offsets::BYTES_FETCHED] as usize;
-        let mut buffer = [0u8; 15];
-        let n = count.minimum(15);
+        let mut buf = [0u8; 15];
+        let n = count.min(15);
         for i in 0..n {
-            buffer[i] = self.data[control_offsets::GUEST_INST_BYTES + i];
+            buf[i] = self.data[control_offsets::GUEST_INST_BYTES + i];
         }
-        (n, buffer)
+        (n, buf)
     }
     
     /// Read a u16 from the VMCB
@@ -475,7 +475,7 @@ pub fn write_u64(&mut self, offset: usize, value: u64) {
     }
     
     /// Get physical address of VMCB (for VMRUN)
-    pub fn physical_address(&self) -> u64 {
+    pub fn phys_addr(&self) -> u64 {
         let virt = self as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const _ as u64;
         virt.wrapping_sub(crate::memory::hhdm_offset())
@@ -543,13 +543,13 @@ pub fn write_state(&mut self, offset: usize, value: u64) {
     }
     
     /// Set IOPM base physical address
-    pub fn set_iopm_base(&mut self, physical: u64) {
-        self.write_u64(control_offsets::IOPM_BASE_PA, physical);
+    pub fn set_iopm_base(&mut self, phys: u64) {
+        self.write_u64(control_offsets::IOPM_BASE_PA, phys);
     }
     
     /// Set MSRPM base physical address
-    pub fn set_msrpm_base(&mut self, physical: u64) {
-        self.write_u64(control_offsets::MSRPM_BASE_PA, physical);
+    pub fn set_msrpm_base(&mut self, phys: u64) {
+        self.write_u64(control_offsets::MSRPM_BASE_PA, phys);
     }
     
     /// Set TSC offset
@@ -735,7 +735,7 @@ pub fn write_state(&mut self, offset: usize, value: u64) {
     }
     
     /// Set FS segment
-    pub fn set_filesystem(&mut self, selector: u16, attrib: u16, limit: u32, base: u64) {
+    pub fn set_fs(&mut self, selector: u16, attrib: u16, limit: u32, base: u64) {
         self.write_u16(state_offsets::FILESYSTEM_SELECTOR, selector);
         self.write_u16(state_offsets::FILESYSTEM_ATTRIB, attrib);
         self.write_u32(state_offsets::FILESYSTEM_LIMIT, limit);
@@ -819,7 +819,7 @@ pub fn write_state(&mut self, offset: usize, value: u64) {
         // Data segments at 0
         self.set_ds(0, data_attrib, 0xFFFF, 0);
         self.set_es(0, data_attrib, 0xFFFF, 0);
-        self.set_filesystem(0, data_attrib, 0xFFFF, 0);
+        self.set_fs(0, data_attrib, 0xFFFF, 0);
         self.set_gs(0, data_attrib, 0xFFFF, 0);
         self.set_ss(0, data_attrib, 0xFFFF, 0);
         
@@ -861,7 +861,7 @@ pub fn write_state(&mut self, offset: usize, value: u64) {
         self.set_cs(0x08, code_attrib, 0xFFFFFFFF, 0);
         self.set_ds(0x10, data_attrib, 0xFFFFFFFF, 0);
         self.set_es(0x10, data_attrib, 0xFFFFFFFF, 0);
-        self.set_filesystem(0x10, data_attrib, 0xFFFFFFFF, 0);
+        self.set_fs(0x10, data_attrib, 0xFFFFFFFF, 0);
         self.set_gs(0x10, data_attrib, 0xFFFFFFFF, 0);
         self.set_ss(0x10, data_attrib, 0xFFFFFFFF, 0);
         
@@ -900,7 +900,7 @@ pub fn write_state(&mut self, offset: usize, value: u64) {
         self.set_cs(0x08, code64_attrib, 0xFFFFFFFF, 0);
         self.set_ds(0x10, data64_attrib, 0xFFFFFFFF, 0);
         self.set_es(0x10, data64_attrib, 0xFFFFFFFF, 0);
-        self.set_filesystem(0x10, data64_attrib, 0xFFFFFFFF, 0);
+        self.set_fs(0x10, data64_attrib, 0xFFFFFFFF, 0);
         self.set_gs(0x10, data64_attrib, 0xFFFFFFFF, 0);
         self.set_ss(0x10, data64_attrib, 0xFFFFFFFF, 0);
         
@@ -941,7 +941,7 @@ pub fn write_state(&mut self, offset: usize, value: u64) {
     pub fn setup_long_mode_for_linux(
         &mut self,
         entry_point: u64,
-        stack_pointer: u64,
+        stack_ptr: u64,
         guest_cr3: u64,
         gdt_base: u64,
         gdt_limit: u32,
@@ -954,7 +954,7 @@ pub fn write_state(&mut self, offset: usize, value: u64) {
         self.set_cs(0x08, code64_attrib, 0xFFFFFFFF, 0);
         self.set_ds(0x10, data64_attrib, 0xFFFFFFFF, 0);
         self.set_es(0x10, data64_attrib, 0xFFFFFFFF, 0);
-        self.set_filesystem(0x10, data64_attrib, 0xFFFFFFFF, 0);
+        self.set_fs(0x10, data64_attrib, 0xFFFFFFFF, 0);
         self.set_gs(0x10, data64_attrib, 0xFFFFFFFF, 0);
         self.set_ss(0x10, data64_attrib, 0xFFFFFFFF, 0);
         
@@ -981,7 +981,7 @@ pub fn write_state(&mut self, offset: usize, value: u64) {
         
         self.set_rflags(0x00000002);
         self.set_rip(entry_point);
-        self.set_rsp(stack_pointer);
+        self.set_rsp(stack_ptr);
         self.set_cpl(0);
         
         self.set_dr6(0xFFFF0FF0);

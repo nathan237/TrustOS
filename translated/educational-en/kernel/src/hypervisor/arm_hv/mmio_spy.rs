@@ -52,14 +52,14 @@ pub struct SmcEvent {
 /// Ring buffer entry with sequence number for lock-free operation
 #[derive(Clone, Copy)]
 struct MmioSlot {
-    sequence: u64,
+    seq: u64,
     event: MmioEvent,
 }
 
 // #[derive] — auto-generates trait implementations at compile time.
 #[derive(Clone, Copy)]
 struct SmcSlot {
-    sequence: u64,
+    seq: u64,
     event: SmcEvent,
 }
 
@@ -85,12 +85,12 @@ const EMPTY_SMC: SmcEvent = SmcEvent {
 
 /// Global MMIO event ring buffer (static, no heap needed at interrupt time)
 static mut MMIO_RING: [MmioSlot; MAXIMUM_MMIO_EVENTS] = {
-    let slot = MmioSlot { sequence: 0, event: EMPTY_MMIO };
+    let slot = MmioSlot { seq: 0, event: EMPTY_MMIO };
     [slot; MAXIMUM_MMIO_EVENTS]
 };
 
 static mut SMC_RING: [SmcSlot; MAXIMUM_SMC_EVENTS] = {
-    let slot = SmcSlot { sequence: 0, event: EMPTY_SMC };
+    let slot = SmcSlot { seq: 0, event: EMPTY_SMC };
     [slot; MAXIMUM_SMC_EVENTS]
 };
 
@@ -106,21 +106,21 @@ static SMC_TOTAL: AtomicU64 = AtomicU64::new(0);
 
 /// Log an MMIO access event (called from trap handler at EL2)
 pub fn log_event(event: MmioEvent) {
-    let index = MMIO_WRITE_INDEX.fetch_add(1, Ordering::Relaxed) % MAXIMUM_MMIO_EVENTS;
-    let sequence = MMIO_TOTAL.fetch_add(1, Ordering::Relaxed) + 1;
+    let idx = MMIO_WRITE_INDEX.fetch_add(1, Ordering::Relaxed) % MAXIMUM_MMIO_EVENTS;
+    let seq = MMIO_TOTAL.fetch_add(1, Ordering::Relaxed) + 1;
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        MMIO_RING[index] = MmioSlot { sequence, event };
+        MMIO_RING[idx] = MmioSlot { seq, event };
     }
 }
 
 /// Log an SMC event (called from trap handler at EL2)
 pub fn log_smc(event: SmcEvent) {
-    let index = SMC_WRITE_INDEX.fetch_add(1, Ordering::Relaxed) % MAXIMUM_SMC_EVENTS;
-    let sequence = SMC_TOTAL.fetch_add(1, Ordering::Relaxed) + 1;
+    let idx = SMC_WRITE_INDEX.fetch_add(1, Ordering::Relaxed) % MAXIMUM_SMC_EVENTS;
+    let seq = SMC_TOTAL.fetch_add(1, Ordering::Relaxed) + 1;
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        SMC_RING[index] = SmcSlot { sequence, event };
+        SMC_RING[idx] = SmcSlot { seq, event };
     }
 }
 
@@ -141,15 +141,15 @@ pub fn recent_mmio_events(count: usize) -> alloc::vec::Vec<MmioEvent> {
         return alloc::vec::Vec::new();
     }
 
-    let n = count.minimum(total).minimum(MAXIMUM_MMIO_EVENTS);
-    let write_position = MMIO_WRITE_INDEX.load(Ordering::Acquire);
+    let n = count.min(total).min(MAXIMUM_MMIO_EVENTS);
+    let write_pos = MMIO_WRITE_INDEX.load(Ordering::Acquire);
     let mut events = alloc::vec::Vec::with_capacity(n);
 
     for i in 0..n {
-        let index = (write_position + MAXIMUM_MMIO_EVENTS - 1 - i) % MAXIMUM_MMIO_EVENTS;
+        let idx = (write_pos + MAXIMUM_MMIO_EVENTS - 1 - i) % MAXIMUM_MMIO_EVENTS;
         let slot = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &MMIO_RING[index] };
-        if slot.sequence > 0 {
+unsafe { &MMIO_RING[idx] };
+        if slot.seq > 0 {
             events.push(slot.event);
         }
     }
@@ -164,15 +164,15 @@ pub fn recent_smc_events(count: usize) -> alloc::vec::Vec<SmcEvent> {
         return alloc::vec::Vec::new();
     }
 
-    let n = count.minimum(total).minimum(MAXIMUM_SMC_EVENTS);
-    let write_position = SMC_WRITE_INDEX.load(Ordering::Acquire);
+    let n = count.min(total).min(MAXIMUM_SMC_EVENTS);
+    let write_pos = SMC_WRITE_INDEX.load(Ordering::Acquire);
     let mut events = alloc::vec::Vec::with_capacity(n);
 
     for i in 0..n {
-        let index = (write_position + MAXIMUM_SMC_EVENTS - 1 - i) % MAXIMUM_SMC_EVENTS;
+        let idx = (write_pos + MAXIMUM_SMC_EVENTS - 1 - i) % MAXIMUM_SMC_EVENTS;
         let slot = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &SMC_RING[index] };
-        if slot.sequence > 0 {
+unsafe { &SMC_RING[idx] };
+        if slot.seq > 0 {
             events.push(slot.event);
         }
     }
@@ -186,17 +186,17 @@ pub fn device_stats() -> alloc::vec::Vec<(&'static str, u64, u64)> {
     let mut stats: alloc::vec::Vec<(&str, u64, u64)> = alloc::vec::Vec::new();
 
     let total = MMIO_TOTAL.load(Ordering::Acquire) as usize;
-    let n = total.minimum(MAXIMUM_MMIO_EVENTS);
+    let n = total.min(MAXIMUM_MMIO_EVENTS);
 
     for i in 0..n {
         let slot = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { &MMIO_RING[i] };
-        if slot.sequence == 0 {
+        if slot.seq == 0 {
             continue;
         }
 
         let name = slot.event.device_name;
-        if let Some(entry) = stats.iterator_mut().find(|s| s.0 == name) {
+        if let Some(entry) = stats.iter_mut().find(|s| s.0 == name) {
             if slot.event.is_write {
                 entry.2 += 1;
             } else {

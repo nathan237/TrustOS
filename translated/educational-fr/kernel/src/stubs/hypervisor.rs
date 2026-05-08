@@ -47,7 +47,7 @@ pub enum VmEventType {
 pub struct VmEvent {
     pub event_type: VmEventType,
     pub vm_id: u64,
-    pub timestamp_mouse: u64,
+    pub timestamp_ms: u64,
 }
 
 // #[derive] — génère automatiquement les implémentations de traits à la compilation.
@@ -65,7 +65,7 @@ pub struct EptViolation {
     pub guest_physical: u64,
     pub guest_linear: Option<u64>,
     pub violation_type: ViolationType,
-    pub timestamp_mouse: u64,
+    pub timestamp_ms: u64,
     pub guest_rip: u64,
 }
 
@@ -123,7 +123,7 @@ pub fn version() -> &'static str { "N/A" }
 // Fonction publique — appelable depuis d'autres modules.
 pub fn logo() -> &'static str { "" }
 // Fonction publique — appelable depuis d'autres modules.
-pub fn create_vm(_name: &str, _memory_mb: usize) -> Result<u64, String> {
+pub fn create_vm(_name: &str, _mem_mb: usize) -> Result<u64, String> {
     Err(String::from("Hypervisor not available"))
 }
 // Fonction publique — appelable depuis d'autres modules.

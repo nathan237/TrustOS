@@ -243,19 +243,19 @@ unsafe {
         TSS.ist[0] = ist1_stack;
         
         // Set TSS entry in GDT
-        let tss_address = core::ptr::address_of!(TSS) as u64;
+        let tss_address = core::ptr::addr_of!(TSS) as u64;
         GDT.tss = TssEntry::new(tss_address);
         
         // Create GDT pointer
-        let gdt_pointer = GdtPointer {
+        let gdt_ptr = GdtPointer {
             limit: (size_of::<Gdt>() - 1) as u16,
-            base: core::ptr::address_of!(GDT) as u64,
+            base: core::ptr::addr_of!(GDT) as u64,
         };
         
         // Load GDT
         core::arch::asm!(
             "lgdt [{}]",
-            in(reg) &gdt_pointer,
+            in(reg) &gdt_ptr,
             options(readonly, nostack, preserves_flags)
         );
         
@@ -267,7 +267,7 @@ unsafe {
             "retfq",
             "2:",
             sel = in(reg) KERNEL_CODE_SELECTOR as u64,
-            temporary = lateout(reg) _,
+            tmp = lateout(reg) _,
             options(preserves_flags)
         );
         
@@ -299,7 +299,7 @@ fn allocator_kernel_stack() -> u64 {
 const STACK_SIZE: usize = 512 * 1024; // 512 KB kernel stack
     
     let stack: Vec<u8> = alloc::vec![0u8; STACK_SIZE];
-    let stack_top = stack.as_pointer() as u64 + STACK_SIZE as u64;
+    let stack_top = stack.as_ptr() as u64 + STACK_SIZE as u64;
     
     // Leak the stack so it persists
     core::mem::forget(stack);
@@ -324,33 +324,33 @@ unsafe {
 /// Initialize GDT/TSS for an Application Processor (AP)
 /// Creates a per-CPU GDT+TSS so each core has its own kernel stack (RSP0).
 pub fn initialize_ap(cpu_id: u32) {
-    let index = cpu_id as usize;
-    if index == 0 || index >= MAXIMUM_CPUS { return; }
+    let idx = cpu_id as usize;
+    if idx == 0 || idx >= MAXIMUM_CPUS { return; }
     
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
         // Allocate kernel stack for this AP
         let kernel_stack = allocator_kernel_stack();
-        PER_CPU_TSS[index].rsp[0] = kernel_stack;
+        PER_CPU_TSS[idx].rsp[0] = kernel_stack;
         
         // IST1 for double fault handler
         let ist1 = allocator_kernel_stack();
-        PER_CPU_TSS[index].ist[0] = ist1;
+        PER_CPU_TSS[idx].ist[0] = ist1;
         
         // Set up GDT with TSS entry pointing to this AP's TSS
-        PER_CPU_GDT[index] = Gdt::new();
-        let tss_address = core::ptr::address_of!(PER_CPU_TSS[index]) as u64;
-        PER_CPU_GDT[index].tss = TssEntry::new(tss_address);
+        PER_CPU_GDT[idx] = Gdt::new();
+        let tss_address = core::ptr::addr_of!(PER_CPU_TSS[idx]) as u64;
+        PER_CPU_GDT[idx].tss = TssEntry::new(tss_address);
         
         // Load this AP's GDT
-        let gdt_pointer = GdtPointer {
+        let gdt_ptr = GdtPointer {
             limit: (size_of::<Gdt>() - 1) as u16,
-            base: core::ptr::address_of!(PER_CPU_GDT[index]) as u64,
+            base: core::ptr::addr_of!(PER_CPU_GDT[idx]) as u64,
         };
         
         core::arch::asm!(
             "lgdt [{}]",
-            in(reg) &gdt_pointer,
+            in(reg) &gdt_ptr,
             options(readonly, nostack, preserves_flags)
         );
         
@@ -362,7 +362,7 @@ unsafe {
             "retfq",
             "2:",
             sel = in(reg) KERNEL_CODE_SELECTOR as u64,
-            temporary = lateout(reg) _,
+            tmp = lateout(reg) _,
             options(preserves_flags)
         );
         

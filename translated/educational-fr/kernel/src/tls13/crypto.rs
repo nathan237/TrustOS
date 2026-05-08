@@ -44,8 +44,8 @@ const SHA256_K: [u32; 64] = [
 pub struct Sha256 {
     state: [u32; 8],
     buffer: [u8; 64],
-    buffer_length: usize,
-    total_length: u64,
+    buffer_len: usize,
+    total_len: u64,
 }
 
 // Bloc d'implémentation — définit les méthodes du type ci-dessus.
@@ -55,8 +55,8 @@ pub fn new() -> Self {
         Self {
             state: SHA256_H,
             buffer: [0u8; 64],
-            buffer_length: 0,
-            total_length: 0,
+            buffer_len: 0,
+            total_len: 0,
         }
     }
     
@@ -66,25 +66,25 @@ pub fn update(&mut self, data: &[u8]) {
         let len = data.len();
 
         // If there's leftover in the buffer, fill it first
-        if self.buffer_length > 0 {
-            let need = 64 - self.buffer_length;
+        if self.buffer_len > 0 {
+            let need = 64 - self.buffer_len;
             let take = if len < need { len } else { need };
-            self.buffer[self.buffer_length..self.buffer_length + take]
+            self.buffer[self.buffer_len..self.buffer_len + take]
                 .copy_from_slice(&data[..take]);
-            self.buffer_length += take;
-            self.total_length += take as u64;
+            self.buffer_len += take;
+            self.total_len += take as u64;
             offset += take;
 
-            if self.buffer_length == 64 {
+            if self.buffer_len == 64 {
                 self.process_block();
-                self.buffer_length = 0;
+                self.buffer_len = 0;
             }
         }
 
         // Process full 64-byte blocks directly from input
         while offset + 64 <= len {
             self.buffer.copy_from_slice(&data[offset..offset + 64]);
-            self.total_length += 64;
+            self.total_len += 64;
             self.process_block();
             offset += 64;
         }
@@ -93,30 +93,30 @@ pub fn update(&mut self, data: &[u8]) {
         let remaining = len - offset;
         if remaining > 0 {
             self.buffer[..remaining].copy_from_slice(&data[offset..]);
-            self.buffer_length = remaining;
-            self.total_length += remaining as u64;
+            self.buffer_len = remaining;
+            self.total_len += remaining as u64;
         }
     }
     
         // Fonction publique — appelable depuis d'autres modules.
 pub fn finalize(&mut self) -> [u8; 32] {
         // Padding
-        let bit_length = self.total_length * 8;
-        self.buffer[self.buffer_length] = 0x80;
-        self.buffer_length += 1;
+        let bit_length = self.total_len * 8;
+        self.buffer[self.buffer_len] = 0x80;
+        self.buffer_len += 1;
         
-        if self.buffer_length > 56 {
-            while self.buffer_length < 64 {
-                self.buffer[self.buffer_length] = 0;
-                self.buffer_length += 1;
+        if self.buffer_len > 56 {
+            while self.buffer_len < 64 {
+                self.buffer[self.buffer_len] = 0;
+                self.buffer_len += 1;
             }
             self.process_block();
-            self.buffer_length = 0;
+            self.buffer_len = 0;
         }
         
-        while self.buffer_length < 56 {
-            self.buffer[self.buffer_length] = 0;
-            self.buffer_length += 1;
+        while self.buffer_len < 56 {
+            self.buffer[self.buffer_len] = 0;
+            self.buffer_len += 1;
         }
         
         // Append length in bits
@@ -156,8 +156,8 @@ pub fn finalize(&mut self) -> [u8; 32] {
         // Compression
         for i in 0..64 {
             let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
-            let character = (e & f) ^ ((!e) & g);
-            let temp1 = h.wrapping_add(s1).wrapping_add(character).wrapping_add(SHA256_K[i]).wrapping_add(w[i]);
+            let ch = (e & f) ^ ((!e) & g);
+            let temp1 = h.wrapping_add(s1).wrapping_add(ch).wrapping_add(SHA256_K[i]).wrapping_add(w[i]);
             let s0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
             let maj = (a & b) ^ (a & c) ^ (b & c);
             let temp2 = s0.wrapping_add(maj);
@@ -236,7 +236,7 @@ pub fn hkdf_extract(salt: &[u8], ikm: &[u8]) -> [u8; 32] {
 }
 
 /// HKDF-Expand
-pub fn hkdf_expand(prk: &[u8; 32], information: &[u8], length: usize) -> Vec<u8> {
+pub fn hkdf_expand(prk: &[u8; 32], info: &[u8], length: usize) -> Vec<u8> {
     let mut output = Vec::with_capacity(length);
     let mut t = Vec::new();
     let mut counter = 1u8;
@@ -244,7 +244,7 @@ pub fn hkdf_expand(prk: &[u8; 32], information: &[u8], length: usize) -> Vec<u8>
     while output.len() < length {
         let mut input = Vec::new();
         input.extend_from_slice(&t);
-        input.extend_from_slice(information);
+        input.extend_from_slice(info);
         input.push(counter);
         
         t = hmac_sha256(prk, &input).to_vec();
@@ -261,14 +261,14 @@ pub fn hkdf_expand_label(secret: &[u8; 32], label: &str, context: &[u8], length:
     let full_label = alloc::format!("tls13 {}", label);
     let label_bytes = full_label.as_bytes();
     
-    let mut information = Vec::new();
-    information.extend_from_slice(&(length as u16).to_be_bytes());
-    information.push(label_bytes.len() as u8);
-    information.extend_from_slice(label_bytes);
-    information.push(context.len() as u8);
-    information.extend_from_slice(context);
+    let mut info = Vec::new();
+    info.extend_from_slice(&(length as u16).to_be_bytes());
+    info.push(label_bytes.len() as u8);
+    info.extend_from_slice(label_bytes);
+    info.push(context.len() as u8);
+    info.extend_from_slice(context);
     
-    hkdf_expand(secret, &information, length)
+    hkdf_expand(secret, &info, length)
 }
 
 /// Derive secret using HKDF-Expand-Label
@@ -321,8 +321,8 @@ pub fn new(key: &[u8; 16]) -> Self {
         
         // Key expansion
         for i in 1..11 {
-            let previous = round_keys[i - 1];
-            let mut word = [previous[12], previous[13], previous[14], previous[15]];
+            let prev = round_keys[i - 1];
+            let mut word = [prev[12], prev[13], prev[14], prev[15]];
             
             // RotWord + SubWord + Rcon
             let temporary = word[0];
@@ -332,10 +332,10 @@ pub fn new(key: &[u8; 16]) -> Self {
             word[3] = SBOX[temporary as usize];
             
             for j in 0..4 {
-                round_keys[i][j] = previous[j] ^ word[j];
+                round_keys[i][j] = prev[j] ^ word[j];
             }
             for j in 4..16 {
-                round_keys[i][j] = previous[j] ^ round_keys[i][j - 4];
+                round_keys[i][j] = prev[j] ^ round_keys[i][j - 4];
             }
         }
         
@@ -373,7 +373,7 @@ pub fn new(key: &[u8; 16]) -> Self {
     }
     
     fn sub_bytes(&self, block: &mut [u8; 16]) {
-        for byte in block.iterator_mut() {
+        for byte in block.iter_mut() {
             *byte = SBOX[*byte as usize];
         }
     }
@@ -403,13 +403,13 @@ pub fn new(key: &[u8; 16]) -> Self {
     
     fn mix_columns(&self, block: &mut [u8; 16]) {
         for i in 0..4 {
-            let column = i * 4;
-            let (a, b, c, d) = (block[column], block[column + 1], block[column + 2], block[column + 3]);
+            let col = i * 4;
+            let (a, b, c, d) = (block[col], block[col + 1], block[col + 2], block[col + 3]);
             
-            block[column] = gf_mul(a, 2) ^ gf_mul(b, 3) ^ c ^ d;
-            block[column + 1] = a ^ gf_mul(b, 2) ^ gf_mul(c, 3) ^ d;
-            block[column + 2] = a ^ b ^ gf_mul(c, 2) ^ gf_mul(d, 3);
-            block[column + 3] = gf_mul(a, 3) ^ b ^ c ^ gf_mul(d, 2);
+            block[col] = gf_mul(a, 2) ^ gf_mul(b, 3) ^ c ^ d;
+            block[col + 1] = a ^ gf_mul(b, 2) ^ gf_mul(c, 3) ^ d;
+            block[col + 2] = a ^ b ^ gf_mul(c, 2) ^ gf_mul(d, 3);
+            block[col + 3] = gf_mul(a, 3) ^ b ^ c ^ gf_mul(d, 2);
         }
     }
 }
@@ -471,7 +471,7 @@ fn ghash(h: &[u8; 16], aad: &[u8], ciphertext: &[u8]) -> [u8; 16] {
     let aad_blocks = (aad.len() + 15) / 16;
     for i in 0..aad_blocks {
         let start = i * 16;
-        let end = (start + 16).minimum(aad.len());
+        let end = (start + 16).min(aad.len());
         for j in start..end {
             y[j - start] ^= aad[j];
         }
@@ -482,7 +482,7 @@ fn ghash(h: &[u8; 16], aad: &[u8], ciphertext: &[u8]) -> [u8; 16] {
     let ct_blocks = (ciphertext.len() + 15) / 16;
     for i in 0..ct_blocks {
         let start = i * 16;
-        let end = (start + 16).minimum(ciphertext.len());
+        let end = (start + 16).min(ciphertext.len());
         for j in start..end {
             y[j - start] ^= ciphertext[j];
         }
@@ -537,7 +537,7 @@ pub fn aes_gcm_encrypt(
         aes.encrypt_block(&mut block);
         
         let start = i * 16;
-        let end = (start + 16).minimum(plaintext.len());
+        let end = (start + 16).min(plaintext.len());
         for j in start..end {
             ciphertext.push(plaintext[j] ^ block[j - start]);
         }
@@ -613,7 +613,7 @@ pub fn aes_gcm_decrypt(
         aes.encrypt_block(&mut block);
         
         let start = i * 16;
-        let end = (start + 16).minimum(ciphertext.len());
+        let end = (start + 16).min(ciphertext.len());
         for j in start..end {
             plaintext.push(ciphertext[j] ^ block[j - start]);
         }
@@ -750,7 +750,7 @@ pub(crate) fn fe_from_bytes(b: &[u8; 32]) -> Fe {
     
     fn load64(b: &[u8]) -> u64 {
         let mut result = 0u64;
-        for i in 0..8.minimum(b.len()) {
+        for i in 0..8.min(b.len()) {
             result |= (b[i] as u64) << (i * 8);
         }
         result

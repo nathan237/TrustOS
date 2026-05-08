@@ -9,39 +9,39 @@ use core::sync::atomic::{AtomicU32, Ordering};
 use spin::Mutex;
 
 
-static KE_: Mutex<BTreeMap<u64, Vec<Bwn>>> = Mutex::new(BTreeMap::new());
+static KX_: Mutex<BTreeMap<u64, Vec<Ago>>> = Mutex::new(BTreeMap::new());
 
 
 #[derive(Debug, Clone)]
-struct Bwn {
+struct Ago {
     
-    ni: u64,
+    tid: u64,
     
-    qy: u32,
+    expected: u32,
     
-    wtf: u64,
+    start_time: u64,
     
-    gun: u64,
+    timeout_ns: u64,
 }
 
 
 pub mod op {
-    pub const ACN_: u32 = 0;
-    pub const ACO_: u32 = 1;
-    pub const DMH_: u32 = 2;
-    pub const BVT_: u32 = 3;
-    pub const BVS_: u32 = 4;
-    pub const DML_: u32 = 5;
-    pub const DMI_: u32 = 6;
-    pub const DMK_: u32 = 7;
-    pub const DMJ_: u32 = 8;
-    pub const BVU_: u32 = 9;
-    pub const BVV_: u32 = 10;
+    pub const AED_: u32 = 0;
+    pub const AEE_: u32 = 1;
+    pub const DQB_: u32 = 2;
+    pub const BYZ_: u32 = 3;
+    pub const BYY_: u32 = 4;
+    pub const DQF_: u32 = 5;
+    pub const DQC_: u32 = 6;
+    pub const DQE_: u32 = 7;
+    pub const DQD_: u32 = 8;
+    pub const BZA_: u32 = 9;
+    pub const BZB_: u32 = 10;
     
-    pub const ACM_: u32 = 128;
-    pub const BVQ_: u32 = 256;
+    pub const AEC_: u32 = 128;
+    pub const BYW_: u32 = 256;
     
-    pub const BVR_: u32 = !(ACM_ | BVQ_);
+    pub const BYX_: u32 = !(AEC_ | BYW_);
 }
 
 
@@ -54,84 +54,84 @@ pub mod op {
 
 
 pub fn futex(
-    aqp: u64,
-    szm: u32,
-    ap: u32,
-    aah: u64,
-    gvk: u64,
-    jvf: u32,
+    uaddr: u64,
+    futex_op: u32,
+    val: u32,
+    mz: u64,
+    uaddr2: u64,
+    val3: u32,
 ) -> Result<i64, i32> {
-    let cmd = szm & op::BVR_;
+    let cmd = futex_op & op::BYX_;
     
     match cmd {
-        op::ACN_ => nwu(aqp, ap, aah),
-        op::ACO_ => nwv(aqp, ap),
-        op::BVT_ => nwt(aqp, ap, gvk, jvf),
-        op::BVS_ => szl(aqp, ap, gvk, jvf, aah as u32),
-        op::BVU_ => szn(aqp, ap, aah, jvf),
-        op::BVV_ => szo(aqp, ap, jvf),
+        op::AED_ => iam(uaddr, val, mz),
+        op::AEE_ => ian(uaddr, val),
+        op::BYZ_ => ial(uaddr, val, uaddr2, val3),
+        op::BYY_ => mao(uaddr, val, uaddr2, val3, mz as u32),
+        op::BZA_ => maq(uaddr, val, mz, val3),
+        op::BZB_ => mar(uaddr, val, val3),
         _ => Err(-38), 
     }
 }
 
 
-fn nwu(aqp: u64, qy: u32, gun: u64) -> Result<i64, i32> {
+fn iam(uaddr: u64, expected: u32, timeout_ns: u64) -> Result<i64, i32> {
     
-    if !crate::memory::aov(aqp) && aqp != 0 {
+    if !crate::memory::ux(uaddr) && uaddr != 0 {
         
-        if aqp < 0xFFFF_8000_0000_0000 {
+        if uaddr < 0xFFFF_8000_0000_0000 {
             return Err(-14); 
         }
     }
     
     
-    let cv = unsafe { 
-        let ptr = aqp as *const AtomicU32;
+    let current = unsafe { 
+        let ptr = uaddr as *const AtomicU32;
         (*ptr).load(Ordering::SeqCst)
     };
     
     
-    if cv != qy {
+    if current != expected {
         return Err(-11); 
     }
     
     
-    let ni = crate::thread::bqd();
-    let iu = crate::time::evk();
+    let tid = crate::thread::current_tid();
+    let cy = crate::time::cbx();
     
     
     {
-        let mut bwj = KE_.lock();
-        let queue = bwj.bt(aqp).clq(Vec::new);
-        queue.push(Bwn {
-            ni,
-            qy,
-            wtf: iu,
-            gun,
+        let mut zg = KX_.lock();
+        let queue = zg.entry(uaddr).or_insert_with(Vec::new);
+        queue.push(Ago {
+            tid,
+            expected,
+            start_time: cy,
+            timeout_ns,
         });
     }
     
     
     
     
-    if gun > 0 {
-        let ean = iu.akq(gun);
-        crate::thread::eyp(ean);
+    if timeout_ns > 0 {
+        let brq = cy.saturating_add(timeout_ns);
+        crate::thread::cds(brq);
     } else {
         
-        crate::thread::mzq();
+        crate::thread::hig();
     }
     
     
     
     {
-        let mut bwj = KE_.lock();
-        if let Some(queue) = bwj.ds(&aqp) {
-            if queue.iter().any(|aa| aa.ni == ni) {
+        let mut zg = KX_.lock();
+        if let Some(queue) = zg.get_mut(&uaddr) {
+            if queue.iter().any(|e| e.tid == tid) {
                 
-                queue.ajm(|aa| aa.ni != ni);
+                queue.retain(|e| e.tid != tid);
                 if queue.is_empty() {
-                    bwj.remove(&aqp);
+                    zg.remove(&uaddr);
                 }
                 return Err(-110); 
             }
@@ -143,117 +143,117 @@ fn nwu(aqp: u64, qy: u32, gun: u64) -> Result<i64, i32> {
 }
 
 
-fn nwv(aqp: u64, az: u32) -> Result<i64, i32> {
-    let mut bwj = KE_.lock();
+fn ian(uaddr: u64, count: u32) -> Result<i64, i32> {
+    let mut zg = KX_.lock();
     
-    let fyv = if let Some(queue) = bwj.ds(&aqp) {
-        let mlm = (az as usize).v(queue.len());
+    let csw = if let Some(queue) = zg.get_mut(&uaddr) {
+        let gzf = (count as usize).min(queue.len());
         
         
-        let fyv: Vec<_> = queue.bbk(..mlm).collect();
+        let csw: Vec<_> = queue.drain(..gzf).collect();
         
         
-        for bt in &fyv {
-            crate::thread::wake(bt.ni);
+        for entry in &csw {
+            crate::thread::wake(entry.tid);
         }
         
         if queue.is_empty() {
-            bwj.remove(&aqp);
+            zg.remove(&uaddr);
         }
         
-        fyv.len() as i64
+        csw.len() as i64
     } else {
         0
     };
     
-    Ok(fyv)
+    Ok(csw)
 }
 
 
-fn nwt(aqp: u64, mqf: u32, gvk: u64, lzl: u32) -> Result<i64, i32> {
-    let mut bwj = KE_.lock();
+fn ial(uaddr: u64, wake_count: u32, uaddr2: u64, requeue_count: u32) -> Result<i64, i32> {
+    let mut zg = KX_.lock();
     
-    let mut pvj = 0i64;
+    let mut jod = 0i64;
     
-    if let Some(queue) = bwj.ds(&aqp) {
+    if let Some(queue) = zg.get_mut(&uaddr) {
         
-        let mlm = (mqf as usize).v(queue.len());
-        let fyv: Vec<_> = queue.bbk(..mlm).collect();
+        let gzf = (wake_count as usize).min(queue.len());
+        let csw: Vec<_> = queue.drain(..gzf).collect();
         
-        for bt in &fyv {
-            crate::thread::wake(bt.ni);
+        for entry in &csw {
+            crate::thread::wake(entry.tid);
         }
-        pvj = fyv.len() as i64;
+        jod = csw.len() as i64;
         
         
-        let xin = (lzl as usize).v(queue.len());
-        let vxn: Vec<_> = queue.bbk(..xin).collect();
+        let pkn = (requeue_count as usize).min(queue.len());
+        let ogc: Vec<_> = queue.drain(..pkn).collect();
         
         
-        let vpi = bwj.bt(gvk).clq(Vec::new);
-        vpi.lg(vxn);
+        let oap = zg.entry(uaddr2).or_insert_with(Vec::new);
+        oap.extend(ogc);
     }
     
     
-    if bwj.get(&aqp).map(|fm| fm.is_empty()).unwrap_or(false) {
-        bwj.remove(&aqp);
+    if zg.get(&uaddr).map(|q| q.is_empty()).unwrap_or(false) {
+        zg.remove(&uaddr);
     }
     
-    Ok(pvj)
+    Ok(jod)
 }
 
 
-fn szl(aqp: u64, mqf: u32, gvk: u64, lzl: u32, qy: u32) -> Result<i64, i32> {
+fn mao(uaddr: u64, wake_count: u32, uaddr2: u64, requeue_count: u32, expected: u32) -> Result<i64, i32> {
     
-    let cv = unsafe { 
-        let ptr = aqp as *const AtomicU32;
+    let current = unsafe { 
+        let ptr = uaddr as *const AtomicU32;
         (*ptr).load(Ordering::SeqCst)
     };
-    if cv != qy {
+    if current != expected {
         return Err(-11); 
     }
     
-    nwt(aqp, mqf, gvk, lzl)
+    ial(uaddr, wake_count, uaddr2, requeue_count)
 }
 
 
-fn szn(aqp: u64, qy: u32, gun: u64, kdm: u32) -> Result<i64, i32> {
-    if kdm == 0 {
+fn maq(uaddr: u64, expected: u32, timeout_ns: u64, bitset: u32) -> Result<i64, i32> {
+    if bitset == 0 {
         return Err(-22); 
     }
     
     
     
-    nwu(aqp, qy, gun)
+    iam(uaddr, expected, timeout_ns)
 }
 
 
-fn szo(aqp: u64, az: u32, kdm: u32) -> Result<i64, i32> {
-    if kdm == 0 {
+fn mar(uaddr: u64, count: u32, bitset: u32) -> Result<i64, i32> {
+    if bitset == 0 {
         return Err(-22); 
     }
     
     
-    nwv(aqp, az)
+    ian(uaddr, count)
 }
 
 
-pub fn yui(aqp: u64) -> usize {
-    KE_.lock()
-        .get(&aqp)
-        .map(|fm| fm.len())
+pub fn qiy(uaddr: u64) -> usize {
+    KX_.lock()
+        .get(&uaddr)
+        .map(|q| q.len())
         .unwrap_or(0)
 }
 
 
-pub fn khu(ce: u64) {
-    let mut bwj = KE_.lock();
+pub fn flu(pid: u64) {
+    let mut zg = KX_.lock();
     
     
-    for queue in bwj.xqp() {
-        queue.ajm(|aa| (aa.ni >> 32) != ce);
+    for queue in zg.values_mut() {
+        queue.retain(|e| (e.tid >> 32) != pid);
     }
     
     
-    bwj.ajm(|_, fm| !fm.is_empty());
+    zg.retain(|_, q| !q.is_empty());
 }

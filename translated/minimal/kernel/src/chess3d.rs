@@ -11,9 +11,9 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::format;
 
-use crate::formula3d::{V3, lz, rk, ahn};
+use crate::formula3d::{V3, eu, hr, ra};
 use crate::chess::{
-    ChessState, GamePhase, Y,
+    ChessState, GamePhase, Q,
 };
 
 
@@ -23,393 +23,393 @@ use crate::chess::{
 pub struct Chess3DState {
     pub chess: ChessState,
     
-    pub bbc: f32,    
-    pub atx: f32,    
-    pub aab: f32,       
-    pub ikf: bool,   
+    pub cam_angle_y: f32,    
+    pub cam_angle_x: f32,    
+    pub cam_dist: f32,       
+    pub auto_rotate: bool,   
     pub frame: u32,
     
-    pub ahe: usize,
-    pub asl: usize,
+    pub buf_w: usize,
+    pub buf_h: usize,
     
-    pub tqc: Option<usize>,   
-    pub kan: Option<usize>, 
-    pub ijt: f32,               
-    pub qin: V3,          
-    pub qip: V3,            
+    pub hover_sq: Option<usize>,   
+    pub anim_piece: Option<usize>, 
+    pub anim_t: f32,               
+    pub anim_from_3d: V3,          
+    pub anim_to_3d: V3,            
     
-    pub iro: bool,       
-    pub irm: i32,          
-    pub irn: i32,          
+    pub drag_rotating: bool,       
+    pub drag_last_x: i32,          
+    pub drag_last_y: i32,          
 }
 
 impl Chess3DState {
     pub fn new() -> Self {
         Chess3DState {
             chess: ChessState::new(),
-            bbc: 0.0,       
-            atx: 0.65,      
-            aab: 18.0,         
-            ikf: false,
+            cam_angle_y: 0.0,       
+            cam_angle_x: 0.65,      
+            cam_dist: 18.0,         
+            auto_rotate: false,
             frame: 0,
-            ahe: 0,
-            asl: 0,
-            tqc: None,
-            kan: None,
-            ijt: 0.0,
-            qin: V3 { b: 0.0, c: 0.0, av: 0.0 },
-            qip: V3 { b: 0.0, c: 0.0, av: 0.0 },
-            iro: false,
-            irm: 0,
-            irn: 0,
+            buf_w: 0,
+            buf_h: 0,
+            hover_sq: None,
+            anim_piece: None,
+            anim_t: 0.0,
+            anim_from_3d: V3 { x: 0.0, y: 0.0, z: 0.0 },
+            anim_to_3d: V3 { x: 0.0, y: 0.0, z: 0.0 },
+            drag_rotating: false,
+            drag_last_x: 0,
+            drag_last_y: 0,
         }
     }
 
-    pub fn vr(&mut self, bs: u8) {
-        use crate::keyboard::{V_, U_, AH_, AI_};
+    pub fn handle_key(&mut self, key: u8) {
+        use crate::keyboard::{T_, S_, AI_, AJ_};
 
-        match bs {
+        match key {
             
-            b'a' | b'A' => self.bbc -= 0.12,
-            b'd' | b'D' => self.bbc += 0.12,
-            b'w' | b'W' => { self.atx = (self.atx + 0.08).v(1.40); },
-            b's' | b'S' => { self.atx = (self.atx - 0.08).am(0.15); },
-            b'z' | b'Z' => { self.aab = (self.aab - 0.8).am(8.0); },
-            b'x' | b'X' => { self.aab = (self.aab + 0.8).v(35.0); },
-            b'o' | b'O' => self.ikf = !self.ikf,
+            b'a' | b'A' => self.cam_angle_y -= 0.12,
+            b'd' | b'D' => self.cam_angle_y += 0.12,
+            b'w' | b'W' => { self.cam_angle_x = (self.cam_angle_x + 0.08).min(1.40); },
+            b's' | b'S' => { self.cam_angle_x = (self.cam_angle_x - 0.08).max(0.15); },
+            b'z' | b'Z' => { self.cam_dist = (self.cam_dist - 0.8).max(8.0); },
+            b'x' | b'X' => { self.cam_dist = (self.cam_dist + 0.8).min(35.0); },
+            b'o' | b'O' => self.auto_rotate = !self.auto_rotate,
             
-            _ => self.chess.vr(bs),
+            _ => self.chess.handle_key(key),
         }
     }
 
     
     
-    pub fn ago(&mut self, hl: i32, ir: i32, ur: i32, nd: i32) {
+    pub fn handle_click(&mut self, cg: i32, cr: i32, hy: i32, en: i32) {
         
-        let d = ur as usize;
-        let i = nd as usize;
-        if hl < 0 || ir < 0 || hl >= ur || ir >= nd {
+        let w = hy as usize;
+        let h = en as usize;
+        if cg < 0 || cr < 0 || cg >= hy || cr >= en {
             return;
         }
 
         
         
-        let mut myt: Option<usize> = None;
-        let mut myq = 999999.0f32;
+        let mut hhk: Option<usize> = None;
+        let mut hhh = 999999.0f32;
 
-        for br in 0..8u32 {
-            for bj in 0..8u32 {
-                let im = (br * 8 + bj) as usize;
-                let (cr, cq, _) = self.oye(br, bj, d, i);
-                let dx = (cr - hl) as f32;
-                let bg = (cq - ir) as f32;
-                let la = dx * dx + bg * bg;
-                if la < myq && la < (40.0 * 40.0) {
-                    myq = la;
-                    myt = Some(im);
+        for row in 0..8u32 {
+            for col in 0..8u32 {
+                let cu = (row * 8 + col) as usize;
+                let (am, ak, _) = self.project_square_center(row, col, w, h);
+                let dx = (am - cg) as f32;
+                let ad = (ak - cr) as f32;
+                let em = dx * dx + ad * ad;
+                if em < hhh && em < (40.0 * 40.0) {
+                    hhh = em;
+                    hhk = Some(cu);
                 }
             }
         }
 
-        if let Some(im) = myt {
-            let bj = (im % 8) as i32;
-            let br = (im / 8) as i32;
-            self.chess.oai(bj, br);
+        if let Some(cu) = hhk {
+            let col = (cu % 8) as i32;
+            let row = (cu / 8) as i32;
+            self.chess.handle_mouse_click(col, row);
         } else {
             
-            self.iro = true;
-            self.irm = hl;
-            self.irn = ir;
+            self.drag_rotating = true;
+            self.drag_last_x = cg;
+            self.drag_last_y = cr;
         }
     }
 
     
-    pub fn lax(&mut self, hl: i32, ir: i32) {
-        if self.iro {
-            let dx = hl - self.irm;
-            let bg = ir - self.irn;
+    pub fn handle_mouse_move(&mut self, cg: i32, cr: i32) {
+        if self.drag_rotating {
+            let dx = cg - self.drag_last_x;
+            let ad = cr - self.drag_last_y;
             
-            self.bbc += dx as f32 * 0.01;
+            self.cam_angle_y += dx as f32 * 0.01;
             
-            self.atx = (self.atx - bg as f32 * 0.008).qp(0.15, 1.40);
-            self.irm = hl;
-            self.irn = ir;
+            self.cam_angle_x = (self.cam_angle_x - ad as f32 * 0.008).clamp(0.15, 1.40);
+            self.drag_last_x = cg;
+            self.drag_last_y = cr;
         }
     }
 
     
-    pub fn lay(&mut self) {
-        self.iro = false;
+    pub fn handle_mouse_release(&mut self) {
+        self.drag_rotating = false;
     }
 
     
-    pub fn ers(&mut self, aaq: i8) {
-        if aaq > 0 {
+    pub fn handle_scroll(&mut self, mk: i8) {
+        if mk > 0 {
             
-            self.aab = (self.aab - 0.8).am(8.0);
-        } else if aaq < 0 {
+            self.cam_dist = (self.cam_dist - 0.8).max(8.0);
+        } else if mk < 0 {
             
-            self.aab = (self.aab + 0.8).v(35.0);
+            self.cam_dist = (self.cam_dist + 0.8).min(35.0);
         }
     }
 
     
-    fn oye(&self, br: u32, bj: u32, d: usize, i: usize) -> (i32, i32, f32) {
-        let dnh = ilx(br as i32, bj as i32);
-        self.bwc(dnh, d, i)
+    fn project_square_center(&self, row: u32, col: u32, w: usize, h: usize) -> (i32, i32, f32) {
+        let bkb = ehc(row as i32, col as i32);
+        self.project_point(bkb, w, h)
     }
 
     
-    fn bwc(&self, ai: V3, d: usize, i: usize) -> (i32, i32, f32) {
+    fn project_point(&self, aa: V3, w: usize, h: usize) -> (i32, i32, f32) {
         
-        let cdr = rk(self.atx);
-        let grr = lz(self.atx);
-        let cdp = rk(self.bbc);
-        let bcm = lz(self.bbc);
+        let ce = hr(self.cam_angle_x);
+        let dea = eu(self.cam_angle_x);
+        let apz = hr(self.cam_angle_y);
+        let acl = eu(self.cam_angle_y);
 
         
-        let hef = self.aab * cdr * bcm;
-        let heg = self.aab * grr;
-        let heh = self.aab * cdr * cdp;
+        let dln = self.cam_dist * ce * acl;
+        let dlo = self.cam_dist * dea;
+        let dlp = self.cam_dist * ce * apz;
 
         
-        let cla = 1.0 / self.aab;
-        let fje = -hef * cla;
-        let fjf = -heg * cla;
-        let fjg = -heh * cla;
+        let aub = 1.0 / self.cam_dist;
+        let cjw = -dln * aub;
+        let cjx = -dlo * aub;
+        let cjy = -dlp * aub;
 
         
-        let fth = -fjg;
-        let fti = fje;
-        let ftc = ahn(fth * fth + fti * fti);
-        if ftc < 0.0001 {
-            return (d as i32 / 2, i as i32 / 2, 0.0);
+        let cps = -cjy;
+        let cpt = cjw;
+        let cpn = ra(cps * cps + cpt * cpt);
+        if cpn < 0.0001 {
+            return (w as i32 / 2, h as i32 / 2, 0.0);
         }
-        let frv = fth / ftc;
-        let frw = fti / ftc;
+        let coq = cps / cpn;
+        let cor = cpt / cpn;
 
         
-        let mnu = -frw * fjf;
-        let mnv = frw * fje - frv * fjg;
-        let mnw = frv * fjf;
+        let haj = -cor * cjx;
+        let hak = cor * cjw - coq * cjy;
+        let hal = coq * cjx;
 
         
-        let dx = ai.b - hef;
-        let bg = ai.c - heg;
-        let pt = ai.av - heh;
+        let dx = aa.x - dln;
+        let ad = aa.y - dlo;
+        let dz = aa.z - dlp;
 
         
-        let qvs = dx * frv + pt * frw;
-        let qvt = dx * mnu + bg * mnv + pt * mnw;
-        let fef = dx * fje + bg * fjf + pt * fjg;
+        let khc = dx * coq + dz * cor;
+        let khd = dx * haj + ad * hak + dz * hal;
+        let cgp = dx * cjw + ad * cjx + dz * cjy;
 
-        if fef < 0.5 {
-            return (d as i32 / 2, i as i32 / 2, fef);
+        if cgp < 0.5 {
+            return (w as i32 / 2, h as i32 / 2, cgp);
         }
 
         
-        let ckm = d.v(i) as f32 * 1.6;
-        let cr = (qvs / fef * ckm) as i32 + d as i32 / 2;
-        let cq = (-qvt / fef * ckm) as i32 + i as i32 / 2;
-        (cr, cq, fef)
+        let fov = w.min(h) as f32 * 1.6;
+        let am = (khc / cgp * fov) as i32 + w as i32 / 2;
+        let ak = (-khd / cgp * fov) as i32 + h as i32 / 2;
+        (am, ak, cgp)
     }
 
-    pub fn or(&mut self) {
+    pub fn tick(&mut self) {
         self.frame += 1;
-        if self.ikf {
-            self.bbc += 0.005;
+        if self.auto_rotate {
+            self.cam_angle_y += 0.005;
         }
         
-        if self.kan.is_some() {
-            self.ijt += 0.06;
-            if self.ijt >= 1.0 {
-                self.kan = None;
-                self.ijt = 0.0;
+        if self.anim_piece.is_some() {
+            self.anim_t += 0.06;
+            if self.anim_t >= 1.0 {
+                self.anim_piece = None;
+                self.anim_t = 0.0;
             }
         }
     }
 
     
-    pub fn tj(&mut self, fpx: &mut [u32], d: usize, i: usize) {
-        if d < 100 || i < 100 { return; }
+    pub fn render(&mut self, out_buf: &mut [u32], w: usize, h: usize) {
+        if w < 100 || h < 100 { return; }
 
         
-        for y in fpx.el() {
-            *y = 0xFF050808;
+        for p in out_buf.iter_mut() {
+            *p = 0xFF050808;
         }
         
-        self.ahe = d;
-        self.asl = i;
+        self.buf_w = w;
+        self.buf_h = h;
 
         
-        self.vvj(fpx, d, i);
+        self.render_board_reflection(out_buf, w, h);
 
         
-        self.vvg(fpx, d, i);
+        self.render_board(out_buf, w, h);
 
         
-        self.vvi(fpx, d, i);
+        self.render_board_labels(out_buf, w, h);
 
         
-        self.vwi(fpx, d, i);
+        self.render_piece_shadows(out_buf, w, h);
 
         
-        self.vwj(fpx, d, i);
+        self.render_pieces(out_buf, w, h);
         
         
-        self.lzd(fpx, d, i);
+        self.render_hud(out_buf, w, h);
     }
 
-    fn vvg(&self, k: &mut [u32], d: usize, i: usize) {
+    fn render_board(&self, buf: &mut [u32], w: usize, h: usize) {
         
         
 
         
         
-        let mut ibj: [(u32, u32, f32); 64] = [(0, 0, 0.0); 64];
-        for br in 0..8u32 {
-            for bj in 0..8u32 {
-                let w = (br * 8 + bj) as usize;
-                let pn = ilx(br as i32, bj as i32);
-                let kgg = self.idw(pn);
-                ibj[w] = (br, bj, kgg.av);
+        let mut eae: [(u32, u32, f32); 64] = [(0, 0, 0.0); 64];
+        for row in 0..8u32 {
+            for col in 0..8u32 {
+                let idx = (row * 8 + col) as usize;
+                let center = ehc(row as i32, col as i32);
+                let fkq = self.to_camera_space(center);
+                eae[idx] = (row, col, fkq.z);
             }
         }
 
         
-        for a in 1..64 {
-            let mut fb = a;
-            while fb > 0 && ibj[fb].2 > ibj[fb - 1].2 {
-                ibj.swap(fb, fb - 1);
-                fb -= 1;
+        for i in 1..64 {
+            let mut ay = i;
+            while ay > 0 && eae[ay].2 > eae[ay - 1].2 {
+                eae.swap(ay, ay - 1);
+                ay -= 1;
             }
         }
 
-        for &(br, bj, _) in &ibj {
-            let im = (br * 8 + bj) as usize;
-            let dio = (br + bj) % 2 == 0;
+        for &(row, col, _) in &eae {
+            let cu = (row * 8 + col) as usize;
+            let bhj = (row + col) % 2 == 0;
 
             
-            let mut agg = if dio { 0xFF3D6B3D } else { 0xFF1A3E1A };
+            let mut qf = if bhj { 0xFF3D6B3D } else { 0xFF1A3E1A };
 
             
-            if self.chess.na == Some(im) {
-                agg = 0xFF7AAA2A;
+            if self.chess.selected == Some(cu) {
+                qf = 0xFF7AAA2A;
             }
             
-            if self.chess.blr.contains(&im) {
-                agg = if dio { 0xFF4AAA4A } else { 0xFF2A8A2A };
+            if self.chess.valid_moves.contains(&cu) {
+                qf = if bhj { 0xFF4AAA4A } else { 0xFF2A8A2A };
             }
             
-            if self.chess.jcn == Some(im) || self.chess.jco == Some(im) {
-                agg = if dio { 0xFF6A8A3A } else { 0xFF4A6A2A };
+            if self.chess.last_move_from == Some(cu) || self.chess.last_move_to == Some(cu) {
+                qf = if bhj { 0xFF6A8A3A } else { 0xFF4A6A2A };
             }
             
-            if self.chess.gi == im {
-                agg = 0xFF00CC55;
+            if self.chess.cursor == cu {
+                qf = 0xFF00CC55;
             }
 
             
-            let acw = cvx(br as i32, bj as i32);
-            let rw = cvx(br as i32, bj as i32 + 1);
-            let tx = cvx(br as i32 + 1, bj as i32 + 1);
-            let der = cvx(br as i32 + 1, bj as i32);
+            let og = ban(row as i32, col as i32);
+            let hw = ban(row as i32, col as i32 + 1);
+            let jf = ban(row as i32 + 1, col as i32 + 1);
+            let bfc = ban(row as i32 + 1, col as i32);
 
             
-            let (dmf, dmg, _) = self.bwc(acw, d, i);
-            let (asa, bos, _) = self.bwc(rw, d, i);
-            let (amy, bcw, _) = self.bwc(tx, d, i);
-            let (ick, icl, _) = self.bwc(der, d, i);
+            let (sx0, sy0, _) = self.project_point(og, w, h);
+            let (wn, aiu, _) = self.project_point(hw, w, h);
+            let (tq, acv, _) = self.project_point(jf, w, h);
+            let (sx3, sy3, _) = self.project_point(bfc, w, h);
 
             
-            fir(k, d, i, dmf, dmg, asa, bos, amy, bcw, agg);
-            fir(k, d, i, dmf, dmg, amy, bcw, ick, icl, agg);
+            cjn(buf, w, h, sx0, sy0, wn, aiu, tq, acv, qf);
+            cjn(buf, w, h, sx0, sy0, tq, acv, sx3, sy3, qf);
 
             
-            let cqc = 0xFF0A1A0A;
-            dgr(k, d, i, dmf, dmg, asa, bos, cqc);
-            dgr(k, d, i, asa, bos, amy, bcw, cqc);
-            dgr(k, d, i, amy, bcw, ick, icl, cqc);
-            dgr(k, d, i, ick, icl, dmf, dmg, cqc);
+            let awx = 0xFF0A1A0A;
+            draw_line_buf(buf, w, h, sx0, sy0, wn, aiu, awx);
+            draw_line_buf(buf, w, h, wn, aiu, tq, acv, awx);
+            draw_line_buf(buf, w, h, tq, acv, sx3, sy3, awx);
+            draw_line_buf(buf, w, h, sx3, sy3, sx0, sy0, awx);
 
             
-            if self.chess.blr.contains(&im) && self.chess.mn[im] == Y {
-                let (cx, ae, _) = self.oye(br, bj, d, i);
-                ssh(k, d, i, cx, ae, 4, 0xFF00FF66);
+            if self.chess.valid_moves.contains(&cu) && self.chess.board[cu] == Q {
+                let (cx, u, _) = self.project_square_center(row, col, w, h);
+                fill_circle_buf(buf, w, h, cx, u, 4, 0xFF00FF66);
             }
         }
 
         
-        self.vvh(k, d, i);
+        self.render_board_edge(buf, w, h);
     }
 
     
-    fn vvi(&self, k: &mut [u32], d: usize, i: usize) {
-        let bbw = 0xFF55AA55;
-        let dwd = 0.8;
+    fn render_board_labels(&self, buf: &mut [u32], w: usize, h: usize) {
+        let ace = 0xFF55AA55;
+        let bpc = 0.8;
 
         
-        for bj in 0..8 {
-            let ueb = (b'a' + bj as u8) as char;
-            let u = V3 {
-                b: (bj as f32 - 3.5) * dwd,
-                c: -0.05,
-                av: (8.0 - 4.0) * dwd + 0.3, 
+        for col in 0..8 {
+            let mxy = (b'a' + col as u8) as char;
+            let pos = V3 {
+                x: (col as f32 - 3.5) * bpc,
+                y: -0.05,
+                z: (8.0 - 4.0) * bpc + 0.3, 
             };
-            let (cr, cq, nf) = self.bwc(u, d, i);
-            if nf > 0.5 {
-                kqw(k, d, i, cr - 4, cq - 8, ueb, bbw);
+            let (am, ak, fq) = self.project_point(pos, w, h);
+            if fq > 0.5 {
+                fsv(buf, w, h, am - 4, ak - 8, mxy, ace);
             }
         }
 
         
-        for br in 0..8 {
-            let dpy = (b'8' - br as u8) as char; 
-            let u = V3 {
-                b: (0.0 - 4.0) * dwd - 0.3, 
-                c: -0.05,
-                av: (br as f32 - 3.5) * dwd,
+        for row in 0..8 {
+            let blu = (b'8' - row as u8) as char; 
+            let pos = V3 {
+                x: (0.0 - 4.0) * bpc - 0.3, 
+                y: -0.05,
+                z: (row as f32 - 3.5) * bpc,
             };
-            let (cr, cq, nf) = self.bwc(u, d, i);
-            if nf > 0.5 {
-                kqw(k, d, i, cr - 4, cq - 8, dpy, bbw);
+            let (am, ak, fq) = self.project_point(pos, w, h);
+            if fq > 0.5 {
+                fsv(buf, w, h, am - 4, ak - 8, blu, ace);
             }
         }
     }
 
     
-    fn vwi(&self, k: &mut [u32], d: usize, i: usize) {
-        let dls = 0x40000000u32; 
-        for im in 0..64 {
-            let xe = self.chess.mn[im];
-            if xe == Y { continue; }
+    fn render_piece_shadows(&self, buf: &mut [u32], w: usize, h: usize) {
+        let bjd = 0x40000000u32; 
+        for cu in 0..64 {
+            let piece = self.chess.board[cu];
+            if piece == Q { continue; }
 
-            let br = im / 8;
-            let bj = im % 8;
-            let pn = ilx(br as i32, bj as i32);
-            let (cr, cq, nf) = self.bwc(pn, d, i);
-            if nf < 0.5 { continue; }
+            let row = cu / 8;
+            let col = cu % 8;
+            let center = ehc(row as i32, col as i32);
+            let (am, ak, fq) = self.project_point(center, w, h);
+            if fq < 0.5 { continue; }
 
             
-            let dy = (d.v(i) as f32 * 0.012 * (8.0 / nf)).am(2.0) as i32;
-            let ix = (dy as f32 * 0.5) as i32; 
-            for bg in -ix..=ix {
-                for dx in -dy..=dy {
-                    let vt = dx as f32 / dy as f32;
-                    let ahr = bg as f32 / ix as f32;
-                    if vt * vt + ahr * ahr > 1.0 { continue; }
+            let radius = (w.min(h) as f32 * 0.012 * (8.0 / fq)).max(2.0) as i32;
+            let cm = (radius as f32 * 0.5) as i32; 
+            for ad in -cm..=cm {
+                for dx in -radius..=radius {
+                    let nx = dx as f32 / radius as f32;
+                    let re = ad as f32 / cm as f32;
+                    if nx * nx + re * re > 1.0 { continue; }
 
-                    let y = cr + dx;
-                    let x = cq + bg;
-                    if y >= 0 && x >= 0 && y < d as i32 && x < i as i32 {
-                        let w = x as usize * d + y as usize;
-                        if w < k.len() {
+                    let p = am + dx;
+                    let o = ak + ad;
+                    if p >= 0 && o >= 0 && p < w as i32 && o < h as i32 {
+                        let idx = o as usize * w + p as usize;
+                        if idx < buf.len() {
                             
-                            let xy = k[w];
-                            let m = ((xy >> 16) & 0xFF) * 3 / 4;
-                            let at = ((xy >> 8) & 0xFF) * 3 / 4;
-                            let o = (xy & 0xFF) * 3 / 4;
-                            k[w] = 0xFF000000 | (m << 16) | (at << 8) | o;
+                            let ku = buf[idx];
+                            let r = ((ku >> 16) & 0xFF) * 3 / 4;
+                            let g = ((ku >> 8) & 0xFF) * 3 / 4;
+                            let b = (ku & 0xFF) * 3 / 4;
+                            buf[idx] = 0xFF000000 | (r << 16) | (g << 8) | b;
                         }
                     }
                 }
@@ -418,304 +418,304 @@ impl Chess3DState {
     }
 
     
-    fn vvj(&self, k: &mut [u32], d: usize, i: usize) {
-        let vtt = 0.35; 
-        let lyl = 0.15; 
+    fn render_board_reflection(&self, buf: &mut [u32], w: usize, h: usize) {
+        let oeb = 0.35; 
+        let gqv = 0.15; 
 
         
-        for br in 0..8u32 {
-            for bj in 0..8u32 {
-                let dio = (br + bj) % 2 == 0;
-                let agg: u32 = if dio { 0xFF3D6B3D } else { 0xFF1A3E1A };
+        for row in 0..8u32 {
+            for col in 0..8u32 {
+                let bhj = (row + col) % 2 == 0;
+                let qf: u32 = if bhj { 0xFF3D6B3D } else { 0xFF1A3E1A };
 
                 
-                let acw = cvx(br as i32, bj as i32);
-                let rw = cvx(br as i32, bj as i32 + 1);
-                let tx = cvx(br as i32 + 1, bj as i32 + 1);
-                let der = cvx(br as i32 + 1, bj as i32);
+                let og = ban(row as i32, col as i32);
+                let hw = ban(row as i32, col as i32 + 1);
+                let jf = ban(row as i32 + 1, col as i32 + 1);
+                let bfc = ban(row as i32 + 1, col as i32);
 
                 
-                let djo = |ai: V3| V3 { b: ai.b, c: -vtt - ai.c * 0.3, av: ai.av };
+                let mirror = |aa: V3| V3 { x: aa.x, y: -oeb - aa.y * 0.3, z: aa.z };
 
-                let (dmf, dmg, _) = self.bwc(djo(acw), d, i);
-                let (asa, bos, _) = self.bwc(djo(rw), d, i);
-                let (amy, bcw, _) = self.bwc(djo(tx), d, i);
-                let (ick, icl, _) = self.bwc(djo(der), d, i);
+                let (sx0, sy0, _) = self.project_point(mirror(og), w, h);
+                let (wn, aiu, _) = self.project_point(mirror(hw), w, h);
+                let (tq, acv, _) = self.project_point(mirror(jf), w, h);
+                let (sx3, sy3, _) = self.project_point(mirror(bfc), w, h);
 
                 
-                let m = (((agg >> 16) & 0xFF) as f32 * lyl) as u32;
-                let at = (((agg >> 8) & 0xFF) as f32 * lyl) as u32;
-                let o = ((agg & 0xFF) as f32 * lyl) as u32;
-                let pba = 0xFF000000 | (m << 16) | (at << 8) | o;
+                let r = (((qf >> 16) & 0xFF) as f32 * gqv) as u32;
+                let g = (((qf >> 8) & 0xFF) as f32 * gqv) as u32;
+                let b = ((qf & 0xFF) as f32 * gqv) as u32;
+                let izb = 0xFF000000 | (r << 16) | (g << 8) | b;
 
-                fir(k, d, i, dmf, dmg, asa, bos, amy, bcw, pba);
-                fir(k, d, i, dmf, dmg, amy, bcw, ick, icl, pba);
+                cjn(buf, w, h, sx0, sy0, wn, aiu, tq, acv, izb);
+                cjn(buf, w, h, sx0, sy0, tq, acv, sx3, sy3, izb);
             }
         }
     }
 
-    fn vvh(&self, k: &mut [u32], d: usize, i: usize) {
-        let ahw = 0.15;
-        let cqc = 0xFF0A200A;
+    fn render_board_edge(&self, buf: &mut [u32], w: usize, h: usize) {
+        let rh = 0.15;
+        let awx = 0xFF0A200A;
 
         
-        let cjs = [
-            cvx(0, 0),
-            cvx(0, 8),
-            cvx(8, 8),
-            cvx(8, 0),
+        let atk = [
+            ban(0, 0),
+            ban(0, 8),
+            ban(8, 8),
+            ban(8, 0),
         ];
-        let nge: [V3; 4] = [
-            V3 { b: cjs[0].b, c: cjs[0].c - ahw, av: cjs[0].av },
-            V3 { b: cjs[1].b, c: cjs[1].c - ahw, av: cjs[1].av },
-            V3 { b: cjs[2].b, c: cjs[2].c - ahw, av: cjs[2].av },
-            V3 { b: cjs[3].b, c: cjs[3].c - ahw, av: cjs[3].av },
+        let hnx: [V3; 4] = [
+            V3 { x: atk[0].x, y: atk[0].y - rh, z: atk[0].z },
+            V3 { x: atk[1].x, y: atk[1].y - rh, z: atk[1].z },
+            V3 { x: atk[2].x, y: atk[2].y - rh, z: atk[2].z },
+            V3 { x: atk[3].x, y: atk[3].y - rh, z: atk[3].z },
         ];
 
         
-        for a in 0..4 {
-            let fb = (a + 1) % 4;
-            let (prg, prh, _) = self.bwc(cjs[a], d, i);
-            let (wzs, wzt, _) = self.bwc(cjs[fb], d, i);
-            let (qlz, qma, _) = self.bwc(nge[a], d, i);
-            let (mxd, mxe, _) = self.bwc(nge[fb], d, i);
+        for i in 0..4 {
+            let ay = (i + 1) % 4;
+            let (t0x, t0y, _) = self.project_point(atk[i], w, h);
+            let (t1x, t1y, _) = self.project_point(atk[ay], w, h);
+            let (b0x, b0y, _) = self.project_point(hnx[i], w, h);
+            let (b1x, b1y, _) = self.project_point(hnx[ay], w, h);
 
-            fir(k, d, i, prg, prh, wzs, wzt, mxd, mxe, cqc);
-            fir(k, d, i, prg, prh, mxd, mxe, qlz, qma, cqc);
+            cjn(buf, w, h, t0x, t0y, t1x, t1y, b1x, b1y, awx);
+            cjn(buf, w, h, t0x, t0y, b1x, b1y, b0x, b0y, awx);
         }
     }
 
-    fn vwj(&self, k: &mut [u32], d: usize, i: usize) {
+    fn render_pieces(&self, buf: &mut [u32], w: usize, h: usize) {
         
-        struct Boy {
-            im: usize,
-            xe: i8,
-            u: V3,
-            eo: f32,
+        struct Aco {
+            cu: usize,
+            piece: i8,
+            pos: V3,
+            depth: f32,
         }
 
-        let mut gpi: Vec<Boy> = Vec::new();
+        let mut dcq: Vec<Aco> = Vec::new();
 
-        for im in 0..64 {
-            let xe = self.chess.mn[im];
-            if xe == Y { continue; }
+        for cu in 0..64 {
+            let piece = self.chess.board[cu];
+            if piece == Q { continue; }
 
-            let br = im / 8;
-            let bj = im % 8;
-            let u = ilx(br as i32, bj as i32);
+            let row = cu / 8;
+            let col = cu % 8;
+            let pos = ehc(row as i32, col as i32);
 
             
-            let kgg = self.idw(u);
+            let fkq = self.to_camera_space(pos);
 
-            gpi.push(Boy { im, xe, u, eo: kgg.av });
+            dcq.push(Aco { cu, piece, pos, depth: fkq.z });
         }
 
         
-        for a in 1..gpi.len() {
-            let mut fb = a;
-            while fb > 0 && gpi[fb].eo > gpi[fb - 1].eo {
-                gpi.swap(fb, fb - 1);
-                fb -= 1;
+        for i in 1..dcq.len() {
+            let mut ay = i;
+            while ay > 0 && dcq[ay].depth > dcq[ay - 1].depth {
+                dcq.swap(ay, ay - 1);
+                ay -= 1;
             }
         }
 
         
-        for oc in &gpi {
-            let aun = oc.xe > 0;
-            let qeq = if oc.xe < 0 { -oc.xe } else { oc.xe };
+        for ej in &dcq {
+            let xr = ej.piece > 0;
+            let jth = if ej.piece < 0 { -ej.piece } else { ej.piece };
 
-            let mesh = tei(qeq);
-            let agg = if aun { 0xFFE0D8C8 } else { 0xFF2A2A2A };
-            let cqc = if aun { 0xFF1A1A1A } else { 0xFF888888 };
+            let mesh = mdp(jth);
+            let qf = if xr { 0xFFE0D8C8 } else { 0xFF2A2A2A };
+            let awx = if xr { 0xFF1A1A1A } else { 0xFF888888 };
 
             
-            self.vwh(k, d, i, &mesh, oc.u, agg, cqc);
+            self.render_piece_mesh(buf, w, h, &mesh, ej.pos, qf, awx);
         }
     }
 
-    fn vwh(&self, k: &mut [u32], d: usize, i: usize,
-                         mesh: &Hz, u: V3, agg: u32, cqc: u32) {
+    fn render_piece_mesh(&self, buf: &mut [u32], w: usize, h: usize,
+                         mesh: &Dh, pos: V3, qf: u32, awx: u32) {
         
-        let mut bkz: Vec<(i32, i32)> = Vec::fc(mesh.lm.len());
-        let mut rvu: Vec<f32> = Vec::fc(mesh.lm.len());
+        let mut agy: Vec<(i32, i32)> = Vec::with_capacity(mesh.vertices.len());
+        let mut ldk: Vec<f32> = Vec::with_capacity(mesh.vertices.len());
 
-        for p in &mesh.lm {
-            let dnh = V3 {
-                b: u.b + p.b,
-                c: u.c + p.c,
-                av: u.av + p.av,
+        for v in &mesh.vertices {
+            let bkb = V3 {
+                x: pos.x + v.x,
+                y: pos.y + v.y,
+                z: pos.z + v.z,
             };
-            let (cr, cq, nf) = self.bwc(dnh, d, i);
-            bkz.push((cr, cq));
-            rvu.push(nf);
+            let (am, ak, fq) = self.project_point(bkb, w, h);
+            agy.push((am, ak));
+            ldk.push(fq);
         }
 
         
-        if let Some(ref ks) = mesh.ks {
-            struct Bgp {
-                w: usize,
-                bth: f32,
-                kt: f32,
+        if let Some(ref faces) = mesh.faces {
+            struct Yr {
+                idx: usize,
+                avg_z: f32,
+                brightness: f32,
             }
 
-            let csc = V3 { b: -0.3, c: -0.8, av: -0.5 };
-            let lio = ahn(csc.b * csc.b + csc.c * csc.c + csc.av * csc.av);
-            let light = V3 { b: csc.b / lio, c: csc.c / lio, av: csc.av / lio };
+            let axv = V3 { x: -0.3, y: -0.8, z: -0.5 };
+            let gfk = ra(axv.x * axv.x + axv.y * axv.y + axv.z * axv.z);
+            let light = V3 { x: axv.x / gfk, y: axv.y / gfk, z: axv.z / gfk };
 
-            let mut iw: Vec<Bgp> = Vec::new();
+            let mut visible: Vec<Yr> = Vec::new();
 
-            for (a, &(q, o, r)) in ks.iter().cf() {
-                if q >= mesh.lm.len() || o >= mesh.lm.len() || r >= mesh.lm.len() { continue; }
+            for (i, &(a, b, c)) in faces.iter().enumerate() {
+                if a >= mesh.vertices.len() || b >= mesh.vertices.len() || c >= mesh.vertices.len() { continue; }
 
-                let asf = V3 { b: u.b + mesh.lm[q].b, c: u.c + mesh.lm[q].c, av: u.av + mesh.lm[q].av };
-                let cci = V3 { b: u.b + mesh.lm[o].b, c: u.c + mesh.lm[o].c, av: u.av + mesh.lm[o].av };
-                let cvd = V3 { b: u.b + mesh.lm[r].b, c: u.c + mesh.lm[r].c, av: u.av + mesh.lm[r].av };
-
-                
-                let fwb = self.idw(asf);
-                let bov = self.idw(cci);
-                let asb = self.idw(cvd);
-
-                let ebb = V3 { b: bov.b - fwb.b, c: bov.c - fwb.c, av: bov.av - fwb.av };
-                let agl = V3 { b: asb.b - fwb.b, c: asb.c - fwb.c, av: asb.av - fwb.av };
-                let vt = ebb.c * agl.av - ebb.av * agl.c;
-                let ahr = ebb.av * agl.b - ebb.b * agl.av;
-                let arn = ebb.b * agl.c - ebb.c * agl.b;
-                let gnt = ahn(vt * vt + ahr * ahr + arn * arn);
-                if gnt < 0.0001 { continue; }
-                let bo = V3 { b: vt / gnt, c: ahr / gnt, av: arn / gnt };
+                let va = V3 { x: pos.x + mesh.vertices[a].x, y: pos.y + mesh.vertices[a].y, z: pos.z + mesh.vertices[a].z };
+                let apk = V3 { x: pos.x + mesh.vertices[b].x, y: pos.y + mesh.vertices[b].y, z: pos.z + mesh.vertices[b].z };
+                let bad = V3 { x: pos.x + mesh.vertices[c].x, y: pos.y + mesh.vertices[c].y, z: pos.z + mesh.vertices[c].z };
 
                 
-                if bo.av > 0.0 { continue; }
+                let crh = self.to_camera_space(va);
+                let aiv = self.to_camera_space(apk);
+                let wo = self.to_camera_space(bad);
 
-                let hsl = -(bo.b * light.b + bo.c * light.c + bo.av * light.av);
-                let kt = 0.3 + 0.7 * hsl.am(0.0);
+                let bsc = V3 { x: aiv.x - crh.x, y: aiv.y - crh.y, z: aiv.z - crh.z };
+                let pg = V3 { x: wo.x - crh.x, y: wo.y - crh.y, z: wo.z - crh.z };
+                let nx = bsc.y * pg.z - bsc.z * pg.y;
+                let re = bsc.z * pg.x - bsc.x * pg.z;
+                let wi = bsc.x * pg.y - bsc.y * pg.x;
+                let dbt = ra(nx * nx + re * re + wi * wi);
+                if dbt < 0.0001 { continue; }
+                let ae = V3 { x: nx / dbt, y: re / dbt, z: wi / dbt };
 
-                let bth = (fwb.av + bov.av + asb.av) / 3.0;
-                iw.push(Bgp { w: a, bth, kt });
+                
+                if ae.z > 0.0 { continue; }
+
+                let dux = -(ae.x * light.x + ae.y * light.y + ae.z * light.z);
+                let brightness = 0.3 + 0.7 * dux.max(0.0);
+
+                let avg_z = (crh.z + aiv.z + wo.z) / 3.0;
+                visible.push(Yr { idx: i, avg_z, brightness });
             }
 
             
-            for a in 1..iw.len() {
-                let mut fb = a;
-                while fb > 0 && iw[fb].bth > iw[fb - 1].bth {
-                    iw.swap(fb, fb - 1);
-                    fb -= 1;
+            for i in 1..visible.len() {
+                let mut ay = i;
+                while ay > 0 && visible[ay].avg_z > visible[ay - 1].avg_z {
+                    visible.swap(ay, ay - 1);
+                    ay -= 1;
                 }
             }
 
-            let bdm = (agg >> 16) & 0xFF;
-            let bji = (agg >> 8) & 0xFF;
-            let cdd = agg & 0xFF;
+            let adi = (qf >> 16) & 0xFF;
+            let agd = (qf >> 8) & 0xFF;
+            let apu = qf & 0xFF;
 
-            for da in &iw {
-                let (q, o, r) = ks[da.w];
-                if q >= bkz.len() || o >= bkz.len() || r >= bkz.len() { continue; }
-                let (dmf, dmg) = bkz[q];
-                let (asa, bos) = bkz[o];
-                let (amy, bcw) = bkz[r];
+            for fd in &visible {
+                let (a, b, c) = faces[fd.idx];
+                if a >= agy.len() || b >= agy.len() || c >= agy.len() { continue; }
+                let (sx0, sy0) = agy[a];
+                let (wn, aiu) = agy[b];
+                let (tq, acv) = agy[c];
 
-                let m = ((bdm as f32 * da.kt) as u32).v(255);
-                let at = ((bji as f32 * da.kt) as u32).v(255);
-                let qmb = ((cdd as f32 * da.kt) as u32).v(255);
-                let mfi = 0xFF000000 | (m << 16) | (at << 8) | qmb;
+                let r = ((adi as f32 * fd.brightness) as u32).min(255);
+                let g = ((agd as f32 * fd.brightness) as u32).min(255);
+                let jyw = ((apu as f32 * fd.brightness) as u32).min(255);
+                let gur = 0xFF000000 | (r << 16) | (g << 8) | jyw;
 
-                fir(k, d, i, dmf, dmg, asa, bos, amy, bcw, mfi);
+                cjn(buf, w, h, sx0, sy0, wn, aiu, tq, acv, gur);
             }
         }
 
         
-        if let Some(ref bu) = mesh.bu {
-            for &(q, o) in bu {
-                if q >= bkz.len() || o >= bkz.len() { continue; }
-                let (fy, fo) = bkz[q];
-                let (dn, dp) = bkz[o];
-                dgr(k, d, i, fy, fo, dn, dp, cqc);
+        if let Some(ref edges) = mesh.edges {
+            for &(a, b) in edges {
+                if a >= agy.len() || b >= agy.len() { continue; }
+                let (bm, az) = agy[a];
+                let (x1, y1) = agy[b];
+                draw_line_buf(buf, w, h, bm, az, x1, y1, awx);
             }
         }
     }
 
-    fn idw(&self, ai: V3) -> V3 {
-        let cdr = rk(self.atx);
-        let grr = lz(self.atx);
-        let cdp = rk(self.bbc);
-        let bcm = lz(self.bbc);
+    fn to_camera_space(&self, aa: V3) -> V3 {
+        let ce = hr(self.cam_angle_x);
+        let dea = eu(self.cam_angle_x);
+        let apz = hr(self.cam_angle_y);
+        let acl = eu(self.cam_angle_y);
 
-        let hef = self.aab * cdr * bcm;
-        let heg = self.aab * grr;
-        let heh = self.aab * cdr * cdp;
+        let dln = self.cam_dist * ce * acl;
+        let dlo = self.cam_dist * dea;
+        let dlp = self.cam_dist * ce * apz;
 
-        let cla = 1.0 / self.aab;
-        let fje = -hef * cla;
-        let fjf = -heg * cla;
-        let fjg = -heh * cla;
+        let aub = 1.0 / self.cam_dist;
+        let cjw = -dln * aub;
+        let cjx = -dlo * aub;
+        let cjy = -dlp * aub;
 
-        let fth = -fjg;
-        let fti = fje;
-        let ftc = ahn(fth * fth + fti * fti);
-        if ftc < 0.0001 {
-            return V3 { b: 0.0, c: 0.0, av: self.aab };
+        let cps = -cjy;
+        let cpt = cjw;
+        let cpn = ra(cps * cps + cpt * cpt);
+        if cpn < 0.0001 {
+            return V3 { x: 0.0, y: 0.0, z: self.cam_dist };
         }
-        let frv = fth / ftc;
-        let frw = fti / ftc;
+        let coq = cps / cpn;
+        let cor = cpt / cpn;
 
-        let mnu = -frw * fjf;
-        let mnv = frw * fje - frv * fjg;
-        let mnw = frv * fjf;
+        let haj = -cor * cjx;
+        let hak = cor * cjw - coq * cjy;
+        let hal = coq * cjx;
 
-        let dx = ai.b - hef;
-        let bg = ai.c - heg;
-        let pt = ai.av - heh;
+        let dx = aa.x - dln;
+        let ad = aa.y - dlo;
+        let dz = aa.z - dlp;
 
         V3 {
-            b: dx * frv + pt * frw,
-            c: dx * mnu + bg * mnv + pt * mnw,
-            av: dx * fje + bg * fjf + pt * fjg,
+            x: dx * coq + dz * cor,
+            y: dx * haj + ad * hak + dz * hal,
+            z: dx * cjw + ad * cjx + dz * cjy,
         }
     }
 
     
-    fn lzd(&self, k: &mut [u32], d: usize, i: usize) {
+    fn render_hud(&self, buf: &mut [u32], w: usize, h: usize) {
         
-        let gvd = if self.chess.axi { "WHITE" } else { "BLACK" };
-        let ovi = match self.chess.ib {
-            GamePhase::Ce => "",
-            GamePhase::Aam => " CHECK!",
-            GamePhase::Mw => " CHECKMATE!",
-            GamePhase::Up => " STALEMATE",
-            GamePhase::Yg => " PROMOTION",
+        let dfw = if self.chess.white_turn { "WHITE" } else { "BLACK" };
+        let iuo = match self.chess.phase {
+            GamePhase::Playing => "",
+            GamePhase::Check => " CHECK!",
+            GamePhase::Checkmate => " CHECKMATE!",
+            GamePhase::Stalemate => " STALEMATE",
+            GamePhase::Promotion => " PROMOTION",
         };
         
         
-        let ifg = if self.chess.axi { 0xFFE0E0E0 } else { 0xFF40FF40 };
-        hng(k, d, i, 8, 8, gvd, ifg);
-        if !ovi.is_empty() {
-            let vhh = match self.chess.ib {
-                GamePhase::Aam => 0xFFFF4444,
-                GamePhase::Mw => 0xFFFF2222,
-                GamePhase::Up => 0xFFFFAA00,
-                GamePhase::Yg => 0xFF4488FF,
+        let ecu = if self.chess.white_turn { 0xFFE0E0E0 } else { 0xFF40FF40 };
+        drp(buf, w, h, 8, 8, dfw, ecu);
+        if !iuo.is_empty() {
+            let nud = match self.chess.phase {
+                GamePhase::Check => 0xFFFF4444,
+                GamePhase::Checkmate => 0xFFFF2222,
+                GamePhase::Stalemate => 0xFFFFAA00,
+                GamePhase::Promotion => 0xFF4488FF,
                 _ => 0xFF40FF40,
             };
-            hng(k, d, i, 8 + gvd.len() as i32 * 8, 8, ovi, vhh);
+            drp(buf, w, h, 8 + dfw.len() as i32 * 8, 8, iuo, nud);
         }
         
         
-        let ol = self.chess.oli();
-        let hzb = format!("{:+}", ol);
-        let mcl = if ol > 0 { 0xFFE0E0E0 } else if ol < 0 { 0xFF40FF40 } else { 0xFF888888 };
-        hng(k, d, i, d as i32 - 60, 8, &hzb, mcl);
+        let score = self.chess.material_score();
+        let dyq = format!("{:+}", score);
+        let gsw = if score > 0 { 0xFFE0E0E0 } else if score < 0 { 0xFF40FF40 } else { 0xFF888888 };
+        drp(buf, w, h, w as i32 - 60, 8, &dyq, gsw);
         
         
         let hint = "WASD:Cam Scroll/ZX:Zoom O:Rotate Drag:Orbit";
-        hng(k, d, i, 8, i as i32 - 14, hint, 0xFF336633);
+        drp(buf, w, h, 8, h as i32 - 14, hint, 0xFF336633);
         
         
-        let adv = &self.chess.gnd;
-        let ay = if adv.len() > 5 { adv.len() - 5 } else { 0 };
-        for (a, euz) in adv[ay..].iter().cf() {
-            let mrx = 24 + a as i32 * 12;
-            hng(k, d, i, 8, mrx, euz, 0xFF448844);
+        let history = &self.chess.move_history;
+        let start = if history.len() > 5 { history.len() - 5 } else { 0 };
+        for (i, mv) in history[start..].iter().enumerate() {
+            let hde = 24 + i as i32 * 12;
+            drp(buf, w, h, 8, hde, mv, 0xFF448844);
         }
     }
 }
@@ -725,22 +725,22 @@ impl Chess3DState {
 
 
 
-fn ilx(br: i32, bj: i32) -> V3 {
-    let dwd = 0.8;
+fn ehc(row: i32, col: i32) -> V3 {
+    let bpc = 0.8;
     V3 {
-        b: (bj as f32 - 3.5) * dwd,
-        c: 0.0,
-        av: (br as f32 - 3.5) * dwd,
+        x: (col as f32 - 3.5) * bpc,
+        y: 0.0,
+        z: (row as f32 - 3.5) * bpc,
     }
 }
 
 
-fn cvx(br: i32, bj: i32) -> V3 {
-    let dwd = 0.8;
+fn ban(row: i32, col: i32) -> V3 {
+    let bpc = 0.8;
     V3 {
-        b: (bj as f32 - 4.0) * dwd,
-        c: 0.0,
-        av: (br as f32 - 4.0) * dwd,
+        x: (col as f32 - 4.0) * bpc,
+        y: 0.0,
+        z: (row as f32 - 4.0) * bpc,
     }
 }
 
@@ -748,486 +748,486 @@ fn cvx(br: i32, bj: i32) -> V3 {
 
 
 
-pub struct Hz {
-    pub lm: Vec<V3>,
-    pub bu: Option<Vec<(usize, usize)>>,
-    pub ks: Option<Vec<(usize, usize, usize)>>,
+pub struct Dh {
+    pub vertices: Vec<V3>,
+    pub edges: Option<Vec<(usize, usize)>>,
+    pub faces: Option<Vec<(usize, usize, usize)>>,
 }
 
 
-fn tei(bkv: i8) -> Hz {
-    match bkv {
-        1 => omz(),
-        2 => unm(),
-        3 => uni(),
-        4 => uno(),
-        5 => unn(),
-        6 => unl(),
-        _ => omz(),
+fn mdp(agw: i8) -> Dh {
+    match agw {
+        1 => ink(),
+        2 => neu(),
+        3 => neo(),
+        4 => nex(),
+        5 => nev(),
+        6 => ner(),
+        _ => ink(),
     }
 }
 
 
 
-fn mz(c: f32, m: f32, bo: u32) -> Vec<V3> {
-    let mut frp = Vec::fc(bo as usize);
-    for a in 0..bo {
-        let hg = (a as f32 / bo as f32) * 6.2831853;
-        frp.push(V3 {
-            b: rk(hg) * m,
-            c,
-            av: lz(hg) * m,
+fn dq(y: f32, r: f32, ae: u32) -> Vec<V3> {
+    let mut pts = Vec::with_capacity(ae as usize);
+    for i in 0..ae {
+        let cc = (i as f32 / ae as f32) * 6.2831853;
+        pts.push(V3 {
+            x: hr(cc) * r,
+            y,
+            z: eu(cc) * r,
         });
     }
-    frp
+    pts
 }
 
 
 
-fn ala(bpq: usize, bpr: usize, bo: usize) -> (Vec<(usize, usize, usize)>, Vec<(usize, usize)>) {
-    let mut ks = Vec::new();
-    let mut bu = Vec::new();
-    for a in 0..bo {
-        let fb = (a + 1) % bo;
-        let bfv = bpq + a;
-        let km = bpq + fb;
-        let wu = bpr + a;
-        let of = bpr + fb;
-        ks.push((bfv, km, of));
-        ks.push((bfv, of, wu));
-        bu.push((bfv, km));
-        bu.push((bfv, wu));
+fn sr(aje: usize, ajf: usize, ae: usize) -> (Vec<(usize, usize, usize)>, Vec<(usize, usize)>) {
+    let mut faces = Vec::new();
+    let mut edges = Vec::new();
+    for i in 0..ae {
+        let ay = (i + 1) % ae;
+        let abn = aje + i;
+        let eb = aje + ay;
+        let kl = ajf + i;
+        let gf = ajf + ay;
+        faces.push((abn, eb, gf));
+        faces.push((abn, gf, kl));
+        edges.push((abn, eb));
+        edges.push((abn, kl));
     }
-    bu.push((bpq, bpr)); 
-    (ks, bu)
+    edges.push((aje, ajf)); 
+    (faces, edges)
 }
 
 
-fn cwn(ar: usize, emf: usize, bo: usize) -> (Vec<(usize, usize, usize)>, Vec<(usize, usize)>) {
-    let mut ks = Vec::new();
-    let mut bu = Vec::new();
-    for a in 0..bo {
-        let fb = (a + 1) % bo;
-        ks.push((ar + a, ar + fb, emf));
-        bu.push((ar + a, emf));
+fn baw(base: usize, bxm: usize, ae: usize) -> (Vec<(usize, usize, usize)>, Vec<(usize, usize)>) {
+    let mut faces = Vec::new();
+    let mut edges = Vec::new();
+    for i in 0..ae {
+        let ay = (i + 1) % ae;
+        faces.push((base + i, base + ay, bxm));
+        edges.push((base + i, bxm));
     }
-    (ks, bu)
+    (faces, edges)
 }
 
-const Al: u32 = 8; 
-const Yo: f32 = 0.22; 
+const Y: u32 = 8; 
+const Ko: f32 = 0.22; 
 
-fn omz() -> Hz {
-    let e = Yo;
-    let bo = Al as usize;
-    let mut by = Vec::new();
-    let mut ks = Vec::new();
-    let mut bu = Vec::new();
-
-    
-    let ctp = mz(0.0, 0.35 * e, Al);     
-    let wu = by.len(); by.bk(&ctp);
-    let aqh = mz(0.08, 0.35 * e, Al);     
-    let of = by.len(); by.bk(&aqh);
+fn ink() -> Dh {
+    let j = Ko;
+    let ae = Y as usize;
+    let mut verts = Vec::new();
+    let mut faces = Vec::new();
+    let mut edges = Vec::new();
 
     
-    let uv = mz(0.10, 0.20 * e, Al);     
-    let tb = by.len(); by.bk(&uv);
-    let ctq = mz(0.28, 0.15 * e, Al);     
-    let ajw = by.len(); by.bk(&ctq);
+    let aml = dq(0.0, 0.35 * j, Y);     
+    let kl = verts.len(); verts.extend_from_slice(&aml);
+    let uh = dq(0.08, 0.35 * j, Y);     
+    let gf = verts.len(); verts.extend_from_slice(&uh);
 
     
-    let ehb = mz(0.30, 0.20 * e, Al);     
-    let bay = by.len(); by.bk(&ehb);
-    let daw = mz(0.38, 0.22 * e, Al);     
-    let bjh = by.len(); by.bk(&daw);
-    let fru = mz(0.44, 0.18 * e, Al);     
-    let ddz = by.len(); by.bk(&fru);
+    let ju = dq(0.10, 0.20 * j, Y);     
+    let iq = verts.len(); verts.extend_from_slice(&ju);
+    let azf = dq(0.28, 0.15 * j, Y);     
+    let sc = verts.len(); verts.extend_from_slice(&azf);
 
     
-    let emf = by.len();
-    by.push(V3 { b: 0.0, c: 0.48 * 1.0, av: 0.0 });
+    let bve = dq(0.30, 0.20 * j, Y);     
+    let abr = verts.len(); verts.extend_from_slice(&bve);
+    let bde = dq(0.38, 0.22 * j, Y);     
+    let agb = verts.len(); verts.extend_from_slice(&bde);
+    let cop = dq(0.44, 0.18 * j, Y);     
+    let ber = verts.len(); verts.extend_from_slice(&cop);
 
     
-    let (bb, aa) = ala(wu, of, bo); ks.lg(bb); bu.lg(aa);
-    let (bb, aa) = ala(of, tb, bo); ks.lg(bb); bu.lg(aa);
-    let (bb, aa) = ala(tb, ajw, bo); ks.lg(bb); bu.lg(aa);
-    let (bb, aa) = ala(ajw, bay, bo); ks.lg(bb); bu.lg(aa);
-    let (bb, aa) = ala(bay, bjh, bo); ks.lg(bb); bu.lg(aa);
-    let (bb, aa) = ala(bjh, ddz, bo); ks.lg(bb); bu.lg(aa);
-    let (bb, aa) = cwn(ddz, emf, bo); ks.lg(bb); bu.lg(aa);
+    let bxm = verts.len();
+    verts.push(V3 { x: 0.0, y: 0.48 * 1.0, z: 0.0 });
 
     
-    let qrk = by.len();
-    by.push(V3 { b: 0.0, c: 0.0, av: 0.0 });
-    let (bb, aa) = cwn(wu, qrk, bo); ks.lg(bb); bu.lg(aa);
+    let (f, e) = sr(kl, gf, ae); faces.extend(f); edges.extend(e);
+    let (f, e) = sr(gf, iq, ae); faces.extend(f); edges.extend(e);
+    let (f, e) = sr(iq, sc, ae); faces.extend(f); edges.extend(e);
+    let (f, e) = sr(sc, abr, ae); faces.extend(f); edges.extend(e);
+    let (f, e) = sr(abr, agb, ae); faces.extend(f); edges.extend(e);
+    let (f, e) = sr(agb, ber, ae); faces.extend(f); edges.extend(e);
+    let (f, e) = baw(ber, bxm, ae); faces.extend(f); edges.extend(e);
 
-    Hz { lm: by, bu: Some(bu), ks: Some(ks) }
+    
+    let kdp = verts.len();
+    verts.push(V3 { x: 0.0, y: 0.0, z: 0.0 });
+    let (f, e) = baw(kl, kdp, ae); faces.extend(f); edges.extend(e);
+
+    Dh { vertices: verts, edges: Some(edges), faces: Some(faces) }
 }
 
-fn unm() -> Hz {
-    let e = Yo;
-    let bo = Al as usize;
-    let mut by = Vec::new();
-    let mut ks = Vec::new();
-    let mut bu = Vec::new();
+fn neu() -> Dh {
+    let j = Ko;
+    let ae = Y as usize;
+    let mut verts = Vec::new();
+    let mut faces = Vec::new();
+    let mut edges = Vec::new();
 
     
-    let ctp = mz(0.0, 0.38 * e, Al);
-    let wu = by.len(); by.bk(&ctp);
-    let aqh = mz(0.10, 0.35 * e, Al);
-    let of = by.len(); by.bk(&aqh);
+    let aml = dq(0.0, 0.38 * j, Y);
+    let kl = verts.len(); verts.extend_from_slice(&aml);
+    let uh = dq(0.10, 0.35 * j, Y);
+    let gf = verts.len(); verts.extend_from_slice(&uh);
 
     
-    let uv = mz(0.20, 0.20 * e, Al);
-    let tb = by.len(); by.bk(&uv);
-    let ctq = mz(0.35, 0.22 * e, Al);
-    let ajw = by.len(); by.bk(&ctq);
+    let ju = dq(0.20, 0.20 * j, Y);
+    let iq = verts.len(); verts.extend_from_slice(&ju);
+    let azf = dq(0.35, 0.22 * j, Y);
+    let sc = verts.len(); verts.extend_from_slice(&azf);
 
     
-    let mut obf = mz(0.42, 0.20 * e, Al);
-    for p in obf.el() { p.av -= 0.06; } 
-    let bay = by.len(); by.bk(&obf);
+    let mut iei = dq(0.42, 0.20 * j, Y);
+    for v in iei.iter_mut() { v.z -= 0.06; } 
+    let abr = verts.len(); verts.extend_from_slice(&iei);
 
     
-    let mut oou = mz(0.47, 0.12 * e, Al);
-    for p in oou.el() { p.av -= 0.12; }
-    let bjh = by.len(); by.bk(&oou);
+    let mut ipe = dq(0.47, 0.12 * j, Y);
+    for v in ipe.iter_mut() { v.z -= 0.12; }
+    let agb = verts.len(); verts.extend_from_slice(&ipe);
 
     
-    let sid = by.len();
-    by.push(V3 { b: 0.0, c: 0.55, av: -0.02 });
+    let lne = verts.len();
+    verts.push(V3 { x: 0.0, y: 0.55, z: -0.02 });
 
     
-    let (bb, aa) = ala(wu, of, bo); ks.lg(bb); bu.lg(aa);
-    let (bb, aa) = ala(of, tb, bo); ks.lg(bb); bu.lg(aa);
-    let (bb, aa) = ala(tb, ajw, bo); ks.lg(bb); bu.lg(aa);
-    let (bb, aa) = ala(ajw, bay, bo); ks.lg(bb); bu.lg(aa);
-    let (bb, aa) = ala(bay, bjh, bo); ks.lg(bb); bu.lg(aa);
-    let (bb, aa) = cwn(bjh, sid, bo); ks.lg(bb); bu.lg(aa);
+    let (f, e) = sr(kl, gf, ae); faces.extend(f); edges.extend(e);
+    let (f, e) = sr(gf, iq, ae); faces.extend(f); edges.extend(e);
+    let (f, e) = sr(iq, sc, ae); faces.extend(f); edges.extend(e);
+    let (f, e) = sr(sc, abr, ae); faces.extend(f); edges.extend(e);
+    let (f, e) = sr(abr, agb, ae); faces.extend(f); edges.extend(e);
+    let (f, e) = baw(agb, lne, ae); faces.extend(f); edges.extend(e);
 
-    let abm = by.len();
-    by.push(V3 { b: 0.0, c: 0.0, av: 0.0 });
-    let (bb, aa) = cwn(wu, abm, bo); ks.lg(bb); bu.lg(aa);
+    let bottom = verts.len();
+    verts.push(V3 { x: 0.0, y: 0.0, z: 0.0 });
+    let (f, e) = baw(kl, bottom, ae); faces.extend(f); edges.extend(e);
 
-    Hz { lm: by, bu: Some(bu), ks: Some(ks) }
+    Dh { vertices: verts, edges: Some(edges), faces: Some(faces) }
 }
 
-fn uni() -> Hz {
-    let e = Yo;
-    let bo = Al as usize;
-    let mut by = Vec::new();
-    let mut ks = Vec::new();
-    let mut bu = Vec::new();
+fn neo() -> Dh {
+    let j = Ko;
+    let ae = Y as usize;
+    let mut verts = Vec::new();
+    let mut faces = Vec::new();
+    let mut edges = Vec::new();
 
     
-    let ctp = mz(0.0, 0.38 * e, Al);
-    let wu = by.len(); by.bk(&ctp);
-    let aqh = mz(0.10, 0.35 * e, Al);
-    let of = by.len(); by.bk(&aqh);
+    let aml = dq(0.0, 0.38 * j, Y);
+    let kl = verts.len(); verts.extend_from_slice(&aml);
+    let uh = dq(0.10, 0.35 * j, Y);
+    let gf = verts.len(); verts.extend_from_slice(&uh);
 
     
-    let uv = mz(0.12, 0.18 * e, Al);
-    let tb = by.len(); by.bk(&uv);
-    let ctq = mz(0.32, 0.15 * e, Al);
-    let ajw = by.len(); by.bk(&ctq);
+    let ju = dq(0.12, 0.18 * j, Y);
+    let iq = verts.len(); verts.extend_from_slice(&ju);
+    let azf = dq(0.32, 0.15 * j, Y);
+    let sc = verts.len(); verts.extend_from_slice(&azf);
 
     
-    let ehb = mz(0.34, 0.22 * e, Al);
-    let bay = by.len(); by.bk(&ehb);
-    let daw = mz(0.42, 0.20 * e, Al);
-    let bjh = by.len(); by.bk(&daw);
-    let fru = mz(0.50, 0.12 * e, Al);
-    let ddz = by.len(); by.bk(&fru);
+    let bve = dq(0.34, 0.22 * j, Y);
+    let abr = verts.len(); verts.extend_from_slice(&bve);
+    let bde = dq(0.42, 0.20 * j, Y);
+    let agb = verts.len(); verts.extend_from_slice(&bde);
+    let cop = dq(0.50, 0.12 * j, Y);
+    let ber = verts.len(); verts.extend_from_slice(&cop);
 
     
-    let emf = by.len();
-    by.push(V3 { b: 0.0, c: 0.58, av: 0.0 });
+    let bxm = verts.len();
+    verts.push(V3 { x: 0.0, y: 0.58, z: 0.0 });
 
-    let (bb, aa) = ala(wu, of, bo); ks.lg(bb); bu.lg(aa);
-    let (bb, aa) = ala(of, tb, bo); ks.lg(bb); bu.lg(aa);
-    let (bb, aa) = ala(tb, ajw, bo); ks.lg(bb); bu.lg(aa);
-    let (bb, aa) = ala(ajw, bay, bo); ks.lg(bb); bu.lg(aa);
-    let (bb, aa) = ala(bay, bjh, bo); ks.lg(bb); bu.lg(aa);
-    let (bb, aa) = ala(bjh, ddz, bo); ks.lg(bb); bu.lg(aa);
-    let (bb, aa) = cwn(ddz, emf, bo); ks.lg(bb); bu.lg(aa);
+    let (f, e) = sr(kl, gf, ae); faces.extend(f); edges.extend(e);
+    let (f, e) = sr(gf, iq, ae); faces.extend(f); edges.extend(e);
+    let (f, e) = sr(iq, sc, ae); faces.extend(f); edges.extend(e);
+    let (f, e) = sr(sc, abr, ae); faces.extend(f); edges.extend(e);
+    let (f, e) = sr(abr, agb, ae); faces.extend(f); edges.extend(e);
+    let (f, e) = sr(agb, ber, ae); faces.extend(f); edges.extend(e);
+    let (f, e) = baw(ber, bxm, ae); faces.extend(f); edges.extend(e);
 
-    let abm = by.len();
-    by.push(V3 { b: 0.0, c: 0.0, av: 0.0 });
-    let (bb, aa) = cwn(wu, abm, bo); ks.lg(bb); bu.lg(aa);
+    let bottom = verts.len();
+    verts.push(V3 { x: 0.0, y: 0.0, z: 0.0 });
+    let (f, e) = baw(kl, bottom, ae); faces.extend(f); edges.extend(e);
 
-    Hz { lm: by, bu: Some(bu), ks: Some(ks) }
+    Dh { vertices: verts, edges: Some(edges), faces: Some(faces) }
 }
 
-fn uno() -> Hz {
-    let e = Yo;
-    let bo = Al as usize;
-    let mut by = Vec::new();
-    let mut ks = Vec::new();
-    let mut bu = Vec::new();
+fn nex() -> Dh {
+    let j = Ko;
+    let ae = Y as usize;
+    let mut verts = Vec::new();
+    let mut faces = Vec::new();
+    let mut edges = Vec::new();
 
     
-    let ctp = mz(0.0, 0.40 * e, Al);
-    let wu = by.len(); by.bk(&ctp);
-    let aqh = mz(0.10, 0.38 * e, Al);
-    let of = by.len(); by.bk(&aqh);
+    let aml = dq(0.0, 0.40 * j, Y);
+    let kl = verts.len(); verts.extend_from_slice(&aml);
+    let uh = dq(0.10, 0.38 * j, Y);
+    let gf = verts.len(); verts.extend_from_slice(&uh);
 
     
-    let uv = mz(0.12, 0.25 * e, Al);
-    let tb = by.len(); by.bk(&uv);
-    let ctq = mz(0.38, 0.25 * e, Al);
-    let ajw = by.len(); by.bk(&ctq);
+    let ju = dq(0.12, 0.25 * j, Y);
+    let iq = verts.len(); verts.extend_from_slice(&ju);
+    let azf = dq(0.38, 0.25 * j, Y);
+    let sc = verts.len(); verts.extend_from_slice(&azf);
 
     
-    let ehb = mz(0.40, 0.32 * e, Al);
-    let bay = by.len(); by.bk(&ehb);
-    let daw = mz(0.50, 0.32 * e, Al);
-    let bjh = by.len(); by.bk(&daw);
+    let bve = dq(0.40, 0.32 * j, Y);
+    let abr = verts.len(); verts.extend_from_slice(&bve);
+    let bde = dq(0.50, 0.32 * j, Y);
+    let agb = verts.len(); verts.extend_from_slice(&bde);
 
     
-    let xjl = by.len();
-    by.push(V3 { b: 0.0, c: 0.50, av: 0.0 });
+    let pld = verts.len();
+    verts.push(V3 { x: 0.0, y: 0.50, z: 0.0 });
 
-    let (bb, aa) = ala(wu, of, bo); ks.lg(bb); bu.lg(aa);
-    let (bb, aa) = ala(of, tb, bo); ks.lg(bb); bu.lg(aa);
-    let (bb, aa) = ala(tb, ajw, bo); ks.lg(bb); bu.lg(aa);
-    let (bb, aa) = ala(ajw, bay, bo); ks.lg(bb); bu.lg(aa);
-    let (bb, aa) = ala(bay, bjh, bo); ks.lg(bb); bu.lg(aa);
-    let (bb, aa) = cwn(bjh, xjl, bo); ks.lg(bb); bu.lg(aa);
+    let (f, e) = sr(kl, gf, ae); faces.extend(f); edges.extend(e);
+    let (f, e) = sr(gf, iq, ae); faces.extend(f); edges.extend(e);
+    let (f, e) = sr(iq, sc, ae); faces.extend(f); edges.extend(e);
+    let (f, e) = sr(sc, abr, ae); faces.extend(f); edges.extend(e);
+    let (f, e) = sr(abr, agb, ae); faces.extend(f); edges.extend(e);
+    let (f, e) = baw(agb, pld, ae); faces.extend(f); edges.extend(e);
 
-    let abm = by.len();
-    by.push(V3 { b: 0.0, c: 0.0, av: 0.0 });
-    let (bb, aa) = cwn(wu, abm, bo); ks.lg(bb); bu.lg(aa);
+    let bottom = verts.len();
+    verts.push(V3 { x: 0.0, y: 0.0, z: 0.0 });
+    let (f, e) = baw(kl, bottom, ae); faces.extend(f); edges.extend(e);
 
-    Hz { lm: by, bu: Some(bu), ks: Some(ks) }
+    Dh { vertices: verts, edges: Some(edges), faces: Some(faces) }
 }
 
-fn unn() -> Hz {
-    let e = Yo;
-    let bo = Al as usize;
-    let mut by = Vec::new();
-    let mut ks = Vec::new();
-    let mut bu = Vec::new();
+fn nev() -> Dh {
+    let j = Ko;
+    let ae = Y as usize;
+    let mut verts = Vec::new();
+    let mut faces = Vec::new();
+    let mut edges = Vec::new();
 
     
-    let ctp = mz(0.0, 0.40 * e, Al);
-    let wu = by.len(); by.bk(&ctp);
-    let aqh = mz(0.10, 0.38 * e, Al);
-    let of = by.len(); by.bk(&aqh);
+    let aml = dq(0.0, 0.40 * j, Y);
+    let kl = verts.len(); verts.extend_from_slice(&aml);
+    let uh = dq(0.10, 0.38 * j, Y);
+    let gf = verts.len(); verts.extend_from_slice(&uh);
 
     
-    let uv = mz(0.12, 0.22 * e, Al);
-    let tb = by.len(); by.bk(&uv);
-    let ctq = mz(0.30, 0.18 * e, Al);
-    let ajw = by.len(); by.bk(&ctq);
+    let ju = dq(0.12, 0.22 * j, Y);
+    let iq = verts.len(); verts.extend_from_slice(&ju);
+    let azf = dq(0.30, 0.18 * j, Y);
+    let sc = verts.len(); verts.extend_from_slice(&azf);
 
     
-    let ehb = mz(0.35, 0.25 * e, Al);
-    let bay = by.len(); by.bk(&ehb);
+    let bve = dq(0.35, 0.25 * j, Y);
+    let abr = verts.len(); verts.extend_from_slice(&bve);
 
     
-    let daw = mz(0.42, 0.28 * e, Al);
-    let bjh = by.len(); by.bk(&daw);
+    let bde = dq(0.42, 0.28 * j, Y);
+    let agb = verts.len(); verts.extend_from_slice(&bde);
 
     
-    let fru = mz(0.52, 0.15 * e, Al);
-    let ddz = by.len(); by.bk(&fru);
+    let cop = dq(0.52, 0.15 * j, Y);
+    let ber = verts.len(); verts.extend_from_slice(&cop);
 
     
-    let emf = by.len();
-    by.push(V3 { b: 0.0, c: 0.60, av: 0.0 });
+    let bxm = verts.len();
+    verts.push(V3 { x: 0.0, y: 0.60, z: 0.0 });
 
-    let (bb, aa) = ala(wu, of, bo); ks.lg(bb); bu.lg(aa);
-    let (bb, aa) = ala(of, tb, bo); ks.lg(bb); bu.lg(aa);
-    let (bb, aa) = ala(tb, ajw, bo); ks.lg(bb); bu.lg(aa);
-    let (bb, aa) = ala(ajw, bay, bo); ks.lg(bb); bu.lg(aa);
-    let (bb, aa) = ala(bay, bjh, bo); ks.lg(bb); bu.lg(aa);
-    let (bb, aa) = ala(bjh, ddz, bo); ks.lg(bb); bu.lg(aa);
-    let (bb, aa) = cwn(ddz, emf, bo); ks.lg(bb); bu.lg(aa);
+    let (f, e) = sr(kl, gf, ae); faces.extend(f); edges.extend(e);
+    let (f, e) = sr(gf, iq, ae); faces.extend(f); edges.extend(e);
+    let (f, e) = sr(iq, sc, ae); faces.extend(f); edges.extend(e);
+    let (f, e) = sr(sc, abr, ae); faces.extend(f); edges.extend(e);
+    let (f, e) = sr(abr, agb, ae); faces.extend(f); edges.extend(e);
+    let (f, e) = sr(agb, ber, ae); faces.extend(f); edges.extend(e);
+    let (f, e) = baw(ber, bxm, ae); faces.extend(f); edges.extend(e);
 
-    let abm = by.len();
-    by.push(V3 { b: 0.0, c: 0.0, av: 0.0 });
-    let (bb, aa) = cwn(wu, abm, bo); ks.lg(bb); bu.lg(aa);
+    let bottom = verts.len();
+    verts.push(V3 { x: 0.0, y: 0.0, z: 0.0 });
+    let (f, e) = baw(kl, bottom, ae); faces.extend(f); edges.extend(e);
 
-    Hz { lm: by, bu: Some(bu), ks: Some(ks) }
+    Dh { vertices: verts, edges: Some(edges), faces: Some(faces) }
 }
 
-fn unl() -> Hz {
-    let e = Yo;
-    let bo = Al as usize;
-    let mut by = Vec::new();
-    let mut ks = Vec::new();
-    let mut bu = Vec::new();
+fn ner() -> Dh {
+    let j = Ko;
+    let ae = Y as usize;
+    let mut verts = Vec::new();
+    let mut faces = Vec::new();
+    let mut edges = Vec::new();
 
     
-    let ctp = mz(0.0, 0.42 * e, Al);
-    let wu = by.len(); by.bk(&ctp);
-    let aqh = mz(0.10, 0.40 * e, Al);
-    let of = by.len(); by.bk(&aqh);
+    let aml = dq(0.0, 0.42 * j, Y);
+    let kl = verts.len(); verts.extend_from_slice(&aml);
+    let uh = dq(0.10, 0.40 * j, Y);
+    let gf = verts.len(); verts.extend_from_slice(&uh);
 
     
-    let uv = mz(0.12, 0.24 * e, Al);
-    let tb = by.len(); by.bk(&uv);
-    let ctq = mz(0.32, 0.20 * e, Al);
-    let ajw = by.len(); by.bk(&ctq);
+    let ju = dq(0.12, 0.24 * j, Y);
+    let iq = verts.len(); verts.extend_from_slice(&ju);
+    let azf = dq(0.32, 0.20 * j, Y);
+    let sc = verts.len(); verts.extend_from_slice(&azf);
 
     
-    let ehb = mz(0.35, 0.28 * e, Al);
-    let bay = by.len(); by.bk(&ehb);
-    let daw = mz(0.42, 0.26 * e, Al);
-    let bjh = by.len(); by.bk(&daw);
+    let bve = dq(0.35, 0.28 * j, Y);
+    let abr = verts.len(); verts.extend_from_slice(&bve);
+    let bde = dq(0.42, 0.26 * j, Y);
+    let agb = verts.len(); verts.extend_from_slice(&bde);
 
     
-    let fru = mz(0.48, 0.15 * e, Al);
-    let ddz = by.len(); by.bk(&fru);
+    let cop = dq(0.48, 0.15 * j, Y);
+    let ber = verts.len(); verts.extend_from_slice(&cop);
 
-    let (bb, aa) = ala(wu, of, bo); ks.lg(bb); bu.lg(aa);
-    let (bb, aa) = ala(of, tb, bo); ks.lg(bb); bu.lg(aa);
-    let (bb, aa) = ala(tb, ajw, bo); ks.lg(bb); bu.lg(aa);
-    let (bb, aa) = ala(ajw, bay, bo); ks.lg(bb); bu.lg(aa);
-    let (bb, aa) = ala(bay, bjh, bo); ks.lg(bb); bu.lg(aa);
-    let (bb, aa) = ala(bjh, ddz, bo); ks.lg(bb); bu.lg(aa);
-
-    
-    
-    let azk = 0.04;
-    let hek = 0.14;
-    let eab = 0.50;
-    let to = by.len();
-    by.push(V3 { b: -azk, c: eab, av: -azk });
-    by.push(V3 { b:  azk, c: eab, av: -azk });
-    by.push(V3 { b:  azk, c: eab + hek, av: -azk });
-    by.push(V3 { b: -azk, c: eab + hek, av: -azk });
-    by.push(V3 { b: -azk, c: eab, av:  azk });
-    by.push(V3 { b:  azk, c: eab, av:  azk });
-    by.push(V3 { b:  azk, c: eab + hek, av:  azk });
-    by.push(V3 { b: -azk, c: eab + hek, av:  azk });
+    let (f, e) = sr(kl, gf, ae); faces.extend(f); edges.extend(e);
+    let (f, e) = sr(gf, iq, ae); faces.extend(f); edges.extend(e);
+    let (f, e) = sr(iq, sc, ae); faces.extend(f); edges.extend(e);
+    let (f, e) = sr(sc, abr, ae); faces.extend(f); edges.extend(e);
+    let (f, e) = sr(abr, agb, ae); faces.extend(f); edges.extend(e);
+    let (f, e) = sr(agb, ber, ae); faces.extend(f); edges.extend(e);
 
     
-    ks.push((to, to+1, to+2)); ks.push((to, to+2, to+3));      
-    ks.push((to+4, to+6, to+5)); ks.push((to+4, to+7, to+6));  
-    ks.push((to, to+3, to+7)); ks.push((to, to+7, to+4));      
-    ks.push((to+1, to+5, to+6)); ks.push((to+1, to+6, to+2));  
-    ks.push((to+3, to+2, to+6)); ks.push((to+3, to+6, to+7));  
+    
+    let aap = 0.04;
+    let dls = 0.14;
+    let brg = 0.50;
+    let ja = verts.len();
+    verts.push(V3 { x: -aap, y: brg, z: -aap });
+    verts.push(V3 { x:  aap, y: brg, z: -aap });
+    verts.push(V3 { x:  aap, y: brg + dls, z: -aap });
+    verts.push(V3 { x: -aap, y: brg + dls, z: -aap });
+    verts.push(V3 { x: -aap, y: brg, z:  aap });
+    verts.push(V3 { x:  aap, y: brg, z:  aap });
+    verts.push(V3 { x:  aap, y: brg + dls, z:  aap });
+    verts.push(V3 { x: -aap, y: brg + dls, z:  aap });
 
     
-    bu.push((to, to+1)); bu.push((to+1, to+2)); bu.push((to+2, to+3)); bu.push((to+3, to));
-    bu.push((to+4, to+5)); bu.push((to+5, to+6)); bu.push((to+6, to+7)); bu.push((to+7, to+4));
-    bu.push((to, to+4)); bu.push((to+1, to+5)); bu.push((to+2, to+6)); bu.push((to+3, to+7));
+    faces.push((ja, ja+1, ja+2)); faces.push((ja, ja+2, ja+3));      
+    faces.push((ja+4, ja+6, ja+5)); faces.push((ja+4, ja+7, ja+6));  
+    faces.push((ja, ja+3, ja+7)); faces.push((ja, ja+7, ja+4));      
+    faces.push((ja+1, ja+5, ja+6)); faces.push((ja+1, ja+6, ja+2));  
+    faces.push((ja+3, ja+2, ja+6)); faces.push((ja+3, ja+6, ja+7));  
 
     
-    let pl = eab + hek * 0.55;
-    let lo = 0.10;
-    let ww = by.len();
-    by.push(V3 { b: -lo, c: pl, av: -azk });
-    by.push(V3 { b:  lo, c: pl, av: -azk });
-    by.push(V3 { b:  lo, c: pl + 0.03, av: -azk });
-    by.push(V3 { b: -lo, c: pl + 0.03, av: -azk });
-    by.push(V3 { b: -lo, c: pl, av:  azk });
-    by.push(V3 { b:  lo, c: pl, av:  azk });
-    by.push(V3 { b:  lo, c: pl + 0.03, av:  azk });
-    by.push(V3 { b: -lo, c: pl + 0.03, av:  azk });
-
-    ks.push((ww, ww+1, ww+2)); ks.push((ww, ww+2, ww+3));
-    ks.push((ww+4, ww+6, ww+5)); ks.push((ww+4, ww+7, ww+6));
-    ks.push((ww, ww+3, ww+7)); ks.push((ww, ww+7, ww+4));
-    ks.push((ww+1, ww+5, ww+6)); ks.push((ww+1, ww+6, ww+2));
-    ks.push((ww+3, ww+2, ww+6)); ks.push((ww+3, ww+6, ww+7));
-
-    bu.push((ww, ww+1)); bu.push((ww+1, ww+2)); bu.push((ww+2, ww+3)); bu.push((ww+3, ww));
-    bu.push((ww+4, ww+5)); bu.push((ww+5, ww+6)); bu.push((ww+6, ww+7)); bu.push((ww+7, ww+4));
+    edges.push((ja, ja+1)); edges.push((ja+1, ja+2)); edges.push((ja+2, ja+3)); edges.push((ja+3, ja));
+    edges.push((ja+4, ja+5)); edges.push((ja+5, ja+6)); edges.push((ja+6, ja+7)); edges.push((ja+7, ja+4));
+    edges.push((ja, ja+4)); edges.push((ja+1, ja+5)); edges.push((ja+2, ja+6)); edges.push((ja+3, ja+7));
 
     
-    let xjq = by.len();
-    by.push(V3 { b: 0.0, c: 0.48, av: 0.0 });
-    let (bb, aa) = cwn(ddz, xjq, bo); ks.lg(bb); bu.lg(aa);
+    let gk = brg + dls * 0.55;
+    let ek = 0.10;
+    let km = verts.len();
+    verts.push(V3 { x: -ek, y: gk, z: -aap });
+    verts.push(V3 { x:  ek, y: gk, z: -aap });
+    verts.push(V3 { x:  ek, y: gk + 0.03, z: -aap });
+    verts.push(V3 { x: -ek, y: gk + 0.03, z: -aap });
+    verts.push(V3 { x: -ek, y: gk, z:  aap });
+    verts.push(V3 { x:  ek, y: gk, z:  aap });
+    verts.push(V3 { x:  ek, y: gk + 0.03, z:  aap });
+    verts.push(V3 { x: -ek, y: gk + 0.03, z:  aap });
+
+    faces.push((km, km+1, km+2)); faces.push((km, km+2, km+3));
+    faces.push((km+4, km+6, km+5)); faces.push((km+4, km+7, km+6));
+    faces.push((km, km+3, km+7)); faces.push((km, km+7, km+4));
+    faces.push((km+1, km+5, km+6)); faces.push((km+1, km+6, km+2));
+    faces.push((km+3, km+2, km+6)); faces.push((km+3, km+6, km+7));
+
+    edges.push((km, km+1)); edges.push((km+1, km+2)); edges.push((km+2, km+3)); edges.push((km+3, km));
+    edges.push((km+4, km+5)); edges.push((km+5, km+6)); edges.push((km+6, km+7)); edges.push((km+7, km+4));
 
     
-    let abm = by.len();
-    by.push(V3 { b: 0.0, c: 0.0, av: 0.0 });
-    let (bb, aa) = cwn(wu, abm, bo); ks.lg(bb); bu.lg(aa);
+    let pli = verts.len();
+    verts.push(V3 { x: 0.0, y: 0.48, z: 0.0 });
+    let (f, e) = baw(ber, pli, ae); faces.extend(f); edges.extend(e);
 
-    Hz { lm: by, bu: Some(bu), ks: Some(ks) }
+    
+    let bottom = verts.len();
+    verts.push(V3 { x: 0.0, y: 0.0, z: 0.0 });
+    let (f, e) = baw(kl, bottom, ae); faces.extend(f); edges.extend(e);
+
+    Dh { vertices: verts, edges: Some(edges), faces: Some(faces) }
 }
 
 
 
 
 
-fn fir(k: &mut [u32], d: usize, i: usize,
-                       mut fy: i32, mut fo: i32,
-                       mut dn: i32, mut dp: i32,
-                       mut hy: i32, mut jz: i32,
-                       s: u32) {
+fn cjn(buf: &mut [u32], w: usize, h: usize,
+                       mut bm: i32, mut az: i32,
+                       mut x1: i32, mut y1: i32,
+                       mut x2: i32, mut y2: i32,
+                       color: u32) {
     
-    if fo > dp { core::mem::swap(&mut fy, &mut dn); core::mem::swap(&mut fo, &mut dp); }
-    if dp > jz { core::mem::swap(&mut dn, &mut hy); core::mem::swap(&mut dp, &mut jz); }
-    if fo > dp { core::mem::swap(&mut fy, &mut dn); core::mem::swap(&mut fo, &mut dp); }
+    if az > y1 { core::mem::swap(&mut bm, &mut x1); core::mem::swap(&mut az, &mut y1); }
+    if y1 > y2 { core::mem::swap(&mut x1, &mut x2); core::mem::swap(&mut y1, &mut y2); }
+    if az > y1 { core::mem::swap(&mut bm, &mut x1); core::mem::swap(&mut az, &mut y1); }
 
-    let aku = jz - fo;
-    if aku == 0 { return; }
+    let sn = y2 - az;
+    if sn == 0 { return; }
 
-    let bpl = fo.am(0);
-    let dno = jz.v(i as i32 - 1);
+    let ajb = az.max(0);
+    let bkg = y2.min(h as i32 - 1);
 
-    for c in bpl..=dno {
-        let hzh = c >= dp;
-        let ftz = if hzh { jz - dp } else { dp - fo };
+    for y in ajb..=bkg {
+        let dyv = y >= y1;
+        let cqg = if dyv { y2 - y1 } else { y1 - az };
 
-        let mjn = (c - fo) as f32 / aku as f32;
-        let bpj = fy as f32 + (hy - fy) as f32 * mjn;
+        let gxu = (y - az) as f32 / sn as f32;
+        let aja = bm as f32 + (x2 - bm) as f32 * gxu;
 
-        let dnk = if ftz == 0 {
-            bpj
-        } else if hzh {
-            let fwa = (c - dp) as f32 / ftz as f32;
-            dn as f32 + (hy - dn) as f32 * fwa
+        let bkd = if cqg == 0 {
+            aja
+        } else if dyv {
+            let crg = (y - y1) as f32 / cqg as f32;
+            x1 as f32 + (x2 - x1) as f32 * crg
         } else {
-            let fwa = (c - fo) as f32 / ftz as f32;
-            fy as f32 + (dn - fy) as f32 * fwa
+            let crg = (y - az) as f32 / cqg as f32;
+            bm as f32 + (x1 - bm) as f32 * crg
         };
 
-        let mut fd = bpj as i32;
-        let mut hw = dnk as i32;
-        if fd > hw { core::mem::swap(&mut fd, &mut hw); }
+        let mut left = aja as i32;
+        let mut right = bkd as i32;
+        if left > right { core::mem::swap(&mut left, &mut right); }
 
-        fd = fd.am(0);
-        hw = hw.v(d as i32 - 1);
+        left = left.max(0);
+        right = right.min(w as i32 - 1);
 
-        let br = c as usize * d;
-        for b in fd..=hw {
-            let w = br + b as usize;
-            if w < k.len() {
-                k[w] = s;
+        let row = y as usize * w;
+        for x in left..=right {
+            let idx = row + x as usize;
+            if idx < buf.len() {
+                buf[idx] = color;
             }
         }
     }
 }
 
-use crate::draw_utils::{ahj as dgr, abc as ssh};
+use crate::draw_utils::{draw_line as draw_line_buf, fill_circle as fill_circle_buf};
 
 
-fn hng(k: &mut [u32], d: usize, i: usize, b: i32, c: i32, text: &str, s: u32) {
-    let mut cx = b;
-    for bm in text.bw() {
-        kqw(k, d, i, cx, c, bm, s);
+fn drp(buf: &mut [u32], w: usize, h: usize, x: i32, y: i32, text: &str, color: u32) {
+    let mut cx = x;
+    for ch in text.chars() {
+        fsv(buf, w, h, cx, y, ch, color);
         cx += 8;
     }
 }
 
 
-fn kqw(k: &mut [u32], d: usize, i: usize, b: i32, c: i32, r: char, s: u32) {
-    let ka = crate::framebuffer::font::ada(r);
-    for br in 0..16 {
-        let fs = ka[br];
-        for bj in 0..8 {
-            if fs & (0x80 >> bj) != 0 {
-                let y = b + bj as i32;
-                let x = c + br as i32;
-                if y >= 0 && x >= 0 && y < d as i32 && x < i as i32 {
-                    let w = x as usize * d + y as usize;
-                    if w < k.len() {
-                        k[w] = s;
+fn fsv(buf: &mut [u32], w: usize, h: usize, x: i32, y: i32, c: char, color: u32) {
+    let du = crate::framebuffer::font::ol(c);
+    for row in 0..16 {
+        let bits = du[row];
+        for col in 0..8 {
+            if bits & (0x80 >> col) != 0 {
+                let p = x + col as i32;
+                let o = y + row as i32;
+                if p >= 0 && o >= 0 && p < w as i32 && o < h as i32 {
+                    let idx = o as usize * w + p as usize;
+                    if idx < buf.len() {
+                        buf[idx] = color;
                     }
                 }
             }

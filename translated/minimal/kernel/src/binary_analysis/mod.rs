@@ -15,120 +15,120 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::format;
 
-pub use elf_parser::{Abq, Ga, Go, Qm, Abg, Aef, Abr, Aro};
-pub use disasm::Dc;
-pub use xrefs::{XrefDatabase, Lc, XrefType, Sb};
+pub use elf_parser::{Lz, Ct, Cy, Gz, Lo, Mz, Ma, Rw};
+pub use disasm::Bj;
+pub use xrefs::{XrefDatabase, Er, XrefType, Hp};
 
 
 
 
-pub struct Rn {
+pub struct Hg {
     
-    pub f: Vec<u8>,
+    pub data: Vec<u8>,
     
-    pub elf: Abq,
+    pub elf: Lz,
     
-    pub instructions: Vec<Dc>,
+    pub instructions: Vec<Bj>,
     
     pub xrefs: XrefDatabase,
 }
 
-impl Rn {
+impl Hg {
     
-    pub fn yxa(&self, l: usize) -> Option<String> {
-        if l >= self.f.len() {
+    pub fn qkv(&self, offset: usize) -> Option<String> {
+        if offset >= self.data.len() {
             return None;
         }
 
-        let ci = (l + 16).v(self.f.len());
-        let jj = &self.f[l..ci];
+        let end = (offset + 16).min(self.data.len());
+        let df = &self.data[offset..end];
 
-        let mut nu = String::new();
+        let mut ga = String::new();
         let mut ascii = String::new();
 
-        for (a, &o) in jj.iter().cf() {
-            if a == 8 { nu.push(' '); }
-            nu.t(&format!("{:02X} ", o));
-            ascii.push(if o >= 0x20 && o < 0x7F { o as char } else { '.' });
+        for (i, &b) in df.iter().enumerate() {
+            if i == 8 { ga.push(' '); }
+            ga.push_str(&format!("{:02X} ", b));
+            ascii.push(if b >= 0x20 && b < 0x7F { b as char } else { '.' });
         }
 
         
-        let ob = 16 - jj.len();
-        for a in 0..ob {
-            if jj.len() + a == 8 { nu.push(' '); }
-            nu.t("   ");
+        let padding = 16 - df.len();
+        for i in 0..padding {
+            if df.len() + i == 8 { ga.push(' '); }
+            ga.push_str("   ");
         }
 
-        Some(format!("{:08X}  {}|{}|", l, nu, ascii))
+        Some(format!("{:08X}  {}|{}|", offset, ga, ascii))
     }
 
     
-    pub fn tvj(&self, ag: u64) -> Option<&Dc> {
-        self.instructions.iter().du(|a| a.re == ag)
+    pub fn instruction_at(&self, addr: u64) -> Option<&Bj> {
+        self.instructions.iter().find(|i| i.address == addr)
     }
 
     
-    pub fn yyh(&self, ay: u64, ci: u64) -> Vec<&Dc> {
+    pub fn qlp(&self, start: u64, end: u64) -> Vec<&Bj> {
         self.instructions.iter()
-            .hi(|a| a.re >= ay && a.re < ci)
+            .filter(|i| i.address >= start && i.address < end)
             .collect()
     }
 
     
-    pub fn zmb(&self, l: u64) -> Option<&Ga> {
-        self.elf.aeo.iter().du(|e| {
-            l >= e.l && l < e.l + e.aw
+    pub fn qvb(&self, offset: u64) -> Option<&Ct> {
+        self.elf.sections.iter().find(|j| {
+            offset >= j.offset && offset < j.offset + j.size
         })
     }
 
     
-    pub fn osf(&self, l: u64) -> Option<u64> {
-        for ajj in &self.elf.dku {
-            if ajj.bku == elf_parser::IU_
-                && l >= ajj.l
-                && l < ajj.l + ajj.hjh
+    pub fn offset_to_vaddr(&self, offset: u64) -> Option<u64> {
+        for rx in &self.elf.programs {
+            if rx.p_type == elf_parser::JM_
+                && offset >= rx.offset
+                && offset < rx.offset + rx.filesz
             {
-                return Some(ajj.uy + (l - ajj.l));
+                return Some(rx.vaddr + (offset - rx.offset));
             }
         }
         None
     }
 
     
-    pub fn mot(&self, uy: u64) -> Option<u64> {
-        for ajj in &self.elf.dku {
-            if ajj.bku == elf_parser::IU_
-                && uy >= ajj.uy
-                && uy < ajj.uy + ajj.jfv
+    pub fn vaddr_to_offset(&self, vaddr: u64) -> Option<u64> {
+        for rx in &self.elf.programs {
+            if rx.p_type == elf_parser::JM_
+                && vaddr >= rx.vaddr
+                && vaddr < rx.vaddr + rx.memsz
             {
-                return Some(ajj.l + (uy - ajj.uy));
+                return Some(rx.offset + (vaddr - rx.vaddr));
             }
         }
         None
     }
 
     
-    pub fn ygx(&self, uy: u64, len: usize) -> Option<&[u8]> {
-        let l = self.mot(uy)? as usize;
-        if l + len <= self.f.len() {
-            Some(&self.f[l..l + len])
+    pub fn pyy(&self, vaddr: u64, len: usize) -> Option<&[u8]> {
+        let offset = self.vaddr_to_offset(vaddr)? as usize;
+        if offset + len <= self.data.len() {
+            Some(&self.data[offset..offset + len])
         } else {
             None
         }
     }
 
     
-    pub fn awz(&self) -> String {
+    pub fn summary(&self) -> String {
         format!(
             "{} | {} | {} | {} bytes | {} sections | {} symbols | {} instructions | {}",
-            self.elf.co.class,
-            self.elf.co.czk,
-            self.elf.co.gfz,
-            self.f.len(),
-            self.elf.aeo.len(),
-            self.elf.bot.len() + self.elf.dqj.len(),
+            self.elf.info.class,
+            self.elf.info.machine,
+            self.elf.info.elf_type,
+            self.data.len(),
+            self.elf.sections.len(),
+            self.elf.symbols.len() + self.elf.dynamic_symbols.len(),
             self.instructions.len(),
-            self.xrefs.awz(),
+            self.xrefs.summary(),
         )
     }
 }
@@ -136,81 +136,81 @@ impl Rn {
 
 
 
-pub fn qhu(f: &[u8]) -> Result<Rn, &'static str> {
+pub fn jvs(data: &[u8]) -> Result<Hg, &'static str> {
     
-    let elf = elf_parser::vcd(f)?;
+    let elf = elf_parser::nqd(data)?;
 
     
-    let mut gaa = Vec::new();
+    let mut ctl = Vec::new();
 
     
-    let ioq = elf.ioq();
+    let code_sections = elf.code_sections();
 
-    if ioq.is_empty() {
+    if code_sections.is_empty() {
         
-        for ajj in &elf.dku {
-            if ajj.bku == elf_parser::IU_ && (ajj.flags & 1) != 0 {
-                let ay = ajj.l as usize;
-                let aw = ajj.hjh as usize;
-                if ay + aw <= f.len() {
-                    let aj = &f[ay..ay + aw];
-                    let mut disasm = disasm::Disassembler::new(aj, ajj.uy);
-                    let mut edl = disasm.irf();
-                    gaa.bte(&mut edl);
+        for rx in &elf.programs {
+            if rx.p_type == elf_parser::JM_ && (rx.flags & 1) != 0 {
+                let start = rx.offset as usize;
+                let size = rx.filesz as usize;
+                if start + size <= data.len() {
+                    let code = &data[start..start + size];
+                    let mut disasm = disasm::Disassembler::new(code, rx.vaddr);
+                    let mut btl = disasm.disassemble_all();
+                    ctl.append(&mut btl);
                 }
             }
         }
     } else {
-        for ava in &ioq {
-            let ay = ava.l as usize;
-            let aw = ava.aw as usize;
-            if ay + aw <= f.len() && aw > 0 {
-                let aj = &f[ay..ay + aw];
-                let mut disasm = disasm::Disassembler::new(aj, ava.ag);
-                let mut edl = disasm.irf();
-                gaa.bte(&mut edl);
+        for section in &code_sections {
+            let start = section.offset as usize;
+            let size = section.size as usize;
+            if start + size <= data.len() && size > 0 {
+                let code = &data[start..start + size];
+                let mut disasm = disasm::Disassembler::new(code, section.addr);
+                let mut btl = disasm.disassemble_all();
+                ctl.append(&mut btl);
             }
         }
     }
 
     
-    gaa.bxf(|a| a.re);
+    ctl.sort_by_key(|i| i.address);
 
     
-    disasm::qiu(&mut gaa, &elf.blw);
+    disasm::jwh(&mut ctl, &elf.addr_to_symbol);
 
     
-    let xrefs = xrefs::XrefDatabase::qsy(&gaa, &elf.blw);
+    let xrefs = xrefs::XrefDatabase::ker(&ctl, &elf.addr_to_symbol);
 
-    Ok(Rn {
-        f: f.ip(),
+    Ok(Hg {
+        data: data.to_vec(),
         elf,
-        instructions: gaa,
+        instructions: ctl,
         xrefs,
     })
 }
 
 
-pub fn txj(f: &[u8]) -> bool {
-    f.len() >= 4 && &f[0..4] == b"\x7FELF"
+pub fn msm(data: &[u8]) -> bool {
+    data.len() >= 4 && &data[0..4] == b"\x7FELF"
 }
 
 
-pub fn mvr(path: &str) -> Result<Rn, &'static str> {
-    let da = crate::vfs::aji(path, crate::vfs::OpenFlags(crate::vfs::OpenFlags::OO_))
-        .jd(|_| "Failed to open file")?;
+pub fn hfe(path: &str) -> Result<Hg, &'static str> {
+    let fd = crate::vfs::open(path, crate::vfs::OpenFlags(crate::vfs::OpenFlags::PM_))
+        .map_err(|_| "Failed to open file")?;
 
-    let hm = crate::vfs::hm(path).jd(|_| "Failed to stat file")?;
-    let aw = hm.aw as usize;
+    let stat = crate::vfs::stat(path).map_err(|_| "Failed to stat file")?;
+    let size = stat.size as usize;
 
-    if aw > 32 * 1024 * 1024 {
-        crate::vfs::agj(da).bq();
+    if size > 32 * 1024 * 1024 {
+        crate::vfs::close(fd).ok();
         return Err("File too large (>32MB)");
     }
 
-    let mut f = alloc::vec![0u8; aw];
-    crate::vfs::read(da, &mut f).jd(|_| "Failed to read file")?;
-    crate::vfs::agj(da).bq();
+    let mut data = alloc::vec![0u8; size];
+    crate::vfs::read(fd, &mut data).map_err(|_| "Failed to read file")?;
+    crate::vfs::close(fd).ok();
 
-    qhu(&f)
+    jvs(&data)
 }

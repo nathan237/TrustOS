@@ -125,14 +125,14 @@ unsafe { PER_CPU[i].apic_id == apic_id } {
 pub fn current() -> &'static PerCpuData {
     let id = current_cpu_id() as usize;
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &PER_CPU[id.minimum(MAXIMUM_CPUS - 1)] }
+unsafe { &PER_CPU[id.min(MAXIMUM_CPUS - 1)] }
 }
 
 /// Get mutable per-CPU data for current CPU
 pub fn current_mut() -> &'static mut PerCpuData {
     let id = current_cpu_id() as usize;
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &mut PER_CPU[id.minimum(MAXIMUM_CPUS - 1)] }
+unsafe { &mut PER_CPU[id.min(MAXIMUM_CPUS - 1)] }
 }
 
 /// Get CPU count
@@ -236,7 +236,7 @@ pub fn print_status() {
     crate::println!("║ Ready CPUs:  {:3}                     ║", ready_cpu_count());
     crate::println!("╠══════════════════════════════════════╣");
     
-    for i in 0..cpu_count().minimum(MAXIMUM_CPUS as u32) as usize {
+    for i in 0..cpu_count().min(MAXIMUM_CPUS as u32) as usize {
         let ready = if is_cpu_ready(i as u32) { "✓" } else { "✗" };
         let work = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { PER_CPU[i].work_completed };
@@ -350,28 +350,28 @@ pub fn parallel_for(total_items: usize, func: WorkFn, data: *mut u8) {
         return;
     }
     
-    let number_cpus = ready_cpu_count() as usize;
+    let num_cpus = ready_cpu_count() as usize;
     
     // Fallback to single-thread if:
     // - Only 1 CPU ready
     // - Workload too small (overhead not worth it)
-    if number_cpus <= 1 || total_items < PARALLEL_THRESHOLD {
+    if num_cpus <= 1 || total_items < PARALLEL_THRESHOLD {
         func(0, total_items, data);
         return;
     }
     
     // Calculate chunk size - each core gets equal portion
-    let chunk_size = (total_items + number_cpus - 1) / number_cpus;
+    let chunk_size = (total_items + num_cpus - 1) / num_cpus;
     WORK_COMPLETION.store(0, Ordering::Release);
     
     // Distribute work to APs (Application Processors)
     let mut dispatched = 0usize;
-    for cpu_id in 1..number_cpus {
+    for cpu_id in 1..num_cpus {
         if !is_cpu_ready(cpu_id as u32) { continue; }
         
         let start = cpu_id * chunk_size;
         if start >= total_items { break; }
-        let end = ((cpu_id + 1) * chunk_size).minimum(total_items);
+        let end = ((cpu_id + 1) * chunk_size).min(total_items);
         
         // Queue work for this AP
         {
@@ -390,7 +390,7 @@ pub fn parallel_for(total_items: usize, func: WorkFn, data: *mut u8) {
     // No IPI needed — avoids LAPIC MMIO complexity.
     
     // BSP (Bootstrap Processor) handles chunk 0
-    func(0, chunk_size.minimum(total_items), data);
+    func(0, chunk_size.min(total_items), data);
     WORK_COMPLETION.fetch_add(1, Ordering::Release);
     
     // Wait for APs to complete with timeout
@@ -408,7 +408,7 @@ pub fn parallel_for(total_items: usize, func: WorkFn, data: *mut u8) {
                     WORK_COMPLETION.load(Ordering::Relaxed), expected);
                 // Cancel unfinished work to prevent use-after-free
                 // (caller's stack data may be freed after we return)
-                for cancel_id in 1..number_cpus {
+                for cancel_id in 1..num_cpus {
                     WORK_PENDING[cancel_id].store(false, Ordering::Release);
                 }
                 break;
@@ -449,10 +449,10 @@ unsafe { PER_CPU[cpu_id].work_completed += 1; }
 /// 6. Mark CPU as ready
 /// 7. Enable interrupts + idle loop
 pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe extern "C" fn ap_entry(smp_information: &limine::smp::Cpu) -> ! {
+unsafe extern "C" fn ap_entry(smp_info: &limine::smp::Cpu) -> ! {
     // Read AP info from Limine
-    let processor_id = smp_information.id as usize;
-    let lapic_id = smp_information.lapic_id;
+    let processor_id = smp_info.id as usize;
+    let lapic_id = smp_info.lapic_id;
     
     // Initialize per-CPU data (raw array, no lock needed — each AP writes its own slot)
     if processor_id < MAXIMUM_CPUS {

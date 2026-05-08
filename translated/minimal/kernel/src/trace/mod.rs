@@ -7,60 +7,60 @@ use spin::Mutex;
 use core::sync::atomic::{AtomicU64, AtomicBool, Ordering};
 
 
-const EU_: usize = 1024;
+const FK_: usize = 1024;
 
 
-static AJB_: Mutex<[TraceEvent; EU_]> = 
-    Mutex::new([TraceEvent::Y; EU_]);
+static AKX_: Mutex<[TraceEvent; FK_]> = 
+    Mutex::new([TraceEvent::Q; FK_]);
 
 
-static YR_: AtomicU64 = AtomicU64::new(0);
+static ZW_: AtomicU64 = AtomicU64::new(0);
 
 
-static XS_: AtomicBool = AtomicBool::new(true);
+static YZ_: AtomicBool = AtomicBool::new(true);
 
 
-static SP_: AtomicBool = AtomicBool::new(false);
+static TW_: AtomicBool = AtomicBool::new(false);
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum EventType {
     None = 0,
-    Ano = 1,
-    Caa = 2,
-    Dac = 3,
-    Dab = 4,
-    Mb = 5,
-    Fv = 6,
-    Ani = 7,
-    Azp = 8,
-    Cms = 9,
-    Dck = 10,
-    Dcm = 11,
-    Dau = 12,
-    Gv = 255,
+    TimerTick = 1,
+    ContextSwitch = 2,
+    IpcSend = 3,
+    IpcReceive = 4,
+    PageFault = 5,
+    Interrupt = 6,
+    SyscallEntry = 7,
+    SyscallExit = 8,
+    SecurityViolation = 9,
+    MemoryAlloc = 10,
+    MemoryFree = 11,
+    KeyboardInput = 12,
+    Custom = 255,
 }
 
 
 #[derive(Debug, Clone, Copy)]
 pub struct TraceEvent {
     
-    pub aea: u64,
+    pub timestamp: u64,
     
-    pub qq: u8,
+    pub cpu_id: u8,
     
-    pub bqo: EventType,
+    pub event_type: EventType,
     
-    pub ew: u64,
+    pub payload: u64,
 }
 
 impl TraceEvent {
-    pub const Y: Self = Self {
-        aea: 0,
-        qq: 0,
-        bqo: EventType::None,
-        ew: 0,
+    pub const Q: Self = Self {
+        timestamp: 0,
+        cpu_id: 0,
+        event_type: EventType::None,
+        payload: 0,
     };
 }
 
@@ -70,116 +70,116 @@ pub fn init() {
     
     #[cfg(feature = "deterministic")]
     {
-        SP_.store(true, Ordering::SeqCst);
+        TW_.store(true, Ordering::SeqCst);
         crate::log_debug!("Deterministic mode ENABLED");
     }
     
-    crate::log_debug!("Trace buffer initialized ({} entries)", EU_);
+    crate::log_debug!("Trace buffer initialized ({} entries)", FK_);
 }
 
 
-pub fn bry(bqo: EventType, ew: u64) {
-    if !XS_.load(Ordering::Relaxed) {
+pub fn akj(event_type: EventType, payload: u64) {
+    if !YZ_.load(Ordering::Relaxed) {
         return;
     }
     
-    let aea = crate::logger::fjp();
-    let qq = 0; 
+    let timestamp = crate::logger::ckc();
+    let cpu_id = 0; 
     
-    let id = TraceEvent {
-        aea,
-        qq,
-        bqo,
-        ew,
+    let event = TraceEvent {
+        timestamp,
+        cpu_id,
+        event_type,
+        payload,
     };
     
-    let index = YR_.fetch_add(1, Ordering::Relaxed) as usize;
-    let gk = index % EU_;
+    let index = ZW_.fetch_add(1, Ordering::Relaxed) as usize;
+    let slot = index % FK_;
     
-    AJB_.lock()[gk] = id;
+    AKX_.lock()[slot] = event;
 }
 
 
-pub fn cuf(iq: bool) {
-    XS_.store(iq, Ordering::SeqCst);
+pub fn set_enabled(enabled: bool) {
+    YZ_.store(enabled, Ordering::SeqCst);
 }
 
 
-pub fn zu() -> bool {
-    XS_.load(Ordering::Relaxed)
+pub fn lq() -> bool {
+    YZ_.load(Ordering::Relaxed)
 }
 
 
-pub fn ypc() {
-    SP_.store(true, Ordering::SeqCst);
+pub fn qeu() {
+    TW_.store(true, Ordering::SeqCst);
     crate::log!("Deterministic mode ENABLED");
 }
 
 
-pub fn yzh() -> bool {
-    SP_.load(Ordering::Relaxed)
+pub fn qmh() -> bool {
+    TW_.load(Ordering::Relaxed)
 }
 
 
-pub fn ynw() {
-    let bi = AJB_.lock();
-    let cv = YR_.load(Ordering::Relaxed) as usize;
+pub fn qeg() {
+    let buffer = AKX_.lock();
+    let current = ZW_.load(Ordering::Relaxed) as usize;
     
-    crate::serial::elt(format_args!("\n=== TRACE DUMP (last 32 events) ===\n"));
+    crate::serial::bxg(format_args!("\n=== TRACE DUMP (last 32 events) ===\n"));
     
     
-    let ay = cv.ao(32);
-    for a in ay..cv {
-        let id = &bi[a % EU_];
-        if id.bqo != EventType::None {
-            crate::serial::elt(format_args!(
+    let start = current.saturating_sub(32);
+    for i in start..current {
+        let event = &buffer[i % FK_];
+        if event.event_type != EventType::None {
+            crate::serial::bxg(format_args!(
                 "[{:>10}][CPU{}] {:?} payload={:#x}\n",
-                id.aea,
-                id.qq,
-                id.bqo,
-                id.ew
+                event.timestamp,
+                event.cpu_id,
+                event.event_type,
+                event.payload
             ));
         }
     }
     
-    crate::serial::elt(format_args!("=== END TRACE DUMP ===\n"));
+    crate::serial::bxg(format_args!("=== END TRACE DUMP ===\n"));
 }
 
 
-pub fn ypu() -> alloc::vec::Vec<TraceEvent> {
-    let bi = AJB_.lock();
-    let cv = YR_.load(Ordering::Relaxed) as usize;
-    let az = cv.v(EU_);
+pub fn qfj() -> alloc::vec::Vec<TraceEvent> {
+    let buffer = AKX_.lock();
+    let current = ZW_.load(Ordering::Relaxed) as usize;
+    let count = current.min(FK_);
     
-    let mut events = alloc::vec::Vec::fc(az);
-    let ay = if cv > EU_ {
-        cv - EU_
+    let mut events = alloc::vec::Vec::with_capacity(count);
+    let start = if current > FK_ {
+        current - FK_
     } else {
         0
     };
     
-    for a in ay..cv {
-        events.push(bi[a % EU_]);
+    for i in start..current {
+        events.push(buffer[i % FK_]);
     }
     
     events
 }
 
 
-pub fn cm() -> Buo {
-    Buo {
-        nrh: YR_.load(Ordering::Relaxed),
-        kfi: EU_,
-        xlc: XS_.load(Ordering::Relaxed),
-        rwx: SP_.load(Ordering::Relaxed),
+pub fn stats() -> Afk {
+    Afk {
+        events_recorded: ZW_.load(Ordering::Relaxed),
+        fkb: FK_,
+        tracing_enabled: YZ_.load(Ordering::Relaxed),
+        deterministic_mode: TW_.load(Ordering::Relaxed),
     }
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Buo {
-    pub nrh: u64,
-    pub kfi: usize,
-    pub xlc: bool,
-    pub rwx: bool,
+pub struct Afk {
+    pub events_recorded: u64,
+    pub fkb: usize,
+    pub tracing_enabled: bool,
+    pub deterministic_mode: bool,
 }

@@ -8,82 +8,82 @@
 
 
 use alloc::vec::Vec;
-use super::Uy;
+use super::Jg;
 
 
 #[repr(C, packed)]
-struct Csb {
+struct Atc {
     signature: [u8; 2],    
-    yy: u32,
-    awt: u32,
-    bbj: u32,
+    file_size: u32,
+    reserved: u32,
+    data_offset: u32,
 }
 
 
 #[repr(C, packed)]
-struct Csc {
-    drp: u32,
-    z: i32,
-    ac: i32,
-    hvf: u16,
-    cjh: u16,
+struct Atd {
+    bms: u32,
+    width: i32,
+    height: i32,
+    planes: u16,
+    atc: u16,
     compression: u32,
-    gjn: u32,
-    zxp: u32,
-    zxw: u32,
-    yjn: u32,
-    yjm: u32,
+    image_size: u32,
+    x_pixels_per_meter: u32,
+    y_pixels_per_meter: u32,
+    colors_used: u32,
+    colors_important: u32,
 }
 
 
-pub fn jdu(path: &str) -> Option<Uy> {
-    let f = match crate::vfs::mq(path) {
-        Ok(bc) => bc,
+pub fn ete(path: &str) -> Option<Jg> {
+    let data = match crate::vfs::read_file(path) {
+        Ok(d) => d,
         Err(_) => {
             crate::serial_println!("[BMP] Cannot read file: {}", path);
             return None;
         }
     };
     
-    ouc(&f)
+    itq(&data)
 }
 
 
-pub fn hqf(f: &[u8]) -> Option<Uy> {
-    ouc(f)
+pub fn dtq(data: &[u8]) -> Option<Jg> {
+    itq(data)
 }
 
 
-fn ouc(f: &[u8]) -> Option<Uy> {
+fn itq(data: &[u8]) -> Option<Jg> {
     
-    if f.len() < 54 {
+    if data.len() < 54 {
         crate::serial_println!("[BMP] File too small");
         return None;
     }
     
     
-    if f[0] != b'B' || f[1] != b'M' {
+    if data[0] != b'B' || data[1] != b'M' {
         crate::serial_println!("[BMP] Invalid signature");
         return None;
     }
     
     
-    let bbj = za(&f[10..14]) as usize;
-    let drp = za(&f[14..18]);
-    let z = amq(&f[18..22]);
-    let ac = amq(&f[22..26]);
-    let cjh = alp(&f[28..30]);
-    let compression = za(&f[30..34]);
+    let data_offset = read_u32(&data[10..14]) as usize;
+    let bms = read_u32(&data[14..18]);
+    let width = read_i32(&data[18..22]);
+    let height = read_i32(&data[22..26]);
+    let atc = read_u16(&data[28..30]);
+    let compression = read_u32(&data[30..34]);
     
     
-    if z <= 0 || z > 8192 {
-        crate::serial_println!("[BMP] Invalid width: {}", z);
+    if width <= 0 || width > 8192 {
+        crate::serial_println!("[BMP] Invalid width: {}", width);
         return None;
     }
     
-    let fkl = ac.gp();
-    if fkl <= 0 || fkl > 8192 {
-        crate::serial_println!("[BMP] Invalid height: {}", ac);
+    let ckl = height.abs();
+    if ckl <= 0 || ckl > 8192 {
+        crate::serial_println!("[BMP] Invalid height: {}", height);
         return None;
     }
     
@@ -94,76 +94,76 @@ fn ouc(f: &[u8]) -> Option<Uy> {
     }
     
     
-    if cjh != 24 && cjh != 32 {
-        crate::serial_println!("[BMP] Unsupported bit depth: {}", cjh);
+    if atc != 24 && atc != 32 {
+        crate::serial_println!("[BMP] Unsupported bit depth: {}", atc);
         return None;
     }
     
-    let z = z as u32;
-    let dia = fkl as u32;
-    let lgn = ac < 0;
+    let width = width as u32;
+    let bgy = ckl as u32;
+    let ged = height < 0;
     
     
-    let coy = cjh as usize / 8;
-    let ehu = ((z as usize * coy + 3) / 4) * 4;
+    let awm = atc as usize / 8;
+    let bvm = ((width as usize * awm + 3) / 4) * 4;
     
     
-    let fqv = (z * dia) as usize;
-    let mut hz = Vec::fc(fqv);
+    let cod = (width * bgy) as usize;
+    let mut pixels = Vec::with_capacity(cod);
     
     
-    let amn = &f[bbj..];
+    let tm = &data[data_offset..];
     
-    for br in 0..dia {
+    for row in 0..bgy {
         
-        let bxg = if lgn { br } else { dia - 1 - br };
-        let mu = bxg as usize * ehu;
+        let amv = if ged { row } else { bgy - 1 - row };
+        let fk = amv as usize * bvm;
         
-        for bj in 0..z {
-            let bfa = mu + bj as usize * coy;
+        for col in 0..width {
+            let aee = fk + col as usize * awm;
             
-            if bfa + coy <= amn.len() {
+            if aee + awm <= tm.len() {
                 
-                let o = amn[bfa] as u32;
-                let at = amn[bfa + 1] as u32;
-                let m = amn[bfa + 2] as u32;
-                let q = if cjh == 32 {
-                    amn[bfa + 3] as u32
+                let b = tm[aee] as u32;
+                let g = tm[aee + 1] as u32;
+                let r = tm[aee + 2] as u32;
+                let a = if atc == 32 {
+                    tm[aee + 3] as u32
                 } else {
                     255
                 };
                 
                 
-                let il = (q << 24) | (m << 16) | (at << 8) | o;
-                hz.push(il);
+                let ct = (a << 24) | (r << 16) | (g << 8) | b;
+                pixels.push(ct);
             } else {
-                hz.push(0xFF000000); 
+                pixels.push(0xFF000000); 
             }
         }
     }
     
-    crate::serial_println!("[BMP] Loaded {}x{} image ({}-bit)", z, dia, cjh);
+    crate::serial_println!("[BMP] Loaded {}x{} image ({}-bit)", width, bgy, atc);
     
-    Some(Uy {
-        z,
-        ac: dia,
-        hz,
+    Some(Jg {
+        width,
+        height: bgy,
+        pixels,
     })
 }
 
 
-fn za(f: &[u8]) -> u32 {
-    u32::dj([f[0], f[1], f[2], f[3]])
+fn read_u32(data: &[u8]) -> u32 {
+    u32::from_le_bytes([data[0], data[1], data[2], data[3]])
 }
 
 
-fn amq(f: &[u8]) -> i32 {
-    i32::dj([f[0], f[1], f[2], f[3]])
+fn read_i32(data: &[u8]) -> i32 {
+    i32::from_le_bytes([data[0], data[1], data[2], data[3]])
 }
 
 
-fn alp(f: &[u8]) -> u16 {
-    u16::dj([f[0], f[1]])
+fn read_u16(data: &[u8]) -> u16 {
+    u16::from_le_bytes([data[0], data[1]])
 }
 
 
@@ -171,44 +171,44 @@ fn alp(f: &[u8]) -> u16 {
 
 
 
-pub fn ngy(z: u32, ac: u32, hz: &[u32]) -> Vec<u8> {
-    let coy = 3; 
-    let ehu = ((z as usize * coy + 3) / 4) * 4;
-    let hve = ehu * ac as usize;
-    let yy = 54 + hve;
+pub fn hom(width: u32, height: u32, pixels: &[u32]) -> Vec<u8> {
+    let awm = 3; 
+    let bvm = ((width as usize * awm + 3) / 4) * 4;
+    let dwo = bvm * height as usize;
+    let file_size = 54 + dwo;
     
-    let mut bmp = Vec::fc(yy);
-    
-    
-    bmp.bk(&[b'B', b'M']);
-    bmp.bk(&(yy as u32).ho());
-    bmp.bk(&[0u8; 4]); 
-    bmp.bk(&54u32.ho()); 
+    let mut bmp = Vec::with_capacity(file_size);
     
     
-    bmp.bk(&40u32.ho()); 
-    bmp.bk(&(z as i32).ho());
-    bmp.bk(&(ac as i32).ho()); 
-    bmp.bk(&1u16.ho()); 
-    bmp.bk(&24u16.ho()); 
-    bmp.bk(&0u32.ho()); 
-    bmp.bk(&(hve as u32).ho());
-    bmp.bk(&[0u8; 16]); 
+    bmp.extend_from_slice(&[b'B', b'M']);
+    bmp.extend_from_slice(&(file_size as u32).to_le_bytes());
+    bmp.extend_from_slice(&[0u8; 4]); 
+    bmp.extend_from_slice(&54u32.to_le_bytes()); 
     
     
-    for br in (0..ac).vv() {
-        for bj in 0..z {
-            let il = hz[(br * z + bj) as usize];
-            let m = ((il >> 16) & 0xFF) as u8;
-            let at = ((il >> 8) & 0xFF) as u8;
-            let o = (il & 0xFF) as u8;
-            bmp.push(o);
-            bmp.push(at);
-            bmp.push(m);
+    bmp.extend_from_slice(&40u32.to_le_bytes()); 
+    bmp.extend_from_slice(&(width as i32).to_le_bytes());
+    bmp.extend_from_slice(&(height as i32).to_le_bytes()); 
+    bmp.extend_from_slice(&1u16.to_le_bytes()); 
+    bmp.extend_from_slice(&24u16.to_le_bytes()); 
+    bmp.extend_from_slice(&0u32.to_le_bytes()); 
+    bmp.extend_from_slice(&(dwo as u32).to_le_bytes());
+    bmp.extend_from_slice(&[0u8; 16]); 
+    
+    
+    for row in (0..height).rev() {
+        for col in 0..width {
+            let ct = pixels[(row * width + col) as usize];
+            let r = ((ct >> 16) & 0xFF) as u8;
+            let g = ((ct >> 8) & 0xFF) as u8;
+            let b = (ct & 0xFF) as u8;
+            bmp.push(b);
+            bmp.push(g);
+            bmp.push(r);
         }
         
-        let ob = ehu - (z as usize * 3);
-        for _ in 0..ob {
+        let padding = bvm - (width as usize * 3);
+        for _ in 0..padding {
             bmp.push(0);
         }
     }

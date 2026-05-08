@@ -9,131 +9,131 @@ use alloc::string::String;
 use alloc::format;
 use core::sync::atomic::{AtomicU16, Ordering};
 
-static CYI_: AtomicU16 = AtomicU16::new(1000);
+static DCA_: AtomicU16 = AtomicU16::new(1000);
 
 
 #[derive(Debug, Clone)]
-pub struct Anq {
-    pub gjd: u8,
+pub struct Qn {
+    pub hop_num: u8,
     pub ip: Option<[u8; 4]>,
-    pub ajc: Option<String>,
-    pub bcj: [u64; 3],   
-    pub gqi: bool,      
+    pub hostname: Option<String>,
+    pub rtt_ms: [u64; 3],   
+    pub reached: bool,      
 }
 
 
 pub struct TraceConfig {
-    pub fnv: u8,
-    pub oya: u8,
-    pub sg: u32,
-    pub cd: [u8; 4],
+    pub max_hops: u8,
+    pub probes_per_hop: u8,
+    pub timeout_ms: u32,
+    pub target: [u8; 4],
 }
 
 impl Default for TraceConfig {
     fn default() -> Self {
         Self {
-            fnv: 30,
-            oya: 3,
-            sg: 2000,
-            cd: [0; 4],
+            max_hops: 30,
+            probes_per_hop: 3,
+            timeout_ms: 2000,
+            target: [0; 4],
         }
     }
 }
 
 
-pub fn trace(cd: [u8; 4], fnv: u8, sg: u32) -> Vec<Anq> {
-    let mut cyn = Vec::new();
+pub fn trace(target: [u8; 4], max_hops: u8, timeout_ms: u32) -> Vec<Qn> {
+    let mut bcb = Vec::new();
 
-    crate::netstack::icmp::hcx();
-    crate::netstack::icmp::ndg();
+    crate::netstack::icmp::dkt();
+    crate::netstack::icmp::hlh();
 
-    for akv in 1..=fnv {
-        let mut bhe = Anq {
-            gjd: akv,
+    for ttl in 1..=max_hops {
+        let mut afg = Qn {
+            hop_num: ttl,
             ip: None,
-            ajc: None,
-            bcj: [0; 3],
-            gqi: false,
+            hostname: None,
+            rtt_ms: [0; 3],
+            reached: false,
         };
 
-        let mut nzk = false;
+        let mut icn = false;
 
         for probe in 0..3 {
-            let ls = CYI_.fetch_add(1, Ordering::Relaxed);
+            let seq = DCA_.fetch_add(1, Ordering::Relaxed);
 
-            crate::netstack::icmp::hcx();
-            crate::netstack::icmp::ndg();
-
-            
-            let mut cyp = Vec::new();
-            cyp.push(8); 
-            cyp.push(0); 
-            cyp.push(0); cyp.push(0); 
-            cyp.bk(&0x5CA1u16.ft()); 
-            cyp.bk(&ls.ft());
+            crate::netstack::icmp::dkt();
+            crate::netstack::icmp::hlh();
 
             
-            let wi = crate::time::lc() as u32;
-            cyp.bk(&wi.ft());
-            for a in 0..20 {
-                cyp.push((0x41 + a) as u8);
+            let mut bce = Vec::new();
+            bce.push(8); 
+            bce.push(0); 
+            bce.push(0); bce.push(0); 
+            bce.extend_from_slice(&0x5CA1u16.to_be_bytes()); 
+            bce.extend_from_slice(&seq.to_be_bytes());
+
+            
+            let jy = crate::time::uptime_ms() as u32;
+            bce.extend_from_slice(&jy.to_be_bytes());
+            for i in 0..20 {
+                bce.push((0x41 + i) as u8);
             }
 
             
-            let td = lcz(&cyp);
-            cyp[2] = (td >> 8) as u8;
-            cyp[3] = (td & 0xFF) as u8;
+            let ig = gbl(&bce);
+            bce[2] = (ig >> 8) as u8;
+            bce[3] = (ig & 0xFF) as u8;
 
-            let ay = crate::logger::lh();
+            let start = crate::logger::eg();
 
             
-            if crate::netstack::ip::whj(cd, 1, &cyp, akv).is_err() {
-                bhe.bcj[probe] = 0;
+            if crate::netstack::ip::onw(target, 1, &bce, ttl).is_err() {
+                afg.rtt_ms[probe] = 0;
                 continue;
             }
 
             
-            let result = crate::netstack::icmp::xtk(ls, cd, sg);
-            let ez = crate::logger::lh().ao(ay);
+            let result = crate::netstack::icmp::ptk(seq, target, timeout_ms);
+            let bb = crate::logger::eg().saturating_sub(start);
 
             match result {
-                crate::netstack::icmp::TracerouteResult::Bqn { ip, .. } => {
-                    bhe.ip = Some(ip);
-                    bhe.bcj[probe] = ez;
-                    bhe.gqi = true;
-                    nzk = true;
+                crate::netstack::icmp::TracerouteResult::Reached { ip, .. } => {
+                    afg.ip = Some(ip);
+                    afg.rtt_ms[probe] = bb;
+                    afg.reached = true;
+                    icn = true;
                 }
-                crate::netstack::icmp::TracerouteResult::Biu { ip, bcj, .. } => {
-                    bhe.ip = Some(ip);
-                    bhe.bcj[probe] = bcj;
-                    nzk = true;
+                crate::netstack::icmp::TracerouteResult::Hop { ip, rtt_ms, .. } => {
+                    afg.ip = Some(ip);
+                    afg.rtt_ms[probe] = rtt_ms;
+                    icn = true;
                 }
-                crate::netstack::icmp::TracerouteResult::Oi => {
-                    bhe.bcj[probe] = 0; 
+                crate::netstack::icmp::TracerouteResult::Timeout => {
+                    afg.rtt_ms[probe] = 0; 
                 }
             }
         }
 
-        cyn.push(bhe.clone());
+        bcb.push(afg.clone());
 
-        if bhe.gqi {
+        if afg.reached {
             break;
         }
     }
 
-    cyn
+    bcb
 }
 
 
-fn lcz(f: &[u8]) -> u16 {
+fn gbl(data: &[u8]) -> u16 {
     let mut sum: u32 = 0;
-    let mut a = 0;
-    while a + 1 < f.len() {
-        sum += ((f[a] as u32) << 8) | (f[a + 1] as u32);
-        a += 2;
+    let mut i = 0;
+    while i + 1 < data.len() {
+        sum += ((data[i] as u32) << 8) | (data[i + 1] as u32);
+        i += 2;
     }
-    if a < f.len() {
-        sum += (f[a] as u32) << 8;
+    if i < data.len() {
+        sum += (data[i] as u32) << 8;
     }
     while (sum >> 16) != 0 {
         sum = (sum & 0xFFFF) + (sum >> 16);
@@ -142,28 +142,28 @@ fn lcz(f: &[u8]) -> u16 {
 }
 
 
-pub fn swb(cyn: &[Anq]) -> String {
-    let mut an = String::new();
-    for bhe in cyn {
-        an.t(&format!("{:>2}  ", bhe.gjd));
+pub fn lxu(bcb: &[Qn]) -> String {
+    let mut output = String::new();
+    for afg in bcb {
+        output.push_str(&format!("{:>2}  ", afg.hop_num));
 
-        if let Some(ip) = bhe.ip {
-            an.t(&super::aot(ip));
-            an.t("  ");
-            for &ehv in &bhe.bcj {
-                if ehv == 0 {
-                    an.t("*  ");
-                } else if ehv < 1 {
-                    an.t("<1 ms  ");
+        if let Some(ip) = afg.ip {
+            output.push_str(&super::uw(ip));
+            output.push_str("  ");
+            for &rtt in &afg.rtt_ms {
+                if rtt == 0 {
+                    output.push_str("*  ");
+                } else if rtt < 1 {
+                    output.push_str("<1 ms  ");
                 } else {
-                    an.t(&format!("{} ms  ", ehv));
+                    output.push_str(&format!("{} ms  ", rtt));
                 }
             }
         } else {
-            an.t("* * *");
+            output.push_str("* * *");
         }
 
-        an.push('\n');
+        output.push('\n');
     }
-    an
+    output
 }

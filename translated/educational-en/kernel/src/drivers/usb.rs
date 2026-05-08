@@ -45,7 +45,7 @@ pub struct UsbDevice {
 /// USB Controller state
 pub struct UsbController {
     pub controller_type: UsbControllerType,
-    pub base_address: u64,
+    pub base_addr: u64,
     pub devices: Vec<UsbDevice>,
     pub initialized: bool,
 }
@@ -71,7 +71,7 @@ pub fn initialize_ehci(base: u64) -> bool {
     
     let controller = UsbController {
         controller_type: UsbControllerType::EHCI,
-        base_address: base,
+        base_addr: base,
         devices: Vec::new(),
         initialized: false,  // Not fully implemented yet
     };
@@ -98,7 +98,7 @@ pub fn initialize_xhci(base: u64) -> bool {
     
     let controller = UsbController {
         controller_type: UsbControllerType::XHCI,
-        base_address: base,
+        base_addr: base,
         devices: Vec::new(),
         initialized: false,  // Not fully implemented yet
     };

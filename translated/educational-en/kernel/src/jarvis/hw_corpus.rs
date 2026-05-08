@@ -53,15 +53,15 @@ fn cpu_sequences(p: &HardwareProfile, s: &mut Vec<String>) {
     s.push(format!("Q: Quel processeur? A: {}", p.cpu_brand));
     s.push(format!("Q: CPU vendor? A: {}", p.cpu_vendor));
     s.push(format!("Q: How many CPU cores? A: {} logical, {} physical",
-        p.maximum_logical_cpus, p.maximum_physical_cpus));
+        p.max_logical_cpus, p.max_physical_cpus));
     s.push(format!("Q: Combien de coeurs? A: {} logiques, {} physiques",
-        p.maximum_logical_cpus, p.maximum_physical_cpus));
+        p.max_logical_cpus, p.max_physical_cpus));
     s.push(format!("Q: CPU family/model? A: family {} model {} stepping {}",
         p.cpu_family, p.cpu_model, p.cpu_stepping));
 
     // TSC
-    if p.tsc_frequency_hz > 0 {
-        let mhz = p.tsc_frequency_hz / 1_000_000;
+    if p.tsc_freq_hz > 0 {
+        let mhz = p.tsc_freq_hz / 1_000_000;
         s.push(format!("Q: CPU frequency? A: ~{} MHz (TSC)", mhz));
         s.push(format!("Q: Quelle frequence CPU? A: ~{} MHz", mhz));
     }
@@ -192,11 +192,11 @@ fn pci_sequences(p: &HardwareProfile, s: &mut Vec<String>) {
     }
 
     // Top 5 PCI devices as factual knowledge
-    for (i, device) in p.pci_devices.iter().take(5).enumerate() {
+    for (i, dev) in p.pci_devices.iter().take(5).enumerate() {
         s.push(format!("PCI device {}: {} {} at {:02x}:{:02x}.{} (vendor {:04x}, device {:04x})",
-            i, device.class_name, device.subclass_name,
-            device.bus, device.device, device.function,
-            device.vendor_id, device.device_id));
+            i, dev.class_name, dev.subclass_name,
+            dev.bus, dev.device, dev.function,
+            dev.vendor_id, dev.device_id));
     }
 }
 
@@ -214,16 +214,16 @@ fn storage_sequences(p: &HardwareProfile, s: &mut Vec<String>) {
     s.push(format!("Q: Total storage? A: {} GB across {} device(s)",
         total_gb, p.storage_devices.len()));
 
-    for device in &p.storage_devices {
-        let capability_mb = device.capacity_bytes / (1024 * 1024);
+    for dev in &p.storage_devices {
+        let capability_mb = dev.capacity_bytes / (1024 * 1024);
         let kind = // Pattern matching — Rust's exhaustive branching construct.
-match device.kind {
+match dev.kind {
             crate::jarvis_hw::probe::StorageKind::Nvme => "NVMe",
             crate::jarvis_hw::probe::StorageKind::Sata => "SATA",
             crate::jarvis_hw::probe::StorageKind::Ide => "IDE",
             crate::jarvis_hw::probe::StorageKind::Unknown => "unknown",
         };
-        s.push(format!("Storage: {} ({}) — {} MB", device.name, kind, capability_mb));
+        s.push(format!("Storage: {} ({}) — {} MB", dev.name, kind, capability_mb));
     }
 
     // Partitions
@@ -248,9 +248,9 @@ fn encryption_sequences(p: &HardwareProfile, s: &mut Vec<String>) {
     s.push(format!("Q: Encrypted disks? A: {} encrypted volume(s) detected.",
         p.encryption_detected.len()));
 
-    for encrypt in &p.encryption_detected {
+    for enc in &p.encryption_detected {
         let encrypt_type = // Pattern matching — Rust's exhaustive branching construct.
-match encrypt.encryption_type {
+match enc.encryption_type {
             crate::jarvis_hw::probe::EncryptionType::Luks1 => "LUKS1",
             crate::jarvis_hw::probe::EncryptionType::Luks2 => "LUKS2",
             crate::jarvis_hw::probe::EncryptionType::BitLocker => "BitLocker",
@@ -260,7 +260,7 @@ match encrypt.encryption_type {
             crate::jarvis_hw::probe::EncryptionType::OpalSed => "Opal SED",
             crate::jarvis_hw::probe::EncryptionType::Unknown => "unknown",
         };
-        s.push(format!("Encryption: {} on {} — {}", encrypt_type, encrypt.disk_name, encrypt.detail));
+        s.push(format!("Encryption: {} on {} — {}", encrypt_type, enc.disk_name, enc.detail));
     }
 
     // Reasoning about encryption
@@ -320,9 +320,9 @@ fn usb_sequences(p: &HardwareProfile, s: &mut Vec<String>) {
     s.push(format!("Q: USB devices? A: {} device(s) on {} controller(s)",
         p.usb_devices.len(), p.usb_controller_count));
 
-    for device in p.usb_devices.iter().take(4) {
+    for dev in p.usb_devices.iter().take(4) {
         s.push(format!("USB: {} ({}) at address {}",
-            device.product, device.class_name, device.address));
+            dev.product, dev.class_name, dev.address));
     }
 }
 
@@ -344,9 +344,9 @@ fn timer_sequences(p: &HardwareProfile, s: &mut Vec<String>) {
         s.push(format!("Q: Available timers? A: {}", timer_str));
     }
 
-    if p.hpet_available && p.hpet_number_timers > 0 {
+    if p.hpet_available && p.hpet_num_timers > 0 {
         s.push(format!("HPET: {} timers, {}bit, vendor 0x{:04x}",
-            p.hpet_number_timers,
+            p.hpet_num_timers,
             if p.hpet_64bit { "64" } else { "32" },
             p.hpet_vendor_id));
     }
@@ -386,7 +386,7 @@ fn acpi_sequences(p: &HardwareProfile, s: &mut Vec<String>) {
     s.push(format!("Q: ACPI revision? A: {} (OEM: {})",
         p.acpi_revision, p.acpi_oem_id));
 
-    if p.fadt_hardware_reduced {
+    if p.fadt_hw_reduced {
         s.push(String::from("ACPI hardware-reduced mode is active."));
     }
 
@@ -473,10 +473,10 @@ fn reasoning_chains(p: &HardwareProfile, s: &mut Vec<String>) {
     }
 
     // Multi-core reasoning
-    if p.maximum_logical_cpus > 1 {
+    if p.max_logical_cpus > 1 {
         s.push(format!(
             "System has {} logical CPUs. Could parallelize multi-head attention across cores in the future.",
-            p.maximum_logical_cpus));
+            p.max_logical_cpus));
     } else {
         s.push(String::from(
             "Single CPU core. All computation is sequential. Kernel optimization matters most."));
@@ -488,7 +488,7 @@ fn reasoning_chains(p: &HardwareProfile, s: &mut Vec<String>) {
     // Hardware fingerprint summary
     s.push(format!(
         "System summary: {} cores, {} MB RAM, {} PCI devices, {} storage, {}GPU, {}net.",
-        p.maximum_logical_cpus, ram_mb, p.pci_device_count,
+        p.max_logical_cpus, ram_mb, p.pci_device_count,
         p.storage_devices.len(),
         if p.has_gpu { "" } else { "no " },
         if p.has_network { "" } else { "no " }));

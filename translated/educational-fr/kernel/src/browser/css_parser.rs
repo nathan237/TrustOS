@@ -71,7 +71,7 @@ pub enum CssValue {
 #[derive(Debug, Clone, Copy)]
 // Énumération — un type qui peut être l'une de plusieurs variantes.
 pub enum LengthUnit {
-    Pixel,     // pixels
+    Px,     // pixels
     Em,     // relative to font-size
     Rem,    // relative to root font-size
     Percent,
@@ -99,8 +99,8 @@ pub struct ComputedStyle {
     pub border_radius: f32,
     pub width: Option<f32>,
     pub height: Option<f32>,
-    pub maximum_width: Option<f32>,
-    pub minimum_width: Option<f32>,
+    pub max_width: Option<f32>,
+    pub min_width: Option<f32>,
     pub line_height: f32,
     pub opacity: f32,
     pub overflow: Overflow,
@@ -280,8 +280,8 @@ impl Default for ComputedStyle {
             border_radius: 0.0,
             width: None,
             height: None,
-            maximum_width: None,
-            minimum_width: None,
+            max_width: None,
+            min_width: None,
             line_height: 1.2,
             opacity: 1.0,
             overflow: Overflow::Visible,
@@ -568,13 +568,13 @@ fn hue_to_rgb(p: f32, q: f32, mut t: f32) -> f32 {
 /// CSS Parser
 struct CssParser<'a> {
     input: &'a str,
-    position: usize,
+    pos: usize,
 }
 
 // Bloc d'implémentation — définit les méthodes du type ci-dessus.
 impl<'a> CssParser<'a> {
     fn new(input: &'a str) -> Self {
-        Self { input, position: 0 }
+        Self { input, pos: 0 }
     }
     
     fn parse_stylesheet(&mut self) -> Stylesheet {
@@ -583,7 +583,7 @@ impl<'a> CssParser<'a> {
                 // Boucle infinie — tourne jusqu'à un `break` explicite.
 loop {
             self.skip_whitespace_and_comments();
-            if self.position >= self.input.len() {
+            if self.pos >= self.input.len() {
                 break;
             }
             
@@ -650,42 +650,42 @@ loop {
 match self.current_char()? {
                 '{' | ',' => break,
                 '*' => {
-                    self.position += 1;
+                    self.pos += 1;
                     elements.push(SelectorPart::Universal);
                 }
                 '.' => {
-                    self.position += 1;
+                    self.pos += 1;
                     let class = self.parse_identifier();
                     elements.push(SelectorPart::Class(class));
                 }
                 '#' => {
-                    self.position += 1;
+                    self.pos += 1;
                     let id = self.parse_identifier();
                     elements.push(SelectorPart::Id(id));
                 }
                 ':' => {
-                    self.position += 1;
+                    self.pos += 1;
                     if self.current_char() == Some(':') {
-                        self.position += 1; // ::pseudo-element
+                        self.pos += 1; // ::pseudo-element
                     }
                     let pseudo = self.parse_identifier();
                     elements.push(SelectorPart::Pseudo(pseudo));
                 }
                 '[' => {
-                    self.position += 1;
-                    let attribute = self.parse_attribute_selector();
-                    elements.push(attribute);
+                    self.pos += 1;
+                    let attr = self.parse_attribute_selector();
+                    elements.push(attr);
                 }
                 '>' => {
-                    self.position += 1;
+                    self.pos += 1;
                     elements.push(SelectorPart::Child);
                 }
                 '+' => {
-                    self.position += 1;
+                    self.pos += 1;
                     elements.push(SelectorPart::Adjacent);
                 }
                 '~' => {
-                    self.position += 1;
+                    self.pos += 1;
                     elements.push(SelectorPart::Sibling);
                 }
                 c if c.is_alphabetic() || c == '-' || c == '_' => {
@@ -716,7 +716,7 @@ match self.current_char()? {
             if c == '"' || c == '\'' || c.is_alphanumeric() {
                 break;
             }
-            self.position += 1;
+            self.pos += 1;
         }
         
         let value = self.parse_string_or_ident();
@@ -733,7 +733,7 @@ match self.current_char()? {
 loop {
             self.skip_whitespace();
             
-            if self.current_char() == Some('}') || self.position >= self.input.len() {
+            if self.current_char() == Some('}') || self.pos >= self.input.len() {
                 break;
             }
             
@@ -781,7 +781,7 @@ loop {
 match self.current_char() {
                 None | Some(';') | Some('}') => break,
                 Some('!') => {
-                    self.position += 1;
+                    self.pos += 1;
                     let word = self.parse_identifier();
                     if word == "important" {
                         important = true;
@@ -799,7 +799,8 @@ match self.current_char() {
         }
         
         let value = if values.len() == 1 {
-            values.into_iterator().next().unwrap()
+            // SAFETY: just checked len() == 1
+            values.into_iter().next().unwrap_or(CssValue::Keyword(String::new()))
         } else {
             CssValue::Multiple(values)
         };
@@ -814,16 +815,16 @@ match self.current_char() {
 match self.current_char()? {
             '#' => {
                 // Color
-                let start = self.position;
-                self.position += 1;
+                let start = self.pos;
+                self.pos += 1;
                 while let Some(c) = self.current_char() {
                     if c.is_ascii_hexdigit() {
-                        self.position += 1;
+                        self.pos += 1;
                     } else {
                         break;
                     }
                 }
-                let color_str = &self.input[start..self.position];
+                let color_str = &self.input[start..self.pos];
                 if let Some(color) = parse_color(color_str) {
                     Some(CssValue::Color(color))
                 } else {
@@ -845,7 +846,7 @@ match self.current_char()? {
                 }
             }
             c if c.is_alphabetic() => {
-                let start = self.position;
+                let start = self.pos;
                 let word = self.parse_identifier();
                 
                 // Check for url()
@@ -854,12 +855,12 @@ match self.current_char()? {
                     let url = if self.current_char() == Some('"') || self.current_char() == Some('\'') {
                         self.parse_quoted_string()
                     } else {
-                        let start = self.position;
+                        let start = self.pos;
                         while let Some(c) = self.current_char() {
                             if c == ')' { break; }
-                            self.position += 1;
+                            self.pos += 1;
                         }
-                        self.input[start..self.position].to_string()
+                        self.input[start..self.pos].to_string()
                     };
                     self.skip_whitespace();
                     self.consume_char(')');
@@ -876,10 +877,10 @@ match self.current_char()? {
                     let func_start = start;
                     while let Some(c) = self.current_char() {
                         if c == ')' { break; }
-                        self.position += 1;
+                        self.pos += 1;
                     }
                     self.consume_char(')');
-                    let func_str = &self.input[func_start..self.position];
+                    let func_str = &self.input[func_start..self.pos];
                     if let Some(color) = parse_color(func_str) {
                         return Some(CssValue::Color(color));
                     }
@@ -892,39 +893,39 @@ match self.current_char()? {
     }
     
     fn parse_number_with_unit(&mut self) -> (f32, Option<LengthUnit>) {
-        let start = self.position;
+        let start = self.pos;
         
         // Parse sign
         if self.current_char() == Some('-') {
-            self.position += 1;
+            self.pos += 1;
         }
         
         // Parse digits and decimal
         while let Some(c) = self.current_char() {
             if c.is_ascii_digit() || c == '.' {
-                self.position += 1;
+                self.pos += 1;
             } else {
                 break;
             }
         }
         
-        let number_str = &self.input[start..self.position];
+        let number_str = &self.input[start..self.pos];
         let num: f32 = number_str.parse().unwrap_or(0.0);
         
         // Parse unit
-        let unit_start = self.position;
+        let unit_start = self.pos;
         while let Some(c) = self.current_char() {
             if c.is_alphabetic() || c == '%' {
-                self.position += 1;
+                self.pos += 1;
             } else {
                 break;
             }
         }
         
-        let unit_str = &self.input[unit_start..self.position];
+        let unit_str = &self.input[unit_start..self.pos];
         let unit = // Correspondance de motifs — branchement exhaustif de Rust.
 match unit_str {
-            "px" => Some(LengthUnit::Pixel),
+            "px" => Some(LengthUnit::Px),
             "em" => Some(LengthUnit::Em),
             "rem" => Some(LengthUnit::Rem),
             "%" => Some(LengthUnit::Percent),
@@ -939,33 +940,33 @@ match unit_str {
     }
     
     fn parse_identifier(&mut self) -> String {
-        let start = self.position;
+        let start = self.pos;
         while let Some(c) = self.current_char() {
             if c.is_alphanumeric() || c == '-' || c == '_' {
-                self.position += 1;
+                self.pos += 1;
             } else {
                 break;
             }
         }
-        self.input[start..self.position].to_string()
+        self.input[start..self.pos].to_string()
     }
     
     fn parse_quoted_string(&mut self) -> String {
         let quote = self.current_char().unwrap_or('"');
-        self.position += 1;
+        self.pos += 1;
         
-        let start = self.position;
+        let start = self.pos;
         while let Some(c) = self.current_char() {
             if c == quote {
                 break;
             }
             if c == '\\' {
-                self.position += 2; // Skip escape
+                self.pos += 2; // Skip escape
             } else {
-                self.position += 1;
+                self.pos += 1;
             }
         }
-        let s = self.input[start..self.position].to_string();
+        let s = self.input[start..self.pos].to_string();
         self.consume_char(quote);
         s
     }
@@ -981,7 +982,7 @@ match self.current_char() {
     fn skip_whitespace(&mut self) {
         while let Some(c) = self.current_char() {
             if c.is_whitespace() {
-                self.position += 1;
+                self.pos += 1;
             } else {
                 break;
             }
@@ -995,13 +996,13 @@ loop {
             
             if self.starts_with("/*") {
                 // C-style comment
-                self.position += 2;
-                while self.position < self.input.len() {
+                self.pos += 2;
+                while self.pos < self.input.len() {
                     if self.starts_with("*/") {
-                        self.position += 2;
+                        self.pos += 2;
                         break;
                     }
-                    self.position += 1;
+                    self.pos += 1;
                 }
             } else {
                 break;
@@ -1013,39 +1014,39 @@ loop {
         // Skip @import, @media, etc.
         while let Some(c) = self.current_char() {
             if c == ';' {
-                self.position += 1;
+                self.pos += 1;
                 break;
             }
             if c == '{' {
                 // Skip block
                 let mut depth = 1;
-                self.position += 1;
-                while self.position < self.input.len() && depth > 0 {
+                self.pos += 1;
+                while self.pos < self.input.len() && depth > 0 {
                                         // Correspondance de motifs — branchement exhaustif de Rust.
-match self.input.chars().nth(self.position) {
+match self.input.chars().nth(self.pos) {
                         Some('{') => depth += 1,
                         Some('}') => depth -= 1,
                         _ => {}
                     }
-                    self.position += 1;
+                    self.pos += 1;
                 }
                 break;
             }
-            self.position += 1;
+            self.pos += 1;
         }
     }
     
     fn current_char(&self) -> Option<char> {
-        self.input.chars().nth(self.position)
+        self.input.chars().nth(self.pos)
     }
     
     fn starts_with(&self, s: &str) -> bool {
-        self.input[self.position..].starts_with(s)
+        self.input[self.pos..].starts_with(s)
     }
     
     fn consume_char(&mut self, expected: char) -> bool {
         if self.current_char() == Some(expected) {
-            self.position += 1;
+            self.pos += 1;
             true
         } else {
             false

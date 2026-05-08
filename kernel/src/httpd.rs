@@ -22,6 +22,8 @@ static SERVER_RUNNING: AtomicBool = AtomicBool::new(false);
 static SERVER_PORT: AtomicU32 = AtomicU32::new(8080);
 /// Total requests served
 static REQUESTS_SERVED: AtomicU64 = AtomicU64::new(0);
+/// Set by POST /api/reboot — triggers reboot after response is sent
+static REBOOT_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 /// Check if server is running
 pub fn is_running() -> bool {
@@ -77,22 +79,48 @@ pub fn start(port: u16, max_requests: u32) {
             let remote = format!("{}.{}.{}.{}", remote_ip[0], remote_ip[1], remote_ip[2], remote_ip[3]);
             crate::serial_println!("[HTTPD] Connection from {}:{}", remote, remote_port);
 
-            // Read request
-            let request = read_request(remote_ip, port, src_port, 3000);
+            // Read request (raw bytes — preserves binary body)
+            let raw = read_request_raw(remote_ip, remote_port, src_port, 3000);
 
-            if !request.is_empty() {
-                // Parse HTTP request
-                let (method, path) = parse_request(&request);
+            if !raw.is_empty() {
+                // Split at \r\n\r\n
+                let split = raw.windows(4).position(|w| w == b"\r\n\r\n").unwrap_or(raw.len());
+                let headers_bytes = &raw[..split];
+                let body_in_buf = if split + 4 <= raw.len() { &raw[split + 4..] } else { &[][..] };
+
+                let headers_str = core::str::from_utf8(headers_bytes).unwrap_or("");
+                let (method, path) = parse_request(headers_str);
                 crate::println!("{} {} — {}:{}", method, path, remote, remote_port);
 
+                // Read body for PUT/POST
+                let body: Vec<u8> = if method == "PUT" || method == "POST" {
+                    let content_length = parse_content_length(headers_str);
+                    if content_length > 0 {
+                        let mut body = Vec::from(body_in_buf);
+                        let still_needed = content_length.saturating_sub(body.len());
+                        if still_needed > 0 {
+                            let more = read_body_raw(remote_ip, remote_port, src_port, still_needed, 60_000);
+                            body.extend_from_slice(&more);
+                        }
+                        body
+                    } else {
+                        Vec::new()
+                    }
+                } else {
+                    Vec::new()
+                };
+
                 // Generate response
-                let response = route_request(&method, &path);
+                let response = route_request(&method, &path, &body);
 
                 // Send response
                 let _ = crate::netstack::tcp::send_data(remote_ip, remote_port, src_port, response.as_bytes());
 
-                // Brief delay for data to send
-                for _ in 0..50_000 { core::hint::spin_loop(); }
+                // Flush TX — poll multiple times to ensure data is on the wire before FIN
+                for _ in 0..5 {
+                    crate::netstack::poll();
+                    for _ in 0..20_000 { core::hint::spin_loop(); }
+                }
 
                 served += 1;
                 REQUESTS_SERVED.fetch_add(1, Ordering::SeqCst);
@@ -100,6 +128,15 @@ pub fn start(port: u16, max_requests: u32) {
 
             // Close connection
             let _ = crate::netstack::tcp::send_fin(remote_ip, remote_port, src_port);
+
+            // POST /api/reboot — reboot after response sent and FIN
+            if REBOOT_REQUESTED.load(Ordering::SeqCst) {
+                crate::serial_println!("[HTTPD] Reboot requested via HTTP — rebooting now");
+                crate::netstack::tcp::stop_listening(port);
+                SERVER_RUNNING.store(false, Ordering::SeqCst);
+                REBOOT_REQUESTED.store(false, Ordering::SeqCst);
+                crate::acpi::reboot();
+            }
         }
 
         // Check keyboard for Ctrl+C
@@ -127,17 +164,16 @@ pub fn stop() {
     SERVER_RUNNING.store(false, Ordering::SeqCst);
 }
 
-/// Read HTTP request from a connection
-fn read_request(remote_ip: [u8; 4], listen_port: u16, src_port: u16, timeout_ms: u32) -> String {
-    let mut data = Vec::new();
+/// Read HTTP headers as raw bytes (stops at \r\n\r\n, may include start of body)
+fn read_request_raw(remote_ip: [u8; 4], remote_port: u16, src_port: u16, timeout_ms: u32) -> Vec<u8> {
+    let mut data: Vec<u8> = Vec::new();
     let start = crate::logger::get_ticks();
 
     loop {
         crate::netstack::poll();
 
-        if let Some(chunk) = crate::netstack::tcp::recv_data(remote_ip, listen_port, src_port) {
+        if let Some(chunk) = crate::netstack::tcp::recv_data(remote_ip, remote_port, src_port) {
             data.extend_from_slice(&chunk);
-            // Check for end of HTTP headers
             if data.windows(4).any(|w| w == b"\r\n\r\n") {
                 break;
             }
@@ -150,30 +186,110 @@ fn read_request(remote_ip: [u8; 4], listen_port: u16, src_port: u16, timeout_ms:
         core::hint::spin_loop();
     }
 
-    String::from_utf8_lossy(&data).into_owned()
+    data
+}
+
+/// Read exactly `needed` additional body bytes after headers
+fn read_body_raw(remote_ip: [u8; 4], remote_port: u16, src_port: u16, needed: usize, timeout_ms: u32) -> Vec<u8> {
+    const MAX_UPLOAD: usize = 64 * 1024 * 1024; // 64 MB cap
+    let needed = needed.min(MAX_UPLOAD);
+    let mut data: Vec<u8> = Vec::with_capacity(needed.min(65536));
+    let start = crate::logger::get_ticks();
+
+    while data.len() < needed {
+        crate::netstack::poll();
+
+        if let Some(chunk) = crate::netstack::tcp::recv_data(remote_ip, remote_port, src_port) {
+            let take = (needed - data.len()).min(chunk.len());
+            data.extend_from_slice(&chunk[..take]);
+        }
+
+        if crate::logger::get_ticks().saturating_sub(start) > timeout_ms as u64 {
+            break;
+        }
+
+        core::hint::spin_loop();
+    }
+
+    data
 }
 
 /// Parse HTTP request line → (method, path)
-fn parse_request(request: &str) -> (String, String) {
-    let first_line = request.lines().next().unwrap_or("");
+fn parse_request(headers: &str) -> (String, String) {
+    let first_line = headers.lines().next().unwrap_or("");
     let parts: Vec<&str> = first_line.split_whitespace().collect();
     let method = String::from(*parts.first().unwrap_or(&"GET"));
     let path = String::from(*parts.get(1).unwrap_or(&"/"));
     (method, path)
 }
 
+/// Parse Content-Length header value, returns 0 if absent
+fn parse_content_length(headers: &str) -> usize {
+    for line in headers.lines() {
+        let lower = line.to_ascii_lowercase();
+        if lower.starts_with("content-length:") {
+            let val = lower["content-length:".len()..].trim();
+            return val.parse::<usize>().unwrap_or(0);
+        }
+    }
+    0
+}
+
 /// Route request to handler
-fn route_request(method: &str, path: &str) -> String {
-    match path {
-        "/" => page_index(),
-        "/status" => page_status(),
-        "/api/info" => api_info(),
-        "/api/stats" => api_stats(),
-        "/api/processes" => api_processes(),
-        "/favicon.ico" => response_404(),
-        _ if path.starts_with("/files") => page_files(path),
+fn route_request(method: &str, path: &str, body: &[u8]) -> String {
+    match (method, path) {
+        ("GET", "/") | ("HEAD", "/") => page_index(),
+        ("GET", "/status") => page_status(),
+        ("GET", "/api/info") => api_info(),
+        ("GET", "/api/stats") => api_stats(),
+        ("GET", "/api/processes") => api_processes(),
+        (_, "/favicon.ico") => response_404(),
+        ("GET", p) if p.starts_with("/files") => page_files(p),
+        ("PUT", p) | ("POST", p) if p.starts_with("/upload") => handle_upload(p, body),
+        ("POST", "/api/reboot") => {
+            // Send response first, then reboot
+            let r = http_response("application/json", "{\"status\":\"rebooting\"}");
+            // Caller will send this response, then we reboot after the request loop returns.
+            // Set a flag so the main loop reboots after sending.
+            REBOOT_REQUESTED.store(true, core::sync::atomic::Ordering::SeqCst);
+            r
+        }
         _ => response_404(),
     }
+}
+
+/// Handle file upload: PUT /upload/<filename>
+/// Writes body to RAMFS and attempts persistent VFS write.
+fn handle_upload(path: &str, body: &[u8]) -> String {
+    // Extract filename from /upload/<filename>
+    let filename = path.trim_start_matches("/upload").trim_start_matches('/');
+    if filename.is_empty() || filename.contains("..\\") || filename.contains("../") {
+        return response_400("Invalid filename");
+    }
+    if body.is_empty() {
+        return response_400("Empty body");
+    }
+
+    let size = body.len();
+    crate::serial_println!("[HTTPD] upload: {} ({} bytes)", filename, size);
+
+    // Write to RAMFS (always available, no risk of panic)
+    let ramfs_path = format!("/uploads/{}", filename);
+    let ramfs_ok = crate::ramfs::with_fs(|fs| {
+        let _ = fs.mkdir("/uploads");
+        let _ = fs.touch(&ramfs_path);
+        fs.write_file(&ramfs_path, body)
+    }).is_ok();
+
+    let storage = if ramfs_ok { "RAMFS" } else { "write failed" };
+
+    crate::serial_println!("[HTTPD] upload done: {} -> {}", filename, storage);
+
+    let body_str = format!(
+        "{{\"status\":\"ok\",\"file\":\"{}\",\"bytes\":{},\"storage\":\"{}\"}}",
+        filename, size, storage
+    );
+    response_201(&body_str)
 }
 
 /// HTTP 200 response wrapper
@@ -187,6 +303,36 @@ fn http_response(content_type: &str, body: &str) -> String {
          \r\n\
          {}",
         content_type, body.len(), body
+    )
+}
+
+/// HTTP 201 Created response
+fn response_201(body: &str) -> String {
+    format!(
+        "HTTP/1.0 201 Created\r\n\
+         Content-Type: application/json\r\n\
+         Content-Length: {}\r\n\
+         Server: TrustOS/0.4.0\r\n\
+         Access-Control-Allow-Origin: *\r\n\
+         Connection: close\r\n\
+         \r\n\
+         {}",
+        body.len(), body
+    )
+}
+
+/// HTTP 400 Bad Request response
+fn response_400(reason: &str) -> String {
+    let body = format!("{{\"error\":\"{}\"}}", reason);
+    format!(
+        "HTTP/1.0 400 Bad Request\r\n\
+         Content-Type: application/json\r\n\
+         Content-Length: {}\r\n\
+         Server: TrustOS/0.4.0\r\n\
+         Connection: close\r\n\
+         \r\n\
+         {}",
+        body.len(), body
     )
 }
 

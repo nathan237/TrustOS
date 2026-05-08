@@ -15,7 +15,7 @@ fn mac_fallback_config() -> ([u8; 4], [u8; 4], Option<[u8; 4]>) {
 
 /// Check if dest_ip is a broadcast address (global or subnet broadcast).
 /// Broadcast packets use Ethernet MAC FF:FF:FF:FF:FF:FF, no ARP needed.
-fn is_broadcast(dest: [u8; 4], source: &[u8; 4], mask: &[u8; 4]) -> bool {
+fn is_broadcast(dest: [u8; 4], src: &[u8; 4], mask: &[u8; 4]) -> bool {
     // Global broadcast
     if dest == [255, 255, 255, 255] {
         return true;
@@ -71,9 +71,9 @@ pub fn handle_packet(data: &[u8]) {
     
     let version = data[0] >> 4;
     let ihl = (data[0] & 0x0F) as usize;
-    let header_length = ihl * 4;
+    let header_len = ihl * 4;
     
-    if version != 4 || data.len() < header_length {
+    if version != 4 || data.len() < header_len {
         return;
     }
     
@@ -81,7 +81,7 @@ pub fn handle_packet(data: &[u8]) {
     let total_length = u16::from_be_bytes([data[2], data[3]]) as usize;
     
     // Validate total length
-    if total_length < header_length || total_length > data.len() {
+    if total_length < header_len || total_length > data.len() {
         return;
     }
     
@@ -91,7 +91,7 @@ pub fn handle_packet(data: &[u8]) {
     let dest = [data[16], data[17], data[18], data[19]];
     
     // Use total_length to get actual payload, ignoring Ethernet padding
-    let payload = &data[header_length..total_length];
+    let payload = &data[header_len..total_length];
     
     // ── Firewall: INPUT chain ──
     let (sport, dport) = extract_ports(protocol, payload);

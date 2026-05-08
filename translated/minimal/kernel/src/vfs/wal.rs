@@ -10,174 +10,174 @@
 use spin::Mutex;
 
 const H_: usize = 512;
-const BIW_: u32 = 0x57414C21; 
-const VC_: usize = 63;
+const BLC_: u32 = 0x57414C21; 
+const WL_: usize = 63;
 
 
 
 
-const YN_: u64 = 33;
-const BIV_: u64 = 34; 
+const ZQ_: u64 = 33;
+const BLB_: u64 = 34; 
 
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct Bwp {
-    sj: u32,
-    ame: u32,
-    gda: u32, 
-    eil: u64,   
-    fzo: [u8; H_ - 20],
+struct Agp {
+    magic: u32,
+    entry_count: u32,
+    committed: u32, 
+    sequence: u64,   
+    _pad: [u8; H_ - 20],
 }
 
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct Dly {
-    zrb: u64,        
-    f: [u8; H_ - 8], 
+struct Bfm {
+    target_sector: u64,        
+    data: [u8; H_ - 8], 
 }
 
 
 pub struct WriteAheadLog {
-    aln: [(u64, [u8; H_]); VC_],
-    az: usize,
-    eil: u64,
-    gh: bool,
+    pending: [(u64, [u8; H_]); WL_],
+    count: usize,
+    sequence: u64,
+    active: bool,
 }
 
 impl WriteAheadLog {
     pub const fn new() -> Self {
         Self {
-            aln: [(0, [0u8; H_]); VC_],
-            az: 0,
-            eil: 0,
-            gh: false,
+            pending: [(0, [0u8; H_]); WL_],
+            count: 0,
+            sequence: 0,
+            active: false,
         }
     }
 
     
-    pub fn myo(&mut self) {
-        self.az = 0;
-        self.gh = true;
+    pub fn begin(&mut self) {
+        self.count = 0;
+        self.active = true;
     }
 
     
-    pub fn ljr(&mut self, jk: u64, f: &[u8; H_]) -> Result<(), ()> {
-        if !self.gh || self.az >= VC_ {
+    pub fn log_write(&mut self, dj: u64, data: &[u8; H_]) -> Result<(), ()> {
+        if !self.active || self.count >= WL_ {
             return Err(());
         }
-        self.aln[self.az] = (jk, *f);
-        self.az += 1;
+        self.pending[self.count] = (dj, *data);
+        self.count += 1;
         Ok(())
     }
 
     
-    pub fn dfc(
+    pub fn commit(
         &mut self,
-        aby: &dyn Fn(u64, &[u8; H_]) -> Result<(), ()>,
+        write_sector: &dyn Fn(u64, &[u8; H_]) -> Result<(), ()>,
     ) -> Result<(), ()> {
-        if self.az == 0 {
-            self.gh = false;
+        if self.count == 0 {
+            self.active = false;
             return Ok(());
         }
 
-        self.eil += 1;
+        self.sequence += 1;
 
         
-        let mut hmr = [0u8; H_];
-        let zj = unsafe { &mut *(hmr.mw() as *mut Bwp) };
-        zj.sj = BIW_;
-        zj.ame = self.az as u32;
-        zj.gda = 1;
-        zj.eil = self.eil;
-        aby(YN_, &hmr)?;
+        let mut drg = [0u8; H_];
+        let kp = unsafe { &mut *(drg.as_mut_ptr() as *mut Agp) };
+        kp.magic = BLC_;
+        kp.entry_count = self.count as u32;
+        kp.committed = 1;
+        kp.sequence = self.sequence;
+        write_sector(ZQ_, &drg)?;
 
         
-        for a in 0..self.az {
-            let (cd, ref f) = self.aln[a];
+        for i in 0..self.count {
+            let (target, ref data) = self.pending[i];
             
-            let mut fhv = [0u8; H_];
-            fhv[0..8].dg(&cd.ho());
-            let zg = core::cmp::v(f.len(), H_ - 8);
-            fhv[8..8 + zg].dg(&f[..zg]);
-            aby(BIV_ + a as u64, &fhv)?;
+            let mut ciz = [0u8; H_];
+            ciz[0..8].copy_from_slice(&target.to_le_bytes());
+            let mb = core::cmp::min(data.len(), H_ - 8);
+            ciz[8..8 + mb].copy_from_slice(&data[..mb]);
+            write_sector(BLB_ + i as u64, &ciz)?;
         }
 
         
-        for a in 0..self.az {
-            let (cd, ref f) = self.aln[a];
-            aby(cd, f)?;
+        for i in 0..self.count {
+            let (target, ref data) = self.pending[i];
+            write_sector(target, data)?;
         }
 
         
-        let ajs = [0u8; H_];
-        aby(YN_, &ajs)?;
+        let zero = [0u8; H_];
+        write_sector(ZQ_, &zero)?;
 
-        self.az = 0;
-        self.gh = false;
+        self.count = 0;
+        self.active = false;
         Ok(())
     }
 
     
-    pub fn ewn(&self) -> usize {
-        self.az
+    pub fn pending_count(&self) -> usize {
+        self.count
     }
 }
 
 
-static Baq: Mutex<WriteAheadLog> = Mutex::new(WriteAheadLog::new());
+static Vy: Mutex<WriteAheadLog> = Mutex::new(WriteAheadLog::new());
 
 
-pub fn vxh(
-    xr: &dyn Fn(u64, &mut [u8; H_]) -> Result<(), ()>,
-    aby: &dyn Fn(u64, &[u8; H_]) -> Result<(), ()>,
+pub fn ofx(
+    read_sector: &dyn Fn(u64, &mut [u8; H_]) -> Result<(), ()>,
+    write_sector: &dyn Fn(u64, &[u8; H_]) -> Result<(), ()>,
 ) -> Result<usize, ()> {
-    let mut hmr = [0u8; H_];
-    xr(YN_, &mut hmr)?;
+    let mut drg = [0u8; H_];
+    read_sector(ZQ_, &mut drg)?;
 
-    let zj = unsafe { &*(hmr.fq() as *const Bwp) };
-    if zj.sj != BIW_ || zj.gda != 1 || zj.ame == 0 {
+    let kp = unsafe { &*(drg.as_ptr() as *const Agp) };
+    if kp.magic != BLC_ || kp.committed != 1 || kp.entry_count == 0 {
         return Ok(0); 
     }
 
-    let az = zj.ame as usize;
-    crate::log!("[WAL] Replaying {} pending writes from sequence {}", az, zj.eil);
+    let count = kp.entry_count as usize;
+    crate::log!("[WAL] Replaying {} pending writes from sequence {}", count, kp.sequence);
 
-    for a in 0..az.v(VC_) {
-        let mut fhv = [0u8; H_];
-        xr(BIV_ + a as u64, &mut fhv)?;
+    for i in 0..count.min(WL_) {
+        let mut ciz = [0u8; H_];
+        read_sector(BLB_ + i as u64, &mut ciz)?;
 
-        let cd = u64::dj(fhv[0..8].try_into().unwrap_or([0; 8]));
+        let target = u64::from_le_bytes(ciz[0..8].try_into().unwrap_or([0; 8]));
         
-        let mut f = [0u8; H_];
-        let zg = core::cmp::v(H_ - 8, H_);
-        f[..zg].dg(&fhv[8..8 + zg]);
+        let mut data = [0u8; H_];
+        let mb = core::cmp::min(H_ - 8, H_);
+        data[..mb].copy_from_slice(&ciz[8..8 + mb]);
         
-        aby(cd, &f)?;
+        write_sector(target, &data)?;
     }
 
     
-    let ajs = [0u8; H_];
-    aby(YN_, &ajs)?;
+    let zero = [0u8; H_];
+    write_sector(ZQ_, &zero)?;
 
-    crate::log!("[WAL] Replay complete — {} writes applied", az);
-    Ok(az)
+    crate::log!("[WAL] Replay complete — {} writes applied", count);
+    Ok(count)
 }
 
 
-pub fn myo() {
-    Baq.lock().myo();
+pub fn begin() {
+    Vy.lock().begin();
 }
 
 
-pub fn ljr(jk: u64, f: &[u8; H_]) -> Result<(), ()> {
-    Baq.lock().ljr(jk, f)
+pub fn log_write(dj: u64, data: &[u8; H_]) -> Result<(), ()> {
+    Vy.lock().log_write(dj, data)
 }
 
 
-pub fn dfc(
-    aby: &dyn Fn(u64, &[u8; H_]) -> Result<(), ()>,
+pub fn commit(
+    write_sector: &dyn Fn(u64, &[u8; H_]) -> Result<(), ()>,
 ) -> Result<(), ()> {
-    Baq.lock().dfc(aby)
+    Vy.lock().commit(write_sector)
 }

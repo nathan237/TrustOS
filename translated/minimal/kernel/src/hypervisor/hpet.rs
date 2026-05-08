@@ -24,28 +24,28 @@
 
 
 
-pub const ADK_: u64 = 0xFED0_0000;
+pub const AFA_: u64 = 0xFED0_0000;
 
 
 
-const AVX_: u32 = 69_841_279; 
+const AYA_: u32 = 69_841_279; 
 
 
-const EN_: usize = 3;
+const FB_: usize = 3;
 
 
 mod regs {
-    pub const ASR_: u64      = 0x000;  
-    pub const Bho: u64        = 0x010;  
-    pub const Bhq: u64         = 0x020;  
-    pub const AZF_: u64 = 0x0F0;  
+    pub const AUV_: u64      = 0x000;  
+    pub const Za: u64        = 0x010;  
+    pub const Zc: u64         = 0x020;  
+    pub const BBG_: u64 = 0x0F0;  
     
     
-    pub const LF_: u64   = 0x100;
-    pub const LH_: u64 = 0x20;
-    pub const BHJ_: u64      = 0x00;   
-    pub const BHI_: u64      = 0x08;   
-    pub const BHK_: u64       = 0x10;   
+    pub const MA_: u64   = 0x100;
+    pub const MC_: u64 = 0x20;
+    pub const BJN_: u64      = 0x00;   
+    pub const BJM_: u64      = 0x08;   
+    pub const BJO_: u64       = 0x10;   
 }
 
 
@@ -54,9 +54,9 @@ pub struct HpetTimer {
     
     pub config: u64,
     
-    pub dpb: u64,
+    pub comparator: u64,
     
-    pub kxk: u64,
+    pub fsb_route: u64,
 }
 
 impl Default for HpetTimer {
@@ -67,8 +67,8 @@ impl Default for HpetTimer {
             
             
             config: 0x0000_0000_00F0_0030, 
-            dpb: 0,
-            kxk: 0,
+            comparator: 0,
+            fsb_route: 0,
         }
     }
 }
@@ -79,33 +79,33 @@ pub struct HpetState {
     
     pub config: u64,
     
-    pub cru: u64,
+    pub isr: u64,
     
-    pub dpe: u64,
+    pub counter_offset: u64,
     
-    pub mng: u64,
+    pub tsc_at_enable: u64,
     
-    pub iq: bool,
+    pub enabled: bool,
     
-    pub axe: [HpetTimer; EN_],
+    pub timers: [HpetTimer; FB_],
 }
 
 impl Default for HpetState {
     fn default() -> Self {
-        let mut axe: [HpetTimer; EN_] = core::array::nwe(|_| HpetTimer::default());
+        let mut timers: [HpetTimer; FB_] = core::array::from_fn(|_| HpetTimer::default());
         
-        axe[0].config = 0x0000_0000_00F0_0070; 
+        timers[0].config = 0x0000_0000_00F0_0070; 
         
-        axe[1].config = 0x0000_0000_00F0_0030;
-        axe[2].config = 0x0000_0000_00F0_0030;
+        timers[1].config = 0x0000_0000_00F0_0030;
+        timers[2].config = 0x0000_0000_00F0_0030;
         
         Self {
             config: 0,
-            cru: 0,
-            dpe: 0,
-            mng: 0,
-            iq: false,
-            axe,
+            isr: 0,
+            counter_offset: 0,
+            tsc_at_enable: 0,
+            enabled: false,
+            timers,
         }
     }
 }
@@ -113,50 +113,50 @@ impl Default for HpetState {
 impl HpetState {
     
     
-    fn lke(&self) -> u64 {
-        if !self.iq {
-            return self.dpe;
+    fn main_counter(&self) -> u64 {
+        if !self.enabled {
+            return self.counter_offset;
         }
-        let xna = ow();
-        let xmz = xna.nj(self.mng);
+        let pof = ey();
+        let poe = pof.wrapping_sub(self.tsc_at_enable);
         
         
         
         
-        let tqj = xmz / 140;
-        self.dpe.cn(tqj)
+        let mmm = poe / 140;
+        self.counter_offset.wrapping_add(mmm)
     }
     
     
     
-    pub fn read(&self, l: u64, aw: u8) -> u64 {
-        let mou = match l {
-            regs::ASR_ => {
+    pub fn read(&self, offset: u64, size: u8) -> u64 {
+        let hbd = match offset {
+            regs::AUV_ => {
                 
                 
                 
                 
                 
-                let uwo = (EN_ as u64 - 1) << 8;
-                let eoc = 1u64 << 13;
-                let vym = 0x01u64; 
-                ((AVX_ as u64) << 32) | uwo | eoc | vym
+                let nlx = (FB_ as u64 - 1) << 8;
+                let counter_64bit = 1u64 << 13;
+                let ogs = 0x01u64; 
+                ((AYA_ as u64) << 32) | nlx | counter_64bit | ogs
             }
-            regs::Bho => self.config,
-            regs::Bhq => self.cru,
-            regs::AZF_ => self.lke(),
+            regs::Za => self.config,
+            regs::Zc => self.isr,
+            regs::BBG_ => self.main_counter(),
             
             
-            dz if dz >= regs::LF_ && dz < regs::LF_ + (EN_ as u64) * regs::LH_ + 0x18 => {
-                let idp = dz - regs::LF_;
-                let dwv = (idp / regs::LH_) as usize;
-                let lym = idp % regs::LH_;
+            off if off >= regs::MA_ && off < regs::MA_ + (FB_ as u64) * regs::MC_ + 0x18 => {
+                let ebt = off - regs::MA_;
+                let bpl = (ebt / regs::MC_) as usize;
+                let gqw = ebt % regs::MC_;
                 
-                if dwv < EN_ {
-                    match lym {
-                        regs::BHJ_ => self.axe[dwv].config,
-                        regs::BHI_ => self.axe[dwv].dpb,
-                        regs::BHK_  => self.axe[dwv].kxk,
+                if bpl < FB_ {
+                    match gqw {
+                        regs::BJN_ => self.timers[bpl].config,
+                        regs::BJM_ => self.timers[bpl].comparator,
+                        regs::BJO_  => self.timers[bpl].fsb_route,
                         _ => 0,
                     }
                 } else {
@@ -167,66 +167,66 @@ impl HpetState {
         };
         
         
-        if aw == 4 {
-            if l & 0x4 != 0 {
+        if size == 4 {
+            if offset & 0x4 != 0 {
                 
-                (mou >> 32) & 0xFFFF_FFFF
+                (hbd >> 32) & 0xFFFF_FFFF
             } else {
-                mou & 0xFFFF_FFFF
+                hbd & 0xFFFF_FFFF
             }
         } else {
-            mou
+            hbd
         }
     }
     
     
-    pub fn write(&mut self, l: u64, bn: u64, aw: u8) {
-        match l {
-            regs::ASR_ => {} 
+    pub fn write(&mut self, offset: u64, value: u64, size: u8) {
+        match offset {
+            regs::AUV_ => {} 
             
-            regs::Bho => {
-                let osg = self.iq;
-                self.config = bn & 0x3; 
-                self.iq = (bn & 1) != 0;
+            regs::Za => {
+                let isb = self.enabled;
+                self.config = value & 0x3; 
+                self.enabled = (value & 1) != 0;
                 
-                if self.iq && !osg {
+                if self.enabled && !isb {
                     
-                    self.mng = ow();
-                } else if !self.iq && osg {
+                    self.tsc_at_enable = ey();
+                } else if !self.enabled && isb {
                     
-                    self.dpe = self.lke();
+                    self.counter_offset = self.main_counter();
                 }
             }
             
-            regs::Bhq => {
+            regs::Zc => {
                 
-                self.cru &= !bn;
+                self.isr &= !value;
             }
             
-            regs::AZF_ => {
+            regs::BBG_ => {
                 
-                if !self.iq {
-                    if aw == 4 {
-                        if l & 0x4 != 0 {
-                            self.dpe = (self.dpe & 0xFFFF_FFFF) | (bn << 32);
+                if !self.enabled {
+                    if size == 4 {
+                        if offset & 0x4 != 0 {
+                            self.counter_offset = (self.counter_offset & 0xFFFF_FFFF) | (value << 32);
                         } else {
-                            self.dpe = (self.dpe & !0xFFFF_FFFF) | (bn & 0xFFFF_FFFF);
+                            self.counter_offset = (self.counter_offset & !0xFFFF_FFFF) | (value & 0xFFFF_FFFF);
                         }
                     } else {
-                        self.dpe = bn;
+                        self.counter_offset = value;
                     }
                 }
             }
             
             
-            dz if dz >= regs::LF_ && dz < regs::LF_ + (EN_ as u64) * regs::LH_ + 0x18 => {
-                let idp = dz - regs::LF_;
-                let dwv = (idp / regs::LH_) as usize;
-                let lym = idp % regs::LH_;
+            off if off >= regs::MA_ && off < regs::MA_ + (FB_ as u64) * regs::MC_ + 0x18 => {
+                let ebt = off - regs::MA_;
+                let bpl = (ebt / regs::MC_) as usize;
+                let gqw = ebt % regs::MC_;
                 
-                if dwv < EN_ {
-                    match lym {
-                        regs::BHJ_ => {
+                if bpl < FB_ {
+                    match gqw {
+                        regs::BJN_ => {
                             
                             
                             
@@ -234,15 +234,15 @@ impl HpetState {
                             
                             
                             
-                            let jmr: u64 = self.axe[dwv].config & 0xFFFF_FFFF_FFFF_8181;
-                            let xvf: u64 = 0x0000_0000_0000_7E7E;
-                            self.axe[dwv].config = jmr | (bn & xvf);
+                            let eyw: u64 = self.timers[bpl].config & 0xFFFF_FFFF_FFFF_8181;
+                            let pva: u64 = 0x0000_0000_0000_7E7E;
+                            self.timers[bpl].config = eyw | (value & pva);
                         }
-                        regs::BHI_ => {
-                            self.axe[dwv].dpb = bn;
+                        regs::BJM_ => {
+                            self.timers[bpl].comparator = value;
                         }
-                        regs::BHK_ => {
-                            self.axe[dwv].kxk = bn;
+                        regs::BJO_ => {
+                            self.timers[bpl].fsb_route = value;
                         }
                         _ => {}
                     }
@@ -254,20 +254,20 @@ impl HpetState {
     
     
     
-    pub fn qzy(&self) -> [(bool, u8); EN_] {
-        let va = self.lke();
-        let mut result = [(false, 0u8); EN_];
+    pub fn check_timers(&self) -> [(bool, u8); FB_] {
+        let counter = self.main_counter();
+        let mut result = [(false, 0u8); FB_];
         
-        for a in 0..EN_ {
-            let config = self.axe[a].config;
-            let iq = (config >> 2) & 1 != 0;
-            if !self.iq || !iq {
+        for i in 0..FB_ {
+            let config = self.timers[i].config;
+            let enabled = (config >> 2) & 1 != 0;
+            if !self.enabled || !enabled {
                 continue;
             }
-            let dpb = self.axe[a].dpb;
-            if va >= dpb && dpb > 0 {
-                let lft = ((config >> 9) & 0x1F) as u8;
-                result[a] = (true, lft);
+            let comparator = self.timers[i].comparator;
+            if counter >= comparator && comparator > 0 {
+                let gdo = ((config >> 9) & 0x1F) as u8;
+                result[i] = (true, gdo);
             }
         }
         result
@@ -276,10 +276,10 @@ impl HpetState {
 
 
 #[inline(always)]
-fn ow() -> u64 {
+fn ey() -> u64 {
     #[cfg(target_arch = "x86_64")]
     unsafe {
-        core::arch::x86_64::dxw()
+        core::arch::x86_64::_rdtsc()
     }
     #[cfg(not(target_arch = "x86_64"))]
     { 0 }
@@ -294,39 +294,39 @@ mod tests {
     use super::*;
     
     #[test]
-    fn psg() {
+    fn jlu() {
         let hpet = HpetState::default();
-        assert!(!hpet.iq);
+        assert!(!hpet.enabled);
         assert_eq!(hpet.config, 0);
-        assert_eq!(hpet.axe.len(), 3);
+        assert_eq!(hpet.timers.len(), 3);
     }
     
     #[test]
-    fn psi() {
+    fn jlw() {
         let hpet = HpetState::default();
-        let cew = hpet.read(0x000, 8);
-        let awn = (cew >> 32) as u32;
-        assert_eq!(awn, AVX_);
-        let uwn = ((cew >> 8) & 0x1F) as usize;
-        assert_eq!(uwn, 2); 
-        assert_ne!(cew & (1 << 13), 0); 
+        let agk = hpet.read(0x000, 8);
+        let zd = (agk >> 32) as u32;
+        assert_eq!(zd, AYA_);
+        let nlw = ((agk >> 8) & 0x1F) as usize;
+        assert_eq!(nlw, 2); 
+        assert_ne!(agk & (1 << 13), 0); 
     }
     
     #[test]
-    fn psh() {
+    fn jlv() {
         let mut hpet = HpetState::default();
-        assert!(!hpet.iq);
+        assert!(!hpet.enabled);
         hpet.write(0x010, 1, 8); 
-        assert!(hpet.iq);
+        assert!(hpet.enabled);
         hpet.write(0x010, 0, 8); 
-        assert!(!hpet.iq);
+        assert!(!hpet.enabled);
     }
     
     #[test]
-    fn zrs() {
+    fn qzm() {
         let mut hpet = HpetState::default();
         hpet.write(0x0F0, 0x12345, 8); 
-        let r = hpet.read(0x0F0, 8);
-        assert_eq!(r, 0x12345);
+        let c = hpet.read(0x0F0, 8);
+        assert_eq!(c, 0x12345);
     }
 }

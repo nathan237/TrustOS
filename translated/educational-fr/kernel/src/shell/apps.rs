@@ -643,9 +643,9 @@ const i64) -> i64 {
                 match id {
                     0 | 1 => { // print / println
                         if argc > 0 {
-                            let value = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+                            let val = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe { *argv };
-                            crate::print!("{}", value);
+                            crate::print!("{}", val);
                         }
                         if id == 1 { crate::println!(); }
                         0
@@ -829,21 +829,21 @@ pub(super) fn command_trustlang_showcase() {
         crate::framebuffer::set_double_buffer_mode(true);
     }
 
-    let mut buffer = alloc::vec![0u32; w * h];
+    let mut buf = alloc::vec![0u32; w * h];
 
     // --------------- HELPER CLOSURES ---------------
 
-    let draw_big_char = |buffer: &mut [u32], w: usize, h: usize, cx: usize, cy: usize, c: char, color: u32, scale: usize| {
+    let draw_big_char = |buf: &mut [u32], w: usize, h: usize, cx: usize, cy: usize, c: char, color: u32, scale: usize| {
         let glyph = crate::framebuffer::font::get_glyph(c);
         for (row, &bits) in glyph.iter().enumerate() {
             for bit in 0..8u32 {
                 if bits & (0x80 >> bit) != 0 {
                     for sy in 0..scale {
                         for sx in 0..scale {
-                            let pixel = cx + bit as usize * scale + sx;
+                            let px = cx + bit as usize * scale + sx;
                             let py = cy + row * scale + sy;
-                            if pixel < w && py < h {
-                                buffer[py * w + pixel] = color;
+                            if px < w && py < h {
+                                buf[py * w + px] = color;
                             }
                         }
                     }
@@ -852,44 +852,44 @@ pub(super) fn command_trustlang_showcase() {
         }
     };
 
-    let draw_text_at = |buffer: &mut [u32], w: usize, h: usize, x: usize, y: usize, text: &str, color: u32, scale: usize| {
+    let draw_text_at = |buf: &mut [u32], w: usize, h: usize, x: usize, y: usize, text: &str, color: u32, scale: usize| {
         for (i, c) in text.chars().enumerate() {
-            draw_big_char(buffer, w, h, x + i * 8 * scale, y, c, color, scale);
+            draw_big_char(buf, w, h, x + i * 8 * scale, y, c, color, scale);
         }
     };
 
-    let draw_text_centered = |buffer: &mut [u32], w: usize, h: usize, y: usize, text: &str, color: u32, scale: usize| {
+    let draw_text_centered = |buf: &mut [u32], w: usize, h: usize, y: usize, text: &str, color: u32, scale: usize| {
         let tw = text.len() * 8 * scale;
         let sx = if tw < w { (w - tw) / 2 } else { 0 };
         for (i, c) in text.chars().enumerate() {
-            draw_big_char(buffer, w, h, sx + i * 8 * scale, y, c, color, scale);
+            draw_big_char(buf, w, h, sx + i * 8 * scale, y, c, color, scale);
         }
     };
 
-    let blit_buffer = |buffer: &[u32], w: usize, h: usize| {
-        if let Some((bb_pointer, _bb_w, bb_h, bb_stride)) = crate::framebuffer::get_backbuffer_information() {
-            let bb = bb_pointer as *mut u32;
+    let blit_buffer = |buf: &[u32], w: usize, h: usize| {
+        if let Some((bb_ptr, _bb_w, bb_h, bb_stride)) = crate::framebuffer::get_backbuffer_information() {
+            let bb = bb_ptr as *mut u32;
             let bb_s = bb_stride as usize;
-            for y in 0..h.minimum(bb_h as usize) {
+            for y in 0..h.min(bb_h as usize) {
                                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-                    core::ptr::copy_nonoverlapping(buffer[y * w..].as_pointer(), bb.add(y * bb_s), w);
+                    core::ptr::copy_nonoverlapping(buf[y * w..].as_ptr(), bb.add(y * bb_s), w);
                 }
             }
         }
         crate::framebuffer::swap_buffers();
     };
 
-    let clear_buffer = |buffer: &mut [u32]| {
-        for p in buffer.iterator_mut() { *p = 0xFF000000; }
+    let clear_buffer = |buf: &mut [u32]| {
+        for p in buf.iter_mut() { *p = 0xFF000000; }
     };
 
     // Matrix rain state
     let mut rain_cols: alloc::vec::Vec<u16> = (0..w / 8 + 1).map(|i| ((i * 37 + 13) % h) as u16).collect();
     let rain_speeds: alloc::vec::Vec<u8> = (0..w / 8 + 1).map(|i| (((i * 7 + 3) % 4) + 1) as u8).collect();
 
-    let draw_rain = |buffer: &mut [u32], w: usize, h: usize, cols: &mut [u16], speeds: &[u8], frame: u32| {
-        for pixel in buffer.iterator_mut() {
+    let draw_rain = |buf: &mut [u32], w: usize, h: usize, cols: &mut [u16], speeds: &[u8], frame: u32| {
+        for pixel in buf.iter_mut() {
             let g = ((*pixel >> 8) & 0xFF) as u32;
             if g > 0 { *pixel = 0xFF000000 | (g.saturating_sub(6) << 8); }
         }
@@ -906,8 +906,8 @@ unsafe {
                 if py >= h { break; }
                 for bit in 0..8u32 {
                     if bits & (0x80 >> bit) != 0 {
-                        let pixel = x + bit as usize;
-                        if pixel < w { buffer[py * w + pixel] = 0xFF00FF44; }
+                        let px = x + bit as usize;
+                        if px < w { buf[py * w + px] = 0xFF00FF44; }
                     }
                 }
             }
@@ -918,19 +918,19 @@ unsafe {
     let frame_mouse: u64 = 30;
 
     // -- Fade out: gradually darken buffer over ~78 frames (~2.3s) --
-    let do_fade = |buffer: &mut [u32], w: usize, h: usize, blit: &dyn Fn(&[u32], usize, usize)| {
+    let do_fade = |buf: &mut [u32], w: usize, h: usize, blit: &dyn Fn(&[u32], usize, usize)| {
         for _ in 0..78 {
-            for pixel in buffer.iterator_mut() {
-                let r = ((*pixel >> 16) & 0xFF).saturating_sub(4);
-                let g = ((*pixel >> 8) & 0xFF).saturating_sub(4);
-                let b = (*pixel & 0xFF).saturating_sub(4);
-                *pixel = 0xFF000000 | (r << 16) | (g << 8) | b;
+            for px in buf.iter_mut() {
+                let r = ((*px >> 16) & 0xFF).saturating_sub(4);
+                let g = ((*px >> 8) & 0xFF).saturating_sub(4);
+                let b = (*px & 0xFF).saturating_sub(4);
+                *px = 0xFF000000 | (r << 16) | (g << 8) | b;
             }
-            blit(buffer, w, h);
+            blit(buf, w, h);
             crate::cpu::tsc::pit_delay_mouse(frame_mouse);
         }
-        for p in buffer.iterator_mut() { *p = 0xFF000000; }
-        blit(buffer, w, h);
+        for p in buf.iter_mut() { *p = 0xFF000000; }
+        blit(buf, w, h);
         // Black pause between scenes (~1.4s)
         crate::cpu::tsc::pit_delay_mouse(1400);
     };
@@ -940,14 +940,14 @@ unsafe {
     // ms_per_char: how fast each character appears (higher = slower)
     // hold_frames: how many frames to HOLD after all text is typed
     // ---------------------------------------------------------------
-    let show_description = |buffer: &mut [u32], w: usize, h: usize,
+    let show_description = |buf: &mut [u32], w: usize, h: usize,
                             rain_cols: &mut [u16], rain_speeds: &[u8],
                             lines: &[(&str, u32, usize)],
-                            mouse_per_char: u64,
+                            ms_per_char: u64,
                             hold_frames: u32| {
         let total_chars: usize = lines.iter().map(|(t, _, _)| t.len()).sum();
         // frames_per_char: how many render frames per character typed
-        let frames_per_char = (mouse_per_char / frame_mouse).maximum(1) as u32;
+        let frames_per_char = (ms_per_char / frame_mouse).max(1) as u32;
         let typing_frames = total_chars as u32 * frames_per_char;
         let total_frames = typing_frames + hold_frames;
         let mut frame = 0u32;
@@ -960,7 +960,7 @@ unsafe {
             }
 
             // Rain background
-            draw_rain(buffer, w, h, rain_cols, rain_speeds, frame);
+            draw_rain(buf, w, h, rain_cols, rain_speeds, frame);
 
             // How many chars to show based on frame count
             let chars_shown = (frame / frames_per_char) as usize;
@@ -975,7 +975,7 @@ unsafe {
                 let sx = if tw < w { (w - tw) / 2 } else { 0 };
                 for (i, c) in text.chars().enumerate() {
                     if counted + i >= chars_shown { break; }
-                    draw_big_char(buffer, w, h, sx + i * 8 * scale, y, c, color, scale);
+                    draw_big_char(buf, w, h, sx + i * 8 * scale, y, c, color, scale);
                 }
                 // Cursor blink during typing
                 if chars_shown > counted && chars_shown < counted + text.len() {
@@ -984,8 +984,8 @@ unsafe {
                     if (frame / 8) % 2 == 0 {
                         for cy in y..y + 16 * scale {
                             if cy < h && cx + 2 < w {
-                                buffer[cy * w + cx] = 0xFF00FF88;
-                                buffer[cy * w + cx + 1] = 0xFF00FF88;
+                                buf[cy * w + cx] = 0xFF00FF88;
+                                buf[cy * w + cx + 1] = 0xFF00FF88;
                             }
                         }
                     }
@@ -994,7 +994,7 @@ unsafe {
                 y += 16 * scale + 12;
             }
 
-            blit_buffer(buffer, w, h);
+            blit_buffer(buf, w, h);
             frame += 1;
             crate::cpu::tsc::pit_delay_mouse(frame_mouse);
         }
@@ -1006,14 +1006,14 @@ unsafe {
     // hold_frames: frames to wait after typing before "COMPILING"
     // output_hold_ms: MILLISECONDS to show output after execution (direct delay)
     // ---------------------------------------------------------------
-    let show_code_and_run = |buffer: &mut [u32], w: usize, h: usize,
+    let show_code_and_run = |buf: &mut [u32], w: usize, h: usize,
                              rain_cols: &mut [u16], rain_speeds: &[u8],
                              title: &str,
                              source: &str,
-                             pre_message: &str,
-                             _mouse_per_char: u64,
+                             pre_msg: &str,
+                             _ms_per_char: u64,
                              _hold_frames: u32,
-                             output_hold_mouse: u64| {
+                             output_hold_ms: u64| {
         // ----------------------------------------------
         // Human-like typing: variable speed per character
         // with random pauses and scripted typos
@@ -1039,7 +1039,7 @@ unsafe {
         }
 
         // Simple deterministic PRNG (no rand crate in kernel)
-        let mut random_generator_state: u32 = 0xDEAD_BEEF;
+        let mut rng_state: u32 = 0xDEAD_BEEF;
         let mut random_generator_next = |state: &mut u32| -> u32 {
             *state ^= *state << 13;
             *state ^= *state >> 17;
@@ -1063,29 +1063,29 @@ unsafe {
         let mut rain_frame: u32 = 0;
 
         // Render function (inline) -- draws the current state of the editor
-        let render_editor = |buffer: &mut [u32], w: usize, h: usize,
+        let render_editor = |buf: &mut [u32], w: usize, h: usize,
                              rain_cols: &mut [u16], rain_speeds: &[u8],
                              rain_frame: u32,
                              chars_shown: usize,
                              typo_char: Option<(usize, usize, char)>| {
             // Dark background with dimmed Matrix rain
-            for p in buffer.iterator_mut() { *p = 0xFF0A0A0A; }
-            draw_rain(buffer, w, h, rain_cols, rain_speeds, rain_frame);
-            for p in buffer.iterator_mut() {
-                let g = ((*p >> 8) & 0xFF).minimum(25);
+            for p in buf.iter_mut() { *p = 0xFF0A0A0A; }
+            draw_rain(buf, w, h, rain_cols, rain_speeds, rain_frame);
+            for p in buf.iter_mut() {
+                let g = ((*p >> 8) & 0xFF).min(25);
                 *p = 0xFF000000 | (g << 8);
             }
 
             // Title bar
             for y in 0..header_h {
                 for x in 0..w {
-                    buffer[y * w + x] = 0xFF111111;
+                    buf[y * w + x] = 0xFF111111;
                 }
             }
-            draw_text_at(buffer, w, h, margin_x + 20, 15, title, 0xFF00FF88, 2);
+            draw_text_at(buf, w, h, margin_x + 20, 15, title, 0xFF00FF88, 2);
 
-            if !pre_message.is_empty() {
-                draw_text_at(buffer, w, h, margin_x + 20, header_h + 5, pre_message, 0xFF888888, 1);
+            if !pre_msg.is_empty() {
+                draw_text_at(buf, w, h, margin_x + 20, header_h + 5, pre_msg, 0xFF888888, 1);
             }
 
             // Code panel
@@ -1094,38 +1094,38 @@ unsafe {
             let panel_y = code_y_start;
             let panel_h = h - code_y_start - 80;
             for py in panel_y..panel_y + panel_h {
-                for pixel in panel_x..panel_x + panel_w {
-                    if py < h && pixel < w {
-                        buffer[py * w + pixel] = 0xFF0D1117;
+                for px in panel_x..panel_x + panel_w {
+                    if py < h && px < w {
+                        buf[py * w + px] = 0xFF0D1117;
                     }
                 }
             }
             // Panel border (green)
-            for pixel in panel_x..panel_x + panel_w {
-                if panel_y < h { buffer[panel_y * w + pixel] = 0xFF00FF44; }
-                let bot = (panel_y + panel_h).minimum(h) - 1;
-                buffer[bot * w + pixel] = 0xFF00FF44;
+            for px in panel_x..panel_x + panel_w {
+                if panel_y < h { buf[panel_y * w + px] = 0xFF00FF44; }
+                let bot = (panel_y + panel_h).min(h) - 1;
+                buf[bot * w + px] = 0xFF00FF44;
             }
-            for py in panel_y..(panel_y + panel_h).minimum(h) {
-                buffer[py * w + panel_x] = 0xFF00FF44;
-                let right = (panel_x + panel_w - 1).minimum(w - 1);
-                buffer[py * w + right] = 0xFF00FF44;
+            for py in panel_y..(panel_y + panel_h).min(h) {
+                buf[py * w + panel_x] = 0xFF00FF44;
+                let right = (panel_x + panel_w - 1).min(w - 1);
+                buf[py * w + right] = 0xFF00FF44;
             }
 
             // Compute scroll offset so cursor line stays visible
             let maximum_visible = panel_h.saturating_sub(30) / line_h;
             let cursor_line = {
                 let mut ci = 0usize;
-                let mut line = 0usize;
+                let mut ln = 0usize;
                 for (li, line) in lines_vec.iter().enumerate() {
                     if ci + line.len() >= chars_shown {
-                        line = li;
+                        ln = li;
                         break;
                     }
                     ci += line.len() + 1;
-                    line = li + 1;
+                    ln = li + 1;
                 }
-                line.minimum(lines_vec.len().saturating_sub(1))
+                ln.min(lines_vec.len().saturating_sub(1))
             };
             let scroll_offset = if cursor_line >= maximum_visible.saturating_sub(2) {
                 cursor_line.saturating_sub(maximum_visible.saturating_sub(3))
@@ -1137,21 +1137,21 @@ unsafe {
             let code_x = panel_x + 42;
             let mut global_index = 0usize;
             // Skip chars in lines above scroll_offset
-            for li in 0..scroll_offset.minimum(lines_vec.len()) {
+            for li in 0..scroll_offset.min(lines_vec.len()) {
                 global_index += lines_vec[li].len() + 1; // +1 for \n
             }
-            for vi in 0..(lines_vec.len() - scroll_offset.minimum(lines_vec.len())) {
+            for vi in 0..(lines_vec.len() - scroll_offset.min(lines_vec.len())) {
                 let li = vi + scroll_offset;
                 let ly = code_y_start + 15 + vi * line_h;
                 if ly + 16 > panel_y + panel_h { break; }
                 let line = lines_vec[li];
 
                 // Line number
-                let line_str = alloc::format!("{:>3}", li + 1);
-                draw_text_at(buffer, w, h, panel_x + 8, ly, &line_str, 0xFF555555, code_scale);
+                let ln_str = alloc::format!("{:>3}", li + 1);
+                draw_text_at(buf, w, h, panel_x + 8, ly, &ln_str, 0xFF555555, code_scale);
                 let separator_x = panel_x + 35;
                 for sy in ly..ly + 16 {
-                    if sy < h && separator_x < w { buffer[sy * w + separator_x] = 0xFF333333; }
+                    if sy < h && separator_x < w { buf[sy * w + separator_x] = 0xFF333333; }
                 }
 
                 // Syntax-highlighted characters
@@ -1159,7 +1159,7 @@ unsafe {
                 for (ci, c) in line.chars().enumerate() {
                     if global_index >= chars_shown { break; }
                     let color = line_colors.get(ci).copied().unwrap_or(0xFFD4D4D4);
-                    draw_big_char(buffer, w, h, code_x + ci * 8 * code_scale, ly, c, color, code_scale);
+                    draw_big_char(buf, w, h, code_x + ci * 8 * code_scale, ly, c, color, code_scale);
                     global_index += 1;
                 }
 
@@ -1167,7 +1167,7 @@ unsafe {
                 if let Some((tli, tci, tc)) = typo_char {
                     if li == tli && global_index == chars_shown {
                         let ly2 = code_y_start + 15 + vi * line_h;
-                        draw_big_char(buffer, w, h, code_x + tci * 8 * code_scale, ly2, tc, 0xFFFF4444, code_scale);
+                        draw_big_char(buf, w, h, code_x + tci * 8 * code_scale, ly2, tc, 0xFFFF4444, code_scale);
                     }
                 }
 
@@ -1180,14 +1180,14 @@ unsafe {
                 let sb_y = panel_y + 2;
                 let sb_h = panel_h.saturating_sub(4);
                 for py in sb_y..sb_y + sb_h {
-                    if py < h && sb_x < w { buffer[py * w + sb_x] = 0xFF1A1A1A; }
+                    if py < h && sb_x < w { buf[py * w + sb_x] = 0xFF1A1A1A; }
                 }
-                let thumb_h = ((maximum_visible * sb_h) / lines_vec.len()).maximum(10);
+                let thumb_h = ((maximum_visible * sb_h) / lines_vec.len()).max(10);
                 let thumb_y = if lines_vec.len() > 0 { sb_y + (scroll_offset * sb_h) / lines_vec.len() } else { sb_y };
-                for py in thumb_y..(thumb_y + thumb_h).minimum(sb_y + sb_h) {
+                for py in thumb_y..(thumb_y + thumb_h).min(sb_y + sb_h) {
                     if py < h && sb_x < w {
-                        buffer[py * w + sb_x] = 0xFF00FF44;
-                        if sb_x + 1 < w { buffer[py * w + sb_x + 1] = 0xFF00FF44; }
+                        buf[py * w + sb_x] = 0xFF00FF44;
+                        if sb_x + 1 < w { buf[py * w + sb_x + 1] = 0xFF00FF44; }
                     }
                 }
             }
@@ -1206,19 +1206,19 @@ unsafe {
                     ci2 += line.len() + 1;
                 }
                 // Offset cursor past typo char if visible
-                let cursor_column = if typo_char.is_some() && typo_char.unwrap().0 == target_line {
+                let cursor_col = if typo_char.is_some() && typo_char.unwrap().0 == target_line {
                     target_column + 1
                 } else {
                     target_column
                 };
                 let vis_line = target_line.saturating_sub(scroll_offset);
                 let cy = code_y_start + 15 + vis_line * line_h;
-                let cx = panel_x + 42 + cursor_column * 8 * code_scale;
+                let cx = panel_x + 42 + cursor_col * 8 * code_scale;
                 if (rain_frame / 5) % 2 == 0 {
                     for sy in cy..cy + 16 {
                         if sy < h && cx < w && cx + 2 < w {
-                            buffer[sy * w + cx] = 0xFF00FF88;
-                            buffer[sy * w + cx + 1] = 0xFF00FF88;
+                            buf[sy * w + cx] = 0xFF00FF88;
+                            buf[sy * w + cx + 1] = 0xFF00FF88;
                         }
                     }
                 }
@@ -1227,24 +1227,24 @@ unsafe {
             // Status bar
             let status_y = h - 40;
             for py in status_y..h {
-                for pixel in 0..w { buffer[py * w + pixel] = 0xFF111111; }
+                for px in 0..w { buf[py * w + px] = 0xFF111111; }
             }
             {
                 let cur_line = {
                     let mut ci3 = 0usize;
-                    let mut line = 1usize;
+                    let mut ln = 1usize;
                     for (_li, line) in lines_vec.iter().enumerate() {
                         if ci3 + line.len() >= chars_shown { break; }
                         ci3 += line.len() + 1;
-                        line += 1;
+                        ln += 1;
                     }
-                    line
+                    ln
                 };
                 let status = alloc::format!("Ln {}  |  {} lines  |  TrustLang", cur_line, lines_vec.len());
-                draw_text_at(buffer, w, h, margin_x, status_y + 12, &status, 0xFF00CC66, 1);
+                draw_text_at(buf, w, h, margin_x, status_y + 12, &status, 0xFF00CC66, 1);
             }
 
-            blit_buffer(buffer, w, h);
+            blit_buffer(buf, w, h);
         };
 
         // -- Phase 1: Human-like typing animation --
@@ -1256,35 +1256,35 @@ unsafe {
 
             // Check if we hit a typo point
             let mut did_typo = false;
-            for &(typo_index, wrong_c) in typo_schedule.iter() {
-                if chars_shown == typo_index && typo_index < total_chars {
+            for &(typo_idx, wrong_c) in typo_schedule.iter() {
+                if chars_shown == typo_idx && typo_idx < total_chars {
                     // Find which line/col we're at
                     let mut ci4 = 0usize;
-                    let mut target_line = 0usize;
-                    let mut target_column = 0usize;
+                    let mut tgt_line = 0usize;
+                    let mut tgt_col = 0usize;
                     for (li, line) in lines_vec.iter().enumerate() {
                         if ci4 + line.len() > chars_shown {
-                            target_line = li;
-                            target_column = chars_shown - ci4;
+                            tgt_line = li;
+                            tgt_col = chars_shown - ci4;
                             break;
                         }
                         ci4 += line.len() + 1;
                     }
 
                     // Type wrong char
-                    render_editor(buffer, w, h, rain_cols, rain_speeds, rain_frame,
-                        chars_shown, Some((target_line, target_column, wrong_c)));
+                    render_editor(buf, w, h, rain_cols, rain_speeds, rain_frame,
+                        chars_shown, Some((tgt_line, tgt_col, wrong_c)));
                     rain_frame += 1;
                     crate::cpu::tsc::pit_delay_mouse(120);
 
                     // Pause -- "notice the mistake"
-                    render_editor(buffer, w, h, rain_cols, rain_speeds, rain_frame,
-                        chars_shown, Some((target_line, target_column, wrong_c)));
+                    render_editor(buf, w, h, rain_cols, rain_speeds, rain_frame,
+                        chars_shown, Some((tgt_line, tgt_col, wrong_c)));
                     rain_frame += 1;
                     crate::cpu::tsc::pit_delay_mouse(400);
 
                     // Backspace -- remove wrong char (render without it)
-                    render_editor(buffer, w, h, rain_cols, rain_speeds, rain_frame,
+                    render_editor(buf, w, h, rain_cols, rain_speeds, rain_frame,
                         chars_shown, None);
                     rain_frame += 1;
                     crate::cpu::tsc::pit_delay_mouse(150);
@@ -1304,32 +1304,32 @@ unsafe {
 
             // Newline: longer pause (thinking about next line)
             if c == '\n' {
-                delay_mouse = 80 + (random_generator_next(&mut random_generator_state) % 120) as u64; // 80-200ms
+                delay_mouse = 80 + (random_generator_next(&mut rng_state) % 120) as u64; // 80-200ms
             }
             // After {  or before } : thinking pause
             else if c == '{' || (next_c == Some('}')) {
-                delay_mouse = 150 + (random_generator_next(&mut random_generator_state) % 200) as u64;
+                delay_mouse = 150 + (random_generator_next(&mut rng_state) % 200) as u64;
             }
             // After // comment start: slightly slower (typing words)
             else if c == '/' {
-                delay_mouse = 40 + (random_generator_next(&mut random_generator_state) % 60) as u64;
+                delay_mouse = 40 + (random_generator_next(&mut rng_state) % 60) as u64;
             }
             // Space: brief pause
             else if c == ' ' {
-                delay_mouse = 15 + (random_generator_next(&mut random_generator_state) % 40) as u64;
+                delay_mouse = 15 + (random_generator_next(&mut rng_state) % 40) as u64;
             }
             // Punctuation: slightly slower
             else if c == '(' || c == ')' || c == ';' || c == ',' {
-                delay_mouse = 30 + (random_generator_next(&mut random_generator_state) % 30) as u64;
+                delay_mouse = 30 + (random_generator_next(&mut rng_state) % 30) as u64;
             }
             // Regular chars: some variance
             else {
-                delay_mouse = 18 + (random_generator_next(&mut random_generator_state) % 25) as u64;
+                delay_mouse = 18 + (random_generator_next(&mut rng_state) % 25) as u64;
             }
 
             // Occasional random longer pause (~5% chance, "thinking")
-            if random_generator_next(&mut random_generator_state) % 100 < 5 {
-                delay_mouse += 200 + (random_generator_next(&mut random_generator_state) % 400) as u64;
+            if random_generator_next(&mut rng_state) % 100 < 5 {
+                delay_mouse += 200 + (random_generator_next(&mut rng_state) % 400) as u64;
             }
 
             // After a typo correction, slight hesitation
@@ -1338,7 +1338,7 @@ unsafe {
             }
 
             // Render current state
-            render_editor(buffer, w, h, rain_cols, rain_speeds, rain_frame, chars_shown, None);
+            render_editor(buf, w, h, rain_cols, rain_speeds, rain_frame, chars_shown, None);
             rain_frame += 1;
 
             // Advance
@@ -1347,7 +1347,7 @@ unsafe {
         }
 
         // Show complete code for a moment
-        render_editor(buffer, w, h, rain_cols, rain_speeds, rain_frame, total_chars, None);
+        render_editor(buf, w, h, rain_cols, rain_speeds, rain_frame, total_chars, None);
         crate::cpu::tsc::pit_delay_mouse(1200);
 
         // -- Phase 2: In-editor compilation (bottom output pane) --
@@ -1355,7 +1355,7 @@ unsafe {
         // showing "Compiling..." then "Compiled in 0.3s"
         {
             // Render the full editor one more time, then draw output pane on top
-            render_editor(buffer, w, h, rain_cols, rain_speeds, rain_frame, total_chars, None);
+            render_editor(buf, w, h, rain_cols, rain_speeds, rain_frame, total_chars, None);
 
             // Output pane: sits between code panel bottom and status bar
             let pane_y = h - 120;
@@ -1365,41 +1365,41 @@ unsafe {
 
             // Dark output pane background
             for py in pane_y..pane_y + pane_h {
-                for pixel in pane_x..pane_x + pane_w {
-                    if py < h && pixel < w {
-                        buffer[py * w + pixel] = 0xFF0A0E14;
+                for px in pane_x..pane_x + pane_w {
+                    if py < h && px < w {
+                        buf[py * w + px] = 0xFF0A0E14;
                     }
                 }
             }
             // Pane border
-            for pixel in pane_x..pane_x + pane_w {
-                if pane_y < h { buffer[pane_y * w + pixel] = 0xFF00FF44; }
+            for px in pane_x..pane_x + pane_w {
+                if pane_y < h { buf[pane_y * w + px] = 0xFF00FF44; }
             }
             // "OUTPUT" label
-            draw_text_at(buffer, w, h, pane_x + 8, pane_y + 4, "OUTPUT", 0xFF888888, 1);
+            draw_text_at(buf, w, h, pane_x + 8, pane_y + 4, "OUTPUT", 0xFF888888, 1);
 
             // "$ trustlang compile youtube_dvd.tl"
-            draw_text_at(buffer, w, h, pane_x + 8, pane_y + 22, "$ trustlang compile youtube_dvd.tl", 0xFF00CC66, 1);
-            blit_buffer(buffer, w, h);
+            draw_text_at(buf, w, h, pane_x + 8, pane_y + 22, "$ trustlang compile youtube_dvd.tl", 0xFF00CC66, 1);
+            blit_buffer(buf, w, h);
             crate::cpu::tsc::pit_delay_mouse(800);
 
             // "Compiling..." appears
-            draw_text_at(buffer, w, h, pane_x + 8, pane_y + 38, "Compiling...", 0xFFAABBCC, 1);
-            blit_buffer(buffer, w, h);
+            draw_text_at(buf, w, h, pane_x + 8, pane_y + 38, "Compiling...", 0xFFAABBCC, 1);
+            blit_buffer(buf, w, h);
             crate::cpu::tsc::pit_delay_mouse(1200);
 
             // Replace "Compiling..." with success message
             for py in pane_y + 36..pane_y + 56 {
-                for pixel in pane_x + 4..pane_x + pane_w - 4 {
-                    if py < h && pixel < w {
-                        buffer[py * w + pixel] = 0xFF0A0E14;
+                for px in pane_x + 4..pane_x + pane_w - 4 {
+                    if py < h && px < w {
+                        buf[py * w + px] = 0xFF0A0E14;
                     }
                 }
             }
-            draw_text_at(buffer, w, h, pane_x + 8, pane_y + 38, "Compiled successfully in 0.3s  (47 lines, 0 errors)", 0xFF00FF88, 1);
+            draw_text_at(buf, w, h, pane_x + 8, pane_y + 38, "Compiled successfully in 0.3s  (47 lines, 0 errors)", 0xFF00FF88, 1);
             // Also show bytecode info
-            draw_text_at(buffer, w, h, pane_x + 8, pane_y + 54, "Generated 284 bytecode instructions", 0xFF666666, 1);
-            blit_buffer(buffer, w, h);
+            draw_text_at(buf, w, h, pane_x + 8, pane_y + 54, "Generated 284 bytecode instructions", 0xFF666666, 1);
+            blit_buffer(buf, w, h);
             crate::cpu::tsc::pit_delay_mouse(2000);
         }
 
@@ -1414,10 +1414,10 @@ unsafe {
         // Draw a fake shell screen
         {
             // Dark background with subtle rain
-            for p in buffer.iterator_mut() { *p = 0xFF0A0A0A; }
-            draw_rain(buffer, w, h, rain_cols, rain_speeds, rain_frame);
-            for p in buffer.iterator_mut() {
-                let g = ((*p >> 8) & 0xFF).minimum(15);
+            for p in buf.iter_mut() { *p = 0xFF0A0A0A; }
+            draw_rain(buf, w, h, rain_cols, rain_speeds, rain_frame);
+            for p in buf.iter_mut() {
+                let g = ((*p >> 8) & 0xFF).min(15);
                 *p = 0xFF000000 | (g << 8);
             }
 
@@ -1428,32 +1428,32 @@ unsafe {
             let win_h = h - 40;
             // Window background
             for py in win_y..win_y + win_h {
-                for pixel in win_x..win_x + win_w {
-                    if py < h && pixel < w {
-                        buffer[py * w + pixel] = 0xFF0D0D0D;
+                for px in win_x..win_x + win_w {
+                    if py < h && px < w {
+                        buf[py * w + px] = 0xFF0D0D0D;
                     }
                 }
             }
             // Title bar
             for py in win_y..win_y + 28 {
-                for pixel in win_x..win_x + win_w {
-                    if py < h && pixel < w {
-                        buffer[py * w + pixel] = 0xFF1A1A1A;
+                for px in win_x..win_x + win_w {
+                    if py < h && px < w {
+                        buf[py * w + px] = 0xFF1A1A1A;
                     }
                 }
             }
-            draw_text_at(buffer, w, h, win_x + 12, win_y + 6, "TrustOS Terminal", 0xFF00FF88, 1);
+            draw_text_at(buf, w, h, win_x + 12, win_y + 6, "TrustOS Terminal", 0xFF00FF88, 1);
             // Border
-            for pixel in win_x..win_x + win_w {
-                if win_y < h { buffer[win_y * w + pixel] = 0xFF00FF44; }
-                let bot = (win_y + win_h - 1).minimum(h - 1);
-                buffer[bot * w + pixel] = 0xFF00FF44;
+            for px in win_x..win_x + win_w {
+                if win_y < h { buf[win_y * w + px] = 0xFF00FF44; }
+                let bot = (win_y + win_h - 1).min(h - 1);
+                buf[bot * w + px] = 0xFF00FF44;
             }
             for py in win_y..win_y + win_h {
                 if py < h {
-                    buffer[py * w + win_x] = 0xFF00FF44;
-                    let r = (win_x + win_w - 1).minimum(w - 1);
-                    buffer[py * w + r] = 0xFF00FF44;
+                    buf[py * w + win_x] = 0xFF00FF44;
+                    let r = (win_x + win_w - 1).min(w - 1);
+                    buf[py * w + r] = 0xFF00FF44;
                 }
             }
 
@@ -1461,39 +1461,39 @@ unsafe {
             let mut text_y = win_y + 40;
 
             // Show some previous shell output (fake history)
-            draw_text_at(buffer, w, h, text_x, text_y, "TrustOS v2.0 - TrustLang Runtime", 0xFF00FF88, 1);
+            draw_text_at(buf, w, h, text_x, text_y, "TrustOS v2.0 - TrustLang Runtime", 0xFF00FF88, 1);
             text_y += 20;
-            draw_text_at(buffer, w, h, text_x, text_y, "Type 'help' for available commands.", 0xFF666666, 1);
+            draw_text_at(buf, w, h, text_x, text_y, "Type 'help' for available commands.", 0xFF666666, 1);
             text_y += 28;
 
             // Previous command: trustlang compile
             // Prompt: root@trustos:/$ 
-            draw_text_at(buffer, w, h, text_x, text_y, "root", 0xFFFF0000, 1);
-            draw_text_at(buffer, w, h, text_x + 32, text_y, "@", 0xFFFFFFFF, 1);
-            draw_text_at(buffer, w, h, text_x + 40, text_y, "trustos", 0xFF00FF00, 1);
-            draw_text_at(buffer, w, h, text_x + 96, text_y, ":/$ ", 0xFF00FF00, 1);
-            draw_text_at(buffer, w, h, text_x + 128, text_y, "trustlang compile youtube_dvd.tl", 0xFFD4D4D4, 1);
+            draw_text_at(buf, w, h, text_x, text_y, "root", 0xFFFF0000, 1);
+            draw_text_at(buf, w, h, text_x + 32, text_y, "@", 0xFFFFFFFF, 1);
+            draw_text_at(buf, w, h, text_x + 40, text_y, "trustos", 0xFF00FF00, 1);
+            draw_text_at(buf, w, h, text_x + 96, text_y, ":/$ ", 0xFF00FF00, 1);
+            draw_text_at(buf, w, h, text_x + 128, text_y, "trustlang compile youtube_dvd.tl", 0xFFD4D4D4, 1);
             text_y += 18;
-            draw_text_at(buffer, w, h, text_x, text_y, "Compiled successfully in 0.3s", 0xFF00FF88, 1);
+            draw_text_at(buf, w, h, text_x, text_y, "Compiled successfully in 0.3s", 0xFF00FF88, 1);
             text_y += 18;
-            draw_text_at(buffer, w, h, text_x, text_y, "Generated 284 bytecode instructions", 0xFF666666, 1);
+            draw_text_at(buf, w, h, text_x, text_y, "Generated 284 bytecode instructions", 0xFF666666, 1);
             text_y += 28;
 
             // New prompt where we'll type the run command
             let prompt_y = text_y;
-            draw_text_at(buffer, w, h, text_x, prompt_y, "root", 0xFFFF0000, 1);
-            draw_text_at(buffer, w, h, text_x + 32, prompt_y, "@", 0xFFFFFFFF, 1);
-            draw_text_at(buffer, w, h, text_x + 40, prompt_y, "trustos", 0xFF00FF00, 1);
-            draw_text_at(buffer, w, h, text_x + 96, prompt_y, ":/$ ", 0xFF00FF00, 1);
-            blit_buffer(buffer, w, h);
+            draw_text_at(buf, w, h, text_x, prompt_y, "root", 0xFFFF0000, 1);
+            draw_text_at(buf, w, h, text_x + 32, prompt_y, "@", 0xFFFFFFFF, 1);
+            draw_text_at(buf, w, h, text_x + 40, prompt_y, "trustos", 0xFF00FF00, 1);
+            draw_text_at(buf, w, h, text_x + 96, prompt_y, ":/$ ", 0xFF00FF00, 1);
+            blit_buffer(buf, w, h);
             crate::cpu::tsc::pit_delay_mouse(800);
 
             // Type "trustlang run youtube_dvd.tl" character by character
             let run_command = "trustlang run youtube_dvd.tl";
             let command_start_x = text_x + 128;
             for (ci, c) in run_command.chars().enumerate() {
-                draw_big_char(buffer, w, h, command_start_x + ci * 8, prompt_y, c, 0xFFD4D4D4, 1);
-                blit_buffer(buffer, w, h);
+                draw_big_char(buf, w, h, command_start_x + ci * 8, prompt_y, c, 0xFFD4D4D4, 1);
+                blit_buffer(buf, w, h);
                 let d = 30 + (((ci as u32 * 7 + 13) ^ 0x5A) % 50) as u64;
                 crate::cpu::tsc::pit_delay_mouse(d);
             }
@@ -1501,8 +1501,8 @@ unsafe {
 
             // Show "Enter" -- command execution
             text_y = prompt_y + 24;
-            draw_text_at(buffer, w, h, text_x, text_y, "Running youtube_dvd.tl ...", 0xFFAABBCC, 1);
-            blit_buffer(buffer, w, h);
+            draw_text_at(buf, w, h, text_x, text_y, "Running youtube_dvd.tl ...", 0xFFAABBCC, 1);
+            blit_buffer(buf, w, h);
             crate::cpu::tsc::pit_delay_mouse(600);
         }
 
@@ -1513,44 +1513,44 @@ unsafe {
                     // Text output -- should not happen for this graphics demo,
                     // but handle it just in case
                     let out_lines: alloc::vec::Vec<&str> = output.lines().collect();
-                    clear_buffer(buffer);
-                    draw_text_centered(buffer, w, h, 25, "OUTPUT", 0xFF00FF88, 3);
+                    clear_buffer(buf);
+                    draw_text_centered(buf, w, h, 25, "OUTPUT", 0xFF00FF88, 3);
                     for (i, line) in out_lines.iter().enumerate() {
                         let ly = 80 + i * 20;
                         if ly + 16 > h - 40 { break; }
                         let sx = if line.len() * 8 < w { (w - line.len() * 8) / 2 } else { 40 };
-                        draw_text_at(buffer, w, h, sx, ly, line, 0xFFCCFFCC, 1);
+                        draw_text_at(buf, w, h, sx, ly, line, 0xFFCCFFCC, 1);
                     }
-                    blit_buffer(buffer, w, h);
-                    crate::cpu::tsc::pit_delay_mouse(output_hold_mouse);
+                    blit_buffer(buf, w, h);
+                    crate::cpu::tsc::pit_delay_mouse(output_hold_ms);
                 }
                 if output.is_empty() {
                     // Graphics program -- result is already on framebuffer
                     // Read back FB into buf for fade later
-                    if let Some((bb_pointer, _bb_w, bb_h, bb_stride)) = crate::framebuffer::get_backbuffer_information() {
-                        let bb = bb_pointer as *mut u32;
+                    if let Some((bb_ptr, _bb_w, bb_h, bb_stride)) = crate::framebuffer::get_backbuffer_information() {
+                        let bb = bb_ptr as *mut u32;
                         let bb_s = bb_stride as usize;
-                        for y in 0..h.minimum(bb_h as usize) {
+                        for y in 0..h.min(bb_h as usize) {
                                                         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
                                 core::ptr::copy_nonoverlapping(
                                     bb.add(y * bb_s),
-                                    buffer[y * w..].as_mut_pointer(),
+                                    buf[y * w..].as_mut_ptr(),
                                     w,
                                 );
                             }
                         }
                     }
                     // Hold on graphics result
-                    crate::cpu::tsc::pit_delay_mouse(output_hold_mouse);
+                    crate::cpu::tsc::pit_delay_mouse(output_hold_ms);
                 }
             }
             Err(e) => {
-                clear_buffer(buffer);
-                draw_text_centered(buffer, w, h, h / 2 - 20, "Runtime Error", 0xFFFF4444, 4);
+                clear_buffer(buf);
+                draw_text_centered(buf, w, h, h / 2 - 20, "Runtime Error", 0xFFFF4444, 4);
                 let error_short = if e.len() > 80 { &e[..80] } else { &e };
-                draw_text_centered(buffer, w, h, h / 2 + 50, error_short, 0xFFFF8888, 1);
-                blit_buffer(buffer, w, h);
+                draw_text_centered(buf, w, h, h / 2 + 50, error_short, 0xFFFF8888, 1);
+                blit_buffer(buf, w, h);
                 crate::cpu::tsc::pit_delay_mouse(3000);
             }
         }
@@ -1566,20 +1566,20 @@ unsafe {
     // ------------------------------------------------
     // INTRO: Title Screen                    (~8s)
     // ------------------------------------------------
-    clear_buffer(&mut buffer);
-    show_description(&mut buffer, w, h, &mut rain_cols, &rain_speeds,
+    clear_buffer(&mut buf);
+    show_description(&mut buf, w, h, &mut rain_cols, &rain_speeds,
         &[("TrustLang", 0xFF00FF88, 6),
           ("", 0xFF000000, 1),
           ("Live Demo", 0xFF00CC66, 4),
           ("Programming Inside TrustOS", 0xFF008844, 2)],
         90, 200);   // 90ms/char ? slow dramatic typing, hold 200 frames (~6s)
-    do_fade(&mut buffer, w, h, &blit_buffer);
+    do_fade(&mut buf, w, h, &blit_buffer);
 
     // ------------------------------------------------
     // CONCEPT: What we're building            (~10s)
     // ------------------------------------------------
-    clear_buffer(&mut buffer);
-    show_description(&mut buffer, w, h, &mut rain_cols, &rain_speeds,
+    clear_buffer(&mut buf);
+    show_description(&mut buf, w, h, &mut rain_cols, &rain_speeds,
         &[("YouTube DVD Screensaver", 0xFFFF0000, 4),
           ("", 0xFF000000, 1),
           ("A bouncing 3D YouTube logo", 0xFFCCFFCC, 2),
@@ -1590,13 +1590,13 @@ unsafe {
           ("", 0xFF000000, 1),
           ("All in real-time. Zero dependencies.", 0xFF888888, 2)],
         70, 180);   // 70ms/char, hold 180 frames (~5.4s)
-    do_fade(&mut buffer, w, h, &blit_buffer);
+    do_fade(&mut buf, w, h, &blit_buffer);
 
     // ------------------------------------------------
     // ARCHITECTURE: TrustLang pipeline         (~5s)
     // ------------------------------------------------
-    clear_buffer(&mut buffer);
-    show_description(&mut buffer, w, h, &mut rain_cols, &rain_speeds,
+    clear_buffer(&mut buf);
+    show_description(&mut buf, w, h, &mut rain_cols, &rain_speeds,
         &[("How TrustLang Works", 0xFF00FF88, 4),
           ("", 0xFF000000, 1),
           ("tokenize()   Lexer -> Tokens", 0xFFFF7B72, 2),
@@ -1607,13 +1607,13 @@ unsafe {
           ("pixel() fill_rect() draw_text()", 0xFFFFD700, 2),
           ("flush() sleep() clear_screen()", 0xFFFFD700, 2)],
         60, 170);   // 60ms/char, hold 170 frames (~5s)
-    do_fade(&mut buffer, w, h, &blit_buffer);
+    do_fade(&mut buf, w, h, &blit_buffer);
 
     // ------------------------------------------------
     // THE CODE + EXECUTION                    (~50s)
     // ------------------------------------------------
-    clear_buffer(&mut buffer);
-    show_code_and_run(&mut buffer, w, h, &mut rain_cols, &rain_speeds,
+    clear_buffer(&mut buf);
+    show_code_and_run(&mut buf, w, h, &mut rain_cols, &rain_speeds,
         "TrustCode  -  youtube_dvd.tl",
         r#"// YouTube DVD Screensaver in TrustLang!
 fn main() {
@@ -1672,13 +1672,13 @@ fn main() {
         30,     // unused (human typing now)
         80,     // unused (human typing now)
         3000);  // hold 3s on final frame after animation ends
-    do_fade(&mut buffer, w, h, &blit_buffer);
+    do_fade(&mut buf, w, h, &blit_buffer);
 
     // ------------------------------------------------
     // OUTRO                                   (~8s)
     // ------------------------------------------------
-    clear_buffer(&mut buffer);
-    show_description(&mut buffer, w, h, &mut rain_cols, &rain_speeds,
+    clear_buffer(&mut buf);
+    show_description(&mut buf, w, h, &mut rain_cols, &rain_speeds,
         &[("TrustLang", 0xFF00FF88, 6),
           ("", 0xFF000000, 1),
           ("Lexer > Parser > Compiler > VM", 0xFFAADDAA, 2),
@@ -1688,11 +1688,11 @@ fn main() {
           ("", 0xFF000000, 1),
           ("github.com/nathan237/TrustOS", 0xFF00FF88, 2)],
         80, 250);   // slow dramatic outro, hold 250 frames (~7.5s)
-    do_fade(&mut buffer, w, h, &blit_buffer);
+    do_fade(&mut buf, w, h, &blit_buffer);
 
     // Restore framebuffer state
-    clear_buffer(&mut buffer);
-    blit_buffer(&buffer, w, h);
+    clear_buffer(&mut buf);
+    blit_buffer(&buf, w, h);
     if !was_db {
         crate::framebuffer::set_double_buffer_mode(false);
     }
@@ -1724,11 +1724,11 @@ pub(super) fn command_trustos_film() {
         crate::framebuffer::set_double_buffer_mode(true);
     }
 
-    let mut buffer = alloc::vec![0u32; w * h];
+    let mut buf = alloc::vec![0u32; w * h];
 
     // --------------- HELPER CLOSURES ---------------
 
-    let draw_big_char = |buffer: &mut [u32], w: usize, h: usize,
+    let draw_big_char = |buf: &mut [u32], w: usize, h: usize,
                          cx: usize, cy: usize, c: char, color: u32, scale: usize| {
         let glyph = crate::framebuffer::font::get_glyph(c);
         for (row, &bits) in glyph.iter().enumerate() {
@@ -1736,9 +1736,9 @@ pub(super) fn command_trustos_film() {
                 if bits & (0x80 >> bit) != 0 {
                     for sy in 0..scale {
                         for sx in 0..scale {
-                            let pixel = cx + bit as usize * scale + sx;
+                            let px = cx + bit as usize * scale + sx;
                             let py = cy + row * scale + sy;
-                            if pixel < w && py < h { buffer[py * w + pixel] = color; }
+                            if px < w && py < h { buf[py * w + px] = color; }
                         }
                     }
                 }
@@ -1746,69 +1746,69 @@ pub(super) fn command_trustos_film() {
         }
     };
 
-    let draw_text_at = |buffer: &mut [u32], w: usize, h: usize,
+    let draw_text_at = |buf: &mut [u32], w: usize, h: usize,
                         x: usize, y: usize, text: &str, color: u32, scale: usize| {
         for (i, c) in text.chars().enumerate() {
-            draw_big_char(buffer, w, h, x + i * 8 * scale, y, c, color, scale);
+            draw_big_char(buf, w, h, x + i * 8 * scale, y, c, color, scale);
         }
     };
 
-    let draw_text_centered = |buffer: &mut [u32], w: usize, h: usize,
+    let draw_text_centered = |buf: &mut [u32], w: usize, h: usize,
                               y: usize, text: &str, color: u32, scale: usize| {
         let tw = text.len() * 8 * scale;
         let sx = if tw < w { (w - tw) / 2 } else { 0 };
         for (i, c) in text.chars().enumerate() {
-            draw_big_char(buffer, w, h, sx + i * 8 * scale, y, c, color, scale);
+            draw_big_char(buf, w, h, sx + i * 8 * scale, y, c, color, scale);
         }
     };
 
-    let blit_buffer = |buffer: &[u32], w: usize, h: usize| {
-        if let Some((bb_pointer, _bb_w, bb_h, bb_stride)) = crate::framebuffer::get_backbuffer_information() {
-            let bb = bb_pointer as *mut u32;
+    let blit_buffer = |buf: &[u32], w: usize, h: usize| {
+        if let Some((bb_ptr, _bb_w, bb_h, bb_stride)) = crate::framebuffer::get_backbuffer_information() {
+            let bb = bb_ptr as *mut u32;
             let bb_s = bb_stride as usize;
-            for y in 0..h.minimum(bb_h as usize) {
+            for y in 0..h.min(bb_h as usize) {
                                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
                     core::ptr::copy_nonoverlapping(
-                        buffer[y * w..].as_pointer(), bb.add(y * bb_s), w);
+                        buf[y * w..].as_ptr(), bb.add(y * bb_s), w);
                 }
             }
         }
         crate::framebuffer::swap_buffers();
     };
 
-    let clear_buffer = |buffer: &mut [u32]| {
-        for p in buffer.iterator_mut() { *p = 0xFF000000; }
+    let clear_buffer = |buf: &mut [u32]| {
+        for p in buf.iter_mut() { *p = 0xFF000000; }
     };
 
     // Filled rectangle helper
-    let draw_rect = |buffer: &mut [u32], w: usize, h: usize,
+    let draw_rect = |buf: &mut [u32], w: usize, h: usize,
                      x: usize, y: usize, rw: usize, rh: usize, color: u32| {
         for dy in 0..rh {
             for dx in 0..rw {
-                let pixel = x + dx;
+                let px = x + dx;
                 let py = y + dy;
-                if pixel < w && py < h { buffer[py * w + pixel] = color; }
+                if px < w && py < h { buf[py * w + px] = color; }
             }
         }
     };
 
     let frame_mouse: u64 = 30;
 
-    let do_fade = |buffer: &mut [u32], w: usize, h: usize,
+    let do_fade = |buf: &mut [u32], w: usize, h: usize,
                    blit: &dyn Fn(&[u32], usize, usize)| {
         for _ in 0..40 {
-            for pixel in buffer.iterator_mut() {
-                let r = ((*pixel >> 16) & 0xFF).saturating_sub(8);
-                let g = ((*pixel >> 8) & 0xFF).saturating_sub(8);
-                let b = (*pixel & 0xFF).saturating_sub(8);
-                *pixel = 0xFF000000 | (r << 16) | (g << 8) | b;
+            for px in buf.iter_mut() {
+                let r = ((*px >> 16) & 0xFF).saturating_sub(8);
+                let g = ((*px >> 8) & 0xFF).saturating_sub(8);
+                let b = (*px & 0xFF).saturating_sub(8);
+                *px = 0xFF000000 | (r << 16) | (g << 8) | b;
             }
-            blit(buffer, w, h);
+            blit(buf, w, h);
             crate::cpu::tsc::pit_delay_mouse(frame_mouse);
         }
-        for p in buffer.iterator_mut() { *p = 0xFF000000; }
-        blit(buffer, w, h);
+        for p in buf.iter_mut() { *p = 0xFF000000; }
+        blit(buf, w, h);
         crate::cpu::tsc::pit_delay_mouse(400);
     };
 
@@ -1816,7 +1816,7 @@ unsafe {
     // Each produces a unique animated background per-frame.
 
     // BG1: Pulsing deep-blue/purple nebula gradient (ACT I -- mystery)
-    let bg_pulse = |buffer: &mut [u32], w: usize, h: usize, frame: u32| {
+    let bg_pulse = |buf: &mut [u32], w: usize, h: usize, frame: u32| {
         // Integer-based sine approximation (no libm in no_std)
         // Triangle wave oscillating 0..40..0 over ~160 frames
         let phase = (frame % 160) as u32;
@@ -1827,16 +1827,16 @@ unsafe {
             let yf = (y as u32 * 40) / h as u32;
             for x in 0..w {
                 let xf = (x as u32 * 10) / w as u32;
-                let r = (yf / 4 + pulse2 / 3).minimum(40);
-                let g = (xf / 3).minimum(15);
-                let b = (yf + pulse + xf / 2).minimum(80);
-                buffer[y * w + x] = 0xFF000000 | (r << 16) | (g << 8) | b;
+                let r = (yf / 4 + pulse2 / 3).min(40);
+                let g = (xf / 3).min(15);
+                let b = (yf + pulse + xf / 2).min(80);
+                buf[y * w + x] = 0xFF000000 | (r << 16) | (g << 8) | b;
             }
         }
     };
 
     // BG2: Red warning scan-lines (ACT II -- danger/urgency)
-    let bg_scanlines = |buffer: &mut [u32], w: usize, h: usize, frame: u32| {
+    let bg_scanlines = |buf: &mut [u32], w: usize, h: usize, frame: u32| {
         let scroll = (frame as usize * 2) % h;
         for y in 0..h {
             let sy = (y + scroll) % h;
@@ -1844,67 +1844,67 @@ unsafe {
             for x in 0..w {
                 let base_r = if stripe { 35u32 } else { 15 };
                 let flash = if (sy % 60) < 2 { 30u32 } else { 0 };
-                let r = (base_r + flash).minimum(65);
+                let r = (base_r + flash).min(65);
                 let g = 2;
                 let b = 5;
-                buffer[y * w + x] = 0xFF000000 | (r << 16) | (g << 8) | b;
+                buf[y * w + x] = 0xFF000000 | (r << 16) | (g << 8) | b;
             }
         }
     };
 
     // BG3: Blueprint dot-grid (comparison bars -- precision)
-    let bg_dotgrid = |buffer: &mut [u32], w: usize, h: usize, _frame: u32| {
+    let bg_dotgrid = |buf: &mut [u32], w: usize, h: usize, _frame: u32| {
         for y in 0..h {
             for x in 0..w {
                 let on_grid = (x % 20 < 2) && (y % 20 < 2);
                 let color = if on_grid { 0xFF0A1A3A } else { 0xFF060E1E };
-                buffer[y * w + x] = color;
+                buf[y * w + x] = color;
             }
         }
     };
 
     // BG4: Rising green sparks / particles (ACT III -- hope)
-    let bg_sparks = |buffer: &mut [u32], w: usize, h: usize, frame: u32| {
+    let bg_sparks = |buf: &mut [u32], w: usize, h: usize, frame: u32| {
         // Dim previous frame for trailing effect
-        for pixel in buffer.iterator_mut() {
-            let r = ((*pixel >> 16) & 0xFF).saturating_sub(8);
-            let g = ((*pixel >> 8) & 0xFF).saturating_sub(12);
-            let b = (*pixel & 0xFF).saturating_sub(8);
-            *pixel = 0xFF000000 | (r << 16) | (g << 8) | b;
+        for px in buf.iter_mut() {
+            let r = ((*px >> 16) & 0xFF).saturating_sub(8);
+            let g = ((*px >> 8) & 0xFF).saturating_sub(12);
+            let b = (*px & 0xFF).saturating_sub(8);
+            *px = 0xFF000000 | (r << 16) | (g << 8) | b;
         }
         // Spawn particles rising from bottom
         for i in 0..24u32 {
             let seed = (i.wrapping_mul(2654435761).wrapping_add(frame.wrapping_mul(37))) as usize;
-            let pixel = (seed.wrapping_mul(7919)) % w;
+            let px = (seed.wrapping_mul(7919)) % w;
             let rise = (frame as usize + seed) % h;
             let py = h.saturating_sub(rise);
             let brightness = (50 + (seed % 40)) as u32;
-            if pixel < w && py < h {
-                buffer[py * w + pixel] = 0xFF000000 | (brightness / 4 << 16) | (brightness << 8) | (brightness / 3);
-                if pixel + 1 < w { buffer[py * w + pixel + 1] = 0xFF000000 | (brightness << 8); }
+            if px < w && py < h {
+                buf[py * w + px] = 0xFF000000 | (brightness / 4 << 16) | (brightness << 8) | (brightness / 3);
+                if px + 1 < w { buf[py * w + px + 1] = 0xFF000000 | (brightness << 8); }
             }
         }
     };
 
     // BG5: Deep-space starfield (feature grid -- wonder/scale)
-    let bg_stars = |buffer: &mut [u32], w: usize, h: usize, frame: u32| {
-        for p in buffer.iterator_mut() { *p = 0xFF050510; }
+    let bg_stars = |buf: &mut [u32], w: usize, h: usize, frame: u32| {
+        for p in buf.iter_mut() { *p = 0xFF050510; }
         // Fixed stars with twinkle
         for i in 0..80u32 {
             let sx = ((i.wrapping_mul(7919)) as usize) % w;
             let sy = ((i.wrapping_mul(104729)) as usize) % h;
             let twinkle = ((frame.wrapping_add(i * 17)) % 30) as u32;
             let bright = if twinkle < 15 { 40 + twinkle * 3 } else { 40 + (30 - twinkle) * 3 };
-            let bright = bright.minimum(120);
+            let bright = bright.min(120);
             if sx < w && sy < h {
-                buffer[sy * w + sx] = 0xFF000000 | (bright << 16) | (bright << 8) | bright;
+                buf[sy * w + sx] = 0xFF000000 | (bright << 16) | (bright << 8) | bright;
             }
         }
     };
 
     // BG6: Circuit-board traces (ACT IV -- technical proof)
-    let bg_circuit = |buffer: &mut [u32], w: usize, h: usize, frame: u32| {
-        for p in buffer.iterator_mut() { *p = 0xFF0A0A14; }
+    let bg_circuit = |buf: &mut [u32], w: usize, h: usize, frame: u32| {
+        for p in buf.iter_mut() { *p = 0xFF0A0A14; }
         // Horizontal and vertical traces
         let trace_color = 0xFF0F2818u32;
         let active_color = 0xFF00AA44u32;
@@ -1914,40 +1914,40 @@ unsafe {
             // Horizontal lines
             if ty < h {
                 for x in 0..w {
-                    buffer[ty * w + x] = trace_color;
+                    buf[ty * w + x] = trace_color;
                 }
             }
             // Vertical lines
             if transmit < w {
                 for y in 0..h {
-                    buffer[y * w + transmit] = trace_color;
+                    buf[y * w + transmit] = trace_color;
                 }
             }
         }
         // Animated pulse along a trace
         let pulse_y = ((frame as usize * 3) % h) & !3;
         if pulse_y < h {
-            let pw = (w / 4).minimum(120);
-            let pixel_start = (frame as usize * 5) % w;
+            let pw = (w / 4).min(120);
+            let px_start = (frame as usize * 5) % w;
             for dx in 0..pw {
-                let pixel = (pixel_start + dx) % w;
-                buffer[pulse_y * w + pixel] = active_color;
-                if pulse_y + 1 < h { buffer[(pulse_y + 1) * w + pixel] = active_color; }
+                let px = (px_start + dx) % w;
+                buf[pulse_y * w + px] = active_color;
+                if pulse_y + 1 < h { buf[(pulse_y + 1) * w + px] = active_color; }
             }
         }
     };
 
     // BG7: Sunrise warm gradient (ACT V -- inspiration)
-    let bg_sunrise = |buffer: &mut [u32], w: usize, h: usize, frame: u32| {
-        let lift = (frame as u32).minimum(60); // sun rises over 60 frames
+    let bg_sunrise = |buf: &mut [u32], w: usize, h: usize, frame: u32| {
+        let lift = (frame as u32).min(60); // sun rises over 60 frames
         for y in 0..h {
             let yf = y as u32 * 100 / h as u32; // 0=top, 100=bottom
-            let warmth = if yf > 50 { (yf - 50).minimum(50) + lift } else { lift / 2 };
-            let r = (warmth * 2).minimum(90);
-            let g = (warmth * 3 / 4).minimum(45);
-            let b = (20u32.saturating_sub(warmth / 3)).minimum(30);
+            let warmth = if yf > 50 { (yf - 50).min(50) + lift } else { lift / 2 };
+            let r = (warmth * 2).min(90);
+            let g = (warmth * 3 / 4).min(45);
+            let b = (20u32.saturating_sub(warmth / 3)).min(30);
             for x in 0..w {
-                buffer[y * w + x] = 0xFF000000 | (r << 16) | (g << 8) | b;
+                buf[y * w + x] = 0xFF000000 | (r << 16) | (g << 8) | b;
             }
         }
         // Sun glow at bottom center
@@ -1963,14 +1963,14 @@ unsafe {
                     for (sx, sy) in [(sun_cx + dx, sun_cy.wrapping_sub(dy)),
                                      (sun_cx.wrapping_sub(dx), sun_cy.wrapping_sub(dy))] {
                         if sx < w && sy < h {
-                            let existing = buffer[sy * w + sx];
+                            let existing = buf[sy * w + sx];
                             let er = ((existing >> 16) & 0xFF) + intensity;
                             let eg = ((existing >> 8) & 0xFF) + intensity * 2 / 3;
                             let eb = (existing & 0xFF) + intensity / 4;
-                            buffer[sy * w + sx] = 0xFF000000
-                                | (er.minimum(255) << 16)
-                                | (eg.minimum(255) << 8)
-                                | eb.minimum(255);
+                            buf[sy * w + sx] = 0xFF000000
+                                | (er.min(255) << 16)
+                                | (eg.min(255) << 8)
+                                | eb.min(255);
                         }
                     }
                 }
@@ -1984,9 +1984,9 @@ unsafe {
     let rain_speeds: alloc::vec::Vec<u8> =
         (0..w / 8 + 1).map(|i| (((i * 7 + 3) % 4) + 1) as u8).collect();
 
-    let draw_rain = |buffer: &mut [u32], w: usize, h: usize,
+    let draw_rain = |buf: &mut [u32], w: usize, h: usize,
                      cols: &mut [u16], speeds: &[u8], frame: u32| {
-        for pixel in buffer.iterator_mut() {
+        for pixel in buf.iter_mut() {
             let g = ((*pixel >> 8) & 0xFF) as u32;
             if g > 0 { *pixel = 0xFF000000 | (g.saturating_sub(6) << 8); }
         }
@@ -2003,8 +2003,8 @@ unsafe {
                 if py >= h { break; }
                 for bit in 0..8u32 {
                     if bits & (0x80 >> bit) != 0 {
-                        let pixel = x + bit as usize;
-                        if pixel < w { buffer[py * w + pixel] = 0xFF00FF44; }
+                        let px = x + bit as usize;
+                        if px < w { buf[py * w + px] = 0xFF00FF44; }
                     }
                 }
             }
@@ -2015,12 +2015,12 @@ unsafe {
     // Generic scene: animate background + type text on top.
     // bg_id: 1=pulse, 2=scanlines, 3=dotgrid, 4=sparks, 5=stars,
     //        6=circuit, 7=sunrise, 8=rain
-    let show_scene = |buffer: &mut [u32], w: usize, h: usize,
+    let show_scene = |buf: &mut [u32], w: usize, h: usize,
                       rain_cols: &mut [u16], rain_speeds: &[u8],
                       lines: &[(&str, u32, usize)],
-                      mouse_per_char: u64, hold_frames: u32, bg_id: u8| {
+                      ms_per_char: u64, hold_frames: u32, bg_id: u8| {
         let total_chars: usize = lines.iter().map(|(t, _, _)| t.len()).sum();
-        let frames_per_char = (mouse_per_char / frame_mouse).maximum(1) as u32;
+        let frames_per_char = (ms_per_char / frame_mouse).max(1) as u32;
         let typing_frames = total_chars as u32 * frames_per_char;
         let total_frames = typing_frames + hold_frames;
         let mut frame = 0u32;
@@ -2031,15 +2031,15 @@ unsafe {
             }
             // Draw the per-scene background
             match bg_id {
-                1 => bg_pulse(buffer, w, h, frame),
-                2 => bg_scanlines(buffer, w, h, frame),
-                3 => bg_dotgrid(buffer, w, h, frame),
-                4 => bg_sparks(buffer, w, h, frame),
-                5 => bg_stars(buffer, w, h, frame),
-                6 => bg_circuit(buffer, w, h, frame),
-                7 => bg_sunrise(buffer, w, h, frame),
-                8 => draw_rain(buffer, w, h, rain_cols, rain_speeds, frame),
-                _ => { for p in buffer.iterator_mut() { *p = 0xFF000000; } }
+                1 => bg_pulse(buf, w, h, frame),
+                2 => bg_scanlines(buf, w, h, frame),
+                3 => bg_dotgrid(buf, w, h, frame),
+                4 => bg_sparks(buf, w, h, frame),
+                5 => bg_stars(buf, w, h, frame),
+                6 => bg_circuit(buf, w, h, frame),
+                7 => bg_sunrise(buf, w, h, frame),
+                8 => draw_rain(buf, w, h, rain_cols, rain_speeds, frame),
+                _ => { for p in buf.iter_mut() { *p = 0xFF000000; } }
             }
             let chars_shown = (frame / frames_per_char) as usize;
             let total_h: usize = lines.iter().map(|(_, _, s)| 16 * s + 12).sum();
@@ -2050,7 +2050,7 @@ unsafe {
                 let sx = if tw < w { (w - tw) / 2 } else { 0 };
                 for (i, c) in text.chars().enumerate() {
                     if counted + i >= chars_shown { break; }
-                    draw_big_char(buffer, w, h, sx + i * 8 * scale, y, c, color, scale);
+                    draw_big_char(buf, w, h, sx + i * 8 * scale, y, c, color, scale);
                 }
                 // Blinking cursor during typing
                 if chars_shown > counted && chars_shown < counted + text.len() {
@@ -2059,8 +2059,8 @@ unsafe {
                     if (frame / 8) % 2 == 0 {
                         for cy in y..y + 16 * scale {
                             if cy < h && cx + 2 < w {
-                                buffer[cy * w + cx] = 0xFFFFFFFF;
-                                buffer[cy * w + cx + 1] = 0xFFFFFFFF;
+                                buf[cy * w + cx] = 0xFFFFFFFF;
+                                buf[cy * w + cx + 1] = 0xFFFFFFFF;
                             }
                         }
                     }
@@ -2068,7 +2068,7 @@ unsafe {
                 counted += text.len();
                 y += 16 * scale + 12;
             }
-            blit_buffer(buffer, w, h);
+            blit_buffer(buf, w, h);
             frame += 1;
             crate::cpu::tsc::pit_delay_mouse(frame_mouse);
         }
@@ -2079,11 +2079,11 @@ unsafe {
     // ---------------------------------------------------------------
     //  ACT I  --  THE QUESTION  (unique animations per scene)
     // ---------------------------------------------------------------
-    clear_buffer(&mut buffer);
-    show_scene(&mut buffer, w, h, &mut rain_cols, &rain_speeds,
+    clear_buffer(&mut buf);
+    show_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
         &[("ACT I", 0xFF88CCFF, 5)],
         50, 30, 1);
-    do_fade(&mut buffer, w, h, &blit_buffer);
+    do_fade(&mut buf, w, h, &blit_buffer);
 
     // -- Scene 1: Floating Windows -- "You use a computer every day" --
     {
@@ -2106,7 +2106,7 @@ unsafe {
                 if k == 0x1B { break; }
                 if k == b' ' || k == b'\r' || k == b'\n' { break; }
             }
-            bg_pulse(&mut buffer, w, h, frame);
+            bg_pulse(&mut buf, w, h, frame);
             // Animate floating windows
             for wi in 0..6 {
                 let win = &mut wins[wi];
@@ -2116,20 +2116,20 @@ unsafe {
                 win.1 += win.6;
                 if win.0 < 0 || win.0 + win.2 as i32 > w as i32 { win.5 = -win.5; win.0 += win.5; }
                 if win.1 < 0 || win.1 + win.3 as i32 > h as i32 { win.6 = -win.6; win.1 += win.6; }
-                let wx = win.0.maximum(0) as usize;
-                let wy = win.1.maximum(0) as usize;
+                let wx = win.0.max(0) as usize;
+                let wy = win.1.max(0) as usize;
                 let wc = win.4;
                 let wr = ((wc >> 16) & 0xFF) / 3;
                 let wg = ((wc >> 8)  & 0xFF) / 3;
                 let wb = (wc & 0xFF) / 3;
                 let dim = 0xFF000000 | (wr << 16) | (wg << 8) | wb;
-                draw_rect(&mut buffer, w, h, wx, wy, win.2, win.3, dim);
-                draw_rect(&mut buffer, w, h, wx, wy, win.2, 10, wc);
+                draw_rect(&mut buf, w, h, wx, wy, win.2, win.3, dim);
+                draw_rect(&mut buf, w, h, wx, wy, win.2, 10, wc);
                 // Fake content lines inside window
                 for li in 0..3usize {
                     let ly = wy + 16 + li * 12;
                     if ly + 5 < wy + win.3 {
-                        draw_rect(&mut buffer, w, h, wx + 6, ly, win.2.saturating_sub(12), 5, 0xFF222233);
+                        draw_rect(&mut buf, w, h, wx + 6, ly, win.2.saturating_sub(12), 5, 0xFF222233);
                     }
                 }
             }
@@ -2143,7 +2143,7 @@ unsafe {
             let sx1 = if tw1 < w { (w - tw1) / 2 } else { 0 };
             for (i, c) in text1.chars().enumerate() {
                 if i >= chars_shown { break; }
-                draw_big_char(&mut buffer, w, h, sx1 + i * 8 * scale, y1, c, 0xFFFFFFFF, scale);
+                draw_big_char(&mut buf, w, h, sx1 + i * 8 * scale, y1, c, 0xFFFFFFFF, scale);
             }
             if chars_shown > text1.len() {
                 let tw2 = text2.len() * 8 * scale;
@@ -2151,14 +2151,14 @@ unsafe {
                 let extra = chars_shown - text1.len();
                 for (i, c) in text2.chars().enumerate() {
                     if i >= extra { break; }
-                    draw_big_char(&mut buffer, w, h, sx2 + i * 8 * scale, y2, c, 0xFFFFFFFF, scale);
+                    draw_big_char(&mut buf, w, h, sx2 + i * 8 * scale, y2, c, 0xFFFFFFFF, scale);
                 }
             }
-            blit_buffer(&buffer, w, h);
+            blit_buffer(&buf, w, h);
             crate::cpu::tsc::pit_delay_mouse(frame_mouse);
         }
     }
-    do_fade(&mut buffer, w, h, &blit_buffer);
+    do_fade(&mut buf, w, h, &blit_buffer);
 
     // -- Scene 2: Question Marks Rain -- "Do you really know?" --
     {
@@ -2174,18 +2174,18 @@ unsafe {
                 if k == 0x1B { break; }
                 if k == b' ' || k == b'\r' || k == b'\n' { break; }
             }
-            bg_pulse(&mut buffer, w, h, frame);
+            bg_pulse(&mut buf, w, h, frame);
             // Rain question marks with acceleration
             let speed = 1 + (frame / 30) as i32;
             for qi in 0..number_qcols {
                 qy[qi] += speed + (qi as i32 % 3);
                 if qy[qi] > h as i32 { qy[qi] = -(qi as i32 * 13 % 60); }
                 if qy[qi] >= 0 {
-                    let pixel = qi * 10 + 2;
+                    let px = qi * 10 + 2;
                     let py = qy[qi] as usize;
                     let bright = 0xFF000000 | (0x40 << 16) | (0x60 << 8) | 0xFF;
-                    if pixel < w && py < h {
-                        draw_big_char(&mut buffer, w, h, pixel, py, '?', bright, 1);
+                    if px < w && py < h {
+                        draw_big_char(&mut buf, w, h, px, py, '?', bright, 1);
                     }
                 }
             }
@@ -2198,7 +2198,7 @@ unsafe {
             let sx1 = if tw1 < w { (w - tw1) / 2 } else { 0 };
             for (i, c) in text1.chars().enumerate() {
                 if i >= chars_shown { break; }
-                draw_big_char(&mut buffer, w, h, sx1 + i * 8 * scale, y1, c, 0xFFCCCCCC, scale);
+                draw_big_char(&mut buf, w, h, sx1 + i * 8 * scale, y1, c, 0xFFCCCCCC, scale);
             }
             if chars_shown > text1.len() {
                 let tw2 = text2.len() * 8 * scale;
@@ -2206,14 +2206,14 @@ unsafe {
                 let extra = chars_shown - text1.len();
                 for (i, c) in text2.chars().enumerate() {
                     if i >= extra { break; }
-                    draw_big_char(&mut buffer, w, h, sx2 + i * 8 * scale, y2, c, 0xFFFF9944, 4);
+                    draw_big_char(&mut buf, w, h, sx2 + i * 8 * scale, y2, c, 0xFFFF9944, 4);
                 }
             }
-            blit_buffer(&buffer, w, h);
+            blit_buffer(&buf, w, h);
             crate::cpu::tsc::pit_delay_mouse(frame_mouse);
         }
     }
-    do_fade(&mut buffer, w, h, &blit_buffer);
+    do_fade(&mut buf, w, h, &blit_buffer);
 
     // -- Scene 3: Screen Shatter -- "The honest answer... is no." --
     {
@@ -2233,7 +2233,7 @@ unsafe {
                 if k == 0x1B { break; }
                 if k == b' ' || k == b'\r' || k == b'\n' { break; }
             }
-            bg_scanlines(&mut buffer, w, h, frame);
+            bg_scanlines(&mut buf, w, h, frame);
             // Type text
             let chars_shown = (frame / fpc) as usize;
             let scale1 = 3usize;
@@ -2242,7 +2242,7 @@ unsafe {
             let sx1 = if tw1 < w { (w - tw1) / 2 } else { 0 };
             for (i, c) in text1.chars().enumerate() {
                 if i >= chars_shown { break; }
-                draw_big_char(&mut buffer, w, h, sx1 + i * 8 * scale1, y1, c, 0xFF888888, scale1);
+                draw_big_char(&mut buf, w, h, sx1 + i * 8 * scale1, y1, c, 0xFF888888, scale1);
             }
             if chars_shown > text1.len() {
                 let scale2 = 5usize;
@@ -2251,7 +2251,7 @@ unsafe {
                 let extra = chars_shown - text1.len();
                 for (i, c) in text2.chars().enumerate() {
                     if i >= extra { break; }
-                    draw_big_char(&mut buffer, w, h, sx2 + i * 8 * scale2, h / 2, c, 0xFFFF4444, scale2);
+                    draw_big_char(&mut buf, w, h, sx2 + i * 8 * scale2, h / 2, c, 0xFFFF4444, scale2);
                 }
             }
             // Shatter effect after typing
@@ -2261,32 +2261,32 @@ unsafe {
                 let cy = h / 2;
                 for &(cdx, cdy) in cracks.iter() {
                     for step in 0..(progress * 4) as i32 {
-                        let pixel = (cx as i32 + cdx * step).maximum(0) as usize;
-                        let py = (cy as i32 + cdy * step).maximum(0) as usize;
-                        if pixel < w && py < h {
-                            buffer[py * w + pixel] = 0xFFFFFFFF;
-                            if pixel + 1 < w { buffer[py * w + pixel + 1] = 0xFFFFDDDD; }
-                            if py + 1 < h { buffer[(py + 1) * w + pixel] = 0xFFFFDDDD; }
+                        let px = (cx as i32 + cdx * step).max(0) as usize;
+                        let py = (cy as i32 + cdy * step).max(0) as usize;
+                        if px < w && py < h {
+                            buf[py * w + px] = 0xFFFFFFFF;
+                            if px + 1 < w { buf[py * w + px + 1] = 0xFFFFDDDD; }
+                            if py + 1 < h { buf[(py + 1) * w + px] = 0xFFFFDDDD; }
                         }
                     }
                 }
             }
-            blit_buffer(&buffer, w, h);
+            blit_buffer(&buf, w, h);
             crate::cpu::tsc::pit_delay_mouse(frame_mouse);
         }
     }
-    do_fade(&mut buffer, w, h, &blit_buffer);
+    do_fade(&mut buf, w, h, &blit_buffer);
 
     // ---------------------------------------------------------------
     //  ACT II  --  THE PROBLEM  (binary flood + redacted bars)
     // ---------------------------------------------------------------
-    clear_buffer(&mut buffer);
-    show_scene(&mut buffer, w, h, &mut rain_cols, &rain_speeds,
+    clear_buffer(&mut buf);
+    show_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
         &[("ACT II", 0xFFFF6644, 5),
           ("", 0xFF000000, 1),
           ("The Problem", 0xFFFF4444, 3)],
         50, 30, 2);
-    do_fade(&mut buffer, w, h, &blit_buffer);
+    do_fade(&mut buf, w, h, &blit_buffer);
 
     // -- Scene 4: Binary Flood -- "It controls EVERYTHING" --
     {
@@ -2305,9 +2305,9 @@ unsafe {
                 if k == 0x1B { break; }
                 if k == b' ' || k == b'\r' || k == b'\n' { break; }
             }
-            bg_scanlines(&mut buffer, w, h, frame);
+            bg_scanlines(&mut buf, w, h, frame);
             // Binary flood: 0s and 1s cascading from top
-            let flood_rows = (frame as usize * 3).minimum(h);
+            let flood_rows = (frame as usize * 3).min(h);
             for fy in 0..flood_rows {
                 if fy >= h { break; }
                 // Sparse binary chars
@@ -2318,7 +2318,7 @@ unsafe {
                         let c = if seed < 8 { '0' } else { '1' };
                         let bright = (20 + (seed * 2)) as u32;
                         let color = 0xFF000000 | (bright << 16) | ((bright / 2) << 8) | (bright / 4);
-                        draw_big_char(&mut buffer, w, h, fx, fy, c, color, 1);
+                        draw_big_char(&mut buf, w, h, fx, fy, c, color, 1);
                     }
                 }
             }
@@ -2332,21 +2332,21 @@ unsafe {
                 let sx = if tw < w { (w - tw) / 2 } else { 0 };
                 // Dark background behind text
                 if !text.is_empty() {
-                    draw_rect(&mut buffer, w, h, sx.saturating_sub(4), y.saturating_sub(2),
+                    draw_rect(&mut buf, w, h, sx.saturating_sub(4), y.saturating_sub(2),
                         tw + 8, 16 * scale + 4, 0xCC000000);
                 }
                 for (i, c) in text.chars().enumerate() {
                     if counted + i >= chars_shown { break; }
-                    draw_big_char(&mut buffer, w, h, sx + i * 8 * scale, y, c, color, scale);
+                    draw_big_char(&mut buf, w, h, sx + i * 8 * scale, y, c, color, scale);
                 }
                 counted += text.len();
                 y += 16 * scale + 12;
             }
-            blit_buffer(&buffer, w, h);
+            blit_buffer(&buf, w, h);
             crate::cpu::tsc::pit_delay_mouse(frame_mouse);
         }
     }
-    do_fade(&mut buffer, w, h, &blit_buffer);
+    do_fade(&mut buf, w, h, &blit_buffer);
 
     // -- Scene 5: Redacted Bars -- "Nobody knows what's inside" --
     {
@@ -2376,12 +2376,12 @@ unsafe {
                 if k == 0x1B { break; }
                 if k == b' ' || k == b'\r' || k == b'\n' { break; }
             }
-            bg_scanlines(&mut buffer, w, h, frame);
+            bg_scanlines(&mut buf, w, h, frame);
             // Draw fake document on left side
             let doc_x = 30usize;
             for &(line, dy) in doc_lines.iter() {
                 if dy < h {
-                    draw_text_at(&mut buffer, w, h, doc_x, dy, line, 0xFF445566, 1);
+                    draw_text_at(&mut buf, w, h, doc_x, dy, line, 0xFF445566, 1);
                 }
             }
             // Redact bars sliding in after typing completes
@@ -2390,12 +2390,12 @@ unsafe {
                 for (di, &(_line, dy)) in doc_lines.iter().enumerate() {
                     let delay = di as u32 * 6;
                     if progress > delay {
-                        let bar_w = ((progress - delay) as usize * 12).minimum(280);
+                        let bar_w = ((progress - delay) as usize * 12).min(280);
                         if dy < h {
-                            draw_rect(&mut buffer, w, h, doc_x, dy.saturating_sub(2),
+                            draw_rect(&mut buf, w, h, doc_x, dy.saturating_sub(2),
                                 bar_w, 14, 0xFF000000);
                             if bar_w > 80 {
-                                draw_text_at(&mut buffer, w, h, doc_x + 4, dy,
+                                draw_text_at(&mut buf, w, h, doc_x + 4, dy,
                                     "REDACTED", 0xFFFF2222, 1);
                             }
                         }
@@ -2412,16 +2412,16 @@ unsafe {
                 let sx = text_x_base;
                 for (i, c) in text.chars().enumerate() {
                     if counted + i >= chars_shown { break; }
-                    draw_big_char(&mut buffer, w, h, sx + i * 8 * scale, y, c, color, scale);
+                    draw_big_char(&mut buf, w, h, sx + i * 8 * scale, y, c, color, scale);
                 }
                 counted += text.len();
                 y += 16 * scale + 12;
             }
-            blit_buffer(&buffer, w, h);
+            blit_buffer(&buf, w, h);
             crate::cpu::tsc::pit_delay_mouse(frame_mouse);
         }
     }
-    do_fade(&mut buffer, w, h, &blit_buffer);
+    do_fade(&mut buf, w, h, &blit_buffer);
 
     // -- Scene 6: Bar Chart with Earthquake Shake --
     {
@@ -2446,10 +2446,10 @@ unsafe {
                 if k == 0x1B { break; }
                 if k == b' ' || k == b'\r' || k == b'\n' { break; }
             }
-            bg_dotgrid(&mut buffer, w, h, frame);
+            bg_dotgrid(&mut buf, w, h, frame);
 
             let progress = if frame < 30 { 0u32 }
-                else { ((frame - 30) * 100 / 70).minimum(100) };
+                else { ((frame - 30) * 100 / 70).min(100) };
 
             // Earthquake shake when TrustOS bar appears (frame 100+)
             if frame > 100 && frame < 130 {
@@ -2461,50 +2461,50 @@ unsafe {
                 shake_y = 0;
             }
 
-            draw_text_centered(&mut buffer, w, h,
+            draw_text_centered(&mut buf, w, h,
                 (30i32 + shake_y) as usize,
                 "Lines of Code per OS", 0xFFFFFFFF, 3);
 
-            for (i, &(name, value, color)) in bar_data.iter().enumerate() {
-                let y = ((start_y + i * bar_spacing) as i32 + shake_y).maximum(0) as usize;
-                let adj_label_x = (label_x as i32 + shake_x).maximum(0) as usize;
-                draw_text_at(&mut buffer, w, h, adj_label_x, y + 10,
+            for (i, &(name, val, color)) in bar_data.iter().enumerate() {
+                let y = ((start_y + i * bar_spacing) as i32 + shake_y).max(0) as usize;
+                let adj_label_x = (label_x as i32 + shake_x).max(0) as usize;
+                draw_text_at(&mut buf, w, h, adj_label_x, y + 10,
                     name, 0xFFFFFFFF, 2);
-                let bar_x = (adj_label_x + 170).minimum(w.saturating_sub(10));
-                draw_rect(&mut buffer, w, h, bar_x, y,
+                let bar_x = (adj_label_x + 170).min(w.saturating_sub(10));
+                draw_rect(&mut buf, w, h, bar_x, y,
                     bar_maximum_w, bar_h_pixel, 0xFF111122);
-                let full_w = (value as usize * bar_maximum_w) / maximum_value as usize;
-                let target_w = full_w.maximum(12);
+                let full_w = (val as usize * bar_maximum_w) / maximum_value as usize;
+                let target_w = full_w.max(12);
                 let current_w = target_w * progress as usize / 100;
-                draw_rect(&mut buffer, w, h, bar_x, y,
+                draw_rect(&mut buf, w, h, bar_x, y,
                     current_w, bar_h_pixel, color);
 
                 // Flash effect on TrustOS bar appearance
                 if i == 3 && frame > 100 && frame < 110 {
                     let flash = 0xFF88FFAA;
-                    draw_rect(&mut buffer, w, h, bar_x, y,
+                    draw_rect(&mut buf, w, h, bar_x, y,
                         current_w + 4, bar_h_pixel + 4, flash);
                 }
 
                 if frame > 70 {
-                    let label = if value >= 1_000_000 {
-                        alloc::format!("{}M", value / 1_000_000)
+                    let label = if val >= 1_000_000 {
+                        alloc::format!("{}M", val / 1_000_000)
                     } else {
-                        alloc::format!("{}K", value / 1000)
+                        alloc::format!("{}K", val / 1000)
                     };
-                    draw_text_at(&mut buffer, w, h, bar_x + current_w + 10,
+                    draw_text_at(&mut buf, w, h, bar_x + current_w + 10,
                         y + 10, &label, 0xFFFFFFFF, 2);
                 }
             }
-            blit_buffer(&buffer, w, h);
+            blit_buffer(&buf, w, h);
             crate::cpu::tsc::pit_delay_mouse(frame_mouse);
         }
     }
-    do_fade(&mut buffer, w, h, &blit_buffer);
+    do_fade(&mut buf, w, h, &blit_buffer);
 
     // Contrast emphasis
-    clear_buffer(&mut buffer);
-    show_scene(&mut buffer, w, h, &mut rain_cols, &rain_speeds,
+    clear_buffer(&mut buf);
+    show_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
         &[("50 million vs 120 thousand.", 0xFFFFFFFF, 3),
           ("", 0xFF000000, 1),
           ("Like comparing a city", 0xFFCCCCCC, 2),
@@ -2513,18 +2513,18 @@ unsafe {
           ("Except the house", 0xFFCCCCCC, 2),
           ("does everything.", 0xFF00FF88, 3)],
         50, 80, 2);
-    do_fade(&mut buffer, w, h, &blit_buffer);
+    do_fade(&mut buf, w, h, &blit_buffer);
 
     // ---------------------------------------------------------------
     //  ACT III  --  THE SOLUTION  (light burst + odometer counter)
     // ---------------------------------------------------------------
-    clear_buffer(&mut buffer);
-    show_scene(&mut buffer, w, h, &mut rain_cols, &rain_speeds,
+    clear_buffer(&mut buf);
+    show_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
         &[("ACT III", 0xFF00FF88, 5),
           ("", 0xFF000000, 1),
           ("The Solution", 0xFF00CC66, 3)],
         50, 30, 4);
-    do_fade(&mut buffer, w, h, &blit_buffer);
+    do_fade(&mut buf, w, h, &blit_buffer);
 
     // -- Scene 7: Light Burst -- "What if one person could understand ALL of it?" --
     {
@@ -2543,7 +2543,7 @@ unsafe {
                 if k == 0x1B { break; }
                 if k == b' ' || k == b'\r' || k == b'\n' { break; }
             }
-            bg_sparks(&mut buffer, w, h, frame);
+            bg_sparks(&mut buf, w, h, frame);
             // Light burst: pulsing center with star rays
             let cx = w / 2;
             let cy = h / 2;
@@ -2554,22 +2554,22 @@ unsafe {
             let ray_length = 40 + (frame / 2) as i32;
             for &(rdx, rdy) in rays.iter() {
                 for step in 0..ray_length {
-                    let pixel = (cx as i32 + rdx * step).maximum(0) as usize;
-                    let py = (cy as i32 + rdy * step).maximum(0) as usize;
-                    if pixel < w && py < h {
+                    let px = (cx as i32 + rdx * step).max(0) as usize;
+                    let py = (cy as i32 + rdy * step).max(0) as usize;
+                    if px < w && py < h {
                         let falloff = (ray_length - step) as u32 * 3;
-                        let bright = (pulse + falloff).minimum(180);
+                        let bright = (pulse + falloff).min(180);
                         let r = bright;
-                        let g = (bright * 3 / 4).minimum(140);
-                        let b = (bright / 3).minimum(60);
-                        let existing = buffer[py * w + pixel];
+                        let g = (bright * 3 / 4).min(140);
+                        let b = (bright / 3).min(60);
+                        let existing = buf[py * w + px];
                         let er = ((existing >> 16) & 0xFF) + r;
                         let eg = ((existing >> 8) & 0xFF) + g;
                         let eb = (existing & 0xFF) + b;
-                        buffer[py * w + pixel] = 0xFF000000
-                            | (er.minimum(255) << 16)
-                            | (eg.minimum(255) << 8)
-                            | eb.minimum(255);
+                        buf[py * w + px] = 0xFF000000
+                            | (er.min(255) << 16)
+                            | (eg.min(255) << 8)
+                            | eb.min(255);
                     }
                 }
             }
@@ -2582,7 +2582,7 @@ unsafe {
                                            (cx.wrapping_sub(dx), cy+dy),
                                            (cx.wrapping_sub(dx), cy.wrapping_sub(dy))] {
                             if sx < w && sy < h {
-                                buffer[sy * w + sx] = 0xFFFFFFCC;
+                                buf[sy * w + sx] = 0xFFFFFFCC;
                             }
                         }
                     }
@@ -2597,7 +2597,7 @@ unsafe {
             let sx1 = if tw1 < w { (w - tw1) / 2 } else { 0 };
             for (i, c) in text1.chars().enumerate() {
                 if i >= chars_shown { break; }
-                draw_big_char(&mut buffer, w, h, sx1 + i * 8 * scale, y1, c, 0xFFFFFFFF, scale);
+                draw_big_char(&mut buf, w, h, sx1 + i * 8 * scale, y1, c, 0xFFFFFFFF, scale);
             }
             if chars_shown > text1.len() {
                 let tw2 = text2.len() * 8 * scale;
@@ -2605,14 +2605,14 @@ unsafe {
                 let extra = chars_shown - text1.len();
                 for (i, c) in text2.chars().enumerate() {
                     if i >= extra { break; }
-                    draw_big_char(&mut buffer, w, h, sx2 + i * 8 * scale, y2, c, 0xFF00FF88, scale);
+                    draw_big_char(&mut buf, w, h, sx2 + i * 8 * scale, y2, c, 0xFF00FF88, scale);
                 }
             }
-            blit_buffer(&buffer, w, h);
+            blit_buffer(&buf, w, h);
             crate::cpu::tsc::pit_delay_mouse(frame_mouse);
         }
     }
-    do_fade(&mut buffer, w, h, &blit_buffer);
+    do_fade(&mut buf, w, h, &blit_buffer);
 
     // -- Scene 8: Odometer Counter -- TrustOS stats --
     {
@@ -2628,12 +2628,12 @@ unsafe {
                 if k == 0x1B { break; }
                 if k == b' ' || k == b'\r' || k == b'\n' { break; }
             }
-            bg_sparks(&mut buffer, w, h, frame);
+            bg_sparks(&mut buf, w, h, frame);
             // Title
-            draw_text_centered(&mut buffer, w, h, 40, "TrustOS", 0xFF00FF88, 6);
+            draw_text_centered(&mut buf, w, h, 40, "TrustOS", 0xFF00FF88, 6);
             // Odometer: numbers roll from 0 to target
             let progress = if frame < 20 { 0u32 }
-                else { ((frame - 20) * 100 / 80).minimum(100) };
+                else { ((frame - 20) * 100 / 80).min(100) };
             let line_y_start = h / 2 - 40;
             for (si, &(prefix, suffix, target, color)) in stats.iter().enumerate() {
                 let y = line_y_start + si * 48;
@@ -2646,24 +2646,24 @@ unsafe {
                         alloc::format!("{}", current)
                     };
                     let full = alloc::format!("{} {}", number_str, suffix);
-                    draw_text_centered(&mut buffer, w, h, y, &full, color, scale);
+                    draw_text_centered(&mut buf, w, h, y, &full, color, scale);
                 } else if !prefix.is_empty() {
                     let full = alloc::format!("{} {}", prefix, suffix);
                     if frame > 60 + si as u32 * 15 {
-                        draw_text_centered(&mut buffer, w, h, y, &full, color, scale);
+                        draw_text_centered(&mut buf, w, h, y, &full, color, scale);
                     }
                 } else {
                     let full = alloc::format!("0 {}", suffix);
                     if frame > 60 + si as u32 * 15 {
-                        draw_text_centered(&mut buffer, w, h, y, &full, color, scale);
+                        draw_text_centered(&mut buf, w, h, y, &full, color, scale);
                     }
                 }
             }
-            blit_buffer(&buffer, w, h);
+            blit_buffer(&buf, w, h);
             crate::cpu::tsc::pit_delay_mouse(frame_mouse);
         }
     }
-    do_fade(&mut buffer, w, h, &blit_buffer);
+    do_fade(&mut buf, w, h, &blit_buffer);
 
     // -- Scene 9: Feature Grid with Glow Pulse --
     {
@@ -2688,14 +2688,14 @@ unsafe {
                 if let Some(k) = crate::keyboard::try_read_key() {
                     if k == 0x1B { break; }
                 }
-                bg_stars(&mut buffer, w, h, frame + reveal as u32 * 30);
-                draw_text_centered(&mut buffer, w, h, 30,
+                bg_stars(&mut buf, w, h, frame + reveal as u32 * 30);
+                draw_text_centered(&mut buf, w, h, 30,
                     "All of this in 10 MB:", 0xFFFFFFFF, 3);
                 for (fi, &(name, desc, color)) in features.iter().enumerate() {
                     if fi > reveal { break; }
-                    let column = fi % cols;
+                    let col = fi % cols;
                     let row = fi / cols;
-                    let fx = grid_x + column * (cell_w + 40);
+                    let fx = grid_x + col * (cell_w + 40);
                     let fy = grid_y + row * (cell_h + 20);
 
                     // Glow pulse: bright border that fades after reveal
@@ -2705,56 +2705,56 @@ unsafe {
                     let glow = glow as u32;
 
                     // Card background
-                    draw_rect(&mut buffer, w, h, fx, fy, cell_w, cell_h, 0xFF0E0E1E);
+                    draw_rect(&mut buf, w, h, fx, fy, cell_w, cell_h, 0xFF0E0E1E);
 
                     // Glow border (all 4 sides)
                     if glow > 0 {
-                        let gc = 0xFF000000 | (glow.minimum(255) << 16) | (glow.minimum(255) << 8) | glow.minimum(255);
-                        draw_rect(&mut buffer, w, h, fx.saturating_sub(2), fy.saturating_sub(2),
+                        let gc = 0xFF000000 | (glow.min(255) << 16) | (glow.min(255) << 8) | glow.min(255);
+                        draw_rect(&mut buf, w, h, fx.saturating_sub(2), fy.saturating_sub(2),
                             cell_w + 4, 3, gc);
-                        draw_rect(&mut buffer, w, h, fx.saturating_sub(2), fy + cell_h,
+                        draw_rect(&mut buf, w, h, fx.saturating_sub(2), fy + cell_h,
                             cell_w + 4, 3, gc);
-                        draw_rect(&mut buffer, w, h, fx.saturating_sub(2), fy,
+                        draw_rect(&mut buf, w, h, fx.saturating_sub(2), fy,
                             3, cell_h, gc);
-                        draw_rect(&mut buffer, w, h, fx + cell_w, fy,
+                        draw_rect(&mut buf, w, h, fx + cell_w, fy,
                             3, cell_h, gc);
                     }
 
                     // Top color bar
-                    draw_rect(&mut buffer, w, h, fx, fy, cell_w, 3, color);
-                    draw_rect(&mut buffer, w, h, fx, fy + cell_h - 1, cell_w, 1, 0xFF222244);
-                    draw_text_at(&mut buffer, w, h, fx + 10, fy + 12,
+                    draw_rect(&mut buf, w, h, fx, fy, cell_w, 3, color);
+                    draw_rect(&mut buf, w, h, fx, fy + cell_h - 1, cell_w, 1, 0xFF222244);
+                    draw_text_at(&mut buf, w, h, fx + 10, fy + 12,
                         name, color, 2);
-                    draw_text_at(&mut buffer, w, h, fx + 10, fy + 42,
+                    draw_text_at(&mut buf, w, h, fx + 10, fy + 42,
                         desc, 0xFFAAAAAA, 1);
                 }
-                blit_buffer(&buffer, w, h);
+                blit_buffer(&buf, w, h);
                 crate::cpu::tsc::pit_delay_mouse(frame_mouse);
             }
         }
         crate::cpu::tsc::pit_delay_mouse(1500);
     }
-    do_fade(&mut buffer, w, h, &blit_buffer);
+    do_fade(&mut buf, w, h, &blit_buffer);
 
     // ---------------------------------------------------------------
     //  ACT IV  --  THE PROOF  (bg: circuit-board traces -- technical)
     //  Retention: interactive-feeling animation, pattern interrupt
     // ---------------------------------------------------------------
-    clear_buffer(&mut buffer);
-    show_scene(&mut buffer, w, h, &mut rain_cols, &rain_speeds,
+    clear_buffer(&mut buf);
+    show_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
         &[("ACT IV", 0xFF00FF88, 5),
           ("", 0xFF000000, 1),
           ("The Proof", 0xFF00CC66, 3)],
         50, 30, 6);
-    do_fade(&mut buffer, w, h, &blit_buffer);
+    do_fade(&mut buf, w, h, &blit_buffer);
 
-    clear_buffer(&mut buffer);
-    show_scene(&mut buffer, w, h, &mut rain_cols, &rain_speeds,
+    clear_buffer(&mut buf);
+    show_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
         &[("When you visit a website,", 0xFFCCCCCC, 2),
           ("this is what happens", 0xFFCCCCCC, 2),
           ("inside TrustOS:", 0xFF00FF88, 2)],
         50, 60, 6);
-    do_fade(&mut buffer, w, h, &blit_buffer);
+    do_fade(&mut buf, w, h, &blit_buffer);
 
     // -- Packet journey animation (on circuit bg) --
     {
@@ -2779,33 +2779,33 @@ unsafe {
                 if let Some(k) = crate::keyboard::try_read_key() {
                     if k == 0x1B { break; }
                 }
-                bg_circuit(&mut buffer, w, h, frame + pass * 150);
+                bg_circuit(&mut buf, w, h, frame + pass * 150);
 
-                draw_text_centered(&mut buffer, w, h, 30,
+                draw_text_centered(&mut buf, w, h, 30,
                     label, 0xFFFFFFFF, 2);
 
                 for (si, &(name, color)) in stages.iter().enumerate() {
                     let sx = 40 + si * stage_w;
                     let bw = stage_w.saturating_sub(15);
-                    draw_rect(&mut buffer, w, h, sx, lane_y, bw, stage_h,
+                    draw_rect(&mut buf, w, h, sx, lane_y, bw, stage_h,
                               0xFF0E1020);
-                    draw_rect(&mut buffer, w, h, sx, lane_y, bw, 3, color);
-                    draw_rect(&mut buffer, w, h, sx, lane_y + stage_h - 1, bw, 1, 0xFF222244);
+                    draw_rect(&mut buf, w, h, sx, lane_y, bw, 3, color);
+                    draw_rect(&mut buf, w, h, sx, lane_y + stage_h - 1, bw, 1, 0xFF222244);
                     let transmit = sx + bw / 2 - name.len() * 4;
-                    draw_text_at(&mut buffer, w, h, transmit, lane_y + 22,
+                    draw_text_at(&mut buf, w, h, transmit, lane_y + 22,
                         name, color, 1);
                     if si < n - 1 {
                         let ax = sx + bw;
-                        draw_rect(&mut buffer, w, h, ax,
+                        draw_rect(&mut buf, w, h, ax,
                             lane_y + stage_h / 2 - 1, 15, 3, 0xFF334455);
                         // Arrow head
-                        draw_rect(&mut buffer, w, h, ax + 12,
+                        draw_rect(&mut buf, w, h, ax + 12,
                             lane_y + stage_h / 2 - 3, 3, 7, 0xFF556677);
                     }
                 }
 
                 // Animated packet with trail
-                let progress = (frame * 100 / 120).minimum(100) as usize;
+                let progress = (frame * 100 / 120).min(100) as usize;
                 let total_travel = (n - 1) * stage_w;
                 let packet_off = if pass == 0 {
                     total_travel * progress / 100
@@ -2818,49 +2818,49 @@ unsafe {
                 for trail in 1..6u32 {
                     let transmit = if pass == 0 { packet_x.saturating_sub(trail as usize * 6) }
                              else { packet_x + trail as usize * 6 };
-                    let alpha = (60u32.saturating_sub(trail * 12)).minimum(255);
+                    let alpha = (60u32.saturating_sub(trail * 12)).min(255);
                     let tc = 0xFF000000 | (alpha / 4 << 16) | (alpha << 8) | (alpha / 3);
-                    draw_rect(&mut buffer, w, h, transmit, packet_y + 2, 8, 12, tc);
+                    draw_rect(&mut buf, w, h, transmit, packet_y + 2, 8, 12, tc);
                 }
-                draw_rect(&mut buffer, w, h, packet_x, packet_y, 16, 16, packet_color);
-                draw_text_at(&mut buffer, w, h,
+                draw_rect(&mut buf, w, h, packet_x, packet_y, 16, 16, packet_color);
+                draw_text_at(&mut buf, w, h,
                     packet_x.saturating_sub(16), packet_y + 20,
                     "packet", 0xFFCCCCCC, 1);
 
-                blit_buffer(&buffer, w, h);
+                blit_buffer(&buf, w, h);
                 crate::cpu::tsc::pit_delay_mouse(frame_mouse);
             }
         }
     }
-    do_fade(&mut buffer, w, h, &blit_buffer);
+    do_fade(&mut buf, w, h, &blit_buffer);
 
     // Post-demo -- emotional beat
-    clear_buffer(&mut buffer);
-    show_scene(&mut buffer, w, h, &mut rain_cols, &rain_speeds,
+    clear_buffer(&mut buf);
+    show_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
         &[("Every step is visible.", 0xFFFFFFFF, 3),
           ("Every byte is readable.", 0xFFFFFFFF, 3),
           ("", 0xFF000000, 1),
           ("Nothing is hidden.", 0xFF00FF88, 4)],
         50, 80, 4);
-    do_fade(&mut buffer, w, h, &blit_buffer);
+    do_fade(&mut buf, w, h, &blit_buffer);
 
     // ---------------------------------------------------------------
     //  ACT V  --  THE FUTURE  (sparkle dissolve + expanding rings)
     // ---------------------------------------------------------------
-    clear_buffer(&mut buffer);
-    show_scene(&mut buffer, w, h, &mut rain_cols, &rain_speeds,
+    clear_buffer(&mut buf);
+    show_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
         &[("ACT V", 0xFFFFDD88, 5),
           ("", 0xFF000000, 1),
           ("The Future", 0xFFFFAA44, 3)],
         50, 30, 7);
-    do_fade(&mut buffer, w, h, &blit_buffer);
+    do_fade(&mut buf, w, h, &blit_buffer);
 
-    clear_buffer(&mut buffer);
-    show_scene(&mut buffer, w, h, &mut rain_cols, &rain_speeds,
+    clear_buffer(&mut buf);
+    show_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
         &[("You deserve to understand", 0xFFFFFFFF, 3),
           ("your own machine.", 0xFFFFFFFF, 3)],
         50, 60, 7);
-    do_fade(&mut buffer, w, h, &blit_buffer);
+    do_fade(&mut buf, w, h, &blit_buffer);
 
     // -- Scene 10: Sparkle Dissolve -- "Computing is not magic" --
     {
@@ -2874,9 +2874,9 @@ unsafe {
                 if k == 0x1B { break; }
                 if k == b' ' || k == b'\r' || k == b'\n' { break; }
             }
-            bg_sunrise(&mut buffer, w, h, frame);
+            bg_sunrise(&mut buf, w, h, frame);
             // Sparkles: random bright points that form geometric shapes
-            let sparkle_count = (frame * 2).minimum(200) as usize;
+            let sparkle_count = (frame * 2).min(200) as usize;
             for si in 0..sparkle_count {
                 let seed = si.wrapping_mul(2654435761).wrapping_add(frame as usize * 131);
                 let sx = seed % w;
@@ -2912,8 +2912,8 @@ match shape_phase {
                 };
                 if fx < w && fy < h {
                     let bright = (100 + (seed % 155)) as u32;
-                    buffer[fy * w + fx] = 0xFF000000 | (bright << 16) | (bright << 8) | bright;
-                    if fx + 1 < w { buffer[fy * w + fx + 1] = 0xFF000000 | (bright << 16) | ((bright / 2) << 8); }
+                    buf[fy * w + fx] = 0xFF000000 | (bright << 16) | (bright << 8) | bright;
+                    if fx + 1 < w { buf[fy * w + fx + 1] = 0xFF000000 | (bright << 16) | ((bright / 2) << 8); }
                 }
             }
             // Type text
@@ -2925,7 +2925,7 @@ match shape_phase {
             let sx1 = if tw1 < w { (w - tw1) / 2 } else { 0 };
             for (i, c) in text1.chars().enumerate() {
                 if i >= chars_shown { break; }
-                draw_big_char(&mut buffer, w, h, sx1 + i * 8 * scale, y1, c, 0xFFCCCCCC, scale);
+                draw_big_char(&mut buf, w, h, sx1 + i * 8 * scale, y1, c, 0xFFCCCCCC, scale);
             }
             if chars_shown > text1.len() {
                 let tw2 = text2.len() * 8 * scale;
@@ -2933,14 +2933,14 @@ match shape_phase {
                 let extra = chars_shown - text1.len();
                 for (i, c) in text2.chars().enumerate() {
                     if i >= extra { break; }
-                    draw_big_char(&mut buffer, w, h, sx2 + i * 8 * scale, y2, c, 0xFFFFDD88, scale);
+                    draw_big_char(&mut buf, w, h, sx2 + i * 8 * scale, y2, c, 0xFFFFDD88, scale);
                 }
             }
-            blit_buffer(&buffer, w, h);
+            blit_buffer(&buf, w, h);
             crate::cpu::tsc::pit_delay_mouse(frame_mouse);
         }
     }
-    do_fade(&mut buffer, w, h, &blit_buffer);
+    do_fade(&mut buf, w, h, &blit_buffer);
 
     // -- Scene 11: Expanding Rings -- "TrustOS proves it." --
     {
@@ -2954,7 +2954,7 @@ match shape_phase {
                 if k == 0x1B { break; }
                 if k == b' ' || k == b'\r' || k == b'\n' { break; }
             }
-            bg_sunrise(&mut buffer, w, h, frame);
+            bg_sunrise(&mut buf, w, h, frame);
             let cx = w / 2;
             let cy = h / 2;
             // Expanding concentric rings (shockwave)
@@ -2964,14 +2964,14 @@ match shape_phase {
                 for ri in 0..number_rings {
                     let radius = (ring_progress as usize * 4).saturating_sub(ri as usize * 30);
                     if radius == 0 || radius > w { continue; }
-                    let bright = (200u32.saturating_sub(ri * 30)).minimum(255);
-                    let r_color = 0xFF000000 | ((bright / 3) << 16) | (bright << 8) | ((bright * 2 / 3).minimum(255));
+                    let bright = (200u32.saturating_sub(ri * 30)).min(255);
+                    let r_color = 0xFF000000 | ((bright / 3) << 16) | (bright << 8) | ((bright * 2 / 3).min(255));
                     // Draw ring using distance check in a bounding box
                     let r2_outer = radius * radius;
                     let r_inner = radius.saturating_sub(3);
                     let r2_inner = r_inner * r_inner;
                     let y_start = cy.saturating_sub(radius);
-                    let y_end = (cy + radius).minimum(h);
+                    let y_end = (cy + radius).min(h);
                     for py in y_start..y_end {
                         let dy = if py >= cy { py - cy } else { cy - py };
                         let dy2 = dy * dy;
@@ -2986,13 +2986,13 @@ match shape_phase {
                         while (dx_minimum + 1) * (dx_minimum + 1) <= dx_minimum_sq { dx_minimum += 1; }
                         // Draw right arc
                         for dx in dx_minimum..=dx_maximum {
-                            let pixel = cx + dx;
-                            if pixel < w { buffer[py * w + pixel] = r_color; }
+                            let px = cx + dx;
+                            if px < w { buf[py * w + px] = r_color; }
                         }
                         // Draw left arc
                         for dx in dx_minimum..=dx_maximum {
-                            let pixel = cx.wrapping_sub(dx);
-                            if pixel < w { buffer[py * w + pixel] = r_color; }
+                            let px = cx.wrapping_sub(dx);
+                            if px < w { buf[py * w + px] = r_color; }
                         }
                     }
                 }
@@ -3005,30 +3005,30 @@ match shape_phase {
             let ty = h / 2 - 8 * scale;
             for (i, c) in text.chars().enumerate() {
                 if i >= chars_shown { break; }
-                draw_big_char(&mut buffer, w, h, sx + i * 8 * scale, ty, c, 0xFF00FF88, scale);
+                draw_big_char(&mut buf, w, h, sx + i * 8 * scale, ty, c, 0xFF00FF88, scale);
             }
-            blit_buffer(&buffer, w, h);
+            blit_buffer(&buf, w, h);
             crate::cpu::tsc::pit_delay_mouse(frame_mouse);
         }
     }
-    do_fade(&mut buffer, w, h, &blit_buffer);
+    do_fade(&mut buf, w, h, &blit_buffer);
 
     // ---------------------------------------------------------------
     //  OUTRO  (Matrix rain callback -- signature TrustOS feel)
     // ---------------------------------------------------------------
-    clear_buffer(&mut buffer);
-    show_scene(&mut buffer, w, h, &mut rain_cols, &rain_speeds,
+    clear_buffer(&mut buf);
+    show_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
         &[("Trust the code.", 0xFF00FF88, 5),
           ("", 0xFF000000, 1),
           ("Rust is the reason.", 0xFFFF7744, 3),
           ("", 0xFF000000, 1),
           ("github.com/nathan237/TrustOS", 0xFFCCCCCC, 2)],
         60, 150, 8);
-    do_fade(&mut buffer, w, h, &blit_buffer);
+    do_fade(&mut buf, w, h, &blit_buffer);
 
     // -- Cleanup --
-    clear_buffer(&mut buffer);
-    blit_buffer(&buffer, w, h);
+    clear_buffer(&mut buf);
+    blit_buffer(&buf, w, h);
     if !was_db {
         crate::framebuffer::set_double_buffer_mode(false);
     }
@@ -3325,8 +3325,8 @@ match crate::ramfs::with_filesystem(|fs| fs.read_file(path).map(|d| d.to_vec()))
             
             if show_strings && !analysis.strings.is_empty() {
                 crate::println_color!(COLOR_YELLOW, "=== Strings (first 20) ===");
-                for (address, s) in analysis.strings.iter().take(20) {
-                    crate::println!("0x{:06x}: \"{}\"", address, s);
+                for (addr, s) in analysis.strings.iter().take(20) {
+                    crate::println!("0x{:06x}: \"{}\"", addr, s);
                 }
                 crate::println!();
             }
@@ -3374,10 +3374,10 @@ match crate::ramfs::with_filesystem(|fs| fs.read_file(path).map(|d| d.to_vec()))
     crate::println_color!(COLOR_CYAN, "Strings in {}: {} found", path, strings.len());
     crate::println!();
     
-    for (address, s) in strings.iter() {
+    for (addr, s) in strings.iter() {
         // Skip binary garbage
         if s.chars().all(|c| c.is_ascii_graphic() || c == ' ') {
-            crate::println!("0x{:06x}: {}", address, s);
+            crate::println!("0x{:06x}: {}", addr, s);
         }
     }
 }
@@ -3438,26 +3438,26 @@ match crate::ramfs::with_filesystem(|fs| fs.ls(Some("/alpine/bin"))) {
         if let Ok(data) = crate::ramfs::with_filesystem(|fs| fs.read_file(&path).map(|d| d.to_vec())) {
             if let Some(analysis) = crate::transpiler::analyze_elf(&data) {
                 let syscall_count = analysis.syscalls_used.len();
-                let instruction_count = analysis.functions.first().map(|f| f.instructions.len()).unwrap_or(0);
+                let instr_count = analysis.functions.first().map(|f| f.instructions.len()).unwrap_or(0);
                 
-                if syscall_count <= 3 && instruction_count < 100 {
-                    simple.push((name.clone(), syscall_count, instruction_count));
+                if syscall_count <= 3 && instr_count < 100 {
+                    simple.push((name.clone(), syscall_count, instr_count));
                 } else {
-                    complex.push((name.clone(), syscall_count, instruction_count));
+                    complex.push((name.clone(), syscall_count, instr_count));
                 }
             }
         }
     }
     
     crate::println_color!(COLOR_GREEN, "Simple binaries ({} - easy to transpile):", simple.len());
-    for (name, sc, instruction) in &simple {
-        crate::println!("  {} - {} syscalls, {} instructions", name, sc, instruction);
+    for (name, sc, instr) in &simple {
+        crate::println!("  {} - {} syscalls, {} instructions", name, sc, instr);
     }
     
     crate::println!();
     crate::println_color!(COLOR_YELLOW, "Complex binaries ({} - need more work):", complex.len());
-    for (name, sc, instruction) in complex.iter().take(10) {
-        crate::println!("  {} - {} syscalls, {} instructions", name, sc, instruction);
+    for (name, sc, instr) in complex.iter().take(10) {
+        crate::println!("  {} - {} syscalls, {} instructions", name, sc, instr);
     }
     if complex.len() > 10 {
         crate::println!("  ... and {} more", complex.len() - 10);
@@ -4044,8 +4044,8 @@ match subcmd {
             // Real-time streaming render -- no file accumulation
             let software = crate::framebuffer::width();
             let sh = crate::framebuffer::height();
-            let vw = software.minimum(640) as u16;
-            let vh = sh.minimum(480) as u16;
+            let vw = software.min(640) as u16;
+            let vh = sh.min(480) as u16;
 
                         // Correspondance de motifs — branchement exhaustif de Rust.
 match effect {
@@ -4078,7 +4078,7 @@ match crate::vfs::read_file(&path) {
                     let mut player = crate::video::player::VideoPlayer::new();
                                         // Correspondance de motifs — branchement exhaustif de Rust.
 match player.play_data(data) {
-                        Ok(message) => crate::println!("{}", message),
+                        Ok(msg) => crate::println!("{}", msg),
                         Err(e) => crate::println!("Error: {}", e),
                     }
                 }
@@ -4102,16 +4102,16 @@ match args.get(1) {
                         // Correspondance de motifs — branchement exhaustif de Rust.
 match crate::vfs::read_file(&path) {
                 Ok(data) => {
-                    if let Some(header) = crate::video::codec::TvHeader::from_bytes(&data) {
+                    if let Some(hdr) = crate::video::codec::TvHeader::from_bytes(&data) {
                         crate::println!("=== TrustVideo Info ===");
-                        crate::println!("  Format:     TrustVideo v{}", header.version);
-                        crate::println!("  Resolution: {}x{}", header.width, header.height);
-                        crate::println!("  FPS:        {}", header.fps);
-                        crate::println!("  Frames:     {}", header.frame_count);
-                        crate::println!("  Duration:   {:.1}s", header.frame_count as f64 / header.fps as f64);
-                        crate::println!("  Keyframe:   every {} frames", header.keyframe_interval);
+                        crate::println!("  Format:     TrustVideo v{}", hdr.version);
+                        crate::println!("  Resolution: {}x{}", hdr.width, hdr.height);
+                        crate::println!("  FPS:        {}", hdr.fps);
+                        crate::println!("  Frames:     {}", hdr.frame_count);
+                        crate::println!("  Duration:   {:.1}s", hdr.frame_count as f64 / hdr.fps as f64);
+                        crate::println!("  Keyframe:   every {} frames", hdr.keyframe_interval);
                         crate::println!("  File size:  {} bytes ({} KB)", data.len(), data.len() / 1024);
-                        let raw_size = header.width as usize * header.height as usize * 4 * header.frame_count as usize;
+                        let raw_size = hdr.width as usize * hdr.height as usize * 4 * hdr.frame_count as usize;
                         if raw_size > 0 {
                             let ratio = raw_size as f64 / data.len() as f64;
                             crate::println!("  Compression: {:.1}x (raw would be {} KB)", ratio, raw_size / 1024);

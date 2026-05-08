@@ -11,7 +11,7 @@ const USER_STACK_SIZE: usize = 1024 * 1024;
 pub // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const USER_CODE_BASE: u64 = 0x0000_0000_0040_0000;
 
-pub static mut USER_RSP_TEMPORARY: u64 = 0;
+pub static mut USER_RSP_TEMP: u64 = 0;
 pub static mut USER_RETURN_RIP: u64 = 0;
 pub static mut USER_RETURN_RFLAGS: u64 = 0;
 pub static mut SIGNAL_DELIVER_SIGNO: u64 = 0;

@@ -50,35 +50,35 @@ pub enum SandboxState {
 // Structure publique — visible à l'extérieur de ce module.
 pub struct ResourceLimits {
     /// Max memory in bytes (default 4 MB)
-    pub maximum_memory_bytes: usize,
+    pub max_memory_bytes: usize,
     /// Max concurrent network requests
-    pub maximum_concurrent_requests: usize,
+    pub max_concurrent_requests: usize,
     /// Max total requests per session
-    pub maximum_total_requests: usize,
+    pub max_total_requests: usize,
     /// Max response body size in bytes (default 1 MB)
-    pub maximum_response_size: usize,
+    pub max_response_size: usize,
     /// Max files in sandbox filesystem
-    pub maximum_filesystem_files: usize,
+    pub max_fs_files: usize,
     /// Max total filesystem storage in bytes (default 512 KB)
-    pub maximum_filesystem_bytes: usize,
+    pub max_fs_bytes: usize,
     /// JS execution time limit in ms (0 = unlimited)
-    pub js_timeout_mouse: u64,
+    pub js_timeout_ms: u64,
     /// JS max stack depth
-    pub js_maximum_stack: usize,
+    pub js_max_stack: usize,
 }
 
 // Implémentation de trait — remplit un contrat comportemental.
 impl Default for ResourceLimits {
     fn default() -> Self {
         Self {
-            maximum_memory_bytes: 4 * 1024 * 1024,       // 4 MB
-            maximum_concurrent_requests: 4,
-            maximum_total_requests: 100,
-            maximum_response_size: 1024 * 1024,           // 1 MB
-            maximum_filesystem_files: 64,
-            maximum_filesystem_bytes: 512 * 1024,                 // 512 KB
-            js_timeout_mouse: 5000,
-            js_maximum_stack: 64,
+            max_memory_bytes: 4 * 1024 * 1024,       // 4 MB
+            max_concurrent_requests: 4,
+            max_total_requests: 100,
+            max_response_size: 1024 * 1024,           // 1 MB
+            max_fs_files: 64,
+            max_fs_bytes: 512 * 1024,                 // 512 KB
+            js_timeout_ms: 5000,
+            js_max_stack: 64,
         }
     }
 }
@@ -87,7 +87,7 @@ impl Default for ResourceLimits {
 #[derive(Debug, Clone)]
 // Structure publique — visible à l'extérieur de ce module.
 pub struct AuditEntry {
-    pub timestamp_mouse: u64,
+    pub timestamp_ms: u64,
     pub sandbox_id: SandboxId,
     pub action: AuditAction,
     pub detail: String,
@@ -103,7 +103,7 @@ pub enum AuditAction {
     NetworkBlocked,
     JsExecute,
     JsBlocked,
-    FilesystemAccess,
+    FsAccess,
     PolicyViolation,
     Destroyed,
 }
@@ -117,8 +117,8 @@ pub struct SandboxStats {
     pub bytes_received: usize,
     pub js_executions: usize,
     pub policy_violations: usize,
-    pub filesystem_files_created: usize,
-    pub filesystem_bytes_used: usize,
+    pub fs_files_created: usize,
+    pub fs_bytes_used: usize,
 }
 
 // Bloc d'implémentation — définit les méthodes du type ci-dessus.
@@ -130,8 +130,8 @@ impl SandboxStats {
             bytes_received: 0,
             js_executions: 0,
             policy_violations: 0,
-            filesystem_files_created: 0,
-            filesystem_bytes_used: 0,
+            fs_files_created: 0,
+            fs_bytes_used: 0,
         }
     }
 }
@@ -164,7 +164,7 @@ pub struct Sandbox {
 impl Sandbox {
     fn new(id: SandboxId, capability: CapabilityId, policy: SandboxPolicy, limits: ResourceLimits, label: String) -> Self {
         let net_proxy = NetProxy::new(id, &policy);
-        let filesystem = SandboxFs::new(id, limits.maximum_filesystem_files, limits.maximum_filesystem_bytes);
+        let filesystem = SandboxFs::new(id, limits.max_fs_files, limits.max_fs_bytes);
         Self {
             id,
             state: SandboxState::Idle,
@@ -188,9 +188,9 @@ pub struct SandboxManager {
     sandboxes: BTreeMap<u64, Sandbox>,
     next_id: u64,
     /// Dynamic capability type ID for WebSandbox
-    capability_type_id: Option<u32>,
+    cap_type_id: Option<u32>,
     /// Master capability (parent for all sandbox capabilities)
-    master_capability: Option<CapabilityId>,
+    master_cap: Option<CapabilityId>,
     /// Global audit log (ring buffer, max 256 entries)
     audit_log: Vec<AuditEntry>,
 }
@@ -202,8 +202,8 @@ pub fn new() -> Self {
         Self {
             sandboxes: BTreeMap::new(),
             next_id: 1,
-            capability_type_id: None,
-            master_capability: None,
+            cap_type_id: None,
+            master_cap: None,
             audit_log: Vec::new(),
         }
     }
@@ -216,7 +216,7 @@ pub fn new() -> Self {
             "Security",
             "Web sandbox isolation — controls network, JS, filesystem access for untrusted web content"
         );
-        self.capability_type_id = Some(type_id);
+        self.cap_type_id = Some(type_id);
 
         // Create master capability with full rights (kernel-only)
         let master = security::create_capability(
@@ -227,7 +227,7 @@ pub fn new() -> Self {
                 .union(CapabilityRights::CONTROL),
             0, // kernel owner
         );
-        self.master_capability = Some(master);
+        self.master_cap = Some(master);
     }
 
     /// Create a new sandbox with the given preset and optional custom label
@@ -236,7 +236,7 @@ pub fn new() -> Self {
         self.next_id += 1;
 
         // Derive a restricted capability from master (read + write only, no control)
-        let capability = if let Some(master) = self.master_capability {
+        let capability = if let Some(master) = self.master_cap {
             security::derive(
                 master,
                 CapabilityRights::READ.union(CapabilityRights::WRITE),
@@ -248,8 +248,8 @@ pub fn new() -> Self {
 
         let policy = SandboxPolicy::from_preset(preset);
         let limits = ResourceLimits::default();
-        let label = label.unwrap_or("sandbox").into();
-        let sandbox = Sandbox::new(id, capability, policy, limits, label);
+        let lbl = label.unwrap_or("sandbox").into();
+        let sandbox = Sandbox::new(id, capability, policy, limits, lbl);
         self.sandboxes.insert(id.0, sandbox);
 
         self.audit(id, AuditAction::Created, format!("preset={:?}", preset));
@@ -268,7 +268,7 @@ pub fn new() -> Self {
             if sandbox.state == SandboxState::Suspended {
                 return Err(SandboxError::Suspended);
             }
-            if sandbox.stats.requests_made >= sandbox.limits.maximum_total_requests {
+            if sandbox.stats.requests_made >= sandbox.limits.max_total_requests {
                 // Need mutable access for stats update
             }
         }
@@ -277,7 +277,7 @@ pub fn new() -> Self {
         let sandbox = self.sandboxes.get_mut(&id.0)
             .ok_or(SandboxError::NotFound)?;
 
-        if sandbox.stats.requests_made >= sandbox.limits.maximum_total_requests {
+        if sandbox.stats.requests_made >= sandbox.limits.max_total_requests {
             sandbox.stats.policy_violations += 1;
             return Err(SandboxError::RequestLimitExceeded);
         }
@@ -296,8 +296,8 @@ match verdict {
 
         // Phase 3: Fetch through proxy
         sandbox.stats.requests_made += 1;
-        let maximum_size = sandbox.limits.maximum_response_size;
-        let response = sandbox.net_proxy.fetch(url, maximum_size)?;
+        let max_size = sandbox.limits.max_response_size;
+        let response = sandbox.net_proxy.fetch(url, max_size)?;
 
         sandbox.stats.bytes_received += response.body.len();
         sandbox.current_url = Some(url.into());
@@ -330,7 +330,7 @@ match verdict {
             });
         }
 
-        if sandbox.stats.requests_made >= sandbox.limits.maximum_total_requests {
+        if sandbox.stats.requests_made >= sandbox.limits.max_total_requests {
             sandbox.stats.policy_violations += 1;
             return Err(SandboxError::RequestLimitExceeded);
         }
@@ -346,8 +346,8 @@ match verdict {
         }
 
         sandbox.stats.requests_made += 1;
-        let maximum_size = sandbox.limits.maximum_response_size;
-        let response = sandbox.net_proxy.fetch(url, maximum_size)?;
+        let max_size = sandbox.limits.max_response_size;
+        let response = sandbox.net_proxy.fetch(url, max_size)?;
         sandbox.stats.bytes_received += response.body.len();
         sandbox.page_cache.insert(url.into(), response.body.clone());
         Ok(response)
@@ -406,9 +406,9 @@ match verdict {
 
     /// Add audit log entry
     fn audit(&mut self, id: SandboxId, action: AuditAction, detail: String) {
-        let ts = crate::time::uptime_mouse();
+        let ts = crate::time::uptime_ms();
         self.audit_log.push(AuditEntry {
-            timestamp_mouse: ts,
+            timestamp_ms: ts,
             sandbox_id: id,
             action,
             detail,
@@ -441,8 +441,8 @@ pub enum SandboxError {
     PolicyDenied(String),
     RequestLimitExceeded,
     NetworkError(String),
-    FilesystemQuotaExceeded,
-    FilesystemNotFound,
+    FsQuotaExceeded,
+    FsNotFound,
     JsTimeout,
     JsStackOverflow,
     CapabilityDenied,
@@ -474,8 +474,8 @@ static ref SANDBOX_MANAGER: Mutex<SandboxManager> = Mutex::new(SandboxManager::n
 
 /// Initialize the sandbox subsystem — call after security::init()
 pub fn init() {
-    let mut manager = SANDBOX_MANAGER.lock();
-    manager.register_capability_type();
+    let mut mgr = SANDBOX_MANAGER.lock();
+    mgr.register_capability_type();
     crate::serial_println!("[sandbox] Web Sandbox subsystem initialized");
     crate::serial_println!("[sandbox] Capability type registered: WebSandbox (danger=3)");
 }
@@ -502,24 +502,24 @@ pub fn destroy(id: SandboxId) -> Result<(), SandboxError> {
 
 /// List all sandboxes
 pub fn list() -> Vec<(SandboxId, String, SandboxState)> {
-    SANDBOX_MANAGER.lock().list().into_iterator()
+    SANDBOX_MANAGER.lock().list().into_iter()
         .map(|(id, s, st)| (id, String::from(s), st))
         .collect()
 }
 
 /// Get sandbox status info string
 pub fn status_string(id: SandboxId) -> Option<String> {
-    let manager = SANDBOX_MANAGER.lock();
-    let sb = manager.get(id)?;
+    let mgr = SANDBOX_MANAGER.lock();
+    let sb = mgr.get(id)?;
     Some(format!(
         "Sandbox #{} '{}'\n  State: {:?}\n  URL: {}\n  Requests: {}/{} ({} blocked)\n  Data: {} bytes\n  JS execs: {}\n  Violations: {}\n  FS: {} files, {} bytes\n  Policy: {:?}",
         sb.id.0, sb.label, sb.state,
         sb.current_url.as_deref().unwrap_or("(none)"),
-        sb.stats.requests_made, sb.limits.maximum_total_requests, sb.stats.requests_blocked,
+        sb.stats.requests_made, sb.limits.max_total_requests, sb.stats.requests_blocked,
         sb.stats.bytes_received,
         sb.stats.js_executions,
         sb.stats.policy_violations,
-        sb.stats.filesystem_files_created, sb.stats.filesystem_bytes_used,
+        sb.stats.fs_files_created, sb.stats.fs_bytes_used,
         sb.policy.preset,
     ))
 }

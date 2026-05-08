@@ -71,12 +71,12 @@ unsafe { data.read(); }
 
     // 6. Reset keyboard device (send 0xFF → expect 0xFA ACK, then 0xAA BAT pass)
     i8042_write_data(0xFF);
-    let acknowledge = i8042_read_data();
-    if acknowledge == 0xFA {
+    let ack = i8042_read_data();
+    if ack == 0xFA {
         let bat = i8042_read_data();
-        crate::serial_println!("[i8042] Keyboard reset: ACK={:#04x} BAT={:#04x}", acknowledge, bat);
+        crate::serial_println!("[i8042] Keyboard reset: ACK={:#04x} BAT={:#04x}", ack, bat);
     } else {
-        crate::serial_println!("[i8042] Keyboard reset: response {:#04x} (no ACK)", acknowledge);
+        crate::serial_println!("[i8042] Keyboard reset: response {:#04x} (no ACK)", ack);
     }
 
     // 7. Flush again in case the reset produced extra bytes
@@ -99,7 +99,7 @@ fn i8042_command(cmd: u8) {
     let mut status = Port::<u8>::new(PS2_STATUS);
     let mut command = Port::<u8>::new(PS2_COMMAND);
     // Wait for input buffer empty (bit 1 = 0)
-    // Use large timeout for slow controllers (e.g. Lenovo T61)
+    // Use large timeout for slow controllers (e.g. older laptops)
     for _ in 0..1_000_000 {
         if         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { status.read() } & 0x02 == 0 { break; }
@@ -179,8 +179,8 @@ const KEY_CONTROLLER_RIGHT: u8 = 0xD6;      // Ctrl+Right word right
 /// Ring buffer for keyboard input
 struct KeyboardBuffer {
     buffer: [u8; BUFFER_SIZE],
-    read_position: usize,
-    write_position: usize,
+    read_pos: usize,
+    write_pos: usize,
 }
 
 // Implementation block — defines methods for the type above.
@@ -188,31 +188,31 @@ impl KeyboardBuffer {
     const fn new() -> Self {
         Self {
             buffer: [0; BUFFER_SIZE],
-            read_position: 0,
-            write_position: 0,
+            read_pos: 0,
+            write_pos: 0,
         }
     }
 
     fn push(&mut self, byte: u8) {
-        let next_write = (self.write_position + 1) % BUFFER_SIZE;
-        if next_write != self.read_position {
-            self.buffer[self.write_position] = byte;
-            self.write_position = next_write;
+        let next_write = (self.write_pos + 1) % BUFFER_SIZE;
+        if next_write != self.read_pos {
+            self.buffer[self.write_pos] = byte;
+            self.write_pos = next_write;
         }
     }
 
     fn pop(&mut self) -> Option<u8> {
-        if self.read_position == self.write_position {
+        if self.read_pos == self.write_pos {
             None
         } else {
-            let byte = self.buffer[self.read_position];
-            self.read_position = (self.read_position + 1) % BUFFER_SIZE;
+            let byte = self.buffer[self.read_pos];
+            self.read_pos = (self.read_pos + 1) % BUFFER_SIZE;
             Some(byte)
         }
     }
 
     fn is_empty(&self) -> bool {
-        self.read_position == self.write_position
+        self.read_pos == self.write_pos
     }
 }
 
@@ -221,8 +221,8 @@ const HISTORY_SIZE: usize = 32;
 
 struct CommandHistory {
     entries: [Option<String>; HISTORY_SIZE],
-    write_position: usize,
-    browse_position: usize,
+    write_pos: usize,
+    browse_pos: usize,
     count: usize,
 }
 
@@ -237,8 +237,8 @@ impl CommandHistory {
                 None, None, None, None, None, None, None, None,
                 None, None, None, None, None, None, None, None,
             ],
-            write_position: 0,
-            browse_position: 0,
+            write_pos: 0,
+            browse_pos: 0,
             count: 0,
         }
     }
@@ -249,80 +249,80 @@ impl CommandHistory {
         }
         // Don't add duplicates of last command
         if self.count > 0 {
-            let last_position = if self.write_position == 0 { HISTORY_SIZE - 1 } else { self.write_position - 1 };
+            let last_position = if self.write_pos == 0 { HISTORY_SIZE - 1 } else { self.write_pos - 1 };
             if let Some(ref last) = self.entries[last_position] {
                 if last == cmd {
-                    self.browse_position = self.write_position;
+                    self.browse_pos = self.write_pos;
                     return;
                 }
             }
         }
         
-        self.entries[self.write_position] = Some(String::from(cmd));
-        self.write_position = (self.write_position + 1) % HISTORY_SIZE;
+        self.entries[self.write_pos] = Some(String::from(cmd));
+        self.write_pos = (self.write_pos + 1) % HISTORY_SIZE;
         if self.count < HISTORY_SIZE {
             self.count += 1;
         }
-        self.browse_position = self.write_position;
+        self.browse_pos = self.write_pos;
     }
     
-    fn get_previous(&mut self) -> Option<&str> {
+    fn get_prev(&mut self) -> Option<&str> {
         if self.count == 0 {
             return None;
         }
         
-        let new_position = if self.browse_position == 0 { 
+        let new_position = if self.browse_pos == 0 { 
             HISTORY_SIZE - 1 
         } else { 
-            self.browse_position - 1 
+            self.browse_pos - 1 
         };
         
         // Don't go past oldest entry
         let oldest = if self.count < HISTORY_SIZE {
             0
         } else {
-            self.write_position
+            self.write_pos
         };
         
-        if new_position == oldest && self.browse_position == oldest {
+        if new_position == oldest && self.browse_pos == oldest {
             // Already at oldest
-            return self.entries[self.browse_position].as_deref();
+            return self.entries[self.browse_pos].as_deref();
         }
         
         if self.entries[new_position].is_some() {
-            self.browse_position = new_position;
-            self.entries[self.browse_position].as_deref()
+            self.browse_pos = new_position;
+            self.entries[self.browse_pos].as_deref()
         } else {
             None
         }
     }
     
     fn get_next(&mut self) -> Option<&str> {
-        if self.browse_position == self.write_position {
+        if self.browse_pos == self.write_pos {
             return None; // Already at newest
         }
         
-        self.browse_position = (self.browse_position + 1) % HISTORY_SIZE;
+        self.browse_pos = (self.browse_pos + 1) % HISTORY_SIZE;
         
-        if self.browse_position == self.write_position {
+        if self.browse_pos == self.write_pos {
             None // Reached end (current input)
         } else {
-            self.entries[self.browse_position].as_deref()
+            self.entries[self.browse_pos].as_deref()
         }
     }
     
     fn reset_browse(&mut self) {
-        self.browse_position = self.write_position;
+        self.browse_pos = self.write_pos;
     }
     
     fn iter(&self) -> // Implementation block — defines methods for the type above.
 impl Iterator<Item = (usize, &str)> {
         let count = self.count;
-        let start = if count < HISTORY_SIZE { 0 } else { self.write_position };
+        let start = if count < HISTORY_SIZE { 0 } else { self.write_pos };
         
         (0..count).map(move |i| {
-            let index = (start + i) % HISTORY_SIZE;
-            (i + 1, self.entries[index].as_deref().unwrap_or(""))
+            let idx = (start + i) % HISTORY_SIZE;
+            (i + 1, self.entries[idx].as_deref().unwrap_or(""))
         })
     }
 }
@@ -428,8 +428,8 @@ const SCANCODE_TO_ASCII_SHIFT: [u8; 128] = [
 /// (should not happen with without_interrupts wrapping, but defense-in-depth).
 #[inline]
 fn buffer_push(byte: u8) {
-    if let Some(mut buffer) = KEYBOARD_BUFFER.try_lock() {
-        buffer.push(byte);
+    if let Some(mut buf) = KEYBOARD_BUFFER.try_lock() {
+        buf.push(byte);
     }
     // If lock fails, drop the keystroke (better than deadlock)
 }
@@ -515,7 +515,7 @@ match key_without_release {
         if key == 0x1D {
             CONTROLLER_PRESSED.store(!is_release, Ordering::SeqCst);
             if !is_release {
-                crate::accessibility::sticky_modifier_press(crate::accessibility::StickyModifier::Controller);
+                crate::accessibility::sticky_modifier_press(crate::accessibility::StickyModifier::Ctrl);
             }
             return;
         }
@@ -530,14 +530,14 @@ match key_without_release {
         // Extended navigation keys (press only)
         if !is_release {
             let alt = ALT_PRESSED.load(Ordering::SeqCst);
-            let controller = CONTROLLER_PRESSED.load(Ordering::SeqCst);
+            let ctrl = CONTROLLER_PRESSED.load(Ordering::SeqCst);
             
             let special = // Pattern matching — Rust's exhaustive branching construct.
 match key {
                 0x48 if alt  => Some(KEY_ALT_UP),
                 0x50 if alt  => Some(KEY_ALT_DOWN),
-                0x4B if controller => Some(KEY_CONTROLLER_LEFT),
-                0x4D if controller => Some(KEY_CONTROLLER_RIGHT),
+                0x4B if ctrl => Some(KEY_CONTROLLER_LEFT),
+                0x4D if ctrl => Some(KEY_CONTROLLER_RIGHT),
                 0x48 => Some(KEY_UP),
                 0x50 => Some(KEY_DOWN),
                 0x4B => Some(KEY_LEFT),
@@ -574,7 +574,7 @@ match key {
         CONTROLLER_PRESSED.store(!is_release, Ordering::SeqCst);
         // Sticky keys: track modifier press/release
         if !is_release {
-            crate::accessibility::sticky_modifier_press(crate::accessibility::StickyModifier::Controller);
+            crate::accessibility::sticky_modifier_press(crate::accessibility::StickyModifier::Ctrl);
         }
         return;
     }
@@ -765,7 +765,7 @@ match scancode {
             0x38 => ALT_PRESSED.load(Ordering::Relaxed)
                 || crate::accessibility::is_sticky_active(crate::accessibility::StickyModifier::Alt),
             0x1D => CONTROLLER_PRESSED.load(Ordering::Relaxed)
-                || crate::accessibility::is_sticky_active(crate::accessibility::StickyModifier::Controller),
+                || crate::accessibility::is_sticky_active(crate::accessibility::StickyModifier::Ctrl),
             0x2A | 0x36 => SHIFT_PRESSED.load(Ordering::Relaxed)
                 || crate::accessibility::is_sticky_active(crate::accessibility::StickyModifier::Shift),
             _ => {
@@ -818,7 +818,7 @@ pub fn add_to_history(cmd: &str) {
 
 /// Get previous command from history
 pub fn history_previous() -> Option<String> {
-    COMMAND_HISTORY.lock().get_previous().map(String::from)
+    COMMAND_HISTORY.lock().get_prev().map(String::from)
 }
 
 /// Get next command from history
@@ -848,7 +848,7 @@ pub fn clipboard_get() -> Option<String> {
 
 /// Read a line from keyboard with history support
 pub fn read_line_with_history(buffer: &mut [u8]) -> usize {
-    let mut position = 0;
+    let mut pos = 0;
     let mut cursor = 0; // Cursor position (can differ from pos when editing mid-line)
     let mut current_input = String::new(); // Save current input when browsing history
     let mut select_all = false;
@@ -864,7 +864,7 @@ match c {
                 b'\n' | b'\r' => {
                     crate::println!();
                     // Add to history if non-empty
-                    let cmd = core::str::from_utf8(&buffer[..position]).unwrap_or("");
+                    let cmd = core::str::from_utf8(&buffer[..pos]).unwrap_or("");
                     if !cmd.trim().is_empty() {
                         add_to_history(cmd);
                     }
@@ -882,56 +882,56 @@ match c {
                             crate::print!("\x08");
                             cursor -= 1;
                         }
-                        for _ in 0..position {
+                        for _ in 0..pos {
                             crate::print!(" ");
                         }
-                        for _ in 0..position {
+                        for _ in 0..pos {
                             crate::print!("\x08");
                         }
-                        position = 0;
+                        pos = 0;
                         cursor = 0;
                         select_all = false;
                     } else if cursor > 0 {
                         // Shift everything after cursor left
-                        for i in cursor..position {
+                        for i in cursor..pos {
                             buffer[i - 1] = buffer[i];
                         }
-                        position = position.saturating_sub(1);
+                        pos = pos.saturating_sub(1);
                         cursor = cursor.saturating_sub(1);
                         
                         // Redraw: move cursor back, print rest of line, space, move back again
                         crate::print!("\x08");
-                        for i in cursor..position {
+                        for i in cursor..pos {
                             crate::print!("{}", buffer[i] as char);
                         }
                         crate::print!(" ");
-                        for _ in cursor..=position {
+                        for _ in cursor..=pos {
                             crate::print!("\x08");
                         }
                     }
                 }
                 KEY_UP => {
                     // Previous command in history
-                    if let Some(previous) = history_previous() {
+                    if let Some(prev) = history_previous() {
                         select_all = false;
                         // Clear current line
                         while cursor > 0 {
                             crate::print!("\x08");
                             cursor -= 1;
                         }
-                        for _ in 0..position {
+                        for _ in 0..pos {
                             crate::print!(" ");
                         }
-                        for _ in 0..position {
+                        for _ in 0..pos {
                             crate::print!("\x08");
                         }
                         // Display history entry
-                        let bytes = previous.as_bytes();
-                        let len = bytes.len().minimum(buffer.len() - 1);
+                        let bytes = prev.as_bytes();
+                        let len = bytes.len().min(buffer.len() - 1);
                         buffer[..len].copy_from_slice(&bytes[..len]);
-                        position = len;
+                        pos = len;
                         cursor = len;
-                        crate::print!("{}", &previous[..len]);
+                        crate::print!("{}", &prev[..len]);
                     }
                 }
                 KEY_DOWN => {
@@ -943,22 +943,22 @@ match c {
                         crate::print!("\x08");
                         cursor -= 1;
                     }
-                    for _ in 0..position {
+                    for _ in 0..pos {
                         crate::print!(" ");
                     }
-                    for _ in 0..position {
+                    for _ in 0..pos {
                         crate::print!("\x08");
                     }
                     
-                    if let Some(next_command) = next {
-                        let bytes = next_command.as_bytes();
-                        let len = bytes.len().minimum(buffer.len() - 1);
+                    if let Some(next_cmd) = next {
+                        let bytes = next_cmd.as_bytes();
+                        let len = bytes.len().min(buffer.len() - 1);
                         buffer[..len].copy_from_slice(&bytes[..len]);
-                        position = len;
+                        pos = len;
                         cursor = len;
-                        crate::print!("{}", &next_command[..len]);
+                        crate::print!("{}", &next_cmd[..len]);
                     } else {
-                        position = 0;
+                        pos = 0;
                         cursor = 0;
                     }
                 }
@@ -971,7 +971,7 @@ match c {
                 }
                 KEY_RIGHT => {
                     select_all = false;
-                    if cursor < position {
+                    if cursor < pos {
                         crate::print!("{}", buffer[cursor] as char);
                         cursor += 1;
                     }
@@ -985,7 +985,7 @@ match c {
                 }
                 KEY_END => {
                     select_all = false;
-                    while cursor < position {
+                    while cursor < pos {
                         crate::print!("{}", buffer[cursor] as char);
                         cursor += 1;
                     }
@@ -998,29 +998,29 @@ match c {
                             crate::print!("\x08");
                             cursor -= 1;
                         }
-                        for _ in 0..position {
+                        for _ in 0..pos {
                             crate::print!(" ");
                         }
-                        for _ in 0..position {
+                        for _ in 0..pos {
                             crate::print!("\x08");
                         }
-                        position = 0;
+                        pos = 0;
                         cursor = 0;
                         select_all = false;
-                    } else if cursor < position {
+                    } else if cursor < pos {
                         // Shift everything after cursor left
-                        for i in cursor..position.saturating_sub(1) {
+                        for i in cursor..pos.saturating_sub(1) {
                             buffer[i] = buffer[i + 1];
                         }
-                        position = position.saturating_sub(1);
+                        pos = pos.saturating_sub(1);
                         
                         // Redraw from cursor to end
-                        for i in cursor..position {
+                        for i in cursor..pos {
                             crate::print!("{}", buffer[i] as char);
                         }
                         crate::print!(" ");
                         // Move cursor back to original position
-                        for _ in cursor..=position {
+                        for _ in cursor..=pos {
                             crate::print!("\x08");
                         }
                     }
@@ -1031,18 +1031,18 @@ match c {
                     // Redraw prompt and current input
                     crate::print_color!(crate::framebuffer::COLOR_BRIGHT_GREEN, "trustos");
                     crate::print_color!(crate::framebuffer::COLOR_GREEN, "> ");
-                    for i in 0..position {
+                    for i in 0..pos {
                         crate::print!("{}", buffer[i] as char);
                     }
                     // Move cursor to correct position
-                    for _ in cursor..position {
+                    for _ in cursor..pos {
                         crate::print!("\x08");
                     }
                     select_all = false;
                 }
                 3 => {
                     // Ctrl+C - copy current line to clipboard
-                    if let Ok(text) = core::str::from_utf8(&buffer[..position]) {
+                    if let Ok(text) = core::str::from_utf8(&buffer[..pos]) {
                         clipboard_set(text);
                     }
                     select_all = false;
@@ -1056,39 +1056,39 @@ match c {
                                 crate::print!("\x08");
                                 cursor -= 1;
                             }
-                            for _ in 0..position {
+                            for _ in 0..pos {
                                 crate::print!(" ");
                             }
-                            for _ in 0..position {
+                            for _ in 0..pos {
                                 crate::print!("\x08");
                             }
-                            position = 0;
+                            pos = 0;
                             cursor = 0;
                             select_all = false;
                         }
                         for b in text.bytes() {
-                            if b < 0x20 || b >= 0x7F || position >= buffer.len() - 1 {
+                            if b < 0x20 || b >= 0x7F || pos >= buffer.len() - 1 {
                                 continue;
                             }
-                            if cursor < position {
-                                for i in (cursor..position).rev() {
+                            if cursor < pos {
+                                for i in (cursor..pos).rev() {
                                     buffer[i + 1] = buffer[i];
                                 }
                             }
                             buffer[cursor] = b;
-                            position += 1;
+                            pos += 1;
                             cursor += 1;
 
-                            for i in cursor - 1..position {
+                            for i in cursor - 1..pos {
                                 crate::print!("{}", buffer[i] as char);
                             }
-                            for _ in cursor..position {
+                            for _ in cursor..pos {
                                 crate::print!("\x08");
                             }
                         }
                     }
                 }
-                _ if c >= 0x20 && c < 0x7F && position < buffer.len() - 1 => {
+                _ if c >= 0x20 && c < 0x7F && pos < buffer.len() - 1 => {
                     // Printable character
                     if select_all {
                         // Clear whole line before inserting
@@ -1096,32 +1096,32 @@ match c {
                             crate::print!("\x08");
                             cursor -= 1;
                         }
-                        for _ in 0..position {
+                        for _ in 0..pos {
                             crate::print!(" ");
                         }
-                        for _ in 0..position {
+                        for _ in 0..pos {
                             crate::print!("\x08");
                         }
-                        position = 0;
+                        pos = 0;
                         cursor = 0;
                         select_all = false;
                     }
-                    if cursor < position {
+                    if cursor < pos {
                         // Insert at cursor position
-                        for i in (cursor..position).rev() {
+                        for i in (cursor..pos).rev() {
                             buffer[i + 1] = buffer[i];
                         }
                     }
                     buffer[cursor] = c;
-                    position += 1;
+                    pos += 1;
                     cursor += 1;
                     
                     // Redraw from cursor
-                    for i in cursor - 1..position {
+                    for i in cursor - 1..pos {
                         crate::print!("{}", buffer[i] as char);
                     }
                     // Move cursor back if we inserted
-                    for _ in cursor..position {
+                    for _ in cursor..pos {
                         crate::print!("\x08");
                     }
                 }
@@ -1133,8 +1133,8 @@ match c {
         }
     }
     
-    buffer[position] = 0; // Null terminate
-    position
+    buffer[pos] = 0; // Null terminate
+    pos
 }
 
 /// Read a line from keyboard (blocking, with echo) - legacy version
@@ -1144,7 +1144,7 @@ pub fn read_line(buffer: &mut [u8]) -> usize {
 
 /// Read a line from keyboard with hidden input (for passwords)
 pub fn read_line_hidden(buffer: &mut [u8]) -> usize {
-    let mut position = 0;
+    let mut pos = 0;
     
         // Infinite loop — runs until an explicit `break`.
 loop {
@@ -1157,30 +1157,30 @@ match c {
                 }
                 0x08 => {
                     // Backspace
-                    if position > 0 {
-                        position -= 1;
-                        buffer[position] = 0;
+                    if pos > 0 {
+                        pos -= 1;
+                        buffer[pos] = 0;
                         // Print asterisk backspace (optional visual feedback)
                         crate::print!("\x08 \x08");
                     }
                 }
                 0x03 => {
                     // Ctrl+C - cancel
-                    position = 0;
+                    pos = 0;
                     break;
                 }
                 0x15 => {
                     // Ctrl+U - clear line
-                    for _ in 0..position {
+                    for _ in 0..pos {
                         crate::print!("\x08 \x08");
                     }
-                    position = 0;
+                    pos = 0;
                 }
                 c if c >= 0x20 && c < 0x7F => {
                     // Printable character
-                    if position < buffer.len() - 1 {
-                        buffer[position] = c;
-                        position += 1;
+                    if pos < buffer.len() - 1 {
+                        buffer[pos] = c;
+                        pos += 1;
                         // Show asterisk instead of actual character
                         crate::print!("*");
                     }
@@ -1190,7 +1190,7 @@ match c {
         }
     }
     
-    position
+    pos
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

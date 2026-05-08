@@ -118,7 +118,7 @@ const R_X86_64_IRELATIVE: u32 = 37;
 // Public structure — visible outside this module.
 pub struct Elf64Dyn {
     pub d_tag: i64,
-    pub d_value: u64,
+    pub d_val: u64,
 }
 
 /// ELF64 symbol table entry
@@ -142,16 +142,16 @@ pub struct Elf64Sym {
 // Public structure — visible outside this module.
 pub struct Elf64Rela {
     pub r_offset: u64,
-    pub r_information: u64,
+    pub r_info: u64,
     pub r_addend: i64,
 }
 
 // Implementation block — defines methods for the type above.
 impl Elf64Rela {
         // Public function — callable from other modules.
-pub fn sym_index(&self) -> u32 { (self.r_information >> 32) as u32 }
+pub fn sym_idx(&self) -> u32 { (self.r_info >> 32) as u32 }
         // Public function — callable from other modules.
-pub fn relative_type(&self) -> u32 { (self.r_information & 0xFFFF_FFFF) as u32 }
+pub fn rel_type(&self) -> u32 { (self.r_info & 0xFFFF_FFFF) as u32 }
 }
 
 /// ELF64 file header
@@ -188,7 +188,7 @@ const SIZE: usize = 64;
         }
         
         let header = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*(data.as_pointer() as *const Self) };
+unsafe { &*(data.as_ptr() as *const Self) };
         
         // Validate magic
         if header.e_ident[0..4] != ELF_MAGIC {
@@ -270,11 +270,11 @@ pub struct Elf64Shdr {
     pub sh_name: u32,       // Section name (string table index)
     pub sh_type: u32,       // Section type
     pub sh_flags: u64,      // Section flags
-    pub sh_address: u64,       // Section virtual address
+    pub sh_addr: u64,       // Section virtual address
     pub sh_offset: u64,     // Section file offset
     pub sh_size: u64,       // Section size
     pub sh_link: u32,       // Link to another section
-    pub sh_information: u32,       // Additional section info
+    pub sh_info: u32,       // Additional section info
     pub sh_addralign: u64,  // Section alignment
     pub sh_entsize: u64,    // Entry size if section holds table
 }
@@ -309,12 +309,12 @@ pub struct DynamicInfo {
     pub strtab_offset: u64,
     pub strtab_size: usize,
     /// INIT / FINI addresses (virtual)
-    pub initialize_address: u64,
-    pub fini_address: u64,
+    pub init_addr: u64,
+    pub fini_addr: u64,
     /// INIT_ARRAY / FINI_ARRAY
-    pub initialize_array_address: u64,
-    pub initialize_array_size: usize,
-    pub fini_array_address: u64,
+    pub init_array_addr: u64,
+    pub init_array_size: usize,
+    pub fini_array_addr: u64,
     pub fini_array_size: usize,
     /// FLAGS
     pub flags: u64,
@@ -329,10 +329,10 @@ pub struct DynamicInfo {
 pub struct LoadedElf {
     pub entry_point: u64,
     pub segments: Vec<LoadedSegment>,
-    pub minimum_vaddr: u64,
-    pub maximum_vaddr: u64,
+    pub min_vaddr: u64,
+    pub max_vaddr: u64,
     /// Base address offset for PIE executables (ET_DYN)
-    pub base_address: u64,
+    pub base_addr: u64,
     /// Whether this is a PIE/shared object
     pub is_pie: bool,
     /// Dynamic linking information
@@ -346,8 +346,8 @@ pub struct LoadedElf {
 // Public structure — visible outside this module.
 pub struct RelocationEntry {
     pub offset: u64,
-    pub relative_type: u32,
-    pub sym_index: u32,
+    pub rel_type: u32,
+    pub sym_idx: u32,
     pub addend: i64,
 }
 
@@ -372,11 +372,11 @@ type ElfResult<T> = Result<T, ElfError>;
 pub fn load_from_path(path: &str) -> ElfResult<LoadedElf> {
     // Open the file
     let fd = crate::vfs::open(path, crate::vfs::OpenFlags(crate::vfs::OpenFlags::O_RDONLY))
-        .map_error(|_| ElfError::IoError)?;
+        .map_err(|_| ElfError::IoError)?;
     
     // Get file size
-    let status = crate::vfs::status(path).map_error(|_| ElfError::IoError)?;
-    let size = status.size as usize;
+    let stat = crate::vfs::stat(path).map_err(|_| ElfError::IoError)?;
+    let size = stat.size as usize;
     
     if size > 16 * 1024 * 1024 {  // 16 MB limit
         crate::vfs::close(fd).ok();
@@ -385,7 +385,7 @@ pub fn load_from_path(path: &str) -> ElfResult<LoadedElf> {
     
     // Read entire file
     let mut data = alloc::vec![0u8; size];
-    crate::vfs::read(fd, &mut data).map_error(|_| ElfError::IoError)?;
+    crate::vfs::read(fd, &mut data).map_err(|_| ElfError::IoError)?;
     crate::vfs::close(fd).ok();
     
     // Parse and load
@@ -404,14 +404,14 @@ pub fn load_from_bytes(data: &[u8]) -> ElfResult<LoadedElf> {
     
     let is_pie = header.e_type == ET_DYN;
     // PIE executables are loaded at a fixed base; static ELFs at their linked address
-    let base_address: u64 = if is_pie { 0x0040_0000 } else { 0 };
+    let base_addr: u64 = if is_pie { 0x0040_0000 } else { 0 };
     
     crate::log_debug!("[ELF] Loading {} executable, entry: {:#x}, base: {:#x}",
-        if is_pie { "PIE" } else { "static" }, header.e_entry, base_address);
+        if is_pie { "PIE" } else { "static" }, header.e_entry, base_addr);
     
     let mut segments = Vec::new();
-    let mut minimum_vaddr = u64::MAX;
-    let mut maximum_vaddr = 0u64;
+    let mut min_vaddr = u64::MAX;
+    let mut max_vaddr = 0u64;
     let mut dynamic_information = DynamicInfo::default();
     let mut dynamic_phdr: Option<(u64, u64)> = None; // (offset, size)
     
@@ -427,7 +427,7 @@ pub fn load_from_bytes(data: &[u8]) -> ElfResult<LoadedElf> {
         }
         
         let phdr = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*(data[offset..].as_pointer() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe { &*(data[offset..].as_ptr() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const Elf64Phdr) };
         
                 // Pattern matching — Rust's exhaustive branching construct.
@@ -451,22 +451,22 @@ match phdr.p_type {
                 dynamic_phdr = Some((phdr.p_offset, phdr.p_filesz));
             }
             PT_LOAD => {
-                let vaddr = phdr.p_vaddr + base_address;
+                let vaddr = phdr.p_vaddr + base_addr;
                 crate::log_debug!("[ELF] LOAD segment: vaddr={:#x}, filesz={}, memsz={}, flags={:#x}",
                     vaddr, phdr.p_filesz, phdr.p_memsz, phdr.p_flags);
                 
-                if vaddr < minimum_vaddr { minimum_vaddr = vaddr; }
-                if vaddr + phdr.p_memsz > maximum_vaddr { maximum_vaddr = vaddr + phdr.p_memsz; }
+                if vaddr < min_vaddr { min_vaddr = vaddr; }
+                if vaddr + phdr.p_memsz > max_vaddr { max_vaddr = vaddr + phdr.p_memsz; }
                 
                 let file_offset = phdr.p_offset as usize;
                 let file_size = phdr.p_filesz as usize;
-                let memory_size = phdr.p_memsz as usize;
+                let mem_size = phdr.p_memsz as usize;
                 
                 if file_offset + file_size > data.len() {
                     return Err(ElfError::InvalidProgramHeader);
                 }
                 
-                let mut segment_data = alloc::vec![0u8; memory_size];
+                let mut segment_data = alloc::vec![0u8; mem_size];
                 segment_data[..file_size].copy_from_slice(&data[file_offset..file_offset + file_size]);
                 
                 segments.push(LoadedSegment {
@@ -490,7 +490,7 @@ match phdr.p_type {
         let start = dyn_off as usize;
         let end = start + dyn_sz as usize;
         if end <= data.len() {
-            parse_dynamic(data, start, end, base_address, &mut dynamic_information);
+            parse_dynamic(data, start, end, base_addr, &mut dynamic_information);
         }
         // Parse RELA relocations
         if dynamic_information.rela_count > 0 && (dynamic_information.rela_offset as usize) < data.len() {
@@ -499,12 +499,12 @@ match phdr.p_type {
                 let off = rela_start + i * core::mem::size_of::<Elf64Rela>();
                 if off + core::mem::size_of::<Elf64Rela>() > data.len() { break; }
                 let rela = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*(data[off..].as_pointer() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe { &*(data[off..].as_ptr() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const Elf64Rela) };
                 relocations.push(RelocationEntry {
                     offset: rela.r_offset,
-                    relative_type: rela.relative_type(),
-                    sym_index: rela.sym_index(),
+                    rel_type: rela.rel_type(),
+                    sym_idx: rela.sym_idx(),
                     addend: rela.r_addend,
                 });
             }
@@ -516,12 +516,12 @@ const Elf64Rela) };
                 let off = jmp_start + i * core::mem::size_of::<Elf64Rela>();
                 if off + core::mem::size_of::<Elf64Rela>() > data.len() { break; }
                 let rela = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*(data[off..].as_pointer() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe { &*(data[off..].as_ptr() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const Elf64Rela) };
                 relocations.push(RelocationEntry {
                     offset: rela.r_offset,
-                    relative_type: rela.relative_type(),
-                    sym_index: rela.sym_index(),
+                    rel_type: rela.rel_type(),
+                    sym_idx: rela.sym_idx(),
                     addend: rela.r_addend,
                 });
             }
@@ -531,11 +531,11 @@ const Elf64Rela) };
     }
     
     Ok(LoadedElf {
-        entry_point: header.e_entry + base_address,
+        entry_point: header.e_entry + base_addr,
         segments,
-        minimum_vaddr,
-        maximum_vaddr,
-        base_address,
+        min_vaddr,
+        max_vaddr,
+        base_addr,
         is_pie,
         dynamic: dynamic_information,
         relocations,
@@ -543,40 +543,40 @@ const Elf64Rela) };
 }
 
 /// Parse the .dynamic section entries
-fn parse_dynamic(data: &[u8], start: usize, end: usize, _base: u64, information: &mut DynamicInfo) {
+fn parse_dynamic(data: &[u8], start: usize, end: usize, _base: u64, info: &mut DynamicInfo) {
     let entry_size = core::mem::size_of::<Elf64Dyn>();
     let mut rela_size: u64 = 0;
     let mut rela_ent: u64 = 0;
     let mut plt_relative_size: u64 = 0;
     let mut strtab_file_off: u64 = 0;
-    let mut strtab_size: u64 = 0;
+    let mut strtab_sz: u64 = 0;
     let mut needed_offsets: Vec<u64> = Vec::new();
     
     let mut off = start;
     while off + entry_size <= end {
         let dyn_entry = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*(data[off..].as_pointer() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe { &*(data[off..].as_ptr() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const Elf64Dyn) };
                 // Pattern matching — Rust's exhaustive branching construct.
 match dyn_entry.d_tag {
             DT_NULL => break,
-            DT_NEEDED => { needed_offsets.push(dyn_entry.d_value); }
-            DT_STRTAB => { strtab_file_off = dyn_entry.d_value; }
-            DT_STRSZ => { strtab_size = dyn_entry.d_value; }
-            DT_SYMTAB => { information.symtab_offset = dyn_entry.d_value; }
-            DT_RELA => { information.rela_offset = dyn_entry.d_value; }
-            DT_RELASZ => { rela_size = dyn_entry.d_value; }
-            DT_RELAENT => { rela_ent = dyn_entry.d_value; }
-            DT_JMPREL => { information.jmprel_offset = dyn_entry.d_value; }
-            DT_PLTRELSZ => { plt_relative_size = dyn_entry.d_value; }
-            DT_INITIALIZE => { information.initialize_address = dyn_entry.d_value; }
-            DT_FINI => { information.fini_address = dyn_entry.d_value; }
-            DT_INITIALIZE_ARRAY => { information.initialize_array_address = dyn_entry.d_value; }
-            DT_INITIALIZE_ARRAYSZ => { information.initialize_array_size = dyn_entry.d_value as usize; }
-            DT_FINI_ARRAY => { information.fini_array_address = dyn_entry.d_value; }
-            DT_FINI_ARRAYSZ => { information.fini_array_size = dyn_entry.d_value as usize; }
-            DT_FLAGS => { information.flags = dyn_entry.d_value; }
-            DT_FLAGS_1 => { information.flags_1 = dyn_entry.d_value; }
+            DT_NEEDED => { needed_offsets.push(dyn_entry.d_val); }
+            DT_STRTAB => { strtab_file_off = dyn_entry.d_val; }
+            DT_STRSZ => { strtab_sz = dyn_entry.d_val; }
+            DT_SYMTAB => { info.symtab_offset = dyn_entry.d_val; }
+            DT_RELA => { info.rela_offset = dyn_entry.d_val; }
+            DT_RELASZ => { rela_size = dyn_entry.d_val; }
+            DT_RELAENT => { rela_ent = dyn_entry.d_val; }
+            DT_JMPREL => { info.jmprel_offset = dyn_entry.d_val; }
+            DT_PLTRELSZ => { plt_relative_size = dyn_entry.d_val; }
+            DT_INITIALIZE => { info.init_addr = dyn_entry.d_val; }
+            DT_FINI => { info.fini_addr = dyn_entry.d_val; }
+            DT_INITIALIZE_ARRAY => { info.init_array_addr = dyn_entry.d_val; }
+            DT_INITIALIZE_ARRAYSZ => { info.init_array_size = dyn_entry.d_val as usize; }
+            DT_FINI_ARRAY => { info.fini_array_addr = dyn_entry.d_val; }
+            DT_FINI_ARRAYSZ => { info.fini_array_size = dyn_entry.d_val as usize; }
+            DT_FLAGS => { info.flags = dyn_entry.d_val; }
+            DT_FLAGS_1 => { info.flags_1 = dyn_entry.d_val; }
             _ => {}
         }
         off += entry_size;
@@ -584,15 +584,15 @@ match dyn_entry.d_tag {
     
     // Calculate relocation counts
     if rela_ent > 0 && rela_size > 0 {
-        information.rela_count = (rela_size / rela_ent) as usize;
+        info.rela_count = (rela_size / rela_ent) as usize;
     }
     if plt_relative_size > 0 {
         let ent = if rela_ent > 0 { rela_ent } else { core::mem::size_of::<Elf64Rela>() as u64 };
-        information.jmprel_count = (plt_relative_size / ent) as usize;
+        info.jmprel_count = (plt_relative_size / ent) as usize;
     }
     
-    information.strtab_offset = strtab_file_off;
-    information.strtab_size = strtab_size as usize;
+    info.strtab_offset = strtab_file_off;
+    info.strtab_size = strtab_sz as usize;
     
     // Resolve needed library names from string table
     // The strtab_file_off may be a virtual address; try to find it as a file offset
@@ -605,7 +605,7 @@ match dyn_entry.d_tag {
                 let end_position = data[name_start..].iter().position(|&b| b == 0)
                     .unwrap_or(data.len() - name_start);
                 if let Ok(name) = core::str::from_utf8(&data[name_start..name_start + end_position]) {
-                    information.needed_libs.push(String::from(name));
+                    info.needed_libs.push(String::from(name));
                 }
             }
         }

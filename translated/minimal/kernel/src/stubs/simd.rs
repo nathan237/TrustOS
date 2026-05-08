@@ -1,26 +1,26 @@
 
 
-pub fn ktg() {}
-pub fn ktd() -> bool { false }
-pub fn sky() -> bool { false }
+pub fn fuo() {}
+pub fn ful() -> bool { false }
+pub fn lpq() -> bool { false }
 
-pub unsafe fn umz(cs: *mut u8, cy: *const u8, len: usize) {
-    core::ptr::copy_nonoverlapping(cy, cs, len);
+pub unsafe fn nef(dst: *mut u8, src: *const u8, len: usize) {
+    core::ptr::copy_nonoverlapping(src, dst, len);
 }
 
-pub unsafe fn unb(cs: *mut u8, bn: u8, len: usize) {
-    core::ptr::ahx(cs, bn, len);
+pub unsafe fn nei(dst: *mut u8, value: u8, len: usize) {
+    core::ptr::write_bytes(dst, value, len);
 }
 
-pub unsafe fn umy(q: *const u8, o: *const u8, len: usize) -> bool {
-    for a in 0..len {
-        if *q.add(a) != *o.add(a) { return false; }
+pub unsafe fn nee(a: *const u8, b: *const u8, len: usize) -> bool {
+    for i in 0..len {
+        if *a.add(i) != *b.add(i) { return false; }
     }
     true
 }
 
-pub unsafe fn xwo(cs: *mut u8, cy: *const u8, len: usize) {
-    for a in 0..len {
-        *cs.add(a) ^= *cy.add(a);
+pub unsafe fn pvu(dst: *mut u8, src: *const u8, len: usize) {
+    for i in 0..len {
+        *dst.add(i) ^= *src.add(i);
     }
 }

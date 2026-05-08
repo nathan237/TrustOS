@@ -179,7 +179,7 @@ pub fn new(id: u64, name: &str, memory_mb: usize) -> Result<Self> {
     }
     
     /// Démarrer la VM
-    pub fn start(&mut self, entry_point: u64, stack_pointer: u64) -> Result<()> {
+    pub fn start(&mut self, entry_point: u64, stack_ptr: u64) -> Result<()> {
         if self.vmcs.is_none() {
             self.initialize()?;
         }
@@ -187,7 +187,7 @@ pub fn new(id: u64, name: &str, memory_mb: usize) -> Result<Self> {
         let vmcs = self.vmcs.as_ref().unwrap();
         
         // Configurer l'état du guest
-        vmcs.setup_guest_state(entry_point, stack_pointer)?;
+        vmcs.setup_guest_state(entry_point, stack_ptr)?;
         
         // Configurer l'état de l'host — RIP = vm_exit_stub (naked handler for VM exits)
         let exit_handler = vm_exit_stub as *// Compile-time constant — evaluated at compilation, zero runtime cost.
@@ -195,7 +195,7 @@ const () as u64;
         
         // Allocate a host stack for VM exit handler (16KB, 16-byte aligned)
         let host_stack = alloc::vec![0u8; 16384];
-        let host_stack_top = (host_stack.as_pointer() as u64 + 16384) & !0xF;
+        let host_stack_top = (host_stack.as_ptr() as u64 + 16384) & !0xF;
         core::mem::forget(host_stack); // Must not be freed
         
         vmcs.setup_host_state(exit_handler, host_stack_top)?;
@@ -203,7 +203,7 @@ const () as u64;
         self.state = VmState::Running;
         
         crate::serial_println!("[VM {}] Starting at RIP=0x{:X}, RSP=0x{:X}", 
-                              self.id, entry_point, stack_pointer);
+                              self.id, entry_point, stack_ptr);
         crate::serial_println!("[VM {}] Host exit handler=0x{:X}, host stack=0x{:X}",
                               self.id, exit_handler, host_stack_top);
         
@@ -246,14 +246,14 @@ const () as u64;
         linux_loader::configure_vmcs_for_linux(vmcs, &setup)?;
         
         // Set RSI = boot_params address (Linux boot protocol requirement)
-        self.guest_regs.rsi = setup.boot_params_address;
+        self.guest_regs.rsi = setup.boot_params_addr;
         self.save_guest_regs_for_entry();
         
         // Set up host state for VM exits
         let exit_handler = vm_exit_stub as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const () as u64;
         let host_stack = alloc::vec![0u8; 16384];
-        let host_stack_top = (host_stack.as_pointer() as u64 + 16384) & !0xF;
+        let host_stack_top = (host_stack.as_ptr() as u64 + 16384) & !0xF;
         core::mem::forget(host_stack);
         
         vmcs.setup_host_state(exit_handler, host_stack_top)?;
@@ -261,8 +261,8 @@ const () as u64;
         self.state = VmState::Running;
         
         crate::serial_println!("[VM {}] Linux: RIP=0x{:X} RSP=0x{:X} RSI(boot_params)=0x{:X} CR3=0x{:X}",
-                              self.id, setup.entry_point, setup.stack_pointer,
-                              setup.boot_params_address, setup.cr3);
+                              self.id, setup.entry_point, setup.stack_ptr,
+                              setup.boot_params_addr, setup.cr3);
         
         self.run_loop()?;
         
@@ -283,8 +283,8 @@ loop {
             
             if result != 0 {
                 // VMLAUNCH/VMRESUME failed
-                let error = vmx::vmread(fields::VM_INSTRUCTION_ERROR).unwrap_or(0xFFFF);
-                crate::serial_println!("[VM {}] VM entry failed! error={}", self.id, error);
+                let err = vmx::vmread(fields::VM_INSTRUCTION_ERROR).unwrap_or(0xFFFF);
+                crate::serial_println!("[VM {}] VM entry failed! error={}", self.id, err);
                 self.state = VmState::Crashed;
                 return if launched {
                     Err(HypervisorError::VmresumeFailed)
@@ -369,7 +369,7 @@ unsafe {
     /// Gérer un VM exit
     fn handle_vm_exit(&mut self) -> Result<bool> {
         // Lire les infos de base du VMCS
-        let (exit_reason, exit_qual, guest_rip, instruction_length) = {
+        let (exit_reason, exit_qual, guest_rip, instr_len) = {
             let vmcs = self.vmcs.as_ref().unwrap();
             let reason = vmcs.read(fields::VM_EXIT_REASON)? as u32 & 0xFFFF;
             let qual = vmcs.read(fields::EXIT_QUALIFICATION)?;
@@ -398,7 +398,7 @@ match exit_reason {
                 // For Linux: HLT is used in idle loops, advance RIP past it and continue.
                 // Only stop the VM after too many consecutive HLTs without progress.
                 let vmcs = self.vmcs.as_ref().unwrap();
-                vmcs.write(fields::GUEST_RIP, guest_rip + instruction_length)?;
+                vmcs.write(fields::GUEST_RIP, guest_rip + instr_len)?;
                 
                 // Safety valve: if we've done thousands of HLTs, the guest is likely stuck
                 if self.stats.hlt_exits > 50000 {
@@ -416,7 +416,7 @@ match exit_reason {
                 crate::lab_mode::trace_bus::emit_vm_io(self.id, directory, port, self.guest_regs.rax);
                 self.handle_io(exit_qual)?;
                 let vmcs = self.vmcs.as_ref().unwrap();
-                vmcs.write(fields::GUEST_RIP, guest_rip + instruction_length)?;
+                vmcs.write(fields::GUEST_RIP, guest_rip + instr_len)?;
                 Ok(true)
             }
             
@@ -424,24 +424,24 @@ match exit_reason {
                 self.stats.msr_exits += 1;
                 self.handle_msr(exit_reason == exit_reason::WRMSR)?;
                 let vmcs = self.vmcs.as_ref().unwrap();
-                vmcs.write(fields::GUEST_RIP, guest_rip + instruction_length)?;
+                vmcs.write(fields::GUEST_RIP, guest_rip + instr_len)?;
                 Ok(true)
             }
             
             exit_reason::EPT_VIOLATION => {
                 self.stats.ept_violations += 1;
                 let vmcs = self.vmcs.as_ref().unwrap();
-                let guest_physical = vmcs.read(fields::GUEST_PHYSICAL_ADDRESS)?;
+                let guest_phys = vmcs.read(fields::GUEST_PHYSICAL_ADDRESS)?;
                 let guest_linear = vmcs.read(fields::GUEST_LINEAR_ADDRESS).ok();
                 
                 crate::lab_mode::trace_bus::emit_vm_memory(
-                    self.id, "EPT_VIOLATION", guest_physical, exit_qual
+                    self.id, "EPT_VIOLATION", guest_phys, exit_qual
                 );
                 
                 // Record the violation in isolation module
                 super::isolation::record_violation(
                     self.id,
-                    guest_physical,
+                    guest_phys,
                     guest_linear,
                     exit_qual,
                     guest_rip,
@@ -451,7 +451,7 @@ match exit_reason {
                 super::api::emit_event(
                     super::api::VmEventType::EptViolation,
                     self.id,
-                    super::api::VmEventData::Address(guest_physical),
+                    super::api::VmEventData::Address(guest_phys),
                 );
                 
                 Ok(false)
@@ -465,7 +465,7 @@ match exit_reason {
                 // Hypercall depuis le guest
                 let result = self.handle_vmcall()?;
                 let vmcs = self.vmcs.as_ref().unwrap();
-                vmcs.write(fields::GUEST_RIP, guest_rip + instruction_length)?;
+                vmcs.write(fields::GUEST_RIP, guest_rip + instr_len)?;
                 Ok(result)
             }
             
@@ -499,7 +499,7 @@ match exit_reason {
                 }
                 
                 let vmcs = self.vmcs.as_ref().unwrap();
-                vmcs.write(fields::GUEST_RIP, guest_rip + instruction_length)?;
+                vmcs.write(fields::GUEST_RIP, guest_rip + instr_len)?;
                 Ok(true)
             }
             
@@ -598,16 +598,16 @@ match leaf {
 match port {
                 // Serial COM1 output
                 0x3F8 => {
-                    let character = (value & 0xFF) as u8;
-                    crate::serial_print!("{}", character as char);
+                    let ch = (value & 0xFF) as u8;
+                    crate::serial_print!("{}", ch as char);
                     if let Some(console_id) = self.console_id {
-                        super::console::write_char(console_id, character as char);
+                        super::console::write_char(console_id, ch as char);
                     }
                 }
                 // Serial COM2 output
                 0x2F8 => {
-                    let character = (value & 0xFF) as u8;
-                    crate::serial_print!("{}", character as char);
+                    let ch = (value & 0xFF) as u8;
+                    crate::serial_print!("{}", ch as char);
                 }
                 // Serial config writes — accept silently
                 0x3F9..=0x3FF | 0x2F9..=0x2FF => {}
@@ -622,8 +622,8 @@ match port {
                 0xCF8 | 0xCFC..=0xCFF => {} // PCI (simplified)
                 0xB000..=0xB03F => {} // ACPI PM
                 0xE9 => {
-                    let character = (value & 0xFF) as u8;
-                    crate::serial_print!("{}", character as char);
+                    let ch = (value & 0xFF) as u8;
+                    crate::serial_print!("{}", ch as char);
                 }
                 0xED => {} // I/O delay
                 _ => {
@@ -794,7 +794,7 @@ match function {
             
             // Hypercall 2: Get time
             2 => {
-                let ticks = crate::time::uptime_mouse();
+                let ticks = crate::time::uptime_ms();
                 self.guest_regs.rax = ticks;
                 Ok(true)
             }
@@ -879,7 +879,7 @@ pub fn start_vm(id: u64) -> Result<()> {
 pub fn start_vm_with_guest(id: u64, guest_name: &str) -> Result<()> {
     let mut vms = VMS.lock();
     
-    for vm in vms.iterator_mut() {
+    for vm in vms.iter_mut() {
         if vm.id == id {
             // Check if this is a Linux-type guest
             if guest_name == "linux-test" || guest_name.ends_with(".bzimage") {
@@ -910,7 +910,7 @@ pub fn start_vm_with_guest(id: u64, guest_name: &str) -> Result<()> {
 pub fn stop_vm(id: u64) -> Result<()> {
     let mut vms = VMS.lock();
     
-    for vm in vms.iterator_mut() {
+    for vm in vms.iter_mut() {
         if vm.id == id {
             vm.state = VmState::Stopped;
             return Ok(());

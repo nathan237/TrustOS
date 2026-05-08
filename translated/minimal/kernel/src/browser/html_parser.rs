@@ -2,74 +2,74 @@
 
 
 
-use alloc::string::{String, Gd};
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use alloc::vec;
 
 
 #[derive(Debug, Clone)]
-pub struct Su {
-    pub dq: String,
-    pub xq: Vec<HtmlNode>,
+pub struct Ia {
+    pub title: String,
+    pub nodes: Vec<HtmlNode>,
 }
 
 
 #[derive(Debug, Clone)]
 pub enum HtmlNode {
     Text(String),
-    Na(HtmlElement),
+    Element(HtmlElement),
 }
 
 
 #[derive(Debug, Clone)]
 pub struct HtmlElement {
-    pub ll: String,
-    pub fcv: Vec<(String, String)>,
-    pub zf: Vec<HtmlNode>,
+    pub tag: String,
+    pub attributes: Vec<(String, String)>,
+    pub children: Vec<HtmlNode>,
 }
 
 impl HtmlElement {
-    pub fn new(ll: &str) -> Self {
+    pub fn new(tag: &str) -> Self {
         Self {
-            ll: ll.aqn(),
-            fcv: Vec::new(),
-            zf: Vec::new(),
+            tag: tag.to_lowercase(),
+            attributes: Vec::new(),
+            children: Vec::new(),
         }
     }
     
     
-    pub fn qn(&self, j: &str) -> Option<&str> {
-        self.fcv.iter()
-            .du(|(eh, _)| eh == j)
-            .map(|(_, p)| p.as_str())
+    pub fn attr(&self, name: &str) -> Option<&str> {
+        self.attributes.iter()
+            .find(|(k, _)| k == name)
+            .map(|(_, v)| v.as_str())
     }
 }
 
 
-pub fn due(brb: &str) -> Su {
-    let mut doc = Su {
-        dq: String::new(),
-        xq: Vec::new(),
+pub fn boe(ajx: &str) -> Ia {
+    let mut doc = Ia {
+        title: String::new(),
+        nodes: Vec::new(),
     };
     
-    let mut parser = HtmlParser::new(brb);
-    doc.xq = parser.ouk();
+    let mut parser = HtmlParser::new(ajx);
+    doc.nodes = parser.parse_nodes();
     
     
-    doc.dq = nun(&doc.xq).unwrap_or_else(|| "Untitled".to_string());
+    doc.title = hyz(&doc.nodes).unwrap_or_else(|| "Untitled".to_string());
     
     doc
 }
 
 
-fn nun(xq: &[HtmlNode]) -> Option<String> {
-    for anq in xq {
-        if let HtmlNode::Na(ij) = anq {
-            if ij.ll == "title" {
-                return Some(nyq(&ij.zf));
+fn hyz(nodes: &[HtmlNode]) -> Option<String> {
+    for uf in nodes {
+        if let HtmlNode::Element(el) = uf {
+            if el.tag == "title" {
+                return Some(ibx(&el.children));
             }
-            if let Some(dq) = nun(&ij.zf) {
-                return Some(dq);
+            if let Some(title) = hyz(&el.children) {
+                return Some(title);
             }
         }
     }
@@ -77,12 +77,12 @@ fn nun(xq: &[HtmlNode]) -> Option<String> {
 }
 
 
-fn nyq(xq: &[HtmlNode]) -> String {
+fn ibx(nodes: &[HtmlNode]) -> String {
     let mut text = String::new();
-    for anq in xq {
-        match anq {
-            HtmlNode::Text(ab) => text.t(ab),
-            HtmlNode::Na(ij) => text.t(&nyq(&ij.zf)),
+    for uf in nodes {
+        match uf {
+            HtmlNode::Text(t) => text.push_str(t),
+            HtmlNode::Element(el) => text.push_str(&ibx(&el.children)),
         }
     }
     text
@@ -91,246 +91,246 @@ fn nyq(xq: &[HtmlNode]) -> String {
 
 struct HtmlParser<'a> {
     input: &'a str,
-    u: usize,
+    pos: usize,
 }
 
 impl<'a> HtmlParser<'a> {
     fn new(input: &'a str) -> Self {
-        Self { input, u: 0 }
+        Self { input, pos: 0 }
     }
     
-    fn ouk(&mut self) -> Vec<HtmlNode> {
-        let mut xq = Vec::new();
+    fn parse_nodes(&mut self) -> Vec<HtmlNode> {
+        let mut nodes = Vec::new();
         
-        while self.u < self.input.len() {
-            self.ayr();
+        while self.pos < self.input.len() {
+            self.skip_whitespace();
             
-            if self.cj("<!--") {
-                self.wpg();
-            } else if self.cj("<!") {
-                self.wph();
-            } else if self.cj("</") {
+            if self.starts_with("<!--") {
+                self.skip_comment();
+            } else if self.starts_with("<!") {
+                self.skip_doctype();
+            } else if self.starts_with("</") {
                 
                 break;
-            } else if self.cj("<") {
-                if let Some(ij) = self.aut() {
-                    xq.push(HtmlNode::Na(ij));
+            } else if self.starts_with("<") {
+                if let Some(el) = self.parse_element() {
+                    nodes.push(HtmlNode::Element(el));
                 }
             } else {
-                if let Some(text) = self.ved() {
-                    if !text.em().is_empty() {
-                        xq.push(HtmlNode::Text(text));
+                if let Some(text) = self.parse_text() {
+                    if !text.trim().is_empty() {
+                        nodes.push(HtmlNode::Text(text));
                     }
                 }
             }
         }
         
-        xq
+        nodes
     }
     
-    fn aut(&mut self) -> Option<HtmlElement> {
-        if !self.cpo("<") {
+    fn parse_element(&mut self) -> Option<HtmlElement> {
+        if !self.consume("<") {
             return None;
         }
         
-        let ll = self.oup();
-        if ll.is_empty() {
+        let tag = self.parse_tag_name();
+        if tag.is_empty() {
             return None;
         }
         
-        let mut ebd = HtmlElement::new(&ll);
+        let mut bse = HtmlElement::new(&tag);
         
         
         loop {
-            self.ayr();
+            self.skip_whitespace();
             
-            if self.cj("/>") {
-                self.cpo("/>");
-                return Some(ebd);
+            if self.starts_with("/>") {
+                self.consume("/>");
+                return Some(bse);
             }
             
-            if self.cj(">") {
-                self.cpo(">");
+            if self.starts_with(">") {
+                self.consume(">");
                 break;
             }
             
-            if let Some((j, bn)) = self.vbt() {
-                ebd.fcv.push((j, bn));
+            if let Some((name, value)) = self.parse_attribute() {
+                bse.attributes.push((name, value));
             } else {
                 break;
             }
         }
         
         
-        let wgx = oh!(ll.as_str(), 
+        let onk = matches!(tag.as_str(), 
             "br" | "hr" | "img" | "input" | "meta" | "link" | "area" | "base" | 
             "col" | "embed" | "param" | "source" | "track" | "wbr"
         );
         
-        if !wgx {
+        if !onk {
             
-            ebd.zf = self.ouk();
+            bse.children = self.parse_nodes();
             
             
-            self.ayr();
-            if self.cj("</") {
-                self.cpo("</");
-                self.oup();
-                self.ayr();
-                self.cpo(">");
+            self.skip_whitespace();
+            if self.starts_with("</") {
+                self.consume("</");
+                self.parse_tag_name();
+                self.skip_whitespace();
+                self.consume(">");
             }
         }
         
-        Some(ebd)
+        Some(bse)
     }
     
-    fn oup(&mut self) -> String {
-        let ay = self.u;
-        while self.u < self.input.len() {
-            let r = self.asp();
-            if r.etb() || r == '-' || r == '_' || r == ':' {
-                self.u += 1;
+    fn parse_tag_name(&mut self) -> String {
+        let start = self.pos;
+        while self.pos < self.input.len() {
+            let c = self.current_char();
+            if c.is_alphanumeric() || c == '-' || c == '_' || c == ':' {
+                self.pos += 1;
             } else {
                 break;
             }
         }
-        self.input[ay..self.u].aqn()
+        self.input[start..self.pos].to_lowercase()
     }
     
-    fn vbt(&mut self) -> Option<(String, String)> {
-        let akj = self.u;
-        while self.u < self.input.len() {
-            let r = self.asp();
-            if r.etb() || r == '-' || r == '_' || r == ':' {
-                self.u += 1;
+    fn parse_attribute(&mut self) -> Option<(String, String)> {
+        let sj = self.pos;
+        while self.pos < self.input.len() {
+            let c = self.current_char();
+            if c.is_alphanumeric() || c == '-' || c == '_' || c == ':' {
+                self.pos += 1;
             } else {
                 break;
             }
         }
         
-        let j = self.input[akj..self.u].aqn();
-        if j.is_empty() {
+        let name = self.input[sj..self.pos].to_lowercase();
+        if name.is_empty() {
             return None;
         }
         
-        self.ayr();
+        self.skip_whitespace();
         
-        let bn = if self.cpo("=") {
-            self.ayr();
-            self.vbv()
+        let value = if self.consume("=") {
+            self.skip_whitespace();
+            self.parse_attribute_value()
         } else {
             String::new()
         };
         
-        Some((j, bn))
+        Some((name, value))
     }
     
-    fn vbv(&mut self) -> String {
-        if self.cj("\"") {
-            self.cpo("\"");
-            let bn = self.nfp('"');
-            self.cpo("\"");
-            bn
-        } else if self.cj("'") {
-            self.cpo("'");
-            let bn = self.nfp('\'');
-            self.cpo("'");
-            bn
+    fn parse_attribute_value(&mut self) -> String {
+        if self.starts_with("\"") {
+            self.consume("\"");
+            let value = self.consume_until('"');
+            self.consume("\"");
+            value
+        } else if self.starts_with("'") {
+            self.consume("'");
+            let value = self.consume_until('\'');
+            self.consume("'");
+            value
         } else {
             
-            let ay = self.u;
-            while self.u < self.input.len() {
-                let r = self.asp();
-                if r.fme() || r == '>' || r == '/' {
+            let start = self.pos;
+            while self.pos < self.input.len() {
+                let c = self.current_char();
+                if c.is_whitespace() || c == '>' || c == '/' {
                     break;
                 }
-                self.u += 1;
+                self.pos += 1;
             }
-            self.input[ay..self.u].to_string()
+            self.input[start..self.pos].to_string()
         }
     }
     
-    fn ved(&mut self) -> Option<String> {
-        let ay = self.u;
-        while self.u < self.input.len() && !self.cj("<") {
-            self.u += 1;
+    fn parse_text(&mut self) -> Option<String> {
+        let start = self.pos;
+        while self.pos < self.input.len() && !self.starts_with("<") {
+            self.pos += 1;
         }
-        if self.u > ay {
-            Some(rul(&self.input[ay..self.u]))
+        if self.pos > start {
+            Some(lcj(&self.input[start..self.pos]))
         } else {
             None
         }
     }
     
-    fn ayr(&mut self) {
-        while self.u < self.input.len() && self.asp().fme() {
-            self.u += 1;
+    fn skip_whitespace(&mut self) {
+        while self.pos < self.input.len() && self.current_char().is_whitespace() {
+            self.pos += 1;
         }
     }
     
-    fn wpg(&mut self) {
-        self.cpo("<!--");
-        while self.u < self.input.len() && !self.cj("-->") {
-            self.u += 1;
+    fn skip_comment(&mut self) {
+        self.consume("<!--");
+        while self.pos < self.input.len() && !self.starts_with("-->") {
+            self.pos += 1;
         }
-        self.cpo("-->");
+        self.consume("-->");
     }
     
-    fn wph(&mut self) {
-        while self.u < self.input.len() && !self.cj(">") {
-            self.u += 1;
+    fn skip_doctype(&mut self) {
+        while self.pos < self.input.len() && !self.starts_with(">") {
+            self.pos += 1;
         }
-        self.cpo(">");
+        self.consume(">");
     }
     
-    fn asp(&self) -> char {
-        self.input[self.u..].bw().next().unwrap_or('\0')
+    fn current_char(&self) -> char {
+        self.input[self.pos..].chars().next().unwrap_or('\0')
     }
     
-    fn cj(&self, e: &str) -> bool {
-        self.input[self.u..].cj(e)
+    fn starts_with(&self, j: &str) -> bool {
+        self.input[self.pos..].starts_with(j)
     }
     
-    fn cpo(&mut self, e: &str) -> bool {
-        if self.cj(e) {
-            self.u += e.len();
+    fn consume(&mut self, j: &str) -> bool {
+        if self.starts_with(j) {
+            self.pos += j.len();
             true
         } else {
             false
         }
     }
     
-    fn nfp(&mut self, r: char) -> String {
-        let ay = self.u;
-        while self.u < self.input.len() && self.asp() != r {
-            self.u += 1;
+    fn consume_until(&mut self, c: char) -> String {
+        let start = self.pos;
+        while self.pos < self.input.len() && self.current_char() != c {
+            self.pos += 1;
         }
-        self.input[ay..self.u].to_string()
+        self.input[start..self.pos].to_string()
     }
 }
 
 
-fn rul(text: &str) -> String {
-    let mut result = String::fc(text.len());
-    let mut bw = text.bw().ltk();
+fn lcj(text: &str) -> String {
+    let mut result = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
     
-    while let Some(r) = bw.next() {
-        if r == '&' {
-            let mut ktq = String::new();
-            while let Some(&r) = bw.amm() {
-                if r == ';' {
-                    bw.next();
+    while let Some(c) = chars.next() {
+        if c == '&' {
+            let mut fuy = String::new();
+            while let Some(&c) = chars.peek() {
+                if c == ';' {
+                    chars.next();
                     break;
                 }
-                if r.etb() || r == '#' {
-                    ktq.push(r);
-                    bw.next();
+                if c.is_alphanumeric() || c == '#' {
+                    fuy.push(c);
+                    chars.next();
                 } else {
                     break;
                 }
             }
             
-            match ktq.as_str() {
+            match fuy.as_str() {
                 "amp" => result.push('&'),
                 "lt" => result.push('<'),
                 "gt" => result.push('>'),
@@ -341,31 +341,31 @@ fn rul(text: &str) -> String {
                 "reg" => result.push('®'),
                 "mdash" => result.push('—'),
                 "ndash" => result.push('–'),
-                e if e.cj('#') => {
-                    if let Some(aj) = vcb(&e[1..]) {
-                        if let Some(r) = char::zi(aj) {
-                            result.push(r);
+                j if j.starts_with('#') => {
+                    if let Some(code) = nqc(&j[1..]) {
+                        if let Some(c) = char::from_u32(code) {
+                            result.push(c);
                         }
                     }
                 }
                 _ => {
                     result.push('&');
-                    result.t(&ktq);
+                    result.push_str(&fuy);
                     result.push(';');
                 }
             }
         } else {
-            result.push(r);
+            result.push(c);
         }
     }
     
     result
 }
 
-fn vcb(e: &str) -> Option<u32> {
-    if e.cj('x') || e.cj('X') {
-        u32::wa(&e[1..], 16).bq()
+fn nqc(j: &str) -> Option<u32> {
+    if j.starts_with('x') || j.starts_with('X') {
+        u32::from_str_radix(&j[1..], 16).ok()
     } else {
-        e.parse().bq()
+        j.parse().ok()
     }
 }

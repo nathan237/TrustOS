@@ -29,8 +29,8 @@ use spin::Mutex;
 #[derive(Debug, Clone, Copy)]
 // Structure publique — visible à l'extérieur de ce module.
 pub struct EthernetFrame {
-    pub destination_mac: [u8; 6],
-    pub source_mac: [u8; 6],
+    pub dst_mac: [u8; 6],
+    pub src_mac: [u8; 6],
     pub ethertype: u16,  // Big endian!
 }
 
@@ -46,7 +46,7 @@ pub fn parse(data: &[u8]) -> Option<Self> {
         }
         
         Some(        // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { core::ptr::read_unaligned(data.as_pointer() as *const Self) })
+unsafe { core::ptr::read_unaligned(data.as_ptr() as *const Self) })
     }
     
         // Fonction publique — appelable depuis d'autres modules.
@@ -123,14 +123,14 @@ pub fn poll() {
 }
 
 /// Send raw ethernet frame
-pub fn send_frame(destination_mac: [u8; 6], ethertype: u16, payload: &[u8]) -> Result<(), &'static str> {
-    let source_mac = crate::drivers::net::get_mac()
+pub fn send_frame(dst_mac: [u8; 6], ethertype: u16, payload: &[u8]) -> Result<(), &'static str> {
+    let src_mac = crate::drivers::net::get_mac()
         .or_else(crate::network::get_mac_address)
         .ok_or("No MAC address")?;
     
     let mut frame = Vec::with_capacity(64); // Minimum Ethernet frame size
-    frame.extend_from_slice(&destination_mac);
-    frame.extend_from_slice(&source_mac);
+    frame.extend_from_slice(&dst_mac);
+    frame.extend_from_slice(&src_mac);
     frame.extend_from_slice(&ethertype.to_be_bytes());
     frame.extend_from_slice(payload);
     

@@ -175,7 +175,7 @@ pub struct Thread {
     pub entry_point: u64,
     
     /// Entry argument
-    pub entry_argument: u64,
+    pub entry_arg: u64,
     
     /// Exit code (valid when state is Dead)
     pub exit_code: i32,
@@ -197,7 +197,7 @@ impl Thread {
         
         // Allocate kernel stack
         let mut kernel_stack = Box::new([0u8; KERNEL_STACK_SIZE]);
-        let stack_top = kernel_stack.as_pointer() as u64 + KERNEL_STACK_SIZE as u64;
+        let stack_top = kernel_stack.as_ptr() as u64 + KERNEL_STACK_SIZE as u64;
         
         // Set up initial context for kernel thread
         let mut context = ThreadContext::default();
@@ -243,7 +243,7 @@ impl Thread {
             kernel_stack_top: stack_top,
             user_stack_top: 0,
             entry_point: entry,
-            entry_argument: argument,
+            entry_arg: argument,
             exit_code: 0,
             cpu_time: 0,
             joiner: None,
@@ -267,7 +267,7 @@ impl Thread {
         
         // Allocate kernel stack (for syscalls/interrupts)
         let kernel_stack = Box::new([0u8; KERNEL_STACK_SIZE]);
-        let kernel_stack_top = kernel_stack.as_pointer() as u64 + KERNEL_STACK_SIZE as u64;
+        let kernel_stack_top = kernel_stack.as_ptr() as u64 + KERNEL_STACK_SIZE as u64;
         
         // Set up initial context for user thread
         let mut context = ThreadContext::default();
@@ -311,7 +311,7 @@ impl Thread {
             kernel_stack_top,
             user_stack_top: user_stack,
             entry_point: entry,
-            entry_argument: argument,
+            entry_arg: argument,
             exit_code: 0,
             cpu_time: 0,
             joiner: None,
@@ -456,7 +456,7 @@ fn is_idle_tid(tid: Tid) -> bool {
 /// Get current CPU ID for scheduler (uses CPUID-based lookup)
 #[inline]
 fn scheduler_cpu_id() -> usize {
-    (crate::cpu::smp::current_cpu_id() as usize).minimum(MAXIMUM_CPUS_SCHEDULER - 1)
+    (crate::cpu::smp::current_cpu_id() as usize).min(MAXIMUM_CPUS_SCHEDULER - 1)
 }
 
 /// Get current thread ID
@@ -645,10 +645,10 @@ static ref READY_QUEUE: Mutex<VecDeque<Tid>> = Mutex::new(VecDeque::new());
 
 /// Enqueue a thread on the best CPU's run queue
 fn enqueue_thread(tid: Tid) {
-    let number_cpus = crate::cpu::smp::ready_cpu_count().maximum(1) as usize;
+    let num_cpus = crate::cpu::smp::ready_cpu_count().max(1) as usize;
     
     // Round-robin assignment across available CPUs
-    let target_cpu = (NEXT_CPU.fetch_add(1, Ordering::Relaxed) % number_cpus as u64) as usize;
+    let target_cpu = (NEXT_CPU.fetch_add(1, Ordering::Relaxed) % num_cpus as u64) as usize;
     PER_CPU_QUEUES[target_cpu].push(tid);
     
     // If the target CPU is not the current one and is idle, wake it
@@ -660,13 +660,13 @@ fn enqueue_thread(tid: Tid) {
 
 /// Try to steal work from the busiest other CPU (IRQ-safe: uses try_lock)
 fn try_steal_work(my_cpu: usize) -> Option<Tid> {
-    let number_cpus = crate::cpu::smp::ready_cpu_count().maximum(1) as usize;
+    let num_cpus = crate::cpu::smp::ready_cpu_count().max(1) as usize;
     
     // Find the busiest CPU (most items in queue) that isn't us
     let mut best_cpu = usize::MAX;
     let mut best_length = 0;
     
-    for cpu in 0..number_cpus {
+    for cpu in 0..num_cpus {
         if cpu == my_cpu { continue; }
         let len = PER_CPU_QUEUES[cpu].try_len();
         if len > best_length {
@@ -700,7 +700,7 @@ pub fn init() {
             kernel_stack_top: 0,
             user_stack_top: 0,
             entry_point: 0,
-            entry_argument: 0,
+            entry_arg: 0,
             exit_code: 0,
             cpu_time: 0,
             joiner: None,
@@ -715,8 +715,8 @@ pub fn init() {
 /// Initialize scheduler for an Application Processor.
 /// Creates an idle thread so the AP has a valid current_tid.
 pub fn initialize_ap_scheduler(cpu_id: u32) {
-    let index = cpu_id as usize;
-    let idle_tid = idle_tid_for(index);
+    let idx = cpu_id as usize;
+    let idle_tid = idle_tid_for(idx);
     
     let idle = Thread {
         tid: idle_tid,
@@ -729,14 +729,14 @@ pub fn initialize_ap_scheduler(cpu_id: u32) {
         kernel_stack_top: 0,
         user_stack_top: 0,
         entry_point: 0,
-        entry_argument: 0,
+        entry_arg: 0,
         exit_code: 0,
         cpu_time: 0,
         joiner: None,
     };
     
     THREADS.write().insert(idle_tid, idle);
-    CURRENT_TIDS[index].store(idle_tid, Ordering::SeqCst);
+    CURRENT_TIDS[idx].store(idle_tid, Ordering::SeqCst);
     
     crate::serial_println!("[THREAD] AP {} idle thread created (TID={:#x})", cpu_id, idle_tid);
 }

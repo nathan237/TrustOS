@@ -14,171 +14,171 @@ use alloc::vec::Vec;
 use core::sync::atomic::{AtomicUsize, AtomicU64, Ordering};
 use spin::Mutex;
 
-pub use paging::{AddressSpace, PageFlags, sw, aov, txu};
+pub use paging::{AddressSpace, PageFlags, ij, ux, msu};
 
 
 
 
 
-const AFD_: usize = 64;
+const AGX_: usize = 64;
 
 struct BootMemoryMap {
-    ch: [(u64, u64, u8); AFD_],
-    az: usize,
+    entries: [(u64, u64, u8); AGX_],
+    count: usize,
 }
 
 impl BootMemoryMap {
     const fn new() -> Self {
-        Self { ch: [(0, 0, 0); AFD_], az: 0 }
+        Self { entries: [(0, 0, 0); AGX_], count: 0 }
     }
-    fn push(&mut self, ar: u64, go: u64, ifl: u8) {
-        if self.az < AFD_ {
-            self.ch[self.az] = (ar, go, ifl);
-            self.az += 1;
+    fn push(&mut self, base: u64, length: u64, ecy: u8) {
+        if self.count < AGX_ {
+            self.entries[self.count] = (base, length, ecy);
+            self.count += 1;
         }
     }
-    fn gai(&self) -> &[(u64, u64, u8)] {
-        &self.ch[..self.az]
+    fn as_slice(&self) -> &[(u64, u64, u8)] {
+        &self.entries[..self.count]
     }
 }
 
-static ALW_: Mutex<BootMemoryMap> = Mutex::new(BootMemoryMap::new());
+static ANR_: Mutex<BootMemoryMap> = Mutex::new(BootMemoryMap::new());
 
 
-pub fn wuv(ar: u64, go: u64, ifl: u8) {
-    if let Some(mut map) = ALW_.try_lock() {
-        map.push(ar, go, ifl);
+pub fn oxu(base: u64, length: u64, ecy: u8) {
+    if let Some(mut map) = ANR_.try_lock() {
+        map.push(base, length, ecy);
     }
 }
 
 
-pub fn tdz() -> Vec<(u64, u64, u8)> {
-    ALW_.lock().gai().ip()
+pub fn mdl() -> Vec<(u64, u64, u8)> {
+    ANR_.lock().as_slice().to_vec()
 }
 
 
-static CF_: AtomicUsize = AtomicUsize::new(0);
+static CH_: AtomicUsize = AtomicUsize::new(0);
 
-static DS_: AtomicU64 = AtomicU64::new(0xFFFF_8000_0000_0000);
+static ED_: AtomicU64 = AtomicU64::new(0xFFFF_8000_0000_0000);
 
-pub const TW_: usize = 64 * 1024 * 1024;
+pub const VE_: usize = 64 * 1024 * 1024;
 
-pub const BZB_: usize = 512 * 1024 * 1024;
-
-
-static TV_: AtomicUsize = AtomicUsize::new(64 * 1024 * 1024);
+pub const CCM_: usize = 512 * 1024 * 1024;
 
 
-pub fn cre() -> usize {
-    TV_.load(Ordering::Relaxed)
+static VD_: AtomicUsize = AtomicUsize::new(64 * 1024 * 1024);
+
+
+pub fn atz() -> usize {
+    VD_.load(Ordering::Relaxed)
 }
 
 
-#[deprecated(jp = "Use memory::heap_size() instead")]
-pub const DPD_: usize = 64 * 1024 * 1024;
+#[deprecated(note = "Use memory::heap_size() instead")]
+pub const DSX_: usize = 64 * 1024 * 1024;
 
 
-static BHN_: AtomicU64 = AtomicU64::new(0);
+static BJR_: AtomicU64 = AtomicU64::new(0);
 
 
-pub fn wjt(bf: u64) {
-    BHN_.store(bf, Ordering::SeqCst);
+pub fn opo(bytes: u64) {
+    BJR_.store(bytes, Ordering::SeqCst);
 }
 
 
-pub fn fxc() -> u64 {
-    BHN_.load(Ordering::Relaxed)
+pub fn ceo() -> u64 {
+    BJR_.load(Ordering::Relaxed)
 }
 
 
-pub fn rnh(xko: u64) -> usize {
-    let exd = (xko / 4) as usize;
-    exd.qp(TW_, BZB_)
+pub fn kwm(total_ram: u64) -> usize {
+    let ccz = (total_ram / 4) as usize;
+    ccz.clamp(VE_, CCM_)
 }
 
 
-pub fn lej(lr: u64, moj: u64, giz: usize) {
+pub fn gcr(hhdm_offset: u64, usable_base: u64, heap_bytes: usize) {
     
-    DS_.store(lr, Ordering::SeqCst);
-    
-    
-    TV_.store(giz, Ordering::SeqCst);
+    ED_.store(hhdm_offset, Ordering::SeqCst);
     
     
-    let dhz = moj;
-    let lca = lr + dhz;
-    
-    CF_.store(lca as usize, Ordering::SeqCst);
+    VD_.store(heap_bytes, Ordering::SeqCst);
     
     
-    heap::lec(lca as usize, giz);
+    let bgx = usable_base;
+    let gaq = hhdm_offset + bgx;
+    
+    CH_.store(gaq as usize, Ordering::SeqCst);
+    
+    
+    heap::gcm(gaq as usize, heap_bytes);
     crate::log!("Heap initialized: {} MB at virt {:#x} (phys {:#x})", 
-        giz / 1024 / 1024, lca, dhz);
+        heap_bytes / 1024 / 1024, gaq, bgx);
 }
 
 
-pub fn yxv(lr: u64, moj: u64) {
-    lej(lr, moj, TW_);
+pub fn qlg(hhdm_offset: u64, usable_base: u64) {
+    gcr(hhdm_offset, usable_base, VE_);
 }
 
 
 pub fn init() {
     
     
-    let lby = 0xFFFF_8000_0100_0000usize; 
-    CF_.store(lby, Ordering::SeqCst);
-    let aw = TW_;
-    TV_.store(aw, Ordering::SeqCst);
-    heap::lec(lby, aw);
-    crate::log!("Heap initialized (fallback): {} MB at {:#x}", aw / 1024 / 1024, lby);
+    let gan = 0xFFFF_8000_0100_0000usize; 
+    CH_.store(gan, Ordering::SeqCst);
+    let size = VE_;
+    VD_.store(size, Ordering::SeqCst);
+    heap::gcm(gan, size);
+    crate::log!("Heap initialized (fallback): {} MB at {:#x}", size / 1024 / 1024, gan);
 }
 
 
 
-pub fn tta(ovk: u64, giz: usize) {
+pub fn mov(phys_base: u64, heap_bytes: usize) {
     
-    DS_.store(0, Ordering::SeqCst);
-    TV_.store(giz, Ordering::SeqCst);
-    CF_.store(ovk as usize, Ordering::SeqCst);
+    ED_.store(0, Ordering::SeqCst);
+    VD_.store(heap_bytes, Ordering::SeqCst);
+    CH_.store(phys_base as usize, Ordering::SeqCst);
     
-    heap::lec(ovk as usize, giz);
+    heap::gcm(phys_base as usize, heap_bytes);
 }
 
 
-pub fn cm() -> Bme {
-    let (sxa, ceu) = frame::cm();
-    Bme {
-        afa: heap::mr(),
-        buv: heap::aez(),
-        ceu: ceu as usize,
-        dhj: (sxa - ceu) as usize,
+pub fn stats() -> Abi {
+    let (frames_total, frames_used) = frame::stats();
+    Abi {
+        heap_used: heap::used(),
+        heap_free: heap::free(),
+        frames_used: frames_used as usize,
+        frames_free: (frames_total - frames_used) as usize,
     }
 }
 
 
 #[derive(Debug, Clone, Copy)]
-pub struct Bme {
-    pub afa: usize,
-    pub buv: usize,
-    pub ceu: usize,
-    pub dhj: usize,
+pub struct Abi {
+    pub heap_used: usize,
+    pub heap_free: usize,
+    pub frames_used: usize,
+    pub frames_free: usize,
 }
 
 
-pub fn lr() -> u64 {
-    DS_.load(Ordering::Relaxed)
+pub fn hhdm_offset() -> u64 {
+    ED_.load(Ordering::Relaxed)
 }
 
 
-pub fn auv(ht: u64) -> u64 {
-    lr() + ht
+pub fn wk(phys: u64) -> u64 {
+    hhdm_offset() + phys
 }
 
 
-pub fn abw(ju: u64) -> Option<u64> {
-    let hp = lr();
-    if ju >= hp {
-        Some(ju - hp)
+pub fn lc(virt: u64) -> Option<u64> {
+    let bz = hhdm_offset();
+    if virt >= bz {
+        Some(virt - bz)
     } else {
         None
     }
@@ -189,73 +189,73 @@ pub fn abw(ju: u64) -> Option<u64> {
 
 
 
-pub fn bki(ki: u64, aw: usize) -> Result<u64, &'static str> {
+pub fn yv(phys_addr: u64, size: usize) -> Result<u64, &'static str> {
     
     
     
     
-    let vd = auv(ki);
+    let virt_addr = wk(phys_addr);
     
     
-    let aus = 4096u64;
-    let eiz = ki & !0xFFF;
-    let ktm = (ki + aw as u64 + 0xFFF) & !0xFFF;
-    let dtt = ((ktm - eiz) / aus) as usize;
+    let xy = 4096u64;
+    let bvy = phys_addr & !0xFFF;
+    let fuu = (phys_addr + size as u64 + 0xFFF) & !0xFFF;
+    let bnw = ((fuu - bvy) / xy) as usize;
     
     crate::serial_println!("[MMIO] Mapping {:#x} -> {:#x} ({} pages)", 
-        ki, vd, dtt);
+        phys_addr, virt_addr, bnw);
     
     
-    for a in 0..dtt {
-        let dai = eiz + (a as u64 * aus);
-        let egd = auv(dai);
+    for i in 0..bnw {
+        let bcy = bvy + (i as u64 * xy);
+        let page_virt = wk(bcy);
         
-        paging::oky(egd, dai)?;
+        paging::ilu(page_virt, bcy)?;
     }
     
     
-    for a in 0..dtt {
-        let egd = auv(eiz + (a as u64 * aus));
+    for i in 0..bnw {
+        let page_virt = wk(bvy + (i as u64 * xy));
         unsafe {
             #[cfg(target_arch = "x86_64")]
-            core::arch::asm!("invlpg [{}]", in(reg) egd, options(nostack, preserves_flags));
+            core::arch::asm!("invlpg [{}]", in(reg) page_virt, options(nostack, preserves_flags));
             #[cfg(not(target_arch = "x86_64"))]
-            crate::arch::ghg(egd);
+            crate::arch::cxy(page_virt);
         }
     }
     
-    Ok(vd)
+    Ok(virt_addr)
 }
 
 
-pub fn zuc(ydt: u64, dds: usize) {
+pub fn rbi(_virt_addr: u64, bek: usize) {
     
 }
 
 
 
-pub fn vst(qdj: u32, ag: u64) -> Result<u64, i32> {
+pub fn odj(_pid: u32, addr: u64) -> Result<u64, i32> {
     
     
-    if !aov(ag) {
+    if !ux(addr) {
         return Err(-14); 
     }
     
     
-    let bn = unsafe { core::ptr::read_volatile(ag as *const u64) };
-    Ok(bn)
+    let value = unsafe { core::ptr::read_volatile(addr as *const u64) };
+    Ok(value)
 }
 
 
 
-pub fn xvu(qdj: u32, ag: u64, bn: u64) -> Result<(), i32> {
+pub fn pvf(_pid: u32, addr: u64, value: u64) -> Result<(), i32> {
     
     
-    if !aov(ag) {
+    if !ux(addr) {
         return Err(-14); 
     }
     
     
-    unsafe { core::ptr::write_volatile(ag as *mut u64, bn) };
+    unsafe { core::ptr::write_volatile(addr as *mut u64, value) };
     Ok(())
 }

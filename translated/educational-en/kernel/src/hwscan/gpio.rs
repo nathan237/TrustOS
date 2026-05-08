@@ -16,11 +16,11 @@ use alloc::string::String;
 use alloc::format;
 use alloc::vec::Vec;
 
-fn safe_read(address: u64) -> Option<u32> {
-    if address == 0 { return None; }
+fn safe_read(addr: u64) -> Option<u32> {
+    if addr == 0 { return None; }
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        let ptr = address as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+        let ptr = addr as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u32;
         Some(core::ptr::read_volatile(ptr))
     }
@@ -74,7 +74,7 @@ const QCOM_TLMM_FUNC_NAMES: &[(u32, &str)] = &[
 ];
 
 /// Decode BCM2711 GPIO pin functions
-fn decode_bcm_gpio(base: u64, number_pins: u32) -> String {
+fn decode_bcm_gpio(base: u64, num_pins: u32) -> String {
     let mut out = String::new();
     
     out.push_str(&format!("{:<6} {:<10} {:<8} {}\n",
@@ -85,7 +85,7 @@ fn decode_bcm_gpio(base: u64, number_pins: u32) -> String {
     let level0 = safe_read(base + 0x34).unwrap_or(0);
     let level1 = safe_read(base + 0x38).unwrap_or(0);
     
-    let maximum_pins = core::cmp::minimum(number_pins, 54);
+    let maximum_pins = core::cmp::min(num_pins, 54);
     let mut uart_pins = Vec::new();
     let mut jtag_pins = Vec::new();
     
@@ -154,17 +154,17 @@ match dalt {
 
 /// Decode Qualcomm TLMM GPIO
 #[cfg(target_arch = "aarch64")]
-fn decode_qcom_gpio(base: u64, number_pins: u32) -> String {
+fn decode_qcom_gpio(base: u64, num_pins: u32) -> String {
     let mut out = String::new();
     
     out.push_str(&format!("{:<6} {:<10} {:<8} {}\n",
         "PIN", "FUNCTION", "DIR", "FLAGS"));
     out.push_str(&format!("{}\n", "-".repeat(50)));
     
-    let maximum = core::cmp::minimum(number_pins, 200);
+    let max = core::cmp::min(num_pins, 200);
     let mut debug_pins = Vec::new();
     
-    for pin in 0..maximum {
+    for pin in 0..max {
         // Each GPIO has a config register at base + pin * 0x1000
         let configuration_address = base + (pin as u64) * 0x1000;
         
@@ -220,20 +220,20 @@ pub fn probe_gpio_pins() -> String {
         output.push_str("\x01C== TrustProbe: GPIO Pin & Debug Interface Scanner ==\x01W\n\n");
         output.push_str("Scanning GPIO controllers for muxed debug interfaces...\n\n");
         
-        for &(base, number_pins, name) in GPIO_CONTROLLERS {
+        for &(base, num_pins, name) in GPIO_CONTROLLERS {
             // Check if controller exists
-            if let Some(value) = safe_read(base) {
-                if value != 0xFFFFFFFF {
+            if let Some(val) = safe_read(base) {
+                if val != 0xFFFFFFFF {
                     output.push_str(&format!("\x01G[FOUND]\x01W {} @ 0x{:08X} ({} pins)\n\n",
-                        name, base, number_pins));
+                        name, base, num_pins));
                     
                     if name.contains("BCM") {
-                        output.push_str(&decode_bcm_gpio(base, number_pins));
+                        output.push_str(&decode_bcm_gpio(base, num_pins));
                     } else if name.contains("Snapdragon") || name.contains("TLMM") {
-                        output.push_str(&decode_qcom_gpio(base, number_pins));
+                        output.push_str(&decode_qcom_gpio(base, num_pins));
                     } else {
                         // Generic PL061 decode
-                        output.push_str(&format!("  Data: 0x{:08X}\n", value));
+                        output.push_str(&format!("  Data: 0x{:08X}\n", val));
                         if let Some(directory) = safe_read(base + 0x400) {
                             output.push_str(&format!("  Direction: 0x{:08X}\n", directory));
                         }
@@ -285,7 +285,7 @@ pub fn probe_gpio_pins() -> String {
         
         // SiFive/QEMU UART
         let uart_base = 0x1000_0000u64;
-        if let Some(value) = safe_read(uart_base) {
+        if let Some(val) = safe_read(uart_base) {
             output.push_str(&format!("\x01G[FOUND]\x01W UART @ 0x{:08X}\n", uart_base));
         }
     }

@@ -263,7 +263,7 @@ fn detect_intent(norm: &str) -> Intent {
     if matches_any(norm, &["open ", "ouvre ", "launch", "lance ", "start ", "demarre"]) {
         return Intent::OpenApp;
     }
-    if matches_any(norm, &["music", "musique", "play", "beep", "son", "sound", "audio"]) {
+    if matches_any(norm, &["music", "musique", "play", "beep", "son", "sound", "audio", "live", "strudel", "tidal"]) {
         return Intent::PlayMusic;
     }
     if matches_any(norm, &["theme", "color", "couleur", "dark", "light", "sombre", "clair"]) {
@@ -1073,6 +1073,29 @@ fn cmd_brain(args: &[&str]) {
         crate::println!("    propagate     Auto-propagation: mesh + pull brain + federate");
         crate::println!("    propagate pxe Same + enable PXE to replicate further");
         crate::println!();
+        crate::println!("  Background Training (CPU loop with SSD checkpoints):");
+        crate::println!("    loop start [--lr 0.001] [--epochs 0] [--ckpt 50]");
+        crate::println!("    loop stop/pause/resume/status");
+        crate::println!("    loop load [best|latest]  Load checkpoint from SSD");
+        crate::println!("    dashboard     Loss curve + stats + training metrics");
+        crate::println!("    curve [W] [H] Render loss curve (default 60x15)");
+        crate::println!("    ask <text>    Query current model (logs conversation)");
+        crate::println!("    history [N]   Show last N conversations");
+        crate::println!("    history search <keyword>");
+        crate::println!("    history progress  Compare quality over training stages");
+        crate::println!("    rate <1-5>    Rate last JARVIS response");
+        crate::println!("    logs [N]      Show training event log (errors, warnings)");
+        crate::println!("    logs errors   Show errors only");
+        crate::println!();
+        crate::println!("  Developmental Learning (human brain growth model):");
+        crate::println!("    dev status    Show developmental stage & milestones");
+        crate::println!("    dev init      Start developmental learning (Phase 0)");
+        crate::println!("    dev observe   Feed live input to perception system");
+        crate::println!("    dev feedback <-1..1>  Send reward/punishment signal");
+        crate::println!("    dev train     Run one developmental training step");
+        crate::println!("    dev promote   Force promotion to next stage");
+        crate::println!("    dev stage <N> Set stage manually (0-6)");
+        crate::println!();
         crate::println!("  The neural brain is a 4-layer transformer (4.4M params)");
         crate::println!("  that learns from text, generates responses, and self-improves.");
         return;
@@ -1611,9 +1634,511 @@ fn cmd_brain(args: &[&str]) {
             crate::println_color!(COLOR_GRAY, "  Pre-training done");
         }
 
+        // ═══════════════════════════════════════════════════════════════
+        // Background Training Loop
+        // ═══════════════════════════════════════════════════════════════
+
+        "loop" | "background" | "bg" => {
+            if args.len() < 2 {
+                crate::println_color!(JARVIS_BRAIN, "  Background Training Loop");
+                crate::println!();
+                crate::println!("  Usage: jarvis brain loop <command>");
+                crate::println!();
+                crate::println!("  Commands:");
+                crate::println!("    start [--lr 0.001] [--epochs 0] [--ckpt 50]");
+                crate::println!("                        Start training (epochs=0 = infinite)");
+                crate::println!("    stop                Graceful stop + final checkpoint");
+                crate::println!("    pause               Pause training");
+                crate::println!("    resume              Resume training");
+                crate::println!("    status              Show training status");
+                crate::println!("    checkpoint [N]      Force checkpoint now (or set interval)");
+                crate::println!("    load [best|latest]  Load checkpoint from SSD");
+                return;
+            }
+
+            match args[1] {
+                "start" => {
+                    if !ensure_brain() { return; }
+
+                    let mut config = crate::jarvis::training_loop::TrainingConfig::default();
+
+                    // Parse flags
+                    let mut i = 2;
+                    while i < args.len() {
+                        match args[i] {
+                            "--lr" if i + 1 < args.len() => {
+                                config.lr_max = args[i + 1].parse().unwrap_or(0.001);
+                                config.lr_min = config.lr_max * 0.1;
+                                i += 2;
+                            }
+                            "--epochs" if i + 1 < args.len() => {
+                                config.epochs = args[i + 1].parse().unwrap_or(0);
+                                i += 2;
+                            }
+                            "--ckpt" if i + 1 < args.len() => {
+                                config.checkpoint_every = args[i + 1].parse().unwrap_or(50);
+                                i += 2;
+                            }
+                            "--path" if i + 1 < args.len() => {
+                                config.checkpoint_path = String::from(args[i + 1]);
+                                i += 2;
+                            }
+                            "--no-early-stop" => {
+                                config.early_stop = false;
+                                i += 1;
+                            }
+                            _ => { i += 1; }
+                        }
+                    }
+
+                    crate::println_color!(JARVIS_BRAIN, "  Starting background training...");
+                    crate::println_color!(COLOR_GRAY, "    LR: {:.5} -> {:.5}", config.lr_max, config.lr_min);
+                    crate::println_color!(COLOR_GRAY, "    Epochs: {} (0=infinite)", config.epochs);
+                    crate::println_color!(COLOR_GRAY, "    Checkpoint every {} optimizer steps", config.checkpoint_every);
+                    crate::println_color!(COLOR_GRAY, "    Path: {}", config.checkpoint_path);
+
+                    match crate::jarvis::training_loop::start(config) {
+                        Ok(()) => crate::println_color!(COLOR_GREEN, "  Background training started (tick-based, non-blocking)"),
+                        Err(e) => crate::println_color!(COLOR_RED, "  Error: {}", e),
+                    }
+                }
+
+                "stop" => {
+                    if !crate::jarvis::training_loop::is_running() {
+                        crate::println_color!(COLOR_YELLOW, "  Training not running");
+                        return;
+                    }
+                    crate::jarvis::training_loop::stop();
+                    crate::println_color!(COLOR_GREEN, "  Stop requested (will checkpoint and stop)");
+                }
+
+                "pause" => {
+                    crate::jarvis::training_loop::pause();
+                    crate::println_color!(COLOR_GREEN, "  Training paused");
+                }
+
+                "resume" => {
+                    crate::jarvis::training_loop::resume();
+                    crate::println_color!(COLOR_GREEN, "  Training resumed");
+                }
+
+                "status" | "stat" => {
+                    for line in crate::jarvis::training_dashboard::format_status() {
+                        crate::println!("{}", line);
+                    }
+                }
+
+                // Machine-readable JSON status for external monitors
+                "json" => {
+                    let s = crate::jarvis::training_loop::status();
+                    let state = if !s.running { "stopped" }
+                        else if s.paused { "paused" }
+                        else { "running" };
+                    let stats = crate::jarvis::training_dashboard::loss_stats(50);
+                    let total_seqs = crate::jarvis::corpus::total_sequences();
+                    let num_phases = crate::jarvis::corpus::num_phases();
+                    // Estimate total steps per epoch
+                    let seqs_per_epoch = total_seqs as u64;
+                    let epoch_progress = if seqs_per_epoch > 0 {
+                        ((s.step % seqs_per_epoch) as f32 / seqs_per_epoch as f32 * 100.0) as u32
+                    } else { 0 };
+                    crate::println!("{{\"state\":\"{}\",\"step\":{},\"epoch\":{},\"loss\":{:.6},\"best_loss\":{:.6},\"lr\":{:.8},\"sps\":{:.2},\"elapsed_ms\":{},\"ckpt_step\":{},\"nan\":{},\"ckpt_fail\":{},\"ssd\":{},\"trend\":{:.6},\"loss_min\":{:.6},\"loss_max\":{:.6},\"loss_mean\":{:.6},\"total_seqs\":{},\"phases\":{},\"epoch_pct\":{}}}",
+                        state, s.step, s.epoch, s.current_loss, s.best_loss,
+                        s.lr, s.steps_per_sec, s.elapsed_ms,
+                        s.last_checkpoint_step, s.nan_count, s.checkpoint_failures,
+                        s.ssd_available, stats.trend, stats.min, stats.max, stats.mean,
+                        total_seqs, num_phases, epoch_progress);
+                }
+
+                "checkpoint" | "ckpt" => {
+                    if args.len() > 2 {
+                        // Set checkpoint interval
+                        if let Ok(n) = args[2].parse::<u32>() {
+                            use core::sync::atomic::Ordering;
+                            crate::jarvis::training_loop::CHECKPOINT_EVERY
+                                .store(n, Ordering::Release);
+                            crate::println_color!(COLOR_GREEN, "  Checkpoint interval set to {} steps", n);
+                        }
+                    } else {
+                        crate::println_color!(COLOR_YELLOW, "  Manual checkpoint not yet implemented");
+                    }
+                }
+
+                "load" => {
+                    let which = if args.len() > 2 { args[2] } else { "latest" };
+                    crate::println_color!(JARVIS_BRAIN, "  Loading checkpoint '{}'...", which);
+                    match crate::jarvis::training_loop::load_checkpoint(which) {
+                        Ok(step) => crate::println_color!(COLOR_GREEN,
+                            "  Checkpoint loaded (step {})", step),
+                        Err(e) => crate::println_color!(COLOR_RED, "  Load failed: {}", e),
+                    }
+                }
+
+                _ => {
+                    crate::println_color!(COLOR_RED, "  Unknown: jarvis brain loop {}", args[1]);
+                }
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // Dashboard — Loss curve + stats
+        // ═══════════════════════════════════════════════════════════════
+
+        "dashboard" | "dash" | "stats" => {
+            crate::println_color!(JARVIS_BRAIN, "  === JARVIS Training Dashboard ===");
+            crate::println!();
+
+            // Status
+            for line in crate::jarvis::training_dashboard::format_status() {
+                crate::println!("{}", line);
+            }
+            crate::println!();
+
+            // Loss curve
+            for line in crate::jarvis::training_dashboard::render_loss_curve(60, 12) {
+                crate::println!("{}", line);
+            }
+            crate::println!();
+
+            // Stats
+            for line in crate::jarvis::training_dashboard::format_stats(100) {
+                crate::println!("{}", line);
+            }
+        }
+
+        "curve" | "loss" => {
+            let width = if args.len() > 1 { args[1].parse().unwrap_or(60) } else { 60 };
+            let height = if args.len() > 2 { args[2].parse().unwrap_or(15) } else { 15 };
+            for line in crate::jarvis::training_dashboard::render_loss_curve(width, height) {
+                crate::println!("{}", line);
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // Model Query — Ask the current model
+        // ═══════════════════════════════════════════════════════════════
+
+        "ask" | "query" | "q" => {
+            if !ensure_brain() { return; }
+            if args.len() < 2 {
+                crate::println!("  Usage: jarvis brain ask <question>");
+                return;
+            }
+            let prompt = args[1..].join(" ");
+            crate::print_color!(COLOR_WHITE, "  You: ");
+            crate::println!("{}", prompt);
+
+            let result = crate::jarvis::training_dashboard::query_with_meta(&prompt, 64);
+
+            crate::print_color!(JARVIS_BRAIN, "  Jarvis: ");
+            for c in result.response.chars() {
+                if c.is_ascii_graphic() || c == ' ' {
+                    crate::print!("{}", c);
+                } else {
+                    crate::print_color!(COLOR_GRAY, ".");
+                }
+            }
+            crate::println!();
+            crate::println_color!(COLOR_GRAY, "  (step={}, {}ms)", result.step, result.elapsed_ms);
+
+            // Log the conversation
+            crate::jarvis::conversation_log::log_exchange(&prompt, &result.response);
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // Conversation History
+        // ═══════════════════════════════════════════════════════════════
+
+        "history" | "hist" | "conversations" | "conv" => {
+            if args.len() > 1 {
+                match args[1] {
+                    "search" if args.len() > 2 => {
+                        let keyword = args[2..].join(" ");
+                        let results = crate::jarvis::conversation_log::search(&keyword);
+                        if results.is_empty() {
+                            crate::println_color!(COLOR_YELLOW, "  No matches for '{}'", keyword);
+                        } else {
+                            crate::println_color!(JARVIS_BRAIN, "  Found {} matches:", results.len());
+                            for ex in results.iter().take(10) {
+                                for line in crate::jarvis::conversation_log::format_exchange(ex) {
+                                    crate::println!("{}", line);
+                                }
+                            }
+                        }
+                    }
+                    "progress" => {
+                        for line in crate::jarvis::conversation_log::progress_report() {
+                            crate::println!("{}", line);
+                        }
+                    }
+                    "flush" => {
+                        crate::jarvis::conversation_log::flush_to_disk();
+                        crate::println_color!(COLOR_GREEN, "  Conversations flushed to SSD");
+                    }
+                    n => {
+                        let count: usize = n.parse().unwrap_or(10);
+                        let recent = crate::jarvis::conversation_log::recent(count);
+                        crate::println_color!(JARVIS_BRAIN, "  Last {} conversations:", recent.len());
+                        for ex in &recent {
+                            for line in crate::jarvis::conversation_log::format_exchange(ex) {
+                                crate::println!("{}", line);
+                            }
+                        }
+                    }
+                }
+            } else {
+                let recent = crate::jarvis::conversation_log::recent(10);
+                if recent.is_empty() {
+                    crate::println_color!(COLOR_YELLOW, "  No conversations recorded");
+                    crate::println!("  Use 'jarvis brain ask <question>' to start");
+                } else {
+                    crate::println_color!(JARVIS_BRAIN, "  Recent conversations:");
+                    for ex in &recent {
+                        for line in crate::jarvis::conversation_log::format_exchange(ex) {
+                            crate::println!("{}", line);
+                        }
+                    }
+                }
+            }
+        }
+
+        "rate" => {
+            if args.len() < 2 {
+                crate::println!("  Usage: jarvis brain rate <1-5>  (rates last response)");
+                return;
+            }
+            let rating: u8 = args[1].parse().unwrap_or(0);
+            if rating < 1 || rating > 5 {
+                crate::println_color!(COLOR_RED, "  Rating must be 1-5");
+                return;
+            }
+            if crate::jarvis::conversation_log::rate_last(rating) {
+                crate::println_color!(COLOR_GREEN, "  Rated last response: {}/5", rating);
+            } else {
+                crate::println_color!(COLOR_YELLOW, "  No conversation to rate");
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // Training Logs — Error/event diagnostics
+        // ═══════════════════════════════════════════════════════════════
+
+        "logs" | "log" | "errors" => {
+            let show_errors_only = args.len() > 1 && (args[1] == "errors" || args[1] == "err");
+            let count: usize = if args.len() > 1 {
+                args[args.len() - 1].parse().unwrap_or(20)
+            } else {
+                20
+            };
+
+            let events = if show_errors_only {
+                crate::jarvis::training_loop::recent_errors(count)
+            } else {
+                crate::jarvis::training_loop::recent_events(count)
+            };
+
+            if events.is_empty() {
+                crate::println_color!(COLOR_YELLOW, "  No training events recorded");
+                crate::println!("  Start training with: jarvis brain loop start");
+                return;
+            }
+
+            let (err_count, warn_count) = crate::jarvis::training_loop::error_counts();
+            crate::println_color!(JARVIS_BRAIN, "  Training Log ({} errors, {} warnings):",
+                err_count, warn_count);
+            crate::println!();
+
+            for ev in &events {
+                let (level_str, color) = match ev.level {
+                    crate::jarvis::training_loop::EventLevel::Info => ("INFO", COLOR_GRAY),
+                    crate::jarvis::training_loop::EventLevel::Warning => ("WARN", COLOR_YELLOW),
+                    crate::jarvis::training_loop::EventLevel::Error => ("ERR ", COLOR_RED),
+                };
+
+                let secs = ev.timestamp_ms / 1000;
+                crate::print_color!(COLOR_GRAY, "  [{:>6}s] ", secs);
+                crate::print_color!(color, "{} ", level_str);
+                crate::print_color!(COLOR_GRAY, "step={:<6} ", ev.step);
+                crate::println!("{}", ev.message);
+            }
+
+            crate::println!();
+            let s = crate::jarvis::training_loop::status();
+            if !s.ssd_available {
+                crate::println_color!(COLOR_RED, "  WARNING: SSD not available — logs are memory-only");
+            } else {
+                let config_guard = crate::jarvis::training_loop::CONFIG.lock();
+                if let Some(cfg) = config_guard.as_ref() {
+                    crate::println_color!(COLOR_GRAY, "  Log file: {}/training.log", cfg.checkpoint_path);
+                }
+            }
+        }
+
+        "dev" | "developmental" | "growth" => {
+            cmd_brain_dev(&args[1..]);
+        }
+
         _ => {
             crate::println_color!(COLOR_RED, "  Unknown: jarvis brain {}", args[0]);
             crate::println!("  Use 'jarvis brain' for help");
+        }
+    }
+}
+
+/// Handle "jarvis brain dev <cmd>" — Developmental Learning subsystem
+fn cmd_brain_dev(args: &[&str]) {
+    use crate::jarvis::developmental;
+
+    if args.is_empty() || args[0] == "status" {
+        // Show developmental status
+        if !developmental::is_active() {
+            crate::println_color!(COLOR_YELLOW, "  Developmental system not active. Run: jarvis brain dev init");
+            return;
+        }
+        for line in developmental::status_lines() {
+            crate::println!("{}", line);
+        }
+        return;
+    }
+
+    match args[0] {
+        "init" | "start" => {
+            if !ensure_brain() { return; }
+            developmental::init();
+            crate::println_color!(COLOR_GREEN, "  Developmental learning initialized — Stage: Fetus");
+            crate::println_color!(COLOR_GRAY, "  Run 'jarvis brain pretrain' to complete Phase 0 (wiring)");
+        }
+
+        "observe" => {
+            if !developmental::is_active() {
+                crate::println_color!(COLOR_YELLOW, "  Not active. Run: jarvis brain dev init");
+                return;
+            }
+            if args.len() < 2 {
+                crate::println!("  Usage: jarvis brain dev observe <text>");
+                return;
+            }
+            let text = args[1..].join(" ");
+            let novelty = developmental::observe(text.as_bytes());
+            let stage = developmental::current_stage();
+            crate::println!("  Stage: {}  Novelty: {:.3}  Confidence: {:.3}",
+                stage.name(), novelty, developmental::recent_confidence());
+            if novelty > 0.6 {
+                crate::println_color!(COLOR_YELLOW, "  ! High novelty — attention spike");
+            }
+        }
+
+        "feedback" | "reward" => {
+            if args.len() < 2 {
+                crate::println!("  Usage: jarvis brain dev feedback <-1.0 to 1.0>");
+                return;
+            }
+            if let Ok(reward) = args[1].parse::<f32>() {
+                developmental::feedback(reward);
+                let label = if reward > 0.0 { "positive" } else if reward < 0.0 { "negative" } else { "neutral" };
+                crate::println_color!(COLOR_GREEN, "  Feedback: {} ({:.2})", label, reward);
+            } else {
+                crate::println_color!(COLOR_RED, "  Invalid reward value: {}", args[1]);
+            }
+        }
+
+        "train" | "step" => {
+            if !developmental::is_active() {
+                crate::println_color!(COLOR_YELLOW, "  Not active. Run: jarvis brain dev init");
+                return;
+            }
+            match developmental::train_step() {
+                Some(loss) => {
+                    crate::println!("  Dev train step — loss: {:.4}", loss);
+                }
+                None => {
+                    crate::println_color!(COLOR_GRAY, "  Nothing to train on (need more observations or episodes)");
+                }
+            }
+        }
+
+        "promote" => {
+            if !developmental::is_active() {
+                crate::println_color!(COLOR_YELLOW, "  Not active. Run: jarvis brain dev init");
+                return;
+            }
+            let current = developmental::current_stage();
+            if current as u8 >= 6 {
+                crate::println_color!(COLOR_GRAY, "  Already at Adult stage");
+                return;
+            }
+            let next = developmental::Stage::from_u8(current as u8 + 1);
+            developmental::set_stage(next);
+            crate::println_color!(COLOR_GREEN, "  Promoted: {} -> {}", current.name(), next.name());
+        }
+
+        "stage" => {
+            if args.len() < 2 {
+                crate::println!("  Current stage: {} ({}/6)",
+                    developmental::current_stage().name(),
+                    developmental::current_stage() as u8);
+                return;
+            }
+            if let Ok(n) = args[1].parse::<u8>() {
+                if n <= 6 {
+                    let stage = developmental::Stage::from_u8(n);
+                    developmental::set_stage(stage);
+                    crate::println_color!(COLOR_GREEN, "  Stage set to: {} ({})", stage.name(), n);
+                } else {
+                    crate::println_color!(COLOR_RED, "  Stage must be 0-6");
+                }
+            } else {
+                crate::println_color!(COLOR_RED, "  Usage: jarvis brain dev stage <0-6>");
+            }
+        }
+
+        "confirm" => {
+            developmental::confirm_completion();
+            crate::println_color!(COLOR_GREEN, "  Completion confirmed for Phase 3 milestone");
+        }
+
+        "heartbeat" | "heart" | "bpm" | "pulse" => {
+            use crate::jarvis::heartbeat;
+            heartbeat::tick(); // Force refresh
+            let bpm = heartbeat::bpm();
+            let status = heartbeat::status();
+            let color = heartbeat::color();
+
+            crate::println!("");
+            crate::println_color!(color, "  {} BPM — {}", bpm, status);
+            crate::println!("");
+
+            // Visual heartbeat bar
+            let filled = ((bpm - 60).min(140) as usize * 40) / 140;
+            let mut bar = alloc::string::String::with_capacity(42);
+            bar.push('[');
+            for i in 0..40 {
+                if i < filled { bar.push('\u{2588}'); } else { bar.push('\u{2591}'); }
+            }
+            bar.push(']');
+            crate::println_color!(color, "  {}", bar);
+            crate::println!("  60{:>39}200", "");
+            crate::println!("");
+
+            // Factors breakdown
+            crate::println!("  Confidence:  {:.2}", developmental::recent_confidence());
+            crate::println!("  Novelty:     {:.2}", developmental::recent_novelty());
+            crate::println!("  Discomforts: {}", developmental::discomfort_count());
+            crate::println!("  Stage:       {} ({}/6)", developmental::current_stage().name(),
+                developmental::current_stage() as u8);
+            let training = crate::jarvis::training_loop::is_running();
+            crate::println!("  Training:    {}", if training { "active" } else { "idle" });
+            if training {
+                let ts = crate::jarvis::training_loop::status();
+                crate::println!("  Loss:        {:.3}", ts.current_loss);
+            }
+            crate::println!("");
+            crate::println_color!(0x888888, "  The cursor blinks at JARVIS's heartbeat rhythm.");
+        }
+
+        _ => {
+            crate::println_color!(COLOR_RED, "  Unknown: jarvis brain dev {}", args[0]);
+            crate::println!("  Commands: status, init, observe, feedback, train, promote, stage, confirm, heartbeat");
         }
     }
 }

@@ -9,59 +9,59 @@ use spin::Mutex;
 
 
 pub mod prot {
-    pub const CKV_: u32 = 0;
-    pub const CKW_: u32 = 1;
-    pub const WK_: u32 = 2;
-    pub const AGR_: u32 = 4;
+    pub const COE_: u32 = 0;
+    pub const COF_: u32 = 1;
+    pub const XT_: u32 = 2;
+    pub const AIL_: u32 = 4;
 }
 
 
 pub mod flags {
-    pub const AES_: u32 = 0x20;
-    pub const AZG_: u32 = 0x02;
-    pub const CFB_: u32 = 0x01;
+    pub const AGM_: u32 = 0x20;
+    pub const BBH_: u32 = 0x02;
+    pub const CIK_: u32 = 0x01;
 }
 
 
 #[derive(Clone, Debug)]
-pub struct Rf {
+pub struct He {
     
-    pub ay: u64,
+    pub start: u64,
     
-    pub ci: u64,
+    pub end: u64,
     
     pub prot: u32,
     
     pub flags: u32,
 }
 
-impl Rf {
+impl He {
     
-    pub fn contains(&self, ag: u64) -> bool {
-        ag >= self.ay && ag < self.ci
+    pub fn contains(&self, addr: u64) -> bool {
+        addr >= self.start && addr < self.end
     }
     
     
-    pub fn aw(&self) -> u64 {
-        self.ci - self.ay
+    pub fn size(&self) -> u64 {
+        self.end - self.start
     }
 }
 
 
-static JH_: Mutex<BTreeMap<u64, Vec<Rf>>> = Mutex::new(BTreeMap::new());
+static KA_: Mutex<BTreeMap<u64, Vec<He>>> = Mutex::new(BTreeMap::new());
 
 
-pub fn qfp(jm: u64, vma: Rf) {
-    let mut gg = JH_.lock();
-    gg.bt(jm).clq(Vec::new).push(vma);
+pub fn jty(cr3: u64, vma: He) {
+    let mut bs = KA_.lock();
+    bs.entry(cr3).or_insert_with(Vec::new).push(vma);
 }
 
 
-pub fn uii(jm: u64, ag: u64) -> Option<Rf> {
-    let gg = JH_.lock();
-    if let Some(fba) = gg.get(&jm) {
-        for vma in fba {
-            if vma.contains(ag) {
+pub fn nas(cr3: u64, addr: u64) -> Option<He> {
+    let bs = KA_.lock();
+    if let Some(vmas) = bs.get(&cr3) {
+        for vma in vmas {
+            if vma.contains(addr) {
                 return Some(vma.clone());
             }
         }
@@ -70,85 +70,85 @@ pub fn uii(jm: u64, ag: u64) -> Option<Rf> {
 }
 
 
-pub fn vva(jm: u64, ay: u64, ci: u64) {
-    let mut gg = JH_.lock();
-    if let Some(fba) = gg.ds(&jm) {
+pub fn ofc(cr3: u64, start: u64, end: u64) {
+    let mut bs = KA_.lock();
+    if let Some(vmas) = bs.get_mut(&cr3) {
         
-        let mut jgv = Vec::new();
-        for vma in fba.bbk(..) {
-            if vma.ci <= ay || vma.ay >= ci {
+        let mut euy = Vec::new();
+        for vma in vmas.drain(..) {
+            if vma.end <= start || vma.start >= end {
                 
-                jgv.push(vma);
+                euy.push(vma);
             } else {
                 
-                if vma.ay < ay {
-                    jgv.push(Rf {
-                        ay: vma.ay,
-                        ci: ay,
+                if vma.start < start {
+                    euy.push(He {
+                        start: vma.start,
+                        end: start,
                         prot: vma.prot,
                         flags: vma.flags,
                     });
                 }
-                if vma.ci > ci {
-                    jgv.push(Rf {
-                        ay: ci,
-                        ci: vma.ci,
+                if vma.end > end {
+                    euy.push(He {
+                        start: end,
+                        end: vma.end,
                         prot: vma.prot,
                         flags: vma.flags,
                     });
                 }
             }
         }
-        *fba = jgv;
+        *vmas = euy;
     }
 }
 
 
-pub fn zuw(jm: u64, ay: u64, ci: u64, uto: u32) {
-    let mut gg = JH_.lock();
-    if let Some(fba) = gg.ds(&jm) {
-        for vma in fba.el() {
-            if vma.ay < ci && vma.ci > ay {
-                vma.prot = uto;
+pub fn rbs(cr3: u64, start: u64, end: u64, new_prot: u32) {
+    let mut bs = KA_.lock();
+    if let Some(vmas) = bs.get_mut(&cr3) {
+        for vma in vmas.iter_mut() {
+            if vma.start < end && vma.end > start {
+                vma.prot = new_prot;
             }
         }
     }
 }
 
 
-pub fn yir(wrr: u64, sgz: u64) {
-    let mut gg = JH_.lock();
-    if let Some(fba) = gg.get(&wrr) {
-        let abn = fba.clone();
-        gg.insert(sgz, abn);
+pub fn qac(src_cr3: u64, dst_cr3: u64) {
+    let mut bs = KA_.lock();
+    if let Some(vmas) = bs.get(&src_cr3) {
+        let cloned = vmas.clone();
+        bs.insert(dst_cr3, cloned);
     }
 }
 
 
-pub fn zjd(jm: u64) {
-    JH_.lock().remove(&jm);
+pub fn qto(cr3: u64) {
+    KA_.lock().remove(&cr3);
 }
 
 
-pub fn ufz(jm: u64) -> Vec<Rf> {
-    let gg = JH_.lock();
-    gg.get(&jm).abn().age()
+pub fn mzk(cr3: u64) -> Vec<He> {
+    let bs = KA_.lock();
+    bs.get(&cr3).cloned().unwrap_or_default()
 }
 
 
-pub fn vni(prot_flags: u32) -> crate::memory::paging::PageFlags {
+pub fn nyx(prot_flags: u32) -> crate::memory::paging::PageFlags {
     use crate::memory::paging::PageFlags;
     
-    let mut bb = PageFlags::Cz | PageFlags::Gq | PageFlags::DL_;
-    if (prot_flags & prot::WK_) != 0 {
-        bb |= PageFlags::Ff;
+    let mut f = PageFlags::Bg | PageFlags::Cz | PageFlags::DT_;
+    if (prot_flags & prot::XT_) != 0 {
+        f |= PageFlags::Cg;
     }
-    if (prot_flags & prot::AGR_) != 0 {
+    if (prot_flags & prot::AIL_) != 0 {
         
-        bb = PageFlags::Cz | PageFlags::Gq;
-        if (prot_flags & prot::WK_) != 0 {
-            bb |= PageFlags::Ff;
+        f = PageFlags::Bg | PageFlags::Cz;
+        if (prot_flags & prot::XT_) != 0 {
+            f |= PageFlags::Cg;
         }
     }
-    PageFlags::new(bb)
+    PageFlags::new(f)
 }

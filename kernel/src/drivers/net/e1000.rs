@@ -252,18 +252,13 @@ impl E1000Driver {
     
     /// Get virtual address for HHDM
     fn phys_to_virt(phys: u64) -> u64 {
-        const HHDM_OFFSET: u64 = 0xFFFF_8000_0000_0000;
-        phys + HHDM_OFFSET
+        phys + crate::memory::hhdm_offset()
     }
     
     /// Get physical address from virtual (for HHDM region)
     fn virt_to_phys(virt: u64) -> u64 {
-        const HHDM_OFFSET: u64 = 0xFFFF_8000_0000_0000;
-        if virt >= HHDM_OFFSET {
-            virt - HHDM_OFFSET
-        } else {
-            virt
-        }
+        let hhdm = crate::memory::hhdm_offset();
+        if virt >= hhdm { virt - hhdm } else { virt }
     }
     
     /// Disable ULP (Ultra Low Power) mode for SPT variants

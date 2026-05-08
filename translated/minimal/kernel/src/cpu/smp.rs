@@ -8,142 +8,142 @@ use alloc::vec::Vec;
 use spin::Mutex;
 
 
-pub const AN_: usize = 64;
+pub const AR_: usize = 64;
 
 
-static AOZ_: AtomicU32 = AtomicU32::new(1);
+static AQZ_: AtomicU32 = AtomicU32::new(1);
 
 
-static AGX_: AtomicU32 = AtomicU32::new(1);
-
-
-
+static AIR_: AtomicU32 = AtomicU32::new(1);
 
 
 
-const AYD_: u64 = 0xFEE0_0000;
-
-const DQL_: u64 = 0x300;
-
-const DQK_: u64 = 0x310;
 
 
 
-fn whg(mjw: u32, wj: u8) {
-    if crate::apic::zu() {
-        crate::apic::mds(mjw, wj);
+const BAE_: u64 = 0xFEE0_0000;
+
+const DUF_: u64 = 0x300;
+
+const DUE_: u64 = 0x310;
+
+
+
+fn ons(target_apic_id: u32, vector: u8) {
+    if crate::apic::lq() {
+        crate::apic::gtx(target_apic_id, vector);
     }
 }
 
 
-pub fn xtm() {
-    if crate::apic::zu() {
-        crate::apic::phu(0xFE);
+pub fn ptm() {
+    if crate::apic::lq() {
+        crate::apic::jel(0xFE);
     }
 }
 
 
 
-pub fn phx(cih: u32) {
-    let aed = unsafe { CG_[cih as usize].aed };
-    if crate::apic::zu() && aed != 0 || cih != 0 {
-        whg(aed, 0xFD);
+pub fn jeo(target_cpu: u32) {
+    let apic_id = unsafe { CI_[target_cpu as usize].apic_id };
+    if crate::apic::lq() && apic_id != 0 || target_cpu != 0 {
+        ons(apic_id, 0xFD);
     }
 }
 
 
-static AAS_: [AtomicBool; AN_] = {
-    const Dm: AtomicBool = AtomicBool::new(false);
-    [Dm; AN_]
+static ACF_: [AtomicBool; AR_] = {
+    const Bm: AtomicBool = AtomicBool::new(false);
+    [Bm; AR_]
 };
 
 
-static ALZ_: AtomicU32 = AtomicU32::new(0);
+static AOD_: AtomicU32 = AtomicU32::new(0);
 
 
 #[repr(C)]
 pub struct PerCpuData {
     
-    pub qq: u32,
+    pub cpu_id: u32,
     
-    pub aed: u32,
+    pub apic_id: u32,
     
-    pub eoh: u64,
+    pub byk: u64,
     
-    pub flu: u32,
+    pub interrupt_depth: u32,
     
-    pub bhg: u64,
+    pub kernel_stack: u64,
     
-    pub mni: u64,
+    pub tsc_last: u64,
     
-    pub dng: u64,
+    pub work_completed: u64,
 }
 
 impl PerCpuData {
-    pub const fn new(qq: u32, aed: u32) -> Self {
+    pub const fn new(cpu_id: u32, apic_id: u32) -> Self {
         Self {
-            qq,
-            aed,
-            eoh: 0,
-            flu: 0,
-            bhg: 0,
-            mni: 0,
-            dng: 0,
+            cpu_id,
+            apic_id,
+            byk: 0,
+            interrupt_depth: 0,
+            kernel_stack: 0,
+            tsc_last: 0,
+            work_completed: 0,
         }
     }
 }
 
 
-static mut CG_: [PerCpuData; AN_] = {
-    const Dm: PerCpuData = PerCpuData::new(0, 0);
-    [Dm; AN_]
+static mut CI_: [PerCpuData; AR_] = {
+    const Bm: PerCpuData = PerCpuData::new(0, 0);
+    [Bm; AR_]
 };
 
 
-pub fn ead() -> u32 {
-    let ipl = unsafe { core::arch::x86_64::ddo(1) };
-    let aed = ((ipl.ebx >> 24) & 0xFF) as u32;
+pub fn bll() -> u32 {
+    let st = unsafe { core::arch::x86_64::__cpuid(1) };
+    let apic_id = ((st.ebx >> 24) & 0xFF) as u32;
     
     
-    for a in 0..aao() as usize {
-        if unsafe { CG_[a].aed == aed } {
-            return a as u32;
+    for i in 0..cpu_count() as usize {
+        if unsafe { CI_[i].apic_id == apic_id } {
+            return i as u32;
         }
     }
     0 
 }
 
 
-pub fn cv() -> &'static PerCpuData {
-    let ad = ead() as usize;
-    unsafe { &CG_[ad.v(AN_ - 1)] }
+pub fn current() -> &'static PerCpuData {
+    let id = bll() as usize;
+    unsafe { &CI_[id.min(AR_ - 1)] }
 }
 
 
-pub fn rry() -> &'static mut PerCpuData {
-    let ad = ead() as usize;
-    unsafe { &mut CG_[ad.v(AN_ - 1)] }
+pub fn lam() -> &'static mut PerCpuData {
+    let id = bll() as usize;
+    unsafe { &mut CI_[id.min(AR_ - 1)] }
 }
 
 
-pub fn aao() -> u32 {
-    AOZ_.load(Ordering::Relaxed)
+pub fn cpu_count() -> u32 {
+    AQZ_.load(Ordering::Relaxed)
 }
 
 
-pub fn piv(az: u32) {
-    AOZ_.store(az, Ordering::Release);
+pub fn jfb(count: u32) {
+    AQZ_.store(count, Ordering::Release);
 }
 
 
-pub fn boc() -> u32 {
-    AGX_.load(Ordering::Acquire)
+pub fn ail() -> u32 {
+    AIR_.load(Ordering::Acquire)
 }
 
 
-pub fn lga(qq: u32) -> bool {
-    if (qq as usize) < AN_ {
-        AAS_[qq as usize].load(Ordering::Relaxed)
+pub fn gds(cpu_id: u32) -> bool {
+    if (cpu_id as usize) < AR_ {
+        ACF_[cpu_id as usize].load(Ordering::Relaxed)
     } else {
         false
     }
@@ -152,96 +152,96 @@ pub fn lga(qq: u32) -> bool {
 
 pub fn init() {
     
-    AAS_[0].store(true, Ordering::Release);
-    AGX_.store(1, Ordering::Release);
+    ACF_[0].store(true, Ordering::Release);
+    AIR_.store(1, Ordering::Release);
     
     
     unsafe {
-        CG_[0].qq = 0;
-        CG_[0].aed = nxq();
-        CG_[0].dng = 0;
+        CI_[0].cpu_id = 0;
+        CI_[0].apic_id = ibf();
+        CI_[0].work_completed = 0;
     }
     
-    ALZ_.store(unsafe { CG_[0].aed }, Ordering::Release);
+    AOD_.store(unsafe { CI_[0].apic_id }, Ordering::Release);
     
-    crate::serial_println!("[SMP] BSP initialized (APIC ID: {})", unsafe { CG_[0].aed });
+    crate::serial_println!("[SMP] BSP initialized (APIC ID: {})", unsafe { CI_[0].apic_id });
 }
 
 
-fn nxq() -> u32 {
-    let ipl = unsafe { core::arch::x86_64::ddo(1) };
-    ((ipl.ebx >> 24) & 0xFF) as u32
+fn ibf() -> u32 {
+    let st = unsafe { core::arch::x86_64::__cpuid(1) };
+    ((st.ebx >> 24) & 0xFF) as u32
 }
 
 
-pub struct Aza {
-    pub aao: u32,
-    pub gbo: u32,
-    pub iju: Vec<u32>,
+pub struct Ve {
+    pub cpu_count: u32,
+    pub cuj: u32,
+    pub ap_apic_ids: Vec<u32>,
 }
 
-impl Aza {
+impl Ve {
     
-    pub fn dgf() -> Self {
-        let gbo = nxq();
+    pub fn bfx() -> Self {
+        let cuj = ibf();
         
         
-        if let Some(fzr) = crate::acpi::ani() {
-            let mut kaq = Vec::new();
-            for ku in &fzr.dja {
-                if ku.iq && ku.aed != gbo {
-                    kaq.push(ku.aed);
+        if let Some(ctg) = crate::acpi::rk() {
+            let mut fhd = Vec::new();
+            for lapic in &ctg.local_apics {
+                if lapic.enabled && lapic.apic_id != cuj {
+                    fhd.push(lapic.apic_id);
                 }
             }
             
             Self {
-                aao: (1 + kaq.len()) as u32,
-                gbo,
-                iju: kaq,
+                cpu_count: (1 + fhd.len()) as u32,
+                cuj,
+                ap_apic_ids: fhd,
             }
         } else {
             
             Self {
-                aao: 1,
-                gbo,
-                iju: Vec::new(),
+                cpu_count: 1,
+                cuj,
+                ap_apic_ids: Vec::new(),
             }
         }
     }
 }
 
 
-pub fn lvm() {
-    let vbn = if jbt() { "ON " } else { "OFF" };
+pub fn gof() {
+    let npw = if eru() { "ON " } else { "OFF" };
     crate::println!("╔══════════════════════════════════════╗");
     crate::println!("║          SMP STATUS                  ║");
     crate::println!("╠══════════════════════════════════════╣");
-    crate::println!("║ Parallel:    {}                      ║", vbn);
-    crate::println!("║ BSP APIC ID: {:3}                     ║", ALZ_.load(Ordering::Relaxed));
-    crate::println!("║ Total CPUs:  {:3}                     ║", aao());
-    crate::println!("║ Ready CPUs:  {:3}                     ║", boc());
+    crate::println!("║ Parallel:    {}                      ║", npw);
+    crate::println!("║ BSP APIC ID: {:3}                     ║", AOD_.load(Ordering::Relaxed));
+    crate::println!("║ Total CPUs:  {:3}                     ║", cpu_count());
+    crate::println!("║ Ready CPUs:  {:3}                     ║", ail());
     crate::println!("╠══════════════════════════════════════╣");
     
-    for a in 0..aao().v(AN_ as u32) as usize {
-        let ack = if lga(a as u32) { "✓" } else { "✗" };
-        let dnf = unsafe { CG_[a].dng };
+    for i in 0..cpu_count().min(AR_ as u32) as usize {
+        let ready = if gds(i as u32) { "✓" } else { "✗" };
+        let bka = unsafe { CI_[i].work_completed };
         crate::println!("║ CPU {:2}: {} APIC {:3}  Work: {:8}  ║", 
-            a, ack, unsafe { CG_[a].aed }, dnf);
+            i, ready, unsafe { CI_[i].apic_id }, bka);
     }
     crate::println!("╚══════════════════════════════════════╝");
 }
 
 
-pub fn asx() -> (u32, u32, u64) {
-    let es = aao();
-    let ack = boc();
-    let mut pvk = 0u64;
+pub fn get_stats() -> (u32, u32, u64) {
+    let av = cpu_count();
+    let ready = ail();
+    let mut joe = 0u64;
     
-    for a in 0..es as usize {
-        pvk += unsafe { CG_[a].dng };
+    for i in 0..av as usize {
+        joe += unsafe { CI_[i].work_completed };
     }
     
-    (es, ack, pvk)
+    (av, ready, joe)
 }
 
 
@@ -249,66 +249,66 @@ pub fn asx() -> (u32, u32, u64) {
 
 
 
-pub type Afv = fn(usize, usize, *mut u8);
+pub type Nz = fn(usize, usize, *mut u8);
 
 
 #[derive(Clone, Copy)]
 pub struct WorkItem {
-    pub ke: Option<Afv>,
-    pub ay: usize,
-    pub ci: usize,
-    pub f: *mut u8,
+    pub func: Option<Nz>,
+    pub start: usize,
+    pub end: usize,
+    pub data: *mut u8,
 }
 
 unsafe impl Send for WorkItem {}
 unsafe impl Sync for WorkItem {}
 
 impl WorkItem {
-    pub const fn azs() -> Self {
-        Self { ke: None, ay: 0, ci: 0, f: core::ptr::null_mut() }
+    pub const fn empty() -> Self {
+        Self { func: None, start: 0, end: 0, data: core::ptr::null_mut() }
     }
 }
 
 
-static BJB_: [Mutex<WorkItem>; AN_] = {
-    const Dm: Mutex<WorkItem> = Mutex::new(WorkItem::azs());
-    [Dm; AN_]
+static BLG_: [Mutex<WorkItem>; AR_] = {
+    const Bm: Mutex<WorkItem> = Mutex::new(WorkItem::empty());
+    [Bm; AR_]
 };
 
 
-static YQ_: [AtomicBool; AN_] = {
-    const Dm: AtomicBool = AtomicBool::new(false);
-    [Dm; AN_]
+static ZV_: [AtomicBool; AR_] = {
+    const Bm: AtomicBool = AtomicBool::new(false);
+    [Bm; AR_]
 };
 
 
-static QT_: AtomicU32 = AtomicU32::new(0);
+static RO_: AtomicU32 = AtomicU32::new(0);
 
 
-static XE_: AtomicBool = AtomicBool::new(true);
+static YL_: AtomicBool = AtomicBool::new(true);
 
 
-const CIN_: usize = 32;
+const CLW_: usize = 32;
 
 
 
-const CFW_: u32 = 1_000_000;
+const CJG_: u32 = 1_000_000;
 
 
-pub fn isq() {
-    XE_.store(true, Ordering::Release);
+pub fn elh() {
+    YL_.store(true, Ordering::Release);
     crate::serial_println!("[SMP] Parallelism ENABLED");
 }
 
 
-pub fn kqd() {
-    XE_.store(false, Ordering::Release);
+pub fn fsj() {
+    YL_.store(false, Ordering::Release);
     crate::serial_println!("[SMP] Parallelism DISABLED");
 }
 
 
-pub fn jbt() -> bool {
-    XE_.load(Ordering::Relaxed)
+pub fn eru() -> bool {
+    YL_.load(Ordering::Relaxed)
 }
 
 
@@ -317,73 +317,73 @@ pub fn jbt() -> bool {
 
 
 
-pub fn daj(ejz: usize, ke: Afv, f: *mut u8) {
+pub fn bcz(total_items: usize, func: Nz, data: *mut u8) {
     
-    if !XE_.load(Ordering::Relaxed) {
-        ke(0, ejz, f);
+    if !YL_.load(Ordering::Relaxed) {
+        func(0, total_items, data);
         return;
     }
     
-    let bcc = boc() as usize;
+    let num_cpus = ail() as usize;
     
     
     
     
-    if bcc <= 1 || ejz < CIN_ {
-        ke(0, ejz, f);
+    if num_cpus <= 1 || total_items < CLW_ {
+        func(0, total_items, data);
         return;
     }
     
     
-    let aiw = (ejz + bcc - 1) / bcc;
-    QT_.store(0, Ordering::Release);
+    let rs = (total_items + num_cpus - 1) / num_cpus;
+    RO_.store(0, Ordering::Release);
     
     
-    let mut kqe = 0usize;
-    for qq in 1..bcc {
-        if !lga(qq as u32) { continue; }
+    let mut fsk = 0usize;
+    for cpu_id in 1..num_cpus {
+        if !gds(cpu_id as u32) { continue; }
         
-        let ay = qq * aiw;
-        if ay >= ejz { break; }
-        let ci = ((qq + 1) * aiw).v(ejz);
+        let start = cpu_id * rs;
+        if start >= total_items { break; }
+        let end = ((cpu_id + 1) * rs).min(total_items);
         
         
         {
-            let mut dnf = BJB_[qq].lock();
-            dnf.ke = Some(ke);
-            dnf.ay = ay;
-            dnf.ci = ci;
-            dnf.f = f;
+            let mut bka = BLG_[cpu_id].lock();
+            bka.func = Some(func);
+            bka.start = start;
+            bka.end = end;
+            bka.data = data;
         }
         
-        YQ_[qq].store(true, Ordering::Release);
-        kqe += 1;
+        ZV_[cpu_id].store(true, Ordering::Release);
+        fsk += 1;
     }
     
     
     
     
     
-    ke(0, aiw.v(ejz), f);
-    QT_.fetch_add(1, Ordering::Release);
+    func(0, rs.min(total_items), data);
+    RO_.fetch_add(1, Ordering::Release);
     
     
-    if kqe > 0 {
-        let qy = kqe as u32 + 1;
-        let mut ibf = 0u32;
+    if fsk > 0 {
+        let expected = fsk as u32 + 1;
+        let mut eab = 0u32;
         
-        while QT_.load(Ordering::Acquire) < qy {
-            core::hint::hc();
-            ibf += 1;
+        while RO_.load(Ordering::Acquire) < expected {
+            core::hint::spin_loop();
+            eab += 1;
             
             
-            if ibf > CFW_ {
+            if eab > CJG_ {
                 crate::serial_println!("[SMP] WARNING: Timeout waiting for APs, completed {}/{}", 
-                    QT_.load(Ordering::Relaxed), qy);
+                    RO_.load(Ordering::Relaxed), expected);
                 
                 
-                for qvw in 1..bcc {
-                    YQ_[qvw].store(false, Ordering::Release);
+                for cancel_id in 1..num_cpus {
+                    ZV_[cancel_id].store(false, Ordering::Release);
                 }
                 break;
             }
@@ -392,17 +392,17 @@ pub fn daj(ejz: usize, ke: Afv, f: *mut u8) {
 }
 
 
-fn qyk(qq: usize) {
-    if YQ_[qq].load(Ordering::Acquire) {
-        let dnf = { *BJB_[qq].lock() };
-        YQ_[qq].store(false, Ordering::Release);
+fn kis(cpu_id: usize) {
+    if ZV_[cpu_id].load(Ordering::Acquire) {
+        let bka = { *BLG_[cpu_id].lock() };
+        ZV_[cpu_id].store(false, Ordering::Release);
         
-        if let Some(ke) = dnf.ke {
-            ke(dnf.ay, dnf.ci, dnf.f);
-            unsafe { CG_[qq].dng += 1; }
+        if let Some(func) = bka.func {
+            func(bka.start, bka.end, bka.data);
+            unsafe { CI_[cpu_id].work_completed += 1; }
         }
         
-        QT_.fetch_add(1, Ordering::Release);
+        RO_.fetch_add(1, Ordering::Release);
     }
 }
 
@@ -421,54 +421,54 @@ fn qyk(qq: usize) {
 
 
 
-pub unsafe extern "C" fn mvx(plp: &limine::smp::Cpu) -> ! {
+pub unsafe extern "C" fn hfk(smp_info: &limine::smp::Cpu) -> ! {
     
-    let bny = plp.ad as usize;
-    let ett = plp.ett;
+    let processor_id = smp_info.id as usize;
+    let lapic_id = smp_info.lapic_id;
     
     
-    if bny < AN_ {
-        CG_[bny].qq = bny as u32;
-        CG_[bny].aed = ett;
-        CG_[bny].dng = 0;
+    if processor_id < AR_ {
+        CI_[processor_id].cpu_id = processor_id as u32;
+        CI_[processor_id].apic_id = lapic_id;
+        CI_[processor_id].work_completed = 0;
     }
     
     
-    crate::cpu::simd::ktg();
+    crate::cpu::simd::fuo();
     
     
     
-    crate::gdt::eso(bny as u32);
+    crate::gdt::cau(processor_id as u32);
     
     
     
-    crate::interrupts::ugz();
+    crate::interrupts::nad();
     
     
     
     
-    crate::sync::percpu::eso(bny as u32);
+    crate::sync::percpu::cau(processor_id as u32);
     
     
     
-    crate::thread::ttb(bny as u32);
+    crate::thread::mow(processor_id as u32);
     
     
     
-    crate::apic::eso();
+    crate::apic::cau();
     
     
-    AAS_[bny].store(true, Ordering::Release);
-    AGX_.fetch_add(1, Ordering::Release);
+    ACF_[processor_id].store(true, Ordering::Release);
+    AIR_.fetch_add(1, Ordering::Release);
     
-    crate::serial_println!("[SMP] AP {} fully online (LAPIC ID: {})", bny, ett);
+    crate::serial_println!("[SMP] AP {} fully online (LAPIC ID: {})", processor_id, lapic_id);
     
     
     
     
     loop {
         
-        qyk(bny);
+        kis(processor_id);
         
         
         

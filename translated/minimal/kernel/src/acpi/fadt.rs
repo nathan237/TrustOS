@@ -2,165 +2,165 @@
 
 
 
-use super::tables::{Ei, Gj};
+use super::tables::{Bu, Cx};
 
 
 #[repr(C, packed)]
-struct Cdi {
-    dh: Ei,
+struct Akb {
+    header: Bu,
     
     
-    yqu: u32,
+    firmware_ctrl: u32,
     
-    dgt: u32,
-    
-    
-    iii: u8,
-    
-    zgi: u8,
-    
-    wei: u16,
-    
-    fuy: u32,
-    
-    gxr: u8,
-    
-    jyz: u8,
-    
-    zko: u8,
-    
-    zgu: u8,
+    bge: u32,
     
     
-    gpl: u32,
+    _reserved0: u8,
     
-    lul: u32,
+    preferred_pm_profile: u8,
     
-    dul: u32,
+    sci_interrupt: u16,
     
-    hvk: u32,
+    smi_cmd: u32,
     
-    zfp: u32,
+    acpi_enable: u8,
     
-    jjn: u32,
+    acpi_disable: u8,
     
-    yve: u32,
+    s4bios_req: u8,
     
-    yvh: u32,
-    
-    
-    zfm: u8,
-    
-    zfl: u8,
-    
-    zfq: u8,
-    
-    lum: u8,
-    
-    yvf: u8,
-    
-    yvi: u8,
-    
-    yvg: u8,
-    
-    yky: u8,
-    
-    ygz: u16,
-    
-    yha: u16,
-    
-    yre: u16,
-    
-    yrf: u16,
-    
-    yny: u8,
-    
-    ynz: u8,
-    
-    ylf: u8,
-    
-    zda: u8,
-    
-    hcn: u8,
+    pstate_cnt: u8,
     
     
-    ygr: u16,
+    pm1a_evt_blk: u32,
     
-    fzp: u8,
+    pm1b_evt_blk: u32,
+    
+    pm1a_cnt_blk: u32,
+    
+    pm1b_cnt_blk: u32,
+    
+    pm2_cnt_blk: u32,
+    
+    pm_tmr_blk: u32,
+    
+    gpe0_blk: u32,
+    
+    gpe1_blk: u32,
+    
+    
+    pm1_evt_len: u8,
+    
+    pm1_cnt_len: u8,
+    
+    pm2_cnt_len: u8,
+    
+    gnm: u8,
+    
+    gpe0_blk_len: u8,
+    
+    gpe1_blk_len: u8,
+    
+    gpe1_base: u8,
+    
+    cst_cnt: u8,
+    
+    c2_latency: u16,
+    
+    c3_latency: u16,
+    
+    flush_size: u16,
+    
+    flush_stride: u16,
+    
+    duty_offset: u8,
+    
+    duty_width: u8,
+    
+    day_alarm: u8,
+    
+    month_alarm: u8,
+    
+    century: u8,
+    
+    
+    boot_arch_flags: u16,
+    
+    _reserved1: u8,
     
     flags: u32,
     
     
-    gqu: Gj,
+    reset_reg: Cx,
     
-    hxp: u8,
+    reset_value: u8,
     
-    yfa: u16,
+    arm_boot_arch: u16,
     
-    yqf: u8,
+    fadt_minor_version: u8,
     
     
     
-    zxm: u64,
+    x_firmware_ctrl: u64,
     
-    zxl: u64,
+    x_dsdt: u64,
     
-    zxr: Gj,
+    x_pm1a_evt_blk: Cx,
     
-    zxt: Gj,
+    x_pm1b_evt_blk: Cx,
     
-    zxq: Gj,
+    x_pm1a_cnt_blk: Cx,
     
-    zxs: Gj,
+    x_pm1b_cnt_blk: Cx,
     
-    zxu: Gj,
+    x_pm2_cnt_blk: Cx,
     
-    zxv: Gj,
+    x_pm_tmr_blk: Cx,
     
-    zxn: Gj,
+    x_gpe0_blk: Cx,
     
-    zxo: Gj,
+    x_gpe1_blk: Cx,
     
-    wpk: Gj,
+    sleep_control_reg: Cx,
     
-    mgb: Gj,
+    sleep_status_reg: Cx,
 }
 
 
 #[derive(Debug, Clone)]
 pub struct FadtInfo {
     
-    pub grm: u16,
+    pub sci_int: u16,
     
-    pub fuy: u32,
+    pub smi_cmd: u32,
     
-    pub gxr: u8,
+    pub acpi_enable: u8,
     
-    pub jyz: u8,
-    
-    
-    pub gpl: u32,
-    
-    pub lul: u32,
-    
-    pub dul: u32,
-    
-    pub hvk: u32,
-    
-    pub jjn: u32,
+    pub acpi_disable: u8,
     
     
-    pub nca: u8,
+    pub pm1a_evt_blk: u32,
+    
+    pub pm1b_evt_blk: u32,
+    
+    pub pm1a_cnt_blk: u32,
+    
+    pub pm1b_cnt_blk: u32,
+    
+    pub pm_tmr_blk: u32,
     
     
-    pub gqu: Gj,
-    
-    pub hxp: u8,
+    pub century_reg: u8,
     
     
-    pub plh: Option<Gj>,
+    pub reset_reg: Cx,
     
-    pub mgb: Option<Gj>,
+    pub reset_value: u8,
+    
+    
+    pub sleep_ctrl_reg: Option<Cx>,
+    
+    pub sleep_status_reg: Option<Cx>,
     
     
     pub flags: u32,
@@ -168,80 +168,80 @@ pub struct FadtInfo {
 
 impl FadtInfo {
     
-    pub const BVE_: u32 = 1 << 20;
+    pub const BYL_: u32 = 1 << 20;
     
-    pub const BVF_: u32 = 1 << 21;
+    pub const BYM_: u32 = 1 << 21;
     
-    pub const DLZ_: u32 = 1 << 0;
+    pub const DPV_: u32 = 1 << 0;
     
-    pub const BVG_: u32 = 1 << 10;
+    pub const BYN_: u32 = 1 << 10;
     
-    pub fn ogb(&self) -> bool {
-        (self.flags & Self::BVE_) != 0
+    pub fn is_hw_reduced(&self) -> bool {
+        (self.flags & Self::BYL_) != 0
     }
     
-    pub fn ppx(&self) -> bool {
-        (self.flags & Self::BVG_) != 0
+    pub fn supports_reset(&self) -> bool {
+        (self.flags & Self::BYN_) != 0
     }
 }
 
 
-pub fn parse(nst: u64, xzr: u64) -> Option<FadtInfo> {
-    let dh = unsafe { &*(nst as *const Ei) };
+pub fn parse(fadt_virt: u64, _hhdm: u64) -> Option<FadtInfo> {
+    let header = unsafe { &*(fadt_virt as *const Bu) };
     
     
-    if &dh.signature != b"FACP" {
+    if &header.signature != b"FACP" {
         return None;
     }
     
-    let fadt = unsafe { &*(nst as *const Cdi) };
+    let fadt = unsafe { &*(fadt_virt as *const Akb) };
     
     
-    let grm = unsafe { core::ptr::md(core::ptr::vf!(fadt.wei)) };
-    let fuy = unsafe { core::ptr::md(core::ptr::vf!(fadt.fuy)) };
-    let vjg = unsafe { core::ptr::md(core::ptr::vf!(fadt.gpl)) };
-    let vji = unsafe { core::ptr::md(core::ptr::vf!(fadt.lul)) };
-    let vjf = unsafe { core::ptr::md(core::ptr::vf!(fadt.dul)) };
-    let vjh = unsafe { core::ptr::md(core::ptr::vf!(fadt.hvk)) };
-    let jjm = unsafe { core::ptr::md(core::ptr::vf!(fadt.jjn)) };
-    let flags = unsafe { core::ptr::md(core::ptr::vf!(fadt.flags)) };
-    let gqu = unsafe { core::ptr::md(core::ptr::vf!(fadt.gqu)) };
+    let sci_int = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(fadt.sci_interrupt)) };
+    let smi_cmd = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(fadt.smi_cmd)) };
+    let nvq = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(fadt.pm1a_evt_blk)) };
+    let nvs = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(fadt.pm1b_evt_blk)) };
+    let nvp = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(fadt.pm1a_cnt_blk)) };
+    let nvr = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(fadt.pm1b_cnt_blk)) };
+    let ewu = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(fadt.pm_tmr_blk)) };
+    let flags = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(fadt.flags)) };
+    let reset_reg = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(fadt.reset_reg)) };
     
     
-    let tml = dh.go >= 244;
+    let mjk = header.length >= 244;
     
-    let (mga, wpm) = if tml && dh.go >= 276 {
-        let db = unsafe { core::ptr::md(core::ptr::vf!(fadt.wpk)) };
-        let status = unsafe { core::ptr::md(core::ptr::vf!(fadt.mgb)) };
+    let (sleep_ctrl, sleep_status) = if mjk && header.length >= 276 {
+        let ctrl = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(fadt.sleep_control_reg)) };
+        let status = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(fadt.sleep_status_reg)) };
         (
-            if db.cld() { Some(db) } else { None },
-            if status.cld() { Some(status) } else { None }
+            if ctrl.is_valid() { Some(ctrl) } else { None },
+            if status.is_valid() { Some(status) } else { None }
         )
     } else {
         (None, None)
     };
     
     Some(FadtInfo {
-        grm,
-        fuy,
-        gxr: fadt.gxr,
-        jyz: fadt.jyz,
-        gpl: vjg,
-        lul: vji,
-        dul: vjf,
-        hvk: vjh,
-        jjn: jjm,
-        nca: fadt.hcn,
-        gqu,
-        hxp: fadt.hxp,
-        plh: mga,
-        mgb: wpm,
+        sci_int,
+        smi_cmd,
+        acpi_enable: fadt.acpi_enable,
+        acpi_disable: fadt.acpi_disable,
+        pm1a_evt_blk: nvq,
+        pm1b_evt_blk: nvs,
+        pm1a_cnt_blk: nvp,
+        pm1b_cnt_blk: nvr,
+        pm_tmr_blk: ewu,
+        century_reg: fadt.century,
+        reset_reg,
+        reset_value: fadt.reset_value,
+        sleep_ctrl_reg: sleep_ctrl,
+        sleep_status_reg: sleep_status,
         flags,
     })
 }
 
 
-pub fn cbu(fadt: &FadtInfo) {
+pub fn shutdown(fadt: &FadtInfo) {
     crate::serial_println!("[ACPI] Attempting ACPI shutdown...");
     
     
@@ -250,39 +250,39 @@ pub fn cbu(fadt: &FadtInfo) {
     unsafe {
         
         x86_64::instructions::port::Port::<u16>::new(0x604).write(0x2000);
-        for _ in 0..100_000 { core::hint::hc(); }
+        for _ in 0..100_000 { core::hint::spin_loop(); }
         
         
         x86_64::instructions::port::Port::<u16>::new(0xB004).write(0x2000);
-        for _ in 0..100_000 { core::hint::hc(); }
+        for _ in 0..100_000 { core::hint::spin_loop(); }
         
         
         x86_64::instructions::port::Port::<u16>::new(0x4004).write(0x3400);
-        for _ in 0..100_000 { core::hint::hc(); }
+        for _ in 0..100_000 { core::hint::spin_loop(); }
         
         
         x86_64::instructions::port::Port::<u8>::new(0x600).write(0x34);
-        for _ in 0..100_000 { core::hint::hc(); }
+        for _ in 0..100_000 { core::hint::spin_loop(); }
     }
     
     crate::serial_println!("[ACPI] VM ports didn't work, trying ACPI PM1...");
     
     
-    if fadt.fuy != 0 && fadt.gxr != 0 {
+    if fadt.smi_cmd != 0 && fadt.acpi_enable != 0 {
         unsafe {
             
-            if fadt.dul != 0 {
-                let cv = x86_64::instructions::port::Port::<u16>::new(fadt.dul as u16).read();
-                if (cv & 0x0001) == 0 {
+            if fadt.pm1a_cnt_blk != 0 {
+                let current = x86_64::instructions::port::Port::<u16>::new(fadt.pm1a_cnt_blk as u16).read();
+                if (current & 0x0001) == 0 {
                     
-                    crate::serial_println!("[ACPI] Enabling ACPI mode via SMI_CMD={:#x}", fadt.fuy);
-                    x86_64::instructions::port::Port::<u8>::new(fadt.fuy as u16)
-                        .write(fadt.gxr);
+                    crate::serial_println!("[ACPI] Enabling ACPI mode via SMI_CMD={:#x}", fadt.smi_cmd);
+                    x86_64::instructions::port::Port::<u8>::new(fadt.smi_cmd as u16)
+                        .write(fadt.acpi_enable);
                     
                     for _ in 0..10_000_000 {
-                        let ap = x86_64::instructions::port::Port::<u16>::new(fadt.dul as u16).read();
-                        if (ap & 0x0001) != 0 { break; }
-                        core::hint::hc();
+                        let val = x86_64::instructions::port::Port::<u16>::new(fadt.pm1a_cnt_blk as u16).read();
+                        if (val & 0x0001) != 0 { break; }
+                        core::hint::spin_loop();
                     }
                 }
             }
@@ -290,54 +290,54 @@ pub fn cbu(fadt: &FadtInfo) {
     }
     
     
-    if fadt.ogb() {
-        if let Some(ref mga) = fadt.plh {
+    if fadt.is_hw_reduced() {
+        if let Some(ref sleep_ctrl) = fadt.sleep_ctrl_reg {
             
-            unsafe { mga.write(0x20); }
-            for _ in 0..1_000_000 { core::hint::hc(); }
+            unsafe { sleep_ctrl.write(0x20); }
+            for _ in 0..1_000_000 { core::hint::spin_loop(); }
         }
     }
     
     
     
     
-    const PO_: u16 = 1 << 13;
+    const QL_: u16 = 1 << 13;
     
-    let pex: [u16; 4] = [
+    let jcd: [u16; 4] = [
         0x00 << 10,  
         0x05 << 10,  
         0x07 << 10,  
         0x02 << 10,  
     ];
     
-    if fadt.dul != 0 {
-        let port = fadt.dul as u16;
+    if fadt.pm1a_cnt_blk != 0 {
+        let port = fadt.pm1a_cnt_blk as u16;
         
-        for &dwb in &pex {
+        for &bpa in &jcd {
             unsafe {
                 
-                let cv = x86_64::instructions::port::Port::<u16>::new(port).read();
-                let weh = cv & 0x0001;
+                let current = x86_64::instructions::port::Port::<u16>::new(port).read();
+                let olo = current & 0x0001;
                 
                 crate::serial_println!("[ACPI] S5: writing SLP_TYP={:#06x} | SLP_EN to PM1a_CNT port {:#x}",
-                    dwb, port);
+                    bpa, port);
                 
                 x86_64::instructions::port::Port::<u16>::new(port)
-                    .write(weh | dwb | PO_);
+                    .write(olo | bpa | QL_);
                 
                 
-                for _ in 0..500_000 { core::hint::hc(); }
+                for _ in 0..500_000 { core::hint::spin_loop(); }
             }
         }
         
         
-        if fadt.hvk != 0 {
-            let vjw = fadt.hvk as u16;
-            for &dwb in &pex {
+        if fadt.pm1b_cnt_blk != 0 {
+            let nwd = fadt.pm1b_cnt_blk as u16;
+            for &bpa in &jcd {
                 unsafe {
-                    x86_64::instructions::port::Port::<u16>::new(vjw)
-                        .write(dwb | PO_);
-                    for _ in 0..200_000 { core::hint::hc(); }
+                    x86_64::instructions::port::Port::<u16>::new(nwd)
+                        .write(bpa | QL_);
+                    for _ in 0..200_000 { core::hint::spin_loop(); }
                 }
             }
         }
@@ -347,16 +347,16 @@ pub fn cbu(fadt: &FadtInfo) {
 }
 
 
-pub fn apa(fadt: &FadtInfo) {
+pub fn reset(fadt: &FadtInfo) {
     crate::serial_println!("[ACPI] Attempting ACPI reset...");
     
-    if fadt.ppx() && fadt.gqu.cld() {
+    if fadt.supports_reset() && fadt.reset_reg.is_valid() {
         unsafe {
-            fadt.gqu.write(fadt.hxp as u64);
+            fadt.reset_reg.write(fadt.reset_value as u64);
         }
         
         
-        for _ in 0..1000000 { core::hint::hc(); }
+        for _ in 0..1000000 { core::hint::spin_loop(); }
     }
     
     crate::serial_println!("[ACPI] Reset register failed");
@@ -367,48 +367,48 @@ pub fn apa(fadt: &FadtInfo) {
 
 
 
-pub fn wwc(fadt: &FadtInfo) -> bool {
+pub fn oyt(fadt: &FadtInfo) -> bool {
     crate::serial_println!("[ACPI] Attempting S3 suspend (sleep-to-RAM)...");
 
     
-    const CTL_: u16 = 0x01 << 10;   
-    const CTK_: u16 = 0x05 << 10;    
-    const CTJ_: u16 = 0x03 << 10;     
-    const PO_: u16 = 1 << 13;
+    const CXC_: u16 = 0x01 << 10;   
+    const CXB_: u16 = 0x05 << 10;    
+    const CXA_: u16 = 0x03 << 10;     
+    const QL_: u16 = 1 << 13;
 
     
-    if fadt.gpl != 0 {
+    if fadt.pm1a_evt_blk != 0 {
         unsafe {
             
-            let skw = (fadt.gpl + 2) as u16;
-            let skx: u16 = (1 << 0)   
+            let lpo = (fadt.pm1a_evt_blk + 2) as u16;
+            let lpp: u16 = (1 << 0)   
                             | (1 << 8)   
                             | (1 << 5);  
-            x86_64::instructions::port::Port::<u16>::new(skw).write(skx);
+            x86_64::instructions::port::Port::<u16>::new(lpo).write(lpp);
         }
     }
 
-    if fadt.dul != 0 {
-        let port = fadt.dul as u16;
-        let alv = [CTL_, CTK_, CTJ_];
+    if fadt.pm1a_cnt_blk != 0 {
+        let port = fadt.pm1a_cnt_blk as u16;
+        let values = [CXC_, CXB_, CXA_];
 
-        for &dwb in &alv {
+        for &bpa in &values {
             unsafe {
-                let cv = x86_64::instructions::port::Port::<u16>::new(port).read();
-                let owy = cv & 0x0203; 
+                let current = x86_64::instructions::port::Port::<u16>::new(port).read();
+                let ivw = current & 0x0203; 
 
                 crate::serial_println!("[ACPI] S3: writing 0x{:04X} to PM1a_CNT (port 0x{:03X})",
-                    owy | dwb | PO_, port);
+                    ivw | bpa | QL_, port);
 
                 
-                core::arch::x86_64::ybf();
+                core::arch::x86_64::_mm_mfence();
 
                 x86_64::instructions::port::Port::<u16>::new(port)
-                    .write(owy | dwb | PO_);
+                    .write(ivw | bpa | QL_);
 
                 
                 
-                for _ in 0..5_000_000 { core::hint::hc(); }
+                for _ in 0..5_000_000 { core::hint::spin_loop(); }
             }
         }
 

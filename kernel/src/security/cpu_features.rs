@@ -155,8 +155,8 @@ pub fn init() -> CpuSecurityFeatures {
         enable_smep();
     }
     
-    // SMAP disabled for now - requires updating all user memory accesses
-    // to use the STAC/CLAC pattern. Enable once syscalls are updated.
+    // SMAP disabled — bare-metal kernel accesses all memory as supervisor,
+    // no user-space page marking yet. Enable once paging distinguishes U/S.
     // if features.smap {
     //     enable_smap();
     // }

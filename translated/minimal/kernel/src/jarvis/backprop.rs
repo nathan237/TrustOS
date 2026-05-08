@@ -20,156 +20,156 @@ use super::model::*;
 
 
 pub struct LayerGrads {
-    pub dfp: Vec<f32>,   
-    pub dfx: Vec<f32>,         
-    pub dfv: Vec<f32>,         
-    pub dfz: Vec<f32>,         
-    pub dfw: Vec<f32>,         
-    pub dfq: Vec<f32>,    
-    pub dfu: Vec<f32>,      
-    pub dfy: Vec<f32>,        
-    pub dft: Vec<f32>,      
+    pub d_rms_attn: Vec<f32>,   
+    pub d_wq: Vec<f32>,         
+    pub d_wk: Vec<f32>,         
+    pub d_wv: Vec<f32>,         
+    pub d_wo: Vec<f32>,         
+    pub d_rms_ffn: Vec<f32>,    
+    pub d_wgate: Vec<f32>,      
+    pub d_wup: Vec<f32>,        
+    pub d_wdown: Vec<f32>,      
 }
 
 impl LayerGrads {
     pub fn new() -> Self {
         LayerGrads {
-            dfp: vec![0.0; E_],
-            dfx: vec![0.0; E_ * E_],
-            dfv: vec![0.0; E_ * E_],
-            dfz: vec![0.0; E_ * E_],
-            dfw: vec![0.0; E_ * E_],
-            dfq: vec![0.0; E_],
-            dfu: vec![0.0; E_ * Y_],
-            dfy: vec![0.0; E_ * Y_],
-            dft: vec![0.0; Y_ * E_],
+            d_rms_attn: vec![0.0; E_],
+            d_wq: vec![0.0; E_ * E_],
+            d_wk: vec![0.0; E_ * E_],
+            d_wv: vec![0.0; E_ * E_],
+            d_wo: vec![0.0; E_ * E_],
+            d_rms_ffn: vec![0.0; E_],
+            d_wgate: vec![0.0; E_ * Z_],
+            d_wup: vec![0.0; E_ * Z_],
+            d_wdown: vec![0.0; Z_ * E_],
         }
     }
 
-    pub fn ajs(&mut self) {
-        for p in self.dfp.el() { *p = 0.0; }
-        for p in self.dfx.el() { *p = 0.0; }
-        for p in self.dfv.el() { *p = 0.0; }
-        for p in self.dfz.el() { *p = 0.0; }
-        for p in self.dfw.el() { *p = 0.0; }
-        for p in self.dfq.el() { *p = 0.0; }
-        for p in self.dfu.el() { *p = 0.0; }
-        for p in self.dfy.el() { *p = 0.0; }
-        for p in self.dft.el() { *p = 0.0; }
+    pub fn zero(&mut self) {
+        for v in self.d_rms_attn.iter_mut() { *v = 0.0; }
+        for v in self.d_wq.iter_mut() { *v = 0.0; }
+        for v in self.d_wk.iter_mut() { *v = 0.0; }
+        for v in self.d_wv.iter_mut() { *v = 0.0; }
+        for v in self.d_wo.iter_mut() { *v = 0.0; }
+        for v in self.d_rms_ffn.iter_mut() { *v = 0.0; }
+        for v in self.d_wgate.iter_mut() { *v = 0.0; }
+        for v in self.d_wup.iter_mut() { *v = 0.0; }
+        for v in self.d_wdown.iter_mut() { *v = 0.0; }
     }
 }
 
 
 pub struct ModelGrads {
-    pub dfs: Vec<f32>,  
-    pub dfo: Vec<f32>,    
-    pub my: Vec<LayerGrads>,
-    pub dfr: Vec<f32>,    
-    pub dfn: Vec<f32>,       
+    pub d_token_embed: Vec<f32>,  
+    pub d_pos_embed: Vec<f32>,    
+    pub layers: Vec<LayerGrads>,
+    pub d_rms_final: Vec<f32>,    
+    pub d_output: Vec<f32>,       
 }
 
 impl ModelGrads {
     pub fn new() -> Self {
-        let mut my = Vec::fc(AZ_);
-        for _ in 0..AZ_ {
-            my.push(LayerGrads::new());
+        let mut layers = Vec::with_capacity(BB_);
+        for _ in 0..BB_ {
+            layers.push(LayerGrads::new());
         }
         ModelGrads {
-            dfs: vec![0.0; BG_ * E_],
-            dfo: vec![0.0; CY_ * E_],
-            my,
-            dfr: vec![0.0; E_],
-            dfn: vec![0.0; E_ * BG_],
+            d_token_embed: vec![0.0; BI_ * E_],
+            d_pos_embed: vec![0.0; DF_ * E_],
+            layers,
+            d_rms_final: vec![0.0; E_],
+            d_output: vec![0.0; E_ * BI_],
         }
     }
 
-    pub fn ajs(&mut self) {
-        for p in self.dfs.el() { *p = 0.0; }
-        for p in self.dfo.el() { *p = 0.0; }
-        for dm in &mut self.my { dm.ajs(); }
-        for p in self.dfr.el() { *p = 0.0; }
-        for p in self.dfn.el() { *p = 0.0; }
+    pub fn zero(&mut self) {
+        for v in self.d_token_embed.iter_mut() { *v = 0.0; }
+        for v in self.d_pos_embed.iter_mut() { *v = 0.0; }
+        for l in &mut self.layers { l.zero(); }
+        for v in self.d_rms_final.iter_mut() { *v = 0.0; }
+        for v in self.d_output.iter_mut() { *v = 0.0; }
     }
 
     
-    pub fn az(&self) -> usize {
-        self.dfs.len() + self.dfo.len()
-        + self.my.iter().map(|dm| {
-            dm.dfp.len() + dm.dfx.len() + dm.dfv.len() + dm.dfz.len()
-            + dm.dfw.len() + dm.dfq.len() + dm.dfu.len() + dm.dfy.len()
-            + dm.dft.len()
+    pub fn count(&self) -> usize {
+        self.d_token_embed.len() + self.d_pos_embed.len()
+        + self.layers.iter().map(|l| {
+            l.d_rms_attn.len() + l.d_wq.len() + l.d_wk.len() + l.d_wv.len()
+            + l.d_wo.len() + l.d_rms_ffn.len() + l.d_wgate.len() + l.d_wup.len()
+            + l.d_wdown.len()
         }).sum::<usize>()
-        + self.dfr.len() + self.dfn.len()
+        + self.d_rms_final.len() + self.d_output.len()
     }
 
     
-    pub fn thi(&self) -> f32 {
-        let mut rv = 0.0f32;
-        let coj = |rv: &mut f32, e: &[f32]| { for &at in e { *rv += at * at; } };
-        coj(&mut rv, &self.dfs);
-        coj(&mut rv, &self.dfo);
-        for dm in &self.my {
-            coj(&mut rv, &dm.dfp);
-            coj(&mut rv, &dm.dfx); coj(&mut rv, &dm.dfv);
-            coj(&mut rv, &dm.dfz); coj(&mut rv, &dm.dfw);
-            coj(&mut rv, &dm.dfq);
-            coj(&mut rv, &dm.dfu); coj(&mut rv, &dm.dfy);
-            coj(&mut rv, &dm.dft);
+    pub fn grad_norm(&self) -> f32 {
+        let mut ss = 0.0f32;
+        let awa = |ss: &mut f32, j: &[f32]| { for &g in j { *ss += g * g; } };
+        awa(&mut ss, &self.d_token_embed);
+        awa(&mut ss, &self.d_pos_embed);
+        for l in &self.layers {
+            awa(&mut ss, &l.d_rms_attn);
+            awa(&mut ss, &l.d_wq); awa(&mut ss, &l.d_wk);
+            awa(&mut ss, &l.d_wv); awa(&mut ss, &l.d_wo);
+            awa(&mut ss, &l.d_rms_ffn);
+            awa(&mut ss, &l.d_wgate); awa(&mut ss, &l.d_wup);
+            awa(&mut ss, &l.d_wdown);
         }
-        coj(&mut rv, &self.dfr);
-        coj(&mut rv, &self.dfn);
-        ccw(rv)
+        awa(&mut ss, &self.d_rms_final);
+        awa(&mut ss, &self.d_output);
+        apq(ss)
     }
 
     
-    pub fn hcy(&mut self, olz: f32) {
-        let abh = self.thi();
-        if abh > olz && abh > 0.0 {
-            let e = olz / abh;
-            let jt = |p: &mut [f32], e: f32| { for at in p.el() { *at *= e; } };
-            jt(&mut self.dfs, e);
-            jt(&mut self.dfo, e);
-            for dm in &mut self.my {
-                jt(&mut dm.dfp, e); jt(&mut dm.dfx, e); jt(&mut dm.dfv, e);
-                jt(&mut dm.dfz, e); jt(&mut dm.dfw, e); jt(&mut dm.dfq, e);
-                jt(&mut dm.dfu, e); jt(&mut dm.dfy, e); jt(&mut dm.dft, e);
+    pub fn clip_norm(&mut self, max_norm: f32) {
+        let mu = self.grad_norm();
+        if mu > max_norm && mu > 0.0 {
+            let j = max_norm / mu;
+            let dr = |v: &mut [f32], j: f32| { for g in v.iter_mut() { *g *= j; } };
+            dr(&mut self.d_token_embed, j);
+            dr(&mut self.d_pos_embed, j);
+            for l in &mut self.layers {
+                dr(&mut l.d_rms_attn, j); dr(&mut l.d_wq, j); dr(&mut l.d_wk, j);
+                dr(&mut l.d_wv, j); dr(&mut l.d_wo, j); dr(&mut l.d_rms_ffn, j);
+                dr(&mut l.d_wgate, j); dr(&mut l.d_wup, j); dr(&mut l.d_wdown, j);
             }
-            jt(&mut self.dfr, e);
-            jt(&mut self.dfn, e);
+            dr(&mut self.d_rms_final, j);
+            dr(&mut self.d_output, j);
         }
     }
 
     
-    pub fn mtk(&mut self, gq: &ModelGrads) {
-        let add = |cs: &mut [f32], cy: &[f32]| {
-            for (bc, e) in cs.el().fca(cy.iter()) { *bc += *e; }
+    pub fn accumulate(&mut self, other: &ModelGrads) {
+        let add = |dst: &mut [f32], src: &[f32]| {
+            for (d, j) in dst.iter_mut().zip(src.iter()) { *d += *j; }
         };
-        add(&mut self.dfs, &gq.dfs);
-        add(&mut self.dfo, &gq.dfo);
-        for (dl, aks) in self.my.el().fca(gq.my.iter()) {
-            add(&mut dl.dfp, &aks.dfp);
-            add(&mut dl.dfx, &aks.dfx); add(&mut dl.dfv, &aks.dfv);
-            add(&mut dl.dfz, &aks.dfz); add(&mut dl.dfw, &aks.dfw);
-            add(&mut dl.dfq, &aks.dfq);
-            add(&mut dl.dfu, &aks.dfu); add(&mut dl.dfy, &aks.dfy);
-            add(&mut dl.dft, &aks.dft);
+        add(&mut self.d_token_embed, &other.d_token_embed);
+        add(&mut self.d_pos_embed, &other.d_pos_embed);
+        for (dl, sl) in self.layers.iter_mut().zip(other.layers.iter()) {
+            add(&mut dl.d_rms_attn, &sl.d_rms_attn);
+            add(&mut dl.d_wq, &sl.d_wq); add(&mut dl.d_wk, &sl.d_wk);
+            add(&mut dl.d_wv, &sl.d_wv); add(&mut dl.d_wo, &sl.d_wo);
+            add(&mut dl.d_rms_ffn, &sl.d_rms_ffn);
+            add(&mut dl.d_wgate, &sl.d_wgate); add(&mut dl.d_wup, &sl.d_wup);
+            add(&mut dl.d_wdown, &sl.d_wdown);
         }
-        add(&mut self.dfr, &gq.dfr);
-        add(&mut self.dfn, &gq.dfn);
+        add(&mut self.d_rms_final, &other.d_rms_final);
+        add(&mut self.d_output, &other.d_output);
     }
 
     
-    pub fn bv(&mut self, e: f32) {
-        let jt = |p: &mut [f32]| { for at in p.el() { *at *= e; } };
-        jt(&mut self.dfs);
-        jt(&mut self.dfo);
-        for dm in &mut self.my {
-            jt(&mut dm.dfp); jt(&mut dm.dfx); jt(&mut dm.dfv);
-            jt(&mut dm.dfz); jt(&mut dm.dfw); jt(&mut dm.dfq);
-            jt(&mut dm.dfu); jt(&mut dm.dfy); jt(&mut dm.dft);
+    pub fn scale(&mut self, j: f32) {
+        let dr = |v: &mut [f32]| { for g in v.iter_mut() { *g *= j; } };
+        dr(&mut self.d_token_embed);
+        dr(&mut self.d_pos_embed);
+        for l in &mut self.layers {
+            dr(&mut l.d_rms_attn); dr(&mut l.d_wq); dr(&mut l.d_wk);
+            dr(&mut l.d_wv); dr(&mut l.d_wo); dr(&mut l.d_rms_ffn);
+            dr(&mut l.d_wgate); dr(&mut l.d_wup); dr(&mut l.d_wdown);
         }
-        jt(&mut self.dfr);
-        jt(&mut self.dfn);
+        dr(&mut self.d_rms_final);
+        dr(&mut self.d_output);
     }
 }
 
@@ -178,35 +178,35 @@ impl ModelGrads {
 
 
 
-struct Bph {
+struct Acs {
     
-    b: Vec<f32>,
+    x: Vec<f32>,
     
-    oii: Vec<Bkt>,
+    layer_acts: Vec<Aat>,
     
-    qam: Vec<f32>,
+    x_final_norm: Vec<f32>,
     
-    auq: Vec<f32>,
+    logits: Vec<f32>,
 }
 
-struct Bkt {
+struct Aat {
     
-    ihn: Vec<f32>,       
-    jxo: Vec<f32>,
-    fm: Vec<f32>,          
-    eh: Vec<f32>,          
-    p: Vec<f32>,          
-    mwp: Vec<Vec<f32>>,  
-    con: Vec<f32>,   
-    jkf: Vec<f32>,   
+    x_in: Vec<f32>,       
+    x_norm_attn: Vec<f32>,
+    q: Vec<f32>,          
+    k: Vec<f32>,          
+    v: Vec<f32>,          
+    attn_weights: Vec<Vec<f32>>,  
+    attn_out: Vec<f32>,   
+    exc: Vec<f32>,   
     
-    iho: Vec<f32>,      
-    fzc: Vec<f32>, 
-    hky: Vec<f32>,   
-    hkx: Vec<f32>,   
-    bln: Vec<f32>,         
-    hkz: Vec<f32>,      
-    cxv: Vec<f32>,    
+    x_mid: Vec<f32>,      
+    x_norm_ffn: Vec<f32>, 
+    gate_pre: Vec<f32>,   
+    gate_act: Vec<f32>,   
+    up: Vec<f32>,         
+    gated: Vec<f32>,      
+    bbr: Vec<f32>,    
 }
 
 
@@ -214,70 +214,70 @@ struct Bkt {
 
 
 
-#[allow(bgr)]
-fn ami(bd: &mut [f32], d: &[f32], b: &[f32], ec: usize, lk: usize) {
-    for m in 0..lk {
+#[allow(dead_code)]
+fn tk(out: &mut [f32], w: &[f32], x: &[f32], cols: usize, rows: usize) {
+    for r in 0..rows {
         let mut sum = 0.0f32;
-        let ar = m * ec;
-        for r in 0..ec {
-            sum += d[ar + r] * b[r];
+        let base = r * cols;
+        for c in 0..cols {
+            sum += w[base + c] * x[c];
         }
-        bd[m] = sum;
+        out[r] = sum;
     }
 }
 
 
-#[allow(bgr)]
-fn cbl(bd: &mut [f32], b: &[f32], amz: &[f32]) -> f32 {
-    let bo = b.len();
-    let mut rv = 0.0f32;
-    for &p in b { rv += p * p; }
-    let bfd = ccw(rv / bo as f32 + HC_);
-    let wq = 1.0 / bfd;
-    for a in 0..bo {
-        bd[a] = b[a] * wq * amz[a];
+#[allow(dead_code)]
+fn aox(out: &mut [f32], x: &[f32], tv: &[f32]) -> f32 {
+    let ae = x.len();
+    let mut ss = 0.0f32;
+    for &v in x { ss += v * v; }
+    let aeg = apq(ss / ae as f32 + HT_);
+    let ki = 1.0 / aeg;
+    for i in 0..ae {
+        out[i] = x[i] * ki * tv[i];
     }
-    wq 
+    ki 
 }
 
-fn gss(f: &mut [f32]) {
-    if f.is_empty() { return; }
-    let am = f.iter().hu().cqs(f32::IP_, f32::am);
+fn deq(data: &mut [f32]) {
+    if data.is_empty() { return; }
+    let max = data.iter().copied().fold(f32::NEG_INFINITY, f32::max);
     let mut sum = 0.0f32;
-    for p in f.el() {
-        *p = kat(*p - am);
-        sum += *p;
+    for v in data.iter_mut() {
+        *v = fhf(*v - max);
+        sum += *v;
     }
     if sum > 0.0 {
-        let wq = 1.0 / sum;
-        for p in f.el() { *p *= wq; }
+        let ki = 1.0 / sum;
+        for v in data.iter_mut() { *v *= ki; }
     }
 }
 
-fn kat(b: f32) -> f32 {
-    if b > 88.0 { return f32::O; }
-    if b < -88.0 { return 0.0; }
-    let q = (1 << 23) as f32 / core::f32::consts::IG_;
-    let o = (1 << 23) as f32 * (127.0 - 0.04368);
-    let fs = ((q * b + o) as i32).am(0) as u32;
-    f32::bhb(fs)
+fn fhf(x: f32) -> f32 {
+    if x > 88.0 { return f32::MAX; }
+    if x < -88.0 { return 0.0; }
+    let a = (1 << 23) as f32 / core::f32::consts::LN_2;
+    let b = (1 << 23) as f32 * (127.0 - 0.04368);
+    let bits = ((a * x + b) as i32).max(0) as u32;
+    f32::from_bits(bits)
 }
 
-pub fn ccw(b: f32) -> f32 {
-    if b <= 0.0 { return 0.0; }
-    let fs = b.bsr();
-    let anj = f32::bhb((fs >> 1) + 0x1FBD_1DF5);
-    (anj + b / anj) * 0.5
+pub fn apq(x: f32) -> f32 {
+    if x <= 0.0 { return 0.0; }
+    let bits = x.to_bits();
+    let uc = f32::from_bits((bits >> 1) + 0x1FBD_1DF5);
+    (uc + x / uc) * 0.5
 }
 
-fn woi(b: f32) -> f32 {
-    let sig = 1.0 / (1.0 + kat(-b));
-    b * sig
+fn osu(x: f32) -> f32 {
+    let sig = 1.0 / (1.0 + fhf(-x));
+    x * sig
 }
 
-fn woj(b: f32) -> f32 {
-    let sig = 1.0 / (1.0 + kat(-b));
-    sig + b * sig * (1.0 - sig)
+fn osv(x: f32) -> f32 {
+    let sig = 1.0 / (1.0 + fhf(-x));
+    sig + x * sig * (1.0 - sig)
 }
 
 
@@ -289,288 +289,288 @@ fn woj(b: f32) -> f32 {
 
 
 
-pub fn ivk(model: &TransformerWeights, eb: &[u8]) -> (f32, ModelGrads) {
-    let anz = eb.len().v(super::model::CY_);
-    if anz < 2 {
-        return (f32::O, ModelGrads::new());
+pub fn eng(model: &TransformerWeights, tokens: &[u8]) -> (f32, ModelGrads) {
+    let uj = tokens.len().min(super::model::DF_);
+    if uj < 2 {
+        return (f32::MAX, ModelGrads::new());
     }
 
     
-    let mut mup: Vec<Bph> = Vec::fc(anz);
+    let mut hen: Vec<Acs> = Vec::with_capacity(uj);
     
-    let mut ijh: Vec<Vec<Vec<f32>>> = vec![Vec::new(); AZ_]; 
-    let mut iji: Vec<Vec<Vec<f32>>> = vec![Vec::new(); AZ_];
+    let mut efg: Vec<Vec<Vec<f32>>> = vec![Vec::new(); BB_]; 
+    let mut efh: Vec<Vec<Vec<f32>>> = vec![Vec::new(); BB_];
 
-    for ab in 0..anz {
-        let cil = eb[ab] as usize;
-        let u = ab;
+    for t in 0..uj {
+        let asl = tokens[t] as usize;
+        let pos = t;
 
         
-        let mut b = vec![0.0f32; E_];
-        for a in 0..E_ {
-            b[a] = model.bpa[cil * E_ + a] + model.cgq[u * E_ + a];
+        let mut x = vec![0.0f32; E_];
+        for i in 0..E_ {
+            x[i] = model.token_embed[asl * E_ + i] + model.pos_embed[pos * E_ + i];
         }
 
-        let mut oij = Vec::fc(AZ_);
+        let mut ijn = Vec::with_capacity(BB_);
 
-        for dm in 0..AZ_ {
-            let fl = &model.my[dm];
-            let ihn = b.clone();
-
-            
-            let mut ihp = vec![0.0f32; E_];
-            let _ = super::simd::cbl(&mut ihp, &ihn, &fl.cmh);
+        for l in 0..BB_ {
+            let bj = &model.layers[l];
+            let x_in = x.clone();
 
             
-            let mut fm = vec![0.0f32; E_];
-            let mut eh = vec![0.0f32; E_];
-            let mut p = vec![0.0f32; E_];
-            super::simd::ami(&mut fm, &fl.biw, &ihp, E_, E_);
-            super::simd::ami(&mut eh, &fl.biu, &ihp, E_, E_);
-            super::simd::ami(&mut p, &fl.bpg, &ihp, E_, E_);
+            let mut eej = vec![0.0f32; E_];
+            let _ = super::simd::aox(&mut eej, &x_in, &bj.rms_attn);
 
             
-            ijh[dm].push(eh.clone());
-            iji[dm].push(p.clone());
+            let mut q = vec![0.0f32; E_];
+            let mut k = vec![0.0f32; E_];
+            let mut v = vec![0.0f32; E_];
+            super::simd::tk(&mut q, &bj.w_q, &eej, E_, E_);
+            super::simd::tk(&mut k, &bj.w_k, &eej, E_, E_);
+            super::simd::tk(&mut v, &bj.w_v, &eej, E_, E_);
 
             
-            let brl = ab + 1;
-            let mut con = vec![0.0f32; E_];
-            let kns = ccw(CU_ as f32);
-            let mut mwq = Vec::fc(FP_);
+            efg[l].push(k.clone());
+            efh[l].push(v.clone());
 
-            for i in 0..FP_ {
-                let bra = i * CU_;
-                let mut eyd = vec![0.0f32; brl];
-                for ai in 0..brl {
-                    let mut e = 0.0f32;
-                    for bc in 0..CU_ {
-                        e += fm[bra + bc] * ijh[dm][ai][bra + bc];
+            
+            let ake = t + 1;
+            let mut attn_out = vec![0.0f32; E_];
+            let fql = apq(DA_ as f32);
+            let mut hfw = Vec::with_capacity(GE_);
+
+            for h in 0..GE_ {
+                let ajw = h * DA_;
+                let mut cdo = vec![0.0f32; ake];
+                for aa in 0..ake {
+                    let mut j = 0.0f32;
+                    for d in 0..DA_ {
+                        j += q[ajw + d] * efg[l][aa][ajw + d];
                     }
-                    eyd[ai] = e / kns;
+                    cdo[aa] = j / fql;
                 }
-                gss(&mut eyd);
+                deq(&mut cdo);
 
-                for ai in 0..brl {
-                    let d = eyd[ai];
-                    for bc in 0..CU_ {
-                        con[bra + bc] += d * iji[dm][ai][bra + bc];
+                for aa in 0..ake {
+                    let w = cdo[aa];
+                    for d in 0..DA_ {
+                        attn_out[ajw + d] += w * efh[l][aa][ajw + d];
                     }
                 }
-                mwq.push(eyd);
+                hfw.push(cdo);
             }
 
             
-            let mut aci = vec![0.0f32; E_];
-            super::simd::ami(&mut aci, &fl.biv, &con, E_, E_);
+            let mut oa = vec![0.0f32; E_];
+            super::simd::tk(&mut oa, &bj.w_o, &attn_out, E_, E_);
 
             
-            for a in 0..E_ { b[a] = ihn[a] + aci[a]; }
-            let iho = b.clone();
+            for i in 0..E_ { x[i] = x_in[i] + oa[i]; }
+            let x_mid = x.clone();
 
             
-            let mut fzc = vec![0.0f32; E_];
-            let _ = super::simd::cbl(&mut fzc, &iho, &fl.cmi);
+            let mut x_norm_ffn = vec![0.0f32; E_];
+            let _ = super::simd::aox(&mut x_norm_ffn, &x_mid, &bj.rms_ffn);
 
             
-            let mut hky = vec![0.0f32; Y_];
-            let mut bln = vec![0.0f32; Y_];
-            super::simd::ami(&mut hky, &fl.bit, &fzc, E_, Y_);
-            super::simd::ami(&mut bln, &fl.bpf, &fzc, E_, Y_);
+            let mut gate_pre = vec![0.0f32; Z_];
+            let mut up = vec![0.0f32; Z_];
+            super::simd::tk(&mut gate_pre, &bj.w_gate, &x_norm_ffn, E_, Z_);
+            super::simd::tk(&mut up, &bj.w_up, &x_norm_ffn, E_, Z_);
 
-            let mut hkx = vec![0.0f32; Y_];
-            let mut hkz = vec![0.0f32; Y_];
-            for a in 0..Y_ {
-                hkx[a] = woi(hky[a]);
-                hkz[a] = hkx[a] * bln[a];
+            let mut gate_act = vec![0.0f32; Z_];
+            let mut gated = vec![0.0f32; Z_];
+            for i in 0..Z_ {
+                gate_act[i] = osu(gate_pre[i]);
+                gated[i] = gate_act[i] * up[i];
             }
 
-            let mut cxv = vec![0.0f32; E_];
-            super::simd::ami(&mut cxv, &fl.bpe, &hkz, Y_, E_);
+            let mut bbr = vec![0.0f32; E_];
+            super::simd::tk(&mut bbr, &bj.w_down, &gated, Z_, E_);
 
             
-            for a in 0..E_ { b[a] = iho[a] + cxv[a]; }
+            for i in 0..E_ { x[i] = x_mid[i] + bbr[i]; }
 
-            oij.push(Bkt {
-                ihn, jxo: ihp, fm, eh: ijh[dm][ab].clone(), p: iji[dm][ab].clone(),
-                mwp: mwq, con, jkf: aci,
-                iho, fzc, hky, hkx, bln, hkz, cxv,
+            ijn.push(Aat {
+                x_in, x_norm_attn: eej, q, k: efg[l][t].clone(), v: efh[l][t].clone(),
+                attn_weights: hfw, attn_out, exc: oa,
+                x_mid, x_norm_ffn, gate_pre, gate_act, up, gated, bbr,
             });
         }
 
         
-        let mut mro = vec![0.0f32; E_];
-        super::simd::cbl(&mut mro, &b, &model.chg);
+        let mut hcw = vec![0.0f32; E_];
+        super::simd::aox(&mut hcw, &x, &model.rms_final);
 
         
-        let mut auq = vec![0.0f32; BG_];
-        super::simd::ami(&mut auq, &model.bft, &mro, E_, BG_);
+        let mut logits = vec![0.0f32; BI_];
+        super::simd::tk(&mut logits, &model.w_output, &hcw, E_, BI_);
 
-        mup.push(Bph {
-            b: b.clone(),
-            oii: oij,
-            qam: mro,
-            auq,
+        hen.push(Acs {
+            x: x.clone(),
+            layer_acts: ijn,
+            x_final_norm: hcw,
+            logits,
         });
     }
 
     
-    let mut ayy = 0.0f32;
-    let gnj = anz - 1;
-    let mut arg = ModelGrads::new();
+    let mut aah = 0.0f32;
+    let dbn = uj - 1;
+    let mut wg = ModelGrads::new();
 
     
     
     
 
     
-    for ab in 0..gnj {
-        let cd = eb[ab + 1] as usize;
-        let iiw = &mup[ab];
+    for t in 0..dbn {
+        let target = tokens[t + 1] as usize;
+        let eey = &hen[t];
 
         
         
-        let mut gpw = iiw.auq.clone();
-        gss(&mut gpw);
+        let mut dcx = eey.logits.clone();
+        deq(&mut dcx);
 
         
-        let vam = gpw[cd].am(1e-10);
-        ayy += -ees(vam);
+        let noy = dcx[target].max(1e-10);
+        aah += -ln_approx(noy);
 
-        let mut iqk = gpw; 
-        iqk[cd] -= 1.0;  
+        let mut ejt = dcx; 
+        ejt[target] -= 1.0;  
         
-        let bv = 1.0 / gnj as f32;
-        for p in iqk.el() { *p *= bv; }
-
-        
-        
-        super::simd::ctd(&mut arg.dfn, &iqk, &iiw.qam, E_, BG_);
+        let scale = 1.0 / dbn as f32;
+        for v in ejt.iter_mut() { *v *= scale; }
 
         
-        let mut njg = vec![0.0f32; E_];
-        super::simd::dta(&mut njg, &model.bft, &iqk, E_, BG_);
+        
+        super::simd::ayw(&mut wg.d_output, &ejt, &eey.x_final_norm, E_, BI_);
 
         
-        let mut eol = kbv(&njg, &iiw.b, &model.chg, &mut arg.dfr);
+        let mut hqm = vec![0.0f32; E_];
+        super::simd::bnm(&mut hqm, &model.w_output, &ejt, E_, BI_);
 
         
-        for dm in (0..AZ_).vv() {
-            let auo = &iiw.oii[dm];
-            let fl = &model.my[dm];
-            let bnk = &mut arg.my[dm];
+        let mut byo = fhz(&hqm, &eey.x, &model.rms_final, &mut wg.d_rms_final);
+
+        
+        for l in (0..BB_).rev() {
+            let xu = &eey.layer_acts[l];
+            let bj = &model.layers[l];
+            let aie = &mut wg.layers[l];
 
             
-            let njd = eol.clone(); 
+            let hqk = byo.clone(); 
             
 
             
             
-            let mut knp = vec![0.0f32; Y_];
-            super::simd::ctd(&mut bnk.dft, &njd, &auo.hkz, Y_, E_);
-            super::simd::dta(&mut knp, &fl.bpe, &njd, Y_, E_);
+            let mut fqj = vec![0.0f32; Z_];
+            super::simd::ayw(&mut aie.d_wdown, &hqk, &xu.gated, Z_, E_);
+            super::simd::bnm(&mut fqj, &bj.w_down, &hqk, Z_, E_);
 
             
-            let mut kno = vec![0.0f32; Y_];
-            let mut knw = vec![0.0f32; Y_];
-            for a in 0..Y_ {
+            let mut fqi = vec![0.0f32; Z_];
+            let mut fqo = vec![0.0f32; Z_];
+            for i in 0..Z_ {
                 
-                let rsx = knp[a] * auo.bln[a];
+                let lbc = fqj[i] * xu.up[i];
                 
-                knw[a] = knp[a] * auo.hkx[a];
+                fqo[i] = fqj[i] * xu.gate_act[i];
                 
-                kno[a] = rsx * woj(auo.hky[a]);
+                fqi[i] = lbc * osv(xu.gate_pre[i]);
             }
 
             
             
-            let mut knz = vec![0.0f32; E_];
+            let mut fqr = vec![0.0f32; E_];
             
-            super::simd::ctd(&mut bnk.dfu, &kno, &auo.fzc, E_, Y_);
-            super::simd::ctd(&mut bnk.dfy, &knw, &auo.fzc, E_, Y_);
+            super::simd::ayw(&mut aie.d_wgate, &fqi, &xu.x_norm_ffn, E_, Z_);
+            super::simd::ayw(&mut aie.d_wup, &fqo, &xu.x_norm_ffn, E_, Z_);
             
-            super::simd::dta(&mut knz, &fl.bit, &kno, E_, Y_);
-            super::simd::euq(&mut knz, &fl.bpf, &knw, E_, Y_);
+            super::simd::bnm(&mut fqr, &bj.w_gate, &fqi, E_, Z_);
+            super::simd::cbq(&mut fqr, &bj.w_up, &fqo, E_, Z_);
 
             
-            let rtd = kbv(&knz, &auo.iho, &fl.cmi, &mut bnk.dfq);
+            let lbh = fhz(&fqr, &xu.x_mid, &bj.rms_ffn, &mut aie.d_rms_ffn);
 
             
-            let mut iqm = vec![0.0f32; E_];
-            for a in 0..E_ {
-                iqm[a] = eol[a] + rtd[a]; 
+            let mut ejv = vec![0.0f32; E_];
+            for i in 0..E_ {
+                ejv[i] = byo[i] + lbh[i]; 
             }
 
             
-            super::simd::ctd(&mut bnk.dfw, &iqm, &auo.con, E_, E_);
-            let mut knn = vec![0.0f32; E_];
-            super::simd::dta(&mut knn, &fl.biv, &iqm, E_, E_);
+            super::simd::ayw(&mut aie.d_wo, &ejv, &xu.attn_out, E_, E_);
+            let mut fqh = vec![0.0f32; E_];
+            super::simd::bnm(&mut fqh, &bj.w_o, &ejv, E_, E_);
 
             
-            let kns = ccw(CU_ as f32);
-            let brl = ab + 1;
-            let mut knv = vec![0.0f32; E_];
-            let mut knr = vec![0.0f32; E_];
-            let mut knx = vec![0.0f32; E_];
-            for i in 0..FP_ {
-                let bra = i * CU_;
-                let mrj = &auo.mwp[i];
+            let fql = apq(DA_ as f32);
+            let ake = t + 1;
+            let mut fqn = vec![0.0f32; E_];
+            let mut fqk = vec![0.0f32; E_];
+            let mut fqp = vec![0.0f32; E_];
+            for h in 0..GE_ {
+                let ajw = h * DA_;
+                let hcs = &xu.attn_weights[h];
 
-                let mut kny = vec![0.0f32; brl];
-                for ai in 0..brl {
-                    let mut e = 0.0f32;
-                    for bc in 0..CU_ {
-                        e += knn[bra + bc] * iji[dm][ai][bra + bc];
-                        if ai == ab { knx[bra + bc] += mrj[ai] * knn[bra + bc]; }
+                let mut fqq = vec![0.0f32; ake];
+                for aa in 0..ake {
+                    let mut j = 0.0f32;
+                    for d in 0..DA_ {
+                        j += fqh[ajw + d] * efh[l][aa][ajw + d];
+                        if aa == t { fqp[ajw + d] += hcs[aa] * fqh[ajw + d]; }
                     }
-                    kny[ai] = e;
+                    fqq[aa] = j;
                 }
 
-                let amb: f32 = (0..brl).map(|ai| kny[ai] * mrj[ai]).sum();
-                let mut njf = vec![0.0f32; brl];
-                for ai in 0..brl {
-                    njf[ai] = mrj[ai] * (kny[ai] - amb);
+                let dot: f32 = (0..ake).map(|aa| fqq[aa] * hcs[aa]).sum();
+                let mut hql = vec![0.0f32; ake];
+                for aa in 0..ake {
+                    hql[aa] = hcs[aa] * (fqq[aa] - dot);
                 }
 
-                for ai in 0..brl {
-                    let bjw = njf[ai] / kns;
-                    for bc in 0..CU_ {
-                        knv[bra + bc] += bjw * ijh[dm][ai][bra + bc];
-                        if ai == ab { knr[bra + bc] += bjw * auo.fm[bra + bc]; }
+                for aa in 0..ake {
+                    let ds = hql[aa] / fql;
+                    for d in 0..DA_ {
+                        fqn[ajw + d] += ds * efg[l][aa][ajw + d];
+                        if aa == t { fqk[ajw + d] += ds * xu.q[ajw + d]; }
                     }
                 }
             }
 
             
             
-            super::simd::ctd(&mut bnk.dfx, &knv, &auo.jxo, E_, E_);
-            super::simd::ctd(&mut bnk.dfv, &knr, &auo.jxo, E_, E_);
-            super::simd::ctd(&mut bnk.dfz, &knx, &auo.jxo, E_, E_);
+            super::simd::ayw(&mut aie.d_wq, &fqn, &xu.x_norm_attn, E_, E_);
+            super::simd::ayw(&mut aie.d_wk, &fqk, &xu.x_norm_attn, E_, E_);
+            super::simd::ayw(&mut aie.d_wv, &fqp, &xu.x_norm_attn, E_, E_);
             
-            let mut iqn = vec![0.0f32; E_];
-            super::simd::dta(&mut iqn, &fl.biw, &knv, E_, E_);
-            super::simd::euq(&mut iqn, &fl.biu, &knr, E_, E_);
-            super::simd::euq(&mut iqn, &fl.bpg, &knx, E_, E_);
+            let mut ejw = vec![0.0f32; E_];
+            super::simd::bnm(&mut ejw, &bj.w_q, &fqn, E_, E_);
+            super::simd::cbq(&mut ejw, &bj.w_k, &fqk, E_, E_);
+            super::simd::cbq(&mut ejw, &bj.w_v, &fqp, E_, E_);
 
             
-            let rtc = kbv(&iqn, &auo.ihn, &fl.cmh, &mut bnk.dfp);
+            let lbg = fhz(&ejw, &xu.x_in, &bj.rms_attn, &mut aie.d_rms_attn);
 
             
-            for a in 0..E_ {
-                eol[a] = iqm[a] + rtc[a];
+            for i in 0..E_ {
+                byo[i] = ejv[i] + lbg[i];
             }
         }
 
         
-        let cil = eb[ab] as usize;
-        for a in 0..E_ {
-            arg.dfs[cil * E_ + a] += eol[a];
-            arg.dfo[ab * E_ + a] += eol[a];
+        let asl = tokens[t] as usize;
+        for i in 0..E_ {
+            wg.d_token_embed[asl * E_ + i] += byo[i];
+            wg.d_pos_embed[t * E_ + i] += byo[i];
         }
     }
 
-    let bdl = ayy / gnj as f32;
-    (bdl, arg)
+    let adh = aah / dbn as f32;
+    (adh, wg)
 }
 
 
@@ -579,48 +579,48 @@ pub fn ivk(model: &TransformerWeights, eb: &[u8]) -> (f32, ModelGrads) {
 
 
 
-fn kbv(nje: &[f32], b: &[f32], amz: &[f32], rtb: &mut [f32]) -> Vec<f32> {
-    let bo = b.len();
-    let mut rv = 0.0f32;
-    for &p in b { rv += p * p; }
-    let bfd = ccw(rv / bo as f32 + HC_);
-    let bva = 1.0 / bfd;
+fn fhz(d_out: &[f32], x: &[f32], tv: &[f32], d_weight: &mut [f32]) -> Vec<f32> {
+    let ae = x.len();
+    let mut ss = 0.0f32;
+    for &v in x { ss += v * v; }
+    let aeg = apq(ss / ae as f32 + HT_);
+    let alu = 1.0 / aeg;
 
     
-    for a in 0..bo {
-        rtb[a] += nje[a] * b[a] * bva;
+    for i in 0..ae {
+        d_weight[i] += d_out[i] * x[i] * alu;
     }
 
     
     
     
-    let mut knu = vec![0.0f32; bo];
-    for a in 0..bo {
-        knu[a] = nje[a] * amz[a];
+    let mut fqm = vec![0.0f32; ae];
+    for i in 0..ae {
+        fqm[i] = d_out[i] * tv[i];
     }
 
     
-    let mut amb = 0.0f32;
-    for a in 0..bo {
-        amb += b[a] * bva * knu[a];
+    let mut dot = 0.0f32;
+    for i in 0..ae {
+        dot += x[i] * alu * fqm[i];
     }
-    amb /= bo as f32;
+    dot /= ae as f32;
 
-    let mut eol = vec![0.0f32; bo];
-    for a in 0..bo {
-        eol[a] = bva * (knu[a] - b[a] * bva * amb);
+    let mut byo = vec![0.0f32; ae];
+    for i in 0..ae {
+        byo[i] = alu * (fqm[i] - x[i] * alu * dot);
     }
-    eol
+    byo
 }
 
 
 
 
 
-fn ees(b: f32) -> f32 {
-    if b <= 0.0 { return -88.0; }
-    let fs = b.bsr();
-    let aa = ((fs >> 23) & 0xFF) as f32 - 127.0;
-    let ef = f32::bhb((fs & 0x007FFFFF) | 0x3F800000);
-    (aa + (ef - 1.0) * 1.4427) * core::f32::consts::IG_
+fn ln_approx(x: f32) -> f32 {
+    if x <= 0.0 { return -88.0; }
+    let bits = x.to_bits();
+    let e = ((bits >> 23) & 0xFF) as f32 - 127.0;
+    let m = f32::from_bits((bits & 0x007FFFFF) | 0x3F800000);
+    (e + (m - 1.0) * 1.4427) * core::f32::consts::LN_2
 }

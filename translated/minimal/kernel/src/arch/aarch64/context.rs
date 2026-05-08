@@ -7,19 +7,19 @@
 #[repr(C)]
 pub struct CpuContext {
     
-    pub b: [u64; 31],
+    pub x: [u64; 31],
     
     pub sp: u64,
     
-    pub fz: u64,
+    pub pc: u64,
     
-    pub vnx: u64,
+    pub pstate: u64,
     
-    pub pwj: u64,
+    pub ttbr0: u64,
     
-    pub xkv: u64,
+    pub tpidr_el0: u64,
     
-    pub kww: [u8; 512],
+    pub fp_state: [u8; 512],
 }
 
 impl Default for CpuContext {
@@ -31,38 +31,38 @@ impl Default for CpuContext {
 impl CpuContext {
     pub const fn new() -> Self {
         Self {
-            b: [0; 31],
+            x: [0; 31],
             sp: 0,
-            fz: 0,
-            vnx: 0x0, 
-            pwj: 0,
-            xkv: 0,
-            kww: [0; 512],
+            pc: 0,
+            pstate: 0x0, 
+            ttbr0: 0,
+            tpidr_el0: 0,
+            fp_state: [0; 512],
         }
     }
     
     
-    pub fn pix(&mut self, bt: u64) {
-        self.fz = bt;
+    pub fn jfc(&mut self, entry: u64) {
+        self.pc = entry;
     }
     
     
-    pub fn pjg(&mut self, sp: u64) {
+    pub fn jfl(&mut self, sp: u64) {
         self.sp = sp;
     }
     
     
-    pub fn pjc(&mut self, se: u64) {
-        self.pwj = se;
+    pub fn jfh(&mut self, jd: u64) {
+        self.ttbr0 = jd;
     }
     
     
-    pub fn edk(&self) -> u64 {
-        self.fz
+    pub fn instruction_pointer(&self) -> u64 {
+        self.pc
     }
     
     
-    pub fn pns(&self) -> u64 {
+    pub fn jic(&self) -> u64 {
         self.sp
     }
 }

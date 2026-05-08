@@ -7,14 +7,14 @@ pub fn enable_avx() -> bool { false }
 pub fn enable_avx512() -> bool { false }
 
 pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe fn memcpy_sse2(destination: *mut u8, source: *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe fn memcpy_sse2(dst: *mut u8, src: *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u8, len: usize) {
-    core::ptr::copy_nonoverlapping(source, destination, len);
+    core::ptr::copy_nonoverlapping(src, dst, len);
 }
 
 pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe fn memset_sse2(destination: *mut u8, value: u8, len: usize) {
-    core::ptr::write_bytes(destination, value, len);
+unsafe fn memset_sse2(dst: *mut u8, value: u8, len: usize) {
+    core::ptr::write_bytes(dst, value, len);
 }
 
 pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
@@ -28,9 +28,9 @@ const u8, len: usize) -> bool {
 }
 
 pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe fn xor_blocks_sse2(destination: *mut u8, source: *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe fn xor_blocks_sse2(dst: *mut u8, src: *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u8, len: usize) {
     for i in 0..len {
-        *destination.add(i) ^= *source.add(i);
+        *dst.add(i) ^= *src.add(i);
     }
 }

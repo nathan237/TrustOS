@@ -16,62 +16,62 @@ use alloc::format;
 use alloc::vec::Vec;
 
 
-fn ozz() -> u64 {
+fn iyi() -> u64 {
     #[cfg(target_arch = "aarch64")]
     {
-        let ffg: u64;
+        let cnt: u64;
         unsafe {
             core::arch::asm!(
                 "mrs {}, cntvct_el0",
-                bd(reg) ffg,
+                out(reg) cnt,
                 options(nomem, nostack)
             );
         }
-        ffg
+        cnt
     }
     
     #[cfg(target_arch = "x86_64")]
     {
-        let hh: u32;
-        let gd: u32;
+        let lo: u32;
+        let hi: u32;
         unsafe {
             core::arch::asm!(
                 "rdtsc",
-                bd("eax") hh,
-                bd("edx") gd,
+                out("eax") lo,
+                out("edx") hi,
                 options(nomem, nostack)
             );
         }
-        ((gd as u64) << 32) | (hh as u64)
+        ((hi as u64) << 32) | (lo as u64)
     }
     
     #[cfg(target_arch = "riscv64")]
     {
-        let ffg: u64;
+        let cnt: u64;
         unsafe {
             core::arch::asm!(
                 "rdcycle {}",
-                bd(reg) ffg,
+                out(reg) cnt,
                 options(nomem, nostack)
             );
         }
-        ffg
+        cnt
     }
 }
 
 
-fn tew() -> u64 {
+fn mdx() -> u64 {
     #[cfg(target_arch = "aarch64")]
     {
-        let kx: u64;
+        let freq: u64;
         unsafe {
             core::arch::asm!(
                 "mrs {}, cntfrq_el0",
-                bd(reg) kx,
+                out(reg) freq,
                 options(nomem, nostack)
             );
         }
-        kx
+        freq
     }
     
     #[cfg(target_arch = "x86_64")]
@@ -88,12 +88,12 @@ fn tew() -> u64 {
 }
 
 
-fn omq(ag: u64, atc: usize) -> (u64, u64, u64) {
-    let mut llw = u64::O;
-    let mut lku = 0u64;
-    let mut pux = 0u64;
+fn ind(addr: u64, xe: usize) -> (u64, u64, u64) {
+    let mut ghs = u64::MAX;
+    let mut ggu = 0u64;
+    let mut jnt = 0u64;
     
-    for _ in 0..atc {
+    for _ in 0..xe {
         
         #[cfg(target_arch = "aarch64")]
         unsafe {
@@ -108,11 +108,11 @@ fn omq(ag: u64, atc: usize) -> (u64, u64, u64) {
             core::arch::asm!("fence", options(nomem, nostack));
         }
         
-        let ay = ozz();
+        let start = iyi();
         
         
         unsafe {
-            let ptr = ag as *const u32;
+            let ptr = addr as *const u32;
             let _ = core::ptr::read_volatile(ptr);
         }
         
@@ -130,27 +130,27 @@ fn omq(ag: u64, atc: usize) -> (u64, u64, u64) {
             core::arch::asm!("fence", options(nomem, nostack));
         }
         
-        let ci = ozz();
-        let ez = ci.nj(ay);
+        let end = iyi();
+        let bb = end.wrapping_sub(start);
         
-        if ez < llw { llw = ez; }
-        if ez > lku { lku = ez; }
-        pux += ez;
+        if bb < ghs { ghs = bb; }
+        if bb > ggu { ggu = bb; }
+        jnt += bb;
     }
     
-    let abl = pux / atc as u64;
-    (llw, abl, lku)
+    let ns = jnt / xe as u64;
+    (ghs, ns, ggu)
 }
 
 
-fn rbb(qlw: u64, myd: u64) -> (&'static str, &'static str) {
-    let bkx = if myd > 0 {
-        (qlw * 100) / myd
+fn kkq(avg_cycles: u64, baseline_cycles: u64) -> (&'static str, &'static str) {
+    let zi = if baseline_cycles > 0 {
+        (avg_cycles * 100) / baseline_cycles
     } else {
         100
     };
     
-    match bkx {
+    match zi {
         0..=80 => ("FAST", "\x01G"),    
         81..=120 => ("NORMAL", "\x01W"), 
         121..=300 => ("SLOW", "\x01Y"),  
@@ -160,39 +160,39 @@ fn rbb(qlw: u64, myd: u64) -> (&'static str, &'static str) {
 }
 
 
-pub fn per(n: &str) -> String {
-    let mut an = String::new();
+pub fn jbw(args: &str) -> String {
+    let mut output = String::new();
     
-    an.t("\x01C== TrustProbe: Timing Side-Channel Analyzer ==\x01W\n\n");
+    output.push_str("\x01C== TrustProbe: Timing Side-Channel Analyzer ==\x01W\n\n");
     
-    let kx = tew();
-    an.t(&format!("Timer frequency: {} Hz ({} MHz)\n", kx, kx / 1_000_000));
+    let freq = mdx();
+    output.push_str(&format!("Timer frequency: {} Hz ({} MHz)\n", freq, freq / 1_000_000));
     
-    let atc = 10;
-    
-    
-    an.t("\n\x01Y--- Baseline Measurement ---\x01W\n");
+    let xe = 10;
     
     
-    let qnt = &an as *const String as u64;
-    let qnu = qnt & !0xFFF;
-    let (qps, fdk, qpr) = omq(qnu, atc);
-    
-    an.t(&format!("Baseline (kernel memory): min={} avg={} max={} cycles\n",
-        qps, fdk, qpr));
-    
-    let org = if kx > 0 { 1_000_000_000 / kx } else { 1 };
-    an.t(&format!("  ~{} ns per access (avg)\n", fdk * org));
+    output.push_str("\n\x01Y--- Baseline Measurement ---\x01W\n");
     
     
-    an.t("\n\x01Y--- Region Timing Comparison ---\x01W\n");
-    an.t(&format!("{:<16} {:<10} {:<10} {:<10} {:<10} {}\n",
+    let kai = &output as *const String as u64;
+    let kaj = kai & !0xFFF;
+    let (bl_min, bl_avg, bl_max) = ind(kaj, xe);
+    
+    output.push_str(&format!("Baseline (kernel memory): min={} avg={} max={} cycles\n",
+        bl_min, bl_avg, bl_max));
+    
+    let ird = if freq > 0 { 1_000_000_000 / freq } else { 1 };
+    output.push_str(&format!("  ~{} ns per access (avg)\n", bl_avg * ird));
+    
+    
+    output.push_str("\n\x01Y--- Region Timing Comparison ---\x01W\n");
+    output.push_str(&format!("{:<16} {:<10} {:<10} {:<10} {:<10} {}\n",
         "ADDRESS", "MIN", "AVG", "MAX", "RATIO", "CLASS"));
-    an.t(&format!("{}\n", "-".afd(70)));
+    output.push_str(&format!("{}\n", "-".repeat(70)));
     
     
     #[cfg(target_arch = "aarch64")]
-    let jka: Vec<(u64, &str)> = alloc::vec![
+    let ewz: Vec<(u64, &str)> = alloc::vec![
         (0x0800_0000, "GIC"),
         (0x0900_0000, "UART"),
         (0x0A00_0000, "VirtIO"),
@@ -202,7 +202,7 @@ pub fn per(n: &str) -> String {
     ];
     
     #[cfg(target_arch = "x86_64")]
-    let jka: Vec<(u64, &str)> = alloc::vec![
+    let ewz: Vec<(u64, &str)> = alloc::vec![
         (0x000A_0000, "VGA/SMRAM"),
         (0x000F_0000, "BIOS area"),
         (0xFEC0_0000, "I/O APIC"),
@@ -211,58 +211,58 @@ pub fn per(n: &str) -> String {
     ];
     
     #[cfg(target_arch = "riscv64")]
-    let jka: Vec<(u64, &str)> = alloc::vec![
+    let ewz: Vec<(u64, &str)> = alloc::vec![
         (0x0200_0000, "CLINT"),
         (0x0C00_0000, "PLIC"),
         (0x1000_0000, "UART"),
         (0x8000_0000, "RAM"),
     ];
     
-    let mut dyi = Vec::new();
+    let mut bqg = Vec::new();
     
-    for (ag, j) in &jka {
-        let (val, lrl, vak) = omq(*ag, atc);
-        let bkx = if fdk > 0 { (lrl * 100) / fdk } else { 0 };
-        let (class, s) = rbb(lrl, fdk);
+    for (addr, name) in &ewz {
+        let (p_min, p_avg, p_max) = ind(*addr, xe);
+        let zi = if bl_avg > 0 { (p_avg * 100) / bl_avg } else { 0 };
+        let (class, color) = kkq(p_avg, bl_avg);
         
-        an.t(&format!("0x{:010X}   {:<10} {:<10} {:<10} {:<10} {}{}\x01W ({})\n",
-            ag, val, lrl, vak,
-            format!("{}%", bkx), s, class, j));
+        output.push_str(&format!("0x{:010X}   {:<10} {:<10} {:<10} {:<10} {}{}\x01W ({})\n",
+            addr, p_min, p_avg, p_max,
+            format!("{}%", zi), color, class, name));
         
-        if bkx > 200 || bkx < 50 {
-            dyi.push((*ag, *j, bkx, class));
+        if zi > 200 || zi < 50 {
+            bqg.push((*addr, *name, zi, class));
         }
     }
     
     
-    if !dyi.is_empty() {
-        an.t(&format!("\n\x01Y--- Anomaly Details ---\x01W\n"));
-        an.t(&format!("Found {} timing anomalies:\n\n", dyi.len()));
+    if !bqg.is_empty() {
+        output.push_str(&format!("\n\x01Y--- Anomaly Details ---\x01W\n"));
+        output.push_str(&format!("Found {} timing anomalies:\n\n", bqg.len()));
         
-        for (ag, j, bkx, class) in &dyi {
-            an.t(&format!("\x01R[{}]\x01W {} @ 0x{:010X} ({}% of baseline)\n",
-                class, j, ag, bkx));
+        for (addr, name, zi, class) in &bqg {
+            output.push_str(&format!("\x01R[{}]\x01W {} @ 0x{:010X} ({}% of baseline)\n",
+                class, name, addr, zi));
             
-            if *bkx > 300 {
-                an.t("    Interpretation: This region likely triggers a fault/exception.\n");
-                an.t("    This could indicate secure memory, MMIO, or unmapped region.\n");
-            } else if *bkx < 50 {
-                an.t("    Interpretation: Faster than DRAM — could be SRAM or cached.\n");
-                an.t("    This might be a tightly-coupled memory or L1 cache hit.\n");
+            if *zi > 300 {
+                output.push_str("    Interpretation: This region likely triggers a fault/exception.\n");
+                output.push_str("    This could indicate secure memory, MMIO, or unmapped region.\n");
+            } else if *zi < 50 {
+                output.push_str("    Interpretation: Faster than DRAM — could be SRAM or cached.\n");
+                output.push_str("    This might be a tightly-coupled memory or L1 cache hit.\n");
             }
         }
     }
     
     
-    an.t(&format!("\n\x01C== Timing Analysis Summary ==\x01W\n"));
-    an.t(&format!("  Regions tested: {}\n", jka.len()));
-    an.t(&format!("  Anomalies: {}\n", dyi.len()));
-    an.t(&format!("  Baseline: {} cycles ({} ns)\n", fdk, fdk * org));
+    output.push_str(&format!("\n\x01C== Timing Analysis Summary ==\x01W\n"));
+    output.push_str(&format!("  Regions tested: {}\n", ewz.len()));
+    output.push_str(&format!("  Anomalies: {}\n", bqg.len()));
+    output.push_str(&format!("  Baseline: {} cycles ({} ns)\n", bl_avg, bl_avg * ird));
     
-    if dyi.iter().any(|(_, _, m, _)| *m > 500) {
-        an.t("\n\x01R[!] High-latency regions detected — possible secure boundaries\x01W\n");
-        an.t("    Run 'hwscan trustzone' for detailed boundary mapping\n");
+    if bqg.iter().any(|(_, _, r, _)| *r > 500) {
+        output.push_str("\n\x01R[!] High-latency regions detected — possible secure boundaries\x01W\n");
+        output.push_str("    Run 'hwscan trustzone' for detailed boundary mapping\n");
     }
     
-    an
+    output
 }

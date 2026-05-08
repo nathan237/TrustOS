@@ -25,25 +25,25 @@ use spin::Mutex;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Chain {
-    Jp,
-    Dd,
-    Abv,
+    Input,
+    Output,
+    Forward,
 }
 
 impl Chain {
-    pub fn j(&self) -> &'static str {
+    pub fn name(&self) -> &'static str {
         match self {
-            Chain::Jp => "INPUT",
-            Chain::Dd => "OUTPUT",
-            Chain::Abv => "FORWARD",
+            Chain::Input => "INPUT",
+            Chain::Output => "OUTPUT",
+            Chain::Forward => "FORWARD",
         }
     }
 
-    pub fn cko(e: &str) -> Option<Self> {
-        match e.idx().as_str() {
-            "INPUT" => Some(Chain::Jp),
-            "OUTPUT" => Some(Chain::Dd),
-            "FORWARD" => Some(Chain::Abv),
+    pub fn atv(j: &str) -> Option<Self> {
+        match j.to_uppercase().as_str() {
+            "INPUT" => Some(Chain::Input),
+            "OUTPUT" => Some(Chain::Output),
+            "FORWARD" => Some(Chain::Forward),
             _ => None,
         }
     }
@@ -52,28 +52,28 @@ impl Chain {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Action {
-    Ld,
+    Accept,
     Drop,
-    Aly,
-    Nl, 
+    Reject,
+    Log, 
 }
 
 impl Action {
-    pub fn j(&self) -> &'static str {
+    pub fn name(&self) -> &'static str {
         match self {
-            Action::Ld => "ACCEPT",
+            Action::Accept => "ACCEPT",
             Action::Drop => "DROP",
-            Action::Aly => "REJECT",
-            Action::Nl => "LOG",
+            Action::Reject => "REJECT",
+            Action::Log => "LOG",
         }
     }
 
-    pub fn cko(e: &str) -> Option<Self> {
-        match e.idx().as_str() {
-            "ACCEPT" => Some(Action::Ld),
+    pub fn atv(j: &str) -> Option<Self> {
+        match j.to_uppercase().as_str() {
+            "ACCEPT" => Some(Action::Accept),
             "DROP" => Some(Action::Drop),
-            "REJECT" => Some(Action::Aly),
-            "LOG" => Some(Action::Nl),
+            "REJECT" => Some(Action::Reject),
+            "LOG" => Some(Action::Log),
             _ => None,
         }
     }
@@ -82,38 +82,38 @@ impl Action {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Protocol {
-    Eb,
-    Mk,
-    Ic,
-    Pq,
+    Any,
+    Tcp,
+    Udp,
+    Icmp,
 }
 
 impl Protocol {
-    pub fn j(&self) -> &'static str {
+    pub fn name(&self) -> &'static str {
         match self {
-            Protocol::Eb => "all",
-            Protocol::Mk => "tcp",
-            Protocol::Ic => "udp",
-            Protocol::Pq => "icmp",
+            Protocol::Any => "all",
+            Protocol::Tcp => "tcp",
+            Protocol::Udp => "udp",
+            Protocol::Icmp => "icmp",
         }
     }
 
-    pub fn cko(e: &str) -> Option<Self> {
-        match e.aqn().as_str() {
-            "all" | "any" | "*" => Some(Protocol::Eb),
-            "tcp" => Some(Protocol::Mk),
-            "udp" => Some(Protocol::Ic),
-            "icmp" => Some(Protocol::Pq),
+    pub fn atv(j: &str) -> Option<Self> {
+        match j.to_lowercase().as_str() {
+            "all" | "any" | "*" => Some(Protocol::Any),
+            "tcp" => Some(Protocol::Tcp),
+            "udp" => Some(Protocol::Udp),
+            "icmp" => Some(Protocol::Icmp),
             _ => None,
         }
     }
 
-    pub fn aqb(&self) -> Option<u8> {
+    pub fn number(&self) -> Option<u8> {
         match self {
-            Protocol::Eb => None,
-            Protocol::Pq => Some(1),
-            Protocol::Mk => Some(6),
-            Protocol::Ic => Some(17),
+            Protocol::Any => None,
+            Protocol::Icmp => Some(1),
+            Protocol::Tcp => Some(6),
+            Protocol::Udp => Some(17),
         }
     }
 }
@@ -121,53 +121,53 @@ impl Protocol {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum IpMatch {
-    Eb,
-    Ho([u8; 4]),
-    Azm([u8; 4], u8), 
+    Any,
+    Exact([u8; 4]),
+    Subnet([u8; 4], u8), 
 }
 
 impl IpMatch {
-    pub fn oh(&self, ip: [u8; 4]) -> bool {
+    pub fn matches(&self, ip: [u8; 4]) -> bool {
         match self {
-            IpMatch::Eb => true,
-            IpMatch::Ho(ag) => *ag == ip,
-            IpMatch::Azm(ag, adx) => {
-                if *adx == 0 {
+            IpMatch::Any => true,
+            IpMatch::Exact(addr) => *addr == ip,
+            IpMatch::Subnet(addr, nm) => {
+                if *nm == 0 {
                     return true;
                 }
-                if *adx >= 32 {
-                    return *ag == ip;
+                if *nm >= 32 {
+                    return *addr == ip;
                 }
-                let hs = !0u32 << (32 - adx);
-                let q = u32::oa(*ag) & hs;
-                let o = u32::oa(ip) & hs;
-                q == o
+                let mask = !0u32 << (32 - nm);
+                let a = u32::from_be_bytes(*addr) & mask;
+                let b = u32::from_be_bytes(ip) & mask;
+                a == b
             }
         }
     }
 
-    pub fn parse(e: &str) -> Option<Self> {
-        if e == "0.0.0.0/0" || e == "any" || e == "*" {
-            return Some(IpMatch::Eb);
+    pub fn parse(j: &str) -> Option<Self> {
+        if j == "0.0.0.0/0" || j == "any" || j == "*" {
+            return Some(IpMatch::Any);
         }
-        if let Some((elz, vkr)) = e.fve('/') {
-            let ag = cgl(elz)?;
-            let adx: u8 = vkr.parse().bq()?;
-            if adx > 32 {
+        if let Some((bkp, prefix_str)) = j.split_once('/') {
+            let addr = art(bkp)?;
+            let nm: u8 = prefix_str.parse().ok()?;
+            if nm > 32 {
                 return None;
             }
-            Some(IpMatch::Azm(ag, adx))
+            Some(IpMatch::Subnet(addr, nm))
         } else {
-            let ag = cgl(e)?;
-            Some(IpMatch::Ho(ag))
+            let addr = art(j)?;
+            Some(IpMatch::Exact(addr))
         }
     }
 
     pub fn display(&self) -> String {
         match self {
-            IpMatch::Eb => String::from("0.0.0.0/0"),
-            IpMatch::Ho(q) => format!("{}.{}.{}.{}", q[0], q[1], q[2], q[3]),
-            IpMatch::Azm(q, ai) => format!("{}.{}.{}.{}/{}", q[0], q[1], q[2], q[3], ai),
+            IpMatch::Any => String::from("0.0.0.0/0"),
+            IpMatch::Exact(a) => format!("{}.{}.{}.{}", a[0], a[1], a[2], a[3]),
+            IpMatch::Subnet(a, aa) => format!("{}.{}.{}.{}/{}", a[0], a[1], a[2], a[3], aa),
         }
     }
 }
@@ -175,39 +175,39 @@ impl IpMatch {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PortMatch {
-    Eb,
-    Ho(u16),
-    Nt(u16, u16),
+    Any,
+    Exact(u16),
+    Range(u16, u16),
 }
 
 impl PortMatch {
-    pub fn oh(&self, port: u16) -> bool {
+    pub fn matches(&self, port: u16) -> bool {
         match self {
-            PortMatch::Eb => true,
-            PortMatch::Ho(ai) => *ai == port,
-            PortMatch::Nt(hh, gd) => port >= *hh && port <= *gd,
+            PortMatch::Any => true,
+            PortMatch::Exact(aa) => *aa == port,
+            PortMatch::Range(lo, hi) => port >= *lo && port <= *hi,
         }
     }
 
-    pub fn parse(e: &str) -> Option<Self> {
-        if e == "any" || e == "*" || e == "0" {
-            return Some(PortMatch::Eb);
+    pub fn parse(j: &str) -> Option<Self> {
+        if j == "any" || j == "*" || j == "0" {
+            return Some(PortMatch::Any);
         }
-        if let Some((ugi, too)) = e.fve(':') {
-            let hh: u16 = ugi.parse().bq()?;
-            let gd: u16 = too.parse().bq()?;
-            Some(PortMatch::Nt(hh, gd))
+        if let Some((lo_str, hi_str)) = j.split_once(':') {
+            let lo: u16 = lo_str.parse().ok()?;
+            let hi: u16 = hi_str.parse().ok()?;
+            Some(PortMatch::Range(lo, hi))
         } else {
-            let ai: u16 = e.parse().bq()?;
-            Some(PortMatch::Ho(ai))
+            let aa: u16 = j.parse().ok()?;
+            Some(PortMatch::Exact(aa))
         }
     }
 
     pub fn display(&self) -> String {
         match self {
-            PortMatch::Eb => String::from("*"),
-            PortMatch::Ho(ai) => format!("{}", ai),
-            PortMatch::Nt(hh, gd) => format!("{}:{}", hh, gd),
+            PortMatch::Any => String::from("*"),
+            PortMatch::Exact(aa) => format!("{}", aa),
+            PortMatch::Range(lo, hi) => format!("{}:{}", lo, hi),
         }
     }
 }
@@ -215,57 +215,57 @@ impl PortMatch {
 
 #[derive(Debug, Clone)]
 pub struct Rule {
-    pub rh: Chain,
+    pub chain: Chain,
     pub protocol: Protocol,
-    pub jh: IpMatch,
-    pub pz: IpMatch,
-    pub ey: PortMatch,
-    pub sa: PortMatch,
-    pub hr: Action,
-    pub byv: String,
+    pub src_ip: IpMatch,
+    pub dst_ip: IpMatch,
+    pub src_port: PortMatch,
+    pub dst_port: PortMatch,
+    pub action: Action,
+    pub comment: String,
     
-    pub egb: u64,
+    pub packets: u64,
     
-    pub bf: u64,
+    pub bytes: u64,
 }
 
 impl Rule {
-    pub fn new(rh: Chain, hr: Action) -> Self {
+    pub fn new(chain: Chain, action: Action) -> Self {
         Self {
-            rh,
-            protocol: Protocol::Eb,
-            jh: IpMatch::Eb,
-            pz: IpMatch::Eb,
-            ey: PortMatch::Eb,
-            sa: PortMatch::Eb,
-            hr,
-            byv: String::new(),
-            egb: 0,
-            bf: 0,
+            chain,
+            protocol: Protocol::Any,
+            src_ip: IpMatch::Any,
+            dst_ip: IpMatch::Any,
+            src_port: PortMatch::Any,
+            dst_port: PortMatch::Any,
+            action,
+            comment: String::new(),
+            packets: 0,
+            bytes: 0,
         }
     }
 
     
-    pub fn oh(&self, cgv: u8, cy: [u8; 4], cs: [u8; 4], bom: u16, bmx: u16) -> bool {
+    pub fn matches(&self, arv: u8, src: [u8; 4], dst: [u8; 4], ais: u16, ahv: u16) -> bool {
         
-        if let Some(ai) = self.protocol.aqb() {
-            if ai != cgv {
+        if let Some(aa) = self.protocol.number() {
+            if aa != arv {
                 return false;
             }
         }
         
-        if !self.jh.oh(cy) {
+        if !self.src_ip.matches(src) {
             return false;
         }
-        if !self.pz.oh(cs) {
+        if !self.dst_ip.matches(dst) {
             return false;
         }
         
-        if cgv == 6 || cgv == 17 {
-            if !self.ey.oh(bom) {
+        if arv == 6 || arv == 17 {
+            if !self.src_port.matches(ais) {
                 return false;
             }
-            if !self.sa.oh(bmx) {
+            if !self.dst_port.matches(ahv) {
                 return false;
             }
         }
@@ -277,135 +277,135 @@ impl Rule {
 
 
 
-struct Asl {
-    bib: Vec<Rule>,
-    jai: Action,
-    jid: Action,
-    ivl: Action,
-    fnf: Vec<String>,
+struct Si {
+    rules: Vec<Rule>,
+    input_policy: Action,
+    output_policy: Action,
+    forward_policy: Action,
+    log_entries: Vec<String>,
 }
 
-impl Asl {
+impl Si {
     fn new() -> Self {
         Self {
-            bib: Vec::new(),
-            jai: Action::Ld,
-            jid: Action::Ld,
-            ivl: Action::Drop,
-            fnf: Vec::new(),
+            rules: Vec::new(),
+            input_policy: Action::Accept,
+            output_policy: Action::Accept,
+            forward_policy: Action::Drop,
+            log_entries: Vec::new(),
         }
     }
 
-    fn iwu(&self, rh: Chain) -> Action {
-        match rh {
-            Chain::Jp => self.jai,
-            Chain::Dd => self.jid,
-            Chain::Abv => self.ivl,
+    fn get_policy(&self, chain: Chain) -> Action {
+        match chain {
+            Chain::Input => self.input_policy,
+            Chain::Output => self.output_policy,
+            Chain::Forward => self.forward_policy,
         }
     }
 
-    fn met(&mut self, rh: Chain, hr: Action) {
-        match rh {
-            Chain::Jp => self.jai = hr,
-            Chain::Dd => self.jid = hr,
-            Chain::Abv => self.ivl = hr,
+    fn set_policy(&mut self, chain: Chain, action: Action) {
+        match chain {
+            Chain::Input => self.input_policy = action,
+            Chain::Output => self.output_policy = action,
+            Chain::Forward => self.forward_policy = action,
         }
     }
 
-    fn qfk(&mut self, bt: String) {
-        if self.fnf.len() >= 256 {
-            self.fnf.remove(0);
+    fn add_log(&mut self, entry: String) {
+        if self.log_entries.len() >= 256 {
+            self.log_entries.remove(0);
         }
-        self.fnf.push(bt);
+        self.log_entries.push(entry);
     }
 }
 
-static Kj: Mutex<Asl> = Mutex::new(Asl {
-    bib: Vec::new(),
-    jai: Action::Ld,
-    jid: Action::Ld,
-    ivl: Action::Drop,
-    fnf: Vec::new(),
+static Ee: Mutex<Si> = Mutex::new(Si {
+    rules: Vec::new(),
+    input_policy: Action::Accept,
+    output_policy: Action::Accept,
+    forward_policy: Action::Drop,
+    log_entries: Vec::new(),
 });
 
-static Li: AtomicBool = AtomicBool::new(false);
-static OQ_: AtomicU64 = AtomicU64::new(0);
-static OR_: AtomicU64 = AtomicU64::new(0);
+static Cq: AtomicBool = AtomicBool::new(false);
+static PO_: AtomicU64 = AtomicU64::new(0);
+static PP_: AtomicU64 = AtomicU64::new(0);
 
 
 
 
 
 
-pub fn zu() -> bool {
-    Li.load(Ordering::Relaxed)
+pub fn lq() -> bool {
+    Cq.load(Ordering::Relaxed)
 }
 
 
-pub fn cuf(iq: bool) {
-    Li.store(iq, Ordering::Release);
+pub fn set_enabled(enabled: bool) {
+    Cq.store(enabled, Ordering::Release);
 }
 
 
-pub fn ssp(cgv: u8, cy: [u8; 4], cs: [u8; 4], bom: u16, bmx: u16, duk: usize) -> bool {
-    if !zu() {
+pub fn lvk(arv: u8, src: [u8; 4], dst: [u8; 4], ais: u16, ahv: u16, aup: usize) -> bool {
+    if !lq() {
         return true;
     }
-    ntv(Chain::Jp, cgv, cy, cs, bom, bmx, duk)
+    hyn(Chain::Input, arv, src, dst, ais, ahv, aup)
 }
 
 
-pub fn ntw(cgv: u8, cy: [u8; 4], cs: [u8; 4], bom: u16, bmx: u16, duk: usize) -> bool {
-    if !zu() {
+pub fn hyo(arv: u8, src: [u8; 4], dst: [u8; 4], ais: u16, ahv: u16, aup: usize) -> bool {
+    if !lq() {
         return true;
     }
-    ntv(Chain::Dd, cgv, cy, cs, bom, bmx, duk)
+    hyn(Chain::Output, arv, src, dst, ais, ahv, aup)
 }
 
 
-fn ntv(rh: Chain, cgv: u8, cy: [u8; 4], cs: [u8; 4], bom: u16, bmx: u16, duk: usize) -> bool {
-    let mut ua = Kj.lock();
+fn hyn(chain: Chain, arv: u8, src: [u8; 4], dst: [u8; 4], ais: u16, ahv: u16, aup: usize) -> bool {
+    let mut fo = Ee.lock();
 
     
-    for agu in ua.bib.el() {
-        if agu.rh != rh {
+    for qo in fo.rules.iter_mut() {
+        if qo.chain != chain {
             continue;
         }
-        if agu.oh(cgv, cy, cs, bom, bmx) {
-            agu.egb += 1;
-            agu.bf += duk as u64;
+        if qo.matches(arv, src, dst, ais, ahv) {
+            qo.packets += 1;
+            qo.bytes += aup as u64;
 
-            match agu.hr {
-                Action::Ld => {
-                    OQ_.fetch_add(1, Ordering::Relaxed);
+            match qo.action {
+                Action::Accept => {
+                    PO_.fetch_add(1, Ordering::Relaxed);
                     return true;
                 }
                 Action::Drop => {
-                    OR_.fetch_add(1, Ordering::Relaxed);
+                    PP_.fetch_add(1, Ordering::Relaxed);
                     return false;
                 }
-                Action::Aly => {
-                    OR_.fetch_add(1, Ordering::Relaxed);
-                    whl(cgv, cy, cs, bom, bmx);
+                Action::Reject => {
+                    PP_.fetch_add(1, Ordering::Relaxed);
+                    ony(arv, src, dst, ais, ahv);
                     return false;
                 }
-                Action::Nl => {
-                    let vnl = match cgv {
+                Action::Log => {
+                    let nza = match arv {
                         1 => "ICMP",
                         6 => "TCP",
                         17 => "UDP",
                         _ => "???",
                     };
-                    let bt = format!(
+                    let entry = format!(
                         "[FW {}] {} {}.{}.{}.{}:{} -> {}.{}.{}.{}:{} len={}",
-                        rh.j(), vnl,
-                        cy[0], cy[1], cy[2], cy[3], bom,
-                        cs[0], cs[1], cs[2], cs[3], bmx,
-                        duk,
+                        chain.name(), nza,
+                        src[0], src[1], src[2], src[3], ais,
+                        dst[0], dst[1], dst[2], dst[3], ahv,
+                        aup,
                     );
-                    crate::serial_println!("{}", bt);
-                    ua.qfk(bt);
-                    OQ_.fetch_add(1, Ordering::Relaxed);
+                    crate::serial_println!("{}", entry);
+                    fo.add_log(entry);
+                    PO_.fetch_add(1, Ordering::Relaxed);
                     return true; 
                 }
             }
@@ -413,14 +413,14 @@ fn ntv(rh: Chain, cgv: u8, cy: [u8; 4], cs: [u8; 4], bom: u16, bmx: u16, duk: us
     }
 
     
-    let policy = ua.iwu(rh);
+    let policy = fo.get_policy(chain);
     match policy {
-        Action::Ld | Action::Nl => {
-            OQ_.fetch_add(1, Ordering::Relaxed);
+        Action::Accept | Action::Log => {
+            PO_.fetch_add(1, Ordering::Relaxed);
             true
         }
-        Action::Drop | Action::Aly => {
-            OR_.fetch_add(1, Ordering::Relaxed);
+        Action::Drop | Action::Reject => {
+            PP_.fetch_add(1, Ordering::Relaxed);
             false
         }
     }
@@ -431,34 +431,34 @@ fn ntv(rh: Chain, cgv: u8, cy: [u8; 4], cs: [u8; 4], bom: u16, bmx: u16, duk: us
 
 
 
-pub fn qfo(agu: Rule) {
-    Kj.lock().bib.push(agu);
+pub fn jtx(qo: Rule) {
+    Ee.lock().rules.push(qo);
 }
 
 
-pub fn yyf(index: usize, agu: Rule) {
-    let mut ua = Kj.lock();
-    if index <= ua.bib.len() {
-        ua.bib.insert(index, agu);
+pub fn qln(index: usize, qo: Rule) {
+    let mut fo = Ee.lock();
+    if index <= fo.rules.len() {
+        fo.rules.insert(index, qo);
     }
 }
 
 
-pub fn rvj(rh: Chain, index: usize) -> bool {
-    let mut ua = Kj.lock();
-    let mut nch = 0usize;
-    let mut pak = None;
-    for (a, agu) in ua.bib.iter().cf() {
-        if agu.rh == rh {
-            if nch == index {
-                pak = Some(a);
+pub fn ldc(chain: Chain, index: usize) -> bool {
+    let mut fo = Ee.lock();
+    let mut hki = 0usize;
+    let mut iyn = None;
+    for (i, qo) in fo.rules.iter().enumerate() {
+        if qo.chain == chain {
+            if hki == index {
+                iyn = Some(i);
                 break;
             }
-            nch += 1;
+            hki += 1;
         }
     }
-    if let Some(a) = pak {
-        ua.bib.remove(a);
+    if let Some(i) = iyn {
+        fo.rules.remove(i);
         true
     } else {
         false
@@ -466,52 +466,52 @@ pub fn rvj(rh: Chain, index: usize) -> bool {
 }
 
 
-pub fn hjx(rh: Option<Chain>) {
-    let mut ua = Kj.lock();
-    match rh {
-        Some(r) => ua.bib.ajm(|m| m.rh != r),
-        None => ua.bib.clear(),
+pub fn flush(chain: Option<Chain>) {
+    let mut fo = Ee.lock();
+    match chain {
+        Some(c) => fo.rules.retain(|r| r.chain != c),
+        None => fo.rules.clear(),
     }
 }
 
 
-pub fn met(rh: Chain, hr: Action) {
-    Kj.lock().met(rh, hr);
+pub fn set_policy(chain: Chain, action: Action) {
+    Ee.lock().set_policy(chain, action);
 }
 
 
-pub fn ufv(rh: Chain) -> Vec<Rule> {
-    Kj.lock().bib.iter().hi(|m| m.rh == rh).abn().collect()
+pub fn mzh(chain: Chain) -> Vec<Rule> {
+    Ee.lock().rules.iter().filter(|r| r.chain == chain).cloned().collect()
 }
 
 
-pub fn iwu(rh: Chain) -> Action {
-    Kj.lock().iwu(rh)
+pub fn get_policy(chain: Chain) -> Action {
+    Ee.lock().get_policy(chain)
 }
 
 
-pub fn cm() -> (u64, u64) {
-    (OQ_.load(Ordering::Relaxed), OR_.load(Ordering::Relaxed))
+pub fn stats() -> (u64, u64) {
+    (PO_.load(Ordering::Relaxed), PP_.load(Ordering::Relaxed))
 }
 
 
-pub fn tdx() -> Vec<String> {
-    Kj.lock().fnf.clone()
+pub fn mdj() -> Vec<String> {
+    Ee.lock().log_entries.clone()
 }
 
 
-pub fn rbf() {
-    Kj.lock().fnf.clear();
+pub fn kku() {
+    Ee.lock().log_entries.clear();
 }
 
 
-pub fn pcq() {
-    OQ_.store(0, Ordering::Relaxed);
-    OR_.store(0, Ordering::Relaxed);
-    let mut ua = Kj.lock();
-    for agu in ua.bib.el() {
-        agu.egb = 0;
-        agu.bf = 0;
+pub fn jai() {
+    PO_.store(0, Ordering::Relaxed);
+    PP_.store(0, Ordering::Relaxed);
+    let mut fo = Ee.lock();
+    for qo in fo.rules.iter_mut() {
+        qo.packets = 0;
+        qo.bytes = 0;
     }
 }
 
@@ -519,77 +519,77 @@ pub fn pcq() {
 
 
 
-fn cgl(e: &str) -> Option<[u8; 4]> {
-    let ek: Vec<&str> = e.adk('.').collect();
-    if ek.len() != 4 {
+fn art(j: &str) -> Option<[u8; 4]> {
+    let au: Vec<&str> = j.split('.').collect();
+    if au.len() != 4 {
         return None;
     }
-    let q: u8 = ek[0].parse().bq()?;
-    let o: u8 = ek[1].parse().bq()?;
-    let r: u8 = ek[2].parse().bq()?;
-    let bc: u8 = ek[3].parse().bq()?;
-    Some([q, o, r, bc])
+    let a: u8 = au[0].parse().ok()?;
+    let b: u8 = au[1].parse().ok()?;
+    let c: u8 = au[2].parse().ok()?;
+    let d: u8 = au[3].parse().ok()?;
+    Some([a, b, c, d])
 }
 
 
-fn whl(cgv: u8, cy: [u8; 4], cs: [u8; 4], bom: u16, bmx: u16) {
-    if cgv == 6 {
+fn ony(arv: u8, src: [u8; 4], dst: [u8; 4], ais: u16, ahv: u16) {
+    if arv == 6 {
         
-        whq(cy, cs, bom, bmx);
+        ood(src, dst, ais, ahv);
     } else {
         
-        whf(cy, cs);
+        onr(src, dst);
     }
 }
 
 
-fn whq(ams: [u8; 4], uht: [u8; 4], bci: u16, ahq: u16) {
+fn ood(tn: [u8; 4], local_ip: [u8; 4], remote_port: u16, local_port: u16) {
     
-    let mut pk = [0u8; 20];
+    let mut gq = [0u8; 20];
     
-    pk[0..2].dg(&ahq.ft());
+    gq[0..2].copy_from_slice(&local_port.to_be_bytes());
     
-    pk[2..4].dg(&bci.ft());
+    gq[2..4].copy_from_slice(&remote_port.to_be_bytes());
     
     
     
-    pk[12] = 0x50; 
-    pk[13] = 0x14; 
+    gq[12] = 0x50; 
+    gq[13] = 0x14; 
     
     
     
 
     
-    let td = super::tcp::psc(uht, ams, &pk);
-    pk[16..18].dg(&td.ft());
+    let ig = super::tcp::jlr(local_ip, tn, &gq);
+    gq[16..18].copy_from_slice(&ig.to_be_bytes());
 
-    let _ = super::ip::blc(ams, 6, &pk);
+    let _ = super::ip::aha(tn, 6, &gq);
 }
 
 
-fn whf(ams: [u8; 4], yao: [u8; 4]) {
+fn onr(tn: [u8; 4], _local_ip: [u8; 4]) {
     
-    let mut mt = [0u8; 8];
-    mt[0] = 3;  
-    mt[1] = 13; 
+    let mut fj = [0u8; 8];
+    fj[0] = 3;  
+    fj[1] = 13; 
     
     
 
     
     let mut sum: u32 = 0;
-    for a in (0..mt.len()).akt(2) {
-        let od = if a + 1 < mt.len() {
-            ((mt[a] as u16) << 8) | (mt[a + 1] as u16)
+    for i in (0..fj.len()).step_by(2) {
+        let fx = if i + 1 < fj.len() {
+            ((fj[i] as u16) << 8) | (fj[i + 1] as u16)
         } else {
-            (mt[a] as u16) << 8
+            (fj[i] as u16) << 8
         };
-        sum += od as u32;
+        sum += fx as u32;
     }
     while sum >> 16 != 0 {
         sum = (sum & 0xFFFF) + (sum >> 16);
     }
-    let td = !(sum as u16);
-    mt[2..4].dg(&td.ft());
+    let ig = !(sum as u16);
+    fj[2..4].copy_from_slice(&ig.to_be_bytes());
 
-    let _ = super::ip::blc(ams, 1, &mt);
+    let _ = super::ip::aha(tn, 1, &fj);
 }

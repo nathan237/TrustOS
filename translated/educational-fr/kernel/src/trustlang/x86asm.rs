@@ -99,8 +99,8 @@ pub fn offset(&self) -> usize { self.code.len() }
     pub fn resolve_patches(&mut self) -> Result<(), &'static str> {
         for patch in &self.patches {
             let target = self.labels[patch.label.0].ok_or("unresolved label")?;
-            let relative = target as i64 - (patch.offset as i64 + 4); // rel32 is relative to end of instruction
-            let rel32 = relative as i32;
+            let rel = target as i64 - (patch.offset as i64 + 4); // rel32 is relative to end of instruction
+            let rel32 = rel as i32;
             let bytes = rel32.to_le_bytes();
             self.code[patch.offset..patch.offset + 4].copy_from_slice(&bytes);
         }
@@ -144,73 +144,73 @@ pub fn offset(&self) -> usize { self.code.len() }
     }
 
     /// mov reg, imm64
-    pub fn mov_r_imm64(&mut self, destination: Reg, imm: i64) {
-        self.rex_w_single(destination);
-        self.code.push(0xB8 + destination.lo3());
+    pub fn mov_r_imm64(&mut self, dst: Reg, imm: i64) {
+        self.rex_w_single(dst);
+        self.code.push(0xB8 + dst.lo3());
         self.code.extend_from_slice(&imm.to_le_bytes());
     }
 
     /// mov reg, imm32 (sign-extended to 64-bit)
-    pub fn mov_r_imm32(&mut self, destination: Reg, imm: i32) {
-        self.rex_w_single(destination);
+    pub fn mov_r_imm32(&mut self, dst: Reg, imm: i32) {
+        self.rex_w_single(dst);
         self.code.push(0xC7);
-        self.code.push(Self::modrm(0b11, 0, destination.lo3()));
+        self.code.push(Self::modrm(0b11, 0, dst.lo3()));
         self.code.extend_from_slice(&imm.to_le_bytes());
     }
 
     /// mov dst, src (64-bit register to register)
-    pub fn mov_r_r(&mut self, destination: Reg, source: Reg) {
-        self.rex_w(destination, source);
+    pub fn mov_r_r(&mut self, dst: Reg, src: Reg) {
+        self.rex_w(dst, src);
         self.code.push(0x89);
-        self.code.push(Self::modrm(0b11, source.lo3(), destination.lo3()));
+        self.code.push(Self::modrm(0b11, src.lo3(), dst.lo3()));
     }
 
     /// mov dst, [rbp + offset] (load local from stack frame)
-    pub fn mov_r_rbp_offset(&mut self, destination: Reg, offset: i32) {
-        self.rex_w(Reg::Rbp, destination);
+    pub fn mov_r_rbp_offset(&mut self, dst: Reg, offset: i32) {
+        self.rex_w(Reg::Rbp, dst);
         self.code.push(0x8B);
         if offset >= -128 && offset <= 127 {
-            self.code.push(Self::modrm(0b01, destination.lo3(), 0x05));
+            self.code.push(Self::modrm(0b01, dst.lo3(), 0x05));
             self.code.push(offset as u8);
         } else {
-            self.code.push(Self::modrm(0b10, destination.lo3(), 0x05));
+            self.code.push(Self::modrm(0b10, dst.lo3(), 0x05));
             self.code.extend_from_slice(&offset.to_le_bytes());
         }
     }
 
     /// mov [rbp + offset], src (store to local in stack frame)
-    pub fn mov_rbp_offset_r(&mut self, offset: i32, source: Reg) {
-        self.rex_w(Reg::Rbp, source);
+    pub fn mov_rbp_offset_r(&mut self, offset: i32, src: Reg) {
+        self.rex_w(Reg::Rbp, src);
         self.code.push(0x89);
         if offset >= -128 && offset <= 127 {
-            self.code.push(Self::modrm(0b01, source.lo3(), 0x05));
+            self.code.push(Self::modrm(0b01, src.lo3(), 0x05));
             self.code.push(offset as u8);
         } else {
-            self.code.push(Self::modrm(0b10, source.lo3(), 0x05));
+            self.code.push(Self::modrm(0b10, src.lo3(), 0x05));
             self.code.extend_from_slice(&offset.to_le_bytes());
         }
     }
 
     /// add dst, src
-    pub fn add_r_r(&mut self, destination: Reg, source: Reg) {
-        self.rex_w(destination, source);
+    pub fn add_r_r(&mut self, dst: Reg, src: Reg) {
+        self.rex_w(dst, src);
         self.code.push(0x01);
-        self.code.push(Self::modrm(0b11, source.lo3(), destination.lo3()));
+        self.code.push(Self::modrm(0b11, src.lo3(), dst.lo3()));
     }
 
     /// sub dst, src
-    pub fn sub_r_r(&mut self, destination: Reg, source: Reg) {
-        self.rex_w(destination, source);
+    pub fn sub_r_r(&mut self, dst: Reg, src: Reg) {
+        self.rex_w(dst, src);
         self.code.push(0x29);
-        self.code.push(Self::modrm(0b11, source.lo3(), destination.lo3()));
+        self.code.push(Self::modrm(0b11, src.lo3(), dst.lo3()));
     }
 
     /// imul dst, src (signed multiply, result in dst)
-    pub fn imul_r_r(&mut self, destination: Reg, source: Reg) {
-        self.rex_w(source, destination);
+    pub fn imul_r_r(&mut self, dst: Reg, src: Reg) {
+        self.rex_w(src, dst);
         self.code.push(0x0F);
         self.code.push(0xAF);
-        self.code.push(Self::modrm(0b11, destination.lo3(), source.lo3()));
+        self.code.push(Self::modrm(0b11, dst.lo3(), src.lo3()));
     }
 
     /// cqo (sign-extend rax into rdx:rax for division)
@@ -220,52 +220,52 @@ pub fn offset(&self) -> usize { self.code.len() }
     }
 
     /// idiv src (signed divide rdx:rax by src, quotient in rax, remainder in rdx)
-    pub fn idiv_r(&mut self, source: Reg) {
-        self.rex_w_single(source);
+    pub fn idiv_r(&mut self, src: Reg) {
+        self.rex_w_single(src);
         self.code.push(0xF7);
-        self.code.push(Self::modrm(0b11, 7, source.lo3()));
+        self.code.push(Self::modrm(0b11, 7, src.lo3()));
     }
 
     /// neg reg (two's complement negate)
-    pub fn negative_r(&mut self, r: Reg) {
+    pub fn neg_r(&mut self, r: Reg) {
         self.rex_w_single(r);
         self.code.push(0xF7);
         self.code.push(Self::modrm(0b11, 3, r.lo3()));
     }
 
     /// and dst, src
-    pub fn and_r_r(&mut self, destination: Reg, source: Reg) {
-        self.rex_w(destination, source);
+    pub fn and_r_r(&mut self, dst: Reg, src: Reg) {
+        self.rex_w(dst, src);
         self.code.push(0x21);
-        self.code.push(Self::modrm(0b11, source.lo3(), destination.lo3()));
+        self.code.push(Self::modrm(0b11, src.lo3(), dst.lo3()));
     }
 
     /// or dst, src
-    pub fn or_r_r(&mut self, destination: Reg, source: Reg) {
-        self.rex_w(destination, source);
+    pub fn or_r_r(&mut self, dst: Reg, src: Reg) {
+        self.rex_w(dst, src);
         self.code.push(0x09);
-        self.code.push(Self::modrm(0b11, source.lo3(), destination.lo3()));
+        self.code.push(Self::modrm(0b11, src.lo3(), dst.lo3()));
     }
 
     /// xor dst, src
-    pub fn xor_r_r(&mut self, destination: Reg, source: Reg) {
-        self.rex_w(destination, source);
+    pub fn xor_r_r(&mut self, dst: Reg, src: Reg) {
+        self.rex_w(dst, src);
         self.code.push(0x31);
-        self.code.push(Self::modrm(0b11, source.lo3(), destination.lo3()));
+        self.code.push(Self::modrm(0b11, src.lo3(), dst.lo3()));
     }
 
     /// shl dst, cl (shift left by cl)
-    pub fn shl_r_cl(&mut self, destination: Reg) {
-        self.rex_w_single(destination);
+    pub fn shl_r_cl(&mut self, dst: Reg) {
+        self.rex_w_single(dst);
         self.code.push(0xD3);
-        self.code.push(Self::modrm(0b11, 4, destination.lo3()));
+        self.code.push(Self::modrm(0b11, 4, dst.lo3()));
     }
 
     /// shr dst, cl (shift right by cl, arithmetic)
-    pub fn sar_r_cl(&mut self, destination: Reg) {
-        self.rex_w_single(destination);
+    pub fn sar_r_cl(&mut self, dst: Reg) {
+        self.rex_w_single(dst);
         self.code.push(0xD3);
-        self.code.push(Self::modrm(0b11, 7, destination.lo3()));
+        self.code.push(Self::modrm(0b11, 7, dst.lo3()));
     }
 
     /// cmp a, b
@@ -295,8 +295,8 @@ pub fn offset(&self) -> usize { self.code.len() }
     }
 
     /// setcc r8 (set byte based on condition)
-    pub fn setcc(&mut self, cc: Cc, destination: Reg) {
-        if destination.needs_rex() {
+    pub fn setcc(&mut self, cc: Cc, dst: Reg) {
+        if dst.needs_rex() {
             self.code.push(0x41);
         } else {
             // Need REX prefix to access sil/dil etc.
@@ -304,37 +304,37 @@ pub fn offset(&self) -> usize { self.code.len() }
         }
         self.code.push(0x0F);
         self.code.push(0x90 + cc as u8);
-        self.code.push(Self::modrm(0b11, 0, destination.lo3()));
+        self.code.push(Self::modrm(0b11, 0, dst.lo3()));
     }
 
     /// movzx dst(64), src(8) — zero-extend byte to qword
-    pub fn movzx_r_r8(&mut self, destination: Reg, source: Reg) {
-        self.rex_w(source, destination);
+    pub fn movzx_r_r8(&mut self, dst: Reg, src: Reg) {
+        self.rex_w(src, dst);
         self.code.push(0x0F);
         self.code.push(0xB6);
-        self.code.push(Self::modrm(0b11, destination.lo3(), source.lo3()));
+        self.code.push(Self::modrm(0b11, dst.lo3(), src.lo3()));
     }
 
     /// add dst, imm32
-    pub fn add_r_imm32(&mut self, destination: Reg, imm: i32) {
-        self.rex_w_single(destination);
-        if destination == Reg::Rax {
+    pub fn add_r_imm32(&mut self, dst: Reg, imm: i32) {
+        self.rex_w_single(dst);
+        if dst == Reg::Rax {
             self.code.push(0x05);
         } else {
             self.code.push(0x81);
-            self.code.push(Self::modrm(0b11, 0, destination.lo3()));
+            self.code.push(Self::modrm(0b11, 0, dst.lo3()));
         }
         self.code.extend_from_slice(&imm.to_le_bytes());
     }
 
     /// sub dst, imm32
-    pub fn sub_r_imm32(&mut self, destination: Reg, imm: i32) {
-        self.rex_w_single(destination);
-        if destination == Reg::Rax {
+    pub fn sub_r_imm32(&mut self, dst: Reg, imm: i32) {
+        self.rex_w_single(dst);
+        if dst == Reg::Rax {
             self.code.push(0x2D);
         } else {
             self.code.push(0x81);
-            self.code.push(Self::modrm(0b11, 5, destination.lo3()));
+            self.code.push(Self::modrm(0b11, 5, dst.lo3()));
         }
         self.code.extend_from_slice(&imm.to_le_bytes());
     }
@@ -372,7 +372,7 @@ pub fn offset(&self) -> usize { self.code.len() }
     }
 
     /// ret
-    pub fn return_value(&mut self) {
+    pub fn ret(&mut self) {
         self.code.push(0xC3);
     }
 
@@ -382,14 +382,14 @@ pub fn offset(&self) -> usize { self.code.len() }
     }
 
     /// lea dst, [rbp + offset]
-    pub fn lea_rbp_offset(&mut self, destination: Reg, offset: i32) {
-        self.rex_w(Reg::Rbp, destination);
+    pub fn lea_rbp_offset(&mut self, dst: Reg, offset: i32) {
+        self.rex_w(Reg::Rbp, dst);
         self.code.push(0x8D);
         if offset >= -128 && offset <= 127 {
-            self.code.push(Self::modrm(0b01, destination.lo3(), 0x05));
+            self.code.push(Self::modrm(0b01, dst.lo3(), 0x05));
             self.code.push(offset as u8);
         } else {
-            self.code.push(Self::modrm(0b10, destination.lo3(), 0x05));
+            self.code.push(Self::modrm(0b10, dst.lo3(), 0x05));
             self.code.extend_from_slice(&offset.to_le_bytes());
         }
     }
@@ -409,6 +409,6 @@ pub fn offset(&self) -> usize { self.code.len() }
     pub fn epilogue(&mut self) {
         self.mov_r_r(Reg::Rsp, Reg::Rbp);
         self.pop_r(Reg::Rbp);
-        self.return_value();
+        self.ret();
     }
 }

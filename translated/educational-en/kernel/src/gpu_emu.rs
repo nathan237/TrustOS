@@ -91,7 +91,7 @@ pub struct VirtualGpu {
     /// Frame counter for animations
     frame: AtomicU32,
     /// Time accumulator (in ms)
-    time_mouse: AtomicU32,
+    time_ms: AtomicU32,
     /// Active shader
     active_shader: Option<PixelShaderFn>,
     /// Framebuffer pointer
@@ -122,7 +122,7 @@ impl VirtualGpu {
 const INITIALIZE_BOOL: AtomicBool = AtomicBool::new(false);
         Self {
             frame: AtomicU32::new(0),
-            time_mouse: AtomicU32::new(0),
+            time_ms: AtomicU32::new(0),
             active_shader: None,
             framebuffer: core::ptr::null_mut(),
             width: 0,
@@ -155,12 +155,12 @@ const INITIALIZE_BOOL: AtomicBool = AtomicBool::new(false);
         let width = self.width;
         let height = self.height;
         let total_pixels = (width * height) as usize;
-        let time = self.time_mouse.load(Ordering::Relaxed) as f32 / 1000.0;
+        let time = self.time_ms.load(Ordering::Relaxed) as f32 / 1000.0;
         let frame = self.frame.load(Ordering::Relaxed);
         
         // Get number of CPU cores available
         let cpu_count = crate::cpu::smp::ready_cpu_count() as usize;
-        let cpu_count = cpu_count.maximum(1);
+        let cpu_count = cpu_count.max(1);
         
         // Calculate pixels per core
         let pixels_per_core = (total_pixels + cpu_count - 1) / cpu_count;
@@ -169,7 +169,7 @@ const INITIALIZE_BOOL: AtomicBool = AtomicBool::new(false);
         self.work_completed.store(0, Ordering::Release);
         
         // Create work context
-        let context = ShaderContext {
+        let ctx = ShaderContext {
             shader,
             framebuffer: self.framebuffer,
             width,
@@ -184,7 +184,7 @@ const INITIALIZE_BOOL: AtomicBool = AtomicBool::new(false);
         crate::cpu::smp::parallel_for(
             height as usize,
             dispatch_shader_row,
-            &context as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+            &ctx as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const ShaderContext as *mut u8,
         );
         
@@ -200,10 +200,10 @@ pub fn dispatch_fullscreen_simd(&self) {
         
         let width = self.width;
         let height = self.height;
-        let time = self.time_mouse.load(Ordering::Relaxed) as f32 / 1000.0;
+        let time = self.time_ms.load(Ordering::Relaxed) as f32 / 1000.0;
         let frame = self.frame.load(Ordering::Relaxed);
         
-        let context = ShaderContext {
+        let ctx = ShaderContext {
             shader,
             framebuffer: self.framebuffer,
             width,
@@ -217,7 +217,7 @@ pub fn dispatch_fullscreen_simd(&self) {
         crate::cpu::smp::parallel_for(
             height as usize,
             dispatch_shader_row_simd,
-            &context as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+            &ctx as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const ShaderContext as *mut u8,
         );
         
@@ -226,7 +226,7 @@ const ShaderContext as *mut u8,
     
     /// Update time (call each frame with delta_ms)
     pub fn tick(&self, delta_mouse: u32) {
-        self.time_mouse.fetch_add(delta_mouse, Ordering::Relaxed);
+        self.time_ms.fetch_add(delta_mouse, Ordering::Relaxed);
     }
     
     /// Get current frame number
@@ -236,7 +236,7 @@ const ShaderContext as *mut u8,
     
     /// Get elapsed time in seconds
     pub fn time(&self) -> f32 {
-        self.time_mouse.load(Ordering::Relaxed) as f32 / 1000.0
+        self.time_ms.load(Ordering::Relaxed) as f32 / 1000.0
     }
 }
 
@@ -276,7 +276,7 @@ pub fn dispatch_fullscreen_stride(
     frame: u32,
     shader: PixelShaderFn,
 ) {
-    let context = ShaderContext {
+    let ctx = ShaderContext {
         shader,
         framebuffer,
         width,
@@ -292,7 +292,7 @@ pub fn dispatch_fullscreen_stride(
         crate::cpu::smp::parallel_for(
             height as usize,
             dispatch_shader_row_simd,
-            &context as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+            &ctx as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const ShaderContext as *mut u8,
         );
     }
@@ -302,7 +302,7 @@ const ShaderContext as *mut u8,
         crate::cpu::smp::parallel_for(
             height as usize,
             dispatch_shader_row,
-            &context as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+            &ctx as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const ShaderContext as *mut u8,
         );
     }
@@ -333,14 +333,14 @@ impl Sync for ShaderContext {}
 
 /// Dispatch shader for a range of rows (called by parallel_for)
 fn dispatch_shader_row(start: usize, end: usize, data: *mut u8) {
-    let context = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+    let ctx = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { &*(data as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const ShaderContext) };
-    let shader = context.shader;
-    let framebuffer = context.framebuffer;
-    let width = context.width;
-    let height = context.height;
-    let stride = context.stride as usize;
+    let shader = ctx.shader;
+    let fb = ctx.framebuffer;
+    let width = ctx.width;
+    let height = ctx.height;
+    let stride = ctx.stride as usize;
 
     for y in start..end {
         let row_offset = y * stride;
@@ -350,14 +350,14 @@ const ShaderContext) };
                 y: y as u32,
                 width,
                 height,
-                time: context.time,
-                frame: context.frame,
+                time: ctx.time,
+                frame: ctx.frame,
             };
 
             let output = shader(input);
                         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-                *framebuffer.add(row_offset + x) = output.to_u32();
+                *fb.add(row_offset + x) = output.to_u32();
             }
         }
     }
@@ -368,14 +368,14 @@ unsafe {
 fn dispatch_shader_row_simd(start: usize, end: usize, data: *mut u8) {
     use core::arch::x86_64::*;
     
-    let context = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+    let ctx = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { &*(data as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const ShaderContext) };
-    let shader = context.shader;
-    let framebuffer = context.framebuffer;
-    let width = context.width as usize;
-    let height = context.height;
-    let stride = context.stride as usize;
+    let shader = ctx.shader;
+    let fb = ctx.framebuffer;
+    let width = ctx.width as usize;
+    let height = ctx.height;
+    let stride = ctx.stride as usize;
     
     for y in start..end {
         let row_offset = y * stride;
@@ -392,17 +392,17 @@ const ShaderContext) };
                     y: y as u32,
                     width: width as u32,
                     height,
-                    time: context.time,
-                    frame: context.frame,
+                    time: ctx.time,
+                    frame: ctx.frame,
                 };
                 colors[i] = shader(input).to_u32();
             }
             
             // Store 4 pixels at once using SSE2
             unsafe {
-                let pixels = _mm_loadu_si128(colors.as_pointer() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+                let pixels = _mm_loadu_si128(colors.as_ptr() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const __m128i);
-                _mm_storeu_si128(framebuffer.add(row_offset + x) as *mut __m128i, pixels);
+                _mm_storeu_si128(fb.add(row_offset + x) as *mut __m128i, pixels);
             }
             
             x += 4;
@@ -415,12 +415,12 @@ const __m128i);
                 y: y as u32,
                 width: width as u32,
                 height,
-                time: context.time,
-                frame: context.frame,
+                time: ctx.time,
+                frame: ctx.frame,
             };
                         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-                *framebuffer.add(row_offset + x) = shader(input).to_u32();
+                *fb.add(row_offset + x) = shader(input).to_u32();
             }
             x += 1;
         }
@@ -464,20 +464,20 @@ pub fn shader_matrix_rain(input: PixelInput) -> PixelOutput {
     // Grid: 8x16 pixel cells (like characters)
     let cell_w = 8u32;
     let cell_h = 16u32;
-    let column = x / cell_w;
+    let col = x / cell_w;
     let row = y / cell_h;
     let local_x = x % cell_w;
     let local_y = y % cell_h;
     
     // Each column has unique parameters (using hash)
-    let column_seed = column.wrapping_mul(2654435761);
+    let column_seed = col.wrapping_mul(2654435761);
     let column_hash = (column_seed & 0xFFFF) as f32 / 65535.0;
     let column_hash2 = ((column_seed >> 8) & 0xFFFF) as f32 / 65535.0;
     
     // Column properties
     let speed = 3.0 + column_hash * 8.0;           // Fall speed 3-11
     let offset = column_hash2 * 50.0;               // Start offset
-    let trail_length = 8.0 + column_hash * 12.0;       // Trail length 8-20 cells
+    let trail_len = 8.0 + column_hash * 12.0;       // Trail length 8-20 cells
     
     // Head position (in cell units)
     let head_row = ((t * speed + offset) % ((h / cell_h + 30) as f32)) as i32 - 15;
@@ -486,13 +486,13 @@ pub fn shader_matrix_rain(input: PixelInput) -> PixelOutput {
     // Distance from head
     let dist = head_row - row_i;
     
-    if dist < 0 || dist > trail_length as i32 {
+    if dist < 0 || dist > trail_len as i32 {
         // Not in trail
         return PixelOutput::from_rgb(0, 0, 0);
     }
     
     // Calculate brightness based on position in trail
-    let trail_position = dist as f32 / trail_length;
+    let trail_position = dist as f32 / trail_len;
     let brightness = if dist == 0 {
         1.0  // Head is brightest
     } else {
@@ -500,7 +500,7 @@ pub fn shader_matrix_rain(input: PixelInput) -> PixelOutput {
     };
     
     // Glyph simulation: each cell has a "character" (pseudo-random pattern)
-    let cell_seed = (column.wrapping_mul(31337) ^ row.wrapping_mul(7919) ^ (input.frame / 3)) as f32;
+    let cell_seed = (col.wrapping_mul(31337) ^ row.wrapping_mul(7919) ^ (input.frame / 3)) as f32;
     let glyph_bit = pseudo_glyph(local_x, local_y, cell_seed as u32);
     
     if !glyph_bit {
@@ -563,8 +563,8 @@ match pattern_type {
         6 => {
             // Triangle
             let mid = 4i32;
-            let row_width = (ly as i32 - 2).maximum(0).minimum(6);
-            let dist_from_mid = (lx as i32 - mid).absolute();
+            let row_width = (ly as i32 - 2).max(0).min(6);
+            let dist_from_mid = (lx as i32 - mid).abs();
             ly > 2 && ly < 14 && dist_from_mid <= row_width / 2
         },
         _ => {
@@ -587,9 +587,9 @@ pub fn shader_mandelbrot(input: PixelInput) -> PixelOutput {
 const MAXIMUM_ITERATOR: u32 = 64;
     
     while zx * zx + zy * zy < 4.0 && iter < MAXIMUM_ITERATOR {
-        let temporary = zx * zx - zy * zy + cx;
+        let tmp = zx * zx - zy * zy + cx;
         zy = 2.0 * zx * zy + cy;
-        zx = temporary;
+        zx = tmp;
         iter += 1;
     }
     
@@ -626,7 +626,7 @@ pub fn shader_fire(input: PixelInput) -> PixelOutput {
     
     let base_heat = 1.0 - (y / h);
     let heat = base_heat * (0.5 + noise1 * 0.2 + noise2 * 0.2 + noise3 * 0.1);
-    let heat = heat.maximum(0.0).minimum(1.0);
+    let heat = heat.max(0.0).min(1.0);
     
     // Fire color gradient: black -> red -> orange -> yellow -> white
     let (r, g, b) = if heat < 0.2 {
@@ -662,7 +662,7 @@ pub fn shader_holomatrix_tunnel(input: PixelInput) -> PixelOutput {
     let cy = (input.y as f32 - h * 0.5) / (h * 0.5);
     
     // Polar coordinates from center
-    let radius = fast_sqrt(cx * cx + cy * cy).maximum(0.001);
+    let radius = fast_sqrt(cx * cx + cy * cy).max(0.001);
     let angle = fast_atan2(cy, cx);
     
     // === TUNNEL DEPTH ===
@@ -695,7 +695,7 @@ pub fn shader_holomatrix_tunnel(input: PixelInput) -> PixelOutput {
     
     // === DEPTH FOG / BRIGHTNESS ===
     // Near (high radius) = bright, Far (low radius / center) = dim
-    let fog = (radius * 1.5).minimum(1.0);
+    let fog = (radius * 1.5).min(1.0);
     let depth_pulse = (fast_sin(z * 3.0 + t * 4.0) * 0.15 + 0.85);
     let brightness = fog * depth_pulse;
     
@@ -713,7 +713,7 @@ pub fn shader_holomatrix_tunnel(input: PixelInput) -> PixelOutput {
     };
     
     // Add grid glow
-    let total_intensity = (base_intensity + grid_intensity * 0.4).minimum(1.0);
+    let total_intensity = (base_intensity + grid_intensity * 0.4).min(1.0);
     
     // Matrix green with holographic tint
     // Closer = more cyan/white, farther = darker green
@@ -727,10 +727,10 @@ pub fn shader_holomatrix_tunnel(input: PixelInput) -> PixelOutput {
     let flash_phase = (z * 8.0 + t * 10.0) % 1.0;
     if glyph_visible && flash_phase < 0.05 && radius < 0.8 {
         let flash = (1.0 - flash_phase / 0.05) * brightness;
-        let fr = (r as f32 + flash * 200.0).minimum(255.0) as u8;
-        let fg = (g as f32 + flash * 50.0).minimum(255.0) as u8;
-        let framebuffer = (b as f32 + flash * 200.0).minimum(255.0) as u8;
-        return PixelOutput::from_rgb(fr, fg, framebuffer);
+        let fr = (r as f32 + flash * 200.0).min(255.0) as u8;
+        let fg = (g as f32 + flash * 50.0).min(255.0) as u8;
+        let fb = (b as f32 + flash * 200.0).min(255.0) as u8;
+        return PixelOutput::from_rgb(fr, fg, fb);
     }
     
     PixelOutput::from_rgb(r, g, b)
@@ -740,30 +740,30 @@ pub fn shader_holomatrix_tunnel(input: PixelInput) -> PixelOutput {
 #[inline]
 fn tunnel_glyph_pattern(lx: f32, ly: f32, seed: u32) -> bool {
     let pattern = seed % 12;
-    let pixel = (lx * 8.0) as u32;
+    let px = (lx * 8.0) as u32;
     let py = (ly * 12.0) as u32;
     
         // Pattern matching — Rust's exhaustive branching construct.
 match pattern {
-        0 => py > 2 && py < 10 && (pixel == 2 || pixel == 5),  // ||
-        1 => py == 3 || py == 8 || (pixel == 4 && py > 2 && py < 10),  // =|=
-        2 => (pixel + py) % 3 == 0,  // Diagonal scatter
-        3 => pixel > 1 && pixel < 6 && (py == 2 || py == 9),  // Top/bottom bars
-        4 => (pixel == 3 || pixel == 4) && py > 1 && py < 11,  // Vertical line
-        5 => py > 2 && py < 10 && pixel > 1 && pixel < 6 && (py - 2) % 2 == 0,  // Horizontal stripes
+        0 => py > 2 && py < 10 && (px == 2 || px == 5),  // ||
+        1 => py == 3 || py == 8 || (px == 4 && py > 2 && py < 10),  // =|=
+        2 => (px + py) % 3 == 0,  // Diagonal scatter
+        3 => px > 1 && px < 6 && (py == 2 || py == 9),  // Top/bottom bars
+        4 => (px == 3 || px == 4) && py > 1 && py < 11,  // Vertical line
+        5 => py > 2 && py < 10 && px > 1 && px < 6 && (py - 2) % 2 == 0,  // Horizontal stripes
         6 => {  // Box outline
-            (py == 2 || py == 9) && pixel > 1 && pixel < 6 ||
-            (pixel == 2 || pixel == 5) && py > 2 && py < 9
+            (py == 2 || py == 9) && px > 1 && px < 6 ||
+            (px == 2 || px == 5) && py > 2 && py < 9
         },
-        7 => pixel == 3 && py > 1 && py < 11 || py == 6 && pixel > 0 && pixel < 7,  // Cross
-        8 => (pixel + py / 2) % 4 == 0,  // Diagonal lines
-        9 => py > 3 && py < 9 && ((pixel > 1 && pixel < 4) || (pixel > 4 && pixel < 7)),  // Two columns
+        7 => px == 3 && py > 1 && py < 11 || py == 6 && px > 0 && px < 7,  // Cross
+        8 => (px + py / 2) % 4 == 0,  // Diagonal lines
+        9 => py > 3 && py < 9 && ((px > 1 && px < 4) || (px > 4 && px < 7)),  // Two columns
         10 => {  // Triangle
             let center = 3.5;
-            let dist = if pixel as f32 > center { pixel as f32 - center } else { center - pixel as f32 };
+            let dist = if px as f32 > center { px as f32 - center } else { center - px as f32 };
             py > 2 && py < 10 && dist < (py - 2) as f32 * 0.4
         },
-        _ => (seed.wrapping_mul(pixel) ^ py) % 3 == 0,  // Random dots
+        _ => (seed.wrapping_mul(px) ^ py) % 3 == 0,  // Random dots
     }
 }
 
@@ -836,9 +836,9 @@ pub fn shader_holomatrix_parallax(input: PixelInput) -> PixelOutput {
     // Scanlines
     let scanline = if (y % 2) == 0 { 0.92 } else { 1.0 };
     
-    let r = (total_r * scanline).minimum(255.0) as u8;
-    let g = (total_g * scanline).minimum(255.0) as u8;
-    let b = (total_b * scanline).minimum(60.0) as u8;  // Keep it green-dominant
+    let r = (total_r * scanline).min(255.0) as u8;
+    let g = (total_g * scanline).min(255.0) as u8;
+    let b = (total_b * scanline).min(60.0) as u8;  // Keep it green-dominant
     
     PixelOutput::from_rgb(r, g, b)
 }
@@ -846,30 +846,30 @@ pub fn shader_holomatrix_parallax(input: PixelInput) -> PixelOutput {
 /// Single parallax layer of matrix rain
 fn parallax_layer(x: u32, y: u32, t: f32, h: u32, speed: f32, brightness: f32, 
                   cell_w: u32, cell_h: u32, seed_offset: u32) -> (f32, f32, f32) {
-    let column = x / cell_w;
+    let col = x / cell_w;
     let row = y / cell_h;
     let local_x = x % cell_w;
     let local_y = y % cell_h;
     
     // Column-based parameters
-    let column_seed = column.wrapping_add(seed_offset).wrapping_mul(2654435761);
+    let column_seed = col.wrapping_add(seed_offset).wrapping_mul(2654435761);
     let column_hash = (column_seed & 0xFFFF) as f32 / 65535.0;
     
     let column_speed = speed * (0.7 + column_hash * 0.6);
     let column_offset = ((column_seed >> 16) & 0xFFFF) as f32 / 65535.0 * 50.0;
-    let trail_length = 12.0 + column_hash * 20.0;
+    let trail_len = 12.0 + column_hash * 20.0;
     
     // Head position
     let head_row = ((t * column_speed * 8.0 + column_offset) % ((h / cell_h + 40) as f32)) as i32 - 20;
     let row_i = row as i32;
     let dist = head_row - row_i;
     
-    if dist < 0 || dist > trail_length as i32 {
+    if dist < 0 || dist > trail_len as i32 {
         return (0.0, 0.0, 0.0);
     }
     
     // Brightness based on trail position
-    let trail_position = dist as f32 / trail_length;
+    let trail_position = dist as f32 / trail_len;
     let intensity = if dist == 0 {
         brightness * 255.0
     } else {
@@ -877,7 +877,7 @@ fn parallax_layer(x: u32, y: u32, t: f32, h: u32, speed: f32, brightness: f32,
     };
     
     // Glyph pattern
-    let cell_seed = column.wrapping_mul(31337) ^ row.wrapping_mul(7919) ^ seed_offset;
+    let cell_seed = col.wrapping_mul(31337) ^ row.wrapping_mul(7919) ^ seed_offset;
     if !tunnel_glyph_pattern(local_x as f32 / cell_w as f32, 
                               local_y as f32 / cell_h as f32, cell_seed) {
         return (intensity * 0.05, intensity * 0.1, intensity * 0.03);
@@ -945,16 +945,16 @@ pub fn shader_matrix_shapes(input: PixelInput) -> PixelOutput {
     let mut hit_position = (0.0f32, 0.0f32, 0.0f32);
     
     for _step in 0..24 {  // Reduced from 64 to 24 for performance
-        let pixel = ro_x + rd_x * dist;
+        let px = ro_x + rd_x * dist;
         let py = ro_y + rd_y * dist;
         let pz = ro_z + rd_z * dist;
         
         // Get distance to all shapes
-        let (shape_dist, shape_id) = sdf_scene(pixel, py, pz, t);
+        let (shape_dist, shape_id) = sdf_scene(px, py, pz, t);
         
         if shape_dist < 0.02 {  // Slightly increased threshold
             hit_shape = shape_id;
-            hit_position = (pixel, py, pz);
+            hit_position = (px, py, pz);
             break;
         }
         
@@ -1025,8 +1025,8 @@ fn sdf_scene(x: f32, y: f32, z: f32, t: f32) -> (f32, u8) {
     
     // Rotate point around cube center
     let angle_y = t * 0.5;
-    let (receive, ry, rz) = rotate_point(x, y, z - cube_z, 0.0, angle_y);
-    let cube_dist = sdf_cube(receive, ry, rz, 0.6);
+    let (rx, ry, rz) = rotate_point(x, y, z - cube_z, 0.0, angle_y);
+    let cube_dist = sdf_cube(rx, ry, rz, 0.6);
     
     // Orbiting sphere
     let sphere_x = fast_cos(t * 0.7) * 1.0;
@@ -1056,11 +1056,11 @@ fn sdf_cube(x: f32, y: f32, z: f32, s: f32) -> f32 {
     let dz = fast_absolute(z) - s;
     
     let outside = fast_sqrt(
-        dx.maximum(0.0) * dx.maximum(0.0) + 
-        dy.maximum(0.0) * dy.maximum(0.0) + 
-        dz.maximum(0.0) * dz.maximum(0.0)
+        dx.max(0.0) * dx.max(0.0) + 
+        dy.max(0.0) * dy.max(0.0) + 
+        dz.max(0.0) * dz.max(0.0)
     );
-    let inside = dx.maximum(dy).maximum(dz).minimum(0.0);
+    let inside = dx.max(dy).max(dz).min(0.0);
     outside + inside
 }
 
@@ -1100,7 +1100,7 @@ fn sdf_normal(x: f32, y: f32, z: f32, t: f32) -> (f32, f32, f32) {
     let nx = dx - d;
     let ny = dy - d;
     let nz = dz - d;
-    let len = fast_sqrt(nx * nx + ny * ny + nz * nz).maximum(0.0001);
+    let len = fast_sqrt(nx * nx + ny * ny + nz * nz).max(0.0001);
     (nx / len, ny / len, nz / len)
 }
 
@@ -1125,11 +1125,11 @@ fn edge_glow(x: f32, y: f32, z: f32, _t: f32) -> f32 {
 
 /// Matrix rain background (simplified version for compositing)
 fn matrix_rain_background(x: u32, y: u32, w: f32, h: f32, t: f32) -> (u8, u8, u8) {
-    let column = (x as f32 / 16.0) as u32;
+    let col = (x as f32 / 16.0) as u32;
     let row = (y as f32 / 18.0) as u32;
     
     // Column-based random seed
-    let seed = column.wrapping_mul(31337) ^ 0xDEAD;
+    let seed = col.wrapping_mul(31337) ^ 0xDEAD;
     let fall_speed = 0.3 + ((seed % 100) as f32 / 100.0) * 0.7;
     let phase_offset = (seed % 1000) as f32 / 100.0;
     
@@ -1138,7 +1138,7 @@ fn matrix_rain_background(x: u32, y: u32, w: f32, h: f32, t: f32) -> (u8, u8, u8
     let row_norm = y as f32 / h;
     
     // Head position (brightest)
-    let head_dist = (fall_position - row_norm).absolute();
+    let head_dist = (fall_position - row_norm).abs();
     let is_head = head_dist < 0.03;
     
     // Trail fades from head
@@ -1147,7 +1147,7 @@ fn matrix_rain_background(x: u32, y: u32, w: f32, h: f32, t: f32) -> (u8, u8, u8
     let trail_fade = if in_trail { 1.0 - (fall_position - row_norm) / trail_length } else { 0.0 };
     
     // Glyph visibility (pseudo-random based on cell)
-    let cell_seed = column.wrapping_mul(7919) ^ row.wrapping_mul(31337);
+    let cell_seed = col.wrapping_mul(7919) ^ row.wrapping_mul(31337);
     let glyph_on = (cell_seed % 3) != 0;
     
     if is_head && glyph_on {
@@ -1207,7 +1207,7 @@ pub fn shader_matrix_rain_3d(input: PixelInput) -> PixelOutput {
     let cy = (input.y as f32 - h * 0.5) / (h * 0.5);
     
     // Polar coords
-    let radius = fast_sqrt(cx * cx + cy * cy).maximum(0.001);
+    let radius = fast_sqrt(cx * cx + cy * cy).max(0.001);
     let angle = fast_atan2(cy, cx);
     
     // Depth = inverse radius (center = far, edges = near)
@@ -1248,7 +1248,7 @@ pub fn shader_matrix_rain_3d(input: PixelInput) -> PixelOutput {
     
     // === BRIGHTNESS based on depth ===
     // Close (high radius) = bright, Far (low radius) = dim
-    let fog = (radius * 1.8).minimum(1.0);
+    let fog = (radius * 1.8).min(1.0);
     
     // Head glow - leading edge of rain drops
     let is_head = glyph_local_z < 0.25;
@@ -1287,22 +1287,22 @@ pub fn shader_matrix_rain_3d(input: PixelInput) -> PixelOutput {
 /// Glyph pattern for Matrix Rain 3D
 #[inline]
 fn matrix3d_glyph(lx: f32, ly: f32, seed: u32) -> bool {
-    let pixel = (lx * 6.0) as u32;
+    let px = (lx * 6.0) as u32;
     let py = (ly * 8.0) as u32;
     let pattern = seed % 10;
     
         // Pattern matching — Rust's exhaustive branching construct.
 match pattern {
-        0 => pixel > 1 && pixel < 5,                              // Vertical bar
+        0 => px > 1 && px < 5,                              // Vertical bar
         1 => py == 2 || py == 5,                            // Horizontal lines
-        2 => (pixel + py) % 2 == 0,                            // Checkerboard
-        3 => pixel == 3 || py == 4,                            // Cross
-        4 => py > 1 && py < 7 && pixel > 1 && pixel < 5,          // Block
-        5 => (pixel == 2 || pixel == 4) && py > 1 && py < 7,      // Parallel bars
-        6 => py == 3 || (pixel == 3 && py > 1 && py < 7),      // T shape
-        7 => (pixel + py / 2) % 3 == 0,                        // Diagonal
-        8 => py < 4 && pixel > 1 && pixel < 5,                    // Top half
-        _ => (seed.wrapping_mul(pixel + 1) ^ (py + 1)) % 3 == 0, // Random dots
+        2 => (px + py) % 2 == 0,                            // Checkerboard
+        3 => px == 3 || py == 4,                            // Cross
+        4 => py > 1 && py < 7 && px > 1 && px < 5,          // Block
+        5 => (px == 2 || px == 4) && py > 1 && py < 7,      // Parallel bars
+        6 => py == 3 || (px == 3 && py > 1 && py < 7),      // T shape
+        7 => (px + py / 2) % 3 == 0,                        // Diagonal
+        8 => py < 4 && px > 1 && px < 5,                    // Top half
+        _ => (seed.wrapping_mul(px + 1) ^ (py + 1)) % 3 == 0, // Random dots
     }
 }
 
@@ -1382,11 +1382,11 @@ pub fn shader_cosmic_deform(input: PixelInput) -> PixelOutput {
     
     let fr = fast_tanh(e_py1 * radial / (o_r + 0.001));
     let fg = fast_tanh(e_pyn1 * radial / (o_g + 0.001));
-    let framebuffer = fast_tanh(e_pyn2 * radial / (o_b + 0.001));
+    let fb = fast_tanh(e_pyn2 * radial / (o_b + 0.001));
     
-    let r = (fast_absolute(fr) * 255.0).minimum(255.0) as u8;
-    let g = (fast_absolute(fg) * 255.0).minimum(255.0) as u8;
-    let b = (fast_absolute(framebuffer) * 255.0).minimum(255.0) as u8;
+    let r = (fast_absolute(fr) * 255.0).min(255.0) as u8;
+    let g = (fast_absolute(fg) * 255.0).min(255.0) as u8;
+    let b = (fast_absolute(fb) * 255.0).min(255.0) as u8;
     PixelOutput::from_rgb(r, g, b)
 }
 
@@ -1394,7 +1394,7 @@ pub fn shader_cosmic_deform(input: PixelInput) -> PixelOutput {
 #[inline(always)]
 fn fast_tanh(x: f32) -> f32 {
     let x2 = x * x;
-    x / (1.0 + x.absolute() + x2 * 0.28)
+    x / (1.0 + x.abs() + x2 * 0.28)
 }
 
 /// Approximate exp for shader math (fast, rough)
@@ -1602,7 +1602,7 @@ struct MDrop {
     y: i16,              // Head row position (can be negative)
     speed: u8,           // Ticks per cell advance (1=fast, 8=slow)
     counter: u8,         // Current tick
-    trail_length: u8,       // Trail length in cells
+    trail_len: u8,       // Trail length in cells
     glyph_seed: u32,     // Seed for glyph selection
     active: bool,
     // Resonance lock system: when adjacent trail cells share the same glyph,
@@ -1615,7 +1615,7 @@ struct MDrop {
 impl MDrop {
     const fn new() -> Self {
         Self {
-            y: -100, speed: 2, counter: 0, trail_length: 20,
+            y: -100, speed: 2, counter: 0, trail_len: 20,
             glyph_seed: 0, active: false,
             locked_mask: 0, locked_glyphs: [0u8; 48],
         }
@@ -1642,9 +1642,9 @@ impl MDrop {
 /// Full matrix rain state (~60 KB total — fits in L2 cache)
 pub struct ShaderMatrixState {
     drops: [[MDrop; MDROPS]; MGRID_COLS],
-    column_depth: [u8; MGRID_COLS],   // 0=far (dim), 255=close (bright)
-    number_cols: usize,
-    number_rows: usize,
+    col_depth: [u8; MGRID_COLS],   // 0=far (dim), 255=close (bright)
+    num_cols: usize,
+    num_rows: usize,
     frame: u32,
     rng: u32,
     initialized: bool,
@@ -1655,9 +1655,9 @@ impl ShaderMatrixState {
     pub const fn new() -> Self {
         Self {
             drops: [[MDrop::new(); MDROPS]; MGRID_COLS],
-            column_depth: [128u8; MGRID_COLS],
-            number_cols: 0,
-            number_rows: 0,
+            col_depth: [128u8; MGRID_COLS],
+            num_cols: 0,
+            num_rows: 0,
             frame: 0,
             rng: 0xDEADBEEF,
             initialized: false,
@@ -1666,24 +1666,24 @@ impl ShaderMatrixState {
 
     /// Initialize with screen dimensions
     pub fn init(&mut self, screen_w: usize, screen_h: usize) {
-        self.number_cols = (screen_w / MCELL).minimum(MGRID_COLS);
-        self.number_rows = (screen_h / MCELL).minimum(MGRID_ROWS);
+        self.num_cols = (screen_w / MCELL).min(MGRID_COLS);
+        self.num_rows = (screen_h / MCELL).min(MGRID_ROWS);
         self.frame = 0;
         self.rng = 0xDEADBEEF;
 
         // Assign per-column depth using pseudo-noise for natural parallax
-        for column in 0..self.number_cols {
+        for col in 0..self.num_cols {
             self.rng = self.rng.wrapping_mul(1103515245).wrapping_add(12345);
             // Mix position-based pattern with randomness for layered parallax
-            let pattern = ((column * 17 + 53) % 97) as i32 - 48; // -48..+48
+            let pattern = ((col * 17 + 53) % 97) as i32 - 48; // -48..+48
             let random = (self.rng % 100) as i32 - 50;          // -50..+50
             let depth = (145i32 + pattern + random).clamp(20, 255) as u8;
-            self.column_depth[column] = depth;
+            self.col_depth[col] = depth;
         }
 
         // Initialize drops with staggered positions
-        for column in 0..self.number_cols {
-            let depth = self.column_depth[column];
+        for col in 0..self.num_cols {
+            let depth = self.col_depth[col];
             let df = depth as u32; // 0..255
 
             let mut next_offset: i32 = 0;
@@ -1692,7 +1692,7 @@ impl ShaderMatrixState {
 
                 // Trail length: closer = longer
                 let minimum_t = MTRAIL_MINIMUM as u32 + df / 8;           // 10..41
-                let maximum_t = (MTRAIL_MAXIMUM as u32).minimum(minimum_t + 20);  // min+20
+                let maximum_t = (MTRAIL_MAXIMUM as u32).min(minimum_t + 20);  // min+20
                 let trail = minimum_t + (self.rng % (maximum_t - minimum_t + 1));
 
                 self.rng = self.rng.wrapping_mul(1103515245).wrapping_add(12345);
@@ -1714,11 +1714,11 @@ impl ShaderMatrixState {
 
                 self.rng = self.rng.wrapping_mul(1103515245).wrapping_add(12345);
 
-                self.drops[column][di] = MDrop {
+                self.drops[col][di] = MDrop {
                     y: start_y as i16,
-                    speed: speed.minimum(8) as u8,
+                    speed: speed.min(8) as u8,
                     counter: (self.rng % speed) as u8,
-                    trail_length: trail.minimum(MTRAIL_MAXIMUM as u32) as u8,
+                    trail_len: trail.min(MTRAIL_MAXIMUM as u32) as u8,
                     glyph_seed: self.rng,
                     active: true,
                     locked_mask: 0,
@@ -1733,14 +1733,14 @@ impl ShaderMatrixState {
     /// Advance all drops — integer-only, no floats
     pub fn update(&mut self) {
         self.frame = self.frame.wrapping_add(1);
-        let maximum_y = self.number_rows as i32 + MTRAIL_MAXIMUM as i32 + 10;
+        let maximum_y = self.num_rows as i32 + MTRAIL_MAXIMUM as i32 + 10;
 
-        for column in 0..self.number_cols {
-            let depth = self.column_depth[column];
+        for col in 0..self.num_cols {
+            let depth = self.col_depth[col];
             let df = depth as u32;
 
             for di in 0..MDROPS {
-                let drop = &mut self.drops[column][di];
+                let drop = &mut self.drops[col][di];
                 if !drop.active { continue; }
 
                 // Speed counter
@@ -1755,7 +1755,7 @@ impl ShaderMatrixState {
                     // Scan trail for adjacent cells with identical glyph index.
                     // When found, lock both into that glyph for the rest of
                     // this drop's cycle. Already-locked positions keep their glyph.
-                    let tlen = drop.trail_length as usize;
+                    let tlen = drop.trail_len as usize;
                     if tlen >= 2 && tlen <= 48 {
                         let mut previous_index = drop.glyph_at(0) as u8;
                         for tp in 1..tlen {
@@ -1776,7 +1776,7 @@ impl ShaderMatrixState {
                     self.rng = self.rng.wrapping_mul(1103515245).wrapping_add(12345);
 
                     let minimum_t = MTRAIL_MINIMUM as u32 + df / 8;
-                    let maximum_t = (MTRAIL_MAXIMUM as u32).minimum(minimum_t + 20);
+                    let maximum_t = (MTRAIL_MAXIMUM as u32).min(minimum_t + 20);
                     let trail = minimum_t + (self.rng % (maximum_t - minimum_t + 1));
 
                     self.rng = self.rng.wrapping_mul(1103515245).wrapping_add(12345);
@@ -1790,9 +1790,9 @@ impl ShaderMatrixState {
 
                     self.rng = self.rng.wrapping_mul(1103515245).wrapping_add(12345);
                     drop.y = new_y as i16;
-                    drop.speed = speed.minimum(8) as u8;
+                    drop.speed = speed.min(8) as u8;
                     drop.counter = 0;
-                    drop.trail_length = trail.minimum(MTRAIL_MAXIMUM as u32) as u8;
+                    drop.trail_len = trail.min(MTRAIL_MAXIMUM as u32) as u8;
                     drop.glyph_seed = self.rng;
                     // Clear resonance locks for new cycle
                     drop.locked_mask = 0;
@@ -1809,9 +1809,9 @@ impl ShaderMatrixState {
 struct MatrixRenderContext {
     state: *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const ShaderMatrixState,
-    framebuffer: *mut u32,
-    framebuffer_width: usize,
-    framebuffer_height: usize,
+    fb: *mut u32,
+    fb_width: usize,
+    fb_height: usize,
 }
 
 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
@@ -1824,39 +1824,39 @@ impl Sync for MatrixRenderContext {}
 /// SMP worker: render column band [start..end)
 /// Each column writes to non-overlapping horizontal strips → no data races.
 fn matrix_column_worker(start: usize, end: usize, data: *mut u8) {
-    let context = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+    let ctx = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { &*(data as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const MatrixRenderContext) };
     let state = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*context.state };
-    let framebuffer = context.framebuffer;
-    let fw = context.framebuffer_width;
-    let fh = context.framebuffer_height;
-    let number_rows = state.number_rows;
+unsafe { &*ctx.state };
+    let fb = ctx.fb;
+    let fw = ctx.fb_width;
+    let fh = ctx.fb_height;
+    let num_rows = state.num_rows;
 
     // Reference the glyph table from matrix_fast
     let glyphs = &crate::matrix_fast::MATRIX_GLYPHS_6X6;
 
-    for column in start..end {
-        let depth = state.column_depth[column] as u32;
+    for col in start..end {
+        let depth = state.col_depth[col] as u32;
         // Depth brightness: far=40%, close=100%
         let depth_brightness = 100 + (depth * 155 / 255);
 
         for di in 0..MDROPS {
-            let drop = &state.drops[column][di];
+            let drop = &state.drops[col][di];
             if !drop.active { continue; }
 
             let head_y = drop.y as i32;
-            let trail_length = drop.trail_length as usize;
+            let trail_len = drop.trail_len as usize;
 
-            for tp in 0..trail_length {
+            for tp in 0..trail_len {
                 let cell_y = head_y - tp as i32;
-                if cell_y < 0 || cell_y >= number_rows as i32 { continue; }
+                if cell_y < 0 || cell_y >= num_rows as i32 { continue; }
 
                 // Intensity from LUT (exponential fade along trail)
-                let lut_index = (tp * 63) / trail_length.maximum(1);
-                let base_i = MINT_LUT[lut_index.minimum(63)] as u32;
-                let mut intensity = ((base_i * depth_brightness) / 255).minimum(255) as u8;
+                let lut_index = (tp * 63) / trail_len.max(1);
+                let base_i = MINT_LUT[lut_index.min(63)] as u32;
+                let mut intensity = ((base_i * depth_brightness) / 255).min(255) as u8;
                 if intensity < 2 { continue; }
 
                 // Select glyph: locked (resonant) or dynamic
@@ -1869,34 +1869,34 @@ unsafe { &*context.state };
                 //  - Locked/resonant cell: cyan-white glow (boosted intensity)
                 //  - Normal cell: standard green fade
                 let color = if tp == 0 {
-                    mcolor(intensity.maximum(250))
+                    mcolor(intensity.max(250))
                 } else if locked {
                     // Resonance glow: boost intensity by 40-80 and use glow LUT
-                    intensity = intensity.saturating_add(60).minimum(255);
+                    intensity = intensity.saturating_add(60).min(255);
                     mglow(intensity)
                 } else {
                     mcolor(intensity)
                 };
 
                 // Pixel position (1px inset for spacing like BrailleMatrix)
-                let pixel = column * MCELL + 1;
+                let px = col * MCELL + 1;
                 let py = cell_y as usize * MCELL + 1;
 
                 // Draw 6×6 glyph — unrolled, no bounds check in hot path
-                if py + 6 <= fh && pixel + 6 <= fw {
+                if py + 6 <= fh && px + 6 <= fw {
                     // Fast path: fully on-screen
                     for row in 0..6 {
                         let bits = glyph[row];
                         if bits == 0 { continue; }
-                        let row_base = (py + row) * fw + pixel;
+                        let row_base = (py + row) * fw + px;
                                                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-                            if bits & 0b000001 != 0 { *framebuffer.add(row_base)     = color; }
-                            if bits & 0b000010 != 0 { *framebuffer.add(row_base + 1) = color; }
-                            if bits & 0b000100 != 0 { *framebuffer.add(row_base + 2) = color; }
-                            if bits & 0b001000 != 0 { *framebuffer.add(row_base + 3) = color; }
-                            if bits & 0b010000 != 0 { *framebuffer.add(row_base + 4) = color; }
-                            if bits & 0b100000 != 0 { *framebuffer.add(row_base + 5) = color; }
+                            if bits & 0b000001 != 0 { *fb.add(row_base)     = color; }
+                            if bits & 0b000010 != 0 { *fb.add(row_base + 1) = color; }
+                            if bits & 0b000100 != 0 { *fb.add(row_base + 2) = color; }
+                            if bits & 0b001000 != 0 { *fb.add(row_base + 3) = color; }
+                            if bits & 0b010000 != 0 { *fb.add(row_base + 4) = color; }
+                            if bits & 0b100000 != 0 { *fb.add(row_base + 5) = color; }
                         }
                     }
                 }
@@ -1919,11 +1919,11 @@ static SHADER_MATRIX: spin::Mutex<ShaderMatrixState> =
 ///  4. SMP-dispatches glyph rendering across column bands
 ///
 /// Typical perf: ~12K glyph blits/frame vs 1M+ shader calls = 20-60× faster.
-pub fn shader_matrix_render(framebuffer: *mut u32, width: usize, height: usize) {
+pub fn shader_matrix_render(fb: *mut u32, width: usize, height: usize) {
     let mut state = SHADER_MATRIX.lock();
 
     // Lazy init
-    if !state.initialized || state.number_cols != width / MCELL || state.number_rows != height / MCELL {
+    if !state.initialized || state.num_cols != width / MCELL || state.num_rows != height / MCELL {
         state.init(width, height);
     }
 
@@ -1935,29 +1935,29 @@ pub fn shader_matrix_render(framebuffer: *mut u32, width: usize, height: usize) 
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
         #[cfg(target_arch = "x86_64")]
-        crate::graphics::simd::fill_row_sse2(framebuffer, total_pixels, 0xFF010201);
+        crate::graphics::simd::fill_row_sse2(fb, total_pixels, 0xFF010201);
         #[cfg(not(target_arch = "x86_64"))]
         {
             for i in 0..total_pixels {
-                *framebuffer.add(i) = 0xFF010201u32;
+                *fb.add(i) = 0xFF010201u32;
             }
         }
     }
 
     // SMP render: parallelize by column bands
-    let number_cols = state.number_cols;
-    let context = MatrixRenderContext {
+    let num_cols = state.num_cols;
+    let ctx = MatrixRenderContext {
         state: &*state as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const ShaderMatrixState,
-        framebuffer,
-        framebuffer_width: width,
-        framebuffer_height: height,
+        fb,
+        fb_width: width,
+        fb_height: height,
     };
 
     crate::cpu::smp::parallel_for(
-        number_cols,
+        num_cols,
         matrix_column_worker,
-        &context as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+        &ctx as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const MatrixRenderContext as *mut u8,
     );
 }

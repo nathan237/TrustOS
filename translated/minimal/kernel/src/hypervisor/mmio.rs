@@ -25,28 +25,28 @@
 
 
 #[derive(Debug, Clone)]
-pub struct Eh {
+pub struct Bt {
     
-    pub rm: bool,
+    pub is_write: bool,
     
-    pub aqc: u8,
+    pub operand_size: u8,
     
     
-    pub nw: Option<u8>,
+    pub register: Option<u8>,
     
-    pub cag: Option<u64>,
+    pub immediate: Option<u64>,
     
-    pub ake: usize,
+    pub insn_len: usize,
 }
 
 
 #[derive(Debug, Clone, Copy)]
 #[repr(u8)]
-pub enum Cyd {
-    J = 0, Fe = 1, Axm = 2, Ckf = 3,
-    Qo = 4, Qn = 5, Brf = 6, Bql = 7,
-    Alo = 8, Alp = 9, Alj = 10, Alk = 11,
-    All = 12, Alm = 13, Aln = 14, Aec = 15,
+pub enum Aww {
+    Rax = 0, Rcx = 1, Rdx = 2, Rbx = 3,
+    Rsp = 4, Rbp = 5, Rsi = 6, Rdi = 7,
+    R8 = 8, R9 = 9, R10 = 10, R11 = 11,
+    R12 = 12, R13 = 13, R14 = 14, R15 = 15,
 }
 
 
@@ -57,242 +57,242 @@ pub enum Cyd {
 
 
 
-pub fn cpw(hod: &[u8], nba: usize, ykx: bool) -> Option<Eh> {
-    if nba == 0 || hod.is_empty() {
+pub fn awu(insn_bytes: &[u8], bytes_fetched: usize, cs_long: bool) -> Option<Bt> {
+    if bytes_fetched == 0 || insn_bytes.is_empty() {
         return None;
     }
     
-    let bf = &hod[..nba.v(hod.len())];
-    let mut u: usize = 0;
+    let bytes = &insn_bytes[..bytes_fetched.min(insn_bytes.len())];
+    let mut pos: usize = 0;
     
     
-    let mut kf = false;
-    let mut ako = false;   
-    let mut nx = false;   
-    let mut ic = false;   
-    let mut fkd = false;  
-    let mut bus = false;  
-    let mut qcd = false;  
-    let mut msi = false;  
-    let mut msj = false;  
+    let mut dv = false;
+    let mut rex_w = false;   
+    let mut gb = false;   
+    let mut cq = false;   
+    let mut ckh = false;  
+    let mut alr = false;  
+    let mut jsn = false;  
+    let mut hdi = false;  
+    let mut hdj = false;  
     
     
-    while u < bf.len() {
-        match bf[u] {
-            0x66 => { fkd = true; u += 1; }
-            0x67 => { bus = true; u += 1; }
-            0xF0 => { qcd = true; u += 1; }
-            0xF2 => { msi = true; u += 1; }
-            0xF3 => { msj = true; u += 1; }
+    while pos < bytes.len() {
+        match bytes[pos] {
+            0x66 => { ckh = true; pos += 1; }
+            0x67 => { alr = true; pos += 1; }
+            0xF0 => { jsn = true; pos += 1; }
+            0xF2 => { hdi = true; pos += 1; }
+            0xF3 => { hdj = true; pos += 1; }
             
-            0x2E | 0x3E | 0x26 | 0x36 | 0x64 | 0x65 => { u += 1; }
+            0x2E | 0x3E | 0x26 | 0x36 | 0x64 | 0x65 => { pos += 1; }
             
-            o @ 0x40..=0x4F => {
-                kf = true;
-                ako = (o & 0x08) != 0;
-                nx = (o & 0x04) != 0;
-                ic = (o & 0x01) != 0;
-                u += 1;
+            b @ 0x40..=0x4F => {
+                dv = true;
+                rex_w = (b & 0x08) != 0;
+                gb = (b & 0x04) != 0;
+                cq = (b & 0x01) != 0;
+                pos += 1;
             }
             _ => break, 
         }
     }
     
-    if u >= bf.len() {
+    if pos >= bytes.len() {
         return None;
     }
     
     
     
-    let aqc: u8 = if ako {
+    let operand_size: u8 = if rex_w {
         8
-    } else if fkd {
+    } else if ckh {
         2
     } else {
         4
     };
     
-    let opcode = bf[u];
-    u += 1;
+    let opcode = bytes[pos];
+    pos += 1;
     
     match opcode {
         
         0x89 => {
-            if u >= bf.len() { return None; }
-            let ms = bf[u];
-            u += 1;
-            let (alq, ake) = dpt(ms, nx, ic, bus, bf, u)?;
-            Some(Eh {
-                rm: true,
-                aqc,
-                nw: Some(alq),
-                cag: None,
-                ake,
+            if pos >= bytes.len() { return None; }
+            let fi = bytes[pos];
+            pos += 1;
+            let (tb, insn_len) = blq(fi, gb, cq, alr, bytes, pos)?;
+            Some(Bt {
+                is_write: true,
+                operand_size,
+                register: Some(tb),
+                immediate: None,
+                insn_len,
             })
         }
         
         
         0x88 => {
-            if u >= bf.len() { return None; }
-            let ms = bf[u];
-            u += 1;
-            let (alq, ake) = dpt(ms, nx, ic, bus, bf, u)?;
-            Some(Eh {
-                rm: true,
-                aqc: 1,
-                nw: Some(alq),
-                cag: None,
-                ake,
+            if pos >= bytes.len() { return None; }
+            let fi = bytes[pos];
+            pos += 1;
+            let (tb, insn_len) = blq(fi, gb, cq, alr, bytes, pos)?;
+            Some(Bt {
+                is_write: true,
+                operand_size: 1,
+                register: Some(tb),
+                immediate: None,
+                insn_len,
             })
         }
         
         
         0x8B => {
-            if u >= bf.len() { return None; }
-            let ms = bf[u];
-            u += 1;
-            let (alq, ake) = dpt(ms, nx, ic, bus, bf, u)?;
-            Some(Eh {
-                rm: false,
-                aqc,
-                nw: Some(alq),
-                cag: None,
-                ake,
+            if pos >= bytes.len() { return None; }
+            let fi = bytes[pos];
+            pos += 1;
+            let (tb, insn_len) = blq(fi, gb, cq, alr, bytes, pos)?;
+            Some(Bt {
+                is_write: false,
+                operand_size,
+                register: Some(tb),
+                immediate: None,
+                insn_len,
             })
         }
         
         
         0x8A => {
-            if u >= bf.len() { return None; }
-            let ms = bf[u];
-            u += 1;
-            let (alq, ake) = dpt(ms, nx, ic, bus, bf, u)?;
-            Some(Eh {
-                rm: false,
-                aqc: 1,
-                nw: Some(alq),
-                cag: None,
-                ake,
+            if pos >= bytes.len() { return None; }
+            let fi = bytes[pos];
+            pos += 1;
+            let (tb, insn_len) = blq(fi, gb, cq, alr, bytes, pos)?;
+            Some(Bt {
+                is_write: false,
+                operand_size: 1,
+                register: Some(tb),
+                immediate: None,
+                insn_len,
             })
         }
         
         
         0xC7 => {
-            if u >= bf.len() { return None; }
-            let ms = bf[u];
-            let fsn = (ms >> 3) & 7;
-            if fsn != 0 { return None; } 
-            u += 1;
-            let (_, gzu) = dpt(ms, false, ic, bus, bf, u)?;
+            if pos >= bytes.len() { return None; }
+            let fi = bytes[pos];
+            let cpg = (fi >> 3) & 7;
+            if cpg != 0 { return None; } 
+            pos += 1;
+            let (_, base_insn_len) = blq(fi, false, cq, alr, bytes, pos)?;
             
-            let esj = gzu; 
-            let ldo = if ako { 4 } else if fkd { 2 } else { 4 }; 
-            if esj + ldo > bf.len() { return None; }
-            let gf = match ldo {
-                2 => u16::dj([bf[esj], bf[esj + 1]]) as u64,
+            let car = base_insn_len; 
+            let gbz = if rex_w { 4 } else if ckh { 2 } else { 4 }; 
+            if car + gbz > bytes.len() { return None; }
+            let imm = match gbz {
+                2 => u16::from_le_bytes([bytes[car], bytes[car + 1]]) as u64,
                 4 => {
-                    let p = u32::dj([
-                        bf[esj], bf[esj + 1],
-                        bf[esj + 2], bf[esj + 3],
+                    let v = u32::from_le_bytes([
+                        bytes[car], bytes[car + 1],
+                        bytes[car + 2], bytes[car + 3],
                     ]);
-                    if ako {
+                    if rex_w {
                         
-                        p as i32 as i64 as u64
+                        v as i32 as i64 as u64
                     } else {
-                        p as u64
+                        v as u64
                     }
                 }
                 _ => return None,
             };
-            Some(Eh {
-                rm: true,
-                aqc,
-                nw: None,
-                cag: Some(gf),
-                ake: esj + ldo,
+            Some(Bt {
+                is_write: true,
+                operand_size,
+                register: None,
+                immediate: Some(imm),
+                insn_len: car + gbz,
             })
         }
         
         
         0xC6 => {
-            if u >= bf.len() { return None; }
-            let ms = bf[u];
-            let fsn = (ms >> 3) & 7;
-            if fsn != 0 { return None; }
-            u += 1;
-            let (_, gzu) = dpt(ms, false, ic, bus, bf, u)?;
-            if gzu >= bf.len() { return None; }
-            let gf = bf[gzu] as u64;
-            Some(Eh {
-                rm: true,
-                aqc: 1,
-                nw: None,
-                cag: Some(gf),
-                ake: gzu + 1,
+            if pos >= bytes.len() { return None; }
+            let fi = bytes[pos];
+            let cpg = (fi >> 3) & 7;
+            if cpg != 0 { return None; }
+            pos += 1;
+            let (_, base_insn_len) = blq(fi, false, cq, alr, bytes, pos)?;
+            if base_insn_len >= bytes.len() { return None; }
+            let imm = bytes[base_insn_len] as u64;
+            Some(Bt {
+                is_write: true,
+                operand_size: 1,
+                register: None,
+                immediate: Some(imm),
+                insn_len: base_insn_len + 1,
             })
         }
         
         
         0x0F => {
-            if u >= bf.len() { return None; }
-            let uyu = bf[u];
-            u += 1;
+            if pos >= bytes.len() { return None; }
+            let nno = bytes[pos];
+            pos += 1;
             
-            match uyu {
+            match nno {
                 
                 0xB6 => {
-                    if u >= bf.len() { return None; }
-                    let ms = bf[u];
-                    u += 1;
-                    let (alq, ake) = dpt(ms, nx, ic, bus, bf, u)?;
-                    Some(Eh {
-                        rm: false,
-                        aqc: 1, 
-                        nw: Some(alq),
-                        cag: None,
-                        ake,
+                    if pos >= bytes.len() { return None; }
+                    let fi = bytes[pos];
+                    pos += 1;
+                    let (tb, insn_len) = blq(fi, gb, cq, alr, bytes, pos)?;
+                    Some(Bt {
+                        is_write: false,
+                        operand_size: 1, 
+                        register: Some(tb),
+                        immediate: None,
+                        insn_len,
                     })
                 }
                 
                 0xB7 => {
-                    if u >= bf.len() { return None; }
-                    let ms = bf[u];
-                    u += 1;
-                    let (alq, ake) = dpt(ms, nx, ic, bus, bf, u)?;
-                    Some(Eh {
-                        rm: false,
-                        aqc: 2,
-                        nw: Some(alq),
-                        cag: None,
-                        ake,
+                    if pos >= bytes.len() { return None; }
+                    let fi = bytes[pos];
+                    pos += 1;
+                    let (tb, insn_len) = blq(fi, gb, cq, alr, bytes, pos)?;
+                    Some(Bt {
+                        is_write: false,
+                        operand_size: 2,
+                        register: Some(tb),
+                        immediate: None,
+                        insn_len,
                     })
                 }
                 
                 0xBE => {
-                    if u >= bf.len() { return None; }
-                    let ms = bf[u];
-                    u += 1;
-                    let (alq, ake) = dpt(ms, nx, ic, bus, bf, u)?;
-                    Some(Eh {
-                        rm: false,
-                        aqc: 1,
-                        nw: Some(alq),
-                        cag: None,
-                        ake,
+                    if pos >= bytes.len() { return None; }
+                    let fi = bytes[pos];
+                    pos += 1;
+                    let (tb, insn_len) = blq(fi, gb, cq, alr, bytes, pos)?;
+                    Some(Bt {
+                        is_write: false,
+                        operand_size: 1,
+                        register: Some(tb),
+                        immediate: None,
+                        insn_len,
                     })
                 }
                 
                 0xBF => {
-                    if u >= bf.len() { return None; }
-                    let ms = bf[u];
-                    u += 1;
-                    let (alq, ake) = dpt(ms, nx, ic, bus, bf, u)?;
-                    Some(Eh {
-                        rm: false,
-                        aqc: 2,
-                        nw: Some(alq),
-                        cag: None,
-                        ake,
+                    if pos >= bytes.len() { return None; }
+                    let fi = bytes[pos];
+                    pos += 1;
+                    let (tb, insn_len) = blq(fi, gb, cq, alr, bytes, pos)?;
+                    Some(Bt {
+                        is_write: false,
+                        operand_size: 2,
+                        register: Some(tb),
+                        immediate: None,
+                        insn_len,
                     })
                 }
                 _ => None, 
@@ -302,53 +302,53 @@ pub fn cpw(hod: &[u8], nba: usize, ykx: bool) -> Option<Eh> {
         
         0xA1 => {
             
-            let fco = if bus { 4 } else { 8 }; 
-            let ake = u + fco;
-            Some(Eh {
-                rm: false,
-                aqc,
-                nw: Some(0), 
-                cag: None,
-                ake,
+            let cft = if alr { 4 } else { 8 }; 
+            let insn_len = pos + cft;
+            Some(Bt {
+                is_write: false,
+                operand_size,
+                register: Some(0), 
+                immediate: None,
+                insn_len,
             })
         }
         
         
         0xA3 => {
-            let fco = if bus { 4 } else { 8 };
-            let ake = u + fco;
-            Some(Eh {
-                rm: true,
-                aqc,
-                nw: Some(0), 
-                cag: None,
-                ake,
+            let cft = if alr { 4 } else { 8 };
+            let insn_len = pos + cft;
+            Some(Bt {
+                is_write: true,
+                operand_size,
+                register: Some(0), 
+                immediate: None,
+                insn_len,
             })
         }
         
         
         0xA0 => {
-            let fco = if bus { 4 } else { 8 };
-            let ake = u + fco;
-            Some(Eh {
-                rm: false,
-                aqc: 1,
-                nw: Some(0), 
-                cag: None,
-                ake,
+            let cft = if alr { 4 } else { 8 };
+            let insn_len = pos + cft;
+            Some(Bt {
+                is_write: false,
+                operand_size: 1,
+                register: Some(0), 
+                immediate: None,
+                insn_len,
             })
         }
         
         
         0xA2 => {
-            let fco = if bus { 4 } else { 8 };
-            let ake = u + fco;
-            Some(Eh {
-                rm: true,
-                aqc: 1,
-                nw: Some(0), 
-                cag: None,
-                ake,
+            let cft = if alr { 4 } else { 8 };
+            let insn_len = pos + cft;
+            Some(Bt {
+                is_write: true,
+                operand_size: 1,
+                register: Some(0), 
+                immediate: None,
+                insn_len,
             })
         }
         
@@ -360,54 +360,54 @@ pub fn cpw(hod: &[u8], nba: usize, ykx: bool) -> Option<Eh> {
 
 
 
-fn dpt(
-    ms: u8,
-    nx: bool,
-    yci: bool,
-    xzp: bool,
-    bf: &[u8],
-    vka: usize,
+fn blq(
+    fi: u8,
+    gb: bool,
+    _rex_b: bool,
+    _has_67: bool,
+    bytes: &[u8],
+    pos_after_modrm: usize,
 ) -> Option<(u8, usize)> {
-    let hrq = (ms >> 6) & 3;
-    let fsn = (ms >> 3) & 7;
-    let ext = ms & 7;
+    let dul = (fi >> 6) & 3;
+    let cpg = (fi >> 3) & 7;
+    let cdj = fi & 7;
     
     
-    let alq = fsn | (if nx { 8 } else { 0 });
+    let tb = cpg | (if gb { 8 } else { 0 });
     
-    let mut u = vka;
+    let mut pos = pos_after_modrm;
     
     
-    match hrq {
+    match dul {
         0b00 => {
             
-            if ext == 4 {
+            if cdj == 4 {
                 
-                u += 1; 
-                if u > bf.len() { return None; }
-                let iam = bf[u - 1];
-                let ar = iam & 7;
-                if ar == 5 {
-                    u += 4; 
+                pos += 1; 
+                if pos > bytes.len() { return None; }
+                let dzk = bytes[pos - 1];
+                let base = dzk & 7;
+                if base == 5 {
+                    pos += 4; 
                 }
-            } else if ext == 5 {
+            } else if cdj == 5 {
                 
-                u += 4;
+                pos += 4;
             }
         }
         0b01 => {
             
-            if ext == 4 {
-                u += 1; 
+            if cdj == 4 {
+                pos += 1; 
             }
-            u += 1; 
+            pos += 1; 
         }
         0b10 => {
             
-            if ext == 4 {
-                u += 1; 
+            if cdj == 4 {
+                pos += 1; 
             }
-            u += 4; 
+            pos += 4; 
         }
         0b11 => {
             
@@ -415,16 +415,16 @@ fn dpt(
         _ => unreachable!(),
     }
     
-    if u > bf.len() {
+    if pos > bytes.len() {
         return None;
     }
     
-    Some((alq, u))
+    Some((tb, pos))
 }
 
 
-pub fn paf(regs: &super::svm_vm::SvmGuestRegs, w: u8) -> u64 {
-    match w {
+pub fn iyl(regs: &super::svm_vm::SvmGuestRegs, idx: u8) -> u64 {
+    match idx {
         0 => regs.rax,
         1 => regs.rcx,
         2 => regs.rdx,
@@ -446,36 +446,36 @@ pub fn paf(regs: &super::svm_vm::SvmGuestRegs, w: u8) -> u64 {
 }
 
 
-pub fn pzy(regs: &mut super::svm_vm::SvmGuestRegs, w: u8, bn: u64) {
-    match w {
-        0 => regs.rax = bn,
-        1 => regs.rcx = bn,
-        2 => regs.rdx = bn,
-        3 => regs.rbx = bn,
-        4 => regs.rsp = bn,
-        5 => regs.rbp = bn,
-        6 => regs.rsi = bn,
-        7 => regs.rdi = bn,
-        8 => regs.r8 = bn,
-        9 => regs.r9 = bn,
-        10 => regs.r10 = bn,
-        11 => regs.r11 = bn,
-        12 => regs.r12 = bn,
-        13 => regs.r13 = bn,
-        14 => regs.r14 = bn,
-        15 => regs.r15 = bn,
+pub fn jro(regs: &mut super::svm_vm::SvmGuestRegs, idx: u8, value: u64) {
+    match idx {
+        0 => regs.rax = value,
+        1 => regs.rcx = value,
+        2 => regs.rdx = value,
+        3 => regs.rbx = value,
+        4 => regs.rsp = value,
+        5 => regs.rbp = value,
+        6 => regs.rsi = value,
+        7 => regs.rdi = value,
+        8 => regs.r8 = value,
+        9 => regs.r9 = value,
+        10 => regs.r10 = value,
+        11 => regs.r11 = value,
+        12 => regs.r12 = value,
+        13 => regs.r13 = value,
+        14 => regs.r14 = value,
+        15 => regs.r15 = value,
         _ => {}
     }
 }
 
 
-pub fn old(bn: u64, aw: u8) -> u64 {
-    match aw {
-        1 => bn & 0xFF,
-        2 => bn & 0xFFFF,
-        4 => bn & 0xFFFF_FFFF,
-        8 => bn,
-        _ => bn & 0xFFFF_FFFF,
+pub fn ilw(value: u64, size: u8) -> u64 {
+    match size {
+        1 => value & 0xFF,
+        2 => value & 0xFFFF,
+        4 => value & 0xFFFF_FFFF,
+        8 => value,
+        _ => value & 0xFFFF_FFFF,
     }
 }
 
@@ -488,56 +488,56 @@ mod tests {
     use super::*;
 
     #[test]
-    fn zrm() {
+    fn qzg() {
         
-        let bf = [0x89, 0x07];
-        let bc = cpw(&bf, 2, true).unwrap();
-        assert!(bc.rm);
-        assert_eq!(bc.aqc, 4);
-        assert_eq!(bc.nw, Some(0)); 
-        assert_eq!(bc.ake, 2);
+        let bytes = [0x89, 0x07];
+        let d = awu(&bytes, 2, true).unwrap();
+        assert!(d.is_write);
+        assert_eq!(d.operand_size, 4);
+        assert_eq!(d.register, Some(0)); 
+        assert_eq!(d.insn_len, 2);
     }
 
     #[test]
-    fn zrl() {
+    fn qzf() {
         
-        let bf = [0x8B, 0x0F];
-        let bc = cpw(&bf, 2, true).unwrap();
-        assert!(!bc.rm);
-        assert_eq!(bc.aqc, 4);
-        assert_eq!(bc.nw, Some(1)); 
-        assert_eq!(bc.ake, 2);
+        let bytes = [0x8B, 0x0F];
+        let d = awu(&bytes, 2, true).unwrap();
+        assert!(!d.is_write);
+        assert_eq!(d.operand_size, 4);
+        assert_eq!(d.register, Some(1)); 
+        assert_eq!(d.insn_len, 2);
     }
 
     #[test]
-    fn zro() {
+    fn qzi() {
         
-        let bf = [0x48, 0x89, 0x07];
-        let bc = cpw(&bf, 3, true).unwrap();
-        assert!(bc.rm);
-        assert_eq!(bc.aqc, 8);
-        assert_eq!(bc.nw, Some(0)); 
-        assert_eq!(bc.ake, 3);
+        let bytes = [0x48, 0x89, 0x07];
+        let d = awu(&bytes, 3, true).unwrap();
+        assert!(d.is_write);
+        assert_eq!(d.operand_size, 8);
+        assert_eq!(d.register, Some(0)); 
+        assert_eq!(d.insn_len, 3);
     }
 
     #[test]
-    fn zrn() {
+    fn qzh() {
         
-        let bf = [0x0F, 0xB6, 0x07];
-        let bc = cpw(&bf, 3, true).unwrap();
-        assert!(!bc.rm);
-        assert_eq!(bc.aqc, 1);
-        assert_eq!(bc.nw, Some(0)); 
+        let bytes = [0x0F, 0xB6, 0x07];
+        let d = awu(&bytes, 3, true).unwrap();
+        assert!(!d.is_write);
+        assert_eq!(d.operand_size, 1);
+        assert_eq!(d.register, Some(0)); 
     }
 
     #[test]  
-    fn zrk() {
+    fn qze() {
         
-        let bf = [0x8B, 0x87, 0x20, 0x03, 0x00, 0x00];
-        let bc = cpw(&bf, 6, true).unwrap();
-        assert!(!bc.rm);
-        assert_eq!(bc.aqc, 4);
-        assert_eq!(bc.nw, Some(0)); 
-        assert_eq!(bc.ake, 6);
+        let bytes = [0x8B, 0x87, 0x20, 0x03, 0x00, 0x00];
+        let d = awu(&bytes, 6, true).unwrap();
+        assert!(!d.is_write);
+        assert_eq!(d.operand_size, 4);
+        assert_eq!(d.register, Some(0)); 
+        assert_eq!(d.insn_len, 6);
     }
 }

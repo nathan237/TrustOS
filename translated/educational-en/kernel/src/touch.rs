@@ -220,19 +220,19 @@ struct EventRingBuffer {
     phases: [AtomicU8; EVENT_BUFFER_SIZE],
     timestamps: [AtomicU64; EVENT_BUFFER_SIZE],
     /// Write index (only modified by producer/IRQ)
-    write_index: AtomicU32,
+    write_idx: AtomicU32,
     /// Read index (only modified by consumer/main)
-    read_index: AtomicU32,
+    read_idx: AtomicU32,
 }
 
 // Helper macro for initializing atomic arrays
 macro_rules! atomic_array {
     ($    // Type alias — gives an existing type a new name for clarity.
-type:ty, $value:expr, $n:expr) => {{
+type:ty, $val:expr, $n:expr) => {{
         // Workaround: const array init doesn't work for AtomicXXX in static,
         // so we use a const helper.
         const INIT: $// Type alias — gives an existing type a new name for clarity.
-type = $value;
+type = $val;
         [INIT; $n]
     }};
 }
@@ -245,48 +245,48 @@ static EVENT_RING: EventRingBuffer = EventRingBuffer {
     pressures: atomic_array!(AtomicU8, AtomicU8::new(0), EVENT_BUFFER_SIZE),
     phases: atomic_array!(AtomicU8, AtomicU8::new(0), EVENT_BUFFER_SIZE),
     timestamps: atomic_array!(AtomicU64, AtomicU64::new(0), EVENT_BUFFER_SIZE),
-    write_index: AtomicU32::new(0),
-    read_index: AtomicU32::new(0),
+    write_idx: AtomicU32::new(0),
+    read_idx: AtomicU32::new(0),
 };
 
 // Implementation block — defines methods for the type above.
 impl EventRingBuffer {
     /// Push a touch event (called from IRQ / injection context)
     fn push(&self, point: &TouchPoint) {
-        let w = self.write_index.load(Ordering::Relaxed);
-        let index = (w as usize) & EVENT_BUFFER_MASK;
+        let w = self.write_idx.load(Ordering::Relaxed);
+        let idx = (w as usize) & EVENT_BUFFER_MASK;
 
-        self.ids[index].store(point.id, Ordering::Relaxed);
-        self.xs[index].store(point.x, Ordering::Relaxed);
-        self.ys[index].store(point.y, Ordering::Relaxed);
-        self.pressures[index].store(point.pressure, Ordering::Relaxed);
-        self.phases[index].store(point.phase as u8, Ordering::Relaxed);
-        self.timestamps[index].store(point.timestamp_us, Ordering::Relaxed);
+        self.ids[idx].store(point.id, Ordering::Relaxed);
+        self.xs[idx].store(point.x, Ordering::Relaxed);
+        self.ys[idx].store(point.y, Ordering::Relaxed);
+        self.pressures[idx].store(point.pressure, Ordering::Relaxed);
+        self.phases[idx].store(point.phase as u8, Ordering::Relaxed);
+        self.timestamps[idx].store(point.timestamp_us, Ordering::Relaxed);
 
         // Advance write index (Release ensures data is visible before index)
-        self.write_index.store(w.wrapping_add(1), Ordering::Release);
+        self.write_idx.store(w.wrapping_add(1), Ordering::Release);
     }
 
     /// Pop a touch event (called from main/gesture thread)
     fn pop(&self) -> Option<TouchEvent> {
-        let r = self.read_index.load(Ordering::Relaxed);
-        let w = self.write_index.load(Ordering::Acquire);
+        let r = self.read_idx.load(Ordering::Relaxed);
+        let w = self.write_idx.load(Ordering::Acquire);
 
         if r == w {
             return None; // Empty
         }
 
-        let index = (r as usize) & EVENT_BUFFER_MASK;
+        let idx = (r as usize) & EVENT_BUFFER_MASK;
         let point = TouchPoint {
-            id: self.ids[index].load(Ordering::Relaxed),
-            x: self.xs[index].load(Ordering::Relaxed),
-            y: self.ys[index].load(Ordering::Relaxed),
-            pressure: self.pressures[index].load(Ordering::Relaxed),
-            phase: TouchPhase::from_u8(self.phases[index].load(Ordering::Relaxed)),
-            timestamp_us: self.timestamps[index].load(Ordering::Relaxed),
+            id: self.ids[idx].load(Ordering::Relaxed),
+            x: self.xs[idx].load(Ordering::Relaxed),
+            y: self.ys[idx].load(Ordering::Relaxed),
+            pressure: self.pressures[idx].load(Ordering::Relaxed),
+            phase: TouchPhase::from_u8(self.phases[idx].load(Ordering::Relaxed)),
+            timestamp_us: self.timestamps[idx].load(Ordering::Relaxed),
         };
 
-        self.read_index.store(r.wrapping_add(1), Ordering::Release);
+        self.read_idx.store(r.wrapping_add(1), Ordering::Release);
         Some(TouchEvent { point })
     }
 }
@@ -365,8 +365,8 @@ pub fn poll_event() -> Option<TouchEvent> {
 
 /// Drain all pending events into a callback
 pub fn drain_events<F: FnMut(TouchEvent)>(mut f: F) {
-    while let Some(event) = EVENT_RING.pop() {
-        f(event);
+    while let Some(evt) = EVENT_RING.pop() {
+        f(evt);
     }
 }
 
@@ -381,8 +381,8 @@ pub fn drain_events<F: FnMut(TouchEvent)>(mut f: F) {
 pub fn inject_raw(id: u16, raw_x: u32, raw_y: u32, pressure: u8, phase: TouchPhase) {
     let screen_w = SCREEN_WIDTH.load(Ordering::Relaxed);
     let screen_h = SCREEN_HEIGHT.load(Ordering::Relaxed);
-    let device_maximum_x = DEVICE_MAXIMUM_X.load(Ordering::Relaxed).maximum(1);
-    let device_maximum_y = DEVICE_MAXIMUM_Y.load(Ordering::Relaxed).maximum(1);
+    let device_maximum_x = DEVICE_MAXIMUM_X.load(Ordering::Relaxed).max(1);
+    let device_maximum_y = DEVICE_MAXIMUM_Y.load(Ordering::Relaxed).max(1);
 
     // Scale device coordinates → screen pixels
     let x = ((raw_x as u64 * screen_w as u64) / device_maximum_x as u64) as i32;
@@ -410,8 +410,8 @@ pub fn inject_screen(id: u16, x: i32, y: i32, pressure: u8, phase: TouchPhase) {
 
     // Update slot
     let slot_index = find_or_allocator_slot(id, phase);
-    if let Some(index) = slot_index {
-        TOUCH_SLOTS[index].store(&point);
+    if let Some(idx) = slot_index {
+        TOUCH_SLOTS[idx].store(&point);
     }
 
     // Update active count

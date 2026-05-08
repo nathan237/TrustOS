@@ -122,10 +122,10 @@ pub extern "C" fn syscall_handler_rust(
     use crate::syscall::linux::nr::RT_SIGRETURN;
     
     // Forward all arguments to the full handler
-    let return_value = crate::syscall::handle_full(num, arg1, arg2, arg3, arg4, arg5, arg6);
+    let ret = crate::syscall::handle_full(num, arg1, arg2, arg3, arg4, arg5, arg6);
 
     // Emit structured syscall event to TrustLab trace bus
-    crate::lab_mode::trace_bus::emit_syscall(num, [arg1, arg2, arg3], return_value);
+    crate::lab_mode::trace_bus::emit_syscall(num, [arg1, arg2, arg3], ret);
 
     // ── Signal delivery on return to userspace ──
     // Skip for rt_sigreturn (it handles its own context restoration)
@@ -134,7 +134,7 @@ pub extern "C" fn syscall_handler_rust(
         unsafe {
             let result = crate::signals::sigreturn_restore(
                 &mut crate::userland::USER_RETURN_RIP,
-                &mut crate::userland::USER_RSP_TEMPORARY,
+                &mut crate::userland::USER_RSP_TEMP,
                 &mut crate::userland::USER_RETURN_RFLAGS,
             );
             return result as u64;
@@ -145,9 +145,9 @@ pub extern "C" fn syscall_handler_rust(
     unsafe {
         if let Some(signo) = crate::signals::try_deliver_signal(
             &mut crate::userland::USER_RETURN_RIP,
-            &mut crate::userland::USER_RSP_TEMPORARY,
+            &mut crate::userland::USER_RSP_TEMP,
             &mut crate::userland::USER_RETURN_RFLAGS,
-            return_value as u64,
+            ret as u64,
         ) {
             // Signal is being delivered — the return context has been
             // redirected to the signal handler.
@@ -158,5 +158,5 @@ pub extern "C" fn syscall_handler_rust(
         }
     }
 
-    return_value as u64
+    ret as u64
 }

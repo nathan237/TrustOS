@@ -2,21 +2,21 @@
 
 
 
-use x86_64::structures::idt::{Fi, PageFaultErrorCode};
+use x86_64::structures::idt::{InterruptStackFrame, PageFaultErrorCode};
 use core::sync::atomic::{AtomicBool, Ordering};
-use super::pic::{self, Qh};
+use super::pic::{self, Gv};
 
 
-pub extern "x86-interrupt" fn qru(amw: Fi) {
-    crate::log_warn!("EXCEPTION: BREAKPOINT\n{:#?}", amw);
+pub extern "x86-interrupt" fn kdu(stack_frame: InterruptStackFrame) {
+    crate::log_warn!("EXCEPTION: BREAKPOINT\n{:#?}", stack_frame);
 }
 
 
-pub extern "x86-interrupt" fn sap(
-    amw: Fi,
-    xza: u64,
+pub extern "x86-interrupt" fn lhg(
+    stack_frame: InterruptStackFrame,
+    _error_code: u64,
 ) -> ! {
-    panic!("EXCEPTION: DOUBLE FAULT\n{:#?}", amw);
+    panic!("EXCEPTION: DOUBLE FAULT\n{:#?}", stack_frame);
 }
 
 
@@ -24,94 +24,94 @@ pub extern "x86-interrupt" fn sap(
 
 
 
-pub extern "x86-interrupt" fn vaw(
-    amw: Fi,
+pub extern "x86-interrupt" fn npj(
+    stack_frame: InterruptStackFrame,
     error_code: PageFaultErrorCode,
 ) {
     use x86_64::registers::control::Cr2;
     use crate::memory::paging::{PageFlags, UserMemoryRegion};
     
-    let bha = Cr2::read().cvr();
+    let aff = Cr2::read().as_u64();
     
     
-    crate::trace::bry(crate::trace::EventType::Mb, bha);
+    crate::trace::akj(crate::trace::EventType::PageFault, aff);
     
     
-    let lgo = error_code.contains(PageFaultErrorCode::EJR_);
-    let lgk = error_code.contains(PageFaultErrorCode::EBG_);
-    let rm = error_code.contains(PageFaultErrorCode::DEJ_);
+    let gee = error_code.contains(PageFaultErrorCode::USER_MODE);
+    let gea = error_code.contains(PageFaultErrorCode::PROTECTION_VIOLATION);
+    let is_write = error_code.contains(PageFaultErrorCode::CAUSED_BY_WRITE);
     
     
-    if lgo && lgk && rm {
-        if crate::memory::cow::tjf(bha) {
+    if gee && gea && is_write {
+        if crate::memory::cow::mhn(aff) {
             return; 
         }
     }
     
     
-    if lgo && !lgk {
-        let jm: u64;
-        unsafe { core::arch::asm!("mov {}, cr3", bd(reg) jm, options(nostack, preserves_flags)); }
-        if crate::memory::swap::tla(jm, bha) {
+    if gee && !gea {
+        let cr3: u64;
+        unsafe { core::arch::asm!("mov {}, cr3", out(reg) cr3, options(nostack, preserves_flags)); }
+        if crate::memory::swap::mim(cr3, aff) {
             return; 
         }
     }
     
-    if lgo && !lgk {
+    if gee && !gea {
         
-        let dkk = bha & !0xFFF;
-        
-        
-        let tsl = bha >= UserMemoryRegion::CF_
-            && bha < crate::exec::dfj();
-        
-        let eiy = crate::exec::rsb();
-        let tsp = eiy > 0
-            && bha >= eiy.ao(4096 * 16) 
-            && bha < UserMemoryRegion::PP_;
+        let page_addr = aff & !0xFFF;
         
         
-        let klt: u64;
-        unsafe { core::arch::asm!("mov {}, cr3", bd(reg) klt, options(nostack, preserves_flags)); }
-        let vma = crate::memory::vma::uii(klt, bha);
+        let mok = aff >= UserMemoryRegion::CH_
+            && aff < crate::exec::bfr();
         
-        if tsl || tsp || vma.is_some() {
+        let bvx = crate::exec::lap();
+        let mon = bvx > 0
+            && aff >= bvx.saturating_sub(4096 * 16) 
+            && aff < UserMemoryRegion::QM_;
+        
+        
+        let cr3_val: u64;
+        unsafe { core::arch::asm!("mov {}, cr3", out(reg) cr3_val, options(nostack, preserves_flags)); }
+        let vma = crate::memory::vma::nas(cr3_val, aff);
+        
+        if mok || mon || vma.is_some() {
             
-            let vay = if let Some(ref vma) = vma {
-                crate::memory::vma::vni(vma.prot)
+            let npl = if let Some(ref vma) = vma {
+                crate::memory::vma::nyx(vma.prot)
             } else {
-                PageFlags::EW_
+                PageFlags::FM_
             };
             
             
-            let ht = crate::memory::frame::azg()
-                .or_else(|| crate::memory::swap::xmm()); 
-            if let Some(ht) = ht {
-                let lki = crate::exec::jwy(|atm| {
-                    atm.bnl(dkk, ht, vay)
+            let phys = crate::memory::frame::aan()
+                .or_else(|| crate::memory::swap::pnu()); 
+            if let Some(phys) = phys {
+                let ggn = crate::exec::ffh(|space| {
+                    space.map_page(page_addr, phys, npl)
                 });
                 
-                if lki == Some(Some(())) {
+                if ggn == Some(Some(())) {
                     
-                    crate::memory::swap::xlm(klt, dkk, ht);
+                    crate::memory::swap::pmx(cr3_val, page_addr, phys);
                     return; 
                 }
                 
                 
-                crate::memory::frame::apt(ht);
+                crate::memory::frame::vk(phys);
             }
             
             
-            crate::serial_println!("[PF] OOM for demand page at {:#x}, killing user process", bha);
-            unsafe { crate::userland::ctw(-11); } 
+            crate::serial_println!("[PF] OOM for demand page at {:#x}, killing user process", aff);
+            unsafe { crate::userland::azi(-11); } 
         }
         
         
         crate::serial_println!(
             "[PF] SEGFAULT: user accessed invalid addr {:#x} (brk={:#x}, stack_bottom={:#x})",
-            bha, crate::exec::dfj(), eiy
+            aff, crate::exec::bfr(), bvx
         );
-        unsafe { crate::userland::ctw(-11); } 
+        unsafe { crate::userland::azi(-11); } 
     }
     
     
@@ -120,27 +120,27 @@ pub extern "x86-interrupt" fn vaw(
         Accessed Address: {:#x}\n\
         Error Code: {:?}\n\
         {:#?}",
-        bha,
+        aff,
         error_code,
-        amw
+        stack_frame
     );
     
-    panic!("Page fault at {:#x}", bha);
+    panic!("Page fault at {:#x}", aff);
 }
 
 
-pub extern "x86-interrupt" fn tbw(
-    amw: Fi,
+pub extern "x86-interrupt" fn mce(
+    stack_frame: InterruptStackFrame,
     error_code: u64,
 ) {
     
-    if amw.dzo & 3 == 3 {
+    if stack_frame.code_segment & 3 == 3 {
         crate::serial_println!(
             "[GPF] User-mode GPF at RIP={:#x} error_code={}, killing process",
-            amw.edk.cvr(),
+            stack_frame.instruction_pointer.as_u64(),
             error_code
         );
-        unsafe { crate::userland::ctw(-11); } 
+        unsafe { crate::userland::azi(-11); } 
     }
 
     
@@ -148,166 +148,166 @@ pub extern "x86-interrupt" fn tbw(
         "EXCEPTION: GENERAL PROTECTION FAULT\n\
         Error Code: {}\n\
         {:#?}",
-        error_code, amw
+        error_code, stack_frame
     );
 }
 
 
-pub extern "x86-interrupt" fn tvz(amw: Fi) {
+pub extern "x86-interrupt" fn mrl(stack_frame: InterruptStackFrame) {
     
-    if amw.dzo & 3 == 3 {
+    if stack_frame.code_segment & 3 == 3 {
         crate::serial_println!(
             "[UD] User-mode invalid opcode at RIP={:#x}, killing process",
-            amw.edk.cvr()
+            stack_frame.instruction_pointer.as_u64()
         );
-        unsafe { crate::userland::ctw(-4); } 
+        unsafe { crate::userland::azi(-4); } 
     }
 
     
-    panic!("EXCEPTION: INVALID OPCODE\n{:#?}", amw);
+    panic!("EXCEPTION: INVALID OPCODE\n{:#?}", stack_frame);
 }
 
 
-pub extern "x86-interrupt" fn rze(amw: Fi) {
+pub extern "x86-interrupt" fn lgb(stack_frame: InterruptStackFrame) {
     
-    if amw.dzo & 3 == 3 {
+    if stack_frame.code_segment & 3 == 3 {
         crate::serial_println!(
             "[DE] User-mode divide error at RIP={:#x}, killing process",
-            amw.edk.cvr()
+            stack_frame.instruction_pointer.as_u64()
         );
-        unsafe { crate::userland::ctw(-8); } 
+        unsafe { crate::userland::azi(-8); } 
     }
 
     
-    panic!("EXCEPTION: DIVIDE BY ZERO\n{:#?}", amw);
+    panic!("EXCEPTION: DIVIDE BY ZERO\n{:#?}", stack_frame);
 }
 
 
-pub extern "x86-interrupt" fn rxc(amw: Fi) {
-    if amw.dzo & 3 == 3 {
+pub extern "x86-interrupt" fn lef(stack_frame: InterruptStackFrame) {
+    if stack_frame.code_segment & 3 == 3 {
         crate::serial_println!(
             "[NM] User-mode #NM at RIP={:#x}, killing process",
-            amw.edk.cvr()
+            stack_frame.instruction_pointer.as_u64()
         );
-        unsafe { crate::userland::ctw(-4); } 
+        unsafe { crate::userland::azi(-4); } 
     }
-    panic!("EXCEPTION: DEVICE NOT AVAILABLE (#NM) — FPU/SSE not enabled\n{:#?}", amw);
+    panic!("EXCEPTION: DEVICE NOT AVAILABLE (#NM) — FPU/SSE not enabled\n{:#?}", stack_frame);
 }
 
 
-pub extern "x86-interrupt" fn wsd(
-    amw: Fi,
+pub extern "x86-interrupt" fn ovu(
+    stack_frame: InterruptStackFrame,
     error_code: u64,
 ) {
-    if amw.dzo & 3 == 3 {
+    if stack_frame.code_segment & 3 == 3 {
         crate::serial_println!(
             "[SS] User-mode stack fault at RIP={:#x} error_code={}, killing process",
-            amw.edk.cvr(),
+            stack_frame.instruction_pointer.as_u64(),
             error_code
         );
-        unsafe { crate::userland::ctw(-11); } 
+        unsafe { crate::userland::azi(-11); } 
     }
     panic!(
         "EXCEPTION: STACK-SEGMENT FAULT (#SS)\nError Code: {}\n{:#?}",
-        error_code, amw
+        error_code, stack_frame
     );
 }
 
 
-pub extern "x86-interrupt" fn xwg(amw: Fi) {
-    if amw.dzo & 3 == 3 {
+pub extern "x86-interrupt" fn pvp(stack_frame: InterruptStackFrame) {
+    if stack_frame.code_segment & 3 == 3 {
         crate::serial_println!(
             "[MF] User-mode x87 FPU error at RIP={:#x}, killing process",
-            amw.edk.cvr()
+            stack_frame.instruction_pointer.as_u64()
         );
-        unsafe { crate::userland::ctw(-8); } 
+        unsafe { crate::userland::azi(-8); } 
     }
-    panic!("EXCEPTION: x87 FPU ERROR (#MF)\n{:#?}", amw);
+    panic!("EXCEPTION: x87 FPU ERROR (#MF)\n{:#?}", stack_frame);
 }
 
 
-pub extern "x86-interrupt" fn wok(amw: Fi) {
-    if amw.dzo & 3 == 3 {
+pub extern "x86-interrupt" fn osw(stack_frame: InterruptStackFrame) {
+    if stack_frame.code_segment & 3 == 3 {
         crate::serial_println!(
             "[XM] User-mode SIMD exception at RIP={:#x}, killing process",
-            amw.edk.cvr()
+            stack_frame.instruction_pointer.as_u64()
         );
-        unsafe { crate::userland::ctw(-8); } 
+        unsafe { crate::userland::azi(-8); } 
     }
-    panic!("EXCEPTION: SIMD FLOATING-POINT (#XM)\n{:#?}", amw);
+    panic!("EXCEPTION: SIMD FLOATING-POINT (#XM)\n{:#?}", stack_frame);
 }
 
 
-pub extern "x86-interrupt" fn xhi(elu: Fi) {
-    if !LY_.load(Ordering::Relaxed) {
+pub extern "x86-interrupt" fn pjr(_stack_frame: InterruptStackFrame) {
+    if !MV_.load(Ordering::Relaxed) {
         unsafe {
-            Qh.lock().goa(pic::InterruptIndex::Timer.gaj());
+            Gv.lock().notify_end_of_interrupt(pic::InterruptIndex::Timer.as_u8());
         }
         return;
     }
     
-    crate::logger::or();
-    crate::time::or();
+    crate::logger::tick();
+    crate::time::tick();
     
     
-    crate::trace::bry(crate::trace::EventType::Ano, 0);
+    crate::trace::akj(crate::trace::EventType::TimerTick, 0);
     
     
-    crate::thread::hto();
+    crate::thread::dvv();
     
     
     unsafe {
-        Qh.lock().goa(pic::InterruptIndex::Timer.gaj());
+        Gv.lock().notify_end_of_interrupt(pic::InterruptIndex::Timer.as_u8());
     }
 }
 
 
-pub extern "x86-interrupt" fn qjl(elu: Fi) {
-    if !LY_.load(Ordering::Relaxed) {
-        crate::apic::dsp();
+pub extern "x86-interrupt" fn jwt(_stack_frame: InterruptStackFrame) {
+    if !MV_.load(Ordering::Relaxed) {
+        crate::apic::bng();
         return;
     }
     
     
-    crate::logger::or();
-    crate::time::or();
+    crate::logger::tick();
+    crate::time::tick();
     
     
-    crate::trace::bry(crate::trace::EventType::Ano, 0);
+    crate::trace::akj(crate::trace::EventType::TimerTick, 0);
     
     
     {
-        static CYF_: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
-        let az = CYF_.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
-        if az % 100 == 0 {
-            crate::lab_mode::trace_bus::dgy(
-                crate::lab_mode::trace_bus::EventCategory::Fv,
+        static DBX_: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
+        let count = DBX_.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+        if count % 100 == 0 {
+            crate::lab_mode::trace_bus::bgi(
+                crate::lab_mode::trace_bus::EventCategory::Interrupt,
                 "timer tick (x100)",
-                az,
+                count,
             );
         }
     }
     
     
-    crate::thread::hto();
+    crate::thread::dvv();
     
     
-    crate::apic::dsp();
+    crate::apic::bng();
 }
 
 
-pub extern "x86-interrupt" fn qjj(elu: Fi) {
+pub extern "x86-interrupt" fn jwr(_stack_frame: InterruptStackFrame) {
     use x86_64::instructions::port::Port;
     
     
-    let mut dma = Port::<u8>::new(0x64);
-    let status: u8 = unsafe { dma.read() };
+    let mut bjk = Port::<u8>::new(0x64);
+    let status: u8 = unsafe { bjk.read() };
     
     
     if status & 0x20 != 0 {
-        let mut axr = Port::<u8>::new(0x60);
-        let _: u8 = unsafe { axr.read() };
-        crate::apic::dsp();
+        let mut zu = Port::<u8>::new(0x60);
+        let _: u8 = unsafe { zu.read() };
+        crate::apic::bng();
         return;
     }
     
@@ -315,44 +315,44 @@ pub extern "x86-interrupt" fn qjj(elu: Fi) {
     let scancode: u8 = unsafe { port.read() };
     
     
-    if !LY_.load(Ordering::Relaxed) {
-        crate::apic::dsp();
+    if !MV_.load(Ordering::Relaxed) {
+        crate::apic::bng();
         return;
     }
     
-    crate::keyboard::crc(scancode);
+    crate::keyboard::handle_scancode(scancode);
     
-    crate::lab_mode::trace_bus::dgy(
-        crate::lab_mode::trace_bus::EventCategory::Hs,
+    crate::lab_mode::trace_bus::bgi(
+        crate::lab_mode::trace_bus::EventCategory::Keyboard,
         "key press",
         scancode as u64,
     );
     
-    crate::apic::dsp();
+    crate::apic::bng();
 }
 
 
-pub extern "x86-interrupt" fn qjk(elu: Fi) {
-    crate::mouse::eck();
-    crate::apic::dsp();
+pub extern "x86-interrupt" fn jws(_stack_frame: InterruptStackFrame) {
+    crate::mouse::btc();
+    crate::apic::bng();
 }
 
 
-pub extern "x86-interrupt" fn ubi(elu: Fi) {
+pub extern "x86-interrupt" fn mvs(_stack_frame: InterruptStackFrame) {
     use x86_64::instructions::port::Port;
     
     
-    let mut dma = Port::<u8>::new(0x64);
-    let status: u8 = unsafe { dma.read() };
+    let mut bjk = Port::<u8>::new(0x64);
+    let status: u8 = unsafe { bjk.read() };
     
     
     if status & 0x20 != 0 {
         
-        let mut axr = Port::<u8>::new(0x60);
-        let _: u8 = unsafe { axr.read() };
+        let mut zu = Port::<u8>::new(0x60);
+        let _: u8 = unsafe { zu.read() };
         
         unsafe {
-            Qh.lock().goa(pic::InterruptIndex::Hs.gaj());
+            Gv.lock().notify_end_of_interrupt(pic::InterruptIndex::Keyboard.as_u8());
         }
         return;
     }
@@ -361,86 +361,86 @@ pub extern "x86-interrupt" fn ubi(elu: Fi) {
     let scancode: u8 = unsafe { port.read() };
     
     
-    if !LY_.load(Ordering::Relaxed) {
+    if !MV_.load(Ordering::Relaxed) {
         unsafe {
-            Qh.lock().goa(pic::InterruptIndex::Hs.gaj());
+            Gv.lock().notify_end_of_interrupt(pic::InterruptIndex::Keyboard.as_u8());
         }
         return;
     }
     
     
-    crate::keyboard::crc(scancode);
+    crate::keyboard::handle_scancode(scancode);
     
     
-    crate::lab_mode::trace_bus::dgy(
-        crate::lab_mode::trace_bus::EventCategory::Hs,
+    crate::lab_mode::trace_bus::bgi(
+        crate::lab_mode::trace_bus::EventCategory::Keyboard,
         "key press",
         scancode as u64,
     );
     
     
     unsafe {
-        Qh.lock().goa(pic::InterruptIndex::Hs.gaj());
+        Gv.lock().notify_end_of_interrupt(pic::InterruptIndex::Keyboard.as_u8());
     }
 }
 
-static LY_: AtomicBool = AtomicBool::new(false);
+static MV_: AtomicBool = AtomicBool::new(false);
 
-pub fn mee(ack: bool) {
-    LY_.store(ack, Ordering::SeqCst);
+pub fn gue(ready: bool) {
+    MV_.store(ready, Ordering::SeqCst);
 }
 
 
-pub extern "x86-interrupt" fn ups(elu: Fi) {
+pub extern "x86-interrupt" fn ngh(_stack_frame: InterruptStackFrame) {
     
-    crate::mouse::eck();
+    crate::mouse::btc();
     
     
     unsafe {
-        Qh.lock().goa(pic::InterruptIndex::Cp.gaj());
+        Gv.lock().notify_end_of_interrupt(pic::InterruptIndex::Mouse.as_u8());
     }
 }
 
 
 
 
-pub extern "x86-interrupt" fn wpy(elu: Fi) {
+pub extern "x86-interrupt" fn oua(_stack_frame: InterruptStackFrame) {
     
-    if crate::apic::zu() {
-        crate::apic::dsp();
+    if crate::apic::lq() {
+        crate::apic::bng();
     } else {
         unsafe {
-            let gkr = crate::memory::auv(crate::acpi::ljo());
-            let ku = gkr as *mut u32;
-            core::ptr::write_volatile(ku.ygw(0xB0), 0);
+            let dag = crate::memory::wk(crate::acpi::ggc());
+            let lapic = dag as *mut u32;
+            core::ptr::write_volatile(lapic.byte_add(0xB0), 0);
         }
     }
 }
 
 
 
-pub extern "x86-interrupt" fn vxp(elu: Fi) {
-    crate::apic::dsp();
-    crate::thread::dvk();
+pub extern "x86-interrupt" fn oge(_stack_frame: InterruptStackFrame) {
+    crate::apic::bng();
+    crate::thread::boq();
 }
 
 
 
-pub extern "x86-interrupt" fn xrw(elu: Fi) {
+pub extern "x86-interrupt" fn psf(_stack_frame: InterruptStackFrame) {
     
-    if crate::virtio_net::ky() {
-        crate::virtio_net::eck();
+    if crate::virtio_net::is_initialized() {
+        crate::virtio_net::btc();
     }
     
     
-    if crate::drivers::net::bzy() && !crate::virtio_net::ky() {
-        crate::virtio_net::tjx();
+    if crate::drivers::net::aoh() && !crate::virtio_net::is_initialized() {
+        crate::virtio_net::mhx();
     }
     
     
-    if crate::virtio_blk::ky() {
-        crate::virtio_blk::eck();
+    if crate::virtio_blk::is_initialized() {
+        crate::virtio_blk::btc();
     }
     
-    crate::apic::dsp();
+    crate::apic::bng();
 }

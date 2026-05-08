@@ -5,7 +5,7 @@
 use alloc::vec::Vec;
 
 
-pub const AZW_: usize = 4096;
+pub const BBY_: usize = 4096;
 
 
 #[derive(Debug, Clone)]
@@ -13,23 +13,23 @@ pub struct MessageHeader {
     
     pub msg_type: u32,
     
-    pub bsg: u64,
+    pub sender: u64,
     
-    pub eil: u64,
+    pub sequence: u64,
     
-    pub aea: u64,
+    pub timestamp: u64,
     
     pub capability: u64,
 }
 
 impl MessageHeader {
     
-    pub fn new(msg_type: u32, bsg: u64, capability: u64) -> Self {
+    pub fn new(msg_type: u32, sender: u64, capability: u64) -> Self {
         Self {
             msg_type,
-            bsg,
-            eil: 0,
-            aea: crate::logger::fjp(),
+            sender,
+            sequence: 0,
+            timestamp: crate::logger::ckc(),
             capability,
         }
     }
@@ -39,79 +39,79 @@ impl MessageHeader {
 #[derive(Debug, Clone)]
 pub enum MessagePayload {
     
-    Jl,
+    Empty,
     
-    Aug([u8; 64]),
+    Inline([u8; 64]),
     
-    Bir(Vec<u8>),
+    Heap(Vec<u8>),
     
-    Byt {
+    Buffer {
         
-        ki: u64,
+        phys_addr: u64,
         
-        aw: usize,
+        size: usize,
     },
 }
 
 impl MessagePayload {
     
-    pub fn aw(&self) -> usize {
+    pub fn size(&self) -> usize {
         match self {
-            MessagePayload::Jl => 0,
-            MessagePayload::Aug(f) => f.len(),
-            MessagePayload::Bir(f) => f.len(),
-            MessagePayload::Byt { aw, .. } => *aw,
+            MessagePayload::Empty => 0,
+            MessagePayload::Inline(data) => data.len(),
+            MessagePayload::Heap(data) => data.len(),
+            MessagePayload::Buffer { size, .. } => *size,
         }
     }
     
     
-    pub fn eca(f: &[u8]) -> Self {
-        if f.is_empty() {
-            MessagePayload::Jl
-        } else if f.len() <= 64 {
+    pub fn bsv(data: &[u8]) -> Self {
+        if data.is_empty() {
+            MessagePayload::Empty
+        } else if data.len() <= 64 {
             let mut inline = [0u8; 64];
-            inline[..f.len()].dg(f);
-            MessagePayload::Aug(inline)
+            inline[..data.len()].copy_from_slice(data);
+            MessagePayload::Inline(inline)
         } else {
-            MessagePayload::Bir(f.ip())
+            MessagePayload::Heap(data.to_vec())
         }
     }
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Cj {
+pub struct Az {
     
-    pub dh: MessageHeader,
+    pub header: MessageHeader,
     
-    pub ew: MessagePayload,
+    pub payload: MessagePayload,
 }
 
-impl Cj {
+impl Az {
     
-    pub fn new(msg_type: u32, bsg: u64, capability: u64, ew: MessagePayload) -> Self {
+    pub fn new(msg_type: u32, sender: u64, capability: u64, payload: MessagePayload) -> Self {
         Self {
-            dh: MessageHeader::new(msg_type, bsg, capability),
-            ew,
+            header: MessageHeader::new(msg_type, sender, capability),
+            payload,
         }
     }
     
     
-    pub fn cug(msg_type: u32, bsg: u64, capability: u64) -> Self {
-        Self::new(msg_type, bsg, capability, MessagePayload::Jl)
+    pub fn ash(msg_type: u32, sender: u64, capability: u64) -> Self {
+        Self::new(msg_type, sender, capability, MessagePayload::Empty)
     }
     
     
-    pub fn zwc(msg_type: u32, bsg: u64, capability: u64, f: &[u8]) -> Self {
-        Self::new(msg_type, bsg, capability, MessagePayload::eca(f))
+    pub fn rco(msg_type: u32, sender: u64, capability: u64, data: &[u8]) -> Self {
+        Self::new(msg_type, sender, capability, MessagePayload::bsv(data))
     }
 }
 
 
 pub mod msg_types {
-    pub const Ua: u32 = 1;
-    pub const Dfp: u32 = 2;
-    pub const Ayg: u32 = 3;
-    pub const Sf: u32 = 4;
-    pub const Uf: u32 = 5;
+    pub const Iq: u32 = 1;
+    pub const Bbi: u32 = 2;
+    pub const Uv: u32 = 3;
+    pub const Hr: u32 = 4;
+    pub const Iu: u32 = 5;
 }

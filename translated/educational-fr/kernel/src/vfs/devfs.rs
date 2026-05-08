@@ -25,28 +25,28 @@ enum DeviceType {
 
 /// Device file implementation
 struct DeviceFile {
-    device_type: DeviceType,
+    dev_type: DeviceType,
     ino: Ino,
 }
 
 // Implémentation de trait — remplit un contrat comportemental.
 impl FileOperations for DeviceFile {
-    fn read(&self, offset: u64, buffer: &mut [u8]) -> VfsResult<usize> {
+    fn read(&self, offset: u64, buf: &mut [u8]) -> VfsResult<usize> {
                 // Correspondance de motifs — branchement exhaustif de Rust.
-match self.device_type {
+match self.dev_type {
             DeviceType::Null => Ok(0), // EOF
             DeviceType::Zero => {
-                for b in buffer.iterator_mut() {
+                for b in buf.iter_mut() {
                     *b = 0;
                 }
-                Ok(buffer.len())
+                Ok(buf.len())
             }
             DeviceType::Random => {
                 // Simple PRNG for random bytes
-                for b in buffer.iterator_mut() {
+                for b in buf.iter_mut() {
                     *b = crate::rng::next_u64() as u8;
                 }
-                Ok(buffer.len())
+                Ok(buf.len())
             }
             DeviceType::Console => {
                 // Read from keyboard buffer (blocking, line-buffered)
@@ -56,14 +56,14 @@ match self.device_type {
                 let mut spins = 0u64;
                 
                 while total == 0 && spins < maximum_spins {
-                    while total < buffer.len() {
-                        if let Some(character) = crate::keyboard::read_char() {
-                            buffer[total] = character;
+                    while total < buf.len() {
+                        if let Some(ch) = crate::keyboard::read_char() {
+                            buf[total] = ch;
                             total += 1;
                             // Line-buffered: return on newline
-                            if character == b'\n' || character == b'\r' {
-                                if character == b'\r' {
-                                    buffer[total - 1] = b'\n';
+                            if ch == b'\n' || ch == b'\r' {
+                                if ch == b'\r' {
+                                    buf[total - 1] = b'\n';
                                 }
                                 return Ok(total);
                             }
@@ -89,36 +89,36 @@ match self.device_type {
                 let offset_in_sector = (offset % sector_size) as usize;
                 let mut total_read = 0usize;
                 let mut sect = start_sector;
-                let mut position = offset_in_sector;
+                let mut pos = offset_in_sector;
                 let mut sector_buffer = [0u8; 512];
-                while total_read < buffer.len() {
+                while total_read < buf.len() {
                     if crate::virtio_blk::read_sector(sect, &mut sector_buffer).is_err() {
                         break;
                     }
-                    let avail = 512 - position;
-                    let to_copy = core::cmp::minimum(avail, buffer.len() - total_read);
-                    buffer[total_read..total_read + to_copy].copy_from_slice(&sector_buffer[position..position + to_copy]);
+                    let avail = 512 - pos;
+                    let to_copy = core::cmp::min(avail, buf.len() - total_read);
+                    buf[total_read..total_read + to_copy].copy_from_slice(&sector_buffer[pos..pos + to_copy]);
                     total_read += to_copy;
                     sect += 1;
-                    position = 0;
+                    pos = 0;
                 }
                 Ok(total_read)
             }
         }
     }
     
-    fn write(&self, offset: u64, buffer: &[u8]) -> VfsResult<usize> {
+    fn write(&self, offset: u64, buf: &[u8]) -> VfsResult<usize> {
                 // Correspondance de motifs — branchement exhaustif de Rust.
-match self.device_type {
-            DeviceType::Null => Ok(buffer.len()), // Discard
+match self.dev_type {
+            DeviceType::Null => Ok(buf.len()), // Discard
             DeviceType::Zero => Err(VfsError::ReadOnly),
             DeviceType::Random => Err(VfsError::ReadOnly),
             DeviceType::Console => {
                 // Write to serial console
-                for &b in buffer {
+                for &b in buf {
                     crate::serial_print!("{}", b as char);
                 }
-                Ok(buffer.len())
+                Ok(buf.len())
             }
             DeviceType::Vda => {
                 if !crate::virtio_blk::is_initialized() {
@@ -129,31 +129,31 @@ match self.device_type {
                 let offset_in_sector = (offset % sector_size) as usize;
                 let mut total_written = 0usize;
                 let mut sect = start_sector;
-                let mut position = offset_in_sector;
+                let mut pos = offset_in_sector;
                 let mut sector_buffer = [0u8; 512];
-                while total_written < buffer.len() {
+                while total_written < buf.len() {
                     // Read-modify-write if partial sector
-                    if position != 0 || (buffer.len() - total_written) < 512 {
+                    if pos != 0 || (buf.len() - total_written) < 512 {
                         let _ = crate::virtio_blk::read_sector(sect, &mut sector_buffer);
                     }
-                    let avail = 512 - position;
-                    let to_copy = core::cmp::minimum(avail, buffer.len() - total_written);
-                    sector_buffer[position..position + to_copy].copy_from_slice(&buffer[total_written..total_written + to_copy]);
+                    let avail = 512 - pos;
+                    let to_copy = core::cmp::min(avail, buf.len() - total_written);
+                    sector_buffer[pos..pos + to_copy].copy_from_slice(&buf[total_written..total_written + to_copy]);
                     if crate::virtio_blk::write_sector(sect, &sector_buffer).is_err() {
                         break;
                     }
                     total_written += to_copy;
                     sect += 1;
-                    position = 0;
+                    pos = 0;
                 }
                 Ok(total_written)
             }
         }
     }
     
-    fn status(&self) -> VfsResult<Stat> {
+    fn stat(&self) -> VfsResult<Stat> {
         let file_type = // Correspondance de motifs — branchement exhaustif de Rust.
-match self.device_type {
+match self.dev_type {
             DeviceType::Vda => FileType::BlockDevice,
             _ => FileType::CharDevice,
         };
@@ -173,7 +173,7 @@ match self.device_type {
 /// Device entry info
 struct DeviceEntry {
     name: String,
-    device_type: DeviceType,
+    dev_type: DeviceType,
     ino: Ino,
 }
 
@@ -185,9 +185,9 @@ struct DeviceRootDirectory {
 // Implémentation de trait — remplit un contrat comportemental.
 impl DirectoryOperations for DeviceRootDirectory {
     fn lookup(&self, name: &str) -> VfsResult<Ino> {
-        for device in &self.devices {
-            if device.name == name {
-                return Ok(device.ino);
+        for dev in &self.devices {
+            if dev.name == name {
+                return Ok(dev.ino);
             }
         }
         Err(VfsError::NotFound)
@@ -199,12 +199,12 @@ impl DirectoryOperations for DeviceRootDirectory {
             DirectoryEntry { name: String::from(".."), ino: 1, file_type: FileType::Directory },
         ];
         
-        for device in &self.devices {
+        for dev in &self.devices {
             entries.push(DirectoryEntry {
-                name: device.name.clone(),
-                ino: device.ino,
+                name: dev.name.clone(),
+                ino: dev.ino,
                 file_type:                 // Correspondance de motifs — branchement exhaustif de Rust.
-match device.device_type {
+match dev.dev_type {
                     DeviceType::Vda => FileType::BlockDevice,
                     _ => FileType::CharDevice,
                 },
@@ -222,7 +222,7 @@ match device.device_type {
         Err(VfsError::ReadOnly)
     }
     
-    fn status(&self) -> VfsResult<Stat> {
+    fn stat(&self) -> VfsResult<Stat> {
         Ok(Stat {
             ino: 1,
             file_type: FileType::Directory,
@@ -266,11 +266,11 @@ pub fn new() -> VfsResult<Self> {
         Ok(fs)
     }
     
-    fn add_device(&mut self, name: &str, device_type: DeviceType) {
+    fn add_device(&mut self, name: &str, dev_type: DeviceType) {
         let ino = self.next_ino.fetch_add(1, Ordering::SeqCst);
         self.devices.push(DeviceEntry {
             name: String::from(name),
-            device_type,
+            dev_type,
             ino,
         });
     }
@@ -291,14 +291,14 @@ impl FileSystem for DevFs {
     }
     
     fn get_file(&self, ino: Ino) -> VfsResult<Arc<dyn FileOperations>> {
-        let device = self.find_device(ino).ok_or(VfsError::NotFound)?;
+        let dev = self.find_device(ino).ok_or(VfsError::NotFound)?;
         Ok(Arc::new(DeviceFile {
-            device_type: device.device_type,
-            ino: device.ino,
+            dev_type: dev.dev_type,
+            ino: dev.ino,
         }))
     }
     
-    fn get_directory(&self, ino: Ino) -> VfsResult<Arc<dyn DirectoryOperations>> {
+    fn get_dir(&self, ino: Ino) -> VfsResult<Arc<dyn DirectoryOperations>> {
         if ino == 1 {
             Ok(Arc::new(DeviceRootDirectory {
                 devices: self.devices.clone(),
@@ -308,7 +308,7 @@ impl FileSystem for DevFs {
         }
     }
     
-    fn status(&self, ino: Ino) -> VfsResult<Stat> {
+    fn stat(&self, ino: Ino) -> VfsResult<Stat> {
         if ino == 1 {
             Ok(Stat {
                 ino: 1,
@@ -316,11 +316,11 @@ impl FileSystem for DevFs {
                 mode: 0o755,
                 ..Default::default()
             })
-        } else if let Some(device) = self.find_device(ino) {
+        } else if let Some(dev) = self.find_device(ino) {
             Ok(Stat {
-                ino: device.ino,
+                ino: dev.ino,
                 file_type:                 // Correspondance de motifs — branchement exhaustif de Rust.
-match device.device_type {
+match dev.dev_type {
                     DeviceType::Vda => FileType::BlockDevice,
                     _ => FileType::CharDevice,
                 },
@@ -338,7 +338,7 @@ impl Clone for DeviceEntry {
     fn clone(&self) -> Self {
         Self {
             name: self.name.clone(),
-            device_type: self.device_type,
+            dev_type: self.dev_type,
             ino: self.ino,
         }
     }

@@ -47,23 +47,23 @@ pub struct TzBoundaryResult {
 
 /// Test if an address is in the Secure World
 /// Returns true if accessible (Normal World), false if faulted (Secure)
-fn probe_tz_address(address: u64) -> TzBoundaryResult {
+fn probe_tz_address(addr: u64) -> TzBoundaryResult {
     // Attempt a volatile read
     // If the address is in Secure World, we'll get a data abort
     // Our fault handler marks the access as failed vs succeeded
     
     let result = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        if address == 0 || address > 0xFFFF_FFFF_FFFF {
+        if addr == 0 || addr > 0xFFFF_FFFF_FFFF {
             return TzBoundaryResult {
-                address: address,
+                address: addr,
                 accessible: false,
                 read_value: None,
                 fault_type: "invalid",
             };
         }
         
-        let ptr = address as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+        let ptr = addr as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u32;
         // This would fault on real secure memory
         // In a controlled environment, our fault handler catches it
@@ -72,14 +72,14 @@ const u32;
     
         // Pattern matching — Rust's exhaustive branching construct.
 match result {
-        Some(value) => TzBoundaryResult {
-            address: address,
+        Some(val) => TzBoundaryResult {
+            address: addr,
             accessible: true,
-            read_value: Some(value),
+            read_value: Some(val),
             fault_type: "none",
         },
         None => TzBoundaryResult {
-            address: address,
+            address: addr,
             accessible: false,
             read_value: None,
             fault_type: "data_abort",
@@ -138,7 +138,7 @@ match result.read_value {
             let risk = if result.accessible && name.contains("Secure") {
                 RiskLevel::Critical // Secure region accessible = BAD
             } else if !result.accessible {
-                RiskLevel::Information // Expected: secure is secure
+                RiskLevel::Info // Expected: secure is secure
             } else {
                 RiskLevel::Low
             };
@@ -168,9 +168,9 @@ match result.read_value {
                 // Read TZPC decode protection registers
                 for offset in [0x800, 0x804, 0x808, 0x80C].iter() {
                     let reg = probe_tz_address(base + offset);
-                    if let Some(value) = reg.read_value {
+                    if let Some(val) = reg.read_value {
                         output.push_str(&format!("     +0x{:03X} = 0x{:08X} (decode protection {})\n",
-                            offset, value, offset / 4));
+                            offset, val, offset / 4));
                     }
                 }
             }
@@ -190,16 +190,16 @@ match result.read_value {
             
             let step = 0x10_0000u64; // 1MB steps
             let mut previous_accessible = None;
-            let mut address = start;
+            let mut addr = start;
             
-            while address < end {
-                let result = probe_tz_address(address);
+            while addr < end {
+                let result = probe_tz_address(addr);
                 
-                if let Some(previous) = previous_accessible {
-                    if result.accessible != previous {
+                if let Some(prev) = previous_accessible {
+                    if result.accessible != prev {
                         // Found a boundary!
-                        let boundary = find_boundary(address - step, address, previous);
-                        let direction = if previous { "Normal->Secure" } else { "Secure->Normal" };
+                        let boundary = find_boundary(addr - step, addr, prev);
+                        let direction = if prev { "Normal->Secure" } else { "Secure->Normal" };
                         output.push_str(&format!("  \x01R** BOUNDARY at 0x{:010X}: {} **\x01W\n",
                             boundary, direction));
                         
@@ -216,7 +216,7 @@ match result.read_value {
                 }
                 
                 previous_accessible = Some(result.accessible);
-                address += step;
+                addr += step;
             }
         }
         
@@ -283,10 +283,10 @@ match result.read_value {
             (0x8000_0000u64, "Main RAM"),
         ];
         
-        for &(address, name) in &test_regions {
-            let result = probe_tz_address(address);
+        for &(addr, name) in &test_regions {
+            let result = probe_tz_address(addr);
             let icon = if result.accessible { "\x01G[OK]" } else { "\x01R[PMP]" };
-            output.push_str(&format!("{}\x01W 0x{:010X} {}\n", icon, address, name));
+            output.push_str(&format!("{}\x01W 0x{:010X} {}\n", icon, addr, name));
         }
     }
     

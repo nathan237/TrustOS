@@ -9,7 +9,7 @@
 
 
 
-use alloc::string::{String, Gd};
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use alloc::vec;
 use alloc::sync::Arc;
@@ -18,8 +18,8 @@ use spin::RwLock;
 use core::sync::atomic::{AtomicU64, Ordering};
 
 use super::{
-    Cc, Et, Ep, Stat, Br, FileType,
-    I, B, VfsError
+    Au, Bx, Bv, Stat, Ap, FileType,
+    K, E, VfsError
 };
 
 const H_: usize = 512;
@@ -27,73 +27,73 @@ const H_: usize = 512;
 
 #[repr(C, packed)]
 #[derive(Clone, Copy)]
-struct Asb {
-    uak: [u8; 3],
-    zec: [u8; 8],
-    aid: u16,
-    anx: u8,
-    lzo: u16,
-    dtr: u8,
-    zki: u16,  
-    zti: u16,  
-    zcp: u8,
-    yqg: u16,       
-    wge: u16,
-    uwj: u16,
-    tor: u32,
-    mmm: u32,
+struct Sf {
+    jmp_boot: [u8; 3],
+    oem_name: [u8; 8],
+    bytes_per_sector: u16,
+    sectors_per_cluster: u8,
+    reserved_sectors: u16,
+    num_fats: u8,
+    root_entry_count: u16,  
+    total_sectors_16: u16,  
+    media_type: u8,
+    fat_size_16: u16,       
+    sectors_per_track: u16,
+    num_heads: u16,
+    hidden_sectors: u32,
+    total_sectors_32: u32,
     
-    kvf: u32,
-    ypw: u16,
-    yrx: u16,
-    jms: u32,
-    yrv: u16,
-    yfh: u16,
-    awt: [u8; 12],
-    ynq: u8,
-    pco: u8,
-    ygt: u8,
-    zvs: u32,
-    zvt: [u8; 11],
-    yrw: [u8; 8],
+    fat_size_32: u32,
+    ext_flags: u16,
+    fs_version: u16,
+    root_cluster: u32,
+    fs_info: u16,
+    backup_boot: u16,
+    reserved: [u8; 12],
+    drive_number: u8,
+    reserved1: u8,
+    boot_sig: u8,
+    volume_id: u32,
+    volume_label: [u8; 11],
+    fs_type: [u8; 8],
 }
 
-impl Asb {
-    fn cld(&self) -> bool {
+impl Sf {
+    fn is_valid(&self) -> bool {
         
-        let aid = unsafe { core::ptr::md(core::ptr::vf!(self.aid)) };
-        let anx = self.anx;
-        let awt = unsafe { core::ptr::md(core::ptr::vf!(self.lzo)) };
-        let dtr = self.dtr;
+        let bytes_per_sector = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(self.bytes_per_sector)) };
+        let sectors_per_cluster = self.sectors_per_cluster;
+        let reserved = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(self.reserved_sectors)) };
+        let num_fats = self.num_fats;
         
-        aid >= 512 && 
-        aid <= 4096 &&
-        anx >= 1 &&
-        anx <= 128 &&
-        awt >= 1 &&
-        dtr >= 1
+        bytes_per_sector >= 512 && 
+        bytes_per_sector <= 4096 &&
+        sectors_per_cluster >= 1 &&
+        sectors_per_cluster <= 128 &&
+        reserved >= 1 &&
+        num_fats >= 1
     }
     
-    fn qt(&self) -> usize {
-        let hbc = unsafe { core::ptr::md(core::ptr::vf!(self.aid)) } as usize;
-        let ibb = self.anx as usize;
-        hbc * ibb
+    fn cluster_size(&self) -> usize {
+        let djm = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(self.bytes_per_sector)) } as usize;
+        let dzv = self.sectors_per_cluster as usize;
+        djm * dzv
     }
     
-    fn nut(&self) -> u64 {
-        let awt = unsafe { core::ptr::md(core::ptr::vf!(self.lzo)) } as u64;
-        let dtr = self.dtr as u64;
-        let hiy = unsafe { core::ptr::md(core::ptr::vf!(self.kvf)) } as u64;
-        awt + (dtr * hiy)
+    fn first_data_sector(&self) -> u64 {
+        let reserved = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(self.reserved_sectors)) } as u64;
+        let num_fats = self.num_fats as u64;
+        let dpi = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(self.fat_size_32)) } as u64;
+        reserved + (num_fats * dpi)
     }
     
-    fn kwl(&self) -> u64 {
-        (unsafe { core::ptr::md(core::ptr::vf!(self.lzo)) }) as u64
+    fn first_fat_sector(&self) -> u64 {
+        (unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(self.reserved_sectors)) }) as u64
     }
     
-    fn nds(&self, ry: u32) -> u64 {
-        let ibb = self.anx as u64;
-        self.nut() + ((ry - 2) as u64 * ibb)
+    fn cluster_to_sector(&self, cluster: u32) -> u64 {
+        let dzv = self.sectors_per_cluster as u64;
+        self.first_data_sector() + ((cluster - 2) as u64 * dzv)
     }
 }
 
@@ -101,82 +101,82 @@ impl Asb {
 #[repr(C, packed)]
 #[derive(Clone, Copy)]
 struct Fat32DirEntry {
-    j: [u8; 8],
-    wm: [u8; 3],
-    qn: u8,
-    lpf: u8,
-    kly: u8,
-    klx: u16,
-    klv: u16,
-    jyx: u16,
-    hda: u16,
-    lmm: u16,
-    lml: u16,
-    hdb: u16,
-    yy: u32,
+    name: [u8; 8],
+    ext: [u8; 3],
+    attr: u8,
+    nt_reserved: u8,
+    create_time_tenth: u8,
+    create_time: u16,
+    create_date: u16,
+    access_date: u16,
+    cluster_hi: u16,
+    modify_time: u16,
+    modify_date: u16,
+    cluster_lo: u16,
+    file_size: u32,
 }
 
 impl Fat32DirEntry {
-    const DCU_: u8 = 0x01;
-    const DCT_: u8 = 0x02;
-    const DCV_: u8 = 0x04;
-    const BKR_: u8 = 0x08;
-    const LU_: u8 = 0x10;
-    const BKM_: u8 = 0x20;
-    const AKY_: u8 = 0x0F;
+    const DGO_: u8 = 0x01;
+    const DGN_: u8 = 0x02;
+    const DGP_: u8 = 0x04;
+    const BNF_: u8 = 0x08;
+    const MR_: u8 = 0x10;
+    const BNA_: u8 = 0x20;
+    const AMT_: u8 = 0x0F;
     
-    fn ofz(&self) -> bool {
-        self.j[0] == 0x00 || self.j[0] == 0xE5
+    fn is_free(&self) -> bool {
+        self.name[0] == 0x00 || self.name[0] == 0xE5
     }
     
-    fn ofw(&self) -> bool {
-        self.j[0] == 0x00
+    fn is_end(&self) -> bool {
+        self.name[0] == 0x00
     }
     
-    fn lgg(&self) -> bool {
-        (self.qn & Self::AKY_) == Self::AKY_
+    fn is_long_name(&self) -> bool {
+        (self.attr & Self::AMT_) == Self::AMT_
     }
     
-    fn cfr(&self) -> bool {
-        (self.qn & Self::LU_) != 0
+    fn is_directory(&self) -> bool {
+        (self.attr & Self::MR_) != 0
     }
     
-    fn ogy(&self) -> bool {
-        (self.qn & Self::BKR_) != 0 && !self.lgg()
+    fn is_volume_label(&self) -> bool {
+        (self.attr & Self::BNF_) != 0 && !self.is_long_name()
     }
     
-    fn ry(&self) -> u32 {
-        let gd = unsafe { core::ptr::md(core::ptr::vf!(self.hda)) } as u32;
-        let hh = unsafe { core::ptr::md(core::ptr::vf!(self.hdb)) } as u32;
-        (gd << 16) | hh
+    fn cluster(&self) -> u32 {
+        let hi = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(self.cluster_hi)) } as u32;
+        let lo = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(self.cluster_lo)) } as u32;
+        (hi << 16) | lo
     }
     
-    fn aw(&self) -> u32 {
-        unsafe { core::ptr::md(core::ptr::vf!(self.yy)) }
+    fn size(&self) -> u32 {
+        unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(self.file_size)) }
     }
     
-    fn nyn(&self) -> String {
-        let bko = self.j;
-        let spp = self.wm;
+    fn get_short_name(&self) -> String {
+        let agt = self.name;
+        let lte = self.ext;
         
         
-        let j: String = bko.iter()
-            .fwc(|&&r| r != b' ' && r != 0)
-            .map(|&r| {
-                if r == 0x05 { 0xE5 as char } 
-                else { r as char }
+        let name: String = agt.iter()
+            .take_while(|&&c| c != b' ' && c != 0)
+            .map(|&c| {
+                if c == 0x05 { 0xE5 as char } 
+                else { c as char }
             })
             .collect();
         
-        let wm: String = spp.iter()
-            .fwc(|&&r| r != b' ' && r != 0)
-            .map(|&r| r as char)
+        let ext: String = lte.iter()
+            .take_while(|&&c| c != b' ' && c != 0)
+            .map(|&c| c as char)
             .collect();
         
-        if wm.is_empty() {
-            j
+        if ext.is_empty() {
+            name
         } else {
-            alloc::format!("{}.{}", j, wm)
+            alloc::format!("{}.{}", name, ext)
         }
     }
 }
@@ -184,181 +184,181 @@ impl Fat32DirEntry {
 
 #[repr(C, packed)]
 #[derive(Clone, Copy)]
-struct Bgu {
-    gon: u8,
-    lng: [u16; 5],  
-    qn: u8,         
-    zar: u8,     
-    bmj: u8,
-    lnh: [u16; 6],  
-    ry: u16,     
-    lni: [u16; 2],  
+struct Yt {
+    order: u8,
+    name1: [u16; 5],  
+    attr: u8,         
+    lfn_type: u8,     
+    checksum: u8,
+    name2: [u16; 6],  
+    cluster: u16,     
+    name3: [u16; 2],  
 }
 
-impl Bgu {
-    fn tcz(&self) -> Vec<char> {
-        let mut bw = Vec::fc(13);
+impl Yt {
+    fn get_chars(&self) -> Vec<char> {
+        let mut chars = Vec::with_capacity(13);
         
         
-        let lng = unsafe { core::ptr::md(core::ptr::vf!(self.lng)) };
-        let lnh = unsafe { core::ptr::md(core::ptr::vf!(self.lnh)) };
-        let lni = unsafe { core::ptr::md(core::ptr::vf!(self.lni)) };
+        let name1 = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(self.name1)) };
+        let name2 = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(self.name2)) };
+        let name3 = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(self.name3)) };
         
-        for &r in &lng {
-            if r == 0 || r == 0xFFFF { return bw; }
-            bw.push(char::zi(r as u32).unwrap_or('?'));
+        for &c in &name1 {
+            if c == 0 || c == 0xFFFF { return chars; }
+            chars.push(char::from_u32(c as u32).unwrap_or('?'));
         }
-        for &r in &lnh {
-            if r == 0 || r == 0xFFFF { return bw; }
-            bw.push(char::zi(r as u32).unwrap_or('?'));
+        for &c in &name2 {
+            if c == 0 || c == 0xFFFF { return chars; }
+            chars.push(char::from_u32(c as u32).unwrap_or('?'));
         }
-        for &r in &lni {
-            if r == 0 || r == 0xFFFF { return bw; }
-            bw.push(char::zi(r as u32).unwrap_or('?'));
+        for &c in &name3 {
+            if c == 0 || c == 0xFFFF { return chars; }
+            chars.push(char::from_u32(c as u32).unwrap_or('?'));
         }
         
-        bw
+        chars
     }
     
-    fn gon(&self) -> u8 {
-        self.gon & 0x3F
+    fn order(&self) -> u8 {
+        self.order & 0x3F
     }
     
-    fn fmd(&self) -> bool {
-        (self.gon & 0x40) != 0
+    fn clo(&self) -> bool {
+        (self.order & 0x40) != 0
     }
 }
 
 
-const ARQ_: u32 = 0x00000000;
-const BVB_: u32 = 0x0FFFFFF8;  
-const BVA_: u32 = 0x0FFFFFF7;
+const ATS_: u32 = 0x00000000;
+const BXX_: u32 = 0x0FFFFFF8;  
+const BXW_: u32 = 0x0FFFFFF7;
 
 
-struct Sm {
-    ry: u32,
-    aw: u64,
-    ta: bool,
-    j: String,
+struct Hx {
+    cluster: u32,
+    size: u64,
+    is_dir: bool,
+    name: String,
     
-    bmw: u32,
+    dir_cluster: u32,
     
-    eou: usize,
+    dir_entry_offset: usize,
 }
 
 
-pub trait Bj: Send + Sync {
-    fn xr(&self, jk: u64, bi: &mut [u8]) -> Result<(), ()>;
-    fn aby(&self, jk: u64, bi: &[u8]) -> Result<(), ()>;
-    fn zn(&self) -> usize { H_ }
+pub trait Ak: Send + Sync {
+    fn read_sector(&self, dj: u64, buffer: &mut [u8]) -> Result<(), ()>;
+    fn write_sector(&self, dj: u64, buffer: &[u8]) -> Result<(), ()>;
+    fn sector_size(&self) -> usize { H_ }
 }
 
 
-pub trait Byn: Bj {}
-impl<T: Bj> Byn for T {}
+pub trait Ahl: Ak {}
+impl<T: Ak> Ahl for T {}
 
 
-pub struct Bvw;
+pub struct Agd;
 
-impl Bj for Bvw {
-    fn xr(&self, jk: u64, bi: &mut [u8]) -> Result<(), ()> {
+impl Ak for Agd {
+    fn read_sector(&self, dj: u64, buffer: &mut [u8]) -> Result<(), ()> {
         
-        crate::virtio_blk::ain(jk, 1, bi)
-            .jd(|_| ())
+        crate::virtio_blk::read_sectors(dj, 1, buffer)
+            .map_err(|_| ())
     }
     
-    fn aby(&self, jk: u64, bi: &[u8]) -> Result<(), ()> {
-        crate::virtio_blk::bpi(jk, 1, bi)
-            .jd(|_| ())
+    fn write_sector(&self, dj: u64, buffer: &[u8]) -> Result<(), ()> {
+        crate::virtio_blk::write_sectors(dj, 1, buffer)
+            .map_err(|_| ())
     }
 }
 
 
 pub struct AhciBlockReader {
     port: usize,
-    jiv: u64,  
+    partition_start: u64,  
 }
 
 impl AhciBlockReader {
-    pub fn new(port: usize, jiv: u64) -> Self {
-        Self { port, jiv }
+    pub fn new(port: usize, partition_start: u64) -> Self {
+        Self { port, partition_start }
     }
 }
 
-impl Bj for AhciBlockReader {
-    fn xr(&self, jk: u64, bi: &mut [u8]) -> Result<(), ()> {
-        let jyu = self.jiv + jk;
-        crate::drivers::ahci::ain(self.port as u8, jyu, 1, bi)
+impl Ak for AhciBlockReader {
+    fn read_sector(&self, dj: u64, buffer: &mut [u8]) -> Result<(), ()> {
+        let ffy = self.partition_start + dj;
+        crate::drivers::ahci::read_sectors(self.port as u8, ffy, 1, buffer)
             .map(|_| ())
-            .jd(|_| ())
+            .map_err(|_| ())
     }
     
-    fn aby(&self, jk: u64, bi: &[u8]) -> Result<(), ()> {
-        let jyu = self.jiv + jk;
-        crate::drivers::ahci::bpi(self.port as u8, jyu, 1, bi)
+    fn write_sector(&self, dj: u64, buffer: &[u8]) -> Result<(), ()> {
+        let ffy = self.partition_start + dj;
+        crate::drivers::ahci::write_sectors(self.port as u8, ffy, 1, buffer)
             .map(|_| ())
-            .jd(|_| ())
+            .map_err(|_| ())
     }
 }
 
 
 pub struct Fat32Fs {
-    cha: Arc<dyn Bj>,
-    agh: Asb,
-    arj: RwLock<BTreeMap<I, Sm>>,
-    hsv: AtomicU64,
-    pea: I,
+    reader: Arc<dyn Ak>,
+    bpb: Sf,
+    inodes: RwLock<BTreeMap<K, Hx>>,
+    next_ino: AtomicU64,
+    root_ino: K,
 }
 
 impl Fat32Fs {
     
-    pub fn beu(cha: Arc<dyn Bj>) -> B<Self> {
+    pub fn abd(reader: Arc<dyn Ak>) -> E<Self> {
         
-        let mut cvz = [0u8; H_];
-        cha.xr(0, &mut cvz)
-            .jd(|_| VfsError::Av)?;
+        let mut bap = [0u8; H_];
+        reader.read_sector(0, &mut bap)
+            .map_err(|_| VfsError::IoError)?;
         
         
-        if cvz[510] != 0x55 || cvz[511] != 0xAA {
+        if bap[510] != 0x55 || bap[511] != 0xAA {
             crate::log_warn!("[FAT32] Invalid boot signature");
-            return Err(VfsError::Pr);
+            return Err(VfsError::InvalidPath);
         }
         
         
-        let agh = unsafe { 
-            core::ptr::md(cvz.fq() as *const Asb)
+        let bpb = unsafe { 
+            core::ptr::read_unaligned(bap.as_ptr() as *const Sf)
         };
         
-        if !agh.cld() {
+        if !bpb.is_valid() {
             crate::log_warn!("[FAT32] Invalid BPB");
-            return Err(VfsError::Pr);
+            return Err(VfsError::InvalidPath);
         }
         
-        let jms = { agh.jms };
-        let aid = { agh.aid };
-        let anx = { agh.anx };
+        let root_cluster = { bpb.root_cluster };
+        let bytes_per_sector = { bpb.bytes_per_sector };
+        let sectors_per_cluster = { bpb.sectors_per_cluster };
         
         crate::log!("[FAT32] Mounted: {} bytes/sector, {} sectors/cluster, root cluster {}",
-            aid, anx, jms);
+            bytes_per_sector, sectors_per_cluster, root_cluster);
         
         let fs = Self {
-            cha,
-            agh,
-            arj: RwLock::new(BTreeMap::new()),
-            hsv: AtomicU64::new(2),
-            pea: 1,
+            reader,
+            bpb,
+            inodes: RwLock::new(BTreeMap::new()),
+            next_ino: AtomicU64::new(2),
+            root_ino: 1,
         };
         
         
         {
-            let mut arj = fs.arj.write();
-            arj.insert(1, Sm {
-                ry: jms,
-                aw: 0,
-                ta: true,
-                j: String::from("/"),
-                bmw: 0,
-                eou: 0,
+            let mut inodes = fs.inodes.write();
+            inodes.insert(1, Hx {
+                cluster: root_cluster,
+                size: 0,
+                is_dir: true,
+                name: String::from("/"),
+                dir_cluster: 0,
+                dir_entry_offset: 0,
             });
         }
         
@@ -366,133 +366,133 @@ impl Fat32Fs {
     }
     
     
-    fn gqj(&self, ry: u32) -> B<Vec<u8>> {
-        let jk = self.agh.nds(ry);
-        let anx = { self.agh.anx } as u64;
-        let qt = self.agh.qt();
+    fn read_cluster(&self, cluster: u32) -> E<Vec<u8>> {
+        let dj = self.bpb.cluster_to_sector(cluster);
+        let sectors_per_cluster = { self.bpb.sectors_per_cluster } as u64;
+        let cluster_size = self.bpb.cluster_size();
         
-        let mut f = vec![0u8; qt];
+        let mut data = vec![0u8; cluster_size];
         
-        for a in 0..anx {
-            let l = (a as usize) * H_;
-            self.cha.xr(jk + a, &mut f[l..l + H_])
-                .jd(|_| VfsError::Av)?;
+        for i in 0..sectors_per_cluster {
+            let offset = (i as usize) * H_;
+            self.reader.read_sector(dj + i, &mut data[offset..offset + H_])
+                .map_err(|_| VfsError::IoError)?;
         }
         
-        Ok(f)
+        Ok(data)
     }
     
     
-    fn vrr(&self, ry: u32) -> B<u32> {
-        let hiw = ry * 4;
-        let aid = { self.agh.aid } as u32;
-        let hix = self.agh.kwl() + (hiw / aid) as u64;
-        let bho = (hiw % aid) as usize;
+    fn read_fat_entry(&self, cluster: u32) -> E<u32> {
+        let dpg = cluster * 4;
+        let bytes_per_sector = { self.bpb.bytes_per_sector } as u32;
+        let dph = self.bpb.first_fat_sector() + (dpg / bytes_per_sector) as u64;
+        let afl = (dpg % bytes_per_sector) as usize;
         
-        let mut aae = [0u8; H_];
-        self.cha.xr(hix, &mut aae)
-            .jd(|_| VfsError::Av)?;
+        let mut mx = [0u8; H_];
+        self.reader.read_sector(dph, &mut mx)
+            .map_err(|_| VfsError::IoError)?;
         
-        let bt = u32::dj([
-            aae[bho],
-            aae[bho + 1],
-            aae[bho + 2],
-            aae[bho + 3],
+        let entry = u32::from_le_bytes([
+            mx[afl],
+            mx[afl + 1],
+            mx[afl + 2],
+            mx[afl + 3],
         ]) & 0x0FFFFFFF;  
         
-        Ok(bt)
+        Ok(entry)
     }
     
     
-    fn ghx(&self, dly: u32) -> B<Vec<u32>> {
-        let mut rh = Vec::new();
-        let mut cv = dly;
+    fn get_cluster_chain(&self, bji: u32) -> E<Vec<u32>> {
+        let mut chain = Vec::new();
+        let mut current = bji;
         
-        while cv >= 2 && cv < BVA_ {
-            rh.push(cv);
-            cv = self.vrr(cv)?;
+        while current >= 2 && current < BXW_ {
+            chain.push(current);
+            current = self.read_fat_entry(current)?;
             
             
-            if rh.len() > 1_000_000 {
-                return Err(VfsError::Av);
+            if chain.len() > 1_000_000 {
+                return Err(VfsError::IoError);
             }
         }
         
-        Ok(rh)
+        Ok(chain)
     }
     
     
-    fn ozv(&self, dly: u32, aw: Option<u64>) -> B<Vec<u8>> {
-        let rh = self.ghx(dly)?;
-        let qt = self.agh.qt();
-        let aay = aw.unwrap_or((rh.len() * qt) as u64) as usize;
+    fn read_chain(&self, bji: u32, size: Option<u64>) -> E<Vec<u8>> {
+        let chain = self.get_cluster_chain(bji)?;
+        let cluster_size = self.bpb.cluster_size();
+        let total_size = size.unwrap_or((chain.len() * cluster_size) as u64) as usize;
         
-        let mut f = Vec::fc(aay);
+        let mut data = Vec::with_capacity(total_size);
         
-        for ry in rh {
-            let fez = self.gqj(ry)?;
-            f.bk(&fez);
-            if f.len() >= aay {
+        for cluster in chain {
+            let chd = self.read_cluster(cluster)?;
+            data.extend_from_slice(&chd);
+            if data.len() >= total_size {
                 break;
             }
         }
         
-        f.dmu(aay);
-        Ok(f)
+        data.truncate(total_size);
+        Ok(data)
     }
     
     
-    fn gwx(&self, ry: u32, f: &[u8]) -> B<()> {
-        let jk = self.agh.nds(ry);
-        let anx = { self.agh.anx } as u64;
-        let qt = self.agh.qt();
+    fn write_cluster(&self, cluster: u32, data: &[u8]) -> E<()> {
+        let dj = self.bpb.cluster_to_sector(cluster);
+        let sectors_per_cluster = { self.bpb.sectors_per_cluster } as u64;
+        let cluster_size = self.bpb.cluster_size();
         
-        if f.len() < qt {
-            return Err(VfsError::Av);
+        if data.len() < cluster_size {
+            return Err(VfsError::IoError);
         }
         
-        for a in 0..anx {
-            let l = (a as usize) * H_;
-            self.cha.aby(jk + a, &f[l..l + H_])
-                .jd(|_| VfsError::Av)?;
+        for i in 0..sectors_per_cluster {
+            let offset = (i as usize) * H_;
+            self.reader.write_sector(dj + i, &data[offset..offset + H_])
+                .map_err(|_| VfsError::IoError)?;
         }
         
         Ok(())
     }
     
     
-    fn mrb(&self, ry: u32, bn: u32) -> B<()> {
-        let hiw = ry * 4;
-        let aid = { self.agh.aid } as u32;
-        let hix = self.agh.kwl() + (hiw / aid) as u64;
-        let bho = (hiw % aid) as usize;
+    fn write_fat_entry(&self, cluster: u32, value: u32) -> E<()> {
+        let dpg = cluster * 4;
+        let bytes_per_sector = { self.bpb.bytes_per_sector } as u32;
+        let dph = self.bpb.first_fat_sector() + (dpg / bytes_per_sector) as u64;
+        let afl = (dpg % bytes_per_sector) as usize;
         
         
-        let mut aae = [0u8; H_];
-        self.cha.xr(hix, &mut aae)
-            .jd(|_| VfsError::Av)?;
+        let mut mx = [0u8; H_];
+        self.reader.read_sector(dph, &mut mx)
+            .map_err(|_| VfsError::IoError)?;
         
         
-        let loe = (bn & 0x0FFFFFFF) | 
-                        (u32::dj([aae[bho], 
-                                            aae[bho + 1],
-                                            aae[bho + 2], 
-                                            aae[bho + 3]]) & 0xF0000000);
+        let gjj = (value & 0x0FFFFFFF) | 
+                        (u32::from_le_bytes([mx[afl], 
+                                            mx[afl + 1],
+                                            mx[afl + 2], 
+                                            mx[afl + 3]]) & 0xF0000000);
         
-        aae[bho..bho + 4]
-            .dg(&loe.ho());
-        
-        
-        self.cha.aby(hix, &aae)
-            .jd(|_| VfsError::Av)?;
+        mx[afl..afl + 4]
+            .copy_from_slice(&gjj.to_le_bytes());
         
         
-        let dtr = { self.agh.dtr } as u64;
-        if dtr > 1 {
-            let hiy = unsafe { core::ptr::md(core::ptr::vf!(self.agh.kvf)) } as u64;
-            for srd in 1..dtr {
-                let qml = hix + srd * hiy;
-                let _ = self.cha.aby(qml, &aae);
+        self.reader.write_sector(dph, &mx)
+            .map_err(|_| VfsError::IoError)?;
+        
+        
+        let num_fats = { self.bpb.num_fats } as u64;
+        if num_fats > 1 {
+            let dpi = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(self.bpb.fat_size_32)) } as u64;
+            for fat_idx in 1..num_fats {
+                let jze = dph + fat_idx * dpi;
+                let _ = self.reader.write_sector(jze, &mx);
             }
         }
         
@@ -500,342 +500,342 @@ impl Fat32Fs {
     }
     
     
-    fn ijp(&self) -> B<u32> {
-        let aid = { self.agh.aid } as u32;
-        let sre = self.agh.kwl();
-        let hiy = unsafe { core::ptr::md(core::ptr::vf!(self.agh.kvf)) };
-        let mmm = unsafe { core::ptr::md(core::ptr::vf!(self.agh.mmm)) };
-        let rtp = mmm as u64 - self.agh.nut();
-        let ibb = self.agh.anx as u64;
-        let xjx = (rtp / ibb) as u32 + 2;
+    fn allocate_cluster(&self) -> E<u32> {
+        let bytes_per_sector = { self.bpb.bytes_per_sector } as u32;
+        let luj = self.bpb.first_fat_sector();
+        let dpi = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(self.bpb.fat_size_32)) };
+        let total_sectors_32 = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(self.bpb.total_sectors_32)) };
+        let lbs = total_sectors_32 as u64 - self.bpb.first_data_sector();
+        let dzv = self.bpb.sectors_per_cluster as u64;
+        let plq = (lbs / dzv) as u32 + 2;
         
         
-        let ggh = aid / 4;
-        let mut aae = [0u8; H_];
+        let cxf = bytes_per_sector / 4;
+        let mut mx = [0u8; H_];
         
-        for cmu in 0..hiy {
-            self.cha.xr(sre + cmu as u64, &mut aae)
-                .jd(|_| VfsError::Av)?;
+        for avb in 0..dpi {
+            self.reader.read_sector(luj + avb as u64, &mut mx)
+                .map_err(|_| VfsError::IoError)?;
             
-            for bea in 0..ggh {
-                let ry = cmu * ggh + bea;
-                if ry < 2 || ry >= xjx {
+            for ado in 0..cxf {
+                let cluster = avb * cxf + ado;
+                if cluster < 2 || cluster >= plq {
                     continue;
                 }
                 
-                let l = (bea * 4) as usize;
-                let bn = u32::dj([
-                    aae[l],
-                    aae[l + 1],
-                    aae[l + 2],
-                    aae[l + 3],
+                let offset = (ado * 4) as usize;
+                let value = u32::from_le_bytes([
+                    mx[offset],
+                    mx[offset + 1],
+                    mx[offset + 2],
+                    mx[offset + 3],
                 ]) & 0x0FFFFFFF;
                 
-                if bn == ARQ_ {
+                if value == ATS_ {
                     
-                    self.mrb(ry, BVB_)?;
-                    return Ok(ry);
+                    self.write_fat_entry(cluster, BXX_)?;
+                    return Ok(cluster);
                 }
             }
         }
         
-        Err(VfsError::Tq)
+        Err(VfsError::NoSpace)
     }
     
     
-    fn nsd(&self, ucc: u32) -> B<u32> {
-        let bhm = self.ijp()?;
-        self.mrb(ucc, bhm)?;
-        Ok(bhm)
+    fn extend_chain(&self, last_cluster: u32) -> E<u32> {
+        let afj = self.allocate_cluster()?;
+        self.write_fat_entry(last_cluster, afj)?;
+        Ok(afj)
     }
     
     
-    fn xvk(&self, dly: u32, l: u64, f: &[u8], knc: u64) -> B<(u32, u64)> {
-        let qt = self.agh.qt();
-        let mut rh = self.ghx(dly)?;
+    fn write_file_data(&self, bji: u32, offset: u64, data: &[u8], fpx: u64) -> E<(u32, u64)> {
+        let cluster_size = self.bpb.cluster_size();
+        let mut chain = self.get_cluster_chain(bji)?;
         
         
-        let epw = l + f.len() as u64;
-        let kie = ((epw + qt as u64 - 1) / qt as u64) as usize;
+        let bzl = offset + data.len() as u64;
+        let fmc = ((bzl + cluster_size as u64 - 1) / cluster_size as u64) as usize;
         
         
-        while rh.len() < kie {
-            let qv = *rh.qv().unwrap_or(&dly);
-            let bhm = if rh.is_empty() {
-                self.ijp()?
+        while chain.len() < fmc {
+            let last = *chain.last().unwrap_or(&bji);
+            let afj = if chain.is_empty() {
+                self.allocate_cluster()?
             } else {
-                self.nsd(qv)?
+                self.extend_chain(last)?
             };
-            rh.push(bhm);
+            chain.push(afj);
         }
         
         
-        let mut ia = f;
-        let mut fbt = l as usize;
+        let mut ck = data;
+        let mut cfn = offset as usize;
         
-        for &ry in &rh {
-            let ioe = (rh.iter().qf(|&r| r == ry).unwrap()) * qt;
-            let rbw = ioe + qt;
+        for &cluster in &chain {
+            let eie = (chain.iter().position(|&c| c == cluster).unwrap()) * cluster_size;
+            let klh = eie + cluster_size;
             
-            if fbt >= rbw || ia.is_empty() {
+            if cfn >= klh || ck.is_empty() {
                 continue;
             }
             
-            if fbt < ioe {
-                fbt = ioe;
+            if cfn < eie {
+                cfn = eie;
             }
             
             
-            let mut fez = self.gqj(ry)?;
+            let mut chd = self.read_cluster(cluster)?;
             
             
-            let dke = fbt - ioe;
-            let wqm = qt - dke;
-            let dwy = core::cmp::v(wqm, ia.len());
+            let bik = cfn - eie;
+            let ouk = cluster_size - bik;
+            let bpo = core::cmp::min(ouk, ck.len());
             
             
-            fez[dke..dke + dwy]
-                .dg(&ia[..dwy]);
+            chd[bik..bik + bpo]
+                .copy_from_slice(&ck[..bpo]);
             
             
-            self.gwx(ry, &fez)?;
+            self.write_cluster(cluster, &chd)?;
             
-            ia = &ia[dwy..];
-            fbt += dwy;
+            ck = &ck[bpo..];
+            cfn += bpo;
         }
         
-        let brm = core::cmp::am(knc, epw);
-        let lod = *rh.fv().unwrap_or(&dly);
+        let akf = core::cmp::max(fpx, bzl);
+        let gji = *chain.first().unwrap_or(&bji);
         
-        Ok((lod, brm))
+        Ok((gji, akf))
     }
     
     
-    fn tcl(uig: &str) -> [u8; 11] {
-        let mut iag = [b' '; 11];
-        let juw = uig.idx();
+    fn mci(long_name: &str) -> [u8; 11] {
+        let mut dzh = [b' '; 11];
+        let fea = long_name.to_uppercase();
         
         
-        let (urh, spt) = if let Some(fgw) = juw.bhx('.') {
-            (&juw[..fgw], &juw[fgw + 1..])
+        let (name_part, ext_part) = if let Some(dot_pos) = fea.rfind('.') {
+            (&fea[..dot_pos], &fea[dot_pos + 1..])
         } else {
-            (juw.as_str(), "")
+            (fea.as_str(), "")
         };
         
         
-        for (a, bm) in urh.bw().hi(|r| r.bvb() || *r == '_').take(8).cf() {
-            iag[a] = bm as u8;
+        for (i, ch) in name_part.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '_').take(8).enumerate() {
+            dzh[i] = ch as u8;
         }
         
         
-        for (a, bm) in spt.bw().hi(|r| r.bvb()).take(3).cf() {
-            iag[8 + a] = bm as u8;
+        for (i, ch) in ext_part.chars().filter(|c| c.is_ascii_alphanumeric()).take(3).enumerate() {
+            dzh[8 + i] = ch as u8;
         }
         
-        iag
+        dzh
     }
     
     
-    fn stf(&self, bmw: u32) -> B<(u32, usize)> {
-        let qt = self.agh.qt();
-        let acy = core::mem::size_of::<Fat32DirEntry>();
-        let isu = qt / acy;
+    fn find_free_dir_entry(&self, dir_cluster: u32) -> E<(u32, usize)> {
+        let cluster_size = self.bpb.cluster_size();
+        let oi = core::mem::size_of::<Fat32DirEntry>();
+        let ell = cluster_size / oi;
         
-        let rh = self.ghx(bmw)?;
+        let chain = self.get_cluster_chain(dir_cluster)?;
         
-        for &ry in &rh {
-            let f = self.gqj(ry)?;
+        for &cluster in &chain {
+            let data = self.read_cluster(cluster)?;
             
-            for a in 0..isu {
-                let l = a * acy;
-                let iuu = f[l];
+            for i in 0..ell {
+                let offset = i * oi;
+                let ems = data[offset];
                 
-                if iuu == 0x00 || iuu == 0xE5 {
-                    return Ok((ry, l));
+                if ems == 0x00 || ems == 0xE5 {
+                    return Ok((cluster, offset));
                 }
             }
         }
         
         
-        let qv = *rh.qv().unwrap_or(&bmw);
-        let bhm = self.nsd(qv)?;
+        let last = *chain.last().unwrap_or(&dir_cluster);
+        let afj = self.extend_chain(last)?;
         
         
-        let xxk = vec![0u8; qt];
-        self.gwx(bhm, &xxk)?;
+        let pwl = vec![0u8; cluster_size];
+        self.write_cluster(afj, &pwl)?;
         
-        Ok((bhm, 0))
+        Ok((afj, 0))
     }
     
     
-    fn rqn(&self, bmw: u32, j: &str, ta: bool) -> B<(u32, u64)> {
-        let (nqo, bql) = self.stf(bmw)?;
+    fn create_entry(&self, dir_cluster: u32, name: &str, is_dir: bool) -> E<(u32, u64)> {
+        let (entry_cluster, entry_offset) = self.find_free_dir_entry(dir_cluster)?;
         
         
-        let bhm = if ta {
-            let ry = self.ijp()?;
+        let afj = if is_dir {
+            let cluster = self.allocate_cluster()?;
             
-            let qt = self.agh.qt();
-            let mut kpz = vec![0u8; qt];
+            let cluster_size = self.bpb.cluster_size();
+            let mut fsg = vec![0u8; cluster_size];
             
             
-            let sai = Fat32DirEntry {
-                j: [b'.', b' ', b' ', b' ', b' ', b' ', b' ', b' '],
-                wm: [b' ', b' ', b' '],
-                qn: Fat32DirEntry::LU_,
-                lpf: 0,
-                kly: 0,
-                klx: 0,
-                klv: 0,
-                jyx: 0,
-                hda: ((ry >> 16) & 0xFFFF) as u16,
-                lmm: 0,
-                lml: 0,
-                hdb: (ry & 0xFFFF) as u16,
-                yy: 0,
+            let lha = Fat32DirEntry {
+                name: [b'.', b' ', b' ', b' ', b' ', b' ', b' ', b' '],
+                ext: [b' ', b' ', b' '],
+                attr: Fat32DirEntry::MR_,
+                nt_reserved: 0,
+                create_time_tenth: 0,
+                create_time: 0,
+                create_date: 0,
+                access_date: 0,
+                cluster_hi: ((cluster >> 16) & 0xFFFF) as u16,
+                modify_time: 0,
+                modify_date: 0,
+                cluster_lo: (cluster & 0xFFFF) as u16,
+                file_size: 0,
             };
             
             
-            let sal = Fat32DirEntry {
-                j: [b'.', b'.', b' ', b' ', b' ', b' ', b' ', b' '],
-                wm: [b' ', b' ', b' '],
-                qn: Fat32DirEntry::LU_,
-                lpf: 0,
-                kly: 0,
-                klx: 0,
-                klv: 0,
-                jyx: 0,
-                hda: ((bmw >> 16) & 0xFFFF) as u16,
-                lmm: 0,
-                lml: 0,
-                hdb: (bmw & 0xFFFF) as u16,
-                yy: 0,
+            let lhd = Fat32DirEntry {
+                name: [b'.', b'.', b' ', b' ', b' ', b' ', b' ', b' '],
+                ext: [b' ', b' ', b' '],
+                attr: Fat32DirEntry::MR_,
+                nt_reserved: 0,
+                create_time_tenth: 0,
+                create_time: 0,
+                create_date: 0,
+                access_date: 0,
+                cluster_hi: ((dir_cluster >> 16) & 0xFFFF) as u16,
+                modify_time: 0,
+                modify_date: 0,
+                cluster_lo: (dir_cluster & 0xFFFF) as u16,
+                file_size: 0,
             };
             
-            let acy = core::mem::size_of::<Fat32DirEntry>();
+            let oi = core::mem::size_of::<Fat32DirEntry>();
             unsafe {
-                core::ptr::write(kpz.mw() as *mut Fat32DirEntry, sai);
-                core::ptr::write((kpz.mw().add(acy)) as *mut Fat32DirEntry, sal);
+                core::ptr::write(fsg.as_mut_ptr() as *mut Fat32DirEntry, lha);
+                core::ptr::write((fsg.as_mut_ptr().add(oi)) as *mut Fat32DirEntry, lhd);
             }
             
-            self.gwx(ry, &kpz)?;
-            ry
+            self.write_cluster(cluster, &fsg)?;
+            cluster
         } else {
             0 
         };
         
         
-        let dbz = Self::tcl(j);
-        let daf = Fat32DirEntry {
-            j: dbz[..8].try_into().unwrap_or([b' '; 8]),
-            wm: dbz[8..11].try_into().unwrap_or([b' '; 3]),
-            qn: if ta { Fat32DirEntry::LU_ } else { Fat32DirEntry::BKM_ },
-            lpf: 0,
-            kly: 0,
-            klx: 0,
-            klv: 0,
-            jyx: 0,
-            hda: ((bhm >> 16) & 0xFFFF) as u16,
-            lmm: 0,
-            lml: 0,
-            hdb: (bhm & 0xFFFF) as u16,
-            yy: 0,
+        let short_name = Self::mci(name);
+        let new_entry = Fat32DirEntry {
+            name: short_name[..8].try_into().unwrap_or([b' '; 8]),
+            ext: short_name[8..11].try_into().unwrap_or([b' '; 3]),
+            attr: if is_dir { Fat32DirEntry::MR_ } else { Fat32DirEntry::BNA_ },
+            nt_reserved: 0,
+            create_time_tenth: 0,
+            create_time: 0,
+            create_date: 0,
+            access_date: 0,
+            cluster_hi: ((afj >> 16) & 0xFFFF) as u16,
+            modify_time: 0,
+            modify_date: 0,
+            cluster_lo: (afj & 0xFFFF) as u16,
+            file_size: 0,
         };
         
         
-        let mut fez = self.gqj(nqo)?;
+        let mut chd = self.read_cluster(entry_cluster)?;
         unsafe {
             core::ptr::write(
-                fez.mw().add(bql) as *mut Fat32DirEntry,
-                daf
+                chd.as_mut_ptr().add(entry_offset) as *mut Fat32DirEntry,
+                new_entry
             );
         }
-        self.gwx(nqo, &fez)?;
+        self.write_cluster(entry_cluster, &chd)?;
         
-        Ok((bhm, 0))
+        Ok((afj, 0))
     }
     
     
-    fn xot(&self, dd: I, bhm: u32, brm: u64) -> B<()> {
-        let arj = self.arj.read();
-        let fa = arj.get(&dd).ok_or(VfsError::N)?;
-        let bmw = fa.bmw;
-        let nlp = fa.eou;
-        drop(arj);
+    fn update_dir_entry(&self, ino: K, afj: u32, akf: u64) -> E<()> {
+        let inodes = self.inodes.read();
+        let inode = inodes.get(&ino).ok_or(VfsError::NotFound)?;
+        let dir_cluster = inode.dir_cluster;
+        let hsj = inode.dir_entry_offset;
+        drop(inodes);
 
-        if bmw == 0 {
+        if dir_cluster == 0 {
             
             return Ok(());
         }
 
-        let acy = core::mem::size_of::<Fat32DirEntry>();
-        let qt = self.agh.qt();
-        let isu = qt / acy;
+        let oi = core::mem::size_of::<Fat32DirEntry>();
+        let cluster_size = self.bpb.cluster_size();
+        let ell = cluster_size / oi;
 
         
-        let rh = self.ghx(bmw)?;
-        let ndr = nlp / qt;
-        let dke = nlp % qt;
+        let chain = self.get_cluster_chain(dir_cluster)?;
+        let hlq = hsj / cluster_size;
+        let bik = hsj % cluster_size;
 
-        if ndr >= rh.len() {
-            return Err(VfsError::Av);
+        if hlq >= chain.len() {
+            return Err(VfsError::IoError);
         }
 
-        let pry = rh[ndr];
-        let mut f = self.gqj(pry)?;
+        let jlo = chain[hlq];
+        let mut data = self.read_cluster(jlo)?;
 
         
-        let bt = unsafe {
-            &mut *(f.mw().add(dke) as *mut Fat32DirEntry)
+        let entry = unsafe {
+            &mut *(data.as_mut_ptr().add(bik) as *mut Fat32DirEntry)
         };
 
         
-        bt.hdb = (bhm & 0xFFFF) as u16;
-        bt.hda = ((bhm >> 16) & 0xFFFF) as u16;
+        entry.cluster_lo = (afj & 0xFFFF) as u16;
+        entry.cluster_hi = ((afj >> 16) & 0xFFFF) as u16;
 
         
-        if bt.qn & Fat32DirEntry::LU_ == 0 {
-            bt.yy = brm as u32;
+        if entry.attr & Fat32DirEntry::MR_ == 0 {
+            entry.file_size = akf as u32;
         }
 
         
-        self.gwx(pry, &f)?;
+        self.write_cluster(jlo, &data)?;
 
         Ok(())
     }
     
     
-    fn rvi(&self, bmw: u32, j: &str) -> B<()> {
-        let qt = self.agh.qt();
-        let acy = core::mem::size_of::<Fat32DirEntry>();
-        let isu = qt / acy;
+    fn delete_entry(&self, dir_cluster: u32, name: &str) -> E<()> {
+        let cluster_size = self.bpb.cluster_size();
+        let oi = core::mem::size_of::<Fat32DirEntry>();
+        let ell = cluster_size / oi;
         
-        let rh = self.ghx(bmw)?;
+        let chain = self.get_cluster_chain(dir_cluster)?;
         
-        for &ry in &rh {
-            let mut f = self.gqj(ry)?;
+        for &cluster in &chain {
+            let mut data = self.read_cluster(cluster)?;
             
-            for a in 0..isu {
-                let l = a * acy;
-                let bt = unsafe {
-                    core::ptr::md(f[l..].fq() as *const Fat32DirEntry)
+            for i in 0..ell {
+                let offset = i * oi;
+                let entry = unsafe {
+                    core::ptr::read_unaligned(data[offset..].as_ptr() as *const Fat32DirEntry)
                 };
                 
-                if bt.ofw() {
-                    return Err(VfsError::N);
+                if entry.is_end() {
+                    return Err(VfsError::NotFound);
                 }
                 
-                if !bt.ofz() && !bt.lgg() && !bt.ogy() {
-                    let cxm = bt.nyn();
-                    if cxm.dha(j) {
+                if !entry.is_free() && !entry.is_long_name() && !entry.is_volume_label() {
+                    let bbl = entry.get_short_name();
+                    if bbl.eq_ignore_ascii_case(name) {
                         
-                        f[l] = 0xE5;
-                        self.gwx(ry, &f)?;
+                        data[offset] = 0xE5;
+                        self.write_cluster(cluster, &data)?;
                         
                         
-                        let ntk = bt.ry();
-                        if ntk >= 2 {
-                            self.sxc(ntk)?;
+                        let hyd = entry.cluster();
+                        if hyd >= 2 {
+                            self.free_cluster_chain(hyd)?;
                         }
                         
                         return Ok(());
@@ -844,443 +844,443 @@ impl Fat32Fs {
             }
         }
         
-        Err(VfsError::N)
+        Err(VfsError::NotFound)
     }
     
     
-    fn sxc(&self, dly: u32) -> B<()> {
-        let rh = self.ghx(dly)?;
+    fn free_cluster_chain(&self, bji: u32) -> E<()> {
+        let chain = self.get_cluster_chain(bji)?;
         
-        for ry in rh {
-            self.mrb(ry, ARQ_)?;
+        for cluster in chain {
+            self.write_fat_entry(cluster, ATS_)?;
         }
         
         Ok(())
     }
     
     
-    fn lsh(&self, ry: u32) -> B<Vec<(String, Fat32DirEntry, usize)>> {
-        let f = self.ozv(ry, None)?;
-        let acy = core::mem::size_of::<Fat32DirEntry>();
-        let mut ch = Vec::new();
-        let mut glk: Vec<(u8, Vec<char>)> = Vec::new();
+    fn parse_directory(&self, cluster: u32) -> E<Vec<(String, Fat32DirEntry, usize)>> {
+        let data = self.read_chain(cluster, None)?;
+        let oi = core::mem::size_of::<Fat32DirEntry>();
+        let mut entries = Vec::new();
+        let mut dan: Vec<(u8, Vec<char>)> = Vec::new();
         
-        let mut a = 0;
-        while a + acy <= f.len() {
-            let bt = unsafe {
-                core::ptr::md(f[a..].fq() as *const Fat32DirEntry)
+        let mut i = 0;
+        while i + oi <= data.len() {
+            let entry = unsafe {
+                core::ptr::read_unaligned(data[i..].as_ptr() as *const Fat32DirEntry)
             };
             
-            if bt.ofw() {
+            if entry.is_end() {
                 break;
             }
             
-            if bt.ofz() {
-                glk.clear();
-                a += acy;
+            if entry.is_free() {
+                dan.clear();
+                i += oi;
                 continue;
             }
             
-            if bt.lgg() {
+            if entry.is_long_name() {
                 
-                let oiz = unsafe {
-                    core::ptr::md(f[a..].fq() as *const Bgu)
+                let ika = unsafe {
+                    core::ptr::read_unaligned(data[i..].as_ptr() as *const Yt)
                 };
-                glk.push((oiz.gon(), oiz.tcz()));
-            } else if !bt.ogy() {
+                dan.push((ika.order(), ika.get_chars()));
+            } else if !entry.is_volume_label() {
                 
-                let j = if !glk.is_empty() {
+                let name = if !dan.is_empty() {
                     
-                    glk.bxf(|(gon, _)| *gon);
-                    let ghr: String = glk.iter()
-                        .iva(|(_, bw)| bw.iter())
+                    dan.sort_by_key(|(order, _)| *order);
+                    let cyf: String = dan.iter()
+                        .flat_map(|(_, chars)| chars.iter())
                         .collect();
-                    glk.clear();
-                    ghr
+                    dan.clear();
+                    cyf
                 } else {
-                    bt.nyn()
+                    entry.get_short_name()
                 };
                 
                 
-                if j != "." && j != ".." {
-                    ch.push((j, bt, a));
+                if name != "." && name != ".." {
+                    entries.push((name, entry, i));
                 }
             }
             
-            a += acy;
+            i += oi;
         }
         
-        Ok(ch)
+        Ok(entries)
     }
     
-    fn kyt(&self, dd: I) -> B<Sm> {
-        let arj = self.arj.read();
-        arj.get(&dd).abn().ok_or(VfsError::N)
+    fn get_inode(&self, ino: K) -> E<Hx> {
+        let inodes = self.inodes.read();
+        inodes.get(&ino).cloned().ok_or(VfsError::NotFound)
     }
     
-    fn kaa(&self) -> I {
-        self.hsv.fetch_add(1, Ordering::SeqCst)
+    fn alloc_ino(&self) -> K {
+        self.next_ino.fetch_add(1, Ordering::SeqCst)
     }
 }
 
 
-impl Clone for Sm {
+impl Clone for Hx {
     fn clone(&self) -> Self {
         Self {
-            ry: self.ry,
-            aw: self.aw,
-            ta: self.ta,
-            bmw: self.bmw,
-            eou: self.eou,
-            j: self.j.clone(),
+            cluster: self.cluster,
+            size: self.size,
+            is_dir: self.is_dir,
+            dir_cluster: self.dir_cluster,
+            dir_entry_offset: self.dir_entry_offset,
+            name: self.name.clone(),
         }
     }
 }
 
-impl Cc for Fat32Fs {
-    fn j(&self) -> &str {
+impl Au for Fat32Fs {
+    fn name(&self) -> &str {
         "fat32"
     }
     
-    fn cbm(&self) -> I {
-        self.pea
+    fn root_inode(&self) -> K {
+        self.root_ino
     }
     
-    fn era(&self, dd: I) -> B<Arc<dyn Et>> {
-        let fa = self.kyt(dd)?;
-        if fa.ta {
-            return Err(VfsError::Tc);
+    fn get_file(&self, ino: K) -> E<Arc<dyn Bx>> {
+        let inode = self.get_inode(ino)?;
+        if inode.is_dir {
+            return Err(VfsError::IsDirectory);
         }
         
-        Ok(Arc::new(Aid {
+        Ok(Arc::new(Oy {
             fs: self as *const Fat32Fs,
-            dd,
-            ry: RwLock::new(fa.ry),
-            aw: RwLock::new(fa.aw),
+            ino,
+            cluster: RwLock::new(inode.cluster),
+            size: RwLock::new(inode.size),
         }))
     }
     
-    fn dhl(&self, dd: I) -> B<Arc<dyn Ep>> {
-        let fa = self.kyt(dd)?;
-        if !fa.ta {
-            return Err(VfsError::Lz);
+    fn get_dir(&self, ino: K) -> E<Arc<dyn Bv>> {
+        let inode = self.get_inode(ino)?;
+        if !inode.is_dir {
+            return Err(VfsError::NotDirectory);
         }
         
-        Ok(Arc::new(Aic {
+        Ok(Arc::new(Ox {
             fs: self as *const Fat32Fs,
-            dd,
-            ry: fa.ry,
+            ino,
+            cluster: inode.cluster,
         }))
     }
     
-    fn hm(&self, dd: I) -> B<Stat> {
-        let fa = self.kyt(dd)?;
+    fn stat(&self, ino: K) -> E<Stat> {
+        let inode = self.get_inode(ino)?;
         
         Ok(Stat {
-            dd,
-            kd: if fa.ta { FileType::K } else { FileType::Ea },
-            aw: fa.aw,
-            xk: (fa.aw + 511) / 512,
-            py: self.agh.qt() as u32,
-            ev: if fa.ta { 0o755 } else { 0o644 },
-            pi: 0,
-            pw: 0,
-            byi: 0,
-            bnp: 0,
-            cpq: 0,
+            ino,
+            file_type: if inode.is_dir { FileType::Directory } else { FileType::Regular },
+            size: inode.size,
+            blocks: (inode.size + 511) / 512,
+            block_size: self.bpb.cluster_size() as u32,
+            mode: if inode.is_dir { 0o755 } else { 0o644 },
+            uid: 0,
+            gid: 0,
+            atime: 0,
+            mtime: 0,
+            ctime: 0,
         })
     }
 }
 
 
-struct Aid {
+struct Oy {
     fs: *const Fat32Fs,
-    dd: I,
-    ry: RwLock<u32>,
-    aw: RwLock<u64>,
+    ino: K,
+    cluster: RwLock<u32>,
+    size: RwLock<u64>,
 }
 
-unsafe impl Send for Aid {}
-unsafe impl Sync for Aid {}
+unsafe impl Send for Oy {}
+unsafe impl Sync for Oy {}
 
-impl Et for Aid {
-    fn read(&self, l: u64, k: &mut [u8]) -> B<usize> {
-        let aw = *self.aw.read();
-        let ry = *self.ry.read();
+impl Bx for Oy {
+    fn read(&self, offset: u64, buf: &mut [u8]) -> E<usize> {
+        let size = *self.size.read();
+        let cluster = *self.cluster.read();
         
-        if l >= aw {
+        if offset >= size {
             return Ok(0);
         }
         
         let fs = unsafe { &*self.fs };
-        let ajp = core::cmp::v(k.len() as u64, aw - l) as usize;
+        let rz = core::cmp::min(buf.len() as u64, size - offset) as usize;
         
-        if ry < 2 {
+        if cluster < 2 {
             
             return Ok(0);
         }
         
         
-        let f = fs.ozv(ry, Some(aw))?;
+        let data = fs.read_chain(cluster, Some(size))?;
         
-        let ay = l as usize;
-        let ci = ay + ajp;
+        let start = offset as usize;
+        let end = start + rz;
         
-        if ci <= f.len() {
-            k[..ajp].dg(&f[ay..ci]);
-            Ok(ajp)
+        if end <= data.len() {
+            buf[..rz].copy_from_slice(&data[start..end]);
+            Ok(rz)
         } else {
-            Err(VfsError::Av)
+            Err(VfsError::IoError)
         }
     }
     
-    fn write(&self, l: u64, k: &[u8]) -> B<usize> {
-        if k.is_empty() {
+    fn write(&self, offset: u64, buf: &[u8]) -> E<usize> {
+        if buf.is_empty() {
             return Ok(0);
         }
         
         let fs = unsafe { &*self.fs };
-        let nif = *self.ry.read();
-        let knc = *self.aw.read();
+        let hpp = *self.cluster.read();
+        let fpx = *self.size.read();
         
         
-        let dly = if nif < 2 {
-            let bhm = fs.ijp()?;
-            *self.ry.write() = bhm;
-            bhm
+        let bji = if hpp < 2 {
+            let afj = fs.allocate_cluster()?;
+            *self.cluster.write() = afj;
+            afj
         } else {
-            nif
+            hpp
         };
         
         
-        let (bhm, brm) = fs.xvk(dly, l, k, knc)?;
+        let (afj, akf) = fs.write_file_data(bji, offset, buf, fpx)?;
         
         
-        *self.ry.write() = bhm;
-        *self.aw.write() = brm;
+        *self.cluster.write() = afj;
+        *self.size.write() = akf;
         
         
-        if let Some(mut arj) = fs.arj.ifb() {
-            if let Some(fa) = arj.ds(&self.dd) {
-                fa.ry = bhm;
-                fa.aw = brm;
+        if let Some(mut inodes) = fs.inodes.try_write() {
+            if let Some(inode) = inodes.get_mut(&self.ino) {
+                inode.cluster = afj;
+                inode.size = akf;
             }
         }
         
         
-        let _ = fs.xot(self.dd, bhm, brm);
+        let _ = fs.update_dir_entry(self.ino, afj, akf);
         
-        Ok(k.len())
+        Ok(buf.len())
     }
     
-    fn hm(&self) -> B<Stat> {
-        let aw = *self.aw.read();
+    fn stat(&self) -> E<Stat> {
+        let size = *self.size.read();
         Ok(Stat {
-            dd: self.dd,
-            kd: FileType::Ea,
-            aw,
-            xk: (aw + 511) / 512,
-            py: 512,
-            ev: 0o644,
-            pi: 0,
-            pw: 0,
-            byi: 0,
-            bnp: 0,
-            cpq: 0,
+            ino: self.ino,
+            file_type: FileType::Regular,
+            size,
+            blocks: (size + 511) / 512,
+            block_size: 512,
+            mode: 0o644,
+            uid: 0,
+            gid: 0,
+            atime: 0,
+            mtime: 0,
+            ctime: 0,
         })
     }
 }
 
 
-struct Aic {
+struct Ox {
     fs: *const Fat32Fs,
-    dd: I,
-    ry: u32,
+    ino: K,
+    cluster: u32,
 }
 
-unsafe impl Send for Aic {}
-unsafe impl Sync for Aic {}
+unsafe impl Send for Ox {}
+unsafe impl Sync for Ox {}
 
-impl Ep for Aic {
-    fn cga(&self, j: &str) -> B<I> {
+impl Bv for Ox {
+    fn lookup(&self, name: &str) -> E<K> {
         let fs = unsafe { &*self.fs };
         
         
         {
-            let arj = fs.arj.read();
-            for (dd, fa) in arj.iter() {
-                if fa.j.dha(j) {
-                    return Ok(*dd);
+            let inodes = fs.inodes.read();
+            for (ino, inode) in inodes.iter() {
+                if inode.name.eq_ignore_ascii_case(name) {
+                    return Ok(*ino);
                 }
             }
         }
         
         
-        let ch = fs.lsh(self.ry)?;
+        let entries = fs.parse_directory(self.cluster)?;
         
-        for (cxm, bt, aok) in ch {
-            if cxm.dha(j) {
-                let dd = fs.kaa();
-                let fa = Sm {
-                    ry: bt.ry(),
-                    aw: bt.aw() as u64,
-                    ta: bt.cfr(),
-                    j: cxm,
-                    bmw: self.ry,
-                    eou: aok,
+        for (bbl, entry, uo) in entries {
+            if bbl.eq_ignore_ascii_case(name) {
+                let ino = fs.alloc_ino();
+                let inode = Hx {
+                    cluster: entry.cluster(),
+                    size: entry.size() as u64,
+                    is_dir: entry.is_directory(),
+                    name: bbl,
+                    dir_cluster: self.cluster,
+                    dir_entry_offset: uo,
                 };
-                fs.arj.write().insert(dd, fa);
-                return Ok(dd);
+                fs.inodes.write().insert(ino, inode);
+                return Ok(ino);
             }
         }
         
-        Err(VfsError::N)
+        Err(VfsError::NotFound)
     }
     
-    fn brx(&self) -> B<Vec<Br>> {
+    fn readdir(&self) -> E<Vec<Ap>> {
         let fs = unsafe { &*self.fs };
-        let ch = fs.lsh(self.ry)?;
+        let entries = fs.parse_directory(self.cluster)?;
         
         let mut result = Vec::new();
         
-        for (j, bt, aok) in ch {
-            let dd = fs.kaa();
-            let ta = bt.cfr();
+        for (name, entry, uo) in entries {
+            let ino = fs.alloc_ino();
+            let is_dir = entry.is_directory();
             
             
-            fs.arj.write().insert(dd, Sm {
-                ry: bt.ry(),
-                aw: bt.aw() as u64,
-                ta,
-                j: j.clone(),
-                bmw: self.ry,
-                eou: aok,
+            fs.inodes.write().insert(ino, Hx {
+                cluster: entry.cluster(),
+                size: entry.size() as u64,
+                is_dir,
+                name: name.clone(),
+                dir_cluster: self.cluster,
+                dir_entry_offset: uo,
             });
             
-            result.push(Br {
-                j,
-                dd,
-                kd: if ta { FileType::K } else { FileType::Ea },
+            result.push(Ap {
+                name,
+                ino,
+                file_type: if is_dir { FileType::Directory } else { FileType::Regular },
             });
         }
         
         Ok(result)
     }
     
-    fn avp(&self, j: &str, kd: FileType) -> B<I> {
+    fn create(&self, name: &str, file_type: FileType) -> E<K> {
         let fs = unsafe { &*self.fs };
         
         
-        if self.cga(j).is_ok() {
-            return Err(VfsError::Ri);
+        if self.lookup(name).is_ok() {
+            return Err(VfsError::AlreadyExists);
         }
         
-        let ta = oh!(kd, FileType::K);
+        let is_dir = matches!(file_type, FileType::Directory);
         
         
-        let (ry, dds) = fs.rqn(self.ry, j, ta)?;
+        let (cluster, bek) = fs.create_entry(self.cluster, name, is_dir)?;
         
         
-        let eou = if let Ok(ch) = fs.lsh(self.ry) {
-            ch.iter()
-                .du(|(bo, _, _)| bo.dha(j))
-                .map(|(_, _, dz)| *dz)
+        let dir_entry_offset = if let Ok(entries) = fs.parse_directory(self.cluster) {
+            entries.iter()
+                .find(|(ae, _, _)| ae.eq_ignore_ascii_case(name))
+                .map(|(_, _, off)| *off)
                 .unwrap_or(0)
         } else {
             0
         };
         
         
-        let dd = fs.kaa();
-        fs.arj.write().insert(dd, Sm {
-            ry,
-            aw: 0,
-            ta,
-            j: j.to_string(),
-            bmw: self.ry,
-            eou,
+        let ino = fs.alloc_ino();
+        fs.inodes.write().insert(ino, Hx {
+            cluster,
+            size: 0,
+            is_dir,
+            name: name.to_string(),
+            dir_cluster: self.cluster,
+            dir_entry_offset,
         });
         
-        Ok(dd)
+        Ok(ino)
     }
     
-    fn cnm(&self, j: &str) -> B<()> {
+    fn unlink(&self, name: &str) -> E<()> {
         let fs = unsafe { &*self.fs };
         
         
-        if j == "." || j == ".." {
-            return Err(VfsError::Pr);
+        if name == "." || name == ".." {
+            return Err(VfsError::InvalidPath);
         }
         
         
-        fs.rvi(self.ry, j)?;
+        fs.delete_entry(self.cluster, name)?;
         
         
-        let mut arj = fs.arj.write();
-        let cik: Vec<I> = arj.iter()
-            .hi(|(_, fa)| fa.j.dha(j))
-            .map(|(dd, _)| *dd)
+        let mut inodes = fs.inodes.write();
+        let aph: Vec<K> = inodes.iter()
+            .filter(|(_, inode)| inode.name.eq_ignore_ascii_case(name))
+            .map(|(ino, _)| *ino)
             .collect();
         
-        for dd in cik {
-            arj.remove(&dd);
+        for ino in aph {
+            inodes.remove(&ino);
         }
         
         Ok(())
     }
     
-    fn hm(&self) -> B<Stat> {
+    fn stat(&self) -> E<Stat> {
         let fs = unsafe { &*self.fs };
-        fs.hm(self.dd)
+        fs.stat(self.ino)
     }
 }
 
 
-pub fn xmq() -> Option<Arc<Fat32Fs>> {
-    use crate::drivers::partition::{hul, PartitionType};
+pub fn pnx() -> Option<Arc<Fat32Fs>> {
+    use crate::drivers::partition::{dwf, PartitionType};
     use crate::drivers::ahci;
     
     
-    let ik = ahci::bhh();
-    crate::log_debug!("[FAT32] Checking {} AHCI devices", ik.len());
+    let devices = ahci::adz();
+    crate::log_debug!("[FAT32] Checking {} AHCI devices", devices.len());
     
-    for de in ik {
-        let port = de.kg;
-        let axf = de.agw;
-        crate::log_debug!("[FAT32] Port {}: {} sectors", port, axf);
+    for device in devices {
+        let port = device.port_num;
+        let zp = device.sector_count;
+        crate::log_debug!("[FAT32] Port {}: {} sectors", port, zp);
         
         
-        let dld = |jk: u64, k: &mut [u8]| -> Result<(), &'static str> {
-            ahci::ain(port, jk, 1, k)
+        let read_fn = |dj: u64, buf: &mut [u8]| -> Result<(), &'static str> {
+            ahci::read_sectors(port, dj, 1, buf)
                 .map(|_| ())
         };
         
         
-        let vsu = Arc::new(AhciBlockReader::new(port as usize, 0));
-        if let Ok(fs) = Fat32Fs::beu(vsu) {
+        let odk = Arc::new(AhciBlockReader::new(port as usize, 0));
+        if let Ok(fs) = Fat32Fs::abd(odk) {
             crate::log!("[FAT32] Mounted superfloppy FAT32 from port {}", port);
             return Some(Arc::new(fs));
         }
         
         
-        if let Ok(gg) = hul(dld, axf) {
-            for partition in &gg.aqd {
+        if let Ok(bs) = dwf(read_fn, zp) {
+            for partition in &bs.partitions {
                 
-                match partition.duf {
-                    PartitionType::Asa | 
-                    PartitionType::Asc |
-                    PartitionType::Akg => {
-                        crate::log!("[FAT32] Found partition at LBA {}", partition.aag);
+                match partition.partition_type {
+                    PartitionType::Fat32 | 
+                    PartitionType::Fat32Lba |
+                    PartitionType::MicrosoftBasicData => {
+                        crate::log!("[FAT32] Found partition at LBA {}", partition.start_lba);
                         
-                        let cha = Arc::new(AhciBlockReader::new(port as usize, partition.aag));
+                        let reader = Arc::new(AhciBlockReader::new(port as usize, partition.start_lba));
                         
-                        match Fat32Fs::beu(cha) {
+                        match Fat32Fs::abd(reader) {
                             Ok(fs) => {
                                 crate::log!("[FAT32] Successfully mounted partition");
                                 return Some(Arc::new(fs));
                             }
-                            Err(aa) => {
-                                crate::log_warn!("[FAT32] Mount failed: {:?}", aa);
+                            Err(e) => {
+                                crate::log_warn!("[FAT32] Mount failed: {:?}", e);
                             }
                         }
                     }

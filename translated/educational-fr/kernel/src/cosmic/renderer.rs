@@ -21,9 +21,9 @@ pub struct CosmicRenderer {
 // Bloc d'implémentation — définit les méthodes du type ci-dessus.
 impl CosmicRenderer {
     /// Create a new renderer with given dimensions
-    pub fn new(width: u32, height: u32) -> Self {
-        let pixmap = Pixmap::new(width, height).expect("Failed to create pixmap");
-        Self { pixmap, width, height }
+    pub fn new(width: u32, height: u32) -> Option<Self> {
+        let pixmap = Pixmap::new(width, height)?;
+        Some(Self { pixmap, width, height })
     }
     
     /// Get dimensions
@@ -43,11 +43,11 @@ impl CosmicRenderer {
         
         // Write 4 bytes per pixel directly
         for i in 0..pixels {
-            let index = i * 4;
-            data[index] = r;
-            data[index + 1] = g;
-            data[index + 2] = b;
-            data[index + 3] = a;
+            let idx = i * 4;
+            data[idx] = r;
+            data[idx + 1] = g;
+            data[idx + 2] = b;
+            data[idx + 3] = a;
         }
     }
     
@@ -58,10 +58,10 @@ impl CosmicRenderer {
         let b = (color.b * 255.0) as u8;
         let a = (color.a * 255.0) as u8;
         
-        let x0 = (rect.x as i32).maximum(0) as u32;
-        let y0 = (rect.y as i32).maximum(0) as u32;
-        let x1 = ((rect.x + rect.width) as u32).minimum(self.width);
-        let y1 = ((rect.y + rect.height) as u32).minimum(self.height);
+        let x0 = (rect.x as i32).max(0) as u32;
+        let y0 = (rect.y as i32).max(0) as u32;
+        let x1 = ((rect.x + rect.width) as u32).min(self.width);
+        let y1 = ((rect.y + rect.height) as u32).min(self.height);
         
         let data = self.pixmap.data_mut();
         let stride = self.width as usize * 4;
@@ -71,11 +71,11 @@ impl CosmicRenderer {
             for y in y0..y1 {
                 let row_start = y as usize * stride;
                 for x in x0..x1 {
-                    let index = row_start + x as usize * 4;
-                    data[index] = r;
-                    data[index + 1] = g;
-                    data[index + 2] = b;
-                    data[index + 3] = a;
+                    let idx = row_start + x as usize * 4;
+                    data[idx] = r;
+                    data[idx + 1] = g;
+                    data[idx + 2] = b;
+                    data[idx + 3] = a;
                 }
             }
         } else {
@@ -85,11 +85,11 @@ impl CosmicRenderer {
             for y in y0..y1 {
                 let row_start = y as usize * stride;
                 for x in x0..x1 {
-                    let index = row_start + x as usize * 4;
-                    data[index] = ((r as u32 * alpha + data[index] as u32 * inv_alpha) / 255) as u8;
-                    data[index + 1] = ((g as u32 * alpha + data[index + 1] as u32 * inv_alpha) / 255) as u8;
-                    data[index + 2] = ((b as u32 * alpha + data[index + 2] as u32 * inv_alpha) / 255) as u8;
-                    data[index + 3] = 255;
+                    let idx = row_start + x as usize * 4;
+                    data[idx] = ((r as u32 * alpha + data[idx] as u32 * inv_alpha) / 255) as u8;
+                    data[idx + 1] = ((g as u32 * alpha + data[idx + 1] as u32 * inv_alpha) / 255) as u8;
+                    data[idx + 2] = ((b as u32 * alpha + data[idx + 2] as u32 * inv_alpha) / 255) as u8;
+                    data[idx + 3] = 255;
                 }
             }
         }
@@ -117,14 +117,18 @@ impl CosmicRenderer {
     
     /// Stroke a rounded rectangle border
     pub fn stroke_rounded_rect(&mut self, rect: Rect, radius: f32, color: Color, width: f32) {
-        let path = rounded_rect_path(rect, radius);
+        let path = // Correspondance de motifs — branchement exhaustif de Rust.
+match rounded_rect_path(rect, radius) {
+            Some(p) => p,
+            None => return,
+        };
         let mut paint = Paint::default();
         paint.set_color(to_skia_color(color));
         paint.anti_alias = true;
         
         let stroke = Stroke {
             width,
-            line_capability: LineCap::Round,
+            line_cap: LineCap::Round,
             ..Default::default()
         };
         
@@ -146,7 +150,11 @@ impl CosmicRenderer {
         }
         
         // Large circles use tiny-skia for quality
-        let path = circle_path(center, radius);
+        let path = // Correspondance de motifs — branchement exhaustif de Rust.
+match circle_path(center, radius) {
+            Some(p) => p,
+            None => return,
+        };
         let mut paint = Paint::default();
         paint.set_color(to_skia_color(color));
         paint.anti_alias = true;
@@ -189,22 +197,22 @@ impl CosmicRenderer {
                 // Check if point is inside circle
                 if dx * dx + dy_sq > rad_sq { continue; }
                 
-                let pixel = cx + dx;
-                if pixel < 0 || pixel >= w { continue; }
+                let px = cx + dx;
+                if px < 0 || px >= w { continue; }
                 
-                let index = row_start + pixel as usize * 4;
+                let idx = row_start + px as usize * 4;
                 if a == 255 {
-                    data[index] = r;
-                    data[index + 1] = g;
-                    data[index + 2] = b;
-                    data[index + 3] = a;
+                    data[idx] = r;
+                    data[idx + 1] = g;
+                    data[idx + 2] = b;
+                    data[idx + 3] = a;
                 } else {
                     let alpha = a as u32;
                     let inv_alpha = 255 - alpha;
-                    data[index] = ((r as u32 * alpha + data[index] as u32 * inv_alpha) / 255) as u8;
-                    data[index + 1] = ((g as u32 * alpha + data[index + 1] as u32 * inv_alpha) / 255) as u8;
-                    data[index + 2] = ((b as u32 * alpha + data[index + 2] as u32 * inv_alpha) / 255) as u8;
-                    data[index + 3] = 255;
+                    data[idx] = ((r as u32 * alpha + data[idx] as u32 * inv_alpha) / 255) as u8;
+                    data[idx + 1] = ((g as u32 * alpha + data[idx + 1] as u32 * inv_alpha) / 255) as u8;
+                    data[idx + 2] = ((b as u32 * alpha + data[idx + 2] as u32 * inv_alpha) / 255) as u8;
+                    data[idx + 3] = 255;
                 }
             }
         }
@@ -223,7 +231,7 @@ impl CosmicRenderer {
             
             let stroke = Stroke {
                 width,
-                line_capability: LineCap::Round,
+                line_cap: LineCap::Round,
                 ..Default::default()
             };
             
@@ -281,18 +289,18 @@ impl CosmicRenderer {
             
                         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-                let source = data.as_pointer().add(source_offset) as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+                let src = data.as_ptr().add(source_offset) as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u32;
-                let destination = framebuffer_address.add(destination_offset) as *mut u32;
+                let dst = framebuffer_address.add(destination_offset) as *mut u32;
                 
                 for x in 0..self.width as usize {
-                    let rgba = *source.add(x);
+                    let rgba = *src.add(x);
                     // RGBA to ARGB: swap R and B
                     let r = (rgba >> 0) & 0xFF;
                     let g = (rgba >> 8) & 0xFF;  
                     let b = (rgba >> 16) & 0xFF;
                     let a = (rgba >> 24) & 0xFF;
-                    *destination.add(x) = (a << 24) | (r << 16) | (g << 8) | b;
+                    *dst.add(x) = (a << 24) | (r << 16) | (g << 8) | b;
                 }
             }
         }
@@ -303,11 +311,11 @@ const u32;
         let data = self.pixmap.data();
         
         if let Some((ptr, bb_width, bb_height, _stride)) = crate::framebuffer::get_backbuffer_information() {
-            let pixels = self.width.minimum(bb_width) * self.height.minimum(bb_height);
+            let pixels = self.width.min(bb_width) * self.height.min(bb_height);
             
                         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-                let source_u32 = data.as_pointer() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+                let source_u32 = data.as_ptr() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u32;
                 let destination_u32 = ptr as *mut u32;
                 
@@ -378,21 +386,21 @@ match state {
         );
         
         // Window controls (right side)
-        let button_size = 14.0;
-        let button_y = rect.y + (rect.height - button_size) / 2.0;
+        let btn_size = 14.0;
+        let btn_y = rect.y + (rect.height - btn_size) / 2.0;
         let button_spacing = 8.0;
         
         // Close button (rightmost)
-        let close_x = rect.x + rect.width - button_size - 12.0;
-        self.fill_circle(Point::new(close_x + button_size/2.0, button_y + button_size/2.0), button_size/2.0, t.close_bg);
+        let close_x = rect.x + rect.width - btn_size - 12.0;
+        self.fill_circle(Point::new(close_x + btn_size/2.0, btn_y + btn_size/2.0), btn_size/2.0, t.close_bg);
         
         // Maximize button
-        let maximum_x = close_x - button_size - button_spacing;
-        self.fill_circle(Point::new(maximum_x + button_size/2.0, button_y + button_size/2.0), button_size/2.0, t.maximize_bg);
+        let maximum_x = close_x - btn_size - button_spacing;
+        self.fill_circle(Point::new(maximum_x + btn_size/2.0, btn_y + btn_size/2.0), btn_size/2.0, t.maximize_bg);
         
         // Minimize button  
-        let minimum_x = maximum_x - button_size - button_spacing;
-        self.fill_circle(Point::new(minimum_x + button_size/2.0, button_y + button_size/2.0), button_size/2.0, t.minimize_bg);
+        let minimum_x = maximum_x - btn_size - button_spacing;
+        self.fill_circle(Point::new(minimum_x + btn_size/2.0, btn_y + btn_size/2.0), btn_size/2.0, t.minimize_bg);
     }
     
     /// Draw COSMIC-style panel (top bar)
@@ -482,19 +490,19 @@ fn to_skia_color(c: Color) -> SkiaColor {
     SkiaColor::from_rgba(c.r, c.g, c.b, c.a).unwrap_or(SkiaColor::BLACK)
 }
 
-fn rect_path(r: Rect) -> Path {
+fn rect_path(r: Rect) -> Option<Path> {
     let mut pb = PathBuilder::new();
     pb.move_to(r.x, r.y);
     pb.line_to(r.x + r.width, r.y);
     pb.line_to(r.x + r.width, r.y + r.height);
     pb.line_to(r.x, r.y + r.height);
     pb.close();
-    pb.finish().unwrap()
+    pb.finish()
 }
 
-fn rounded_rect_path(r: Rect, radius: f32) -> Path {
+fn rounded_rect_path(r: Rect, radius: f32) -> Option<Path> {
     let mut pb = PathBuilder::new();
-    let rad = radius.minimum(r.width / 2.0).minimum(r.height / 2.0);
+    let rad = radius.min(r.width / 2.0).min(r.height / 2.0);
     
     // Start at top-left after corner
     pb.move_to(r.x + rad, r.y);
@@ -520,10 +528,10 @@ fn rounded_rect_path(r: Rect, radius: f32) -> Path {
     pb.quad_to(r.x, r.y, r.x + rad, r.y);
     
     pb.close();
-    pb.finish().unwrap()
+    pb.finish()
 }
 
-fn circle_path(center: Point, radius: f32) -> Path {
+fn circle_path(center: Point, radius: f32) -> Option<Path> {
     let mut pb = PathBuilder::new();
     
     // Approximate circle with bezier curves
@@ -553,7 +561,7 @@ fn circle_path(center: Point, radius: f32) -> Path {
     );
     pb.close();
     
-    pb.finish().unwrap()
+    pb.finish()
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -603,18 +611,18 @@ impl CosmicRenderer {
             }
             
             for bit in 0..8 {
-                let pixel = x + bit;
-                if pixel < 0 || pixel >= self.width as i32 {
+                let px = x + bit;
+                if px < 0 || px >= self.width as i32 {
                     continue;
                 }
                 
                 if (glyph_byte >> (7 - bit)) & 1 != 0 {
-                    let index = py as usize * stride + pixel as usize * 4;
-                    if index + 3 < data.len() {
-                        data[index] = r;
-                        data[index + 1] = g;
-                        data[index + 2] = b;
-                        data[index + 3] = a;
+                    let idx = py as usize * stride + px as usize * 4;
+                    if idx + 3 < data.len() {
+                        data[idx] = r;
+                        data[idx + 1] = g;
+                        data[idx + 2] = b;
+                        data[idx + 3] = a;
                     }
                 }
             }

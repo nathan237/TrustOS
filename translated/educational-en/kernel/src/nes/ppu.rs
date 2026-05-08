@@ -22,17 +22,17 @@ const NES_PALETTE: [u32; 64] = [
 // Public structure — visible outside this module.
 pub struct Ppu {
     // Registers
-    pub controller: u8,       // $2000 PPUCTRL
+    pub ctrl: u8,       // $2000 PPUCTRL
     pub mask: u8,       // $2001 PPUMASK
     pub status: u8,     // $2002 PPUSTATUS
-    pub oam_address: u8,   // $2003 OAMADDR
+    pub oam_addr: u8,   // $2003 OAMADDR
 
     // Internal registers
     pub v: u16,         // Current VRAM address (15-bit)
     pub t: u16,         // Temporary VRAM address (15-bit)
     pub fine_x: u8,     // Fine X scroll (3-bit)
     pub w: bool,        // Write toggle for $2005/$2006
-    pub data_buffer: u8,   // PPUDATA read buffer
+    pub data_buf: u8,   // PPUDATA read buffer
 
     // Memory
     pub oam: [u8; 256],        // Object Attribute Memory (64 sprites × 4 bytes)
@@ -59,8 +59,8 @@ impl Ppu {
         // Public function — callable from other modules.
 pub fn new() -> Self {
         Self {
-            controller: 0, mask: 0, status: 0, oam_address: 0,
-            v: 0, t: 0, fine_x: 0, w: false, data_buffer: 0,
+            ctrl: 0, mask: 0, status: 0, oam_addr: 0,
+            v: 0, t: 0, fine_x: 0, w: false, data_buf: 0,
             oam: [0; 256],
             vram: [0; 2048],
             palette: [0; 32],
@@ -77,72 +77,72 @@ pub fn new() -> Self {
 
     // ======================== Register Access ========================
 
-    pub fn read_register(&mut self, address: u16, cart: &Cartridge) -> u8 {
+    pub fn read_register(&mut self, addr: u16, cart: &Cartridge) -> u8 {
                 // Pattern matching — Rust's exhaustive branching construct.
-match address & 7 {
+match addr & 7 {
             2 => { // PPUSTATUS
-                let value = (self.status & 0xE0) | (self.data_buffer & 0x1F);
+                let val = (self.status & 0xE0) | (self.data_buf & 0x1F);
                 self.status &= !0x80; // Clear VBlank
                 self.w = false;
-                value
+                val
             }
             4 => { // OAMDATA
-                self.oam[self.oam_address as usize]
+                self.oam[self.oam_addr as usize]
             }
             7 => { // PPUDATA
-                let address = self.v & 0x3FFF;
-                let value = if address >= 0x3F00 {
-                    self.palette_read(address)
+                let addr = self.v & 0x3FFF;
+                let val = if addr >= 0x3F00 {
+                    self.palette_read(addr)
                 } else {
-                    let buffered = self.data_buffer;
-                    self.data_buffer = self.ppu_read(address, cart);
+                    let buffered = self.data_buf;
+                    self.data_buf = self.ppu_read(addr, cart);
                     buffered
                 };
-                self.v = self.v.wrapping_add(if self.controller & 0x04 != 0 { 32 } else { 1 });
-                value
+                self.v = self.v.wrapping_add(if self.ctrl & 0x04 != 0 { 32 } else { 1 });
+                val
             }
             _ => 0,
         }
     }
 
         // Public function — callable from other modules.
-pub fn write_register(&mut self, address: u16, value: u8, cart: &mut Cartridge) {
+pub fn write_register(&mut self, addr: u16, val: u8, cart: &mut Cartridge) {
                 // Pattern matching — Rust's exhaustive branching construct.
-match address & 7 {
+match addr & 7 {
             0 => { // PPUCTRL
-                self.controller = value;
-                self.t = (self.t & 0xF3FF) | (((value as u16) & 3) << 10);
+                self.ctrl = val;
+                self.t = (self.t & 0xF3FF) | (((val as u16) & 3) << 10);
             }
-            1 => self.mask = value,
-            3 => self.oam_address = value,
+            1 => self.mask = val,
+            3 => self.oam_addr = val,
             4 => { // OAMDATA
-                self.oam[self.oam_address as usize] = value;
-                self.oam_address = self.oam_address.wrapping_add(1);
+                self.oam[self.oam_addr as usize] = val;
+                self.oam_addr = self.oam_addr.wrapping_add(1);
             }
             5 => { // PPUSCROLL
                 if !self.w {
-                    self.t = (self.t & 0xFFE0) | ((value as u16) >> 3);
-                    self.fine_x = value & 7;
+                    self.t = (self.t & 0xFFE0) | ((val as u16) >> 3);
+                    self.fine_x = val & 7;
                 } else {
                     self.t = (self.t & 0x8C1F)
-                        | (((value as u16) & 0xF8) << 2)
-                        | (((value as u16) & 7) << 12);
+                        | (((val as u16) & 0xF8) << 2)
+                        | (((val as u16) & 7) << 12);
                 }
                 self.w = !self.w;
             }
             6 => { // PPUADDR
                 if !self.w {
-                    self.t = (self.t & 0x00FF) | (((value as u16) & 0x3F) << 8);
+                    self.t = (self.t & 0x00FF) | (((val as u16) & 0x3F) << 8);
                 } else {
-                    self.t = (self.t & 0xFF00) | (value as u16);
+                    self.t = (self.t & 0xFF00) | (val as u16);
                     self.v = self.t;
                 }
                 self.w = !self.w;
             }
             7 => { // PPUDATA
                 let a = self.v & 0x3FFF;
-                self.ppu_write(a, value, cart);
-                self.v = self.v.wrapping_add(if self.controller & 0x04 != 0 { 32 } else { 1 });
+                self.ppu_write(a, val, cart);
+                self.v = self.v.wrapping_add(if self.ctrl & 0x04 != 0 { 32 } else { 1 });
             }
             _ => {}
         }
@@ -150,43 +150,43 @@ match address & 7 {
 
     // ======================== PPU Memory Access ========================
 
-    fn ppu_read(&self, address: u16, cart: &Cartridge) -> u8 {
+    fn ppu_read(&self, addr: u16, cart: &Cartridge) -> u8 {
                 // Pattern matching — Rust's exhaustive branching construct.
-match address {
-            0x0000..=0x1FFF => cart.ppu_read(address),
+match addr {
+            0x0000..=0x1FFF => cart.ppu_read(addr),
             0x2000..=0x3EFF => {
-                let nt_address = cart.mirror_nametable(address - 0x2000);
+                let nt_address = cart.mirror_nametable(addr - 0x2000);
                 self.vram[nt_address as usize]
             }
-            0x3F00..=0x3FFF => self.palette_read(address),
+            0x3F00..=0x3FFF => self.palette_read(addr),
             _ => 0,
         }
     }
 
-    fn ppu_write(&mut self, address: u16, value: u8, cart: &mut Cartridge) {
+    fn ppu_write(&mut self, addr: u16, val: u8, cart: &mut Cartridge) {
                 // Pattern matching — Rust's exhaustive branching construct.
-match address {
-            0x0000..=0x1FFF => cart.ppu_write(address, value),
+match addr {
+            0x0000..=0x1FFF => cart.ppu_write(addr, val),
             0x2000..=0x3EFF => {
-                let nt_address = cart.mirror_nametable(address - 0x2000);
-                self.vram[nt_address as usize] = value;
+                let nt_address = cart.mirror_nametable(addr - 0x2000);
+                self.vram[nt_address as usize] = val;
             }
             0x3F00..=0x3FFF => {
-                let index = (address & 0x1F) as usize;
-                self.palette[index] = value & 0x3F;
+                let idx = (addr & 0x1F) as usize;
+                self.palette[idx] = val & 0x3F;
                 // Mirror background color
-                if index & 3 == 0 {
-                    self.palette[index ^ 0x10] = value & 0x3F;
+                if idx & 3 == 0 {
+                    self.palette[idx ^ 0x10] = val & 0x3F;
                 }
             }
             _ => {}
         }
     }
 
-    fn palette_read(&self, address: u16) -> u8 {
-        let mut index = (address & 0x1F) as usize;
-        if index >= 16 && index & 3 == 0 { index -= 16; }
-        self.palette[index] & 0x3F
+    fn palette_read(&self, addr: u16) -> u8 {
+        let mut idx = (addr & 0x1F) as usize;
+        if idx >= 16 && idx & 3 == 0 { idx -= 16; }
+        self.palette[idx] & 0x3F
     }
 
     // ======================== Scanline Rendering ========================
@@ -208,7 +208,7 @@ match self.scanline {
             241 => {
                 // VBlank start
                 self.status |= 0x80;
-                if self.controller & 0x80 != 0 {
+                if self.ctrl & 0x80 != 0 {
                     trigger_nmi = true;
                 }
             }
@@ -241,9 +241,9 @@ match self.scanline {
         let bg_left = self.mask & 0x02 != 0;
         let spr_left = self.mask & 0x04 != 0;
 
-        let bg_pattern = if self.controller & 0x10 != 0 { 0x1000u16 } else { 0u16 };
-        let spr_pattern = if self.controller & 0x08 != 0 { 0x1000u16 } else { 0u16 };
-        let tall_sprites = self.controller & 0x20 != 0;
+        let bg_pattern = if self.ctrl & 0x10 != 0 { 0x1000u16 } else { 0u16 };
+        let spr_pattern = if self.ctrl & 0x08 != 0 { 0x1000u16 } else { 0u16 };
+        let tall_sprites = self.ctrl & 0x20 != 0;
         let spr_h = if tall_sprites { 16 } else { 8 };
 
         // Scroll values from v register
@@ -269,9 +269,9 @@ match self.scanline {
                 let tile_id = self.ppu_read(nt_address, cart) as u16;
 
                 let attribute_address = nt_base + 0x03C0 + ((coarse_y + fine_y / 8) / 4) * 8 + actual_tile_x / 4;
-                let attribute = self.ppu_read(attribute_address, cart);
+                let attr = self.ppu_read(attribute_address, cart);
                 let shift = ((((coarse_y + fine_y / 8) & 2)) | ((actual_tile_x & 2) >> 1)) * 2;
-                let palette_id = (attribute >> shift) & 3;
+                let palette_id = (attr >> shift) & 3;
 
                 let pattern_address = bg_pattern + tile_id * 16 + (fine_y & 7);
                 let lo = self.ppu_read(pattern_address, cart);
@@ -299,11 +299,11 @@ match self.scanline {
             // Compose final pixel
             let final_color = if spr_color != 0 && (bg_color == 0 || !spr_priority) {
                 // Sprite wins
-                let index = self.palette[16 + spr_palette as usize * 4 + spr_color as usize] as usize;
-                NES_PALETTE[index & 0x3F]
+                let idx = self.palette[16 + spr_palette as usize * 4 + spr_color as usize] as usize;
+                NES_PALETTE[idx & 0x3F]
             } else if bg_color != 0 {
-                let index = self.palette[bg_palette as usize * 4 + bg_color as usize] as usize;
-                NES_PALETTE[index & 0x3F]
+                let idx = self.palette[bg_palette as usize * 4 + bg_color as usize] as usize;
+                NES_PALETTE[idx & 0x3F]
             } else {
                 NES_PALETTE[self.palette[0] as usize & 0x3F]
             };
@@ -321,11 +321,11 @@ match self.scanline {
 
     fn get_sprite_pixel(&self, x: u8, y: u8, spr_pattern: u16, spr_h: u8, cart: &Cartridge) -> (u8, u8, bool, bool) {
         for i in 0..self.sprite_count as usize {
-            let index = self.sprite_indices[i] as usize * 4;
-            let spr_y = self.oam[index] as i16;
-            let spr_tile = self.oam[index + 1];
-            let spr_attribute = self.oam[index + 2];
-            let spr_x = self.oam[index + 3] as i16;
+            let idx = self.sprite_indices[i] as usize * 4;
+            let spr_y = self.oam[idx] as i16;
+            let spr_tile = self.oam[idx + 1];
+            let spr_attribute = self.oam[idx + 2];
+            let spr_x = self.oam[idx + 3] as i16;
 
             if (x as i16) < spr_x || (x as i16) >= spr_x + 8 { continue; }
 
@@ -355,8 +355,8 @@ match self.scanline {
             let lo = self.ppu_read(pattern_address, cart);
             let hi = self.ppu_read(pattern_address + 8, cart);
 
-            let column = if flip_h { x as i16 - spr_x } else { 7 - (x as i16 - spr_x) };
-            let color = ((lo >> column) & 1) | (((hi >> column) & 1) << 1);
+            let col = if flip_h { x as i16 - spr_x } else { 7 - (x as i16 - spr_x) };
+            let color = ((lo >> col) & 1) | (((hi >> col) & 1) << 1);
 
             if color != 0 {
                 return (color, palette_id, priority, self.sprite_indices[i] == 0);
@@ -368,7 +368,7 @@ match self.scanline {
     fn evaluate_sprites(&mut self, _cart: &Cartridge) {
         self.sprite_count = 0;
         let y = self.scanline as u8;
-        let h = if self.controller & 0x20 != 0 { 16i16 } else { 8i16 };
+        let h = if self.ctrl & 0x20 != 0 { 16i16 } else { 8i16 };
 
         for i in 0..64u8 {
             let spr_y = self.oam[i as usize * 4] as i16;

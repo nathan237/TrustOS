@@ -126,13 +126,13 @@ pub struct Envelope {
 // Implementation block — defines methods for the type above.
 impl Envelope {
     /// Create new envelope with times in milliseconds
-    pub fn new(attack_mouse: u32, decay_mouse: u32, sustain_pct: u32, release_mouse: u32) -> Self {
-        let sustain = (sustain_pct.minimum(100) as i32 * 32767) / 100;
+    pub fn new(attack_ms: u32, decay_ms: u32, sustain_pct: u32, release_ms: u32) -> Self {
+        let sustain = (sustain_pct.min(100) as i32 * 32767) / 100;
         Self {
-            attack_samples: mouse_to_samples(attack_mouse),
-            decay_samples: mouse_to_samples(decay_mouse),
+            attack_samples: mouse_to_samples(attack_ms),
+            decay_samples: mouse_to_samples(decay_ms),
             sustain_level: sustain,
-            release_samples: mouse_to_samples(release_mouse),
+            release_samples: mouse_to_samples(release_ms),
             state: EnvState::Idle,
             level: 0,
             counter: 0,
@@ -271,7 +271,7 @@ pub struct Oscillator {
     /// Phase increment per sample (Q16.16)
     phase_inc: u32,
     /// Current frequency in Hz
-    pub frequency_hz: u32,
+    pub freq_hz: u32,
     /// LFSR state for noise generation
     lfsr: u16,
 }
@@ -279,34 +279,34 @@ pub struct Oscillator {
 // Implementation block — defines methods for the type above.
 impl Oscillator {
     /// Create a new oscillator
-    pub fn new(waveform: Waveform, frequency_hz: u32) -> Self {
-        let phase_inc = Self::calc_phase_inc(frequency_hz);
+    pub fn new(waveform: Waveform, freq_hz: u32) -> Self {
+        let phase_inc = Self::calc_phase_inc(freq_hz);
         Self {
             waveform,
             phase: 0,
             phase_inc,
-            frequency_hz,
+            freq_hz,
             lfsr: LFSR_SEED,
         }
     }
 
     /// Calculate phase increment for a given frequency
     /// phase_inc = (freq × TABLE_SIZE << FRAC_BITS) / SAMPLE_RATE
-    fn calc_phase_inc(frequency_hz: u32) -> u32 {
+    fn calc_phase_inc(freq_hz: u32) -> u32 {
         // Use 64-bit to avoid overflow: freq can be up to ~12kHz
-        ((frequency_hz as u64 * (TABLE_SIZE as u64) << FRAC_BITS) / SAMPLE_RATE as u64) as u32
+        ((freq_hz as u64 * (TABLE_SIZE as u64) << FRAC_BITS) / SAMPLE_RATE as u64) as u32
     }
 
     /// Set frequency
-    pub fn set_frequency(&mut self, frequency_hz: u32) {
-        self.frequency_hz = frequency_hz;
-        self.phase_inc = Self::calc_phase_inc(frequency_hz);
+    pub fn set_freq(&mut self, freq_hz: u32) {
+        self.freq_hz = freq_hz;
+        self.phase_inc = Self::calc_phase_inc(freq_hz);
     }
 
     /// Set frequency from MIDI note
     pub fn set_midi_note(&mut self, note: u8) {
-        let frequency = MIDI_FREQUENCY[note.minimum(127) as usize];
-        self.set_frequency(frequency);
+        let freq = MIDI_FREQUENCY[note.min(127) as usize];
+        self.set_freq(freq);
     }
 
     /// Reset phase to 0
@@ -318,11 +318,11 @@ impl Oscillator {
     pub fn tick(&mut self) -> i16 {
         let sample = // Pattern matching — Rust's exhaustive branching construct.
 match self.waveform {
-            Waveform::Sine => self.generator_sine(),
-            Waveform::Square => self.generator_square(),
-            Waveform::Sawtooth => self.generator_sawtooth(),
-            Waveform::Triangle => self.generator_triangle(),
-            Waveform::Noise => self.generator_noise(),
+            Waveform::Sine => self.gen_sine(),
+            Waveform::Square => self.gen_square(),
+            Waveform::Sawtooth => self.gen_sawtooth(),
+            Waveform::Triangle => self.gen_triangle(),
+            Waveform::Noise => self.gen_noise(),
         };
 
         // Advance phase
@@ -332,7 +332,7 @@ match self.waveform {
     }
 
     /// Sine wave via table lookup with linear interpolation
-    fn generator_sine(&self) -> i16 {
+    fn gen_sine(&self) -> i16 {
         let table_index = (self.phase >> FRAC_BITS) as usize & 0xFF;
         let frac = (self.phase & 0xFFFF) as i32;
 
@@ -373,7 +373,7 @@ match self.waveform {
     }
 
     /// Band-limited square wave via PolyBLEP (removes aliasing)
-    fn generator_square(&self) -> i16 {
+    fn gen_square(&self) -> i16 {
         let period_mask = ((TABLE_SIZE << FRAC_BITS) - 1) as u32;
         let half = (128u32) << FRAC_BITS;
         let p = self.phase & period_mask;
@@ -392,7 +392,7 @@ match self.waveform {
     }
 
     /// Band-limited sawtooth wave via PolyBLEP (full 24-bit precision)
-    fn generator_sawtooth(&self) -> i16 {
+    fn gen_sawtooth(&self) -> i16 {
         let period_mask = ((TABLE_SIZE << FRAC_BITS) - 1) as u32;
         let period = (TABLE_SIZE << FRAC_BITS) as u64;
         let p = self.phase & period_mask;
@@ -408,7 +408,7 @@ match self.waveform {
     }
 
     /// Triangle wave with full 24-bit phase precision (was 8-bit!)
-    fn generator_triangle(&self) -> i16 {
+    fn gen_triangle(&self) -> i16 {
         let period_mask = ((TABLE_SIZE << FRAC_BITS) - 1) as u32;
         let p = self.phase & period_mask;
         let half = (128u32) << FRAC_BITS;
@@ -424,7 +424,7 @@ match self.waveform {
     }
 
     /// White noise via 16-bit LFSR (Galois)
-    fn generator_noise(&mut self) -> i16 {
+    fn gen_noise(&mut self) -> i16 {
         // Galois LFSR with taps at bits 16, 14, 13, 11
         let bit = self.lfsr & 1;
         self.lfsr >>= 1;
@@ -461,7 +461,7 @@ impl LowPassFilter {
         // w = 2π × fc / fs (scaled ×1000 for integer math)
         let w = (6283u64 * cutoff_hz as u64) / SAMPLE_RATE as u64;
         // alpha = w / (1000 + w) in Q16
-        self.alpha = ((w << 16) / (1000 + w)).minimum(65536) as u32;
+        self.alpha = ((w << 16) / (1000 + w)).min(65536) as u32;
     }
 
     /// Process one sample through 2-pole cascaded LPF
@@ -525,15 +525,15 @@ pub fn new() -> Self {
 
     /// Start playing a note
     pub fn note_on(&mut self, note: u8, velocity: u8, waveform: Waveform, envelope: Envelope) {
-        let frequency = MIDI_FREQUENCY[note.minimum(127) as usize];
+        let freq = MIDI_FREQUENCY[note.min(127) as usize];
 
         // Primary oscillator
-        self.osc = Oscillator::new(waveform, frequency);
+        self.osc = Oscillator::new(waveform, freq);
         self.base_inc = self.osc.phase_inc;
         self.drift_phase = 0;
 
         // Detuned second oscillator (+0.5%) for unison width
-        let freq2 = frequency + (frequency / 200).maximum(1);
+        let freq2 = freq + (freq / 200).max(1);
         self.osc2 = Oscillator::new(waveform, freq2);
 
         self.env = envelope;
@@ -552,12 +552,12 @@ match waveform {
             }
             Waveform::Triangle => {
                 // Fairly clean — gentle filtering
-                let cutoff = (frequency * 12).maximum(400).minimum(16000);
+                let cutoff = (freq * 12).max(400).min(16000);
                 self.filter.set_cutoff(cutoff);
             }
             Waveform::Square | Waveform::Sawtooth => {
                 // These have strong harmonics — warmer filtering
-                let cutoff = (frequency * 8).maximum(300).minimum(12000);
+                let cutoff = (freq * 8).max(300).min(12000);
                 self.filter.set_cutoff(cutoff);
             }
             Waveform::Noise => {
@@ -590,7 +590,7 @@ match waveform {
         let drift_value = SINE_TABLE[drift_index] as i32;  // -32767..+32767
         // ±0.08% of base_inc ≈ base_inc * drift / (32767 * 1250)
         let drift_mod = ((self.base_inc as i64 * drift_value as i64) / (32767 * 1250)) as i32;
-        self.osc.phase_inc = (self.base_inc as i32 + drift_mod).maximum(1) as u32;
+        self.osc.phase_inc = (self.base_inc as i32 + drift_mod).max(1) as u32;
 
         // Mix both oscillators (unison for richness)
         let raw1 = self.osc.tick() as i32;
@@ -652,8 +652,8 @@ impl SynthEngine {
     }
 
     /// Set the default envelope (ADSR in ms, sustain in %)
-    pub fn set_adsr(&mut self, attack_mouse: u32, decay_mouse: u32, sustain_pct: u32, release_mouse: u32) {
-        self.envelope = Envelope::new(attack_mouse, decay_mouse, sustain_pct, release_mouse);
+    pub fn set_adsr(&mut self, attack_ms: u32, decay_ms: u32, sustain_pct: u32, release_ms: u32) {
+        self.envelope = Envelope::new(attack_ms, decay_ms, sustain_pct, release_ms);
     }
 
     /// Play a note (finds a free voice or steals the oldest)
@@ -684,7 +684,7 @@ impl SynthEngine {
     /// Generate audio samples into a buffer (stereo interleaved i16)
     /// Returns the number of samples written (per channel)
     pub fn render(&mut self, buffer: &mut [i16], number_samples: usize) -> usize {
-        let to_render = number_samples.minimum(buffer.len() / 2); // stereo
+        let to_render = number_samples.min(buffer.len() / 2); // stereo
 
         for i in 0..to_render {
             // Mix all active voices
@@ -710,8 +710,8 @@ impl SynthEngine {
     }
 
     /// Generate a fixed-duration note and return the samples
-    pub fn render_note(&mut self, note: u8, velocity: u8, duration_mouse: u32) -> Vec<i16> {
-        let total_samples = mouse_to_samples(duration_mouse) as usize;
+    pub fn render_note(&mut self, note: u8, velocity: u8, duration_ms: u32) -> Vec<i16> {
+        let total_samples = mouse_to_samples(duration_ms) as usize;
         // Add release tail
         let release_samples = self.envelope.release_samples as usize;
         let full_samples = total_samples + release_samples;
@@ -735,15 +735,15 @@ impl SynthEngine {
     }
 
     /// Play a note by name, e.g., "C4", "A#3"
-    pub fn play_note_by_name(&mut self, name: &str, duration_mouse: u32) -> Result<Vec<i16>, &'static str> {
+    pub fn play_note_by_name(&mut self, name: &str, duration_ms: u32) -> Result<Vec<i16>, &'static str> {
         let midi_note = super::tables::note_name_to_midi(name)
             .ok_or("Invalid note name (use e.g. C4, A#3, Bb5)")?;
-        Ok(self.render_note(midi_note, 100, duration_mouse))
+        Ok(self.render_note(midi_note, 100, duration_ms))
     }
 
     /// Render a tone at a specific frequency (Hz) for a given duration
-    pub fn render_frequency(&mut self, frequency_hz: u32, duration_mouse: u32) -> Vec<i16> {
-        let total_samples = mouse_to_samples(duration_mouse) as usize;
+    pub fn render_freq(&mut self, freq_hz: u32, duration_ms: u32) -> Vec<i16> {
+        let total_samples = mouse_to_samples(duration_ms) as usize;
         let release_samples = self.envelope.release_samples as usize;
         let full_samples = total_samples + release_samples;
         let mut buffer = alloc::vec![0i16; full_samples * 2]; // stereo
@@ -751,7 +751,7 @@ impl SynthEngine {
         // Setup a voice manually with exact frequency
         let voice_index = self.find_free_voice();
         let voice = &mut self.voices[voice_index];
-        voice.osc = Oscillator::new(self.waveform, frequency_hz);
+        voice.osc = Oscillator::new(self.waveform, freq_hz);
         voice.env = self.envelope;
         voice.env.note_on();
         voice.note = 69; // placeholder
@@ -830,8 +830,8 @@ impl SynthEngine {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /// Convert milliseconds to samples
-pub fn mouse_to_samples(mouse: u32) -> u32 {
-    (SAMPLE_RATE * mouse) / 1000
+pub fn mouse_to_samples(ms: u32) -> u32 {
+    (SAMPLE_RATE * ms) / 1000
 }
 
 /// Convert samples to milliseconds

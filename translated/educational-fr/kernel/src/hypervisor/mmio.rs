@@ -37,7 +37,7 @@ pub struct MmioDecoded {
     /// Immediate value (for MOV r/m, imm32)
     pub immediate: Option<u64>,
     /// Total instruction length (to advance RIP)
-    pub insn_length: usize,
+    pub insn_len: usize,
 }
 
 /// Register indices used in ModR/M encoding
@@ -64,8 +64,8 @@ pub fn decode_mmio_instruction(insn_bytes: &[u8], bytes_fetched: usize, cs_long:
         return None;
     }
     
-    let bytes = &insn_bytes[..bytes_fetched.minimum(insn_bytes.len())];
-    let mut position: usize = 0;
+    let bytes = &insn_bytes[..bytes_fetched.min(insn_bytes.len())];
+    let mut pos: usize = 0;
     
     // ── Parse prefixes ──────────────────────────────────────────
     let mut has_rex = false;
@@ -79,29 +79,29 @@ pub fn decode_mmio_instruction(insn_bytes: &[u8], bytes_fetched: usize, cs_long:
     let mut _has_f3 = false;  // REP
     // Segment override prefixes (2E, 3E, 26, 64, 65, 36) — skip
     
-    while position < bytes.len() {
+    while pos < bytes.len() {
                 // Correspondance de motifs — branchement exhaustif de Rust.
-match bytes[position] {
-            0x66 => { has_66 = true; position += 1; }
-            0x67 => { has_67 = true; position += 1; }
-            0xF0 => { _has_f0 = true; position += 1; }
-            0xF2 => { _has_f2 = true; position += 1; }
-            0xF3 => { _has_f3 = true; position += 1; }
+match bytes[pos] {
+            0x66 => { has_66 = true; pos += 1; }
+            0x67 => { has_67 = true; pos += 1; }
+            0xF0 => { _has_f0 = true; pos += 1; }
+            0xF2 => { _has_f2 = true; pos += 1; }
+            0xF3 => { _has_f3 = true; pos += 1; }
             // Segment overrides — skip
-            0x2E | 0x3E | 0x26 | 0x36 | 0x64 | 0x65 => { position += 1; }
+            0x2E | 0x3E | 0x26 | 0x36 | 0x64 | 0x65 => { pos += 1; }
             // REX prefix: 0x40-0x4F
             b @ 0x40..=0x4F => {
                 has_rex = true;
                 rex_w = (b & 0x08) != 0;
                 rex_r = (b & 0x04) != 0;
                 rex_b = (b & 0x01) != 0;
-                position += 1;
+                pos += 1;
             }
             _ => break, // Not a prefix, start of opcode
         }
     }
     
-    if position >= bytes.len() {
+    if pos >= bytes.len() {
         return None;
     }
     
@@ -115,81 +115,81 @@ match bytes[position] {
         4
     };
     
-    let opcode = bytes[position];
-    position += 1;
+    let opcode = bytes[pos];
+    pos += 1;
     
         // Correspondance de motifs — branchement exhaustif de Rust.
 match opcode {
         // ── MOV r/m32, r32 (opcode 0x89) — WRITE to MMIO ───────
         0x89 => {
-            if position >= bytes.len() { return None; }
-            let modrm = bytes[position];
-            position += 1;
-            let (register_index, insn_length) = decode_modrm_register_and_skip(modrm, rex_r, rex_b, has_67, bytes, position)?;
+            if pos >= bytes.len() { return None; }
+            let modrm = bytes[pos];
+            pos += 1;
+            let (register_index, insn_len) = decode_modrm_register_and_skip(modrm, rex_r, rex_b, has_67, bytes, pos)?;
             Some(MmioDecoded {
                 is_write: true,
                 operand_size,
                 register: Some(register_index),
                 immediate: None,
-                insn_length,
+                insn_len,
             })
         }
         
         // ── MOV r/m8, r8 (opcode 0x88) — WRITE byte to MMIO ───
         0x88 => {
-            if position >= bytes.len() { return None; }
-            let modrm = bytes[position];
-            position += 1;
-            let (register_index, insn_length) = decode_modrm_register_and_skip(modrm, rex_r, rex_b, has_67, bytes, position)?;
+            if pos >= bytes.len() { return None; }
+            let modrm = bytes[pos];
+            pos += 1;
+            let (register_index, insn_len) = decode_modrm_register_and_skip(modrm, rex_r, rex_b, has_67, bytes, pos)?;
             Some(MmioDecoded {
                 is_write: true,
                 operand_size: 1,
                 register: Some(register_index),
                 immediate: None,
-                insn_length,
+                insn_len,
             })
         }
         
         // ── MOV r32, r/m32 (opcode 0x8B) — READ from MMIO ──────
         0x8B => {
-            if position >= bytes.len() { return None; }
-            let modrm = bytes[position];
-            position += 1;
-            let (register_index, insn_length) = decode_modrm_register_and_skip(modrm, rex_r, rex_b, has_67, bytes, position)?;
+            if pos >= bytes.len() { return None; }
+            let modrm = bytes[pos];
+            pos += 1;
+            let (register_index, insn_len) = decode_modrm_register_and_skip(modrm, rex_r, rex_b, has_67, bytes, pos)?;
             Some(MmioDecoded {
                 is_write: false,
                 operand_size,
                 register: Some(register_index),
                 immediate: None,
-                insn_length,
+                insn_len,
             })
         }
         
         // ── MOV r8, r/m8 (opcode 0x8A) — READ byte from MMIO ──
         0x8A => {
-            if position >= bytes.len() { return None; }
-            let modrm = bytes[position];
-            position += 1;
-            let (register_index, insn_length) = decode_modrm_register_and_skip(modrm, rex_r, rex_b, has_67, bytes, position)?;
+            if pos >= bytes.len() { return None; }
+            let modrm = bytes[pos];
+            pos += 1;
+            let (register_index, insn_len) = decode_modrm_register_and_skip(modrm, rex_r, rex_b, has_67, bytes, pos)?;
             Some(MmioDecoded {
                 is_write: false,
                 operand_size: 1,
                 register: Some(register_index),
                 immediate: None,
-                insn_length,
+                insn_len,
             })
         }
         
         // ── MOV r/m32, imm32 (opcode 0xC7 /0) — WRITE immediate ──
         0xC7 => {
-            if position >= bytes.len() { return None; }
-            let modrm = bytes[position];
+            if pos >= bytes.len() { return None; }
+            let modrm = bytes[pos];
             let register_field = (modrm >> 3) & 7;
             if register_field != 0 { return None; } // Only /0 is MOV
-            position += 1;
-            let (_, base_insn_length) = decode_modrm_register_and_skip(modrm, false, rex_b, has_67, bytes, position)?;
+            pos += 1;
+            let (_, base_insn_len) = decode_modrm_register_and_skip(modrm, false, rex_b, has_67, bytes, pos)?;
             // After ModR/M + SIB + displacement, there's the immediate
-            let imm_start = base_insn_length; // instruction bytes consumed so far
+            let imm_start = base_insn_len; // instruction bytes consumed so far
             let imm_size = if rex_w { 4 } else if has_66 { 2 } else { 4 }; // Note: even with REX.W, MOV r/m64,imm32 sign-extends
             if imm_start + imm_size > bytes.len() { return None; }
             let imm = // Correspondance de motifs — branchement exhaustif de Rust.
@@ -214,91 +214,91 @@ match imm_size {
                 operand_size,
                 register: None,
                 immediate: Some(imm),
-                insn_length: imm_start + imm_size,
+                insn_len: imm_start + imm_size,
             })
         }
         
         // ── MOV r/m8, imm8 (opcode 0xC6 /0) — WRITE byte immediate ──
         0xC6 => {
-            if position >= bytes.len() { return None; }
-            let modrm = bytes[position];
+            if pos >= bytes.len() { return None; }
+            let modrm = bytes[pos];
             let register_field = (modrm >> 3) & 7;
             if register_field != 0 { return None; }
-            position += 1;
-            let (_, base_insn_length) = decode_modrm_register_and_skip(modrm, false, rex_b, has_67, bytes, position)?;
-            if base_insn_length >= bytes.len() { return None; }
-            let imm = bytes[base_insn_length] as u64;
+            pos += 1;
+            let (_, base_insn_len) = decode_modrm_register_and_skip(modrm, false, rex_b, has_67, bytes, pos)?;
+            if base_insn_len >= bytes.len() { return None; }
+            let imm = bytes[base_insn_len] as u64;
             Some(MmioDecoded {
                 is_write: true,
                 operand_size: 1,
                 register: None,
                 immediate: Some(imm),
-                insn_length: base_insn_length + 1,
+                insn_len: base_insn_len + 1,
             })
         }
         
         // ── Two-byte opcodes (0x0F prefix) ──────────────────────
         0x0F => {
-            if position >= bytes.len() { return None; }
-            let opcode2 = bytes[position];
-            position += 1;
+            if pos >= bytes.len() { return None; }
+            let opcode2 = bytes[pos];
+            pos += 1;
             
                         // Correspondance de motifs — branchement exhaustif de Rust.
 match opcode2 {
                 // MOVZX r32, r/m8 (0x0F 0xB6) — byte read, zero-extend
                 0xB6 => {
-                    if position >= bytes.len() { return None; }
-                    let modrm = bytes[position];
-                    position += 1;
-                    let (register_index, insn_length) = decode_modrm_register_and_skip(modrm, rex_r, rex_b, has_67, bytes, position)?;
+                    if pos >= bytes.len() { return None; }
+                    let modrm = bytes[pos];
+                    pos += 1;
+                    let (register_index, insn_len) = decode_modrm_register_and_skip(modrm, rex_r, rex_b, has_67, bytes, pos)?;
                     Some(MmioDecoded {
                         is_write: false,
                         operand_size: 1, // read 1 byte, but dest register is wider
                         register: Some(register_index),
                         immediate: None,
-                        insn_length,
+                        insn_len,
                     })
                 }
                 // MOVZX r32, r/m16 (0x0F 0xB7) — word read, zero-extend
                 0xB7 => {
-                    if position >= bytes.len() { return None; }
-                    let modrm = bytes[position];
-                    position += 1;
-                    let (register_index, insn_length) = decode_modrm_register_and_skip(modrm, rex_r, rex_b, has_67, bytes, position)?;
+                    if pos >= bytes.len() { return None; }
+                    let modrm = bytes[pos];
+                    pos += 1;
+                    let (register_index, insn_len) = decode_modrm_register_and_skip(modrm, rex_r, rex_b, has_67, bytes, pos)?;
                     Some(MmioDecoded {
                         is_write: false,
                         operand_size: 2,
                         register: Some(register_index),
                         immediate: None,
-                        insn_length,
+                        insn_len,
                     })
                 }
                 // MOVSX r32, r/m8 (0x0F 0xBE) — byte read, sign-extend
                 0xBE => {
-                    if position >= bytes.len() { return None; }
-                    let modrm = bytes[position];
-                    position += 1;
-                    let (register_index, insn_length) = decode_modrm_register_and_skip(modrm, rex_r, rex_b, has_67, bytes, position)?;
+                    if pos >= bytes.len() { return None; }
+                    let modrm = bytes[pos];
+                    pos += 1;
+                    let (register_index, insn_len) = decode_modrm_register_and_skip(modrm, rex_r, rex_b, has_67, bytes, pos)?;
                     Some(MmioDecoded {
                         is_write: false,
                         operand_size: 1,
                         register: Some(register_index),
                         immediate: None,
-                        insn_length,
+                        insn_len,
                     })
                 }
                 // MOVSX r32, r/m16 (0x0F 0xBF) — word read, sign-extend
                 0xBF => {
-                    if position >= bytes.len() { return None; }
-                    let modrm = bytes[position];
-                    position += 1;
-                    let (register_index, insn_length) = decode_modrm_register_and_skip(modrm, rex_r, rex_b, has_67, bytes, position)?;
+                    if pos >= bytes.len() { return None; }
+                    let modrm = bytes[pos];
+                    pos += 1;
+                    let (register_index, insn_len) = decode_modrm_register_and_skip(modrm, rex_r, rex_b, has_67, bytes, pos)?;
                     Some(MmioDecoded {
                         is_write: false,
                         operand_size: 2,
                         register: Some(register_index),
                         immediate: None,
-                        insn_length,
+                        insn_len,
                     })
                 }
                 _ => None, // Unknown 2-byte opcode
@@ -309,52 +309,52 @@ match opcode2 {
         0xA1 => {
             // This loads from an absolute address into RAX
             let address_size = if has_67 { 4 } else { 8 }; // 8 in 64-bit mode
-            let insn_length = position + address_size;
+            let insn_len = pos + address_size;
             Some(MmioDecoded {
                 is_write: false,
                 operand_size,
                 register: Some(0), // RAX
                 immediate: None,
-                insn_length,
+                insn_len,
             })
         }
         
         // ── MOV moffs32, EAX (opcode 0xA3) — WRITE from RAX ──
         0xA3 => {
             let address_size = if has_67 { 4 } else { 8 };
-            let insn_length = position + address_size;
+            let insn_len = pos + address_size;
             Some(MmioDecoded {
                 is_write: true,
                 operand_size,
                 register: Some(0), // RAX
                 immediate: None,
-                insn_length,
+                insn_len,
             })
         }
         
         // ── MOV AL, moffs8 (opcode 0xA0) — READ byte from absolute addr ──
         0xA0 => {
             let address_size = if has_67 { 4 } else { 8 };
-            let insn_length = position + address_size;
+            let insn_len = pos + address_size;
             Some(MmioDecoded {
                 is_write: false,
                 operand_size: 1,
                 register: Some(0), // AL
                 immediate: None,
-                insn_length,
+                insn_len,
             })
         }
         
         // ── MOV moffs8, AL (opcode 0xA2) — WRITE byte from AL ──
         0xA2 => {
             let address_size = if has_67 { 4 } else { 8 };
-            let insn_length = position + address_size;
+            let insn_len = pos + address_size;
             Some(MmioDecoded {
                 is_write: true,
                 operand_size: 1,
                 register: Some(0), // AL
                 immediate: None,
-                insn_length,
+                insn_len,
             })
         }
         
@@ -372,7 +372,7 @@ fn decode_modrm_register_and_skip(
     _rex_b: bool,
     _has_67: bool,
     bytes: &[u8],
-    position_after_modrm: usize,
+    pos_after_modrm: usize,
 ) -> Option<(u8, usize)> {
     let mod_field = (modrm >> 6) & 3;
     let register_field = (modrm >> 3) & 7;
@@ -381,7 +381,7 @@ fn decode_modrm_register_and_skip(
     // REX.R extends the reg field
     let register_index = register_field | (if rex_r { 8 } else { 0 });
     
-    let mut position = position_after_modrm;
+    let mut pos = pos_after_modrm;
     
     // Skip the r/m addressing mode (SIB + displacement)
     match mod_field {
@@ -389,31 +389,31 @@ fn decode_modrm_register_and_skip(
             // [r/m] — no displacement, unless rm=5 (RIP-relative) or rm=4 (SIB)
             if rm_field == 4 {
                 // SIB byte follows
-                position += 1; // skip SIB
-                if position > bytes.len() { return None; }
-                let sib = bytes[position - 1];
+                pos += 1; // skip SIB
+                if pos > bytes.len() { return None; }
+                let sib = bytes[pos - 1];
                 let base = sib & 7;
                 if base == 5 {
-                    position += 4; // disp32
+                    pos += 4; // disp32
                 }
             } else if rm_field == 5 {
                 // RIP-relative: disp32
-                position += 4;
+                pos += 4;
             }
         }
         0b01 => {
             // [r/m + disp8]
             if rm_field == 4 {
-                position += 1; // SIB byte
+                pos += 1; // SIB byte
             }
-            position += 1; // disp8
+            pos += 1; // disp8
         }
         0b10 => {
             // [r/m + disp32]
             if rm_field == 4 {
-                position += 1; // SIB byte
+                pos += 1; // SIB byte
             }
-            position += 4; // disp32
+            pos += 4; // disp32
         }
         0b11 => {
             // Register-to-register (not MMIO, but handle gracefully)
@@ -421,17 +421,17 @@ fn decode_modrm_register_and_skip(
         _ => unreachable!(),
     }
     
-    if position > bytes.len() {
+    if pos > bytes.len() {
         return None;
     }
     
-    Some((register_index, position))
+    Some((register_index, pos))
 }
 
 /// Read a guest register value by index (0=RAX..15=R15)
-pub fn read_guest_register(regs: &super::svm_vm::SvmGuestRegs, index: u8) -> u64 {
+pub fn read_guest_register(regs: &super::svm_vm::SvmGuestRegs, idx: u8) -> u64 {
         // Correspondance de motifs — branchement exhaustif de Rust.
-match index {
+match idx {
         0 => regs.rax,
         1 => regs.rcx,
         2 => regs.rdx,
@@ -453,9 +453,9 @@ match index {
 }
 
 /// Write a value to a guest register by index (0=RAX..15=R15)
-pub fn write_guest_register(regs: &mut super::svm_vm::SvmGuestRegs, index: u8, value: u64) {
+pub fn write_guest_register(regs: &mut super::svm_vm::SvmGuestRegs, idx: u8, value: u64) {
         // Correspondance de motifs — branchement exhaustif de Rust.
-match index {
+match idx {
         0 => regs.rax = value,
         1 => regs.rcx = value,
         2 => regs.rdx = value,
@@ -504,7 +504,7 @@ mod tests {
         assert!(d.is_write);
         assert_eq!(d.operand_size, 4);
         assert_eq!(d.register, Some(0)); // EAX
-        assert_eq!(d.insn_length, 2);
+        assert_eq!(d.insn_len, 2);
     }
 
     #[test]
@@ -515,7 +515,7 @@ mod tests {
         assert!(!d.is_write);
         assert_eq!(d.operand_size, 4);
         assert_eq!(d.register, Some(1)); // ECX
-        assert_eq!(d.insn_length, 2);
+        assert_eq!(d.insn_len, 2);
     }
 
     #[test]
@@ -526,7 +526,7 @@ mod tests {
         assert!(d.is_write);
         assert_eq!(d.operand_size, 8);
         assert_eq!(d.register, Some(0)); // RAX
-        assert_eq!(d.insn_length, 3);
+        assert_eq!(d.insn_len, 3);
     }
 
     #[test]
@@ -547,6 +547,6 @@ mod tests {
         assert!(!d.is_write);
         assert_eq!(d.operand_size, 4);
         assert_eq!(d.register, Some(0)); // EAX
-        assert_eq!(d.insn_length, 6);
+        assert_eq!(d.insn_len, 6);
     }
 }

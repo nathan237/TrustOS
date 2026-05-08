@@ -70,7 +70,7 @@ pub struct HoloMatrix {
     /// Height of each slice
     pub height: usize,
     /// Number of Z layers
-    pub number_layers: usize,
+    pub num_layers: usize,
     /// Data: layers[z][y * width + x] = intensity (0-255)
     pub layers: Vec<Vec<u8>>,
     /// Z depth of each layer (0.0 = near, 1.0 = far)
@@ -155,20 +155,20 @@ fn sqrt_approx(x: f32) -> f32 { crate::math::fast_sqrt(x) }
 // Bloc d'implémentation — définit les méthodes du type ci-dessus.
 impl HoloMatrix {
     /// Create a new holographic matrix
-    pub fn new(width: usize, height: usize, number_layers: usize) -> Self {
-        let mut layers = Vec::with_capacity(number_layers);
-        let mut layer_depths = Vec::with_capacity(number_layers);
+    pub fn new(width: usize, height: usize, num_layers: usize) -> Self {
+        let mut layers = Vec::with_capacity(num_layers);
+        let mut layer_depths = Vec::with_capacity(num_layers);
         
-        for i in 0..number_layers {
+        for i in 0..num_layers {
             layers.push(vec![0u8; width * height]);
             // Linear depth distribution from 0 (near) to 1 (far)
-            layer_depths.push(i as f32 / (number_layers - 1) as f32);
+            layer_depths.push(i as f32 / (num_layers - 1) as f32);
         }
         
         Self {
             width,
             height,
-            number_layers,
+            num_layers,
             layers,
             layer_depths,
             rotation_x: 0.0,
@@ -189,14 +189,14 @@ impl HoloMatrix {
     #[inline]
         // Fonction publique — appelable depuis d'autres modules.
 pub fn set_point(&mut self, layer: usize, x: i32, y: i32, intensity: u8) {
-        if layer < self.number_layers 
+        if layer < self.num_layers 
             && x >= 0 && (x as usize) < self.width 
             && y >= 0 && (y as usize) < self.height 
         {
-            let index = y as usize * self.width + x as usize;
+            let idx = y as usize * self.width + x as usize;
             // Additive blend
-            let current = self.layers[layer][index] as u16;
-            self.layers[layer][index] = (current + intensity as u16).minimum(255) as u8;
+            let current = self.layers[layer][idx] as u16;
+            self.layers[layer][idx] = (current + intensity as u16).min(255) as u8;
         }
     }
     
@@ -205,14 +205,14 @@ pub fn set_point(&mut self, layer: usize, x: i32, y: i32, intensity: u8) {
         let screen_cx = self.width as f32 / 2.0;
         let screen_cy = self.height as f32 / 2.0;
         
-        for layer_index in 0..self.number_layers {
+        for layer_index in 0..self.num_layers {
             let layer_z = self.layer_depths[layer_index];
             
             // Distance from sphere center to this Z plane
             let dz = layer_z - cz;
             
             // Check if this plane intersects the sphere
-            if dz.absolute() < radius {
+            if dz.abs() < radius {
                 // Radius of intersection circle at this Z
                 let circle_radius = sqrt_approx(radius * radius - dz * dz);
                 
@@ -222,7 +222,7 @@ pub fn set_point(&mut self, layer: usize, x: i32, y: i32, intensity: u8) {
                 let pcy = (cy * self.height as f32 / 2.0 + screen_cy) as i32;
                 
                 // Intensity decreases with distance from center
-                let depth_factor = 1.0 - dz.absolute() / radius;
+                let depth_factor = 1.0 - dz.abs() / radius;
                 let layer_intensity = (intensity as f32 * depth_factor) as u8;
                 
                 self.draw_circle_layer(layer_index, pcx, pcy, circle_pixel, layer_intensity);
@@ -248,7 +248,7 @@ pub fn set_point(&mut self, layer: usize, x: i32, y: i32, intensity: u8) {
                     0.5 + dist_ratio * 0.5
                 };
                 
-                let pixel_intensity = (intensity as f32 * edge_factor).minimum(255.0) as u8;
+                let pixel_intensity = (intensity as f32 * edge_factor).min(255.0) as u8;
                 self.set_point(layer, cx + dx, cy + dy, pixel_intensity);
             }
         }
@@ -309,17 +309,17 @@ pub fn set_point(&mut self, layer: usize, x: i32, y: i32, intensity: u8) {
         
         for step in 0..=steps {
             let t = step as f32 / steps as f32;
-            let pixel = p1.x + dx * t;
+            let px = p1.x + dx * t;
             let py = p1.y + dy * t;
             let pz = p1.z + dz * t;
             
             // Find closest layer
             let layer_z = (pz + 1.0) / 2.0; // Normalize -1..1 to 0..1
             if layer_z >= 0.0 && layer_z <= 1.0 {
-                let layer_index = ((layer_z * (self.number_layers - 1) as f32) as usize).minimum(self.number_layers - 1);
+                let layer_index = ((layer_z * (self.num_layers - 1) as f32) as usize).min(self.num_layers - 1);
                 
                 // Project to screen
-                let sx = (pixel * self.width as f32 / 2.5 + screen_cx) as i32;
+                let sx = (px * self.width as f32 / 2.5 + screen_cx) as i32;
                 let sy = (py * self.height as f32 / 2.5 + screen_cy) as i32;
                 
                 // Intensity based on Z (closer = brighter)
@@ -420,21 +420,21 @@ pub fn set_point(&mut self, layer: usize, x: i32, y: i32, intensity: u8) {
                     let intensity = layer[y * self.width + x];
                     
                     if intensity > 0 {
-                        let pixel_index = y * self.width + x;
-                        let current = output[pixel_index];
+                        let pixel_idx = y * self.width + x;
+                        let current = output[pixel_idx];
                         
                         // Get current RGB
                         let cr = ((current >> 16) & 0xFF) as u32;
                         let cg = ((current >> 8) & 0xFF) as u32;
-                        let callback = (current & 0xFF) as u32;
+                        let cb = (current & 0xFF) as u32;
                         
                         // Blend with glow color
                         let alpha = (intensity as f32 / 255.0) * layer_opacity;
                         let nr = (cr as f32 * (1.0 - alpha) + gr as f32 * alpha) as u32;
                         let ng = (cg as f32 * (1.0 - alpha) + gg as f32 * alpha) as u32;
-                        let nb = (callback as f32 * (1.0 - alpha) + gb as f32 * alpha) as u32;
+                        let nb = (cb as f32 * (1.0 - alpha) + gb as f32 * alpha) as u32;
                         
-                        output[pixel_index] = 0xFF000000 | (nr.minimum(255) << 16) | (ng.minimum(255) << 8) | nb.minimum(255);
+                        output[pixel_idx] = 0xFF000000 | (nr.min(255) << 16) | (ng.min(255) << 8) | nb.min(255);
                     }
                 }
             }
@@ -628,7 +628,7 @@ match scene {
             let y_offset = sin_approx(self.time * 1.5 + i as f32 * 0.789) * 0.5;
             let orbit_radius = 0.45 + sin_approx(self.time + i as f32) * 0.1;
             
-            let pixel = cx + orbit_radius * cos_approx(angle);
+            let px = cx + orbit_radius * cos_approx(angle);
             let py = cy + y_offset;
             let pz = cz + orbit_radius * sin_approx(angle) * 0.4;
             
@@ -636,7 +636,7 @@ match scene {
             let pulse = ((sin_approx(self.time * 2.0 + i as f32 * 1.1) + 1.0) / 2.0 * 0.5 + 0.5) as f32;
             let particle_intensity = (intensity as f32 * pulse) as u8;
             
-            self.draw_sphere(pixel, py, pz, 0.02, particle_intensity);
+            self.draw_sphere(px, py, pz, 0.02, particle_intensity);
         }
     }
 }
@@ -703,9 +703,9 @@ match self {
     }
     
     /// Convert from index
-    pub fn from_index(index: u8) -> Self {
+    pub fn from_index(idx: u8) -> Self {
                 // Correspondance de motifs — branchement exhaustif de Rust.
-match index {
+match idx {
             0 => Self::RotatingCube,
             1 => Self::SpherePulse,
             2 => Self::Torus,

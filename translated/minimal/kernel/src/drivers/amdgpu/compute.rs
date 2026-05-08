@@ -38,7 +38,7 @@ use alloc::vec::Vec;
 use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use spin::Mutex;
 
-use super::{wr, sk, Sr};
+use super::{kj, ib, Hz};
 use super::regs;
 use crate::memory;
 
@@ -47,20 +47,20 @@ use crate::memory;
 
 
 
-const DM_: usize = 1024;
-const AHG_: usize = DM_ * 4;
+const DU_: usize = 1024;
+const AJC_: usize = DU_ * 4;
 
 
-const HT_: usize = 64 * 1024;
+const IN_: usize = 64 * 1024;
 
 
-const ARV_: usize = HT_ - 16;
+const ATX_: usize = IN_ - 16;
 
 
-const ARY_: u64 = 0xDEAD_BEEF_CAFE_F00D;
+const AUA_: u64 = 0xDEAD_BEEF_CAFE_F00D;
 
 
-const BYE_: u64 = 10_000_000;
+const CBK_: u64 = 10_000_000;
 
 
 
@@ -69,60 +69,60 @@ const BYE_: u64 = 10_000_000;
 
 
 #[inline]
-fn hvl(opcode: u32, az: u32) -> u32 {
-    (3 << 30) | ((opcode & 0xFF) << 8) | ((az - 1) & 0x3FFF)
+fn dwq(opcode: u32, count: u32) -> u32 {
+    (3 << 30) | ((opcode & 0xFF) << 8) | ((count - 1) & 0x3FFF)
 }
 
 
-fn vjk() -> [u32; 2] {
-    [hvl(regs::CJX_, 1), 0]
+fn nvu() -> [u32; 2] {
+    [dwq(regs::CNG_, 1), 0]
 }
 
 
 
-fn frb(ban: u32, bn: u32) -> [u32; 3] {
+fn coh(abg: u32, value: u32) -> [u32; 3] {
     [
-        hvl(regs::BDG_, 2),
-        (ban - regs::BFV_) >> 2, 
-        bn,
+        dwq(regs::BFJ_, 2),
+        (abg - regs::BHZ_) >> 2, 
+        value,
     ]
 }
 
 
-fn vjm(ban: u32, xqh: u32, xqi: u32) -> [u32; 4] {
+fn nvw(abg: u32, val0: u32, val1: u32) -> [u32; 4] {
     [
-        hvl(regs::BDG_, 3),
-        (ban - regs::BFV_) >> 2,
-        xqh,
-        xqi,
+        dwq(regs::BFJ_, 3),
+        (abg - regs::BHZ_) >> 2,
+        val0,
+        val1,
     ]
 }
 
 
 
-fn vjj(thq: u32, thr: u32, ths: u32) -> [u32; 5] {
+fn nvt(groups_x: u32, groups_y: u32, groups_z: u32) -> [u32; 5] {
     [
-        hvl(regs::CJW_, 4),
-        thq,
-        thr,
-        ths,
+        dwq(regs::CNF_, 4),
+        groups_x,
+        groups_y,
+        groups_z,
         1, 
     ]
 }
 
 
 
-fn vjl(iuf: u64, ntd: u64) -> [u32; 7] {
+fn nvv(eml: u64, fence_value: u64) -> [u32; 7] {
     [
-        hvl(regs::CJY_, 6),
+        dwq(regs::CNH_, 6),
         
         (0x14) | (5 << 8) | (0 << 12), 
         
         (2 << 29), 
-        (iuf & 0xFFFFFFFF) as u32,          
-        ((iuf >> 32) & 0xFFFF) as u32,      
-        (ntd & 0xFFFFFFFF) as u32,              
-        ((ntd >> 32) & 0xFFFFFFFF) as u32,      
+        (eml & 0xFFFFFFFF) as u32,          
+        ((eml >> 32) & 0xFFFF) as u32,      
+        (fence_value & 0xFFFFFFFF) as u32,              
+        ((fence_value >> 32) & 0xFFFFFFFF) as u32,      
     ]
 }
 
@@ -170,7 +170,7 @@ fn vjl(iuf: u64, ntd: u64) -> [u32; 7] {
 
 
 
-pub static BJL_: &[u32] = &[
+pub static BLV_: &[u32] = &[
     
     
     0x7E020284,
@@ -217,7 +217,7 @@ pub static BJL_: &[u32] = &[
 
 
 
-pub static BJN_: &[u32] = &[
+pub static BLX_: &[u32] = &[
     
     0x02020082 | (0x12 << 25),
     
@@ -245,7 +245,7 @@ pub static BJN_: &[u32] = &[
 
 
 
-pub static BJM_: &[u32] = &[
+pub static BLW_: &[u32] = &[
     
     0x02020082 | (0x12 << 25),
     
@@ -274,22 +274,22 @@ pub static BJM_: &[u32] = &[
 
 
 
-fn qta(nzl: u64, csx: u32, oq: u32) -> [u32; 4] {
-    let qnn = (nzl & 0xFFFFFFFF) as u32;
-    let qnl = ((nzl >> 32) & 0xFFFF) as u32;
+fn ket(gpu_addr: u64, ayr: u32, stride: u32) -> [u32; 4] {
+    let kae = (gpu_addr & 0xFFFFFFFF) as u32;
+    let kac = ((gpu_addr >> 32) & 0xFFFF) as u32;
     
-    let epl = qnl | ((oq & 0x3FFF) << 16);
+    let bza = kac | ((stride & 0x3FFF) << 16);
     
     
     
-    let shp: u32 = (4 << 15) |  
+    let lmu: u32 = (4 << 15) |  
                    (4 << 19) |  
                    (0 << 24) |  
                    (4 << 0)  |  
                    (5 << 3)  |  
                    (6 << 6)  |  
                    (7 << 9);    
-    [qnn, epl, csx, shp]
+    [kae, bza, ayr, lmu]
 }
 
 
@@ -300,110 +300,110 @@ fn qta(nzl: u64, csx: u32, oq: u32) -> [u32; 4] {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AgentKind {
     
-    It,
+    Incr,
     
-    Hv,
+    MemFill,
     
-    Iw,
+    MemCopy,
 }
 
 impl AgentKind {
-    pub fn j(&self) -> &'static str {
+    pub fn name(&self) -> &'static str {
         match self {
-            AgentKind::It => "incr",
-            AgentKind::Hv => "memfill",
-            AgentKind::Iw => "memcopy",
+            AgentKind::Incr => "incr",
+            AgentKind::MemFill => "memfill",
+            AgentKind::MemCopy => "memcopy",
         }
     }
     
-    pub fn dc(&self) -> &'static str {
+    pub fn description(&self) -> &'static str {
         match self {
-            AgentKind::It => "Increment each u32 by 1 (proof-of-life)",
-            AgentKind::Hv => "Fill buffer with constant u32 value",
-            AgentKind::Iw => "GPU-speed buffer copy (src → dst)",
+            AgentKind::Incr => "Increment each u32 by 1 (proof-of-life)",
+            AgentKind::MemFill => "Fill buffer with constant u32 value",
+            AgentKind::MemCopy => "GPU-speed buffer copy (src → dst)",
         }
     }
 
     
-    pub fn fun(&self) -> &'static [u32] {
+    pub fn shader_code(&self) -> &'static [u32] {
         match self {
-            AgentKind::It => BJL_,
-            AgentKind::Hv => BJN_,
-            AgentKind::Iw => BJM_,
+            AgentKind::Incr => BLV_,
+            AgentKind::MemFill => BLX_,
+            AgentKind::MemCopy => BLW_,
         }
     }
     
     
-    pub fn jpo(&self) -> u32 {
+    pub fn sgpr_count(&self) -> u32 {
         match self {
-            AgentKind::It => 4,     
-            AgentKind::Hv => 5,  
-            AgentKind::Iw => 8,  
+            AgentKind::Incr => 4,     
+            AgentKind::MemFill => 5,  
+            AgentKind::MemCopy => 8,  
         }
     }
     
     
-    pub fn jvl(&self) -> u32 {
+    pub fn vgpr_count(&self) -> u32 {
         match self {
-            AgentKind::It => 3,    
-            AgentKind::Hv => 3,
-            AgentKind::Iw => 3,
+            AgentKind::Incr => 3,    
+            AgentKind::MemFill => 3,
+            AgentKind::MemCopy => 3,
         }
     }
     
     
-    pub fn xpw(&self) -> u32 {
+    pub fn user_sgpr_count(&self) -> u32 {
         match self {
-            AgentKind::It => 4,
-            AgentKind::Hv => 5,
-            AgentKind::Iw => 8,
+            AgentKind::Incr => 4,
+            AgentKind::MemFill => 5,
+            AgentKind::MemCopy => 8,
         }
     }
 }
 
 
-pub const QZ_: &[AgentKind] = &[
-    AgentKind::It,
-    AgentKind::Hv,
-    AgentKind::Iw,
+pub const RU_: &[AgentKind] = &[
+    AgentKind::Incr,
+    AgentKind::MemFill,
+    AgentKind::MemCopy,
 ];
 
 
-struct Ahc {
-    jr: bool,
-    hv: u64,
+struct Oi {
+    initialized: bool,
+    mmio_base: u64,
     
-    dlh: u64,
+    ring_virt: u64,
     
-    bhy: u64,
+    ring_phys: u64,
     
-    dpq: u64,
+    data_virt: u64,
     
-    cpu: u64,
+    data_phys: u64,
     
-    ffi: u64,
+    code_virt: u64,
     
-    asn: u64,
+    code_phys: u64,
     
-    ccn: u32,
+    wptr: u32,
     
-    eox: u64,
+    dispatch_count: u64,
 }
 
-static Rr: Mutex<Ahc> = Mutex::new(Ahc {
-    jr: false,
-    hv: 0,
-    dlh: 0,
-    bhy: 0,
-    dpq: 0,
-    cpu: 0,
-    ffi: 0,
-    asn: 0,
-    ccn: 0,
-    eox: 0,
+static Hh: Mutex<Oi> = Mutex::new(Oi {
+    initialized: false,
+    mmio_base: 0,
+    ring_virt: 0,
+    ring_phys: 0,
+    data_virt: 0,
+    data_phys: 0,
+    code_virt: 0,
+    code_phys: 0,
+    wptr: 0,
+    dispatch_count: 0,
 });
 
-static AAO_: AtomicBool = AtomicBool::new(false);
+static ACB_: AtomicBool = AtomicBool::new(false);
 
 
 
@@ -411,25 +411,25 @@ static AAO_: AtomicBool = AtomicBool::new(false);
 
 
 
-fn cbk(g: &mut Ahc, f: &[u32]) -> usize {
-    let mz = g.dlh as *mut u32;
-    for (a, &aix) in f.iter().cf() {
-        let w = (g.ccn as usize + a) % DM_;
+fn aow(state: &mut Oi, data: &[u32]) -> usize {
+    let dq = state.ring_virt as *mut u32;
+    for (i, &qx) in data.iter().enumerate() {
+        let idx = (state.wptr as usize + i) % DU_;
         unsafe {
-            core::ptr::write_volatile(mz.add(w), aix);
+            core::ptr::write_volatile(dq.add(idx), qx);
         }
     }
-    g.ccn = (g.ccn + f.len() as u32) % DM_ as u32;
-    f.len()
+    state.wptr = (state.wptr + data.len() as u32) % DU_ as u32;
+    data.len()
 }
 
 
-fn jmn(g: &Ahc) {
+fn eyu(state: &Oi) {
     unsafe {
         
-        let mqx = (g.ccn as u32) * 4;
-        sk(g.hv, regs::APF_, mqx);
-        sk(g.hv, regs::APE_, 0);
+        let hco = (state.wptr as u32) * 4;
+        ib(state.mmio_base, regs::ARF_, hco);
+        ib(state.mmio_base, regs::ARE_, 0);
     }
 }
 
@@ -439,111 +439,117 @@ fn jmn(g: &Ahc) {
 
 
 
-pub fn init(hv: u64) {
+pub fn init(mmio_base: u64) {
     crate::log!("[GPU-COMPUTE] ═══════════════════════════════════════════════");
     crate::log!("[GPU-COMPUTE] Phase 3/4: Bare-metal RDNA Compute Agent");
     crate::log!("[GPU-COMPUTE] ═══════════════════════════════════════════════");
     
-    if hv == 0 {
+    if mmio_base == 0 {
         crate::log!("[GPU-COMPUTE] No MMIO base — skipping");
         return;
     }
     
     
-    let jmm = alloc::alloc::Layout::bjy(AHG_, 4096)
-        .expect("ring layout");
-    let dlh = unsafe { alloc::alloc::alloc_zeroed(jmm) } as u64;
-    let bhy = memory::abw(dlh).unwrap_or(0);
+    let eyt = match alloc::alloc::Layout::from_size_align(AJC_, 4096) {
+        Ok(l) => l,
+        Err(_) => { crate::log!("[GPU-COMPUTE] ERROR: invalid ring layout"); return; }
+    };
+    let ring_virt = unsafe { alloc::alloc::alloc_zeroed(eyt) } as u64;
+    let ring_phys = memory::lc(ring_virt).unwrap_or(0);
     
-    if bhy == 0 {
+    if ring_phys == 0 {
         crate::log!("[GPU-COMPUTE] ERROR: Cannot get physical address for ring buffer");
         return;
     }
     crate::log!("[GPU-COMPUTE] Ring buffer: virt={:#X} phys={:#X} size={} dwords",
-        dlh, bhy, DM_);
+        ring_virt, ring_phys, DU_);
     
     
-    let rtl = alloc::alloc::Layout::bjy(HT_, 4096)
-        .expect("data layout");
-    let dpq = unsafe { alloc::alloc::alloc_zeroed(rtl) } as u64;
-    let cpu = memory::abw(dpq).unwrap_or(0);
+    let lbn = match alloc::alloc::Layout::from_size_align(IN_, 4096) {
+        Ok(l) => l,
+        Err(_) => { crate::log!("[GPU-COMPUTE] ERROR: invalid data layout"); return; }
+    };
+    let data_virt = unsafe { alloc::alloc::alloc_zeroed(lbn) } as u64;
+    let data_phys = memory::lc(data_virt).unwrap_or(0);
     
-    if cpu == 0 {
+    if data_phys == 0 {
         crate::log!("[GPU-COMPUTE] ERROR: Cannot get physical address for data buffer");
         return;
     }
     crate::log!("[GPU-COMPUTE] Data buffer: virt={:#X} phys={:#X} size={}KB",
-        dpq, cpu, HT_ / 1024);
+        data_virt, data_phys, IN_ / 1024);
     
     
-    let rld = alloc::alloc::Layout::bjy(4096, 256)
-        .expect("code layout");
-    let ffi = unsafe { alloc::alloc::alloc_zeroed(rld) } as u64;
-    let asn = memory::abw(ffi).unwrap_or(0);
+    let kuo = match alloc::alloc::Layout::from_size_align(4096, 256) {
+        Ok(l) => l,
+        Err(_) => { crate::log!("[GPU-COMPUTE] ERROR: invalid code layout"); return; }
+    };
+    let code_virt = unsafe { alloc::alloc::alloc_zeroed(kuo) } as u64;
+    let code_phys = memory::lc(code_virt).unwrap_or(0);
     
-    if asn == 0 {
+    if code_phys == 0 {
         crate::log!("[GPU-COMPUTE] ERROR: Cannot get physical address for code buffer");
         return;
     }
-    crate::log!("[GPU-COMPUTE] Code buffer: virt={:#X} phys={:#X}", ffi, asn);
+    crate::log!("[GPU-COMPUTE] Code buffer: virt={:#X} phys={:#X}", code_virt, code_phys);
     
     
-    let hlx = unsafe { wr(hv, regs::KI_) };
-    let rpk = unsafe { wr(hv, regs::MN_) };
-    crate::log!("[GPU-COMPUTE] GRBM_STATUS={:#010X} CP_ME_CNTL={:#010X}", hlx, rpk);
+    let dqz = unsafe { kj(mmio_base, regs::LB_) };
+    let kyi = unsafe { kj(mmio_base, regs::NM_) };
+    crate::log!("[GPU-COMPUTE] GRBM_STATUS={:#010X} CP_ME_CNTL={:#010X}", dqz, kyi);
     
-    let laq = (hlx & regs::ATR_) != 0;
-    let kky = (hlx & regs::ADC_) != 0;
-    crate::log!("[GPU-COMPUTE] GUI_ACTIVE={} CP_BUSY={}", laq, kky);
+    let fzq = (dqz & regs::AVV_) != 0;
+    let fos = (dqz & regs::AES_) != 0;
+    crate::log!("[GPU-COMPUTE] GUI_ACTIVE={} CP_BUSY={}", fzq, fos);
     
     
     crate::log!("[GPU-COMPUTE] Configuring HQD for compute queue...");
     unsafe {
         
-        sk(hv, regs::APC_, 0);
+        ib(mmio_base, regs::ARC_, 0);
         
         
-        let hwt = bhy >> 8;
-        sk(hv, regs::BPB_, (hwt & 0xFFFFFFFF) as u32);
-        sk(hv, regs::BPA_, ((hwt >> 32) & 0xFF) as u32);
+        let dxi = ring_phys >> 8;
+        ib(mmio_base, regs::BRS_, (dxi & 0xFFFFFFFF) as u32);
+        ib(mmio_base, regs::BRR_, ((dxi >> 32) & 0xFF) as u32);
         
         
         
-        let vkn = (6 << 0) | (10 << 8);
-        sk(hv, regs::BPC_, vkn);
+        let nwr = (6 << 0) | (10 << 8);
+        ib(mmio_base, regs::BRT_, nwr);
         
         
-        sk(hv, regs::APD_, 0);
-        sk(hv, regs::APF_, 0);
-        sk(hv, regs::APE_, 0);
+        ib(mmio_base, regs::ARD_, 0);
+        ib(mmio_base, regs::ARF_, 0);
+        ib(mmio_base, regs::ARE_, 0);
         
         
-        sk(hv, regs::APC_, 1);
+        ib(mmio_base, regs::ARC_, 1);
     }
     
-    crate::log!("[GPU-COMPUTE] HQD configured: base={:#X} size={}dw", bhy, DM_);
+    crate::log!("[GPU-COMPUTE] HQD configured: base={:#X} size={}dw", ring_phys, DU_);
     
     
-    let mut g = Rr.lock();
-    g.jr = true;
-    g.hv = hv;
-    g.dlh = dlh;
-    g.bhy = bhy;
-    g.dpq = dpq;
-    g.cpu = cpu;
-    g.ffi = ffi;
-    g.asn = asn;
-    g.ccn = 0;
-    g.eox = 0;
-    drop(g);
+    let mut state = Hh.lock();
+    state.initialized = true;
+    state.mmio_base = mmio_base;
+    state.ring_virt = ring_virt;
+    state.ring_phys = ring_phys;
+    state.data_virt = data_virt;
+    state.data_phys = data_phys;
+    state.code_virt = code_virt;
+    state.code_phys = code_phys;
+    state.wptr = 0;
+    state.dispatch_count = 0;
+    drop(state);
     
-    AAO_.store(true, Ordering::SeqCst);
+    ACB_.store(true, Ordering::SeqCst);
     
     
     crate::log!("[GPU-COMPUTE] ───────────────────────────────────────────────");
     crate::log!("[GPU-COMPUTE] Available agents:");
-    for agent in QZ_ {
-        crate::log!("[GPU-COMPUTE]   {} — {}", agent.j(), agent.dc());
+    for agent in RU_ {
+        crate::log!("[GPU-COMPUTE]   {} — {}", agent.name(), agent.description());
     }
     crate::log!("[GPU-COMPUTE] ───────────────────────────────────────────────");
     crate::log!("[GPU-COMPUTE] Compute engine ready — dispatch via `gpuexec`");
@@ -562,164 +568,164 @@ pub fn init(hv: u64) {
 
 
 
-pub fn gey(agent: AgentKind, csx: u32, eqg: u32) -> Result<u64, &'static str> {
-    if !AAO_.load(Ordering::Relaxed) {
+pub fn cwq(agent: AgentKind, ayr: u32, fill_value: u32) -> Result<u64, &'static str> {
+    if !ACB_.load(Ordering::Relaxed) {
         return Err("GPU compute engine not initialized");
     }
     
-    let mut g = Rr.lock();
-    let mmio = g.hv;
+    let mut state = Hh.lock();
+    let mmio = state.mmio_base;
     
     
-    let ulc = ((HT_ - 64) / 4) as u32;
-    let csx = csx.v(ulc);
+    let ncv = ((IN_ - 64) / 4) as u32;
+    let ayr = ayr.min(ncv);
     
     
-    let gee = g.dpq as *mut u32;
+    let cwg = state.data_virt as *mut u32;
     match agent {
-        AgentKind::It => {
-            for a in 0..csx {
-                unsafe { core::ptr::write_volatile(gee.add(a as usize), a); }
+        AgentKind::Incr => {
+            for i in 0..ayr {
+                unsafe { core::ptr::write_volatile(cwg.add(i as usize), i); }
             }
         }
-        AgentKind::Hv => {
+        AgentKind::MemFill => {
             
-            for a in 0..csx {
-                unsafe { core::ptr::write_volatile(gee.add(a as usize), 0); }
+            for i in 0..ayr {
+                unsafe { core::ptr::write_volatile(cwg.add(i as usize), 0); }
             }
         }
-        AgentKind::Iw => {
+        AgentKind::MemCopy => {
             
-            let iv = csx / 2;
-            for a in 0..iv {
-                unsafe { core::ptr::write_volatile(gee.add(a as usize), 0xA0A0_0000 + a); }
+            let cw = ayr / 2;
+            for i in 0..cw {
+                unsafe { core::ptr::write_volatile(cwg.add(i as usize), 0xA0A0_0000 + i); }
             }
-            for a in iv..csx {
-                unsafe { core::ptr::write_volatile(gee.add(a as usize), 0); }
+            for i in cw..ayr {
+                unsafe { core::ptr::write_volatile(cwg.add(i as usize), 0); }
             }
         }
     }
     
     
-    let ntc = (g.dpq + ARV_ as u64) as *mut u64;
-    unsafe { core::ptr::write_volatile(ntc, 0); }
+    let hxz = (state.data_virt + ATX_ as u64) as *mut u64;
+    unsafe { core::ptr::write_volatile(hxz, 0); }
     
     
-    let bfg = agent.fun();
-    let rlg = g.ffi as *mut u32;
-    for (a, &tvf) in bfg.iter().cf() {
-        unsafe { core::ptr::write_volatile(rlg.add(a), tvf); }
+    let shader = agent.shader_code();
+    let kur = state.code_virt as *mut u32;
+    for (i, &insn) in shader.iter().enumerate() {
+        unsafe { core::ptr::write_volatile(kur.add(i), insn); }
     }
     
     
-    let qsp = qta(g.cpu, csx, 4);
+    let ken = ket(state.data_phys, ayr, 4);
     
     
     
-    let xro = (agent.jvl() + 7) / 8;
-    let wln = (agent.jpo() + 7) / 8;
-    let vgz = ((xro.ao(1)) & 0x3F) |
-                    (((wln.ao(1)) & 0xF) << 6) |
+    let prz = (agent.vgpr_count() + 7) / 8;
+    let oqo = (agent.sgpr_count() + 7) / 8;
+    let ntv = ((prz.saturating_sub(1)) & 0x3F) |
+                    (((oqo.saturating_sub(1)) & 0xF) << 6) |
                     (3 << 24); 
     
     
-    let vha = agent.xpw() & 0x1F; 
+    let ntw = agent.user_sgpr_count() & 0x1F; 
     
     
-    let pkc = g.asn >> 8;
+    let jgb = state.code_phys >> 8;
     
     
     
-    g.ccn = 0;
+    state.wptr = 0;
     
     
-    let vgy = vjm(
-        regs::BOO_,
-        (pkc & 0xFFFFFFFF) as u32,
-        ((pkc >> 32) & 0xFFFF) as u32,
+    let ntu = nvw(
+        regs::BRF_,
+        (jgb & 0xFFFFFFFF) as u32,
+        ((jgb >> 32) & 0xFFFF) as u32,
     );
-    cbk(&mut g, &vgy);
+    aow(&mut state, &ntu);
     
     
-    let wax = frb(regs::BOP_, vgz);
-    cbk(&mut g, &wax);
+    let ois = coh(regs::BRG_, ntv);
+    aow(&mut state, &ois);
     
     
-    let way = frb(regs::BOQ_, vha);
-    cbk(&mut g, &way);
+    let oit = coh(regs::BRH_, ntw);
+    aow(&mut state, &oit);
     
     
-    let xgk = frb(regs::BOL_, 64);
-    cbk(&mut g, &xgk);
-    let xgl = frb(regs::BOM_, 1);
-    cbk(&mut g, &xgl);
-    let xgm = frb(regs::BON_, 1);
-    cbk(&mut g, &xgm);
+    let piw = coh(regs::BRC_, 64);
+    aow(&mut state, &piw);
+    let pix = coh(regs::BRD_, 1);
+    aow(&mut state, &pix);
+    let piy = coh(regs::BRE_, 1);
+    aow(&mut state, &piy);
     
     
-    for (a, &aix) in qsp.iter().cf() {
-        let reg = regs::AOV_ + (a as u32) * 4;
-        let mt = frb(reg, aix);
-        cbk(&mut g, &mt);
+    for (i, &qx) in ken.iter().enumerate() {
+        let reg = regs::AQV_ + (i as u32) * 4;
+        let fj = coh(reg, qx);
+        aow(&mut state, &fj);
     }
     
     
-    if agent == AgentKind::Hv {
-        let mt = frb(regs::AOV_ + 16, eqg);
-        cbk(&mut g, &mt);
+    if agent == AgentKind::MemFill {
+        let fj = coh(regs::AQV_ + 16, fill_value);
+        aow(&mut state, &fj);
     }
     
     
     
-    let orq = (csx + 63) / 64;
-    let ryk = vjj(orq, 1, 1);
-    cbk(&mut g, &ryk);
+    let irl = (ayr + 63) / 64;
+    let lfg = nvt(irl, 1, 1);
+    aow(&mut state, &lfg);
     
     
-    let iuf = g.cpu + ARV_ as u64;
-    let vun = vjl(iuf, ARY_);
-    cbk(&mut g, &vun);
+    let eml = state.data_phys + ATX_ as u64;
+    let oer = nvv(eml, AUA_);
+    aow(&mut state, &oer);
     
     
-    let oqw = vjk();
-    cbk(&mut g, &oqw);
+    let iqu = nvu();
+    aow(&mut state, &iqu);
     
     
     crate::serial_println!("[GPU-COMPUTE] Submitting {} agent: {} elements, {} workgroups",
-        agent.j(), csx, orq);
-    crate::serial_println!("[GPU-COMPUTE]   Ring WPTR: {} dwords", g.ccn);
-    crate::serial_println!("[GPU-COMPUTE]   Shader: {} insns at phys {:#X}", bfg.len(), g.asn);
+        agent.name(), ayr, irl);
+    crate::serial_println!("[GPU-COMPUTE]   Ring WPTR: {} dwords", state.wptr);
+    crate::serial_println!("[GPU-COMPUTE]   Shader: {} insns at phys {:#X}", shader.len(), state.code_phys);
     
-    jmn(&g);
+    eyu(&state);
     
     
-    let mut ez = 0u64;
+    let mut bb = 0u64;
     loop {
-        let nig = unsafe { core::ptr::read_volatile(ntc) };
-        if nig == ARY_ {
+        let hpq = unsafe { core::ptr::read_volatile(hxz) };
+        if hpq == AUA_ {
             break;
         }
-        ez += 1;
-        if ez >= BYE_ {
+        bb += 1;
+        if bb >= CBK_ {
             crate::serial_println!("[GPU-COMPUTE] TIMEOUT after {} iterations (fence={:#X})",
-                ez, nig);
+                bb, hpq);
             
-            let fjx = unsafe { wr(mmio, regs::KI_) };
-            let waq = unsafe { wr(mmio, regs::APD_) };
-            crate::serial_println!("[GPU-COMPUTE]   GRBM_STATUS={:#010X} RPTR={}", fjx, waq);
-            g.eox += 1;
+            let ckf = unsafe { kj(mmio, regs::LB_) };
+            let oim = unsafe { kj(mmio, regs::ARD_) };
+            crate::serial_println!("[GPU-COMPUTE]   GRBM_STATUS={:#010X} RPTR={}", ckf, oim);
+            state.dispatch_count += 1;
             return Err("GPU dispatch timed out (fence not signaled)");
         }
         
-        if ez % 100 == 0 {
-            core::hint::hc();
+        if bb % 100 == 0 {
+            core::hint::spin_loop();
         }
     }
     
-    g.eox += 1;
-    crate::serial_println!("[GPU-COMPUTE] Dispatch complete in {} poll iterations", ez);
+    state.dispatch_count += 1;
+    crate::serial_println!("[GPU-COMPUTE] Dispatch complete in {} poll iterations", bb);
     
-    Ok(ez)
+    Ok(bb)
 }
 
 
@@ -727,56 +733,56 @@ pub fn gey(agent: AgentKind, csx: u32, eqg: u32) -> Result<u64, &'static str> {
 
 
 
-pub fn gwa(agent: AgentKind, csx: u32, eqg: u32) -> (u32, u32) {
-    let g = Rr.lock();
-    let gee = g.dpq as *const u32;
-    let mut afu = 0u32;
-    let mut ace = 0u32;
+pub fn dgf(agent: AgentKind, ayr: u32, fill_value: u32) -> (u32, u32) {
+    let state = Hh.lock();
+    let cwg = state.data_virt as *const u32;
+    let mut gd = 0u32;
+    let mut gv = 0u32;
     
-    let ncl = csx.v(((HT_ - 64) / 4) as u32);
+    let dko = ayr.min(((IN_ - 64) / 4) as u32);
     
-    for a in 0..ncl {
-        let elw = unsafe { core::ptr::read_volatile(gee.add(a as usize)) };
-        let qy = match agent {
-            AgentKind::It => a + 1, 
-            AgentKind::Hv => eqg,
-            AgentKind::Iw => {
-                let iv = ncl / 2;
-                if a >= iv {
+    for i in 0..dko {
+        let bxh = unsafe { core::ptr::read_volatile(cwg.add(i as usize)) };
+        let expected = match agent {
+            AgentKind::Incr => i + 1, 
+            AgentKind::MemFill => fill_value,
+            AgentKind::MemCopy => {
+                let cw = dko / 2;
+                if i >= cw {
                     
-                    0xA0A0_0000 + (a - iv)
+                    0xA0A0_0000 + (i - cw)
                 } else {
                     
-                    0xA0A0_0000 + a
+                    0xA0A0_0000 + i
                 }
             }
         };
-        if elw == qy {
-            afu += 1;
+        if bxh == expected {
+            gd += 1;
         } else {
-            ace += 1;
+            gv += 1;
             
-            if ace <= 8 {
+            if gv <= 8 {
                 crate::serial_println!("[GPU-COMPUTE] VERIFY[{}]: expected {:#010X} got {:#010X}",
-                    a, qy, elw);
+                    i, expected, bxh);
             }
         }
     }
     
-    (afu, ace)
+    (gd, gv)
 }
 
 
-pub fn vrn(index: u32) -> Option<u32> {
-    let g = Rr.lock();
-    if !g.jr {
+pub fn oco(index: u32) -> Option<u32> {
+    let state = Hh.lock();
+    if !state.initialized {
         return None;
     }
-    let am = ((HT_ - 64) / 4) as u32;
-    if index >= am {
+    let max = ((IN_ - 64) / 4) as u32;
+    if index >= max {
         return None;
     }
-    let ptr = g.dpq as *const u32;
+    let ptr = state.data_virt as *const u32;
     Some(unsafe { core::ptr::read_volatile(ptr.add(index as usize)) })
 }
 
@@ -785,50 +791,50 @@ pub fn vrn(index: u32) -> Option<u32> {
 
 
 
-pub fn uc() -> bool {
-    AAO_.load(Ordering::Relaxed)
+pub fn is_ready() -> bool {
+    ACB_.load(Ordering::Relaxed)
 }
 
 
-pub fn eox() -> u64 {
-    Rr.lock().eox
+pub fn dispatch_count() -> u64 {
+    Hh.lock().dispatch_count
 }
 
 
-pub fn awz() -> String {
-    if uc() {
-        let g = Rr.lock();
+pub fn summary() -> String {
+    if is_ready() {
+        let state = Hh.lock();
         format!("GPU Compute: {} agents, {} dispatches, ring@{:#X}",
-            QZ_.len(), g.eox, g.bhy)
+            RU_.len(), state.dispatch_count, state.ring_phys)
     } else {
         String::from("GPU Compute: not initialized")
     }
 }
 
 
-pub fn zl() -> Vec<String> {
-    let mut ak = Vec::new();
+pub fn info_lines() -> Vec<String> {
+    let mut lines = Vec::new();
     
-    if uc() {
-        let g = Rr.lock();
-        ak.push(String::from("╔══════════════════════════════════════════════════╗"));
-        ak.push(String::from("║    GPU Compute Agent — Bare-metal RDNA Dispatch  ║"));
-        ak.push(String::from("╠══════════════════════════════════════════════════╣"));
-        ak.push(format!("║ Ring Buffer:  {:#X} ({} dwords)          ║", g.bhy, DM_));
-        ak.push(format!("║ Data Buffer:  {:#X} ({}KB)              ║", g.cpu, HT_/1024));
-        ak.push(format!("║ Code Buffer:  {:#X}                     ║", g.asn));
-        ak.push(format!("║ Dispatches:   {}                                  ║", g.eox));
-        ak.push(format!("║ Ring WPTR:    {}                                  ║", g.ccn));
-        ak.push(String::from("╠══════════════════════════════════════════════════╣"));
-        ak.push(String::from("║ Available Agents:                                ║"));
-        for agent in QZ_ {
-            ak.push(format!("║  {:10} — {}  ║", agent.j(), agent.dc()));
+    if is_ready() {
+        let state = Hh.lock();
+        lines.push(String::from("╔══════════════════════════════════════════════════╗"));
+        lines.push(String::from("║    GPU Compute Agent — Bare-metal RDNA Dispatch  ║"));
+        lines.push(String::from("╠══════════════════════════════════════════════════╣"));
+        lines.push(format!("║ Ring Buffer:  {:#X} ({} dwords)          ║", state.ring_phys, DU_));
+        lines.push(format!("║ Data Buffer:  {:#X} ({}KB)              ║", state.data_phys, IN_/1024));
+        lines.push(format!("║ Code Buffer:  {:#X}                     ║", state.code_phys));
+        lines.push(format!("║ Dispatches:   {}                                  ║", state.dispatch_count));
+        lines.push(format!("║ Ring WPTR:    {}                                  ║", state.wptr));
+        lines.push(String::from("╠══════════════════════════════════════════════════╣"));
+        lines.push(String::from("║ Available Agents:                                ║"));
+        for agent in RU_ {
+            lines.push(format!("║  {:10} — {}  ║", agent.name(), agent.description()));
         }
-        ak.push(String::from("╚══════════════════════════════════════════════════╝"));
+        lines.push(String::from("╚══════════════════════════════════════════════════╝"));
     } else {
-        ak.push(String::from("GPU Compute Agent not initialized"));
-        ak.push(String::from("(Requires AMD GPU with MMIO access)"));
+        lines.push(String::from("GPU Compute Agent not initialized"));
+        lines.push(String::from("(Requires AMD GPU with MMIO access)"));
     }
     
-    ak
+    lines
 }

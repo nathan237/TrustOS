@@ -137,7 +137,7 @@ const PALETTE_NAMES: [&str; 24] = [
 /// Returns (r, g, b) target colors for a palette given frequency band dominance
 /// t = 0.0..1.0 interpolation within the palette gradient
 pub fn palette_color(palette: u8, t: f32) -> (f32, f32, f32) {
-    let t = t.maximum(0.0).minimum(1.0);
+    let t = t.max(0.0).min(1.0);
         // Correspondance de motifs — branchement exhaustif de Rust.
 match palette {
         0 => { // Matrix — classic green
@@ -293,7 +293,7 @@ match palette {
 /// Combo palette: blends 3 base palettes across the gradient
 /// Each palette occupies 1/3 of the t range with smooth crossfade
 fn combo_palette(p1: u8, p2: u8, p3: u8, t: f32) -> (f32, f32, f32) {
-    let t = t.maximum(0.0).minimum(1.0);
+    let t = t.max(0.0).min(1.0);
     if t < 0.3 {
         // Pure p1
         palette_color(p1, t / 0.3)
@@ -322,7 +322,7 @@ fn combo_palette(p1: u8, p2: u8, p3: u8, t: f32) -> (f32, f32, f32) {
 
 /// Rainbow: full HSV color wheel across t=0..1
 fn rainbow_color(t: f32) -> (f32, f32, f32) {
-    let t = t.maximum(0.0).minimum(1.0);
+    let t = t.max(0.0).min(1.0);
     // HSV to RGB: hue = t * 360°, full saturation, full value
     let h = t * 6.0; // 0..6 (6 sextants)
     let i = h as u8;
@@ -348,13 +348,13 @@ fn random_color(t: f32) -> (f32, f32, f32) {
 }
 
 /// Public random color for rain characters — uses col+row+frame as seed
-pub fn rain_random_color(column: usize, row: usize, frame: u32) -> (u8, u8, u8) {
-    let seed = (column as u32).wrapping_mul(2654435761)
+pub fn rain_random_color(col: usize, row: usize, frame: u32) -> (u8, u8, u8) {
+    let seed = (col as u32).wrapping_mul(2654435761)
         ^ (row as u32).wrapping_mul(1103515245)
         ^ frame.wrapping_mul(214013).wrapping_add(2531011);
     let hue = (seed % 360) as f32 / 360.0;
     let (r, g, b) = rainbow_color(hue);
-    (r.minimum(255.0) as u8, g.minimum(255.0) as u8, b.minimum(255.0) as u8)
+    (r.min(255.0) as u8, g.min(255.0) as u8, b.min(255.0) as u8)
 }
 
 /// Get color for any palette index (base 0-12, multi 13-23)
@@ -401,8 +401,8 @@ pub struct VisualizerState {
     pub column_bounds: Vec<(i32, i32)>,
 
     // ── Audio state ──
-    pub z_minimum: i16, pub z_maximum: i16,
-    pub column_w: i32,
+    pub z_min: i16, pub z_max: i16,
+    pub col_w: i32,
     pub frame: u64,
     pub smooth_sub_bass: f32,
     pub smooth_bass: f32,
@@ -424,7 +424,7 @@ pub struct VisualizerState {
     morph_edges_all: [Vec<Edge>; 4],
     morph_current: Vec<V3>,
     morph_phase: f32,               // 0.0–4.0 cycling through shapes
-    morph_index: usize,               // current target index
+    morph_idx: usize,               // current target index
 
     // ── Mode 2: Lorenz Attractor ──
     lorenz_trail: Vec<V3>,          // trail points
@@ -508,7 +508,7 @@ impl VisualizerState {
             scale: 180, scale_target: 180,
             center_x: 0, center_y: 0,
             column_hits: Vec::new(), column_bounds: Vec::new(),
-            z_minimum: 0, z_maximum: 0, column_w: 8,
+            z_min: 0, z_max: 0, col_w: 8,
             frame: 0,
             smooth_sub_bass: 0.0, smooth_bass: 0.0,
             smooth_mid: 0.0, smooth_treble: 0.0,
@@ -519,7 +519,7 @@ impl VisualizerState {
             morph_shapes: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
             morph_edges_all: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
             morph_current: Vec::new(),
-            morph_phase: 0.0, morph_index: 0,
+            morph_phase: 0.0, morph_idx: 0,
             lorenz_trail: Vec::new(), lorenz_state: [1.0, 1.0, 1.0],
             spec_base: Vec::new(), spec_bands: Vec::new(), spec_edges: Vec::new(),
             ribbon_spine: Vec::new(),
@@ -564,19 +564,19 @@ fn cos_i(mrad: i32) -> i32 { sin_i(mrad + 1571) }
 fn sinf(r: f32) -> f32 { sin_i((r * 1000.0) as i32) as f32 / 1000.0 }
 fn cosf(r: f32) -> f32 { cos_i((r * 1000.0) as i32) as f32 / 1000.0 }
 
-fn transform_vertex(v: V3, receive: i32, ry: i32, rz: i32, s: i32) -> (i32, i32, i32) {
+fn transform_vertex(v: V3, rx: i32, ry: i32, rz: i32, s: i32) -> (i32, i32, i32) {
     let vx = (v.x * s as f32) as i32;
     let vy = (v.y * s as f32) as i32;
     let vz = (v.z * s as f32) as i32;
-    let (sx, cx) = (sin_i(receive), cos_i(receive));
+    let (sx, cx) = (sin_i(rx), cos_i(rx));
     let y1 = (vy * cx - vz * sx) / 1000;
     let z1 = (vy * sx + vz * cx) / 1000;
     let (sy, cy) = (sin_i(ry), cos_i(ry));
     let x2 = (vx * cy + z1 * sy) / 1000;
     let z2 = (-vx * sy + z1 * cy) / 1000;
-    let (size, cz) = (sin_i(rz), cos_i(rz));
-    let x3 = (x2 * cz - y1 * size) / 1000;
-    let y3 = (x2 * size + y1 * cz) / 1000;
+    let (sz, cz) = (sin_i(rz), cos_i(rz));
+    let x3 = (x2 * cz - y1 * sz) / 1000;
+    let y3 = (x2 * sz + y1 * cz) / 1000;
     (x3, y3, z2)
 }
 
@@ -650,7 +650,7 @@ fn generator_icosahedron() -> (Vec<V3>, Vec<Edge>) {
         V3::new( l, 0.0, -s), V3::new( l, 0.0,  s),
         V3::new(-l, 0.0, -s), V3::new(-l, 0.0,  s),
     ];
-    #[allow(clippy::identity_operation)]
+    #[allow(clippy::identity_op)]
     let edges = alloc::vec![
         Edge(0,1), Edge(0,5), Edge(0,7), Edge(0,10), Edge(0,11),
         Edge(1,5), Edge(1,7), Edge(1,8), Edge(1,9),
@@ -1137,7 +1137,7 @@ fn build_mode_13(s: &mut VisualizerState) {
 // Initialization
 // ═══════════════════════════════════════
 
-fn ensure_initialize(s: &mut VisualizerState) {
+fn ensure_init(s: &mut VisualizerState) {
     if s.initialized { return; }
 
     // Mode 0 & 3: Sphere + Spectrum Globe (same base geometry)
@@ -1156,7 +1156,7 @@ fn ensure_initialize(s: &mut VisualizerState) {
     let (star_v, star_e) = generator_star();
 
     // Find max vertex count
-    let maximum_v = ico_v.len().maximum(cube_v.len()).maximum(dia_v.len()).maximum(star_v.len());
+    let maximum_v = ico_v.len().max(cube_v.len()).max(dia_v.len()).max(star_v.len());
 
     // Pad shapes to max_v vertices (duplicate last vertex)
     fn pad_verts(v: &[V3], target: usize) -> Vec<V3> {
@@ -1251,16 +1251,16 @@ fn build_mode_0(s: &mut VisualizerState) {
 
 fn build_mode_1(s: &mut VisualizerState) {
     // Morph between shapes — transition on beat
-    let from_index = s.morph_index;
-    let to_index = (s.morph_index + 1) % 4;
+    let from_idx = s.morph_idx;
+    let to_idx = (s.morph_idx + 1) % 4;
     let t = s.morph_phase - libm::floorf(s.morph_phase); // 0.0–1.0 within current transition
 
     // Smooth ease-in-out: t² * (3 - 2t)
     let smooth_t = t * t * (3.0 - 2.0 * t);
 
-    let from = &s.morph_shapes[from_index];
-    let to = &s.morph_shapes[to_index];
-    let count = from.len().minimum(to.len());
+    let from = &s.morph_shapes[from_idx];
+    let to = &s.morph_shapes[to_idx];
+    let count = from.len().min(to.len());
 
     // Audio-reactive vertex jitter
     let jitter = s.beat_pulse * 0.15;
@@ -1275,7 +1275,7 @@ fn build_mode_1(s: &mut VisualizerState) {
 
     // Use edges from the shape we're transitioning toward
     s.edges.clear();
-    s.edges.extend_from_slice(&s.morph_edges_all[to_index]);
+    s.edges.extend_from_slice(&s.morph_edges_all[to_idx]);
 }
 
 fn build_mode_2(s: &mut VisualizerState) {
@@ -1401,7 +1401,7 @@ fn build_mode_5(s: &mut VisualizerState) {
     if s.beat_pulse > 0.8 {
         let count = 30 + (s.smooth_bass * 20.0) as usize;
         let seed = s.frame as u32;
-        for i in 0..count.minimum(50) {
+        for i in 0..count.min(50) {
             let hash = seed.wrapping_mul(2654435761).wrapping_add(i as u32);
             let fx = ((hash & 0xFF) as f32 / 128.0 - 1.0) * 0.8;
             let fy = (((hash >> 8) & 0xFF) as f32 / 128.0 - 1.0) * 0.8;
@@ -1416,7 +1416,7 @@ fn build_mode_5(s: &mut VisualizerState) {
     }
 
     // Update particles
-    for p in s.particles.iterator_mut() {
+    for p in s.particles.iter_mut() {
         p.x += p.vx;
         p.y += p.vy;
         p.z += p.vz;
@@ -1456,29 +1456,29 @@ fn build_mode_6(s: &mut VisualizerState) {
 
     // Display the image at ~1.5× native size, centered
     let display_w = logo_w * 3 / 2;
-    let display_h = logo_h * 3 / 2;
+    let disp_h = logo_h * 3 / 2;
     s.image_display_w = display_w;
-    s.image_display_h = display_h;
+    s.image_display_h = disp_h;
     s.image_offset_x = s.center_x - display_w as i32 / 2;
-    s.image_offset_y = s.center_y - display_h as i32 / 2;
+    s.image_offset_y = s.center_y - disp_h as i32 / 2;
 
     // Beat makes image pulse slightly
     let pulse = (s.beat_pulse * 40.0) as i32;
     s.image_offset_x -= pulse / 2;
     s.image_offset_y -= pulse / 2;
     s.image_display_w = (display_w as i32 + pulse) as u32;
-    s.image_display_h = (display_h as i32 + pulse) as u32;
+    s.image_display_h = (disp_h as i32 + pulse) as u32;
 
     // Set column bounds based on image extent so fill layers + slow factor work
-    let column_w = s.column_w;
-    if column_w > 0 {
+    let col_w = s.col_w;
+    if col_w > 0 {
         let ncols = s.column_bounds.len();
-        for column in 0..ncols {
-            let column_pixel = column as i32 * column_w + column_w / 2;
+        for col in 0..ncols {
+            let column_pixel = col as i32 * col_w + col_w / 2;
             if column_pixel >= s.image_offset_x && column_pixel < s.image_offset_x + s.image_display_w as i32 {
-                s.column_bounds[column] = (
-                    s.image_offset_y.maximum(0),
-                    (s.image_offset_y + s.image_display_h as i32).maximum(0),
+                s.column_bounds[col] = (
+                    s.image_offset_y.max(0),
+                    (s.image_offset_y + s.image_display_h as i32).max(0),
                 );
             }
         }
@@ -1497,7 +1497,7 @@ fn build_mode_7(s: &mut VisualizerState) {
 
     s.verts.clear();
     for (i, bv) in s.torus_knot_base.iter().enumerate() {
-        let t = i as f32 / s.torus_knot_base.len().maximum(1) as f32;
+        let t = i as f32 / s.torus_knot_base.len().max(1) as f32;
         // Audio-reactive radial breathing
         let r = 1.0 + bass_pulse * 0.4 + sinf(t * 6.28 * 3.0 + time) * treble_jitter;
         s.verts.push(V3::new(bv.x * r, bv.y * r, bv.z * r));
@@ -1515,7 +1515,7 @@ fn build_mode_8(s: &mut VisualizerState) {
 
     s.verts.clear();
     for (i, bv) in s.dna_base.iter().enumerate() {
-        let t = (i % segments.maximum(1)) as f32 / segments.maximum(1) as f32;
+        let t = (i % segments.max(1)) as f32 / segments.max(1) as f32;
         // Breathing radius
         let r = 1.0 + bass_pulse * 0.3;
         // Extra twist based on mid frequencies
@@ -1706,7 +1706,7 @@ pub fn update(
     sub_bass: f32, bass: f32, mid: f32, treble: f32,
     playing: bool,
 ) {
-    ensure_initialize(state);
+    ensure_init(state);
     state.frame = state.frame.wrapping_add(1);
     state.center_x = screen_w as i32 / 2;
     state.center_y = screen_h as i32 / 2;
@@ -1762,14 +1762,14 @@ pub fn update(
                 + (state.beat_pulse * 25.0) as i32
         } else { 150 };
         state.scale += (state.scale_target - state.scale) / 3;
-        state.scale = state.scale.maximum(80).minimum(220);
+        state.scale = state.scale.max(80).min(220);
     }
 
     // ── Mode 13: DVD bounce movement ──
     if state.mode == 13 {
         // Compute shape bounding box radius in screen coords (approximate)
-        let shape_radius_x = (state.scale as f32 * 0.9).maximum(80.0);
-        let shape_radius_y = (state.scale as f32 * 0.7).maximum(60.0);
+        let shape_radius_x = (state.scale as f32 * 0.9).max(80.0);
+        let shape_radius_y = (state.scale as f32 * 0.7).max(60.0);
 
         // Move position
         state.dvd_x += state.dvd_vx;
@@ -1783,17 +1783,17 @@ pub fn update(
 
         if state.dvd_x - margin_x < 0.0 {
             state.dvd_x = margin_x;
-            state.dvd_vx = state.dvd_vx.absolute();
+            state.dvd_vx = state.dvd_vx.abs();
         } else if state.dvd_x + margin_x > software {
             state.dvd_x = software - margin_x;
-            state.dvd_vx = -(state.dvd_vx.absolute());
+            state.dvd_vx = -(state.dvd_vx.abs());
         }
         if state.dvd_y - margin_y < 0.0 {
             state.dvd_y = margin_y;
-            state.dvd_vy = state.dvd_vy.absolute();
+            state.dvd_vy = state.dvd_vy.abs();
         } else if state.dvd_y + margin_y > sh {
             state.dvd_y = sh - margin_y;
-            state.dvd_vy = -(state.dvd_vy.absolute());
+            state.dvd_vy = -(state.dvd_vy.abs());
         }
 
         // Override center to bounce position
@@ -1815,7 +1815,7 @@ pub fn update(
         state.morph_phase += speed;
         if state.morph_phase >= 1.0 {
             state.morph_phase -= 1.0;
-            state.morph_index = (state.morph_index + 1) % 4;
+            state.morph_idx = (state.morph_idx + 1) % 4;
         }
     }
 
@@ -1839,7 +1839,7 @@ pub fn update(
     }
 
     // ── Project all vertices ──
-    let (scale, receive, ry, rz) = (state.scale, state.rot_x, state.rot_y, state.rot_z);
+    let (scale, rx, ry, rz) = (state.scale, state.rot_x, state.rot_y, state.rot_z);
     let (cx, cy) = (state.center_x, state.center_y);
 
     state.pverts.clear();
@@ -1847,15 +1847,15 @@ pub fn update(
     let mut zmin: i16 = i16::MAX;
     let mut zmax: i16 = i16::MIN;
     for v in &state.verts {
-        let (x3, y3, z3) = transform_vertex(*v, receive, ry, rz, scale);
+        let (x3, y3, z3) = transform_vertex(*v, rx, ry, rz, scale);
         state.pverts.push(project(x3, y3, z3, cx, cy));
-        let z16 = (z3 as i16).maximum(-500).minimum(500);
+        let z16 = (z3 as i16).max(-500).min(500);
         state.proj_z.push(z16);
         if z16 < zmin { zmin = z16; }
         if z16 > zmax { zmax = z16; }
     }
-    state.z_minimum = zmin;
-    state.z_maximum = zmax;
+    state.z_min = zmin;
+    state.z_max = zmax;
 
     // ── Specular highlight ──
     {
@@ -1864,7 +1864,7 @@ pub fn update(
         let mut best_sy: i32 = cy;
         let (lx, ly, lz) = (500i32, 700, 500);
         for (vi, v) in state.verts.iter().enumerate() {
-            let (nx, ny, nz) = transform_vertex(*v, receive, ry, rz, 1000);
+            let (nx, ny, nz) = transform_vertex(*v, rx, ry, rz, 1000);
             let dot = (nx * lx + ny * ly + nz * lz) / 1000;
             if dot > best_dot {
                 best_dot = dot;
@@ -1894,8 +1894,8 @@ pub fn update(
     }
 
     // ── Column hit-map ──
-    let column_w = if matrix_cols > 0 { screen_w as i32 / matrix_cols as i32 } else { 8 };
-    state.column_w = column_w;
+    let col_w = if matrix_cols > 0 { screen_w as i32 / matrix_cols as i32 } else { 8 };
+    state.col_w = col_w;
 
     if state.column_hits.len() != matrix_cols {
         state.column_hits.clear();
@@ -1905,8 +1905,8 @@ pub fn update(
             state.column_bounds.push((-1, -1));
         }
     } else {
-        for h in state.column_hits.iterator_mut() { h.clear(); }
-        for b in state.column_bounds.iterator_mut() { *b = (-1, -1); }
+        for h in state.column_hits.iter_mut() { h.clear(); }
+        for b in state.column_bounds.iter_mut() { *b = (-1, -1); }
     }
 
     for (ei, edge) in state.edges.iter().enumerate() {
@@ -1918,38 +1918,38 @@ pub fn update(
         let z_average = if a < state.proj_z.len() && b < state.proj_z.len() {
             ((state.proj_z[a] as i32 + state.proj_z[b] as i32) / 2) as i16
         } else { 0 };
-        rasterize_edge(x0, y0, x1, y1, ei as u16, z_average, column_w, matrix_cols,
+        rasterize_edge(x0, y0, x1, y1, ei as u16, z_average, col_w, matrix_cols,
                        screen_h as i32, &mut state.column_hits, &mut state.column_bounds);
     }
 }
 
 fn rasterize_edge(
     x0: i32, y0: i32, x1: i32, y1: i32,
-    eidx: u16, z_average: i16, column_w: i32, ncols: usize, sh: i32,
+    eidx: u16, z_average: i16, col_w: i32, ncols: usize, sh: i32,
     hits: &mut [Vec<(i32, i32, u16, u8, i16)>],
     bounds: &mut [(i32, i32)],
 ) {
-    if column_w <= 0 { return; }
-    let dx = (x1 - x0).absolute();
-    let dy = (y1 - y0).absolute();
-    let steps = dx.maximum(dy).maximum(1).minimum(2048);
+    if col_w <= 0 { return; }
+    let dx = (x1 - x0).abs();
+    let dy = (y1 - y0).abs();
+    let steps = dx.max(dy).max(1).min(2048);
     let step_x = ((x1 - x0) * 1024) / steps;
     let step_y = ((y1 - y0) * 1024) / steps;
-    let mut pixel = x0 * 1024;
+    let mut px = x0 * 1024;
     let mut py = y0 * 1024;
     let prox = 8i32;
     let stride = 2;
     let mut s = 0;
     while s <= steps {
-        let sx = pixel / 1024;
+        let sx = px / 1024;
         let sy = py / 1024;
-        let c = sx / column_w;
+        let c = sx / col_w;
         if c >= 0 && (c as usize) < ncols && sy >= 0 && sy < sh {
             let ci = c as usize;
             if hits[ci].len() < 64 {
-                let y_lo = (sy - prox).maximum(0);
-                let y_hi = (sy + prox).minimum(sh - 1);
-                let dist = ((sx - c * column_w - column_w / 2).absolute() as u32 * 255 / (prox as u32 + 1)).minimum(255) as u8;
+                let y_lo = (sy - prox).max(0);
+                let y_hi = (sy + prox).min(sh - 1);
+                let dist = ((sx - c * col_w - col_w / 2).abs() as u32 * 255 / (prox as u32 + 1)).min(255) as u8;
                 let intensity = 255u8.saturating_sub(dist);
                 hits[ci].push((y_lo, y_hi, eidx, intensity, z_average));
             }
@@ -1958,7 +1958,7 @@ fn rasterize_edge(
             if *bmin < 0 || yy < *bmin { *bmin = yy; }
             if yy > *bmax { *bmax = yy; }
         }
-        pixel += step_x * stride;
+        px += step_x * stride;
         py += step_y * stride;
         s += stride;
     }
@@ -1969,12 +1969,12 @@ fn rasterize_edge(
 // ═══════════════════════════════════════
 
 pub fn check_rain_collision(
-    state: &VisualizerState, column: usize, y: i32,
+    state: &VisualizerState, col: usize, y: i32,
     beat_pulse: f32, energy: f32,
 ) -> RainEffect {
     if !state.initialized { return RainEffect::NONE; }
     let ncols = state.column_hits.len();
-    if column >= ncols { return RainEffect::NONE; }
+    if col >= ncols { return RainEffect::NONE; }
 
     let (cx, cy) = (state.center_x, state.center_y);
 
@@ -1982,7 +1982,7 @@ pub fn check_rain_collision(
     // Mode 6: Image Reveal — sample logo bitmap directly
     // ═══════════════════════════════════════
     if state.mode == 6 && state.image_display_w > 0 && state.image_display_h > 0 {
-        let screen_x = column as i32 * state.column_w + state.column_w / 2;
+        let screen_x = col as i32 * state.col_w + state.col_w / 2;
 
         // Map screen position to image pixel coordinates
         let relative_x = screen_x - state.image_offset_x;
@@ -2001,17 +2001,17 @@ pub fn check_rain_collision(
                 let pixel = crate::logo_bitmap::logo_pixel(image_x, image_y);
                 let a = (pixel >> 24) & 0xFF;
                 let pr = (pixel >> 16) & 0xFF;
-                let page = (pixel >> 8) & 0xFF;
+                let pg = (pixel >> 8) & 0xFF;
                 let pb = pixel & 0xFF;
 
                 // Only reveal non-transparent pixels with some brightness
-                let brightness = (pr.maximum(page).maximum(pb)) as u8;
+                let brightness = (pr.max(pg).max(pb)) as u8;
                 if a > 30 && brightness > 15 {
                     // Blend strength: brighter pixels → stronger reveal
                     // Beat pulse intensifies the image
                     let base_blend = 140u8 + (brightness / 4);
-                    let beat_boost = (beat_pulse * 60.0).minimum(60.0) as u8;
-                    let blend = base_blend.saturating_add(beat_boost).minimum(230);
+                    let beat_boost = (beat_pulse * 60.0).min(60.0) as u8;
+                    let blend = base_blend.saturating_add(beat_boost).min(230);
 
                     // Beat ripple for image mode
                     let mut ripple: u8 = 0;
@@ -2021,9 +2021,9 @@ pub fn check_rain_collision(
                         let dist = libm::sqrtf(dx * dx + dy * dy);
                         let ring_dist = libm::fabsf(dist - state.ripple_radius);
                         if ring_dist < 35.0 {
-                            let life = (1.0 - state.ripple_radius / 500.0).maximum(0.0);
+                            let life = (1.0 - state.ripple_radius / 500.0).max(0.0);
                             let t = (1.0 - ring_dist / 35.0) * life;
-                            ripple = (t * 120.0).minimum(120.0) as u8;
+                            ripple = (t * 120.0).min(120.0) as u8;
                         }
                     }
 
@@ -2044,7 +2044,7 @@ pub fn check_rain_collision(
                         inner_glow: 0,
                         shadow: 0,
                         target_r: pr as u8,
-                        target_g: page as u8,
+                        target_g: pg as u8,
                         target_b: pb as u8,
                         target_blend: blend,
                     };
@@ -2061,7 +2061,7 @@ pub fn check_rain_collision(
         let dy_edge = if relative_y < 0 { -relative_y }
             else if relative_y >= state.image_display_h as i32 { relative_y - state.image_display_h as i32 + 1 }
             else { 0 };
-        let edge_dist = dx_edge.maximum(dy_edge);
+        let edge_dist = dx_edge.max(dy_edge);
         if edge_dist > 0 && edge_dist < 40 {
             let dim = ((1.0 - edge_dist as f32 / 40.0) * 50.0) as u8;
             return RainEffect { dim, ..RainEffect::NONE };
@@ -2080,47 +2080,47 @@ pub fn check_rain_collision(
     // ── Beat ripple ring ──
     let mut ripple: u8 = 0;
     {
-        let dx = (column as i32 * state.column_w + state.column_w / 2 - cx) as f32;
+        let dx = (col as i32 * state.col_w + state.col_w / 2 - cx) as f32;
         let dy = (y - cy) as f32;
         let dist = libm::sqrtf(dx * dx + dy * dy);
         let ring_dist = libm::fabsf(dist - state.ripple_radius);
         if ring_dist < 35.0 {
-            let life = (1.0 - state.ripple_radius / 500.0).maximum(0.0);
+            let life = (1.0 - state.ripple_radius / 500.0).max(0.0);
             let t = (1.0 - ring_dist / 35.0) * life;
-            ripple = (t * 120.0).minimum(120.0) as u8;
+            ripple = (t * 120.0).min(120.0) as u8;
         }
     }
 
     // ── Edge glow (strongest effect) ──
-    let hits = &state.column_hits[column];
+    let hits = &state.column_hits[col];
     for &(y_lo, y_hi, _eidx, intensity, z_depth) in hits.iter() {
         if y >= y_lo && y <= y_hi {
-            let edge_dist = (y - (y_lo + y_hi) / 2).absolute();
+            let edge_dist = (y - (y_lo + y_hi) / 2).abs();
             let half = (y_hi - y_lo) / 2;
             let glow_t = if half > 0 {
-                1.0 - (edge_dist as f32 / half as f32).minimum(1.0)
+                1.0 - (edge_dist as f32 / half as f32).min(1.0)
             } else { 1.0 };
             let glow = (80.0 + glow_t * 175.0 * (intensity as f32 / 255.0)) as u8;
 
             // Depth normalization
-            let z_range = (state.z_maximum as i32 - state.z_minimum as i32).maximum(1);
-            let depth = ((z_depth as i32 - state.z_minimum as i32) * 255 / z_range).maximum(0).minimum(255) as u8;
+            let z_range = (state.z_max as i32 - state.z_min as i32).max(1);
+            let depth = ((z_depth as i32 - state.z_min as i32) * 255 / z_range).max(0).min(255) as u8;
 
             // Fresnel: brighter at silhouette edges
-            let (bmin, bmax) = state.column_bounds[column];
+            let (bmin, bmax) = state.column_bounds[col];
             let fresnel = if bmax > bmin {
                 let cy_mid = (bmin + bmax) / 2;
-                let edge_from_mid = (y - cy_mid).absolute() as f32;
+                let edge_from_mid = (y - cy_mid).abs() as f32;
                 let half_h = ((bmax - bmin) / 2) as f32;
                 if half_h > 0.0 {
-                    let f = (edge_from_mid / half_h).minimum(1.0);
+                    let f = (edge_from_mid / half_h).min(1.0);
                     (f * f * 255.0) as u8
                 } else { 0 }
             } else { 0 };
 
             // Specular
-            let sdx = (column as i32 * state.column_w - state.spec_x).absolute();
-            let sdy = (y - state.spec_y).absolute();
+            let sdx = (col as i32 * state.col_w - state.spec_x).abs();
+            let sdy = (y - state.spec_y).abs();
             let spec_dist = sdx + sdy;
             let specular = if spec_dist < 60 {
                 ((1.0 - spec_dist as f32 / 60.0) * 255.0) as u8
@@ -2128,27 +2128,27 @@ pub fn check_rain_collision(
 
             // AO: darker at poles (top/bottom of silhouette)
             let ao = if bmax > bmin {
-                let t = (y - bmin) as f32 / (bmax - bmin).maximum(1) as f32;
-                let pole = (0.5 - t).absolute() * 2.0; // 1.0 at poles, 0.0 at equator
+                let t = (y - bmin) as f32 / (bmax - bmin).max(1) as f32;
+                let pole = (0.5 - t).abs() * 2.0; // 1.0 at poles, 0.0 at equator
                 (pole * pole * 100.0) as u8
             } else { 0 };
 
             // Bloom
-            let bloom = (glow as u16 * depth as u16 / 512).minimum(200) as u8;
+            let bloom = (glow as u16 * depth as u16 / 512).min(200) as u8;
 
             // Inner glow
             let inner_glow = if bmax > bmin {
-                let dx = column as i32 * state.column_w + state.column_w / 2 - cx;
+                let dx = col as i32 * state.col_w + state.col_w / 2 - cx;
                 let dy = y - cy;
                 let r = libm::sqrtf((dx * dx + dy * dy) as f32);
-                let maximum_r = ((bmax - bmin) as f32 / 2.0).maximum(1.0);
-                let t = (1.0 - r / maximum_r).maximum(0.0);
+                let maximum_r = ((bmax - bmin) as f32 / 2.0).max(1.0);
+                let t = (1.0 - r / maximum_r).max(0.0);
                 (t * t * 180.0) as u8
             } else { 0 };
 
             return RainEffect {
                 glow, depth,
-                trail_boost: (glow / 4).minimum(80),
+                trail_boost: (glow / 4).min(80),
                 ripple,
                 dim: 0,
                 fresnel, specular, ao, bloom,
@@ -2158,34 +2158,34 @@ pub fn check_rain_collision(
                 target_r: if red_flash > 0.01 { 255 } else { 0 },
                 target_g: 0,
                 target_b: 0,
-                target_blend: (red_flash * 220.0).minimum(220.0) as u8,
+                target_blend: (red_flash * 220.0).min(220.0) as u8,
             };
         }
     }
 
     // ── Inside silhouette (volume fill) ──
-    let (bmin, bmax) = state.column_bounds[column];
+    let (bmin, bmax) = state.column_bounds[col];
     if bmin >= 0 && y >= bmin && y <= bmax {
         let glow = 20u8;
-        let z_range = (state.z_maximum as i32 - state.z_minimum as i32).maximum(1);
+        let z_range = (state.z_max as i32 - state.z_min as i32).max(1);
         let depth = 128u8;
 
         let fresnel = {
             let cy_mid = (bmin + bmax) / 2;
-            let edge_from_mid = (y - cy_mid).absolute() as f32;
+            let edge_from_mid = (y - cy_mid).abs() as f32;
             let half_h = ((bmax - bmin) / 2) as f32;
             if half_h > 0.0 {
-                let f = (edge_from_mid / half_h).minimum(1.0);
+                let f = (edge_from_mid / half_h).min(1.0);
                 (f * f * 200.0) as u8
             } else { 0 }
         };
 
         let inner_glow = {
-            let dx = column as i32 * state.column_w + state.column_w / 2 - cx;
+            let dx = col as i32 * state.col_w + state.col_w / 2 - cx;
             let dy = y - cy;
             let r = libm::sqrtf((dx * dx + dy * dy) as f32);
-            let maximum_r = ((bmax - bmin) as f32 / 2.0).maximum(1.0);
-            let t = (1.0 - r / maximum_r).maximum(0.0);
+            let maximum_r = ((bmax - bmin) as f32 / 2.0).max(1.0);
+            let t = (1.0 - r / maximum_r).max(0.0);
             (t * t * 120.0) as u8
         };
 
@@ -2197,7 +2197,7 @@ pub fn check_rain_collision(
             target_r: if red_flash > 0.01 { 255 } else { 0 },
             target_g: 0,
             target_b: 0,
-            target_blend: (red_flash * 180.0).minimum(180.0) as u8,
+            target_blend: (red_flash * 180.0).min(180.0) as u8,
         };
     }
 
@@ -2229,12 +2229,12 @@ pub fn check_rain_collision(
 
     // ── Scanline rays below center ──
     if y > state.shape_center_y && y < state.shape_center_y + 200 {
-        let pixel = column as i32 * state.column_w + state.column_w / 2;
-        let dx = (pixel - cx).absolute();
-        if dx < 80 && column % 4 == 0 {
+        let px = col as i32 * state.col_w + state.col_w / 2;
+        let dx = (px - cx).abs();
+        if dx < 80 && col % 4 == 0 {
             let ray_t = (1.0 - dx as f32 / 80.0) * (1.0 - (y - state.shape_center_y) as f32 / 200.0);
             if ray_t > 0.05 {
-                let scanline = (ray_t * 150.0).minimum(200.0) as u8;
+                let scanline = (ray_t * 150.0).min(200.0) as u8;
                 return RainEffect {
                     glow: 0, depth: 128, trail_boost: 0,
                     ripple, dim: 0, fresnel: 0, specular: 0, ao: 0,
@@ -2291,10 +2291,10 @@ pub fn modulate_rain_color(
     if scanline > 3 {
         let ray = scanline as f32 / 255.0;
         // Tint scanlines with palette color
-        let (pr, page, pb) = get_palette_color(palette, 0.3);
-        r = (r + ray * pr * 0.3).minimum(255.0);
-        g = (g + ray * page * 0.3).minimum(255.0);
-        b = (b + ray * pb * 0.3).minimum(255.0);
+        let (pr, pg, pb) = get_palette_color(palette, 0.3);
+        r = (r + ray * pr * 0.3).min(255.0);
+        g = (g + ray * pg * 0.3).min(255.0);
+        b = (b + ray * pb * 0.3).min(255.0);
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -2309,16 +2309,16 @@ pub fn modulate_rain_color(
 
         // Strong push toward white for edges
         let white_blend = g_f * edge_brightness;
-        r = (r * (1.0 - white_blend) + 255.0 * white_blend).minimum(255.0);
-        g = (g * (1.0 - white_blend) + 255.0 * white_blend).minimum(255.0);
-        b = (b * (1.0 - white_blend) + 255.0 * white_blend).minimum(255.0);
+        r = (r * (1.0 - white_blend) + 255.0 * white_blend).min(255.0);
+        g = (g * (1.0 - white_blend) + 255.0 * white_blend).min(255.0);
+        b = (b * (1.0 - white_blend) + 255.0 * white_blend).min(255.0);
 
         // Subtle palette tint on edges (just a hint, 15%) so they're not pure white
-        let (pr, page, pb) = get_palette_color(palette, depth_t);
+        let (pr, pg, pb) = get_palette_color(palette, depth_t);
         let tint = 0.15 * g_f;
-        r = (r * (1.0 - tint) + pr * tint).minimum(255.0);
-        g = (g * (1.0 - tint) + page * tint).minimum(255.0);
-        b = (b * (1.0 - tint) + pb * tint).minimum(255.0);
+        r = (r * (1.0 - tint) + pr * tint).min(255.0);
+        g = (g * (1.0 - tint) + pg * tint).min(255.0);
+        b = (b * (1.0 - tint) + pb * tint).min(255.0);
 
         // AO: darken at poles
         if ao > 0 {
@@ -2342,18 +2342,18 @@ pub fn modulate_rain_color(
 
         // ── Palette gradient across depth ──
         // Near faces get bright end of palette, far faces get dark end
-        let (pr, page, pb) = get_palette_color(palette, depth_t);
+        let (pr, pg, pb) = get_palette_color(palette, depth_t);
 
         // Apply shadow factor to palette color
         let lit_r = pr * shadow_factor;
-        let lit_g = page * shadow_factor;
+        let lit_g = pg * shadow_factor;
         let lit_b = pb * shadow_factor;
 
         // Blend strength: deeper inside = stronger color
-        let blend = (ig * 0.80).minimum(0.80);
-        r = (r * (1.0 - blend) + lit_r * blend).minimum(255.0);
-        g = (g * (1.0 - blend) + lit_g * blend).minimum(255.0);
-        b = (b * (1.0 - blend) + lit_b * blend).minimum(255.0);
+        let blend = (ig * 0.80).min(0.80);
+        r = (r * (1.0 - blend) + lit_r * blend).min(255.0);
+        g = (g * (1.0 - blend) + lit_g * blend).min(255.0);
+        b = (b * (1.0 - blend) + lit_b * blend).min(255.0);
 
         // ── AO: extra darkening at top/bottom poles (ambient occlusion) ──
         if ao > 0 {
@@ -2364,9 +2364,9 @@ pub fn modulate_rain_color(
         // ── Subtle brightness boost for very near faces (highlight rim) ──
         if depth_t > 0.8 {
             let near_boost = (depth_t - 0.8) / 0.2 * 30.0;
-            r = (r + near_boost).minimum(255.0);
-            g = (g + near_boost).minimum(255.0);
-            b = (b + near_boost).minimum(255.0);
+            r = (r + near_boost).min(255.0);
+            g = (g + near_boost).min(255.0);
+            b = (b + near_boost).min(255.0);
         }
     }
     // ══════════════════════════════════════════════════════════════
@@ -2374,11 +2374,11 @@ pub fn modulate_rain_color(
     // ══════════════════════════════════════════════════════════════
     else if glow > 0 {
         let g_f = glow as f32 / 255.0;
-        let (pr, page, pb) = get_palette_color(palette, depth_t * 0.5 + 0.3);
+        let (pr, pg, pb) = get_palette_color(palette, depth_t * 0.5 + 0.3);
         let boost = g_f * 0.5;
-        r = (r + pr * boost).minimum(255.0);
-        g = (g + page * boost).minimum(255.0);
-        b = (b + pb * boost).minimum(255.0);
+        r = (r + pr * boost).min(255.0);
+        g = (g + pg * boost).min(255.0);
+        b = (b + pb * boost).min(255.0);
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -2387,9 +2387,9 @@ pub fn modulate_rain_color(
     if fresnel > 120 {
         let f_t = (fresnel as f32 - 120.0) / 135.0;
         let white_push = f_t * f_t;
-        r = (r * (1.0 - white_push) + 252.0 * white_push).minimum(255.0);
-        g = (g * (1.0 - white_push) + 255.0 * white_push).minimum(255.0);
-        b = (b * (1.0 - white_push) + 252.0 * white_push).minimum(255.0);
+        r = (r * (1.0 - white_push) + 252.0 * white_push).min(255.0);
+        g = (g * (1.0 - white_push) + 255.0 * white_push).min(255.0);
+        b = (b * (1.0 - white_push) + 252.0 * white_push).min(255.0);
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -2399,10 +2399,10 @@ pub fn modulate_rain_color(
         let s_t = (specular as f32 - 30.0) / 225.0;
         let s_t = s_t * s_t;
         // Specular goes toward white but with slight palette tint
-        let (pr, page, pb) = get_palette_color(palette, 0.9);
-        r = (r + s_t * (200.0 + pr * 0.2)).minimum(255.0);
-        g = (g + s_t * (220.0 + page * 0.1)).minimum(255.0);
-        b = (b + s_t * (200.0 + pb * 0.2)).minimum(255.0);
+        let (pr, pg, pb) = get_palette_color(palette, 0.9);
+        r = (r + s_t * (200.0 + pr * 0.2)).min(255.0);
+        g = (g + s_t * (220.0 + pg * 0.1)).min(255.0);
+        b = (b + s_t * (200.0 + pb * 0.2)).min(255.0);
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -2410,10 +2410,10 @@ pub fn modulate_rain_color(
     // ══════════════════════════════════════════════════════════════
     if bloom > 10 {
         let bl = bloom as f32 / 255.0;
-        let (pr, page, pb) = get_palette_color(palette, 0.5);
-        r = (r + bl * pr * 0.15).minimum(255.0);
-        g = (g + bl * page * 0.15).minimum(255.0);
-        b = (b + bl * pb * 0.15).minimum(255.0);
+        let (pr, pg, pb) = get_palette_color(palette, 0.5);
+        r = (r + bl * pr * 0.15).min(255.0);
+        g = (g + bl * pg * 0.15).min(255.0);
+        b = (b + bl * pb * 0.15).min(255.0);
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -2421,19 +2421,19 @@ pub fn modulate_rain_color(
     // ══════════════════════════════════════════════════════════════
     if ripple > 0 {
         let rip = ripple as f32 / 255.0;
-        let (pr, page, pb) = get_palette_color(palette, 0.6);
-        r = (r + rip * pr * 0.2).minimum(255.0);
-        g = (g + rip * page * 0.2).minimum(255.0);
-        b = (b + rip * pb * 0.2).minimum(255.0);
+        let (pr, pg, pb) = get_palette_color(palette, 0.6);
+        r = (r + rip * pr * 0.2).min(255.0);
+        g = (g + rip * pg * 0.2).min(255.0);
+        b = (b + rip * pb * 0.2).min(255.0);
     }
 
     // ══════════════════════════════════════════════════════════════
     // 10. Music-reactive color boost — intensifies palette on beat
     // ══════════════════════════════════════════════════════════════
     if inside && energy > 0.03 {
-        let maximum_band = sub_bass.maximum(bass).maximum(mid).maximum(treble);
+        let maximum_band = sub_bass.max(bass).max(mid).max(treble);
         if maximum_band > 0.10 {
-            let intensity = (energy * 0.8 + 0.1).minimum(0.55);
+            let intensity = (energy * 0.8 + 0.1).min(0.55);
 
             // Map frequency band to palette position
             let band_t = if sub_bass >= maximum_band - 0.05 {
@@ -2451,17 +2451,17 @@ pub fn modulate_rain_color(
             let (tr, tg, tb) = get_palette_color(palette, mix_t);
 
             let pulse = 1.0 + beat * 0.5;
-            let blend = (intensity * pulse).minimum(0.65);
-            r = (r * (1.0 - blend) + tr * blend).minimum(255.0);
-            g = (g * (1.0 - blend) + tg * blend).minimum(255.0);
-            b = (b * (1.0 - blend) + tb * blend).minimum(255.0);
+            let blend = (intensity * pulse).min(0.65);
+            r = (r * (1.0 - blend) + tr * blend).min(255.0);
+            g = (g * (1.0 - blend) + tg * blend).min(255.0);
+            b = (b * (1.0 - blend) + tb * blend).min(255.0);
 
             // Beat kick: flash brighter
             if beat > 0.5 {
                 let kick = (beat - 0.5) * 45.0;
-                r = (r + kick).minimum(255.0);
-                g = (g + kick).minimum(255.0);
-                b = (b + kick).minimum(255.0);
+                r = (r + kick).min(255.0);
+                g = (g + kick).min(255.0);
+                b = (b + kick).min(255.0);
             }
         }
     }
@@ -2470,20 +2470,20 @@ pub fn modulate_rain_color(
     // 11. Final output with palette-aware background tinting
     // ══════════════════════════════════════════════════════════════
     if inside {
-        (r.minimum(255.0) as u8, g.minimum(255.0) as u8, b.minimum(255.0) as u8)
+        (r.min(255.0) as u8, g.min(255.0) as u8, b.min(255.0) as u8)
     } else if palette == 0 {
         // Matrix: green-dominant outside
         let g_final = g as u8;
-        let r_final = (r as u8).minimum(g_final);
-        let b_final = (b as u8).minimum(g_final);
+        let r_final = (r as u8).min(g_final);
+        let b_final = (b as u8).min(g_final);
         (r_final, g_final, b_final)
     } else {
         // Other palettes: subtle tint on rain
-        let (pr, page, pb) = get_palette_color(palette, 0.15);
+        let (pr, pg, pb) = get_palette_color(palette, 0.15);
         let tint = 0.18f32;
-        let r_final = (r * (1.0 - tint) + pr * tint).minimum(255.0) as u8;
-        let g_final = (g * (1.0 - tint) + page * tint).minimum(255.0) as u8;
-        let b_final = (b * (1.0 - tint) + pb * tint).minimum(255.0) as u8;
+        let r_final = (r * (1.0 - tint) + pr * tint).min(255.0) as u8;
+        let g_final = (g * (1.0 - tint) + pg * tint).min(255.0) as u8;
+        let b_final = (b * (1.0 - tint) + pb * tint).min(255.0) as u8;
         (r_final, g_final, b_final)
     }
 }
@@ -2494,12 +2494,12 @@ pub fn modulate_rain_color(
 
 #[inline]
 // Fonction publique — appelable depuis d'autres modules.
-pub fn column_slow_factor(state: &VisualizerState, column: usize) -> u8 {
-    if column < state.column_bounds.len() {
-        let (bmin, bmax) = state.column_bounds[column];
+pub fn column_slow_factor(state: &VisualizerState, col: usize) -> u8 {
+    if col < state.column_bounds.len() {
+        let (bmin, bmax) = state.column_bounds[col];
         if bmin >= 0 && bmax > bmin {
             let span = (bmax - bmin) as u32;
-            let slow = (45 + (55 * span / 400).minimum(55)) as u8;
+            let slow = (45 + (55 * span / 400).min(55)) as u8;
             return 100u8.saturating_sub(100 - slow);
         }
     }

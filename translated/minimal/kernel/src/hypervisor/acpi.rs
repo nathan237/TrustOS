@@ -17,31 +17,28 @@
 
 
 
-const YS_: u64 = 0x50000;
+const ZX_: u64 = 0x50000;
 
 
-const BEU_: u64 = 0xE0000;
+const BGW_: u64 = 0xE0000;
 
 
-const AHI_: usize = 36;
+const AJE_: usize = 36;
 
 
-const CDL_: u32 = 0xFEE0_0000;
+const CGU_: u32 = 0xFEE0_0000;
 
 
-const CCD_: u32 = 0xFEC0_0000;
+const CFO_: u32 = 0xFEC0_0000;
 
 
-const CCB_: u8 = 1;
+const CFM_: u8 = 1;
 
 
-const KT_: &[u8; 6] = b"TRUST\0";
+const LM_: &[u8; 6] = b"TRUST\0";
 
 
-const OM_: &[u8; 8] = b"TRUSTVM\0";
-
-
-
+const PK_: &[u8; 8] = b"TRUSTVM\0";
 
 
 
@@ -55,66 +52,69 @@ const OM_: &[u8; 8] = b"TRUSTVM\0";
 
 
 
-pub fn esu(fe: &mut [u8]) -> u64 {
-    let ar = YS_ as usize;
+
+
+
+pub fn cay(guest_memory: &mut [u8]) -> u64 {
+    let base = ZX_ as usize;
     
     
-    let qex = 0x500; 
-    for a in 0..qex {
-        if ar + a < fe.len() {
-            fe[ar + a] = 0;
+    let jtm = 0x500; 
+    for i in 0..jtm {
+        if base + i < guest_memory.len() {
+            guest_memory[base + i] = 0;
         }
     }
     
-    let dll = ar;           
-    let gxb = ar + 0x040;   
-    let lkc = ar + 0x080;   
-    let kuz = ar + 0x100;   
-    let krq = ar + 0x200;   
-    let lcr = ar + 0x400;   
+    let biz = base;           
+    let dgv = base + 0x040;   
+    let ggl = base + 0x080;   
+    let fwd = base + 0x100;   
+    let ftg = base + 0x200;   
+    let gbe = base + 0x400;   
     
     
-    let bmy = qte(fe, krq);
+    let ahw = kew(guest_memory, ftg);
     
     
-    let ujh = qtl(fe, lkc);
+    let nbv = kfe(guest_memory, ggl);
     
     
-    let sqv = qtf(fe, kuz, krq as u64);
+    let luc = kex(guest_memory, fwd, ftg as u64);
     
     
-    let tqi = qti(fe, lcr);
+    let mml = kfb(guest_memory, gbe);
     
     
-    let xwr = qud(fe, gxb, &[
-        lkc as u64,
-        kuz as u64,
-        lcr as u64,
+    let pvw = kfw(guest_memory, dgv, &[
+        ggl as u64,
+        fwd as u64,
+        gbe as u64,
     ]);
     
     
-    qub(fe, dll, gxb as u64);
+    kfu(guest_memory, biz, dgv as u64);
     
     
     
-    let kdl = BEU_ as usize;
-    if kdl + AHI_ <= fe.len() {
+    let fjg = BGW_ as usize;
+    if fjg + AJE_ <= guest_memory.len() {
         
-        let mut pek = [0u8; 36];
-        pek.dg(&fe[dll..dll + AHI_]);
-        fe[kdl..kdl + AHI_].dg(&pek);
+        let mut jbr = [0u8; 36];
+        jbr.copy_from_slice(&guest_memory[biz..biz + AJE_]);
+        guest_memory[fjg..fjg + AJE_].copy_from_slice(&jbr);
     }
     
-    crate::serial_println!("[ACPI] Tables installed at GPA 0x{:X}:", YS_);
-    crate::serial_println!("[ACPI]   RSDP: 0x{:X} (also at 0x{:X})", dll, BEU_);
-    crate::serial_println!("[ACPI]   XSDT: 0x{:X} ({} bytes, {} entries)", gxb, xwr, 3);
-    crate::serial_println!("[ACPI]   MADT: 0x{:X} ({} bytes)", lkc, ujh);
-    crate::serial_println!("[ACPI]   FADT: 0x{:X} ({} bytes)", kuz, sqv);
-    crate::serial_println!("[ACPI]   HPET: 0x{:X} ({} bytes)", lcr, tqi);
-    crate::serial_println!("[ACPI]   DSDT: 0x{:X} ({} bytes)", krq, bmy);
+    crate::serial_println!("[ACPI] Tables installed at GPA 0x{:X}:", ZX_);
+    crate::serial_println!("[ACPI]   RSDP: 0x{:X} (also at 0x{:X})", biz, BGW_);
+    crate::serial_println!("[ACPI]   XSDT: 0x{:X} ({} bytes, {} entries)", dgv, pvw, 3);
+    crate::serial_println!("[ACPI]   MADT: 0x{:X} ({} bytes)", ggl, nbv);
+    crate::serial_println!("[ACPI]   FADT: 0x{:X} ({} bytes)", fwd, luc);
+    crate::serial_println!("[ACPI]   HPET: 0x{:X} ({} bytes)", gbe, mml);
+    crate::serial_println!("[ACPI]   DSDT: 0x{:X} ({} bytes)", ftg, ahw);
     
     
-    YS_
+    ZX_
 }
 
 
@@ -133,40 +133,40 @@ pub fn esu(fe: &mut [u8]) -> u64 {
 
 
 
-fn qub(mem: &mut [u8], l: usize, xws: u64) {
+fn kfu(mem: &mut [u8], offset: usize, xsdt_phys: u64) {
     
-    mem[l..l + 8].dg(b"RSD PTR ");
-    
-    
-    mem[l + 9..l + 15].dg(KT_);
+    mem[offset..offset + 8].copy_from_slice(b"RSD PTR ");
     
     
-    mem[l + 15] = 2;
+    mem[offset + 9..offset + 15].copy_from_slice(LM_);
     
     
-    sx(mem, l + 16, 0);
+    mem[offset + 15] = 2;
     
     
-    sx(mem, l + 20, 36);
+    write_u32(mem, offset + 16, 0);
     
     
-    tw(mem, l + 24, xws);
+    write_u32(mem, offset + 20, 36);
     
     
-    mem[l + 8] = 0; 
+    write_u64(mem, offset + 24, xsdt_phys);
+    
+    
+    mem[offset + 8] = 0; 
     let mut sum: u8 = 0;
-    for a in 0..20 {
-        sum = sum.cn(mem[l + a]);
+    for i in 0..20 {
+        sum = sum.wrapping_add(mem[offset + i]);
     }
-    mem[l + 8] = 0u8.nj(sum);
+    mem[offset + 8] = 0u8.wrapping_sub(sum);
     
     
-    mem[l + 32] = 0; 
-    let mut mid: u8 = 0;
-    for a in 0..36 {
-        mid = mid.cn(mem[l + a]);
+    mem[offset + 32] = 0; 
+    let mut gws: u8 = 0;
+    for i in 0..36 {
+        gws = gws.wrapping_add(mem[offset + i]);
     }
-    mem[l + 32] = 0u8.nj(mid);
+    mem[offset + 32] = 0u8.wrapping_sub(gws);
 }
 
 
@@ -175,148 +175,46 @@ fn qub(mem: &mut [u8], l: usize, xws: u64) {
 
 
 
-fn qud(mem: &mut [u8], l: usize, icw: &[u64]) -> usize {
-    let ame = icw.len();
-    let aeb = 36 + ame * 8;
+fn kfw(mem: &mut [u8], offset: usize, ebf: &[u64]) -> usize {
+    let entry_count = ebf.len();
+    let total_len = 36 + entry_count * 8;
     
     
-    mem[l..l + 4].dg(b"XSDT");
+    mem[offset..offset + 4].copy_from_slice(b"XSDT");
     
     
-    sx(mem, l + 4, aeb as u32);
+    write_u32(mem, offset + 4, total_len as u32);
     
     
-    mem[l + 8] = 1;
+    mem[offset + 8] = 1;
     
     
-    mem[l + 9] = 0;
+    mem[offset + 9] = 0;
     
     
-    mem[l + 10..l + 16].dg(KT_);
+    mem[offset + 10..offset + 16].copy_from_slice(LM_);
     
     
-    mem[l + 16..l + 24].dg(OM_);
+    mem[offset + 16..offset + 24].copy_from_slice(PK_);
     
     
-    sx(mem, l + 24, 1);
+    write_u32(mem, offset + 24, 1);
     
     
-    mem[l + 28..l + 32].dg(b"TROS");
+    mem[offset + 28..offset + 32].copy_from_slice(b"TROS");
     
     
-    sx(mem, l + 32, 1);
+    write_u32(mem, offset + 32, 1);
     
     
-    for (a, &ag) in icw.iter().cf() {
-        tw(mem, l + 36 + a * 8, ag);
+    for (i, &addr) in ebf.iter().enumerate() {
+        write_u64(mem, offset + 36 + i * 8, addr);
     }
     
     
-    hju(mem, l, aeb);
+    dpx(mem, offset, total_len);
     
-    aeb
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-fn qtl(mem: &mut [u8], l: usize) -> usize {
-    
-    
-    
-    let mut u = l;
-    
-    
-    mem[u..u + 4].dg(b"APIC"); 
-    
-    u += 4;
-    let udz = u;
-    u += 4; 
-    
-    mem[l + 8] = 4; 
-    mem[l + 9] = 0; 
-    mem[l + 10..l + 16].dg(KT_);
-    mem[l + 16..l + 24].dg(OM_);
-    sx(mem, l + 24, 1); 
-    mem[l + 28..l + 32].dg(b"TROS"); 
-    sx(mem, l + 32, 1); 
-    
-    u = l + 36;
-    
-    
-    
-    
-    sx(mem, u, CDL_);
-    u += 4;
-    
-    
-    sx(mem, u, 1); 
-    u += 4;
-    
-    
-    mem[u] = 0;     
-    mem[u + 1] = 8; 
-    mem[u + 2] = 0; 
-    mem[u + 3] = 0; 
-    sx(mem, u + 4, 1); 
-    u += 8;
-    
-    
-    mem[u] = 1;      
-    mem[u + 1] = 12; 
-    mem[u + 2] = CCB_; 
-    mem[u + 3] = 0;  
-    sx(mem, u + 4, CCD_); 
-    sx(mem, u + 8, 0); 
-    u += 12;
-    
-    
-    
-    mem[u] = 2;      
-    mem[u + 1] = 10; 
-    mem[u + 2] = 0;  
-    mem[u + 3] = 0;  
-    sx(mem, u + 4, 2); 
-    aqr(mem, u + 8, 0); 
-    u += 10;
-    
-    
-    
-    mem[u] = 2;      
-    mem[u + 1] = 10; 
-    mem[u + 2] = 0;  
-    mem[u + 3] = 9;  
-    sx(mem, u + 4, 9); 
-    aqr(mem, u + 8, 0x000D); 
-    u += 10;
-    
-    
-    
-    mem[u] = 4;     
-    mem[u + 1] = 6; 
-    mem[u + 2] = 0xFF; 
-    aqr(mem, u + 3, 0x0005); 
-    mem[u + 5] = 1; 
-    u += 6;
-    
-    let aeb = u - l;
-    
-    
-    sx(mem, udz, aeb as u32);
-    
-    
-    hju(mem, l, aeb);
-    
-    aeb
+    total_len
 }
 
 
@@ -330,131 +228,233 @@ fn qtl(mem: &mut [u8], l: usize) -> usize {
 
 
 
-fn qtf(mem: &mut [u8], l: usize, nob: u64) -> usize {
-    
-    let aeb: usize = 276;
-    
-    
-    mem[l..l + 4].dg(b"FACP");
-    sx(mem, l + 4, aeb as u32);
-    mem[l + 8] = 5; 
-    mem[l + 9] = 0; 
-    mem[l + 10..l + 16].dg(KT_);
-    mem[l + 16..l + 24].dg(OM_);
-    sx(mem, l + 24, 1); 
-    mem[l + 28..l + 32].dg(b"TROS"); 
-    sx(mem, l + 32, 1); 
+
+fn kfe(mem: &mut [u8], offset: usize) -> usize {
     
     
     
-    
-    sx(mem, l + 36, 0);
-    
-    
-    sx(mem, l + 40, nob as u32);
+    let mut pos = offset;
     
     
-    mem[l + 45] = 0;
+    mem[pos..pos + 4].copy_from_slice(b"APIC"); 
     
+    pos += 4;
+    let mxx = pos;
+    pos += 4; 
     
+    mem[offset + 8] = 4; 
+    mem[offset + 9] = 0; 
+    mem[offset + 10..offset + 16].copy_from_slice(LM_);
+    mem[offset + 16..offset + 24].copy_from_slice(PK_);
+    write_u32(mem, offset + 24, 1); 
+    mem[offset + 28..offset + 32].copy_from_slice(b"TROS"); 
+    write_u32(mem, offset + 32, 1); 
     
-    aqr(mem, l + 46, 9);
-    
-    
-    sx(mem, l + 48, 0);
-    
-    
-    mem[l + 52] = 0;
-    
-    mem[l + 53] = 0;
-    
-    
-    sx(mem, l + 56, 0xB000);
-    
-    
-    sx(mem, l + 60, 0);
-    
-    
-    sx(mem, l + 64, 0xB004);
-    
-    
-    sx(mem, l + 68, 0);
-    
-    
-    sx(mem, l + 72, 0);
-    
-    
-    sx(mem, l + 76, 0xB008);
-    
-    
-    sx(mem, l + 80, 0);
-    
-    sx(mem, l + 84, 0);
-    
-    
-    mem[l + 88] = 4;
-    
-    mem[l + 89] = 2;
-    
-    mem[l + 90] = 0;
-    
-    mem[l + 91] = 4;
-    
-    
-    mem[l + 92] = 0;
-    
-    mem[l + 93] = 0;
+    pos = offset + 36;
     
     
     
     
+    write_u32(mem, pos, CGU_);
+    pos += 4;
     
     
-    let squ: u32 = (1 << 0)  
+    write_u32(mem, pos, 1); 
+    pos += 4;
+    
+    
+    mem[pos] = 0;     
+    mem[pos + 1] = 8; 
+    mem[pos + 2] = 0; 
+    mem[pos + 3] = 0; 
+    write_u32(mem, pos + 4, 1); 
+    pos += 8;
+    
+    
+    mem[pos] = 1;      
+    mem[pos + 1] = 12; 
+    mem[pos + 2] = CFM_; 
+    mem[pos + 3] = 0;  
+    write_u32(mem, pos + 4, CFO_); 
+    write_u32(mem, pos + 8, 0); 
+    pos += 12;
+    
+    
+    
+    mem[pos] = 2;      
+    mem[pos + 1] = 10; 
+    mem[pos + 2] = 0;  
+    mem[pos + 3] = 0;  
+    write_u32(mem, pos + 4, 2); 
+    write_u16(mem, pos + 8, 0); 
+    pos += 10;
+    
+    
+    
+    mem[pos] = 2;      
+    mem[pos + 1] = 10; 
+    mem[pos + 2] = 0;  
+    mem[pos + 3] = 9;  
+    write_u32(mem, pos + 4, 9); 
+    write_u16(mem, pos + 8, 0x000D); 
+    pos += 10;
+    
+    
+    
+    mem[pos] = 4;     
+    mem[pos + 1] = 6; 
+    mem[pos + 2] = 0xFF; 
+    write_u16(mem, pos + 3, 0x0005); 
+    mem[pos + 5] = 1; 
+    pos += 6;
+    
+    let total_len = pos - offset;
+    
+    
+    write_u32(mem, mxx, total_len as u32);
+    
+    
+    dpx(mem, offset, total_len);
+    
+    total_len
+}
+
+
+
+
+
+
+
+
+
+
+
+
+fn kex(mem: &mut [u8], offset: usize, dsdt_phys: u64) -> usize {
+    
+    let total_len: usize = 276;
+    
+    
+    mem[offset..offset + 4].copy_from_slice(b"FACP");
+    write_u32(mem, offset + 4, total_len as u32);
+    mem[offset + 8] = 5; 
+    mem[offset + 9] = 0; 
+    mem[offset + 10..offset + 16].copy_from_slice(LM_);
+    mem[offset + 16..offset + 24].copy_from_slice(PK_);
+    write_u32(mem, offset + 24, 1); 
+    mem[offset + 28..offset + 32].copy_from_slice(b"TROS"); 
+    write_u32(mem, offset + 32, 1); 
+    
+    
+    
+    
+    write_u32(mem, offset + 36, 0);
+    
+    
+    write_u32(mem, offset + 40, dsdt_phys as u32);
+    
+    
+    mem[offset + 45] = 0;
+    
+    
+    
+    write_u16(mem, offset + 46, 9);
+    
+    
+    write_u32(mem, offset + 48, 0);
+    
+    
+    mem[offset + 52] = 0;
+    
+    mem[offset + 53] = 0;
+    
+    
+    write_u32(mem, offset + 56, 0xB000);
+    
+    
+    write_u32(mem, offset + 60, 0);
+    
+    
+    write_u32(mem, offset + 64, 0xB004);
+    
+    
+    write_u32(mem, offset + 68, 0);
+    
+    
+    write_u32(mem, offset + 72, 0);
+    
+    
+    write_u32(mem, offset + 76, 0xB008);
+    
+    
+    write_u32(mem, offset + 80, 0);
+    
+    write_u32(mem, offset + 84, 0);
+    
+    
+    mem[offset + 88] = 4;
+    
+    mem[offset + 89] = 2;
+    
+    mem[offset + 90] = 0;
+    
+    mem[offset + 91] = 4;
+    
+    
+    mem[offset + 92] = 0;
+    
+    mem[offset + 93] = 0;
+    
+    
+    
+    
+    
+    
+    let lub: u32 = (1 << 0)  
                         | (1 << 4)  
                         | (1 << 8); 
-    sx(mem, l + 112, squ);
+    write_u32(mem, offset + 112, lub);
     
     
     
-    mem[l + 116] = 1; 
-    mem[l + 117] = 8; 
-    mem[l + 118] = 0; 
-    mem[l + 119] = 1; 
-    tw(mem, l + 120, 0xCF9); 
+    mem[offset + 116] = 1; 
+    mem[offset + 117] = 8; 
+    mem[offset + 118] = 0; 
+    mem[offset + 119] = 1; 
+    write_u64(mem, offset + 120, 0xCF9); 
     
     
-    mem[l + 128] = 0x06;
+    mem[offset + 128] = 0x06;
     
     
-    aqr(mem, l + 129, 0);
+    write_u16(mem, offset + 129, 0);
     
     
-    mem[l + 131] = 1;
+    mem[offset + 131] = 1;
     
     
-    tw(mem, l + 132, 0);
+    write_u64(mem, offset + 132, 0);
     
     
-    tw(mem, l + 140, nob);
+    write_u64(mem, offset + 140, dsdt_phys);
     
     
-    mrc(mem, l + 148, 1, 32, 0, 2, 0xB000); 
-    
-    
-    
-    mrc(mem, l + 172, 1, 16, 0, 2, 0xB004); 
+    hcp(mem, offset + 148, 1, 32, 0, 2, 0xB000); 
     
     
     
+    hcp(mem, offset + 172, 1, 16, 0, 2, 0xB004); 
     
     
-    mrc(mem, l + 208, 1, 32, 0, 3, 0xB008); 
     
     
-    hju(mem, l, aeb);
     
-    aeb
+    hcp(mem, offset + 208, 1, 32, 0, 3, 0xB008); 
+    
+    
+    dpx(mem, offset, total_len);
+    
+    total_len
 }
 
 
@@ -474,274 +474,274 @@ fn qtf(mem: &mut [u8], l: usize, nob: u64) -> usize {
 
 
 
-fn qte(mem: &mut [u8], l: usize) -> usize {
+fn kew(mem: &mut [u8], offset: usize) -> usize {
     
-    let mut mv: [u8; 512] = [0u8; 512];
-    let mut u: usize = 0;
+    let mut fl: [u8; 512] = [0u8; 512];
+    let mut pos: usize = 0;
     
     
     
-    let wde = u;
-    mv[u] = 0x10; 
-    u += 1;
-    let wdd = u;
-    u += 2; 
+    let okn = pos;
+    fl[pos] = 0x10; 
+    pos += 1;
+    let okm = pos;
+    pos += 2; 
     
     
-    mv[u..u + 4].dg(b"_SB_");
-    u += 4;
+    fl[pos..pos + 4].copy_from_slice(b"_SB_");
+    pos += 4;
     
     
-    let vft = u;
-    mv[u] = 0x5B; u += 1; 
-    mv[u] = 0x82; u += 1; 
-    let vfs = u;
-    u += 2; 
-    mv[u..u + 4].dg(b"PCI0");
-    u += 4;
+    let nss = pos;
+    fl[pos] = 0x5B; pos += 1; 
+    fl[pos] = 0x82; pos += 1; 
+    let nsr = pos;
+    pos += 2; 
+    fl[pos..pos + 4].copy_from_slice(b"PCI0");
+    pos += 4;
     
     
     
-    mv[u] = 0x08; u += 1; 
-    mv[u..u + 4].dg(b"_HID");
-    u += 4;
+    fl[pos] = 0x08; pos += 1; 
+    fl[pos..pos + 4].copy_from_slice(b"_HID");
+    pos += 4;
     
-    mv[u] = 0x0C; u += 1; 
-    let sjs = kth(b"PNP", 0x0A03);
-    mv[u..u + 4].dg(&sjs.ho());
-    u += 4;
+    fl[pos] = 0x0C; pos += 1; 
+    let loq = fup(b"PNP", 0x0A03);
+    fl[pos..pos + 4].copy_from_slice(&loq.to_le_bytes());
+    pos += 4;
     
     
-    mv[u] = 0x08; u += 1; 
-    mv[u..u + 4].dg(b"_ADR");
-    u += 4;
-    mv[u] = 0x00; u += 1; 
+    fl[pos] = 0x08; pos += 1; 
+    fl[pos..pos + 4].copy_from_slice(b"_ADR");
+    pos += 4;
+    fl[pos] = 0x00; pos += 1; 
     
     
-    mv[u] = 0x08; u += 1; 
-    mv[u..u + 4].dg(b"_BBN");
-    u += 4;
-    mv[u] = 0x00; u += 1; 
+    fl[pos] = 0x08; pos += 1; 
+    fl[pos..pos + 4].copy_from_slice(b"_BBN");
+    pos += 4;
+    fl[pos] = 0x00; pos += 1; 
     
     
     
-    mv[u] = 0x08; u += 1; 
-    mv[u..u + 4].dg(b"_PRT");
-    u += 4;
+    fl[pos] = 0x08; pos += 1; 
+    fl[pos..pos + 4].copy_from_slice(b"_PRT");
+    pos += 4;
     
     
-    let vno = u;
-    mv[u] = 0x12; u += 1; 
-    let vnn = u;
-    u += 2; 
-    mv[u] = 0x04; u += 1; 
+    let nzd = pos;
+    fl[pos] = 0x12; pos += 1; 
+    let nzc = pos;
+    pos += 2; 
+    fl[pos] = 0x04; pos += 1; 
     
     
     
     
-    u = iso(&mut mv, u, 1, 0, 16);
+    pos = elg(&mut fl, pos, 1, 0, 16);
     
-    u = iso(&mut mv, u, 2, 0, 17);
+    pos = elg(&mut fl, pos, 2, 0, 17);
     
-    u = iso(&mut mv, u, 3, 0, 18);
+    pos = elg(&mut fl, pos, 3, 0, 18);
     
-    u = iso(&mut mv, u, 4, 0, 19);
+    pos = elg(&mut fl, pos, 4, 0, 19);
     
     
-    let vnm = u - vno;
-    ggd(&mut mv, vnn, vnm - 1); 
+    let nzb = pos - nzd;
+    cxe(&mut fl, nzc, nzb - 1); 
     
     
-    let tzo = u;
-    mv[u] = 0x5B; u += 1; 
-    mv[u] = 0x82; u += 1; 
-    let tzn = u;
-    u += 2; 
-    mv[u..u + 4].dg(b"ISA_");
-    u += 4;
+    let muh = pos;
+    fl[pos] = 0x5B; pos += 1; 
+    fl[pos] = 0x82; pos += 1; 
+    let mug = pos;
+    pos += 2; 
+    fl[pos..pos + 4].copy_from_slice(b"ISA_");
+    pos += 4;
     
     
-    mv[u] = 0x08; u += 1; 
-    mv[u..u + 4].dg(b"_ADR");
-    u += 4;
-    mv[u] = 0x0C; u += 1; 
-    mv[u..u + 4].dg(&0x0001_0000u32.ho());
-    u += 4;
+    fl[pos] = 0x08; pos += 1; 
+    fl[pos..pos + 4].copy_from_slice(b"_ADR");
+    pos += 4;
+    fl[pos] = 0x0C; pos += 1; 
+    fl[pos..pos + 4].copy_from_slice(&0x0001_0000u32.to_le_bytes());
+    pos += 4;
     
     
-    let rmn = u;
-    mv[u] = 0x5B; u += 1; 
-    mv[u] = 0x82; u += 1; 
-    let rmm = u;
-    u += 2; 
-    mv[u..u + 4].dg(b"COM1");
-    u += 4;
+    let kvx = pos;
+    fl[pos] = 0x5B; pos += 1; 
+    fl[pos] = 0x82; pos += 1; 
+    let kvw = pos;
+    pos += 2; 
+    fl[pos..pos + 4].copy_from_slice(b"COM1");
+    pos += 4;
     
     
-    mv[u] = 0x08; u += 1; 
-    mv[u..u + 4].dg(b"_HID");
-    u += 4;
-    mv[u] = 0x0C; u += 1; 
-    let sjr = kth(b"PNP", 0x0501);
-    mv[u..u + 4].dg(&sjr.ho());
-    u += 4;
+    fl[pos] = 0x08; pos += 1; 
+    fl[pos..pos + 4].copy_from_slice(b"_HID");
+    pos += 4;
+    fl[pos] = 0x0C; pos += 1; 
+    let lop = fup(b"PNP", 0x0501);
+    fl[pos..pos + 4].copy_from_slice(&lop.to_le_bytes());
+    pos += 4;
     
     
-    mv[u] = 0x08; u += 1; 
-    mv[u..u + 4].dg(b"_UID");
-    u += 4;
-    mv[u] = 0x01; u += 1; 
+    fl[pos] = 0x08; pos += 1; 
+    fl[pos..pos + 4].copy_from_slice(b"_UID");
+    pos += 4;
+    fl[pos] = 0x01; pos += 1; 
     
     
-    let rml = u - rmn;
-    ggd(&mut mv, rmm, rml - 2); 
+    let kvv = pos - kvx;
+    cxe(&mut fl, kvw, kvv - 2); 
     
     
-    let tzm = u - tzo;
-    ggd(&mut mv, tzn, tzm - 2);
+    let muf = pos - muh;
+    cxe(&mut fl, mug, muf - 2);
     
     
-    let vfr = u - vft;
-    ggd(&mut mv, vfs, vfr - 2);
+    let nsq = pos - nss;
+    cxe(&mut fl, nsr, nsq - 2);
     
     
-    let voq = u;
-    mv[u] = 0x5B; u += 1; 
-    mv[u] = 0x82; u += 1; 
-    let vop = u;
-    u += 2; 
-    mv[u..u + 4].dg(b"PWRB");
-    u += 4;
+    let nzx = pos;
+    fl[pos] = 0x5B; pos += 1; 
+    fl[pos] = 0x82; pos += 1; 
+    let nzw = pos;
+    pos += 2; 
+    fl[pos..pos + 4].copy_from_slice(b"PWRB");
+    pos += 4;
     
     
-    mv[u] = 0x08; u += 1; 
-    mv[u..u + 4].dg(b"_HID");
-    u += 4;
-    mv[u] = 0x0C; u += 1; 
-    let sjt = kth(b"PNP", 0x0C0C);
-    mv[u..u + 4].dg(&sjt.ho());
-    u += 4;
+    fl[pos] = 0x08; pos += 1; 
+    fl[pos..pos + 4].copy_from_slice(b"_HID");
+    pos += 4;
+    fl[pos] = 0x0C; pos += 1; 
+    let lor = fup(b"PNP", 0x0C0C);
+    fl[pos..pos + 4].copy_from_slice(&lor.to_le_bytes());
+    pos += 4;
     
     
-    let voo = u - voq;
-    ggd(&mut mv, vop, voo - 2);
+    let nzv = pos - nzx;
+    cxe(&mut fl, nzw, nzv - 2);
     
     
-    let wdc = u - wde;
-    ggd(&mut mv, wdd, wdc - 1); 
+    let okl = pos - okn;
+    cxe(&mut fl, okm, okl - 1); 
     
     
     
-    mv[u] = 0x08; u += 1; 
+    fl[pos] = 0x08; pos += 1; 
     
-    mv[u] = 0x5C; u += 1; 
-    mv[u..u + 4].dg(b"_S5_");
-    u += 4;
-    mv[u] = 0x12; u += 1; 
-    mv[u] = 0x06; u += 1; 
-    mv[u] = 0x04; u += 1; 
-    mv[u] = 0x0A; u += 1; 
-    mv[u] = 0x05; u += 1; 
-    mv[u] = 0x0A; u += 1; 
-    mv[u] = 0x05; u += 1; 
-    mv[u] = 0x00; u += 1; 
-    mv[u] = 0x00; u += 1; 
+    fl[pos] = 0x5C; pos += 1; 
+    fl[pos..pos + 4].copy_from_slice(b"_S5_");
+    pos += 4;
+    fl[pos] = 0x12; pos += 1; 
+    fl[pos] = 0x06; pos += 1; 
+    fl[pos] = 0x04; pos += 1; 
+    fl[pos] = 0x0A; pos += 1; 
+    fl[pos] = 0x05; pos += 1; 
+    fl[pos] = 0x0A; pos += 1; 
+    fl[pos] = 0x05; pos += 1; 
+    fl[pos] = 0x00; pos += 1; 
+    fl[pos] = 0x00; pos += 1; 
     
-    let kaj = u;
+    let fgy = pos;
     
     
-    let aeb = 36 + kaj;
+    let total_len = 36 + fgy;
     
     
-    mem[l..l + 4].dg(b"DSDT");
-    sx(mem, l + 4, aeb as u32);
-    mem[l + 8] = 2; 
-    mem[l + 9] = 0; 
-    mem[l + 10..l + 16].dg(KT_);
-    mem[l + 16..l + 24].dg(OM_);
-    sx(mem, l + 24, 1);     
-    mem[l + 28..l + 32].dg(b"TROS"); 
-    sx(mem, l + 32, 1);     
+    mem[offset..offset + 4].copy_from_slice(b"DSDT");
+    write_u32(mem, offset + 4, total_len as u32);
+    mem[offset + 8] = 2; 
+    mem[offset + 9] = 0; 
+    mem[offset + 10..offset + 16].copy_from_slice(LM_);
+    mem[offset + 16..offset + 24].copy_from_slice(PK_);
+    write_u32(mem, offset + 24, 1);     
+    mem[offset + 28..offset + 32].copy_from_slice(b"TROS"); 
+    write_u32(mem, offset + 32, 1);     
     
     
-    mem[l + 36..l + 36 + kaj].dg(&mv[..kaj]);
+    mem[offset + 36..offset + 36 + fgy].copy_from_slice(&fl[..fgy]);
     
-    hju(mem, l, aeb);
+    dpx(mem, offset, total_len);
     
-    aeb
+    total_len
 }
 
 
 
-fn kth(llr: &[u8; 3], baj: u16) -> u32 {
+fn fup(mfr: &[u8; 3], product: u16) -> u32 {
     
-    let acw = (llr[0] - b'@') & 0x1F;
-    let rw = (llr[1] - b'@') & 0x1F;
-    let tx = (llr[2] - b'@') & 0x1F;
-    
-    
-    let ond = ((acw as u16) << 10) | ((rw as u16) << 5) | (tx as u16);
+    let og = (mfr[0] - b'@') & 0x1F;
+    let hw = (mfr[1] - b'@') & 0x1F;
+    let jf = (mfr[2] - b'@') & 0x1F;
     
     
+    let inp = ((og as u16) << 10) | ((hw as u16) << 5) | (jf as u16);
     
-    let wu = (ond >> 8) as u8;
-    let of = (ond & 0xFF) as u8;
-    let tb = (baj >> 8) as u8;
-    let ajw = (baj & 0xFF) as u8;
     
-    u32::dj([wu, of, tb, ajw])
+    
+    let kl = (inp >> 8) as u8;
+    let gf = (inp & 0xFF) as u8;
+    let iq = (product >> 8) as u8;
+    let sc = (product & 0xFF) as u8;
+    
+    u32::from_le_bytes([kl, gf, iq, sc])
 }
 
 
 
-fn iso(mv: &mut [u8], mut u: usize, gk: u32, pin: u8, bup: u32) -> usize {
-    let smi = u;
-    mv[u] = 0x12; u += 1; 
-    let smh = u;
-    u += 1; 
-    mv[u] = 0x04; u += 1; 
+fn elg(fl: &mut [u8], mut pos: usize, slot: u32, pin: u8, gsi: u32) -> usize {
+    let lqu = pos;
+    fl[pos] = 0x12; pos += 1; 
+    let lqt = pos;
+    pos += 1; 
+    fl[pos] = 0x04; pos += 1; 
     
     
-    let ag = (gk << 16) | 0xFFFF;
-    mv[u] = 0x0C; u += 1; 
-    mv[u..u + 4].dg(&ag.ho());
-    u += 4;
+    let addr = (slot << 16) | 0xFFFF;
+    fl[pos] = 0x0C; pos += 1; 
+    fl[pos..pos + 4].copy_from_slice(&addr.to_le_bytes());
+    pos += 4;
     
     
-    mv[u] = 0x0A; u += 1; 
-    mv[u] = pin; u += 1;
+    fl[pos] = 0x0A; pos += 1; 
+    fl[pos] = pin; pos += 1;
     
     
-    mv[u] = 0x00; u += 1; 
+    fl[pos] = 0x00; pos += 1; 
     
     
-    mv[u] = 0x0C; u += 1; 
-    mv[u..u + 4].dg(&bup.ho());
-    u += 4;
+    fl[pos] = 0x0C; pos += 1; 
+    fl[pos..pos + 4].copy_from_slice(&gsi.to_le_bytes());
+    pos += 4;
     
     
-    let bue = u - smi;
-    mv[smh] = (bue - 1) as u8; 
+    let alm = pos - lqu;
+    fl[lqt] = (alm - 1) as u8; 
     
-    u
+    pos
 }
 
 
 
-fn ggd(mv: &mut [u8], u: usize, go: usize) {
-    if go < 63 {
+fn cxe(fl: &mut [u8], pos: usize, length: usize) {
+    if length < 63 {
         
-        mv[u] = go as u8;
-        mv[u + 1] = 0; 
+        fl[pos] = length as u8;
+        fl[pos + 1] = 0; 
         
         
     }
     
     
-    let hh = (go & 0x0F) as u8;
-    let gd = ((go >> 4) & 0xFF) as u8;
-    mv[u] = 0x40 | hh; 
-    mv[u + 1] = gd;
+    let lo = (length & 0x0F) as u8;
+    let hi = ((length >> 4) & 0xFF) as u8;
+    fl[pos] = 0x40 | lo; 
+    fl[pos + 1] = hi;
 }
 
 
@@ -749,38 +749,38 @@ fn ggd(mv: &mut [u8], u: usize, go: usize) {
 
 
 
-fn hju(mem: &mut [u8], l: usize, len: usize) {
-    mem[l + 9] = 0;
+fn dpx(mem: &mut [u8], offset: usize, len: usize) {
+    mem[offset + 9] = 0;
     let mut sum: u8 = 0;
-    for a in 0..len {
-        sum = sum.cn(mem[l + a]);
+    for i in 0..len {
+        sum = sum.wrapping_add(mem[offset + i]);
     }
-    mem[l + 9] = 0u8.nj(sum);
+    mem[offset + 9] = 0u8.wrapping_sub(sum);
 }
 
 
-fn mrc(mem: &mut [u8], l: usize, ijc: u8, gbd: u8, mzf: u8, cct: u8, re: u64) {
-    mem[l] = ijc;
-    mem[l + 1] = gbd;
-    mem[l + 2] = mzf;
-    mem[l + 3] = cct;
-    tw(mem, l + 4, re);
+fn hcp(mem: &mut [u8], offset: usize, efb: u8, bit_width: u8, bit_offset: u8, access_size: u8, address: u64) {
+    mem[offset] = efb;
+    mem[offset + 1] = bit_width;
+    mem[offset + 2] = bit_offset;
+    mem[offset + 3] = access_size;
+    write_u64(mem, offset + 4, address);
 }
 
-fn aqr(mem: &mut [u8], l: usize, bn: u16) {
-    let bf = bn.ho();
-    mem[l] = bf[0];
-    mem[l + 1] = bf[1];
+fn write_u16(mem: &mut [u8], offset: usize, value: u16) {
+    let bytes = value.to_le_bytes();
+    mem[offset] = bytes[0];
+    mem[offset + 1] = bytes[1];
 }
 
-fn sx(mem: &mut [u8], l: usize, bn: u32) {
-    let bf = bn.ho();
-    mem[l..l + 4].dg(&bf);
+fn write_u32(mem: &mut [u8], offset: usize, value: u32) {
+    let bytes = value.to_le_bytes();
+    mem[offset..offset + 4].copy_from_slice(&bytes);
 }
 
-fn tw(mem: &mut [u8], l: usize, bn: u64) {
-    let bf = bn.ho();
-    mem[l..l + 8].dg(&bf);
+fn write_u64(mem: &mut [u8], offset: usize, value: u64) {
+    let bytes = value.to_le_bytes();
+    mem[offset..offset + 8].copy_from_slice(&bytes);
 }
 
 
@@ -805,46 +805,46 @@ fn tw(mem: &mut [u8], l: usize, bn: u64) {
 
 
 
-fn qti(mem: &mut [u8], l: usize) -> usize {
-    let aeb: usize = 56;
+fn kfb(mem: &mut [u8], offset: usize) -> usize {
+    let total_len: usize = 56;
     
     
-    mem[l..l + 4].dg(b"HPET");
+    mem[offset..offset + 4].copy_from_slice(b"HPET");
     
     
-    sx(mem, l + 4, aeb as u32);
+    write_u32(mem, offset + 4, total_len as u32);
     
     
-    mem[l + 8] = 1;
+    mem[offset + 8] = 1;
     
     
-    mem[l + 10..l + 16].dg(KT_);
+    mem[offset + 10..offset + 16].copy_from_slice(LM_);
     
     
-    mem[l + 16..l + 24].dg(OM_);
+    mem[offset + 16..offset + 24].copy_from_slice(PK_);
     
     
-    sx(mem, l + 24, 1);
+    write_u32(mem, offset + 24, 1);
     
     
-    mem[l + 28..l + 32].dg(b"TROS");
+    mem[offset + 28..offset + 32].copy_from_slice(b"TROS");
     
     
-    sx(mem, l + 32, 1);
-    
-    
-    
+    write_u32(mem, offset + 32, 1);
     
     
     
     
     
-    let qqj: u32 = (0x8086 << 16)  
+    
+    
+    
+    let kcs: u32 = (0x8086 << 16)  
                        | (1 << 15)       
                        | (1 << 13)       
                        | (2 << 8)        
                        | 0x01;           
-    sx(mem, l + 36, qqj);
+    write_u32(mem, offset + 36, kcs);
     
     
     
@@ -852,25 +852,25 @@ fn qti(mem: &mut [u8], l: usize) -> usize {
     
     
     
-    mem[l + 40] = 0;   
-    mem[l + 41] = 64;  
-    mem[l + 42] = 0;   
-    mem[l + 43] = 0;   
-    tw(mem, l + 44, 0xFED0_0000); 
+    mem[offset + 40] = 0;   
+    mem[offset + 41] = 64;  
+    mem[offset + 42] = 0;   
+    mem[offset + 43] = 0;   
+    write_u64(mem, offset + 44, 0xFED0_0000); 
     
     
-    mem[l + 52] = 0;
+    mem[offset + 52] = 0;
     
     
-    aqr(mem, l + 53, 128);
+    write_u16(mem, offset + 53, 128);
     
     
-    mem[l + 55] = 0;
+    mem[offset + 55] = 0;
     
     
-    hju(mem, l, aeb);
+    dpx(mem, offset, total_len);
     
-    aeb
+    total_len
 }
 
 
@@ -884,81 +884,81 @@ fn qti(mem: &mut [u8], l: usize) -> usize {
 mod tests {
     use super::*;
 
-    fn gqm(mem: &[u8], l: usize) -> u32 {
-        u32::dj([mem[l], mem[l+1], mem[l+2], mem[l+3]])
+    fn ddf(mem: &[u8], offset: usize) -> u32 {
+        u32::from_le_bytes([mem[offset], mem[offset+1], mem[offset+2], mem[offset+3]])
     }
-    fn paj(mem: &[u8], l: usize) -> u64 {
-        u64::dj([
-            mem[l], mem[l+1], mem[l+2], mem[l+3],
-            mem[l+4], mem[l+5], mem[l+6], mem[l+7],
+    fn iym(mem: &[u8], offset: usize) -> u64 {
+        u64::from_le_bytes([
+            mem[offset], mem[offset+1], mem[offset+2], mem[offset+3],
+            mem[offset+4], mem[offset+5], mem[offset+6], mem[offset+7],
         ])
     }
-    fn gcm(mem: &[u8], l: usize, len: usize) -> bool {
+    fn cva(mem: &[u8], offset: usize, len: usize) -> bool {
         let mut sum: u8 = 0;
-        for a in 0..len { sum = sum.cn(mem[l + a]); }
+        for i in 0..len { sum = sum.wrapping_add(mem[offset + i]); }
         sum == 0
     }
 
     #[test]
-    fn zsg() {
+    fn raa() {
         let mut mem = vec![0u8; 0xF0000];
-        esu(&mut mem);
+        cay(&mut mem);
         assert_eq!(&mem[0x50000..0x50008], b"RSD PTR ");
-        assert!(gcm(&mem, 0x50000, 20), "RSDP v1 checksum");
-        assert!(gcm(&mem, 0x50000, 36), "RSDP v2 checksum");
+        assert!(cva(&mem, 0x50000, 20), "RSDP v1 checksum");
+        assert!(cva(&mem, 0x50000, 36), "RSDP v2 checksum");
         assert_eq!(mem[0x50000 + 15], 2, "RSDP revision");
     }
 
     #[test]
-    fn zsi() {
+    fn rac() {
         let mut mem = vec![0u8; 0xF0000];
-        esu(&mut mem);
-        let bya = 0x50040;
-        assert_eq!(&mem[bya..bya+4], b"XSDT");
-        let len = gqm(&mem, bya + 4) as usize;
-        assert!(gcm(&mem, bya, len));
-        assert_eq!(paj(&mem, bya + 36), 0x50080); 
-        assert_eq!(paj(&mem, bya + 44), 0x50100); 
+        cay(&mut mem);
+        let anj = 0x50040;
+        assert_eq!(&mem[anj..anj+4], b"XSDT");
+        let len = ddf(&mem, anj + 4) as usize;
+        assert!(cva(&mem, anj, len));
+        assert_eq!(iym(&mem, anj + 36), 0x50080); 
+        assert_eq!(iym(&mem, anj + 44), 0x50100); 
     }
 
     #[test]
-    fn zrz() {
+    fn qzt() {
         let mut mem = vec![0u8; 0xF0000];
-        esu(&mut mem);
+        cay(&mut mem);
         let madt = 0x50080;
         assert_eq!(&mem[madt..madt+4], b"APIC");
-        let len = gqm(&mem, madt + 4) as usize;
-        assert!(gcm(&mem, madt, len));
-        assert_eq!(gqm(&mem, madt + 36), 0xFEE0_0000);
+        let len = ddf(&mem, madt + 4) as usize;
+        assert!(cva(&mem, madt, len));
+        assert_eq!(ddf(&mem, madt + 36), 0xFEE0_0000);
     }
 
     #[test]
-    fn zrq() {
+    fn qzk() {
         let mut mem = vec![0u8; 0xF0000];
-        esu(&mut mem);
+        cay(&mut mem);
         let fadt = 0x50100;
         assert_eq!(&mem[fadt..fadt+4], b"FACP");
-        let len = gqm(&mem, fadt + 4) as usize;
+        let len = ddf(&mem, fadt + 4) as usize;
         assert_eq!(len, 276);
-        assert!(gcm(&mem, fadt, len));
-        assert_eq!(gqm(&mem, fadt + 76), 0xB008); 
+        assert!(cva(&mem, fadt, len));
+        assert_eq!(ddf(&mem, fadt + 76), 0xB008); 
     }
 
     #[test]
-    fn zrp() {
+    fn qzj() {
         let mut mem = vec![0u8; 0xF0000];
-        esu(&mut mem);
-        let dgt = 0x50200;
-        assert_eq!(&mem[dgt..dgt+4], b"DSDT");
-        let len = gqm(&mem, dgt + 4) as usize;
+        cay(&mut mem);
+        let bge = 0x50200;
+        assert_eq!(&mem[bge..bge+4], b"DSDT");
+        let len = ddf(&mem, bge + 4) as usize;
         assert_eq!(len, 36);
-        assert!(gcm(&mem, dgt, len));
+        assert!(cva(&mem, bge, len));
     }
 
     #[test]
-    fn zrf() {
+    fn qyz() {
         let mut mem = vec![0u8; 0xF0000];
-        esu(&mut mem);
+        cay(&mut mem);
         assert_eq!(&mem[0x50000..0x50024], &mem[0xE0000..0xE0024]);
     }
 }

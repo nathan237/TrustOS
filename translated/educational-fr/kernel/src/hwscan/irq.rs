@@ -13,11 +13,11 @@ use alloc::string::String;
 use alloc::format;
 use alloc::vec::Vec;
 
-fn safe_read(address: u64) -> Option<u32> {
-    if address == 0 { return None; }
+fn safe_read(addr: u64) -> Option<u32> {
+    if addr == 0 { return None; }
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-        let ptr = address as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+        let ptr = addr as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u32;
         Some(core::ptr::read_volatile(ptr))
     }
@@ -106,10 +106,10 @@ match implementer {
     out.push_str("\n  Enabled IRQs:\n");
     let mut enabled_count = 0;
     for bank in 0..32u64 {
-        if let Some(value) = safe_read(base + GICD_ISENABLER0 + bank * 4) {
-            if value != 0 {
+        if let Some(val) = safe_read(base + GICD_ISENABLER0 + bank * 4) {
+            if val != 0 {
                 for bit in 0..32 {
-                    if value & (1 << bit) != 0 {
+                    if val & (1 << bit) != 0 {
                         let irq = bank * 32 + bit;
                         let pending = safe_read(base + GICD_ISPENDR0 + (irq / 32) * 4)
                             .map(|v| (v >> (irq % 32)) & 1 == 1)
@@ -155,8 +155,8 @@ pub fn scan_interrupt_request_topology() -> String {
         for &(dist_base, _rdist_base, name) in GIC_BASES {
             output.push_str(&format!("\x01YProbing {} @ 0x{:08X}\x01W\n", name, dist_base));
             
-            if let Some(value) = safe_read(dist_base) {
-                if value != 0xFFFFFFFF {
+            if let Some(val) = safe_read(dist_base) {
+                if val != 0xFFFFFFFF {
                     output.push_str(&format!("\x01G[FOUND]\x01W GIC Distributor\n"));
                     output.push_str(&decode_gic_distributor(dist_base));
                 } else {
@@ -238,8 +238,8 @@ pub fn scan_interrupt_request_topology() -> String {
         // Scan priority registers for active sources
         let mut active_sources = 0;
         for i in 0..128u64 {
-            if let Some(priority) = safe_read(plic_base + i * 4) {
-                if priority > 0 {
+            if let Some(prio) = safe_read(plic_base + i * 4) {
+                if prio > 0 {
                     active_sources += 1;
                 }
             }

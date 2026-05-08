@@ -54,10 +54,10 @@ pub fn eval_line(line: &str) -> Result<String, String> {
 
 /// Compile TrustLang source to native x86_64 and execute it.
 /// Returns the i64 return value of main().
-pub fn compile_and_run_native(source: &str, builtin_callback: native::BuiltinFn) -> Result<i64, String> {
+pub fn compile_and_run_native(source: &str, builtin_cb: native::BuiltinFn) -> Result<i64, String> {
     let program = native::compile_native(source)?;
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { native::execute_native(&program, builtin_callback) }
+unsafe { native::execute_native(&program, builtin_cb) }
 }
 
 /// Run the native backend test suite.

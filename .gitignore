@@ -25,6 +25,13 @@ sdma_v*.txt
 sdma_v*_log.txt
 vbox_launch_log.txt
 
+# Scratch / debug captures at repo root (forbidden — use logs/ instead)
+/_*.txt
+/_*.py
+/_*.err
+/_*.log
+/*.txt.bak
+
 # One-off scripts
 fix_encoding.py
 fix_gmc.py
@@ -42,6 +49,17 @@ pxe_tftp/trustos_kernel
 pxe_tftp/boot/
 pxe_tftp/EFI/
 pxe_tftp/limine/
+pxe_tftp/freedos/freedos.img
+pxe_tftp/freedos/dumps/
+pxe_tftp/freedos/payload/
+
+# tools/bios — proprietary AFUDOS + downloaded FreeDOS/mTCP cache
+tools/bios/payload/_cache/
+tools/bios/payload/*.EXE
+tools/bios/payload/*.COM
+tools/bios/payload/*.SYS
+tools/bios/payload/*.IMG
+tools/bios/payload/*.ROM
 
 # IDE / editor
 .vscode/settings.json

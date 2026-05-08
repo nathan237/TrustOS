@@ -6,81 +6,81 @@
 
 
 #[inline]
-pub fn sf(k: &mut [u32], d: usize, i: usize, b: i32, c: i32, s: u32) {
-    if b >= 0 && c >= 0 && (b as usize) < d && (c as usize) < i {
-        let w = c as usize * d + b as usize;
-        if w < k.len() {
-            k[w] = s;
+pub fn put_pixel(buf: &mut [u32], w: usize, h: usize, x: i32, y: i32, color: u32) {
+    if x >= 0 && y >= 0 && (x as usize) < w && (y as usize) < h {
+        let idx = y as usize * w + x as usize;
+        if idx < buf.len() {
+            buf[idx] = color;
         }
     }
 }
 
 
-pub fn ahj(k: &mut [u32], d: usize, i: usize,
-                 fy: i32, fo: i32, dn: i32, dp: i32, s: u32) {
-    let mut b = fy;
-    let mut c = fo;
-    let dx = (dn - fy).gp();
-    let bg = -(dp - fo).gp();
-    let cr: i32 = if fy < dn { 1 } else { -1 };
-    let cq: i32 = if fo < dp { 1 } else { -1 };
-    let mut rq = dx + bg;
+pub fn draw_line(buf: &mut [u32], w: usize, h: usize,
+                 bm: i32, az: i32, x1: i32, y1: i32, color: u32) {
+    let mut x = bm;
+    let mut y = az;
+    let dx = (x1 - bm).abs();
+    let ad = -(y1 - az).abs();
+    let am: i32 = if bm < x1 { 1 } else { -1 };
+    let ak: i32 = if az < y1 { 1 } else { -1 };
+    let mut err = dx + ad;
 
-    let csk = ((dx.gp() + bg.gp()) as usize + 1).v(8000);
-    for _ in 0..csk {
-        sf(k, d, i, b, c, s);
-        if b == dn && c == dp { break; }
-        let agl = 2 * rq;
-        if agl >= bg { rq += bg; b += cr; }
-        if agl <= dx { rq += dx; c += cq; }
+    let ayd = ((dx.abs() + ad.abs()) as usize + 1).min(8000);
+    for _ in 0..ayd {
+        put_pixel(buf, w, h, x, y, color);
+        if x == x1 && y == y1 { break; }
+        let pg = 2 * err;
+        if pg >= ad { err += ad; x += am; }
+        if pg <= dx { err += dx; y += ak; }
     }
 }
 
 
-pub fn ah(k: &mut [u32], ahe: usize, asl: usize,
-                 b: usize, c: usize, d: usize, i: usize, s: u32) {
-    for bg in 0..i {
-        let x = c + bg;
-        if x >= asl { break; }
-        for dx in 0..d {
-            let y = b + dx;
-            if y >= ahe { break; }
-            k[x * ahe + y] = s;
+pub fn fill_rect(buf: &mut [u32], buf_w: usize, buf_h: usize,
+                 x: usize, y: usize, w: usize, h: usize, color: u32) {
+    for ad in 0..h {
+        let o = y + ad;
+        if o >= buf_h { break; }
+        for dx in 0..w {
+            let p = x + dx;
+            if p >= buf_w { break; }
+            buf[o * buf_w + p] = color;
         }
     }
 }
 
 
-pub fn lx(k: &mut [u32], ahe: usize, asl: usize,
-                 b: usize, c: usize, d: usize, i: usize, s: u32) {
-    if d == 0 || i == 0 { return; }
+pub fn draw_rect(buf: &mut [u32], buf_w: usize, buf_h: usize,
+                 x: usize, y: usize, w: usize, h: usize, color: u32) {
+    if w == 0 || h == 0 { return; }
     
-    for dx in 0..d {
-        let y = b + dx;
-        if y < ahe {
-            if c < asl { k[c * ahe + y] = s; }
-            let je = c + i - 1;
-            if je < asl { k[je * ahe + y] = s; }
+    for dx in 0..w {
+        let p = x + dx;
+        if p < buf_w {
+            if y < buf_h { buf[y * buf_w + p] = color; }
+            let dc = y + h - 1;
+            if dc < buf_h { buf[dc * buf_w + p] = color; }
         }
     }
     
-    for bg in 0..i {
-        let x = c + bg;
-        if x < asl {
-            if b < ahe { k[x * ahe + b] = s; }
-            let kb = b + d - 1;
-            if kb < ahe { k[x * ahe + kb] = s; }
+    for ad in 0..h {
+        let o = y + ad;
+        if o < buf_h {
+            if x < buf_w { buf[o * buf_w + x] = color; }
+            let da = x + w - 1;
+            if da < buf_w { buf[o * buf_w + da] = color; }
         }
     }
 }
 
 
-pub fn abc(k: &mut [u32], d: usize, i: usize,
-                   cx: i32, ae: i32, m: i32, s: u32) {
-    for bg in -m..=m {
-        for dx in -m..=m {
-            if dx * dx + bg * bg <= m * m {
-                sf(k, d, i, cx + dx, ae + bg, s);
+pub fn fill_circle(buf: &mut [u32], w: usize, h: usize,
+                   cx: i32, u: i32, r: i32, color: u32) {
+    for ad in -r..=r {
+        for dx in -r..=r {
+            if dx * dx + ad * ad <= r * r {
+                put_pixel(buf, w, h, cx + dx, u + ad, color);
             }
         }
     }
@@ -89,9 +89,9 @@ pub fn abc(k: &mut [u32], d: usize, i: usize,
 
 
 #[inline]
-pub fn qas(mut b: u32) -> u32 {
-    b ^= b << 13;
-    b ^= b >> 17;
-    b ^= b << 5;
-    b
+pub fn jsa(mut x: u32) -> u32 {
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    x
 }

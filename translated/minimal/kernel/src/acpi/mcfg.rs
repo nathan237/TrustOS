@@ -3,118 +3,118 @@
 
 
 use alloc::vec::Vec;
-use super::tables::Ei;
+use super::tables::Bu;
 
 
 #[repr(C, packed)]
-struct Dcj {
-    dh: Ei,
+struct Azn {
+    header: Bu,
     
-    asi: u64,
+    _reserved: u64,
     
 }
 
 
 #[repr(C, packed)]
 #[derive(Clone, Copy)]
-struct Bma {
+struct Abg {
     
-    bps: u64,
+    base_address: u64,
     
-    wgo: u16,
+    segment_group: u16,
     
-    cca: u8,
+    start_bus: u8,
     
-    cej: u8,
+    end_bus: u8,
     
-    asi: u32,
+    _reserved: u32,
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Tl {
+pub struct Ij {
     
-    pub bps: u64,
+    pub base_address: u64,
     
-    pub ie: u16,
+    pub segment: u16,
     
-    pub cca: u8,
+    pub start_bus: u8,
     
-    pub cej: u8,
+    pub end_bus: u8,
 }
 
-impl Tl {
+impl Ij {
     
-    pub fn nfk(&self, aq: u8, de: u8, gw: u8) -> Option<u64> {
-        if aq < self.cca || aq > self.cej {
+    pub fn config_address(&self, bus: u8, device: u8, function: u8) -> Option<u64> {
+        if bus < self.start_bus || bus > self.end_bus {
             return None;
         }
-        if de > 31 || gw > 7 {
+        if device > 31 || function > 7 {
             return None;
         }
         
         
         
-        let l = ((aq.ao(self.cca)) as u64) << 20 
-                   | (de as u64) << 15 
-                   | (gw as u64) << 12;
+        let offset = ((bus.saturating_sub(self.start_bus)) as u64) << 20 
+                   | (device as u64) << 15 
+                   | (function as u64) << 12;
         
-        Some(self.bps + l)
+        Some(self.base_address + offset)
     }
     
     
-    pub fn aw(&self) -> u64 {
-        let kfo = (self.cej.ao(self.cca) as u64).akq(1);
-        kfo << 20  
+    pub fn size(&self) -> u64 {
+        let fkf = (self.end_bus.saturating_sub(self.start_bus) as u64).saturating_add(1);
+        fkf << 20  
     }
 }
 
 
-pub fn parse(omk: u64) -> Option<Vec<Tl>> {
-    let dh = unsafe { &*(omk as *const Ei) };
+pub fn parse(mcfg_virt: u64) -> Option<Vec<Ij>> {
+    let header = unsafe { &*(mcfg_virt as *const Bu) };
     
     
-    if &dh.signature != b"MCFG" {
+    if &header.signature != b"MCFG" {
         return None;
     }
     
     
-    let drp = core::mem::size_of::<Ei>() + 8; 
-    let acy = core::mem::size_of::<Bma>();
-    let ebf = (dh.go as usize - drp) / acy;
+    let bms = core::mem::size_of::<Bu>() + 8; 
+    let oi = core::mem::size_of::<Abg>();
+    let bsg = (header.length as usize - bms) / oi;
     
-    if ebf == 0 {
+    if bsg == 0 {
         return None;
     }
     
-    let mut ch = Vec::fc(ebf);
-    let fhu = omk + drp as u64;
+    let mut entries = Vec::with_capacity(bsg);
+    let ciy = mcfg_virt + bms as u64;
     
-    for a in 0..ebf {
-        let ggi = fhu + (a * acy) as u64;
-        let js = unsafe { &*(ggi as *const Bma) };
+    for i in 0..bsg {
+        let cxg = ciy + (i * oi) as u64;
+        let dm = unsafe { &*(cxg as *const Abg) };
         
-        let ar = unsafe { core::ptr::md(core::ptr::vf!(js.bps)) };
-        let pk = unsafe { core::ptr::md(core::ptr::vf!(js.wgo)) };
+        let base = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(dm.base_address)) };
+        let gq = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(dm.segment_group)) };
         
-        ch.push(Tl {
-            bps: ar,
-            ie: pk,
-            cca: js.cca,
-            cej: js.cej,
+        entries.push(Ij {
+            base_address: base,
+            segment: gq,
+            start_bus: dm.start_bus,
+            end_bus: dm.end_bus,
         });
     }
     
-    Some(ch)
+    Some(entries)
 }
 
 
-pub fn ytl(ie: u16, aq: u8, de: u8, gw: u8) -> Option<u64> {
-    let co = super::ani()?;
+pub fn qib(segment: u16, bus: u8, device: u8, function: u8) -> Option<u64> {
+    let info = super::rk()?;
     
-    for bt in &co.eut {
-        if bt.ie == ie && aq >= bt.cca && aq <= bt.cej {
-            return bt.nfk(aq, de, gw);
+    for entry in &info.mcfg_regions {
+        if entry.segment == segment && bus >= entry.start_bus && bus <= entry.end_bus {
+            return entry.config_address(bus, device, function);
         }
     }
     
@@ -122,8 +122,8 @@ pub fn ytl(ie: u16, aq: u8, de: u8, gw: u8) -> Option<u64> {
 }
 
 
-pub fn anl() -> bool {
-    super::ani()
-        .map(|a| !a.eut.is_empty())
+pub fn sw() -> bool {
+    super::rk()
+        .map(|i| !i.mcfg_regions.is_empty())
         .unwrap_or(false)
 }

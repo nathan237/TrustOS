@@ -1,13 +1,13 @@
 
 
-#![allow(bgr)]
+#![allow(dead_code)]
 
 use alloc::vec;
 use alloc::vec::Vec;
 use super::cartridge::Cartridge;
 
 
-pub const AFV_: [u32; 64] = [
+pub const AHP_: [u32; 64] = [
     0xFF666666, 0xFF002A88, 0xFF1412A7, 0xFF3B00A4, 0xFF5C007E, 0xFF6E0040, 0xFF6C0600, 0xFF561D00,
     0xFF333500, 0xFF0B4800, 0xFF005200, 0xFF004F08, 0xFF00404D, 0xFF000000, 0xFF000000, 0xFF000000,
     0xFFADADAD, 0xFF155FD9, 0xFF4240FF, 0xFF7527FE, 0xFFA01ACC, 0xFFB71E7B, 0xFFB53120, 0xFF994E00,
@@ -20,33 +20,33 @@ pub const AFV_: [u32; 64] = [
 
 pub struct Ppu {
     
-    pub db: u8,       
-    pub hs: u8,       
+    pub ctrl: u8,       
+    pub mask: u8,       
     pub status: u8,     
-    pub dkd: u8,   
+    pub oam_addr: u8,   
 
     
-    pub p: u16,         
-    pub ab: u16,         
-    pub kwg: u8,     
-    pub d: bool,        
-    pub iqo: u8,   
+    pub v: u16,         
+    pub t: u16,         
+    pub fine_x: u8,     
+    pub w: bool,        
+    pub data_buf: u8,   
 
     
-    pub awh: [u8; 256],        
-    pub aof: [u8; 2048],      
-    pub aim: [u8; 32],     
+    pub oam: [u8; 256],        
+    pub vram: [u8; 2048],      
+    pub palette: [u8; 32],     
 
     
-    pub ys: i32,
-    pub amb: u32,
-    pub oo: u64,
-    pub uus: bool,
-    pub wrl: bool,
+    pub scanline: i32,
+    pub dot: u32,
+    pub frame_count: u64,
+    pub nmi_triggered: bool,
+    pub sprite0_hit_possible: bool,
 
     
-    jrc: [u8; 8],
-    gsu: u8,
+    sprite_indices: [u8; 8],
+    sprite_count: u8,
 
     
     pub framebuffer: Vec<u32>,
@@ -55,87 +55,87 @@ pub struct Ppu {
 impl Ppu {
     pub fn new() -> Self {
         Self {
-            db: 0, hs: 0, status: 0, dkd: 0,
-            p: 0, ab: 0, kwg: 0, d: false, iqo: 0,
-            awh: [0; 256],
-            aof: [0; 2048],
-            aim: [0; 32],
-            ys: -1,
-            amb: 0,
-            oo: 0,
-            uus: false,
-            wrl: false,
-            jrc: [0xFF; 8],
-            gsu: 0,
+            ctrl: 0, mask: 0, status: 0, oam_addr: 0,
+            v: 0, t: 0, fine_x: 0, w: false, data_buf: 0,
+            oam: [0; 256],
+            vram: [0; 2048],
+            palette: [0; 32],
+            scanline: -1,
+            dot: 0,
+            frame_count: 0,
+            nmi_triggered: false,
+            sprite0_hit_possible: false,
+            sprite_indices: [0xFF; 8],
+            sprite_count: 0,
             framebuffer: vec![0u32; 256 * 240],
         }
     }
 
     
 
-    pub fn gql(&mut self, ag: u16, on: &Cartridge) -> u8 {
-        match ag & 7 {
+    pub fn read_register(&mut self, addr: u16, cart: &Cartridge) -> u8 {
+        match addr & 7 {
             2 => { 
-                let ap = (self.status & 0xE0) | (self.iqo & 0x1F);
+                let val = (self.status & 0xE0) | (self.data_buf & 0x1F);
                 self.status &= !0x80; 
-                self.d = false;
-                ap
+                self.w = false;
+                val
             }
             4 => { 
-                self.awh[self.dkd as usize]
+                self.oam[self.oam_addr as usize]
             }
             7 => { 
-                let ag = self.p & 0x3FFF;
-                let ap = if ag >= 0x3F00 {
-                    self.ott(ag)
+                let addr = self.v & 0x3FFF;
+                let val = if addr >= 0x3F00 {
+                    self.palette_read(addr)
                 } else {
-                    let cox = self.iqo;
-                    self.iqo = self.egx(ag, on);
-                    cox
+                    let awl = self.data_buf;
+                    self.data_buf = self.ppu_read(addr, cart);
+                    awl
                 };
-                self.p = self.p.cn(if self.db & 0x04 != 0 { 32 } else { 1 });
-                ap
+                self.v = self.v.wrapping_add(if self.ctrl & 0x04 != 0 { 32 } else { 1 });
+                val
             }
             _ => 0,
         }
     }
 
-    pub fn ihl(&mut self, ag: u16, ap: u8, on: &mut Cartridge) {
-        match ag & 7 {
+    pub fn write_register(&mut self, addr: u16, val: u8, cart: &mut Cartridge) {
+        match addr & 7 {
             0 => { 
-                self.db = ap;
-                self.ab = (self.ab & 0xF3FF) | (((ap as u16) & 3) << 10);
+                self.ctrl = val;
+                self.t = (self.t & 0xF3FF) | (((val as u16) & 3) << 10);
             }
-            1 => self.hs = ap,
-            3 => self.dkd = ap,
+            1 => self.mask = val,
+            3 => self.oam_addr = val,
             4 => { 
-                self.awh[self.dkd as usize] = ap;
-                self.dkd = self.dkd.cn(1);
+                self.oam[self.oam_addr as usize] = val;
+                self.oam_addr = self.oam_addr.wrapping_add(1);
             }
             5 => { 
-                if !self.d {
-                    self.ab = (self.ab & 0xFFE0) | ((ap as u16) >> 3);
-                    self.kwg = ap & 7;
+                if !self.w {
+                    self.t = (self.t & 0xFFE0) | ((val as u16) >> 3);
+                    self.fine_x = val & 7;
                 } else {
-                    self.ab = (self.ab & 0x8C1F)
-                        | (((ap as u16) & 0xF8) << 2)
-                        | (((ap as u16) & 7) << 12);
+                    self.t = (self.t & 0x8C1F)
+                        | (((val as u16) & 0xF8) << 2)
+                        | (((val as u16) & 7) << 12);
                 }
-                self.d = !self.d;
+                self.w = !self.w;
             }
             6 => { 
-                if !self.d {
-                    self.ab = (self.ab & 0x00FF) | (((ap as u16) & 0x3F) << 8);
+                if !self.w {
+                    self.t = (self.t & 0x00FF) | (((val as u16) & 0x3F) << 8);
                 } else {
-                    self.ab = (self.ab & 0xFF00) | (ap as u16);
-                    self.p = self.ab;
+                    self.t = (self.t & 0xFF00) | (val as u16);
+                    self.v = self.t;
                 }
-                self.d = !self.d;
+                self.w = !self.w;
             }
             7 => { 
-                let q = self.p & 0x3FFF;
-                self.lva(q, ap, on);
-                self.p = self.p.cn(if self.db & 0x04 != 0 { 32 } else { 1 });
+                let a = self.v & 0x3FFF;
+                self.ppu_write(a, val, cart);
+                self.v = self.v.wrapping_add(if self.ctrl & 0x04 != 0 { 32 } else { 1 });
             }
             _ => {}
         }
@@ -143,230 +143,230 @@ impl Ppu {
 
     
 
-    fn egx(&self, ag: u16, on: &Cartridge) -> u8 {
-        match ag {
-            0x0000..=0x1FFF => on.egx(ag),
+    fn ppu_read(&self, addr: u16, cart: &Cartridge) -> u8 {
+        match addr {
+            0x0000..=0x1FFF => cart.ppu_read(addr),
             0x2000..=0x3EFF => {
-                let htb = on.ono(ag - 0x2000);
-                self.aof[htb as usize]
+                let dvk = cart.mirror_nametable(addr - 0x2000);
+                self.vram[dvk as usize]
             }
-            0x3F00..=0x3FFF => self.ott(ag),
+            0x3F00..=0x3FFF => self.palette_read(addr),
             _ => 0,
         }
     }
 
-    fn lva(&mut self, ag: u16, ap: u8, on: &mut Cartridge) {
-        match ag {
-            0x0000..=0x1FFF => on.lva(ag, ap),
+    fn ppu_write(&mut self, addr: u16, val: u8, cart: &mut Cartridge) {
+        match addr {
+            0x0000..=0x1FFF => cart.ppu_write(addr, val),
             0x2000..=0x3EFF => {
-                let htb = on.ono(ag - 0x2000);
-                self.aof[htb as usize] = ap;
+                let dvk = cart.mirror_nametable(addr - 0x2000);
+                self.vram[dvk as usize] = val;
             }
             0x3F00..=0x3FFF => {
-                let w = (ag & 0x1F) as usize;
-                self.aim[w] = ap & 0x3F;
+                let idx = (addr & 0x1F) as usize;
+                self.palette[idx] = val & 0x3F;
                 
-                if w & 3 == 0 {
-                    self.aim[w ^ 0x10] = ap & 0x3F;
+                if idx & 3 == 0 {
+                    self.palette[idx ^ 0x10] = val & 0x3F;
                 }
             }
             _ => {}
         }
     }
 
-    fn ott(&self, ag: u16) -> u8 {
-        let mut w = (ag & 0x1F) as usize;
-        if w >= 16 && w & 3 == 0 { w -= 16; }
-        self.aim[w] & 0x3F
+    fn palette_read(&self, addr: u16) -> u8 {
+        let mut idx = (addr & 0x1F) as usize;
+        if idx >= 16 && idx & 3 == 0 { idx -= 16; }
+        self.palette[idx] & 0x3F
     }
 
     
 
     
-    pub fn wud(&mut self, on: &Cartridge) -> bool {
-        let mut pwd = false;
-        let pcf = self.hs & 0x18 != 0;
+    pub fn step_scanline(&mut self, cart: &Cartridge) -> bool {
+        let mut joq = false;
+        let jaa = self.mask & 0x18 != 0;
 
-        match self.ys {
+        match self.scanline {
             0..=239 => {
                 
-                if pcf {
-                    self.snr(on);
-                    self.lzh(on);
+                if jaa {
+                    self.evaluate_sprites(cart);
+                    self.render_scanline(cart);
                 }
             }
             241 => {
                 
                 self.status |= 0x80;
-                if self.db & 0x80 != 0 {
-                    pwd = true;
+                if self.ctrl & 0x80 != 0 {
+                    joq = true;
                 }
             }
             261 => {
                 
                 self.status &= !0xE0; 
-                if pcf {
+                if jaa {
                     
-                    self.p = (self.p & 0x041F) | (self.ab & 0x7BE0);
+                    self.v = (self.v & 0x041F) | (self.t & 0x7BE0);
                 }
             }
             _ => {}
         }
 
-        self.ys += 1;
-        if self.ys > 261 {
-            self.ys = 0;
-            self.oo += 1;
+        self.scanline += 1;
+        if self.scanline > 261 {
+            self.scanline = 0;
+            self.frame_count += 1;
         }
 
-        pwd
+        joq
     }
 
-    fn lzh(&mut self, on: &Cartridge) {
-        let c = self.ys as usize;
-        if c >= 240 { return; }
+    fn render_scanline(&mut self, cart: &Cartridge) {
+        let y = self.scanline as usize;
+        if y >= 240 { return; }
 
-        let qpe = self.hs & 0x08 != 0;
-        let wrh = self.hs & 0x10 != 0;
-        let qpi = self.hs & 0x02 != 0;
-        let wri = self.hs & 0x04 != 0;
+        let kbq = self.mask & 0x08 != 0;
+        let ovc = self.mask & 0x10 != 0;
+        let kbt = self.mask & 0x02 != 0;
+        let ovd = self.mask & 0x04 != 0;
 
-        let haj = if self.db & 0x10 != 0 { 0x1000u16 } else { 0u16 };
-        let mgv = if self.db & 0x08 != 0 { 0x1000u16 } else { 0u16 };
-        let xap = self.db & 0x20 != 0;
-        let ibg = if xap { 16 } else { 8 };
+        let bg_pattern = if self.ctrl & 0x10 != 0 { 0x1000u16 } else { 0u16 };
+        let gvq = if self.ctrl & 0x08 != 0 { 0x1000u16 } else { 0u16 };
+        let pcz = self.ctrl & 0x20 != 0;
+        let eac = if pcz { 16 } else { 8 };
 
         
-        let rlc = self.p & 0x1F;
-        let kjo = (self.p >> 5) & 0x1F;
-        let iur = (self.p >> 12) & 7;
-        let uwa = (self.p >> 10) & 3;
+        let kun = self.v & 0x1F;
+        let fnm = (self.v >> 5) & 0x1F;
+        let emr = (self.v >> 12) & 7;
+        let nlp = (self.v >> 10) & 3;
 
-        for b in 0..256usize {
-            let xu = b;
-            let ewr = b as u16 + self.kwg as u16;
-            let pte = (rlc as u16 + ewr / 8) as u16;
-            let stq = (ewr % 8) as u8;
+        for x in 0..256usize {
+            let lw = x;
+            let ccs = x as u16 + self.fine_x as u16;
+            let jmo = (kun as u16 + ccs / 8) as u16;
+            let lwd = (ccs % 8) as u8;
 
             
-            let (vp, bdo) = if qpe && (qpi || b >= 8) {
-                let jze = pte & 0x1F;
-                let uvy = if pte >= 32 { 1u16 } else { 0 };
-                let uvx = uwa ^ uvy;
-                let orh = 0x2000 + uvx * 0x400;
+            let (bg_color, bg_palette) = if kbq && (kbt || x >= 8) {
+                let fge = jmo & 0x1F;
+                let nln = if jmo >= 32 { 1u16 } else { 0 };
+                let nlm = nlp ^ nln;
+                let ire = 0x2000 + nlm * 0x400;
 
-                let htb = orh + (kjo + iur / 8) * 32 + jze;
-                let cup = self.egx(htb, on) as u16;
+                let dvk = ire + (fnm + emr / 8) * 32 + fge;
+                let azw = self.ppu_read(dvk, cart) as u16;
 
-                let qla = orh + 0x03C0 + ((kjo + iur / 8) / 4) * 8 + jze / 4;
-                let qn = self.egx(qla, on);
-                let acn = ((((kjo + iur / 8) & 2)) | ((jze & 2) >> 1)) * 2;
-                let lrx = (qn >> acn) & 3;
+                let jyb = ire + 0x03C0 + ((fnm + emr / 8) / 4) * 8 + fge / 4;
+                let attr = self.ppu_read(jyb, cart);
+                let no = ((((fnm + emr / 8) & 2)) | ((fge & 2) >> 1)) * 2;
+                let gly = (attr >> no) & 3;
 
-                let huq = haj + cup * 16 + (iur & 7);
-                let hh = self.egx(huq, on);
-                let gd = self.egx(huq + 8, on);
-                let ga = 7 - stq;
-                let s = ((hh >> ga) & 1) | (((gd >> ga) & 1) << 1);
+                let dwi = bg_pattern + azw * 16 + (emr & 7);
+                let lo = self.ppu_read(dwi, cart);
+                let hi = self.ppu_read(dwi + 8, cart);
+                let bf = 7 - lwd;
+                let color = ((lo >> bf) & 1) | (((hi >> bf) & 1) << 1);
 
-                (s, lrx)
+                (color, gly)
             } else {
                 (0, 0)
             };
 
             
-            let (mgu, wrj, wrk, tza) = if wrh && (wri || b >= 8) {
-                self.ter(b as u8, c as u8, mgv, ibg, on)
+            let (spr_color, spr_palette, spr_priority, is_sprite0) = if ovc && (ovd || x >= 8) {
+                self.get_sprite_pixel(x as u8, y as u8, gvq, eac, cart)
             } else {
                 (0, 0, false, false)
             };
 
             
-            if tza && vp != 0 && mgu != 0 && b < 255 {
+            if is_sprite0 && bg_color != 0 && spr_color != 0 && x < 255 {
                 self.status |= 0x40;
             }
 
             
-            let hjk = if mgu != 0 && (vp == 0 || !wrk) {
+            let dpo = if spr_color != 0 && (bg_color == 0 || !spr_priority) {
                 
-                let w = self.aim[16 + wrj as usize * 4 + mgu as usize] as usize;
-                AFV_[w & 0x3F]
-            } else if vp != 0 {
-                let w = self.aim[bdo as usize * 4 + vp as usize] as usize;
-                AFV_[w & 0x3F]
+                let idx = self.palette[16 + spr_palette as usize * 4 + spr_color as usize] as usize;
+                AHP_[idx & 0x3F]
+            } else if bg_color != 0 {
+                let idx = self.palette[bg_palette as usize * 4 + bg_color as usize] as usize;
+                AHP_[idx & 0x3F]
             } else {
-                AFV_[self.aim[0] as usize & 0x3F]
+                AHP_[self.palette[0] as usize & 0x3F]
             };
 
-            self.framebuffer[c * 256 + xu] = hjk;
+            self.framebuffer[y * 256 + lw] = dpo;
         }
 
         
-        if self.ys < 240 {
-            self.tsr();
+        if self.scanline < 240 {
+            self.increment_y();
             
-            self.p = (self.p & !0x041F) | (self.ab & 0x041F);
+            self.v = (self.v & !0x041F) | (self.t & 0x041F);
         }
     }
 
-    fn ter(&self, b: u8, c: u8, mgv: u16, ibg: u8, on: &Cartridge) -> (u8, u8, bool, bool) {
-        for a in 0..self.gsu as usize {
-            let w = self.jrc[a] as usize * 4;
-            let mgx = self.awh[w] as i16;
-            let mgw = self.awh[w + 1];
-            let jra = self.awh[w + 2];
-            let jrb = self.awh[w + 3] as i16;
+    fn get_sprite_pixel(&self, x: u8, y: u8, gvq: u16, eac: u8, cart: &Cartridge) -> (u8, u8, bool, bool) {
+        for i in 0..self.sprite_count as usize {
+            let idx = self.sprite_indices[i] as usize * 4;
+            let gvs = self.oam[idx] as i16;
+            let gvr = self.oam[idx + 1];
+            let fbf = self.oam[idx + 2];
+            let fbg = self.oam[idx + 3] as i16;
 
-            if (b as i16) < jrb || (b as i16) >= jrb + 8 { continue; }
+            if (x as i16) < fbg || (x as i16) >= fbg + 8 { continue; }
 
-            let sut = jra & 0x40 != 0;
-            let suu = jra & 0x80 != 0;
-            let abv = jra & 0x20 != 0; 
-            let lrx = jra & 3;
+            let lwx = fbf & 0x40 != 0;
+            let lwy = fbf & 0x80 != 0;
+            let priority = fbf & 0x20 != 0; 
+            let gly = fbf & 3;
 
-            let mut br = c as i16 - mgx - 1;
-            if suu { br = (ibg as i16 - 1) - br; }
-            if br < 0 || br >= ibg as i16 { continue; }
+            let mut row = y as i16 - gvs - 1;
+            if lwy { row = (eac as i16 - 1) - row; }
+            if row < 0 || row >= eac as i16 { continue; }
 
-            let (ccd, vfb) = if ibg == 16 {
-                let om = (mgw as u16 & 1) * 0x1000;
-                let ptc = mgw & 0xFE;
-                if br < 8 {
-                    (ptc as u16, om)
+            let (apf, pattern_base) = if eac == 16 {
+                let gi = (gvr as u16 & 1) * 0x1000;
+                let jmm = gvr & 0xFE;
+                if row < 8 {
+                    (jmm as u16, gi)
                 } else {
-                    ((ptc + 1) as u16, om)
+                    ((jmm + 1) as u16, gi)
                 }
             } else {
-                (mgw as u16, mgv)
+                (gvr as u16, gvq)
             };
 
-            let fcl = (br % 8) as u16;
-            let huq = vfb + ccd * 16 + fcl;
-            let hh = self.egx(huq, on);
-            let gd = self.egx(huq + 8, on);
+            let cfs = (row % 8) as u16;
+            let dwi = pattern_base + apf * 16 + cfs;
+            let lo = self.ppu_read(dwi, cart);
+            let hi = self.ppu_read(dwi + 8, cart);
 
-            let bj = if sut { b as i16 - jrb } else { 7 - (b as i16 - jrb) };
-            let s = ((hh >> bj) & 1) | (((gd >> bj) & 1) << 1);
+            let col = if lwx { x as i16 - fbg } else { 7 - (x as i16 - fbg) };
+            let color = ((lo >> col) & 1) | (((hi >> col) & 1) << 1);
 
-            if s != 0 {
-                return (s, lrx, abv, self.jrc[a] == 0);
+            if color != 0 {
+                return (color, gly, priority, self.sprite_indices[i] == 0);
             }
         }
         (0, 0, false, false)
     }
 
-    fn snr(&mut self, xye: &Cartridge) {
-        self.gsu = 0;
-        let c = self.ys as u8;
-        let i = if self.db & 0x20 != 0 { 16i16 } else { 8i16 };
+    fn evaluate_sprites(&mut self, _cart: &Cartridge) {
+        self.sprite_count = 0;
+        let y = self.scanline as u8;
+        let h = if self.ctrl & 0x20 != 0 { 16i16 } else { 8i16 };
 
-        for a in 0..64u8 {
-            let mgx = self.awh[a as usize * 4] as i16;
-            let wz = c as i16 - mgx;
-            if wz >= 1 && wz <= i {
-                if self.gsu < 8 {
-                    self.jrc[self.gsu as usize] = a;
-                    self.gsu += 1;
+        for i in 0..64u8 {
+            let gvs = self.oam[i as usize * 4] as i16;
+            let jr = y as i16 - gvs;
+            if jr >= 1 && jr <= h {
+                if self.sprite_count < 8 {
+                    self.sprite_indices[self.sprite_count as usize] = i;
+                    self.sprite_count += 1;
                 } else {
                     self.status |= 0x20; 
                     break;
@@ -375,26 +375,26 @@ impl Ppu {
         }
     }
 
-    fn tsr(&mut self) {
-        if (self.p & 0x7000) != 0x7000 {
-            self.p += 0x1000; 
+    fn increment_y(&mut self) {
+        if (self.v & 0x7000) != 0x7000 {
+            self.v += 0x1000; 
         } else {
-            self.p &= !0x7000; 
-            let mut c = (self.p & 0x03E0) >> 5;
-            if c == 29 {
-                c = 0;
-                self.p ^= 0x0800; 
-            } else if c == 31 {
-                c = 0;
+            self.v &= !0x7000; 
+            let mut y = (self.v & 0x03E0) >> 5;
+            if y == 29 {
+                y = 0;
+                self.v ^= 0x0800; 
+            } else if y == 31 {
+                y = 0;
             } else {
-                c += 1;
+                y += 1;
             }
-            self.p = (self.p & !0x03E0) | (c << 5);
+            self.v = (self.v & !0x03E0) | (y << 5);
         }
     }
 
     
-    pub fn uwt(&mut self, f: &[u8; 256]) {
-        self.awh.dg(f);
+    pub fn oam_dma(&mut self, data: &[u8; 256]) {
+        self.oam.copy_from_slice(data);
     }
 }

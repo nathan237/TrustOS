@@ -13,380 +13,380 @@ use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use spin::Mutex;
 
 
-static Ja: AtomicBool = AtomicBool::new(false);
+static Dr: AtomicBool = AtomicBool::new(false);
 
 
-static ACB_: AtomicU64 = AtomicU64::new(0);
+static ADS_: AtomicU64 = AtomicU64::new(0);
 
 
-static YK_: Mutex<BTreeMap<&'static str, &'static [u8]>> = Mutex::new(BTreeMap::new());
+static ZO_: Mutex<BTreeMap<&'static str, &'static [u8]>> = Mutex::new(BTreeMap::new());
 
 
-static Ue: Mutex<BTreeMap<u16, Ant>> = Mutex::new(BTreeMap::new());
+static It: Mutex<BTreeMap<u16, Qp>> = Mutex::new(BTreeMap::new());
 
 
-static VT_: Mutex<u16> = Mutex::new(50000);
+static XC_: Mutex<u16> = Mutex::new(50000);
 
 
 mod opcode {
-    pub const Ckb: u16 = 1;   
-    pub const Cqg: u16 = 2;   
-    pub const Bdz: u16 = 3;  
-    pub const Ie: u16 = 4;   
-    pub const Sf: u16 = 5; 
+    pub const Aoj: u16 = 1;   
+    pub const Ary: u16 = 2;   
+    pub const Xk: u16 = 3;  
+    pub const Dk: u16 = 4;   
+    pub const Hr: u16 = 5; 
 }
 
 
 mod error_code {
-    pub const BBP_: u16 = 1;
-    pub const BJH_: u16 = 2;
-    pub const ELF_: u16 = 3;
-    pub const AWX_: u16 = 4;
+    pub const BDS_: u16 = 1;
+    pub const BLM_: u16 = 2;
+    pub const EOQ_: u16 = 3;
+    pub const AYZ_: u16 = 4;
 }
 
 
-const AR_: usize = 512;
+const AT_: usize = 512;
 
 
-struct Ant {
+struct Qp {
     
-    bjn: [u8; 4],
+    client_ip: [u8; 4],
     
-    dex: u16,
+    client_port: u16,
     
-    ahq: u16,
+    local_port: u16,
     
-    cxw: &'static [u8],
+    file_data: &'static [u8],
     
-    fge: u16,
+    current_block: u16,
     
-    fxa: u16,
+    total_blocks: u16,
     
-    kke: bool,
+    complete: bool,
     
-    clg: u64,
+    last_send: u64,
     
-    arv: u8,
+    retries: u8,
 }
 
 
-pub fn dsi() -> bool {
-    Ja.load(Ordering::Relaxed)
+pub fn is_running() -> bool {
+    Dr.load(Ordering::Relaxed)
 }
 
 
-pub fn kvt() -> u64 {
-    ACB_.load(Ordering::Relaxed)
+pub fn fwq() -> u64 {
+    ADS_.load(Ordering::Relaxed)
 }
 
 
-pub fn exo(j: &'static str, f: &'static [u8]) {
-    let mut sb = YK_.lock();
-    sb.insert(j, f);
-    crate::serial_println!("[TFTPD] Registered file '{}' ({} bytes)", j, f.len());
+pub fn cdg(name: &'static str, data: &'static [u8]) {
+    let mut files = ZO_.lock();
+    files.insert(name, data);
+    crate::serial_println!("[TFTPD] Registered file '{}' ({} bytes)", name, data.len());
 }
 
 
-pub fn ay() {
-    if Ja.load(Ordering::Relaxed) {
+pub fn start() {
+    if Dr.load(Ordering::Relaxed) {
         crate::serial_println!("[TFTPD] Already running");
         return;
     }
 
-    Ja.store(true, Ordering::Relaxed);
-    ACB_.store(0, Ordering::Relaxed);
+    Dr.store(true, Ordering::Relaxed);
+    ADS_.store(0, Ordering::Relaxed);
 
-    let sb = YK_.lock();
-    crate::serial_println!("[TFTPD] TFTP server started on port 69 ({} files registered)", sb.len());
-    for (j, f) in sb.iter() {
+    let files = ZO_.lock();
+    crate::serial_println!("[TFTPD] TFTP server started on port 69 ({} files registered)", files.len());
+    for (name, data) in files.iter() {
         crate::serial_println!("[TFTPD]   {} ({} bytes, {} blocks)",
-            j, f.len(), (f.len() + AR_ - 1) / AR_);
+            name, data.len(), (data.len() + AT_ - 1) / AT_);
     }
 }
 
 
-pub fn qg() {
-    Ja.store(false, Ordering::Relaxed);
-    let mut chu = Ue.lock();
-    chu.clear();
+pub fn stop() {
+    Dr.store(false, Ordering::Relaxed);
+    let mut asf = It.lock();
+    asf.clear();
     crate::serial_println!("[TFTPD] Server stopped");
 }
 
 
 
-pub fn tkr(f: &[u8], jh: [u8; 4], ey: u16) {
-    if !Ja.load(Ordering::Relaxed) || f.len() < 4 {
+pub fn mif(data: &[u8], src_ip: [u8; 4], src_port: u16) {
+    if !Dr.load(Ordering::Relaxed) || data.len() < 4 {
         return;
     }
 
-    let opcode = u16::oa([f[0], f[1]]);
+    let opcode = u16::from_be_bytes([data[0], data[1]]);
 
     match opcode {
-        opcode::Ckb => tkq(f, jh, ey),
-        opcode::Cqg => {
+        opcode::Aoj => mie(data, src_ip, src_port),
+        opcode::Ary => {
             
-            hzp(jh, ey, 69, error_code::BJH_, "Write not supported");
+            dzc(src_ip, src_port, 69, error_code::BLM_, "Write not supported");
         }
         _ => {
-            hzp(jh, ey, 69, error_code::AWX_, "Invalid opcode");
+            dzc(src_ip, src_port, 69, error_code::AYZ_, "Invalid opcode");
         }
     }
 }
 
 
-pub fn tlk(f: &[u8], jh: [u8; 4], ey: u16, ahq: u16) {
-    if !Ja.load(Ordering::Relaxed) || f.len() < 4 {
+pub fn mit(data: &[u8], src_ip: [u8; 4], src_port: u16, local_port: u16) {
+    if !Dr.load(Ordering::Relaxed) || data.len() < 4 {
         return;
     }
 
-    let opcode = u16::oa([f[0], f[1]]);
+    let opcode = u16::from_be_bytes([data[0], data[1]]);
 
-    if opcode == opcode::Ie {
-        let block = u16::oa([f[2], f[3]]);
-        tiw(jh, ey, ahq, block);
+    if opcode == opcode::Dk {
+        let block = u16::from_be_bytes([data[2], data[3]]);
+        mhf(src_ip, src_port, local_port, block);
     }
 }
 
 
-fn tkq(f: &[u8], bjn: [u8; 4], dex: u16) {
+fn mie(data: &[u8], client_ip: [u8; 4], client_port: u16) {
     
-    let ew = &f[2..];
+    let payload = &data[2..];
 
     
-    let ssf = match ew.iter().qf(|&o| o == 0) {
-        Some(u) => u,
+    let lve = match payload.iter().position(|&b| b == 0) {
+        Some(pos) => pos,
         None => {
-            hzp(bjn, dex, 69, error_code::AWX_, "Bad request");
+            dzc(client_ip, client_port, 69, error_code::AYZ_, "Bad request");
             return;
         }
     };
 
-    let it = match core::str::jg(&ew[..ssf]) {
-        Ok(e) => e,
+    let filename = match core::str::from_utf8(&payload[..lve]) {
+        Ok(j) => j,
         Err(_) => {
-            hzp(bjn, dex, 69, error_code::BBP_, "Invalid filename");
+            dzc(client_ip, client_port, 69, error_code::BDS_, "Invalid filename");
             return;
         }
     };
 
     
-    let doy = it.tl('/');
+    let bld = filename.trim_start_matches('/');
 
     crate::serial_println!("[TFTPD] RRQ for '{}' from {}.{}.{}.{}:{}",
-        doy,
-        bjn[0], bjn[1], bjn[2], bjn[3],
-        dex);
+        bld,
+        client_ip[0], client_ip[1], client_ip[2], client_ip[3],
+        client_port);
 
     
-    let sb = YK_.lock();
-    let cxw = match sb.get(doy) {
-        Some(f) => *f,
+    let files = ZO_.lock();
+    let file_data = match files.get(bld) {
+        Some(data) => *data,
         None => {
             
-            let qhk = if doy.cj("boot/") {
-                &doy[5..]
+            let jvh = if bld.starts_with("boot/") {
+                &bld[5..]
             } else {
-                doy
+                bld
             };
-            match sb.get(qhk) {
-                Some(f) => *f,
+            match files.get(jvh) {
+                Some(data) => *data,
                 None => {
-                    drop(sb);
-                    crate::serial_println!("[TFTPD] File not found: '{}'", doy);
-                    hzp(bjn, dex, 69, error_code::BBP_, "File not found");
+                    drop(files);
+                    crate::serial_println!("[TFTPD] File not found: '{}'", bld);
+                    dzc(client_ip, client_port, 69, error_code::BDS_, "File not found");
                     return;
                 }
             }
         }
     };
-    drop(sb);
+    drop(files);
 
     
-    let ahq = {
-        let mut ni = VT_.lock();
-        let port = *ni;
-        *ni = ni.cn(1);
-        if *ni < 50000 { *ni = 50000; }
+    let local_port = {
+        let mut tid = XC_.lock();
+        let port = *tid;
+        *tid = tid.wrapping_add(1);
+        if *tid < 50000 { *tid = 50000; }
         port
     };
 
-    let fxa = ((cxw.len() + AR_ - 1) / AR_).am(1) as u16;
+    let total_blocks = ((file_data.len() + AT_ - 1) / AT_).max(1) as u16;
 
     crate::serial_println!("[TFTPD] Starting transfer: '{}' ({} bytes, {} blocks) TID={}",
-        doy, cxw.len(), fxa, ahq);
+        bld, file_data.len(), total_blocks, local_port);
 
     
-    let he = Ant {
-        bjn,
-        dex,
-        ahq,
-        cxw,
-        fge: 1,
-        fxa,
-        kke: false,
-        clg: crate::time::lc(),
-        arv: 0,
+    let by = Qp {
+        client_ip,
+        client_port,
+        local_port,
+        file_data,
+        current_block: 1,
+        total_blocks,
+        complete: false,
+        last_send: crate::time::uptime_ms(),
+        retries: 0,
     };
 
     
-    mdp(&he);
+    gtu(&by);
 
     
-    let mut chu = Ue.lock();
-    chu.insert(ahq, he);
+    let mut asf = It.lock();
+    asf.insert(local_port, by);
 }
 
 
-fn tiw(bjn: [u8; 4], dex: u16, ahq: u16, block: u16) {
-    let mut chu = Ue.lock();
+fn mhf(client_ip: [u8; 4], client_port: u16, local_port: u16, block: u16) {
+    let mut asf = It.lock();
 
-    let he = match chu.ds(&ahq) {
-        Some(e) => e,
+    let by = match asf.get_mut(&local_port) {
+        Some(j) => j,
         None => return,
     };
 
     
-    if he.bjn != bjn || he.dex != dex {
+    if by.client_ip != client_ip || by.client_port != client_port {
         return;
     }
 
-    if block == he.fge {
+    if block == by.current_block {
         
-        he.fge += 1;
-        he.arv = 0;
+        by.current_block += 1;
+        by.retries = 0;
 
-        if he.fge > he.fxa {
+        if by.current_block > by.total_blocks {
             
-            let ucb = he.cxw.len() % AR_;
-            if ucb == 0 && !he.cxw.is_empty() {
+            let mwj = by.file_data.len() % AT_;
+            if mwj == 0 && !by.file_data.is_empty() {
                 
-                whd(he);
+                onp(by);
             }
-            crate::serial_println!("[TFTPD] Transfer complete for TID={}", ahq);
-            he.kke = true;
-            ACB_.fetch_add(1, Ordering::Relaxed);
-            let port = ahq;
-            drop(chu);
-            rbd(port);
+            crate::serial_println!("[TFTPD] Transfer complete for TID={}", local_port);
+            by.complete = true;
+            ADS_.fetch_add(1, Ordering::Relaxed);
+            let port = local_port;
+            drop(asf);
+            kkr(port);
             return;
         }
 
         
-        mdp(he);
-        he.clg = crate::time::lc();
+        gtu(by);
+        by.last_send = crate::time::uptime_ms();
     }
     
 }
 
 
-fn mdp(he: &Ant) {
-    let block = he.fge;
-    let l = ((block - 1) as usize) * AR_;
-    let ci = (l + AR_).v(he.cxw.len());
+fn gtu(by: &Qp) {
+    let block = by.current_block;
+    let offset = ((block - 1) as usize) * AT_;
+    let end = (offset + AT_).min(by.file_data.len());
 
-    let njq = if l < he.cxw.len() {
-        &he.cxw[l..ci]
+    let hqr = if offset < by.file_data.len() {
+        &by.file_data[offset..end]
     } else {
         &[]
     };
 
     
-    let mut ex = Vec::fc(4 + njq.len());
-    ex.bk(&opcode::Bdz.ft());
-    ex.bk(&block.ft());
-    ex.bk(njq);
+    let mut be = Vec::with_capacity(4 + hqr.len());
+    be.extend_from_slice(&opcode::Xk.to_be_bytes());
+    be.extend_from_slice(&block.to_be_bytes());
+    be.extend_from_slice(hqr);
 
-    let _ = crate::netstack::udp::dlp(
-        he.bjn,
-        he.dex,
-        he.ahq,
-        &ex,
+    let _ = crate::netstack::udp::azq(
+        by.client_ip,
+        by.client_port,
+        by.local_port,
+        &be,
     );
 }
 
 
-fn whd(he: &Ant) {
-    let block = he.fge;
-    let mut ex = Vec::fc(4);
-    ex.bk(&opcode::Bdz.ft());
-    ex.bk(&block.ft());
+fn onp(by: &Qp) {
+    let block = by.current_block;
+    let mut be = Vec::with_capacity(4);
+    be.extend_from_slice(&opcode::Xk.to_be_bytes());
+    be.extend_from_slice(&block.to_be_bytes());
 
-    let _ = crate::netstack::udp::dlp(
-        he.bjn,
-        he.dex,
-        he.ahq,
-        &ex,
+    let _ = crate::netstack::udp::azq(
+        by.client_ip,
+        by.client_port,
+        by.local_port,
+        &be,
     );
 }
 
 
-fn hzp(kv: [u8; 4], rz: u16, ey: u16, aj: u16, fr: &str) {
-    let ooj = fr.as_bytes();
-    let mut ex = Vec::fc(5 + ooj.len());
-    ex.bk(&opcode::Sf.ft());
-    ex.bk(&aj.ft());
-    ex.bk(ooj);
-    ex.push(0); 
+fn dzc(dest_ip: [u8; 4], dest_port: u16, src_port: u16, code: u16, bk: &str) {
+    let ior = bk.as_bytes();
+    let mut be = Vec::with_capacity(5 + ior.len());
+    be.extend_from_slice(&opcode::Hr.to_be_bytes());
+    be.extend_from_slice(&code.to_be_bytes());
+    be.extend_from_slice(ior);
+    be.push(0); 
 
-    let _ = crate::netstack::udp::dlp(kv, rz, ey, &ex);
+    let _ = crate::netstack::udp::azq(dest_ip, dest_port, src_port, &be);
 }
 
 
-fn rbd(port: u16) {
-    let mut chu = Ue.lock();
-    chu.remove(&port);
+fn kkr(port: u16) {
+    let mut asf = It.lock();
+    asf.remove(&port);
 }
 
 
 pub fn poll() {
-    if !Ja.load(Ordering::Relaxed) {
+    if !Dr.load(Ordering::Relaxed) {
         return;
     }
 
-    let iu = crate::time::lc();
-    let mut chu = Ue.lock();
-    let mut cik = Vec::new();
+    let cy = crate::time::uptime_ms();
+    let mut asf = It.lock();
+    let mut aph = Vec::new();
 
-    for (port, he) in chu.el() {
-        if he.kke {
-            cik.push(*port);
+    for (port, by) in asf.iter_mut() {
+        if by.complete {
+            aph.push(*port);
             continue;
         }
 
         
-        if iu.ao(he.clg) > 3000 {
-            if he.arv >= 5 {
+        if cy.saturating_sub(by.last_send) > 3000 {
+            if by.retries >= 5 {
                 crate::serial_println!("[TFTPD] Transfer timeout for TID={}", port);
-                cik.push(*port);
+                aph.push(*port);
             } else {
-                he.arv += 1;
-                he.clg = iu;
-                mdp(he);
+                by.retries += 1;
+                by.last_send = cy;
+                gtu(by);
                 crate::serial_println!("[TFTPD] Retransmit block {} for TID={} (retry {})",
-                    he.fge, port, he.arv);
+                    by.current_block, port, by.retries);
             }
         }
     }
 
-    for port in cik {
-        chu.remove(&port);
+    for port in aph {
+        asf.remove(&port);
     }
 }
 
 
-pub fn jdr() -> Vec<(&'static str, usize)> {
-    let sb = YK_.lock();
-    sb.iter().map(|(j, f)| (*j, f.len())).collect()
+pub fn etb() -> Vec<(&'static str, usize)> {
+    let files = ZO_.lock();
+    files.iter().map(|(name, data)| (*name, data.len())).collect()
 }
 
 
-pub fn jzc() -> usize {
-    let chu = Ue.lock();
-    chu.len()
+pub fn fgb() -> usize {
+    let asf = It.lock();
+    asf.len()
 }
 
 
-pub fn tzf(port: u16) -> bool {
-    let chu = Ue.lock();
-    chu.bgm(&port)
+pub fn mtx(port: u16) -> bool {
+    let asf = It.lock();
+    asf.contains_key(&port)
 }

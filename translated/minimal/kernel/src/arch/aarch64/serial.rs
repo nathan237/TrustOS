@@ -3,90 +3,90 @@
 
 
 
-use super::cpu::{wr, sk, fom, djp};
+use super::cpu::{kj, ib, cmx, bhy};
 
 
 
 
-static mut EA_: u64 = 0x0900_0000;
+static mut EM_: u64 = 0x0900_0000;
 
 
-const Buy: u64 = 0x000;     
-const Djy: u64 = 0x004;    
-const Bac: u64 = 0x018;     
-const Coh: u64 = 0x024;   
-const Cog: u64 = 0x028;   
-const CZE_: u64 = 0x02C;  
-const Bux: u64 = 0x030;     
-const Coj: u64 = 0x038;   
-const Coi: u64 = 0x044;    
+const Afo: u64 = 0x000;     
+const Bec: u64 = 0x004;    
+const Vo: u64 = 0x018;     
+const Aqt: u64 = 0x024;   
+const Aqs: u64 = 0x028;   
+const DCW_: u64 = 0x02C;  
+const Afn: u64 = 0x030;     
+const Aqv: u64 = 0x038;   
+const Aqu: u64 = 0x044;    
 
 
-const BVN_: u32 = 1 << 5;   
-const ASM_: u32 = 1 << 4;   
-const DMG_: u32 = 1 << 3;   
+const BYT_: u32 = 1 << 5;   
+const AUQ_: u32 = 1 << 4;   
+const DQA_: u32 = 1 << 3;   
 
 
-pub fn wih(ar: u64) {
-    unsafe { EA_ = ar; }
+pub fn oop(base: u64) {
+    unsafe { EM_ = base; }
 }
 
 
 pub fn init() {
     unsafe {
-        let ar = EA_;
+        let base = EM_;
         
         
-        sk(ar + Bux, 0);
+        ib(base + Afn, 0);
         
         
-        sk(ar + Coi, 0x7FF);
+        ib(base + Aqu, 0x7FF);
         
         
         
         
-        sk(ar + Coh, 26);
-        sk(ar + Cog, 3);
+        ib(base + Aqt, 26);
+        ib(base + Aqs, 3);
         
         
-        sk(ar + CZE_, (0b11 << 5) | (1 << 4));
+        ib(base + DCW_, (0b11 << 5) | (1 << 4));
         
         
-        sk(ar + Coj, 0);
+        ib(base + Aqv, 0);
         
         
-        sk(ar + Bux, (1 << 0) | (1 << 8) | (1 << 9));
+        ib(base + Afn, (1 << 0) | (1 << 8) | (1 << 9));
     }
 }
 
 
-pub fn cco(hf: u8) {
+pub fn write_byte(byte: u8) {
     unsafe {
-        let ar = EA_;
+        let base = EM_;
         
-        while wr(ar + Bac) & BVN_ != 0 {
-            core::hint::hc();
+        while kj(base + Vo) & BYT_ != 0 {
+            core::hint::spin_loop();
         }
-        sk(ar + Buy, hf as u32);
+        ib(base + Afo, byte as u32);
     }
 }
 
 
-pub fn ahx(bf: &[u8]) {
-    for &o in bf {
-        if o == b'\n' {
-            cco(b'\r');
+pub fn write_bytes(bytes: &[u8]) {
+    for &b in bytes {
+        if b == b'\n' {
+            write_byte(b'\r');
         }
-        cco(o);
+        write_byte(b);
     }
 }
 
 
-pub fn dlb() -> Option<u8> {
+pub fn read_byte() -> Option<u8> {
     unsafe {
-        let ar = EA_;
-        if wr(ar + Bac) & ASM_ == 0 {
-            Some((wr(ar + Buy) & 0xFF) as u8)
+        let base = EM_;
+        if kj(base + Vo) & AUQ_ == 0 {
+            Some((kj(base + Afo) & 0xFF) as u8)
         } else {
             None
         }
@@ -94,9 +94,9 @@ pub fn dlb() -> Option<u8> {
 }
 
 
-pub fn nji() -> bool {
+pub fn hqn() -> bool {
     unsafe {
-        let ar = EA_;
-        wr(ar + Bac) & ASM_ == 0
+        let base = EM_;
+        kj(base + Vo) & AUQ_ == 0
     }
 }

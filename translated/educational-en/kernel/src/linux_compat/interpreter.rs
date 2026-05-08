@@ -61,9 +61,9 @@ pub fn new() -> Self {
     }
     
     /// Get register by index (used for ModR/M decoding)
-    pub fn get_register(&self, index: u8) -> u64 {
+    pub fn get_reg(&self, idx: u8) -> u64 {
                 // Pattern matching — Rust's exhaustive branching construct.
-match index {
+match idx {
             0 => self.rax,
             1 => self.rcx,
             2 => self.rdx,
@@ -85,25 +85,25 @@ match index {
     }
     
     /// Set register by index
-    pub fn set_register(&mut self, index: u8, value: u64) {
+    pub fn set_reg(&mut self, idx: u8, val: u64) {
                 // Pattern matching — Rust's exhaustive branching construct.
-match index {
-            0 => self.rax = value,
-            1 => self.rcx = value,
-            2 => self.rdx = value,
-            3 => self.rbx = value,
-            4 => self.rsp = value,
-            5 => self.rbp = value,
-            6 => self.rsi = value,
-            7 => self.rdi = value,
-            8 => self.r8 = value,
-            9 => self.r9 = value,
-            10 => self.r10 = value,
-            11 => self.r11 = value,
-            12 => self.r12 = value,
-            13 => self.r13 = value,
-            14 => self.r14 = value,
-            15 => self.r15 = value,
+match idx {
+            0 => self.rax = val,
+            1 => self.rcx = val,
+            2 => self.rdx = val,
+            3 => self.rbx = val,
+            4 => self.rsp = val,
+            5 => self.rbp = val,
+            6 => self.rsi = val,
+            7 => self.rdi = val,
+            8 => self.r8 = val,
+            9 => self.r9 = val,
+            10 => self.r10 = val,
+            11 => self.r11 = val,
+            12 => self.r12 = val,
+            13 => self.r13 = val,
+            14 => self.r14 = val,
+            15 => self.r15 = val,
             _ => {}
         }
     }
@@ -149,8 +149,8 @@ pub fn new() -> Self {
     }
     
     /// Map a memory region
-    pub fn map(&mut self, address: u64, size: usize, r: bool, w: bool, x: bool) {
-        self.regions.insert(address, MemoryRegion {
+    pub fn map(&mut self, addr: u64, size: usize, r: bool, w: bool, x: bool) {
+        self.regions.insert(addr, MemoryRegion {
             data: alloc::vec![0u8; size],
             readable: r,
             writable: w,
@@ -159,15 +159,15 @@ pub fn new() -> Self {
     }
     
     /// Write data to memory
-    pub fn write(&mut self, address: u64, data: &[u8]) -> Result<(), &'static str> {
-        for (region_base, region) in self.regions.iterator_mut() {
+    pub fn write(&mut self, addr: u64, data: &[u8]) -> Result<(), &'static str> {
+        for (region_base, region) in self.regions.iter_mut() {
             let region_end = *region_base + region.data.len() as u64;
-            if address >= *region_base && address < region_end {
+            if addr >= *region_base && addr < region_end {
                 if !region.writable {
                     return Err("Write to non-writable memory");
                 }
-                let offset = (address - *region_base) as usize;
-                let copy_length = core::cmp::minimum(data.len(), region.data.len() - offset);
+                let offset = (addr - *region_base) as usize;
+                let copy_length = core::cmp::min(data.len(), region.data.len() - offset);
                 region.data[offset..offset + copy_length].copy_from_slice(&data[..copy_length]);
                 return Ok(());
             }
@@ -176,15 +176,15 @@ pub fn new() -> Self {
     }
     
     /// Read data from memory
-    pub fn read(&self, address: u64, len: usize) -> Result<Vec<u8>, &'static str> {
+    pub fn read(&self, addr: u64, len: usize) -> Result<Vec<u8>, &'static str> {
         for (region_base, region) in self.regions.iter() {
             let region_end = *region_base + region.data.len() as u64;
-            if address >= *region_base && address < region_end {
+            if addr >= *region_base && addr < region_end {
                 if !region.readable {
                     return Err("Read from non-readable memory");
                 }
-                let offset = (address - *region_base) as usize;
-                let copy_length = core::cmp::minimum(len, region.data.len() - offset);
+                let offset = (addr - *region_base) as usize;
+                let copy_length = core::cmp::min(len, region.data.len() - offset);
                 return Ok(region.data[offset..offset + copy_length].to_vec());
             }
         }
@@ -192,26 +192,26 @@ pub fn new() -> Self {
     }
     
     /// Read a single byte
-    pub fn read_u8(&self, address: u64) -> Result<u8, &'static str> {
-        let data = self.read(address, 1)?;
+    pub fn read_u8(&self, addr: u64) -> Result<u8, &'static str> {
+        let data = self.read(addr, 1)?;
         Ok(data[0])
     }
     
     /// Read u16
-    pub fn read_u16(&self, address: u64) -> Result<u16, &'static str> {
-        let data = self.read(address, 2)?;
+    pub fn read_u16(&self, addr: u64) -> Result<u16, &'static str> {
+        let data = self.read(addr, 2)?;
         Ok(u16::from_le_bytes([data[0], data[1]]))
     }
     
     /// Read u32
-    pub fn read_u32(&self, address: u64) -> Result<u32, &'static str> {
-        let data = self.read(address, 4)?;
+    pub fn read_u32(&self, addr: u64) -> Result<u32, &'static str> {
+        let data = self.read(addr, 4)?;
         Ok(u32::from_le_bytes([data[0], data[1], data[2], data[3]]))
     }
     
     /// Read u64
-    pub fn read_u64(&self, address: u64) -> Result<u64, &'static str> {
-        let data = self.read(address, 8)?;
+    pub fn read_u64(&self, addr: u64) -> Result<u64, &'static str> {
+        let data = self.read(addr, 8)?;
         Ok(u64::from_le_bytes([
             data[0], data[1], data[2], data[3],
             data[4], data[5], data[6], data[7],
@@ -219,13 +219,13 @@ pub fn new() -> Self {
     }
     
     /// Write u8
-    pub fn write_u8(&mut self, address: u64, value: u8) -> Result<(), &'static str> {
-        self.write(address, &[value])
+    pub fn write_u8(&mut self, addr: u64, val: u8) -> Result<(), &'static str> {
+        self.write(addr, &[val])
     }
     
     /// Write u64
-    pub fn write_u64(&mut self, address: u64, value: u64) -> Result<(), &'static str> {
-        self.write(address, &value.to_le_bytes())
+    pub fn write_u64(&mut self, addr: u64, val: u64) -> Result<(), &'static str> {
+        self.write(addr, &val.to_le_bytes())
     }
     
     /// Get/set brk
@@ -466,7 +466,7 @@ match self.memory.read(self.cpu.rip, 16) {
             Err(_) => return DecodeResult::Error("Failed to fetch instruction"),
         };
         
-        let mut index = 0;
+        let mut idx = 0;
         
         // Parse prefixes
         let mut rex: u8 = 0;
@@ -474,23 +474,23 @@ match self.memory.read(self.cpu.rip, 16) {
         
                 // Infinite loop — runs until an explicit `break`.
 loop {
-            if index >= inst_bytes.len() {
+            if idx >= inst_bytes.len() {
                 return DecodeResult::Error("Instruction too long");
             }
             
                         // Pattern matching — Rust's exhaustive branching construct.
-match inst_bytes[index] {
+match inst_bytes[idx] {
                 0x40..=0x4F => {
-                    rex = inst_bytes[index];
-                    index += 1;
+                    rex = inst_bytes[idx];
+                    idx += 1;
                 }
                 0x66 => {
                     has_66_prefix = true;
-                    index += 1;
+                    idx += 1;
                 }
                 0xF0 | 0xF2 | 0xF3 | 0x26 | 0x2E | 0x36 | 0x3E | 0x64 | 0x65 => {
                     // Other prefixes - skip for now
-                    index += 1;
+                    idx += 1;
                 }
                 _ => break,
             }
@@ -501,20 +501,20 @@ match inst_bytes[index] {
         let rex_x = (rex & 0x02) != 0;
         let rex_b = (rex & 0x01) != 0;
         
-        let opcode = inst_bytes[index];
-        index += 1;
+        let opcode = inst_bytes[idx];
+        idx += 1;
         
                 // Pattern matching — Rust's exhaustive branching construct.
 match opcode {
             // SYSCALL
-            0x0F if inst_bytes.get(index) == Some(&0x05) => {
-                self.cpu.rip += (index + 1) as u64;
+            0x0F if inst_bytes.get(idx) == Some(&0x05) => {
+                self.cpu.rip += (idx + 1) as u64;
                 return DecodeResult::Syscall;
             }
             
             // NOP
             0x90 => {
-                self.cpu.rip += index as u64;
+                self.cpu.rip += idx as u64;
             }
             
             // RET
@@ -530,33 +530,33 @@ match opcode {
             // PUSH r64
             0x50..=0x57 => {
                 let register_index = (opcode - 0x50) + if rex_b { 8 } else { 0 };
-                let value = self.cpu.get_register(register_index);
+                let val = self.cpu.get_reg(register_index);
                 self.cpu.rsp -= 8;
-                let _ = self.memory.write_u64(self.cpu.rsp, value);
-                self.cpu.rip += index as u64;
+                let _ = self.memory.write_u64(self.cpu.rsp, val);
+                self.cpu.rip += idx as u64;
             }
             
             // POP r64
             0x58..=0x5F => {
                 let register_index = (opcode - 0x58) + if rex_b { 8 } else { 0 };
-                let value = self.memory.read_u64(self.cpu.rsp).unwrap_or(0);
+                let val = self.memory.read_u64(self.cpu.rsp).unwrap_or(0);
                 self.cpu.rsp += 8;
-                self.cpu.set_register(register_index, value);
-                self.cpu.rip += index as u64;
+                self.cpu.set_reg(register_index, val);
+                self.cpu.rip += idx as u64;
             }
             
             // MOV r64, imm64 (REX.W B8+rd)
             0xB8..=0xBF if rex_w => {
                 let register_index = (opcode - 0xB8) + if rex_b { 8 } else { 0 };
-                if index + 8 <= inst_bytes.len() {
+                if idx + 8 <= inst_bytes.len() {
                     let imm = u64::from_le_bytes([
-                        inst_bytes[index], inst_bytes[index + 1],
-                        inst_bytes[index + 2], inst_bytes[index + 3],
-                        inst_bytes[index + 4], inst_bytes[index + 5],
-                        inst_bytes[index + 6], inst_bytes[index + 7],
+                        inst_bytes[idx], inst_bytes[idx + 1],
+                        inst_bytes[idx + 2], inst_bytes[idx + 3],
+                        inst_bytes[idx + 4], inst_bytes[idx + 5],
+                        inst_bytes[idx + 6], inst_bytes[idx + 7],
                     ]);
-                    self.cpu.set_register(register_index, imm);
-                    self.cpu.rip += (index + 8) as u64;
+                    self.cpu.set_reg(register_index, imm);
+                    self.cpu.rip += (idx + 8) as u64;
                 } else {
                     return DecodeResult::Error("MOV imm64 truncated");
                 }
@@ -565,13 +565,13 @@ match opcode {
             // MOV r32, imm32
             0xB8..=0xBF => {
                 let register_index = (opcode - 0xB8) + if rex_b { 8 } else { 0 };
-                if index + 4 <= inst_bytes.len() {
+                if idx + 4 <= inst_bytes.len() {
                     let imm = u32::from_le_bytes([
-                        inst_bytes[index], inst_bytes[index + 1],
-                        inst_bytes[index + 2], inst_bytes[index + 3],
+                        inst_bytes[idx], inst_bytes[idx + 1],
+                        inst_bytes[idx + 2], inst_bytes[idx + 3],
                     ]);
-                    self.cpu.set_register(register_index, imm as u64);
-                    self.cpu.rip += (index + 4) as u64;
+                    self.cpu.set_reg(register_index, imm as u64);
+                    self.cpu.rip += (idx + 4) as u64;
                 } else {
                     return DecodeResult::Error("MOV imm32 truncated");
                 }
@@ -579,11 +579,11 @@ match opcode {
             
             // XOR r/m64, r64 (31 /r)
             0x31 if rex_w => {
-                if index >= inst_bytes.len() {
+                if idx >= inst_bytes.len() {
                     return DecodeResult::Error("XOR missing modrm");
                 }
-                let modrm = inst_bytes[index];
-                index += 1;
+                let modrm = inst_bytes[idx];
+                idx += 1;
                 
                 let mod_field = (modrm >> 6) & 3;
                 let reg = ((modrm >> 3) & 7) + if rex_r { 8 } else { 0 };
@@ -591,86 +591,86 @@ match opcode {
                 
                 if mod_field == 3 {
                     // Register-register
-                    let source = self.cpu.get_register(reg);
-                    let destination = self.cpu.get_register(rm);
-                    let result = destination ^ source;
-                    self.cpu.set_register(rm, result);
+                    let src = self.cpu.get_reg(reg);
+                    let dst = self.cpu.get_reg(rm);
+                    let result = dst ^ src;
+                    self.cpu.set_reg(rm, result);
                     self.update_flags_logic(result);
                 }
-                self.cpu.rip += index as u64;
+                self.cpu.rip += idx as u64;
             }
             
             // XOR r32, r/m32
             0x31 => {
-                if index >= inst_bytes.len() {
+                if idx >= inst_bytes.len() {
                     return DecodeResult::Error("XOR missing modrm");
                 }
-                let modrm = inst_bytes[index];
-                index += 1;
+                let modrm = inst_bytes[idx];
+                idx += 1;
                 
                 let mod_field = (modrm >> 6) & 3;
                 let reg = ((modrm >> 3) & 7) + if rex_r { 8 } else { 0 };
                 let rm = (modrm & 7) + if rex_b { 8 } else { 0 };
                 
                 if mod_field == 3 {
-                    let source = self.cpu.get_register(reg) as u32;
-                    let destination = self.cpu.get_register(rm) as u32;
-                    let result = destination ^ source;
-                    self.cpu.set_register(rm, result as u64);
+                    let src = self.cpu.get_reg(reg) as u32;
+                    let dst = self.cpu.get_reg(rm) as u32;
+                    let result = dst ^ src;
+                    self.cpu.set_reg(rm, result as u64);
                     self.update_flags_logic(result as u64);
                 }
-                self.cpu.rip += index as u64;
+                self.cpu.rip += idx as u64;
             }
             
             // CALL rel32
             0xE8 => {
-                if index + 4 > inst_bytes.len() {
+                if idx + 4 > inst_bytes.len() {
                     return DecodeResult::Error("CALL truncated");
                 }
-                let relative = i32::from_le_bytes([
-                    inst_bytes[index], inst_bytes[index + 1],
-                    inst_bytes[index + 2], inst_bytes[index + 3],
+                let rel = i32::from_le_bytes([
+                    inst_bytes[idx], inst_bytes[idx + 1],
+                    inst_bytes[idx + 2], inst_bytes[idx + 3],
                 ]);
-                let next_rip = self.cpu.rip + (index + 4) as u64;
+                let next_rip = self.cpu.rip + (idx + 4) as u64;
                 self.cpu.rsp -= 8;
                 let _ = self.memory.write_u64(self.cpu.rsp, next_rip);
-                self.cpu.rip = (next_rip as i64 + relative as i64) as u64;
+                self.cpu.rip = (next_rip as i64 + rel as i64) as u64;
             }
             
             // JMP rel32
             0xE9 => {
-                if index + 4 > inst_bytes.len() {
+                if idx + 4 > inst_bytes.len() {
                     return DecodeResult::Error("JMP truncated");
                 }
-                let relative = i32::from_le_bytes([
-                    inst_bytes[index], inst_bytes[index + 1],
-                    inst_bytes[index + 2], inst_bytes[index + 3],
+                let rel = i32::from_le_bytes([
+                    inst_bytes[idx], inst_bytes[idx + 1],
+                    inst_bytes[idx + 2], inst_bytes[idx + 3],
                 ]);
-                let next_rip = self.cpu.rip + (index + 4) as u64;
-                self.cpu.rip = (next_rip as i64 + relative as i64) as u64;
+                let next_rip = self.cpu.rip + (idx + 4) as u64;
+                self.cpu.rip = (next_rip as i64 + rel as i64) as u64;
             }
             
             // JMP rel8
             0xEB => {
-                if index >= inst_bytes.len() {
+                if idx >= inst_bytes.len() {
                     return DecodeResult::Error("JMP rel8 truncated");
                 }
-                let relative = inst_bytes[index] as i8;
-                let next_rip = self.cpu.rip + (index + 1) as u64;
-                self.cpu.rip = (next_rip as i64 + relative as i64) as u64;
+                let rel = inst_bytes[idx] as i8;
+                let next_rip = self.cpu.rip + (idx + 1) as u64;
+                self.cpu.rip = (next_rip as i64 + rel as i64) as u64;
             }
             
             // Conditional jumps (JCC rel8)
             0x70..=0x7F => {
-                if index >= inst_bytes.len() {
+                if idx >= inst_bytes.len() {
                     return DecodeResult::Error("Jcc truncated");
                 }
-                let relative = inst_bytes[index] as i8;
+                let rel = inst_bytes[idx] as i8;
                 let condition = opcode & 0x0F;
-                let next_rip = self.cpu.rip + (index + 1) as u64;
+                let next_rip = self.cpu.rip + (idx + 1) as u64;
                 
                 if self.check_condition(condition) {
-                    self.cpu.rip = (next_rip as i64 + relative as i64) as u64;
+                    self.cpu.rip = (next_rip as i64 + rel as i64) as u64;
                 } else {
                     self.cpu.rip = next_rip;
                 }
@@ -679,7 +679,7 @@ match opcode {
             // INT3 (breakpoint)
             0xCC => {
                 crate::serial_println!("[INTERP] INT3 at 0x{:x}", self.cpu.rip);
-                self.cpu.rip += index as u64;
+                self.cpu.rip += idx as u64;
             }
             
             // HLT
@@ -693,7 +693,7 @@ match opcode {
                     opcode, self.cpu.rip
                 );
                 // Skip unknown instruction
-                self.cpu.rip += index as u64;
+                self.cpu.rip += idx as u64;
             }
         }
         
@@ -808,10 +808,10 @@ match syscall_number {
             // write(fd, buf, count)
             1 => {
                 let fd = arg1 as i32;
-                let buffer = arg2;
+                let buf = arg2;
                 let count = arg3 as usize;
                 
-                if let Ok(data) = self.memory.read(buffer, count) {
+                if let Ok(data) = self.memory.read(buf, count) {
                                         // Pattern matching — Rust's exhaustive branching construct.
 match self.fds.get(&fd) {
                         Some(FileDescriptor::Stdout) | Some(FileDescriptor::Stderr) => {
@@ -830,7 +830,7 @@ match self.fds.get(&fd) {
             // read(fd, buf, count)
             0 => {
                 let fd = arg1 as i32;
-                let buffer = arg2;
+                let buf = arg2;
                 let count = arg3 as usize;
                 
                                 // Pattern matching — Rust's exhaustive branching construct.
@@ -840,7 +840,7 @@ match self.fds.get(&fd) {
                         let mut read_count = 0;
                         while read_count < count {
                             if let Some(c) = crate::keyboard::read_char() {
-                                let _ = self.memory.write_u8(buffer + read_count as u64, c);
+                                let _ = self.memory.write_u8(buf + read_count as u64, c);
                                 read_count += 1;
                                 if c == b'\n' {
                                     break;
@@ -864,31 +864,31 @@ match self.fds.get(&fd) {
             
             // brk(addr)
             12 => {
-                let address = arg1;
-                if address == 0 {
+                let addr = arg1;
+                if addr == 0 {
                     self.memory.brk() as i64
                 } else {
-                    self.memory.set_brk(address);
-                    address as i64
+                    self.memory.set_brk(addr);
+                    addr as i64
                 }
             }
             
             // mmap
             9 => {
-                let address = arg1;
+                let addr = arg1;
                 let length = arg2 as usize;
                 let _prot = arg3;
                 let _flags = arg4;
                 
                 // Simple anonymous mmap
-                let map_address = if address == 0 {
+                let map_address = if addr == 0 {
                     self.memory.brk()
                 } else {
-                    address
+                    addr
                 };
                 
                 self.memory.map(map_address, length, true, true, false);
-                if address == 0 {
+                if addr == 0 {
                     self.memory.set_brk(map_address + length as u64);
                 }
                 
@@ -913,25 +913,25 @@ match self.fds.get(&fd) {
             // uname
             63 => {
                 // Write uname struct at arg1
-                let buffer = arg1;
+                let buf = arg1;
                 let uname_data = b"Linux\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
-                let _ = self.memory.write(buffer, uname_data);
+                let _ = self.memory.write(buf, uname_data);
                 0
             }
             
             // arch_prctl
             158 => {
                 let code = arg1;
-                let address = arg2;
+                let addr = arg2;
                 
                                 // Pattern matching — Rust's exhaustive branching construct.
 match code {
                     0x1002 => { // ARCH_SET_FS
-                        self.cpu.fs = address;
+                        self.cpu.fs = addr;
                         0
                     }
                     0x1003 => { // ARCH_SET_GS
-                        self.cpu.gs = address;
+                        self.cpu.gs = addr;
                         0
                     }
                     _ => -22, // EINVAL

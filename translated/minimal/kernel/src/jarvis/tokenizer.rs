@@ -20,62 +20,62 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 
-pub const CIK_: u8 = 0x00;
-pub const ZP_: u8 = 0x01;  
-pub const ABV_: u8 = 0x02;  
-pub const CSD_: u8 = 0x03;  
+pub const CLT_: u8 = 0x00;
+pub const ABA_: u8 = 0x01;  
+pub const ADL_: u8 = 0x02;  
+pub const CVU_: u8 = 0x03;  
 
 
-pub fn cxj(text: &str) -> Vec<u8> {
-    let mut eb = Vec::fc(text.len() + 2);
-    eb.push(ZP_);
-    for hf in text.bf() {
-        eb.push(hf);
+pub fn bbj(text: &str) -> Vec<u8> {
+    let mut tokens = Vec::with_capacity(text.len() + 2);
+    tokens.push(ABA_);
+    for byte in text.bytes() {
+        tokens.push(byte);
     }
-    eb.push(ABV_);
-    eb
+    tokens.push(ADL_);
+    tokens
 }
 
 
-pub fn ypj(text: &str) -> Vec<u8> {
-    text.bf().collect()
+pub fn qfb(text: &str) -> Vec<u8> {
+    text.bytes().collect()
 }
 
 
-pub fn hfo(eb: &[u8]) -> String {
-    let mut e = String::fc(eb.len());
-    for &ab in eb {
-        match ab {
-            CIK_ => {}      
-            ZP_ => {}      
-            ABV_ => break,  
-            CSD_ => e.push('\n'),
-            0x20..=0x7E => e.push(ab as char),  
-            0x0A => e.push('\n'),               
-            0x09 => e.push('\t'),               
+pub fn dmo(tokens: &[u8]) -> String {
+    let mut j = String::with_capacity(tokens.len());
+    for &t in tokens {
+        match t {
+            CLT_ => {}      
+            ABA_ => {}      
+            ADL_ => break,  
+            CVU_ => j.push('\n'),
+            0x20..=0x7E => j.push(t as char),  
+            0x0A => j.push('\n'),               
+            0x09 => j.push('\t'),               
             0x0D => {}                           
             _ => {
                 
-                e.push(ab as char);
+                j.push(t as char);
             }
         }
     }
-    e
+    j
 }
 
 
-pub fn ztb(text: &str) -> usize {
+pub fn rap(text: &str) -> usize {
     text.len() 
 }
 
 
-pub fn yzx(bat: u8) -> bool {
-    oh!(bat, 0x20..=0x7E | 0x0A | 0x09)
+pub fn qmv(abm: u8) -> bool {
+    matches!(abm, 0x20..=0x7E | 0x0A | 0x09)
 }
 
 
-pub fn ztc(bat: u8) -> &'static str {
-    match bat {
+pub fn raq(abm: u8) -> &'static str {
+    match abm {
         0x00 => "<PAD>",
         0x01 => "<BOS>",
         0x02 => "<EOS>",

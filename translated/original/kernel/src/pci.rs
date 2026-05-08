@@ -292,6 +292,12 @@ fn init_ecam() {
     }
 }
 
+/// Get the ECAM virtual base address (0 if not available)
+pub fn get_ecam_base() -> Option<u64> {
+    let virt = ECAM_VIRT.load(core::sync::atomic::Ordering::Relaxed);
+    if virt == 0 { None } else { Some(virt) }
+}
+
 /// Read 32-bit value from PCIe ECAM config space (supports full 4K space, offset 0..4095)
 pub fn ecam_config_read32(bus: u8, device: u8, function: u8, offset: u16) -> Option<u32> {
     let virt = ECAM_VIRT.load(core::sync::atomic::Ordering::Relaxed);

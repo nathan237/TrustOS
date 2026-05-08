@@ -61,7 +61,7 @@ pub struct ScanConfig {
     pub target: [u8; 4],
     pub ports: Vec<u16>,
     pub scan_type: ScanType,
-    pub timeout_mouse: u32,
+    pub timeout_ms: u32,
     pub grab_banner: bool,
 }
 
@@ -73,7 +73,7 @@ pub fn new(target: [u8; 4]) -> Self {
             target,
             ports: super::COMMON_PORTS.to_vec(),
             scan_type: ScanType::Syn,
-            timeout_mouse: 1500,
+            timeout_ms: 1500,
             grab_banner: false,
         }
     }
@@ -97,8 +97,8 @@ pub fn with_type(mut self, scan_type: ScanType) -> Self {
     }
 
         // Fonction publique — appelable depuis d'autres modules.
-pub fn with_timeout(mut self, mouse: u32) -> Self {
-        self.timeout_mouse = mouse;
+pub fn with_timeout(mut self, ms: u32) -> Self {
+        self.timeout_ms = ms;
         self
     }
 
@@ -123,7 +123,7 @@ pub struct ScanStats {
     pub open: usize,
     pub closed: usize,
     pub filtered: usize,
-    pub elapsed_mouse: u64,
+    pub elapsed_ms: u64,
 }
 
 /// Run a port scan with the given configuration
@@ -138,9 +138,9 @@ pub fn scan(config: &ScanConfig) -> (Vec<PortResult>, ScanStats) {
     for &port in &config.ports {
         let result = // Correspondance de motifs — branchement exhaustif de Rust.
 match config.scan_type {
-            ScanType::Syn => syn_scan_port(config.target, port, config.timeout_mouse),
-            ScanType::Connect => connect_scan_port(config.target, port, config.timeout_mouse),
-            ScanType::Udp => udp_scan_port(config.target, port, config.timeout_mouse),
+            ScanType::Syn => syn_scan_port(config.target, port, config.timeout_ms),
+            ScanType::Connect => connect_scan_port(config.target, port, config.timeout_ms),
+            ScanType::Udp => udp_scan_port(config.target, port, config.timeout_ms),
         };
 
                 // Correspondance de motifs — branchement exhaustif de Rust.
@@ -156,7 +156,7 @@ match result.state {
         }
     }
 
-    stats.elapsed_mouse = crate::logger::get_ticks().saturating_sub(start);
+    stats.elapsed_ms = crate::logger::get_ticks().saturating_sub(start);
     (results, stats)
 }
 
@@ -166,11 +166,11 @@ match result.state {
 /// - SYN-ACK = open (send RST to close)
 /// - RST = closed
 /// - No response = filtered
-fn syn_scan_port(target: [u8; 4], port: u16, timeout_mouse: u32) -> PortResult {
+fn syn_scan_port(target: [u8; 4], port: u16, timeout_ms: u32) -> PortResult {
     let service = super::service_name(port);
 
     // Send TCP SYN
-    let source_port = // Correspondance de motifs — branchement exhaustif de Rust.
+    let src_port = // Correspondance de motifs — branchement exhaustif de Rust.
 match crate::netstack::tcp::send_syn(target, port) {
         Ok(p) => p,
         Err(_) => {
@@ -186,12 +186,12 @@ match crate::netstack::tcp::send_syn(target, port) {
 loop {
         crate::netstack::poll();
 
-        if let Some(state) = crate::netstack::tcp::get_connection_state(target, port, source_port) {
+        if let Some(state) = crate::netstack::tcp::get_connection_state(target, port, src_port) {
                         // Correspondance de motifs — branchement exhaustif de Rust.
 match state {
                 crate::netstack::tcp::TcpState::Established => {
                     // Port is open! Send RST to close quickly (stealth)
-                    let _ = send_rst(target, port, source_port);
+                    let _ = send_rst(target, port, src_port);
                     return PortResult { port, state: PortState::Open, service, banner: None };
                 }
                 crate::netstack::tcp::TcpState::Closed => {
@@ -201,7 +201,7 @@ match state {
             }
         }
 
-        if crate::logger::get_ticks().saturating_sub(start) > timeout_mouse as u64 {
+        if crate::logger::get_ticks().saturating_sub(start) > timeout_ms as u64 {
             return PortResult { port, state: PortState::Filtered, service, banner: None };
         }
         spins = spins.wrapping_add(1);
@@ -213,13 +213,13 @@ match state {
 }
 
 /// Send a TCP RST to close connection quickly
-fn send_rst(dest_ip: [u8; 4], dest_port: u16, source_port: u16) -> Result<(), &'static str> {
-    let source_ip = crate::network::get_ipv4_config()
+fn send_rst(dest_ip: [u8; 4], dest_port: u16, src_port: u16) -> Result<(), &'static str> {
+    let src_ip = crate::network::get_ipv4_config()
         .map(|(ip, _, _)| *ip.as_bytes())
         .unwrap_or([10, 0, 2, 15]);
 
     let mut segment = alloc::vec::Vec::with_capacity(20);
-    segment.extend_from_slice(&source_port.to_be_bytes());
+    segment.extend_from_slice(&src_port.to_be_bytes());
     segment.extend_from_slice(&dest_port.to_be_bytes());
     segment.extend_from_slice(&0u32.to_be_bytes()); // seq
     segment.extend_from_slice(&0u32.to_be_bytes()); // ack
@@ -231,7 +231,7 @@ fn send_rst(dest_ip: [u8; 4], dest_port: u16, source_port: u16) -> Result<(), &'
 
     // Calculate TCP checksum
     let mut pseudo = alloc::vec::Vec::with_capacity(32);
-    pseudo.extend_from_slice(&source_ip);
+    pseudo.extend_from_slice(&src_ip);
     pseudo.extend_from_slice(&dest_ip);
     pseudo.push(0);
     pseudo.push(6);
@@ -261,10 +261,10 @@ fn inet_checksum(data: &[u8]) -> u16 {
 }
 
 /// TCP Connect scan: full three-way handshake
-fn connect_scan_port(target: [u8; 4], port: u16, timeout_mouse: u32) -> PortResult {
+fn connect_scan_port(target: [u8; 4], port: u16, timeout_ms: u32) -> PortResult {
     let service = super::service_name(port);
 
-    let source_port = // Correspondance de motifs — branchement exhaustif de Rust.
+    let src_port = // Correspondance de motifs — branchement exhaustif de Rust.
 match crate::netstack::tcp::send_syn(target, port) {
         Ok(p) => p,
         Err(_) => {
@@ -273,15 +273,15 @@ match crate::netstack::tcp::send_syn(target, port) {
     };
 
     // Wait for established connection
-    let established = crate::netstack::tcp::wait_for_established(target, port, source_port, timeout_mouse);
+    let established = crate::netstack::tcp::wait_for_established(target, port, src_port, timeout_ms);
 
     if established {
         // Port is open — clean close
-        let _ = crate::netstack::tcp::send_fin(target, port, source_port);
+        let _ = crate::netstack::tcp::send_fin(target, port, src_port);
         PortResult { port, state: PortState::Open, service, banner: None }
     } else {
         // Check if closed (RST received) or filtered (timeout)
-        match crate::netstack::tcp::get_connection_state(target, port, source_port) {
+        match crate::netstack::tcp::get_connection_state(target, port, src_port) {
             Some(crate::netstack::tcp::TcpState::Closed) => {
                 PortResult { port, state: PortState::Closed, service, banner: None }
             }
@@ -293,14 +293,14 @@ match crate::netstack::tcp::send_syn(target, port) {
 }
 
 /// UDP scan: send probe, wait for ICMP unreachable = closed, no response = open|filtered
-fn udp_scan_port(target: [u8; 4], port: u16, timeout_mouse: u32) -> PortResult {
+fn udp_scan_port(target: [u8; 4], port: u16, timeout_ms: u32) -> PortResult {
     let service = super::service_name(port);
 
     // Send UDP probe (service-specific payload for better detection)
     let payload = udp_probe_payload(port);
-    let source_port = crate::netstack::udp::allocator_ephemeral_port();
+    let src_port = crate::netstack::udp::allocator_ephemeral_port();
 
-    if crate::netstack::udp::send_to(target, port, source_port, &payload).is_err() {
+    if crate::netstack::udp::send_to(target, port, src_port, &payload).is_err() {
         return PortResult { port, state: PortState::Filtered, service, banner: None };
     }
 
@@ -313,18 +313,18 @@ loop {
         crate::netstack::poll();
 
         // Check for UDP response (port is definitely open)
-        if crate::netstack::udp::recv_on(source_port).is_some() {
+        if crate::netstack::udp::recv_on(src_port).is_some() {
             return PortResult { port, state: PortState::Open, service, banner: None };
         }
 
         // Check for ICMP destination unreachable (port is closed)
-        if let Some(error) = crate::netstack::icmp::wait_for_error(target, 0) {
-            if error.error_type == crate::netstack::icmp::ICMP_DEST_UNREACHABLE && error.code == 3 {
+        if let Some(err) = crate::netstack::icmp::wait_for_error(target, 0) {
+            if err.error_type == crate::netstack::icmp::ICMP_DEST_UNREACHABLE && err.code == 3 {
                 return PortResult { port, state: PortState::Closed, service, banner: None };
             }
         }
 
-        if crate::logger::get_ticks().saturating_sub(start) > timeout_mouse as u64 {
+        if crate::logger::get_ticks().saturating_sub(start) > timeout_ms as u64 {
             return PortResult { port, state: PortState::OpenFiltered, service, banner: None };
         }
         spins = spins.wrapping_add(1);
@@ -383,8 +383,8 @@ match port {
         }
         // SSDP/UPnP discovery
         1900 => {
-            let message = b"M-SEARCH * HTTP/1.1\r\nHost:239.255.255.250:1900\r\nST:ssdp:all\r\nMAN:\"ssdp:discover\"\r\nMX:1\r\n\r\n";
-            message.to_vec()
+            let msg = b"M-SEARCH * HTTP/1.1\r\nHost:239.255.255.250:1900\r\nST:ssdp:all\r\nMAN:\"ssdp:discover\"\r\nMX:1\r\n\r\n";
+            msg.to_vec()
         }
         // Generic empty probe
         _ => alloc::vec![0x00; 4],

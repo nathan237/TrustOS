@@ -230,7 +230,7 @@ pub struct LabState {
     /// Shell cursor position
     pub shell_cursor: usize,
     /// Sub-states per module type (all always alive, slots just select which to display)
-    pub hardware_state: hardware::HardwareState,
+    pub hw_state: hardware::HardwareState,
     pub trace_state: kernel_trace::KernelTraceState,
     pub guide_state: guide::GuideState,
     pub tree_state: filetree::FileTreeState,
@@ -257,7 +257,7 @@ pub fn new() -> Self {
             switcher: ModuleSwitcher::new(),
             shell_input: String::new(),
             shell_cursor: 0,
-            hardware_state: hardware::HardwareState::new(),
+            hw_state: hardware::HardwareState::new(),
             trace_state: kernel_trace::KernelTraceState::new(),
             guide_state: guide::GuideState::new(),
             tree_state: filetree::FileTreeState::new(),
@@ -332,7 +332,7 @@ pub fn new() -> Self {
     fn dispatch_key(&mut self, key: u8) {
                 // Pattern matching — Rust's exhaustive branching construct.
 match self.focused_module() {
-            PanelId::HardwareStatus => self.hardware_state.handle_key(key),
+            PanelId::HardwareStatus => self.hw_state.handle_key(key),
             PanelId::KernelTrace => self.trace_state.handle_key(key),
             PanelId::CommandGuide => self.guide_state.handle_key(key),
             PanelId::FileTree => self.tree_state.handle_key(key),
@@ -345,12 +345,12 @@ match self.focused_module() {
     }
     
     /// Handle character input (printable)
-    pub fn handle_char(&mut self, character: char) {
+    pub fn handle_char(&mut self, ch: char) {
         if self.switcher.open { return; }
 
         if self.demo_state.active {
             // Forward space to demo as key skip
-            if character == ' ' {
+            if ch == ' ' {
                 self.demo_state.handle_key(0x20);
             }
             return;
@@ -358,11 +358,11 @@ match self.focused_module() {
 
                 // Pattern matching — Rust's exhaustive branching construct.
 match self.focused_module() {
-            PanelId::TrustLangEditor => self.editor_state.handle_char(character),
-            PanelId::CommandGuide => self.guide_state.handle_char(character),
+            PanelId::TrustLangEditor => self.editor_state.handle_char(ch),
+            PanelId::CommandGuide => self.guide_state.handle_char(ch),
             _ => {
                 // Route to shell bar for all other panels
-                self.shell_input.insert(self.shell_cursor, character);
+                self.shell_input.insert(self.shell_cursor, ch);
                 self.shell_cursor += 1;
             }
         }
@@ -422,7 +422,7 @@ match cmd.as_str() {
             }
             "refresh" | "r" => {
                 self.tree_state.handle_key(b'R');
-                self.hardware_state.force_refresh();
+                self.hw_state.force_refresh();
             }
             "run" | "f5" => {
                 self.editor_state.run_code();
@@ -460,8 +460,8 @@ match preset {
             "slots" | "layout" => {
                 // Show current slot assignment in trace
                 for (i, module) in self.slot_assignment.iter().enumerate() {
-                    let message = format!("Slot {} [{}]: {}", i, SLOT_NAMES[i], module.short_name());
-                    trace_bus::emit(trace_bus::EventCategory::Custom, message, i as u64);
+                    let msg = format!("Slot {} [{}]: {}", i, SLOT_NAMES[i], module.short_name());
+                    trace_bus::emit(trace_bus::EventCategory::Custom, msg, i as u64);
                 }
                 self.focus_module(PanelId::KernelTrace);
             }
@@ -477,24 +477,24 @@ match preset {
     }
     
     /// Handle mouse click (coordinates relative to window content area)
-    pub fn handle_click(&mut self, receive: i32, ry: i32, ww: u32, wh: u32) {
+    pub fn handle_click(&mut self, rx: i32, ry: i32, ww: u32, wh: u32) {
         // If switcher is open, handle click on switcher or close it
         if self.switcher.open {
-            self.handle_switcher_click(receive, ry, ww, wh);
+            self.handle_switcher_click(rx, ry, ww, wh);
             return;
         }
 
         let cx = 2i32;
         let cy = TITLE_BAR_HEIGHT as i32 + 2;
         let cw = ww.saturating_sub(4);
-        let character = wh.saturating_sub(TITLE_BAR_HEIGHT + 4);
-        if cw < 200 || character < 100 { return; }
+        let ch = wh.saturating_sub(TITLE_BAR_HEIGHT + 4);
+        if cw < 200 || ch < 100 { return; }
 
-        let panels = compute_panels(cx, cy, cw, character);
+        let panels = compute_panels(cx, cy, cw, ch);
 
         // Check if click is inside a panel
         for (i, pr) in panels.iter().enumerate() {
-            if receive >= pr.x && receive < pr.x + pr.w as i32
+            if rx >= pr.x && rx < pr.x + pr.w as i32
                 && ry >= pr.y && ry < pr.y + pr.h as i32
             {
                 self.focused_slot = i;
@@ -502,7 +502,7 @@ match preset {
 
                 // Check if click is on the ▼ swap button in header
                 let swap_button_x = pr.x + pr.w as i32 - 24;
-                if ry < pr.y + PANEL_HEADER_H as i32 && receive >= swap_button_x {
+                if ry < pr.y + PANEL_HEADER_H as i32 && rx >= swap_button_x {
                     self.open_switcher(i);
                     return;
                 }
@@ -512,7 +512,7 @@ match preset {
                 let content_y = pr.y + PANEL_HEADER_H as i32 + PANEL_PADDING as i32;
                 let content_w = pr.w.saturating_sub(PANEL_PADDING * 2);
                 let content_h = pr.h.saturating_sub(PANEL_HEADER_H + PANEL_PADDING * 2);
-                let local_x = receive - content_x;
+                let local_x = rx - content_x;
                 let local_y = ry - content_y;
 
                 // Dispatch click to the module loaded in this slot
@@ -523,14 +523,14 @@ match preset {
 
         // Click on shell bar — focus stays, position cursor
         let gap = 4u32;
-        let shell_y = cy + (character - SHELL_BAR_H) as i32;
+        let shell_y = cy + (ch - SHELL_BAR_H) as i32;
         if ry >= shell_y && ry < shell_y + SHELL_BAR_H as i32 {
             let cw_pixel = char_w();
             if cw_pixel > 0 {
                 let prompt_length = 5; // "lab> "
                 let input_x = cx + 8 + prompt_length * cw_pixel;
-                let click_column = ((receive - input_x) / cw_pixel).maximum(0) as usize;
-                self.shell_cursor = click_column.minimum(self.shell_input.len());
+                let click_column = ((rx - input_x) / cw_pixel).max(0) as usize;
+                self.shell_cursor = click_column.min(self.shell_input.len());
             }
         }
     }
@@ -539,7 +539,7 @@ match preset {
     fn dispatch_click(&mut self, pid: PanelId, lx: i32, ly: i32, w: u32, h: u32) {
                 // Pattern matching — Rust's exhaustive branching construct.
 match pid {
-            PanelId::HardwareStatus => self.hardware_state.handle_click(lx, ly, w, h),
+            PanelId::HardwareStatus => self.hw_state.handle_click(lx, ly, w, h),
             PanelId::KernelTrace => self.trace_state.handle_click(lx, ly, w, h),
             PanelId::CommandGuide => self.guide_state.handle_click(lx, ly, w, h),
             PanelId::FileTree => self.tree_state.handle_click(lx, ly, w, h),
@@ -554,14 +554,14 @@ match pid {
     /// Update per-frame state
     pub fn tick(&mut self) {
         self.frame += 1;
-        self.hardware_state.update();
+        self.hw_state.update();
         self.trace_state.update();
         self.pipeline_state.update();
         self.vm_inspector_state.update();
         // Demo tick: auto-focus panels
-        if let Some(panel_index) = self.demo_state.tick() {
+        if let Some(panel_idx) = self.demo_state.tick() {
             // Demo uses original slot indices
-            self.focused_slot = panel_index.minimum(6);
+            self.focused_slot = panel_idx.min(6);
         }
     }
 
@@ -607,9 +607,9 @@ match key {
                     let module = all[self.switcher.selected];
                     let slot = self.switcher.target_slot;
                     self.slot_assignment[slot] = module;
-                    let message = format!("Slot {} [{}] -> {}",
+                    let msg = format!("Slot {} [{}] -> {}",
                         slot, SLOT_NAMES[slot], module.short_name());
-                    trace_bus::emit(trace_bus::EventCategory::Custom, message, 0);
+                    trace_bus::emit(trace_bus::EventCategory::Custom, msg, 0);
                 }
                 self.switcher.open = false;
             }
@@ -619,8 +619,8 @@ match key {
                 }
             }
             k if k == KEY_DOWN => {
-                let maximum = PanelId::all().len() - 1;
-                if self.switcher.selected < maximum {
+                let max = PanelId::all().len() - 1;
+                if self.switcher.selected < max {
                     self.switcher.selected += 1;
                 }
             }
@@ -629,14 +629,14 @@ match key {
     }
 
     /// Handle click on module switcher overlay
-    fn handle_switcher_click(&mut self, receive: i32, ry: i32, ww: u32, wh: u32) {
+    fn handle_switcher_click(&mut self, rx: i32, ry: i32, ww: u32, wh: u32) {
         let cx = 2i32;
         let cy = TITLE_BAR_HEIGHT as i32 + 2;
         let cw = ww.saturating_sub(4);
-        let character = wh.saturating_sub(TITLE_BAR_HEIGHT + 4);
-        if cw < 200 || character < 100 { self.switcher.open = false; return; }
+        let ch = wh.saturating_sub(TITLE_BAR_HEIGHT + 4);
+        if cw < 200 || ch < 100 { self.switcher.open = false; return; }
 
-        let panels = compute_panels(cx, cy, cw, character);
+        let panels = compute_panels(cx, cy, cw, ch);
         let slot = self.switcher.target_slot;
         if slot >= panels.len() { self.switcher.open = false; return; }
         let pr = &panels[slot];
@@ -648,7 +648,7 @@ match key {
         let ow = pr.w.saturating_sub(8);
         let oh = pr.h.saturating_sub(8);
 
-        if receive >= ox && receive < ox + ow as i32 && ry >= oy && ry < oy + oh as i32 {
+        if rx >= ox && rx < ox + ow as i32 && ry >= oy && ry < oy + oh as i32 {
             // Calculate which entry was clicked
             let list_y_start = oy + 24; // after title + separator
             let row_h = char_h();
@@ -660,9 +660,9 @@ match key {
                     // For simplicity, single click selects and applies
                     let module = PanelId::all()[entry];
                     self.slot_assignment[slot] = module;
-                    let message = format!("Slot {} [{}] -> {}",
+                    let msg = format!("Slot {} [{}] -> {}",
                         slot, SLOT_NAMES[slot], module.short_name());
-                    trace_bus::emit(trace_bus::EventCategory::Custom, message, 0);
+                    trace_bus::emit(trace_bus::EventCategory::Custom, msg, 0);
                     self.switcher.open = false;
                 }
             }
@@ -691,22 +691,22 @@ pub(crate) struct PanelRect {
     pub(crate) h: u32,
 }
 
-pub(crate) fn compute_panels(cx: i32, cy: i32, cw: u32, character: u32) -> [PanelRect; 7] {
+pub(crate) fn compute_panels(cx: i32, cy: i32, cw: u32, ch: u32) -> [PanelRect; 7] {
     let gap = 4u32;
     // Reserve bottom for shell bar
-    let content_h = character.saturating_sub(SHELL_BAR_H + gap);
+    let content_h = ch.saturating_sub(SHELL_BAR_H + gap);
     
-    let column_w = (cw.saturating_sub(gap * 2)) / 3;
+    let col_w = (cw.saturating_sub(gap * 2)) / 3;
     let row_h = (content_h.saturating_sub(gap)) / 2;
     
     let x0 = cx;
-    let x1 = cx + column_w as i32 + gap as i32;
-    let x2 = cx + (column_w as i32 + gap as i32) * 2;
+    let x1 = cx + col_w as i32 + gap as i32;
+    let x2 = cx + (col_w as i32 + gap as i32) * 2;
     let y0 = cy;
     let y1 = cy + row_h as i32 + gap as i32;
     
     // Right column: clamp width so it doesn't overflow the window
-    let col2_w = (cw as i32 - (x2 - cx)).maximum(40) as u32;
+    let col2_w = (cw as i32 - (x2 - cx)).max(40) as u32;
     
     // Top-middle is split in half vertically: Trace (top) + Pipeline (bottom)
     let trace_h = row_h.saturating_sub(gap) / 2;
@@ -714,12 +714,12 @@ pub(crate) fn compute_panels(cx: i32, cy: i32, cw: u32, character: u32) -> [Pane
     let pipe_y = y0 + trace_h as i32 + gap as i32;
     
     [
-        PanelRect { x: x0, y: y0, w: column_w, h: row_h },          // 0: Hardware Status
-        PanelRect { x: x1, y: y0, w: column_w, h: trace_h },        // 1: Kernel Trace (top half)
+        PanelRect { x: x0, y: y0, w: col_w, h: row_h },          // 0: Hardware Status
+        PanelRect { x: x1, y: y0, w: col_w, h: trace_h },        // 1: Kernel Trace (top half)
         PanelRect { x: x2, y: y0, w: col2_w, h: row_h },         // 2: Command Guide
-        PanelRect { x: x0, y: y1, w: column_w, h: row_h },          // 3: File Tree
-        PanelRect { x: x1, y: y1, w: column_w, h: row_h },          // 4: TrustLang Editor
-        PanelRect { x: x1, y: pipe_y, w: column_w, h: pipe_h },     // 5: Pipeline View (bottom half)
+        PanelRect { x: x0, y: y1, w: col_w, h: row_h },          // 3: File Tree
+        PanelRect { x: x1, y: y1, w: col_w, h: row_h },          // 4: TrustLang Editor
+        PanelRect { x: x1, y: pipe_y, w: col_w, h: pipe_h },     // 5: Pipeline View (bottom half)
         PanelRect { x: x2, y: y1, w: col2_w, h: row_h },         // 6: Hex Editor
     ]
 }
@@ -729,17 +729,17 @@ pub fn draw_lab(state: &LabState, wx: i32, wy: i32, ww: u32, wh: u32) {
     let cx = wx + 2;
     let cy = wy + TITLE_BAR_HEIGHT as i32 + 2;
     let cw = ww.saturating_sub(4);
-    let character = wh.saturating_sub(TITLE_BAR_HEIGHT + 4);
+    let ch = wh.saturating_sub(TITLE_BAR_HEIGHT + 4);
     
-    if cw < 200 || character < 100 {
+    if cw < 200 || ch < 100 {
         return;
     }
     
     // Background
-    crate::framebuffer::fill_rect(cx as u32, cy as u32, cw, character, COLUMN_BG);
+    crate::framebuffer::fill_rect(cx as u32, cy as u32, cw, ch, COLUMN_BG);
     
     // Compute panel layout
-    let panels = compute_panels(cx, cy, cw, character);
+    let panels = compute_panels(cx, cy, cw, ch);
     
     // Draw each panel (module type comes from slot_assignment)
     for (i, pr) in panels.iter().enumerate() {
@@ -758,7 +758,7 @@ pub fn draw_lab(state: &LabState, wx: i32, wy: i32, ww: u32, wh: u32) {
     
     // Draw shell bar at bottom
     let gap = 4u32;
-    let shell_y = cy + (character - SHELL_BAR_H) as i32;
+    let shell_y = cy + (ch - SHELL_BAR_H) as i32;
     draw_shell_bar(state, cx, shell_y, cw, SHELL_BAR_H);
 
     // Module switcher overlay (drawn on top of panels)
@@ -782,11 +782,11 @@ fn draw_panel_frame(pr: &PanelRect, pid: PanelId, focused: bool) {
     draw_rect_border(pr.x, pr.y, pr.w, pr.h, border_color);
     
     // Header bar
-    let header_bg = if focused { 0xFF1F2937 } else { COLUMN_HEADER_BG };
+    let hdr_bg = if focused { 0xFF1F2937 } else { COLUMN_HEADER_BG };
     crate::framebuffer::fill_rect(
         (pr.x + 1) as u32, (pr.y + 1) as u32,
         pr.w.saturating_sub(2), PANEL_HEADER_H - 1,
-        header_bg,
+        hdr_bg,
     );
     
     // Colored accent line at top
@@ -802,15 +802,15 @@ fn draw_panel_frame(pr: &PanelRect, pid: PanelId, focused: bool) {
     
     // Swap button (v) at right side of header
     let button_x = pr.x + pr.w as i32 - 22;
-    let button_color = if focused { COLUMN_ACCENT } else { COLUMN_DIM };
-    draw_lab_text(button_x, pr.y + 6, "\u{25BC}", button_color);
+    let btn_color = if focused { COLUMN_ACCENT } else { COLUMN_DIM };
+    draw_lab_text(button_x, pr.y + 6, "\u{25BC}", btn_color);
 }
 
 /// Draw the content of a module into a given area
 fn draw_module_content(state: &LabState, pid: PanelId, x: i32, y: i32, w: u32, h: u32) {
         // Pattern matching — Rust's exhaustive branching construct.
 match pid {
-        PanelId::HardwareStatus => hardware::draw(&state.hardware_state, x, y, w, h),
+        PanelId::HardwareStatus => hardware::draw(&state.hw_state, x, y, w, h),
         PanelId::KernelTrace => kernel_trace::draw(&state.trace_state, x, y, w, h),
         PanelId::CommandGuide => guide::draw(&state.guide_state, x, y, w, h),
         PanelId::FileTree => filetree::draw(&state.tree_state, x, y, w, h),
@@ -846,13 +846,13 @@ fn draw_module_switcher(state: &LabState, panels: &[PanelRect; 7]) {
     crate::framebuffer::fill_rect((ox + 1) as u32, separator_y as u32, ow.saturating_sub(2), 1, COLUMN_PANEL_BORDER);
 
     // Module list
-    let character = char_h();
+    let ch = char_h();
     let all = PanelId::all();
     let current = state.slot_assignment[slot];
     let mut row_y = separator_y + 4;
 
     for (i, module) in all.iter().enumerate() {
-        if row_y + character > oy + oh as i32 - character { break; } // don't overflow
+        if row_y + ch > oy + oh as i32 - ch { break; } // don't overflow
 
         let is_selected = i == state.switcher.selected;
         let is_current = *module == current;
@@ -861,7 +861,7 @@ fn draw_module_switcher(state: &LabState, panels: &[PanelRect; 7]) {
         if is_selected {
             crate::framebuffer::fill_rect(
                 (ox + 2) as u32, row_y as u32,
-                ow.saturating_sub(4), character as u32,
+                ow.saturating_sub(4), ch as u32,
                 0xFF1F6FEB,
             );
         }
@@ -879,11 +879,11 @@ fn draw_module_switcher(state: &LabState, panels: &[PanelRect; 7]) {
             8, 8, module.icon_color(),
         );
 
-        row_y += character;
+        row_y += ch;
     }
 
     // Bottom hint
-    let hint_y = oy + oh as i32 - character;
+    let hint_y = oy + oh as i32 - ch;
     draw_lab_text(ox + 8, hint_y, "Up/Down Enter Esc", COLUMN_DIM);
 }
 
@@ -951,22 +951,22 @@ fn draw_rect_border(x: i32, y: i32, w: u32, h: u32, color: u32) {
 /// Draw a horizontal progress bar
 pub fn draw_progress_bar(x: i32, y: i32, w: u32, h: u32, pct: u32, fg: u32, bg: u32) {
     crate::framebuffer::fill_rect(x as u32, y as u32, w, h, bg);
-    let fill_w = (w as u64 * pct.minimum(100) as u64 / 100) as u32;
+    let fill_w = (w as u64 * pct.min(100) as u64 / 100) as u32;
     if fill_w > 0 {
         crate::framebuffer::fill_rect(x as u32, y as u32, fill_w, h, fg);
     }
 }
 
 /// Truncate a string to fit in pixel width
-pub fn truncate_to_width(s: &str, maximum_w: u32) -> &str {
+pub fn truncate_to_width(s: &str, max_w: u32) -> &str {
     let cw = char_w() as u32;
     if cw == 0 { return s; }
-    let maximum_chars = (maximum_w / cw) as usize;
+    let maximum_chars = (max_w / cw) as usize;
     if s.len() <= maximum_chars {
         s
     } else if maximum_chars > 3 {
         &s[..maximum_chars - 3]
     } else {
-        &s[..maximum_chars.minimum(s.len())]
+        &s[..maximum_chars.min(s.len())]
     }
 }

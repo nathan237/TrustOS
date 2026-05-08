@@ -48,7 +48,7 @@ pub fn run(entry: u64, process: &mut LinuxProcess) -> Result<i32, &'static str> 
 pub fn run_script(script: &str, process: &mut LinuxProcess) -> Result<i32, &'static str> {
     // Read the script
     let content = crate::linux::rootfs::read_file(script)?;
-    let text = core::str::from_utf8(&content).map_error(|_| "invalid script")?;
+    let text = core::str::from_utf8(&content).map_err(|_| "invalid script")?;
     
     // Check for shebang
     let lines: Vec<&str> = text.lines().collect();

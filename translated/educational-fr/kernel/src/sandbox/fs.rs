@@ -44,7 +44,7 @@ pub struct SandboxFile {
 // Bloc d'implémentation — définit les méthodes du type ci-dessus.
 impl SandboxFile {
     fn new_file(name: &str, origin: &str) -> Self {
-        let now = crate::time::uptime_mouse();
+        let now = crate::time::uptime_ms();
         Self {
             name: String::from(name),
             file_type: SandboxFileType::File,
@@ -57,7 +57,7 @@ impl SandboxFile {
     }
 
     fn new_directory(name: &str) -> Self {
-        let now = crate::time::uptime_mouse();
+        let now = crate::time::uptime_ms();
         Self {
             name: String::from(name),
             file_type: SandboxFileType::Directory,
@@ -93,8 +93,8 @@ pub struct SandboxFs {
     /// Flat map: normalized path → file entry
     files: BTreeMap<String, SandboxFile>,
     /// Limits
-    maximum_files: usize,
-    maximum_bytes: usize,
+    max_files: usize,
+    max_bytes: usize,
     /// Current usage
     total_bytes: usize,
 }
@@ -102,12 +102,12 @@ pub struct SandboxFs {
 // Bloc d'implémentation — définit les méthodes du type ci-dessus.
 impl SandboxFs {
         // Fonction publique — appelable depuis d'autres modules.
-pub fn new(sandbox_id: SandboxId, maximum_files: usize, maximum_bytes: usize) -> Self {
+pub fn new(sandbox_id: SandboxId, max_files: usize, max_bytes: usize) -> Self {
         let mut fs = Self {
             sandbox_id,
             files: BTreeMap::new(),
-            maximum_files,
-            maximum_bytes,
+            max_files,
+            max_bytes,
             total_bytes: 0,
         };
         // Create root directories
@@ -161,16 +161,16 @@ pub fn new(sandbox_id: SandboxId, maximum_files: usize, maximum_bytes: usize) ->
             // Update: account for size change
             let old_size = existing.data.len();
             let new_total = self.total_bytes - old_size + data.len();
-            if new_total > self.maximum_bytes {
+            if new_total > self.max_bytes {
                 return Err(FsError::QuotaBytes);
             }
             self.total_bytes = new_total;
         } else {
             // New file: check quotas
-            if self.files.len() >= self.maximum_files {
+            if self.files.len() >= self.max_files {
                 return Err(FsError::QuotaFiles);
             }
-            if self.total_bytes + data.len() > self.maximum_bytes {
+            if self.total_bytes + data.len() > self.max_bytes {
                 return Err(FsError::QuotaBytes);
             }
             self.total_bytes += data.len();
@@ -256,7 +256,7 @@ match self.files.get(&path) {
         if self.files.contains_key(&path) {
             return Err(FsError::AlreadyExists);
         }
-        if self.files.len() >= self.maximum_files {
+        if self.files.len() >= self.max_files {
             return Err(FsError::QuotaFiles);
         }
         self.files.insert(path.clone(), SandboxFile::new_directory(
@@ -300,14 +300,14 @@ match self.files.get(&path) {
     /// Cache a response body
     pub fn cache_response(&mut self, url: &str, data: &[u8]) -> Result<(), FsError> {
         // Simple hash of URL for filename
-        let hash = url.bytes().fold(0u64, |accumulator, b| accumulator.wrapping_mul(31).wrapping_add(b as u64));
+        let hash = url.bytes().fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
         let path = format!("/cache/{:016x}", hash);
         self.write(&path, data, "cache")
     }
 
     /// Get cached response
     pub fn get_cached(&self, url: &str) -> Option<&[u8]> {
-        let hash = url.bytes().fold(0u64, |accumulator, b| accumulator.wrapping_mul(31).wrapping_add(b as u64));
+        let hash = url.bytes().fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
         let path = format!("/cache/{:016x}", hash);
         self.read(&path).ok()
     }
@@ -319,7 +319,7 @@ match self.files.get(&path) {
         let file_count = self.files.values()
             .filter(|f| f.file_type == SandboxFileType::File)
             .count();
-        (file_count, self.maximum_files, self.total_bytes, self.maximum_bytes)
+        (file_count, self.max_files, self.total_bytes, self.max_bytes)
     }
 
     /// Clear all files (reset filesystem)
@@ -337,8 +337,8 @@ match self.files.get(&path) {
     /// Display filesystem tree
     pub fn tree(&self) -> String {
         let mut out = String::from("Sandbox FS (");
-        let (files, maximum_f, bytes, maximum_b) = self.usage();
-        out.push_str(&format!("{}/{} files, {}/{} bytes)\n", files, maximum_f, bytes, maximum_b));
+        let (files, max_f, bytes, max_b) = self.usage();
+        out.push_str(&format!("{}/{} files, {}/{} bytes)\n", files, max_f, bytes, max_b));
 
         let mut sorted: Vec<_> = self.files.keys().collect();
         sorted.sort();

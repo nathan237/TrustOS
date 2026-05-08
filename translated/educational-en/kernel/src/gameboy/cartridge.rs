@@ -103,7 +103,7 @@ match data[0x149] {
             r
         };
 
-        let ram = vec![0u8; ram_size.maximum(8192)];
+        let ram = vec![0u8; ram_size.max(8192)];
 
         let title_str: Vec<u8> = title.iter().copied().take_while(|&c| c != 0 && c >= 0x20).collect();
         crate::serial_println!("[GB] ROM: \"{}\" type={:#04X} mbc={:?} ROM={}KB RAM={}KB CGB={:#04X}",
@@ -129,114 +129,114 @@ match mbc_type { MbcType::None => "None", MbcType::Mbc1 => "MBC1", MbcType::Mbc3
     }
 
         // Public function — callable from other modules.
-pub fn read(&self, address: u16) -> u8 {
+pub fn read(&self, addr: u16) -> u8 {
                 // Pattern matching — Rust's exhaustive branching construct.
 match self.mbc_type {
-            MbcType::None => self.mbc0_read(address),
-            MbcType::Mbc1 => self.mbc1_read(address),
-            MbcType::Mbc3 => self.mbc3_read(address),
-            MbcType::Mbc5 => self.mbc5_read(address),
+            MbcType::None => self.mbc0_read(addr),
+            MbcType::Mbc1 => self.mbc1_read(addr),
+            MbcType::Mbc3 => self.mbc3_read(addr),
+            MbcType::Mbc5 => self.mbc5_read(addr),
         }
     }
 
         // Public function — callable from other modules.
-pub fn write(&mut self, address: u16, value: u8) {
+pub fn write(&mut self, addr: u16, val: u8) {
                 // Pattern matching — Rust's exhaustive branching construct.
 match self.mbc_type {
-            MbcType::None => self.mbc0_write(address, value),
-            MbcType::Mbc1 => self.mbc1_write(address, value),
-            MbcType::Mbc3 => self.mbc3_write(address, value),
-            MbcType::Mbc5 => self.mbc5_write(address, value),
+            MbcType::None => self.mbc0_write(addr, val),
+            MbcType::Mbc1 => self.mbc1_write(addr, val),
+            MbcType::Mbc3 => self.mbc3_write(addr, val),
+            MbcType::Mbc5 => self.mbc5_write(addr, val),
         }
     }
 
     // ======================== MBC0 ========================
-    fn mbc0_read(&self, address: u16) -> u8 {
+    fn mbc0_read(&self, addr: u16) -> u8 {
                 // Pattern matching — Rust's exhaustive branching construct.
-match address {
+match addr {
             0x0000..=0x7FFF => {
-                if (address as usize) < self.rom.len() { self.rom[address as usize] } else { 0xFF }
+                if (addr as usize) < self.rom.len() { self.rom[addr as usize] } else { 0xFF }
             }
             0xA000..=0xBFFF => {
-                let index = (address - 0xA000) as usize;
-                if index < self.ram.len() { self.ram[index] } else { 0xFF }
+                let idx = (addr - 0xA000) as usize;
+                if idx < self.ram.len() { self.ram[idx] } else { 0xFF }
             }
             _ => 0xFF,
         }
     }
-    fn mbc0_write(&mut self, address: u16, value: u8) {
-        if address >= 0xA000 && address <= 0xBFFF {
-            let index = (address - 0xA000) as usize;
-            if index < self.ram.len() { self.ram[index] = value; }
+    fn mbc0_write(&mut self, addr: u16, val: u8) {
+        if addr >= 0xA000 && addr <= 0xBFFF {
+            let idx = (addr - 0xA000) as usize;
+            if idx < self.ram.len() { self.ram[idx] = val; }
         }
     }
 
     // ======================== MBC1 ========================
-    fn mbc1_read(&self, address: u16) -> u8 {
+    fn mbc1_read(&self, addr: u16) -> u8 {
                 // Pattern matching — Rust's exhaustive branching construct.
-match address {
+match addr {
             0x0000..=0x3FFF => {
                 if self.mode == 1 {
-                    let bank = ((self.ram_bank as usize & 3) << 5) % (self.rom.len() / 16384).maximum(1);
-                    let index = bank * 16384 + address as usize;
-                    if index < self.rom.len() { self.rom[index] } else { 0xFF }
+                    let bank = ((self.ram_bank as usize & 3) << 5) % (self.rom.len() / 16384).max(1);
+                    let idx = bank * 16384 + addr as usize;
+                    if idx < self.rom.len() { self.rom[idx] } else { 0xFF }
                 } else {
-                    if (address as usize) < self.rom.len() { self.rom[address as usize] } else { 0xFF }
+                    if (addr as usize) < self.rom.len() { self.rom[addr as usize] } else { 0xFF }
                 }
             }
             0x4000..=0x7FFF => {
                 let bank = if self.rom_bank == 0 { 1 } else { self.rom_bank as usize };
-                let full_bank = (bank | ((self.ram_bank as usize & 3) << 5)) % (self.rom.len() / 16384).maximum(1);
-                let index = full_bank * 16384 + (address as usize - 0x4000);
-                if index < self.rom.len() { self.rom[index] } else { 0xFF }
+                let full_bank = (bank | ((self.ram_bank as usize & 3) << 5)) % (self.rom.len() / 16384).max(1);
+                let idx = full_bank * 16384 + (addr as usize - 0x4000);
+                if idx < self.rom.len() { self.rom[idx] } else { 0xFF }
             }
             0xA000..=0xBFFF => {
                 if !self.ram_enabled { return 0xFF; }
                 let bank = if self.mode == 1 { self.ram_bank as usize } else { 0 };
-                let index = bank * 8192 + (address as usize - 0xA000);
-                if index < self.ram.len() { self.ram[index] } else { 0xFF }
+                let idx = bank * 8192 + (addr as usize - 0xA000);
+                if idx < self.ram.len() { self.ram[idx] } else { 0xFF }
             }
             _ => 0xFF,
         }
     }
-    fn mbc1_write(&mut self, address: u16, value: u8) {
+    fn mbc1_write(&mut self, addr: u16, val: u8) {
                 // Pattern matching — Rust's exhaustive branching construct.
-match address {
-            0x0000..=0x1FFF => self.ram_enabled = (value & 0x0F) == 0x0A,
+match addr {
+            0x0000..=0x1FFF => self.ram_enabled = (val & 0x0F) == 0x0A,
             0x2000..=0x3FFF => {
-                let mut bank = (value & 0x1F) as u16;
+                let mut bank = (val & 0x1F) as u16;
                 if bank == 0 { bank = 1; }
                 self.rom_bank = bank;
             }
-            0x4000..=0x5FFF => self.ram_bank = value & 3,
-            0x6000..=0x7FFF => self.mode = value & 1,
+            0x4000..=0x5FFF => self.ram_bank = val & 3,
+            0x6000..=0x7FFF => self.mode = val & 1,
             0xA000..=0xBFFF => {
                 if !self.ram_enabled { return; }
                 let bank = if self.mode == 1 { self.ram_bank as usize } else { 0 };
-                let index = bank * 8192 + (address as usize - 0xA000);
-                if index < self.ram.len() { self.ram[index] = value; }
+                let idx = bank * 8192 + (addr as usize - 0xA000);
+                if idx < self.ram.len() { self.ram[idx] = val; }
             }
             _ => {}
         }
     }
 
     // ======================== MBC3 ========================
-    fn mbc3_read(&self, address: u16) -> u8 {
+    fn mbc3_read(&self, addr: u16) -> u8 {
                 // Pattern matching — Rust's exhaustive branching construct.
-match address {
+match addr {
             0x0000..=0x3FFF => {
-                if (address as usize) < self.rom.len() { self.rom[address as usize] } else { 0xFF }
+                if (addr as usize) < self.rom.len() { self.rom[addr as usize] } else { 0xFF }
             }
             0x4000..=0x7FFF => {
                 let bank = if self.rom_bank == 0 { 1 } else { self.rom_bank as usize };
-                let index = (bank % (self.rom.len() / 16384).maximum(1)) * 16384 + (address as usize - 0x4000);
-                if index < self.rom.len() { self.rom[index] } else { 0xFF }
+                let idx = (bank % (self.rom.len() / 16384).max(1)) * 16384 + (addr as usize - 0x4000);
+                if idx < self.rom.len() { self.rom[idx] } else { 0xFF }
             }
             0xA000..=0xBFFF => {
                 if !self.ram_enabled { return 0xFF; }
                 if self.ram_bank <= 3 {
-                    let index = self.ram_bank as usize * 8192 + (address as usize - 0xA000);
-                    if index < self.ram.len() { self.ram[index] } else { 0xFF }
+                    let idx = self.ram_bank as usize * 8192 + (addr as usize - 0xA000);
+                    if idx < self.ram.len() { self.ram[idx] } else { 0xFF }
                 } else {
                     0 // RTC registers (not fully emulated)
                 }
@@ -244,21 +244,21 @@ match address {
             _ => 0xFF,
         }
     }
-    fn mbc3_write(&mut self, address: u16, value: u8) {
+    fn mbc3_write(&mut self, addr: u16, val: u8) {
                 // Pattern matching — Rust's exhaustive branching construct.
-match address {
-            0x0000..=0x1FFF => self.ram_enabled = (value & 0x0F) == 0x0A,
+match addr {
+            0x0000..=0x1FFF => self.ram_enabled = (val & 0x0F) == 0x0A,
             0x2000..=0x3FFF => {
-                let bank = (value & 0x7F) as u16;
+                let bank = (val & 0x7F) as u16;
                 self.rom_bank = if bank == 0 { 1 } else { bank };
             }
-            0x4000..=0x5FFF => self.ram_bank = value,
+            0x4000..=0x5FFF => self.ram_bank = val,
             0x6000..=0x7FFF => {} // RTC latch
             0xA000..=0xBFFF => {
                 if !self.ram_enabled { return; }
                 if self.ram_bank <= 3 {
-                    let index = self.ram_bank as usize * 8192 + (address as usize - 0xA000);
-                    if index < self.ram.len() { self.ram[index] = value; }
+                    let idx = self.ram_bank as usize * 8192 + (addr as usize - 0xA000);
+                    if idx < self.ram.len() { self.ram[idx] = val; }
                 }
             }
             _ => {}
@@ -266,36 +266,36 @@ match address {
     }
 
     // ======================== MBC5 ========================
-    fn mbc5_read(&self, address: u16) -> u8 {
+    fn mbc5_read(&self, addr: u16) -> u8 {
                 // Pattern matching — Rust's exhaustive branching construct.
-match address {
+match addr {
             0x0000..=0x3FFF => {
-                if (address as usize) < self.rom.len() { self.rom[address as usize] } else { 0xFF }
+                if (addr as usize) < self.rom.len() { self.rom[addr as usize] } else { 0xFF }
             }
             0x4000..=0x7FFF => {
                 let bank = self.rom_bank as usize;
-                let index = (bank % (self.rom.len() / 16384).maximum(1)) * 16384 + (address as usize - 0x4000);
-                if index < self.rom.len() { self.rom[index] } else { 0xFF }
+                let idx = (bank % (self.rom.len() / 16384).max(1)) * 16384 + (addr as usize - 0x4000);
+                if idx < self.rom.len() { self.rom[idx] } else { 0xFF }
             }
             0xA000..=0xBFFF => {
                 if !self.ram_enabled { return 0xFF; }
-                let index = (self.ram_bank as usize & 0x0F) * 8192 + (address as usize - 0xA000);
-                if index < self.ram.len() { self.ram[index] } else { 0xFF }
+                let idx = (self.ram_bank as usize & 0x0F) * 8192 + (addr as usize - 0xA000);
+                if idx < self.ram.len() { self.ram[idx] } else { 0xFF }
             }
             _ => 0xFF,
         }
     }
-    fn mbc5_write(&mut self, address: u16, value: u8) {
+    fn mbc5_write(&mut self, addr: u16, val: u8) {
                 // Pattern matching — Rust's exhaustive branching construct.
-match address {
-            0x0000..=0x1FFF => self.ram_enabled = (value & 0x0F) == 0x0A,
-            0x2000..=0x2FFF => self.rom_bank = (self.rom_bank & 0x100) | value as u16,
-            0x3000..=0x3FFF => self.rom_bank = (self.rom_bank & 0xFF) | (((value & 1) as u16) << 8),
-            0x4000..=0x5FFF => self.ram_bank = value & 0x0F,
+match addr {
+            0x0000..=0x1FFF => self.ram_enabled = (val & 0x0F) == 0x0A,
+            0x2000..=0x2FFF => self.rom_bank = (self.rom_bank & 0x100) | val as u16,
+            0x3000..=0x3FFF => self.rom_bank = (self.rom_bank & 0xFF) | (((val & 1) as u16) << 8),
+            0x4000..=0x5FFF => self.ram_bank = val & 0x0F,
             0xA000..=0xBFFF => {
                 if !self.ram_enabled { return; }
-                let index = (self.ram_bank as usize & 0x0F) * 8192 + (address as usize - 0xA000);
-                if index < self.ram.len() { self.ram[index] = value; }
+                let idx = (self.ram_bank as usize & 0x0F) * 8192 + (addr as usize - 0xA000);
+                if idx < self.ram.len() { self.ram[idx] = val; }
             }
             _ => {}
         }

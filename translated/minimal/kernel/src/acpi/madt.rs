@@ -6,13 +6,13 @@
 
 
 use alloc::vec::Vec;
-use super::tables::Ei;
+use super::tables::Bu;
 
 
 #[repr(C, packed)]
-struct Chf {
+struct Ams {
     
-    cap: u32,
+    local_apic_addr: u32,
     
     flags: u32,
 }
@@ -20,254 +20,254 @@ struct Chf {
 
 #[repr(C, packed)]
 #[derive(Clone, Copy)]
-struct Tj {
-    avt: u8,
-    go: u8,
+struct Ih {
+    entry_type: u8,
+    length: u8,
 }
 
 
-const BTV_: u8 = 0;
-const BTU_: u8 = 1;
-const BTT_: u8 = 2;
-const DLE_: u8 = 3;
-const BTX_: u8 = 4;
-const BTW_: u8 = 5;
-const BTY_: u8 = 9;
+const BWR_: u8 = 0;
+const BWQ_: u8 = 1;
+const BWP_: u8 = 2;
+const DOT_: u8 = 3;
+const BWT_: u8 = 4;
+const BWS_: u8 = 5;
+const BWU_: u8 = 9;
 
 
 #[repr(C, packed)]
-struct Cgt {
-    dh: Tj,
+struct Amk {
+    header: Ih,
     
-    qev: u8,
+    acpi_processor_id: u8,
     
-    aed: u8,
+    apic_id: u8,
     
     flags: u32,
 }
 
 
 #[repr(C, packed)]
-struct Cgd {
-    dh: Tj,
+struct Alw {
+    header: Ih,
     
-    twe: u8,
+    io_apic_id: u8,
     
-    asi: u8,
+    _reserved: u8,
     
-    twd: u32,
+    io_apic_addr: u32,
     
-    ech: u32,
+    gsi_base: u32,
 }
 
 
 #[repr(C, packed)]
-struct Cfz {
-    dh: Tj,
+struct Alv {
+    header: Ih,
     
-    aq: u8,
+    bus: u8,
     
-    iy: u8,
+    source: u8,
     
-    bup: u32,
+    gsi: u32,
     
     flags: u16,
 }
 
 
 #[repr(C, packed)]
-struct Cgu {
-    dh: Tj,
+struct Aml {
+    header: Ih,
     
-    jza: u8,
+    acpi_processor_uid: u8,
     
     flags: u16,
     
-    gln: u8,
+    lint: u8,
 }
 
 
 #[repr(C, packed)]
-struct Cgs {
-    dh: Tj,
+struct Amj {
+    header: Ih,
     
-    asi: u16,
+    _reserved: u16,
     
-    cap: u64,
+    local_apic_addr: u64,
 }
 
 
 #[repr(C, packed)]
-struct Cqq {
-    dh: Tj,
+struct Asd {
+    header: Ih,
     
-    asi: u16,
+    _reserved: u16,
     
-    mrm: u32,
+    x2apic_id: u32,
     
     flags: u32,
     
-    jza: u32,
+    acpi_processor_uid: u32,
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Xl {
+pub struct Kc {
     
-    pub aed: u32,
+    pub apic_id: u32,
     
-    pub bny: u32,
+    pub processor_id: u32,
     
-    pub iq: bool,
+    pub enabled: bool,
     
-    pub htp: bool,
+    pub online_capable: bool,
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Ach {
+pub struct Mh {
     
-    pub ad: u8,
+    pub id: u8,
     
-    pub re: u64,
+    pub address: u64,
     
-    pub ech: u32,
+    pub gsi_base: u32,
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Xc {
+pub struct Kb {
     
-    pub iy: u8,
+    pub source: u8,
     
-    pub bup: u32,
+    pub gsi: u32,
     
-    pub dkr: u8,
+    pub polarity: u8,
     
-    pub dmt: u8,
+    pub trigger: u8,
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Acs {
+pub struct Mn {
     
-    pub vmx: u8,
+    pub processor_uid: u8,
     
-    pub gln: u8,
+    pub lint: u8,
     
-    pub dkr: u8,
+    pub polarity: u8,
     
-    pub dmt: u8,
+    pub trigger: u8,
 }
 
 
-pub fn parse(jen: u64) -> Option<(u64, Vec<Xl>, Vec<Ach>, Vec<Xc>, Vec<Acs>)> {
-    let dh = unsafe { &*(jen as *const Ei) };
+pub fn parse(madt_virt: u64) -> Option<(u64, Vec<Kc>, Vec<Mh>, Vec<Kb>, Vec<Mn>)> {
+    let header = unsafe { &*(madt_virt as *const Bu) };
     
     
-    if &dh.signature != b"APIC" {
+    if &header.signature != b"APIC" {
         return None;
     }
     
-    let okr = core::mem::size_of::<Ei>();
-    let ujg = unsafe { 
-        &*((jen + okr as u64) as *const Chf) 
+    let iln = core::mem::size_of::<Bu>();
+    let nbu = unsafe { 
+        &*((madt_virt + iln as u64) as *const Ams) 
     };
     
-    let mut cap = unsafe { 
-        core::ptr::md(core::ptr::vf!(ujg.cap)) 
+    let mut local_apic_addr = unsafe { 
+        core::ptr::read_unaligned(core::ptr::addr_of!(nbu.local_apic_addr)) 
     } as u64;
     
-    let mut dja = Vec::new();
-    let mut cyx = Vec::new();
-    let mut jif = Vec::new();
-    let mut oqq = Vec::new();
+    let mut local_apics = Vec::new();
+    let mut io_apics = Vec::new();
+    let mut evx = Vec::new();
+    let mut iqp = Vec::new();
     
     
-    let fhu = jen + okr as u64 + 8;
-    let xaj = jen + dh.go as u64;
-    let mut l = fhu;
+    let ciy = madt_virt + iln as u64 + 8;
+    let pcu = madt_virt + header.length as u64;
+    let mut offset = ciy;
     
-    while l + 2 <= xaj {
-        let bzn = unsafe { &*(l as *const Tj) };
+    while offset + 2 <= pcu {
+        let aob = unsafe { &*(offset as *const Ih) };
         
-        if bzn.go < 2 {
+        if aob.length < 2 {
             break;
         }
         
-        match bzn.avt {
-            BTV_ => {
-                if bzn.go >= 8 {
-                    let bt = unsafe { &*(l as *const Cgt) };
-                    let flags = unsafe { core::ptr::md(core::ptr::vf!(bt.flags)) };
+        match aob.entry_type {
+            BWR_ => {
+                if aob.length >= 8 {
+                    let entry = unsafe { &*(offset as *const Amk) };
+                    let flags = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(entry.flags)) };
                     
-                    dja.push(Xl {
-                        aed: bt.aed as u32,
-                        bny: bt.qev as u32,
-                        iq: (flags & 1) != 0,
-                        htp: (flags & 2) != 0,
+                    local_apics.push(Kc {
+                        apic_id: entry.apic_id as u32,
+                        processor_id: entry.acpi_processor_id as u32,
+                        enabled: (flags & 1) != 0,
+                        online_capable: (flags & 2) != 0,
                     });
                 }
             }
-            BTU_ => {
-                if bzn.go >= 12 {
-                    let bt = unsafe { &*(l as *const Cgd) };
-                    let ag = unsafe { core::ptr::md(core::ptr::vf!(bt.twd)) };
-                    let ech = unsafe { core::ptr::md(core::ptr::vf!(bt.ech)) };
+            BWQ_ => {
+                if aob.length >= 12 {
+                    let entry = unsafe { &*(offset as *const Alw) };
+                    let addr = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(entry.io_apic_addr)) };
+                    let gsi_base = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(entry.gsi_base)) };
                     
-                    cyx.push(Ach {
-                        ad: bt.twe,
-                        re: ag as u64,
-                        ech,
+                    io_apics.push(Mh {
+                        id: entry.io_apic_id,
+                        address: addr as u64,
+                        gsi_base,
                     });
                 }
             }
-            BTT_ => {
-                if bzn.go >= 10 {
-                    let bt = unsafe { &*(l as *const Cfz) };
-                    let bup = unsafe { core::ptr::md(core::ptr::vf!(bt.bup)) };
-                    let flags = unsafe { core::ptr::md(core::ptr::vf!(bt.flags)) };
+            BWP_ => {
+                if aob.length >= 10 {
+                    let entry = unsafe { &*(offset as *const Alv) };
+                    let gsi = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(entry.gsi)) };
+                    let flags = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(entry.flags)) };
                     
-                    jif.push(Xc {
-                        iy: bt.iy,
-                        bup,
-                        dkr: (flags & 0x03) as u8,
-                        dmt: ((flags >> 2) & 0x03) as u8,
+                    evx.push(Kb {
+                        source: entry.source,
+                        gsi,
+                        polarity: (flags & 0x03) as u8,
+                        trigger: ((flags >> 2) & 0x03) as u8,
                     });
                 }
             }
-            BTW_ => {
-                if bzn.go >= 12 {
-                    let bt = unsafe { &*(l as *const Cgs) };
-                    cap = unsafe { 
-                        core::ptr::md(core::ptr::vf!(bt.cap)) 
+            BWS_ => {
+                if aob.length >= 12 {
+                    let entry = unsafe { &*(offset as *const Amj) };
+                    local_apic_addr = unsafe { 
+                        core::ptr::read_unaligned(core::ptr::addr_of!(entry.local_apic_addr)) 
                     };
                 }
             }
-            BTX_ => {
-                if bzn.go >= 6 {
-                    let bt = unsafe { &*(l as *const Cgu) };
-                    let flags = unsafe { core::ptr::md(core::ptr::vf!(bt.flags)) };
-                    oqq.push(Acs {
-                        vmx: bt.jza,
-                        gln: bt.gln,
-                        dkr: (flags & 0x03) as u8,
-                        dmt: ((flags >> 2) & 0x03) as u8,
+            BWT_ => {
+                if aob.length >= 6 {
+                    let entry = unsafe { &*(offset as *const Aml) };
+                    let flags = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(entry.flags)) };
+                    iqp.push(Mn {
+                        processor_uid: entry.acpi_processor_uid,
+                        lint: entry.lint,
+                        polarity: (flags & 0x03) as u8,
+                        trigger: ((flags >> 2) & 0x03) as u8,
                     });
                 }
             }
-            BTY_ => {
-                if bzn.go >= 16 {
-                    let bt = unsafe { &*(l as *const Cqq) };
-                    let mrm = unsafe { core::ptr::md(core::ptr::vf!(bt.mrm)) };
-                    let flags = unsafe { core::ptr::md(core::ptr::vf!(bt.flags)) };
-                    let pi = unsafe { core::ptr::md(core::ptr::vf!(bt.jza)) };
+            BWU_ => {
+                if aob.length >= 16 {
+                    let entry = unsafe { &*(offset as *const Asd) };
+                    let x2apic_id = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(entry.x2apic_id)) };
+                    let flags = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(entry.flags)) };
+                    let uid = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(entry.acpi_processor_uid)) };
                     
-                    dja.push(Xl {
-                        aed: mrm,
-                        bny: pi,
-                        iq: (flags & 1) != 0,
-                        htp: (flags & 2) != 0,
+                    local_apics.push(Kc {
+                        apic_id: x2apic_id,
+                        processor_id: uid,
+                        enabled: (flags & 1) != 0,
+                        online_capable: (flags & 2) != 0,
                     });
                 }
             }
@@ -276,8 +276,8 @@ pub fn parse(jen: u64) -> Option<(u64, Vec<Xl>, Vec<Ach>, Vec<Xc>, Vec<Acs>)> {
             }
         }
         
-        l += bzn.go as u64;
+        offset += aob.length as u64;
     }
     
-    Some((cap, dja, cyx, jif, oqq))
+    Some((local_apic_addr, local_apics, io_apics, evx, iqp))
 }

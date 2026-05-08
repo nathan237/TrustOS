@@ -23,84 +23,84 @@ use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU64, Ordering};
 
 pub use capability::{Capability, CapabilityId, CapabilityType, CapabilityRights};
-pub use capability::{pbm, tdn, ojp, nop};
-pub use cpu_features::{npw, sle, npx, rxy};
-pub use storage::{StorageOperation, StorageSecurityError, Ik};
+pub use capability::{izk, mda, ikq, huo};
+pub use cpu_features::{hvq, lpu, hvr, lez};
+pub use storage::{StorageOperation, StorageSecurityError, Dn};
 
 
-static Ig: Mutex<BTreeMap<CapabilityId, Capability>> = Mutex::new(BTreeMap::new());
+static Dl: Mutex<BTreeMap<CapabilityId, Capability>> = Mutex::new(BTreeMap::new());
 
 
-static CHM_: AtomicU64 = AtomicU64::new(1);
+static CKV_: AtomicU64 = AtomicU64::new(1);
 
 
-static Aoa: AtomicU64 = AtomicU64::new(0);
+static Qu: AtomicU64 = AtomicU64::new(0);
 
 
 pub fn init() {
     
-    let pdy = Capability::exv();
-    Ig.lock().insert(pdy.ad, pdy);
+    let jbi = Capability::cdl();
+    Dl.lock().insert(jbi.id, jbi);
     
     
     let features = cpu_features::init();
     
     
-    isolation::tty();
+    isolation::mpn();
     
     crate::log!("[SECURITY] Initialized - SMEP:{} SMAP:{} UMIP:{} subsystems:{}",
-        if features.cia { "ON" } else { "off" },
-        if features.cul { "avail" } else { "off" },
-        if features.ddd { "ON" } else { "off" },
-        isolation::ppp()
+        if features.smep { "ON" } else { "off" },
+        if features.smap { "avail" } else { "off" },
+        if features.umip { "ON" } else { "off" },
+        isolation::jjq()
     );
 }
 
 
-pub fn klu(
+pub fn fpa(
     cap_type: CapabilityType,
-    bap: CapabilityRights,
-    awj: u64,
+    rights: CapabilityRights,
+    owner: u64,
 ) -> CapabilityId {
-    let ad = CapabilityId(CHM_.fetch_add(1, Ordering::Relaxed));
-    let mh = Capability::new(ad, cap_type, bap, awj);
+    let id = CapabilityId(CKV_.fetch_add(1, Ordering::Relaxed));
+    let cap = Capability::new(id, cap_type, rights, owner);
     
-    Ig.lock().insert(ad, mh);
+    Dl.lock().insert(id, cap);
     
-    crate::log_debug!("Created capability {:?} for task {}", ad, awj);
+    crate::log_debug!("Created capability {:?} for task {}", id, owner);
     
-    ad
+    id
 }
 
 
-pub fn dxi(cap_id: CapabilityId, bao: CapabilityRights) -> Result<(), SecurityError> {
-    let dr = Ig.lock();
-    let mh = dr.get(&cap_id).ok_or(SecurityError::Tb)?;
+pub fn bpu(cap_id: CapabilityId, abh: CapabilityRights) -> Result<(), SecurityError> {
+    let caps = Dl.lock();
+    let cap = caps.get(&cap_id).ok_or(SecurityError::InvalidCapability)?;
     
-    if !mh.lbf(bao) {
-        Aoa.fetch_add(1, Ordering::Relaxed);
-        crate::log_warn!("Security violation: capability {:?} lacks rights {:?}", cap_id, bao);
+    if !cap.has_rights(abh) {
+        Qu.fetch_add(1, Ordering::Relaxed);
+        crate::log_warn!("Security violation: capability {:?} lacks rights {:?}", cap_id, abh);
         
-        crate::trace::bry(
-            crate::trace::EventType::Cms,
+        crate::trace::akj(
+            crate::trace::EventType::SecurityViolation,
             cap_id.0
         );
         
-        return Err(SecurityError::Auk);
+        return Err(SecurityError::InsufficientRights);
     }
     
-    if mh.hox() {
-        return Err(SecurityError::Bgh);
+    if cap.is_expired() {
+        return Err(SecurityError::ExpiredCapability);
     }
     
     Ok(())
 }
 
 
-pub fn vyp(cap_id: CapabilityId) -> Result<(), SecurityError> {
-    Ig.lock()
+pub fn ogu(cap_id: CapabilityId) -> Result<(), SecurityError> {
+    Dl.lock()
         .remove(&cap_id)
-        .ok_or(SecurityError::Tb)?;
+        .ok_or(SecurityError::InvalidCapability)?;
     
     crate::log_debug!("Revoked capability {:?}", cap_id);
     
@@ -109,128 +109,128 @@ pub fn vyp(cap_id: CapabilityId) -> Result<(), SecurityError> {
 
 
 pub fn derive(
-    tu: CapabilityId,
-    oqd: CapabilityRights,
-    ute: u64,
+    parent: CapabilityId,
+    new_rights: CapabilityRights,
+    new_owner: u64,
 ) -> Result<CapabilityId, SecurityError> {
     let cap_type: CapabilityType;
     {
-        let dr = Ig.lock();
-        let otu = dr.get(&tu).ok_or(SecurityError::Tb)?;
+        let caps = Dl.lock();
+        let itk = caps.get(&parent).ok_or(SecurityError::InvalidCapability)?;
         
         
-        if !otu.lbf(oqd) {
-            return Err(SecurityError::Auk);
+        if !itk.has_rights(new_rights) {
+            return Err(SecurityError::InsufficientRights);
         }
-        cap_type = otu.cap_type;
+        cap_type = itk.cap_type;
     }
     
-    let ad = klu(cap_type, oqd, ute);
+    let id = fpa(cap_type, new_rights, new_owner);
     
-    Ok(ad)
+    Ok(id)
 }
 
 
-pub fn xqm(
+pub fn prc(
     cap_id: CapabilityId,
-    pcm: CapabilityType,
-    bao: CapabilityRights,
+    required_type: CapabilityType,
+    abh: CapabilityRights,
 ) -> Result<(), SecurityError> {
-    let dr = Ig.lock();
-    let mh = dr.get(&cap_id).ok_or(SecurityError::Tb)?;
+    let caps = Dl.lock();
+    let cap = caps.get(&cap_id).ok_or(SecurityError::InvalidCapability)?;
     
     
-    if mh.cap_type != pcm && mh.cap_type != CapabilityType::Xj {
-        Aoa.fetch_add(1, Ordering::Relaxed);
+    if cap.cap_type != required_type && cap.cap_type != CapabilityType::Kernel {
+        Qu.fetch_add(1, Ordering::Relaxed);
         crate::log_warn!("Security violation: capability {:?} type mismatch (have {:?}, need {:?})",
-            cap_id, mh.cap_type, pcm);
-        return Err(SecurityError::Cia);
+            cap_id, cap.cap_type, required_type);
+        return Err(SecurityError::NotPermitted);
     }
     
-    if !mh.lbf(bao) {
-        Aoa.fetch_add(1, Ordering::Relaxed);
-        return Err(SecurityError::Auk);
+    if !cap.has_rights(abh) {
+        Qu.fetch_add(1, Ordering::Relaxed);
+        return Err(SecurityError::InsufficientRights);
     }
     
-    if mh.hox() {
-        return Err(SecurityError::Bgh);
+    if cap.is_expired() {
+        return Err(SecurityError::ExpiredCapability);
     }
     
-    mh.xpm();
+    cap.use_once();
     Ok(())
 }
 
 
-pub fn ufn() -> Vec<(CapabilityId, CapabilityType, CapabilityRights, u64)> {
-    Ig.lock()
+pub fn myz() -> Vec<(CapabilityId, CapabilityType, CapabilityRights, u64)> {
+    Dl.lock()
         .iter()
-        .map(|(ad, mh)| (*ad, mh.cap_type, mh.bap, mh.awj))
+        .map(|(id, cap)| (*id, cap.cap_type, cap.rights, cap.owner))
         .collect()
 }
 
 
-pub fn zaw(awj: u64) -> Vec<(CapabilityId, CapabilityType, CapabilityRights)> {
-    Ig.lock()
+pub fn qnl(owner: u64) -> Vec<(CapabilityId, CapabilityType, CapabilityRights)> {
+    Dl.lock()
         .iter()
-        .hi(|(_, mh)| mh.awj == awj)
-        .map(|(ad, mh)| (*ad, mh.cap_type, mh.bap))
+        .filter(|(_, cap)| cap.owner == owner)
+        .map(|(id, cap)| (*id, cap.cap_type, cap.rights))
         .collect()
 }
 
 
-pub fn zax(cap_type: CapabilityType) -> Vec<(CapabilityId, u64, CapabilityRights)> {
-    Ig.lock()
+pub fn qnm(cap_type: CapabilityType) -> Vec<(CapabilityId, u64, CapabilityRights)> {
+    Dl.lock()
         .iter()
-        .hi(|(_, mh)| mh.cap_type == cap_type)
-        .map(|(ad, mh)| (*ad, mh.awj, mh.bap))
+        .filter(|(_, cap)| cap.cap_type == cap_type)
+        .map(|(id, cap)| (*id, cap.owner, cap.rights))
         .collect()
 }
 
 
-pub fn zkc(awj: u64) -> usize {
-    let mut dr = Ig.lock();
-    let cik: Vec<CapabilityId> = dr.iter()
-        .hi(|(_, mh)| mh.awj == awj)
-        .map(|(ad, _)| *ad)
+pub fn qui(owner: u64) -> usize {
+    let mut caps = Dl.lock();
+    let aph: Vec<CapabilityId> = caps.iter()
+        .filter(|(_, cap)| cap.owner == owner)
+        .map(|(id, _)| *id)
         .collect();
-    let az = cik.len();
-    for ad in cik {
-        dr.remove(&ad);
+    let count = aph.len();
+    for id in aph {
+        caps.remove(&id);
     }
-    if az > 0 {
-        crate::log_debug!("Cascade-revoked {} capabilities for owner {}", az, awj);
+    if count > 0 {
+        crate::log_debug!("Cascade-revoked {} capabilities for owner {}", count, owner);
     }
-    az
+    count
 }
 
 
-pub fn cm() -> Bsj {
-    Bsj {
-        mto: Ig.lock().len(),
-        cnt: Aoa.load(Ordering::Relaxed),
-        noq: nop(),
-        ppr: isolation::ppp(),
+pub fn stats() -> Aeq {
+    Aeq {
+        active_capabilities: Dl.lock().len(),
+        violations: Qu.load(Ordering::Relaxed),
+        dynamic_types: huo(),
+        subsystems: isolation::jjq(),
     }
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Bsj {
-    pub mto: usize,
-    pub cnt: u64,
-    pub noq: usize,
-    pub ppr: usize,
+pub struct Aeq {
+    pub active_capabilities: usize,
+    pub violations: u64,
+    pub dynamic_types: usize,
+    pub subsystems: usize,
 }
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SecurityError {
     
-    Tb,
+    InvalidCapability,
     
-    Auk,
+    InsufficientRights,
     
-    Bgh,
+    ExpiredCapability,
     
-    Cia,
+    NotPermitted,
 }

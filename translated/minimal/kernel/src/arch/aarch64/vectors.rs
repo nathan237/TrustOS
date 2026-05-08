@@ -13,20 +13,20 @@
 use core::sync::atomic::{AtomicBool, Ordering};
 
 
-static BIE_: AtomicBool = AtomicBool::new(false);
+static BKL_: AtomicBool = AtomicBool::new(false);
 
 
 
 #[repr(C)]
-pub struct Anu {
+pub struct Qq {
     
     pub regs: [u64; 31],
     
-    pub zoz: u64,
+    pub sp_el0: u64,
     
-    pub bzm: u64,
+    pub elr_el1: u64,
     
-    pub mgy: u64,
+    pub spsr_el1: u64,
 }
 
 
@@ -40,20 +40,20 @@ pub fn init() {
         core::arch::asm!(
             "adrp {0}, __exception_vectors",
             "add {0}, {0}, :lo12:__exception_vectors",
-            bd(reg) vectors,
+            out(reg) vectors,
             options(nomem, nostack, preserves_flags)
         );
 
         
-        super::cpu::xvv(vectors);
+        super::cpu::pvg(vectors);
 
-        BIE_.store(true, Ordering::Release);
+        BKL_.store(true, Ordering::Release);
         crate::serial_println!("[VECTORS] Exception vector table installed at {:#x}", vectors);
     }
 }
 
-pub fn ete() -> bool {
-    BIE_.load(Ordering::Acquire)
+pub fn cbb() -> bool {
+    BKL_.load(Ordering::Acquire)
 }
 
 
@@ -71,55 +71,55 @@ pub fn ete() -> bool {
 
 
 #[no_mangle]
-extern "C" fn yot(boy: &Anu) {
-    let esr = unsafe { super::cpu::pad() };
-    let adt = unsafe { super::cpu::lxm() };
+extern "C" fn qen(tf: &Qq) {
+    let esr = unsafe { super::cpu::iyj() };
+    let far = unsafe { super::cpu::gqc() };
     let ec = (esr >> 26) & 0x3F;
-    let ayb = esr & 0x1FF_FFFF;
+    let xt = esr & 0x1FF_FFFF;
 
     match ec {
         0x25 => {
             
-            let xva = (ayb >> 6) & 1; 
-            let kpr = ayb & 0x3F;    
+            let puy = (xt >> 6) & 1; 
+            let frz = xt & 0x3F;    
             crate::serial_println!(
                 "\n[EXCEPTION] Data Abort (EL1): FAR={:#x} WnR={} DFSC={:#x} ELR={:#x}",
-                adt, xva, kpr, boy.bzm
+                far, puy, frz, tf.elr_el1
             );
 
             
-            if kpr & 0x3C == 0x04 {
+            if frz & 0x3C == 0x04 {
                 
-                crate::serial_println!("  Translation fault level {}", kpr & 0x3);
+                crate::serial_println!("  Translation fault level {}", frz & 0x3);
             }
 
             
-            panic!("Unhandled Data Abort at ELR={:#x} FAR={:#x}", boy.bzm, adt);
+            panic!("Unhandled Data Abort at ELR={:#x} FAR={:#x}", tf.elr_el1, far);
         }
         0x21 => {
             
             crate::serial_println!(
                 "\n[EXCEPTION] Instruction Abort (EL1): FAR={:#x} ELR={:#x}",
-                adt, boy.bzm
+                far, tf.elr_el1
             );
-            panic!("Instruction Abort at ELR={:#x} FAR={:#x}", boy.bzm, adt);
+            panic!("Instruction Abort at ELR={:#x} FAR={:#x}", tf.elr_el1, far);
         }
         0x22 => {
-            crate::serial_println!("\n[EXCEPTION] PC Alignment Fault: ELR={:#x}", boy.bzm);
-            panic!("PC Alignment Fault at {:#x}", boy.bzm);
+            crate::serial_println!("\n[EXCEPTION] PC Alignment Fault: ELR={:#x}", tf.elr_el1);
+            panic!("PC Alignment Fault at {:#x}", tf.elr_el1);
         }
         0x26 => {
-            crate::serial_println!("\n[EXCEPTION] SP Alignment Fault: ELR={:#x}", boy.bzm);
-            panic!("SP Alignment Fault at {:#x}", boy.bzm);
+            crate::serial_println!("\n[EXCEPTION] SP Alignment Fault: ELR={:#x}", tf.elr_el1);
+            panic!("SP Alignment Fault at {:#x}", tf.elr_el1);
         }
         0x3C => {
             
-            crate::serial_println!("[EXCEPTION] Breakpoint (BRK) at ELR={:#x}", boy.bzm);
+            crate::serial_println!("[EXCEPTION] Breakpoint (BRK) at ELR={:#x}", tf.elr_el1);
         }
         _ => {
             crate::serial_println!(
                 "\n[EXCEPTION] Unhandled sync exception: EC={:#x} ISS={:#x} ELR={:#x} FAR={:#x}",
-                ec, ayb, boy.bzm, adt
+                ec, xt, tf.elr_el1, far
             );
             panic!("Unhandled sync exception EC={:#x}", ec);
         }
@@ -131,31 +131,31 @@ extern "C" fn yot(boy: &Anu) {
 
 
 #[no_mangle]
-extern "C" fn yos(qdt: &Anu) {
-    let irq = super::gic::mtl();
+extern "C" fn qem(_tf: &Qq) {
+    let irq = super::gic::hdt();
 
-    if irq == super::gic::BGF_ {
+    if irq == super::gic::BIJ_ {
         
         return;
     }
 
     match irq {
         
-        super::gic::LG_ => {
+        super::gic::MB_ => {
             
-            super::gic::lye(10);
+            super::gic::gqp(10);
 
             
-            if crate::interrupts::ofs() {
+            if crate::interrupts::iht() {
                 
-                crate::logger::or();
-                crate::time::or();
+                crate::logger::tick();
+                crate::time::tick();
 
                 
-                crate::trace::bry(crate::trace::EventType::Ano, 0);
+                crate::trace::akj(crate::trace::EventType::TimerTick, 0);
 
                 
-                crate::thread::hto();
+                crate::thread::dvv();
             }
         }
         
@@ -165,45 +165,45 @@ extern "C" fn yos(qdt: &Anu) {
     }
 
     
-    super::gic::ktu(irq);
+    super::gic::fvb(irq);
 }
 
 
 
 #[no_mangle]
-extern "C" fn yor(boy: &Anu) {
-    let esr = unsafe { super::cpu::pad() };
+extern "C" fn qel(tf: &Qq) {
+    let esr = unsafe { super::cpu::iyj() };
     let ec = (esr >> 26) & 0x3F;
 
     match ec {
         0x15 => {
             
             
-            let qds = boy.regs[8];
-            let xxt = boy.regs[0];
+            let jst = tf.regs[8];
+            let pwp = tf.regs[0];
             
-            crate::serial_println!("[SYSCALL] SVC from user: num={}", qds);
+            crate::serial_println!("[SYSCALL] SVC from user: num={}", jst);
         }
         0x20 => {
             
-            let adt = unsafe { super::cpu::lxm() };
+            let far = unsafe { super::cpu::gqc() };
             crate::serial_println!(
                 "[EXCEPTION] User Instruction Abort: FAR={:#x} ELR={:#x}",
-                adt, boy.bzm
+                far, tf.elr_el1
             );
         }
         0x24 => {
             
-            let adt = unsafe { super::cpu::lxm() };
+            let far = unsafe { super::cpu::gqc() };
             crate::serial_println!(
                 "[EXCEPTION] User Data Abort: FAR={:#x} ELR={:#x}",
-                adt, boy.bzm
+                far, tf.elr_el1
             );
         }
         _ => {
             crate::serial_println!(
                 "[EXCEPTION] Unhandled user sync exception: EC={:#x} ELR={:#x}",
-                ec, boy.bzm
+                ec, tf.elr_el1
             );
         }
     }
@@ -212,22 +212,22 @@ extern "C" fn yor(boy: &Anu) {
 
 
 #[no_mangle]
-extern "C" fn yoq(qdt: &Anu) {
+extern "C" fn qek(_tf: &Qq) {
     
-    let irq = super::gic::mtl();
+    let irq = super::gic::hdt();
 
-    if irq == super::gic::BGF_ {
+    if irq == super::gic::BIJ_ {
         return;
     }
 
     match irq {
-        super::gic::LG_ => {
-            super::gic::lye(10);
-            if crate::interrupts::ofs() {
-                crate::logger::or();
-                crate::time::or();
-                crate::trace::bry(crate::trace::EventType::Ano, 0);
-                crate::thread::hto();
+        super::gic::MB_ => {
+            super::gic::gqp(10);
+            if crate::interrupts::iht() {
+                crate::logger::tick();
+                crate::time::tick();
+                crate::trace::akj(crate::trace::EventType::TimerTick, 0);
+                crate::thread::dvv();
             }
         }
         _ => {
@@ -235,7 +235,7 @@ extern "C" fn yoq(qdt: &Anu) {
         }
     }
 
-    super::gic::ktu(irq);
+    super::gic::fvb(irq);
 }
 
 

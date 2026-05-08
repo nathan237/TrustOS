@@ -213,6 +213,38 @@ All output dual-mirrored to screen + serial (115200 8N1).
 - **USB**: xHCI host controller
 - **PCI**: Full bus enumeration with vendor/device IDs
 
+### ELECTRO — Power & Thermal Dashboard
+
+Comprehensive electrical power monitoring (~90 metrics): CPU RAPL full decomposition,
+motherboard voltage rails via SuperIO, GPU thermal/power via AMD SMU, battery/EC,
+C-state residency, live dashboard.
+
+| Command | Aliases | Description |
+|---------|---------|-------------|
+| `electro` | `electro all`, `elec`, `power` | Full system snapshot (all available metrics) |
+| `electro cpu` | `electro power` | CPU: RAPL domains (PKG/PP0/PP1/DRAM), VID voltage, frequency, C-states, thermal |
+| `electro gpu` | | GPU: temperature, fan duty, activity, power via AMD SMU mailbox |
+| `electro rails` | `electro voltages` | Motherboard voltage rails via SuperIO (VCore, +12V, +5V, +3.3V, VBAT) |
+| `electro rails --raw` | | Raw SuperIO HWM register values (for calibration) |
+| `electro fans` | | All detected fans (SuperIO + EC + GPU) |
+| `electro battery` | `electro bat` | Battery & EC sensors (laptop only, ThinkPad EC support) |
+| `electro thermal` | `electro temp` | Combined thermal view (CPU + GPU + EC) |
+| `electro live` | | Real-time dashboard, 2s refresh, press 'q' to quit (2 min max) |
+| `electro alerts` | `electro alert` | Show only out-of-threshold metrics (PROCHOT, critical temp, etc.) |
+| `electro json` | | Machine-parseable JSON output for remote parsing |
+| `electro help` | | Show all electro subcommands |
+
+**CPU Metrics**: Core temp, package temp, TjMax, PROCHOT status, current/target frequency,
+turbo ratios (1–4 core), VCore (VID), RAPL power (PKG, PP0 cores, PP1 iGPU, DRAM),
+PL1/PL2 limits, TDP, C-state residency (C3/C6/C7 core + C2/C3/C6/C7 package),
+Energy Performance Bias.
+
+**SuperIO Chips Detected**: ITE IT8728F/IT8686E/IT8625E, Nuvoton NCT6776/NCT6793D/NCT6798D.
+Probes ports 0x2E/0x4E with ITE + Winbond config sequences.
+
+**GPU Metrics** (AMD Polaris): Edge temperature, fan duty %, GRBM activity,
+SMU average power (milliwatts).
+
 ---
 
 ## 6. DISK & STORAGE COMMANDS
@@ -490,6 +522,16 @@ Alias: `pkg` works instead of `trustpkg`
 | `gpu info` | Show GPU info (vendor, VRAM, features) |
 | `gpu dcn` | Display engine (DCN) status |
 | `gpu modes` | Display connector modes |
+| `gpu pci` | Raw PCI probe (even if GPU init failed) |
+| `gpu dump` | Full register dump |
+| `gpu mmio <off> [val]` | Read/write GPU MMIO register (hex offset) |
+| `gpu rom` | Read/check VBIOS ROM header (0xAA55 + ATOM) |
+| `gpu smu status` | SMU mailbox diagnostic (FW, clocks, running) |
+| `gpu smu regs` | Dump raw SMU v7 mailbox registers |
+| `gpu smu send <msg> [param]` | Send raw SMU message (hex IDs) |
+| `gpu sdma <step>` | SDMA staged init |
+| `gpu heap` | Heap free/used diagnostic |
+| `gpu regscan <sub>` | Register scanner (bitflip/anomaly/hidden) |
 | `gpuexec <agent> [N]` | Dispatch RDNA compute agent on GPU CUs |
 
 GPU Agents: `incr`, `memfill`, `memcopy`

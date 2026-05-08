@@ -9,6 +9,8 @@ pub mod paging;
 pub mod cow;
 pub mod swap;
 pub mod vma;
+#[cfg(feature = "jarvis")]
+pub mod jarvis_arena;
 
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicUsize, AtomicU64, Ordering};
@@ -62,8 +64,8 @@ static HEAP_START: AtomicUsize = AtomicUsize::new(0);
 static HHDM_OFFSET: AtomicU64 = AtomicU64::new(0xFFFF_8000_0000_0000);
 /// Minimum heap size (64 MB) — fallback value
 pub const HEAP_SIZE_MIN: usize = 64 * 1024 * 1024;
-/// Maximum heap size (512 MB) — cap to leave RAM for framebuffer, page tables, DMA
-pub const HEAP_SIZE_MAX: usize = 512 * 1024 * 1024;
+/// Maximum heap size (2 GB) — cap to leave RAM for framebuffer, page tables, DMA
+pub const HEAP_SIZE_MAX: usize = 2 * 1024 * 1024 * 1024;
 
 /// Actual heap size selected at boot (dynamic: 25% of detected RAM, clamped)
 static HEAP_SIZE_ACTUAL: AtomicUsize = AtomicUsize::new(64 * 1024 * 1024);
@@ -90,10 +92,10 @@ pub fn total_physical_memory() -> u64 {
     TOTAL_PHYS_MEMORY.load(Ordering::Relaxed)
 }
 
-/// Compute dynamic heap size: 25% of total RAM, clamped to [64 MB, 512 MB]
+/// Compute dynamic heap size: 50% of total RAM, clamped to [64 MB, 2 GB]
 pub fn compute_heap_size(total_ram: u64) -> usize {
-    let quarter = (total_ram / 4) as usize;
-    quarter.clamp(HEAP_SIZE_MIN, HEAP_SIZE_MAX)
+    let half = (total_ram / 2) as usize;
+    half.clamp(HEAP_SIZE_MIN, HEAP_SIZE_MAX)
 }
 
 /// Initialize memory management with HHDM offset and dynamic heap size
@@ -147,11 +149,19 @@ pub fn init_android_heap(phys_base: u64, heap_bytes: usize) {
 /// Get memory statistics
 pub fn stats() -> MemoryStats {
     let (frames_total, frames_used) = frame::stats();
+    #[cfg(feature = "jarvis")]
+    let (jarvis_used, jarvis_free, jarvis_total) = jarvis_arena::stats();
     MemoryStats {
         heap_used: heap::used(),
         heap_free: heap::free(),
         frames_used: frames_used as usize,
         frames_free: (frames_total - frames_used) as usize,
+        #[cfg(feature = "jarvis")]
+        jarvis_arena_used: jarvis_used,
+        #[cfg(feature = "jarvis")]
+        jarvis_arena_free: jarvis_free,
+        #[cfg(feature = "jarvis")]
+        jarvis_arena_total: jarvis_total,
     }
 }
 
@@ -162,6 +172,12 @@ pub struct MemoryStats {
     pub heap_free: usize,
     pub frames_used: usize,
     pub frames_free: usize,
+    #[cfg(feature = "jarvis")]
+    pub jarvis_arena_used: usize,
+    #[cfg(feature = "jarvis")]
+    pub jarvis_arena_free: usize,
+    #[cfg(feature = "jarvis")]
+    pub jarvis_arena_total: usize,
 }
 
 /// Get the HHDM offset (for physical to virtual address translation)

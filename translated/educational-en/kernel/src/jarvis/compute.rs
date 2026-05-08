@@ -237,7 +237,7 @@ pub fn summary() -> String {
 }
 
 /// Detailed info lines for display
-pub fn information_lines() -> Vec<String> {
+pub fn info_lines() -> Vec<String> {
     let mut lines = Vec::new();
     let backend = if gpu_available() { "GPU (AMD RDNA)" } else { "CPU (SSE2 SIMD)" };
     lines.push(alloc::format!("Compute: {}", backend));
@@ -245,8 +245,8 @@ pub fn information_lines() -> Vec<String> {
     lines.push(alloc::format!("  CPU ops:  {}", CPU_OPERATIONS.load(Ordering::Relaxed)));
 
     if gpu_available() {
-        if let Some(information) = crate::drivers::amdgpu::get_information() {
-            lines.push(alloc::format!("  GPU: {} ({})", information.gpu_name(), information.vram_string()));
+        if let Some(info) = crate::drivers::amdgpu::get_information() {
+            lines.push(alloc::format!("  GPU: {} ({})", info.gpu_name(), info.vram_string()));
         }
     }
 

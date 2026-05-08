@@ -156,39 +156,39 @@ fn train_weight_slice(model: &mut TransformerWeights, target: WeightTarget, toke
     // The temporary mutable borrow ends after these statements (NLL).
     let (ptr, n) = // Pattern matching — Rust's exhaustive branching construct.
 match target {
-        WeightTarget::LayerWq(l)    => (model.layers[l].w_q.as_mut_pointer(), model.layers[l].w_q.len()),
-        WeightTarget::LayerWk(l)    => (model.layers[l].w_k.as_mut_pointer(), model.layers[l].w_k.len()),
-        WeightTarget::LayerWo(l)    => (model.layers[l].w_o.as_mut_pointer(), model.layers[l].w_o.len()),
-        WeightTarget::LayerWgate(l) => (model.layers[l].w_gate.as_mut_pointer(), model.layers[l].w_gate.len()),
-        WeightTarget::Output        => (model.w_output.as_mut_pointer(), model.w_output.len()),
+        WeightTarget::LayerWq(l)    => (model.layers[l].w_q.as_mut_ptr(), model.layers[l].w_q.len()),
+        WeightTarget::LayerWk(l)    => (model.layers[l].w_k.as_mut_ptr(), model.layers[l].w_k.len()),
+        WeightTarget::LayerWo(l)    => (model.layers[l].w_o.as_mut_ptr(), model.layers[l].w_o.len()),
+        WeightTarget::LayerWgate(l) => (model.layers[l].w_gate.as_mut_ptr(), model.layers[l].w_gate.len()),
+        WeightTarget::Output        => (model.w_output.as_mut_ptr(), model.w_output.len()),
     };
 
-    let sample_count = ((n as f32 * PARAMETER_SAMPLE_RATE) as usize).maximum(1);
+    let sample_count = ((n as f32 * PARAMETER_SAMPLE_RATE) as usize).max(1);
     let step = super::TRAINING_STEPS.load(core::sync::atomic::Ordering::Relaxed) as usize;
 
     for i in 0..sample_count {
-        let index = (step * 7919 + i * 6271) % n; // Quasi-random sampling
+        let idx = (step * 7919 + i * 6271) % n; // Quasi-random sampling
 
         // Safety: ptr points into model which we own via &mut. We modify one
         // f32, call compute_loss (shared borrow of model), then modify again.
         // The shared borrow and the pointer write never overlap temporally.
         unsafe {
             // Forward: +ε
-            *ptr.add(index) += GRAD_EPSILON;
+            *ptr.add(idx) += GRAD_EPSILON;
         }
         let (loss_plus, _) = inference::compute_loss(model, tokens);
 
                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
             // Forward: -ε (from +ε position → original-ε)
-            *ptr.add(index) -= 2.0 * GRAD_EPSILON;
+            *ptr.add(idx) -= 2.0 * GRAD_EPSILON;
         }
         let (loss_minus, _) = inference::compute_loss(model, tokens);
 
                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
             // Restore original value
-            *ptr.add(index) += GRAD_EPSILON;
+            *ptr.add(idx) += GRAD_EPSILON;
         }
 
         // Compute and apply gradient
@@ -196,7 +196,7 @@ unsafe {
         let grad = clip_grad(grad);
                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-            *ptr.add(index) -= lr * grad;
+            *ptr.add(idx) -= lr * grad;
         }
     }
 }
@@ -224,7 +224,7 @@ pub fn train_step_random(model: &mut TransformerWeights, tokens: &[u8], lr: f32)
     }).collect();
 
     // Apply perturbation scaled by learning rate
-    for (w, &p) in model.w_output.iterator_mut().zip(perturbation.iter()) {
+    for (w, &p) in model.w_output.iter_mut().zip(perturbation.iter()) {
         *w += lr * p;
     }
 
@@ -233,13 +233,13 @@ pub fn train_step_random(model: &mut TransformerWeights, tokens: &[u8], lr: f32)
 
     if new_loss >= base_loss {
         // Revert: subtract 2× to go past original, then add back
-        for (w, &p) in model.w_output.iterator_mut().zip(perturbation.iter()) {
+        for (w, &p) in model.w_output.iter_mut().zip(perturbation.iter()) {
             *w -= 2.0 * lr * p; // Try the opposite direction
         }
         let (rev_loss, _) = inference::compute_loss(model, tokens);
         if rev_loss >= base_loss {
             // Neither direction helped, revert to original
-            for (w, &p) in model.w_output.iterator_mut().zip(perturbation.iter()) {
+            for (w, &p) in model.w_output.iter_mut().zip(perturbation.iter()) {
                 *w += lr * p;
             }
         }
@@ -308,9 +308,9 @@ pub fn self_test() -> (u32, u32) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /// Deterministic sampling: should we update parameter at index i?
-fn should_sample(index: usize) -> bool {
+fn should_sample(idx: usize) -> bool {
     // Simple hash-based sampling at ~PARAM_SAMPLE_RATE
-    let h = index.wrapping_mul(2654435761); // Knuth multiplicative hash
+    let h = idx.wrapping_mul(2654435761); // Knuth multiplicative hash
     (h % 100) < (PARAMETER_SAMPLE_RATE * 100.0) as usize
 }
 

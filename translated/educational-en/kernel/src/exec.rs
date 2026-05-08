@@ -92,7 +92,7 @@ pub fn resolve_path(name: &str) -> Option<String> {
     // If path contains '/', use as-is
     if name.contains('/') {
         // Check if file exists
-        if crate::vfs::status(name).is_ok() {
+        if crate::vfs::stat(name).is_ok() {
             return Some(String::from(name));
         }
         return None;
@@ -102,7 +102,7 @@ pub fn resolve_path(name: &str) -> Option<String> {
     let search_dirs = ["/bin", "/usr/bin", "/sbin", "/usr/sbin", "/usr/local/bin"];
     for directory in &search_dirs {
         let full = alloc::format!("{}/{}", directory, name);
-        if crate::vfs::status(&full).is_ok() {
+        if crate::vfs::stat(&full).is_ok() {
             return Some(full);
         }
     }
@@ -115,7 +115,7 @@ fn check_shebang(data: &[u8]) -> Option<(String, String)> {
         return None;
     }
     // Read until newline
-    let end = data.iter().position(|&b| b == b'\n').unwrap_or(data.len().minimum(256));
+    let end = data.iter().position(|&b| b == b'\n').unwrap_or(data.len().min(256));
     let line = core::str::from_utf8(&data[2..end]).ok()?;
     let line = line.trim();
     // Split into interpreter and optional argument
@@ -173,7 +173,7 @@ match crate::elf::load_from_bytes(data) {
 /// Execute a loaded ELF
 fn execute_elf(elf: &LoadedElf, args: &[&str]) -> ExecResult {
     crate::log!("[EXEC] Entry point: {:#x}", elf.entry_point);
-    crate::log!("[EXEC] Address range: {:#x} - {:#x}", elf.minimum_vaddr, elf.maximum_vaddr);
+    crate::log!("[EXEC] Address range: {:#x} - {:#x}", elf.min_vaddr, elf.max_vaddr);
     
     // Create user address space
     let mut address_space = // Pattern matching — Rust's exhaustive branching construct.
@@ -189,13 +189,13 @@ match AddressSpace::new_with_kernel() {
     
     // Map ELF segments into user space
     for segment in &elf.segments {
-        let pages_needed = ((segment.size as usize + 4095) / 4096).maximum(1);
+        let pages_needed = ((segment.size as usize + 4095) / 4096).max(1);
         
         crate::log_debug!("[EXEC] Mapping segment: vaddr={:#x}, size={}, pages={}", 
             segment.vaddr, segment.size, pages_needed);
         
-        for page_index in 0..pages_needed {
-            let virt_address = (segment.vaddr & !0xFFF) + (page_index as u64 * 4096);
+        for page_idx in 0..pages_needed {
+            let virt_addr = (segment.vaddr & !0xFFF) + (page_idx as u64 * 4096);
             
             // Allocate physical page
             let physical_page = // Pattern matching — Rust's exhaustive branching construct.
@@ -220,26 +220,26 @@ match allocator_physical_page() {
             };
             
             // Map the page
-            if address_space.map_page(virt_address, physical_page, flags).is_none() {
-                crate::log_error!("[EXEC] Failed to map page at {:#x}", virt_address);
+            if address_space.map_page(virt_addr, physical_page, flags).is_none() {
+                crate::log_error!("[EXEC] Failed to map page at {:#x}", virt_addr);
                 return ExecResult::MemoryError;
             }
             
             // Copy segment data to physical page
             let page_virt = physical_page + hhdm;
-            let seg_offset = page_index * 4096;
+            let seg_offset = page_idx * 4096;
             let copy_start = seg_offset;
-            let copy_end = ((segment.data.len()).minimum(seg_offset + 4096)).maximum(seg_offset);
+            let copy_end = ((segment.data.len()).min(seg_offset + 4096)).max(seg_offset);
             
             if copy_start < segment.data.len() {
-                let source = &segment.data[copy_start..copy_end];
+                let src = &segment.data[copy_start..copy_end];
                 let dest = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
                     core::slice::from_raw_parts_mut(page_virt as *mut u8, 4096)
                 };
-                dest[..source.len()].copy_from_slice(source);
+                dest[..src.len()].copy_from_slice(src);
                 // Zero the rest of the page
-                for b in &mut dest[source.len()..] {
+                for b in &mut dest[src.len()..] {
                     *b = 0;
                 }
             } else {
@@ -255,29 +255,29 @@ unsafe {
     
     // ── Apply ELF relocations (PIE / dynamic) ──
     if !elf.relocations.is_empty() {
-        crate::log_debug!("[EXEC] Applying {} relocations (base={:#x})", elf.relocations.len(), elf.base_address);
+        crate::log_debug!("[EXEC] Applying {} relocations (base={:#x})", elf.relocations.len(), elf.base_addr);
         for reloc in &elf.relocations {
-            let target_vaddr = reloc.offset + elf.base_address;
+            let target_vaddr = reloc.offset + elf.base_addr;
                         // Pattern matching — Rust's exhaustive branching construct.
-match reloc.relative_type {
+match reloc.rel_type {
                 8 => {
                     // R_X86_64_RELATIVE: *target = base + addend
-                    let value = elf.base_address.wrapping_add(reloc.addend as u64);
-                    if let Some(physical) = address_space.translate(target_vaddr) {
+                    let value = elf.base_addr.wrapping_add(reloc.addend as u64);
+                    if let Some(phys) = address_space.translate(target_vaddr) {
                                                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { *((physical + hhdm) as *mut u64) = value; }
+unsafe { *((phys + hhdm) as *mut u64) = value; }
                     }
                 }
                 1 | 6 | 7 => {
                     // R_X86_64_64, GLOB_DAT, JUMP_SLOT — resolve to base+addend for static-pie
-                    let value = elf.base_address.wrapping_add(reloc.addend as u64);
-                    if let Some(physical) = address_space.translate(target_vaddr) {
+                    let value = elf.base_addr.wrapping_add(reloc.addend as u64);
+                    if let Some(phys) = address_space.translate(target_vaddr) {
                                                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { *((physical + hhdm) as *mut u64) = value; }
+unsafe { *((phys + hhdm) as *mut u64) = value; }
                     }
                 }
                 _ => {
-                    crate::log_debug!("[EXEC] Unsupported reloc type {}", reloc.relative_type);
+                    crate::log_debug!("[EXEC] Unsupported reloc type {}", reloc.rel_type);
                 }
             }
         }
@@ -294,7 +294,7 @@ unsafe { *((physical + hhdm) as *mut u64) = value; }
     // (no map_page call for guard_page address)
     
     for i in 0..stack_pages {
-        let virt_address = stack_base + (i as u64 * 4096);
+        let virt_addr = stack_base + (i as u64 * 4096);
         
         let physical_page = // Pattern matching — Rust's exhaustive branching construct.
 match allocator_physical_page() {
@@ -312,8 +312,8 @@ unsafe {
             core::ptr::write_bytes(page_virt as *mut u8, 0, 4096);
         }
         
-        if address_space.map_page(virt_address, physical_page, PageFlags::USER_DATA).is_none() {
-            crate::log_error!("[EXEC] Failed to map stack at {:#x}", virt_address);
+        if address_space.map_page(virt_addr, physical_page, PageFlags::USER_DATA).is_none() {
+            crate::log_error!("[EXEC] Failed to map stack at {:#x}", virt_addr);
             return ExecResult::MemoryError;
         }
     }
@@ -329,15 +329,15 @@ unsafe {
         // Write string to user stack via HHDM
         let stack_page_base = sp & !0xFFF;
         let page_offset = (sp - stack_base) as usize;
-        let page_index = page_offset / 4096;
-        if page_index < stack_pages {
+        let page_idx = page_offset / 4096;
+        if page_idx < stack_pages {
             // Find physical page backing this stack address
             // We write via the HHDM mapping — find the PTE
-            if let Some(physical) = address_space.translate(sp) {
-                let dest = (physical + hhdm) as *mut u8;
+            if let Some(phys) = address_space.translate(sp) {
+                let dest = (phys + hhdm) as *mut u8;
                                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-                    core::ptr::copy_nonoverlapping(bytes.as_pointer(), dest, bytes.len());
+                    core::ptr::copy_nonoverlapping(bytes.as_ptr(), dest, bytes.len());
                     *dest.add(bytes.len()) = 0; // null terminator
                 }
             }
@@ -353,7 +353,7 @@ unsafe {
     // Linux ABI stack layout: argc, argv[], NULL, envp[], NULL, auxv[], AT_NULL
     let auxv_entries: [(u64, u64); 7] = [
         (6,  4096),                  // AT_PAGESZ
-        (3,  elf.minimum_vaddr + 0x40),  // AT_PHDR (program headers, typically at ELF base + 0x40)
+        (3,  elf.min_vaddr + 0x40),  // AT_PHDR (program headers, typically at ELF base + 0x40)
         (4,  56),                    // AT_PHENT (sizeof Elf64_Phdr)
         (5,  elf.segments.len() as u64), // AT_PHNUM
         (9,  elf.entry_point),       // AT_ENTRY
@@ -364,46 +364,46 @@ unsafe {
     // Push auxiliary vector (from end to start)
     for &(atype, aval) in auxv_entries.iter().rev() {
         sp -= 8;
-        if let Some(physical) = address_space.translate(sp) {
+        if let Some(phys) = address_space.translate(sp) {
                         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { *((physical + hhdm) as *mut u64) = aval; }
+unsafe { *((phys + hhdm) as *mut u64) = aval; }
         }
         sp -= 8;
-        if let Some(physical) = address_space.translate(sp) {
+        if let Some(phys) = address_space.translate(sp) {
                         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { *((physical + hhdm) as *mut u64) = atype; }
+unsafe { *((phys + hhdm) as *mut u64) = atype; }
         }
     }
     
     // Step 2c: Push NULL terminator for envp array (no env vars on stack for now)
     sp -= 8;
-    if let Some(physical) = address_space.translate(sp) {
+    if let Some(phys) = address_space.translate(sp) {
                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { *((physical + hhdm) as *mut u64) = 0; }
+unsafe { *((phys + hhdm) as *mut u64) = 0; }
     }
     
     // Step 3: Push null terminator for argv array
     sp -= 8;
-    if let Some(physical) = address_space.translate(sp) {
+    if let Some(phys) = address_space.translate(sp) {
                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { *((physical + hhdm) as *mut u64) = 0; }
+unsafe { *((phys + hhdm) as *mut u64) = 0; }
     }
     
     // Step 4: Push argv pointers (in reverse)
-    for address in argument_addrs.iter().rev() {
+    for addr in argument_addrs.iter().rev() {
         sp -= 8;
-        if let Some(physical) = address_space.translate(sp) {
+        if let Some(phys) = address_space.translate(sp) {
                         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { *((physical + hhdm) as *mut u64) = *address; }
+unsafe { *((phys + hhdm) as *mut u64) = *addr; }
         }
     }
     let argv_pointer = sp; // argv points to first pointer
     
     // Step 5: Push argc
     sp -= 8;
-    if let Some(physical) = address_space.translate(sp) {
+    if let Some(phys) = address_space.translate(sp) {
                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { *((physical + hhdm) as *mut u64) = args.len() as u64; }
+unsafe { *((phys + hhdm) as *mut u64) = args.len() as u64; }
     }
     
     // Ensure 16-byte alignment (ABI requirement before call)
@@ -419,8 +419,8 @@ unsafe { *((physical + hhdm) as *mut u64) = args.len() as u64; }
     
     // Update memory layout in the process table
     crate::process::set_memory(pid, crate::process::MemoryLayout {
-        code_start: elf.minimum_vaddr,
-        code_end: elf.maximum_vaddr,
+        code_start: elf.min_vaddr,
+        code_end: elf.max_vaddr,
         heap_start: UserMemoryRegion::HEAP_START,
         heap_end: UserMemoryRegion::HEAP_START,
         stack_start: stack_base,
@@ -553,23 +553,23 @@ match AddressSpace::new_with_kernel() {
     
     // Allocate and map code page at 0x400000
     let code_vaddr: u64 = 0x400000;
-    let code_physical = // Pattern matching — Rust's exhaustive branching construct.
+    let code_phys = // Pattern matching — Rust's exhaustive branching construct.
 match allocator_physical_page() {
         Some(p) => p,
         None => return ExecResult::MemoryError,
     };
     
-    crate::log!("[EXEC] Code page: phys={:#x}, vaddr={:#x}", code_physical, code_vaddr);
+    crate::log!("[EXEC] Code page: phys={:#x}, vaddr={:#x}", code_phys, code_vaddr);
     
     // Copy code to physical page
     unsafe {
-        let dest = (code_physical + hhdm) as *mut u8;
+        let dest = (code_phys + hhdm) as *mut u8;
         core::ptr::write_bytes(dest, 0, 4096); // Zero first
-        core::ptr::copy_nonoverlapping(test_code.as_pointer(), dest, test_code.len());
+        core::ptr::copy_nonoverlapping(test_code.as_ptr(), dest, test_code.len());
     }
     
     // Map code page as executable
-    if address_space.map_page(code_vaddr, code_physical, PageFlags::USER_CODE).is_none() {
+    if address_space.map_page(code_vaddr, code_phys, PageFlags::USER_CODE).is_none() {
         crate::log_error!("[EXEC] Failed to map code page");
         return ExecResult::MemoryError;
     }
@@ -582,15 +582,15 @@ match allocator_physical_page() {
     
     for i in 0..stack_pages {
         let vaddr = stack_top - (i as u64 + 1) * 4096;
-        let physical = // Pattern matching — Rust's exhaustive branching construct.
+        let phys = // Pattern matching — Rust's exhaustive branching construct.
 match allocator_physical_page() {
             Some(p) => p,
             None => return ExecResult::MemoryError,
         };
                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::write_bytes((physical + hhdm) as *mut u8, 0, 4096); }
+unsafe { core::ptr::write_bytes((phys + hhdm) as *mut u8, 0, 4096); }
         
-        if address_space.map_page(vaddr, physical, PageFlags::USER_DATA).is_none() {
+        if address_space.map_page(vaddr, phys, PageFlags::USER_DATA).is_none() {
             crate::log_error!("[EXEC] Failed to map stack page");
             return ExecResult::MemoryError;
         }
@@ -844,18 +844,18 @@ match AddressSpace::new_with_kernel() {
 
     // Map code page at 0x400000
     let code_vaddr: u64 = 0x400000;
-    let code_physical = // Pattern matching — Rust's exhaustive branching construct.
+    let code_phys = // Pattern matching — Rust's exhaustive branching construct.
 match allocator_physical_page() {
         Some(p) => p,
         None => return ExecResult::MemoryError,
     };
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        let dest = (code_physical + hhdm) as *mut u8;
+        let dest = (code_phys + hhdm) as *mut u8;
         core::ptr::write_bytes(dest, 0, 4096);
-        core::ptr::copy_nonoverlapping(memtest_code.as_pointer(), dest, memtest_code.len());
+        core::ptr::copy_nonoverlapping(memtest_code.as_ptr(), dest, memtest_code.len());
     }
-    if address_space.map_page(code_vaddr, code_physical, PageFlags::USER_CODE).is_none() {
+    if address_space.map_page(code_vaddr, code_phys, PageFlags::USER_CODE).is_none() {
         return ExecResult::MemoryError;
     }
 
@@ -864,14 +864,14 @@ unsafe {
     let stack_pages = 4;
     for i in 0..stack_pages {
         let vaddr = stack_top - (i as u64 + 1) * 4096;
-        let physical = // Pattern matching — Rust's exhaustive branching construct.
+        let phys = // Pattern matching — Rust's exhaustive branching construct.
 match allocator_physical_page() {
             Some(p) => p,
             None => return ExecResult::MemoryError,
         };
                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::write_bytes((physical + hhdm) as *mut u8, 0, 4096); }
-        if address_space.map_page(vaddr, physical, PageFlags::USER_DATA).is_none() {
+unsafe { core::ptr::write_bytes((phys + hhdm) as *mut u8, 0, 4096); }
+        if address_space.map_page(vaddr, phys, PageFlags::USER_DATA).is_none() {
             return ExecResult::MemoryError;
         }
     }
@@ -1027,18 +1027,18 @@ match AddressSpace::new_with_kernel() {
 
     // Map code page at 0x400000
     let code_vaddr: u64 = 0x400000;
-    let code_physical = // Pattern matching — Rust's exhaustive branching construct.
+    let code_phys = // Pattern matching — Rust's exhaustive branching construct.
 match allocator_physical_page() {
         Some(p) => p,
         None => return ExecResult::MemoryError,
     };
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        let dest = (code_physical + hhdm) as *mut u8;
+        let dest = (code_phys + hhdm) as *mut u8;
         core::ptr::write_bytes(dest, 0, 4096);
-        core::ptr::copy_nonoverlapping(pipe_test_code.as_pointer(), dest, pipe_test_code.len());
+        core::ptr::copy_nonoverlapping(pipe_test_code.as_ptr(), dest, pipe_test_code.len());
     }
-    if address_space.map_page(code_vaddr, code_physical, PageFlags::USER_CODE).is_none() {
+    if address_space.map_page(code_vaddr, code_phys, PageFlags::USER_CODE).is_none() {
         return ExecResult::MemoryError;
     }
 
@@ -1047,14 +1047,14 @@ unsafe {
     let stack_pages = 4;
     for i in 0..stack_pages {
         let vaddr = stack_top - (i as u64 + 1) * 4096;
-        let physical = // Pattern matching — Rust's exhaustive branching construct.
+        let phys = // Pattern matching — Rust's exhaustive branching construct.
 match allocator_physical_page() {
             Some(p) => p,
             None => return ExecResult::MemoryError,
         };
                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::write_bytes((physical + hhdm) as *mut u8, 0, 4096); }
-        if address_space.map_page(vaddr, physical, PageFlags::USER_DATA).is_none() {
+unsafe { core::ptr::write_bytes((phys + hhdm) as *mut u8, 0, 4096); }
+        if address_space.map_page(vaddr, phys, PageFlags::USER_DATA).is_none() {
             return ExecResult::MemoryError;
         }
     }
@@ -1116,18 +1116,18 @@ match AddressSpace::new_with_kernel() {
     ];
 
     let code_vaddr: u64 = 0x400000;
-    let code_physical = // Pattern matching — Rust's exhaustive branching construct.
+    let code_phys = // Pattern matching — Rust's exhaustive branching construct.
 match allocator_physical_page() {
         Some(p) => p,
         None => return ExecResult::MemoryError,
     };
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        let dest = (code_physical + hhdm) as *mut u8;
+        let dest = (code_phys + hhdm) as *mut u8;
         core::ptr::write_bytes(dest, 0, 4096);
-        core::ptr::copy_nonoverlapping(code.as_pointer(), dest, code.len());
+        core::ptr::copy_nonoverlapping(code.as_ptr(), dest, code.len());
     }
-    if address_space.map_page(code_vaddr, code_physical, PageFlags::USER_CODE).is_none() {
+    if address_space.map_page(code_vaddr, code_phys, PageFlags::USER_CODE).is_none() {
         return ExecResult::MemoryError;
     }
 
@@ -1135,11 +1135,11 @@ unsafe {
     let stack_pages = 4usize;
     for i in 0..stack_pages {
         let vaddr = stack_top - (i as u64 + 1) * 4096;
-        let physical = // Pattern matching — Rust's exhaustive branching construct.
+        let phys = // Pattern matching — Rust's exhaustive branching construct.
 match allocator_physical_page() { Some(p) => p, None => return ExecResult::MemoryError };
                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::write_bytes((physical + hhdm) as *mut u8, 0, 4096); }
-        if address_space.map_page(vaddr, physical, PageFlags::USER_DATA).is_none() {
+unsafe { core::ptr::write_bytes((phys + hhdm) as *mut u8, 0, 4096); }
+        if address_space.map_page(vaddr, phys, PageFlags::USER_DATA).is_none() {
             return ExecResult::MemoryError;
         }
     }
@@ -1240,18 +1240,18 @@ match AddressSpace::new_with_kernel() {
     ];
 
     let code_vaddr: u64 = 0x400000;
-    let code_physical = // Pattern matching — Rust's exhaustive branching construct.
+    let code_phys = // Pattern matching — Rust's exhaustive branching construct.
 match allocator_physical_page() {
         Some(p) => p,
         None => return ExecResult::MemoryError,
     };
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        let dest = (code_physical + hhdm) as *mut u8;
+        let dest = (code_phys + hhdm) as *mut u8;
         core::ptr::write_bytes(dest, 0, 4096);
-        core::ptr::copy_nonoverlapping(code.as_pointer(), dest, code.len());
+        core::ptr::copy_nonoverlapping(code.as_ptr(), dest, code.len());
     }
-    if address_space.map_page(code_vaddr, code_physical, PageFlags::USER_CODE).is_none() {
+    if address_space.map_page(code_vaddr, code_phys, PageFlags::USER_CODE).is_none() {
         return ExecResult::MemoryError;
     }
 
@@ -1259,11 +1259,11 @@ unsafe {
     let stack_pages = 4usize;
     for i in 0..stack_pages {
         let vaddr = stack_top - (i as u64 + 1) * 4096;
-        let physical = // Pattern matching — Rust's exhaustive branching construct.
+        let phys = // Pattern matching — Rust's exhaustive branching construct.
 match allocator_physical_page() { Some(p) => p, None => return ExecResult::MemoryError };
                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::write_bytes((physical + hhdm) as *mut u8, 0, 4096); }
-        if address_space.map_page(vaddr, physical, PageFlags::USER_DATA).is_none() {
+unsafe { core::ptr::write_bytes((phys + hhdm) as *mut u8, 0, 4096); }
+        if address_space.map_page(vaddr, phys, PageFlags::USER_DATA).is_none() {
             return ExecResult::MemoryError;
         }
     }
@@ -1367,18 +1367,18 @@ match AddressSpace::new_with_kernel() {
     ];
 
     let code_vaddr: u64 = 0x400000;
-    let code_physical = // Pattern matching — Rust's exhaustive branching construct.
+    let code_phys = // Pattern matching — Rust's exhaustive branching construct.
 match allocator_physical_page() {
         Some(p) => p,
         None => return ExecResult::MemoryError,
     };
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        let dest = (code_physical + hhdm) as *mut u8;
+        let dest = (code_phys + hhdm) as *mut u8;
         core::ptr::write_bytes(dest, 0, 4096);
-        core::ptr::copy_nonoverlapping(code.as_pointer(), dest, code.len());
+        core::ptr::copy_nonoverlapping(code.as_ptr(), dest, code.len());
     }
-    if address_space.map_page(code_vaddr, code_physical, PageFlags::USER_CODE).is_none() {
+    if address_space.map_page(code_vaddr, code_phys, PageFlags::USER_CODE).is_none() {
         return ExecResult::MemoryError;
     }
 
@@ -1386,11 +1386,11 @@ unsafe {
     let stack_pages = 4usize;
     for i in 0..stack_pages {
         let vaddr = stack_top - (i as u64 + 1) * 4096;
-        let physical = // Pattern matching — Rust's exhaustive branching construct.
+        let phys = // Pattern matching — Rust's exhaustive branching construct.
 match allocator_physical_page() { Some(p) => p, None => return ExecResult::MemoryError };
                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::write_bytes((physical + hhdm) as *mut u8, 0, 4096); }
-        if address_space.map_page(vaddr, physical, PageFlags::USER_DATA).is_none() {
+unsafe { core::ptr::write_bytes((phys + hhdm) as *mut u8, 0, 4096); }
+        if address_space.map_page(vaddr, phys, PageFlags::USER_DATA).is_none() {
             return ExecResult::MemoryError;
         }
     }

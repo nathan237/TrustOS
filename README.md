@@ -209,9 +209,10 @@ python scripts/pxe_server.py --tftp-root pxe_tftp --server-ip 10.0.0.1
 ## Build
 
 ```powershell
-cargo build --release -p trustos_kernel    # kernel only
-.\trustos.ps1 build                         # build + ISO + VM
-.\trustos.ps1 build -NoRun                  # build + ISO only
+cargo build --release -p trustos_kernel        # kernel seul
+.\scripts\build\build-trustos.ps1              # build + ISO + VM
+.\scripts\build\build-trustos.ps1 -NoRun       # build + ISO seulement
+.\scripts\trustos-hub.ps1                      # hub — point d'entrée principal
 ```
 
 Requires Rust nightly with `rust-src` and `llvm-tools-preview`, target `x86_64-unknown-none`. See [`CONTRIBUTING.md`](CONTRIBUTING.md).

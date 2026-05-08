@@ -34,7 +34,7 @@ pub fn start() {
     
     // Create the init process — use KERNEL flag so it shares kernel address space
     // (no user-space address space management on aarch64 yet)
-    let initialize_process = crate::process::Process::new(
+    let init_proc = crate::process::Process::new(
         PID_INITIALIZE,
         0, // Parent is kernel
         "init",

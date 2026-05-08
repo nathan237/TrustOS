@@ -62,7 +62,7 @@ const GUEST_ANNOUNCE: u32 = 1 << 21; // Guest can announce
 pub struct VirtioNetHdr {
     pub flags: u8,
     pub gso_type: u8,
-    pub header_length: u16,
+    pub hdr_len: u16,
     pub gso_size: u16,
     pub csum_start: u16,
     pub csum_offset: u16,
@@ -98,19 +98,19 @@ pub struct VirtioNet {
     /// Base VirtIO device
     device: VirtioDevice,
     /// Receive queue (queue 0)
-    receive_queue: Option<Box<Virtqueue>>,
+    rx_queue: Option<Box<Virtqueue>>,
     /// Transmit queue (queue 1)
-    transmit_queue: Option<Box<Virtqueue>>,
+    tx_queue: Option<Box<Virtqueue>>,
     /// MAC address
     mac: [u8; 6],
     /// Link status (up/down)
     link_up: bool,
     /// RX buffers (kept alive for DMA)
-    receive_buffers: Vec<Box<ReceiveBuffer>>,
+    rx_buffers: Vec<Box<ReceiveBuffer>>,
     /// TX buffers
-    transmit_buffers: Vec<Box<TransmitBuffer>>,
+    tx_buffers: Vec<Box<TransmitBuffer>>,
     /// Pending TX descriptor indices
-    transmit_pending: VecDeque<u16>,
+    tx_pending: VecDeque<u16>,
 }
 
 /// Global driver instance
@@ -138,9 +138,9 @@ static BYTES_RECEIVE: core::sync::atomic::AtomicU64 = core::sync::atomic::Atomic
 // Bloc d'implémentation — définit les méthodes du type ci-dessus.
 impl VirtioNet {
     /// Initialize the driver with a PCI device
-    pub fn new(pci_device: &PciDevice) -> Result<Self, &'static str> {
+    pub fn new(pci_dev: &PciDevice) -> Result<Self, &'static str> {
         // Get I/O base from BAR0 (legacy VirtIO uses I/O ports)
-        let bar0 = pci_device.bar[0];
+        let bar0 = pci_dev.bar[0];
         if bar0 == 0 {
             return Err("BAR0 not configured");
         }
@@ -199,13 +199,13 @@ impl VirtioNet {
         
         Ok(Self {
             device,
-            receive_queue: None,
-            transmit_queue: None,
+            rx_queue: None,
+            tx_queue: None,
             mac,
             link_up,
-            receive_buffers: Vec::new(),
-            transmit_buffers: Vec::new(),
-            transmit_pending: VecDeque::new(),
+            rx_buffers: Vec::new(),
+            tx_buffers: Vec::new(),
+            tx_pending: VecDeque::new(),
         })
     }
     
@@ -220,13 +220,13 @@ impl VirtioNet {
             return Err("RX queue not available");
         }
         
-        let receive_queue = self.allocator_queue(receive_size)?;
+        let rx_queue = self.alloc_queue(receive_size)?;
         
         // Tell device where the queue is
-        let pfn = (receive_queue.physical_address / 4096) as u32;
+        let pfn = (rx_queue.phys_addr / 4096) as u32;
         self.device.set_queue_address(pfn);
         
-        self.receive_queue = Some(receive_queue);
+        self.rx_queue = Some(rx_queue);
         
         // Setup TX queue (queue 1)
         self.device.select_queue(1);
@@ -237,24 +237,24 @@ impl VirtioNet {
             return Err("TX queue not available");
         }
         
-        let transmit_queue = self.allocator_queue(transmit_size)?;
+        let tx_queue = self.alloc_queue(transmit_size)?;
         
-        let pfn = (transmit_queue.physical_address / 4096) as u32;
+        let pfn = (tx_queue.phys_addr / 4096) as u32;
         self.device.set_queue_address(pfn);
         
-        self.transmit_queue = Some(transmit_queue);
+        self.tx_queue = Some(tx_queue);
         
         Ok(())
     }
     
     /// Allocate a virtqueue
-    fn allocator_queue(&mut self, size: u16) -> Result<Box<Virtqueue>, &'static str> {
+    fn alloc_queue(&mut self, size: u16) -> Result<Box<Virtqueue>, &'static str> {
         let total_size = Virtqueue::calc_size(size);
         
         // Allocate page-aligned memory
         // For simplicity, use heap (in production, use DMA-safe allocator)
         let layout = core::alloc::Layout::from_size_align(total_size, 4096)
-            .map_error(|_| "Layout error")?;
+            .map_err(|_| "Layout error")?;
         
         let ptr = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe { alloc::alloc::alloc_zeroed(layout) };
@@ -272,13 +272,13 @@ unsafe { ptr.add(avail_offset) as *mut virtio::VirtqAvail };
 unsafe { ptr.add(used_offset) as *mut virtio::VirtqUsed };
         
         // Physical address (for DMA) - in higher half, subtract HHDM offset
-        let virt_address = ptr as u64;
+        let virt_addr = ptr as u64;
         let hhdm_offset = crate::memory::hhdm_offset();
-        let physical_address = if virt_address >= hhdm_offset {
-            virt_address - hhdm_offset
+        let phys_addr = if virt_addr >= hhdm_offset {
+            virt_addr - hhdm_offset
         } else {
             // Heap is below HHDM, use identity mapping assumption
-            virt_address
+            virt_addr
         };
         
         // Initialize free list
@@ -290,23 +290,23 @@ unsafe { ptr.add(used_offset) as *mut virtio::VirtqUsed };
         
         Ok(Box::new(Virtqueue {
             size,
-            physical_address,
+            phys_addr,
             desc: descriptor_pointer,
             avail: avail_pointer,
             used: used_pointer,
-            last_used_index: 0,
+            last_used_idx: 0,
             free_head: 0,
-            number_free: size,
+            num_free: size,
             free_list,
         }))
     }
     
     /// Setup RX buffers
-    pub fn setup_receive_buffers(&mut self) -> Result<(), &'static str> {
-        let queue = self.receive_queue.as_mut().ok_or("RX queue not initialized")?;
+    pub fn setup_rx_buffers(&mut self) -> Result<(), &'static str> {
+        let queue = self.rx_queue.as_mut().ok_or("RX queue not initialized")?;
         
         // Allocate buffers and add them to the available ring
-        let number_buffers = (queue.size / 2).minimum(128) as usize; // Use half the queue, max 128
+        let number_buffers = (queue.size / 2).min(128) as usize; // Use half the queue, max 128
         
         for _ in 0..number_buffers {
             let buffer = Box::new(ReceiveBuffer {
@@ -314,19 +314,19 @@ unsafe { ptr.add(used_offset) as *mut virtio::VirtqUsed };
                 data: [0u8; 1514],
             });
             
-            let descriptor_index = queue.allocator_descriptor().ok_or("No free descriptors")?;
+            let descriptor_index = queue.alloc_desc().ok_or("No free descriptors")?;
             
             // Get physical address of buffer
-            let buffer_pointer = &*buffer as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+            let buffer_ptr = &*buffer as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const ReceiveBuffer;
-            let virt_address = buffer_pointer as u64;
+            let virt_addr = buffer_ptr as u64;
             let hhdm = crate::memory::hhdm_offset();
-            let physical_address = if virt_address >= hhdm { virt_address - hhdm } else { virt_address };
+            let phys_addr = if virt_addr >= hhdm { virt_addr - hhdm } else { virt_addr };
             
             // Setup descriptor (device writes to this buffer)
             unsafe {
                 let desc = &mut *queue.desc.add(descriptor_index as usize);
-                desc.address = physical_address;
+                desc.addr = phys_addr;
                 desc.len = core::mem::size_of::<ReceiveBuffer>() as u32;
                 desc.flags = desc_flags::WRITE; // Device writes to buffer
                 desc.next = 0;
@@ -335,7 +335,7 @@ const ReceiveBuffer;
                 queue.add_available(descriptor_index);
             }
             
-            self.receive_buffers.push(buffer);
+            self.rx_buffers.push(buffer);
         }
         
         crate::log_debug!("[virtio-net] {} RX buffers ready", number_buffers);
@@ -362,9 +362,9 @@ const ReceiveBuffer;
         }
         
         // First, recycle any completed TX descriptors
-        self.poll_transmit_internal();
+        self.poll_tx_internal();
         
-        let queue = self.transmit_queue.as_mut().ok_or("TX queue not initialized")?;
+        let queue = self.tx_queue.as_mut().ok_or("TX queue not initialized")?;
         
         // Allocate TX buffer
         let mut buffer = Box::new(TransmitBuffer {
@@ -376,19 +376,19 @@ const ReceiveBuffer;
         buffer.data[..data.len()].copy_from_slice(data);
         
         // Allocate descriptor
-        let descriptor_index = queue.allocator_descriptor().ok_or("TX queue full")?;
+        let descriptor_index = queue.alloc_desc().ok_or("TX queue full")?;
         
         // Get physical address
-        let buffer_pointer = &*buffer as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+        let buffer_ptr = &*buffer as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const TransmitBuffer;
-        let virt_address = buffer_pointer as u64;
+        let virt_addr = buffer_ptr as u64;
         let hhdm = crate::memory::hhdm_offset();
-        let physical_address = if virt_address >= hhdm { virt_address - hhdm } else { virt_address };
+        let phys_addr = if virt_addr >= hhdm { virt_addr - hhdm } else { virt_addr };
         
         // Setup descriptor
         unsafe {
             let desc = &mut *queue.desc.add(descriptor_index as usize);
-            desc.address = physical_address;
+            desc.addr = phys_addr;
             desc.len = (VirtioNetHdr::SIZE + data.len()) as u32;
             desc.flags = 0; // Device reads from buffer
             desc.next = 0;
@@ -397,8 +397,8 @@ const TransmitBuffer;
         }
         
         // Keep buffer alive until transmission complete
-        self.transmit_buffers.push(buffer);
-        self.transmit_pending.push_back(descriptor_index);
+        self.tx_buffers.push(buffer);
+        self.tx_pending.push_back(descriptor_index);
         
         // Notify device
         self.device.notify_queue(1);
@@ -411,8 +411,8 @@ const TransmitBuffer;
     }
     
     /// Poll for received packets
-    pub fn poll_receive(&mut self) -> Option<Vec<u8>> {
-        let queue = self.receive_queue.as_mut()?;
+    pub fn poll_rx(&mut self) -> Option<Vec<u8>> {
+        let queue = self.rx_queue.as_mut()?;
         
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
@@ -427,9 +427,9 @@ unsafe {
             let desc = &*queue.desc.add(descriptor_index as usize);
             
             // Get the data (skip virtio header)
-            let buffer_pointer = (crate::memory::hhdm_offset() + desc.address) as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+            let buffer_ptr = (crate::memory::hhdm_offset() + desc.addr) as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const ReceiveBuffer;
-            let buffer = &*buffer_pointer;
+            let buffer = &*buffer_ptr;
             
             let data_length = (used.1 as usize).saturating_sub(VirtioNetHdr::SIZE);
             if data_length > 0 && data_length <= 1514 {
@@ -455,9 +455,9 @@ const ReceiveBuffer;
     }
     
     /// Handle completed transmissions (internal)
-    fn poll_transmit_internal(&mut self) {
+    fn poll_tx_internal(&mut self) {
         let queue = // Correspondance de motifs — branchement exhaustif de Rust.
-match self.transmit_queue.as_mut() {
+match self.tx_queue.as_mut() {
             Some(q) => q,
             None => return,
         };
@@ -467,25 +467,25 @@ unsafe {
             while queue.has_used() {
                 if let Some(used) = queue.pop_used() {
                     // Free the descriptor - used is (id, len) tuple
-                    queue.free_descriptor(used.0 as u16);
+                    queue.free_desc(used.0 as u16);
                     
                     // Remove from pending
-                    if let Some(position) = self.transmit_pending.iter().position(|&x| x == used.0 as u16) {
-                        self.transmit_pending.remove(position);
+                    if let Some(pos) = self.tx_pending.iter().position(|&x| x == used.0 as u16) {
+                        self.tx_pending.remove(pos);
                     }
                 }
             }
         }
         
         // Clean up TX buffers (simple approach: keep last N)
-        while self.transmit_buffers.len() > 16 && !self.transmit_pending.is_empty() {
-            self.transmit_buffers.remove(0);
+        while self.tx_buffers.len() > 16 && !self.tx_pending.is_empty() {
+            self.tx_buffers.remove(0);
         }
     }
     
     /// Handle completed transmissions (public API)
-    pub fn poll_transmit(&mut self) {
-        self.poll_transmit_internal();
+    pub fn poll_tx(&mut self) {
+        self.poll_tx_internal();
     }
     
     /// Get MAC address
@@ -507,12 +507,12 @@ unsafe {
 // ============ Public API ============
 
 /// Initialize virtio-net driver
-pub fn init(pci_device: &PciDevice) -> Result<(), &'static str> {
+pub fn init(pci_dev: &PciDevice) -> Result<(), &'static str> {
     crate::log!("[virtio-net] Initializing...");
     
-    let mut driver = VirtioNet::new(pci_device)?;
+    let mut driver = VirtioNet::new(pci_dev)?;
     driver.setup_queues()?;
-    driver.setup_receive_buffers()?;
+    driver.setup_rx_buffers()?;
     driver.start()?;
     
     // Store iobase for ISR access
@@ -522,7 +522,7 @@ pub fn init(pci_device: &PciDevice) -> Result<(), &'static str> {
     *DRIVER.lock() = Some(driver);
     
     // Route PCI interrupt through IOAPIC
-    let irq = pci_device.interrupt_line;
+    let irq = pci_dev.interrupt_line;
     if irq > 0 && irq < 255 {
         crate::apic::route_pci_interrupt_request(irq, crate::apic::VIRTIO_VECTOR);
         crate::serial_println!("[virtio-net] IRQ {} routed to vector {}", irq, crate::apic::VIRTIO_VECTOR);
@@ -544,8 +544,8 @@ pub fn get_mac() -> Option<[u8; 6]> {
 /// Send a raw ethernet frame
 pub fn send_packet(data: &[u8]) -> Result<(), &'static str> {
     let mut driver = DRIVER.lock();
-    let driver = driver.as_mut().ok_or("Driver not initialized")?;
-    driver.send(data)
+    let drv = driver.as_mut().ok_or("Driver not initialized")?;
+    drv.send(data)
 }
 
 /// Poll for incoming packets (non-blocking)
@@ -554,12 +554,12 @@ pub fn poll() {
     VIRTIO_NET_INTERRUPT_REQUEST_PENDING.store(false, Ordering::Relaxed);
     
     let mut driver = DRIVER.lock();
-    if let Some(driver) = driver.as_mut() {
+    if let Some(drv) = driver.as_mut() {
         // Check for completed TX
-        driver.poll_transmit();
+        drv.poll_tx();
         
         // Check for received packets
-        while let Some(packet) = driver.poll_receive() {
+        while let Some(packet) = drv.poll_rx() {
             RECEIVE_PACKETS.lock().push_back(packet);
         }
     }
@@ -588,20 +588,20 @@ pub fn handle_interrupt() {
     if iobase == 0 { return; }
     
     // Read ISR status register (iobase+0x13) — this also acknowledges the interrupt
-    let interrupt_handler: u8 = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+    let isr: u8 = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
         let mut port = Port::<u8>::new(iobase + 0x13);
         port.read()
     };
     
-    if interrupt_handler & 1 != 0 {
+    if isr & 1 != 0 {
         // Bit 0: used ring update (packets ready)
         VIRTIO_NET_INTERRUPT_REQUEST_PENDING.store(true, Ordering::Release);
     }
 }
 
 /// Check if there's a pending VirtIO net interrupt
-pub fn interrupt_request_pending() -> bool {
+pub fn irq_pending() -> bool {
     VIRTIO_NET_INTERRUPT_REQUEST_PENDING.load(Ordering::Relaxed)
 }
 

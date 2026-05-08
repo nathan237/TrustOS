@@ -84,7 +84,7 @@ pub struct ContainerConfig {
     /// Max total HTTP requests per session
     pub request_limit: usize,
     /// Max response body size
-    pub maximum_response_size: usize,
+    pub max_response_size: usize,
     /// Request rate limit (per minute)
     pub rate_limit: u32,
     /// Allowed domains (empty = use preset default)
@@ -108,7 +108,7 @@ impl Default for ContainerConfig {
             isolation: IsolationMode::SoftwareOnly,
             memory_limit: 4 * 1024 * 1024,     // 4 MB
             request_limit: 200,
-            maximum_response_size: 1024 * 1024,     // 1 MB
+            max_response_size: 1024 * 1024,     // 1 MB
             rate_limit: 60,
             allowed_domains: Vec::new(),
             blocked_domains: Vec::new(),
@@ -129,7 +129,7 @@ impl ContainerConfig {
             isolation: IsolationMode::SoftwareOnly,
             memory_limit: 2 * 1024 * 1024,
             request_limit: 50,
-            maximum_response_size: 512 * 1024,
+            max_response_size: 512 * 1024,
             rate_limit: 20,
             allowed_domains: Vec::new(),
             blocked_domains: Vec::new(),
@@ -140,14 +140,14 @@ impl ContainerConfig {
     }
 
     /// Dev preset: permissive, JS allowed, higher limits
-    pub fn device() -> Self {
+    pub fn dev() -> Self {
         Self {
             name: String::from("web-dev"),
             preset: PolicyPreset::Permissive,
             isolation: IsolationMode::SoftwareOnly,
             memory_limit: 8 * 1024 * 1024,
             request_limit: 500,
-            maximum_response_size: 4 * 1024 * 1024,
+            max_response_size: 4 * 1024 * 1024,
             rate_limit: 120,
             allowed_domains: Vec::new(),
             blocked_domains: Vec::new(),
@@ -193,7 +193,7 @@ pub struct WebContainer {
 // Bloc d'implémentation — définit les méthodes du type ci-dessus.
 impl WebContainer {
     fn new(id: u32, config: ContainerConfig) -> Self {
-        let now = crate::time::uptime_mouse();
+        let now = crate::time::uptime_ms();
         Self {
             id,
             config,
@@ -220,14 +220,14 @@ impl WebContainer {
         // Create sandbox through the global manager
         let label = format!("container:{}", self.config.name);
         let sandbox_id = {
-            let mut manager = SANDBOX_MANAGER.lock();
-            let sid = manager.create_sandbox(self.config.preset, Some(&label));
+            let mut mgr = SANDBOX_MANAGER.lock();
+            let sid = mgr.create_sandbox(self.config.preset, Some(&label));
 
             // Apply container-specific configuration to the sandbox
-            if let Some(sb) = manager.get_mut(sid) {
-                sb.limits.maximum_memory_bytes = self.config.memory_limit;
-                sb.limits.maximum_total_requests = self.config.request_limit;
-                sb.limits.maximum_response_size = self.config.maximum_response_size;
+            if let Some(sb) = mgr.get_mut(sid) {
+                sb.limits.max_memory_bytes = self.config.memory_limit;
+                sb.limits.max_total_requests = self.config.request_limit;
+                sb.limits.max_response_size = self.config.max_response_size;
 
                 // Apply domain rules
                 for domain in &self.config.allowed_domains {
@@ -239,7 +239,7 @@ impl WebContainer {
 
                 // JS policy
                 sb.policy.block_javascript = !self.config.allow_js;
-                sb.policy.rate_limit_per_minimum = self.config.rate_limit;
+                sb.policy.rate_limit_per_min = self.config.rate_limit;
             }
 
             sid
@@ -247,7 +247,7 @@ impl WebContainer {
 
         self.sandbox_id = Some(sandbox_id);
         self.health = HealthStatus::Healthy;
-        self.started_at = crate::time::uptime_mouse();
+        self.started_at = crate::time::uptime_ms();
         self.last_activity = self.started_at;
 
         crate::serial_println!("[container:{}] Started (sandbox #{}, {:?}, {:?})",
@@ -278,7 +278,7 @@ impl WebContainer {
 
         let response = SANDBOX_MANAGER.lock().navigate(sid, url)?;
 
-        self.last_activity = crate::time::uptime_mouse();
+        self.last_activity = crate::time::uptime_ms();
         self.total_bytes += response.body.len();
         self.total_requests += 1;
         self.history.push(String::from(url));
@@ -298,7 +298,7 @@ impl WebContainer {
 
         let response = SANDBOX_MANAGER.lock().fetch_resource(sid, url)?;
 
-        self.last_activity = crate::time::uptime_mouse();
+        self.last_activity = crate::time::uptime_ms();
         self.total_bytes += response.body.len();
         self.total_requests += 1;
 
@@ -314,15 +314,15 @@ impl WebContainer {
             return true;
         }
 
-        let now = crate::time::uptime_mouse();
-        let timeout_mouse = self.config.watchdog_timeout_secs * 1000;
+        let now = crate::time::uptime_ms();
+        let timeout_ms = self.config.watchdog_timeout_secs * 1000;
 
         // Check if sandbox is still responsive
         if let Some(sid) = self.sandbox_id {
-            let manager = SANDBOX_MANAGER.lock();
-            if let Some(sb) = manager.get(sid) {
+            let mgr = SANDBOX_MANAGER.lock();
+            if let Some(sb) = mgr.get(sid) {
                 if sb.state == SandboxState::Terminated {
-                    drop(manager);
+                    drop(mgr);
                     crate::serial_println!("[container:{}] watchdog: sandbox terminated, restarting", self.id);
                     if self.config.auto_restart {
                         self.sandbox_id = None;
@@ -333,11 +333,11 @@ impl WebContainer {
                     return false;
                 }
                 // Check for stall (no activity for timeout period)
-                if now.saturating_sub(self.last_activity) > timeout_mouse && self.total_requests > 0 {
+                if now.saturating_sub(self.last_activity) > timeout_ms && self.total_requests > 0 {
                     self.health = HealthStatus::Degraded;
                 }
             } else {
-                drop(manager);
+                drop(mgr);
                 // Sandbox disappeared — restart if auto-restart
                 if self.config.auto_restart {
                     self.sandbox_id = None;
@@ -384,7 +384,7 @@ impl WebContainer {
 
     /// Get uptime in seconds
     pub fn uptime_secs(&self) -> u64 {
-        crate::time::uptime_mouse().saturating_sub(self.started_at) / 1000
+        crate::time::uptime_ms().saturating_sub(self.started_at) / 1000
     }
 
     /// Get container status as string
@@ -459,7 +459,7 @@ pub fn new() -> Self {
 
     /// Boot the daemon — creates and starts the default web container
     pub fn boot(&mut self) {
-        self.boot_time = crate::time::uptime_mouse();
+        self.boot_time = crate::time::uptime_ms();
         self.booted = true;
 
         // Create default secure web container
@@ -566,7 +566,7 @@ match container.start() {
 
     /// Get daemon uptime in seconds
     pub fn uptime_secs(&self) -> u64 {
-        crate::time::uptime_mouse().saturating_sub(self.boot_time) / 1000
+        crate::time::uptime_ms().saturating_sub(self.boot_time) / 1000
     }
 
     /// Get daemon status summary
@@ -623,7 +623,7 @@ pub fn navigate(url: &str) -> Result<ProxiedResponse, SandboxError> {
 
 /// List containers
 pub fn list_containers() -> Vec<(u32, String, HealthStatus, bool)> {
-    CONTAINER_DAEMON.lock().list().into_iterator()
+    CONTAINER_DAEMON.lock().list().into_iter()
         .map(|(id, n, h, d)| (id, String::from(n), h, d))
         .collect()
 }

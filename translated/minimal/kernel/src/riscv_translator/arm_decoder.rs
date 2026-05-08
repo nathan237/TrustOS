@@ -27,182 +27,182 @@ use alloc::string::String;
 use super::ir::*;
 
 
-fn ccy(ijz: u8) -> Reg {
-    match ijz {
-        0  => Reg::Je, 
-        1  => Reg::Zo, 
-        2  => Reg::Afw, 
-        3  => Reg::Va, 
-        4  => Reg::Vb, 
-        5  => Reg::Vc, 
-        6  => Reg::Bav, 
-        7  => Reg::Vd, 
-        8  => Reg::Aol, 
-        9  => Reg::Bg,  
-        10 => Reg::Mp,  
-        11 => Reg::Aom,  
-        12 => Reg::Bay, 
-        13 => Reg::Baz, 
-        14 => Reg::Bba, 
-        15 => Reg::Bbd,  
-        16 => Reg::Mp,  
-        17 => Reg::Aom,  
-        18 => Reg::Bbb,  
-        19 => Reg::Afx, 
-        20 => Reg::Afy, 
-        21 => Reg::Afz, 
-        22 => Reg::Aog, 
-        23 => Reg::Aoh, 
-        24 => Reg::Aoi, 
-        25 => Reg::Aoj, 
-        26 => Reg::Aok, 
-        27 => Reg::Baw, 
-        28 => Reg::Bax, 
-        29 => Reg::Aon,  
-        30 => Reg::Oq,  
-        31 => Reg::Bt,  
-        _  => Reg::Bt,
+fn apr(arm_reg: u8) -> Reg {
+    match arm_reg {
+        0  => Reg::X10, 
+        1  => Reg::X11, 
+        2  => Reg::X12, 
+        3  => Reg::X13, 
+        4  => Reg::X14, 
+        5  => Reg::X15, 
+        6  => Reg::X16, 
+        7  => Reg::X17, 
+        8  => Reg::X28, 
+        9  => Reg::X5,  
+        10 => Reg::X6,  
+        11 => Reg::X7,  
+        12 => Reg::X29, 
+        13 => Reg::X30, 
+        14 => Reg::X31, 
+        15 => Reg::X9,  
+        16 => Reg::X6,  
+        17 => Reg::X7,  
+        18 => Reg::X4,  
+        19 => Reg::X18, 
+        20 => Reg::X19, 
+        21 => Reg::X20, 
+        22 => Reg::X21, 
+        23 => Reg::X22, 
+        24 => Reg::X23, 
+        25 => Reg::X24, 
+        26 => Reg::X25, 
+        27 => Reg::X26, 
+        28 => Reg::X27, 
+        29 => Reg::X8,  
+        30 => Reg::X1,  
+        31 => Reg::X0,  
+        _  => Reg::X0,
     }
 }
 
 
-fn kba(ijz: u8, tyy: bool) -> Reg {
-    if ijz == 31 {
-        if tyy { Reg::Ds } else { Reg::Bt }
+fn fhk(arm_reg: u8, is_sp: bool) -> Reg {
+    if arm_reg == 31 {
+        if is_sp { Reg::X2 } else { Reg::X0 }
     } else {
-        ccy(ijz)
+        apr(arm_reg)
     }
 }
 
 
 pub struct ArmDecoder {
     
-    aj: Vec<u8>,
+    code: Vec<u8>,
     
-    sm: u64,
+    base_addr: u64,
     
-    l: usize,
+    offset: usize,
     
-    pub cm: TranslationStats,
+    pub stats: TranslationStats,
 }
 
 impl ArmDecoder {
-    pub fn new(aj: &[u8], sm: u64) -> Self {
+    pub fn new(code: &[u8], base_addr: u64) -> Self {
         Self {
-            aj: aj.ip(),
-            sm,
-            l: 0,
-            cm: TranslationStats::default(),
+            code: code.to_vec(),
+            base_addr,
+            offset: 0,
+            stats: TranslationStats::default(),
         }
     }
 
     
-    pub fn mmw(&mut self, cun: usize) -> TranslatedBlock {
-        self.l = cun;
-        let cbz = self.sm + cun as u64;
-        let mut block = TranslatedBlock::new(cbz, SourceArch::Fg);
+    pub fn translate_block(&mut self, azv: usize) -> TranslatedBlock {
+        self.offset = azv;
+        let src_addr = self.base_addr + azv as u64;
+        let mut block = TranslatedBlock::new(src_addr, SourceArch::Aarch64);
 
-        let eff = 256;
-        let mut az = 0;
+        let max_instructions = 256;
+        let mut count = 0;
 
-        while self.l + 4 <= self.aj.len() && az < eff {
-            let mkf = self.hfp(&mut block);
-            block.jrg += 1;
-            self.cm.esv += 1;
-            az += 1;
+        while self.offset + 4 <= self.code.len() && count < max_instructions {
+            let gyh = self.decode_one(&mut block);
+            block.src_inst_count += 1;
+            self.stats.instructions_translated += 1;
+            count += 1;
 
-            if mkf {
+            if gyh {
                 break;
             }
         }
 
-        self.cm.ilv += 1;
-        self.cm.hyi += block.instructions.len() as u64;
+        self.stats.blocks_translated += 1;
+        self.stats.rv_instructions_emitted += block.instructions.len() as u64;
         block
     }
 
     
-    pub fn iev(&mut self) -> Vec<TranslatedBlock> {
-        let mut xk = Vec::new();
-        let mut fyw: Vec<usize> = Vec::new();
-        let mut bxs: Vec<u64> = Vec::new();
+    pub fn translate_all(&mut self) -> Vec<TranslatedBlock> {
+        let mut blocks = Vec::new();
+        let mut csx: Vec<usize> = Vec::new();
+        let mut anc: Vec<u64> = Vec::new();
 
-        fyw.push(0);
+        csx.push(0);
 
-        while let Some(l) = fyw.pop() {
-            let ag = self.sm + l as u64;
-            if bxs.contains(&ag) {
+        while let Some(offset) = csx.pop() {
+            let addr = self.base_addr + offset as u64;
+            if anc.contains(&addr) {
                 continue;
             }
-            bxs.push(ag);
+            anc.push(addr);
 
-            let block = self.mmw(l);
+            let block = self.translate_block(offset);
 
-            for &fvt in &block.bil {
-                if fvt >= self.sm {
-                    let ice = (fvt - self.sm) as usize;
-                    if ice + 4 <= self.aj.len() && !bxs.contains(&fvt) {
-                        fyw.push(ice);
+            for &succ in &block.successors {
+                if succ >= self.base_addr {
+                    let eaq = (succ - self.base_addr) as usize;
+                    if eaq + 4 <= self.code.len() && !anc.contains(&succ) {
+                        csx.push(eaq);
                     }
                 }
             }
 
-            xk.push(block);
+            blocks.push(block);
         }
 
-        xk
+        blocks
     }
 
     
-    fn hjd(&mut self) -> u32 {
-        if self.l + 4 > self.aj.len() {
+    fn fetch(&mut self) -> u32 {
+        if self.offset + 4 > self.code.len() {
             return 0;
         }
-        let fi = u32::dj([
-            self.aj[self.l],
-            self.aj[self.l + 1],
-            self.aj[self.l + 2],
-            self.aj[self.l + 3],
+        let inst = u32::from_le_bytes([
+            self.code[self.offset],
+            self.code[self.offset + 1],
+            self.code[self.offset + 2],
+            self.code[self.offset + 3],
         ]);
-        self.l += 4;
-        fi
+        self.offset += 4;
+        inst
     }
 
     
     
-    fn hfp(&mut self, block: &mut TranslatedBlock) -> bool {
-        let dik = self.sm + self.l as u64;
-        let fi = self.hjd();
+    fn decode_one(&mut self, block: &mut TranslatedBlock) -> bool {
+        let bhf = self.base_addr + self.offset as u64;
+        let inst = self.fetch();
 
-        if fi == 0 {
-            block.fj(RvInst::Fq);
+        if inst == 0 {
+            block.emit(RvInst::Nop);
             return true;
         }
 
         
-        let uym = (fi >> 25) & 0xF;
+        let nnh = (inst >> 25) & 0xF;
 
-        match uym {
+        match nnh {
             
-            0b1000 | 0b1001 => self.ruj(fi, dik, block),
-
-            
-            0b1010 | 0b1011 => return self.ruh(fi, dik, block),
+            0b1000 | 0b1001 => self.decode_dp_imm(inst, bhf, block),
 
             
-            0b0100 | 0b0110 | 0b1100 | 0b1110 => self.ruo(fi, dik, block),
+            0b1010 | 0b1011 => return self.decode_branch(inst, bhf, block),
 
             
-            0b0101 | 0b1101 => self.ruk(fi, dik, block),
+            0b0100 | 0b0110 | 0b1100 | 0b1110 => self.decode_ldst(inst, bhf, block),
+
+            
+            0b0101 | 0b1101 => self.decode_dp_reg(inst, bhf, block),
 
             _ => {
-                self.cm.ddf += 1;
-                block.fj(RvInst::Od {
-                    arch: SourceArch::Fg,
-                    ag: dik,
-                    text: format!("unsupported: 0x{:08X}", fi),
+                self.stats.unsupported_instructions += 1;
+                block.emit(RvInst::SrcAnnotation {
+                    arch: SourceArch::Aarch64,
+                    addr: bhf,
+                    text: format!("unsupported: 0x{:08X}", inst),
                 });
-                block.fj(RvInst::Fq);
+                block.emit(RvInst::Nop);
             }
         }
 
@@ -210,60 +210,60 @@ impl ArmDecoder {
     }
 
     
-    fn ruj(&mut self, fi: u32, ag: u64, block: &mut TranslatedBlock) {
-        let fps = (fi >> 23) & 0x7;
-        let eim = (fi >> 31) & 1; 
-        let ck = (fi & 0x1F) as u8;
-        let dve = ((fi >> 5) & 0x1F) as u8;
+    fn decode_dp_imm(&mut self, inst: u32, addr: u64, block: &mut TranslatedBlock) {
+        let cnm = (inst >> 23) & 0x7;
+        let bvs = (inst >> 31) & 1; 
+        let aj = (inst & 0x1F) as u8;
+        let boo = ((inst >> 5) & 0x1F) as u8;
 
-        match fps {
+        match cnm {
             
             0b010 | 0b011 => {
-                let acn = ((fi >> 22) & 1) as u8;
-                let izn = ((fi >> 10) & 0xFFF) as i64;
-                let gf = if acn == 1 { izn << 12 } else { izn };
-                let jbv = (fi >> 30) & 1 == 1;
-                let gsh = (fi >> 29) & 1 == 1;
+                let no = ((inst >> 22) & 1) as u8;
+                let eqf = ((inst >> 10) & 0xFFF) as i64;
+                let imm = if no == 1 { eqf << 12 } else { eqf };
+                let erw = (inst >> 30) & 1 == 1;
+                let dej = (inst >> 29) & 1 == 1;
 
-                let aen = kba(ck, !gsh);
-                let we = kba(dve, true);
+                let pj = fhk(aj, !dej);
+                let kc = fhk(boo, true);
 
-                if jbv {
-                    block.fj(RvInst::Gf { ck: aen, cp: we, gf: -gf });
+                if erw {
+                    block.emit(RvInst::Addi { aj: pj, rs1: kc, imm: -imm });
                 } else {
-                    block.fj(RvInst::Gf { ck: aen, cp: we, gf });
+                    block.emit(RvInst::Addi { aj: pj, rs1: kc, imm });
                 }
 
-                if gsh {
-                    block.fj(RvInst::Ed { cp: aen, et: Reg::Bt });
+                if dej {
+                    block.emit(RvInst::CmpFlags { rs1: pj, rs2: Reg::X0 });
                 }
             }
 
             
             0b100 | 0b101 => {
-                let avz = ((fi >> 21) & 0x3) as u8;
-                let buy = ((fi >> 5) & 0xFFFF) as i64;
-                let uyt = (fi >> 29) & 0x3;
-                let aen = ccy(ck);
+                let xc = ((inst >> 21) & 0x3) as u8;
+                let alt = ((inst >> 5) & 0xFFFF) as i64;
+                let nnn = (inst >> 29) & 0x3;
+                let pj = apr(aj);
 
-                let dvy = buy << (avz * 16);
+                let bow = alt << (xc * 16);
 
-                match uyt {
+                match nnn {
                     0b00 => { 
-                        block.fj(RvInst::Hu { ck: aen, gf: !dvy });
+                        block.emit(RvInst::Li { aj: pj, imm: !bow });
                     }
                     0b10 => { 
-                        block.fj(RvInst::Hu { ck: aen, gf: dvy });
+                        block.emit(RvInst::Li { aj: pj, imm: bow });
                     }
                     0b11 => { 
-                        let hs = !(0xFFFF_i64 << (avz * 16));
-                        block.fj(RvInst::Hu { ck: Reg::Bg, gf: hs });
-                        block.fj(RvInst::Ex { ck: aen, cp: aen, et: Reg::Bg });
-                        block.fj(RvInst::Hu { ck: Reg::Bg, gf: dvy });
-                        block.fj(RvInst::Fx { ck: aen, cp: aen, et: Reg::Bg });
+                        let mask = !(0xFFFF_i64 << (xc * 16));
+                        block.emit(RvInst::Li { aj: Reg::X5, imm: mask });
+                        block.emit(RvInst::And { aj: pj, rs1: pj, rs2: Reg::X5 });
+                        block.emit(RvInst::Li { aj: Reg::X5, imm: bow });
+                        block.emit(RvInst::Or { aj: pj, rs1: pj, rs2: Reg::X5 });
                     }
                     _ => {
-                        block.fj(RvInst::Fq);
+                        block.emit(RvInst::Nop);
                     }
                 }
             }
@@ -271,19 +271,19 @@ impl ArmDecoder {
             
             0b110 => {
                 
-                let aen = ccy(ck);
-                let we = ccy(dve);
-                let hqh = (fi >> 29) & 0x3;
+                let pj = apr(aj);
+                let kc = apr(boo);
+                let dtt = (inst >> 29) & 0x3;
                 
-                let izo = ruf(fi, eim == 1);
+                let eqg = lci(inst, bvs == 1);
 
-                match hqh {
-                    0b00 => block.fj(RvInst::Ou { ck: aen, cp: we, gf: izo }),
-                    0b01 => block.fj(RvInst::Akw { ck: aen, cp: we, gf: izo }),
-                    0b10 => block.fj(RvInst::Aoq { ck: aen, cp: we, gf: izo }),
+                match dtt {
+                    0b00 => block.emit(RvInst::Andi { aj: pj, rs1: kc, imm: eqg }),
+                    0b01 => block.emit(RvInst::Ori { aj: pj, rs1: kc, imm: eqg }),
+                    0b10 => block.emit(RvInst::Xori { aj: pj, rs1: kc, imm: eqg }),
                     0b11 => { 
-                        block.fj(RvInst::Ou { ck: aen, cp: we, gf: izo });
-                        block.fj(RvInst::Ed { cp: aen, et: Reg::Bt });
+                        block.emit(RvInst::Andi { aj: pj, rs1: kc, imm: eqg });
+                        block.emit(RvInst::CmpFlags { rs1: pj, rs2: Reg::X0 });
                     }
                     _ => {}
                 }
@@ -291,217 +291,217 @@ impl ArmDecoder {
 
             
             0b000 | 0b001 => {
-                let aen = ccy(ck);
-                let tsd = ((fi >> 5) & 0x7FFFF) as i64;
-                let tse = ((fi >> 29) & 0x3) as i64;
-                let twq = (fi >> 31) & 1 == 1;
-                let mut gf = (tsd << 2) | tse;
+                let pj = apr(aj);
+                let mof = ((inst >> 5) & 0x7FFFF) as i64;
+                let mog = ((inst >> 29) & 0x3) as i64;
+                let mrw = (inst >> 31) & 1 == 1;
+                let mut imm = (mof << 2) | mog;
                 
-                if gf & (1 << 20) != 0 { gf |= !0x1FFFFF; }
-                if twq { gf <<= 12; }
-                let cd = ag as i64 + gf;
-                block.fj(RvInst::Hu { ck: aen, gf: cd });
+                if imm & (1 << 20) != 0 { imm |= !0x1FFFFF; }
+                if mrw { imm <<= 12; }
+                let target = addr as i64 + imm;
+                block.emit(RvInst::Li { aj: pj, imm: target });
             }
 
             _ => {
-                self.cm.ddf += 1;
-                block.fj(RvInst::Fq);
+                self.stats.unsupported_instructions += 1;
+                block.emit(RvInst::Nop);
             }
         }
     }
 
     
-    fn ruh(&mut self, fi: u32, ag: u64, block: &mut TranslatedBlock) -> bool {
-        let uyn = (fi >> 29) & 0x7;
+    fn decode_branch(&mut self, inst: u32, addr: u64, block: &mut TranslatedBlock) -> bool {
+        let nni = (inst >> 29) & 0x7;
 
-        match uyn {
+        match nni {
             
             0b000 | 0b100 => {
-                let mut ldm = (fi & 0x03FF_FFFF) as i64;
-                if ldm & (1 << 25) != 0 { ldm |= !0x03FF_FFFF; }
-                let cd = ag as i64 + (ldm << 2);
-                let ofq = (fi >> 31) & 1 == 1;
+                let mut gbx = (inst & 0x03FF_FFFF) as i64;
+                if gbx & (1 << 25) != 0 { gbx |= !0x03FF_FFFF; }
+                let target = addr as i64 + (gbx << 2);
+                let ihr = (inst >> 31) & 1 == 1;
 
-                if ofq {
+                if ihr {
                     
-                    block.fj(RvInst::Xh { ck: Reg::Oq, l: cd });
+                    block.emit(RvInst::Jal { aj: Reg::X1, offset: target });
                 } else {
                     
-                    block.fj(RvInst::Xh { ck: Reg::Bt, l: cd });
+                    block.emit(RvInst::Jal { aj: Reg::X0, offset: target });
                 }
 
-                block.bil.push(cd as u64);
-                if ofq {
-                    block.bil.push(ag + 4);
+                block.successors.push(target as u64);
+                if ihr {
+                    block.successors.push(addr + 4);
                 }
                 true
             }
 
             
             0b010 => {
-                let mut flf = ((fi >> 5) & 0x7FFFF) as i64;
-                if flf & (1 << 18) != 0 { flf |= !0x7FFFF; }
-                let cd = ag as i64 + (flf << 2);
-                let mo = (fi & 0xF) as u8;
+                let mut cky = ((inst >> 5) & 0x7FFFF) as i64;
+                if cky & (1 << 18) != 0 { cky |= !0x7FFFF; }
+                let target = addr as i64 + (cky << 2);
+                let fc = (inst & 0xF) as u8;
 
-                let suk = qkn(mo);
-                block.fj(RvInst::Aad { mo: suk, l: cd });
-                block.bil.push(cd as u64);
-                block.bil.push(ag + 4);
+                let lwp = jxp(fc);
+                block.emit(RvInst::BranchCond { fc: lwp, offset: target });
+                block.successors.push(target as u64);
+                block.successors.push(addr + 4);
                 true
             }
 
             
             0b001 | 0b101 => {
-                let dbl = (fi & 0x1F) as u8;
-                let mut flf = ((fi >> 5) & 0x7FFFF) as i64;
-                if flf & (1 << 18) != 0 { flf |= !0x7FFFF; }
-                let cd = ag as i64 + (flf << 2);
-                let twv = (fi >> 24) & 1 == 1;
-                let bck = ccy(dbl);
+                let bdm = (inst & 0x1F) as u8;
+                let mut cky = ((inst >> 5) & 0x7FFFF) as i64;
+                if cky & (1 << 18) != 0 { cky |= !0x7FFFF; }
+                let target = addr as i64 + (cky << 2);
+                let msa = (inst >> 24) & 1 == 1;
+                let acj = apr(bdm);
 
-                if twv {
-                    block.fj(RvInst::Ags { cp: bck, et: Reg::Bt, l: cd });
+                if msa {
+                    block.emit(RvInst::Bne { rs1: acj, rs2: Reg::X0, offset: target });
                 } else {
-                    block.fj(RvInst::Agp { cp: bck, et: Reg::Bt, l: cd });
+                    block.emit(RvInst::Beq { rs1: acj, rs2: Reg::X0, offset: target });
                 }
 
-                block.bil.push(cd as u64);
-                block.bil.push(ag + 4);
+                block.successors.push(target as u64);
+                block.successors.push(addr + 4);
                 true
             }
 
             
             0b110 => {
-                let fpq = (fi >> 21) & 0x7;
-                if fpq == 0 {
+                let cnk = (inst >> 21) & 0x7;
+                if cnk == 0 {
                     
-                    let fps = (fi >> 21) & 0x7;
-                    let glq = fi & 0x3;
-                    if glq == 1 {
+                    let cnm = (inst >> 21) & 0x7;
+                    let das = inst & 0x3;
+                    if das == 1 {
                         
-                        block.fj(RvInst::Od {
-                            arch: SourceArch::Fg,
-                            ag,
+                        block.emit(RvInst::SrcAnnotation {
+                            arch: SourceArch::Aarch64,
+                            addr,
                             text: String::from("SVC #0 (syscall)"),
                         });
                         
                         
                         
-                        block.fj(RvInst::Gl { ck: Reg::Vd, acl: Reg::Aol });
+                        block.emit(RvInst::Mv { aj: Reg::X17, oc: Reg::X28 });
                         
-                        block.fj(RvInst::Wk);
+                        block.emit(RvInst::Ecall);
                         
                         return false;
-                    } else if glq == 0 && fps == 0 {
+                    } else if das == 0 && cnm == 0 {
                         
-                        block.fj(RvInst::Wk);
+                        block.emit(RvInst::Ecall);
                         return false;
                     }
                 }
 
                 
-                if (fi & 0xFFFFFC1F) == 0xD65F0000 {
-                    block.fj(RvInst::Ama);
+                if (inst & 0xFFFFFC1F) == 0xD65F0000 {
+                    block.emit(RvInst::Ret);
                     return true;
                 }
 
                 
-                if (fi & 0xFFFFFC00) == 0xD61F0000 {
-                    let dve = ((fi >> 5) & 0x1F) as u8;
-                    let we = ccy(dve);
-                    block.fj(RvInst::Xi { ck: Reg::Bt, cp: we, l: 0 });
+                if (inst & 0xFFFFFC00) == 0xD61F0000 {
+                    let boo = ((inst >> 5) & 0x1F) as u8;
+                    let kc = apr(boo);
+                    block.emit(RvInst::Jalr { aj: Reg::X0, rs1: kc, offset: 0 });
                     return true;
                 }
 
                 
-                if (fi & 0xFFFFFC00) == 0xD63F0000 {
-                    let dve = ((fi >> 5) & 0x1F) as u8;
-                    let we = ccy(dve);
-                    block.fj(RvInst::Xi { ck: Reg::Oq, cp: we, l: 0 });
-                    block.bil.push(ag + 4);
+                if (inst & 0xFFFFFC00) == 0xD63F0000 {
+                    let boo = ((inst >> 5) & 0x1F) as u8;
+                    let kc = apr(boo);
+                    block.emit(RvInst::Jalr { aj: Reg::X1, rs1: kc, offset: 0 });
+                    block.successors.push(addr + 4);
                     return true;
                 }
 
                 
-                if fi == 0xD503201F { 
-                    block.fj(RvInst::Fq);
+                if inst == 0xD503201F { 
+                    block.emit(RvInst::Nop);
                     return false;
                 }
-                if fi == 0xD503207F { 
-                    block.fj(RvInst::Fq);
+                if inst == 0xD503207F { 
+                    block.emit(RvInst::Nop);
                     return false;
                 }
 
-                self.cm.ddf += 1;
-                block.fj(RvInst::Fq);
+                self.stats.unsupported_instructions += 1;
+                block.emit(RvInst::Nop);
                 false
             }
 
             
             0b011 | 0b111 => {
-                let dbl = (fi & 0x1F) as u8;
-                let ga = ((fi >> 19) & 0x1F) as u8 | (((fi >> 31) & 1) as u8) << 5;
-                let mut ldl = ((fi >> 5) & 0x3FFF) as i64;
-                if ldl & (1 << 13) != 0 { ldl |= !0x3FFF; }
-                let cd = ag as i64 + (ldl << 2);
-                let tzd = (fi >> 24) & 1 == 1;
+                let bdm = (inst & 0x1F) as u8;
+                let bf = ((inst >> 19) & 0x1F) as u8 | (((inst >> 31) & 1) as u8) << 5;
+                let mut gbw = ((inst >> 5) & 0x3FFF) as i64;
+                if gbw & (1 << 13) != 0 { gbw |= !0x3FFF; }
+                let target = addr as i64 + (gbw << 2);
+                let mtv = (inst >> 24) & 1 == 1;
 
-                let bck = ccy(dbl);
+                let acj = apr(bdm);
                 
-                block.fj(RvInst::Hu { ck: Reg::Bg, gf: 1 << ga });
-                block.fj(RvInst::Ex { ck: Reg::Bg, cp: bck, et: Reg::Bg });
+                block.emit(RvInst::Li { aj: Reg::X5, imm: 1 << bf });
+                block.emit(RvInst::And { aj: Reg::X5, rs1: acj, rs2: Reg::X5 });
 
-                if tzd {
-                    block.fj(RvInst::Ags { cp: Reg::Bg, et: Reg::Bt, l: cd });
+                if mtv {
+                    block.emit(RvInst::Bne { rs1: Reg::X5, rs2: Reg::X0, offset: target });
                 } else {
-                    block.fj(RvInst::Agp { cp: Reg::Bg, et: Reg::Bt, l: cd });
+                    block.emit(RvInst::Beq { rs1: Reg::X5, rs2: Reg::X0, offset: target });
                 }
 
-                block.bil.push(cd as u64);
-                block.bil.push(ag + 4);
+                block.successors.push(target as u64);
+                block.successors.push(addr + 4);
                 true
             }
 
             _ => {
-                self.cm.ddf += 1;
-                block.fj(RvInst::Fq);
+                self.stats.unsupported_instructions += 1;
+                block.emit(RvInst::Nop);
                 false
             }
         }
     }
 
     
-    fn ruo(&mut self, fi: u32, ag: u64, block: &mut TranslatedBlock) {
-        let aw = (fi >> 30) & 0x3;
-        let fps = (fi >> 22) & 0x3;
-        let dve = ((fi >> 5) & 0x1F) as u8;
-        let dbl = (fi & 0x1F) as u8;
+    fn decode_ldst(&mut self, inst: u32, addr: u64, block: &mut TranslatedBlock) {
+        let size = (inst >> 30) & 0x3;
+        let cnm = (inst >> 22) & 0x3;
+        let boo = ((inst >> 5) & 0x1F) as u8;
+        let bdm = (inst & 0x1F) as u8;
 
-        let bck = ccy(dbl);
-        let we = kba(dve, true);
+        let acj = apr(bdm);
+        let kc = fhk(boo, true);
 
         
-        if (fi & 0x3B000000) == 0x39000000 {
-            let izn = ((fi >> 10) & 0xFFF) as i64;
-            let bv = aw as i64;
-            let l = izn << bv;
-            let gkf = (fps & 1) == 1;
+        if (inst & 0x3B000000) == 0x39000000 {
+            let eqf = ((inst >> 10) & 0xFFF) as i64;
+            let scale = size as i64;
+            let offset = eqf << scale;
+            let czz = (cnm & 1) == 1;
 
-            if gkf {
-                match aw {
-                    0 => block.fj(RvInst::Ajr { ck: bck, cp: we, l }),
-                    1 => block.fj(RvInst::Ajs { ck: bck, cp: we, l }),
-                    2 => block.fj(RvInst::Aka { ck: bck, cp: we, l }),
-                    3 => block.fj(RvInst::Pt { ck: bck, cp: we, l }),
+            if czz {
+                match size {
+                    0 => block.emit(RvInst::Lbu { aj: acj, rs1: kc, offset }),
+                    1 => block.emit(RvInst::Lhu { aj: acj, rs1: kc, offset }),
+                    2 => block.emit(RvInst::Lwu { aj: acj, rs1: kc, offset }),
+                    3 => block.emit(RvInst::Ld { aj: acj, rs1: kc, offset }),
                     _ => {}
                 }
             } else {
-                match aw {
-                    0 => block.fj(RvInst::Amf { et: bck, cp: we, l }),
-                    1 => block.fj(RvInst::Amo { et: bck, cp: we, l }),
-                    2 => block.fj(RvInst::Ang { et: bck, cp: we, l }),
-                    3 => block.fj(RvInst::Mi { et: bck, cp: we, l }),
+                match size {
+                    0 => block.emit(RvInst::Sb { rs2: acj, rs1: kc, offset }),
+                    1 => block.emit(RvInst::Sh { rs2: acj, rs1: kc, offset }),
+                    2 => block.emit(RvInst::Sw { rs2: acj, rs1: kc, offset }),
+                    3 => block.emit(RvInst::Sd { rs2: acj, rs1: kc, offset }),
                     _ => {}
                 }
             }
@@ -509,197 +509,197 @@ impl ArmDecoder {
         }
 
         
-        if (fi & 0x3B200C00) == 0x38000000 || (fi & 0x3B200C00) == 0x38000400 {
-            let mut cyu = ((fi >> 12) & 0x1FF) as i64;
-            if cyu & (1 << 8) != 0 { cyu |= !0x1FF; }
-            let dsh = (fi >> 11) & 1 == 1;
-            let gkf = (fps & 1) == 1;
+        if (inst & 0x3B200C00) == 0x38000000 || (inst & 0x3B200C00) == 0x38000400 {
+            let mut bci = ((inst >> 12) & 0x1FF) as i64;
+            if bci & (1 << 8) != 0 { bci |= !0x1FF; }
+            let bnb = (inst >> 11) & 1 == 1;
+            let czz = (cnm & 1) == 1;
 
-            if dsh {
+            if bnb {
                 
-                block.fj(RvInst::Gf { ck: we, cp: we, gf: cyu });
+                block.emit(RvInst::Addi { aj: kc, rs1: kc, imm: bci });
             }
 
-            if gkf {
-                match aw {
-                    0 => block.fj(RvInst::Ajr { ck: bck, cp: we, l: if dsh { 0 } else { cyu } }),
-                    1 => block.fj(RvInst::Ajs { ck: bck, cp: we, l: if dsh { 0 } else { cyu } }),
-                    2 => block.fj(RvInst::Aka { ck: bck, cp: we, l: if dsh { 0 } else { cyu } }),
-                    3 => block.fj(RvInst::Pt { ck: bck, cp: we, l: if dsh { 0 } else { cyu } }),
+            if czz {
+                match size {
+                    0 => block.emit(RvInst::Lbu { aj: acj, rs1: kc, offset: if bnb { 0 } else { bci } }),
+                    1 => block.emit(RvInst::Lhu { aj: acj, rs1: kc, offset: if bnb { 0 } else { bci } }),
+                    2 => block.emit(RvInst::Lwu { aj: acj, rs1: kc, offset: if bnb { 0 } else { bci } }),
+                    3 => block.emit(RvInst::Ld { aj: acj, rs1: kc, offset: if bnb { 0 } else { bci } }),
                     _ => {}
                 }
             } else {
-                match aw {
-                    0 => block.fj(RvInst::Amf { et: bck, cp: we, l: if dsh { 0 } else { cyu } }),
-                    1 => block.fj(RvInst::Amo { et: bck, cp: we, l: if dsh { 0 } else { cyu } }),
-                    2 => block.fj(RvInst::Ang { et: bck, cp: we, l: if dsh { 0 } else { cyu } }),
-                    3 => block.fj(RvInst::Mi { et: bck, cp: we, l: if dsh { 0 } else { cyu } }),
+                match size {
+                    0 => block.emit(RvInst::Sb { rs2: acj, rs1: kc, offset: if bnb { 0 } else { bci } }),
+                    1 => block.emit(RvInst::Sh { rs2: acj, rs1: kc, offset: if bnb { 0 } else { bci } }),
+                    2 => block.emit(RvInst::Sw { rs2: acj, rs1: kc, offset: if bnb { 0 } else { bci } }),
+                    3 => block.emit(RvInst::Sd { rs2: acj, rs1: kc, offset: if bnb { 0 } else { bci } }),
                     _ => {}
                 }
             }
 
-            if !dsh {
+            if !bnb {
                 
-                block.fj(RvInst::Gf { ck: we, cp: we, gf: cyu });
+                block.emit(RvInst::Addi { aj: kc, rs1: kc, imm: bci });
             }
             return;
         }
 
         
-        if (fi & 0x3E000000) == 0x28000000 || (fi & 0x3E000000) == 0x2C000000 {
-            let wba = ((fi >> 10) & 0x1F) as u8;
-            let mut ldn = ((fi >> 15) & 0x7F) as i64;
-            if ldn & (1 << 6) != 0 { ldn |= !0x7F; }
-            let bv = if (fi >> 31) & 1 == 1 { 3 } else { 2 };
-            let l = ldn << bv;
-            let gkf = (fi >> 22) & 1 == 1;
+        if (inst & 0x3E000000) == 0x28000000 || (inst & 0x3E000000) == 0x2C000000 {
+            let oiu = ((inst >> 10) & 0x1F) as u8;
+            let mut gby = ((inst >> 15) & 0x7F) as i64;
+            if gby & (1 << 6) != 0 { gby |= !0x7F; }
+            let scale = if (inst >> 31) & 1 == 1 { 3 } else { 2 };
+            let offset = gby << scale;
+            let czz = (inst >> 22) & 1 == 1;
 
-            let pet = ccy(wba);
+            let jby = apr(oiu);
 
-            if gkf {
-                block.fj(RvInst::Pt { ck: bck, cp: we, l });
-                block.fj(RvInst::Pt { ck: pet, cp: we, l: l + 8 });
+            if czz {
+                block.emit(RvInst::Ld { aj: acj, rs1: kc, offset });
+                block.emit(RvInst::Ld { aj: jby, rs1: kc, offset: offset + 8 });
             } else {
-                block.fj(RvInst::Mi { et: bck, cp: we, l });
-                block.fj(RvInst::Mi { et: pet, cp: we, l: l + 8 });
+                block.emit(RvInst::Sd { rs2: acj, rs1: kc, offset });
+                block.emit(RvInst::Sd { rs2: jby, rs1: kc, offset: offset + 8 });
             }
             return;
         }
 
         
-        self.cm.ddf += 1;
-        block.fj(RvInst::Od {
-            arch: SourceArch::Fg,
-            ag,
-            text: format!("unsupported ldst: 0x{:08X}", fi),
+        self.stats.unsupported_instructions += 1;
+        block.emit(RvInst::SrcAnnotation {
+            arch: SourceArch::Aarch64,
+            addr,
+            text: format!("unsupported ldst: 0x{:08X}", inst),
         });
-        block.fj(RvInst::Fq);
+        block.emit(RvInst::Nop);
     }
 
     
-    fn ruk(&mut self, fi: u32, ag: u64, block: &mut TranslatedBlock) {
-        let ck = (fi & 0x1F) as u8;
-        let dve = ((fi >> 5) & 0x1F) as u8;
-        let hb = ((fi >> 16) & 0x1F) as u8;
-        let fps = (fi >> 29) & 0x7;
+    fn decode_dp_reg(&mut self, inst: u32, addr: u64, block: &mut TranslatedBlock) {
+        let aj = (inst & 0x1F) as u8;
+        let boo = ((inst >> 5) & 0x1F) as u8;
+        let rm = ((inst >> 16) & 0x1F) as u8;
+        let cnm = (inst >> 29) & 0x7;
 
-        let aen = ccy(ck);
-        let we = ccy(dve);
-        let aww = ccy(hb);
+        let pj = apr(aj);
+        let kc = apr(boo);
+        let zk = apr(rm);
 
         
-        if (fi & 0x1F000000) == 0x0A000000 {
-            let hqh = (fi >> 29) & 0x3;
-            let bo = (fi >> 21) & 1;
-            let gsh = hqh == 0b11;
+        if (inst & 0x1F000000) == 0x0A000000 {
+            let dtt = (inst >> 29) & 0x3;
+            let ae = (inst >> 21) & 1;
+            let dej = dtt == 0b11;
 
-            match (hqh, bo) {
-                (0b00, 0) => block.fj(RvInst::Ex { ck: aen, cp: we, et: aww }),
-                (0b01, 0) => block.fj(RvInst::Fx { ck: aen, cp: we, et: aww }),
-                (0b10, 0) => block.fj(RvInst::Aga { ck: aen, cp: we, et: aww }),
+            match (dtt, ae) {
+                (0b00, 0) => block.emit(RvInst::And { aj: pj, rs1: kc, rs2: zk }),
+                (0b01, 0) => block.emit(RvInst::Or { aj: pj, rs1: kc, rs2: zk }),
+                (0b10, 0) => block.emit(RvInst::Xor { aj: pj, rs1: kc, rs2: zk }),
                 (0b11, 0) => { 
-                    block.fj(RvInst::Ex { ck: aen, cp: we, et: aww });
+                    block.emit(RvInst::And { aj: pj, rs1: kc, rs2: zk });
                 }
                 
                 (_, 1) => {
-                    block.fj(RvInst::Aoq { ck: Reg::Bg, cp: aww, gf: -1 });
-                    match hqh {
-                        0b00 => block.fj(RvInst::Ex { ck: aen, cp: we, et: Reg::Bg }),
-                        0b01 => block.fj(RvInst::Fx { ck: aen, cp: we, et: Reg::Bg }),
-                        0b10 => block.fj(RvInst::Aga { ck: aen, cp: we, et: Reg::Bg }),
-                        0b11 => block.fj(RvInst::Ex { ck: aen, cp: we, et: Reg::Bg }),
+                    block.emit(RvInst::Xori { aj: Reg::X5, rs1: zk, imm: -1 });
+                    match dtt {
+                        0b00 => block.emit(RvInst::And { aj: pj, rs1: kc, rs2: Reg::X5 }),
+                        0b01 => block.emit(RvInst::Or { aj: pj, rs1: kc, rs2: Reg::X5 }),
+                        0b10 => block.emit(RvInst::Xor { aj: pj, rs1: kc, rs2: Reg::X5 }),
+                        0b11 => block.emit(RvInst::And { aj: pj, rs1: kc, rs2: Reg::X5 }),
                         _ => {}
                     }
                 }
-                _ => { block.fj(RvInst::Fq); }
+                _ => { block.emit(RvInst::Nop); }
             }
 
-            if gsh {
-                block.fj(RvInst::Ed { cp: aen, et: Reg::Bt });
+            if dej {
+                block.emit(RvInst::CmpFlags { rs1: pj, rs2: Reg::X0 });
             }
             return;
         }
 
         
-        if (fi & 0x1F000000) == 0x0B000000 {
-            let jbv = (fi >> 30) & 1 == 1;
-            let gsh = (fi >> 29) & 1 == 1;
+        if (inst & 0x1F000000) == 0x0B000000 {
+            let erw = (inst >> 30) & 1 == 1;
+            let dej = (inst >> 29) & 1 == 1;
 
             
-            let wmw = ((fi >> 22) & 0x3) as u8;
-            let jpw = ((fi >> 10) & 0x3F) as u8;
+            let ort = ((inst >> 22) & 0x3) as u8;
+            let fau = ((inst >> 10) & 0x3F) as u8;
 
-            if jpw > 0 {
-                match wmw {
-                    0 => block.fj(RvInst::Ayv { ck: Reg::Bg, cp: aww, bcp: jpw }),
-                    1 => block.fj(RvInst::Aze { ck: Reg::Bg, cp: aww, bcp: jpw }),
-                    2 => block.fj(RvInst::Azd { ck: Reg::Bg, cp: aww, bcp: jpw }),
-                    _ => block.fj(RvInst::Gl { ck: Reg::Bg, acl: aww }),
+            if fau > 0 {
+                match ort {
+                    0 => block.emit(RvInst::Slli { aj: Reg::X5, rs1: zk, acn: fau }),
+                    1 => block.emit(RvInst::Srli { aj: Reg::X5, rs1: zk, acn: fau }),
+                    2 => block.emit(RvInst::Srai { aj: Reg::X5, rs1: zk, acn: fau }),
+                    _ => block.emit(RvInst::Mv { aj: Reg::X5, oc: zk }),
                 }
-                if jbv {
-                    block.fj(RvInst::Sub { ck: aen, cp: we, et: Reg::Bg });
+                if erw {
+                    block.emit(RvInst::Sub { aj: pj, rs1: kc, rs2: Reg::X5 });
                 } else {
-                    block.fj(RvInst::Add { ck: aen, cp: we, et: Reg::Bg });
+                    block.emit(RvInst::Add { aj: pj, rs1: kc, rs2: Reg::X5 });
                 }
             } else {
-                if jbv {
-                    block.fj(RvInst::Sub { ck: aen, cp: we, et: aww });
+                if erw {
+                    block.emit(RvInst::Sub { aj: pj, rs1: kc, rs2: zk });
                 } else {
-                    block.fj(RvInst::Add { ck: aen, cp: we, et: aww });
+                    block.emit(RvInst::Add { aj: pj, rs1: kc, rs2: zk });
                 }
             }
 
-            if gsh {
-                block.fj(RvInst::Ed { cp: aen, et: Reg::Bt });
+            if dej {
+                block.emit(RvInst::CmpFlags { rs1: pj, rs2: Reg::X0 });
             }
             return;
         }
 
         
-        if (fi & 0x7FE00000) == 0x1B000000 {
-            let hwl = ((fi >> 10) & 0x1F) as u8;
-            let tyg = (fi >> 15) & 1 == 1;
+        if (inst & 0x7FE00000) == 0x1B000000 {
+            let dxe = ((inst >> 10) & 0x1F) as u8;
+            let mte = (inst >> 15) & 1 == 1;
 
-            if hwl == 31 {
+            if dxe == 31 {
                 
-                block.fj(RvInst::Mul { ck: aen, cp: we, et: aww });
+                block.emit(RvInst::Mul { aj: pj, rs1: kc, rs2: zk });
             } else {
-                let pes = ccy(hwl);
-                block.fj(RvInst::Mul { ck: Reg::Bg, cp: we, et: aww });
-                if tyg {
-                    block.fj(RvInst::Sub { ck: aen, cp: pes, et: Reg::Bg });
+                let jbx = apr(dxe);
+                block.emit(RvInst::Mul { aj: Reg::X5, rs1: kc, rs2: zk });
+                if mte {
+                    block.emit(RvInst::Sub { aj: pj, rs1: jbx, rs2: Reg::X5 });
                 } else {
-                    block.fj(RvInst::Add { ck: aen, cp: pes, et: Reg::Bg });
+                    block.emit(RvInst::Add { aj: pj, rs1: jbx, rs2: Reg::X5 });
                 }
             }
             return;
         }
 
         
-        if (fi & 0x7FE0FC00) == 0x1AC00800 {
-            let tzg = (fi >> 10) & 1 == 0;
-            if tzg {
-                block.fj(RvInst::Arb { ck: aen, cp: we, et: aww });
+        if (inst & 0x7FE0FC00) == 0x1AC00800 {
+            let mty = (inst >> 10) & 1 == 0;
+            if mty {
+                block.emit(RvInst::Divu { aj: pj, rs1: kc, rs2: zk });
             } else {
-                block.fj(RvInst::Div { ck: aen, cp: we, et: aww });
+                block.emit(RvInst::Div { aj: pj, rs1: kc, rs2: zk });
             }
             return;
         }
 
         
-        if (fi & 0x7FE0F000) == 0x1AC02000 {
-            let wmv = ((fi >> 10) & 0x3) as u8;
-            match wmv {
-                0 => block.fj(RvInst::Amt { ck: aen, cp: we, et: aww }),
-                1 => block.fj(RvInst::Amx { ck: aen, cp: we, et: aww }),
-                2 => block.fj(RvInst::Azc { ck: aen, cp: we, et: aww }),
+        if (inst & 0x7FE0F000) == 0x1AC02000 {
+            let ors = ((inst >> 10) & 0x3) as u8;
+            match ors {
+                0 => block.emit(RvInst::Sll { aj: pj, rs1: kc, rs2: zk }),
+                1 => block.emit(RvInst::Srl { aj: pj, rs1: kc, rs2: zk }),
+                2 => block.emit(RvInst::Sra { aj: pj, rs1: kc, rs2: zk }),
                 
                 3 => {
-                    block.fj(RvInst::Amx { ck: Reg::Bg, cp: we, et: aww });
-                    block.fj(RvInst::Hu { ck: Reg::Mp, gf: 64 });
-                    block.fj(RvInst::Sub { ck: Reg::Mp, cp: Reg::Mp, et: aww });
-                    block.fj(RvInst::Amt { ck: Reg::Mp, cp: we, et: Reg::Mp });
-                    block.fj(RvInst::Fx { ck: aen, cp: Reg::Bg, et: Reg::Mp });
+                    block.emit(RvInst::Srl { aj: Reg::X5, rs1: kc, rs2: zk });
+                    block.emit(RvInst::Li { aj: Reg::X6, imm: 64 });
+                    block.emit(RvInst::Sub { aj: Reg::X6, rs1: Reg::X6, rs2: zk });
+                    block.emit(RvInst::Sll { aj: Reg::X6, rs1: kc, rs2: Reg::X6 });
+                    block.emit(RvInst::Or { aj: pj, rs1: Reg::X5, rs2: Reg::X6 });
                 }
                 _ => {}
             }
@@ -707,73 +707,73 @@ impl ArmDecoder {
         }
 
         
-        self.cm.ddf += 1;
-        block.fj(RvInst::Od {
-            arch: SourceArch::Fg,
-            ag,
-            text: format!("unsupported dp_reg: 0x{:08X}", fi),
+        self.stats.unsupported_instructions += 1;
+        block.emit(RvInst::SrcAnnotation {
+            arch: SourceArch::Aarch64,
+            addr,
+            text: format!("unsupported dp_reg: 0x{:08X}", inst),
         });
-        block.fj(RvInst::Fq);
+        block.emit(RvInst::Nop);
     }
 }
 
 
-fn qkn(nn: u8) -> FlagCond {
-    match nn {
+fn jxp(ft: u8) -> FlagCond {
+    match ft {
         0x0 => FlagCond::Eq,     
-        0x1 => FlagCond::Adl,     
-        0x2 => FlagCond::Atb,    
-        0x3 => FlagCond::Auz,    
+        0x1 => FlagCond::Ne,     
+        0x2 => FlagCond::Geu,    
+        0x3 => FlagCond::Ltu,    
         0x4 => FlagCond::Neg,    
         0x5 => FlagCond::Pos,    
-        0x6 => FlagCond::Awn,    
-        0x7 => FlagCond::Awc,  
-        0x8 => FlagCond::Jn,     
-        0x9 => FlagCond::Te,     
-        0xA => FlagCond::Wr,     
+        0x6 => FlagCond::Ovf,    
+        0x7 => FlagCond::NoOvf,  
+        0x8 => FlagCond::Gt,     
+        0x9 => FlagCond::Le,     
+        0xA => FlagCond::Ge,     
         0xB => FlagCond::Lt,     
-        0xC => FlagCond::Jn,     
-        0xD => FlagCond::Te,     
+        0xC => FlagCond::Gt,     
+        0xD => FlagCond::Le,     
         0xE => FlagCond::Eq,     
         _   => FlagCond::Eq,
     }
 }
 
 
-fn ruf(fi: u32, yad: bool) -> i64 {
-    let bo = (fi >> 22) & 1;
-    let tsf = ((fi >> 16) & 0x3F) as u32;
-    let odl = ((fi >> 10) & 0x3F) as u32;
+fn lci(inst: u32, _is_64: bool) -> i64 {
+    let ae = (inst >> 22) & 1;
+    let moh = ((inst >> 16) & 0x3F) as u32;
+    let ifw = ((inst >> 10) & 0x3F) as u32;
 
     
-    let len = if bo == 1 { 6 } else {
+    let len = if ae == 1 { 6 } else {
         
-        let jhi = !odl & 0x3F;
-        if jhi & 0x20 != 0 { 5 }
-        else if jhi & 0x10 != 0 { 4 }
-        else if jhi & 0x08 != 0 { 3 }
-        else if jhi & 0x04 != 0 { 2 }
+        let evh = !ifw & 0x3F;
+        if evh & 0x20 != 0 { 5 }
+        else if evh & 0x10 != 0 { 4 }
+        else if evh & 0x08 != 0 { 3 }
+        else if evh & 0x04 != 0 { 2 }
         else { 1 }
     };
 
-    let aw = 1u64 << len;
-    let hs = aw - 1;
-    let e = (odl & hs as u32) as u64;
-    let m = (tsf & hs as u32) as u64;
+    let size = 1u64 << len;
+    let mask = size - 1;
+    let j = (ifw & mask as u32) as u64;
+    let r = (moh & mask as u32) as u64;
 
-    let mut ihe: u64 = (1u64 << (e + 1)) - 1;
+    let mut eee: u64 = (1u64 << (j + 1)) - 1;
     
-    if m > 0 {
-        ihe = (ihe >> m) | (ihe << (aw - m));
-        ihe &= (1u64 << aw) - 1;
+    if r > 0 {
+        eee = (eee >> r) | (eee << (size - r));
+        eee &= (1u64 << size) - 1;
     }
 
     
-    let mut result = ihe;
-    let mut kmo = aw;
-    while kmo < 64 {
-        result |= result << kmo;
-        kmo *= 2;
+    let mut result = eee;
+    let mut fpk = size;
+    while fpk < 64 {
+        result |= result << fpk;
+        fpk *= 2;
     }
 
     result as i64

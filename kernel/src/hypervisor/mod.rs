@@ -133,6 +133,8 @@ pub enum HypervisorError {
     SvmInitFailed,
     /// VMCB not loaded (AMD SVM)
     VmcbNotLoaded,
+    /// VMCS not loaded (Intel VMX)
+    VmcsNotLoaded,
     /// Already running (Linux Subsystem)
     AlreadyRunning,
     /// Invalid state (Linux Subsystem)

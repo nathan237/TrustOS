@@ -4,140 +4,140 @@
 
 
 #[repr(C, packed)]
-pub struct Cky {
+pub struct Aoo {
     
     pub signature: [u8; 8],
     
-    pub bmj: u8,
+    pub checksum: u8,
     
-    pub clo: [u8; 6],
+    pub oem_id: [u8; 6],
     
-    pub afe: u8,
+    pub revision: u8,
     
-    pub dvi: u32,
+    pub rsdt_address: u32,
 }
 
 
 #[repr(C, packed)]
-pub struct Cqr {
+pub struct Ase {
     
     pub signature: [u8; 8],
-    pub bmj: u8,
-    pub clo: [u8; 6],
-    pub afe: u8,
-    pub dvi: u32,
+    pub checksum: u8,
+    pub oem_id: [u8; 6],
+    pub revision: u8,
+    pub rsdt_address: u32,
     
     
     
-    pub go: u32,
+    pub length: u32,
     
-    pub ihx: u64,
+    pub xsdt_address: u64,
     
-    pub yqb: u8,
+    pub extended_checksum: u8,
     
-    pub awt: [u8; 3],
+    pub reserved: [u8; 3],
 }
 
 
 #[repr(C, packed)]
-pub struct Ei {
+pub struct Bu {
     
     pub signature: [u8; 4],
     
-    pub go: u32,
+    pub length: u32,
     
-    pub afe: u8,
+    pub revision: u8,
     
-    pub bmj: u8,
+    pub checksum: u8,
     
-    pub clo: [u8; 6],
+    pub oem_id: [u8; 6],
     
-    pub zee: [u8; 8],
+    pub oem_table_id: [u8; 8],
     
-    pub zed: u32,
+    pub oem_revision: u32,
     
-    pub yku: u32,
+    pub creator_id: u32,
     
-    pub ykv: u32,
+    pub creator_revision: u32,
 }
 
-impl Ei {
+impl Bu {
     
-    pub fn dxi(&self) -> bool {
+    pub fn bpu(&self) -> bool {
         let ptr = self as *const _ as *const u8;
-        let len = self.go as usize;
+        let len = self.length as usize;
         
-        if len < core::mem::size_of::<Ei>() {
+        if len < core::mem::size_of::<Bu>() {
             return false;
         }
         
         let sum: u8 = unsafe {
-            (0..len).map(|a| *ptr.add(a)).cqs(0u8, |q, o| q.cn(o))
+            (0..len).map(|i| *ptr.add(i)).fold(0u8, |a, b| a.wrapping_add(b))
         };
         
         sum == 0
     }
     
     
-    pub fn zol(&self) -> &str {
-        core::str::jg(&self.signature).unwrap_or("????")
+    pub fn qwz(&self) -> &str {
+        core::str::from_utf8(&self.signature).unwrap_or("????")
     }
 }
 
 
 #[repr(C, packed)]
 #[derive(Clone, Copy, Debug)]
-pub struct Gj {
+pub struct Cx {
     
-    pub ze: u8,
+    pub address_space: u8,
     
-    pub gbd: u8,
+    pub bit_width: u8,
     
-    pub mzf: u8,
+    pub bit_offset: u8,
     
-    pub cct: u8,
+    pub access_size: u8,
     
-    pub re: u64,
+    pub address: u64,
 }
 
-impl Gj {
+impl Cx {
     
-    pub const BGB_: u8 = 0;
+    pub const BIF_: u8 = 0;
     
-    pub const BGA_: u8 = 1;
+    pub const BIE_: u8 = 1;
     
-    pub const EGO_: u8 = 2;
+    pub const EKH_: u8 = 2;
     
-    pub const EGM_: u8 = 3;
+    pub const EKF_: u8 = 3;
     
-    pub const EGP_: u8 = 4;
+    pub const EKI_: u8 = 4;
     
-    pub const EGN_: u8 = 0x7F;
+    pub const EKG_: u8 = 0x7F;
     
     
-    pub fn cld(&self) -> bool {
-        self.re != 0
+    pub fn is_valid(&self) -> bool {
+        self.address != 0
     }
     
     
     pub unsafe fn read(&self) -> u64 {
-        match self.ze {
-            Self::BGA_ => {
-                let port = self.re as u16;
-                match self.gbd {
+        match self.address_space {
+            Self::BIE_ => {
+                let port = self.address as u16;
+                match self.bit_width {
                     8 => x86_64::instructions::port::Port::<u8>::new(port).read() as u64,
                     16 => x86_64::instructions::port::Port::<u16>::new(port).read() as u64,
                     32 => x86_64::instructions::port::Port::<u32>::new(port).read() as u64,
                     _ => 0,
                 }
             }
-            Self::BGB_ => {
-                let ag = self.re + crate::memory::lr();
-                match self.gbd {
-                    8 => core::ptr::read_volatile(ag as *const u8) as u64,
-                    16 => core::ptr::read_volatile(ag as *const u16) as u64,
-                    32 => core::ptr::read_volatile(ag as *const u32) as u64,
-                    64 => core::ptr::read_volatile(ag as *const u64),
+            Self::BIF_ => {
+                let addr = self.address + crate::memory::hhdm_offset();
+                match self.bit_width {
+                    8 => core::ptr::read_volatile(addr as *const u8) as u64,
+                    16 => core::ptr::read_volatile(addr as *const u16) as u64,
+                    32 => core::ptr::read_volatile(addr as *const u32) as u64,
+                    64 => core::ptr::read_volatile(addr as *const u64),
                     _ => 0,
                 }
             }
@@ -146,24 +146,24 @@ impl Gj {
     }
     
     
-    pub unsafe fn write(&self, bn: u64) {
-        match self.ze {
-            Self::BGA_ => {
-                let port = self.re as u16;
-                match self.gbd {
-                    8 => x86_64::instructions::port::Port::<u8>::new(port).write(bn as u8),
-                    16 => x86_64::instructions::port::Port::<u16>::new(port).write(bn as u16),
-                    32 => x86_64::instructions::port::Port::<u32>::new(port).write(bn as u32),
+    pub unsafe fn write(&self, value: u64) {
+        match self.address_space {
+            Self::BIE_ => {
+                let port = self.address as u16;
+                match self.bit_width {
+                    8 => x86_64::instructions::port::Port::<u8>::new(port).write(value as u8),
+                    16 => x86_64::instructions::port::Port::<u16>::new(port).write(value as u16),
+                    32 => x86_64::instructions::port::Port::<u32>::new(port).write(value as u32),
                     _ => {}
                 }
             }
-            Self::BGB_ => {
-                let ag = self.re + crate::memory::lr();
-                match self.gbd {
-                    8 => core::ptr::write_volatile(ag as *mut u8, bn as u8),
-                    16 => core::ptr::write_volatile(ag as *mut u16, bn as u16),
-                    32 => core::ptr::write_volatile(ag as *mut u32, bn as u32),
-                    64 => core::ptr::write_volatile(ag as *mut u64, bn),
+            Self::BIF_ => {
+                let addr = self.address + crate::memory::hhdm_offset();
+                match self.bit_width {
+                    8 => core::ptr::write_volatile(addr as *mut u8, value as u8),
+                    16 => core::ptr::write_volatile(addr as *mut u16, value as u16),
+                    32 => core::ptr::write_volatile(addr as *mut u32, value as u32),
+                    64 => core::ptr::write_volatile(addr as *mut u64, value),
                     _ => {}
                 }
             }

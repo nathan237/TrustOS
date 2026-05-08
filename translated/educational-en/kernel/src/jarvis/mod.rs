@@ -137,12 +137,12 @@ pub fn init() {
         let float_count = MICRO_BIN.len() / 4;
         let floats: &[f32] = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-            core::slice::from_raw_parts(MICRO_BIN.as_pointer() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+            core::slice::from_raw_parts(MICRO_BIN.as_ptr() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const f32, float_count)
         };
         if let Some(micro_weights) = MicroWeights::deserialize(floats) {
             crate::serial_println!("[JARVIS] Micro sentinel loaded ({} params, {} KB)",
-                micro_weights.parameter_count(), MICRO_BIN.len() / 1024);
+                micro_weights.param_count(), MICRO_BIN.len() / 1024);
             *MICRO_MODEL.lock() = Some(micro_weights);
             *MICRO_ENGINE.lock() = Some(MicroEngine::new());
         } else {
@@ -159,7 +159,7 @@ const f32, float_count)
     // ── Phase 2: Kernel validation via micro sentinel ────────────────────────
     let status = micro_model::kernel_validate();
     crate::serial_println!("[JARVIS] Kernel validation: heap={} int={} fs={} serial={}",
-        status.heap_ok, status.interrupts_ok, status.filesystem_ok, status.serial_ok);
+        status.heap_ok, status.interrupts_ok, status.fs_ok, status.serial_ok);
 
     // ── Phase 3: Initialize SIMD + compute backend ───────────────────────────
     simd::initialize_dispatch();
@@ -174,7 +174,7 @@ match backend {
     INITIALIZED.store(true, Ordering::Release);
 
     // ── Phase 4: Try loading full brain from FS ──────────────────────────────
-    if status.filesystem_ok {
+    if status.fs_ok {
                 // Pattern matching — Rust's exhaustive branching construct.
 match load_full_brain() {
             Ok(bytes) => {
@@ -210,7 +210,7 @@ match load_full_brain() {
 pub fn load_full_brain() -> Result<usize, &'static str> {
     let data = crate::ramfs::with_filesystem(|fs| {
         fs.read_file(WEIGHTS_PATH).map(|d| d.to_vec())
-    }).map_error(|_| "weights.bin not found in FS")?;
+    }).map_err(|_| "weights.bin not found in FS")?;
 
     if data.len() % 4 != 0 || data.len() < 1024 {
         return Err("Invalid weight file");
@@ -219,14 +219,14 @@ pub fn load_full_brain() -> Result<usize, &'static str> {
     let float_count = data.len() / 4;
     let floats: &[f32] = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        core::slice::from_raw_parts(data.as_pointer() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+        core::slice::from_raw_parts(data.as_ptr() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const f32, float_count)
     };
 
     let weights = model::TransformerWeights::deserialize(floats)
         .ok_or("Deserialization failed (wrong param count)")?;
 
-    let parameter_count = weights.parameter_count();
+    let param_count = weights.param_count();
 
     // Upload to GPU if available
     if compute::gpu_available() {
@@ -234,7 +234,7 @@ const f32, float_count)
     }
 
     let engine = InferenceEngine::new();
-    let adam = AdamState::with_lr(parameter_count, 0.001);
+    let adam = AdamState::with_lr(param_count, 0.001);
 
     *MODEL.lock() = Some(weights);
     *ENGINE.lock() = Some(engine);
@@ -242,7 +242,7 @@ const f32, float_count)
     FULL_BRAIN_LOADED.store(true, Ordering::Release);
 
     crate::serial_println!("[JARVIS] Full brain: {} params ({} KB)",
-        parameter_count, data.len() / 1024);
+        param_count, data.len() / 1024);
 
     Ok(data.len())
 }
@@ -260,21 +260,21 @@ fn install_brain_from_bytes(data: &[u8], source: &str) -> Result<usize, &'static
     let float_count = data.len() / 4;
     let floats: &[f32] = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        core::slice::from_raw_parts(data.as_pointer() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+        core::slice::from_raw_parts(data.as_ptr() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const f32, float_count)
     };
 
     let weights = model::TransformerWeights::deserialize(floats)
         .ok_or("Deserialization failed (wrong param count)")?;
 
-    let parameter_count = weights.parameter_count();
+    let param_count = weights.param_count();
 
     if compute::gpu_available() {
         let _ = compute::upload_weights_to_vram(&weights);
     }
 
     let engine = InferenceEngine::new();
-    let adam = AdamState::with_lr(parameter_count, 0.001);
+    let adam = AdamState::with_lr(param_count, 0.001);
 
     *MODEL.lock() = Some(weights);
     *ENGINE.lock() = Some(engine);
@@ -282,7 +282,7 @@ const f32, float_count)
     FULL_BRAIN_LOADED.store(true, Ordering::Release);
 
     crate::serial_println!("[JARVIS] Full brain loaded from {}: {} params ({} KB)",
-        source, parameter_count, data.len() / 1024);
+        source, param_count, data.len() / 1024);
 
     Ok(data.len())
 }
@@ -291,7 +291,7 @@ const f32, float_count)
 pub fn load_brain_from_vfs(path: &str) -> Result<usize, &'static str> {
     crate::serial_println!("[JARVIS] Loading brain from VFS: {}", path);
     let data = crate::vfs::read_file(path)
-        .map_error(|_| "File not found or read error on VFS path")?;
+        .map_err(|_| "File not found or read error on VFS path")?;
     install_brain_from_bytes(&data, path)
 }
 
@@ -304,7 +304,7 @@ match filename {
     };
     crate::serial_println!("[JARVIS] Loading brain from FAT32: {}", path);
     let data = crate::vfs::read_file(&path)
-        .map_error(|_| "File not found on FAT32 (is a FAT32 disk attached?)")?;
+        .map_err(|_| "File not found on FAT32 (is a FAT32 disk attached?)")?;
     install_brain_from_bytes(&data, &path)
 }
 
@@ -330,7 +330,7 @@ pub fn cache_brain_to_ramfs() -> Result<usize, &'static str> {
     let byte_count = floats.len() * 4;
     let bytes: &[u8] = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        core::slice::from_raw_parts(floats.as_pointer() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+        core::slice::from_raw_parts(floats.as_ptr() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u8, byte_count)
     };
     crate::ramfs::with_filesystem(|fs| {
@@ -338,7 +338,7 @@ const u8, byte_count)
     });
     crate::ramfs::with_filesystem(|fs| {
         let _ = fs.touch(WEIGHTS_PATH);
-        fs.write_file(WEIGHTS_PATH, bytes).map_error(|_| "Cache write failed")
+        fs.write_file(WEIGHTS_PATH, bytes).map_err(|_| "Cache write failed")
     })?;
     crate::serial_println!("[JARVIS] Brain cached to RamFS ({} KB)", byte_count / 1024);
     Ok(byte_count)
@@ -366,12 +366,12 @@ fn initialize_random() {
     crate::serial_println!("[JARVIS] Initializing random full brain...");
 
     let weights = TransformerWeights::new_random();
-    let parameter_count = weights.parameter_count();
+    let param_count = weights.param_count();
 
     crate::serial_println!("[JARVIS] Model: {} layers, d_model={}, d_ff={}, {} heads",
         model::N_LAYERS, model::D_MODEL, model::D_FF, model::N_HEADS);
     crate::serial_println!("[JARVIS] Parameters: {} ({} KB FP32)",
-        parameter_count, parameter_count * 4 / 1024);
+        param_count, param_count * 4 / 1024);
 
     simd::initialize_dispatch();
     let backend = compute::detect_backend();
@@ -391,7 +391,7 @@ match compute::upload_weights_to_vram(&weights) {
     }
 
     let engine = InferenceEngine::new();
-    let adam = AdamState::with_lr(parameter_count, 0.001);
+    let adam = AdamState::with_lr(param_count, 0.001);
 
     *MODEL.lock() = Some(weights);
     *ENGINE.lock() = Some(engine);
@@ -481,7 +481,7 @@ match engine_guard.as_mut() {
     };
 
     let tokens: Vec<u8> = prompt.bytes().collect();
-    let capped = maximum_tokens.minimum(micro_model::MICRO_MAXIMUM_SEQUENCE);
+    let capped = maximum_tokens.min(micro_model::MICRO_MAXIMUM_SEQUENCE);
     let generated = engine.generate(micro, &tokens, capped);
     GENERATION_COUNT.fetch_add(1, Ordering::Relaxed);
     tokenizer::decode(&generated)
@@ -519,8 +519,8 @@ pub fn train_on_text(text: &str, learning_rate: f32) -> f32 {
     if !is_ready() { return f32::MAX; }
 
     // Guardian authorization required for training
-    if let Err(message) = guardian::authorize(guardian::ProtectedOp::Train) {
-        crate::serial_println!("[JARVIS] {}", message);
+    if let Err(msg) = guardian::authorize(guardian::ProtectedOp::Train) {
+        crate::serial_println!("[JARVIS] {}", msg);
         return f32::MAX;
     }
 
@@ -563,7 +563,7 @@ match model_guard.as_mut() {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /// Get model info as formatted lines
-pub fn information_lines() -> Vec<String> {
+pub fn info_lines() -> Vec<String> {
     let mut lines = Vec::new();
     lines.push(String::from("╔═══════════════════════════════════════════════════╗"));
     lines.push(String::from("║   J.A.R.V.I.S. Neural Brain v3.0 (Two-Tier)     ║"));
@@ -574,8 +574,8 @@ pub fn information_lines() -> Vec<String> {
     if let Some(micro) = MICRO_MODEL.lock().as_ref() {
         lines.push(format!("║ Micro:  {}L × d{} × {}H  ({} params, {:.0} KB)     ║",
             micro_model::MICRO_N_LAYERS, micro_model::MICRO_D_MODEL,
-            micro_model::MICRO_N_HEADS, micro.parameter_count(),
-            micro.parameter_count() as f64 * 4.0 / 1024.0));
+            micro_model::MICRO_N_HEADS, micro.param_count(),
+            micro.param_count() as f64 * 4.0 / 1024.0));
         lines.push(String::from("║ Role:   Kernel sentinel, validation, fallback    ║"));
     } else {
         lines.push(String::from("║ Micro:  NOT LOADED                               ║"));
@@ -587,7 +587,7 @@ pub fn information_lines() -> Vec<String> {
     let full = FULL_BRAIN_LOADED.load(Ordering::Relaxed);
     if full {
         if let Some(model) = MODEL.lock().as_ref() {
-            let params = model.parameter_count();
+            let params = model.param_count();
             lines.push(format!("║ Full:   {}L × d{} × {}H × ff{}  ({:.1}M params)  ║",
                 model::N_LAYERS, model::D_MODEL, model::N_HEADS, model::D_FF,
                 params as f64 / 1_000_000.0));
@@ -620,7 +620,7 @@ pub fn information_lines() -> Vec<String> {
 /// Get compact stats
 pub fn stats() -> String {
     let full = if FULL_BRAIN_LOADED.load(Ordering::Relaxed) {
-        format!("full={}K", if let Some(m) = MODEL.lock().as_ref() { m.parameter_count() / 1000 } else { 0 })
+        format!("full={}K", if let Some(m) = MODEL.lock().as_ref() { m.param_count() / 1000 } else { 0 })
     } else {
         String::from("full=OFF")
     };
@@ -720,7 +720,7 @@ pub fn save_weights() -> Result<usize, &'static str> {
     // Convert f32 slice to u8 slice (safe: same alignment guarantees in our allocator)
     let bytes: &[u8] = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        core::slice::from_raw_parts(floats.as_pointer() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+        core::slice::from_raw_parts(floats.as_ptr() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u8, byte_count)
     };
 
@@ -732,12 +732,12 @@ const u8, byte_count)
     // Create file if needed, then write
     crate::ramfs::with_filesystem(|fs| {
         let _ = fs.touch(WEIGHTS_PATH);
-        fs.write_file(WEIGHTS_PATH, bytes).map_error(|_| "Write failed")
+        fs.write_file(WEIGHTS_PATH, bytes).map_err(|_| "Write failed")
     })?;
 
     // Save metadata
     let meta = format!("params={}\nsteps={}\ngens={}\nbytes={}\n",
-        model.parameter_count(),
+        model.param_count(),
         TRAINING_STEPS.load(Ordering::Relaxed),
         GENERATION_COUNT.load(Ordering::Relaxed),
         byte_count);
@@ -832,7 +832,7 @@ pub fn pretrain(epochs: usize, lr: f32) -> (usize, f32, u64) {
 
     // Recalculate total steps including hardware sequences
     total_steps += hardware_sequences.len() * epochs;
-    let warmup_steps = (total_steps / 10).maximum(5) as u64; // 10% warmup
+    let warmup_steps = (total_steps / 10).max(5) as u64; // 10% warmup
 
     crate::serial_println!("[JARVIS] Pre-training: {} phases + HW, {} sequences, {} epoch(s), lr_peak={}, warmup={}",
         corpus::number_phases(), total_steps, epochs, lr, warmup_steps);
@@ -842,7 +842,7 @@ pub fn pretrain(epochs: usize, lr: f32) -> (usize, f32, u64) {
 
     if let (Some(adam), Some(model)) = (opt_guard.as_mut(), model_guard.as_mut()) {
         for epoch in 0..epochs {
-            for (phase_index, phase) in corpus::CORPUS.iter().enumerate() {
+            for (phase_idx, phase) in corpus::CORPUS.iter().enumerate() {
                 let mut phase_loss = 0.0f32;
                 let mut phase_count = 0u32;
                 let mut accum_grads = backprop::ModelGrads::new();
@@ -896,7 +896,7 @@ pub fn pretrain(epochs: usize, lr: f32) -> (usize, f32, u64) {
 
                 let average = if phase_count > 0 { phase_loss / phase_count as f32 } else { 0.0 };
                 crate::serial_println!("[JARVIS] Epoch {}/{} Phase {} ({}) — {} seqs, avg loss={:.3}",
-                    epoch + 1, epochs, phase_index, corpus::phase_name(phase_index),
+                    epoch + 1, epochs, phase_idx, corpus::phase_name(phase_idx),
                     phase_count, average);
             }
 
@@ -988,7 +988,7 @@ pub fn pretrain_phase(phase: usize, epochs: usize, lr: f32) -> (usize, f32, u64)
 
     let sequences = corpus::CORPUS[phase];
     let total_seqs = sequences.len() * epochs;
-    let warmup = (total_seqs / 10).maximum(2) as u64;
+    let warmup = (total_seqs / 10).max(2) as u64;
     let lr_minimum = lr * 0.1;
     let mut step = 0u64;
 
@@ -1174,10 +1174,10 @@ match rpc::get_weights(leader.ip, leader.rpc_port) {
     // Priority 2: Try any peer with params > 0
     let peers = mesh::get_peers();
     for peer in &peers {
-        if peer.parameter_count > 0 {
+        if peer.param_count > 0 {
             crate::serial_println!("[JARVIS] Trying peer {}.{}.{}.{}:{} ({} params)",
                 peer.ip[0], peer.ip[1], peer.ip[2], peer.ip[3],
-                peer.rpc_port, peer.parameter_count);
+                peer.rpc_port, peer.param_count);
                         // Pattern matching — Rust's exhaustive branching construct.
 match rpc::get_weights(peer.ip, peer.rpc_port) {
                 Ok(weight_bytes) if weight_bytes.len() > 1024 => {
@@ -1228,7 +1228,7 @@ pub fn auto_propagate(enable_pxe: bool) -> String {
     report.push_str("[2/5] Mesh: active (UDP 7700 / TCP 7701)\n");
 
     // Step 3: Network poll + peer discovery (time-based: up to 10s, break early)
-    let disc_start = crate::time::uptime_mouse();
+    let disc_start = crate::time::uptime_ms();
     let mut peer_count = 0;
     crate::serial_println!("[JARVIS] Discovering peers (up to 10s)...");
         // Infinite loop — runs until an explicit `break`.
@@ -1239,10 +1239,10 @@ loop {
         if !peers.is_empty() {
             peer_count = peers.len();
             crate::serial_println!("[JARVIS] Found {} peer(s) after {}ms",
-                peer_count, crate::time::uptime_mouse() - disc_start);
+                peer_count, crate::time::uptime_ms() - disc_start);
             break;
         }
-        let elapsed = crate::time::uptime_mouse().wrapping_sub(disc_start);
+        let elapsed = crate::time::uptime_ms().wrapping_sub(disc_start);
         if elapsed > 10_000 { break; }
     }
     report.push_str(&format!("[3/5] Peers: {} discovered\n", peer_count));

@@ -3,7 +3,7 @@
 
 
 use alloc::string::String;
-use alloc::string::Gd;
+use alloc::string::ToString;
 use alloc::vec::Vec;
 use alloc::format;
 use super::rootfs;
@@ -12,63 +12,63 @@ const B_: u32 = 0x00FF00;
 const C_: u32 = 0x00FFFF;
 const D_: u32 = 0xFFFF00;
 const A_: u32 = 0xFF0000;
-const Q_: u32 = 0xFFFFFF;
-const CD_: u32 = 0x6699FF;
+const R_: u32 = 0xFFFFFF;
+const CF_: u32 = 0x6699FF;
 
 
-pub fn vw() {
+pub fn run() {
     crate::println!();
-    crate::h!(C_, "╔══════════════════════════════════════════════════════════════╗");
-    crate::h!(C_, "║              Alpine Linux on TrustOS                         ║");
-    crate::h!(C_, "╚══════════════════════════════════════════════════════════════╝");
+    crate::n!(C_, "╔══════════════════════════════════════════════════════════════╗");
+    crate::n!(C_, "║              Alpine Linux on TrustOS                         ║");
+    crate::n!(C_, "╚══════════════════════════════════════════════════════════════╝");
     crate::println!();
     
     
-    if let Ok(upr) = rootfs::mq("/etc/motd") {
-        if let Ok(e) = core::str::jg(&upr) {
-            crate::print!("{}", e);
+    if let Ok(motd) = rootfs::read_file("/etc/motd") {
+        if let Ok(j) = core::str::from_utf8(&motd) {
+            crate::print!("{}", j);
         }
     }
     
-    let mut hdd = [0u8; 512];
-    let mut adv: Vec<String> = Vec::new();
+    let mut dkv = [0u8; 512];
+    let mut history: Vec<String> = Vec::new();
     
     loop {
         
-        let (jv, ajc, ox) = super::bsz(|linux| {
+        let (cwd, hostname, username) = super::akr(|linux| {
             (
-                String::from(linux.jv()),
-                String::from(linux.ajc()),
-                String::from(linux.ox()),
+                String::from(linux.cwd()),
+                String::from(linux.hostname()),
+                String::from(linux.username()),
             )
         });
         
         
-        crate::gr!(B_, "{}@{}", ox, ajc);
+        crate::bq!(B_, "{}@{}", username, hostname);
         crate::print!(":");
-        crate::gr!(CD_, "{}", ryp(&jv));
-        if ox == "root" {
+        crate::bq!(CF_, "{}", lfm(&cwd));
+        if username == "root" {
             crate::print!("# ");
         } else {
             crate::print!("$ ");
         }
         
-        let len = crate::keyboard::cts(&mut hdd);
-        let input = core::str::jg(&hdd[..len]).unwrap_or("");
-        let cmd = input.em();
+        let len = crate::keyboard::read_line(&mut dkv);
+        let input = core::str::from_utf8(&dkv[..len]).unwrap_or("");
+        let cmd = input.trim();
         
         if cmd.is_empty() {
             continue;
         }
         
         
-        if adv.len() >= 100 {
-            adv.remove(0);
+        if history.len() >= 100 {
+            history.remove(0);
         }
-        adv.push(String::from(cmd));
+        history.push(String::from(cmd));
         
         
-        if azu(cmd).is_err() {
+        if aav(cmd).is_err() {
             
             break;
         }
@@ -78,10 +78,10 @@ pub fn vw() {
 }
 
 
-fn ryp(path: &str) -> String {
+fn lfm(path: &str) -> String {
     if path == "/root" {
         String::from("~")
-    } else if path.cj("/root/") {
+    } else if path.starts_with("/root/") {
         format!("~{}", &path[5..])
     } else {
         String::from(path)
@@ -89,119 +89,119 @@ fn ryp(path: &str) -> String {
 }
 
 
-pub fn azu(cmd: &str) -> Result<(), &'static str> {
-    let ek: Vec<&str> = cmd.ayt().collect();
-    if ek.is_empty() {
+pub fn aav(cmd: &str) -> Result<(), &'static str> {
+    let au: Vec<&str> = cmd.split_whitespace().collect();
+    if au.is_empty() {
         return Ok(());
     }
     
-    let ro = ek[0];
-    let n = &ek[1..];
+    let command = au[0];
+    let args = &au[1..];
     
-    match ro {
+    match command {
         "exit" | "logout" => {
             return Err("exit");
         }
         
-        "help" => kis(),
-        "ls" => ioj(n),
-        "ll" => ioj(&["-la"]),
-        "cd" => kig(n),
-        "pwd" => kjb(),
-        "cat" => hde(n),
-        "echo" => kin(n),
-        "mkdir" => iok(n),
-        "touch" => kji(n),
-        "rm" => kjc(n),
-        "cp" => kii(n),
-        "mv" => kix(n),
-        "clear" => iof(),
-        "uname" => iom(n),
+        "help" => chf(),
+        "ls" => eij(args),
+        "ll" => eij(&["-la"]),
+        "cd" => fme(args),
+        "pwd" => fmz(),
+        "cat" => dkw(args),
+        "echo" => fmm(args),
+        "mkdir" => eik(args),
+        "touch" => fng(args),
+        "rm" => fna(args),
+        "cp" => fmg(args),
+        "mv" => fmv(args),
+        "clear" => eif(),
+        "uname" => eim(args),
         "whoami" => crate::println!("root"),
         "id" => crate::println!("uid=0(root) gid=0(root) groups=0(root)"),
-        "hostname" => kit(n),
-        "date" => kij(),
-        "uptime" => rkb(),
-        "free" => ioh(n),
-        "df" => kik(n),
-        "ps" => kja(n),
-        "top" => iol(),
-        "dmesg" => kim(),
-        "mount" => kiw(),
-        "env" | "printenv" => iog(),
-        "export" => kio(n),
-        "head" => kir(n),
-        "tail" => kjg(n),
-        "wc" => kjk(n),
-        "grep" => kiq(n),
-        "find" => kip(n),
-        "which" => hdl(n),
-        "type" => rjw(n),
+        "hostname" => fmq(args),
+        "date" => fmh(),
+        "uptime" => ktm(),
+        "free" => eih(args),
+        "df" => fmi(args),
+        "ps" => fmy(args),
+        "top" => eil(),
+        "dmesg" => fml(),
+        "mount" => fmu(),
+        "env" | "printenv" => eig(),
+        "export" => che(args),
+        "head" => fmp(args),
+        "tail" => fne(args),
+        "wc" => fni(args),
+        "grep" => fmo(args),
+        "find" => fmn(args),
+        "which" => dkz(args),
+        "type" => kth(args),
         "true" => {}
         "false" => {}
-        "test" | "[" => kjh(n),
+        "test" | "[" => fnf(args),
         "sh" | "ash" | "bash" => {
             crate::println!("Already in shell");
         }
-        "apk" => rcg(n),
-        "wget" | "curl" => rkq(n),
-        "ping" => kiz(n),
-        "ifconfig" | "ip" => hdh(n),
-        "netstat" | "ss" => hdi(),
+        "apk" => klq(args),
+        "wget" | "curl" => kub(args),
+        "ping" => fmx(args),
+        "ifconfig" | "ip" => dkx(args),
+        "netstat" | "ss" => dky(),
         "reboot" | "poweroff" | "halt" => {
-            crate::println!("Cannot {} from Linux subsystem", ro);
+            crate::println!("Cannot {} from Linux subsystem", command);
             crate::println!("Use 'exit' to return to TrustOS, then use TrustOS commands.");
         }
         
         _ => {
             
-            let jv = super::bsz(|dm| String::from(dm.jv()));
-            let kdg = ["/bin", "/sbin", "/usr/bin", "/usr/sbin"];
+            let cwd = super::akr(|l| String::from(l.cwd()));
+            let fjc = ["/bin", "/sbin", "/usr/bin", "/usr/sbin"];
             
-            let mut aig = false;
+            let mut nj = false;
             
             
-            let qzj = if ro.cj('/') || ro.cj("./") {
-                Some(String::from(ro))
+            let kjk = if command.starts_with('/') || command.starts_with("./") {
+                Some(String::from(command))
             } else {
                 
-                kdg.iter()
-                    .map(|ai| format!("{}/{}", ai, ro))
-                    .du(|ai| rootfs::aja(ai))
+                fjc.iter()
+                    .map(|aa| format!("{}/{}", aa, command))
+                    .find(|aa| rootfs::exists(aa))
             };
             
-            if let Some(haq) = qzj {
-                if crate::linux_compat::tya(&haq) {
+            if let Some(binary_path) = kjk {
+                if crate::linux_compat::msy(&binary_path) {
                     
-                    match crate::linux_compat::exec(&haq, n) {
-                        Ok(aj) => {
-                            if aj != 0 {
-                                crate::serial_println!("[LINUX] {} exited with code {}", ro, aj);
+                    match crate::linux_compat::exec(&binary_path, args) {
+                        Ok(code) => {
+                            if code != 0 {
+                                crate::serial_println!("[LINUX] {} exited with code {}", command, code);
                             }
                         }
-                        Err(aa) => {
-                            crate::println!("{}: execution failed: {}", ro, aa);
+                        Err(e) => {
+                            crate::println!("{}: execution failed: {}", command, e);
                         }
                     }
-                    aig = true;
-                } else if let Ok(ca) = rootfs::mq(&haq) {
+                    nj = true;
+                } else if let Ok(content) = rootfs::read_file(&binary_path) {
                     
-                    if ca.len() >= 2 && &ca[0..2] == b"#!" {
+                    if content.len() >= 2 && &content[0..2] == b"#!" {
                         
-                        match crate::linux_compat::runtime::wbl(&haq, &mut crate::linux_compat::LinuxProcess::new(&haq, alloc::vec![], alloc::vec![])) {
+                        match crate::linux_compat::runtime::ojf(&binary_path, &mut crate::linux_compat::LinuxProcess::new(&binary_path, alloc::vec![], alloc::vec![])) {
                             Ok(_) => {}
-                            Err(aa) => crate::println!("{}: {}", ro, aa),
+                            Err(e) => crate::println!("{}: {}", command, e),
                         }
-                        aig = true;
+                        nj = true;
                     } else {
-                        crate::println!("{}: binary format not recognized", ro);
-                        aig = true;
+                        crate::println!("{}: binary format not recognized", command);
+                        nj = true;
                     }
                 }
             }
             
-            if !aig {
-                crate::println!("{}: command not found", ro);
+            if !nj {
+                crate::println!("{}: command not found", command);
             }
         }
     }
@@ -209,11 +209,11 @@ pub fn azu(cmd: &str) -> Result<(), &'static str> {
     Ok(())
 }
 
-fn kis() {
-    crate::h!(C_, "Alpine Linux Shell Commands");
-    crate::h!(C_, "===========================");
+fn chf() {
+    crate::n!(C_, "Alpine Linux Shell Commands");
+    crate::n!(C_, "===========================");
     crate::println!();
-    crate::h!(D_, "File Operations:");
+    crate::n!(D_, "File Operations:");
     crate::println!("  ls [-la]         List directory contents");
     crate::println!("  cd <dir>         Change directory");
     crate::println!("  pwd              Print working directory");
@@ -224,7 +224,7 @@ fn kis() {
     crate::println!("  cp <src> <dst>   Copy file");
     crate::println!("  mv <src> <dst>   Move/rename file");
     crate::println!();
-    crate::h!(D_, "System Information:");
+    crate::n!(D_, "System Information:");
     crate::println!("  uname [-a]       System information");
     crate::println!("  hostname         Show hostname");
     crate::println!("  whoami           Current user");
@@ -237,20 +237,20 @@ fn kis() {
     crate::println!("  top              Process monitor");
     crate::println!("  dmesg            Kernel messages");
     crate::println!();
-    crate::h!(D_, "Text Processing:");
+    crate::n!(D_, "Text Processing:");
     crate::println!("  echo <text>      Print text");
     crate::println!("  head <file>      First lines of file");
     crate::println!("  tail <file>      Last lines of file");
     crate::println!("  wc <file>        Word/line count");
     crate::println!("  grep <pat> <f>   Search in files");
     crate::println!();
-    crate::h!(D_, "Package Management:");
+    crate::n!(D_, "Package Management:");
     crate::println!("  apk update       Update package index");
     crate::println!("  apk add <pkg>    Install package");
     crate::println!("  apk del <pkg>    Remove package");
     crate::println!("  apk search <q>   Search packages");
     crate::println!();
-    crate::h!(D_, "Network:");
+    crate::n!(D_, "Network:");
     crate::println!("  ping <host>      Ping host");
     crate::println!("  ifconfig         Network interfaces");
     crate::println!("  netstat          Network connections");
@@ -258,153 +258,153 @@ fn kis() {
     crate::println!("  exit             Return to TrustOS");
 }
 
-fn ioj(n: &[&str]) {
-    let eym = n.contains(&"-a") || n.contains(&"-la") || n.contains(&"-al");
-    let lju = n.contains(&"-l") || n.contains(&"-la") || n.contains(&"-al");
+fn eij(args: &[&str]) {
+    let cdr = args.contains(&"-a") || args.contains(&"-la") || args.contains(&"-al");
+    let ggg = args.contains(&"-l") || args.contains(&"-la") || args.contains(&"-al");
     
     
-    let path = n.iter()
-        .du(|q| !q.cj('-'))
-        .hu();
+    let path = args.iter()
+        .find(|a| !a.starts_with('-'))
+        .copied();
     
-    let jv = super::bsz(|dm| String::from(dm.jv()));
-    let cd = path.unwrap_or(&jv);
+    let cwd = super::akr(|l| String::from(l.cwd()));
+    let target = path.unwrap_or(&cwd);
     
-    let wo = rootfs::ufk(cd, &jv);
-    let dss = if cd.cj('/') {
-        String::from(cd)
-    } else if cd == "." {
-        jv.clone()
+    let kg = rootfs::myx(target, &cwd);
+    let bni = if target.starts_with('/') {
+        String::from(target)
+    } else if target == "." {
+        cwd.clone()
     } else {
-        format!("{}/{}", jv, cd)
+        format!("{}/{}", cwd, target)
     };
     
-    match rootfs::ojo(&dss.replace("/linux", "").replace("//", "/")) {
-        Ok(ch) => {
-            if lju {
-                crate::println!("total {}", ch.len());
+    match rootfs::ikp(&bni.replace("/linux", "").replace("//", "/")) {
+        Ok(entries) => {
+            if ggg {
+                crate::println!("total {}", entries.len());
             }
             
-            let mut pj: Vec<_> = ch.dse().collect();
-            pj.bxe(|q, o| q.0.cmp(&o.0));
+            let mut items: Vec<_> = entries.into_iter().collect();
+            items.sort_by(|a, b| a.0.cmp(&b.0));
             
-            for (j, ta, aw) in pj {
-                if !eym && j.cj('.') {
+            for (name, is_dir, size) in items {
+                if !cdr && name.starts_with('.') {
                     continue;
                 }
                 
-                if lju {
-                    let dao = if ta { "drwxr-xr-x" } else { "-rw-r--r--" };
-                    let als = if ta { 
+                if ggg {
+                    let bda = if is_dir { "drwxr-xr-x" } else { "-rw-r--r--" };
+                    let td = if is_dir { 
                         format!("{:>8}", 4096) 
                     } else { 
-                        format!("{:>8}", aw) 
+                        format!("{:>8}", size) 
                     };
                     
-                    if ta {
-                        crate::print!("{} 1 root root {} Feb  2 12:00 ", dao, als);
-                        crate::h!(CD_, "{}/", j);
+                    if is_dir {
+                        crate::print!("{} 1 root root {} Feb  2 12:00 ", bda, td);
+                        crate::n!(CF_, "{}/", name);
                     } else {
-                        crate::println!("{} 1 root root {} Feb  2 12:00 {}", dao, als, j);
+                        crate::println!("{} 1 root root {} Feb  2 12:00 {}", bda, td, name);
                     }
                 } else {
-                    if ta {
-                        crate::gr!(CD_, "{}  ", j);
+                    if is_dir {
+                        crate::bq!(CF_, "{}  ", name);
                     } else {
-                        crate::print!("{}  ", j);
+                        crate::print!("{}  ", name);
                     }
                 }
             }
             
-            if !lju {
+            if !ggg {
                 crate::println!();
             }
         }
         Err(_) => {
-            crate::println!("ls: cannot access '{}': No such file or directory", cd);
+            crate::println!("ls: cannot access '{}': No such file or directory", target);
         }
     }
 }
 
-fn kig(n: &[&str]) {
-    let cd = n.fv().hu().unwrap_or("~");
+fn fme(args: &[&str]) {
+    let target = args.first().copied().unwrap_or("~");
     
-    super::bsz(|linux| {
-        let dag = if cd == "~" || cd == "" {
+    super::akr(|linux| {
+        let bcx = if target == "~" || target == "" {
             String::from("/root")
-        } else if cd == "-" {
+        } else if target == "-" {
             
-            String::from(linux.jv())
-        } else if cd.cj('/') {
-            String::from(cd)
-        } else if cd.cj("~/") {
-            format!("/root/{}", &cd[2..])
+            String::from(linux.cwd())
+        } else if target.starts_with('/') {
+            String::from(target)
+        } else if target.starts_with("~/") {
+            format!("/root/{}", &target[2..])
         } else {
-            let jv = linux.jv();
-            if jv == "/" {
-                format!("/{}", cd)
+            let cwd = linux.cwd();
+            if cwd == "/" {
+                format!("/{}", target)
             } else {
-                format!("{}/{}", jv, cd)
+                format!("{}/{}", cwd, target)
             }
         };
         
         
-        let dto = bro(&dag);
+        let bnu = normalize_path(&bcx);
         
         
-        if rootfs::cfr(&dto) {
-            linux.wiq(&dto);
-        } else if rootfs::aja(&dto) {
-            crate::println!("cd: {}: Not a directory", cd);
+        if rootfs::is_directory(&bnu) {
+            linux.set_cwd(&bnu);
+        } else if rootfs::exists(&bnu) {
+            crate::println!("cd: {}: Not a directory", target);
         } else {
-            crate::println!("cd: {}: No such file or directory", cd);
+            crate::println!("cd: {}: No such file or directory", target);
         }
     });
 }
 
-fn bro(path: &str) -> String {
-    let mut ek: Vec<&str> = Vec::new();
+fn normalize_path(path: &str) -> String {
+    let mut au: Vec<&str> = Vec::new();
     
-    for vu in path.adk('/') {
-        match vu {
+    for jn in path.split('/') {
+        match jn {
             "" | "." => continue,
-            ".." => { ek.pop(); }
-            _ => ek.push(vu),
+            ".." => { au.pop(); }
+            _ => au.push(jn),
         }
     }
     
-    if ek.is_empty() {
+    if au.is_empty() {
         String::from("/")
     } else {
-        format!("/{}", ek.rr("/"))
+        format!("/{}", au.join("/"))
     }
 }
 
-fn kjb() {
-    let jv = super::bsz(|dm| String::from(dm.jv()));
-    crate::println!("{}", jv);
+fn fmz() {
+    let cwd = super::akr(|l| String::from(l.cwd()));
+    crate::println!("{}", cwd);
 }
 
-fn hde(n: &[&str]) {
-    if n.is_empty() {
+fn dkw(args: &[&str]) {
+    if args.is_empty() {
         crate::println!("cat: missing operand");
         return;
     }
     
-    let jv = super::bsz(|dm| String::from(dm.jv()));
+    let cwd = super::akr(|l| String::from(l.cwd()));
     
-    for path in n {
-        let wo = if path.cj('/') {
+    for path in args {
+        let kg = if path.starts_with('/') {
             String::from(*path)
         } else {
-            format!("{}/{}", jv, path)
+            format!("{}/{}", cwd, path)
         };
         
-        match rootfs::mq(&wo) {
-            Ok(ca) => {
-                if let Ok(e) = core::str::jg(&ca) {
-                    crate::print!("{}", e);
-                    if !e.pp('\n') {
+        match rootfs::read_file(&kg) {
+            Ok(content) => {
+                if let Ok(j) = core::str::from_utf8(&content) {
+                    crate::print!("{}", j);
+                    if !j.ends_with('\n') {
                         crate::println!();
                     }
                 } else {
@@ -418,210 +418,210 @@ fn hde(n: &[&str]) {
     }
 }
 
-fn kin(n: &[&str]) {
-    let text = n.rr(" ");
+fn fmm(args: &[&str]) {
+    let text = args.join(" ");
     crate::println!("{}", text);
 }
 
-fn iok(n: &[&str]) {
-    if n.is_empty() {
+fn eik(args: &[&str]) {
+    if args.is_empty() {
         crate::println!("mkdir: missing operand");
         return;
     }
     
-    let jv = super::bsz(|dm| String::from(dm.jv()));
+    let cwd = super::akr(|l| String::from(l.cwd()));
     
-    for path in n {
-        if path.cj('-') {
+    for path in args {
+        if path.starts_with('-') {
             continue;
         }
         
-        let wo = if path.cj('/') {
+        let kg = if path.starts_with('/') {
             format!("/linux{}", path)
         } else {
-            format!("/linux{}/{}", jv, path)
+            format!("/linux{}/{}", cwd, path)
         };
         
-        crate::ramfs::fh(|fs| {
-            if let Err(_) = fs.ut(&wo) {
+        crate::ramfs::bh(|fs| {
+            if let Err(_) = fs.mkdir(&kg) {
                 crate::println!("mkdir: cannot create directory '{}': File exists", path);
             }
         });
     }
 }
 
-fn kji(n: &[&str]) {
-    if n.is_empty() {
+fn fng(args: &[&str]) {
+    if args.is_empty() {
         crate::println!("touch: missing file operand");
         return;
     }
     
-    let jv = super::bsz(|dm| String::from(dm.jv()));
+    let cwd = super::akr(|l| String::from(l.cwd()));
     
-    for path in n {
-        let wo = if path.cj('/') {
+    for path in args {
+        let kg = if path.starts_with('/') {
             format!("/linux{}", path)
         } else {
-            format!("/linux{}/{}", jv, path)
+            format!("/linux{}/{}", cwd, path)
         };
         
-        crate::ramfs::fh(|fs| {
-            let _ = fs.touch(&wo);
+        crate::ramfs::bh(|fs| {
+            let _ = fs.touch(&kg);
         });
     }
 }
 
-fn kjc(n: &[&str]) {
-    if n.is_empty() {
+fn fna(args: &[&str]) {
+    if args.is_empty() {
         crate::println!("rm: missing operand");
         return;
     }
     
-    let jv = super::bsz(|dm| String::from(dm.jv()));
+    let cwd = super::akr(|l| String::from(l.cwd()));
     
-    for path in n {
-        if path.cj('-') {
+    for path in args {
+        if path.starts_with('-') {
             continue;
         }
         
-        let wo = if path.cj('/') {
+        let kg = if path.starts_with('/') {
             format!("/linux{}", path)
         } else {
-            format!("/linux{}/{}", jv, path)
+            format!("/linux{}/{}", cwd, path)
         };
         
-        crate::ramfs::fh(|fs| {
-            if let Err(aa) = fs.hb(&wo) {
-                crate::println!("rm: cannot remove '{}': {}", path, aa.as_str());
+        crate::ramfs::bh(|fs| {
+            if let Err(e) = fs.rm(&kg) {
+                crate::println!("rm: cannot remove '{}': {}", path, e.as_str());
             }
         });
     }
 }
 
-fn kii(n: &[&str]) {
-    if n.len() < 2 {
+fn fmg(args: &[&str]) {
+    if args.len() < 2 {
         crate::println!("cp: missing operand");
         return;
     }
     
-    let jv = super::bsz(|dm| String::from(dm.jv()));
-    let cy = n[0];
-    let cs = n[1];
+    let cwd = super::akr(|l| String::from(l.cwd()));
+    let src = args[0];
+    let dst = args[1];
     
-    let ibl = if cy.cj('/') {
-        format!("/linux{}", cy)
+    let eag = if src.starts_with('/') {
+        format!("/linux{}", src)
     } else {
-        format!("/linux{}/{}", jv, cy)
+        format!("/linux{}/{}", cwd, src)
     };
     
-    let hhc = if cs.cj('/') {
-        format!("/linux{}", cs)
+    let dnv = if dst.starts_with('/') {
+        format!("/linux{}", dst)
     } else {
-        format!("/linux{}/{}", jv, cs)
+        format!("/linux{}/{}", cwd, dst)
     };
     
-    crate::ramfs::fh(|fs| {
-        if let Err(aa) = fs.bza(&ibl, &hhc) {
-            crate::println!("cp: error: {}", aa.as_str());
+    crate::ramfs::bh(|fs| {
+        if let Err(e) = fs.cp(&eag, &dnv) {
+            crate::println!("cp: error: {}", e.as_str());
         }
     });
 }
 
-fn kix(n: &[&str]) {
-    if n.len() < 2 {
+fn fmv(args: &[&str]) {
+    if args.len() < 2 {
         crate::println!("mv: missing operand");
         return;
     }
     
-    let jv = super::bsz(|dm| String::from(dm.jv()));
-    let cy = n[0];
-    let cs = n[1];
+    let cwd = super::akr(|l| String::from(l.cwd()));
+    let src = args[0];
+    let dst = args[1];
     
-    let ibl = if cy.cj('/') {
-        format!("/linux{}", cy)
+    let eag = if src.starts_with('/') {
+        format!("/linux{}", src)
     } else {
-        format!("/linux{}/{}", jv, cy)
+        format!("/linux{}/{}", cwd, src)
     };
     
-    let hhc = if cs.cj('/') {
-        format!("/linux{}", cs)
+    let dnv = if dst.starts_with('/') {
+        format!("/linux{}", dst)
     } else {
-        format!("/linux{}/{}", jv, cs)
+        format!("/linux{}/{}", cwd, dst)
     };
     
-    crate::ramfs::fh(|fs| {
-        if let Err(aa) = fs.euz(&ibl, &hhc) {
-            crate::println!("mv: error: {}", aa.as_str());
+    crate::ramfs::bh(|fs| {
+        if let Err(e) = fs.mv(&eag, &dnv) {
+            crate::println!("mv: error: {}", e.as_str());
         }
     });
 }
 
-fn iof() {
+fn eif() {
     
     crate::print!("\x1B[2J\x1B[H");
 }
 
-fn iom(n: &[&str]) {
-    let eym = n.contains(&"-a");
+fn eim(args: &[&str]) {
+    let cdr = args.contains(&"-a");
     
-    if eym || n.is_empty() {
-        if eym {
+    if cdr || args.is_empty() {
+        if cdr {
             crate::println!("Linux alpine 5.15.0-alpine #1 SMP TrustOS x86_64 GNU/Linux");
         } else {
             crate::println!("Linux");
         }
     } else {
-        let mut an = String::new();
-        for ji in n {
-            match *ji {
-                "-s" => an.t("Linux "),
-                "-n" => an.t("alpine "),
-                "-r" => an.t("5.15.0-alpine "),
-                "-v" => an.t("#1 SMP TrustOS "),
-                "-m" => an.t("x86_64 "),
-                "-o" => an.t("GNU/Linux "),
+        let mut output = String::new();
+        for db in args {
+            match *db {
+                "-s" => output.push_str("Linux "),
+                "-n" => output.push_str("alpine "),
+                "-r" => output.push_str("5.15.0-alpine "),
+                "-v" => output.push_str("#1 SMP TrustOS "),
+                "-m" => output.push_str("x86_64 "),
+                "-o" => output.push_str("GNU/Linux "),
                 _ => {}
             }
         }
-        crate::println!("{}", an.em());
+        crate::println!("{}", output.trim());
     }
 }
 
-fn kit(n: &[&str]) {
-    if n.is_empty() {
-        let ajc = super::bsz(|dm| String::from(dm.ajc()));
-        crate::println!("{}", ajc);
+fn fmq(args: &[&str]) {
+    if args.is_empty() {
+        let hostname = super::akr(|l| String::from(l.hostname()));
+        crate::println!("{}", hostname);
     } else {
         crate::println!("hostname: you must be root to change the host name");
     }
 }
 
-fn kij() {
+fn fmh() {
     
-    let os = crate::rtc::cgz();
-    let fgl = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    let upo = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    let fm = crate::rtc::aou();
+    let cic = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    let nge = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     
-    let upn = upo.get((os.caw - 1) as usize).unwrap_or(&"???");
+    let ngd = nge.get((fm.month - 1) as usize).unwrap_or(&"???");
     crate::println!("{} {} {:2} {:02}:{:02}:{:02} UTC {}", 
-        fgl[(os.cjw % 7) as usize], upn, os.cjw, os.bek, os.bri, os.chr, os.ccq);
+        cic[(fm.day % 7) as usize], ngd, fm.day, fm.hour, fm.minute, fm.second, fm.year);
 }
 
-fn rkb() {
-    let qb = crate::logger::lh();
-    let dvm = qb / 100; 
-    let lma = dvm / 60;
-    let cad = lma / 60;
+fn ktm() {
+    let gx = crate::logger::eg();
+    let abi = gx / 100; 
+    let ght = abi / 60;
+    let aoi = ght / 60;
     
     crate::println!(" {:02}:{:02}:{:02} up {} min, 1 user, load average: 0.00, 0.00, 0.00",
-        cad % 24, lma % 60, dvm % 60, lma);
+        aoi % 24, ght % 60, abi % 60, ght);
 }
 
-fn ioh(n: &[&str]) {
-    let iyz = n.contains(&"-h");
+fn eih(args: &[&str]) {
+    let epv = args.contains(&"-h");
     
     crate::println!("              total        used        free      shared  buff/cache   available");
-    if iyz {
+    if epv {
         crate::println!("Mem:          4.0Gi       500Mi       3.0Gi       128Mi       500Mi       3.5Gi");
         crate::println!("Swap:            0B          0B          0B");
     } else {
@@ -630,13 +630,13 @@ fn ioh(n: &[&str]) {
     }
 }
 
-fn kik(n: &[&str]) {
-    let iyz = n.contains(&"-h");
+fn fmi(args: &[&str]) {
+    let epv = args.contains(&"-h");
     
     crate::println!("Filesystem      {}      Used Available Use% Mounted on", 
-        if iyz { "Size" } else { "1K-blocks" });
+        if epv { "Size" } else { "1K-blocks" });
     
-    if iyz {
+    if epv {
         crate::println!("trustos-root     32M       8M       24M  25% /");
         crate::println!("tmpfs           128M       0M      128M   0% /tmp");
         crate::println!("devfs             0M       0M        0M   0% /dev");
@@ -649,13 +649,13 @@ fn kik(n: &[&str]) {
     }
 }
 
-fn kja(n: &[&str]) {
-    let eym = n.contains(&"-a") || n.contains(&"-e") || n.contains(&"aux");
+fn fmy(args: &[&str]) {
+    let cdr = args.contains(&"-a") || args.contains(&"-e") || args.contains(&"aux");
     
     crate::println!("PID   USER     TIME  COMMAND");
     crate::println!("    1 root      0:00 init");
     crate::println!("    2 root      0:00 [kthreadd]");
-    if eym {
+    if cdr {
         crate::println!("    3 root      0:00 [ksoftirqd/0]");
         crate::println!("   10 root      0:00 [rcu_sched]");
     }
@@ -663,7 +663,7 @@ fn kja(n: &[&str]) {
     crate::println!("  101 root      0:00 ps");
 }
 
-fn iol() {
+fn eil() {
     crate::println!("top - {:02}:{:02}:{:02} up 0 min,  1 user,  load average: 0.00, 0.00, 0.00",
         12, 0, 0);
     crate::println!("Tasks:   3 total,   1 running,   2 sleeping,   0 stopped,   0 zombie");
@@ -679,7 +679,7 @@ fn iol() {
     crate::println!("(Press 'q' to quit - not implemented in snapshot mode)");
 }
 
-fn kim() {
+fn fml() {
     crate::println!("[    0.000000] Linux version 5.15.0-alpine (TrustOS subsystem)");
     crate::println!("[    0.000000] Command line: console=ttyS0");
     crate::println!("[    0.000000] TrustOS Linux Subsystem initialized");
@@ -689,7 +689,7 @@ fn kim() {
     crate::println!("[    0.040000] Alpine rootfs mounted successfully");
 }
 
-fn kiw() {
+fn fmu() {
     crate::println!("trustos-root on / type ramfs (rw,relatime)");
     crate::println!("proc on /proc type proc (rw,nosuid,nodev,noexec,relatime)");
     crate::println!("sys on /sys type sysfs (rw,nosuid,nodev,noexec,relatime)");
@@ -697,49 +697,49 @@ fn kiw() {
     crate::println!("tmpfs on /tmp type tmpfs (rw,nosuid,nodev,relatime)");
 }
 
-fn iog() {
+fn eig() {
     crate::println!("PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin");
     crate::println!("HOME=/root");
     crate::println!("USER=root");
     crate::println!("LOGNAME=root");
     crate::println!("SHELL=/bin/sh");
-    crate::println!("PWD={}", super::bsz(|dm| String::from(dm.jv())));
-    crate::println!("HOSTNAME={}", super::bsz(|dm| String::from(dm.ajc())));
+    crate::println!("PWD={}", super::akr(|l| String::from(l.cwd())));
+    crate::println!("HOSTNAME={}", super::akr(|l| String::from(l.hostname())));
     crate::println!("TERM=linux");
     crate::println!("LANG=C.UTF-8");
 }
 
-fn kio(n: &[&str]) {
-    if n.is_empty() {
-        iog();
+fn che(args: &[&str]) {
+    if args.is_empty() {
+        eig();
     } else {
         
-        for ji in n {
-            crate::println!("export {}", ji);
+        for db in args {
+            crate::println!("export {}", db);
         }
     }
 }
 
-fn kir(n: &[&str]) {
-    let ak = 10;
+fn fmp(args: &[&str]) {
+    let lines = 10;
     
-    for path in n {
-        if path.cj('-') {
+    for path in args {
+        if path.starts_with('-') {
             continue;
         }
         
-        let jv = super::bsz(|dm| String::from(dm.jv()));
-        let wo = if path.cj('/') {
+        let cwd = super::akr(|l| String::from(l.cwd()));
+        let kg = if path.starts_with('/') {
             String::from(*path)
         } else {
-            format!("{}/{}", jv, path)
+            format!("{}/{}", cwd, path)
         };
         
-        match rootfs::mq(&wo) {
-            Ok(ca) => {
-                if let Ok(e) = core::str::jg(&ca) {
-                    for (a, line) in e.ak().cf() {
-                        if a >= ak {
+        match rootfs::read_file(&kg) {
+            Ok(content) => {
+                if let Ok(j) = core::str::from_utf8(&content) {
+                    for (i, line) in j.lines().enumerate() {
+                        if i >= lines {
                             break;
                         }
                         crate::println!("{}", line);
@@ -753,27 +753,27 @@ fn kir(n: &[&str]) {
     }
 }
 
-fn kjg(n: &[&str]) {
-    let ak = 10;
+fn fne(args: &[&str]) {
+    let lines = 10;
     
-    for path in n {
-        if path.cj('-') {
+    for path in args {
+        if path.starts_with('-') {
             continue;
         }
         
-        let jv = super::bsz(|dm| String::from(dm.jv()));
-        let wo = if path.cj('/') {
+        let cwd = super::akr(|l| String::from(l.cwd()));
+        let kg = if path.starts_with('/') {
             String::from(*path)
         } else {
-            format!("{}/{}", jv, path)
+            format!("{}/{}", cwd, path)
         };
         
-        match rootfs::mq(&wo) {
-            Ok(ca) => {
-                if let Ok(e) = core::str::jg(&ca) {
-                    let jzw: Vec<&str> = e.ak().collect();
-                    let ay = if jzw.len() > ak { jzw.len() - ak } else { 0 };
-                    for line in &jzw[ay..] {
+        match rootfs::read_file(&kg) {
+            Ok(content) => {
+                if let Ok(j) = core::str::from_utf8(&content) {
+                    let fgr: Vec<&str> = j.lines().collect();
+                    let start = if fgr.len() > lines { fgr.len() - lines } else { 0 };
+                    for line in &fgr[start..] {
                         crate::println!("{}", line);
                     }
                 }
@@ -785,26 +785,26 @@ fn kjg(n: &[&str]) {
     }
 }
 
-fn kjk(n: &[&str]) {
-    for path in n {
-        if path.cj('-') {
+fn fni(args: &[&str]) {
+    for path in args {
+        if path.starts_with('-') {
             continue;
         }
         
-        let jv = super::bsz(|dm| String::from(dm.jv()));
-        let wo = if path.cj('/') {
+        let cwd = super::akr(|l| String::from(l.cwd()));
+        let kg = if path.starts_with('/') {
             String::from(*path)
         } else {
-            format!("{}/{}", jv, path)
+            format!("{}/{}", cwd, path)
         };
         
-        match rootfs::mq(&wo) {
-            Ok(ca) => {
-                if let Ok(e) = core::str::jg(&ca) {
-                    let ak = e.ak().az();
-                    let aoh = e.ayt().az();
-                    let bf = ca.len();
-                    crate::println!("{:>7} {:>7} {:>7} {}", ak, aoh, bf, path);
+        match rootfs::read_file(&kg) {
+            Ok(content) => {
+                if let Ok(j) = core::str::from_utf8(&content) {
+                    let lines = j.lines().count();
+                    let um = j.split_whitespace().count();
+                    let bytes = content.len();
+                    crate::println!("{:>7} {:>7} {:>7} {}", lines, um, bytes, path);
                 }
             }
             Err(_) => {
@@ -814,26 +814,26 @@ fn kjk(n: &[&str]) {
     }
 }
 
-fn kiq(n: &[&str]) {
-    if n.len() < 2 {
+fn fmo(args: &[&str]) {
+    if args.len() < 2 {
         crate::println!("Usage: grep PATTERN FILE");
         return;
     }
     
-    let pattern = n[0];
-    let jv = super::bsz(|dm| String::from(dm.jv()));
+    let pattern = args[0];
+    let cwd = super::akr(|l| String::from(l.cwd()));
     
-    for path in &n[1..] {
-        let wo = if path.cj('/') {
+    for path in &args[1..] {
+        let kg = if path.starts_with('/') {
             String::from(*path)
         } else {
-            format!("{}/{}", jv, path)
+            format!("{}/{}", cwd, path)
         };
         
-        match rootfs::mq(&wo) {
-            Ok(ca) => {
-                if let Ok(e) = core::str::jg(&ca) {
-                    for line in e.ak() {
+        match rootfs::read_file(&kg) {
+            Ok(content) => {
+                if let Ok(j) = core::str::from_utf8(&content) {
+                    for line in j.lines() {
                         if line.contains(pattern) {
                             crate::println!("{}", line);
                         }
@@ -847,49 +847,49 @@ fn kiq(n: &[&str]) {
     }
 }
 
-fn kip(n: &[&str]) {
-    let path = n.fv().hu().unwrap_or(".");
+fn fmn(args: &[&str]) {
+    let path = args.first().copied().unwrap_or(".");
     crate::println!("{}", path);
     crate::println!("(find: recursive listing not fully implemented)");
 }
 
-fn hdl(n: &[&str]) {
-    let kdg = ["/bin", "/sbin", "/usr/bin", "/usr/sbin"];
+fn dkz(args: &[&str]) {
+    let fjc = ["/bin", "/sbin", "/usr/bin", "/usr/sbin"];
     
-    for cmd in n {
-        let mut aig = false;
-        for path in kdg {
-            let wo = format!("{}/{}", path, cmd);
-            if rootfs::aja(&wo) {
-                crate::println!("{}", wo);
-                aig = true;
+    for cmd in args {
+        let mut nj = false;
+        for path in fjc {
+            let kg = format!("{}/{}", path, cmd);
+            if rootfs::exists(&kg) {
+                crate::println!("{}", kg);
+                nj = true;
                 break;
             }
         }
-        if !aig {
+        if !nj {
             crate::println!("{} not found", cmd);
         }
     }
 }
 
-fn rjw(n: &[&str]) {
-    let kfn = ["cd", "pwd", "echo", "exit", "export", "help", "clear", "test"];
+fn kth(args: &[&str]) {
+    let fke = ["cd", "pwd", "echo", "exit", "export", "help", "clear", "test"];
     
-    for cmd in n {
-        if kfn.contains(cmd) {
+    for cmd in args {
+        if fke.contains(cmd) {
             crate::println!("{} is a shell builtin", cmd);
         } else {
-            hdl(&[cmd]);
+            dkz(&[cmd]);
         }
     }
 }
 
-fn kjh(elm: &[&str]) {
+fn fnf(_args: &[&str]) {
     
 }
 
-fn rcg(n: &[&str]) {
-    if n.is_empty() {
+fn klq(args: &[&str]) {
+    if args.is_empty() {
         crate::println!("apk-tools 2.14.0, compiled for x86_64.");
         crate::println!();
         crate::println!("usage: apk [<OPTIONS>...] COMMAND [<ARGUMENTS>...]");
@@ -898,7 +898,7 @@ fn rcg(n: &[&str]) {
         return;
     }
     
-    match n[0] {
+    match args[0] {
         "update" => {
             crate::println!("fetch https://dl-cdn.alpinelinux.org/alpine/v3.19/main/x86_64/APKINDEX.tar.gz");
             crate::println!("fetch https://dl-cdn.alpinelinux.org/alpine/v3.19/community/x86_64/APKINDEX.tar.gz");
@@ -906,43 +906,43 @@ fn rcg(n: &[&str]) {
             crate::println!("OK: 23456 distinct packages available");
         }
         "add" => {
-            if n.len() < 2 {
+            if args.len() < 2 {
                 crate::println!("apk add: missing package name");
                 return;
             }
-            for op in &n[1..] {
-                crate::println!("(1/1) Installing {}...", op);
-                crate::println!(" Executing {}-0.1-r0.post-install", op);
-                crate::println!("OK: {} installed", op);
+            for gh in &args[1..] {
+                crate::println!("(1/1) Installing {}...", gh);
+                crate::println!(" Executing {}-0.1-r0.post-install", gh);
+                crate::println!("OK: {} installed", gh);
             }
         }
         "del" | "remove" => {
-            if n.len() < 2 {
+            if args.len() < 2 {
                 crate::println!("apk del: missing package name");
                 return;
             }
-            for op in &n[1..] {
-                crate::println!("(1/1) Purging {}...", op);
-                crate::println!("OK: {} removed", op);
+            for gh in &args[1..] {
+                crate::println!("(1/1) Purging {}...", gh);
+                crate::println!("OK: {} removed", gh);
             }
         }
         "search" => {
-            let query = n.get(1).hu().unwrap_or("");
+            let query = args.get(1).copied().unwrap_or("");
             crate::println!("Searching for '{}'...", query);
             crate::println!("{}-1.0-r0", query);
             crate::println!("{}-dev-1.0-r0", query);
             crate::println!("{}-doc-1.0-r0", query);
         }
         "info" => {
-            if n.len() < 2 {
+            if args.len() < 2 {
                 crate::println!("Installed packages:");
                 crate::println!("alpine-base-3.19.0-r0");
                 crate::println!("busybox-1.36.0-r0");
                 crate::println!("musl-1.2.4-r0");
             } else {
-                let op = n[1];
-                crate::println!("{}-1.0-r0 description:", op);
-                crate::println!("  {} package for Alpine Linux", op);
+                let gh = args[1];
+                crate::println!("{}-1.0-r0 description:", gh);
+                crate::println!("  {} package for Alpine Linux", gh);
             }
         }
         "upgrade" => {
@@ -950,13 +950,13 @@ fn rcg(n: &[&str]) {
             crate::println!("OK: 0 packages upgraded");
         }
         _ => {
-            crate::println!("apk: unknown command '{}'", n[0]);
+            crate::println!("apk: unknown command '{}'", args[0]);
         }
     }
 }
 
-fn rkq(n: &[&str]) {
-    if n.is_empty() {
+fn kub(args: &[&str]) {
+    if args.is_empty() {
         crate::println!("Usage: wget URL");
         return;
     }
@@ -965,26 +965,26 @@ fn rkq(n: &[&str]) {
     crate::println!("Use TrustOS 'download' command instead");
 }
 
-fn kiz(n: &[&str]) {
-    if n.is_empty() {
+fn fmx(args: &[&str]) {
+    if args.is_empty() {
         crate::println!("Usage: ping HOST");
         return;
     }
     
-    let kh = n[0];
-    crate::println!("PING {} ({}) 56(84) bytes of data.", kh, kh);
+    let host = args[0];
+    crate::println!("PING {} ({}) 56(84) bytes of data.", host, host);
     
-    for a in 1..=4 {
-        crate::println!("64 bytes from {}: icmp_seq={} ttl=64 time=0.1 ms", kh, a);
+    for i in 1..=4 {
+        crate::println!("64 bytes from {}: icmp_seq={} ttl=64 time=0.1 ms", host, i);
     }
     
     crate::println!();
-    crate::println!("--- {} ping statistics ---", kh);
+    crate::println!("--- {} ping statistics ---", host);
     crate::println!("4 packets transmitted, 4 received, 0% packet loss, time 3000ms");
     crate::println!("rtt min/avg/max/mdev = 0.100/0.100/0.100/0.000 ms");
 }
 
-fn hdh(n: &[&str]) {
+fn dkx(args: &[&str]) {
     crate::println!("eth0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500");
     crate::println!("        inet 192.168.56.100  netmask 255.255.255.0  broadcast 192.168.56.255");
     crate::println!("        inet6 fe80::1  prefixlen 64  scopeid 0x20<link>");
@@ -998,7 +998,7 @@ fn hdh(n: &[&str]) {
     crate::println!("        loop  txqueuelen 1000  (Local Loopback)");
 }
 
-fn hdi() {
+fn dky() {
     crate::println!("Active Internet connections (servers and established)");
     crate::println!("Proto Recv-Q Send-Q Local Address           Foreign Address         State");
     crate::println!("tcp        0      0 0.0.0.0:22              0.0.0.0:*               LISTEN");

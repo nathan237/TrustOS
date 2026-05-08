@@ -18,157 +18,157 @@ use alloc::vec::Vec;
 use super::Image;
 
 
-pub fn ojv(path: &str) -> Option<Image> {
-    let f = match crate::vfs::mq(path) {
-        Ok(bc) => bc,
+pub fn ikw(path: &str) -> Option<Image> {
+    let data = match crate::vfs::read_file(path) {
+        Ok(d) => d,
         Err(_) => {
             crate::serial_println!("[PPM] Cannot read file: {}", path);
             return None;
         }
     };
     
-    ljj(&f)
+    gfz(&data)
 }
 
 
-pub fn ljj(f: &[u8]) -> Option<Image> {
-    if f.len() < 7 {
+pub fn gfz(data: &[u8]) -> Option<Image> {
+    if data.len() < 7 {
         return None;
     }
     
     
-    if f[0] != b'P' {
+    if data[0] != b'P' {
         return None;
     }
     
-    match f[1] {
-        b'3' => vdb(&f[2..]),  
-        b'6' => vdc(&f[2..]),  
+    match data[1] {
+        b'3' => nqu(&data[2..]),  
+        b'6' => nqv(&data[2..]),  
         _ => None,
     }
 }
 
 
-fn vdb(f: &[u8]) -> Option<Image> {
-    let text = core::str::jg(f).bq()?;
-    let mut eb = text.ayt()
-        .hi(|e| !e.cj('#')); 
+fn nqu(data: &[u8]) -> Option<Image> {
+    let text = core::str::from_utf8(data).ok()?;
+    let mut tokens = text.split_whitespace()
+        .filter(|j| !j.starts_with('#')); 
     
-    let z: u32 = eb.next()?.parse().bq()?;
-    let ac: u32 = eb.next()?.parse().bq()?;
-    let aki: u32 = eb.next()?.parse().bq()?;
+    let width: u32 = tokens.next()?.parse().ok()?;
+    let height: u32 = tokens.next()?.parse().ok()?;
+    let sh: u32 = tokens.next()?.parse().ok()?;
     
-    if z == 0 || ac == 0 || z > 8192 || ac > 8192 {
+    if width == 0 || height == 0 || width > 8192 || height > 8192 {
         return None;
     }
     
-    let mut hz = Vec::fc((z * ac) as usize);
+    let mut pixels = Vec::with_capacity((width * height) as usize);
     
-    for _ in 0..(z * ac) {
-        let m: u32 = eb.next()?.parse().bq()?;
-        let at: u32 = eb.next()?.parse().bq()?;
-        let o: u32 = eb.next()?.parse().bq()?;
+    for _ in 0..(width * height) {
+        let r: u32 = tokens.next()?.parse().ok()?;
+        let g: u32 = tokens.next()?.parse().ok()?;
+        let b: u32 = tokens.next()?.parse().ok()?;
         
         
-        let m = if aki == 255 { m } else { m * 255 / aki };
-        let at = if aki == 255 { at } else { at * 255 / aki };
-        let o = if aki == 255 { o } else { o * 255 / aki };
+        let r = if sh == 255 { r } else { r * 255 / sh };
+        let g = if sh == 255 { g } else { g * 255 / sh };
+        let b = if sh == 255 { b } else { b * 255 / sh };
         
-        let il = 0xFF000000 | (m << 16) | (at << 8) | o;
-        hz.push(il);
+        let ct = 0xFF000000 | (r << 16) | (g << 8) | b;
+        pixels.push(ct);
     }
     
-    crate::serial_println!("[PPM] Loaded P3 {}x{} image", z, ac);
-    Some(Image::fjd(z, ac, hz))
+    crate::serial_println!("[PPM] Loaded P3 {}x{} image", width, height);
+    Some(Image::cjv(width, height, pixels))
 }
 
 
-fn vdc(f: &[u8]) -> Option<Image> {
+fn nqv(data: &[u8]) -> Option<Image> {
     
-    let mut u = 0;
-    let mut z = 0u32;
-    let mut ac = 0u32;
-    let mut aki = 0u32;
-    let mut lbv = 0; 
-    let mut ldt = false;
-    let mut orm = [0u8; 16];
-    let mut gof = 0;
+    let mut pos = 0;
+    let mut width = 0u32;
+    let mut height = 0u32;
+    let mut sh = 0u32;
+    let mut gal = 0; 
+    let mut gcf = false;
+    let mut iri = [0u8; 16];
+    let mut dbx = 0;
     
-    while u < f.len() && lbv < 3 {
-        let r = f[u];
-        u += 1;
+    while pos < data.len() && gal < 3 {
+        let c = data[pos];
+        pos += 1;
         
-        if ldt {
-            if r == b'\n' { ldt = false; }
+        if gcf {
+            if c == b'\n' { gcf = false; }
             continue;
         }
         
-        if r == b'#' {
-            ldt = true;
+        if c == b'#' {
+            gcf = true;
             continue;
         }
         
-        if r.yyy() {
-            if gof > 0 {
-                let ajh = core::str::jg(&orm[..gof]).bq()?;
-                let num: u32 = ajh.parse().bq()?;
-                gof = 0;
+        if c.is_ascii_whitespace() {
+            if dbx > 0 {
+                let rw = core::str::from_utf8(&iri[..dbx]).ok()?;
+                let num: u32 = rw.parse().ok()?;
+                dbx = 0;
                 
-                match lbv {
-                    0 => z = num,
-                    1 => ac = num,
-                    2 => aki = num,
+                match gal {
+                    0 => width = num,
+                    1 => height = num,
+                    2 => sh = num,
                     _ => {}
                 }
-                lbv += 1;
+                gal += 1;
             }
             continue;
         }
         
-        if r.atb() && gof < 16 {
-            orm[gof] = r;
-            gof += 1;
+        if c.is_ascii_digit() && dbx < 16 {
+            iri[dbx] = c;
+            dbx += 1;
         }
     }
     
-    if z == 0 || ac == 0 || z > 8192 || ac > 8192 {
+    if width == 0 || height == 0 || width > 8192 || height > 8192 {
         return None;
     }
     
     
-    let amn = &f[u..];
-    let coy = if aki > 255 { 6 } else { 3 };
+    let tm = &data[pos..];
+    let awm = if sh > 255 { 6 } else { 3 };
     
-    if amn.len() < (z * ac) as usize * coy {
+    if tm.len() < (width * height) as usize * awm {
         return None;
     }
     
-    let mut hz = Vec::fc((z * ac) as usize);
-    let mut a = 0;
+    let mut pixels = Vec::with_capacity((width * height) as usize);
+    let mut i = 0;
     
-    for _ in 0..(z * ac) {
-        let (m, at, o) = if aki > 255 {
+    for _ in 0..(width * height) {
+        let (r, g, b) = if sh > 255 {
             
-            let m = ((amn[a] as u32) << 8 | amn[a+1] as u32) * 255 / aki;
-            let at = ((amn[a+2] as u32) << 8 | amn[a+3] as u32) * 255 / aki;
-            let o = ((amn[a+4] as u32) << 8 | amn[a+5] as u32) * 255 / aki;
-            a += 6;
-            (m, at, o)
+            let r = ((tm[i] as u32) << 8 | tm[i+1] as u32) * 255 / sh;
+            let g = ((tm[i+2] as u32) << 8 | tm[i+3] as u32) * 255 / sh;
+            let b = ((tm[i+4] as u32) << 8 | tm[i+5] as u32) * 255 / sh;
+            i += 6;
+            (r, g, b)
         } else {
             
-            let m = if aki == 255 { amn[a] as u32 } else { amn[a] as u32 * 255 / aki };
-            let at = if aki == 255 { amn[a+1] as u32 } else { amn[a+1] as u32 * 255 / aki };
-            let o = if aki == 255 { amn[a+2] as u32 } else { amn[a+2] as u32 * 255 / aki };
-            a += 3;
-            (m, at, o)
+            let r = if sh == 255 { tm[i] as u32 } else { tm[i] as u32 * 255 / sh };
+            let g = if sh == 255 { tm[i+1] as u32 } else { tm[i+1] as u32 * 255 / sh };
+            let b = if sh == 255 { tm[i+2] as u32 } else { tm[i+2] as u32 * 255 / sh };
+            i += 3;
+            (r, g, b)
         };
         
-        let il = 0xFF000000 | (m << 16) | (at << 8) | o;
-        hz.push(il);
+        let ct = 0xFF000000 | (r << 16) | (g << 8) | b;
+        pixels.push(ct);
     }
     
-    crate::serial_println!("[PPM] Loaded P6 {}x{} image", z, ac);
-    Some(Image::fjd(z, ac, hz))
+    crate::serial_println!("[PPM] Loaded P6 {}x{} image", width, height);
+    Some(Image::cjv(width, height, pixels))
 }
 
 
@@ -176,28 +176,28 @@ fn vdc(f: &[u8]) -> Option<Image> {
 
 
 
-pub fn zlq(th: &Image, path: &str) -> Result<(), &'static str> {
-    let f = rqr(th);
-    crate::vfs::ns(path, &f).jd(|_| "Failed to write file")
+pub fn qus(iv: &Image, path: &str) -> Result<(), &'static str> {
+    let data = kzj(iv);
+    crate::vfs::write_file(path, &data).map_err(|_| "Failed to write file")
 }
 
 
-pub fn rqr(th: &Image) -> Vec<u8> {
+pub fn kzj(iv: &Image) -> Vec<u8> {
     use alloc::format;
     
-    let dh = format!("P6\n{} {}\n255\n", th.z, th.ac);
-    let mut f = Vec::fc(dh.len() + (th.z * th.ac * 3) as usize);
+    let header = format!("P6\n{} {}\n255\n", iv.width, iv.height);
+    let mut data = Vec::with_capacity(header.len() + (iv.width * iv.height * 3) as usize);
     
-    f.bk(dh.as_bytes());
+    data.extend_from_slice(header.as_bytes());
     
-    for il in &th.hz {
-        let m = ((il >> 16) & 0xFF) as u8;
-        let at = ((il >> 8) & 0xFF) as u8;
-        let o = (il & 0xFF) as u8;
-        f.push(m);
-        f.push(at);
-        f.push(o);
+    for ct in &iv.pixels {
+        let r = ((ct >> 16) & 0xFF) as u8;
+        let g = ((ct >> 8) & 0xFF) as u8;
+        let b = (ct & 0xFF) as u8;
+        data.push(r);
+        data.push(g);
+        data.push(b);
     }
     
-    f
+    data
 }

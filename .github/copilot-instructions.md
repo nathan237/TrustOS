@@ -60,25 +60,28 @@ translated/          — AUTO-GENERATED, never edit
 
 ## Build Commands
 
+### trustos-hub — point d'entrée canonique UNIQUE
+```powershell
+.\scripts\trustos-hub.ps1
+```
+Menu : **1/2/b** = switch profile · **3-6** = serveurs PXE/HTTP · **7** = build+deploy · **9** = reboot board · **d** = receive BIOS dump · **q** = quit.
+Règle : ne jamais appeler `pxe_server.py` directement.
+
 ### Windows (primary dev environment)
 ```powershell
-# Build kernel
+# Build kernel seul
 cargo build --release -p trustos_kernel
 
-# Full build + ISO + VirtualBox launch
-.\trustos.ps1 build
+# Build mining edition (GPU debug standard — cible BTC-250PRO)
+cargo build --release -p trustos_kernel --no-default-features --features trustos-mining
 
-# Build without launching VM
-.\trustos.ps1 build -NoRun
+# Scripts build dédiés (sous scripts/build/)
+.\scripts\build\build-trustos.ps1              # build + ISO + VirtualBox
+.\scripts\build\build-trustos.ps1 -NoRun       # build + ISO seulement
+.\scripts\build\build-trustos-jarvispack.ps1   # édition JarvisPack
 
-# Build JarvisPack edition
-.\trustos.ps1 build -Edition jarvispack
-
-# Release (build + translate + commit + push)
-.\trustos.ps1 release -Tag v0.3.0
-
-# Clean
-.\trustos.ps1 clean
+# Via hub (préféré — gère tout)
+.\scripts\trustos-hub.ps1   # option 7 = build+deploy, option 9 = reboot
 
 # VirtualBox: power cycle
 & "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" controlvm "TRustOs" poweroff
@@ -104,7 +107,7 @@ qemu-system-x86_64 -cdrom trustos.iso -m 512M -machine q35 -cpu max -smp 4 \
 ```
 
 ## Hardware Test Targets
-- **Primary**: Lenovo ThinkPad T61 (Intel, real hardware testing)
+- **Primary**: BTC-250PRO LR mining board, Intel Pentium G4400 @ 3.30 GHz (Skylake 2c/2t), AMD RX 580X (Polaris 10, GCN4) PCIe x16 direct
 - **VM**: VirtualBox "TRustOs" (daily dev)
 - **PXE**: Network boot via 10.0.0.1 (TFTP server)
 - **Target board**: ASUS H170-PRO (PXE boot target)

@@ -164,7 +164,7 @@ struct FingerTracker {
     /// Timestamp of latest update
     last_time_us: u64,
     /// Max displacement from start (for tap/long-press detection)
-    maximum_displacement: i32,
+    max_displacement: i32,
 }
 
 // Trait implementation — fulfills a behavioral contract.
@@ -179,7 +179,7 @@ impl Default for FingerTracker {
             current_y: 0,
             start_time_us: 0,
             last_time_us: 0,
-            maximum_displacement: 0,
+            max_displacement: 0,
         }
     }
 }
@@ -196,7 +196,7 @@ impl FingerTracker {
             current_y: 0,
             start_time_us: 0,
             last_time_us: 0,
-            maximum_displacement: 0,
+            max_displacement: 0,
         }
     }
 
@@ -204,7 +204,7 @@ impl FingerTracker {
         let dx = self.current_x - self.start_x;
         let dy = self.current_y - self.start_y;
         // Use Manhattan distance for speed (no sqrt needed in kernel)
-        dx.absolute() + dy.absolute()
+        dx.abs() + dy.abs()
     }
 
     fn euclidean_sq(&self) -> i32 {
@@ -258,8 +258,8 @@ pub struct GestureRecognizer {
     /// Initial two-finger distance (for pinch)
     initial_two_finger_dist: i32,
     /// Previous two-finger positions (for scroll delta)
-    previous_two_finger_mid_x: i32,
-    previous_two_finger_mid_y: i32,
+    prev_two_finger_mid_x: i32,
+    prev_two_finger_mid_y: i32,
 }
 
 // Implementation block — defines methods for the type above.
@@ -277,8 +277,8 @@ impl GestureRecognizer {
             last_tap_time_us: 0,
             long_press_fired: false,
             initial_two_finger_dist: 0,
-            previous_two_finger_mid_x: 0,
-            previous_two_finger_mid_y: 0,
+            prev_two_finger_mid_x: 0,
+            prev_two_finger_mid_y: 0,
         }
     }
 
@@ -324,16 +324,16 @@ match point.phase {
             && !self.long_press_fired
         {
             // Copy finger data to avoid borrow conflict with self.long_press_fired
-            let (fx, fy, start_t, maximum_display) = // Pattern matching — Rust's exhaustive branching construct.
+            let (fx, fy, start_t, max_disp) = // Pattern matching — Rust's exhaustive branching construct.
 match self.find_active_finger() {
-                Some(f) => (f.current_x, f.current_y, f.start_time_us, f.maximum_displacement),
+                Some(f) => (f.current_x, f.current_y, f.start_time_us, f.max_displacement),
                 None => return None,
             };
             let now = crate::gui::engine::now_us();
             let duration = now.saturating_sub(start_t);
 
             if duration >= LONG_PRESS_THRESHOLD_US
-                && maximum_display < LONG_PRESS_MAXIMUM_DISPLACEMENT
+                && max_disp < LONG_PRESS_MAXIMUM_DISPLACEMENT
             {
                 self.long_press_fired = true;
                 self.state = RecogState::PossibleLongPress;
@@ -363,7 +363,7 @@ match self.find_active_finger() {
             current_y: point.y,
             start_time_us: point.timestamp_us,
             last_time_us: point.timestamp_us,
-            maximum_displacement: 0,
+            max_displacement: 0,
         };
 
         self.finger_count += 1;
@@ -379,8 +379,8 @@ match self.find_active_finger() {
                 // Record initial distance for pinch
                 self.initial_two_finger_dist = self.two_finger_distance();
                 let (mx, my) = self.two_finger_midpoint();
-                self.previous_two_finger_mid_x = mx;
-                self.previous_two_finger_mid_y = my;
+                self.prev_two_finger_mid_x = mx;
+                self.prev_two_finger_mid_y = my;
             }
             3 => {
                 self.state = RecogState::ThreeFinger;
@@ -405,9 +405,9 @@ match self.find_active_finger() {
         finger.current_x = point.x;
         finger.current_y = point.y;
         finger.last_time_us = point.timestamp_us;
-        let display = finger.displacement();
-        if display > finger.maximum_displacement {
-            finger.maximum_displacement = display;
+        let disp = finger.displacement();
+        if disp > finger.max_displacement {
+            finger.max_displacement = disp;
         }
 
                 // Pattern matching — Rust's exhaustive branching construct.
@@ -519,14 +519,14 @@ match self.state {
         let duration = now_us.saturating_sub(finger.start_time_us);
         let dx = finger.current_x - finger.start_x;
         let dy = finger.current_y - finger.start_y;
-        let displacement = dx.absolute() + dy.absolute();
+        let displacement = dx.abs() + dy.abs();
 
         // Check for TAP first (short duration, small displacement)
         if duration < TAP_MAXIMUM_DURATION_US && displacement < TAP_MAXIMUM_DISPLACEMENT {
             // Check for double-tap
             let since_last_tap = now_us.saturating_sub(self.last_tap_time_us);
-            let tap_dist = (finger.current_x - self.last_tap_x).absolute()
-                + (finger.current_y - self.last_tap_y).absolute();
+            let tap_dist = (finger.current_x - self.last_tap_x).abs()
+                + (finger.current_y - self.last_tap_y).abs();
 
             self.last_tap_x = finger.current_x;
             self.last_tap_y = finger.current_y;
@@ -549,7 +549,7 @@ match self.state {
 
         // Check for SWIPE (sufficient distance and velocity)
         if displacement >= SWIPE_MINIMUM_DISTANCE {
-            let duration_secs_x100 = (duration / 10_000).maximum(1) as i32; // centiseconds
+            let duration_secs_x100 = (duration / 10_000).max(1) as i32; // centiseconds
             let velocity = (displacement * 100) / duration_secs_x100; // px/sec
 
             if velocity >= SWIPE_MINIMUM_VELOCITY {
@@ -559,7 +559,7 @@ match self.state {
                 }
 
                 // Regular swipe — determine direction by dominant axis
-                let direction = if dx.absolute() > dy.absolute() {
+                let direction = if dx.abs() > dy.abs() {
                     if dx > 0 { SwipeDirection::Right } else { SwipeDirection::Left }
                 } else {
                     if dy > 0 { SwipeDirection::Down } else { SwipeDirection::Up }
@@ -588,7 +588,7 @@ match self.state {
         if finger.start_y >= self.screen_height - EDGE_ZONE_PIXEL && dy < -SWIPE_MINIMUM_DISTANCE {
             return Some(GestureEvent::EdgeSwipe {
                 origin: EdgeOrigin::Bottom,
-                progress: dy.absolute(),
+                progress: dy.abs(),
             });
         }
 
@@ -596,7 +596,7 @@ match self.state {
         if finger.start_y <= EDGE_ZONE_PIXEL && dy > SWIPE_MINIMUM_DISTANCE {
             return Some(GestureEvent::EdgeSwipe {
                 origin: EdgeOrigin::Top,
-                progress: dy.absolute(),
+                progress: dy.abs(),
             });
         }
 
@@ -604,7 +604,7 @@ match self.state {
         if finger.start_x <= EDGE_ZONE_PIXEL && dx > SWIPE_MINIMUM_DISTANCE {
             return Some(GestureEvent::EdgeSwipe {
                 origin: EdgeOrigin::Left,
-                progress: dx.absolute(),
+                progress: dx.abs(),
             });
         }
 
@@ -612,7 +612,7 @@ match self.state {
         if finger.start_x >= self.screen_width - EDGE_ZONE_PIXEL && dx < -SWIPE_MINIMUM_DISTANCE {
             return Some(GestureEvent::EdgeSwipe {
                 origin: EdgeOrigin::Right,
-                progress: dx.absolute(),
+                progress: dx.abs(),
             });
         }
 
@@ -626,11 +626,11 @@ match self.state {
         let dist_delta = cur_dist - self.initial_two_finger_dist;
 
         // Check PINCH (distance changed significantly)
-        if dist_delta.absolute() >= PINCH_MINIMUM_DELTA {
+        if dist_delta.abs() >= PINCH_MINIMUM_DELTA {
             let (cx, cy) = self.two_finger_midpoint();
             // Scale: 100 = no change, proportional to distance ratio
             let scale = if self.initial_two_finger_dist > 0 {
-                (cur_dist * 100) / self.initial_two_finger_dist.maximum(1)
+                (cur_dist * 100) / self.initial_two_finger_dist.max(1)
             } else {
                 100
             };
@@ -643,12 +643,12 @@ match self.state {
 
         // Check TWO-FINGER SCROLL (both fingers moving in same direction)
         let (mx, my) = self.two_finger_midpoint();
-        let scroll_dx = mx - self.previous_two_finger_mid_x;
-        let scroll_dy = my - self.previous_two_finger_mid_y;
+        let scroll_dx = mx - self.prev_two_finger_mid_x;
+        let scroll_dy = my - self.prev_two_finger_mid_y;
 
-        if scroll_dx.absolute() >= SCROLL_MINIMUM_DELTA || scroll_dy.absolute() >= SCROLL_MINIMUM_DELTA {
-            self.previous_two_finger_mid_x = mx;
-            self.previous_two_finger_mid_y = my;
+        if scroll_dx.abs() >= SCROLL_MINIMUM_DELTA || scroll_dy.abs() >= SCROLL_MINIMUM_DELTA {
+            self.prev_two_finger_mid_x = mx;
+            self.prev_two_finger_mid_y = my;
             return Some(GestureEvent::Scroll {
                 delta_x: scroll_dx,
                 delta_y: scroll_dy,
@@ -672,7 +672,7 @@ match self.state {
 
         let average_dx = total_dx / count;
 
-        if average_dx.absolute() >= SWIPE_MINIMUM_DISTANCE {
+        if average_dx.abs() >= SWIPE_MINIMUM_DISTANCE {
             let direction = if average_dx > 0 {
                 SwipeDirection::Right
             } else {
@@ -806,8 +806,8 @@ pub fn is_empty(&self) -> bool {
         // Public function — callable from other modules.
 pub fn iter(&self) -> GestureIterator<'_> {
         GestureIterator {
-            buffer: self,
-            index: 0,
+            buf: self,
+            idx: 0,
         }
     }
 
@@ -820,8 +820,8 @@ pub fn clear(&mut self) {
 
 // Public structure — visible outside this module.
 pub struct GestureIterator<'a> {
-    buffer: &'a GestureBuffer,
-    index: usize,
+    buf: &'a GestureBuffer,
+    idx: usize,
 }
 
 // Trait implementation — fulfills a behavioral contract.
@@ -829,10 +829,10 @@ impl<'a> Iterator for GestureIterator<'a> {
         // Type alias — gives an existing type a new name for clarity.
 type Item = &'a GestureEvent;
     fn next(&mut self) -> Option<Self::Item> {
-        while self.index < self.buffer.count {
-            let i = self.index;
-            self.index += 1;
-            if let Some(ref g) = self.buffer.gestures[i] {
+        while self.idx < self.buf.count {
+            let i = self.idx;
+            self.idx += 1;
+            if let Some(ref g) = self.buf.gestures[i] {
                 return Some(g);
             }
         }

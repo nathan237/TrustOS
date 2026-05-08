@@ -13,6 +13,7 @@ pub mod synth;
 pub mod pattern;
 pub mod player;
 pub mod strudel;
+#[cfg(feature = "strudel")]
 pub mod strudel_dsl;
 pub mod live_engine;
 
@@ -588,11 +589,13 @@ pub fn strudel_state() -> (u16, bool, u32) {
 
 // -------------------------------------------------------------------------------
 // TrustStrudel DSL (chained method-call syntax) � P1+
+// Gated behind `feature = "strudel"` (included in trustos-audio edition).
 // -------------------------------------------------------------------------------
 
 /// Parse a DSL string and assign it to a track on the live engine.
 ///
 /// Example: `dsl_set_track(0, "n(\"0 4 7\").scale(\"g:minor\").s(\"saw\").lpf(800)")`
+#[cfg(feature = "strudel")]
 pub fn dsl_set_track(idx: usize, src: &str) -> Result<(), String> {
     ensure_engine().map_err(String::from)?;
     let bundle = strudel_dsl::parse_eval(src)?;
@@ -640,6 +643,7 @@ pub fn dsl_set_track(idx: usize, src: &str) -> Result<(), String> {
 }
 
 /// One-shot: parse, evaluate, render one cycle, play it (no looping).
+#[cfg(feature = "strudel")]
 pub fn dsl_oneshot(src: &str) -> Result<(), String> {
     ensure_init().map_err(String::from)?;
     let bundle = strudel_dsl::parse_eval(src)?;
@@ -669,6 +673,7 @@ pub fn dsl_oneshot(src: &str) -> Result<(), String> {
 }
 
 /// Inspect a DSL source: returns a debug summary without playing it.
+#[cfg(feature = "strudel")]
 pub fn dsl_inspect(src: &str) -> Result<String, String> {
     let bundle = strudel_dsl::parse_eval(src)?;
     let c = &bundle.controls;

@@ -19,7 +19,7 @@ use super::{
 #[derive(Clone, Copy, Debug)]
 enum ProcFileType {
     CpuInformation,
-    MemoryInformation,
+    MemInfo,
     Uptime,
     Version,
     Mounts,
@@ -47,7 +47,7 @@ enum PidFileType {
 // ============================================================================
 
 fn pid_directory_ino(pid: u32) -> Ino { 1000 + (pid as u64) * 10 }
-fn pid_file_ino(pid: u32, index: u64) -> Ino { 1000 + (pid as u64) * 10 + index }
+fn pid_file_ino(pid: u32, idx: u64) -> Ino { 1000 + (pid as u64) * 10 + idx }
 
 /// Check if an inode is a per-PID directory
 fn is_pid_directory_ino(ino: Ino) -> Option<u32> {
@@ -63,9 +63,9 @@ fn is_pid_file_ino(ino: Ino) -> Option<(u32, u64)> {
     if ino >= 1001 {
         let offset = ino - 1000;
         let pid = (offset / 10) as u32;
-        let index = offset % 10;
-        if index >= 1 && index <= 6 {
-            Some((pid, index))
+        let idx = offset % 10;
+        if idx >= 1 && idx <= 6 {
+            Some((pid, idx))
         } else {
             None
         }
@@ -88,20 +88,20 @@ impl ProcessFile {
     fn generate_content(&self) -> Vec<u8> {
                 // Correspondance de motifs — branchement exhaustif de Rust.
 match self.file_type {
-            ProcFileType::CpuInformation => self.generator_cpuinfo(),
-            ProcFileType::MemoryInformation => self.generator_meminfo(),
-            ProcFileType::Uptime => self.generator_uptime(),
-            ProcFileType::Version => self.generator_version(),
-            ProcFileType::Mounts => self.generator_mounts(),
-            ProcFileType::Cmdline => self.generator_cmdline(),
-            ProcFileType::Stat => self.generator_status(),
+            ProcFileType::CpuInformation => self.gen_cpuinfo(),
+            ProcFileType::MemInfo => self.gen_meminfo(),
+            ProcFileType::Uptime => self.gen_uptime(),
+            ProcFileType::Version => self.gen_version(),
+            ProcFileType::Mounts => self.gen_mounts(),
+            ProcFileType::Cmdline => self.gen_cmdline(),
+            ProcFileType::Stat => self.gen_stat(),
         }
     }
     
-    fn generator_cpuinfo(&self) -> Vec<u8> {
-        let number_cpus = crate::cpu::smp::ready_cpu_count();
+    fn gen_cpuinfo(&self) -> Vec<u8> {
+        let num_cpus = crate::cpu::smp::ready_cpu_count();
         let mut s = String::new();
-        for i in 0..number_cpus {
+        for i in 0..num_cpus {
             s.push_str(&format!(
                 "processor\t: {}\n\
                  vendor_id\t: TrustOS\n\
@@ -117,7 +117,7 @@ match self.file_type {
         s.into_bytes()
     }
     
-    fn generator_meminfo(&self) -> Vec<u8> {
+    fn gen_meminfo(&self) -> Vec<u8> {
         let total_keyboard = 1024u64;
         let used = crate::memory::heap::used() as u64 / 1024;
         let free = total_keyboard.saturating_sub(used);
@@ -134,21 +134,21 @@ match self.file_type {
         ).into_bytes()
     }
     
-    fn generator_uptime(&self) -> Vec<u8> {
+    fn gen_uptime(&self) -> Vec<u8> {
         let ticks = crate::logger::get_ticks();
         let secs = ticks / 100;
         let frac = (ticks % 100) as f32 / 100.0;
         format!("{}.{:02} 0.00\n", secs, (frac * 100.0) as u32).into_bytes()
     }
     
-    fn generator_version(&self) -> Vec<u8> {
+    fn gen_version(&self) -> Vec<u8> {
         format!(
             "TrustOS version 0.1.0 (rustc) #1 SMP PREEMPT {}\n",
             "Jan 30 2026"
         ).into_bytes()
     }
     
-    fn generator_mounts(&self) -> Vec<u8> {
+    fn gen_mounts(&self) -> Vec<u8> {
         let mut content = String::new();
         for (path, fstype) in crate::vfs::list_mounts() {
             content.push_str(&format!("{} {} {} rw 0 0\n", fstype, path, fstype));
@@ -159,27 +159,27 @@ match self.file_type {
         content.into_bytes()
     }
     
-    fn generator_cmdline(&self) -> Vec<u8> {
+    fn gen_cmdline(&self) -> Vec<u8> {
         b"BOOT_IMAGE=/boot/trustos root=/dev/vda\n".to_vec()
     }
     
-    fn generator_status(&self) -> Vec<u8> {
+    fn gen_stat(&self) -> Vec<u8> {
         let ticks = crate::logger::get_ticks();
-        let number_cpus = crate::cpu::smp::ready_cpu_count();
+        let num_cpus = crate::cpu::smp::ready_cpu_count();
         let mut s = format!(
             "cpu  {} 0 {} 0 0 0 0 0 0 0\n",
             ticks / 2, ticks / 2
         );
-        for i in 0..number_cpus {
+        for i in 0..num_cpus {
             s.push_str(&format!(
                 "cpu{} {} 0 {} 0 0 0 0 0 0 0\n",
-                i, ticks / (2 * number_cpus as u64), ticks / (2 * number_cpus as u64)
+                i, ticks / (2 * num_cpus as u64), ticks / (2 * num_cpus as u64)
             ));
         }
         s.push_str(&format!(
             "intr 0\nctxt 0\nbtime 0\nprocesses {}\nprocs_running {}\nprocs_blocked 0\n",
             crate::process::count(),
-            number_cpus
+            num_cpus
         ));
         s.into_bytes()
     }
@@ -187,22 +187,22 @@ match self.file_type {
 
 // Implémentation de trait — remplit un contrat comportemental.
 impl FileOperations for ProcessFile {
-    fn read(&self, offset: u64, buffer: &mut [u8]) -> VfsResult<usize> {
+    fn read(&self, offset: u64, buf: &mut [u8]) -> VfsResult<usize> {
         let content = self.generate_content();
         if offset >= content.len() as u64 {
             return Ok(0);
         }
         let start = offset as usize;
-        let to_read = core::cmp::minimum(buffer.len(), content.len() - start);
-        buffer[..to_read].copy_from_slice(&content[start..start + to_read]);
+        let to_read = core::cmp::min(buf.len(), content.len() - start);
+        buf[..to_read].copy_from_slice(&content[start..start + to_read]);
         Ok(to_read)
     }
     
-    fn write(&self, _offset: u64, _buffer: &[u8]) -> VfsResult<usize> {
+    fn write(&self, _offset: u64, _buf: &[u8]) -> VfsResult<usize> {
         Err(VfsError::ReadOnly)
     }
     
-    fn status(&self) -> VfsResult<Stat> {
+    fn stat(&self) -> VfsResult<Stat> {
         let size = self.generate_content().len() as u64;
         Ok(Stat {
             ino: self.ino,
@@ -230,16 +230,16 @@ impl PidFile {
     fn generate_content(&self) -> Vec<u8> {
                 // Correspondance de motifs — branchement exhaustif de Rust.
 match self.file_type {
-            PidFileType::Status => self.generator_status(),
-            PidFileType::Comm => self.generator_comm(),
-            PidFileType::Maps => self.generator_maps(),
-            PidFileType::Cmdline => self.generator_cmdline(),
-            PidFileType::Cwd => self.generator_cwd(),
-            PidFileType::Environ => self.generator_environ(),
+            PidFileType::Status => self.gen_status(),
+            PidFileType::Comm => self.gen_comm(),
+            PidFileType::Maps => self.gen_maps(),
+            PidFileType::Cmdline => self.gen_cmdline(),
+            PidFileType::Cwd => self.gen_cwd(),
+            PidFileType::Environ => self.gen_environ(),
         }
     }
     
-    fn generator_status(&self) -> Vec<u8> {
+    fn gen_status(&self) -> Vec<u8> {
         let mut s = String::new();
         crate::process::with_process(self.pid, |p| {
             let state_str = // Correspondance de motifs — branchement exhaustif de Rust.
@@ -272,7 +272,7 @@ match p.state {
         s.into_bytes()
     }
     
-    fn generator_comm(&self) -> Vec<u8> {
+    fn gen_comm(&self) -> Vec<u8> {
         let mut name = String::new();
         crate::process::with_process(self.pid, |p| {
             name = p.name.clone();
@@ -280,7 +280,7 @@ match p.state {
         format!("{}\n", name).into_bytes()
     }
     
-    fn generator_maps(&self) -> Vec<u8> {
+    fn gen_maps(&self) -> Vec<u8> {
         let mut s = String::new();
         crate::process::with_process(self.pid, |p| {
             let m = &p.memory;
@@ -317,7 +317,7 @@ match p.state {
         s.into_bytes()
     }
     
-    fn generator_cmdline(&self) -> Vec<u8> {
+    fn gen_cmdline(&self) -> Vec<u8> {
         let mut name = String::new();
         crate::process::with_process(self.pid, |p| {
             name = p.name.clone();
@@ -325,7 +325,7 @@ match p.state {
         format!("{}\0", name).into_bytes()
     }
     
-    fn generator_cwd(&self) -> Vec<u8> {
+    fn gen_cwd(&self) -> Vec<u8> {
         let mut cwd = String::from("/");
         crate::process::with_process(self.pid, |p| {
             cwd = p.cwd.clone();
@@ -333,7 +333,7 @@ match p.state {
         format!("{}\n", cwd).into_bytes()
     }
     
-    fn generator_environ(&self) -> Vec<u8> {
+    fn gen_environ(&self) -> Vec<u8> {
         let mut s = String::new();
         crate::process::with_process(self.pid, |p| {
             for (k, v) in &p.env {
@@ -346,22 +346,22 @@ match p.state {
 
 // Implémentation de trait — remplit un contrat comportemental.
 impl FileOperations for PidFile {
-    fn read(&self, offset: u64, buffer: &mut [u8]) -> VfsResult<usize> {
+    fn read(&self, offset: u64, buf: &mut [u8]) -> VfsResult<usize> {
         let content = self.generate_content();
         if offset >= content.len() as u64 {
             return Ok(0);
         }
         let start = offset as usize;
-        let to_read = core::cmp::minimum(buffer.len(), content.len() - start);
-        buffer[..to_read].copy_from_slice(&content[start..start + to_read]);
+        let to_read = core::cmp::min(buf.len(), content.len() - start);
+        buf[..to_read].copy_from_slice(&content[start..start + to_read]);
         Ok(to_read)
     }
     
-    fn write(&self, _offset: u64, _buffer: &[u8]) -> VfsResult<usize> {
+    fn write(&self, _offset: u64, _buf: &[u8]) -> VfsResult<usize> {
         Err(VfsError::ReadOnly)
     }
     
-    fn status(&self) -> VfsResult<Stat> {
+    fn stat(&self) -> VfsResult<Stat> {
         let size = self.generate_content().len() as u64;
         Ok(Stat {
             ino: self.ino,
@@ -415,7 +415,7 @@ impl DirectoryOperations for ProcessPidDirectory {
         Err(VfsError::ReadOnly)
     }
     
-    fn status(&self) -> VfsResult<Stat> {
+    fn stat(&self) -> VfsResult<Stat> {
         Ok(Stat {
             ino: pid_directory_ino(self.pid),
             file_type: FileType::Directory,
@@ -497,7 +497,7 @@ impl DirectoryOperations for ProcessRootDirectory {
         Err(VfsError::ReadOnly)
     }
     
-    fn status(&self) -> VfsResult<Stat> {
+    fn stat(&self) -> VfsResult<Stat> {
         Ok(Stat {
             ino: 1,
             file_type: FileType::Directory,
@@ -518,7 +518,7 @@ impl ProcFs {
 pub fn new() -> VfsResult<Self> {
         let entries = vec![
             ProcessEntry { name: String::from("cpuinfo"), file_type: ProcFileType::CpuInformation, ino: 2 },
-            ProcessEntry { name: String::from("meminfo"), file_type: ProcFileType::MemoryInformation, ino: 3 },
+            ProcessEntry { name: String::from("meminfo"), file_type: ProcFileType::MemInfo, ino: 3 },
             ProcessEntry { name: String::from("uptime"), file_type: ProcFileType::Uptime, ino: 4 },
             ProcessEntry { name: String::from("version"), file_type: ProcFileType::Version, ino: 5 },
             ProcessEntry { name: String::from("mounts"), file_type: ProcFileType::Mounts, ino: 6 },
@@ -553,9 +553,9 @@ impl FileSystem for ProcFs {
             }));
         }
         // Per-PID file?
-        if let Some((pid, index)) = is_pid_file_ino(ino) {
+        if let Some((pid, idx)) = is_pid_file_ino(ino) {
             let ft = // Correspondance de motifs — branchement exhaustif de Rust.
-match index {
+match idx {
                 1 => PidFileType::Status,
                 2 => PidFileType::Comm,
                 3 => PidFileType::Maps,
@@ -569,7 +569,7 @@ match index {
         Err(VfsError::NotFound)
     }
     
-    fn get_directory(&self, ino: Ino) -> VfsResult<Arc<dyn DirectoryOperations>> {
+    fn get_dir(&self, ino: Ino) -> VfsResult<Arc<dyn DirectoryOperations>> {
         if ino == 1 {
             return Ok(Arc::new(ProcessRootDirectory {
                 entries: self.entries.clone(),
@@ -582,7 +582,7 @@ match index {
         Err(VfsError::NotDirectory)
     }
     
-    fn status(&self, ino: Ino) -> VfsResult<Stat> {
+    fn stat(&self, ino: Ino) -> VfsResult<Stat> {
         if ino == 1 {
             return Ok(Stat {
                 ino: 1,
@@ -593,12 +593,12 @@ match index {
         }
         // System-wide file?
         if let Some(entry) = self.find_entry(ino) {
-            let content_length = ProcessFile { file_type: entry.file_type, ino: entry.ino }
+            let content_len = ProcessFile { file_type: entry.file_type, ino: entry.ino }
                 .generate_content().len() as u64;
             return Ok(Stat {
                 ino: entry.ino,
                 file_type: FileType::Regular,
-                size: content_length,
+                size: content_len,
                 mode: 0o444,
                 ..Default::default()
             });
@@ -613,9 +613,9 @@ match index {
             });
         }
         // PID file?
-        if let Some((pid, index)) = is_pid_file_ino(ino) {
+        if let Some((pid, idx)) = is_pid_file_ino(ino) {
             let ft = // Correspondance de motifs — branchement exhaustif de Rust.
-match index {
+match idx {
                 1 => PidFileType::Status,
                 2 => PidFileType::Comm,
                 3 => PidFileType::Maps,

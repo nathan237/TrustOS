@@ -642,44 +642,88 @@ pub fn map_kernel_mmio_page(virt: u64, phys: u64) -> Result<(), &'static str> {
         unsafe { &mut *(pdpt_virt as *mut PageTable) }
     };
     
-    // Get or create PD
+    // Get or create PD — handle 1GB huge page at PDPT level
     let pd = if pdpt.entries[pdpt_idx].is_present() {
-        let pd_phys = pdpt.entries[pdpt_idx].phys_addr();
-        unsafe { &mut *((pd_phys + hhdm) as *mut PageTable) }
+        if pdpt.entries[pdpt_idx].flags().0 & PageFlags::HUGE_PAGE != 0 {
+            // 1GB huge page — must split into 512 × 2MB huge pages
+            let huge_phys = pdpt.entries[pdpt_idx].phys_addr();
+            let old_flags = pdpt.entries[pdpt_idx].flags().0
+                & !(PageFlags::HUGE_PAGE | PageFlags::PRESENT);
+            crate::serial_println!("[MMIO] Splitting 1GB huge page PDPT[{}] (phys={:#x})", pdpt_idx, huge_phys);
+            let mut new_pd = Box::new(PageTable::new());
+            for i in 0..512 {
+                let sub_phys = huge_phys + (i as u64) * 0x200000; // 2MB each
+                let sub_flags = PageFlags::new(
+                    PageFlags::PRESENT | PageFlags::WRITABLE | PageFlags::HUGE_PAGE
+                    | (old_flags & (PageFlags::NO_EXECUTE | PageFlags::USER | PageFlags::GLOBAL))
+                );
+                new_pd.entries[i].set(sub_phys, sub_flags);
+            }
+            let pd_virt = Box::into_raw(new_pd) as u64;
+            let pd_phys = pd_virt.checked_sub(hhdm).ok_or("Cannot convert PD virt to phys")?;
+            let flags = PageFlags::new(PageFlags::PRESENT | PageFlags::WRITABLE
+                | (old_flags & (PageFlags::NO_EXECUTE | PageFlags::USER)));
+            pdpt.entries[pdpt_idx].set(pd_phys, flags);
+            // Flush TLB for entire 1GB region
+            let base_virt = (virt >> 30) << 30;
+            for i in (0..0x4000_0000u64).step_by(0x200000) {
+                unsafe { core::arch::asm!("invlpg [{}]", in(reg) base_virt + i, options(nostack, preserves_flags)); }
+            }
+            unsafe { &mut *(pd_virt as *mut PageTable) }
+        } else {
+            let pd_phys = pdpt.entries[pdpt_idx].phys_addr();
+            unsafe { &mut *((pd_phys + hhdm) as *mut PageTable) }
+        }
     } else {
-        // Need to create PD - allocate a new page table
         crate::serial_println!("[MMIO] Creating PD for PDPT[{}]", pdpt_idx);
         let new_pd = Box::new(PageTable::new());
         let pd_virt = Box::into_raw(new_pd) as u64;
         let pd_phys = pd_virt.checked_sub(hhdm).ok_or("Cannot convert PD virt to phys")?;
-        
-        // Set PDPT entry
         let flags = PageFlags::new(PageFlags::PRESENT | PageFlags::WRITABLE);
         pdpt.entries[pdpt_idx].set(pd_phys, flags);
-        
         unsafe { &mut *(pd_virt as *mut PageTable) }
     };
     
-    // Get or create PT
+    // Get or create PT — handle 2MB huge page at PD level
     let pt = if pd.entries[pd_idx].is_present() {
-        // Check if it's a huge page (2MB)
         if pd.entries[pd_idx].flags().0 & PageFlags::HUGE_PAGE != 0 {
-            // Already mapped as 2MB page, MMIO access should work
-            return Ok(());
+            // 2MB huge page — must split into 512 × 4KB pages
+            let huge_phys = pd.entries[pd_idx].phys_addr();
+            let old_flags = pd.entries[pd_idx].flags().0
+                & !(PageFlags::HUGE_PAGE | PageFlags::PRESENT);
+            crate::serial_println!("[MMIO] Splitting 2MB huge page PD[{}] (phys={:#x})", pd_idx, huge_phys);
+            let mut new_pt = Box::new(PageTable::new());
+            for i in 0..512 {
+                let sub_phys = huge_phys + (i as u64) * 0x1000; // 4KB each
+                let sub_flags = PageFlags::new(
+                    PageFlags::PRESENT | PageFlags::WRITABLE
+                    | (old_flags & (PageFlags::NO_EXECUTE | PageFlags::USER | PageFlags::GLOBAL
+                        | PageFlags::WRITE_THROUGH | PageFlags::NO_CACHE))
+                );
+                new_pt.entries[i].set(sub_phys, sub_flags);
+            }
+            let pt_virt = Box::into_raw(new_pt) as u64;
+            let pt_phys = pt_virt.checked_sub(hhdm).ok_or("Cannot convert PT virt to phys")?;
+            let flags = PageFlags::new(PageFlags::PRESENT | PageFlags::WRITABLE
+                | (old_flags & (PageFlags::NO_EXECUTE | PageFlags::USER)));
+            pd.entries[pd_idx].set(pt_phys, flags);
+            // Flush TLB for 2MB region
+            let base_virt = (virt >> 21) << 21;
+            for i in (0..0x200000u64).step_by(0x1000) {
+                unsafe { core::arch::asm!("invlpg [{}]", in(reg) base_virt + i, options(nostack, preserves_flags)); }
+            }
+            unsafe { &mut *(pt_virt as *mut PageTable) }
+        } else {
+            let pt_phys = pd.entries[pd_idx].phys_addr();
+            unsafe { &mut *((pt_phys + hhdm) as *mut PageTable) }
         }
-        let pt_phys = pd.entries[pd_idx].phys_addr();
-        unsafe { &mut *((pt_phys + hhdm) as *mut PageTable) }
     } else {
-        // Need to create PT - allocate a new page table
         crate::serial_println!("[MMIO] Creating PT for PD[{}]", pd_idx);
         let new_pt = Box::new(PageTable::new());
         let pt_virt = Box::into_raw(new_pt) as u64;
         let pt_phys = pt_virt.checked_sub(hhdm).ok_or("Cannot convert PT virt to phys")?;
-        
-        // Set PD entry
         let flags = PageFlags::new(PageFlags::PRESENT | PageFlags::WRITABLE);
         pd.entries[pd_idx].set(pt_phys, flags);
-        
         unsafe { &mut *(pt_virt as *mut PageTable) }
     };
     
@@ -688,8 +732,9 @@ pub fn map_kernel_mmio_page(virt: u64, phys: u64) -> Result<(), &'static str> {
         // Page already mapped - check if it's the same physical address
         let existing_phys = pt.entries[pt_idx].phys_addr();
         if existing_phys == (phys & !0xFFF) {
-            // Same page, already mapped
-            return Ok(());
+            // Same page, already mapped — but we MUST update flags for MMIO
+            // (HHDM may have mapped it with write-back caching)
+            crate::serial_println!("[MMIO] Re-flagging existing mapping at PT[{}] for uncacheable MMIO", pt_idx);
         }
         // Different mapping exists - update it for MMIO
         crate::serial_println!("[MMIO] Updating existing mapping at PT[{}]", pt_idx);

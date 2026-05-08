@@ -33,10 +33,10 @@ impl Note {
     /// Create a new note
     pub fn new(pitch: u8, velocity: u8, start_tick: u32, duration_ticks: u32) -> Self {
         Self {
-            pitch: pitch.minimum(127),
-            velocity: velocity.minimum(127),
+            pitch: pitch.min(127),
+            velocity: velocity.min(127),
             start_tick,
-            duration_ticks: duration_ticks.maximum(1),
+            duration_ticks: duration_ticks.max(1),
         }
     }
 
@@ -53,12 +53,12 @@ impl Note {
     }
 
     /// Duration in milliseconds at a given BPM
-    pub fn duration_mouse(&self, bpm: u32) -> u32 {
+    pub fn duration_ms(&self, bpm: u32) -> u32 {
         ticks_to_mouse(self.duration_ticks, bpm)
     }
 
     /// Start time in milliseconds at a given BPM
-    pub fn start_mouse(&self, bpm: u32) -> u32 {
+    pub fn start_ms(&self, bpm: u32) -> u32 {
         ticks_to_mouse(self.start_tick, bpm)
     }
 }
@@ -72,7 +72,7 @@ pub struct Track {
     /// Track name (fixed-size buffer for no_std)
     name: [u8; 32],
     /// Name length
-    name_length: usize,
+    name_len: usize,
     /// Notes in this track (sorted by start_tick)
     pub notes: Vec<Note>,
     /// Waveform for this track
@@ -91,12 +91,12 @@ impl Track {
     pub fn new(name: &str) -> Self {
         let mut name_buffer = [0u8; 32];
         let bytes = name.as_bytes();
-        let len = bytes.len().minimum(32);
+        let len = bytes.len().min(32);
         name_buffer[..len].copy_from_slice(&bytes[..len]);
 
         Self {
             name: name_buffer,
-            name_length: len,
+            name_len: len,
             notes: Vec::new(),
             waveform: Waveform::Sine,
             envelope: Envelope::default_env(),
@@ -107,14 +107,14 @@ impl Track {
 
     /// Get track name as &str
     pub fn name_str(&self) -> &str {
-        core::str::from_utf8(&self.name[..self.name_length]).unwrap_or("???")
+        core::str::from_utf8(&self.name[..self.name_len]).unwrap_or("???")
     }
 
     /// Add a note, keeping the list sorted by start_tick
     pub fn add_note(&mut self, note: Note) {
         // Binary search for insertion point
-        let position = self.notes.partition_point(|n| n.start_tick < note.start_tick);
-        self.notes.insert(position, note);
+        let pos = self.notes.partition_point(|n| n.start_tick < note.start_tick);
+        self.notes.insert(pos, note);
     }
 
     /// Remove a note by index
@@ -147,7 +147,7 @@ impl Track {
 
     /// Get the last tick (end of last note)
     pub fn end_tick(&self) -> u32 {
-        self.notes.iter().map(|n| n.end_tick()).maximum().unwrap_or(0)
+        self.notes.iter().map(|n| n.end_tick()).max().unwrap_or(0)
     }
 
     /// Total number of notes
@@ -195,7 +195,7 @@ impl Track {
     pub fn shift(&mut self, ticks: i32) {
         for note in &mut self.notes {
             let new_start = note.start_tick as i64 + ticks as i64;
-            note.start_tick = new_start.maximum(0) as u32;
+            note.start_tick = new_start.max(0) as u32;
         }
         // Re-sort after shifting
         self.notes.sort_by_key(|n| n.start_tick);
@@ -211,15 +211,15 @@ pub struct Project {
     /// Project name
     name: [u8; 64],
     /// Name length
-    name_length: usize,
+    name_len: usize,
     /// Tracks
     pub tracks: Vec<Track>,
     /// Global BPM
     pub bpm: u16,
     /// Time signature numerator (e.g., 4 for 4/4)
-    pub time_signal_number: u8,
+    pub time_sig_num: u8,
     /// Time signature denominator (e.g., 4 for 4/4)
-    pub time_signal_den: u8,
+    pub time_sig_den: u8,
 }
 
 /// Track colors for UI
@@ -248,22 +248,22 @@ impl Project {
     pub fn new(name: &str, bpm: u16) -> Self {
         let mut name_buffer = [0u8; 64];
         let bytes = name.as_bytes();
-        let len = bytes.len().minimum(64);
+        let len = bytes.len().min(64);
         name_buffer[..len].copy_from_slice(&bytes[..len]);
 
         Self {
             name: name_buffer,
-            name_length: len,
+            name_len: len,
             tracks: Vec::new(),
             bpm,
-            time_signal_number: 4,
-            time_signal_den: 4,
+            time_sig_num: 4,
+            time_sig_den: 4,
         }
     }
 
     /// Get project name as &str
     pub fn name_str(&self) -> &str {
-        core::str::from_utf8(&self.name[..self.name_length]).unwrap_or("???")
+        core::str::from_utf8(&self.name[..self.name_len]).unwrap_or("???")
     }
 
     /// Add a track, returns its index
@@ -271,11 +271,11 @@ impl Project {
         if self.tracks.len() >= MAXIMUM_TRACKS {
             return Err("Maximum tracks reached");
         }
-        let index = self.tracks.len();
+        let idx = self.tracks.len();
         let mut track = Track::new(name);
-        track.color = TRACK_COLORS[index % TRACK_COLORS.len()];
+        track.color = TRACK_COLORS[idx % TRACK_COLORS.len()];
         self.tracks.push(track);
-        Ok(index)
+        Ok(idx)
     }
 
     /// Remove a track by index
@@ -289,13 +289,13 @@ impl Project {
 
     /// Get the project length in ticks (end of the last note)
     pub fn length_ticks(&self) -> u32 {
-        self.tracks.iter().map(|t| t.end_tick()).maximum().unwrap_or(0)
+        self.tracks.iter().map(|t| t.end_tick()).max().unwrap_or(0)
     }
 
     /// Get the project length in bars (rounded up)
     pub fn length_bars(&self) -> u32 {
         let ticks = self.length_ticks();
-        let ticks_per_bar = super::TICKS_PER_QUARTER * self.time_signal_number as u32;
+        let ticks_per_bar = super::TICKS_PER_QUARTER * self.time_sig_num as u32;
         (ticks + ticks_per_bar - 1) / ticks_per_bar
     }
 
@@ -317,10 +317,10 @@ pub fn ticks_to_mouse(ticks: u32, bpm: u32) -> u32 {
 }
 
 /// Convert milliseconds to ticks at a given BPM
-pub fn mouse_to_ticks(mouse: u32, bpm: u32) -> u32 {
-    if mouse == 0 { return 0; }
+pub fn mouse_to_ticks(ms: u32, bpm: u32) -> u32 {
+    if ms == 0 { return 0; }
     // ticks = ms * BPM * TICKS_PER_QUARTER / 60000
-    (mouse as u64 * bpm as u64 * super::TICKS_PER_QUARTER as u64 / 60_000) as u32
+    (ms as u64 * bpm as u64 * super::TICKS_PER_QUARTER as u64 / 60_000) as u32
 }
 
 /// Convert ticks to samples at a given BPM

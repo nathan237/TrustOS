@@ -10,126 +10,126 @@ use spin::Mutex;
 use alloc::collections::BTreeMap;
 use core::sync::atomic::{AtomicU64, Ordering};
 
-pub use channel::{Channel, Kg, Rt};
-pub use message::{Cj, MessageHeader, MessagePayload};
+pub use channel::{Channel, Ed, Hj};
+pub use message::{Az, MessageHeader, MessagePayload};
 
 
-static Dv: Mutex<BTreeMap<Kg, Channel>> = Mutex::new(BTreeMap::new());
+static Bq: Mutex<BTreeMap<Ed, Channel>> = Mutex::new(BTreeMap::new());
 
 
-static CHN_: AtomicU64 = AtomicU64::new(1);
+static CKW_: AtomicU64 = AtomicU64::new(1);
 
 
-static BAK_: AtomicU64 = AtomicU64::new(0);
-static AFI_: AtomicU64 = AtomicU64::new(0);
+static BCM_: AtomicU64 = AtomicU64::new(0);
+static AHC_: AtomicU64 = AtomicU64::new(0);
 
 
 pub fn init() {
     crate::log!("IPC ready");
 }
 
-pub fn whk(bm: u64) {
-    crate::log_debug!("IPC send {}", bm);
+pub fn onx(ch: u64) {
+    crate::log_debug!("IPC send {}", ch);
 }
 
-pub fn vtc(bm: u64) -> u64 {
-    crate::log_debug!("IPC recv {}", bm);
+pub fn odo(ch: u64) -> u64 {
+    crate::log_debug!("IPC recv {}", ch);
     0
 }
 
-pub fn rqk() -> u64 {
+pub fn kzf() -> u64 {
     crate::log!("Create IPC channel");
     1
 }
 
 
-pub fn ipp() -> (Rt, Rt) {
-    let ad = Kg(CHN_.fetch_add(1, Ordering::Relaxed));
-    let channel = Channel::new(ad);
+pub fn ejc() -> (Hj, Hj) {
+    let id = Ed(CKW_.fetch_add(1, Ordering::Relaxed));
+    let channel = Channel::new(id);
     
-    let bsg = channel.bsg();
-    let afw = channel.afw();
+    let sender = channel.sender();
+    let receiver = channel.receiver();
     
-    Dv.lock().insert(ad, channel);
+    Bq.lock().insert(id, channel);
     
-    crate::log_debug!("Created IPC channel {:?}", ad);
+    crate::log_debug!("Created IPC channel {:?}", id);
     
-    (bsg, afw)
+    (sender, receiver)
 }
 
 
-pub fn baq(channel: Kg, message: Cj) -> Result<(), IpcError> {
-    let lq = Dv.lock();
-    let channel = lq.get(&channel).ok_or(IpcError::Apw)?;
+pub fn send(channel: Ed, message: Az) -> Result<(), IpcError> {
+    let channels = Bq.lock();
+    let channel = channels.get(&channel).ok_or(IpcError::ChannelNotFound)?;
     
-    channel.baq(message)?;
-    BAK_.fetch_add(1, Ordering::Relaxed);
+    channel.send(message)?;
+    BCM_.fetch_add(1, Ordering::Relaxed);
     
     Ok(())
 }
 
 
-pub fn chb(channel: Kg) -> Result<Cj, IpcError> {
-    let lq = Dv.lock();
-    let channel = lq.get(&channel).ok_or(IpcError::Apw)?;
+pub fn receive(channel: Ed) -> Result<Az, IpcError> {
+    let channels = Bq.lock();
+    let channel = channels.get(&channel).ok_or(IpcError::ChannelNotFound)?;
     
-    let fr = channel.chb()?;
-    AFI_.fetch_add(1, Ordering::Relaxed);
+    let bk = channel.receive()?;
+    AHC_.fetch_add(1, Ordering::Relaxed);
     
-    Ok(fr)
+    Ok(bk)
 }
 
 
-pub fn pwh(channel: Kg) -> Result<Option<Cj>, IpcError> {
-    let lq = Dv.lock();
-    let channel = lq.get(&channel).ok_or(IpcError::Apw)?;
+pub fn try_receive(channel: Ed) -> Result<Option<Az>, IpcError> {
+    let channels = Bq.lock();
+    let channel = channels.get(&channel).ok_or(IpcError::ChannelNotFound)?;
     
-    match channel.pwh() {
-        Ok(fr) => {
-            AFI_.fetch_add(1, Ordering::Relaxed);
-            Ok(Some(fr))
+    match channel.try_receive() {
+        Ok(bk) => {
+            AHC_.fetch_add(1, Ordering::Relaxed);
+            Ok(Some(bk))
         }
-        Err(IpcError::Zn) => Ok(None),
-        Err(aa) => Err(aa),
+        Err(IpcError::WouldBlock) => Ok(None),
+        Err(e) => Err(e),
     }
 }
 
 
-pub fn yit(channel: Kg) {
-    Dv.lock().remove(&channel);
+pub fn qae(channel: Ed) {
+    Bq.lock().remove(&channel);
     crate::log_debug!("Closed IPC channel {:?}", channel);
 }
 
 
-pub fn cm() -> Bka {
-    Bka {
-        qye: Dv.lock().len(),
-        unt: BAK_.load(Ordering::Relaxed),
-        uns: AFI_.load(Ordering::Relaxed),
+pub fn stats() -> Aaf {
+    Aaf {
+        channels_active: Bq.lock().len(),
+        messages_sent: BCM_.load(Ordering::Relaxed),
+        messages_received: AHC_.load(Ordering::Relaxed),
     }
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Bka {
-    pub qye: usize,
-    pub unt: u64,
-    pub uns: u64,
+pub struct Aaf {
+    pub channels_active: usize,
+    pub messages_sent: u64,
+    pub messages_received: u64,
 }
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IpcError {
     
-    Apw,
+    ChannelNotFound,
     
-    Aak,
+    ChannelClosed,
     
-    Byu,
+    BufferFull,
     
-    Zn,
+    WouldBlock,
     
-    Jt,
+    PermissionDenied,
     
-    Czy,
+    InvalidMessage,
 }

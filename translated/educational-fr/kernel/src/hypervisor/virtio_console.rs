@@ -54,7 +54,7 @@ pub fn new(id: u32, name: &str) -> Self {
     /// Write data to be sent to guest
     pub fn write(&mut self, data: &[u8]) -> usize {
         let available = MAXIMUM_BUFFER_SIZE.saturating_sub(self.output_buffer.len());
-        let to_write = data.len().minimum(available);
+        let to_write = data.len().min(available);
         for &byte in &data[..to_write] {
             self.output_buffer.push_back(byte);
         }
@@ -67,10 +67,10 @@ pub fn new(id: u32, name: &str) -> Self {
     }
 
     /// Read data received from guest
-    pub fn read(&mut self, buffer: &mut [u8]) -> usize {
-        let to_read = buffer.len().minimum(self.input_buffer.len());
+    pub fn read(&mut self, buf: &mut [u8]) -> usize {
+        let to_read = buf.len().min(self.input_buffer.len());
         for i in 0..to_read {
-            buffer[i] = self.input_buffer.pop_front().unwrap_or(0);
+            buf[i] = self.input_buffer.pop_front().unwrap_or(0);
         }
         to_read
     }
@@ -80,9 +80,9 @@ pub fn new(id: u32, name: &str) -> Self {
         // Look for newline in buffer
         let newline_position = self.input_buffer.iter().position(|&b| b == b'\n');
         
-        if let Some(position) = newline_position {
+        if let Some(pos) = newline_position {
             let mut line = String::new();
-            for _ in 0..=position {
+            for _ in 0..=pos {
                 if let Some(byte) = self.input_buffer.pop_front() {
                     if byte != b'\n' && byte != b'\r' {
                         line.push(byte as char);
@@ -184,8 +184,8 @@ impl VirtioConsole {
     }
 
     /// Read from main console
-    pub fn read(&mut self, buffer: &mut [u8]) -> usize {
-        self.main_port().read(buffer)
+    pub fn read(&mut self, buf: &mut [u8]) -> usize {
+        self.main_port().read(buf)
     }
 
     /// Read line from main console
@@ -232,8 +232,8 @@ impl ConsoleManager {
     /// Create a console for a VM
     pub fn create_console(&mut self, vm_id: u64) -> &mut VirtioConsole {
         // Check if already exists
-        if let Some(index) = self.consoles.iter().position(|c| c.vm_id == vm_id) {
-            return &mut self.consoles[index];
+        if let Some(idx) = self.consoles.iter().position(|c| c.vm_id == vm_id) {
+            return &mut self.consoles[idx];
         }
         
         self.consoles.push(VirtioConsole::new(vm_id));
@@ -247,7 +247,7 @@ impl ConsoleManager {
 
     /// Get mutable console for a VM
     pub fn get_console_mut(&mut self, vm_id: u64) -> Option<&mut VirtioConsole> {
-        self.consoles.iterator_mut().find(|c| c.vm_id == vm_id)
+        self.consoles.iter_mut().find(|c| c.vm_id == vm_id)
     }
 
     /// Remove console for a VM
@@ -279,9 +279,9 @@ pub fn write_to_vm(vm_id: u64, data: &[u8]) -> usize {
 }
 
 /// Read from a VM's console
-pub fn read_from_vm(vm_id: u64, buffer: &mut [u8]) -> usize {
+pub fn read_from_vm(vm_id: u64, buf: &mut [u8]) -> usize {
     if let Some(console) = console_manager().get_console_mut(vm_id) {
-        console.read(buffer)
+        console.read(buf)
     } else {
         0
     }

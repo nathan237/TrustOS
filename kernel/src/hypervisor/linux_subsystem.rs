@@ -1248,8 +1248,7 @@ Note: Running in simulated mode (no real Linux kernel)")
                 let is_online = self.online_mode && server.is_some();
 
                 for pkg in &to_install {
-                    if is_online {
-                        let srv = server.as_deref().unwrap();
+                    if let (true, Some(srv)) = (is_online, server.as_deref()) {
                         out.push_str(&format!("Get:1 {}/repo/pool/{}.pkg {} [{} kB]\n",
                             srv, pkg.name, pkg.version, pkg.size_kb));
 
@@ -1268,9 +1267,9 @@ Note: Running in simulated mode (no real Linux kernel)")
                             pkg.name, pkg.version, pkg.size_kb));
                     }
                 }
-                if is_online {
+                if let (true, Some(srv)) = (is_online, server.as_deref()) {
                     out.push_str(&format!("Fetched {} bytes from {}\n",
-                        self.total_bytes_downloaded, server.as_deref().unwrap()));
+                        self.total_bytes_downloaded, srv));
                 } else {
                     out.push_str(&format!("Fetched {} kB in 0s (internal)\n", total_size));
                 }

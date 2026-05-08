@@ -10,69 +10,69 @@ use spin::Mutex;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum UsbControllerType {
-    Buz,   
-    Bnp,   
-    Ark,   
-    Bbe,   
+    Afp,   
+    Abw,   
+    Rv,   
+    Wa,   
 }
 
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum UsbDeviceClass {
-    Cyn,
-    Cer,         
-    Dci,
-    Rj,
-    Zj,
-    Dex,
-    Qg(u8),
+    Hub,
+    HID,         
+    MassStorage,
+    Audio,
+    Video,
+    Printer,
+    Other(u8),
 }
 
 
 #[derive(Clone, Debug)]
-pub struct Bvl {
-    pub re: u8,
+pub struct Afy {
+    pub address: u8,
     pub class: UsbDeviceClass,
-    pub ml: u16,
-    pub cgt: u16,
-    pub lkg: String,
-    pub baj: String,
+    pub vendor_id: u16,
+    pub product_id: u16,
+    pub manufacturer: String,
+    pub product: String,
 }
 
 
-pub struct Bah {
-    pub nft: UsbControllerType,
-    pub sm: u64,
-    pub ik: Vec<Bvl>,
-    pub jr: bool,
+pub struct Vr {
+    pub controller_type: UsbControllerType,
+    pub base_addr: u64,
+    pub devices: Vec<Afy>,
+    pub initialized: bool,
 }
 
-static Vt: Mutex<Vec<Bah>> = Mutex::new(Vec::new());
+static Jm: Mutex<Vec<Vr>> = Mutex::new(Vec::new());
 
 
-pub fn ky() -> bool {
-    Vt.lock().iter().any(|r| r.jr)
+pub fn is_initialized() -> bool {
+    Jm.lock().iter().any(|c| c.initialized)
 }
 
 
-pub fn yxp(ar: u64) -> bool {
-    if ar == 0 || ar == 0xFFFFFFFF {
+pub fn qla(base: u64) -> bool {
+    if base == 0 || base == 0xFFFFFFFF {
         return false;
     }
     
-    crate::serial_println!("[USB] EHCI controller at {:#x}", ar);
+    crate::serial_println!("[USB] EHCI controller at {:#x}", base);
     
     
     
     
-    let df = Bah {
-        nft: UsbControllerType::Ark,
-        sm: ar,
-        ik: Vec::new(),
-        jr: false,  
+    let ar = Vr {
+        controller_type: UsbControllerType::Rv,
+        base_addr: base,
+        devices: Vec::new(),
+        initialized: false,  
     };
     
-    Vt.lock().push(df);
+    Jm.lock().push(ar);
     
     
     
@@ -85,21 +85,21 @@ pub fn yxp(ar: u64) -> bool {
 }
 
 
-pub fn yxw(ar: u64) -> bool {
-    if ar == 0 || ar == 0xFFFFFFFF {
+pub fn qlh(base: u64) -> bool {
+    if base == 0 || base == 0xFFFFFFFF {
         return false;
     }
     
-    crate::serial_println!("[USB] xHCI controller at {:#x}", ar);
+    crate::serial_println!("[USB] xHCI controller at {:#x}", base);
     
-    let df = Bah {
-        nft: UsbControllerType::Bbe,
-        sm: ar,
-        ik: Vec::new(),
-        jr: false,  
+    let ar = Vr {
+        controller_type: UsbControllerType::Wa,
+        base_addr: base,
+        devices: Vec::new(),
+        initialized: false,  
     };
     
-    Vt.lock().push(df);
+    Jm.lock().push(ar);
     
     
     
@@ -115,21 +115,21 @@ pub fn yxw(ar: u64) -> bool {
 }
 
 
-pub fn smj() -> Vec<Bvl> {
-    Vt.lock()
+pub fn lqv() -> Vec<Afy> {
+    Jm.lock()
         .iter()
-        .iva(|r| r.ik.clone())
+        .flat_map(|c| c.devices.clone())
         .collect()
 }
 
 
-pub fn roo() -> usize {
-    Vt.lock().len()
+pub fn kxn() -> usize {
+    Jm.lock().len()
 }
 
 
-pub fn tmo() -> bool {
-    Vt.lock()
+pub fn mjm() -> bool {
+    Jm.lock()
         .iter()
-        .any(|r| r.ik.iter().any(|bc| bc.class == UsbDeviceClass::Cer))
+        .any(|c| c.devices.iter().any(|d| d.class == UsbDeviceClass::HID))
 }

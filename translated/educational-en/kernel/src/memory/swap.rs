@@ -26,13 +26,13 @@ type SwapSlot = u32;
 #[derive(Clone, Copy, Debug)]
 struct SwapEntry {
     /// Physical address of the page (when in memory), 0 if swapped out
-    physical_address: u64,
+    phys_addr: u64,
     /// Swap slot number (0 = never swapped)
     slot: SwapSlot,
     /// Owning CR3 (address space)
     cr3: u64,
     /// Virtual address
-    virt_address: u64,
+    virt_addr: u64,
     /// Access counter for LRU approximation (incremented on access)
     access_count: u32,
     /// Last access tick
@@ -78,7 +78,7 @@ static SWAP_ENABLED: AtomicBool = AtomicBool::new(false);
 /// Initialize the swap subsystem with a swap file/partition
 pub fn init(swap_path: &'static str, size_bytes: u64) {
     let slots = (size_bytes / PAGE_SIZE) as usize;
-    let slots = slots.minimum(MAXIMUM_SWAP_SLOTS);
+    let slots = slots.min(MAXIMUM_SWAP_SLOTS);
     
     let mut state = SWAP.lock();
     state.slot_bitmap = alloc::vec![false; slots];
@@ -93,8 +93,8 @@ pub fn init(swap_path: &'static str, size_bytes: u64) {
 }
 
 /// Enable swap without a backing file (in-memory page cache eviction only)
-pub fn enable_anonymous(maximum_pages: usize) {
-    let slots = maximum_pages.minimum(MAXIMUM_SWAP_SLOTS);
+pub fn enable_anonymous(max_pages: usize) {
+    let slots = max_pages.min(MAXIMUM_SWAP_SLOTS);
     let mut state = SWAP.lock();
     state.slot_bitmap = alloc::vec![false; slots];
     state.total_slots = slots;
@@ -137,7 +137,7 @@ pub fn is_enabled() -> bool {
 
 /// Allocate a swap slot
 fn allocator_slot(state: &mut SwapState) -> Option<SwapSlot> {
-    for (i, used) in state.slot_bitmap.iterator_mut().enumerate() {
+    for (i, used) in state.slot_bitmap.iter_mut().enumerate() {
         if !*used {
             *used = true;
             state.used_slots += 1;
@@ -150,23 +150,23 @@ fn allocator_slot(state: &mut SwapState) -> Option<SwapSlot> {
 /// Free a swap slot
 fn free_slot(state: &mut SwapState, slot: SwapSlot) {
     if slot == 0 { return; }
-    let index = (slot - 1) as usize;
-    if index < state.slot_bitmap.len() {
-        state.slot_bitmap[index] = false;
+    let idx = (slot - 1) as usize;
+    if idx < state.slot_bitmap.len() {
+        state.slot_bitmap[idx] = false;
         state.used_slots = state.used_slots.saturating_sub(1);
     }
 }
 
 /// Track a page for potential eviction
-pub fn track_page(cr3: u64, virt_address: u64, physical_address: u64) {
+pub fn track_page(cr3: u64, virt_addr: u64, phys_addr: u64) {
     if !SWAP_ENABLED.load(Ordering::Relaxed) { return; }
     
-    let key = (cr3, virt_address & !0xFFF);
+    let key = (cr3, virt_addr & !0xFFF);
     let entry = SwapEntry {
-        physical_address,
+        phys_addr,
         slot: 0,
         cr3,
-        virt_address: virt_address & !0xFFF,
+        virt_addr: virt_addr & !0xFFF,
         access_count: 1,
         last_access: crate::logger::get_ticks(),
     };
@@ -175,10 +175,10 @@ pub fn track_page(cr3: u64, virt_address: u64, physical_address: u64) {
 }
 
 /// Record page access (called on page fault handler for accessed pages)
-pub fn touch_page(cr3: u64, virt_address: u64) {
+pub fn touch_page(cr3: u64, virt_addr: u64) {
     if !SWAP_ENABLED.load(Ordering::Relaxed) { return; }
     
-    let key = (cr3, virt_address & !0xFFF);
+    let key = (cr3, virt_addr & !0xFFF);
     let mut state = SWAP.lock();
     if let Some(entry) = state.page_tracker.get_mut(&key) {
         entry.access_count = entry.access_count.saturating_add(1);
@@ -187,10 +187,10 @@ pub fn touch_page(cr3: u64, virt_address: u64) {
 }
 
 /// Untrack a page (when freed)
-pub fn untrack_page(cr3: u64, virt_address: u64) {
+pub fn untrack_page(cr3: u64, virt_addr: u64) {
     if !SWAP_ENABLED.load(Ordering::Relaxed) { return; }
     
-    let key = (cr3, virt_address & !0xFFF);
+    let key = (cr3, virt_addr & !0xFFF);
     let mut state = SWAP.lock();
     if let Some(entry) = state.page_tracker.remove(&key) {
         if entry.slot != 0 {
@@ -208,7 +208,7 @@ fn select_lru_victim(state: &SwapState) -> Option<(u64, u64, u64)> {
     
     for (key, entry) in state.page_tracker.iter() {
         // Only consider pages that are currently in memory
-        if entry.physical_address == 0 { continue; }
+        if entry.phys_addr == 0 { continue; }
         // Skip kernel pages (cr3 = 0 convention)
         if entry.cr3 == 0 { continue; }
         
@@ -221,7 +221,7 @@ fn select_lru_victim(state: &SwapState) -> Option<(u64, u64, u64)> {
         }
     }
     
-    best.map(|(_, entry)| (entry.cr3, entry.virt_address, entry.physical_address))
+    best.map(|(_, entry)| (entry.cr3, entry.virt_addr, entry.phys_addr))
 }
 
 /// Try to evict a page to make room for a new allocation.
@@ -230,31 +230,31 @@ pub fn try_evict_page() -> Option<u64> {
     let mut state = SWAP.lock();
     if !state.enabled { return None; }
     
-    let (cr3, virt_address, physical_address) = select_lru_victim(&state)?;
+    let (cr3, virt_addr, phys_addr) = select_lru_victim(&state)?;
     let slot = allocator_slot(&mut state)?;
     
     // Write page data to swap slot (in-memory swap buffer for now)
     // In a real OS, this would write to disk
-    write_swap_slot(&state, slot, physical_address);
+    write_swap_slot(&state, slot, phys_addr);
     
     // Update tracking
-    let key = (cr3, virt_address);
+    let key = (cr3, virt_addr);
     if let Some(entry) = state.page_tracker.get_mut(&key) {
-        entry.physical_address = 0; // No longer in memory
+        entry.phys_addr = 0; // No longer in memory
         entry.slot = slot;
     }
     state.swap_map.insert(key, slot);
     
     // Unmap the page from the address space (mark as not present)
     // We modify the PTE to store the swap slot in bits 12..31
-    unmap_for_swap(cr3, virt_address, slot);
+    unmap_for_swap(cr3, virt_addr, slot);
     
     PAGES_SWAPPED_OUT.fetch_add(1, Ordering::Relaxed);
     
     crate::log_debug!("[SWAP] Evicted page cr3={:#x} virt={:#x} -> slot {}",
-        cr3, virt_address, slot);
+        cr3, virt_addr, slot);
     
-    Some(physical_address)
+    Some(phys_addr)
 }
 
 /// Handle a page fault for a swapped-out page.
@@ -284,7 +284,7 @@ match crate::memory::frame::allocator_frame_zeroed() {
     
     // Update tracking
     if let Some(entry) = state.page_tracker.get_mut(&key) {
-        entry.physical_address = new_physical;
+        entry.phys_addr = new_physical;
         let old_slot = entry.slot;
         entry.slot = 0;
         entry.access_count = 1;
@@ -348,43 +348,43 @@ const SECTORS_PER_PAGE: u64 = 8;
 
 /// Get the swap base LBA (last 64 MB of NVMe)
 fn swap_base_lba() -> u64 {
-    let capability = crate::nvme::capacity();
+    let cap = crate::nvme::capacity();
     let swap_sectors = (MAXIMUM_SWAP_SLOTS as u64) * SECTORS_PER_PAGE;
-    if capability > swap_sectors {
-        capability - swap_sectors
+    if cap > swap_sectors {
+        cap - swap_sectors
     } else {
         0 // Drive too small — use start (or fallback in-memory)
     }
 }
 
-fn write_swap_slot(_state: &SwapState, slot: SwapSlot, physical_address: u64) {
+fn write_swap_slot(_state: &SwapState, slot: SwapSlot, phys_addr: u64) {
     let hhdm = crate::memory::hhdm_offset();
-    let source = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::slice::from_raw_parts((physical_address + hhdm) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+    let src = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { core::slice::from_raw_parts((phys_addr + hhdm) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u8, PAGE_SIZE as usize) };
     
     // Try NVMe first
     if crate::nvme::is_initialized() {
         let lba = swap_base_lba() + ((slot as u64 - 1) * SECTORS_PER_PAGE);
-        if crate::nvme::write_sectors(lba, SECTORS_PER_PAGE as usize, source).is_ok() {
+        if crate::nvme::write_sectors(lba, SECTORS_PER_PAGE as usize, src).is_ok() {
             return;
         }
     }
     
     // Fallback: in-memory
     let mut pages = SWAP_PAGES.lock();
-    pages.insert(slot, source.to_vec());
+    pages.insert(slot, src.to_vec());
 }
 
-fn read_swap_slot(_state: &SwapState, slot: SwapSlot, physical_address: u64) {
+fn read_swap_slot(_state: &SwapState, slot: SwapSlot, phys_addr: u64) {
     let hhdm = crate::memory::hhdm_offset();
-    let destination = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::slice::from_raw_parts_mut((physical_address + hhdm) as *mut u8, PAGE_SIZE as usize) };
+    let dst = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { core::slice::from_raw_parts_mut((phys_addr + hhdm) as *mut u8, PAGE_SIZE as usize) };
     
     // Try NVMe first
     if crate::nvme::is_initialized() {
         let lba = swap_base_lba() + ((slot as u64 - 1) * SECTORS_PER_PAGE);
-        if crate::nvme::read_sectors(lba, SECTORS_PER_PAGE as usize, destination).is_ok() {
+        if crate::nvme::read_sectors(lba, SECTORS_PER_PAGE as usize, dst).is_ok() {
             return;
         }
     }
@@ -392,9 +392,9 @@ unsafe { core::slice::from_raw_parts_mut((physical_address + hhdm) as *mut u8, P
     // Fallback: in-memory
     let pages = SWAP_PAGES.lock();
     if let Some(data) = pages.get(&slot) {
-        destination[..data.len()].copy_from_slice(data);
+        dst[..data.len()].copy_from_slice(data);
     } else {
-        destination.fill(0);
+        dst.fill(0);
     }
 }
 
@@ -403,32 +403,32 @@ unsafe { core::slice::from_raw_parts_mut((physical_address + hhdm) as *mut u8, P
 // ============================================================================
 
 /// Unmap a page and store swap slot in the PTE (not-present, bits 1..31 = slot)
-fn unmap_for_swap(cr3: u64, virt_address: u64, slot: SwapSlot) {
+fn unmap_for_swap(cr3: u64, virt_addr: u64, slot: SwapSlot) {
     let hhdm = crate::memory::hhdm_offset();
     
     // Walk page tables to find the PTE
     let pml4 = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { &mut *((cr3 + hhdm) as *mut [u64; 512]) };
-    let pml4_index = ((virt_address >> 39) & 0x1FF) as usize;
+    let pml4_index = ((virt_addr >> 39) & 0x1FF) as usize;
     if pml4[pml4_index] & 1 == 0 { return; }
     
     let pdpt_physical = pml4[pml4_index] & !0xFFF;
     let pdpt = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { &mut *((pdpt_physical + hhdm) as *mut [u64; 512]) };
-    let pdpt_index = ((virt_address >> 30) & 0x1FF) as usize;
+    let pdpt_index = ((virt_addr >> 30) & 0x1FF) as usize;
     if pdpt[pdpt_index] & 1 == 0 { return; }
     
     let pd_physical = pdpt[pdpt_index] & !0xFFF;
     let pd = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { &mut *((pd_physical + hhdm) as *mut [u64; 512]) };
-    let pd_index = ((virt_address >> 21) & 0x1FF) as usize;
+    let pd_index = ((virt_addr >> 21) & 0x1FF) as usize;
     if pd[pd_index] & 1 == 0 { return; }
     if pd[pd_index] & (1 << 7) != 0 { return; } // Huge page, skip
     
     let pt_physical = pd[pd_index] & !0xFFF;
     let pt = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { &mut *((pt_physical + hhdm) as *mut [u64; 512]) };
-    let pt_index = ((virt_address >> 12) & 0x1FF) as usize;
+    let pt_index = ((virt_addr >> 12) & 0x1FF) as usize;
     
     // Store swap slot encoded in the PTE (not-present):
     // Bit 0 = 0 (not present)
@@ -439,42 +439,42 @@ unsafe { &mut *((pt_physical + hhdm) as *mut [u64; 512]) };
     // Flush TLB for this page
     #[cfg(target_arch = "x86_64")]
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::arch::asm!("invlpg [{}]", in(reg) virt_address, options(nostack, preserves_flags)); }
+unsafe { core::arch::asm!("invlpg [{}]", in(reg) virt_addr, options(nostack, preserves_flags)); }
 }
 
 /// Re-map a page after swapping it back in
-fn remap_after_swap(cr3: u64, virt_address: u64, physical_address: u64) {
+fn remap_after_swap(cr3: u64, virt_addr: u64, phys_addr: u64) {
     let hhdm = crate::memory::hhdm_offset();
     
     let pml4 = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { &mut *((cr3 + hhdm) as *mut [u64; 512]) };
-    let pml4_index = ((virt_address >> 39) & 0x1FF) as usize;
+    let pml4_index = ((virt_addr >> 39) & 0x1FF) as usize;
     if pml4[pml4_index] & 1 == 0 { return; }
     
     let pdpt_physical = pml4[pml4_index] & !0xFFF;
     let pdpt = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { &mut *((pdpt_physical + hhdm) as *mut [u64; 512]) };
-    let pdpt_index = ((virt_address >> 30) & 0x1FF) as usize;
+    let pdpt_index = ((virt_addr >> 30) & 0x1FF) as usize;
     if pdpt[pdpt_index] & 1 == 0 { return; }
     
     let pd_physical = pdpt[pdpt_index] & !0xFFF;
     let pd = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { &mut *((pd_physical + hhdm) as *mut [u64; 512]) };
-    let pd_index = ((virt_address >> 21) & 0x1FF) as usize;
+    let pd_index = ((virt_addr >> 21) & 0x1FF) as usize;
     if pd[pd_index] & 1 == 0 { return; }
     
     let pt_physical = pd[pd_index] & !0xFFF;
     let pt = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { &mut *((pt_physical + hhdm) as *mut [u64; 512]) };
-    let pt_index = ((virt_address >> 12) & 0x1FF) as usize;
+    let pt_index = ((virt_addr >> 12) & 0x1FF) as usize;
     
     // Restore as USER_DATA page (present, writable, user)
     let flags: u64 = 1 | (1 << 1) | (1 << 2); // PRESENT | WRITABLE | USER
-    pt[pt_index] = (physical_address & !0xFFF) | flags;
+    pt[pt_index] = (phys_addr & !0xFFF) | flags;
     
     #[cfg(target_arch = "x86_64")]
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::arch::asm!("invlpg [{}]", in(reg) virt_address, options(nostack, preserves_flags)); }
+unsafe { core::arch::asm!("invlpg [{}]", in(reg) virt_addr, options(nostack, preserves_flags)); }
 }
 
 /// Check if a PTE is a swap entry (not present + swap marker)

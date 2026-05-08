@@ -9,411 +9,411 @@ use alloc::format;
 use spin::Mutex;
 
 
-pub const AZP_: usize = 32 * 1024 * 1024;
+pub const BBR_: usize = 32 * 1024 * 1024;
 
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum FileType {
-    Es,
-    K,
+    File,
+    Directory,
 }
 
 
 #[derive(Clone)]
 pub struct FsEntry {
-    pub j: String,
-    pub kd: FileType,
-    pub ca: Vec<u8>,
-    pub zf: Vec<String>, 
-    pub cju: u64,       
-    pub euw: u64,      
+    pub name: String,
+    pub file_type: FileType,
+    pub content: Vec<u8>,
+    pub children: Vec<String>, 
+    pub created_at: u64,       
+    pub modified_at: u64,      
 }
 
 impl FsEntry {
-    pub fn gnm(j: &str) -> Self {
-        let qb = crate::logger::lh();
+    pub fn dbp(name: &str) -> Self {
+        let gx = crate::logger::eg();
         Self {
-            j: String::from(j),
-            kd: FileType::Es,
-            ca: Vec::new(),
-            zf: Vec::new(),
-            cju: qb,
-            euw: qb,
+            name: String::from(name),
+            file_type: FileType::File,
+            content: Vec::new(),
+            children: Vec::new(),
+            created_at: gx,
+            modified_at: gx,
         }
     }
     
-    pub fn cll(j: &str) -> Self {
-        let qb = crate::logger::lh();
+    pub fn auj(name: &str) -> Self {
+        let gx = crate::logger::eg();
         Self {
-            j: String::from(j),
-            kd: FileType::K,
-            ca: Vec::new(),
-            zf: Vec::new(),
-            cju: qb,
-            euw: qb,
+            name: String::from(name),
+            file_type: FileType::Directory,
+            content: Vec::new(),
+            children: Vec::new(),
+            created_at: gx,
+            modified_at: gx,
         }
     }
 }
 
 
 pub struct RamFs {
-    ch: BTreeMap<String, FsEntry>,
-    eae: String,
+    entries: BTreeMap<String, FsEntry>,
+    current_dir: String,
 }
 
 impl RamFs {
     pub const fn new() -> Self {
         Self {
-            ch: BTreeMap::new(),
-            eae: String::new(),
+            entries: BTreeMap::new(),
+            current_dir: String::new(),
         }
     }
     
     pub fn init(&mut self) {
         
-        self.eae.clear();
-        self.ch.insert(String::from("/"), FsEntry::cll("/"));
+        self.current_dir.clear();
+        self.entries.insert(String::from("/"), FsEntry::auj("/"));
         
         
-        self.ut("/home").bq();
-        self.ut("/tmp").bq();
-        self.ut("/bin").bq();
-        self.ut("/etc").bq();
-        self.ut("/documents").bq();
-        self.ut("/downloads").bq();
-        self.ut("/music").bq();
-        self.ut("/pictures").bq();
+        self.mkdir("/home").ok();
+        self.mkdir("/tmp").ok();
+        self.mkdir("/bin").ok();
+        self.mkdir("/etc").ok();
+        self.mkdir("/documents").ok();
+        self.mkdir("/downloads").ok();
+        self.mkdir("/music").ok();
+        self.mkdir("/pictures").ok();
         
         
-        self.touch("/home/welcome.txt").bq();
-        self.ns("/home/welcome.txt", b"Welcome to TrustOS!\n\nThis is a RAM filesystem.\nAll files are stored in memory.\n").bq();
+        self.touch("/home/welcome.txt").ok();
+        self.write_file("/home/welcome.txt", b"Welcome to TrustOS!\n\nThis is a RAM filesystem.\nAll files are stored in memory.\n").ok();
         
         
-        self.touch("/etc/hostname").bq();
-        self.ns("/etc/hostname", b"trustos").bq();
+        self.touch("/etc/hostname").ok();
+        self.write_file("/etc/hostname", b"trustos").ok();
         
         
-        self.touch("/etc/version").bq();
-        self.ns("/etc/version", b"TrustOS v0.9.4\n").bq();
+        self.touch("/etc/version").ok();
+        self.write_file("/etc/version", b"TrustOS v0.9.4\n").ok();
         
         
-        self.touch("/documents/readme.md").bq();
-        self.ns("/documents/readme.md", b"# My Documents\n\nWelcome to TrustOS! Place your files here.\n").bq();
-        self.touch("/documents/notes.txt").bq();
-        self.ns("/documents/notes.txt", b"My notes\n--------\n").bq();
+        self.touch("/documents/readme.md").ok();
+        self.write_file("/documents/readme.md", b"# My Documents\n\nWelcome to TrustOS! Place your files here.\n").ok();
+        self.touch("/documents/notes.txt").ok();
+        self.write_file("/documents/notes.txt", b"My notes\n--------\n").ok();
         
-        self.touch("/downloads/example.txt").bq();
-        self.ns("/downloads/example.txt", b"Downloaded files will appear here.\n").bq();
+        self.touch("/downloads/example.txt").ok();
+        self.write_file("/downloads/example.txt", b"Downloaded files will appear here.\n").ok();
         
-        self.touch("/music/playlist.toml").bq();
-        self.ns("/music/playlist.toml", b"[playlist]\nname = \"My Music\"\ntracks = []\n").bq();
+        self.touch("/music/playlist.toml").ok();
+        self.write_file("/music/playlist.toml", b"[playlist]\nname = \"My Music\"\ntracks = []\n").ok();
         
-        self.touch("/pictures/info.txt").bq();
-        self.ns("/pictures/info.txt", b"Screenshots and images will be saved here.\n").bq();
+        self.touch("/pictures/info.txt").ok();
+        self.write_file("/pictures/info.txt", b"Screenshots and images will be saved here.\n").ok();
     }
     
     
-    pub fn dau(&self) -> &str {
-        if self.eae.is_empty() {
+    pub fn pwd(&self) -> &str {
+        if self.current_dir.is_empty() {
             "/"
         } else {
-            &self.eae
+            &self.current_dir
         }
     }
     
     
-    pub fn fem(&mut self, path: &str) -> Result<(), FsError> {
-        let aqs = self.aqj(path);
+    pub fn cd(&mut self, path: &str) -> Result<(), FsError> {
+        let vw = self.resolve_path(path);
         
-        if let Some(bt) = self.ch.get(&aqs) {
-            if bt.kd == FileType::K {
-                self.eae = aqs;
+        if let Some(entry) = self.entries.get(&vw) {
+            if entry.file_type == FileType::Directory {
+                self.current_dir = vw;
                 Ok(())
             } else {
-                Err(FsError::Adm)
+                Err(FsError::NotADirectory)
             }
         } else {
-            Err(FsError::N)
+            Err(FsError::NotFound)
         }
     }
     
     
-    pub fn awb(&self, path: Option<&str>) -> Result<Vec<(String, FileType, usize)>, FsError> {
-        let hge = match path {
-            Some(ai) => self.aqj(ai),
+    pub fn ls(&self, path: Option<&str>) -> Result<Vec<(String, FileType, usize)>, FsError> {
+        let dnd = match path {
+            Some(aa) => self.resolve_path(aa),
             None => {
-                if self.eae.is_empty() {
+                if self.current_dir.is_empty() {
                     String::from("/")
                 } else {
-                    self.eae.clone()
+                    self.current_dir.clone()
                 }
             }
         };
         
-        if let Some(bt) = self.ch.get(&hge) {
-            if bt.kd != FileType::K {
-                return Err(FsError::Adm);
+        if let Some(entry) = self.entries.get(&dnd) {
+            if entry.file_type != FileType::Directory {
+                return Err(FsError::NotADirectory);
             }
             
-            let mut pj: Vec<(String, FileType, usize)> = Vec::new();
-            for khm in &bt.zf {
-                let enk = if hge == "/" {
-                    format!("/{}", khm)
+            let mut items: Vec<(String, FileType, usize)> = Vec::new();
+            for child_name in &entry.children {
+                let bxx = if dnd == "/" {
+                    format!("/{}", child_name)
                 } else {
-                    format!("{}/{}", hge, khm)
+                    format!("{}/{}", dnd, child_name)
                 };
                 
-                if let Some(aeh) = self.ch.get(&enk) {
-                    let aw = if aeh.kd == FileType::Es {
-                        aeh.ca.len()
+                if let Some(pd) = self.entries.get(&bxx) {
+                    let size = if pd.file_type == FileType::File {
+                        pd.content.len()
                     } else {
-                        aeh.zf.len()
+                        pd.children.len()
                     };
-                    pj.push((khm.clone(), aeh.kd, aw));
+                    items.push((child_name.clone(), pd.file_type, size));
                 }
             }
-            Ok(pj)
+            Ok(items)
         } else {
-            Err(FsError::N)
+            Err(FsError::NotFound)
         }
     }
     
     
-    pub fn ut(&mut self, path: &str) -> Result<(), FsError> {
-        let aqs = self.aqj(path);
+    pub fn mkdir(&mut self, path: &str) -> Result<(), FsError> {
+        let vw = self.resolve_path(path);
         
-        if self.ch.bgm(&aqs) {
-            return Err(FsError::Ri);
+        if self.entries.contains_key(&vw) {
+            return Err(FsError::AlreadyExists);
         }
         
         
-        let bhs = self.bhs(&aqs);
-        let j = self.fdf(&aqs);
+        let parent_path = self.parent_path(&vw);
+        let name = self.basename(&vw);
         
         
-        if let Some(tu) = self.ch.ds(&bhs) {
-            if tu.kd != FileType::K {
-                return Err(FsError::Adm);
+        if let Some(parent) = self.entries.get_mut(&parent_path) {
+            if parent.file_type != FileType::Directory {
+                return Err(FsError::NotADirectory);
             }
-            tu.zf.push(j.clone());
+            parent.children.push(name.clone());
         } else {
-            return Err(FsError::N);
+            return Err(FsError::NotFound);
         }
         
         
-        self.ch.insert(aqs, FsEntry::cll(&j));
+        self.entries.insert(vw, FsEntry::auj(&name));
         Ok(())
     }
     
     
     pub fn touch(&mut self, path: &str) -> Result<(), FsError> {
-        let aqs = self.aqj(path);
+        let vw = self.resolve_path(path);
         
-        if self.ch.bgm(&aqs) {
+        if self.entries.contains_key(&vw) {
             
-            if let Some(bt) = self.ch.ds(&aqs) {
-                bt.euw = crate::logger::lh();
+            if let Some(entry) = self.entries.get_mut(&vw) {
+                entry.modified_at = crate::logger::eg();
             }
             return Ok(());
         }
         
         
-        let bhs = self.bhs(&aqs);
-        let j = self.fdf(&aqs);
+        let parent_path = self.parent_path(&vw);
+        let name = self.basename(&vw);
         
         
-        if let Some(tu) = self.ch.ds(&bhs) {
-            if tu.kd != FileType::K {
-                return Err(FsError::Adm);
+        if let Some(parent) = self.entries.get_mut(&parent_path) {
+            if parent.file_type != FileType::Directory {
+                return Err(FsError::NotADirectory);
             }
-            tu.zf.push(j.clone());
+            parent.children.push(name.clone());
         } else {
-            return Err(FsError::N);
+            return Err(FsError::NotFound);
         }
         
         
-        self.ch.insert(aqs, FsEntry::gnm(&j));
+        self.entries.insert(vw, FsEntry::dbp(&name));
         Ok(())
     }
     
     
-    pub fn hb(&mut self, path: &str) -> Result<(), FsError> {
-        let aqs = self.aqj(path);
+    pub fn rm(&mut self, path: &str) -> Result<(), FsError> {
+        let vw = self.resolve_path(path);
         
-        if aqs == "/" {
-            return Err(FsError::Jt);
+        if vw == "/" {
+            return Err(FsError::PermissionDenied);
         }
         
         
-        if let Some(bt) = self.ch.get(&aqs) {
+        if let Some(entry) = self.entries.get(&vw) {
             
-            if bt.kd == FileType::K && !bt.zf.is_empty() {
-                return Err(FsError::Bep);
+            if entry.file_type == FileType::Directory && !entry.children.is_empty() {
+                return Err(FsError::DirectoryNotEmpty);
             }
         } else {
-            return Err(FsError::N);
+            return Err(FsError::NotFound);
         }
         
         
-        let bhs = self.bhs(&aqs);
-        let j = self.fdf(&aqs);
+        let parent_path = self.parent_path(&vw);
+        let name = self.basename(&vw);
         
-        if let Some(tu) = self.ch.ds(&bhs) {
-            tu.zf.ajm(|r| r != &j);
+        if let Some(parent) = self.entries.get_mut(&parent_path) {
+            parent.children.retain(|c| c != &name);
         }
         
         
-        self.ch.remove(&aqs);
+        self.entries.remove(&vw);
         Ok(())
     }
     
     
-    pub fn mq(&self, path: &str) -> Result<&[u8], FsError> {
-        let aqs = self.aqj(path);
+    pub fn read_file(&self, path: &str) -> Result<&[u8], FsError> {
+        let vw = self.resolve_path(path);
         
-        if let Some(bt) = self.ch.get(&aqs) {
-            if bt.kd == FileType::Es {
-                Ok(&bt.ca)
+        if let Some(entry) = self.entries.get(&vw) {
+            if entry.file_type == FileType::File {
+                Ok(&entry.content)
             } else {
-                Err(FsError::Aci)
+                Err(FsError::IsADirectory)
             }
         } else {
-            Err(FsError::N)
+            Err(FsError::NotFound)
         }
     }
     
     
-    pub fn ns(&mut self, path: &str, ca: &[u8]) -> Result<(), FsError> {
-        let aqs = self.aqj(path);
+    pub fn write_file(&mut self, path: &str, content: &[u8]) -> Result<(), FsError> {
+        let vw = self.resolve_path(path);
         
-        if let Some(bt) = self.ch.ds(&aqs) {
-            if bt.kd == FileType::Es {
-                if ca.len() > AZP_ {
-                    return Err(FsError::Asi);
+        if let Some(entry) = self.entries.get_mut(&vw) {
+            if entry.file_type == FileType::File {
+                if content.len() > BBR_ {
+                    return Err(FsError::FileTooLarge);
                 }
-                bt.ca = ca.ip();
-                bt.euw = crate::logger::lh();
+                entry.content = content.to_vec();
+                entry.modified_at = crate::logger::eg();
                 Ok(())
             } else {
-                Err(FsError::Aci)
+                Err(FsError::IsADirectory)
             }
         } else {
-            Err(FsError::N)
+            Err(FsError::NotFound)
         }
     }
     
     
-    pub fn ijw(&mut self, path: &str, ca: &[u8]) -> Result<(), FsError> {
-        let aqs = self.aqj(path);
+    pub fn append_file(&mut self, path: &str, content: &[u8]) -> Result<(), FsError> {
+        let vw = self.resolve_path(path);
         
-        if let Some(bt) = self.ch.ds(&aqs) {
-            if bt.kd == FileType::Es {
-                if bt.ca.len() + ca.len() > AZP_ {
-                    return Err(FsError::Asi);
+        if let Some(entry) = self.entries.get_mut(&vw) {
+            if entry.file_type == FileType::File {
+                if entry.content.len() + content.len() > BBR_ {
+                    return Err(FsError::FileTooLarge);
                 }
-                bt.ca.bk(ca);
-                bt.euw = crate::logger::lh();
+                entry.content.extend_from_slice(content);
+                entry.modified_at = crate::logger::eg();
                 Ok(())
             } else {
-                Err(FsError::Aci)
+                Err(FsError::IsADirectory)
             }
         } else {
-            Err(FsError::N)
+            Err(FsError::NotFound)
         }
     }
     
     
-    pub fn bza(&mut self, cy: &str, cs: &str) -> Result<(), FsError> {
-        let ibl = self.aqj(cy);
-        let hhc = self.aqj(cs);
+    pub fn cp(&mut self, src: &str, dst: &str) -> Result<(), FsError> {
+        let eag = self.resolve_path(src);
+        let dnv = self.resolve_path(dst);
         
         
-        let ca = {
-            if let Some(bt) = self.ch.get(&ibl) {
-                if bt.kd != FileType::Es {
-                    return Err(FsError::Aci);
+        let content = {
+            if let Some(entry) = self.entries.get(&eag) {
+                if entry.file_type != FileType::File {
+                    return Err(FsError::IsADirectory);
                 }
-                bt.ca.clone()
+                entry.content.clone()
             } else {
-                return Err(FsError::N);
+                return Err(FsError::NotFound);
             }
         };
         
         
-        if !self.ch.bgm(&hhc) {
-            self.touch(cs)?;
+        if !self.entries.contains_key(&dnv) {
+            self.touch(dst)?;
         }
         
         
-        self.ns(cs, &ca)
+        self.write_file(dst, &content)
     }
     
     
-    pub fn euz(&mut self, cy: &str, cs: &str) -> Result<(), FsError> {
-        self.bza(cy, cs)?;
-        self.hb(cy)?;
+    pub fn mv(&mut self, src: &str, dst: &str) -> Result<(), FsError> {
+        self.cp(src, dst)?;
+        self.rm(src)?;
         Ok(())
     }
     
     
-    pub fn aja(&self, path: &str) -> bool {
-        let aqs = self.aqj(path);
-        self.ch.bgm(&aqs)
+    pub fn exists(&self, path: &str) -> bool {
+        let vw = self.resolve_path(path);
+        self.entries.contains_key(&vw)
     }
     
     
-    pub fn hm(&self, path: &str) -> Result<&FsEntry, FsError> {
-        let aqs = self.aqj(path);
-        self.ch.get(&aqs).ok_or(FsError::N)
+    pub fn stat(&self, path: &str) -> Result<&FsEntry, FsError> {
+        let vw = self.resolve_path(path);
+        self.entries.get(&vw).ok_or(FsError::NotFound)
     }
     
     
-    fn aqj(&self, path: &str) -> String {
-        if path.cj('/') {
-            self.bro(path)
-        } else if path == "~" || path.cj("~/") {
-            let kr = if path == "~" { "" } else { &path[2..] };
-            if kr.is_empty() {
+    fn resolve_path(&self, path: &str) -> String {
+        if path.starts_with('/') {
+            self.normalize_path(path)
+        } else if path == "~" || path.starts_with("~/") {
+            let ef = if path == "~" { "" } else { &path[2..] };
+            if ef.is_empty() {
                 String::from("/home")
             } else {
-                format!("/home/{}", kr)
+                format!("/home/{}", ef)
             }
         } else {
-            let jv = if self.eae.is_empty() { "/" } else { &self.eae };
-            if jv == "/" {
-                self.bro(&format!("/{}", path))
+            let cwd = if self.current_dir.is_empty() { "/" } else { &self.current_dir };
+            if cwd == "/" {
+                self.normalize_path(&format!("/{}", path))
             } else {
-                self.bro(&format!("{}/{}", jv, path))
+                self.normalize_path(&format!("{}/{}", cwd, path))
             }
         }
     }
     
     
-    fn bro(&self, path: &str) -> String {
-        let mut ek: Vec<&str> = Vec::new();
+    fn normalize_path(&self, path: &str) -> String {
+        let mut au: Vec<&str> = Vec::new();
         
-        for vu in path.adk('/') {
-            match vu {
+        for jn in path.split('/') {
+            match jn {
                 "" | "." => continue,
-                ".." => { ek.pop(); }
-                _ => ek.push(vu),
+                ".." => { au.pop(); }
+                _ => au.push(jn),
             }
         }
         
-        if ek.is_empty() {
+        if au.is_empty() {
             String::from("/")
         } else {
-            format!("/{}", ek.rr("/"))
+            format!("/{}", au.join("/"))
         }
     }
     
     
-    fn bhs(&self, path: &str) -> String {
-        if let Some(u) = path.bhx('/') {
-            if u == 0 {
+    fn parent_path(&self, path: &str) -> String {
+        if let Some(pos) = path.rfind('/') {
+            if pos == 0 {
                 String::from("/")
             } else {
-                String::from(&path[..u])
+                String::from(&path[..pos])
             }
         } else {
             String::from("/")
@@ -421,9 +421,9 @@ impl RamFs {
     }
     
     
-    fn fdf(&self, path: &str) -> String {
-        if let Some(u) = path.bhx('/') {
-            String::from(&path[u + 1..])
+    fn basename(&self, path: &str) -> String {
+        if let Some(pos) = path.rfind('/') {
+            String::from(&path[pos + 1..])
         } else {
             String::from(path)
         }
@@ -433,49 +433,49 @@ impl RamFs {
 
 #[derive(Debug, Clone, Copy)]
 pub enum FsError {
-    N,
-    Ri,
-    Adm,
-    Aci,
-    Bep,
-    Asi,
-    Jt,
+    NotFound,
+    AlreadyExists,
+    NotADirectory,
+    IsADirectory,
+    DirectoryNotEmpty,
+    FileTooLarge,
+    PermissionDenied,
 }
 
 impl FsError {
     pub fn as_str(&self) -> &'static str {
         match self {
-            FsError::N => "not found",
-            FsError::Ri => "already exists",
-            FsError::Adm => "not a directory",
-            FsError::Aci => "is a directory",
-            FsError::Bep => "directory not empty",
-            FsError::Asi => "file too large",
-            FsError::Jt => "permission denied",
+            FsError::NotFound => "not found",
+            FsError::AlreadyExists => "already exists",
+            FsError::NotADirectory => "not a directory",
+            FsError::IsADirectory => "is a directory",
+            FsError::DirectoryNotEmpty => "directory not empty",
+            FsError::FileTooLarge => "file too large",
+            FsError::PermissionDenied => "permission denied",
         }
     }
 }
 
 
-static Arx: Mutex<Option<RamFs>> = Mutex::new(None);
+static Sc: Mutex<Option<RamFs>> = Mutex::new(None);
 
 
 pub fn init() {
     let mut fs = RamFs::new();
     fs.init();
-    *Arx.lock() = Some(fs);
+    *Sc.lock() = Some(fs);
 }
 
 
-pub fn ky() -> bool {
-    Arx.lock().is_some()
+pub fn is_initialized() -> bool {
+    Sc.lock().is_some()
 }
 
 
-pub fn fh<G, Ac>(bb: G) -> Ac
+pub fn bh<F, U>(f: F) -> U
 where
-    G: FnOnce(&mut RamFs) -> Ac,
+    F: FnOnce(&mut RamFs) -> U,
 {
-    let mut adb = Arx.lock();
-    bb(adb.as_mut().expect("Filesystem not initialized"))
+    let mut jg = Sc.lock();
+    f(jg.as_mut().expect("Filesystem not initialized"))
 }

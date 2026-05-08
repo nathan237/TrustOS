@@ -412,8 +412,10 @@ pub fn init(mmio_base: u64) {
     crate::log!("[SDMA] SDMA0 VERSION={:#010X}", sdma_ver);
 
     // Step 2: Allocate ring buffers (one per engine, 16KB each, page-aligned)
-    let ring_layout = alloc::alloc::Layout::from_size_align(RING_SIZE_BYTES, 4096)
-        .expect("sdma ring layout");
+    let ring_layout = match alloc::alloc::Layout::from_size_align(RING_SIZE_BYTES, 4096) {
+        Ok(l) => l,
+        Err(_) => { crate::log!("[SDMA] ERROR: invalid ring layout"); return; }
+    };
 
     let ring0_virt = unsafe { alloc::alloc::alloc_zeroed(ring_layout) } as u64;
     let ring0_phys = memory::virt_to_phys(ring0_virt).unwrap_or(0);
@@ -432,8 +434,10 @@ pub fn init(mmio_base: u64) {
         ring1_virt, ring1_phys, RING_SIZE_DWORDS);
 
     // Step 3: Allocate status buffer (fence + RPTR writeback, 4KB)
-    let status_layout = alloc::alloc::Layout::from_size_align(STATUS_BUFFER_SIZE, 4096)
-        .expect("sdma status layout");
+    let status_layout = match alloc::alloc::Layout::from_size_align(STATUS_BUFFER_SIZE, 4096) {
+        Ok(l) => l,
+        Err(_) => { crate::log!("[SDMA] ERROR: invalid status layout"); return; }
+    };
     let status_virt = unsafe { alloc::alloc::alloc_zeroed(status_layout) } as u64;
     let status_phys = memory::virt_to_phys(status_virt).unwrap_or(0);
 
@@ -444,8 +448,10 @@ pub fn init(mmio_base: u64) {
     crate::log!("[SDMA] Status: virt={:#X} phys={:#X}", status_virt, status_phys);
 
     // Step 4: Allocate staging buffer (CPU→GPU data staging, 256KB)
-    let staging_layout = alloc::alloc::Layout::from_size_align(STAGING_BUFFER_SIZE, 4096)
-        .expect("sdma staging layout");
+    let staging_layout = match alloc::alloc::Layout::from_size_align(STAGING_BUFFER_SIZE, 4096) {
+        Ok(l) => l,
+        Err(_) => { crate::log!("[SDMA] ERROR: invalid staging layout"); return; }
+    };
     let staging_virt = unsafe { alloc::alloc::alloc_zeroed(staging_layout) } as u64;
     let staging_phys = memory::virt_to_phys(staging_virt).unwrap_or(0);
 
@@ -767,7 +773,10 @@ pub fn self_test() -> (u32, u32) {
     let mut fail = 0u32;
 
     // Allocate two test buffers (4KB each)
-    let layout = alloc::alloc::Layout::from_size_align(4096, 4096).expect("test layout");
+    let layout = match alloc::alloc::Layout::from_size_align(4096, 4096) {
+        Ok(l) => l,
+        Err(_) => { crate::serial_println!("[SDMA-TEST] FAIL: invalid test layout"); return (0, 1); }
+    };
     let buf_a_virt = unsafe { alloc::alloc::alloc_zeroed(layout) } as u64;
     let buf_b_virt = unsafe { alloc::alloc::alloc_zeroed(layout) } as u64;
     let buf_a_phys = memory::virt_to_phys(buf_a_virt).unwrap_or(0);

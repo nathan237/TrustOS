@@ -146,11 +146,11 @@ pub struct AppleAic {
     /// MMIO base address (physical)
     base: u64,
     /// Number of hardware IRQs supported
-    number_irqs: u32,
+    num_irqs: u32,
     /// AIC version (0=v1, 1=v2)
     version: u32,
     /// Number of CPU cores
-    number_cpus: u32,
+    num_cpus: u32,
     /// Per-IRQ configuration
     irqs: [IrqConfig; MAXIMUM_IRQS],
     /// Total interrupts handled
@@ -174,17 +174,17 @@ static AIC_INITIALIZED: AtomicBool = AtomicBool::new(false);
 #[inline(always)]
 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe fn aic_read32(base: u64, offset: usize) -> u32 {
-    let address = (base as usize + offset) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+    let addr = (base as usize + offset) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u32;
-    ptr::read_volatile(address)
+    ptr::read_volatile(addr)
 }
 
 /// Write a 32-bit AIC register
 #[inline(always)]
 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe fn aic_write32(base: u64, offset: usize, value: u32) {
-    let address = (base as usize + offset) as *mut u32;
-    ptr::write_volatile(address, value);
+unsafe fn aic_write32(base: u64, offset: usize, val: u32) {
+    let addr = (base as usize + offset) as *mut u32;
+    ptr::write_volatile(addr, val);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -200,27 +200,27 @@ unsafe fn aic_write32(base: u64, offset: usize, value: u32) {
 /// # Safety
 /// Caller must ensure `base` points to valid AIC MMIO.
 pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe fn init(base: u64, number_cpus: u32) -> Result<(), &'static str> {
+unsafe fn init(base: u64, num_cpus: u32) -> Result<(), &'static str> {
     crate::serial_println!("[AIC] Initializing Apple Interrupt Controller @ {:#x}", base);
     
     // Read AIC_INFO to discover capabilities
-    let information = aic_read32(base, AIC_INFORMATION);
-    let number_irqs = information & AIC_INFORMATION_NUMBER_INTERRUPT_REQUEST_MASK;
-    let version = (information >> AIC_INFORMATION_VERSION_SHIFT) & 0xF;
+    let info = aic_read32(base, AIC_INFORMATION);
+    let num_irqs = info & AIC_INFORMATION_NUMBER_INTERRUPT_REQUEST_MASK;
+    let version = (info >> AIC_INFORMATION_VERSION_SHIFT) & 0xF;
     
     crate::serial_println!("[AIC] Version: AICv{}", version + 1);
-    crate::serial_println!("[AIC] Hardware IRQs: {}", number_irqs);
-    crate::serial_println!("[AIC] CPUs: {}", number_cpus);
+    crate::serial_println!("[AIC] Hardware IRQs: {}", num_irqs);
+    crate::serial_println!("[AIC] CPUs: {}", num_cpus);
     
-    if number_irqs == 0 || number_irqs as usize > MAXIMUM_IRQS {
+    if num_irqs == 0 || num_irqs as usize > MAXIMUM_IRQS {
         return Err("AIC: invalid IRQ count from hardware");
     }
     
     let mut aic = AppleAic {
         base,
-        number_irqs,
+        num_irqs,
         version,
-        number_cpus,
+        num_cpus,
         irqs: [IrqConfig::default(); MAXIMUM_IRQS],
         total_irqs: 0,
         total_ipis: 0,
@@ -228,13 +228,13 @@ unsafe fn init(base: u64, number_cpus: u32) -> Result<(), &'static str> {
     };
     
     // Mask all IRQs initially
-    let number_words = (number_irqs + 31) / 32;
+    let number_words = (num_irqs + 31) / 32;
     for w in 0..number_words as usize {
         aic_write32(base, AIC_MASK_SET_BASE + w * 4, 0xFFFFFFFF);
     }
     
     // Route all IRQs to CPU 0 initially
-    for i in 0..number_irqs as usize {
+    for i in 0..num_irqs as usize {
         aic_write32(base, AIC_TARGET_CPU_BASE + i * 4, 1 << 0); // CPU0
     }
     
@@ -255,7 +255,7 @@ pub fn register_interrupt_request(irq: u32, name: &'static str, handler: Interru
     let mut guard = AIC.lock();
     let aic = guard.as_mut().ok_or("AIC not initialized")?;
     
-    if irq >= aic.number_irqs {
+    if irq >= aic.num_irqs {
         return Err("IRQ number out of range");
     }
     
@@ -272,7 +272,7 @@ pub fn enable_interrupt_request(irq: u32) -> Result<(), &'static str> {
     let mut guard = AIC.lock();
     let aic = guard.as_mut().ok_or("AIC not initialized")?;
     
-    if irq >= aic.number_irqs {
+    if irq >= aic.num_irqs {
         return Err("IRQ number out of range");
     }
     
@@ -293,7 +293,7 @@ pub fn disable_interrupt_request(irq: u32) -> Result<(), &'static str> {
     let mut guard = AIC.lock();
     let aic = guard.as_mut().ok_or("AIC not initialized")?;
     
-    if irq >= aic.number_irqs {
+    if irq >= aic.num_irqs {
         return Err("IRQ number out of range");
     }
     
@@ -314,10 +314,10 @@ pub fn set_interrupt_request_target(irq: u32, cpu: u32) -> Result<(), &'static s
     let mut guard = AIC.lock();
     let aic = guard.as_mut().ok_or("AIC not initialized")?;
     
-    if irq >= aic.number_irqs {
+    if irq >= aic.num_irqs {
         return Err("IRQ number out of range");
     }
-    if cpu >= aic.number_cpus {
+    if cpu >= aic.num_cpus {
         return Err("CPU number out of range");
     }
     
@@ -335,7 +335,7 @@ pub fn send_ipi(target_cpu: u32) -> Result<(), &'static str> {
     let guard = AIC.lock();
     let aic = guard.as_ref().ok_or("AIC not initialized")?;
     
-    if target_cpu >= aic.number_cpus {
+    if target_cpu >= aic.num_cpus {
         return Err("Target CPU out of range");
     }
     
@@ -447,13 +447,13 @@ pub fn status_summary() -> String {
 match guard.as_ref() {
         None => String::from("AIC: not initialized"),
         Some(aic) => {
-            let enabled = aic.irqs[..aic.number_irqs as usize]
+            let enabled = aic.irqs[..aic.num_irqs as usize]
                 .iter()
                 .filter(|c| c.enabled)
                 .count();
             format!(
                 "AIC v{} @ {:#x}: {} IRQs ({} enabled), {} total handled, {} IPIs",
-                aic.version + 1, aic.base, aic.number_irqs,
+                aic.version + 1, aic.base, aic.num_irqs,
                 enabled, aic.total_irqs, aic.total_ipis
             )
         }
@@ -468,7 +468,7 @@ match guard.as_ref() {
         None => Vec::new(),
         Some(aic) => {
             let mut result = Vec::new();
-            for i in 0..aic.number_irqs as usize {
+            for i in 0..aic.num_irqs as usize {
                 let config = &aic.irqs[i];
                 if config.handler.is_some() || config.enabled {
                     result.push((

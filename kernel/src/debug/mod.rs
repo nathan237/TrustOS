@@ -50,7 +50,7 @@ pub fn last_post_code() -> u8 {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /// Max boot checkpoints (fixed-size to avoid heap allocation before heap init)
-const MAX_CHECKPOINTS: usize = 32;
+const MAX_CHECKPOINTS: usize = 64;
 
 /// Boot checkpoint log (fixed array + count — no heap needed)
 struct CheckpointLog {
@@ -98,6 +98,12 @@ pub const POST_HEAP:            u8 = 0x41;
 pub const POST_PAGING:          u8 = 0x42;
 pub const POST_PCI:             u8 = 0x50;
 pub const POST_DISK:            u8 = 0x51;
+pub const POST_GPU_PCI:         u8 = 0x52;
+pub const POST_GPU_MMIO:        u8 = 0x53;
+pub const POST_GPU_PSP:         u8 = 0x54;
+pub const POST_GPU_FW:          u8 = 0x55;
+pub const POST_GPU_SDMA:        u8 = 0x56;
+pub const POST_GPU_READY:       u8 = 0x57;
 pub const POST_NETWORK:         u8 = 0x60;
 pub const POST_VFS:             u8 = 0x70;
 pub const POST_PROCESS:         u8 = 0x80;
@@ -791,6 +797,7 @@ pub fn watchdog_enable(timeout_ms: u64) {
 /// Pet the watchdog (call from main loop or timer)
 pub fn watchdog_pet() {
     WATCHDOG_COUNTER.store(0, Ordering::Relaxed);
+    tco_watchdog_pet(); // Also pet hardware watchdog
 }
 
 /// Called from timer interrupt — increments counter and checks for timeout
@@ -801,14 +808,353 @@ pub fn watchdog_tick(ms_elapsed: u64) {
     let count = WATCHDOG_COUNTER.fetch_add(ms_elapsed, Ordering::Relaxed) + ms_elapsed;
     if count >= WATCHDOG_THRESHOLD.load(Ordering::Relaxed) {
         WATCHDOG_COUNTER.store(0, Ordering::Relaxed);
-        crate::serial_println!("!!! WATCHDOG TIMEOUT !!! System may be hung ({} ms)", count);
-        // Don't panic — just warn. The system might recover.
+        crate::serial_println!("!!! WATCHDOG TIMEOUT !!! Rebooting ({} ms)", count);
+        #[cfg(feature = "netconsole")]
+        {
+            crate::debug::netconsole::send_line("[WATCHDOG] Timeout: system will reboot");
+        }
+        crate::acpi::reboot();
     }
 }
 
 pub fn watchdog_disable() {
     WATCHDOG_ENABLED.store(false, Ordering::Relaxed);
     crate::serial_println!("[WATCHDOG] Disabled");
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 14. TCO HARDWARE WATCHDOG — survives triple faults, deadlocks, NMI storms
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// Intel 100-series PCH (H110/B150/H170/Z170 — Skylake):
+//   TCO base = SMBus PCI 00:1F.4 config offset 0x50 (TCOBASE)
+//   TCO enable = SMBus PCI 00:1F.4 config offset 0x54 bit 8 (TCO_BASE_EN)
+//   NO_REBOOT = PMC PCI 00:1F.2 BAR0 + 0x1024, bit 1
+//
+// Fallback for older PCH: ACPI_BASE + 0x60
+
+static TCO_BASE: AtomicU64 = AtomicU64::new(0);
+static TCO_ARMED: AtomicBool = AtomicBool::new(false);
+
+/// Set on panic — stops TCO petting so hardware watchdog fires and reboots.
+static PANICKED: AtomicBool = AtomicBool::new(false);
+
+/// Mark the system as panicked. TCO will no longer be pet → automatic reboot.
+pub fn set_panicked() {
+    PANICKED.store(true, Ordering::SeqCst);
+}
+
+/// Check if the system has panicked.
+pub fn is_panicked() -> bool {
+    PANICKED.load(Ordering::Relaxed)
+}
+
+/// Initialize and arm the TCO hardware watchdog.
+/// `timeout_600ms_steps` = number of 0.6s steps (e.g. 10 = 6 seconds, 50 = 30 seconds)
+pub fn tco_watchdog_init(timeout_600ms_steps: u16) {
+    #[cfg(target_arch = "x86_64")]
+    {
+        let timeout = if timeout_600ms_steps == 0 { 10 } else { timeout_600ms_steps.min(1023) };
+
+        // ── Discover TCO base ──
+        // Method 1 (Skylake+): SMBus PCI 00:1F.4, TCOBASE at offset 0x50
+        let smbus_vid = crate::pci::config_read16(0, 0x1F, 4, 0x00);
+        let mut tco_base: u16 = 0;
+
+        if smbus_vid != 0xFFFF {
+            let tcobase_raw = crate::pci::config_read(0, 0x1F, 4, 0x50);
+            let tcoctl_raw = crate::pci::config_read(0, 0x1F, 4, 0x54);
+            let tco_from_smbus = (tcobase_raw & 0xFFE0) as u16;
+            crate::serial_println!("[TCO] SMBus VID={:#06X} TCOBASE_RAW={:#010X} TCOCTL={:#010X}",
+                smbus_vid, tcobase_raw, tcoctl_raw);
+
+            if tco_from_smbus != 0 && tco_from_smbus != 0xFFE0 {
+                tco_base = tco_from_smbus;
+                // Enable TCO base if not enabled (TCOCTL bit 8)
+                if tcoctl_raw & (1 << 8) == 0 {
+                    crate::pci::config_write(0, 0x1F, 4, 0x54, tcoctl_raw | (1 << 8));
+                    crate::serial_println!("[TCO] Enabled TCO_BASE_EN in TCOCTL");
+                }
+            }
+        }
+
+        // Method 2 (fallback): ACPI_BASE + 0x60
+        if tco_base == 0 {
+            let pmbase_raw = crate::pci::config_read(0, 0x1F, 0, 0x40);
+            let acpi_base = (pmbase_raw & 0xFF80) as u16;
+            if acpi_base != 0 && acpi_base != 0xFF80 {
+                tco_base = acpi_base + 0x60;
+                crate::serial_println!("[TCO] Fallback: ACPI_BASE={:#06X} TCO_BASE={:#06X}", acpi_base, tco_base);
+            }
+        }
+
+        if tco_base == 0 {
+            crate::serial_println!("[TCO] Cannot find TCO base — abort");
+            return;
+        }
+        crate::serial_println!("[TCO] Using TCO_BASE={:#06X}", tco_base);
+
+        // ── Clear NO_REBOOT bit + disable SMI TCO capture ──
+        let pmc_vid = crate::pci::config_read16(0, 0x1F, 2, 0x00);
+        if pmc_vid != 0xFFFF {
+            // Enable Memory Space decode on PMC if not already enabled
+            let pmc_cmd = crate::pci::config_read16(0, 0x1F, 2, 0x04);
+            if pmc_cmd & 0x02 == 0 {
+                crate::pci::config_write16(0, 0x1F, 2, 0x04, pmc_cmd | 0x02);
+                crate::serial_println!("[TCO] PMC CMD {:#06X} -> enabled Memory Space", pmc_cmd);
+            }
+
+            let pmc_bar_raw = crate::pci::config_read(0, 0x1F, 2, 0x10);
+            let pmc_bar = (pmc_bar_raw & 0xFFFF_F000) as u64;
+            crate::serial_println!("[TCO] PMC VID={:#06X} BAR={:#010X}", pmc_vid, pmc_bar_raw);
+
+            // Clear NO_REBOOT — on 200-series (Union Point), it's at PWRMBASE+0x08, bit 1
+            if pmc_bar != 0 && pmc_bar != 0xFFFF_F000 {
+                match crate::memory::map_mmio(pmc_bar, 0x1000) {
+                    Ok(virt) => {
+                        let addr = virt + 0x08;
+                        unsafe {
+                            let ptr = addr as *mut u32;
+                            let val = core::ptr::read_volatile(ptr);
+                            let no_reboot = (val >> 1) & 1;
+                            crate::serial_println!("[TCO] PWRMBASE+0x08={:#010X} NO_REBOOT(bit1)={}",
+                                val, no_reboot);
+                            if no_reboot != 0 {
+                                core::ptr::write_volatile(ptr, val & !(1u32 << 1));
+                                let rb = core::ptr::read_volatile(ptr);
+                                crate::serial_println!("[TCO] Cleared NO_REBOOT -> {:#010X}", rb);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        crate::serial_println!("[TCO] Cannot map PMC: {}", e);
+                    }
+                }
+            }
+
+            // Read ACPI_BASE from PMC (00:1F.2 offset 0x40), NOT from LPC
+            let abase_raw = crate::pci::config_read(0, 0x1F, 2, 0x40);
+            let acpi_base = (abase_raw & 0xFF80) as u16;
+            if acpi_base != 0 && acpi_base != 0xFF80 {
+                let smi_en_port = acpi_base + 0x30;
+                unsafe {
+                    let smi_en = port_read32(smi_en_port);
+                    let tco_en = (smi_en >> 13) & 1;
+                    crate::serial_println!("[TCO] SMI_EN@{:#06X}={:#010X} TCO_EN(bit13)={}",
+                        smi_en_port, smi_en, tco_en);
+                    if tco_en != 0 {
+                        // Clear TCO_EN (bit 13) so TCO timeout causes reboot, not SMI
+                        let new_smi = smi_en & 0xFFFF_DFFF;
+                        port_write32(smi_en_port, new_smi);
+                        let rb = port_read32(smi_en_port);
+                        crate::serial_println!("[TCO] Cleared TCO_EN -> SMI_EN={:#010X}", rb);
+                    }
+                }
+            } else {
+                crate::serial_println!("[TCO] ACPI_BASE from PMC invalid: {:#X}", abase_raw);
+            }
+        } else {
+            crate::serial_println!("[TCO] No PMC at 00:1F.2");
+        }
+
+        unsafe {
+            // ── Read pre-config state for diagnostics ──
+            let pre_cnt = port_read16(tco_base + 0x08);
+            let pre_sts1 = port_read16(tco_base + 0x04);
+            let pre_sts2 = port_read16(tco_base + 0x06);
+            let pre_tmr = port_read16(tco_base + 0x12);
+            crate::serial_println!("[TCO] PRE: CNT={:#06X} STS1={:#06X} STS2={:#06X} TMR={:#06X}",
+                pre_cnt, pre_sts1, pre_sts2, pre_tmr);
+
+            // Step 1: Halt timer while configuring
+            port_write16(tco_base + 0x08, pre_cnt | (1 << 11)); // TMR_HLT=1
+
+            // Step 2: Clear TCO status bits (write 1 to clear)
+            port_write16(tco_base + 0x04, 0xFFFF); // TCO1_STS
+            port_write16(tco_base + 0x06, 0xFFFF); // TCO2_STS (clears SECOND_TO_STS)
+
+            // Step 3: Set timeout value
+            let tco_tmr = port_read16(tco_base + 0x12);
+            let new_tmr = (tco_tmr & 0xFC00) | timeout;
+            port_write16(tco_base + 0x12, new_tmr);
+
+            // Step 4: Reload timer
+            port_write16(tco_base + 0x00, 1); // TCO_RLD — any write reloads
+
+            // Step 5: Un-halt = START the timer
+            let tco1_cnt2 = port_read16(tco_base + 0x08);
+            port_write16(tco_base + 0x08, tco1_cnt2 & !(1 << 11)); // TMR_HLT=0
+
+            // Verify
+            let post_cnt = port_read16(tco_base + 0x08);
+            let post_tmr = port_read16(tco_base + 0x12);
+            let post_sts1 = port_read16(tco_base + 0x04);
+            let post_sts2 = port_read16(tco_base + 0x06);
+            let halted = (post_cnt >> 11) & 1;
+            crate::serial_println!("[TCO] POST: CNT={:#06X}(halt={}) TMR={:#06X} STS1={:#06X} STS2={:#06X}",
+                post_cnt, halted, post_tmr, post_sts1, post_sts2);
+
+            if halted != 0 {
+                crate::serial_println!("[TCO] WARNING: Timer still halted! TCO locked by BIOS?");
+            }
+        }
+
+        TCO_BASE.store(tco_base as u64, Ordering::Relaxed);
+        TCO_ARMED.store(true, Ordering::Relaxed);
+        crate::serial_println!("[TCO] Hardware watchdog ARMED — timeout={} x 0.6s = {:.1}s",
+            timeout, timeout as f64 * 0.6);
+    }
+}
+
+/// Pet (reload) the TCO hardware watchdog. Call this regularly!
+pub fn tco_watchdog_pet() {
+    #[cfg(target_arch = "x86_64")]
+    {
+        if PANICKED.load(Ordering::Relaxed) { return; } // Let TCO fire → reboot
+        if !TCO_ARMED.load(Ordering::Relaxed) { return; }
+        let base = TCO_BASE.load(Ordering::Relaxed) as u16;
+        if base == 0 { return; }
+        unsafe {
+            // Clear SECOND_TO_STS (TCO2_STS bit 1) to prevent double-timeout reboot
+            let sts2 = port_read16(base + 0x06);
+            if sts2 & (1 << 1) != 0 {
+                port_write16(base + 0x06, 1 << 1); // Clear SECOND_TO_STS
+            }
+            // Reload timer
+            port_write16(base + 0x00, 1);
+        }
+    }
+}
+
+/// Disable TCO watchdog (halt the timer)
+pub fn tco_watchdog_disable() {
+    #[cfg(target_arch = "x86_64")]
+    {
+        let base = TCO_BASE.load(Ordering::Relaxed) as u16;
+        if base == 0 { return; }
+        unsafe {
+            let tco1_cnt = port_read16(base + 0x08);
+            port_write16(base + 0x08, tco1_cnt | (1 << 11)); // TMR_HLT=1
+        }
+        TCO_ARMED.store(false, Ordering::Relaxed);
+        crate::serial_println!("[TCO] Hardware watchdog DISABLED");
+    }
+}
+
+/// Full TCO diagnostic dump (for shell command)
+pub fn tco_watchdog_diag() {
+    #[cfg(target_arch = "x86_64")]
+    {
+        // SMBus device info
+        let smbus_vid = crate::pci::config_read16(0, 0x1F, 4, 0x00);
+        let smbus_did = crate::pci::config_read16(0, 0x1F, 4, 0x02);
+        let tcobase_raw = crate::pci::config_read(0, 0x1F, 4, 0x50);
+        let tcoctl_raw = crate::pci::config_read(0, 0x1F, 4, 0x54);
+        crate::println!("SMBus: VID={:#06X} DID={:#06X}", smbus_vid, smbus_did);
+        crate::println!("TCOBASE_RAW={:#010X} TCOCTL={:#010X} EN={}",
+            tcobase_raw, tcoctl_raw, (tcoctl_raw >> 8) & 1);
+
+        // LPC/ACPI base
+        let pmbase = crate::pci::config_read(0, 0x1F, 0, 0x40);
+        crate::println!("LPC PMBASE={:#010X} (ACPI_BASE={:#06X})", pmbase, (pmbase & 0xFF80) as u16);
+
+        // PMC device
+        let pmc_vid = crate::pci::config_read16(0, 0x1F, 2, 0x00);
+        let pmc_did = crate::pci::config_read16(0, 0x1F, 2, 0x02);
+        let pmc_cmd = crate::pci::config_read16(0, 0x1F, 2, 0x04);
+        let pmc_bar = crate::pci::config_read(0, 0x1F, 2, 0x10);
+        crate::println!("PMC: VID={:#06X} DID={:#06X} CMD={:#06X} BAR={:#010X} MEM_EN={}",
+            pmc_vid, pmc_did, pmc_cmd, pmc_bar, (pmc_cmd >> 1) & 1);
+
+        // Current TCO state
+        let base = TCO_BASE.load(Ordering::Relaxed) as u16;
+        let armed = TCO_ARMED.load(Ordering::Relaxed);
+        crate::println!("TCO_BASE={:#06X} ARMED={}", base, armed);
+
+        if base != 0 {
+            unsafe {
+                let rld = port_read16(base + 0x00);
+                let sts1 = port_read16(base + 0x04);
+                let sts2 = port_read16(base + 0x06);
+                let cnt = port_read16(base + 0x08);
+                let tmr = port_read16(base + 0x12);
+                let halted = (cnt >> 11) & 1;
+                crate::println!("RLD={:#06X} STS1={:#06X} STS2={:#06X} CNT={:#06X} TMR={:#06X}",
+                    rld, sts1, sts2, cnt, tmr);
+                crate::println!("Halted={} Timeout={}x0.6s={:.1}s 2ndTO={}",
+                    halted, tmr & 0x3FF, (tmr & 0x3FF) as f64 * 0.6, (sts2 >> 1) & 1);
+            }
+        }
+
+        // NO_REBOOT at PWRMBASE+0x08, bit 1 (200-series Union Point)
+        if pmc_bar != 0 && pmc_bar != 0xFFFF_FFFF {
+            let pmc_phys = (pmc_bar & 0xFFFF_F000) as u64;
+            match crate::memory::map_mmio(pmc_phys, 0x1000) {
+                Ok(virt) => {
+                    unsafe {
+                        let val = core::ptr::read_volatile((virt + 0x08) as *const u32);
+                        crate::println!("PWRMBASE+0x08={:#010X} NO_REBOOT(bit1)={}", val, (val >> 1) & 1);
+                    }
+                }
+                Err(e) => {
+                    crate::println!("PMC MMIO map failed: {}", e);
+                }
+            }
+        }
+
+        // SMI_EN from ACPI_BASE (PMC 00:1F.2 offset 0x40) + 0x30
+        let abase_raw = crate::pci::config_read(0, 0x1F, 2, 0x40);
+        let acpi_base = (abase_raw & 0xFF80) as u16;
+        if acpi_base != 0 && acpi_base != 0xFF80 {
+            unsafe {
+                let smi_en = port_read32(acpi_base + 0x30);
+                crate::println!("ACPI_BASE={:#06X} SMI_EN={:#010X} TCO_EN(bit13)={}",
+                    acpi_base, smi_en, (smi_en >> 13) & 1);
+            }
+        }
+    }
+}
+
+/// Read TCO status (for diagnostics)
+pub fn tco_watchdog_status() -> (bool, u16, u16, u16) {
+    #[cfg(target_arch = "x86_64")]
+    {
+        let base = TCO_BASE.load(Ordering::Relaxed) as u16;
+        if base == 0 { return (false, 0, 0, 0); }
+        unsafe {
+            let armed = TCO_ARMED.load(Ordering::Relaxed);
+            let sts1 = port_read16(base + 0x04);
+            let sts2 = port_read16(base + 0x06);
+            let cnt = port_read16(base + 0x08);
+            (armed, sts1, sts2, cnt)
+        }
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    { (false, 0, 0, 0) }
+}
+
+#[cfg(target_arch = "x86_64")]
+unsafe fn port_read16(port: u16) -> u16 {
+    let val: u16;
+    core::arch::asm!("in ax, dx", out("ax") val, in("dx") port, options(nostack, preserves_flags));
+    val
+}
+
+#[cfg(target_arch = "x86_64")]
+unsafe fn port_write16(port: u16, val: u16) {
+    core::arch::asm!("out dx, ax", in("dx") port, in("ax") val, options(nostack, preserves_flags));
+}
+
+#[cfg(target_arch = "x86_64")]
+unsafe fn port_read32(port: u16) -> u32 {
+    let val: u32;
+    core::arch::asm!("in eax, dx", out("eax") val, in("dx") port, options(nostack, preserves_flags));
+    val
+}
+
+#[cfg(target_arch = "x86_64")]
+unsafe fn port_write32(port: u16, val: u32) {
+    core::arch::asm!("out dx, eax", in("dx") port, in("eax") val, options(nostack, preserves_flags));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

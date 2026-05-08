@@ -16,7 +16,7 @@ pub struct HostInformation {
     pub mac: Option<[u8; 6]>,
     pub hostname: Option<String>,
     pub ttl: Option<u8>,
-    pub rtt_mouse: u64,
+    pub rtt_ms: u64,
     pub os_hint: &'static str,
 }
 
@@ -36,7 +36,7 @@ match ttl {
 ///
 /// Sends ARP requests to every IP in the subnet, then collects replies.
 /// This is the fastest method for local network discovery.
-pub fn arp_sweep(subnet_start: [u8; 4], subnet_end: [u8; 4], timeout_mouse: u32) -> Vec<HostInformation> {
+pub fn arp_sweep(subnet_start: [u8; 4], subnet_end: [u8; 4], timeout_ms: u32) -> Vec<HostInformation> {
     let mut hosts = Vec::new();
 
     let start_u32 = u32::from_be_bytes(subnet_start);
@@ -61,7 +61,7 @@ pub fn arp_sweep(subnet_start: [u8; 4], subnet_end: [u8; 4], timeout_mouse: u32)
 loop {
         crate::netstack::poll();
 
-        if crate::logger::get_ticks().saturating_sub(start) > timeout_mouse as u64 {
+        if crate::logger::get_ticks().saturating_sub(start) > timeout_ms as u64 {
             break;
         }
         spins = spins.wrapping_add(1);
@@ -80,7 +80,7 @@ loop {
                 mac: Some(mac),
                 hostname: None,
                 ttl: None,
-                rtt_mouse: 0,
+                rtt_ms: 0,
                 os_hint: "Unknown",
             });
         }
@@ -91,7 +91,7 @@ loop {
 }
 
 /// ARP sweep the local /24 subnet
-pub fn arp_sweep_local(timeout_mouse: u32) -> Vec<HostInformation> {
+pub fn arp_sweep_local(timeout_ms: u32) -> Vec<HostInformation> {
     let (our_ip, subnet, _) = // Pattern matching — Rust's exhaustive branching construct.
 match crate::network::get_ipv4_config() {
         Some((ip, mask, gw)) => (*ip.as_bytes(), *mask.as_bytes(), gw),
@@ -112,36 +112,36 @@ match crate::network::get_ipv4_config() {
         (our_ip[3] | !subnet[3]).wrapping_sub(1), // Skip broadcast
     ];
 
-    arp_sweep(net_start, net_end, timeout_mouse)
+    arp_sweep(net_start, net_end, timeout_ms)
 }
 
 /// ICMP ping sweep: discover hosts via ping
 ///
 /// Slower than ARP but works across subnets/routers.
-pub fn ping_sweep(targets: &[[u8; 4]], timeout_mouse: u32) -> Vec<HostInformation> {
+pub fn ping_sweep(targets: &[[u8; 4]], timeout_ms: u32) -> Vec<HostInformation> {
     let mut hosts = Vec::new();
 
     crate::netstack::icmp::clear_responses();
 
     for (i, &target) in targets.iter().enumerate() {
-        let sequence = (i + 1) as u16;
+        let seq = (i + 1) as u16;
         let start = crate::logger::get_ticks();
 
-        if crate::netstack::icmp::send_echo_request(target, 0x5CA2, sequence).is_err() {
+        if crate::netstack::icmp::send_echo_request(target, 0x5CA2, seq).is_err() {
             continue;
         }
 
                 // Pattern matching — Rust's exhaustive branching construct.
-match crate::netstack::icmp::wait_for_response(sequence, timeout_mouse) {
-            Some(response) if response.success => {
-                let rtt_mouse = crate::logger::get_ticks().saturating_sub(start);
+match crate::netstack::icmp::wait_for_response(seq, timeout_ms) {
+            Some(resp) if resp.success => {
+                let rtt_ms = crate::logger::get_ticks().saturating_sub(start);
                 hosts.push(HostInformation {
                     ip: target,
                     mac: crate::netstack::arp::resolve(target),
                     hostname: None,
-                    ttl: Some(response.ttl),
-                    rtt_mouse,
-                    os_hint: guess_os_from_ttl(response.ttl),
+                    ttl: Some(resp.ttl),
+                    rtt_ms,
+                    os_hint: guess_os_from_ttl(resp.ttl),
                 });
             }
             _ => {} // Host down or filtered
@@ -152,28 +152,28 @@ match crate::netstack::icmp::wait_for_response(sequence, timeout_mouse) {
 }
 
 /// Ping sweep a /24 subnet
-pub fn ping_sweep_subnet(base_ip: [u8; 4], timeout_per_host_mouse: u32) -> Vec<HostInformation> {
+pub fn ping_sweep_subnet(base_ip: [u8; 4], timeout_per_host_ms: u32) -> Vec<HostInformation> {
     let mut targets = Vec::new();
     for i in 1..=254u8 {
         targets.push([base_ip[0], base_ip[1], base_ip[2], i]);
     }
-    ping_sweep(&targets, timeout_per_host_mouse)
+    ping_sweep(&targets, timeout_per_host_ms)
 }
 
 /// Combined discovery: ARP sweep (fast) + Ping sweep (for remaining)
-pub fn full_discovery(timeout_mouse: u32) -> Vec<HostInformation> {
+pub fn full_discovery(timeout_ms: u32) -> Vec<HostInformation> {
     // Start with ARP sweep (fast, local only)
-    let mut hosts = arp_sweep_local(timeout_mouse);
+    let mut hosts = arp_sweep_local(timeout_ms);
 
     // Add ping data for each found host (get TTL/OS info)
     for host in &mut hosts {
         crate::netstack::icmp::clear_responses();
         let start = crate::logger::get_ticks();
         if crate::netstack::icmp::send_echo_request(host.ip, 0x5CA1, 1).is_ok() {
-            if let Some(response) = crate::netstack::icmp::wait_for_response(1, 500) {
-                host.ttl = Some(response.ttl);
-                host.rtt_mouse = crate::logger::get_ticks().saturating_sub(start);
-                host.os_hint = guess_os_from_ttl(response.ttl);
+            if let Some(resp) = crate::netstack::icmp::wait_for_response(1, 500) {
+                host.ttl = Some(resp.ttl);
+                host.rtt_ms = crate::logger::get_ticks().saturating_sub(start);
+                host.os_hint = guess_os_from_ttl(resp.ttl);
             }
         }
     }

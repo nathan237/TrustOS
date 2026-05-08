@@ -68,8 +68,8 @@ fn use_avx2_fma() -> bool {
 fn dot_simd(a: &[f32], b: &[f32], len: usize) -> f32 {
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-        let ap = a.as_pointer();
-        let bp = b.as_pointer();
+        let ap = a.as_ptr();
+        let bp = b.as_ptr();
 
         let mut acc0 = _mm_setzero_ps();
         let mut acc1 = _mm_setzero_ps();
@@ -142,8 +142,8 @@ unsafe {
 fn dot_neon(a: &[f32], b: &[f32], len: usize) -> f32 {
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-        let ap = a.as_pointer();
-        let bp = b.as_pointer();
+        let ap = a.as_ptr();
+        let bp = b.as_ptr();
 
         let mut acc0 = vdupq_n_f32(0.0);
         let mut acc1 = vdupq_n_f32(0.0);
@@ -263,12 +263,12 @@ unsafe { matvec_transpose_avx2(out, w, y, cols, rows); }
         return;
     }
     // Zero output first
-    for v in out[..cols].iterator_mut() { *v = 0.0; }
+    for v in out[..cols].iter_mut() { *v = 0.0; }
 
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-        let wp = w.as_pointer();
-        let op = out.as_mut_pointer();
+        let wp = w.as_ptr();
+        let op = out.as_mut_ptr();
 
         for r in 0..rows {
             let yr = y[r];
@@ -324,11 +324,11 @@ unsafe {
 #[cfg(target_arch = "aarch64")]
 // Fonction publique — appelable depuis d'autres modules.
 pub fn matvec_transpose(out: &mut [f32], w: &[f32], y: &[f32], cols: usize, rows: usize) {
-    for v in out[..cols].iterator_mut() { *v = 0.0; }
+    for v in out[..cols].iter_mut() { *v = 0.0; }
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-        let wp = w.as_pointer();
-        let op = out.as_mut_pointer();
+        let wp = w.as_ptr();
+        let op = out.as_mut_ptr();
         for r in 0..rows {
             let yr = y[r];
             if yr == 0.0 { continue; }
@@ -372,7 +372,7 @@ unsafe {
 #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
 // Fonction publique — appelable depuis d'autres modules.
 pub fn matvec_transpose(out: &mut [f32], w: &[f32], y: &[f32], cols: usize, rows: usize) {
-    for v in out[..cols].iterator_mut() { *v = 0.0; }
+    for v in out[..cols].iter_mut() { *v = 0.0; }
     for r in 0..rows {
         let base = r * cols;
         for c in 0..cols {
@@ -393,8 +393,8 @@ unsafe { matvec_transpose_accum_avx2(out, w, y, cols, rows); }
     }
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-        let wp = w.as_pointer();
-        let op = out.as_mut_pointer();
+        let wp = w.as_ptr();
+        let op = out.as_mut_ptr();
 
         for r in 0..rows {
             let yr = y[r];
@@ -449,8 +449,8 @@ unsafe {
 pub fn matvec_transpose_accum(out: &mut [f32], w: &[f32], y: &[f32], cols: usize, rows: usize) {
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-        let wp = w.as_pointer();
-        let op = out.as_mut_pointer();
+        let wp = w.as_ptr();
+        let op = out.as_mut_ptr();
         for r in 0..rows {
             let yr = y[r];
             if yr == 0.0 { continue; }
@@ -519,8 +519,8 @@ unsafe { outer_product_accum_avx2(dw, dy, x, cols, rows); }
     }
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-        let dwp = dw.as_mut_pointer();
-        let xp = x.as_pointer();
+        let dwp = dw.as_mut_ptr();
+        let xp = x.as_ptr();
 
         for r in 0..rows {
             let dyr = dy[r];
@@ -578,8 +578,8 @@ unsafe {
 pub fn outer_product_accum(dw: &mut [f32], dy: &[f32], x: &[f32], cols: usize, rows: usize) {
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-        let dwp = dw.as_mut_pointer();
-        let xp = x.as_pointer();
+        let dwp = dw.as_mut_ptr();
+        let xp = x.as_ptr();
         for r in 0..rows {
             let dyr = dy[r];
             if dyr == 0.0 { continue; }
@@ -647,7 +647,7 @@ pub fn rmsnorm(out: &mut [f32], x: &[f32], weight: &[f32]) -> f32 {
     // SSE2 sum of squares
     let ss = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-        let xp = x.as_pointer();
+        let xp = x.as_ptr();
         let mut acc0 = _mm_setzero_ps();
         let mut acc1 = _mm_setzero_ps();
 
@@ -689,9 +689,9 @@ unsafe {
 
     // SSE2 normalize + scale
     unsafe {
-        let xp = x.as_pointer();
-        let wp = weight.as_pointer();
-        let op = out.as_mut_pointer();
+        let xp = x.as_ptr();
+        let wp = weight.as_ptr();
+        let op = out.as_mut_ptr();
         let inv_rms_vec = _mm_set1_ps(inv_rms);
 
         let chunks4 = n / 4;
@@ -720,7 +720,7 @@ pub fn rmsnorm(out: &mut [f32], x: &[f32], weight: &[f32]) -> f32 {
     let n = x.len();
     let ss = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-        let xp = x.as_pointer();
+        let xp = x.as_ptr();
         let mut acc0 = vdupq_n_f32(0.0);
         let mut acc1 = vdupq_n_f32(0.0);
         let chunks8 = n / 8;
@@ -743,9 +743,9 @@ unsafe {
     let inv_rms = 1.0 / rms;
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-        let xp = x.as_pointer();
-        let wp = weight.as_pointer();
-        let op = out.as_mut_pointer();
+        let xp = x.as_ptr();
+        let wp = weight.as_ptr();
+        let op = out.as_mut_ptr();
         let inv_rms_vec = vdupq_n_f32(inv_rms);
         let chunks4 = n / 4;
         for i in 0..chunks4 {
@@ -793,9 +793,9 @@ unsafe { vec_add_avx2(out, a, b, len); }
     }
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-        let ap = a.as_pointer();
-        let bp = b.as_pointer();
-        let op = out.as_mut_pointer();
+        let ap = a.as_ptr();
+        let bp = b.as_ptr();
+        let op = out.as_mut_ptr();
 
         let chunks4 = len / 4;
         for i in 0..chunks4 {
@@ -817,9 +817,9 @@ unsafe {
 pub fn vec_add(out: &mut [f32], a: &[f32], b: &[f32], len: usize) {
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-        let ap = a.as_pointer();
-        let bp = b.as_pointer();
-        let op = out.as_mut_pointer();
+        let ap = a.as_ptr();
+        let bp = b.as_ptr();
+        let op = out.as_mut_ptr();
         let chunks4 = len / 4;
         for i in 0..chunks4 {
             let off = i * 4;
@@ -851,8 +851,8 @@ unsafe { vec_add_inplace_avx2(a, b, len); }
     }
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-        let ap = a.as_mut_pointer();
-        let bp = b.as_pointer();
+        let ap = a.as_mut_ptr();
+        let bp = b.as_ptr();
 
         let chunks4 = len / 4;
         for i in 0..chunks4 {
@@ -874,8 +874,8 @@ unsafe {
 pub fn vec_add_inplace(a: &mut [f32], b: &[f32], len: usize) {
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-        let ap = a.as_mut_pointer();
-        let bp = b.as_pointer();
+        let ap = a.as_mut_ptr();
+        let bp = b.as_ptr();
         let chunks4 = len / 4;
         for i in 0..chunks4 {
             let off = i * 4;
@@ -907,7 +907,7 @@ unsafe { vec_scale_avx2(a, scalar, len); }
     }
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-        let ap = a.as_mut_pointer();
+        let ap = a.as_mut_ptr();
         let sv = _mm_set1_ps(scalar);
 
         let chunks4 = len / 4;
@@ -929,7 +929,7 @@ unsafe {
 pub fn vec_scale(a: &mut [f32], scalar: f32, len: usize) {
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-        let ap = a.as_mut_pointer();
+        let ap = a.as_mut_ptr();
         let sv = vdupq_n_f32(scalar);
         let chunks4 = len / 4;
         for i in 0..chunks4 {
@@ -969,8 +969,8 @@ pub fn vec_scale(a: &mut [f32], scalar: f32, len: usize) {
 #[inline]
 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe fn dot_avx2(a: &[f32], b: &[f32], len: usize) -> f32 {
-    let ap = a.as_pointer();
-    let bp = b.as_pointer();
+    let ap = a.as_ptr();
+    let bp = b.as_ptr();
 
     let mut acc0 = _mm256_setzero_ps();
     let mut acc1 = _mm256_setzero_ps();
@@ -1048,10 +1048,10 @@ unsafe fn matvec_avx2(out: &mut [f32], w: &[f32], x: &[f32], cols: usize, rows: 
 #[target_feature(enable = "avx2,fma")]
 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe fn matvec_transpose_avx2(out: &mut [f32], w: &[f32], y: &[f32], cols: usize, rows: usize) {
-    for v in out[..cols].iterator_mut() { *v = 0.0; }
+    for v in out[..cols].iter_mut() { *v = 0.0; }
 
-    let wp = w.as_pointer();
-    let op = out.as_mut_pointer();
+    let wp = w.as_ptr();
+    let op = out.as_mut_ptr();
 
     for r in 0..rows {
         let yr = y[r];
@@ -1107,8 +1107,8 @@ unsafe fn matvec_transpose_avx2(out: &mut [f32], w: &[f32], y: &[f32], cols: usi
 #[target_feature(enable = "avx2,fma")]
 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe fn matvec_transpose_accum_avx2(out: &mut [f32], w: &[f32], y: &[f32], cols: usize, rows: usize) {
-    let wp = w.as_pointer();
-    let op = out.as_mut_pointer();
+    let wp = w.as_ptr();
+    let op = out.as_mut_ptr();
 
     for r in 0..rows {
         let yr = y[r];
@@ -1161,8 +1161,8 @@ unsafe fn matvec_transpose_accum_avx2(out: &mut [f32], w: &[f32], y: &[f32], col
 #[target_feature(enable = "avx2,fma")]
 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe fn outer_product_accum_avx2(dw: &mut [f32], dy: &[f32], x: &[f32], cols: usize, rows: usize) {
-    let dwp = dw.as_mut_pointer();
-    let xp = x.as_pointer();
+    let dwp = dw.as_mut_ptr();
+    let xp = x.as_ptr();
 
     for r in 0..rows {
         let dyr = dy[r];
@@ -1219,7 +1219,7 @@ unsafe fn outer_product_accum_avx2(dw: &mut [f32], dy: &[f32], x: &[f32], cols: 
 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe fn rmsnorm_avx2(out: &mut [f32], x: &[f32], weight: &[f32]) -> f32 {
     let n = x.len();
-    let xp = x.as_pointer();
+    let xp = x.as_ptr();
 
     // AVX2 sum of squares with FMA
     let mut acc0 = _mm256_setzero_ps();
@@ -1263,8 +1263,8 @@ unsafe fn rmsnorm_avx2(out: &mut [f32], x: &[f32], weight: &[f32]) -> f32 {
     let inv_rms = 1.0 / rms;
 
     // AVX2 normalize + scale
-    let wp = weight.as_pointer();
-    let op = out.as_mut_pointer();
+    let wp = weight.as_ptr();
+    let op = out.as_mut_ptr();
     let inv_rms_vec = _mm256_set1_ps(inv_rms);
 
     let chunks8 = n / 8;
@@ -1290,9 +1290,9 @@ unsafe fn rmsnorm_avx2(out: &mut [f32], x: &[f32], weight: &[f32]) -> f32 {
 #[target_feature(enable = "avx2")]
 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe fn vec_add_avx2(out: &mut [f32], a: &[f32], b: &[f32], len: usize) {
-    let ap = a.as_pointer();
-    let bp = b.as_pointer();
-    let op = out.as_mut_pointer();
+    let ap = a.as_ptr();
+    let bp = b.as_ptr();
+    let op = out.as_mut_ptr();
 
     let chunks8 = len / 8;
     for i in 0..chunks8 {
@@ -1313,8 +1313,8 @@ unsafe fn vec_add_avx2(out: &mut [f32], a: &[f32], b: &[f32], len: usize) {
 #[target_feature(enable = "avx2")]
 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe fn vec_add_inplace_avx2(a: &mut [f32], b: &[f32], len: usize) {
-    let ap = a.as_mut_pointer();
-    let bp = b.as_pointer();
+    let ap = a.as_mut_ptr();
+    let bp = b.as_ptr();
 
     let chunks8 = len / 8;
     for i in 0..chunks8 {
@@ -1335,7 +1335,7 @@ unsafe fn vec_add_inplace_avx2(a: &mut [f32], b: &[f32], len: usize) {
 #[target_feature(enable = "avx2")]
 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe fn vec_scale_avx2(a: &mut [f32], scalar: f32, len: usize) {
-    let ap = a.as_mut_pointer();
+    let ap = a.as_mut_ptr();
     let sv = _mm256_set1_ps(scalar);
 
     let chunks8 = len / 8;

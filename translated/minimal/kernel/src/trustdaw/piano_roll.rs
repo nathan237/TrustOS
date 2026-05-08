@@ -10,7 +10,7 @@
 use alloc::format;
 use alloc::string::String;
 use super::track::{Track, Note};
-use super::{AE_, Hi};
+use super::{AF_, Df};
 use core::sync::atomic::Ordering;
 
 
@@ -18,36 +18,36 @@ use core::sync::atomic::Ordering;
 
 
 
-const BRD_: u32 = 1;
+const BTY_: u32 = 1;
 
-const BRC_: u32 = 8;
+const BTX_: u32 = 8;
 
-const UK_: u32 = 48;
+const VT_: u32 = 48;
 
-const QE_: u32 = 24;
+const RB_: u32 = 24;
 
-const AFP_: u8 = 24;  
+const AHJ_: u8 = 24;  
 
-const CFK_: u8 = 96;  
+const CIT_: u8 = 96;  
 
 
 mod colors {
-    pub const Apk: u32 = 0x1A1A2E;
-    pub const BYG_: u32 = 0x2A2A3E;
-    pub const BYF_: u32 = 0x3A3A4E;
-    pub const ATV_: u32 = 0x5A5A6E;
-    pub const DBL_: u32 = 0x222236;
-    pub const BLE_: u32 = 0x181828;
-    pub const CDC_: u32 = 0x101020;
-    pub const ADT_: u32 = 0xCCCCDD;
-    pub const ADS_: u32 = 0x333344;
-    pub const CDD_: u32 = 0x888899;
-    pub const CYD_: u32 = 0x151530;
-    pub const CYE_: u32 = 0xAAAABB;
-    pub const DVE_: u32 = 0xFFFFFF;
-    pub const Bok: u32 = 0xFF4444;
-    pub const Cle: u32 = 0x4488FF;
-    pub const Bdg: u32 = 0x44FF44;
+    pub const Rb: u32 = 0x1A1A2E;
+    pub const CBM_: u32 = 0x2A2A3E;
+    pub const CBL_: u32 = 0x3A3A4E;
+    pub const AVZ_: u32 = 0x5A5A6E;
+    pub const DFD_: u32 = 0x222236;
+    pub const BNW_: u32 = 0x181828;
+    pub const CGL_: u32 = 0x101020;
+    pub const AFN_: u32 = 0xCCCCDD;
+    pub const AFM_: u32 = 0x333344;
+    pub const CGM_: u32 = 0x888899;
+    pub const DBV_: u32 = 0x151530;
+    pub const DBW_: u32 = 0xAAAABB;
+    pub const DYV_: u32 = 0xFFFFFF;
+    pub const Acd: u32 = 0xFF4444;
+    pub const Aot: u32 = 0x4488FF;
+    pub const Xd: u32 = 0x44FF44;
 }
 
 
@@ -57,403 +57,403 @@ mod colors {
 
 pub struct PianoRoll {
     
-    pub b: u32,
+    pub x: u32,
     
-    pub c: u32,
+    pub y: u32,
     
-    pub z: u32,
+    pub width: u32,
     
-    pub ac: u32,
+    pub height: u32,
     
-    pub drl: u32,
+    pub h_zoom: u32,
     
-    pub clf: u32,
+    pub key_height: u32,
     
-    pub cms: u32,
+    pub scroll_x: u32,
     
-    pub ug: u8,
+    pub scroll_y: u8,
     
-    pub phr: Option<usize>,
+    pub selected_note: Option<usize>,
     
-    pub dpl: u32,
-    pub dfm: u8,
+    pub cursor_tick: u32,
+    pub cursor_pitch: u8,
     
-    pub ecg: u32,
+    pub grid_snap: u32,
 }
 
 impl PianoRoll {
     
-    pub fn new(b: u32, c: u32, z: u32, ac: u32) -> Self {
+    pub fn new(x: u32, y: u32, width: u32, height: u32) -> Self {
         Self {
-            b,
-            c,
-            z,
-            ac,
-            drl: BRD_,
-            clf: BRC_,
-            cms: 0,
-            ug: AFP_,
-            phr: None,
-            dpl: 0,
-            dfm: 60, 
-            ecg: AE_ / 4, 
+            x,
+            y,
+            width,
+            height,
+            h_zoom: BTY_,
+            key_height: BTX_,
+            scroll_x: 0,
+            scroll_y: AHJ_,
+            selected_note: None,
+            cursor_tick: 0,
+            cursor_pitch: 60, 
+            grid_snap: AF_ / 4, 
         }
     }
 
     
-    pub fn po(&self, track: &Track, vje: u32) {
-        let gz = crate::framebuffer::AB_.load(Ordering::Relaxed) as u32;
-        let kc = crate::framebuffer::Z_.load(Ordering::Relaxed) as u32;
-        if gz == 0 || kc == 0 { return; }
+    pub fn draw(&self, track: &Track, playhead_tick: u32) {
+        let fb_w = crate::framebuffer::X_.load(Ordering::Relaxed) as u32;
+        let fb_h = crate::framebuffer::W_.load(Ordering::Relaxed) as u32;
+        if fb_w == 0 || fb_h == 0 { return; }
 
         
-        let d = self.z.v(gz - self.b);
-        let i = self.ac.v(kc - self.c);
-        let bqw = self.b + UK_;
-        let gip = self.c + QE_;
-        let auk = d.ao(UK_);
-        let bhc = i.ao(QE_);
+        let w = self.width.min(fb_w - self.x);
+        let h = self.height.min(fb_h - self.y);
+        let aju = self.x + VT_;
+        let cza = self.y + RB_;
+        let grid_w = w.saturating_sub(VT_);
+        let grid_h = h.saturating_sub(RB_);
 
         
-        crate::framebuffer::ah(self.b, self.c, d, i, colors::Apk);
+        crate::framebuffer::fill_rect(self.x, self.y, w, h, colors::Rb);
 
         
-        self.sdr(bhc);
+        self.draw_key_labels(grid_h);
 
         
-        self.fgx(bqw, gip, auk, bhc);
+        self.draw_grid(aju, cza, grid_w, grid_h);
 
         
-        self.sgf(bqw, auk);
+        self.draw_timeline(aju, grid_w);
 
         
-        self.sel(track, bqw, gip, auk, bhc);
+        self.draw_notes(track, aju, cza, grid_w, grid_h);
 
         
-        self.sey(vje, bqw, gip, auk, bhc);
+        self.draw_playhead(playhead_tick, aju, cza, grid_w, grid_h);
 
         
-        self.dqf(bqw, gip, auk, bhc);
+        self.draw_cursor(aju, cza, grid_w, grid_h);
     }
 
     
-    fn sdr(&self, bhc: u32) {
-        let dis = self.b;
-        let fmn = self.c + QE_;
-        let dmz = bhc / self.clf;
+    fn draw_key_labels(&self, grid_h: u32) {
+        let bhn = self.x;
+        let clw = self.y + RB_;
+        let bjw = grid_h / self.key_height;
 
-        crate::framebuffer::ah(dis, fmn, UK_, bhc, colors::CDC_);
+        crate::framebuffer::fill_rect(bhn, clw, VT_, grid_h, colors::CGL_);
 
-        for a in 0..dmz {
-            let jb = self.ovx(a);
-            if jb > 127 { continue; }
+        for i in 0..bjw {
+            let pitch = self.pitch_from_row(i);
+            if pitch > 127 { continue; }
 
-            let afy = fmn + (dmz - 1 - a) * self.clf;
-            let din = ofr(jb);
-
-            
-            let ube = if din { colors::ADS_ } else { colors::ADT_ };
-            crate::framebuffer::ah(dis, afy, UK_ - 2, self.clf, ube);
+            let mf = clw + (bjw - 1 - i) * self.key_height;
+            let bhi = ihs(pitch);
 
             
-            if jb % 12 == 0 || jb == self.dfm {
-                let j = crate::audio::tables::dtf(jb);
-                let bvq = crate::audio::tables::efk(jb);
-                let cu = format!("{}{}", j, bvq);
-                crate::framebuffer::cb(&cu, dis + 4, afy + 1, colors::CDD_);
+            let mvo = if bhi { colors::AFM_ } else { colors::AFN_ };
+            crate::framebuffer::fill_rect(bhn, mf, VT_ - 2, self.key_height, mvo);
+
+            
+            if pitch % 12 == 0 || pitch == self.cursor_pitch {
+                let name = crate::audio::tables::bno(pitch);
+                let amb = crate::audio::tables::bui(pitch);
+                let label = format!("{}{}", name, amb);
+                crate::framebuffer::draw_text(&label, bhn + 4, mf + 1, colors::CGM_);
             }
         }
     }
 
     
-    fn fgx(&self, qz: u32, ub: u32, nt: u32, bjz: u32) {
-        let dmz = bjz / self.clf;
+    fn draw_grid(&self, hc: u32, jh: u32, fz: u32, agl: u32) {
+        let bjw = agl / self.key_height;
 
         
-        for a in 0..dmz {
-            let jb = self.ovx(a);
-            if jb > 127 { continue; }
+        for i in 0..bjw {
+            let pitch = self.pitch_from_row(i);
+            if pitch > 127 { continue; }
 
-            let afy = ub + (dmz - 1 - a) * self.clf;
-            let wak = if ofr(jb) {
-                colors::BLE_
+            let mf = jh + (bjw - 1 - i) * self.key_height;
+            let oij = if ihs(pitch) {
+                colors::BNW_
             } else {
-                colors::DBL_
+                colors::DFD_
             };
-            crate::framebuffer::ah(qz, afy, nt, self.clf, wak);
+            crate::framebuffer::fill_rect(hc, mf, fz, self.key_height, oij);
 
             
-            crate::framebuffer::zs(qz, afy, nt, colors::BYG_);
+            crate::framebuffer::mn(hc, mf, fz, colors::CBM_);
         }
 
         
-        let cij = AE_ * 4; 
-        let mkr = nt / self.drl.am(1);
+        let ask = AF_ * 4; 
+        let gyr = fz / self.h_zoom.max(1);
 
-        let vb = self.cms;
-        let ckg = vb + mkr;
+        let start_tick = self.scroll_x;
+        let end_tick = start_tick + gyr;
 
         
-        let kwj = (vb / cij) * cij;
-        let mut or = kwj;
-        while or <= ckg {
-            let y = self.fwq(or, qz);
-            if y >= qz && y < qz + nt {
-                crate::framebuffer::axt(y, ub, bjz, colors::ATV_);
+        let fxc = (start_tick / ask) * ask;
+        let mut tick = fxc;
+        while tick <= end_tick {
+            let p = self.tick_to_pixel(tick, hc);
+            if p >= hc && p < hc + fz {
+                crate::framebuffer::zv(p, jh, agl, colors::AVZ_);
             }
-            or += cij;
+            tick += ask;
         }
 
         
-        let sty = (vb / AE_) * AE_;
-        or = sty;
-        while or <= ckg {
-            if or % cij != 0 { 
-                let y = self.fwq(or, qz);
-                if y >= qz && y < qz + nt {
-                    crate::framebuffer::axt(y, ub, bjz, colors::BYF_);
+        let lwf = (start_tick / AF_) * AF_;
+        tick = lwf;
+        while tick <= end_tick {
+            if tick % ask != 0 { 
+                let p = self.tick_to_pixel(tick, hc);
+                if p >= hc && p < hc + fz {
+                    crate::framebuffer::zv(p, jh, agl, colors::CBL_);
                 }
             }
-            or += AE_;
+            tick += AF_;
         }
     }
 
     
-    fn sgf(&self, qz: u32, nt: u32) {
-        let ty = self.c;
-        crate::framebuffer::ah(self.b, ty, self.z, QE_, colors::CYD_);
+    fn draw_timeline(&self, hc: u32, fz: u32) {
+        let ty = self.y;
+        crate::framebuffer::fill_rect(self.x, ty, self.width, RB_, colors::DBV_);
 
-        let cij = AE_ * 4;
-        let mkr = nt / self.drl.am(1);
-        let vb = self.cms;
-        let ckg = vb + mkr;
+        let ask = AF_ * 4;
+        let gyr = fz / self.h_zoom.max(1);
+        let start_tick = self.scroll_x;
+        let end_tick = start_tick + gyr;
 
-        let kwj = (vb / cij) * cij;
-        let mut or = kwj;
-        while or <= ckg {
-            let qmx = or / cij + 1;
-            let y = self.fwq(or, qz);
-            if y >= qz && y < qz + nt {
-                let cu = format!("{}", qmx);
-                crate::framebuffer::cb(&cu, y + 2, ty + 4, colors::CYE_);
-                crate::framebuffer::axt(y, ty, QE_, colors::ATV_);
+        let fxc = (start_tick / ask) * ask;
+        let mut tick = fxc;
+        while tick <= end_tick {
+            let jzo = tick / ask + 1;
+            let p = self.tick_to_pixel(tick, hc);
+            if p >= hc && p < hc + fz {
+                let label = format!("{}", jzo);
+                crate::framebuffer::draw_text(&label, p + 2, ty + 4, colors::DBW_);
+                crate::framebuffer::zv(p, ty, RB_, colors::AVZ_);
             }
-            or += cij;
+            tick += ask;
         }
     }
 
     
-    fn sel(&self, track: &Track, qz: u32, ub: u32, nt: u32, bjz: u32) {
-        let dmz = bjz / self.clf;
+    fn draw_notes(&self, track: &Track, hc: u32, jh: u32, fz: u32, agl: u32) {
+        let bjw = agl / self.key_height;
 
-        for (a, jp) in track.ts.iter().cf() {
+        for (i, note) in track.notes.iter().enumerate() {
             
-            let low = self.fwq(jp.vb, qz);
-            let oqz = self.fwq(jp.ckg(), qz);
-            let uvo = (oqz.ao(low)).am(2);
+            let gjq = self.tick_to_pixel(note.start_tick, hc);
+            let iqw = self.tick_to_pixel(note.end_tick(), hc);
+            let nlg = (iqw.saturating_sub(gjq)).max(2);
 
             
-            if jp.jb < self.ug || jp.jb >= self.ug + dmz as u8 {
+            if note.pitch < self.scroll_y || note.pitch >= self.scroll_y + bjw as u8 {
                 continue;
             }
 
             
-            if oqz < qz || low > qz + nt {
+            if iqw < hc || gjq > hc + fz {
                 continue;
             }
 
-            let wam = (jp.jb - self.ug) as u32;
-            let lox = ub + (dmz - 1 - wam) * self.clf + 1;
+            let oil = (note.pitch - self.scroll_y) as u32;
+            let gjr = jh + (bjw - 1 - oil) * self.key_height + 1;
 
             
-            let irx = low.am(qz);
-            let hgy = uvo.v(qz + nt - irx);
+            let eks = gjq.max(hc);
+            let dnr = nlg.min(hc + fz - eks);
 
             
-            let kt = jp.qm as u32 * 100 / 127;
-            let uvd = jzn(track.s, kt);
+            let brightness = note.velocity as u32 * 100 / 127;
+            let nkv = fgh(track.color, brightness);
 
             
-            crate::framebuffer::ah(irx, lox, hgy, self.clf - 2, uvd);
+            crate::framebuffer::fill_rect(eks, gjr, dnr, self.key_height - 2, nkv);
 
             
-            if self.phr == Some(a) {
-                crate::framebuffer::lx(irx, lox, hgy, self.clf - 2, colors::Cle);
+            if self.selected_note == Some(i) {
+                crate::framebuffer::draw_rect(eks, gjr, dnr, self.key_height - 2, colors::Aot);
             }
 
             
-            if hgy > 24 {
-                let j = crate::audio::tables::dtf(jp.jb);
-                crate::framebuffer::cb(j, irx + 2, lox + 1, 0xFFFFFF);
-            }
-        }
-    }
-
-    
-    fn sey(&self, or: u32, qz: u32, ub: u32, nt: u32, bjz: u32) {
-        let y = self.fwq(or, qz);
-        if y >= qz && y < qz + nt {
-            crate::framebuffer::axt(y, ub, bjz, colors::Bok);
-            
-            for a in 0..4u32 {
-                crate::framebuffer::zs(y.ao(a), ub.ao(a + 1), a * 2 + 1, colors::Bok);
+            if dnr > 24 {
+                let name = crate::audio::tables::bno(note.pitch);
+                crate::framebuffer::draw_text(name, eks + 2, gjr + 1, 0xFFFFFF);
             }
         }
     }
 
     
-    fn dqf(&self, qz: u32, ub: u32, nt: u32, bjz: u32) {
-        let dmz = bjz / self.clf;
+    fn draw_playhead(&self, tick: u32, hc: u32, jh: u32, fz: u32, agl: u32) {
+        let p = self.tick_to_pixel(tick, hc);
+        if p >= hc && p < hc + fz {
+            crate::framebuffer::zv(p, jh, agl, colors::Acd);
+            
+            for i in 0..4u32 {
+                crate::framebuffer::mn(p.saturating_sub(i), jh.saturating_sub(i + 1), i * 2 + 1, colors::Acd);
+            }
+        }
+    }
+
+    
+    fn draw_cursor(&self, hc: u32, jh: u32, fz: u32, agl: u32) {
+        let bjw = agl / self.key_height;
 
         
-        let cx = self.fwq(self.dpl, qz);
-        if cx >= qz && cx < qz + nt {
-            crate::framebuffer::axt(cx, ub, bjz, colors::Bdg);
+        let cx = self.tick_to_pixel(self.cursor_tick, hc);
+        if cx >= hc && cx < hc + fz {
+            crate::framebuffer::zv(cx, jh, agl, colors::Xd);
         }
 
         
-        if self.dfm >= self.ug && self.dfm < self.ug + dmz as u8 {
-            let br = (self.dfm - self.ug) as u32;
-            let ae = ub + (dmz - 1 - br) * self.clf;
-            crate::framebuffer::ih(qz, ae, nt, self.clf, colors::Bdg, 40);
+        if self.cursor_pitch >= self.scroll_y && self.cursor_pitch < self.scroll_y + bjw as u8 {
+            let row = (self.cursor_pitch - self.scroll_y) as u32;
+            let u = jh + (bjw - 1 - row) * self.key_height;
+            crate::framebuffer::co(hc, u, fz, self.key_height, colors::Xd, 40);
         }
     }
 
     
 
     
-    fn fwq(&self, or: u32, bqw: u32) -> u32 {
-        if or >= self.cms {
-            bqw + (or - self.cms) * self.drl
+    fn tick_to_pixel(&self, tick: u32, aju: u32) -> u32 {
+        if tick >= self.scroll_x {
+            aju + (tick - self.scroll_x) * self.h_zoom
         } else {
-            bqw 
+            aju 
         }
     }
 
     
-    pub fn zfh(&self, y: u32, bqw: u32) -> u32 {
-        if y >= bqw && self.drl > 0 {
-            self.cms + (y - bqw) / self.drl
+    pub fn qqm(&self, p: u32, aju: u32) -> u32 {
+        if p >= aju && self.h_zoom > 0 {
+            self.scroll_x + (p - aju) / self.h_zoom
         } else {
-            self.cms
+            self.scroll_x
         }
     }
 
     
-    fn ovx(&self, br: u32) -> u8 {
-        let jb = self.ug as u32 + br;
-        if jb > 127 { 127 } else { jb as u8 }
+    fn pitch_from_row(&self, row: u32) -> u8 {
+        let pitch = self.scroll_y as u32 + row;
+        if pitch > 127 { 127 } else { pitch as u8 }
     }
 
     
 
     
-    pub fn mco(&mut self) {
-        let kcd = AE_ * 4;
-        self.cms = self.cms.ao(kcd);
+    pub fn scroll_left(&mut self) {
+        let fig = AF_ * 4;
+        self.scroll_x = self.scroll_x.saturating_sub(fig);
     }
 
     
-    pub fn mcq(&mut self) {
-        let kcd = AE_ * 4;
-        self.cms += kcd;
+    pub fn scroll_right(&mut self) {
+        let fig = AF_ * 4;
+        self.scroll_x += fig;
     }
 
     
-    pub fn dlm(&mut self) {
-        if self.ug < CFK_ - 12 {
-            self.ug += 12; 
+    pub fn scroll_up(&mut self) {
+        if self.scroll_y < CIT_ - 12 {
+            self.scroll_y += 12; 
         }
     }
 
     
-    pub fn eid(&mut self) {
-        if self.ug > AFP_ + 12 {
-            self.ug -= 12;
+    pub fn scroll_down(&mut self) {
+        if self.scroll_y > AHJ_ + 12 {
+            self.scroll_y -= 12;
         } else {
-            self.ug = AFP_;
+            self.scroll_y = AHJ_;
         }
     }
 
     
-    pub fn zxx(&mut self) {
-        if self.drl < 8 {
-            self.drl += 1;
+    pub fn rdq(&mut self) {
+        if self.h_zoom < 8 {
+            self.h_zoom += 1;
         }
     }
 
     
-    pub fn zxy(&mut self) {
-        if self.drl > 1 {
-            self.drl -= 1;
+    pub fn rdr(&mut self) {
+        if self.h_zoom > 1 {
+            self.h_zoom -= 1;
         }
     }
 
     
-    pub fn rsg(&mut self) {
-        self.dpl += self.ecg;
+    pub fn cursor_right(&mut self) {
+        self.cursor_tick += self.grid_snap;
     }
 
     
-    pub fn rse(&mut self) {
-        self.dpl = self.dpl.ao(self.ecg);
+    pub fn cursor_left(&mut self) {
+        self.cursor_tick = self.cursor_tick.saturating_sub(self.grid_snap);
     }
 
     
-    pub fn rsk(&mut self) {
-        if self.dfm < 127 {
-            self.dfm += 1;
+    pub fn cursor_up(&mut self) {
+        if self.cursor_pitch < 127 {
+            self.cursor_pitch += 1;
         }
     }
 
     
-    pub fn rsd(&mut self) {
-        if self.dfm > 0 {
-            self.dfm -= 1;
+    pub fn cursor_down(&mut self) {
+        if self.cursor_pitch > 0 {
+            self.cursor_pitch -= 1;
         }
     }
 
     
-    pub fn zou(&mut self) {
-        if self.ecg > 0 {
-            let dlf = self.dpl % self.ecg;
-            if dlf > self.ecg / 2 {
-                self.dpl += self.ecg - dlf;
+    pub fn qxf(&mut self) {
+        if self.grid_snap > 0 {
+            let bix = self.cursor_tick % self.grid_snap;
+            if bix > self.grid_snap / 2 {
+                self.cursor_tick += self.grid_snap - bix;
             } else {
-                self.dpl -= dlf;
+                self.cursor_tick -= bix;
             }
         }
     }
 
     
-    pub fn znb(&mut self, rzg: &str) {
-        self.ecg = match rzg {
-            "1" | "whole" => AE_ * 4,
-            "1/2" | "half" => AE_ * 2,
-            "1/4" | "quarter" => AE_,
-            "1/8" | "eighth" => AE_ / 2,
-            "1/16" | "sixteenth" => AE_ / 4,
-            "1/32" | "thirtysecond" => AE_ / 8,
+    pub fn qvy(&mut self, division: &str) {
+        self.grid_snap = match division {
+            "1" | "whole" => AF_ * 4,
+            "1/2" | "half" => AF_ * 2,
+            "1/4" | "quarter" => AF_,
+            "1/8" | "eighth" => AF_ / 2,
+            "1/16" | "sixteenth" => AF_ / 4,
+            "1/32" | "thirtysecond" => AF_ / 8,
             "off" | "free" => 1,
-            _ => self.ecg, 
+            _ => self.grid_snap, 
         };
     }
 
     
-    pub fn yem(&self, track: &mut Track, qm: u8, bbn: u32) {
-        let jp = Note::new(self.dfm, qm, self.dpl, bbn);
-        track.axn(jp);
+    pub fn pxu(&self, track: &mut Track, velocity: u8, duration_ticks: u32) {
+        let note = Note::new(self.cursor_pitch, velocity, self.cursor_tick, duration_ticks);
+        track.add_note(note);
     }
 
     
-    pub fn ylp(&self, track: &mut Track) -> bool {
-        let uvp = track.uvq(self.dpl);
-        if let Some(jp) = uvp.iter().du(|bo| bo.jb == self.dfm) {
-            let w = track.ts.iter().qf(|bo|
-                bo.jb == jp.jb && bo.vb == jp.vb
+    pub fn qco(&self, track: &mut Track) -> bool {
+        let nlh = track.notes_at_tick(self.cursor_tick);
+        if let Some(note) = nlh.iter().find(|ae| ae.pitch == self.cursor_pitch) {
+            let idx = track.notes.iter().position(|ae|
+                ae.pitch == note.pitch && ae.start_tick == note.start_tick
             );
-            if let Some(w) = w {
-                track.pbr(w);
+            if let Some(idx) = idx {
+                track.remove_note(idx);
                 return true;
             }
         }
@@ -466,83 +466,83 @@ impl PianoRoll {
 
 
 
-fn ofr(jb: u8) -> bool {
-    oh!(jb % 12, 1 | 3 | 6 | 8 | 10) 
+fn ihs(pitch: u8) -> bool {
+    matches!(pitch % 12, 1 | 3 | 6 | 8 | 10) 
 }
 
 
-fn jzn(s: u32, kt: u32) -> u32 {
-    let m = ((s >> 16) & 0xFF) * kt / 100;
-    let at = ((s >> 8) & 0xFF) * kt / 100;
-    let o = (s & 0xFF) * kt / 100;
-    (m.v(255) << 16) | (at.v(255) << 8) | o.v(255)
+fn fgh(color: u32, brightness: u32) -> u32 {
+    let r = ((color >> 16) & 0xFF) * brightness / 100;
+    let g = ((color >> 8) & 0xFF) * brightness / 100;
+    let b = (color & 0xFF) * brightness / 100;
+    (r.min(255) << 16) | (g.min(255) << 8) | b.min(255)
 }
 
 
-pub fn xfw(track: &Track, cjf: u32) -> String {
-    let mut e = String::new();
-    let cij = AE_ * 4;
-    let cng = cij * cjf;
-    let ec = (cjf * 16) as usize; 
-    let xgs = cij / 16;
+pub fn pij(track: &Track, bars: u32) -> String {
+    let mut j = String::new();
+    let ask = AF_ * 4;
+    let total_ticks = ask * bars;
+    let cols = (bars * 16) as usize; 
+    let pjg = ask / 16;
 
-    e.t(&format!("Piano Roll: \"{}\" — {} bars, {} notes\n",
-        track.amj(), cjf, track.ts.len()));
-    e.t(&format!("Grid: 1/16 note | {} = {}\n\n", track.ve.j(),
-        if track.mwg { "ARMED" } else { "" }));
-
-    
-    e.t("     │");
-    for bar in 0..cjf {
-        e.t(&format!("{:^16}", bar + 1));
-    }
-    e.t("\n     │");
-    for _ in 0..cjf {
-        e.t("────────────────");
-    }
-    e.push('\n');
+    j.push_str(&format!("Piano Roll: \"{}\" — {} bars, {} notes\n",
+        track.name_str(), bars, track.notes.len()));
+    j.push_str(&format!("Grid: 1/16 note | {} = {}\n\n", track.waveform.name(),
+        if track.armed { "ARMED" } else { "" }));
 
     
-    let (uom, ulu) = if track.ts.is_empty() {
+    j.push_str("     │");
+    for bar in 0..bars {
+        j.push_str(&format!("{:^16}", bar + 1));
+    }
+    j.push_str("\n     │");
+    for _ in 0..bars {
+        j.push_str("────────────────");
+    }
+    j.push('\n');
+
+    
+    let (min_pitch, max_pitch) = if track.notes.is_empty() {
         (57, 72) 
     } else {
-        let v = track.ts.iter().map(|bo| bo.jb).v().unwrap_or(60);
-        let am = track.ts.iter().map(|bo| bo.jb).am().unwrap_or(72);
-        (v.ao(2), (am + 2).v(127))
+        let min = track.notes.iter().map(|ae| ae.pitch).min().unwrap_or(60);
+        let max = track.notes.iter().map(|ae| ae.pitch).max().unwrap_or(72);
+        (min.saturating_sub(2), (max + 2).min(127))
     };
 
     
-    for jb in (uom..=ulu).vv() {
-        let j = crate::audio::tables::dtf(jb);
-        let bvq = crate::audio::tables::efk(jb);
-        let hou = jb % 12 == 0;
+    for pitch in (min_pitch..=max_pitch).rev() {
+        let name = crate::audio::tables::bno(pitch);
+        let amb = crate::audio::tables::bui(pitch);
+        let dsl = pitch % 12 == 0;
         
-        e.t(&format!("{}{:<2} {}│", j, bvq,
-            if hou { "─" } else { " " }));
+        j.push_str(&format!("{}{:<2} {}│", name, amb,
+            if dsl { "─" } else { " " }));
 
-        for bj in 0..ec {
-            let or = bj as u32 * xgs;
-            let gh = track.ts.iter().any(|bo|
-                bo.jb == jb && bo.vb <= or && or < bo.ckg()
+        for col in 0..cols {
+            let tick = col as u32 * pjg;
+            let active = track.notes.iter().any(|ae|
+                ae.pitch == pitch && ae.start_tick <= tick && tick < ae.end_tick()
             );
-            let tyj = track.ts.iter().any(|bo|
-                bo.jb == jb && bo.vb == or
+            let mtg = track.notes.iter().any(|ae|
+                ae.pitch == pitch && ae.start_tick == tick
             );
 
-            if tyj {
-                e.push('█');
-            } else if gh {
-                e.push('▓');
-            } else if bj % 16 == 0 {
-                e.push('│');
-            } else if bj % 4 == 0 {
-                e.push('┊');
+            if mtg {
+                j.push('█');
+            } else if active {
+                j.push('▓');
+            } else if col % 16 == 0 {
+                j.push('│');
+            } else if col % 4 == 0 {
+                j.push('┊');
             } else {
-                e.push('·');
+                j.push('·');
             }
         }
-        e.push('\n');
+        j.push('\n');
     }
 
-    e
+    j
 }

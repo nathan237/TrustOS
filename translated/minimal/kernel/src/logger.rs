@@ -6,99 +6,99 @@
 use core::sync::atomic::{AtomicU64, Ordering};
 
 
-static BHB_: AtomicU64 = AtomicU64::new(0);
+static BJF_: AtomicU64 = AtomicU64::new(0);
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum LogLevel {
-    Ze = 0,
+    Trace = 0,
     Debug = 1,
-    V = 2,
-    Bwq = 3,
-    Q = 4,
-    Nd = 5,
+    Info = 2,
+    Warn = 3,
+    Error = 4,
+    Fatal = 5,
 }
 
 impl LogLevel {
     pub fn as_str(&self) -> &'static str {
         match self {
-            LogLevel::Ze => "TRACE",
+            LogLevel::Trace => "TRACE",
             LogLevel::Debug => "DEBUG",
-            LogLevel::V => "INFO ",
-            LogLevel::Bwq => "WARN ",
-            LogLevel::Q => "ERROR",
-            LogLevel::Nd => "FATAL",
+            LogLevel::Info => "INFO ",
+            LogLevel::Warn => "WARN ",
+            LogLevel::Error => "ERROR",
+            LogLevel::Fatal => "FATAL",
         }
     }
 }
 
 
-pub fn fjp() -> u64 {
-    BHB_.load(Ordering::Relaxed)
+pub fn ckc() -> u64 {
+    BJF_.load(Ordering::Relaxed)
 }
 
 
-pub fn lh() -> u64 {
-    fjp()
+pub fn eg() -> u64 {
+    ckc()
 }
 
 
-pub fn or() {
-    BHB_.fetch_add(1, Ordering::Relaxed);
+pub fn tick() {
+    BJF_.fetch_add(1, Ordering::Relaxed);
 }
 
 
 #[doc(hidden)]
-pub fn qcj(jy: LogLevel, n: core::fmt::Arguments) {
-    let aea = fjp();
-    let qq = 0u8; 
+pub fn jsp(level: LogLevel, args: core::fmt::Arguments) {
+    let timestamp = ckc();
+    let cpu_id = 0u8; 
     
-    crate::serial::elt(format_args!(
+    crate::serial::bxg(format_args!(
         "[{:>10}][CPU{}][{}] {}\n",
-        aea,
-        qq,
-        jy.as_str(),
-        n
+        timestamp,
+        cpu_id,
+        level.as_str(),
+        args
     ));
 }
 
 
 #[macro_export]
-macro_rules! jdx {
-    ($jy:expr, $($ji:tt)*) => {
-        $crate::logger::qcj($jy, format_args!($($ji)*))
+macro_rules! eth {
+    ($level:expr, $($db:tt)*) => {
+        $crate::logger::jsp($level, format_args!($($db)*))
     };
 }
 
 
 #[macro_export]
 macro_rules! log {
-    ($($ji:tt)*) => {
-        $crate::jdx!($crate::logger::LogLevel::V, $($ji)*)
+    ($($db:tt)*) => {
+        $crate::eth!($crate::logger::LogLevel::Info, $($db)*)
     };
 }
 
 
 #[macro_export]
 macro_rules! log_debug {
-    ($($ji:tt)*) => {
-        $crate::jdx!($crate::logger::LogLevel::Debug, $($ji)*)
+    ($($db:tt)*) => {
+        $crate::eth!($crate::logger::LogLevel::Debug, $($db)*)
     };
 }
 
 
 #[macro_export]
 macro_rules! log_warn {
-    ($($ji:tt)*) => {
-        $crate::jdx!($crate::logger::LogLevel::Bwq, $($ji)*)
+    ($($db:tt)*) => {
+        $crate::eth!($crate::logger::LogLevel::Warn, $($db)*)
     };
 }
 
 
 #[macro_export]
 macro_rules! log_error {
-    ($($ji:tt)*) => {
-        $crate::jdx!($crate::logger::LogLevel::Q, $($ji)*)
+    ($($db:tt)*) => {
+        $crate::eth!($crate::logger::LogLevel::Error, $($db)*)
     };
 }

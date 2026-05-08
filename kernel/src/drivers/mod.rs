@@ -6,6 +6,7 @@
 pub mod net;
 pub mod ahci;
 pub mod ata;
+pub mod firmware_loader;
 pub mod usb;
 pub mod usb_storage;
 pub mod xhci;
@@ -15,9 +16,11 @@ pub mod pci_ids;
 pub mod partition;
 pub mod virtio_gpu;
 pub mod hda;
+#[cfg(feature = "amdgpu")]
 pub mod amdgpu;
 pub mod nvidia;
 pub mod thinkpad_ec;
+pub mod smbus;
 
 /// Apple Silicon hardware drivers (AIC, UART, DART, PMGR)
 /// Used for iPhone/iPad bare-metal boot via checkm8/PongoOS
@@ -28,6 +31,53 @@ use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 use spin::Mutex;
+
+/// Deferred xHCI PCI info (init happens on first `usb` command, not at boot)
+#[derive(Clone)]
+pub struct XhciPciInfo {
+    pub bus: u8,
+    pub device: u8,
+    pub function: u8,
+    pub bar0: u64,
+}
+
+static XHCI_PCI_INFO: Mutex<Option<XhciPciInfo>> = Mutex::new(None);
+
+/// Check if xHCI was detected (but not yet initialized)
+pub fn xhci_detected() -> bool {
+    XHCI_PCI_INFO.lock().is_some()
+}
+
+/// Initialize xHCI on demand (called from shell `usb` command)
+pub fn init_xhci_deferred() -> bool {
+    let info = match XHCI_PCI_INFO.lock().clone() {
+        Some(i) => i,
+        None => {
+            crate::serial_println!("[xHCI] No xHCI controller detected");
+            return false;
+        }
+    };
+    
+    if xhci::is_initialized() {
+        crate::serial_println!("[xHCI] Already initialized");
+        return true;
+    }
+    
+    crate::serial_println!("[xHCI] Deferred init: BAR0={:#x}", info.bar0);
+    
+    // Enable PCI bus mastering + memory space via raw config writes
+    let cmd = crate::pci::config_read16(info.bus, info.device, info.function, 0x04);
+    crate::pci::config_write(info.bus, info.device, info.function, 0x04, 
+        (cmd | 0x06) as u32); // Bus Master + Memory Space
+    
+    if xhci::init(info.bar0) {
+        crate::serial_println!("[xHCI] Initialized with {} devices", xhci::device_count());
+        true
+    } else {
+        crate::serial_println!("[xHCI] Init failed");
+        false
+    }
+}
 
 /// Driver categories
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -179,13 +229,28 @@ pub fn probe_storage() {
     for dev in &devices {
         // AHCI Controller (class 0x01, subclass 0x06, prog_if 0x01)
         if dev.class_code == 0x01 && dev.subclass == 0x06 && dev.prog_if == 0x01 {
+            let bar5_raw = dev.bar[5];
             crate::serial_println!("[AHCI] Controller detected at {:02X}:{:02X}.{} (BAR5={:#x})",
-                dev.bus, dev.device, dev.function, dev.bar[5]);
-            let bar5 = dev.bar[5] as u64;
-            if ahci::init(bar5) {
-                crate::serial_println!("[DRIVERS] AHCI controller initialized");
-                // Identify all devices to get sector counts
-                ahci::identify_all_devices();
+                dev.bus, dev.device, dev.function, bar5_raw);
+            
+            // Validate BAR5: must be non-zero, not all-ones, and memory-type (bit 0 = 0)
+            if bar5_raw == 0 || bar5_raw == 0xFFFFFFFF || bar5_raw & 1 != 0 {
+                crate::serial_println!("[AHCI] Skipping — invalid BAR5 ({:#x})", bar5_raw);
+            } else {
+                let bar5 = bar5_raw as u64;
+                // Validate physical address is in a reasonable MMIO range (above 1MB, below 64GB)
+                let abar_phys = bar5 & !0xF;
+                if abar_phys < 0x100000 || abar_phys > 0x10_0000_0000 {
+                    crate::serial_println!("[AHCI] Skipping — BAR5 address {:#x} out of range", abar_phys);
+                } else {
+                    // Enable PCI bus mastering + memory space access before AHCI init
+                    crate::pci::enable_bus_master(dev);
+                    crate::pci::enable_memory_space(dev);
+                    if ahci::init(bar5) {
+                        crate::serial_println!("[DRIVERS] AHCI controller initialized");
+                        ahci::identify_all_devices();
+                    }
+                }
             }
         }
         
@@ -216,16 +281,18 @@ pub fn probe_storage() {
             crate::serial_println!("[USB] Controller detected: {} at {:02X}:{:02X}.{} (BAR0={:#x})", 
                 usb_type, dev.bus, dev.device, dev.function, dev.bar[0]);
             
-            // Initialize xHCI controller (USB 3.0)
+            // xHCI init DEFERRED — map_bar0 + MMIO can page-fault on bare metal
+            // boards where Limine HHDM uses huge pages over the BAR region.
+            // Init happens on first `usb` shell command instead (same pattern as WiFi).
             if dev.prog_if == 0x30 {
-                // Use proper 64-bit BAR decoding
+                // Remember PCI info for deferred init
                 let bar0 = dev.bar_address(0).unwrap_or(dev.bar[0] as u64);
-                crate::pci::enable_bus_master(dev);
-                crate::pci::enable_memory_space(dev);
-                if xhci::init(bar0) {
-                    crate::serial_println!("[DRIVERS] xHCI controller initialized with {} devices", 
-                        xhci::device_count());
-                }
+                crate::serial_println!("[xHCI] Deferring init (BAR0={:#x}) — use `usb` command", bar0);
+                // Store for later
+                *XHCI_PCI_INFO.lock() = Some(XhciPciInfo {
+                    bus: dev.bus, device: dev.device, function: dev.function,
+                    bar0,
+                });
             }
         }
     }

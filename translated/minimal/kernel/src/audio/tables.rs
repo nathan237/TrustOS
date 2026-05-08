@@ -6,7 +6,7 @@
 
 
 
-pub static XC_: [i16; 256] = [
+pub static YJ_: [i16; 256] = [
          0,    804,   1608,   2410,   3212,   4011,   4808,   5602,
       6393,   7179,   7962,   8739,   9512,  10278,  11039,  11793,
      12539,  13279,  14010,  14732,  15446,  16151,  16846,  17530,
@@ -44,7 +44,7 @@ pub static XC_: [i16; 256] = [
 
 
 
-pub static AFO_: [u32; 128] = [
+pub static AHI_: [u32; 128] = [
        8,     9,     9,    10,    10,    11,    12,    12, 
       13,    14,    15,    15,    16,    17,    18,    19, 
       21,    22,    23,    25,    26,    28,    29,    31, 
@@ -65,72 +65,72 @@ pub static AFO_: [u32; 128] = [
 
 
 
-pub fn fpd(j: &str) -> Option<u8> {
-    let bf = j.as_bytes();
-    if bf.is_empty() {
+pub fn cnh(name: &str) -> Option<u8> {
+    let bytes = name.as_bytes();
+    if bytes.is_empty() {
         return None;
     }
 
     
-    let (ar, kr) = match bf[0] {
-        b'C' | b'c' => (0u8, &bf[1..]),
-        b'D' | b'd' => (2, &bf[1..]),
-        b'E' | b'e' => (4, &bf[1..]),
-        b'F' | b'f' => (5, &bf[1..]),
-        b'G' | b'g' => (7, &bf[1..]),
-        b'A' | b'a' => (9, &bf[1..]),
-        b'B' | b'b' => (11, &bf[1..]),
+    let (base, ef) = match bytes[0] {
+        b'C' | b'c' => (0u8, &bytes[1..]),
+        b'D' | b'd' => (2, &bytes[1..]),
+        b'E' | b'e' => (4, &bytes[1..]),
+        b'F' | b'f' => (5, &bytes[1..]),
+        b'G' | b'g' => (7, &bytes[1..]),
+        b'A' | b'a' => (9, &bytes[1..]),
+        b'B' | b'b' => (11, &bytes[1..]),
         _ => return None,
     };
 
     
-    let (joi, kr) = if kr.fv() == Some(&b'#') {
-        (1i8, &kr[1..])
-    } else if kr.fv() == Some(&b'b') {
-        (-1i8, &kr[1..])
+    let (faa, ef) = if ef.first() == Some(&b'#') {
+        (1i8, &ef[1..])
+    } else if ef.first() == Some(&b'b') {
+        (-1i8, &ef[1..])
     } else {
-        (0i8, kr)
+        (0i8, ef)
     };
 
     
-    if kr.is_empty() {
+    if ef.is_empty() {
         return None;
     }
-    let cgg: u8 = {
-        let mut ap = 0u8;
-        for &o in kr {
-            if o >= b'0' && o <= b'9' {
-                ap = ap * 10 + (o - b'0');
+    let octave: u8 = {
+        let mut val = 0u8;
+        for &b in ef {
+            if b >= b'0' && b <= b'9' {
+                val = val * 10 + (b - b'0');
             } else {
                 return None;
             }
         }
-        ap
+        val
     };
 
     
-    let ayg = (cgg as i16 + 1) * 12 + ar as i16 + joi as i16;
-    if ayg >= 0 && ayg <= 127 {
-        Some(ayg as u8)
+    let aad = (octave as i16 + 1) * 12 + base as i16 + faa as i16;
+    if aad >= 0 && aad <= 127 {
+        Some(aad as u8)
     } else {
         None
     }
 }
 
 
-pub fn dtf(jp: u8) -> &'static str {
+pub fn bno(note: u8) -> &'static str {
     
-    static Bna: [&str; 12] = [
+    static Abo: [&str; 12] = [
         "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"
     ];
-    let _ = Bna[jp as usize % 12]; 
+    let _ = Abo[note as usize % 12]; 
     
-    Bna[jp as usize % 12]
+    Abo[note as usize % 12]
 }
 
 
-pub fn efk(jp: u8) -> u8 {
-    if jp >= 12 { (jp / 12) - 1 } else { 0 }
+pub fn bui(note: u8) -> u8 {
+    if note >= 12 { (note / 12) - 1 } else { 0 }
 }
 
 #[cfg(test)]
@@ -138,10 +138,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn zsa() {
-        assert_eq!(fpd("C4"), Some(60));
-        assert_eq!(fpd("A4"), Some(69));
-        assert_eq!(fpd("C#4"), Some(61));
-        assert_eq!(fpd("Bb3"), Some(58));
+    fn qzu() {
+        assert_eq!(cnh("C4"), Some(60));
+        assert_eq!(cnh("A4"), Some(69));
+        assert_eq!(cnh("C#4"), Some(61));
+        assert_eq!(cnh("Bb3"), Some(58));
     }
 }

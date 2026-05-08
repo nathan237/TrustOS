@@ -29,6 +29,188 @@ fn hc(normal: u32, hc_replacement: u32) -> u32 {
 static EXIT_DESKTOP_FLAG: AtomicBool = AtomicBool::new(false);
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// BACKGROUND RENDER THREAD — Fully isolated rain animation
+// The BG thread renders the animated background into a dedicated buffer.
+// The UI thread copies it in ~0.3ms (memcpy), then draws windows on top.
+// Result: windows have ZERO impact on background fluidity.
+// ═══════════════════════════════════════════════════════════════════════════════
+use core::sync::atomic::{AtomicPtr, AtomicU64};
+
+/// Raw pointer to Desktop — set by UI thread after init, read by BG thread.
+/// Safety: The BG thread only accesses BG-specific fields (matrix_*, global_*,
+/// visualizer, drone_swarm, frame_count). The UI thread only accesses window
+/// fields during rendering. No data races on disjoint fields.
+static BG_DESKTOP_POINTER: AtomicPtr<u8> = AtomicPtr::new(core::ptr::null_mut());
+
+/// Double buffer for background rendering (2 full-screen buffers).
+/// BG thread writes to BACK, then swaps. UI thread reads from FRONT.
+static BG_BUFFER_A: Mutex<Option<Vec<u32>>> = Mutex::new(None);
+// Global shared state guarded by a Mutex (mutual exclusion lock).
+static BG_BUFFER_B: Mutex<Option<Vec<u32>>> = Mutex::new(None);
+/// 0 = A is front (UI reads A, BG writes B)
+/// 1 = B is front (UI reads B, BG writes A)
+static BG_FRONT_INDEX: AtomicU64 = AtomicU64::new(0);
+/// Frame counter in the front buffer (so UI knows it's a new frame)
+static BG_FRAME_READY: AtomicU64 = AtomicU64::new(0);
+/// Last frame consumed by UI thread
+static BG_FRAME_CONSUMED: AtomicU64 = AtomicU64::new(0);
+/// Signal BG thread to stop
+static BG_THREAD_STOP: AtomicBool = AtomicBool::new(false);
+/// BG thread is running
+static BG_THREAD_RUNNING: AtomicBool = AtomicBool::new(false);
+
+/// Background render thread entry point
+fn bg_render_worker(_arg: u64) -> i32 {
+    crate::serial_println!("[BG-THREAD] Started on CPU {}", crate::cpu::smp::current_cpu_id());
+    BG_THREAD_RUNNING.store(true, Ordering::SeqCst);
+    
+    let width = framebuffer::width();
+    let height = framebuffer::height();
+    let stride = width as usize;
+    let buf_size = stride * height as usize;
+    
+    if buf_size == 0 {
+        crate::serial_println!("[BG-THREAD] ERROR: zero framebuffer size");
+        BG_THREAD_RUNNING.store(false, Ordering::SeqCst);
+        return 1;
+    }
+    
+    let mut frame_num: u64 = 0;
+    
+    while !BG_THREAD_STOP.load(Ordering::Relaxed) {
+        // Wait until UI has consumed the last frame (backpressure)
+        let ready = BG_FRAME_READY.load(Ordering::Relaxed);
+        let consumed = BG_FRAME_CONSUMED.load(Ordering::Relaxed);
+        if ready > consumed + 1 {
+            // UI is behind — yield to avoid wasting CPU
+            crate::thread::yield_thread();
+            continue;
+        }
+        
+        // Determine which buffer to write to (opposite of front)
+        let front = BG_FRONT_INDEX.load(Ordering::Acquire);
+        let write_to_a = front == 1; // front=B, so write to A
+        
+        // Get raw pointer to back buffer
+        let buf_ptr = if write_to_a {
+            let guard = BG_BUFFER_A.lock();
+                        // Pattern matching — Rust's exhaustive branching construct.
+match &*guard {
+                Some(buf) => buf.as_ptr() as *mut u32,
+                None => { crate::thread::yield_thread(); continue; }
+            }
+        } else {
+            let guard = BG_BUFFER_B.lock();
+                        // Pattern matching — Rust's exhaustive branching construct.
+match &*guard {
+                Some(buf) => buf.as_ptr() as *mut u32,
+                None => { crate::thread::yield_thread(); continue; }
+            }
+        };
+        
+        // Get Desktop pointer (set by UI thread)
+        let desktop_pointer = BG_DESKTOP_POINTER.load(Ordering::Acquire);
+        if desktop_pointer.is_null() {
+            crate::thread::yield_thread();
+            continue;
+        }
+        
+        // SAFETY: Desktop pointer is valid for the lifetime of the desktop.
+        // BG thread only accesses disjoint BG fields (matrix_*, global_*, etc.)
+        // UI thread only accesses window/taskbar fields during rendering.
+        let desktop = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { &mut *(desktop_pointer as *mut Desktop) };
+        
+        // Redirect rendering to our private buffer
+        framebuffer::redirect_rendering(buf_ptr);
+        
+        // Force Full tier — BG thread is isolated, immune to UI FPS drops
+        let saved_tier = desktop.desktop_tier;
+        desktop.desktop_tier = DesktopTier::Full;
+        
+        // Advance frame count and render
+        desktop.frame_count += 1;
+        desktop.draw_background();
+        
+        // Restore tier (UI thread may have changed it for its own use)
+        desktop.desktop_tier = saved_tier;
+        
+        // Reset rendering redirect
+        framebuffer::reset_rendering();
+        
+        // Swap: make newly rendered buffer the front
+        let new_front = if write_to_a { 0u64 } else { 1u64 };
+        BG_FRONT_INDEX.store(new_front, Ordering::Release);
+        frame_num += 1;
+        BG_FRAME_READY.store(frame_num, Ordering::Release);
+    }
+    
+    crate::serial_println!("[BG-THREAD] Stopped");
+    BG_THREAD_RUNNING.store(false, Ordering::SeqCst);
+    0
+}
+
+/// Initialize BG double buffers and spawn the background render thread.
+/// Called once from Desktop::init_desktop() after framebuffer is ready.
+fn initialize_bg_thread(desktop: &mut Desktop) {
+    let width = framebuffer::width() as usize;
+    let height = framebuffer::height() as usize;
+    let size = width * height;
+    if size == 0 { return; }
+    
+    // Allocate double buffers
+    let mut buffer_a = alloc::vec::Vec::new();
+    let mut buffer_b = alloc::vec::Vec::new();
+    if buffer_a.try_reserve_exact(size).is_err() || buffer_b.try_reserve_exact(size).is_err() {
+        crate::serial_println!("[BG-THREAD] Failed to allocate double buffers ({} KB each)", size * 4 / 1024);
+        return;
+    }
+    buffer_a.resize(size, 0xFF010200u32); // dark bg
+    buffer_b.resize(size, 0xFF010200u32);
+    *BG_BUFFER_A.lock() = Some(buffer_a);
+    *BG_BUFFER_B.lock() = Some(buffer_b);
+    crate::serial_println!("[BG-THREAD] Double buffers allocated: 2 × {} KB", size * 4 / 1024);
+    
+    // Publish Desktop pointer for the BG thread
+    let ptr = desktop as *mut Desktop as *mut u8;
+    BG_DESKTOP_POINTER.store(ptr, Ordering::Release);
+    
+    // Spawn background render thread
+    BG_THREAD_STOP.store(false, Ordering::SeqCst);
+    let _tid = crate::thread::spawn_kernel("bg-render", bg_render_worker, 0);
+    crate::serial_println!("[BG-THREAD] Spawned render thread (tid={})", _tid);
+}
+
+/// Copy the BG front buffer into the current backbuffer (called by UI thread).
+/// Uses FRAME_BB_PTR if available (fast), otherwise falls back to mutex.
+/// Returns true if a new frame was consumed.
+fn blit_bg_front_to_backbuffer() -> bool {
+    let ready = BG_FRAME_READY.load(Ordering::Acquire);
+    let consumed = BG_FRAME_CONSUMED.load(Ordering::Relaxed);
+    if ready <= consumed {
+        return false; // No new frame
+    }
+    
+    let front = BG_FRONT_INDEX.load(Ordering::Acquire);
+    let source_guard = if front == 0 { BG_BUFFER_A.lock() } else { BG_BUFFER_B.lock() };
+    
+    if let Some(ref src_buf) = *source_guard {
+        let ptr = framebuffer::frame_bb_pointer();
+        if !ptr.is_null() {
+            let len = src_buf.len();
+                        // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe {
+                core::ptr::copy_nonoverlapping(src_buf.as_ptr(), ptr, len);
+            }
+        }
+    }
+    drop(source_guard);
+    
+    BG_FRAME_CONSUMED.store(ready, Ordering::Release);
+    true
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // JARVIS async inference — run on background thread, poll result in render loop
 // ═══════════════════════════════════════════════════════════════════════════════
 /// Pending JARVIS query (set by terminal, consumed by background thread)
@@ -49,7 +231,7 @@ static BROWSER_NAV_RESULT: Mutex<Option<Result<(String, u16, Vec<(String, String
 static BROWSER_NAV_BUSY: AtomicBool = AtomicBool::new(false);
 
 /// Background thread entry point for browser HTTP fetch
-fn browser_nav_worker(_argument: u64) -> i32 {
+fn browser_nav_worker(_arg: u64) -> i32 {
     let url = {
         let mut pending = BROWSER_PENDING_URL.lock();
         pending.take()
@@ -90,7 +272,7 @@ match crate::netstack::http::get(&full_url) {
 }
 
 /// Background thread entry point for JARVIS inference
-fn jarvis_worker(_argument: u64) -> i32 {
+fn jarvis_worker(_arg: u64) -> i32 {
     // Take the pending query
     let query = {
         let mut pending = JARVIS_PENDING_QUERY.lock();
@@ -225,15 +407,39 @@ const DESKTOP_BG_TOP: u32 = BG_DEEPEST;
 // Compile-time constant — evaluated at compilation, zero runtime cost.
 const DESKTOP_BG_BOTTOM: u32 = 0xFF020303;
 
-// Layout constants (official spec — v2 visual overhaul)
-const TASKBAR_HEIGHT: u32 = 48;
+// Layout constants — resolution-adaptive via scaling module
+// Base values (for 1x / ~1024×768). Scaled proportionally at runtime.
+const BASE_TASKBAR_HEIGHT: u32 = 48;
 // Compile-time constant — evaluated at compilation, zero runtime cost.
-const TITLE_BAR_HEIGHT: u32 = 28;             // Classic title bar height
-const WINDOW_BORDER_RADIUS: u32 = 8;          // Moderate rounded corners
-const WINDOW_SHADOW_BLUR: u32 = 16;
+const BASE_TITLE_BAR_HEIGHT: u32 = 24;
 // Compile-time constant — evaluated at compilation, zero runtime cost.
-const DOCK_ICON_SIZE: u32 = 32;               // Larger dock icons
-const DOCK_WIDTH: u32 = 72;                   // Widened to fit label text (e.g. Settings)
+const BASE_WINDOW_BORDER_RADIUS: u32 = 6;
+// Compile-time constant — evaluated at compilation, zero runtime cost.
+const BASE_WINDOW_SHADOW_BLUR: u32 = 10;
+// Compile-time constant — evaluated at compilation, zero runtime cost.
+const BASE_DOCK_ICON_SIZE: u32 = 28;
+// Compile-time constant — evaluated at compilation, zero runtime cost.
+const BASE_DOCK_WIDTH: u32 = 64;
+
+// Scaled accessors — drop-in replacement for the old const names
+#[inline(always)]
+#[allow(non_snake_case)]
+fn TASKBAR_HEIGHT() -> u32 { crate::graphics::scaling::scale_ui(BASE_TASKBAR_HEIGHT) }
+#[inline(always)]
+#[allow(non_snake_case)]
+fn TITLE_BAR_HEIGHT() -> u32 { crate::graphics::scaling::scale_ui(BASE_TITLE_BAR_HEIGHT) }
+#[inline(always)]
+#[allow(non_snake_case)]
+fn WINDOW_BORDER_RADIUS() -> u32 { crate::graphics::scaling::scale_ui(BASE_WINDOW_BORDER_RADIUS) }
+#[inline(always)]
+#[allow(non_snake_case)]
+fn WINDOW_SHADOW_BLUR() -> u32 { crate::graphics::scaling::scale_ui(BASE_WINDOW_SHADOW_BLUR) }
+#[inline(always)]
+#[allow(non_snake_case)]
+fn DOCK_ICON_SIZE() -> u32 { crate::graphics::scaling::scale_ui(BASE_DOCK_ICON_SIZE) }
+#[inline(always)]
+#[allow(non_snake_case)]
+fn DOCK_WIDTH() -> u32 { crate::graphics::scaling::scale_ui(BASE_DOCK_WIDTH) }
 
 // Animation state (minimal - no flashy effects)
 const FADE_STEPS: u8 = 8;
@@ -349,7 +555,7 @@ pub fn new() -> Self {
     }
     
     /// Start maximize animation  
-    pub fn start_maximize(&mut self, x: i32, y: i32, width: u32, height: u32, maximum_w: u32, maximum_h: u32) {
+    pub fn start_maximize(&mut self, x: i32, y: i32, width: u32, height: u32, max_w: u32, maximum_h: u32) {
         self.state = AnimationState::Maximizing;
         self.progress = 0.0;
         self.start_x = x;
@@ -358,20 +564,20 @@ pub fn new() -> Self {
         self.start_height = height;
         self.target_x = 0;
         self.target_y = 0;
-        self.target_width = maximum_w;
-        self.target_height = maximum_h - TASKBAR_HEIGHT;
+        self.target_width = max_w;
+        self.target_height = maximum_h - TASKBAR_HEIGHT();
         self.alpha = 1.0;
     }
     
     /// Start restore animation
-    pub fn start_restore(&mut self, current_x: i32, current_y: i32, current_w: u32, current_h: u32,
+    pub fn start_restore(&mut self, curr_x: i32, curr_y: i32, curr_w: u32, curr_h: u32,
                          saved_x: i32, saved_y: i32, saved_w: u32, saved_h: u32) {
         self.state = AnimationState::Restoring;
         self.progress = 0.0;
-        self.start_x = current_x;
-        self.start_y = current_y;
-        self.start_width = current_w;
-        self.start_height = current_h;
+        self.start_x = curr_x;
+        self.start_y = curr_y;
+        self.start_width = curr_w;
+        self.start_height = curr_h;
         self.target_x = saved_x;
         self.target_y = saved_y;
         self.target_width = saved_w;
@@ -576,16 +782,16 @@ impl CellPixels {
     /// Initialize from a glyph: lit pixels get `color`, unlit stay 0 (transparent).
     pub fn from_glyph(c: char, color: u32) -> Self {
         let glyph = crate::framebuffer::font::get_glyph(c);
-        let mut pixel = [0u32; 128];
+        let mut px = [0u32; 128];
         for row in 0..16 {
             let bits = glyph[row];
             for bit in 0..8u8 {
                 if bits & (0x80 >> bit) != 0 {
-                    pixel[row * 8 + bit as usize] = color;
+                    px[row * 8 + bit as usize] = color;
                 }
             }
         }
-        CellPixels { pixels: pixel }
+        CellPixels { pixels: px }
     }
 
     /// Set a single pixel (0..7, 0..15) to a color.
@@ -644,9 +850,9 @@ impl MatrixProjection {
         let mut pixels = vec![0u32; w * h];
 
         for py in 0..h {
-            for pixel in 0..w {
+            for px in 0..w {
                 // Normalized coordinates (0.0 - 1.0)
-                let u = pixel as f32 / w as f32;
+                let u = px as f32 / w as f32;
                 let v = py as f32 / h as f32;
                 // Center-relative (-1.0 to 1.0)
                 let cx = u * 2.0 - 1.0;
@@ -680,14 +886,14 @@ impl MatrixProjection {
                 let s2 = fast_sin(d * 12.0 - v * 4.0) * 0.5 + 0.5;
                 let s3 = fast_sin((cx + cy) * 8.0) * 0.5 + 0.5;
 
-                let mut r = (s1 * 0.5 + s2 * 0.3 + s3 * 0.2).minimum(1.0);
-                let mut g = (s2 * 0.5 + s3 * 0.3 + s1 * 0.2).minimum(1.0);
-                let mut b = (s3 * 0.5 + s1 * 0.3 + s2 * 0.2).minimum(1.0);
+                let mut r = (s1 * 0.5 + s2 * 0.3 + s3 * 0.2).min(1.0);
+                let mut g = (s2 * 0.5 + s3 * 0.3 + s1 * 0.2).min(1.0);
+                let mut b = (s3 * 0.5 + s1 * 0.3 + s2 * 0.2).min(1.0);
 
                 // ── Geometric shapes overlay ──
 
                 // Central diamond: bright cyan
-                let diamond = cx.absolute() + cy.absolute();
+                let diamond = cx.abs() + cy.abs();
                 if diamond < 0.35 {
                     let t = 1.0 - diamond / 0.35;
                     r = r * (1.0 - t * 0.8) + 0.1 * t;
@@ -696,42 +902,42 @@ impl MatrixProjection {
                 }
 
                 // Concentric rings: magenta glow
-                let ring1 = (d - 0.5).absolute();
+                let ring1 = (d - 0.5).abs();
                 if ring1 < 0.04 {
                     let t = 1.0 - ring1 / 0.04;
-                    r = (r + t * 0.9).minimum(1.0);
+                    r = (r + t * 0.9).min(1.0);
                     g = g * (1.0 - t * 0.6);
-                    b = (b + t * 0.8).minimum(1.0);
+                    b = (b + t * 0.8).min(1.0);
                 }
-                let ring2 = (d - 0.75).absolute();
+                let ring2 = (d - 0.75).abs();
                 if ring2 < 0.03 {
                     let t = 1.0 - ring2 / 0.03;
-                    r = (r + t * 0.3).minimum(1.0);
-                    g = (g + t * 0.9).minimum(1.0);
+                    r = (r + t * 0.3).min(1.0);
+                    g = (g + t * 0.9).min(1.0);
                     b = g * (1.0 - t * 0.3);
                 }
 
                 // Corner accents: warm orange triangles
                 let top_left = (1.0 - u) + (1.0 - v);
                 if top_left > 1.7 {
-                    let t = ((top_left - 1.7) / 0.3).minimum(1.0);
-                    r = (r + t * 0.6).minimum(1.0);
-                    g = (g + t * 0.3).minimum(1.0);
+                    let t = ((top_left - 1.7) / 0.3).min(1.0);
+                    r = (r + t * 0.6).min(1.0);
+                    g = (g + t * 0.3).min(1.0);
                     b = b * (1.0 - t * 0.4);
                 }
                 let bot_right = u + v;
                 if bot_right > 1.7 {
-                    let t = ((bot_right - 1.7) / 0.3).minimum(1.0);
+                    let t = ((bot_right - 1.7) / 0.3).min(1.0);
                     r = r * (1.0 - t * 0.3);
-                    g = (g + t * 0.4).minimum(1.0);
-                    b = (b + t * 0.7).minimum(1.0);
+                    g = (g + t * 0.4).min(1.0);
+                    b = (b + t * 0.7).min(1.0);
                 }
 
                 // Cross-hair lines through center: white with glow
-                if cy.absolute() < 0.012 || cx.absolute() < 0.012 {
-                    r = (r * 0.5 + 0.5).minimum(1.0);
-                    g = (g * 0.5 + 0.5).minimum(1.0);
-                    b = (b * 0.5 + 0.5).minimum(1.0);
+                if cy.abs() < 0.012 || cx.abs() < 0.012 {
+                    r = (r * 0.5 + 0.5).min(1.0);
+                    g = (g * 0.5 + 0.5).min(1.0);
+                    b = (b * 0.5 + 0.5).min(1.0);
                 }
 
                 // Vignette: darken edges
@@ -741,14 +947,14 @@ impl MatrixProjection {
                 b *= vig;
 
                 // Boost saturation a bit
-                r = (r * 1.3).minimum(1.0);
-                g = (g * 1.2).minimum(1.0);
-                b = (b * 1.3).minimum(1.0);
+                r = (r * 1.3).min(1.0);
+                g = (g * 1.2).min(1.0);
+                b = (b * 1.3).min(1.0);
 
                 let ri = (r * 255.0) as u32;
                 let gi = (g * 255.0) as u32;
                 let bi = (b * 255.0) as u32;
-                pixels[py * w + pixel] = 0xFF000000 | (ri << 16) | (gi << 8) | bi;
+                pixels[py * w + px] = 0xFF000000 | (ri << 16) | (gi << 8) | bi;
             }
         }
         pixels
@@ -809,7 +1015,7 @@ pub enum IconAction {
 // Enumeration — a type that can be one of several variants.
 pub enum WindowType {
     Terminal,
-    SystemInformation,
+    SystemInfo,
     About,
     Empty,
     Calculator,
@@ -840,6 +1046,7 @@ pub enum WindowType {
     MusicPlayer,  // Music player widget with pulse wave
     WifiNetworks, // WiFi network list
     WifiPassword, // WiFi password dialog
+    WifiAnalyzer, // TrustWave WiFi wave visualizer
 }
 
 /// Window structure
@@ -852,8 +1059,8 @@ pub struct Window {
     pub y: i32,
     pub width: u32,
     pub height: u32,
-    pub minimum_width: u32,
-    pub minimum_height: u32,
+    pub min_width: u32,
+    pub min_height: u32,
     pub visible: bool,
     pub focused: bool,
     pub minimized: bool,
@@ -875,6 +1082,8 @@ pub struct Window {
     // Animation state
     pub animation: WindowAnimation,
     pub pending_close: bool,  // Window should close after animation
+    /// Dirty flag: window needs re-rendering (content/state changed)
+    pub dirty: bool,
 }
 
 /// Resize edge being dragged
@@ -926,7 +1135,7 @@ pub struct FileManagerState {
     /// Navigation history (paths visited)
     pub history: Vec<String>,
     /// Current index in history (for back/forward)
-    pub history_index: usize,
+    pub history_idx: usize,
     /// Sidebar collapsed or not
     pub sidebar_collapsed: bool,
     /// Sidebar width in pixels
@@ -948,7 +1157,7 @@ pub struct FileManagerState {
     /// Search box focused 
     pub search_focused: bool,
     /// Column widths (resizable) - name, type, size, program
-    pub column_widths: [u32; 4],
+    pub col_widths: [u32; 4],
 }
 
 // Implementation block — defines methods for the type above.
@@ -957,7 +1166,7 @@ impl FileManagerState {
 pub fn new() -> Self {
         Self {
             history: Vec::new(),
-            history_index: 0,
+            history_idx: 0,
             sidebar_collapsed: false,
             sidebar_width: 180,
             sidebar_scroll: 0,
@@ -974,35 +1183,35 @@ pub fn new() -> Self {
             hover_index: None,
             search_query: String::new(),
             search_focused: false,
-            column_widths: [200, 80, 80, 120],
+            col_widths: [200, 80, 80, 120],
         }
     }
     
         // Public function — callable from other modules.
 pub fn push_history(&mut self, path: &str) {
         // Trim forward history when navigating to new path
-        if self.history_index + 1 < self.history.len() {
-            self.history.truncate(self.history_index + 1);
+        if self.history_idx + 1 < self.history.len() {
+            self.history.truncate(self.history_idx + 1);
         }
         self.history.push(String::from(path));
-        self.history_index = self.history.len() - 1;
+        self.history_idx = self.history.len() - 1;
     }
     
         // Public function — callable from other modules.
 pub fn can_go_back(&self) -> bool {
-        self.history_index > 0
+        self.history_idx > 0
     }
     
         // Public function — callable from other modules.
 pub fn can_go_forward(&self) -> bool {
-        self.history_index + 1 < self.history.len()
+        self.history_idx + 1 < self.history.len()
     }
     
         // Public function — callable from other modules.
 pub fn go_back(&mut self) -> Option<&str> {
-        if self.history_index > 0 {
-            self.history_index -= 1;
-            Some(&self.history[self.history_index])
+        if self.history_idx > 0 {
+            self.history_idx -= 1;
+            Some(&self.history[self.history_idx])
         } else {
             None
         }
@@ -1010,9 +1219,9 @@ pub fn go_back(&mut self) -> Option<&str> {
     
         // Public function — callable from other modules.
 pub fn go_forward(&mut self) -> Option<&str> {
-        if self.history_index + 1 < self.history.len() {
-            self.history_index += 1;
-            Some(&self.history[self.history_index])
+        if self.history_idx + 1 < self.history.len() {
+            self.history_idx += 1;
+            Some(&self.history[self.history_idx])
         } else {
             None
         }
@@ -1022,8 +1231,8 @@ pub fn go_forward(&mut self) -> Option<&str> {
 /// Image viewer state — holds decoded pixel data for BMP display
 pub struct ImageViewerState {
     pub pixels: Vec<u32>,
-    pub image_width: u32,
-    pub image_height: u32,
+    pub img_width: u32,
+    pub img_height: u32,
     pub zoom: u32,     // percentage: 100 = 1:1
     pub pan_x: i32,
     pub pan_y: i32,
@@ -1033,7 +1242,7 @@ pub struct ImageViewerState {
 impl ImageViewerState {
         // Public function — callable from other modules.
 pub fn new() -> Self {
-        Self { pixels: Vec::new(), image_width: 0, image_height: 0, zoom: 100, pan_x: 0, pan_y: 0 }
+        Self { pixels: Vec::new(), img_width: 0, img_height: 0, zoom: 100, pan_x: 0, pan_y: 0 }
     }
 }
 
@@ -1048,7 +1257,7 @@ pub struct FileClipboardEntry {
 pub struct DragState {
     pub source_path: String,
     pub filename: String,
-    pub is_directory: bool,
+    pub is_dir: bool,
     pub start_x: i32,
     pub start_y: i32,
     pub current_x: i32,
@@ -1072,8 +1281,8 @@ pub fn new(title: &str, x: i32, y: i32, width: u32, height: u32, wtype: WindowTy
             y,
             width,
             height,
-            minimum_width: 200,
-            minimum_height: 150,
+            min_width: 200,
+            min_height: 150,
             visible: true,
             focused: false,
             minimized: false,
@@ -1093,6 +1302,7 @@ pub fn new(title: &str, x: i32, y: i32, width: u32, height: u32, wtype: WindowTy
             scroll_offset: 0,
             animation: WindowAnimation::new(),
             pending_close: false,
+            dirty: true,
         }
     }
     
@@ -1164,47 +1374,47 @@ pub fn new(title: &str, x: i32, y: i32, width: u32, height: u32, wtype: WindowTy
     }
     
     /// Check if point is inside window
-    pub fn contains(&self, pixel: i32, py: i32) -> bool {
+    pub fn contains(&self, px: i32, py: i32) -> bool {
         if self.minimized { return false; }
-        pixel >= self.x && pixel < self.x + self.width as i32 &&
+        px >= self.x && px < self.x + self.width as i32 &&
         py >= self.y && py < self.y + self.height as i32
     }
     
     /// Check if point is in title bar
-    pub fn in_title_bar(&self, pixel: i32, py: i32) -> bool {
-        pixel >= self.x && pixel < self.x + self.width as i32 - 90 &&
-        py >= self.y && py < self.y + TITLE_BAR_HEIGHT as i32
+    pub fn in_title_bar(&self, px: i32, py: i32) -> bool {
+        px >= self.x && px < self.x + self.width as i32 - 90 &&
+        py >= self.y && py < self.y + TITLE_BAR_HEIGHT() as i32
     }
     
     /// Check if point is on close button (Windows-style: rightmost, top-right)
-    pub fn on_close_button(&self, pixel: i32, py: i32) -> bool {
-        let button_w = 28i32;
-        let button_h = TITLE_BAR_HEIGHT as i32;
-        let bx = self.x + self.width as i32 - button_w - 1;
+    pub fn on_close_button(&self, px: i32, py: i32) -> bool {
+        let btn_w = 28i32;
+        let btn_h = TITLE_BAR_HEIGHT() as i32;
+        let bx = self.x + self.width as i32 - btn_w - 1;
         let by = self.y + 1;
-        pixel >= bx && pixel < bx + button_w && py >= by && py < by + button_h
+        px >= bx && px < bx + btn_w && py >= by && py < by + btn_h
     }
     
     /// Check if point is on maximize button (Windows-style: second from right)
-    pub fn on_maximize_button(&self, pixel: i32, py: i32) -> bool {
-        let button_w = 28i32;
-        let button_h = TITLE_BAR_HEIGHT as i32;
-        let bx = self.x + self.width as i32 - button_w * 2 - 1;
+    pub fn on_maximize_button(&self, px: i32, py: i32) -> bool {
+        let btn_w = 28i32;
+        let btn_h = TITLE_BAR_HEIGHT() as i32;
+        let bx = self.x + self.width as i32 - btn_w * 2 - 1;
         let by = self.y + 1;
-        pixel >= bx && pixel < bx + button_w && py >= by && py < by + button_h
+        px >= bx && px < bx + btn_w && py >= by && py < by + btn_h
     }
     
     /// Check if point is on minimize button (Windows-style: third from right)
-    pub fn on_minimize_button(&self, pixel: i32, py: i32) -> bool {
-        let button_w = 28i32;
-        let button_h = TITLE_BAR_HEIGHT as i32;
-        let bx = self.x + self.width as i32 - button_w * 3 - 1;
+    pub fn on_minimize_button(&self, px: i32, py: i32) -> bool {
+        let btn_w = 28i32;
+        let btn_h = TITLE_BAR_HEIGHT() as i32;
+        let bx = self.x + self.width as i32 - btn_w * 3 - 1;
         let by = self.y + 1;
-        pixel >= bx && pixel < bx + button_w && py >= by && py < by + button_h
+        px >= bx && px < bx + btn_w && py >= by && py < by + btn_h
     }
     
     /// Check if point is on resize edge
-    pub fn on_resize_edge(&self, pixel: i32, py: i32) -> ResizeEdge {
+    pub fn on_resize_edge(&self, px: i32, py: i32) -> ResizeEdge {
         if self.maximized { return ResizeEdge::None; }
         
         let resize_margin = 12i32;
@@ -1213,8 +1423,8 @@ pub fn new(title: &str, x: i32, y: i32, width: u32, height: u32, wtype: WindowTy
         let top_edge = self.y;
         let bottom_edge = self.y + self.height as i32;
         
-        let on_left = pixel >= left_edge && pixel < left_edge + resize_margin;
-        let on_right = pixel >= right_edge - resize_margin && pixel < right_edge;
+        let on_left = px >= left_edge && px < left_edge + resize_margin;
+        let on_right = px >= right_edge - resize_margin && px < right_edge;
         let on_top = py >= top_edge && py < top_edge + resize_margin;
         let on_bottom = py >= bottom_edge - resize_margin && py < bottom_edge;
         
@@ -1245,10 +1455,10 @@ pub fn new(title: &str, x: i32, y: i32, width: u32, height: u32, wtype: WindowTy
             self.saved_width = self.width;
             self.saved_height = self.height;
             // Maximize to usable area (right of dock, above taskbar)
-            self.x = DOCK_WIDTH as i32;
+            self.x = DOCK_WIDTH() as i32;
             self.y = 0;
-            self.width = screen_width.saturating_sub(DOCK_WIDTH);
-            self.height = screen_height.saturating_sub(TASKBAR_HEIGHT);
+            self.width = screen_width.saturating_sub(DOCK_WIDTH());
+            self.height = screen_height.saturating_sub(TASKBAR_HEIGHT());
             self.maximized = true;
         }
     }
@@ -1280,7 +1490,7 @@ pub struct MusicPlayerState {
     /// Current track index on the audio disk
     pub current_track: usize,
     /// Total tracks available on disk
-    pub number_tracks: usize,
+    pub num_tracks: usize,
     /// DMA write cursor (samples written so far)
     pub write_cursor: usize,
     /// Which DMA half was last refilled (0 or 1)
@@ -1290,15 +1500,15 @@ pub struct MusicPlayerState {
     /// Total DMA-consumed samples (stereo i16, incremented on each half-buffer flip)
     pub consumed_samples: usize,
     /// DMA buffer capacity in i16 samples (cached after start)
-    pub dma_capability: usize,
+    pub dma_cap: usize,
     /// Visual frame counter (local)
     pub vis_frame: u32,
     /// LPIB-based elapsed milliseconds (sync'd to hardware)
-    pub elapsed_mouse: u64,
+    pub elapsed_ms: u64,
     /// Base offset for seek (added to LPIB-derived time)
-    pub seek_base_mouse: u64,
+    pub seek_base_ms: u64,
     /// Total duration in ms
-    pub total_mouse: u64,
+    pub total_ms: u64,
     /// FFT scratch buffers
     pub fft_re: [f32; 1024],
     pub fft_im: [f32; 1024],
@@ -1314,18 +1524,18 @@ pub struct MusicPlayerState {
     /// Smoothed overall energy
     pub energy: f32,
     /// Previous energy for onset detection
-    pub previous_energy: f32,
+    pub prev_energy: f32,
     /// Energy history ring buffer for adaptive threshold
     pub energy_hist: [f32; 43],
-    pub hist_index: usize,
+    pub hist_idx: usize,
     pub hist_count: usize,
     /// Waveform ring buffer (128 samples for pulse visualization)
     pub waveform: [f32; 128],
-    pub wave_index: usize,
+    pub wave_idx: usize,
     /// Volume level (0–100)
     pub volume: u32,
     /// Audio/visual sync offset in ms (positive = shift visual later, negative = shift visual earlier)
-    pub av_offset_mouse: i32,
+    pub av_offset_ms: i32,
     /// True when playing procedural audio (short loop that repeats indefinitely)
     pub is_looping: bool,
     /// Track names loaded from disk (for clickable list)
@@ -1343,16 +1553,16 @@ pub fn new() -> Self {
             audio: None,
             song_title: String::from("No Track"),
             current_track: 0,
-            number_tracks: 0,
+            num_tracks: 0,
             write_cursor: 0,
             last_half: 0,
             audio_exhausted: false,
             consumed_samples: 0,
-            dma_capability: 0,
+            dma_cap: 0,
             vis_frame: 0,
-            elapsed_mouse: 0,
-            seek_base_mouse: 0,
-            total_mouse: 0,
+            elapsed_ms: 0,
+            seek_base_ms: 0,
+            total_ms: 0,
             fft_re: [0.0; 1024],
             fft_im: [0.0; 1024],
             peak_rms: 1.0,
@@ -1362,14 +1572,14 @@ pub fn new() -> Self {
             treble: 0.0,
             beat: 0.0,
             energy: 0.0,
-            previous_energy: 0.0,
+            prev_energy: 0.0,
             energy_hist: [0.0; 43],
-            hist_index: 0,
+            hist_idx: 0,
             hist_count: 0,
             waveform: [0.0; 128],
-            wave_index: 0,
+            wave_idx: 0,
             volume: 75,
-            av_offset_mouse: 0,
+            av_offset_ms: 0,
             is_looping: false,
             track_names: Vec::new(),
             track_list_scroll: 0,
@@ -1379,8 +1589,8 @@ pub fn new() -> Self {
     /// Load track names from disk for the UI list.
     pub fn load_track_list(&mut self) {
         self.track_names = crate::trustdaw::disk_audio::get_track_names();
-        self.number_tracks = self.track_names.len();
-        crate::serial_println!("[MUSIC] Track list: {} tracks", self.number_tracks);
+        self.num_tracks = self.track_names.len();
+        crate::serial_println!("[MUSIC] Track list: {} tracks", self.num_tracks);
         for (i, name) in self.track_names.iter().enumerate() {
             crate::serial_println!("[MUSIC]   {}: {}", i, name);
         }
@@ -1398,63 +1608,63 @@ pub fn new() -> Self {
         self.stop();
 
         // Detect track count on first play
-        if self.number_tracks == 0 {
+        if self.num_tracks == 0 {
             self.load_track_list();
         }
 
-        if self.number_tracks == 0 {
+        if self.num_tracks == 0 {
             self.song_title = String::from("No tracks found");
             crate::serial_println!("[MUSIC] No tracks available on disk");
             return;
         }
 
-        let index = track_index % self.number_tracks;
-        self.current_track = index;
+        let idx = track_index % self.num_tracks;
+        self.current_track = idx;
 
         crate::serial_println!("[MUSIC] Loading track {} — heap free: {} KB",
-            index, crate::memory::heap::free() / 1024);
+            idx, crate::memory::heap::free() / 1024);
 
         // Load track from TWAV disk
-        match crate::trustdaw::disk_audio::load_track_from_disk(index) {
+        match crate::trustdaw::disk_audio::load_track_from_disk(idx) {
             Ok((raw_wav, name)) => {
                 // Debug: log first 12 bytes to verify WAV header
                 if raw_wav.len() >= 12 {
                     crate::serial_println!("[MUSIC] Track {} raw header: {:02X} {:02X} {:02X} {:02X} ... {:02X} {:02X} {:02X} {:02X}",
-                        index, raw_wav[0], raw_wav[1], raw_wav[2], raw_wav[3],
+                        idx, raw_wav[0], raw_wav[1], raw_wav[2], raw_wav[3],
                         raw_wav[8], raw_wav[9], raw_wav[10], raw_wav[11]);
                 }
                                 // Pattern matching — Rust's exhaustive branching construct.
 match crate::trustdaw::audio_viz::decode_wav_to_pcm(&raw_wav) {
                     Ok(audio) => {
-                        crate::serial_println!("[MUSIC] Decoded track {}: '{}' → {} samples", index, name, audio.len());
+                        crate::serial_println!("[MUSIC] Decoded track {}: '{}' → {} samples", idx, name, audio.len());
                         // Drop raw WAV to free memory before playback setup
                         drop(raw_wav);
                         self.start_playback_with_audio(audio, &name);
                         return;
                     }
                     Err(e) => {
-                        crate::serial_println!("[MUSIC] Track {} decode error: {}", index, e);
+                        crate::serial_println!("[MUSIC] Track {} decode error: {}", idx, e);
                     }
                 }
             }
             Err(e) => {
-                crate::serial_println!("[MUSIC] Track {} load error: {}", index, e);
+                crate::serial_println!("[MUSIC] Track {} load error: {}", idx, e);
             }
         }
 
         // If we get here, loading failed
-        let name = if index < self.track_names.len() {
-            self.track_names[index].clone()
+        let name = if idx < self.track_names.len() {
+            self.track_names[idx].clone()
         } else {
-            alloc::format!("Track {}", index + 1)
+            alloc::format!("Track {}", idx + 1)
         };
         self.song_title = alloc::format!("{} (load failed)", name);
     }
 
     /// Switch to next track and start playback.
     pub fn next_track(&mut self) {
-        if self.number_tracks > 1 {
-            let next = (self.current_track + 1) % self.number_tracks;
+        if self.num_tracks > 1 {
+            let next = (self.current_track + 1) % self.num_tracks;
             self.play_track(next);
         } else {
             // Only 1 track (or procedural) — restart from beginning
@@ -1463,10 +1673,10 @@ match crate::trustdaw::audio_viz::decode_wav_to_pcm(&raw_wav) {
     }
 
     /// Switch to previous track and start playback.
-    pub fn previous_track(&mut self) {
-        if self.number_tracks > 1 {
-            let previous = if self.current_track == 0 { self.number_tracks - 1 } else { self.current_track - 1 };
-            self.play_track(previous);
+    pub fn prev_track(&mut self) {
+        if self.num_tracks > 1 {
+            let prev = if self.current_track == 0 { self.num_tracks - 1 } else { self.current_track - 1 };
+            self.play_track(prev);
         } else {
             // Only 1 track — restart from beginning
             self.play_track(self.current_track);
@@ -1477,16 +1687,16 @@ match crate::trustdaw::audio_viz::decode_wav_to_pcm(&raw_wav) {
     fn start_playback_with_audio(&mut self, audio: Vec<i16>, title: &str) {
         self.song_title = String::from(title);
         let total_frames = audio.len() / 2;
-        self.total_mouse = (total_frames as u64 * 1000) / 48000;
+        self.total_ms = (total_frames as u64 * 1000) / 48000;
 
         // Init HDA audio (idempotent)
         crate::audio::init().ok();
 
         // Get DMA buffer capacity
-        let dma_capability = crate::drivers::hda::get_dma_buffer_information()
+        let dma_cap = crate::drivers::hda::get_dma_buffer_information()
             .map(|(_, c)| c)
             .unwrap_or(0);
-        if dma_capability == 0 {
+        if dma_cap == 0 {
             crate::serial_println!("[MUSIC] No DMA buffer available");
             return;
         }
@@ -1496,27 +1706,27 @@ match crate::trustdaw::audio_viz::decode_wav_to_pcm(&raw_wav) {
         crate::drivers::hda::reset_stream();
 
         // Fill initial DMA buffer and start playback
-        let initial = audio.len().minimum(dma_capability);
+        let initial = audio.len().min(dma_cap);
         if let Ok(()) = crate::drivers::hda::start_looped_playback(&audio[0..initial]) {
             self.write_cursor = initial;
-            self.dma_capability = dma_capability;
+            self.dma_cap = dma_cap;
             self.audio = Some(audio);
             self.state = PlaybackState::Playing;
             self.audio_exhausted = false;
             self.consumed_samples = 0;
-            self.seek_base_mouse = 0;
+            self.seek_base_ms = 0;
             self.vis_frame = 0;
-            self.elapsed_mouse = 0;
+            self.elapsed_ms = 0;
 
             // Read actual LPIB to sync half-buffer tracking
             let lpib = crate::drivers::hda::get_playback_position();
-            let full_bytes = (dma_capability * 2) as u32;
+            let full_bytes = (dma_cap * 2) as u32;
             let half_bytes = full_bytes / 2;
             let lpib_clamped = if lpib >= full_bytes { 0 } else { lpib };
             self.last_half = if lpib_clamped < half_bytes { 0 } else { 1 };
 
             // Apply saved volume
-            let _ = crate::drivers::hda::set_volume(self.volume.minimum(100) as u8);
+            let _ = crate::drivers::hda::set_volume(self.volume.min(100) as u8);
 
             // Reset FFT / beat state
             self.peak_rms = 1.0;
@@ -1526,13 +1736,13 @@ match crate::trustdaw::audio_viz::decode_wav_to_pcm(&raw_wav) {
             self.treble = 0.0;
             self.beat = 0.0;
             self.energy = 0.0;
-            self.previous_energy = 0.0;
+            self.prev_energy = 0.0;
             self.energy_hist = [0.0; 43];
-            self.hist_index = 0;
+            self.hist_idx = 0;
             self.hist_count = 0;
             self.waveform = [0.0; 128];
-            self.wave_index = 0;
-            crate::serial_println!("[MUSIC] Playing '{}', {}ms, DMA={}", self.song_title, self.total_mouse, dma_capability);
+            self.wave_idx = 0;
+            crate::serial_println!("[MUSIC] Playing '{}', {}ms, DMA={}", self.song_title, self.total_ms, dma_cap);
         } else {
             crate::serial_println!("[MUSIC] start_looped_playback failed");
         }
@@ -1547,10 +1757,10 @@ match crate::trustdaw::audio_viz::decode_wav_to_pcm(&raw_wav) {
             self.audio = None;
             self.write_cursor = 0;
             self.consumed_samples = 0;
-            self.dma_capability = 0;
-            self.seek_base_mouse = 0;
+            self.dma_cap = 0;
+            self.seek_base_ms = 0;
             self.vis_frame = 0;
-            self.elapsed_mouse = 0;
+            self.elapsed_ms = 0;
             self.is_looping = false;
             // Decay visual state
             self.beat = 0.0;
@@ -1570,11 +1780,11 @@ match self.state {
             PlaybackState::Playing => {
                 let _ = crate::drivers::hda::stop();
                 self.state = PlaybackState::Paused;
-                crate::serial_println!("[MUSIC] Paused at {}ms", self.elapsed_mouse);
+                crate::serial_println!("[MUSIC] Paused at {}ms", self.elapsed_ms);
             }
             PlaybackState::Paused => {
                 // Resume by refilling DMA from current position and restarting
-                self.resume_from_current_position();
+                self.resume_from_current_pos();
             }
             _ => {}
         }
@@ -1582,48 +1792,48 @@ match self.state {
 
     /// Resume playback from current elapsed_ms position
     /// Refills DMA buffer from the audio at that position and restarts HDA.
-    fn resume_from_current_position(&mut self) {
+    fn resume_from_current_pos(&mut self) {
         // Take audio out temporarily to avoid clone (we put it back after)
         let audio = // Pattern matching — Rust's exhaustive branching construct.
 match self.audio.take() {
             Some(a) => a,
             None => return,
         };
-        let dma_capability = crate::drivers::hda::get_dma_buffer_information()
+        let dma_cap = crate::drivers::hda::get_dma_buffer_information()
             .map(|(_, c)| c)
             .unwrap_or(0);
-        if dma_capability == 0 {
+        if dma_cap == 0 {
             self.audio = Some(audio);
             return;
         }
 
         // Compute audio sample position from elapsed_ms
-        let sample_position = ((self.elapsed_mouse as usize * 48000 * 2) / 1000).minimum(audio.len());
+        let sample_pos = ((self.elapsed_ms as usize * 48000 * 2) / 1000).min(audio.len());
 
         // Stop + full stream reset (SRST clears LPIB to 0, reconfigures stream)
         let _ = crate::drivers::hda::stop();
         crate::drivers::hda::reset_stream();
 
         // Fill DMA buffer from new position and start
-        let initial = audio.len().saturating_sub(sample_position).minimum(dma_capability);
+        let initial = audio.len().saturating_sub(sample_pos).min(dma_cap);
         if initial == 0 {
             self.audio = Some(audio);
             self.stop();
             return;
         }
-        if let Ok(()) = crate::drivers::hda::start_looped_playback(&audio[sample_position..sample_position + initial]) {
-            self.write_cursor = sample_position + initial;
-            self.dma_capability = dma_capability;
+        if let Ok(()) = crate::drivers::hda::start_looped_playback(&audio[sample_pos..sample_pos + initial]) {
+            self.write_cursor = sample_pos + initial;
+            self.dma_cap = dma_cap;
             self.consumed_samples = 0;
-            self.seek_base_mouse = self.elapsed_mouse;
+            self.seek_base_ms = self.elapsed_ms;
             self.state = PlaybackState::Playing;
             self.audio_exhausted = false;
 
             // After SRST, LPIB starts at 0 — always start in half 0
             self.last_half = 0;
 
-            let _ = crate::drivers::hda::set_volume(self.volume.minimum(100) as u8);
-            crate::serial_println!("[MUSIC] Resumed at {}ms, sample={}", self.elapsed_mouse, sample_position);
+            let _ = crate::drivers::hda::set_volume(self.volume.min(100) as u8);
+            crate::serial_println!("[MUSIC] Resumed at {}ms, sample={}", self.elapsed_ms, sample_pos);
         } else {
             crate::serial_println!("[MUSIC] Resume start_looped_playback failed");
         }
@@ -1633,8 +1843,8 @@ match self.audio.take() {
 
     /// Seek to a specific millisecond position. Works from Playing or Paused.
     pub fn seek_to(&mut self, target_mouse: u64) {
-        let target_mouse = target_mouse.minimum(self.total_mouse);
-        self.elapsed_mouse = target_mouse;
+        let target_mouse = target_mouse.min(self.total_ms);
+        self.elapsed_ms = target_mouse;
 
         // If paused, just update position — DMA will be refilled on resume
         if self.state == PlaybackState::Paused {
@@ -1644,7 +1854,7 @@ match self.audio.take() {
 
         // If playing, do a live seek: refill DMA from new position
         if self.state == PlaybackState::Playing {
-            self.resume_from_current_position();
+            self.resume_from_current_pos();
             crate::serial_println!("[MUSIC] Seek (playing) to {}ms", target_mouse);
         }
     }
@@ -1659,10 +1869,10 @@ match &self.audio {
         };
 
         // DMA refill using LPIB-based half-buffer ping-pong
-        if let Some((dma_pointer, dma_capability)) = crate::drivers::hda::get_dma_buffer_information() {
-            let half_i16 = dma_capability / 2;
+        if let Some((dma_ptr, dma_cap)) = crate::drivers::hda::get_dma_buffer_information() {
+            let half_i16 = dma_cap / 2;
             let half_bytes = (half_i16 * 2) as u32;
-            let full_bytes = (dma_capability * 2) as u32;
+            let full_bytes = (dma_cap * 2) as u32;
 
             crate::drivers::hda::clear_stream_status();
             crate::drivers::hda::ensure_running();
@@ -1678,12 +1888,12 @@ match &self.audio {
                 if self.write_cursor < audio.len() {
                     let dest_offset = self.last_half as usize * half_i16;
                     let remaining = audio.len() - self.write_cursor;
-                    let to_copy = remaining.minimum(half_i16);
+                    let to_copy = remaining.min(half_i16);
                                         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
                         core::ptr::copy_nonoverlapping(
-                            audio.as_pointer().add(self.write_cursor),
-                            dma_pointer.add(dest_offset),
+                            audio.as_ptr().add(self.write_cursor),
+                            dma_ptr.add(dest_offset),
                             to_copy,
                         );
                         if to_copy < half_i16 {
@@ -1691,16 +1901,16 @@ unsafe {
                             if self.is_looping && !audio.is_empty() {
                                 let mut filled = to_copy;
                                 while filled < half_i16 {
-                                    let wrap_copy = (half_i16 - filled).minimum(audio.len());
+                                    let wrap_copy = (half_i16 - filled).min(audio.len());
                                     core::ptr::copy_nonoverlapping(
-                                        audio.as_pointer(),
-                                        dma_pointer.add(dest_offset + filled),
+                                        audio.as_ptr(),
+                                        dma_ptr.add(dest_offset + filled),
                                         wrap_copy,
                                     );
                                     filled += wrap_copy;
                                 }
                             } else {
-                                core::ptr::write_bytes(dma_pointer.add(dest_offset + to_copy), 0, half_i16 - to_copy);
+                                core::ptr::write_bytes(dma_ptr.add(dest_offset + to_copy), 0, half_i16 - to_copy);
                             }
                         }
                     }
@@ -1716,21 +1926,21 @@ unsafe {
                     // Looping: refill from start of audio
                     self.write_cursor = 0;
                     let dest_offset = self.last_half as usize * half_i16;
-                    let to_copy = audio.len().minimum(half_i16);
+                    let to_copy = audio.len().min(half_i16);
                                         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
                         core::ptr::copy_nonoverlapping(
-                            audio.as_pointer(),
-                            dma_pointer.add(dest_offset),
+                            audio.as_ptr(),
+                            dma_ptr.add(dest_offset),
                             to_copy,
                         );
                         if to_copy < half_i16 {
                             let mut filled = to_copy;
                             while filled < half_i16 {
-                                let wrap_copy = (half_i16 - filled).minimum(audio.len());
+                                let wrap_copy = (half_i16 - filled).min(audio.len());
                                 core::ptr::copy_nonoverlapping(
-                                    audio.as_pointer(),
-                                    dma_pointer.add(dest_offset + filled),
+                                    audio.as_ptr(),
+                                    dma_ptr.add(dest_offset + filled),
                                     wrap_copy,
                                 );
                                 filled += wrap_copy;
@@ -1741,7 +1951,7 @@ unsafe {
                 } else {
                     let dest_offset = self.last_half as usize * half_i16;
                                         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::write_bytes(dma_pointer.add(dest_offset), 0, half_i16); }
+unsafe { core::ptr::write_bytes(dma_ptr.add(dest_offset), 0, half_i16); }
                 }
                 self.last_half = current_half;
             }
@@ -1756,32 +1966,32 @@ unsafe { core::ptr::write_bytes(dma_pointer.add(dest_offset), 0, half_i16); }
             // Since consumed_samples is incremented when the PREVIOUS half completes,
             // the actual playback position is: initial_dma_fill + consumed - dma_cap + lpib_samples
             // Simplified: the source audio position being heard RIGHT NOW is:
-            let heard_position = if self.consumed_samples + lpib_samples >= dma_capability {
-                self.consumed_samples + lpib_samples - dma_capability
+            let heard_position = if self.consumed_samples + lpib_samples >= dma_cap {
+                self.consumed_samples + lpib_samples - dma_cap
             } else {
                 lpib_samples // still within initial DMA fill
             };
             // Convert stereo samples → milliseconds (48kHz stereo = 96000 samples/sec)
             // Add seek_base_ms so seek position is preserved
-            self.elapsed_mouse = self.seek_base_mouse + (heard_position as u64 * 1000) / (48000 * 2);
+            self.elapsed_ms = self.seek_base_ms + (heard_position as u64 * 1000) / (48000 * 2);
         }
 
         self.vis_frame += 1;
 
         // Check if done
-        if self.elapsed_mouse >= self.total_mouse || self.audio_exhausted {
+        if self.elapsed_ms >= self.total_ms || self.audio_exhausted {
             if self.is_looping {
                 // Looping mode: restart same track
                 self.write_cursor = 0;
                 self.audio_exhausted = false;
                 self.consumed_samples = 0;
-                self.seek_base_mouse = 0;
-                self.elapsed_mouse = 0;
+                self.seek_base_ms = 0;
+                self.elapsed_ms = 0;
                 return;
             }
             // Auto-advance to next track if multiple tracks available
-            if self.number_tracks > 1 {
-                let next = (self.current_track + 1) % self.number_tracks;
+            if self.num_tracks > 1 {
+                let next = (self.current_track + 1) % self.num_tracks;
                 crate::serial_println!("[MUSIC] Track ended, auto-advancing to track {}", next);
                 self.play_track(next);
             } else {
@@ -1791,16 +2001,16 @@ unsafe { core::ptr::write_bytes(dma_pointer.add(dest_offset), 0, half_i16); }
         }
 
         // Audio position for FFT — use LPIB-synced position + A/V sync offset
-        let visual_mouse = (self.elapsed_mouse as i64 + self.av_offset_mouse as i64).maximum(0).minimum(self.total_mouse as i64) as u64;
-        let audio_position = (visual_mouse as usize * 48000 * 2 / 1000).minimum(audio.len().saturating_sub(2));
+        let visual_mouse = (self.elapsed_ms as i64 + self.av_offset_ms as i64).max(0).min(self.total_ms as i64) as u64;
+        let audio_position = (visual_mouse as usize * 48000 * 2 / 1000).min(audio.len().saturating_sub(2));
 
         // ── Mini FFT (256-point for speed — enough for widget) ──
         let fft_n = 256usize;
         let mono_start = audio_position.saturating_sub(fft_n * 2) & !1;
         let mut maximum_absolute: f32 = 0.0;
         for i in 0..fft_n {
-            let index = mono_start + i * 2;
-            let s = if index < audio.len() { audio[index] as f32 } else { 0.0 };
+            let idx = mono_start + i * 2;
+            let s = if idx < audio.len() { audio[idx] as f32 } else { 0.0 };
             self.fft_re[i] = s;
             self.fft_im[i] = 0.0;
             let a = if s >= 0.0 { s } else { -s };
@@ -1856,10 +2066,10 @@ unsafe { core::ptr::write_bytes(dma_pointer.add(dest_offset), 0, half_i16); }
         // Band energies (256-pt FFT at 48kHz: bin = index * 187.5 Hz)
         let mag = |lo: usize, hi: usize| -> f32 {
             let mut s = 0.0f32;
-            for i in lo..hi.minimum(128) {
+            for i in lo..hi.min(128) {
                 s += libm::sqrtf(self.fft_re[i] * self.fft_re[i] + self.fft_im[i] * self.fft_im[i]);
             }
-            s / (hi - lo).maximum(1) as f32
+            s / (hi - lo).max(1) as f32
         };
         let raw_sub = mag(1, 2);   // ~188Hz
         let raw_bass = mag(2, 4);  // 375-750Hz
@@ -1868,42 +2078,42 @@ unsafe { core::ptr::write_bytes(dma_pointer.add(dest_offset), 0, half_i16); }
         let raw_e = raw_sub * 1.5 + raw_bass * 1.2 + raw_mid * 0.5 + raw_tre * 0.2;
 
         // Smooth
-        let sm = |previous: f32, new: f32, a: f32, r: f32| -> f32 {
-            if new > previous { previous + (new - previous) * a } else { previous + (new - previous) * r }
+        let sm = |prev: f32, new: f32, a: f32, r: f32| -> f32 {
+            if new > prev { prev + (new - prev) * a } else { prev + (new - prev) * r }
         };
-        self.sub_bass = sm(self.sub_bass, raw_sub.minimum(1.0), 0.75, 0.10);
-        self.bass = sm(self.bass, raw_bass.minimum(1.0), 0.70, 0.10);
-        self.mid = sm(self.mid, raw_mid.minimum(1.0), 0.60, 0.12);
-        self.treble = sm(self.treble, raw_tre.minimum(1.0), 0.70, 0.16);
-        self.energy = sm(self.energy, raw_e.minimum(1.5), 0.65, 0.10);
+        self.sub_bass = sm(self.sub_bass, raw_sub.min(1.0), 0.75, 0.10);
+        self.bass = sm(self.bass, raw_bass.min(1.0), 0.70, 0.10);
+        self.mid = sm(self.mid, raw_mid.min(1.0), 0.60, 0.12);
+        self.treble = sm(self.treble, raw_tre.min(1.0), 0.70, 0.16);
+        self.energy = sm(self.energy, raw_e.min(1.5), 0.65, 0.10);
 
         // Beat detection
         let be = raw_sub + raw_bass * 0.8;
-        self.energy_hist[self.hist_index] = be;
-        self.hist_index = (self.hist_index + 1) % 43;
+        self.energy_hist[self.hist_idx] = be;
+        self.hist_idx = (self.hist_idx + 1) % 43;
         if self.hist_count < 43 { self.hist_count += 1; }
-        let filled = self.hist_count.maximum(1) as f32;
+        let filled = self.hist_count.max(1) as f32;
         let average: f32 = self.energy_hist.iter().take(self.hist_count).sum::<f32>() / filled;
         let mut var_sum = 0.0f32;
         for i in 0..self.hist_count { let d = self.energy_hist[i] - average; var_sum += d * d; }
         let variance = var_sum / filled;
-        let threshold = (-15.0 * variance + 1.45f32).maximum(1.05).minimum(1.5);
-        let onset = be - self.previous_energy;
+        let threshold = (-15.0 * variance + 1.45f32).max(1.05).min(1.5);
+        let onset = be - self.prev_energy;
         if be > average * threshold && onset > 0.002 && self.hist_count > 5 {
-            let strength = ((be - average * threshold) / average.maximum(0.001)).minimum(1.0);
-            self.beat = (0.6 + strength * 0.4).minimum(1.0);
+            let strength = ((be - average * threshold) / average.max(0.001)).min(1.0);
+            self.beat = (0.6 + strength * 0.4).min(1.0);
         } else {
             self.beat *= 0.88;
             if self.beat < 0.02 { self.beat = 0.0; }
         }
-        self.previous_energy = be;
+        self.prev_energy = be;
 
         // Update waveform ring buffer (sample every few frames for smooth viz)
         if !audio.is_empty() {
-            let index = audio_position.minimum(audio.len() - 1) & !1;
-            let sample = audio[index] as f32 / 32768.0;
-            self.waveform[self.wave_index % 128] = sample;
-            self.wave_index += 1;
+            let idx = audio_position.min(audio.len() - 1) & !1;
+            let sample = audio[idx] as f32 / 32768.0;
+            self.waveform[self.wave_idx % 128] = sample;
+            self.wave_idx += 1;
         }
     }
 }
@@ -1926,13 +2136,13 @@ pub enum RenderMode {
 }
 
 /// Adaptive desktop complexity tier — chosen based on host capabilities.
-/// Higher tiers unlock more visual effects; if FPS drops below 30 for
+/// Higher tiers unlock more visual effects; if FPS drops below 18 for
 /// 3 consecutive seconds the tier auto-downgrades.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 // Enumeration — a type that can be one of several variants.
 pub enum DesktopTier {
     /// CLI only — returned to shell, no GUI launched (< 128 MB RAM or no FB)
-    ClientOnly,
+    CliOnly,
     /// Minimal desktop: solid background, taskbar, windows — no rain, no effects
     Minimal,
     /// Standard desktop: matrix rain at low density, basic animations
@@ -2013,9 +2223,12 @@ pub struct Desktop {
     // GameBoy Input window links (input_window_id -> gb_window_id)
     #[cfg(feature = "emulators")]
     pub gb_input_links: BTreeMap<u32, u32>,
+    // TrustWave WiFi analyzer states (window_id -> WifiAnalyzerState)
+    pub wifi_analyzer_states: BTreeMap<u32, crate::wifi_analyzer::WifiAnalyzerState>,
     // UI scale factor (1 = native, 2 = HiDPI, 3 = ultra)
     pub scale_factor: u32,
     // Matrix rain state (depth-parallax advancing effect)
+    matrix_cols: usize,
     matrix_chars: Vec<u8>,
     matrix_heads: Vec<i32>,
     matrix_speeds: Vec<u32>,
@@ -2046,9 +2259,9 @@ pub struct Desktop {
     global_energy: f32,
     global_beat: f32,
     global_peak_rms: f32,
-    global_previous_energy: f32,
+    global_prev_energy: f32,
     global_energy_hist: Vec<f32>,
-    global_hist_index: usize,
+    global_hist_idx: usize,
     global_hist_count: usize,
     global_audio_active: bool,
     // Terminal auto-suggestions: how many suggestion lines added after prompt
@@ -2086,11 +2299,11 @@ pub struct Desktop {
     /// Lock screen wrong PIN shake animation
     pub lock_screen_shake: u32,
     /// System tray: simulated volume level (0-100)
-    pub system_volume: u32,
+    pub sys_volume: u32,
     /// System tray: simulated battery level (0-100)
-    pub system_battery: u32,
+    pub sys_battery: u32,
     /// System tray: simulated wifi connected
-    pub system_wifi_connected: bool,
+    pub sys_wifi_connected: bool,
     
     // ══════ WiFi ══════
     /// WiFi: selected network index in the WiFi window
@@ -2106,7 +2319,7 @@ pub struct Desktop {
     /// WiFi: scan requested (debounce)
     pub wifi_scan_requested: bool,
     /// WiFi: connection error message
-    pub wifi_error_message: Option<String>,
+    pub wifi_error_msg: Option<String>,
     
     // ══════ TOUCH INPUT ══════
     /// Gesture recognizer state machine
@@ -2134,12 +2347,18 @@ pub struct Desktop {
     fps_high_count: u32,
     /// The initial tier detected at boot (ceiling for auto-upgrade)
     initial_tier: DesktopTier,
+    /// Cooldown frames after tier change (prevents oscillation)
+    tier_cooldown: u32,
     /// Manual override: when true, auto_adjust_tier() is disabled
     pub tier_manual_override: bool,
     /// Snap preview zone (shown while dragging a window near screen edges)
     snap_preview: Option<SnapDir>,
     /// Shortcut help overlay visible (F1 toggle)
     show_shortcuts: bool,
+    /// Window overlay caching: true when any window needs re-rendering
+    windows_dirty: bool,
+    /// Previous cursor position for hover-change detection
+    prev_hover_window_id: Option<u32>,
     // ══════ SHUTDOWN ANIMATION ══════
     /// Shutdown sequence active
     shutdown_active: bool,
@@ -2281,8 +2500,8 @@ pub fn press_backspace(&mut self) {
     
     fn eval_expression(expr: &str) -> f64 {
         let tokens = Self::tokenize(expr);
-        let mut position = 0;
-        let result = Self::parse_expr(&tokens, &mut position);
+        let mut pos = 0;
+        let result = Self::parse_expr(&tokens, &mut pos);
         result
     }
     
@@ -2291,16 +2510,16 @@ pub fn press_backspace(&mut self) {
         let chars: Vec<char> = expr.chars().collect();
         let mut i = 0;
         while i < chars.len() {
-            let character = chars[i];
-            if character.is_ascii_digit() || character == '.' {
+            let ch = chars[i];
+            if ch.is_ascii_digit() || ch == '.' {
                 // Parse number
                 let start = i;
                 while i < chars.len() && (chars[i].is_ascii_digit() || chars[i] == '.') {
                     i += 1;
                 }
                 let number_str: String = chars[start..i].iter().collect();
-                tokens.push(CalcToken::Number(Self::parse_float(&number_str)));
-            } else if character.is_ascii_alphabetic() {
+                tokens.push(CalcToken::Num(Self::parse_float(&number_str)));
+            } else if ch.is_ascii_alphabetic() {
                 // Parse function name
                 let start = i;
                 while i < chars.len() && chars[i].is_ascii_alphabetic() {
@@ -2308,14 +2527,14 @@ pub fn press_backspace(&mut self) {
                 }
                 let name: String = chars[start..i].iter().collect();
                 tokens.push(CalcToken::Func(name));
-            } else if character == '(' {
+            } else if ch == '(' {
                 tokens.push(CalcToken::LParen);
                 i += 1;
-            } else if character == ')' {
+            } else if ch == ')' {
                 tokens.push(CalcToken::RParen);
                 i += 1;
-            } else if character == '+' || character == '-' || character == '*' || character == '/' || character == '%' {
-                tokens.push(CalcToken::Op(character));
+            } else if ch == '+' || ch == '-' || ch == '*' || ch == '/' || ch == '%' {
+                tokens.push(CalcToken::Op(ch));
                 i += 1;
             } else {
                 i += 1; // skip unknown chars
@@ -2324,77 +2543,77 @@ pub fn press_backspace(&mut self) {
         tokens
     }
     
-    fn parse_expr(tokens: &[CalcToken], position: &mut usize) -> f64 {
-        let mut left = Self::parse_term(tokens, position);
-        while *position < tokens.len() {
+    fn parse_expr(tokens: &[CalcToken], pos: &mut usize) -> f64 {
+        let mut left = Self::parse_term(tokens, pos);
+        while *pos < tokens.len() {
                         // Pattern matching — Rust's exhaustive branching construct.
-match &tokens[*position] {
-                CalcToken::Op('+') => { *position += 1; left += Self::parse_term(tokens, position); }
-                CalcToken::Op('-') => { *position += 1; left -= Self::parse_term(tokens, position); }
+match &tokens[*pos] {
+                CalcToken::Op('+') => { *pos += 1; left += Self::parse_term(tokens, pos); }
+                CalcToken::Op('-') => { *pos += 1; left -= Self::parse_term(tokens, pos); }
                 _ => break,
             }
         }
         left
     }
     
-    fn parse_term(tokens: &[CalcToken], position: &mut usize) -> f64 {
-        let mut left = Self::parse_factor(tokens, position);
-        while *position < tokens.len() {
+    fn parse_term(tokens: &[CalcToken], pos: &mut usize) -> f64 {
+        let mut left = Self::parse_factor(tokens, pos);
+        while *pos < tokens.len() {
                         // Pattern matching — Rust's exhaustive branching construct.
-match &tokens[*position] {
-                CalcToken::Op('*') => { *position += 1; left *= Self::parse_factor(tokens, position); }
-                CalcToken::Op('/') => { *position += 1; let r = Self::parse_factor(tokens, position); left = if r != 0.0 { left / r } else { 0.0 }; }
-                CalcToken::Op('%') => { *position += 1; let r = Self::parse_factor(tokens, position); left = if r != 0.0 { left % r } else { 0.0 }; }
+match &tokens[*pos] {
+                CalcToken::Op('*') => { *pos += 1; left *= Self::parse_factor(tokens, pos); }
+                CalcToken::Op('/') => { *pos += 1; let r = Self::parse_factor(tokens, pos); left = if r != 0.0 { left / r } else { 0.0 }; }
+                CalcToken::Op('%') => { *pos += 1; let r = Self::parse_factor(tokens, pos); left = if r != 0.0 { left % r } else { 0.0 }; }
                 _ => break,
             }
         }
         left
     }
     
-    fn parse_factor(tokens: &[CalcToken], position: &mut usize) -> f64 {
+    fn parse_factor(tokens: &[CalcToken], pos: &mut usize) -> f64 {
         // Handle unary minus
-        if *position < tokens.len() {
-            if let CalcToken::Op('-') = &tokens[*position] {
-                *position += 1;
-                return -Self::parse_atom(tokens, position);
+        if *pos < tokens.len() {
+            if let CalcToken::Op('-') = &tokens[*pos] {
+                *pos += 1;
+                return -Self::parse_atom(tokens, pos);
             }
         }
-        Self::parse_atom(tokens, position)
+        Self::parse_atom(tokens, pos)
     }
     
-    fn parse_atom(tokens: &[CalcToken], position: &mut usize) -> f64 {
-        if *position >= tokens.len() { return 0.0; }
+    fn parse_atom(tokens: &[CalcToken], pos: &mut usize) -> f64 {
+        if *pos >= tokens.len() { return 0.0; }
         
                 // Pattern matching — Rust's exhaustive branching construct.
-match &tokens[*position] {
-            CalcToken::Number(n) => {
+match &tokens[*pos] {
+            CalcToken::Num(n) => {
                 let v = *n;
-                *position += 1;
+                *pos += 1;
                 v
             }
             CalcToken::LParen => {
-                *position += 1; // skip (
-                let v = Self::parse_expr(tokens, position);
-                if *position < tokens.len() {
-                    if let CalcToken::RParen = &tokens[*position] { *position += 1; }
+                *pos += 1; // skip (
+                let v = Self::parse_expr(tokens, pos);
+                if *pos < tokens.len() {
+                    if let CalcToken::RParen = &tokens[*pos] { *pos += 1; }
                 }
                 v
             }
             CalcToken::Func(name) => {
                 let fname = name.clone();
-                *position += 1; // skip func name
+                *pos += 1; // skip func name
                 // Expect (
-                if *position < tokens.len() {
-                    if let CalcToken::LParen = &tokens[*position] { *position += 1; }
+                if *pos < tokens.len() {
+                    if let CalcToken::LParen = &tokens[*pos] { *pos += 1; }
                 }
-                let argument = Self::parse_expr(tokens, position);
-                if *position < tokens.len() {
-                    if let CalcToken::RParen = &tokens[*position] { *position += 1; }
+                let argument = Self::parse_expr(tokens, pos);
+                if *pos < tokens.len() {
+                    if let CalcToken::RParen = &tokens[*pos] { *pos += 1; }
                 }
                 Self::apply_func(&fname, argument)
             }
             _ => {
-                *position += 1;
+                *pos += 1;
                 0.0
             }
         }
@@ -2410,10 +2629,10 @@ match name {
             "cos" => Self::cos_approx(x),
             "tan" => {
                 let c = Self::cos_approx(x);
-                if c.absolute() > 1e-10 { Self::sin_approx(x) / c } else { 0.0 }
+                if c.abs() > 1e-10 { Self::sin_approx(x) / c } else { 0.0 }
             }
             "abs" => if x < 0.0 { -x } else { x },
-            "ln" => Self::line_approx(x),
+            "ln" => Self::ln_approx(x),
             _ => x,
         }
     }
@@ -2450,7 +2669,7 @@ match name {
         Self::sin_approx(x + pi / 2.0)
     }
     
-    fn line_approx(x: f64) -> f64 {
+    fn ln_approx(x: f64) -> f64 {
         if x <= 0.0 { return 0.0; }
         // Use: ln(x) = 2 * atanh((x-1)/(x+1)) with series expansion
         let y = (x - 1.0) / (x + 1.0);
@@ -2469,13 +2688,13 @@ match name {
         let mut decimal_part = false;
         let mut decimal_factor = 0.1;
         let mut negative = false;
-        for (i, character) in s.chars().enumerate() {
-            if character == '-' && i == 0 {
+        for (i, ch) in s.chars().enumerate() {
+            if ch == '-' && i == 0 {
                 negative = true;
-            } else if character == '.' {
+            } else if ch == '.' {
                 decimal_part = true;
-            } else if character.is_ascii_digit() {
-                let digit = (character as u8 - b'0') as f64;
+            } else if ch.is_ascii_digit() {
+                let digit = (ch as u8 - b'0') as f64;
                 if decimal_part {
                     result += digit * decimal_factor;
                     decimal_factor *= 0.1;
@@ -2488,7 +2707,7 @@ match name {
     }
     
     fn format_number(n: f64) -> String {
-        if n == (n as i64) as f64 && n.absolute() < 1e15 {
+        if n == (n as i64) as f64 && n.abs() < 1e15 {
             format!("{}", n as i64)
         } else {
             let s = format!("{:.6}", n);
@@ -2502,7 +2721,7 @@ match name {
 /// Token for calculator expression parser
 #[derive(Clone)]
 enum CalcToken {
-    Number(f64),
+    Num(f64),
     Op(char),
     LParen,
     RParen,
@@ -2522,7 +2741,7 @@ pub struct SnakeState {
     pub grid_h: i32,
     pub tick_counter: u32,
     pub speed: u32,
-    pub random_generator_state: u32,
+    pub rng_state: u32,
 }
 
 // Implementation block — defines methods for the type above.
@@ -2541,7 +2760,7 @@ pub fn new() -> Self {
             grid_h: 15,
             tick_counter: 0,
             speed: 8, // Move every 8 frames
-            random_generator_state: 42,
+            rng_state: 42,
         };
         // Initial snake in the middle
         for i in 0..4 {
@@ -2550,11 +2769,11 @@ pub fn new() -> Self {
         state
     }
     
-    fn next_random_generator(&mut self) -> u32 {
-        self.random_generator_state ^= self.random_generator_state << 13;
-        self.random_generator_state ^= self.random_generator_state >> 17;
-        self.random_generator_state ^= self.random_generator_state << 5;
-        self.random_generator_state
+    fn next_rng(&mut self) -> u32 {
+        self.rng_state ^= self.rng_state << 13;
+        self.rng_state ^= self.rng_state >> 17;
+        self.rng_state ^= self.rng_state << 5;
+        self.rng_state
     }
     
         // Public function — callable from other modules.
@@ -2568,8 +2787,8 @@ pub fn spawn_food(&mut self) {
             return;
         }
         for _ in 0..1000 {
-            let fx = (self.next_random_generator() % self.grid_w as u32) as i32;
-            let fy = (self.next_random_generator() % self.grid_h as u32) as i32;
+            let fx = (self.next_rng() % self.grid_w as u32) as i32;
+            let fy = (self.next_rng() % self.grid_h as u32) as i32;
             if !self.snake.iter().any(|&(sx, sy)| sx == fx && sy == fy) {
                 self.food = (fx, fy);
                 return;
@@ -2721,7 +2940,9 @@ impl Desktop {
             gamelab_states: BTreeMap::new(),
             #[cfg(feature = "emulators")]
             gb_input_links: BTreeMap::new(),
+            wifi_analyzer_states: BTreeMap::new(),
             scale_factor: 1,
+            matrix_cols: 256,
             matrix_chars: Vec::new(),
             matrix_heads: Vec::new(),
             matrix_speeds: Vec::new(),
@@ -2744,9 +2965,9 @@ impl Desktop {
             global_energy: 0.0,
             global_beat: 0.0,
             global_peak_rms: 0.0,
-            global_previous_energy: 0.0,
+            global_prev_energy: 0.0,
             global_energy_hist: Vec::new(),
-            global_hist_index: 0,
+            global_hist_idx: 0,
             global_hist_count: 0,
             global_audio_active: false,
             terminal_suggestion_count: 0,
@@ -2767,9 +2988,9 @@ impl Desktop {
             lock_screen_active: false,
             lock_screen_input: String::new(),
             lock_screen_shake: 0,
-            system_volume: 75,
-            system_battery: 85,
-            system_wifi_connected: true,
+            sys_volume: 75,
+            sys_battery: 85,
+            sys_wifi_connected: true,
             // WiFi
             wifi_selected_index: 0,
             wifi_scroll_offset: 0,
@@ -2777,7 +2998,7 @@ impl Desktop {
             wifi_connecting_ssid: String::new(),
             wifi_show_password: false,
             wifi_scan_requested: false,
-            wifi_error_message: None,
+            wifi_error_msg: None,
             // Touch input
             gesture_recognizer: crate::gesture::GestureRecognizer::new(1280, 800),
             gesture_buffer: crate::gesture::GestureBuffer::new(),
@@ -2793,9 +3014,12 @@ impl Desktop {
             fps_low_count: 0,
             fps_high_count: 0,
             initial_tier: DesktopTier::Full,
+            tier_cooldown: 0,
             tier_manual_override: false,
             snap_preview: None,
             show_shortcuts: false,
+            windows_dirty: true,
+            prev_hover_window_id: None,
             // Shutdown animation
             shutdown_active: false,
             shutdown_start_tick: 0,
@@ -2868,8 +3092,10 @@ impl Desktop {
         
         // Initialize UI scaling based on resolution
         crate::graphics::scaling::init(width, height);
+        crate::graphics::scaling::initialize_ui_scale(width, height);
         self.scale_factor = crate::graphics::scaling::get_scale_factor();
-        crate::serial_println!("[Desktop] UI scale factor: {}x", self.scale_factor);
+        crate::serial_println!("[Desktop] Text scale: {}x, UI chrome: TASKBAR={}px DOCK={}px TITLE={}px",
+            self.scale_factor, TASKBAR_HEIGHT(), DOCK_WIDTH(), TITLE_BAR_HEIGHT());
         
         // Initialize touch input subsystem
         crate::touch::init();
@@ -2894,6 +3120,16 @@ impl Desktop {
         crate::serial_println!("[Desktop] init_background_cache...");
         framebuffer::initialize_background_cache();
         
+        // Initialize window overlay cache (skip window redraw when unchanged)
+        framebuffer::initialize_window_overlay();
+        
+        // Initialize background ring buffer (pre-render future frames)
+        framebuffer::initialize_bg_ring();
+        
+        // Spawn dedicated background render thread (multithread isolation)
+        initialize_bg_thread(self);
+
+        
         // Initialize OpenGL compositor
         crate::serial_println!("[Desktop] init_compositor...");
         compositor::initialize_compositor(width, height);
@@ -2901,14 +3137,14 @@ impl Desktop {
         
         // Create desktop icons like Windows
         crate::serial_println!("[Desktop] init_desktop_icons...");
-        self.initialize_desktop_icons();
+        self.init_desktop_icons();
         
         // Mark that we need to render background on first frame
         self.background_cached = false;
         self.needs_full_redraw = true;
         
         // Initialize matrix rain
-        self.initialize_matrix_rain();
+        self.init_matrix_rain();
         
         // Detect optimal desktop tier based on host capabilities
         self.detect_tier();
@@ -2919,38 +3155,45 @@ impl Desktop {
     }
     
     /// Initialize matrix rain background data (depth-parallax advancing effect)
-    fn initialize_matrix_rain(&mut self) {
-        // 256 columns × 4 layers: depth-layered rain with far=dense/slow, near=sparse/fast
-        const MATRIX_COLS: usize = 256;
+    fn init_matrix_rain(&mut self) {
+        // Dynamic columns: scale proportionally to resolution
+        // Calibrated on T61 (1280px = 256 cols, ~5px per column)
+        // Higher resolution = more columns = same visual density
+        const BASE_COLS: usize = 256;
+                // Compile-time constant — evaluated at compilation, zero runtime cost.
+const BASE_WIDTH: usize = 1280;
+        let matrix_cols = ((self.width as usize * BASE_COLS) / BASE_WIDTH).max(BASE_COLS);
+        self.matrix_cols = matrix_cols;
                 // Compile-time constant — evaluated at compilation, zero runtime cost.
 const NUMBER_LAYERS: usize = 4;
                 // Compile-time constant — evaluated at compilation, zero runtime cost.
 const MAXIMUM_TRAIL: usize = 40;   // must match draw_background
         const CHARS: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ@#$%&*+=<>[]{}|";
         
-        let total = MATRIX_COLS * NUMBER_LAYERS;
+        crate::serial_println!("[Rain] {}px wide -> {} cols (base=256@1280)", self.width, matrix_cols);
+        let total = matrix_cols * NUMBER_LAYERS;
         self.matrix_chars = vec![0u8; total * MAXIMUM_TRAIL];
         self.matrix_heads = vec![0i32; total];
         self.matrix_speeds = vec![2u32; total];
         self.matrix_seeds = vec![0u32; total];
         
-        let height = self.height.saturating_sub(TASKBAR_HEIGHT);
+        let height = self.height.saturating_sub(TASKBAR_HEIGHT());
         
-        for column in 0..MATRIX_COLS {
+        for col in 0..matrix_cols {
             for layer in 0..NUMBER_LAYERS {
-                let index = column * NUMBER_LAYERS + layer;
-                let seed = (column as u32).wrapping_mul(2654435761)
+                let idx = col * NUMBER_LAYERS + layer;
+                let seed = (col as u32).wrapping_mul(2654435761)
                     ^ 0xDEADBEEF
                     ^ ((layer as u32).wrapping_mul(0x9E3779B9));
                 for i in 0..MAXIMUM_TRAIL {
                     let char_seed = seed.wrapping_add((i as u32).wrapping_mul(7919));
-                    self.matrix_chars[index * MAXIMUM_TRAIL + i] = CHARS[(char_seed as usize) % CHARS.len()];
+                    self.matrix_chars[idx * MAXIMUM_TRAIL + i] = CHARS[(char_seed as usize) % CHARS.len()];
                 }
                 // Stagger start positions so layers don't overlap initially
                 let spread = height / 2 + (layer as u32) * height / 6;
-                self.matrix_heads[index] = -((seed % spread.maximum(1)) as i32);
-                self.matrix_speeds[index] = 2 + (seed % 4);
-                self.matrix_seeds[index] = seed;
+                self.matrix_heads[idx] = -((seed % spread.max(1)) as i32);
+                self.matrix_speeds[idx] = 2 + (seed % 4);
+                self.matrix_seeds[idx] = seed;
             }
         }
         self.matrix_initialized = true;
@@ -2966,7 +3209,7 @@ const MAXIMUM_TRAIL: usize = 40;   // must match draw_background
         let proj_w: u32 = 256;
         let proj_h: u32 = 256;
         let screen_w = self.width;
-        let screen_h = self.height.saturating_sub(TASKBAR_HEIGHT);
+        let screen_h = self.height.saturating_sub(TASKBAR_HEIGHT());
         let proj_x = (screen_w / 2).saturating_sub(proj_w / 2);
         let proj_y = (screen_h / 2).saturating_sub(proj_h / 2);
         let pixels = MatrixProjection::generate_test_image(proj_w, proj_h);
@@ -2990,63 +3233,63 @@ const MAXIMUM_TRAIL: usize = 40;   // must match draw_background
     // ═══════════════════════════════════════════════════════════════════
     
     /// Matrix layout constants (must match draw_background)
-    const MATRIX_COLS: usize = 256;
-        // Compile-time constant — evaluated at compilation, zero runtime cost.
-const MATRIX_LAYERS: usize = 4;
+    /// MATRIX_COLS is now dynamic: self.matrix_cols (resolution-scaled)
+    const MATRIX_LAYERS: usize = 4;
         // Compile-time constant — evaluated at compilation, zero runtime cost.
 const MATRIX_MAXIMUM_TRAIL: usize = 40;
 
     /// Set rain speed preset: 0=slow, 1=mid, 2=fast
     pub fn set_rain_preset(&mut self, preset: u8) {
-        self.matrix_rain_preset = preset.minimum(2);
+        self.matrix_rain_preset = preset.min(2);
         crate::serial_println!("[RAIN] Speed preset set to {}", ["slow", "mid", "fast"][self.matrix_rain_preset as usize]);
     }
 
     /// Compute the flat cell index for (col, layer, trail_pos).
     #[inline]
-    fn matrix_cell_key(column: usize, layer: usize, trail_i: usize) -> usize {
-        (column * Self::MATRIX_LAYERS + layer) * Self::MATRIX_MAXIMUM_TRAIL + trail_i
+    fn matrix_cell_key(col: usize, layer: usize, trail_i: usize) -> usize {
+        (col * Self::MATRIX_LAYERS + layer) * Self::MATRIX_MAXIMUM_TRAIL + trail_i
     }
 
     /// Override a cell with a custom pixel block.
     /// `col` 0..320, `layer` 0..3, `trail_i` 0..40.
     /// Returns a mutable reference to the pixel block for further editing.
-    pub fn matrix_override_cell(&mut self, column: usize, layer: usize, trail_i: usize, cell: CellPixels) -> &mut CellPixels {
-        let key = Self::matrix_cell_key(column, layer, trail_i);
+    pub fn matrix_override_cell(&mut self, col: usize, layer: usize, trail_i: usize, cell: CellPixels) -> &mut CellPixels {
+        let key = Self::matrix_cell_key(col, layer, trail_i);
         self.matrix_overrides.insert(key, cell);
-        self.matrix_overrides.get_mut(&key).unwrap()
+        // SAFETY: just inserted above
+        self.matrix_overrides.get_mut(&key).unwrap_or_else(|| unreachable!())
     }
 
     /// Override a cell, initializing it from the current glyph character at that position.
     /// Gives you the glyph shape as a starting point for per-pixel editing.
-    pub fn matrix_override_from_glyph(&mut self, column: usize, layer: usize, trail_i: usize, color: u32) -> &mut CellPixels {
-        let index = column * Self::MATRIX_LAYERS + layer;
-        let char_index = index * Self::MATRIX_MAXIMUM_TRAIL + trail_i;
+    pub fn matrix_override_from_glyph(&mut self, col: usize, layer: usize, trail_i: usize, color: u32) -> &mut CellPixels {
+        let idx = col * Self::MATRIX_LAYERS + layer;
+        let char_index = idx * Self::MATRIX_MAXIMUM_TRAIL + trail_i;
         let c = if char_index < self.matrix_chars.len() {
             self.matrix_chars[char_index] as char
         } else {
             '#'
         };
         let cell = CellPixels::from_glyph(c, color);
-        self.matrix_override_cell(column, layer, trail_i, cell)
+        self.matrix_override_cell(col, layer, trail_i, cell)
     }
 
     /// Get a mutable reference to an existing cell override (None if not overridden).
-    pub fn matrix_get_cell_mut(&mut self, column: usize, layer: usize, trail_i: usize) -> Option<&mut CellPixels> {
-        let key = Self::matrix_cell_key(column, layer, trail_i);
+    pub fn matrix_get_cell_mut(&mut self, col: usize, layer: usize, trail_i: usize) -> Option<&mut CellPixels> {
+        let key = Self::matrix_cell_key(col, layer, trail_i);
         self.matrix_overrides.get_mut(&key)
     }
 
     /// Set a single pixel in a cell override. Creates the override if needed (blank).
-    pub fn matrix_cell_set_pixel(&mut self, column: usize, layer: usize, trail_i: usize, pixel: u8, py: u8, color: u32) {
-        let key = Self::matrix_cell_key(column, layer, trail_i);
+    pub fn matrix_cell_set_pixel(&mut self, col: usize, layer: usize, trail_i: usize, px: u8, py: u8, color: u32) {
+        let key = Self::matrix_cell_key(col, layer, trail_i);
         let cell = self.matrix_overrides.entry(key).or_insert_with(CellPixels::blank);
-        cell.set(pixel, py, color);
+        cell.set(px, py, color);
     }
 
     /// Remove the override for a specific cell (reverts to normal glyph rendering).
-    pub fn matrix_clear_cell(&mut self, column: usize, layer: usize, trail_i: usize) {
-        let key = Self::matrix_cell_key(column, layer, trail_i);
+    pub fn matrix_clear_cell(&mut self, col: usize, layer: usize, trail_i: usize) {
+        let key = Self::matrix_cell_key(col, layer, trail_i);
         self.matrix_overrides.remove(&key);
     }
 
@@ -3067,24 +3310,24 @@ const MATRIX_MAXIMUM_TRAIL: usize = 40;
         
         for cy in 0..cells_h {
             for cx in 0..cells_w {
-                let column = start_column + cx;
+                let col = start_column + cx;
                 let trail_i = start_trail + cy;
-                if column >= Self::MATRIX_COLS || trail_i >= Self::MATRIX_MAXIMUM_TRAIL { continue; }
+                if col >= self.matrix_cols || trail_i >= Self::MATRIX_MAXIMUM_TRAIL { continue; }
                 
                 let mut cell = CellPixels::blank();
                 for py in 0..16u8 {
-                    for pixel in 0..8u8 {
-                        let source_x = cx * 8 + pixel as usize;
+                    for px in 0..8u8 {
+                        let source_x = cx * 8 + px as usize;
                         let source_y = cy * 16 + py as usize;
                         if source_x < pw && source_y < ph {
                             let color = pixel_data[source_y * pw + source_x];
                             if color & 0xFF000000 != 0 {  // non-transparent
-                                cell.set(pixel, py, color);
+                                cell.set(px, py, color);
                             }
                         }
                     }
                 }
-                self.matrix_override_cell(column, layer, trail_i, cell);
+                self.matrix_override_cell(col, layer, trail_i, cell);
             }
         }
     }
@@ -3166,7 +3409,7 @@ struct AppConfig {
         let physical_mb = crate::memory::total_physical_memory() / (1024 * 1024);
         let heap_free_mb = crate::memory::heap::free() / (1024 * 1024);
         let pixels = (self.width as u64) * (self.height as u64);
-        let cpus = crate::cpu::smp::cpu_count().maximum(1) as u64;
+        let cpus = crate::cpu::smp::cpu_count().max(1) as u64;
         
         // Estimate CPU speed via TSC (in MHz)
         let tsc_mhz = crate::cpu::tsc_frequency() / 1_000_000;
@@ -3177,7 +3420,7 @@ struct AppConfig {
         //   CPU contribution: 1 point per 400 MHz (weighted more than RAM)
         //   Core contribution: 2 points per core (parallelism matters for rendering)
         //   Resolution penalty: -1 per million pixels above 1M
-        let ram_score = ((physical_mb / 256) as i64).minimum(8);
+        let ram_score = ((physical_mb / 256) as i64).min(8);
         let cpu_score = if tsc_mhz > 0 { (tsc_mhz / 400) as i64 } else { 2 };
         let core_score = (cpus as i64) * 2;
         let result_penalty = ((pixels as i64) - 1_000_000) / 1_000_000;
@@ -3190,7 +3433,7 @@ struct AppConfig {
         let cpu_limited = tsc_mhz > 0 && tsc_mhz < 1500 && cpus <= 1;
         
         let tier = if physical_mb < 128 || heap_free_mb < 8 {
-            DesktopTier::ClientOnly
+            DesktopTier::CliOnly
         } else if score <= 4 || physical_mb < 256 {
             DesktopTier::Minimal
         } else if score <= 8 || physical_mb < 512 || cpu_limited {
@@ -3210,26 +3453,39 @@ struct AppConfig {
         );
     }
     
-    /// Auto-adjust tier: downgrade if FPS stays below 40 for ~3 seconds,
-    /// upgrade back if FPS stays above 50 for ~5 seconds.
+    /// Auto-adjust tier: downgrade if FPS stays below 18 for ~3 seconds,
+    /// upgrade back if FPS stays above 35 for ~5 seconds.
     /// Called once per frame from draw().
     fn auto_adjust_tier(&mut self) {
         // Skip auto-adjust when user has manually overridden the tier
         if self.tier_manual_override { return; }
+        // BG thread renders independently — tier downgrade is no longer needed
+        // to protect FPS. Background is the only heavy component and it runs
+        // on its own thread at full speed regardless of window count.
+        if BG_THREAD_RUNNING.load(Ordering::Relaxed) { return; }
+        // Skip until FPS has actually been measured at least once
+        if self.fps_current == 0 { return; }
         // Skip auto-adjust during the first 120 frames (FPS not yet stable,
         // especially on slower hardware like T61 where boot takes longer)
         if self.frame_count < 120 { return; }
+        // Cooldown after tier change: wait ~3s before re-evaluating
+        if self.tier_cooldown > 0 {
+            self.tier_cooldown -= 1;
+            self.fps_low_count = 0;
+            self.fps_high_count = 0;
+            return;
+        }
         
         // ── Downgrade: sustained low FPS ──
-        // Threshold raised from 18→40: 20-30fps on T61 should trigger downgrade
-        // to maintain smooth experience rather than allowing sustained low FPS
-        if self.fps_current < 40 {
+        // Threshold set to 18fps: 30fps is perfectly usable and should NOT
+        // trigger a downgrade. Only truly low FPS (choppy experience) warrants it.
+        if self.fps_current < 18 {
             // Critical: if FPS is 0-2, count faster (each frame ≈ seconds of wall time)
-            let increment = if self.fps_current <= 2 { 60 } else if self.fps_current < 18 { 4 } else { 1 };
+            let increment = if self.fps_current <= 2 { 60 } else if self.fps_current < 10 { 4 } else { 1 };
             self.fps_low_count += increment;
             self.fps_high_count = 0;
-        } else if self.fps_current >= 50 {
-            // ── Upgrade candidate: sustained >= 50 FPS ──
+        } else if self.fps_current >= 35 {
+            // ── Upgrade candidate: sustained >= 35 FPS ──
             self.fps_high_count += 1;
             if self.fps_low_count > 0 {
                 self.fps_low_count = self.fps_low_count.saturating_sub(4);
@@ -3242,7 +3498,7 @@ struct AppConfig {
             self.fps_high_count = 0;
         }
         
-        // ~3 seconds of sustained < 40 FPS → downgrade
+        // ~3 seconds of sustained < 18 FPS → downgrade
         if self.fps_low_count >= 120 {
             let old = self.desktop_tier;
             // Emergency: if FPS <= 2, skip directly to Minimal
@@ -3262,19 +3518,24 @@ match old {
             };
             if new_tier != old {
                 self.desktop_tier = new_tier;
+                // Lower the ceiling so we never auto-upgrade back to a tier
+                // that proved too heavy (e.g. Full on VBox virtual GPU).
+                self.initial_tier = new_tier;
                 self.fps_low_count = 0;
                 self.fps_high_count = 0;
+                self.tier_cooldown = 180;
                 self.needs_full_redraw = true;
                 self.background_cached = false;
+                framebuffer::invalidate_background_cache();
                 crate::serial_println!(
-                    "[Desktop] Auto-downgrade: {:?} -> {:?} (FPS was {})",
-                    old, new_tier, self.fps_current
+                    "[Desktop] Auto-downgrade: {:?} -> {:?} (FPS was {}, ceiling now {:?})",
+                    old, new_tier, self.fps_current, self.initial_tier
                 );
             }
         }
         
         // ~5 seconds of sustained >= 35 FPS → upgrade (up to initial tier)
-        if self.fps_high_count >= 300 {
+        if self.fps_high_count >= 200 {
             let old = self.desktop_tier;
             let new_tier = // Pattern matching — Rust's exhaustive branching construct.
 match old {
@@ -3287,8 +3548,10 @@ match old {
                 self.desktop_tier = new_tier;
                 self.fps_high_count = 0;
                 self.fps_low_count = 0;
+                self.tier_cooldown = 180; // ~3s cooldown before next change
                 self.needs_full_redraw = true;
                 self.background_cached = false;
+                framebuffer::invalidate_background_cache();
                 crate::serial_println!(
                     "[Desktop] Auto-upgrade: {:?} -> {:?} (FPS was {})",
                     old, new_tier, self.fps_current
@@ -3329,7 +3592,7 @@ match old {
     }
     
     /// Initialize desktop icons (positioned for left dock sidebar)
-    fn initialize_desktop_icons(&mut self) {
+    fn init_desktop_icons(&mut self) {
         use crate::icons::IconType;
         
         // Dock layout: icon_size=36, gap=14, ix=12, start_y=12
@@ -3369,10 +3632,10 @@ match old {
     /// Check if click is on a dock icon
     fn check_icon_click(&self, x: i32, y: i32) -> Option<IconAction> {
         // Dock hit area: full dock strip width
-        if x < 0 || x >= (DOCK_WIDTH + 10) as i32 { return None; }
+        if x < 0 || x >= (DOCK_WIDTH() + 10) as i32 { return None; }
         
-        let dock_h = self.height.saturating_sub(TASKBAR_HEIGHT);
-        let n_icons = self.icons.len().maximum(1) as u32;
+        let dock_h = self.height.saturating_sub(TASKBAR_HEIGHT());
+        let n_icons = self.icons.len().max(1) as u32;
         let padding = 12u32;
         let available = dock_h.saturating_sub(padding * 2);
         let icon_total = (available / n_icons) as i32;
@@ -3390,16 +3653,16 @@ match old {
     /// Create a new window with type
     pub fn create_window(&mut self, title: &str, x: i32, y: i32, width: u32, height: u32, wtype: WindowType) -> u32 {
         // Clamp window size to fit available screen area (minus dock and taskbar)
-        let usable_w = self.width.saturating_sub(DOCK_WIDTH + 4);
-        let usable_h = self.height.saturating_sub(TASKBAR_HEIGHT + TITLE_BAR_HEIGHT);
-        let w = width.minimum(usable_w).maximum(120);
-        let h = height.minimum(usable_h).maximum(80);
+        let usable_w = self.width.saturating_sub(DOCK_WIDTH() + 4);
+        let usable_h = self.height.saturating_sub(TASKBAR_HEIGHT() + TITLE_BAR_HEIGHT());
+        let w = width.min(usable_w).max(120);
+        let h = height.min(usable_h).max(80);
         // Clamp position so the window stays on-screen
-        let minimum_x = DOCK_WIDTH as i32 + 2;
-        let maximum_x = (self.width as i32 - w as i32).maximum(minimum_x);
-        let maximum_y = (self.height as i32 - TASKBAR_HEIGHT as i32 - h as i32).maximum(0);
-        let cx = x.maximum(minimum_x).minimum(maximum_x);
-        let cy = y.maximum(0).minimum(maximum_y);
+        let minimum_x = DOCK_WIDTH() as i32 + 2;
+        let maximum_x = (self.width as i32 - w as i32).max(minimum_x);
+        let maximum_y = (self.height as i32 - TASKBAR_HEIGHT() as i32 - h as i32).max(0);
+        let cx = x.max(minimum_x).min(maximum_x);
+        let cy = y.max(0).min(maximum_y);
 
         let mut window = Window::new(title, cx, cy, w, h, wtype);
         
@@ -3411,7 +3674,7 @@ match old {
                 window.content.push(String::from(""));
                 window.content.push(Self::make_prompt("_"));
             },
-            WindowType::SystemInformation => {
+            WindowType::SystemInfo => {
                 window.content.push(String::from("=== System Information ==="));
                 window.content.push(String::from(""));
                 window.content.push(format!("OS: TrustOS v0.2.0"));
@@ -3607,13 +3870,16 @@ match old {
             WindowType::WifiNetworks => {
                 self.wifi_selected_index = 0;
                 self.wifi_scroll_offset = 0;
-                self.wifi_error_message = None;
+                self.wifi_error_msg = None;
                 let _ = crate::drivers::net::wifi::start_scan();
             },
             WindowType::WifiPassword => {
                 self.wifi_password_input.clear();
                 self.wifi_show_password = false;
-                self.wifi_error_message = None;
+                self.wifi_error_msg = None;
+            },
+            WindowType::WifiAnalyzer => {
+                self.wifi_analyzer_states.insert(window.id, crate::wifi_analyzer::WifiAnalyzerState::new());
             },
             _ => {}
         }
@@ -3623,13 +3889,17 @@ match old {
         
         let id = window.id;
         self.windows.push(window);
+        self.windows_dirty = true;
+        framebuffer::invalidate_window_overlay();
         id
     }
     
     /// Close a window (with animation if enabled)
     pub fn close_window(&mut self, id: u32) {
         crate::serial_println!("[GUI] close_window({}) start", id);
-        if let Some(w) = self.windows.iterator_mut().find(|w| w.id == id) {
+        self.windows_dirty = true;
+        framebuffer::invalidate_window_overlay();
+        if let Some(w) = self.windows.iter_mut().find(|w| w.id == id) {
             if w.animate_close() {
                 crate::serial_println!("[GUI] close_window({}) animate path", id);
                 // Animation started — immediately free heavyweight emulator/game states
@@ -3643,6 +3913,7 @@ match old {
                 #[cfg(feature = "emulators")]
                 self.gamelab_states.remove(&id);
                 self.lab_states.remove(&id);
+                self.wifi_analyzer_states.remove(&id);
                 // Stop music playback on close
                 if let Some(mp) = self.music_player_states.get_mut(&id) {
                     crate::serial_println!("[GUI] close_window({}) stopping music...", id);
@@ -3672,6 +3943,7 @@ match old {
         self.gameboy_states.remove(&id);
         self.binary_viewer_states.remove(&id);
         self.lab_states.remove(&id);
+        self.wifi_analyzer_states.remove(&id);
         if let Some(mp) = self.music_player_states.get_mut(&id) {
             crate::serial_println!("[GUI] close_window({}) stopping music (imm)...", id);
             mp.stop();
@@ -3688,8 +3960,8 @@ match old {
     
     /// Minimize/restore a window (with animation)
     pub fn minimize_window(&mut self, id: u32) {
-        let taskbar_y = (self.height - TASKBAR_HEIGHT) as i32;
-        if let Some(w) = self.windows.iterator_mut().find(|w| w.id == id) {
+        let taskbar_y = (self.height - TASKBAR_HEIGHT()) as i32;
+        if let Some(w) = self.windows.iter_mut().find(|w| w.id == id) {
             if !w.minimized {
                 w.animate_minimize(taskbar_y);
             }
@@ -3700,12 +3972,22 @@ match old {
     /// Update all window animations (call each frame)
     pub fn update_animations(&mut self) {
         let mut to_remove = Vec::new();
+        let mut any_active = false;
         
         for w in &mut self.windows {
+            if w.animation.state != AnimationState::None {
+                any_active = true;
+                w.dirty = true;
+            }
             if w.update_animation() {
                 // Animation completed and window should close
                 to_remove.push(w.id);
             }
+        }
+        
+        if any_active || !to_remove.is_empty() {
+            self.windows_dirty = true;
+            framebuffer::invalidate_window_overlay();
         }
         
         // Remove windows that finished closing animation
@@ -3728,12 +4010,15 @@ match old {
     pub fn focus_window(&mut self, id: u32) {
         for w in &mut self.windows {
             w.focused = false;
+            w.dirty = true;
         }
-        if let Some(index) = self.windows.iter().position(|w| w.id == id) {
-            let mut window = self.windows.remove(index);
+        if let Some(idx) = self.windows.iter().position(|w| w.id == id) {
+            let mut window = self.windows.remove(idx);
             window.focused = true;
             window.minimized = false;
+            window.dirty = true;
             self.windows.push(window);
+            self.windows_dirty = true;
         }
     }
     
@@ -3764,7 +4049,7 @@ pub fn screen_height(&self) -> u32 { self.height }
     pub fn toggle_maximize_focused(&mut self) {
         if let Some(id) = self.windows.iter().rev().find(|w| w.focused).map(|w| w.id) {
             let (software, sh) = (self.width, self.height);
-            if let Some(w) = self.windows.iterator_mut().find(|w| w.id == id) {
+            if let Some(w) = self.windows.iter_mut().find(|w| w.id == id) {
                 w.toggle_maximize(software, sh);
             }
         }
@@ -3772,10 +4057,10 @@ pub fn screen_height(&self) -> u32 { self.height }
     
     /// Snap focused window to left/right/quadrant (Win+Arrow or drag-to-edge)
     pub fn snap_focused_window(&mut self, directory: SnapDir) {
-        if let Some(w) = self.windows.iterator_mut().rev().find(|w| w.focused) {
-            let work_height = self.height.saturating_sub(TASKBAR_HEIGHT);
-            let work_x = DOCK_WIDTH as i32;
-            let work_w = self.width.saturating_sub(DOCK_WIDTH);
+        if let Some(w) = self.windows.iter_mut().rev().find(|w| w.focused) {
+            let work_height = self.height.saturating_sub(TASKBAR_HEIGHT());
+            let work_x = DOCK_WIDTH() as i32;
+            let work_w = self.width.saturating_sub(DOCK_WIDTH());
             let half_w = work_w / 2;
             let half_h = work_height / 2;
             
@@ -3857,7 +4142,7 @@ match directory {
     }
     
     /// Get window info (title, type) for Alt+Tab overlay
-    pub fn get_window_information(&self) -> Vec<(String, WindowType)> {
+    pub fn get_window_info(&self) -> Vec<(String, WindowType)> {
         self.windows.iter()
             .filter(|w| !w.minimized)
             .map(|w| (w.title.clone(), w.window_type.clone()))
@@ -3872,6 +4157,8 @@ match directory {
 
     /// Handle mouse click
     pub fn handle_click(&mut self, x: i32, y: i32, pressed: bool) {
+        // Any mouse click dirties windows
+        self.windows_dirty = true;
         // ════════ MOBILE MODE: route clicks to mobile gesture system ════════
         if self.mobile_state.active {
             let vx = self.mobile_state.vp_x;
@@ -3882,12 +4169,12 @@ match directory {
             if x >= vx && x < vx + vw && y >= vy && y < vy + vh {
                 let local_x = x - vx;
                 let local_y = y - vy;
-                let event = if pressed {
+                let evt = if pressed {
                     crate::mobile::GestureEvent::TapDown(local_x, local_y)
                 } else {
                     crate::mobile::GestureEvent::TapUp(local_x, local_y)
                 };
-                let action = crate::mobile::handle_gesture(&mut self.mobile_state, event);
+                let action = crate::mobile::handle_gesture(&mut self.mobile_state, evt);
                 self.apply_mobile_action(action);
             }
             return;
@@ -3927,7 +4214,7 @@ match directory {
                     return;
                 }
                 // Click outside menu (but not on taskbar TrustOS button) → close menu
-                if y < (self.height - TASKBAR_HEIGHT) as i32 || x >= 108 {
+                if y < (self.height - TASKBAR_HEIGHT()) as i32 || x >= 108 {
                     self.start_menu_open = false;
                     self.start_menu_search.clear();
                     return;
@@ -3935,7 +4222,7 @@ match directory {
             }
             
             // Check taskbar first
-            if y >= (self.height - TASKBAR_HEIGHT) as i32 {
+            if y >= (self.height - TASKBAR_HEIGHT()) as i32 {
                 self.handle_taskbar_click(x, y);
                 return;
             }
@@ -3952,7 +4239,7 @@ match directory {
                     
                     if self.windows[i].on_maximize_button(x, y) {
                         let (software, sh) = (self.width, self.height);
-                        if let Some(w) = self.windows.iterator_mut().find(|w| w.id == id) {
+                        if let Some(w) = self.windows.iter_mut().find(|w| w.id == id) {
                             w.toggle_maximize(software, sh);
                         }
                         return;
@@ -3981,7 +4268,7 @@ match directory {
                         if crate::mouse::is_double_click() {
                             crate::mouse::reset_click_count();
                             let (software, sh) = (self.width, self.height);
-                            if let Some(w) = self.windows.iterator_mut().find(|w| w.id == id) {
+                            if let Some(w) = self.windows.iter_mut().find(|w| w.id == id) {
                                 w.toggle_maximize(software, sh);
                             }
                             return;
@@ -4013,9 +4300,9 @@ match directory {
                     if self.windows[i].window_type == WindowType::ModelEditor {
                         let win = &self.windows[i];
                         let vx = x - win.x;
-                        let vy = y - win.y - TITLE_BAR_HEIGHT as i32;
+                        let vy = y - win.y - TITLE_BAR_HEIGHT() as i32;
                         let vw = win.width as usize;
-                        let vh = win.height.saturating_sub(TITLE_BAR_HEIGHT) as usize;
+                        let vh = win.height.saturating_sub(TITLE_BAR_HEIGHT()) as usize;
                         let win_id = win.id;
                         if vy >= 0 {
                             if let Some(state) = self.model_editor_states.get_mut(&win_id) {
@@ -4028,20 +4315,20 @@ match directory {
                     if self.windows[i].window_type == WindowType::Chess {
                         let win = &self.windows[i];
                         let game_x = win.x as i32 + 8;
-                        let game_y = win.y as i32 + TITLE_BAR_HEIGHT as i32 + 4;
+                        let game_y = win.y as i32 + TITLE_BAR_HEIGHT() as i32 + 4;
                         let game_w = win.width.saturating_sub(16) as i32;
                         let cell_size: i32 = 48;
                         let board_size = cell_size * 8;
                         let board_x = game_x + (game_w - board_size) / 2;
                         let board_y = game_y + 28;
                         
-                        let column = (x - board_x) / cell_size;
+                        let col = (x - board_x) / cell_size;
                         let row = (y - board_y) / cell_size;
                         
-                        if x >= board_x && x < board_x + board_size && y >= board_y && y < board_y + board_size && column >= 0 && column < 8 && row >= 0 && row < 8 {
+                        if x >= board_x && x < board_x + board_size && y >= board_y && y < board_y + board_size && col >= 0 && col < 8 && row >= 0 && row < 8 {
                             let win_id = win.id;
                             if let Some(chess) = self.chess_states.get_mut(&win_id) {
-                                chess.handle_mouse_click(column, row);
+                                chess.handle_mouse_click(col, row);
                                 chess.update_drag_position(x, y);
                             }
                         }
@@ -4051,9 +4338,9 @@ match directory {
                     if self.windows[i].window_type == WindowType::Chess3D {
                         let win = &self.windows[i];
                         let content_x = win.x as i32;
-                        let content_y = win.y as i32 + TITLE_BAR_HEIGHT as i32;
+                        let content_y = win.y as i32 + TITLE_BAR_HEIGHT() as i32;
                         let content_w = win.width as i32;
-                        let content_h = win.height.saturating_sub(TITLE_BAR_HEIGHT) as i32;
+                        let content_h = win.height.saturating_sub(TITLE_BAR_HEIGHT()) as i32;
                         let relative_x = x - content_x;
                         let relative_y = y - content_y;
                         if relative_x >= 0 && relative_y >= 0 && relative_x < content_w && relative_y < content_h {
@@ -4077,6 +4364,19 @@ match directory {
                         }
                     }
 
+                    // Handle TrustWave WiFi analyzer clicks
+                    if self.windows[i].window_type == WindowType::WifiAnalyzer {
+                        let win = &self.windows[i];
+                        let relative_x = x - win.x;
+                        let relative_y = y - win.y;
+                        let win_id = win.id;
+                        let ww = win.width;
+                        let wh = win.height;
+                        if let Some(wa) = self.wifi_analyzer_states.get_mut(&win_id) {
+                            wa.handle_click(relative_x, relative_y, ww, wh);
+                        }
+                    }
+
                     // Handle WiFi networks window clicks
                     if self.windows[i].window_type == WindowType::WifiNetworks {
                         let win = &self.windows[i];
@@ -4096,7 +4396,7 @@ match directory {
                     if self.windows[i].window_type == WindowType::GameBoyEmu {
                         let win = &self.windows[i];
                         let content_x = win.x as u32;
-                        let content_y = (win.y + TITLE_BAR_HEIGHT as i32) as u32;
+                        let content_y = (win.y + TITLE_BAR_HEIGHT() as i32) as u32;
                         let content_w = win.width;
                         let menu_h: u32 = 22;
                         let win_id = win.id;
@@ -4116,7 +4416,7 @@ match directory {
                                 // Open input window below the GB window
                                 let inp_x = win_x;
                                 let inp_y = win_y + win_h as i32 + 2;
-                                let inp_id = self.create_window("GB Input", inp_x, inp_y, win_w.minimum(480), 160, WindowType::GameBoyInput);
+                                let inp_id = self.create_window("GB Input", inp_x, inp_y, win_w.min(480), 160, WindowType::GameBoyInput);
                                 self.gb_input_links.insert(inp_id, win_id);
                             }
                             
@@ -4128,8 +4428,8 @@ match directory {
                                 let software = self.width;
                                 let sh = self.height;
                                 let lab_x = win_x + win_w as i32 + 4;
-                                let lab_w = (software as i32 - lab_x).maximum(400) as u32;
-                                let lab_h = sh - TASKBAR_HEIGHT;
+                                let lab_w = (software as i32 - lab_x).max(400) as u32;
+                                let lab_h = sh - TASKBAR_HEIGHT();
                                 let lab_id = self.create_window("Game Lab", lab_x, 0, lab_w, lab_h, WindowType::GameLab);
                                 if let Some(lab) = self.gamelab_states.get_mut(&lab_id) {
                                     lab.linked_gb_id = Some(win_id);
@@ -4144,15 +4444,15 @@ match directory {
                     if self.windows[i].window_type == WindowType::GameBoyInput {
                         let win = &self.windows[i];
                         let cx = win.x as u32;
-                        let cy = (win.y + TITLE_BAR_HEIGHT as i32) as u32;
+                        let cy = (win.y + TITLE_BAR_HEIGHT() as i32) as u32;
                         let cw = win.width;
-                        let character = win.height.saturating_sub(TITLE_BAR_HEIGHT);
+                        let ch = win.height.saturating_sub(TITLE_BAR_HEIGHT());
                         let win_id = win.id;
                         let mx = x as u32;
                         let my = y as u32;
                         
                         let linked_id = self.gb_input_links.get(&win_id).copied();
-                        let buttons = crate::game_lab::get_input_buttons(cx, cy, cw, character);
+                        let buttons = crate::game_lab::get_input_buttons(cx, cy, cw, ch);
                         for &(bx, by, bw, bh, key) in &buttons {
                             if mx >= bx && mx < bx + bw && my >= by && my < by + bh {
                                 // Find the linked GB emulator
@@ -4179,7 +4479,7 @@ match directory {
                         if let Some(lab) = self.gamelab_states.get_mut(&win_id) {
                             // Check Save/Load header button clicks
                             let save_receive = ww as i32 - 120;
-                            if relative_y >= TITLE_BAR_HEIGHT as i32 + 2 && relative_y < TITLE_BAR_HEIGHT as i32 + 18 {
+                            if relative_y >= TITLE_BAR_HEIGHT() as i32 + 2 && relative_y < TITLE_BAR_HEIGHT() as i32 + 18 {
                                 if relative_x >= save_receive && relative_x < save_receive + 48 {
                                     // SAVE click
                                     let emu_id = lab.linked_gb_id
@@ -4220,21 +4520,21 @@ match directory {
                         let win = &self.windows[i];
                         let wx = win.x;
                         let wy = win.y;
-                        let content_y = wy + TITLE_BAR_HEIGHT as i32;
+                        let content_y = wy + TITLE_BAR_HEIGHT() as i32;
                         let sidebar_w = 140i32;
                         let item_h = 32i32;
                         
                         // Sidebar click: change category
                         if x >= wx && x < wx + sidebar_w && y >= content_y + 8 {
-                            let index = ((y - content_y - 8) / item_h) as u8;
-                            if index <= 7 {
-                                self.settings_category = index;
+                            let idx = ((y - content_y - 8) / item_h) as u8;
+                            if idx <= 7 {
+                                self.settings_category = idx;
                             }
                         }
                         
                         // Content area click: Display category mode buttons
                         if self.settings_category == 0 && x >= wx + sidebar_w {
-                            let pixel = wx + sidebar_w + 20;
+                            let px = wx + sidebar_w + 20;
                             let line_h = 22i32;
                             // Layout matches draw_settings_gui category 0:
                             // title(+line_h+8) + resolution(+line_h) + theme(+line_h+8)
@@ -4251,7 +4551,7 @@ match directory {
 match self.desktop_tier {
                                     DesktopTier::Full => DesktopTier::Standard,
                                     DesktopTier::Standard => DesktopTier::Minimal,
-                                    DesktopTier::Minimal | DesktopTier::ClientOnly => DesktopTier::Full,
+                                    DesktopTier::Minimal | DesktopTier::CliOnly => DesktopTier::Full,
                                 };
                                 self.desktop_tier = new_tier;
                                 self.tier_manual_override = true;
@@ -4288,16 +4588,16 @@ match self.desktop_tier {
                     if self.windows[i].window_type == WindowType::Calculator {
                         let win = &self.windows[i];
                         let cx_start = win.x as u32 + 4;
-                        let cy_start = win.y as u32 + TITLE_BAR_HEIGHT + 4;
+                        let cy_start = win.y as u32 + TITLE_BAR_HEIGHT() + 4;
                         let cw = win.width.saturating_sub(8);
-                        let character = win.height.saturating_sub(TITLE_BAR_HEIGHT + 8);
+                        let ch = win.height.saturating_sub(TITLE_BAR_HEIGHT() + 8);
                         let display_h = 56u32;
                         let button_area_y = cy_start + display_h + 12;
                         let button_cols = 4u32;
                         let button_rows = 5u32;
-                        let button_gap = 4u32;
-                        let button_w = (cw - 12 - button_gap * (button_cols - 1)) / button_cols;
-                        let button_h = ((character - display_h - 20 - button_gap * (button_rows - 1)) / button_rows).minimum(40);
+                        let btn_gap = 4u32;
+                        let btn_w = (cw - 12 - btn_gap * (button_cols - 1)) / button_cols;
+                        let btn_h = ((ch - display_h - 20 - btn_gap * (button_rows - 1)) / button_rows).min(40);
                         
                         let click_x = x as u32;
                         let click_y = y as u32;
@@ -4311,12 +4611,12 @@ match self.desktop_tier {
                                 ['0', '.', '=', '+'],
                             ];
                             
-                            for (row, button_row) in buttons.iter().enumerate() {
-                                for (column, &label) in button_row.iter().enumerate() {
-                                    let bx = cx_start + 4 + column as u32 * (button_w + button_gap);
-                                    let by = button_area_y + row as u32 * (button_h + button_gap);
+                            for (row, btn_row) in buttons.iter().enumerate() {
+                                for (col, &label) in btn_row.iter().enumerate() {
+                                    let bx = cx_start + 4 + col as u32 * (btn_w + btn_gap);
+                                    let by = button_area_y + row as u32 * (btn_h + btn_gap);
                                     
-                                    if click_x >= bx && click_x < bx + button_w && click_y >= by && click_y < by + button_h {
+                                    if click_x >= bx && click_x < bx + btn_w && click_y >= by && click_y < by + btn_h {
                                         let win_id = win.id;
                                         if let Some(calc) = self.calculator_states.get_mut(&win_id) {
                                                                                         // Pattern matching — Rust's exhaustive branching construct.
@@ -4345,7 +4645,7 @@ match label {
                     if self.windows[i].window_type == WindowType::MusicPlayer {
                         let win = &self.windows[i];
                         let wx = win.x as u32;
-                        let wy = win.y as u32 + TITLE_BAR_HEIGHT;
+                        let wy = win.y as u32 + TITLE_BAR_HEIGHT();
                         let ww = win.width;
                         let pad = 10u32;
                         let inner_x = wx + pad;
@@ -4356,13 +4656,13 @@ match label {
                         let win_id = win.id;
 
                         // ── Layout positions (must match draw_music_player) ──
-                        let number_tracks = self.music_player_states.get(&win_id)
-                            .map(|mp| mp.number_tracks).unwrap_or(0);
+                        let num_tracks = self.music_player_states.get(&win_id)
+                            .map(|mp| mp.num_tracks).unwrap_or(0);
                         let list_header_y = wy + 6;
                         let list_y = list_header_y + 16;
                         let maximum_visible = 5usize;
                         let row_h = 20u32;
-                        let list_h = if number_tracks == 0 { row_h } else { (number_tracks.minimum(maximum_visible) as u32) * row_h };
+                        let list_h = if num_tracks == 0 { row_h } else { (num_tracks.min(maximum_visible) as u32) * row_h };
 
                         let np_y = list_y + list_h + 10;
                         let song_y = np_y + 16;
@@ -4373,22 +4673,22 @@ match label {
                         let bars_y = viz_y + viz_h + 4;
                         let bar_h = 14u32;
                         let controller_y = bars_y + bar_h + 8;
-                        let button_h = 28u32;
+                        let btn_h = 28u32;
                         let small_button_w = 36u32;
                         let play_button_w = 64u32;
                         let gap = 4u32;
 
                         // ── Track list click ──
-                        if number_tracks > 0
+                        if num_tracks > 0
                             && click_x >= inner_x && click_x < inner_x + inner_w
                             && click_y >= list_y && click_y < list_y + list_h
                         {
                             let scroll = self.music_player_states.get(&win_id)
-                                .map(|mp| mp.track_list_scroll.minimum(mp.number_tracks.saturating_sub(maximum_visible)))
+                                .map(|mp| mp.track_list_scroll.min(mp.num_tracks.saturating_sub(maximum_visible)))
                                 .unwrap_or(0);
                             let row_index = ((click_y - list_y) / row_h) as usize;
                             let track_index = scroll + row_index;
-                            if track_index < number_tracks {
+                            if track_index < num_tracks {
                                 crate::serial_println!("[MUSIC] Track list click: track {}", track_index);
                                 if let Some(mp) = self.music_player_states.get_mut(&win_id) {
                                     mp.play_track(track_index);
@@ -4400,12 +4700,12 @@ match label {
                         // ── Transport buttons (centered, fixed-size) ──
                         let total_transport_w = small_button_w * 3 + play_button_w + gap * 3;
                         let transport_x = inner_x + (inner_w.saturating_sub(total_transport_w)) / 2;
-                        if click_y >= controller_y && click_y < controller_y + button_h {
+                        if click_y >= controller_y && click_y < controller_y + btn_h {
                             // |< Previous
                             let previous_x = transport_x;
                             if click_x >= previous_x && click_x < previous_x + small_button_w {
                                 if let Some(mp) = self.music_player_states.get_mut(&win_id) {
-                                    mp.previous_track();
+                                    mp.prev_track();
                                 }
                             }
                             // PLAY/PAUSE
@@ -4442,26 +4742,26 @@ match mp.state {
                         if click_x >= inner_x && click_x < inner_x + inner_w
                             && click_y >= prog_y.saturating_sub(3) && click_y < prog_y + 8 {
                             if let Some(mp) = self.music_player_states.get_mut(&win_id) {
-                                if mp.total_mouse > 0 && mp.state != PlaybackState::Stopped {
-                                    let relative = (click_x - inner_x) as f32 / inner_w.maximum(1) as f32;
-                                    let new_mouse = (relative * mp.total_mouse as f32) as u64;
+                                if mp.total_ms > 0 && mp.state != PlaybackState::Stopped {
+                                    let rel = (click_x - inner_x) as f32 / inner_w.max(1) as f32;
+                                    let new_mouse = (rel * mp.total_ms as f32) as u64;
                                     mp.seek_to(new_mouse);
                                 }
                             }
                         }
 
                         // ── Volume slider ──
-                        let vol_y = controller_y + button_h + 8;
+                        let vol_y = controller_y + btn_h + 8;
                         let vol_h = 10u32;
                         let vol_track_x = inner_x + 30;
                         let vol_track_w = inner_w.saturating_sub(72);
                         if click_x >= vol_track_x && click_x < vol_track_x + vol_track_w
                             && click_y >= vol_y.saturating_sub(4) && click_y < vol_y + vol_h + 4 {
-                            let relative = (click_x - vol_track_x) as f32 / vol_track_w.maximum(1) as f32;
-                            let new_vol = (relative * 100.0).maximum(0.0).minimum(100.0) as u32;
+                            let rel = (click_x - vol_track_x) as f32 / vol_track_w.max(1) as f32;
+                            let new_vol = (rel * 100.0).max(0.0).min(100.0) as u32;
                             if let Some(mp) = self.music_player_states.get_mut(&win_id) {
                                 mp.volume = new_vol;
-                                let _ = crate::drivers::hda::set_volume(new_vol.minimum(100) as u8);
+                                let _ = crate::drivers::hda::set_volume(new_vol.min(100) as u8);
                             }
                         }
 
@@ -4479,21 +4779,21 @@ match mp.state {
                             // [-] button
                             if click_x >= fx_controller_x && click_x < fx_controller_x + arrow_w {
                                 if let Some(mp) = self.music_player_states.get_mut(&win_id) {
-                                    mp.av_offset_mouse = (mp.av_offset_mouse - 10).maximum(-500);
+                                    mp.av_offset_ms = (mp.av_offset_ms - 10).max(-500);
                                 }
                             }
                             let sync_plus_x = fx_controller_x + arrow_w + 4 + 52 + 4;
                             // [+] button
                             if click_x >= sync_plus_x && click_x < sync_plus_x + arrow_w {
                                 if let Some(mp) = self.music_player_states.get_mut(&win_id) {
-                                    mp.av_offset_mouse = (mp.av_offset_mouse + 10).minimum(500);
+                                    mp.av_offset_ms = (mp.av_offset_ms + 10).min(500);
                                 }
                             }
                             // [0] reset button
                             let sync_reset_x = sync_plus_x + arrow_w + 4;
                             if click_x >= sync_reset_x && click_x < sync_reset_x + arrow_w {
                                 if let Some(mp) = self.music_player_states.get_mut(&win_id) {
-                                    mp.av_offset_mouse = 0;
+                                    mp.av_offset_ms = 0;
                                 }
                             }
                         }
@@ -4553,8 +4853,8 @@ match mp.state {
             }
             
             // Check desktop icons - single click to open
-            if let Some(index) = self.check_icon_index(x, y) {
-                let action = self.icons[index].action;
+            if let Some(idx) = self.check_icon_index(x, y) {
+                let action = self.icons[idx].action;
                 self.handle_icon_action(action);
                 return;
             }
@@ -4569,9 +4869,9 @@ match mp.state {
                 if w.dragging {
                     if let Some(directory) = snap_directory {
                         // Apply snap: resize window to preview zone (accounting for dock)
-                        let work_h = self.height.saturating_sub(TASKBAR_HEIGHT);
-                        let work_x = DOCK_WIDTH as i32;
-                        let work_w = self.width.saturating_sub(DOCK_WIDTH);
+                        let work_h = self.height.saturating_sub(TASKBAR_HEIGHT());
+                        let work_x = DOCK_WIDTH() as i32;
+                        let work_w = self.width.saturating_sub(DOCK_WIDTH());
                         let half_w = work_w / 2;
                         let half_h = work_h / 2;
                                                 // Pattern matching — Rust's exhaustive branching construct.
@@ -4618,16 +4918,16 @@ match directory {
                         // Find the window to compute board coordinates
                         if let Some(win) = self.windows.iter().find(|w| w.id == id) {
                             let game_x = win.x as i32 + 8;
-                            let game_y = win.y as i32 + TITLE_BAR_HEIGHT as i32 + 4;
+                            let game_y = win.y as i32 + TITLE_BAR_HEIGHT() as i32 + 4;
                             let game_w = win.width.saturating_sub(16) as i32;
                             let cell_size: i32 = 48;
                             let board_size = cell_size * 8;
                             let board_x = game_x + (game_w - board_size) / 2;
                             let board_y = game_y + 28;
                             
-                            let column = (x - board_x) / cell_size;
+                            let col = (x - board_x) / cell_size;
                             let row = (y - board_y) / cell_size;
-                            chess.handle_mouse_release(column, row);
+                            chess.handle_mouse_release(col, row);
                         }
                     }
                 }
@@ -4682,24 +4982,24 @@ match directory {
         self.start_menu_search.clear();
         
         // Check if right-click inside a File Manager window's content area
-        if let Some(fm_information) = self.windows.iter().find(|w| {
+        if let Some(fm_info) = self.windows.iter().find(|w| {
             w.window_type == WindowType::FileManager
             && x >= w.x && x < w.x + w.width as i32
-            && y >= w.y + TITLE_BAR_HEIGHT as i32 + 36 + 1 + 24 // below column headers
+            && y >= w.y + TITLE_BAR_HEIGHT() as i32 + 36 + 1 + 24 // below column headers
             && y < w.y + w.height as i32
         }).map(|w| (w.id, w.x, w.y, w.width, w.height, w.file_path.clone(), w.selected_index, w.content.len())) {
-            let (wid, wx, wy, ww, _wh, file_path_opt, sel_index, content_length) = fm_information;
+            let (wid, wx, wy, ww, _wh, file_path_opt, sel_idx, content_len) = fm_info;
             let sidebar_w = self.fm_states.get(&wid).map(|f| if f.sidebar_collapsed { 0i32 } else { f.sidebar_width as i32 }).unwrap_or(180);
             
             // Only show context menu if click is in the file list area (right of sidebar)
             if x >= wx + sidebar_w {
                 // Determine which file is under the cursor
-                let content_y = wy + TITLE_BAR_HEIGHT as i32;
+                let content_y = wy + TITLE_BAR_HEIGHT() as i32;
                 let body_y = content_y + 36 + 1;
                 let list_start_y = body_y + 24 + 1;
                 let row_h = 26i32;
-                let file_start_index = 5usize.minimum(content_length);
-                let file_count = if content_length > file_start_index + 2 { content_length - file_start_index - 2 } else { 0 };
+                let file_start_index = 5usize.min(content_len);
+                let file_count = if content_len > file_start_index + 2 { content_len - file_start_index - 2 } else { 0 };
                 let relative_y = y - list_start_y;
                 let scroll = self.windows.iter().find(|w| w.id == wid).map(|w| w.scroll_offset).unwrap_or(0);
                 
@@ -4707,10 +5007,10 @@ match directory {
                 let on_file = click_index.map(|i| i < file_count).unwrap_or(false);
                 
                 // Select the clicked file
-                if let Some(index) = click_index {
-                    if index < file_count {
-                        if let Some(w) = self.windows.iterator_mut().find(|w| w.id == wid) {
-                            w.selected_index = index;
+                if let Some(idx) = click_index {
+                    if idx < file_count {
+                        if let Some(w) = self.windows.iter_mut().find(|w| w.id == wid) {
+                            w.selected_index = idx;
                         }
                     }
                 }
@@ -4777,13 +5077,13 @@ match directory {
         }
         
         // Check if right-click on desktop icon
-        if let Some(index) = self.check_icon_index(x, y) {
-            self.show_icon_context_menu(x, y, index);
+        if let Some(idx) = self.check_icon_index(x, y) {
+            self.show_icon_context_menu(x, y, idx);
             return;
         }
         
         // Check if right-click on desktop (empty area)
-        if y < (self.height - TASKBAR_HEIGHT) as i32 {
+        if y < (self.height - TASKBAR_HEIGHT()) as i32 {
             self.show_desktop_context_menu(x, y);
         }
     }
@@ -4850,9 +5150,9 @@ match directory {
         let menu_height = self.context_menu.items.len() as i32 * item_height;
         
         if x >= menu_x && x < menu_x + menu_width && y >= menu_y && y < menu_y + menu_height {
-            let index = ((y - menu_y) / item_height) as usize;
-            if index < self.context_menu.items.len() {
-                return Some(self.context_menu.items[index].action);
+            let idx = ((y - menu_y) / item_height) as usize;
+            if idx < self.context_menu.items.len() {
+                return Some(self.context_menu.items[idx].action);
             }
         }
         
@@ -4876,21 +5176,21 @@ match action {
                 if is_fm_context {
                     // Open from file manager — open the selected file in the focused FM
                     if let Some(window) = self.windows.iter().find(|w| w.focused && w.window_type == WindowType::FileManager) {
-                        let file_start_index = 5usize.minimum(window.content.len());
+                        let file_start_index = 5usize.min(window.content.len());
                         let actual_index = file_start_index + window.selected_index;
                         if actual_index < window.content.len().saturating_sub(2) {
                             let line = &window.content[actual_index];
-                            let is_directory = line.contains("[D]");
+                            let is_dir = line.contains("[D]");
                             let name = String::from(Self::extract_name_from_entry(line));
-                            if is_directory {
+                            if is_dir {
                                 self.navigate_file_manager(&name);
                             } else {
                                 self.open_file(&name);
                             }
                         }
                     }
-                } else if let Some(index) = fm_icon_target {
-                    let icon_action = self.icons[index].action;
+                } else if let Some(idx) = fm_icon_target {
+                    let icon_action = self.icons[idx].action;
                     self.handle_icon_action(icon_action);
                 }
             },
@@ -4942,7 +5242,7 @@ match action {
                 let win_count = self.windows.len();
                 let icon_count = self.icons.len();
                 let win_id = self.create_window("Properties", 350 + offset, 250 + offset, 320, 220, WindowType::About);
-                if let Some(window) = self.windows.iterator_mut().find(|window| window.id == win_id) {
+                if let Some(window) = self.windows.iter_mut().find(|wnd| wnd.id == win_id) {
                     window.content.clear();
                     window.content.push(String::from("═══════ System Properties ═══════"));
                     window.content.push(String::new());
@@ -4957,18 +5257,18 @@ match action {
             ContextAction::Cut => {
                 if is_fm_context {
                     self.file_clipboard_copy(true);
-                } else if let Some(index) = fm_icon_target {
-                    self.clipboard_icon = Some((index, true));
-                    let name = self.icons[index].name.clone();
+                } else if let Some(idx) = fm_icon_target {
+                    self.clipboard_icon = Some((idx, true));
+                    let name = self.icons[idx].name.clone();
                     crate::keyboard::clipboard_set(&name);
                 }
             },
             ContextAction::Copy => {
                 if is_fm_context {
                     self.file_clipboard_copy(false);
-                } else if let Some(index) = fm_icon_target {
-                    self.clipboard_icon = Some((index, false));
-                    let name = self.icons[index].name.clone();
+                } else if let Some(idx) = fm_icon_target {
+                    self.clipboard_icon = Some((idx, false));
+                    let name = self.icons[idx].name.clone();
                     crate::keyboard::clipboard_set(&name);
                 }
             },
@@ -4978,14 +5278,14 @@ match action {
                 } else if let Some((source_index, is_cut)) = self.clipboard_icon.take() {
                     if source_index < self.icons.len() {
                         if !is_cut {
-                            let source = self.icons[source_index].clone();
-                            let new_name = format!("{} (copy)", source.name);
+                            let src = self.icons[source_index].clone();
+                            let new_name = format!("{} (copy)", src.name);
                             let new_icon = DesktopIcon {
                                 name: new_name.clone(),
-                                icon_type: source.icon_type,
-                                x: source.x + 10,
-                                y: source.y + 10,
-                                action: source.action,
+                                icon_type: src.icon_type,
+                                x: src.x + 10,
+                                y: src.y + 10,
+                                action: src.action,
                             };
                             self.icons.push(new_icon);
                         }
@@ -4996,7 +5296,7 @@ match action {
                 if is_fm_context {
                     if let Some(window) = self.windows.iter().find(|w| w.focused && w.window_type == WindowType::FileManager) {
                         let current_path = window.file_path.clone().unwrap_or_else(|| String::from("/"));
-                        let file_start_index = 5usize.minimum(window.content.len());
+                        let file_start_index = 5usize.min(window.content.len());
                         let actual_index = file_start_index + window.selected_index;
                         if actual_index < window.content.len().saturating_sub(2) {
                             let name = Self::extract_name_from_entry(&window.content[actual_index]);
@@ -5005,9 +5305,9 @@ match action {
                             crate::serial_println!("[FM] Copied path: {}", full);
                         }
                     }
-                } else if let Some(index) = fm_icon_target {
-                    if index < self.icons.len() {
-                        let path = format!("/desktop/{}", self.icons[index].name);
+                } else if let Some(idx) = fm_icon_target {
+                    if idx < self.icons.len() {
+                        let path = format!("/desktop/{}", self.icons[idx].name);
                         crate::keyboard::clipboard_set(&path);
                     }
                 }
@@ -5016,7 +5316,7 @@ match action {
                 if is_fm_context {
                     if let Some(window) = self.windows.iter().find(|w| w.focused && w.window_type == WindowType::FileManager) {
                         let current_path = window.file_path.clone().unwrap_or_else(|| String::from("/"));
-                        let file_start_index = 5usize.minimum(window.content.len());
+                        let file_start_index = 5usize.min(window.content.len());
                         let actual_index = file_start_index + window.selected_index;
                         if actual_index < window.content.len().saturating_sub(2) {
                             let name = String::from(Self::extract_name_from_entry(&window.content[actual_index]));
@@ -5030,9 +5330,9 @@ match action {
                         drop(window);
                         self.refresh_file_manager(&cp);
                     }
-                } else if let Some(index) = fm_icon_target {
-                    if index < self.icons.len() {
-                        self.icons.remove(index);
+                } else if let Some(idx) = fm_icon_target {
+                    if idx < self.icons.len() {
+                        self.icons.remove(idx);
                         self.clipboard_icon = None;
                     }
                 }
@@ -5040,8 +5340,8 @@ match action {
             ContextAction::Rename => {
                 if is_fm_context {
                     // Enter rename mode
-                    if let Some(window) = self.windows.iterator_mut().find(|w| w.focused && w.window_type == WindowType::FileManager) {
-                        let file_start_index = 5usize.minimum(window.content.len());
+                    if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::FileManager) {
+                        let file_start_index = 5usize.min(window.content.len());
                         let actual_index = file_start_index + window.selected_index;
                         if actual_index < window.content.len().saturating_sub(2) {
                             let name = String::from(Self::extract_name_from_entry(&window.content[actual_index]));
@@ -5051,9 +5351,9 @@ match action {
                             }
                         }
                     }
-                } else if let Some(index) = fm_icon_target {
-                    if index < self.icons.len() {
-                        crate::serial_println!("[GUI] Rename icon: {}", self.icons[index].name);
+                } else if let Some(idx) = fm_icon_target {
+                    if idx < self.icons.len() {
+                        crate::serial_println!("[GUI] Rename icon: {}", self.icons[idx].name);
                     }
                 }
             },
@@ -5100,20 +5400,20 @@ match action {
     /// Get icon index at position — uses same dynamic layout as draw_desktop_icons
     fn check_icon_index(&self, x: i32, y: i32) -> Option<usize> {
         // Must be within dock strip
-        if x < 0 || x >= (DOCK_WIDTH + 10) as i32 {
+        if x < 0 || x >= (DOCK_WIDTH() + 10) as i32 {
             return None;
         }
-        let dock_h = self.height.saturating_sub(TASKBAR_HEIGHT);
-        let n_icons = self.icons.len().maximum(1) as u32;
+        let dock_h = self.height.saturating_sub(TASKBAR_HEIGHT());
+        let n_icons = self.icons.len().max(1) as u32;
         let padding = 12u32;
         let available = dock_h.saturating_sub(padding * 2);
         let icon_total = available / n_icons;
         let start_y = padding + (available - icon_total * n_icons) / 2;
         
-        for (index, _icon) in self.icons.iter().enumerate() {
-            let iy = (start_y + index as u32 * icon_total) as i32;
+        for (idx, _icon) in self.icons.iter().enumerate() {
+            let iy = (start_y + idx as u32 * icon_total) as i32;
             if y >= iy && y < iy + icon_total as i32 {
-                return Some(index);
+                return Some(idx);
             }
         }
         None
@@ -5144,14 +5444,14 @@ match action {
             },
             IconAction::OpenMusicPlayer => {
                 let mp_x = self.width.saturating_sub(340) as i32;
-                let mp_y = self.height.saturating_sub(TASKBAR_HEIGHT + 600) as i32;
-                self.create_window("Music Player", mp_x, mp_y.maximum(20), 320, 580, WindowType::MusicPlayer)
+                let mp_y = self.height.saturating_sub(TASKBAR_HEIGHT() + 600) as i32;
+                self.create_window("Music Player", mp_x, mp_y.max(20), 320, 580, WindowType::MusicPlayer)
             },
             IconAction::OpenGame => {
                 let software = self.width;
                 let sh = self.height;
-                let id = self.create_window("TrustChess 3D", 0, 0, software, sh - TASKBAR_HEIGHT, WindowType::Chess3D);
-                if let Some(w) = self.windows.iterator_mut().find(|w| w.id == id) {
+                let id = self.create_window("TrustChess 3D", 0, 0, software, sh - TASKBAR_HEIGHT(), WindowType::Chess3D);
+                if let Some(w) = self.windows.iter_mut().find(|w| w.id == id) {
                     w.maximized = true;
                 }
                 id
@@ -5185,8 +5485,8 @@ match action {
                 let sh = self.height;
                 // Open on the right side, leaving room for Game Boy (480px)
                 let lab_x = 490i32;
-                let lab_w = (software as i32 - lab_x).maximum(400) as u32;
-                let lab_h = sh - TASKBAR_HEIGHT;
+                let lab_w = (software as i32 - lab_x).max(400) as u32;
+                let lab_h = sh - TASKBAR_HEIGHT();
                 let lab_id = self.create_window("Game Lab", lab_x, 0, lab_w, lab_h, WindowType::GameLab);
                 lab_id
             },
@@ -5212,11 +5512,23 @@ match action {
             return;
         }
         
-        // Settings button in system tray (gear icon)
+        // Settings gear icon in system tray → cycles desktop display mode
         let tray_x = self.width - 120;
         let settings_x = tray_x - 44;
         if x >= settings_x as i32 && x < (settings_x + 40) as i32 {
-            self.open_settings_panel();
+            let new_tier = // Pattern matching — Rust's exhaustive branching construct.
+match self.desktop_tier {
+                DesktopTier::Full => DesktopTier::Standard,
+                DesktopTier::Standard => DesktopTier::Minimal,
+                DesktopTier::Minimal | DesktopTier::CliOnly => DesktopTier::Full,
+            };
+            self.desktop_tier = new_tier;
+            self.tier_manual_override = true;
+            self.fps_low_count = 0;
+            self.fps_high_count = 0;
+            self.needs_full_redraw = true;
+            self.background_cached = false;
+            crate::serial_println!("[Desktop] Tier toggle from gear icon: {:?}", new_tier);
             return;
         }
 
@@ -5238,14 +5550,14 @@ match action {
         // Window buttons — must match the centered layout in draw_taskbar v2
         let total_btns = self.windows.len();
         if total_btns > 0 {
-            let button_w = 96u32;
-            let button_gap = 6u32;
-            let total_w = total_btns as u32 * (button_w + button_gap) - button_gap;
+            let btn_w = 96u32;
+            let btn_gap = 6u32;
+            let total_w = total_btns as u32 * (btn_w + btn_gap) - btn_gap;
             let start_x = (self.width.saturating_sub(total_w)) / 2;
             
             for (i, w) in self.windows.iter().enumerate() {
-                let button_x = start_x + i as u32 * (button_w + button_gap);
-                if x >= button_x as i32 && x < (button_x + button_w) as i32 {
+                let button_x = start_x + i as u32 * (btn_w + btn_gap);
+                if x >= button_x as i32 && x < (button_x + btn_w) as i32 {
                     let id = w.id;
                     // Click on focused window → minimize; click on other → focus/unminimize
                     if w.focused && !w.minimized {
@@ -5279,7 +5591,7 @@ match action {
         let menu_w = 480u32;
         let menu_h = 680u32;
         let menu_x = 4i32;
-        let menu_y = (self.height - TASKBAR_HEIGHT - menu_h - 8) as i32;
+        let menu_y = (self.height - TASKBAR_HEIGHT() - menu_h - 8) as i32;
         
         // Check if click is inside the start menu at all
         if x < menu_x || x >= menu_x + menu_w as i32 || y < menu_y || y >= menu_y + menu_h as i32 {
@@ -5289,17 +5601,17 @@ match action {
         // Search bar: menu_y + 34, height 36 → items start at menu_y + 78
         let items_start_y = menu_y + 78;
         
-        // App labels (indices 0-14, non-special)
-        let app_labels: [&str; 15] = [
+        // App labels (indices 0-15, non-special)
+        let app_labels: [&str; 16] = [
             "Terminal", "Files", "Calculator", "Network", "Text Editor",
             "TrustEdit 3D", "Browser", "Snake", "Chess", "Chess 3D",
-            "NES Emulator", "Game Boy", "TrustLab", "Music Player", "Settings",
+            "NES Emulator", "Game Boy", "TrustLab", "Music Player", "TrustWave", "Settings",
         ];
-        let app_indices: [u8; 15] = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14];
+        let app_indices: [u8; 16] = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15];
         
-        // Power labels (indices 15-17, bottom-anchored)
+        // Power labels (indices 16-18, bottom-anchored)
         let power_labels: [&str; 3] = ["Exit Desktop", "Shutdown", "Reboot"];
-        let power_indices: [u8; 3] = [15, 16, 17];
+        let power_indices: [u8; 3] = [16, 17, 18];
         
         let search = self.start_menu_search.trim();
         let search_lower: String = search.chars().map(|c| if c.is_ascii_uppercase() { (c as u8 + 32) as char } else { c }).collect();
@@ -5313,8 +5625,8 @@ match action {
         let filtered_apps: alloc::vec::Vec<u8> = if search.is_empty() {
             app_indices.to_vec()
         } else {
-            app_indices.iter().filter(|&&index| {
-                let label: String = app_labels[index as usize].chars().map(|c| if c.is_ascii_uppercase() { (c as u8 + 32) as char } else { c }).collect();
+            app_indices.iter().filter(|&&idx| {
+                let label: String = app_labels[idx as usize].chars().map(|c| if c.is_ascii_uppercase() { (c as u8 + 32) as char } else { c }).collect();
                 label.contains(search_lower.as_str())
             }).copied().collect()
         };
@@ -5322,9 +5634,9 @@ match action {
         // Check app grid items
         if y >= items_start_y && y < menu_y + menu_h as i32 - 110 {
             for (drawn, &app_index) in filtered_apps.iter().enumerate() {
-                let column = (drawn % column_count as usize) as i32;
+                let col = (drawn % column_count as usize) as i32;
                 let row = (drawn / column_count as usize) as i32;
-                let item_x = menu_x + 10 + column * (tile_w + tile_gap) as i32;
+                let item_x = menu_x + 10 + col * (tile_w + tile_gap) as i32;
                 let item_y = items_start_y + row * (tile_h + tile_gap) as i32;
                 
                 if x >= item_x && x < item_x + tile_w as i32
@@ -5356,7 +5668,7 @@ match action {
     fn handle_menu_action(&mut self, action: u8) {
         // Matches draw_start_menu items array order:
         // 0=Terminal, 1=Files, 2=Calculator, 3=Network, 4=TextEditor,
-        // 5=TrustEdit3D, 6=Browser, 7=Chess3D, 8=Chess2D, 9=Snake, 10=NES, 11=GameBoy, 12=TrustLab, 13=MusicPlayer, 14=Settings, 15=Exit Desktop, 16=Shutdown, 17=Reboot
+        // 5=TrustEdit3D, 6=Browser, 7=Chess3D, 8=Chess2D, 9=Snake, 10=NES, 11=GameBoy, 12=TrustLab, 13=MusicPlayer, 14=TrustWave, 15=Settings, 16=Exit Desktop, 17=Shutdown, 18=Reboot
         match action {
             0 => { // Terminal
                 let x = 100 + (self.windows.len() as i32 * 30);
@@ -5384,9 +5696,9 @@ match action {
             7 => { // Chess 3D — open fullscreen
                 let software = self.width;
                 let sh = self.height;
-                let id = self.create_window("TrustChess 3D", 0, 0, software, sh - TASKBAR_HEIGHT, WindowType::Chess3D);
+                let id = self.create_window("TrustChess 3D", 0, 0, software, sh - TASKBAR_HEIGHT(), WindowType::Chess3D);
                 // Mark as maximized
-                if let Some(w) = self.windows.iterator_mut().find(|w| w.id == id) {
+                if let Some(w) = self.windows.iter_mut().find(|w| w.id == id) {
                     w.maximized = true;
                 }
             },
@@ -5410,19 +5722,22 @@ match action {
             13 => { // Music Player
                 crate::serial_println!("[GUI] Opening Music Player...");
                 let mp_x = self.width.saturating_sub(320) as i32;
-                let mp_y = self.height.saturating_sub(TASKBAR_HEIGHT + 600) as i32;
-                crate::serial_println!("[GUI] Music Player pos: {}x{}", mp_x, mp_y.maximum(20));
-                self.create_window("Music Player", mp_x, mp_y.maximum(20), 320, 580, WindowType::MusicPlayer);
+                let mp_y = self.height.saturating_sub(TASKBAR_HEIGHT() + 600) as i32;
+                crate::serial_println!("[GUI] Music Player pos: {}x{}", mp_x, mp_y.max(20));
+                self.create_window("Music Player", mp_x, mp_y.max(20), 320, 580, WindowType::MusicPlayer);
                 crate::serial_println!("[GUI] Music Player window created OK");
             },
-            14 => { // Settings
+            14 => { // TrustWave WiFi Analyzer
+                self.open_wifi_analyzer();
+            },
+            15 => { // Settings
                 self.open_settings_panel();
             },
-            15 => { // Exit Desktop
+            16 => { // Exit Desktop
                 crate::serial_println!("[GUI] Exit Desktop from start menu");
                 EXIT_DESKTOP_FLAG.store(true, Ordering::SeqCst);
             },
-            16 => { // Shutdown
+            17 => { // Shutdown
                 crate::serial_println!("[SYSTEM] Shutdown sequence initiated");
                 self.shutdown_active = true;
                 self.shutdown_start_tick = crate::logger::get_ticks();
@@ -5431,7 +5746,7 @@ match action {
                 self.start_menu_open = false;
                 self.start_menu_search.clear();
             },
-            17 => { // Reboot
+            18 => { // Reboot
                 crate::serial_println!("[SYSTEM] Reboot requested");
                 // Triple fault reboot
                 unsafe {
@@ -5448,6 +5763,8 @@ loop { crate::arch::halt(); }
     /// Handle keyboard input for the focused window
     pub fn handle_keyboard_input(&mut self, key: u8) {
         use crate::keyboard::{KEY_UP, KEY_DOWN};
+        // Any keyboard input dirties windows (content/focus may change)
+        self.windows_dirty = true;
         crate::serial_println!("[KBD-DBG] handle_keyboard_input key={} (0x{:02X}) lock={} start_menu={}",
             key, key, self.lock_screen_active, self.start_menu_open);
         
@@ -5486,7 +5803,7 @@ match key {
                     }
                 },
                 0x0D | 0x0A => { // Enter — launch selected or first match
-                    if self.start_menu_selected >= 0 && self.start_menu_selected <= 16 {
+                    if self.start_menu_selected >= 0 && self.start_menu_selected <= 18 {
                         // Launch the selected item
                         let action = self.start_menu_selected as u8;
                         self.start_menu_open = false;
@@ -5496,11 +5813,11 @@ match key {
                         return;
                     }
                     // Fallback: launch first matching item by search
-                    let all_labels: [&str; 17] = [
+                    let all_labels: [&str; 19] = [
                         "Terminal", "Files", "Calculator", "Network", "Text Editor",
                         "TrustEdit 3D", "Browser", "Snake", "Chess", "Chess 3D",
-                        "NES Emulator", "Game Boy", "TrustLab",
-                        "Settings", "Exit Desktop", "Shutdown", "Reboot",
+                        "NES Emulator", "Game Boy", "TrustLab", "Music Player",
+                        "TrustWave", "Settings", "Exit Desktop", "Shutdown", "Reboot",
                     ];
                     let search = self.start_menu_search.trim();
                     if !search.is_empty() {
@@ -5541,16 +5858,16 @@ match wtype {
                 },
                 WindowType::FileManager => {
                     // Ctrl+C/X/V for file clipboard
-                    let controller = crate::keyboard::is_key_pressed(0x1D);
-                    if controller && (key == 3 || key == b'c' || key == b'C') {
+                    let ctrl = crate::keyboard::is_key_pressed(0x1D);
+                    if ctrl && (key == 3 || key == b'c' || key == b'C') {
                         self.file_clipboard_copy(false);
                         return;
                     }
-                    if controller && (key == 24 || key == b'x' || key == b'X') {
+                    if ctrl && (key == 24 || key == b'x' || key == b'X') {
                         self.file_clipboard_copy(true);
                         return;
                     }
-                    if controller && (key == 22 || key == b'v' || key == b'V') {
+                    if ctrl && (key == 22 || key == b'v' || key == b'V') {
                         self.file_clipboard_paste();
                         return;
                     }
@@ -5680,6 +5997,11 @@ match key {
                         }
                     }
                 },
+                WindowType::WifiAnalyzer => {
+                    if let Some(wa) = self.wifi_analyzer_states.get_mut(&win_id) {
+                        wa.handle_key(key);
+                    }
+                },
                 #[cfg(feature = "emulators")]
                 WindowType::GameLab => {
                     if let Some(lab) = self.gamelab_states.get_mut(&win_id) {
@@ -5713,7 +6035,7 @@ match key {
                 },
                 WindowType::Browser => {
                     use crate::keyboard::{KEY_LEFT, KEY_RIGHT, KEY_HOME, KEY_END, KEY_DELETE, KEY_PGUP, KEY_PGDOWN};
-                    let controller = crate::keyboard::is_key_pressed(0x1D);
+                    let ctrl = crate::keyboard::is_key_pressed(0x1D);
                     crate::serial_println!("[BROWSER] Key received: {} (0x{:02X}) cursor={} url_len={} sel={}", 
                         if key >= 0x20 && key < 0x7F { key as char } else { '?' }, key,
                         self.browser_url_cursor, self.browser_url_input.len(), self.browser_url_select_all);
@@ -5754,7 +6076,7 @@ match key {
                     }
                     
                     // Ctrl+A: select all
-                    if controller && (key == b'a' || key == b'A') {
+                    if ctrl && (key == b'a' || key == b'A') {
                         self.browser_url_select_all = true;
                         self.browser_url_cursor = self.browser_url_input.len();
                         return;
@@ -5796,7 +6118,7 @@ match key {
                             }
                         },
                         _ if key == KEY_LEFT => {
-                            if controller {
+                            if ctrl {
                                 // Ctrl+Left: jump to previous word boundary
                                 while self.browser_url_cursor > 0 {
                                     self.browser_url_cursor -= 1;
@@ -5812,7 +6134,7 @@ match key {
                             }
                         },
                         _ if key == KEY_RIGHT => {
-                            if controller {
+                            if ctrl {
                                 // Ctrl+Right: jump to next word boundary
                                 let len = self.browser_url_input.len();
                                 while self.browser_url_cursor < len {
@@ -5851,18 +6173,18 @@ match key {
                                 browser.scroll(200);
                             }
                         },
-                        _ if controller && (key == b'l' || key == b'L') => {
+                        _ if ctrl && (key == b'l' || key == b'L') => {
                             // Ctrl+L: select all URL text (focus omnibox)
                             self.browser_url_select_all = true;
                             self.browser_url_cursor = self.browser_url_input.len();
                         },
-                        _ if controller && (key == b'r' || key == b'R') => {
+                        _ if ctrl && (key == b'r' || key == b'R') => {
                             // Ctrl+R or F5: refresh
                             if let Some(ref mut browser) = self.browser {
                                 let _ = browser.refresh();
                             }
                         },
-                        _ if controller && (key == b'a' || key == b'A') => {
+                        _ if ctrl && (key == b'a' || key == b'A') => {
                             // Ctrl+A: select all — handled above, but fallback
                             self.browser_url_select_all = true;
                             self.browser_url_cursor = self.browser_url_input.len();
@@ -5890,15 +6212,15 @@ match key {
                 },
                 WindowType::HexViewer => {
                     use crate::keyboard::{KEY_UP, KEY_DOWN, KEY_PGUP, KEY_PGDOWN, KEY_HOME, KEY_END};
-                    if let Some(window) = self.windows.iterator_mut().find(|w| w.id == win_id) {
-                        let visible_lines = ((window.height.saturating_sub(TITLE_BAR_HEIGHT + 20)) / 16) as usize;
+                    if let Some(window) = self.windows.iter_mut().find(|w| w.id == win_id) {
+                        let visible_lines = ((window.height.saturating_sub(TITLE_BAR_HEIGHT() + 20)) / 16) as usize;
                         let maximum_scroll = window.content.len().saturating_sub(visible_lines);
                                                 // Pattern matching — Rust's exhaustive branching construct.
 match key {
                             KEY_UP => window.scroll_offset = window.scroll_offset.saturating_sub(1),
-                            KEY_DOWN => window.scroll_offset = (window.scroll_offset + 1).minimum(maximum_scroll),
+                            KEY_DOWN => window.scroll_offset = (window.scroll_offset + 1).min(maximum_scroll),
                             KEY_PGUP => window.scroll_offset = window.scroll_offset.saturating_sub(visible_lines),
-                            KEY_PGDOWN => window.scroll_offset = (window.scroll_offset + visible_lines).minimum(maximum_scroll),
+                            KEY_PGDOWN => window.scroll_offset = (window.scroll_offset + visible_lines).min(maximum_scroll),
                             KEY_HOME => window.scroll_offset = 0,
                             KEY_END => window.scroll_offset = maximum_scroll,
                             _ => {}
@@ -5922,7 +6244,7 @@ match key {
                                 );
                                 self.windows.retain(|w| w.id != win_id);
                             } else {
-                                self.wifi_error_message = Some(String::from("Password cannot be empty"));
+                                self.wifi_error_msg = Some(String::from("Password cannot be empty"));
                             }
                         },
                         b' '..=b'~' => { // Printable ASCII
@@ -5996,7 +6318,7 @@ match key {
         
         let mut rename_action: Option<(String, String, String)> = None; // (old_name, new_name, current_path)
         
-        if let Some(window) = self.windows.iterator_mut().find(|w| w.focused && w.window_type == WindowType::FileManager) {
+        if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::FileManager) {
             // Check if we're in rename mode
             if window.title.starts_with("RENAME:") {
                 if key == 0x0D || key == 0x0A { // Enter — confirm rename
@@ -6034,9 +6356,9 @@ match key {
             } else if key == 0x08 { // Backspace - navigate up
                 action = Some((String::from(".."), true));
             } else if key == KEY_DELETE { // Delete selected file/folder
-                let index = window.selected_index + 5;
-                if index < window.content.len().saturating_sub(2) {
-                    let line = &window.content[index];
+                let idx = window.selected_index + 5;
+                if idx < window.content.len().saturating_sub(2) {
+                    let line = &window.content[idx];
                     if let Some(name_start) = line.find(']') {
                         if name_start + 2 < line.len() {
                             let rest = &line[name_start + 2..];
@@ -6055,9 +6377,9 @@ match key {
                 new_folder = true;
             } else if key == b'r' || key == b'R' { // R for rename
                 rename_start = true;
-                let index = window.selected_index + 5;
-                if index < window.content.len().saturating_sub(2) {
-                    let line = &window.content[index];
+                let idx = window.selected_index + 5;
+                if idx < window.content.len().saturating_sub(2) {
+                    let line = &window.content[idx];
                     if let Some(name_start) = line.find(']') {
                         if name_start + 2 < line.len() {
                             let rest = &line[name_start + 2..];
@@ -6073,17 +6395,17 @@ match key {
                 }
             } else if key == 0x0D || key == 0x0A { // Enter - open file
                 // Get selected file
-                let index = window.selected_index + 5; // Skip header
-                if index < window.content.len().saturating_sub(2) { // Skip footer
-                    let line = &window.content[index];
+                let idx = window.selected_index + 5; // Skip header
+                if idx < window.content.len().saturating_sub(2) { // Skip footer
+                    let line = &window.content[idx];
                     // Parse filename from line format: "  [icon] filename..."
                     if let Some(name_start) = line.find(']') {
                         if name_start + 2 < line.len() {
                             let rest = &line[name_start + 2..];
                             if let Some(name_end) = rest.find(' ') {
                                 let filename = String::from(rest[..name_end].trim());
-                                let is_directory = line.contains("[D]");
-                                action = Some((filename, is_directory));
+                                let is_dir = line.contains("[D]");
+                                action = Some((filename, is_dir));
                             }
                         }
                     }
@@ -6143,8 +6465,8 @@ match key {
         }
         
         // Handle action outside the borrow
-        if let Some((filename, is_directory)) = action {
-            if is_directory {
+        if let Some((filename, is_dir)) = action {
+            if is_dir {
                 // Navigate into directory
                 self.navigate_file_manager(&filename);
             } else {
@@ -6156,7 +6478,7 @@ match key {
     /// Refresh file manager at current directory
     fn refresh_file_manager(&mut self, path: &str) {
         // Read sort/search settings before borrowing windows mutably
-        let (sort_column, sort_asc, search_q) = {
+        let (sort_col, sort_asc, search_q) = {
             let wid = self.windows.iter()
                 .find(|w| w.focused && w.window_type == WindowType::FileManager)
                 .map(|w| w.id);
@@ -6167,7 +6489,7 @@ match key {
             } else { return; }
         };
         
-        if let Some(window) = self.windows.iterator_mut().find(|w| w.focused && w.window_type == WindowType::FileManager) {
+        if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::FileManager) {
             window.content.clear();
             window.content.push(String::from("=== File Manager ==="));
             window.content.push(format!("Path: {}", path));
@@ -6201,7 +6523,7 @@ match key {
                         return if a_is_directory { core::cmp::Ordering::Less } else { core::cmp::Ordering::Greater };
                     }
                     let ord = // Pattern matching — Rust's exhaustive branching construct.
-match sort_column {
+match sort_col {
                         1 => { // Sort by type (extension)
                             let ext_a = a.0.rsplit('.').next().unwrap_or("");
                             let ext_b = b.0.rsplit('.').next().unwrap_or("");
@@ -6254,7 +6576,7 @@ match sort_column {
                                                 // Pattern matching — Rust's exhaustive branching construct.
 match trimmed.rfind('/') {
                             Some(0) => String::from("/"),
-                            Some(position) => String::from(&trimmed[..position]),
+                            Some(pos) => String::from(&trimmed[..pos]),
                             None => String::from("/"),
                         }
                     }
@@ -6275,7 +6597,7 @@ match trimmed.rfind('/') {
         }
         
         // Set path on window
-        if let Some(window) = self.windows.iterator_mut().find(|w| w.id == wid) {
+        if let Some(window) = self.windows.iter_mut().find(|w| w.id == wid) {
             window.file_path = Some(new_path.clone());
         }
         
@@ -6307,7 +6629,7 @@ match program {
             },
             Program::ImageViewer => {
                 let id = self.create_window(&format!("View: {}", filename), 180 + offset, 100 + offset, 500, 420, WindowType::ImageViewer);
-                if let Some(window) = self.windows.iterator_mut().find(|w| w.id == id) {
+                if let Some(window) = self.windows.iter_mut().find(|w| w.id == id) {
                     window.file_path = Some(String::from(filename));
                     window.content.clear();
                     
@@ -6315,18 +6637,18 @@ match program {
                     let file_path = format!("/{}", filename);
                     if let Ok(raw_data) = crate::ramfs::with_filesystem(|fs| fs.read_file(&file_path).map(|d| d.to_vec())) {
                         // Try BMP parser
-                        if let Some(image) = crate::theme::bmp::load_bitmap_from_bytes(&raw_data) {
+                        if let Some(img) = crate::theme::bmp::load_bitmap_from_bytes(&raw_data) {
                             let mut state = ImageViewerState::new();
-                            state.image_width = image.width;
-                            state.image_height = image.height;
-                            state.pixels = image.pixels;
+                            state.img_width = img.width;
+                            state.img_height = img.height;
+                            state.pixels = img.pixels;
                             // Auto-zoom to fit window (500x420 content area ~480x360)
-                            let fit_w = (480 * 100) / image.width.maximum(1);
-                            let fit_h = (360 * 100) / image.height.maximum(1);
-                            state.zoom = fit_w.minimum(fit_h).minimum(200);
+                            let fit_w = (480 * 100) / img.width.max(1);
+                            let fit_h = (360 * 100) / img.height.max(1);
+                            state.zoom = fit_w.min(fit_h).min(200);
                             self.image_viewer_states.insert(id, state);
-                            crate::serial_println!("[ImageViewer] Loaded BMP: {}x{}", image.width, image.height);
-                            window.content.push(format!("Image: {} ({}x{} BMP)", filename, image.width, image.height));
+                            crate::serial_println!("[ImageViewer] Loaded BMP: {}x{}", img.width, img.height);
+                            window.content.push(format!("Image: {} ({}x{} BMP)", filename, img.width, img.height));
                         } else {
                             // Not a BMP or parse failed — show file info
                             window.content.push(format!("=== Image: {} ===", filename));
@@ -6346,7 +6668,7 @@ match program {
             },
             Program::HexViewer => {
                 let id = self.create_window(&format!("Hex: {}", filename), 160 + offset, 80 + offset, 500, 350, WindowType::HexViewer);
-                if let Some(window) = self.windows.iterator_mut().find(|w| w.id == id) {
+                if let Some(window) = self.windows.iter_mut().find(|w| w.id == id) {
                     window.file_path = Some(String::from(filename));
                     window.content.clear();
                     window.content.push(format!("=== Hex View: {} ===", filename));
@@ -6377,7 +6699,7 @@ match program {
                 // Execute file
                 crate::serial_println!("[EXEC] Would execute: {}", filename);
                 let id = self.create_window("Execution", 200 + offset, 150 + offset, 400, 200, WindowType::Terminal);
-                if let Some(window) = self.windows.iterator_mut().find(|w| w.id == id) {
+                if let Some(window) = self.windows.iter_mut().find(|w| w.id == id) {
                     window.content.clear();
                     window.content.push(format!("Executing: {}", filename));
                     window.content.push(String::from(""));
@@ -6424,7 +6746,7 @@ match self.settings_category {
 match self.desktop_tier {
                         DesktopTier::Full => DesktopTier::Standard,
                         DesktopTier::Standard => DesktopTier::Minimal,
-                        DesktopTier::Minimal | DesktopTier::ClientOnly => DesktopTier::Full,
+                        DesktopTier::Minimal | DesktopTier::CliOnly => DesktopTier::Full,
                     };
                     self.desktop_tier = new_tier;
                     self.tier_manual_override = true;
@@ -6443,10 +6765,10 @@ match self.desktop_tier {
             },
             1 => { // Sound
                 if key == b'1' {
-                    let vol = &mut DESKTOP.lock().system_volume;
-                    *vol = (*vol + 10).minimum(100);
+                    let vol = &mut DESKTOP.lock().sys_volume;
+                    *vol = (*vol + 10).min(100);
                 } else if key == b'2' {
-                    let vol = &mut DESKTOP.lock().system_volume;
+                    let vol = &mut DESKTOP.lock().sys_volume;
                     *vol = vol.saturating_sub(10);
                 }
             },
@@ -6503,9 +6825,9 @@ match self.desktop_tier {
         
         if ww < 200 || wh < 160 { return; }
         
-        let content_y = wy + TITLE_BAR_HEIGHT as i32;
-        let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT);
-        let safe_x = wx.maximum(0) as u32;
+        let content_y = wy + TITLE_BAR_HEIGHT() as i32;
+        let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT());
+        let safe_x = wx.max(0) as u32;
         
         let is_hc = crate::accessibility::is_high_contrast();
         let bg_sidebar = if is_hc { 0xFF0A0A0A } else { 0xFF060E08 };
@@ -6555,41 +6877,41 @@ match self.desktop_tier {
         let cw = ww.saturating_sub(sidebar_w);
         framebuffer::fill_rect(cx, content_y as u32, cw, content_h, bg_content);
         
-        let pixel = cx as i32 + 20; // padding x
+        let px = cx as i32 + 20; // padding x
         let mut py = content_y + 16;  // current y
         let line_h = 22i32;
         
                 // Pattern matching — Rust's exhaustive branching construct.
 match self.settings_category {
             0 => { // Display
-                self.draw_text_smooth(pixel, py, "Display", green_accent);
-                self.draw_text_smooth(pixel + 1, py, "Display", green_accent); // bold
+                self.draw_text_smooth(px, py, "Display", green_accent);
+                self.draw_text_smooth(px + 1, py, "Display", green_accent); // bold
                 py += line_h + 8;
                 
-                self.draw_text_smooth(pixel, py, "Resolution", text_label);
-                self.draw_text_smooth(pixel + 120, py, &alloc::format!("{}x{}", self.width, self.height), text_value);
+                self.draw_text_smooth(px, py, "Resolution", text_label);
+                self.draw_text_smooth(px + 120, py, &alloc::format!("{}x{}", self.width, self.height), text_value);
                 py += line_h;
                 
                 let theme_name = crate::theme::THEME.read().name.clone();
-                self.draw_text_smooth(pixel, py, "Theme", text_label);
-                self.draw_text_smooth(pixel + 120, py, &theme_name, text_value);
+                self.draw_text_smooth(px, py, "Theme", text_label);
+                self.draw_text_smooth(px + 120, py, &theme_name, text_value);
                 py += line_h + 8;
                 
                 // Toggle: Animations
                 let anim_on = animations_enabled();
-                self.draw_settings_toggle(pixel, py, "[1] Animations", anim_on);
+                self.draw_settings_toggle(px, py, "[1] Animations", anim_on);
                 py += line_h;
                 
                 // Speed
                 let speed = *ANIMATION_SPEED.lock();
-                self.draw_text_smooth(pixel, py, "[2] Anim Speed", text_label);
-                self.draw_text_smooth(pixel + 180, py, &alloc::format!("{:.1}x", speed), text_value);
+                self.draw_text_smooth(px, py, "[2] Anim Speed", text_label);
+                self.draw_text_smooth(px + 180, py, &alloc::format!("{:.1}x", speed), text_value);
                 py += line_h + 8;
                 
                 // ── Desktop Mode section ──
-                framebuffer::draw_hline((pixel) as u32, (py + 2) as u32, cw.saturating_sub(40), 0xFF1A3A1A);
+                framebuffer::draw_hline((px) as u32, (py + 2) as u32, cw.saturating_sub(40), 0xFF1A3A1A);
                 py += line_h;
-                self.draw_text_smooth(pixel, py, "Desktop Mode", green_accent);
+                self.draw_text_smooth(px, py, "Desktop Mode", green_accent);
                 py += line_h;
                 
                 let tier_str = // Pattern matching — Rust's exhaustive branching construct.
@@ -6597,48 +6919,48 @@ match self.desktop_tier {
                     DesktopTier::Full => "Full",
                     DesktopTier::Standard => "Standard",
                     DesktopTier::Minimal => "Minimal",
-                    DesktopTier::ClientOnly => "CLI Only",
+                    DesktopTier::CliOnly => "CLI Only",
                 };
-                self.draw_text_smooth(pixel, py, "[3] Mode", text_label);
-                self.draw_text_smooth(pixel + 120, py, tier_str, text_value);
+                self.draw_text_smooth(px, py, "[3] Mode", text_label);
+                self.draw_text_smooth(px + 120, py, tier_str, text_value);
                 py += line_h;
                 
-                self.draw_settings_toggle(pixel, py, "[4] Manual Override", self.tier_manual_override);
+                self.draw_settings_toggle(px, py, "[4] Manual Override", self.tier_manual_override);
                 py += line_h;
                 
                 if !self.tier_manual_override {
-                    self.draw_text_smooth(pixel + 12, py, "(auto-adjusts based on FPS)", text_dim);
+                    self.draw_text_smooth(px + 12, py, "(auto-adjusts based on FPS)", text_dim);
                 } else {
-                    self.draw_text_smooth(pixel + 12, py, "(locked, no auto-downgrade)", text_value);
+                    self.draw_text_smooth(px + 12, py, "(locked, no auto-downgrade)", text_value);
                 }
                 py += line_h;
             },
             1 => { // Sound
-                self.draw_text_smooth(pixel, py, "Sound", green_accent);
-                self.draw_text_smooth(pixel + 1, py, "Sound", green_accent);
+                self.draw_text_smooth(px, py, "Sound", green_accent);
+                self.draw_text_smooth(px + 1, py, "Sound", green_accent);
                 py += line_h + 8;
                 
-                self.draw_text_smooth(pixel, py, "Master Volume", text_label);
-                let vol = self.system_volume;
-                self.draw_settings_slider(pixel + 140, py, cw.saturating_sub(180) as i32, vol, 100);
+                self.draw_text_smooth(px, py, "Master Volume", text_label);
+                let vol = self.sys_volume;
+                self.draw_settings_slider(px + 140, py, cw.saturating_sub(180) as i32, vol, 100);
                 py += line_h;
                 
-                self.draw_text_smooth(pixel, py, "[1] Volume +  [2] Volume -", text_dim);
+                self.draw_text_smooth(px, py, "[1] Volume +  [2] Volume -", text_dim);
                 py += line_h + 8;
                 
                 // Audio driver info
-                self.draw_text_smooth(pixel, py, "Audio Device", text_label);
+                self.draw_text_smooth(px, py, "Audio Device", text_label);
                 py += line_h;
                 let driver_name = if crate::drivers::hda::is_initialized() { "Intel HDA (active)" } else { "Not detected" };
-                self.draw_text_smooth(pixel + 12, py, driver_name, text_dim);
+                self.draw_text_smooth(px + 12, py, driver_name, text_dim);
             },
             2 => { // Taskbar
-                self.draw_text_smooth(pixel, py, "Taskbar", green_accent);
-                self.draw_text_smooth(pixel + 1, py, "Taskbar", green_accent);
+                self.draw_text_smooth(px, py, "Taskbar", green_accent);
+                self.draw_text_smooth(px + 1, py, "Taskbar", green_accent);
                 py += line_h + 8;
                 
                 let tb = crate::theme::taskbar();
-                self.draw_text_smooth(pixel, py, "Position", text_label);
+                self.draw_text_smooth(px, py, "Position", text_label);
                 let position_str = // Pattern matching — Rust's exhaustive branching construct.
 match tb.position {
                     crate::theme::TaskbarPosition::Bottom => "Bottom",
@@ -6646,32 +6968,32 @@ match tb.position {
                     crate::theme::TaskbarPosition::Left => "Left",
                     crate::theme::TaskbarPosition::Right => "Right",
                 };
-                self.draw_text_smooth(pixel + 120, py, position_str, text_value);
+                self.draw_text_smooth(px + 120, py, position_str, text_value);
                 py += line_h;
                 
-                self.draw_text_smooth(pixel, py, "Height", text_label);
-                self.draw_text_smooth(pixel + 120, py, &alloc::format!("{}px", tb.height), text_value);
+                self.draw_text_smooth(px, py, "Height", text_label);
+                self.draw_text_smooth(px + 120, py, &alloc::format!("{}px", tb.height), text_value);
                 py += line_h;
                 
-                self.draw_settings_toggle(pixel, py, "Show Clock", tb.show_clock);
+                self.draw_settings_toggle(px, py, "Show Clock", tb.show_clock);
                 py += line_h;
                 
-                self.draw_settings_toggle(pixel, py, "Show Date", tb.show_date);
+                self.draw_settings_toggle(px, py, "Show Date", tb.show_date);
                 py += line_h;
                 
-                self.draw_settings_toggle(pixel, py, "Centered Icons", tb.centered_icons);
+                self.draw_settings_toggle(px, py, "Centered Icons", tb.centered_icons);
             },
             3 => { // Personalization
-                self.draw_text_smooth(pixel, py, "Personalization", green_accent);
-                self.draw_text_smooth(pixel + 1, py, "Personalization", green_accent);
+                self.draw_text_smooth(px, py, "Personalization", green_accent);
+                self.draw_text_smooth(px + 1, py, "Personalization", green_accent);
                 py += line_h + 8;
                 
                 let theme_name = crate::theme::THEME.read().name.clone();
-                self.draw_text_smooth(pixel, py, "[1] Theme", text_label);
-                self.draw_text_smooth(pixel + 120, py, &theme_name, text_value);
+                self.draw_text_smooth(px, py, "[1] Theme", text_label);
+                self.draw_text_smooth(px + 120, py, &theme_name, text_value);
                 py += line_h;
                 
-                self.draw_text_smooth(pixel, py, "Available themes:", text_dim);
+                self.draw_text_smooth(px, py, "Available themes:", text_dim);
                 py += line_h;
                 let themes = ["dark_green", "windows11_dark"];
                 let labels = ["TrustOS Dark", "Windows 11 Dark"];
@@ -6679,129 +7001,129 @@ match tb.position {
                     let is_current = theme_name == themes[i];
                     let c = if is_current { green_accent } else { text_label };
                     let marker = if is_current { " *" } else { "  " };
-                    self.draw_text_smooth(pixel + 16, py, &alloc::format!("{}{}", marker, label), c);
+                    self.draw_text_smooth(px + 16, py, &alloc::format!("{}{}", marker, label), c);
                     py += line_h;
                 }
                 py += 8;
                 
                 let colors = crate::theme::colors();
-                self.draw_text_smooth(pixel, py, "Accent Color", text_label);
+                self.draw_text_smooth(px, py, "Accent Color", text_label);
                 // Draw color swatch
-                framebuffer::fill_rect((pixel + 120) as u32, py as u32, 20, 14, colors.accent);
+                framebuffer::fill_rect((px + 120) as u32, py as u32, 20, 14, colors.accent);
                 py += line_h;
                 
-                self.draw_text_smooth(pixel, py, "Background", text_label);
-                framebuffer::fill_rect((pixel + 120) as u32, py as u32, 20, 14, colors.background);
+                self.draw_text_smooth(px, py, "Background", text_label);
+                framebuffer::fill_rect((px + 120) as u32, py as u32, 20, 14, colors.background);
             },
             4 => { // Accessibility
-                self.draw_text_smooth(pixel, py, "Accessibility", green_accent);
-                self.draw_text_smooth(pixel + 1, py, "Accessibility", green_accent);
+                self.draw_text_smooth(px, py, "Accessibility", green_accent);
+                self.draw_text_smooth(px + 1, py, "Accessibility", green_accent);
                 py += line_h + 8;
                 
-                self.draw_settings_toggle(pixel, py, "[1] High Contrast", crate::accessibility::is_high_contrast());
+                self.draw_settings_toggle(px, py, "[1] High Contrast", crate::accessibility::is_high_contrast());
                 py += line_h;
                 
-                self.draw_text_smooth(pixel, py, "[2] Font Size", text_label);
-                self.draw_text_smooth(pixel + 160, py, crate::accessibility::get_font_size().label(), text_value);
+                self.draw_text_smooth(px, py, "[2] Font Size", text_label);
+                self.draw_text_smooth(px + 160, py, crate::accessibility::get_font_size().label(), text_value);
                 py += line_h;
                 
-                self.draw_text_smooth(pixel, py, "[3] Cursor Size", text_label);
-                self.draw_text_smooth(pixel + 160, py, crate::accessibility::get_cursor_size().label(), text_value);
+                self.draw_text_smooth(px, py, "[3] Cursor Size", text_label);
+                self.draw_text_smooth(px + 160, py, crate::accessibility::get_cursor_size().label(), text_value);
                 py += line_h;
                 
-                self.draw_settings_toggle(pixel, py, "[4] Sticky Keys", crate::accessibility::is_sticky_keys());
+                self.draw_settings_toggle(px, py, "[4] Sticky Keys", crate::accessibility::is_sticky_keys());
                 py += line_h;
                 
-                self.draw_text_smooth(pixel, py, "[5] Mouse Speed", text_label);
-                self.draw_text_smooth(pixel + 160, py, crate::accessibility::get_mouse_speed().label(), text_value);
+                self.draw_text_smooth(px, py, "[5] Mouse Speed", text_label);
+                self.draw_text_smooth(px + 160, py, crate::accessibility::get_mouse_speed().label(), text_value);
             },
             5 => { // Network
-                self.draw_text_smooth(pixel, py, "Network", green_accent);
-                self.draw_text_smooth(pixel + 1, py, "Network", green_accent);
+                self.draw_text_smooth(px, py, "Network", green_accent);
+                self.draw_text_smooth(px + 1, py, "Network", green_accent);
                 py += line_h + 8;
                 
                 // Interface info
-                self.draw_text_smooth(pixel, py, "Interface", text_label);
+                self.draw_text_smooth(px, py, "Interface", text_label);
                 py += line_h;
                 
                 if let Some(mac) = crate::network::get_mac_address() {
-                    self.draw_text_smooth(pixel + 12, py, &alloc::format!("MAC: {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]), text_value);
+                    self.draw_text_smooth(px + 12, py, &alloc::format!("MAC: {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]), text_value);
                 } else {
-                    self.draw_text_smooth(pixel + 12, py, "MAC: Not available", text_dim);
+                    self.draw_text_smooth(px + 12, py, "MAC: Not available", text_dim);
                 }
                 py += line_h;
                 
                 if let Some((ip, mask, gw)) = crate::network::get_ipv4_config() {
-                    self.draw_text_smooth(pixel + 12, py, &alloc::format!("IP:   {}", ip), text_value);
+                    self.draw_text_smooth(px + 12, py, &alloc::format!("IP:   {}", ip), text_value);
                     py += line_h;
-                    self.draw_text_smooth(pixel + 12, py, &alloc::format!("Mask: {}", mask), text_value);
+                    self.draw_text_smooth(px + 12, py, &alloc::format!("Mask: {}", mask), text_value);
                     py += line_h;
                     if let Some(g) = gw {
-                        self.draw_text_smooth(pixel + 12, py, &alloc::format!("GW:   {}", g), text_value);
+                        self.draw_text_smooth(px + 12, py, &alloc::format!("GW:   {}", g), text_value);
                     }
                 } else {
-                    self.draw_text_smooth(pixel + 12, py, "IP: Waiting for DHCP...", text_dim);
+                    self.draw_text_smooth(px + 12, py, "IP: Waiting for DHCP...", text_dim);
                 }
                 py += line_h + 8;
                 
                 let driver = if crate::virtio_net::is_initialized() { "virtio-net (active)" }
                     else if crate::drivers::net::has_driver() { "RTL8169/e1000 (active)" }
                     else { "No driver loaded" };
-                self.draw_text_smooth(pixel, py, "Driver", text_label);
-                self.draw_text_smooth(pixel + 80, py, driver, text_value);
+                self.draw_text_smooth(px, py, "Driver", text_label);
+                self.draw_text_smooth(px + 80, py, driver, text_value);
             },
             6 => { // Apps
-                self.draw_text_smooth(pixel, py, "Default Apps", green_accent);
-                self.draw_text_smooth(pixel + 1, py, "Default Apps", green_accent);
+                self.draw_text_smooth(px, py, "Default Apps", green_accent);
+                self.draw_text_smooth(px + 1, py, "Default Apps", green_accent);
                 py += line_h + 8;
                 
                 let assocs = crate::file_assoc::list_associations();
-                self.draw_text_smooth(pixel, py, "Extension", text_dim);
-                self.draw_text_smooth(pixel + 100, py, "Program", text_dim);
-                self.draw_text_smooth(pixel + 220, py, "Type", text_dim);
+                self.draw_text_smooth(px, py, "Extension", text_dim);
+                self.draw_text_smooth(px + 100, py, "Program", text_dim);
+                self.draw_text_smooth(px + 220, py, "Type", text_dim);
                 py += 4;
-                framebuffer::draw_hline((pixel) as u32, (py + 12) as u32, cw.saturating_sub(40), 0xFF1A3A1A);
+                framebuffer::draw_hline((px) as u32, (py + 12) as u32, cw.saturating_sub(40), 0xFF1A3A1A);
                 py += line_h;
                 
                 for (ext, prog, desc) in assocs.iter().take(10) {
-                    self.draw_text_smooth(pixel, py, &alloc::format!(".{}", ext), text_value);
-                    self.draw_text_smooth(pixel + 100, py, prog, text_label);
-                    self.draw_text_smooth(pixel + 220, py, desc, text_dim);
+                    self.draw_text_smooth(px, py, &alloc::format!(".{}", ext), text_value);
+                    self.draw_text_smooth(px + 100, py, prog, text_label);
+                    self.draw_text_smooth(px + 220, py, desc, text_dim);
                     py += line_h;
                 }
                 py += 8;
-                self.draw_text_smooth(pixel, py, "[3] Edit File Associations...", text_label);
+                self.draw_text_smooth(px, py, "[3] Edit File Associations...", text_label);
             },
             7 => { // About
-                self.draw_text_smooth(pixel, py, "About TrustOS", green_accent);
-                self.draw_text_smooth(pixel + 1, py, "About TrustOS", green_accent);
+                self.draw_text_smooth(px, py, "About TrustOS", green_accent);
+                self.draw_text_smooth(px + 1, py, "About TrustOS", green_accent);
                 py += line_h + 8;
                 
-                self.draw_text_smooth(pixel, py, "TrustOS", 0xFFCCEECC);
-                self.draw_text_smooth(pixel + 1, py, "TrustOS", 0xFFCCEECC);
+                self.draw_text_smooth(px, py, "TrustOS", 0xFFCCEECC);
+                self.draw_text_smooth(px + 1, py, "TrustOS", 0xFFCCEECC);
                 py += line_h;
-                self.draw_text_smooth(pixel, py, "Version 0.2.0", text_value);
+                self.draw_text_smooth(px, py, "Version 0.2.0", text_value);
                 py += line_h;
-                self.draw_text_smooth(pixel, py, "Bare-metal OS written in Rust", text_label);
+                self.draw_text_smooth(px, py, "Bare-metal OS written in Rust", text_label);
                 py += line_h + 8;
                 
-                self.draw_text_smooth(pixel, py, "Kernel", text_dim);
-                self.draw_text_smooth(pixel + 80, py, "trustos_kernel (x86_64)", text_value);
+                self.draw_text_smooth(px, py, "Kernel", text_dim);
+                self.draw_text_smooth(px + 80, py, "trustos_kernel (x86_64)", text_value);
                 py += line_h;
                 
-                self.draw_text_smooth(pixel, py, "Arch", text_dim);
-                self.draw_text_smooth(pixel + 80, py, "x86_64", text_value);
+                self.draw_text_smooth(px, py, "Arch", text_dim);
+                self.draw_text_smooth(px + 80, py, "x86_64", text_value);
                 py += line_h;
                 
-                self.draw_text_smooth(pixel, py, "Display", text_dim);
-                self.draw_text_smooth(pixel + 80, py, &alloc::format!("{}x{}", self.width, self.height), text_value);
+                self.draw_text_smooth(px, py, "Display", text_dim);
+                self.draw_text_smooth(px + 80, py, &alloc::format!("{}x{}", self.width, self.height), text_value);
                 py += line_h;
                 
-                self.draw_text_smooth(pixel, py, "AI", text_dim);
-                self.draw_text_smooth(pixel + 80, py, "JARVIS (Transformer 4.4M params)", text_value);
+                self.draw_text_smooth(px, py, "AI", text_dim);
+                self.draw_text_smooth(px + 80, py, "JARVIS (Transformer 4.4M params)", text_value);
                 py += line_h + 8;
                 
-                self.draw_text_smooth(pixel, py, "(c) 2026 Nathan", text_label);
+                self.draw_text_smooth(px, py, "(c) 2026 Nathan", text_label);
             },
             _ => {}
         }
@@ -6835,7 +7157,7 @@ match tb.position {
     
     /// Draw a horizontal slider widget
     fn draw_settings_slider(&self, x: i32, y: i32, width: i32, value: u32, maximum_value: u32) {
-        let track_w = width.maximum(40) as u32;
+        let track_w = width.max(40) as u32;
         let track_h = 6u32;
         let ty = y + 5;
         
@@ -6843,9 +7165,9 @@ match tb.position {
         draw_rounded_rect(x, ty, track_w, track_h, 3, 0xFF1A1A1A);
         
         // Filled portion
-        let fill_w = ((value as u64 * track_w as u64) / maximum_value.maximum(1) as u64) as u32;
+        let fill_w = ((value as u64 * track_w as u64) / maximum_value.max(1) as u64) as u32;
         if fill_w > 0 {
-            draw_rounded_rect(x, ty, fill_w.minimum(track_w), track_h, 3, 0xFF1A5A2A);
+            draw_rounded_rect(x, ty, fill_w.min(track_w), track_h, 3, 0xFF1A5A2A);
         }
         
         // Knob
@@ -6855,7 +7177,7 @@ match tb.position {
                 let ddx = dx as i32 - 5;
                 let ddy = dy as i32 - 5;
                 if ddx * ddx + ddy * ddy <= 25 {
-                    framebuffer::put_pixel_fast((knob_x + dx as i32 - 5).maximum(0) as u32, (ty as u32 - 2 + dy), GREEN_PRIMARY);
+                    framebuffer::put_pixel_fast((knob_x + dx as i32 - 5).max(0) as u32, (ty as u32 - 2 + dy), GREEN_PRIMARY);
                 }
             }
         }
@@ -6889,10 +7211,10 @@ match self.netscan_tab {
                         if let Some(g) = gw {
                             let target = *g.as_bytes();
                             let (results, stats) = crate::netscan::port_scanner::quick_scan(target);
-                            if let Some(window) = self.windows.iterator_mut().find(|w| w.window_type == WindowType::NetworkInformation) {
+                            if let Some(window) = self.windows.iter_mut().find(|w| w.window_type == WindowType::NetworkInformation) {
                                 window.content.clear();
                                 window.content.push(alloc::format!("Scan: {} | Open: {} | Closed: {} | {:.0}ms",
-                                    crate::netscan::format_ip(target), stats.open, stats.closed, stats.elapsed_mouse));
+                                    crate::netscan::format_ip(target), stats.open, stats.closed, stats.elapsed_ms));
                                 for pr in &results {
                                     let state_str = // Pattern matching — Rust's exhaustive branching construct.
 match pr.state {
@@ -6914,7 +7236,7 @@ match pr.state {
             2 => { // Discovery
                 if key == b'd' || key == b'D' {
                     let hosts = crate::netscan::discovery::arp_sweep_local(3000);
-                    if let Some(window) = self.windows.iterator_mut().find(|w| w.window_type == WindowType::NetworkInformation) {
+                    if let Some(window) = self.windows.iter_mut().find(|w| w.window_type == WindowType::NetworkInformation) {
                         window.content.clear();
                         window.content.push(alloc::format!("ARP Sweep: {} hosts found", hosts.len()));
                         for host in &hosts {
@@ -6924,7 +7246,7 @@ match host.mac {
                                 None => String::from("??:??:??:??:??:??"),
                             };
                             window.content.push(alloc::format!("  {} - {} ({}ms)",
-                                crate::netscan::format_ip(host.ip), mac_str, host.rtt_mouse));
+                                crate::netscan::format_ip(host.ip), mac_str, host.rtt_ms));
                         }
                         if hosts.is_empty() {
                             window.content.push(String::from("  No hosts discovered"));
@@ -6948,7 +7270,7 @@ match host.mac {
                             let target = *g.as_bytes();
                             let hops = crate::netscan::traceroute::trace(target, 30, 5000);
                             let formatted = crate::netscan::traceroute::format_trace(&hops);
-                            if let Some(window) = self.windows.iterator_mut().find(|w| w.window_type == WindowType::NetworkInformation) {
+                            if let Some(window) = self.windows.iter_mut().find(|w| w.window_type == WindowType::NetworkInformation) {
                                 window.content.clear();
                                 for line in formatted.lines() {
                                     window.content.push(String::from(line));
@@ -6971,7 +7293,7 @@ match host.mac {
                                 .collect();
                             let results = crate::netscan::vuln::scan(target, &open_ports);
                             let report = crate::netscan::vuln::format_report(target, &results);
-                            if let Some(window) = self.windows.iterator_mut().find(|w| w.window_type == WindowType::NetworkInformation) {
+                            if let Some(window) = self.windows.iter_mut().find(|w| w.window_type == WindowType::NetworkInformation) {
                                 window.content.clear();
                                 for line in report.lines() {
                                     window.content.push(String::from(line));
@@ -6994,9 +7316,9 @@ match host.mac {
         
         if ww < 200 || wh < 120 { return; }
         
-        let content_y = wy + TITLE_BAR_HEIGHT as i32;
-        let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT);
-        let safe_x = wx.maximum(0) as u32;
+        let content_y = wy + TITLE_BAR_HEIGHT() as i32;
+        let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT());
+        let safe_x = wx.max(0) as u32;
         
         let bg = 0xFF0A140Cu32;
         let tab_bg = 0xFF060E08u32;
@@ -7016,7 +7338,7 @@ match host.mac {
         framebuffer::fill_rect(safe_x, (content_y + tab_h as i32) as u32, ww, 1, border_color);
         
         let tabs = ["Dashboard", "PortScan", "Discovery", "Sniffer", "Traceroute", "VulnScan"];
-        let tab_w = (ww / tabs.len() as u32).maximum(80);
+        let tab_w = (ww / tabs.len() as u32).max(80);
         
         for (i, label) in tabs.iter().enumerate() {
             let transmit = safe_x + (i as u32 * tab_w);
@@ -7247,7 +7569,7 @@ match self.netscan_tab {
     
     /// Refresh settings window content to show current values
     fn refresh_settings_window(&mut self) {
-        if let Some(window) = self.windows.iterator_mut().find(|w| w.window_type == WindowType::Settings) {
+        if let Some(window) = self.windows.iter_mut().find(|w| w.window_type == WindowType::Settings) {
             window.content.clear();
             window.content.push(String::from("=== Settings ==="));
             window.content.push(String::from(""));
@@ -7278,7 +7600,7 @@ match self.netscan_tab {
     fn handle_fileassoc_key(&mut self, key: u8) {
         use crate::keyboard::{KEY_UP, KEY_DOWN};
         
-        if let Some(window) = self.windows.iterator_mut().find(|w| w.focused && w.window_type == WindowType::FileAssociations) {
+        if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::FileAssociations) {
             let list_start = 4; // After header
             let list_end = window.content.len().saturating_sub(2);
             let list_length = list_end.saturating_sub(list_start);
@@ -7289,10 +7611,10 @@ match self.netscan_tab {
                 window.selected_index += 1;
             } else if key == 0x0D || key == 0x0A {
                 // Cycle through programs for selected extension
-                let index = list_start + window.selected_index;
-                if index < list_end {
+                let idx = list_start + window.selected_index;
+                if idx < list_end {
                     // Get extension from line
-                    let line = &window.content[index];
+                    let line = &window.content[idx];
                     if let Some(ext_end) = line.find('|') {
                         let ext = line[1..ext_end].trim().trim_start_matches('.');
                         // Cycle to next program
@@ -7318,7 +7640,7 @@ match current {
     /// Remove any existing auto-suggestion lines from the terminal window
     fn clear_terminal_suggestions(&mut self) {
         if self.terminal_suggestion_count > 0 {
-            if let Some(window) = self.windows.iterator_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
+            if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
                 for _ in 0..self.terminal_suggestion_count {
                     window.content.pop();
                 }
@@ -7340,7 +7662,7 @@ match current {
         if matches.is_empty() {
             return;
         }
-        if let Some(window) = self.windows.iterator_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
+        if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
             // Show up to 6 suggestions on one line
             let display: Vec<&str> = matches.iter().copied().take(6).collect();
             let line = format!("  \x01M> {}", display.join("  "));
@@ -7373,15 +7695,15 @@ match current {
         
         // PageUp / PageDown — scroll terminal output
         if key == KEY_PGUP || key == KEY_PGDOWN {
-            if let Some(window) = self.windows.iterator_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
+            if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
                 let line_height = 16usize;
-                let content_area_h = (window.height as usize).saturating_sub(TITLE_BAR_HEIGHT as usize + 16);
+                let content_area_h = (window.height as usize).saturating_sub(TITLE_BAR_HEIGHT() as usize + 16);
                 let visible_lines = if line_height > 0 { content_area_h / line_height } else { 1 };
                 let maximum_scroll = window.content.len().saturating_sub(visible_lines);
                 if key == KEY_PGUP {
                     window.scroll_offset = window.scroll_offset.saturating_sub(visible_lines);
                 } else {
-                    window.scroll_offset = (window.scroll_offset + visible_lines).minimum(maximum_scroll);
+                    window.scroll_offset = (window.scroll_offset + visible_lines).min(maximum_scroll);
                 }
             }
             return;
@@ -7390,7 +7712,7 @@ match current {
         if key == 0x08 { // Backspace
             if !self.input_buffer.is_empty() {
                 self.input_buffer.pop();
-                if let Some(window) = self.windows.iterator_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
+                if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
                     if let Some(last) = window.content.last_mut() {
                         *last = Self::make_prompt(&format!("{}_", self.input_buffer));
                     }
@@ -7400,9 +7722,9 @@ match current {
             let partial = self.input_buffer.clone();
             if !partial.is_empty() {
                 // Check if we're completing a command argument (contains space) or a command name
-                if let Some(space_position) = partial.rfind(' ') {
+                if let Some(space_pos) = partial.rfind(' ') {
                     // Completing a filename argument
-                    let file_partial = &partial[space_position + 1..];
+                    let file_partial = &partial[space_pos + 1..];
                     if !file_partial.is_empty() {
                         // List files from ramfs and find matches
                         let mut file_matches: Vec<String> = Vec::new();
@@ -7417,16 +7739,16 @@ match current {
                             }
                         }
                         if file_matches.len() == 1 {
-                            let command_prefix = &partial[..=space_position];
+                            let command_prefix = &partial[..=space_pos];
                             self.input_buffer = format!("{}{}", command_prefix, file_matches[0]);
-                            if let Some(window) = self.windows.iterator_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
+                            if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
                                 if let Some(last) = window.content.last_mut() {
                                     *last = Self::make_prompt(&format!("{}_", self.input_buffer));
                                 }
                             }
                         } else if file_matches.len() > 1 {
                             let match_str: String = file_matches.join("  ");
-                            if let Some(window) = self.windows.iterator_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
+                            if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
                                 window.content.push(match_str);
                                 window.content.push(Self::make_prompt(&format!("{}_", self.input_buffer)));
                             }
@@ -7439,14 +7761,14 @@ match current {
                     let matches: Vec<&str> = commands.iter().copied().filter(|c| c.starts_with(partial_str)).collect();
                     if matches.len() == 1 {
                         self.input_buffer = String::from(matches[0]);
-                        if let Some(window) = self.windows.iterator_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
+                        if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
                             if let Some(last) = window.content.last_mut() {
                                 *last = Self::make_prompt(&format!("{}_", self.input_buffer));
                             }
                         }
                     } else if matches.len() > 1 {
                         let match_str: String = matches.join("  ");
-                        if let Some(window) = self.windows.iterator_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
+                        if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
                             window.content.push(match_str);
                             window.content.push(Self::make_prompt(&format!("{}_", self.input_buffer)));
                         }
@@ -7460,18 +7782,18 @@ match self.history_index {
                     None => {
                         // Start browsing: save current input, go to last command
                         self.saved_input = self.input_buffer.clone();
-                        let index = self.command_history.len() - 1;
-                        self.history_index = Some(index);
-                        self.input_buffer = self.command_history[index].clone();
+                        let idx = self.command_history.len() - 1;
+                        self.history_index = Some(idx);
+                        self.input_buffer = self.command_history[idx].clone();
                     }
                     Some(i) if i > 0 => {
-                        let index = i - 1;
-                        self.history_index = Some(index);
-                        self.input_buffer = self.command_history[index].clone();
+                        let idx = i - 1;
+                        self.history_index = Some(idx);
+                        self.input_buffer = self.command_history[idx].clone();
                     }
                     _ => {} // already at oldest
                 }
-                if let Some(window) = self.windows.iterator_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
+                if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
                     if let Some(last) = window.content.last_mut() {
                         *last = Self::make_prompt(&format!("{}_", self.input_buffer));
                     }
@@ -7480,15 +7802,15 @@ match self.history_index {
         } else if key == 0xF1 { // Down arrow — history next
             if let Some(i) = self.history_index {
                 if i + 1 < self.command_history.len() {
-                    let index = i + 1;
-                    self.history_index = Some(index);
-                    self.input_buffer = self.command_history[index].clone();
+                    let idx = i + 1;
+                    self.history_index = Some(idx);
+                    self.input_buffer = self.command_history[idx].clone();
                 } else {
                     // Past the end: restore saved input
                     self.history_index = None;
                     self.input_buffer = self.saved_input.clone();
                 }
-                if let Some(window) = self.windows.iterator_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
+                if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
                     if let Some(last) = window.content.last_mut() {
                         *last = Self::make_prompt(&format!("{}_", self.input_buffer));
                     }
@@ -7518,8 +7840,8 @@ match argument {
                     "u2" | "untitled2" | "lofi" | "untitled" => {
                         // Create music player widget and start playback
                         let mp_x = self.width.saturating_sub(320) as i32;
-                        let mp_y = self.height.saturating_sub(TASKBAR_HEIGHT + 600) as i32;
-                        let wid = self.create_window("Music Player", mp_x, mp_y.maximum(20), 320, 580, WindowType::MusicPlayer);
+                        let mp_y = self.height.saturating_sub(TASKBAR_HEIGHT() + 600) as i32;
+                        let wid = self.create_window("Music Player", mp_x, mp_y.max(20), 320, 580, WindowType::MusicPlayer);
                         if let Some(mp_state) = self.music_player_states.get_mut(&wid) {
                             mp_state.play_track(0);
                         }
@@ -7528,7 +7850,7 @@ match argument {
                 }
             }
             
-            if let Some(window) = self.windows.iterator_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
+            if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
                 // Handle "clear" specially — wipe all content
                 if cmd.trim() == "clear" {
                     window.content.clear();
@@ -7551,7 +7873,7 @@ match argument {
                     
                     // Auto-scroll to bottom
                     let line_height = 16usize;
-                    let content_area_h = (window.height as usize).saturating_sub(TITLE_BAR_HEIGHT as usize + 16);
+                    let content_area_h = (window.height as usize).saturating_sub(TITLE_BAR_HEIGHT() as usize + 16);
                     let visible_lines = if line_height > 0 { content_area_h / line_height } else { 1 };
                     if window.content.len() > visible_lines {
                         window.scroll_offset = window.content.len() - visible_lines;
@@ -7563,7 +7885,7 @@ match argument {
         } else if key >= 0x20 && key < 0x7F {
             self.input_buffer.push(key as char);
             
-            if let Some(window) = self.windows.iterator_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
+            if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
                 if let Some(last) = window.content.last_mut() {
                     *last = Self::make_prompt(&format!("{}_", self.input_buffer));
                 }
@@ -7675,12 +7997,12 @@ match cmd {
                 output.push(String::from("✓ Matrix Tunnel 3D - ESC to exit"));
                 
                 // Get framebuffer info
-                let framebuffer = crate::framebuffer::get_framebuffer();
+                let fb = crate::framebuffer::get_framebuffer();
                 let width = crate::framebuffer::width();
                 let height = crate::framebuffer::height();
                 
                 // Init virtual GPU with tunnel shader
-                crate::gpu_emu::init(framebuffer, width, height);
+                crate::gpu_emu::init(fb, width, height);
                 if let Some(shader_fn) = crate::gpu_emu::get_shader("tunnel") {
                     crate::gpu_emu::set_shader(shader_fn);
                 }
@@ -7894,12 +8216,12 @@ match crate::ramfs::with_filesystem(|fs| fs.rm(path)) {
                     output.push(format!("✓ Starting shader: {} (ESC to exit)", shader_name));
                     
                     // Get framebuffer info
-                    let framebuffer = crate::framebuffer::get_framebuffer();
+                    let fb = crate::framebuffer::get_framebuffer();
                     let width = crate::framebuffer::width();
                     let height = crate::framebuffer::height();
                     
                     // Init virtual GPU
-                    crate::gpu_emu::init(framebuffer, width, height);
+                    crate::gpu_emu::init(fb, width, height);
                     crate::gpu_emu::set_shader(shader_fn);
                     
                     // Run shader demo loop
@@ -8046,13 +8368,13 @@ match argument {
         for w in &mut self.windows {
             // Handle window dragging
             if w.dragging && !w.maximized {
-                w.x = (x - w.drag_offset_x).maximum(0).minimum(self.width as i32 - 50);
-                w.y = (y - w.drag_offset_y).maximum(0).minimum(self.height as i32 - TASKBAR_HEIGHT as i32 - TITLE_BAR_HEIGHT as i32);
+                w.x = (x - w.drag_offset_x).max(0).min(self.width as i32 - 50);
+                w.y = (y - w.drag_offset_y).max(0).min(self.height as i32 - TASKBAR_HEIGHT() as i32 - TITLE_BAR_HEIGHT() as i32);
                 
                 // Detect snap zone while dragging
                 let edge_margin = 16i32;
                 let software = self.width as i32;
-                let sh = (self.height - TASKBAR_HEIGHT) as i32;
+                let sh = (self.height - TASKBAR_HEIGHT()) as i32;
                 let half_h = sh / 2;
                 
                 if x <= edge_margin && y <= edge_margin + half_h / 4 {
@@ -8080,8 +8402,8 @@ match argument {
                 // Right edge: expand width
                 match w.resizing {
                     ResizeEdge::Right | ResizeEdge::BottomRight | ResizeEdge::TopRight => {
-                        let new_width = (w.width as i32 + dx).maximum(w.minimum_width as i32) as u32;
-                        w.width = new_width.minimum(self.width - w.x as u32);
+                        let new_width = (w.width as i32 + dx).max(w.min_width as i32) as u32;
+                        w.width = new_width.min(self.width - w.x as u32);
                         w.drag_offset_x = x;
                     }
                     _ => {}
@@ -8090,7 +8412,7 @@ match argument {
                 // Left edge: move x and shrink width
                 match w.resizing {
                     ResizeEdge::Left | ResizeEdge::BottomLeft | ResizeEdge::TopLeft => {
-                        let new_width = (w.width as i32 - dx).maximum(w.minimum_width as i32) as u32;
+                        let new_width = (w.width as i32 - dx).max(w.min_width as i32) as u32;
                         if new_width != w.width as u32 {
                             w.x += (w.width as i32 - new_width as i32);
                             w.width = new_width;
@@ -8103,8 +8425,8 @@ match argument {
                 // Bottom edge: expand height
                 match w.resizing {
                     ResizeEdge::Bottom | ResizeEdge::BottomRight | ResizeEdge::BottomLeft => {
-                        let new_height = (w.height as i32 + dy).maximum(w.minimum_height as i32) as u32;
-                        w.height = new_height.minimum(self.height - TASKBAR_HEIGHT - w.y as u32);
+                        let new_height = (w.height as i32 + dy).max(w.min_height as i32) as u32;
+                        w.height = new_height.min(self.height - TASKBAR_HEIGHT() - w.y as u32);
                         w.drag_offset_y = y;
                     }
                     _ => {}
@@ -8113,7 +8435,7 @@ match argument {
                 // Top edge: move y and shrink height
                 match w.resizing {
                     ResizeEdge::Top | ResizeEdge::TopLeft | ResizeEdge::TopRight => {
-                        let new_height = (w.height as i32 - dy).maximum(w.minimum_height as i32) as u32;
+                        let new_height = (w.height as i32 - dy).max(w.min_height as i32) as u32;
                         if new_height != w.height as u32 {
                             w.y += (w.height as i32 - new_height as i32);
                             w.height = new_height;
@@ -8131,9 +8453,9 @@ match argument {
             .map(|w| (w.id, w.x, w.y, w.width, w.height));
         if let Some((win_id, wx, wy, ww, wh)) = model_information {
             let vx = x - wx;
-            let vy = y - wy - TITLE_BAR_HEIGHT as i32;
+            let vy = y - wy - TITLE_BAR_HEIGHT() as i32;
             let vw = ww as usize;
-            let vh = wh.saturating_sub(TITLE_BAR_HEIGHT) as usize;
+            let vh = wh.saturating_sub(TITLE_BAR_HEIGHT()) as usize;
             if let Some(state) = self.model_editor_states.get_mut(&win_id) {
                 state.handle_mouse_move(vx, vy, vw, vh);
             }
@@ -8158,7 +8480,7 @@ match argument {
         if let Some((win_id, wx, wy)) = chess3d_information {
             if let Some(state) = self.chess3d_states.get_mut(&win_id) {
                 let relative_x = x - wx;
-                let relative_y = y - wy - TITLE_BAR_HEIGHT as i32;
+                let relative_y = y - wy - TITLE_BAR_HEIGHT() as i32;
                 state.handle_mouse_move(relative_x, relative_y);
             }
         }
@@ -8166,6 +8488,7 @@ match argument {
     
     /// Handle scroll wheel
     pub fn handle_scroll(&mut self, delta: i8) {
+        self.windows_dirty = true;
         // Handle model editor scroll (zoom) separately
         let model_information = self.windows.iter().rev().find(|w| w.focused && !w.minimized && w.window_type == WindowType::ModelEditor).map(|w| w.id);
         if let Some(win_id) = model_information {
@@ -8183,7 +8506,7 @@ match argument {
             return;
         }
         // Scroll focused window content if it's a scrollable type
-        if let Some(window) = self.windows.iterator_mut().rev().find(|w| w.focused && !w.minimized) {
+        if let Some(window) = self.windows.iter_mut().rev().find(|w| w.focused && !w.minimized) {
                         // Pattern matching — Rust's exhaustive branching construct.
 match window.window_type {
                 WindowType::FileManager | WindowType::TextEditor | WindowType::HexViewer | 
@@ -8201,7 +8524,7 @@ match window.window_type {
                         }
                     } else if delta < 0 {
                         // Scroll down
-                        window.scroll_offset = (window.scroll_offset + 3).minimum(maximum_scroll);
+                        window.scroll_offset = (window.scroll_offset + 3).min(maximum_scroll);
                     }
                 },
                 _ => {}
@@ -8377,9 +8700,9 @@ match gtype {
         }
         // Find currently focused window and move focus to next
         let focused_index = self.windows.iter().position(|w| w.focused);
-        if let Some(index) = focused_index {
-            let next = (index + 1) % self.windows.len();
-            for w in self.windows.iterator_mut() {
+        if let Some(idx) = focused_index {
+            let next = (idx + 1) % self.windows.len();
+            for w in self.windows.iter_mut() {
                 w.focused = false;
             }
             self.windows[next].focused = true;
@@ -8433,7 +8756,7 @@ match gtype {
         let elapsed = now_tick.saturating_sub(self.fps_last_tick);
         // Timer interrupt fires at ~100 Hz (1 tick = ~10ms), so 100 ticks ≈ 1 sec
         if elapsed >= 100 {
-            self.fps_current = ((self.fps_frame_accum as u64 * 100) / elapsed.maximum(1)) as u32;
+            self.fps_current = ((self.fps_frame_accum as u64 * 100) / elapsed.max(1)) as u32;
             self.fps_frame_accum = 0;
             self.fps_last_tick = now_tick;
         }
@@ -8443,11 +8766,11 @@ match gtype {
         
         // Poll WiFi driver and update system tray state
         crate::drivers::net::wifi::poll();
-        self.system_wifi_connected = crate::drivers::net::wifi::is_connected();
+        self.sys_wifi_connected = crate::drivers::net::wifi::is_connected();
         
         // Tick snake games — only when window is focused and visible
-        let snake_ids: Vec<u32> = self.snake_states.keys().copied().collect();
-        for id in snake_ids {
+        let (snake_ids, snake_n) = { let mut b = [0u32; 32]; let mut n = 0; for &k in self.snake_states.keys() { if n < 32 { b[n] = k; n += 1; } } (b, n) };
+        for &id in &snake_ids[..snake_n] {
             let is_active = self.windows.iter().any(|w| w.id == id && w.focused && w.visible && !w.minimized);
             if is_active {
                 if let Some(snake) = self.snake_states.get_mut(&id) {
@@ -8457,16 +8780,16 @@ match gtype {
         }
         
         // Tick music players — always tick if playing (even minimized, for DMA refill)
-        let mp_ids: Vec<u32> = self.music_player_states.keys().copied().collect();
-        for id in mp_ids {
+        let (mp_ids, mp_n) = { let mut b = [0u32; 32]; let mut n = 0; for &k in self.music_player_states.keys() { if n < 32 { b[n] = k; n += 1; } } (b, n) };
+        for &id in &mp_ids[..mp_n] {
             if let Some(mp) = self.music_player_states.get_mut(&id) {
                 mp.tick();
             }
         }
         
         // Tick 3D game — only when window is focused and visible
-        let game3d_ids: Vec<u32> = self.game3d_states.keys().copied().collect();
-        for id in game3d_ids {
+        let (game3d_ids, game3d_n) = { let mut b = [0u32; 32]; let mut n = 0; for &k in self.game3d_states.keys() { if n < 32 { b[n] = k; n += 1; } } (b, n) };
+        for &id in &game3d_ids[..game3d_n] {
             let is_active = self.windows.iter().any(|w| w.id == id && w.focused && w.visible && !w.minimized);
             if is_active {
                 if let Some(game) = self.game3d_states.get_mut(&id) {
@@ -8478,8 +8801,8 @@ match gtype {
         // Tick NES emulator — only when window is focused and visible
         #[cfg(feature = "emulators")]
         {
-        let nes_ids: Vec<u32> = self.nes_states.keys().copied().collect();
-        for id in nes_ids {
+        let (nes_ids, nes_n) = { let mut b = [0u32; 32]; let mut n = 0; for &k in self.nes_states.keys() { if n < 32 { b[n] = k; n += 1; } } (b, n) };
+        for &id in &nes_ids[..nes_n] {
             let is_active = self.windows.iter().any(|w| w.id == id && w.focused && w.visible && !w.minimized);
             if is_active {
                 if let Some(emu) = self.nes_states.get_mut(&id) {
@@ -8493,8 +8816,8 @@ match gtype {
         // Integrates GameLab speed control, pausing, breakpoints, trace
         #[cfg(feature = "emulators")]
         {
-        let gb_ids: Vec<u32> = self.gameboy_states.keys().copied().collect();
-        for id in gb_ids {
+        let (gb_ids, gb_n) = { let mut b = [0u32; 32]; let mut n = 0; for &k in self.gameboy_states.keys() { if n < 32 { b[n] = k; n += 1; } } (b, n) };
+        for &id in &gb_ids[..gb_n] {
             let is_active = self.windows.iter().any(|w| w.id == id && w.visible && !w.minimized && !w.pending_close);
             if is_active {
                 // Find linked GameLab (if any)
@@ -8504,10 +8827,10 @@ match gtype {
                     .or_else(|| self.gamelab_states.keys().next().copied());
                 
                 // Read lab state
-                let (paused, mut step_one, mut step_frame, speed_index, trace_enabled) =
+                let (paused, mut step_one, mut step_frame, speed_idx, trace_enabled) =
                     if let Some(lid) = lab_id {
                         if let Some(lab) = self.gamelab_states.get(&lid) {
-                            (lab.paused, lab.step_one, lab.step_frame, lab.speed_index, lab.trace_enabled)
+                            (lab.paused, lab.step_one, lab.step_frame, lab.speed_idx, lab.trace_enabled)
                         } else { (false, false, false, 2, false) }
                     } else { (false, false, false, 2, false) };
                 
@@ -8529,7 +8852,7 @@ match gtype {
 
                 // Speed control: accumulate ticks
                 let ticks = // Pattern matching — Rust's exhaustive branching construct.
-match speed_index {
+match speed_idx {
                     0 => if self.frame_count % 4 == 0 { 1 } else { 0 }, // 0.25x
                     1 => if self.frame_count % 2 == 0 { 1 } else { 0 }, // 0.5x
                     2 => 1, // 1x
@@ -8616,8 +8939,8 @@ match speed_index {
         }
         
         // Tick chess timers (~60fps → ~16ms per frame)
-        let chess_ids: Vec<u32> = self.chess_states.keys().copied().collect();
-        for id in chess_ids {
+        let (chess_ids, chess_n) = { let mut b = [0u32; 32]; let mut n = 0; for &k in self.chess_states.keys() { if n < 32 { b[n] = k; n += 1; } } (b, n) };
+        for &id in &chess_ids[..chess_n] {
             let is_active = self.windows.iter().any(|w| w.id == id && w.visible && !w.minimized);
             if is_active {
                 if let Some(chess) = self.chess_states.get_mut(&id) {
@@ -8627,8 +8950,8 @@ match speed_index {
         }
         
         // Tick TrustLab states — live data refresh
-        let lab_ids: Vec<u32> = self.lab_states.keys().copied().collect();
-        for id in lab_ids {
+        let (lab_ids, lab_n) = { let mut b = [0u32; 32]; let mut n = 0; for &k in self.lab_states.keys() { if n < 32 { b[n] = k; n += 1; } } (b, n) };
+        for &id in &lab_ids[..lab_n] {
             let is_active = self.windows.iter().any(|w| w.id == id && w.visible && !w.minimized);
             if is_active {
                 if let Some(lab) = self.lab_states.get_mut(&id) {
@@ -8637,11 +8960,22 @@ match speed_index {
             }
         }
         
+        // Tick TrustWave WiFi Analyzer states — live data refresh
+        let (wa_ids, wa_n) = { let mut b = [0u32; 32]; let mut n = 0; for &k in self.wifi_analyzer_states.keys() { if n < 32 { b[n] = k; n += 1; } } (b, n) };
+        for &id in &wa_ids[..wa_n] {
+            let is_active = self.windows.iter().any(|w| w.id == id && w.visible && !w.minimized);
+            if is_active {
+                if let Some(wa) = self.wifi_analyzer_states.get_mut(&id) {
+                    wa.tick();
+                }
+            }
+        }
+        
         // Tick GameLab states
         #[cfg(feature = "emulators")]
         {
-        let gamelab_ids: Vec<u32> = self.gamelab_states.keys().copied().collect();
-        for id in gamelab_ids {
+        let (gamelab_ids, gamelab_n) = { let mut b = [0u32; 32]; let mut n = 0; for &k in self.gamelab_states.keys() { if n < 32 { b[n] = k; n += 1; } } (b, n) };
+        for &id in &gamelab_ids[..gamelab_n] {
             let is_active = self.windows.iter().any(|w| w.id == id && w.visible && !w.minimized);
             if is_active {
                 if let Some(lab) = self.gamelab_states.get_mut(&id) {
@@ -8654,6 +8988,16 @@ match speed_index {
         // Toggle cursor blink every ~9 frames (~500ms at 18fps)
         if self.frame_count % 9 == 0 {
             self.cursor_blink = !self.cursor_blink;
+            // Only mark focused editor/terminal dirty — not ALL windows
+            for w in self.windows.iter_mut() {
+                if w.focused && w.visible && !w.minimized {
+                                        // Pattern matching — Rust's exhaustive branching construct.
+match w.window_type {
+                        WindowType::Terminal | WindowType::TextEditor => { w.dirty = true; }
+                        _ => {}
+                    }
+                }
+            }
         }
         
         // Get mouse state
@@ -8681,6 +9025,55 @@ match speed_index {
         // If windows changed, invalidate taskbar in background cache
         if windows_changed {
             self.needs_full_redraw = true;
+            self.windows_dirty = true;
+            framebuffer::invalidate_window_overlay();
+        }
+        
+        // ── Auto-detect window dirty state ──
+        // Any window being dragged or resized → dirty (position/size changing)
+        if self.windows.iter().any(|w| w.dragging || w.resizing != ResizeEdge::None) {
+            self.windows_dirty = true;
+        }
+        // Detect cursor hover changes on window title bar buttons
+        {
+            let hover_id = self.windows.iter().rev()
+                .find(|w| w.visible && !w.minimized && {
+                    let mx = self.cursor_x;
+                    let my = self.cursor_y;
+                    mx >= w.x && mx < w.x + w.width as i32
+                        && my >= w.y && my < w.y + TITLE_BAR_HEIGHT() as i32
+                })
+                .map(|w| w.id);
+            if hover_id != self.prev_hover_window_id {
+                // Only mark the two affected windows dirty (old + new hover)
+                for w in self.windows.iter_mut() {
+                    if Some(w.id) == hover_id || Some(w.id) == self.prev_hover_window_id {
+                        w.dirty = true;
+                    }
+                }
+                self.prev_hover_window_id = hover_id;
+            }
+        }
+        // Mark dynamic-content windows dirty (games, emulators, music players)
+        for w in self.windows.iter_mut() {
+            if !w.visible || w.minimized { continue; }
+                        // Pattern matching — Rust's exhaustive branching construct.
+match w.window_type {
+                WindowType::Game | WindowType::Game3D | WindowType::Chess
+                | WindowType::Chess3D | WindowType::Demo3D => { w.dirty = true; }
+                // MusicPlayer: only redraw every 10 frames (~6 Hz) — enough for
+                // progress bar updates without destroying the window overlay cache
+                WindowType::MusicPlayer => {
+                    if self.frame_count % 10 == 0 { w.dirty = true; }
+                }
+                _ => {}
+            }
+            #[cfg(feature = "emulators")]
+                        // Pattern matching — Rust's exhaustive branching construct.
+match w.window_type {
+                WindowType::NesEmu | WindowType::GameBoyEmu | WindowType::GameLab => { w.dirty = true; }
+                _ => {}
+            }
         }
         
         // ════════ MOBILE MODE: render portrait UI instead of desktop ════════
@@ -8690,44 +9083,78 @@ match speed_index {
             return;
         }
         
-        // Background rendering — tier-adaptive
-        // Full: animated matrix rain every frame (4 layers + visualizer + drones)
-        // Standard: 2-layer rain, no visualizer/drones
-        // Minimal: 1-layer simplified rain (lightweight, any CPU can handle it)
-        // Note: draw_background() fills its own area, no need for redundant clear
-        framebuffer::begin_frame(); // Cache BB pointer — all put_pixel_fast calls are zero-lock
-        self.draw_background();
+        // ════════════════════════════════════════════════════════════════
+        // BACKGROUND: Copy from dedicated BG render thread's front buffer.
+        // The BG thread renders independently at full speed.
+        // If no frame is ready yet (first frame), fall back to live render.
+        // ════════════════════════════════════════════════════════════════
+        framebuffer::begin_frame();
+        if BG_THREAD_RUNNING.load(Ordering::Relaxed) {
+            if !blit_bg_front_to_backbuffer() {
+                // First frame not ready yet — render live as fallback
+                self.draw_background();
+            }
+        } else {
+            self.draw_background();
+        }
+        self.needs_full_redraw = false;
         self.draw_desktop_icons();
         
-        // Draw windows (these change, so always redraw)
+        // ────────────────────────────────────────────────────────────────
+        // WINDOW RENDERING — with overlay cache
+        // Dirty windows: full re-render + cache. Clean: blit cached overlay
+        // over the FRESH background (only opaque window pixels matter;
+        // background is already correct from BG thread or live render).
+        // ────────────────────────────────────────────────────────────────
         let has_visible_windows = self.windows.iter().any(|w| w.visible && !w.minimized);
-        for window in &self.windows {
-            if window.visible && !window.minimized {
-                self.draw_window(window);
+        
+        let any_window_dirty = self.windows_dirty
+            || windows_changed
+            || menu_changed
+            || !framebuffer::is_window_overlay_valid()
+            || self.windows.iter().any(|w| w.visible && !w.minimized && w.dirty);
+        
+        if any_window_dirty || !has_visible_windows {
+            for window in &self.windows {
+                if window.visible && !window.minimized {
+                    self.draw_window(window);
+                }
+            }
+            self.draw_editor_windows();
+            self.draw_model_editor_windows();
+            self.draw_game3d_windows();
+            self.draw_chess3d_windows();
+            #[cfg(feature = "emulators")]
+            self.draw_nes_windows();
+            #[cfg(feature = "emulators")]
+            self.draw_gameboy_windows();
+            
+            if has_visible_windows {
+                framebuffer::cache_window_overlay();
+            }
+            
+            for w in self.windows.iter_mut() {
+                w.dirty = false;
+            }
+            self.windows_dirty = false;
+        } else {
+            // Fast path: stamp cached window rects over fresh background
+            // Use 0 shadow margin — shadow pixels contain stale background blend
+            // and would overwrite the fresh rain. Opaque window body is fine.
+            for window in &self.windows {
+                if window.visible && !window.minimized {
+                    framebuffer::blit_window_overlay_rect(
+                        window.x, window.y,
+                        window.width, window.height,
+                        0, // no shadow margin — keeps background clean
+                    );
+                }
             }
         }
         
-        // Second pass: render editor content (needs &mut for blink counter)
-        self.draw_editor_windows();
-        
-        // Third pass: render model editor windows (needs &mut for state)
-        self.draw_model_editor_windows();
-        
-        // Fourth pass: render 3D game windows (needs &mut for state)
-        self.draw_game3d_windows();
-        
-        // Fifth pass: render 3D chess windows (needs &mut for state)
-        self.draw_chess3d_windows();
-        
-        // Sixth pass: render emulator windows
-        #[cfg(feature = "emulators")]
-        self.draw_nes_windows();
-        #[cfg(feature = "emulators")]
-        self.draw_gameboy_windows();
-        
         // Draw snap preview overlay (translucent green zone while dragging to edge)
         if let Some(snap_directory) = self.snap_preview {
-            let work_h = self.height - TASKBAR_HEIGHT;
+            let work_h = self.height - TASKBAR_HEIGHT();
             let half_w = self.width / 2;
             let half_h = work_h / 2;
             let (sx, sy, software, sh) = // Pattern matching — Rust's exhaustive branching construct.
@@ -8860,6 +9287,7 @@ match snap_directory {
         
         // Reset dirty rects for this frame
         self.dirty_rect_count = 0;
+        let force_bg_redraw = self.needs_full_redraw || windows_changed;
         
         // Track what's dirty this frame
         if windows_changed || menu_changed || self.needs_full_redraw {
@@ -8870,19 +9298,19 @@ match snap_directory {
             // Partial: only mark changed regions
             if cursor_moved {
                 // Old cursor position
-                let old_x = (self.last_cursor_x.maximum(0) as u32).saturating_sub(2);
-                let old_y = (self.last_cursor_y.maximum(0) as u32).saturating_sub(2);
+                let old_x = (self.last_cursor_x.max(0) as u32).saturating_sub(2);
+                let old_y = (self.last_cursor_y.max(0) as u32).saturating_sub(2);
                 self.add_dirty_rect(old_x, old_y, 24, 24);
                 // New cursor position
-                let new_x = (mouse.x.maximum(0) as u32).saturating_sub(2);
-                let new_y = (mouse.y.maximum(0) as u32).saturating_sub(2);
+                let new_x = (mouse.x.max(0) as u32).saturating_sub(2);
+                let new_y = (mouse.y.max(0) as u32).saturating_sub(2);
                 self.add_dirty_rect(new_x, new_y, 24, 24);
             }
             // Mark dirty rects for each visible window (content may animate)
             // Collect window rects first to avoid borrow conflict
             let win_rects: Vec<(u32, u32, u32, u32)> = self.windows.iter()
                 .filter(|w| w.visible && !w.minimized)
-                .map(|w| (w.x.maximum(0) as u32, w.y.maximum(0) as u32, w.width, w.height))
+                .map(|w| (w.x.max(0) as u32, w.y.max(0) as u32, w.width, w.height))
                 .collect();
             for (wx, wy, ww, wh) in win_rects {
                 self.add_dirty_rect(wx, wy, ww, wh);
@@ -8897,8 +9325,18 @@ match snap_directory {
         if self.mobile_state.active {
             self.draw_mobile_mode();
         } else {
-            framebuffer::clear_backbuffer(0xFF000000);
-            self.draw_background();
+            framebuffer::begin_frame();
+            let gpu_has_windows = self.windows.iter().any(|w| w.visible && !w.minimized);
+            // Use BG thread's pre-rendered frame, fallback to live render
+            if BG_THREAD_RUNNING.load(Ordering::Relaxed) {
+                if !blit_bg_front_to_backbuffer() {
+                    framebuffer::clear_backbuffer(0xFF000000);
+                    self.draw_background();
+                }
+            } else {
+                framebuffer::clear_backbuffer(0xFF000000);
+                self.draw_background();
+            }
             self.draw_desktop_icons();
             
             for window in &self.windows {
@@ -8920,6 +9358,7 @@ match snap_directory {
             self.draw_drag_ghost();
             if self.lock_screen_active { self.draw_lock_screen(); }
             self.draw_cursor();
+            framebuffer::end_frame();
         }
         
         // Update tracking
@@ -8956,7 +9395,7 @@ match snap_directory {
         
         // Soft rounded shadow (multiple layers, increasingly offset)
         for i in (1..=6).rev() {
-            let alpha = (18 - i * 2).maximum(4) as u32;
+            let alpha = (18 - i * 2).max(4) as u32;
             let shadow_color = alpha << 24;
             draw_rounded_rect(
                 menu_x + i, menu_y + i + 2,
@@ -8974,8 +9413,8 @@ match snap_directory {
         
         // Glass-like gradient overlay (lighter at top, fading down)
         // We draw thin horizontal slices clipped to the rounded shape
-        for row in 0..menu_height.minimum(20) {
-            let glass_alpha = (12 - row * 12 / 20).maximum(0) as u32;
+        for row in 0..menu_height.min(20) {
+            let glass_alpha = (12 - row * 12 / 20).max(0) as u32;
             if glass_alpha > 0 {
                 let overlay = (glass_alpha << 24) | 0x00FFFFFF;
                 // Inset to respect rounded corners
@@ -9002,8 +9441,8 @@ match snap_directory {
         );
         
         // Draw items
-        for (index, item) in self.context_menu.items.iter().enumerate() {
-            let item_y = menu_y + padding + index as i32 * item_height;
+        for (idx, item) in self.context_menu.items.iter().enumerate() {
+            let item_y = menu_y + padding + idx as i32 * item_height;
             
             let is_hovered = self.cursor_x >= menu_x && self.cursor_x < menu_x + menu_width
                 && self.cursor_y >= item_y && self.cursor_y < item_y + item_height;
@@ -9074,7 +9513,7 @@ match snap_directory {
         let dma_information = crate::drivers::hda::get_dma_buffer_information();
         let lpib = crate::drivers::hda::get_playback_position();
         
-        let (buffer_pointer, buffer_capability) = // Pattern matching — Rust's exhaustive branching construct.
+        let (buf_ptr, buf_cap) = // Pattern matching — Rust's exhaustive branching construct.
 match dma_information {
             Some((p, c)) if !p.is_null() && c > 512 => (p, c),
             _ => return,
@@ -9089,14 +9528,14 @@ match dma_information {
             lpib_sample - fft_n * 2
         } else {
             // Wrap around the circular DMA buffer
-            buffer_capability.saturating_sub(fft_n * 2 - lpib_sample)
+            buf_cap.saturating_sub(fft_n * 2 - lpib_sample)
         };
 
         let mut maximum_absolute: f32 = 0.0;
         for i in 0..fft_n {
-            let index = (read_start + i * 2) % buffer_capability; // stereo: skip every other (take left channel)
+            let idx = (read_start + i * 2) % buf_cap; // stereo: skip every other (take left channel)
             let s = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { *buffer_pointer.add(index) } as f32;
+unsafe { *buf_ptr.add(idx) } as f32;
             self.global_fft_re[i] = s;
             self.global_fft_im[i] = 0.0;
             let a = if s >= 0.0 { s } else { -s };
@@ -9170,10 +9609,10 @@ unsafe { *buffer_pointer.add(index) } as f32;
         // Band energies (256-pt FFT at 48kHz: bin = index * 187.5 Hz)
         let mag = |re: &[f32], im: &[f32], lo: usize, hi: usize| -> f32 {
             let mut s = 0.0f32;
-            for i in lo..hi.minimum(128) {
+            for i in lo..hi.min(128) {
                 s += libm::sqrtf(re[i] * re[i] + im[i] * im[i]);
             }
-            s / (hi - lo).maximum(1) as f32
+            s / (hi - lo).max(1) as f32
         };
         let raw_sub = mag(&self.global_fft_re, &self.global_fft_im, 1, 2);
         let raw_bass = mag(&self.global_fft_re, &self.global_fft_im, 2, 4);
@@ -9182,21 +9621,21 @@ unsafe { *buffer_pointer.add(index) } as f32;
         let raw_e = raw_sub * 1.5 + raw_bass * 1.2 + raw_mid * 0.5 + raw_tre * 0.2;
 
         // Smooth
-        let sm = |previous: f32, new: f32, a: f32, r: f32| -> f32 {
-            if new > previous { previous + (new - previous) * a } else { previous + (new - previous) * r }
+        let sm = |prev: f32, new: f32, a: f32, r: f32| -> f32 {
+            if new > prev { prev + (new - prev) * a } else { prev + (new - prev) * r }
         };
-        self.global_sub_bass = sm(self.global_sub_bass, raw_sub.minimum(1.0), 0.75, 0.10);
-        self.global_bass = sm(self.global_bass, raw_bass.minimum(1.0), 0.70, 0.10);
-        self.global_mid = sm(self.global_mid, raw_mid.minimum(1.0), 0.60, 0.12);
-        self.global_treble = sm(self.global_treble, raw_tre.minimum(1.0), 0.70, 0.16);
-        self.global_energy = sm(self.global_energy, raw_e.minimum(1.5), 0.65, 0.10);
+        self.global_sub_bass = sm(self.global_sub_bass, raw_sub.min(1.0), 0.75, 0.10);
+        self.global_bass = sm(self.global_bass, raw_bass.min(1.0), 0.70, 0.10);
+        self.global_mid = sm(self.global_mid, raw_mid.min(1.0), 0.60, 0.12);
+        self.global_treble = sm(self.global_treble, raw_tre.min(1.0), 0.70, 0.16);
+        self.global_energy = sm(self.global_energy, raw_e.min(1.5), 0.65, 0.10);
 
         // Beat detection
         let be = raw_sub + raw_bass * 0.8;
-        self.global_energy_hist[self.global_hist_index] = be;
-        self.global_hist_index = (self.global_hist_index + 1) % 43;
+        self.global_energy_hist[self.global_hist_idx] = be;
+        self.global_hist_idx = (self.global_hist_idx + 1) % 43;
         if self.global_hist_count < 43 { self.global_hist_count += 1; }
-        let filled = self.global_hist_count.maximum(1) as f32;
+        let filled = self.global_hist_count.max(1) as f32;
         let average: f32 = self.global_energy_hist.iter().take(self.global_hist_count).sum::<f32>() / filled;
         let mut var_sum = 0.0f32;
         for i in 0..self.global_hist_count {
@@ -9204,16 +9643,16 @@ unsafe { *buffer_pointer.add(index) } as f32;
             var_sum += d * d;
         }
         let variance = var_sum / filled;
-        let threshold = (-15.0 * variance + 1.45f32).maximum(1.05).minimum(1.5);
-        let onset = be - self.global_previous_energy;
+        let threshold = (-15.0 * variance + 1.45f32).max(1.05).min(1.5);
+        let onset = be - self.global_prev_energy;
         if be > average * threshold && onset > 0.002 && self.global_hist_count > 5 {
-            let strength = ((be - average * threshold) / average.maximum(0.001)).minimum(1.0);
-            self.global_beat = (0.6 + strength * 0.4).minimum(1.0);
+            let strength = ((be - average * threshold) / average.max(0.001)).min(1.0);
+            self.global_beat = (0.6 + strength * 0.4).min(1.0);
         } else {
             self.global_beat *= 0.88;
             if self.global_beat < 0.02 { self.global_beat = 0.0; }
         }
-        self.global_previous_energy = be;
+        self.global_prev_energy = be;
     }
     
     // ═══════════════════════════════════════════════════════════════════
@@ -9231,13 +9670,19 @@ unsafe { *buffer_pointer.add(index) } as f32;
         // Clear entire screen to deep black
         framebuffer::clear_backbuffer(0xFF000000);
 
-        // Draw matrix rain background (same as desktop, full screen)
-        self.draw_background();
+        // Draw matrix rain background from BG thread or live fallback
+        if BG_THREAD_RUNNING.load(Ordering::Relaxed) {
+            if !blit_bg_front_to_backbuffer() {
+                self.draw_background();
+            }
+        } else {
+            self.draw_background();
+        }
 
         // Darken area outside viewport for phone-frame effect
         if vx > 0 {
             framebuffer::fill_rect(0, 0, vx as u32, self.height, 0xFF020202);
-            framebuffer::fill_rect((vx + vw as i32) as u32, 0, (self.width as i32 - vx - vw as i32).maximum(0) as u32, self.height, 0xFF020202);
+            framebuffer::fill_rect((vx + vw as i32) as u32, 0, (self.width as i32 - vx - vw as i32).max(0) as u32, self.height, 0xFF020202);
         }
 
         // Phone chrome frame (same border style as desktop windows)
@@ -9345,16 +9790,16 @@ match action {
             MobileAction::CloseControlCenter => {
                 self.mobile_state.view = crate::mobile::MobileView::Home;
             }
-            MobileAction::LaunchApp(index) => {
+            MobileAction::LaunchApp(idx) => {
                 self.mobile_state.view = crate::mobile::MobileView::AppFullscreen;
-                self.mobile_state.active_app_id = Some(index as u32);
-                crate::serial_println!("[Mobile] Launch app #{}", index);
+                self.mobile_state.active_app_id = Some(idx as u32);
+                crate::serial_println!("[Mobile] Launch app #{}", idx);
             }
             MobileAction::LaunchDockApp(slot) => {
-                let index = crate::mobile::dock_app_index(slot as usize);
+                let idx = crate::mobile::dock_app_index(slot as usize);
                 self.mobile_state.view = crate::mobile::MobileView::AppFullscreen;
-                self.mobile_state.active_app_id = Some(index as u32);
-                crate::serial_println!("[Mobile] Launch dock app slot={} -> idx={}", slot, index);
+                self.mobile_state.active_app_id = Some(idx as u32);
+                crate::serial_println!("[Mobile] Launch dock app slot={} -> idx={}", slot, idx);
             }
             MobileAction::BackFromApp => {
                 self.mobile_state.view = crate::mobile::MobileView::Home;
@@ -9395,119 +9840,119 @@ const MOBILE_MP_KEY: u32 = 0xFFFF_FFFE;
                 crate::serial_println!("[Mobile] Viz mode set to {} ({})", mode,
                     crate::visualizer::MODE_NAMES[mode as usize % crate::visualizer::NUMBER_MODES as usize]);
             }
-            MobileAction::CalcButton(button) => {
+            MobileAction::CalcButton(btn) => {
                 // Full calculator logic
-                let mouse = &mut self.mobile_state;
+                let ms = &mut self.mobile_state;
                                 // Pattern matching — Rust's exhaustive branching construct.
-match button {
+match btn {
                     16 => { // C (clear)
-                        mouse.calc_display.clear();
-                        mouse.calc_operation = 0;
-                        mouse.calc_operand = 0;
-                        mouse.calc_fresh = false;
+                        ms.calc_display.clear();
+                        ms.calc_op = 0;
+                        ms.calc_operand = 0;
+                        ms.calc_fresh = false;
                     }
                     17 => { // +/- (negate)
-                        if !mouse.calc_display.is_empty() && mouse.calc_display != "0" {
-                            if mouse.calc_display.starts_with('-') {
-                                mouse.calc_display.remove(0);
+                        if !ms.calc_display.is_empty() && ms.calc_display != "0" {
+                            if ms.calc_display.starts_with('-') {
+                                ms.calc_display.remove(0);
                             } else {
-                                mouse.calc_display.insert(0, '-');
+                                ms.calc_display.insert(0, '-');
                             }
                         }
                     }
                     18 => { // %
-                        if let Ok(v) = mouse.calc_display.parse::<i64>() {
+                        if let Ok(v) = ms.calc_display.parse::<i64>() {
                             let result = v / 100;
-                            mouse.calc_display.clear();
+                            ms.calc_display.clear();
                             use core::fmt::Write;
-                            let _ = core::write!(mouse.calc_display, "{}", result);
+                            let _ = core::write!(ms.calc_display, "{}", result);
                         }
                     }
                     10 => { // . (dot)
-                        if mouse.calc_fresh { mouse.calc_display.clear(); mouse.calc_fresh = false; }
-                        if !mouse.calc_display.contains('.') {
-                            if mouse.calc_display.is_empty() { mouse.calc_display.push('0'); }
-                            mouse.calc_display.push('.');
+                        if ms.calc_fresh { ms.calc_display.clear(); ms.calc_fresh = false; }
+                        if !ms.calc_display.contains('.') {
+                            if ms.calc_display.is_empty() { ms.calc_display.push('0'); }
+                            ms.calc_display.push('.');
                         }
                     }
                     15 => { // = (equals)
-                        let current = mouse.calc_display.parse::<i64>().unwrap_or(0);
+                        let current = ms.calc_display.parse::<i64>().unwrap_or(0);
                         let result = // Pattern matching — Rust's exhaustive branching construct.
-match mouse.calc_operation {
-                            1 => mouse.calc_operand + current,
-                            2 => mouse.calc_operand - current,
-                            3 => mouse.calc_operand * current,
-                            4 => if current != 0 { mouse.calc_operand / current } else { 0 },
+match ms.calc_op {
+                            1 => ms.calc_operand + current,
+                            2 => ms.calc_operand - current,
+                            3 => ms.calc_operand * current,
+                            4 => if current != 0 { ms.calc_operand / current } else { 0 },
                             _ => current,
                         };
-                        mouse.calc_display.clear();
+                        ms.calc_display.clear();
                         use core::fmt::Write;
-                        let _ = core::write!(mouse.calc_display, "{}", result);
-                        mouse.calc_operation = 0;
-                        mouse.calc_operand = 0;
-                        mouse.calc_fresh = true;
+                        let _ = core::write!(ms.calc_display, "{}", result);
+                        ms.calc_op = 0;
+                        ms.calc_operand = 0;
+                        ms.calc_fresh = true;
                     }
                     11 | 12 | 13 | 14 => { // +, -, *, /
-                        let current = mouse.calc_display.parse::<i64>().unwrap_or(0);
+                        let current = ms.calc_display.parse::<i64>().unwrap_or(0);
                         // Chain operations
-                        if mouse.calc_operation > 0 && !mouse.calc_fresh {
+                        if ms.calc_op > 0 && !ms.calc_fresh {
                             let result = // Pattern matching — Rust's exhaustive branching construct.
-match mouse.calc_operation {
-                                1 => mouse.calc_operand + current,
-                                2 => mouse.calc_operand - current,
-                                3 => mouse.calc_operand * current,
-                                4 => if current != 0 { mouse.calc_operand / current } else { 0 },
+match ms.calc_op {
+                                1 => ms.calc_operand + current,
+                                2 => ms.calc_operand - current,
+                                3 => ms.calc_operand * current,
+                                4 => if current != 0 { ms.calc_operand / current } else { 0 },
                                 _ => current,
                             };
-                            mouse.calc_operand = result;
-                            mouse.calc_display.clear();
+                            ms.calc_operand = result;
+                            ms.calc_display.clear();
                             use core::fmt::Write;
-                            let _ = core::write!(mouse.calc_display, "{}", result);
+                            let _ = core::write!(ms.calc_display, "{}", result);
                         } else {
-                            mouse.calc_operand = current;
+                            ms.calc_operand = current;
                         }
-                        mouse.calc_operation = button - 10; // 1=+, 2=-, 3=*, 4=/
-                        mouse.calc_fresh = true;
+                        ms.calc_op = btn - 10; // 1=+, 2=-, 3=*, 4=/
+                        ms.calc_fresh = true;
                     }
                     0..=9 => { // Digits
-                        if mouse.calc_fresh {
-                            mouse.calc_display.clear();
-                            mouse.calc_fresh = false;
+                        if ms.calc_fresh {
+                            ms.calc_display.clear();
+                            ms.calc_fresh = false;
                         }
-                        if mouse.calc_display == "0" { mouse.calc_display.clear(); }
-                        if mouse.calc_display.len() < 15 {
-                            mouse.calc_display.push((b'0' + button) as char);
+                        if ms.calc_display == "0" { ms.calc_display.clear(); }
+                        if ms.calc_display.len() < 15 {
+                            ms.calc_display.push((b'0' + btn) as char);
                         }
                     }
                     _ => {}
                 }
-                crate::serial_println!("[Mobile] Calc: display={}", mouse.calc_display);
+                crate::serial_println!("[Mobile] Calc: display={}", ms.calc_display);
             }
-            MobileAction::FilesTap(index) => {
-                let mouse = &mut self.mobile_state;
-                mouse.files_selected = index as i32;
+            MobileAction::FilesTap(idx) => {
+                let ms = &mut self.mobile_state;
+                ms.files_selected = idx as i32;
                 // If it's a directory (first 4 entries), go deeper
-                if index < 4 && mouse.files_depth == 0 {
-                    mouse.files_depth = 1;
-                    mouse.files_selected = -1;
+                if idx < 4 && ms.files_depth == 0 {
+                    ms.files_depth = 1;
+                    ms.files_selected = -1;
                 }
-                crate::serial_println!("[Mobile] Files: tap idx={} depth={}", index, mouse.files_depth);
+                crate::serial_println!("[Mobile] Files: tap idx={} depth={}", idx, ms.files_depth);
             }
             MobileAction::FilesBack => {
                 self.mobile_state.files_depth = self.mobile_state.files_depth.saturating_sub(1);
                 self.mobile_state.files_selected = -1;
             }
-            MobileAction::SettingsTap(index) => {
-                let mouse = &mut self.mobile_state;
-                mouse.settings_selected = index as i32;
-                if (index as usize) < mouse.settings_toggles.len() {
-                    mouse.settings_toggles[index as usize] = !mouse.settings_toggles[index as usize];
+            MobileAction::SettingsTap(idx) => {
+                let ms = &mut self.mobile_state;
+                ms.settings_selected = idx as i32;
+                if (idx as usize) < ms.settings_toggles.len() {
+                    ms.settings_toggles[idx as usize] = !ms.settings_toggles[idx as usize];
                 }
-                crate::serial_println!("[Mobile] Settings: toggled idx={}", index);
+                crate::serial_println!("[Mobile] Settings: toggled idx={}", idx);
             }
-            MobileAction::GamesTap(index) => {
-                self.mobile_state.games_selected = index as i32;
-                crate::serial_println!("[Mobile] Games: selected idx={}", index);
+            MobileAction::GamesTap(idx) => {
+                self.mobile_state.games_selected = idx as i32;
+                crate::serial_println!("[Mobile] Games: selected idx={}", idx);
             }
             MobileAction::BrowserNav(page) => {
                 self.mobile_state.browser_page = page;
@@ -9520,16 +9965,16 @@ match mouse.calc_operation {
                 self.mobile_state.editor_tab = tab;
             }
             MobileAction::ChessTap(sq) => {
-                let mouse = &mut self.mobile_state;
-                if mouse.chess_selected == sq as i32 {
-                    mouse.chess_selected = -1; // Deselect
-                } else if mouse.chess_selected >= 0 {
+                let ms = &mut self.mobile_state;
+                if ms.chess_selected == sq as i32 {
+                    ms.chess_selected = -1; // Deselect
+                } else if ms.chess_selected >= 0 {
                     // "Move" piece: toggle turn, deselect
-                    mouse.chess_turn = 1 - mouse.chess_turn;
-                    mouse.chess_selected = -1;
+                    ms.chess_turn = 1 - ms.chess_turn;
+                    ms.chess_selected = -1;
                     crate::serial_println!("[Mobile] Chess: move to sq={}", sq);
                 } else {
-                    mouse.chess_selected = sq as i32;
+                    ms.chess_selected = sq as i32;
                 }
             }
             MobileAction::MusicAppToggle => {
@@ -9547,12 +9992,12 @@ match mp.state {
                 }
             }
             MobileAction::TermSubmit => {
-                let mouse = &mut self.mobile_state;
+                let ms = &mut self.mobile_state;
                 // Since there's no keyboard on mobile, cycle through demo commands
                 let commands = ["help", "uname", "ls", "pwd", "whoami", "date", "free -h", "uptime"];
-                let command_index = mouse.term_lines.len() / 2; // every 2 lines = 1 command+response
+                let command_index = ms.term_lines.len() / 2; // every 2 lines = 1 command+response
                 let cmd = commands[command_index % commands.len()];
-                mouse.term_lines.push(alloc::format!("$ {}", cmd));
+                ms.term_lines.push(alloc::format!("$ {}", cmd));
                 let response = // Pattern matching — Rust's exhaustive branching construct.
 match cmd {
                     "help" => "Available: help, ls, pwd, date, uname, whoami, free, uptime",
@@ -9565,10 +10010,10 @@ match cmd {
                     "uptime" => "up 4h 23m, 1 user, load: 0.12",
                     _ => "command not found",
                 };
-                mouse.term_lines.push(alloc::string::String::from(response));
+                ms.term_lines.push(alloc::string::String::from(response));
                 // Keep history manageable
-                if mouse.term_lines.len() > 40 {
-                    mouse.term_lines.drain(0..2);
+                if ms.term_lines.len() > 40 {
+                    ms.term_lines.drain(0..2);
                 }
             }
         }
@@ -9641,7 +10086,13 @@ match cmd {
         // 1) Matrix rain — draw dimmed until fully faded
         if matrix_alpha < 255 {
             // Draw the normal background (matrix rain + visualizer + logo)
-            self.draw_background();
+            if BG_THREAD_RUNNING.load(Ordering::Relaxed) {
+                if !blit_bg_front_to_backbuffer() {
+                    self.draw_background();
+                }
+            } else {
+                self.draw_background();
+            }
             
             // Now overlay a black rect with matrix_alpha opacity to fade it
             if matrix_alpha > 0 {
@@ -9667,7 +10118,7 @@ match cmd {
                 let logo_h = crate::logo_bitmap::LOGO_H as u32;
                 let logo_x = (width / 2).saturating_sub(logo_w / 2);
                 let logo_y = (height / 2).saturating_sub(logo_h / 2);
-                let extra = logo_alpha.saturating_sub(viz_alpha.maximum(matrix_alpha));
+                let extra = logo_alpha.saturating_sub(viz_alpha.max(matrix_alpha));
                 if extra > 0 {
                     let pad = 20u32;
                     framebuffer::fill_rect_alpha(
@@ -9683,21 +10134,21 @@ match cmd {
         // 4) Taskbar + Sidebar — draw with slide-out animation
         if ui_alpha < 255 {
             // Draw sidebar (slides left) and taskbar (slides down)
-            let sidebar_offset = (ui_alpha as i32 * DOCK_WIDTH as i32) / 255;
-            let taskbar_offset = (ui_alpha as i32 * TASKBAR_HEIGHT as i32) / 255;
+            let sidebar_offset = (ui_alpha as i32 * DOCK_WIDTH() as i32) / 255;
+            let taskbar_offset = (ui_alpha as i32 * TASKBAR_HEIGHT() as i32) / 255;
             
             // Draw sidebar shifted left (clipped by offset)
-            if sidebar_offset < DOCK_WIDTH as i32 {
+            if sidebar_offset < DOCK_WIDTH() as i32 {
                 // Render sidebar with darkening overlay for fade effect
                 self.draw_desktop_icons();
                 // Darken the sidebar area proportionally
-                framebuffer::fill_rect_alpha(0, 0, DOCK_WIDTH as u32 + 10, height, 0x000000, ui_alpha as u32);
+                framebuffer::fill_rect_alpha(0, 0, DOCK_WIDTH() as u32 + 10, height, 0x000000, ui_alpha as u32);
             }
             
             // Draw taskbar shifted down (with darkening)
-            if taskbar_offset < TASKBAR_HEIGHT as i32 {
+            if taskbar_offset < TASKBAR_HEIGHT() as i32 {
                 self.draw_taskbar();
-                framebuffer::fill_rect_alpha(0, height.saturating_sub(TASKBAR_HEIGHT as u32), width, TASKBAR_HEIGHT as u32, 0x000000, ui_alpha as u32);
+                framebuffer::fill_rect_alpha(0, height.saturating_sub(TASKBAR_HEIGHT() as u32), width, TASKBAR_HEIGHT() as u32, 0x000000, ui_alpha as u32);
             }
         }
         
@@ -9710,14 +10161,14 @@ match cmd {
             };
             let g = (text_alpha as u32 * 0xAA) / 255;
             let color = 0xFF000000 | (g << 8);
-            let message = "Shutting down...";
+            let msg = "Shutting down...";
             let char_w = 8u32;
-            let text_w = message.len() as u32 * char_w;
+            let text_w = msg.len() as u32 * char_w;
             let transmit = (width / 2).saturating_sub(text_w / 2);
             let ty = height / 2 + 40;
             let mut cx = transmit;
-            for character in message.chars() {
-                framebuffer::draw_char_at(cx, ty, character, color);
+            for ch in msg.chars() {
+                framebuffer::draw_char_at(cx, ty, ch, color);
                 cx += char_w;
             }
         }
@@ -9735,7 +10186,7 @@ match cmd {
             framebuffer::swap_buffers();
             
             // Stop music playback
-            for (_id, mp) in self.music_player_states.iterator_mut() {
+            for (_id, mp) in self.music_player_states.iter_mut() {
                 mp.state = PlaybackState::Stopped;
             }
             
@@ -9750,10 +10201,10 @@ match cmd {
         // Logo: faithful chrome/silver rendering from bitmap
         // Tier-adaptive: Standard=2 layers, Full=4 layers
         // ═══════════════════════════════════════════════════════════════
-        const MATRIX_COLS: usize = 256;
+        let matrix_cols = self.matrix_cols;
                 // Compile-time constant — evaluated at compilation, zero runtime cost.
 const MAXIMUM_TRAIL: usize = 40;
-        let number_layers: usize = if self.desktop_tier >= DesktopTier::Full {
+        let num_layers: usize = if self.desktop_tier >= DesktopTier::Full {
             4
         } else if self.desktop_tier >= DesktopTier::Standard {
             2
@@ -9775,7 +10226,7 @@ const LAYER_SPEED_PRESETS: [[f32; 4]; 3] = [
             [0.75, 1.50, 2.75, 3.75],
             [1.19, 2.38, 4.38, 6.25],
         ];
-        let preset = (self.matrix_rain_preset as usize).minimum(2);
+        let preset = (self.matrix_rain_preset as usize).min(2);
         let layer_speed: [f32; 4] = LAYER_SPEED_PRESETS[preset];
                 // Compile-time constant — evaluated at compilation, zero runtime cost.
 const LAYER_SWAY: [f32; 4]      = [0.0, 0.3, 1.0, 2.0];
@@ -9801,7 +10252,7 @@ const MOBILE_GLYPH_H: [u32; 4]   = [6, 8, 12, 14];
 const MOBILE_COLUMN_SKIP: [usize; 4] = [2, 3, 6, 8];
         let is_mobile = self.mobile_state.active;
         
-        let height = self.height.saturating_sub(TASKBAR_HEIGHT);
+        let height = self.height.saturating_sub(TASKBAR_HEIGHT());
         let width = self.width;
         
         // ── Analyze ALL audio from HDA DMA buffer (source-agnostic) ──
@@ -9830,6 +10281,8 @@ const MOBILE_COLUMN_SKIP: [usize; 4] = [2, 3, 6, 8];
         if refl_start < height {
             framebuffer::fill_rect(0, refl_start, width, height - refl_start, 0xFF020300);
         }
+        // Cached framebuffer + clip context — zero atomic loads for starfield/projection/override
+        let rain_context = framebuffer::FrameCtx::snapshot();
         
         // ── Star field: sparse single white pixels ──
         // Deterministic grid with hash-based selection — ~0.15% of pixels twinkle
@@ -9851,15 +10304,15 @@ const MOBILE_COLUMN_SKIP: [usize; 4] = [2, 3, 6, 8];
                         // Sub-pixel offset within the cell (deterministic)
                         let ox = (h >> 8) % step;
                         let oy = (h >> 14) % step;
-                        let pixel = sx + ox;
+                        let px = sx + ox;
                         let py = sy + oy;
-                        if pixel < width && py < height && py < refl_start {
+                        if px < width && py < height && py < refl_start {
                             // Twinkle: fast integer triangle wave (no sinf)
                             let phase = star_tick.wrapping_add(h & 0xFF).wrapping_mul(3);
-                            let tri = ((phase & 255) as i32 - 128).unsigned_absolute(); // 0..128
+                            let tri = ((phase & 255) as i32 - 128).unsigned_abs(); // 0..128
                             let lum = 40 + (tri * 60 / 128) as u32; // 40..100 brightness
                             let c = 0xFF000000 | (lum << 16) | (lum << 8) | lum;
-                            framebuffer::put_pixel_fast(pixel, py, c);
+                            rain_context.put_pixel(px, py, c);
                         }
                     }
                     sx += step;
@@ -9878,11 +10331,12 @@ const MOBILE_COLUMN_SKIP: [usize; 4] = [2, 3, 6, 8];
         
         // ── Visualizer: update multi-mode 3D shape projection ──
         // Full tier only — wireframe deformation costs per-column trig
+        // Pass full screen height (self.height) for true center, not taskbar-clipped height
         if self.desktop_tier >= DesktopTier::Full {
             crate::visualizer::update(
                 &mut self.visualizer,
-                width, height,
-                MATRIX_COLS,
+                width, self.height,
+                matrix_cols,
                 m_beat, m_energy,
                 m_sub_bass, m_bass, m_mid, m_treble,
                 m_playing,
@@ -9904,16 +10358,18 @@ const MOBILE_COLUMN_SKIP: [usize; 4] = [2, 3, 6, 8];
         let flow_fade = 250.0f32; // fade zone beyond radius
         
         // ── Render matrix rain with color variety ──
-        let column_width = width / MATRIX_COLS as u32;
-        let half_cols = MATRIX_COLS as f32 / 2.0;
+        // Use full-width spacing: avoid integer truncation gap at right edge
+        // col_width is still used for glyph centering; col X is computed per-column
+        let column_width = (width + matrix_cols as u32 - 1) / matrix_cols as u32;
+        let half_cols = matrix_cols as f32 / 2.0;
         // Flow field phase: slow scrolling offset so the field evolves
         let flow_time = self.frame_count as f32 * 0.008;
         
         if self.frame_count < 5 { crate::serial_println!("[FRAME] #{} rain start", self.frame_count); }
         // Get raw framebuffer pointer once — eliminates 3 atomic loads per pixel
-        let (framebuffer_pointer, framebuffer_stride, _framebuffer_height) = framebuffer::frame_context();
+        let (fb_ptr, fb_stride, _fb_height) = framebuffer::frame_context();
         let has_any_overrides = !self.matrix_overrides.is_empty();
-        for layer in 0..number_layers {
+        for layer in 0..num_layers {
         // ── Parallax sway: horizontal drift based on frame time ──
         // Each layer oscillates at a different frequency for organic motion
         let sway_amp = LAYER_SWAY[layer];
@@ -9937,16 +10393,17 @@ match layer { 4 => 0.010f32, 5 => 0.014, 3 => 0.006, _ => 0.0 };
         let glyph_w = if is_mobile { MOBILE_GLYPH_W[layer] } else { LAYER_GLYPH_W[layer] };
         let glyph_h = if is_mobile { MOBILE_GLYPH_H[layer] } else { LAYER_GLYPH_H[layer] };
         
-        for column in 0..MATRIX_COLS.minimum(self.matrix_heads.len() / number_layers.maximum(1)) {
+        for col in 0..matrix_cols.min(self.matrix_heads.len() / num_layers.max(1)) {
             // Column density: skip columns based on layer
-            if column_skip > 1 && (column % column_skip) != 0 { continue; }
+            if column_skip > 1 && (col % column_skip) != 0 { continue; }
             
-            let index = column * number_layers.maximum(1) + layer;
-            let speed = self.matrix_speeds[index];
-            let seed = self.matrix_seeds[index];
+            let idx = col * num_layers.max(1) + layer;
+            let speed = self.matrix_speeds[idx];
+            let seed = self.matrix_seeds[idx];
             // Apply horizontal parallax sway to x position
-            let base_x = (column as u32 * column_width) + column_width / 2;
-            let x = (base_x as i32 + sway_offset).maximum(0).minimum(width as i32 - 1) as u32;
+            // Even distribution across full width (no truncation gap at right edge)
+            let base_x = (col as u32 * width) / matrix_cols as u32 + column_width / 2;
+            let x = (base_x as i32 + sway_offset).max(0).min(width as i32 - 1) as u32;
             
             // ── Per-layer depth parameters ──
             let layer_trail = LAYER_TRAIL[layer];
@@ -9955,8 +10412,8 @@ match layer { 4 => 0.010f32, 5 => 0.014, 3 => 0.006, _ => 0.0 };
             
             // ── FOV depth: columns at screen edges → more spaced, slower ──
             // fov_t: 0.0 at center, 1.0 at extreme edges (quadratic)
-            let from_center = ((column as f32) - half_cols).absolute() / half_cols;
-            let fov_t = (from_center * from_center).minimum(1.0);
+            let from_center = ((col as f32) - half_cols).abs() / half_cols;
+            let fov_t = (from_center * from_center).min(1.0);
             // Char spacing: use glyph_h as base + minimal FOV expansion at edges
             let fov_extra = (fov_t * (glyph_h as f32 * 0.15)) as u32;
             let eff_char_h: u32 = glyph_h + fov_extra;
@@ -9967,7 +10424,7 @@ match layer { 4 => 0.010f32, 5 => 0.014, 3 => 0.006, _ => 0.0 };
             
             // ── Per-column frequency band assignment (seeded) ──
             // Same band for all layers in a column (use layer-0 seed)
-            let frequency_band = (self.matrix_seeds[column * number_layers.maximum(1)] >> 3) % 4;
+            let frequency_band = (self.matrix_seeds[col * num_layers.max(1)] >> 3) % 4;
             // Get the amplitude for this column's band (0.0 - 1.0+)
             let (band_amp, band_r_base, band_g_base, band_b_base) = if m_playing {
                                 // Pattern matching — Rust's exhaustive branching construct.
@@ -9982,20 +10439,20 @@ match frequency_band {
             };
             // Intensity multiplier from band amplitude (0.3 = idle, up to 1.5 at max)
             let frequency_intensity = if m_playing {
-                (0.3 + band_amp * 1.2).minimum(1.5)
+                (0.3 + band_amp * 1.2).min(1.5)
             } else { 1.0 };
             
             // ── Beat-synced void mode: suppress a few columns on 8th beat ──
             // Suppress only ~6% of columns in void mode (subtle pulse)
-            let column_suppressed = void_mode && ((column.wrapping_mul(7) ^ self.matrix_beat_count as usize) % 16 == 0);
+            let column_suppressed = void_mode && ((col.wrapping_mul(7) ^ self.matrix_beat_count as usize) % 16 == 0);
             
             // ── Music-reactive speed boost ──
             let beat_boost = if m_playing {
-                let t = (column as u32 * 2) % (MATRIX_COLS as u32);
-                let column_phase = if t < MATRIX_COLS as u32 {
-                    t as f32 / MATRIX_COLS as f32
+                let t = (col as u32 * 2) % (matrix_cols as u32);
+                let column_phase = if t < matrix_cols as u32 {
+                    t as f32 / matrix_cols as f32
                 } else {
-                    2.0 - t as f32 / MATRIX_COLS as f32
+                    2.0 - t as f32 / matrix_cols as f32
                 };
                 let local_beat = m_beat * (0.5 + column_phase * 0.5);
                 (local_beat * 6.0 + band_amp * 4.0) as i32
@@ -10003,47 +10460,47 @@ match frequency_band {
             
             // Visualizer: slow rain in columns that intersect the 3D shape
             // Always active (idle mode shows shapes even without music)
-            let ghost_slow = crate::visualizer::column_slow_factor(&self.visualizer, column) as i32;
+            let ghost_slow = crate::visualizer::column_slow_factor(&self.visualizer, col) as i32;
             let speed_adj = ((speed as f32) * layer_spd) as i32;
-            let effective_advance = (((speed_adj + beat_boost) * ghost_slow / 100) * fov_speed_pct / 100).maximum(1);
-            let new_y = self.matrix_heads[index] + effective_advance;
+            let effective_advance = (((speed_adj + beat_boost) * ghost_slow / 100) * fov_speed_pct / 100).max(1);
+            let new_y = self.matrix_heads[idx] + effective_advance;
             if new_y > height as i32 + (layer_trail as i32 * eff_char_h as i32) {
                 let new_seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
-                self.matrix_seeds[index] = new_seed;
-                self.matrix_heads[index] = -((new_seed % (height / 3)) as i32);
+                self.matrix_seeds[idx] = new_seed;
+                self.matrix_heads[idx] = -((new_seed % (height / 3)) as i32);
                 let chars: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ@#$%&*+=<>[]{}|";
-                for i in 0..layer_trail.minimum(MAXIMUM_TRAIL) {
+                for i in 0..layer_trail.min(MAXIMUM_TRAIL) {
                     let cs = new_seed.wrapping_add((i as u32).wrapping_mul(7919));
-                    self.matrix_chars[index * MAXIMUM_TRAIL + i] = chars[(cs as usize) % chars.len()];
+                    self.matrix_chars[idx * MAXIMUM_TRAIL + i] = chars[(cs as usize) % chars.len()];
                 }
             } else {
-                self.matrix_heads[index] = new_y;
+                self.matrix_heads[idx] = new_y;
             }
             
             // Skip rendering for suppressed columns (position still advances)
             if column_suppressed { continue; }
             
-            let head_y = self.matrix_heads[index];
+            let head_y = self.matrix_heads[idx];
             
             // Speed-based brightness: faster drops = brighter
             let column_speed = (speed as f32) * layer_spd;
-            let speed_norm = (column_speed / 5.0).minimum(1.0); // 0..1 normalized to max speed
+            let speed_norm = (column_speed / 5.0).min(1.0); // 0..1 normalized to max speed
             let energy_boost = if m_playing { m_energy * 0.3 } else { 0.0 };
             let beat_bright = if m_playing { m_beat * 0.15 } else { 0.0 };
-            let brightness_mult = ((0.3 + speed_norm * 0.7 + energy_boost + beat_bright) * fov_dim * layer_dim).minimum(1.5);
+            let brightness_mult = ((0.3 + speed_norm * 0.7 + energy_boost + beat_bright) * fov_dim * layer_dim).min(1.5);
             
             // Visualizer: columns inside shape allow dimmer trail chars through
-            let ghost_column_inside = m_playing && column < self.visualizer.column_bounds.len() && {
-                let (bmin, bmax) = self.visualizer.column_bounds[column];
+            let ghost_column_inside = m_playing && col < self.visualizer.column_bounds.len() && {
+                let (bmin, bmax) = self.visualizer.column_bounds[col];
                 bmin >= 0 && bmax > bmin
             };
             
             // Per-column trail variation: each column gets a unique trail multiplier
             // so rain drops have different lengths (short splashes vs long streaks)
-            let column_hash = ((column as u32).wrapping_mul(2654435761u32)) >> 20; // Knuth hash
+            let column_hash = ((col as u32).wrapping_mul(2654435761u32)) >> 20; // Knuth hash
             let column_trail_mult = 0.55 + (column_hash % 100) as f32 / 110.0; // 0.55..1.46
             let speed_trail = ((layer_trail as f32) * (0.5 + speed_norm * 0.5) * column_trail_mult) as usize;
-            let eff_trail = speed_trail.maximum(4).minimum(MAXIMUM_TRAIL);
+            let eff_trail = speed_trail.max(4).min(MAXIMUM_TRAIL);
             
             for i in 0..eff_trail {
                 // Far layer: render every other trail char (barely visible anyway)
@@ -10057,59 +10514,59 @@ match frequency_band {
                 
                 // Trail fading — faster drops fade slower (longer visible trail)
                 let trail_ext = if m_playing { (m_energy * 30.0) as u8 } else { 0 };
-                let fade_rate = (200u8 as u16 / (eff_trail as u16).maximum(1)) as u8;
+                let fade_rate = (200u8 as u16 / (eff_trail as u16).max(1)) as u8;
                 // Speed bonus: fast drops sustain brightness longer
                 let speed_sustain = (speed_norm * 30.0) as u8;
                 let base = if i == 0 { 255u8 }
-                    else if i == 1 { (230u8 + speed_sustain / 2).minimum(255).saturating_add(trail_ext / 2) }
-                    else { (210u8 + trail_ext / 3 + speed_sustain / 3).saturating_sub((i as u8).saturating_mul(fade_rate.maximum(3))) };
+                    else if i == 1 { (230u8 + speed_sustain / 2).min(255).saturating_add(trail_ext / 2) }
+                    else { (210u8 + trail_ext / 3 + speed_sustain / 3).saturating_sub((i as u8).saturating_mul(fade_rate.max(3))) };
                 if base < (if ghost_column_inside { 2 } else { 3 }) { continue; }
                 
-                let brightness = ((base as f32) * brightness_mult).minimum(255.0) as u8;
+                let brightness = ((base as f32) * brightness_mult).min(255.0) as u8;
                 
                 // ══ Speed-based green→white gradient coloring ══
                 // Faster drops → brighter, whiter, longer visible trail
                 // Each layer progressively reduces intensity
                 let (r, g, b) = if i == 0 {
                     // HEAD: bright white-green (Matrix palette: white → green → black)
-                    let white_mix = (0.50 + speed_norm * 0.45).minimum(0.95);
+                    let white_mix = (0.50 + speed_norm * 0.45).min(0.95);
                     let band_mix = 1.0 - white_mix;
                     // White in Matrix = equal R/G/B, green-biased
-                    let hr = ((band_r_base as f32 * band_mix + 180.0 * white_mix) * brightness_mult).minimum(190.0) as i16;
-                    let hg = ((band_g_base as f32 * band_mix + 255.0 * white_mix) * brightness_mult).minimum(255.0) as i16;
-                    let hb = ((180.0 * white_mix) * brightness_mult).minimum(190.0) as i16;
-                    let beat_w = if m_playing { (m_beat * 8.0).minimum(15.0) as i16 } else { 0 };
+                    let hr = ((band_r_base as f32 * band_mix + 180.0 * white_mix) * brightness_mult).min(190.0) as i16;
+                    let hg = ((band_g_base as f32 * band_mix + 255.0 * white_mix) * brightness_mult).min(255.0) as i16;
+                    let hb = ((180.0 * white_mix) * brightness_mult).min(190.0) as i16;
+                    let beat_w = if m_playing { (m_beat * 8.0).min(15.0) as i16 } else { 0 };
                     // Ensure R never exceeds G (prevents yellow)
-                    let fr = (hr + beat_w / 4 + atmo_r).maximum(0).minimum(190) as u8;
-                    let fg = (hg + beat_w + atmo_g).maximum(0).minimum(255) as u8;
-                    let framebuffer = (hb + beat_w / 4 + atmo_b).maximum(0).minimum(190) as u8;
+                    let fr = (hr + beat_w / 4 + atmo_r).max(0).min(190) as u8;
+                    let fg = (hg + beat_w + atmo_g).max(0).min(255) as u8;
+                    let fb = (hb + beat_w / 4 + atmo_b).max(0).min(190) as u8;
                     // Clamp: R must be ≤ G to prevent any yellow tint
-                    let fr = fr.minimum(fg);
-                    let framebuffer = framebuffer.minimum(fg);
-                    (fr, fg, framebuffer)
+                    let fr = fr.min(fg);
+                    let fb = fb.min(fg);
+                    (fr, fg, fb)
                 } else {
                     // TRAIL: speed drives brightness floor + green purity
                     let fade = brightness as f32 / 255.0;
                     let fi = frequency_intensity;
                     if self.visualizer.palette == 23 {
                         // Random palette: vivid random color per character
-                        let (cr, cg, callback) = crate::visualizer::rain_random_color(
-                            column, i, self.matrix_seeds[index],
+                        let (cr, cg, cb) = crate::visualizer::rain_random_color(
+                            col, i, self.matrix_seeds[idx],
                         );
-                        let fr = (cr as f32 * fade * fi).minimum(255.0) as u8;
-                        let fg = (cg as f32 * fade * fi).minimum(255.0) as u8;
-                        let framebuffer = (callback as f32 * fade * fi).minimum(255.0) as u8;
-                        (fr, fg, framebuffer)
+                        let fr = (cr as f32 * fade * fi).min(255.0) as u8;
+                        let fg = (cg as f32 * fade * fi).min(255.0) as u8;
+                        let fb = (cb as f32 * fade * fi).min(255.0) as u8;
+                        (fr, fg, fb)
                     } else {
                         let speed_green = 0.8 + speed_norm * 0.4; // faster = greener
                         let tr = 0i16; // Zero red in trail — pure green only
-                        let tg = ((band_g_base as f32 * fi * fade * speed_green).minimum(255.0)) as i16;
+                        let tg = ((band_g_base as f32 * fi * fade * speed_green).min(255.0)) as i16;
                         let tb = 0i16; // No blue in trail
                         // Atmospheric shift
                         let fr = 0u8; // Absolutely no red in trail
-                        let fg = (tg + atmo_g).maximum(0).minimum(255) as u8;
-                        let framebuffer = 0u8; // Absolutely no blue in trail
-                        (fr, fg, framebuffer)
+                        let fg = (tg + atmo_g).max(0).min(255) as u8;
+                        let fb = 0u8; // Absolutely no blue in trail
+                        (fr, fg, fb)
                     }
                 };
                 
@@ -10121,7 +10578,7 @@ match frequency_band {
                 // Always active: shapes visible in idle mode too
                 if layer >= 1 {
                     let fx = crate::visualizer::check_rain_collision(
-                        &self.visualizer, column, char_y,
+                        &self.visualizer, col, char_y,
                         self.visualizer.beat_pulse, m_energy,
                     );
                     if fx.glow > 0 || fx.ripple > 0 || fx.fresnel > 0 || fx.specular > 0
@@ -10158,9 +10615,9 @@ match frequency_band {
                 // Trail extension: boost brightness for trailing chars near shape
                 if ghost_trail_boost > 0 {
                     let boost = 1.0 + ghost_trail_boost as f32 / 100.0;
-                    r = (r as f32 * boost).minimum(255.0) as u8;
-                    g = (g as f32 * boost).minimum(255.0) as u8;
-                    b = (b as f32 * boost).minimum(255.0) as u8;
+                    r = (r as f32 * boost).min(255.0) as u8;
+                    g = (g as f32 * boost).min(255.0) as u8;
+                    b = (b as f32 * boost).min(255.0) as u8;
                 }
                 
                 // ── Flow field: organic horizontal displacement ──
@@ -10183,7 +10640,7 @@ match frequency_band {
                     };
                     if radial > 0.01 {
                         let cy = char_y as f32;
-                        let cx = column as f32;
+                        let cx = col as f32;
                         let sin = crate::graphics::holomatrix::sin_approx_pub;
                         let o1 = sin(cy * 0.0045 + cx * 0.13 + flow_time);
                         let o2 = sin(cy * 0.012 + cx * 0.07 + flow_time * 1.6 + 3.0) * 0.4;
@@ -10191,7 +10648,7 @@ match frequency_band {
                         ((o1 + o2 + o3) * flow_amp * radial) as i32
                     } else { 0 }
                 } else { 0 };
-                let x_flow = (x as i32 + flow_offset).maximum(0).minimum(width as i32 - 1) as u32;
+                let x_flow = (x as i32 + flow_offset).max(0).min(width as i32 - 1) as u32;
                 
                 // ── Drone Swarm: holographic wireframe formations ──
                 // Skip for far layers (0-2) — subtle effect invisible at low brightness
@@ -10204,12 +10661,12 @@ match frequency_band {
                 };
                 if drone_fx.brightness != 1.0 || drone_fx.color_r != 0 {
                     let bf = drone_fx.brightness;
-                    r = ((r as f32 * bf).minimum(255.0)) as u8;
-                    g = ((g as f32 * bf).minimum(255.0)) as u8;
-                    b = ((b as f32 * bf).minimum(255.0)) as u8;
-                    r = ((r as i16 + drone_fx.color_r).maximum(0).minimum(255)) as u8;
-                    g = ((g as i16 + drone_fx.color_g).maximum(0).minimum(255)) as u8;
-                    b = ((b as i16 + drone_fx.color_b).maximum(0).minimum(255)) as u8;
+                    r = ((r as f32 * bf).min(255.0)) as u8;
+                    g = ((g as f32 * bf).min(255.0)) as u8;
+                    b = ((b as f32 * bf).min(255.0)) as u8;
+                    r = ((r as i16 + drone_fx.color_r).max(0).min(255)) as u8;
+                    g = ((g as i16 + drone_fx.color_g).max(0).min(255)) as u8;
+                    b = ((b as i16 + drone_fx.color_b).max(0).min(255)) as u8;
                 }
                 
                 let color = 0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
@@ -10245,12 +10702,12 @@ match frequency_band {
                     && (char_y as u32) < self.matrix_projection.y + self.matrix_projection.height;
 
                 // Check for per-cell pixel override (skip if projection takes priority)
-                let cell_key = index * MAXIMUM_TRAIL + i;
+                let cell_key = idx * MAXIMUM_TRAIL + i;
                 let has_override = !in_proj && has_any_overrides && self.matrix_overrides.contains_key(&cell_key);
                 
                 let cr = ((color >> 16) & 0xFF) as u8;
                 let cg = ((color >> 8) & 0xFF) as u8;
-                let callback = (color & 0xFF) as u8;
+                let cb = (color & 0xFF) as u8;
                 
                 if in_proj {
                     // ── PROJECTION MODE: reveal image pixels through rain ──
@@ -10267,26 +10724,26 @@ match frequency_band {
                         let in_reflection = py > height * 88 / 100;
                         let image_y = (py - proj.y) as usize;
                         for bit in 0..glyph_w {
-                            let pixel = x_flow + bit;
-                            if pixel >= width { continue; }
-                            if pixel < proj.x || pixel >= proj.x + proj.width { continue; }
-                            let image_x = (pixel - proj.x) as usize;
+                            let px = x_flow + bit;
+                            if px >= width { continue; }
+                            if px < proj.x || px >= proj.x + proj.width { continue; }
+                            let image_x = (px - proj.x) as usize;
                             let pixel_color = proj.pixels[image_y * proj.width as usize + image_x];
                             if pixel_color & 0xFF000000 == 0 { continue; }
                             let pr = ((pixel_color >> 16) & 0xFF) as f32;
-                            let page = ((pixel_color >> 8) & 0xFF) as f32;
+                            let pg = ((pixel_color >> 8) & 0xFF) as f32;
                             let pb = (pixel_color & 0xFF) as f32;
-                            let mut fr = (pr * intensity).minimum(255.0) as u8;
-                            let mut fg = (page * intensity).minimum(255.0) as u8;
-                            let mut framebuffer = (pb * intensity).minimum(255.0) as u8;
-                            fr = ((fr as f32 * scanline).minimum(255.0)) as u8;
-                            fg = ((fg as f32 * scanline).minimum(255.0)) as u8;
-                            framebuffer = ((framebuffer as f32 * scanline).minimum(255.0)) as u8;
+                            let mut fr = (pr * intensity).min(255.0) as u8;
+                            let mut fg = (pg * intensity).min(255.0) as u8;
+                            let mut fb = (pb * intensity).min(255.0) as u8;
+                            fr = ((fr as f32 * scanline).min(255.0)) as u8;
+                            fg = ((fg as f32 * scanline).min(255.0)) as u8;
+                            fb = ((fb as f32 * scanline).min(255.0)) as u8;
                             if in_reflection {
-                                fg = (fg as u16 + 10).minimum(255) as u8;
+                                fg = (fg as u16 + 10).min(255) as u8;
                             }
-                            let fc = 0xFF000000 | ((fr as u32) << 16) | ((fg as u32) << 8) | (framebuffer as u32);
-                            framebuffer::put_pixel_fast(pixel, py, fc);
+                            let fc = 0xFF000000 | ((fr as u32) << 16) | ((fg as u32) << 8) | (fb as u32);
+                            rain_context.put_pixel(px, py, fc);
                         }
                     }
                 } else if has_override {
@@ -10300,29 +10757,29 @@ match frequency_band {
                         for bit in 0..8u32 {
                             let pixel_color = cell_pixels.pixels[gr * 8 + bit as usize];
                             if pixel_color & 0xFF000000 == 0 { continue; } // transparent
-                            let pixel = x_flow + bit;
-                            if pixel >= width { continue; }
+                            let px = x_flow + bit;
+                            if px >= width { continue; }
                             // Extract pixel's own RGB, then modulate by rain intensity
                             let pr = ((pixel_color >> 16) & 0xFF) as f32;
-                            let page = ((pixel_color >> 8) & 0xFF) as f32;
+                            let pg = ((pixel_color >> 8) & 0xFF) as f32;
                             let pb = (pixel_color & 0xFF) as f32;
                             // Modulate: blend the override pixel toward the rain color/intensity
                             // intensity = brightness / 255 (how bright this trail position is)
                             let intensity = brightness as f32 / 255.0;
-                            let mut fr = (pr * intensity).minimum(255.0) as u8;
-                            let mut fg = (page * intensity).minimum(255.0) as u8;
-                            let mut framebuffer = (pb * intensity).minimum(255.0) as u8;
+                            let mut fr = (pr * intensity).min(255.0) as u8;
+                            let mut fg = (pg * intensity).min(255.0) as u8;
+                            let mut fb = (pb * intensity).min(255.0) as u8;
                             if layer > 0 {
-                                fg = (fg as u16 + 30u16).minimum(255) as u8;
+                                fg = (fg as u16 + 30u16).min(255) as u8;
                             }
-                            fr = ((fr as f32 * scanline).minimum(255.0)) as u8;
-                            fg = ((fg as f32 * scanline).minimum(255.0)) as u8;
-                            framebuffer = ((framebuffer as f32 * scanline).minimum(255.0)) as u8;
+                            fr = ((fr as f32 * scanline).min(255.0)) as u8;
+                            fg = ((fg as f32 * scanline).min(255.0)) as u8;
+                            fb = ((fb as f32 * scanline).min(255.0)) as u8;
                             if in_reflection {
-                                fg = (fg as u16 + 10).minimum(255) as u8;
+                                fg = (fg as u16 + 10).min(255) as u8;
                             }
-                            let fc = 0xFF000000 | ((fr as u32) << 16) | ((fg as u32) << 8) | (framebuffer as u32);
-                            framebuffer::put_pixel_fast(pixel, py, fc);
+                            let fc = 0xFF000000 | ((fr as u32) << 16) | ((fg as u32) << 8) | (fb as u32);
+                            rain_context.put_pixel(px, py, fc);
                         }
                     }
                 } else {
@@ -10330,23 +10787,23 @@ match frequency_band {
                     // Pre-compute colors for even/odd scanlines (avoid per-pixel float math)
                     let fg_boost = if layer > 0 { 30u16 } else { 0u16 };
                     let ar = cr;
-                    let ag = (cg as u16 + fg_boost).minimum(255) as u8;
-                    let ab = callback;
+                    let ag = (cg as u16 + fg_boost).min(255) as u8;
+                    let ab = cb;
                     let color_even = 0xFF000000 | ((ar as u32) << 16) | ((ag as u32) << 8) | (ab as u32);
                     let sr = (ar as u16 * 245 >> 8) as u8;
                     let sg = (ag as u16 * 245 >> 8) as u8;
                     let sb = (ab as u16 * 245 >> 8) as u8;
                     let color_odd = 0xFF000000 | ((sr as u32) << 16) | ((sg as u32) << 8) | (sb as u32);
                     let refl_y = height * 88 / 100;
-                    let rg_even = (ag as u16 + 10).minimum(255) as u8;
-                    let rg_odd = (sg as u16 + 10).minimum(255) as u8;
+                    let rg_even = (ag as u16 + 10).min(255) as u8;
+                    let rg_odd = (sg as u16 + 10).min(255) as u8;
                     let color_refl_even = 0xFF000000 | ((ar as u32) << 16) | ((rg_even as u32) << 8) | (ab as u32);
                     let color_refl_odd = 0xFF000000 | ((sr as u32) << 16) | ((rg_odd as u32) << 8) | (sb as u32);
-                    let use_direct = !framebuffer_pointer.is_null();
+                    let use_direct = !fb_ptr.is_null();
                     for sy in 0..glyph_h {
                         let py = char_y as u32 + sy;
                         if py >= height { continue; }
-                        let source_row = ((sy * 16) / glyph_h).minimum(15) as usize;
+                        let source_row = ((sy * 16) / glyph_h).min(15) as usize;
                         let bits = glyph[source_row];
                         if bits == 0 { continue; }
                         let is_odd = py & 1 != 0;
@@ -10360,24 +10817,24 @@ match (is_odd, in_reflection) {
                         };
                         if use_direct {
                             // Direct pointer write — zero atomic loads per pixel
-                            let row_base = py as usize * framebuffer_stride as usize;
+                            let row_base = py as usize * fb_stride as usize;
                             for sx in 0..glyph_w {
-                                let source_column = ((sx * 8) / glyph_w).minimum(7);
+                                let source_column = ((sx * 8) / glyph_w).min(7);
                                 if bits & (0x80 >> source_column) != 0 {
-                                    let pixel = x_flow + sx;
-                                    if pixel < width {
+                                    let px = x_flow + sx;
+                                    if px < width {
                                                                                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { *framebuffer_pointer.add(row_base + pixel as usize) = fc; }
+unsafe { *fb_ptr.add(row_base + px as usize) = fc; }
                                     }
                                 }
                             }
                         } else {
                             for sx in 0..glyph_w {
-                                let source_column = ((sx * 8) / glyph_w).minimum(7);
+                                let source_column = ((sx * 8) / glyph_w).min(7);
                                 if bits & (0x80 >> source_column) != 0 {
-                                    let pixel = x_flow + sx;
-                                    if pixel < width {
-                                        framebuffer::put_pixel_fast(pixel, py, fc);
+                                    let px = x_flow + sx;
+                                    if px < width {
+                                        framebuffer::put_pixel_fast(px, py, fc);
                                     }
                                 }
                             }
@@ -10401,15 +10858,14 @@ const FILL_TRAIL: usize = 16;
                         // Compile-time constant — evaluated at compilation, zero runtime cost.
 const FILL_CHARACTER: u32 = 16;  // Fill layers use standard 8×16 glyphs
             
-            for column in 0..MATRIX_COLS.minimum(self.visualizer.column_bounds.len()) {
+            for col in 0..matrix_cols.min(self.visualizer.column_bounds.len()) {
                 // Skip columns with no shape at all (free)
-                let (bmin, bmax) = self.visualizer.column_bounds[column];
+                let (bmin, bmax) = self.visualizer.column_bounds[col];
                 if bmin < 0 || bmax <= bmin { continue; }
                 
-                let x = (column as u32 * column_width) + column_width / 2;
-                
+                let x = (col as u32 * width) / matrix_cols as u32 + column_width / 2;
                 for fill in 0..NUMBER_FILL {
-                    let fill_seed = (column as u32).wrapping_mul(2654435761)
+                    let fill_seed = (col as u32).wrapping_mul(2654435761)
                         ^ ((fill as u32 + 17).wrapping_mul(0x9E3779B9));
                     let fill_speed = 1 + (fill_seed % 3);
                     
@@ -10418,7 +10874,7 @@ const FILL_CHARACTER: u32 = 16;  // Fill layers use standard 8×16 glyphs
                     let raw_position = (self.frame_count as u32)
                         .wrapping_mul(fill_speed)
                         .wrapping_add(fill_seed);
-                    let virtual_head = (raw_position % total_h.maximum(1)) as i32
+                    let virtual_head = (raw_position % total_h.max(1)) as i32
                         - (FILL_TRAIL as i32 * FILL_CHARACTER as i32);
                     
                     for i in 0..FILL_TRAIL {
@@ -10430,7 +10886,7 @@ const FILL_CHARACTER: u32 = 16;  // Fill layers use standard 8×16 glyphs
                         if char_y < bmin - margin || char_y > bmax + margin { continue; }
                         
                         let fx = crate::visualizer::check_rain_collision(
-                            &self.visualizer, column, char_y,
+                            &self.visualizer, col, char_y,
                             self.visualizer.beat_pulse, m_energy,
                         );
                         // Only render if truly inside or on an edge — invisible otherwise
@@ -10477,23 +10933,23 @@ const FILL_CHARACTER: u32 = 16;  // Fill layers use standard 8×16 glyphs
                         for (gr, &bits) in glyph.iter().enumerate() {
                             let py = char_y as u32 + gr as u32;
                             if py >= height || bits == 0 { continue; }
-                            if !framebuffer_pointer.is_null() {
-                                let row_base = py as usize * framebuffer_stride as usize;
+                            if !fb_ptr.is_null() {
+                                let row_base = py as usize * fb_stride as usize;
                                 for bit in 0..8u32 {
                                     if bits & (0x80 >> bit) != 0 {
-                                        let pixel = x + bit;
-                                        if pixel < width {
+                                        let px = x + bit;
+                                        if px < width {
                                                                                         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { *framebuffer_pointer.add(row_base + pixel as usize) = color; }
+unsafe { *fb_ptr.add(row_base + px as usize) = color; }
                                         }
                                     }
                                 }
                             } else {
                                 for bit in 0..8u32 {
                                     if bits & (0x80 >> bit) != 0 {
-                                        let pixel = x + bit;
-                                        if pixel < width {
-                                            framebuffer::put_pixel_fast(pixel, py, color);
+                                        let px = x + bit;
+                                        if px < width {
+                                            framebuffer::put_pixel_fast(px, py, color);
                                         }
                                     }
                                 }
@@ -10525,12 +10981,12 @@ unsafe { *framebuffer_pointer.add(row_base + pixel as usize) = color; }
                 for ly in (0..logo_h).step_by(2) {
                     for lx in 0..logo_w {
                         if !crate::logo_bitmap::logo_edge_pixel(lx as usize, ly as usize) { continue; }
-                        let pixel = logo_x + lx;
+                        let px = logo_x + lx;
                         let py = logo_y + ly;
-                        if pixel >= width || py >= height { continue; }
+                        if px >= width || py >= height { continue; }
                         let glow_g: u32 = if m_playing { 35 + (m_beat * 50.0) as u32 } else { 30 };
                         // Single pixel glow (skip 3×3)
-                        framebuffer::put_pixel_fast(pixel, py, 0xFF000000 | (glow_g.minimum(255) << 8));
+                        framebuffer::put_pixel_fast(px, py, 0xFF000000 | (glow_g.min(255) << 8));
                     }
                 }
             }
@@ -10548,24 +11004,24 @@ unsafe { *framebuffer_pointer.add(row_base + pixel as usize) = color; }
                     let luminance = (r * 77 + g * 150 + b * 29) >> 8;
                     if luminance < 30 { continue; }
                     
-                    let pixel = logo_x + lx;
+                    let px = logo_x + lx;
                     let py = logo_y + ly;
-                    if pixel >= width || py >= height { continue; }
+                    if px >= width || py >= height { continue; }
                     
                     if luminance >= 60 {
-                        let beat_add = if m_playing { (m_beat * 20.0).minimum(30.0) as u32 } else { 0 };
-                        let pr = (r + beat_add).minimum(255);
-                        let page = (g + beat_add).minimum(255);
-                        let pb = (b + beat_add).minimum(255);
-                        framebuffer::put_pixel_fast(pixel, py, 0xFF000000 | (pr << 16) | (page << 8) | pb);
+                        let beat_add = if m_playing { (m_beat * 20.0).min(30.0) as u32 } else { 0 };
+                        let pr = (r + beat_add).min(255);
+                        let pg = (g + beat_add).min(255);
+                        let pb = (b + beat_add).min(255);
+                        framebuffer::put_pixel_fast(px, py, 0xFF000000 | (pr << 16) | (pg << 8) | pb);
                     } else {
-                        let alpha = ((luminance as u32) * 255 / 60).minimum(255);
-                        let bg = framebuffer::get_pixel_fast(pixel, py);
+                        let alpha = ((luminance as u32) * 255 / 60).min(255);
+                        let bg = framebuffer::get_pixel_fast(px, py);
                         let inv = 255 - alpha;
                         let nr = (r * alpha + ((bg >> 16) & 0xFF) * inv) / 255;
                         let ng = (g * alpha + ((bg >> 8) & 0xFF) * inv) / 255;
                         let nb = (b * alpha + (bg & 0xFF) * inv) / 255;
-                        framebuffer::put_pixel_fast(pixel, py, 0xFF000000 | (nr << 16) | (ng << 8) | nb);
+                        framebuffer::put_pixel_fast(px, py, 0xFF000000 | (nr << 16) | (ng << 8) | nb);
                     }
                 }
             }
@@ -10578,6 +11034,7 @@ unsafe { *framebuffer_pointer.add(row_base + pixel as usize) = color; }
     fn draw_wallpaper_image(&self, wp_data: &crate::theme::WallpaperData, screen_height: u32) {
         use crate::theme::WallpaperMode;
         let mode = crate::theme::THEME.read().wallpaper.mode;
+        let wp_context = framebuffer::FrameCtx::snapshot();
         
                 // Pattern matching — Rust's exhaustive branching construct.
 match mode {
@@ -10591,14 +11048,14 @@ match mode {
                     // Fixed-point source coordinate (8-bit fractional)
                     let source_y_fp = (sy as u64 * ((wp_h as u64 - 1) << 8)) / screen_height as u64;
                     let y0 = (source_y_fp >> 8) as u32;
-                    let y1 = (y0 + 1).minimum(wp_h - 1);
+                    let y1 = (y0 + 1).min(wp_h - 1);
                     let fy = (source_y_fp & 0xFF) as u32; // 0..255 fractional part
                     let ify = 256 - fy;
                     
                     for sx in 0..scr_w {
                         let source_x_fp = (sx as u64 * ((wp_w as u64 - 1) << 8)) / scr_w as u64;
                         let x0 = (source_x_fp >> 8) as u32;
-                        let x1 = (x0 + 1).minimum(wp_w - 1);
+                        let x1 = (x0 + 1).min(wp_w - 1);
                         let fx = (source_x_fp & 0xFF) as u32;
                         let ifx = 256 - fx;
                         
@@ -10628,7 +11085,7 @@ match mode {
                                     + (c01 & 0xFF) * ifx * fy
                                     + (c11 & 0xFF) * fx * fy ) >> 16;
                             
-                            framebuffer::put_pixel_fast(sx, sy, 0xFF000000 | (r << 16) | (g << 8) | b);
+                            wp_context.put_pixel(sx, sy, 0xFF000000 | (r << 16) | (g << 8) | b);
                         }
                     }
                 }
@@ -10641,11 +11098,11 @@ match mode {
                 let offset_x = self.width.saturating_sub(wp_data.width) / 2;
                 let offset_y = screen_height.saturating_sub(wp_data.height) / 2;
                 
-                for y in 0..wp_data.height.minimum(screen_height) {
-                    for x in 0..wp_data.width.minimum(self.width) {
-                        let index = (y * wp_data.width + x) as usize;
-                        if index < wp_data.pixels.len() {
-                            framebuffer::put_pixel_fast(offset_x + x, offset_y + y, wp_data.pixels[index]);
+                for y in 0..wp_data.height.min(screen_height) {
+                    for x in 0..wp_data.width.min(self.width) {
+                        let idx = (y * wp_data.width + x) as usize;
+                        if idx < wp_data.pixels.len() {
+                            wp_context.put_pixel(offset_x + x, offset_y + y, wp_data.pixels[idx]);
                         }
                     }
                 }
@@ -10660,9 +11117,9 @@ match mode {
                             if dy + y >= screen_height { break; }
                             for x in 0..wp_data.width {
                                 if dx + x >= self.width { break; }
-                                let index = (y * wp_data.width + x) as usize;
-                                if index < wp_data.pixels.len() {
-                                    framebuffer::put_pixel_fast(dx + x, dy + y, wp_data.pixels[index]);
+                                let idx = (y * wp_data.width + x) as usize;
+                                if idx < wp_data.pixels.len() {
+                                    wp_context.put_pixel(dx + x, dy + y, wp_data.pixels[idx]);
                                 }
                             }
                         }
@@ -10684,7 +11141,7 @@ match mode {
     /// circuit-board key extending downward with branch nodes, "TrustOS" text
     fn draw_logo_watermark(&self) {
         let center_x = self.width / 2;
-        let center_y = (self.height - TASKBAR_HEIGHT) / 2 - 30;
+        let center_y = (self.height - TASKBAR_HEIGHT()) / 2 - 30;
         
         // Colors matching the logo image
         let green_bright = 0xFF50E050u32;  // Bright green
@@ -10709,19 +11166,19 @@ match mode {
                 1.0
             } else {
                 let t = (ratio - 0.45) / 0.55;
-                (1.0 - t * t).maximum(0.0)
+                (1.0 - t * t).max(0.0)
             };
-            let w = (shield_w as f32 * width_factor).maximum(2.0) as u32;
+            let w = (shield_w as f32 * width_factor).max(2.0) as u32;
             let x_off = (shield_w - w) / 2;
             
             for dx in 0..w {
-                let pixel = sx + x_off + dx;
+                let px = sx + x_off + dx;
                 let py = sy + y;
                 // Diagonal split: left of center = black, right = dark green
                 let local_x = x_off + dx;
                 let diagonal = (local_x as f32 / shield_w as f32) + (ratio * 0.2);
                 let fill = if diagonal < 0.5 { black_fill } else { green_dark };
-                framebuffer::put_pixel_fast(pixel, py, fill);
+                framebuffer::put_pixel_fast(px, py, fill);
             }
             
             // Shield outline (both edges)
@@ -10786,15 +11243,15 @@ match mode {
         ];
         
         for &(by, bx_off, node_r) in branches {
-            if by >= self.height.saturating_sub(TASKBAR_HEIGHT) { continue; }
+            if by >= self.height.saturating_sub(TASKBAR_HEIGHT()) { continue; }
             // Draw branch line
             let sign: i32 = if bx_off < 0 { -1 } else { 1 };
             let absolute_off = if bx_off < 0 { -bx_off } else { bx_off };
             for dx in 0..absolute_off {
-                let pixel = (lock_cx as i32 + sign * dx) as u32;
-                if pixel < self.width {
-                    framebuffer::put_pixel_fast(pixel, by, circuit_green);
-                    framebuffer::put_pixel_fast(pixel, by + 1, circuit_green);
+                let px = (lock_cx as i32 + sign * dx) as u32;
+                if px < self.width {
+                    framebuffer::put_pixel_fast(px, by, circuit_green);
+                    framebuffer::put_pixel_fast(px, by + 1, circuit_green);
                 }
             }
             // Node dot at end of branch
@@ -10804,10 +11261,10 @@ match mode {
                     let ddx = ndx as i32 - node_r as i32 / 2;
                     let ddy = ndy as i32 - node_r as i32 / 2;
                     if ddx * ddx + ddy * ddy <= (node_r as i32 / 2) * (node_r as i32 / 2) {
-                        let pixel = node_x + ndx;
+                        let px = node_x + ndx;
                         let py = by + ndy;
-                        if pixel < self.width && py < self.height.saturating_sub(TASKBAR_HEIGHT) {
-                            framebuffer::put_pixel_fast(pixel, py, node_color);
+                        if px < self.width && py < self.height.saturating_sub(TASKBAR_HEIGHT()) {
+                            framebuffer::put_pixel_fast(px, py, node_color);
                         }
                     }
                 }
@@ -10815,7 +11272,7 @@ match mode {
         }
         
         // Bottom terminator node (larger)
-        if key_end_y + 4 < self.height.saturating_sub(TASKBAR_HEIGHT) {
+        if key_end_y + 4 < self.height.saturating_sub(TASKBAR_HEIGHT()) {
             for dy in 0..8u32 {
                 for dx in 0..8u32 {
                     let ddx = dx as i32 - 4;
@@ -10834,28 +11291,29 @@ match mode {
         // LEFT DOCK SIDEBAR — Dark translucent panel with glow effects
         // Icons dynamically fill the full sidebar height
         // ═══════════════════════════════════════════════════════════════
-        let dock_h = self.height.saturating_sub(TASKBAR_HEIGHT);
+        let dock_h = self.height.saturating_sub(TASKBAR_HEIGHT());
+        let dock_context = framebuffer::FrameCtx::snapshot();
         
         // Frosted dark dock background — very dark with slight green tint
         // Draw column by column with opacity blending over matrix rain
         for dy in 0..dock_h {
-            for dx in 0..(DOCK_WIDTH + 10) {
-                let existing = framebuffer::get_pixel_fast(dx, dy);
+            for dx in 0..(DOCK_WIDTH() + 10) {
+                let existing = dock_context.get_pixel(dx, dy);
                 let er = ((existing >> 16) & 0xFF) as u32;
                 let eg = ((existing >> 8) & 0xFF) as u32;
                 let eb = (existing & 0xFF) as u32;
                 // 75% opacity dark overlay: blend toward 0x040804
-                let nr = (er * 25 / 100 + 4 * 75 / 100).minimum(255);
-                let ng = (eg * 25 / 100 + 8 * 75 / 100).minimum(255);
-                let nb = (eb * 25 / 100 + 4 * 75 / 100).minimum(255);
-                framebuffer::put_pixel_fast(dx, dy, 0xFF000000 | (nr << 16) | (ng << 8) | nb);
+                let nr = (er * 25 / 100 + 4 * 75 / 100).min(255);
+                let ng = (eg * 25 / 100 + 8 * 75 / 100).min(255);
+                let nb = (eb * 25 / 100 + 4 * 75 / 100).min(255);
+                dock_context.put_pixel(dx, dy, 0xFF000000 | (nr << 16) | (ng << 8) | nb);
             }
         }
         // Right edge: chrome separator
-        framebuffer::fill_rect(DOCK_WIDTH + 9, 0, 1, dock_h, CHROME_GHOST);
+        framebuffer::fill_rect(DOCK_WIDTH() + 9, 0, 1, dock_h, CHROME_GHOST);
         
         let icon_size = 36u32;
-        let n_icons = self.icons.len().maximum(1) as u32;
+        let n_icons = self.icons.len().max(1) as u32;
         let padding = 12u32;
         let available = dock_h.saturating_sub(padding * 2);
         let icon_total = available / n_icons;
@@ -10867,7 +11325,7 @@ match mode {
             if iy + icon_size > dock_h { break; }
             
             // Hit test
-            let is_hovered = self.cursor_x >= 0 && self.cursor_x < (DOCK_WIDTH + 10) as i32
+            let is_hovered = self.cursor_x >= 0 && self.cursor_x < (DOCK_WIDTH() + 10) as i32
                 && self.cursor_y >= iy as i32 && self.cursor_y < (iy + icon_total) as i32;
             
             // Darker muted colors normally, vivid glow on hover
@@ -10884,9 +11342,9 @@ match mode {
                 let gh = icon_size + 20 + glow_pad * 2;
                 for gdy in 0..gh {
                     for gdx in 0..gw {
-                        let pixel = gx + gdx;
+                        let px = gx + gdx;
                         let py = gy + gdy;
-                        if pixel >= DOCK_WIDTH + 10 || py >= dock_h { continue; }
+                        if px >= DOCK_WIDTH() + 10 || py >= dock_h { continue; }
                         // Distance from edge of icon area for falloff
                         let inner_x = if gdx < glow_pad { glow_pad - gdx } 
                             else if gdx > gw - glow_pad { gdx - (gw - glow_pad) } 
@@ -10894,15 +11352,15 @@ match mode {
                         let inner_y = if gdy < glow_pad { glow_pad - gdy }
                             else if gdy > gh - glow_pad { gdy - (gh - glow_pad) }
                             else { 0 };
-                        let dist = inner_x.maximum(inner_y);
+                        let dist = inner_x.max(inner_y);
                         if dist > 0 {
-                            let intensity = (20u32.saturating_sub(dist * 4)).minimum(20) as u8;
+                            let intensity = (20u32.saturating_sub(dist * 4)).min(20) as u8;
                             if intensity > 0 {
-                                let existing = framebuffer::get_pixel_fast(pixel, py);
+                                let existing = framebuffer::get_pixel_fast(px, py);
                                 let eg = ((existing >> 8) & 0xFF) as u8;
                                 let new_g = eg.saturating_add(intensity);
                                 let blended = (existing & 0xFFFF00FF) | ((new_g as u32) << 8);
-                                framebuffer::put_pixel_fast(pixel, py, blended);
+                                framebuffer::put_pixel_fast(px, py, blended);
                             }
                         }
                     }
@@ -11007,10 +11465,10 @@ match icon.icon_type {
                     self.draw_text((cx - 5) as i32, (cy - 10) as i32, "42", 0xFF40FF40);
                     // Buttons: 4×3 grid
                     for row in 0..3u32 {
-                        for column in 0..4u32 {
-                            let bx = cx - 8 + column * 5;
+                        for col in 0..4u32 {
+                            let bx = cx - 8 + col * 5;
                             let by = cy - 0 + row * 4;
-                            let button_column = if column == 3 { accent_color } else { draw_color };
+                            let button_column = if col == 3 { accent_color } else { draw_color };
                             framebuffer::fill_rect(bx, by, 3, 2, button_column);
                         }
                     }
@@ -11028,9 +11486,9 @@ match icon.icon_type {
                             for dx in -(r as i32)..=(r as i32) {
                                 let dist2 = dx * dx + dy * dy;
                                 if dist2 <= r2 && dist2 >= r2_inner {
-                                    let pixel = (arc_cx + dx) as u32;
+                                    let px = (arc_cx + dx) as u32;
                                     let py = (arc_cy + dy) as u32;
-                                    if pixel >= ix && pixel < ix + icon_size && py >= iy && py < iy + icon_size {
+                                    if px >= ix && px < ix + icon_size && py >= iy && py < iy + icon_size {
                                         let color = if ring == 0 { 
                                             if is_hovered { accent_color } else { GREEN_GHOST }
                                         } else if ring == 1 { 
@@ -11038,7 +11496,7 @@ match icon.icon_type {
                                         } else { 
                                             draw_color 
                                         };
-                                        framebuffer::put_pixel_fast(pixel, py, color);
+                                        framebuffer::put_pixel_fast(px, py, color);
                                     }
                                 }
                             }
@@ -11113,9 +11571,9 @@ match icon.icon_type {
                     // 8 gear teeth (wider)
                     let teeth: &[(i32, i32)] = &[(0, -10), (0, 10), (-10, 0), (10, 0), (-7, -7), (7, -7), (-7, 7), (7, 7)];
                     for &(transmit, ty) in teeth {
-                        let pixel = (cx as i32 + transmit) as u32;
+                        let px = (cx as i32 + transmit) as u32;
                         let py = (cy as i32 + ty) as u32;
-                        framebuffer::fill_rect(pixel.saturating_sub(2), py.saturating_sub(1), 4, 3, draw_color);
+                        framebuffer::fill_rect(px.saturating_sub(2), py.saturating_sub(1), 4, 3, draw_color);
                     }
                 },
                 IconType::Browser => {
@@ -11142,9 +11600,9 @@ match icon.icon_type {
                     // Curved meridian (ellipse)
                     for dy in 0..20u32 {
                         let ddy = dy as i32 - 10;
-                        let value = 100 - ddy * ddy;
-                        if value > 0 {
-                            let curve_x = (fast_sqrt_i32(value) * 2 / 5) as u32;
+                        let val = 100 - ddy * ddy;
+                        if val > 0 {
+                            let curve_x = (fast_sqrt_i32(val) * 2 / 5) as u32;
                             if cx + curve_x < ix + icon_size {
                                 framebuffer::put_pixel_fast(cx + curve_x, cy - 10 + dy, draw_color);
                             }
@@ -11251,7 +11709,7 @@ match icon.icon_type {
     }
     
     fn draw_taskbar(&mut self) {
-        let y = self.height - TASKBAR_HEIGHT;
+        let y = self.height - TASKBAR_HEIGHT();
         
         // ═══════════════════════════════════════════════════════════════
         // MODERN TASKBAR — v2: taller, glass morphism, larger icons
@@ -11275,13 +11733,13 @@ match icon.icon_type {
                 }
             }
             // Main body (uniform alpha with rounded top) — slightly transparent
-            framebuffer::fill_rect_alpha(0, y + radius, w, TASKBAR_HEIGHT - radius, 0x040A06, 165);
+            framebuffer::fill_rect_alpha(0, y + radius, w, TASKBAR_HEIGHT() - radius, 0x040A06, 165);
             // Green tint overlay
-            framebuffer::fill_rect_alpha(0, y, w, TASKBAR_HEIGHT, 0x00AA44, 10);
+            framebuffer::fill_rect_alpha(0, y, w, TASKBAR_HEIGHT(), 0x00AA44, 10);
             // Glass top highlight
             if w > radius * 2 {
-                for pixel in radius..(w - radius) {
-                    framebuffer::put_pixel_fast(pixel, y, CHROME_DIM);
+                for px in radius..(w - radius) {
+                    framebuffer::put_pixel_fast(px, y, CHROME_DIM);
                 }
             }
             
@@ -11310,41 +11768,41 @@ match icon.icon_type {
         }
         let border_color = if start_hover || self.start_menu_open { CHROME_BRIGHT } else { CHROME_GHOST };
         draw_rounded_rect_border(6, (y + 7) as i32, 110, 34, 10, border_color);
-        let text_color = if start_hover || self.start_menu_open { GREEN_PRIMARY } else { GREEN_SECONDARY };
-        self.draw_text_smooth(20, (y + 15) as i32, "TrustOS", text_color);
+        let txt_color = if start_hover || self.start_menu_open { GREEN_PRIMARY } else { GREEN_SECONDARY };
+        self.draw_text_smooth(20, (y + 15) as i32, "TrustOS", txt_color);
         // Subtle bold effect for TrustOS label
         if start_hover || self.start_menu_open {
-            self.draw_text_smooth(21, (y + 15) as i32, "TrustOS", text_color);
+            self.draw_text_smooth(21, (y + 15) as i32, "TrustOS", txt_color);
         }
         
         // ── Window buttons (centered) — taller pills ──
         let total_btns = self.windows.len();
-        let button_w = 96u32;
-        let button_h = 34u32;
-        let button_gap = 6u32;
-        let total_w = if total_btns > 0 { total_btns as u32 * (button_w + button_gap) - button_gap } else { 0 };
+        let btn_w = 96u32;
+        let btn_h = 34u32;
+        let btn_gap = 6u32;
+        let total_w = if total_btns > 0 { total_btns as u32 * (btn_w + btn_gap) - btn_gap } else { 0 };
         let start_x = (self.width.saturating_sub(total_w)) / 2;
         
         for (i, w) in self.windows.iter().enumerate() {
-            let button_x = start_x + i as u32 * (button_w + button_gap);
-            let button_y = y + 7;
+            let button_x = start_x + i as u32 * (btn_w + btn_gap);
+            let btn_y = y + 7;
             
-            let is_hover = self.cursor_x >= button_x as i32 && self.cursor_x < (button_x + button_w) as i32
+            let is_hover = self.cursor_x >= button_x as i32 && self.cursor_x < (button_x + btn_w) as i32
                 && self.cursor_y >= y as i32;
             
             // Button background — rounded glass pill
             if w.focused {
-                draw_rounded_rect(button_x as i32, button_y as i32, button_w, button_h, 8, 0xFF001A0A);
-                framebuffer::fill_rect_alpha(button_x, button_y, button_w, button_h, 0x00AA44, 70);
+                draw_rounded_rect(button_x as i32, btn_y as i32, btn_w, btn_h, 8, 0xFF001A0A);
+                framebuffer::fill_rect_alpha(button_x, btn_y, btn_w, btn_h, 0x00AA44, 70);
                 // Top glass highlight
-                framebuffer::fill_rect_alpha(button_x + 4, button_y, button_w - 8, 1, 0x00FF66, 35);
+                framebuffer::fill_rect_alpha(button_x + 4, btn_y, btn_w - 8, 1, 0x00FF66, 35);
             } else if is_hover {
-                draw_rounded_rect(button_x as i32, button_y as i32, button_w, button_h, 8, 0xFF000D05);
-                framebuffer::fill_rect_alpha(button_x, button_y, button_w, button_h, 0x008833, 50);
+                draw_rounded_rect(button_x as i32, btn_y as i32, btn_w, btn_h, 8, 0xFF000D05);
+                framebuffer::fill_rect_alpha(button_x, btn_y, btn_w, btn_h, 0x008833, 50);
             }
             // Border
             let bdr = if w.focused { CHROME_BRIGHT } else if is_hover { CHROME_MID } else { CHROME_GHOST };
-            draw_rounded_rect_border(button_x as i32, button_y as i32, button_w, button_h, 8, bdr);
+            draw_rounded_rect_border(button_x as i32, btn_y as i32, btn_w, btn_h, 8, bdr);
             
             // Window icon (2-char)
             let icon_str = // Pattern matching — Rust's exhaustive branching construct.
@@ -11359,23 +11817,23 @@ match w.window_type {
                 _ => "::",
             };
             let icon_color = if w.focused { GREEN_PRIMARY } else { GREEN_GHOST };
-            self.draw_text_smooth((button_x + 8) as i32, (button_y + 10) as i32, icon_str, icon_color);
+            self.draw_text_smooth((button_x + 8) as i32, (btn_y + 10) as i32, icon_str, icon_color);
             
             // Window title (truncated)
             let title_maximum = 7;
             let title: String = w.title.chars().take(title_maximum).collect();
             let text_color = if w.focused { GREEN_PRIMARY } else { GREEN_TERTIARY };
-            self.draw_text_smooth((button_x + 28) as i32, (button_y + 10) as i32, &title, text_color);
+            self.draw_text_smooth((button_x + 28) as i32, (btn_y + 10) as i32, &title, text_color);
             
             // Active indicator (green glow bar at bottom)
             if w.focused {
-                let indicator_w = 60u32.minimum(button_w - 14);
-                let indicator_x = button_x + (button_w - indicator_w) / 2;
-                draw_rounded_rect((indicator_x) as i32, (y + TASKBAR_HEIGHT - 5) as i32, indicator_w, 3, 1, GREEN_PRIMARY);
-                framebuffer::fill_rect_alpha(indicator_x.saturating_sub(2), y + TASKBAR_HEIGHT - 7, indicator_w + 4, 2, GREEN_PRIMARY, 50);
+                let indicator_w = 60u32.min(btn_w - 14);
+                let indicator_x = button_x + (btn_w - indicator_w) / 2;
+                draw_rounded_rect((indicator_x) as i32, (y + TASKBAR_HEIGHT() - 5) as i32, indicator_w, 3, 1, GREEN_PRIMARY);
+                framebuffer::fill_rect_alpha(indicator_x.saturating_sub(2), y + TASKBAR_HEIGHT() - 7, indicator_w + 4, 2, GREEN_PRIMARY, 50);
             } else if !w.minimized {
-                let dot_x = button_x + button_w / 2 - 2;
-                framebuffer::fill_rect(dot_x, y + TASKBAR_HEIGHT - 4, 4, 2, GREEN_SUBTLE);
+                let dot_x = button_x + btn_w / 2 - 2;
+                framebuffer::fill_rect(dot_x, y + TASKBAR_HEIGHT() - 4, 4, 2, GREEN_SUBTLE);
             }
         }
         
@@ -11407,7 +11865,7 @@ match w.window_type {
         let bars_w = 36u32;
         let ind_x = tray_cursor - bars_w;
         let ind_y = y + 8;
-        let cpu_level = ((self.frame_count % 7) + 2).minimum(6) as u32;
+        let cpu_level = ((self.frame_count % 7) + 2).min(6) as u32;
         self.draw_text(ind_x as i32, (ind_y + 2) as i32, "C", GREEN_GHOST);
         let bar_start_x = ind_x + 12;
         for seg in 0..8u32 {
@@ -11418,8 +11876,8 @@ match w.window_type {
         }
         let memory_level = {
             let total = 16u32;
-            let used = ((self.windows.len() as u32 * 2) + 4).minimum(total);
-            (used * 8 / total).minimum(8)
+            let used = ((self.windows.len() as u32 * 2) + 4).min(total);
+            (used * 8 / total).min(8)
         };
         self.draw_text(ind_x as i32, (ind_y + 17) as i32, "M", GREEN_GHOST);
         for seg in 0..8u32 {
@@ -11450,7 +11908,7 @@ match w.window_type {
         // ── System tray indicators (WiFi, Volume, Battery) ──
         let tray_icons_w = 100u32;
         let tray_icons_x = tray_cursor - tray_icons_w;
-        self.draw_system_tray_indicators(tray_icons_x, y + 10);
+        self.draw_sys_tray_indicators(tray_icons_x, y + 10);
         let gear_hover = self.cursor_x >= (gear_x as i32 - 4) && self.cursor_x < (gear_x as i32 + 20)
             && self.cursor_y >= y as i32;
         let gear_color = if gear_hover { GREEN_PRIMARY } else { GREEN_TERTIARY };
@@ -11472,9 +11930,9 @@ match w.window_type {
         }
         let teeth: &[(i32, i32)] = &[(0, -8), (0, 8), (-8, 0), (8, 0), (-6, -6), (6, -6), (-6, 6), (6, 6)];
         for &(transmit, ty) in teeth {
-            let pixel = (gear_x as i32 + 8 + transmit) as u32;
+            let px = (gear_x as i32 + 8 + transmit) as u32;
             let py = (gear_y as i32 + 8 + ty) as u32;
-            framebuffer::fill_rect(pixel.saturating_sub(1), py.saturating_sub(1), 3, 3, gear_color);
+            framebuffer::fill_rect(px.saturating_sub(1), py.saturating_sub(1), 3, 3, gear_color);
         }
         
         // ── Show Desktop button (far right) ──
@@ -11482,8 +11940,8 @@ match w.window_type {
         let sd_w = 8u32;
         let sd_hover = self.cursor_x >= sd_x as i32 && self.cursor_y >= y as i32;
         let sd_color = if sd_hover { GREEN_MUTED } else { GREEN_GHOST };
-        framebuffer::fill_rect(sd_x, y, sd_w, TASKBAR_HEIGHT, sd_color);
-        framebuffer::fill_rect(sd_x, y + 6, 1, TASKBAR_HEIGHT - 12, GREEN_SUBTLE);
+        framebuffer::fill_rect(sd_x, y, sd_w, TASKBAR_HEIGHT(), sd_color);
+        framebuffer::fill_rect(sd_x, y + 6, 1, TASKBAR_HEIGHT() - 12, GREEN_SUBTLE);
     }
     
     fn get_time_string(&mut self) -> String {
@@ -11506,7 +11964,7 @@ match w.window_type {
         let menu_w = 480u32;
         let menu_h = 680u32;
         let menu_x = 4i32;
-        let menu_y = (self.height - TASKBAR_HEIGHT - menu_h - 8) as i32;
+        let menu_y = (self.height - TASKBAR_HEIGHT() - menu_h - 8) as i32;
         
         let is_hc = crate::accessibility::is_high_contrast();
         
@@ -11580,7 +12038,7 @@ match w.window_type {
         let items_start_y = search_y + search_h as i32 + 8;
         
         // ── App items — 2-column ICON GRID ──
-        let items: [(&str, &str, bool); 18] = [
+        let items: [(&str, &str, bool); 19] = [
             (">_", "Terminal", false),
             ("[]", "Files", false),
             ("##", "Calculator", false),
@@ -11595,6 +12053,7 @@ match w.window_type {
             ("GB", "Game Boy", false),
             ("Lb", "TrustLab", false),
             ("Mu", "Music Player", false),
+            ("Wv", "TrustWave", false),
             ("@)", "Settings", false),
             ("<-", "Exit Desktop", true),
             ("!!", "Shutdown", true),
@@ -11622,9 +12081,9 @@ match w.window_type {
                 }
             }
             
-            let column = (drawn % column_count as usize) as u32;
+            let col = (drawn % column_count as usize) as u32;
             let row = (drawn / column_count as usize) as u32;
-            let item_x = menu_x + 10 + column as i32 * (tile_w + tile_gap) as i32;
+            let item_x = menu_x + 10 + col as i32 * (tile_w + tile_gap) as i32;
             let item_y = items_start_y + (row as i32 * (tile_h + tile_gap) as i32);
             drawn += 1;
             
@@ -11699,7 +12158,7 @@ match w.window_type {
             (">>", "Reboot", 16),
         ];
         
-        for (pi, (icon, label, index)) in power_items.iter().enumerate() {
+        for (pi, (icon, label, idx)) in power_items.iter().enumerate() {
             if !search_lower.is_empty() {
                 let label_lower: String = label.chars().map(|c| if c.is_ascii_uppercase() { (c as u8 + 32) as char } else { c }).collect();
                 if !label_lower.contains(search_lower.as_str()) {
@@ -11714,7 +12173,7 @@ match w.window_type {
                 && self.cursor_x < menu_x + menu_w as i32
                 && self.cursor_y >= item_y 
                 && self.cursor_y < item_y + item_h as i32;
-            let is_selected = self.start_menu_selected == *index as i32;
+            let is_selected = self.start_menu_selected == *idx as i32;
             
             if is_hovered || is_selected {
                 draw_rounded_rect(menu_x + 8, item_y, menu_w - 16, item_h, 6, 0xFF1A0808);
@@ -11744,7 +12203,7 @@ match w.window_type {
         // CLASSIC WINDOW — Thick borders, transparency, right-side buttons
         // ═══════════════════════════════════════════════════════════════
         
-        let corner_radius = if window.maximized { 0u32 } else { WINDOW_BORDER_RADIUS };
+        let corner_radius = if window.maximized { 0u32 } else { WINDOW_BORDER_RADIUS() };
         
         // Drop shadow — tier-adaptive layers (5 on Full, 2 on Standard, 1 on Minimal)
         // Each fill_rect_alpha is expensive on old CPUs (read-modify-write per pixel)
@@ -11856,7 +12315,7 @@ match edge {
         // ═══════════════════════════════════════════════════════════════
         // TITLE BAR — Glass gradient with transparency
         // ═══════════════════════════════════════════════════════════════
-        let titlebar_h = TITLE_BAR_HEIGHT;
+        let titlebar_h = TITLE_BAR_HEIGHT();
         let tb_x = (x + 3) as u32;
         let tb_w = w.saturating_sub(6);
         if self.desktop_tier >= DesktopTier::Full {
@@ -11884,21 +12343,21 @@ match edge {
         // ═══════════════════════════════════════════════════════════════
         // Windows-style BUTTONS (right side: minimize / maximize / close)
         // ═══════════════════════════════════════════════════════════════
-        let button_w = 28u32;
-        let button_h = titlebar_h - 4;
-        let button_y = (y + 3) as u32;
+        let btn_w = 28u32;
+        let btn_h = titlebar_h - 4;
+        let btn_y = (y + 3) as u32;
         let mx = self.cursor_x;
         let my = self.cursor_y;
         
         // Close button (rightmost, red)
-        let close_x = x + w as i32 - button_w as i32 - 3;
-        let close_hover = mx >= close_x && mx < close_x + button_w as i32 
-            && my >= button_y as i32 && my < button_y as i32 + button_h as i32;
+        let close_x = x + w as i32 - btn_w as i32 - 3;
+        let close_hover = mx >= close_x && mx < close_x + btn_w as i32 
+            && my >= btn_y as i32 && my < btn_y as i32 + btn_h as i32;
         let close_bg = if close_hover { 0xFFCC3333 } else if window.focused { 0xFF2A1414 } else { 0xFF1A1A1A };
-        framebuffer::fill_rect(close_x as u32, button_y, button_w, button_h, close_bg);
+        framebuffer::fill_rect(close_x as u32, btn_y, btn_w, btn_h, close_bg);
         // X icon
-        let cx_c = close_x + button_w as i32 / 2;
-        let cy_c = button_y as i32 + button_h as i32 / 2;
+        let cx_c = close_x + btn_w as i32 / 2;
+        let cy_c = btn_y as i32 + btn_h as i32 / 2;
         let x_color = if close_hover { 0xFFFFFFFF } else if window.focused { 0xFFCC4444 } else { 0xFF666666 };
         for i in -3..=3i32 {
             framebuffer::put_pixel_fast((cx_c + i) as u32, (cy_c + i) as u32, x_color);
@@ -11909,13 +12368,13 @@ match edge {
         }
         
         // Maximize button (second from right, green)
-        let maximum_x = close_x - button_w as i32;
-        let maximum_hover = mx >= maximum_x && mx < maximum_x + button_w as i32 
-            && my >= button_y as i32 && my < button_y as i32 + button_h as i32;
+        let maximum_x = close_x - btn_w as i32;
+        let maximum_hover = mx >= maximum_x && mx < maximum_x + btn_w as i32 
+            && my >= btn_y as i32 && my < btn_y as i32 + btn_h as i32;
         let maximum_bg = if maximum_hover { 0xFF1A3A20 } else { 0xFF0E0E0E };
-        framebuffer::fill_rect(maximum_x as u32, button_y, button_w, button_h, maximum_bg);
-        let cx_m = maximum_x + button_w as i32 / 2;
-        let cy_m = button_y as i32 + button_h as i32 / 2;
+        framebuffer::fill_rect(maximum_x as u32, btn_y, btn_w, btn_h, maximum_bg);
+        let cx_m = maximum_x + btn_w as i32 / 2;
+        let cy_m = btn_y as i32 + btn_h as i32 / 2;
         let m_color = if maximum_hover { 0xFF44DD66 } else if window.focused { 0xFF227744 } else { 0xFF555555 };
         if window.maximized {
             // Overlapping squares (restore icon)
@@ -11940,13 +12399,13 @@ match edge {
         }
         
         // Minimize button (third from right, amber)
-        let minimum_x = maximum_x - button_w as i32;
-        let minimum_hover = mx >= minimum_x && mx < minimum_x + button_w as i32 
-            && my >= button_y as i32 && my < button_y as i32 + button_h as i32;
+        let minimum_x = maximum_x - btn_w as i32;
+        let minimum_hover = mx >= minimum_x && mx < minimum_x + btn_w as i32 
+            && my >= btn_y as i32 && my < btn_y as i32 + btn_h as i32;
         let minimum_bg = if minimum_hover { 0xFF2A2A10 } else { 0xFF0E0E0E };
-        framebuffer::fill_rect(minimum_x as u32, button_y, button_w, button_h, minimum_bg);
-        let cx_n = minimum_x + button_w as i32 / 2;
-        let cy_n = button_y as i32 + button_h as i32 / 2;
+        framebuffer::fill_rect(minimum_x as u32, btn_y, btn_w, btn_h, minimum_bg);
+        let cx_n = minimum_x + btn_w as i32 / 2;
+        let cy_n = btn_y as i32 + btn_h as i32 / 2;
         let n_color = if minimum_hover { 0xFFFFBB33 } else if window.focused { 0xFF886622 } else { 0xFF555555 };
         // Dash icon —
         for i in -3..=3i32 {
@@ -11955,9 +12414,9 @@ match edge {
         }
         
         // Button separator lines
-        framebuffer::fill_rect(minimum_x as u32, button_y, 1, button_h, CHROME_GHOST);
-        framebuffer::fill_rect(maximum_x as u32, button_y, 1, button_h, CHROME_GHOST);
-        framebuffer::fill_rect(close_x as u32, button_y, 1, button_h, CHROME_GHOST);
+        framebuffer::fill_rect(minimum_x as u32, btn_y, 1, btn_h, CHROME_GHOST);
+        framebuffer::fill_rect(maximum_x as u32, btn_y, 1, btn_h, CHROME_GHOST);
+        framebuffer::fill_rect(close_x as u32, btn_y, 1, btn_h, CHROME_GHOST);
         
         // Window icon (left side)
         let icon_x = x + 10;
@@ -11986,7 +12445,7 @@ match window.window_type {
         };
         let title_pixel_w = window.title.len() as i32 * 8;
         let title_center_x = x + (w as i32 / 2) - (title_pixel_w / 2);
-        let title_x = title_center_x.maximum(icon_x + 24);
+        let title_x = title_center_x.max(icon_x + 24);
         self.draw_text_smooth(title_x, y + (titlebar_h as i32 / 2) - 6, &window.title, text_color);
         
         // ═══════════════════════════════════════════════════════════════
@@ -12004,8 +12463,8 @@ match window.window_type {
         }
         
         // Set clip rect to window content area
-        let clip_x = (x + 3).maximum(0) as u32;
-        let clip_y = (content_y + 1).maximum(0) as u32;
+        let clip_x = (x + 3).max(0) as u32;
+        let clip_y = (content_y + 1).max(0) as u32;
         let clip_w = w.saturating_sub(6);
         let clip_h = content_h.saturating_sub(4);
         framebuffer::set_clip_rect(clip_x, clip_y, clip_w, clip_h);
@@ -12045,7 +12504,7 @@ match window.window_type {
     
     fn draw_window_content(&self, window: &Window) {
         let content_x = window.x + 8;
-        let content_y = window.y + TITLE_BAR_HEIGHT as i32 + 8;
+        let content_y = window.y + TITLE_BAR_HEIGHT() as i32 + 8;
         
         // TextEditor rendering is handled separately in draw_editor_windows
         if window.window_type == WindowType::TextEditor {
@@ -12153,6 +12612,14 @@ match window.window_type {
             }
             return;
         }
+
+        // TrustWave WiFi Analyzer
+        if window.window_type == WindowType::WifiAnalyzer {
+            if let Some(state) = self.wifi_analyzer_states.get(&window.id) {
+                crate::wifi_analyzer::draw(state, window.x, window.y, window.width, window.height);
+            }
+            return;
+        }
         
         // GameLab — Game Boy emulator analysis dashboard
         #[cfg(feature = "emulators")]
@@ -12197,18 +12664,18 @@ match window.window_type {
         // ═══════════════════════════════════════════════════════════════
         if window.window_type == WindowType::Terminal {
             let line_height = 16i32;
-            let content_area_h = (window.height as i32 - TITLE_BAR_HEIGHT as i32 - 16).maximum(0) as usize;
+            let content_area_h = (window.height as i32 - TITLE_BAR_HEIGHT() as i32 - 16).max(0) as usize;
             let visible_lines = if line_height as usize > 0 { content_area_h / line_height as usize } else { 0 };
             let total_lines = window.content.len();
             
             // Determine scroll range
             let scroll = window.scroll_offset;
             let start = scroll;
-            let end = (start + visible_lines).minimum(total_lines);
+            let end = (start + visible_lines).min(total_lines);
             
-            for index in start..end {
-                let line = &window.content[index];
-                let line_y = content_y + ((index - start) as i32 * line_height);
+            for idx in start..end {
+                let line = &window.content[idx];
+                let line_y = content_y + ((idx - start) as i32 * line_height);
                 if line_y >= window.y + window.height as i32 - 8 {
                     break;
                 }
@@ -12220,8 +12687,8 @@ match window.window_type {
                     let mut cx = content_x;
                     let mut current_color = COLOR_GREEN;
                     let mut chars = line.chars().peekable();
-                    while let Some(character) = chars.next() {
-                        if character == '\x01' {
+                    while let Some(ch) = chars.next() {
+                        if ch == '\x01' {
                             if let Some(&code) = chars.peek() {
                                 chars.next();
                                 current_color = // Pattern matching — Rust's exhaustive branching construct.
@@ -12241,7 +12708,7 @@ match code {
                                 };
                             }
                         } else {
-                            crate::framebuffer::draw_char_at(cx as u32, line_y as u32, character, current_color);
+                            crate::framebuffer::draw_char_at(cx as u32, line_y as u32, ch, current_color);
                             cx += 8;
                         }
                     }
@@ -12251,43 +12718,43 @@ match code {
                     if trimmed.starts_with("root@trustos") || trimmed.starts_with("$") {
                         // Styled prompt: user@host in cyan, path in amber, $ in green
                         let mut cx = content_x;
-                        if let Some(dollar_position) = line.find('$') {
+                        if let Some(dollar_pos) = line.find('$') {
                             // Draw everything before $
-                            let before = &line[..dollar_position];
+                            let before = &line[..dollar_pos];
                             // Find @ to split user@host
-                            if let Some(at_position) = before.find('@') {
+                            if let Some(at_pos) = before.find('@') {
                                 // "root" in bright green
-                                for character in before[..at_position].chars() {
-                                    crate::framebuffer::draw_char_at(cx as u32, line_y as u32, character, GREEN_PRIMARY);
+                                for ch in before[..at_pos].chars() {
+                                    crate::framebuffer::draw_char_at(cx as u32, line_y as u32, ch, GREEN_PRIMARY);
                                     cx += 8;
                                 }
                                 // "@" in dim
                                 crate::framebuffer::draw_char_at(cx as u32, line_y as u32, '@', GREEN_GHOST);
                                 cx += 8;
                                 // "trustos" in cyan
-                                let host_part = &before[at_position + 1..];
+                                let host_part = &before[at_pos + 1..];
                                 // Find : separator for path
                                 if let Some(colon_position) = host_part.find(':') {
-                                    for character in host_part[..colon_position].chars() {
-                                        crate::framebuffer::draw_char_at(cx as u32, line_y as u32, character, ACCENT_BLUE);
+                                    for ch in host_part[..colon_position].chars() {
+                                        crate::framebuffer::draw_char_at(cx as u32, line_y as u32, ch, ACCENT_BLUE);
                                         cx += 8;
                                     }
                                     crate::framebuffer::draw_char_at(cx as u32, line_y as u32, ':', GREEN_GHOST);
                                     cx += 8;
                                     // Path in amber
-                                    for character in host_part[colon_position + 1..].chars() {
-                                        crate::framebuffer::draw_char_at(cx as u32, line_y as u32, character, ACCENT_AMBER);
+                                    for ch in host_part[colon_position + 1..].chars() {
+                                        crate::framebuffer::draw_char_at(cx as u32, line_y as u32, ch, ACCENT_AMBER);
                                         cx += 8;
                                     }
                                 } else {
-                                    for character in host_part.chars() {
-                                        crate::framebuffer::draw_char_at(cx as u32, line_y as u32, character, ACCENT_BLUE);
+                                    for ch in host_part.chars() {
+                                        crate::framebuffer::draw_char_at(cx as u32, line_y as u32, ch, ACCENT_BLUE);
                                         cx += 8;
                                     }
                                 }
                             } else {
-                                for character in before.chars() {
-                                    crate::framebuffer::draw_char_at(cx as u32, line_y as u32, character, GREEN_SECONDARY);
+                                for ch in before.chars() {
+                                    crate::framebuffer::draw_char_at(cx as u32, line_y as u32, ch, GREEN_SECONDARY);
                                     cx += 8;
                                 }
                             }
@@ -12295,8 +12762,8 @@ match code {
                             crate::framebuffer::draw_char_at(cx as u32, line_y as u32, '$', GREEN_PRIMARY);
                             cx += 8;
                             // Rest of line (user input) in white
-                            for character in line[dollar_position + 1..].chars() {
-                                crate::framebuffer::draw_char_at(cx as u32, line_y as u32, character, TEXT_PRIMARY);
+                            for ch in line[dollar_pos + 1..].chars() {
+                                crate::framebuffer::draw_char_at(cx as u32, line_y as u32, ch, TEXT_PRIMARY);
                                 cx += 8;
                             }
                         } else {
@@ -12312,15 +12779,15 @@ match code {
             // ── Modern Scrollbar (rounded thumb) ──
             let scrollbar_w = 6u32;
             let scrollbar_x = (window.x + window.width as i32 - scrollbar_w as i32 - 3) as u32;
-            let track_y = (window.y + TITLE_BAR_HEIGHT as i32 + 2) as u32;
-            let track_h = window.height.saturating_sub(TITLE_BAR_HEIGHT + 4);
+            let track_y = (window.y + TITLE_BAR_HEIGHT() as i32 + 2) as u32;
+            let track_h = window.height.saturating_sub(TITLE_BAR_HEIGHT() + 4);
             
             if total_lines > visible_lines {
                 // Track (very subtle)
                 framebuffer::fill_rect_alpha(scrollbar_x, track_y, scrollbar_w, track_h, 0x0A1A0F, 80);
                 
                 // Rounded thumb
-                let thumb_h = ((visible_lines as u32 * track_h) / total_lines as u32).maximum(20);
+                let thumb_h = ((visible_lines as u32 * track_h) / total_lines as u32).max(20);
                 let maximum_scroll = total_lines.saturating_sub(visible_lines);
                 let thumb_y = if maximum_scroll > 0 {
                     track_y + ((scroll as u32 * (track_h - thumb_h)) / maximum_scroll as u32)
@@ -12355,8 +12822,8 @@ match window.window_type {
             0
         };
         
-        for (index, line) in window.content.iter().enumerate().skip(scroll) {
-            let i = index - scroll;
+        for (idx, line) in window.content.iter().enumerate().skip(scroll) {
+            let i = idx - scroll;
             let line_y = content_y + (i as i32 * 16);
             if line_y >= window.y + window.height as i32 - 8 {
                 break;
@@ -12364,9 +12831,9 @@ match window.window_type {
             
             // Check if this line is selected
             let is_selected = needs_selection 
-                && index >= sel_start 
-                && index < sel_end 
-                && (index - sel_start) == window.selected_index;
+                && idx >= sel_start 
+                && idx < sel_end 
+                && (idx - sel_start) == window.selected_index;
             
             if is_selected {
                 // Draw selection highlight
@@ -12395,14 +12862,14 @@ match window.window_type {
         for (win_id, wx, wy, ww, wh) in editor_windows {
             if let Some(editor) = self.editor_states.get_mut(&win_id) {
                 let content_x = wx;
-                let content_y = wy + TITLE_BAR_HEIGHT as i32;
+                let content_y = wy + TITLE_BAR_HEIGHT() as i32;
                 let content_w = ww;
-                let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT);
+                let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT());
                 
                 // Clip to window content area
                 framebuffer::set_clip_rect(
-                    (content_x + 2).maximum(0) as u32,
-                    content_y.maximum(0) as u32,
+                    (content_x + 2).max(0) as u32,
+                    content_y.max(0) as u32,
                     content_w.saturating_sub(4),
                     content_h,
                 );
@@ -12412,14 +12879,14 @@ match window.window_type {
                     content_x, content_y, content_w, content_h,
                     &|x, y, text, color| {
                         // Use the font renderer char by char
-                        for (i, character) in text.chars().enumerate() {
+                        for (i, ch) in text.chars().enumerate() {
                             let cx = (x + (i as i32 * 8)) as u32;
                             let cy = y as u32;
-                            crate::framebuffer::draw_char_at(cx, cy, character, color);
+                            crate::framebuffer::draw_char_at(cx, cy, ch, color);
                         }
                     },
-                    &|x, y, character, color| {
-                        crate::framebuffer::draw_char_at(x as u32, y as u32, character, color);
+                    &|x, y, ch, color| {
+                        crate::framebuffer::draw_char_at(x as u32, y as u32, ch, color);
                     },
                 );
                 
@@ -12439,24 +12906,24 @@ match window.window_type {
         for (win_id, wx, wy, ww, wh) in editor_windows {
             if let Some(state) = self.model_editor_states.get_mut(&win_id) {
                 let content_x = wx as u32;
-                let content_y = (wy + TITLE_BAR_HEIGHT as i32) as u32;
+                let content_y = (wy + TITLE_BAR_HEIGHT() as i32) as u32;
                 let content_w = ww;
-                let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT);
+                let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT());
                 
                 if content_w < 80 || content_h < 80 { continue; }
                 
                 // Render into a buffer then blit
-                let buffer_w = content_w as usize;
-                let buffer_h = content_h as usize;
-                let mut buffer = alloc::vec![0u32; buffer_w * buffer_h];
+                let buf_w = content_w as usize;
+                let buf_h = content_h as usize;
+                let mut buf = alloc::vec![0u32; buf_w * buf_h];
                 
-                state.render(&mut buffer, buffer_w, buffer_h);
+                state.render(&mut buf, buf_w, buf_h);
                 
                 // Blit buffer to framebuffer
-                for py in 0..buffer_h {
-                    for pixel in 0..buffer_w {
-                        let color = buffer[py * buffer_w + pixel];
-                        let sx = content_x + pixel as u32;
+                for py in 0..buf_h {
+                    for px in 0..buf_w {
+                        let color = buf[py * buf_w + px];
+                        let sx = content_x + px as u32;
                         let sy = content_y + py as u32;
                         framebuffer::put_pixel_fast(sx, sy, color);
                     }
@@ -12475,23 +12942,23 @@ match window.window_type {
         for (win_id, wx, wy, ww, wh) in game_windows {
             if let Some(state) = self.game3d_states.get_mut(&win_id) {
                 let content_x = wx as u32;
-                let content_y = (wy + TITLE_BAR_HEIGHT as i32) as u32;
+                let content_y = (wy + TITLE_BAR_HEIGHT() as i32) as u32;
                 let content_w = ww;
-                let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT);
+                let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT());
                 
                 if content_w < 80 || content_h < 60 { continue; }
                 
-                let buffer_w = content_w as usize;
-                let buffer_h = content_h as usize;
-                let mut buffer = alloc::vec![0u32; buffer_w * buffer_h];
+                let buf_w = content_w as usize;
+                let buf_h = content_h as usize;
+                let mut buf = alloc::vec![0u32; buf_w * buf_h];
                 
-                state.render(&mut buffer, buffer_w, buffer_h);
+                state.render(&mut buf, buf_w, buf_h);
                 
                 // Blit buffer to framebuffer
-                for py in 0..buffer_h {
-                    for pixel in 0..buffer_w {
-                        let color = buffer[py * buffer_w + pixel];
-                        let sx = content_x + pixel as u32;
+                for py in 0..buf_h {
+                    for px in 0..buf_w {
+                        let color = buf[py * buf_w + px];
+                        let sx = content_x + px as u32;
                         let sy = content_y + py as u32;
                         framebuffer::put_pixel_fast(sx, sy, color);
                     }
@@ -12510,25 +12977,25 @@ match window.window_type {
         for (win_id, wx, wy, ww, wh) in chess3d_windows {
             if let Some(state) = self.chess3d_states.get_mut(&win_id) {
                 let content_x = wx as u32;
-                let content_y = (wy + TITLE_BAR_HEIGHT as i32) as u32;
+                let content_y = (wy + TITLE_BAR_HEIGHT() as i32) as u32;
                 let content_w = ww;
-                let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT);
+                let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT());
                 
                 if content_w < 100 || content_h < 100 { continue; }
                 
                 state.tick();
                 
-                let buffer_w = content_w as usize;
-                let buffer_h = content_h as usize;
-                let mut buffer = alloc::vec![0u32; buffer_w * buffer_h];
+                let buf_w = content_w as usize;
+                let buf_h = content_h as usize;
+                let mut buf = alloc::vec![0u32; buf_w * buf_h];
                 
-                state.render(&mut buffer, buffer_w, buffer_h);
+                state.render(&mut buf, buf_w, buf_h);
                 
                 // Blit buffer to framebuffer
-                for py in 0..buffer_h {
-                    for pixel in 0..buffer_w {
-                        let color = buffer[py * buffer_w + pixel];
-                        let sx = content_x + pixel as u32;
+                for py in 0..buf_h {
+                    for px in 0..buf_w {
+                        let color = buf[py * buf_w + px];
+                        let sx = content_x + px as u32;
                         let sy = content_y + py as u32;
                         framebuffer::put_pixel_fast(sx, sy, color);
                     }
@@ -12548,22 +13015,22 @@ match window.window_type {
         for (win_id, wx, wy, ww, wh) in nes_windows {
             if let Some(emu) = self.nes_states.get_mut(&win_id) {
                 let content_x = wx as u32;
-                let content_y = (wy + TITLE_BAR_HEIGHT as i32) as u32;
+                let content_y = (wy + TITLE_BAR_HEIGHT() as i32) as u32;
                 let content_w = ww;
-                let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT);
+                let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT());
                 
                 if content_w < 80 || content_h < 60 { continue; }
                 
-                let buffer_w = content_w as usize;
-                let buffer_h = content_h as usize;
-                let mut buffer = alloc::vec![0u32; buffer_w * buffer_h];
+                let buf_w = content_w as usize;
+                let buf_h = content_h as usize;
+                let mut buf = alloc::vec![0u32; buf_w * buf_h];
                 
-                emu.render(&mut buffer, buffer_w, buffer_h);
+                emu.render(&mut buf, buf_w, buf_h);
                 
-                for py in 0..buffer_h {
-                    for pixel in 0..buffer_w {
-                        let color = buffer[py * buffer_w + pixel];
-                        let sx = content_x + pixel as u32;
+                for py in 0..buf_h {
+                    for px in 0..buf_w {
+                        let color = buf[py * buf_w + px];
+                        let sx = content_x + px as u32;
                         let sy = content_y + py as u32;
                         framebuffer::put_pixel_fast(sx, sy, color);
                     }
@@ -12585,9 +13052,9 @@ match window.window_type {
         for (win_id, wx, wy, ww, wh, _focused) in gb_windows {
             if let Some(emu) = self.gameboy_states.get_mut(&win_id) {
                 let content_x = wx as u32;
-                let content_y = (wy + TITLE_BAR_HEIGHT as i32) as u32;
+                let content_y = (wy + TITLE_BAR_HEIGHT() as i32) as u32;
                 let content_w = ww;
-                let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT);
+                let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT());
                 
                 if content_w < 80 || content_h < 60 { continue; }
                 
@@ -12609,20 +13076,20 @@ match emu.gpu.mode {
                 let bank_s = alloc::format!("BK:{}", emu.cart.rom_bank);
                 
                 let mut transmit = content_x + 4;
-                for character in pc_s.chars() { framebuffer::draw_char_at(transmit, content_y + 4, character, 0xFF58A6FF); transmit += 8; }
+                for ch in pc_s.chars() { framebuffer::draw_char_at(transmit, content_y + 4, ch, 0xFF58A6FF); transmit += 8; }
                 transmit += 8;
-                for character in ly_s.chars() { framebuffer::draw_char_at(transmit, content_y + 4, character, 0xFF80FFAA); transmit += 8; }
+                for ch in ly_s.chars() { framebuffer::draw_char_at(transmit, content_y + 4, ch, 0xFF80FFAA); transmit += 8; }
                 transmit += 8;
-                for character in mode_s.chars() { framebuffer::draw_char_at(transmit, content_y + 4, character, 0xFFD29922); transmit += 8; }
+                for ch in mode_s.chars() { framebuffer::draw_char_at(transmit, content_y + 4, ch, 0xFFD29922); transmit += 8; }
                 transmit += 8;
-                for character in bank_s.chars() { framebuffer::draw_char_at(transmit, content_y + 4, character, 0xFF9CD8B0); transmit += 8; }
+                for ch in bank_s.chars() { framebuffer::draw_char_at(transmit, content_y + 4, ch, 0xFF9CD8B0); transmit += 8; }
                 
                 if emu.cgb_mode {
                     transmit += 8;
                     let spd = if emu.key1 & 0x80 != 0 { "2x" } else { "1x" };
-                    for character in "CGB".chars() { framebuffer::draw_char_at(transmit, content_y + 4, character, 0xFF00FF88); transmit += 8; }
+                    for ch in "CGB".chars() { framebuffer::draw_char_at(transmit, content_y + 4, ch, 0xFF00FF88); transmit += 8; }
                     transmit += 4;
-                    for character in spd.chars() { framebuffer::draw_char_at(transmit, content_y + 4, character, 0xFF79C0FF); transmit += 8; }
+                    for ch in spd.chars() { framebuffer::draw_char_at(transmit, content_y + 4, ch, 0xFF79C0FF); transmit += 8; }
                 }
                 
                 // Menu buttons (right-aligned)
@@ -12633,8 +13100,8 @@ match emu.gpu.mode {
                 framebuffer::fill_rect(inp_button_x, content_y + 2, inp_button_w, 1, 0xFF2A4A38);
                 framebuffer::fill_rect(inp_button_x, content_y + menu_h - 3, inp_button_w, 1, 0xFF2A4A38);
                 let itx = inp_button_x + 4;
-                for (i, character) in "INPUT".chars().enumerate() {
-                    framebuffer::draw_char_at(itx + i as u32 * 8, content_y + 5, character, 0xFF00FF88);
+                for (i, ch) in "INPUT".chars().enumerate() {
+                    framebuffer::draw_char_at(itx + i as u32 * 8, content_y + 5, ch, 0xFF00FF88);
                 }
                 
                 // [LAB] button
@@ -12644,8 +13111,8 @@ match emu.gpu.mode {
                 framebuffer::fill_rect(lab_button_x, content_y + 2, lab_button_w, 1, 0xFF2A3A58);
                 framebuffer::fill_rect(lab_button_x, content_y + menu_h - 3, lab_button_w, 1, 0xFF2A3A58);
                 let ltx = lab_button_x + 4;
-                for (i, character) in "LAB".chars().enumerate() {
-                    framebuffer::draw_char_at(ltx + i as u32 * 8, content_y + 5, character, 0xFF58A6FF);
+                for (i, ch) in "LAB".chars().enumerate() {
+                    framebuffer::draw_char_at(ltx + i as u32 * 8, content_y + 5, ch, 0xFF58A6FF);
                 }
                 
                 // ── Game rendering below menu ──────────────────────────
@@ -12654,16 +13121,16 @@ match emu.gpu.mode {
                 
                 if game_h < 40 { continue; }
                 
-                let buffer_w = content_w as usize;
-                let buffer_h = game_h as usize;
-                let mut buffer = alloc::vec![0u32; buffer_w * buffer_h];
+                let buf_w = content_w as usize;
+                let buf_h = game_h as usize;
+                let mut buf = alloc::vec![0u32; buf_w * buf_h];
                 
-                emu.render(&mut buffer, buffer_w, buffer_h);
+                emu.render(&mut buf, buf_w, buf_h);
                 
-                for py in 0..buffer_h {
-                    for pixel in 0..buffer_w {
-                        let color = buffer[py * buffer_w + pixel];
-                        let sx = content_x + pixel as u32;
+                for py in 0..buf_h {
+                    for px in 0..buf_w {
+                        let color = buf[py * buf_w + px];
+                        let sx = content_x + px as u32;
                         let sy = game_y + py as u32;
                         framebuffer::put_pixel_fast(sx, sy, color);
                     }
@@ -12682,11 +13149,11 @@ match emu.gpu.mode {
         
         for (_win_id, wx, wy, ww, wh, linked_id) in input_windows {
             let cx = wx as u32;
-            let cy = (wy + TITLE_BAR_HEIGHT as i32) as u32;
+            let cy = (wy + TITLE_BAR_HEIGHT() as i32) as u32;
             let cw = ww;
-            let character = wh.saturating_sub(TITLE_BAR_HEIGHT);
+            let ch = wh.saturating_sub(TITLE_BAR_HEIGHT());
             
-            if cw < 60 || character < 40 { continue; }
+            if cw < 60 || ch < 40 { continue; }
             
             // Find the linked emulator
             let emu_opt = if let Some(lid) = linked_id {
@@ -12695,7 +13162,7 @@ match emu.gpu.mode {
                 self.gameboy_states.values().next()
             };
             
-            crate::game_lab::draw_input_window(emu_opt, cx, cy, cw, character);
+            crate::game_lab::draw_input_window(emu_opt, cx, cy, cw, ch);
         }
     }
     
@@ -12705,9 +13172,9 @@ match emu.gpu.mode {
         use crate::graphics::texture;
         
         let demo_x = window.x as u32 + 10;
-        let demo_y = window.y as u32 + TITLE_BAR_HEIGHT + 10;
+        let demo_y = window.y as u32 + TITLE_BAR_HEIGHT() + 10;
         let demo_w = window.width.saturating_sub(20);
-        let demo_h = window.height.saturating_sub(TITLE_BAR_HEIGHT + 20);
+        let demo_h = window.height.saturating_sub(TITLE_BAR_HEIGHT() + 20);
         
         if demo_w < 80 || demo_h < 80 {
             return;
@@ -12848,11 +13315,11 @@ unsafe {
     
     /// Draw a simple line using Bresenham's algorithm
     fn draw_line_simple(&self, x0: i32, y0: i32, x1: i32, y1: i32, color: u32) {
-        let dx = (x1 - x0).absolute();
-        let dy = -(y1 - y0).absolute();
+        let dx = (x1 - x0).abs();
+        let dy = -(y1 - y0).abs();
         let sx = if x0 < x1 { 1 } else { -1 };
         let sy = if y0 < y1 { 1 } else { -1 };
-        let mut error = dx + dy;
+        let mut err = dx + dy;
         let mut x = x0;
         let mut y = y0;
         
@@ -12862,13 +13329,13 @@ loop {
                 framebuffer::put_pixel_fast(x as u32, y as u32, color);
             }
             if x == x1 && y == y1 { break; }
-            let e2 = 2 * error;
+            let e2 = 2 * err;
             if e2 >= dy {
-                error += dy;
+                err += dy;
                 x += sx;
             }
             if e2 <= dx {
-                error += dx;
+                err += dx;
                 y += sy;
             }
         }
@@ -12877,9 +13344,9 @@ loop {
     /// Draw Snake game window content
     fn draw_snake_game(&self, window: &Window) {
         let game_x = window.x as u32 + 10;
-        let game_y = window.y as u32 + TITLE_BAR_HEIGHT + 10;
+        let game_y = window.y as u32 + TITLE_BAR_HEIGHT() + 10;
         let game_w = window.width.saturating_sub(20);
-        let game_h = window.height.saturating_sub(TITLE_BAR_HEIGHT + 20);
+        let game_h = window.height.saturating_sub(TITLE_BAR_HEIGHT() + 20);
         
         if game_w < 80 || game_h < 80 {
             return;
@@ -12907,28 +13374,28 @@ loop {
             // Draw grid background (subtle)
             for gy in 0..snake.grid_h {
                 for gx in 0..snake.grid_w {
-                    let pixel = grid_offset_x + gx as u32 * cell_size;
+                    let px = grid_offset_x + gx as u32 * cell_size;
                     let py = grid_offset_y + gy as u32 * cell_size;
-                    if pixel + cell_size < game_x + game_w && py + cell_size < game_y + game_h {
+                    if px + cell_size < game_x + game_w && py + cell_size < game_y + game_h {
                         let bg = if (gx + gy) % 2 == 0 { 0xFF0D120E } else { 0xFF0B100C };
-                        framebuffer::fill_rect(pixel, py, cell_size, cell_size, bg);
+                        framebuffer::fill_rect(px, py, cell_size, cell_size, bg);
                     }
                 }
             }
             
             // Draw snake
             for (i, &(sx, sy)) in snake.snake.iter().enumerate() {
-                let pixel = grid_offset_x + sx as u32 * cell_size;
+                let px = grid_offset_x + sx as u32 * cell_size;
                 let py = grid_offset_y + sy as u32 * cell_size;
                 let color = if i == 0 { 
                     0xFF00FF00 // Head is bright green
                 } else {
-                    let fade = (0xCC - (i as u32 * 8).minimum(0x80)) as u32;
+                    let fade = (0xCC - (i as u32 * 8).min(0x80)) as u32;
                     0xFF000000 | (fade << 8) // Body fades
                 };
                 
-                if pixel + cell_size < game_x + game_w && py + cell_size < game_y + game_h {
-                    framebuffer::fill_rect(pixel + 1, py + 1, cell_size - 2, cell_size - 2, color);
+                if px + cell_size < game_x + game_w && py + cell_size < game_y + game_h {
+                    framebuffer::fill_rect(px + 1, py + 1, cell_size - 2, cell_size - 2, color);
                     // Head has eyes
                     if i == 0 {
                         let (ex1, ey1, ex2, ey2) = // Pattern matching — Rust's exhaustive branching construct.
@@ -12938,8 +13405,8 @@ match snake.direction {
                             (0, -1) => (3, 2, cell_size-5, 2),                     // Up
                             _ => (3, cell_size-4, cell_size-5, cell_size-4),       // Down
                         };
-                        framebuffer::put_pixel_fast(pixel + ex1, py + ey1, 0xFF000000);
-                        framebuffer::put_pixel_fast(pixel + ex2, py + ey2, 0xFF000000);
+                        framebuffer::put_pixel_fast(px + ex1, py + ey1, 0xFF000000);
+                        framebuffer::put_pixel_fast(px + ex2, py + ey2, 0xFF000000);
                     }
                 }
             }
@@ -12988,7 +13455,7 @@ match snake.direction {
     }
     
     /// Draw a chess piece silhouette at pixel position (px, py) within a 48x48 cell
-    fn draw_chess_piece_sprite(pixel: u32, py: u32, piece: i8) {
+    fn draw_chess_piece_sprite(px: u32, py: u32, piece: i8) {
         let absolute_p = if piece < 0 { -piece } else { piece };
         let is_white = piece > 0;
 
@@ -13065,34 +13532,34 @@ match absolute_p {
 
         // Outline pass — draw each part inflated by 1px
         for &(x, y, w, h) in parts {
-            framebuffer::fill_rect(pixel + x - 1, py + y - 1, w + 2, h + 2, outline);
+            framebuffer::fill_rect(px + x - 1, py + y - 1, w + 2, h + 2, outline);
         }
         // Fill pass
         for &(x, y, w, h) in parts {
-            framebuffer::fill_rect(pixel + x, py + y, w, h, fill);
+            framebuffer::fill_rect(px + x, py + y, w, h, fill);
         }
         // Highlight pass — thin bright line on left side for 3D effect
         let hl = if is_white { 0x66FFFFFF_u32 } else { 0x44FFFFFF_u32 };
         for &(x, y, w, h) in parts {
             if w > 4 && h > 2 {
-                framebuffer::fill_rect(pixel + x + 1, py + y + 1, 1, h - 2, hl);
+                framebuffer::fill_rect(px + x + 1, py + y + 1, 1, h - 2, hl);
             }
         }
 
         // Bishop slit — distinctive diagonal cut
         if absolute_p == 3 {
             let slit_color = outline;
-            framebuffer::fill_rect(pixel + 22, py + 14, 4, 1, slit_color);
-            framebuffer::fill_rect(pixel + 21, py + 15, 4, 1, slit_color);
+            framebuffer::fill_rect(px + 22, py + 14, 4, 1, slit_color);
+            framebuffer::fill_rect(px + 21, py + 15, 4, 1, slit_color);
         }
     }
 
     /// Draw chess game board
     fn draw_chess_game(&self, window: &Window) {
         let game_x = window.x as u32 + 8;
-        let game_y = window.y as u32 + TITLE_BAR_HEIGHT + 4;
+        let game_y = window.y as u32 + TITLE_BAR_HEIGHT() + 4;
         let game_w = window.width.saturating_sub(16);
-        let game_h = window.height.saturating_sub(TITLE_BAR_HEIGHT + 8);
+        let game_h = window.height.saturating_sub(TITLE_BAR_HEIGHT() + 8);
         
         if game_w < 200 || game_h < 200 {
             return;
@@ -13131,8 +13598,8 @@ match chess.ai_depth { 1 => "Easy", 2 => "Med", _ => "Hard" };
             
             // ── Timer display ──
             if chess.timer_enabled {
-                let btime = crate::chess::ChessState::format_time(chess.black_time_mouse);
-                let wtime = crate::chess::ChessState::format_time(chess.white_time_mouse);
+                let btime = crate::chess::ChessState::format_time(chess.black_time_ms);
+                let wtime = crate::chess::ChessState::format_time(chess.white_time_ms);
                 // Black timer (top-right)
                 let timer_color_b = if !chess.white_turn && chess.timer_started { 0xFFCC4444 } else { GREEN_MUTED };
                 self.draw_text(board_x as i32 + board_size as i32 + 8, board_y as i32 + 4, &btime, timer_color_b);
@@ -13145,13 +13612,13 @@ match chess.ai_depth { 1 => "Easy", 2 => "Med", _ => "Hard" };
             
             // ── Draw board ──
             for row in 0..8u32 {
-                for column in 0..8u32 {
-                    let sq = (row * 8 + column) as usize;
-                    let pixel = board_x + column * cell_size;
+                for col in 0..8u32 {
+                    let sq = (row * 8 + col) as usize;
+                    let px = board_x + col * cell_size;
                     let py = board_y + row * cell_size;
                     
                     // Square colors — dark/light alternating
-                    let is_light = (row + column) % 2 == 0;
+                    let is_light = (row + col) % 2 == 0;
                     let mut bg = if is_light { 0xFF3D5A3D } else { 0xFF1A2E1A };
                     
                     // Highlight selected piece
@@ -13174,18 +13641,18 @@ match chess.ai_depth { 1 => "Easy", 2 => "Med", _ => "Hard" };
                         bg = 0xFF00AA44; // Bright green cursor
                     }
                     
-                    framebuffer::fill_rect(pixel, py, cell_size, cell_size, bg);
+                    framebuffer::fill_rect(px, py, cell_size, cell_size, bg);
                     
                     // Draw piece (skip if being dragged from this square)
                     let piece = chess.board[sq];
                     let is_being_dragged = chess.drag_from == Some(sq) && chess.dragging_piece.is_some();
                     if piece != 0 && !is_being_dragged {
-                        Self::draw_chess_piece_sprite(pixel, py, piece);
+                        Self::draw_chess_piece_sprite(px, py, piece);
                     }
                     
                     // Valid move dots (for empty target squares)
                     if chess.valid_moves.contains(&sq) && (piece == 0 || is_being_dragged) {
-                        let dot_x = pixel + cell_size / 2 - 3;
+                        let dot_x = px + cell_size / 2 - 3;
                         let dot_y = py + cell_size / 2 - 3;
                         framebuffer::fill_rect(dot_x, dot_y, 6, 6, 0xFF00FF66);
                     }
@@ -13194,14 +13661,14 @@ match chess.ai_depth { 1 => "Easy", 2 => "Med", _ => "Hard" };
                     if chess.valid_moves.contains(&sq) && piece != 0 && !is_being_dragged {
                         // Draw corner triangles to indicate capturable
                         for dx in 0..4u32 {
-                            framebuffer::put_pixel_fast(pixel + dx, py, 0xFF00FF66);
-                            framebuffer::put_pixel_fast(pixel, py + dx, 0xFF00FF66);
-                            framebuffer::put_pixel_fast(pixel + cell_size - 1 - dx, py, 0xFF00FF66);
-                            framebuffer::put_pixel_fast(pixel + cell_size - 1, py + dx, 0xFF00FF66);
-                            framebuffer::put_pixel_fast(pixel + dx, py + cell_size - 1, 0xFF00FF66);
-                            framebuffer::put_pixel_fast(pixel, py + cell_size - 1 - dx, 0xFF00FF66);
-                            framebuffer::put_pixel_fast(pixel + cell_size - 1 - dx, py + cell_size - 1, 0xFF00FF66);
-                            framebuffer::put_pixel_fast(pixel + cell_size - 1, py + cell_size - 1 - dx, 0xFF00FF66);
+                            framebuffer::put_pixel_fast(px + dx, py, 0xFF00FF66);
+                            framebuffer::put_pixel_fast(px, py + dx, 0xFF00FF66);
+                            framebuffer::put_pixel_fast(px + cell_size - 1 - dx, py, 0xFF00FF66);
+                            framebuffer::put_pixel_fast(px + cell_size - 1, py + dx, 0xFF00FF66);
+                            framebuffer::put_pixel_fast(px + dx, py + cell_size - 1, 0xFF00FF66);
+                            framebuffer::put_pixel_fast(px, py + cell_size - 1 - dx, 0xFF00FF66);
+                            framebuffer::put_pixel_fast(px + cell_size - 1 - dx, py + cell_size - 1, 0xFF00FF66);
+                            framebuffer::put_pixel_fast(px + cell_size - 1, py + cell_size - 1 - dx, 0xFF00FF66);
                         }
                     }
                 }
@@ -13248,10 +13715,10 @@ match chess.ai_depth { 1 => "Easy", 2 => "Med", _ => "Hard" };
             let center = board_x + bar_w / 2;
             if clamped > 0 {
                 let fill_w = ((clamped as u32) * (bar_w / 2)) / maximum_score as u32;
-                framebuffer::fill_rect(center, bar_y, fill_w.minimum(bar_w / 2), bar_h, 0xFFFFFFFF);
+                framebuffer::fill_rect(center, bar_y, fill_w.min(bar_w / 2), bar_h, 0xFFFFFFFF);
             } else if clamped < 0 {
                 let fill_w = (((-clamped) as u32) * (bar_w / 2)) / maximum_score as u32;
-                let fill_w = fill_w.minimum(bar_w / 2);
+                let fill_w = fill_w.min(bar_w / 2);
                 framebuffer::fill_rect(center - fill_w, bar_y, fill_w, bar_h, 0xFFCC4444);
             }
             // Center tick mark
@@ -13330,7 +13797,7 @@ match chess.phase {
         // Force fullscreen (maximized)
         let software = crate::framebuffer::width() as u32;
         let sh = crate::framebuffer::height() as u32;
-        if let Some(w) = self.windows.iterator_mut().find(|w| w.id == id) {
+        if let Some(w) = self.windows.iter_mut().find(|w| w.id == id) {
             w.saved_x = w.x;
             w.saved_y = w.y;
             w.saved_width = w.width;
@@ -13338,7 +13805,28 @@ match chess.phase {
             w.x = 0;
             w.y = 0;
             w.width = software;
-            w.height = sh - TASKBAR_HEIGHT;
+            w.height = sh - TASKBAR_HEIGHT();
+            w.maximized = true;
+        }
+        self.focus_window(id);
+        id
+    }
+
+    /// Open TrustWave WiFi Analyzer (fullscreen)
+    pub fn open_wifi_analyzer(&mut self) -> u32 {
+        let id = self.create_window("TrustWave \u{2014} WiFi Analyzer", 30, 30, 1200, 700, WindowType::WifiAnalyzer);
+        // Force fullscreen (maximized)
+        let software = crate::framebuffer::width() as u32;
+        let sh = crate::framebuffer::height() as u32;
+        if let Some(w) = self.windows.iter_mut().find(|w| w.id == id) {
+            w.saved_x = w.x;
+            w.saved_y = w.y;
+            w.saved_width = w.width;
+            w.saved_height = w.height;
+            w.x = 0;
+            w.y = 0;
+            w.width = software;
+            w.height = sh - TASKBAR_HEIGHT();
             w.maximized = true;
         }
         self.focus_window(id);
@@ -13356,8 +13844,8 @@ match chess.phase {
         let wh = window.height;
         if ww < 60 || wh < 80 { return; }
         
-        let content_y = wy + TITLE_BAR_HEIGHT as i32;
-        let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT + 28); // 28px for status bar
+        let content_y = wy + TITLE_BAR_HEIGHT() as i32;
+        let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT() + 28); // 28px for status bar
         let safe_x = if wx < 0 { 0u32 } else { wx as u32 };
         let safe_y = content_y as u32;
         
@@ -13365,38 +13853,38 @@ match chess.phase {
         framebuffer::fill_rect(safe_x + 2, safe_y, ww.saturating_sub(4), content_h, 0xFF080808);
         
         if let Some(state) = self.image_viewer_states.get(&window.id) {
-            if state.image_width > 0 && state.image_height > 0 && !state.pixels.is_empty() {
+            if state.img_width > 0 && state.img_height > 0 && !state.pixels.is_empty() {
                 // Calculate display size with zoom
                 let zoom_f = state.zoom as u32;
-                let display_w = (state.image_width * zoom_f) / 100;
-                let display_h = (state.image_height * zoom_f) / 100;
+                let display_w = (state.img_width * zoom_f) / 100;
+                let disp_h = (state.img_height * zoom_f) / 100;
                 
                 // Center image in window
                 let offset_x = (ww as i32 - display_w as i32) / 2 + state.pan_x;
-                let offset_y = (content_h as i32 - display_h as i32) / 2 + state.pan_y;
+                let offset_y = (content_h as i32 - disp_h as i32) / 2 + state.pan_y;
                 
                 // Draw pixel-by-pixel (nearest-neighbor scaling)
                 let screen_w = framebuffer::width();
                 let screen_h = framebuffer::height();
                 
-                for dy in 0..display_h {
+                for dy in 0..disp_h {
                     let screen_y = content_y + offset_y + dy as i32;
                     if screen_y < content_y || screen_y >= content_y + content_h as i32 { continue; }
                     if screen_y < 0 || screen_y >= screen_h as i32 { continue; }
                     
                     // Source row
-                    let source_y = (dy * state.image_height) / display_h.maximum(1);
-                    if source_y >= state.image_height { continue; }
+                    let source_y = (dy * state.img_height) / disp_h.max(1);
+                    if source_y >= state.img_height { continue; }
                     
                     for dx in 0..display_w {
                         let screen_x = wx + offset_x + dx as i32;
                         if screen_x < wx + 2 || screen_x >= wx + ww as i32 - 2 { continue; }
                         if screen_x < 0 || screen_x >= screen_w as i32 { continue; }
                         
-                        let source_x = (dx * state.image_width) / display_w.maximum(1);
-                        if source_x >= state.image_width { continue; }
+                        let source_x = (dx * state.img_width) / display_w.max(1);
+                        if source_x >= state.img_width { continue; }
                         
-                        let pixel = state.pixels[(source_y * state.image_width + source_x) as usize];
+                        let pixel = state.pixels[(source_y * state.img_width + source_x) as usize];
                         // Skip fully transparent pixels
                         if (pixel >> 24) == 0 { continue; }
                         framebuffer::put_pixel_fast(screen_x as u32, screen_y as u32, pixel | 0xFF000000);
@@ -13408,9 +13896,9 @@ match chess.phase {
                 framebuffer::fill_rect(safe_x + 2, status_y, ww.saturating_sub(4), 24, 0xFF0A1A12);
                 framebuffer::draw_hline(safe_x + 2, status_y, ww.saturating_sub(4), 0xFF1A2A1A);
                 
-                let information = alloc::format!("{}x{} | Zoom: {}% | +/- to zoom | Arrows to pan", 
-                    state.image_width, state.image_height, state.zoom);
-                self.draw_text_smooth(wx + 10, status_y as i32 + 5, &information, GREEN_SUBTLE);
+                let info = alloc::format!("{}x{} | Zoom: {}% | +/- to zoom | Arrows to pan", 
+                    state.img_width, state.img_height, state.zoom);
+                self.draw_text_smooth(wx + 10, status_y as i32 + 5, &info, GREEN_SUBTLE);
             } else {
                 // No image data — show placeholder
                 self.draw_text_smooth(wx + ww as i32 / 2 - 60, content_y + content_h as i32 / 2, "No image loaded", GREEN_GHOST);
@@ -13430,8 +13918,8 @@ match self.windows.iter().find(|w| w.focused && w.window_type == WindowType::Ima
         if let Some(state) = self.image_viewer_states.get_mut(&win_id) {
                         // Pattern matching — Rust's exhaustive branching construct.
 match key {
-                b'+' | b'=' => { state.zoom = (state.zoom + 10).minimum(500); }
-                b'-' => { state.zoom = state.zoom.saturating_sub(10).maximum(10); }
+                b'+' | b'=' => { state.zoom = (state.zoom + 10).min(500); }
+                b'-' => { state.zoom = state.zoom.saturating_sub(10).max(10); }
                 b'0' => { state.zoom = 100; state.pan_x = 0; state.pan_y = 0; } // Reset
                 _ => {
                     if key == crate::keyboard::KEY_UP { state.pan_y += 20; }
@@ -13454,7 +13942,7 @@ match key {
         let wh = window.height;
         if ww < 80 || wh < 100 { return; }
         
-        let content_y_start = wy + TITLE_BAR_HEIGHT as i32;
+        let content_y_start = wy + TITLE_BAR_HEIGHT() as i32;
         let safe_x = if wx < 0 { 0u32 } else { wx as u32 };
         
         // Sidebar offset
@@ -13476,38 +13964,38 @@ match key {
         let toolbar_h = 36u32;
         framebuffer::fill_rect(safe_x, content_y_start as u32, ww, toolbar_h, bg_toolbar);
         
-        let button_y = content_y_start + 7;
+        let btn_y = content_y_start + 7;
         let button_size = 22u32;
         // Back/Forward/Up buttons
         let can_back = self.fm_states.get(&window.id).map(|f| f.can_go_back()).unwrap_or(false);
         let back_c = if can_back { GREEN_SECONDARY } else { 0xFF1A2A1A };
-        draw_rounded_rect(wx + 8, button_y, button_size, button_size, 4, 0xFF101810);
-        self.draw_text(wx + 14, button_y + 4, "<", back_c);
+        draw_rounded_rect(wx + 8, btn_y, button_size, button_size, 4, 0xFF101810);
+        self.draw_text(wx + 14, btn_y + 4, "<", back_c);
         
         let can_fwd = self.fm_states.get(&window.id).map(|f| f.can_go_forward()).unwrap_or(false);
         let fwd_c = if can_fwd { GREEN_SECONDARY } else { 0xFF1A2A1A };
-        draw_rounded_rect(wx + 34, button_y, button_size, button_size, 4, 0xFF101810);
-        self.draw_text(wx + 40, button_y + 4, ">", fwd_c);
+        draw_rounded_rect(wx + 34, btn_y, button_size, button_size, 4, 0xFF101810);
+        self.draw_text(wx + 40, btn_y + 4, ">", fwd_c);
         
-        draw_rounded_rect(wx + 60, button_y, button_size, button_size, 4, 0xFF101810);
-        draw_rounded_rect_border(wx + 60, button_y, button_size, button_size, 4, GREEN_GHOST);
-        self.draw_text(wx + 66, button_y + 4, "^", GREEN_SUBTLE);
+        draw_rounded_rect(wx + 60, btn_y, button_size, button_size, 4, 0xFF101810);
+        draw_rounded_rect_border(wx + 60, btn_y, button_size, button_size, 4, GREEN_GHOST);
+        self.draw_text(wx + 66, btn_y + 4, "^", GREEN_SUBTLE);
         
         // Path bar
         let path_x = wx + 90;
         let path_w = (ww as i32).saturating_sub(106);
         if path_w > 10 {
-            draw_rounded_rect(path_x, button_y, path_w as u32, button_size, 6, 0xFF080E08);
-            draw_rounded_rect_border(path_x, button_y, path_w as u32, button_size, 6, separator);
+            draw_rounded_rect(path_x, btn_y, path_w as u32, button_size, 6, 0xFF080E08);
+            draw_rounded_rect_border(path_x, btn_y, path_w as u32, button_size, 6, separator);
             let current_path = window.file_path.as_deref().unwrap_or("/");
-            self.draw_text_smooth(path_x + 10, button_y + 5, current_path, GREEN_PRIMARY);
+            self.draw_text_smooth(path_x + 10, btn_y + 5, current_path, GREEN_PRIMARY);
         }
         
         framebuffer::draw_hline(safe_x, (content_y_start + toolbar_h as i32) as u32, ww, separator);
         
         // ── Sidebar (same as list view) ──
         let body_y = content_y_start + toolbar_h as i32 + 1;
-        let body_h = wh.saturating_sub(TITLE_BAR_HEIGHT + toolbar_h + 1 + 26);
+        let body_h = wh.saturating_sub(TITLE_BAR_HEIGHT() + toolbar_h + 1 + 26);
         
         if sidebar_w > 0 && body_h > 20 {
             framebuffer::fill_rect(safe_x, body_y as u32, sidebar_w, body_h, bg_sidebar);
@@ -13559,16 +14047,16 @@ match key {
         let grid_start_y = body_y as u32;
         let grid_area_h = body_h.saturating_sub(2);
         if grid_area_h < 8 { return; }
-        framebuffer::fill_rect(grid_x.maximum(0) as u32, grid_start_y, grid_w, grid_area_h, bg_dark);
+        framebuffer::fill_rect(grid_x.max(0) as u32, grid_start_y, grid_w, grid_area_h, bg_dark);
         
         // Grid parameters
         let icon_cell_w = 90u32;
         let icon_cell_h = 80u32;
-        let cols = ((grid_w.saturating_sub(20)) / icon_cell_w).maximum(1);
+        let cols = ((grid_w.saturating_sub(20)) / icon_cell_w).max(1);
         let padding_x = (grid_w.saturating_sub(cols * icon_cell_w)) / 2;
         
         // Parse file entries
-        let file_start_index = 5usize.minimum(window.content.len());
+        let file_start_index = 5usize.min(window.content.len());
         let file_end_index = if window.content.len() > file_start_index + 2 { window.content.len() - 2 } else { window.content.len() };
         let file_entries: Vec<&str> = if file_end_index > file_start_index {
             window.content[file_start_index..file_end_index].iter().map(|s| s.as_str()).collect()
@@ -13578,24 +14066,24 @@ match key {
             self.draw_text_smooth(grid_x + 40, grid_start_y as i32 + 30, "This folder is empty.", GREEN_GHOST);
         }
         
-        let maximum_visible_rows = (grid_area_h / icon_cell_h).maximum(1) as usize;
+        let maximum_visible_rows = (grid_area_h / icon_cell_h).max(1) as usize;
         let scroll_row = window.scroll_offset / cols as usize;
         
-        for (index, entry) in file_entries.iter().enumerate() {
-            let row = index / cols as usize;
-            let column = index % cols as usize;
+        for (idx, entry) in file_entries.iter().enumerate() {
+            let row = idx / cols as usize;
+            let col = idx % cols as usize;
             
             // Scroll check
             if row < scroll_row { continue; }
             let display_row = row - scroll_row;
             if display_row >= maximum_visible_rows { break; }
             
-            let cell_x = grid_x.maximum(0) as u32 + padding_x + column as u32 * icon_cell_w;
+            let cell_x = grid_x.max(0) as u32 + padding_x + col as u32 * icon_cell_w;
             let cell_y = grid_start_y + display_row as u32 * icon_cell_h;
             if cell_y + icon_cell_h > grid_start_y + grid_area_h { break; }
             
-            let is_selected = index == window.selected_index;
-            let is_directory = entry.contains("[D]");
+            let is_selected = idx == window.selected_index;
+            let is_dir = entry.contains("[D]");
             
             // Selection background
             if is_selected {
@@ -13606,7 +14094,7 @@ match key {
             // Draw icon (larger in grid view)
             let icon_x = cell_x + (icon_cell_w - 32) / 2;
             let icon_y = cell_y + 6;
-            if is_directory {
+            if is_dir {
                 // Large folder icon
                 let fc = if is_selected { 0xFFEEBB40 } else { icon_folder };
                 framebuffer::fill_rect(icon_x, icon_y, 16, 6, fc);
@@ -13647,7 +14135,7 @@ match key {
             
             // Filename (centered, truncated)
             let name = Self::extract_name_from_entry(entry);
-            let maximum_chars = (icon_cell_w / 8).minimum(10) as usize;
+            let maximum_chars = (icon_cell_w / 8).min(10) as usize;
             let display_name: String = if name.len() > maximum_chars {
                 let mut s: String = name.chars().take(maximum_chars - 2).collect();
                 s.push_str("..");
@@ -13686,22 +14174,22 @@ match key {
     // ═══════════════════════════════════════════════════════════════════════
     
     fn handle_file_manager_click(&mut self, x: i32, y: i32, window_id: u32) {
-        let (wtype, wx, wy, ww, wh, file_path_opt, content_length, selected_index) = {
+        let (wtype, wx, wy, ww, wh, file_path_opt, content_len, selected_idx) = {
             if let Some(w) = self.windows.iter().find(|w| w.id == window_id && w.window_type == WindowType::FileManager) {
                 (w.window_type, w.x, w.y, w.width, w.height, w.file_path.clone(), w.content.len(), w.selected_index)
             } else { return; }
         };
         
-        let content_y = wy + TITLE_BAR_HEIGHT as i32;
+        let content_y = wy + TITLE_BAR_HEIGHT() as i32;
         let toolbar_h = 36i32;
         let sidebar_w = self.fm_states.get(&window_id).map(|f| if f.sidebar_collapsed { 0i32 } else { f.sidebar_width as i32 }).unwrap_or(180);
         
         // ── Toolbar buttons ──
-        let button_y = content_y + 7;
+        let btn_y = content_y + 7;
         let button_size = 22i32;
         
         // Back button (◄)
-        if x >= wx + 8 && x < wx + 8 + button_size && y >= button_y && y < button_y + button_size {
+        if x >= wx + 8 && x < wx + 8 + button_size && y >= btn_y && y < btn_y + button_size {
             // Use history-based back navigation
             let back_path = self.fm_states.get_mut(&window_id).and_then(|f| f.go_back().map(|s| String::from(s)));
             if let Some(path) = back_path {
@@ -13710,7 +14198,7 @@ match key {
             return;
         }
         // Forward button (►)
-        if x >= wx + 34 && x < wx + 34 + button_size && y >= button_y && y < button_y + button_size {
+        if x >= wx + 34 && x < wx + 34 + button_size && y >= btn_y && y < btn_y + button_size {
             let fwd_path = self.fm_states.get_mut(&window_id).and_then(|f| f.go_forward().map(|s| String::from(s)));
             if let Some(path) = fwd_path {
                 self.navigate_file_manager_to(window_id, &path);
@@ -13718,7 +14206,7 @@ match key {
             return;
         }
         // Up button (▲)
-        if x >= wx + 60 && x < wx + 60 + button_size && y >= button_y && y < button_y + button_size {
+        if x >= wx + 60 && x < wx + 60 + button_size && y >= btn_y && y < btn_y + button_size {
             self.navigate_file_manager("..");
             return;
         }
@@ -13727,7 +14215,7 @@ match key {
         let search_w = if ww > 400 { 180i32 } else if ww > 300 { 120i32 } else { 0i32 };
         if search_w > 0 {
             let sx = wx + ww as i32 - search_w - 8;
-            if x >= sx && x < sx + search_w && y >= button_y && y < button_y + button_size {
+            if x >= sx && x < sx + search_w && y >= btn_y && y < btn_y + button_size {
                 if let Some(fm) = self.fm_states.get_mut(&window_id) {
                     fm.search_focused = true;
                 }
@@ -13770,7 +14258,7 @@ match key {
         }
         
         // ── Status bar view mode buttons (bottom-right) ──
-        let body_h = wh.saturating_sub(TITLE_BAR_HEIGHT + toolbar_h as u32 + 1 + 26);
+        let body_h = wh.saturating_sub(TITLE_BAR_HEIGHT() + toolbar_h as u32 + 1 + 26);
         let status_y = content_y + toolbar_h + 1 + body_h as i32;
         if y >= status_y && y < status_y + 24 && ww > 300 {
             let vb_x = wx + ww as i32 - 120;
@@ -13829,8 +14317,8 @@ match key {
         
         // ── Click on file in content area ──
         let is_grid = self.fm_view_modes.get(&window_id).copied().unwrap_or(FileManagerViewMode::List) == FileManagerViewMode::IconGrid;
-        let file_start_index = 5usize.minimum(content_length);
-        let file_end_index = if content_length > file_start_index + 2 { content_length - 2 } else { content_length };
+        let file_start_index = 5usize.min(content_len);
+        let file_end_index = if content_len > file_start_index + 2 { content_len - 2 } else { content_len };
         let file_count = file_end_index.saturating_sub(file_start_index);
         
         if is_grid {
@@ -13840,24 +14328,24 @@ match key {
             let icon_cell_h = 80i32;
             let content_x = wx + sidebar_w;
             let grid_w = ww as i32 - sidebar_w;
-            let cols = ((grid_w - 20) / icon_cell_w).maximum(1);
+            let cols = ((grid_w - 20) / icon_cell_w).max(1);
             let padding_x = (grid_w - cols * icon_cell_w) / 2;
             let scroll_row = (self.windows.iter().find(|w| w.id == window_id).map(|w| w.scroll_offset).unwrap_or(0) / cols as usize) as i32;
             
             let relative_x = x - content_x - padding_x;
             let relative_y = y - grid_start_y;
             if relative_x >= 0 && relative_y >= 0 {
-                let column = relative_x / icon_cell_w;
+                let col = relative_x / icon_cell_w;
                 let display_row = relative_y / icon_cell_h;
                 let actual_row = display_row + scroll_row;
-                let index = actual_row * cols + column;
-                if index >= 0 && (index as usize) < file_count {
-                    let click_index = index as usize;
-                    if click_index == selected_index && crate::mouse::is_double_click() {
+                let idx = actual_row * cols + col;
+                if idx >= 0 && (idx as usize) < file_count {
+                    let click_index = idx as usize;
+                    if click_index == selected_idx && crate::mouse::is_double_click() {
                         self.open_selected_file_at(window_id, click_index);
                         return;
                     }
-                    if let Some(w) = self.windows.iterator_mut().find(|w| w.id == window_id) {
+                    if let Some(w) = self.windows.iter_mut().find(|w| w.id == window_id) {
                         w.selected_index = click_index;
                     }
                 }
@@ -13874,11 +14362,11 @@ match key {
                 let scroll_offset = self.windows.iter().find(|w| w.id == window_id).map(|w| w.scroll_offset).unwrap_or(0);
                 let click_index = scroll_offset + (relative_y / row_h) as usize;
                 if click_index < file_count {
-                    if click_index == selected_index && crate::mouse::is_double_click() {
+                    if click_index == selected_idx && crate::mouse::is_double_click() {
                         self.open_selected_file_at(window_id, click_index);
                         return;
                     }
-                    if let Some(w) = self.windows.iterator_mut().find(|w| w.id == window_id) {
+                    if let Some(w) = self.windows.iter_mut().find(|w| w.id == window_id) {
                         w.selected_index = click_index;
                     }
                 }
@@ -13894,7 +14382,7 @@ match key {
             w.focused = w.id == window_id;
         }
         // Set path directly and refresh
-        if let Some(window) = self.windows.iterator_mut().find(|w| w.id == window_id) {
+        if let Some(window) = self.windows.iter_mut().find(|w| w.id == window_id) {
             window.file_path = Some(String::from(path));
         }
         self.refresh_file_manager(path);
@@ -13909,20 +14397,20 @@ match key {
     }
     
     fn open_selected_file_at(&mut self, window_id: u32, entry_index: usize) {
-        let (filename, is_directory) = {
+        let (filename, is_dir) = {
             if let Some(w) = self.windows.iter().find(|w| w.id == window_id) {
-                let file_start_index = 5usize.minimum(w.content.len());
+                let file_start_index = 5usize.min(w.content.len());
                 let actual_index = file_start_index + entry_index;
                 if actual_index < w.content.len().saturating_sub(2) {
                     let line = &w.content[actual_index];
-                    let is_directory = line.contains("[D]");
+                    let is_dir = line.contains("[D]");
                     let name = Self::extract_name_from_entry(line);
-                    (String::from(name), is_directory)
+                    (String::from(name), is_dir)
                 } else { return; }
             } else { return; }
         };
         
-        if is_directory {
+        if is_dir {
             self.navigate_file_manager(&filename);
         } else {
             self.open_file(&filename);
@@ -13935,11 +14423,11 @@ match key {
     
     fn start_file_drag(&mut self, window_id: u32) {
         if let Some(w) = self.windows.iter().find(|w| w.id == window_id && w.window_type == WindowType::FileManager) {
-            let file_start_index = 5usize.minimum(w.content.len());
+            let file_start_index = 5usize.min(w.content.len());
             let actual_index = file_start_index + w.selected_index;
             if actual_index < w.content.len().saturating_sub(2) {
                 let line = &w.content[actual_index];
-                let is_directory = line.contains("[D]");
+                let is_dir = line.contains("[D]");
                 let name = Self::extract_name_from_entry(line);
                 if name == ".." { return; }
                 let current_path = w.file_path.clone().unwrap_or_else(|| String::from("/"));
@@ -13951,7 +14439,7 @@ match key {
                 self.drag_state = Some(DragState {
                     source_path: full_path,
                     filename: String::from(name),
-                    is_directory,
+                    is_dir,
                     start_x: self.cursor_x,
                     start_y: self.cursor_y,
                     current_x: self.cursor_x,
@@ -13988,7 +14476,7 @@ match key {
                 };
                 
                 // Copy file
-                if !drag.is_directory {
+                if !drag.is_dir {
                     if let Ok(data) = crate::ramfs::with_filesystem(|fs| fs.read_file(&drag.source_path).map(|d| d.to_vec())) {
                         let _ = crate::ramfs::with_filesystem(|fs| fs.write_file(&dest_path, &data));
                         crate::serial_println!("[DnD] Copied {} -> {}", drag.source_path, dest_path);
@@ -14000,7 +14488,7 @@ match key {
                 
                 // Refresh target file manager
                 self.refresh_file_manager_by_id(target.id, &target_path);
-            } else if y >= (self.height - TASKBAR_HEIGHT) as i32 {
+            } else if y >= (self.height - TASKBAR_HEIGHT()) as i32 {
                 // Dropped on taskbar — ignore
                 crate::serial_println!("[DnD] Dropped on taskbar, ignoring");
             } else {
@@ -14021,7 +14509,7 @@ match key {
             draw_rounded_rect_border(gx, gy, 70, 22, 4, GREEN_PRIMARY);
             
             // Icon
-            if drag.is_directory {
+            if drag.is_dir {
                 framebuffer::fill_rect((gx + 4) as u32, (gy + 4) as u32, 14, 14, 0xFFDDAA30);
             } else {
                 framebuffer::fill_rect((gx + 4) as u32, (gy + 4) as u32, 12, 14, 0xFF60AA80);
@@ -14053,7 +14541,7 @@ match key {
     
     fn file_clipboard_copy(&mut self, cut: bool) {
         if let Some(w) = self.windows.iter().find(|w| w.focused && w.window_type == WindowType::FileManager) {
-            let file_start_index = 5usize.minimum(w.content.len());
+            let file_start_index = 5usize.min(w.content.len());
             let actual_index = file_start_index + w.selected_index;
             if actual_index < w.content.len().saturating_sub(2) {
                 let line = &w.content[actual_index];
@@ -14131,11 +14619,11 @@ match key {
             for r in 0..column_h {
                 let ry = column_y_start + r as i32 * 14;
                 if ry >= 0 && ry < sh as i32 - 14 {
-                    let brightness = (255 - r * 12).maximum(20);
+                    let brightness = (255 - r * 12).max(20);
                     let color = (brightness << 8) | 0xFF000000;
                     let character_value = ((seed.wrapping_add(r)) % 26 + 65) as u8 as char;
-                    let mut buffer = [0u8; 4];
-                    let character_str = character_value.encode_utf8(&mut buffer);
+                    let mut buf = [0u8; 4];
+                    let character_str = character_value.encode_utf8(&mut buf);
                     framebuffer::draw_text(character_str, column_x, ry as u32, color);
                 }
             }
@@ -14144,25 +14632,25 @@ match key {
         // Center panel
         let panel_w = 360u32;
         let panel_h = 280u32;
-        let pixel = (software - panel_w) / 2;
+        let px = (software - panel_w) / 2;
         let py = (sh - panel_h) / 2;
         let shake_off = if self.lock_screen_shake > 0 {
             let amplitude = (self.lock_screen_shake as i32 * 3) % 13 - 6;
             amplitude
         } else { 0 };
-        let pixel = (pixel as i32 + shake_off) as u32;
+        let px = (px as i32 + shake_off) as u32;
         
         // Panel background (frosted glass)
-        framebuffer::fill_rect_alpha(pixel, py, panel_w, panel_h, 0x0C1A12, 200);
-        draw_rounded_rect(pixel as i32, py as i32, panel_w, panel_h, 12, 0xFF0A1A0F);
-        draw_rounded_rect_border(pixel as i32, py as i32, panel_w, panel_h, 12, GREEN_MUTED);
+        framebuffer::fill_rect_alpha(px, py, panel_w, panel_h, 0x0C1A12, 200);
+        draw_rounded_rect(px as i32, py as i32, panel_w, panel_h, 12, 0xFF0A1A0F);
+        draw_rounded_rect_border(px as i32, py as i32, panel_w, panel_h, 12, GREEN_MUTED);
         
         // TrustOS logo text
-        let title_x = (pixel + panel_w / 2).saturating_sub(40) as i32;
+        let title_x = (px + panel_w / 2).saturating_sub(40) as i32;
         self.draw_text_smooth(title_x, (py + 30) as i32, "TrustOS", GREEN_PRIMARY);
         
         // Lock icon (padlock shape)
-        let lock_x = pixel + panel_w / 2 - 12;
+        let lock_x = px + panel_w / 2 - 12;
         let lock_y = py + 70;
         // Shackle (arc)
         framebuffer::fill_rect(lock_x, lock_y, 24, 3, GREEN_SUBTLE);
@@ -14173,25 +14661,25 @@ match key {
         framebuffer::fill_rect(lock_x + 8, lock_y + 22, 8, 10, 0xFF040A08);
         
         // "Locked" text
-        let lock_text_x = (pixel + panel_w / 2).saturating_sub(24) as i32;
+        let lock_text_x = (px + panel_w / 2).saturating_sub(24) as i32;
         self.draw_text_smooth(lock_text_x, (lock_y + 48) as i32, "Locked", GREEN_TERTIARY);
         
         // Clock (large)
         let time = &self.cached_time_str;
         if !time.is_empty() {
-            let time_x = (pixel + panel_w / 2).saturating_sub((time.len() as u32 * 8) / 2) as i32;
+            let time_x = (px + panel_w / 2).saturating_sub((time.len() as u32 * 8) / 2) as i32;
             self.draw_text_smooth(time_x, (py + 150) as i32, time, GREEN_PRIMARY);
         }
         let date = &self.cached_date_str;
         if !date.is_empty() {
-            let date_x = (pixel + panel_w / 2).saturating_sub((date.len() as u32 * 8) / 2) as i32;
+            let date_x = (px + panel_w / 2).saturating_sub((date.len() as u32 * 8) / 2) as i32;
             self.draw_text_smooth(date_x, (py + 170) as i32, date, GREEN_TERTIARY);
         }
         
         // PIN input field
         let input_y = py + 200;
         let input_w = 200u32;
-        let input_x = pixel + (panel_w - input_w) / 2;
+        let input_x = px + (panel_w - input_w) / 2;
         draw_rounded_rect(input_x as i32, input_y as i32, input_w, 30, 6, 0xFF081208);
         draw_rounded_rect_border(input_x as i32, input_y as i32, input_w, 30, 6, GREEN_GHOST);
         
@@ -14210,11 +14698,11 @@ match key {
         }
         
         // Hint
-        self.draw_text_smooth((pixel + panel_w / 2 - 80) as i32, (input_y + 42) as i32, "Press Enter to unlock", GREEN_GHOST);
+        self.draw_text_smooth((px + panel_w / 2 - 80) as i32, (input_y + 42) as i32, "Press Enter to unlock", GREEN_GHOST);
         
         // Wrong PIN message
         if self.lock_screen_shake > 0 {
-            self.draw_text_smooth((pixel + panel_w / 2 - 50) as i32, (input_y + 60) as i32, "Wrong PIN!", 0xFFCC4444);
+            self.draw_text_smooth((px + panel_w / 2 - 50) as i32, (input_y + 60) as i32, "Wrong PIN!", 0xFFCC4444);
         }
     }
     
@@ -14246,11 +14734,11 @@ match key {
     // SYSTEM TRAY INDICATORS (volume, battery, wifi)
     // ═══════════════════════════════════════════════════════════════════════
     
-    fn draw_system_tray_indicators(&self, tray_x: u32, tray_y: u32) {
+    fn draw_sys_tray_indicators(&self, tray_x: u32, tray_y: u32) {
         // ── WiFi indicator ──
         let wifi_x = tray_x;
         let wifi_y = tray_y + 2;
-        let wifi_color = if self.system_wifi_connected { GREEN_PRIMARY } else { 0xFF553333 };
+        let wifi_color = if self.sys_wifi_connected { GREEN_PRIMARY } else { 0xFF553333 };
         // Draw wifi arcs (3 arcs of increasing size)
         for arc in 0..3u32 {
             let r = 3 + arc * 3;
@@ -14263,10 +14751,10 @@ match key {
                 // Integer sqrt approximation
                 let mut dy = 0u32;
                 while (dy + 1) * (dy + 1) <= dy_sq { dy += 1; }
-                let pixel = cx + dx;
+                let px = cx + dx;
                 let py = cy.saturating_sub(dy);
-                if pixel > 0 && py > 0 {
-                    framebuffer::put_pixel_fast(pixel, py, wifi_color);
+                if px > 0 && py > 0 {
+                    framebuffer::put_pixel_fast(px, py, wifi_color);
                     // Mirror to left
                     if cx >= dx {
                         framebuffer::put_pixel_fast(cx - dx, py, wifi_color);
@@ -14285,14 +14773,14 @@ match key {
         framebuffer::fill_rect(vol_x, vol_y + 4, 4, 6, vol_color);
         framebuffer::fill_rect(vol_x + 4, vol_y + 2, 3, 10, vol_color);
         // Sound waves proportional to volume
-        let waves = (self.system_volume / 34).minimum(3); // 0-3 waves
+        let waves = (self.sys_volume / 34).min(3); // 0-3 waves
         for w in 0..waves {
             let wx_off = vol_x + 9 + w * 3;
             let wh_half = 2 + w * 2;
             let wy_center = vol_y + 7;
             framebuffer::fill_rect(wx_off, wy_center.saturating_sub(wh_half), 1, wh_half * 2, vol_color);
         }
-        if self.system_volume == 0 {
+        if self.sys_volume == 0 {
             // Muted X
             framebuffer::fill_rect(vol_x + 9, vol_y + 3, 1, 8, 0xFFCC4444);
             framebuffer::fill_rect(vol_x + 12, vol_y + 3, 1, 8, 0xFFCC4444);
@@ -14308,14 +14796,14 @@ match key {
         // Battery tip
         framebuffer::fill_rect(bat_x + bat_w, bat_y + 2, 2, 4, GREEN_GHOST);
         // Fill level
-        let fill_w = ((self.system_battery as u32 * (bat_w - 2)) / 100).maximum(1);
-        let bat_color = if self.system_battery > 50 { GREEN_PRIMARY }
-            else if self.system_battery > 20 { ACCENT_AMBER }
+        let fill_w = ((self.sys_battery as u32 * (bat_w - 2)) / 100).max(1);
+        let bat_color = if self.sys_battery > 50 { GREEN_PRIMARY }
+            else if self.sys_battery > 20 { ACCENT_AMBER }
             else { ACCENT_RED };
         framebuffer::fill_rect(bat_x + 1, bat_y + 1, fill_w, bat_h - 2, bat_color);
         
         // Battery % text
-        let bat_str = alloc::format!("{}%", self.system_battery);
+        let bat_str = alloc::format!("{}%", self.sys_battery);
         self.draw_text((bat_x + bat_w + 5) as i32, bat_y as i32, &bat_str, GREEN_GHOST);
     }
 
@@ -14335,8 +14823,8 @@ match key {
         
         if ww < 120 || wh < 140 { return; }
         
-        let content_y = wy + TITLE_BAR_HEIGHT as i32;
-        let safe_x = wx.maximum(0) as u32;
+        let content_y = wy + TITLE_BAR_HEIGHT() as i32;
+        let safe_x = wx.max(0) as u32;
         
         // ════════════════ COLORS (Windows 11-inspired + TrustOS green) ════════════════
         let bg_sidebar     = 0xFF081008u32;  // Very dark green-black sidebar
@@ -14363,68 +14851,68 @@ match key {
         // Get FM state
         let fm = self.fm_states.get(&window.id);
         let sidebar_w = fm.map(|f| if f.sidebar_collapsed { 0u32 } else { f.sidebar_width }).unwrap_or(180);
-        let hover_index = fm.and_then(|f| f.hover_index);
+        let hover_idx = fm.and_then(|f| f.hover_index);
         
         // ════════════════ TOOLBAR (Windows 11 style nav bar) ════════════════
         let toolbar_h = 36u32;
         framebuffer::fill_rect(safe_x, content_y as u32, ww, toolbar_h, bg_toolbar);
         
-        let button_y = content_y + 7;
+        let btn_y = content_y + 7;
         let button_size = 22u32;
         
         // ── Back button ◄
         let can_back = fm.map(|f| f.can_go_back()).unwrap_or(false);
         let back_color = if can_back { GREEN_SECONDARY } else { 0xFF1A2A1A };
-        draw_rounded_rect(wx + 8, button_y, button_size, button_size, 4, 0xFF101810);
-        if can_back { draw_rounded_rect_border(wx + 8, button_y, button_size, button_size, 4, GREEN_GHOST); }
-        self.draw_text(wx + 14, button_y + 4, "<", back_color);
+        draw_rounded_rect(wx + 8, btn_y, button_size, button_size, 4, 0xFF101810);
+        if can_back { draw_rounded_rect_border(wx + 8, btn_y, button_size, button_size, 4, GREEN_GHOST); }
+        self.draw_text(wx + 14, btn_y + 4, "<", back_color);
         
         // ── Forward button ►
         let can_fwd = fm.map(|f| f.can_go_forward()).unwrap_or(false);
         let fwd_color = if can_fwd { GREEN_SECONDARY } else { 0xFF1A2A1A };
-        draw_rounded_rect(wx + 34, button_y, button_size, button_size, 4, 0xFF101810);
-        if can_fwd { draw_rounded_rect_border(wx + 34, button_y, button_size, button_size, 4, GREEN_GHOST); }
-        self.draw_text(wx + 40, button_y + 4, ">", fwd_color);
+        draw_rounded_rect(wx + 34, btn_y, button_size, button_size, 4, 0xFF101810);
+        if can_fwd { draw_rounded_rect_border(wx + 34, btn_y, button_size, button_size, 4, GREEN_GHOST); }
+        self.draw_text(wx + 40, btn_y + 4, ">", fwd_color);
         
         // ── Up button ▲
-        draw_rounded_rect(wx + 60, button_y, button_size, button_size, 4, 0xFF101810);
-        draw_rounded_rect_border(wx + 60, button_y, button_size, button_size, 4, GREEN_GHOST);
-        self.draw_text(wx + 66, button_y + 4, "^", GREEN_SUBTLE);
+        draw_rounded_rect(wx + 60, btn_y, button_size, button_size, 4, 0xFF101810);
+        draw_rounded_rect_border(wx + 60, btn_y, button_size, button_size, 4, GREEN_GHOST);
+        self.draw_text(wx + 66, btn_y + 4, "^", GREEN_SUBTLE);
         
         // ── Breadcrumb path bar (Windows 11 style)
         let path_x = wx + 90;
         let search_w = if ww > 400 { 180i32 } else if ww > 300 { 120i32 } else { 0i32 };
-        let path_w = (ww as i32 - 100 - search_w - 10).maximum(60);
+        let path_w = (ww as i32 - 100 - search_w - 10).max(60);
         
-        draw_rounded_rect(path_x, button_y, path_w as u32, button_size, 6, 0xFF080E08);
-        draw_rounded_rect_border(path_x, button_y, path_w as u32, button_size, 6, separator_color);
+        draw_rounded_rect(path_x, btn_y, path_w as u32, button_size, 6, 0xFF080E08);
+        draw_rounded_rect_border(path_x, btn_y, path_w as u32, button_size, 6, separator_color);
         
         // Draw breadcrumb path segments
         let current_path = window.file_path.as_deref().unwrap_or("/");
-        let mut pixel = path_x + 10;
+        let mut px = path_x + 10;
         let parts: Vec<&str> = current_path.split('/').filter(|s| !s.is_empty()).collect();
         
         // Root icon
-        self.draw_text_smooth(pixel, button_y + 5, "\x07", 0xFF40AA50); // "drive" icon
-        pixel += 12;
+        self.draw_text_smooth(px, btn_y + 5, "\x07", 0xFF40AA50); // "drive" icon
+        px += 12;
         
         if parts.is_empty() {
-            self.draw_text_smooth(pixel, button_y + 5, "This PC", accent);
+            self.draw_text_smooth(px, btn_y + 5, "This PC", accent);
         } else {
-            self.draw_text_smooth(pixel, button_y + 5, "This PC", GREEN_SUBTLE);
-            pixel += 56;
+            self.draw_text_smooth(px, btn_y + 5, "This PC", GREEN_SUBTLE);
+            px += 56;
             for (i, part) in parts.iter().enumerate() {
-                if pixel > path_x + path_w - 30 { 
-                    self.draw_text_smooth(pixel, button_y + 5, "...", GREEN_GHOST);
+                if px > path_x + path_w - 30 { 
+                    self.draw_text_smooth(px, btn_y + 5, "...", GREEN_GHOST);
                     break; 
                 }
                 // Separator chevron ›
-                self.draw_text_smooth(pixel, button_y + 5, ">", 0xFF2A4A30);
-                pixel += 12;
+                self.draw_text_smooth(px, btn_y + 5, ">", 0xFF2A4A30);
+                px += 12;
                 let is_last = i == parts.len() - 1;
                 let c = if is_last { accent } else { GREEN_SUBTLE };
-                self.draw_text_smooth(pixel, button_y + 5, part, c);
-                pixel += (part.len() as i32) * 8 + 6;
+                self.draw_text_smooth(px, btn_y + 5, part, c);
+                px += (part.len() as i32) * 8 + 6;
             }
         }
         
@@ -14434,20 +14922,20 @@ match key {
             let search_focused = fm.map(|f| f.search_focused).unwrap_or(false);
             let sb_bg = if search_focused { 0xFF081008 } else { bg_search };
             let sb_border = if search_focused { accent } else { separator_color };
-            draw_rounded_rect(sx, button_y, search_w as u32, button_size, 6, sb_bg);
-            draw_rounded_rect_border(sx, button_y, search_w as u32, button_size, 6, sb_border);
+            draw_rounded_rect(sx, btn_y, search_w as u32, button_size, 6, sb_bg);
+            draw_rounded_rect_border(sx, btn_y, search_w as u32, button_size, 6, sb_border);
             // Search icon (magnifying glass)
-            self.draw_text_smooth(sx + 8, button_y + 5, "\x0F", if search_focused { accent } else { GREEN_GHOST });
+            self.draw_text_smooth(sx + 8, btn_y + 5, "\x0F", if search_focused { accent } else { GREEN_GHOST });
             let query = fm.map(|f| f.search_query.as_str()).unwrap_or("");
             if query.is_empty() {
-                self.draw_text_smooth(sx + 22, button_y + 5, "Search", text_dim);
+                self.draw_text_smooth(sx + 22, btn_y + 5, "Search", text_dim);
             } else {
-                self.draw_text_smooth(sx + 22, button_y + 5, query, text_file);
+                self.draw_text_smooth(sx + 22, btn_y + 5, query, text_file);
             }
             // Blinking cursor when focused
             if search_focused && (self.frame_count / 30) % 2 == 0 {
                 let cursor_x = sx + 22 + (query.len() as i32) * 8;
-                framebuffer::fill_rect(cursor_x as u32, (button_y + 4) as u32, 1, 14, accent);
+                framebuffer::fill_rect(cursor_x as u32, (btn_y + 4) as u32, 1, 14, accent);
             }
         }
         
@@ -14456,7 +14944,7 @@ match key {
         
         // ════════════════ SIDEBAR (Windows 11 Navigation Pane) ════════════════
         let body_y = content_y + toolbar_h as i32 + 1;
-        let body_h = wh.saturating_sub(TITLE_BAR_HEIGHT + toolbar_h + 1 + 26); // 26 = status bar
+        let body_h = wh.saturating_sub(TITLE_BAR_HEIGHT() + toolbar_h + 1 + 26); // 26 = status bar
         
         if sidebar_w > 0 && body_h > 20 {
             framebuffer::fill_rect(safe_x, body_y as u32, sidebar_w, body_h, bg_sidebar);
@@ -14551,7 +15039,7 @@ match key {
         
         // ── Column headers (Windows 11 style)
         let column_h = 24u32;
-        framebuffer::fill_rect((content_x.maximum(0)) as u32, body_y as u32, content_w, column_h, bg_header);
+        framebuffer::fill_rect((content_x.max(0)) as u32, body_y as u32, content_w, column_h, bg_header);
         
         // Column positions (proportional)
         let column_name_x = content_x + 36;
@@ -14562,43 +15050,43 @@ match key {
         let hy = body_y + 5;
         
         // Sort indicator
-        let sort_column = fm.map(|f| f.sort_column).unwrap_or(0);
+        let sort_col = fm.map(|f| f.sort_column).unwrap_or(0);
         let sort_asc = fm.map(|f| f.sort_ascending).unwrap_or(true);
         let sort_arrow = if sort_asc { "v" } else { "^" };
         
         // Name header
         self.draw_text_smooth(column_name_x, hy, "Name", text_header);
-        if sort_column == 0 { self.draw_text_smooth(column_name_x + 40, hy, sort_arrow, GREEN_GHOST); }
+        if sort_col == 0 { self.draw_text_smooth(column_name_x + 40, hy, sort_arrow, GREEN_GHOST); }
         
         if content_w > 200 {
             framebuffer::fill_rect(column_type_x as u32 - 2, body_y as u32 + 4, 1, column_h - 8, separator_color);
             self.draw_text_smooth(column_type_x, hy, "Type", text_header);
-            if sort_column == 1 { self.draw_text_smooth(column_type_x + 36, hy, sort_arrow, GREEN_GHOST); }
+            if sort_col == 1 { self.draw_text_smooth(column_type_x + 36, hy, sort_arrow, GREEN_GHOST); }
         }
         if content_w > 300 {
             framebuffer::fill_rect(column_size_x as u32 - 2, body_y as u32 + 4, 1, column_h - 8, separator_color);
             self.draw_text_smooth(column_size_x, hy, "Size", text_header);
-            if sort_column == 2 { self.draw_text_smooth(column_size_x + 36, hy, sort_arrow, GREEN_GHOST); }
+            if sort_col == 2 { self.draw_text_smooth(column_size_x + 36, hy, sort_arrow, GREEN_GHOST); }
         }
         if content_w > 420 {
             framebuffer::fill_rect(column_date_x as u32 - 2, body_y as u32 + 4, 1, column_h - 8, separator_color);
             self.draw_text_smooth(column_date_x, hy, "Open with", text_header);
         }
         
-        framebuffer::draw_hline((content_x.maximum(0)) as u32, (body_y + column_h as i32) as u32, content_w, separator_color);
+        framebuffer::draw_hline((content_x.max(0)) as u32, (body_y + column_h as i32) as u32, content_w, separator_color);
         
         // ── File list area
         let list_y = body_y + column_h as i32 + 1;
         let list_h = body_h.saturating_sub(column_h + 27); // reserve for status bar
         if list_h < 8 { return; }
         
-        framebuffer::fill_rect((content_x.maximum(0)) as u32, list_y as u32, content_w, list_h, bg_content);
+        framebuffer::fill_rect((content_x.max(0)) as u32, list_y as u32, content_w, list_h, bg_content);
         
         let row_h = 26u32; // Slightly taller rows like Windows 11
-        let maximum_visible = (list_h / row_h).maximum(1) as usize;
+        let maximum_visible = (list_h / row_h).max(1) as usize;
         
         // Parse file entries
-        let file_start_index = 5usize.minimum(window.content.len());
+        let file_start_index = 5usize.min(window.content.len());
         let file_end_index = if window.content.len() > file_start_index + 2 { window.content.len() - 2 } else { window.content.len() };
         let file_entries: Vec<&str> = if file_end_index > file_start_index {
             window.content[file_start_index..file_end_index].iter().map(|s| s.as_str()).collect()
@@ -14610,7 +15098,7 @@ match key {
         }
         
         let scroll = window.scroll_offset;
-        let visible_count = file_entries.len().minimum(maximum_visible);
+        let visible_count = file_entries.len().min(maximum_visible);
         
         for vi in 0..visible_count {
             let entry_index = scroll + vi;
@@ -14620,8 +15108,8 @@ match key {
             if ry + row_h > list_y as u32 + list_h { break; }
             
             let is_selected = entry_index == window.selected_index;
-            let is_directory = line.contains("[D]");
-            let is_hovered = hover_index == Some(entry_index);
+            let is_dir = line.contains("[D]");
+            let is_hovered = hover_idx == Some(entry_index);
             
             // ── Row background
             let row_bg = if is_selected {
@@ -14633,12 +15121,12 @@ match key {
             } else {
                 bg_row_odd
             };
-            framebuffer::fill_rect((content_x.maximum(0)) as u32, ry, content_w, row_h, row_bg);
+            framebuffer::fill_rect((content_x.max(0)) as u32, ry, content_w, row_h, row_bg);
             
             // ── Selection highlight (Windows 11: subtle rounded highlight + left accent)
             if is_selected {
                 // Left accent bar (blue in Windows, green in TrustOS)
-                framebuffer::fill_rect((content_x.maximum(0)) as u32, ry + 3, 3, row_h - 6, accent);
+                framebuffer::fill_rect((content_x.max(0)) as u32, ry + 3, 3, row_h - 6, accent);
                 // Subtle border around selected row
                 draw_rounded_rect_border(content_x, ry as i32, content_w, row_h, 3, 0xFF1A4A28);
             }
@@ -14647,35 +15135,35 @@ match key {
             let row_text_color = if is_selected { accent } else { text_file };
             
             // ── Draw icon (Windows 11 style: larger, more detailed)
-            let ix = (content_x + 10).maximum(0) as u32;
+            let ix = (content_x + 10).max(0) as u32;
             let iy = ry + 3;
-            let icon_size = 20u32;
+            let icon_sz = 20u32;
             
-            if is_directory {
+            if is_dir {
                 // Folder icon — Windows 11 style yellow folder
                 let fc = if is_selected { 0xFFEECC50 } else { icon_folder };
                 let fc_dark = if is_selected { 0xFFCCAA30 } else { 0xFFBB8820 };
                 // Tab part
-                framebuffer::fill_rect(ix, iy, icon_size / 2, 4, fc);
+                framebuffer::fill_rect(ix, iy, icon_sz / 2, 4, fc);
                 // Body  
-                framebuffer::fill_rect(ix, iy + 4, icon_size, icon_size - 4, fc);
+                framebuffer::fill_rect(ix, iy + 4, icon_sz, icon_sz - 4, fc);
                 // Inner shadow
-                framebuffer::fill_rect(ix + 2, iy + 7, icon_size - 4, icon_size - 10, fc_dark);
+                framebuffer::fill_rect(ix + 2, iy + 7, icon_sz - 4, icon_sz - 10, fc_dark);
                 // Doc line hints
-                framebuffer::fill_rect(ix + 4, iy + 9, icon_size - 8, 1, 0xFF0A0A04);
-                framebuffer::fill_rect(ix + 4, iy + 12, icon_size / 2, 1, 0xFF0A0A04);
+                framebuffer::fill_rect(ix + 4, iy + 9, icon_sz - 8, 1, 0xFF0A0A04);
+                framebuffer::fill_rect(ix + 4, iy + 12, icon_sz / 2, 1, 0xFF0A0A04);
             } else {
                 // File icon — Windows 11 style document
                 let fc = if is_selected { 0xFF80DDAA } else { icon_file };
                 let fc_dark = 0xFF0A140A;
                 // Main body
-                framebuffer::fill_rect(ix + 2, iy, icon_size - 6, icon_size, fc);
+                framebuffer::fill_rect(ix + 2, iy, icon_sz - 6, icon_sz, fc);
                 // Folded corner (top-right)
-                framebuffer::fill_rect(ix + icon_size - 8, iy, 4, 6, fc_dark);
-                framebuffer::fill_rect(ix + icon_size - 8, iy, 1, 6, fc);
-                framebuffer::fill_rect(ix + icon_size - 8, iy + 5, 4, 1, fc);
+                framebuffer::fill_rect(ix + icon_sz - 8, iy, 4, 6, fc_dark);
+                framebuffer::fill_rect(ix + icon_sz - 8, iy, 1, 6, fc);
+                framebuffer::fill_rect(ix + icon_sz - 8, iy + 5, 4, 1, fc);
                 // Inner area  
-                framebuffer::fill_rect(ix + 4, iy + 8, icon_size - 10, icon_size - 10, fc_dark);
+                framebuffer::fill_rect(ix + 4, iy + 8, icon_sz - 10, icon_sz - 10, fc_dark);
                 // Text lines inside file
                 framebuffer::fill_rect(ix + 5, iy + 10, 8, 1, 0xFF1A3A1A);
                 framebuffer::fill_rect(ix + 5, iy + 13, 6, 1, 0xFF1A3A1A);
@@ -14693,7 +15181,7 @@ match key {
                     else if ext_name.ends_with(".png") || ext_name.ends_with(".jpg") || ext_name.ends_with(".bmp") { 0xFF33BB66 }
                     else if ext_name.ends_with(".mp3") || ext_name.ends_with(".wav") { 0xFFEE55AA }
                     else { 0xFF446644 };
-                framebuffer::fill_rect(ix + 3, iy + icon_size - 5, 6, 4, badge_color);
+                framebuffer::fill_rect(ix + 3, iy + icon_sz - 5, 6, 4, badge_color);
             }
             
             // ── Parse entry fields
@@ -14714,9 +15202,9 @@ match key {
             // ── Draw columns
             // Name (with extension dimmed like Windows)
             let name_x = content_x + 36;
-            if let Some(dot_position) = name_str.rfind('.') {
-                let base = &name_str[..dot_position];
-                let ext = &name_str[dot_position..];
+            if let Some(dot_pos) = name_str.rfind('.') {
+                let base = &name_str[..dot_pos];
+                let ext = &name_str[dot_pos..];
                 self.draw_text_smooth(name_x, text_y, base, row_text_color);
                 let ext_x = name_x + (base.len() as i32) * 8;
                 self.draw_text_smooth(ext_x, text_y, ext, if is_selected { GREEN_SUBTLE } else { text_dim });
@@ -14726,7 +15214,7 @@ match key {
             
             // Type column
             if content_w > 200 {
-                let type_label = if is_directory { "File folder" } else {
+                let type_label = if is_dir { "File folder" } else {
                                         // Pattern matching — Rust's exhaustive branching construct.
 match name_str.rsplit('.').next() {
                         Some("rs") => "Rust Source",
@@ -14748,7 +15236,7 @@ match name_str.rsplit('.').next() {
             
             // Size column (human-readable like Windows)
             if content_w > 300 {
-                let size_display = if is_directory {
+                let size_display = if is_dir {
                     String::from("")
                 } else if let Ok(bytes) = size_str.parse::<u64>() {
                     if bytes < 1024 { alloc::format!("{} B", bytes) }
@@ -14768,7 +15256,7 @@ match name_str.rsplit('.').next() {
             }
             
             // ── Row bottom line (very subtle, every row)
-            framebuffer::draw_hline((content_x.maximum(0)) as u32, ry + row_h - 1, content_w, 0xFF0E160E);
+            framebuffer::draw_hline((content_x.max(0)) as u32, ry + row_h - 1, content_w, 0xFF0E160E);
         }
         
         // ── Scrollbar (Windows 11 thin style)
@@ -14779,7 +15267,7 @@ match name_str.rsplit('.').next() {
             framebuffer::fill_rect(sb_x, list_y as u32 + 2, sb_w, track_h, 0xFF0A160C);
             let total = file_entries.len() as u32;
             let visible = maximum_visible as u32;
-            let thumb_h = ((visible * track_h) / total.maximum(1)).maximum(20).minimum(track_h);
+            let thumb_h = ((visible * track_h) / total.max(1)).max(20).min(track_h);
             let maximum_scroll = total.saturating_sub(visible);
             let thumb_y = if maximum_scroll > 0 {
                 list_y as u32 + 2 + ((scroll as u32 * track_h.saturating_sub(thumb_h)) / maximum_scroll)
@@ -14857,9 +15345,9 @@ match name_str.rsplit('.').next() {
     // ═══════════════════════════════════════════════════════════════════════════
     fn draw_music_player(&self, window: &Window) {
         let wx = window.x as u32;
-        let wy = window.y as u32 + TITLE_BAR_HEIGHT;
+        let wy = window.y as u32 + TITLE_BAR_HEIGHT();
         let ww = window.width;
-        let wh = window.height.saturating_sub(TITLE_BAR_HEIGHT);
+        let wh = window.height.saturating_sub(TITLE_BAR_HEIGHT());
 
         if ww < 80 || wh < 80 { return; }
 
@@ -14888,8 +15376,8 @@ match self.music_player_states.get(&window.id) {
         let list_header_y = wy + 6;
         // Header: "LIBRARY" + track count
         self.draw_text(inner_x as i32, list_header_y as i32, "LIBRARY", 0xFF44886A);
-        if state.number_tracks > 0 {
-            let count_str = alloc::format!("{} tracks", state.number_tracks);
+        if state.num_tracks > 0 {
+            let count_str = alloc::format!("{} tracks", state.num_tracks);
             let count_x = (inner_x + inner_w).saturating_sub(count_str.len() as u32 * cw);
             self.draw_text(count_x as i32, list_header_y as i32, &count_str, 0xFF336655);
         }
@@ -14897,7 +15385,7 @@ match self.music_player_states.get(&window.id) {
         let list_y = list_header_y + 16;
         let maximum_visible = 5usize;
         let row_h = 20u32;
-        let list_h = if state.number_tracks == 0 { row_h } else { (state.number_tracks.minimum(maximum_visible) as u32) * row_h };
+        let list_h = if state.num_tracks == 0 { row_h } else { (state.num_tracks.min(maximum_visible) as u32) * row_h };
 
         // List background
         framebuffer::fill_rect_alpha(inner_x, list_y, inner_w, list_h, 0x0A1A12, 180);
@@ -14905,13 +15393,13 @@ match self.music_player_states.get(&window.id) {
         framebuffer::fill_rect_alpha(inner_x, list_y, inner_w, 1, 0x00FF66, 18);
         framebuffer::fill_rect_alpha(inner_x, list_y + list_h - 1, inner_w, 1, 0x00FF66, 12);
 
-        if state.number_tracks == 0 {
+        if state.num_tracks == 0 {
             self.draw_text(inner_x as i32 + 8, (list_y + 4) as i32, "No tracks found", 0xFF556655);
         } else {
-            let scroll = state.track_list_scroll.minimum(state.number_tracks.saturating_sub(maximum_visible));
+            let scroll = state.track_list_scroll.min(state.num_tracks.saturating_sub(maximum_visible));
             for vi in 0..maximum_visible {
                 let track_i = scroll + vi;
-                if track_i >= state.number_tracks { break; }
+                if track_i >= state.num_tracks { break; }
                 let ry = list_y + vi as u32 * row_h;
                 let is_current = track_i == state.current_track && state.state != PlaybackState::Stopped;
 
@@ -14933,7 +15421,7 @@ match self.music_player_states.get(&window.id) {
                 };
                 let maximum_chars = ((inner_w - 30) / cw) as usize;
                 let display_name = if name.len() > maximum_chars {
-                    &name[..maximum_chars.minimum(name.len())]
+                    &name[..maximum_chars.min(name.len())]
                 } else {
                     name
                 };
@@ -14976,8 +15464,8 @@ match state.state {
         self.draw_text(inner_x as i32, status_y as i32, status, status_color);
 
         // Time display (right-aligned)
-        let elapsed_s = (state.elapsed_mouse / 1000) as u32;
-        let total_s = (state.total_mouse / 1000) as u32;
+        let elapsed_s = (state.elapsed_ms / 1000) as u32;
+        let total_s = (state.total_ms / 1000) as u32;
         let time_str = alloc::format!(
             "{}:{:02} / {}:{:02}",
             elapsed_s / 60, elapsed_s % 60,
@@ -14990,9 +15478,9 @@ match state.state {
         let prog_y = status_y + 18;
         let prog_h = 4u32;
         framebuffer::fill_rect_alpha(inner_x, prog_y, inner_w, prog_h, 0x1A3322, 200);
-        if state.total_mouse > 0 {
-            let fill_w = ((state.elapsed_mouse as u64 * inner_w as u64) / state.total_mouse.maximum(1) as u64) as u32;
-            let fill_w = fill_w.minimum(inner_w);
+        if state.total_ms > 0 {
+            let fill_w = ((state.elapsed_ms as u64 * inner_w as u64) / state.total_ms.max(1) as u64) as u32;
+            let fill_w = fill_w.min(inner_w);
             if fill_w > 0 {
                 framebuffer::fill_rect(inner_x, prog_y, fill_w, prog_h, 0xFF00FF88);
                 if fill_w > 2 {
@@ -15012,39 +15500,39 @@ match state.state {
         let half_h = (viz_h / 2 - 3) as f32;
 
         if state.state == PlaybackState::Playing || state.state == PlaybackState::Paused {
-            let n_points = inner_w.minimum(128) as usize;
+            let n_points = inner_w.min(128) as usize;
             let beat_glow = state.beat;
             for i in 0..n_points {
-                let wave_i = (state.wave_index + i) % 128;
+                let wave_i = (state.wave_idx + i) % 128;
                 let sample = state.waveform[wave_i];
                 let amp = sample * (1.0 + beat_glow * 0.5);
-                let y_offset = (amp * half_h).maximum(-half_h).minimum(half_h) as i32;
-                let pixel = inner_x + i as u32;
+                let y_offset = (amp * half_h).max(-half_h).min(half_h) as i32;
+                let px = inner_x + i as u32;
                 let py = (mid_y as i32 + y_offset) as u32;
-                let py = py.maximum(viz_y + 2).minimum(viz_y + viz_h - 3);
+                let py = py.max(viz_y + 2).min(viz_y + viz_h - 3);
 
                 let g_base = 0xCCu32;
                 let b_shift = (beat_glow * 180.0) as u32;
-                let r_shift = (state.energy * 60.0).minimum(60.0) as u32;
+                let r_shift = (state.energy * 60.0).min(60.0) as u32;
                 let center = mid_y;
                 if py < center {
                     for yy in py..center {
-                        let fade = 1.0 - ((center - yy) as f32 / half_h).minimum(1.0) * 0.4;
-                        let c = 0xFF000000 | (((r_shift as f32 * fade) as u32).minimum(0xFF) << 16)
-                            | (((g_base as f32 * fade) as u32).minimum(0xFF) << 8)
-                            | ((b_shift as f32 * fade) as u32).minimum(0xFF);
-                        framebuffer::put_pixel_fast(pixel, yy, c);
+                        let fade = 1.0 - ((center - yy) as f32 / half_h).min(1.0) * 0.4;
+                        let c = 0xFF000000 | (((r_shift as f32 * fade) as u32).min(0xFF) << 16)
+                            | (((g_base as f32 * fade) as u32).min(0xFF) << 8)
+                            | ((b_shift as f32 * fade) as u32).min(0xFF);
+                        framebuffer::put_pixel_fast(px, yy, c);
                     }
                 } else {
                     for yy in center..=py {
-                        let fade = 1.0 - ((yy - center) as f32 / half_h).minimum(1.0) * 0.4;
-                        let c = 0xFF000000 | (((r_shift as f32 * fade) as u32).minimum(0xFF) << 16)
-                            | (((g_base as f32 * fade) as u32).minimum(0xFF) << 8)
-                            | ((b_shift as f32 * fade) as u32).minimum(0xFF);
-                        framebuffer::put_pixel_fast(pixel, yy, c);
+                        let fade = 1.0 - ((yy - center) as f32 / half_h).min(1.0) * 0.4;
+                        let c = 0xFF000000 | (((r_shift as f32 * fade) as u32).min(0xFF) << 16)
+                            | (((g_base as f32 * fade) as u32).min(0xFF) << 8)
+                            | ((b_shift as f32 * fade) as u32).min(0xFF);
+                        framebuffer::put_pixel_fast(px, yy, c);
                     }
                 }
-                framebuffer::put_pixel_fast(pixel, py, 0xFF00FFCC);
+                framebuffer::put_pixel_fast(px, py, 0xFF00FFCC);
             }
             if beat_glow > 0.3 {
                 let flash_alpha = ((beat_glow - 0.3) * 50.0) as u32;
@@ -15067,7 +15555,7 @@ match state.state {
         for (bi, (level, color, label)) in bands.iter().enumerate() {
             let bx = inner_x + bi as u32 * (bar_w + 3);
             framebuffer::fill_rect_alpha(bx, bars_y, bar_w, bar_h, 0x0E1E14, 160);
-            let fill = (level.minimum(1.0) * bar_w as f32) as u32;
+            let fill = (level.min(1.0) * bar_w as f32) as u32;
             if fill > 0 {
                 framebuffer::fill_rect(bx, bars_y, fill, bar_h, *color);
                 framebuffer::fill_rect_alpha(bx, bars_y, fill, bar_h, 0xFFFFFF, 12);
@@ -15079,7 +15567,7 @@ match state.state {
         // TRANSPORT CONTROLS (fixed-size beautiful buttons)
         // ═══════════════════════════════════════════════
         let controller_y = bars_y + bar_h + 8;
-        let button_h = 28u32;
+        let btn_h = 28u32;
 
         // Fixed-size buttons: all same width except PLAY which is wider
         let small_button_w = 36u32;
@@ -15089,7 +15577,7 @@ match state.state {
         let transport_x = inner_x + (inner_w.saturating_sub(total_transport_w)) / 2;
 
         // Helper: draw a styled button with glass effect
-        fn draw_button(this: &Desktop, bx: u32, by: u32, bw: u32, bh: u32, label: &str, bg: u32, border: u32, text_column: u32) {
+        fn draw_btn(this: &Desktop, bx: u32, by: u32, bw: u32, bh: u32, label: &str, bg: u32, border: u32, text_column: u32) {
             let cw = crate::graphics::scaling::char_width() as u32;
             // Body
             framebuffer::fill_rect_alpha(bx, by, bw, bh, bg, 210);
@@ -15111,7 +15599,7 @@ match state.state {
 
         // |< Previous
         let previous_x = transport_x;
-        draw_button(self, previous_x, controller_y, small_button_w, button_h, "|<", 0x142820, 0x00AA88, 0xFF88CCAA);
+        draw_btn(self, previous_x, controller_y, small_button_w, btn_h, "|<", 0x142820, 0x00AA88, 0xFF88CCAA);
 
         // PLAY / PAUSE
         let play_x = previous_x + small_button_w + gap;
@@ -15125,18 +15613,18 @@ match state.state {
             PlaybackState::Playing => 0x0A5530,
             _ => 0x084428,
         };
-        draw_button(self, play_x, controller_y, play_button_w, button_h, play_label, play_bg, 0x00FF88, 0xFF00FFAA);
+        draw_btn(self, play_x, controller_y, play_button_w, btn_h, play_label, play_bg, 0x00FF88, 0xFF00FFAA);
 
         // STOP
         let stop_x = play_x + play_button_w + gap;
-        draw_button(self, stop_x, controller_y, small_button_w, button_h, "STOP", 0x2A1610, 0xCC6633, 0xFFFF8844);
+        draw_btn(self, stop_x, controller_y, small_button_w, btn_h, "STOP", 0x2A1610, 0xCC6633, 0xFFFF8844);
 
         // >| Next
         let next_x = stop_x + small_button_w + gap;
-        draw_button(self, next_x, controller_y, small_button_w, button_h, ">|", 0x142820, 0x00AA88, 0xFF88CCAA);
+        draw_btn(self, next_x, controller_y, small_button_w, btn_h, ">|", 0x142820, 0x00AA88, 0xFF88CCAA);
 
         // ── Volume control ──
-        let vol_y = controller_y + button_h + 8;
+        let vol_y = controller_y + btn_h + 8;
         let vol_h = 10u32;
         self.draw_text(inner_x as i32, vol_y as i32, "VOL", 0xFF44886A);
 
@@ -15174,9 +15662,9 @@ match state.state {
         self.draw_text(inner_x as i32, sync_y as i32 + 4, "SYNC", 0xFF44886A);
         let sync_controller_x = inner_x + label_w + 4;
         // [-] button
-        draw_button(self, sync_controller_x, sync_y, arrow_w, fx_row_h, "-", 0x142820, 0x00AA88, 0xFF88CCAA);
+        draw_btn(self, sync_controller_x, sync_y, arrow_w, fx_row_h, "-", 0x142820, 0x00AA88, 0xFF88CCAA);
         // value display
-        let sync_value_str = alloc::format!("{}ms", state.av_offset_mouse);
+        let sync_value_str = alloc::format!("{}ms", state.av_offset_ms);
         let sync_value_x = sync_controller_x + arrow_w + 4;
         let sync_value_w = 52u32;
         framebuffer::fill_rect_alpha(sync_value_x, sync_y, sync_value_w, fx_row_h, 0x0A1A12, 180);
@@ -15184,17 +15672,17 @@ match state.state {
         self.draw_text(svtx as i32, sync_y as i32 + 5, &sync_value_str, 0xFF88CCAA);
         // [+] button
         let sync_plus_x = sync_value_x + sync_value_w + 4;
-        draw_button(self, sync_plus_x, sync_y, arrow_w, fx_row_h, "+", 0x142820, 0x00AA88, 0xFF88CCAA);
+        draw_btn(self, sync_plus_x, sync_y, arrow_w, fx_row_h, "+", 0x142820, 0x00AA88, 0xFF88CCAA);
         // [0] reset
         let sync_reset_x = sync_plus_x + arrow_w + 4;
-        draw_button(self, sync_reset_x, sync_y, arrow_w, fx_row_h, "0", 0x1A1A14, 0x888855, 0xFFCCAA66);
+        draw_btn(self, sync_reset_x, sync_y, arrow_w, fx_row_h, "0", 0x1A1A14, 0x888855, 0xFFCCAA66);
 
         // ── VIZ row ──
         let viz_y2 = sync_y + fx_row_h + 4;
         self.draw_text(inner_x as i32, viz_y2 as i32 + 4, "VIZ", 0xFF44886A);
         let viz_controller_x = inner_x + label_w + 4;
         // [<] button
-        draw_button(self, viz_controller_x, viz_y2, arrow_w, fx_row_h, "<", 0x142820, 0x00AA88, 0xFF88CCAA);
+        draw_btn(self, viz_controller_x, viz_y2, arrow_w, fx_row_h, "<", 0x142820, 0x00AA88, 0xFF88CCAA);
         // mode name display
         let viz_mode = self.visualizer.mode as usize % crate::visualizer::NUMBER_MODES as usize;
         let viz_name = crate::visualizer::MODE_NAMES[viz_mode];
@@ -15207,14 +15695,14 @@ match state.state {
         self.draw_text(vntx as i32, viz_y2 as i32 + 5, viz_display, 0xFF00DDAA);
         // [>] button
         let viz_next_x = viz_name_x + viz_name_w + 4;
-        draw_button(self, viz_next_x, viz_y2, arrow_w, fx_row_h, ">", 0x142820, 0x00AA88, 0xFF88CCAA);
+        draw_btn(self, viz_next_x, viz_y2, arrow_w, fx_row_h, ">", 0x142820, 0x00AA88, 0xFF88CCAA);
 
         // ── PAL row ──
         let pal_y = viz_y2 + fx_row_h + 4;
         self.draw_text(inner_x as i32, pal_y as i32 + 4, "PAL", 0xFF44886A);
         let pal_controller_x = inner_x + label_w + 4;
         // [<] button
-        draw_button(self, pal_controller_x, pal_y, arrow_w, fx_row_h, "<", 0x142820, 0x8866CC, 0xFFAA88EE);
+        draw_btn(self, pal_controller_x, pal_y, arrow_w, fx_row_h, "<", 0x142820, 0x8866CC, 0xFFAA88EE);
         // palette name display
         let pal_index = self.visualizer.palette as usize % crate::visualizer::NUMBER_PALETTES as usize;
         let pal_name = crate::visualizer::PALETTE_NAMES[pal_index];
@@ -15227,16 +15715,16 @@ match state.state {
         self.draw_text(pntx as i32, pal_y as i32 + 5, pal_display, 0xFFCC88FF);
         // [>] button
         let pal_next_x = pal_name_x + pal_name_w + 4;
-        draw_button(self, pal_next_x, pal_y, arrow_w, fx_row_h, ">", 0x142820, 0x8866CC, 0xFFAA88EE);
+        draw_btn(self, pal_next_x, pal_y, arrow_w, fx_row_h, ">", 0x142820, 0x8866CC, 0xFFAA88EE);
 
         // ── RAIN row ──
         let rain_y = pal_y + fx_row_h + 4;
         self.draw_text(inner_x as i32, rain_y as i32 + 4, "RAIN", 0xFF44886A);
         let rain_controller_x = inner_x + label_w + 4;
         // [<] button
-        draw_button(self, rain_controller_x, rain_y, arrow_w, fx_row_h, "<", 0x142820, 0x00AA88, 0xFF88CCAA);
+        draw_btn(self, rain_controller_x, rain_y, arrow_w, fx_row_h, "<", 0x142820, 0x00AA88, 0xFF88CCAA);
         // speed name display
-        let rain_preset = (self.matrix_rain_preset as usize).minimum(2);
+        let rain_preset = (self.matrix_rain_preset as usize).min(2);
         let rain_names = ["Slow", "Mid", "Fast"];
         let rain_name = rain_names[rain_preset];
         let rain_name_x = rain_controller_x + arrow_w + 4;
@@ -15246,17 +15734,17 @@ match state.state {
         self.draw_text(rntx as i32, rain_y as i32 + 5, rain_name, 0xFF88DDAA);
         // [>] button
         let rain_next_x = rain_name_x + rain_name_w + 4;
-        draw_button(self, rain_next_x, rain_y, arrow_w, fx_row_h, ">", 0x142820, 0x00AA88, 0xFF88CCAA);
+        draw_btn(self, rain_next_x, rain_y, arrow_w, fx_row_h, ">", 0x142820, 0x00AA88, 0xFF88CCAA);
     }
 
     /// Draw interactive Calculator
     fn draw_calculator(&self, window: &Window) {
         let cx = window.x as u32 + 4;
-        let cy = window.y as u32 + TITLE_BAR_HEIGHT + 4;
+        let cy = window.y as u32 + TITLE_BAR_HEIGHT() + 4;
         let cw = window.width.saturating_sub(8);
-        let character = window.height.saturating_sub(TITLE_BAR_HEIGHT + 8);
+        let ch = window.height.saturating_sub(TITLE_BAR_HEIGHT() + 8);
         
-        if cw < 100 || character < 120 {
+        if cw < 100 || ch < 120 {
             return;
         }
         
@@ -15286,15 +15774,15 @@ match state.state {
         let text_length = display_text.len() as i32;
         let char_w = 12; // wider spacing for larger look
         let text_x = cx as i32 + cw as i32 - 18 - text_length * char_w;
-        for (i, character) in display_text.chars().enumerate() {
-            let pixel = text_x + i as i32 * char_w;
+        for (i, ch) in display_text.chars().enumerate() {
+            let px = text_x + i as i32 * char_w;
             let py = cy as i32 + 28;
-            let mut buffer = [0u8; 4];
-            let s = character.encode_utf8(&mut buffer);
+            let mut buf = [0u8; 4];
+            let s = ch.encode_utf8(&mut buf);
             // Triple-draw for bolder look
-            self.draw_text(pixel, py, s, 0xFFFFFFFF);
-            self.draw_text(pixel + 1, py, s, 0xFFFFFFFF);
-            self.draw_text(pixel, py + 1, s, 0xFFEEEEEE);
+            self.draw_text(px, py, s, 0xFFFFFFFF);
+            self.draw_text(px + 1, py, s, 0xFFFFFFFF);
+            self.draw_text(px, py + 1, s, 0xFFEEEEEE);
         }
         
         // Expression indicator
@@ -15308,11 +15796,11 @@ match state.state {
         let button_area_y = cy + display_h + 16;
         let button_rows = 5u32;
         let button_cols = 4u32;
-        let button_gap = 6u32;
+        let btn_gap = 6u32;
         let available_w = cw.saturating_sub(16);
-        let available_h = character.saturating_sub(display_h + 28);
-        let button_w = (available_w - button_gap * (button_cols - 1)) / button_cols;
-        let button_h = ((available_h - button_gap * (button_rows - 1)) / button_rows).minimum(52);
+        let available_h = ch.saturating_sub(display_h + 28);
+        let btn_w = (available_w - btn_gap * (button_cols - 1)) / button_cols;
+        let btn_h = ((available_h - btn_gap * (button_rows - 1)) / button_rows).min(52);
         
         let buttons = [
             ["C", "(", ")", "%"],
@@ -15322,16 +15810,16 @@ match state.state {
             ["0", ".", "=", "+"],
         ];
         
-        for (row, button_row) in buttons.iter().enumerate() {
-            for (column, label) in button_row.iter().enumerate() {
-                let bx = cx + 6 + column as u32 * (button_w + button_gap);
-                let by = button_area_y + row as u32 * (button_h + button_gap);
+        for (row, btn_row) in buttons.iter().enumerate() {
+            for (col, label) in btn_row.iter().enumerate() {
+                let bx = cx + 6 + col as u32 * (btn_w + btn_gap);
+                let by = button_area_y + row as u32 * (btn_h + btn_gap);
                 
                 let is_operator = matches!(*label, "+" | "-" | "*" | "/" | "%" | "=");
                 let is_clear = *label == "C" || *label == "(" || *label == ")";
                 
                 // Button colors (modern, with depth)
-                let (button_bg, button_border) = if is_operator {
+                let (btn_bg, btn_border) = if is_operator {
                     if *label == "=" {
                         (GREEN_MUTED, GREEN_PRIMARY)
                     } else {
@@ -15344,39 +15832,39 @@ match state.state {
                 };
                 
                 // Hover detection
-                let hover = self.cursor_x >= bx as i32 && self.cursor_x < (bx + button_w) as i32
-                    && self.cursor_y >= by as i32 && self.cursor_y < (by + button_h) as i32;
+                let hover = self.cursor_x >= bx as i32 && self.cursor_x < (bx + btn_w) as i32
+                    && self.cursor_y >= by as i32 && self.cursor_y < (by + btn_h) as i32;
                 
                 let bg = if hover {
                     // Brighten on hover
-                    let r = ((button_bg >> 16) & 0xFF).minimum(220) + 30;
-                    let g = ((button_bg >> 8) & 0xFF).minimum(220) + 30;
-                    let b = (button_bg & 0xFF).minimum(220) + 30;
+                    let r = ((btn_bg >> 16) & 0xFF).min(220) + 30;
+                    let g = ((btn_bg >> 8) & 0xFF).min(220) + 30;
+                    let b = (btn_bg & 0xFF).min(220) + 30;
                     0xFF000000 | (r << 16) | (g << 8) | b
                 } else {
-                    button_bg
+                    btn_bg
                 };
                 
                 // Button shadow
-                if button_h > 8 {
-                    framebuffer::fill_rect_alpha(bx + 2, by + 2, button_w, button_h, 0x000000, 30);
+                if btn_h > 8 {
+                    framebuffer::fill_rect_alpha(bx + 2, by + 2, btn_w, btn_h, 0x000000, 30);
                 }
                 
                 // Draw rounded button
-                let button_radius = 8u32.minimum(button_h / 3);
-                draw_rounded_rect(bx as i32, by as i32, button_w, button_h, button_radius, bg);
-                draw_rounded_rect_border(bx as i32, by as i32, button_w, button_h, button_radius, 
-                    if hover { GREEN_PRIMARY } else { button_border });
+                let button_radius = 8u32.min(btn_h / 3);
+                draw_rounded_rect(bx as i32, by as i32, btn_w, btn_h, button_radius, bg);
+                draw_rounded_rect_border(bx as i32, by as i32, btn_w, btn_h, button_radius, 
+                    if hover { GREEN_PRIMARY } else { btn_border });
                 
                 // Top highlight (glass effect)
-                if button_h > 12 {
-                    framebuffer::fill_rect_alpha(bx + 3, by + 1, button_w.saturating_sub(6), 1, 0xFFFFFF, 15);
+                if btn_h > 12 {
+                    framebuffer::fill_rect_alpha(bx + 3, by + 1, btn_w.saturating_sub(6), 1, 0xFFFFFF, 15);
                 }
                 
                 // Label centered (larger spacing)
                 let lw = label.len() as u32 * 8;
-                let lx = bx + (button_w.saturating_sub(lw)) / 2;
-                let ly = by + (button_h / 2).saturating_sub(5);
+                let lx = bx + (btn_w.saturating_sub(lw)) / 2;
+                let ly = by + (btn_h / 2).saturating_sub(5);
                 let text_color = if *label == "=" { 
                     0xFF000000 
                 } else if is_operator { 
@@ -15412,9 +15900,9 @@ const BROWSER_PAD: u32 = 2; // inner window padding
         -> (u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32)
     {
         let bx = window.x as u32 + Self::BROWSER_PAD;
-        let by = window.y as u32 + TITLE_BAR_HEIGHT;
+        let by = window.y as u32 + TITLE_BAR_HEIGHT();
         let bw = window.width.saturating_sub(Self::BROWSER_PAD * 2);
-        let bh = window.height.saturating_sub(TITLE_BAR_HEIGHT + Self::BROWSER_PAD);
+        let bh = window.height.saturating_sub(TITLE_BAR_HEIGHT() + Self::BROWSER_PAD);
 
         let tab_y = by;                                 // tab bar top
         let nav_y = tab_y + Self::BROWSER_TAB_BAR_H;    // navigation bar top
@@ -15444,8 +15932,8 @@ const BROWSER_PAD: u32 = 2; // inner window padding
         let wh = window.height;
         if ww < 200 || wh < 200 { return; }
 
-        let content_y = wy + TITLE_BAR_HEIGHT as i32;
-        let safe_x = wx.maximum(0) as u32;
+        let content_y = wy + TITLE_BAR_HEIGHT() as i32;
+        let safe_x = wx.max(0) as u32;
 
         let bg_main      = 0xFF0A120Cu32;
         let bg_header     = 0xFF0C180Eu32;
@@ -15462,7 +15950,7 @@ const BROWSER_PAD: u32 = 2; // inner window padding
         let signal_weak   = 0xFFCC4444u32;
 
         // Background
-        framebuffer::fill_rect(safe_x, content_y as u32, ww, wh - TITLE_BAR_HEIGHT, bg_main);
+        framebuffer::fill_rect(safe_x, content_y as u32, ww, wh - TITLE_BAR_HEIGHT(), bg_main);
 
         // Header bar
         let header_h = 36u32;
@@ -15542,7 +16030,7 @@ match wifi_state {
         // Network list
         let networks = crate::drivers::net::wifi::get_scan_results();
         let row_h = 44i32;
-        let visible_rows = ((wh as i32 - (list_y - wy) - 8) / row_h).maximum(1) as usize;
+        let visible_rows = ((wh as i32 - (list_y - wy) - 8) / row_h).max(1) as usize;
 
         if networks.is_empty() && !is_scanning {
             self.draw_text_smooth((wx + 20) as i32, list_y + 20, "No networks found. Click Scan to search.", text_dim);
@@ -15611,10 +16099,10 @@ match (self.frame_count / 15) % 4 {
         }
 
         // Error message
-        if let Some(ref message) = self.wifi_error_message {
+        if let Some(ref msg) = self.wifi_error_msg {
             let error_y = (wy as u32 + wh).saturating_sub(30);
             framebuffer::fill_rect_alpha(safe_x + 4, error_y, ww - 8, 24, 0x331111, 200);
-            self.draw_text_smooth((wx + 12) as i32, (error_y + 6) as i32, message, signal_weak);
+            self.draw_text_smooth((wx + 12) as i32, (error_y + 6) as i32, msg, signal_weak);
         }
     }
 
@@ -15629,8 +16117,8 @@ match (self.frame_count / 15) % 4 {
         let wh = window.height;
         if ww < 200 || wh < 150 { return; }
 
-        let content_y = wy + TITLE_BAR_HEIGHT as i32;
-        let safe_x = wx.maximum(0) as u32;
+        let content_y = wy + TITLE_BAR_HEIGHT() as i32;
+        let safe_x = wx.max(0) as u32;
 
         let bg_main     = 0xFF0A120Cu32;
         let text_bright = 0xFF80CC90u32;
@@ -15641,7 +16129,7 @@ match (self.frame_count / 15) % 4 {
         let button_cancel  = 0xFF1A0A0Au32;
 
         // Background
-        framebuffer::fill_rect(safe_x, content_y as u32, ww, wh - TITLE_BAR_HEIGHT, bg_main);
+        framebuffer::fill_rect(safe_x, content_y as u32, ww, wh - TITLE_BAR_HEIGHT(), bg_main);
 
         // WiFi icon (arcs)
         let icon_cx = wx as u32 + ww / 2;
@@ -15695,7 +16183,7 @@ match (self.frame_count / 15) % 4 {
         // Blinking cursor
         if self.cursor_blink {
             let maximum_chars = ((input_w as usize).saturating_sub(40)) / 8;
-            let cursor_x = text_x + display_text.len().minimum(maximum_chars) as i32 * 8;
+            let cursor_x = text_x + display_text.len().min(maximum_chars) as i32 * 8;
             framebuffer::fill_rect(cursor_x as u32, (text_y - 1) as u32, 2, 14, accent);
         }
 
@@ -15732,10 +16220,10 @@ match (self.frame_count / 15) % 4 {
         self.draw_text_smooth(cancel_text_x, button_y as i32 + 9, "Cancel", 0xFFCC4444);
 
         // Error message
-        if let Some(ref message) = self.wifi_error_message {
+        if let Some(ref msg) = self.wifi_error_msg {
             let error_y = button_y - 24;
-            let error_x = (wx as u32 + (ww - message.len() as u32 * 8) / 2) as i32;
-            self.draw_text_smooth(error_x, error_y as i32, message, 0xFFCC4444);
+            let error_x = (wx as u32 + (ww - msg.len() as u32 * 8) / 2) as i32;
+            self.draw_text_smooth(error_x, error_y as i32, msg, 0xFFCC4444);
         }
     }
 
@@ -15749,13 +16237,13 @@ match (self.frame_count / 15) % 4 {
         if bw < 120 || bh < 100 { return; }
 
         let cw = crate::graphics::scaling::char_width() as i32;
-        let character = crate::graphics::scaling::char_height();
+        let ch = crate::graphics::scaling::char_height();
 
         // ── Tab bar (dark, like Chrome's #202124) ──────────────────────
         framebuffer::fill_rect(bx, tab_y, bw, Self::BROWSER_TAB_BAR_H, 0xFF202124);
         // Active tab pill
         let tab_x = bx + 8;
-        let tab_w: u32 = 200.minimum(bw.saturating_sub(60));
+        let tab_w: u32 = 200.min(bw.saturating_sub(60));
         let tab_h = Self::BROWSER_TAB_BAR_H - 4;
         // Rounded-ish tab: draw body + 1px lighter top corners
         framebuffer::fill_rect(tab_x + 2, tab_y + 4, tab_w - 4, tab_h, 0xFF35363A);
@@ -15789,11 +16277,11 @@ match (self.frame_count / 15) % 4 {
         let button_r = nav_button_size / 2;
         let mut bx_cursor = bx + 12u32;
         // Helper: draw a filled circle-ish button (octagon approx)
-        let draw_nav_button = |cx: u32, cy: u32, r: u32, hover_column: u32| {
+        let draw_nav_button = |cx: u32, cy: u32, r: u32, hover_col: u32| {
             // Approximate circle: center rect + 4 corner rects
             let inset = r / 3;
-            framebuffer::fill_rect(cx - r + inset, cy - r, (r - inset) * 2, r * 2, hover_column);
-            framebuffer::fill_rect(cx - r, cy - r + inset, r * 2, (r - inset) * 2, hover_column);
+            framebuffer::fill_rect(cx - r + inset, cy - r, (r - inset) * 2, r * 2, hover_col);
+            framebuffer::fill_rect(cx - r, cy - r + inset, r * 2, (r - inset) * 2, hover_col);
         };
         // Back ◀
         let back_cx = bx_cursor + button_r;
@@ -15832,7 +16320,7 @@ match (self.frame_count / 15) % 4 {
 
         // Lock / info icon placeholder
         let icon_x = url_bar_x as i32 + 8;
-        let text_y = url_bar_y as i32 + (url_bar_h as i32 - character as i32) / 2;
+        let text_y = url_bar_y as i32 + (url_bar_h as i32 - ch as i32) / 2;
         let has_https = self.browser_url_input.starts_with("https://");
         if has_https {
             self.draw_text(icon_x, text_y, "S", 0xFF81C995);
@@ -15854,12 +16342,12 @@ match (self.frame_count / 15) % 4 {
 
         // Visible portion with scroll
         let text_area_pixel = (url_bar_w as i32).saturating_sub(42);
-        let maximum_visible = if cw > 0 { (text_area_pixel / cw).maximum(1) as usize } else { 40 };
+        let maximum_visible = if cw > 0 { (text_area_pixel / cw).max(1) as usize } else { 40 };
         let url_length = url_text.len();
         let scroll_off = if self.browser_url_cursor > maximum_visible {
             self.browser_url_cursor - maximum_visible + 1
         } else { 0 };
-        let vis_end = (scroll_off + maximum_visible).minimum(url_length);
+        let vis_end = (scroll_off + maximum_visible).min(url_length);
         let visible_text = if scroll_off < url_length { &url_text[scroll_off..vis_end] } else { "" };
 
         if self.browser_loading {
@@ -15872,7 +16360,7 @@ match (self.frame_count / 15) % 4 {
         if !self.browser_loading && self.browser_url_select_all && !self.browser_url_input.is_empty() {
             let sel_w = (visible_text.len() as u32) * cw as u32;
             if sel_w > 0 {
-                framebuffer::fill_rect(url_text_x as u32, url_bar_y + 3, sel_w.minimum(url_bar_w - 34), url_bar_h - 6, 0xFF3574E0);
+                framebuffer::fill_rect(url_text_x as u32, url_bar_y + 3, sel_w.min(url_bar_w - 34), url_bar_h - 6, 0xFF3574E0);
                 // Redraw text on top of selection in white
                 self.draw_text(url_text_x, text_y, visible_text, 0xFFFFFFFF);
             }
@@ -15934,12 +16422,12 @@ match &browser.status {
     }
 
     /// Chrome-style welcome / new-tab page
-    fn draw_browser_welcome(&self, bx: u32, cy: u32, bw: u32, character: u32) {
+    fn draw_browser_welcome(&self, bx: u32, cy: u32, bw: u32, ch: u32) {
         // Soft off-white background
-        framebuffer::fill_rect(bx, cy, bw, character, 0xFFFFFFFF);
+        framebuffer::fill_rect(bx, cy, bw, ch, 0xFFFFFFFF);
 
         let mid_x = bx as i32 + bw as i32 / 2;
-        let mid_y = cy as i32 + character as i32 / 2 - 50;
+        let mid_y = cy as i32 + ch as i32 / 2 - 50;
 
         // "TrustBrowser" title
         let title = "TrustBrowser";
@@ -15948,9 +16436,9 @@ match &browser.status {
         self.draw_text(transmit, mid_y, title, 0xFF202124);
 
         // Fake search box (centered rounded rect)
-        let box_w: u32 = 360.minimum(bw.saturating_sub(40));
+        let box_w: u32 = 360.min(bw.saturating_sub(40));
         let box_h: u32 = 34;
-        let box_x = (mid_x - box_w as i32 / 2).maximum(bx as i32 + 4) as u32;
+        let box_x = (mid_x - box_w as i32 / 2).max(bx as i32 + 4) as u32;
         let box_y = (mid_y + 30) as u32;
         framebuffer::fill_rect(box_x + 4, box_y, box_w - 8, box_h, 0xFFF1F3F4);
         framebuffer::fill_rect(box_x, box_y + 4, 4, box_h - 8, 0xFFF1F3F4);
@@ -16060,7 +16548,7 @@ match &browser.status {
             height: self.windows.iter()
                 .find(|w| w.x == win_x && w.y == win_y && w.width == win_w)
                 .map(|w| w.height).unwrap_or(500),
-            minimum_width: 0, minimum_height: 0,
+            min_width: 0, min_height: 0,
             visible: true, focused: true, minimized: false, maximized: false,
             dragging: false, resizing: ResizeEdge::None,
             drag_offset_x: 0, drag_offset_y: 0,
@@ -16068,7 +16556,7 @@ match &browser.status {
             window_type: WindowType::Browser,
             content: Vec::new(), file_path: None,
             selected_index: 0, scroll_offset: 0,
-            animation: WindowAnimation::new(), pending_close: false,
+            animation: WindowAnimation::new(), pending_close: false, dirty: true,
         };
         let (_bx, _by, bw, _bh, _tab_y, nav_y,
              url_bar_x, url_bar_y, url_bar_w, url_bar_h,
@@ -16089,8 +16577,8 @@ match &browser.status {
         let mut button_x = _bx + 12 + button_r;
         // Check circular hit (use square approximation)
         let hit_button = |bx_c: u32| -> bool {
-            let dx = (cx as i32 - bx_c as i32).unsigned_absolute();
-            let dy = (cy as i32 - button_cy as i32).unsigned_absolute();
+            let dx = (cx as i32 - bx_c as i32).unsigned_abs();
+            let dy = (cy as i32 - button_cy as i32).unsigned_abs();
             dx <= button_r && dy <= button_r
         };
         // Back
@@ -16133,7 +16621,7 @@ match &browser.status {
                 let text_start_x = url_bar_x + 26;
                 let relative_x = cx.saturating_sub(text_start_x);
                 let char_position = (relative_x / cw) as usize;
-                self.browser_url_cursor = char_position.minimum(self.browser_url_input.len());
+                self.browser_url_cursor = char_position.min(self.browser_url_input.len());
                 crate::serial_println!("[BROWSER] URL bar clicked, cursor={}", self.browser_url_cursor);
             }
             return;
@@ -16209,9 +16697,9 @@ match cursor_mode {
             if sx >= 0 && sy >= 0 && sx < self.width as i32 && sy < self.height as i32 {
                 for dy in 0..(12 * cs as i32) {
                     let py = (sy + dy) as u32;
-                    let pixel = sx as u32;
-                    if py < self.height && pixel < self.width {
-                        framebuffer::put_pixel_fast(pixel, py, shadow_color);
+                    let px = sx as u32;
+                    if py < self.height && px < self.width {
+                        framebuffer::put_pixel_fast(px, py, shadow_color);
                     }
                 }
             }
@@ -16253,10 +16741,10 @@ match pixel {
                 // Draw cs×cs block per cursor pixel for accessibility scaling
                 for sy in 0..cs {
                     for sx in 0..cs {
-                        let pixel = (self.cursor_x + cx as i32 * cs as i32 + sx as i32) as u32;
+                        let px = (self.cursor_x + cx as i32 * cs as i32 + sx as i32) as u32;
                         let py = (self.cursor_y + cy as i32 * cs as i32 + sy as i32) as u32;
-                        if pixel < self.width && py < self.height {
-                            framebuffer::put_pixel_fast(pixel, py, color);
+                        if px < self.width && py < self.height {
+                            framebuffer::put_pixel_fast(px, py, color);
                         }
                     }
                 }
@@ -16271,38 +16759,38 @@ match pixel {
         // Horizontal double arrow: ←→ centered on cursor
         // Left arrow
         for i in 0..7i32 {
-            let pixel = (mx - 7 + i) as u32;
+            let px = (mx - 7 + i) as u32;
             let py = my as u32;
-            if pixel < self.width && py < self.height {
-                framebuffer::put_pixel_fast(pixel, py, GREEN_PRIMARY);
-                if py > 0 { framebuffer::put_pixel_fast(pixel, py - 1, GREEN_MUTED); }
-                if py + 1 < self.height { framebuffer::put_pixel_fast(pixel, py + 1, GREEN_MUTED); }
+            if px < self.width && py < self.height {
+                framebuffer::put_pixel_fast(px, py, GREEN_PRIMARY);
+                if py > 0 { framebuffer::put_pixel_fast(px, py - 1, GREEN_MUTED); }
+                if py + 1 < self.height { framebuffer::put_pixel_fast(px, py + 1, GREEN_MUTED); }
             }
         }
         // Right arrow  
         for i in 0..7i32 {
-            let pixel = (mx + 1 + i) as u32;
+            let px = (mx + 1 + i) as u32;
             let py = my as u32;
-            if pixel < self.width && py < self.height {
-                framebuffer::put_pixel_fast(pixel, py, GREEN_PRIMARY);
-                if py > 0 { framebuffer::put_pixel_fast(pixel, py - 1, GREEN_MUTED); }
-                if py + 1 < self.height { framebuffer::put_pixel_fast(pixel, py + 1, GREEN_MUTED); }
+            if px < self.width && py < self.height {
+                framebuffer::put_pixel_fast(px, py, GREEN_PRIMARY);
+                if py > 0 { framebuffer::put_pixel_fast(px, py - 1, GREEN_MUTED); }
+                if py + 1 < self.height { framebuffer::put_pixel_fast(px, py + 1, GREEN_MUTED); }
             }
         }
         // Left arrowhead
         for d in 1..=4i32 {
-            let pixel = (mx - 7 + d) as u32;
-            if pixel < self.width {
-                if (my - d) >= 0 { framebuffer::put_pixel_fast(pixel, (my - d) as u32, GREEN_PRIMARY); }
-                if (my + d) < self.height as i32 { framebuffer::put_pixel_fast(pixel, (my + d) as u32, GREEN_PRIMARY); }
+            let px = (mx - 7 + d) as u32;
+            if px < self.width {
+                if (my - d) >= 0 { framebuffer::put_pixel_fast(px, (my - d) as u32, GREEN_PRIMARY); }
+                if (my + d) < self.height as i32 { framebuffer::put_pixel_fast(px, (my + d) as u32, GREEN_PRIMARY); }
             }
         }
         // Right arrowhead
         for d in 1..=4i32 {
-            let pixel = (mx + 7 - d) as u32;
-            if pixel < self.width {
-                if (my - d) >= 0 { framebuffer::put_pixel_fast(pixel, (my - d) as u32, GREEN_PRIMARY); }
-                if (my + d) < self.height as i32 { framebuffer::put_pixel_fast(pixel, (my + d) as u32, GREEN_PRIMARY); }
+            let px = (mx + 7 - d) as u32;
+            if px < self.width {
+                if (my - d) >= 0 { framebuffer::put_pixel_fast(px, (my - d) as u32, GREEN_PRIMARY); }
+                if (my + d) < self.height as i32 { framebuffer::put_pixel_fast(px, (my + d) as u32, GREEN_PRIMARY); }
             }
         }
         // Center dot
@@ -16317,21 +16805,21 @@ match pixel {
         let my = self.cursor_y;
         // Vertical double arrow
         for i in 0..7i32 {
-            let pixel = mx as u32;
+            let px = mx as u32;
             let py = (my - 7 + i) as u32;
-            if pixel < self.width && py < self.height {
-                framebuffer::put_pixel_fast(pixel, py, GREEN_PRIMARY);
-                if pixel > 0 { framebuffer::put_pixel_fast(pixel - 1, py, GREEN_MUTED); }
-                if pixel + 1 < self.width { framebuffer::put_pixel_fast(pixel + 1, py, GREEN_MUTED); }
+            if px < self.width && py < self.height {
+                framebuffer::put_pixel_fast(px, py, GREEN_PRIMARY);
+                if px > 0 { framebuffer::put_pixel_fast(px - 1, py, GREEN_MUTED); }
+                if px + 1 < self.width { framebuffer::put_pixel_fast(px + 1, py, GREEN_MUTED); }
             }
         }
         for i in 0..7i32 {
-            let pixel = mx as u32;
+            let px = mx as u32;
             let py = (my + 1 + i) as u32;
-            if pixel < self.width && py < self.height {
-                framebuffer::put_pixel_fast(pixel, py, GREEN_PRIMARY);
-                if pixel > 0 { framebuffer::put_pixel_fast(pixel - 1, py, GREEN_MUTED); }
-                if pixel + 1 < self.width { framebuffer::put_pixel_fast(pixel + 1, py, GREEN_MUTED); }
+            if px < self.width && py < self.height {
+                framebuffer::put_pixel_fast(px, py, GREEN_PRIMARY);
+                if px > 0 { framebuffer::put_pixel_fast(px - 1, py, GREEN_MUTED); }
+                if px + 1 < self.width { framebuffer::put_pixel_fast(px + 1, py, GREEN_MUTED); }
             }
         }
         // Top arrowhead
@@ -16361,12 +16849,12 @@ match pixel {
         let my = self.cursor_y;
         // Diagonal line NW→SE
         for i in -6..=6i32 {
-            let pixel = (mx + i) as u32;
+            let px = (mx + i) as u32;
             let py = (my + i) as u32;
-            if pixel < self.width && py < self.height {
-                framebuffer::put_pixel_fast(pixel, py, GREEN_PRIMARY);
-                if pixel + 1 < self.width { framebuffer::put_pixel_fast(pixel + 1, py, GREEN_MUTED); }
-                if py + 1 < self.height { framebuffer::put_pixel_fast(pixel, py + 1, GREEN_MUTED); }
+            if px < self.width && py < self.height {
+                framebuffer::put_pixel_fast(px, py, GREEN_PRIMARY);
+                if px + 1 < self.width { framebuffer::put_pixel_fast(px + 1, py, GREEN_MUTED); }
+                if py + 1 < self.height { framebuffer::put_pixel_fast(px, py + 1, GREEN_MUTED); }
             }
         }
         // NW arrowhead
@@ -16395,12 +16883,12 @@ match pixel {
         let my = self.cursor_y;
         // Diagonal line NE→SW
         for i in -6..=6i32 {
-            let pixel = (mx + i) as u32;
+            let px = (mx + i) as u32;
             let py = (my - i) as u32;
-            if pixel < self.width && py < self.height {
-                framebuffer::put_pixel_fast(pixel, py, GREEN_PRIMARY);
-                if pixel > 0 { framebuffer::put_pixel_fast(pixel - 1, py, GREEN_MUTED); }
-                if py + 1 < self.height { framebuffer::put_pixel_fast(pixel, py + 1, GREEN_MUTED); }
+            if px < self.width && py < self.height {
+                framebuffer::put_pixel_fast(px, py, GREEN_PRIMARY);
+                if px > 0 { framebuffer::put_pixel_fast(px - 1, py, GREEN_MUTED); }
+                if py + 1 < self.height { framebuffer::put_pixel_fast(px, py + 1, GREEN_MUTED); }
             }
         }
         // NE arrowhead
@@ -16430,9 +16918,9 @@ match pixel {
         
         let cw = crate::graphics::scaling::char_width() as i32;
         for (i, c) in text.chars().enumerate() {
-            let pixel = x + (i as i32 * cw);
-            if pixel >= 0 && pixel < self.width as i32 && y >= 0 && y < self.height as i32 {
-                crate::graphics::scaling::draw_scaled_char(pixel as u32, y as u32, c, color);
+            let px = x + (i as i32 * cw);
+            if px >= 0 && px < self.width as i32 && y >= 0 && y < self.height as i32 {
+                crate::graphics::scaling::draw_scaled_char(px as u32, y as u32, c, color);
             }
         }
         
@@ -16450,8 +16938,8 @@ match pixel {
         let factor = crate::graphics::scaling::get_scale_factor();
         let _character = 16u32 * factor;
         let _fw = 8u32 * factor;
-        let framebuffer_w = self.width;
-        let framebuffer_h = self.height;
+        let fb_w = self.width;
+        let fb_h = self.height;
         
         let fg_r = ((color >> 16) & 0xFF) as u32;
         let fg_g = ((color >> 8) & 0xFF) as u32;
@@ -16459,41 +16947,41 @@ match pixel {
         
         for (i, c) in text.chars().enumerate() {
             let cx = x + (i as i32 * cw);
-            if cx < 0 || cx >= framebuffer_w as i32 || y < 0 || y >= framebuffer_h as i32 { continue; }
+            if cx < 0 || cx >= fb_w as i32 || y < 0 || y >= fb_h as i32 { continue; }
             
             let glyph = framebuffer::font::get_glyph(c);
             
             for row in 0..16u32 {
                 let bits = glyph[row as usize];
-                let previous = if row > 0 { glyph[row as usize - 1] } else { 0u8 };
+                let prev = if row > 0 { glyph[row as usize - 1] } else { 0u8 };
                 let next = if row < 15 { glyph[row as usize + 1] } else { 0u8 };
                 
-                for column in 0..8u32 {
-                    let mask = 0x80u8 >> column;
+                for col in 0..8u32 {
+                    let mask = 0x80u8 >> col;
                     let is_set = bits & mask != 0;
                     
                     if is_set {
                         // Draw foreground block
                         for sy in 0..factor {
                             for sx in 0..factor {
-                                let pixel = cx as u32 + column * factor + sx;
+                                let px = cx as u32 + col * factor + sx;
                                 let py = y as u32 + row * factor + sy;
-                                if pixel < framebuffer_w && py < framebuffer_h {
-                                    framebuffer::put_pixel_fast(pixel, py, color);
+                                if px < fb_w && py < fb_h {
+                                    framebuffer::put_pixel_fast(px, py, color);
                                 }
                             }
                         }
                     } else {
                         // Check 8-connected neighbors for improved AA
-                        let left  = column > 0 && (bits & (mask << 1)) != 0;
-                        let right = column < 7 && (bits & (mask >> 1)) != 0;
-                        let top   = previous & mask != 0;
+                        let left  = col > 0 && (bits & (mask << 1)) != 0;
+                        let right = col < 7 && (bits & (mask >> 1)) != 0;
+                        let top   = prev & mask != 0;
                         let bot   = next & mask != 0;
                         // Diagonal neighbors (weighted at 0.7x)
-                        let tl = column > 0 && (previous & (mask << 1)) != 0;
-                        let tr = column < 7 && (previous & (mask >> 1)) != 0;
-                        let bl = column > 0 && (next & (mask << 1)) != 0;
-                        let br = column < 7 && (next & (mask >> 1)) != 0;
+                        let tl = col > 0 && (prev & (mask << 1)) != 0;
+                        let tr = col < 7 && (prev & (mask >> 1)) != 0;
+                        let bl = col > 0 && (next & (mask << 1)) != 0;
+                        let br = col < 7 && (next & (mask >> 1)) != 0;
                         
                         // Cardinal adjacency counts as 1.0, diagonal as 0.5
                         let cardinal = (left as u32) + (right as u32) + (top as u32) + (bot as u32);
@@ -16509,17 +16997,17 @@ match pixel {
                             let inv = 255 - alpha;
                             for sy in 0..factor {
                                 for sx in 0..factor {
-                                    let pixel = cx as u32 + column * factor + sx;
+                                    let px = cx as u32 + col * factor + sx;
                                     let py = y as u32 + row * factor + sy;
-                                    if pixel < framebuffer_w && py < framebuffer_h {
-                                        let bg = framebuffer::get_pixel_fast(pixel, py);
+                                    if px < fb_w && py < fb_h {
+                                        let bg = framebuffer::get_pixel_fast(px, py);
                                         let bg_r = (bg >> 16) & 0xFF;
                                         let bg_g = (bg >> 8) & 0xFF;
                                         let bg_b = bg & 0xFF;
                                         let r = (fg_r * alpha + bg_r * inv) / 255;
                                         let g = (fg_g * alpha + bg_g * inv) / 255;
                                         let b = (fg_b * alpha + bg_b * inv) / 255;
-                                        framebuffer::put_pixel_fast(pixel, py, 0xFF000000 | (r << 16) | (g << 8) | b);
+                                        framebuffer::put_pixel_fast(px, py, 0xFF000000 | (r << 16) | (g << 8) | b);
                                     }
                                 }
                             }
@@ -16540,7 +17028,7 @@ match self.windows.iter().find(|w| w.id == win_id) {
         let wy = window.y;
         let ww = window.width;
         let wh = window.height;
-        let content_y = wy + TITLE_BAR_HEIGHT as i32;
+        let content_y = wy + TITLE_BAR_HEIGHT() as i32;
         let header_h = 36i32;
 
         // Check if connected — banner area
@@ -16581,7 +17069,7 @@ match self.windows.iter().find(|w| w.id == win_id) {
                 } else {
                     self.wifi_connecting_ssid = net.ssid.clone();
                     self.wifi_password_input.clear();
-                    self.wifi_error_message = None;
+                    self.wifi_error_msg = None;
                     self.create_window("WiFi Password", 250, 150, 360, 300, WindowType::WifiPassword);
                 }
                 return;
@@ -16599,7 +17087,7 @@ match self.windows.iter().find(|w| w.id == win_id) {
         let wy = window.y;
         let ww = window.width;
         let wh = window.height;
-        let content_y = wy + TITLE_BAR_HEIGHT as i32;
+        let content_y = wy + TITLE_BAR_HEIGHT() as i32;
 
         let input_y = content_y + 108;
         let input_h = 32;
@@ -16623,7 +17111,7 @@ match self.windows.iter().find(|w| w.id == win_id) {
         if x >= button_start_x && x < button_start_x + button_w
             && y >= button_y && y < button_y + button_h {
             if self.wifi_password_input.is_empty() {
-                self.wifi_error_message = Some(String::from("Password cannot be empty"));
+                self.wifi_error_msg = Some(String::from("Password cannot be empty"));
             } else {
                 crate::drivers::net::wifi::request_connect(
                     &self.wifi_connecting_ssid,
@@ -16739,7 +17227,7 @@ pub fn create_terminal(x: i32, y: i32) -> u32 {
 
 /// Create a system info window
 pub fn create_sysinfo(x: i32, y: i32) -> u32 {
-    DESKTOP.lock().create_window("System Info", x, y, 300, 220, WindowType::SystemInformation)
+    DESKTOP.lock().create_window("System Info", x, y, 300, 220, WindowType::SystemInfo)
 }
 
 /// Close a window
@@ -17170,7 +17658,7 @@ unsafe {
             if let Some(lines) = result {
                 let mut d = DESKTOP.lock();
                 // Find the focused terminal window and append JARVIS output
-                if let Some(window) = d.windows.iterator_mut().find(|w| w.window_type == WindowType::Terminal) {
+                if let Some(window) = d.windows.iter_mut().find(|w| w.window_type == WindowType::Terminal) {
                     // Remove the cursor/prompt line before appending
                     if window.content.last().map(|s| s.contains("$ ")).unwrap_or(false) {
                         window.content.pop();
@@ -17183,7 +17671,7 @@ unsafe {
                     window.content.push(Desktop::make_prompt("_"));
                     // Auto-scroll to bottom
                     let line_height = 16usize;
-                    let content_area_h = (window.height as usize).saturating_sub(TITLE_BAR_HEIGHT as usize + 16);
+                    let content_area_h = (window.height as usize).saturating_sub(TITLE_BAR_HEIGHT() as usize + 16);
                     let visible_lines = if line_height > 0 { content_area_h / line_height } else { 1 };
                     if window.content.len() > visible_lines {
                         window.scroll_offset = window.content.len() - visible_lines;
@@ -17349,7 +17837,7 @@ match nav_result {
     // Stop all music playback to prevent HDA DMA writing to freed memory
     {
         let mut d = DESKTOP.lock();
-        for (_id, mp) in d.music_player_states.iterator_mut() {
+        for (_id, mp) in d.music_player_states.iter_mut() {
             mp.stop();
         }
         crate::serial_println!("[GUI] All music players stopped");
@@ -17374,7 +17862,7 @@ pub enum SnapDir {
 /// Render Alt+Tab overlay — polished window switcher
 fn render_alt_tab_overlay() {
     let desktop = DESKTOP.lock();
-    let win_information = desktop.get_window_information();
+    let win_information = desktop.get_window_info();
     if win_information.is_empty() { return; }
     
     let screen_w = desktop.width;
@@ -17383,14 +17871,14 @@ fn render_alt_tab_overlay() {
     
     let selection = crate::gui::engine::alt_tab_selection();
     let count = win_information.len() as i32;
-    let index = ((selection % count) + count) % count;
+    let idx = ((selection % count) + count) % count;
     
     // Card dimensions
     let card_w: u32 = 150;
     let card_h: u32 = 100;
     let gap: u32 = 12;
     let maximum_visible: u32 = 6; // Max cards shown at once
-    let visible_count = (win_information.len() as u32).minimum(maximum_visible);
+    let visible_count = (win_information.len() as u32).min(maximum_visible);
     let total_w = visible_count * (card_w + gap) + gap;
     let title_area: u32 = 30;
     let total_h = card_h + gap * 2 + title_area + 14;
@@ -17415,7 +17903,7 @@ fn render_alt_tab_overlay() {
         let cx = ox + gap as i32 + i as i32 * (card_w + gap) as i32;
         let cy = oy + gap as i32 + 22;
         
-        let is_selected = i as i32 == index;
+        let is_selected = i as i32 == idx;
         
         // Card background
         if is_selected {
@@ -17498,7 +17986,7 @@ fn render_shortcut_overlay() {
 
     // Layout: 2-column grid
     let column_count: u32 = 2;
-    let column_w: u32 = 300;
+    let col_w: u32 = 300;
     let row_h: u32 = 18;
     let cat_pad: u32 = 8;
     let header_h: u32 = 40;
@@ -17513,7 +18001,7 @@ fn render_shortcut_overlay() {
     // Split into 2 columns
     let rows_per_column = (total_rows + 1) / 2;
     let content_h = rows_per_column * row_h + ((categories.len() as u32 + 1) / 2) * cat_pad;
-    let panel_w = column_count * column_w + margin * 3;
+    let panel_w = column_count * col_w + margin * 3;
     let panel_h = header_h + content_h + footer_h + margin;
 
     let ox = (screen_w as i32 - panel_w as i32) / 2;
@@ -17532,19 +18020,19 @@ fn render_shortcut_overlay() {
     fill_rect_signed(ox + margin as i32, oy + header_h as i32 - 6, panel_w as i32 - margin as i32 * 2, 1, 0x3000FF66);
 
     // ── Content: 2-column layout ──
-    let mut column = 0u32;
+    let mut col = 0u32;
     let mut row_in_column = 0u32;
     let mut cat_index = 0usize;
 
     for (cat_name, entries) in categories.iter() {
         // Check if this category would overflow current column
         let needed = 1 + entries.len() as u32;
-        if row_in_column + needed > rows_per_column && column < column_count - 1 {
-            column += 1;
+        if row_in_column + needed > rows_per_column && col < column_count - 1 {
+            col += 1;
             row_in_column = 0;
         }
 
-        let cx = ox + margin as i32 + column as i32 * (column_w as i32 + margin as i32);
+        let cx = ox + margin as i32 + col as i32 * (col_w as i32 + margin as i32);
         let cy = oy + header_h as i32 + row_in_column as i32 * row_h as i32 + cat_index as i32 * cat_pad as i32;
 
         // Category header
@@ -17576,7 +18064,7 @@ fn window_type_icon(wtype: WindowType) -> &'static str {
         // Pattern matching — Rust's exhaustive branching construct.
 match wtype {
         WindowType::Terminal => ">_",
-        WindowType::SystemInformation => "[i]",
+        WindowType::SystemInfo => "[i]",
         WindowType::About => "(?)",
         WindowType::Calculator => "[#]",
         WindowType::FileManager => "[/]",
@@ -17601,7 +18089,7 @@ fn window_type_label(wtype: WindowType) -> &'static str {
         // Pattern matching — Rust's exhaustive branching construct.
 match wtype {
         WindowType::Terminal => "Terminal",
-        WindowType::SystemInformation => "System",
+        WindowType::SystemInfo => "System",
         WindowType::About => "About",
         WindowType::Calculator => "Calc",
         WindowType::FileManager => "Files",
@@ -17633,7 +18121,7 @@ fn render_start_menu() {
     let menu_w: u32 = 280;
     let menu_h: u32 = 350;
     let x: i32 = 10;
-    let y: i32 = screen_h as i32 - TASKBAR_HEIGHT as i32 - menu_h as i32 - 5;
+    let y: i32 = screen_h as i32 - TASKBAR_HEIGHT() as i32 - menu_h as i32 - 5;
     
     // Background with blur effect simulation
     draw_rounded_rect(x, y, menu_w, menu_h, 12, 0xF0101520);
@@ -17689,7 +18177,7 @@ fn render_notifications() {
         if opacity == 0 { continue; }
         
         // Slide-in from right: first 300ms slides from +40px offset
-        let elapsed = toast.elapsed_mouse();
+        let elapsed = toast.elapsed_ms();
         let slide_offset = if elapsed < 300 {
             ((300 - elapsed) * 40 / 300) as i32
         } else {
@@ -17721,7 +18209,7 @@ fn render_notifications() {
         // Priority icon
         let icon = // Pattern matching — Rust's exhaustive branching construct.
 match toast.priority {
-            NotifyPriority::Information => "[i]",
+            NotifyPriority::Info => "[i]",
             NotifyPriority::Warning => "/!\\",
             NotifyPriority::Error => "[X]",
             NotifyPriority::Success => "[v]",
@@ -17745,7 +18233,7 @@ match toast.priority {
             let bar_w = w - 28;
             let bar_alpha = (opacity as u32 * 0xFF / 255) << 24;
             draw_rounded_rect(x + 14, bar_y, bar_w, 8, 3, bar_alpha | 0x00252A35);
-            let fill_w = (bar_w * percent as u32 / 100).maximum(1);
+            let fill_w = (bar_w * percent as u32 / 100).max(1);
             if fill_w > 4 {
                 draw_rounded_rect(x + 14, bar_y, fill_w, 8, 3, bar_alpha | 0x0000CC55);
             }
@@ -17798,7 +18286,7 @@ fn draw_rect(x: i32, y: i32, w: u32, h: u32, color: u32) {
 /// Helper: Draw filled rounded rect with alpha blending (semi-transparent glass effect)
 fn draw_rounded_rect_alpha(x: i32, y: i32, w: u32, h: u32, radius: u32, color: u32, alpha: u32) {
     if w == 0 || h == 0 { return; }
-    let r = radius.minimum(w / 2).minimum(h / 2);
+    let r = radius.min(w / 2).min(h / 2);
 
     if r == 0 {
         if x >= 0 && y >= 0 {
@@ -17828,7 +18316,7 @@ fn draw_rounded_rect_alpha(x: i32, y: i32, w: u32, h: u32, radius: u32, color: u
 /// Helper: Draw filled rounded rect with proper quarter-circle corners (opaque)
 fn draw_rounded_rect(x: i32, y: i32, w: u32, h: u32, radius: u32, color: u32) {
     if w == 0 || h == 0 { return; }
-    let r = radius.minimum(w / 2).minimum(h / 2);
+    let r = radius.min(w / 2).min(h / 2);
 
     if r == 0 {
         // No rounding — just fill
@@ -17870,7 +18358,7 @@ fn draw_rounded_rect(x: i32, y: i32, w: u32, h: u32, radius: u32, color: u32) {
 /// Helper: Draw rounded rectangle border (outline only)
 fn draw_rounded_rect_border(x: i32, y: i32, w: u32, h: u32, radius: u32, color: u32) {
     if w == 0 || h == 0 { return; }
-    let r = radius.minimum(w / 2).minimum(h / 2);
+    let r = radius.min(w / 2).min(h / 2);
     let wi = w as i32;
     let hi = h as i32;
     let ri = r as i32;
@@ -17883,9 +18371,9 @@ fn draw_rounded_rect_border(x: i32, y: i32, w: u32, h: u32, radius: u32, color: 
     }
 
     // Straight edges
-    for pixel in ri..wi - ri {
-        put_pixel_signed(x + pixel, y, color);            // top
-        put_pixel_signed(x + pixel, y + hi - 1, color);   // bottom
+    for px in ri..wi - ri {
+        put_pixel_signed(x + px, y, color);            // top
+        put_pixel_signed(x + px, y + hi - 1, color);   // bottom
     }
     for py in ri..hi - ri {
         put_pixel_signed(x, y + py, color);            // left
@@ -17895,7 +18383,7 @@ fn draw_rounded_rect_border(x: i32, y: i32, w: u32, h: u32, radius: u32, color: 
     // Corner arcs (Bresenham midpoint)
     let mut cx = ri;
     let mut cy = 0i32;
-    let mut error = 0i32;
+    let mut err = 0i32;
     while cx >= cy {
         // Top-left
         put_pixel_signed(x + ri - cx, y + ri - cy, color);
@@ -17911,10 +18399,10 @@ fn draw_rounded_rect_border(x: i32, y: i32, w: u32, h: u32, radius: u32, color: 
         put_pixel_signed(x + wi - 1 - ri + cy, y + hi - 1 - ri + cx, color);
 
         cy += 1;
-        error += 1 + 2 * cy;
-        if 2 * (error - cx) + 1 > 0 {
+        err += 1 + 2 * cy;
+        if 2 * (err - cx) + 1 > 0 {
             cx -= 1;
-            error += 1 - 2 * cx;
+            err += 1 - 2 * cx;
         }
     }
 }
@@ -17923,24 +18411,24 @@ fn draw_rounded_rect_border(x: i32, y: i32, w: u32, h: u32, radius: u32, color: 
 #[inline]
 fn fill_rect_signed(x: i32, y: i32, w: i32, h: i32, color: u32) {
     if w <= 0 || h <= 0 { return; }
-    let pixel = x.maximum(0) as u32;
-    let py = y.maximum(0) as u32;
-    let cw = if x < 0 { (w + x).maximum(0) as u32 } else { w as u32 };
-    let character = if y < 0 { (h + y).maximum(0) as u32 } else { h as u32 };
-    if cw > 0 && character > 0 {
-        crate::framebuffer::fill_rect(pixel, py, cw, character, color);
+    let px = x.max(0) as u32;
+    let py = y.max(0) as u32;
+    let cw = if x < 0 { (w + x).max(0) as u32 } else { w as u32 };
+    let ch = if y < 0 { (h + y).max(0) as u32 } else { h as u32 };
+    if cw > 0 && ch > 0 {
+        crate::framebuffer::fill_rect(px, py, cw, ch, color);
     }
 }
 
 /// Signed-coord alpha-blended fill helper
 fn fill_rect_signed_alpha(x: i32, y: i32, w: i32, h: i32, color: u32, alpha: u32) {
     if w <= 0 || h <= 0 { return; }
-    let pixel = x.maximum(0) as u32;
-    let py = y.maximum(0) as u32;
-    let cw = if x < 0 { (w + x).maximum(0) as u32 } else { w as u32 };
-    let character = if y < 0 { (h + y).maximum(0) as u32 } else { h as u32 };
-    if cw > 0 && character > 0 {
-        crate::framebuffer::fill_rect_alpha(pixel, py, cw, character, color, alpha);
+    let px = x.max(0) as u32;
+    let py = y.max(0) as u32;
+    let cw = if x < 0 { (w + x).max(0) as u32 } else { w as u32 };
+    let ch = if y < 0 { (h + y).max(0) as u32 } else { h as u32 };
+    if cw > 0 && ch > 0 {
+        crate::framebuffer::fill_rect_alpha(px, py, cw, ch, color, alpha);
     }
 }
 

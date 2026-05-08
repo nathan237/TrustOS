@@ -13,13 +13,13 @@ use alloc::vec::Vec;
 
 
 
-pub const YJ_: usize = 32;
+pub const ZN_: usize = 32;
 
 
-pub const DBP_: usize = 64;
+pub const DFK_: usize = 64;
 
 
-pub const DTO_: usize = 256;
+pub const DXF_: usize = 256;
 
 
 
@@ -28,11 +28,11 @@ pub const DTO_: usize = 256;
 
 #[derive(Clone, Copy)]
 #[repr(C)]
-pub struct Fy {
-    pub b: u32,
-    pub c: u32,
-    pub z: u32,
-    pub ac: u32,
+pub struct Cr {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
     pub time: f32,
     pub frame: u32,
 }
@@ -41,34 +41,34 @@ pub struct Fy {
 #[derive(Clone, Copy, Default)]
 #[repr(C)]
 pub struct PixelOutput {
-    pub m: u8,
-    pub at: u8,
-    pub o: u8,
-    pub q: u8,
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+    pub a: u8,
 }
 
 impl PixelOutput {
     #[inline]
-    pub fn lv(&self) -> u32 {
-        ((self.q as u32) << 24) | ((self.m as u32) << 16) | ((self.at as u32) << 8) | (self.o as u32)
+    pub fn to_u32(&self) -> u32 {
+        ((self.a as u32) << 24) | ((self.r as u32) << 16) | ((self.g as u32) << 8) | (self.b as u32)
     }
     
     #[inline]
-    pub fn bul(m: u8, at: u8, o: u8) -> Self {
-        Self { m, at, o, q: 255 }
+    pub fn aln(r: u8, g: u8, b: u8) -> Self {
+        Self { r, g, b, a: 255 }
     }
     
     #[inline]
-    pub fn syf(m: u8, at: u8, o: u8, q: u8) -> Self {
-        Self { m, at, o, q }
+    pub fn from_rgba(r: u8, g: u8, b: u8, a: u8) -> Self {
+        Self { r, g, b, a }
     }
 }
 
 
-pub type Ty = fn(input: Fy) -> PixelOutput;
+pub type Ip = fn(input: Cr) -> PixelOutput;
 
 
-pub type Ctl = fn(yuz: u32, zbn: u32, zty: *const u8) -> u32;
+pub type Atq = fn(global_id: u32, local_id: u32, uniforms: *const u8) -> u32;
 
 
 
@@ -79,20 +79,20 @@ pub struct VirtualGpu {
     
     frame: AtomicU32,
     
-    ejx: AtomicU32,
+    time_ms: AtomicU32,
     
-    iiv: Option<Ty>,
+    active_shader: Option<Ip>,
     
     framebuffer: *mut u32,
     
-    z: u32,
-    ac: u32,
+    width: u32,
+    height: u32,
     
-    oq: u32,
+    stride: u32,
     
-    rpa: [AtomicBool; YJ_],
+    core_busy: [AtomicBool; ZN_],
     
-    dng: AtomicU32,
+    work_completed: AtomicU32,
 }
 
 unsafe impl Send for VirtualGpu {}
@@ -101,72 +101,72 @@ unsafe impl Sync for VirtualGpu {}
 impl VirtualGpu {
     
     pub const fn new() -> Self {
-        const CBR_: AtomicBool = AtomicBool::new(false);
+        const CFC_: AtomicBool = AtomicBool::new(false);
         Self {
             frame: AtomicU32::new(0),
-            ejx: AtomicU32::new(0),
-            iiv: None,
+            time_ms: AtomicU32::new(0),
+            active_shader: None,
             framebuffer: core::ptr::null_mut(),
-            z: 0,
-            ac: 0,
-            oq: 0,
-            rpa: [CBR_; YJ_],
-            dng: AtomicU32::new(0),
+            width: 0,
+            height: 0,
+            stride: 0,
+            core_busy: [CFC_; ZN_],
+            work_completed: AtomicU32::new(0),
         }
     }
     
     
     
-    pub fn init(&mut self, framebuffer: *mut u32, z: u32, ac: u32, oq: u32) {
+    pub fn init(&mut self, framebuffer: *mut u32, width: u32, height: u32, stride: u32) {
         self.framebuffer = framebuffer;
-        self.z = z;
-        self.ac = ac;
-        self.oq = oq;
+        self.width = width;
+        self.height = height;
+        self.stride = stride;
     }
     
     
-    pub fn hzy(&mut self, bfg: Ty) {
-        self.iiv = Some(bfg);
+    pub fn set_shader(&mut self, shader: Ip) {
+        self.active_shader = Some(shader);
     }
     
     
     
-    pub fn nlu(&self) {
-        let Some(bfg) = self.iiv else { return };
+    pub fn dispatch_fullscreen(&self) {
+        let Some(shader) = self.active_shader else { return };
         
-        let z = self.z;
-        let ac = self.ac;
-        let jtv = (z * ac) as usize;
-        let time = self.ejx.load(Ordering::Relaxed) as f32 / 1000.0;
+        let width = self.width;
+        let height = self.height;
+        let fdi = (width * height) as usize;
+        let time = self.time_ms.load(Ordering::Relaxed) as f32 / 1000.0;
         let frame = self.frame.load(Ordering::Relaxed);
         
         
-        let aao = crate::cpu::smp::boc() as usize;
-        let aao = aao.am(1);
+        let cpu_count = crate::cpu::smp::ail() as usize;
+        let cpu_count = cpu_count.max(1);
         
         
-        let zfi = (jtv + aao - 1) / aao;
+        let qqn = (fdi + cpu_count - 1) / cpu_count;
         
         
-        self.dng.store(0, Ordering::Release);
+        self.work_completed.store(0, Ordering::Release);
         
         
-        let be = Kx {
-            bfg,
+        let ab = Eo {
+            shader,
             framebuffer: self.framebuffer,
-            z,
-            ac,
-            oq: self.oq,
+            width,
+            height,
+            stride: self.stride,
             time,
             frame,
         };
         
         
         
-        crate::cpu::smp::daj(
-            ac as usize,
-            nlv,
-            &be as *const Kx as *mut u8,
+        crate::cpu::smp::bcz(
+            height as usize,
+            hsn,
+            &ab as *const Eo as *mut u8,
         );
         
         
@@ -175,37 +175,37 @@ impl VirtualGpu {
     
     
     #[cfg(target_arch = "x86_64")]
-    pub fn ryh(&self) {
-        let Some(bfg) = self.iiv else { return };
+    pub fn dispatch_fullscreen_simd(&self) {
+        let Some(shader) = self.active_shader else { return };
         
-        let z = self.z;
-        let ac = self.ac;
-        let time = self.ejx.load(Ordering::Relaxed) as f32 / 1000.0;
+        let width = self.width;
+        let height = self.height;
+        let time = self.time_ms.load(Ordering::Relaxed) as f32 / 1000.0;
         let frame = self.frame.load(Ordering::Relaxed);
         
-        let be = Kx {
-            bfg,
+        let ab = Eo {
+            shader,
             framebuffer: self.framebuffer,
-            z,
-            ac,
-            oq: self.oq,
+            width,
+            height,
+            stride: self.stride,
             time,
             frame,
         };
         
         
-        crate::cpu::smp::daj(
-            ac as usize,
-            nlw,
-            &be as *const Kx as *mut u8,
+        crate::cpu::smp::bcz(
+            height as usize,
+            hso,
+            &ab as *const Eo as *mut u8,
         );
         
         self.frame.fetch_add(1, Ordering::Relaxed);
     }
     
     
-    pub fn or(&self, koy: u32) {
-        self.ejx.fetch_add(koy, Ordering::Relaxed);
+    pub fn tick(&self, brv: u32) {
+        self.time_ms.fetch_add(brv, Ordering::Relaxed);
     }
     
     
@@ -215,7 +215,7 @@ impl VirtualGpu {
     
     
     pub fn time(&self) -> f32 {
-        self.ejx.load(Ordering::Relaxed) as f32 / 1000.0
+        self.time_ms.load(Ordering::Relaxed) as f32 / 1000.0
     }
 }
 
@@ -233,33 +233,33 @@ impl VirtualGpu {
 
 
 #[inline]
-pub fn nlu(
+pub fn dispatch_fullscreen(
     framebuffer: *mut u32,
-    z: u32,
-    ac: u32,
+    width: u32,
+    height: u32,
     time: f32,
     frame: u32,
-    bfg: Ty,
+    shader: Ip,
 ) {
-    ryi(framebuffer, z, ac, z, time, frame, bfg);
+    lff(framebuffer, width, height, width, time, frame, shader);
 }
 
 
-pub fn ryi(
+pub fn lff(
     framebuffer: *mut u32,
-    z: u32,
-    ac: u32,
-    oq: u32,
+    width: u32,
+    height: u32,
+    stride: u32,
     time: f32,
     frame: u32,
-    bfg: Ty,
+    shader: Ip,
 ) {
-    let be = Kx {
-        bfg,
+    let ab = Eo {
+        shader,
         framebuffer,
-        z,
-        ac,
-        oq,
+        width,
+        height,
+        stride,
         time,
         frame,
     };
@@ -267,19 +267,19 @@ pub fn ryi(
     
     #[cfg(target_arch = "x86_64")]
     {
-        crate::cpu::smp::daj(
-            ac as usize,
-            nlw,
-            &be as *const Kx as *mut u8,
+        crate::cpu::smp::bcz(
+            height as usize,
+            hso,
+            &ab as *const Eo as *mut u8,
         );
     }
 
     #[cfg(not(target_arch = "x86_64"))]
     {
-        crate::cpu::smp::daj(
-            ac as usize,
-            nlv,
-            &be as *const Kx as *mut u8,
+        crate::cpu::smp::bcz(
+            height as usize,
+            hsn,
+            &ab as *const Eo as *mut u8,
         );
     }
 }
@@ -290,43 +290,43 @@ pub fn ryi(
 
 
 #[repr(C)]
-struct Kx {
-    bfg: Ty,
+struct Eo {
+    shader: Ip,
     framebuffer: *mut u32,
-    z: u32,
-    ac: u32,
-    oq: u32,  
+    width: u32,
+    height: u32,
+    stride: u32,  
     time: f32,
     frame: u32,
 }
 
-unsafe impl Send for Kx {}
-unsafe impl Sync for Kx {}
+unsafe impl Send for Eo {}
+unsafe impl Sync for Eo {}
 
 
-fn nlv(ay: usize, ci: usize, f: *mut u8) {
-    let be = unsafe { &*(f as *const Kx) };
-    let bfg = be.bfg;
-    let pq = be.framebuffer;
-    let z = be.z;
-    let ac = be.ac;
-    let oq = be.oq as usize;
+fn hsn(start: usize, end: usize, data: *mut u8) {
+    let ab = unsafe { &*(data as *const Eo) };
+    let shader = ab.shader;
+    let fb = ab.framebuffer;
+    let width = ab.width;
+    let height = ab.height;
+    let stride = ab.stride as usize;
 
-    for c in ay..ci {
-        let afg = c * oq;
-        for b in 0..z as usize {
-            let input = Fy {
-                b: b as u32,
-                c: c as u32,
-                z,
-                ac,
-                time: be.time,
-                frame: be.frame,
+    for y in start..end {
+        let pq = y * stride;
+        for x in 0..width as usize {
+            let input = Cr {
+                x: x as u32,
+                y: y as u32,
+                width,
+                height,
+                time: ab.time,
+                frame: ab.frame,
             };
 
-            let an = bfg(input);
+            let output = shader(input);
             unsafe {
-                *pq.add(afg + b) = an.lv();
+                *fb.add(pq + x) = output.to_u32();
             }
         }
     }
@@ -334,60 +334,60 @@ fn nlv(ay: usize, ci: usize, f: *mut u8) {
 
 
 #[cfg(target_arch = "x86_64")]
-fn nlw(ay: usize, ci: usize, f: *mut u8) {
+fn hso(start: usize, end: usize, data: *mut u8) {
     use core::arch::x86_64::*;
     
-    let be = unsafe { &*(f as *const Kx) };
-    let bfg = be.bfg;
-    let pq = be.framebuffer;
-    let z = be.z as usize;
-    let ac = be.ac;
-    let oq = be.oq as usize;
+    let ab = unsafe { &*(data as *const Eo) };
+    let shader = ab.shader;
+    let fb = ab.framebuffer;
+    let width = ab.width as usize;
+    let height = ab.height;
+    let stride = ab.stride as usize;
     
-    for c in ay..ci {
-        let afg = c * oq;
+    for y in start..end {
+        let pq = y * stride;
         
         
-        let mut b = 0;
-        while b + 4 <= z {
+        let mut x = 0;
+        while x + 4 <= width {
             
             let mut colors = [0u32; 4];
             
-            for a in 0..4 {
-                let input = Fy {
-                    b: (b + a) as u32,
-                    c: c as u32,
-                    z: z as u32,
-                    ac,
-                    time: be.time,
-                    frame: be.frame,
+            for i in 0..4 {
+                let input = Cr {
+                    x: (x + i) as u32,
+                    y: y as u32,
+                    width: width as u32,
+                    height,
+                    time: ab.time,
+                    frame: ab.frame,
                 };
-                colors[a] = bfg(input).lv();
+                colors[i] = shader(input).to_u32();
             }
             
             
             unsafe {
-                let hz = byb(colors.fq() as *const acb);
-                ccs(pq.add(afg + b) as *mut acb, hz);
+                let pixels = _mm_loadu_si128(colors.as_ptr() as *const __m128i);
+                _mm_storeu_si128(fb.add(pq + x) as *mut __m128i, pixels);
             }
             
-            b += 4;
+            x += 4;
         }
         
         
-        while b < z {
-            let input = Fy {
-                b: b as u32,
-                c: c as u32,
-                z: z as u32,
-                ac,
-                time: be.time,
-                frame: be.frame,
+        while x < width {
+            let input = Cr {
+                x: x as u32,
+                y: y as u32,
+                width: width as u32,
+                height,
+                time: ab.time,
+                frame: ab.frame,
             };
             unsafe {
-                *pq.add(afg + b) = bfg(input).lv();
+                *fb.add(pq + x) = shader(input).to_u32();
             }
-            b += 1;
+            x += 1;
         }
     }
 }
@@ -397,216 +397,216 @@ fn nlw(ay: usize, ci: usize, f: *mut u8) {
 
 
 
-pub fn wmd(input: Fy) -> PixelOutput {
-    let b = input.b as f32 / input.z as f32;
-    let c = input.c as f32 / input.ac as f32;
-    let ab = input.time;
+pub fn org(input: Cr) -> PixelOutput {
+    let x = input.x as f32 / input.width as f32;
+    let y = input.y as f32 / input.height as f32;
+    let t = input.time;
     
     
-    let agy = lz(b * 10.0 + ab);
-    let apg = lz(c * 10.0 + ab * 1.5);
-    let bdf = lz((b + c) * 5.0 + ab * 0.7);
-    let cnq = lz(ahn((b - 0.5) * (b - 0.5) + (c - 0.5) * (c - 0.5)) * 10.0 - ab * 2.0);
+    let v1 = eu(x * 10.0 + t);
+    let v2 = eu(y * 10.0 + t * 1.5);
+    let v3 = eu((x + y) * 5.0 + t * 0.7);
+    let v4 = eu(ra((x - 0.5) * (x - 0.5) + (y - 0.5) * (y - 0.5)) * 10.0 - t * 2.0);
     
-    let p = (agy + apg + bdf + cnq) / 4.0;
+    let v = (v1 + v2 + v3 + v4) / 4.0;
     
     
-    let m = ((p + 1.0) * 0.5 * 255.0) as u8;
-    let at = ((lz(p * 3.14159 + ab) + 1.0) * 0.5 * 255.0) as u8;
-    let o = ((lz(p * 3.14159 * 2.0 + ab * 1.3) + 1.0) * 0.5 * 255.0) as u8;
+    let r = ((v + 1.0) * 0.5 * 255.0) as u8;
+    let g = ((eu(v * 3.14159 + t) + 1.0) * 0.5 * 255.0) as u8;
+    let b = ((eu(v * 3.14159 * 2.0 + t * 1.3) + 1.0) * 0.5 * 255.0) as u8;
     
-    PixelOutput::bul(m, at, o)
+    PixelOutput::aln(r, g, b)
 }
 
 
-pub fn wlz(input: Fy) -> PixelOutput {
-    let b = input.b;
-    let c = input.c;
-    let ab = input.time;
-    let d = input.z;
-    let i = input.ac;
+pub fn orc(input: Cr) -> PixelOutput {
+    let x = input.x;
+    let y = input.y;
+    let t = input.time;
+    let w = input.width;
+    let h = input.height;
     
     
-    let acc = 8u32;
-    let aqw = 16u32;
-    let bj = b / acc;
-    let br = c / aqw;
-    let bhi = b % acc;
-    let alk = c % aqw;
+    let cell_w = 8u32;
+    let cell_h = 16u32;
+    let col = x / cell_w;
+    let row = y / cell_h;
+    let afh = x % cell_w;
+    let ta = y % cell_h;
     
     
-    let dpa = bj.hx(2654435761);
-    let ffk = (dpa & 0xFFFF) as f32 / 65535.0;
-    let rlv = ((dpa >> 8) & 0xFFFF) as f32 / 65535.0;
+    let blf = col.wrapping_mul(2654435761);
+    let chl = (blf & 0xFFFF) as f32 / 65535.0;
+    let kvg = ((blf >> 8) & 0xFFFF) as f32 / 65535.0;
     
     
-    let ig = 3.0 + ffk * 8.0;           
-    let l = rlv * 50.0;               
-    let acr = 8.0 + ffk * 12.0;       
+    let speed = 3.0 + chl * 8.0;           
+    let offset = kvg * 50.0;               
+    let trail_len = 8.0 + chl * 12.0;       
     
     
-    let lbr = ((ab * ig + l) % ((i / aqw + 30) as f32)) as i32 - 15;
-    let mat = br as i32;
+    let gah = ((t * speed + offset) % ((h / cell_h + 30) as f32)) as i32 - 15;
+    let gry = row as i32;
     
     
-    let la = lbr - mat;
+    let em = gah - gry;
     
-    if la < 0 || la > acr as i32 {
+    if em < 0 || em > trail_len as i32 {
         
-        return PixelOutput::bul(0, 0, 0);
+        return PixelOutput::aln(0, 0, 0);
     }
     
     
-    let cuv = la as f32 / acr;
-    let kt = if la == 0 {
+    let bab = em as f32 / trail_len;
+    let brightness = if em == 0 {
         1.0  
     } else {
-        (1.0 - cuv) * 0.7
+        (1.0 - bab) * 0.7
     };
     
     
-    let feo = (bj.hx(31337) ^ br.hx(7919) ^ (input.frame / 3)) as f32;
-    let tgh = vnv(bhi, alk, feo as u32);
+    let cgt = (col.wrapping_mul(31337) ^ row.wrapping_mul(7919) ^ (input.frame / 3)) as f32;
+    let mfe = nzg(afh, ta, cgt as u32);
     
-    if !tgh {
+    if !mfe {
         
-        let tq = kt * 0.15;
-        let at = (tq * 255.0) as u8;
-        return PixelOutput::bul(0, at / 2, at / 4);
+        let glow = brightness * 0.15;
+        let g = (glow * 255.0) as u8;
+        return PixelOutput::aln(0, g / 2, g / 4);
     }
     
     
-    let bji = kt * 255.0;
-    let m = if la == 0 { (bji * 0.8) as u8 } else { 0 };  
-    let at = bji as u8;
-    let o = if la == 0 { (bji * 0.8) as u8 } else { (bji * 0.2) as u8 };
+    let agd = brightness * 255.0;
+    let r = if em == 0 { (agd * 0.8) as u8 } else { 0 };  
+    let g = agd as u8;
+    let b = if em == 0 { (agd * 0.8) as u8 } else { (agd * 0.2) as u8 };
     
-    PixelOutput::bul(m, at, o)
+    PixelOutput::aln(r, g, b)
 }
 
 
 #[inline]
-fn vnv(mj: u32, ct: u32, dv: u32) -> bool {
+fn nzg(fe: u32, ly: u32, seed: u32) -> bool {
     
-    let hash = dv
-        .hx(2654435761)
-        .cn(mj.hx(7919))
-        .cn(ct.hx(31337));
+    let hash = seed
+        .wrapping_mul(2654435761)
+        .wrapping_add(fe.wrapping_mul(7919))
+        .wrapping_add(ly.wrapping_mul(31337));
     
     
-    let vfl = (dv / 7) % 8;
+    let nsk = (seed / 7) % 8;
     
-    match vfl {
+    match nsk {
         0 => {
             
-            ct % 4 < 2 && mj > 1 && mj < 6
+            ly % 4 < 2 && fe > 1 && fe < 6
         },
         1 => {
             
-            mj == 3 || mj == 4 || (ct % 5 == 0 && mj > 1)
+            fe == 3 || fe == 4 || (ly % 5 == 0 && fe > 1)
         },
         2 => {
             
-            (ct == 2 || ct == 13) && mj > 1 && mj < 6 ||
-            (mj == 2 || mj == 5) && ct > 2 && ct < 13
+            (ly == 2 || ly == 13) && fe > 1 && fe < 6 ||
+            (fe == 2 || fe == 5) && ly > 2 && ly < 13
         },
         3 => {
             
-            let wz = if mj > ct / 2 { mj - ct / 2 } else { ct / 2 - mj };
-            wz < 2
+            let jr = if fe > ly / 2 { fe - ly / 2 } else { ly / 2 - fe };
+            jr < 2
         },
         4 => {
             
-            (mj == 3 || mj == 4) && ct > 2 && ct < 14 ||
-            (ct == 7 || ct == 8) && mj > 0 && mj < 7
+            (fe == 3 || fe == 4) && ly > 2 && ly < 14 ||
+            (ly == 7 || ly == 8) && fe > 0 && fe < 7
         },
         5 => {
             
-            (hash % 3) == 0 && mj > 0 && mj < 7 && ct > 1 && ct < 14
+            (hash % 3) == 0 && fe > 0 && fe < 7 && ly > 1 && ly < 14
         },
         6 => {
             
-            let vs = 4i32;
-            let cml = (ct as i32 - 2).am(0).v(6);
-            let rzc = (mj as i32 - vs).gp();
-            ct > 2 && ct < 14 && rzc <= cml / 2
+            let mid = 4i32;
+            let auv = (ly as i32 - 2).max(0).min(6);
+            let lfz = (fe as i32 - mid).abs();
+            ly > 2 && ly < 14 && lfz <= auv / 2
         },
         _ => {
             
-            mj > 0 && mj < 7 && ct > 1 && ct < 14 && (mj + ct) % 3 != 0
+            fe > 0 && fe < 7 && ly > 1 && ly < 14 && (fe + ly) % 3 != 0
         }
     }
 }
 
 
-pub fn wly(input: Fy) -> PixelOutput {
-    let ddn = 2.5 + lz(input.time * 0.3) * 0.5;
-    let cx = (input.b as f32 / input.z as f32 - 0.7) * ddn;
-    let ae = (input.c as f32 / input.ac as f32 - 0.5) * ddn;
+pub fn orb(input: Cr) -> PixelOutput {
+    let zoom = 2.5 + eu(input.time * 0.3) * 0.5;
+    let cx = (input.x as f32 / input.width as f32 - 0.7) * zoom;
+    let u = (input.y as f32 / input.height as f32 - 0.5) * zoom;
     
-    let mut gxd = 0.0f32;
-    let mut gxe = 0.0f32;
+    let mut dgx = 0.0f32;
+    let mut dgy = 0.0f32;
     let mut iter = 0u32;
-    const AFB_: u32 = 64;
+    const AGV_: u32 = 64;
     
-    while gxd * gxd + gxe * gxe < 4.0 && iter < AFB_ {
-        let gup = gxd * gxd - gxe * gxe + cx;
-        gxe = 2.0 * gxd * gxe + ae;
-        gxd = gup;
+    while dgx * dgx + dgy * dgy < 4.0 && iter < AGV_ {
+        let tmp = dgx * dgx - dgy * dgy + cx;
+        dgy = 2.0 * dgx * dgy + u;
+        dgx = tmp;
         iter += 1;
     }
     
-    if iter == AFB_ {
-        PixelOutput::bul(0, 0, 0)
+    if iter == AGV_ {
+        PixelOutput::aln(0, 0, 0)
     } else {
-        let ab = iter as f32 / AFB_ as f32;
-        let m = (ab * 255.0) as u8;
-        let at = (srb(ab * 2.0) * 255.0) as u8;
-        let o = ((1.0 - ab) * 255.0) as u8;
-        PixelOutput::bul(m, at, o)
+        let t = iter as f32 / AGV_ as f32;
+        let r = (t * 255.0) as u8;
+        let g = (lui(t * 2.0) * 255.0) as u8;
+        let b = ((1.0 - t) * 255.0) as u8;
+        PixelOutput::aln(r, g, b)
     }
 }
 
 
-pub fn wlv(input: Fy) -> PixelOutput {
-    let m = (input.b * 255 / input.z) as u8;
-    let at = (input.c * 255 / input.ac) as u8;
-    let o = ((input.time * 50.0) as u32 % 256) as u8;
-    PixelOutput::bul(m, at, o)
+pub fn oqy(input: Cr) -> PixelOutput {
+    let r = (input.x * 255 / input.width) as u8;
+    let g = (input.y * 255 / input.height) as u8;
+    let b = ((input.time * 50.0) as u32 % 256) as u8;
+    PixelOutput::aln(r, g, b)
 }
 
 
-pub fn wlu(input: Fy) -> PixelOutput {
-    let b = input.b as f32;
-    let c = input.c as f32;
-    let i = input.ac as f32;
-    let ab = input.time;
+pub fn oqx(input: Cr) -> PixelOutput {
+    let x = input.x as f32;
+    let y = input.y as f32;
+    let h = input.height as f32;
+    let t = input.time;
     
     
-    let uuy = lz(b * 0.1 + ab * 3.0) * 0.5 + 0.5;
-    let uuz = lz(b * 0.17 + ab * 2.3) * 0.5 + 0.5;
-    let uva = lz(b * 0.23 + c * 0.1 + ab * 1.7) * 0.5 + 0.5;
+    let nkq = eu(x * 0.1 + t * 3.0) * 0.5 + 0.5;
+    let nkr = eu(x * 0.17 + t * 2.3) * 0.5 + 0.5;
+    let nks = eu(x * 0.23 + y * 0.1 + t * 1.7) * 0.5 + 0.5;
     
-    let qnk = 1.0 - (c / i);
-    let xc = qnk * (0.5 + uuy * 0.2 + uuz * 0.2 + uva * 0.1);
-    let xc = xc.am(0.0).v(1.0);
+    let kab = 1.0 - (y / h);
+    let heat = kab * (0.5 + nkq * 0.2 + nkr * 0.2 + nks * 0.1);
+    let heat = heat.max(0.0).min(1.0);
     
     
-    let (m, at, o) = if xc < 0.2 {
-        let ab = xc / 0.2;
-        ((ab * 128.0) as u8, 0, 0)
-    } else if xc < 0.5 {
-        let ab = (xc - 0.2) / 0.3;
-        (128 + (ab * 127.0) as u8, (ab * 100.0) as u8, 0)
-    } else if xc < 0.8 {
-        let ab = (xc - 0.5) / 0.3;
-        (255, 100 + (ab * 155.0) as u8, (ab * 50.0) as u8)
+    let (r, g, b) = if heat < 0.2 {
+        let t = heat / 0.2;
+        ((t * 128.0) as u8, 0, 0)
+    } else if heat < 0.5 {
+        let t = (heat - 0.2) / 0.3;
+        (128 + (t * 127.0) as u8, (t * 100.0) as u8, 0)
+    } else if heat < 0.8 {
+        let t = (heat - 0.5) / 0.3;
+        (255, 100 + (t * 155.0) as u8, (t * 50.0) as u8)
     } else {
-        let ab = (xc - 0.8) / 0.2;
-        (255, 255, 50 + (ab * 205.0) as u8)
+        let t = (heat - 0.8) / 0.2;
+        (255, 255, 50 + (t * 205.0) as u8)
     };
     
-    PixelOutput::bul(m, at, o)
+    PixelOutput::aln(r, g, b)
 }
 
 
@@ -615,258 +615,258 @@ pub fn wlu(input: Fy) -> PixelOutput {
 
 
 
-pub fn wlx(input: Fy) -> PixelOutput {
-    let d = input.z as f32;
-    let i = input.ac as f32;
-    let ab = input.time;
+pub fn ora(input: Cr) -> PixelOutput {
+    let w = input.width as f32;
+    let h = input.height as f32;
+    let t = input.time;
     
     
-    let cx = (input.b as f32 - d * 0.5) / (i * 0.5);  
-    let ae = (input.c as f32 - i * 0.5) / (i * 0.5);
+    let cx = (input.x as f32 - w * 0.5) / (h * 0.5);  
+    let u = (input.y as f32 - h * 0.5) / (h * 0.5);
     
     
-    let dy = ahn(cx * cx + ae * ae).am(0.001);
-    let hg = itz(ae, cx);
-    
-    
-    
-    let eo = 1.0 / dy;
-    
-    
-    let av = eo + ab * 2.5;
+    let radius = ra(cx * cx + u * u).max(0.001);
+    let cc = emf(u, cx);
     
     
     
-    let cnz = (hg / 6.28318 + 0.5) % 1.0;
-    let cnz = if cnz < 0.0 { cnz + 1.0 } else { cnz };
+    let depth = 1.0 / radius;
     
     
-    let xto = av % 1.0;
-    
-    
-    let kgy = 0.08;
-    let nby = 0.12;  
-    
-    let dzm = (cnz / kgy) as u32;
-    let bmg = (av / nby) as u32;
-    let bhi = (cnz % kgy) / kgy;
-    let alk = (xto / nby) % 1.0;
-    
-    
-    let feo = dzm.hx(31337) ^ bmg.hx(7919);
-    let nzi = pwk(bhi, alk, feo);
+    let z = depth + t * 2.5;
     
     
     
-    let cer = (dy * 1.5).v(1.0);
-    let rvs = (lz(av * 3.0 + ab * 4.0) * 0.15 + 0.85);
-    let kt = cer * rvs;
+    let avu = (cc / 6.28318 + 0.5) % 1.0;
+    let avu = if avu < 0.0 { avu + 1.0 } else { avu };
     
     
-    let ys = if (input.c % 3) == 0 { 0.85 } else { 1.0 };
+    let ptq = z % 1.0;
     
     
-    let nzs = xng(cnz, av, ab);
+    let flc = 0.08;
+    let hka = 0.12;  
+    
+    let bqx = (avu / flc) as u32;
+    let aho = (z / hka) as u32;
+    let afh = (avu % flc) / flc;
+    let ta = (ptq / hka) % 1.0;
     
     
-    let gzv = if nzi {
-        kt * ys
+    let cgt = bqx.wrapping_mul(31337) ^ aho.wrapping_mul(7919);
+    let icm = jot(afh, ta, cgt);
+    
+    
+    
+    let aqm = (radius * 1.5).min(1.0);
+    let ldi = (eu(z * 3.0 + t * 4.0) * 0.15 + 0.85);
+    let brightness = aqm * ldi;
+    
+    
+    let scanline = if (input.y % 3) == 0 { 0.85 } else { 1.0 };
+    
+    
+    let icw = poj(avu, z, t);
+    
+    
+    let din = if icm {
+        brightness * scanline
     } else {
-        kt * 0.08 * ys  
+        brightness * 0.08 * scanline  
     };
     
     
-    let mmg = (gzv + nzs * 0.4).v(1.0);
+    let gzq = (din + icw * 0.4).min(1.0);
     
     
     
-    let nko = (1.0 - cer) * 0.3;  
+    let hrl = (1.0 - aqm) * 0.3;  
     
-    let m = (mmg * (80.0 + nko * 100.0) * kt) as u8;
-    let at = (mmg * 255.0) as u8;
-    let o = (mmg * (60.0 + nko * 150.0 + nzs * 80.0)) as u8;
+    let r = (gzq * (80.0 + hrl * 100.0) * brightness) as u8;
+    let g = (gzq * 255.0) as u8;
+    let b = (gzq * (60.0 + hrl * 150.0 + icw * 80.0)) as u8;
     
     
-    let nva = (av * 8.0 + ab * 10.0) % 1.0;
-    if nzi && nva < 0.05 && dy < 0.8 {
-        let ceq = (1.0 - nva / 0.05) * kt;
-        let xb = (m as f32 + ceq * 200.0).v(255.0) as u8;
-        let lp = (at as f32 + ceq * 50.0).v(255.0) as u8;
-        let pq = (o as f32 + ceq * 200.0).v(255.0) as u8;
-        return PixelOutput::bul(xb, lp, pq);
+    let hzd = (z * 8.0 + t * 10.0) % 1.0;
+    if icm && hzd < 0.05 && radius < 0.8 {
+        let flash = (1.0 - hzd / 0.05) * brightness;
+        let ko = (r as f32 + flash * 200.0).min(255.0) as u8;
+        let fg = (g as f32 + flash * 50.0).min(255.0) as u8;
+        let fb = (b as f32 + flash * 200.0).min(255.0) as u8;
+        return PixelOutput::aln(ko, fg, fb);
     }
     
-    PixelOutput::bul(m, at, o)
+    PixelOutput::aln(r, g, b)
 }
 
 
 #[inline]
-fn pwk(mj: f32, ct: f32, dv: u32) -> bool {
-    let pattern = dv % 12;
-    let y = (mj * 8.0) as u32;
-    let x = (ct * 12.0) as u32;
+fn jot(fe: f32, ly: f32, seed: u32) -> bool {
+    let pattern = seed % 12;
+    let p = (fe * 8.0) as u32;
+    let o = (ly * 12.0) as u32;
     
     match pattern {
-        0 => x > 2 && x < 10 && (y == 2 || y == 5),  
-        1 => x == 3 || x == 8 || (y == 4 && x > 2 && x < 10),  
-        2 => (y + x) % 3 == 0,  
-        3 => y > 1 && y < 6 && (x == 2 || x == 9),  
-        4 => (y == 3 || y == 4) && x > 1 && x < 11,  
-        5 => x > 2 && x < 10 && y > 1 && y < 6 && (x - 2) % 2 == 0,  
+        0 => o > 2 && o < 10 && (p == 2 || p == 5),  
+        1 => o == 3 || o == 8 || (p == 4 && o > 2 && o < 10),  
+        2 => (p + o) % 3 == 0,  
+        3 => p > 1 && p < 6 && (o == 2 || o == 9),  
+        4 => (p == 3 || p == 4) && o > 1 && o < 11,  
+        5 => o > 2 && o < 10 && p > 1 && p < 6 && (o - 2) % 2 == 0,  
         6 => {  
-            (x == 2 || x == 9) && y > 1 && y < 6 ||
-            (y == 2 || y == 5) && x > 2 && x < 9
+            (o == 2 || o == 9) && p > 1 && p < 6 ||
+            (p == 2 || p == 5) && o > 2 && o < 9
         },
-        7 => y == 3 && x > 1 && x < 11 || x == 6 && y > 0 && y < 7,  
-        8 => (y + x / 2) % 4 == 0,  
-        9 => x > 3 && x < 9 && ((y > 1 && y < 4) || (y > 4 && y < 7)),  
+        7 => p == 3 && o > 1 && o < 11 || o == 6 && p > 0 && p < 7,  
+        8 => (p + o / 2) % 4 == 0,  
+        9 => o > 3 && o < 9 && ((p > 1 && p < 4) || (p > 4 && p < 7)),  
         10 => {  
-            let pn = 3.5;
-            let la = if y as f32 > pn { y as f32 - pn } else { pn - y as f32 };
-            x > 2 && x < 10 && la < (x - 2) as f32 * 0.4
+            let center = 3.5;
+            let em = if p as f32 > center { p as f32 - center } else { center - p as f32 };
+            o > 2 && o < 10 && em < (o - 2) as f32 * 0.4
         },
-        _ => (dv.hx(y) ^ x) % 3 == 0,  
+        _ => (seed.wrapping_mul(p) ^ o) % 3 == 0,  
     }
 }
 
 
 #[inline]
-fn xng(cnz: f32, av: f32, ab: f32) -> f32 {
+fn poj(avu: f32, z: f32, t: f32) -> f32 {
     
-    let vpp = 16.0;
-    let ozc = cnz * vpp;
-    let ozb = axv(ozc - (ozc as i32) as f32 - 0.5);
-    let vpq = if ozb < 0.08 { (0.08 - ozb) / 0.08 } else { 0.0 };
-    
-    
-    let vze = 0.3;
-    let pdl = av / vze;
-    let vyz = pdl - (pdl as i32) as f32;
-    let pdi = axv(vyz - 0.5);
-    let vzb = if pdi < 0.05 { (0.05 - pdi) / 0.05 * 0.5 } else { 0.0 };
+    let oaw = 16.0;
+    let ixq = avu * oaw;
+    let ixp = zx(ixq - (ixq as i32) as f32 - 0.5);
+    let oax = if ixp < 0.08 { (0.08 - ixp) / 0.08 } else { 0.0 };
     
     
-    let xg = lz(av * 2.0 - ab * 8.0) * 0.3 + 0.7;
+    let ohh = 0.3;
+    let jaw = z / ohh;
+    let ohc = jaw - (jaw as i32) as f32;
+    let jau = zx(ohc - 0.5);
+    let ohe = if jau < 0.05 { (0.05 - jau) / 0.05 * 0.5 } else { 0.0 };
     
-    (vpq * 0.6 + vzb * xg) * 0.8
+    
+    let kq = eu(z * 2.0 - t * 8.0) * 0.3 + 0.7;
+    
+    (oax * 0.6 + ohe * kq) * 0.8
 }
 
 
 #[inline(always)]
-fn itz(c: f32, b: f32) -> f32 { crate::math::itz(c, b) }
+fn emf(y: f32, x: f32) -> f32 { crate::math::emf(y, x) }
 
 
 
 
 
 
-pub fn wlw(input: Fy) -> PixelOutput {
-    let b = input.b;
-    let c = input.c;
-    let ab = input.time;
-    let i = input.ac;
+pub fn oqz(input: Cr) -> PixelOutput {
+    let x = input.x;
+    let y = input.y;
+    let t = input.time;
+    let h = input.height;
     
     
-    let mut iem = 0.0f32;
-    let mut ieh = 0.0f32;
-    let mut iec = 0.0f32;
+    let mut ech = 0.0f32;
+    let mut ecd = 0.0f32;
+    let mut ecb = 0.0f32;
     
     
-    let (ctp, szv, wu) = jio(b, c, ab, i, 0.4, 0.15, 6, 12, 0);
-    iem += ctp * 0.3;
-    ieh += szv * 0.3;
-    iec += wu * 0.5;  
+    let (aml, g0, kl) = ewc(x, y, t, h, 0.4, 0.15, 6, 12, 0);
+    ech += aml * 0.3;
+    ecd += g0 * 0.3;
+    ecb += kl * 0.5;  
     
     
-    let (aqh, cyd, of) = jio(b, c, ab, i, 0.7, 0.35, 7, 14, 100);
-    iem += aqh * 0.5;
-    ieh += cyd * 0.5;
-    iec += of * 0.35;
+    let (uh, bbu, gf) = ewc(x, y, t, h, 0.7, 0.35, 7, 14, 100);
+    ech += uh * 0.5;
+    ecd += bbu * 0.5;
+    ecb += gf * 0.35;
     
     
-    let (uv, cqu, tb) = jio(b, c, ab, i, 1.0, 0.65, 8, 16, 200);
-    iem += uv * 0.7;
-    ieh += cqu * 0.7;
-    iec += tb * 0.25;
+    let (ju, axe, iq) = ewc(x, y, t, h, 1.0, 0.65, 8, 16, 200);
+    ech += ju * 0.7;
+    ecd += axe * 0.7;
+    ecb += iq * 0.25;
     
     
-    let (ctq, szw, ajw) = jio(b, c, ab, i, 1.5, 1.0, 10, 20, 300);
-    iem += ctq;
-    ieh += szw;
-    iec += ajw * 0.2;
+    let (azf, g3, sc) = ewc(x, y, t, h, 1.5, 1.0, 10, 20, 300);
+    ech += azf;
+    ecd += g3;
+    ecb += sc * 0.2;
     
     
-    let ys = if (c % 2) == 0 { 0.92 } else { 1.0 };
+    let scanline = if (y % 2) == 0 { 0.92 } else { 1.0 };
     
-    let m = (iem * ys).v(255.0) as u8;
-    let at = (ieh * ys).v(255.0) as u8;
-    let o = (iec * ys).v(60.0) as u8;  
+    let r = (ech * scanline).min(255.0) as u8;
+    let g = (ecd * scanline).min(255.0) as u8;
+    let b = (ecb * scanline).min(60.0) as u8;  
     
-    PixelOutput::bul(m, at, o)
+    PixelOutput::aln(r, g, b)
 }
 
 
-fn jio(b: u32, c: u32, ab: f32, i: u32, ig: f32, kt: f32, 
-                  acc: u32, aqw: u32, phl: u32) -> (f32, f32, f32) {
-    let bj = b / acc;
-    let br = c / aqw;
-    let bhi = b % acc;
-    let alk = c % aqw;
+fn ewc(x: u32, y: u32, t: f32, h: u32, speed: f32, brightness: f32, 
+                  cell_w: u32, cell_h: u32, seed_offset: u32) -> (f32, f32, f32) {
+    let col = x / cell_w;
+    let row = y / cell_h;
+    let afh = x % cell_w;
+    let ta = y % cell_h;
     
     
-    let dpa = bj.cn(phl).hx(2654435761);
-    let ffk = (dpa & 0xFFFF) as f32 / 65535.0;
+    let blf = col.wrapping_add(seed_offset).wrapping_mul(2654435761);
+    let chl = (blf & 0xFFFF) as f32 / 65535.0;
     
-    let kjv = ig * (0.7 + ffk * 0.6);
-    let kju = ((dpa >> 16) & 0xFFFF) as f32 / 65535.0 * 50.0;
-    let acr = 12.0 + ffk * 20.0;
+    let fns = speed * (0.7 + chl * 0.6);
+    let fnr = ((blf >> 16) & 0xFFFF) as f32 / 65535.0 * 50.0;
+    let trail_len = 12.0 + chl * 20.0;
     
     
-    let lbr = ((ab * kjv * 8.0 + kju) % ((i / aqw + 40) as f32)) as i32 - 20;
-    let mat = br as i32;
-    let la = lbr - mat;
+    let gah = ((t * fns * 8.0 + fnr) % ((h / cell_h + 40) as f32)) as i32 - 20;
+    let gry = row as i32;
+    let em = gah - gry;
     
-    if la < 0 || la > acr as i32 {
+    if em < 0 || em > trail_len as i32 {
         return (0.0, 0.0, 0.0);
     }
     
     
-    let cuv = la as f32 / acr;
-    let hj = if la == 0 {
-        kt * 255.0
+    let bab = em as f32 / trail_len;
+    let intensity = if em == 0 {
+        brightness * 255.0
     } else {
-        kt * (1.0 - cuv * cuv) * 180.0
+        brightness * (1.0 - bab * bab) * 180.0
     };
     
     
-    let feo = bj.hx(31337) ^ br.hx(7919) ^ phl;
-    if !pwk(bhi as f32 / acc as f32, 
-                              alk as f32 / aqw as f32, feo) {
-        return (hj * 0.05, hj * 0.1, hj * 0.03);
+    let cgt = col.wrapping_mul(31337) ^ row.wrapping_mul(7919) ^ seed_offset;
+    if !jot(afh as f32 / cell_w as f32, 
+                              ta as f32 / cell_h as f32, cgt) {
+        return (intensity * 0.05, intensity * 0.1, intensity * 0.03);
     }
     
     
-    let (m, at, o) = if la == 0 {
-        (hj * 0.9, hj, hj * 0.9)  
-    } else if la < 3 {
-        (hj * 0.3, hj, hj * 0.1)  
+    let (r, g, b) = if em == 0 {
+        (intensity * 0.9, intensity, intensity * 0.9)  
+    } else if em < 3 {
+        (intensity * 0.3, intensity, intensity * 0.1)  
     } else {
-        (0.0, hj, hj * 0.05)  
+        (0.0, intensity, intensity * 0.05)  
     };
     
-    (m, at, o)
+    (r, g, b)
 }
 
 
 
 
 
-use crate::math::{ahn, axv, lz, rk, jdi};
+use crate::math::{ra, zx, eu, hr, esw};
 
 
 #[inline(always)]
-fn srb(b: f32) -> f32 {
-    b - (b as i32) as f32
+fn lui(x: f32) -> f32 {
+    x - (x as i32) as f32
 }
 
 
@@ -875,209 +875,209 @@ fn srb(b: f32) -> f32 {
 
 
 
-pub fn wmc(input: Fy) -> PixelOutput {
-    let d = input.z as f32;
-    let i = input.ac as f32;
-    let ab = input.time;
+pub fn orf(input: Cr) -> PixelOutput {
+    let w = input.width as f32;
+    let h = input.height as f32;
+    let t = input.time;
     
     
-    let tm = (input.b as f32 / d - 0.5) * 2.0 * (d / i);  
-    let p = (input.c as f32 / i - 0.5) * 2.0;
+    let iy = (input.x as f32 / w - 0.5) * 2.0 * (w / h);  
+    let v = (input.y as f32 / h - 0.5) * 2.0;
     
     
-    let fef = -3.0;
-    let lxg = tm;
-    let lxh = p;
-    let lxi = 1.5;  
+    let cgp = -3.0;
+    let gpw = iy;
+    let gpx = v;
+    let gpy = 1.5;  
     
     
-    let gqh = ahn(lxg * lxg + lxh * lxh + lxi * lxi);
-    let vqv = lxg / gqh;
-    let vqw = lxh / gqh;
-    let vqx = lxi / gqh;
+    let ddd = ra(gpw * gpw + gpx * gpx + gpy * gpy);
+    let obz = gpw / ddd;
+    let oca = gpx / ddd;
+    let ocb = gpy / ddd;
     
     
-    let vzs = 0.0;
-    let vzt = 0.0;
-    let vzu = fef;
+    let ohs = 0.0;
+    let oht = 0.0;
+    let ohu = cgp;
     
     
-    let mut la = 0.0f32;
-    let mut lch = 0u8;  
-    let mut lcg = (0.0f32, 0.0f32, 0.0f32);
+    let mut em = 0.0f32;
+    let mut gax = 0u8;  
+    let mut gaw = (0.0f32, 0.0f32, 0.0f32);
     
-    for ydc in 0..24 {  
-        let y = vzs + vqv * la;
-        let x = vzt + vqw * la;
-        let cbe = vzu + vqx * la;
+    for _step in 0..24 {  
+        let p = ohs + obz * em;
+        let o = oht + oca * em;
+        let aos = ohu + ocb * em;
         
         
-        let (pkg, wmk) = hzd(y, x, cbe, ab);
+        let (shape_dist, shape_id) = dys(p, o, aos, t);
         
-        if pkg < 0.02 {  
-            lch = wmk;
-            lcg = (y, x, cbe);
+        if shape_dist < 0.02 {  
+            gax = shape_id;
+            gaw = (p, o, aos);
             break;
         }
         
-        la += pkg;
-        if la > 20.0 { break; }
+        em += shape_dist;
+        if em > 20.0 { break; }
     }
     
     
-    let (cos, cor, coq) = ukn(input.b, input.c, d, i, ab);
+    let (awg, awf, awe) = ncm(input.x, input.y, w, h, t);
     
-    if lch == 0 {
+    if gax == 0 {
         
-        return PixelOutput::bul(cos, cor, coq);
+        return PixelOutput::aln(awg, awf, awe);
     }
     
     
     
-    let btz = (1.0 - (la - 1.0) / 10.0).qp(0.2, 1.0);
-    let cpz = btz;
+    let alh = (1.0 - (em - 1.0) / 10.0).clamp(0.2, 1.0);
+    let diffuse = alh;
     
     
-    let kss = axv(lcg.0) > 0.4;
-    let siy = axv(lcg.1) > 0.4;
-    let isj = if kss || siy { 0.5 } else { 0.0 };
+    let fuc = zx(gaw.0) > 0.4;
+    let lof = zx(gaw.1) > 0.4;
+    let eld = if fuc || lof { 0.5 } else { 0.0 };
     
     
-    let cer = ((la - 1.0) / 6.0).qp(0.0, 0.6);
+    let aqm = ((em - 1.0) / 6.0).clamp(0.0, 0.6);
     
     
-    let (wmm, wmj, wmi) = match lch {
+    let (shape_r, shape_g, shape_b) = match gax {
         1 => {  
-            let m = (80.0 * cpz + isj * 200.0) as u8;
-            let at = (255.0 * cpz + isj * 100.0) as u8;
-            let o = (180.0 * cpz + isj * 255.0) as u8;
-            (m, at, o)
+            let r = (80.0 * diffuse + eld * 200.0) as u8;
+            let g = (255.0 * diffuse + eld * 100.0) as u8;
+            let b = (180.0 * diffuse + eld * 255.0) as u8;
+            (r, g, b)
         },
         2 => {  
-            let xg = lz(ab * 3.0) * 0.2 + 0.8;
-            let m = (60.0 * cpz * xg) as u8;
-            let at = (255.0 * cpz * xg) as u8;
-            let o = (100.0 * cpz * xg) as u8;
-            (m, at, o)
+            let kq = eu(t * 3.0) * 0.2 + 0.8;
+            let r = (60.0 * diffuse * kq) as u8;
+            let g = (255.0 * diffuse * kq) as u8;
+            let b = (100.0 * diffuse * kq) as u8;
+            (r, g, b)
         },
-        _ => (cos, cor, coq)
+        _ => (awg, awf, awe)
     };
     
     
-    let adh = 1.0 - cer;
-    let m = jdi(cos, wmm, adh);
-    let at = jdi(cor, wmj, adh);
-    let o = jdi(coq, wmi, adh);
+    let opacity = 1.0 - aqm;
+    let r = esw(awg, shape_r, opacity);
+    let g = esw(awf, shape_g, opacity);
+    let b = esw(awe, shape_b, opacity);
     
     
-    let arx = if input.c % 3 == 0 { 0.9 } else { 1.0 };
-    let m = ((m as f32) * arx) as u8;
-    let at = ((at as f32) * arx) as u8;
-    let o = ((o as f32) * arx) as u8;
+    let scan = if input.y % 3 == 0 { 0.9 } else { 1.0 };
+    let r = ((r as f32) * scan) as u8;
+    let g = ((g as f32) * scan) as u8;
+    let b = ((b as f32) * scan) as u8;
     
-    PixelOutput::bul(m, at, o)
+    PixelOutput::aln(r, g, b)
 }
 
 
 #[inline(always)]
-fn hzd(b: f32, c: f32, av: f32, ab: f32) -> (f32, u8) {
+fn dys(x: f32, y: f32, z: f32, t: f32) -> (f32, u8) {
     
-    let rro = 2.0 + lz(ab * 0.5) * 0.3;
-    
-    
-    let aev = ab * 0.5;
-    let (kb, ix, agv) = wac(b, c, av - rro, 0.0, aev);
-    let nhw = wff(kb, ix, agv, 0.6);
+    let lag = 2.0 + eu(t * 0.5) * 0.3;
     
     
-    let wrc = rk(ab * 0.7) * 1.0;
-    let wrd = lz(ab * 0.5) * 0.6;
-    let wre = 2.5;
-    let pmi = wfg(b - wrc, c - wrd, av - wre, 0.4);
+    let angle_y = t * 0.5;
+    let (da, cm, qp) = oib(x, y, z - lag, 0.0, angle_y);
+    let hph = omg(da, cm, qp, 0.6);
     
     
-    if nhw < pmi {
-        (nhw, 1)
+    let ouy = hr(t * 0.7) * 1.0;
+    let ouz = eu(t * 0.5) * 0.6;
+    let ova = 2.5;
+    let jhg = omh(x - ouy, y - ouz, z - ova, 0.4);
+    
+    
+    if hph < jhg {
+        (hph, 1)
     } else {
-        (pmi, 2)
+        (jhg, 2)
     }
 }
 
 
 #[inline(always)]
-fn wfg(b: f32, c: f32, av: f32, m: f32) -> f32 {
-    ahn(b * b + c * c + av * av) - m
+fn omh(x: f32, y: f32, z: f32, r: f32) -> f32 {
+    ra(x * x + y * y + z * z) - r
 }
 
 
 #[inline(always)]
-fn wff(b: f32, c: f32, av: f32, e: f32) -> f32 {
-    let dx = axv(b) - e;
-    let bg = axv(c) - e;
-    let pt = axv(av) - e;
+fn omg(x: f32, y: f32, z: f32, j: f32) -> f32 {
+    let dx = zx(x) - j;
+    let ad = zx(y) - j;
+    let dz = zx(z) - j;
     
-    let lre = ahn(
-        dx.am(0.0) * dx.am(0.0) + 
-        bg.am(0.0) * bg.am(0.0) + 
-        pt.am(0.0) * pt.am(0.0)
+    let glk = ra(
+        dx.max(0.0) * dx.max(0.0) + 
+        ad.max(0.0) * ad.max(0.0) + 
+        dz.max(0.0) * dz.max(0.0)
     );
-    let dsa = dx.am(bg).am(pt).v(0.0);
-    lre + dsa
+    let bmz = dx.max(ad).max(dz).min(0.0);
+    glk + bmz
 }
 
 
 #[inline(always)]
-fn zlw(b: f32, c: f32, av: f32, lww: f32, jkz: f32) -> f32 {
-    let fm = ahn(b * b + av * av) - lww;
-    ahn(fm * fm + c * c) - jkz
+fn quw(x: f32, y: f32, z: f32, gpl: f32, exo: f32) -> f32 {
+    let q = ra(x * x + z * z) - gpl;
+    ra(q * q + y * y) - exo
 }
 
 
 #[inline(always)]
-fn wac(b: f32, c: f32, av: f32, ax: f32, bga: f32) -> (f32, f32, f32) {
+fn oib(x: f32, y: f32, z: f32, ax: f32, aet: f32) -> (f32, f32, f32) {
     
-    let bmo = rk(bga);
-    let bol = lz(bga);
-    let hy = b * bmo - av * bol;
-    let ahc = b * bol + av * bmo;
+    let ahs = hr(aet);
+    let air = eu(aet);
+    let x2 = x * ahs - z * air;
+    let qt = x * air + z * ahs;
     
     
-    let bmn = rk(ax);
-    let bok = lz(ax);
-    let jz = c * bmn - ahc * bok;
-    let eli = c * bok + ahc * bmn;
+    let ahr = hr(ax);
+    let aiq = eu(ax);
+    let y2 = y * ahr - qt * aiq;
+    let bxf = y * aiq + qt * ahr;
     
-    (hy, jz, eli)
+    (x2, y2, bxf)
 }
 
 
-fn zlv(b: f32, c: f32, av: f32, ab: f32) -> (f32, f32, f32) {
-    let cel = 0.001;
-    let (bc, _) = hzd(b, c, av, ab);
-    let (dx, _) = hzd(b + cel, c, av, ab);
-    let (bg, _) = hzd(b, c + cel, av, ab);
-    let (pt, _) = hzd(b, c, av + cel, ab);
+fn quv(x: f32, y: f32, z: f32, t: f32) -> (f32, f32, f32) {
+    let eps = 0.001;
+    let (d, _) = dys(x, y, z, t);
+    let (dx, _) = dys(x + eps, y, z, t);
+    let (ad, _) = dys(x, y + eps, z, t);
+    let (dz, _) = dys(x, y, z + eps, t);
     
-    let vt = dx - bc;
-    let ahr = bg - bc;
-    let arn = pt - bc;
-    let len = ahn(vt * vt + ahr * ahr + arn * arn).am(0.0001);
-    (vt / len, ahr / len, arn / len)
+    let nx = dx - d;
+    let re = ad - d;
+    let wi = dz - d;
+    let len = ra(nx * nx + re * re + wi * wi).max(0.0001);
+    (nx / len, re / len, wi / len)
 }
 
 
-fn isj(b: f32, c: f32, av: f32, ydg: f32) -> f32 {
-    let gfx = 0.02;
-    let ax = axv(b);
-    let bga = axv(c);
-    let gzl = axv(av);
+fn eld(x: f32, y: f32, z: f32, _t: f32) -> f32 {
+    let cxb = 0.02;
+    let ax = zx(x);
+    let aet = zx(y);
+    let did = zx(z);
     
     
-    let uxz = (axv(ax - 0.5) < gfx) && (axv(bga - 0.5) < gfx);
-    let uya = (axv(ax - 0.5) < gfx) && (axv(gzl - 0.5) < gfx);
-    let uyb = (axv(bga - 0.5) < gfx) && (axv(gzl - 0.5) < gfx);
+    let nmz = (zx(ax - 0.5) < cxb) && (zx(aet - 0.5) < cxb);
+    let nna = (zx(ax - 0.5) < cxb) && (zx(did - 0.5) < cxb);
+    let nnb = (zx(aet - 0.5) < cxb) && (zx(did - 0.5) < cxb);
     
-    if uxz || uya || uyb {
+    if nmz || nna || nnb {
         1.0
     } else {
         0.0
@@ -1085,39 +1085,39 @@ fn isj(b: f32, c: f32, av: f32, ydg: f32) -> f32 {
 }
 
 
-fn ukn(b: u32, c: u32, d: f32, i: f32, ab: f32) -> (u8, u8, u8) {
-    let bj = (b as f32 / 16.0) as u32;
-    let br = (c as f32 / 18.0) as u32;
+fn ncm(x: u32, y: u32, w: f32, h: f32, t: f32) -> (u8, u8, u8) {
+    let col = (x as f32 / 16.0) as u32;
+    let row = (y as f32 / 18.0) as u32;
     
     
-    let dv = bj.hx(31337) ^ 0xDEAD;
-    let sqy = 0.3 + ((dv % 100) as f32 / 100.0) * 0.7;
-    let vhj = (dv % 1000) as f32 / 100.0;
+    let seed = col.wrapping_mul(31337) ^ 0xDEAD;
+    let lug = 0.3 + ((seed % 100) as f32 / 100.0) * 0.7;
+    let nuf = (seed % 1000) as f32 / 100.0;
     
     
-    let itv = (ab * sqy + vhj) % 1.5;
-    let jmx = c as f32 / i;
+    let emc = (t * lug + nuf) % 1.5;
+    let eza = y as f32 / h;
     
     
-    let hms = (itv - jmx).gp();
-    let jbi = hms < 0.03;
+    let drh = (emc - eza).abs();
+    let erl = drh < 0.03;
     
     
-    let ies = 0.3;
-    let odx = jmx < itv && (itv - jmx) < ies;
-    let fad = if odx { 1.0 - (itv - jmx) / ies } else { 0.0 };
+    let ecn = 0.3;
+    let igf = eza < emc && (emc - eza) < ecn;
+    let cep = if igf { 1.0 - (emc - eza) / ecn } else { 0.0 };
     
     
-    let feo = bj.hx(7919) ^ br.hx(31337);
-    let nzg = (feo % 3) != 0;
+    let cgt = col.wrapping_mul(7919) ^ row.wrapping_mul(31337);
+    let ick = (cgt % 3) != 0;
     
-    if jbi && nzg {
+    if erl && ick {
         (220, 255, 220)  
-    } else if odx && nzg {
-        let at = (200.0 * fad) as u8;
-        let m = (50.0 * fad) as u8;
-        let o = (80.0 * fad) as u8;
-        (m, at, o)
+    } else if igf && ick {
+        let g = (200.0 * cep) as u8;
+        let r = (50.0 * cep) as u8;
+        let b = (80.0 * cep) as u8;
+        (r, g, b)
     } else {
         (5, 15, 8)  
     }
@@ -1129,26 +1129,26 @@ fn ukn(b: u32, c: u32, d: f32, i: f32, ab: f32) -> (u8, u8, u8) {
 
 use spin::Mutex;
 
-static Rd: Mutex<VirtualGpu> = Mutex::new(VirtualGpu::new());
+static Hd: Mutex<VirtualGpu> = Mutex::new(VirtualGpu::new());
 
 
 
-pub fn init(framebuffer: *mut u32, z: u32, ac: u32) {
-    Rd.lock().init(framebuffer, z, ac, z);
+pub fn init(framebuffer: *mut u32, width: u32, height: u32) {
+    Hd.lock().init(framebuffer, width, height, width);
     crate::serial_println!("[VGPU] Initialized {}x{} virtual GPU ({} virtual cores)", 
-        z, ac, YJ_);
+        width, height, ZN_);
 }
 
 
-pub fn ttx(framebuffer: *mut u32, z: u32, ac: u32, oq: u32) {
-    Rd.lock().init(framebuffer, z, ac, oq);
+pub fn mpm(framebuffer: *mut u32, width: u32, height: u32, stride: u32) {
+    Hd.lock().init(framebuffer, width, height, stride);
     crate::serial_println!("[VGPU] Initialized {}x{} stride={} virtual GPU ({} virtual cores)", 
-        z, ac, oq, YJ_);
+        width, height, stride, ZN_);
 }
 
 
-pub fn hzy(bfg: Ty) {
-    Rd.lock().hzy(bfg);
+pub fn set_shader(shader: Ip) {
+    Hd.lock().set_shader(shader);
 }
 
 
@@ -1157,138 +1157,138 @@ pub fn hzy(bfg: Ty) {
 
 
 
-pub fn wma(input: Fy) -> PixelOutput {
-    let d = input.z as f32;
-    let i = input.ac as f32;
-    let ab = input.time;
+pub fn ord(input: Cr) -> PixelOutput {
+    let w = input.width as f32;
+    let h = input.height as f32;
+    let t = input.time;
     
     
-    let cx = (input.b as f32 - d * 0.5) / (i * 0.5);
-    let ae = (input.c as f32 - i * 0.5) / (i * 0.5);
+    let cx = (input.x as f32 - w * 0.5) / (h * 0.5);
+    let u = (input.y as f32 - h * 0.5) / (h * 0.5);
     
     
-    let dy = ahn(cx * cx + ae * ae).am(0.001);
-    let hg = itz(ae, cx);
+    let radius = ra(cx * cx + u * u).max(0.001);
+    let cc = emf(u, cx);
     
     
-    let eo = 1.0 / dy;
+    let depth = 1.0 / radius;
     
     
-    let av = eo + ab * 3.0;
-    
-    
-    
-    let oro = 32.0;
-    let nen = (hg + 3.14159) / 6.28318;  
-    let column = (nen * oro) as u32;
-    let odn = (nen * oro) % 1.0;  
-    
-    
-    let dpa = column.hx(48271);
-    let kju = (dpa % 1000) as f32 / 1000.0 * 10.0;
-    
-    
-    let nzh = 0.15;
-    let jzo = av + kju;
-    let tgk = (jzo / nzh) as u32;
-    let hls = (jzo / nzh) % 1.0;
+    let z = depth + t * 3.0;
     
     
     
-    let rls = axv(odn - 0.5);
-    let tgl = hls > 0.2 && hls < 0.8;
+    let irk = 32.0;
+    let hmk = (cc + 3.14159) / 6.28318;  
+    let column = (hmk * irk) as u32;
+    let ifx = (hmk * irk) % 1.0;  
     
     
-    let byt = 0.3 + dy * 0.2;
-    let uxx = rls < byt;
+    let blf = column.wrapping_mul(48271);
+    let fnr = (blf % 1000) as f32 / 1000.0 * 10.0;
     
     
-    let amg = tgk.hx(31337) ^ column.hx(48271);
-    let tgj = ukl(odn, hls, amg);
+    let icl = 0.15;
+    let fgi = z + fnr;
+    let mfg = (fgi / icl) as u32;
+    let dqx = (fgi / icl) % 1.0;
     
     
     
-    let cer = (dy * 1.8).v(1.0);
+    let kvd = zx(ifx - 0.5);
+    let mfh = dqx > 0.2 && dqx < 0.8;
     
     
-    let jbi = hls < 0.25;
-    let fad = if jbi { 1.0 } else { 1.0 - (hls - 0.25) / 0.6 };
+    let ati = 0.3 + radius * 0.2;
+    let nmx = kvd < ati;
     
     
-    let ys = if input.c % 2 == 0 { 0.9 } else { 1.0 };
+    let glyph_seed = mfg.wrapping_mul(31337) ^ column.wrapping_mul(48271);
+    let mff = nck(ifx, dqx, glyph_seed);
     
     
-    if uxx && tgl && tgj {
+    
+    let aqm = (radius * 1.8).min(1.0);
+    
+    
+    let erl = dqx < 0.25;
+    let cep = if erl { 1.0 } else { 1.0 - (dqx - 0.25) / 0.6 };
+    
+    
+    let scanline = if input.y % 2 == 0 { 0.9 } else { 1.0 };
+    
+    
+    if nmx && mfh && mff {
         
-        let hj = cer * fad * ys;
+        let intensity = aqm * cep * scanline;
         
-        if jbi {
+        if erl {
             
-            let xg = lz(ab * 8.0 + jzo * 4.0) * 0.2 + 0.8;
-            let m = (200.0 * hj * xg) as u8;
-            let at = (255.0 * hj) as u8;
-            let o = (220.0 * hj * xg) as u8;
-            PixelOutput::bul(m, at, o)
+            let kq = eu(t * 8.0 + fgi * 4.0) * 0.2 + 0.8;
+            let r = (200.0 * intensity * kq) as u8;
+            let g = (255.0 * intensity) as u8;
+            let b = (220.0 * intensity * kq) as u8;
+            PixelOutput::aln(r, g, b)
         } else {
             
-            let m = (40.0 * hj) as u8;
-            let at = (255.0 * hj * fad) as u8;
-            let o = (80.0 * hj) as u8;
-            PixelOutput::bul(m, at, o)
+            let r = (40.0 * intensity) as u8;
+            let g = (255.0 * intensity * cep) as u8;
+            let b = (80.0 * intensity) as u8;
+            PixelOutput::aln(r, g, b)
         }
     } else {
         
-        let qpf = (cer * 0.05 * ys) as f32;
-        let ei = (qpf * 40.0) as u8;
-        PixelOutput::bul(0, ei, ei / 2)
+        let kbr = (aqm * 0.05 * scanline) as f32;
+        let bg = (kbr * 40.0) as u8;
+        PixelOutput::aln(0, bg, bg / 2)
     }
 }
 
 
 #[inline]
-fn ukl(mj: f32, ct: f32, dv: u32) -> bool {
-    let y = (mj * 6.0) as u32;
-    let x = (ct * 8.0) as u32;
-    let pattern = dv % 10;
+fn nck(fe: f32, ly: f32, seed: u32) -> bool {
+    let p = (fe * 6.0) as u32;
+    let o = (ly * 8.0) as u32;
+    let pattern = seed % 10;
     
     match pattern {
-        0 => y > 1 && y < 5,                              
-        1 => x == 2 || x == 5,                            
-        2 => (y + x) % 2 == 0,                            
-        3 => y == 3 || x == 4,                            
-        4 => x > 1 && x < 7 && y > 1 && y < 5,          
-        5 => (y == 2 || y == 4) && x > 1 && x < 7,      
-        6 => x == 3 || (y == 3 && x > 1 && x < 7),      
-        7 => (y + x / 2) % 3 == 0,                        
-        8 => x < 4 && y > 1 && y < 5,                    
-        _ => (dv.hx(y + 1) ^ (x + 1)) % 3 == 0, 
+        0 => p > 1 && p < 5,                              
+        1 => o == 2 || o == 5,                            
+        2 => (p + o) % 2 == 0,                            
+        3 => p == 3 || o == 4,                            
+        4 => o > 1 && o < 7 && p > 1 && p < 5,          
+        5 => (p == 2 || p == 4) && o > 1 && o < 7,      
+        6 => o == 3 || (p == 3 && o > 1 && o < 7),      
+        7 => (p + o / 2) % 3 == 0,                        
+        8 => o < 4 && p > 1 && p < 5,                    
+        _ => (seed.wrapping_mul(p + 1) ^ (o + 1)) % 3 == 0, 
     }
 }
 
 
-pub fn po() {
-    Rd.lock().nlu();
+pub fn draw() {
+    Hd.lock().dispatch_fullscreen();
 }
 
 
 #[cfg(target_arch = "x86_64")]
-pub fn krk() {
-    Rd.lock().ryh();
+pub fn ftc() {
+    Hd.lock().dispatch_fullscreen_simd();
 }
 
 
-pub fn or(koy: u32) {
-    Rd.lock().or(koy);
+pub fn tick(brv: u32) {
+    Hd.lock().tick(brv);
 }
 
 
 pub fn frame() -> u32 {
-    Rd.lock().frame()
+    Hd.lock().frame()
 }
 
 
 pub fn time() -> f32 {
-    Rd.lock().time()
+    Hd.lock().time()
 }
 
 
@@ -1298,94 +1298,94 @@ pub fn time() -> f32 {
 
 
 
-pub fn wlt(input: Fy) -> PixelOutput {
-    let d = input.z as f32;
-    let i = input.ac as f32;
-    let ab = input.time;
+pub fn oqw(input: Cr) -> PixelOutput {
+    let w = input.width as f32;
+    let h = input.height as f32;
+    let t = input.time;
     
     
-    let fqb = (input.b as f32 * 2.0 - d) / i;
-    let cth = (input.c as f32 * 2.0 - i) / i;
+    let cnq = (input.x as f32 * 2.0 - w) / h;
+    let ayy = (input.y as f32 * 2.0 - h) / h;
     
-    let kqn = fqb * fqb + cth * cth;
-    let dm = axv(0.7 - kqn);
+    let fss = cnq * cnq + ayy * ayy;
+    let l = zx(0.7 - fss);
     
-    let e = (1.0 - dm) * 5.0;
-    let mut fp = fqb * e;
-    let mut iz = cth * e;
+    let j = (1.0 - l) * 5.0;
+    let mut vx = cnq * j;
+    let mut vy = ayy * j;
     
-    let mut htk: f32 = 0.0;
-    let mut htj: f32 = 0.0;
-    let mut hti: f32 = 0.0;
+    let mut dvt: f32 = 0.0;
+    let mut dvs: f32 = 0.0;
+    let mut dvr: f32 = 0.0;
     
     
-    let mut a: f32 = 1.0;
-    while a <= 6.0 {
-        let hok = 1.0 / a;
-        fp += rk(iz * a + ab) * hok + 0.7;
-        iz += rk(fp * a + a + ab) * hok + 0.7;
+    let mut i: f32 = 1.0;
+    while i <= 6.0 {
+        let dsf = 1.0 / i;
+        vx += hr(vy * i + t) * dsf + 0.7;
+        vy += hr(vx * i + i + t) * dsf + 0.7;
         
-        let wz = axv(fp - iz) * 0.2;
-        htk += (lz(fp) + 1.0) * wz;
-        htj += (lz(iz) + 1.0) * wz;
-        hti += (lz(iz) + 1.0) * wz;
-        a += 1.0;
+        let jr = zx(vx - vy) * 0.2;
+        dvt += (eu(vx) + 1.0) * jr;
+        dvs += (eu(vy) + 1.0) * jr;
+        dvr += (eu(vy) + 1.0) * jr;
+        i += 1.0;
     }
     
     
-    let duu = cxr(-4.0 * dm);
-    let ksh = cxr(cth);
-    let ksi = cxr(-cth);
-    let ksj = cxr(cth * -2.0);
+    let boj = bbo(-4.0 * l);
+    let fts = bbo(ayy);
+    let ftt = bbo(-ayy);
+    let ftu = bbo(ayy * -2.0);
     
-    let xb = fii(ksh * duu / (htk + 0.001));
-    let lp = fii(ksi * duu / (htj + 0.001));
-    let pq = fii(ksj * duu / (hti + 0.001));
+    let ko = cjg(fts * boj / (dvt + 0.001));
+    let fg = cjg(ftt * boj / (dvs + 0.001));
+    let fb = cjg(ftu * boj / (dvr + 0.001));
     
-    let m = (axv(xb) * 255.0).v(255.0) as u8;
-    let at = (axv(lp) * 255.0).v(255.0) as u8;
-    let o = (axv(pq) * 255.0).v(255.0) as u8;
-    PixelOutput::bul(m, at, o)
+    let r = (zx(ko) * 255.0).min(255.0) as u8;
+    let g = (zx(fg) * 255.0).min(255.0) as u8;
+    let b = (zx(fb) * 255.0).min(255.0) as u8;
+    PixelOutput::aln(r, g, b)
 }
 
 
 #[inline(always)]
-fn fii(b: f32) -> f32 {
-    let hy = b * b;
-    b / (1.0 + b.gp() + hy * 0.28)
+fn cjg(x: f32) -> f32 {
+    let x2 = x * x;
+    x / (1.0 + x.abs() + x2 * 0.28)
 }
 
 
 #[inline(always)]
-fn cxr(b: f32) -> f32 {
-    let b = b.qp(-10.0, 10.0);
-    let ab = 1.0 + b / 256.0;
-    let mut m = ab;
+fn bbo(x: f32) -> f32 {
+    let x = x.clamp(-10.0, 10.0);
+    let t = 1.0 + x / 256.0;
+    let mut r = t;
     
-    m = m * m; m = m * m; m = m * m; m = m * m;
-    m = m * m; m = m * m; m = m * m; m = m * m;
-    m
+    r = r * r; r = r * r; r = r * r; r = r * r;
+    r = r * r; r = r * r; r = r * r; r = r * r;
+    r
 }
 
 
-pub fn kyx(j: &str) -> Option<Ty> {
-    match j.aqn().as_str() {
-        "plasma" => Some(wmd),
-        "matrix" | "rain" => Some(wlz),
-        "mandelbrot" | "fractal" => Some(wly),
-        "gradient" | "test" => Some(wlv),
-        "fire" => Some(wlu),
-        "tunnel" | "holotunnel" | "3d" => Some(wlx),
-        "parallax" | "holoparallax" | "depth" => Some(wlw),
-        "shapes" | "objects" | "cubes" | "matrix3dshapes" => Some(wmc),
-        "rain3d" | "matrix3d" | "matrixrain3d" | "fly" => Some(wma),
-        "cosmic" | "deform" | "vortex" | "complex" => Some(wlt),
+pub fn fyx(name: &str) -> Option<Ip> {
+    match name.to_lowercase().as_str() {
+        "plasma" => Some(org),
+        "matrix" | "rain" => Some(orc),
+        "mandelbrot" | "fractal" => Some(orb),
+        "gradient" | "test" => Some(oqy),
+        "fire" => Some(oqx),
+        "tunnel" | "holotunnel" | "3d" => Some(ora),
+        "parallax" | "holoparallax" | "depth" => Some(oqz),
+        "shapes" | "objects" | "cubes" | "matrix3dshapes" => Some(orf),
+        "rain3d" | "matrix3d" | "matrixrain3d" | "fly" => Some(ord),
+        "cosmic" | "deform" | "vortex" | "complex" => Some(oqw),
         _ => None,
     }
 }
 
 
-pub fn zbb() -> &'static [&'static str] {
+pub fn qnq() -> &'static [&'static str] {
     &["plasma", "matrix", "mandelbrot", "gradient", "fire", "tunnel", "parallax", "shapes", "rain3d", "cosmic"]
 }
 
@@ -1410,21 +1410,21 @@ pub fn zbb() -> &'static [&'static str] {
 
 
 
-const Xn: usize = 8;
+const Kd: usize = 8;
 
-const OE_: usize = 240;
+const PC_: usize = 240;
 
-const CGK_: usize = 150;
+const CJU_: usize = 150;
 
-const Act: usize = 4;
+const Mo: usize = 4;
 
-const BBC_: usize = 10;
-const OJ_: usize = 45;
+const BDF_: usize = 10;
+const PH_: usize = 45;
 
-const CGQ_: usize = 64;
+const CKA_: usize = 64;
 
 
-static CGM_: [u8; 64] = [
+static CJW_: [u8; 64] = [
     255, 250, 244, 238, 232, 225, 218, 211,
     204, 196, 189, 181, 174, 166, 158, 150,
     143, 135, 128, 121, 114, 107, 100,  94,
@@ -1437,320 +1437,320 @@ static CGM_: [u8; 64] = [
 
 
 
-const fn tbc() -> [u32; 256] {
-    let mut djf = [0xFF010201u32; 256]; 
-    let mut a = 1u32;
-    while a < 256 {
-        let r = if a > 250 {
+const fn mbv() -> [u32; 256] {
+    let mut bhu = [0xFF010201u32; 256]; 
+    let mut i = 1u32;
+    while i < 256 {
+        let c = if i > 250 {
             
-            let d = 200 + ((a - 250) * 10) as u32;
-            let d = if d > 255 { 255 } else { d };
-            (0xFF << 24) | (d << 16) | (255 << 8) | d
-        } else if a > 200 {
+            let w = 200 + ((i - 250) * 10) as u32;
+            let w = if w > 255 { 255 } else { w };
+            (0xFF << 24) | (w << 16) | (255 << 8) | w
+        } else if i > 200 {
             
-            let bb = a - 200;
-            let m = bb * 3 / 2;
-            let at = 200 + bb;
-            let o = bb / 2;
-            (0xFF << 24) | (m << 16) | (at << 8) | o
-        } else if a > 140 {
+            let f = i - 200;
+            let r = f * 3 / 2;
+            let g = 200 + f;
+            let b = f / 2;
+            (0xFF << 24) | (r << 16) | (g << 8) | b
+        } else if i > 140 {
             
-            let at = 130 + (a - 140) * 7 / 6;
-            let m = (a - 140) / 6;
-            let o = (a - 140) / 8;
-            (0xFF << 24) | (m << 16) | (at << 8) | o
-        } else if a > 80 {
+            let g = 130 + (i - 140) * 7 / 6;
+            let r = (i - 140) / 6;
+            let b = (i - 140) / 8;
+            (0xFF << 24) | (r << 16) | (g << 8) | b
+        } else if i > 80 {
             
-            let at = 60 + (a - 80) * 7 / 6;
-            let o = (a - 80) / 4;
-            (0xFF << 24) | (at << 8) | o
-        } else if a > 30 {
+            let g = 60 + (i - 80) * 7 / 6;
+            let b = (i - 80) / 4;
+            (0xFF << 24) | (g << 8) | b
+        } else if i > 30 {
             
-            let at = 20 + (a - 30) * 4 / 5;
-            (0xFF << 24) | (at << 8)
-        } else if a > 10 {
+            let g = 20 + (i - 30) * 4 / 5;
+            (0xFF << 24) | (g << 8)
+        } else if i > 10 {
             
-            let at = 6 + (a - 10) * 7 / 10;
-            (0xFF << 24) | (at << 8)
+            let g = 6 + (i - 10) * 7 / 10;
+            (0xFF << 24) | (g << 8)
         } else {
             
-            let at = 2 + a / 2;
-            (0xFF << 24) | (at << 8)
+            let g = 2 + i / 2;
+            (0xFF << 24) | (g << 8)
         };
-        djf[a as usize] = r;
-        a += 1;
+        bhu[i as usize] = c;
+        i += 1;
     }
-    djf
+    bhu
 }
 
-static CFZ_: [u32; 256] = tbc();
+static CJJ_: [u32; 256] = mbv();
 
 
 #[inline(always)]
-fn oml(hj: u8) -> u32 {
-    CFZ_[hj as usize]
+fn imy(intensity: u8) -> u32 {
+    CJJ_[intensity as usize]
 }
 
 
 
-const fn tbd() -> [u32; 256] {
-    let mut djf = [0xFF010201u32; 256];
-    let mut a = 1u32;
-    while a < 256 {
+const fn mbw() -> [u32; 256] {
+    let mut bhu = [0xFF010201u32; 256];
+    let mut i = 1u32;
+    while i < 256 {
         
-        let r = if a > 240 {
+        let c = if i > 240 {
             
-            let d = 220 + ((a - 240) * 2);
-            let d = if d > 255 { 255 } else { d };
-            (0xFF << 24) | (d << 16) | (255 << 8) | d
-        } else if a > 180 {
+            let w = 220 + ((i - 240) * 2);
+            let w = if w > 255 { 255 } else { w };
+            (0xFF << 24) | (w << 16) | (255 << 8) | w
+        } else if i > 180 {
             
-            let bb = a - 180;
-            let m = 100 + bb;
-            let at = 200 + bb / 2;
-            let o = 140 + bb;
-            let m = if m > 255 { 255 } else { m };
-            let at = if at > 255 { 255 } else { at };
-            let o = if o > 255 { 255 } else { o };
-            (0xFF << 24) | (m << 16) | (at << 8) | o
-        } else if a > 120 {
+            let f = i - 180;
+            let r = 100 + f;
+            let g = 200 + f / 2;
+            let b = 140 + f;
+            let r = if r > 255 { 255 } else { r };
+            let g = if g > 255 { 255 } else { g };
+            let b = if b > 255 { 255 } else { b };
+            (0xFF << 24) | (r << 16) | (g << 8) | b
+        } else if i > 120 {
             
-            let bb = a - 120;
-            let m = 30 + bb / 2;
-            let at = 130 + bb;
-            let o = 60 + bb;
-            (0xFF << 24) | (m << 16) | (at << 8) | o
-        } else if a > 60 {
+            let f = i - 120;
+            let r = 30 + f / 2;
+            let g = 130 + f;
+            let b = 60 + f;
+            (0xFF << 24) | (r << 16) | (g << 8) | b
+        } else if i > 60 {
             
-            let bb = a - 60;
-            let at = 60 + bb;
-            let o = 30 + bb / 2;
-            let m = bb / 4;
-            (0xFF << 24) | (m << 16) | (at << 8) | o
-        } else if a > 20 {
+            let f = i - 60;
+            let g = 60 + f;
+            let b = 30 + f / 2;
+            let r = f / 4;
+            (0xFF << 24) | (r << 16) | (g << 8) | b
+        } else if i > 20 {
             
-            let at = 20 + (a - 20);
-            let o = 10 + (a - 20) / 2;
-            (0xFF << 24) | (at << 8) | o
+            let g = 20 + (i - 20);
+            let b = 10 + (i - 20) / 2;
+            (0xFF << 24) | (g << 8) | b
         } else {
             
-            let at = 4 + a / 2;
-            let o = 2 + a / 3;
-            (0xFF << 24) | (at << 8) | o
+            let g = 4 + i / 2;
+            let b = 2 + i / 3;
+            (0xFF << 24) | (g << 8) | b
         };
-        djf[a as usize] = r;
-        a += 1;
+        bhu[i as usize] = c;
+        i += 1;
     }
-    djf
+    bhu
 }
 
-static CGJ_: [u32; 256] = tbd();
+static CJT_: [u32; 256] = mbw();
 
 
 #[inline(always)]
-fn uod(hj: u8) -> u32 {
-    CGJ_[hj as usize]
+fn nff(intensity: u8) -> u32 {
+    CJT_[intensity as usize]
 }
 
 
 #[derive(Clone, Copy)]
 struct MDrop {
-    c: i16,              
-    ig: u8,           
-    va: u8,         
-    acr: u8,       
-    amg: u32,     
-    gh: bool,
+    y: i16,              
+    speed: u8,           
+    counter: u8,         
+    trail_len: u8,       
+    glyph_seed: u32,     
+    active: bool,
     
     
-    glu: u64,          
-    glt: [u8; 48],   
+    locked_mask: u64,          
+    locked_glyphs: [u8; 48],   
 }
 
 impl MDrop {
     const fn new() -> Self {
         Self {
-            c: -100, ig: 2, va: 0, acr: 20,
-            amg: 0, gh: false,
-            glu: 0, glt: [0u8; 48],
+            y: -100, speed: 2, counter: 0, trail_len: 20,
+            glyph_seed: 0, active: false,
+            locked_mask: 0, locked_glyphs: [0u8; 48],
         }
     }
 
     
     #[inline(always)]
-    fn kzh(&self, aaz: usize) -> usize {
-        if aaz < 48 && (self.glu >> aaz) & 1 != 0 {
-            self.glt[aaz] as usize
+    fn glyph_at(&self, tp: usize) -> usize {
+        if tp < 48 && (self.locked_mask >> tp) & 1 != 0 {
+            self.locked_glyphs[tp] as usize
         } else {
-            let ckx = self.amg.cn(aaz as u32 * 2654435761);
-            (ckx % CGQ_ as u32) as usize
+            let gs = self.glyph_seed.wrapping_add(tp as u32 * 2654435761);
+            (gs % CKA_ as u32) as usize
         }
     }
 
     
     #[inline(always)]
-    fn ogg(&self, aaz: usize) -> bool {
-        aaz < 48 && (self.glu >> aaz) & 1 != 0
+    fn is_locked(&self, tp: usize) -> bool {
+        tp < 48 && (self.locked_mask >> tp) & 1 != 0
     }
 }
 
 
 pub struct ShaderMatrixState {
-    agk: [[MDrop; Act]; OE_],
-    cwh: [u8; OE_],   
-    ajg: usize,
-    bnr: usize,
+    drops: [[MDrop; Mo]; PC_],
+    col_depth: [u8; PC_],   
+    num_cols: usize,
+    num_rows: usize,
     frame: u32,
     rng: u32,
-    jr: bool,
+    initialized: bool,
 }
 
 impl ShaderMatrixState {
     pub const fn new() -> Self {
         Self {
-            agk: [[MDrop::new(); Act]; OE_],
-            cwh: [128u8; OE_],
-            ajg: 0,
-            bnr: 0,
+            drops: [[MDrop::new(); Mo]; PC_],
+            col_depth: [128u8; PC_],
+            num_cols: 0,
+            num_rows: 0,
             frame: 0,
             rng: 0xDEADBEEF,
-            jr: false,
+            initialized: false,
         }
     }
 
     
-    pub fn init(&mut self, wf: usize, aav: usize) {
-        self.ajg = (wf / Xn).v(OE_);
-        self.bnr = (aav / Xn).v(CGK_);
+    pub fn init(&mut self, screen_w: usize, screen_h: usize) {
+        self.num_cols = (screen_w / Kd).min(PC_);
+        self.num_rows = (screen_h / Kd).min(CJU_);
         self.frame = 0;
         self.rng = 0xDEADBEEF;
 
         
-        for bj in 0..self.ajg {
-            self.rng = self.rng.hx(1103515245).cn(12345);
+        for col in 0..self.num_cols {
+            self.rng = self.rng.wrapping_mul(1103515245).wrapping_add(12345);
             
-            let pattern = ((bj * 17 + 53) % 97) as i32 - 48; 
-            let lxa = (self.rng % 100) as i32 - 50;          
-            let eo = (145i32 + pattern + lxa).qp(20, 255) as u8;
-            self.cwh[bj] = eo;
+            let pattern = ((col * 17 + 53) % 97) as i32 - 48; 
+            let gpp = (self.rng % 100) as i32 - 50;          
+            let depth = (145i32 + pattern + gpp).clamp(20, 255) as u8;
+            self.col_depth[col] = depth;
         }
 
         
-        for bj in 0..self.ajg {
-            let eo = self.cwh[bj];
-            let eat = eo as u32; 
+        for col in 0..self.num_cols {
+            let depth = self.col_depth[col];
+            let brx = depth as u32; 
 
-            let mut foz: i32 = 0;
-            for di in 0..Act {
-                self.rng = self.rng.hx(1103515245).cn(12345);
-
-                
-                let foi = BBC_ as u32 + eat / 8;           
-                let llf = (OJ_ as u32).v(foi + 20);  
-                let ase = foi + (self.rng % (llf - foi + 1));
-
-                self.rng = self.rng.hx(1103515245).cn(12345);
+            let mut next_offset: i32 = 0;
+            for di in 0..Mo {
+                self.rng = self.rng.wrapping_mul(1103515245).wrapping_add(12345);
 
                 
-                let tae = 3u32.ao(eat / 128);    
-                let hkw = 2 + (255 - eat) / 50;             
-                let qi = tae + (self.rng % hkw);
+                let cmw = BDF_ as u32 + brx / 8;           
+                let gha = (PH_ as u32).min(cmw + 20);  
+                let wr = cmw + (self.rng % (gha - cmw + 1));
 
-                let vc = foz - (self.rng % 6) as i32;
-                foz = vc - ase as i32 - qi as i32;
-
-                self.rng = self.rng.hx(1103515245).cn(12345);
+                self.rng = self.rng.wrapping_mul(1103515245).wrapping_add(12345);
 
                 
-                let fvc = 1 + (255u32.ao(eat)) / 128; 
-                let fvd = 1 + (255u32.ao(eat)) / 80; 
-                let ig = fvc + (self.rng % fvd);
+                let mbd = 3u32.saturating_sub(brx / 128);    
+                let dql = 2 + (255 - brx) / 50;             
+                let gap = mbd + (self.rng % dql);
 
-                self.rng = self.rng.hx(1103515245).cn(12345);
+                let start_y = next_offset - (self.rng % 6) as i32;
+                next_offset = start_y - wr as i32 - gap as i32;
 
-                self.agk[bj][di] = MDrop {
-                    c: vc as i16,
-                    ig: ig.v(8) as u8,
-                    va: (self.rng % ig) as u8,
-                    acr: ase.v(OJ_ as u32) as u8,
-                    amg: self.rng,
-                    gh: true,
-                    glu: 0,
-                    glt: [0u8; 48],
+                self.rng = self.rng.wrapping_mul(1103515245).wrapping_add(12345);
+
+                
+                let cqx = 1 + (255u32.saturating_sub(brx)) / 128; 
+                let cqy = 1 + (255u32.saturating_sub(brx)) / 80; 
+                let speed = cqx + (self.rng % cqy);
+
+                self.rng = self.rng.wrapping_mul(1103515245).wrapping_add(12345);
+
+                self.drops[col][di] = MDrop {
+                    y: start_y as i16,
+                    speed: speed.min(8) as u8,
+                    counter: (self.rng % speed) as u8,
+                    trail_len: wr.min(PH_ as u32) as u8,
+                    glyph_seed: self.rng,
+                    active: true,
+                    locked_mask: 0,
+                    locked_glyphs: [0u8; 48],
                 };
             }
         }
 
-        self.jr = true;
+        self.initialized = true;
     }
 
     
-    pub fn qs(&mut self) {
-        self.frame = self.frame.cn(1);
-        let csl = self.bnr as i32 + OJ_ as i32 + 10;
+    pub fn update(&mut self) {
+        self.frame = self.frame.wrapping_add(1);
+        let aye = self.num_rows as i32 + PH_ as i32 + 10;
 
-        for bj in 0..self.ajg {
-            let eo = self.cwh[bj];
-            let eat = eo as u32;
+        for col in 0..self.num_cols {
+            let depth = self.col_depth[col];
+            let brx = depth as u32;
 
-            for di in 0..Act {
-                let drop = &mut self.agk[bj][di];
-                if !drop.gh { continue; }
+            for di in 0..Mo {
+                let drop = &mut self.drops[col][di];
+                if !drop.active { continue; }
 
                 
-                drop.va = drop.va.cn(1);
-                if drop.va >= drop.ig {
-                    drop.va = 0;
-                    drop.c += 1;
+                drop.counter = drop.counter.wrapping_add(1);
+                if drop.counter >= drop.speed {
+                    drop.counter = 0;
+                    drop.y += 1;
                     
-                    drop.amg = drop.amg.hx(1103515245).cn(12345);
+                    drop.glyph_seed = drop.glyph_seed.wrapping_mul(1103515245).wrapping_add(12345);
 
                     
                     
                     
                     
-                    let mlf = drop.acr as usize;
-                    if mlf >= 2 && mlf <= 48 {
-                        let mut oxh = drop.kzh(0) as u8;
-                        for aaz in 1..mlf {
-                            let ipw = drop.kzh(aaz) as u8;
-                            if ipw == oxh {
+                    let gyz = drop.trail_len as usize;
+                    if gyz >= 2 && gyz <= 48 {
+                        let mut iwa = drop.glyph_at(0) as u8;
+                        for tp in 1..gyz {
+                            let eji = drop.glyph_at(tp) as u8;
+                            if eji == iwa {
                                 
-                                drop.glu |= (1u64 << (aaz - 1)) | (1u64 << aaz);
-                                drop.glt[aaz - 1] = ipw;
-                                drop.glt[aaz] = ipw;
+                                drop.locked_mask |= (1u64 << (tp - 1)) | (1u64 << tp);
+                                drop.locked_glyphs[tp - 1] = eji;
+                                drop.locked_glyphs[tp] = eji;
                             }
-                            oxh = ipw;
+                            iwa = eji;
                         }
                     }
                 }
 
                 
-                if drop.c as i32 > csl {
-                    self.rng = self.rng.hx(1103515245).cn(12345);
+                if drop.y as i32 > aye {
+                    self.rng = self.rng.wrapping_mul(1103515245).wrapping_add(12345);
 
-                    let foi = BBC_ as u32 + eat / 8;
-                    let llf = (OJ_ as u32).v(foi + 20);
-                    let ase = foi + (self.rng % (llf - foi + 1));
+                    let cmw = BDF_ as u32 + brx / 8;
+                    let gha = (PH_ as u32).min(cmw + 20);
+                    let wr = cmw + (self.rng % (gha - cmw + 1));
 
-                    self.rng = self.rng.hx(1103515245).cn(12345);
-                    let qi = 2 + (self.rng % 6);
-                    let bhn = -(ase as i32) - qi as i32 - (self.rng % 8) as i32;
+                    self.rng = self.rng.wrapping_mul(1103515245).wrapping_add(12345);
+                    let gap = 2 + (self.rng % 6);
+                    let afk = -(wr as i32) - gap as i32 - (self.rng % 8) as i32;
 
-                    self.rng = self.rng.hx(1103515245).cn(12345);
-                    let fvc = 1 + (255u32.ao(eat)) / 128;
-                    let fvd = 1 + (255u32.ao(eat)) / 80;
-                    let ig = fvc + (self.rng % fvd);
+                    self.rng = self.rng.wrapping_mul(1103515245).wrapping_add(12345);
+                    let cqx = 1 + (255u32.saturating_sub(brx)) / 128;
+                    let cqy = 1 + (255u32.saturating_sub(brx)) / 80;
+                    let speed = cqx + (self.rng % cqy);
 
-                    self.rng = self.rng.hx(1103515245).cn(12345);
-                    drop.c = bhn as i16;
-                    drop.ig = ig.v(8) as u8;
-                    drop.va = 0;
-                    drop.acr = ase.v(OJ_ as u32) as u8;
-                    drop.amg = self.rng;
+                    self.rng = self.rng.wrapping_mul(1103515245).wrapping_add(12345);
+                    drop.y = afk as i16;
+                    drop.speed = speed.min(8) as u8;
+                    drop.counter = 0;
+                    drop.trail_len = wr.min(PH_ as u32) as u8;
+                    drop.glyph_seed = self.rng;
                     
-                    drop.glu = 0;
-                    drop.glt = [0u8; 48];
+                    drop.locked_mask = 0;
+                    drop.locked_glyphs = [0u8; 48];
                 }
             }
         }
@@ -1760,88 +1760,88 @@ impl ShaderMatrixState {
 
 
 #[repr(C)]
-struct Acv {
-    g: *const ShaderMatrixState,
-    pq: *mut u32,
-    lu: usize,
-    qh: usize,
+struct Mq {
+    state: *const ShaderMatrixState,
+    fb: *mut u32,
+    fb_width: usize,
+    fb_height: usize,
 }
 
-unsafe impl Send for Acv {}
-unsafe impl Sync for Acv {}
+unsafe impl Send for Mq {}
+unsafe impl Sync for Mq {}
 
 
 
-fn ukm(ay: usize, ci: usize, f: *mut u8) {
-    let be = unsafe { &*(f as *const Acv) };
-    let g = unsafe { &*be.g };
-    let pq = be.pq;
-    let ua = be.lu;
-    let iuj = be.qh;
-    let bnr = g.bnr;
+fn ncl(start: usize, end: usize, data: *mut u8) {
+    let ab = unsafe { &*(data as *const Mq) };
+    let state = unsafe { &*ab.state };
+    let fb = ab.fb;
+    let fo = ab.fb_width;
+    let cxt = ab.fb_height;
+    let num_rows = state.num_rows;
 
     
-    let cqz = &crate::matrix_fast::CFC_;
+    let glyphs = &crate::matrix_fast::CIL_;
 
-    for bj in ay..ci {
-        let eo = g.cwh[bj] as u32;
+    for col in start..end {
+        let depth = state.col_depth[col] as u32;
         
-        let hfu = 100 + (eo * 155 / 255);
+        let dms = 100 + (depth * 155 / 255);
 
-        for di in 0..Act {
-            let drop = &g.agk[bj][di];
-            if !drop.gh { continue; }
+        for di in 0..Mo {
+            let drop = &state.drops[col][di];
+            if !drop.active { continue; }
 
-            let buu = drop.c as i32;
-            let acr = drop.acr as usize;
+            let head_y = drop.y as i32;
+            let trail_len = drop.trail_len as usize;
 
-            for aaz in 0..acr {
-                let bmg = buu - aaz as i32;
-                if bmg < 0 || bmg >= bnr as i32 { continue; }
-
-                
-                let uiu = (aaz * 63) / acr.am(1);
-                let qnm = CGM_[uiu.v(63)] as u32;
-                let mut hj = ((qnm * hfu) / 255).v(255) as u8;
-                if hj < 2 { continue; }
+            for tp in 0..trail_len {
+                let aho = head_y - tp as i32;
+                if aho < 0 || aho >= num_rows as i32 { continue; }
 
                 
-                let caq = drop.ogg(aaz);
-                let cqy = drop.kzh(aaz);
-                let ka = &cqz[cqy];
+                let nbf = (tp * 63) / trail_len.max(1);
+                let kad = CJW_[nbf.min(63)] as u32;
+                let mut intensity = ((kad * dms) / 255).min(255) as u8;
+                if intensity < 2 { continue; }
+
+                
+                let locked = drop.is_locked(tp);
+                let axi = drop.glyph_at(tp);
+                let du = &glyphs[axi];
 
                 
                 
                 
                 
-                let s = if aaz == 0 {
-                    oml(hj.am(250))
-                } else if caq {
+                let color = if tp == 0 {
+                    imy(intensity.max(250))
+                } else if locked {
                     
-                    hj = hj.akq(60).v(255);
-                    uod(hj)
+                    intensity = intensity.saturating_add(60).min(255);
+                    nff(intensity)
                 } else {
-                    oml(hj)
+                    imy(intensity)
                 };
 
                 
-                let y = bj * Xn + 1;
-                let x = bmg as usize * Xn + 1;
+                let p = col * Kd + 1;
+                let o = aho as usize * Kd + 1;
 
                 
-                if x + 6 <= iuj && y + 6 <= ua {
+                if o + 6 <= cxt && p + 6 <= fo {
                     
-                    for br in 0..6 {
-                        let fs = ka[br];
-                        if fs == 0 { continue; }
-                        let dvh = (x + br) * ua + y;
+                    for row in 0..6 {
+                        let bits = du[row];
+                        if bits == 0 { continue; }
+                        let bop = (o + row) * fo + p;
                         unsafe {
-                            if fs & 0b000001 != 0 { *pq.add(dvh)     = s; }
-                            if fs & 0b000010 != 0 { *pq.add(dvh + 1) = s; }
-                            if fs & 0b000100 != 0 { *pq.add(dvh + 2) = s; }
-                            if fs & 0b001000 != 0 { *pq.add(dvh + 3) = s; }
-                            if fs & 0b010000 != 0 { *pq.add(dvh + 4) = s; }
-                            if fs & 0b100000 != 0 { *pq.add(dvh + 5) = s; }
+                            if bits & 0b000001 != 0 { *fb.add(bop)     = color; }
+                            if bits & 0b000010 != 0 { *fb.add(bop + 1) = color; }
+                            if bits & 0b000100 != 0 { *fb.add(bop + 2) = color; }
+                            if bits & 0b001000 != 0 { *fb.add(bop + 3) = color; }
+                            if bits & 0b010000 != 0 { *fb.add(bop + 4) = color; }
+                            if bits & 0b100000 != 0 { *fb.add(bop + 5) = color; }
                         }
                     }
                 }
@@ -1852,7 +1852,7 @@ fn ukm(ay: usize, ci: usize, f: *mut u8) {
 
 
 
-static CSQ_: spin::Mutex<ShaderMatrixState> =
+static CWH_: spin::Mutex<ShaderMatrixState> =
     spin::Mutex::new(ShaderMatrixState::new());
 
 
@@ -1864,42 +1864,42 @@ static CSQ_: spin::Mutex<ShaderMatrixState> =
 
 
 
-pub fn wmb(pq: *mut u32, z: usize, ac: usize) {
-    let mut g = CSQ_.lock();
+pub fn ore(fb: *mut u32, width: usize, height: usize) {
+    let mut state = CWH_.lock();
 
     
-    if !g.jr || g.ajg != z / Xn || g.bnr != ac / Xn {
-        g.init(z, ac);
+    if !state.initialized || state.num_cols != width / Kd || state.num_rows != height / Kd {
+        state.init(width, height);
     }
 
     
-    g.qs();
+    state.update();
 
     
-    let jtv = z * ac;
+    let fdi = width * height;
     unsafe {
         #[cfg(target_arch = "x86_64")]
-        crate::graphics::simd::bed(pq, jtv, 0xFF010201);
+        crate::graphics::simd::adq(fb, fdi, 0xFF010201);
         #[cfg(not(target_arch = "x86_64"))]
         {
-            for a in 0..jtv {
-                *pq.add(a) = 0xFF010201u32;
+            for i in 0..fdi {
+                *fb.add(i) = 0xFF010201u32;
             }
         }
     }
 
     
-    let ajg = g.ajg;
-    let be = Acv {
-        g: &*g as *const ShaderMatrixState,
-        pq,
-        lu: z,
-        qh: ac,
+    let num_cols = state.num_cols;
+    let ab = Mq {
+        state: &*state as *const ShaderMatrixState,
+        fb,
+        fb_width: width,
+        fb_height: height,
     };
 
-    crate::cpu::smp::daj(
-        ajg,
-        ukm,
-        &be as *const Acv as *mut u8,
+    crate::cpu::smp::bcz(
+        num_cols,
+        ncl,
+        &ab as *const Mq as *mut u8,
     );
 }

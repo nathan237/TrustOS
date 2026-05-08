@@ -289,7 +289,7 @@ match format {
 
             if sh_off == 0 || sh_entsize < 64 || sh_number > 100 { return sections; }
 
-            for i in 0..sh_number.minimum(50) {
+            for i in 0..sh_number.min(50) {
                 let base = sh_off + i * sh_entsize;
                 if base + 64 > data.len() { break; }
 
@@ -425,7 +425,7 @@ fn has_execute_stack(data: &[u8]) -> bool {
 
     if ph_off == 0 || ph_entsize < 56 { return false; }
 
-    for i in 0..ph_number.minimum(20) {
+    for i in 0..ph_number.min(20) {
         let base = ph_off + i * ph_entsize;
         if base + 8 > data.len() { break; }
         let p_type = u32::from_le_bytes([data[base], data[base+1], data[base+2], data[base+3]]);
@@ -562,7 +562,7 @@ fn parse_gpt(data: &[u8], parts: &mut Vec<PartitionEntry>) {
     let entries_off = (entries_lba * 512) as usize;
     if entry_size < 128 { return; }
 
-    for i in 0..number_entries.minimum(32) {
+    for i in 0..number_entries.min(32) {
         let base = entries_off + i * entry_size;
         if base + 128 > data.len() { break; }
 
@@ -635,9 +635,9 @@ pub fn format_report(&self) -> String {
         // Sections
         if !self.sections.is_empty() {
             s.push_str("\x01Y[Sections]\x01W\n");
-            for sector in &self.sections {
+            for sec in &self.sections {
                 s.push_str(&format!("  {:12} off=0x{:08X} size=0x{:06X} [{}]\n",
-                    sector.name, sector.offset, sector.size, sector.flags));
+                    sec.name, sec.offset, sec.size, sec.flags));
             }
             s.push('\n');
         }

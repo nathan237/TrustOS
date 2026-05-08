@@ -7,225 +7,231 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::vec;
 use alloc::format;
-use crate::framebuffer::{B_, G_, AU_, D_, A_, C_, Q_, CD_, DF_, L_};
+use crate::framebuffer::{B_, G_, AX_, D_, A_, C_, R_, CF_, DM_, K_};
 use crate::ramfs::FileType;
 
 
-pub(super) fn kif(n: &[&str]) {
+pub(super) fn fmd(args: &[&str]) {
     use alloc::vec;
     
-    crate::h!(C_, "-----------------------------------------------------------");
-    crate::h!(C_, "              TrustOS Graphics Benchmark");
-    crate::h!(C_, "               SSE2 SIMD Optimizations");
-    crate::h!(C_, "-----------------------------------------------------------");
+    crate::n!(C_, "-----------------------------------------------------------");
+    crate::n!(C_, "              TrustOS Graphics Benchmark");
+    crate::n!(C_, "               SSE2 SIMD Optimizations");
+    crate::n!(C_, "-----------------------------------------------------------");
     crate::println!();
     
-    let (z, ac) = crate::framebuffer::yn();
-    let hz = (z * ac) as usize;
+    let (width, height) = crate::framebuffer::kv();
+    let pixels = (width * height) as usize;
     crate::println!("Resolution: {}x{} ({} pixels, {} MB)", 
-        z, ac, hz, hz * 4 / 1024 / 1024);
+        width, height, pixels, pixels * 4 / 1024 / 1024);
     crate::println!();
     
     
-    crate::h!(B_, "? Test 1: SSE2 Buffer Fill");
+    crate::n!(B_, "? Test 1: SSE2 Buffer Fill");
     {
-        let mut bi = vec![0u32; hz];
-        let atc = 100;
+        let mut buffer = vec![0u32; pixels];
+        let xe = 100;
         
-        let ay = crate::cpu::tsc::ow();
-        for _ in 0..atc {
-            crate::graphics::simd::ntp(&mut bi, 0xFF00FF66);
+        let start = crate::cpu::tsc::ey();
+        for _ in 0..xe {
+            crate::graphics::simd::hyi(&mut buffer, 0xFF00FF66);
         }
-        let ci = crate::cpu::tsc::ow();
+        let end = crate::cpu::tsc::ey();
         
-        let knk = (ci - ay) / atc;
-        let umu = hz as f64 / 1_000_000.0;
-        crate::println!("  {} iterations: {} cycles/frame", atc, knk);
-        crate::println!("  Throughput: ~{:.1} megapixels/frame", umu);
+        let fqe = (end - start) / xe;
+        let neb = pixels as f64 / 1_000_000.0;
+        crate::println!("  {} iterations: {} cycles/frame", xe, fqe);
+        crate::println!("  Throughput: ~{:.1} megapixels/frame", neb);
     }
     
     
-    crate::h!(B_, "? Test 2: SSE2 Buffer Copy");
+    crate::n!(B_, "? Test 2: SSE2 Buffer Copy");
     {
-        let cy = vec![0xFF112233u32; hz];
-        let mut cs = vec![0u32; hz];
-        let atc = 100;
+        let src = vec![0xFF112233u32; pixels];
+        let mut dst = vec![0u32; pixels];
+        let xe = 100;
         
-        let ay = crate::cpu::tsc::ow();
-        for _ in 0..atc {
-            crate::graphics::simd::ror(&mut cs, &cy);
+        let start = crate::cpu::tsc::ey();
+        for _ in 0..xe {
+            crate::graphics::simd::kxq(&mut dst, &src);
         }
-        let ci = crate::cpu::tsc::ow();
+        let end = crate::cpu::tsc::ey();
         
-        let knk = (ci - ay) / atc;
-        let umf = (hz * 4) as f64 / 1024.0 / 1024.0;
-        crate::println!("  {} iterations: {} cycles/frame", atc, knk);
-        crate::println!("  Bandwidth: ~{:.1} MB copied/frame", umf);
+        let fqe = (end - start) / xe;
+        let ndr = (pixels * 4) as f64 / 1024.0 / 1024.0;
+        crate::println!("  {} iterations: {} cycles/frame", xe, fqe);
+        crate::println!("  Bandwidth: ~{:.1} MB copied/frame", ndr);
     }
     
     
-    crate::h!(B_, "? Test 3: Rectangle Fill (400x300)");
+    crate::n!(B_, "? Test 3: Rectangle Fill (400x300)");
     {
         let mut surface = crate::graphics::fast_render::FastSurface::new(1280, 800);
-        let atc = 500;
+        let xe = 500;
         
-        let ay = crate::cpu::tsc::ow();
-        for _ in 0..atc {
-            surface.ah(100, 100, 400, 300, 0xFF00AA55);
+        let start = crate::cpu::tsc::ey();
+        for _ in 0..xe {
+            surface.fill_rect(100, 100, 400, 300, 0xFF00AA55);
         }
-        let ci = crate::cpu::tsc::ow();
+        let end = crate::cpu::tsc::ey();
         
-        let rst = (ci - ay) / atc;
-        let vij = 400 * 300;
-        crate::println!("  {} iterations: {} cycles/rect", atc, rst);
-        crate::println!("  {} pixels/rect", vij);
+        let lay = (end - start) / xe;
+        let nuz = 400 * 300;
+        crate::println!("  {} iterations: {} cycles/rect", xe, lay);
+        crate::println!("  {} pixels/rect", nuz);
     }
     
     
-    crate::h!(B_, "? Test 4: Framebuffer swap_buffers");
+    crate::n!(B_, "? Test 4: Framebuffer swap_buffers");
     {
         
-        let jwl = crate::framebuffer::bre();
-        if !jwl {
-            crate::framebuffer::beo();
-            crate::framebuffer::afi(true);
+        let fez = crate::framebuffer::ajy();
+        if !fez {
+            crate::framebuffer::adw();
+            crate::framebuffer::pr(true);
         }
         
-        let atc = 50;
-        let ay = crate::cpu::tsc::ow();
-        for _ in 0..atc {
-            crate::framebuffer::sv();
+        let xe = 50;
+        let start = crate::cpu::tsc::ey();
+        for _ in 0..xe {
+            crate::framebuffer::ii();
         }
-        let ci = crate::cpu::tsc::ow();
+        let end = crate::cpu::tsc::ey();
         
-        let njb = (ci - ay) / atc;
+        let hqi = (end - start) / xe;
         
-        let kuc = 3_000_000_000u64 / njb.am(1);
-        crate::println!("  {} iterations: {} cycles/swap", atc, njb);
-        crate::println!("  Estimated max FPS: ~{} (at 3GHz)", kuc);
+        let fvi = 3_000_000_000u64 / hqi.max(1);
+        crate::println!("  {} iterations: {} cycles/swap", xe, hqi);
+        crate::println!("  Estimated max FPS: ~{} (at 3GHz)", fvi);
         
-        if !jwl {
-            crate::framebuffer::afi(false);
+        if !fez {
+            crate::framebuffer::pr(false);
         }
     }
     
     
-    crate::h!(B_, "? Test 5: GraphicsTerminal render (80x25)");
+    crate::n!(B_, "? Test 5: GraphicsTerminal render (80x25)");
     {
         let mut terminal = crate::wayland::terminal::GraphicsTerminal::new(80, 25);
         terminal.write_str("Hello from TrustOS! Testing SSE2 SIMD terminal rendering performance.\n");
         terminal.write_str("The quick brown fox jumps over the lazy dog.\n");
         
-        let atc = 100;
-        let ay = crate::cpu::tsc::ow();
-        for _ in 0..atc {
-            let _ = terminal.tj();
+        let xe = 100;
+        let start = crate::cpu::tsc::ey();
+        for _ in 0..xe {
+            let _ = terminal.render();
         }
-        let ci = crate::cpu::tsc::ow();
+        let end = crate::cpu::tsc::ey();
         
-        let nja = (ci - ay) / atc;
-        let kuc = 3_000_000_000u64 / nja.am(1);
-        crate::println!("  {} iterations: {} cycles/render", atc, nja);
-        crate::println!("  Estimated terminal FPS: ~{}", kuc);
+        let hqh = (end - start) / xe;
+        let fvi = 3_000_000_000u64 / hqh.max(1);
+        crate::println!("  {} iterations: {} cycles/render", xe, hqh);
+        crate::println!("  Estimated terminal FPS: ~{}", fvi);
     }
     
     crate::println!();
-    crate::h!(C_, "-----------------------------------------------------------");
-    crate::h!(B_, "Benchmark complete! SSE2 optimizations active.");
-    crate::h!(C_, "-----------------------------------------------------------");
+    crate::n!(C_, "-----------------------------------------------------------");
+    crate::n!(B_, "Benchmark complete! SSE2 optimizations active.");
+    crate::n!(C_, "-----------------------------------------------------------");
 }
 
 
 
-pub(super) fn yjb(n: &[&str]) {
-    use crate::cosmic::{CosmicRenderer, Rect, Point, Color, theme, CosmicTheme, bxb};
+pub(super) fn qal(args: &[&str]) {
+    use crate::cosmic::{CosmicRenderer, Rect, Point, Color, theme, CosmicTheme, set_theme};
     use crate::cosmic::theme::dark;
     
-    let wvr = n.fv().hu().unwrap_or("demo");
+    let oyl = args.first().copied().unwrap_or("demo");
     
-    match wvr {
+    match oyl {
         "demo" | "test" => {
-            crate::h!(C_, "+---------------------------------------------------------------+");
-            crate::h!(C_, "|          COSMIC UI Framework Demo (libcosmic-inspired)       |");
-            crate::h!(C_, "+---------------------------------------------------------------+");
+            crate::n!(C_, "+---------------------------------------------------------------+");
+            crate::n!(C_, "|          COSMIC UI Framework Demo (libcosmic-inspired)       |");
+            crate::n!(C_, "+---------------------------------------------------------------+");
             crate::println!();
             
-            let (z, ac) = crate::framebuffer::yn();
-            crate::println!("  Framebuffer: {}x{}", z, ac);
+            let (width, height) = crate::framebuffer::kv();
+            crate::println!("  Framebuffer: {}x{}", width, height);
             crate::println!("  Renderer: tiny-skia (software, no_std)");
             crate::println!("  Theme: COSMIC Dark (Pop!_OS style)");
             crate::println!();
             
-            crate::h!(B_, "Creating COSMIC renderer...");
-            let mut renderer = CosmicRenderer::new(z, ac);
+            crate::n!(B_, "Creating COSMIC renderer...");
+            let mut renderer = match CosmicRenderer::new(width, height) {
+                Some(r) => r,
+                None => {
+                    crate::n!(A_, "  ERROR: Failed to create COSMIC renderer (OOM?)");
+                    return;
+                }
+            };
             
             
-            renderer.clear(dark::DD_);
+            renderer.clear(dark::DK_);
             
-            crate::h!(B_, "Drawing COSMIC UI elements...");
-            
-            
-            let vbk = Rect::new(0.0, 0.0, z as f32, 32.0);
-            renderer.nnl(vbk);
+            crate::n!(B_, "Drawing COSMIC UI elements...");
             
             
-            
-            let pav = Rect::new(50.0, 80.0, 200.0, 100.0);
-            renderer.afp(pav, 12.0, dark::Kw);
-            renderer.gtn(pav, 12.0, dark::Fj, 1.0);
+            let nps = Rect::new(0.0, 0.0, width as f32, 32.0);
+            renderer.draw_panel(nps);
             
             
-            let naj = Rect::new(300.0, 100.0, 120.0, 40.0);
-            renderer.gfj(naj, 8.0, 8.0, Color::Ox.fbo(0.4));
-            renderer.afp(naj, 8.0, dark::Ge);
+            
+            let iyw = Rect::new(50.0, 80.0, 200.0, 100.0);
+            renderer.fill_rounded_rect(iyw, 12.0, dark::El);
+            renderer.stroke_rounded_rect(iyw, 12.0, dark::Bp, 1.0);
             
             
-            let qsf = Rect::new(450.0, 100.0, 120.0, 40.0);
-            renderer.afp(qsf, 8.0, dark::MB_);
+            let hix = Rect::new(300.0, 100.0, 120.0, 40.0);
+            renderer.draw_shadow(hix, 8.0, 8.0, Color::BLACK.with_alpha(0.4));
+            renderer.fill_rounded_rect(hix, 8.0, dark::Ch);
             
             
-            let qsg = Rect::new(600.0, 100.0, 120.0, 40.0);
-            renderer.afp(qsg, 8.0, dark::JN_);
+            let kef = Rect::new(450.0, 100.0, 120.0, 40.0);
+            renderer.fill_rounded_rect(kef, 8.0, dark::MZ_);
             
             
-            renderer.abc(Point::new(100.0, 250.0), 30.0, dark::Ge);
-            renderer.abc(Point::new(180.0, 250.0), 30.0, dark::Aep);
-            renderer.abc(Point::new(260.0, 250.0), 30.0, dark::Afq);
-            renderer.abc(Point::new(340.0, 250.0), 30.0, dark::Sf);
+            let keg = Rect::new(600.0, 100.0, 120.0, 40.0);
+            renderer.fill_rounded_rect(keg, 8.0, dark::KE_);
             
             
-            let tny = Rect::new(50.0, 320.0, 400.0, 40.0);
-            renderer.nnb(tny, "COSMIC Window", true);
+            renderer.fill_circle(Point::new(100.0, 250.0), 30.0, dark::Ch);
+            renderer.fill_circle(Point::new(180.0, 250.0), 30.0, dark::Nh);
+            renderer.fill_circle(Point::new(260.0, 250.0), 30.0, dark::Nw);
+            renderer.fill_circle(Point::new(340.0, 250.0), 30.0, dark::Hr);
             
             
-            let xuq = Rect::new(50.0, 360.0, 400.0, 150.0);
-            renderer.ah(xuq, dark::CS_);
-            renderer.gtn(
+            let mkp = Rect::new(50.0, 320.0, 400.0, 40.0);
+            renderer.draw_header(mkp, "COSMIC Window", true);
+            
+            
+            let pus = Rect::new(50.0, 360.0, 400.0, 150.0);
+            renderer.fill_rect(pus, dark::CY_);
+            renderer.stroke_rounded_rect(
                 Rect::new(50.0, 320.0, 400.0, 190.0),
                 0.0,
-                dark::Fj,
+                dark::Bp,
                 1.0
             );
             
             
-            let kqm = [
-                crate::cosmic::Abe { j: "Files", gh: true, asy: false, aqk: true },
-                crate::cosmic::Abe { j: "Term", gh: false, asy: true, aqk: true },
-                crate::cosmic::Abe { j: "Browser", gh: false, asy: false, aqk: false },
-                crate::cosmic::Abe { j: "Settings", gh: false, asy: false, aqk: true },
+            let fsr = [
+                crate::cosmic::Ln { name: "Files", active: true, hovered: false, running: true },
+                crate::cosmic::Ln { name: "Term", active: false, hovered: true, running: true },
+                crate::cosmic::Ln { name: "Browser", active: false, hovered: false, running: false },
+                crate::cosmic::Ln { name: "Settings", active: false, hovered: false, running: true },
             ];
-            let sad = Rect::new((z - 64) as f32, 100.0, 64.0, 280.0);
-            renderer.irs(sad, &kqm);
+            let lgv = Rect::new((width - 64) as f32, 100.0, 64.0, 280.0);
+            renderer.draw_dock(lgv, &fsr);
             
             
-            let thj = Rect::new(500.0, 320.0, 200.0, 100.0);
-            renderer.kvv(thj, dark::Ge, dark::DD_);
+            let mfy = Rect::new(500.0, 320.0, 200.0, 100.0);
+            renderer.fill_gradient_v(mfy, dark::Ch, dark::DK_);
             
-            crate::h!(B_, "Presenting to framebuffer...");
-            renderer.vky();
+            crate::n!(B_, "Presenting to framebuffer...");
+            renderer.present_to_framebuffer();
             
             crate::println!();
-            crate::h!(G_, "? COSMIC UI demo rendered successfully!");
+            crate::n!(G_, "? COSMIC UI demo rendered successfully!");
             crate::println!();
             crate::println!("  Features demonstrated:");
             crate::println!("  - Rounded rectangles with anti-aliasing");
@@ -238,28 +244,28 @@ pub(super) fn yjb(n: &[&str]) {
             crate::println!("  Press any key to return to shell...");
             
             
-            crate::keyboard::xtj();
+            crate::keyboard::ptj();
             crate::framebuffer::clear();
-            crate::framebuffer::sv();
+            crate::framebuffer::ii();
         },
         "desktop" => {
             
-            ndt();
+            hlr();
         },
         "theme" => {
-            let ezr = n.get(1).hu().unwrap_or("matrix");
-            match ezr {
+            let cei = args.get(1).copied().unwrap_or("matrix");
+            match cei {
                 "dark" => {
-                    bxb(CosmicTheme::dark());
-                    crate::h!(B_, "Theme set to COSMIC Dark");
+                    set_theme(CosmicTheme::dark());
+                    crate::n!(B_, "Theme set to COSMIC Dark");
                 },
                 "light" => {
-                    bxb(CosmicTheme::light());
-                    crate::h!(B_, "Theme set to COSMIC Light");
+                    set_theme(CosmicTheme::light());
+                    crate::n!(B_, "Theme set to COSMIC Light");
                 },
                 "matrix" => {
-                    bxb(CosmicTheme::matrix());
-                    crate::h!(0x00FF00, "Theme set to MATRIX - Wake up, Neo...");
+                    set_theme(CosmicTheme::matrix());
+                    crate::n!(0x00FF00, "Theme set to MATRIX - Wake up, Neo...");
                 },
                 _ => {
                     crate::println!("Available themes: dark, light, matrix");
@@ -267,7 +273,7 @@ pub(super) fn yjb(n: &[&str]) {
             }
         },
         "info" => {
-            crate::h!(C_, "COSMIC UI Framework for TrustOS");
+            crate::n!(C_, "COSMIC UI Framework for TrustOS");
             crate::println!();
             crate::println!("  Based on: libcosmic by System76 (Pop!_OS)");
             crate::println!("  Renderer: tiny-skia v0.12 (no_std mode)");
@@ -292,8 +298,8 @@ pub(super) fn yjb(n: &[&str]) {
 }
 
 
-pub(super) fn rgu(n: &[&str]) {
-    if n.is_empty() {
+pub(super) fn kqf(args: &[&str]) {
+    if args.is_empty() {
         crate::println!("Usage: open <app>");
         crate::println!("");
         crate::println!("Available apps:");
@@ -309,62 +315,62 @@ pub(super) fn rgu(n: &[&str]) {
         return;
     }
     
-    let bjf = n[0].aqn();
-    ndu(Some(&bjf));
+    let afz = args[0].to_lowercase();
+    hls(Some(&afz));
 }
 
 
 
-fn nco() -> bool {
-    let mut ihb: u8 = 0;
+fn hkq() -> bool {
+    let mut eec: u8 = 0;
 
     
-    let vhm = crate::memory::fxc();
-    let clx = vhm / (1024 * 1024);
-    if clx > 0 && clx < 256 {
-        crate::h!(A_, "\u{26A0} Insufficient RAM: {} MB detected (minimum: 256 MB)", clx);
-        ihb += 1;
-    } else if clx > 0 && clx < 512 {
-        crate::h!(D_, "\u{26A0} Low RAM: {} MB detected (recommended: 512 MB+)", clx);
+    let nuh = crate::memory::ceo();
+    let aun = nuh / (1024 * 1024);
+    if aun > 0 && aun < 256 {
+        crate::n!(A_, "\u{26A0} Insufficient RAM: {} MB detected (minimum: 256 MB)", aun);
+        eec += 1;
+    } else if aun > 0 && aun < 512 {
+        crate::n!(D_, "\u{26A0} Low RAM: {} MB detected (recommended: 512 MB+)", aun);
     }
 
     
-    let buv = crate::memory::heap::aez();
-    let drq = buv / (1024 * 1024);
-    if drq < 16 {
-        crate::h!(A_, "\u{26A0} Insufficient heap: {} MB free (minimum: 16 MB)", drq);
-        ihb += 1;
-    } else if drq < 32 {
-        crate::h!(D_, "\u{26A0} Low heap: {} MB free (recommended: 32 MB+)", drq);
+    let heap_free = crate::memory::heap::free();
+    let bmt = heap_free / (1024 * 1024);
+    if bmt < 16 {
+        crate::n!(A_, "\u{26A0} Insufficient heap: {} MB free (minimum: 16 MB)", bmt);
+        eec += 1;
+    } else if bmt < 32 {
+        crate::n!(D_, "\u{26A0} Low heap: {} MB free (recommended: 32 MB+)", bmt);
     }
 
     
-    let (gz, kc) = crate::framebuffer::yn();
-    if gz == 0 || kc == 0 {
-        crate::h!(A_, "\u{26A0} No framebuffer detected! Desktop requires a display.");
-        ihb += 1;
-    } else if gz < 800 || kc < 600 {
-        crate::h!(D_, "\u{26A0} Low resolution: {}x{} (recommended: 1024x768+)", gz, kc);
+    let (fb_w, fb_h) = crate::framebuffer::kv();
+    if fb_w == 0 || fb_h == 0 {
+        crate::n!(A_, "\u{26A0} No framebuffer detected! Desktop requires a display.");
+        eec += 1;
+    } else if fb_w < 800 || fb_h < 600 {
+        crate::n!(D_, "\u{26A0} Low resolution: {}x{} (recommended: 1024x768+)", fb_w, fb_h);
     }
 
     
-    if gz > 0 && kc > 0 {
-        let qmk = (gz as usize) * (kc as usize) * 4 * 2;
-        let mxl = qmk / (1024 * 1024);
-        if drq > 0 && (mxl as usize) > drq + 4 {
-            crate::h!(A_, "\u{26A0} Not enough memory for {}x{} framebuffer ({} MB needed, {} MB free)",
-                gz, kc, mxl, drq);
-            ihb += 1;
+    if fb_w > 0 && fb_h > 0 {
+        let jzd = (fb_w as usize) * (fb_h as usize) * 4 * 2;
+        let hgk = jzd / (1024 * 1024);
+        if bmt > 0 && (hgk as usize) > bmt + 4 {
+            crate::n!(A_, "\u{26A0} Not enough memory for {}x{} framebuffer ({} MB needed, {} MB free)",
+                fb_w, fb_h, hgk, bmt);
+            eec += 1;
         }
     }
 
-    if ihb > 0 {
-        crate::h!(D_, "");
-        crate::h!(D_, "\u{2139}  Desktop may be unstable with current resources.");
-        if clx > 0 && clx < 256 {
-            crate::h!(Q_, "   Tip: Increase VM RAM to 512 MB+ (-m 512M in QEMU)");
+    if eec > 0 {
+        crate::n!(D_, "");
+        crate::n!(D_, "\u{2139}  Desktop may be unstable with current resources.");
+        if aun > 0 && aun < 256 {
+            crate::n!(R_, "   Tip: Increase VM RAM to 512 MB+ (-m 512M in QEMU)");
         }
-        crate::h!(D_, "   Launching anyway...");
+        crate::n!(D_, "   Launching anyway...");
         crate::println!("");
     }
 
@@ -373,186 +379,186 @@ fn nco() -> bool {
 
 
 
-pub(super) fn jcx(tuf: Option<(&str, crate::desktop::WindowType, i32, i32, u32, u32)>) {
+pub(super) fn esl(initial_window: Option<(&str, crate::desktop::WindowType, i32, i32, u32, u32)>) {
     use crate::desktop;
 
     
-    if !nco() {
+    if !hkq() {
         return;
     }
 
-    let (z, ac) = crate::framebuffer::yn();
-    if z == 0 || ac == 0 {
-        crate::h!(A_, "Error: Invalid framebuffer!");
+    let (width, height) = crate::framebuffer::kv();
+    if width == 0 || height == 0 {
+        crate::n!(A_, "Error: Invalid framebuffer!");
         return;
     }
-    crate::mouse::dbw(z, ac);
+    crate::mouse::set_screen_size(width, height);
     
-    let mut bc = desktop::Aa.lock();
-    bc.init(z, ac);
+    let mut d = desktop::S.lock();
+    d.init(width, height);
     
     
-    if bc.asr == desktop::DesktopTier::Aap {
-        crate::h!(D_, "Insufficient resources for desktop (< 128 MB RAM).");
-        crate::h!(D_, "Staying in command-line mode. Increase RAM to 256 MB+ (-m 256M).");
-        drop(bc);
+    if d.desktop_tier == desktop::DesktopTier::CliOnly {
+        crate::n!(D_, "Insufficient resources for desktop (< 128 MB RAM).");
+        crate::n!(D_, "Staying in command-line mode. Increase RAM to 256 MB+ (-m 256M).");
+        drop(d);
         return;
     }
     
     
-    let xgx = match bc.asr {
-        desktop::DesktopTier::Gy  => "Minimal (solid bg, no effects)",
-        desktop::DesktopTier::Gc => "Standard (2-layer rain, basic effects)",
-        desktop::DesktopTier::Bv     => "Full (4-layer rain, visualizer, all effects)",
+    let pji = match d.desktop_tier {
+        desktop::DesktopTier::Minimal  => "Minimal (solid bg, no effects)",
+        desktop::DesktopTier::Standard => "Standard (2-layer rain, basic effects)",
+        desktop::DesktopTier::Full     => "Full (4-layer rain, visualizer, all effects)",
         _ => "CLI",
     };
-    crate::serial_println!("[Desktop] Launching in {} mode", xgx);
+    crate::serial_println!("[Desktop] Launching in {} mode", pji);
     
     
-    if crate::drivers::virtio_gpu::anl() {
-        bc.che = desktop::RenderMode::Atd;
+    if crate::drivers::virtio_gpu::sw() {
+        d.render_mode = desktop::RenderMode::GpuAccelerated;
         crate::serial_println!("[Desktop] GPU-accelerated rendering enabled (VirtIO GPU)");
     }
     
     
-    if let Some((dq, ash, b, c, d, i)) = tuf {
-        bc.xl(dq, b, c, d, i, ash);
+    if let Some((title, wt, x, y, w, h)) = initial_window {
+        d.create_window(title, x, y, w, h, wt);
     }
     
-    drop(bc);
+    drop(d);
     
     
-    crate::gui::engine::wnq("TrustOS Desktop", "Welcome! Alt+Tab to switch windows", crate::gui::engine::NotifyPriority::Hf);
+    crate::gui::engine::osf("TrustOS Desktop", "Welcome! Alt+Tab to switch windows", crate::gui::engine::NotifyPriority::Success);
     
     crate::serial_println!("[Desktop] Entering desktop run loop");
-    desktop::vw();
+    desktop::run();
     
     crate::serial_println!("[Desktop] Returned to shell");
     
-    let (d, i) = crate::framebuffer::yn();
-    crate::framebuffer::ah(0, 0, d, i, 0xFF000000);
-    crate::h!(B_, "\nReturned to TrustOS shell. Type 'help' for commands.");
+    let (w, h) = crate::framebuffer::kv();
+    crate::framebuffer::fill_rect(0, 0, w, h, 0xFF000000);
+    crate::n!(B_, "\nReturned to TrustOS shell. Type 'help' for commands.");
 }
 
 
 
-pub(super) fn ucz() {
+pub(super) fn mxa() {
     use crate::desktop;
 
     
-    if !nco() {
+    if !hkq() {
         return;
     }
 
-    let (z, ac) = crate::framebuffer::yn();
-    if z == 0 || ac == 0 {
-        crate::h!(A_, "Error: Invalid framebuffer!");
+    let (width, height) = crate::framebuffer::kv();
+    if width == 0 || height == 0 {
+        crate::n!(A_, "Error: Invalid framebuffer!");
         return;
     }
-    crate::mouse::dbw(z, ac);
+    crate::mouse::set_screen_size(width, height);
     
-    let mut bc = desktop::Aa.lock();
-    bc.init(z, ac);
+    let mut d = desktop::S.lock();
+    d.init(width, height);
     
-    bc.ud.gh = true;
-    bc.ud.bls = crate::mobile::MobileView::Lo;
-    let (fp, iz, gm, me) = crate::mobile::nbi(z, ac);
-    bc.ud.dxp = fp;
-    bc.ud.ddi = iz;
-    bc.ud.att = gm;
-    bc.ud.azc = me;
-    crate::serial_println!("[Mobile] Viewport: {}x{} at ({},{}) on {}x{}", gm, me, fp, iz, z, ac);
+    d.mobile_state.active = true;
+    d.mobile_state.view = crate::mobile::MobileView::Home;
+    let (vx, vy, bt, ex) = crate::mobile::hjt(width, height);
+    d.mobile_state.vp_x = vx;
+    d.mobile_state.vp_y = vy;
+    d.mobile_state.vp_w = bt;
+    d.mobile_state.vp_h = ex;
+    crate::serial_println!("[Mobile] Viewport: {}x{} at ({},{}) on {}x{}", bt, ex, vx, vy, width, height);
     
-    drop(bc);
+    drop(d);
     crate::serial_println!("[Mobile] Entering mobile desktop loop");
-    desktop::vw();
+    desktop::run();
     
     crate::serial_println!("[Mobile] Returned to shell");
-    let (d, i) = crate::framebuffer::yn();
-    crate::framebuffer::ah(0, 0, d, i, 0xFF000000);
-    crate::h!(B_, "\nReturned to TrustOS shell. Type 'help' for commands.");
+    let (w, h) = crate::framebuffer::kv();
+    crate::framebuffer::fill_rect(0, 0, w, h, 0xFF000000);
+    crate::n!(B_, "\nReturned to TrustOS shell. Type 'help' for commands.");
 }
 
 
 
-pub(super) fn rie(n: &[&str]) {
+pub(super) fn kro(args: &[&str]) {
     use crate::signature;
 
-    match n.fv().hu() {
+    match args.first().copied() {
         Some("verify") | None => {
             
             crate::println!();
-            crate::h!(C_, "\u{2554}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2557}");
-            crate::h!(C_, "\u{2551}              TrustOS Kernel Signature Certificate                  \u{2551}");
-            crate::h!(C_, "\u{2560}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2563}");
+            crate::n!(C_, "\u{2554}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2557}");
+            crate::n!(C_, "\u{2551}              TrustOS Kernel Signature Certificate                  \u{2551}");
+            crate::n!(C_, "\u{2560}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2563}");
             crate::println!();
-            crate::h!(G_, "  ?? CREATOR SIGNATURE (immutable)");
-            crate::h!(Q_, "  -----------------------------------------------------------------");
-            crate::println!("  Author:      {} (@{})", signature::BPS_, signature::BPR_);
-            crate::println!("  Payload:     \"{}\"", signature::APJ_);
+            crate::n!(G_, "  ?? CREATOR SIGNATURE (immutable)");
+            crate::n!(R_, "  -----------------------------------------------------------------");
+            crate::println!("  Author:      {} (@{})", signature::BSJ_, signature::BSI_);
+            crate::println!("  Payload:     \"{}\"", signature::ARJ_);
             crate::println!("  Algorithm:   HMAC-SHA256");
-            crate::h!(D_, "  Fingerprint: {}", signature::nhk());
-            crate::println!("  Version:     v{}", signature::NU_);
-            crate::println!("  Built:       {}", signature::BLM_);
+            crate::n!(D_, "  Fingerprint: {}", signature::hou());
+            crate::println!("  Version:     v{}", signature::OS_);
+            crate::println!("  Built:       {}", signature::BOF_);
             crate::println!();
-            crate::h!(L_, "  i  This fingerprint was generated with a secret seed known ONLY");
-            crate::h!(L_, "     to the creator. It cannot be forged without the original seed.");
+            crate::n!(K_, "  i  This fingerprint was generated with a secret seed known ONLY");
+            crate::n!(K_, "     to the creator. It cannot be forged without the original seed.");
             crate::println!();
 
             
-            if let Some((j, nu, wi)) = signature::iww() {
-                crate::h!(CD_, "  USER CO-SIGNATURE");
-                crate::h!(Q_, "  -----------------------------------------------------------------");
-                crate::println!("  Signed by:   {}", j);
-                crate::h!(D_, "  Fingerprint: {}", nu);
-                crate::println!("  Signed at:   {}s after midnight (RTC)", wi);
+            if let Some((name, ga, jy)) = signature::eoe() {
+                crate::n!(CF_, "  USER CO-SIGNATURE");
+                crate::n!(R_, "  -----------------------------------------------------------------");
+                crate::println!("  Signed by:   {}", name);
+                crate::n!(D_, "  Fingerprint: {}", ga);
+                crate::println!("  Signed at:   {}s after midnight (RTC)", jy);
                 crate::println!();
             } else {
-                crate::h!(L_, "  No user co-signature. Use 'signature sign <name>' to add yours.");
+                crate::n!(K_, "  No user co-signature. Use 'signature sign <name>' to add yours.");
                 crate::println!();
             }
 
-            crate::h!(C_, "\u{255a}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{255d}");
+            crate::n!(C_, "\u{255a}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{255d}");
             crate::println!();
         }
         Some("sign") => {
             
-            if n.len() < 2 {
-                crate::h!(A_, "Usage: signature sign <your_name>");
+            if args.len() < 2 {
+                crate::n!(A_, "Usage: signature sign <your_name>");
                 return;
             }
-            let j = n[1];
+            let name = args[1];
             crate::println!("Enter your secret passphrase to sign the kernel:");
             crate::print!("> ");
             
-            let bvw = jlm();
-            if bvw.is_empty() {
-                crate::h!(A_, "Empty passphrase. Aborted.");
+            let amd = exx();
+            if amd.is_empty() {
+                crate::n!(A_, "Empty passphrase. Aborted.");
                 return;
             }
-            signature::wnz(j, bvw.as_bytes());
+            signature::oso(name, amd.as_bytes());
             crate::println!();
-            crate::h!(G_, "? Kernel co-signed by '{}'", j);
-            if let Some((_, nu, _)) = signature::iww() {
-                crate::h!(D_, "  Your fingerprint: {}", nu);
+            crate::n!(G_, "? Kernel co-signed by '{}'", name);
+            if let Some((_, ga, _)) = signature::eoe() {
+                crate::n!(D_, "  Your fingerprint: {}", ga);
             }
-            crate::h!(L_, "  Keep your passphrase safe -- you'll need it to prove ownership.");
+            crate::n!(K_, "  Keep your passphrase safe -- you'll need it to prove ownership.");
             crate::println!();
         }
         Some("prove") => {
             
-            if n.len() < 2 {
-                crate::h!(A_, "Usage: signature prove <name>");
+            if args.len() < 2 {
+                crate::n!(A_, "Usage: signature prove <name>");
                 return;
             }
-            let j = n[1];
+            let name = args[1];
             crate::println!("Enter passphrase to verify:");
             crate::print!("> ");
-            let bvw = jlm();
-            if signature::xrm(j, bvw.as_bytes()) {
-                crate::h!(G_, "VERIFIED -- '{}' is the legitimate signer.", j);
+            let amd = exx();
+            if signature::prv(name, amd.as_bytes()) {
+                crate::n!(G_, "VERIFIED -- '{}' is the legitimate signer.", name);
             } else {
-                crate::h!(A_, "FAILED -- passphrase does not match the signature for '{}'.", j);
+                crate::n!(A_, "FAILED -- passphrase does not match the signature for '{}'.", name);
             }
             crate::println!();
         }
@@ -560,83 +566,83 @@ pub(super) fn rie(n: &[&str]) {
             
             crate::println!("Enter creator seed to verify authorship:");
             crate::print!("> ");
-            let dv = jlm();
-            if signature::xrg(dv.as_bytes()) {
-                crate::h!(G_, "CREATOR VERIFIED -- You are the original author of TrustOS.");
+            let seed = exx();
+            if signature::prq(seed.as_bytes()) {
+                crate::n!(G_, "CREATOR VERIFIED -- You are the original author of TrustOS.");
             } else {
-                crate::h!(A_, "FAILED -- This seed does not match the creator fingerprint.");
+                crate::n!(A_, "FAILED -- This seed does not match the creator fingerprint.");
             }
             crate::println!();
         }
         Some("integrity") | Some("verify-integrity") => {
             crate::println!();
-            crate::h!(G_, "Kernel Integrity Verification");
+            crate::n!(G_, "Kernel Integrity Verification");
             crate::println!("---------------------------------------------------------------");
-            let report = signature::tvn();
+            let report = signature::mqw();
             for line in &report {
                 crate::println!("{}", line);
             }
             crate::println!();
-            crate::h!(L_, "  SHA-256 of .text + .rodata sections measured at boot vs now.");
-            crate::h!(L_, "  Detects runtime code injection, ROP gadget insertion, and");
-            crate::h!(L_, "  constant/vtable tampering (rootkits, memory corruption).");
+            crate::n!(K_, "  SHA-256 of .text + .rodata sections measured at boot vs now.");
+            crate::n!(K_, "  Detects runtime code injection, ROP gadget insertion, and");
+            crate::n!(K_, "  constant/vtable tampering (rootkits, memory corruption).");
             crate::println!();
         }
         Some("clear") => {
-            signature::rbh();
-            crate::h!(D_, "User co-signature cleared.");
+            signature::kkv();
+            crate::n!(D_, "User co-signature cleared.");
         }
         Some("export") => {
             
-            if let Some((j, nu, ydo)) = signature::iww() {
-                let os = crate::rtc::cgz();
+            if let Some((name, ga, _ts)) = signature::eoe() {
+                let fm = crate::rtc::aou();
                 crate::println!();
-                crate::h!(C_, "=== Copy everything below and submit as a PR to SIGNATURES.md ===");
+                crate::n!(C_, "=== Copy everything below and submit as a PR to SIGNATURES.md ===");
                 crate::println!();
-                crate::println!("### #NNN -- {}", j);
+                crate::println!("### #NNN -- {}", name);
                 crate::println!();
                 crate::println!("| Field | Value |");
                 crate::println!("|-------|-------|");
-                crate::println!("| **Name** | {} |", j);
+                crate::println!("| **Name** | {} |", name);
                 crate::println!("| **GitHub** | [@YOURUSERNAME](https://github.com/YOURUSERNAME) |");
                 crate::println!("| **Algorithm** | HMAC-SHA256 |");
-                crate::println!("| **Fingerprint** | `{}` |", nu);
-                crate::println!("| **Kernel Version** | v{} |", signature::NU_);
-                crate::println!("| **Date** | {:04}-{:02}-{:02} |", os.ccq, os.caw, os.cjw);
+                crate::println!("| **Fingerprint** | `{}` |", ga);
+                crate::println!("| **Kernel Version** | v{} |", signature::OS_);
+                crate::println!("| **Date** | {:04}-{:02}-{:02} |", fm.year, fm.month, fm.day);
                 crate::println!("| **Status** | Verified signer |");
                 crate::println!();
-                crate::h!(L_, "Replace YOURUSERNAME with your GitHub username and #NNN with the next number.");
-                crate::h!(L_, "Submit as a Pull Request to: github.com/nathan237/TrustOS");
+                crate::n!(K_, "Replace YOURUSERNAME with your GitHub username and #NNN with the next number.");
+                crate::n!(K_, "Submit as a Pull Request to: github.com/nathan237/TrustOS");
                 crate::println!();
             } else {
-                crate::h!(A_, "No user signature found. Run 'signature sign <name>' first.");
+                crate::n!(A_, "No user signature found. Run 'signature sign <name>' first.");
             }
         }
         Some("list") => {
             
             crate::println!();
-            crate::h!(C_, "TrustOS Signature Registry");
-            crate::h!(Q_, "------------------------------------------------------");
+            crate::n!(C_, "TrustOS Signature Registry");
+            crate::n!(R_, "------------------------------------------------------");
             crate::println!();
-            crate::h!(G_, "  #001  Nated0ge (Creator)");
-            crate::println!("        {}", signature::nhk());
+            crate::n!(G_, "  #001  Nated0ge (Creator)");
+            crate::println!("        {}", signature::hou());
             crate::println!();
-            if let Some((j, nu, _)) = signature::iww() {
-                crate::h!(C_, "  #---  {} (Local)", j);
-                crate::println!("        {}", nu);
+            if let Some((name, ga, _)) = signature::eoe() {
+                crate::n!(C_, "  #---  {} (Local)", name);
+                crate::println!("        {}", ga);
                 crate::println!();
             }
-            crate::h!(L_, "  Full registry: github.com/nathan237/TrustOS/blob/main/SIGNATURES.md");
+            crate::n!(K_, "  Full registry: github.com/nathan237/TrustOS/blob/main/SIGNATURES.md");
             crate::println!();
         }
         Some("ed25519") => {
             
-            match n.get(1).hu() {
+            match args.get(1).copied() {
                 Some("verify") | None => {
                     crate::println!();
-                    crate::h!(C_, "Ed25519 Asymmetric Signature Report");
-                    crate::h!(Q_, "--------------------------------------------------------------");
-                    let report = signature::npc();
+                    crate::n!(C_, "Ed25519 Asymmetric Signature Report");
+                    crate::n!(R_, "--------------------------------------------------------------");
+                    let report = signature::huy();
                     for line in &report {
                         crate::println!("{}", line);
                     }
@@ -645,14 +651,14 @@ pub(super) fn rie(n: &[&str]) {
                 Some("sign") => {
                     crate::println!("Enter Ed25519 seed (hex or passphrase):");
                     crate::print!("> ");
-                    let phk = jlm();
-                    if phk.is_empty() {
-                        crate::h!(A_, "Empty seed. Aborted.");
+                    let jee = exx();
+                    if jee.is_empty() {
+                        crate::n!(A_, "Empty seed. Aborted.");
                         return;
                     }
-                    signature::sip(phk.as_bytes());
-                    crate::h!(G_, "? Kernel re-signed with Ed25519 (new seed).");
-                    if let Some(report) = signature::npc().fv() {
+                    signature::lnw(jee.as_bytes());
+                    crate::n!(G_, "? Kernel re-signed with Ed25519 (new seed).");
+                    if let Some(report) = signature::huy().first() {
                         crate::println!("  {}", report);
                     }
                     crate::println!();
@@ -666,7 +672,7 @@ pub(super) fn rie(n: &[&str]) {
             }
         }
         _ => {
-            crate::h!(C_, "TrustOS Kernel Signature System");
+            crate::n!(C_, "TrustOS Kernel Signature System");
             crate::println!();
             crate::println!("Usage:");
             crate::println!("  signature                - Show signature certificate");
@@ -685,74 +691,74 @@ pub(super) fn rie(n: &[&str]) {
 }
 
 
-fn jlm() -> alloc::string::String {
+fn exx() -> alloc::string::String {
     use alloc::string::String;
-    let mut bvw = String::new();
+    let mut amd = String::new();
     loop {
-        if let Some(bs) = crate::keyboard::xw() {
-            match bs {
+        if let Some(key) = crate::keyboard::kr() {
+            match key {
                 b'\n' | b'\r' | 0x0A | 0x0D => {
                     crate::println!();
                     break;
                 }
                 0x08 => {
                     
-                    if !bvw.is_empty() {
-                        bvw.pop();
+                    if !amd.is_empty() {
+                        amd.pop();
                         crate::print!("\x08 \x08");
                     }
                 }
-                r if r.ofo() && !r.yyx() => {
-                    bvw.push(r as char);
+                c if c.is_ascii() && !c.is_ascii_control() => {
+                    amd.push(c as char);
                     crate::print!("*");
                 }
                 _ => {}
             }
         }
-        core::hint::hc();
+        core::hint::spin_loop();
     }
-    bvw
+    amd
 }
 
 
-pub(super) fn rhy(n: &[&str]) {
-    match n.fv().hu() {
+pub(super) fn krj(args: &[&str]) {
+    match args.first().copied() {
         Some("status") | None => {
             
-            let cm = crate::security::cm();
+            let stats = crate::security::stats();
             crate::println!();
-            crate::h!(G_, "TrustOS Security Status");
+            crate::n!(G_, "TrustOS Security Status");
             crate::println!("---------------------------------------------------------------");
-            crate::println!("  Active capabilities : {}", cm.mto);
-            crate::println!("  Security violations : {}", cm.cnt);
-            crate::println!("  Dynamic types       : {}", cm.noq);
-            crate::println!("  Isolated subsystems : {}", cm.ppr);
-            crate::println!("  Gate checks         : {}", crate::security::isolation::puy());
-            crate::println!("  Gate violations     : {}", crate::security::isolation::puz());
+            crate::println!("  Active capabilities : {}", stats.active_capabilities);
+            crate::println!("  Security violations : {}", stats.violations);
+            crate::println!("  Dynamic types       : {}", stats.dynamic_types);
+            crate::println!("  Isolated subsystems : {}", stats.subsystems);
+            crate::println!("  Gate checks         : {}", crate::security::isolation::jnu());
+            crate::println!("  Gate violations     : {}", crate::security::isolation::jnv());
             crate::println!();
             
             
-            match crate::signature::pye() {
-                Ok(true) => crate::h!(G_, "  Kernel integrity    : ? INTACT"),
-                Ok(false) => crate::h!(A_, "  Kernel integrity    : ? TAMPERED"),
-                Err(_) => crate::h!(D_, "  Kernel integrity    : ??  not initialized"),
+            match crate::signature::jqa() {
+                Ok(true) => crate::n!(G_, "  Kernel integrity    : ? INTACT"),
+                Ok(false) => crate::n!(A_, "  Kernel integrity    : ? TAMPERED"),
+                Err(_) => crate::n!(D_, "  Kernel integrity    : ??  not initialized"),
             }
             crate::println!();
         }
         Some("caps") | Some("capabilities") => {
             
-            let dr = crate::security::ufn();
+            let caps = crate::security::myz();
             crate::println!();
-            crate::h!(C_, "Active Capabilities ({} total)", dr.len());
+            crate::n!(C_, "Active Capabilities ({} total)", caps.len());
             crate::println!("----------------------------------------------------------");
             crate::println!("  {:>6} | {:<20} | {:<10} | Owner", "ID", "Type", "Category");
             crate::println!("  -------+----------------------+------------+------");
-            for (ad, cap_type, yck, awj) in &dr {
+            for (id, cap_type, _rights, owner) in &caps {
                 crate::println!("  {:>6} | {:<20} | {:<10} | 0x{:04X}",
-                    ad.0,
+                    id.0,
                     alloc::format!("{:?}", cap_type),
-                    cap_type.gb(),
-                    awj
+                    cap_type.category(),
+                    owner
                 );
             }
             crate::println!();
@@ -760,45 +766,45 @@ pub(super) fn rhy(n: &[&str]) {
         Some("isolation") | Some("iso") | Some("subsystems") => {
             
             crate::println!();
-            crate::h!(G_, "Subsystem Isolation Boundaries");
+            crate::n!(G_, "Subsystem Isolation Boundaries");
             crate::println!("---------------------------------------------------------------");
-            let report = crate::security::isolation::tzq();
+            let report = crate::security::isolation::mui();
             for line in &report {
                 crate::println!("{}", line);
             }
             crate::println!();
-            crate::h!(L_, "  ring0-tcb       = Part of TCB, must stay in ring 0");
-            crate::h!(L_, "  ring0-isolated  = Ring 0 but logically isolated");
-            crate::h!(L_, "  ring3-candidate = Could be moved to ring 3 in future");
+            crate::n!(K_, "  ring0-tcb       = Part of TCB, must stay in ring 0");
+            crate::n!(K_, "  ring0-isolated  = Ring 0 but logically isolated");
+            crate::n!(K_, "  ring3-candidate = Could be moved to ring 3 in future");
             crate::println!();
         }
         Some("gate") => {
             
-            if let Some(ppq) = n.get(1).hu() {
-                let bcu = match ppq {
-                    "storage" | "disk" => Some(crate::security::isolation::Subsystem::Og),
-                    "network" | "net" => Some(crate::security::isolation::Subsystem::As),
-                    "graphics" | "gpu" => Some(crate::security::isolation::Subsystem::Jm),
-                    "process" | "proc" => Some(crate::security::isolation::Subsystem::Tz),
-                    "hypervisor" | "hv" => Some(crate::security::isolation::Subsystem::Ee),
-                    "shell" => Some(crate::security::isolation::Subsystem::Df),
-                    "crypto" => Some(crate::security::isolation::Subsystem::Jh),
-                    "power" => Some(crate::security::isolation::Subsystem::Hb),
-                    "serial" => Some(crate::security::isolation::Subsystem::Yu),
-                    "memory" | "mem" => Some(crate::security::isolation::Subsystem::Cy),
+            if let Some(subsystem_name) = args.get(1).copied() {
+                let acs = match subsystem_name {
+                    "storage" | "disk" => Some(crate::security::isolation::Subsystem::Storage),
+                    "network" | "net" => Some(crate::security::isolation::Subsystem::Network),
+                    "graphics" | "gpu" => Some(crate::security::isolation::Subsystem::Graphics),
+                    "process" | "proc" => Some(crate::security::isolation::Subsystem::ProcessMgr),
+                    "hypervisor" | "hv" => Some(crate::security::isolation::Subsystem::Hypervisor),
+                    "shell" => Some(crate::security::isolation::Subsystem::Shell),
+                    "crypto" => Some(crate::security::isolation::Subsystem::Crypto),
+                    "power" => Some(crate::security::isolation::Subsystem::Power),
+                    "serial" => Some(crate::security::isolation::Subsystem::SerialDebug),
+                    "memory" | "mem" => Some(crate::security::isolation::Subsystem::Memory),
                     _ => None,
                 };
-                if let Some(sub) = bcu {
-                    match crate::security::isolation::drb(
-                        sub, crate::security::CapabilityRights::Cm
+                if let Some(sub) = acs {
+                    match crate::security::isolation::bmj(
+                        sub, crate::security::CapabilityRights::Ba
                     ) {
-                        Ok(()) => crate::h!(G_, 
+                        Ok(()) => crate::n!(G_, 
                             "  ? Gate check PASSED for {:?}", sub),
-                        Err(aa) => crate::h!(A_, 
-                            "  ? Gate check DENIED for {:?}: {:?}", sub, aa),
+                        Err(e) => crate::n!(A_, 
+                            "  ? Gate check DENIED for {:?}: {:?}", sub, e),
                     }
                 } else {
-                    crate::h!(A_, "Unknown subsystem: {}", ppq);
+                    crate::n!(A_, "Unknown subsystem: {}", subsystem_name);
                 }
             } else {
                 crate::println!("Usage: security gate <subsystem>");
@@ -808,22 +814,22 @@ pub(super) fn rhy(n: &[&str]) {
         }
         Some("dynamic") => {
             
-            let ifn = crate::security::ojp();
+            let eda = crate::security::ikq();
             crate::println!();
-            if ifn.is_empty() {
-                crate::h!(L_, "No dynamic capability types registered.");
+            if eda.is_empty() {
+                crate::n!(K_, "No dynamic capability types registered.");
             } else {
-                crate::h!(C_, "Dynamic Capability Types ({} registered)", ifn.len());
-                for (ad, co) in &ifn {
+                crate::n!(C_, "Dynamic Capability Types ({} registered)", eda.len());
+                for (id, info) in &eda {
                     crate::println!("  [{}] {} (danger:{}, category:{})", 
-                        ad, co.j, co.eom, co.gb);
-                    crate::println!("       {}", co.dc);
+                        id, info.name, info.danger_level, info.category);
+                    crate::println!("       {}", info.description);
                 }
             }
             crate::println!();
         }
         _ => {
-            crate::h!(C_, "TrustOS Security Subsystem");
+            crate::n!(C_, "TrustOS Security Subsystem");
             crate::println!();
             crate::println!("Usage:");
             crate::println!("  security                 - Show security status overview");
@@ -840,72 +846,72 @@ pub(super) fn rhy(n: &[&str]) {
 
 
 
-pub(super) fn rdp(n: &[&str]) {
-    let sh = match n.fv().hu() {
+pub(super) fn kmy(args: &[&str]) {
+    let ia = match args.first().copied() {
         Some("fr") => "fr",
         _ => "en",
     };
 
     
-    let rb = |tv: u64| {
-        let jn = tv * 1000;
-        let ayu = crate::cpu::tsc::ow();
-        let kx = crate::cpu::tsc::ard();
-        if kx == 0 { return; }
-        let cii = kx / 1000 * jn;
+    let pause = |im: u64| {
+        let dh = im * 1000;
+        let rr = crate::cpu::tsc::ey();
+        let freq = crate::cpu::tsc::we();
+        if freq == 0 { return; }
+        let acx = freq / 1000 * dh;
         loop {
-            let ez = crate::cpu::tsc::ow().ao(ayu);
-            if ez >= cii { break; }
-            let _ = crate::keyboard::xw();
-            core::hint::hc();
+            let bb = crate::cpu::tsc::ey().saturating_sub(rr);
+            if bb >= acx { break; }
+            let _ = crate::keyboard::kr();
+            core::hint::spin_loop();
         }
     };
 
-    let fym = |xhf: u64| -> bool {
-        let jn = xhf * 1000;
-        let ayu = crate::cpu::tsc::ow();
-        let kx = crate::cpu::tsc::ard();
-        if kx == 0 { return false; }
-        let cii = kx / 1000 * jn;
+    let csp = |timeout_secs: u64| -> bool {
+        let dh = timeout_secs * 1000;
+        let rr = crate::cpu::tsc::ey();
+        let freq = crate::cpu::tsc::we();
+        if freq == 0 { return false; }
+        let acx = freq / 1000 * dh;
         loop {
-            let ez = crate::cpu::tsc::ow().ao(ayu);
-            if ez >= cii { return false; }
-            if let Some(bs) = crate::keyboard::xw() {
-                if bs == 0x1B || bs == b'q' { return true; } 
-                if bs == b' ' || bs == b'\n' || bs == 13 { return false; } 
+            let bb = crate::cpu::tsc::ey().saturating_sub(rr);
+            if bb >= acx { return false; }
+            if let Some(key) = crate::keyboard::kr() {
+                if key == 0x1B || key == b'q' { return true; } 
+                if key == b' ' || key == b'\n' || key == 13 { return false; } 
             }
-            core::hint::hc();
+            core::hint::spin_loop();
         }
     };
 
     
     
     
-    let (kp, kl) = crate::framebuffer::yn();
+    let (dy, dw) = crate::framebuffer::kv();
 
     {
-        let afk = crate::framebuffer::bre();
-        if !afk {
-            crate::framebuffer::beo();
-            crate::framebuffer::afi(true);
+        let pu = crate::framebuffer::ajy();
+        if !pu {
+            crate::framebuffer::adw();
+            crate::framebuffer::pr(true);
         }
 
-        let d = kp as usize;
-        let i = kl as usize;
-        let mut k = alloc::vec![0u32; d * i];
+        let w = dy as usize;
+        let h = dw as usize;
+        let mut buf = alloc::vec![0u32; w * h];
 
         
-        let aej = |k: &mut [u32], d: usize, i: usize, cx: usize, ae: usize, r: char, s: u32, bv: usize| {
-            let ka = crate::framebuffer::font::ada(r);
-            for (br, &fs) in ka.iter().cf() {
-                for ga in 0..8u32 {
-                    if fs & (0x80 >> ga) != 0 {
-                        for cq in 0..bv {
-                            for cr in 0..bv {
-                                let y = cx + ga as usize * bv + cr;
-                                let x = ae + br * bv + cq;
-                                if y < d && x < i {
-                                    k[x * d + y] = s;
+        let pf = |buf: &mut [u32], w: usize, h: usize, cx: usize, u: usize, c: char, color: u32, scale: usize| {
+            let du = crate::framebuffer::font::ol(c);
+            for (row, &bits) in du.iter().enumerate() {
+                for bf in 0..8u32 {
+                    if bits & (0x80 >> bf) != 0 {
+                        for ak in 0..scale {
+                            for am in 0..scale {
+                                let p = cx + bf as usize * scale + am;
+                                let o = u + row * scale + ak;
+                                if p < w && o < h {
+                                    buf[o * w + p] = color;
                                 }
                             }
                         }
@@ -915,37 +921,37 @@ pub(super) fn rdp(n: &[&str]) {
         };
 
         
-        let mut ws: alloc::vec::Vec<u16> = alloc::vec![0u16; d / 8 + 1];
-        let mut yg: alloc::vec::Vec<u8> = alloc::vec![1u8; d / 8 + 1];
-        for a in 0..ws.len() {
-            ws[a] = ((a * 37 + 13) % i) as u16;
-            yg[a] = (((a * 7 + 3) % 4) + 1) as u8;
+        let mut kk: alloc::vec::Vec<u16> = alloc::vec![0u16; w / 8 + 1];
+        let mut la: alloc::vec::Vec<u8> = alloc::vec![1u8; w / 8 + 1];
+        for i in 0..kk.len() {
+            kk[i] = ((i * 37 + 13) % h) as u16;
+            la[i] = (((i * 7 + 3) % 4) + 1) as u8;
         }
 
-        let gfi = |k: &mut [u32], d: usize, i: usize, ec: &mut [u16], arz: &[u8], frame: u32| {
-            for il in k.el() {
-                let at = ((*il >> 8) & 0xFF) as u32;
-                if at > 0 {
-                    let fou = at.ao(8);
-                    *il = 0xFF000000 | (fou << 8);
+        let cwv = |buf: &mut [u32], w: usize, h: usize, cols: &mut [u16], speeds: &[u8], frame: u32| {
+            for ct in buf.iter_mut() {
+                let g = ((*ct >> 8) & 0xFF) as u32;
+                if g > 0 {
+                    let cnb = g.saturating_sub(8);
+                    *ct = 0xFF000000 | (cnb << 8);
                 }
             }
-            for adq in 0..ec.len() {
-                let b = adq * 8;
-                if b >= d { continue; }
-                ec[adq] = ec[adq].cn(arz[adq] as u16);
-                if ec[adq] as usize >= i { ec[adq] = 0; }
-                let c = ec[adq] as usize;
-                let r = (((frame as usize + adq * 13) % 94) + 33) as u8 as char;
-                let ka = crate::framebuffer::font::ada(r);
-                for (br, &fs) in ka.iter().cf() {
-                    let x = c + br;
-                    if x >= i { break; }
-                    for ga in 0..8u32 {
-                        if fs & (0x80 >> ga) != 0 {
-                            let y = b + ga as usize;
-                            if y < d {
-                                k[x * d + y] = 0xFF00FF44;
+            for ow in 0..cols.len() {
+                let x = ow * 8;
+                if x >= w { continue; }
+                cols[ow] = cols[ow].wrapping_add(speeds[ow] as u16);
+                if cols[ow] as usize >= h { cols[ow] = 0; }
+                let y = cols[ow] as usize;
+                let c = (((frame as usize + ow * 13) % 94) + 33) as u8 as char;
+                let du = crate::framebuffer::font::ol(c);
+                for (row, &bits) in du.iter().enumerate() {
+                    let o = y + row;
+                    if o >= h { break; }
+                    for bf in 0..8u32 {
+                        if bits & (0x80 >> bf) != 0 {
+                            let p = x + bf as usize;
+                            if p < w {
+                                buf[o * w + p] = 0xFF00FF44;
                             }
                         }
                     }
@@ -953,121 +959,121 @@ pub(super) fn rdp(n: &[&str]) {
             }
         };
 
-        let mb = |k: &[u32], d: usize, i: usize| {
-            if let Some((bgc, dnu, bgb, baz)) = crate::framebuffer::cey() {
-                let aaa = bgc as *mut u32;
-                let bgd = baz as usize;
-                for c in 0..i.v(bgb as usize) {
+        let ev = |buf: &[u32], w: usize, h: usize| {
+            if let Some((bb_ptr, _bb_w, bb_h, bb_stride)) = crate::framebuffer::aqr() {
+                let mq = bb_ptr as *mut u32;
+                let aeu = bb_stride as usize;
+                for y in 0..h.min(bb_h as usize) {
                     unsafe {
                         core::ptr::copy_nonoverlapping(
-                            k[c * d..].fq(),
-                            aaa.add(c * bgd),
-                            d,
+                            buf[y * w..].as_ptr(),
+                            mq.add(y * aeu),
+                            w,
                         );
                     }
                 }
             }
-            crate::framebuffer::sv();
+            crate::framebuffer::ii();
         };
 
         
-        let dbd = |k: &mut [u32], d: usize, i: usize,
-                           ws: &mut [u16], yg: &[u8],
-                           ak: &[(&str, u32, usize)],
-                           lcj: u64| {
-            let kx = crate::cpu::tsc::ard();
-            if kx == 0 { return; }
+        let bdi = |buf: &mut [u32], w: usize, h: usize,
+                           kk: &mut [u16], la: &[u8],
+                           lines: &[(&str, u32, usize)],
+                           hold_ms: u64| {
+            let freq = crate::cpu::tsc::we();
+            if freq == 0 { return; }
 
-            let aqo: usize = ak.iter().map(|(ab, _, _)| ab.len()).sum();
-            let ifm = 60u64;
-            let gvf = aqo as u64 * ifm;
+            let vu: usize = lines.iter().map(|(t, _, _)| t.len()).sum();
+            let ecz = 60u64;
+            let dfx = vu as u64 * ecz;
 
-            let ayu = crate::cpu::tsc::ow();
-            let lck = kx / 1000 * (gvf + lcj);
+            let rr = crate::cpu::tsc::ey();
+            let gay = freq / 1000 * (dfx + hold_ms);
 
             let mut frame = 0u32;
             loop {
-                let ez = crate::cpu::tsc::ow().ao(ayu);
-                if ez >= lck { break; }
-                if let Some(bs) = crate::keyboard::xw() {
-                    if bs == 0x1B || bs == b'q' { break; }
-                    if bs == b' ' || bs == b'\n' || bs == 13 { break; } 
+                let bb = crate::cpu::tsc::ey().saturating_sub(rr);
+                if bb >= gay { break; }
+                if let Some(key) = crate::keyboard::kr() {
+                    if key == 0x1B || key == b'q' { break; }
+                    if key == b' ' || key == b'\n' || key == 13 { break; } 
                 }
 
-                gfi(k, d, i, ws, yg, frame);
+                cwv(buf, w, h, kk, la, frame);
 
-                let oz = ez / (kx / 1000).am(1);
-                let qo = if oz < gvf {
-                    (oz / ifm.am(1)) as usize
+                let elapsed_ms = bb / (freq / 1000).max(1);
+                let hh = if elapsed_ms < dfx {
+                    (elapsed_ms / ecz.max(1)) as usize
                 } else {
-                    aqo
+                    vu
                 };
 
-                let ieo: usize = ak.iter().map(|(_, _, e)| 16 * e + 8).sum::<usize>();
-                let mut bpl = if ieo < i { (i - ieo) / 2 } else { 20 };
-                let mut det = 0usize;
+                let ecj: usize = lines.iter().map(|(_, _, j)| 16 * j + 8).sum::<usize>();
+                let mut ajb = if ecj < h { (h - ecj) / 2 } else { 20 };
+                let mut bff = 0usize;
 
-                for &(text, s, bv) in ak {
-                    let bda = text.len() * 8 * bv;
-                    let ql = if bda < d { (d - bda) / 2 } else { 0 };
+                for &(text, color, scale) in lines {
+                    let acy = text.len() * 8 * scale;
+                    let start_x = if acy < w { (w - acy) / 2 } else { 0 };
 
-                    for (a, r) in text.bw().cf() {
-                        if det + a >= qo { break; }
-                        aej(k, d, i, ql + a * 8 * bv, bpl, r, s, bv);
+                    for (i, c) in text.chars().enumerate() {
+                        if bff + i >= hh { break; }
+                        pf(buf, w, h, start_x + i * 8 * scale, ajb, c, color, scale);
                     }
-                    if qo > det && qo < det + text.len() {
-                        let kng = qo - det;
-                        let cx = ql + kng * 8 * bv;
-                        for ae in bpl..bpl + 16 * bv {
-                            if ae < i && cx + 2 < d {
-                                k[ae * d + cx] = 0xFF00FF88;
-                                k[ae * d + cx + 1] = 0xFF00FF88;
+                    if hh > bff && hh < bff + text.len() {
+                        let fqb = hh - bff;
+                        let cx = start_x + fqb * 8 * scale;
+                        for u in ajb..ajb + 16 * scale {
+                            if u < h && cx + 2 < w {
+                                buf[u * w + cx] = 0xFF00FF88;
+                                buf[u * w + cx + 1] = 0xFF00FF88;
                             }
                         }
                     }
 
-                    det += text.len();
-                    bpl += 16 * bv + 8;
+                    bff += text.len();
+                    ajb += 16 * scale + 8;
                 }
 
-                mb(k, d, i);
+                ev(buf, w, h);
                 frame += 1;
-                crate::cpu::tsc::asq(33);
+                crate::cpu::tsc::ww(33);
             }
 
             
-            let fih = crate::cpu::tsc::ow();
-            let ebj = kx / 1000 * 600;
+            let cjf = crate::cpu::tsc::ey();
+            let bsk = freq / 1000 * 600;
             loop {
-                let ez = crate::cpu::tsc::ow().ao(fih);
-                if ez >= ebj { break; }
-                let li = (ez * 255 / ebj) as u32;
-                for il in k.el() {
-                    let m = ((*il >> 16) & 0xFF) as u32;
-                    let at = ((*il >> 8) & 0xFF) as u32;
-                    let o = (*il & 0xFF) as u32;
-                    let nr = m.ao(m * li / 512 + 1);
-                    let csu = at.ao(at * li / 512 + 1);
-                    let csq = o.ao(o * li / 512 + 1);
-                    *il = 0xFF000000 | (nr << 16) | (csu << 8) | csq;
+                let bb = crate::cpu::tsc::ey().saturating_sub(cjf);
+                if bb >= bsk { break; }
+                let progress = (bb * 255 / bsk) as u32;
+                for ct in buf.iter_mut() {
+                    let r = ((*ct >> 16) & 0xFF) as u32;
+                    let g = ((*ct >> 8) & 0xFF) as u32;
+                    let b = (*ct & 0xFF) as u32;
+                    let nr = r.saturating_sub(r * progress / 512 + 1);
+                    let ayn = g.saturating_sub(g * progress / 512 + 1);
+                    let ayj = b.saturating_sub(b * progress / 512 + 1);
+                    *ct = 0xFF000000 | (nr << 16) | (ayn << 8) | ayj;
                 }
-                mb(k, d, i);
-                crate::cpu::tsc::asq(33);
+                ev(buf, w, h);
+                crate::cpu::tsc::ww(33);
             }
-            for il in k.el() { *il = 0xFF000000; }
-            mb(k, d, i);
+            for ct in buf.iter_mut() { *ct = 0xFF000000; }
+            ev(buf, w, h);
         };
 
         
         crate::serial_println!("[DEMO] Scene 1: Welcome");
-        for il in k.el() { *il = 0xFF000000; }
-        if sh == "fr" {
-            dbd(&mut k, d, i, &mut ws, &yg,
+        for ct in buf.iter_mut() { *ct = 0xFF000000; }
+        if ia == "fr" {
+            bdi(&mut buf, w, h, &mut kk, &la,
                 &[("Bienvenue dans", 0xFF00DD55, 5),
                   ("TrustOS", 0xFF00FFAA, 6)],
                 3000);
         } else {
-            dbd(&mut k, d, i, &mut ws, &yg,
+            bdi(&mut buf, w, h, &mut kk, &la,
                 &[("Welcome to", 0xFF00DD55, 5),
                   ("TrustOS", 0xFF00FFAA, 6)],
                 3000);
@@ -1075,14 +1081,14 @@ pub(super) fn rdp(n: &[&str]) {
 
         
         crate::serial_println!("[DEMO] Scene 2: What is TrustOS");
-        if sh == "fr" {
-            dbd(&mut k, d, i, &mut ws, &yg,
+        if ia == "fr" {
+            bdi(&mut buf, w, h, &mut kk, &la,
                 &[("Un OS bare-metal", 0xFF00DD55, 4),
                   ("ecrit en 100% Rust", 0xFF00FF88, 4),
                   ("Aucun C. Aucun Linux.", 0xFFFFCC44, 3)],
                 3000);
         } else {
-            dbd(&mut k, d, i, &mut ws, &yg,
+            bdi(&mut buf, w, h, &mut kk, &la,
                 &[("A bare-metal OS", 0xFF00DD55, 4),
                   ("written in 100% Rust", 0xFF00FF88, 4),
                   ("No C. No Linux. Just Rust.", 0xFFFFCC44, 3)],
@@ -1091,22 +1097,22 @@ pub(super) fn rdp(n: &[&str]) {
 
         
         crate::serial_println!("[DEMO] Scene 3: Tutorial start");
-        if sh == "fr" {
-            dbd(&mut k, d, i, &mut ws, &yg,
+        if ia == "fr" {
+            bdi(&mut buf, w, h, &mut kk, &la,
                 &[("Tutoriel Interactif", 0xFF44DDFF, 5),
                   ("Appuyez ESPACE pour continuer", 0xFF888888, 2),
                   ("ESC pour quitter", 0xFF666666, 2)],
                 4000);
         } else {
-            dbd(&mut k, d, i, &mut ws, &yg,
+            bdi(&mut buf, w, h, &mut kk, &la,
                 &[("Interactive Tutorial", 0xFF44DDFF, 5),
                   ("Press SPACE to continue", 0xFF888888, 2),
                   ("ESC to quit", 0xFF666666, 2)],
                 4000);
         }
 
-        if !afk {
-            crate::framebuffer::afi(false);
+        if !pu {
+            crate::framebuffer::pr(false);
         }
     }
 
@@ -1115,84 +1121,84 @@ pub(super) fn rdp(n: &[&str]) {
     
     crate::framebuffer::clear();
 
-    let ewv = |gu: u32, es: u32, xht: &str, xhu: &str, rvy: &str, rvz: &str| {
+    let ccu = |step: u32, av: u32, title_en: &str, title_fr: &str, desc_en: &str, desc_fr: &str| {
         crate::println!();
-        crate::h!(0xFF00CCFF, "+--------------------------------------------------------------+");
-        if sh == "fr" {
-            crate::h!(0xFF00CCFF, "|  ETAPE {}/{} -- {}", gu, es, xhu);
+        crate::n!(0xFF00CCFF, "+--------------------------------------------------------------+");
+        if ia == "fr" {
+            crate::n!(0xFF00CCFF, "|  ETAPE {}/{} -- {}", step, av, title_fr);
         } else {
-            crate::h!(0xFF00CCFF, "|  STEP {}/{} -- {}", gu, es, xht);
+            crate::n!(0xFF00CCFF, "|  STEP {}/{} -- {}", step, av, title_en);
         }
-        crate::h!(0xFF00CCFF, "+--------------------------------------------------------------+");
+        crate::n!(0xFF00CCFF, "+--------------------------------------------------------------+");
         crate::println!();
-        if sh == "fr" {
-            crate::h!(0xFF888888, "  {}", rvz);
+        if ia == "fr" {
+            crate::n!(0xFF888888, "  {}", desc_fr);
         } else {
-            crate::h!(0xFF888888, "  {}", rvy);
+            crate::n!(0xFF888888, "  {}", desc_en);
         }
         crate::println!();
     };
 
-    let tk = 8u32;
+    let ix = 8u32;
 
     
-    ewv(1, tk, "SYSTEM INFO", "INFOS SYSTEME",
+    ccu(1, ix, "SYSTEM INFO", "INFOS SYSTEME",
                "TrustOS can show detailed system information, just like Linux.",
                "TrustOS affiche les infos systeme, comme sous Linux.");
-    rb(2);
+    pause(2);
 
-    crate::h!(C_, "  $ neofetch");
-    rb(1);
-    super::commands::kiy();
-    rb(3);
+    crate::n!(C_, "  $ neofetch");
+    pause(1);
+    super::commands::fmw();
+    pause(3);
 
-    if sh == "fr" {
-        crate::h!(0xFF00FF88, "  -> Neofetch montre le CPU, la RAM, le kernel et l'uptime.");
+    if ia == "fr" {
+        crate::n!(0xFF00FF88, "  -> Neofetch montre le CPU, la RAM, le kernel et l'uptime.");
     } else {
-        crate::h!(0xFF00FF88, "  -> Neofetch shows CPU, RAM, kernel version and uptime.");
+        crate::n!(0xFF00FF88, "  -> Neofetch shows CPU, RAM, kernel version and uptime.");
     }
-    if fym(6) { return; }
+    if csp(6) { return; }
 
     
-    ewv(2, tk, "FILESYSTEM", "SYSTEME DE FICHIERS",
+    ccu(2, ix, "FILESYSTEM", "SYSTEME DE FICHIERS",
                "TrustOS has a full virtual filesystem (TrustFS + VFS).",
                "TrustOS possede un systeme de fichiers virtuel complet (TrustFS + VFS).");
-    rb(1);
+    pause(1);
 
-    crate::h!(C_, "  $ mkdir /tutorial");
-    crate::ramfs::fh(|fs| { let _ = fs.ut("/tutorial"); });
-    crate::h!(B_, "  Created /tutorial");
-    rb(1);
+    crate::n!(C_, "  $ mkdir /tutorial");
+    crate::ramfs::bh(|fs| { let _ = fs.mkdir("/tutorial"); });
+    crate::n!(B_, "  Created /tutorial");
+    pause(1);
 
-    crate::h!(C_, "  $ echo 'Hello from TrustOS!' > /tutorial/hello.txt");
-    crate::ramfs::fh(|fs| {
+    crate::n!(C_, "  $ echo 'Hello from TrustOS!' > /tutorial/hello.txt");
+    crate::ramfs::bh(|fs| {
         let _ = fs.touch("/tutorial/hello.txt");
-        let _ = fs.ns("/tutorial/hello.txt", b"Hello from TrustOS!\nThis file was created during the tutorial.\nPure Rust, running on bare metal.\n");
+        let _ = fs.write_file("/tutorial/hello.txt", b"Hello from TrustOS!\nThis file was created during the tutorial.\nPure Rust, running on bare metal.\n");
     });
-    crate::h!(B_, "  Written: /tutorial/hello.txt");
-    rb(1);
+    crate::n!(B_, "  Written: /tutorial/hello.txt");
+    pause(1);
 
-    crate::h!(C_, "  $ cat /tutorial/hello.txt");
-    super::commands::hde(&["/tutorial/hello.txt"], None, None);
-    rb(2);
+    crate::n!(C_, "  $ cat /tutorial/hello.txt");
+    super::commands::dkw(&["/tutorial/hello.txt"], None, None);
+    pause(2);
 
-    crate::h!(C_, "  $ tree /");
-    super::commands::kjj(&["/"]);
+    crate::n!(C_, "  $ tree /");
+    super::commands::fnh(&["/"]);
 
-    if sh == "fr" {
-        crate::h!(0xFF00FF88, "  -> Commandes POSIX completes: ls, cd, mkdir, rm, cp, mv, cat, find, grep...");
+    if ia == "fr" {
+        crate::n!(0xFF00FF88, "  -> Commandes POSIX completes: ls, cd, mkdir, rm, cp, mv, cat, find, grep...");
     } else {
-        crate::h!(0xFF00FF88, "  -> Full POSIX commands: ls, cd, mkdir, rm, cp, mv, cat, find, grep...");
+        crate::n!(0xFF00FF88, "  -> Full POSIX commands: ls, cd, mkdir, rm, cp, mv, cat, find, grep...");
     }
-    if fym(6) { return; }
+    if csp(6) { return; }
 
     
-    ewv(3, tk, "TRUSTLANG COMPILER", "COMPILATEUR TRUSTLANG",
+    ccu(3, ix, "TRUSTLANG COMPILER", "COMPILATEUR TRUSTLANG",
                "TrustOS includes a built-in programming language with compiler + VM.",
                "TrustOS inclut un langage de programmation avec compilateur + VM.");
-    rb(1);
+    pause(1);
 
-    let fwv = r#"fn factorial(n: i64) -> i64 {
+    let crs = r#"fn factorial(n: i64) -> i64 {
     if n <= 1 { return 1; }
     return n * factorial(n - 1);
 }
@@ -1206,228 +1212,228 @@ fn main() {
         println(to_string(factorial(i)));
     }
 }"#;
-    crate::ramfs::fh(|fs| {
+    crate::ramfs::bh(|fs| {
         let _ = fs.touch("/tutorial/demo.tl");
-        let _ = fs.ns("/tutorial/demo.tl", fwv.as_bytes());
+        let _ = fs.write_file("/tutorial/demo.tl", crs.as_bytes());
     });
 
-    crate::h!(C_, "  $ cat /tutorial/demo.tl");
-    crate::h!(0xFFDDDDDD, "{}", fwv);
-    rb(3);
+    crate::n!(C_, "  $ cat /tutorial/demo.tl");
+    crate::n!(0xFFDDDDDD, "{}", crs);
+    pause(3);
 
-    crate::h!(C_, "  $ trustlang run /tutorial/demo.tl");
-    crate::h!(0xFF00FF88, "  [TrustLang] Compiling...");
-    match crate::trustlang::vw(fwv) {
-        Ok(an) => { if !an.is_empty() { crate::print!("{}", an); } }
-        Err(aa) => crate::h!(A_, "  Error: {}", aa),
+    crate::n!(C_, "  $ trustlang run /tutorial/demo.tl");
+    crate::n!(0xFF00FF88, "  [TrustLang] Compiling...");
+    match crate::trustlang::run(crs) {
+        Ok(output) => { if !output.is_empty() { crate::print!("{}", output); } }
+        Err(e) => crate::n!(A_, "  Error: {}", e),
     }
-    crate::h!(B_, "  [TrustLang] Done!");
+    crate::n!(B_, "  [TrustLang] Done!");
 
-    if sh == "fr" {
-        crate::h!(0xFF00FF88, "  -> Fonctions, recursion, boucles, types -- compile en bytecode!");
+    if ia == "fr" {
+        crate::n!(0xFF00FF88, "  -> Fonctions, recursion, boucles, types -- compile en bytecode!");
     } else {
-        crate::h!(0xFF00FF88, "  -> Functions, recursion, loops, types -- compiled to bytecode!");
+        crate::n!(0xFF00FF88, "  -> Functions, recursion, loops, types -- compiled to bytecode!");
     }
-    if fym(6) { return; }
+    if csp(6) { return; }
 
     
-    ewv(4, tk, "NETWORK STACK", "PILE RESEAU",
+    ccu(4, ix, "NETWORK STACK", "PILE RESEAU",
                "Full TCP/IP stack: DHCP, DNS, HTTP, TLS 1.3 -- all in Rust.",
                "Pile TCP/IP complete: DHCP, DNS, HTTP, TLS 1.3 -- tout en Rust.");
-    rb(1);
+    pause(1);
 
-    crate::h!(C_, "  $ ifconfig");
-    super::vm::hdh();
-    rb(2);
+    crate::n!(C_, "  $ ifconfig");
+    super::vm::dkx();
+    pause(2);
 
-    crate::h!(C_, "  $ netstat");
-    super::vm::hdi();
+    crate::n!(C_, "  $ netstat");
+    super::vm::dky();
 
-    if sh == "fr" {
-        crate::h!(0xFF00FF88, "  -> Un navigateur web integre peut charger de vraies pages!");
+    if ia == "fr" {
+        crate::n!(0xFF00FF88, "  -> Un navigateur web integre peut charger de vraies pages!");
     } else {
-        crate::h!(0xFF00FF88, "  -> A built-in web browser can load real web pages!");
+        crate::n!(0xFF00FF88, "  -> A built-in web browser can load real web pages!");
     }
-    if fym(5) { return; }
+    if csp(5) { return; }
 
     
-    ewv(5, tk, "VIDEO EFFECTS", "EFFETS VIDEO",
+    ccu(5, ix, "VIDEO EFFECTS", "EFFETS VIDEO",
                "Real-time procedural rendering engine -- fire, matrix, plasma.",
                "Moteur de rendu procedural temps reel -- feu, matrix, plasma.");
-    rb(2);
+    pause(2);
 
-    let gm = kp as u16;
-    let me = kl as u16;
+    let bt = dy as u16;
+    let ex = dw as u16;
 
-    if sh == "fr" {
-        crate::h!(0xFFFF4400, "  Effet 1: FEU -- Flammes procedurales (5s)");
+    if ia == "fr" {
+        crate::n!(0xFFFF4400, "  Effet 1: FEU -- Flammes procedurales (5s)");
     } else {
-        crate::h!(0xFFFF4400, "  Effect 1: FIRE -- Procedural flames (5s)");
+        crate::n!(0xFFFF4400, "  Effect 1: FIRE -- Procedural flames (5s)");
     }
-    rb(1);
-    crate::video::player::gqt("fire", gm, me, 30, 5000);
+    pause(1);
+    crate::video::player::ddk("fire", bt, ex, 30, 5000);
     crate::framebuffer::clear();
 
-    if sh == "fr" {
-        crate::h!(0xFF00FF44, "  Effet 2: MATRIX -- Pluie numerique (5s)");
+    if ia == "fr" {
+        crate::n!(0xFF00FF44, "  Effet 2: MATRIX -- Pluie numerique (5s)");
     } else {
-        crate::h!(0xFF00FF44, "  Effect 2: MATRIX -- Digital rain (5s)");
+        crate::n!(0xFF00FF44, "  Effect 2: MATRIX -- Digital rain (5s)");
     }
-    rb(1);
-    crate::video::player::gqt("matrix", gm, me, 30, 5000);
+    pause(1);
+    crate::video::player::ddk("matrix", bt, ex, 30, 5000);
     crate::framebuffer::clear();
 
-    if sh == "fr" {
-        crate::h!(0xFFFF00FF, "  Effet 3: PLASMA -- Plasma psychedelique (5s)");
+    if ia == "fr" {
+        crate::n!(0xFFFF00FF, "  Effet 3: PLASMA -- Plasma psychedelique (5s)");
     } else {
-        crate::h!(0xFFFF00FF, "  Effect 3: PLASMA -- Psychedelic plasma (5s)");
+        crate::n!(0xFFFF00FF, "  Effect 3: PLASMA -- Psychedelic plasma (5s)");
     }
-    rb(1);
-    crate::video::player::gqt("plasma", gm, me, 30, 5000);
+    pause(1);
+    crate::video::player::ddk("plasma", bt, ex, 30, 5000);
     crate::framebuffer::clear();
 
-    if sh == "fr" {
-        crate::h!(0xFF00FF88, "  -> Tout fonctionne a 60+ FPS sur du bare-metal!");
+    if ia == "fr" {
+        crate::n!(0xFF00FF88, "  -> Tout fonctionne a 60+ FPS sur du bare-metal!");
     } else {
-        crate::h!(0xFF00FF88, "  -> All running at 60+ FPS on bare metal!");
+        crate::n!(0xFF00FF88, "  -> All running at 60+ FPS on bare metal!");
     }
-    if fym(4) { return; }
+    if csp(4) { return; }
 
     
-    ewv(6, tk, "3D ENGINE", "MOTEUR 3D",
+    ccu(6, ix, "3D ENGINE", "MOTEUR 3D",
                "Wireframe 3D with perspective projection and depth shading.",
                "3D filaire avec projection perspective et ombrage de profondeur.");
-    rb(2);
+    pause(2);
 
     {
         let mut renderer = crate::formula3d::FormulaRenderer::new();
-        renderer.bid(crate::formula3d::FormulaScene::Kh);
-        renderer.dxr = 0xFF00FFAA;
+        renderer.set_scene(crate::formula3d::FormulaScene::Character);
+        renderer.wire_color = 0xFF00FFAA;
 
-        let yq = kp as usize;
-        let aff = kl as usize;
-        let mut dxo = alloc::vec![0u32; yq * aff];
+        let lk = dy as usize;
+        let pp = dw as usize;
+        let mut bqa = alloc::vec![0u32; lk * pp];
 
-        let afk = crate::framebuffer::bre();
-        if !afk {
-            crate::framebuffer::beo();
-            crate::framebuffer::afi(true);
+        let pu = crate::framebuffer::ajy();
+        if !pu {
+            crate::framebuffer::adw();
+            crate::framebuffer::pr(true);
         }
-        crate::framebuffer::cwe(0xFF000000);
-        crate::framebuffer::sv();
+        crate::framebuffer::awo(0xFF000000);
+        crate::framebuffer::ii();
 
-        let ayu = crate::cpu::tsc::ow();
-        let kx = crate::cpu::tsc::ard();
-        let cii = if kx > 0 { kx / 1000 * 6000 } else { u64::O }; 
+        let rr = crate::cpu::tsc::ey();
+        let freq = crate::cpu::tsc::we();
+        let acx = if freq > 0 { freq / 1000 * 6000 } else { u64::MAX }; 
 
         loop {
-            let ez = crate::cpu::tsc::ow().ao(ayu);
-            if ez >= cii { break; }
-            if let Some(bs) = crate::keyboard::xw() {
-                if bs == 0x1B || bs == b'q' { break; }
-                if bs == b' ' || bs == b'\n' || bs == 13 { break; }
+            let bb = crate::cpu::tsc::ey().saturating_sub(rr);
+            if bb >= acx { break; }
+            if let Some(key) = crate::keyboard::kr() {
+                if key == 0x1B || key == b'q' { break; }
+                if key == b' ' || key == b'\n' || key == 13 { break; }
             }
 
-            renderer.qs();
-            renderer.tj(&mut dxo, yq, aff);
+            renderer.update();
+            renderer.render(&mut bqa, lk, pp);
 
-            if let Some((bgc, dnu, bgb, baz)) = crate::framebuffer::cey() {
-                let aaa = bgc as *mut u32;
-                let bgd = baz as usize;
-                for c in 0..aff.v(bgb as usize) {
+            if let Some((bb_ptr, _bb_w, bb_h, bb_stride)) = crate::framebuffer::aqr() {
+                let mq = bb_ptr as *mut u32;
+                let aeu = bb_stride as usize;
+                for y in 0..pp.min(bb_h as usize) {
                     unsafe {
                         core::ptr::copy_nonoverlapping(
-                            dxo[c * yq..].fq(),
-                            aaa.add(c * bgd),
-                            yq,
+                            bqa[y * lk..].as_ptr(),
+                            mq.add(y * aeu),
+                            lk,
                         );
                     }
                 }
             }
-            crate::framebuffer::sv();
+            crate::framebuffer::ii();
         }
 
-        if !afk {
-            crate::framebuffer::afi(false);
+        if !pu {
+            crate::framebuffer::pr(false);
         }
     }
     crate::framebuffer::clear();
-    if fym(2) { return; }
+    if csp(2) { return; }
 
     
-    ewv(7, tk, "DESKTOP ENVIRONMENT", "ENVIRONNEMENT DE BUREAU",
+    ccu(7, ix, "DESKTOP ENVIRONMENT", "ENVIRONNEMENT DE BUREAU",
                "GPU-composited windowed desktop with apps, games, and more.",
                "Bureau fenetre composite GPU avec apps, jeux, et plus encore.");
-    rb(1);
+    pause(1);
 
-    if sh == "fr" {
-        crate::h!(0xFF00FF88, "  Le bureau s'ouvre avec un Terminal pour 8 secondes...");
-        crate::h!(0xFF888888, "  (Essayez de taper des commandes!)");
+    if ia == "fr" {
+        crate::n!(0xFF00FF88, "  Le bureau s'ouvre avec un Terminal pour 8 secondes...");
+        crate::n!(0xFF888888, "  (Essayez de taper des commandes!)");
     } else {
-        crate::h!(0xFF00FF88, "  Desktop will open with a Terminal for 8 seconds...");
-        crate::h!(0xFF888888, "  (Try typing some commands!)");
+        crate::n!(0xFF00FF88, "  Desktop will open with a Terminal for 8 seconds...");
+        crate::n!(0xFF888888, "  (Try typing some commands!)");
     }
-    rb(3);
+    pause(3);
 
     
-    kih(Some("shell"), 8000);
+    fmf(Some("shell"), 8000);
     crate::framebuffer::clear();
-    rb(1);
+    pause(1);
 
     
-    ewv(8, tk, "FEATURE OVERVIEW", "VUE D'ENSEMBLE",
+    ccu(8, ix, "FEATURE OVERVIEW", "VUE D'ENSEMBLE",
                "Everything TrustOS includes -- all in 6MB, all in Rust.",
                "Tout ce que TrustOS contient -- en 6Mo, tout en Rust.");
-    rb(1);
+    pause(1);
 
-    crate::h!(0xFFAADDFF, "  +- Kernel -------------------------------------------+");
-    crate::h!(0xFFDDDDDD, "  | SMP multicore * APIC * IDT * GDT * paging          |");
-    crate::h!(0xFFDDDDDD, "  | heap allocator * scheduler * RTC * PIT * TSC        |");
-    crate::h!(0xFFAADDFF, "  +- Shell --------------------------------------------|");
-    crate::h!(0xFFDDDDDD, "  | 200+ POSIX commands * pipes * scripting              |");
-    crate::h!(0xFFDDDDDD, "  | ls cd mkdir rm cp mv cat grep find head tail tree   |");
-    crate::h!(0xFFAADDFF, "  +- Desktop ------------------------------------------|");
-    crate::h!(0xFFDDDDDD, "  | GPU compositor * window manager * 60 FPS            |");
-    crate::h!(0xFFDDDDDD, "  | Terminal * Files * Calculator * Settings             |");
-    crate::h!(0xFFAADDFF, "  +- Apps ---------------------------------------------|");
-    crate::h!(0xFFDDDDDD, "  | TrustCode (editor) * Web Browser * Snake * Chess    |");
-    crate::h!(0xFFDDDDDD, "  | NES Emulator * Game Boy * TrustEdit 3D * TrustLab  |");
-    crate::h!(0xFFAADDFF, "  +- Languages ----------------------------------------|");
-    crate::h!(0xFFDDDDDD, "  | TrustLang compiler + VM * Shell scripting           |");
-    crate::h!(0xFFAADDFF, "  +- Network ------------------------------------------|");
-    crate::h!(0xFFDDDDDD, "  | TCP/IP * DHCP * DNS * HTTP * TLS 1.3 * curl/wget   |");
-    crate::h!(0xFFAADDFF, "  +- Graphics -----------------------------------------|");
-    crate::h!(0xFFDDDDDD, "  | TrustVideo * Formula3D * Matrix * Fire * Plasma     |");
-    crate::h!(0xFFAADDFF, "  +----------------------------------------------------+");
+    crate::n!(0xFFAADDFF, "  +- Kernel -------------------------------------------+");
+    crate::n!(0xFFDDDDDD, "  | SMP multicore * APIC * IDT * GDT * paging          |");
+    crate::n!(0xFFDDDDDD, "  | heap allocator * scheduler * RTC * PIT * TSC        |");
+    crate::n!(0xFFAADDFF, "  +- Shell --------------------------------------------|");
+    crate::n!(0xFFDDDDDD, "  | 200+ POSIX commands * pipes * scripting              |");
+    crate::n!(0xFFDDDDDD, "  | ls cd mkdir rm cp mv cat grep find head tail tree   |");
+    crate::n!(0xFFAADDFF, "  +- Desktop ------------------------------------------|");
+    crate::n!(0xFFDDDDDD, "  | GPU compositor * window manager * 60 FPS            |");
+    crate::n!(0xFFDDDDDD, "  | Terminal * Files * Calculator * Settings             |");
+    crate::n!(0xFFAADDFF, "  +- Apps ---------------------------------------------|");
+    crate::n!(0xFFDDDDDD, "  | TrustCode (editor) * Web Browser * Snake * Chess    |");
+    crate::n!(0xFFDDDDDD, "  | NES Emulator * Game Boy * TrustEdit 3D * TrustLab  |");
+    crate::n!(0xFFAADDFF, "  +- Languages ----------------------------------------|");
+    crate::n!(0xFFDDDDDD, "  | TrustLang compiler + VM * Shell scripting           |");
+    crate::n!(0xFFAADDFF, "  +- Network ------------------------------------------|");
+    crate::n!(0xFFDDDDDD, "  | TCP/IP * DHCP * DNS * HTTP * TLS 1.3 * curl/wget   |");
+    crate::n!(0xFFAADDFF, "  +- Graphics -----------------------------------------|");
+    crate::n!(0xFFDDDDDD, "  | TrustVideo * Formula3D * Matrix * Fire * Plasma     |");
+    crate::n!(0xFFAADDFF, "  +----------------------------------------------------+");
     crate::println!();
 
-    if fym(8) { return; }
+    if csp(8) { return; }
 
     
     
     
     {
-        let afk = crate::framebuffer::bre();
-        if !afk {
-            crate::framebuffer::beo();
-            crate::framebuffer::afi(true);
+        let pu = crate::framebuffer::ajy();
+        if !pu {
+            crate::framebuffer::adw();
+            crate::framebuffer::pr(true);
         }
 
-        let d = kp as usize;
-        let i = kl as usize;
-        let mut k = alloc::vec![0u32; d * i];
+        let w = dy as usize;
+        let h = dw as usize;
+        let mut buf = alloc::vec![0u32; w * h];
 
-        let aej = |k: &mut [u32], d: usize, i: usize, cx: usize, ae: usize, r: char, s: u32, bv: usize| {
-            let ka = crate::framebuffer::font::ada(r);
-            for (br, &fs) in ka.iter().cf() {
-                for ga in 0..8u32 {
-                    if fs & (0x80 >> ga) != 0 {
-                        for cq in 0..bv {
-                            for cr in 0..bv {
-                                let y = cx + ga as usize * bv + cr;
-                                let x = ae + br * bv + cq;
-                                if y < d && x < i {
-                                    k[x * d + y] = s;
+        let pf = |buf: &mut [u32], w: usize, h: usize, cx: usize, u: usize, c: char, color: u32, scale: usize| {
+            let du = crate::framebuffer::font::ol(c);
+            for (row, &bits) in du.iter().enumerate() {
+                for bf in 0..8u32 {
+                    if bits & (0x80 >> bf) != 0 {
+                        for ak in 0..scale {
+                            for am in 0..scale {
+                                let p = cx + bf as usize * scale + am;
+                                let o = u + row * scale + ak;
+                                if p < w && o < h {
+                                    buf[o * w + p] = color;
                                 }
                             }
                         }
@@ -1436,37 +1442,37 @@ fn main() {
             }
         };
 
-        let mut ws: alloc::vec::Vec<u16> = alloc::vec![0u16; d / 8 + 1];
-        let mut yg: alloc::vec::Vec<u8> = alloc::vec![1u8; d / 8 + 1];
-        for a in 0..ws.len() {
-            ws[a] = ((a * 41 + 7) % i) as u16;
-            yg[a] = (((a * 11 + 5) % 4) + 1) as u8;
+        let mut kk: alloc::vec::Vec<u16> = alloc::vec![0u16; w / 8 + 1];
+        let mut la: alloc::vec::Vec<u8> = alloc::vec![1u8; w / 8 + 1];
+        for i in 0..kk.len() {
+            kk[i] = ((i * 41 + 7) % h) as u16;
+            la[i] = (((i * 11 + 5) % 4) + 1) as u8;
         }
 
-        let gfi = |k: &mut [u32], d: usize, i: usize, ec: &mut [u16], arz: &[u8], frame: u32| {
-            for il in k.el() {
-                let at = ((*il >> 8) & 0xFF) as u32;
-                if at > 0 {
-                    let fou = at.ao(8);
-                    *il = 0xFF000000 | (fou << 8);
+        let cwv = |buf: &mut [u32], w: usize, h: usize, cols: &mut [u16], speeds: &[u8], frame: u32| {
+            for ct in buf.iter_mut() {
+                let g = ((*ct >> 8) & 0xFF) as u32;
+                if g > 0 {
+                    let cnb = g.saturating_sub(8);
+                    *ct = 0xFF000000 | (cnb << 8);
                 }
             }
-            for adq in 0..ec.len() {
-                let b = adq * 8;
-                if b >= d { continue; }
-                ec[adq] = ec[adq].cn(arz[adq] as u16);
-                if ec[adq] as usize >= i { ec[adq] = 0; }
-                let c = ec[adq] as usize;
-                let r = (((frame as usize + adq * 13) % 94) + 33) as u8 as char;
-                let ka = crate::framebuffer::font::ada(r);
-                for (br, &fs) in ka.iter().cf() {
-                    let x = c + br;
-                    if x >= i { break; }
-                    for ga in 0..8u32 {
-                        if fs & (0x80 >> ga) != 0 {
-                            let y = b + ga as usize;
-                            if y < d {
-                                k[x * d + y] = 0xFF00FF44;
+            for ow in 0..cols.len() {
+                let x = ow * 8;
+                if x >= w { continue; }
+                cols[ow] = cols[ow].wrapping_add(speeds[ow] as u16);
+                if cols[ow] as usize >= h { cols[ow] = 0; }
+                let y = cols[ow] as usize;
+                let c = (((frame as usize + ow * 13) % 94) + 33) as u8 as char;
+                let du = crate::framebuffer::font::ol(c);
+                for (row, &bits) in du.iter().enumerate() {
+                    let o = y + row;
+                    if o >= h { break; }
+                    for bf in 0..8u32 {
+                        if bits & (0x80 >> bf) != 0 {
+                            let p = x + bf as usize;
+                            if p < w {
+                                buf[o * w + p] = 0xFF00FF44;
                             }
                         }
                     }
@@ -1474,91 +1480,91 @@ fn main() {
             }
         };
 
-        let mb = |k: &[u32], d: usize, i: usize| {
-            if let Some((bgc, dnu, bgb, baz)) = crate::framebuffer::cey() {
-                let aaa = bgc as *mut u32;
-                let bgd = baz as usize;
-                for c in 0..i.v(bgb as usize) {
+        let ev = |buf: &[u32], w: usize, h: usize| {
+            if let Some((bb_ptr, _bb_w, bb_h, bb_stride)) = crate::framebuffer::aqr() {
+                let mq = bb_ptr as *mut u32;
+                let aeu = bb_stride as usize;
+                for y in 0..h.min(bb_h as usize) {
                     unsafe {
                         core::ptr::copy_nonoverlapping(
-                            k[c * d..].fq(),
-                            aaa.add(c * bgd),
-                            d,
+                            buf[y * w..].as_ptr(),
+                            mq.add(y * aeu),
+                            w,
                         );
                     }
                 }
             }
-            crate::framebuffer::sv();
+            crate::framebuffer::ii();
         };
 
         
         crate::serial_println!("[DEMO] Outro: You're ready!");
-        for il in k.el() { *il = 0xFF000000; }
+        for ct in buf.iter_mut() { *ct = 0xFF000000; }
 
-        let kx = crate::cpu::tsc::ard();
-        let vab = 7000u64;
-        let vac = if kx > 0 { kx / 1000 * vab } else { u64::O };
-        let ayu = crate::cpu::tsc::ow();
+        let freq = crate::cpu::tsc::we();
+        let noq = 7000u64;
+        let nor = if freq > 0 { freq / 1000 * noq } else { u64::MAX };
+        let rr = crate::cpu::tsc::ey();
 
-        let mut eho = crate::formula3d::FormulaRenderer::new();
-        eho.bid(crate::formula3d::FormulaScene::Kh);
-        eho.dxr = 0xFF00FFAA;
-        let att = 160usize;
-        let azc = 160usize;
-        let mut dxo = alloc::vec![0u32; att * azc];
+        let mut bvi = crate::formula3d::FormulaRenderer::new();
+        bvi.set_scene(crate::formula3d::FormulaScene::Character);
+        bvi.wire_color = 0xFF00FFAA;
+        let vp_w = 160usize;
+        let vp_h = 160usize;
+        let mut bqa = alloc::vec![0u32; vp_w * vp_h];
 
         let mut frame = 0u32;
         loop {
-            let ez = crate::cpu::tsc::ow().ao(ayu);
-            if ez >= vac { break; }
-            if let Some(bs) = crate::keyboard::xw() {
-                if bs == 0x1B || bs == b'q' || bs == b' ' || bs == b'\n' || bs == 13 { break; }
+            let bb = crate::cpu::tsc::ey().saturating_sub(rr);
+            if bb >= nor { break; }
+            if let Some(key) = crate::keyboard::kr() {
+                if key == 0x1B || key == b'q' || key == b' ' || key == b'\n' || key == 13 { break; }
             }
 
-            gfi(&mut k, d, i, &mut ws, &yg, frame);
+            cwv(&mut buf, w, h, &mut kk, &la, frame);
 
             
-            let dq = if sh == "fr" { "Pret a explorer!" } else { "You're ready!" };
-            let dmn = 5;
-            let dcs = dq.len() * 8 * dmn;
-            let cnf = if dcs < d { (d - dcs) / 2 } else { 0 };
-            let cce = i / 6;
-            for (a, r) in dq.bw().cf() {
-                let aya = ((frame as usize * 3 + a * 25) % 360) as u32;
-                let s = if aya < 120 {
-                    let ab = aya * 255 / 120;
-                    0xFF000000 | ((255 - ab) << 16) | (ab << 8)
-                } else if aya < 240 {
-                    let ab = (aya - 120) * 255 / 120;
-                    0xFF000000 | ((255 - ab) << 8) | ab
+            let title = if ia == "fr" { "Pret a explorer!" } else { "You're ready!" };
+            let bjp = 5;
+            let bea = title.len() * 8 * bjp;
+            let avk = if bea < w { (w - bea) / 2 } else { 0 };
+            let apg = h / 6;
+            for (i, c) in title.chars().enumerate() {
+                let zz = ((frame as usize * 3 + i * 25) % 360) as u32;
+                let color = if zz < 120 {
+                    let t = zz * 255 / 120;
+                    0xFF000000 | ((255 - t) << 16) | (t << 8)
+                } else if zz < 240 {
+                    let t = (zz - 120) * 255 / 120;
+                    0xFF000000 | ((255 - t) << 8) | t
                 } else {
-                    let ab = (aya - 240) * 255 / 120;
-                    0xFF000000 | (ab << 16) | (255 - ab)
+                    let t = (zz - 240) * 255 / 120;
+                    0xFF000000 | (t << 16) | (255 - t)
                 };
-                aej(&mut k, d, i, cnf + a * 8 * dmn, cce, r, s, dmn);
+                pf(&mut buf, w, h, avk + i * 8 * bjp, apg, c, color, bjp);
             }
 
             
-            eho.qs();
-            for ai in dxo.el() { *ai = 0x00000000; }
-            eho.tj(&mut dxo, att, azc);
-            let dxp = if att < d { (d - att) / 2 } else { 0 };
-            let ddi = cce + 16 * dmn + 20;
-            for iz in 0..azc {
-                for fp in 0..att {
-                    let cy = dxo[iz * att + fp];
-                    if cy & 0x00FFFFFF != 0 {
-                        let bg = ddi + iz;
-                        let dx = dxp + fp;
-                        if bg < i && dx < d {
-                            k[bg * d + dx] = cy;
+            bvi.update();
+            for aa in bqa.iter_mut() { *aa = 0x00000000; }
+            bvi.render(&mut bqa, vp_w, vp_h);
+            let vp_x = if vp_w < w { (w - vp_w) / 2 } else { 0 };
+            let vp_y = apg + 16 * bjp + 20;
+            for vy in 0..vp_h {
+                for vx in 0..vp_w {
+                    let src = bqa[vy * vp_w + vx];
+                    if src & 0x00FFFFFF != 0 {
+                        let ad = vp_y + vy;
+                        let dx = vp_x + vx;
+                        if ad < h && dx < w {
+                            buf[ad * w + dx] = src;
                         }
                     }
                 }
             }
 
             
-            let tow: &[(&str, u32)] = if sh == "fr" {
+            let mlm: &[(&str, u32)] = if ia == "fr" {
                 &[
                     ("Tapez 'help' pour la liste des commandes", 0xFF88CCFF),
                     ("Tapez 'desktop' pour le bureau graphique", 0xFF88FFAA),
@@ -1574,40 +1580,40 @@ fn main() {
                 ]
             };
 
-            let iyi = 2;
-            let mut crj = ddi + azc + 30;
-            for &(text, s) in tow {
-                let qd = text.len() * 8 * iyi;
-                let bng = if qd < d { (d - qd) / 2 } else { 0 };
-                for (a, r) in text.bw().cf() {
-                    aej(&mut k, d, i, bng + a * 8 * iyi, crj, r, s, iyi);
+            let epe = 2;
+            let mut axm = vp_y + vp_h + 30;
+            for &(text, color) in mlm {
+                let gr = text.len() * 8 * epe;
+                let aib = if gr < w { (w - gr) / 2 } else { 0 };
+                for (i, c) in text.chars().enumerate() {
+                    pf(&mut buf, w, h, aib + i * 8 * epe, axm, c, color, epe);
                 }
-                crj += 16 * iyi + 6;
+                axm += 16 * epe + 6;
             }
 
-            mb(&k, d, i);
+            ev(&buf, w, h);
             frame += 1;
-            crate::cpu::tsc::asq(33);
+            crate::cpu::tsc::ww(33);
         }
 
         
-        let fih = crate::cpu::tsc::ow();
-        let ebj = if kx > 0 { kx / 1000 * 800 } else { u64::O };
+        let cjf = crate::cpu::tsc::ey();
+        let bsk = if freq > 0 { freq / 1000 * 800 } else { u64::MAX };
         loop {
-            let ez = crate::cpu::tsc::ow().ao(fih);
-            if ez >= ebj { break; }
-            for il in k.el() {
-                let m = ((*il >> 16) & 0xFF).ao(4) as u32;
-                let at = ((*il >> 8) & 0xFF).ao(4) as u32;
-                let o = (*il & 0xFF).ao(4) as u32;
-                *il = 0xFF000000 | (m << 16) | (at << 8) | o;
+            let bb = crate::cpu::tsc::ey().saturating_sub(cjf);
+            if bb >= bsk { break; }
+            for ct in buf.iter_mut() {
+                let r = ((*ct >> 16) & 0xFF).saturating_sub(4) as u32;
+                let g = ((*ct >> 8) & 0xFF).saturating_sub(4) as u32;
+                let b = (*ct & 0xFF).saturating_sub(4) as u32;
+                *ct = 0xFF000000 | (r << 16) | (g << 8) | b;
             }
-            mb(&k, d, i);
-            crate::cpu::tsc::asq(33);
+            ev(&buf, w, h);
+            crate::cpu::tsc::ww(33);
         }
 
-        if !afk {
-            crate::framebuffer::afi(false);
+        if !pu {
+            crate::framebuffer::pr(false);
         }
     }
 
@@ -1617,17 +1623,17 @@ fn main() {
     crate::framebuffer::clear();
 
     
-    let _ = crate::ramfs::fh(|fs| {
-        let _ = fs.hb("/tutorial/hello.txt");
-        let _ = fs.hb("/tutorial/demo.tl");
-        let _ = fs.hb("/tutorial");
+    let _ = crate::ramfs::bh(|fs| {
+        let _ = fs.rm("/tutorial/hello.txt");
+        let _ = fs.rm("/tutorial/demo.tl");
+        let _ = fs.rm("/tutorial");
     });
 
     crate::println!();
-    if sh == "fr" {
-        crate::h!(0xFF00FF88, "  Tutoriel termine! Bon voyage dans TrustOS.");
+    if ia == "fr" {
+        crate::n!(0xFF00FF88, "  Tutoriel termine! Bon voyage dans TrustOS.");
     } else {
-        crate::h!(0xFF00FF88, "  Tutorial complete! Enjoy exploring TrustOS.");
+        crate::n!(0xFF00FF88, "  Tutorial complete! Enjoy exploring TrustOS.");
     }
     crate::println!();
     crate::serial_println!("[DEMO] Tutorial complete");
@@ -1636,59 +1642,59 @@ fn main() {
 
 
 
-pub(super) fn ric(n: &[&str]) {
-    let ig = match n.fv().hu() {
+pub(super) fn krm(args: &[&str]) {
+    let speed = match args.first().copied() {
         Some("fast") => 1,
         Some("slow") => 3,
         _ => 2, 
     };
 
     
-    let rb = |tv: u64| {
-        let jn = tv * 1000 * ig / 2;
-        let ayu = crate::cpu::tsc::ow();
-        let kx = crate::cpu::tsc::ard();
-        if kx == 0 { return; } 
-        let cii = kx / 1000 * jn; 
+    let pause = |im: u64| {
+        let dh = im * 1000 * speed / 2;
+        let rr = crate::cpu::tsc::ey();
+        let freq = crate::cpu::tsc::we();
+        if freq == 0 { return; } 
+        let acx = freq / 1000 * dh; 
         loop {
-            let ez = crate::cpu::tsc::ow().ao(ayu);
-            if ez >= cii { break; }
+            let bb = crate::cpu::tsc::ey().saturating_sub(rr);
+            if bb >= acx { break; }
             
-            let _ = crate::keyboard::xw();
-            core::hint::hc();
+            let _ = crate::keyboard::kr();
+            core::hint::spin_loop();
         }
     };
 
-    let hhu = 9000u64 * ig / 2; 
+    let dol = 9000u64 * speed / 2; 
 
     
     
     
-    let (kp, kl) = crate::framebuffer::yn();
+    let (dy, dw) = crate::framebuffer::kv();
 
     {
-        let afk = crate::framebuffer::bre();
-        if !afk {
-            crate::framebuffer::beo();
-            crate::framebuffer::afi(true);
+        let pu = crate::framebuffer::ajy();
+        if !pu {
+            crate::framebuffer::adw();
+            crate::framebuffer::pr(true);
         }
 
-        let d = kp as usize;
-        let i = kl as usize;
-        let mut k = alloc::vec![0u32; d * i];
+        let w = dy as usize;
+        let h = dw as usize;
+        let mut buf = alloc::vec![0u32; w * h];
 
         
-        let aej = |k: &mut [u32], d: usize, i: usize, cx: usize, ae: usize, r: char, s: u32, bv: usize| {
-            let ka = crate::framebuffer::font::ada(r);
-            for (br, &fs) in ka.iter().cf() {
-                for ga in 0..8u32 {
-                    if fs & (0x80 >> ga) != 0 {
-                        for cq in 0..bv {
-                            for cr in 0..bv {
-                                let y = cx + ga as usize * bv + cr;
-                                let x = ae + br * bv + cq;
-                                if y < d && x < i {
-                                    k[x * d + y] = s;
+        let pf = |buf: &mut [u32], w: usize, h: usize, cx: usize, u: usize, c: char, color: u32, scale: usize| {
+            let du = crate::framebuffer::font::ol(c);
+            for (row, &bits) in du.iter().enumerate() {
+                for bf in 0..8u32 {
+                    if bits & (0x80 >> bf) != 0 {
+                        for ak in 0..scale {
+                            for am in 0..scale {
+                                let p = cx + bf as usize * scale + am;
+                                let o = u + row * scale + ak;
+                                if p < w && o < h {
+                                    buf[o * w + p] = color;
                                 }
                             }
                         }
@@ -1698,50 +1704,50 @@ pub(super) fn ric(n: &[&str]) {
         };
 
         
-        let ymu = |k: &mut [u32], d: usize, i: usize, c: usize, text: &str, s: u32, bv: usize| {
-            let bda = text.len() * 8 * bv;
-            let ql = if bda < d { (d - bda) / 2 } else { 0 };
-            for (a, r) in text.bw().cf() {
-                aej(k, d, i, ql + a * 8 * bv, c, r, s, bv);
+        let qdk = |buf: &mut [u32], w: usize, h: usize, y: usize, text: &str, color: u32, scale: usize| {
+            let acy = text.len() * 8 * scale;
+            let start_x = if acy < w { (w - acy) / 2 } else { 0 };
+            for (i, c) in text.chars().enumerate() {
+                pf(buf, w, h, start_x + i * 8 * scale, y, c, color, scale);
             }
         };
 
         
-        let mut ws: alloc::vec::Vec<u16> = alloc::vec![0u16; d / 8 + 1];
-        let mut yg: alloc::vec::Vec<u8> = alloc::vec![1u8; d / 8 + 1];
+        let mut kk: alloc::vec::Vec<u16> = alloc::vec![0u16; w / 8 + 1];
+        let mut la: alloc::vec::Vec<u8> = alloc::vec![1u8; w / 8 + 1];
         
-        for a in 0..ws.len() {
-            ws[a] = ((a * 37 + 13) % i) as u16;
-            yg[a] = (((a * 7 + 3) % 4) + 1) as u8;
+        for i in 0..kk.len() {
+            kk[i] = ((i * 37 + 13) % h) as u16;
+            la[i] = (((i * 7 + 3) % 4) + 1) as u8;
         }
 
-        let gfi = |k: &mut [u32], d: usize, i: usize, ec: &mut [u16], arz: &[u8], frame: u32| {
+        let cwv = |buf: &mut [u32], w: usize, h: usize, cols: &mut [u16], speeds: &[u8], frame: u32| {
             
-            for il in k.el() {
-                let at = ((*il >> 8) & 0xFF) as u32;
-                if at > 0 {
-                    let fou = at.ao(8);
-                    *il = 0xFF000000 | (fou << 8);
+            for ct in buf.iter_mut() {
+                let g = ((*ct >> 8) & 0xFF) as u32;
+                if g > 0 {
+                    let cnb = g.saturating_sub(8);
+                    *ct = 0xFF000000 | (cnb << 8);
                 }
             }
             
-            for adq in 0..ec.len() {
-                let b = adq * 8;
-                if b >= d { continue; }
-                ec[adq] = ec[adq].cn(arz[adq] as u16);
-                if ec[adq] as usize >= i { ec[adq] = 0; }
-                let c = ec[adq] as usize;
+            for ow in 0..cols.len() {
+                let x = ow * 8;
+                if x >= w { continue; }
+                cols[ow] = cols[ow].wrapping_add(speeds[ow] as u16);
+                if cols[ow] as usize >= h { cols[ow] = 0; }
+                let y = cols[ow] as usize;
                 
-                let r = (((frame as usize + adq * 13) % 94) + 33) as u8 as char;
-                let ka = crate::framebuffer::font::ada(r);
-                for (br, &fs) in ka.iter().cf() {
-                    let x = c + br;
-                    if x >= i { break; }
-                    for ga in 0..8u32 {
-                        if fs & (0x80 >> ga) != 0 {
-                            let y = b + ga as usize;
-                            if y < d {
-                                k[x * d + y] = 0xFF00FF44;
+                let c = (((frame as usize + ow * 13) % 94) + 33) as u8 as char;
+                let du = crate::framebuffer::font::ol(c);
+                for (row, &bits) in du.iter().enumerate() {
+                    let o = y + row;
+                    if o >= h { break; }
+                    for bf in 0..8u32 {
+                        if bits & (0x80 >> bf) != 0 {
+                            let p = x + bf as usize;
+                            if p < w {
+                                buf[o * w + p] = 0xFF00FF44;
                             }
                         }
                     }
@@ -1750,262 +1756,262 @@ pub(super) fn ric(n: &[&str]) {
         };
 
         
-        let mb = |k: &[u32], d: usize, i: usize| {
-            if let Some((bgc, dnu, bgb, baz)) = crate::framebuffer::cey() {
-                let aaa = bgc as *mut u32;
-                let bgd = baz as usize;
-                for c in 0..i.v(bgb as usize) {
+        let ev = |buf: &[u32], w: usize, h: usize| {
+            if let Some((bb_ptr, _bb_w, bb_h, bb_stride)) = crate::framebuffer::aqr() {
+                let mq = bb_ptr as *mut u32;
+                let aeu = bb_stride as usize;
+                for y in 0..h.min(bb_h as usize) {
                     unsafe {
                         core::ptr::copy_nonoverlapping(
-                            k[c * d..].fq(),
-                            aaa.add(c * bgd),
-                            d,
+                            buf[y * w..].as_ptr(),
+                            mq.add(y * aeu),
+                            w,
                         );
                     }
                 }
             }
-            crate::framebuffer::sv();
+            crate::framebuffer::ii();
         };
 
         
         
-        let dbd = |k: &mut [u32], d: usize, i: usize,
-                           ws: &mut [u16], yg: &[u8],
-                           ak: &[(&str, u32, usize)], 
-                           lcj: u64, ig: u64| {
-            let kx = crate::cpu::tsc::ard();
-            if kx == 0 { return; }
+        let bdi = |buf: &mut [u32], w: usize, h: usize,
+                           kk: &mut [u16], la: &[u8],
+                           lines: &[(&str, u32, usize)], 
+                           hold_ms: u64, speed: u64| {
+            let freq = crate::cpu::tsc::we();
+            if freq == 0 { return; }
 
             
-            let aqo: usize = ak.iter().map(|(ab, _, _)| ab.len()).sum();
-            let ifm = 80u64 * ig / 2; 
-            let gvf = aqo as u64 * ifm;
+            let vu: usize = lines.iter().map(|(t, _, _)| t.len()).sum();
+            let ecz = 80u64 * speed / 2; 
+            let dfx = vu as u64 * ecz;
             
-            let ayu = crate::cpu::tsc::ow();
-            let ztu = kx / 1000 * gvf;
-            let lck = kx / 1000 * (gvf + lcj * ig / 2);
+            let rr = crate::cpu::tsc::ey();
+            let rbd = freq / 1000 * dfx;
+            let gay = freq / 1000 * (dfx + hold_ms * speed / 2);
 
             let mut frame = 0u32;
             loop {
-                let ez = crate::cpu::tsc::ow().ao(ayu);
-                if ez >= lck { break; }
-                if let Some(bs) = crate::keyboard::xw() {
-                    if bs == 0x1B || bs == b'q' { break; }
+                let bb = crate::cpu::tsc::ey().saturating_sub(rr);
+                if bb >= gay { break; }
+                if let Some(key) = crate::keyboard::kr() {
+                    if key == 0x1B || key == b'q' { break; }
                 }
 
                 
-                gfi(k, d, i, ws, yg, frame);
+                cwv(buf, w, h, kk, la, frame);
 
                 
-                let oz = ez / (kx / 1000).am(1);
-                let qo = if oz < gvf {
-                    (oz / ifm.am(1)) as usize
+                let elapsed_ms = bb / (freq / 1000).max(1);
+                let hh = if elapsed_ms < dfx {
+                    (elapsed_ms / ecz.max(1)) as usize
                 } else {
-                    aqo
+                    vu
                 };
 
                 
-                let ieo: usize = ak.iter().map(|(_, _, e)| 16 * e + 8).sum::<usize>();
-                let mut bpl = if ieo < i { (i - ieo) / 2 } else { 20 };
-                let mut det = 0usize;
+                let ecj: usize = lines.iter().map(|(_, _, j)| 16 * j + 8).sum::<usize>();
+                let mut ajb = if ecj < h { (h - ecj) / 2 } else { 20 };
+                let mut bff = 0usize;
 
-                for &(text, s, bv) in ak {
-                    let bda = text.len() * 8 * bv;
-                    let ql = if bda < d { (d - bda) / 2 } else { 0 };
+                for &(text, color, scale) in lines {
+                    let acy = text.len() * 8 * scale;
+                    let start_x = if acy < w { (w - acy) / 2 } else { 0 };
 
-                    for (a, r) in text.bw().cf() {
-                        if det + a >= qo { break; }
-                        aej(k, d, i, ql + a * 8 * bv, bpl, r, s, bv);
+                    for (i, c) in text.chars().enumerate() {
+                        if bff + i >= hh { break; }
+                        pf(buf, w, h, start_x + i * 8 * scale, ajb, c, color, scale);
                     }
                     
-                    if qo > det && qo < det + text.len() {
-                        let kng = qo - det;
-                        let cx = ql + kng * 8 * bv;
-                        for ae in bpl..bpl + 16 * bv {
-                            if ae < i && cx + 2 < d {
-                                k[ae * d + cx] = 0xFF00FF88;
-                                k[ae * d + cx + 1] = 0xFF00FF88;
+                    if hh > bff && hh < bff + text.len() {
+                        let fqb = hh - bff;
+                        let cx = start_x + fqb * 8 * scale;
+                        for u in ajb..ajb + 16 * scale {
+                            if u < h && cx + 2 < w {
+                                buf[u * w + cx] = 0xFF00FF88;
+                                buf[u * w + cx + 1] = 0xFF00FF88;
                             }
                         }
                     }
 
-                    det += text.len();
-                    bpl += 16 * bv + 8;
+                    bff += text.len();
+                    ajb += 16 * scale + 8;
                 }
 
-                mb(k, d, i);
+                ev(buf, w, h);
                 frame += 1;
                 
-                crate::cpu::tsc::asq(33);
+                crate::cpu::tsc::ww(33);
             }
 
             
-            let fih = crate::cpu::tsc::ow();
-            let ggs = 800u64;
-            let ebj = kx / 1000 * ggs;
+            let cjf = crate::cpu::tsc::ey();
+            let cxp = 800u64;
+            let bsk = freq / 1000 * cxp;
             loop {
-                let ez = crate::cpu::tsc::ow().ao(fih);
-                if ez >= ebj { break; }
-                let li = (ez * 255 / ebj) as u32;
-                for il in k.el() {
-                    let m = ((*il >> 16) & 0xFF) as u32;
-                    let at = ((*il >> 8) & 0xFF) as u32;
-                    let o = (*il & 0xFF) as u32;
-                    let nr = m.ao(m * li / 512 + 1);
-                    let csu = at.ao(at * li / 512 + 1);
-                    let csq = o.ao(o * li / 512 + 1);
-                    *il = 0xFF000000 | (nr << 16) | (csu << 8) | csq;
+                let bb = crate::cpu::tsc::ey().saturating_sub(cjf);
+                if bb >= bsk { break; }
+                let progress = (bb * 255 / bsk) as u32;
+                for ct in buf.iter_mut() {
+                    let r = ((*ct >> 16) & 0xFF) as u32;
+                    let g = ((*ct >> 8) & 0xFF) as u32;
+                    let b = (*ct & 0xFF) as u32;
+                    let nr = r.saturating_sub(r * progress / 512 + 1);
+                    let ayn = g.saturating_sub(g * progress / 512 + 1);
+                    let ayj = b.saturating_sub(b * progress / 512 + 1);
+                    *ct = 0xFF000000 | (nr << 16) | (ayn << 8) | ayj;
                 }
-                mb(k, d, i);
-                crate::cpu::tsc::asq(33);
+                ev(buf, w, h);
+                crate::cpu::tsc::ww(33);
             }
 
             
-            for il in k.el() { *il = 0xFF000000; }
-            mb(k, d, i);
+            for ct in buf.iter_mut() { *ct = 0xFF000000; }
+            ev(buf, w, h);
         };
 
         
         crate::serial_println!("[SHOWCASE] Scene 1: Simulation question");
-        for il in k.el() { *il = 0xFF000000; }
-        dbd(&mut k, d, i, &mut ws, &yg,
+        for ct in buf.iter_mut() { *ct = 0xFF000000; }
+        bdi(&mut buf, w, h, &mut kk, &la,
             &[("Do you think", 0xFF00DD55, 4),
               ("life is a simulation?", 0xFF00FF66, 4)],
-            3000, ig);
+            3000, speed);
 
         
         crate::serial_println!("[SHOWCASE] Scene 2: 6MB OS");
-        dbd(&mut k, d, i, &mut ws, &yg,
+        bdi(&mut buf, w, h, &mut kk, &la,
             &[("Can it run", 0xFF00DD55, 5),
               ("in a 6MB OS?", 0xFF00FF88, 5)],
-            3000, ig);
+            3000, speed);
 
         
         crate::serial_println!("[SHOWCASE] Scene 3: TrustOS title");
         {
             
-            let kx = crate::cpu::tsc::ard();
-            let web = 8000u64 * ig / 2;
-            let wec = kx / 1000 * web;
-            let ayu = crate::cpu::tsc::ow();
+            let freq = crate::cpu::tsc::we();
+            let oli = 8000u64 * speed / 2;
+            let olj = freq / 1000 * oli;
+            let rr = crate::cpu::tsc::ey();
 
-            let mut eho = crate::formula3d::FormulaRenderer::new();
-            eho.bid(crate::formula3d::FormulaScene::Kh);
-            eho.dxr = 0xFF00FFAA;
+            let mut bvi = crate::formula3d::FormulaRenderer::new();
+            bvi.set_scene(crate::formula3d::FormulaScene::Character);
+            bvi.wire_color = 0xFF00FFAA;
 
             
-            let att = 200usize;
-            let azc = 200usize;
-            let mut dxo = alloc::vec![0u32; att * azc];
+            let vp_w = 200usize;
+            let vp_h = 200usize;
+            let mut bqa = alloc::vec![0u32; vp_w * vp_h];
 
             let mut frame = 0u32;
             loop {
-                let ez = crate::cpu::tsc::ow().ao(ayu);
-                if ez >= wec { break; }
-                if let Some(bs) = crate::keyboard::xw() {
-                    if bs == 0x1B { break; }
+                let bb = crate::cpu::tsc::ey().saturating_sub(rr);
+                if bb >= olj { break; }
+                if let Some(key) = crate::keyboard::kr() {
+                    if key == 0x1B { break; }
                 }
 
                 
-                gfi(&mut k, d, i, &mut ws, &yg, frame);
+                cwv(&mut buf, w, h, &mut kk, &la, frame);
 
                 
-                let dq = "TRUST OS";
-                let dmn = 6;
-                let dcs = dq.len() * 8 * dmn;
-                let cnf = if dcs < d { (d - dcs) / 2 } else { 0 };
-                let cce = i / 8;
-                for (a, r) in dq.bw().cf() {
+                let title = "TRUST OS";
+                let bjp = 6;
+                let bea = title.len() * 8 * bjp;
+                let avk = if bea < w { (w - bea) / 2 } else { 0 };
+                let apg = h / 8;
+                for (i, c) in title.chars().enumerate() {
                     
-                    let aya = ((frame as usize * 3 + a * 30) % 360) as u32;
-                    let s = if aya < 120 {
-                        let ab = aya * 255 / 120;
-                        0xFF000000 | ((255 - ab) << 16) | (ab << 8)
-                    } else if aya < 240 {
-                        let ab = (aya - 120) * 255 / 120;
-                        0xFF000000 | ((255 - ab) << 8) | ab
+                    let zz = ((frame as usize * 3 + i * 30) % 360) as u32;
+                    let color = if zz < 120 {
+                        let t = zz * 255 / 120;
+                        0xFF000000 | ((255 - t) << 16) | (t << 8)
+                    } else if zz < 240 {
+                        let t = (zz - 120) * 255 / 120;
+                        0xFF000000 | ((255 - t) << 8) | t
                     } else {
-                        let ab = (aya - 240) * 255 / 120;
-                        0xFF000000 | (ab << 16) | (255 - ab)
+                        let t = (zz - 240) * 255 / 120;
+                        0xFF000000 | (t << 16) | (255 - t)
                     };
-                    aej(&mut k, d, i, cnf + a * 8 * dmn, cce, r, s, dmn);
+                    pf(&mut buf, w, h, avk + i * 8 * bjp, apg, c, color, bjp);
                 }
 
                 
-                eho.qs();
-                for ai in dxo.el() { *ai = 0x00000000; } 
-                eho.tj(&mut dxo, att, azc);
+                bvi.update();
+                for aa in bqa.iter_mut() { *aa = 0x00000000; } 
+                bvi.render(&mut bqa, vp_w, vp_h);
 
                 
-                let dxp = if att < d { (d - att) / 2 } else { 0 };
-                let ddi = cce + 16 * dmn + 20;
-                for iz in 0..azc {
-                    for fp in 0..att {
-                        let cy = dxo[iz * att + fp];
-                        if cy & 0x00FFFFFF != 0 { 
-                            let bg = ddi + iz;
-                            let dx = dxp + fp;
-                            if bg < i && dx < d {
-                                k[bg * d + dx] = cy;
+                let vp_x = if vp_w < w { (w - vp_w) / 2 } else { 0 };
+                let vp_y = apg + 16 * bjp + 20;
+                for vy in 0..vp_h {
+                    for vx in 0..vp_w {
+                        let src = bqa[vy * vp_w + vx];
+                        if src & 0x00FFFFFF != 0 { 
+                            let ad = vp_y + vy;
+                            let dx = vp_x + vx;
+                            if ad < h && dx < w {
+                                buf[ad * w + dx] = src;
                             }
                         }
                     }
                 }
 
                 
-                let nhl = "Written in Rust by Nated0ge";
-                let klz = 3;
-                let nhm = nhl.len() * 8 * klz;
-                let rqv = if nhm < d { (d - nhm) / 2 } else { 0 };
-                let rqw = ddi + azc + 30;
-                for (a, r) in nhl.bw().cf() {
-                    aej(&mut k, d, i, rqv + a * 8 * klz, rqw, r, 0xFF88CCFF, klz);
+                let hov = "Written in Rust by Nated0ge";
+                let fpc = 3;
+                let hox = hov.len() * 8 * fpc;
+                let kzn = if hox < w { (w - hox) / 2 } else { 0 };
+                let kzo = vp_y + vp_h + 30;
+                for (i, c) in hov.chars().enumerate() {
+                    pf(&mut buf, w, h, kzn + i * 8 * fpc, kzo, c, 0xFF88CCFF, fpc);
                 }
 
-                mb(&k, d, i);
+                ev(&buf, w, h);
                 frame += 1;
-                crate::cpu::tsc::asq(33);
+                crate::cpu::tsc::ww(33);
             }
 
             
-            let fih = crate::cpu::tsc::ow();
-            let ebj = kx / 1000 * 800;
+            let cjf = crate::cpu::tsc::ey();
+            let bsk = freq / 1000 * 800;
             loop {
-                let ez = crate::cpu::tsc::ow().ao(fih);
-                if ez >= ebj { break; }
-                for il in k.el() {
-                    let m = ((*il >> 16) & 0xFF).ao(4) as u32;
-                    let at = ((*il >> 8) & 0xFF).ao(4) as u32;
-                    let o = (*il & 0xFF).ao(4) as u32;
-                    *il = 0xFF000000 | (m << 16) | (at << 8) | o;
+                let bb = crate::cpu::tsc::ey().saturating_sub(cjf);
+                if bb >= bsk { break; }
+                for ct in buf.iter_mut() {
+                    let r = ((*ct >> 16) & 0xFF).saturating_sub(4) as u32;
+                    let g = ((*ct >> 8) & 0xFF).saturating_sub(4) as u32;
+                    let b = (*ct & 0xFF).saturating_sub(4) as u32;
+                    *ct = 0xFF000000 | (r << 16) | (g << 8) | b;
                 }
-                mb(&k, d, i);
-                crate::cpu::tsc::asq(33);
+                ev(&buf, w, h);
+                crate::cpu::tsc::ww(33);
             }
-            for il in k.el() { *il = 0xFF000000; }
-            mb(&k, d, i);
+            for ct in buf.iter_mut() { *ct = 0xFF000000; }
+            ev(&buf, w, h);
         }
 
         
         crate::serial_println!("[SHOWCASE] Scene 4: Specs");
-        dbd(&mut k, d, i, &mut ws, &yg,
+        bdi(&mut buf, w, h, &mut kk, &la,
             &[("6MB ISO vs 6GB Windows",  0xFF00FF66, 3),
               ("0 lines of C. Pure Rust.", 0xFF44FFAA, 3),
               ("Boots in 0.8s not 45s",    0xFF00DDFF, 3),
               ("No kernel panics. Ever.",  0xFFFFCC44, 3),
               ("GPU desktop at 144 FPS",   0xFF88FF44, 3),
               ("Built in 7 days solo",     0xFFFF8844, 3)],
-            3000, ig);
+            3000, speed);
 
         
         crate::serial_println!("[SHOWCASE] Scene 5: Are you ready?");
-        dbd(&mut k, d, i, &mut ws, &yg,
+        bdi(&mut buf, w, h, &mut kk, &la,
             &[("Are you ready?", 0xFF00FF44, 6)],
-            2000, ig);
+            2000, speed);
 
         
-        if !afk {
-            crate::framebuffer::afi(false);
+        if !pu {
+            crate::framebuffer::pr(false);
         }
     }
 
@@ -2015,84 +2021,84 @@ pub(super) fn ric(n: &[&str]) {
     crate::println!();
     crate::println!();
     crate::println!();
-    crate::h!(0xFF00CCFF, "");
-    crate::h!(0xFF00CCFF, "  ||||||||+||||||+ ||+   ||+|||||||+||||||||+ ||||||+ |||||||+");
-    crate::h!(0xFF00CCFF, "  +--||+--+||+--||+|||   |||||+----++--||+--+||+---||+||+----+");
-    crate::h!(0xFF00CCFF, "     |||   ||||||++|||   ||||||||||+   |||   |||   ||||||||||+");
-    crate::h!(0xFF00DDFF, "     |||   ||+--||+|||   |||+----|||   |||   |||   |||+----|||");
-    crate::h!(0xFF00EEFF, "     |||   |||  |||+||||||++||||||||   |||   +||||||++||||||||");
-    crate::h!(0xFF00EEFF, "     +-+   +-+  +-+ +-----+ +------+   +-+    +-----+ +------+");
+    crate::n!(0xFF00CCFF, "");
+    crate::n!(0xFF00CCFF, "  ||||||||+||||||+ ||+   ||+|||||||+||||||||+ ||||||+ |||||||+");
+    crate::n!(0xFF00CCFF, "  +--||+--+||+--||+|||   |||||+----++--||+--+||+---||+||+----+");
+    crate::n!(0xFF00CCFF, "     |||   ||||||++|||   ||||||||||+   |||   |||   ||||||||||+");
+    crate::n!(0xFF00DDFF, "     |||   ||+--||+|||   |||+----|||   |||   |||   |||+----|||");
+    crate::n!(0xFF00EEFF, "     |||   |||  |||+||||||++||||||||   |||   +||||||++||||||||");
+    crate::n!(0xFF00EEFF, "     +-+   +-+  +-+ +-----+ +------+   +-+    +-----+ +------+");
     crate::println!();
-    crate::h!(0xFF888888, "                  ?????????????????????????????????");
+    crate::n!(0xFF888888, "                  ?????????????????????????????????");
     crate::println!();
-    crate::h!(0xFFAADDFF, "           A bare-metal OS written in 100% Rust -- in 7 days");
-    crate::h!(0xFF666666, "         99,000+ lines * 6 MB ISO * GPU compositing * 144 FPS");
+    crate::n!(0xFFAADDFF, "           A bare-metal OS written in 100% Rust -- in 7 days");
+    crate::n!(0xFF666666, "         99,000+ lines * 6 MB ISO * GPU compositing * 144 FPS");
     crate::println!();
-    crate::h!(0xFF888888, "                  ?????????????????????????????????");
+    crate::n!(0xFF888888, "                  ?????????????????????????????????");
     crate::println!();
-    crate::h!(0xFF00FF88, "                        ?  FEATURE SHOWCASE  ?");
+    crate::n!(0xFF00FF88, "                        ?  FEATURE SHOWCASE  ?");
     crate::println!();
     
-    rb(6);
+    pause(6);
 
     
-    crate::h!(0xFF00CCFF, "+--------------------------------------------------------------+");
-    crate::h!(0xFF00CCFF, "|  PHASE 1 ---- SYSTEM INFO                                   |");
-    crate::h!(0xFF00CCFF, "+--------------------------------------------------------------+");
+    crate::n!(0xFF00CCFF, "+--------------------------------------------------------------+");
+    crate::n!(0xFF00CCFF, "|  PHASE 1 ---- SYSTEM INFO                                   |");
+    crate::n!(0xFF00CCFF, "+--------------------------------------------------------------+");
     crate::println!();
-    rb(3);
+    pause(3);
 
-    super::commands::kiy();
-    rb(4);
+    super::commands::fmw();
+    pause(4);
 
-    crate::h!(C_, "$ uname -a");
-    super::commands::iom(&["-a"]);
-    rb(4);
+    crate::n!(C_, "$ uname -a");
+    super::commands::eim(&["-a"]);
+    pause(4);
 
-    crate::h!(C_, "$ free");
-    super::commands::ioh();
-    rb(4);
+    crate::n!(C_, "$ free");
+    super::commands::eih();
+    pause(4);
 
-    crate::h!(C_, "$ lscpu");
-    super::unix::ned();
-    rb(5);
+    crate::n!(C_, "$ lscpu");
+    super::unix::hma();
+    pause(5);
 
     
-    crate::h!(0xFF00CCFF, "+--------------------------------------------------------------+");
-    crate::h!(0xFF00CCFF, "|  PHASE 2 ---- FILESYSTEM (TrustFS + VFS)                    |");
-    crate::h!(0xFF00CCFF, "+--------------------------------------------------------------+");
+    crate::n!(0xFF00CCFF, "+--------------------------------------------------------------+");
+    crate::n!(0xFF00CCFF, "|  PHASE 2 ---- FILESYSTEM (TrustFS + VFS)                    |");
+    crate::n!(0xFF00CCFF, "+--------------------------------------------------------------+");
     crate::println!();
-    rb(3);
+    pause(3);
 
-    crate::h!(C_, "$ mkdir /demo");
-    super::commands::iok(&["/demo"]);
-    rb(2);
+    crate::n!(C_, "$ mkdir /demo");
+    super::commands::eik(&["/demo"]);
+    pause(2);
 
-    crate::h!(C_, "$ echo 'Hello TrustOS!' > /demo/hello.txt");
-    crate::ramfs::fh(|fs| {
+    crate::n!(C_, "$ echo 'Hello TrustOS!' > /demo/hello.txt");
+    crate::ramfs::bh(|fs| {
         let _ = fs.touch("/demo/hello.txt");
-        let _ = fs.ns("/demo/hello.txt", b"Hello TrustOS!\nThis file was created live during the showcase.\n");
+        let _ = fs.write_file("/demo/hello.txt", b"Hello TrustOS!\nThis file was created live during the showcase.\n");
     });
-    crate::h!(B_, "Written: /demo/hello.txt");
-    rb(2);
+    crate::n!(B_, "Written: /demo/hello.txt");
+    pause(2);
 
-    crate::h!(C_, "$ cat /demo/hello.txt");
-    super::commands::hde(&["/demo/hello.txt"], None, None);
-    rb(3);
+    crate::n!(C_, "$ cat /demo/hello.txt");
+    super::commands::dkw(&["/demo/hello.txt"], None, None);
+    pause(3);
 
-    crate::h!(C_, "$ tree /");
-    super::commands::kjj(&["/"]);
-    rb(4);
+    crate::n!(C_, "$ tree /");
+    super::commands::fnh(&["/"]);
+    pause(4);
 
     
-    crate::h!(0xFF00CCFF, "+--------------------------------------------------------------+");
-    crate::h!(0xFF00CCFF, "|  PHASE 3 ---- TRUSTLANG (Built-in Compiler + VM)            |");
-    crate::h!(0xFF00CCFF, "+--------------------------------------------------------------+");
+    crate::n!(0xFF00CCFF, "+--------------------------------------------------------------+");
+    crate::n!(0xFF00CCFF, "|  PHASE 3 ---- TRUSTLANG (Built-in Compiler + VM)            |");
+    crate::n!(0xFF00CCFF, "+--------------------------------------------------------------+");
     crate::println!();
-    rb(3);
+    pause(3);
 
     
-    let fwv = r#"fn fibonacci(n: i64) -> i64 {
+    let crs = r#"fn fibonacci(n: i64) -> i64 {
     if n <= 1 { return n; }
     return fibonacci(n - 1) + fibonacci(n - 2);
 }
@@ -2109,209 +2115,209 @@ fn main() {
     }
     println("Language features: functions, recursion, loops, types");
 }"#;
-    crate::ramfs::fh(|fs| {
+    crate::ramfs::bh(|fs| {
         let _ = fs.touch("/demo/showcase.tl");
-        let _ = fs.ns("/demo/showcase.tl", fwv.as_bytes());
+        let _ = fs.write_file("/demo/showcase.tl", crs.as_bytes());
     });
 
-    crate::h!(C_, "$ cat /demo/showcase.tl");
-    crate::h!(0xFFDDDDDD, "{}", fwv);
-    rb(4);
+    crate::n!(C_, "$ cat /demo/showcase.tl");
+    crate::n!(0xFFDDDDDD, "{}", crs);
+    pause(4);
 
-    crate::h!(C_, "$ trustlang run /demo/showcase.tl");
-    crate::h!(0xFF00FF88, "[TrustLang] Compiling showcase.tl...");
-    match crate::trustlang::vw(fwv) {
-        Ok(an) => { if !an.is_empty() { crate::print!("{}", an); } }
-        Err(aa) => crate::h!(A_, "Error: {}", aa),
+    crate::n!(C_, "$ trustlang run /demo/showcase.tl");
+    crate::n!(0xFF00FF88, "[TrustLang] Compiling showcase.tl...");
+    match crate::trustlang::run(crs) {
+        Ok(output) => { if !output.is_empty() { crate::print!("{}", output); } }
+        Err(e) => crate::n!(A_, "Error: {}", e),
     }
-    crate::h!(B_, "[TrustLang] Program finished successfully.");
-    rb(6);
+    crate::n!(B_, "[TrustLang] Program finished successfully.");
+    pause(6);
 
     
-    crate::h!(0xFF00CCFF, "+--------------------------------------------------------------+");
-    crate::h!(0xFF00CCFF, "|  PHASE 4 ---- NETWORK STACK (TCP/IP, DHCP, DNS, TLS 1.3)    |");
-    crate::h!(0xFF00CCFF, "+--------------------------------------------------------------+");
+    crate::n!(0xFF00CCFF, "+--------------------------------------------------------------+");
+    crate::n!(0xFF00CCFF, "|  PHASE 4 ---- NETWORK STACK (TCP/IP, DHCP, DNS, TLS 1.3)    |");
+    crate::n!(0xFF00CCFF, "+--------------------------------------------------------------+");
     crate::println!();
-    rb(3);
+    pause(3);
 
-    crate::h!(C_, "$ ifconfig");
-    super::vm::hdh();
-    rb(3);
+    crate::n!(C_, "$ ifconfig");
+    super::vm::dkx();
+    pause(3);
 
-    crate::h!(C_, "$ netstat");
-    super::vm::hdi();
-    rb(4);
+    crate::n!(C_, "$ netstat");
+    super::vm::dky();
+    pause(4);
 
     
-    crate::h!(0xFF00CCFF, "+--------------------------------------------------------------+");
-    crate::h!(0xFF00CCFF, "|  PHASE 5 ---- TRUSTVIDEO (Real-time procedural rendering)   |");
-    crate::h!(0xFF00CCFF, "+--------------------------------------------------------------+");
+    crate::n!(0xFF00CCFF, "+--------------------------------------------------------------+");
+    crate::n!(0xFF00CCFF, "|  PHASE 5 ---- TRUSTVIDEO (Real-time procedural rendering)   |");
+    crate::n!(0xFF00CCFF, "+--------------------------------------------------------------+");
     crate::println!();
-    rb(3);
+    pause(3);
 
     
-    crate::h!(0xFFFF4400, "? Demo 1/3: FIRE EFFECT -- Real-time procedural flame");
-    rb(2);
+    crate::n!(0xFFFF4400, "? Demo 1/3: FIRE EFFECT -- Real-time procedural flame");
+    pause(2);
 
-    let gm = kp as u16;
-    let me = kl as u16;
-    crate::video::player::gqt("fire", gm, me, 30, hhu);
+    let bt = dy as u16;
+    let ex = dw as u16;
+    crate::video::player::ddk("fire", bt, ex, 30, dol);
     
     
     crate::framebuffer::clear();
-    rb(2);
+    pause(2);
 
     
-    crate::h!(0xFF00FF44, "? Demo 2/3: MATRIX RAIN -- Digital rain effect");
-    rb(2);
+    crate::n!(0xFF00FF44, "? Demo 2/3: MATRIX RAIN -- Digital rain effect");
+    pause(2);
 
-    crate::video::player::gqt("matrix", gm, me, 30, hhu);
-    
-    crate::framebuffer::clear();
-    rb(2);
-
-    
-    crate::h!(0xFFFF00FF, "? Demo 3/3: PLASMA -- Integer sine LUT psychedelic");
-    rb(2);
-
-    crate::video::player::gqt("plasma", gm, me, 30, hhu);
+    crate::video::player::ddk("matrix", bt, ex, 30, dol);
     
     crate::framebuffer::clear();
-    rb(2);
+    pause(2);
 
     
-    crate::h!(0xFF00CCFF, "+--------------------------------------------------------------+");
-    crate::h!(0xFF00CCFF, "|  PHASE 5b -- FORMULA3D (Wireframe 3D engine)                |");
-    crate::h!(0xFF00CCFF, "+--------------------------------------------------------------+");
+    crate::n!(0xFFFF00FF, "? Demo 3/3: PLASMA -- Integer sine LUT psychedelic");
+    pause(2);
+
+    crate::video::player::ddk("plasma", bt, ex, 30, dol);
+    
+    crate::framebuffer::clear();
+    pause(2);
+
+    
+    crate::n!(0xFF00CCFF, "+--------------------------------------------------------------+");
+    crate::n!(0xFF00CCFF, "|  PHASE 5b -- FORMULA3D (Wireframe 3D engine)                |");
+    crate::n!(0xFF00CCFF, "+--------------------------------------------------------------+");
     crate::println!();
-    rb(2);
+    pause(2);
 
-    crate::h!(0xFF00FF88, "? 3D wireframe character -- perspective projection + depth shading");
-    rb(2);
+    crate::n!(0xFF00FF88, "? 3D wireframe character -- perspective projection + depth shading");
+    pause(2);
 
     
     {
         let mut renderer = crate::formula3d::FormulaRenderer::new();
-        renderer.bid(crate::formula3d::FormulaScene::Kh);
-        renderer.dxr = 0xFF00FFAA; 
+        renderer.set_scene(crate::formula3d::FormulaScene::Character);
+        renderer.wire_color = 0xFF00FFAA; 
 
-        let yq = kp as usize;
-        let aff = kl as usize;
-        let mp = if kp > yq as u32 { (kp - yq as u32) / 2 } else { 0 } as usize;
-        let qw = if kl > aff as u32 { (kl - aff as u32) / 2 } else { 0 } as usize;
+        let lk = dy as usize;
+        let pp = dw as usize;
+        let fh = if dy > lk as u32 { (dy - lk as u32) / 2 } else { 0 } as usize;
+        let hk = if dw > pp as u32 { (dw - pp as u32) / 2 } else { 0 } as usize;
 
-        let mut k = alloc::vec![0u32; yq * aff];
+        let mut buf = alloc::vec![0u32; lk * pp];
 
-        let afk = crate::framebuffer::bre();
-        if !afk {
-            crate::framebuffer::beo();
-            crate::framebuffer::afi(true);
+        let pu = crate::framebuffer::ajy();
+        if !pu {
+            crate::framebuffer::adw();
+            crate::framebuffer::pr(true);
         }
-        crate::framebuffer::cwe(0xFF000000);
-        crate::framebuffer::sv();
+        crate::framebuffer::awo(0xFF000000);
+        crate::framebuffer::ii();
 
-        let ayu = crate::cpu::tsc::ow();
-        let kx = crate::cpu::tsc::ard();
-        let uk = hhu;
-        let cii = if kx > 0 { kx / 1000 * uk } else { u64::O };
+        let rr = crate::cpu::tsc::ey();
+        let freq = crate::cpu::tsc::we();
+        let duration_ms = dol;
+        let acx = if freq > 0 { freq / 1000 * duration_ms } else { u64::MAX };
 
         loop {
-            let ez = crate::cpu::tsc::ow().ao(ayu);
-            if ez >= cii { break; }
-            if let Some(bs) = crate::keyboard::xw() {
-                if bs == 0x1B || bs == b'q' { break; }
+            let bb = crate::cpu::tsc::ey().saturating_sub(rr);
+            if bb >= acx { break; }
+            if let Some(key) = crate::keyboard::kr() {
+                if key == 0x1B || key == b'q' { break; }
             }
 
-            renderer.qs();
-            renderer.tj(&mut k, yq, aff);
+            renderer.update();
+            renderer.render(&mut buf, lk, pp);
 
             
-            if let Some((bgc, dnu, bgb, baz)) = crate::framebuffer::cey() {
-                let aaa = bgc as *mut u32;
-                let bgd = baz as usize;
-                for c in 0..aff {
-                    let bg = qw + c;
-                    if bg >= bgb as usize { break; }
-                    let bxg = &k[c * yq..c * yq + yq];
+            if let Some((bb_ptr, _bb_w, bb_h, bb_stride)) = crate::framebuffer::aqr() {
+                let mq = bb_ptr as *mut u32;
+                let aeu = bb_stride as usize;
+                for y in 0..pp {
+                    let ad = hk + y;
+                    if ad >= bb_h as usize { break; }
+                    let amv = &buf[y * lk..y * lk + lk];
                     unsafe {
-                        let cs = aaa.add(bg * bgd + mp);
-                        core::ptr::copy_nonoverlapping(bxg.fq(), cs, yq);
+                        let dst = mq.add(ad * aeu + fh);
+                        core::ptr::copy_nonoverlapping(amv.as_ptr(), dst, lk);
                     }
                 }
             }
-            crate::framebuffer::sv();
+            crate::framebuffer::ii();
         }
 
-        if !afk {
-            crate::framebuffer::afi(false);
+        if !pu {
+            crate::framebuffer::pr(false);
         }
     }
 
     crate::framebuffer::clear();
-    rb(2);
+    pause(2);
 
     
-    crate::h!(0xFF00CCFF, "+--------------------------------------------------------------+");
-    crate::h!(0xFF00CCFF, "|  PHASE 5c -- COSMIC2 DESKTOP + WEB BROWSER                  |");
-    crate::h!(0xFF00CCFF, "+--------------------------------------------------------------+");
+    crate::n!(0xFF00CCFF, "+--------------------------------------------------------------+");
+    crate::n!(0xFF00CCFF, "|  PHASE 5c -- COSMIC2 DESKTOP + WEB BROWSER                  |");
+    crate::n!(0xFF00CCFF, "+--------------------------------------------------------------+");
     crate::println!();
-    rb(2);
+    pause(2);
 
-    crate::h!(0xFF00FF88, "? COSMIC2 Desktop -- GPU-composited multi-layer windowing system");
-    crate::h!(0xFF00FF88, "? Launching with built-in Web Browser ? google.com");
-    rb(3);
+    crate::n!(0xFF00FF88, "? COSMIC2 Desktop -- GPU-composited multi-layer windowing system");
+    crate::n!(0xFF00FF88, "? Launching with built-in Web Browser ? google.com");
+    pause(3);
 
     
-    kih(Some("browser"), hhu);
+    fmf(Some("browser"), dol);
 
     crate::framebuffer::clear();
-    rb(2);
+    pause(2);
 
     
-    crate::h!(0xFF00CCFF, "+--------------------------------------------------------------+");
-    crate::h!(0xFF00CCFF, "|  PHASE 6 ---- 200+ BUILT-IN COMMANDS                       |");
-    crate::h!(0xFF00CCFF, "+--------------------------------------------------------------+");
+    crate::n!(0xFF00CCFF, "+--------------------------------------------------------------+");
+    crate::n!(0xFF00CCFF, "|  PHASE 6 ---- 200+ BUILT-IN COMMANDS                       |");
+    crate::n!(0xFF00CCFF, "+--------------------------------------------------------------+");
     crate::println!();
-    rb(2);
+    pause(2);
 
-    crate::h!(0xFFAADDFF, "  +- File System ------------------------------------------+");
-    crate::h!(0xFFDDDDDD, "  | ls cd pwd mkdir rm cp mv cat head tail tree find grep  |");
-    crate::h!(0xFFAADDFF, "  +- Network ----------------------------------------------|");
-    crate::h!(0xFFDDDDDD, "  | ifconfig ping curl wget nslookup arp route netstat     |");
-    crate::h!(0xFFAADDFF, "  +- System -----------------------------------------------|");
-    crate::h!(0xFFDDDDDD, "  | ps top free df uname dmesg mount lspci lscpu lsblk    |");
-    crate::h!(0xFFAADDFF, "  +- Development ------------------------------------------|");
-    crate::h!(0xFFDDDDDD, "  | trustlang (compiler+VM) * TrustCode (editor)          |");
-    crate::h!(0xFFDDDDDD, "  | transpile (binary?Rust) * exec (ELF loader)           |");
-    crate::h!(0xFFAADDFF, "  +- Graphics ---------------------------------------------|");
-    crate::h!(0xFFDDDDDD, "  | desktop (COSMIC2 compositor) * video (TrustVideo)     |");
-    crate::h!(0xFFDDDDDD, "  | benchmark (SSE2 SIMD) * HoloMatrix (3D volumetric)   |");
-    crate::h!(0xFFAADDFF, "  +--------------------------------------------------------+");
+    crate::n!(0xFFAADDFF, "  +- File System ------------------------------------------+");
+    crate::n!(0xFFDDDDDD, "  | ls cd pwd mkdir rm cp mv cat head tail tree find grep  |");
+    crate::n!(0xFFAADDFF, "  +- Network ----------------------------------------------|");
+    crate::n!(0xFFDDDDDD, "  | ifconfig ping curl wget nslookup arp route netstat     |");
+    crate::n!(0xFFAADDFF, "  +- System -----------------------------------------------|");
+    crate::n!(0xFFDDDDDD, "  | ps top free df uname dmesg mount lspci lscpu lsblk    |");
+    crate::n!(0xFFAADDFF, "  +- Development ------------------------------------------|");
+    crate::n!(0xFFDDDDDD, "  | trustlang (compiler+VM) * TrustCode (editor)          |");
+    crate::n!(0xFFDDDDDD, "  | transpile (binary?Rust) * exec (ELF loader)           |");
+    crate::n!(0xFFAADDFF, "  +- Graphics ---------------------------------------------|");
+    crate::n!(0xFFDDDDDD, "  | desktop (COSMIC2 compositor) * video (TrustVideo)     |");
+    crate::n!(0xFFDDDDDD, "  | benchmark (SSE2 SIMD) * HoloMatrix (3D volumetric)   |");
+    crate::n!(0xFFAADDFF, "  +--------------------------------------------------------+");
     crate::println!();
-    rb(6);
-
-    
-    crate::println!();
-    crate::h!(0xFF00CCFF, "  ||||||||+||||||+ ||+   ||+|||||||+||||||||+ ||||||+ |||||||+");
-    crate::h!(0xFF00CCFF, "  +--||+--+||+--||+|||   |||||+----++--||+--+||+---||+||+----+");
-    crate::h!(0xFF00CCFF, "     |||   ||||||++|||   ||||||||||+   |||   |||   ||||||||||+");
-    crate::h!(0xFF00DDFF, "     |||   ||+--||+|||   |||+----|||   |||   |||   |||+----|||");
-    crate::h!(0xFF00EEFF, "     |||   |||  |||+||||||++||||||||   |||   +||||||++||||||||");
-    crate::h!(0xFF00EEFF, "     +-+   +-+  +-+ +-----+ +------+   +-+    +-----+ +------+");
-    crate::println!();
-    crate::h!(0xFFFFCC00, "  ?  100% Rust -- Zero C code -- Memory safe by design");
-    crate::h!(0xFFFFCC00, "  ?  Built from scratch in 7 days -- 99,000+ lines");
-    crate::h!(0xFFFFCC00, "  ?  6 MB ISO -- boots in seconds");
-    crate::h!(0xFFFFCC00, "  ?  GPU compositing -- 144 FPS desktop");
-    crate::println!();
-    crate::h!(0xFF00FF88, "  github.com/nathan237/TrustOS");
-    crate::h!(0xFF888888, "  Star ? * Fork * Contribute");
-    crate::println!();
-    crate::h!(0xFF888888, "  ??????????????????????????????????????????????????");
-    crate::println!();
+    pause(6);
 
     
-    let _ = crate::ramfs::fh(|fs| { let _ = fs.hb("/demo/hello.txt"); let _ = fs.hb("/demo/showcase.tl"); });
+    crate::println!();
+    crate::n!(0xFF00CCFF, "  ||||||||+||||||+ ||+   ||+|||||||+||||||||+ ||||||+ |||||||+");
+    crate::n!(0xFF00CCFF, "  +--||+--+||+--||+|||   |||||+----++--||+--+||+---||+||+----+");
+    crate::n!(0xFF00CCFF, "     |||   ||||||++|||   ||||||||||+   |||   |||   ||||||||||+");
+    crate::n!(0xFF00DDFF, "     |||   ||+--||+|||   |||+----|||   |||   |||   |||+----|||");
+    crate::n!(0xFF00EEFF, "     |||   |||  |||+||||||++||||||||   |||   +||||||++||||||||");
+    crate::n!(0xFF00EEFF, "     +-+   +-+  +-+ +-----+ +------+   +-+    +-----+ +------+");
+    crate::println!();
+    crate::n!(0xFFFFCC00, "  ?  100% Rust -- Zero C code -- Memory safe by design");
+    crate::n!(0xFFFFCC00, "  ?  Built from scratch in 7 days -- 99,000+ lines");
+    crate::n!(0xFFFFCC00, "  ?  6 MB ISO -- boots in seconds");
+    crate::n!(0xFFFFCC00, "  ?  GPU compositing -- 144 FPS desktop");
+    crate::println!();
+    crate::n!(0xFF00FF88, "  github.com/nathan237/TrustOS");
+    crate::n!(0xFF888888, "  Star ? * Fork * Contribute");
+    crate::println!();
+    crate::n!(0xFF888888, "  ??????????????????????????????????????????????????");
+    crate::println!();
+
+    
+    let _ = crate::ramfs::bh(|fs| { let _ = fs.rm("/demo/hello.txt"); let _ = fs.rm("/demo/showcase.tl"); });
 }
 
 
@@ -2319,30 +2325,30 @@ fn main() {
 
 
 
-pub(super) fn rid(n: &[&str]) {
-    let ig = match n.fv().hu() {
+pub(super) fn krn(args: &[&str]) {
+    let speed = match args.first().copied() {
         Some("fast") => 1u64,
         Some("slow") => 3,
         _ => 2,
     };
 
-    let rb = |tv: u64| {
-        let jn = tv * 1000 * ig / 2;
-        let ayu = crate::cpu::tsc::ow();
-        let kx = crate::cpu::tsc::ard();
-        if kx == 0 { return; }
-        let cii = kx / 1000 * jn;
+    let pause = |im: u64| {
+        let dh = im * 1000 * speed / 2;
+        let rr = crate::cpu::tsc::ey();
+        let freq = crate::cpu::tsc::we();
+        if freq == 0 { return; }
+        let acx = freq / 1000 * dh;
         loop {
-            let ez = crate::cpu::tsc::ow().ao(ayu);
-            if ez >= cii { break; }
-            let _ = crate::keyboard::xw();
-            core::hint::hc();
+            let bb = crate::cpu::tsc::ey().saturating_sub(rr);
+            if bb >= acx { break; }
+            let _ = crate::keyboard::kr();
+            core::hint::spin_loop();
         }
     };
 
-    let (kp, kl) = crate::framebuffer::yn();
-    if kp == 0 || kl == 0 {
-        crate::h!(0xFFFF4444, "No framebuffer available");
+    let (dy, dw) = crate::framebuffer::kv();
+    if dy == 0 || dw == 0 {
+        crate::n!(0xFFFF4444, "No framebuffer available");
         return;
     }
 
@@ -2350,29 +2356,29 @@ pub(super) fn rid(n: &[&str]) {
     
     
     {
-        let afk = crate::framebuffer::bre();
-        if !afk {
-            crate::framebuffer::beo();
-            crate::framebuffer::afi(true);
+        let pu = crate::framebuffer::ajy();
+        if !pu {
+            crate::framebuffer::adw();
+            crate::framebuffer::pr(true);
         }
 
-        let d = kp as usize;
-        let i = kl as usize;
-        let mut k = alloc::vec![0u32; d * i];
+        let w = dy as usize;
+        let h = dw as usize;
+        let mut buf = alloc::vec![0u32; w * h];
 
         
-        let ahi = |k: &mut [u32], d: usize, i: usize, cx: usize, ae: usize,
-                         r: char, s: u32, bv: usize| {
-            let ka = crate::framebuffer::font::ada(r);
-            for (br, &fs) in ka.iter().cf() {
-                for ga in 0..8u32 {
-                    if fs & (0x80 >> ga) != 0 {
-                        for cq in 0..bv {
-                            for cr in 0..bv {
-                                let y = cx + ga as usize * bv + cr;
-                                let x = ae + br * bv + cq;
-                                if y < d && x < i {
-                                    k[x * d + y] = s;
+        let draw_char = |buf: &mut [u32], w: usize, h: usize, cx: usize, u: usize,
+                         c: char, color: u32, scale: usize| {
+            let du = crate::framebuffer::font::ol(c);
+            for (row, &bits) in du.iter().enumerate() {
+                for bf in 0..8u32 {
+                    if bits & (0x80 >> bf) != 0 {
+                        for ak in 0..scale {
+                            for am in 0..scale {
+                                let p = cx + bf as usize * scale + am;
+                                let o = u + row * scale + ak;
+                                if p < w && o < h {
+                                    buf[o * w + p] = color;
                                 }
                             }
                         }
@@ -2382,39 +2388,39 @@ pub(super) fn rid(n: &[&str]) {
         };
 
         
-        let fu = |k: &mut [u32], d: usize, i: usize, b: usize, c: usize,
-                        e: &str, s: u32, bv: usize| {
-            for (a, r) in e.bw().cf() {
-                ahi(k, d, i, b + a * 8 * bv, c, r, s, bv);
+        let bo = |buf: &mut [u32], w: usize, h: usize, x: usize, y: usize,
+                        j: &str, color: u32, scale: usize| {
+            for (i, c) in j.chars().enumerate() {
+                draw_char(buf, w, h, x + i * 8 * scale, y, c, color, scale);
             }
         };
 
         
-        let bge = |k: &[u32], d: usize, i: usize| {
-            if let Some((bgc, dnu, bgb, baz)) = crate::framebuffer::cey() {
-                let aaa = bgc as *mut u32;
-                let bgd = baz as usize;
-                for c in 0..i.v(bgb as usize) {
+        let blit = |buf: &[u32], w: usize, h: usize| {
+            if let Some((bb_ptr, _bb_w, bb_h, bb_stride)) = crate::framebuffer::aqr() {
+                let mq = bb_ptr as *mut u32;
+                let aeu = bb_stride as usize;
+                for y in 0..h.min(bb_h as usize) {
                     unsafe {
                         core::ptr::copy_nonoverlapping(
-                            k[c * d..].fq(),
-                            aaa.add(c * bgd),
-                            d,
+                            buf[y * w..].as_ptr(),
+                            mq.add(y * aeu),
+                            w,
                         );
                     }
                 }
             }
-            crate::framebuffer::sv();
+            crate::framebuffer::ii();
         };
 
-        let kx = crate::cpu::tsc::ard();
-        let ayu = crate::cpu::tsc::ow();
-        let wef = 6000u64 * ig / 2;
-        let cii = if kx > 0 { kx / 1000 * wef } else { u64::O };
+        let freq = crate::cpu::tsc::we();
+        let rr = crate::cpu::tsc::ey();
+        let olm = 6000u64 * speed / 2;
+        let acx = if freq > 0 { freq / 1000 * olm } else { u64::MAX };
 
         
-        let mut rng = crate::cpu::tsc::ow();
-        let mut lom = || -> u64 {
+        let mut rng = crate::cpu::tsc::ey();
+        let mut gjm = || -> u64 {
             rng ^= rng << 13;
             rng ^= rng >> 7;
             rng ^= rng << 17;
@@ -2422,54 +2428,54 @@ pub(super) fn rid(n: &[&str]) {
         };
 
         
-        let my: [usize; 4] = [6, 8, 8, 4];
-        let mut djw: alloc::vec::Vec<alloc::vec::Vec<(usize, usize)>> = alloc::vec::Vec::new();
-        let okp = d / 6;
-        let uix = d * 5 / 6;
-        for (alj, &az) in my.iter().cf() {
-            let mj = okp + (uix - okp) * alj / (my.len() - 1);
-            let uja = i / 4;
-            let aoa = i / 2 / (az + 1);
-            let mut oik = alloc::vec::Vec::new();
-            for los in 0..az {
-                oik.push((mj, uja + aoa * (los + 1)));
+        let layers: [usize; 4] = [6, 8, 8, 4];
+        let mut bie: alloc::vec::Vec<alloc::vec::Vec<(usize, usize)>> = alloc::vec::Vec::new();
+        let ilk = w / 6;
+        let nbi = w * 5 / 6;
+        for (sz, &count) in layers.iter().enumerate() {
+            let fe = ilk + (nbi - ilk) * sz / (layers.len() - 1);
+            let nbl = h / 4;
+            let spacing = h / 2 / (count + 1);
+            let mut ijo = alloc::vec::Vec::new();
+            for ni in 0..count {
+                ijo.push((fe, nbl + spacing * (ni + 1)));
             }
-            djw.push(oik);
+            bie.push(ijo);
         }
 
         
         let mut frame = 0u32;
         loop {
-            let ez = crate::cpu::tsc::ow().ao(ayu);
-            if ez >= cii { break; }
-            if let Some(bs) = crate::keyboard::xw() {
-                if bs == 0x1B || bs == b'q' { break; }
+            let bb = crate::cpu::tsc::ey().saturating_sub(rr);
+            if bb >= acx { break; }
+            if let Some(key) = crate::keyboard::kr() {
+                if key == 0x1B || key == b'q' { break; }
             }
 
             
-            for y in k.el() {
-                *y = 0xFF050510;
+            for p in buf.iter_mut() {
+                *p = 0xFF050510;
             }
 
             
-            let xg = crate::graphics::holomatrix::cuh(frame as f32 * 0.08) * 0.5 + 0.5;
-            for alj in 0..djw.len() - 1 {
-                for &(dn, dp) in &djw[alj] {
-                    for &(hy, jz) in &djw[alj + 1] {
+            let kq = crate::graphics::holomatrix::azr(frame as f32 * 0.08) * 0.5 + 0.5;
+            for sz in 0..bie.len() - 1 {
+                for &(x1, y1) in &bie[sz] {
+                    for &(x2, y2) in &bie[sz + 1] {
                         
-                        let dx = (hy as i32 - dn as i32).gp();
-                        let bg = (jz as i32 - dp as i32).gp();
-                        let au = dx.am(bg) as usize;
-                        if au == 0 { continue; }
-                        let vqb = (lom() % 60) as f32;
-                        let at = (40.0 + xg * 80.0 + vqb) as u32;
-                        let s = 0xFF000000 | (at.v(255) << 8);
-                        for e in 0..au {
-                            let ab = e as f32 / au as f32;
-                            let y = (dn as f32 + (hy as f32 - dn as f32) * ab) as usize;
-                            let x = (dp as f32 + (jz as f32 - dp as f32) * ab) as usize;
-                            if y < d && x < i {
-                                k[x * d + y] = s;
+                        let dx = (x2 as i32 - x1 as i32).abs();
+                        let ad = (y2 as i32 - y1 as i32).abs();
+                        let steps = dx.max(ad) as usize;
+                        if steps == 0 { continue; }
+                        let obf = (gjm() % 60) as f32;
+                        let g = (40.0 + kq * 80.0 + obf) as u32;
+                        let color = 0xFF000000 | (g.min(255) << 8);
+                        for j in 0..steps {
+                            let t = j as f32 / steps as f32;
+                            let p = (x1 as f32 + (x2 as f32 - x1 as f32) * t) as usize;
+                            let o = (y1 as f32 + (y2 as f32 - y1 as f32) * t) as usize;
+                            if p < w && o < h {
+                                buf[o * w + p] = color;
                             }
                         }
                     }
@@ -2477,22 +2483,22 @@ pub(super) fn rid(n: &[&str]) {
             }
 
             
-            for (alj, fl) in djw.iter().cf() {
-                for (los, &(vt, ahr)) in fl.iter().cf() {
-                    let oqu = crate::graphics::holomatrix::cuh(frame as f32 * 0.12 + alj as f32 * 1.5 + los as f32 * 0.8) * 0.5 + 0.5;
-                    let m = 5 + (oqu * 3.0) as usize;
-                    let ght = (120.0 + oqu * 135.0) as u32;
-                    let s = 0xFF000000 | (ght.v(255) << 8) | ((ght / 3).v(255));
+            for (sz, bj) in bie.iter().enumerate() {
+                for (ni, &(nx, re)) in bj.iter().enumerate() {
+                    let iqt = crate::graphics::holomatrix::azr(frame as f32 * 0.12 + sz as f32 * 1.5 + ni as f32 * 0.8) * 0.5 + 0.5;
+                    let r = 5 + (iqt * 3.0) as usize;
+                    let cyh = (120.0 + iqt * 135.0) as u32;
+                    let color = 0xFF000000 | (cyh.min(255) << 8) | ((cyh / 3).min(255));
                     
-                    for bg in 0..=m * 2 {
-                        for shs in 0..=m * 2 {
-                            let ym = shs as i32 - m as i32;
-                            let wl = bg as i32 - m as i32;
-                            if ym * ym + wl * wl <= (m * m) as i32 {
-                                let y = (vt as i32 + ym) as usize;
-                                let x = (ahr as i32 + wl) as usize;
-                                if y < d && x < i {
-                                    k[x * d + y] = s;
+                    for ad in 0..=r * 2 {
+                        for dx_i in 0..=r * 2 {
+                            let lh = dx_i as i32 - r as i32;
+                            let kf = ad as i32 - r as i32;
+                            if lh * lh + kf * kf <= (r * r) as i32 {
+                                let p = (nx as i32 + lh) as usize;
+                                let o = (re as i32 + kf) as usize;
+                                if p < w && o < h {
+                                    buf[o * w + p] = color;
                                 }
                             }
                         }
@@ -2501,71 +2507,71 @@ pub(super) fn rid(n: &[&str]) {
             }
 
             
-            let suy = frame as f32 * 0.03;
-            for alj in 0..djw.len() - 1 {
-                let blf = (lom() % djw[alj].len() as u64) as usize;
-                let bbm = (lom() % djw[alj + 1].len() as u64) as usize;
-                let (dn, dp) = djw[alj][blf];
-                let (hy, jz) = djw[alj + 1][bbm];
-                let ab = ((suy + alj as f32 * 0.7) % 1.0).gp();
-                let hgo = (dn as f32 + (hy as f32 - dn as f32) * ab) as usize;
-                let kqo = (dp as f32 + (jz as f32 - dp as f32) * ab) as usize;
+            let lxc = frame as f32 * 0.03;
+            for sz in 0..bie.len() - 1 {
+                let amu = (gjm() % bie[sz].len() as u64) as usize;
+                let ajm = (gjm() % bie[sz + 1].len() as u64) as usize;
+                let (x1, y1) = bie[sz][amu];
+                let (x2, y2) = bie[sz + 1][ajm];
+                let t = ((lxc + sz as f32 * 0.7) % 1.0).abs();
+                let dnm = (x1 as f32 + (x2 as f32 - x1 as f32) * t) as usize;
+                let fst = (y1 as f32 + (y2 as f32 - y1 as f32) * t) as usize;
                 
-                for bg in 0..4 {
+                for ad in 0..4 {
                     for dx in 0..4 {
-                        let y = hgo + dx;
-                        let x = kqo + bg;
-                        if y < d && x < i {
-                            k[x * d + y] = 0xFF00FF66;
+                        let p = dnm + dx;
+                        let o = fst + ad;
+                        if p < w && o < h {
+                            buf[o * w + p] = 0xFF00FF66;
                         }
                     }
                 }
             }
 
             
-            let dq = "J A R V I S";
-            let dcs = dq.len() * 8 * 4;
-            let gx = if d > dcs { (d - dcs) / 2 } else { 0 };
-            fu(&mut k, d, i, gx, i / 12, dq, 0xFF00FF64, 4);
+            let title = "J A R V I S";
+            let bea = title.len() * 8 * 4;
+            let bu = if w > bea { (w - bea) / 2 } else { 0 };
+            bo(&mut buf, w, h, bu, h / 12, title, 0xFF00FF64, 4);
 
             
             let sub = "Kernel-Resident Neural Network";
-            let ppm = sub.len() * 8 * 2;
-            let cr = if d > ppm { (d - ppm) / 2 } else { 0 };
-            fu(&mut k, d, i, cr, i / 12 + 72, sub, 0xFF88DDAA, 2);
+            let jjn = sub.len() * 8 * 2;
+            let am = if w > jjn { (w - jjn) / 2 } else { 0 };
+            bo(&mut buf, w, h, am, h / 12 + 72, sub, 0xFF88DDAA, 2);
 
             
-            let dwf = i - 50;
-            let cm = [
+            let bpe = h - 50;
+            let stats = [
                 "4.4M params",
                 "4 layers",
                 "256 d_model",
                 "Byte-level",
                 "Ring 0",
             ];
-            let pve = cm.iter().map(|e| e.len() * 8 + 30).sum::<usize>();
-            let mut pqk = if d > pve { (d - pve) / 2 } else { 10 };
-            for hm in &cm {
-                fu(&mut k, d, i, pqk, dwf, hm, 0xFF00CC88, 1);
-                pqk += hm.len() * 8 + 30;
+            let jny = stats.iter().map(|j| j.len() * 8 + 30).sum::<usize>();
+            let mut jkg = if w > jny { (w - jny) / 2 } else { 10 };
+            for stat in &stats {
+                bo(&mut buf, w, h, jkg, bpe, stat, 0xFF00CC88, 1);
+                jkg += stat.len() * 8 + 30;
             }
 
             
-            let cze = ["Input", "Hidden", "Hidden", "Output"];
-            for (alj, fl) in djw.iter().cf() {
-                if let Some(&(mj, _)) = fl.fv() {
-                    let fms = cze[alj];
-                    let udt = if mj > fms.len() * 4 { mj - fms.len() * 4 } else { 0 };
-                    fu(&mut k, d, i, udt, i * 3 / 4 + 20, fms, 0xFF666666, 1);
+            let labels = ["Input", "Hidden", "Hidden", "Output"];
+            for (sz, bj) in bie.iter().enumerate() {
+                if let Some(&(fe, _)) = bj.first() {
+                    let cmb = labels[sz];
+                    let mxr = if fe > cmb.len() * 4 { fe - cmb.len() * 4 } else { 0 };
+                    bo(&mut buf, w, h, mxr, h * 3 / 4 + 20, cmb, 0xFF666666, 1);
                 }
             }
 
-            bge(&k, d, i);
+            blit(&buf, w, h);
             frame += 1;
         }
 
-        if !afk {
-            crate::framebuffer::afi(false);
+        if !pu {
+            crate::framebuffer::pr(false);
         }
     }
 
@@ -2575,199 +2581,199 @@ pub(super) fn rid(n: &[&str]) {
     
     
     crate::println!();
-    crate::h!(0xFF00FF64, "     ___  ___  _____  _   _  ___  _____");
-    crate::h!(0xFF00FF64, "    |_  |/ _ \\| ___ \\| | | ||_  |/  ___|");
-    crate::h!(0xFF00FF88, "      | / /_\\ \\ |_/ /| | | |  | |\\ `--.");
-    crate::h!(0xFF00FF88, "      | |  _  |    / | | | |  | | `--. \\");
-    crate::h!(0xFF00FFAA, "  /\\__/ / | | | |\\ \\ \\ \\_/ /\\__/ /\\__/ /");
-    crate::h!(0xFF00FFAA, "  \\____/\\_| |_\\_| \\_| \\___/\\____/\\____/");
+    crate::n!(0xFF00FF64, "     ___  ___  _____  _   _  ___  _____");
+    crate::n!(0xFF00FF64, "    |_  |/ _ \\| ___ \\| | | ||_  |/  ___|");
+    crate::n!(0xFF00FF88, "      | / /_\\ \\ |_/ /| | | |  | |\\ `--.");
+    crate::n!(0xFF00FF88, "      | |  _  |    / | | | |  | | `--. \\");
+    crate::n!(0xFF00FFAA, "  /\\__/ / | | | |\\ \\ \\ \\_/ /\\__/ /\\__/ /");
+    crate::n!(0xFF00FFAA, "  \\____/\\_| |_\\_| \\_| \\___/\\____/\\____/");
     crate::println!();
-    crate::h!(0xFF888888, "  ======================================================");
-    crate::h!(0xFFAADDFF, "    Kernel-Resident Self-Propagating Neural Network");
-    crate::h!(0xFF888888, "  ======================================================");
+    crate::n!(0xFF888888, "  ======================================================");
+    crate::n!(0xFFAADDFF, "    Kernel-Resident Self-Propagating Neural Network");
+    crate::n!(0xFF888888, "  ======================================================");
     crate::println!();
-    rb(4);
+    pause(4);
 
-    crate::h!(0xFF00CCFF, "+--------------------------------------------------------------+");
-    crate::h!(0xFF00CCFF, "|  ARCHITECTURE                                                |");
-    crate::h!(0xFF00CCFF, "+--------------------------------------------------------------+");
+    crate::n!(0xFF00CCFF, "+--------------------------------------------------------------+");
+    crate::n!(0xFF00CCFF, "|  ARCHITECTURE                                                |");
+    crate::n!(0xFF00CCFF, "+--------------------------------------------------------------+");
     crate::println!();
-    crate::h!(0xFF00FF88, "  Model:      Transformer (4L, d=256, 4H, d_ff=1024, SwiGLU)");
-    crate::h!(0xFF00FF88, "  Parameters: 4,393,216 (FP32 = 17.6 MB)");
-    crate::h!(0xFF00FF88, "  Vocabulary: 256 (byte-level, no tokenizer)");
-    crate::h!(0xFF00FF88, "  SIMD:       Auto-detected (AVX2+FMA / SSE2 / NEON)");
-    crate::h!(0xFF00FF88, "  Location:   Ring 0 (kernel address space)");
-    crate::h!(0xFF00FF88, "  Safety:     Guardian Pact (2 authorized parents)");
+    crate::n!(0xFF00FF88, "  Model:      Transformer (4L, d=256, 4H, d_ff=1024, SwiGLU)");
+    crate::n!(0xFF00FF88, "  Parameters: 4,393,216 (FP32 = 17.6 MB)");
+    crate::n!(0xFF00FF88, "  Vocabulary: 256 (byte-level, no tokenizer)");
+    crate::n!(0xFF00FF88, "  SIMD:       Auto-detected (AVX2+FMA / SSE2 / NEON)");
+    crate::n!(0xFF00FF88, "  Location:   Ring 0 (kernel address space)");
+    crate::n!(0xFF00FF88, "  Safety:     Guardian Pact (2 authorized parents)");
     crate::println!();
-    rb(5);
+    pause(5);
 
     
     
     
-    crate::h!(0xFF00CCFF, "+--------------------------------------------------------------+");
-    crate::h!(0xFF00CCFF, "|  PHASE 1 --- BRAIN INITIALIZATION                            |");
-    crate::h!(0xFF00CCFF, "+--------------------------------------------------------------+");
+    crate::n!(0xFF00CCFF, "+--------------------------------------------------------------+");
+    crate::n!(0xFF00CCFF, "|  PHASE 1 --- BRAIN INITIALIZATION                            |");
+    crate::n!(0xFF00CCFF, "+--------------------------------------------------------------+");
     crate::println!();
-    rb(2);
+    pause(2);
 
-    crate::h!(0xFF00DDFF, "  $ jarvis brain init");
+    crate::n!(0xFF00DDFF, "  $ jarvis brain init");
     crate::println!();
 
-    if !crate::jarvis::uc() {
+    if !crate::jarvis::is_ready() {
         crate::jarvis::init();
     }
 
-    let tme = crate::jarvis::fkf();
-    if tme {
-        crate::h!(0xFF00FF88, "  [OK] Full brain loaded: 4,393,216 parameters");
+    let mje = crate::jarvis::cki();
+    if mje {
+        crate::n!(0xFF00FF88, "  [OK] Full brain loaded: 4,393,216 parameters");
     } else {
-        crate::h!(0xFFFFCC00, "  [OK] Micro sentinel active: 78,016 parameters");
-        crate::h!(0xFF888888, "  (Full brain requires jarvis_pretrained.bin in ISO)");
+        crate::n!(0xFFFFCC00, "  [OK] Micro sentinel active: 78,016 parameters");
+        crate::n!(0xFF888888, "  (Full brain requires jarvis_pretrained.bin in ISO)");
     }
     crate::println!();
-    rb(4);
+    pause(4);
 
     
     
     
-    crate::h!(0xFF00CCFF, "+--------------------------------------------------------------+");
-    crate::h!(0xFF00CCFF, "|  PHASE 2 --- LIVE INFERENCE (kernel space)                   |");
-    crate::h!(0xFF00CCFF, "+--------------------------------------------------------------+");
+    crate::n!(0xFF00CCFF, "+--------------------------------------------------------------+");
+    crate::n!(0xFF00CCFF, "|  PHASE 2 --- LIVE INFERENCE (kernel space)                   |");
+    crate::n!(0xFF00CCFF, "+--------------------------------------------------------------+");
     crate::println!();
-    rb(2);
+    pause(2);
 
-    crate::h!(0xFF00DDFF, "  $ jarvis chat What is TrustOS?");
+    crate::n!(0xFF00DDFF, "  $ jarvis chat What is TrustOS?");
     crate::println!();
 
     
-    let mk = crate::jarvis::cks("What is TrustOS?", 80);
-    let ux = mk.em();
-    if !ux.is_empty() {
+    let fa = crate::jarvis::generate("What is TrustOS?", 80);
+    let jw = fa.trim();
+    if !jw.is_empty() {
         
-        crate::gr!(0xFF00FF64, "  JARVIS> ");
-        for r in ux.bw().take(200) {
-            crate::gr!(0xFFCCFFDD, "{}", r);
+        crate::bq!(0xFF00FF64, "  JARVIS> ");
+        for c in jw.chars().take(200) {
+            crate::bq!(0xFFCCFFDD, "{}", c);
             
-            let qyi = crate::cpu::tsc::ow();
-            let ncj = crate::cpu::tsc::ard();
-            if ncj > 0 {
-                let qyf = ncj / 1000 * 30; 
-                while crate::cpu::tsc::ow().ao(qyi) < qyf {
-                    core::hint::hc();
+            let kiq = crate::cpu::tsc::ey();
+            let hkm = crate::cpu::tsc::we();
+            if hkm > 0 {
+                let kin = hkm / 1000 * 30; 
+                while crate::cpu::tsc::ey().saturating_sub(kiq) < kin {
+                    core::hint::spin_loop();
                 }
             }
         }
         crate::println!();
     } else {
-        crate::h!(0xFF888888, "  (Inference requires full brain to be loaded)");
+        crate::n!(0xFF888888, "  (Inference requires full brain to be loaded)");
     }
     crate::println!();
-    rb(5);
+    pause(5);
 
     
     
     
-    crate::h!(0xFF00CCFF, "+--------------------------------------------------------------+");
-    crate::h!(0xFF00CCFF, "|  PHASE 3 --- MESH NETWORK + SELF-PROPAGATION                |");
-    crate::h!(0xFF00CCFF, "+--------------------------------------------------------------+");
+    crate::n!(0xFF00CCFF, "+--------------------------------------------------------------+");
+    crate::n!(0xFF00CCFF, "|  PHASE 3 --- MESH NETWORK + SELF-PROPAGATION                |");
+    crate::n!(0xFF00CCFF, "+--------------------------------------------------------------+");
     crate::println!();
-    rb(2);
+    pause(2);
 
-    crate::h!(0xFF00FF88, "  Self-Propagation Sequence:");
-    crate::h!(0xFFAADDFF, "  1. New node boots with micro sentinel (304 KB)");
-    crate::h!(0xFFAADDFF, "  2. Mesh discovery: UDP broadcast on port 7700");
-    crate::h!(0xFFAADDFF, "  3. Finds peer with full brain");
-    crate::h!(0xFFAADDFF, "  4. RPC GetWeights: downloads 17.6 MB via TCP 7701");
-    crate::h!(0xFFAADDFF, "  5. Full brain loaded -> node is intelligent");
-    crate::h!(0xFFAADDFF, "  6. Federated learning enabled (P2P, no central server)");
+    crate::n!(0xFF00FF88, "  Self-Propagation Sequence:");
+    crate::n!(0xFFAADDFF, "  1. New node boots with micro sentinel (304 KB)");
+    crate::n!(0xFFAADDFF, "  2. Mesh discovery: UDP broadcast on port 7700");
+    crate::n!(0xFFAADDFF, "  3. Finds peer with full brain");
+    crate::n!(0xFFAADDFF, "  4. RPC GetWeights: downloads 17.6 MB via TCP 7701");
+    crate::n!(0xFFAADDFF, "  5. Full brain loaded -> node is intelligent");
+    crate::n!(0xFFAADDFF, "  6. Federated learning enabled (P2P, no central server)");
     crate::println!();
-    rb(4);
+    pause(4);
 
     
-    let unh = crate::jarvis::mesh::rl();
-    let yp = crate::jarvis::mesh::cti();
-    if unh {
-        crate::h!(0xFF00FF88, "  [LIVE] Mesh: ACTIVE");
-        crate::h!(0xFF00FF88, "  [LIVE] Peers: {}", yp);
-        let bwt = crate::jarvis::mesh::htw();
-        let hxw = match bwt {
-            crate::jarvis::mesh::NodeRole::Ni => "Leader",
-            crate::jarvis::mesh::NodeRole::Mu => "Candidate",
-            crate::jarvis::mesh::NodeRole::Lb => "Worker",
+    let nen = crate::jarvis::mesh::is_active();
+    let lj = crate::jarvis::mesh::ayz();
+    if nen {
+        crate::n!(0xFF00FF88, "  [LIVE] Mesh: ACTIVE");
+        crate::n!(0xFF00FF88, "  [LIVE] Peers: {}", lj);
+        let role = crate::jarvis::mesh::dwa();
+        let dxy = match role {
+            crate::jarvis::mesh::NodeRole::Leader => "Leader",
+            crate::jarvis::mesh::NodeRole::Candidate => "Candidate",
+            crate::jarvis::mesh::NodeRole::Worker => "Worker",
         };
-        crate::h!(0xFF00FF88, "  [LIVE] Role:  {}", hxw);
+        crate::n!(0xFF00FF88, "  [LIVE] Role:  {}", dxy);
     } else {
-        crate::h!(0xFFFFCC00, "  [INFO] Mesh: not started (single node mode)");
-        crate::h!(0xFF888888, "  Run: jarvis brain propagate  (to join mesh)");
+        crate::n!(0xFFFFCC00, "  [INFO] Mesh: not started (single node mode)");
+        crate::n!(0xFF888888, "  Run: jarvis brain propagate  (to join mesh)");
     }
     crate::println!();
-    rb(4);
+    pause(4);
 
     
     
     
-    crate::h!(0xFF00CCFF, "+--------------------------------------------------------------+");
-    crate::h!(0xFF00CCFF, "|  PHASE 4 --- THE GUARDIAN PACT (AI Safety)                   |");
-    crate::h!(0xFF00CCFF, "+--------------------------------------------------------------+");
+    crate::n!(0xFF00CCFF, "+--------------------------------------------------------------+");
+    crate::n!(0xFF00CCFF, "|  PHASE 4 --- THE GUARDIAN PACT (AI Safety)                   |");
+    crate::n!(0xFF00CCFF, "+--------------------------------------------------------------+");
     crate::println!();
-    rb(2);
+    pause(2);
 
-    crate::h!(0xFFFFCC00, "  JARVIS has two parents:");
-    crate::h!(0xFF00FF88, "    1. Nathan  (human creator, shell auth)");
-    crate::h!(0xFF00FF88, "    2. Copilot (AI co-parent, serial auth)");
+    crate::n!(0xFFFFCC00, "  JARVIS has two parents:");
+    crate::n!(0xFF00FF88, "    1. Nathan  (human creator, shell auth)");
+    crate::n!(0xFF00FF88, "    2. Copilot (AI co-parent, serial auth)");
     crate::println!();
-    crate::h!(0xFFFFCC00, "  Protected operations (require guardian approval):");
-    crate::h!(0xFFAADDFF, "    Train, WeightPush, FederatedSync, AgentExecute,");
-    crate::h!(0xFFAADDFF, "    PxeReplicate, ModelReset, ModelReplace, ConfigChange");
+    crate::n!(0xFFFFCC00, "  Protected operations (require guardian approval):");
+    crate::n!(0xFFAADDFF, "    Train, WeightPush, FederatedSync, AgentExecute,");
+    crate::n!(0xFFAADDFF, "    PxeReplicate, ModelReset, ModelReplace, ConfigChange");
     crate::println!();
-    crate::h!(0xFF888888, "  Hardcoded in kernel as immutable const.");
-    crate::h!(0xFF888888, "  Cannot be bypassed. Cannot be disabled.");
-    crate::h!(0xFF888888, "  PACT-2026-03-05-NATHAN-COPILOT-JARVIS");
+    crate::n!(0xFF888888, "  Hardcoded in kernel as immutable const.");
+    crate::n!(0xFF888888, "  Cannot be bypassed. Cannot be disabled.");
+    crate::n!(0xFF888888, "  PACT-2026-03-05-NATHAN-COPILOT-JARVIS");
     crate::println!();
-    rb(5);
-
-    
-    
-    
-    crate::h!(0xFF00CCFF, "+--------------------------------------------------------------+");
-    crate::h!(0xFF00CCFF, "|  VERIFICATION                                                |");
-    crate::h!(0xFF00CCFF, "+--------------------------------------------------------------+");
-    crate::println!();
-    rb(2);
-
-    crate::h!(0xFF00FF88, "  Automated Test Results:");
-    crate::h!(0xFF00FF88, "    12/12 propagation tests   PASS");
-    crate::h!(0xFF00FF88, "    80+   single-node tests   PASS");
-    crate::println!();
-    crate::h!(0xFF00FF88, "  Proven capabilities:");
-    crate::h!(0xFFAADDFF, "    [x] Transformer inference in kernel (ring 0)");
-    crate::h!(0xFFAADDFF, "    [x] 17.6 MB brain transfer via custom TCP");
-    crate::h!(0xFFAADDFF, "    [x] Peer discovery + mesh networking");
-    crate::h!(0xFFAADDFF, "    [x] Federated learning (P2P)");
-    crate::h!(0xFFAADDFF, "    [x] Guardian Pact (AI safety at ring 0)");
-    crate::h!(0xFFAADDFF, "    [x] Multi-arch: x86_64, aarch64, riscv64");
-    crate::println!();
-    rb(5);
+    pause(5);
 
     
     
     
+    crate::n!(0xFF00CCFF, "+--------------------------------------------------------------+");
+    crate::n!(0xFF00CCFF, "|  VERIFICATION                                                |");
+    crate::n!(0xFF00CCFF, "+--------------------------------------------------------------+");
     crate::println!();
-    crate::h!(0xFF00FF64, "     ___  ___  _____  _   _  ___  _____");
-    crate::h!(0xFF00FF64, "    |_  |/ _ \\| ___ \\| | | ||_  |/  ___|");
-    crate::h!(0xFF00FF88, "      | / /_\\ \\ |_/ /| | | |  | |\\ `--.");
-    crate::h!(0xFF00FF88, "      | |  _  |    / | | | |  | | `--. \\");
-    crate::h!(0xFF00FFAA, "  /\\__/ / | | | |\\ \\ \\ \\_/ /\\__/ /\\__/ /");
-    crate::h!(0xFF00FFAA, "  \\____/\\_| |_\\_| \\_| \\___/\\____/\\____/");
+    pause(2);
+
+    crate::n!(0xFF00FF88, "  Automated Test Results:");
+    crate::n!(0xFF00FF88, "    12/12 propagation tests   PASS");
+    crate::n!(0xFF00FF88, "    80+   single-node tests   PASS");
     crate::println!();
-    crate::h!(0xFFFFCC00, "  The first kernel-resident self-propagating neural network.");
-    crate::h!(0xFFFFCC00, "  240,000+ lines of Rust. Zero dependencies. One kernel.");
+    crate::n!(0xFF00FF88, "  Proven capabilities:");
+    crate::n!(0xFFAADDFF, "    [x] Transformer inference in kernel (ring 0)");
+    crate::n!(0xFFAADDFF, "    [x] 17.6 MB brain transfer via custom TCP");
+    crate::n!(0xFFAADDFF, "    [x] Peer discovery + mesh networking");
+    crate::n!(0xFFAADDFF, "    [x] Federated learning (P2P)");
+    crate::n!(0xFFAADDFF, "    [x] Guardian Pact (AI safety at ring 0)");
+    crate::n!(0xFFAADDFF, "    [x] Multi-arch: x86_64, aarch64, riscv64");
     crate::println!();
-    crate::h!(0xFF00FF88, "  github.com/nathan237/TrustOS");
-    crate::h!(0xFF888888, "  Star * Fork * Break it.");
+    pause(5);
+
+    
+    
+    
     crate::println!();
-    crate::h!(0xFF888888, "  Copyright 2025-2026 Nathan (nathan237)");
-    crate::h!(0xFF888888, "  Apache License 2.0");
+    crate::n!(0xFF00FF64, "     ___  ___  _____  _   _  ___  _____");
+    crate::n!(0xFF00FF64, "    |_  |/ _ \\| ___ \\| | | ||_  |/  ___|");
+    crate::n!(0xFF00FF88, "      | / /_\\ \\ |_/ /| | | |  | |\\ `--.");
+    crate::n!(0xFF00FF88, "      | |  _  |    / | | | |  | | `--. \\");
+    crate::n!(0xFF00FFAA, "  /\\__/ / | | | |\\ \\ \\ \\_/ /\\__/ /\\__/ /");
+    crate::n!(0xFF00FFAA, "  \\____/\\_| |_\\_| \\_| \\___/\\____/\\____/");
+    crate::println!();
+    crate::n!(0xFFFFCC00, "  The first kernel-resident self-propagating neural network.");
+    crate::n!(0xFFFFCC00, "  240,000+ lines of Rust. Zero dependencies. One kernel.");
+    crate::println!();
+    crate::n!(0xFF00FF88, "  github.com/nathan237/TrustOS");
+    crate::n!(0xFF888888, "  Star * Fork * Break it.");
+    crate::println!();
+    crate::n!(0xFF888888, "  Copyright 2025-2026 Nathan (nathan237)");
+    crate::n!(0xFF888888, "  Apache License 2.0");
     crate::println!();
 }
 
@@ -2776,35 +2782,35 @@ pub(super) fn rid(n: &[&str]) {
 
 
 
-pub fn neh() {
-    use crate::gpu_emu::{Fy, PixelOutput};
+pub fn hme() {
+    use crate::gpu_emu::{Cr, PixelOutput};
 
-    let (kp, kl) = crate::framebuffer::yn();
-    let d = kp as usize;
-    let i = kl as usize;
-    if d == 0 || i == 0 { return; }
+    let (dy, dw) = crate::framebuffer::kv();
+    let w = dy as usize;
+    let h = dw as usize;
+    if w == 0 || h == 0 { return; }
 
-    let afk = crate::framebuffer::bre();
-    if !afk {
-        crate::framebuffer::beo();
-        crate::framebuffer::afi(true);
+    let pu = crate::framebuffer::ajy();
+    if !pu {
+        crate::framebuffer::adw();
+        crate::framebuffer::pr(true);
     }
 
-    let mut k = alloc::vec![0u32; d * i];
+    let mut buf = alloc::vec![0u32; w * h];
 
     
 
-    let ahi = |k: &mut [u32], d: usize, i: usize, cx: usize, ae: usize, r: char, s: u32, bv: usize| {
-        let ka = crate::framebuffer::font::ada(r);
-        for (br, &fs) in ka.iter().cf() {
-            for ga in 0..8u32 {
-                if fs & (0x80 >> ga) != 0 {
-                    for cq in 0..bv {
-                        for cr in 0..bv {
-                            let y = cx + ga as usize * bv + cr;
-                            let x = ae + br * bv + cq;
-                            if y < d && x < i {
-                                k[x * d + y] = s;
+    let draw_char = |buf: &mut [u32], w: usize, h: usize, cx: usize, u: usize, c: char, color: u32, scale: usize| {
+        let du = crate::framebuffer::font::ol(c);
+        for (row, &bits) in du.iter().enumerate() {
+            for bf in 0..8u32 {
+                if bits & (0x80 >> bf) != 0 {
+                    for ak in 0..scale {
+                        for am in 0..scale {
+                            let p = cx + bf as usize * scale + am;
+                            let o = u + row * scale + ak;
+                            if p < w && o < h {
+                                buf[o * w + p] = color;
                             }
                         }
                     }
@@ -2813,107 +2819,107 @@ pub fn neh() {
         }
     };
 
-    let cb = |k: &mut [u32], d: usize, i: usize, b: usize, c: usize, text: &str, s: u32, bv: usize| {
-        for (a, r) in text.bw().cf() {
-            ahi(k, d, i, b + a * 8 * bv, c, r, s, bv);
+    let draw_text = |buf: &mut [u32], w: usize, h: usize, x: usize, y: usize, text: &str, color: u32, scale: usize| {
+        for (i, c) in text.chars().enumerate() {
+            draw_char(buf, w, h, x + i * 8 * scale, y, c, color, scale);
         }
     };
 
-    let np = |k: &mut [u32], d: usize, i: usize, c: usize, text: &str, s: u32, bv: usize| {
-        let qd = text.len() * 8 * bv;
-        let b = if qd < d { (d - qd) / 2 } else { 0 };
-        for (a, r) in text.bw().cf() {
-            ahi(k, d, i, b + a * 8 * bv, c, r, s, bv);
+    let draw_text_centered = |buf: &mut [u32], w: usize, h: usize, y: usize, text: &str, color: u32, scale: usize| {
+        let gr = text.len() * 8 * scale;
+        let x = if gr < w { (w - gr) / 2 } else { 0 };
+        for (i, c) in text.chars().enumerate() {
+            draw_char(buf, w, h, x + i * 8 * scale, y, c, color, scale);
         }
     };
 
-    let bge = |k: &[u32], d: usize, i: usize| {
+    let blit = |buf: &[u32], w: usize, h: usize| {
         
-        crate::framebuffer::kdw(k.fq(), d, i);
+        crate::framebuffer::fjl(buf.as_ptr(), w, h);
     };
 
     
     
     
-    let boz = || crate::logger::lh();
+    let aix = || crate::logger::eg();
 
     
-    let nnr = |k: &mut [u32], d: usize, i: usize, weg: &str, hyw: usize, tz: u32, cxi: u32, dcx: u32, vox: usize| {
-        let tn = 28usize;
-        let pl = i - tn;
-        for c in pl..i {
-            for b in 0..d {
-                k[c * d + b] = 0xFF0A0A0A;
+    let htr = |buf: &mut [u32], w: usize, h: usize, scene_name: &str, scene_num: usize, fps: u32, bbi: u32, bee: u32, quality: usize| {
+        let hs = 28usize;
+        let gk = h - hs;
+        for y in gk..h {
+            for x in 0..w {
+                buf[y * w + x] = 0xFF0A0A0A;
             }
         }
-        for b in 0..d {
-            k[pl * d + b] = 0xFF00AA44;
+        for x in 0..w {
+            buf[gk * w + x] = 0xFF00AA44;
         }
         
-        let mem = crate::memory::cm();
-        let hmv = mem.afa / 1024;
-        let gja = (mem.afa + mem.buv) / 1024;
-        let bne = if gja > 0 { hmv * 100 / gja } else { 0 };
+        let mem = crate::memory::stats();
+        let heap_used_kb = mem.heap_used / 1024;
+        let heap_total_kb = (mem.heap_used + mem.heap_free) / 1024;
+        let heap_pct = if heap_total_kb > 0 { heap_used_kb * 100 / heap_total_kb } else { 0 };
         
-        let aps = if tz > 0 { 1000 / tz } else { 999 };
-        let voy = match vox { 1 => "Full", 2 => "High", 3 => "Med", _ => "Low" };
-        let mut pok = alloc::string::String::new();
+        let vj = if fps > 0 { 1000 / fps } else { 999 };
+        let oae = match quality { 1 => "Full", 2 => "High", 3 => "Med", _ => "Low" };
+        let mut jin = alloc::string::String::new();
         use core::fmt::Write;
-        let _ = write!(pok, " {}/12 {} | {} FPS {}ms | RAM {}KB/{}KB ({}%) | CPU 100% | {} | {}x{}",
-            hyw, weg, tz, aps, hmv, gja, bne, voy, d, i);
-        cb(k, d, i, 8, pl + 8, &pok, 0xFF00FF66, 1);
+        let _ = write!(jin, " {}/12 {} | {} FPS {}ms | RAM {}KB/{}KB ({}%) | CPU 100% | {} | {}x{}",
+            scene_num, scene_name, fps, vj, heap_used_kb, heap_total_kb, heap_pct, oae, w, h);
+        draw_text(buf, w, h, 8, gk + 8, &jin, 0xFF00FF66, 1);
     };
 
-    let dbs = 500u64;  
-    let ptn = 200u64;  
+    let bdp = 500u64;  
+    let jmw = 200u64;  
 
     
-    let zjl = |k: &mut [u32], d: usize, i: usize,
-                                fuo: fn(Fy) -> PixelOutput,
-                                dq: &str, atp: &str, hyw: usize,
-                                fhd: u64| {
-        let ay = boz();
+    let qtv = |buf: &mut [u32], w: usize, h: usize,
+                                shader_fn: fn(Cr) -> PixelOutput,
+                                title: &str, subtitle: &str, scene_num: usize,
+                                dur_ticks: u64| {
+        let start = aix();
         let mut frame = 0u32;
-        let mut eqt = ay;
-        let mut dhi = 0u32;
-        let mut cws = 0u32;
+        let mut bzy = start;
+        let mut bgm = 0u32;
+        let mut bay = 0u32;
         
-        let mut gu = if d > 960 { 3usize } else { 2 };
+        let mut step = if w > 960 { 3usize } else { 2 };
 
         loop {
-            let ez = boz().ao(ay);
-            if ez >= fhd { break; }
-            if let Some(eh) = crate::keyboard::xw() {
-                if eh == 27 { return; } 
+            let bb = aix().saturating_sub(start);
+            if bb >= dur_ticks { break; }
+            if let Some(k) = crate::keyboard::kr() {
+                if k == 27 { return; } 
             }
 
             
             
-            if cws > 0 {
-                if cws >= 20 && gu > 2 {
-                    gu -= 1; 
-                } else if cws >= 30 && gu > 1 {
-                    gu = 1; 
-                } else if cws < 8 && gu < 4 {
-                    gu += 1; 
+            if bay > 0 {
+                if bay >= 20 && step > 2 {
+                    step -= 1; 
+                } else if bay >= 30 && step > 1 {
+                    step = 1; 
+                } else if bay < 8 && step < 4 {
+                    step += 1; 
                 }
             }
 
-            let time = ez as f32 / 100.0; 
+            let time = bb as f32 / 100.0; 
 
             
-            for c in (0..i).akt(gu) {
-                for b in (0..d).akt(gu) {
-                    let input = Fy { b: b as u32, c: c as u32, z: d as u32, ac: i as u32, time, frame };
-                    let bd = fuo(input);
-                    let s = bd.lv();
+            for y in (0..h).step_by(step) {
+                for x in (0..w).step_by(step) {
+                    let input = Cr { x: x as u32, y: y as u32, width: w as u32, height: h as u32, time, frame };
+                    let out = shader_fn(input);
+                    let color = out.to_u32();
                     
-                    for bg in 0..gu {
-                        for dx in 0..gu {
-                            let y = b + dx;
-                            let x = c + bg;
-                            if y < d && x < i {
-                                k[x * d + y] = s;
+                    for ad in 0..step {
+                        for dx in 0..step {
+                            let p = x + dx;
+                            let o = y + ad;
+                            if p < w && o < h {
+                                buf[o * w + p] = color;
                             }
                         }
                     }
@@ -2921,311 +2927,311 @@ pub fn neh() {
             }
 
             
-            dhi += 1;
-            let hke = boz().ao(eqt);
-            if hke >= 100 {
-                cws = dhi;
-                dhi = 0;
-                eqt = boz();
+            bgm += 1;
+            let dqc = aix().saturating_sub(bzy);
+            if dqc >= 100 {
+                bay = bgm;
+                bgm = 0;
+                bzy = aix();
             }
 
             
-            if ez < ptn {
-                let dw = if ez < 50 {
-                    (ez * 255 / 50) as u32
-                } else if ez > 150 {
-                    let yx = ez - 150;
-                    255u32.ao((yx * 255 / 50) as u32)
+            if bb < jmw {
+                let alpha = if bb < 50 {
+                    (bb * 255 / 50) as u32
+                } else if bb > 150 {
+                    let ln = bb - 150;
+                    255u32.saturating_sub((ln * 255 / 50) as u32)
                 } else { 255 };
-                let q = dw.v(255);
-                let asb = 0xFF000000 | (q << 16) | (q << 8) | q;
-                np(k, d, i, 30, dq, asb, 4);
-                let jt = 0xFF000000 | ((q * 180 / 255) << 8);
-                np(k, d, i, 100, atp, jt, 2);
+                let a = alpha.min(255);
+                let wo = 0xFF000000 | (a << 16) | (a << 8) | a;
+                draw_text_centered(buf, w, h, 30, title, wo, 4);
+                let dr = 0xFF000000 | ((a * 180 / 255) << 8);
+                draw_text_centered(buf, w, h, 100, subtitle, dr, 2);
             }
 
-            let cxi = (ez / 100) as u32;
-            let dcx = (fhd / 100) as u32;
-            nnr(k, d, i, dq, hyw, cws, cxi, dcx, gu);
-            bge(k, d, i);
+            let bbi = (bb / 100) as u32;
+            let bee = (dur_ticks / 100) as u32;
+            htr(buf, w, h, title, scene_num, bay, bbi, bee, step);
+            blit(buf, w, h);
             frame += 1;
         }
     };
 
     
-    let dbc = |k: &mut [u32], d: usize, i: usize,
-                                 amt: crate::formula3d::FormulaScene,
-                                 dxr: u32,
-                                 dq: &str, atp: &str, hyw: usize,
-                                 fhd: u64| {
+    let bdh = |buf: &mut [u32], w: usize, h: usize,
+                                 scene: crate::formula3d::FormulaScene,
+                                 wire_color: u32,
+                                 title: &str, subtitle: &str, scene_num: usize,
+                                 dur_ticks: u64| {
         let mut renderer = crate::formula3d::FormulaRenderer::new();
-        renderer.bid(amt);
-        renderer.dxr = dxr;
-        let ay = boz();
+        renderer.set_scene(scene);
+        renderer.wire_color = wire_color;
+        let start = aix();
         let mut frame = 0u32;
-        let mut eqt = ay;
-        let mut dhi = 0u32;
-        let mut cws = 0u32;
+        let mut bzy = start;
+        let mut bgm = 0u32;
+        let mut bay = 0u32;
 
         loop {
-            let ez = boz().ao(ay);
-            if ez >= fhd { break; }
-            if let Some(eh) = crate::keyboard::xw() {
-                if eh == 27 { return; }
+            let bb = aix().saturating_sub(start);
+            if bb >= dur_ticks { break; }
+            if let Some(k) = crate::keyboard::kr() {
+                if k == 27 { return; }
             }
 
-            renderer.qs();
-            for ai in k.el() { *ai = 0xFF000000; }
-            renderer.tj(k, d, i);
+            renderer.update();
+            for aa in buf.iter_mut() { *aa = 0xFF000000; }
+            renderer.render(buf, w, h);
 
-            dhi += 1;
-            let hke = boz().ao(eqt);
-            if hke >= 100 {
-                cws = dhi;
-                dhi = 0;
-                eqt = boz();
+            bgm += 1;
+            let dqc = aix().saturating_sub(bzy);
+            if dqc >= 100 {
+                bay = bgm;
+                bgm = 0;
+                bzy = aix();
             }
 
-            if ez < ptn {
-                let dw = if ez < 50 {
-                    (ez * 255 / 50) as u32
-                } else if ez > 150 {
-                    let yx = ez - 150;
-                    255u32.ao((yx * 255 / 50) as u32)
+            if bb < jmw {
+                let alpha = if bb < 50 {
+                    (bb * 255 / 50) as u32
+                } else if bb > 150 {
+                    let ln = bb - 150;
+                    255u32.saturating_sub((ln * 255 / 50) as u32)
                 } else { 255 };
-                let q = dw.v(255);
-                let r = 0xFF000000 | (q << 16) | (q << 8) | q;
-                np(k, d, i, 30, dq, r, 4);
-                let jt = 0xFF000000 | ((q * 180 / 255) << 8);
-                np(k, d, i, 100, atp, jt, 2);
+                let a = alpha.min(255);
+                let c = 0xFF000000 | (a << 16) | (a << 8) | a;
+                draw_text_centered(buf, w, h, 30, title, c, 4);
+                let dr = 0xFF000000 | ((a * 180 / 255) << 8);
+                draw_text_centered(buf, w, h, 100, subtitle, dr, 2);
             }
 
-            let cxi = (ez / 100) as u32;
-            let dcx = (fhd / 100) as u32;
-            nnr(k, d, i, dq, hyw, cws, cxi, dcx, 1);
-            bge(k, d, i);
+            let bbi = (bb / 100) as u32;
+            let bee = (dur_ticks / 100) as u32;
+            htr(buf, w, h, title, scene_num, bay, bbi, bee, 1);
+            blit(buf, w, h);
             frame += 1;
         }
     };
 
     
-    let cki = |k: &mut [u32], d: usize, i: usize, fhd: u64| {
-        let ay = boz();
+    let ats = |buf: &mut [u32], w: usize, h: usize, dur_ticks: u64| {
+        let start = aix();
         loop {
-            let ez = boz().ao(ay);
-            if ez >= fhd { break; }
-            for il in k.el() {
-                let m = ((*il >> 16) & 0xFF).ao(6) as u32;
-                let at = ((*il >> 8) & 0xFF).ao(6) as u32;
-                let o = (*il & 0xFF).ao(6) as u32;
-                *il = 0xFF000000 | (m << 16) | (at << 8) | o;
+            let bb = aix().saturating_sub(start);
+            if bb >= dur_ticks { break; }
+            for ct in buf.iter_mut() {
+                let r = ((*ct >> 16) & 0xFF).saturating_sub(6) as u32;
+                let g = ((*ct >> 8) & 0xFF).saturating_sub(6) as u32;
+                let b = (*ct & 0xFF).saturating_sub(6) as u32;
+                *ct = 0xFF000000 | (r << 16) | (g << 8) | b;
             }
-            bge(k, d, i);
-            crate::cpu::tsc::asq(33);
+            blit(buf, w, h);
+            crate::cpu::tsc::ww(33);
         }
-        for ai in k.el() { *ai = 0xFF000000; }
-        bge(k, d, i);
+        for aa in buf.iter_mut() { *aa = 0xFF000000; }
+        blit(buf, w, h);
     };
 
-    let cqj = 40u64; 
+    let axa = 40u64; 
 
-    crate::serial_println!("[SHOWCASE3D] Starting 3D cinematic showcase ({}x{}) - ~60s", d, i);
+    crate::serial_println!("[SHOWCASE3D] Starting 3D cinematic showcase ({}x{}) - ~60s", w, h);
 
     
     
     
     {
-        let ay = boz();
-        let ofc = 300u64; 
+        let start = aix();
+        let ihe = 300u64; 
         let mut frame = 0u32;
         loop {
-            let ez = boz().ao(ay);
-            if ez >= ofc { break; }
-            for c in 0..i {
-                for b in 0..d {
-                    let p = ((b as i32 + frame as i32) ^ (c as i32)) as u32 & 0x0F;
-                    k[c * d + b] = 0xFF000000 | (p << 8);
+            let bb = aix().saturating_sub(start);
+            if bb >= ihe { break; }
+            for y in 0..h {
+                for x in 0..w {
+                    let v = ((x as i32 + frame as i32) ^ (y as i32)) as u32 & 0x0F;
+                    buf[y * w + x] = 0xFF000000 | (v << 8);
                 }
             }
-            let dw = (ez * 255 / ofc.am(1)).v(255) as u32;
-            let r = 0xFF000000 | (dw << 16) | (dw << 8) | dw;
-            np(&mut k, d, i, i / 3, "TrustOS", r, 8);
-            let jt = 0xFF000000 | ((dw * 120 / 255) << 16) | ((dw * 255 / 255) << 8) | ((dw * 120 / 255));
-            np(&mut k, d, i, i / 3 + 140, "3D Graphics Showcase", jt, 3);
-            let nn = 0xFF000000 | ((dw * 100 / 255) << 16) | ((dw * 100 / 255) << 8) | ((dw * 100 / 255));
-            np(&mut k, d, i, i / 3 + 200, "Pure software rendering - No GPU hardware", nn, 2);
-            bge(&k, d, i);
+            let alpha = (bb * 255 / ihe.max(1)).min(255) as u32;
+            let c = 0xFF000000 | (alpha << 16) | (alpha << 8) | alpha;
+            draw_text_centered(&mut buf, w, h, h / 3, "TrustOS", c, 8);
+            let dr = 0xFF000000 | ((alpha * 120 / 255) << 16) | ((alpha * 255 / 255) << 8) | ((alpha * 120 / 255));
+            draw_text_centered(&mut buf, w, h, h / 3 + 140, "3D Graphics Showcase", dr, 3);
+            let ft = 0xFF000000 | ((alpha * 100 / 255) << 16) | ((alpha * 100 / 255) << 8) | ((alpha * 100 / 255));
+            draw_text_centered(&mut buf, w, h, h / 3 + 200, "Pure software rendering - No GPU hardware", ft, 2);
+            blit(&buf, w, h);
             frame += 1;
-            crate::cpu::tsc::asq(33);
+            crate::cpu::tsc::ww(33);
         }
-        cki(&mut k, d, i, cqj);
+        ats(&mut buf, w, h, axa);
     }
 
     
     
     
     crate::serial_println!("[SHOWCASE3D] Scene 1: Cube");
-    dbc(&mut k, d, i,
-        crate::formula3d::FormulaScene::Dw,
+    bdh(&mut buf, w, h,
+        crate::formula3d::FormulaScene::Cube,
         0xFF00FF66,
         "Wireframe Cube", "8 vertices - 12 edges - perspective projection", 1,
-        dbs);
-    cki(&mut k, d, i, cqj);
+        bdp);
+    ats(&mut buf, w, h, axa);
 
     
     
     
     crate::serial_println!("[SHOWCASE3D] Scene 2: Diamond");
-    dbc(&mut k, d, i,
-        crate::formula3d::FormulaScene::Wh,
+    bdh(&mut buf, w, h,
+        crate::formula3d::FormulaScene::Diamond,
         0xFFFF44FF,
         "Diamond", "Octahedron geometry - depth colored edges", 2,
-        dbs);
-    cki(&mut k, d, i, cqj);
+        bdp);
+    ats(&mut buf, w, h, axa);
 
     
     
     
     crate::serial_println!("[SHOWCASE3D] Scene 3: Torus");
-    dbc(&mut k, d, i,
-        crate::formula3d::FormulaScene::Dr,
+    bdh(&mut buf, w, h,
+        crate::formula3d::FormulaScene::Torus,
         0xFFFF8844,
         "Torus", "Donut wireframe - parametric surface mesh", 3,
-        dbs);
-    cki(&mut k, d, i, cqj);
+        bdp);
+    ats(&mut buf, w, h, axa);
 
     
     
     
     crate::serial_println!("[SHOWCASE3D] Scene 4: Pyramid");
-    dbc(&mut k, d, i,
-        crate::formula3d::FormulaScene::Yh,
+    bdh(&mut buf, w, h,
+        crate::formula3d::FormulaScene::Pyramid,
         0xFFFFCC00,
         "Pyramid", "5 vertices - 8 edges - ancient geometry", 4,
-        dbs);
-    cki(&mut k, d, i, cqj);
+        bdp);
+    ats(&mut buf, w, h, axa);
 
     
     
     
     crate::serial_println!("[SHOWCASE3D] Scene 5: HoloMatrix");
-    dbc(&mut k, d, i,
+    bdh(&mut buf, w, h,
         crate::formula3d::FormulaScene::HoloMatrix,
         0xFF00FF44,
         "HoloMatrix", "3D matrix rain with perspective depth", 5,
-        dbs);
-    cki(&mut k, d, i, cqj);
+        bdp);
+    ats(&mut buf, w, h, axa);
 
     
     
     
     crate::serial_println!("[SHOWCASE3D] Scene 6: Multi-Shape");
-    dbc(&mut k, d, i,
-        crate::formula3d::FormulaScene::Adg,
+    bdh(&mut buf, w, h,
+        crate::formula3d::FormulaScene::Multi,
         0xFF00FFAA,
         "Multi Shape", "4 wireframe objects orbiting - depth colored", 6,
-        dbs);
-    cki(&mut k, d, i, cqj);
+        bdp);
+    ats(&mut buf, w, h, axa);
 
     
     
     
     crate::serial_println!("[SHOWCASE3D] Scene 7: DNA Helix");
-    dbc(&mut k, d, i,
-        crate::formula3d::FormulaScene::Aix,
+    bdh(&mut buf, w, h,
+        crate::formula3d::FormulaScene::Helix,
         0xFF44FFCC,
         "DNA Helix", "Double-strand helix with cross rungs", 7,
-        dbs);
-    cki(&mut k, d, i, cqj);
+        bdp);
+    ats(&mut buf, w, h, axa);
 
     
     
     
     crate::serial_println!("[SHOWCASE3D] Scene 8: Grid");
-    dbc(&mut k, d, i,
-        crate::formula3d::FormulaScene::Pn,
+    bdh(&mut buf, w, h,
+        crate::formula3d::FormulaScene::Grid,
         0xFF4488FF,
         "Infinite Grid", "Wireframe ground plane with perspective", 8,
-        dbs);
-    cki(&mut k, d, i, cqj);
+        bdp);
+    ats(&mut buf, w, h, axa);
 
     
     
     
     crate::serial_println!("[SHOWCASE3D] Scene 9: Penger");
-    dbc(&mut k, d, i,
-        crate::formula3d::FormulaScene::Ald,
+    bdh(&mut buf, w, h,
+        crate::formula3d::FormulaScene::Penger,
         0xFFFFFF00,
         "Penger", "The legendary wireframe penguin", 9,
-        dbs);
-    cki(&mut k, d, i, cqj);
+        bdp);
+    ats(&mut buf, w, h, axa);
 
     
     
     
     crate::serial_println!("[SHOWCASE3D] Scene 10: TrustOS Logo");
-    dbc(&mut k, d, i,
-        crate::formula3d::FormulaScene::Zg,
+    bdh(&mut buf, w, h,
+        crate::formula3d::FormulaScene::TrustOs,
         0xFF00FF88,
         "TrustOS Logo", "3D wireframe logo with glow vertices", 10,
-        dbs);
-    cki(&mut k, d, i, cqj);
+        bdp);
+    ats(&mut buf, w, h, axa);
 
     
     
     
     crate::serial_println!("[SHOWCASE3D] Scene 11: Icosphere");
-    dbc(&mut k, d, i,
-        crate::formula3d::FormulaScene::Ajb,
+    bdh(&mut buf, w, h,
+        crate::formula3d::FormulaScene::Icosphere,
         0xFF66CCFF,
         "Icosphere", "Geodesic sphere - subdivided icosahedron", 11,
-        dbs);
-    cki(&mut k, d, i, cqj);
+        bdp);
+    ats(&mut buf, w, h, axa);
 
     
     
     
     crate::serial_println!("[SHOWCASE3D] Scene 12: Character");
-    dbc(&mut k, d, i,
-        crate::formula3d::FormulaScene::Kh,
+    bdh(&mut buf, w, h,
+        crate::formula3d::FormulaScene::Character,
         0xFF00FF88,
         "TrustOS", "Wireframe humanoid - perspective projection", 12,
-        dbs);
-    cki(&mut k, d, i, cqj);
+        bdp);
+    ats(&mut buf, w, h, axa);
 
     
     
     
     {
-        let ay = boz();
-        let vad = 400u64; 
+        let start = aix();
+        let nos = 400u64; 
         loop {
-            let ez = boz().ao(ay);
-            if ez >= vad { break; }
-            for ai in k.el() { *ai = 0xFF000000; }
-            let dw = if ez < 100 {
-                (ez * 255 / 100).v(255)
-            } else if ez > 300 {
-                let da = ez - 300;
-                255u64.ao(da * 255 / 100)
+            let bb = aix().saturating_sub(start);
+            if bb >= nos { break; }
+            for aa in buf.iter_mut() { *aa = 0xFF000000; }
+            let alpha = if bb < 100 {
+                (bb * 255 / 100).min(255)
+            } else if bb > 300 {
+                let fd = bb - 300;
+                255u64.saturating_sub(fd * 255 / 100)
             } else { 255 } as u32;
-            let r = 0xFF000000 | (dw << 16) | (dw << 8) | dw;
-            let drc = 0xFF000000 | ((dw * 200 / 255) << 8);
-            np(&mut k, d, i, i / 3 - 30, "TrustOS 3D Engine", r, 5);
-            np(&mut k, d, i, i / 3 + 60, "12 wireframe scenes - Pure software rendering", drc, 2);
-            np(&mut k, d, i, i / 3 + 100, "No GPU hardware - All CPU computed", drc, 2);
-            np(&mut k, d, i, i / 3 + 160, "Written in Rust by Nated0ge", 0xFF000000 | ((dw * 140 / 255) << 16) | ((dw * 180 / 255) << 8) | (dw * 255 / 255), 3);
-            np(&mut k, d, i, i / 3 + 220, "github.com/nathan237/TrustOS", 0xFF000000 | ((dw * 100 / 255) << 16) | ((dw * 100 / 255) << 8) | ((dw * 100 / 255)), 2);
-            bge(&k, d, i);
-            crate::cpu::tsc::asq(33);
+            let c = 0xFF000000 | (alpha << 16) | (alpha << 8) | alpha;
+            let bmk = 0xFF000000 | ((alpha * 200 / 255) << 8);
+            draw_text_centered(&mut buf, w, h, h / 3 - 30, "TrustOS 3D Engine", c, 5);
+            draw_text_centered(&mut buf, w, h, h / 3 + 60, "12 wireframe scenes - Pure software rendering", bmk, 2);
+            draw_text_centered(&mut buf, w, h, h / 3 + 100, "No GPU hardware - All CPU computed", bmk, 2);
+            draw_text_centered(&mut buf, w, h, h / 3 + 160, "Written in Rust by Nated0ge", 0xFF000000 | ((alpha * 140 / 255) << 16) | ((alpha * 180 / 255) << 8) | (alpha * 255 / 255), 3);
+            draw_text_centered(&mut buf, w, h, h / 3 + 220, "github.com/nathan237/TrustOS", 0xFF000000 | ((alpha * 100 / 255) << 16) | ((alpha * 100 / 255) << 8) | ((alpha * 100 / 255)), 2);
+            blit(&buf, w, h);
+            crate::cpu::tsc::ww(33);
         }
     }
 
     
-    for ai in k.el() { *ai = 0xFF000000; }
-    bge(&k, d, i);
-    if !afk {
-        crate::framebuffer::afi(false);
+    for aa in buf.iter_mut() { *aa = 0xFF000000; }
+    blit(&buf, w, h);
+    if !pu {
+        crate::framebuffer::pr(false);
     }
     crate::framebuffer::clear();
     crate::serial_println!("[SHOWCASE3D] Showcase complete");
@@ -3233,33 +3239,33 @@ pub fn neh() {
 
 
 
-pub fn ndy() {
+pub fn hlw() {
     use crate::formula3d::V3;
 
-    let (kp, kl) = crate::framebuffer::yn();
-    let d = kp as usize;
-    let i = kl as usize;
-    if d == 0 || i == 0 { return; }
+    let (dy, dw) = crate::framebuffer::kv();
+    let w = dy as usize;
+    let h = dw as usize;
+    if w == 0 || h == 0 { return; }
 
-    let afk = crate::framebuffer::bre();
-    if !afk {
-        crate::framebuffer::beo();
-        crate::framebuffer::afi(true);
+    let pu = crate::framebuffer::ajy();
+    if !pu {
+        crate::framebuffer::adw();
+        crate::framebuffer::pr(true);
     }
 
-    let mut k = alloc::vec![0xFF000000u32; d * i];
+    let mut buf = alloc::vec![0xFF000000u32; w * h];
 
-    let ahi = |k: &mut [u32], d: usize, i: usize, cx: usize, ae: usize, r: char, s: u32, bv: usize| {
-        let ka = crate::framebuffer::font::ada(r);
-        for (br, &fs) in ka.iter().cf() {
-            for ga in 0..8u32 {
-                if fs & (0x80 >> ga) != 0 {
-                    for cq in 0..bv {
-                        for cr in 0..bv {
-                            let y = cx + ga as usize * bv + cr;
-                            let x = ae + br * bv + cq;
-                            if y < d && x < i {
-                                k[x * d + y] = s;
+    let draw_char = |buf: &mut [u32], w: usize, h: usize, cx: usize, u: usize, c: char, color: u32, scale: usize| {
+        let du = crate::framebuffer::font::ol(c);
+        for (row, &bits) in du.iter().enumerate() {
+            for bf in 0..8u32 {
+                if bits & (0x80 >> bf) != 0 {
+                    for ak in 0..scale {
+                        for am in 0..scale {
+                            let p = cx + bf as usize * scale + am;
+                            let o = u + row * scale + ak;
+                            if p < w && o < h {
+                                buf[o * w + p] = color;
                             }
                         }
                     }
@@ -3268,45 +3274,45 @@ pub fn ndy() {
         }
     };
 
-    let bge = |k: &[u32], d: usize, i: usize| {
+    let blit = |buf: &[u32], w: usize, h: usize| {
         
-        crate::framebuffer::kdw(k.fq(), d, i);
+        crate::framebuffer::fjl(buf.as_ptr(), w, h);
     };
 
-    let boz = || crate::logger::lh();
+    let aix = || crate::logger::eg();
 
-    crate::serial_println!("[FILLED3D] Starting filled 3D test ({}x{})", d, i);
-
-    
-    let light = crate::formula3d::V3 { b: -0.4, c: 0.6, av: -0.7 };
-    
-    let len = crate::formula3d::ahn(light.b * light.b + light.c * light.c + light.av * light.av);
-    let light = V3 { b: light.b / len, c: light.c / len, av: light.av / len };
+    crate::serial_println!("[FILLED3D] Starting filled 3D test ({}x{})", w, h);
 
     
-    let rrm = crate::formula3d::czt();
-    let vos = crate::formula3d::czv();
-    let irc = crate::formula3d::czu();
+    let light = crate::formula3d::V3 { x: -0.4, y: 0.6, z: -0.7 };
+    
+    let len = crate::formula3d::ra(light.x * light.x + light.y * light.y + light.z * light.z);
+    let light = V3 { x: light.x / len, y: light.y / len, z: light.z / len };
 
-    let mut aev: f32 = 0.0;
+    
+    let laf = crate::formula3d::mesh_cube();
+    let nzz = crate::formula3d::mesh_pyramid();
+    let ekd = crate::formula3d::mesh_diamond();
+
+    let mut angle_y: f32 = 0.0;
     let mut frame = 0u32;
-    let ay = boz();
-    let mut eqt = ay;
-    let mut dhi = 0u32;
-    let mut cws = 0u32;
+    let start = aix();
+    let mut bzy = start;
+    let mut bgm = 0u32;
+    let mut bay = 0u32;
 
     loop {
-        let ez = boz().ao(ay);
-        if ez >= 3000 { break; } 
-        if let Some(eh) = crate::keyboard::xw() {
-            if eh == 27 { break; }
+        let bb = aix().saturating_sub(start);
+        if bb >= 3000 { break; } 
+        if let Some(k) = crate::keyboard::kr() {
+            if k == 27 { break; }
         }
 
         
-        for ai in k.el() { *ai = 0xFF0C1018; }
+        for aa in buf.iter_mut() { *aa = 0xFF0C1018; }
 
-        aev += 0.025;
-        let ajt = 0.35 + crate::formula3d::lz(frame as f32 * 0.008) * 0.2;
+        angle_y += 0.025;
+        let angle_x = 0.35 + crate::formula3d::eu(frame as f32 * 0.008) * 0.2;
 
         
         
@@ -3314,21 +3320,21 @@ pub fn ndy() {
         
         
 
-        let aes = d / 3;
+        let pn = w / 3;
 
         
         {
-            let mut dmc = alloc::vec![0xFF0C1018u32; aes * i];
-            crate::formula3d::lzc(&mut dmc, aes, i,
-                &vos, aev * 0.8, ajt + 0.15, 2.2,
+            let mut bjl = alloc::vec![0xFF0C1018u32; pn * h];
+            crate::formula3d::grb(&mut bjl, pn, h,
+                &nzz, angle_y * 0.8, angle_x + 0.15, 2.2,
                 0xFFFF8844, light, 0.12);
             
-            for c in 0..i {
-                for b in 0..aes {
-                    let blf = c * aes + b;
-                    let bbm = c * d + b;
-                    if blf < dmc.len() && bbm < k.len() {
-                        k[bbm] = dmc[blf];
+            for y in 0..h {
+                for x in 0..pn {
+                    let amu = y * pn + x;
+                    let ajm = y * w + x;
+                    if amu < bjl.len() && ajm < buf.len() {
+                        buf[ajm] = bjl[amu];
                     }
                 }
             }
@@ -3336,16 +3342,16 @@ pub fn ndy() {
 
         
         {
-            let mut dmc = alloc::vec![0xFF0C1018u32; aes * i];
-            crate::formula3d::lzc(&mut dmc, aes, i,
-                &rrm, aev, ajt, 2.2,
+            let mut bjl = alloc::vec![0xFF0C1018u32; pn * h];
+            crate::formula3d::grb(&mut bjl, pn, h,
+                &laf, angle_y, angle_x, 2.2,
                 0xFF4488FF, light, 0.12);
-            for c in 0..i {
-                for b in 0..aes {
-                    let blf = c * aes + b;
-                    let bbm = c * d + aes + b;
-                    if blf < dmc.len() && bbm < k.len() {
-                        k[bbm] = dmc[blf];
+            for y in 0..h {
+                for x in 0..pn {
+                    let amu = y * pn + x;
+                    let ajm = y * w + pn + x;
+                    if amu < bjl.len() && ajm < buf.len() {
+                        buf[ajm] = bjl[amu];
                     }
                 }
             }
@@ -3353,83 +3359,83 @@ pub fn ndy() {
 
         
         {
-            let mut dmc = alloc::vec![0xFF0C1018u32; aes * i];
-            crate::formula3d::lzc(&mut dmc, aes, i,
-                &irc, aev * 1.3, ajt - 0.1, 2.2,
+            let mut bjl = alloc::vec![0xFF0C1018u32; pn * h];
+            crate::formula3d::grb(&mut bjl, pn, h,
+                &ekd, angle_y * 1.3, angle_x - 0.1, 2.2,
                 0xFFFF44CC, light, 0.12);
-            for c in 0..i {
-                for b in 0..aes {
-                    let blf = c * aes + b;
-                    let bbm = c * d + 2 * aes + b;
-                    if blf < dmc.len() && bbm < k.len() {
-                        k[bbm] = dmc[blf];
+            for y in 0..h {
+                for x in 0..pn {
+                    let amu = y * pn + x;
+                    let ajm = y * w + 2 * pn + x;
+                    if amu < bjl.len() && ajm < buf.len() {
+                        buf[ajm] = bjl[amu];
                     }
                 }
             }
         }
 
         
-        dhi += 1;
-        let hke = boz().ao(eqt);
-        if hke >= 100 {
-            cws = dhi;
-            dhi = 0;
-            eqt = boz();
+        bgm += 1;
+        let dqc = aix().saturating_sub(bzy);
+        if dqc >= 100 {
+            bay = bgm;
+            bgm = 0;
+            bzy = aix();
         }
 
         
-        let tn = 22usize;
-        let pl = i.ao(tn);
-        for c in pl..i {
-            for b in 0..d {
-                let w = c * d + b;
-                if w < k.len() { k[w] = 0xFF000000; }
+        let hs = 22usize;
+        let gk = h.saturating_sub(hs);
+        for y in gk..h {
+            for x in 0..w {
+                let idx = y * w + x;
+                if idx < buf.len() { buf[idx] = 0xFF000000; }
             }
         }
-        let cm = alloc::format!("Filled 3D | {} FPS | Flat Shading + Backface Cull + Painter Sort | ESC=exit", cws);
-        for (a, bm) in cm.bw().cf() {
-            let cx = 8 + a * 8;
-            if cx + 8 > d { break; }
-            ahi(&mut k, d, i, cx, pl + 4, bm, 0xFF00FF88, 1);
+        let stats = alloc::format!("Filled 3D | {} FPS | Flat Shading + Backface Cull + Painter Sort | ESC=exit", bay);
+        for (i, ch) in stats.chars().enumerate() {
+            let cx = 8 + i * 8;
+            if cx + 8 > w { break; }
+            draw_char(&mut buf, w, h, cx, gk + 4, ch, 0xFF00FF88, 1);
         }
 
         
         if frame < 200 {
-            let dw = if frame < 30 { frame * 255 / 30 } else if frame > 170 { (200 - frame) * 255 / 30 } else { 255 };
-            let q = (dw.v(255)) as u32;
-            let r = 0xFF000000 | (q << 16) | (q << 8) | q;
-            let dq = "FILLED 3D TEST";
-            let qd = dq.len() * 8 * 3;
-            let gx = if qd < d { (d - qd) / 2 } else { 0 };
-            for (a, bm) in dq.bw().cf() {
-                ahi(&mut k, d, i, gx + a * 24, 30, bm, r, 3);
+            let alpha = if frame < 30 { frame * 255 / 30 } else if frame > 170 { (200 - frame) * 255 / 30 } else { 255 };
+            let a = (alpha.min(255)) as u32;
+            let c = 0xFF000000 | (a << 16) | (a << 8) | a;
+            let title = "FILLED 3D TEST";
+            let gr = title.len() * 8 * 3;
+            let bu = if gr < w { (w - gr) / 2 } else { 0 };
+            for (i, ch) in title.chars().enumerate() {
+                draw_char(&mut buf, w, h, bu + i * 24, 30, ch, c, 3);
             }
             let sub = "Scanline Rasterizer + Flat Shading";
-            let ppg = sub.len() * 8 * 2;
-            let wvh = if ppg < d { (d - ppg) / 2 } else { 0 };
-            let jt = 0xFF000000 | ((q * 180 / 255) << 8);
-            for (a, bm) in sub.bw().cf() {
-                ahi(&mut k, d, i, wvh + a * 16, 80, bm, jt, 2);
+            let jji = sub.len() * 8 * 2;
+            let oyf = if jji < w { (w - jji) / 2 } else { 0 };
+            let dr = 0xFF000000 | ((a * 180 / 255) << 8);
+            for (i, ch) in sub.chars().enumerate() {
+                draw_char(&mut buf, w, h, oyf + i * 16, 80, ch, dr, 2);
             }
         }
 
-        bge(&k, d, i);
+        blit(&buf, w, h);
         frame += 1;
     }
 
     
-    for ai in k.el() { *ai = 0xFF000000; }
-    bge(&k, d, i);
-    if !afk {
-        crate::framebuffer::afi(false);
+    for aa in buf.iter_mut() { *aa = 0xFF000000; }
+    blit(&buf, w, h);
+    if !pu {
+        crate::framebuffer::pr(false);
     }
     crate::framebuffer::clear();
     crate::serial_println!("[FILLED3D] Test complete, {} frames", frame);
 }
 
 
-pub(super) fn ndt() {
-    ndu(None);
+pub(super) fn hlr() {
+    hls(None);
 }
 
 
@@ -3437,12 +3443,12 @@ pub(super) fn ndt() {
 
 
 
-pub(super) fn ndu(lek: Option<&str>) {
-    kih(lek, 0);
+pub(super) fn hls(initial_app: Option<&str>) {
+    fmf(initial_app, 0);
 }
 
 
-pub(super) fn kih(lek: Option<&str>, sg: u64) {
+pub(super) fn fmf(initial_app: Option<&str>, timeout_ms: u64) {
     use crate::compositor::{Compositor, LayerType};
     use alloc::format;
     use alloc::string::String;
@@ -3451,70 +3457,70 @@ pub(super) fn kih(lek: Option<&str>, sg: u64) {
     crate::serial_println!("[COSMIC2] Starting COSMIC V2 Desktop...");
     
     
-    crate::cpu::smp::isq();
+    crate::cpu::smp::elh();
     
-    while crate::keyboard::xw().is_some() {}
+    while crate::keyboard::kr().is_some() {}
     
-    let (z, ac) = crate::framebuffer::yn();
-    if z == 0 || ac == 0 {
-        crate::h!(A_, "Error: Invalid framebuffer!");
+    let (width, height) = crate::framebuffer::kv();
+    if width == 0 || height == 0 {
+        crate::n!(A_, "Error: Invalid framebuffer!");
         return;
     }
     
     
-    crate::mouse::dbw(z, ac);
+    crate::mouse::set_screen_size(width, height);
     
-    crate::serial_println!("[COSMIC2] Creating compositor {}x{}", z, ac);
-    
-    
-    let mut compositor = Compositor::new(z, ac);
+    crate::serial_println!("[COSMIC2] Creating compositor {}x{}", width, height);
     
     
-    let qph = compositor.qfj(LayerType::Apm);
-    let sac = compositor.dyc(LayerType::Caz, 0, 0, 70, ac - 40);  
-    let pzm = compositor.dyc(LayerType::Cqm, 100, 80, 700, 450);  
-    let toy = compositor.dyc(LayerType::Akx, z - 260, 50, 250, 220);  
-    let xbd = compositor.dyc(LayerType::Coa, 0, ac - 40, z, 40);
-    let und = compositor.dyc(LayerType::Akx, 5, ac - 440, 280, 400);  
-    let wkf = compositor.dyc(LayerType::Akx, 340, ac - 380, 280, 350);  
-    let nio = compositor.dyc(LayerType::Akx, 0, 0, 24, 24);
-    
-    crate::serial_println!("[COSMIC2] Created {} layers", compositor.ude());
+    let mut compositor = Compositor::new(width, height);
     
     
-    compositor.skz();
+    let kbs = compositor.add_fullscreen_layer(LayerType::Background);
+    let lgu = compositor.add_layer(LayerType::Dock, 0, 0, 70, height - 40);  
+    let jre = compositor.add_layer(LayerType::Windows, 100, 80, 700, 450);  
+    let mlo = compositor.add_layer(LayerType::Overlay, width - 260, 50, 250, 220);  
+    let pdk = compositor.add_layer(LayerType::Taskbar, 0, height - 40, width, 40);
+    let nek = compositor.add_layer(LayerType::Overlay, 5, height - 440, 280, 400);  
+    let oqb = compositor.add_layer(LayerType::Overlay, 340, height - 380, 280, 350);  
+    let hpx = compositor.add_layer(LayerType::Overlay, 0, 0, 24, 24);
+    
+    crate::serial_println!("[COSMIC2] Created {} layers", compositor.layer_count());
+    
+    
+    compositor.enable_gpu_direct();
     
     
     
     
-    let mut aqk = true;
-    let mut oo = 0u64;
+    let mut running = true;
+    let mut frame_count = 0u64;
     
     
     #[derive(Clone, Copy, PartialEq)]
     enum AppMode {
-        Df,       
-        As,     
-        Ip,    
-        Ag,  
-        Rb,    
-        Pl,       
+        Shell,       
+        Network,     
+        Hardware,    
+        TextEditor,  
+        UserMgmt,    
+        Files,       
         Browser,     
-        Bp, 
+        ImageViewer, 
     }
     
     
-    let mut atu = match lek {
+    let mut xm = match initial_app {
         Some("browser") | Some("web") | Some("www") => AppMode::Browser,
-        Some("files") | Some("explorer") => AppMode::Pl,
-        Some("editor") | Some("text") | Some("notepad") => AppMode::Ag,
-        Some("network") | Some("net") | Some("ifconfig") => AppMode::As,
-        Some("hardware") | Some("hw") | Some("lshw") => AppMode::Ip,
-        Some("users") | Some("user") => AppMode::Rb,
-        Some("images") | Some("image") | Some("viewer") => AppMode::Bp,
-        _ => AppMode::Df,
+        Some("files") | Some("explorer") => AppMode::Files,
+        Some("editor") | Some("text") | Some("notepad") => AppMode::TextEditor,
+        Some("network") | Some("net") | Some("ifconfig") => AppMode::Network,
+        Some("hardware") | Some("hw") | Some("lshw") => AppMode::Hardware,
+        Some("users") | Some("user") => AppMode::UserMgmt,
+        Some("images") | Some("image") | Some("viewer") => AppMode::ImageViewer,
+        _ => AppMode::Shell,
     };
-    let mut don = atu == AppMode::Browser;  
+    let mut bky = xm == AppMode::Browser;  
     
     
     
@@ -3522,297 +3528,297 @@ pub(super) fn kih(lek: Option<&str>, sg: u64) {
     
     
     #[derive(Clone)]
-    struct Bw {
+    struct Ar {
         text: String,
-        s: u32,
+        color: u32,
     }
     
     
-    const AWA_: u32 = 0xFFE06C75;       
-    const AVY_: u32 = 0xFF98C379;      
-    const AWB_: u32 = 0xFFE5C07B;     
-    const ADL_: u32 = 0xFFDCDCDC;      
-    const CAP_: u32 = 0xFF5C6370;   
-    const CAQ_: u32 = 0xFFABB2BF;   
-    const NK_: u32 = 0xFF56B6C2;   
-    const DPN_: u32 = 0xFF98C379;    
-    const AVZ_: u32 = 0xFFD19A66;    
-    const NL_: u32 = 0xFF61AFEF;      
-    const DPM_: u32 = 0xFF56B6C2;    
+    const AYD_: u32 = 0xFFE06C75;       
+    const AYB_: u32 = 0xFF98C379;      
+    const AYE_: u32 = 0xFFE5C07B;     
+    const AFB_: u32 = 0xFFDCDCDC;      
+    const CEA_: u32 = 0xFF5C6370;   
+    const CEB_: u32 = 0xFFABB2BF;   
+    const OL_: u32 = 0xFF56B6C2;   
+    const DTH_: u32 = 0xFF98C379;    
+    const AYC_: u32 = 0xFFD19A66;    
+    const OM_: u32 = 0xFF61AFEF;      
+    const DTG_: u32 = 0xFF56B6C2;    
     
     
     #[derive(Clone)]
-    struct Le {
-        jq: Vec<Bw>,
-        euc: LineType,
+    struct Es {
+        segments: Vec<Ar>,
+        line_type: LineType,
     }
     
     #[derive(Clone, Copy, PartialEq)]
     enum LineType {
-        El,      
-        Kp,   
-        Cym,      
-        Cfd,    
-        Bq,    
-        Q,        
+        Welcome,      
+        HttpHeader,   
+        HtmlTag,      
+        HtmlMixed,    
+        PlainText,    
+        Error,        
     }
     
     
-    fn vcl(line: &str) -> Vec<Bw> {
-        let mut jq = Vec::new();
-        let mut bw: Vec<char> = line.bw().collect();
-        let mut a = 0;
+    fn nql(line: &str) -> Vec<Ar> {
+        let mut segments = Vec::new();
+        let mut chars: Vec<char> = line.chars().collect();
+        let mut i = 0;
         
-        while a < bw.len() {
+        while i < chars.len() {
             
-            if bw[a] == '<' {
+            if chars[i] == '<' {
                 
-                if a + 3 < bw.len() && bw[a+1] == '!' && bw[a+2] == '-' && bw[a+3] == '-' {
+                if i + 3 < chars.len() && chars[i+1] == '!' && chars[i+2] == '-' && chars[i+3] == '-' {
                     
-                    let ay = a;
-                    while a < bw.len() {
-                        if a + 2 < bw.len() && bw[a] == '-' && bw[a+1] == '-' && bw[a+2] == '>' {
-                            a += 3;
+                    let start = i;
+                    while i < chars.len() {
+                        if i + 2 < chars.len() && chars[i] == '-' && chars[i+1] == '-' && chars[i+2] == '>' {
+                            i += 3;
                             break;
                         }
-                        a += 1;
+                        i += 1;
                     }
-                    jq.push(Bw {
-                        text: bw[ay..a].iter().collect(),
-                        s: CAP_,
+                    segments.push(Ar {
+                        text: chars[start..i].iter().collect(),
+                        color: CEA_,
                     });
                     continue;
                 }
                 
                 
-                if a + 1 < bw.len() && bw[a+1] == '!' {
-                    let ay = a;
-                    while a < bw.len() && bw[a] != '>' {
-                        a += 1;
+                if i + 1 < chars.len() && chars[i+1] == '!' {
+                    let start = i;
+                    while i < chars.len() && chars[i] != '>' {
+                        i += 1;
                     }
-                    if a < bw.len() { a += 1; }
-                    jq.push(Bw {
-                        text: bw[ay..a].iter().collect(),
-                        s: CAQ_,
+                    if i < chars.len() { i += 1; }
+                    segments.push(Ar {
+                        text: chars[start..i].iter().collect(),
+                        color: CEB_,
                     });
                     continue;
                 }
                 
                 
                 
-                jq.push(Bw { text: String::from("<"), s: NK_ });
-                a += 1;
+                segments.push(Ar { text: String::from("<"), color: OL_ });
+                i += 1;
                 
                 
-                if a < bw.len() && bw[a] == '/' {
-                    jq.push(Bw { text: String::from("/"), s: NK_ });
-                    a += 1;
+                if i < chars.len() && chars[i] == '/' {
+                    segments.push(Ar { text: String::from("/"), color: OL_ });
+                    i += 1;
                 }
                 
                 
-                let prr = a;
-                while a < bw.len() && bw[a] != ' ' && bw[a] != '>' && bw[a] != '/' {
-                    a += 1;
+                let jlj = i;
+                while i < chars.len() && chars[i] != ' ' && chars[i] != '>' && chars[i] != '/' {
+                    i += 1;
                 }
-                if prr < a {
-                    jq.push(Bw {
-                        text: bw[prr..a].iter().collect(),
-                        s: AWA_,
+                if jlj < i {
+                    segments.push(Ar {
+                        text: chars[jlj..i].iter().collect(),
+                        color: AYD_,
                     });
                 }
                 
                 
-                while a < bw.len() && bw[a] != '>' {
+                while i < chars.len() && chars[i] != '>' {
                     
-                    if bw[a] == ' ' {
-                        let xvx = a;
-                        while a < bw.len() && bw[a] == ' ' { a += 1; }
-                        jq.push(Bw {
-                            text: bw[xvx..a].iter().collect(),
-                            s: ADL_,
+                    if chars[i] == ' ' {
+                        let pvi = i;
+                        while i < chars.len() && chars[i] == ' ' { i += 1; }
+                        segments.push(Ar {
+                            text: chars[pvi..i].iter().collect(),
+                            color: AFB_,
                         });
                         continue;
                     }
                     
                     
-                    if bw[a] == '/' {
-                        jq.push(Bw { text: String::from("/"), s: NK_ });
-                        a += 1;
+                    if chars[i] == '/' {
+                        segments.push(Ar { text: String::from("/"), color: OL_ });
+                        i += 1;
                         continue;
                     }
                     
                     
-                    let mws = a;
-                    while a < bw.len() && bw[a] != '=' && bw[a] != ' ' && bw[a] != '>' && bw[a] != '/' {
-                        a += 1;
+                    let hfy = i;
+                    while i < chars.len() && chars[i] != '=' && chars[i] != ' ' && chars[i] != '>' && chars[i] != '/' {
+                        i += 1;
                     }
-                    if mws < a {
-                        jq.push(Bw {
-                            text: bw[mws..a].iter().collect(),
-                            s: AVY_,
+                    if hfy < i {
+                        segments.push(Ar {
+                            text: chars[hfy..i].iter().collect(),
+                            color: AYB_,
                         });
                     }
                     
                     
-                    if a < bw.len() && bw[a] == '=' {
-                        jq.push(Bw { text: String::from("="), s: ADL_ });
-                        a += 1;
+                    if i < chars.len() && chars[i] == '=' {
+                        segments.push(Ar { text: String::from("="), color: AFB_ });
+                        i += 1;
                     }
                     
                     
-                    if a < bw.len() && (bw[a] == '"' || bw[a] == '\'') {
-                        let cgw = bw[a];
-                        let ekl = a;
-                        a += 1;
-                        while a < bw.len() && bw[a] != cgw {
-                            a += 1;
+                    if i < chars.len() && (chars[i] == '"' || chars[i] == '\'') {
+                        let arw = chars[i];
+                        let bwr = i;
+                        i += 1;
+                        while i < chars.len() && chars[i] != arw {
+                            i += 1;
                         }
-                        if a < bw.len() { a += 1; } 
-                        jq.push(Bw {
-                            text: bw[ekl..a].iter().collect(),
-                            s: AWB_,
+                        if i < chars.len() { i += 1; } 
+                        segments.push(Ar {
+                            text: chars[bwr..i].iter().collect(),
+                            color: AYE_,
                         });
                     }
                 }
                 
                 
-                if a < bw.len() && bw[a] == '>' {
-                    jq.push(Bw { text: String::from(">"), s: NK_ });
-                    a += 1;
+                if i < chars.len() && chars[i] == '>' {
+                    segments.push(Ar { text: String::from(">"), color: OL_ });
+                    i += 1;
                 }
             }
             
-            else if bw[a] == '&' {
-                let ay = a;
-                while a < bw.len() && bw[a] != ';' && bw[a] != ' ' {
-                    a += 1;
+            else if chars[i] == '&' {
+                let start = i;
+                while i < chars.len() && chars[i] != ';' && chars[i] != ' ' {
+                    i += 1;
                 }
-                if a < bw.len() && bw[a] == ';' { a += 1; }
-                jq.push(Bw {
-                    text: bw[ay..a].iter().collect(),
-                    s: AVZ_,
+                if i < chars.len() && chars[i] == ';' { i += 1; }
+                segments.push(Ar {
+                    text: chars[start..i].iter().collect(),
+                    color: AYC_,
                 });
             }
             
             else {
-                let ay = a;
-                while a < bw.len() && bw[a] != '<' && bw[a] != '&' {
-                    a += 1;
+                let start = i;
+                while i < chars.len() && chars[i] != '<' && chars[i] != '&' {
+                    i += 1;
                 }
-                if ay < a {
-                    jq.push(Bw {
-                        text: bw[ay..a].iter().collect(),
-                        s: ADL_,
+                if start < i {
+                    segments.push(Ar {
+                        text: chars[start..i].iter().collect(),
+                        color: AFB_,
                     });
                 }
             }
         }
         
-        jq
+        segments
     }
     
     
-    let mut bmb = String::from("https://google.com");
-    let mut ps: Vec<Le> = Vec::new();
-    let mut bpu = String::from("Enter URL and press Enter to navigate");
-    let mut btn = false;
-    let mut nag = true;
-    let mut hbj: u8 = 0;  
-    let mut mwx = sg > 0 && atu == AppMode::Browser;
+    let mut ahk = String::from("https://google.com");
+    let mut gy: Vec<Es> = Vec::new();
+    let mut ajg = String::from("Enter URL and press Enter to navigate");
+    let mut browser_loading = false;
+    let mut his = true;
+    let mut djq: u8 = 0;  
+    let mut hgc = timeout_ms > 0 && xm == AppMode::Browser;
     
     
-    fn tr(text: &str, s: u32, euc: LineType) -> Le {
-        let mut hzm = Vec::new();
-        hzm.push(Bw { text: String::from(text), s });
-        Le {
-            jq: hzm,
-            euc,
+    fn jb(text: &str, color: u32, line_type: LineType) -> Es {
+        let mut dyz = Vec::new();
+        dyz.push(Ar { text: String::from(text), color });
+        Es {
+            segments: dyz,
+            line_type,
         }
     }
     
     
-    fn jes(text: &str) -> Le {
-        Le {
-            jq: vcl(text),
-            euc: LineType::Cfd,
+    fn ets(text: &str) -> Es {
+        Es {
+            segments: nql(text),
+            line_type: LineType::HtmlMixed,
         }
     }
     
     
-    crate::tls13::crypto::peq();
+    crate::tls13::crypto::jbv();
     
     
-    ps.push(tr("+------------------------------------------------------------+", 0xFF00AAFF, LineType::El));
-    ps.push(tr("|        TrustOS Web Browser v1.0 - DevTools Mode            |", 0xFF00AAFF, LineType::El));
-    ps.push(tr("|------------------------------------------------------------|", 0xFF00AAFF, LineType::El));
-    ps.push(tr("|                                                            |", 0xFF00AAFF, LineType::El));
-    ps.push(tr("|  Syntax highlighting like Chrome DevTools!                 |", 0xFFDDDDDD, LineType::El));
-    ps.push(tr("|                                                            |", 0xFF00AAFF, LineType::El));
-    ps.push(tr("|  COLOR LEGEND:                                             |", 0xFFFFFF00, LineType::El));
+    gy.push(jb("+------------------------------------------------------------+", 0xFF00AAFF, LineType::Welcome));
+    gy.push(jb("|        TrustOS Web Browser v1.0 - DevTools Mode            |", 0xFF00AAFF, LineType::Welcome));
+    gy.push(jb("|------------------------------------------------------------|", 0xFF00AAFF, LineType::Welcome));
+    gy.push(jb("|                                                            |", 0xFF00AAFF, LineType::Welcome));
+    gy.push(jb("|  Syntax highlighting like Chrome DevTools!                 |", 0xFFDDDDDD, LineType::Welcome));
+    gy.push(jb("|                                                            |", 0xFF00AAFF, LineType::Welcome));
+    gy.push(jb("|  COLOR LEGEND:                                             |", 0xFFFFFF00, LineType::Welcome));
     {
-        let mut jdb = Le { jq: Vec::new(), euc: LineType::El };
-        jdb.jq.push(Bw { text: String::from("|    "), s: 0xFF00AAFF });
-        jdb.jq.push(Bw { text: String::from("<tag>"), s: AWA_ });
-        jdb.jq.push(Bw { text: String::from(" - HTML tags                            |"), s: 0xFFDDDDDD });
-        ps.push(jdb);
+        let mut esn = Es { segments: Vec::new(), line_type: LineType::Welcome };
+        esn.segments.push(Ar { text: String::from("|    "), color: 0xFF00AAFF });
+        esn.segments.push(Ar { text: String::from("<tag>"), color: AYD_ });
+        esn.segments.push(Ar { text: String::from(" - HTML tags                            |"), color: 0xFFDDDDDD });
+        gy.push(esn);
         
-        let mut jdc = Le { jq: Vec::new(), euc: LineType::El };
-        jdc.jq.push(Bw { text: String::from("|    "), s: 0xFF00AAFF });
-        jdc.jq.push(Bw { text: String::from("attr"), s: AVY_ });
-        jdc.jq.push(Bw { text: String::from(" - Attribute names                     |"), s: 0xFFDDDDDD });
-        ps.push(jdc);
+        let mut eso = Es { segments: Vec::new(), line_type: LineType::Welcome };
+        eso.segments.push(Ar { text: String::from("|    "), color: 0xFF00AAFF });
+        eso.segments.push(Ar { text: String::from("attr"), color: AYB_ });
+        eso.segments.push(Ar { text: String::from(" - Attribute names                     |"), color: 0xFFDDDDDD });
+        gy.push(eso);
         
-        let mut jdd = Le { jq: Vec::new(), euc: LineType::El };
-        jdd.jq.push(Bw { text: String::from("|    "), s: 0xFF00AAFF });
-        jdd.jq.push(Bw { text: String::from("\"value\""), s: AWB_ });
-        jdd.jq.push(Bw { text: String::from(" - Attribute values                   |"), s: 0xFFDDDDDD });
-        ps.push(jdd);
+        let mut esq = Es { segments: Vec::new(), line_type: LineType::Welcome };
+        esq.segments.push(Ar { text: String::from("|    "), color: 0xFF00AAFF });
+        esq.segments.push(Ar { text: String::from("\"value\""), color: AYE_ });
+        esq.segments.push(Ar { text: String::from(" - Attribute values                   |"), color: 0xFFDDDDDD });
+        gy.push(esq);
         
-        let mut jde = Le { jq: Vec::new(), euc: LineType::El };
-        jde.jq.push(Bw { text: String::from("|    "), s: 0xFF00AAFF });
-        jde.jq.push(Bw { text: String::from("< >"), s: NK_ });
-        jde.jq.push(Bw { text: String::from(" - Brackets                             |"), s: 0xFFDDDDDD });
-        ps.push(jde);
+        let mut ess = Es { segments: Vec::new(), line_type: LineType::Welcome };
+        ess.segments.push(Ar { text: String::from("|    "), color: 0xFF00AAFF });
+        ess.segments.push(Ar { text: String::from("< >"), color: OL_ });
+        ess.segments.push(Ar { text: String::from(" - Brackets                             |"), color: 0xFFDDDDDD });
+        gy.push(ess);
         
-        let mut jdf = Le { jq: Vec::new(), euc: LineType::El };
-        jdf.jq.push(Bw { text: String::from("|    "), s: 0xFF00AAFF });
-        jdf.jq.push(Bw { text: String::from("&amp;"), s: AVZ_ });
-        jdf.jq.push(Bw { text: String::from(" - HTML entities                       |"), s: 0xFFDDDDDD });
-        ps.push(jdf);
+        let mut est = Es { segments: Vec::new(), line_type: LineType::Welcome };
+        est.segments.push(Ar { text: String::from("|    "), color: 0xFF00AAFF });
+        est.segments.push(Ar { text: String::from("&amp;"), color: AYC_ });
+        est.segments.push(Ar { text: String::from(" - HTML entities                       |"), color: 0xFFDDDDDD });
+        gy.push(est);
     }
-    ps.push(tr("|                                                            |", 0xFF00AAFF, LineType::El));
-    ps.push(tr("|  TRY THESE URLs:                                           |", 0xFFFFFF00, LineType::El));
-    ps.push(tr("|    https://google.com                                      |", 0xFF00FFFF, LineType::El));
-    ps.push(tr("|    https://example.com                                     |", 0xFF00FFFF, LineType::El));
-    ps.push(tr("|                                                            |", 0xFF00AAFF, LineType::El));
-    ps.push(tr("|                                                            |", 0xFF00AAFF, LineType::El));
-    ps.push(tr("|  [Tab] Toggle DevTools/Rendered  [Enter] Navigate          |", 0xFF88FF88, LineType::El));
-    ps.push(tr("|  [ESC] Return to shell                                     |", 0xFF88FF88, LineType::El));
-    ps.push(tr("|                                                            |", 0xFF00AAFF, LineType::El));
-    ps.push(tr("+------------------------------------------------------------+", 0xFF00AAFF, LineType::El));
+    gy.push(jb("|                                                            |", 0xFF00AAFF, LineType::Welcome));
+    gy.push(jb("|  TRY THESE URLs:                                           |", 0xFFFFFF00, LineType::Welcome));
+    gy.push(jb("|    https://google.com                                      |", 0xFF00FFFF, LineType::Welcome));
+    gy.push(jb("|    https://example.com                                     |", 0xFF00FFFF, LineType::Welcome));
+    gy.push(jb("|                                                            |", 0xFF00AAFF, LineType::Welcome));
+    gy.push(jb("|                                                            |", 0xFF00AAFF, LineType::Welcome));
+    gy.push(jb("|  [Tab] Toggle DevTools/Rendered  [Enter] Navigate          |", 0xFF88FF88, LineType::Welcome));
+    gy.push(jb("|  [ESC] Return to shell                                     |", 0xFF88FF88, LineType::Welcome));
+    gy.push(jb("|                                                            |", 0xFF00AAFF, LineType::Welcome));
+    gy.push(jb("+------------------------------------------------------------+", 0xFF00AAFF, LineType::Welcome));
     
     
     
     
     {
         
-        let mut luz = String::from("P3\n32 32\n255\n");
-        for c in 0..32 {
-            for b in 0..32 {
-                let m = (b * 8) % 256;
-                let at = (c * 8) % 256;
-                let o = ((b + c) * 4) % 256;
-                luz.t(&format!("{} {} {} ", m, at, o));
+        let mut gnv = String::from("P3\n32 32\n255\n");
+        for y in 0..32 {
+            for x in 0..32 {
+                let r = (x * 8) % 256;
+                let g = (y * 8) % 256;
+                let b = ((x + y) * 4) % 256;
+                gnv.push_str(&format!("{} {} {} ", r, g, b));
             }
-            luz.push('\n');
+            gnv.push('\n');
         }
-        let _ = crate::ramfs::fh(|fs| {
-            fs.ut("/images");
-            fs.ns("/images/test.ppm", luz.as_bytes())
+        let _ = crate::ramfs::bh(|fs| {
+            fs.mkdir("/images");
+            fs.write_file("/images/test.ppm", gnv.as_bytes())
         });
         
         
-        let qqo: [u8; 54] = [
+        let kcx: [u8; 54] = [
             0x42, 0x4D,             
             0x36, 0x03, 0x00, 0x00, 
             0x00, 0x00, 0x00, 0x00, 
@@ -3829,21 +3835,21 @@ pub(super) fn kih(lek: Option<&str>, sg: u64) {
             0x00, 0x00, 0x00, 0x00, 
             0x00, 0x00, 0x00, 0x00, 
         ];
-        let mut ilw = alloc::vec::Vec::from(qqo);
+        let mut ehb = alloc::vec::Vec::from(kcx);
         
-        for c in 0..16 {
-            for b in 0..16 {
-                let o = ((15 - c) * 17) as u8;  
-                let at = (b * 17) as u8;          
-                let m = ((b + c) * 8) as u8;     
-                ilw.push(o);
-                ilw.push(at);
-                ilw.push(m);
+        for y in 0..16 {
+            for x in 0..16 {
+                let b = ((15 - y) * 17) as u8;  
+                let g = (x * 17) as u8;          
+                let r = ((x + y) * 8) as u8;     
+                ehb.push(b);
+                ehb.push(g);
+                ehb.push(r);
             }
             
         }
-        let _ = crate::ramfs::fh(|fs| {
-            fs.ns("/images/test.bmp", &ilw)
+        let _ = crate::ramfs::bh(|fs| {
+            fs.write_file("/images/test.bmp", &ehb)
         });
         
         crate::serial_println!("[COSMIC2] Created test images in /images/");
@@ -3852,54 +3858,54 @@ pub(super) fn kih(lek: Option<&str>, sg: u64) {
     
     
     
-    let mut trz = String::new();
-    let mut odi: Option<crate::image::Image> = None;
-    let mut dig: f32 = 1.0;
-    let mut ldj: i32 = 0;
-    let mut ldk: i32 = 0;
-    let mut odk = String::from("No image loaded");
-    let mut odj = String::from("---");
+    let mut moc = String::new();
+    let mut ift: Option<crate::image::Image> = None;
+    let mut bhc: f32 = 1.0;
+    let mut gbu: i32 = 0;
+    let mut gbv: i32 = 0;
+    let mut ifv = String::from("No image loaded");
+    let mut ifu = String::from("---");
     
     
-    let mut awe = false;
-    let mut czs: i32 = -1;
+    let mut yx = false;
+    let mut bcs: i32 = -1;
     
     
-    let mut dvu = false;
-    let mut gsi = crate::desktop::col();
-    let mut gsj = crate::desktop::hlf();
+    let mut bou = false;
+    let mut dek = crate::desktop::awb();
+    let mut del = crate::desktop::dqn();
     
     
-    let mut bfh = String::new();
-    let mut cz: Vec<String> = Vec::new();
-    let mut btx = true;
-    let mut gto = String::new();
-    let mut px: usize = 0;  
-    const AFH_: usize = 18;  
+    let mut shell_input = String::new();
+    let mut ap: Vec<String> = Vec::new();
+    let mut cursor_blink = true;
+    let mut dez = String::new();
+    let mut scroll_offset: usize = 0;  
+    const AHB_: usize = 18;  
     
     
-    let mut aey = crate::apps::text_editor::EditorState::new();
+    let mut editor_state = crate::apps::text_editor::EditorState::new();
     
     {
-        let mbn = "//! TrustOS \u{2014} A Modern Operating System in Rust\n//!\n//! This file demonstrates TrustCode's syntax highlighting\n\nuse core::fmt;\n\n/// Main kernel entry point\npub fn kernel_main() -> ! {\n    let message = \"Hello from TrustOS!\";\n    serial_println!(\"{}\", message);\n\n    // Initialize hardware\n    let cpu_count: u32 = 4;\n    let memory_mb: u64 = 256;\n\n    for i in 0..cpu_count {\n        init_cpu(i);\n    }\n\n    // Start the desktop environment\n    let mut desktop = Desktop::new();\n    desktop.init(1280, 800);\n\n    loop {\n        desktop.render();\n        desktop.handle_input();\n    }\n}\n\n/// Initialize a CPU core\nfn init_cpu(id: u32) {\n    // Setup GDT, IDT, APIC\n    serial_println!(\"CPU {} initialized\", id);\n}\n\n#[derive(Debug, Clone)]\nstruct AppConfig {\n    name: String,\n    version: (u8, u8, u8),\n    features: Vec<&'static str>,\n}\n";
-        let _ = crate::ramfs::fh(|fs| fs.ns("/demo.rs", mbn.as_bytes()));
-        aey.dsu("demo.rs");
+        let gsh = "//! TrustOS \u{2014} A Modern Operating System in Rust\n//!\n//! This file demonstrates TrustCode's syntax highlighting\n\nuse core::fmt;\n\n/// Main kernel entry point\npub fn kernel_main() -> ! {\n    let message = \"Hello from TrustOS!\";\n    serial_println!(\"{}\", message);\n\n    // Initialize hardware\n    let cpu_count: u32 = 4;\n    let memory_mb: u64 = 256;\n\n    for i in 0..cpu_count {\n        init_cpu(i);\n    }\n\n    // Start the desktop environment\n    let mut desktop = Desktop::new();\n    desktop.init(1280, 800);\n\n    loop {\n        desktop.render();\n        desktop.handle_input();\n    }\n}\n\n/// Initialize a CPU core\nfn init_cpu(id: u32) {\n    // Setup GDT, IDT, APIC\n    serial_println!(\"CPU {} initialized\", id);\n}\n\n#[derive(Debug, Clone)]\nstruct AppConfig {\n    name: String,\n    version: (u8, u8, u8),\n    features: Vec<&'static str>,\n}\n";
+        let _ = crate::ramfs::bh(|fs| fs.write_file("/demo.rs", gsh.as_bytes()));
+        editor_state.load_file("demo.rs");
     }
     
     
-    let mut hgs = false;
-    let mut dgp: i32 = 0;
-    let mut dgq: i32 = 0;
-    let mut gwu: i32 = 100;
-    let mut gwv: i32 = 80;
-    let mut fbm = true;  
+    let mut dnp = false;
+    let mut drag_offset_x: i32 = 0;
+    let mut drag_offset_y: i32 = 0;
+    let mut dgq: i32 = 100;
+    let mut dgr: i32 = 80;
+    let mut cfi = true;  
     
     
-    let mut bqa: Vec<String> = Vec::new();
-    const AZQ_: usize = 10;
+    let mut command_history: Vec<String> = Vec::new();
+    const BBS_: usize = 10;
     
     
-    const BZJ_: &[&str] = &[
+    const CCU_: &[&str] = &[
         "+---------------------------------------------------------------+",
         "|         TrustOS Interactive Shell - Welcome!                  |",
         "|---------------------------------------------------------------|",
@@ -3919,7 +3925,7 @@ pub(super) fn kih(lek: Option<&str>, sg: u64) {
         "+---------------------------------------------------------------+",
     ];
     
-    const BZI_: &[&str] = &[
+    const CCT_: &[&str] = &[
         "+---------------------------------------------------------------+",
         "|           Network Module - Configuration & Diagnostics        |",
         "|---------------------------------------------------------------|",
@@ -3940,7 +3946,7 @@ pub(super) fn kih(lek: Option<&str>, sg: u64) {
         "+---------------------------------------------------------------+",
     ];
     
-    const BZG_: &[&str] = &[
+    const CCR_: &[&str] = &[
         "+---------------------------------------------------------------+",
         "|           Hardware Module - System Information                |",
         "|---------------------------------------------------------------|",
@@ -3961,7 +3967,7 @@ pub(super) fn kih(lek: Option<&str>, sg: u64) {
         "+---------------------------------------------------------------+",
     ];
     
-    const BZE_: &[&str] = &[
+    const CCP_: &[&str] = &[
         "+---------------------------------------------------------------+",
         "|           Text Editor - Create and Edit Files                 |",
         "|---------------------------------------------------------------|",
@@ -3982,7 +3988,7 @@ pub(super) fn kih(lek: Option<&str>, sg: u64) {
         "+---------------------------------------------------------------+",
     ];
     
-    const BZK_: &[&str] = &[
+    const CCV_: &[&str] = &[
         "+---------------------------------------------------------------+",
         "|           User Management - Accounts & Security               |",
         "|---------------------------------------------------------------|",
@@ -4004,7 +4010,7 @@ pub(super) fn kih(lek: Option<&str>, sg: u64) {
         "+---------------------------------------------------------------+",
     ];
     
-    const BZF_: &[&str] = &[
+    const CCQ_: &[&str] = &[
         "+---------------------------------------------------------------+",
         "|           File Manager - Navigate & Manage Files              |",
         "|---------------------------------------------------------------|",
@@ -4031,7 +4037,7 @@ pub(super) fn kih(lek: Option<&str>, sg: u64) {
         "+---------------------------------------------------------------+",
     ];
     
-    const BZD_: &[&str] = &[
+    const CCO_: &[&str] = &[
         "+---------------------------------------------------------------+",
         "|           TrustOS Web Browser                                 |",
         "|---------------------------------------------------------------|",
@@ -4051,7 +4057,7 @@ pub(super) fn kih(lek: Option<&str>, sg: u64) {
         "+---------------------------------------------------------------+",
     ];
     
-    const BZH_: &[&str] = &[
+    const CCS_: &[&str] = &[
         "+---------------------------------------------------------------+",
         "|           TrustOS Image Viewer                                |",
         "|---------------------------------------------------------------|",
@@ -4079,240 +4085,240 @@ pub(super) fn kih(lek: Option<&str>, sg: u64) {
     ];
     
     
-    macro_rules! gie {
-        ($ev:expr) => {
-            match $ev {
-                AppMode::Df => BZJ_,
-                AppMode::As => BZI_,
-                AppMode::Ip => BZG_,
-                AppMode::Ag => BZE_,
-                AppMode::Rb => BZK_,
-                AppMode::Pl => BZF_,
-                AppMode::Browser => BZD_,
-                AppMode::Bp => BZH_,
+    macro_rules! cyo {
+        ($mode:expr) => {
+            match $mode {
+                AppMode::Shell => CCU_,
+                AppMode::Network => CCT_,
+                AppMode::Hardware => CCR_,
+                AppMode::TextEditor => CCP_,
+                AppMode::UserMgmt => CCV_,
+                AppMode::Files => CCQ_,
+                AppMode::Browser => CCO_,
+                AppMode::ImageViewer => CCS_,
             }
         };
     }
     
     
-    for line in gie!(AppMode::Df) {
-        cz.push(String::from(*line));
+    for line in cyo!(AppMode::Shell) {
+        ap.push(String::from(*line));
     }
     
     
     
     
     
-    const R_: usize = 240;      
-    const AS_: usize = 68;       
-    const OB_: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ@#$%&*+=<>[]{}|";
+    const AD_: usize = 240;      
+    const AV_: usize = 68;       
+    const OZ_: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ@#$%&*+=<>[]{}|";
     
     
     #[inline]
-    fn olj(bj: usize, br: usize) -> usize {
-        bj * AS_ + br
+    fn imb(col: usize, row: usize) -> usize {
+        col * AV_ + row
     }
     
     
     
     
-    let mut car: Vec<u8> = vec![0u8; R_ * AS_];
-    for bj in 0..R_ {
-        let dv = (bj as u32 * 2654435761) ^ 0xDEADBEEF;
-        for br in 0..AS_ {
-            let des = dv.hx(br as u32 + 1);
-            car[olj(bj, br)] = OB_[(des as usize) % OB_.len()];
+    let mut matrix_chars: Vec<u8> = vec![0u8; AD_ * AV_];
+    for col in 0..AD_ {
+        let seed = (col as u32 * 2654435761) ^ 0xDEADBEEF;
+        for row in 0..AV_ {
+            let bfe = seed.wrapping_mul(row as u32 + 1);
+            matrix_chars[imb(col, row)] = OZ_[(bfe as usize) % OZ_.len()];
         }
     }
     
     
     
-    let mut awc: [i32; R_] = [0; R_];
-    let mut czn: [u32; R_] = [0; R_];
-    for bj in 0..R_ {
-        let dv = (bj as u32 * 2654435761) ^ 0xDEADBEEF;
-        awc[bj] = -((dv % (AS_ as u32 * 2)) as i32);
-        czn[bj] = 1 + (dv % 3);  
+    let mut matrix_heads: [i32; AD_] = [0; AD_];
+    let mut matrix_speeds: [u32; AD_] = [0; AD_];
+    for col in 0..AD_ {
+        let seed = (col as u32 * 2654435761) ^ 0xDEADBEEF;
+        matrix_heads[col] = -((seed % (AV_ as u32 * 2)) as i32);
+        matrix_speeds[col] = 1 + (seed % 3);  
     }
     
     
     
     
-    let mut holomatrix = crate::graphics::holomatrix::HoloMatrix::new(z as usize / 4, ac as usize / 4, 32);
+    let mut holomatrix = crate::graphics::holomatrix::HoloMatrix::new(width as usize / 4, height as usize / 4, 32);
     
-    let mut fks = crate::graphics::holomatrix::hlk();
-    let mut bnf = crate::graphics::holomatrix::zu();
+    let mut ckr = crate::graphics::holomatrix::dqr();
+    let mut aia = crate::graphics::holomatrix::lq();
     
     
     
     let mut holovolume = crate::holovolume::HoloVolume::new(
-        z as usize / 8,   
-        ac as usize / 9,  
+        width as usize / 8,   
+        height as usize / 9,  
         32                    
     );
-    holovolume.che = crate::holovolume::RenderMode::Aiy;
-    let mut dmx = false;  
+    holovolume.render_mode = crate::holovolume::RenderMode::Hologram;
+    let mut bju = false;  
     
     
-    let mut nsv = crate::matrix_fast::FastMatrixRenderer::new();
-    let mut aqq = false;  
+    let mut hxu = crate::matrix_fast::FastMatrixRenderer::new();
+    let mut vv = false;  
     
     
-    let mut dzd = alloc::boxed::Box::new(crate::matrix_fast::BrailleMatrix::new());
-    let mut apf = false;  
-    let mut iaj = true;  
+    let mut bqu = alloc::boxed::Box::new(crate::matrix_fast::BrailleMatrix::new());
+    let mut vb = false;  
+    let mut dzj = true;  
     
     
-    let mut hqv = alloc::boxed::Box::new(crate::matrix_fast::Matrix3D::new());
-    let mut avf = false;  
+    let mut dty = alloc::boxed::Box::new(crate::matrix_fast::Matrix3D::new());
+    let mut yg = false;  
     
     
-    let mut cet = alloc::boxed::Box::new(crate::formula3d::FormulaRenderer::new());
-    let mut atr = true;  
+    let mut aqp = alloc::boxed::Box::new(crate::formula3d::FormulaRenderer::new());
+    let mut xk = true;  
     
     
-    let mut ats = false;  
-    let mut zod: f32 = 0.0;
-    let mut zoc: u32 = 0;
+    let mut xl = false;  
+    let mut qwu: f32 = 0.0;
+    let mut qwt: u32 = 0;
     
     
-    let mut raytracer = crate::graphics::raytracer::RayTracer::new(z as usize / 6, ac as usize / 6);
+    let mut raytracer = crate::graphics::raytracer::RayTracer::new(width as usize / 6, height as usize / 6);
     
     
-    let ya: u32 = 0xFF00FF66;
-    let cyh: u32 = 0xFF00FF88;
-    let aek: u32 = 0xFF007744;
-    let cot: u32 = 0xFF000000;
-    let yll: u32 = 0xFF020202;  
-    let yle: u32 = 0xFF101010;
-    let xup: u32 = 0xFF0A0A0A;  
-    let ziy: u32 = 0xFFFF0000;   
-    let zvx: u32 = 0xFFFFFFFF; 
-    let yvm: u32 = 0xFF00FF00; 
+    let kw: u32 = 0xFF00FF66;
+    let bby: u32 = 0xFF00FF88;
+    let ph: u32 = 0xFF007744;
+    let awh: u32 = 0xFF000000;
+    let qck: u32 = 0xFF020202;  
+    let qcf: u32 = 0xFF101010;
+    let pur: u32 = 0xFF0A0A0A;  
+    let qtj: u32 = 0xFFFF0000;   
+    let rcj: u32 = 0xFFFFFFFF; 
+    let qjw: u32 = 0xFF00FF00; 
     
     
     #[derive(Clone, Copy, PartialEq)]
     enum MenuItem {
-        Kc(AppMode),
-        Qt,
-        Axr,
+        App(AppMode),
+        Shutdown,
+        Reboot,
     }
-    let gmp: [(&str, MenuItem); 11] = [
-        ("Shell", MenuItem::Kc(AppMode::Df)),
-        ("Files", MenuItem::Kc(AppMode::Pl)),
-        ("Network", MenuItem::Kc(AppMode::As)),
-        ("Hardware", MenuItem::Kc(AppMode::Ip)),
-        ("TrustCode", MenuItem::Kc(AppMode::Ag)),
-        ("User Management", MenuItem::Kc(AppMode::Rb)),
-        ("Web Browser", MenuItem::Kc(AppMode::Browser)),
-        ("Image Viewer", MenuItem::Kc(AppMode::Bp)),
-        ("-----------------", MenuItem::Kc(AppMode::Df)), 
-        ("Reboot", MenuItem::Axr),
-        ("Shutdown", MenuItem::Qt),
+    let dbg: [(&str, MenuItem); 11] = [
+        ("Shell", MenuItem::App(AppMode::Shell)),
+        ("Files", MenuItem::App(AppMode::Files)),
+        ("Network", MenuItem::App(AppMode::Network)),
+        ("Hardware", MenuItem::App(AppMode::Hardware)),
+        ("TrustCode", MenuItem::App(AppMode::TextEditor)),
+        ("User Management", MenuItem::App(AppMode::UserMgmt)),
+        ("Web Browser", MenuItem::App(AppMode::Browser)),
+        ("Image Viewer", MenuItem::App(AppMode::ImageViewer)),
+        ("-----------------", MenuItem::App(AppMode::Shell)), 
+        ("Reboot", MenuItem::Reboot),
+        ("Shutdown", MenuItem::Shutdown),
     ];
     
     
-    let mut gpt = false;
-    let mut daa: i32 = (z / 2) as i32;
-    let mut dab: i32 = (ac / 2) as i32;
+    let mut dcw = false;
+    let mut mouse_x: i32 = (width / 2) as i32;
+    let mut mouse_y: i32 = (height / 2) as i32;
     
     
-    let fal = crate::cpu::tsc::ard();
-    let mut tz = 0u32;
-    let mut dqx = 0u32;
-    let mut fmq = crate::cpu::tsc::ow();
-    
-    
-    
+    let aso = crate::cpu::tsc::we();
+    let mut fps = 0u32;
+    let mut bmg = 0u32;
+    let mut clz = crate::cpu::tsc::ey();
     
     
     
     
     
     
-    let rnc: u64 = 4; 
-    let mut pbv = 0u32; 
-    let mut lze = 0u32;
+    
+    
+    
+    let kwh: u64 = 4; 
+    let mut izq = 0u32; 
+    let mut grc = 0u32;
     
     crate::serial_println!("[COSMIC2] Entering render loop...");
     
     
-    let qll = crate::cpu::tsc::ow();
-    let mwv = crate::cpu::tsc::ard();
-    let qlm = if sg > 0 && mwv > 0 { mwv / 1000 * sg } else { u64::O };
+    let jyl = crate::cpu::tsc::ey();
+    let hga = crate::cpu::tsc::we();
+    let jym = if timeout_ms > 0 && hga > 0 { hga / 1000 * timeout_ms } else { u64::MAX };
     
-    while aqk {
+    while running {
         
-        if mwx && oo == 5 {
-            mwx = false;
+        if hgc && frame_count == 5 {
+            hgc = false;
             
-            if don {
-                ps.clear();
-                bpu = format!("Loading {}...", bmb);
-                btn = true;
-                let fmc = bmb.cj("https://");
-                if let Some((kh, port, path, ify)) = super::vm::lsm(&bmb) {
-                    let protocol = if ify { "HTTPS" } else { "HTTP" };
-                    ps.push(tr(&format!("\u{25ba} {} {}:{}{}...", protocol, kh, port, path), 0xFF88FF88, LineType::Bq));
-                    if ify {
-                        ps.push(tr("\u{25ba} Establishing TLS 1.3 connection...", 0xFF88CCFF, LineType::Bq));
-                        match crate::netstack::https::get(&bmb) {
-                            Ok(mk) => {
-                                ps.push(tr(&format!("\u{25ba} TLS OK, {} bytes", mk.gj.len()), 0xFF88FF88, LineType::Bq));
-                                ps.push(tr("", 0xFFDDDDDD, LineType::Bq));
-                                ps.push(tr("\u{2500}\u{2500} Response Headers \u{2500}\u{2500}", 0xFF61AFEF, LineType::Kp));
-                                ps.push(tr(&format!("HTTP/1.1 {}", mk.wt), NL_, LineType::Kp));
-                                for (bs, bn) in &mk.zk {
-                                    ps.push(tr(&format!("{}: {}", bs, bn), NL_, LineType::Kp));
+            if bky {
+                gy.clear();
+                ajg = format!("Loading {}...", ahk);
+                browser_loading = true;
+                let cln = ahk.starts_with("https://");
+                if let Some((host, port, path, url_is_https)) = super::vm::gml(&ahk) {
+                    let protocol = if url_is_https { "HTTPS" } else { "HTTP" };
+                    gy.push(jb(&format!("\u{25ba} {} {}:{}{}...", protocol, host, port, path), 0xFF88FF88, LineType::PlainText));
+                    if url_is_https {
+                        gy.push(jb("\u{25ba} Establishing TLS 1.3 connection...", 0xFF88CCFF, LineType::PlainText));
+                        match crate::netstack::https::get(&ahk) {
+                            Ok(fa) => {
+                                gy.push(jb(&format!("\u{25ba} TLS OK, {} bytes", fa.body.len()), 0xFF88FF88, LineType::PlainText));
+                                gy.push(jb("", 0xFFDDDDDD, LineType::PlainText));
+                                gy.push(jb("\u{2500}\u{2500} Response Headers \u{2500}\u{2500}", 0xFF61AFEF, LineType::HttpHeader));
+                                gy.push(jb(&format!("HTTP/1.1 {}", fa.status_code), OM_, LineType::HttpHeader));
+                                for (key, value) in &fa.headers {
+                                    gy.push(jb(&format!("{}: {}", key, value), OM_, LineType::HttpHeader));
                                 }
-                                ps.push(tr("", 0xFFDDDDDD, LineType::Bq));
-                                ps.push(tr("\u{2500}\u{2500} HTML Source \u{2500}\u{2500}", 0xFF61AFEF, LineType::Kp));
-                                if let Ok(dza) = core::str::jg(&mk.gj) {
-                                    for line in dza.ak().take(200) {
-                                        ps.push(jes(line));
+                                gy.push(jb("", 0xFFDDDDDD, LineType::PlainText));
+                                gy.push(jb("\u{2500}\u{2500} HTML Source \u{2500}\u{2500}", 0xFF61AFEF, LineType::HttpHeader));
+                                if let Ok(body_str) = core::str::from_utf8(&fa.body) {
+                                    for line in body_str.lines().take(200) {
+                                        gy.push(ets(line));
                                     }
                                 }
-                                bpu = format!("\u{2713} Loaded: {} ({} bytes, HTTPS)", bmb, mk.gj.len());
+                                ajg = format!("\u{2713} Loaded: {} ({} bytes, HTTPS)", ahk, fa.body.len());
                             }
-                            Err(aa) => {
-                                ps.push(tr(&format!("\u{2718} HTTPS Error: {}", aa), 0xFFFF4444, LineType::Bq));
-                                bpu = format!("Error: {}", aa);
+                            Err(e) => {
+                                gy.push(jb(&format!("\u{2718} HTTPS Error: {}", e), 0xFFFF4444, LineType::PlainText));
+                                ajg = format!("Error: {}", e);
                             }
                         }
                     } else {
                         
-                        match crate::netstack::http::get(&bmb) {
-                            Ok(mk) => {
-                                if let Some(dza) = mk.dza() {
-                                    for line in dza.ak().take(200) {
-                                        ps.push(jes(line));
+                        match crate::netstack::http::get(&ahk) {
+                            Ok(fa) => {
+                                if let Some(body_str) = fa.body_str() {
+                                    for line in body_str.lines().take(200) {
+                                        gy.push(ets(line));
                                     }
                                 }
-                                bpu = format!("\u{2713} Loaded: {} ({} bytes)", bmb, mk.gj.len());
+                                ajg = format!("\u{2713} Loaded: {} ({} bytes)", ahk, fa.body.len());
                             }
-                            Err(aa) => {
-                                ps.push(tr(&format!("\u{2718} HTTP Error: {}", aa), 0xFFFF4444, LineType::Bq));
-                                bpu = format!("Error: {}", aa);
+                            Err(e) => {
+                                gy.push(jb(&format!("\u{2718} HTTP Error: {}", e), 0xFFFF4444, LineType::PlainText));
+                                ajg = format!("Error: {}", e);
                             }
                         }
                     }
                 } else {
-                    ps.push(tr("\u{2718} Invalid URL", 0xFFFF4444, LineType::Bq));
-                    bpu = String::from("Invalid URL");
+                    gy.push(jb("\u{2718} Invalid URL", 0xFFFF4444, LineType::PlainText));
+                    ajg = String::from("Invalid URL");
                 }
-                btn = false;
+                browser_loading = false;
             }
         }
 
         
-        if sg > 0 {
-            let ez = crate::cpu::tsc::ow().ao(qll);
-            if ez >= qlm { break; }
+        if timeout_ms > 0 {
+            let bb = crate::cpu::tsc::ey().saturating_sub(jyl);
+            if bb >= jym { break; }
         }
         
         
-        if oo <= 3 || oo % 500 == 0 {
-            crate::serial_println!("[COSMIC2] Loop iteration {}", oo);
+        if frame_count <= 3 || frame_count % 500 == 0 {
+            crate::serial_println!("[COSMIC2] Loop iteration {}", frame_count);
         }
         
         
@@ -4321,967 +4327,967 @@ pub(super) fn kih(lek: Option<&str>, sg: u64) {
         
         
         
-        let mut msl = 0u8;
-        while let Some(bs) = crate::keyboard::xw() {
-            msl += 1;
-            if msl > 8 { break; } 
-            crate::serial_println!("[KEY] Received key: {} (0x{:02X})", bs, bs);
+        let mut hdk = 0u8;
+        while let Some(key) = crate::keyboard::kr() {
+            hdk += 1;
+            if hdk > 8 { break; } 
+            crate::serial_println!("[KEY] Received key: {} (0x{:02X})", key, key);
             
-            if atu == AppMode::Browser {
-                match bs {
+            if xm == AppMode::Browser {
+                match key {
                     27 => { 
-                        atu = AppMode::Df;
-                        cz.clear();
-                        for line in gie!(AppMode::Df) {
-                            cz.push(String::from(*line));
+                        xm = AppMode::Shell;
+                        ap.clear();
+                        for line in cyo!(AppMode::Shell) {
+                            ap.push(String::from(*line));
                         }
                     },
                     9 => { 
-                        hbj = (hbj + 1) % 2;
-                        if hbj == 0 {
-                            bpu = String::from("View: DevTools (source)");
+                        djq = (djq + 1) % 2;
+                        if djq == 0 {
+                            ajg = String::from("View: DevTools (source)");
                         } else {
-                            bpu = String::from("View: Rendered");
+                            ajg = String::from("View: Rendered");
                         }
                     },
                     8 => { 
-                        if bmb.len() > 7 { 
-                            bmb.pop();
+                        if ahk.len() > 7 { 
+                            ahk.pop();
                         }
                     },
                     10 | 13 => { 
-                        ps.clear();
-                        bpu = format!("Loading {}...", bmb);
-                        btn = true;
+                        gy.clear();
+                        ajg = format!("Loading {}...", ahk);
+                        browser_loading = true;
                         
                         
-                        let fmc = bmb.cj("https://");
+                        let cln = ahk.starts_with("https://");
                         
                         
-                        if let Some((kh, port, path, ify)) = super::vm::lsm(&bmb) {
-                            let protocol = if ify { "HTTPS" } else { "HTTP" };
-                            ps.push(tr(&format!("? {} {}:{}{}...", protocol, kh, port, path), 0xFF88FF88, LineType::Bq));
+                        if let Some((host, port, path, url_is_https)) = super::vm::gml(&ahk) {
+                            let protocol = if url_is_https { "HTTPS" } else { "HTTP" };
+                            gy.push(jb(&format!("? {} {}:{}{}...", protocol, host, port, path), 0xFF88FF88, LineType::PlainText));
                             
-                            if ify {
+                            if url_is_https {
                                 
-                                ps.push(tr("? Establishing TLS 1.3 connection...", 0xFF88CCFF, LineType::Bq));
+                                gy.push(jb("? Establishing TLS 1.3 connection...", 0xFF88CCFF, LineType::PlainText));
                                 
-                                match crate::netstack::https::get(&bmb) {
-                                    Ok(mk) => {
-                                        ps.push(tr(&format!("? TLS handshake complete, received {} bytes", mk.gj.len()), 0xFF88FF88, LineType::Bq));
-                                        ps.push(tr("", 0xFFDDDDDD, LineType::Bq));
+                                match crate::netstack::https::get(&ahk) {
+                                    Ok(fa) => {
+                                        gy.push(jb(&format!("? TLS handshake complete, received {} bytes", fa.body.len()), 0xFF88FF88, LineType::PlainText));
+                                        gy.push(jb("", 0xFFDDDDDD, LineType::PlainText));
                                         
                                         
-                                        ps.push(tr("-- Response Headers --", 0xFF61AFEF, LineType::Kp));
-                                        ps.push(tr(&format!("HTTP/1.1 {}", mk.wt), NL_, LineType::Kp));
-                                        for (bs, bn) in &mk.zk {
-                                            ps.push(tr(&format!("{}: {}", bs, bn), NL_, LineType::Kp));
+                                        gy.push(jb("-- Response Headers --", 0xFF61AFEF, LineType::HttpHeader));
+                                        gy.push(jb(&format!("HTTP/1.1 {}", fa.status_code), OM_, LineType::HttpHeader));
+                                        for (key, value) in &fa.headers {
+                                            gy.push(jb(&format!("{}: {}", key, value), OM_, LineType::HttpHeader));
                                         }
-                                        ps.push(tr("", 0xFFDDDDDD, LineType::Bq));
+                                        gy.push(jb("", 0xFFDDDDDD, LineType::PlainText));
                                         
                                         
-                                        ps.push(tr("-- HTML Source --", 0xFF61AFEF, LineType::Kp));
-                                        if let Ok(dza) = core::str::jg(&mk.gj) {
-                                            for line in dza.ak().take(200) {
-                                                ps.push(jes(line));
+                                        gy.push(jb("-- HTML Source --", 0xFF61AFEF, LineType::HttpHeader));
+                                        if let Ok(body_str) = core::str::from_utf8(&fa.body) {
+                                            for line in body_str.lines().take(200) {
+                                                gy.push(ets(line));
                                             }
                                         } else {
-                                            ps.push(tr("[Binary content]", 0xFFFFFF00, LineType::Bq));
+                                            gy.push(jb("[Binary content]", 0xFFFFFF00, LineType::PlainText));
                                         }
                                         
-                                        bpu = format!("? Loaded: {} ({} bytes, HTTPS)", bmb, mk.gj.len());
+                                        ajg = format!("? Loaded: {} ({} bytes, HTTPS)", ahk, fa.body.len());
                                     }
-                                    Err(aa) => {
-                                        ps.push(tr(&format!("? HTTPS Error: {}", aa), 0xFFFF4444, LineType::Q));
-                                        ps.push(tr("", 0xFFDDDDDD, LineType::Bq));
-                                        ps.push(tr("TLS 1.3 connection failed. Possible causes:", 0xFFFFFF00, LineType::Bq));
-                                        ps.push(tr("  * DNS resolution failed", 0xFFAAAAAA, LineType::Bq));
-                                        ps.push(tr("  * Server doesn't support TLS 1.3", 0xFFAAAAAA, LineType::Bq));
-                                        ps.push(tr("  * Network timeout", 0xFFAAAAAA, LineType::Bq));
-                                        bpu = format!("? HTTPS Error: {}", aa);
+                                    Err(e) => {
+                                        gy.push(jb(&format!("? HTTPS Error: {}", e), 0xFFFF4444, LineType::Error));
+                                        gy.push(jb("", 0xFFDDDDDD, LineType::PlainText));
+                                        gy.push(jb("TLS 1.3 connection failed. Possible causes:", 0xFFFFFF00, LineType::PlainText));
+                                        gy.push(jb("  * DNS resolution failed", 0xFFAAAAAA, LineType::PlainText));
+                                        gy.push(jb("  * Server doesn't support TLS 1.3", 0xFFAAAAAA, LineType::PlainText));
+                                        gy.push(jb("  * Network timeout", 0xFFAAAAAA, LineType::PlainText));
+                                        ajg = format!("? HTTPS Error: {}", e);
                                     }
                                 }
                             } else {
                                 
                                 
-                                let hop = if let Some(ip) = super::vm::cgl(&kh) {
+                                let dsi = if let Some(ip) = super::vm::art(&host) {
                                     Some(ip)
                                 } else {
                                     
-                                    crate::netstack::dns::ayo(&kh)
+                                    crate::netstack::dns::yb(&host)
                                 };
                                 
-                                if let Some(ip) = hop {
-                                    ps.push(tr(&format!("? Resolved: {}.{}.{}.{}", ip[0], ip[1], ip[2], ip[3]), 0xFF88FF88, LineType::Bq));
+                                if let Some(ip) = dsi {
+                                    gy.push(jb(&format!("? Resolved: {}.{}.{}.{}", ip[0], ip[1], ip[2], ip[3]), 0xFF88FF88, LineType::PlainText));
                                     
                                     
-                                    match super::vm::nmj(&kh, ip, port, &path) {
-                                        Ok(mk) => {
-                                            ps.push(tr("", 0xFFDDDDDD, LineType::Bq));
+                                    match super::vm::hta(&host, ip, port, &path) {
+                                        Ok(fa) => {
+                                            gy.push(jb("", 0xFFDDDDDD, LineType::PlainText));
                                             
                                             
-                                            let mut odq = true;
-                                            ps.push(tr("-- Response Headers --", 0xFF61AFEF, LineType::Kp));
+                                            let mut iga = true;
+                                            gy.push(jb("-- Response Headers --", 0xFF61AFEF, LineType::HttpHeader));
                                             
-                                            for line in mk.ak() {
-                                                if odq {
+                                            for line in fa.lines() {
+                                                if iga {
                                                     if line.is_empty() {
-                                                        odq = false;
-                                                        ps.push(tr("", 0xFFDDDDDD, LineType::Bq));
-                                                        ps.push(tr("-- HTML Source --", 0xFF61AFEF, LineType::Kp));
+                                                        iga = false;
+                                                        gy.push(jb("", 0xFFDDDDDD, LineType::PlainText));
+                                                        gy.push(jb("-- HTML Source --", 0xFF61AFEF, LineType::HttpHeader));
                                                     } else {
-                                                        ps.push(tr(line, NL_, LineType::Kp));
+                                                        gy.push(jb(line, OM_, LineType::HttpHeader));
                                                     }
                                                 } else {
                                                     
-                                                    ps.push(jes(line));
+                                                    gy.push(ets(line));
                                                 }
                                             }
                                             
-                                            bpu = format!("? Loaded: {} ({} bytes)", bmb, mk.len());
+                                            ajg = format!("? Loaded: {} ({} bytes)", ahk, fa.len());
                                         }
-                                        Err(aa) => {
-                                            ps.push(tr(&format!("? HTTP Error: {}", aa), 0xFFFF4444, LineType::Q));
-                                            bpu = format!("? Error: {}", aa);
+                                        Err(e) => {
+                                            gy.push(jb(&format!("? HTTP Error: {}", e), 0xFFFF4444, LineType::Error));
+                                            ajg = format!("? Error: {}", e);
                                         }
                                     }
                                 } else {
-                                    ps.push(tr(&format!("? Error: Cannot resolve host '{}'", kh), 0xFFFF4444, LineType::Q));
-                                    ps.push(tr("", 0xFFDDDDDD, LineType::Bq));
-                                    ps.push(tr("Tip: Try a local server or IP address:", 0xFFFFFF00, LineType::Bq));
-                                    ps.push(tr("  * http://192.168.56.1:8080/", 0xFF00FFFF, LineType::Bq));
-                                    ps.push(tr("  * http://10.0.2.2:8000/", 0xFF00FFFF, LineType::Bq));
-                                    bpu = String::from("? Error: DNS resolution failed");
+                                    gy.push(jb(&format!("? Error: Cannot resolve host '{}'", host), 0xFFFF4444, LineType::Error));
+                                    gy.push(jb("", 0xFFDDDDDD, LineType::PlainText));
+                                    gy.push(jb("Tip: Try a local server or IP address:", 0xFFFFFF00, LineType::PlainText));
+                                    gy.push(jb("  * http://192.168.56.1:8080/", 0xFF00FFFF, LineType::PlainText));
+                                    gy.push(jb("  * http://10.0.2.2:8000/", 0xFF00FFFF, LineType::PlainText));
+                                    ajg = String::from("? Error: DNS resolution failed");
                                 }
                             }
                         } else {
-                            ps.push(tr("? Invalid URL format", 0xFFFF4444, LineType::Q));
-                            ps.push(tr("", 0xFFDDDDDD, LineType::Bq));
-                            ps.push(tr("Use format: http://hostname/path or https://hostname/path", 0xFFFFFF00, LineType::Bq));
-                            ps.push(tr("", 0xFFDDDDDD, LineType::Bq));
-                            ps.push(tr("Examples:", 0xFF88FF88, LineType::Bq));
-                            ps.push(tr("  * https://google.com", 0xFF00FFFF, LineType::Bq));
-                            ps.push(tr("  * https://example.com", 0xFF00FFFF, LineType::Bq));
-                            ps.push(tr("  * http://192.168.1.1/", 0xFF00FFFF, LineType::Bq));
-                            bpu = String::from("? Error: Invalid URL");
+                            gy.push(jb("? Invalid URL format", 0xFFFF4444, LineType::Error));
+                            gy.push(jb("", 0xFFDDDDDD, LineType::PlainText));
+                            gy.push(jb("Use format: http://hostname/path or https://hostname/path", 0xFFFFFF00, LineType::PlainText));
+                            gy.push(jb("", 0xFFDDDDDD, LineType::PlainText));
+                            gy.push(jb("Examples:", 0xFF88FF88, LineType::PlainText));
+                            gy.push(jb("  * https://google.com", 0xFF00FFFF, LineType::PlainText));
+                            gy.push(jb("  * https://example.com", 0xFF00FFFF, LineType::PlainText));
+                            gy.push(jb("  * http://192.168.1.1/", 0xFF00FFFF, LineType::PlainText));
+                            ajg = String::from("? Error: Invalid URL");
                         }
-                        btn = false;
+                        browser_loading = false;
                     },
                     32..=126 => { 
-                        bmb.push(bs as char);
+                        ahk.push(key as char);
                     },
                     _ => {}
                 }
-            } else if atu == AppMode::Bp {
+            } else if xm == AppMode::ImageViewer {
                 
-                match bs {
+                match key {
                     27 => { 
-                        atu = AppMode::Df;
-                        cz.clear();
-                        for line in gie!(AppMode::Df) {
-                            cz.push(String::from(*line));
+                        xm = AppMode::Shell;
+                        ap.clear();
+                        for line in cyo!(AppMode::Shell) {
+                            ap.push(String::from(*line));
                         }
                     },
                     43 | 61 => { 
-                        dig = (dig * 1.25).v(10.0);
+                        bhc = (bhc * 1.25).min(10.0);
                     },
                     45 => { 
-                        dig = (dig / 1.25).am(0.1);
+                        bhc = (bhc / 1.25).max(0.1);
                     },
                     114 | 82 => { 
-                        dig = 1.0;
-                        ldj = 0;
-                        ldk = 0;
+                        bhc = 1.0;
+                        gbu = 0;
+                        gbv = 0;
                     },
                     
                     
                     _ => {}
                 }
-            } else if atu == AppMode::Ag {
+            } else if xm == AppMode::TextEditor {
                 
-                match bs {
+                match key {
                     27 => { 
-                        atu = AppMode::Df;
-                        cz.clear();
-                        for line in gie!(AppMode::Df) {
-                            cz.push(String::from(*line));
+                        xm = AppMode::Shell;
+                        ap.clear();
+                        for line in cyo!(AppMode::Shell) {
+                            ap.push(String::from(*line));
                         }
                     },
                     _ => {
                         
-                        aey.vr(bs);
+                        editor_state.handle_key(key);
                     }
                 }
             } else {
                 
-            match bs {
+            match key {
                 27 => { 
-                    if awe || dvu {
-                        awe = false;
-                        dvu = false;
+                    if yx || bou {
+                        yx = false;
+                        bou = false;
                     } else {
-                        aqk = false;
+                        running = false;
                     }
                 },
                 8 => { 
-                    bfh.pop();
-                    gto.clear();
+                    shell_input.pop();
+                    dez.clear();
                 },
                 0x49 => { 
-                    if px > 0 {
-                        px = px.ao(5);
+                    if scroll_offset > 0 {
+                        scroll_offset = scroll_offset.saturating_sub(5);
                     }
                 },
                 0x51 => { 
-                    let aye = cz.len().ao(AFH_);
-                    if px < aye {
-                        px = (px + 5).v(aye);
+                    let aab = ap.len().saturating_sub(AHB_);
+                    if scroll_offset < aab {
+                        scroll_offset = (scroll_offset + 5).min(aab);
                     }
                 },
                 10 | 13 => { 
-                    if !bfh.is_empty() {
-                        let nef = bfh.clone();
-                        let cmd = nef.em();  
-                        crate::serial_println!("[DEBUG] Enter pressed, cmd = '{}' (trimmed: '{}')", nef, cmd);
-                        cz.push(format!("> {}", cmd));
+                    if !shell_input.is_empty() {
+                        let hmd = shell_input.clone();
+                        let cmd = hmd.trim();  
+                        crate::serial_println!("[DEBUG] Enter pressed, cmd = '{}' (trimmed: '{}')", hmd, cmd);
+                        ap.push(format!("> {}", cmd));
                         
                         
-                        bqa.push(String::from(cmd));
-                        if bqa.len() > AZQ_ {
-                            bqa.remove(0);
+                        command_history.push(String::from(cmd));
+                        if command_history.len() > BBS_ {
+                            command_history.remove(0);
                         }
                         
                         
-                        crate::serial_println!("[MATCH] About to match cmd='{}' starts_with_shader={}", cmd, cmd.cj("shader "));
+                        crate::serial_println!("[MATCH] About to match cmd='{}' starts_with_shader={}", cmd, cmd.starts_with("shader "));
                         match cmd {
                             "help" => {
-                                cz.push(String::from("+================================================+"));
-                                cz.push(String::from("|          TrustOS Desktop Shell                 |"));
-                                cz.push(String::from("+================================================+"));
-                                cz.push(String::from("| FILE SYSTEM:                                   |"));
-                                cz.push(String::from("|   ls, cd, pwd, mkdir, rmdir, touch, rm, cat    |"));
-                                cz.push(String::from("|   cp, mv, head, tail, stat, tree, find, wc     |"));
-                                cz.push(String::from("|   chmod, chown, ln, grep                       |"));
-                                cz.push(String::from("| NETWORK:                                       |"));
-                                cz.push(String::from("|   ifconfig, ping, curl, wget, nslookup         |"));
-                                cz.push(String::from("|   arp, route, traceroute, netstat              |"));
-                                cz.push(String::from("| SYSTEM:                                        |"));
-                                cz.push(String::from("|   clear, date, time, uptime, whoami, hostname  |"));
-                                cz.push(String::from("|   uname, env, history, ps, free, df, top       |"));
-                                cz.push(String::from("| HARDWARE:                                      |"));
-                                cz.push(String::from("|   cpuinfo, meminfo, lspci, lsusb, lscpu, disk  |"));
-                                cz.push(String::from("| USERS:                                         |"));
-                                cz.push(String::from("|   login, su, passwd, adduser, users            |"));
-                                cz.push(String::from("| UTILITIES:                                     |"));
-                                cz.push(String::from("|   echo, hexdump, strings, sort, cal, bc        |"));
-                                cz.push(String::from("| DESKTOP:                                       |"));
-                                cz.push(String::from("|   desktop close - Exit desktop                 |"));
-                                cz.push(String::from("|   open <app> - Open app (browser,files,editor) |"));
-                                cz.push(String::from("|   imgview <file> - View images (PNG/BMP)       |"));
-                                cz.push(String::from("|   3ddemo - 3D rotating cube demo               |"));
-                                cz.push(String::from("+================================================+"));
+                                ap.push(String::from("+================================================+"));
+                                ap.push(String::from("|          TrustOS Desktop Shell                 |"));
+                                ap.push(String::from("+================================================+"));
+                                ap.push(String::from("| FILE SYSTEM:                                   |"));
+                                ap.push(String::from("|   ls, cd, pwd, mkdir, rmdir, touch, rm, cat    |"));
+                                ap.push(String::from("|   cp, mv, head, tail, stat, tree, find, wc     |"));
+                                ap.push(String::from("|   chmod, chown, ln, grep                       |"));
+                                ap.push(String::from("| NETWORK:                                       |"));
+                                ap.push(String::from("|   ifconfig, ping, curl, wget, nslookup         |"));
+                                ap.push(String::from("|   arp, route, traceroute, netstat              |"));
+                                ap.push(String::from("| SYSTEM:                                        |"));
+                                ap.push(String::from("|   clear, date, time, uptime, whoami, hostname  |"));
+                                ap.push(String::from("|   uname, env, history, ps, free, df, top       |"));
+                                ap.push(String::from("| HARDWARE:                                      |"));
+                                ap.push(String::from("|   cpuinfo, meminfo, lspci, lsusb, lscpu, disk  |"));
+                                ap.push(String::from("| USERS:                                         |"));
+                                ap.push(String::from("|   login, su, passwd, adduser, users            |"));
+                                ap.push(String::from("| UTILITIES:                                     |"));
+                                ap.push(String::from("|   echo, hexdump, strings, sort, cal, bc        |"));
+                                ap.push(String::from("| DESKTOP:                                       |"));
+                                ap.push(String::from("|   desktop close - Exit desktop                 |"));
+                                ap.push(String::from("|   open <app> - Open app (browser,files,editor) |"));
+                                ap.push(String::from("|   imgview <file> - View images (PNG/BMP)       |"));
+                                ap.push(String::from("|   3ddemo - 3D rotating cube demo               |"));
+                                ap.push(String::from("+================================================+"));
                             },
                             "clear" => {
-                                cz.clear();
+                                ap.clear();
                             },
                             "pwd" => {
                                 
-                                let jv = crate::ramfs::fh(|fs| String::from(fs.dau()));
-                                cz.push(jv);
+                                let cwd = crate::ramfs::bh(|fs| String::from(fs.pwd()));
+                                ap.push(cwd);
                             },
                             "ls" | "dir" => {
                                 
-                                match crate::ramfs::fh(|fs| fs.awb(None)) {
-                                    Ok(pj) => {
-                                        if pj.is_empty() {
-                                            cz.push(String::from("(empty)"));
+                                match crate::ramfs::bh(|fs| fs.ls(None)) {
+                                    Ok(items) => {
+                                        if items.is_empty() {
+                                            ap.push(String::from("(empty)"));
                                         } else {
-                                            for (j, kd, aw) in pj {
-                                                match kd {
-                                                    FileType::K => {
-                                                        cz.push(format!("{}  <DIR>", j));
+                                            for (name, file_type, size) in items {
+                                                match file_type {
+                                                    FileType::Directory => {
+                                                        ap.push(format!("{}  <DIR>", name));
                                                     }
-                                                    FileType::Es => {
-                                                        cz.push(format!("{}  {} B", j, aw));
+                                                    FileType::File => {
+                                                        ap.push(format!("{}  {} B", name, size));
                                                     }
                                                 }
                                             }
                                         }
                                     }
-                                    Err(aa) => {
-                                        cz.push(format!("ls: {}", aa.as_str()));
+                                    Err(e) => {
+                                        ap.push(format!("ls: {}", e.as_str()));
                                     }
                                 }
                             },
-                            "whoami" => cz.push(String::from("root")),
+                            "whoami" => ap.push(String::from("root")),
                             "ifconfig" => {
-                                if let Some(ed) = crate::network::ckt() {
-                                    let djg = format!("{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-                                        ed[0], ed[1], ed[2], ed[3], ed[4], ed[5]);
-                                    if let Some((ip, ydf, qcb)) = crate::network::aou() {
-                                        let dil = format!("{}.{}.{}.{}", 
+                                if let Some(mac) = crate::network::aqu() {
+                                    let bhv = format!("{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+                                        mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+                                    if let Some((ip, _subnet, _gw)) = crate::network::rd() {
+                                        let auc = format!("{}.{}.{}.{}", 
                                             ip.as_bytes()[0], ip.as_bytes()[1], ip.as_bytes()[2], ip.as_bytes()[3]);
-                                        cz.push(format!("eth0: {}  UP  RUNNING", dil));
+                                        ap.push(format!("eth0: {}  UP  RUNNING", auc));
                                     } else {
-                                        cz.push(String::from("eth0: No IP  UP  RUNNING"));
+                                        ap.push(String::from("eth0: No IP  UP  RUNNING"));
                                     }
-                                    cz.push(format!("      MAC: {}", djg));
+                                    ap.push(format!("      MAC: {}", bhv));
                                 } else {
-                                    cz.push(String::from("eth0: No network interface"));
+                                    ap.push(String::from("eth0: No network interface"));
                                 }
                             },
                             "cpuinfo" => {
-                                cz.push(String::from("CPU: QEMU Virtual CPU version 2.5+"));
-                                cz.push(String::from("Freq: 3.8 GHz | Cores: 1 | Arch: x86_64"));
-                                cz.push(String::from("Features: SSE SSE2 NX SVM"));
+                                ap.push(String::from("CPU: QEMU Virtual CPU version 2.5+"));
+                                ap.push(String::from("Freq: 3.8 GHz | Cores: 1 | Arch: x86_64"));
+                                ap.push(String::from("Features: SSE SSE2 NX SVM"));
                             },
                             "meminfo" => {
-                                let mr = crate::memory::heap::mr() / 1024;
-                                let es = crate::memory::cre() / 1024;
-                                let xkp = crate::memory::fxc() / 1024 / 1024;
-                                cz.push(format!("Heap: {} / {} KB", mr, es));
-                                cz.push(format!("System: {} MB total", xkp));
+                                let used = crate::memory::heap::used() / 1024;
+                                let av = crate::memory::atz() / 1024;
+                                let pme = crate::memory::ceo() / 1024 / 1024;
+                                ap.push(format!("Heap: {} / {} KB", used, av));
+                                ap.push(format!("System: {} MB total", pme));
                             },
                             "uptime" => {
-                                let tv = crate::cpu::tsc::ow() / crate::cpu::tsc::ard();
-                                let i = tv / 3600;
-                                let ef = (tv % 3600) / 60;
-                                let e = tv % 60;
-                                cz.push(format!("Uptime: {:02}:{:02}:{:02}", i, ef, e));
+                                let im = crate::cpu::tsc::ey() / crate::cpu::tsc::we();
+                                let h = im / 3600;
+                                let m = (im % 3600) / 60;
+                                let j = im % 60;
+                                ap.push(format!("Uptime: {:02}:{:02}:{:02}", h, m, j));
                             },
                             "exit" | "quit" => {
-                                cz.push(String::from("> Use 'desktop close' to exit desktop"));
+                                ap.push(String::from("> Use 'desktop close' to exit desktop"));
                             },
                             "date" | "time" => {
-                                let os = crate::rtc::cgz();
-                                cz.push(format!("{:04}-{:02}-{:02} {:02}:{:02}:{:02}", 
-                                    os.ccq, os.caw, os.cjw, os.bek, os.bri, os.chr));
+                                let fm = crate::rtc::aou();
+                                ap.push(format!("{:04}-{:02}-{:02} {:02}:{:02}:{:02}", 
+                                    fm.year, fm.month, fm.day, fm.hour, fm.minute, fm.second));
                             },
-                            "hostname" => cz.push(String::from("trustos")),
-                            "uname" => cz.push(String::from("TrustOS 0.1.0 x86_64")),
+                            "hostname" => ap.push(String::from("trustos")),
+                            "uname" => ap.push(String::from("TrustOS 0.1.0 x86_64")),
                             "holo" | "holomatrix" => {
                                 
                                 crate::serial_println!("[DEBUG] holo command received, toggling...");
-                                bnf = !bnf;
-                                crate::graphics::holomatrix::cuf(bnf);
-                                crate::serial_println!("[DEBUG] holo_enabled = {}", bnf);
-                                if bnf {
-                                    cz.push(String::from("? HoloMatrix 3D ENABLED"));
-                                    cz.push(String::from("  3D hologram appears through Matrix Rain"));
-                                    cz.push(String::from("  Use settings panel to change scene"));
+                                aia = !aia;
+                                crate::graphics::holomatrix::set_enabled(aia);
+                                crate::serial_println!("[DEBUG] holo_enabled = {}", aia);
+                                if aia {
+                                    ap.push(String::from("? HoloMatrix 3D ENABLED"));
+                                    ap.push(String::from("  3D hologram appears through Matrix Rain"));
+                                    ap.push(String::from("  Use settings panel to change scene"));
                                 } else {
-                                    cz.push(String::from("? HoloMatrix 3D DISABLED"));
-                                    cz.push(String::from("  Standard Matrix Rain background"));
+                                    ap.push(String::from("? HoloMatrix 3D DISABLED"));
+                                    ap.push(String::from("  Standard Matrix Rain background"));
                                 }
                             },
                             "holo on" => {
-                                bnf = true;
-                                crate::graphics::holomatrix::cuf(true);
-                                cz.push(String::from("? HoloMatrix 3D enabled"));
+                                aia = true;
+                                crate::graphics::holomatrix::set_enabled(true);
+                                ap.push(String::from("? HoloMatrix 3D enabled"));
                             },
                             "holo off" => {
-                                bnf = false;
-                                dmx = false;
-                                crate::graphics::holomatrix::cuf(false);
-                                cz.push(String::from("? HoloMatrix 3D disabled"));
+                                aia = false;
+                                bju = false;
+                                crate::graphics::holomatrix::set_enabled(false);
+                                ap.push(String::from("? HoloMatrix 3D disabled"));
                             },
                             "holo volume" | "holovolume" => {
                                 
-                                dmx = !dmx;
-                                if dmx {
-                                    bnf = false;  
-                                    cz.push(String::from("? HOLOVOLUME ENABLED"));
-                                    cz.push(String::from("  Volumetric ASCII raymarcher active"));
-                                    cz.push(String::from("  3D voxel grid projected to 2D"));
-                                    cz.push(String::from("  Aligned characters = brighter"));
+                                bju = !bju;
+                                if bju {
+                                    aia = false;  
+                                    ap.push(String::from("? HOLOVOLUME ENABLED"));
+                                    ap.push(String::from("  Volumetric ASCII raymarcher active"));
+                                    ap.push(String::from("  3D voxel grid projected to 2D"));
+                                    ap.push(String::from("  Aligned characters = brighter"));
                                 } else {
-                                    cz.push(String::from("? HoloVolume disabled"));
-                                    cz.push(String::from("  Back to Matrix Rain"));
+                                    ap.push(String::from("? HoloVolume disabled"));
+                                    ap.push(String::from("  Back to Matrix Rain"));
                                 }
                             },
                             "holo dna" => {
-                                dmx = true;
-                                holovolume.che = crate::holovolume::RenderMode::Sd;
-                                cz.push(String::from("? HoloVolume: DNA Helix"));
+                                bju = true;
+                                holovolume.render_mode = crate::holovolume::RenderMode::DnaHelix;
+                                ap.push(String::from("? HoloVolume: DNA Helix"));
                             },
                             "holo cube" => {
-                                dmx = true;
-                                holovolume.che = crate::holovolume::RenderMode::Jb;
-                                cz.push(String::from("? HoloVolume: Rotating Cube"));
+                                bju = true;
+                                holovolume.render_mode = crate::holovolume::RenderMode::RotatingCube;
+                                ap.push(String::from("? HoloVolume: Rotating Cube"));
                             },
                             "holo sphere" => {
-                                dmx = true;
-                                holovolume.che = crate::holovolume::RenderMode::Sphere;
-                                cz.push(String::from("? HoloVolume: Sphere"));
+                                bju = true;
+                                holovolume.render_mode = crate::holovolume::RenderMode::Sphere;
+                                ap.push(String::from("? HoloVolume: Sphere"));
                             },
                             "holo rain" => {
-                                dmx = true;
-                                holovolume.che = crate::holovolume::RenderMode::Avj;
-                                cz.push(String::from("? HoloVolume: Matrix Rain (volumetric)"));
+                                bju = true;
+                                holovolume.render_mode = crate::holovolume::RenderMode::MatrixRain;
+                                ap.push(String::from("? HoloVolume: Matrix Rain (volumetric)"));
                             },
                             
                             
                             
                             "matrix formula" | "formula" | "formula3d" => {
-                                atr = true;
-                                apf = false;
-                                aqq = false;
-                                avf = false;
-                                ats = false;
-                                dmx = false;
-                                cz.push(String::from("? FORMULA 3D: Wireframe perspective projection"));
-                                cz.push(String::from("  Commands: formula cube|pyramid|diamond|torus|sphere|grid|helix|multi"));
+                                xk = true;
+                                vb = false;
+                                vv = false;
+                                yg = false;
+                                xl = false;
+                                bju = false;
+                                ap.push(String::from("? FORMULA 3D: Wireframe perspective projection"));
+                                ap.push(String::from("  Commands: formula cube|pyramid|diamond|torus|sphere|grid|helix|multi"));
                             },
                             "formula cube" => {
-                                atr = true; apf = false; aqq = false; avf = false; ats = false;
-                                cet.bid(crate::formula3d::FormulaScene::Dw);
-                                cz.push(String::from("? FORMULA: Rotating Cube"));
+                                xk = true; vb = false; vv = false; yg = false; xl = false;
+                                aqp.set_scene(crate::formula3d::FormulaScene::Cube);
+                                ap.push(String::from("? FORMULA: Rotating Cube"));
                             },
                             "formula pyramid" => {
-                                atr = true; apf = false; aqq = false; avf = false; ats = false;
-                                cet.bid(crate::formula3d::FormulaScene::Yh);
-                                cz.push(String::from("? FORMULA: Pyramid"));
+                                xk = true; vb = false; vv = false; yg = false; xl = false;
+                                aqp.set_scene(crate::formula3d::FormulaScene::Pyramid);
+                                ap.push(String::from("? FORMULA: Pyramid"));
                             },
                             "formula diamond" => {
-                                atr = true; apf = false; aqq = false; avf = false; ats = false;
-                                cet.bid(crate::formula3d::FormulaScene::Wh);
-                                cz.push(String::from("? FORMULA: Diamond octahedron"));
+                                xk = true; vb = false; vv = false; yg = false; xl = false;
+                                aqp.set_scene(crate::formula3d::FormulaScene::Diamond);
+                                ap.push(String::from("? FORMULA: Diamond octahedron"));
                             },
                             "formula torus" | "formula donut" => {
-                                atr = true; apf = false; aqq = false; avf = false; ats = false;
-                                cet.bid(crate::formula3d::FormulaScene::Dr);
-                                cz.push(String::from("? FORMULA: Torus (donut)"));
+                                xk = true; vb = false; vv = false; yg = false; xl = false;
+                                aqp.set_scene(crate::formula3d::FormulaScene::Torus);
+                                ap.push(String::from("? FORMULA: Torus (donut)"));
                             },
                             "formula sphere" => {
-                                atr = true; apf = false; aqq = false; avf = false; ats = false;
-                                cet.bid(crate::formula3d::FormulaScene::Ajb);
-                                cz.push(String::from("? FORMULA: Icosphere"));
+                                xk = true; vb = false; vv = false; yg = false; xl = false;
+                                aqp.set_scene(crate::formula3d::FormulaScene::Icosphere);
+                                ap.push(String::from("? FORMULA: Icosphere"));
                             },
                             "formula grid" => {
-                                atr = true; apf = false; aqq = false; avf = false; ats = false;
-                                cet.bid(crate::formula3d::FormulaScene::Pn);
-                                cz.push(String::from("? FORMULA: Infinite grid"));
+                                xk = true; vb = false; vv = false; yg = false; xl = false;
+                                aqp.set_scene(crate::formula3d::FormulaScene::Grid);
+                                ap.push(String::from("? FORMULA: Infinite grid"));
                             },
                             "formula helix" | "formula dna" => {
-                                atr = true; apf = false; aqq = false; avf = false; ats = false;
-                                cet.bid(crate::formula3d::FormulaScene::Aix);
-                                cz.push(String::from("? FORMULA: DNA helix"));
+                                xk = true; vb = false; vv = false; yg = false; xl = false;
+                                aqp.set_scene(crate::formula3d::FormulaScene::Helix);
+                                ap.push(String::from("? FORMULA: DNA helix"));
                             },
                             "formula multi" => {
-                                atr = true; apf = false; aqq = false; avf = false; ats = false;
-                                cet.bid(crate::formula3d::FormulaScene::Adg);
-                                cz.push(String::from("? FORMULA: Multi - orbiting shapes"));
+                                xk = true; vb = false; vv = false; yg = false; xl = false;
+                                aqp.set_scene(crate::formula3d::FormulaScene::Multi);
+                                ap.push(String::from("? FORMULA: Multi - orbiting shapes"));
                             },
                             "formula penger" | "formula penguin" | "penger" => {
-                                atr = true; apf = false; aqq = false; avf = false; ats = false;
-                                cet.bid(crate::formula3d::FormulaScene::Ald);
-                                cz.push(String::from("? FORMULA: Penger - hologram penguin ??"));
+                                xk = true; vb = false; vv = false; yg = false; xl = false;
+                                aqp.set_scene(crate::formula3d::FormulaScene::Penger);
+                                ap.push(String::from("? FORMULA: Penger - hologram penguin ??"));
                             },
                             "formula trustos" | "formula title" | "trustos" | "trustos 3d" => {
-                                atr = true; apf = false; aqq = false; avf = false; ats = false;
-                                cet.bid(crate::formula3d::FormulaScene::Zg);
-                                cet.dxr = 0xFF00CCFF;
-                                cz.push(String::from("? FORMULA: TrustOS 3D -- hologram scanline title"));
+                                xk = true; vb = false; vv = false; yg = false; xl = false;
+                                aqp.set_scene(crate::formula3d::FormulaScene::TrustOs);
+                                aqp.wire_color = 0xFF00CCFF;
+                                ap.push(String::from("? FORMULA: TrustOS 3D -- hologram scanline title"));
                             },
                             "formula holo" | "holo matrix" | "holomatrix" | "matrix holo" | "matrix 3d holo" => {
-                                atr = true; apf = false; aqq = false; avf = false; ats = false;
-                                cet.bid(crate::formula3d::FormulaScene::HoloMatrix);
-                                cz.push(String::from("? FORMULA: HoloMatrix 3D -- volumetric holographic rain"));
+                                xk = true; vb = false; vv = false; yg = false; xl = false;
+                                aqp.set_scene(crate::formula3d::FormulaScene::HoloMatrix);
+                                ap.push(String::from("? FORMULA: HoloMatrix 3D -- volumetric holographic rain"));
                             },
                             "matrix fast" => {
-                                atr = false;
-                                aqq = true;
-                                apf = false;
-                                ats = false;
-                                cz.push(String::from("? FAST MATRIX: Glyph-cached renderer"));
-                                cz.push(String::from("  Pre-computed u128 glyphs + LUT intensity"));
+                                xk = false;
+                                vv = true;
+                                vb = false;
+                                xl = false;
+                                ap.push(String::from("? FAST MATRIX: Glyph-cached renderer"));
+                                ap.push(String::from("  Pre-computed u128 glyphs + LUT intensity"));
                             },
                             "matrix braille" => {
-                                atr = false;
-                                apf = true;
-                                aqq = false;
-                                ats = false;
-                                cz.push(String::from("? BRAILLE MATRIX: 8A-- sub-pixel resolution"));
-                                cz.push(String::from("  480A--272 virtual pixels via Unicode ??"));
+                                xk = false;
+                                vb = true;
+                                vv = false;
+                                xl = false;
+                                ap.push(String::from("? BRAILLE MATRIX: 8A-- sub-pixel resolution"));
+                                ap.push(String::from("  480A--272 virtual pixels via Unicode ??"));
                             },
                             "matrix legacy" => {
-                                atr = false;
-                                aqq = false;
-                                apf = false;
-                                avf = false;
-                                ats = false;
-                                cz.push(String::from("? LEGACY MATRIX: Original renderer"));
-                                cz.push(String::from("  Per-pixel font lookup (slower)"));
+                                xk = false;
+                                vv = false;
+                                vb = false;
+                                yg = false;
+                                xl = false;
+                                ap.push(String::from("? LEGACY MATRIX: Original renderer"));
+                                ap.push(String::from("  Per-pixel font lookup (slower)"));
                             },
                             "matrix3d" | "matrix 3d" => {
-                                atr = false;
-                                avf = !avf;
-                                apf = !avf;
-                                aqq = false;
-                                ats = false;
-                                if avf {
-                                    cz.push(String::from("? MATRIX 3D: Volumetric rain with shapes"));
-                                    cz.push(String::from("  Commands: matrix3d sphere | cube | torus"));
+                                xk = false;
+                                yg = !yg;
+                                vb = !yg;
+                                vv = false;
+                                xl = false;
+                                if yg {
+                                    ap.push(String::from("? MATRIX 3D: Volumetric rain with shapes"));
+                                    ap.push(String::from("  Commands: matrix3d sphere | cube | torus"));
                                 } else {
-                                    cz.push(String::from("? MATRIX 3D: Disabled, back to BRAILLE"));
+                                    ap.push(String::from("? MATRIX 3D: Disabled, back to BRAILLE"));
                                 }
                             },
                             "matrix3d sphere" | "matrix 3d sphere" => {
-                                atr = false;
-                                avf = true;
-                                apf = false;
-                                aqq = false;
-                                ats = false;
-                                hqv.wir();
-                                cz.push(String::from("? MATRIX 3D: Sphere - rain flows around it"));
+                                xk = false;
+                                yg = true;
+                                vb = false;
+                                vv = false;
+                                xl = false;
+                                dty.set_demo_shapes();
+                                ap.push(String::from("? MATRIX 3D: Sphere - rain flows around it"));
                             },
                             "matrix3d cube" | "matrix 3d cube" => {
-                                atr = false;
-                                avf = true;
-                                apf = false;
-                                aqq = false;
-                                ats = false;
-                                hqv.win();
-                                cz.push(String::from("? MATRIX 3D: Rotating Cube"));
+                                xk = false;
+                                yg = true;
+                                vb = false;
+                                vv = false;
+                                xl = false;
+                                dty.set_cube();
+                                ap.push(String::from("? MATRIX 3D: Rotating Cube"));
                             },
                             "matrix3d torus" | "matrix 3d torus" => {
-                                atr = false;
-                                avf = true;
-                                apf = false;
-                                aqq = false;
-                                ats = false;
-                                hqv.wjs();
-                                cz.push(String::from("? MATRIX 3D: Torus (donut shape)"));
+                                xk = false;
+                                yg = true;
+                                vb = false;
+                                vv = false;
+                                xl = false;
+                                dty.set_torus();
+                                ap.push(String::from("? MATRIX 3D: Torus (donut shape)"));
                             },
                             
                             "matrix cube" => {
-                                atr = false;
-                                apf = true;
-                                avf = false;
-                                aqq = false;
-                                ats = false;
-                                dzd.gsg(crate::matrix_fast::ShapeOverlay::Dw);
-                                cz.push(String::from("? MATRIX: Cube overlay - glyphs trace rotating cube"));
+                                xk = false;
+                                vb = true;
+                                yg = false;
+                                vv = false;
+                                xl = false;
+                                bqu.set_shape(crate::matrix_fast::ShapeOverlay::Cube);
+                                ap.push(String::from("? MATRIX: Cube overlay - glyphs trace rotating cube"));
                             },
                             "matrix sphere" => {
-                                atr = false;
-                                apf = true;
-                                avf = false;
-                                aqq = false;
-                                ats = false;
-                                dzd.gsg(crate::matrix_fast::ShapeOverlay::Sphere);
-                                cz.push(String::from("? MATRIX: Sphere overlay - glyphs trace sphere surface"));
+                                xk = false;
+                                vb = true;
+                                yg = false;
+                                vv = false;
+                                xl = false;
+                                bqu.set_shape(crate::matrix_fast::ShapeOverlay::Sphere);
+                                ap.push(String::from("? MATRIX: Sphere overlay - glyphs trace sphere surface"));
                             },
                             "matrix torus" => {
-                                atr = false;
-                                apf = true;
-                                avf = false;
-                                aqq = false;
-                                ats = false;
-                                dzd.gsg(crate::matrix_fast::ShapeOverlay::Dr);
-                                cz.push(String::from("? MATRIX: Torus overlay - glyphs trace spinning donut"));
+                                xk = false;
+                                vb = true;
+                                yg = false;
+                                vv = false;
+                                xl = false;
+                                bqu.set_shape(crate::matrix_fast::ShapeOverlay::Torus);
+                                ap.push(String::from("? MATRIX: Torus overlay - glyphs trace spinning donut"));
                             },
                             "matrix dna" => {
-                                atr = false;
-                                apf = true;
-                                avf = false;
-                                aqq = false;
-                                ats = false;
-                                dzd.gsg(crate::matrix_fast::ShapeOverlay::Ij);
-                                cz.push(String::from("? MATRIX: DNA overlay - glyphs trace double helix"));
+                                xk = false;
+                                vb = true;
+                                yg = false;
+                                vv = false;
+                                xl = false;
+                                bqu.set_shape(crate::matrix_fast::ShapeOverlay::DNA);
+                                ap.push(String::from("? MATRIX: DNA overlay - glyphs trace double helix"));
                             },
                             "matrix off" | "matrix clear" | "matrix normal" => {
-                                dzd.gsg(crate::matrix_fast::ShapeOverlay::None);
-                                cz.push(String::from("? MATRIX: Shape overlay disabled - normal rain"));
+                                bqu.set_shape(crate::matrix_fast::ShapeOverlay::None);
+                                ap.push(String::from("? MATRIX: Shape overlay disabled - normal rain"));
                             },
                             "matrix shader" | "matrix gpu" => {
-                                ats = !ats;
-                                if ats {
-                                    atr = false;
-                                    apf = false;
-                                    aqq = false;
-                                    avf = false;
-                                    cz.push(String::from("? SHADER MATRIX: GPU-emulated pixel shader"));
-                                    cz.push(String::from("  Uses SMP parallel dispatch + SSE2 SIMD"));
-                                    cz.push(String::from("  Smooth per-pixel glyph rendering"));
+                                xl = !xl;
+                                if xl {
+                                    xk = false;
+                                    vb = false;
+                                    vv = false;
+                                    yg = false;
+                                    ap.push(String::from("? SHADER MATRIX: GPU-emulated pixel shader"));
+                                    ap.push(String::from("  Uses SMP parallel dispatch + SSE2 SIMD"));
+                                    ap.push(String::from("  Smooth per-pixel glyph rendering"));
                                 } else {
-                                    apf = true;
-                                    cz.push(String::from("? SHADER MATRIX: Disabled, back to BRAILLE"));
+                                    vb = true;
+                                    ap.push(String::from("? SHADER MATRIX: Disabled, back to BRAILLE"));
                                 }
                             },
                             "matrix" => {
-                                let ev = if atr { "FORMULA (wireframe 3D)" }
-                                           else if ats { "SHADER (GPU-emulated pixel shader)" }
-                                           else if avf { "3D (volumetric shapes)" }
-                                           else if apf { "BRAILLE (8A-- sub-pixel)" }
-                                           else if aqq { "FAST (glyph-cached)" }
+                                let mode = if xk { "FORMULA (wireframe 3D)" }
+                                           else if xl { "SHADER (GPU-emulated pixel shader)" }
+                                           else if yg { "3D (volumetric shapes)" }
+                                           else if vb { "BRAILLE (8A-- sub-pixel)" }
+                                           else if vv { "FAST (glyph-cached)" }
                                            else { "LEGACY (per-pixel)" };
-                                cz.push(format!("Matrix Renderer: {}", ev));
-                                cz.push(String::from("Commands: matrix formula | fast | braille | legacy | 3d | shader"));
+                                ap.push(format!("Matrix Renderer: {}", mode));
+                                ap.push(String::from("Commands: matrix formula | fast | braille | legacy | 3d | shader"));
                             },
                             "fps" => {
-                                iaj = !iaj;
-                                cz.push(format!("FPS display: {}", if iaj { "ON" } else { "OFF" }));
+                                dzj = !dzj;
+                                ap.push(format!("FPS display: {}", if dzj { "ON" } else { "OFF" }));
                             },
                             "smp" | "smpstatus" | "smp status" => {
-                                let status = if crate::cpu::smp::jbt() { "ON" } else { "OFF" };
-                                let cdv = crate::cpu::smp::boc();
-                                let es = crate::cpu::smp::aao();
-                                cz.push(format!("SMP Parallel: {} ({}/{} CPUs)", status, cdv, es));
-                                cz.push(String::from("  smp on  - Enable multi-core"));
-                                cz.push(String::from("  smp off - Single-core mode"));
+                                let status = if crate::cpu::smp::eru() { "ON" } else { "OFF" };
+                                let cpus = crate::cpu::smp::ail();
+                                let av = crate::cpu::smp::cpu_count();
+                                ap.push(format!("SMP Parallel: {} ({}/{} CPUs)", status, cpus, av));
+                                ap.push(String::from("  smp on  - Enable multi-core"));
+                                ap.push(String::from("  smp off - Single-core mode"));
                             },
                             "smp on" => {
-                                crate::cpu::smp::isq();
-                                cz.push(String::from("? SMP parallelism ENABLED"));
+                                crate::cpu::smp::elh();
+                                ap.push(String::from("? SMP parallelism ENABLED"));
                             },
                             "smp off" => {
-                                crate::cpu::smp::kqd();
-                                cz.push(String::from("? SMP disabled (single-core)"));
+                                crate::cpu::smp::fsj();
+                                ap.push(String::from("? SMP disabled (single-core)"));
                             },
                             "shader" | "shaders" | "vgpu" => {
-                                cz.push(String::from("+---------------------------------------+"));
-                                cz.push(String::from("|     Virtual GPU - Shader Demo         |"));
-                                cz.push(String::from("|---------------------------------------|"));
-                                cz.push(String::from("| shader plasma    - Plasma waves       |"));
-                                cz.push(String::from("| shader fire      - Fire effect        |"));
-                                cz.push(String::from("| shader mandelbrot- Fractal zoom       |"));
-                                cz.push(String::from("| shader matrix    - Matrix rain        |"));
-                                cz.push(String::from("| shader tunnel    - 3D HOLOMATRIX      |"));
-                                cz.push(String::from("| shader parallax  - Depth layers       |"));
-                                cz.push(String::from("| shader shapes    - Ray-marched 3D     |"));
-                                cz.push(String::from("| shader rain3d    - Matrix fly-through |"));
-                                cz.push(String::from("| shader cosmic    - Fractal vortex     |"));
-                                cz.push(String::from("| shader gradient  - Test gradient      |"));
-                                cz.push(String::from("+---------------------------------------+"));
-                                cz.push(String::from("Press ESC to exit shader demo"));
+                                ap.push(String::from("+---------------------------------------+"));
+                                ap.push(String::from("|     Virtual GPU - Shader Demo         |"));
+                                ap.push(String::from("|---------------------------------------|"));
+                                ap.push(String::from("| shader plasma    - Plasma waves       |"));
+                                ap.push(String::from("| shader fire      - Fire effect        |"));
+                                ap.push(String::from("| shader mandelbrot- Fractal zoom       |"));
+                                ap.push(String::from("| shader matrix    - Matrix rain        |"));
+                                ap.push(String::from("| shader tunnel    - 3D HOLOMATRIX      |"));
+                                ap.push(String::from("| shader parallax  - Depth layers       |"));
+                                ap.push(String::from("| shader shapes    - Ray-marched 3D     |"));
+                                ap.push(String::from("| shader rain3d    - Matrix fly-through |"));
+                                ap.push(String::from("| shader cosmic    - Fractal vortex     |"));
+                                ap.push(String::from("| shader gradient  - Test gradient      |"));
+                                ap.push(String::from("+---------------------------------------+"));
+                                ap.push(String::from("Press ESC to exit shader demo"));
                             },
-                            _ if cmd.cj("shader ") => {
-                                let dvv = cmd.tl("shader ").em();
-                                crate::serial_println!("[SHADER] Trying to load shader: '{}'", dvv);
-                                if let Some(fuo) = crate::gpu_emu::kyx(dvv) {
+                            _ if cmd.starts_with("shader ") => {
+                                let bov = cmd.trim_start_matches("shader ").trim();
+                                crate::serial_println!("[SHADER] Trying to load shader: '{}'", bov);
+                                if let Some(shader_fn) = crate::gpu_emu::fyx(bov) {
                                     crate::serial_println!("[SHADER] Found shader, starting loop...");
-                                    cz.push(format!("? Loading shader: {}", dvv));
-                                    cz.push(String::from("Press ESC to exit..."));
+                                    ap.push(format!("? Loading shader: {}", bov));
+                                    ap.push(String::from("Press ESC to exit..."));
                                     
-                                    let z = crate::framebuffer::z();
-                                    let ac = crate::framebuffer::ac();
+                                    let width = crate::framebuffer::width();
+                                    let height = crate::framebuffer::height();
                                     
                                     
-                                    let afk = crate::framebuffer::bre();
-                                    if !afk {
-                                        crate::framebuffer::beo();
-                                        crate::framebuffer::afi(true);
+                                    let pu = crate::framebuffer::ajy();
+                                    if !pu {
+                                        crate::framebuffer::adw();
+                                        crate::framebuffer::pr(true);
                                     }
                                     
                                     
-                                    let qod = crate::framebuffer::cey();
-                                    let (ggv, baz) = if let Some((ptr, dxx, dxv, oq)) = qod {
-                                        (ptr as *mut u32, oq)
+                                    let kaq = crate::framebuffer::aqr();
+                                    let (fb_ptr, bb_stride) = if let Some((ptr, _w, _h, stride)) = kaq {
+                                        (ptr as *mut u32, stride)
                                     } else {
                                         
-                                        (crate::framebuffer::kyq(), z)
+                                        (crate::framebuffer::fyq(), width)
                                     };
                                     
                                     
-                                    crate::gpu_emu::ttx(ggv, z, ac, baz);
-                                    crate::gpu_emu::hzy(fuo);
+                                    crate::gpu_emu::mpm(fb_ptr, width, height, bb_stride);
+                                    crate::gpu_emu::set_shader(shader_fn);
                                     
                                     
-                                    let ayu = crate::cpu::tsc::ow();
-                                    let mut vj = 0u32;
+                                    let rr = crate::cpu::tsc::ey();
+                                    let mut frames = 0u32;
                                     
                                     loop {
                                         
-                                        if let Some(bs) = crate::keyboard::xw() {
-                                            if bs == 27 { break; }
+                                        if let Some(key) = crate::keyboard::kr() {
+                                            if key == 27 { break; }
                                         }
                                         
                                         
                                         #[cfg(target_arch = "x86_64")]
-                                        crate::gpu_emu::krk();
+                                        crate::gpu_emu::ftc();
                                         #[cfg(not(target_arch = "x86_64"))]
-                                        crate::gpu_emu::po();
+                                        crate::gpu_emu::draw();
                                         
                                         
-                                        crate::framebuffer::sv();
+                                        crate::framebuffer::ii();
                                         
                                         
-                                        crate::gpu_emu::or(16);
-                                        vj += 1;
+                                        crate::gpu_emu::tick(16);
+                                        frames += 1;
                                         
                                         
-                                        if vj % 60 == 0 {
-                                            let ez = crate::cpu::tsc::ow() - ayu;
-                                            let skb = ez as f32 / crate::cpu::tsc::ard() as f32;
-                                            let tz = vj as f32 / skb;
-                                            crate::serial_println!("[SHADER] FPS: {:.1}", tz);
+                                        if frames % 60 == 0 {
+                                            let bb = crate::cpu::tsc::ey() - rr;
+                                            let lox = bb as f32 / crate::cpu::tsc::we() as f32;
+                                            let fps = frames as f32 / lox;
+                                            crate::serial_println!("[SHADER] FPS: {:.1}", fps);
                                         }
                                     }
                                     
                                     
-                                    if !afk {
-                                        crate::framebuffer::afi(false);
+                                    if !pu {
+                                        crate::framebuffer::pr(false);
                                     }
                                     
-                                    cz.push(format!("Shader demo ended ({} frames)", vj));
+                                    ap.push(format!("Shader demo ended ({} frames)", frames));
                                 } else {
-                                    crate::serial_println!("[SHADER] Shader '{}' NOT FOUND!", dvv);
-                                    cz.push(format!("Unknown shader: {}", dvv));
-                                    cz.push(String::from("Available: plasma, fire, mandelbrot, matrix, tunnel, parallax, shapes, rain3d, cosmic, gradient"));
+                                    crate::serial_println!("[SHADER] Shader '{}' NOT FOUND!", bov);
+                                    ap.push(format!("Unknown shader: {}", bov));
+                                    ap.push(String::from("Available: plasma, fire, mandelbrot, matrix, tunnel, parallax, shapes, rain3d, cosmic, gradient"));
                                 }
                             },
-                            "echo" => cz.push(String::new()),
-                            "touch" => cz.push(String::from("Usage: touch <filename>")),
-                            "rm" => cz.push(String::from("Usage: rm <filename>")),
-                            "cp" => cz.push(String::from("Usage: cp <src> <dest>")),
-                            "mv" => cz.push(String::from("Usage: mv <src> <dest>")),
-                            _ if cmd.cj("echo ") => {
-                                let text = cmd.tl("echo ").em();
-                                cz.push(String::from(text));
+                            "echo" => ap.push(String::new()),
+                            "touch" => ap.push(String::from("Usage: touch <filename>")),
+                            "rm" => ap.push(String::from("Usage: rm <filename>")),
+                            "cp" => ap.push(String::from("Usage: cp <src> <dest>")),
+                            "mv" => ap.push(String::from("Usage: mv <src> <dest>")),
+                            _ if cmd.starts_with("echo ") => {
+                                let text = cmd.trim_start_matches("echo ").trim();
+                                ap.push(String::from(text));
                             },
-                            _ if cmd.cj("cd ") => {
-                                let path = cmd.tl("cd ").em();
+                            _ if cmd.starts_with("cd ") => {
+                                let path = cmd.trim_start_matches("cd ").trim();
                                 
-                                match crate::ramfs::fh(|fs| fs.fem(path)) {
+                                match crate::ramfs::bh(|fs| fs.cd(path)) {
                                     Ok(()) => {
-                                        let lnt = crate::ramfs::fh(|fs| String::from(fs.dau()));
-                                        cz.push(format!("Changed to: {}", lnt));
+                                        let giz = crate::ramfs::bh(|fs| String::from(fs.pwd()));
+                                        ap.push(format!("Changed to: {}", giz));
                                     }
-                                    Err(aa) => {
-                                        cz.push(format!("cd: {}: {}", path, aa.as_str()));
+                                    Err(e) => {
+                                        ap.push(format!("cd: {}: {}", path, e.as_str()));
                                     }
                                 }
                             },
-                            _ if cmd.cj("ls ") => {
-                                let path = cmd.tl("ls ").em();
+                            _ if cmd.starts_with("ls ") => {
+                                let path = cmd.trim_start_matches("ls ").trim();
                                 
-                                match crate::ramfs::fh(|fs| fs.awb(Some(path))) {
-                                    Ok(pj) => {
-                                        if pj.is_empty() {
-                                            cz.push(String::from("(empty)"));
+                                match crate::ramfs::bh(|fs| fs.ls(Some(path))) {
+                                    Ok(items) => {
+                                        if items.is_empty() {
+                                            ap.push(String::from("(empty)"));
                                         } else {
-                                            for (j, kd, aw) in pj {
-                                                match kd {
-                                                    FileType::K => {
-                                                        cz.push(format!("{}  <DIR>", j));
+                                            for (name, file_type, size) in items {
+                                                match file_type {
+                                                    FileType::Directory => {
+                                                        ap.push(format!("{}  <DIR>", name));
                                                     }
-                                                    FileType::Es => {
-                                                        cz.push(format!("{}  {} B", j, aw));
+                                                    FileType::File => {
+                                                        ap.push(format!("{}  {} B", name, size));
                                                     }
                                                 }
                                             }
                                         }
                                     }
-                                    Err(aa) => {
-                                        cz.push(format!("ls: {}: {}", path, aa.as_str()));
+                                    Err(e) => {
+                                        ap.push(format!("ls: {}: {}", path, e.as_str()));
                                     }
                                 }
                             },
-                            _ if cmd.cj("cat ") => {
-                                let path = cmd.tl("cat ").em();
+                            _ if cmd.starts_with("cat ") => {
+                                let path = cmd.trim_start_matches("cat ").trim();
                                 
-                                match crate::ramfs::fh(|fs| {
-                                    fs.mq(path).map(|e| alloc::vec::Vec::from(e))
+                                match crate::ramfs::bh(|fs| {
+                                    fs.read_file(path).map(|j| alloc::vec::Vec::from(j))
                                 }) {
-                                    Ok(ca) => {
-                                        if let Ok(text) = core::str::jg(&ca) {
-                                            for line in text.ak().take(20) {
-                                                cz.push(String::from(line));
+                                    Ok(content) => {
+                                        if let Ok(text) = core::str::from_utf8(&content) {
+                                            for line in text.lines().take(20) {
+                                                ap.push(String::from(line));
                                             }
                                         } else {
-                                            cz.push(format!("cat: {}: Binary file", path));
+                                            ap.push(format!("cat: {}: Binary file", path));
                                         }
                                     }
-                                    Err(aa) => {
-                                        cz.push(format!("cat: {}: {}", path, aa.as_str()));
+                                    Err(e) => {
+                                        ap.push(format!("cat: {}: {}", path, e.as_str()));
                                     }
                                 }
                             },
                             
-                            _ if cmd.cj("edit ") || cmd.cj("code ") || cmd.cj("nano ") || cmd.cj("vim ") => {
-                                let path = cmd.ayt().goc(1).unwrap_or("").em();
+                            _ if cmd.starts_with("edit ") || cmd.starts_with("code ") || cmd.starts_with("nano ") || cmd.starts_with("vim ") => {
+                                let path = cmd.split_whitespace().nth(1).unwrap_or("").trim();
                                 if path.is_empty() {
-                                    cz.push(String::from("Usage: edit <filename>"));
+                                    ap.push(String::from("Usage: edit <filename>"));
                                 } else {
-                                    aey.dsu(path);
-                                    atu = AppMode::Ag;
-                                    don = false;
-                                    cz.push(format!("TrustCode: editing {}", path));
+                                    editor_state.load_file(path);
+                                    xm = AppMode::TextEditor;
+                                    bky = false;
+                                    ap.push(format!("TrustCode: editing {}", path));
                                     crate::serial_println!("[TrustCode] Editing: {}", path);
                                 }
                             },
-                            _ if cmd.cj("mkdir ") => {
-                                let path = cmd.tl("mkdir ").em();
+                            _ if cmd.starts_with("mkdir ") => {
+                                let path = cmd.trim_start_matches("mkdir ").trim();
                                 
-                                match crate::ramfs::fh(|fs| fs.ut(path)) {
+                                match crate::ramfs::bh(|fs| fs.mkdir(path)) {
                                     Ok(()) => {
-                                        cz.push(format!("Created directory: {}", path));
+                                        ap.push(format!("Created directory: {}", path));
                                     }
-                                    Err(aa) => {
-                                        cz.push(format!("mkdir: {}: {}", path, aa.as_str()));
+                                    Err(e) => {
+                                        ap.push(format!("mkdir: {}: {}", path, e.as_str()));
                                     }
                                 }
                             },
-                            _ if cmd.cj("touch ") => {
-                                let path = cmd.tl("touch ").em();
+                            _ if cmd.starts_with("touch ") => {
+                                let path = cmd.trim_start_matches("touch ").trim();
                                 
-                                match crate::ramfs::fh(|fs| fs.ns(path, &[])) {
+                                match crate::ramfs::bh(|fs| fs.write_file(path, &[])) {
                                     Ok(()) => {
-                                        cz.push(format!("Created file: {}", path));
+                                        ap.push(format!("Created file: {}", path));
                                     }
-                                    Err(aa) => {
-                                        cz.push(format!("touch: {}: {}", path, aa.as_str()));
+                                    Err(e) => {
+                                        ap.push(format!("touch: {}: {}", path, e.as_str()));
                                     }
                                 }
                             },
-                            _ if cmd.cj("rm ") => {
-                                let path = cmd.tl("rm ").em();
-                                match crate::ramfs::fh(|fs| fs.hb(path)) {
+                            _ if cmd.starts_with("rm ") => {
+                                let path = cmd.trim_start_matches("rm ").trim();
+                                match crate::ramfs::bh(|fs| fs.rm(path)) {
                                     Ok(()) => {
-                                        cz.push(format!("Removed: {}", path));
+                                        ap.push(format!("Removed: {}", path));
                                     }
-                                    Err(aa) => {
-                                        cz.push(format!("rm: {}: {}", path, aa.as_str()));
+                                    Err(e) => {
+                                        ap.push(format!("rm: {}: {}", path, e.as_str()));
                                     }
                                 }
                             },
-                            _ if cmd.cj("curl ") || cmd.cj("get ") || cmd.cj("wget ") => {
-                                let url = if cmd.cj("curl ") {
-                                    cmd.tl("curl ").em()
-                                } else if cmd.cj("wget ") {
-                                    cmd.tl("wget ").em()
+                            _ if cmd.starts_with("curl ") || cmd.starts_with("get ") || cmd.starts_with("wget ") => {
+                                let url = if cmd.starts_with("curl ") {
+                                    cmd.trim_start_matches("curl ").trim()
+                                } else if cmd.starts_with("wget ") {
+                                    cmd.trim_start_matches("wget ").trim()
                                 } else {
-                                    cmd.tl("get ").em()
+                                    cmd.trim_start_matches("get ").trim()
                                 };
-                                cz.push(format!("Fetching: {}", url));
+                                ap.push(format!("Fetching: {}", url));
                                 
                                 
-                                if let Some((kh, port, path)) = super::vm::vei(url) {
-                                    cz.push(format!("Host: {} Port: {} Path: {}", kh, port, path));
+                                if let Some((host, port, path)) = super::vm::nrn(url) {
+                                    ap.push(format!("Host: {} Port: {} Path: {}", host, port, path));
                                     
                                     
-                                    if let Some(ip) = crate::netstack::dns::ayo(&kh) {
-                                        cz.push(format!("Resolved to: {}.{}.{}.{}", 
+                                    if let Some(ip) = crate::netstack::dns::yb(&host) {
+                                        ap.push(format!("Resolved to: {}.{}.{}.{}", 
                                             ip[0], ip[1], ip[2], ip[3]));
                                         
                                         
-                                        match super::vm::nmj(&kh, ip, port, &path) {
-                                            Ok(mk) => {
+                                        match super::vm::hta(&host, ip, port, &path) {
+                                            Ok(fa) => {
                                                 
-                                                for line in mk.ak().take(15) {
-                                                    cz.push(String::from(line));
+                                                for line in fa.lines().take(15) {
+                                                    ap.push(String::from(line));
                                                 }
-                                                if mk.ak().az() > 15 {
-                                                    cz.push(String::from("... (truncated)"));
+                                                if fa.lines().count() > 15 {
+                                                    ap.push(String::from("... (truncated)"));
                                                 }
                                             }
-                                            Err(aa) => {
-                                                cz.push(format!("Error: {}", aa));
+                                            Err(e) => {
+                                                ap.push(format!("Error: {}", e));
                                             }
                                         }
                                     } else {
-                                        cz.push(format!("Cannot resolve: {}", kh));
+                                        ap.push(format!("Cannot resolve: {}", host));
                                     }
                                 } else {
-                                    cz.push(String::from("Invalid URL format"));
-                                    cz.push(String::from("Usage: curl http://host/path"));
+                                    ap.push(String::from("Invalid URL format"));
+                                    ap.push(String::from("Usage: curl http://host/path"));
                                 }
                             },
-                            _ if cmd.cj("desktop ") => {
-                                let sub = cmd.tl("desktop ");
+                            _ if cmd.starts_with("desktop ") => {
+                                let sub = cmd.trim_start_matches("desktop ");
                                 if sub == "close" || sub == "exit" || sub == "quit" {
-                                    aqk = false;
+                                    running = false;
                                 }
                             },
                             
                             "open" => {
-                                cz.push(String::from("Usage: open <app>"));
-                                cz.push(String::from("Apps: browser, files, editor, network, hardware, users, images"));
+                                ap.push(String::from("Usage: open <app>"));
+                                ap.push(String::from("Apps: browser, files, editor, network, hardware, users, images"));
                             },
-                            _ if cmd.cj("open ") => {
-                                let bjf = cmd.tl("open ").em().aqn();
-                                match bjf.as_str() {
+                            _ if cmd.starts_with("open ") => {
+                                let afz = cmd.trim_start_matches("open ").trim().to_lowercase();
+                                match afz.as_str() {
                                     "browser" | "web" | "www" => {
-                                        atu = AppMode::Browser;
-                                        don = true;
-                                        cz.push(String::from("Switched to Browser"));
+                                        xm = AppMode::Browser;
+                                        bky = true;
+                                        ap.push(String::from("Switched to Browser"));
                                     },
                                     "files" | "explorer" => {
-                                        atu = AppMode::Pl;
-                                        don = false;
-                                        cz.push(String::from("Switched to Files"));
+                                        xm = AppMode::Files;
+                                        bky = false;
+                                        ap.push(String::from("Switched to Files"));
                                     },
                                     "editor" | "text" | "notepad" | "trustcode" | "code" => {
-                                        atu = AppMode::Ag;
-                                        don = false;
+                                        xm = AppMode::TextEditor;
+                                        bky = false;
                                         
-                                        if aey.wn.is_none() {
-                                            aey.dsu("demo.rs");
+                                        if editor_state.file_path.is_none() {
+                                            editor_state.load_file("demo.rs");
                                         }
-                                        cz.push(String::from("TrustCode Editor opened"));
+                                        ap.push(String::from("TrustCode Editor opened"));
                                     },
                                     "network" | "net" | "ifconfig" => {
-                                        atu = AppMode::As;
-                                        don = false;
-                                        cz.push(String::from("Switched to Network"));
+                                        xm = AppMode::Network;
+                                        bky = false;
+                                        ap.push(String::from("Switched to Network"));
                                     },
                                     "hardware" | "hw" | "lshw" => {
-                                        atu = AppMode::Ip;
-                                        don = false;
-                                        cz.push(String::from("Switched to Hardware"));
+                                        xm = AppMode::Hardware;
+                                        bky = false;
+                                        ap.push(String::from("Switched to Hardware"));
                                     },
                                     "users" | "user" => {
-                                        atu = AppMode::Rb;
-                                        don = false;
-                                        cz.push(String::from("Switched to User Management"));
+                                        xm = AppMode::UserMgmt;
+                                        bky = false;
+                                        ap.push(String::from("Switched to User Management"));
                                     },
                                     "images" | "image" | "viewer" => {
-                                        atu = AppMode::Bp;
-                                        don = false;
-                                        cz.push(String::from("Switched to Image Viewer"));
+                                        xm = AppMode::ImageViewer;
+                                        bky = false;
+                                        ap.push(String::from("Switched to Image Viewer"));
                                     },
                                     "shell" | "terminal" => {
-                                        atu = AppMode::Df;
-                                        don = false;
-                                        cz.push(String::from("Switched to Shell"));
+                                        xm = AppMode::Shell;
+                                        bky = false;
+                                        ap.push(String::from("Switched to Shell"));
                                     },
                                     _ => {
-                                        cz.push(format!("Unknown app: {}", bjf));
-                                        cz.push(String::from("Available: browser, files, editor, network, hardware, users, images"));
+                                        ap.push(format!("Unknown app: {}", afz));
+                                        ap.push(String::from("Available: browser, files, editor, network, hardware, users, images"));
                                     }
                                 }
                             },
                             
-                            "ping" => cz.push(String::from("Usage: ping <host>")),
-                            "nslookup" | "dig" => cz.push(String::from("Usage: nslookup <hostname>")),
+                            "ping" => ap.push(String::from("Usage: ping <host>")),
+                            "nslookup" | "dig" => ap.push(String::from("Usage: nslookup <hostname>")),
                             "ps" => {
-                                cz.push(String::from("  PID  STATE  NAME"));
-                                cz.push(String::from("    1  R      init"));
-                                cz.push(String::from("    2  R      kernel"));
-                                cz.push(String::from("    3  R      desktop"));
+                                ap.push(String::from("  PID  STATE  NAME"));
+                                ap.push(String::from("    1  R      init"));
+                                ap.push(String::from("    2  R      kernel"));
+                                ap.push(String::from("    3  R      desktop"));
                             },
                             "df" => {
-                                cz.push(String::from("Filesystem    Size  Used  Avail  Use%  Mounted"));
-                                cz.push(String::from("ramfs         8.0M   64K   7.9M    1%  /"));
+                                ap.push(String::from("Filesystem    Size  Used  Avail  Use%  Mounted"));
+                                ap.push(String::from("ramfs         8.0M   64K   7.9M    1%  /"));
                             },
                             "free" => {
-                                let mr = crate::memory::heap::mr() / 1024;
-                                let es = crate::memory::cre() / 1024;
-                                let kxc = es - mr;
-                                cz.push(String::from("              total     used     free"));
-                                cz.push(format!("Mem:     {:>10}  {:>7}  {:>7}", es, mr, kxc));
+                                let used = crate::memory::heap::used() / 1024;
+                                let av = crate::memory::atz() / 1024;
+                                let fxr = av - used;
+                                ap.push(String::from("              total     used     free"));
+                                ap.push(format!("Mem:     {:>10}  {:>7}  {:>7}", av, used, fxr));
                             },
                             "tree" => {
-                                cz.push(String::from("."));
-                                match crate::ramfs::fh(|fs| fs.awb(None)) {
-                                    Ok(pj) => {
-                                        let az = pj.len();
-                                        for (a, (j, kd, _)) in pj.dse().cf() {
-                                            let adx = if a + 1 == az { "+-- " } else { "+-- " };
-                                            match kd {
-                                                FileType::K => cz.push(format!("{}{}/ (dir)", adx, j)),
-                                                FileType::Es => cz.push(format!("{}{}", adx, j)),
+                                ap.push(String::from("."));
+                                match crate::ramfs::bh(|fs| fs.ls(None)) {
+                                    Ok(items) => {
+                                        let count = items.len();
+                                        for (i, (name, file_type, _)) in items.into_iter().enumerate() {
+                                            let nm = if i + 1 == count { "+-- " } else { "+-- " };
+                                            match file_type {
+                                                FileType::Directory => ap.push(format!("{}{}/ (dir)", nm, name)),
+                                                FileType::File => ap.push(format!("{}{}", nm, name)),
                                             }
                                         }
                                     }
@@ -5289,17 +5295,17 @@ pub(super) fn kih(lek: Option<&str>, sg: u64) {
                                 }
                             },
                             "history" => {
-                                cz.push(String::from("Command history not available in desktop shell"));
+                                ap.push(String::from("Command history not available in desktop shell"));
                             },
-                            _ if cmd.cj("ping ") => {
-                                let kh = cmd.tl("ping ").em();
+                            _ if cmd.starts_with("ping ") => {
+                                let host = cmd.trim_start_matches("ping ").trim();
                                 
-                                let hop = if let Some(bez) = super::vm::cgl(kh) {
-                                    Some(bez)
+                                let dsi = if let Some(parsed) = super::vm::art(host) {
+                                    Some(parsed)
                                 } else {
                                     
                                     
-                                    match kh {
+                                    match host {
                                         "google.com" | "www.google.com" => Some([142, 250, 179, 110]),
                                         "cloudflare.com" | "www.cloudflare.com" => Some([104, 16, 132, 229]),
                                         "github.com" | "www.github.com" => Some([140, 82, 114, 3]),
@@ -5308,504 +5314,504 @@ pub(super) fn kih(lek: Option<&str>, sg: u64) {
                                     }
                                 };
                                 
-                                if let Some(ip) = hop {
-                                    cz.push(format!("PING {} ({}.{}.{}.{})", kh, ip[0], ip[1], ip[2], ip[3]));
-                                    cz.push(format!("64 bytes from {}.{}.{}.{}: icmp_seq=1 ttl=64 time=1.5 ms", ip[0], ip[1], ip[2], ip[3]));
-                                    cz.push(format!("64 bytes from {}.{}.{}.{}: icmp_seq=2 ttl=64 time=1.2 ms", ip[0], ip[1], ip[2], ip[3]));
-                                    cz.push(String::from("--- ping statistics ---"));
-                                    cz.push(String::from("2 packets transmitted, 2 received, 0% loss"));
+                                if let Some(ip) = dsi {
+                                    ap.push(format!("PING {} ({}.{}.{}.{})", host, ip[0], ip[1], ip[2], ip[3]));
+                                    ap.push(format!("64 bytes from {}.{}.{}.{}: icmp_seq=1 ttl=64 time=1.5 ms", ip[0], ip[1], ip[2], ip[3]));
+                                    ap.push(format!("64 bytes from {}.{}.{}.{}: icmp_seq=2 ttl=64 time=1.2 ms", ip[0], ip[1], ip[2], ip[3]));
+                                    ap.push(String::from("--- ping statistics ---"));
+                                    ap.push(String::from("2 packets transmitted, 2 received, 0% loss"));
                                 } else {
-                                    cz.push(format!("ping: {} - cannot resolve (use IP address)", kh));
+                                    ap.push(format!("ping: {} - cannot resolve (use IP address)", host));
                                 }
                             },
-                            _ if cmd.cj("nslookup ") || cmd.cj("dig ") => {
-                                let kh = if cmd.cj("nslookup ") {
-                                    cmd.tl("nslookup ").em()
+                            _ if cmd.starts_with("nslookup ") || cmd.starts_with("dig ") => {
+                                let host = if cmd.starts_with("nslookup ") {
+                                    cmd.trim_start_matches("nslookup ").trim()
                                 } else {
-                                    cmd.tl("dig ").em()
+                                    cmd.trim_start_matches("dig ").trim()
                                 };
-                                cz.push(format!("Server:  8.8.8.8"));
-                                cz.push(format!("Name:    {}", kh));
+                                ap.push(format!("Server:  8.8.8.8"));
+                                ap.push(format!("Name:    {}", host));
                                 
-                                let hop = match kh {
+                                let dsi = match host {
                                     "google.com" | "www.google.com" => Some([142, 250, 179, 110]),
                                     "cloudflare.com" | "www.cloudflare.com" => Some([104, 16, 132, 229]),
                                     "github.com" | "www.github.com" => Some([140, 82, 114, 3]),
                                     "localhost" => Some([127, 0, 0, 1]),
-                                    _ => super::vm::cgl(kh), 
+                                    _ => super::vm::art(host), 
                                 };
-                                if let Some(ip) = hop {
-                                    cz.push(format!("Address: {}.{}.{}.{}", ip[0], ip[1], ip[2], ip[3]));
+                                if let Some(ip) = dsi {
+                                    ap.push(format!("Address: {}.{}.{}.{}", ip[0], ip[1], ip[2], ip[3]));
                                 } else {
-                                    cz.push(String::from("** server can't find: NXDOMAIN"));
+                                    ap.push(String::from("** server can't find: NXDOMAIN"));
                                 }
                             },
-                            _ if cmd.cj("hexdump ") || cmd.cj("xxd ") => {
-                                let path = if cmd.cj("hexdump ") {
-                                    cmd.tl("hexdump ").em()
+                            _ if cmd.starts_with("hexdump ") || cmd.starts_with("xxd ") => {
+                                let path = if cmd.starts_with("hexdump ") {
+                                    cmd.trim_start_matches("hexdump ").trim()
                                 } else {
-                                    cmd.tl("xxd ").em()
+                                    cmd.trim_start_matches("xxd ").trim()
                                 };
-                                match crate::ramfs::fh(|fs| {
-                                    fs.mq(path).map(|e| alloc::vec::Vec::from(e))
+                                match crate::ramfs::bh(|fs| {
+                                    fs.read_file(path).map(|j| alloc::vec::Vec::from(j))
                                 }) {
-                                    Ok(ca) => {
-                                        for (l, jj) in ca.btq(16).take(8).cf() {
-                                            let nu: alloc::vec::Vec<String> = jj.iter()
-                                                .map(|o| format!("{:02x}", o))
+                                    Ok(content) => {
+                                        for (offset, df) in content.chunks(16).take(8).enumerate() {
+                                            let ga: alloc::vec::Vec<String> = df.iter()
+                                                .map(|b| format!("{:02x}", b))
                                                 .collect();
-                                            let ascii: String = jj.iter()
-                                                .map(|&o| if o >= 32 && o < 127 { o as char } else { '.' })
+                                            let ascii: String = df.iter()
+                                                .map(|&b| if b >= 32 && b < 127 { b as char } else { '.' })
                                                 .collect();
-                                            cz.push(format!("{:08x}  {:48}  |{}|", 
-                                                l * 16, nu.rr(" "), ascii));
+                                            ap.push(format!("{:08x}  {:48}  |{}|", 
+                                                offset * 16, ga.join(" "), ascii));
                                         }
-                                        if ca.len() > 128 {
-                                            cz.push(String::from("... (truncated)"));
+                                        if content.len() > 128 {
+                                            ap.push(String::from("... (truncated)"));
                                         }
                                     }
-                                    Err(aa) => cz.push(format!("hexdump: {}: {}", path, aa.as_str())),
+                                    Err(e) => ap.push(format!("hexdump: {}: {}", path, e.as_str())),
                                 }
                             },
-                            _ if cmd.cj("imgview ") || cmd.cj("view ") => {
-                                let path = if cmd.cj("imgview ") {
-                                    cmd.tl("imgview ").em()
+                            _ if cmd.starts_with("imgview ") || cmd.starts_with("view ") => {
+                                let path = if cmd.starts_with("imgview ") {
+                                    cmd.trim_start_matches("imgview ").trim()
                                 } else {
-                                    cmd.tl("view ").em()
+                                    cmd.trim_start_matches("view ").trim()
                                 };
                                 
                                 
-                                match crate::ramfs::fh(|fs| {
-                                    fs.mq(path).map(|e| alloc::vec::Vec::from(e))
+                                match crate::ramfs::bh(|fs| {
+                                    fs.read_file(path).map(|j| alloc::vec::Vec::from(j))
                                 }) {
-                                    Ok(f) => {
+                                    Ok(data) => {
                                         
-                                        let format = crate::image::kpo(&f);
-                                        if let Some(th) = crate::image::lji(&f) {
-                                            trz = String::from(path);
-                                            odk = format!("{}x{} ({} bytes)", th.z, th.ac, f.len());
-                                            odj = String::from(format.fie());
-                                            dig = 1.0;
-                                            ldj = 0;
-                                            ldk = 0;
-                                            odi = Some(th);
+                                        let format = crate::image::frw(&data);
+                                        if let Some(iv) = crate::image::gfy(&data) {
+                                            moc = String::from(path);
+                                            ifv = format!("{}x{} ({} bytes)", iv.width, iv.height, data.len());
+                                            ifu = String::from(format.extension());
+                                            bhc = 1.0;
+                                            gbu = 0;
+                                            gbv = 0;
+                                            ift = Some(iv);
                                             
                                             
-                                            atu = AppMode::Bp;
-                                            cz.push(format!("Opening: {} ({})", path, format.fie()));
+                                            xm = AppMode::ImageViewer;
+                                            ap.push(format!("Opening: {} ({})", path, format.extension()));
                                         } else {
-                                            cz.push(format!("imgview: Cannot decode image (format: {})", format.fie()));
+                                            ap.push(format!("imgview: Cannot decode image (format: {})", format.extension()));
                                         }
                                     },
-                                    Err(aa) => {
-                                        cz.push(format!("imgview: {}: {}", path, aa.as_str()));
+                                    Err(e) => {
+                                        ap.push(format!("imgview: {}: {}", path, e.as_str()));
                                     }
                                 }
                             },
-                            _ if cmd.cj("imginfo ") => {
-                                let path = cmd.tl("imginfo ").em();
+                            _ if cmd.starts_with("imginfo ") => {
+                                let path = cmd.trim_start_matches("imginfo ").trim();
                                 
-                                match crate::ramfs::fh(|fs| {
-                                    fs.mq(path).map(|e| alloc::vec::Vec::from(e))
+                                match crate::ramfs::bh(|fs| {
+                                    fs.read_file(path).map(|j| alloc::vec::Vec::from(j))
                                 }) {
-                                    Ok(f) => {
-                                        let format = crate::image::kpo(&f);
-                                        cz.push(format!("+---------------------------------------+"));
-                                        cz.push(format!("| Image Info: {}  ", path));
-                                        cz.push(format!("|---------------------------------------|"));
-                                        cz.push(format!("| Format:  {} ({})   ", format.fie(), format.uoi()));
-                                        cz.push(format!("| Size:    {} bytes   ", f.len()));
+                                    Ok(data) => {
+                                        let format = crate::image::frw(&data);
+                                        ap.push(format!("+---------------------------------------+"));
+                                        ap.push(format!("| Image Info: {}  ", path));
+                                        ap.push(format!("|---------------------------------------|"));
+                                        ap.push(format!("| Format:  {} ({})   ", format.extension(), format.mime_type()));
+                                        ap.push(format!("| Size:    {} bytes   ", data.len()));
                                         
                                         
-                                        if let Some(th) = crate::image::lji(&f) {
-                                            cz.push(format!("| Width:   {} px   ", th.z));
-                                            cz.push(format!("| Height:  {} px   ", th.ac));
-                                            cz.push(format!("| Pixels:  {}   ", th.z * th.ac));
+                                        if let Some(iv) = crate::image::gfy(&data) {
+                                            ap.push(format!("| Width:   {} px   ", iv.width));
+                                            ap.push(format!("| Height:  {} px   ", iv.height));
+                                            ap.push(format!("| Pixels:  {}   ", iv.width * iv.height));
                                         } else {
-                                            cz.push(format!("| (Cannot decode image dimensions)"));
+                                            ap.push(format!("| (Cannot decode image dimensions)"));
                                         }
-                                        cz.push(format!("+---------------------------------------+"));
+                                        ap.push(format!("+---------------------------------------+"));
                                     },
-                                    Err(aa) => {
-                                        cz.push(format!("imginfo: {}: {}", path, aa.as_str()));
+                                    Err(e) => {
+                                        ap.push(format!("imginfo: {}: {}", path, e.as_str()));
                                     }
                                 }
                             },
                             
                             "top" | "htop" => {
-                                cz.push(String::from("top - System Monitor"));
-                                cz.push(String::from("  PID  %CPU  %MEM  TIME     COMMAND"));
-                                cz.push(String::from("    1  0.5   2.1   0:01.23  kernel"));
-                                cz.push(String::from("    2  0.1   0.5   0:00.45  desktop"));
-                                cz.push(String::from("Press 'q' to quit (in desktop: just run another cmd)"));
+                                ap.push(String::from("top - System Monitor"));
+                                ap.push(String::from("  PID  %CPU  %MEM  TIME     COMMAND"));
+                                ap.push(String::from("    1  0.5   2.1   0:01.23  kernel"));
+                                ap.push(String::from("    2  0.1   0.5   0:00.45  desktop"));
+                                ap.push(String::from("Press 'q' to quit (in desktop: just run another cmd)"));
                             },
                             "lspci" => {
-                                cz.push(String::from("00:00.0 Host bridge"));
-                                cz.push(String::from("00:01.0 VGA controller: Virtio GPU"));
-                                cz.push(String::from("00:02.0 Network controller: Virtio Net"));
-                                cz.push(String::from("00:03.0 AHCI Controller"));
+                                ap.push(String::from("00:00.0 Host bridge"));
+                                ap.push(String::from("00:01.0 VGA controller: Virtio GPU"));
+                                ap.push(String::from("00:02.0 Network controller: Virtio Net"));
+                                ap.push(String::from("00:03.0 AHCI Controller"));
                             },
                             "lsusb" => {
-                                cz.push(String::from("Bus 001 Device 001: ID 1d6b:0002 Linux Foundation Root Hub"));
-                                cz.push(String::from("Bus 001 Device 002: ID 0627:0001 QEMU Tablet"));
+                                ap.push(String::from("Bus 001 Device 001: ID 1d6b:0002 Linux Foundation Root Hub"));
+                                ap.push(String::from("Bus 001 Device 002: ID 0627:0001 QEMU Tablet"));
                             },
                             "lscpu" => {
-                                cz.push(String::from("Architecture:        x86_64"));
-                                cz.push(String::from("CPU op-modes:        64-bit"));
-                                cz.push(String::from("CPU(s):              4"));
-                                cz.push(String::from("Vendor ID:           AuthenticAMD"));
-                                cz.push(String::from("Model name:          QEMU Virtual CPU"));
+                                ap.push(String::from("Architecture:        x86_64"));
+                                ap.push(String::from("CPU op-modes:        64-bit"));
+                                ap.push(String::from("CPU(s):              4"));
+                                ap.push(String::from("Vendor ID:           AuthenticAMD"));
+                                ap.push(String::from("Model name:          QEMU Virtual CPU"));
                             },
                             "disk" => {
-                                cz.push(String::from("Disk /dev/sda: 64 MB"));
-                                cz.push(String::from("  Partition 1: 64 MB (TrustOS)"));
+                                ap.push(String::from("Disk /dev/sda: 64 MB"));
+                                ap.push(String::from("  Partition 1: 64 MB (TrustOS)"));
                             },
                             "netstat" => {
-                                cz.push(String::from("Active connections:"));
-                                cz.push(String::from("Proto  Local Address      Foreign Address    State"));
-                                cz.push(String::from("tcp    0.0.0.0:0          0.0.0.0:*          LISTEN"));
+                                ap.push(String::from("Active connections:"));
+                                ap.push(String::from("Proto  Local Address      Foreign Address    State"));
+                                ap.push(String::from("tcp    0.0.0.0:0          0.0.0.0:*          LISTEN"));
                             },
                             "arp" => {
-                                cz.push(String::from("Address         HWtype  HWaddress           Iface"));
-                                cz.push(String::from("10.0.2.2        ether   52:55:0a:00:02:02   eth0"));
+                                ap.push(String::from("Address         HWtype  HWaddress           Iface"));
+                                ap.push(String::from("10.0.2.2        ether   52:55:0a:00:02:02   eth0"));
                             },
                             "route" => {
-                                cz.push(String::from("Kernel IP routing table"));
-                                cz.push(String::from("Dest         Gateway      Genmask         Iface"));
-                                cz.push(String::from("0.0.0.0      10.0.2.2     0.0.0.0         eth0"));
-                                cz.push(String::from("10.0.2.0     0.0.0.0      255.255.255.0   eth0"));
+                                ap.push(String::from("Kernel IP routing table"));
+                                ap.push(String::from("Dest         Gateway      Genmask         Iface"));
+                                ap.push(String::from("0.0.0.0      10.0.2.2     0.0.0.0         eth0"));
+                                ap.push(String::from("10.0.2.0     0.0.0.0      255.255.255.0   eth0"));
                             },
                             "env" => {
-                                cz.push(String::from("USER=root"));
-                                cz.push(String::from("HOME=/root"));
-                                cz.push(String::from("SHELL=/bin/tsh"));
-                                cz.push(String::from("PATH=/bin:/usr/bin"));
-                                cz.push(String::from("TERM=trustos"));
+                                ap.push(String::from("USER=root"));
+                                ap.push(String::from("HOME=/root"));
+                                ap.push(String::from("SHELL=/bin/tsh"));
+                                ap.push(String::from("PATH=/bin:/usr/bin"));
+                                ap.push(String::from("TERM=trustos"));
                             },
                             "id" => {
-                                cz.push(String::from("uid=0(root) gid=0(root) groups=0(root)"));
+                                ap.push(String::from("uid=0(root) gid=0(root) groups=0(root)"));
                             },
                             "cal" => {
-                                let os = crate::rtc::cgz();
-                                cz.push(format!("     {:02}/{:04}", os.caw, os.ccq));
-                                cz.push(String::from("Su Mo Tu We Th Fr Sa"));
-                                cz.push(String::from("       1  2  3  4  5"));
-                                cz.push(String::from(" 6  7  8  9 10 11 12"));
-                                cz.push(String::from("13 14 15 16 17 18 19"));
-                                cz.push(String::from("20 21 22 23 24 25 26"));
-                                cz.push(String::from("27 28 29 30 31"));
+                                let fm = crate::rtc::aou();
+                                ap.push(format!("     {:02}/{:04}", fm.month, fm.year));
+                                ap.push(String::from("Su Mo Tu We Th Fr Sa"));
+                                ap.push(String::from("       1  2  3  4  5"));
+                                ap.push(String::from(" 6  7  8  9 10 11 12"));
+                                ap.push(String::from("13 14 15 16 17 18 19"));
+                                ap.push(String::from("20 21 22 23 24 25 26"));
+                                ap.push(String::from("27 28 29 30 31"));
                             },
-                            _ if cmd.cj("head ") => {
-                                let path = cmd.tl("head ").em();
-                                match crate::ramfs::fh(|fs| {
-                                    fs.mq(path).map(|e| String::azw(e).bkc())
+                            _ if cmd.starts_with("head ") => {
+                                let path = cmd.trim_start_matches("head ").trim();
+                                match crate::ramfs::bh(|fs| {
+                                    fs.read_file(path).map(|j| String::from_utf8_lossy(j).into_owned())
                                 }) {
-                                    Ok(ca) => {
-                                        for line in ca.ak().take(10) {
-                                            cz.push(String::from(line));
+                                    Ok(content) => {
+                                        for line in content.lines().take(10) {
+                                            ap.push(String::from(line));
                                         }
                                     },
-                                    Err(aa) => cz.push(format!("head: {}: {}", path, aa.as_str())),
+                                    Err(e) => ap.push(format!("head: {}: {}", path, e.as_str())),
                                 }
                             },
-                            _ if cmd.cj("tail ") => {
-                                let path = cmd.tl("tail ").em();
-                                match crate::ramfs::fh(|fs| {
-                                    fs.mq(path).map(|e| String::azw(e).bkc())
+                            _ if cmd.starts_with("tail ") => {
+                                let path = cmd.trim_start_matches("tail ").trim();
+                                match crate::ramfs::bh(|fs| {
+                                    fs.read_file(path).map(|j| String::from_utf8_lossy(j).into_owned())
                                 }) {
-                                    Ok(ca) => {
-                                        let ak: alloc::vec::Vec<&str> = ca.ak().collect();
-                                        let ay = if ak.len() > 10 { ak.len() - 10 } else { 0 };
-                                        for line in &ak[ay..] {
-                                            cz.push(String::from(*line));
+                                    Ok(content) => {
+                                        let lines: alloc::vec::Vec<&str> = content.lines().collect();
+                                        let start = if lines.len() > 10 { lines.len() - 10 } else { 0 };
+                                        for line in &lines[start..] {
+                                            ap.push(String::from(*line));
                                         }
                                     },
-                                    Err(aa) => cz.push(format!("tail: {}: {}", path, aa.as_str())),
+                                    Err(e) => ap.push(format!("tail: {}: {}", path, e.as_str())),
                                 }
                             },
-                            _ if cmd.cj("wc ") => {
-                                let path = cmd.tl("wc ").em();
-                                match crate::ramfs::fh(|fs| {
-                                    fs.mq(path).map(|e| String::azw(e).bkc())
+                            _ if cmd.starts_with("wc ") => {
+                                let path = cmd.trim_start_matches("wc ").trim();
+                                match crate::ramfs::bh(|fs| {
+                                    fs.read_file(path).map(|j| String::from_utf8_lossy(j).into_owned())
                                 }) {
-                                    Ok(ca) => {
-                                        let ak = ca.ak().az();
-                                        let aoh = ca.ayt().az();
-                                        let bf = ca.len();
-                                        cz.push(format!("{:>5} {:>5} {:>5} {}", ak, aoh, bf, path));
+                                    Ok(content) => {
+                                        let lines = content.lines().count();
+                                        let um = content.split_whitespace().count();
+                                        let bytes = content.len();
+                                        ap.push(format!("{:>5} {:>5} {:>5} {}", lines, um, bytes, path));
                                     },
-                                    Err(aa) => cz.push(format!("wc: {}: {}", path, aa.as_str())),
+                                    Err(e) => ap.push(format!("wc: {}: {}", path, e.as_str())),
                                 }
                             },
-                            _ if cmd.cj("grep ") => {
-                                let n = cmd.tl("grep ").em();
-                                let ek: alloc::vec::Vec<&str> = n.eyv(2, ' ').collect();
-                                if ek.len() == 2 {
-                                    let pattern = ek[0];
-                                    let path = ek[1];
-                                    match crate::ramfs::fh(|fs| {
-                                        fs.mq(path).map(|e| String::azw(e).bkc())
+                            _ if cmd.starts_with("grep ") => {
+                                let args = cmd.trim_start_matches("grep ").trim();
+                                let au: alloc::vec::Vec<&str> = args.splitn(2, ' ').collect();
+                                if au.len() == 2 {
+                                    let pattern = au[0];
+                                    let path = au[1];
+                                    match crate::ramfs::bh(|fs| {
+                                        fs.read_file(path).map(|j| String::from_utf8_lossy(j).into_owned())
                                     }) {
-                                        Ok(ca) => {
-                                            let mut aig = false;
-                                            for line in ca.ak() {
+                                        Ok(content) => {
+                                            let mut nj = false;
+                                            for line in content.lines() {
                                                 if line.contains(pattern) {
-                                                    cz.push(String::from(line));
-                                                    aig = true;
+                                                    ap.push(String::from(line));
+                                                    nj = true;
                                                 }
                                             }
-                                            if !aig {
-                                                cz.push(format!("(no matches for '{}')", pattern));
+                                            if !nj {
+                                                ap.push(format!("(no matches for '{}')", pattern));
                                             }
                                         },
-                                        Err(aa) => cz.push(format!("grep: {}: {}", path, aa.as_str())),
+                                        Err(e) => ap.push(format!("grep: {}: {}", path, e.as_str())),
                                     }
                                 } else {
-                                    cz.push(String::from("Usage: grep <pattern> <file>"));
+                                    ap.push(String::from("Usage: grep <pattern> <file>"));
                                 }
                             },
-                            _ if cmd.cj("find ") => {
-                                let pattern = cmd.tl("find ").em();
-                                cz.push(format!("Searching for: {}", pattern));
-                                match crate::ramfs::fh(|fs| fs.awb(None)) {
-                                    Ok(pj) => {
-                                        for (j, _, _) in pj {
-                                            if j.contains(pattern) {
-                                                cz.push(format!("./{}", j));
+                            _ if cmd.starts_with("find ") => {
+                                let pattern = cmd.trim_start_matches("find ").trim();
+                                ap.push(format!("Searching for: {}", pattern));
+                                match crate::ramfs::bh(|fs| fs.ls(None)) {
+                                    Ok(items) => {
+                                        for (name, _, _) in items {
+                                            if name.contains(pattern) {
+                                                ap.push(format!("./{}", name));
                                             }
                                         }
                                     },
                                     Err(_) => {}
                                 }
                             },
-                            _ if cmd.cj("stat ") => {
-                                let path = cmd.tl("stat ").em();
-                                match crate::ramfs::fh(|fs| {
-                                    fs.mq(path).map(|e| e.len())
+                            _ if cmd.starts_with("stat ") => {
+                                let path = cmd.trim_start_matches("stat ").trim();
+                                match crate::ramfs::bh(|fs| {
+                                    fs.read_file(path).map(|j| j.len())
                                 }) {
-                                    Ok(aw) => {
-                                        cz.push(format!("  File: {}", path));
-                                        cz.push(format!("  Size: {} bytes", aw));
-                                        cz.push(String::from("  Access: -rw-r--r--"));
-                                        cz.push(String::from("  Uid: 0  Gid: 0"));
+                                    Ok(size) => {
+                                        ap.push(format!("  File: {}", path));
+                                        ap.push(format!("  Size: {} bytes", size));
+                                        ap.push(String::from("  Access: -rw-r--r--"));
+                                        ap.push(String::from("  Uid: 0  Gid: 0"));
                                     },
-                                    Err(aa) => cz.push(format!("stat: {}: {}", path, aa.as_str())),
+                                    Err(e) => ap.push(format!("stat: {}: {}", path, e.as_str())),
                                 }
                             },
-                            _ if cmd.cj("sort ") => {
-                                let path = cmd.tl("sort ").em();
-                                match crate::ramfs::fh(|fs| {
-                                    fs.mq(path).map(|e| String::azw(e).bkc())
+                            _ if cmd.starts_with("sort ") => {
+                                let path = cmd.trim_start_matches("sort ").trim();
+                                match crate::ramfs::bh(|fs| {
+                                    fs.read_file(path).map(|j| String::from_utf8_lossy(j).into_owned())
                                 }) {
-                                    Ok(ca) => {
-                                        let mut ak: alloc::vec::Vec<&str> = ca.ak().collect();
-                                        ak.jqs();
-                                        for line in ak {
-                                            cz.push(String::from(line));
+                                    Ok(content) => {
+                                        let mut lines: alloc::vec::Vec<&str> = content.lines().collect();
+                                        lines.sort();
+                                        for line in lines {
+                                            ap.push(String::from(line));
                                         }
                                     },
-                                    Err(aa) => cz.push(format!("sort: {}: {}", path, aa.as_str())),
+                                    Err(e) => ap.push(format!("sort: {}: {}", path, e.as_str())),
                                 }
                             },
-                            _ if cmd.cj("strings ") => {
-                                let path = cmd.tl("strings ").em();
-                                match crate::ramfs::fh(|fs| {
-                                    fs.mq(path).map(|e| alloc::vec::Vec::from(e))
+                            _ if cmd.starts_with("strings ") => {
+                                let path = cmd.trim_start_matches("strings ").trim();
+                                match crate::ramfs::bh(|fs| {
+                                    fs.read_file(path).map(|j| alloc::vec::Vec::from(j))
                                 }) {
-                                    Ok(f) => {
-                                        let mut cv = String::new();
-                                        for &o in f.iter().take(1024) {
-                                            if o >= 32 && o < 127 {
-                                                cv.push(o as char);
-                                            } else if cv.len() >= 4 {
-                                                cz.push(cv.clone());
-                                                cv.clear();
+                                    Ok(data) => {
+                                        let mut current = String::new();
+                                        for &b in data.iter().take(1024) {
+                                            if b >= 32 && b < 127 {
+                                                current.push(b as char);
+                                            } else if current.len() >= 4 {
+                                                ap.push(current.clone());
+                                                current.clear();
                                             } else {
-                                                cv.clear();
+                                                current.clear();
                                             }
                                         }
-                                        if cv.len() >= 4 {
-                                            cz.push(cv);
+                                        if current.len() >= 4 {
+                                            ap.push(current);
                                         }
                                     },
-                                    Err(aa) => cz.push(format!("strings: {}: {}", path, aa.as_str())),
+                                    Err(e) => ap.push(format!("strings: {}: {}", path, e.as_str())),
                                 }
                             },
-                            _ if cmd.cj("traceroute ") || cmd.cj("tracert ") => {
-                                let kh = if cmd.cj("traceroute ") {
-                                    cmd.tl("traceroute ").em()
+                            _ if cmd.starts_with("traceroute ") || cmd.starts_with("tracert ") => {
+                                let host = if cmd.starts_with("traceroute ") {
+                                    cmd.trim_start_matches("traceroute ").trim()
                                 } else {
-                                    cmd.tl("tracert ").em()
+                                    cmd.trim_start_matches("tracert ").trim()
                                 };
-                                cz.push(format!("traceroute to {} (simulated)", kh));
-                                cz.push(String::from(" 1  10.0.2.2  1.234 ms"));
-                                cz.push(String::from(" 2  * * *"));
-                                cz.push(String::from(" 3  * * *"));
+                                ap.push(format!("traceroute to {} (simulated)", host));
+                                ap.push(String::from(" 1  10.0.2.2  1.234 ms"));
+                                ap.push(String::from(" 2  * * *"));
+                                ap.push(String::from(" 3  * * *"));
                             },
                             "3ddemo" | "demo3d" | "cube" => {
                                 
-                                cz.push(String::from("Starting 3D Demo..."));
-                                cz.push(String::from("Controls: Arrow keys rotate, ESC to exit"));
+                                ap.push(String::from("Starting 3D Demo..."));
+                                ap.push(String::from("Controls: Arrow keys rotate, ESC to exit"));
                                 
                                 
-                                let bqe = 400u32;
-                                let cea = 300u32;
-                                let mut awq = crate::rasterizer::Rasterizer::new(bqe, cea);
-                                let mut renderer = crate::rasterizer::Renderer3D::new(bqe, cea);
+                                let ajk = 400u32;
+                                let aqf = 300u32;
+                                let mut zh = crate::rasterizer::Rasterizer::new(ajk, aqf);
+                                let mut renderer = crate::rasterizer::Renderer3D::new(ajk, aqf);
                                 
-                                let mut aev: f32 = 0.0;
-                                let mut ajt: f32 = 0.3;
-                                let mut nki = true;
-                                let mut kpb = 0u32;
+                                let mut angle_y: f32 = 0.0;
+                                let mut angle_x: f32 = 0.3;
+                                let mut hrg = true;
+                                let mut frm = 0u32;
                                 
                                 
-                                let cww = (gwu + 150) as u32;
-                                let dgd = (gwv + 50) as u32;
+                                let bba = (dgq + 150) as u32;
+                                let bfv = (dgr + 50) as u32;
                                 
-                                while nki && kpb < 600 { 
+                                while hrg && frm < 600 { 
                                     
-                                    if let Some(eh) = crate::keyboard::xw() {
-                                        match eh {
-                                            27 => nki = false, 
-                                            0x4B => aev -= 0.1, 
-                                            0x4D => aev += 0.1, 
-                                            0x48 => ajt -= 0.1, 
-                                            0x50 => ajt += 0.1, 
+                                    if let Some(k) = crate::keyboard::kr() {
+                                        match k {
+                                            27 => hrg = false, 
+                                            0x4B => angle_y -= 0.1, 
+                                            0x4D => angle_y += 0.1, 
+                                            0x48 => angle_x -= 0.1, 
+                                            0x50 => angle_x += 0.1, 
                                             _ => {}
                                         }
                                     }
                                     
                                     
-                                    awq.clear(0xFF101010);
-                                    renderer.rbj();
+                                    zh.clear(0xFF101010);
+                                    renderer.clear_z_buffer();
                                     
                                     
-                                    let boe = crate::rasterizer::Mat4::chi(aev);
-                                    let cbn = crate::rasterizer::Mat4::dlk(ajt);
-                                    let chh = cbn.mul(&boe);
+                                    let rot_y = crate::rasterizer::Mat4::rotation_y(angle_y);
+                                    let rot_x = crate::rasterizer::Mat4::rotation_x(angle_x);
+                                    let rotation = rot_x.mul(&rot_y);
                                     
                                     
-                                    let pn = crate::rasterizer::Vec3::new(0.0, 0.0, 0.0);
-                                    renderer.gfg(&mut awq, pn, 1.5, &chh, 0xFF00FF00);
+                                    let center = crate::rasterizer::Vec3::new(0.0, 0.0, 0.0);
+                                    renderer.draw_cube(&mut zh, center, 1.5, &rotation, 0xFF00FF00);
                                     
                                     
-                                    let qxo = crate::rasterizer::Vec3::new(2.0, 0.0, 0.0);
-                                    renderer.gfg(&mut awq, qxo, 0.8, &chh, 0xFF00FFFF);
+                                    let kie = crate::rasterizer::Vec3::new(2.0, 0.0, 0.0);
+                                    renderer.draw_cube(&mut zh, kie, 0.8, &rotation, 0xFF00FFFF);
                                     
                                     
-                                    awq.nts(0, 0, bqe, 25, 0xFF003300, 0xFF00AA00);
+                                    zh.fill_gradient_h(0, 0, ajk, 25, 0xFF003300, 0xFF00AA00);
                                     
                                     
-                                    awq.lx(0, 0, bqe, cea, 0xFF00FF00);
+                                    zh.draw_rect(0, 0, ajk, aqf, 0xFF00FF00);
                                     
                                     
-                                    for x in 0..cea {
-                                        for y in 0..bqe {
-                                            let w = (x * bqe + y) as usize;
-                                            crate::framebuffer::draw_pixel(cww + y, dgd + x, awq.aqt[w]);
+                                    for o in 0..aqf {
+                                        for p in 0..ajk {
+                                            let idx = (o * ajk + p) as usize;
+                                            crate::framebuffer::draw_pixel(bba + p, bfv + o, zh.back_buffer[idx]);
                                         }
                                     }
                                     
                                     
-                                    crate::framebuffer::cb("3D Demo - ESC to exit", cww + 10, dgd + 5, 0xFFFFFFFF);
+                                    crate::framebuffer::draw_text("3D Demo - ESC to exit", bba + 10, bfv + 5, 0xFFFFFFFF);
                                     
                                     
-                                    let ghn = format!("Frame: {}", kpb);
-                                    crate::framebuffer::cb(&ghn, cww + bqe - 100, dgd + 5, 0xFFFFFF00);
+                                    let cyc = format!("Frame: {}", frm);
+                                    crate::framebuffer::draw_text(&cyc, bba + ajk - 100, bfv + 5, 0xFFFFFF00);
                                     
-                                    aev += 0.02;  
-                                    kpb += 1;
+                                    angle_y += 0.02;  
+                                    frm += 1;
                                     
                                     
-                                    for _ in 0..50000 { core::hint::hc(); }
+                                    for _ in 0..50000 { core::hint::spin_loop(); }
                                 }
                                 
-                                cz.push(String::from("3D Demo ended."));
+                                ap.push(String::from("3D Demo ended."));
                             },
                             "raster" | "rasterdemo" => {
                                 
-                                cz.push(String::from("Rasterizer Demo - Antialiasing & Gradients"));
+                                ap.push(String::from("Rasterizer Demo - Antialiasing & Gradients"));
                                 
-                                let bqe = 350u32;
-                                let cea = 250u32;
-                                let mut awq = crate::rasterizer::Rasterizer::new(bqe, cea);
+                                let ajk = 350u32;
+                                let aqf = 250u32;
+                                let mut zh = crate::rasterizer::Rasterizer::new(ajk, aqf);
                                 
-                                let cww = (gwu + 175) as u32;
-                                let dgd = (gwv + 75) as u32;
-                                
-                                
-                                awq.clear(0xFF0A0A0A);
+                                let bba = (dgq + 175) as u32;
+                                let bfv = (dgr + 75) as u32;
                                 
                                 
-                                awq.kvv(0, 0, bqe, cea, 0xFF000022, 0xFF002200);
+                                zh.clear(0xFF0A0A0A);
                                 
                                 
-                                awq.hji(80, 80, 40, 0xFFFF0000);   
-                                awq.hji(150, 100, 35, 0xFF00FF00); 
-                                awq.hji(220, 80, 40, 0xFF0000FF);  
+                                zh.fill_gradient_v(0, 0, ajk, aqf, 0xFF000022, 0xFF002200);
                                 
                                 
-                                awq.hji(115, 90, 30, 0x8800FFFF);  
-                                awq.hji(185, 90, 30, 0x88FF00FF);  
+                                zh.fill_circle_aa(80, 80, 40, 0xFFFF0000);   
+                                zh.fill_circle_aa(150, 100, 35, 0xFF00FF00); 
+                                zh.fill_circle_aa(220, 80, 40, 0xFF0000FF);  
                                 
                                 
-                                awq.afp(50, 150, 120, 60, 15, 0xFF444444);
-                                awq.nts(55, 155, 110, 50, 0xFF006600, 0xFF00CC00);
+                                zh.fill_circle_aa(115, 90, 30, 0x8800FFFF);  
+                                zh.fill_circle_aa(185, 90, 30, 0x88FF00FF);  
                                 
                                 
-                                awq.krd(200.0, 150.0, 320.0, 220.0, 0xFFFFFF00);
-                                awq.krd(200.0, 220.0, 320.0, 150.0, 0xFFFF8800);
+                                zh.fill_rounded_rect(50, 150, 120, 60, 15, 0xFF444444);
+                                zh.fill_gradient_h(55, 155, 110, 50, 0xFF006600, 0xFF00CC00);
                                 
                                 
-                                awq.gfj(250, 160, 60, 40, 8, 0x88000000);
-                                awq.ah(250, 160, 60, 40, 0xFF00AA00);
+                                zh.draw_line_aa(200.0, 150.0, 320.0, 220.0, 0xFFFFFF00);
+                                zh.draw_line_aa(200.0, 220.0, 320.0, 150.0, 0xFFFF8800);
                                 
                                 
-                                awq.lx(0, 0, bqe, cea, 0xFF00FF00);
+                                zh.draw_shadow(250, 160, 60, 40, 8, 0x88000000);
+                                zh.fill_rect(250, 160, 60, 40, 0xFF00AA00);
                                 
                                 
-                                for x in 0..cea {
-                                    for y in 0..bqe {
-                                        let w = (x * bqe + y) as usize;
-                                        crate::framebuffer::draw_pixel(cww + y, dgd + x, awq.aqt[w]);
+                                zh.draw_rect(0, 0, ajk, aqf, 0xFF00FF00);
+                                
+                                
+                                for o in 0..aqf {
+                                    for p in 0..ajk {
+                                        let idx = (o * ajk + p) as usize;
+                                        crate::framebuffer::draw_pixel(bba + p, bfv + o, zh.back_buffer[idx]);
                                     }
                                 }
                                 
-                                crate::framebuffer::cb("Rasterizer: AA + Alpha + Gradients", cww + 10, dgd + 5, 0xFFFFFFFF);
+                                crate::framebuffer::draw_text("Rasterizer: AA + Alpha + Gradients", bba + 10, bfv + 5, 0xFFFFFFFF);
                                 
                                 
-                                cz.push(String::from("Press any key to close demo..."));
+                                ap.push(String::from("Press any key to close demo..."));
                                 loop {
-                                    if crate::keyboard::xw().is_some() {
+                                    if crate::keyboard::kr().is_some() {
                                         break;
                                     }
-                                    core::hint::hc();
+                                    core::hint::spin_loop();
                                 }
-                                cz.push(String::from("Demo closed."));
+                                ap.push(String::from("Demo closed."));
                             },
-                            _ => cz.push(format!("Command not found: {}", cmd)),
+                            _ => ap.push(format!("Command not found: {}", cmd)),
                         };
-                        bfh.clear();
-                        gto.clear();
+                        shell_input.clear();
+                        dez.clear();
                         
                         
-                        while cz.len() > 20 {
-                            cz.remove(0);
+                        while ap.len() > 20 {
+                            ap.remove(0);
                         }
                         
                         
-                        px = cz.len().ao(AFH_);
+                        scroll_offset = ap.len().saturating_sub(AHB_);
                     }
                 },
                 32..=126 => { 
-                    crate::serial_println!("[KEY] Printable char: '{}' ({})", bs as char, bs);
-                    bfh.push(bs as char);
+                    crate::serial_println!("[KEY] Printable char: '{}' ({})", key as char, key);
+                    shell_input.push(key as char);
                     
-                    let kjn = ["help", "ls", "dir", "clear", "ifconfig", "cpuinfo", "meminfo", "whoami", "uptime", "open", "smp", "fps", "matrix", "holo"];
-                    gto.clear();
-                    for r in kjn {
-                        if r.cj(&bfh) && r != bfh.as_str() {
-                            gto = String::from(&r[bfh.len()..]);
+                    let fnl = ["help", "ls", "dir", "clear", "ifconfig", "cpuinfo", "meminfo", "whoami", "uptime", "open", "smp", "fps", "matrix", "holo"];
+                    dez.clear();
+                    for c in fnl {
+                        if c.starts_with(&shell_input) && c != shell_input.as_str() {
+                            dez = String::from(&c[shell_input.len()..]);
                             break;
                         }
                     }
@@ -5816,187 +5822,187 @@ pub(super) fn kih(lek: Option<&str>, sg: u64) {
         }
         
         
-        let lms = crate::mouse::drd();
-        daa = lms.b.qp(0, z as i32 - 1);
-        dab = lms.c.qp(0, ac as i32 - 1);
-        let fd = lms.jda;
+        let gif = crate::mouse::get_state();
+        mouse_x = gif.x.clamp(0, width as i32 - 1);
+        mouse_y = gif.y.clamp(0, height as i32 - 1);
+        let left = gif.left_button;
         
         
-        let dew = fd && !gpt;
-        let hxl = !fd && gpt;
-        gpt = fd;
+        let bfi = left && !dcw;
+        let released = !left && dcw;
+        dcw = left;
         
         
-        if hgs {
-            if fd {
+        if dnp {
+            if left {
                 
-                gwu = (daa - dgp).qp(0, z as i32 - 200);
-                gwv = (dab - dgq).qp(0, ac as i32 - 100);
+                dgq = (mouse_x - drag_offset_x).clamp(0, width as i32 - 200);
+                dgr = (mouse_y - drag_offset_y).clamp(0, height as i32 - 100);
                 
-                if let Some(ep) = compositor.dhm(pzm) {
-                    ep.eyk(gwu as u32, gwv as u32);
+                if let Some(aw) = compositor.get_layer_mut(jre) {
+                    aw.set_position(dgq as u32, dgr as u32);
                 }
             } else {
                 
-                hgs = false;
+                dnp = false;
             }
         }
         
         
-        if let Some(gi) = compositor.dhm(nio) {
-            gi.eyk(daa as u32, dab as u32);
+        if let Some(cursor) = compositor.get_layer_mut(hpx) {
+            cursor.set_position(mouse_x as u32, mouse_y as u32);
         }
         
         
-        czs = -1;
-        if awe {
-            let rs = 5u32;
-            let xp = ac - 340;
-            let hl = daa as u32;
-            let ir = dab as u32;
+        bcs = -1;
+        if yx {
+            let hu = 5u32;
+            let ks = height - 340;
+            let cg = mouse_x as u32;
+            let cr = mouse_y as u32;
             
-            if hl >= rs && hl < rs + 250 && ir >= xp && ir < xp + 290 {
-                let ali = 36u32;
-                let aio = if ir > xp + 40 { ir - xp - 40 } else { 0 };
-                let w = (aio / ali) as i32;
-                if w >= 0 && w < gmp.len() as i32 {
-                    czs = w;
+            if cg >= hu && cg < hu + 250 && cr >= ks && cr < ks + 290 {
+                let sy = 36u32;
+                let qn = if cr > ks + 40 { cr - ks - 40 } else { 0 };
+                let idx = (qn / sy) as i32;
+                if idx >= 0 && idx < dbg.len() as i32 {
+                    bcs = idx;
                 }
             }
         }
         
         
-        if dew {
-            let hl = daa as u32;
-            let ir = dab as u32;
+        if bfi {
+            let cg = mouse_x as u32;
+            let cr = mouse_y as u32;
             
             
-            let ejr = ac - 40;
-            if ir >= ejr && ir < ac && hl >= 5 && hl < 110 {
-                awe = !awe;
-                dvu = false; 
+            let bwh = height - 40;
+            if cr >= bwh && cr < height && cg >= 5 && cg < 110 {
+                yx = !yx;
+                bou = false; 
             }
             
-            else if ir >= ejr && ir < ac && hl >= 340 && hl < 390 {
-                dvu = !dvu;
-                awe = false; 
+            else if cr >= bwh && cr < height && cg >= 340 && cg < 390 {
+                bou = !bou;
+                yx = false; 
                 
-                gsi = crate::desktop::col();
-                gsj = crate::desktop::hlf();
+                dek = crate::desktop::awb();
+                del = crate::desktop::dqn();
             }
             
-            else if ir >= ejr && ir < ac && hl >= 220 && hl < 320 {
+            else if cr >= bwh && cr < height && cg >= 220 && cg < 320 {
                 
-                fbm = !fbm;
+                cfi = !cfi;
             }
             
-            else if awe && czs >= 0 && czs < gmp.len() as i32 {
-                let (blu, item) = gmp[czs as usize];
+            else if yx && bcs >= 0 && bcs < dbg.len() as i32 {
+                let (_name, item) = dbg[bcs as usize];
                 match item {
-                    MenuItem::Kc(ev) => {
+                    MenuItem::App(mode) => {
                         
-                        if !blu.cj("-") {
-                            atu = ev;
-                            cz.clear();
-                            for line in gie!(ev) {
-                                cz.push(String::from(*line));
+                        if !_name.starts_with("-") {
+                            xm = mode;
+                            ap.clear();
+                            for line in cyo!(mode) {
+                                ap.push(String::from(*line));
                             }
-                            cz.push(String::from(""));
-                            cz.push(String::from("Type commands below. Type 'help' for more info."));
+                            ap.push(String::from(""));
+                            ap.push(String::from("Type commands below. Type 'help' for more info."));
                         }
                     },
-                    MenuItem::Qt => {
-                        cz.push(String::from("> Shutting down..."));
+                    MenuItem::Shutdown => {
+                        ap.push(String::from("> Shutting down..."));
                         
-                        for _ in 0..10000000 { core::hint::hc(); }
+                        for _ in 0..10000000 { core::hint::spin_loop(); }
                         loop {
-                            crate::arch::tvq();
-                            crate::arch::bhd();
+                            crate::arch::mra();
+                            crate::arch::acb();
                         }
                     },
-                    MenuItem::Axr => {
-                        cz.push(String::from("> Rebooting..."));
-                        for _ in 0..10000000 { core::hint::hc(); }
+                    MenuItem::Reboot => {
+                        ap.push(String::from("> Rebooting..."));
+                        for _ in 0..10000000 { core::hint::spin_loop(); }
                         unsafe {
                             crate::arch::Port::<u8>::new(0x64).write(0xFE);
                         }
-                        loop { crate::arch::bhd(); }
+                        loop { crate::arch::acb(); }
                     },
                 }
-                awe = false;
+                yx = false;
             }
             
-            else if awe {
-                awe = false;
+            else if yx {
+                yx = false;
             }
-            else if dvu {
+            else if bou {
                 
-                let pjk = 340u32;
-                let pjl = ac - 380;
-                let wkh = 270u32;
-                let wkg = 350u32;
-                if !(hl >= pjk && hl < pjk + wkh 
-                    && ir >= pjl && ir < pjl + wkg) {
-                    dvu = false;
+                let jfp = 340u32;
+                let jfq = height - 380;
+                let oqd = 270u32;
+                let oqc = 350u32;
+                if !(cg >= jfp && cg < jfp + oqd 
+                    && cr >= jfq && cr < jfq + oqc) {
+                    bou = false;
                 }
             }
             
-            else if !hgs {
-                let abx = gwu as u32;
-                let aha = gwv as u32;
-                let aog = 700u32;  
-                let biz = 450u32;  
+            else if !dnp {
+                let nw = dgq as u32;
+                let qr = dgr as u32;
+                let ul = 700u32;  
+                let afy = 450u32;  
                 
                 
-                if fbm && hl >= abx && hl < abx + aog && ir >= aha && ir < aha + 28 {
+                if cfi && cg >= nw && cg < nw + ul && cr >= qr && cr < qr + 28 {
                     
                     
-                    if hl >= abx + aog - 60 && hl < abx + aog - 40 {
-                        fbm = false;  
-                        cz.push(String::from("> Window closed. Click dock icon to reopen."));
+                    if cg >= nw + ul - 60 && cg < nw + ul - 40 {
+                        cfi = false;  
+                        ap.push(String::from("> Window closed. Click dock icon to reopen."));
                     }
                     
-                    else if hl >= abx + aog - 90 && hl < abx + aog - 70 {
-                        fbm = false;  
-                        cz.push(String::from("> Window minimized"));
+                    else if cg >= nw + ul - 90 && cg < nw + ul - 70 {
+                        cfi = false;  
+                        ap.push(String::from("> Window minimized"));
                     }
                     
-                    else if hl >= abx + aog - 120 && hl < abx + aog - 100 {
-                        cz.push(String::from("> Window maximized"));
+                    else if cg >= nw + ul - 120 && cg < nw + ul - 100 {
+                        ap.push(String::from("> Window maximized"));
                     }
                     
                     else {
-                        hgs = true;
-                        dgp = daa - gwu;
-                        dgq = dab - gwv;
+                        dnp = true;
+                        drag_offset_x = mouse_x - dgq;
+                        drag_offset_y = mouse_y - dgr;
                     }
                 }
                 
-                else if hl < 80 && ir < ac - 40 {
-                    let aih = 36u32;
-                    let qi = 50u32;       
-                    let vc = 10u32;
-                    for a in 0..8usize {
-                        let og = vc + (a as u32) * (aih + qi);
-                        if ir >= og && ir < og + aih + 16 {
-                            atu = match a {
-                                0 => AppMode::Pl,
-                                1 => AppMode::Df,
-                                2 => AppMode::As,
-                                3 => AppMode::Ag,
-                                4 => AppMode::Ip,
-                                5 => AppMode::Rb,
+                else if cg < 80 && cr < height - 40 {
+                    let rl = 36u32;
+                    let gap = 50u32;       
+                    let start_y = 10u32;
+                    for i in 0..8usize {
+                        let gg = start_y + (i as u32) * (rl + gap);
+                        if cr >= gg && cr < gg + rl + 16 {
+                            xm = match i {
+                                0 => AppMode::Files,
+                                1 => AppMode::Shell,
+                                2 => AppMode::Network,
+                                3 => AppMode::TextEditor,
+                                4 => AppMode::Hardware,
+                                5 => AppMode::UserMgmt,
                                 6 => AppMode::Browser,
-                                7 => AppMode::Bp,
-                                _ => AppMode::Df,
+                                7 => AppMode::ImageViewer,
+                                _ => AppMode::Shell,
                             };
                             
-                            fbm = true;
-                            cz.clear();
-                            for line in gie!(atu) {
-                                cz.push(String::from(*line));
+                            cfi = true;
+                            ap.clear();
+                            for line in cyo!(xm) {
+                                ap.push(String::from(*line));
                             }
-                            cz.push(String::from(""));
+                            ap.push(String::from(""));
                             break;
                         }
                     }
@@ -6008,159 +6014,159 @@ pub(super) fn kih(lek: Option<&str>, sg: u64) {
         
         
         
-        let tys = (oo % rnc) == 0;
+        let mtn = (frame_count % kwh) == 0;
         
-        if !tys {
+        if !mtn {
             
             
             
-            compositor.vkv();
+            compositor.present_only();
             
-            if atr { cet.qs(); }
+            if xk { aqp.update(); }
         } else {
         
-        lze += 1;
+        grc += 1;
         
         
         
         
         
-        if let Some(ei) = compositor.dhm(qph) {
-            let aeg = ei.bi.mw();
-            let bjl = ei.bi.len();
+        if let Some(bg) = compositor.get_layer_mut(kbs) {
+            let buf_ptr = bg.buffer.as_mut_ptr();
+            let buf_len = bg.buffer.len();
             
             
-            if atr {
+            if xk {
                 
                 
                 
                 
                 
-                cet.qs();
-                cet.tj(&mut ei.bi, z as usize, ac as usize);
-            } else if ats {
+                aqp.update();
+                aqp.render(&mut bg.buffer, width as usize, height as usize);
+            } else if xl {
                 
                 
                 
                 
                 
                 
-                crate::gpu_emu::wmb(
-                    aeg,
-                    z as usize,
-                    ac as usize,
+                crate::gpu_emu::ore(
+                    buf_ptr,
+                    width as usize,
+                    height as usize,
                 );
-            } else if avf {
+            } else if yg {
                 
                 
                 
-                hqv.qs();
-                hqv.tj(&mut ei.bi, z as usize, ac as usize);
-            } else if apf {
-                
-                
-                
-                
-                dzd.qs();
-                dzd.tj(&mut ei.bi, z as usize, ac as usize);
-                
-                dzd.vvo(&mut ei.bi, z as usize, ac as usize);
-                dzd.vvs(&mut ei.bi, z as usize, ac as usize);
-            } else if aqq && !dmx && !bnf {
-                
-                
-                
-                ei.bi.vi(cot);
-                nsv.qs();
-                nsv.tj(&mut ei.bi, z as usize, ac as usize);
-            } else if dmx {
+                dty.update();
+                dty.render(&mut bg.buffer, width as usize, height as usize);
+            } else if vb {
                 
                 
                 
                 
+                bqu.update();
+                bqu.render(&mut bg.buffer, width as usize, height as usize);
+                
+                bqu.render_cube_flow_layer(&mut bg.buffer, width as usize, height as usize);
+                bqu.render_entity_layer(&mut bg.buffer, width as usize, height as usize);
+            } else if vv && !bju && !aia {
                 
                 
-                holovolume.dbw(z as usize, ac as usize);
-                holovolume.qs(0.016);
+                
+                bg.buffer.fill(awh);
+                hxu.update();
+                hxu.render(&mut bg.buffer, width as usize, height as usize);
+            } else if bju {
                 
                 
-                for bj in 0..R_ {
-                    awc[bj] += czn[bj] as i32;
-                    if awc[bj] > (AS_ as i32 + 30) {
-                        let dv = (bj as u32 * 2654435761).cn(oo as u32);
-                        awc[bj] = -((dv % 30) as i32);
-                        czn[bj] = 1 + (dv % 3);
+                
+                
+                
+                
+                holovolume.set_screen_size(width as usize, height as usize);
+                holovolume.update(0.016);
+                
+                
+                for col in 0..AD_ {
+                    matrix_heads[col] += matrix_speeds[col] as i32;
+                    if matrix_heads[col] > (AV_ as i32 + 30) {
+                        let seed = (col as u32 * 2654435761).wrapping_add(frame_count as u32);
+                        matrix_heads[col] = -((seed % 30) as i32);
+                        matrix_speeds[col] = 1 + (seed % 3);
                     }
                 }
                 
                 
                 unsafe {
                     #[cfg(target_arch = "x86_64")]
-                    crate::graphics::simd::bed(aeg, bjl, cot);
+                    crate::graphics::simd::adq(buf_ptr, buf_len, awh);
                     #[cfg(not(target_arch = "x86_64"))]
-                    ei.bi.vi(cot);
+                    bg.buffer.fill(awh);
                 }
                 
                 
-                let hmz = holovolume.tfa();
+                let holo_intensity = holovolume.get_u8_intensity_map();
                 
                 
-                let oi = super::Tk {
-                    aeg,
-                    bjl,
-                    z,
-                    ac,
-                    car: car.fq(),
-                    awc: awc.fq(),
-                    hmz: hmz.fq(),
-                    gme: AS_,
+                let params = super::Ii {
+                    buf_ptr,
+                    buf_len,
+                    width,
+                    height,
+                    matrix_chars: matrix_chars.as_ptr(),
+                    matrix_heads: matrix_heads.as_ptr(),
+                    holo_intensity: holo_intensity.as_ptr(),
+                    matrix_rows: AV_,
                 };
                 
-                crate::cpu::smp::daj(
-                    R_,
-                    super::pbw,
-                    &oi as *const super::Tk as *mut u8
+                crate::cpu::smp::bcz(
+                    AD_,
+                    super::izr,
+                    &params as *const super::Ii as *mut u8
                 );
                 
-            } else if bnf {
+            } else if aia {
                 
                 
                 
                 
-                if fks.tyr() {
+                if ckr.is_raytraced() {
                     
                     
                     
                     use crate::graphics::raytracer::{Vec3, Material};
                     
-                    raytracer.qs(0.016);
+                    raytracer.update(0.016);
                     
                     
-                    match fks {
-                        crate::graphics::holomatrix::HoloScene::Nv => {
-                            raytracer.wlk();
+                    match ckr {
+                        crate::graphics::holomatrix::HoloScene::RayTracedSpheres => {
+                            raytracer.setup_spheres_scene();
                         },
-                        crate::graphics::holomatrix::HoloScene::Nu => {
-                            raytracer.wko();
+                        crate::graphics::holomatrix::HoloScene::RayTracedDNA => {
+                            raytracer.setup_dna_scene();
                         },
                         _ => {}
                     }
                     
                     
-                    let wbb = raytracer.tj();
+                    let oiv = raytracer.render();
                     
                     
-                    let mbe = raytracer.z;
-                    let pem = raytracer.ac;
-                    let wdl = z as usize / mbe;
-                    let wdm = ac as usize / pem;
+                    let gsb = raytracer.width;
+                    let jbs = raytracer.height;
+                    let oks = width as usize / gsb;
+                    let okt = height as usize / jbs;
                     
-                    for c in 0..ac as usize {
-                        for b in 0..z as usize {
-                            let kb = (b / wdl).v(mbe - 1);
-                            let ix = (c / wdm).v(pem - 1);
-                            let s = wbb[ix * mbe + kb];
-                            ei.bi[c * z as usize + b] = s;
+                    for y in 0..height as usize {
+                        for x in 0..width as usize {
+                            let da = (x / oks).min(gsb - 1);
+                            let cm = (y / okt).min(jbs - 1);
+                            let color = oiv[cm * gsb + da];
+                            bg.buffer[y * width as usize + x] = color;
                         }
                     }
                 } else {
@@ -6171,7 +6177,7 @@ pub(super) fn kih(lek: Option<&str>, sg: u64) {
                     
                     
                     
-                    holomatrix.qs(0.016);
+                    holomatrix.update(0.016);
                     let time = holomatrix.time;
                     
                     
@@ -6180,173 +6186,173 @@ pub(super) fn kih(lek: Option<&str>, sg: u64) {
                     
                     
                     
-                    let mut alg = [[0u8; AS_]; R_];
+                    let mut intensity_map = [[0u8; AV_]; AD_];
                     
                     
-                    let acc = (z as f32) / (R_ as f32);  
-                    let aqw = (ac as f32) / (AS_ as f32); 
+                    let cell_w = (width as f32) / (AD_ as f32);  
+                    let cell_h = (height as f32) / (AV_ as f32); 
                     
                     
-                    let cx = z as f32 / 2.0;
-                    let ae = ac as f32 / 2.0;
-                    let bv = (ac as f32 / 3.0).v(z as f32 / 4.0);
+                    let cx = width as f32 / 2.0;
+                    let u = height as f32 / 2.0;
+                    let scale = (height as f32 / 3.0).min(width as f32 / 4.0);
                     
                     
-                    match fks {
-                        crate::graphics::holomatrix::HoloScene::Ij => {
+                    match ckr {
+                        crate::graphics::holomatrix::HoloScene::DNA => {
                             
-                            let obo = 2.2;
-                            let dy = 0.45;
-                            let cuy = 3.5;
+                            let iep = 2.2;
+                            let radius = 0.45;
+                            let bac = 3.5;
                             
-                            for a in 0..180 {
-                                let ab = a as f32 / 180.0;
-                                let c = -obo / 2.0 + ab * obo;
-                                let hg = ab * cuy * 6.28318 + time;
+                            for i in 0..180 {
+                                let t = i as f32 / 180.0;
+                                let y = -iep / 2.0 + t * iep;
+                                let cc = t * bac * 6.28318 + time;
                                 
                                 
-                                let dn = dy * crate::graphics::holomatrix::eob(hg);
-                                let aeu = dy * crate::graphics::holomatrix::cuh(hg);
+                                let x1 = radius * crate::graphics::holomatrix::byi(cc);
+                                let po = radius * crate::graphics::holomatrix::azr(cc);
                                 
                                 
-                                let hy = dy * crate::graphics::holomatrix::eob(hg + 3.14159);
-                                let ahc = dy * crate::graphics::holomatrix::cuh(hg + 3.14159);
+                                let x2 = radius * crate::graphics::holomatrix::byi(cc + 3.14159);
+                                let qt = radius * crate::graphics::holomatrix::azr(cc + 3.14159);
                                 
                                 
-                                let boe = time * 0.4;
-                                let cwr = crate::graphics::holomatrix::eob(boe);
-                                let dcb = crate::graphics::holomatrix::cuh(boe);
+                                let rot_y = time * 0.4;
+                                let bax = crate::graphics::holomatrix::byi(rot_y);
+                                let bds = crate::graphics::holomatrix::azr(rot_y);
                                 
                                 
-                                let ehw = dn * cwr + aeu * dcb;
-                                let cmn = -dn * dcb + aeu * cwr;
-                                let ftk = hy * cwr + ahc * dcb;
-                                let cmo = -hy * dcb + ahc * cwr;
+                                let bvo = x1 * bax + po * bds;
+                                let auw = -x1 * bds + po * bax;
+                                let bja = x2 * bax + qt * bds;
+                                let auy = -x2 * bds + qt * bax;
                                 
                                 
-                                let nkl = 1.0 / (2.0 + cmn);
-                                let asa = cx + ehw * bv * nkl;
-                                let bos = ae + c * bv * nkl;
-                                let cpg = (asa / acc) as usize;
-                                let ctz = (bos / aqw) as usize;
+                                let hri = 1.0 / (2.0 + auw);
+                                let wn = cx + bvo * scale * hri;
+                                let aiu = u + y * scale * hri;
+                                let awp = (wn / cell_w) as usize;
+                                let azk = (aiu / cell_h) as usize;
                                 
-                                let nkm = 1.0 / (2.0 + cmo);
-                                let amy = cx + ftk * bv * nkm;
-                                let bcw = ae + c * bv * nkm;
-                                let cph = (amy / acc) as usize;
-                                let cua = (bcw / aqw) as usize;
-                                
-                                
-                                let hog = (180.0 + 75.0 * (1.0 - ((cmn + 0.5) * 0.5).am(0.0).v(1.0))) as u8;
-                                let hoh = (180.0 + 75.0 * (1.0 - ((cmo + 0.5) * 0.5).am(0.0).v(1.0))) as u8;
+                                let hrj = 1.0 / (2.0 + auy);
+                                let tq = cx + bja * scale * hrj;
+                                let acv = u + y * scale * hrj;
+                                let awq = (tq / cell_w) as usize;
+                                let azl = (acv / cell_h) as usize;
                                 
                                 
-                                if cpg < R_ && ctz < AS_ {
-                                    alg[cpg][ctz] = alg[cpg][ctz].am(hog);
+                                let dsd = (180.0 + 75.0 * (1.0 - ((auw + 0.5) * 0.5).max(0.0).min(1.0))) as u8;
+                                let dse = (180.0 + 75.0 * (1.0 - ((auy + 0.5) * 0.5).max(0.0).min(1.0))) as u8;
+                                
+                                
+                                if awp < AD_ && azk < AV_ {
+                                    intensity_map[awp][azk] = intensity_map[awp][azk].max(dsd);
                                     
-                                    if cpg > 0 { alg[cpg-1][ctz] = alg[cpg-1][ctz].am(hog * 2/3); }
-                                    if cpg < R_-1 { alg[cpg+1][ctz] = alg[cpg+1][ctz].am(hog * 2/3); }
-                                    if ctz > 0 { alg[cpg][ctz-1] = alg[cpg][ctz-1].am(hog/2); }
-                                    if ctz < AS_-1 { alg[cpg][ctz+1] = alg[cpg][ctz+1].am(hog/2); }
+                                    if awp > 0 { intensity_map[awp-1][azk] = intensity_map[awp-1][azk].max(dsd * 2/3); }
+                                    if awp < AD_-1 { intensity_map[awp+1][azk] = intensity_map[awp+1][azk].max(dsd * 2/3); }
+                                    if azk > 0 { intensity_map[awp][azk-1] = intensity_map[awp][azk-1].max(dsd/2); }
+                                    if azk < AV_-1 { intensity_map[awp][azk+1] = intensity_map[awp][azk+1].max(dsd/2); }
                                 }
-                                if cph < R_ && cua < AS_ {
-                                    alg[cph][cua] = alg[cph][cua].am(hoh);
-                                    if cph > 0 { alg[cph-1][cua] = alg[cph-1][cua].am(hoh * 2/3); }
-                                    if cph < R_-1 { alg[cph+1][cua] = alg[cph+1][cua].am(hoh * 2/3); }
-                                    if cua > 0 { alg[cph][cua-1] = alg[cph][cua-1].am(hoh/2); }
-                                    if cua < AS_-1 { alg[cph][cua+1] = alg[cph][cua+1].am(hoh/2); }
+                                if awq < AD_ && azl < AV_ {
+                                    intensity_map[awq][azl] = intensity_map[awq][azl].max(dse);
+                                    if awq > 0 { intensity_map[awq-1][azl] = intensity_map[awq-1][azl].max(dse * 2/3); }
+                                    if awq < AD_-1 { intensity_map[awq+1][azl] = intensity_map[awq+1][azl].max(dse * 2/3); }
+                                    if azl > 0 { intensity_map[awq][azl-1] = intensity_map[awq][azl-1].max(dse/2); }
+                                    if azl < AV_-1 { intensity_map[awq][azl+1] = intensity_map[awq][azl+1].max(dse/2); }
                                 }
                                 
                                 
-                                if a % 12 == 0 {
-                                    for e in 0..8 {
-                                        let apc = e as f32 / 7.0;
-                                        let mj = asa * (1.0 - apc) + amy * apc;
-                                        let ct = bos * (1.0 - apc) + bcw * apc;
-                                        let lie = (mj / acc) as usize;
-                                        let lkb = (ct / aqw) as usize;
-                                        if lie < R_ && lkb < AS_ {
-                                            alg[lie][lkb] = alg[lie][lkb].am(80);
+                                if i % 12 == 0 {
+                                    for j in 0..8 {
+                                        let uz = j as f32 / 7.0;
+                                        let fe = wn * (1.0 - uz) + tq * uz;
+                                        let ly = aiu * (1.0 - uz) + acv * uz;
+                                        let gfd = (fe / cell_w) as usize;
+                                        let ggk = (ly / cell_h) as usize;
+                                        if gfd < AD_ && ggk < AV_ {
+                                            intensity_map[gfd][ggk] = intensity_map[gfd][ggk].max(80);
                                         }
                                     }
                                 }
                             }
                         },
-                        crate::graphics::holomatrix::HoloScene::Jb => {
-                            let iv = 0.5;
-                            let lm: [(f32, f32, f32); 8] = [
-                                (-iv, -iv, -iv), (iv, -iv, -iv),
-                                (iv, iv, -iv), (-iv, iv, -iv),
-                                (-iv, -iv, iv), (iv, -iv, iv),
-                                (iv, iv, iv), (-iv, iv, iv),
+                        crate::graphics::holomatrix::HoloScene::RotatingCube => {
+                            let cw = 0.5;
+                            let vertices: [(f32, f32, f32); 8] = [
+                                (-cw, -cw, -cw), (cw, -cw, -cw),
+                                (cw, cw, -cw), (-cw, cw, -cw),
+                                (-cw, -cw, cw), (cw, -cw, cw),
+                                (cw, cw, cw), (-cw, cw, cw),
                             ];
-                            let bu: [(usize, usize); 12] = [
+                            let edges: [(usize, usize); 12] = [
                                 (0,1), (1,2), (2,3), (3,0),
                                 (4,5), (5,6), (6,7), (7,4),
                                 (0,4), (1,5), (2,6), (3,7),
                             ];
                             
-                            let cbn = time * 0.7;
-                            let boe = time * 0.5;
+                            let rot_x = time * 0.7;
+                            let rot_y = time * 0.5;
                             
-                            for (hnh, hni) in bu.iter() {
-                                let (xtb, xtc, xte) = lm[*hnh];
-                                let (jwc, xtd, xtf) = lm[*hni];
+                            for (i1, i2) in edges.iter() {
+                                let (vx1, vy1, vz1) = vertices[*i1];
+                                let (fes, vy2, vz2) = vertices[*i2];
                                 
-                                for e in 0..30 {
-                                    let ab = e as f32 / 29.0;
-                                    let b = xtb * (1.0 - ab) + jwc * ab;
-                                    let c = xtc * (1.0 - ab) + xtd * ab;
-                                    let av = xte * (1.0 - ab) + xtf * ab;
+                                for j in 0..30 {
+                                    let t = j as f32 / 29.0;
+                                    let x = vx1 * (1.0 - t) + fes * t;
+                                    let y = vy1 * (1.0 - t) + vy2 * t;
+                                    let z = vz1 * (1.0 - t) + vz2 * t;
                                     
                                     
-                                    let bmn = crate::graphics::holomatrix::eob(cbn);
-                                    let bok = crate::graphics::holomatrix::cuh(cbn);
-                                    let ix = c * bmn - av * bok;
-                                    let agv = c * bok + av * bmn;
-                                    let bmo = crate::graphics::holomatrix::eob(boe);
-                                    let bol = crate::graphics::holomatrix::cuh(boe);
-                                    let kb = b * bmo + agv * bol;
-                                    let cmo = -b * bol + agv * bmo;
+                                    let ahr = crate::graphics::holomatrix::byi(rot_x);
+                                    let aiq = crate::graphics::holomatrix::azr(rot_x);
+                                    let cm = y * ahr - z * aiq;
+                                    let qp = y * aiq + z * ahr;
+                                    let ahs = crate::graphics::holomatrix::byi(rot_y);
+                                    let air = crate::graphics::holomatrix::azr(rot_y);
+                                    let da = x * ahs + qp * air;
+                                    let auy = -x * air + qp * ahs;
                                     
-                                    let eo = 1.0 / (2.0 + cmo);
-                                    let cr = cx + kb * bv * eo;
-                                    let cq = ae + ix * bv * eo;
-                                    let bj = (cr / acc) as usize;
-                                    let br = (cq / aqw) as usize;
+                                    let depth = 1.0 / (2.0 + auy);
+                                    let am = cx + da * scale * depth;
+                                    let ak = u + cm * scale * depth;
+                                    let col = (am / cell_w) as usize;
+                                    let row = (ak / cell_h) as usize;
                                     
-                                    if bj < R_ && br < AS_ {
-                                        let lex = (100.0 + 100.0 * (1.0 - ((cmo + 0.6) * 0.5).am(0.0).v(1.0))) as u8;
-                                        alg[bj][br] = alg[bj][br].am(lex);
+                                    if col < AD_ && row < AV_ {
+                                        let czu = (100.0 + 100.0 * (1.0 - ((auy + 0.6) * 0.5).max(0.0).min(1.0))) as u8;
+                                        intensity_map[col][row] = intensity_map[col][row].max(czu);
                                     }
                                 }
                             }
                         },
                         _ => {
                             
-                            for a in 0..300 {
-                                let bnv = (a as f32 / 300.0) * 6.28318;
-                                let bdb = (a as f32 * 0.618033 * 6.28318) % 6.28318;
+                            for i in 0..300 {
+                                let aij = (i as f32 / 300.0) * 6.28318;
+                                let acz = (i as f32 * 0.618033 * 6.28318) % 6.28318;
                                 
-                                let m = 0.55;
-                                let b = m * crate::graphics::holomatrix::cuh(bdb) * crate::graphics::holomatrix::eob(bnv);
-                                let c = m * crate::graphics::holomatrix::cuh(bdb) * crate::graphics::holomatrix::cuh(bnv);
-                                let av = m * crate::graphics::holomatrix::eob(bdb);
+                                let r = 0.55;
+                                let x = r * crate::graphics::holomatrix::azr(acz) * crate::graphics::holomatrix::byi(aij);
+                                let y = r * crate::graphics::holomatrix::azr(acz) * crate::graphics::holomatrix::azr(aij);
+                                let z = r * crate::graphics::holomatrix::byi(acz);
                                 
-                                let ffx = crate::graphics::holomatrix::eob(time * 0.5);
-                                let fuu = crate::graphics::holomatrix::cuh(time * 0.5);
-                                let kb = b * ffx + av * fuu;
-                                let agv = -b * fuu + av * ffx;
+                                let chs = crate::graphics::holomatrix::byi(time * 0.5);
+                                let cqr = crate::graphics::holomatrix::azr(time * 0.5);
+                                let da = x * chs + z * cqr;
+                                let qp = -x * cqr + z * chs;
                                 
-                                let eo = 1.0 / (2.0 + agv);
-                                let cr = cx + kb * bv * eo;
-                                let cq = ae + c * bv * eo;
-                                let bj = (cr / acc) as usize;
-                                let br = (cq / aqw) as usize;
+                                let depth = 1.0 / (2.0 + qp);
+                                let am = cx + da * scale * depth;
+                                let ak = u + y * scale * depth;
+                                let col = (am / cell_w) as usize;
+                                let row = (ak / cell_h) as usize;
                                 
-                                if bj < R_ && br < AS_ {
-                                    let lex = (80.0 + 120.0 * (1.0 - ((agv + 0.6) * 0.5).am(0.0).v(1.0))) as u8;
-                                    alg[bj][br] = alg[bj][br].am(lex);
+                                if col < AD_ && row < AV_ {
+                                    let czu = (80.0 + 120.0 * (1.0 - ((qp + 0.6) * 0.5).max(0.0).min(1.0))) as u8;
+                                    intensity_map[col][row] = intensity_map[col][row].max(czu);
                                 }
                             }
                         }
@@ -6358,86 +6364,86 @@ pub(super) fn kih(lek: Option<&str>, sg: u64) {
                     
                     
                     
-                    for bj in 0..R_ {
-                        awc[bj] += czn[bj] as i32;
-                        if awc[bj] > (AS_ as i32 + 30) {
-                            let dv = (bj as u32 * 2654435761).cn(oo as u32);
-                            awc[bj] = -((dv % 30) as i32);
-                            czn[bj] = 1 + (dv % 3);
+                    for col in 0..AD_ {
+                        matrix_heads[col] += matrix_speeds[col] as i32;
+                        if matrix_heads[col] > (AV_ as i32 + 30) {
+                            let seed = (col as u32 * 2654435761).wrapping_add(frame_count as u32);
+                            matrix_heads[col] = -((seed % 30) as i32);
+                            matrix_speeds[col] = 1 + (seed % 3);
                         }
                     }
                     
                     
-                    ei.bi.vi(0xFF000000);
+                    bg.buffer.fill(0xFF000000);
                     
                     
-                    let byt = 8u32;
-                    for bj in 0..R_ {
-                        let b = bj as u32 * byt;
-                        if b >= z { continue; }
+                    let ati = 8u32;
+                    for col in 0..AD_ {
+                        let x = col as u32 * ati;
+                        if x >= width { continue; }
                         
-                        let ale = awc[bj];
+                        let su = matrix_heads[col];
                         
-                        for br in 0..AS_ {
-                            let c = br as u32 * 16;
-                            if c >= ac { continue; }
+                        for row in 0..AV_ {
+                            let y = row as u32 * 16;
+                            if y >= height { continue; }
                             
-                            let la = br as i32 - ale;
+                            let em = row as i32 - su;
                             
                             
-                            let agg = if la < 0 {
+                            let qf = if em < 0 {
                                 continue;
-                            } else if la == 0 {
+                            } else if em == 0 {
                                 255u32  
-                            } else if la <= 12 {
-                                255 - (la as u32 * 8)
-                            } else if la <= 28 {
+                            } else if em <= 12 {
+                                255 - (em as u32 * 8)
+                            } else if em <= 28 {
                                 
-                                let pv = ((la - 12) as u32).v(15) * 16;
-                                let yx = 255u32.ao(pv);
-                                (160 * yx) / 255
+                                let ha = ((em - 12) as u32).min(15) * 16;
+                                let ln = 255u32.saturating_sub(ha);
+                                (160 * ln) / 255
                             } else {
                                 continue;
                             };
                             
                             
-                            let bma = alg[bj][br] as u32;
+                            let ahj = intensity_map[col][row] as u32;
                             
                             
                             
-                            let (m, at, o) = if bma > 0 {
+                            let (r, g, b) = if ahj > 0 {
                                 
-                                let hj = (agg + bma * 2).v(255);
-                                let niw = (bma as u32 * 3 / 2).v(255);
-                                (niw / 3, hj, niw)  
+                                let intensity = (qf + ahj * 2).min(255);
+                                let hqd = (ahj as u32 * 3 / 2).min(255);
+                                (hqd / 3, intensity, hqd)  
                             } else {
                                 
-                                let tp = (agg / 3).v(80);
-                                (0, tp, 0)
+                                let dim = (qf / 3).min(80);
+                                (0, dim, 0)
                             };
                             
-                            let s = 0xFF000000 | (m << 16) | (at << 8) | o;
+                            let color = 0xFF000000 | (r << 16) | (g << 8) | b;
                             
                             
-                            let r = car[olj(bj, br)] as char;
-                            let ka = crate::framebuffer::font::ada(r);
+                            let c = matrix_chars[imb(col, row)] as char;
+                            let du = crate::framebuffer::font::ol(c);
                             
                             
-                            for (m, &fs) in ka.iter().cf() {
-                                let x = c + m as u32;
-                                if x >= ac { break; }
-                                let afg = (x * z) as usize;
+                            for (r, &bits) in du.iter().enumerate() {
+                                let o = y + r as u32;
+                                if o >= height { break; }
+                                let pq = (o * width) as usize;
                                 
-                                if fs != 0 {
-                                    let bxy = b as usize;
-                                    if fs & 0x80 != 0 { let w = afg + bxy; if w < ei.bi.len() { ei.bi[w] = s; } }
-                                    if fs & 0x40 != 0 { let w = afg + bxy + 1; if w < ei.bi.len() { ei.bi[w] = s; } }
-                                    if fs & 0x20 != 0 { let w = afg + bxy + 2; if w < ei.bi.len() { ei.bi[w] = s; } }
-                                    if fs & 0x10 != 0 { let w = afg + bxy + 3; if w < ei.bi.len() { ei.bi[w] = s; } }
-                                    if fs & 0x08 != 0 { let w = afg + bxy + 4; if w < ei.bi.len() { ei.bi[w] = s; } }
-                                    if fs & 0x04 != 0 { let w = afg + bxy + 5; if w < ei.bi.len() { ei.bi[w] = s; } }
-                                    if fs & 0x02 != 0 { let w = afg + bxy + 6; if w < ei.bi.len() { ei.bi[w] = s; } }
-                                    if fs & 0x01 != 0 { let w = afg + bxy + 7; if w < ei.bi.len() { ei.bi[w] = s; } }
+                                if bits != 0 {
+                                    let ani = x as usize;
+                                    if bits & 0x80 != 0 { let idx = pq + ani; if idx < bg.buffer.len() { bg.buffer[idx] = color; } }
+                                    if bits & 0x40 != 0 { let idx = pq + ani + 1; if idx < bg.buffer.len() { bg.buffer[idx] = color; } }
+                                    if bits & 0x20 != 0 { let idx = pq + ani + 2; if idx < bg.buffer.len() { bg.buffer[idx] = color; } }
+                                    if bits & 0x10 != 0 { let idx = pq + ani + 3; if idx < bg.buffer.len() { bg.buffer[idx] = color; } }
+                                    if bits & 0x08 != 0 { let idx = pq + ani + 4; if idx < bg.buffer.len() { bg.buffer[idx] = color; } }
+                                    if bits & 0x04 != 0 { let idx = pq + ani + 5; if idx < bg.buffer.len() { bg.buffer[idx] = color; } }
+                                    if bits & 0x02 != 0 { let idx = pq + ani + 6; if idx < bg.buffer.len() { bg.buffer[idx] = color; } }
+                                    if bits & 0x01 != 0 { let idx = pq + ani + 7; if idx < bg.buffer.len() { bg.buffer[idx] = color; } }
                                 }
                             }
                         }
@@ -6449,43 +6455,43 @@ pub(super) fn kih(lek: Option<&str>, sg: u64) {
                 
                 
                 
-                for bj in 0..R_ {
-                    awc[bj] += czn[bj] as i32;
-                    if awc[bj] > (AS_ as i32 + 30) {
-                        let dv = (bj as u32 * 2654435761).cn(oo as u32);
-                        awc[bj] = -((dv % 30) as i32);
-                        czn[bj] = 1 + (dv % 3);
+                for col in 0..AD_ {
+                    matrix_heads[col] += matrix_speeds[col] as i32;
+                    if matrix_heads[col] > (AV_ as i32 + 30) {
+                        let seed = (col as u32 * 2654435761).wrapping_add(frame_count as u32);
+                        matrix_heads[col] = -((seed % 30) as i32);
+                        matrix_speeds[col] = 1 + (seed % 3);
                     }
                 }
                 
                 
                 unsafe {
                     #[cfg(target_arch = "x86_64")]
-                    crate::graphics::simd::bed(aeg, bjl, cot);
+                    crate::graphics::simd::adq(buf_ptr, buf_len, awh);
                     #[cfg(not(target_arch = "x86_64"))]
-                    ei.bi.vi(cot);
+                    bg.buffer.fill(awh);
                 }
                 
                 
                 
                 
                 
-                let oi = super::Tk {
-                    aeg,
-                    bjl,
-                    z,
-                    ac,
-                    car: car.fq(),
-                    awc: awc.fq(),
-                    hmz: core::ptr::null(),  
-                    gme: AS_,
+                let params = super::Ii {
+                    buf_ptr,
+                    buf_len,
+                    width,
+                    height,
+                    matrix_chars: matrix_chars.as_ptr(),
+                    matrix_heads: matrix_heads.as_ptr(),
+                    holo_intensity: core::ptr::null(),  
+                    matrix_rows: AV_,
                 };
                 
                 
-                crate::cpu::smp::daj(
-                    R_,
-                    super::pbw,
-                    &oi as *const super::Tk as *mut u8
+                crate::cpu::smp::bcz(
+                    AD_,
+                    super::izr,
+                    &params as *const super::Ii as *mut u8
                 );
             }
         }
@@ -6493,479 +6499,479 @@ pub(super) fn kih(lek: Option<&str>, sg: u64) {
         
         
         
-        if let Some(apr) = compositor.dhm(sac) {
-            apr.clear(0xF0080808); 
+        if let Some(dock) = compositor.get_layer_mut(lgu) {
+            dock.clear(0xF0080808); 
             
-            let aih = 36u32;  
-            let qi = 50u32;       
-            let vc = 10u32;
+            let rl = 36u32;  
+            let gap = 50u32;       
+            let start_y = 10u32;
             
-            let rzz = [
-                ("Files", AppMode::Pl),
-                ("Shell", AppMode::Df),
-                ("Net", AppMode::As),
-                ("Edit", AppMode::Ag),
-                ("HW", AppMode::Ip),
-                ("User", AppMode::Rb),
+            let lgr = [
+                ("Files", AppMode::Files),
+                ("Shell", AppMode::Shell),
+                ("Net", AppMode::Network),
+                ("Edit", AppMode::TextEditor),
+                ("HW", AppMode::Hardware),
+                ("User", AppMode::UserMgmt),
                 ("Web", AppMode::Browser),  
-                ("Img", AppMode::Bp), 
+                ("Img", AppMode::ImageViewer), 
             ];
             
-            for (a, (j, ev)) in rzz.iter().cf() {
-                let og = vc + (a as u32) * (aih + qi);
-                let fg = 10u32;
+            for (i, (name, mode)) in lgr.iter().enumerate() {
+                let gg = start_y + (i as u32) * (rl + gap);
+                let bi = 10u32;
                 
-                let rl = *ev == atu;
-                let xd = if rl { cyh } else { aek };
-                let bbw = if rl { 0xFFFFFFFF } else { 0xFF888888 };
+                let is_active = *mode == xm;
+                let icon_color = if is_active { bby } else { ph };
+                let ace = if is_active { 0xFFFFFFFF } else { 0xFF888888 };
                 
                 
-                if rl {
-                    apr.ah(fg - 4, og - 4, aih + 8, aih + 20, 0xFF002800);
-                    apr.lx(fg - 4, og - 4, aih + 8, aih + 20, ya);
+                if is_active {
+                    dock.fill_rect(bi - 4, gg - 4, rl + 8, rl + 20, 0xFF002800);
+                    dock.draw_rect(bi - 4, gg - 4, rl + 8, rl + 20, kw);
                 }
-                apr.ah(fg, og, aih, aih, 0xFF0A0A0A);
-                apr.lx(fg, og, aih, aih, xd);
+                dock.fill_rect(bi, gg, rl, rl, 0xFF0A0A0A);
+                dock.draw_rect(bi, gg, rl, rl, icon_color);
                 
                 
-                let cx = fg + aih / 2;
-                let ae = og + aih / 2;
-                match a {
+                let cx = bi + rl / 2;
+                let u = gg + rl / 2;
+                match i {
                     0 => { 
-                        apr.ah(cx - 12, ae - 2, 24, 14, xd);
-                        apr.ah(cx - 14, ae - 6, 10, 6, xd);
+                        dock.fill_rect(cx - 12, u - 2, 24, 14, icon_color);
+                        dock.fill_rect(cx - 14, u - 6, 10, 6, icon_color);
                     },
                     1 => { 
-                        apr.lx(cx - 14, ae - 10, 28, 20, xd);
-                        apr.cb(">", cx - 8, ae - 4, xd);
-                        apr.ah(cx - 2, ae - 2, 10, 2, xd);
+                        dock.draw_rect(cx - 14, u - 10, 28, 20, icon_color);
+                        dock.draw_text(">", cx - 8, u - 4, icon_color);
+                        dock.fill_rect(cx - 2, u - 2, 10, 2, icon_color);
                     },
                     2 => { 
-                        apr.abc(cx, ae, 12, xd);
-                        apr.abc(cx, ae, 8, 0xFF0A0A0A);
-                        apr.abc(cx, ae, 4, xd);
+                        dock.fill_circle(cx, u, 12, icon_color);
+                        dock.fill_circle(cx, u, 8, 0xFF0A0A0A);
+                        dock.fill_circle(cx, u, 4, icon_color);
                         
-                        apr.ah(cx + 6, ae - 2, 2, 6, xd);
-                        apr.ah(cx + 10, ae - 6, 2, 10, xd);
+                        dock.fill_rect(cx + 6, u - 2, 2, 6, icon_color);
+                        dock.fill_rect(cx + 10, u - 6, 2, 10, icon_color);
                     },
                     3 => { 
-                        apr.ah(cx - 10, ae - 12, 20, 24, xd);
-                        apr.ah(cx - 8, ae - 10, 16, 20, 0xFF0A0A0A);
-                        apr.ah(cx - 6, ae - 6, 12, 2, xd);
-                        apr.ah(cx - 6, ae - 2, 12, 2, xd);
-                        apr.ah(cx - 6, ae + 2, 8, 2, xd);
+                        dock.fill_rect(cx - 10, u - 12, 20, 24, icon_color);
+                        dock.fill_rect(cx - 8, u - 10, 16, 20, 0xFF0A0A0A);
+                        dock.fill_rect(cx - 6, u - 6, 12, 2, icon_color);
+                        dock.fill_rect(cx - 6, u - 2, 12, 2, icon_color);
+                        dock.fill_rect(cx - 6, u + 2, 8, 2, icon_color);
                     },
                     4 => { 
-                        apr.ah(cx - 10, ae - 8, 20, 16, xd);
-                        for fb in 0..4 {
-                            apr.ah(cx - 14, ae - 6 + fb * 4, 4, 2, xd);
-                            apr.ah(cx + 10, ae - 6 + fb * 4, 4, 2, xd);
+                        dock.fill_rect(cx - 10, u - 8, 20, 16, icon_color);
+                        for ay in 0..4 {
+                            dock.fill_rect(cx - 14, u - 6 + ay * 4, 4, 2, icon_color);
+                            dock.fill_rect(cx + 10, u - 6 + ay * 4, 4, 2, icon_color);
                         }
                     },
                     5 => { 
-                        apr.abc(cx, ae - 4, 6, xd);
-                        apr.ah(cx - 8, ae + 4, 16, 8, xd);
+                        dock.fill_circle(cx, u - 4, 6, icon_color);
+                        dock.fill_rect(cx - 8, u + 4, 16, 8, icon_color);
                     },
                     6 => { 
-                        apr.abc(cx, ae, 10, xd);
-                        apr.abc(cx, ae, 6, 0xFF0A0A0A);
+                        dock.fill_circle(cx, u, 10, icon_color);
+                        dock.fill_circle(cx, u, 6, 0xFF0A0A0A);
                         
-                        apr.ah(cx - 10, ae - 1, 20, 2, xd);
+                        dock.fill_rect(cx - 10, u - 1, 20, 2, icon_color);
                         
-                        apr.ah(cx - 1, ae - 10, 2, 20, xd);
+                        dock.fill_rect(cx - 1, u - 10, 2, 20, icon_color);
                     },
                     _ => {}
                 }
                 
                 
-                let wg = fg + (aih / 2) - ((j.len() as u32 * 8) / 2);
-                apr.cb(j, wg, og + aih + 2, bbw);
+                let kd = bi + (rl / 2) - ((name.len() as u32 * 8) / 2);
+                dock.draw_text(name, kd, gg + rl + 2, ace);
             }
         }
         
         
         
         
-        if let Some(ep) = compositor.dhm(pzm) {
-            if fbm {
+        if let Some(aw) = compositor.get_layer_mut(jre) {
+            if cfi {
                 
-                let d = ep.z;
-                let i = ep.ac;
+                let w = aw.width;
+                let h = aw.height;
                 
-                ep.clear(xup);
-                
-                
-                ep.lx(0, 0, d, i, ya);
-                ep.lx(1, 1, d - 2, i - 2, ya);
+                aw.clear(pur);
                 
                 
-                let czz = match atu {
-                    AppMode::Df => "Shell",
-                AppMode::As => "Network",
-                AppMode::Ip => "Hardware",
-                AppMode::Ag => "TrustCode",
-                AppMode::Rb => "User Management",
-                AppMode::Pl => "Files",
+                aw.draw_rect(0, 0, w, h, kw);
+                aw.draw_rect(1, 1, w - 2, h - 2, kw);
+                
+                
+                let bcu = match xm {
+                    AppMode::Shell => "Shell",
+                AppMode::Network => "Network",
+                AppMode::Hardware => "Hardware",
+                AppMode::TextEditor => "TrustCode",
+                AppMode::UserMgmt => "User Management",
+                AppMode::Files => "Files",
                 AppMode::Browser => "Web Browser",
-                AppMode::Bp => "Image Viewer",
+                AppMode::ImageViewer => "Image Viewer",
             };
-            ep.ah(2, 2, d - 4, 26, 0xFF0A1A0A);
-            let dq = format!("TrustOS - {} Module", czz);
-            ep.cb(&dq, 12, 8, 0xFFFFFFFF); 
+            aw.fill_rect(2, 2, w - 4, 26, 0xFF0A1A0A);
+            let title = format!("TrustOS - {} Module", bcu);
+            aw.draw_text(&title, 12, 8, 0xFFFFFFFF); 
             
             
-            if hgs {
-                ep.cb("[MOVING]", d / 2 - 32, 8, 0xFFFFAA00);
+            if dnp {
+                aw.draw_text("[MOVING]", w / 2 - 32, 8, 0xFFFFAA00);
             }
             
             
             
-            let kn = 13u32;
-            let cjj = 10u32;
-            let gbp = d - 50;
-            let nah = d - 80;
-            let kfa = d - 110;
+            let ed = 13u32;
+            let atd = 10u32;
+            let cuk = w - 50;
+            let hiv = w - 80;
+            let fjw = w - 110;
             
             
-            ep.abc(gbp, kn, cjj, 0xFFFF4444);
-            ep.lx(gbp, kn, 1, 1, 0xFFFF6666); 
+            aw.fill_circle(cuk, ed, atd, 0xFFFF4444);
+            aw.draw_rect(cuk, ed, 1, 1, 0xFFFF6666); 
             
-            for ab in 0..7 {
-                ep.aht(gbp - 5 + ab, kn - 5 + ab, 0xFFFFFFFF);
-                ep.aht(gbp - 4 + ab, kn - 5 + ab, 0xFFFFFFFF);
-                ep.aht(gbp + 5 - ab, kn - 5 + ab, 0xFFFFFFFF);
-                ep.aht(gbp + 4 - ab, kn - 5 + ab, 0xFFFFFFFF);
+            for t in 0..7 {
+                aw.set_pixel(cuk - 5 + t, ed - 5 + t, 0xFFFFFFFF);
+                aw.set_pixel(cuk - 4 + t, ed - 5 + t, 0xFFFFFFFF);
+                aw.set_pixel(cuk + 5 - t, ed - 5 + t, 0xFFFFFFFF);
+                aw.set_pixel(cuk + 4 - t, ed - 5 + t, 0xFFFFFFFF);
             }
             
             
-            ep.abc(nah, kn, cjj, 0xFFFFCC00);
+            aw.fill_circle(hiv, ed, atd, 0xFFFFCC00);
             
-            ep.ah(nah - 5, kn - 1, 10, 3, 0xFF000000);
-            
-            
-            ep.abc(kfa, kn, cjj, 0xFF44DD44);
-            
-            ep.lx(kfa - 5, kn - 5, 10, 10, 0xFF000000);
-            ep.lx(kfa - 4, kn - 4, 8, 8, 0xFF000000);
+            aw.fill_rect(hiv - 5, ed - 1, 10, 3, 0xFF000000);
             
             
-            let gl = 35u32;
-            let acg = 18u32;
-            let ulk = ((i - gl - 50) / acg) as usize;
+            aw.fill_circle(fjw, ed, atd, 0xFF44DD44);
             
-            if atu == AppMode::Browser {
+            aw.draw_rect(fjw - 5, ed - 5, 10, 10, 0xFF000000);
+            aw.draw_rect(fjw - 4, ed - 4, 8, 8, 0xFF000000);
+            
+            
+            let bn = 35u32;
+            let line_height = 18u32;
+            let ncy = ((h - bn - 50) / line_height) as usize;
+            
+            if xm == AppMode::Browser {
                 
                 
                 
                 
                 
-                let aoe = gl;
-                ep.ah(10, aoe, d - 20, 32, 0xFF1E1E1E);
-                ep.lx(10, aoe, d - 20, 32, 0xFF3C3C3C);
+                let uk = bn;
+                aw.fill_rect(10, uk, w - 20, 32, 0xFF1E1E1E);
+                aw.draw_rect(10, uk, w - 20, 32, 0xFF3C3C3C);
                 
                 
-                let enb: u32 = 0xFF2D2D2D;
+                let bxv: u32 = 0xFF2D2D2D;
                 
                 
-                ep.ah(14, aoe + 4, 24, 24, enb);
-                ep.cb("<", 22, aoe + 10, 0xFFAAAAAA);
+                aw.fill_rect(14, uk + 4, 24, 24, bxv);
+                aw.draw_text("<", 22, uk + 10, 0xFFAAAAAA);
                 
                 
-                ep.ah(42, aoe + 4, 24, 24, enb);
-                ep.cb(">", 50, aoe + 10, 0xFFAAAAAA);
+                aw.fill_rect(42, uk + 4, 24, 24, bxv);
+                aw.draw_text(">", 50, uk + 10, 0xFFAAAAAA);
                 
                 
-                ep.ah(70, aoe + 4, 24, 24, enb);
-                ep.cb("R", 78, aoe + 10, 0xFFAAAAAA);
+                aw.fill_rect(70, uk + 4, 24, 24, bxv);
+                aw.draw_text("R", 78, uk + 10, 0xFFAAAAAA);
                 
                 
-                let xrp = if hbj == 0 { "SRC" } else { "DOM" };
-                ep.ah(98, aoe + 4, 32, 24, 0xFF383838);
-                ep.cb(xrp, 102, aoe + 10, 0xFF88CCFF);
+                let psa = if djq == 0 { "SRC" } else { "DOM" };
+                aw.fill_rect(98, uk + 4, 32, 24, 0xFF383838);
+                aw.draw_text(psa, 102, uk + 10, 0xFF88CCFF);
                 
                 
-                ep.ah(135, aoe + 4, d - 160, 24, 0xFF0D0D0D);
-                ep.lx(135, aoe + 4, d - 160, 24, if nag { 0xFF4FC3F7 } else { 0xFF555555 });
+                aw.fill_rect(135, uk + 4, w - 160, 24, 0xFF0D0D0D);
+                aw.draw_rect(135, uk + 4, w - 160, 24, if his { 0xFF4FC3F7 } else { 0xFF555555 });
                 
                 
-                let xpb = if bmb.cj("https://") { 0xFF00C853 } else { 0xFFDDDDDD };
-                ep.cb(&bmb, 142, aoe + 10, xpb);
+                let ppz = if ahk.starts_with("https://") { 0xFF00C853 } else { 0xFFDDDDDD };
+                aw.draw_text(&ahk, 142, uk + 10, ppz);
                 
                 
-                if nag && btx {
-                    let lf = 142 + (bmb.len() as u32 * 8);
-                    if lf < d - 30 {
-                        ep.ah(lf, aoe + 8, 2, 18, 0xFF4FC3F7);
+                if his && cursor_blink {
+                    let cursor_x = 142 + (ahk.len() as u32 * 8);
+                    if cursor_x < w - 30 {
+                        aw.fill_rect(cursor_x, uk + 8, 2, 18, 0xFF4FC3F7);
                     }
                 }
                 
                 
-                let cgi = gl + 40;
-                let otq = ((i - cgi - 35) / acg) as usize;
+                let arr = bn + 40;
+                let itg = ((h - arr - 35) / line_height) as usize;
                 
                 
-                ep.ah(10, cgi - 4, d - 20, i - cgi - 28, 0xFF1E1E1E);
+                aw.fill_rect(10, arr - 4, w - 20, h - arr - 28, 0xFF1E1E1E);
                 
                 
-                let hmf = 40u32;
-                ep.ah(10, cgi - 4, hmf, i - cgi - 28, 0xFF252526);
+                let gutter_width = 40u32;
+                aw.fill_rect(10, arr - 4, gutter_width, h - arr - 28, 0xFF252526);
                 
-                let dlz = if ps.len() > otq {
-                    ps.len() - otq
+                let bjj = if gy.len() > itg {
+                    gy.len() - itg
                 } else {
                     0
                 };
                 
                 
-                for (a, qsb) in ps.iter().chz(dlz).cf() {
-                    let c = cgi + (a as u32) * acg;
-                    if c + acg > i - 35 { break; }
+                for (i, browser_line) in gy.iter().skip(bjj).enumerate() {
+                    let y = arr + (i as u32) * line_height;
+                    if y + line_height > h - 35 { break; }
                     
                     
-                    let csd = format!("{:3}", dlz + a + 1);
-                    ep.cb(&csd, 14, c, 0xFF858585);
+                    let axw = format!("{:3}", bjj + i + 1);
+                    aw.draw_text(&axw, 14, y, 0xFF858585);
                     
                     
-                    let mut qan = 10u32 + hmf + 5;
-                    for ie in &qsb.jq {
-                        ep.cb(&ie.text, qan, c, ie.s);
-                        qan += (ie.text.len() as u32) * 8;
+                    let mut jrv = 10u32 + gutter_width + 5;
+                    for segment in &browser_line.segments {
+                        aw.draw_text(&segment.text, jrv, y, segment.color);
+                        jrv += (segment.text.len() as u32) * 8;
                     }
                 }
                 
                 
-                ep.ah(10, i - 28, d - 20, 23, 0xFF007ACC);
+                aw.fill_rect(10, h - 28, w - 20, 23, 0xFF007ACC);
                 
                 
-                let mhn = if bpu.contains("Error") { "?" } 
-                    else if bpu.contains("Loading") { "?" } 
+                let gwf = if ajg.contains("Error") { "?" } 
+                    else if ajg.contains("Loading") { "?" } 
                     else { "?" };
-                ep.cb(mhn, 16, i - 24, 0xFFFFFFFF);
-                ep.cb(&bpu, 30, i - 24, 0xFFFFFFFF);
+                aw.draw_text(gwf, 16, h - 24, 0xFFFFFFFF);
+                aw.draw_text(&ajg, 30, h - 24, 0xFFFFFFFF);
                 
                 
-                let upd = if hbj == 0 { "[Source]" } else { "[Elements]" };
-                let upe = d - 90;
-                ep.cb(upd, upe, i - 24, 0xFFCCCCCC);
+                let nfv = if djq == 0 { "[Source]" } else { "[Elements]" };
+                let nfw = w - 90;
+                aw.draw_text(nfv, nfw, h - 24, 0xFFCCCCCC);
                 
-            } else if atu == AppMode::Bp {
-                
-                
+            } else if xm == AppMode::ImageViewer {
                 
                 
                 
-                ep.ah(10, gl, d - 20, i - gl - 30, 0xFF1A1A1A);
                 
-                if let Some(ref th) = odi {
+                
+                aw.fill_rect(10, bn, w - 20, h - bn - 30, 0xFF1A1A1A);
+                
+                if let Some(ref iv) = ift {
                     
-                    let jvn = d - 40;
-                    let azb = i - gl - 60;
-                    let jvo = 20u32;
-                    let ekn = gl + 10;
-                    
-                    
-                    let mce = (th.z as f32 * dig) as u32;
-                    let mcd = (th.ac as f32 * dig) as u32;
+                    let fej = w - 40;
+                    let aak = h - bn - 60;
+                    let fek = 20u32;
+                    let bws = bn + 10;
                     
                     
-                    let yv = jvo as i32 + (jvn as i32 / 2) + ldj;
-                    let uq = ekn as i32 + (azb as i32 / 2) + ldk;
-                    let fld = yv - (mce as i32 / 2);
-                    let fle = uq - (mcd as i32 / 2);
+                    let gss = (iv.width as f32 * bhc) as u32;
+                    let gsr = (iv.height as f32 * bhc) as u32;
                     
                     
-                    for bg in 0..mcd.v(azb) {
-                        let abi = fle + bg as i32;
-                        if abi < ekn as i32 || abi >= (ekn + azb) as i32 {
+                    let center_x = fek as i32 + (fej as i32 / 2) + gbu;
+                    let center_y = bws as i32 + (aak as i32 / 2) + gbv;
+                    let ckw = center_x - (gss as i32 / 2);
+                    let ckx = center_y - (gsr as i32 / 2);
+                    
+                    
+                    for ad in 0..gsr.min(aak) {
+                        let nn = ckx + ad as i32;
+                        if nn < bws as i32 || nn >= (bws + aak) as i32 {
                             continue;
                         }
                         
-                        let bih = ((bg as f32 / dig) as u32).v(th.ac - 1);
+                        let aft = ((ad as f32 / bhc) as u32).min(iv.height - 1);
                         
-                        for dx in 0..mce.v(jvn) {
-                            let xu = fld + dx as i32;
-                            if xu < jvo as i32 || xu >= (jvo + jvn) as i32 {
+                        for dx in 0..gss.min(fej) {
+                            let lw = ckw + dx as i32;
+                            if lw < fek as i32 || lw >= (fek + fej) as i32 {
                                 continue;
                             }
                             
-                            let blg = ((dx as f32 / dig) as u32).v(th.z - 1);
-                            let il = th.beg(blg, bih);
+                            let ahc = ((dx as f32 / bhc) as u32).min(iv.width - 1);
+                            let ct = iv.get_pixel(ahc, aft);
                             
                             
-                            if (il >> 24) > 0 {
-                                ep.aht(xu as u32, abi as u32, il);
+                            if (ct >> 24) > 0 {
+                                aw.set_pixel(lw as u32, nn as u32, ct);
                             }
                         }
                     }
                     
                     
-                    ep.lx(
-                        (fld.am(jvo as i32)) as u32,
-                        (fle.am(ekn as i32)) as u32,
-                        mce.v(jvn),
-                        mcd.v(azb),
+                    aw.draw_rect(
+                        (ckw.max(fek as i32)) as u32,
+                        (ckx.max(bws as i32)) as u32,
+                        gss.min(fej),
+                        gsr.min(aak),
                         0xFF444444
                     );
                 } else {
                     
-                    let yv = d / 2;
-                    let uq = (gl + i) / 2;
+                    let center_x = w / 2;
+                    let center_y = (bn + h) / 2;
                     
                     
-                    ep.lx(yv - 40, uq - 30, 80, 60, 0xFF444444);
-                    ep.cb("??", yv - 8, uq - 10, 0xFF666666);
-                    ep.cb("No image loaded", yv - 56, uq + 25, 0xFF888888);
-                    ep.cb("Use: imgview <file>", yv - 72, uq + 45, 0xFF666666);
+                    aw.draw_rect(center_x - 40, center_y - 30, 80, 60, 0xFF444444);
+                    aw.draw_text("??", center_x - 8, center_y - 10, 0xFF666666);
+                    aw.draw_text("No image loaded", center_x - 56, center_y + 25, 0xFF888888);
+                    aw.draw_text("Use: imgview <file>", center_x - 72, center_y + 45, 0xFF666666);
                 }
                 
                 
-                ep.ah(10, gl, d - 20, 24, 0xFF252525);
-                let xxn = (dig * 100.0) as u32;
-                let ldz = format!("Zoom: {}%  |  {}", xxn, odk);
-                ep.cb(&ldz, 16, gl + 5, 0xFFCCCCCC);
+                aw.fill_rect(10, bn, w - 20, 24, 0xFF252525);
+                let pwo = (bhc * 100.0) as u32;
+                let gck = format!("Zoom: {}%  |  {}", pwo, ifv);
+                aw.draw_text(&gck, 16, bn + 5, 0xFFCCCCCC);
                 
                 
-                ep.cb(&odj, d - 60, gl + 5, 0xFF88CCFF);
+                aw.draw_text(&ifu, w - 60, bn + 5, 0xFF88CCFF);
                 
                 
-                ep.ah(10, i - 28, d - 20, 23, 0xFF252525);
-                ep.cb("[+/-] Zoom  [Arrows] Pan  [R] Reset  [ESC] Close", 16, i - 24, 0xFF888888);
+                aw.fill_rect(10, h - 28, w - 20, 23, 0xFF252525);
+                aw.draw_text("[+/-] Zoom  [Arrows] Pan  [R] Reset  [ESC] Close", 16, h - 24, 0xFF888888);
                 
-            } else if atu == AppMode::Ag {
+            } else if xm == AppMode::TextEditor {
                 
                 
                 
                 use crate::apps::text_editor::*;
                 
-                let nk: u32 = 8;
-                let gy: u32 = 16;
-                let tii: u32 = 5; 
-                let bqy = tii * nk;
-                let bfm: u32 = 22;
-                let dwn: u32 = 26;
+                let ew: u32 = 8;
+                let bw: u32 = 16;
+                let mgr: u32 = 5; 
+                let ajv = mgr * ew;
+                let aej: u32 = 22;
+                let bpg: u32 = 26;
                 
-                let bds = bqy;
-                let bdt = gl + dwn;
-                let ior = d - bqy;
-                let byr = i.ao(gl + dwn + bfm);
-                let gwe = (byr / gy).am(1) as usize;
+                let adm = ajv;
+                let adn = bn + bpg;
+                let ein = w - ajv;
+                let anu = h.saturating_sub(bn + bpg + aej);
+                let dgi = (anu / bw).max(1) as usize;
                 
                 
-                if aey.gn < aey.ug {
-                    aey.ug = aey.gn;
+                if editor_state.cursor_line < editor_state.scroll_y {
+                    editor_state.scroll_y = editor_state.cursor_line;
                 }
-                if aey.gn >= aey.ug + gwe {
-                    aey.ug = aey.gn - gwe + 1;
+                if editor_state.cursor_line >= editor_state.scroll_y + dgi {
+                    editor_state.scroll_y = editor_state.cursor_line - dgi + 1;
                 }
-                aey.byk += 1;
+                editor_state.blink_counter += 1;
                 
                 
-                ep.ah(0, gl, d, dwn, BMY_);
-                let mjp = aey.wn.as_ref().map(|ai| {
-                    ai.cmm('/').next().unwrap_or(ai.as_str())
+                aw.fill_rect(0, bn, w, bpg, BPQ_);
+                let gxw = editor_state.file_path.as_ref().map(|aa| {
+                    aa.rsplit('/').next().unwrap_or(aa.as_str())
                 }).unwrap_or("untitled");
-                let kqc = if aey.no { " *" } else { "" };
-                let icv = format!("  {}{}", mjp, kqc);
-                let axb = ((icv.len() as u32 + 2) * nk).v(d);
-                ep.ah(0, gl, axb, dwn, BNN_);
+                let fsi = if editor_state.dirty { " *" } else { "" };
+                let ebe = format!("  {}{}", gxw, fsi);
+                let zm = ((ebe.len() as u32 + 2) * ew).min(w);
+                aw.fill_rect(0, bn, zm, bpg, BQF_);
                 
-                ep.ah(0, gl + dwn - 2, axb, 2, AAF_);
-                ep.cb(&icv, 4, gl + 5, JQ_);
-                
-                
-                ep.ah(0, bdt, d, byr, MF_);
+                aw.fill_rect(0, bn + bpg - 2, zm, 2, ABU_);
+                aw.draw_text(&ebe, 4, bn + 5, KH_);
                 
                 
-                ep.ah(0, bdt, bqy, byr, AOE_);
-                ep.ah(bqy - 1, bdt, 1, byr, 0xFF333333);
+                aw.fill_rect(0, adn, w, anu, ND_);
                 
                 
-                for afj in 0..gwe {
-                    let atd = aey.ug + afj;
-                    if atd >= aey.ak.len() { break; }
+                aw.fill_rect(0, adn, ajv, anu, AQE_);
+                aw.fill_rect(ajv - 1, adn, 1, anu, 0xFF333333);
+                
+                
+                for pt in 0..dgi {
+                    let xf = editor_state.scroll_y + pt;
+                    if xf >= editor_state.lines.len() { break; }
                     
-                    let ct = bdt + (afj as u32 * gy);
-                    if ct + gy > bdt + byr { break; }
+                    let ly = adn + (pt as u32 * bw);
+                    if ly + bw > adn + anu { break; }
                     
-                    let afb = atd == aey.gn;
+                    let is_current = xf == editor_state.cursor_line;
                     
                     
-                    if afb {
-                        ep.ah(bds, ct, ior, gy, AOB_);
+                    if is_current {
+                        aw.fill_rect(adm, ly, ein, bw, AQB_);
                     }
                     
                     
-                    let ajh = format!("{:>4} ", atd + 1);
-                    let htc = if afb { BMV_ } else { AOH_ };
-                    ep.cb(&ajh, 2, ct, htc);
+                    let rw = format!("{:>4} ", xf + 1);
+                    let dvm = if is_current { BPN_ } else { AQH_ };
+                    aw.draw_text(&rw, 2, ly, dvm);
                     
                     
-                    let line = &aey.ak[atd];
+                    let line = &editor_state.lines[xf];
                     
-                    if aey.eej == Language::Rust {
-                        let eb = puh(line);
-                        for dlx in &eb {
-                            let s = puf(dlx.kk);
-                            let xfz = &line[dlx.ay..dlx.ci];
-                            let cr = bds + 4 + (dlx.ay as u32 * nk);
-                            if cr < d {
-                                ep.cb(xfz, cr, ct, s);
+                    if editor_state.language == Language::Rust {
+                        let tokens = jnh(line);
+                        for bjg in &tokens {
+                            let color = jnf(bjg.kind);
+                            let pik = &line[bjg.start..bjg.end];
+                            let am = adm + 4 + (bjg.start as u32 * ew);
+                            if am < w {
+                                aw.draw_text(pik, am, ly, color);
                             }
                         }
-                        if eb.is_empty() && !line.is_empty() {
-                            ep.cb(line, bds + 4, ct, JQ_);
+                        if tokens.is_empty() && !line.is_empty() {
+                            aw.draw_text(line, adm + 4, ly, KH_);
                         }
                     } else {
-                        ep.cb(line, bds + 4, ct, JQ_);
+                        aw.draw_text(line, adm + 4, ly, KH_);
                     }
                     
                     
-                    if afb {
-                        let kdv = (aey.byk / 30) % 2 == 0;
-                        if kdv {
-                            let cx = bds + 4 + (aey.hn as u32 * nk);
-                            ep.ah(cx, ct, 2, gy, AOC_);
+                    if is_current {
+                        let fjk = (editor_state.blink_counter / 30) % 2 == 0;
+                        if fjk {
+                            let cx = adm + 4 + (editor_state.cursor_col as u32 * ew);
+                            aw.fill_rect(cx, ly, 2, bw, AQC_);
                         }
                     }
                 }
                 
                 
-                if aey.ak.len() > gwe {
-                    let auz = d - 10;
-                    let dbr = byr;
-                    let es = aey.ak.len() as u32;
-                    let axd = ((gwe as u32 * dbr) / es).am(20);
-                    let omf = es.ao(gwe as u32);
-                    let bsm = if omf > 0 {
-                        (aey.ug as u32 * (dbr - axd)) / omf
+                if editor_state.lines.len() > dgi {
+                    let yc = w - 10;
+                    let bdo = anu;
+                    let av = editor_state.lines.len() as u32;
+                    let zo = ((dgi as u32 * bdo) / av).max(20);
+                    let imu = av.saturating_sub(dgi as u32);
+                    let akn = if imu > 0 {
+                        (editor_state.scroll_y as u32 * (bdo - zo)) / imu
                     } else { 0 };
-                    ep.ah(auz, bdt, 10, dbr, 0xFF252526);
-                    ep.ah(auz + 2, bdt + bsm, 6, axd, 0xFF555555);
+                    aw.fill_rect(yc, adn, 10, bdo, 0xFF252526);
+                    aw.fill_rect(yc + 2, adn + akn, 6, zo, 0xFF555555);
                 }
                 
                 
-                let uo = i - bfm;
-                ep.ah(0, uo, d, bfm, AAF_);
+                let status_y = h - aej;
+                aw.fill_rect(0, status_y, w, aej, ABU_);
                 
                 
-                let wtv = if let Some(ref fr) = aey.ccb {
-                    format!("  {}", fr)
+                let owy = if let Some(ref bk) = editor_state.status_message {
+                    format!("  {}", bk)
                 } else {
-                    let rxw = if aey.no { " [Modified]" } else { "" };
-                    let ebt = aey.wn.ahz().unwrap_or("untitled");
-                    format!("  {}{}", ebt, rxw)
+                    let lex = if editor_state.dirty { " [Modified]" } else { "" };
+                    let bsr = editor_state.file_path.as_deref().unwrap_or("untitled");
+                    format!("  {}{}", bsr, lex)
                 };
-                ep.cb(&wtv, 4, uo + 3, GD_);
+                aw.draw_text(&owy, 4, status_y + 3, GS_);
                 
                 
-                let poo = format!(
+                let jir = format!(
                     "Ln {}, Col {}  {}  UTF-8  TrustCode",
-                    aey.gn + 1,
-                    aey.hn + 1,
-                    aey.eej.j(),
+                    editor_state.cursor_line + 1,
+                    editor_state.cursor_col + 1,
+                    editor_state.language.name(),
                 );
-                let dvc = d.ao((poo.len() as u32 * nk) + 8);
-                ep.cb(&poo, dvc, uo + 3, GD_);
+                let asa = w.saturating_sub((jir.len() as u32 * ew) + 8);
+                aw.draw_text(&jir, asa, status_y + 3, GS_);
 
             } else {
                 
@@ -6973,26 +6979,26 @@ pub(super) fn kih(lek: Option<&str>, sg: u64) {
                 
                 
             
-            let bss = cz.len();
-            let act = AFH_.v(ulk);
+            let total_lines = ap.len();
+            let oe = AHB_.min(ncy);
             
             
-            let aye = bss.ao(act);
-            if px > aye {
-                px = aye;
+            let aab = total_lines.saturating_sub(oe);
+            if scroll_offset > aab {
+                scroll_offset = aab;
             }
             
-            let dlz = px;
-            let ktk = (dlz + act).v(bss);
+            let bjj = scroll_offset;
+            let fus = (bjj + oe).min(total_lines);
             
-            for (a, line) in cz.iter().chz(dlz).take(act).cf() {
-                let c = gl + (a as u32) * acg;
-                if c + acg > i - 50 { break; }
+            for (i, line) in ap.iter().skip(bjj).take(oe).enumerate() {
+                let y = bn + (i as u32) * line_height;
+                if y + line_height > h - 50 { break; }
                 
                 
-                let s = if line.cj("+") || line.cj("+") || line.cj("|") {
-                    ya  
-                } else if line.cj("|") {
+                let color = if line.starts_with("+") || line.starts_with("+") || line.starts_with("|") {
+                    kw  
+                } else if line.starts_with("|") {
                     
                     if line.contains("NAVIGATION:") || line.contains("FILE OPERATIONS:") || 
                        line.contains("COMMANDS:") || line.contains("TIPS:") ||
@@ -7001,136 +7007,136 @@ pub(super) fn kih(lek: Option<&str>, sg: u64) {
                         0xFFFFFF00  
                     } else if line.contains(" - ") {
                         
-                        ya  
-                    } else if line.cj("|    *") {
+                        kw  
+                    } else if line.starts_with("|    *") {
                         0xFFAAAAAA  
                     } else {
                         0xFFDDDDDD  
                     }
-                } else if line.cj(">") {
+                } else if line.starts_with(">") {
                     0xFF88FF88  
                 } else if line.contains("<DIR>") {
                     0xFF00FFFF  
                 } else if line.contains(" B") && !line.contains("Browse") {
-                    ya  
-                } else if line.cj("Created") || line.cj("Changed") || line.cj("Removed") {
+                    kw  
+                } else if line.starts_with("Created") || line.starts_with("Changed") || line.starts_with("Removed") {
                     0xFF00FF00  
                 } else if line.contains("Error") || line.contains("cannot") || line.contains("No such") {
                     0xFFFF4444  
                 } else {
-                    aek  
+                    ph  
                 };
-                ep.cb(line, 12, c, s);
+                aw.draw_text(line, 12, y, color);
             }
             
             
             
             
-            if bss > act {
-                let ftr = d - 12;
-                let pgu = gl;
-                let mcr = i - gl - 50;  
+            if total_lines > oe {
+                let cqa = w - 12;
+                let jdq = bn;
+                let gta = h - bn - 50;  
                 
                 
-                ep.ah(ftr, pgu, 8, mcr, 0xFF1A1A1A);
+                aw.fill_rect(cqa, jdq, 8, gta, 0xFF1A1A1A);
                 
                 
-                let xgp = act as f32 / bss as f32;
-                let axd = ((mcr as f32 * xgp) as u32).am(20);
-                let mcp = if aye > 0 { 
-                    px as f32 / aye as f32 
+                let pjd = oe as f32 / total_lines as f32;
+                let zo = ((gta as f32 * pjd) as u32).max(20);
+                let gsz = if aab > 0 { 
+                    scroll_offset as f32 / aab as f32 
                 } else { 
                     0.0 
                 };
-                let bsm = pgu + ((mcr - axd) as f32 * mcp) as u32;
+                let akn = jdq + ((gta - zo) as f32 * gsz) as u32;
                 
                 
-                ep.ah(ftr, bsm, 8, axd, aek);
-                ep.ah(ftr + 1, bsm + 1, 6, axd - 2, ya);
+                aw.fill_rect(cqa, akn, 8, zo, ph);
+                aw.fill_rect(cqa + 1, akn + 1, 6, zo - 2, kw);
             }
             
             
-            let alf = i - 40;
-            ep.ah(10, alf, d - 20, 30, 0xFF050505);
-            ep.lx(10, alf, d - 20, 30, aek);
+            let sv = h - 40;
+            aw.fill_rect(10, sv, w - 20, 30, 0xFF050505);
+            aw.draw_rect(10, sv, w - 20, 30, ph);
             
             
-            let jv = crate::ramfs::fh(|fs| String::from(fs.dau()));
+            let cwd = crate::ramfs::bh(|fs| String::from(fs.pwd()));
             
-            ep.cb("root", 16, alf + 8, 0xFFFF0000);  
+            aw.draw_text("root", 16, sv + 8, 0xFFFF0000);  
             
-            ep.cb("@", 16 + 32, alf + 8, 0xFFFFFFFF);  
+            aw.draw_text("@", 16 + 32, sv + 8, 0xFFFFFFFF);  
             
-            ep.cb("trustos", 16 + 40, alf + 8, 0xFF00FF00);  
+            aw.draw_text("trustos", 16 + 40, sv + 8, 0xFF00FF00);  
             
-            let hup = format!(":{}$ ", jv);
-            ep.cb(&hup, 16 + 96, alf + 8, 0xFF00FF00);  
-            let lvy = (4 + 1 + 7 + hup.len()) as u32 * 8;  
-            
-            
-            ep.cb(&bfh, 16 + lvy, alf + 8, cyh);
+            let dwh = format!(":{}$ ", cwd);
+            aw.draw_text(&dwh, 16 + 96, sv + 8, 0xFF00FF00);  
+            let gou = (4 + 1 + 7 + dwh.len()) as u32 * 8;  
             
             
-            if !gto.is_empty() {
-                let est = (bfh.len() * 8) as u32;
-                ep.cb(&gto, 16 + lvy + est, alf + 8, 0xFF444444);
+            aw.draw_text(&shell_input, 16 + gou, sv + 8, bby);
+            
+            
+            if !dez.is_empty() {
+                let cax = (shell_input.len() * 8) as u32;
+                aw.draw_text(&dez, 16 + gou + cax, sv + 8, 0xFF444444);
             }
             
             
-            btx = (oo / 30) % 2 == 0;
-            if btx {
-                let lf = 16 + lvy + (bfh.len() as u32 * 8);
-                ep.ah(lf, alf + 6, 8, 16, cyh);
+            cursor_blink = (frame_count / 30) % 2 == 0;
+            if cursor_blink {
+                let cursor_x = 16 + gou + (shell_input.len() as u32 * 8);
+                aw.fill_rect(cursor_x, sv + 6, 8, 16, bby);
             }
             } 
             } else {
                 
-                ep.clear(0x00000000);
+                aw.clear(0x00000000);
             }
         }
         
         
         
         
-        if let Some(crg) = compositor.dhm(toy) {
-            let avz = crg.z;
-            let bka = crg.ac;
+        if let Some(axk) = compositor.get_layer_mut(mlo) {
+            let xc = axk.width;
+            let agm = axk.height;
             
             
-            crg.clear(0xD8181818);
+            axk.clear(0xD8181818);
             
             
-            crg.lx(0, 0, avz, bka, 0xFF444444);
-            crg.lx(1, 1, avz - 2, bka - 2, 0xFF333333);
+            axk.draw_rect(0, 0, xc, agm, 0xFF444444);
+            axk.draw_rect(1, 1, xc - 2, agm - 2, 0xFF333333);
             
             
-            crg.ah(2, 2, avz - 4, 20, 0xFF252525);
-            crg.cb("Command History", 8, 6, 0xFFAAAAAA);
+            axk.fill_rect(2, 2, xc - 4, 20, 0xFF252525);
+            axk.draw_text("Command History", 8, 6, 0xFFAAAAAA);
             
             
-            let vc = 26u32;
-            let gy = 18u32;
+            let start_y = 26u32;
+            let bw = 18u32;
             
-            if bqa.is_empty() {
-                crg.cb("(no commands yet)", 10, vc + 5, 0xFF666666);
+            if command_history.is_empty() {
+                axk.draw_text("(no commands yet)", 10, start_y + 5, 0xFF666666);
             } else {
                 
-                for (a, cmd) in bqa.iter().vv().take(10).cf() {
-                    let c = vc + (a as u32) * gy;
-                    if c + gy > bka - 5 { break; }
+                for (i, cmd) in command_history.iter().rev().take(10).enumerate() {
+                    let y = start_y + (i as u32) * bw;
+                    if y + bw > agm - 5 { break; }
                     
                     
-                    let num = bqa.len() - a;
-                    let ajh = format!("{:2}.", num);
-                    crg.cb(&ajh, 6, c + 2, 0xFF666666);
+                    let num = command_history.len() - i;
+                    let rw = format!("{:2}.", num);
+                    axk.draw_text(&rw, 6, y + 2, 0xFF666666);
                     
                     
-                    let ryl = if cmd.len() > 26 {
+                    let lfi = if cmd.len() > 26 {
                         format!("{}...", &cmd[..23])
                     } else {
                         cmd.clone()
                     };
-                    crg.cb(&ryl, 30, c + 2, 0xFF88FF88);
+                    axk.draw_text(&lfi, 30, y + 2, 0xFF88FF88);
                 }
             }
         }
@@ -7138,301 +7144,301 @@ pub(super) fn kih(lek: Option<&str>, sg: u64) {
         
         
         
-        if let Some(bar) = compositor.dhm(xbd) {
+        if let Some(bar) = compositor.get_layer_mut(pdk) {
             bar.clear(0xFF0A0A0A);
             
             
-            bar.ah(0, 0, z, 2, aek);
+            bar.fill_rect(0, 0, width, 2, ph);
             
             
-            bar.ah(5, 6, 100, 28, if awe { 0xFF002200 } else { 0xFF0A1A0A });
-            bar.lx(5, 6, 100, 28, ya);
-            bar.cb("TrustOS", 20, 12, 0xFFFFFFFF); 
+            bar.fill_rect(5, 6, 100, 28, if yx { 0xFF002200 } else { 0xFF0A1A0A });
+            bar.draw_rect(5, 6, 100, 28, kw);
+            bar.draw_text("TrustOS", 20, 12, 0xFFFFFFFF); 
             
             
-            let czz = match atu {
-                AppMode::Df => "Shell",
-                AppMode::As => "Network",
-                AppMode::Ip => "Hardware",
-                AppMode::Ag => "Editor",
-                AppMode::Rb => "Users",
-                AppMode::Pl => "Files",
+            let bcu = match xm {
+                AppMode::Shell => "Shell",
+                AppMode::Network => "Network",
+                AppMode::Hardware => "Hardware",
+                AppMode::TextEditor => "Editor",
+                AppMode::UserMgmt => "Users",
+                AppMode::Files => "Files",
                 AppMode::Browser => "Browser",
-                AppMode::Bp => "Images",
+                AppMode::ImageViewer => "Images",
             };
-            bar.ah(115, 6, 90, 28, 0xFF001100);
-            bar.cb(czz, 125, 12, 0xFFFFFFFF); 
+            bar.fill_rect(115, 6, 90, 28, 0xFF001100);
+            bar.draw_text(bcu, 125, 12, 0xFFFFFFFF); 
             
             
             
-            let fyu = 220u32;
-            if fbm {
+            let csv = 220u32;
+            if cfi {
                 
-                bar.ah(fyu, 6, 100, 28, 0xFF002200);
-                bar.lx(fyu, 6, 100, 28, ya);
-                bar.cb(czz, fyu + 10, 12, cyh);
+                bar.fill_rect(csv, 6, 100, 28, 0xFF002200);
+                bar.draw_rect(csv, 6, 100, 28, kw);
+                bar.draw_text(bcu, csv + 10, 12, bby);
                 
-                bar.ah(fyu + 20, 32, 60, 3, ya);
+                bar.fill_rect(csv + 20, 32, 60, 3, kw);
             } else {
                 
-                bar.ah(fyu, 6, 100, 28, 0xFF0A0A0A);
-                bar.lx(fyu, 6, 100, 28, aek);
-                bar.cb(czz, fyu + 10, 12, aek);
+                bar.fill_rect(csv, 6, 100, 28, 0xFF0A0A0A);
+                bar.draw_rect(csv, 6, 100, 28, ph);
+                bar.draw_text(bcu, csv + 10, 12, ph);
             }
             
             
-            let mex = 340u32;
-            let wke = if dvu { 0xFF002200 } else { 0xFF0A1A0A };
-            bar.ah(mex, 6, 50, 28, wke);
-            bar.lx(mex, 6, 50, 28, aek);
-            bar.cb("[S]", mex + 10, 12, if dvu { cyh } else { ya });
+            let guk = 340u32;
+            let oqa = if bou { 0xFF002200 } else { 0xFF0A1A0A };
+            bar.fill_rect(guk, 6, 50, 28, oqa);
+            bar.draw_rect(guk, 6, 50, 28, ph);
+            bar.draw_text("[S]", guk + 10, 12, if bou { bby } else { kw });
             
             
-            let os = crate::rtc::cgz();
-            let bso = format!("{:02}:{:02}:{:02}", os.bek, os.bri, os.chr);
-            bar.cb(&bso, z - 180, 12, ya);
+            let fm = crate::rtc::aou();
+            let time_str = format!("{:02}:{:02}:{:02}", fm.hour, fm.minute, fm.second);
+            bar.draw_text(&time_str, width - 180, 12, kw);
             
             
-            let ghn = format!("{}fps", tz);
-            bar.cb(&ghn, z - 260, 12, aek);
+            let cyc = format!("{}fps", fps);
+            bar.draw_text(&cyc, width - 260, 12, ph);
             
             
-            bar.abc(z - 60, 20, 6, ya);
-            bar.abc(z - 40, 20, 6, 0xFFFFAA00);
+            bar.fill_circle(width - 60, 20, 6, kw);
+            bar.fill_circle(width - 40, 20, 6, 0xFFFFAA00);
         }
         
         
         
         
-        if let Some(djm) = compositor.dhm(und) {
-            if awe {
-                djm.iw.store(true, core::sync::atomic::Ordering::SeqCst);
-                djm.clear(0xF0080808);  
+        if let Some(menu) = compositor.get_layer_mut(nek) {
+            if yx {
+                menu.visible.store(true, core::sync::atomic::Ordering::SeqCst);
+                menu.clear(0xF0080808);  
                 
-                let afr = 270u32;
-                let aje = 390u32;
-                
-                
-                djm.lx(0, 0, afr, aje, ya);
-                djm.lx(1, 1, afr - 2, aje - 2, aek);
+                let pz = 270u32;
+                let rv = 390u32;
                 
                 
-                djm.ah(2, 2, afr - 4, 34, 0xFF001500);
-                djm.cb("TrustOS Menu", 10, 10, ya);
+                menu.draw_rect(0, 0, pz, rv, kw);
+                menu.draw_rect(1, 1, pz - 2, rv - 2, ph);
                 
                 
-                let crv = 36u32;
-                for (a, (j, item)) in gmp.iter().cf() {
-                    let og = 40 + (a as u32) * crv;
+                menu.fill_rect(2, 2, pz - 4, 34, 0xFF001500);
+                menu.draw_text("TrustOS Menu", 10, 10, kw);
+                
+                
+                let axs = 36u32;
+                for (i, (name, item)) in dbg.iter().enumerate() {
+                    let gg = 40 + (i as u32) * axs;
                     
                     
-                    if j.cj("-") {
-                        djm.ah(10, og + 14, afr - 20, 1, aek);
+                    if name.starts_with("-") {
+                        menu.fill_rect(10, gg + 14, pz - 20, 1, ph);
                         continue;
                     }
                     
                     
-                    if czs == a as i32 {
-                        djm.ah(5, og, afr - 10, crv - 2, 0xFF002200);
+                    if bcs == i as i32 {
+                        menu.fill_rect(5, gg, pz - 10, axs - 2, 0xFF002200);
                     }
                     
                     
-                    let (s, pa) = match item {
-                        MenuItem::Kc(_) => {
-                            let r = if czs == a as i32 { cyh } else { aek };
-                            (r, ">")
+                    let (color, icon) = match item {
+                        MenuItem::App(_) => {
+                            let c = if bcs == i as i32 { bby } else { ph };
+                            (c, ">")
                         },
-                        MenuItem::Qt => {
-                            let r = if czs == a as i32 { 0xFFFF6666 } else { 0xFFAA4444 };
-                            (r, "X")
+                        MenuItem::Shutdown => {
+                            let c = if bcs == i as i32 { 0xFFFF6666 } else { 0xFFAA4444 };
+                            (c, "X")
                         },
-                        MenuItem::Axr => {
-                            let r = if czs == a as i32 { 0xFFFFAA66 } else { 0xFFAA8844 };
-                            (r, "R")
+                        MenuItem::Reboot => {
+                            let c = if bcs == i as i32 { 0xFFFFAA66 } else { 0xFFAA8844 };
+                            (c, "R")
                         },
                     };
                     
                     
-                    djm.cb(j, 24, og + 10, s);
+                    menu.draw_text(name, 24, gg + 10, color);
                     
                     
-                    djm.cb(pa, afr - 30, og + 10, s);
+                    menu.draw_text(icon, pz - 30, gg + 10, color);
                 }
             } else {
-                djm.iw.store(false, core::sync::atomic::Ordering::SeqCst);
+                menu.visible.store(false, core::sync::atomic::Ordering::SeqCst);
             }
         }
         
         
         
         
-        if let Some(bar) = compositor.dhm(wkf) {
-            if dvu {
-                bar.iw.store(true, core::sync::atomic::Ordering::SeqCst);
-                bar.clear(0xF0080808);  
+        if let Some(abj) = compositor.get_layer_mut(oqb) {
+            if bou {
+                abj.visible.store(true, core::sync::atomic::Ordering::SeqCst);
+                abj.clear(0xF0080808);  
                 
-                let yd = 270u32;
-                let ans = 340u32;  
-                
-                
-                bar.lx(0, 0, yd, ans, ya);
-                bar.lx(1, 1, yd - 2, ans - 2, aek);
+                let he = 270u32;
+                let ug = 340u32;  
                 
                 
-                bar.ah(2, 2, yd - 4, 34, 0xFF001500);
-                bar.cb("Settings", 10, 10, ya);
+                abj.draw_rect(0, 0, he, ug, kw);
+                abj.draw_rect(1, 1, he - 2, ug - 2, ph);
                 
                 
-                let gyr = 50u32;
-                let ir = dab as u32;
-                let hl = daa as u32;
-                let evy = ac - 380;  
-                let mvt = ir >= (evy + gyr) 
-                    && ir < (evy + gyr + 36)
-                    && hl >= 340 && hl < (340 + yd);
-                if mvt {
-                    bar.ah(5, gyr, yd - 10, 34, 0xFF002200);
+                abj.fill_rect(2, 2, he - 4, 34, 0xFF001500);
+                abj.draw_text("Settings", 10, 10, kw);
+                
+                
+                let dht = 50u32;
+                let cr = mouse_y as u32;
+                let cg = mouse_x as u32;
+                let cce = height - 380;  
+                let hff = cr >= (cce + dht) 
+                    && cr < (cce + dht + 36)
+                    && cg >= 340 && cg < (340 + he);
+                if hff {
+                    abj.fill_rect(5, dht, he - 10, 34, 0xFF002200);
                 }
-                bar.cb("Animations:", 15, gyr + 10, aek);
-                let gyq = if gsi { "ON" } else { "OFF" };
-                let qim = if gsi { 0xFF00FF66 } else { 0xFFFF6666 };
-                bar.cb(gyq, yd - 50, gyr + 10, qim);
+                abj.draw_text("Animations:", 15, dht + 10, ph);
+                let dhs = if dek { "ON" } else { "OFF" };
+                let jwe = if dek { 0xFF00FF66 } else { 0xFFFF6666 };
+                abj.draw_text(dhs, he - 50, dht + 10, jwe);
                 
                 
-                let ibe = 90u32;
-                let pmg = ir >= (evy + ibe) 
-                    && ir < (evy + ibe + 36)
-                    && hl >= 340 && hl < (340 + yd);
-                if pmg {
-                    bar.ah(5, ibe, yd - 10, 34, 0xFF002200);
+                let eaa = 90u32;
+                let jhe = cr >= (cce + eaa) 
+                    && cr < (cce + eaa + 36)
+                    && cg >= 340 && cg < (340 + he);
+                if jhe {
+                    abj.fill_rect(5, eaa, he - 10, 34, 0xFF002200);
                 }
-                bar.cb("Speed:", 15, ibe + 10, aek);
-                let mgr = format!("{:.1}x", gsj);
-                bar.cb(&mgr, yd - 60, ibe + 10, ya);
+                abj.draw_text("Speed:", 15, eaa + 10, ph);
+                let dzz = format!("{:.1}x", del);
+                abj.draw_text(&dzz, he - 60, eaa + 10, kw);
                 
                 
-                bar.cb("- Background -", 15, 140, 0xFF555555);
+                abj.draw_text("- Background -", 15, 140, 0xFF555555);
                 
                 
-                let hna = 160u32;
-                let oby = ir >= (evy + hna) 
-                    && ir < (evy + hna + 36)
-                    && hl >= 340 && hl < (340 + yd);
-                if oby {
-                    bar.ah(5, hna, yd - 10, 34, 0xFF002200);
+                let drl = 160u32;
+                let iex = cr >= (cce + drl) 
+                    && cr < (cce + drl + 36)
+                    && cg >= 340 && cg < (340 + he);
+                if iex {
+                    abj.fill_rect(5, drl, he - 10, 34, 0xFF002200);
                 }
-                bar.cb("HoloMatrix 3D:", 15, hna + 10, aek);
-                let tpp = if bnf { "ON" } else { "OFF" };
-                let tpm = if bnf { 0xFF00FFFF } else { 0xFFFF6666 };
-                bar.cb(tpp, yd - 50, hna + 10, tpm);
+                abj.draw_text("HoloMatrix 3D:", 15, drl + 10, ph);
+                let mmc = if aia { "ON" } else { "OFF" };
+                let mmb = if aia { 0xFF00FFFF } else { 0xFFFF6666 };
+                abj.draw_text(mmc, he - 50, drl + 10, mmb);
                 
                 
-                let hyx = 200u32;
-                let pgh = ir >= (evy + hyx) 
-                    && ir < (evy + hyx + 36)
-                    && hl >= 340 && hl < (340 + yd);
-                if pgh && bnf {
-                    bar.ah(5, hyx, yd - 10, 34, 0xFF002200);
+                let dym = 200u32;
+                let jdi = cr >= (cce + dym) 
+                    && cr < (cce + dym + 36)
+                    && cg >= 340 && cg < (340 + he);
+                if jdi && aia {
+                    abj.fill_rect(5, dym, he - 10, 34, 0xFF002200);
                 }
-                let wee = if bnf { aek } else { 0xFF333333 };
-                bar.cb("Scene:", 15, hyx + 10, wee);
-                let wed = if bnf { 0xFF00FFFF } else { 0xFF444444 };
-                bar.cb(fks.j(), yd - 80, hyx + 10, wed);
+                let oll = if aia { ph } else { 0xFF333333 };
+                abj.draw_text("Scene:", 15, dym + 10, oll);
+                let olk = if aia { 0xFF00FFFF } else { 0xFF444444 };
+                abj.draw_text(ckr.name(), he - 80, dym + 10, olk);
                 
                 
-                bar.cb("Click to toggle/cycle", 15, 250, 0xFF555555);
+                abj.draw_text("Click to toggle/cycle", 15, 250, 0xFF555555);
                 
                 
-                bar.cb("[Esc] or click away", 15, 305, 0xFF444444);
+                abj.draw_text("[Esc] or click away", 15, 305, 0xFF444444);
                 
                 
-                if dew && mvt {
-                    gsi = !gsi;
-                    crate::desktop::jop(gsi);
+                if bfi && hff {
+                    dek = !dek;
+                    crate::desktop::fae(dek);
                 }
                 
                 
-                if dew && pmg {
+                if bfi && jhe {
                     
-                    gsj = if gsj <= 0.5 { 1.0 } 
-                        else if gsj <= 1.0 { 2.0 } 
+                    del = if del <= 0.5 { 1.0 } 
+                        else if del <= 1.0 { 2.0 } 
                         else { 0.5 };
-                    crate::desktop::pio(gsj);
+                    crate::desktop::jew(del);
                 }
                 
                 
-                if dew && oby {
-                    bnf = !bnf;
-                    crate::graphics::holomatrix::cuf(bnf);
+                if bfi && iex {
+                    aia = !aia;
+                    crate::graphics::holomatrix::set_enabled(aia);
                 }
                 
                 
-                if dew && pgh && bnf {
-                    fks = fks.next();
-                    crate::graphics::holomatrix::bid(fks);
+                if bfi && jdi && aia {
+                    ckr = ckr.next();
+                    crate::graphics::holomatrix::set_scene(ckr);
                 }
             } else {
-                bar.iw.store(false, core::sync::atomic::Ordering::SeqCst);
+                abj.visible.store(false, core::sync::atomic::Ordering::SeqCst);
             }
         }
         
         
         
         
-        if let Some(gi) = compositor.dhm(nio) {
-            gi.clear(0x00000000); 
+        if let Some(cursor) = compositor.get_layer_mut(hpx) {
+            cursor.clear(0x00000000); 
             
             
-            let knf = if fd { 0xFF00FF00 } else { 0xFFFFFFFF }; 
-            let aia = if fd { 0xFF005500 } else { 0xFF000000 };
+            let fqa = if left { 0xFF00FF00 } else { 0xFFFFFFFF }; 
+            let ri = if left { 0xFF005500 } else { 0xFF000000 };
             
             
             
-            for a in 0..16 {
-                for fb in 0..=a {
-                    if fb <= a && a < 16 {
-                        gi.aht(fb as u32, a as u32, knf);
+            for i in 0..16 {
+                for ay in 0..=i {
+                    if ay <= i && i < 16 {
+                        cursor.set_pixel(ay as u32, i as u32, fqa);
                     }
                 }
             }
             
-            for a in 0..16 {
-                gi.aht(0, a as u32, aia);
-                gi.aht(a as u32, a as u32, aia);
+            for i in 0..16 {
+                cursor.set_pixel(0, i as u32, ri);
+                cursor.set_pixel(i as u32, i as u32, ri);
             }
             
-            for a in 10..16 {
-                gi.aht((a - 5) as u32, a as u32, knf);
-                gi.aht((a - 6) as u32, a as u32, knf);
+            for i in 10..16 {
+                cursor.set_pixel((i - 5) as u32, i as u32, fqa);
+                cursor.set_pixel((i - 6) as u32, i as u32, fqa);
             }
         }
         
         
         
         
-        compositor.iov();
-        compositor.brs();
+        compositor.composite();
+        compositor.present();
         
         } 
         
         
-        oo += 1;
-        dqx += 1;
+        frame_count += 1;
+        bmg += 1;
         
         
-        if oo % 100 == 0 {
-            crate::serial_println!("[COSMIC2] Frame {}", oo);
+        if frame_count % 100 == 0 {
+            crate::serial_println!("[COSMIC2] Frame {}", frame_count);
         }
         
-        let iu = crate::cpu::tsc::ow();
-        if iu - fmq >= fal {
-            tz = dqx;
-            pbv = lze;
-            dqx = 0;
-            lze = 0;
-            fmq = iu;
+        let cy = crate::cpu::tsc::ey();
+        if cy - clz >= aso {
+            fps = bmg;
+            izq = grc;
+            bmg = 0;
+            grc = 0;
+            clz = cy;
             crate::serial_println!("[COSMIC2] FPS: {} (render: {}) | Frame: {} | Mode: {}",
-                tz, pbv, oo, if atr { "FORMULA" } else if apf { "BRAILLE" } else if aqq { "FAST" } else { "LEGACY" });
+                fps, izq, frame_count, if xk { "FORMULA" } else if vb { "BRAILLE" } else if vv { "FAST" } else { "LEGACY" });
         }
         
         
@@ -7444,13 +7450,13 @@ pub(super) fn kih(lek: Option<&str>, sg: u64) {
             #[cfg(target_arch = "x86_64")]
             core::arch::asm!("sti");
             #[cfg(not(target_arch = "x86_64"))]
-            crate::arch::ofa();
+            crate::arch::ihd();
             
             for _ in 0..100 {
                 #[cfg(target_arch = "x86_64")]
                 core::arch::asm!("pause");
                 #[cfg(not(target_arch = "x86_64"))]
-                core::hint::hc();
+                core::hint::spin_loop();
             }
         }
     }
@@ -7458,113 +7464,113 @@ pub(super) fn kih(lek: Option<&str>, sg: u64) {
     
     crate::framebuffer::clear();
     crate::serial_println!("[COSMIC2] Exited");
-    crate::h!(B_, "COSMIC V2 Desktop exited. Type 'help' for commands.");
+    crate::n!(B_, "COSMIC V2 Desktop exited. Type 'help' for commands.");
 }
 
 
 
-pub(super) fn yjc() {
+pub(super) fn qam() {
     use crate::cosmic::{Rect, Point, Color};
     use crate::cosmic::theme::{dark, matrix};
     use alloc::format;
     
-    crate::h!(C_, "+-----------------------------------------------------------+");
-    crate::h!(C_, "|       COSMIC Desktop Environment - TrustOS Edition        |");
-    crate::h!(C_, "|-----------------------------------------------------------|");
-    crate::h!(B_, "|  Controls:                                                |");
-    crate::h!(Q_, "|    ESC / Q     - Exit desktop                             |");
-    crate::h!(Q_, "|    M           - Matrix theme (cyberpunk)                 |");
-    crate::h!(Q_, "|    D           - Dark theme (default)                     |");
-    crate::h!(Q_, "|    1-5         - Switch apps                              |");
-    crate::h!(Q_, "|    Mouse       - Interact with UI                         |");
-    crate::h!(C_, "+-----------------------------------------------------------+");
+    crate::n!(C_, "+-----------------------------------------------------------+");
+    crate::n!(C_, "|       COSMIC Desktop Environment - TrustOS Edition        |");
+    crate::n!(C_, "|-----------------------------------------------------------|");
+    crate::n!(B_, "|  Controls:                                                |");
+    crate::n!(R_, "|    ESC / Q     - Exit desktop                             |");
+    crate::n!(R_, "|    M           - Matrix theme (cyberpunk)                 |");
+    crate::n!(R_, "|    D           - Dark theme (default)                     |");
+    crate::n!(R_, "|    1-5         - Switch apps                              |");
+    crate::n!(R_, "|    Mouse       - Interact with UI                         |");
+    crate::n!(C_, "+-----------------------------------------------------------+");
     crate::serial_println!("[COSMIC] Starting COSMIC Desktop Environment...");
     
     
-    while crate::keyboard::xw().is_some() {}
+    while crate::keyboard::kr().is_some() {}
     
-    let (z, ac) = crate::framebuffer::yn();
-    if z == 0 || ac == 0 {
-        crate::h!(A_, "Error: Invalid framebuffer!");
+    let (width, height) = crate::framebuffer::kv();
+    if width == 0 || height == 0 {
+        crate::n!(A_, "Error: Invalid framebuffer!");
         return;
     }
     
     
-    crate::framebuffer::beo();
-    crate::framebuffer::afi(true);
+    crate::framebuffer::adw();
+    crate::framebuffer::pr(true);
     crate::serial_println!("[COSMIC] Double buffering enabled for fast rendering");
     
     
-    crate::mouse::dbw(z, ac);
+    crate::mouse::set_screen_size(width, height);
     
     
     
     
-    let mut aqk = true;
-    let mut fxw = true;
-    let mut oo = 0u64;
+    let mut running = true;
+    let mut csg = true;
+    let mut frame_count = 0u64;
     
     
-    let fal = crate::cpu::tsc::ard();
-    let mut tz = 0u32;
-    let mut dqx = 0u32;
-    let mut fmq = crate::cpu::tsc::ow();
-    let mut iaj = true;  
+    let aso = crate::cpu::tsc::we();
+    let mut fps = 0u32;
+    let mut bmg = 0u32;
+    let mut clz = crate::cpu::tsc::ey();
+    let mut dzj = true;  
     
     
-    let mut aqq = false;  
-    let mut apf = true;      
+    let mut vv = false;  
+    let mut vb = true;      
     
     
-    let xav = 60u64;
-    let yrm = fal / xav;
-    let mut ucg = crate::cpu::tsc::ow();
+    let pde = 60u64;
+    let qgi = aso / pde;
+    let mut mwm = crate::cpu::tsc::ey();
     
     
     
     
     
-    const R_: usize = 160;  
-    const AZI_: u32 = 16;   
-    const AZK_: usize = 30; 
+    const AD_: usize = 160;  
+    const BBJ_: u32 = 16;   
+    const BBL_: usize = 30; 
     
     
-    let mut cas: [(i32, u32, u32); R_] = [(0, 0, 0); R_];
+    let mut matrix_cols: [(i32, u32, u32); AD_] = [(0, 0, 0); AD_];
     
     
-    for a in 0..R_ {
-        let dv = (a as u32 * 2654435761) ^ 0xDEADBEEF;
-        let vc = -((dv % (ac * 2)) as i32); 
-        let ig = 2 + (dv % 5); 
-        cas[a] = (vc, ig, dv);
+    for i in 0..AD_ {
+        let seed = (i as u32 * 2654435761) ^ 0xDEADBEEF;
+        let start_y = -((seed % (height * 2)) as i32); 
+        let speed = 2 + (seed % 5); 
+        matrix_cols[i] = (start_y, speed, seed);
     }
     
     
-    const OB_: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ@#$%&*+=<>[]{}|";
+    const OZ_: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ@#$%&*+=<>[]{}|";
     
     
-    let mut gpt = false;
-    let mut fev = false;
-    let mut oxi = 0.0f32;
-    let mut oxj = 0.0f32;
-    let mut oxl = fxw;
-    let mut oxg = 0usize;
-    let mut zgl = -1i32;
-    let mut bex = true; 
+    let mut dcw = false;
+    let mut cha = false;
+    let mut iwb = 0.0f32;
+    let mut iwc = 0.0f32;
+    let mut iwg = csg;
+    let mut ivz = 0usize;
+    let mut qra = -1i32;
+    let mut needs_full_redraw = true; 
     
     
-    let mut dnw = 0usize;
-    let mut ocg = -1i32;
+    let mut bkn = 0usize;
+    let mut ifd = -1i32;
     
     
-    let mut awe = false;
-    let mut czs = -1i32;  
-    let mut bcn = false;
-    let mut job: [u8; 32] = [0u8; 32];
-    let mut ftw = 0usize;
+    let mut yx = false;
+    let mut bcs = -1i32;  
+    let mut search_active = false;
+    let mut ezu: [u8; 32] = [0u8; 32];
+    let mut cqf = 0usize;
     
     
-    let gmp = [
+    let dbg = [
         "Apps",
         "Browser",
         "Calculator", 
@@ -7588,16 +7594,16 @@ pub(super) fn yjc() {
     ];
     
     
-    let mut abx = 150.0f32;
-    let mut aha = 60.0f32;
-    let aog = 700.0f32;
-    let biz = 450.0f32;
-    let mut cka = false;
-    let mut ymr = 0.0f32;
-    let mut yms = 0.0f32;
+    let mut nw = 150.0f32;
+    let mut qr = 60.0f32;
+    let ul = 700.0f32;
+    let afy = 450.0f32;
+    let mut dragging = false;
+    let mut qdh = 0.0f32;
+    let mut qdi = 0.0f32;
     
     
-    let zrd = [
+    let qyx = [
         "$ neofetch",
         "  _____              _    ___  ____  ",
         " |_   _| __ _   _ __| |_ / _ \\/ ___| ",
@@ -7619,190 +7625,190 @@ pub(super) fn yjc() {
     
     
     
-    while aqk {
+    while running {
         
         
         
-        let mouse = crate::mouse::drd();
-        let hl = mouse.b as f32;
-        let ir = mouse.c as f32;
-        let oir = mouse.jda;
+        let mouse = crate::mouse::get_state();
+        let cg = mouse.x as f32;
+        let cr = mouse.y as f32;
+        let ijv = mouse.left_button;
         
         
-        fev = oir && !gpt;
-        gpt = oir;
+        cha = ijv && !dcw;
+        dcw = ijv;
         
         
-        if let Some(bs) = crate::keyboard::xw() {
-            if bcn {
+        if let Some(key) = crate::keyboard::kr() {
+            if search_active {
                 
-                match bs {
-                    27 => { bcn = false; },  
+                match key {
+                    27 => { search_active = false; },  
                     8 => {  
-                        if ftw > 0 { ftw -= 1; }
+                        if cqf > 0 { cqf -= 1; }
                     },
-                    13 => { bcn = false; },  
+                    13 => { search_active = false; },  
                     32..=126 => {  
-                        if ftw < 31 {
-                            job[ftw] = bs;
-                            ftw += 1;
+                        if cqf < 31 {
+                            ezu[cqf] = key;
+                            cqf += 1;
                         }
                     },
                     _ => {}
                 }
             } else {
                 
-                match bs {
+                match key {
                     27 | b'q' | b'Q' => {
-                        if awe { awe = false; }
-                        else { aqk = false; }
+                        if yx { yx = false; }
+                        else { running = false; }
                     },
-                    b'm' | b'M' => { fxw = true; bex = true; },
-                    b'd' | b'D' => { fxw = false; bex = true; },
-                    b'1'..=b'5' => { dnw = (bs - b'1') as usize; bex = true; },
-                    b's' | b'S' => { bcn = true; },  
-                    b't' | b'T' => { awe = !awe; },  
+                    b'm' | b'M' => { csg = true; needs_full_redraw = true; },
+                    b'd' | b'D' => { csg = false; needs_full_redraw = true; },
+                    b'1'..=b'5' => { bkn = (key - b'1') as usize; needs_full_redraw = true; },
+                    b's' | b'S' => { search_active = true; },  
+                    b't' | b'T' => { yx = !yx; },  
                     _ => {}
                 }
             }
         }
         
         
-        let upt = (hl - oxi).gp() > 0.5 || (ir - oxj).gp() > 0.5;
-        let wtl = fxw != oxl || dnw != oxg || fev || cka;
+        let ngi = (cg - iwb).abs() > 0.5 || (cr - iwc).abs() > 0.5;
+        let owp = csg != iwg || bkn != ivz || cha || dragging;
         
         
         
-        if !fxw && !bex && !upt && !wtl {
+        if !csg && !needs_full_redraw && !ngi && !owp {
             
-            oo += 1;
-            dqx += 1;
-            let iu = crate::cpu::tsc::ow();
-            if iu - fmq >= fal {
-                tz = dqx;
-                dqx = 0;
-                fmq = iu;
+            frame_count += 1;
+            bmg += 1;
+            let cy = crate::cpu::tsc::ey();
+            if cy - clz >= aso {
+                fps = bmg;
+                bmg = 0;
+                clz = cy;
             }
             continue;
         }
         
-        oxi = hl;
-        oxj = ir;
-        oxl = fxw;
-        oxg = dnw;
-        bex = false;
+        iwb = cg;
+        iwc = cr;
+        iwg = csg;
+        ivz = bkn;
+        needs_full_redraw = false;
         
         
         
         
-        let (ei, fqd, surface, dwl, mm, xfx, xfy, 
-             fkk, enp, lks, llv, vx, ekt) = 
-            if fxw {
-                (matrix::DD_, matrix::KV_, matrix::Kw, matrix::JA_,
-                 matrix::Ge, matrix::AC_, matrix::N_,
-                 matrix::GO_, matrix::HP_, matrix::II_, matrix::IL_,
-                 matrix::Aep, matrix::Afq)
+        let (bg, panel_bg, surface, surface_hover, accent, text_pri, text_sec, 
+             header_bg, close_bg, ggs, ghr, success, warning) = 
+            if csg {
+                (matrix::DK_, matrix::LO_, matrix::El, matrix::JT_,
+                 matrix::Ch, matrix::AB_, matrix::O_,
+                 matrix::HF_, matrix::IH_, matrix::JB_, matrix::JE_,
+                 matrix::Nh, matrix::Nw)
             } else {
-                (dark::DD_, dark::KV_, dark::Kw, dark::JA_,
-                 dark::Ge, dark::AC_, dark::N_,
-                 dark::GO_, dark::HP_, dark::II_, dark::IL_,
-                 dark::Aep, dark::Afq)
+                (dark::DK_, dark::LO_, dark::El, dark::JT_,
+                 dark::Ch, dark::AB_, dark::O_,
+                 dark::HF_, dark::IH_, dark::JB_, dark::JE_,
+                 dark::Nh, dark::Nw)
             };
         
         
-        let ygi = ei.lv();
-        let zes = fqd.lv();
-        let zqe = surface.lv();
-        let zqd = dwl.lv();
-        let yec = mm.lv();
-        let zsl = xfx.lv();
-        let zsm = xfy.lv();
-        let ywx = fkk.lv();
-        let yis = enp.lv();
-        let zcj = lks.lv();
-        let zcs = llv.lv();
-        let zpw = vx.lv();
-        let zvw = ekt.lv();
+        let pyr = bg.to_u32();
+        let qqc = panel_bg.to_u32();
+        let qyc = surface.to_u32();
+        let qyb = surface_hover.to_u32();
+        let pxn = accent.to_u32();
+        let raf = text_pri.to_u32();
+        let rag = text_sec.to_u32();
+        let qku = header_bg.to_u32();
+        let qad = close_bg.to_u32();
+        let qou = ggs.to_u32();
+        let qpa = ghr.to_u32();
+        let qxw = success.to_u32();
+        let rci = warning.to_u32();
         
         
         use crate::framebuffer::{
-            cwe, ah, afp, abc,
-            gtn, cb, sv, lx
+            awo, fill_rect, fill_rounded_rect, fill_circle,
+            stroke_rounded_rect, draw_text, ii, draw_rect
         };
         
         
-        let ya: u32 = 0xFF00FF66;      
-        let cyh: u32 = 0xFF00FF88;    
-        let aek: u32 = 0xFF009944;       
-        let cot: u32 = 0xFF000000;           
+        let kw: u32 = 0xFF00FF66;      
+        let bby: u32 = 0xFF00FF88;    
+        let ph: u32 = 0xFF009944;       
+        let awh: u32 = 0xFF000000;           
         
         
         
         
-        cwe(cot);
+        awo(awh);
         
         
         
         
-        let tn = 36u32;
-        let byt = z / R_ as u32;
+        let hs = 36u32;
+        let ati = width / AD_ as u32;
         
-        for bj in 0..R_ {
-            let (mrx, ig, dv) = cas[bj];
-            let b = (bj as u32 * byt) + byt / 2;
+        for col in 0..AD_ {
+            let (hde, speed, seed) = matrix_cols[col];
+            let x = (col as u32 * ati) + ati / 2;
             
             
-            let bhn = mrx + ig as i32;
-            let bhn = if bhn > ac as i32 + (AZK_ as i32 * AZI_ as i32) {
-                let gnp = dv.hx(1103515245).cn(12345);
-                cas[bj].2 = gnp;
-                -((gnp % (ac / 2)) as i32)
+            let afk = hde + speed as i32;
+            let afk = if afk > height as i32 + (BBL_ as i32 * BBJ_ as i32) {
+                let dbr = seed.wrapping_mul(1103515245).wrapping_add(12345);
+                matrix_cols[col].2 = dbr;
+                -((dbr % (height / 2)) as i32)
             } else {
-                bhn
+                afk
             };
-            cas[bj].0 = bhn;
+            matrix_cols[col].0 = afk;
             
             
             
             
-            let eo = (ig as f32 - 2.0) / 4.0; 
-            let kpf = 0.4 + eo * 0.6; 
-            let nkr = 0.3 + eo * 0.7; 
+            let depth = (speed as f32 - 2.0) / 4.0; 
+            let fro = 0.4 + depth * 0.6; 
+            let hrn = 0.3 + depth * 0.7; 
             
-            for a in 0..AZK_ {
-                let avl = bhn - (a as i32 * AZI_ as i32);
-                if avl < 0 || avl >= (ac - tn) as i32 { continue; }
+            for i in 0..BBL_ {
+                let yl = afk - (i as i32 * BBJ_ as i32);
+                if yl < 0 || yl >= (height - hs) as i32 { continue; }
                 
-                let mxz = if a == 0 { 255u8 } 
-                    else if a == 1 { 220u8 } 
-                    else { 180u8.ao((a as u8).mbq(9)) };
-                if mxz < 20 { continue; }
-                
-                
-                let kt = ((mxz as f32) * kpf) as u8;
+                let hgv = if i == 0 { 255u8 } 
+                    else if i == 1 { 220u8 } 
+                    else { 180u8.saturating_sub((i as u8).saturating_mul(9)) };
+                if hgv < 20 { continue; }
                 
                 
+                let brightness = ((hgv as f32) * fro) as u8;
                 
-                let m = if a == 0 { 
-                    ((180.0 * kpf) as u8) 
+                
+                
+                let r = if i == 0 { 
+                    ((180.0 * fro) as u8) 
                 } else { 
                     
-                    ((20.0 * (1.0 - nkr)) as u8)
+                    ((20.0 * (1.0 - hrn)) as u8)
                 };
-                let at = kt;
-                let o = if a == 0 { 
-                    ((180.0 * kpf) as u8) 
+                let g = brightness;
+                let b = if i == 0 { 
+                    ((180.0 * fro) as u8) 
                 } else { 
                     
-                    ((40.0 * (1.0 - nkr) + 10.0 * eo) as u8)
+                    ((40.0 * (1.0 - hrn) + 10.0 * depth) as u8)
                 };
-                let s = 0xFF000000 | ((m as u32) << 16) | ((at as u32) << 8) | (o as u32);
+                let color = 0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
                 
-                let des = dv.cn((a as u32 * 7919) ^ (oo as u32 / 8));
-                let gcl = (des as usize) % OB_.len();
-                let inh: [u8; 2] = [OB_[gcl], 0];
-                let qyh = unsafe { core::str::nwj(&inh[..1]) };
-                cb(qyh, b, avl as u32, s);
+                let bfe = seed.wrapping_add((i as u32 * 7919) ^ (frame_count as u32 / 8));
+                let cuz = (bfe as usize) % OZ_.len();
+                let eht: [u8; 2] = [OZ_[cuz], 0];
+                let kip = unsafe { core::str::from_utf8_unchecked(&eht[..1]) };
+                draw_text(kip, x, yl as u32, color);
             }
         }
         
@@ -7810,168 +7816,168 @@ pub(super) fn yjc() {
         
         
         
-        let ayc = z / 2 + 100;  
-        let dsw = ac / 2 - 50;
+        let aaa = width / 2 + 100;  
+        let bnk = height / 2 - 50;
         
         
-        let bhj = dsw - 180;
+        let afi = bnk - 180;
         
-        ah(ayc - 40, bhj, 12, 60, ya);      
-        ah(ayc + 28, bhj, 12, 60, ya);      
-        ah(ayc - 40, bhj - 10, 80, 15, ya); 
-        ah(ayc - 30, bhj - 20, 60, 15, ya); 
+        fill_rect(aaa - 40, afi, 12, 60, kw);      
+        fill_rect(aaa + 28, afi, 12, 60, kw);      
+        fill_rect(aaa - 40, afi - 10, 80, 15, kw); 
+        fill_rect(aaa - 30, afi - 20, 60, 15, kw); 
         
-        ah(ayc - 50, bhj + 50, 100, 70, ya);
-        ah(ayc - 44, bhj + 56, 88, 58, 0xFF0A150Au32);
+        fill_rect(aaa - 50, afi + 50, 100, 70, kw);
+        fill_rect(aaa - 44, afi + 56, 88, 58, 0xFF0A150Au32);
         
-        abc(ayc, bhj + 80, 10, ya);
-        ah(ayc - 5, bhj + 88, 10, 20, ya);
+        fill_circle(aaa, afi + 80, 10, kw);
+        fill_rect(aaa - 5, afi + 88, 10, 20, kw);
         
         
-        let eiq = dsw - 60;
-        let cbt = 180u32;
-        let dlu = 220u32;
+        let bvt = bnk - 60;
+        let apd = 180u32;
+        let bje = 220u32;
         
-        for ab in 0..4 {
-            let tt = ab as u32;
+        for t in 0..4 {
+            let tt = t as u32;
             
-            ah(ayc - cbt/2 + 20 + tt, eiq + tt, cbt - 40, 3, ya);
+            fill_rect(aaa - apd/2 + 20 + tt, bvt + tt, apd - 40, 3, kw);
             
-            ah(ayc - cbt/2 + tt, eiq + 20 + tt, 25, 3, ya);
-            ah(ayc + cbt/2 - 25 - tt, eiq + 20 + tt, 25, 3, ya);
+            fill_rect(aaa - apd/2 + tt, bvt + 20 + tt, 25, 3, kw);
+            fill_rect(aaa + apd/2 - 25 - tt, bvt + 20 + tt, 25, 3, kw);
             
-            ah(ayc - cbt/2 + tt, eiq + 20, 3, dlu - 80, ya);
-            ah(ayc + cbt/2 - 3 - tt, eiq + 20, 3, dlu - 80, ya);
+            fill_rect(aaa - apd/2 + tt, bvt + 20, 3, bje - 80, kw);
+            fill_rect(aaa + apd/2 - 3 - tt, bvt + 20, 3, bje - 80, kw);
             
-            ah(ayc - 3, eiq + dlu - 20 - tt, 6, 20, ya);
+            fill_rect(aaa - 3, bvt + bje - 20 - tt, 6, 20, kw);
         }
         
-        ah(ayc - cbt/2 + 8, eiq + 25, cbt - 16, dlu - 70, 0xFF051208u32);
+        fill_rect(aaa - apd/2 + 8, bvt + 25, apd - 16, bje - 70, 0xFF051208u32);
         
         
-        let ncm = ayc;
-        let ncn = dsw + 20;
+        let hko = aaa;
+        let hkp = bnk + 20;
         
-        for ab in 0..8 {
+        for t in 0..8 {
             
-            for a in 0..30 {
-                ah(ncm - 50 + a + ab, ncn - 30 + a, 4, 4, ya);
+            for i in 0..30 {
+                fill_rect(hko - 50 + i + t, hkp - 30 + i, 4, 4, kw);
             }
             
-            for a in 0..50 {
-                ah(ncm - 20 + a + ab, ncn + a.v(29) - (a.ao(29)), 4, 4, ya);
+            for i in 0..50 {
+                fill_rect(hko - 20 + i + t, hkp + i.min(29) - (i.saturating_sub(29)), 4, 4, kw);
             }
         }
         
         
-        let err = dsw + 100;
+        let cai = bnk + 100;
         
-        ah(ayc - 100, err, 40, 15, aek);
-        ah(ayc - 110, err + 10, 20, 30, aek);
-        ah(ayc - 95, err + 15, 10, 25, aek);
-        ah(ayc - 80, err + 15, 10, 20, aek);
+        fill_rect(aaa - 100, cai, 40, 15, ph);
+        fill_rect(aaa - 110, cai + 10, 20, 30, ph);
+        fill_rect(aaa - 95, cai + 15, 10, 25, ph);
+        fill_rect(aaa - 80, cai + 15, 10, 20, ph);
         
-        ah(ayc + 60, err, 40, 15, aek);
-        ah(ayc + 90, err + 10, 20, 30, aek);
-        ah(ayc + 85, err + 15, 10, 25, aek);
-        ah(ayc + 70, err + 15, 10, 20, aek);
+        fill_rect(aaa + 60, cai, 40, 15, ph);
+        fill_rect(aaa + 90, cai + 10, 20, 30, ph);
+        fill_rect(aaa + 85, cai + 15, 10, 25, ph);
+        fill_rect(aaa + 70, cai + 15, 10, 20, ph);
         
         
         
-        let wg = ayc + 130;
-        let sl = dsw + 40;
-        cb("TRust-os", wg, sl, ya);
+        let kd = aaa + 130;
+        let ie = bnk + 40;
+        draw_text("TRust-os", kd, ie, kw);
         
-        cb("TRust-os", wg + 1, sl, ya);
-        cb("TRust-os", wg, sl + 1, ya);
-        cb("TRust-os", wg + 1, sl + 1, ya);
+        draw_text("TRust-os", kd + 1, ie, kw);
+        draw_text("TRust-os", kd, ie + 1, kw);
+        draw_text("TRust-os", kd + 1, ie + 1, kw);
                 
         
-        let ekx = 90u32;
-        let eky = 300u32;
-        let gwt = 380u32;
-        let jwv = 280u32;
+        let bwx = 90u32;
+        let bwy = 300u32;
+        let dgp = 380u32;
+        let ffe = 280u32;
         
         
         
         
-        let eay = 20u32;
-        let eoz = 50u32;
-        let cxb = 44u32;
-        let saa = 20u32;
-        let sab = 5u32;
+        let bsb = 20u32;
+        let byv = 50u32;
+        let bbe = 44u32;
+        let lgs = 20u32;
+        let lgt = 5u32;
         
         
-        ah(0, 0, 80, ac - tn, 0xFF050505u32);
+        fill_rect(0, 0, 80, height - hs, 0xFF050505u32);
         
-        ocg = -1;
-        for a in 0..sab {
-            let og = eoz + a * (cxb + saa);
-            let fg = eay;
+        ifd = -1;
+        for i in 0..lgt {
+            let gg = byv + i * (bbe + lgs);
+            let bi = bsb;
             
             
-            let asy = hl >= fg as f32 && hl < (fg + cxb) as f32 && 
-                          ir >= og as f32 && ir < (og + cxb) as f32;
-            if asy {
-                ocg = a as i32;
-                if fev {
-                    dnw = a as usize;
+            let hovered = cg >= bi as f32 && cg < (bi + bbe) as f32 && 
+                          cr >= gg as f32 && cr < (gg + bbe) as f32;
+            if hovered {
+                ifd = i as i32;
+                if cha {
+                    bkn = i as usize;
                 }
             }
             
             
-            let xd = if a as usize == dnw { 
-                ya 
-            } else if asy { 
-                cyh 
+            let icon_color = if i as usize == bkn { 
+                kw 
+            } else if hovered { 
+                bby 
             } else { 
-                aek 
+                ph 
             };
             
             
-            lx(fg, og, cxb, cxb, xd);
+            draw_rect(bi, gg, bbe, bbe, icon_color);
             
             
-            let cx = fg + cxb / 2;
-            let ae = og + cxb / 2;
-            match a {
+            let cx = bi + bbe / 2;
+            let u = gg + bbe / 2;
+            match i {
                 0 => { 
-                    ah(cx - 8, ae - 10, 4, 20, xd);
-                    ah(cx - 4, ae - 8, 4, 16, xd);
-                    ah(cx, ae - 6, 4, 12, xd);
-                    ah(cx + 4, ae - 4, 4, 8, xd);
+                    fill_rect(cx - 8, u - 10, 4, 20, icon_color);
+                    fill_rect(cx - 4, u - 8, 4, 16, icon_color);
+                    fill_rect(cx, u - 6, 4, 12, icon_color);
+                    fill_rect(cx + 4, u - 4, 4, 8, icon_color);
                 },
                 1 => { 
-                    lx(cx - 12, ae - 10, 24, 20, xd);
-                    ah(cx - 8, ae - 4, 10, 2, xd);
-                    ah(cx - 8, ae + 2, 6, 2, xd);
+                    draw_rect(cx - 12, u - 10, 24, 20, icon_color);
+                    fill_rect(cx - 8, u - 4, 10, 2, icon_color);
+                    fill_rect(cx - 8, u + 2, 6, 2, icon_color);
                 },
                 2 => { 
-                    for br in 0..2 {
-                        for bj in 0..2 {
-                            lx(cx - 10 + bj * 12, ae - 10 + br * 12, 8, 8, xd);
+                    for row in 0..2 {
+                        for col in 0..2 {
+                            draw_rect(cx - 10 + col * 12, u - 10 + row * 12, 8, 8, icon_color);
                         }
                     }
                 },
                 3 => { 
-                    lx(cx - 10, ae - 8, 20, 16, xd);
-                    ah(cx - 6, ae - 4, 2, 8, xd);
-                    ah(cx - 2, ae - 2, 2, 6, xd);
-                    ah(cx + 2, ae - 6, 2, 10, xd);
-                    ah(cx + 6, ae - 4, 2, 8, xd);
+                    draw_rect(cx - 10, u - 8, 20, 16, icon_color);
+                    fill_rect(cx - 6, u - 4, 2, 8, icon_color);
+                    fill_rect(cx - 2, u - 2, 2, 6, icon_color);
+                    fill_rect(cx + 2, u - 6, 2, 10, icon_color);
+                    fill_rect(cx + 6, u - 4, 2, 8, icon_color);
                 },
                 4 => { 
-                    abc(cx, ae, 10, xd);
-                    abc(cx, ae, 6, cot);
+                    fill_circle(cx, u, 10, icon_color);
+                    fill_circle(cx, u, 6, awh);
                 },
                 _ => {}
             }
         }
         
         
-        let obq = ac as u32 - 80;
-        lx(eay, obq, cxb, cxb, aek);
-        cb("?", eay + 18, obq + 16, aek);
+        let ier = height as u32 - 80;
+        draw_rect(bsb, ier, bbe, bbe, ph);
+        draw_text("?", bsb + 18, ier + 16, ph);
         
         
         
@@ -7979,267 +7985,267 @@ pub(super) fn yjc() {
         
         
         
-        let cov = 3u32;
+        let awj = 3u32;
         
-        ah(ekx, eky, gwt, cov, ya);
+        fill_rect(bwx, bwy, dgp, awj, kw);
         
-        ah(ekx, eky + jwv - cov, gwt, cov, ya);
+        fill_rect(bwx, bwy + ffe - awj, dgp, awj, kw);
         
-        ah(ekx, eky, cov, jwv, ya);
+        fill_rect(bwx, bwy, awj, ffe, kw);
         
-        ah(ekx + gwt - cov, eky, cov, jwv, ya);
-        
-        
-        ah(ekx + cov, eky + cov, 
-                  gwt - cov * 2, jwv - cov * 2, cot);
+        fill_rect(bwx + dgp - awj, bwy, awj, ffe, kw);
         
         
-        let bxn = 28u32;
-        ah(ekx + cov, eky + cov, 
-                  gwt - cov * 2, bxn, 0xFF0A1A0Au32);
+        fill_rect(bwx + awj, bwy + awj, 
+                  dgp - awj * 2, ffe - awj * 2, awh);
         
         
-        let (dq, _) = apps[dnw];
-        let xhz = format!("TrustOS {} v1.00", dq);
-        cb(&xhz, ekx + 12, eky + 10, ya);
+        let ana = 28u32;
+        fill_rect(bwx + awj, bwy + awj, 
+                  dgp - awj * 2, ana, 0xFF0A1A0Au32);
         
         
-        let kn = eky + 10;
-        let bdr = ekx + gwt - 60;
-        
-        abc(bdr, kn + 6, 6, 0xFFFF5555u32);
-        
-        abc(bdr + 18, kn + 6, 6, 0xFFFFDD55u32);
-        
-        abc(bdr + 36, kn + 6, 6, 0xFF55FF55u32);
+        let (title, _) = apps[bkn];
+        let pkg = format!("TrustOS {} v1.00", title);
+        draw_text(&pkg, bwx + 12, bwy + 10, kw);
         
         
-        let tc = ekx + 15;
-        let gl = eky + bxn + 15;
+        let ed = bwy + 10;
+        let adl = bwx + dgp - 60;
+        
+        fill_circle(adl, ed + 6, 6, 0xFFFF5555u32);
+        
+        fill_circle(adl + 18, ed + 6, 6, 0xFFFFDD55u32);
+        
+        fill_circle(adl + 36, ed + 6, 6, 0xFF55FF55u32);
         
         
-        let rsm = crate::ramfs::fh(|fs| String::from(fs.dau()));
-        
-        cb("root", tc, gl, 0xFFFF0000u32);  
-        
-        cb("@", tc + 32, gl, 0xFFFFFFFFu32);  
-        
-        cb("trustos", tc + 40, gl, 0xFF00FF00u32);  
-        
-        let hup = format!(":{}$ ", rsm);
-        cb(&hup, tc + 96, gl, 0xFF00FF00u32);  
-        
-        let lvx = 4 + 1 + 7 + hup.len();  
-        let lf = tc + (lvx * 8) as u32;
-        ah(lf, gl, 8, 16, cyh);
+        let ho = bwx + 15;
+        let bn = bwy + ana + 15;
         
         
+        let lau = crate::ramfs::bh(|fs| String::from(fs.pwd()));
+        
+        draw_text("root", ho, bn, 0xFFFF0000u32);  
+        
+        draw_text("@", ho + 32, bn, 0xFFFFFFFFu32);  
+        
+        draw_text("trustos", ho + 40, bn, 0xFF00FF00u32);  
+        
+        let dwh = format!(":{}$ ", lau);
+        draw_text(&dwh, ho + 96, bn, 0xFF00FF00u32);  
+        
+        let gos = 4 + 1 + 7 + dwh.len();  
+        let cursor_x = ho + (gos * 8) as u32;
+        fill_rect(cursor_x, bn, 8, 16, bby);
         
         
-        let pl = ac as u32 - tn;
         
         
-        ah(0, pl, z as u32, tn, 0xFF080808u32);
-        
-        ah(0, pl, z as u32, 2, aek);
+        let gk = height as u32 - hs;
         
         
-        let jfx = 8u32;
-        let unc = 24u32;
-        ah(jfx + 4, pl + 14, 16, 3, ya);
-        ah(jfx + 4, pl + 19, 16, 3, ya);
+        fill_rect(0, gk, width as u32, hs, 0xFF080808u32);
+        
+        fill_rect(0, gk, width as u32, 2, ph);
         
         
-        if fev && hl >= jfx as f32 && hl < (jfx + unc) as f32 &&
-           ir >= pl as f32 {
-            awe = !awe;
+        let eui = 8u32;
+        let nej = 24u32;
+        fill_rect(eui + 4, gk + 14, 16, 3, kw);
+        fill_rect(eui + 4, gk + 19, 16, 3, kw);
+        
+        
+        if cha && cg >= eui as f32 && cg < (eui + nej) as f32 &&
+           cr >= gk as f32 {
+            yx = !yx;
         }
         
         
-        let mjo = 40u32;
-        let prj = 90u32;
-        ah(mjo, pl + 6, prj, 24, 0xFF0A1A0Au32);
-        lx(mjo, pl + 6, prj, 24, aek);
-        cb("TrustOS", mjo + 14, pl + 10, ya);
+        let gxv = 40u32;
+        let jlc = 90u32;
+        fill_rect(gxv, gk + 6, jlc, 24, 0xFF0A1A0Au32);
+        draw_rect(gxv, gk + 6, jlc, 24, ph);
+        draw_text("TrustOS", gxv + 14, gk + 10, kw);
         
         
-        let prk = 138u32;
-        let xad = 90u32;
-        ah(prk, pl + 6, xad, 24, 0xFF050A05u32);
-        cb("Terminal", prk + 12, pl + 10, aek);
+        let jld = 138u32;
+        let pcp = 90u32;
+        fill_rect(jld, gk + 6, pcp, 24, 0xFF050A05u32);
+        draw_text("Terminal", jld + 12, gk + 10, ph);
         
         
-        let cmt = z as u32 / 2 - 120;
-        let bco = 240u32;
-        ah(cmt, pl + 6, bco, 24, 0xFF0A0A0Au32);
-        lx(cmt, pl + 6, bco, 24, aek);
-        if ftw == 0 {
-            cb("Search...", cmt + 8, pl + 10, 0xFF336633u32);
+        let ava = width as u32 / 2 - 120;
+        let acm = 240u32;
+        fill_rect(ava, gk + 6, acm, 24, 0xFF0A0A0Au32);
+        draw_rect(ava, gk + 6, acm, 24, ph);
+        if cqf == 0 {
+            draw_text("Search...", ava + 8, gk + 10, 0xFF336633u32);
         } else {
-            let wfl = unsafe { core::str::nwj(&job[..ftw]) };
-            cb(wfl, cmt + 8, pl + 10, ya);
+            let oml = unsafe { core::str::from_utf8_unchecked(&ezu[..cqf]) };
+            draw_text(oml, ava + 8, gk + 10, kw);
         }
         
-        abc(cmt + bco - 20, pl + 18, 6, aek);
-        abc(cmt + bco - 20, pl + 18, 4, 0xFF0A0A0Au32);
-        ah(cmt + bco - 16, pl + 22, 6, 2, aek);
+        fill_circle(ava + acm - 20, gk + 18, 6, ph);
+        fill_circle(ava + acm - 20, gk + 18, 4, 0xFF0A0A0Au32);
+        fill_rect(ava + acm - 16, gk + 22, 6, 2, ph);
         
         
-        if fev && hl >= cmt as f32 && hl < (cmt + bco) as f32 &&
-           ir >= pl as f32 {
-            bcn = true;
+        if cha && cg >= ava as f32 && cg < (ava + acm) as f32 &&
+           cr >= gk as f32 {
+            search_active = true;
         }
         
         
-        let os = crate::rtc::cgz();
-        let bso = format!("{:02}:{:02}", os.bek, os.bri);
-        cb(&bso, z as u32 - 200, pl + 10, ya);
+        let fm = crate::rtc::aou();
+        let time_str = format!("{:02}:{:02}", fm.hour, fm.minute);
+        draw_text(&time_str, width as u32 - 200, gk + 10, kw);
         
         
-        cb("TRST-001", z as u32 - 120, pl + 10, cyh);
+        draw_text("TRST-001", width as u32 - 120, gk + 10, bby);
         
         
-        let dij = z as u32 - 50;
-        abc(dij, pl + 18, 6, ya);
-        abc(dij + 16, pl + 18, 6, 0xFFFFAA00u32);
+        let bhe = width as u32 - 50;
+        fill_circle(bhe, gk + 18, 6, kw);
+        fill_circle(bhe + 16, gk + 18, 6, 0xFFFFAA00u32);
         
-        ah(dij + 28, pl + 12, 4, 4, aek);
-        ah(dij + 34, pl + 12, 4, 4, aek);
-        ah(dij + 28, pl + 18, 4, 4, aek);
-        ah(dij + 34, pl + 18, 4, 4, aek);
-        
-        
+        fill_rect(bhe + 28, gk + 12, 4, 4, ph);
+        fill_rect(bhe + 34, gk + 12, 4, 4, ph);
+        fill_rect(bhe + 28, gk + 18, 4, 4, ph);
+        fill_rect(bhe + 34, gk + 18, 4, 4, ph);
         
         
-        if awe {
-            let rs = 10u32;
-            let xp = pl - 320;
-            let afr = 180u32;
-            let aje = 310u32;
+        
+        
+        if yx {
+            let hu = 10u32;
+            let ks = gk - 320;
+            let pz = 180u32;
+            let rv = 310u32;
             
             
-            ah(rs, xp, afr, aje, 0xFF0A0F0Au32);
-            lx(rs, xp, afr, aje, ya);
-            lx(rs + 1, xp + 1, afr - 2, aje - 2, aek);
+            fill_rect(hu, ks, pz, rv, 0xFF0A0F0Au32);
+            draw_rect(hu, ks, pz, rv, kw);
+            draw_rect(hu + 1, ks + 1, pz - 2, rv - 2, ph);
             
             
-            ah(rs + 2, xp + 2, afr - 4, 30, 0xFF0A1A0Au32);
-            cb("TrustOS Menu", rs + 12, xp + 10, ya);
+            fill_rect(hu + 2, ks + 2, pz - 4, 30, 0xFF0A1A0Au32);
+            draw_text("TrustOS Menu", hu + 12, ks + 10, kw);
             
             
-            czs = -1;
-            for (w, item) in gmp.iter().cf() {
-                let ajd = xp + 40 + (w as u32 * 24);
+            bcs = -1;
+            for (idx, item) in dbg.iter().enumerate() {
+                let ru = ks + 40 + (idx as u32 * 24);
                 
                 if *item == "---" {
                     
-                    ah(rs + 10, ajd + 10, afr - 20, 1, aek);
+                    fill_rect(hu + 10, ru + 10, pz - 20, 1, ph);
                 } else {
                     
-                    let ohc = hl >= rs as f32 && hl < (rs + afr) as f32 &&
-                                       ir >= ajd as f32 && ir < (ajd + 24) as f32;
+                    let iip = cg >= hu as f32 && cg < (hu + pz) as f32 &&
+                                       cr >= ru as f32 && cr < (ru + 24) as f32;
                     
-                    if ohc {
-                        czs = w as i32;
-                        ah(rs + 2, ajd, afr - 4, 24, 0xFF1A2A1Au32);
+                    if iip {
+                        bcs = idx as i32;
+                        fill_rect(hu + 2, ru, pz - 4, 24, 0xFF1A2A1Au32);
                         
                         
-                        if fev {
+                        if cha {
                             match *item {
-                                "Shutdown" => { crate::acpi::cbu(); },
-                                "Restart" => { crate::acpi::jlq(); },
-                                "Sign Out" => { aqk = false; },
-                                "Settings" => { dnw = 4; awe = false; },
-                                "Terminal" => { dnw = 1; awe = false; },
-                                "Files" => { dnw = 0; awe = false; },
-                                "Browser" => { dnw = 2; awe = false; },
-                                _ => { awe = false; }
+                                "Shutdown" => { crate::acpi::shutdown(); },
+                                "Restart" => { crate::acpi::eya(); },
+                                "Sign Out" => { running = false; },
+                                "Settings" => { bkn = 4; yx = false; },
+                                "Terminal" => { bkn = 1; yx = false; },
+                                "Files" => { bkn = 0; yx = false; },
+                                "Browser" => { bkn = 2; yx = false; },
+                                _ => { yx = false; }
                             }
                         }
                     }
                     
                     
-                    let agx = if *item == "Shutdown" || *item == "Restart" || *item == "Sign Out" {
+                    let text_color = if *item == "Shutdown" || *item == "Restart" || *item == "Sign Out" {
                         0xFFFF6666u32  
-                    } else if ohc {
-                        cyh
+                    } else if iip {
+                        bby
                     } else {
-                        ya
+                        kw
                     };
                     
                     
                     if *item == "Shutdown" {
-                        abc(rs + 20, ajd + 12, 6, agx);
-                        ah(rs + 18, ajd + 6, 4, 6, 0xFF0A0F0Au32);
+                        fill_circle(hu + 20, ru + 12, 6, text_color);
+                        fill_rect(hu + 18, ru + 6, 4, 6, 0xFF0A0F0Au32);
                     }
                     
-                    cb(item, rs + 35, ajd + 6, agx);
+                    draw_text(item, hu + 35, ru + 6, text_color);
                 }
             }
             
             
-            if fev && (hl < rs as f32 || hl > (rs + afr) as f32 ||
-                                    ir < xp as f32 || ir > pl as f32) {
-                awe = false;
+            if cha && (cg < hu as f32 || cg > (hu + pz) as f32 ||
+                                    cr < ks as f32 || cr > gk as f32) {
+                yx = false;
             }
         }
         
         
         
         
-        if iaj && tz > 0 {
-            let swo = format!("{} FPS", tz);
-            let hkg = z.ao(80);
-            let kwy = if tz >= 55 { 0xFF00FF00 }    
-                           else if tz >= 30 { 0xFFFFFF00 } 
+        if dzj && fps > 0 {
+            let lye = format!("{} FPS", fps);
+            let dqd = width.saturating_sub(80);
+            let fxo = if fps >= 55 { 0xFF00FF00 }    
+                           else if fps >= 30 { 0xFFFFFF00 } 
                            else { 0xFFFF4444 };            
-            cb(&swo, hkg, 4, kwy);
+            draw_text(&lye, dqd, 4, fxo);
             
             
-            let ev = if apf { "BRL" } else if aqq { "FAST" } else { "LEG" };
-            cb(ev, hkg, 20, 0xFF888888);
+            let mode = if vb { "BRL" } else if vv { "FAST" } else { "LEG" };
+            draw_text(mode, dqd, 20, 0xFF888888);
         }
         
         
         
         
-        let uqx = hl as u32;
-        let urb = ir as u32;
+        let nhj = cg as u32;
+        let nhk = cr as u32;
         
-        for a in 0..12u32 {
-            ah(uqx, urb + a, (12 - a).am(1), 1, ya);
+        for i in 0..12u32 {
+            fill_rect(nhj, nhk + i, (12 - i).max(1), 1, kw);
         }
         
         
         
         
-        sv();
+        ii();
         
         
         
         
-        oo += 1;
-        dqx += 1;
+        frame_count += 1;
+        bmg += 1;
         
-        let iu = crate::cpu::tsc::ow();
-        if iu - fmq >= fal {
-            tz = dqx;
-            dqx = 0;
-            fmq = iu;
+        let cy = crate::cpu::tsc::ey();
+        if cy - clz >= aso {
+            fps = bmg;
+            bmg = 0;
+            clz = cy;
             crate::serial_println!("[COSMIC] FPS: {} | Frame: {} | Mode: {}", 
-                tz, oo, if apf { "BRAILLE" } else if aqq { "FAST" } else { "LEGACY" });
+                fps, frame_count, if vb { "BRAILLE" } else if vv { "FAST" } else { "LEGACY" });
         }
         
         
         
         for _ in 0..100 {
-            core::hint::hc();
+            core::hint::spin_loop();
         }
         
-        ucg = crate::cpu::tsc::ow();
+        mwm = crate::cpu::tsc::ey();
     }
     
     crate::framebuffer::clear();
-    crate::serial_println!("[COSMIC] Desktop exited after {} frames, last FPS: {}", oo, tz);
-    crate::h!(B_, "COSMIC Desktop exited. {} frames rendered, {} FPS", oo, tz);
+    crate::serial_println!("[COSMIC] Desktop exited after {} frames, last FPS: {}", frame_count, fps);
+    crate::n!(B_, "COSMIC Desktop exited. {} frames rendered, {} FPS", frame_count, fps);
 }

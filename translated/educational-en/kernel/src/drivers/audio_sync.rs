@@ -87,23 +87,23 @@ pub fn probe_dma_latency() -> u64 {
     hda::reset_stream();
 
     // Get DMA buffer pointer
-    let (buffer_pointer, buffer_capability) = // Pattern matching — Rust's exhaustive branching construct.
+    let (buf_ptr, buf_cap) = // Pattern matching — Rust's exhaustive branching construct.
 match hda::get_dma_buffer_information() {
-        Some(information) => information,
+        Some(info) => info,
         None => return 0,
     };
 
     // Zero the entire buffer first
     unsafe {
-        core::ptr::write_bytes(buffer_pointer, 0, buffer_capability);
+        core::ptr::write_bytes(buf_ptr, 0, buf_cap);
     }
 
     // Write click at a known offset (quarter of buffer)
-    let click_offset = buffer_capability / 4;
-    let click_length = click.len().minimum(buffer_capability - click_offset);
+    let click_offset = buf_cap / 4;
+    let click_length = click.len().min(buf_cap - click_offset);
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        core::ptr::copy_nonoverlapping(click.as_pointer(), buffer_pointer.add(click_offset), click_length);
+        core::ptr::copy_nonoverlapping(click.as_ptr(), buf_ptr.add(click_offset), click_length);
     }
 
     // Record the byte offset where the click starts

@@ -6,7 +6,7 @@
 use alloc::vec::Vec;
 use alloc::boxed::Box;
 use spin::Mutex;
-use micromath::Wo;
+use micromath::F32Ext;
 
 use super::render2d::Color2D;
 
@@ -15,34 +15,34 @@ use super::render2d::Color2D;
 
 
 
-pub const DNZ_: u32 = 0x0DE0;
-pub const CW_: u32 = 0x0DE1;
+pub const DRT_: u32 = 0x0DE0;
+pub const DD_: u32 = 0x0DE1;
 
 
-pub const ATM_: u32 = 0x2800;
-pub const ATN_: u32 = 0x2801;
-pub const BYA_: u32 = 0x2802;
-pub const BYB_: u32 = 0x2803;
+pub const AVQ_: u32 = 0x2800;
+pub const AVR_: u32 = 0x2801;
+pub const CBG_: u32 = 0x2802;
+pub const CBH_: u32 = 0x2803;
 
 
-pub const ATJ_: u32 = 0x2600;
-pub const ATI_: u32 = 0x2601;
-pub const DNX_: u32 = 0x2700;
-pub const DNV_: u32 = 0x2701;
-pub const BXX_: u32 = 0x2702;
-pub const DNU_: u32 = 0x2703;
+pub const AVN_: u32 = 0x2600;
+pub const AVM_: u32 = 0x2601;
+pub const DRR_: u32 = 0x2700;
+pub const DRP_: u32 = 0x2701;
+pub const CBD_: u32 = 0x2702;
+pub const DRO_: u32 = 0x2703;
 
 
-pub const ATL_: u32 = 0x2901;
-pub const BXP_: u32 = 0x2900;
-pub const BXQ_: u32 = 0x812F;
-pub const BXW_: u32 = 0x8370;
+pub const AVP_: u32 = 0x2901;
+pub const CAV_: u32 = 0x2900;
+pub const CAW_: u32 = 0x812F;
+pub const CBC_: u32 = 0x8370;
 
 
-pub const BXZ_: u32 = 0x1907;
-pub const ACZ_: u32 = 0x1908;
-pub const BXV_: u32 = 0x1909;
-pub const DNW_: u32 = 0x190A;
+pub const CBF_: u32 = 0x1907;
+pub const AEP_: u32 = 0x1908;
+pub const CBB_: u32 = 0x1909;
+pub const DRQ_: u32 = 0x190A;
 
 
 
@@ -51,233 +51,233 @@ pub const DNW_: u32 = 0x190A;
 
 #[derive(Clone)]
 pub struct TextureLevel {
-    pub z: u32,
-    pub ac: u32,
-    pub f: Vec<u32>, 
+    pub width: u32,
+    pub height: u32,
+    pub data: Vec<u32>, 
 }
 
 impl TextureLevel {
-    pub fn new(z: u32, ac: u32) -> Self {
+    pub fn new(width: u32, height: u32) -> Self {
         Self {
-            z,
-            ac,
-            f: alloc::vec![0u32; (z * ac) as usize],
+            width,
+            height,
+            data: alloc::vec![0u32; (width * height) as usize],
         }
     }
     
     
     #[inline]
-    pub fn ehy(&self, b: u32, c: u32) -> u32 {
-        let b = b.v(self.z.ao(1));
-        let c = c.v(self.ac.ao(1));
-        self.f[(c * self.z + b) as usize]
+    pub fn sample_pixel(&self, x: u32, y: u32) -> u32 {
+        let x = x.min(self.width.saturating_sub(1));
+        let y = y.min(self.height.saturating_sub(1));
+        self.data[(y * self.width + x) as usize]
     }
     
     
-    pub fn wck(&self, tm: f32, p: f32) -> u32 {
-        let b = tm * (self.z as f32 - 1.0);
-        let c = p * (self.ac as f32 - 1.0);
+    pub fn sample_bilinear(&self, iy: f32, v: f32) -> u32 {
+        let x = iy * (self.width as f32 - 1.0);
+        let y = v * (self.height as f32 - 1.0);
         
-        let fy = b.hjw() as u32;
-        let fo = c.hjw() as u32;
-        let dn = (fy + 1).v(self.z - 1);
-        let dp = (fo + 1).v(self.ac - 1);
+        let bm = x.floor() as u32;
+        let az = y.floor() as u32;
+        let x1 = (bm + 1).min(self.width - 1);
+        let y1 = (az + 1).min(self.height - 1);
         
-        let jf = b.ivp();
-        let sc = c.ivp();
+        let dg = x.fract();
+        let hj = y.fract();
         
-        let byn = self.ehy(fy, fo);
-        let cdn = self.ehy(dn, fo);
-        let byo = self.ehy(fy, dp);
-        let cdo = self.ehy(dn, dp);
+        let anq = self.sample_pixel(bm, az);
+        let apx = self.sample_pixel(x1, az);
+        let anr = self.sample_pixel(bm, y1);
+        let apy = self.sample_pixel(x1, y1);
         
         
-        let m = Self::ils(
-            ((byn >> 16) & 0xFF) as f32,
-            ((cdn >> 16) & 0xFF) as f32,
-            ((byo >> 16) & 0xFF) as f32,
-            ((cdo >> 16) & 0xFF) as f32,
-            jf, sc
+        let r = Self::egz(
+            ((anq >> 16) & 0xFF) as f32,
+            ((apx >> 16) & 0xFF) as f32,
+            ((anr >> 16) & 0xFF) as f32,
+            ((apy >> 16) & 0xFF) as f32,
+            dg, hj
         ) as u32;
-        let at = Self::ils(
-            ((byn >> 8) & 0xFF) as f32,
-            ((cdn >> 8) & 0xFF) as f32,
-            ((byo >> 8) & 0xFF) as f32,
-            ((cdo >> 8) & 0xFF) as f32,
-            jf, sc
+        let g = Self::egz(
+            ((anq >> 8) & 0xFF) as f32,
+            ((apx >> 8) & 0xFF) as f32,
+            ((anr >> 8) & 0xFF) as f32,
+            ((apy >> 8) & 0xFF) as f32,
+            dg, hj
         ) as u32;
-        let o = Self::ils(
-            (byn & 0xFF) as f32,
-            (cdn & 0xFF) as f32,
-            (byo & 0xFF) as f32,
-            (cdo & 0xFF) as f32,
-            jf, sc
+        let b = Self::egz(
+            (anq & 0xFF) as f32,
+            (apx & 0xFF) as f32,
+            (anr & 0xFF) as f32,
+            (apy & 0xFF) as f32,
+            dg, hj
         ) as u32;
-        let q = Self::ils(
-            ((byn >> 24) & 0xFF) as f32,
-            ((cdn >> 24) & 0xFF) as f32,
-            ((byo >> 24) & 0xFF) as f32,
-            ((cdo >> 24) & 0xFF) as f32,
-            jf, sc
+        let a = Self::egz(
+            ((anq >> 24) & 0xFF) as f32,
+            ((apx >> 24) & 0xFF) as f32,
+            ((anr >> 24) & 0xFF) as f32,
+            ((apy >> 24) & 0xFF) as f32,
+            dg, hj
         ) as u32;
         
-        (q << 24) | (m << 16) | (at << 8) | o
+        (a << 24) | (r << 16) | (g << 8) | b
     }
     
     #[inline]
-    fn ils(byn: f32, cdn: f32, byo: f32, cdo: f32, jf: f32, sc: f32) -> f32 {
-        let acw = byn + (cdn - byn) * jf;
-        let rw = byo + (cdo - byo) * jf;
-        acw + (rw - acw) * sc
+    fn egz(anq: f32, apx: f32, anr: f32, apy: f32, dg: f32, hj: f32) -> f32 {
+        let og = anq + (apx - anq) * dg;
+        let hw = anr + (apy - anr) * dg;
+        og + (hw - og) * hj
     }
 }
 
 
 pub struct Texture {
-    pub ad: u32,
-    pub cd: u32,
-    pub diw: Vec<TextureLevel>,
-    pub lkd: u32,
-    pub onh: u32,
-    pub mqy: u32,
-    pub mqz: u32,
+    pub id: u32,
+    pub target: u32,
+    pub levels: Vec<TextureLevel>,
+    pub mag_filter: u32,
+    pub min_filter: u32,
+    pub wrap_s: u32,
+    pub wrap_t: u32,
 }
 
 impl Texture {
-    pub fn new(ad: u32) -> Self {
+    pub fn new(id: u32) -> Self {
         Self {
-            ad,
-            cd: CW_,
-            diw: Vec::new(),
-            lkd: ATI_,
-            onh: BXX_,
-            mqy: ATL_,
-            mqz: ATL_,
+            id,
+            target: DD_,
+            levels: Vec::new(),
+            mag_filter: AVM_,
+            min_filter: CBD_,
+            wrap_s: AVP_,
+            wrap_t: AVP_,
         }
     }
     
     
-    pub fn mof(&mut self, z: u32, ac: u32, format: u32, f: &[u8]) {
-        let mut jy = TextureLevel::new(z, ac);
+    pub fn upload(&mut self, width: u32, height: u32, format: u32, data: &[u8]) {
+        let mut level = TextureLevel::new(width, height);
         
         match format {
-            ACZ_ => {
-                for (a, jj) in f.btq(4).cf() {
-                    if jj.len() == 4 && a < jy.f.len() {
-                        jy.f[a] = ((jj[3] as u32) << 24) 
-                                      | ((jj[0] as u32) << 16) 
-                                      | ((jj[1] as u32) << 8) 
-                                      | (jj[2] as u32);
+            AEP_ => {
+                for (i, df) in data.chunks(4).enumerate() {
+                    if df.len() == 4 && i < level.data.len() {
+                        level.data[i] = ((df[3] as u32) << 24) 
+                                      | ((df[0] as u32) << 16) 
+                                      | ((df[1] as u32) << 8) 
+                                      | (df[2] as u32);
                     }
                 }
             }
-            BXZ_ => {
-                for (a, jj) in f.btq(3).cf() {
-                    if jj.len() == 3 && a < jy.f.len() {
-                        jy.f[a] = 0xFF000000 
-                                      | ((jj[0] as u32) << 16) 
-                                      | ((jj[1] as u32) << 8) 
-                                      | (jj[2] as u32);
+            CBF_ => {
+                for (i, df) in data.chunks(3).enumerate() {
+                    if df.len() == 3 && i < level.data.len() {
+                        level.data[i] = 0xFF000000 
+                                      | ((df[0] as u32) << 16) 
+                                      | ((df[1] as u32) << 8) 
+                                      | (df[2] as u32);
                     }
                 }
             }
-            BXV_ => {
-                for (a, &fni) in f.iter().cf() {
-                    if a < jy.f.len() {
-                        jy.f[a] = 0xFF000000 
-                                      | ((fni as u32) << 16) 
-                                      | ((fni as u32) << 8) 
-                                      | (fni as u32);
+            CBB_ => {
+                for (i, &cml) in data.iter().enumerate() {
+                    if i < level.data.len() {
+                        level.data[i] = 0xFF000000 
+                                      | ((cml as u32) << 16) 
+                                      | ((cml as u32) << 8) 
+                                      | (cml as u32);
                     }
                 }
             }
             _ => {}
         }
         
-        self.diw.clear();
-        self.diw.push(jy);
+        self.levels.clear();
+        self.levels.push(level);
     }
     
     
-    pub fn tch(&mut self) {
-        if self.diw.is_empty() {
+    pub fn generate_mipmaps(&mut self) {
+        if self.levels.is_empty() {
             return;
         }
         
-        let mut d = self.diw[0].z / 2;
-        let mut i = self.diw[0].ac / 2;
+        let mut w = self.levels[0].width / 2;
+        let mut h = self.levels[0].height / 2;
         
-        while d >= 1 && i >= 1 {
-            let vo = &self.diw[self.diw.len() - 1];
-            let mut jy = TextureLevel::new(d, i);
+        while w >= 1 && h >= 1 {
+            let prev = &self.levels[self.levels.len() - 1];
+            let mut level = TextureLevel::new(w, h);
             
             
-            for c in 0..i {
-                for b in 0..d {
-                    let cr = b * 2;
-                    let cq = c * 2;
+            for y in 0..h {
+                for x in 0..w {
+                    let am = x * 2;
+                    let ak = y * 2;
                     
-                    let byn = vo.ehy(cr, cq);
-                    let cdn = vo.ehy(cr + 1, cq);
-                    let byo = vo.ehy(cr, cq + 1);
-                    let cdo = vo.ehy(cr + 1, cq + 1);
+                    let anq = prev.sample_pixel(am, ak);
+                    let apx = prev.sample_pixel(am + 1, ak);
+                    let anr = prev.sample_pixel(am, ak + 1);
+                    let apy = prev.sample_pixel(am + 1, ak + 1);
                     
-                    let m = (((byn >> 16) & 0xFF) + ((cdn >> 16) & 0xFF) 
-                           + ((byo >> 16) & 0xFF) + ((cdo >> 16) & 0xFF)) / 4;
-                    let at = (((byn >> 8) & 0xFF) + ((cdn >> 8) & 0xFF) 
-                           + ((byo >> 8) & 0xFF) + ((cdo >> 8) & 0xFF)) / 4;
-                    let o = ((byn & 0xFF) + (cdn & 0xFF) 
-                           + (byo & 0xFF) + (cdo & 0xFF)) / 4;
-                    let q = (((byn >> 24) & 0xFF) + ((cdn >> 24) & 0xFF) 
-                           + ((byo >> 24) & 0xFF) + ((cdo >> 24) & 0xFF)) / 4;
+                    let r = (((anq >> 16) & 0xFF) + ((apx >> 16) & 0xFF) 
+                           + ((anr >> 16) & 0xFF) + ((apy >> 16) & 0xFF)) / 4;
+                    let g = (((anq >> 8) & 0xFF) + ((apx >> 8) & 0xFF) 
+                           + ((anr >> 8) & 0xFF) + ((apy >> 8) & 0xFF)) / 4;
+                    let b = ((anq & 0xFF) + (apx & 0xFF) 
+                           + (anr & 0xFF) + (apy & 0xFF)) / 4;
+                    let a = (((anq >> 24) & 0xFF) + ((apx >> 24) & 0xFF) 
+                           + ((anr >> 24) & 0xFF) + ((apy >> 24) & 0xFF)) / 4;
                     
-                    jy.f[(c * d + b) as usize] = (q << 24) | (m << 16) | (at << 8) | o;
+                    level.data[(y * w + x) as usize] = (a << 24) | (r << 16) | (g << 8) | b;
                 }
             }
             
-            self.diw.push(jy);
+            self.levels.push(level);
             
-            if d == 1 && i == 1 { break; }
-            d = d.am(1) / 2;
-            i = i.am(1) / 2;
-            if d == 0 { d = 1; }
-            if i == 0 { i = 1; }
+            if w == 1 && h == 1 { break; }
+            w = w.max(1) / 2;
+            h = h.max(1) / 2;
+            if w == 0 { w = 1; }
+            if h == 0 { h = 1; }
         }
     }
     
     
-    pub fn yr(&self, mut tm: f32, mut p: f32) -> u32 {
-        if self.diw.is_empty() {
+    pub fn sample(&self, mut iy: f32, mut v: f32) -> u32 {
+        if self.levels.is_empty() {
             return 0xFFFFFFFF;
         }
         
         
-        tm = self.mwc(tm, self.mqy);
-        p = self.mwc(p, self.mqz);
+        iy = self.apply_wrap(iy, self.wrap_s);
+        v = self.apply_wrap(v, self.wrap_t);
         
-        let jy = &self.diw[0]; 
+        let level = &self.levels[0]; 
         
-        match self.lkd {
-            ATJ_ => {
-                let b = (tm * jy.z as f32) as u32;
-                let c = (p * jy.ac as f32) as u32;
-                jy.ehy(b, c)
+        match self.mag_filter {
+            AVN_ => {
+                let x = (iy * level.width as f32) as u32;
+                let y = (v * level.height as f32) as u32;
+                level.sample_pixel(x, y)
             }
-            _ => jy.wck(tm, p),
+            _ => level.sample_bilinear(iy, v),
         }
     }
     
-    fn mwc(&self, dff: f32, ev: u32) -> f32 {
-        match ev {
-            BXP_ | BXQ_ => dff.qp(0.0, 1.0),
-            BXW_ => {
-                let a = dff.hjw() as i32;
-                let bb = dff.ivp();
-                if a % 2 == 0 { bb } else { 1.0 - bb }
+    fn apply_wrap(&self, coord: f32, mode: u32) -> f32 {
+        match mode {
+            CAV_ | CAW_ => coord.clamp(0.0, 1.0),
+            CBC_ => {
+                let i = coord.floor() as i32;
+                let f = coord.fract();
+                if i % 2 == 0 { f } else { 1.0 - f }
             }
             _ => { 
-                let bb = dff.ivp();
-                if bb < 0.0 { 1.0 + bb } else { bb }
+                let f = coord.fract();
+                if f < 0.0 { 1.0 + f } else { f }
             }
         }
     }
@@ -289,66 +289,66 @@ impl Texture {
 
 
 pub struct TextureState {
-    cnd: Vec<Option<Texture>>,
-    bcb: u32,
-    emy: Option<u32>,
-    idi: bool,
+    textures: Vec<Option<Texture>>,
+    next_id: u32,
+    bound_2d: Option<u32>,
+    texture_2d_enabled: bool,
 }
 
 impl TextureState {
     pub const fn new() -> Self {
         Self {
-            cnd: Vec::new(),
-            bcb: 1,
-            emy: None,
-            idi: false,
+            textures: Vec::new(),
+            next_id: 1,
+            bound_2d: None,
+            texture_2d_enabled: false,
         }
     }
 }
 
-static ES_: Mutex<TextureState> = Mutex::new(TextureState::new());
+static FH_: Mutex<TextureState> = Mutex::new(TextureState::new());
 
 
 
 
 
 
-pub fn tfs(bo: i32, cnd: &mut [u32]) {
-    let mut g = ES_.lock();
-    for a in 0..(bo as usize) {
-        if a < cnd.len() {
-            let ad = g.bcb;
-            cnd[a] = ad;
-            g.cnd.push(Some(Texture::new(ad)));
-            g.bcb += 1;
+pub fn mes(ae: i32, textures: &mut [u32]) {
+    let mut state = FH_.lock();
+    for i in 0..(ae as usize) {
+        if i < textures.len() {
+            let id = state.next_id;
+            textures[i] = id;
+            state.textures.push(Some(Texture::new(id)));
+            state.next_id += 1;
         }
     }
 }
 
 
-pub fn nyv(cd: u32, texture: u32) {
-    let mut g = ES_.lock();
-    if cd == CW_ {
-        g.emy = if texture == 0 { None } else { Some(texture) };
+pub fn icb(target: u32, texture: u32) {
+    let mut state = FH_.lock();
+    if target == DD_ {
+        state.bound_2d = if texture == 0 { None } else { Some(texture) };
     }
 }
 
 
-pub fn nzb(cd: u32, dkq: u32, evz: u32) {
-    let mut g = ES_.lock();
+pub fn ich(target: u32, biq: u32, param: u32) {
+    let mut state = FH_.lock();
     
-    let ezp = match cd {
-        CW_ => g.emy,
+    let ceg = match target {
+        DD_ => state.bound_2d,
         _ => None,
     };
     
-    if let Some(ad) = ezp {
-        if let Some(Some(dco)) = g.cnd.el().du(|ab| ab.as_ref().map(|b| b.ad) == Some(ad)) {
-            match dkq {
-                ATM_ => dco.lkd = evz,
-                ATN_ => dco.onh = evz,
-                BYA_ => dco.mqy = evz,
-                BYB_ => dco.mqz = evz,
+    if let Some(id) = ceg {
+        if let Some(Some(bdz)) = state.textures.iter_mut().find(|t| t.as_ref().map(|x| x.id) == Some(id)) {
+            match biq {
+                AVQ_ => bdz.mag_filter = param,
+                AVR_ => bdz.min_filter = param,
+                CBG_ => bdz.wrap_s = param,
+                CBH_ => bdz.wrap_t = param,
                 _ => {}
             }
         }
@@ -356,69 +356,69 @@ pub fn nzb(cd: u32, dkq: u32, evz: u32) {
 }
 
 
-pub fn tfu(
-    ydi: u32,
-    yal: i32,
-    yab: u32,
-    z: u32,
-    ac: u32,
-    xyc: i32,
+pub fn meu(
+    _target: u32,
+    _level: i32,
+    _internal_format: u32,
+    width: u32,
+    height: u32,
+    _border: i32,
     format: u32,
-    ydp: u32,
-    f: &[u8],
+    _type: u32,
+    data: &[u8],
 ) {
-    let mut g = ES_.lock();
+    let mut state = FH_.lock();
     
-    if let Some(ad) = g.emy {
-        if let Some(Some(dco)) = g.cnd.el().du(|ab| ab.as_ref().map(|b| b.ad) == Some(ad)) {
-            dco.mof(z, ac, format, f);
+    if let Some(id) = state.bound_2d {
+        if let Some(Some(bdz)) = state.textures.iter_mut().find(|t| t.as_ref().map(|x| x.id) == Some(id)) {
+            bdz.upload(width, height, format, data);
         }
     }
 }
 
 
-pub fn yuq(cd: u32) {
-    let mut g = ES_.lock();
+pub fn qjg(target: u32) {
+    let mut state = FH_.lock();
     
-    let ezp = match cd {
-        CW_ => g.emy,
+    let ceg = match target {
+        DD_ => state.bound_2d,
         _ => None,
     };
     
-    if let Some(ad) = ezp {
-        if let Some(Some(dco)) = g.cnd.el().du(|ab| ab.as_ref().map(|b| b.ad) == Some(ad)) {
-            dco.tch();
+    if let Some(id) = ceg {
+        if let Some(Some(bdz)) = state.textures.iter_mut().find(|t| t.as_ref().map(|x| x.id) == Some(id)) {
+            bdz.generate_mipmaps();
         }
     }
 }
 
 
-pub fn tfq(cd: u32) {
-    let mut g = ES_.lock();
-    if cd == CW_ {
-        g.idi = true;
+pub fn meq(target: u32) {
+    let mut state = FH_.lock();
+    if target == DD_ {
+        state.texture_2d_enabled = true;
     }
 }
 
 
-pub fn tfp(cd: u32) {
-    let mut g = ES_.lock();
-    if cd == CW_ {
-        g.idi = false;
+pub fn mep(target: u32) {
+    let mut state = FH_.lock();
+    if target == DD_ {
+        state.texture_2d_enabled = false;
     }
 }
 
 
-pub fn pfg(tm: f32, p: f32) -> Option<u32> {
-    let g = ES_.lock();
+pub fn jcj(iy: f32, v: f32) -> Option<u32> {
+    let state = FH_.lock();
     
-    if !g.idi {
+    if !state.texture_2d_enabled {
         return None;
     }
     
-    if let Some(ad) = g.emy {
-        if let Some(Some(dco)) = g.cnd.iter().du(|ab| ab.as_ref().map(|b| b.ad) == Some(ad)) {
-            return Some(dco.yr(tm, p));
+    if let Some(id) = state.bound_2d {
+        if let Some(Some(bdz)) = state.textures.iter().find(|t| t.as_ref().map(|x| x.id) == Some(id)) {
+            return Some(bdz.sample(iy, v));
         }
     }
     
@@ -426,21 +426,21 @@ pub fn pfg(tm: f32, p: f32) -> Option<u32> {
 }
 
 
-pub fn tze() -> bool {
-    ES_.lock().idi
+pub fn mtw() -> bool {
+    FH_.lock().texture_2d_enabled
 }
 
 
-pub fn yun(bo: i32, cnd: &[u32]) {
-    let mut g = ES_.lock();
-    for a in 0..(bo as usize) {
-        if a < cnd.len() {
-            let ad = cnd[a];
-            if let Some(u) = g.cnd.iter().qf(|ab| ab.as_ref().map(|b| b.ad) == Some(ad)) {
-                g.cnd[u] = None;
+pub fn qjd(ae: i32, textures: &[u32]) {
+    let mut state = FH_.lock();
+    for i in 0..(ae as usize) {
+        if i < textures.len() {
+            let id = textures[i];
+            if let Some(pos) = state.textures.iter().position(|t| t.as_ref().map(|x| x.id) == Some(id)) {
+                state.textures[pos] = None;
             }
-            if g.emy == Some(ad) {
-                g.emy = None;
+            if state.bound_2d == Some(id) {
+                state.bound_2d = None;
             }
         }
     }
@@ -451,78 +451,78 @@ pub fn yun(bo: i32, cnd: &[u32]) {
 
 
 
-pub fn rqm(aw: u32, bjo: u32, btr: u32) -> Vec<u8> {
-    let mut f = Vec::fc((aw * aw * 4) as usize);
-    let ncs = aw / 8;
+pub fn kzh(size: u32, agh: u32, ale: u32) -> Vec<u8> {
+    let mut data = Vec::with_capacity((size * size * 4) as usize);
+    let hks = size / 8;
     
-    for c in 0..aw {
-        for b in 0..aw {
-            let cx = b / ncs.am(1);
-            let ae = c / ncs.am(1);
-            let s = if (cx + ae) % 2 == 0 { bjo } else { btr };
+    for y in 0..size {
+        for x in 0..size {
+            let cx = x / hks.max(1);
+            let u = y / hks.max(1);
+            let color = if (cx + u) % 2 == 0 { agh } else { ale };
             
-            f.push(((s >> 16) & 0xFF) as u8); 
-            f.push(((s >> 8) & 0xFF) as u8);  
-            f.push((s & 0xFF) as u8);         
-            f.push(((s >> 24) & 0xFF) as u8); 
+            data.push(((color >> 16) & 0xFF) as u8); 
+            data.push(((color >> 8) & 0xFF) as u8);  
+            data.push((color & 0xFF) as u8);         
+            data.push(((color >> 24) & 0xFF) as u8); 
         }
     }
     
-    f
+    data
 }
 
 
-pub fn yki(aw: u32) -> Vec<u8> {
-    let mut f = Vec::fc((aw * aw * 4) as usize);
-    let hbg = aw / 4;
-    let hbh = aw / 2;
-    let hrw = 2u32;
+pub fn qbp(size: u32) -> Vec<u8> {
+    let mut data = Vec::with_capacity((size * size * 4) as usize);
+    let djo = size / 4;
+    let djp = size / 2;
+    let duo = 2u32;
     
-    let qry: u32 = 0xFF8B4513; 
-    let upq: u32 = 0xFFC0C0C0; 
+    let kdy: u32 = 0xFF8B4513; 
+    let ngg: u32 = 0xFFC0C0C0; 
     
-    for c in 0..aw {
-        for b in 0..aw {
-            let br = c / hbg;
-            let l = if br % 2 == 0 { 0 } else { hbh / 2 };
-            let bx = (b + l) % hbh;
-            let je = c % hbg;
+    for y in 0..size {
+        for x in 0..size {
+            let row = y / djo;
+            let offset = if row % 2 == 0 { 0 } else { djp / 2 };
+            let bx = (x + offset) % djp;
+            let dc = y % djo;
             
-            let tyf = je < hrw || bx < hrw;
-            let s = if tyf { upq } else { qry };
+            let mtd = dc < duo || bx < duo;
+            let color = if mtd { ngg } else { kdy };
             
-            f.push(((s >> 16) & 0xFF) as u8);
-            f.push(((s >> 8) & 0xFF) as u8);
-            f.push((s & 0xFF) as u8);
-            f.push(0xFF);
+            data.push(((color >> 16) & 0xFF) as u8);
+            data.push(((color >> 8) & 0xFF) as u8);
+            data.push((color & 0xFF) as u8);
+            data.push(0xFF);
         }
     }
     
-    f
+    data
 }
 
 
-pub fn ykk(aw: u32, bjo: Color2D, btr: Color2D, dic: bool) -> Vec<u8> {
-    let mut f = Vec::fc((aw * aw * 4) as usize);
+pub fn qbr(size: u32, agh: Color2D, ale: Color2D, horizontal: bool) -> Vec<u8> {
+    let mut data = Vec::with_capacity((size * size * 4) as usize);
     
-    for c in 0..aw {
-        for b in 0..aw {
-            let ab = if dic {
-                b as f32 / aw as f32
+    for y in 0..size {
+        for x in 0..size {
+            let t = if horizontal {
+                x as f32 / size as f32
             } else {
-                c as f32 / aw as f32
+                y as f32 / size as f32
             };
             
-            let m = (bjo.m as f32 + (btr.m as f32 - bjo.m as f32) * ab) as u8;
-            let at = (bjo.at as f32 + (btr.at as f32 - bjo.at as f32) * ab) as u8;
-            let o = (bjo.o as f32 + (btr.o as f32 - bjo.o as f32) * ab) as u8;
+            let r = (agh.r as f32 + (ale.r as f32 - agh.r as f32) * t) as u8;
+            let g = (agh.g as f32 + (ale.g as f32 - agh.g as f32) * t) as u8;
+            let b = (agh.b as f32 + (ale.b as f32 - agh.b as f32) * t) as u8;
             
-            f.push(m);
-            f.push(at);
-            f.push(o);
-            f.push(0xFF);
+            data.push(r);
+            data.push(g);
+            data.push(b);
+            data.push(0xFF);
         }
     }
     
-    f
+    data
 }

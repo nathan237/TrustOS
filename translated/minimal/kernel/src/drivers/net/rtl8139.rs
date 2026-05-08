@@ -6,42 +6,42 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use super::{Ha, NetStats};
-use crate::drivers::{Gi, Co, DriverStatus, DriverCategory};
-use crate::pci::S;
+use super::{Dd, NetStats};
+use crate::drivers::{Cw, Bb, DriverStatus, DriverCategory};
+use crate::pci::L;
 
 pub struct Rtl8139Driver {
     status: DriverStatus,
-    ed: [u8; 6],
+    mac: [u8; 6],
 }
 
 impl Rtl8139Driver {
     pub fn new() -> Self {
         Self {
-            status: DriverStatus::Aff,
-            ed: [0x52, 0x54, 0x00, 0x81, 0x39, 0x00],
+            status: DriverStatus::Unloaded,
+            mac: [0x52, 0x54, 0x00, 0x81, 0x39, 0x00],
         }
     }
 }
 
-impl Gi for Rtl8139Driver {
-    fn co(&self) -> &Co {
-        &BZ_
+impl Cw for Rtl8139Driver {
+    fn info(&self) -> &Bb {
+        &CA_
     }
     
-    fn probe(&mut self, ybv: &S) -> Result<(), &'static str> {
-        self.status = DriverStatus::Py;
+    fn probe(&mut self, _pci_device: &L) -> Result<(), &'static str> {
+        self.status = DriverStatus::Loading;
         crate::log!("[rtl8139] Driver probe - not yet implemented");
         Err("RTL8139 driver not implemented yet")
     }
     
-    fn ay(&mut self) -> Result<(), &'static str> {
-        self.status = DriverStatus::Ai;
+    fn start(&mut self) -> Result<(), &'static str> {
+        self.status = DriverStatus::Running;
         Ok(())
     }
     
-    fn qg(&mut self) -> Result<(), &'static str> {
-        self.status = DriverStatus::Ky;
+    fn stop(&mut self) -> Result<(), &'static str> {
+        self.status = DriverStatus::Suspended;
         Ok(())
     }
     
@@ -50,45 +50,45 @@ impl Gi for Rtl8139Driver {
     }
 }
 
-impl Ha for Rtl8139Driver {
-    fn csg(&self) -> [u8; 6] {
-        self.ed
+impl Dd for Rtl8139Driver {
+    fn mac_address(&self) -> [u8; 6] {
+        self.mac
     }
     
-    fn aik(&self) -> bool {
+    fn link_up(&self) -> bool {
         false
     }
     
-    fn baq(&mut self, iia: &[u8]) -> Result<(), &'static str> {
+    fn send(&mut self, _data: &[u8]) -> Result<(), &'static str> {
         Err("Not implemented")
     }
     
-    fn chb(&mut self) -> Option<Vec<u8>> {
+    fn receive(&mut self) -> Option<Vec<u8>> {
         None
     }
     
     fn poll(&mut self) {}
     
-    fn cm(&self) -> NetStats {
+    fn stats(&self) -> NetStats {
         NetStats::default()
     }
 }
 
-const BZ_: Co = Co {
-    j: "rtl8139",
-    dk: "0.1.0",
-    gzh: "T-RustOs Team",
-    gb: DriverCategory::As,
-    fye: &[
+const CA_: Bb = Bb {
+    name: "rtl8139",
+    version: "0.1.0",
+    author: "T-RustOs Team",
+    category: DriverCategory::Network,
+    vendor_ids: &[
         (0x10EC, 0x8139),  
     ],
 };
 
-pub fn nw() {
-    crate::drivers::nw(BZ_, || {
+pub fn register() {
+    crate::drivers::register(CA_, || {
         Box::new(Rtl8139Driver::new())
     });
-    crate::drivers::net::jly(BZ_, || {
+    crate::drivers::net::eyh(CA_, || {
         Box::new(Rtl8139Driver::new())
     });
 }

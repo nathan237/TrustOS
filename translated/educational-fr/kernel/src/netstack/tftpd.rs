@@ -123,7 +123,7 @@ pub fn stop() {
 
 /// Handle incoming TFTP packet on port 69 (initial request port)
 /// Called from UDP handler
-pub fn handle_request_packet(data: &[u8], source_ip: [u8; 4], source_port: u16) {
+pub fn handle_request_packet(data: &[u8], src_ip: [u8; 4], src_port: u16) {
     if !RUNNING.load(Ordering::Relaxed) || data.len() < 4 {
         return;
     }
@@ -132,19 +132,19 @@ pub fn handle_request_packet(data: &[u8], source_ip: [u8; 4], source_port: u16) 
 
         // Correspondance de motifs — branchement exhaustif de Rust.
 match opcode {
-        opcode::RRQ => handle_read_request(data, source_ip, source_port),
+        opcode::RRQ => handle_read_request(data, src_ip, src_port),
         opcode::WRQ => {
             // We don't support writes — send error
-            send_error(source_ip, source_port, 69, error_code::ACCESS_VIOLATION, "Write not supported");
+            send_error(src_ip, src_port, 69, error_code::ACCESS_VIOLATION, "Write not supported");
         }
         _ => {
-            send_error(source_ip, source_port, 69, error_code::ILLEGAL_OPERATION, "Invalid opcode");
+            send_error(src_ip, src_port, 69, error_code::ILLEGAL_OPERATION, "Invalid opcode");
         }
     }
 }
 
 /// Handle incoming data on a TFTP transfer port (ACK from client)
-pub fn handle_transfer_packet(data: &[u8], source_ip: [u8; 4], source_port: u16, local_port: u16) {
+pub fn handle_transfer_packet(data: &[u8], src_ip: [u8; 4], src_port: u16, local_port: u16) {
     if !RUNNING.load(Ordering::Relaxed) || data.len() < 4 {
         return;
     }
@@ -153,7 +153,7 @@ pub fn handle_transfer_packet(data: &[u8], source_ip: [u8; 4], source_port: u16,
 
     if opcode == opcode::ACK {
         let block = u16::from_be_bytes([data[2], data[3]]);
-        handle_acknowledge(source_ip, source_port, local_port, block);
+        handle_acknowledge(src_ip, src_port, local_port, block);
     }
 }
 
@@ -165,7 +165,7 @@ fn handle_read_request(data: &[u8], client_ip: [u8; 4], client_port: u16) {
     // Find null terminator for filename
     let filename_end = // Correspondance de motifs — branchement exhaustif de Rust.
 match payload.iter().position(|&b| b == 0) {
-        Some(position) => position,
+        Some(pos) => pos,
         None => {
             send_error(client_ip, client_port, 69, error_code::ILLEGAL_OPERATION, "Bad request");
             return;
@@ -224,7 +224,7 @@ match files.get(alt_name) {
         port
     };
 
-    let total_blocks = ((file_data.len() + BLOCK_SIZE - 1) / BLOCK_SIZE).maximum(1) as u16;
+    let total_blocks = ((file_data.len() + BLOCK_SIZE - 1) / BLOCK_SIZE).max(1) as u16;
 
     crate::serial_println!("[TFTPD] Starting transfer: '{}' ({} bytes, {} blocks) TID={}",
         clean_name, file_data.len(), total_blocks, local_port);
@@ -238,7 +238,7 @@ match files.get(alt_name) {
         current_block: 1,
         total_blocks,
         complete: false,
-        last_send: crate::time::uptime_mouse(),
+        last_send: crate::time::uptime_ms(),
         retries: 0,
     };
 
@@ -288,7 +288,7 @@ match sessions.get_mut(&local_port) {
 
         // Send next block
         send_data_block(session);
-        session.last_send = crate::time::uptime_mouse();
+        session.last_send = crate::time::uptime_ms();
     }
     // else: duplicate ACK, ignore
 }
@@ -297,7 +297,7 @@ match sessions.get_mut(&local_port) {
 fn send_data_block(session: &TransferSession) {
     let block = session.current_block;
     let offset = ((block - 1) as usize) * BLOCK_SIZE;
-    let end = (offset + BLOCK_SIZE).minimum(session.file_data.len());
+    let end = (offset + BLOCK_SIZE).min(session.file_data.len());
 
     let data_slice = if offset < session.file_data.len() {
         &session.file_data[offset..end]
@@ -335,15 +335,15 @@ fn send_empty_final_block(session: &TransferSession) {
 }
 
 /// Send a TFTP error packet
-fn send_error(dest_ip: [u8; 4], dest_port: u16, source_port: u16, code: u16, message: &str) {
-    let message_bytes = message.as_bytes();
+fn send_error(dest_ip: [u8; 4], dest_port: u16, src_port: u16, code: u16, msg: &str) {
+    let message_bytes = msg.as_bytes();
     let mut packet = Vec::with_capacity(5 + message_bytes.len());
     packet.extend_from_slice(&opcode::ERROR.to_be_bytes());
     packet.extend_from_slice(&code.to_be_bytes());
     packet.extend_from_slice(message_bytes);
     packet.push(0); // null terminator
 
-    let _ = crate::netstack::udp::send_to(dest_ip, dest_port, source_port, &packet);
+    let _ = crate::netstack::udp::send_to(dest_ip, dest_port, src_port, &packet);
 }
 
 /// Remove completed session
@@ -358,11 +358,11 @@ pub fn poll() {
         return;
     }
 
-    let now = crate::time::uptime_mouse();
+    let now = crate::time::uptime_ms();
     let mut sessions = SESSIONS.lock();
     let mut to_remove = Vec::new();
 
-    for (port, session) in sessions.iterator_mut() {
+    for (port, session) in sessions.iter_mut() {
         if session.complete {
             to_remove.push(*port);
             continue;

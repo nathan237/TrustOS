@@ -140,9 +140,13 @@ pub trait WifiDriver: NetworkDriver {
 // ============================================================================
 
 /// Active WiFi driver
+pub(crate) // Global shared state guarded by a Mutex (mutual exclusion lock).
 static WIFI_DRIVER: Mutex<Option<Box<dyn WifiDriver>>> = Mutex::new(None);
 // Atomic variable — provides lock-free thread-safe access.
 static WIFI_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+/// Deferred WiFi PCI location (bus, device, function) — set during boot, probed on first use
+static DEFERRED_PCI: Mutex<Option<(u8, u8, u8)>> = Mutex::new(None);
 
 /// Last scan results (cached for UI)
 static SCAN_RESULTS: Mutex<Vec<WifiNetwork>> = Mutex::new(Vec::new());
@@ -160,9 +164,51 @@ static CONNECT_REQUEST: Mutex<Option<(String, String)>> = Mutex::new(None);
 // Public API (called from desktop/shell)
 // ============================================================================
 
-/// Check if WiFi hardware is available
+/// Store PCI location for deferred WiFi probe (called during boot — no MMIO access)
+pub fn set_deferred_pci(bus: u8, device: u8, function: u8) {
+    *DEFERRED_PCI.lock() = Some((bus, device, function));
+    crate::serial_println!("[WIFI] Deferred PCI probe stored: {}.{}.{}", bus, device, function);
+}
+
+/// Check if WiFi hardware is available (detected or deferred)
 pub fn has_wifi() -> bool {
+    WIFI_ACTIVE.load(Ordering::Relaxed) || DEFERRED_PCI.lock().is_some()
+}
+
+/// Check if WiFi hardware has been fully probed and driver is active
+pub fn has_active_driver() -> bool {
     WIFI_ACTIVE.load(Ordering::Relaxed)
+}
+
+/// Lazy probe: actually touch the hardware for the first time.
+/// Called on first WiFi command, NOT during boot.
+pub fn lazy_probe() -> Result<(), &'static str> {
+    // Already probed?
+    if WIFI_ACTIVE.load(Ordering::Relaxed) {
+        return Ok(());
+    }
+
+    let pci_loc = DEFERRED_PCI.lock().take();
+    let (bus, dev, func) = pci_loc.ok_or("No WiFi hardware detected during boot")?;
+
+    crate::println!("  WiFi lazy probe: PCI {}.{}.{}", bus, dev, func);
+    crate::serial_println!("[WIFI] Lazy probe: {}.{}.{}", bus, dev, func);
+
+    // Find the PCI device by bus/device/function
+    let devices = crate::pci::get_devices();
+    let pci_dev = devices.iter()
+        .find(|d| d.bus == bus && d.device == dev && d.function == func)
+        .ok_or("WiFi PCI device not found")?;
+
+    // Now actually probe (map_bar0 + bus master)
+    if probe_pci(pci_dev) {
+        crate::println!("  WiFi probe OK: iwl4965");
+        Ok(())
+    } else {
+        // Put the deferred info back so user can retry
+        *DEFERRED_PCI.lock() = Some((bus, dev, func));
+        Err("WiFi hardware probe failed")
+    }
 }
 
 /// Get current WiFi state
@@ -185,12 +231,47 @@ pub fn signal_strength() -> Option<i8> {
     WIFI_DRIVER.lock().as_ref().and_then(|d| d.signal_strength())
 }
 
-/// Start a scan for available networks
-pub fn start_scan() -> Result<(), &'static str> {
+/// Ensure the WiFi driver is started (hw_init + firmware load).
+/// Called automatically on first use (scan, connect).
+pub fn ensure_started() -> Result<(), &'static str> {
+    // Lazy probe if not yet done (deferred from boot)
+    if !WIFI_ACTIVE.load(Ordering::Relaxed) {
+        lazy_probe()?;
+    }
+
     let mut guard = WIFI_DRIVER.lock();
     let driver = guard.as_mut().ok_or("No WiFi driver")?;
-    *CONNECTION_STATE.lock() = WifiState::Scanning;
-    driver.scan()
+    if driver.status() == crate::drivers::DriverStatus::Running {
+        return Ok(());
+    }
+    crate::serial_println!("[WIFI] Auto-starting driver (hw_init + firmware)...");
+    crate::println!("  Starting WiFi hardware...");
+        // Pattern matching — Rust's exhaustive branching construct.
+match driver.start() {
+        Ok(()) => {
+            crate::serial_println!("[WIFI] Driver started successfully");
+            crate::println!("  WiFi hardware initialized");
+            Ok(())
+        }
+        Err(e) => {
+            crate::serial_println!("[WIFI] Driver start failed: {}", e);
+            crate::println!("  WiFi start failed: {}", e);
+            Err(e)
+        }
+    }
+}
+
+/// Start a scan for available networks
+pub fn start_scan() -> Result<(), &'static str> {
+    // Lazy probe + auto-start
+    ensure_started()?;
+
+    {
+        let mut guard = WIFI_DRIVER.lock();
+        let driver = guard.as_mut().ok_or("No WiFi driver")?;
+        *CONNECTION_STATE.lock() = WifiState::Scanning;
+        driver.scan()
+    }
 }
 
 /// Get cached scan results
@@ -243,6 +324,11 @@ match driver.connect(&ssid, &password) {
 
 /// Request connection to a network
 pub fn request_connect(ssid: &str, password: &str) {
+    // Auto-start driver if needed
+    if let Err(e) = ensure_started() {
+        crate::serial_println!("[WIFI] Cannot connect — start failed: {}", e);
+        return;
+    }
     *CONNECT_REQUEST.lock() = Some((String::from(ssid), String::from(password)));
 }
 
@@ -258,30 +344,40 @@ pub fn disconnect() -> Result<(), &'static str> {
 
 /// Set the active WiFi driver (called during PCI probe)
 pub fn set_driver(driver: Box<dyn WifiDriver>) {
-    crate::log!("[WIFI] WiFi driver active: {}", driver.information().name);
+    crate::log!("[WIFI] WiFi driver active: {}", driver.info().name);
     *WIFI_DRIVER.lock() = Some(driver);
     WIFI_ACTIVE.store(true, Ordering::SeqCst);
     *CONNECTION_STATE.lock() = WifiState::Disconnected;
 }
 
 /// Probe a PCI device for WiFi capability
-pub fn probe_pci(pci_device: &PciDevice) -> bool {
+pub fn probe_pci(pci_dev: &PciDevice) -> bool {
+    // Debug: log every device we check
+    crate::serial_println!("[WIFI-PROBE] Checking {:04X}:{:04X} class={:02X} sub={:02X} at {}.{}.{}",
+        pci_dev.vendor_id, pci_dev.device_id,
+        pci_dev.class_code, pci_dev.subclass,
+        pci_dev.bus, pci_dev.device, pci_dev.function);
+
     // Intel WiFi devices: class 0x02 (Network) subclass 0x80 (Other)
     // or class 0x0D (Wireless)
-    let is_wireless = pci_device.class_code == crate::pci::class::WIRELESS
-        || (pci_device.class_code == crate::pci::class::NETWORK && pci_device.subclass == 0x80);
+    // or Intel vendor with known WiFi device IDs
+    let is_wireless = pci_dev.class_code == crate::pci::class::WIRELESS
+        || (pci_dev.class_code == crate::pci::class::NETWORK && pci_dev.subclass == 0x80)
+        || (pci_dev.vendor_id == 0x8086 && super::iwl4965::IWL4965_DEVICE_IDS.contains(&pci_dev.device_id));
 
     if !is_wireless {
+        crate::serial_println!("[WIFI-PROBE] -> Not wireless (class={:02X} sub={:02X} devid={:04X})",
+            pci_dev.class_code, pci_dev.subclass, pci_dev.device_id);
         return false;
     }
 
     crate::serial_println!("[WIFI] Found wireless device: {:04X}:{:04X} at {}.{}.{}",
-        pci_device.vendor_id, pci_device.device_id,
-        pci_device.bus, pci_device.device, pci_device.function);
+        pci_dev.vendor_id, pci_dev.device_id,
+        pci_dev.bus, pci_dev.device, pci_dev.function);
 
-    // Try Intel WiFi Link 4965AGN (T61)
-    if pci_device.vendor_id == 0x8086 {
-        if let Some(driver) = super::iwl4965::probe(pci_device) {
+    // Try Intel WiFi Link 4965AGN
+    if pci_dev.vendor_id == 0x8086 {
+        if let Some(driver) = super::iwl4965::probe(pci_dev) {
             set_driver(driver);
             return true;
         }

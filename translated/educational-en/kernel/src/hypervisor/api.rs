@@ -64,13 +64,13 @@ pub fn new() -> Self {
     }
     
         // Public function — callable from other modules.
-pub fn set(&mut self, capability: Capability) {
-        self.bits |= capability as u64;
+pub fn set(&mut self, cap: Capability) {
+        self.bits |= cap as u64;
     }
     
         // Public function — callable from other modules.
-pub fn has(&self, capability: Capability) -> bool {
-        (self.bits & (capability as u64)) != 0
+pub fn has(&self, cap: Capability) -> bool {
+        (self.bits & (cap as u64)) != 0
     }
     
         // Public function — callable from other modules.
@@ -124,7 +124,7 @@ pub struct VmInformation {
     pub state: VmStateInformation,
     pub memory_mb: usize,
     pub vcpus: usize,
-    pub uptime_mouse: u64,
+    pub uptime_ms: u64,
     pub stats: VmStatistics,
     pub isolation: IsolationInformation,
 }
@@ -208,7 +208,7 @@ pub enum VmEventType {
 pub struct VmEvent {
     pub event_type: VmEventType,
     pub vm_id: u64,
-    pub timestamp_mouse: u64,
+    pub timestamp_ms: u64,
     pub data: VmEventData,
 }
 
@@ -220,7 +220,7 @@ pub enum VmEventData {
     ExitCode(i32),
     Message(String),
     Address(u64),
-    HypercallInformation { function: u64, result: i64 },
+    HypercallInfo { function: u64, result: i64 },
 }
 
 /// Event callback type
@@ -263,7 +263,7 @@ pub fn emit_event(event_type: VmEventType, vm_id: u64, data: VmEventData) {
     let event = VmEvent {
         event_type,
         vm_id,
-        timestamp_mouse: crate::time::uptime_mouse(),
+        timestamp_ms: crate::time::uptime_ms(),
         data,
     };
     
@@ -316,54 +316,54 @@ pub struct VmChannel {
     id: u64,
     vm_id: u64,
     name: String,
-    transmit_buffer: Vec<u8>,
-    receive_buffer: Vec<u8>,
-    maximum_size: usize,
+    tx_buffer: Vec<u8>,
+    rx_buffer: Vec<u8>,
+    max_size: usize,
 }
 
 // Implementation block — defines methods for the type above.
 impl VmChannel {
         // Public function — callable from other modules.
-pub fn new(id: u64, vm_id: u64, name: &str, maximum_size: usize) -> Self {
+pub fn new(id: u64, vm_id: u64, name: &str, max_size: usize) -> Self {
         VmChannel {
             id,
             vm_id,
             name: String::from(name),
-            transmit_buffer: Vec::with_capacity(maximum_size),
-            receive_buffer: Vec::with_capacity(maximum_size),
-            maximum_size,
+            tx_buffer: Vec::with_capacity(max_size),
+            rx_buffer: Vec::with_capacity(max_size),
+            max_size,
         }
     }
     
     /// Send data to guest
     pub fn send(&mut self, data: &[u8]) -> Result<usize, &'static str> {
-        let available = self.maximum_size - self.transmit_buffer.len();
-        let to_send = data.len().minimum(available);
+        let available = self.max_size - self.tx_buffer.len();
+        let to_send = data.len().min(available);
         
         if to_send == 0 {
             return Err("Channel buffer full");
         }
         
-        self.transmit_buffer.extend_from_slice(&data[..to_send]);
+        self.tx_buffer.extend_from_slice(&data[..to_send]);
         Ok(to_send)
     }
     
     /// Receive data from guest
-    pub fn recv(&mut self, buffer: &mut [u8]) -> usize {
-        let to_read = buffer.len().minimum(self.receive_buffer.len());
-        buffer[..to_read].copy_from_slice(&self.receive_buffer[..to_read]);
-        self.receive_buffer.drain(..to_read);
+    pub fn recv(&mut self, buf: &mut [u8]) -> usize {
+        let to_read = buf.len().min(self.rx_buffer.len());
+        buf[..to_read].copy_from_slice(&self.rx_buffer[..to_read]);
+        self.rx_buffer.drain(..to_read);
         to_read
     }
     
     /// Data available to read
     pub fn available(&self) -> usize {
-        self.receive_buffer.len()
+        self.rx_buffer.len()
     }
     
     /// Space available to write
     pub fn space(&self) -> usize {
-        self.maximum_size - self.transmit_buffer.len()
+        self.max_size - self.tx_buffer.len()
     }
 }
 
@@ -373,9 +373,9 @@ static CHANNELS: Mutex<BTreeMap<u64, VmChannel>> = Mutex::new(BTreeMap::new());
 static CHANNEL_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// Create a communication channel with a VM
-pub fn create_channel(vm_id: u64, name: &str, maximum_size: usize) -> u64 {
+pub fn create_channel(vm_id: u64, name: &str, max_size: usize) -> u64 {
     let id = CHANNEL_COUNTER.fetch_add(1, Ordering::SeqCst);
-    let channel = VmChannel::new(id, vm_id, name, maximum_size);
+    let channel = VmChannel::new(id, vm_id, name, max_size);
     
     CHANNELS.lock().insert(id, channel);
     
@@ -394,11 +394,11 @@ match channels.get_mut(&channel_id) {
 }
 
 /// Receive data from a channel
-pub fn channel_recv(channel_id: u64, buffer: &mut [u8]) -> Result<usize, &'static str> {
+pub fn channel_recv(channel_id: u64, buf: &mut [u8]) -> Result<usize, &'static str> {
     let mut channels = CHANNELS.lock();
         // Pattern matching — Rust's exhaustive branching construct.
 match channels.get_mut(&channel_id) {
-        Some(channel) => Ok(channel.recv(buffer)),
+        Some(channel) => Ok(channel.recv(buf)),
         None => Err("Channel not found"),
     }
 }
@@ -412,13 +412,13 @@ match channels.get_mut(&channel_id) {
 // Public structure — visible outside this module.
 pub struct ResourceQuota {
     /// Maximum memory in bytes
-    pub maximum_memory: usize,
+    pub max_memory: usize,
     /// Maximum vCPUs
-    pub maximum_vcpus: usize,
+    pub max_vcpus: usize,
     /// Maximum I/O bandwidth (bytes/sec, 0 = unlimited)
-    pub maximum_io_bandwidth: usize,
+    pub max_io_bandwidth: usize,
     /// Maximum hypercalls per second
-    pub maximum_hypercalls_per_sector: usize,
+    pub max_hypercalls_per_sec: usize,
     /// CPU time limit (percentage, 0-100, 0 = unlimited)
     pub cpu_limit_percent: u8,
 }
@@ -427,10 +427,10 @@ pub struct ResourceQuota {
 impl Default for ResourceQuota {
     fn default() -> Self {
         ResourceQuota {
-            maximum_memory: 256 * 1024 * 1024, // 256MB default
-            maximum_vcpus: 4,
-            maximum_io_bandwidth: 0,
-            maximum_hypercalls_per_sector: 10000,
+            max_memory: 256 * 1024 * 1024, // 256MB default
+            max_vcpus: 4,
+            max_io_bandwidth: 0,
+            max_hypercalls_per_sec: 10000,
             cpu_limit_percent: 0,
         }
     }
@@ -552,7 +552,7 @@ match function {
             let channels = CHANNELS.lock();
                         // Pattern matching — Rust's exhaustive branching construct.
 match channels.get(&channel_id) {
-                Some(character) => (0, character.available() as u64),
+                Some(ch) => (0, ch.available() as u64),
                 None => (-1, 0),
             }
         }

@@ -267,10 +267,10 @@ pub fn generate_spy_report() -> String {
             "ADDRESS", "R/W", "VALUE", "SIZE", "DEVICE"));
         out.push_str(&format!("{}\n", "-".repeat(70)));
 
-        for event in &events {
-            let rw = if event.is_write { "WRITE" } else { "READ" };
+        for evt in &events {
+            let rw = if evt.is_write { "WRITE" } else { "READ" };
             out.push_str(&format!("0x{:010X}  {:<6} 0x{:010X}  {} bytes   {}\n",
-                event.ipa, rw, event.value, event.access_size, event.device_name));
+                evt.ipa, rw, evt.value, evt.access_size, evt.device_name));
         }
 
         out.push_str(&format!("\nTotal: {} events captured\n", events.len()));

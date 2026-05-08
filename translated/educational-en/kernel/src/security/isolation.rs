@@ -52,7 +52,7 @@ pub enum Subsystem {
     /// Graphics, framebuffer, GPU, compositor
     Graphics,
     /// Process/task management
-    ProcessManager,
+    ProcessMgr,
     /// Hypervisor (VMX/SVM)
     Hypervisor,
     /// Shell and user command execution
@@ -83,9 +83,9 @@ match self {
             Self::Storage => CapabilityType::BlockDeviceRead,
             Self::Network => CapabilityType::Network,
             Self::Graphics => CapabilityType::Graphics,
-            Self::ProcessManager => CapabilityType::Process,
+            Self::ProcessMgr => CapabilityType::Process,
             Self::Hypervisor => CapabilityType::Hypervisor,
-            Self::Shell => CapabilityType::ShellExecute,
+            Self::Shell => CapabilityType::ShellExec,
             Self::Crypto => CapabilityType::Crypto,
             Self::LinuxCompat => CapabilityType::LinuxCompat,
             Self::SerialDebug => CapabilityType::Serial,
@@ -104,7 +104,7 @@ match self {
             Self::Storage => "Storage",
             Self::Network => "Network",
             Self::Graphics => "Graphics",
-            Self::ProcessManager => "Process",
+            Self::ProcessMgr => "Process",
             Self::Hypervisor => "Hypervisor",
             Self::Shell => "Shell",
             Self::Crypto => "Crypto",
@@ -137,7 +137,7 @@ match self {
                 CapabilityRights::READ.0 | CapabilityRights::WRITE.0 | CapabilityRights::MAP.0
             ),
             // Process: read + write + create + control + signal
-            Self::ProcessManager => CapabilityRights(
+            Self::ProcessMgr => CapabilityRights(
                 CapabilityRights::READ.0 | CapabilityRights::WRITE.0 |
                 CapabilityRights::CREATE.0 | CapabilityRights::CONTROL.0 |
                 CapabilityRights::SIGNAL.0
@@ -182,7 +182,7 @@ match self {
             Self::LinuxCompat | Self::Crypto | Self::Usb |
             Self::SerialDebug => "ring3-candidate",
             // These need ring 0 but are logically isolated
-            Self::Storage | Self::Hypervisor | Self::ProcessManager |
+            Self::Storage | Self::Hypervisor | Self::ProcessMgr |
             Self::Power | Self::PciBus => "ring0-isolated",
         }
     }
@@ -191,7 +191,7 @@ match self {
     pub fn all() -> &'static [Subsystem] {
         &[
             Self::Memory, Self::Storage, Self::Network, Self::Graphics,
-            Self::ProcessManager, Self::Hypervisor, Self::Shell, Self::Crypto,
+            Self::ProcessMgr, Self::Hypervisor, Self::Shell, Self::Crypto,
             Self::LinuxCompat, Self::SerialDebug, Self::Power, Self::Interrupts,
             Self::PciBus, Self::Usb,
         ]
@@ -295,7 +295,7 @@ pub fn gate_graphics() -> Result<(), super::SecurityError> {
 
 /// Convenience gate for process creation
 pub fn gate_process_create() -> Result<(), super::SecurityError> {
-    gate_check(Subsystem::ProcessManager, CapabilityRights::CREATE)
+    gate_check(Subsystem::ProcessMgr, CapabilityRights::CREATE)
 }
 
 /// Convenience gate for hypervisor operations

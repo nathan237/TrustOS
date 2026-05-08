@@ -57,40 +57,40 @@ struct BusAdapter<'a> {
 
 // Trait implementation — fulfills a behavioral contract.
 impl<'a> CpuBus for BusAdapter<'a> {
-    fn cpu_read(&mut self, address: u16) -> u8 {
+    fn cpu_read(&mut self, addr: u16) -> u8 {
                 // Pattern matching — Rust's exhaustive branching construct.
-match address {
-            0x0000..=0x1FFF => self.ram[(address & 0x07FF) as usize],
-            0x2000..=0x3FFF => self.ppu.read_register(address, self.cart),
+match addr {
+            0x0000..=0x1FFF => self.ram[(addr & 0x07FF) as usize],
+            0x2000..=0x3FFF => self.ppu.read_register(addr, self.cart),
             0x4016 => {
-                let value = (self.controller_shift[0] & 0x80) >> 7;
+                let val = (self.controller_shift[0] & 0x80) >> 7;
                 self.controller_shift[0] <<= 1;
-                value | 0x40
+                val | 0x40
             }
             0x4017 => {
-                let value = (self.controller_shift[1] & 0x80) >> 7;
+                let val = (self.controller_shift[1] & 0x80) >> 7;
                 self.controller_shift[1] <<= 1;
-                value | 0x40
+                val | 0x40
             }
             0x4000..=0x4015 => 0, // APU registers (not emulated)
             0x4018..=0x5FFF => 0, // Expansion
-            0x6000..=0xFFFF => self.cart.cpu_read(address),
+            0x6000..=0xFFFF => self.cart.cpu_read(addr),
             _ => 0,
         }
     }
 
-    fn cpu_write(&mut self, address: u16, value: u8) {
+    fn cpu_write(&mut self, addr: u16, val: u8) {
                 // Pattern matching — Rust's exhaustive branching construct.
-match address {
-            0x0000..=0x1FFF => self.ram[(address & 0x07FF) as usize] = value,
-            0x2000..=0x3FFF => self.ppu.write_register(address, value, self.cart),
+match addr {
+            0x0000..=0x1FFF => self.ram[(addr & 0x07FF) as usize] = val,
+            0x2000..=0x3FFF => self.ppu.write_register(addr, val, self.cart),
             0x4014 => {
                 // OAM DMA
-                *self.dma_page = value;
+                *self.dma_page = val;
                 *self.dma_pending = true;
             }
             0x4016 => {
-                if value & 1 != 0 {
+                if val & 1 != 0 {
                     // Strobe — latch controller state
                     self.controller_shift[0] = self.controller_state[0];
                     self.controller_shift[1] = self.controller_state[1];
@@ -98,7 +98,7 @@ match address {
             }
             0x4000..=0x4015 | 0x4017 => {} // APU
             0x4018..=0x5FFF => {} // Expansion
-            0x6000..=0xFFFF => self.cart.cpu_write(address, value),
+            0x6000..=0xFFFF => self.cart.cpu_write(addr, val),
             _ => {}
         }
     }
@@ -222,11 +222,11 @@ match key {
                     let base = (self.dma_page as u16) << 8;
                     let mut dma_data = [0u8; 256];
                     for i in 0..256u16 {
-                        let address = base | i;
+                        let addr = base | i;
                         dma_data[i as usize] = // Pattern matching — Rust's exhaustive branching construct.
-match address {
-                            0x0000..=0x1FFF => self.ram[(address & 0x07FF) as usize],
-                            0x6000..=0xFFFF => self.cart.cpu_read(address),
+match addr {
+                            0x0000..=0x1FFF => self.ram[(addr & 0x07FF) as usize],
+                            0x6000..=0xFFFF => self.cart.cpu_read(addr),
                             _ => 0,
                         };
                     }
@@ -302,35 +302,35 @@ match address {
         // Controller body
         for dy in 0..20u32 {
             for dx in 0..60u32 {
-                let pixel = bx + dx as usize;
+                let px = bx + dx as usize;
                 let py = cy + dy as usize;
-                if pixel < w && py < h {
-                    output[py * w + pixel] = 0xFF333333;
+                if px < w && py < h {
+                    output[py * w + px] = 0xFF333333;
                 }
             }
         }
         // D-pad
         for d in 0..5u32 {
-            let pixel = bx + 12; let py = cy + 5 + d as usize;
-            if pixel < w && py < h { output[py * w + pixel] = 0xFF666666; }
-            let pixel = bx + 10 + d as usize; let py = cy + 7;
-            if pixel < w && py < h { output[py * w + pixel] = 0xFF666666; }
+            let px = bx + 12; let py = cy + 5 + d as usize;
+            if px < w && py < h { output[py * w + px] = 0xFF666666; }
+            let px = bx + 10 + d as usize; let py = cy + 7;
+            if px < w && py < h { output[py * w + px] = 0xFF666666; }
         }
         // A/B buttons
         for button_x in [bx + 42, bx + 50] {
             for dy in 0..4u32 {
                 for dx in 0..4u32 {
-                    let pixel = button_x + dx as usize;
+                    let px = button_x + dx as usize;
                     let py = cy + 6 + dy as usize;
-                    if pixel < w && py < h {
-                        output[py * w + pixel] = 0xFFCC2222;
+                    if px < w && py < h {
+                        output[py * w + px] = 0xFFCC2222;
                     }
                 }
             }
         }
     }
 
-    fn draw_text(&self, buffer: &mut [u32], w: usize, h: usize, x: usize, y: usize, text: &str, color: u32) {
+    fn draw_text(&self, buf: &mut [u32], w: usize, h: usize, x: usize, y: usize, text: &str, color: u32) {
         // Simple 3x5 bitmap font
         const FONT: [u64; 128] = {
             let mut f = [0u64; 128];
@@ -358,18 +358,18 @@ match address {
         };
 
         let mut cx = x;
-        for character in text.bytes() {
-            let index = character as usize;
-            let glyph = if index < 128 { FONT[index] } else { 0 };
-            if glyph != 0 || character == b' ' {
+        for ch in text.bytes() {
+            let idx = ch as usize;
+            let glyph = if idx < 128 { FONT[idx] } else { 0 };
+            if glyph != 0 || ch == b' ' {
                 for row in 0..5 {
-                    for column in 0..4 {
-                        let bit = (glyph >> (20 - row * 4 - column)) & 1;
+                    for col in 0..4 {
+                        let bit = (glyph >> (20 - row * 4 - col)) & 1;
                         if bit != 0 {
-                            let pixel = cx + column as usize;
+                            let px = cx + col as usize;
                             let py = y + row as usize;
-                            if pixel < w && py < h {
-                                buffer[py * w + pixel] = color;
+                            if px < w && py < h {
+                                buf[py * w + px] = color;
                             }
                         }
                     }

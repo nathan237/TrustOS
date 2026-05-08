@@ -24,9 +24,11 @@ pub mod neural;
 pub mod firmware;
 pub mod psp;
 pub mod regscan;
+pub mod atom;
 #[cfg(feature = "jarvis")]
 pub mod gpu_train;
 pub mod shaders;
+pub mod pipeline_audit;
 
 use alloc::string::String;
 use alloc::format;
@@ -266,7 +268,9 @@ static GPU_DETECTED: AtomicBool = AtomicBool::new(false);
 #[inline]
 pub unsafe fn mmio_read32(mmio_base: u64, offset: u32) -> u32 {
     let addr = mmio_base + offset as u64;
-    core::ptr::read_volatile(addr as *const u32)
+    let v = core::ptr::read_volatile(addr as *const u32);
+    crate::mmio_trace!("R", offset, v);
+    v
 }
 
 /// Write a 32-bit GPU register via MMIO
@@ -277,6 +281,7 @@ pub unsafe fn mmio_read32(mmio_base: u64, offset: u32) -> u32 {
 pub unsafe fn mmio_write32(mmio_base: u64, offset: u32, value: u32) {
     let addr = mmio_base + offset as u64;
     core::ptr::write_volatile(addr as *mut u32, value);
+    crate::mmio_trace!("W", offset, value);
 }
 
 /// Read a 32-bit GPU register using indirect (indexed) access via PCIE_INDEX2/DATA2
@@ -774,6 +779,13 @@ pub fn init_gpu(dev: &PciDevice) -> Option<GpuInfo> {
     pci::enable_memory_space(dev);
     ensure_pci_d0(dev);
 
+    // Arm PCIe bus-lock auto-recovery: CTO on the GPU + AER fatal-severity
+    // on GPU and its Root Port. On a fatal PCIe error, SERR# -> NMI ->
+    // 0xCF9 reset (handled by the existing NMI handler). On a soft
+    // completion timeout, callers using mmio_read32_safe() detect the
+    // synthetic 0xFFFFFFFF and reboot.
+    crate::pcie_recovery::init_for_gpu(dev);
+
     let mmio_phys = dev.bar_address(bar::MMIO_REGISTERS).unwrap_or(0);
     let mmio_size = detect_bar_size(dev, bar::MMIO_REGISTERS);
     let vram_phys = dev.bar_address(bar::VRAM_APERTURE).unwrap_or(0);
@@ -1143,11 +1155,27 @@ pub fn init() {
             // trampoline. The SMU PowerUpGfx sequence wakes the CUs so that
             // subsequent CP/MEC firmware uploads can actually execute.
             // Failures here are non-fatal: legacy code paths still run.
+            // Auto-start is disabled so the VBIOS-pre-init SMU state can be
+            // observed via `gpu smu diag` and started manually with `gpu smu start`.
+            // Set TRUSTOS_AMDGPU_SMU_AUTO_START to true to restore auto-start.
+            const TRUSTOS_AMDGPU_SMU_AUTO_START: bool = false;
+            if TRUSTOS_AMDGPU_SMU_AUTO_START {
             if let Some(probe_info) = get_info() {
                 unsafe {
                     match smu::smu7_start_smu(mmio_virt) {
                         Ok(()) => crate::log!("[AMDGPU] SMU started"),
-                        Err(e) => crate::log!("[AMDGPU] SMU start skipped: {}", e),
+                        Err(e) => {
+                            crate::log!("[AMDGPU] SMU start failed: {} — issuing PCI config reset and retrying", e);
+                            smu::smu7_pci_config_reset(
+                                probe_info.bus,
+                                probe_info.device,
+                                probe_info.function,
+                            );
+                            match smu::smu7_start_smu(mmio_virt) {
+                                Ok(()) => crate::log!("[AMDGPU] SMU started after PCI reset"),
+                                Err(e2) => crate::log!("[AMDGPU] SMU start still failed after reset: {}", e2),
+                            }
+                        }
                     }
                     match smu::smu7_powerup_gfx(&probe_info) {
                         Ok(rep) => crate::log!(
@@ -1157,6 +1185,9 @@ pub fn init() {
                         Err(e) => crate::log!("[AMDGPU] PowerUpGfx skipped: {}", e),
                     }
                 }
+            }
+            } else {
+                crate::log!("[AMDGPU] SMU auto-start DISABLED — use `gpu smu start` to bring up");
             }
 
             firmware::init_polaris(mmio_virt, vram_phys, vram_ap_size);

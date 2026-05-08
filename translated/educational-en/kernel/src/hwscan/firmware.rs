@@ -17,21 +17,21 @@ use alloc::format;
 use alloc::vec::Vec;
 use super::{RiskLevel};
 
-fn safe_read(address: u64) -> Option<u32> {
-    if address == 0 { return None; }
+fn safe_read(addr: u64) -> Option<u32> {
+    if addr == 0 { return None; }
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        let ptr = address as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+        let ptr = addr as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u32;
         Some(core::ptr::read_volatile(ptr))
     }
 }
 
-fn safe_read_u8(address: u64) -> Option<u8> {
-    if address == 0 { return None; }
+fn safe_read_u8(addr: u64) -> Option<u8> {
+    if addr == 0 { return None; }
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        let ptr = address as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+        let ptr = addr as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u8;
         Some(core::ptr::read_volatile(ptr))
     }
@@ -97,18 +97,18 @@ const STRING_PATTERNS: &[(&[u8], &str, RiskLevel)] = &[
 fn scan_for_magic(start: u64, size: u64) -> Vec<(u64, &'static str, RiskLevel)> {
     let mut findings = Vec::new();
     let end = start + size;
-    let mut address = start;
+    let mut addr = start;
     
-    while address < end {
-        if let Some(word) = safe_read(address) {
+    while addr < end {
+        if let Some(word) = safe_read(addr) {
             for &(magic, name, ref risk) in FW_SIGNATURES {
                 // Check exact match or masked match
                 if word == magic || (magic & 0xFFFF_0000 != 0 && word & 0xFFFF_0000 == magic & 0xFFFF_0000) {
-                    findings.push((address, name, risk.clone()));
+                    findings.push((addr, name, risk.clone()));
                 }
             }
         }
-        address += 4;
+        addr += 4;
         
         // Safety: don't scan too many pages without yielding
         if findings.len() > 100 {
@@ -125,15 +125,15 @@ fn scan_for_strings(start: u64, size: u64) -> Vec<(u64, &'static str, RiskLevel)
     let end = start + size;
     
     // Read memory in chunks and search for patterns
-    let mut address = start;
-    while address < end {
+    let mut addr = start;
+    while addr < end {
         // Build a small window of bytes
         let mut window = [0u8; 64];
         let mut valid = true;
         
         for i in 0..64u64 {
                         // Pattern matching — Rust's exhaustive branching construct.
-match safe_read_u8(address + i) {
+match safe_read_u8(addr + i) {
                 Some(b) => window[i as usize] = b,
                 None => { valid = false; break; }
             }
@@ -145,7 +145,7 @@ match safe_read_u8(address + i) {
                     // Simple substring search in window
                     for i in 0..=(64 - pattern.len()) {
                         if &window[i..i + pattern.len()] == pattern {
-                            findings.push((address + i as u64, name, risk.clone()));
+                            findings.push((addr + i as u64, name, risk.clone()));
                             break;
                         }
                     }
@@ -153,7 +153,7 @@ match safe_read_u8(address + i) {
             }
         }
         
-        address += 32; // Slide by 32 bytes (overlap for pattern matching)
+        addr += 32; // Slide by 32 bytes (overlap for pattern matching)
         
         if findings.len() > 50 {
             break;
@@ -214,7 +214,7 @@ pub fn scan_firmware_residue(args: &str) -> String {
             continue;
         }
         
-        for (address, name, risk) in &magic_hits {
+        for (addr, name, risk) in &magic_hits {
             let risk_icon = // Pattern matching — Rust's exhaustive branching construct.
 match risk {
                 RiskLevel::Critical => "\x01R[CRITICAL]",
@@ -223,16 +223,16 @@ match risk {
                 _ => "\x01W[INFO]",
             };
             
-            output.push_str(&format!("  {} 0x{:010X}: {}\x01W\n", risk_icon, address, name));
+            output.push_str(&format!("  {} 0x{:010X}: {}\x01W\n", risk_icon, addr, name));
             
             // For critical findings, dump context
             if matches!(risk, RiskLevel::Critical) {
-                critical_findings.push((*address, *name));
+                critical_findings.push((*addr, *name));
                 
                 // Hexdump 32 bytes around the finding
                 output.push_str("    Context: ");
                 for i in 0..8u64 {
-                    if let Some(word) = safe_read(address + i * 4) {
+                    if let Some(word) = safe_read(addr + i * 4) {
                         output.push_str(&format!("{:08X} ", word));
                     }
                 }
@@ -241,7 +241,7 @@ match risk {
             total_findings += 1;
         }
         
-        for (address, name, risk) in &string_hits {
+        for (addr, name, risk) in &string_hits {
             let risk_icon = // Pattern matching — Rust's exhaustive branching construct.
 match risk {
                 RiskLevel::Critical => "\x01R[CRITICAL]",
@@ -250,13 +250,13 @@ match risk {
                 _ => "\x01W[INFO]",
             };
             
-            output.push_str(&format!("  {} 0x{:010X}: {}\x01W\n", risk_icon, address, name));
+            output.push_str(&format!("  {} 0x{:010X}: {}\x01W\n", risk_icon, addr, name));
             
             if matches!(risk, RiskLevel::Critical | RiskLevel::High) {
                 // Print the string context
                 output.push_str("    String: \"");
                 for i in 0..40u64 {
-                    if let Some(b) = safe_read_u8(address + i) {
+                    if let Some(b) = safe_read_u8(addr + i) {
                         if b >= 0x20 && b < 0x7F {
                             output.push(b as char);
                         } else {
@@ -267,7 +267,7 @@ match risk {
                 output.push_str("\"\n");
                 
                 if matches!(risk, RiskLevel::Critical) {
-                    critical_findings.push((*address, *name));
+                    critical_findings.push((*addr, *name));
                 }
             }
             total_findings += 1;
@@ -284,8 +284,8 @@ match risk {
     
     if !critical_findings.is_empty() {
         output.push_str(&format!("\n\x01R!! CRITICAL: Sensitive data found in memory !!\x01W\n"));
-        for (address, name) in &critical_findings {
-            output.push_str(&format!("  0x{:010X}: {}\n", address, name));
+        for (addr, name) in &critical_findings {
+            output.push_str(&format!("  0x{:010X}: {}\n", addr, name));
         }
         output.push_str("\nThis data was left by the bootloader/firmware and could include:\n");
         output.push_str("  - Signing keys (can forge firmware updates)\n");

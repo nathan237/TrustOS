@@ -8,12 +8,12 @@ use super::cpu;
 /// Flush a single TLB entry (sfence.vma with specific address)
 #[inline(always)]
 // Public function — callable from other modules.
-pub fn flush_tlb(address: u64) {
+pub fn flush_tlb(addr: u64) {
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
         core::arch::asm!(
             "sfence.vma {}, zero",
-            in(reg) address,
+            in(reg) addr,
             options(nostack, preserves_flags)
         );
     }
@@ -44,9 +44,9 @@ pub fn read_page_table_root() -> u64 {
 /// Write the page table root (satp CSR)
 #[inline(always)]
 // Public function — callable from other modules.
-pub fn write_page_table_root(value: u64) {
+pub fn write_page_table_root(val: u64) {
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { cpu::write_satp(value); }
+unsafe { cpu::write_satp(val); }
 }
 
 /// Build a satp value for Sv48 mode

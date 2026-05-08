@@ -7,104 +7,104 @@ use alloc::vec::Vec;
 use alloc::vec;
 
 
-const AJV_: usize = 44;
+const ALQ_: usize = 44;
 
 
 
 
 
-pub fn tcs(un: &[i16], auy: u32, lq: u16) -> Vec<u8> {
-    let cpv = un.len() * 2; 
-    let yy = AJV_ + cpv;
+pub fn mcn(jo: &[i16], sample_rate: u32, channels: u16) -> Vec<u8> {
+    let data_size = jo.len() * 2; 
+    let file_size = ALQ_ + data_size;
 
-    let mut bi = vec![0u8; yy];
-
-    
-    
-    bi[0] = b'R';
-    bi[1] = b'I';
-    bi[2] = b'F';
-    bi[3] = b'F';
-    
-    let aiw = (yy - 8) as u32;
-    bi[4..8].dg(&aiw.ho());
-    
-    bi[8] = b'W';
-    bi[9] = b'A';
-    bi[10] = b'V';
-    bi[11] = b'E';
+    let mut buffer = vec![0u8; file_size];
 
     
     
-    bi[12] = b'f';
-    bi[13] = b'm';
-    bi[14] = b't';
-    bi[15] = b' ';
+    buffer[0] = b'R';
+    buffer[1] = b'I';
+    buffer[2] = b'F';
+    buffer[3] = b'F';
     
-    bi[16..20].dg(&16u32.ho());
+    let rs = (file_size - 8) as u32;
+    buffer[4..8].copy_from_slice(&rs.to_le_bytes());
     
-    bi[20..22].dg(&1u16.ho());
-    
-    bi[22..24].dg(&lq.ho());
-    
-    bi[24..28].dg(&auy.ho());
-    
-    let quy = auy * lq as u32 * 2; 
-    bi[28..32].dg(&quy.ho());
-    
-    let qqh = lq * 2;
-    bi[32..34].dg(&qqh.ho());
-    
-    bi[34..36].dg(&16u16.ho());
+    buffer[8] = b'W';
+    buffer[9] = b'A';
+    buffer[10] = b'V';
+    buffer[11] = b'E';
 
     
     
-    bi[36] = b'd';
-    bi[37] = b'a';
-    bi[38] = b't';
-    bi[39] = b'a';
+    buffer[12] = b'f';
+    buffer[13] = b'm';
+    buffer[14] = b't';
+    buffer[15] = b' ';
     
-    bi[40..44].dg(&(cpv as u32).ho());
+    buffer[16..20].copy_from_slice(&16u32.to_le_bytes());
+    
+    buffer[20..22].copy_from_slice(&1u16.to_le_bytes());
+    
+    buffer[22..24].copy_from_slice(&channels.to_le_bytes());
+    
+    buffer[24..28].copy_from_slice(&sample_rate.to_le_bytes());
+    
+    let kgn = sample_rate * channels as u32 * 2; 
+    buffer[28..32].copy_from_slice(&kgn.to_le_bytes());
+    
+    let kcp = channels * 2;
+    buffer[32..34].copy_from_slice(&kcp.to_le_bytes());
+    
+    buffer[34..36].copy_from_slice(&16u16.to_le_bytes());
 
     
-    for (a, &yr) in un.iter().cf() {
-        let l = AJV_ + a * 2;
-        bi[l..l + 2].dg(&yr.ho());
+    
+    buffer[36] = b'd';
+    buffer[37] = b'a';
+    buffer[38] = b't';
+    buffer[39] = b'a';
+    
+    buffer[40..44].copy_from_slice(&(data_size as u32).to_le_bytes());
+
+    
+    for (i, &sample) in jo.iter().enumerate() {
+        let offset = ALQ_ + i * 2;
+        buffer[offset..offset + 2].copy_from_slice(&sample.to_le_bytes());
     }
 
-    bi
+    buffer
 }
 
 
-pub fn hio(path: &str, un: &[i16], auy: u32, lq: u16) -> Result<usize, &'static str> {
-    if un.is_empty() {
+pub fn dpb(path: &str, jo: &[i16], sample_rate: u32, channels: u16) -> Result<usize, &'static str> {
+    if jo.is_empty() {
         return Err("No audio data to export");
     }
 
-    let bxv = tcs(un, auy, lq);
-    let aw = bxv.len();
+    let anf = mcn(jo, sample_rate, channels);
+    let size = anf.len();
 
     
-    crate::vfs::ns(path, &bxv)
-        .jd(|_| "Failed to write WAV file to VFS")?;
+    crate::vfs::write_file(path, &anf)
+        .map_err(|_| "Failed to write WAV file to VFS")?;
 
     crate::serial_println!("[TRUSTDAW] Exported WAV: {} ({} bytes, {} samples, {}Hz {}ch)",
-        path, aw, un.len(), auy, lq);
+        path, size, jo.len(), sample_rate, channels);
 
-    Ok(aw)
+    Ok(size)
 }
 
 
-pub fn ypp(uwm: usize) -> usize {
-    AJV_ + uwm * 2 
+pub fn qff(num_stereo_samples: usize) -> usize {
+    ALQ_ + num_stereo_samples * 2 
 }
 
 
-pub fn shk(evo: usize, auy: u32, lq: u16) -> (u32, u32) {
+pub fn lmr(cbz: usize, sample_rate: u32, channels: u16) -> (u32, u32) {
     
-    let vj = evo / lq as usize;
-    let alu = (vj as u64 * 1000) / auy as u64;
-    let dvm = (alu / 1000) as u32;
-    let jn = (alu % 1000) as u32;
-    (dvm, jn)
+    let frames = cbz / channels as usize;
+    let total_ms = (frames as u64 * 1000) / sample_rate as u64;
+    let abi = (total_ms / 1000) as u32;
+    let dh = (total_ms % 1000) as u32;
+    (abi, dh)
 }

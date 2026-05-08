@@ -102,6 +102,17 @@ const RDESC_STA_DD: u8 = 1 << 0;     // Descriptor Done
 // Interrupt Bits
 const ICR_LSC: u32 = 1 << 2;         // Link Status Change
 
+// SPT (Skylake PCH) specific registers
+const REGISTER_CONTROLLER_EXT: u32 = 0x0018;    // Extended Device Control
+const REGISTER_FWSM: u32 = 0x5B54;        // Firmware Semaphore
+const REGISTER_EXTCNF_CONTROLLER: u32 = 0x0F00; // Extended Config Control
+const E1000_FLASH_BASE_ADDRESS: u32 = 0xE000; // Flash registers base (SPT)
+const CONTROLLER_FRCSPD: u32 = 1 << 11;    // Force Speed
+const CONTROLLER_FRCDPX: u32 = 1 << 12;    // Force Duplex
+const CONTROLLER_PHYSICAL_RST: u32 = 1 << 31;   // PHY Reset
+const CONTROLLER_EXT_PHYPDEN: u32 = 1 << 20; // PHY Power Down Enable
+const CONTROLLER_EXT_SPD_BYPS: u32 = 1 << 15; // Speed Select Bypass
+
 // ============================================================================
 // Descriptor Structures
 // ============================================================================
@@ -117,7 +128,7 @@ const RECEIVE_BUFFER_SIZE: usize = 2048;
 // #[derive] — auto-generates trait implementations at compile time.
 #[derive(Clone, Copy)]
 struct RxDesc {
-    buffer_address: u64,    // Physical address of buffer
+    buffer_addr: u64,    // Physical address of buffer
     length: u16,         // Length of received packet
     checksum: u16,       // Packet checksum
     status: u8,          // Descriptor status
@@ -130,7 +141,7 @@ struct RxDesc {
 // #[derive] — auto-generates trait implementations at compile time.
 #[derive(Clone, Copy)]
 struct TxDesc {
-    buffer_address: u64,    // Physical address of buffer
+    buffer_addr: u64,    // Physical address of buffer
     length: u16,         // Length of packet
     cso: u8,             // Checksum offset
     cmd: u8,             // Command field
@@ -143,7 +154,7 @@ struct TxDesc {
 impl Default for RxDesc {
     fn default() -> Self {
         Self {
-            buffer_address: 0,
+            buffer_addr: 0,
             length: 0,
             checksum: 0,
             status: 0,
@@ -157,7 +168,7 @@ impl Default for RxDesc {
 impl Default for TxDesc {
     fn default() -> Self {
         Self {
-            buffer_address: 0,
+            buffer_addr: 0,
             length: 0,
             cso: 0,
             cmd: 0,
@@ -176,24 +187,26 @@ pub struct E1000Driver {
     status: DriverStatus,
     mmio_base: u64,
     mac: [u8; 6],
+    is_ich: bool,       // ICH8/ICH9 variant (e1000e)
+    is_spt: bool,       // SPT variant (I219 Skylake PCH and newer)
     
     // Descriptor rings (must be 16-byte aligned)
-    receive_descs: Vec<RxDesc>,
-    transmit_descs: Vec<TxDesc>,
-    receive_buffers: Vec<Vec<u8>>,
-    transmit_buffers: Vec<Vec<u8>>,
+    rx_descs: Vec<RxDesc>,
+    tx_descs: Vec<TxDesc>,
+    rx_buffers: Vec<Vec<u8>>,
+    tx_buffers: Vec<Vec<u8>>,
     
     // Ring indices
-    receive_cur: usize,
-    transmit_cur: usize,
+    rx_cur: usize,
+    tx_cur: usize,
     
     // Statistics
-    transmit_packets: AtomicU64,
-    receive_packets: AtomicU64,
-    transmit_bytes: AtomicU64,
-    receive_bytes: AtomicU64,
-    transmit_errors: AtomicU64,
-    receive_errors: AtomicU64,
+    tx_packets: AtomicU64,
+    rx_packets: AtomicU64,
+    tx_bytes: AtomicU64,
+    rx_bytes: AtomicU64,
+    tx_errors: AtomicU64,
+    rx_errors: AtomicU64,
     
     // State
     link_up: AtomicBool,
@@ -208,49 +221,51 @@ pub fn new() -> Self {
             status: DriverStatus::Unloaded,
             mmio_base: 0,
             mac: [0x52, 0x54, 0x00, 0xE1, 0x00, 0x00],
-            receive_descs: Vec::new(),
-            transmit_descs: Vec::new(),
-            receive_buffers: Vec::new(),
-            transmit_buffers: Vec::new(),
-            receive_cur: 0,
-            transmit_cur: 0,
-            transmit_packets: AtomicU64::new(0),
-            receive_packets: AtomicU64::new(0),
-            transmit_bytes: AtomicU64::new(0),
-            receive_bytes: AtomicU64::new(0),
-            transmit_errors: AtomicU64::new(0),
-            receive_errors: AtomicU64::new(0),
+            is_ich: false,
+            is_spt: false,
+            rx_descs: Vec::new(),
+            tx_descs: Vec::new(),
+            rx_buffers: Vec::new(),
+            tx_buffers: Vec::new(),
+            rx_cur: 0,
+            tx_cur: 0,
+            tx_packets: AtomicU64::new(0),
+            rx_packets: AtomicU64::new(0),
+            tx_bytes: AtomicU64::new(0),
+            rx_bytes: AtomicU64::new(0),
+            tx_errors: AtomicU64::new(0),
+            rx_errors: AtomicU64::new(0),
             link_up: AtomicBool::new(false),
             initialized: AtomicBool::new(false),
         }
     }
     
     /// Read a 32-bit register
-    fn read_register(&self, offset: u32) -> u32 {
+    fn read_reg(&self, offset: u32) -> u32 {
         if self.mmio_base == 0 {
             return 0;
         }
-        let address = (self.mmio_base + offset as u64) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+        let addr = (self.mmio_base + offset as u64) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u32;
                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { read_volatile(address) }
+unsafe { read_volatile(addr) }
     }
     
     /// Write a 32-bit register
-    fn write_register(&self, offset: u32, value: u32) {
+    fn write_reg(&self, offset: u32, value: u32) {
         if self.mmio_base == 0 {
             return;
         }
-        let address = (self.mmio_base + offset as u64) as *mut u32;
+        let addr = (self.mmio_base + offset as u64) as *mut u32;
                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { write_volatile(address, value) }
+unsafe { write_volatile(addr, value) }
     }
     
     /// Get virtual address for HHDM
-    fn physical_to_virt(physical: u64) -> u64 {
+    fn physical_to_virt(phys: u64) -> u64 {
                 // Compile-time constant — evaluated at compilation, zero runtime cost.
 const HHDM_OFFSET: u64 = 0xFFFF_8000_0000_0000;
-        physical + HHDM_OFFSET
+        phys + HHDM_OFFSET
     }
     
     /// Get physical address from virtual (for HHDM region)
@@ -264,38 +279,87 @@ const HHDM_OFFSET: u64 = 0xFFFF_8000_0000_0000;
         }
     }
     
+    /// Disable ULP (Ultra Low Power) mode for SPT variants
+    /// Without this, the PHY may be inaccessible on I219
+    fn disable_ulp(&mut self) {
+        if !self.is_spt { return; }
+        crate::serial_println!("[E1000] Disabling ULP mode for SPT...");
+        
+        // Clear CTRL_EXT force SMBus mode (if set)
+        let controller_ext = self.read_reg(REGISTER_CONTROLLER_EXT);
+        self.write_reg(REGISTER_CONTROLLER_EXT, controller_ext & !0x00000800); // clear FORCE_SMBUS
+        
+        // Small delay for PHY to wake
+        for _ in 0..5000 {
+                        // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { core::arch::asm!("out dx, al", in("dx") 0x80u16, in("al") 0u8, options(nomem, nostack)); }
+        }
+    }
+    
     /// Reset the device
     fn reset(&mut self) {
-        crate::log_debug!("[E1000] Resetting device...");
+        crate::serial_println!("[E1000] Resetting device (is_ich={}, is_spt={})...", self.is_ich, self.is_spt);
         
         // Disable interrupts
-        self.write_register(REGISTER_IMC, 0xFFFFFFFF);
+        self.write_reg(REGISTER_IMC, 0xFFFFFFFF);
         
-        // Reset device
-        let controller = self.read_register(REGISTER_CONTROLLER);
-        self.write_register(REGISTER_CONTROLLER, controller | CONTROLLER_RST);
+        // Disable TX and RX before reset
+        self.write_reg(REGISTER_RCTL, 0);
+        self.write_reg(0x0400, 0x00000008); // TCTL = PSP only
         
-        // Wait for reset to complete
-        for _ in 0..1000 {
-            if self.read_register(REGISTER_CONTROLLER) & CONTROLLER_RST == 0 {
+        // Flush
+        let _ = self.read_reg(REGISTER_STATUS);
+        
+        // Wait 10ms for pending transactions
+        for _ in 0..10000 {
+                        // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { core::arch::asm!("out dx, al", in("dx") 0x80u16, in("al") 0u8, options(nomem, nostack)); }
+        }
+        
+        // For SPT, disable ULP before reset
+        if self.is_spt {
+            self.disable_ulp();
+        }
+        
+        // MAC-only reset — do NOT reset PHY, BIOS has it configured
+        // The Linux e1000e driver re-initializes PHY with Kumeran/MDIO workarounds
+        // after PHY reset, but we don't have that capability yet.
+        let ctrl = self.read_reg(REGISTER_CONTROLLER);
+        self.write_reg(REGISTER_CONTROLLER, (ctrl & !CONTROLLER_PHYSICAL_RST) | CONTROLLER_RST);
+        
+        // ICH/SPT needs ~25ms after RST before MMIO is accessible.
+        for _ in 0..25000 {
+                        // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { core::arch::asm!("out dx, al", in("dx") 0x80u16, in("al") 0u8, options(nomem, nostack)); }
+        }
+        
+        // Wait for reset to complete (bounded: ~50ms max)
+        for i in 0..500u32 {
+            let val = self.read_reg(REGISTER_CONTROLLER);
+            if val & CONTROLLER_RST == 0 {
+                crate::serial_println!("[E1000] Reset cleared after {} polls", i);
                 break;
             }
-            for _ in 0..1000 {
-                core::hint::spin_loop();
+            // ~100µs per iteration
+            for _ in 0..100 {
+                                // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { core::arch::asm!("out dx, al", in("dx") 0x80u16, in("al") 0u8, options(nomem, nostack)); }
             }
         }
         
         // Disable interrupts again after reset
-        self.write_register(REGISTER_IMC, 0xFFFFFFFF);
+        self.write_reg(REGISTER_IMC, 0xFFFFFFFF);
+        // Clear pending interrupt causes
+        let _ = self.read_reg(REGISTER_ICR);
         
-        crate::log_debug!("[E1000] Reset complete");
+        crate::serial_println!("[E1000] Reset complete");
     }
     
     /// Read MAC address from EEPROM or RAL/RAH
     fn read_mac(&mut self) {
         // Try to read from RAL/RAH (already set by firmware)
-        let ral = self.read_register(REGISTER_RAL0);
-        let rah = self.read_register(REGISTER_RAH0);
+        let ral = self.read_reg(REGISTER_RAL0);
+        let rah = self.read_reg(REGISTER_RAH0);
         
         if ral != 0 || rah != 0 {
             self.mac[0] = (ral >> 0) as u8;
@@ -308,14 +372,18 @@ const HHDM_OFFSET: u64 = 0xFFFF_8000_0000_0000;
         }
         
         // Try EEPROM read
-        for i in 0..3 {
-            self.write_register(REGISTER_EERD, 1 | ((i as u32) << 8));
+        // ICH8/ICH9 (e1000e): done bit is bit 1, address shift is 2
+        // Classic e1000: done bit is bit 4, address shift is 8
+        let (done_bit, addr_shift) = if self.is_ich { (1 << 1, 2) } else { (1 << 4, 8) };
+        
+        for i in 0..3u32 {
+            self.write_reg(REGISTER_EERD, 1 | (i << addr_shift));
             for _ in 0..1000 {
-                let eerd = self.read_register(REGISTER_EERD);
-                if eerd & (1 << 4) != 0 {
+                let eerd = self.read_reg(REGISTER_EERD);
+                if eerd & done_bit != 0 {
                     let data = (eerd >> 16) as u16;
-                    self.mac[i * 2] = (data & 0xFF) as u8;
-                    self.mac[i * 2 + 1] = (data >> 8) as u8;
+                    self.mac[i as usize * 2] = (data & 0xFF) as u8;
+                    self.mac[i as usize * 2 + 1] = (data >> 8) as u8;
                     break;
                 }
                 core::hint::spin_loop();
@@ -329,94 +397,102 @@ const HHDM_OFFSET: u64 = 0xFFFF_8000_0000_0000;
     }
     
     /// Initialize receive ring
-    fn initialize_receive(&mut self) {
+    fn init_rx(&mut self) {
         crate::log_debug!("[E1000] Initializing RX ring ({} descriptors)", NUMBER_RECEIVE_DESCRIPTOR);
         
-        self.receive_descs = vec![RxDesc::default(); NUMBER_RECEIVE_DESCRIPTOR];
-        self.receive_buffers = Vec::with_capacity(NUMBER_RECEIVE_DESCRIPTOR);
+        self.rx_descs = vec![RxDesc::default(); NUMBER_RECEIVE_DESCRIPTOR];
+        self.rx_buffers = Vec::with_capacity(NUMBER_RECEIVE_DESCRIPTOR);
         
         for i in 0..NUMBER_RECEIVE_DESCRIPTOR {
             let buffer = vec![0u8; RECEIVE_BUFFER_SIZE];
-            let physical_address = Self::virt_to_physical(buffer.as_pointer() as u64);
-            self.receive_descs[i].buffer_address = physical_address;
-            self.receive_descs[i].status = 0;
-            self.receive_buffers.push(buffer);
+            let phys_addr = Self::virt_to_physical(buffer.as_ptr() as u64);
+            self.rx_descs[i].buffer_addr = phys_addr;
+            self.rx_descs[i].status = 0;
+            self.rx_buffers.push(buffer);
         }
         
-        let descs_physical = Self::virt_to_physical(self.receive_descs.as_pointer() as u64);
+        let descs_physical = Self::virt_to_physical(self.rx_descs.as_ptr() as u64);
         
-        self.write_register(REGISTER_RDBAL, descs_physical as u32);
-        self.write_register(REGISTER_RDBAH, (descs_physical >> 32) as u32);
+        self.write_reg(REGISTER_RDBAL, descs_physical as u32);
+        self.write_reg(REGISTER_RDBAH, (descs_physical >> 32) as u32);
         
         let ring_size = (NUMBER_RECEIVE_DESCRIPTOR * core::mem::size_of::<RxDesc>()) as u32;
-        self.write_register(REGISTER_RDLEN, ring_size);
+        self.write_reg(REGISTER_RDLEN, ring_size);
         
-        self.write_register(REGISTER_RDH, 0);
-        self.write_register(REGISTER_RDT, (NUMBER_RECEIVE_DESCRIPTOR - 1) as u32);
+        self.write_reg(REGISTER_RDH, 0);
+        self.write_reg(REGISTER_RDT, (NUMBER_RECEIVE_DESCRIPTOR - 1) as u32);
         
-        self.receive_cur = 0;
+        self.rx_cur = 0;
     }
     
     /// Initialize transmit ring
-    fn initialize_transmit(&mut self) {
+    fn init_tx(&mut self) {
         crate::log_debug!("[E1000] Initializing TX ring ({} descriptors)", NUMBER_TRANSMIT_DESCRIPTOR);
         
-        self.transmit_descs = vec![TxDesc::default(); NUMBER_TRANSMIT_DESCRIPTOR];
-        self.transmit_buffers = Vec::with_capacity(NUMBER_TRANSMIT_DESCRIPTOR);
+        self.tx_descs = vec![TxDesc::default(); NUMBER_TRANSMIT_DESCRIPTOR];
+        self.tx_buffers = Vec::with_capacity(NUMBER_TRANSMIT_DESCRIPTOR);
         
         for i in 0..NUMBER_TRANSMIT_DESCRIPTOR {
-            self.transmit_buffers.push(vec![0u8; RECEIVE_BUFFER_SIZE]);
+            self.tx_buffers.push(vec![0u8; RECEIVE_BUFFER_SIZE]);
             // Mark all TX descriptors as done so first send doesn't wait
-            self.transmit_descs[i].status = TDESC_STA_DD;
+            self.tx_descs[i].status = TDESC_STA_DD;
         }
         
-        let descs_physical = Self::virt_to_physical(self.transmit_descs.as_pointer() as u64);
+        let descs_physical = Self::virt_to_physical(self.tx_descs.as_ptr() as u64);
         
-        self.write_register(REGISTER_TDBAL, descs_physical as u32);
-        self.write_register(REGISTER_TDBAH, (descs_physical >> 32) as u32);
+        self.write_reg(REGISTER_TDBAL, descs_physical as u32);
+        self.write_reg(REGISTER_TDBAH, (descs_physical >> 32) as u32);
         
         let ring_size = (NUMBER_TRANSMIT_DESCRIPTOR * core::mem::size_of::<TxDesc>()) as u32;
-        self.write_register(REGISTER_TDLEN, ring_size);
+        self.write_reg(REGISTER_TDLEN, ring_size);
         
-        self.write_register(REGISTER_TDH, 0);
-        self.write_register(REGISTER_TDT, 0);
+        self.write_reg(REGISTER_TDH, 0);
+        self.write_reg(REGISTER_TDT, 0);
         
-        self.transmit_cur = 0;
+        self.tx_cur = 0;
     }
     
     /// Enable receive
-    fn enable_receive(&mut self) {
+    fn enable_rx(&mut self) {
         let rctl = RCTL_EN | RCTL_SBP | RCTL_UPE | RCTL_MPE 
                  | RCTL_LBM_NONE | RCTL_RDMTS_HALF | RCTL_BAM 
                  | RCTL_SECRC | RCTL_BSIZE_2048;
-        self.write_register(REGISTER_RCTL, rctl);
+        self.write_reg(REGISTER_RCTL, rctl);
     }
     
     /// Enable transmit
-    fn enable_transmit(&mut self) {
-        self.write_register(REGISTER_TIPG, 10 | (8 << 10) | (6 << 20));
+    fn enable_tx(&mut self) {
+        self.write_reg(REGISTER_TIPG, 10 | (8 << 10) | (6 << 20));
         
         let tctl = TCTL_EN | TCTL_PSP 
                  | (15 << TCTL_CT_SHIFT) 
                  | (64 << TCTL_COLD_SHIFT) 
                  | TCTL_RTLC;
-        self.write_register(REGISTER_TCTL, tctl);
+        self.write_reg(REGISTER_TCTL, tctl);
     }
     
     /// Setup link
     fn setup_link(&mut self) {
-        let controller = self.read_register(REGISTER_CONTROLLER);
-        let new_controller = controller | CONTROLLER_SLU | CONTROLLER_ASDE | CONTROLLER_FD;
-        self.write_register(REGISTER_CONTROLLER, new_controller);
+        let mut ctrl = self.read_reg(REGISTER_CONTROLLER);
+        ctrl |= CONTROLLER_SLU;  // Set Link Up
+        if self.is_spt {
+            // SPT/PCH: do NOT force speed/duplex, let auto-neg
+            ctrl &= !(CONTROLLER_FRCSPD | CONTROLLER_FRCDPX);
+            ctrl |= CONTROLLER_ASDE; // Auto-Speed Detection
+        } else {
+            ctrl |= CONTROLLER_ASDE | CONTROLLER_FD;
+        }
+        self.write_reg(REGISTER_CONTROLLER, ctrl);
+        crate::serial_println!("[E1000] CTRL={:#010X}", self.read_reg(REGISTER_CONTROLLER));
         
         // Clear multicast table
         for i in 0..128 {
-            self.write_register(REGISTER_MTA + i * 4, 0);
+            self.write_reg(REGISTER_MTA + i * 4, 0);
         }
         
-        // Wait for link - try for longer with VirtualBox
-        for i in 0..500 {
-            let status = self.read_register(REGISTER_STATUS);
+        // Wait for link — ~200ms max (200 * ~1ms) — fast enough for boot
+        for i in 0..200u32 {
+            let status = self.read_reg(REGISTER_STATUS);
             if status & STATUS_LU != 0 {
                 self.link_up.store(true, Ordering::SeqCst);
                 let speed = // Pattern matching — Rust's exhaustive branching construct.
@@ -426,58 +502,109 @@ match (status & STATUS_SPEED_MASK) >> 6 {
                 crate::log!("[E1000] Link up at {} Mbps (after {} iterations)", speed, i + 1);
                 return;
             }
-            for _ in 0..10000 { core::hint::spin_loop(); }
+            // ~1ms per iteration via port 0x80
+            for _ in 0..1000 {
+                                // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { core::arch::asm!("out dx, al", in("dx") 0x80u16, in("al") 0u8, options(nomem, nostack)); }
+            }
         }
-        // Continue anyway - VirtualBox may not report link but TX/RX still work
-        crate::log_warn!("[E1000] Link not detected - continuing anyway (VirtualBox NAT mode)");
+        // Continue anyway — no cable or VirtualBox NAT mode
+        crate::log_warn!("[E1000] Link not detected - continuing anyway");
         self.link_up.store(true, Ordering::SeqCst);
     }
 }
 
 // Trait implementation — fulfills a behavioral contract.
 impl Driver for E1000Driver {
-    fn information(&self) -> &DriverInformation {
+    fn info(&self) -> &DriverInformation {
         &DRIVER_INFORMATION
     }
     
     fn probe(&mut self, pci_device: &PciDevice) -> Result<(), &'static str> {
         self.status = DriverStatus::Loading;
         
-        crate::log!("[E1000] Probing {:04X}:{:04X}", pci_device.vendor_id, pci_device.device_id);
+        // Enable PCI Bus Mastering and Memory Space (CRITICAL for DMA)
+        crate::pci::enable_bus_master(pci_device);
+        crate::pci::enable_memory_space(pci_device);
+        crate::serial_println!("[E1000] PCI bus mastering + memory space enabled");
+        
+        // Detect ICH8/ICH9 variant (e1000e)
+        self.is_ich = matches!(pci_device.device_id,
+            0x1049 | 0x104A | 0x104B | 0x104C | 0x104D |  // ICH8
+            0x10BD | 0x10BF | 0x10C0 | 0x10C2 | 0x10C3 |  // ICH9
+            0x10CB | 0x10CC | 0x10CD | 0x10CE |             // ICH9
+            0x10DE | 0x10DF | 0x10E5 |                       // ICH10
+            0x10EA | 0x10EB | 0x10EF | 0x10F0 | 0x10F5 |    // PCH
+            0x153A | 0x153B |                                 // I217 (Haswell)
+            0x15A0 | 0x15A1 | 0x15A2 | 0x15A3 |             // I218 (Wildcat Point)
+            0x15B7 | 0x15B8 | 0x15B9 |                       // I219 (Skylake)
+            0x15D6 | 0x15D7 | 0x15D8 |                       // I219 (Kaby Lake)
+            0x15E3 |                                          // I219 (Cannon Lake)
+            0x0D4C | 0x0D4D | 0x0D4E | 0x0D4F               // I219 (Comet/Ice Lake)
+        );
+        
+        // Detect SPT (Skylake PCH and newer) — different NVM/Flash access
+        self.is_spt = matches!(pci_device.device_id,
+            0x15B7 | 0x15B8 | 0x15B9 |                       // I219 (Skylake/SPT)
+            0x15D6 | 0x15D7 | 0x15D8 |                       // I219 (Kaby Lake/KBP)
+            0x15E3 |                                          // I219 (Cannon Lake/CNP)
+            0x0D4C | 0x0D4D | 0x0D4E | 0x0D4F               // I219 (Comet/Ice Lake)
+        );
+        
+        let variant = if self.is_spt { "e1000e (SPT)" } else if self.is_ich { "e1000e (ICH)" } else { "e1000" };
+        crate::log!("[E1000] Probing {:04X}:{:04X} ({})", pci_device.vendor_id, pci_device.device_id, variant);
         
         let bar0 = pci_device.bar_address(0).ok_or("No BAR0")?;
         if bar0 == 0 { return Err("BAR0 is zero"); }
         
         crate::serial_println!("[E1000] BAR0={:#x}, calling map_mmio...", bar0);
+        crate::println!("    [e1000] map_mmio BAR0={:#X}...", bar0);
         
         // Map MMIO region (128KB for E1000)
         const E1000_MMIO_SIZE: usize = 128 * 1024;
         self.mmio_base = crate::memory::map_mmio(bar0, E1000_MMIO_SIZE)
-            .map_error(|e| { crate::serial_println!("[E1000] map_mmio failed: {}", e); "Failed to map E1000 MMIO" })?;
+            .map_err(|e| { crate::serial_println!("[E1000] map_mmio failed: {}", e); "Failed to map E1000 MMIO" })?;
         crate::serial_println!("[E1000] map_mmio returned {:#x}", self.mmio_base);
+        crate::println!("    [e1000] map_mmio OK -> {:#X}", self.mmio_base);
         crate::log_debug!("[E1000] MMIO: phys={:#x} virt={:#x}", bar0, self.mmio_base);
         
+        crate::println!("    [e1000] reset...");
         self.reset();
+        crate::println!("    [e1000] read_mac...");
         self.read_mac();
         
         // Set MAC in receive address registers
         let ral = (self.mac[0] as u32) | ((self.mac[1] as u32) << 8)
                 | ((self.mac[2] as u32) << 16) | ((self.mac[3] as u32) << 24);
         let rah = (self.mac[4] as u32) | ((self.mac[5] as u32) << 8) | (1 << 31);
-        self.write_register(REGISTER_RAL0, ral);
-        self.write_register(REGISTER_RAH0, rah);
+        self.write_reg(REGISTER_RAL0, ral);
+        self.write_reg(REGISTER_RAH0, rah);
         
-        self.initialize_receive();
-        self.initialize_transmit();
+        crate::println!("    [e1000] init_rx...");
+        self.init_rx();
+        crate::println!("    [e1000] init_tx...");
+        self.init_tx();
+        crate::println!("    [e1000] setup_link...");
         self.setup_link();
-        self.enable_receive();
-        self.enable_transmit();
+        crate::println!("    [e1000] enable_rx/tx...");
+        self.enable_rx();
+        self.enable_tx();
         
         self.initialized.store(true, Ordering::SeqCst);
         self.status = DriverStatus::Running;
         
         crate::log!("[E1000] MAC: {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
             self.mac[0], self.mac[1], self.mac[2], self.mac[3], self.mac[4], self.mac[5]);
+        
+        // Dump key registers to serial for hardware debug
+        crate::serial_println!("[E1000] STATUS={:#010X} CTRL={:#010X} RCTL={:#010X} TCTL={:#010X}",
+            self.read_reg(REGISTER_STATUS), self.read_reg(REGISTER_CONTROLLER),
+            self.read_reg(REGISTER_RCTL), self.read_reg(0x0400));
+        if self.is_spt {
+            crate::serial_println!("[E1000] FWSM={:#010X} CTRL_EXT={:#010X} EXTCNF_CTRL={:#010X}",
+                self.read_reg(REGISTER_FWSM), self.read_reg(REGISTER_CONTROLLER_EXT),
+                self.read_reg(REGISTER_EXTCNF_CONTROLLER));
+        }
         
         Ok(())
     }
@@ -488,9 +615,9 @@ impl Driver for E1000Driver {
     }
     
     fn stop(&mut self) -> Result<(), &'static str> {
-        self.write_register(REGISTER_RCTL, 0);
-        self.write_register(REGISTER_TCTL, 0);
-        self.write_register(REGISTER_IMC, 0xFFFFFFFF);
+        self.write_reg(REGISTER_RCTL, 0);
+        self.write_reg(REGISTER_TCTL, 0);
+        self.write_reg(REGISTER_IMC, 0xFFFFFFFF);
         self.status = DriverStatus::Suspended;
         Ok(())
     }
@@ -508,7 +635,7 @@ impl NetworkDriver for E1000Driver {
     
     fn link_up(&self) -> bool {
         if self.mmio_base != 0 {
-            let status = self.read_register(REGISTER_STATUS);
+            let status = self.read_reg(REGISTER_STATUS);
             status & STATUS_LU != 0
         } else {
             self.link_up.load(Ordering::Relaxed)
@@ -517,7 +644,7 @@ impl NetworkDriver for E1000Driver {
     
     fn link_speed(&self) -> u32 {
         if self.mmio_base == 0 { return 0; }
-        let status = self.read_register(REGISTER_STATUS);
+        let status = self.read_reg(REGISTER_STATUS);
                 // Pattern matching — Rust's exhaustive branching construct.
 match (status & STATUS_SPEED_MASK) >> 6 {
             0 => 10, 1 => 100, _ => 1000,
@@ -531,36 +658,36 @@ match (status & STATUS_SPEED_MASK) >> 6 {
         if data.len() > RECEIVE_BUFFER_SIZE { return Err("Packet too large"); }
         if data.len() < 14 { return Err("Packet too small"); }
         
-        let descriptor_index = self.transmit_cur;
+        let descriptor_index = self.tx_cur;
         
         // Wait for descriptor to be available
         let mut timeout = 10000;
-        while self.transmit_descs[descriptor_index].status & TDESC_STA_DD == 0 {
+        while self.tx_descs[descriptor_index].status & TDESC_STA_DD == 0 {
             timeout -= 1;
             if timeout == 0 {
-                self.transmit_errors.fetch_add(1, Ordering::Relaxed);
+                self.tx_errors.fetch_add(1, Ordering::Relaxed);
                 return Err("TX timeout");
             }
             core::hint::spin_loop();
         }
         
         // Copy data to TX buffer
-        let buffer = &mut self.transmit_buffers[descriptor_index];
+        let buffer = &mut self.tx_buffers[descriptor_index];
         buffer[..data.len()].copy_from_slice(data);
         
         // Setup descriptor
-        let physical_address = Self::virt_to_physical(buffer.as_pointer() as u64);
-        self.transmit_descs[descriptor_index].buffer_address = physical_address;
-        self.transmit_descs[descriptor_index].length = data.len() as u16;
-        self.transmit_descs[descriptor_index].cmd = TDESC_COMMAND_EOP | TDESC_COMMAND_IFCS | TDESC_COMMAND_RS;
-        self.transmit_descs[descriptor_index].status = 0;
+        let phys_addr = Self::virt_to_physical(buffer.as_ptr() as u64);
+        self.tx_descs[descriptor_index].buffer_addr = phys_addr;
+        self.tx_descs[descriptor_index].length = data.len() as u16;
+        self.tx_descs[descriptor_index].cmd = TDESC_COMMAND_EOP | TDESC_COMMAND_IFCS | TDESC_COMMAND_RS;
+        self.tx_descs[descriptor_index].status = 0;
         
         // Advance tail
-        self.transmit_cur = (self.transmit_cur + 1) % NUMBER_TRANSMIT_DESCRIPTOR;
-        self.write_register(REGISTER_TDT, self.transmit_cur as u32);
+        self.tx_cur = (self.tx_cur + 1) % NUMBER_TRANSMIT_DESCRIPTOR;
+        self.write_reg(REGISTER_TDT, self.tx_cur as u32);
         
-        self.transmit_packets.fetch_add(1, Ordering::Relaxed);
-        self.transmit_bytes.fetch_add(data.len() as u64, Ordering::Relaxed);
+        self.tx_packets.fetch_add(1, Ordering::Relaxed);
+        self.tx_bytes.fetch_add(data.len() as u64, Ordering::Relaxed);
         
         Ok(())
     }
@@ -568,68 +695,68 @@ match (status & STATUS_SPEED_MASK) >> 6 {
     fn receive(&mut self) -> Option<Vec<u8>> {
         if !self.initialized.load(Ordering::Relaxed) { return None; }
         
-        let descriptor_index = self.receive_cur;
-        let status = self.receive_descs[descriptor_index].status;
+        let descriptor_index = self.rx_cur;
+        let status = self.rx_descs[descriptor_index].status;
         
         if status & RDESC_STA_DD == 0 { return None; }
         
         // Packet received (only log errors, not every packet)
         
-        if self.receive_descs[descriptor_index].errors != 0 {
-            self.receive_errors.fetch_add(1, Ordering::Relaxed);
-            self.receive_descs[descriptor_index].status = 0;
-            self.receive_cur = (self.receive_cur + 1) % NUMBER_RECEIVE_DESCRIPTOR;
+        if self.rx_descs[descriptor_index].errors != 0 {
+            self.rx_errors.fetch_add(1, Ordering::Relaxed);
+            self.rx_descs[descriptor_index].status = 0;
+            self.rx_cur = (self.rx_cur + 1) % NUMBER_RECEIVE_DESCRIPTOR;
             return None;
         }
         
-        let length = self.receive_descs[descriptor_index].length as usize;
+        let length = self.rx_descs[descriptor_index].length as usize;
         if length == 0 || length > RECEIVE_BUFFER_SIZE {
-            self.receive_descs[descriptor_index].status = 0;
-            self.receive_cur = (self.receive_cur + 1) % NUMBER_RECEIVE_DESCRIPTOR;
+            self.rx_descs[descriptor_index].status = 0;
+            self.rx_cur = (self.rx_cur + 1) % NUMBER_RECEIVE_DESCRIPTOR;
             return None;
         }
         
-        let packet = self.receive_buffers[descriptor_index][..length].to_vec();
+        let packet = self.rx_buffers[descriptor_index][..length].to_vec();
         
-        self.receive_descs[descriptor_index].status = 0;
-        self.receive_descs[descriptor_index].length = 0;
-        self.write_register(REGISTER_RDT, descriptor_index as u32);
-        self.receive_cur = (self.receive_cur + 1) % NUMBER_RECEIVE_DESCRIPTOR;
+        self.rx_descs[descriptor_index].status = 0;
+        self.rx_descs[descriptor_index].length = 0;
+        self.write_reg(REGISTER_RDT, descriptor_index as u32);
+        self.rx_cur = (self.rx_cur + 1) % NUMBER_RECEIVE_DESCRIPTOR;
         
-        self.receive_packets.fetch_add(1, Ordering::Relaxed);
-        self.receive_bytes.fetch_add(length as u64, Ordering::Relaxed);
+        self.rx_packets.fetch_add(1, Ordering::Relaxed);
+        self.rx_bytes.fetch_add(length as u64, Ordering::Relaxed);
         
         Some(packet)
     }
     
     fn poll(&mut self) {
         if !self.initialized.load(Ordering::Relaxed) { return; }
-        let icr = self.read_register(REGISTER_ICR);
+        let icr = self.read_reg(REGISTER_ICR);
         if icr & ICR_LSC != 0 {
-            let status = self.read_register(REGISTER_STATUS);
+            let status = self.read_reg(REGISTER_STATUS);
             self.link_up.store(status & STATUS_LU != 0, Ordering::SeqCst);
         }
     }
     
     fn stats(&self) -> NetStats {
         NetStats {
-            transmit_packets: self.transmit_packets.load(Ordering::Relaxed),
-            receive_packets: self.receive_packets.load(Ordering::Relaxed),
-            transmit_bytes: self.transmit_bytes.load(Ordering::Relaxed),
-            receive_bytes: self.receive_bytes.load(Ordering::Relaxed),
-            transmit_errors: self.transmit_errors.load(Ordering::Relaxed),
-            receive_errors: self.receive_errors.load(Ordering::Relaxed),
-            transmit_dropped: 0,
-            receive_dropped: 0,
+            tx_packets: self.tx_packets.load(Ordering::Relaxed),
+            rx_packets: self.rx_packets.load(Ordering::Relaxed),
+            tx_bytes: self.tx_bytes.load(Ordering::Relaxed),
+            rx_bytes: self.rx_bytes.load(Ordering::Relaxed),
+            tx_errors: self.tx_errors.load(Ordering::Relaxed),
+            rx_errors: self.rx_errors.load(Ordering::Relaxed),
+            tx_dropped: 0,
+            rx_dropped: 0,
         }
     }
     
     fn set_promiscuous(&mut self, enabled: bool) -> Result<(), &'static str> {
         if !self.initialized.load(Ordering::Relaxed) { return Err("Not initialized"); }
-        let mut rctl = self.read_register(REGISTER_RCTL);
+        let mut rctl = self.read_reg(REGISTER_RCTL);
         if enabled { rctl |= RCTL_UPE | RCTL_MPE; } 
         else { rctl &= !(RCTL_UPE | RCTL_MPE); }
-        self.write_register(REGISTER_RCTL, rctl);
+        self.write_reg(REGISTER_RCTL, rctl);
         Ok(())
     }
 }
@@ -645,7 +772,47 @@ const DRIVER_INFORMATION: DriverInformation = DriverInformation {
         (0x8086, 0x100F),  // 82545EM (VMware)
         (0x8086, 0x10D3),  // 82574L
         (0x8086, 0x153A),  // I217-LM
+        (0x8086, 0x153B),  // I217-V
         (0x8086, 0x1533),  // I210
+        // e1000e PCH — Skylake/Kaby Lake (H170, Z170, B150, etc.)
+        (0x8086, 0x15A0),  // I218-LM (Wildcat Point)
+        (0x8086, 0x15A1),  // I218-V (Wildcat Point)
+        (0x8086, 0x15A2),  // I218-LM-3
+        (0x8086, 0x15A3),  // I218-V-3
+        (0x8086, 0x15B7),  // I219-LM (Skylake)
+        (0x8086, 0x15B8),  // I219-V (Skylake) — ASUS H170-PRO
+        (0x8086, 0x15B9),  // I219-LM-2
+        (0x8086, 0x15D6),  // I219-V-2 (Kaby Lake)
+        (0x8086, 0x15D7),  // I219-LM-3 (Kaby Lake)
+        (0x8086, 0x15D8),  // I219-V-3
+        (0x8086, 0x15E3),  // I219-LM (Cannon Lake)
+        (0x8086, 0x0D4E),  // I219-LM (Comet Lake)
+        (0x8086, 0x0D4F),  // I219-V (Comet Lake)
+        (0x8086, 0x0D4C),  // I219-LM (Ice Lake)
+        (0x8086, 0x0D4D),  // I219-V (Ice Lake)
+        // e1000e (ICH8/ICH9) — ThinkPad T61, T400, X200, various laptops/desktops
+        (0x8086, 0x1049),  // 82566MM (T61 onboard)
+        (0x8086, 0x104A),  // 82566DM
+        (0x8086, 0x104B),  // 82566DC
+        (0x8086, 0x104C),  // 82562V
+        (0x8086, 0x104D),  // 82566MC
+        (0x8086, 0x10BD),  // 82566DM-2
+        (0x8086, 0x10BF),  // 82567LF
+        (0x8086, 0x10C0),  // 82562V-2
+        (0x8086, 0x10C2),  // 82562G-2
+        (0x8086, 0x10C3),  // 82562GT-2
+        (0x8086, 0x10CB),  // 82567V
+        (0x8086, 0x10CC),  // 82567LM-2
+        (0x8086, 0x10CD),  // 82567LF-2
+        (0x8086, 0x10CE),  // 82567V-2
+        (0x8086, 0x10DE),  // 82567LM-3 (T500/W500)
+        (0x8086, 0x10DF),  // 82567LF-3
+        (0x8086, 0x10E5),  // 82567LM-4
+        (0x8086, 0x10EA),  // 82577LM
+        (0x8086, 0x10EB),  // 82577LC
+        (0x8086, 0x10EF),  // 82578DM
+        (0x8086, 0x10F0),  // 82578DC
+        (0x8086, 0x10F5),  // 82567LM (ICH9)
     ],
 };
 

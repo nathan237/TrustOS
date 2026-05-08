@@ -283,13 +283,13 @@ fn test_acpi_rsdp_revision() -> TestResult {
 fn test_acpi_rsdp_xsdt_pointer() -> TestResult {
     let mem = setup_acpi_guest_memory();
     let rsdp = 0x50000;
-    let xsdt_address = read_u64(&mem, rsdp + 24);
-    let passed = xsdt_address == 0x50040;
+    let xsdt_addr = read_u64(&mem, rsdp + 24);
+    let passed = xsdt_addr == 0x50040;
     TestResult {
         name: "ACPI RSDP XSDT pointer = 0x50040",
         passed,
         detail: if !passed {
-            Some(format!("xsdt_addr=0x{:X}, expected 0x50040", xsdt_address))
+            Some(format!("xsdt_addr=0x{:X}, expected 0x50040", xsdt_addr))
         } else { None },
     }
 }
@@ -329,8 +329,8 @@ fn test_acpi_xsdt_checksum() -> TestResult {
 fn test_acpi_xsdt_entry_count() -> TestResult {
     let mem = setup_acpi_guest_memory();
     let xsdt = 0x50040;
-    let total_length = read_u32(&mem, xsdt + 4) as usize;
-    let entry_bytes = total_length.saturating_sub(36);
+    let total_len = read_u32(&mem, xsdt + 4) as usize;
+    let entry_bytes = total_len.saturating_sub(36);
     let entry_count = entry_bytes / 8;
     // Should have 3 entries (MADT + FADT + HPET)
     let entry0 = read_u64(&mem, xsdt + 36);
@@ -396,25 +396,25 @@ fn test_acpi_madt_lapic_address() -> TestResult {
 fn test_acpi_madt_has_lapic_entry() -> TestResult {
     let mem = setup_acpi_guest_memory();
     let madt = 0x50080;
-    let total_length = read_u32(&mem, madt + 4) as usize;
+    let total_len = read_u32(&mem, madt + 4) as usize;
     
     // Walk MADT entries starting at offset 44
-    let mut position = 44;
+    let mut pos = 44;
     let mut found_lapic = false;
-    while position + 2 <= total_length {
-        let entry_type = mem[madt + position];
-        let entry_length = mem[madt + position + 1] as usize;
-        if entry_length == 0 { break; }
+    while pos + 2 <= total_len {
+        let entry_type = mem[madt + pos];
+        let entry_len = mem[madt + pos + 1] as usize;
+        if entry_len == 0 { break; }
         
-        if entry_type == 0 && entry_length == 8 {
+        if entry_type == 0 && entry_len == 8 {
             // Processor Local APIC
-            let apic_id = mem[madt + position + 3];
-            let flags = read_u32(&mem, madt + position + 4);
+            let apic_id = mem[madt + pos + 3];
+            let flags = read_u32(&mem, madt + pos + 4);
             if apic_id == 0 && (flags & 1) != 0 {
                 found_lapic = true;
             }
         }
-        position += entry_length;
+        pos += entry_len;
     }
     
     TestResult {
@@ -427,24 +427,24 @@ fn test_acpi_madt_has_lapic_entry() -> TestResult {
 fn test_acpi_madt_has_ioapic_entry() -> TestResult {
     let mem = setup_acpi_guest_memory();
     let madt = 0x50080;
-    let total_length = read_u32(&mem, madt + 4) as usize;
+    let total_len = read_u32(&mem, madt + 4) as usize;
     
-    let mut position = 44;
+    let mut pos = 44;
     let mut found_ioapic = false;
     let mut ioapic_address = 0u32;
-    while position + 2 <= total_length {
-        let entry_type = mem[madt + position];
-        let entry_length = mem[madt + position + 1] as usize;
-        if entry_length == 0 { break; }
+    while pos + 2 <= total_len {
+        let entry_type = mem[madt + pos];
+        let entry_len = mem[madt + pos + 1] as usize;
+        if entry_len == 0 { break; }
         
-        if entry_type == 1 && entry_length == 12 {
+        if entry_type == 1 && entry_len == 12 {
             // I/O APIC
-            ioapic_address = read_u32(&mem, madt + position + 4);
+            ioapic_address = read_u32(&mem, madt + pos + 4);
             if ioapic_address == 0xFEC0_0000 {
                 found_ioapic = true;
             }
         }
-        position += entry_length;
+        pos += entry_len;
     }
     
     TestResult {
@@ -459,24 +459,24 @@ fn test_acpi_madt_has_ioapic_entry() -> TestResult {
 fn test_acpi_madt_interrupt_request_overrides() -> TestResult {
     let mem = setup_acpi_guest_memory();
     let madt = 0x50080;
-    let total_length = read_u32(&mem, madt + 4) as usize;
+    let total_len = read_u32(&mem, madt + 4) as usize;
     
-    let mut position = 44;
+    let mut pos = 44;
     let mut found_irq0_gsi2 = false;
     let mut found_irq9_gsi9 = false;
-    while position + 2 <= total_length {
-        let entry_type = mem[madt + position];
-        let entry_length = mem[madt + position + 1] as usize;
-        if entry_length == 0 { break; }
+    while pos + 2 <= total_len {
+        let entry_type = mem[madt + pos];
+        let entry_len = mem[madt + pos + 1] as usize;
+        if entry_len == 0 { break; }
         
-        if entry_type == 2 && entry_length == 10 {
+        if entry_type == 2 && entry_len == 10 {
             // Interrupt Source Override
-            let source = mem[madt + position + 3];
-            let gsi = read_u32(&mem, madt + position + 4);
+            let source = mem[madt + pos + 3];
+            let gsi = read_u32(&mem, madt + pos + 4);
             if source == 0 && gsi == 2 { found_irq0_gsi2 = true; }
             if source == 9 && gsi == 9 { found_irq9_gsi9 = true; }
         }
-        position += entry_length;
+        pos += entry_len;
     }
     
     let passed = found_irq0_gsi2 && found_irq9_gsi9;
@@ -633,7 +633,7 @@ fn test_pic_defaults() -> TestResult {
         && pic.slave_vector_base == 0x70
         && pic.master_icw_phase == 0
         && pic.slave_icw_phase == 0
-        && pic.master_interrupt_handler == 0
+        && pic.master_isr == 0
         && pic.master_irr == 0
         && !pic.initialized;
     TestResult {
@@ -655,7 +655,7 @@ fn test_pic_icw_sequence_master() -> TestResult {
     let icw1: u8 = 0x11; // ICW1 + ICW4 needed
     if icw1 & 0x10 != 0 {
         pic.master_icw_phase = 1;
-        pic.master_interrupt_handler = 0;
+        pic.master_isr = 0;
         pic.master_irr = 0;
     }
     let phase_after_icw1 = pic.master_icw_phase;
@@ -744,20 +744,20 @@ fn test_pic_ocw1_imr() -> TestResult {
 
 fn test_pic_eoi_clears_interrupt_handler() -> TestResult {
     let mut pic = super::svm_vm::PicState::default();
-    pic.master_interrupt_handler = 0x04; // IRQ2 in-service
+    pic.master_isr = 0x04; // IRQ2 in-service
     
     // Non-specific EOI (0x20 to command port)
     let ocw2: u8 = 0x20;
     if ocw2 == 0x20 {
-        pic.master_interrupt_handler = 0;
+        pic.master_isr = 0;
     }
     
-    let passed = pic.master_interrupt_handler == 0;
+    let passed = pic.master_isr == 0;
     TestResult {
         name: "PIC non-specific EOI clears ISR",
         passed,
         detail: if !passed {
-            Some(format!("isr=0x{:02X} after EOI", pic.master_interrupt_handler))
+            Some(format!("isr=0x{:02X} after EOI", pic.master_isr))
         } else { None },
     }
 }
@@ -817,20 +817,20 @@ fn test_pit_lohi_reload() -> TestResult {
     
     // Write low byte: 0x9C (100 Hz = 11932 = 0x2E9C)
     let lo: u8 = 0x9C;
-    let character = &mut pit.channels[0];
-    if !character.write_hi_pending {
-        character.reload = (character.reload & 0xFF00) | lo as u16;
-        character.write_hi_pending = true;
+    let ch = &mut pit.channels[0];
+    if !ch.write_hi_pending {
+        ch.reload = (ch.reload & 0xFF00) | lo as u16;
+        ch.write_hi_pending = true;
     }
-    let after_lo = character.reload;
-    let pending = character.write_hi_pending;
+    let after_lo = ch.reload;
+    let pending = ch.write_hi_pending;
     
     // Write high byte: 0x2E
     let hi: u8 = 0x2E;
-    if character.write_hi_pending {
-        character.reload = (character.reload & 0x00FF) | ((hi as u16) << 8);
-        character.count = character.reload;
-        character.write_hi_pending = false;
+    if ch.write_hi_pending {
+        ch.reload = (ch.reload & 0x00FF) | ((hi as u16) << 8);
+        ch.count = ch.reload;
+        ch.write_hi_pending = false;
     }
     
     let passed = (after_lo & 0xFF) == 0x9C
@@ -994,16 +994,16 @@ fn test_lapic_divider_values() -> TestResult {
     let mut all_ok = true;
     let mut bad = String::new();
     
-    for &(dcr_value, expected) in &divider_map {
+    for &(dcr_val, expected) in &divider_map {
         let divider = // Correspondance de motifs — branchement exhaustif de Rust.
-match dcr_value & 0xB {
+match dcr_val & 0xB {
             0x0 => 2u64, 0x1 => 4, 0x2 => 8, 0x3 => 16,
             0x8 => 32, 0x9 => 64, 0xA => 128, 0xB => 1,
             _ => 1,
         };
         if divider != expected {
             all_ok = false;
-            bad = format!("dcr=0x{:X}: got {} expected {}", dcr_value, divider, expected);
+            bad = format!("dcr=0x{:X}: got {} expected {}", dcr_val, divider, expected);
             break;
         }
     }
@@ -1035,11 +1035,11 @@ fn test_cmos_time_registers() -> TestResult {
     let mut all_ok = true;
     let mut bad = String::new();
     
-    for &(reg, expected_value) in &expected {
+    for &(reg, expected_val) in &expected {
         let actual = cmos_register_value(reg);
-        if actual != expected_value {
+        if actual != expected_val {
             all_ok = false;
-            bad = format!("reg 0x{:02X}: got 0x{:02X} expected 0x{:02X}", reg, actual, expected_value);
+            bad = format!("reg 0x{:02X}: got 0x{:02X} expected 0x{:02X}", reg, actual, expected_val);
             break;
         }
     }
@@ -1134,7 +1134,7 @@ fn test_mmio_decode_mov_write() -> TestResult {
     let d = super::mmio::decode_mmio_instruction(&bytes, 2, true);
     let ok = // Correspondance de motifs — branchement exhaustif de Rust.
 match d {
-        Some(ref decrypt) => decrypt.is_write && decrypt.operand_size == 4 && decrypt.register == Some(0) && decrypt.insn_length == 2,
+        Some(ref dec) => dec.is_write && dec.operand_size == 4 && dec.register == Some(0) && dec.insn_len == 2,
         None => false,
     };
     TestResult {
@@ -1150,7 +1150,7 @@ fn test_mmio_decode_mov_read() -> TestResult {
     let d = super::mmio::decode_mmio_instruction(&bytes, 2, true);
     let ok = // Correspondance de motifs — branchement exhaustif de Rust.
 match d {
-        Some(ref decrypt) => !decrypt.is_write && decrypt.operand_size == 4 && decrypt.register == Some(1) && decrypt.insn_length == 2,
+        Some(ref dec) => !dec.is_write && dec.operand_size == 4 && dec.register == Some(1) && dec.insn_len == 2,
         None => false,
     };
     TestResult {
@@ -1166,7 +1166,7 @@ fn test_mmio_decode_rex_w() -> TestResult {
     let d = super::mmio::decode_mmio_instruction(&bytes, 3, true);
     let ok = // Correspondance de motifs — branchement exhaustif de Rust.
 match d {
-        Some(ref decrypt) => decrypt.is_write && decrypt.operand_size == 8 && decrypt.register == Some(0) && decrypt.insn_length == 3,
+        Some(ref dec) => dec.is_write && dec.operand_size == 8 && dec.register == Some(0) && dec.insn_len == 3,
         None => false,
     };
     TestResult {
@@ -1183,9 +1183,9 @@ fn test_mmio_decode_imm32() -> TestResult {
     let d = super::mmio::decode_mmio_instruction(&bytes, 6, true);
     let ok = // Correspondance de motifs — branchement exhaustif de Rust.
 match d {
-        Some(ref decrypt) => decrypt.is_write && decrypt.operand_size == 4 
-            && decrypt.register.is_none() 
-            && decrypt.immediate == Some(0x12345678),
+        Some(ref dec) => dec.is_write && dec.operand_size == 4 
+            && dec.register.is_none() 
+            && dec.immediate == Some(0x12345678),
         None => false,
     };
     TestResult {
@@ -1201,7 +1201,7 @@ fn test_mmio_decode_movzx() -> TestResult {
     let d = super::mmio::decode_mmio_instruction(&bytes, 3, true);
     let ok = // Correspondance de motifs — branchement exhaustif de Rust.
 match d {
-        Some(ref decrypt) => !decrypt.is_write && decrypt.operand_size == 1 && decrypt.register == Some(0),
+        Some(ref dec) => !dec.is_write && dec.operand_size == 1 && dec.register == Some(0),
         None => false,
     };
     TestResult {
@@ -1217,7 +1217,7 @@ fn test_mmio_decode_disp32() -> TestResult {
     let d = super::mmio::decode_mmio_instruction(&bytes, 6, true);
     let ok = // Correspondance de motifs — branchement exhaustif de Rust.
 match d {
-        Some(ref decrypt) => !decrypt.is_write && decrypt.operand_size == 4 && decrypt.register == Some(0) && decrypt.insn_length == 6,
+        Some(ref dec) => !dec.is_write && dec.operand_size == 4 && dec.register == Some(0) && dec.insn_len == 6,
         None => false,
     };
     TestResult {
@@ -1237,7 +1237,7 @@ fn test_mmio_decode_r8_r15() -> TestResult {
     let d = super::mmio::decode_mmio_instruction(&bytes, 3, true);
     let ok = // Correspondance de motifs — branchement exhaustif de Rust.
 match d {
-        Some(ref decrypt) => decrypt.is_write && decrypt.operand_size == 4 && decrypt.register == Some(8), // R8
+        Some(ref dec) => dec.is_write && dec.operand_size == 4 && dec.register == Some(8), // R8
         None => false,
     };
     TestResult {
@@ -1252,12 +1252,12 @@ fn test_mmio_register_rw() -> TestResult {
     let mut regs = super::svm_vm::SvmGuestRegs::default();
     // Write to R10 (index 10) and read back
     super::mmio::write_guest_register(&mut regs, 10, 0xDEAD_BEEF_CAFE_BABE);
-    let value = super::mmio::read_guest_register(&regs, 10);
-    let ok = value == 0xDEAD_BEEF_CAFE_BABE && regs.r10 == 0xDEAD_BEEF_CAFE_BABE;
+    let val = super::mmio::read_guest_register(&regs, 10);
+    let ok = val == 0xDEAD_BEEF_CAFE_BABE && regs.r10 == 0xDEAD_BEEF_CAFE_BABE;
     TestResult {
         name: "mmio_register_rw",
         passed: ok,
-        detail: if !ok { Some(format!("got 0x{:X}", value)) } else { None },
+        detail: if !ok { Some(format!("got 0x{:X}", val)) } else { None },
     }
 }
 
@@ -1372,7 +1372,7 @@ fn test_ioapic_interrupt_request_routing() -> TestResult {
     ioapic.write(0x00, 0x15); // Entry 2 high
     ioapic.write(0x10, 0x0000_0000); // dest=0
     
-    let route = ioapic.get_interrupt_request_route(2);
+    let route = ioapic.get_irq_route(2);
     let ok = // Correspondance de motifs — branchement exhaustif de Rust.
 match route {
         Some(ref r) => r.vector == 0x30 && !r.masked && r.delivery_mode == 0 && !r.level_triggered,
@@ -1413,7 +1413,7 @@ fn test_ioapic_readonly_bits() -> TestResult {
 
 fn test_hpet_defaults() -> TestResult {
     let hpet = super::hpet::HpetState::default();
-    let ok = !hpet.enabled && hpet.config == 0 && hpet.interrupt_handler == 0 
+    let ok = !hpet.enabled && hpet.config == 0 && hpet.isr == 0 
              && hpet.counter_offset == 0 && hpet.timers.len() == 3;
     TestResult {
         name: "hpet_defaults",
@@ -1581,14 +1581,14 @@ fn test_hpet_acpi_table_address() -> TestResult {
     let mem = setup_acpi_guest_memory();
     let hpet_offset = 0x50400;
     // Base address is at offset 44 (GAS address field)
-    let address = read_u64(&mem, hpet_offset + 44);
+    let addr = read_u64(&mem, hpet_offset + 44);
     // Address space ID should be 0 (memory)
-    let address_space = mem[hpet_offset + 40];
-    let ok = address == 0xFED0_0000 && address_space == 0;
+    let addr_space = mem[hpet_offset + 40];
+    let ok = addr == 0xFED0_0000 && addr_space == 0;
     TestResult {
         name: "hpet_acpi_table_address",
         passed: ok,
-        detail: if !ok { Some(format!("addr=0x{:X} space={}", address, address_space)) } else { None },
+        detail: if !ok { Some(format!("addr=0x{:X} space={}", addr, addr_space)) } else { None },
     }
 }
 
@@ -1616,9 +1616,9 @@ fn test_pci_host_bridge_vendor_device() -> TestResult {
     let mut bus = super::pci::PciBus::default();
     // Select bus 0, dev 0, fn 0, reg 0 (vendor+device)
     bus.write_config_address(0x8000_0000);
-    let value = bus.read_config_data(0);
-    let vendor = (value & 0xFFFF) as u16;
-    let device = ((value >> 16) & 0xFFFF) as u16;
+    let val = bus.read_config_data(0);
+    let vendor = (val & 0xFFFF) as u16;
+    let device = ((val >> 16) & 0xFFFF) as u16;
     let ok = vendor == 0x8086 && device == 0x1237;
     TestResult {
         name: "pci_host_bridge_ids",
@@ -1631,9 +1631,9 @@ fn test_pci_isa_bridge_class() -> TestResult {
     let mut bus = super::pci::PciBus::default();
     // Select bus 0, dev 1, fn 0, reg 0x08 (revision + class)
     bus.write_config_address(0x8000_0808);
-    let value = bus.read_config_data(0);
-    let class_code = ((value >> 24) & 0xFF) as u8;
-    let subclass = ((value >> 16) & 0xFF) as u8;
+    let val = bus.read_config_data(0);
+    let class_code = ((val >> 24) & 0xFF) as u8;
+    let subclass = ((val >> 16) & 0xFF) as u8;
     let ok = class_code == 0x06 && subclass == 0x01;
     TestResult {
         name: "pci_isa_bridge_class",
@@ -1646,12 +1646,12 @@ fn test_pci_config_read_no_device() -> TestResult {
     let mut bus = super::pci::PciBus::default();
     // Bus 0, dev 31, fn 0 — no device
     bus.write_config_address(0x8000_F800);
-    let value = bus.read_config_data(0);
-    let ok = value == 0xFFFF_FFFF;
+    let val = bus.read_config_data(0);
+    let ok = val == 0xFFFF_FFFF;
     TestResult {
         name: "pci_config_no_device",
         passed: ok,
-        detail: if !ok { Some(format!("val=0x{:08X}", value)) } else { None },
+        detail: if !ok { Some(format!("val=0x{:08X}", val)) } else { None },
     }
 }
 
@@ -1659,12 +1659,12 @@ fn test_pci_config_read_disabled() -> TestResult {
     let mut bus = super::pci::PciBus::default();
     // Bit 31 not set = disabled
     bus.write_config_address(0x0000_0000);
-    let value = bus.read_config_data(0);
-    let ok = value == 0xFFFF_FFFF;
+    let val = bus.read_config_data(0);
+    let ok = val == 0xFFFF_FFFF;
     TestResult {
         name: "pci_config_disabled",
         passed: ok,
-        detail: if !ok { Some(format!("val=0x{:08X}", value)) } else { None },
+        detail: if !ok { Some(format!("val=0x{:08X}", val)) } else { None },
     }
 }
 
@@ -1686,13 +1686,13 @@ fn test_pci_bar_probing() -> TestResult {
     bus.write_config_address(0x8000_0010);
     // Write all 1s (BAR size probe)
     bus.write_config_data(0, 0xFFFF_FFFF);
-    let value = bus.read_config_data(0);
+    let val = bus.read_config_data(0);
     // Host bridge has no real BAR, should read back 0xFFFF_FFFF
-    let ok = value == 0xFFFF_FFFF;
+    let ok = val == 0xFFFF_FFFF;
     TestResult {
         name: "pci_bar_probing",
         passed: ok,
-        detail: if !ok { Some(format!("val=0x{:08X}", value)) } else { None },
+        detail: if !ok { Some(format!("val=0x{:08X}", val)) } else { None },
     }
 }
 
@@ -2047,11 +2047,11 @@ fn test_virtio_block_capacity_readback() -> TestResult {
 
 fn test_virtio_console_default() -> TestResult {
     let state = super::virtio_blk::VirtioConsoleState::default();
-    let ok = state.cols == 80 && state.rows == 25 && state.maximum_number_ports == 1;
+    let ok = state.cols == 80 && state.rows == 25 && state.max_nr_ports == 1;
     TestResult {
         name: "virtio_console_defaults",
         passed: ok,
-        detail: if !ok { Some(format!("cols={} rows={} ports={}", state.cols, state.rows, state.maximum_number_ports)) } else { None },
+        detail: if !ok { Some(format!("cols={} rows={} ports={}", state.cols, state.rows, state.max_nr_ports)) } else { None },
     }
 }
 
@@ -2086,7 +2086,7 @@ fn test_virtio_console_queue_select() -> TestResult {
 
 fn test_virtio_console_interrupt_handler_clear_on_read() -> TestResult {
     let mut state = super::virtio_blk::VirtioConsoleState::default();
-    state.interrupt_handler_status = 0x03; // Both bits set
+    state.isr_status = 0x03; // Both bits set
     
     let isr1 = state.io_read(0x13);
     let isr2 = state.io_read(0x13);

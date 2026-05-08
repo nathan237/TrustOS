@@ -46,12 +46,12 @@ pub fn subtract(&mut self, x: i32, y: i32, width: i32, height: i32) {
     }
     
     /// Check if a point is in the region
-    pub fn contains(&self, pixel: i32, py: i32) -> bool {
+    pub fn contains(&self, px: i32, py: i32) -> bool {
         let mut inside = false;
         
         for rect in &self.rects {
-            let in_rect = pixel >= rect.x 
-                && pixel < rect.x + rect.width 
+            let in_rect = px >= rect.x 
+                && px < rect.x + rect.width 
                 && py >= rect.y 
                 && py < rect.y + rect.height;
             

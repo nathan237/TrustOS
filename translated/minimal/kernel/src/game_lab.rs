@@ -20,140 +20,140 @@ use crate::framebuffer;
 use crate::gameboy::GameBoyEmulator;
 
 
-const LI_: u32 = 28;
-const KX_: u32 = 4;
-const K_: u32 = 14;
-const GB_: u32 = 8;
-const JE_: u32 = 24;
+const FI_: u32 = 28;
+const EK_: u32 = 4;
+const L_: u32 = 14;
+const CE_: u32 = 8;
+const JX_: u32 = 24;
 
 
-const MH_: u32         = 0xFF0A0F14;
-const BNY_: u32      = 0xFF111920;
-const JR_: u32     = 0xFF1E2A36;
-const SE_: u32  = 0xFF142028;
-const T_: u32       = 0xFF9CD8B0;   
+const IK_: u32         = 0xFF0A0F14;
+const BQQ_: u32      = 0xFF111920;
+const KI_: u32     = 0xFF1E2A36;
+const KJ_: u32  = 0xFF142028;
+const P_: u32       = 0xFF9CD8B0;   
 const F_: u32        = 0xFF4A6A54;   
-const BE_: u32     = 0xFF00FF88;   
-const O_: u32     = 0xFF58A6FF;   
-const AF_: u32      = 0xFFE0F8D0;   
-const ED_: u32        = 0xFF80FFAA;   
-const DP_: u32    = 0xFF00FF66;   
-const SD_: u32   = 0xFF2A3A30;   
-const MJ_: u32       = 0xFFD29922;   
-const AW_: u32        = 0xFFF85149;   
-const BB_: u32       = 0xFF79C0FF;   
-const BO_: u32     = 0xFFBC8CFF;   
-const HR_: u32       = 0xFF507060;   
-const SC_: u32    = 0xFFFF4444;   
-const SG_: u32    = 0xFF0E1820;
+const BF_: u32     = 0xFF00FF88;   
+const M_: u32     = 0xFF58A6FF;   
+const AG_: u32      = 0xFFE0F8D0;   
+const EQ_: u32        = 0xFF80FFAA;   
+const DZ_: u32    = 0xFF00FF66;   
+const TG_: u32   = 0xFF2A3A30;   
+const NI_: u32       = 0xFFD29922;   
+const AN_: u32        = 0xFFF85149;   
+const AU_: u32       = 0xFF79C0FF;   
+const BG_: u32     = 0xFFBC8CFF;   
+const IJ_: u32       = 0xFF507060;   
+const TF_: u32    = 0xFFFF4444;   
+const TJ_: u32    = 0xFF0E1820;
 
-const BAG_: usize = 16;
-const CFQ_: usize = 256;
-const CYJ_: usize = 64;
-const CFE_: usize = 8;
+const BCI_: usize = 16;
+const CJA_: usize = 256;
+const DCB_: usize = 64;
+const CIN_: usize = 8;
 
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum LabTab {
-    Zt = 0,
-    Ys = 1,
-    Aoe = 2,
-    Oh = 3,
-    Ze = 4,
+    Analyze = 0,
+    Search = 1,
+    Watch = 2,
+    Tiles = 3,
+    Trace = 4,
 }
 
 
 #[derive(Clone)]
-pub struct Bwr {
-    pub ag: u16,
-    pub cu: [u8; 8],    
-    pub jce: u8,
-    pub jjy: u8,
-    pub hes: u8,
-    pub cpa: bool,
-    pub aw: u8,           
+pub struct Agq {
+    pub addr: u16,
+    pub label: [u8; 8],    
+    pub label_len: u8,
+    pub prev_value: u8,
+    pub cur_value: u8,
+    pub changed: bool,
+    pub size: u8,           
 }
 
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum SearchMode {
-    Ho,      
-    Aaj,    
-    Afd,  
-    Ss,    
-    Tg,       
+    Exact,      
+    Changed,    
+    Unchanged,  
+    Greater,    
+    Less,       
 }
 
 
 #[derive(Clone, Copy)]
-pub struct Azx {
-    pub fz: u16,
+pub struct Vl {
+    pub pc: u16,
     pub opcode: u8,
-    pub q: u8, pub bb: u8,
+    pub a: u8, pub f: u8,
     pub sp: u16,
 }
 
 
 pub struct SaveState {
-    pub kkz: u8, pub klf: u8,
-    pub kla: u8, pub klc: u8,
-    pub kld: u8, pub kle: u8,
-    pub klg: u8, pub klj: u8,
-    pub klo: u16, pub klk: u16,
-    pub kli: bool, pub klh: bool,
-    pub brc: u8, pub bhf: u8,
-    pub cfu: u8,
-    pub aow: u8, pub aox: u8,
-    pub cht: u8, pub chs: u8,
-    pub axj: u8, pub beq: u8,
-    pub aec: Vec<u8>,
-    pub bux: [u8; 127],
-    pub kzo: u8, pub kzz: u8,
-    pub kzy: u8, pub kzx: u8,
-    pub kzp: u8, pub kzq: u8,
-    pub kzl: u8, pub kzu: u8, pub kzv: u8,
-    pub lag: u8, pub laf: u8,
-    pub kzr: u8, pub kzm: u32,
-    pub lab: [u8; 8192],
-    pub lac: [u8; 8192],
-    pub kzs: [u8; 160],
-    pub kzk: [u8; 64],
-    pub kzt: [u8; 64],
-    pub lad: u8,
-    pub kzj: u8, pub kzw: u8,
-    pub lae: u8,
-    pub mkw: u16, pub mla: u8,
-    pub mlb: u8, pub mkz: u8,
-    pub kgs: u16, pub kgq: u8,
-    pub kgr: bool, pub kgp: u8,
-    pub imy: Vec<u8>,
-    pub blq: bool,
+    pub cpu_a: u8, pub cpu_f: u8,
+    pub cpu_b: u8, pub cpu_c: u8,
+    pub cpu_d: u8, pub cpu_e: u8,
+    pub cpu_h: u8, pub cpu_l: u8,
+    pub cpu_sp: u16, pub cpu_pc: u16,
+    pub cpu_ime: bool, pub cpu_halted: bool,
+    pub ie_reg: u8, pub if_reg: u8,
+    pub joypad_reg: u8,
+    pub joypad_buttons: u8, pub joypad_dirs: u8,
+    pub serial_data: u8, pub serial_ctrl: u8,
+    pub wram_bank: u8, pub key1: u8,
+    pub wram: Vec<u8>,
+    pub hram: [u8; 127],
+    pub gpu_lcdc: u8, pub gpu_stat: u8,
+    pub gpu_scy: u8, pub gpu_scx: u8,
+    pub gpu_ly: u8, pub gpu_lyc: u8,
+    pub gpu_bgp: u8, pub gpu_obp0: u8, pub gpu_obp1: u8,
+    pub gpu_wy: u8, pub gpu_wx: u8,
+    pub gpu_mode: u8, pub gpu_cycles: u32,
+    pub gpu_vram: [u8; 8192],
+    pub gpu_vram1: [u8; 8192],
+    pub gpu_oam: [u8; 160],
+    pub gpu_bg_palette: [u8; 64],
+    pub gpu_obj_palette: [u8; 64],
+    pub gpu_vram_bank: u8,
+    pub gpu_bcps: u8, pub gpu_ocps: u8,
+    pub gpu_window_line: u8,
+    pub timer_div: u16, pub timer_tima: u8,
+    pub timer_tma: u8, pub timer_tac: u8,
+    pub cart_rom_bank: u16, pub cart_ram_bank: u8,
+    pub cart_ram_enabled: bool, pub cart_mode: u8,
+    pub cart_ram: Vec<u8>,
+    pub valid: bool,
 }
 
 impl SaveState {
-    pub fn azs() -> Self {
+    pub fn empty() -> Self {
         Self {
-            kkz: 0, klf: 0, kla: 0, klc: 0,
-            kld: 0, kle: 0, klg: 0, klj: 0,
-            klo: 0, klk: 0, kli: false, klh: false,
-            brc: 0, bhf: 0, cfu: 0,
-            aow: 0xF, aox: 0xF,
-            cht: 0, chs: 0,
-            axj: 1, beq: 0,
-            aec: Vec::new(), bux: [0; 127],
-            kzo: 0, kzz: 0, kzy: 0, kzx: 0,
-            kzp: 0, kzq: 0, kzl: 0, kzu: 0, kzv: 0,
-            lag: 0, laf: 0, kzr: 0, kzm: 0,
-            lab: [0; 8192], lac: [0; 8192],
-            kzs: [0; 160],
-            kzk: [0; 64], kzt: [0; 64],
-            lad: 0, kzj: 0, kzw: 0,
-            lae: 0,
-            mkw: 0, mla: 0, mlb: 0, mkz: 0,
-            kgs: 1, kgq: 0,
-            kgr: false, kgp: 0,
-            imy: Vec::new(),
-            blq: false,
+            cpu_a: 0, cpu_f: 0, cpu_b: 0, cpu_c: 0,
+            cpu_d: 0, cpu_e: 0, cpu_h: 0, cpu_l: 0,
+            cpu_sp: 0, cpu_pc: 0, cpu_ime: false, cpu_halted: false,
+            ie_reg: 0, if_reg: 0, joypad_reg: 0,
+            joypad_buttons: 0xF, joypad_dirs: 0xF,
+            serial_data: 0, serial_ctrl: 0,
+            wram_bank: 1, key1: 0,
+            wram: Vec::new(), hram: [0; 127],
+            gpu_lcdc: 0, gpu_stat: 0, gpu_scy: 0, gpu_scx: 0,
+            gpu_ly: 0, gpu_lyc: 0, gpu_bgp: 0, gpu_obp0: 0, gpu_obp1: 0,
+            gpu_wy: 0, gpu_wx: 0, gpu_mode: 0, gpu_cycles: 0,
+            gpu_vram: [0; 8192], gpu_vram1: [0; 8192],
+            gpu_oam: [0; 160],
+            gpu_bg_palette: [0; 64], gpu_obj_palette: [0; 64],
+            gpu_vram_bank: 0, gpu_bcps: 0, gpu_ocps: 0,
+            gpu_window_line: 0,
+            timer_div: 0, timer_tima: 0, timer_tma: 0, timer_tac: 0,
+            cart_rom_bank: 1, cart_ram_bank: 0,
+            cart_ram_enabled: false, cart_mode: 0,
+            cart_ram: Vec::new(),
+            valid: false,
         }
     }
 }
@@ -161,98 +161,98 @@ impl SaveState {
 
 pub struct GameLabState {
     
-    pub fnb: Option<u32>,
+    pub linked_gb_id: Option<u32>,
     
-    pub bnn: u16,
+    pub mem_view_addr: u16,
     
-    pub eyi: u8,
+    pub selected_panel: u8,
     
     pub frame: u32,
     
-    pub foa: u8,
+    pub mem_mode: u8,
     
-    pub jc: u32,
+    pub scroll: u32,
 
     
-    pub ahd: LabTab,
+    pub active_tab: LabTab,
 
     
-    pub eku: Vec<Bwr>,
+    pub watches: Vec<Agq>,
 
     
-    pub fty: u16,         
-    pub joa: [u8; 6],     
-    pub eif: u8,
-    pub chq: Vec<u16>,  
-    pub ftx: Vec<u8>,  
-    pub grs: SearchMode,
-    pub bcn: bool,       
-    pub wfk: bool,    
+    pub search_value: u16,         
+    pub search_input: [u8; 6],     
+    pub search_input_len: u8,
+    pub search_results: Vec<u16>,  
+    pub search_snapshot: Vec<u8>,  
+    pub search_mode: SearchMode,
+    pub search_active: bool,       
+    pub search_byte_mode: bool,    
 
     
-    pub gbl: Vec<u16>,     
-    pub qrr: [u8; 5],        
-    pub qrs: u8,
-    pub ant: bool,
-    pub dwj: bool,            
-    pub dwi: bool,          
+    pub breakpoints: Vec<u16>,     
+    pub bp_input: [u8; 5],        
+    pub bp_input_len: u8,
+    pub paused: bool,
+    pub step_one: bool,            
+    pub step_frame: bool,          
 
     
     
-    pub cmx: u8,
+    pub speed_idx: u8,
 
     
-    pub trace: Vec<Azx>,
-    pub eka: bool,
+    pub trace: Vec<Vl>,
+    pub trace_enabled: bool,
 
     
-    pub ejv: u8,   
-    pub gum: u32,
+    pub tile_page: u8,   
+    pub tile_scroll: u32,
 
     
-    pub jfs: [u8; 256], 
+    pub mem_prev: [u8; 256], 
 
     
-    pub fto: SaveState,
+    pub save_state: SaveState,
 }
 
 impl GameLabState {
     pub fn new() -> Self {
         Self {
-            fnb: None,
-            bnn: 0xC000,
-            eyi: 0,
+            linked_gb_id: None,
+            mem_view_addr: 0xC000,
+            selected_panel: 0,
             frame: 0,
-            foa: 0,
-            jc: 0,
-            ahd: LabTab::Zt,
-            eku: Vec::new(),
-            fty: 0,
-            joa: [0; 6],
-            eif: 0,
-            chq: Vec::new(),
-            ftx: Vec::new(),
-            grs: SearchMode::Ho,
-            bcn: false,
-            wfk: true,
-            gbl: Vec::new(),
-            qrr: [0; 5],
-            qrs: 0,
-            ant: false,
-            dwj: false,
-            dwi: false,
-            cmx: 2, 
+            mem_mode: 0,
+            scroll: 0,
+            active_tab: LabTab::Analyze,
+            watches: Vec::new(),
+            search_value: 0,
+            search_input: [0; 6],
+            search_input_len: 0,
+            search_results: Vec::new(),
+            search_snapshot: Vec::new(),
+            search_mode: SearchMode::Exact,
+            search_active: false,
+            search_byte_mode: true,
+            breakpoints: Vec::new(),
+            bp_input: [0; 5],
+            bp_input_len: 0,
+            paused: false,
+            step_one: false,
+            step_frame: false,
+            speed_idx: 2, 
             trace: Vec::new(),
-            eka: false,
-            ejv: 0,
-            gum: 0,
-            jfs: [0; 256],
-            fto: SaveState::azs(),
+            trace_enabled: false,
+            tile_page: 0,
+            tile_scroll: 0,
+            mem_prev: [0; 256],
+            save_state: SaveState::empty(),
         }
     }
 
-    pub fn zpc(&self) -> f32 {
-        match self.cmx {
+    pub fn qxj(&self) -> f32 {
+        match self.speed_idx {
             0 => 0.25,
             1 => 0.5,
             2 => 1.0,
@@ -262,8 +262,8 @@ impl GameLabState {
         }
     }
 
-    pub fn wqy(&self) -> &'static str {
-        match self.cmx {
+    pub fn speed_label(&self) -> &'static str {
+        match self.speed_idx {
             0 => "0.25x",
             1 => "0.5x",
             2 => "1x",
@@ -274,496 +274,496 @@ impl GameLabState {
     }
 
     
-    pub fn ziv(&mut self, cw: &GameBoyEmulator) {
-        if !self.eka { return; }
-        let fz = cw.cpu.fz;
-        let opcode = boa(cw, fz);
-        let bt = Azx {
-            fz,
+    pub fn qtg(&mut self, an: &GameBoyEmulator) {
+        if !self.trace_enabled { return; }
+        let pc = an.cpu.pc;
+        let opcode = aik(an, pc);
+        let entry = Vl {
+            pc,
             opcode,
-            q: cw.cpu.q,
-            bb: cw.cpu.bb,
-            sp: cw.cpu.sp,
+            a: an.cpu.a,
+            f: an.cpu.f,
+            sp: an.cpu.sp,
         };
-        if self.trace.len() >= CYJ_ {
+        if self.trace.len() >= DCB_ {
             self.trace.remove(0);
         }
-        self.trace.push(bt);
+        self.trace.push(entry);
     }
 
     
-    pub fn pkj(&self, fz: u16) -> bool {
-        self.gbl.iter().any(|&bp| bp == fz)
+    pub fn should_break(&self, pc: u16) -> bool {
+        self.breakpoints.iter().any(|&bp| bp == pc)
     }
 
     
-    pub fn wcv(&mut self, cw: &GameBoyEmulator) {
-        let e = &mut self.fto;
-        e.kkz = cw.cpu.q; e.klf = cw.cpu.bb;
-        e.kla = cw.cpu.o; e.klc = cw.cpu.r;
-        e.kld = cw.cpu.bc; e.kle = cw.cpu.aa;
-        e.klg = cw.cpu.i; e.klj = cw.cpu.dm;
-        e.klo = cw.cpu.sp; e.klk = cw.cpu.fz;
-        e.kli = cw.cpu.dih; e.klh = cw.cpu.dhv;
-        e.brc = cw.brc; e.bhf = cw.bhf;
-        e.cfu = cw.cfu;
-        e.aow = cw.aow;
-        e.aox = cw.aox;
-        e.cht = cw.cht;
-        e.chs = cw.chs;
-        e.axj = cw.axj; e.beq = cw.beq;
-        e.aec = cw.aec.clone();
-        e.bux = cw.bux;
-        e.kzo = cw.gpu.amh; e.kzz = cw.gpu.hm;
-        e.kzy = cw.gpu.eyf; e.kzx = cw.gpu.eye;
-        e.kzp = cw.gpu.ct; e.kzq = cw.gpu.eey;
-        e.kzl = cw.gpu.emt; e.kzu = cw.gpu.fpm; e.kzv = cw.gpu.fpn;
-        e.lag = cw.gpu.lw; e.laf = cw.gpu.fx;
-        e.kzr = cw.gpu.ev; e.kzm = cw.gpu.yl;
-        e.lab = cw.gpu.aof;
-        e.lac = cw.gpu.dnb;
-        e.kzs = cw.gpu.awh;
-        e.kzk = cw.gpu.bdo;
-        e.kzt = cw.gpu.fpk;
-        e.lad = cw.gpu.fbb;
-        e.kzj = cw.gpu.doj; e.kzw = cw.gpu.dtv;
-        e.lae = cw.gpu.ekz;
-        e.mkw = cw.timer.div; e.mla = cw.timer.ejw;
-        e.mlb = cw.timer.fww; e.mkz = cw.timer.ezl;
-        e.kgs = cw.on.bwu;
-        e.kgq = cw.on.brv;
-        e.kgr = cw.on.ctr;
-        e.kgp = cw.on.ev;
-        e.imy = cw.on.ajl.clone();
-        e.blq = true;
+    pub fn save_from(&mut self, an: &GameBoyEmulator) {
+        let j = &mut self.save_state;
+        j.cpu_a = an.cpu.a; j.cpu_f = an.cpu.f;
+        j.cpu_b = an.cpu.b; j.cpu_c = an.cpu.c;
+        j.cpu_d = an.cpu.d; j.cpu_e = an.cpu.e;
+        j.cpu_h = an.cpu.h; j.cpu_l = an.cpu.l;
+        j.cpu_sp = an.cpu.sp; j.cpu_pc = an.cpu.pc;
+        j.cpu_ime = an.cpu.ime; j.cpu_halted = an.cpu.halted;
+        j.ie_reg = an.ie_reg; j.if_reg = an.if_reg;
+        j.joypad_reg = an.joypad_reg;
+        j.joypad_buttons = an.joypad_buttons;
+        j.joypad_dirs = an.joypad_dirs;
+        j.serial_data = an.serial_data;
+        j.serial_ctrl = an.serial_ctrl;
+        j.wram_bank = an.wram_bank; j.key1 = an.key1;
+        j.wram = an.wram.clone();
+        j.hram = an.hram;
+        j.gpu_lcdc = an.gpu.lcdc; j.gpu_stat = an.gpu.stat;
+        j.gpu_scy = an.gpu.scy; j.gpu_scx = an.gpu.scx;
+        j.gpu_ly = an.gpu.ly; j.gpu_lyc = an.gpu.lyc;
+        j.gpu_bgp = an.gpu.bgp; j.gpu_obp0 = an.gpu.obp0; j.gpu_obp1 = an.gpu.obp1;
+        j.gpu_wy = an.gpu.wy; j.gpu_wx = an.gpu.wx;
+        j.gpu_mode = an.gpu.mode; j.gpu_cycles = an.gpu.cycles;
+        j.gpu_vram = an.gpu.vram;
+        j.gpu_vram1 = an.gpu.vram1;
+        j.gpu_oam = an.gpu.oam;
+        j.gpu_bg_palette = an.gpu.bg_palette;
+        j.gpu_obj_palette = an.gpu.obj_palette;
+        j.gpu_vram_bank = an.gpu.vram_bank;
+        j.gpu_bcps = an.gpu.bcps; j.gpu_ocps = an.gpu.ocps;
+        j.gpu_window_line = an.gpu.window_line;
+        j.timer_div = an.timer.div; j.timer_tima = an.timer.tima;
+        j.timer_tma = an.timer.tma; j.timer_tac = an.timer.tac;
+        j.cart_rom_bank = an.cart.rom_bank;
+        j.cart_ram_bank = an.cart.ram_bank;
+        j.cart_ram_enabled = an.cart.ram_enabled;
+        j.cart_mode = an.cart.mode;
+        j.cart_ram = an.cart.ram.clone();
+        j.valid = true;
     }
 
     
-    pub fn uhb(&self, cw: &mut GameBoyEmulator) {
-        let e = &self.fto;
-        if !e.blq { return; }
-        cw.cpu.q = e.kkz; cw.cpu.bb = e.klf;
-        cw.cpu.o = e.kla; cw.cpu.r = e.klc;
-        cw.cpu.bc = e.kld; cw.cpu.aa = e.kle;
-        cw.cpu.i = e.klg; cw.cpu.dm = e.klj;
-        cw.cpu.sp = e.klo; cw.cpu.fz = e.klk;
-        cw.cpu.dih = e.kli; cw.cpu.dhv = e.klh;
-        cw.brc = e.brc; cw.bhf = e.bhf;
-        cw.cfu = e.cfu;
-        cw.aow = e.aow;
-        cw.aox = e.aox;
-        cw.cht = e.cht;
-        cw.chs = e.chs;
-        cw.axj = e.axj; cw.beq = e.beq;
-        if e.aec.len() == cw.aec.len() {
-            cw.aec.dg(&e.aec);
+    pub fn load_into(&self, an: &mut GameBoyEmulator) {
+        let j = &self.save_state;
+        if !j.valid { return; }
+        an.cpu.a = j.cpu_a; an.cpu.f = j.cpu_f;
+        an.cpu.b = j.cpu_b; an.cpu.c = j.cpu_c;
+        an.cpu.d = j.cpu_d; an.cpu.e = j.cpu_e;
+        an.cpu.h = j.cpu_h; an.cpu.l = j.cpu_l;
+        an.cpu.sp = j.cpu_sp; an.cpu.pc = j.cpu_pc;
+        an.cpu.ime = j.cpu_ime; an.cpu.halted = j.cpu_halted;
+        an.ie_reg = j.ie_reg; an.if_reg = j.if_reg;
+        an.joypad_reg = j.joypad_reg;
+        an.joypad_buttons = j.joypad_buttons;
+        an.joypad_dirs = j.joypad_dirs;
+        an.serial_data = j.serial_data;
+        an.serial_ctrl = j.serial_ctrl;
+        an.wram_bank = j.wram_bank; an.key1 = j.key1;
+        if j.wram.len() == an.wram.len() {
+            an.wram.copy_from_slice(&j.wram);
         }
-        cw.bux = e.bux;
-        cw.gpu.amh = e.kzo; cw.gpu.hm = e.kzz;
-        cw.gpu.eyf = e.kzy; cw.gpu.eye = e.kzx;
-        cw.gpu.ct = e.kzp; cw.gpu.eey = e.kzq;
-        cw.gpu.emt = e.kzl; cw.gpu.fpm = e.kzu; cw.gpu.fpn = e.kzv;
-        cw.gpu.lw = e.lag; cw.gpu.fx = e.laf;
-        cw.gpu.ev = e.kzr; cw.gpu.yl = e.kzm;
-        cw.gpu.aof = e.lab;
-        cw.gpu.dnb = e.lac;
-        cw.gpu.awh = e.kzs;
-        cw.gpu.bdo = e.kzk;
-        cw.gpu.fpk = e.kzt;
-        cw.gpu.fbb = e.lad;
-        cw.gpu.doj = e.kzj; cw.gpu.dtv = e.kzw;
-        cw.gpu.ekz = e.lae;
-        cw.timer.div = e.mkw; cw.timer.ejw = e.mla;
-        cw.timer.fww = e.mlb; cw.timer.ezl = e.mkz;
-        cw.on.bwu = e.kgs;
-        cw.on.brv = e.kgq;
-        cw.on.ctr = e.kgr;
-        cw.on.ev = e.kgp;
-        if e.imy.len() == cw.on.ajl.len() {
-            cw.on.ajl.dg(&e.imy);
-        }
-    }
-
-    
-    pub fn pru(&mut self, cw: &GameBoyEmulator) {
-        self.ftx.clear();
-        self.ftx.pcn(cw.aec.len());
-        for &o in cw.aec.iter() {
-            self.ftx.push(o);
+        an.hram = j.hram;
+        an.gpu.lcdc = j.gpu_lcdc; an.gpu.stat = j.gpu_stat;
+        an.gpu.scy = j.gpu_scy; an.gpu.scx = j.gpu_scx;
+        an.gpu.ly = j.gpu_ly; an.gpu.lyc = j.gpu_lyc;
+        an.gpu.bgp = j.gpu_bgp; an.gpu.obp0 = j.gpu_obp0; an.gpu.obp1 = j.gpu_obp1;
+        an.gpu.wy = j.gpu_wy; an.gpu.wx = j.gpu_wx;
+        an.gpu.mode = j.gpu_mode; an.gpu.cycles = j.gpu_cycles;
+        an.gpu.vram = j.gpu_vram;
+        an.gpu.vram1 = j.gpu_vram1;
+        an.gpu.oam = j.gpu_oam;
+        an.gpu.bg_palette = j.gpu_bg_palette;
+        an.gpu.obj_palette = j.gpu_obj_palette;
+        an.gpu.vram_bank = j.gpu_vram_bank;
+        an.gpu.bcps = j.gpu_bcps; an.gpu.ocps = j.gpu_ocps;
+        an.gpu.window_line = j.gpu_window_line;
+        an.timer.div = j.timer_div; an.timer.tima = j.timer_tima;
+        an.timer.tma = j.timer_tma; an.timer.tac = j.timer_tac;
+        an.cart.rom_bank = j.cart_rom_bank;
+        an.cart.ram_bank = j.cart_ram_bank;
+        an.cart.ram_enabled = j.cart_ram_enabled;
+        an.cart.mode = j.cart_mode;
+        if j.cart_ram.len() == an.cart.ram.len() {
+            an.cart.ram.copy_from_slice(&j.cart_ram);
         }
     }
 
     
-    pub fn wfn(&mut self, cw: &GameBoyEmulator) {
-        self.chq.clear();
-        let ap = self.fty as u8;
-        for (a, &o) in cw.aec.iter().cf() {
-            if o == ap {
-                let ag = if a < 0x1000 { 0xC000 + a as u16 } else { 0xD000 + (a as u16 - 0x1000) };
-                self.chq.push(ag);
-                if self.chq.len() >= CFQ_ { break; }
+    pub fn take_search_snapshot(&mut self, an: &GameBoyEmulator) {
+        self.search_snapshot.clear();
+        self.search_snapshot.reserve(an.wram.len());
+        for &b in an.wram.iter() {
+            self.search_snapshot.push(b);
+        }
+    }
+
+    
+    pub fn search_initial(&mut self, an: &GameBoyEmulator) {
+        self.search_results.clear();
+        let val = self.search_value as u8;
+        for (i, &b) in an.wram.iter().enumerate() {
+            if b == val {
+                let addr = if i < 0x1000 { 0xC000 + i as u16 } else { 0xD000 + (i as u16 - 0x1000) };
+                self.search_results.push(addr);
+                if self.search_results.len() >= CJA_ { break; }
             }
         }
-        self.pru(cw);
-        self.bcn = true;
+        self.take_search_snapshot(an);
+        self.search_active = true;
     }
 
     
-    pub fn wfm(&mut self, cw: &GameBoyEmulator) {
-        if !self.bcn { return; }
-        let utq: Vec<u16> = self.chq.iter().hu().hi(|&ag| {
-            let heq = boa(cw, ag);
-            let vo = self.plv(ag);
-            match self.grs {
-                SearchMode::Ho => heq == self.fty as u8,
-                SearchMode::Aaj => heq != vo,
-                SearchMode::Afd => heq == vo,
-                SearchMode::Ss => heq > vo,
-                SearchMode::Tg => heq < vo,
+    pub fn search_filter(&mut self, an: &GameBoyEmulator) {
+        if !self.search_active { return; }
+        let njq: Vec<u16> = self.search_results.iter().copied().filter(|&addr| {
+            let agi = aik(an, addr);
+            let prev = self.snapshot_byte(addr);
+            match self.search_mode {
+                SearchMode::Exact => agi == self.search_value as u8,
+                SearchMode::Changed => agi != prev,
+                SearchMode::Unchanged => agi == prev,
+                SearchMode::Greater => agi > prev,
+                SearchMode::Less => agi < prev,
             }
         }).collect();
-        self.chq = utq;
-        self.pru(cw);
+        self.search_results = njq;
+        self.take_search_snapshot(an);
     }
 
-    fn plv(&self, ag: u16) -> u8 {
-        let w = match ag {
-            0xC000..=0xCFFF => (ag - 0xC000) as usize,
-            0xD000..=0xDFFF => 0x1000 + (ag - 0xD000) as usize,
+    fn snapshot_byte(&self, addr: u16) -> u8 {
+        let idx = match addr {
+            0xC000..=0xCFFF => (addr - 0xC000) as usize,
+            0xD000..=0xDFFF => 0x1000 + (addr - 0xD000) as usize,
             _ => return 0xFF,
         };
-        if w < self.ftx.len() { self.ftx[w] } else { 0xFF }
+        if idx < self.search_snapshot.len() { self.search_snapshot[idx] } else { 0xFF }
     }
 
     
-    pub fn qfq(&mut self, ag: u16) {
-        if self.eku.len() >= BAG_ { return; }
-        if self.eku.iter().any(|d| d.ag == ag) { return; }
-        let mut cu = [0u8; 8];
-        let e = format!("{:04X}", ag);
-        for (a, o) in e.bf().cf().take(8) { cu[a] = o; }
-        self.eku.push(Bwr {
-            ag,
-            cu,
-            jce: e.len().v(8) as u8,
-            jjy: 0,
-            hes: 0,
-            cpa: false,
-            aw: 1,
+    pub fn add_watch(&mut self, addr: u16) {
+        if self.watches.len() >= BCI_ { return; }
+        if self.watches.iter().any(|w| w.addr == addr) { return; }
+        let mut label = [0u8; 8];
+        let j = format!("{:04X}", addr);
+        for (i, b) in j.bytes().enumerate().take(8) { label[i] = b; }
+        self.watches.push(Agq {
+            addr,
+            label,
+            label_len: j.len().min(8) as u8,
+            prev_value: 0,
+            cur_value: 0,
+            changed: false,
+            size: 1,
         });
     }
 
     
-    pub fn pxk(&mut self, cw: &GameBoyEmulator) {
-        for d in self.eku.el() {
-            d.jjy = d.hes;
-            d.hes = boa(cw, d.ag);
-            d.cpa = d.hes != d.jjy;
+    pub fn update_watches(&mut self, an: &GameBoyEmulator) {
+        for w in self.watches.iter_mut() {
+            w.prev_value = w.cur_value;
+            w.cur_value = aik(an, w.addr);
+            w.changed = w.cur_value != w.prev_value;
         }
     }
 
-    pub fn or(&mut self) {
-        self.frame = self.frame.cn(1);
+    pub fn tick(&mut self) {
+        self.frame = self.frame.wrapping_add(1);
     }
 
-    pub fn vr(&mut self, bs: u8) {
-        match self.ahd {
-            LabTab::Zt => self.tjz(bs),
-            LabTab::Ys => self.tka(bs),
-            LabTab::Aoe => self.tkd(bs),
-            LabTab::Oh => self.tkb(bs),
-            LabTab::Ze => self.tkc(bs),
+    pub fn handle_key(&mut self, key: u8) {
+        match self.active_tab {
+            LabTab::Analyze => self.handle_key_analyze(key),
+            LabTab::Search => self.handle_key_search(key),
+            LabTab::Watch => self.handle_key_watch(key),
+            LabTab::Tiles => self.handle_key_tiles(key),
+            LabTab::Trace => self.handle_key_trace(key),
         }
         
-        match bs {
+        match key {
             
-            b'p' | b'P' => self.ant = !self.ant,
+            b'p' | b'P' => self.paused = !self.paused,
             
-            b'n' | b'N' => { self.dwj = true; self.ant = true; }
+            b'n' | b'N' => { self.step_one = true; self.paused = true; }
             
-            b'm' | b'M' => { self.dwi = true; self.ant = true; }
+            b'm' | b'M' => { self.step_frame = true; self.paused = true; }
             
-            b',' => { if self.cmx > 0 { self.cmx -= 1; } }
-            b'.' => { if self.cmx < 4 { self.cmx += 1; } }
+            b',' => { if self.speed_idx > 0 { self.speed_idx -= 1; } }
+            b'.' => { if self.speed_idx < 4 { self.speed_idx += 1; } }
             _ => {}
         }
     }
 
-    fn tjz(&mut self, bs: u8) {
-        match bs {
-            0x09 => { self.eyi = (self.eyi + 1) % 6; }
-            0xF0 => { self.bnn = self.bnn.nj(0x10); }
-            0xF1 => { self.bnn = self.bnn.cn(0x10); }
-            0xF2 => { self.bnn = self.bnn.nj(0x100); }
-            0xF3 => { self.bnn = self.bnn.cn(0x100); }
-            b'1' => { self.foa = 0; self.bnn = 0xC000; }
-            b'2' => { self.foa = 1; self.bnn = 0x8000; }
-            b'3' => { self.foa = 2; self.bnn = 0xFF80; }
-            b'4' => { self.foa = 3; self.bnn = 0x0000; }
-            b'5' => { self.foa = 4; self.bnn = 0xFE00; }
+    fn handle_key_analyze(&mut self, key: u8) {
+        match key {
+            0x09 => { self.selected_panel = (self.selected_panel + 1) % 6; }
+            0xF0 => { self.mem_view_addr = self.mem_view_addr.wrapping_sub(0x10); }
+            0xF1 => { self.mem_view_addr = self.mem_view_addr.wrapping_add(0x10); }
+            0xF2 => { self.mem_view_addr = self.mem_view_addr.wrapping_sub(0x100); }
+            0xF3 => { self.mem_view_addr = self.mem_view_addr.wrapping_add(0x100); }
+            b'1' => { self.mem_mode = 0; self.mem_view_addr = 0xC000; }
+            b'2' => { self.mem_mode = 1; self.mem_view_addr = 0x8000; }
+            b'3' => { self.mem_mode = 2; self.mem_view_addr = 0xFF80; }
+            b'4' => { self.mem_mode = 3; self.mem_view_addr = 0x0000; }
+            b'5' => { self.mem_mode = 4; self.mem_view_addr = 0xFE00; }
             _ => {}
         }
     }
 
-    fn tka(&mut self, bs: u8) {
-        match bs {
+    fn handle_key_search(&mut self, key: u8) {
+        match key {
             b'0'..=b'9' | b'a'..=b'f' | b'A'..=b'F' => {
-                if (self.eif as usize) < 4 {
-                    self.joa[self.eif as usize] = bs;
-                    self.eif += 1;
+                if (self.search_input_len as usize) < 4 {
+                    self.search_input[self.search_input_len as usize] = key;
+                    self.search_input_len += 1;
                     
-                    self.fty = self.oum();
+                    self.search_value = self.parse_search_hex();
                 }
             }
             0x08 | 0x7F => { 
-                if self.eif > 0 {
-                    self.eif -= 1;
-                    self.fty = self.oum();
+                if self.search_input_len > 0 {
+                    self.search_input_len -= 1;
+                    self.search_value = self.parse_search_hex();
                 }
             }
             
             0x09 => {
-                self.grs = match self.grs {
-                    SearchMode::Ho => SearchMode::Aaj,
-                    SearchMode::Aaj => SearchMode::Afd,
-                    SearchMode::Afd => SearchMode::Ss,
-                    SearchMode::Ss => SearchMode::Tg,
-                    SearchMode::Tg => SearchMode::Ho,
+                self.search_mode = match self.search_mode {
+                    SearchMode::Exact => SearchMode::Changed,
+                    SearchMode::Changed => SearchMode::Unchanged,
+                    SearchMode::Unchanged => SearchMode::Greater,
+                    SearchMode::Greater => SearchMode::Less,
+                    SearchMode::Less => SearchMode::Exact,
                 };
             }
             
             b'r' | b'R' => {
-                self.chq.clear();
-                self.bcn = false;
-                self.eif = 0;
-                self.ftx.clear();
+                self.search_results.clear();
+                self.search_active = false;
+                self.search_input_len = 0;
+                self.search_snapshot.clear();
             }
             _ => {}
         }
     }
 
-    fn tkd(&mut self, bs: u8) {
-        match bs {
+    fn handle_key_watch(&mut self, key: u8) {
+        match key {
             
             0x08 | 0x7F => {
-                self.eku.pop();
+                self.watches.pop();
             }
             _ => {}
         }
     }
 
-    fn tkb(&mut self, bs: u8) {
-        match bs {
-            0x09 => { self.ejv = (self.ejv + 1) % 3; }
-            0xF0 => { self.gum = self.gum.ao(1); }
-            0xF1 => { self.gum = self.gum.akq(1); }
+    fn handle_key_tiles(&mut self, key: u8) {
+        match key {
+            0x09 => { self.tile_page = (self.tile_page + 1) % 3; }
+            0xF0 => { self.tile_scroll = self.tile_scroll.saturating_sub(1); }
+            0xF1 => { self.tile_scroll = self.tile_scroll.saturating_add(1); }
             _ => {}
         }
     }
 
-    fn tkc(&mut self, bs: u8) {
-        match bs {
-            b't' | b'T' => { self.eka = !self.eka; }
+    fn handle_key_trace(&mut self, key: u8) {
+        match key {
+            b't' | b'T' => { self.trace_enabled = !self.trace_enabled; }
             b'r' | b'R' => { self.trace.clear(); }
             _ => {}
         }
     }
 
-    fn oum(&self) -> u16 {
-        let mut ap: u16 = 0;
-        for a in 0..self.eif as usize {
-            let r = self.joa[a];
-            let dpy = match r {
-                b'0'..=b'9' => r - b'0',
-                b'a'..=b'f' => r - b'a' + 10,
-                b'A'..=b'F' => r - b'A' + 10,
+    fn parse_search_hex(&self) -> u16 {
+        let mut val: u16 = 0;
+        for i in 0..self.search_input_len as usize {
+            let c = self.search_input[i];
+            let blu = match c {
+                b'0'..=b'9' => c - b'0',
+                b'a'..=b'f' => c - b'a' + 10,
+                b'A'..=b'F' => c - b'A' + 10,
                 _ => 0,
             };
-            ap = (ap << 4) | dpy as u16;
+            val = (val << 4) | blu as u16;
         }
-        ap
+        val
     }
 
-    pub fn ago(&mut self, kb: i32, ix: i32, hk: u32, qec: u32) {
+    pub fn handle_click(&mut self, da: i32, cm: i32, ca: u32, _wh: u32) {
         
         
-        let bbs = 22i32;
-        let puj = LI_ as i32 + bbs;
-        let pui = puj + JE_ as i32;
-        if ix >= puj && ix < pui {
-            let axb = 72i32;
-            let gx = kb - 4;
-            if gx >= 0 {
-                let xag = gx / axb;
-                match xag {
-                    0 => self.ahd = LabTab::Zt,
-                    1 => self.ahd = LabTab::Ys,
-                    2 => self.ahd = LabTab::Aoe,
-                    3 => self.ahd = LabTab::Oh,
-                    4 => self.ahd = LabTab::Ze,
+        let acc = 22i32;
+        let jnj = FI_ as i32 + acc;
+        let jni = jnj + JX_ as i32;
+        if cm >= jnj && cm < jni {
+            let zm = 72i32;
+            let bu = da - 4;
+            if bu >= 0 {
+                let pcs = bu / zm;
+                match pcs {
+                    0 => self.active_tab = LabTab::Analyze,
+                    1 => self.active_tab = LabTab::Search,
+                    2 => self.active_tab = LabTab::Watch,
+                    3 => self.active_tab = LabTab::Tiles,
+                    4 => self.active_tab = LabTab::Trace,
                     _ => {}
                 }
             }
             
-            let eyu = hk as i32 - 200;
-            if kb >= eyu && kb < eyu + 24 {
-                if self.cmx > 0 { self.cmx -= 1; }
-            } else if kb >= eyu + 28 && kb < eyu + 52 {
-                if self.cmx < 4 { self.cmx += 1; }
+            let cdu = ca as i32 - 200;
+            if da >= cdu && da < cdu + 24 {
+                if self.speed_idx > 0 { self.speed_idx -= 1; }
+            } else if da >= cdu + 28 && da < cdu + 52 {
+                if self.speed_idx < 4 { self.speed_idx += 1; }
             }
             
-            let goz = hk as i32 - 130;
-            if kb >= goz && kb < goz + 40 {
-                self.ant = !self.ant;
+            let dcj = ca as i32 - 130;
+            if da >= dcj && da < dcj + 40 {
+                self.paused = !self.paused;
             }
             
-            let dcj = hk as i32 - 86;
-            if kb >= dcj && kb < dcj + 36 {
-                self.dwj = true; self.ant = true;
+            let avf = ca as i32 - 86;
+            if da >= avf && da < avf + 36 {
+                self.step_one = true; self.paused = true;
             }
             
-            let nwa = hk as i32 - 46;
-            if kb >= nwa && kb < nwa + 42 {
-                self.dwi = true; self.ant = true;
+            let hzz = ca as i32 - 46;
+            if da >= hzz && da < hzz + 42 {
+                self.step_frame = true; self.paused = true;
             }
         }
 
         
-        let gl = pui;
+        let bn = jni;
 
         
-        if self.ahd == LabTab::Ys {
+        if self.active_tab == LabTab::Search {
             
-            let onx = gl + 6 + K_ as i32 + 4 + K_ as i32 + 2;
-            if ix >= onx && ix < onx + K_ as i32 {
-                let hl = kb - 8 - 48;
-                if hl >= 0 {
+            let ioh = bn + 6 + L_ as i32 + 4 + L_ as i32 + 2;
+            if cm >= ioh && cm < ioh + L_ as i32 {
+                let cg = da - 8 - 48;
+                if cg >= 0 {
                     
-                    let upl: [i32; 5] = [5*8+10, 7*8+10, 4*8+10, 7*8+10, 4*8+10];
-                    let mut jyy = 0i32;
-                    for (a, &d) in upl.iter().cf() {
-                        if hl >= jyy && hl < jyy + d {
-                            self.grs = match a {
-                                0 => SearchMode::Ho,
-                                1 => SearchMode::Aaj,
-                                2 => SearchMode::Afd,
-                                3 => SearchMode::Ss,
-                                _ => SearchMode::Tg,
+                    let ngc: [i32; 5] = [5*8+10, 7*8+10, 4*8+10, 7*8+10, 4*8+10];
+                    let mut fga = 0i32;
+                    for (i, &w) in ngc.iter().enumerate() {
+                        if cg >= fga && cg < fga + w {
+                            self.search_mode = match i {
+                                0 => SearchMode::Exact,
+                                1 => SearchMode::Changed,
+                                2 => SearchMode::Unchanged,
+                                3 => SearchMode::Greater,
+                                _ => SearchMode::Less,
                             };
                             break;
                         }
-                        jyy += d;
+                        fga += w;
                     }
                 }
             }
             
-            let hqd = gl + 120;
-            if ix >= hqd && kb >= (hk as i32 - 60) {
-                let w = ((ix - hqd) / K_ as i32) as usize;
-                if w < self.chq.len() {
-                    self.qfq(self.chq[w]);
+            let dto = bn + 120;
+            if cm >= dto && da >= (ca as i32 - 60) {
+                let idx = ((cm - dto) / L_ as i32) as usize;
+                if idx < self.search_results.len() {
+                    self.add_watch(self.search_results[idx]);
                 }
             }
         }
 
         
-        if self.ahd == LabTab::Oh {
-            let cgi = gl + 6 + K_ as i32;
-            if ix >= cgi && ix < cgi + K_ as i32 {
-                let y = kb - 8;
-                if y >= 0 && y < 110 { self.ejv = 0; }
-                else if y >= 110 && y < 220 { self.ejv = 1; }
-                else if y >= 220 && y < 330 { self.ejv = 2; }
+        if self.active_tab == LabTab::Tiles {
+            let arr = bn + 6 + L_ as i32;
+            if cm >= arr && cm < arr + L_ as i32 {
+                let p = da - 8;
+                if p >= 0 && p < 110 { self.tile_page = 0; }
+                else if p >= 110 && p < 220 { self.tile_page = 1; }
+                else if p >= 220 && p < 330 { self.tile_page = 2; }
             }
         }
     }
 }
 
 
-pub fn sdd(
-    g: &GameLabState,
-    cw: Option<&GameBoyEmulator>,
-    fx: i32, lw: i32, hk: u32, mg: u32,
+pub fn lix(
+    state: &GameLabState,
+    an: Option<&GameBoyEmulator>,
+    wx: i32, wy: i32, ca: u32, er: u32,
 ) {
-    let cx = fx as u32;
-    let ae = (lw + LI_ as i32) as u32;
-    let dt = hk;
-    let bm = mg.ao(LI_);
+    let cx = wx as u32;
+    let u = (wy + FI_ as i32) as u32;
+    let aq = ca;
+    let ch = er.saturating_sub(FI_);
 
-    if dt < 200 || bm < 150 { return; }
-
-    
-    framebuffer::ah(cx, ae, dt, bm, MH_);
+    if aq < 200 || ch < 150 { return; }
 
     
-    framebuffer::ah(cx, ae, dt, 22, SE_);
-    let ilt = (g.frame / 15) % 2 == 0;
-    let sah = if ilt { BE_ } else { F_ };
-    framebuffer::ah(cx + 6, ae + 8, 6, 6, sah);
-    fu(cx + 16, ae + 4, "GAME LAB", BE_);
+    framebuffer::fill_rect(cx, u, aq, ch, IK_);
 
     
-    if cw.is_some() {
-        fu(cx + 100, ae + 4, "[LINKED]", BE_);
+    framebuffer::fill_rect(cx, u, aq, 22, KJ_);
+    let blink = (state.frame / 15) % 2 == 0;
+    let lgz = if blink { BF_ } else { F_ };
+    framebuffer::fill_rect(cx + 6, u + 8, 6, 6, lgz);
+    bo(cx + 16, u + 4, "GAME LAB", BF_);
+
+    
+    if an.is_some() {
+        bo(cx + 100, u + 4, "[LINKED]", BF_);
     } else {
-        fu(cx + 100, ae + 4, "[NO EMU]", AW_);
+        bo(cx + 100, u + 4, "[NO EMU]", AN_);
     }
 
     
-    let dbq = cx + dt - 120;
-    bgt(dbq, ae + 2, 48, 16, "SAVE", g.fto.blq, O_);
-    bgt(dbq + 54, ae + 2, 48, 16, "LOAD", g.fto.blq, if g.fto.blq { BE_ } else { F_ });
+    let bdn = cx + aq - 120;
+    afc(bdn, u + 2, 48, 16, "SAVE", state.save_state.valid, M_);
+    afc(bdn + 54, u + 2, 48, 16, "LOAD", state.save_state.valid, if state.save_state.valid { BF_ } else { F_ });
 
     
-    let ty = ae + 22;
-    framebuffer::ah(cx, ty, dt, JE_, SG_);
-    framebuffer::ah(cx, ty + JE_ - 1, dt, 1, JR_);
+    let ty = u + 22;
+    framebuffer::fill_rect(cx, ty, aq, JX_, TJ_);
+    framebuffer::fill_rect(cx, ty + JX_ - 1, aq, 1, KI_);
 
     
-    let bio: [(&str, LabTab); 5] = [
-        ("ANALYZE", LabTab::Zt),
-        ("SEARCH", LabTab::Ys),
-        ("WATCH", LabTab::Aoe),
-        ("TILES", LabTab::Oh),
-        ("TRACE", LabTab::Ze),
+    let tabs: [(&str, LabTab); 5] = [
+        ("ANALYZE", LabTab::Analyze),
+        ("SEARCH", LabTab::Search),
+        ("WATCH", LabTab::Watch),
+        ("TILES", LabTab::Tiles),
+        ("TRACE", LabTab::Trace),
     ];
-    let axb: u32 = 68;
-    for (a, (cu, acp)) in bio.iter().cf() {
-        let gx = cx + 4 + a as u32 * (axb + 4);
-        let gh = g.ahd == *acp;
-        let ei = if gh { 0xFF1A3828 } else { SG_ };
-        framebuffer::ah(gx, ty + 2, axb, JE_ - 4, ei);
-        if gh {
-            framebuffer::ah(gx, ty + JE_ - 3, axb, 2, BE_);
+    let zm: u32 = 68;
+    for (i, (label, tab)) in tabs.iter().enumerate() {
+        let bu = cx + 4 + i as u32 * (zm + 4);
+        let active = state.active_tab == *tab;
+        let bg = if active { 0xFF1A3828 } else { TJ_ };
+        framebuffer::fill_rect(bu, ty + 2, zm, JX_ - 4, bg);
+        if active {
+            framebuffer::fill_rect(bu, ty + JX_ - 3, zm, 2, BF_);
         }
-        let bj = if gh { BE_ } else { F_ };
-        fu(gx + 4, ty + 6, cu, bj);
+        let col = if active { BF_ } else { F_ };
+        bo(bu + 4, ty + 6, label, col);
     }
 
     
-    let eyu = cx + dt - 200;
-    bgt(eyu, ty + 3, 22, 16, "<", false, O_);
-    fu(eyu + 26, ty + 6, g.wqy(), AF_);
-    bgt(eyu + 56, ty + 3, 22, 16, ">", false, O_);
+    let cdu = cx + aq - 200;
+    afc(cdu, ty + 3, 22, 16, "<", false, M_);
+    bo(cdu + 26, ty + 6, state.speed_label(), AG_);
+    afc(cdu + 56, ty + 3, 22, 16, ">", false, M_);
 
     
-    let goz = cx + dt - 130;
-    let vfm = if g.ant { AW_ } else { BE_ };
-    let vfn = if g.ant { "PLAY" } else { "PAUS" };
-    bgt(goz, ty + 3, 38, 16, vfn, g.ant, vfm);
-    bgt(goz + 42, ty + 3, 34, 16, "STEP", false, BB_);
-    bgt(goz + 80, ty + 3, 42, 16, "FRAME", false, BO_);
+    let dcj = cx + aq - 130;
+    let nsl = if state.paused { AN_ } else { BF_ };
+    let nsm = if state.paused { "PLAY" } else { "PAUS" };
+    afc(dcj, ty + 3, 38, 16, nsm, state.paused, nsl);
+    afc(dcj + 42, ty + 3, 34, 16, "STEP", false, AU_);
+    afc(dcj + 80, ty + 3, 42, 16, "FRAME", false, BG_);
 
     
-    let gl = ty + JE_;
-    let nd = bm.ao(22 + JE_);
+    let bn = ty + JX_;
+    let en = ch.saturating_sub(22 + JX_);
 
-    match g.ahd {
-        LabTab::Zt => sfz(g, cw, cx, gl, dt, nd),
-        LabTab::Ys => sga(g, cw, cx, gl, dt, nd),
-        LabTab::Aoe => sgd(g, cw, cx, gl, dt, nd),
-        LabTab::Oh => sgb(g, cw, cx, gl, dt, nd),
-        LabTab::Ze => sgc(g, cw, cx, gl, dt, nd),
+    match state.active_tab {
+        LabTab::Analyze => lky(state, an, cx, bn, aq, en),
+        LabTab::Search => lkz(state, an, cx, bn, aq, en),
+        LabTab::Watch => llc(state, an, cx, bn, aq, en),
+        LabTab::Tiles => lla(state, an, cx, bn, aq, en),
+        LabTab::Trace => llb(state, an, cx, bn, aq, en),
     }
 }
 
@@ -771,125 +771,125 @@ pub fn sdd(
 
 
 
-fn sfz(g: &GameLabState, cw: Option<&GameBoyEmulator>, cx: u32, ae: u32, dt: u32, bm: u32) {
-    let iea = bm * 60 / 100;
-    let keg = bm - iea - 2;
-    let oy = (dt - 4) / 3;
+fn lky(state: &GameLabState, an: Option<&GameBoyEmulator>, cx: u32, u: u32, aq: u32, ch: u32) {
+    let ebz = ch * 60 / 100;
+    let fjq = ch - ebz - 2;
+    let col_w = (aq - 4) / 3;
 
-    ses(cw, cx + 1, ae, oy, iea, g);
-    set(cw, cx + oy + 2, ae, oy, iea, g);
-    sew(cw, g, cx + oy * 2 + 3, ae, oy, iea);
+    lke(an, cx + 1, u, col_w, ebz, state);
+    lkf(an, cx + col_w + 2, u, col_w, ebz, state);
+    lki(an, state, cx + col_w * 2 + 3, u, col_w, ebz);
 
-    let je = ae + iea + 2;
-    sev(cw, cx + 1, je, oy, keg, g);
-    ser(cw, cx + oy + 2, je, oy, keg);
-    seu(cw, cx + oy * 2 + 3, je, oy, keg, g);
+    let dc = u + ebz + 2;
+    lkh(an, cx + 1, dc, col_w, fjq, state);
+    lkd(an, cx + col_w + 2, dc, col_w, fjq);
+    lkg(an, cx + col_w * 2 + 3, dc, col_w, fjq, state);
 }
 
 
 
 
 
-fn sga(g: &GameLabState, cw: Option<&GameBoyEmulator>, cx: u32, ae: u32, dt: u32, bm: u32) {
-    let y = cx + 8;
-    let mut x = ae + 6;
+fn lkz(state: &GameLabState, an: Option<&GameBoyEmulator>, cx: u32, u: u32, aq: u32, ch: u32) {
+    let p = cx + 8;
+    let mut o = u + 6;
 
     
-    fu(y, x, "MEMORY SEARCH", O_);
-    fu(y + 120, x, "(Hex value, Tab=mode, R=reset)", F_);
-    x += K_ + 4;
+    bo(p, o, "MEMORY SEARCH", M_);
+    bo(p + 120, o, "(Hex value, Tab=mode, R=reset)", F_);
+    o += L_ + 4;
 
     
-    fu(y, x, "VALUE:", ED_);
-    let mut hoc = String::new();
-    for a in 0..g.eif as usize {
-        hoc.push(g.joa[a] as char);
+    bo(p, o, "VALUE:", EQ_);
+    let mut dsa = String::new();
+    for i in 0..state.search_input_len as usize {
+        dsa.push(state.search_input[i] as char);
     }
-    if hoc.is_empty() { hoc.t("__"); }
+    if dsa.is_empty() { dsa.push_str("__"); }
     
-    if (g.frame / 20) % 2 == 0 { hoc.push('_'); }
-    fu(y + 52, x, &hoc, AF_);
+    if (state.frame / 20) % 2 == 0 { dsa.push('_'); }
+    bo(p + 52, o, &dsa, AG_);
 
     
-    let gwl = format!("= {} (0x{:02X})", g.fty, g.fty);
-    fu(y + 120, x, &gwl, F_);
-    x += K_ + 2;
+    let vs = format!("= {} (0x{:02X})", state.search_value, state.search_value);
+    bo(p + 120, o, &vs, F_);
+    o += L_ + 2;
 
     
-    fu(y, x, "MODE:", ED_);
-    let gmv = [
-        ("EXACT", SearchMode::Ho),
-        ("CHANGED", SearchMode::Aaj),
-        ("SAME", SearchMode::Afd),
-        ("GREATER", SearchMode::Ss),
-        ("LESS", SearchMode::Tg),
+    bo(p, o, "MODE:", EQ_);
+    let modes = [
+        ("EXACT", SearchMode::Exact),
+        ("CHANGED", SearchMode::Changed),
+        ("SAME", SearchMode::Unchanged),
+        ("GREATER", SearchMode::Greater),
+        ("LESS", SearchMode::Less),
     ];
-    let mut hl = y + 48;
-    for (cu, ev) in &gmv {
-        let gh = g.grs == *ev;
-        let bj = if gh { BE_ } else { F_ };
-        if gh { framebuffer::ah(hl - 2, x - 1, cu.len() as u32 * GB_ + 4, K_, 0xFF1A3020); }
-        fu(hl, x, cu, bj);
-        hl += cu.len() as u32 * GB_ + 10;
+    let mut cg = p + 48;
+    for (label, mode) in &modes {
+        let active = state.search_mode == *mode;
+        let col = if active { BF_ } else { F_ };
+        if active { framebuffer::fill_rect(cg - 2, o - 1, label.len() as u32 * CE_ + 4, L_, 0xFF1A3020); }
+        bo(cg, o, label, col);
+        cg += label.len() as u32 * CE_ + 10;
     }
-    x += K_ + 2;
+    o += L_ + 2;
 
     
-    fu(y, x, "Enter=Scan/Filter", O_);
-    fu(y + 152, x, "R=Reset", MJ_);
-    x += K_ + 6;
+    bo(p, o, "Enter=Scan/Filter", M_);
+    bo(p + 152, o, "R=Reset", NI_);
+    o += L_ + 6;
 
     
-    let status = if !g.bcn {
+    let status = if !state.search_active {
         String::from("No scan yet. Type value + Enter to scan WRAM.")
     } else {
-        format!("Results: {} addresses", g.chq.len())
+        format!("Results: {} addresses", state.search_results.len())
     };
-    fu(y, x, &status, T_);
-    x += K_ + 4;
+    bo(p, o, &status, P_);
+    o += L_ + 4;
 
     
-    if g.bcn {
-        framebuffer::ah(cx + 4, x, dt - 8, 1, JR_);
-        x += 4;
-        fu(y, x, "ADDR", O_);
-        fu(y + 60, x, "VALUE", O_);
-        fu(y + 110, x, "DEC", O_);
-        if dt > 400 { fu(y + 160, x, "PREV", F_); }
-        fu(cx + dt - 68, x, "[+WATCH]", BE_);
-        x += K_ + 2;
+    if state.search_active {
+        framebuffer::fill_rect(cx + 4, o, aq - 8, 1, KI_);
+        o += 4;
+        bo(p, o, "ADDR", M_);
+        bo(p + 60, o, "VALUE", M_);
+        bo(p + 110, o, "DEC", M_);
+        if aq > 400 { bo(p + 160, o, "PREV", F_); }
+        bo(cx + aq - 68, o, "[+WATCH]", BF_);
+        o += L_ + 2;
 
-        let brh = ((bm.ao(x - ae)) / K_).v(32) as usize;
-        for (a, &ag) in g.chq.iter().take(brh).cf() {
-            let ap = if let Some(aa) = cw { boa(aa, ag) } else { 0 };
-            let vo = g.plv(ag);
-            let cpa = ap != vo;
+        let xw = ((ch.saturating_sub(o - u)) / L_).min(32) as usize;
+        for (i, &addr) in state.search_results.iter().take(xw).enumerate() {
+            let val = if let Some(e) = an { aik(e, addr) } else { 0 };
+            let prev = state.snapshot_byte(addr);
+            let changed = val != prev;
 
-            let dyd = format!("{:04X}", ag);
-            fu(y, x, &dyd, HR_);
+            let bqd = format!("{:04X}", addr);
+            bo(p, o, &bqd, IJ_);
 
-            let mov = format!("{:02X}", ap);
-            let xqj = if cpa { SC_ } else { AF_ };
-            fu(y + 60, x, &mov, xqj);
+            let hbe = format!("{:02X}", val);
+            let pqz = if changed { TF_ } else { AG_ };
+            bo(p + 60, o, &hbe, pqz);
 
-            let kok = format!("{:3}", ap);
-            fu(y + 110, x, &kok, F_);
+            let fqz = format!("{:3}", val);
+            bo(p + 110, o, &fqz, F_);
 
-            if dt > 400 {
-                let lvj = format!("{:02X}", vo);
-                fu(y + 160, x, &lvj, F_);
+            if aq > 400 {
+                let gob = format!("{:02X}", prev);
+                bo(p + 160, o, &gob, F_);
             }
 
             
-            let mqj = cx + dt - 48;
-            fu(mqj, x, "+W", BE_);
+            let hcf = cx + aq - 48;
+            bo(hcf, o, "+W", BF_);
 
-            x += K_;
-            let _ = a;
+            o += L_;
+            let _ = i;
         }
-        if g.chq.len() > brh {
-            let upp = format!("... +{} more", g.chq.len() - brh);
-            fu(y, x, &upp, F_);
+        if state.search_results.len() > xw {
+            let ngf = format!("... +{} more", state.search_results.len() - xw);
+            bo(p, o, &ngf, F_);
         }
     }
 }
@@ -898,60 +898,60 @@ fn sga(g: &GameLabState, cw: Option<&GameBoyEmulator>, cx: u32, ae: u32, dt: u32
 
 
 
-fn sgd(g: &GameLabState, cw: Option<&GameBoyEmulator>, cx: u32, ae: u32, dt: u32, bm: u32) {
-    let y = cx + 8;
-    let mut x = ae + 6;
+fn llc(state: &GameLabState, an: Option<&GameBoyEmulator>, cx: u32, u: u32, aq: u32, ch: u32) {
+    let p = cx + 8;
+    let mut o = u + 6;
 
-    fu(y, x, "WATCH LIST", O_);
-    let rpg = format!("{}/{}", g.eku.len(), BAG_);
-    fu(y + 100, x, &rpg, F_);
-    fu(y + 160, x, "(Backspace=remove last)", F_);
-    x += K_ + 4;
+    bo(p, o, "WATCH LIST", M_);
+    let kye = format!("{}/{}", state.watches.len(), BCI_);
+    bo(p + 100, o, &kye, F_);
+    bo(p + 160, o, "(Backspace=remove last)", F_);
+    o += L_ + 4;
 
-    if g.eku.is_empty() {
-        fu(y, x, "No watches. Add from Search tab with [+W] button.", F_);
+    if state.watches.is_empty() {
+        bo(p, o, "No watches. Add from Search tab with [+W] button.", F_);
         return;
     }
 
     
-    framebuffer::ah(cx + 4, x, dt - 8, 1, JR_);
-    x += 4;
-    fu(y, x, "LABEL", O_);
-    fu(y + 72, x, "ADDR", O_);
-    fu(y + 120, x, "HEX", O_);
-    fu(y + 160, x, "DEC", O_);
-    fu(y + 200, x, "PREV", O_);
-    if dt > 500 { fu(y + 250, x, "VISUAL", F_); }
-    x += K_ + 2;
+    framebuffer::fill_rect(cx + 4, o, aq - 8, 1, KI_);
+    o += 4;
+    bo(p, o, "LABEL", M_);
+    bo(p + 72, o, "ADDR", M_);
+    bo(p + 120, o, "HEX", M_);
+    bo(p + 160, o, "DEC", M_);
+    bo(p + 200, o, "PREV", M_);
+    if aq > 500 { bo(p + 250, o, "VISUAL", F_); }
+    o += L_ + 2;
 
-    for d in g.eku.iter() {
-        let fms: String = d.cu[..d.jce as usize].iter().map(|&o| o as char).collect();
-        fu(y, x, &fms, ED_);
+    for w in state.watches.iter() {
+        let cmb: String = w.label[..w.label_len as usize].iter().map(|&b| b as char).collect();
+        bo(p, o, &cmb, EQ_);
 
-        let dyd = format!("{:04X}", d.ag);
-        fu(y + 72, x, &dyd, HR_);
+        let bqd = format!("{:04X}", w.addr);
+        bo(p + 72, o, &bqd, IJ_);
 
-        let ap = if let Some(aa) = cw { boa(aa, d.ag) } else { d.hes };
-        let mov = format!("{:02X}", ap);
-        let bj = if d.cpa { SC_ } else { AF_ };
-        fu(y + 120, x, &mov, bj);
+        let val = if let Some(e) = an { aik(e, w.addr) } else { w.cur_value };
+        let hbe = format!("{:02X}", val);
+        let col = if w.changed { TF_ } else { AG_ };
+        bo(p + 120, o, &hbe, col);
 
-        let kok = format!("{:3}", ap);
-        fu(y + 160, x, &kok, bj);
+        let fqz = format!("{:3}", val);
+        bo(p + 160, o, &fqz, col);
 
-        let lvj = format!("{:02X}", d.jjy);
-        fu(y + 200, x, &lvj, F_);
+        let gob = format!("{:02X}", w.prev_value);
+        bo(p + 200, o, &gob, F_);
 
         
-        if dt > 500 {
-            let lo = 100u32;
-            let vi = (ap as u32 * lo) / 255;
-            framebuffer::ah(y + 250, x + 2, lo, 8, 0xFF0A1A10);
-            let kca = if d.cpa { SC_ } else { BE_ };
-            framebuffer::ah(y + 250, x + 2, vi, 8, kca);
+        if aq > 500 {
+            let ek = 100u32;
+            let fill = (val as u32 * ek) / 255;
+            framebuffer::fill_rect(p + 250, o + 2, ek, 8, 0xFF0A1A10);
+            let fie = if w.changed { TF_ } else { BF_ };
+            framebuffer::fill_rect(p + 250, o + 2, fill, 8, fie);
         }
 
-        x += K_;
+        o += L_;
     }
 }
 
@@ -959,65 +959,65 @@ fn sgd(g: &GameLabState, cw: Option<&GameBoyEmulator>, cx: u32, ae: u32, dt: u32
 
 
 
-fn sgb(g: &GameLabState, cw: Option<&GameBoyEmulator>, cx: u32, ae: u32, dt: u32, bm: u32) {
-    let y = cx + 8;
-    let mut x = ae + 6;
+fn lla(state: &GameLabState, an: Option<&GameBoyEmulator>, cx: u32, u: u32, aq: u32, ch: u32) {
+    let p = cx + 8;
+    let mut o = u + 6;
 
-    let bcd = ["TILES $8000", "TILES $8800", "OAM SPRITES"];
-    fu(y, x, "TILE VIEWER", O_);
-    x += K_;
+    let acg = ["TILES $8000", "TILES $8800", "OAM SPRITES"];
+    bo(p, o, "TILE VIEWER", M_);
+    o += L_;
 
     
-    for (a, cu) in bcd.iter().cf() {
-        let gh = a as u8 == g.ejv;
-        let bj = if gh { BE_ } else { F_ };
-        let gx = y + a as u32 * 110;
-        if gh { framebuffer::ah(gx - 2, x - 1, cu.len() as u32 * GB_ + 4, K_, 0xFF1A3020); }
-        fu(gx, x, cu, bj);
+    for (i, label) in acg.iter().enumerate() {
+        let active = i as u8 == state.tile_page;
+        let col = if active { BF_ } else { F_ };
+        let bu = p + i as u32 * 110;
+        if active { framebuffer::fill_rect(bu - 2, o - 1, label.len() as u32 * CE_ + 4, L_, 0xFF1A3020); }
+        bo(bu, o, label, col);
     }
-    fu(y + 340, x, "(Tab=page, Arrows=scroll)", F_);
-    x += K_ + 6;
+    bo(p + 340, o, "(Tab=page, Arrows=scroll)", F_);
+    o += L_ + 6;
 
-    let cw = match cw {
-        Some(aa) => aa,
-        None => { fu(y, x, "No emulator linked", F_); return; }
+    let an = match an {
+        Some(e) => e,
+        None => { bo(p, o, "No emulator linked", F_); return; }
     };
 
-    if g.ejv < 2 {
+    if state.tile_page < 2 {
         
-        let sm: u16 = if g.ejv == 0 { 0x8000 } else { 0x8800 };
-        let bll = 2u32; 
-        let idm = 8 * bll;
-        let ec = ((dt - 20) / (idm + 1)).v(16);
-        let brh = ((bm - (x - ae) - 4) / (idm + 1)).v(16);
-        let jc = g.gum.v(16u32.ao(brh));
+        let base_addr: u16 = if state.tile_page == 0 { 0x8000 } else { 0x8800 };
+        let tile_size = 2u32; 
+        let ebr = 8 * tile_size;
+        let cols = ((aq - 20) / (ebr + 1)).min(16);
+        let xw = ((ch - (o - u) - 4) / (ebr + 1)).min(16);
+        let scroll = state.tile_scroll.min(16u32.saturating_sub(xw));
 
-        for br in 0..brh {
-            for bj in 0..ec {
-                let ptb = (jc + br) * 16 + bj;
-                if ptb >= 256 { break; }
-                let bsn = sm.cn(ptb as u16 * 16);
-                let dx = y + bj * (idm + 1);
-                let bg = x + br * (idm + 1);
+        for row in 0..xw {
+            for col in 0..cols {
+                let jml = (scroll + row) * 16 + col;
+                if jml >= 256 { break; }
+                let ako = base_addr.wrapping_add(jml as u16 * 16);
+                let dx = p + col * (ebr + 1);
+                let ad = o + row * (ebr + 1);
 
                 
-                for mnp in 0..8u32 {
-                    let hh = boa(cw, bsn.cn(mnp as u16 * 2));
-                    let gd = boa(cw, bsn.cn(mnp as u16 * 2 + 1));
-                    for pwq in 0..8u32 {
-                        let ga = 7 - pwq;
-                        let bts = ((gd >> ga) & 1) << 1 | ((hh >> ga) & 1);
-                        let dlr = match bts {
+                for ty_off in 0..8u32 {
+                    let lo = aik(an, ako.wrapping_add(ty_off as u16 * 2));
+                    let hi = aik(an, ako.wrapping_add(ty_off as u16 * 2 + 1));
+                    for tx_off in 0..8u32 {
+                        let bf = 7 - tx_off;
+                        let alf = ((hi >> bf) & 1) << 1 | ((lo >> bf) & 1);
+                        let shade = match alf {
                             0 => 0xFF0A1510,
                             1 => 0xFF346856,
                             2 => 0xFF88C070,
                             3 => 0xFFE0F8D0,
                             _ => 0xFF000000,
                         };
-                        framebuffer::ah(
-                            dx + pwq * bll,
-                            bg + mnp * bll,
-                            bll, bll, dlr,
+                        framebuffer::fill_rect(
+                            dx + tx_off * tile_size,
+                            ad + ty_off * tile_size,
+                            tile_size, tile_size, shade,
                         );
                     }
                 }
@@ -1025,41 +1025,41 @@ fn sgb(g: &GameLabState, cw: Option<&GameBoyEmulator>, cx: u32, ae: u32, dt: u32
         }
 
         
-        let fmn = x + brh * (idm + 1) + 4;
-        let vqd = format!("Tiles {}-{}", jc * 16, ((jc + brh) * 16).v(256) - 1);
-        fu(y, fmn, &vqd, F_);
+        let clw = o + xw * (ebr + 1) + 4;
+        let obh = format!("Tiles {}-{}", scroll * 16, ((scroll + xw) * 16).min(256) - 1);
+        bo(p, clw, &obh, F_);
     } else {
         
-        fu(y, x, "#  Y   X   TILE FLAGS", O_);
-        x += K_;
+        bo(p, o, "#  Y   X   TILE FLAGS", M_);
+        o += L_;
 
-        let uly = ((bm - (x - ae)) / K_).v(40);
-        for a in 0..uly {
-            let dkd = 0xFE00u16 + a as u16 * 4;
-            let cq = boa(cw, dkd);
-            let cr = boa(cw, dkd + 1);
-            let ccd = boa(cw, dkd + 2);
-            let flags = boa(cw, dkd + 3);
+        let ndm = ((ch - (o - u)) / L_).min(40);
+        for i in 0..ndm {
+            let oam_addr = 0xFE00u16 + i as u16 * 4;
+            let ak = aik(an, oam_addr);
+            let am = aik(an, oam_addr + 1);
+            let apf = aik(an, oam_addr + 2);
+            let flags = aik(an, oam_addr + 3);
 
-            let iw = cq > 0 && cq < 160 && cr > 0 && cr < 168;
-            let bj = if iw { AF_ } else { F_ };
+            let visible = ak > 0 && ak < 160 && am > 0 && am < 168;
+            let col = if visible { AG_ } else { F_ };
 
-            let e = format!("{:2} {:3} {:3}  {:02X}   {:02X}", a, cq, cr, ccd, flags);
-            fu(y, x, &e, bj);
+            let j = format!("{:2} {:3} {:3}  {:02X}   {:02X}", i, ak, am, apf, flags);
+            bo(p, o, &j, col);
 
             
-            let iux = y + 200;
-            if flags & 0x80 != 0 { fu(iux, x, "P", MJ_); }
-            if flags & 0x40 != 0 { fu(iux + 12, x, "Y", O_); }
-            if flags & 0x20 != 0 { fu(iux + 24, x, "X", O_); }
-            if cw.atz {
-                let jil = flags & 0x07;
-                let om = (flags >> 3) & 1;
-                let jkk = format!("P{} B{}", jil, om);
-                fu(iux + 40, x, &jkk, BB_);
+            let emv = p + 200;
+            if flags & 0x80 != 0 { bo(emv, o, "P", NI_); }
+            if flags & 0x40 != 0 { bo(emv + 12, o, "Y", M_); }
+            if flags & 0x20 != 0 { bo(emv + 24, o, "X", M_); }
+            if an.cgb_mode {
+                let ewa = flags & 0x07;
+                let gi = (flags >> 3) & 1;
+                let exe = format!("P{} B{}", ewa, gi);
+                bo(emv + 40, o, &exe, AU_);
             }
 
-            x += K_;
+            o += L_;
         }
     }
 }
@@ -1068,795 +1068,795 @@ fn sgb(g: &GameLabState, cw: Option<&GameBoyEmulator>, cx: u32, ae: u32, dt: u32
 
 
 
-fn sgc(g: &GameLabState, cw: Option<&GameBoyEmulator>, cx: u32, ae: u32, dt: u32, bm: u32) {
-    let y = cx + 8;
-    let mut x = ae + 6;
+fn llb(state: &GameLabState, an: Option<&GameBoyEmulator>, cx: u32, u: u32, aq: u32, ch: u32) {
+    let p = cx + 8;
+    let mut o = u + 6;
 
-    fu(y, x, "TRACE LOG", O_);
-    let sli = if g.eka { "[ON]" } else { "[OFF]" };
-    let slh = if g.eka { BE_ } else { AW_ };
-    fu(y + 88, x, sli, slh);
-    fu(y + 132, x, "(T=toggle, R=clear)", F_);
-    x += K_ + 2;
+    bo(p, o, "TRACE LOG", M_);
+    let lpx = if state.trace_enabled { "[ON]" } else { "[OFF]" };
+    let lpw = if state.trace_enabled { BF_ } else { AN_ };
+    bo(p + 88, o, lpx, lpw);
+    bo(p + 132, o, "(T=toggle, R=clear)", F_);
+    o += L_ + 2;
 
     
-    if let Some(cw) = cw {
-        fu(y, x, "DISASSEMBLY @ PC", O_);
-        x += K_;
-        let fz = cw.cpu.fz;
+    if let Some(an) = an {
+        bo(p, o, "DISASSEMBLY @ PC", M_);
+        o += L_;
+        let pc = an.cpu.pc;
         
-        let mut ag = fz.nj(8);
-        let ryb = 12u32.v((bm / 3) / K_);
-        for _ in 0..ryb {
-            let opcode = boa(cw, ag);
-            let afb = ag == fz;
-            let adx = if afb { ">" } else { " " };
-            let (bes, aw) = rya(cw, ag);
-            let e = format!("{} {:04X}: {:02X}  {}", adx, ag, opcode, bes);
-            let bj = if afb { BE_ } else { T_ };
-            if afb {
-                framebuffer::ah(y - 2, x - 1, dt - 16, K_, 0xFF1A3020);
+        let mut addr = pc.wrapping_sub(8);
+        let lfc = 12u32.min((ch / 3) / L_);
+        for _ in 0..lfc {
+            let opcode = aik(an, addr);
+            let is_current = addr == pc;
+            let nm = if is_current { ">" } else { " " };
+            let (mnemonic, size) = lfb(an, addr);
+            let j = format!("{} {:04X}: {:02X}  {}", nm, addr, opcode, mnemonic);
+            let col = if is_current { BF_ } else { P_ };
+            if is_current {
+                framebuffer::fill_rect(p - 2, o - 1, aq - 16, L_, 0xFF1A3020);
             }
-            fu(y, x, &e, bj);
+            bo(p, o, &j, col);
 
             
-            if g.gbl.iter().any(|&bp| bp == ag) {
-                framebuffer::ah(y - 6, x + 2, 4, 8, AW_);
+            if state.breakpoints.iter().any(|&bp| bp == addr) {
+                framebuffer::fill_rect(p - 6, o + 2, 4, 8, AN_);
             }
 
-            x += K_;
-            ag = ag.cn(aw as u16);
+            o += L_;
+            addr = addr.wrapping_add(size as u16);
         }
     }
-    x += 6;
-    framebuffer::ah(cx + 4, x, dt - 8, 1, JR_);
-    x += 4;
+    o += 6;
+    framebuffer::fill_rect(cx + 4, o, aq - 8, 1, KI_);
+    o += 4;
 
     
-    fu(y, x, "BREAKPOINTS", O_);
-    let qrq = format!("{}/{}", g.gbl.len(), CFE_);
-    fu(y + 100, x, &qrq, F_);
-    x += K_;
+    bo(p, o, "BREAKPOINTS", M_);
+    let kds = format!("{}/{}", state.breakpoints.len(), CIN_);
+    bo(p + 100, o, &kds, F_);
+    o += L_;
 
-    if g.gbl.is_empty() {
-        fu(y, x, "None (type addr in Search, click to add)", F_);
+    if state.breakpoints.is_empty() {
+        bo(p, o, "None (type addr in Search, click to add)", F_);
     } else {
-        let mut hbd = y;
-        for &bp in g.gbl.iter() {
-            let hbc = format!("{:04X}", bp);
-            framebuffer::ah(hbd, x, 40, K_ - 2, 0xFF2A0A0A);
-            fu(hbd + 2, x, &hbc, AW_);
-            hbd += 48;
-            if hbd > cx + dt - 60 { x += K_; hbd = y; }
+        let mut djn = p;
+        for &bp in state.breakpoints.iter() {
+            let djm = format!("{:04X}", bp);
+            framebuffer::fill_rect(djn, o, 40, L_ - 2, 0xFF2A0A0A);
+            bo(djn + 2, o, &djm, AN_);
+            djn += 48;
+            if djn > cx + aq - 60 { o += L_; djn = p; }
         }
     }
-    x += K_ + 4;
-    framebuffer::ah(cx + 4, x, dt - 8, 1, JR_);
-    x += 4;
+    o += L_ + 4;
+    framebuffer::fill_rect(cx + 4, o, aq - 8, 1, KI_);
+    o += 4;
 
     
-    fu(y, x, "TRACE HISTORY", O_);
-    let xky = format!("({} entries)", g.trace.len());
-    fu(y + 120, x, &xky, F_);
-    x += K_;
+    bo(p, o, "TRACE HISTORY", M_);
+    let pmm = format!("({} entries)", state.trace.len());
+    bo(p + 120, o, &pmm, F_);
+    o += L_;
 
-    fu(y, x, "PC    OP  A  F  SP", F_);
-    x += K_;
+    bo(p, o, "PC    OP  A  F  SP", F_);
+    o += L_;
 
-    let brh = ((bm.ao(x - ae)) / K_) as usize;
-    let ay = if g.trace.len() > brh { g.trace.len() - brh } else { 0 };
-    for bt in g.trace[ay..].iter() {
-        let e = format!("{:04X}  {:02X}  {:02X} {:02X} {:04X}", bt.fz, bt.opcode, bt.q, bt.bb, bt.sp);
-        fu(y, x, &e, T_);
-        x += K_;
-        if x + K_ > ae + bm { break; }
+    let xw = ((ch.saturating_sub(o - u)) / L_) as usize;
+    let start = if state.trace.len() > xw { state.trace.len() - xw } else { 0 };
+    for entry in state.trace[start..].iter() {
+        let j = format!("{:04X}  {:02X}  {:02X} {:02X} {:04X}", entry.pc, entry.opcode, entry.a, entry.f, entry.sp);
+        bo(p, o, &j, P_);
+        o += L_;
+        if o + L_ > u + ch { break; }
     }
 }
 
 
-fn ses(cw: Option<&GameBoyEmulator>, b: u32, c: u32, d: u32, i: u32, g: &GameLabState) {
-    epf(b, c, d, i, "CPU REGISTERS", g.eyi == 0);
+fn lke(an: Option<&GameBoyEmulator>, x: u32, y: u32, w: u32, h: u32, state: &GameLabState) {
+    blx(x, y, w, h, "CPU REGISTERS", state.selected_panel == 0);
 
-    let y = b + KX_ + 2;
-    let mut x = c + 20;
+    let p = x + EK_ + 2;
+    let mut o = y + 20;
 
-    if let Some(cw) = cw {
-        let cpu = &cw.cpu;
+    if let Some(an) = an {
+        let cpu = &an.cpu;
 
         
         let regs = [
-            ("AF", cpu.q, cpu.bb),
-            ("BC", cpu.o, cpu.r),
-            ("DE", cpu.bc, cpu.aa),
-            ("HL", cpu.i, cpu.dm),
+            ("AF", cpu.a, cpu.f),
+            ("BC", cpu.b, cpu.c),
+            ("DE", cpu.d, cpu.e),
+            ("HL", cpu.h, cpu.l),
         ];
-        for (j, gd, hh) in &regs {
-            fu(y, x, j, ED_);
-            let e = format!("{:02X}{:02X}", gd, hh);
-            fu(y + 28, x, &e, AF_);
+        for (name, hi, lo) in &regs {
+            bo(p, o, name, EQ_);
+            let j = format!("{:02X}{:02X}", hi, lo);
+            bo(p + 28, o, &j, AG_);
             
-            let cuc = format!("({:3} {:3})", gd, hh);
-            fu(y + 72, x, &cuc, F_);
-            x += K_;
+            let azn = format!("({:3} {:3})", hi, lo);
+            bo(p + 72, o, &azn, F_);
+            o += L_;
         }
 
-        x += 4;
+        o += 4;
         
-        fu(y, x, "SP", ED_);
-        let wrm = format!("{:04X}", cpu.sp);
-        fu(y + 28, x, &wrm, AF_);
-        x += K_;
+        bo(p, o, "SP", EQ_);
+        let ove = format!("{:04X}", cpu.sp);
+        bo(p + 28, o, &ove, AG_);
+        o += L_;
 
-        fu(y, x, "PC", ED_);
-        let vfw = format!("{:04X}", cpu.fz);
-        fu(y + 28, x, &vfw, O_);
+        bo(p, o, "PC", EQ_);
+        let nsv = format!("{:04X}", cpu.pc);
+        bo(p + 28, o, &nsv, M_);
 
         
-        if cw.dvf {
-            let opcode = boa(cw, cpu.fz);
+        if an.rom_loaded {
+            let opcode = aik(an, cpu.pc);
             let ops = format!("[{:02X}]", opcode);
-            fu(y + 72, x, &ops, BB_);
+            bo(p + 72, o, &ops, AU_);
         }
-        x += K_ + 6;
+        o += L_ + 6;
 
         
-        fu(y, x, "FLAGS", F_);
-        x += K_;
+        bo(p, o, "FLAGS", F_);
+        o += L_;
         let flags = [
-            ("Z", cpu.bb & 0x80 != 0),
-            ("N", cpu.bb & 0x40 != 0),
-            ("H", cpu.bb & 0x20 != 0),
-            ("C", cpu.bb & 0x10 != 0),
+            ("Z", cpu.f & 0x80 != 0),
+            ("N", cpu.f & 0x40 != 0),
+            ("H", cpu.f & 0x20 != 0),
+            ("C", cpu.f & 0x10 != 0),
         ];
-        let mut jf = y;
-        for (j, oj) in &flags {
-            let s = if *oj { DP_ } else { SD_ };
-            framebuffer::ah(jf, x, 24, 14, if *oj { 0xFF0A3020 } else { 0xFF0A1510 });
-            fu(jf + 4, x + 1, j, s);
-            jf += 28;
+        let mut dg = p;
+        for (name, set) in &flags {
+            let color = if *set { DZ_ } else { TG_ };
+            framebuffer::fill_rect(dg, o, 24, 14, if *set { 0xFF0A3020 } else { 0xFF0A1510 });
+            bo(dg + 4, o + 1, name, color);
+            dg += 28;
         }
-        x += K_ + 6;
+        o += L_ + 6;
 
         
-        fu(y, x, "IME", F_);
-        fu(y + 32, x, if cpu.dih { "ON" } else { "OFF" }, 
-            if cpu.dih { DP_ } else { SD_ });
-        fu(y + 64, x, "HALT", F_);
-        fu(y + 100, x, if cpu.dhv { "YES" } else { "NO" },
-            if cpu.dhv { MJ_ } else { F_ });
-        x += K_;
+        bo(p, o, "IME", F_);
+        bo(p + 32, o, if cpu.ime { "ON" } else { "OFF" }, 
+            if cpu.ime { DZ_ } else { TG_ });
+        bo(p + 64, o, "HALT", F_);
+        bo(p + 100, o, if cpu.halted { "YES" } else { "NO" },
+            if cpu.halted { NI_ } else { F_ });
+        o += L_;
 
         
-        fu(y, x, "CYCLES", F_);
-        let aap = format!("{}", cpu.yl);
-        fu(y + 56, x, &aap, AF_);
-        x += K_;
+        bo(p, o, "CYCLES", F_);
+        let cs = format!("{}", cpu.cycles);
+        bo(p + 56, o, &cs, AG_);
+        o += L_;
 
         
-        if cw.atz {
-            fu(y, x, "MODE", F_);
-            fu(y + 40, x, "CGB", BE_);
-            let mgn = if cw.beq & 0x80 != 0 { "2x" } else { "1x" };
-            fu(y + 72, x, mgn, O_);
+        if an.cgb_mode {
+            bo(p, o, "MODE", F_);
+            bo(p + 40, o, "CGB", BF_);
+            let dzw = if an.key1 & 0x80 != 0 { "2x" } else { "1x" };
+            bo(p + 72, o, dzw, M_);
         }
     } else {
-        fu(y, x, "No emulator linked", F_);
+        bo(p, o, "No emulator linked", F_);
     }
 }
 
 
-fn set(cw: Option<&GameBoyEmulator>, b: u32, c: u32, d: u32, i: u32, g: &GameLabState) {
-    epf(b, c, d, i, "GPU / LCD", g.eyi == 1);
+fn lkf(an: Option<&GameBoyEmulator>, x: u32, y: u32, w: u32, h: u32, state: &GameLabState) {
+    blx(x, y, w, h, "GPU / LCD", state.selected_panel == 1);
 
-    let y = b + KX_ + 2;
-    let mut x = c + 20;
+    let p = x + EK_ + 2;
+    let mut o = y + 20;
 
-    if let Some(cw) = cw {
-        let gpu = &cw.gpu;
-
-        
-        fu(y, x, "LCDC", ED_);
-        let awb = format!("{:02X}", gpu.amh);
-        fu(y + 40, x, &awb, AF_);
-        let oim = gpu.amh & 0x80 != 0;
-        fu(y + 64, x, if oim { "LCD:ON" } else { "LCD:OFF" },
-            if oim { DP_ } else { AW_ });
-        x += K_;
+    if let Some(an) = an {
+        let gpu = &an.gpu;
 
         
-        let fs = [
-            ("BG", gpu.amh & 0x01 != 0),
-            ("OBJ", gpu.amh & 0x02 != 0),
-            ("8x16", gpu.amh & 0x04 != 0),
-            ("WIN", gpu.amh & 0x20 != 0),
+        bo(p, o, "LCDC", EQ_);
+        let ls = format!("{:02X}", gpu.lcdc);
+        bo(p + 40, o, &ls, AG_);
+        let ijq = gpu.lcdc & 0x80 != 0;
+        bo(p + 64, o, if ijq { "LCD:ON" } else { "LCD:OFF" },
+            if ijq { DZ_ } else { AN_ });
+        o += L_;
+
+        
+        let bits = [
+            ("BG", gpu.lcdc & 0x01 != 0),
+            ("OBJ", gpu.lcdc & 0x02 != 0),
+            ("8x16", gpu.lcdc & 0x04 != 0),
+            ("WIN", gpu.lcdc & 0x20 != 0),
         ];
-        let mut bx = y;
-        for (j, ea) in &fs {
-            let bj = if *ea { DP_ } else { SD_ };
-            fu(bx, x, j, bj);
-            bx += (j.len() as u32 + 1) * GB_;
+        let mut bx = p;
+        for (name, on) in &bits {
+            let col = if *on { DZ_ } else { TG_ };
+            bo(bx, o, name, col);
+            bx += (name.len() as u32 + 1) * CE_;
         }
-        x += K_ + 4;
+        o += L_ + 4;
 
         
-        fu(y, x, "LY", ED_);
-        let ujc = format!("{:3} / 153", gpu.ct);
-        fu(y + 28, x, &ujc, AF_);
+        bo(p, o, "LY", EQ_);
+        let nbn = format!("{:3} / 153", gpu.ly);
+        bo(p + 28, o, &nbn, AG_);
         
-        let ajx = y + 110;
-        let lo = d.ao(130);
-        framebuffer::ah(ajx, x + 2, lo, 8, 0xFF0A1A10);
-        let li = (gpu.ct as u32 * lo) / 154;
-        let kca = if gpu.ct < 144 { BE_ } else { MJ_ };
-        framebuffer::ah(ajx, x + 2, li.v(lo), 8, kca);
-        x += K_;
+        let pv = p + 110;
+        let ek = w.saturating_sub(130);
+        framebuffer::fill_rect(pv, o + 2, ek, 8, 0xFF0A1A10);
+        let progress = (gpu.ly as u32 * ek) / 154;
+        let fie = if gpu.ly < 144 { BF_ } else { NI_ };
+        framebuffer::fill_rect(pv, o + 2, progress.min(ek), 8, fie);
+        o += L_;
 
-        fu(y, x, "LYC", F_);
-        let ujb = format!("{:3}", gpu.eey);
-        fu(y + 32, x, &ujb, AF_);
-        if gpu.ct == gpu.eey {
-            fu(y + 60, x, "=MATCH", BE_);
+        bo(p, o, "LYC", F_);
+        let nbm = format!("{:3}", gpu.lyc);
+        bo(p + 32, o, &nbm, AG_);
+        if gpu.ly == gpu.lyc {
+            bo(p + 60, o, "=MATCH", BF_);
         }
-        x += K_;
+        o += L_;
 
         
-        fu(y, x, "MODE", F_);
-        let (czz, upa) = match gpu.ev {
+        bo(p, o, "MODE", F_);
+        let (bcu, mode_col) = match gpu.mode {
             0 => ("HBLANK", F_),
-            1 => ("VBLANK", MJ_),
-            2 => ("OAM", O_),
-            3 => ("DRAW", BE_),
-            _ => ("???", AW_),
+            1 => ("VBLANK", NI_),
+            2 => ("OAM", M_),
+            3 => ("DRAW", BF_),
+            _ => ("???", AN_),
         };
-        fu(y + 40, x, czz, upa);
-        let rsv = format!("({} dots)", gpu.yl);
-        fu(y + 96, x, &rsv, F_);
-        x += K_ + 4;
+        bo(p + 40, o, bcu, mode_col);
+        let lba = format!("({} dots)", gpu.cycles);
+        bo(p + 96, o, &lba, F_);
+        o += L_ + 4;
 
         
-        fu(y, x, "SCX/Y", F_);
-        let rv = format!("{:3},{:3}", gpu.eye, gpu.eyf);
-        fu(y + 48, x, &rv, AF_);
-        x += K_;
-        fu(y, x, "WX/Y", F_);
-        let ciw = format!("{:3},{:3}", gpu.fx, gpu.lw);
-        fu(y + 48, x, &ciw, AF_);
-        x += K_ + 4;
+        bo(p, o, "SCX/Y", F_);
+        let ss = format!("{:3},{:3}", gpu.scx, gpu.scy);
+        bo(p + 48, o, &ss, AG_);
+        o += L_;
+        bo(p, o, "WX/Y", F_);
+        let asv = format!("{:3},{:3}", gpu.wx, gpu.wy);
+        bo(p + 48, o, &asv, AG_);
+        o += L_ + 4;
 
         
-        fu(y, x, "BGP", F_);
-        krg(y + 32, x, gpu.emt);
-        x += K_;
-        fu(y, x, "OBP0", F_);
-        krg(y + 40, x, gpu.fpm);
-        x += K_;
-        fu(y, x, "OBP1", F_);
-        krg(y + 40, x, gpu.fpn);
-        x += K_ + 4;
+        bo(p, o, "BGP", F_);
+        fsz(p + 32, o, gpu.bgp);
+        o += L_;
+        bo(p, o, "OBP0", F_);
+        fsz(p + 40, o, gpu.obp0);
+        o += L_;
+        bo(p, o, "OBP1", F_);
+        fsz(p + 40, o, gpu.obp1);
+        o += L_ + 4;
 
         
-        if cw.atz {
-            fu(y, x, "CGB BG PALETTES", F_);
-            x += K_;
-            for jil in 0..8 {
-                let vkm = y + jil * 36;
-                for r in 0..4u32 {
-                    let l = (jil * 8 + r * 2) as usize;
-                    if l + 1 < gpu.bdo.len() {
-                        let hh = gpu.bdo[l] as u16;
-                        let gd = gpu.bdo[l + 1] as u16;
-                        let fsv = hh | (gd << 8);
-                        let m = (((fsv & 0x1F) as u8) << 3) as u32;
-                        let at = ((((fsv >> 5) & 0x1F) as u8) << 3) as u32;
-                        let o = ((((fsv >> 10) & 0x1F) as u8) << 3) as u32;
-                        let s = 0xFF000000 | (m << 16) | (at << 8) | o;
-                        framebuffer::ah(vkm + r * 8, x, 7, 8, s);
+        if an.cgb_mode {
+            bo(p, o, "CGB BG PALETTES", F_);
+            o += L_;
+            for ewa in 0..8 {
+                let nwq = p + ewa * 36;
+                for c in 0..4u32 {
+                    let offset = (ewa * 8 + c * 2) as usize;
+                    if offset + 1 < gpu.bg_palette.len() {
+                        let lo = gpu.bg_palette[offset] as u16;
+                        let hi = gpu.bg_palette[offset + 1] as u16;
+                        let cpj = lo | (hi << 8);
+                        let r = (((cpj & 0x1F) as u8) << 3) as u32;
+                        let g = ((((cpj >> 5) & 0x1F) as u8) << 3) as u32;
+                        let b = ((((cpj >> 10) & 0x1F) as u8) << 3) as u32;
+                        let color = 0xFF000000 | (r << 16) | (g << 8) | b;
+                        framebuffer::fill_rect(nwq + c * 8, o, 7, 8, color);
                     }
                 }
             }
-            x += 12;
+            o += 12;
 
             
-            fu(y, x, "VRAM BANK", F_);
-            let xqu = format!("{}", gpu.fbb);
-            fu(y + 80, x, &xqu, AF_);
+            bo(p, o, "VRAM BANK", F_);
+            let prg = format!("{}", gpu.vram_bank);
+            bo(p + 80, o, &prg, AG_);
         }
     } else {
-        fu(y, x, "No emulator linked", F_);
+        bo(p, o, "No emulator linked", F_);
     }
 }
 
 
-fn sew(cw: Option<&GameBoyEmulator>, g: &GameLabState, b: u32, c: u32, d: u32, i: u32) {
-    epf(b, c, d, i, "MEMORY", g.eyi == 2);
+fn lki(an: Option<&GameBoyEmulator>, state: &GameLabState, x: u32, y: u32, w: u32, h: u32) {
+    blx(x, y, w, h, "MEMORY", state.selected_panel == 2);
 
-    let y = b + KX_ + 2;
-    let mut x = c + 20;
+    let p = x + EK_ + 2;
+    let mut o = y + 20;
 
     
-    let gmv = ["WRAM", "VRAM", "HRAM", "ROM", "OAM"];
-    let mut gx = y;
-    for (a, j) in gmv.iter().cf() {
-        let na = a as u8 == g.foa;
-        let bj = if na { BE_ } else { F_ };
-        if na {
-            framebuffer::ah(gx, x, j.len() as u32 * GB_ + 4, K_, 0xFF1A3020);
+    let modes = ["WRAM", "VRAM", "HRAM", "ROM", "OAM"];
+    let mut bu = p;
+    for (i, name) in modes.iter().enumerate() {
+        let selected = i as u8 == state.mem_mode;
+        let col = if selected { BF_ } else { F_ };
+        if selected {
+            framebuffer::fill_rect(bu, o, name.len() as u32 * CE_ + 4, L_, 0xFF1A3020);
         }
-        fu(gx + 2, x, j, bj);
-        gx += j.len() as u32 * GB_ + 8;
+        bo(bu + 2, o, name, col);
+        bu += name.len() as u32 * CE_ + 8;
     }
-    x += K_ + 4;
+    o += L_ + 4;
 
     
-    let qfu = format!("ADDR  {:04X}", g.bnn);
-    fu(y, x, &qfu, O_);
-    x += K_;
+    let juc = format!("ADDR  {:04X}", state.mem_view_addr);
+    bo(p, o, &juc, M_);
+    o += L_;
 
-    if let Some(cw) = cw {
+    if let Some(an) = an {
         
-        let lk = ((i - 60) / K_).v(16) as u16;
-        for br in 0..lk {
-            let ag = g.bnn.cn(br * 16);
+        let rows = ((h - 60) / L_).min(16) as u16;
+        for row in 0..rows {
+            let addr = state.mem_view_addr.wrapping_add(row * 16);
             
-            let dyd = format!("{:04X}", ag);
-            fu(y, x, &dyd, HR_);
+            let bqd = format!("{:04X}", addr);
+            bo(p, o, &bqd, IJ_);
 
             
-            let mut bng = y + 40;
-            let mut mwk = [b'.'; 16];
-            for bj in 0..16u16 {
-                let q = ag.cn(bj);
-                let hf = boa(cw, q);
-                let lcu = format!("{:02X}", hf);
+            let mut aib = p + 40;
+            let mut hfs = [b'.'; 16];
+            for col in 0..16u16 {
+                let a = addr.wrapping_add(col);
+                let byte = aik(an, a);
+                let gbf = format!("{:02X}", byte);
                 
-                let nli = (br * 16 + bj) as usize;
-                let vo = if nli < g.jfs.len() { g.jfs[nli] } else { hf };
-                let quv = if hf != vo { SC_ } else if hf == 0 { F_ } else { AF_ };
-                fu(bng, x, &lcu, quv);
-                bng += 20;
-                if bj == 7 { bng += 4; } 
+                let hsd = (row * 16 + col) as usize;
+                let prev = if hsd < state.mem_prev.len() { state.mem_prev[hsd] } else { byte };
+                let kgk = if byte != prev { TF_ } else if byte == 0 { F_ } else { AG_ };
+                bo(aib, o, &gbf, kgk);
+                aib += 20;
+                if col == 7 { aib += 4; } 
 
-                if hf >= 0x20 && hf < 0x7F {
-                    mwk[bj as usize] = hf;
+                if byte >= 0x20 && byte < 0x7F {
+                    hfs[col as usize] = byte;
                 }
             }
 
             
-            if d > 420 {
-                let ascii: alloc::string::String = mwk.iter().map(|&o| o as char).collect();
-                fu(bng + 8, x, &ascii, F_);
+            if w > 420 {
+                let ascii: alloc::string::String = hfs.iter().map(|&b| b as char).collect();
+                bo(aib + 8, o, &ascii, F_);
             }
 
-            x += K_;
+            o += L_;
         }
     } else {
-        fu(y, x, "No emulator linked", F_);
+        bo(p, o, "No emulator linked", F_);
     }
 }
 
 
-fn sev(cw: Option<&GameBoyEmulator>, b: u32, c: u32, d: u32, i: u32, g: &GameLabState) {
-    epf(b, c, d, i, "I/O REGISTERS", g.eyi == 3);
+fn lkh(an: Option<&GameBoyEmulator>, x: u32, y: u32, w: u32, h: u32, state: &GameLabState) {
+    blx(x, y, w, h, "I/O REGISTERS", state.selected_panel == 3);
 
-    let y = b + KX_ + 2;
-    let mut x = c + 20;
+    let p = x + EK_ + 2;
+    let mut o = y + 20;
 
-    if let Some(cw) = cw {
+    if let Some(an) = an {
         
-        fu(y, x, "INTERRUPTS", O_);
-        x += K_;
+        bo(p, o, "INTERRUPTS", M_);
+        o += L_;
 
-        fu(y, x, "IE", ED_);
-        let trv = format!("{:02X}", cw.brc);
-        fu(y + 24, x, &trv, AF_);
+        bo(p, o, "IE", EQ_);
+        let mnz = format!("{:02X}", an.ie_reg);
+        bo(p + 24, o, &mnz, AG_);
 
-        fu(y + 50, x, "IF", ED_);
-        let trw = format!("{:02X}", cw.bhf);
-        fu(y + 74, x, &trw, AF_);
-        x += K_;
+        bo(p + 50, o, "IF", EQ_);
+        let moa = format!("{:02X}", an.if_reg);
+        bo(p + 74, o, &moa, AG_);
+        o += L_;
 
         
-        let tvk = ["VBL", "STA", "TIM", "SER", "JOY"];
-        let mut fg = y;
-        for (a, j) in tvk.iter().cf() {
-            let hnr = cw.brc & (1 << a) != 0;
-            let dry = cw.bhf & (1 << a) != 0;
-            let bj = if hnr && dry { AW_ } else if hnr { DP_ } else { SD_ };
-            fu(fg, x, j, bj);
-            fg += 32;
+        let mqt = ["VBL", "STA", "TIM", "SER", "JOY"];
+        let mut bi = p;
+        for (i, name) in mqt.iter().enumerate() {
+            let drt = an.ie_reg & (1 << i) != 0;
+            let iflag = an.if_reg & (1 << i) != 0;
+            let col = if drt && iflag { AN_ } else if drt { DZ_ } else { TG_ };
+            bo(bi, o, name, col);
+            bi += 32;
         }
-        x += K_ + 6;
+        o += L_ + 6;
 
         
-        fu(y, x, "TIMER", O_);
-        x += K_;
+        bo(p, o, "TIMER", M_);
+        o += L_;
 
-        fu(y, x, "DIV", F_);
-        let rzh = format!("{:02X}", cw.timer.pac());
-        fu(y + 32, x, &rzh, AF_);
+        bo(p, o, "DIV", F_);
+        let lgd = format!("{:02X}", an.timer.read_div());
+        bo(p + 32, o, &lgd, AG_);
 
-        fu(y + 60, x, "TIMA", F_);
-        let xha = format!("{:02X}", cw.timer.ejw);
-        fu(y + 100, x, &xha, AF_);
-        x += K_;
+        bo(p + 60, o, "TIMA", F_);
+        let pjl = format!("{:02X}", an.timer.tima);
+        bo(p + 100, o, &pjl, AG_);
+        o += L_;
 
-        fu(y, x, "TMA", F_);
-        let xie = format!("{:02X}", cw.timer.fww);
-        fu(y + 32, x, &xie, AF_);
+        bo(p, o, "TMA", F_);
+        let pki = format!("{:02X}", an.timer.tma);
+        bo(p + 32, o, &pki, AG_);
 
-        fu(y + 60, x, "TAC", F_);
-        let xam = format!("{:02X}", cw.timer.ezl);
-        fu(y + 100, x, &xam, AF_);
-        x += K_ + 6;
+        bo(p + 60, o, "TAC", F_);
+        let pcx = format!("{:02X}", an.timer.tac);
+        bo(p + 100, o, &pcx, AG_);
+        o += L_ + 6;
 
         
-        fu(y, x, "SERIAL", O_);
-        x += K_;
-        fu(y, x, "SB", F_);
-        let wdf = format!("{:02X}", cw.cht);
-        fu(y + 24, x, &wdf, AF_);
-        fu(y + 50, x, "SC", F_);
-        let wew = format!("{:02X}", cw.chs);
-        fu(y + 74, x, &wew, AF_);
+        bo(p, o, "SERIAL", M_);
+        o += L_;
+        bo(p, o, "SB", F_);
+        let oko = format!("{:02X}", an.serial_data);
+        bo(p + 24, o, &oko, AG_);
+        bo(p + 50, o, "SC", F_);
+        let oly = format!("{:02X}", an.serial_ctrl);
+        bo(p + 74, o, &oly, AG_);
 
-        if cw.atz {
-            x += K_ + 6;
-            fu(y, x, "CGB I/O", O_);
-            x += K_;
-            fu(y, x, "KEY1", F_);
-            let uay = format!("{:02X}", cw.beq);
-            fu(y + 40, x, &uay, AF_);
-            fu(y + 68, x, "WRAM", F_);
-            let xud = format!("BK{}", cw.axj);
-            fu(y + 104, x, &xud, AF_);
+        if an.cgb_mode {
+            o += L_ + 6;
+            bo(p, o, "CGB I/O", M_);
+            o += L_;
+            bo(p, o, "KEY1", F_);
+            let mvl = format!("{:02X}", an.key1);
+            bo(p + 40, o, &mvl, AG_);
+            bo(p + 68, o, "WRAM", F_);
+            let pui = format!("BK{}", an.wram_bank);
+            bo(p + 104, o, &pui, AG_);
         }
     } else {
-        fu(y, x, "No emulator linked", F_);
+        bo(p, o, "No emulator linked", F_);
     }
 }
 
 
-fn ser(cw: Option<&GameBoyEmulator>, b: u32, c: u32, d: u32, i: u32) {
-    epf(b, c, d, i, "CARTRIDGE", false);
+fn lkd(an: Option<&GameBoyEmulator>, x: u32, y: u32, w: u32, h: u32) {
+    blx(x, y, w, h, "CARTRIDGE", false);
 
-    let y = b + KX_ + 2;
-    let mut x = c + 20;
+    let p = x + EK_ + 2;
+    let mut o = y + 20;
 
-    if let Some(cw) = cw {
-        let on = &cw.on;
-
-        
-        let xhr: alloc::vec::Vec<u8> = on.dq.iter().hu()
-            .fwc(|&r| r != 0 && r >= 0x20).collect();
-        let dq = core::str::jg(&xhr).unwrap_or("???");
-        fu(y, x, "TITLE", F_);
-        fu(y + 48, x, dq, BE_);
-        x += K_;
+    if let Some(an) = an {
+        let cart = &an.cart;
 
         
-        let umg = match on.fnz {
+        let pka: alloc::vec::Vec<u8> = cart.title.iter().copied()
+            .take_while(|&c| c != 0 && c >= 0x20).collect();
+        let title = core::str::from_utf8(&pka).unwrap_or("???");
+        bo(p, o, "TITLE", F_);
+        bo(p + 48, o, title, BF_);
+        o += L_;
+
+        
+        let ndt = match cart.mbc_type {
             crate::gameboy::cartridge::MbcType::None => "ROM ONLY",
-            crate::gameboy::cartridge::MbcType::Acw => "MBC1",
-            crate::gameboy::cartridge::MbcType::Acx => "MBC3",
-            crate::gameboy::cartridge::MbcType::Acy => "MBC5",
+            crate::gameboy::cartridge::MbcType::Mbc1 => "MBC1",
+            crate::gameboy::cartridge::MbcType::Mbc3 => "MBC3",
+            crate::gameboy::cartridge::MbcType::Mbc5 => "MBC5",
         };
-        fu(y, x, "MBC", F_);
-        fu(y + 32, x, umg, AF_);
-        x += K_;
+        bo(p, o, "MBC", F_);
+        bo(p + 32, o, ndt, AG_);
+        o += L_;
 
         
-        let vzx = on.awv.len() / 1024;
-        let vpx = on.ajl.len() / 1024;
-        fu(y, x, "ROM", F_);
-        let acl = format!("{}KB", vzx);
-        fu(y + 32, x, &acl, AF_);
-        fu(y + 80, x, "RAM", F_);
-        let vqf = format!("{}KB", vpx);
-        fu(y + 112, x, &vqf, AF_);
-        x += K_;
+        let ohx = cart.rom.len() / 1024;
+        let obc = cart.ram.len() / 1024;
+        bo(p, o, "ROM", F_);
+        let oc = format!("{}KB", ohx);
+        bo(p + 32, o, &oc, AG_);
+        bo(p + 80, o, "RAM", F_);
+        let obk = format!("{}KB", obc);
+        bo(p + 112, o, &obk, AG_);
+        o += L_;
 
         
-        fu(y, x, "ROM BANK", F_);
-        let vqr = format!("{:3}", on.bwu);
-        fu(y + 72, x, &vqr, AF_);
-        let xjt = on.awv.len() / 16384;
-        let xbj = format!("/ {}", xjt);
-        fu(y + 96, x, &xbj, F_);
-        x += K_;
+        bo(p, o, "ROM BANK", F_);
+        let obw = format!("{:3}", cart.rom_bank);
+        bo(p + 72, o, &obw, AG_);
+        let pll = cart.rom.len() / 16384;
+        let tbs = format!("/ {}", pll);
+        bo(p + 96, o, &tbs, F_);
+        o += L_;
 
-        fu(y, x, "RAM BANK", F_);
-        let vzo = format!("{:3}", on.brv);
-        fu(y + 72, x, &vzo, AF_);
-        x += K_;
+        bo(p, o, "RAM BANK", F_);
+        let ohq = format!("{:3}", cart.ram_bank);
+        bo(p + 72, o, &ohq, AG_);
+        o += L_;
 
         
-        fu(y, x, "CGB", F_);
-        let qxz = match on.eni {
+        bo(p, o, "CGB", F_);
+        let kij = match cart.cgb_flag {
             0xC0 => "CGB ONLY",
             0x80 => "CGB+DMG",
             _ => "DMG",
         };
-        let qxy = if on.eni >= 0x80 { O_ } else { F_ };
-        fu(y + 32, x, qxz, qxy);
+        let kii = if cart.cgb_flag >= 0x80 { M_ } else { F_ };
+        bo(p + 32, o, kij, kii);
     } else {
-        fu(y, x, "No cartridge", F_);
+        bo(p, o, "No cartridge", F_);
     }
 }
 
 
-fn seu(cw: Option<&GameBoyEmulator>, b: u32, c: u32, d: u32, i: u32, g: &GameLabState) {
-    epf(b, c, d, i, "INPUT STATE", g.eyi == 5);
+fn lkg(an: Option<&GameBoyEmulator>, x: u32, y: u32, w: u32, h: u32, state: &GameLabState) {
+    blx(x, y, w, h, "INPUT STATE", state.selected_panel == 5);
 
-    let y = b + KX_ + 2;
-    let mut x = c + 20;
+    let p = x + EK_ + 2;
+    let mut o = y + 20;
 
-    if let Some(cw) = cw {
-        fu(y, x, "JOYPAD $FF00", O_);
-        let uap = format!("{:02X}", cw.cfu);
-        fu(y + 104, x, &uap, AF_);
-        x += K_ + 4;
-
-        
-        fu(y, x, "D-PAD", F_);
-        x += K_;
-        let bln    = cw.aox & 0x04 == 0;
-        let hgr  = cw.aox & 0x08 == 0;
-        let fd  = cw.aox & 0x02 == 0;
-        let hw = cw.aox & 0x01 == 0;
+    if let Some(an) = an {
+        bo(p, o, "JOYPAD $FF00", M_);
+        let mve = format!("{:02X}", an.joypad_reg);
+        bo(p + 104, o, &mve, AG_);
+        o += L_ + 4;
 
         
-        let dx = y + 16;
-        let bg = x;
-        let nf: u32 = 16;
-        
-        framebuffer::ah(dx + nf, bg, nf, nf, if bln { DP_ } else { 0xFF1A2820 });
-        fu(dx + nf + 3, bg + 2, "U", if bln { 0xFF000000 } else { F_ });
-        
-        framebuffer::ah(dx + nf, bg + nf * 2, nf, nf, if hgr { DP_ } else { 0xFF1A2820 });
-        fu(dx + nf + 3, bg + nf * 2 + 2, "D", if hgr { 0xFF000000 } else { F_ });
-        
-        framebuffer::ah(dx, bg + nf, nf, nf, if fd { DP_ } else { 0xFF1A2820 });
-        fu(dx + 3, bg + nf + 2, "L", if fd { 0xFF000000 } else { F_ });
-        
-        framebuffer::ah(dx + nf * 2, bg + nf, nf, nf, if hw { DP_ } else { 0xFF1A2820 });
-        fu(dx + nf * 2 + 3, bg + nf + 2, "R", if hw { 0xFF000000 } else { F_ });
-        
-        framebuffer::ah(dx + nf, bg + nf, nf, nf, 0xFF1A2820);
+        bo(p, o, "D-PAD", F_);
+        o += L_;
+        let up    = an.joypad_dirs & 0x04 == 0;
+        let dno  = an.joypad_dirs & 0x08 == 0;
+        let left  = an.joypad_dirs & 0x02 == 0;
+        let right = an.joypad_dirs & 0x01 == 0;
 
         
-        let bx = y + 100;
-        let iil = cw.aow & 0x01 == 0;
-        let ikh = cw.aow & 0x02 == 0;
-        let joe = cw.aow & 0x04 == 0;
-        let jrn = cw.aow & 0x08 == 0;
+        let dx = p + 16;
+        let ad = o;
+        let fq: u32 = 16;
+        
+        framebuffer::fill_rect(dx + fq, ad, fq, fq, if up { DZ_ } else { 0xFF1A2820 });
+        bo(dx + fq + 3, ad + 2, "U", if up { 0xFF000000 } else { F_ });
+        
+        framebuffer::fill_rect(dx + fq, ad + fq * 2, fq, fq, if dno { DZ_ } else { 0xFF1A2820 });
+        bo(dx + fq + 3, ad + fq * 2 + 2, "D", if dno { 0xFF000000 } else { F_ });
+        
+        framebuffer::fill_rect(dx, ad + fq, fq, fq, if left { DZ_ } else { 0xFF1A2820 });
+        bo(dx + 3, ad + fq + 2, "L", if left { 0xFF000000 } else { F_ });
+        
+        framebuffer::fill_rect(dx + fq * 2, ad + fq, fq, fq, if right { DZ_ } else { 0xFF1A2820 });
+        bo(dx + fq * 2 + 3, ad + fq + 2, "R", if right { 0xFF000000 } else { F_ });
+        
+        framebuffer::fill_rect(dx + fq, ad + fq, fq, fq, 0xFF1A2820);
 
         
-        framebuffer::ah(bx + 32, bg + 4, 22, 22, if iil { DP_ } else { 0xFF1A2820 });
-        fu(bx + 38, bg + 8, "A", if iil { 0xFF000000 } else { AF_ });
+        let bx = p + 100;
+        let eer = an.joypad_buttons & 0x01 == 0;
+        let efu = an.joypad_buttons & 0x02 == 0;
+        let ezx = an.joypad_buttons & 0x04 == 0;
+        let fbo = an.joypad_buttons & 0x08 == 0;
 
         
-        framebuffer::ah(bx, bg + 16, 22, 22, if ikh { DP_ } else { 0xFF1A2820 });
-        fu(bx + 6, bg + 20, "B", if ikh { 0xFF000000 } else { AF_ });
-
-        x = bg + nf * 3 + 6;
+        framebuffer::fill_rect(bx + 32, ad + 4, 22, 22, if eer { DZ_ } else { 0xFF1A2820 });
+        bo(bx + 38, ad + 8, "A", if eer { 0xFF000000 } else { AG_ });
 
         
-        let jof = y + 20;
-        framebuffer::ah(jof, x, 40, 14, if joe { O_ } else { 0xFF1A2820 });
-        fu(jof + 4, x + 1, "SEL", if joe { 0xFF000000 } else { F_ });
+        framebuffer::fill_rect(bx, ad + 16, 22, 22, if efu { DZ_ } else { 0xFF1A2820 });
+        bo(bx + 6, ad + 20, "B", if efu { 0xFF000000 } else { AG_ });
 
-        framebuffer::ah(jof + 48, x, 48, 14, if jrn { O_ } else { 0xFF1A2820 });
-        fu(jof + 52, x + 1, "START", if jrn { 0xFF000000 } else { F_ });
-        x += K_ + 8;
+        o = ad + fq * 3 + 6;
 
         
-        fu(y, x, "DIRS", F_);
-        let bjw = format!("{:02X}", cw.aox);
-        fu(y + 40, x, &bjw, AF_);
-        fu(y + 68, x, "BTNS", F_);
-        let kex = format!("{:02X}", cw.aow);
-        fu(y + 108, x, &kex, AF_);
+        let ezy = p + 20;
+        framebuffer::fill_rect(ezy, o, 40, 14, if ezx { M_ } else { 0xFF1A2820 });
+        bo(ezy + 4, o + 1, "SEL", if ezx { 0xFF000000 } else { F_ });
+
+        framebuffer::fill_rect(ezy + 48, o, 48, 14, if fbo { M_ } else { 0xFF1A2820 });
+        bo(ezy + 52, o + 1, "START", if fbo { 0xFF000000 } else { F_ });
+        o += L_ + 8;
+
+        
+        bo(p, o, "DIRS", F_);
+        let ds = format!("{:02X}", an.joypad_dirs);
+        bo(p + 40, o, &ds, AG_);
+        bo(p + 68, o, "BTNS", F_);
+        let fjv = format!("{:02X}", an.joypad_buttons);
+        bo(p + 108, o, &fjv, AG_);
     } else {
-        fu(y, x, "No emulator linked", F_);
+        bo(p, o, "No emulator linked", F_);
     }
 }
 
 
 
-fn epf(b: u32, c: u32, d: u32, i: u32, dq: &str, na: bool) {
+fn blx(x: u32, y: u32, w: u32, h: u32, title: &str, selected: bool) {
     
-    framebuffer::ah(b, c, d, i, BNY_);
+    framebuffer::fill_rect(x, y, w, h, BQQ_);
     
-    let imb = if na { BE_ } else { JR_ };
-    framebuffer::ah(b, c, d, 1, imb);
-    framebuffer::ah(b, c + i - 1, d, 1, imb);
-    framebuffer::ah(b, c, 1, i, imb);
-    framebuffer::ah(b + d - 1, c, 1, i, imb);
+    let ehe = if selected { BF_ } else { KI_ };
+    framebuffer::fill_rect(x, y, w, 1, ehe);
+    framebuffer::fill_rect(x, y + h - 1, w, 1, ehe);
+    framebuffer::fill_rect(x, y, 1, h, ehe);
+    framebuffer::fill_rect(x + w - 1, y, 1, h, ehe);
     
-    framebuffer::ah(b + 1, c + 1, d - 2, 16, SE_);
-    fu(b + 6, c + 3, dq, if na { BE_ } else { O_ });
+    framebuffer::fill_rect(x + 1, y + 1, w - 2, 16, KJ_);
+    bo(x + 6, y + 3, title, if selected { BF_ } else { M_ });
 }
 
-fn fu(b: u32, c: u32, text: &str, s: u32) {
-    let mut cx = b;
-    for bm in text.bw() {
-        framebuffer::afn(cx, c, bm, s);
-        cx += GB_;
+fn bo(x: u32, y: u32, text: &str, color: u32) {
+    let mut cx = x;
+    for ch in text.chars() {
+        framebuffer::px(cx, y, ch, color);
+        cx += CE_;
     }
 }
 
-fn krg(b: u32, c: u32, aim: u8) {
+fn fsz(x: u32, y: u32, palette: u8) {
     
-    const BWL_: [u32; 4] = [0xFFE0F8D0, 0xFF88C070, 0xFF346856, 0xFF081820];
-    for a in 0..4u32 {
-        let dlr = (aim >> (a * 2)) & 3;
-        framebuffer::ah(b + a * 16, c + 1, 14, 10, BWL_[dlr as usize]);
+    const BZR_: [u32; 4] = [0xFFE0F8D0, 0xFF88C070, 0xFF346856, 0xFF081820];
+    for i in 0..4u32 {
+        let shade = (palette >> (i * 2)) & 3;
+        framebuffer::fill_rect(x + i * 16, y + 1, 14, 10, BZR_[shade as usize]);
     }
 }
 
 
-pub fn boa(cw: &GameBoyEmulator, ag: u16) -> u8 {
-    match ag {
-        0x0000..=0x7FFF => cw.on.read(ag),
-        0x8000..=0x9FFF => cw.gpu.jlp(ag),
-        0xA000..=0xBFFF => cw.on.read(ag),
+pub fn aik(an: &GameBoyEmulator, addr: u16) -> u8 {
+    match addr {
+        0x0000..=0x7FFF => an.cart.read(addr),
+        0x8000..=0x9FFF => an.gpu.read_vram(addr),
+        0xA000..=0xBFFF => an.cart.read(addr),
         0xC000..=0xCFFF => {
-            let w = (ag as usize) - 0xC000;
-            if w < cw.aec.len() { cw.aec[w] } else { 0xFF }
+            let idx = (addr as usize) - 0xC000;
+            if idx < an.wram.len() { an.wram[idx] } else { 0xFF }
         }
         0xD000..=0xDFFF => {
-            let om = cw.axj.am(1) as usize;
-            let l = om * 0x1000 + (ag as usize - 0xD000);
-            if l < cw.aec.len() { cw.aec[l] } else { 0xFF }
+            let gi = an.wram_bank.max(1) as usize;
+            let offset = gi * 0x1000 + (addr as usize - 0xD000);
+            if offset < an.wram.len() { an.wram[offset] } else { 0xFF }
         }
-        0xFE00..=0xFE9F => cw.gpu.pai(ag),
+        0xFE00..=0xFE9F => an.gpu.read_oam(addr),
         0xFF80..=0xFFFE => {
-            let w = (ag - 0xFF80) as usize;
-            if w < cw.bux.len() { cw.bux[w] } else { 0xFF }
+            let idx = (addr - 0xFF80) as usize;
+            if idx < an.hram.len() { an.hram[idx] } else { 0xFF }
         }
-        0xFFFF => cw.brc,
+        0xFFFF => an.ie_reg,
         _ => 0xFF,
     }
 }
 
 
-pub fn pxh(g: &mut GameLabState, cw: &GameBoyEmulator) {
-    for a in 0..256usize {
-        let ag = g.bnn.cn(a as u16);
-        g.jfs[a] = boa(cw, ag);
+pub fn jpg(state: &mut GameLabState, an: &GameBoyEmulator) {
+    for i in 0..256usize {
+        let addr = state.mem_view_addr.wrapping_add(i as u16);
+        state.mem_prev[i] = aik(an, addr);
     }
 }
 
 
-fn bgt(b: u32, c: u32, d: u32, i: u32, cu: &str, gh: bool, s: u32) {
-    let ei = if gh { 0xFF1A3020 } else { 0xFF0E1820 };
-    framebuffer::ah(b, c, d, i, ei);
-    framebuffer::ah(b, c, d, 1, s & 0x40FFFFFF);
-    framebuffer::ah(b, c + i - 1, d, 1, s & 0x40FFFFFF);
-    framebuffer::ah(b, c, 1, i, s & 0x40FFFFFF);
-    framebuffer::ah(b + d - 1, c, 1, i, s & 0x40FFFFFF);
-    let bda = cu.len() as u32 * GB_;
-    fu(b + (d.ao(bda)) / 2, c + (i.ao(12)) / 2, cu, s);
+fn afc(x: u32, y: u32, w: u32, h: u32, label: &str, active: bool, color: u32) {
+    let bg = if active { 0xFF1A3020 } else { 0xFF0E1820 };
+    framebuffer::fill_rect(x, y, w, h, bg);
+    framebuffer::fill_rect(x, y, w, 1, color & 0x40FFFFFF);
+    framebuffer::fill_rect(x, y + h - 1, w, 1, color & 0x40FFFFFF);
+    framebuffer::fill_rect(x, y, 1, h, color & 0x40FFFFFF);
+    framebuffer::fill_rect(x + w - 1, y, 1, h, color & 0x40FFFFFF);
+    let acy = label.len() as u32 * CE_;
+    bo(x + (w.saturating_sub(acy)) / 2, y + (h.saturating_sub(12)) / 2, label, color);
 }
 
 
-fn rya(cw: &GameBoyEmulator, ag: u16) -> (String, u8) {
-    let op = boa(cw, ag);
-    let of = boa(cw, ag.cn(1));
-    let tb = boa(cw, ag.cn(2));
-    let buy = (tb as u16) << 8 | of as u16;
+fn lfb(an: &GameBoyEmulator, addr: u16) -> (String, u8) {
+    let op = aik(an, addr);
+    let gf = aik(an, addr.wrapping_add(1));
+    let iq = aik(an, addr.wrapping_add(2));
+    let alt = (iq as u16) << 8 | gf as u16;
 
     match op {
         0x00 => (String::from("NOP"), 1),
-        0x01 => (format!("LD BC,${:04X}", buy), 3),
+        0x01 => (format!("LD BC,${:04X}", alt), 3),
         0x02 => (String::from("LD (BC),A"), 1),
         0x03 => (String::from("INC BC"), 1),
         0x04 => (String::from("INC B"), 1),
         0x05 => (String::from("DEC B"), 1),
-        0x06 => (format!("LD B,${:02X}", of), 2),
+        0x06 => (format!("LD B,${:02X}", gf), 2),
         0x07 => (String::from("RLCA"), 1),
-        0x08 => (format!("LD (${:04X}),SP", buy), 3),
+        0x08 => (format!("LD (${:04X}),SP", alt), 3),
         0x09 => (String::from("ADD HL,BC"), 1),
         0x0A => (String::from("LD A,(BC)"), 1),
         0x0B => (String::from("DEC BC"), 1),
         0x0C => (String::from("INC C"), 1),
         0x0D => (String::from("DEC C"), 1),
-        0x0E => (format!("LD C,${:02X}", of), 2),
+        0x0E => (format!("LD C,${:02X}", gf), 2),
         0x0F => (String::from("RRCA"), 1),
         0x10 => (String::from("STOP"), 2),
-        0x11 => (format!("LD DE,${:04X}", buy), 3),
+        0x11 => (format!("LD DE,${:04X}", alt), 3),
         0x12 => (String::from("LD (DE),A"), 1),
         0x13 => (String::from("INC DE"), 1),
-        0x16 => (format!("LD D,${:02X}", of), 2),
-        0x18 => (format!("JR ${:02X}", of), 2),
+        0x16 => (format!("LD D,${:02X}", gf), 2),
+        0x18 => (format!("JR ${:02X}", gf), 2),
         0x1A => (String::from("LD A,(DE)"), 1),
-        0x1E => (format!("LD E,${:02X}", of), 2),
-        0x20 => (format!("JR NZ,${:02X}", of), 2),
-        0x21 => (format!("LD HL,${:04X}", buy), 3),
+        0x1E => (format!("LD E,${:02X}", gf), 2),
+        0x20 => (format!("JR NZ,${:02X}", gf), 2),
+        0x21 => (format!("LD HL,${:04X}", alt), 3),
         0x22 => (String::from("LD (HL+),A"), 1),
         0x23 => (String::from("INC HL"), 1),
-        0x26 => (format!("LD H,${:02X}", of), 2),
-        0x28 => (format!("JR Z,${:02X}", of), 2),
+        0x26 => (format!("LD H,${:02X}", gf), 2),
+        0x28 => (format!("JR Z,${:02X}", gf), 2),
         0x2A => (String::from("LD A,(HL+)"), 1),
-        0x2E => (format!("LD L,${:02X}", of), 2),
+        0x2E => (format!("LD L,${:02X}", gf), 2),
         0x2F => (String::from("CPL"), 1),
-        0x30 => (format!("JR NC,${:02X}", of), 2),
-        0x31 => (format!("LD SP,${:04X}", buy), 3),
+        0x30 => (format!("JR NC,${:02X}", gf), 2),
+        0x31 => (format!("LD SP,${:04X}", alt), 3),
         0x32 => (String::from("LD (HL-),A"), 1),
         0x33 => (String::from("INC SP"), 1),
-        0x36 => (format!("LD (HL),${:02X}", of), 2),
-        0x38 => (format!("JR C,${:02X}", of), 2),
+        0x36 => (format!("LD (HL),${:02X}", gf), 2),
+        0x38 => (format!("JR C,${:02X}", gf), 2),
         0x3C => (String::from("INC A"), 1),
         0x3D => (String::from("DEC A"), 1),
-        0x3E => (format!("LD A,${:02X}", of), 2),
+        0x3E => (format!("LD A,${:02X}", gf), 2),
         0x40..=0x7F if op != 0x76 => {
-            let cs = ["B","C","D","E","H","L","(HL)","A"][(op as usize >> 3) & 7];
-            let cy = ["B","C","D","E","H","L","(HL)","A"][op as usize & 7];
-            (format!("LD {},{}", cs, cy), 1)
+            let dst = ["B","C","D","E","H","L","(HL)","A"][(op as usize >> 3) & 7];
+            let src = ["B","C","D","E","H","L","(HL)","A"][op as usize & 7];
+            (format!("LD {},{}", dst, src), 1)
         }
         0x76 => (String::from("HALT"), 1),
         0x80..=0x87 => {
-            let m = ["B","C","D","E","H","L","(HL)","A"][op as usize & 7];
-            (format!("ADD A,{}", m), 1)
+            let r = ["B","C","D","E","H","L","(HL)","A"][op as usize & 7];
+            (format!("ADD A,{}", r), 1)
         }
         0x90..=0x97 => {
-            let m = ["B","C","D","E","H","L","(HL)","A"][op as usize & 7];
-            (format!("SUB {}", m), 1)
+            let r = ["B","C","D","E","H","L","(HL)","A"][op as usize & 7];
+            (format!("SUB {}", r), 1)
         }
         0xA0..=0xA7 => {
-            let m = ["B","C","D","E","H","L","(HL)","A"][op as usize & 7];
-            (format!("AND {}", m), 1)
+            let r = ["B","C","D","E","H","L","(HL)","A"][op as usize & 7];
+            (format!("AND {}", r), 1)
         }
         0xA8..=0xAF => {
-            let m = ["B","C","D","E","H","L","(HL)","A"][op as usize & 7];
-            (format!("XOR {}", m), 1)
+            let r = ["B","C","D","E","H","L","(HL)","A"][op as usize & 7];
+            (format!("XOR {}", r), 1)
         }
         0xB0..=0xB7 => {
-            let m = ["B","C","D","E","H","L","(HL)","A"][op as usize & 7];
-            (format!("OR {}", m), 1)
+            let r = ["B","C","D","E","H","L","(HL)","A"][op as usize & 7];
+            (format!("OR {}", r), 1)
         }
         0xB8..=0xBF => {
-            let m = ["B","C","D","E","H","L","(HL)","A"][op as usize & 7];
-            (format!("CP {}", m), 1)
+            let r = ["B","C","D","E","H","L","(HL)","A"][op as usize & 7];
+            (format!("CP {}", r), 1)
         }
         0xC0 => (String::from("RET NZ"), 1),
         0xC1 => (String::from("POP BC"), 1),
-        0xC2 => (format!("JP NZ,${:04X}", buy), 3),
-        0xC3 => (format!("JP ${:04X}", buy), 3),
-        0xC4 => (format!("CALL NZ,${:04X}", buy), 3),
+        0xC2 => (format!("JP NZ,${:04X}", alt), 3),
+        0xC3 => (format!("JP ${:04X}", alt), 3),
+        0xC4 => (format!("CALL NZ,${:04X}", alt), 3),
         0xC5 => (String::from("PUSH BC"), 1),
-        0xC6 => (format!("ADD A,${:02X}", of), 2),
+        0xC6 => (format!("ADD A,${:02X}", gf), 2),
         0xC8 => (String::from("RET Z"), 1),
         0xC9 => (String::from("RET"), 1),
-        0xCA => (format!("JP Z,${:04X}", buy), 3),
-        0xCB => (format!("CB {:02X}", of), 2),
-        0xCC => (format!("CALL Z,${:04X}", buy), 3),
-        0xCD => (format!("CALL ${:04X}", buy), 3),
-        0xCE => (format!("ADC A,${:02X}", of), 2),
+        0xCA => (format!("JP Z,${:04X}", alt), 3),
+        0xCB => (format!("CB {:02X}", gf), 2),
+        0xCC => (format!("CALL Z,${:04X}", alt), 3),
+        0xCD => (format!("CALL ${:04X}", alt), 3),
+        0xCE => (format!("ADC A,${:02X}", gf), 2),
         0xD0 => (String::from("RET NC"), 1),
         0xD1 => (String::from("POP DE"), 1),
-        0xD2 => (format!("JP NC,${:04X}", buy), 3),
+        0xD2 => (format!("JP NC,${:04X}", alt), 3),
         0xD5 => (String::from("PUSH DE"), 1),
-        0xD6 => (format!("SUB ${:02X}", of), 2),
+        0xD6 => (format!("SUB ${:02X}", gf), 2),
         0xD8 => (String::from("RET C"), 1),
         0xD9 => (String::from("RETI"), 1),
-        0xDA => (format!("JP C,${:04X}", buy), 3),
-        0xE0 => (format!("LDH ($FF{:02X}),A", of), 2),
+        0xDA => (format!("JP C,${:04X}", alt), 3),
+        0xE0 => (format!("LDH ($FF{:02X}),A", gf), 2),
         0xE1 => (String::from("POP HL"), 1),
         0xE2 => (String::from("LD ($FF00+C),A"), 1),
         0xE5 => (String::from("PUSH HL"), 1),
-        0xE6 => (format!("AND ${:02X}", of), 2),
+        0xE6 => (format!("AND ${:02X}", gf), 2),
         0xE9 => (String::from("JP (HL)"), 1),
-        0xEA => (format!("LD (${:04X}),A", buy), 3),
-        0xEE => (format!("XOR ${:02X}", of), 2),
-        0xF0 => (format!("LDH A,($FF{:02X})", of), 2),
+        0xEA => (format!("LD (${:04X}),A", alt), 3),
+        0xEE => (format!("XOR ${:02X}", gf), 2),
+        0xF0 => (format!("LDH A,($FF{:02X})", gf), 2),
         0xF1 => (String::from("POP AF"), 1),
         0xF3 => (String::from("DI"), 1),
         0xF5 => (String::from("PUSH AF"), 1),
-        0xF6 => (format!("OR ${:02X}", of), 2),
-        0xFA => (format!("LD A,(${:04X})", buy), 3),
+        0xF6 => (format!("OR ${:02X}", gf), 2),
+        0xFA => (format!("LD A,(${:04X})", alt), 3),
         0xFB => (String::from("EI"), 1),
-        0xFE => (format!("CP ${:02X}", of), 2),
+        0xFE => (format!("CP ${:02X}", gf), 2),
         0xFF => (String::from("RST $38"), 1),
         _ => (format!("DB ${:02X}", op), 1),
     }
@@ -1865,160 +1865,160 @@ fn rya(cw: &GameBoyEmulator, ag: u16) -> (String, u8) {
 
 
 
-pub fn sdq(
-    cw: Option<&GameBoyEmulator>,
-    cx: u32, ae: u32, dt: u32, bm: u32,
+pub fn ljg(
+    an: Option<&GameBoyEmulator>,
+    cx: u32, u: u32, aq: u32, ch: u32,
 ) {
     
-    framebuffer::ah(cx, ae, dt, bm, 0xFF0A0F14);
+    framebuffer::fill_rect(cx, u, aq, ch, 0xFF0A0F14);
     
-    if dt < 60 || bm < 40 { return; }
+    if aq < 60 || ch < 40 { return; }
     
-    let (bln, hgr, fd, hw, iil, ikh, joe, jrn, rxu, qsm) =
-        if let Some(cw) = cw {
+    let (up, dno, left, right, eer, efu, ezx, fbo, dirs_raw, btns_raw) =
+        if let Some(an) = an {
             (
-                cw.aox & 0x04 == 0,
-                cw.aox & 0x08 == 0,
-                cw.aox & 0x02 == 0,
-                cw.aox & 0x01 == 0,
-                cw.aow & 0x01 == 0,
-                cw.aow & 0x02 == 0,
-                cw.aow & 0x04 == 0,
-                cw.aow & 0x08 == 0,
-                cw.aox,
-                cw.aow,
+                an.joypad_dirs & 0x04 == 0,
+                an.joypad_dirs & 0x08 == 0,
+                an.joypad_dirs & 0x02 == 0,
+                an.joypad_dirs & 0x01 == 0,
+                an.joypad_buttons & 0x01 == 0,
+                an.joypad_buttons & 0x02 == 0,
+                an.joypad_buttons & 0x04 == 0,
+                an.joypad_buttons & 0x08 == 0,
+                an.joypad_dirs,
+                an.joypad_buttons,
             )
         } else {
             (false, false, false, false, false, false, false, false, 0xFF, 0xFF)
         };
     
     
-    fu(cx + 6, ae + 4, "GAME BOY INPUT", F_);
+    bo(cx + 6, u + 4, "GAME BOY INPUT", F_);
     
     
-    if dt > 300 {
-        fu(cx + dt - 200, ae + 4, "WASD=Pad X=A Z=B C=Sel", 0xFF3A5A44);
+    if aq > 300 {
+        bo(cx + aq - 200, u + 4, "WASD=Pad X=A Z=B C=Sel", 0xFF3A5A44);
     }
     
     
-    let dqd = cx + 40;
-    let dqe = ae + 30;
-    let nf: u32 = 26;
-    let qi: u32 = 2;
+    let blv = cx + 40;
+    let blw = u + 30;
+    let fq: u32 = 26;
+    let gap: u32 = 2;
     
     
-    irw(dqd, dqe - nf - qi, nf, nf, "W", bln);
+    ekp(blv, blw - fq - gap, fq, fq, "W", up);
     
-    irw(dqd, dqe + nf + qi, nf, nf, "S", hgr);
+    ekp(blv, blw + fq + gap, fq, fq, "S", dno);
     
-    irw(dqd - nf - qi, dqe, nf, nf, "A", fd);
+    ekp(blv - fq - gap, blw, fq, fq, "A", left);
     
-    irw(dqd + nf + qi, dqe, nf, nf, "D", hw);
+    ekp(blv + fq + gap, blw, fq, fq, "D", right);
     
-    framebuffer::ah(dqd, dqe, nf, nf, 0xFF141E1A);
-    
-    
-    let acv: u32 = 30;
-    let iim = cx + dt - 80;
-    let iin = ae + 30;
-    let ikj = cx + dt - 140;
-    let ikk = ae + 48;
-    
-    nne(iim, iin, acv, "A", iil);
-    nne(ikj, ikk, acv, "B", ikh);
+    framebuffer::fill_rect(blv, blw, fq, fq, 0xFF141E1A);
     
     
-    fu(iim + acv + 4, iin + 8, "(X)", F_);
-    fu(ikj - 28, ikk + 8, "(Z)", F_);
+    let of: u32 = 30;
+    let ees = cx + aq - 80;
+    let eet = u + 30;
+    let efw = cx + aq - 140;
+    let efx = u + 48;
+    
+    htm(ees, eet, of, "A", eer);
+    htm(efw, efx, of, "B", efu);
     
     
-    let cgd = cx + dt / 2;
-    let fqu = ae + bm - 36;
-    nnf(cgd - 70, fqu, 56, 20, "SELECT", joe);
-    nnf(cgd + 14, fqu, 56, 20, "START", jrn);
+    bo(ees + of + 4, eet + 8, "(X)", F_);
+    bo(efw - 28, efx + 8, "(Z)", F_);
     
     
-    fu(cgd - 70, fqu + 22, "(C)", F_);
-    fu(cgd + 14, fqu + 22, "(Enter)", F_);
+    let arn = cx + aq / 2;
+    let coc = u + ch - 36;
+    htn(arn - 70, coc, 56, 20, "SELECT", ezx);
+    htn(arn + 14, coc, 56, 20, "START", fbo);
     
     
-    let edf = ae + bm - 16;
-    let bjw = alloc::format!("DIRS:{:02X}", rxu);
-    let kex = alloc::format!("BTNS:{:02X}", qsm);
-    fu(cx + 6, edf, &bjw, 0xFF3A5A44);
-    fu(cx + 80, edf, &kex, 0xFF3A5A44);
+    bo(arn - 70, coc + 22, "(C)", F_);
+    bo(arn + 14, coc + 22, "(Enter)", F_);
+    
+    
+    let btj = u + ch - 16;
+    let ds = alloc::format!("DIRS:{:02X}", dirs_raw);
+    let fjv = alloc::format!("BTNS:{:02X}", btns_raw);
+    bo(cx + 6, btj, &ds, 0xFF3A5A44);
+    bo(cx + 80, btj, &fjv, 0xFF3A5A44);
 }
 
 
-pub fn tdt(cx: u32, ae: u32, dt: u32, bm: u32) -> [(u32, u32, u32, u32, u8); 8] {
-    let dqd = cx + 40;
-    let dqe = ae + 30;
-    let nf: u32 = 26;
-    let qi: u32 = 2;
+pub fn mdf(cx: u32, u: u32, aq: u32, ch: u32) -> [(u32, u32, u32, u32, u8); 8] {
+    let blv = cx + 40;
+    let blw = u + 30;
+    let fq: u32 = 26;
+    let gap: u32 = 2;
     
-    let acv: u32 = 30;
-    let iim = cx + dt - 80;
-    let iin = ae + 30;
-    let ikj = cx + dt - 140;
-    let ikk = ae + 48;
+    let of: u32 = 30;
+    let ees = cx + aq - 80;
+    let eet = u + 30;
+    let efw = cx + aq - 140;
+    let efx = u + 48;
     
-    let cgd = cx + dt / 2;
-    let fqu = ae + bm - 36;
+    let arn = cx + aq / 2;
+    let coc = u + ch - 36;
     
     [
-        (dqd, dqe - nf - qi, nf, nf, b'w'),           
-        (dqd, dqe + nf + qi, nf, nf, b's'),           
-        (dqd - nf - qi, dqe, nf, nf, b'a'),           
-        (dqd + nf + qi, dqe, nf, nf, b'd'),           
-        (iim, iin, acv, acv, b'x'),                    
-        (ikj, ikk, acv, acv, b'z'),                    
-        (cgd - 70, fqu, 56, 20, b'c'),                  
-        (cgd + 14, fqu, 56, 20, b'\r'),                 
+        (blv, blw - fq - gap, fq, fq, b'w'),           
+        (blv, blw + fq + gap, fq, fq, b's'),           
+        (blv - fq - gap, blw, fq, fq, b'a'),           
+        (blv + fq + gap, blw, fq, fq, b'd'),           
+        (ees, eet, of, of, b'x'),                    
+        (efw, efx, of, of, b'z'),                    
+        (arn - 70, coc, 56, 20, b'c'),                  
+        (arn + 14, coc, 56, 20, b'\r'),                 
     ]
 }
 
-fn irw(b: u32, c: u32, d: u32, i: u32, cu: &str, vn: bool) {
-    let ei = if vn { 0xFF00CC66 } else { 0xFF1A2E24 };
-    framebuffer::ah(b, c, d, i, ei);
+fn ekp(x: u32, y: u32, w: u32, h: u32, label: &str, pressed: bool) {
+    let bg = if pressed { 0xFF00CC66 } else { 0xFF1A2E24 };
+    framebuffer::fill_rect(x, y, w, h, bg);
     
-    let atw = if vn { 0xFF00FF88 } else { 0xFF2A4A38 };
-    framebuffer::ah(b, c, d, 1, atw);
-    framebuffer::ah(b, c + i - 1, d, 1, atw);
-    framebuffer::ah(b, c, 1, i, atw);
-    framebuffer::ah(b + d - 1, c, 1, i, atw);
-    let fwm = if vn { 0xFF000000 } else { 0xFF00FF88 };
-    let gx = b + (d / 2).ao(4);
-    let ty = c + (i / 2).ao(6);
-    fu(gx, ty, cu, fwm);
+    let bc = if pressed { 0xFF00FF88 } else { 0xFF2A4A38 };
+    framebuffer::fill_rect(x, y, w, 1, bc);
+    framebuffer::fill_rect(x, y + h - 1, w, 1, bc);
+    framebuffer::fill_rect(x, y, 1, h, bc);
+    framebuffer::fill_rect(x + w - 1, y, 1, h, bc);
+    let crl = if pressed { 0xFF000000 } else { 0xFF00FF88 };
+    let bu = x + (w / 2).saturating_sub(4);
+    let ty = y + (h / 2).saturating_sub(6);
+    bo(bu, ty, label, crl);
 }
 
-fn nne(b: u32, c: u32, nf: u32, cu: &str, vn: bool) {
-    let ei = if vn { 0xFF00CC66 } else { 0xFF1A2E24 };
-    framebuffer::ah(b, c, nf, nf, ei);
+fn htm(x: u32, y: u32, fq: u32, label: &str, pressed: bool) {
+    let bg = if pressed { 0xFF00CC66 } else { 0xFF1A2E24 };
+    framebuffer::fill_rect(x, y, fq, fq, bg);
     
-    framebuffer::ah(b, c, 4, 4, 0xFF0A0F14);
-    framebuffer::ah(b + nf - 4, c, 4, 4, 0xFF0A0F14);
-    framebuffer::ah(b, c + nf - 4, 4, 4, 0xFF0A0F14);
-    framebuffer::ah(b + nf - 4, c + nf - 4, 4, 4, 0xFF0A0F14);
+    framebuffer::fill_rect(x, y, 4, 4, 0xFF0A0F14);
+    framebuffer::fill_rect(x + fq - 4, y, 4, 4, 0xFF0A0F14);
+    framebuffer::fill_rect(x, y + fq - 4, 4, 4, 0xFF0A0F14);
+    framebuffer::fill_rect(x + fq - 4, y + fq - 4, 4, 4, 0xFF0A0F14);
     
-    let atw = if vn { 0xFF00FF88 } else { 0xFF2A4A38 };
-    framebuffer::ah(b + 3, c, nf - 6, 1, atw);
-    framebuffer::ah(b + 3, c + nf - 1, nf - 6, 1, atw);
-    framebuffer::ah(b, c + 3, 1, nf - 6, atw);
-    framebuffer::ah(b + nf - 1, c + 3, 1, nf - 6, atw);
-    let fwm = if vn { 0xFF000000 } else { 0xFF00FF88 };
-    fu(b + nf / 2 - 4, c + nf / 2 - 6, cu, fwm);
+    let bc = if pressed { 0xFF00FF88 } else { 0xFF2A4A38 };
+    framebuffer::fill_rect(x + 3, y, fq - 6, 1, bc);
+    framebuffer::fill_rect(x + 3, y + fq - 1, fq - 6, 1, bc);
+    framebuffer::fill_rect(x, y + 3, 1, fq - 6, bc);
+    framebuffer::fill_rect(x + fq - 1, y + 3, 1, fq - 6, bc);
+    let crl = if pressed { 0xFF000000 } else { 0xFF00FF88 };
+    bo(x + fq / 2 - 4, y + fq / 2 - 6, label, crl);
 }
 
-fn nnf(b: u32, c: u32, d: u32, i: u32, cu: &str, vn: bool) {
-    let ei = if vn { 0xFF00CC66 } else { 0xFF141E1A };
-    framebuffer::ah(b, c, d, i, ei);
-    let atw = if vn { 0xFF00FF88 } else { 0xFF2A4A38 };
-    framebuffer::ah(b + 2, c, d - 4, 1, atw);
-    framebuffer::ah(b + 2, c + i - 1, d - 4, 1, atw);
-    framebuffer::ah(b, c + 2, 1, i - 4, atw);
-    framebuffer::ah(b + d - 1, c + 2, 1, i - 4, atw);
-    let fwm = if vn { 0xFF000000 } else { 0xFF80FFAA };
-    let caj = cu.len() as u32 * 8;
-    fu(b + (d.ao(caj)) / 2, c + (i / 2).ao(6), cu, fwm);
+fn htn(x: u32, y: u32, w: u32, h: u32, label: &str, pressed: bool) {
+    let bg = if pressed { 0xFF00CC66 } else { 0xFF141E1A };
+    framebuffer::fill_rect(x, y, w, h, bg);
+    let bc = if pressed { 0xFF00FF88 } else { 0xFF2A4A38 };
+    framebuffer::fill_rect(x + 2, y, w - 4, 1, bc);
+    framebuffer::fill_rect(x + 2, y + h - 1, w - 4, 1, bc);
+    framebuffer::fill_rect(x, y + 2, 1, h - 4, bc);
+    framebuffer::fill_rect(x + w - 1, y + 2, 1, h - 4, bc);
+    let crl = if pressed { 0xFF000000 } else { 0xFF80FFAA };
+    let aok = label.len() as u32 * 8;
+    bo(x + (w.saturating_sub(aok)) / 2, y + (h / 2).saturating_sub(6), label, crl);
 }

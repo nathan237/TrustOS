@@ -27,9 +27,9 @@ use alloc::string::String;
 use super::ir::*;
 
 /// ARM64 register to RISC-V register mapping
-fn arm_to_rv(arm_register: u8) -> Reg {
+fn arm_to_rv(arm_reg: u8) -> Reg {
         // Correspondance de motifs — branchement exhaustif de Rust.
-match arm_register {
+match arm_reg {
         0  => Reg::X10, // X0 → a0
         1  => Reg::X11, // X1 → a1
         2  => Reg::X12, // X2 → a2
@@ -67,11 +67,11 @@ match arm_register {
 }
 
 /// When register 31 means SP (not XZR)
-fn arm_sp_or_zr(arm_register: u8, is_sp: bool) -> Reg {
-    if arm_register == 31 {
+fn arm_sp_or_zr(arm_reg: u8, is_sp: bool) -> Reg {
+    if arm_reg == 31 {
         if is_sp { Reg::X2 } else { Reg::X0 }
     } else {
-        arm_to_rv(arm_register)
+        arm_to_rv(arm_reg)
     }
 }
 
@@ -80,7 +80,7 @@ pub struct ArmDecoder {
     /// Raw binary code (ARM64 is fixed-width 32-bit)
     code: Vec<u8>,
     /// Base virtual address
-    base_address: u64,
+    base_addr: u64,
     /// Current instruction index (in 4-byte units)
     offset: usize,
     /// Translation statistics
@@ -90,10 +90,10 @@ pub struct ArmDecoder {
 // Bloc d'implémentation — définit les méthodes du type ci-dessus.
 impl ArmDecoder {
         // Fonction publique — appelable depuis d'autres modules.
-pub fn new(code: &[u8], base_address: u64) -> Self {
+pub fn new(code: &[u8], base_addr: u64) -> Self {
         Self {
             code: code.to_vec(),
-            base_address,
+            base_addr,
             offset: 0,
             stats: TranslationStats::default(),
         }
@@ -102,15 +102,15 @@ pub fn new(code: &[u8], base_address: u64) -> Self {
     /// Translate a basic block starting at the given byte offset
     pub fn translate_block(&mut self, start_offset: usize) -> TranslatedBlock {
         self.offset = start_offset;
-        let source_address = self.base_address + start_offset as u64;
-        let mut block = TranslatedBlock::new(source_address, SourceArch::Aarch64);
+        let src_addr = self.base_addr + start_offset as u64;
+        let mut block = TranslatedBlock::new(src_addr, SourceArch::Aarch64);
 
-        let maximum_instructions = 256;
+        let max_instructions = 256;
         let mut count = 0;
 
-        while self.offset + 4 <= self.code.len() && count < maximum_instructions {
+        while self.offset + 4 <= self.code.len() && count < max_instructions {
             let terminated = self.decode_one(&mut block);
-            block.source_inst_count += 1;
+            block.src_inst_count += 1;
             self.stats.instructions_translated += 1;
             count += 1;
 
@@ -133,17 +133,17 @@ pub fn new(code: &[u8], base_address: u64) -> Self {
         worklist.push(0);
 
         while let Some(offset) = worklist.pop() {
-            let address = self.base_address + offset as u64;
-            if visited.contains(&address) {
+            let addr = self.base_addr + offset as u64;
+            if visited.contains(&addr) {
                 continue;
             }
-            visited.push(address);
+            visited.push(addr);
 
             let block = self.translate_block(offset);
 
             for &succ in &block.successors {
-                if succ >= self.base_address {
-                    let succ_off = (succ - self.base_address) as usize;
+                if succ >= self.base_addr {
+                    let succ_off = (succ - self.base_addr) as usize;
                     if succ_off + 4 <= self.code.len() && !visited.contains(&succ) {
                         worklist.push(succ_off);
                     }
@@ -174,7 +174,7 @@ pub fn new(code: &[u8], base_address: u64) -> Self {
     /// Decode one AArch64 instruction and emit RISC-V IR.
     /// Returns true if the instruction terminates the basic block.
     fn decode_one(&mut self, block: &mut TranslatedBlock) -> bool {
-        let inst_address = self.base_address + self.offset as u64;
+        let inst_address = self.base_addr + self.offset as u64;
         let inst = self.fetch();
 
         if inst == 0 {
@@ -197,13 +197,13 @@ match op0 {
             0b0100 | 0b0110 | 0b1100 | 0b1110 => self.decode_ldst(inst, inst_address, block),
 
             // Data processing — register
-            0b0101 | 0b1101 => self.decode_dp_register(inst, inst_address, block),
+            0b0101 | 0b1101 => self.decode_dp_reg(inst, inst_address, block),
 
             _ => {
                 self.stats.unsupported_instructions += 1;
-                block.emit(RvInst::SourceAnnotation {
+                block.emit(RvInst::SrcAnnotation {
                     arch: SourceArch::Aarch64,
-                    address: inst_address,
+                    addr: inst_address,
                     text: format!("unsupported: 0x{:08X}", inst),
                 });
                 block.emit(RvInst::Nop);
@@ -214,7 +214,7 @@ match op0 {
     }
 
     /// Decode data processing — immediate group
-    fn decode_dp_imm(&mut self, inst: u32, address: u64, block: &mut TranslatedBlock) {
+    fn decode_dp_imm(&mut self, inst: u32, addr: u64, block: &mut TranslatedBlock) {
         let opc = (inst >> 23) & 0x7;
         let sf = (inst >> 31) & 1; // 1=64-bit, 0=32-bit
         let rd = (inst & 0x1F) as u8;
@@ -246,12 +246,12 @@ match opc {
 
             // MOV wide immediate (MOVZ/MOVK/MOVN) — x01 001 0x
             0b100 | 0b101 => {
-                let hardware = ((inst >> 21) & 0x3) as u8;
+                let hw = ((inst >> 21) & 0x3) as u8;
                 let imm16 = ((inst >> 5) & 0xFFFF) as i64;
                 let opc2 = (inst >> 29) & 0x3;
                 let rv_rd = arm_to_rv(rd);
 
-                let shifted = imm16 << (hardware * 16);
+                let shifted = imm16 << (hw * 16);
 
                                 // Correspondance de motifs — branchement exhaustif de Rust.
 match opc2 {
@@ -262,7 +262,7 @@ match opc2 {
                         block.emit(RvInst::Li { rd: rv_rd, imm: shifted });
                     }
                     0b11 => { // MOVK — move keep (insert bits)
-                        let mask = !(0xFFFF_i64 << (hardware * 16));
+                        let mask = !(0xFFFF_i64 << (hw * 16));
                         block.emit(RvInst::Li { rd: Reg::X5, imm: mask });
                         block.emit(RvInst::And { rd: rv_rd, rs1: rv_rd, rs2: Reg::X5 });
                         block.emit(RvInst::Li { rd: Reg::X5, imm: shifted });
@@ -306,7 +306,7 @@ match log_opc {
                 // Sign extend from 21 bits
                 if imm & (1 << 20) != 0 { imm |= !0x1FFFFF; }
                 if is_adrp { imm <<= 12; }
-                let target = address as i64 + imm;
+                let target = addr as i64 + imm;
                 block.emit(RvInst::Li { rd: rv_rd, imm: target });
             }
 
@@ -318,7 +318,7 @@ match log_opc {
     }
 
     /// Decode branches, exceptions, system instructions
-    fn decode_branch(&mut self, inst: u32, address: u64, block: &mut TranslatedBlock) -> bool {
+    fn decode_branch(&mut self, inst: u32, addr: u64, block: &mut TranslatedBlock) -> bool {
         let op1 = (inst >> 29) & 0x7;
 
                 // Correspondance de motifs — branchement exhaustif de Rust.
@@ -327,7 +327,7 @@ match op1 {
             0b000 | 0b100 => {
                 let mut imm26 = (inst & 0x03FF_FFFF) as i64;
                 if imm26 & (1 << 25) != 0 { imm26 |= !0x03FF_FFFF; }
-                let target = address as i64 + (imm26 << 2);
+                let target = addr as i64 + (imm26 << 2);
                 let is_bl = (inst >> 31) & 1 == 1;
 
                 if is_bl {
@@ -340,7 +340,7 @@ match op1 {
 
                 block.successors.push(target as u64);
                 if is_bl {
-                    block.successors.push(address + 4);
+                    block.successors.push(addr + 4);
                 }
                 true
             }
@@ -349,13 +349,13 @@ match op1 {
             0b010 => {
                 let mut imm19 = ((inst >> 5) & 0x7FFFF) as i64;
                 if imm19 & (1 << 18) != 0 { imm19 |= !0x7FFFF; }
-                let target = address as i64 + (imm19 << 2);
+                let target = addr as i64 + (imm19 << 2);
                 let condition = (inst & 0xF) as u8;
 
                 let flag_condition = arm_cc_to_flag(condition);
-                block.emit(RvInst::BranchCondition { condition: flag_condition, offset: target });
+                block.emit(RvInst::BranchCond { condition: flag_condition, offset: target });
                 block.successors.push(target as u64);
-                block.successors.push(address + 4);
+                block.successors.push(addr + 4);
                 true
             }
 
@@ -364,7 +364,7 @@ match op1 {
                 let rt = (inst & 0x1F) as u8;
                 let mut imm19 = ((inst >> 5) & 0x7FFFF) as i64;
                 if imm19 & (1 << 18) != 0 { imm19 |= !0x7FFFF; }
-                let target = address as i64 + (imm19 << 2);
+                let target = addr as i64 + (imm19 << 2);
                 let is_cbnz = (inst >> 24) & 1 == 1;
                 let rv_rt = arm_to_rv(rt);
 
@@ -375,7 +375,7 @@ match op1 {
                 }
 
                 block.successors.push(target as u64);
-                block.successors.push(address + 4);
+                block.successors.push(addr + 4);
                 true
             }
 
@@ -388,9 +388,9 @@ match op1 {
                     let ll = inst & 0x3;
                     if ll == 1 {
                         // SVC #imm16 — supervisor call (syscall)
-                        block.emit(RvInst::SourceAnnotation {
+                        block.emit(RvInst::SrcAnnotation {
                             arch: SourceArch::Aarch64,
-                            address,
+                            addr,
                             text: String::from("SVC #0 (syscall)"),
                         });
                         // ARM syscall ABI: X8=syscall#, X0-X5=args
@@ -410,7 +410,7 @@ match op1 {
 
                 // RET — encoded as BR X30 (ERET or RET)
                 if (inst & 0xFFFFFC1F) == 0xD65F0000 {
-                    block.emit(RvInst::Return_value);
+                    block.emit(RvInst::Ret);
                     return true;
                 }
 
@@ -427,7 +427,7 @@ match op1 {
                     let rn = ((inst >> 5) & 0x1F) as u8;
                     let rv_rn = arm_to_rv(rn);
                     block.emit(RvInst::Jalr { rd: Reg::X1, rs1: rv_rn, offset: 0 });
-                    block.successors.push(address + 4);
+                    block.successors.push(addr + 4);
                     return true;
                 }
 
@@ -452,7 +452,7 @@ match op1 {
                 let bit = ((inst >> 19) & 0x1F) as u8 | (((inst >> 31) & 1) as u8) << 5;
                 let mut imm14 = ((inst >> 5) & 0x3FFF) as i64;
                 if imm14 & (1 << 13) != 0 { imm14 |= !0x3FFF; }
-                let target = address as i64 + (imm14 << 2);
+                let target = addr as i64 + (imm14 << 2);
                 let is_tbnz = (inst >> 24) & 1 == 1;
 
                 let rv_rt = arm_to_rv(rt);
@@ -467,7 +467,7 @@ match op1 {
                 }
 
                 block.successors.push(target as u64);
-                block.successors.push(address + 4);
+                block.successors.push(addr + 4);
                 true
             }
 
@@ -480,7 +480,7 @@ match op1 {
     }
 
     /// Decode load/store instructions
-    fn decode_ldst(&mut self, inst: u32, address: u64, block: &mut TranslatedBlock) {
+    fn decode_ldst(&mut self, inst: u32, addr: u64, block: &mut TranslatedBlock) {
         let size = (inst >> 30) & 0x3;
         let opc = (inst >> 22) & 0x3;
         let rn = ((inst >> 5) & 0x1F) as u8;
@@ -510,7 +510,7 @@ match size {
 match size {
                     0 => block.emit(RvInst::Sb { rs2: rv_rt, rs1: rv_rn, offset }),
                     1 => block.emit(RvInst::Sh { rs2: rv_rt, rs1: rv_rn, offset }),
-                    2 => block.emit(RvInst::Software { rs2: rv_rt, rs1: rv_rn, offset }),
+                    2 => block.emit(RvInst::Sw { rs2: rv_rt, rs1: rv_rn, offset }),
                     3 => block.emit(RvInst::Sd { rs2: rv_rt, rs1: rv_rn, offset }),
                     _ => {}
                 }
@@ -544,7 +544,7 @@ match size {
 match size {
                     0 => block.emit(RvInst::Sb { rs2: rv_rt, rs1: rv_rn, offset: if is_pre { 0 } else { imm9 } }),
                     1 => block.emit(RvInst::Sh { rs2: rv_rt, rs1: rv_rn, offset: if is_pre { 0 } else { imm9 } }),
-                    2 => block.emit(RvInst::Software { rs2: rv_rt, rs1: rv_rn, offset: if is_pre { 0 } else { imm9 } }),
+                    2 => block.emit(RvInst::Sw { rs2: rv_rt, rs1: rv_rn, offset: if is_pre { 0 } else { imm9 } }),
                     3 => block.emit(RvInst::Sd { rs2: rv_rt, rs1: rv_rn, offset: if is_pre { 0 } else { imm9 } }),
                     _ => {}
                 }
@@ -580,16 +580,16 @@ match size {
 
         // Fallthrough — unsupported load/store variant
         self.stats.unsupported_instructions += 1;
-        block.emit(RvInst::SourceAnnotation {
+        block.emit(RvInst::SrcAnnotation {
             arch: SourceArch::Aarch64,
-            address,
+            addr,
             text: format!("unsupported ldst: 0x{:08X}", inst),
         });
         block.emit(RvInst::Nop);
     }
 
     /// Decode data processing — register group
-    fn decode_dp_register(&mut self, inst: u32, address: u64, block: &mut TranslatedBlock) {
+    fn decode_dp_reg(&mut self, inst: u32, addr: u64, block: &mut TranslatedBlock) {
         let rd = (inst & 0x1F) as u8;
         let rn = ((inst >> 5) & 0x1F) as u8;
         let rm = ((inst >> 16) & 0x1F) as u8;
@@ -724,9 +724,9 @@ match shift_opc {
 
         // Fallthrough — unsupported
         self.stats.unsupported_instructions += 1;
-        block.emit(RvInst::SourceAnnotation {
+        block.emit(RvInst::SrcAnnotation {
             arch: SourceArch::Aarch64,
-            address,
+            addr,
             text: format!("unsupported dp_reg: 0x{:08X}", inst),
         });
         block.emit(RvInst::Nop);

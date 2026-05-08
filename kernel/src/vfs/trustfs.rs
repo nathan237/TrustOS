@@ -27,6 +27,16 @@ const SECTOR_SIZE: usize = 512;
 const MAGIC: u32 = 0x54525553; // "TRUS"
 const VERSION: u32 = 1;
 
+/// 4-byte aligned sector buffer to avoid misaligned pointer panics
+#[repr(C, align(4))]
+struct AlignedBuf([u8; SECTOR_SIZE]);
+
+impl AlignedBuf {
+    fn new() -> Self { Self([0u8; SECTOR_SIZE]) }
+    fn as_slice(&self) -> &[u8; SECTOR_SIZE] { &self.0 }
+    fn as_mut_slice(&mut self) -> &mut [u8; SECTOR_SIZE] { &mut self.0 }
+}
+
 const SUPERBLOCK_SECTOR: u64 = 0;
 const INODE_START_SECTOR: u64 = 1;
 const INODE_SECTORS: u64 = 16;
@@ -278,10 +288,10 @@ impl TrustFsInner {
         let sector = INODE_START_SECTOR + (ino as u64 / INODES_PER_SECTOR as u64);
         let offset = (ino as usize % INODES_PER_SECTOR) * core::mem::size_of::<DiskInode>();
         
-        let mut buf = [0u8; SECTOR_SIZE];
-        self.read_sector(sector, &mut buf)?;
+        let mut buf = AlignedBuf::new();
+        self.read_sector(sector, buf.as_mut_slice())?;
         
-        let inode_ptr = buf[offset..].as_ptr() as *const DiskInode;
+        let inode_ptr = buf.0[offset..].as_ptr() as *const DiskInode;
         let inode = unsafe { *inode_ptr };
         
         // Cache it
@@ -299,13 +309,13 @@ impl TrustFsInner {
         let offset = (ino as usize % INODES_PER_SECTOR) * core::mem::size_of::<DiskInode>();
         
         // Read-modify-write
-        let mut buf = [0u8; SECTOR_SIZE];
-        self.read_sector(sector, &mut buf)?;
+        let mut buf = AlignedBuf::new();
+        self.read_sector(sector, buf.as_mut_slice())?;
         
-        let inode_ptr = buf[offset..].as_mut_ptr() as *mut DiskInode;
+        let inode_ptr = buf.0[offset..].as_mut_ptr() as *mut DiskInode;
         unsafe { *inode_ptr = *inode; }
         
-        self.write_sector(sector, &buf)?;
+        self.write_sector(sector, buf.as_slice())?;
         
         // Update cache
         {
@@ -644,8 +654,7 @@ impl TrustFsInner {
             let mut buf = [0u8; 32]; // DiskDirEntry is 32 bytes
             self.read_file(dir_ino, offset, &mut buf)?;
             
-            let entry_ptr = buf.as_ptr() as *const DiskDirEntry;
-            let disk_entry = unsafe { &*entry_ptr };
+            let disk_entry: DiskDirEntry = unsafe { core::ptr::read_unaligned(buf.as_ptr() as *const DiskDirEntry) };
             
             if disk_entry.inode != 0 {
                 let child_inode = self.read_inode(disk_entry.inode as Ino)?;
@@ -843,10 +852,10 @@ impl TrustFsInner {
         let _ = super::block_cache::sync();
         // Write superblock
         let sb = self.superblock.read();
-        let mut buf = [0u8; SECTOR_SIZE];
-        let sb_ptr = buf.as_mut_ptr() as *mut Superblock;
+        let mut buf = AlignedBuf::new();
+        let sb_ptr = buf.0.as_mut_ptr() as *mut Superblock;
         unsafe { *sb_ptr = *sb; }
-        self.write_sector(SUPERBLOCK_SECTOR, &buf)?;
+        self.write_sector(SUPERBLOCK_SECTOR, buf.as_slice())?;
         
         *self.dirty.write() = false;
         crate::log_debug!("[TrustFS] sync complete");
@@ -863,11 +872,11 @@ impl TrustFs {
     /// Create new TrustFS on a block device, format if needed
     pub fn new(backend: Arc<dyn BlockDevice>, capacity: u64) -> VfsResult<Self> {
         // Try to read existing superblock
-        let mut buf = [0u8; SECTOR_SIZE];
-        backend.read_sector(SUPERBLOCK_SECTOR, &mut buf)
+        let mut buf = AlignedBuf::new();
+        backend.read_sector(SUPERBLOCK_SECTOR, buf.as_mut_slice())
             .map_err(|_| VfsError::IoError)?;
         
-        let sb_ptr = buf.as_ptr() as *const Superblock;
+        let sb_ptr = buf.0.as_ptr() as *const Superblock;
         let existing_sb = unsafe { *sb_ptr };
         
         let superblock = if existing_sb.is_valid() {
@@ -907,10 +916,10 @@ impl TrustFs {
         let sb = Superblock::new(capacity);
         
         // Write superblock
-        let mut buf = [0u8; SECTOR_SIZE];
-        let sb_ptr = buf.as_mut_ptr() as *mut Superblock;
+        let mut buf = AlignedBuf::new();
+        let sb_ptr = buf.0.as_mut_ptr() as *mut Superblock;
         unsafe { *sb_ptr = sb; }
-        backend.write_sector(SUPERBLOCK_SECTOR, &buf)
+        backend.write_sector(SUPERBLOCK_SECTOR, buf.as_slice())
             .map_err(|_| VfsError::IoError)?;
         
         // Clear inode table
@@ -933,14 +942,11 @@ impl TrustFs {
         root_inode.mode |= 0o755;
         
         let inode_sector = INODE_START_SECTOR;
-        let mut inode_buf = [0u8; SECTOR_SIZE];
-        let inode_ptr = inode_buf[core::mem::size_of::<DiskInode>()..].as_mut_ptr() as *mut DiskInode;
-        unsafe { *inode_ptr = root_inode; }
-        // Actually, inode 1 is at offset 1*32 = 32
+        let mut inode_buf = AlignedBuf::new();
         let root_offset = core::mem::size_of::<DiskInode>(); // Skip inode 0
-        let inode_ptr = inode_buf[root_offset..].as_mut_ptr() as *mut DiskInode;
+        let inode_ptr = inode_buf.0[root_offset..].as_mut_ptr() as *mut DiskInode;
         unsafe { *inode_ptr = root_inode; }
-        backend.write_sector(inode_sector, &inode_buf)
+        backend.write_sector(inode_sector, inode_buf.as_slice())
             .map_err(|_| VfsError::IoError)?;
         
         crate::log!("[TrustFS] Formatted: {} blocks, {} inodes", sb.total_blocks, sb.total_inodes);

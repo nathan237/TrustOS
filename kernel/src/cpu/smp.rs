@@ -99,18 +99,18 @@ static mut PER_CPU: [PerCpuData; MAX_CPUS] = {
     [INIT; MAX_CPUS]
 };
 
-/// Get current CPU ID (from APIC)
+/// Get current CPU ID (from APIC).
+/// [BOOT-LOOP-ISO] Reverted to APIC-only path — fast path with `pure+nomem` was UB
+/// (gs:[0] is a memory access incompatible with `nomem`).
 pub fn current_cpu_id() -> u32 {
     let cpuid = unsafe { core::arch::x86_64::__cpuid(1) };
     let apic_id = ((cpuid.ebx >> 24) & 0xFF) as u32;
-    
-    // Find which CPU has this APIC ID
     for i in 0..cpu_count() as usize {
         if unsafe { PER_CPU[i].apic_id == apic_id } {
             return i as u32;
         }
     }
-    0 // Default to BSP
+    0
 }
 
 /// Get per-CPU data for current CPU
@@ -435,6 +435,10 @@ pub unsafe extern "C" fn ap_entry(smp_info: &limine::smp::Cpu) -> ! {
     
     // ── Step 1: Enable SSE/SSE2 (required before ANY Rust code using floats/SIMD) ──
     crate::cpu::simd::enable_sse();
+    // [BOOT-LOOP-ISO] AVX/AVX-512 on AP disabled — G4400 (Skylake Pentium) has no AVX,
+    //                 capability gate may be racing with cached BSP caps init.
+    // crate::cpu::simd::enable_avx();
+    // crate::cpu::simd::enable_avx512();
     
     // ── Step 2: Per-CPU GDT + TSS ──
     // Each AP needs its own TSS with a unique RSP0 (kernel stack)

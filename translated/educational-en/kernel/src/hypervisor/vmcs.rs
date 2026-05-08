@@ -413,7 +413,7 @@ pub fn new(revision_id: u32) -> Self {
 /// Structure VMCS avec méthodes d'accès
 pub struct Vmcs {
     region: Box<VmcsRegion>,
-    physical_address: u64,
+    phys_addr: u64,
     is_current: bool,
 }
 
@@ -422,26 +422,26 @@ impl Vmcs {
     /// Créer une nouvelle VMCS
     pub fn new(revision_id: u32) -> Result<Self> {
         let region = Box::new(VmcsRegion::new(revision_id));
-        let virt_address = region.as_ref() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+        let virt_addr = region.as_ref() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const VmcsRegion as u64;
-        let physical_address = vmx::virt_to_physical_vmx(virt_address);
+        let phys_addr = vmx::virt_to_physical_vmx(virt_addr);
         
         crate::serial_println!("[VMCS] Allocated virt=0x{:016X} phys=0x{:016X} rev=0x{:08X}",
-                              virt_address, physical_address, revision_id);
+                              virt_addr, phys_addr, revision_id);
         
         // VMCLEAR pour initialiser
-        vmclear(physical_address)?;
+        vmclear(phys_addr)?;
         
         Ok(Vmcs {
             region,
-            physical_address,
+            phys_addr,
             is_current: false,
         })
     }
     
     /// Charger cette VMCS comme courante
     pub fn load(&mut self) -> Result<()> {
-        vmptrld(self.physical_address)?;
+        vmptrld(self.phys_addr)?;
         self.is_current = true;
         Ok(())
     }
@@ -573,7 +573,7 @@ const VmcsRegion as u64;
     }
     
     /// Configurer l'état du guest (64-bit long mode)
-    pub fn setup_guest_state(&self, entry_point: u64, stack_pointer: u64) -> Result<()> {
+    pub fn setup_guest_state(&self, entry_point: u64, stack_ptr: u64) -> Result<()> {
         use fields::*;
         
         // Segments (mode 64-bit)
@@ -634,7 +634,7 @@ const VmcsRegion as u64;
         
         // RIP, RSP, RFLAGS
         self.write(GUEST_RIP, entry_point)?;
-        self.write(GUEST_RSP, stack_pointer)?;
+        self.write(GUEST_RSP, stack_ptr)?;
         self.write(GUEST_RFLAGS, 0x2)?; // Reserved bit 1 must be 1
         
         // VMCS link pointer (required, -1 for no shadow VMCS)
@@ -665,7 +665,7 @@ const VmcsRegion as u64;
         self.write(GUEST_IDTR_LIMIT, 0)?;
         
         crate::serial_println!("[VMCS] Guest state: RIP=0x{:X} RSP=0x{:X} CR0=0x{:X} CR4=0x{:X} EFER=0x{:X}",
-                              entry_point, stack_pointer, guest_cr0, guest_cr4, guest_efer);
+                              entry_point, stack_ptr, guest_cr0, guest_cr4, guest_efer);
         
         Ok(())
     }
@@ -728,18 +728,18 @@ unsafe {
         
         // GDTR and IDTR bases — stored as [u16 limit][u64 base] = 10 bytes
         #[repr(C, packed)]
-        struct DescriptorTablePointer {
+        struct DescriptorTablePtr {
             limit: u16,
             base: u64,
         }
         
-        let mut gdtr = DescriptorTablePointer { limit: 0, base: 0 };
-        let mut idtr = DescriptorTablePointer { limit: 0, base: 0 };
+        let mut gdtr = DescriptorTablePtr { limit: 0, base: 0 };
+        let mut idtr = DescriptorTablePtr { limit: 0, base: 0 };
         
                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-            asm!("sgdt [{}]", in(reg) &mut gdtr as *mut DescriptorTablePointer, options(nostack));
-            asm!("sidt [{}]", in(reg) &mut idtr as *mut DescriptorTablePointer, options(nostack));
+            asm!("sgdt [{}]", in(reg) &mut gdtr as *mut DescriptorTablePtr, options(nostack));
+            asm!("sidt [{}]", in(reg) &mut idtr as *mut DescriptorTablePtr, options(nostack));
         }
         
         self.write(HOST_GDTR_BASE, gdtr.base)?;
@@ -747,13 +747,13 @@ unsafe {
         
         // TR base — read from GDT
         let tr_index = (tr >> 3) as usize;
-        let gdt_pointer = gdtr.base as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+        let gdt_ptr = gdtr.base as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u64;
         let tr_base = if tr != 0 && tr_index > 0 {
                         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-                let low = *gdt_pointer.add(tr_index);
-                let high = *gdt_pointer.add(tr_index + 1);
+                let low = *gdt_ptr.add(tr_index);
+                let high = *gdt_ptr.add(tr_index + 1);
                 // TSS descriptor is 16 bytes in long mode
                 let base_low = ((low >> 16) & 0xFFFF)
                              | (((low >> 32) & 0xFF) << 16)
@@ -785,9 +785,9 @@ unsafe {
         crate::serial_println!("[VMCS] Host state: CS=0x{:X} SS=0x{:X} TR=0x{:X} TR_BASE=0x{:X}",
                               cs & !3, ss & !3, tr & !3, tr_base);
         let gdt_base = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::address_of!(gdtr.base).read_unaligned() };
+unsafe { core::ptr::addr_of!(gdtr.base).read_unaligned() };
         let idt_base = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::address_of!(idtr.base).read_unaligned() };
+unsafe { core::ptr::addr_of!(idtr.base).read_unaligned() };
         crate::serial_println!("[VMCS] Host state: GDT_BASE=0x{:X} IDT_BASE=0x{:X}", gdt_base, idt_base);
         crate::serial_println!("[VMCS] Host state: RIP=0x{:X} RSP=0x{:X} EFER=0x{:X}",
                               exit_handler, stack, host_efer);
@@ -800,6 +800,6 @@ unsafe { core::ptr::address_of!(idtr.base).read_unaligned() };
 impl Drop for Vmcs {
     fn drop(&mut self) {
         // VMCLEAR avant de libérer la mémoire
-        let _ = vmclear(self.physical_address);
+        let _ = vmclear(self.phys_addr);
     }
 }

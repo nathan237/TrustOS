@@ -17,130 +17,130 @@ use alloc::format;
 use alloc::vec::Vec;
 use super::{RiskLevel};
 
-fn akp(ag: u64) -> Option<u32> {
-    if ag == 0 { return None; }
+fn sm(addr: u64) -> Option<u32> {
+    if addr == 0 { return None; }
     unsafe {
-        let ptr = ag as *const u32;
+        let ptr = addr as *const u32;
         Some(core::ptr::read_volatile(ptr))
     }
 }
 
-fn pfc(ag: u64) -> Option<u8> {
-    if ag == 0 { return None; }
+fn jcf(addr: u64) -> Option<u8> {
+    if addr == 0 { return None; }
     unsafe {
-        let ptr = ag as *const u8;
+        let ptr = addr as *const u8;
         Some(core::ptr::read_volatile(ptr))
     }
 }
 
 
-const BWE_: &[(u32, &str, RiskLevel)] = &[
+const BZK_: &[(u32, &str, RiskLevel)] = &[
     
-    (0xAA64_0020, "ARM64 kernel/BL image header", RiskLevel::Ao),
-    (0xE12F_FF1E, "ARM32 BX LR (function return)", RiskLevel::Bc),
-    
-    
-    (0x4F42_4F4F, "Android BOOT magic ('BOOT')", RiskLevel::Ao),
-    (0x4152_444E, "Android sparse image ('ANDR')", RiskLevel::Bc),
-    (0x4454_5244, "Android DTB ('DTRD')", RiskLevel::Eg),
+    (0xAA64_0020, "ARM64 kernel/BL image header", RiskLevel::High),
+    (0xE12F_FF1E, "ARM32 BX LR (function return)", RiskLevel::Medium),
     
     
-    (0x2705_1956, "U-Boot image header (legacy)", RiskLevel::Ao),
-    (0xD00D_FEED, "Device Tree Blob (FDT magic)", RiskLevel::Eg),
+    (0x4F42_4F4F, "Android BOOT magic ('BOOT')", RiskLevel::High),
+    (0x4152_444E, "Android sparse image ('ANDR')", RiskLevel::Medium),
+    (0x4454_5244, "Android DTB ('DTRD')", RiskLevel::Low),
     
     
-    (0x4F50_5445, "OP-TEE header ('OPTE')", RiskLevel::Aj),
-    (0x0000_000E, "SMC call convention (FID)", RiskLevel::Ao),
+    (0x2705_1956, "U-Boot image header (legacy)", RiskLevel::High),
+    (0xD00D_FEED, "Device Tree Blob (FDT magic)", RiskLevel::Low),
     
     
-    (0x3082_0000, "ASN.1 DER header (possible certificate/key)", RiskLevel::Aj),
-    (0x30820122, "RSA-2048 public key (DER)", RiskLevel::Aj),
-    (0x30820282, "RSA-4096 public key (DER)", RiskLevel::Aj),
-    (0x30770201, "EC private key (DER)", RiskLevel::Aj),
+    (0x4F50_5445, "OP-TEE header ('OPTE')", RiskLevel::Critical),
+    (0x0000_000E, "SMC call convention (FID)", RiskLevel::High),
     
     
-    (0x0000_0005, "Qualcomm SBL header type", RiskLevel::Ao),
-    (0x7363_0000, "Qualcomm SCM call residue", RiskLevel::Ao),
+    (0x3082_0000, "ASN.1 DER header (possible certificate/key)", RiskLevel::Critical),
+    (0x30820122, "RSA-2048 public key (DER)", RiskLevel::Critical),
+    (0x30820282, "RSA-4096 public key (DER)", RiskLevel::Critical),
+    (0x30770201, "EC private key (DER)", RiskLevel::Critical),
     
     
-    (0x7F45_4C46, "ELF header", RiskLevel::Bc),
-    (0x5A4D_0000, "PE/COFF header (UEFI)", RiskLevel::Bc),
+    (0x0000_0005, "Qualcomm SBL header type", RiskLevel::High),
+    (0x7363_0000, "Qualcomm SCM call residue", RiskLevel::High),
+    
+    
+    (0x7F45_4C46, "ELF header", RiskLevel::Medium),
+    (0x5A4D_0000, "PE/COFF header (UEFI)", RiskLevel::Medium),
 ];
 
 
-const CUN_: &[(&[u8], &str, RiskLevel)] = &[
-    (b"-----BEGIN", "PEM key/certificate header", RiskLevel::Aj),
-    (b"PRIVATE KEY", "Private key marker", RiskLevel::Aj),
-    (b"ssh-rsa", "SSH public key", RiskLevel::Ao),
-    (b"Secure boot", "Secure boot string", RiskLevel::Ao),
-    (b"TZ_LOG", "TrustZone log buffer", RiskLevel::Ao),
-    (b"QSEE", "Qualcomm Secure EE", RiskLevel::Ao),
-    (b"trusty", "Google Trusty TEE", RiskLevel::Ao),
-    (b"OP-TEE", "OP-TEE string", RiskLevel::Ao),
-    (b"BL31", "TF-A BL31 string", RiskLevel::Ao),
-    (b"BL2 ", "TF-A BL2 string", RiskLevel::Bc),
-    (b"U-Boot", "U-Boot bootloader", RiskLevel::Bc),
-    (b"coreboot", "coreboot firmware", RiskLevel::Bc),
-    (b"UEFI", "UEFI firmware", RiskLevel::Eg),
-    (b"fuse", "Fuse/OTP reference", RiskLevel::Ao),
-    (b"rollback", "Anti-rollback reference", RiskLevel::Bc),
-    (b"JTAG", "JTAG reference", RiskLevel::Ao),
-    (b"debug", "Debug reference", RiskLevel::Eg),
-    (b"password", "Password string", RiskLevel::Aj),
+const CYF_: &[(&[u8], &str, RiskLevel)] = &[
+    (b"-----BEGIN", "PEM key/certificate header", RiskLevel::Critical),
+    (b"PRIVATE KEY", "Private key marker", RiskLevel::Critical),
+    (b"ssh-rsa", "SSH public key", RiskLevel::High),
+    (b"Secure boot", "Secure boot string", RiskLevel::High),
+    (b"TZ_LOG", "TrustZone log buffer", RiskLevel::High),
+    (b"QSEE", "Qualcomm Secure EE", RiskLevel::High),
+    (b"trusty", "Google Trusty TEE", RiskLevel::High),
+    (b"OP-TEE", "OP-TEE string", RiskLevel::High),
+    (b"BL31", "TF-A BL31 string", RiskLevel::High),
+    (b"BL2 ", "TF-A BL2 string", RiskLevel::Medium),
+    (b"U-Boot", "U-Boot bootloader", RiskLevel::Medium),
+    (b"coreboot", "coreboot firmware", RiskLevel::Medium),
+    (b"UEFI", "UEFI firmware", RiskLevel::Low),
+    (b"fuse", "Fuse/OTP reference", RiskLevel::High),
+    (b"rollback", "Anti-rollback reference", RiskLevel::Medium),
+    (b"JTAG", "JTAG reference", RiskLevel::High),
+    (b"debug", "Debug reference", RiskLevel::Low),
+    (b"password", "Password string", RiskLevel::Critical),
 ];
 
 
-fn wdr(ay: u64, aw: u64) -> Vec<(u64, &'static str, RiskLevel)> {
-    let mut nq = Vec::new();
-    let ci = ay + aw;
-    let mut ag = ay;
+fn okz(start: u64, size: u64) -> Vec<(u64, &'static str, RiskLevel)> {
+    let mut fw = Vec::new();
+    let end = start + size;
+    let mut addr = start;
     
-    while ag < ci {
-        if let Some(od) = akp(ag) {
-            for &(sj, j, ref bhz) in BWE_ {
+    while addr < end {
+        if let Some(fx) = sm(addr) {
+            for &(magic, name, ref risk) in BZK_ {
                 
-                if od == sj || (sj & 0xFFFF_0000 != 0 && od & 0xFFFF_0000 == sj & 0xFFFF_0000) {
-                    nq.push((ag, j, bhz.clone()));
+                if fx == magic || (magic & 0xFFFF_0000 != 0 && fx & 0xFFFF_0000 == magic & 0xFFFF_0000) {
+                    fw.push((addr, name, risk.clone()));
                 }
             }
         }
-        ag += 4;
+        addr += 4;
         
         
-        if nq.len() > 100 {
+        if fw.len() > 100 {
             break;
         }
     }
     
-    nq
+    fw
 }
 
 
-fn wds(ay: u64, aw: u64) -> Vec<(u64, &'static str, RiskLevel)> {
-    let mut nq = Vec::new();
-    let ci = ay + aw;
+fn ola(start: u64, size: u64) -> Vec<(u64, &'static str, RiskLevel)> {
+    let mut fw = Vec::new();
+    let end = start + size;
     
     
-    let mut ag = ay;
-    while ag < ci {
+    let mut addr = start;
+    while addr < end {
         
-        let mut bh = [0u8; 64];
-        let mut blq = true;
+        let mut window = [0u8; 64];
+        let mut valid = true;
         
-        for a in 0..64u64 {
-            match pfc(ag + a) {
-                Some(o) => bh[a as usize] = o,
-                None => { blq = false; break; }
+        for i in 0..64u64 {
+            match jcf(addr + i) {
+                Some(b) => window[i as usize] = b,
+                None => { valid = false; break; }
             }
         }
         
-        if blq {
-            for &(pattern, j, ref bhz) in CUN_ {
+        if valid {
+            for &(pattern, name, ref risk) in CYF_ {
                 if pattern.len() <= 64 {
                     
-                    for a in 0..=(64 - pattern.len()) {
-                        if &bh[a..a + pattern.len()] == pattern {
-                            nq.push((ag + a as u64, j, bhz.clone()));
+                    for i in 0..=(64 - pattern.len()) {
+                        if &window[i..i + pattern.len()] == pattern {
+                            fw.push((addr + i as u64, name, risk.clone()));
                             break;
                         }
                     }
@@ -148,26 +148,26 @@ fn wds(ay: u64, aw: u64) -> Vec<(u64, &'static str, RiskLevel)> {
             }
         }
         
-        ag += 32; 
+        addr += 32; 
         
-        if nq.len() > 50 {
+        if fw.len() > 50 {
             break;
         }
     }
     
-    nq
+    fw
 }
 
 
-pub fn pgb(n: &str) -> String {
-    let mut an = String::new();
+pub fn jdb(args: &str) -> String {
+    let mut output = String::new();
     
-    an.t("\x01C== TrustProbe: Firmware Residue Scanner ==\x01W\n\n");
-    an.t("Searching memory for bootloader/firmware artifacts...\n\n");
+    output.push_str("\x01C== TrustProbe: Firmware Residue Scanner ==\x01W\n\n");
+    output.push_str("Searching memory for bootloader/firmware artifacts...\n\n");
     
     
     #[cfg(target_arch = "aarch64")]
-    let jnp: Vec<(u64, u64, &str)> = alloc::vec![
+    let ezl: Vec<(u64, u64, &str)> = alloc::vec![
         (0x0000_0000, 0x0001_0000, "BootROM / Vector table"),
         (0x0E00_0000, 0x0010_0000, "Secure SRAM"),
         (0x4000_0000, 0x0010_0000, "Low DRAM (BL2 load area)"),
@@ -177,7 +177,7 @@ pub fn pgb(n: &str) -> String {
     ];
     
     #[cfg(target_arch = "x86_64")]
-    let jnp: Vec<(u64, u64, &str)> = alloc::vec![
+    let ezl: Vec<(u64, u64, &str)> = alloc::vec![
         (0x0000_0000, 0x0000_1000, "Real-mode IVT / BDA"),
         (0x000E_0000, 0x0002_0000, "BIOS ROM area"),
         (0x000F_0000, 0x0001_0000, "High BIOS"),
@@ -186,105 +186,105 @@ pub fn pgb(n: &str) -> String {
     ];
     
     #[cfg(target_arch = "riscv64")]
-    let jnp: Vec<(u64, u64, &str)> = alloc::vec![
+    let ezl: Vec<(u64, u64, &str)> = alloc::vec![
         (0x0000_0000, 0x0000_2000, "Reset / Boot ROM"),
         (0x2000_0000, 0x0010_0000, "Flash (typical)"),
         (0x8000_0000, 0x0010_0000, "RAM start (OpenSBI area)"),
         (0x8020_0000, 0x0010_0000, "Kernel load area"),
     ];
     
-    let mut mme = 0;
-    let mut hej = Vec::new();
+    let mut gzo = 0;
+    let mut dlr = Vec::new();
     
-    for (ar, aw, lyn) in &jnp {
-        an.t(&format!("\x01Y--- {} (0x{:08X} - 0x{:08X}) ---\x01W\n",
-            lyn, ar, ar + aw));
+    for (base, size, region_name) in &ezl {
+        output.push_str(&format!("\x01Y--- {} (0x{:08X} - 0x{:08X}) ---\x01W\n",
+            region_name, base, base + size));
         
         
-        let oks = wdr(*ar, *aw);
-        let ppb = wds(*ar, *aw);
+        let ilo = okz(*base, *size);
+        let jjc = ola(*base, *size);
         
-        if oks.is_empty() && ppb.is_empty() {
-            an.t("  No artifacts found (clean/zeroed)\n\n");
+        if ilo.is_empty() && jjc.is_empty() {
+            output.push_str("  No artifacts found (clean/zeroed)\n\n");
             continue;
         }
         
-        for (ag, j, bhz) in &oks {
-            let mam = match bhz {
-                RiskLevel::Aj => "\x01R[CRITICAL]",
-                RiskLevel::Ao => "\x01R[HIGH]",
-                RiskLevel::Bc => "\x01Y[MEDIUM]",
+        for (addr, name, risk) in &ilo {
+            let grv = match risk {
+                RiskLevel::Critical => "\x01R[CRITICAL]",
+                RiskLevel::High => "\x01R[HIGH]",
+                RiskLevel::Medium => "\x01Y[MEDIUM]",
                 _ => "\x01W[INFO]",
             };
             
-            an.t(&format!("  {} 0x{:010X}: {}\x01W\n", mam, ag, j));
+            output.push_str(&format!("  {} 0x{:010X}: {}\x01W\n", grv, addr, name));
             
             
-            if oh!(bhz, RiskLevel::Aj) {
-                hej.push((*ag, *j));
+            if matches!(risk, RiskLevel::Critical) {
+                dlr.push((*addr, *name));
                 
                 
-                an.t("    Context: ");
-                for a in 0..8u64 {
-                    if let Some(od) = akp(ag + a * 4) {
-                        an.t(&format!("{:08X} ", od));
+                output.push_str("    Context: ");
+                for i in 0..8u64 {
+                    if let Some(fx) = sm(addr + i * 4) {
+                        output.push_str(&format!("{:08X} ", fx));
                     }
                 }
-                an.t("\n");
+                output.push_str("\n");
             }
-            mme += 1;
+            gzo += 1;
         }
         
-        for (ag, j, bhz) in &ppb {
-            let mam = match bhz {
-                RiskLevel::Aj => "\x01R[CRITICAL]",
-                RiskLevel::Ao => "\x01R[HIGH]",
-                RiskLevel::Bc => "\x01Y[MEDIUM]",
+        for (addr, name, risk) in &jjc {
+            let grv = match risk {
+                RiskLevel::Critical => "\x01R[CRITICAL]",
+                RiskLevel::High => "\x01R[HIGH]",
+                RiskLevel::Medium => "\x01Y[MEDIUM]",
                 _ => "\x01W[INFO]",
             };
             
-            an.t(&format!("  {} 0x{:010X}: {}\x01W\n", mam, ag, j));
+            output.push_str(&format!("  {} 0x{:010X}: {}\x01W\n", grv, addr, name));
             
-            if oh!(bhz, RiskLevel::Aj | RiskLevel::Ao) {
+            if matches!(risk, RiskLevel::Critical | RiskLevel::High) {
                 
-                an.t("    String: \"");
-                for a in 0..40u64 {
-                    if let Some(o) = pfc(ag + a) {
-                        if o >= 0x20 && o < 0x7F {
-                            an.push(o as char);
+                output.push_str("    String: \"");
+                for i in 0..40u64 {
+                    if let Some(b) = jcf(addr + i) {
+                        if b >= 0x20 && b < 0x7F {
+                            output.push(b as char);
                         } else {
-                            an.push('.');
+                            output.push('.');
                         }
                     }
                 }
-                an.t("\"\n");
+                output.push_str("\"\n");
                 
-                if oh!(bhz, RiskLevel::Aj) {
-                    hej.push((*ag, *j));
+                if matches!(risk, RiskLevel::Critical) {
+                    dlr.push((*addr, *name));
                 }
             }
-            mme += 1;
+            gzo += 1;
         }
         
-        an.t("\n");
+        output.push_str("\n");
     }
     
     
-    an.t(&format!("\x01C== Firmware Analysis Summary ==\x01W\n"));
-    an.t(&format!("  Regions scanned: {}\n", jnp.len()));
-    an.t(&format!("  Total artifacts: {}\n", mme));
-    an.t(&format!("  Critical findings: {}\n", hej.len()));
+    output.push_str(&format!("\x01C== Firmware Analysis Summary ==\x01W\n"));
+    output.push_str(&format!("  Regions scanned: {}\n", ezl.len()));
+    output.push_str(&format!("  Total artifacts: {}\n", gzo));
+    output.push_str(&format!("  Critical findings: {}\n", dlr.len()));
     
-    if !hej.is_empty() {
-        an.t(&format!("\n\x01R!! CRITICAL: Sensitive data found in memory !!\x01W\n"));
-        for (ag, j) in &hej {
-            an.t(&format!("  0x{:010X}: {}\n", ag, j));
+    if !dlr.is_empty() {
+        output.push_str(&format!("\n\x01R!! CRITICAL: Sensitive data found in memory !!\x01W\n"));
+        for (addr, name) in &dlr {
+            output.push_str(&format!("  0x{:010X}: {}\n", addr, name));
         }
-        an.t("\nThis data was left by the bootloader/firmware and could include:\n");
-        an.t("  - Signing keys (can forge firmware updates)\n");
-        an.t("  - Secure World code (can find TEE vulnerabilities)\n");
-        an.t("  - Debug tokens (can unlock JTAG/debug)\n");
+        output.push_str("\nThis data was left by the bootloader/firmware and could include:\n");
+        output.push_str("  - Signing keys (can forge firmware updates)\n");
+        output.push_str("  - Secure World code (can find TEE vulnerabilities)\n");
+        output.push_str("  - Debug tokens (can unlock JTAG/debug)\n");
     }
     
-    an
+    output
 }

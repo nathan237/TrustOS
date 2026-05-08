@@ -2,101 +2,101 @@
 
 
 
-use super::tables::Ei;
+use super::tables::Bu;
 
 
 #[repr(C, packed)]
-struct Cfc {
-    dh: Ei,
+struct Ald {
+    header: Bu,
     
     
-    sns: u32,
+    event_timer_block_id: u32,
     
     
-    yfn: u8,
-    yfq: u8,
-    yfp: u8,
-    yfr: u8,
-    bps: u64,
+    base_address_space_id: u8,
+    base_register_bit_width: u8,
+    base_register_bit_offset: u8,
+    base_reserved: u8,
+    base_address: u64,
     
     
-    lct: u8,
+    hpet_number: u8,
     
-    onn: u16,
+    minimum_tick: u16,
     
-    zeq: u8,
+    page_protection: u8,
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Wy {
+pub struct Jx {
     
-    pub bps: u64,
+    pub base_address: u64,
     
-    pub lct: u8,
+    pub hpet_number: u8,
     
-    pub llx: u16,
+    pub min_tick: u16,
     
-    pub lph: u8,
+    pub num_comparators: u8,
     
-    pub eoc: bool,
+    pub counter_64bit: bool,
     
-    pub lij: bool,
+    pub legacy_capable: bool,
     
-    pub ml: u16,
+    pub vendor_id: u16,
     
-    pub ewo: u32,
+    pub period_fs: u32,
 }
 
 
 pub mod regs {
     
-    pub const BLU_: u64 = 0x000;
+    pub const BON_: u64 = 0x000;
     
-    pub const Pa: u64 = 0x010;
+    pub const Gh: u64 = 0x010;
     
-    pub const DRI_: u64 = 0x020;
+    pub const DVB_: u64 = 0x020;
     
-    pub const Bze: u64 = 0x0F0;
+    pub const Ahx: u64 = 0x0F0;
     
-    pub const EHQ_: u64 = 0x100;
+    pub const ELH_: u64 = 0x100;
     
-    pub const EHP_: u64 = 0x108;
+    pub const ELG_: u64 = 0x108;
     
-    pub const EHR_: u64 = 0x110;
+    pub const ELI_: u64 = 0x110;
 }
 
 
-pub fn parse(oci: u64) -> Option<Wy> {
-    let dh = unsafe { &*(oci as *const Ei) };
+pub fn parse(hpet_virt: u64) -> Option<Jx> {
+    let header = unsafe { &*(hpet_virt as *const Bu) };
     
     
-    if &dh.signature != b"HPET" {
+    if &header.signature != b"HPET" {
         return None;
     }
     
-    let hpet = unsafe { &*(oci as *const Cfc) };
+    let hpet = unsafe { &*(hpet_virt as *const Ald) };
     
-    let itd = unsafe { core::ptr::md(core::ptr::vf!(hpet.sns)) };
-    let sm = unsafe { core::ptr::md(core::ptr::vf!(hpet.bps)) };
-    let llx = unsafe { core::ptr::md(core::ptr::vf!(hpet.onn)) };
-    
-    
-    let lph = ((itd >> 8) & 0x1F) as u8 + 1;
-    let eoc = (itd & (1 << 13)) != 0;
-    let lij = (itd & (1 << 15)) != 0;
-    let ml = (itd >> 16) as u16;
+    let els = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(hpet.event_timer_block_id)) };
+    let base_addr = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(hpet.base_address)) };
+    let min_tick = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(hpet.minimum_tick)) };
     
     
-    let ewo = if sm != 0 {
+    let num_comparators = ((els >> 8) & 0x1F) as u8 + 1;
+    let counter_64bit = (els & (1 << 13)) != 0;
+    let legacy_capable = (els & (1 << 15)) != 0;
+    let vendor_id = (els >> 16) as u16;
+    
+    
+    let period_fs = if base_addr != 0 {
         
-        match crate::memory::bki(sm, 4096) {
-            Ok(vd) => {
-                let mh = unsafe { core::ptr::read_volatile((vd + regs::BLU_) as *const u64) };
-                (mh >> 32) as u32
+        match crate::memory::yv(base_addr, 4096) {
+            Ok(virt_addr) => {
+                let cap = unsafe { core::ptr::read_volatile((virt_addr + regs::BON_) as *const u64) };
+                (cap >> 32) as u32
             }
-            Err(aa) => {
-                crate::serial_println!("[HPET] Failed to map HPET MMIO at {:#x}: {}", sm, aa);
+            Err(e) => {
+                crate::serial_println!("[HPET] Failed to map HPET MMIO at {:#x}: {}", base_addr, e);
                 0
             }
         }
@@ -104,98 +104,98 @@ pub fn parse(oci: u64) -> Option<Wy> {
         0
     };
     
-    Some(Wy {
-        bps: sm,
-        lct: hpet.lct,
-        llx,
-        lph,
-        eoc,
-        lij,
-        ml,
-        ewo,
+    Some(Jx {
+        base_address: base_addr,
+        hpet_number: hpet.hpet_number,
+        min_tick,
+        num_comparators,
+        counter_64bit,
+        legacy_capable,
+        vendor_id,
+        period_fs,
     })
 }
 
-impl Wy {
+impl Jx {
     
-    pub fn fjc(&self) -> u64 {
-        if self.ewo == 0 {
+    pub fn frequency(&self) -> u64 {
+        if self.period_fs == 0 {
             return 0;
         }
         
-        1_000_000_000_000_000u64 / self.ewo as u64
+        1_000_000_000_000_000u64 / self.period_fs as u64
     }
     
     
-    pub fn vrl(&self) -> u64 {
-        let hp = crate::memory::lr();
-        let ag = self.bps + hp + regs::Bze;
-        unsafe { core::ptr::read_volatile(ag as *const u64) }
+    pub fn ocl(&self) -> u64 {
+        let bz = crate::memory::hhdm_offset();
+        let addr = self.base_address + bz + regs::Ahx;
+        unsafe { core::ptr::read_volatile(addr as *const u64) }
     }
     
     
-    pub fn cuf(&self, iq: bool) {
-        let hp = crate::memory::lr();
-        let dfe = self.bps + hp + regs::Pa;
+    pub fn set_enabled(&self, enabled: bool) {
+        let bz = crate::memory::hhdm_offset();
+        let config_addr = self.base_address + bz + regs::Gh;
         
         unsafe {
-            let mut config = core::ptr::read_volatile(dfe as *const u64);
-            if iq {
+            let mut config = core::ptr::read_volatile(config_addr as *const u64);
+            if enabled {
                 config |= 1; 
             } else {
                 config &= !1;
             }
-            core::ptr::write_volatile(dfe as *mut u64, config);
+            core::ptr::write_volatile(config_addr as *mut u64, config);
         }
     }
     
     
-    pub fn zni(&self, iq: bool) {
-        if !self.lij {
+    pub fn qwe(&self, enabled: bool) {
+        if !self.legacy_capable {
             return;
         }
         
-        let hp = crate::memory::lr();
-        let dfe = self.bps + hp + regs::Pa;
+        let bz = crate::memory::hhdm_offset();
+        let config_addr = self.base_address + bz + regs::Gh;
         
         unsafe {
-            let mut config = core::ptr::read_volatile(dfe as *const u64);
-            if iq {
+            let mut config = core::ptr::read_volatile(config_addr as *const u64);
+            if enabled {
                 config |= 2; 
             } else {
                 config &= !2;
             }
-            core::ptr::write_volatile(dfe as *mut u64, config);
+            core::ptr::write_volatile(config_addr as *mut u64, config);
         }
     }
     
     
-    pub fn zsn(&self, qb: u64) -> u64 {
+    pub fn rah(&self, gx: u64) -> u64 {
         
-        if self.ewo == 0 {
+        if self.period_fs == 0 {
             return 0;
         }
-        (qb as u128 * self.ewo as u128 / 1_000_000) as u64
+        (gx as u128 * self.period_fs as u128 / 1_000_000) as u64
     }
     
     
-    pub fn zdh(&self, efq: u64) -> u64 {
-        if self.ewo == 0 {
+    pub fn qpi(&self, bul: u64) -> u64 {
+        if self.period_fs == 0 {
             return 0;
         }
-        (efq as u128 * 1_000_000 / self.ewo as u128) as u64
+        (bul as u128 * 1_000_000 / self.period_fs as u128) as u64
     }
 }
 
 
 pub fn init() -> bool {
-    let co = match super::ani() {
-        Some(a) => a,
+    let info = match super::rk() {
+        Some(i) => i,
         None => return false,
     };
     
-    let hpet = match &co.hpet {
-        Some(i) => i,
+    let hpet = match &info.hpet {
+        Some(h) => h,
         None => {
             crate::serial_println!("[HPET] No HPET table found");
             return false;
@@ -203,10 +203,10 @@ pub fn init() -> bool {
     };
     
     crate::serial_println!("[HPET] Initializing: base={:#x}, freq={} Hz", 
-        hpet.bps, hpet.fjc());
+        hpet.base_address, hpet.frequency());
     
     
-    hpet.cuf(true);
+    hpet.set_enabled(true);
     
     true
 }

@@ -332,6 +332,14 @@ pub fn init(bar0: u64) -> bool {
     
     crate::serial_println!("[xHCI] Mapped to virt {:#x}", base_virt);
     
+    // Safety probe: check if MMIO is actually accessible before dereferencing
+    let probe = unsafe { core::ptr::read_volatile(base_virt as *const u32) };
+    if probe == 0xFFFFFFFF {
+        crate::serial_println!("[xHCI] MMIO probe failed (read {:#x}) — controller unreachable", probe);
+        return false;
+    }
+    crate::serial_println!("[xHCI] MMIO probe OK (first dword={:#x})", probe);
+    
     // Read capability registers
     let cap_regs = base_virt as *mut XhciCapRegs;
     let cap = unsafe { &*cap_regs };
@@ -376,9 +384,9 @@ pub fn init(bar0: u64) -> bool {
                     // Set OS Owned Semaphore (bit 24)
                     unsafe { core::ptr::write_volatile(ecap_ptr as *mut u32, ecap_val | (1 << 24)); }
 
-                    // Wait up to ~1 s for BIOS to release (bit 16 clears)
+                    // Wait up to ~100ms for BIOS to release (bit 16 clears)
                     let mut ok = false;
-                    for i in 0..1000u32 {
+                    for i in 0..100u32 {
                         let v = unsafe { core::ptr::read_volatile(ecap_ptr as *const u32) };
                         if (v >> 16) & 1 == 0 {
                             ok = true;
@@ -415,8 +423,8 @@ pub fn init(bar0: u64) -> bool {
         crate::serial_println!("[xHCI] Halting controller...");
         op.usbcmd &= !USBCMD_RUN;
         
-        // Wait for halt
-        for _ in 0..1000 {
+        // Wait for halt (max ~100ms)
+        for _ in 0..100 {
             if (op.usbsts & USBSTS_HCH) != 0 {
                 break;
             }
@@ -428,8 +436,8 @@ pub fn init(bar0: u64) -> bool {
     crate::serial_println!("[xHCI] Resetting controller...");
     op.usbcmd |= USBCMD_HCRST;
     
-    // Wait for reset to complete
-    for _ in 0..1000 {
+    // Wait for reset to complete (max ~100ms)
+    for _ in 0..100 {
         if (op.usbcmd & USBCMD_HCRST) == 0 && (op.usbsts & USBSTS_CNR) == 0 {
             break;
         }

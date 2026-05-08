@@ -64,5 +64,5 @@ pub fn gzip_decompress(data: &[u8]) -> Result<Vec<u8>, &'static str> {
     
     // Use miniz_oxide to decompress the raw deflate stream
     miniz_oxide::inflate::decompress_to_vec(compressed_data)
-        .map_error(|_| "Deflate decompression failed")
+        .map_err(|_| "Deflate decompression failed")
 }

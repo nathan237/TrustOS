@@ -52,8 +52,8 @@ pub fn new(label: &str) -> Self {
     }
     
         // Public function — callable from other modules.
-pub fn on_press(mut self, message: Message) -> Self {
-        self.on_press = Some(message);
+pub fn on_press(mut self, msg: Message) -> Self {
+        self.on_press = Some(msg);
         self
     }
     
@@ -295,12 +295,12 @@ impl Widget for Container {
                         // Pattern matching — Rust's exhaustive branching construct.
 match self.direction {
                 Direction::Vertical => {
-                    width = width.maximum(s.width);
+                    width = width.max(s.width);
                     height += s.height + self.spacing;
                 }
                 Direction::Horizontal => {
                     width += s.width + self.spacing;
-                    height = height.maximum(s.height);
+                    height = height.max(s.height);
                 }
             }
         }
@@ -384,8 +384,8 @@ match self.direction {
                 }
             };
             
-            if let Some(message) = child.on_event(event, child_bounds) {
-                return Some(message);
+            if let Some(msg) = child.on_event(event, child_bounds) {
+                return Some(msg);
             }
         }
         
@@ -434,27 +434,27 @@ impl Widget for HeaderBar {
     fn on_event(&mut self, event: &Event, bounds: Rect) -> Option<Message> {
         // Handle window control clicks
         if let Event::Mouse(MouseEvent::Press { x, y, .. }) = event {
-            let button_size = 14.0;
-            let button_y = bounds.y + (bounds.height - button_size) / 2.0;
+            let btn_size = 14.0;
+            let btn_y = bounds.y + (bounds.height - btn_size) / 2.0;
             
             // Close button
-            let close_x = bounds.x + bounds.width - button_size - 12.0;
-            if *x >= close_x && *x <= close_x + button_size &&
-               *y >= button_y && *y <= button_y + button_size {
+            let close_x = bounds.x + bounds.width - btn_size - 12.0;
+            if *x >= close_x && *x <= close_x + btn_size &&
+               *y >= btn_y && *y <= btn_y + btn_size {
                 return Some(1); // CLOSE message
             }
             
             // Maximize button
-            let maximum_x = close_x - button_size - 8.0;
-            if *x >= maximum_x && *x <= maximum_x + button_size &&
-               *y >= button_y && *y <= button_y + button_size {
+            let maximum_x = close_x - btn_size - 8.0;
+            if *x >= maximum_x && *x <= maximum_x + btn_size &&
+               *y >= btn_y && *y <= btn_y + btn_size {
                 return Some(2); // MAXIMIZE message
             }
             
             // Minimize button
-            let minimum_x = maximum_x - button_size - 8.0;
-            if *x >= minimum_x && *x <= minimum_x + button_size &&
-               *y >= button_y && *y <= button_y + button_size {
+            let minimum_x = maximum_x - btn_size - 8.0;
+            if *x >= minimum_x && *x <= minimum_x + btn_size &&
+               *y >= btn_y && *y <= btn_y + btn_size {
                 return Some(3); // MINIMIZE message
             }
         }

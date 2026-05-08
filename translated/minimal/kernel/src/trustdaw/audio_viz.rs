@@ -19,58 +19,58 @@ use core::sync::atomic::Ordering;
 
 
 
-pub fn hfq(f: &[u8]) -> Result<Vec<i16>, &'static str> {
-    let co = crate::drivers::hda::jiu(f)?;
-    if co.emv != 16 {
+pub fn byq(data: &[u8]) -> Result<Vec<i16>, &'static str> {
+    let info = crate::drivers::hda::ewj(data)?;
+    if info.bits_per_sample != 16 {
         return Err("Only 16-bit PCM WAV supported");
     }
 
-    let gpb = &f[co.bbj..co.bbj + co.cpv];
-    let hth = co.cpv / (2 * co.lq as usize);
-    let gue = 48000u32;
-    let god = (hth as u64 * gue as u64
-        / co.auy as u64) as usize;
+    let dck = &data[info.data_offset..info.data_offset + info.data_size];
+    let dvq = info.data_size / (2 * info.channels as usize);
+    let dfi = 48000u32;
+    let dbw = (dvq as u64 * dfi as u64
+        / info.sample_rate as u64) as usize;
 
-    let mut an = Vec::fc(god * 2);
+    let mut output = Vec::with_capacity(dbw * 2);
 
-    for krt in 0..god {
-        let ibk = (krt as u64 * co.auy as u64
-            / gue as u64) as usize;
-        if ibk >= hth { break; }
+    for dst_frame in 0..dbw {
+        let eaf = (dst_frame as u64 * info.sample_rate as u64
+            / dfi as u64) as usize;
+        if eaf >= dvq { break; }
 
-        let w = ibk * co.lq as usize;
-        let avk = w * 2;
+        let idx = eaf * info.channels as usize;
+        let yk = idx * 2;
 
-        let fd = if avk + 1 < gpb.len() {
-            i16::dj([gpb[avk], gpb[avk + 1]])
+        let left = if yk + 1 < dck.len() {
+            i16::from_le_bytes([dck[yk], dck[yk + 1]])
         } else { 0 };
 
-        let hw = if co.lq >= 2 {
-            let jl = (w + 1) * 2;
-            if jl + 1 < gpb.len() {
-                i16::dj([gpb[jl], gpb[jl + 1]])
-            } else { fd }
-        } else { fd };
+        let right = if info.channels >= 2 {
+            let dk = (idx + 1) * 2;
+            if dk + 1 < dck.len() {
+                i16::from_le_bytes([dck[dk], dck[dk + 1]])
+            } else { left }
+        } else { left };
 
-        an.push(fd);
-        an.push(hw);
+        output.push(left);
+        output.push(right);
     }
 
-    Ok(an)
+    Ok(output)
 }
 
 
 
-pub fn hfz(f: &[u8]) -> &'static str {
-    if f.len() >= 12 && &f[0..4] == b"RIFF" && &f[8..12] == b"WAVE" {
+pub fn dmx(data: &[u8]) -> &'static str {
+    if data.len() >= 12 && &data[0..4] == b"RIFF" && &data[8..12] == b"WAVE" {
         return "wav";
     }
     
-    if f.len() >= 3 {
-        if f[0] == 0xFF && (f[1] & 0xE0) == 0xE0 {
+    if data.len() >= 3 {
+        if data[0] == 0xFF && (data[1] & 0xE0) == 0xE0 {
             return "mp3";
         }
-        if &f[0..3] == b"ID3" {
+        if &data[0..3] == b"ID3" {
             return "mp3";
         }
     }
@@ -83,238 +83,238 @@ pub fn hfz(f: &[u8]) -> &'static str {
 
 
 
-fn srw(ath: &mut [f32], aum: &mut [f32]) {
-    let bo = ath.len();
-    debug_assert!(bo.yzw());
-    debug_assert_eq!(bo, aum.len());
+fn luw(xh: &mut [f32], xq: &mut [f32]) {
+    let ae = xh.len();
+    debug_assert!(ae.is_power_of_two());
+    debug_assert_eq!(ae, xq.len());
 
     
-    let mut fb = 0usize;
-    for a in 0..bo {
-        if a < fb {
-            ath.swap(a, fb);
-            aum.swap(a, fb);
+    let mut ay = 0usize;
+    for i in 0..ae {
+        if i < ay {
+            xh.swap(i, ay);
+            xq.swap(i, ay);
         }
-        let mut ef = bo >> 1;
-        while ef >= 1 && fb >= ef {
-            fb -= ef;
-            ef >>= 1;
+        let mut m = ae >> 1;
+        while m >= 1 && ay >= m {
+            ay -= m;
+            m >>= 1;
         }
-        fb += ef;
+        ay += m;
     }
 
     
-    let mut gu = 2;
-    while gu <= bo {
-        let iv = gu / 2;
-        let gyp = -core::f32::consts::Eu * 2.0 / gu as f32;
-        for eh in 0..iv {
-            let hg = gyp * eh as f32;
-            let bfu = libm::zq(hg);
-            let yi = libm::st(hg);
-            let mut a = eh;
-            while a < bo {
-                let fb = a + iv;
-                let agd = bfu * ath[fb] - yi * aum[fb];
-                let ezs = bfu * aum[fb] + yi * ath[fb];
-                ath[fb] = ath[a] - agd;
-                aum[fb] = aum[a] - ezs;
-                ath[a] += agd;
-                aum[a] += ezs;
-                a += gu;
+    let mut step = 2;
+    while step <= ae {
+        let cw = step / 2;
+        let dhr = -core::f32::consts::PI * 2.0 / step as f32;
+        for k in 0..cw {
+            let cc = dhr * k as f32;
+            let aep = libm::cosf(cc);
+            let ld = libm::sinf(cc);
+            let mut i = k;
+            while i < ae {
+                let ay = i + cw;
+                let tr = aep * xh[ay] - ld * xq[ay];
+                let cej = aep * xq[ay] + ld * xh[ay];
+                xh[ay] = xh[i] - tr;
+                xq[ay] = xq[i] - cej;
+                xh[i] += tr;
+                xq[i] += cej;
+                i += step;
             }
         }
-        gu <<= 1;
+        step <<= 1;
     }
 }
 
 
 
-const FD_: usize = 1024;
-const DLS_: usize = FD_ / 2;
+const FS_: usize = 1024;
+const DPH_: usize = FS_ / 2;
 
 
 
-const ALM_: (usize, usize) = (1, 2);      
-const ALI_: (usize, usize)     = (2, 6);       
-const ALK_: (usize, usize)  = (6, 12);      
-const ALL_: (usize, usize)      = (12, 45);     
-const ALJ_: (usize, usize) = (45, 90);     
-const ALN_: (usize, usize)   = (90, 220);    
+const ANH_: (usize, usize) = (1, 2);      
+const AND_: (usize, usize)     = (2, 6);       
+const ANF_: (usize, usize)  = (6, 12);      
+const ANG_: (usize, usize)      = (12, 45);     
+const ANE_: (usize, usize) = (45, 90);     
+const ANI_: (usize, usize)   = (90, 220);    
 
 
 #[inline]
-fn gaq(ath: &[f32], aum: &[f32], hh: usize, gd: usize) -> f32 {
-    if gd <= hh { return 0.0; }
+fn ctu(xh: &[f32], xq: &[f32], lo: usize, hi: usize) -> f32 {
+    if hi <= lo { return 0.0; }
     let mut sum = 0.0f32;
-    for a in hh..gd.v(ath.len()) {
+    for i in lo..hi.min(xh.len()) {
         
-        sum += libm::bon(ath[a] * ath[a] + aum[a] * aum[a]);
+        sum += libm::sqrtf(xh[i] * xh[i] + xq[i] * xq[i]);
     }
-    sum / (gd - hh) as f32
+    sum / (hi - lo) as f32
 }
 
 
 struct BeatState {
     
-    buh: [f32; FD_],
-    ceo: [f32; FD_],
+    fft_re: [f32; FS_],
+    fft_im: [f32; FS_],
     
-    cxk: [f32; 43],
-    drs: usize,
-    cab: usize,
+    energy_hist: [f32; 43],
+    hist_idx: usize,
+    hist_count: usize,
     
-    rf: f32,
+    beat: f32,
     
-    abo: f32,
+    energy: f32,
     
-    ato: f32,
-    aee: f32,
-    jdz: f32,
-    vs: f32,
-    fkq: f32,
-    axg: f32,
+    sub_bass: f32,
+    bass: f32,
+    low_mid: f32,
+    mid: f32,
+    high_mid: f32,
+    treble: f32,
     
-    ewu: f32,
+    prev_energy: f32,
     
-    brp: f32,
+    peak_rms: f32,
     
-    hfg: u32,
+    dbg_frame: u32,
 }
 
 impl BeatState {
     fn new() -> Self {
         Self {
-            buh: [0.0; FD_],
-            ceo: [0.0; FD_],
-            cxk: [0.0; 43],
-            drs: 0,
-            cab: 0,
-            rf: 0.0,
-            abo: 0.0,
-            ato: 0.0,
-            aee: 0.0,
-            jdz: 0.0,
-            vs: 0.0,
-            fkq: 0.0,
-            axg: 0.0,
-            ewu: 0.0,
-            brp: 1.0,
-            hfg: 0,
+            fft_re: [0.0; FS_],
+            fft_im: [0.0; FS_],
+            energy_hist: [0.0; 43],
+            hist_idx: 0,
+            hist_count: 0,
+            beat: 0.0,
+            energy: 0.0,
+            sub_bass: 0.0,
+            bass: 0.0,
+            low_mid: 0.0,
+            mid: 0.0,
+            high_mid: 0.0,
+            treble: 0.0,
+            prev_energy: 0.0,
+            peak_rms: 1.0,
+            dbg_frame: 0,
         }
     }
 
     
-    fn qs(&mut self, audio: &[i16], pn: usize) {
-        self.hfg += 1;
+    fn update(&mut self, audio: &[i16], center: usize) {
+        self.dbg_frame += 1;
 
         
         
-        let hru = pn.ao(FD_); 
-        let hru = hru & !1; 
+        let dun = center.saturating_sub(FS_); 
+        let dun = dun & !1; 
 
-        let mut awd: f32 = 0.0;
-        for a in 0..FD_ {
-            let w = hru + a * 2; 
-            let yr = if w < audio.len() { audio[w] as f32 } else { 0.0 };
-            self.buh[a] = yr;
-            self.ceo[a] = 0.0;
-            let gp = if yr >= 0.0 { yr } else { -yr };
-            if gp > awd { awd = gp; }
+        let mut yw: f32 = 0.0;
+        for i in 0..FS_ {
+            let idx = dun + i * 2; 
+            let sample = if idx < audio.len() { audio[idx] as f32 } else { 0.0 };
+            self.fft_re[i] = sample;
+            self.fft_im[i] = 0.0;
+            let abs = if sample >= 0.0 { sample } else { -sample };
+            if abs > yw { yw = abs; }
         }
 
         
         
-        if awd > self.brp {
-            self.brp = self.brp + (awd - self.brp) * 0.3;
+        if yw > self.peak_rms {
+            self.peak_rms = self.peak_rms + (yw - self.peak_rms) * 0.3;
         } else {
-            self.brp = self.brp * 0.9995; 
+            self.peak_rms = self.peak_rms * 0.9995; 
         }
-        let dqz = if self.brp > 100.0 { 16000.0 / self.brp } else { 1.0 };
+        let bmi = if self.peak_rms > 100.0 { 16000.0 / self.peak_rms } else { 1.0 };
 
         
-        for a in 0..FD_ {
+        for i in 0..FS_ {
             
-            let ab = a as f32 / FD_ as f32;
-            let hmm = 0.5 * (1.0 - libm::zq(2.0 * core::f32::consts::Eu * ab));
-            self.buh[a] *= hmm * dqz / 32768.0; 
+            let t = i as f32 / FS_ as f32;
+            let drf = 0.5 * (1.0 - libm::cosf(2.0 * core::f32::consts::PI * t));
+            self.fft_re[i] *= drf * bmi / 32768.0; 
         }
 
         
-        srw(&mut self.buh, &mut self.ceo);
+        luw(&mut self.fft_re, &mut self.fft_im);
 
         
-        let lxe = gaq(&self.buh, &self.ceo, ALM_.0, ALM_.1);
-        let dkz = gaq(&self.buh, &self.ceo, ALI_.0, ALI_.1);
-        let ozo = gaq(&self.buh, &self.ceo, ALK_.0, ALK_.1);
-        let exe = gaq(&self.buh, &self.ceo, ALL_.0, ALL_.1);
-        let ozn = gaq(&self.buh, &self.ceo, ALJ_.0, ALJ_.1);
-        let ozp = gaq(&self.buh, &self.ceo, ALN_.0, ALN_.1);
+        let gpt = ctu(&self.fft_re, &self.fft_im, ANH_.0, ANH_.1);
+        let biu = ctu(&self.fft_re, &self.fft_im, AND_.0, AND_.1);
+        let ixz = ctu(&self.fft_re, &self.fft_im, ANF_.0, ANF_.1);
+        let cda = ctu(&self.fft_re, &self.fft_im, ANG_.0, ANG_.1);
+        let ixy = ctu(&self.fft_re, &self.fft_im, ANE_.0, ANE_.1);
+        let iya = ctu(&self.fft_re, &self.fft_im, ANI_.0, ANI_.1);
 
         
-        let vqj = lxe * 1.5 + dkz * 1.2 + ozo * 0.8
-            + exe * 0.5 + ozn * 0.3 + ozp * 0.2;
+        let obo = gpt * 1.5 + biu * 1.2 + ixz * 0.8
+            + cda * 0.5 + ixy * 0.3 + iya * 0.2;
 
         
-        self.ato = Self::fuz(self.ato, lxe.v(1.0), 0.75, 0.10);
-        self.aee     = Self::fuz(self.aee,     dkz.v(1.0),     0.70, 0.10);
-        self.jdz  = Self::fuz(self.jdz,  ozo.v(1.0),  0.65, 0.12);
-        self.vs      = Self::fuz(self.vs,      exe.v(1.0),      0.60, 0.12);
-        self.fkq = Self::fuz(self.fkq, ozn.v(1.0), 0.65, 0.14);
-        self.axg   = Self::fuz(self.axg,   ozp.v(1.0),   0.70, 0.16);
-        self.abo   = Self::fuz(self.abo,   vqj.v(1.5),   0.65, 0.10);
+        self.sub_bass = Self::cqu(self.sub_bass, gpt.min(1.0), 0.75, 0.10);
+        self.bass     = Self::cqu(self.bass,     biu.min(1.0),     0.70, 0.10);
+        self.low_mid  = Self::cqu(self.low_mid,  ixz.min(1.0),  0.65, 0.12);
+        self.mid      = Self::cqu(self.mid,      cda.min(1.0),      0.60, 0.12);
+        self.high_mid = Self::cqu(self.high_mid, ixy.min(1.0), 0.65, 0.14);
+        self.treble   = Self::cqu(self.treble,   iya.min(1.0),   0.70, 0.16);
+        self.energy   = Self::cqu(self.energy,   obo.min(1.5),   0.65, 0.10);
 
         
-        let haa = lxe + dkz * 0.8; 
+        let diu = gpt + biu * 0.8; 
 
         
-        self.cxk[self.drs] = haa;
-        self.drs = (self.drs + 1) % self.cxk.len();
-        if self.cab < self.cxk.len() {
-            self.cab += 1;
+        self.energy_hist[self.hist_idx] = diu;
+        self.hist_idx = (self.hist_idx + 1) % self.energy_hist.len();
+        if self.hist_count < self.energy_hist.len() {
+            self.hist_count += 1;
         }
 
         
-        let adu = self.cab.am(1) as f32;
-        let abl: f32 = self.cxk.iter().take(self.cab).sum::<f32>() / adu;
+        let oz = self.hist_count.max(1) as f32;
+        let ns: f32 = self.energy_hist.iter().take(self.hist_count).sum::<f32>() / oz;
 
-        let mut fax = 0.0f32;
-        for a in 0..self.cab {
-            let wz = self.cxk[a] - abl;
-            fax += wz * wz;
+        let mut cex = 0.0f32;
+        for i in 0..self.hist_count {
+            let jr = self.energy_hist[i] - ns;
+            cex += jr * jr;
         }
-        let igh = fax / adu;
+        let edo = cex / oz;
 
         
         
         
-        let bxm = (-15.0 * igh + 1.45).am(1.05).v(1.5);
+        let amz = (-15.0 * edo + 1.45).max(1.05).min(1.5);
 
         
-        let uyl = haa - self.ewu;
-        if haa > abl * bxm && uyl > 0.002 && self.cab > 5 {
-            let ccc = ((haa - abl * bxm) / abl.am(0.001)).v(1.0);
-            self.rf = (0.6 + ccc * 0.4).v(1.0);
+        let nng = diu - self.prev_energy;
+        if diu > ns * amz && nng > 0.002 && self.hist_count > 5 {
+            let strength = ((diu - ns * amz) / ns.max(0.001)).min(1.0);
+            self.beat = (0.6 + strength * 0.4).min(1.0);
         } else {
-            self.rf *= 0.88;
-            if self.rf < 0.02 { self.rf = 0.0; }
+            self.beat *= 0.88;
+            if self.beat < 0.02 { self.beat = 0.0; }
         }
-        self.ewu = haa;
+        self.prev_energy = diu;
 
         
-        if self.hfg == 1 || self.hfg % 60 == 0 {
+        if self.dbg_frame == 1 || self.dbg_frame % 60 == 0 {
             crate::serial_println!(
                 "[BEAT] f={} pos={} gain={:.1} E={:.3} beat={:.2} sub={:.2} bass={:.2} lm={:.2} mid={:.2} hm={:.2} tre={:.2} thr={:.2}",
-                self.hfg, pn, dqz, self.abo, self.rf,
-                self.ato, self.aee, self.jdz, self.vs, self.fkq, self.axg, bxm
+                self.dbg_frame, center, bmi, self.energy, self.beat,
+                self.sub_bass, self.bass, self.low_mid, self.mid, self.high_mid, self.treble, amz
             );
         }
     }
 
     #[inline]
-    fn fuz(vo: f32, new: f32, qkx: f32, ehl: f32) -> f32 {
-        if new > vo { vo + (new - vo) * qkx }
-        else { vo + (new - vo) * ehl }
+    fn cqu(prev: f32, new: f32, attack: f32, release: f32) -> f32 {
+        if new > prev { prev + (new - prev) * attack }
+        else { prev + (new - prev) * release }
     }
 }
 
@@ -324,94 +324,94 @@ impl BeatState {
 
 
 #[inline(always)]
-fn fdm(ei: u32, xb: u32, lp: u32, pq: u32, dw: u32) -> u32 {
-    let wq = 255 - dw;
-    let avi = (ei >> 16) & 0xFF;
-    let qpn = (ei >> 8) & 0xFF;
-    let aaa = ei & 0xFF;
-    let m = (xb * dw + avi * wq) / 255;
-    let at = (lp * dw + qpn * wq) / 255;
-    let o = (pq * dw + aaa * wq) / 255;
-    0xFF000000 | (m << 16) | (at << 8) | o
+fn cgi(bg: u32, ko: u32, fg: u32, fb: u32, alpha: u32) -> u32 {
+    let ki = 255 - alpha;
+    let yi = (bg >> 16) & 0xFF;
+    let kby = (bg >> 8) & 0xFF;
+    let mq = bg & 0xFF;
+    let r = (ko * alpha + yi * ki) / 255;
+    let g = (fg * alpha + kby * ki) / 255;
+    let b = (fb * alpha + mq * ki) / 255;
+    0xFF000000 | (r << 16) | (g << 8) | b
 }
 
 
 #[derive(Clone, Copy)]
-struct Amr {
-    dy: f32,
-    ccc: f32,
-    dw: f32,
+struct Qi {
+    radius: f32,
+    strength: f32,
+    alpha: f32,
 }
 
-const UZ_: usize = 8;
-const COS_: f32 = 5.0;       
-const BEO_: f32 = 35.0;      
-const COP_: f32 = 0.96;      
-const COQ_: f32 = 650.0;     
+const WI_: usize = 8;
+const CSH_: f32 = 5.0;       
+const BGQ_: f32 = 35.0;      
+const CSE_: f32 = 0.96;      
+const CSF_: f32 = 650.0;     
 
 
 
 struct HoloOverlay {
     
-    cbx: Vec<u32>,
-    jqq: usize,
-    mgi: usize,
+    snapshot: Vec<u32>,
+    snap_w: usize,
+    snap_h: usize,
     
-    um: [Amr; UZ_],
-    dvd: usize,
+    rings: [Qi; WI_],
+    ring_count: usize,
     
-    ici: f32,
+    sweep: f32,
     
     frame: u32,
     
-    lve: f32,
+    prev_beat: f32,
 }
 
 impl HoloOverlay {
-    fn new(d: u32, i: u32) -> Self {
+    fn new(w: u32, h: u32) -> Self {
         Self {
-            cbx: Vec::new(),
-            jqq: d as usize,
-            mgi: i as usize,
-            um: [Amr { dy: 0.0, ccc: 0.0, dw: 0.0 }; UZ_],
-            dvd: 0,
-            ici: 0.0,
+            snapshot: Vec::new(),
+            snap_w: w as usize,
+            snap_h: h as usize,
+            rings: [Qi { radius: 0.0, strength: 0.0, alpha: 0.0 }; WI_],
+            ring_count: 0,
+            sweep: 0.0,
             frame: 0,
-            lve: 0.0,
+            prev_beat: 0.0,
         }
     }
 
     
     
-    fn qwi(&mut self) {
-        let ag = crate::framebuffer::BJ_.load(Ordering::Relaxed);
-        if ag.abq() { return; }
-        let jb = crate::framebuffer::CA_.load(Ordering::Relaxed) as usize;
-        let d = self.jqq;
-        let i = self.mgi;
+    fn capture_snapshot(&mut self) {
+        let addr = crate::framebuffer::BL_.load(Ordering::Relaxed);
+        if addr.is_null() { return; }
+        let pitch = crate::framebuffer::CB_.load(Ordering::Relaxed) as usize;
+        let w = self.snap_w;
+        let h = self.snap_h;
 
-        self.cbx = Vec::fc(d * i);
+        self.snapshot = Vec::with_capacity(w * h);
         unsafe {
-            for c in 0..i {
-                let br = ag.add(c * jb) as *const u32;
-                for b in 0..d {
-                    self.cbx.push(core::ptr::read(br.add(b)));
+            for y in 0..h {
+                let row = addr.add(y * pitch) as *const u32;
+                for x in 0..w {
+                    self.snapshot.push(core::ptr::read(row.add(x)));
                 }
             }
         }
-        crate::serial_println!("[VIZ] Snapshot captured: {}x{} ({} px)", d, i, self.cbx.len());
+        crate::serial_println!("[VIZ] Snapshot captured: {}x{} ({} px)", w, h, self.snapshot.len());
     }
 
     
-    fn jmi(&self) {
-        if self.cbx.is_empty() { return; }
-        if let Some((ptr, dxx, dxv, qdr)) = crate::framebuffer::cey() {
-            let bo = self.cbx.len();
+    fn restore_snapshot(&self) {
+        if self.snapshot.is_empty() { return; }
+        if let Some((ptr, _w, _h, _stride)) = crate::framebuffer::aqr() {
+            let ae = self.snapshot.len();
             unsafe {
                 core::ptr::copy_nonoverlapping(
-                    self.cbx.fq(),
+                    self.snapshot.as_ptr(),
                     ptr as *mut u32,
-                    bo,
+                    ae,
                 );
             }
         }
@@ -419,263 +419,263 @@ impl HoloOverlay {
 
     
     #[inline]
-    fn wqd(&self, b: i32, c: i32) -> u32 {
-        if b < 0 || c < 0 || b as usize >= self.jqq || c as usize >= self.mgi {
+    fn snap_px(&self, x: i32, y: i32) -> u32 {
+        if x < 0 || y < 0 || x as usize >= self.snap_w || y as usize >= self.snap_h {
             return 0xFF000000;
         }
-        self.cbx[c as usize * self.jqq + b as usize]
+        self.snapshot[y as usize * self.snap_w + x as usize]
     }
 
     
-    fn wqp(&mut self, ccc: f32) {
-        let mz = Amr {
-            dy: 25.0,
-            ccc: ccc * 14.0,
-            dw: 0.95,
+    fn spawn_ring(&mut self, strength: f32) {
+        let dq = Qi {
+            radius: 25.0,
+            strength: strength * 14.0,
+            alpha: 0.95,
         };
-        if self.dvd < UZ_ {
-            self.um[self.dvd] = mz;
-            self.dvd += 1;
+        if self.ring_count < WI_ {
+            self.rings[self.ring_count] = dq;
+            self.ring_count += 1;
         } else {
             
-            let mut yi = 0;
-            for a in 1..UZ_ {
-                if self.um[a].ccc < self.um[yi].ccc { yi = a; }
+            let mut ld = 0;
+            for i in 1..WI_ {
+                if self.rings[i].strength < self.rings[ld].strength { ld = i; }
             }
-            self.um[yi] = mz;
+            self.rings[ld] = dq;
         }
     }
 
     
-    fn or(&mut self, rf: &BeatState) {
+    fn tick(&mut self, beat: &BeatState) {
         self.frame += 1;
 
         
-        self.ici += 0.008 + rf.abo * 0.015;
-        if self.ici > 1.0 { self.ici -= 1.0; }
+        self.sweep += 0.008 + beat.energy * 0.015;
+        if self.sweep > 1.0 { self.sweep -= 1.0; }
 
         
-        if rf.rf > 0.35 && self.lve < 0.25 {
-            self.wqp(rf.rf);
+        if beat.beat > 0.35 && self.prev_beat < 0.25 {
+            self.spawn_ring(beat.beat);
         }
-        self.lve = rf.rf;
+        self.prev_beat = beat.beat;
 
         
-        let mut d = 0usize;
-        for m in 0..self.dvd {
-            self.um[m].dy += COS_;
-            self.um[m].ccc *= COP_;
-            self.um[m].dw *= 0.97;
-            if self.um[m].dy < COQ_ && self.um[m].dw > 0.01 {
-                if d != m { self.um[d] = self.um[m]; }
-                d += 1;
+        let mut w = 0usize;
+        for r in 0..self.ring_count {
+            self.rings[r].radius += CSH_;
+            self.rings[r].strength *= CSE_;
+            self.rings[r].alpha *= 0.97;
+            if self.rings[r].radius < CSF_ && self.rings[r].alpha > 0.01 {
+                if w != r { self.rings[w] = self.rings[r]; }
+                w += 1;
             }
         }
-        self.dvd = d;
+        self.ring_count = w;
     }
 
     
-    fn sdc(&self, rf: &BeatState) {
-        let (pq, d, i) = match crate::framebuffer::cey() {
-            Some((ai, d, i, _)) => (ai as *mut u32, d as usize, i as usize),
+    fn draw_frame(&self, beat: &BeatState) {
+        let (fb, w, h) = match crate::framebuffer::aqr() {
+            Some((aa, w, h, _)) => (aa as *mut u32, w as usize, h as usize),
             None => return,
         };
-        let cx = d / 2;
-        let ae = i * 42 / 100; 
+        let cx = w / 2;
+        let u = h * 42 / 100; 
 
         
-        self.jmi();
+        self.restore_snapshot();
 
         
-        if self.dvd > 0 {
-            self.qjr(pq, d, i, cx, ae);
+        if self.ring_count > 0 {
+            self.apply_distortion(fb, w, h, cx, u);
         }
 
         
-        self.kra(d as u32, i as u32, cx as u32, ae as u32, rf);
+        self.draw_glow(w as u32, h as u32, cx as u32, u as u32, beat);
 
         
-        self.epd(pq, d, i, cx, ae, rf);
+        self.draw_logo(fb, w, h, cx, u, beat);
 
         
-        for a in 0..self.dvd {
-            self.sff(pq, d, i, cx, ae, &self.um[a]);
+        for i in 0..self.ring_count {
+            self.draw_ring(fb, w, h, cx, u, &self.rings[i]);
         }
     }
 
     
-    fn qjr(&self, pq: *mut u32, d: usize, i: usize, cx: usize, ae: usize) {
-        let rso = cx as f32;
-        let rsw = ae as f32;
+    fn apply_distortion(&self, fb: *mut u32, w: usize, h: usize, cx: usize, u: usize) {
+        let law = cx as f32;
+        let lbb = u as f32;
 
         
-        let mut djl: f32 = 0.0;
-        for a in 0..self.dvd {
-            let m = self.um[a].dy + BEO_ + 5.0;
-            if m > djl { djl = m; }
+        let mut aug: f32 = 0.0;
+        for i in 0..self.ring_count {
+            let r = self.rings[i].radius + BGQ_ + 5.0;
+            if r > aug { aug = r; }
         }
-        let jl = djl as i32;
-        let fy = (cx as i32 - jl).am(0) as usize;
-        let dn = ((cx as i32 + jl) as usize).v(d.ao(1));
-        let fo = (ae as i32 - jl).am(0) as usize;
-        let dp = ((ae as i32 + jl) as usize).v(i.ao(1));
+        let dk = aug as i32;
+        let bm = (cx as i32 - dk).max(0) as usize;
+        let x1 = ((cx as i32 + dk) as usize).min(w.saturating_sub(1));
+        let az = (u as i32 - dk).max(0) as usize;
+        let y1 = ((u as i32 + dk) as usize).min(h.saturating_sub(1));
 
-        for c in fo..=dp {
-            let bg = c as f32 - rsw;
-            for b in fy..=dn {
-                let dx = b as f32 - rso;
-                let la = libm::bon(dx * dx + bg * bg);
-                if la < 1.0 { continue; }
+        for y in az..=y1 {
+            let ad = y as f32 - lbb;
+            for x in bm..=x1 {
+                let dx = x as f32 - law;
+                let em = libm::sqrtf(dx * dx + ad * ad);
+                if em < 1.0 { continue; }
 
                 
-                let mut aor: f32 = 0.0;
-                for a in 0..self.dvd {
-                    let bc = (la - self.um[a].dy) / BEO_;
-                    if bc > 1.0 || bc < -1.0 { continue; }
+                let mut uv: f32 = 0.0;
+                for i in 0..self.ring_count {
+                    let d = (em - self.rings[i].radius) / BGQ_;
+                    if d > 1.0 || d < -1.0 { continue; }
                     
-                    let ab = 1.0 - bc * bc;
-                    aor += self.um[a].ccc * ab * ab;
+                    let t = 1.0 - d * d;
+                    uv += self.rings[i].strength * t * t;
                 }
-                if aor < 0.5 { continue; }
+                if uv < 0.5 { continue; }
 
                 
-                let wq = 1.0 / la;
-                let cr = (b as f32 - dx * wq * aor) as i32;
-                let cq = (c as f32 - bg * wq * aor) as i32;
-                let s = self.wqd(cr, cq);
+                let ki = 1.0 / em;
+                let am = (x as f32 - dx * ki * uv) as i32;
+                let ak = (y as f32 - ad * ki * uv) as i32;
+                let color = self.snap_px(am, ak);
                 unsafe {
-                    core::ptr::write(pq.add(c * d + b), s);
+                    core::ptr::write(fb.add(y * w + x), color);
                 }
             }
         }
     }
 
     
-    fn kra(&self, ua: u32, iuj: u32, cx: u32, ae: u32, rf: &BeatState) {
-        let hj = rf.abo * 0.3 + rf.rf * 0.5;
-        if hj < 0.02 { return; }
-        let djl = ua.v(iuj) / 4;
-        for mz in 0..10u32 {
-            let m = (mz + 1) * djl / 10;
-            let ab = mz as f32 / 10.0;
-            let q = ((1.0 - ab) * hj * 18.0) as u32;
-            if q < 1 { continue; }
-            let fd = cx.ao(m);
-            let qc = ae.ao(m);
-            let yq = (m * 2).v(ua.ao(fd));
-            let aff = (m * 2).v(iuj.ao(qc));
-            if yq > 0 && aff > 0 {
-                crate::framebuffer::ih(fd, qc, yq, aff, 0x00FFCC, q.v(12));
+    fn draw_glow(&self, fo: u32, cxt: u32, cx: u32, u: u32, beat: &BeatState) {
+        let intensity = beat.energy * 0.3 + beat.beat * 0.5;
+        if intensity < 0.02 { return; }
+        let aug = fo.min(cxt) / 4;
+        for dq in 0..10u32 {
+            let r = (dq + 1) * aug / 10;
+            let t = dq as f32 / 10.0;
+            let a = ((1.0 - t) * intensity * 18.0) as u32;
+            if a < 1 { continue; }
+            let left = cx.saturating_sub(r);
+            let top = u.saturating_sub(r);
+            let lk = (r * 2).min(fo.saturating_sub(left));
+            let pp = (r * 2).min(cxt.saturating_sub(top));
+            if lk > 0 && pp > 0 {
+                crate::framebuffer::co(left, top, lk, pp, 0x00FFCC, a.min(12));
             }
         }
     }
 
     
     
-    fn epd(&self, pq: *mut u32, d: usize, i: usize, cx: usize, ae: usize, rf: &BeatState) {
-        let zv = crate::logo_bitmap::AY_;
-        let kq = crate::logo_bitmap::BL_;
-        let jt = ((i as u32) * 45 / kq as u32).am(100);
-        let yq = zv as u32 * jt / 100;
-        let aff = kq as u32 * jt / 100;
-        let kb = (cx as u32).ao(yq / 2);
-        let ix = (ae as u32).ao(aff / 2);
+    fn draw_logo(&self, fb: *mut u32, w: usize, h: usize, cx: usize, u: usize, beat: &BeatState) {
+        let mo = crate::logo_bitmap::BA_;
+        let ee = crate::logo_bitmap::BN_;
+        let dr = ((h as u32) * 45 / ee as u32).max(100);
+        let lk = mo as u32 * dr / 100;
+        let pp = ee as u32 * dr / 100;
+        let da = (cx as u32).saturating_sub(lk / 2);
+        let cm = (u as u32).saturating_sub(pp / 2);
 
-        let xg = rf.rf;
-        let abo = rf.abo;
-
-        
-        let qne = 0.50 + abo * 0.15 + xg * 0.25;
-        
-        let icj = (self.ici * aff as f32) as u32;
-        
-        let kwo = ((self.frame.hx(2654435761) % 100) as f32 / 100.0 - 0.5) * 0.04;
-        
-        let nbf = 2 + (xg * 3.0) as i32;
+        let kq = beat.beat;
+        let energy = beat.energy;
 
         
-        for x in 0..aff {
-            let cq = (x * 100 / jt) as usize;
-            if cq >= kq { continue; }
-            let abi = ix + x;
-            if abi >= i as u32 { continue; }
+        let jzw = 0.50 + energy * 0.15 + kq * 0.25;
+        
+        let eau = (self.sweep * pp as f32) as u32;
+        
+        let fxf = ((self.frame.wrapping_mul(2654435761) % 100) as f32 / 100.0 - 0.5) * 0.04;
+        
+        let hjp = 2 + (kq * 3.0) as i32;
+
+        
+        for o in 0..pp {
+            let ak = (o * 100 / dr) as usize;
+            if ak >= ee { continue; }
+            let nn = cm + o;
+            if nn >= h as u32 { continue; }
 
             
-            let arx = if x % 3 == 0 { 0.35f32 } else { 1.0f32 };
+            let scan = if o % 3 == 0 { 0.35f32 } else { 1.0f32 };
             
-            let sd = x as f32 - icj as f32;
-            let mih = if libm::dhb(sd) < 10.0 { 0.5 * (1.0 - libm::dhb(sd) / 10.0) } else { 0.0f32 };
+            let sd = o as f32 - eau as f32;
+            let gwt = if libm::fabsf(sd) < 10.0 { 0.5 * (1.0 - libm::fabsf(sd) / 10.0) } else { 0.0f32 };
 
-            for y in 0..yq {
-                let cr = (y * 100 / jt) as usize;
-                if cr >= zv { continue; }
-                let xu = kb + y;
-                if xu >= d as u32 { continue; }
+            for p in 0..lk {
+                let am = (p * 100 / dr) as usize;
+                if am >= mo { continue; }
+                let lw = da + p;
+                if lw >= w as u32 { continue; }
 
-                let bax = crate::logo_bitmap::djc(cr, cq);
-                if (bax >> 24) & 0xFF < 20 { continue; }
-                let (m, at, o) = ((bax >> 16) & 0xFF, (bax >> 8) & 0xFF, bax & 0xFF);
-                let oko = (m * 77 + at * 150 + o * 29) >> 8;
-                if oko < 28 { continue; } 
+                let abq = crate::logo_bitmap::bhr(am, ak);
+                if (abq >> 24) & 0xFF < 20 { continue; }
+                let (r, g, b) = ((abq >> 16) & 0xFF, (abq >> 8) & 0xFF, abq & 0xFF);
+                let ilj = (r * 77 + g * 150 + b * 29) >> 8;
+                if ilj < 28 { continue; } 
 
-                let amd = crate::logo_bitmap::hqj(cr, cq);
-                let glj = oko as f32 / 255.0;
+                let th = crate::logo_bitmap::dtu(am, ak);
+                let dam = ilj as f32 / 255.0;
 
                 
-                let (mut gjg, mut gjb, mut gix) = if amd {
+                let (mut czh, mut cze, mut czc) = if th {
                     
-                    (glj * 0.25 + xg * 0.15,
-                     glj * 1.1 + xg * 0.4,
-                     glj * 0.95 + xg * 0.25)
+                    (dam * 0.25 + kq * 0.15,
+                     dam * 1.1 + kq * 0.4,
+                     dam * 0.95 + kq * 0.25)
                 } else {
                     
-                    (glj * 0.12,
-                     glj * 0.7 + abo * 0.1,
-                     glj * 0.55)
+                    (dam * 0.12,
+                     dam * 0.7 + energy * 0.1,
+                     dam * 0.55)
                 };
 
                 
-                gjg = (gjg * arx + mih * 0.2 + kwo).am(0.0);
-                gjb = (gjb * arx + mih * 0.9 + kwo).am(0.0);
-                gix = (gix * arx + mih * 0.7 + kwo).am(0.0);
+                czh = (czh * scan + gwt * 0.2 + fxf).max(0.0);
+                cze = (cze * scan + gwt * 0.9 + fxf).max(0.0);
+                czc = (czc * scan + gwt * 0.7 + fxf).max(0.0);
 
                 
-                if xg > 0.7 {
-                    let bee = (xg - 0.7) * 3.0;
-                    gjg += bee * 0.4;
-                    gjb += bee * 0.7;
-                    gix += bee * 0.5;
+                if kq > 0.7 {
+                    let adr = (kq - 0.7) * 3.0;
+                    czh += adr * 0.4;
+                    cze += adr * 0.7;
+                    czc += adr * 0.5;
                 }
 
-                let btu = (gjg * 255.0).v(255.0) as u32;
-                let bmh = (gjb * 255.0).v(255.0) as u32;
-                let aiv = (gix * 255.0).v(255.0) as u32;
-                let qeh = if amd { 1.3f32 } else { 1.0f32 };
-                let dw = (qne * arx * qeh * 255.0).v(255.0) as u32;
+                let alg = (czh * 255.0).min(255.0) as u32;
+                let ahp = (cze * 255.0).min(255.0) as u32;
+                let cb = (czc * 255.0).min(255.0) as u32;
+                let jsz = if th { 1.3f32 } else { 1.0f32 };
+                let alpha = (jzw * scan * jsz * 255.0).min(255.0) as u32;
 
-                let w = abi as usize * d + xu as usize;
+                let idx = nn as usize * w + lw as usize;
                 unsafe {
-                    let ei = core::ptr::read(pq.add(w));
-                    core::ptr::write(pq.add(w), fdm(ei, btu, bmh, aiv, dw));
+                    let bg = core::ptr::read(fb.add(idx));
+                    core::ptr::write(fb.add(idx), cgi(bg, alg, ahp, cb, alpha));
                 }
 
                 
-                if amd && dw > 80 {
-                    let nbe = dw / 4;
-                    let mj = xu as i32 - nbf;
-                    if mj >= 0 && (mj as usize) < d {
-                        let nc = abi as usize * d + mj as usize;
+                if th && alpha > 80 {
+                    let hjo = alpha / 4;
+                    let fe = lw as i32 - hjp;
+                    if fe >= 0 && (fe as usize) < w {
+                        let ci = nn as usize * w + fe as usize;
                         unsafe {
-                            let ei = core::ptr::read(pq.add(nc));
-                            core::ptr::write(pq.add(nc), fdm(ei, 180, 10, 10, nbe));
+                            let bg = core::ptr::read(fb.add(ci));
+                            core::ptr::write(fb.add(ci), cgi(bg, 180, 10, 10, hjo));
                         }
                     }
-                    let ftk = xu as usize + nbf as usize;
-                    if ftk < d {
-                        let nc = abi as usize * d + ftk;
+                    let bja = lw as usize + hjp as usize;
+                    if bja < w {
+                        let ci = nn as usize * w + bja;
                         unsafe {
-                            let ei = core::ptr::read(pq.add(nc));
-                            core::ptr::write(pq.add(nc), fdm(ei, 10, 10, 200, nbe));
+                            let bg = core::ptr::read(fb.add(ci));
+                            core::ptr::write(fb.add(ci), cgi(bg, 10, 10, 200, hjo));
                         }
                     }
                 }
@@ -683,34 +683,34 @@ impl HoloOverlay {
         }
 
         
-        let ixi = jt * 106 / 100;
-        let nt = zv as u32 * ixi / 100;
-        let bjz = kq as u32 * ixi / 100;
-        let qz = (cx as u32).ao(nt / 2);
-        let ub = (ae as u32).ao(bjz / 2);
-        let szx = (12.0 + abo * 30.0 + xg * 50.0).v(100.0) as u32;
+        let eoo = dr * 106 / 100;
+        let fz = mo as u32 * eoo / 100;
+        let agl = ee as u32 * eoo / 100;
+        let hc = (cx as u32).saturating_sub(fz / 2);
+        let jh = (u as u32).saturating_sub(agl / 2);
+        let mba = (12.0 + energy * 30.0 + kq * 50.0).min(100.0) as u32;
 
-        for x in (0..bjz).akt(2) {
-            let cq = (x * 100 / ixi) as usize;
-            if cq >= kq { continue; }
-            let pgm = ub + x;
-            if pgm >= i as u32 { continue; }
-            for y in (0..nt).akt(2) {
-                let cr = (y * 100 / ixi) as usize;
-                if cr >= zv { continue; }
-                if !crate::logo_bitmap::hqj(cr, cq) { continue; }
-                let pgl = qz + y;
-                if pgl >= d as u32 { continue; }
+        for o in (0..agl).step_by(2) {
+            let ak = (o * 100 / eoo) as usize;
+            if ak >= ee { continue; }
+            let jdk = jh + o;
+            if jdk >= h as u32 { continue; }
+            for p in (0..fz).step_by(2) {
+                let am = (p * 100 / eoo) as usize;
+                if am >= mo { continue; }
+                if !crate::logo_bitmap::dtu(am, ak) { continue; }
+                let jdj = hc + p;
+                if jdj >= w as u32 { continue; }
                 
-                for bg in 0..2u32 {
+                for ad in 0..2u32 {
                     for dx in 0..2u32 {
-                        let jf = pgl + dx;
-                        let sc = pgm + bg;
-                        if jf >= d as u32 || sc >= i as u32 { continue; }
-                        let w = sc as usize * d + jf as usize;
+                        let dg = jdj + dx;
+                        let hj = jdk + ad;
+                        if dg >= w as u32 || hj >= h as u32 { continue; }
+                        let idx = hj as usize * w + dg as usize;
                         unsafe {
-                            let ei = core::ptr::read(pq.add(w));
-                            core::ptr::write(pq.add(w), fdm(ei, 0, 255, 204, szx));
+                            let bg = core::ptr::read(fb.add(idx));
+                            core::ptr::write(fb.add(idx), cgi(bg, 0, 255, 204, mba));
                         }
                     }
                 }
@@ -719,30 +719,30 @@ impl HoloOverlay {
     }
 
     
-    fn sff(&self, pq: *mut u32, d: usize, i: usize, cx: usize, ae: usize, mz: &Amr) {
-        if mz.dw < 0.02 { return; }
-        let m = mz.dy;
-        let hzm = ((m * 6.28) as u32).am(60).v(720);
-        let q = (mz.dw * 180.0) as u32;
+    fn draw_ring(&self, fb: *mut u32, w: usize, h: usize, cx: usize, u: usize, dq: &Qi) {
+        if dq.alpha < 0.02 { return; }
+        let r = dq.radius;
+        let dyz = ((r * 6.28) as u32).max(60).min(720);
+        let a = (dq.alpha * 180.0) as u32;
 
-        for e in 0..hzm {
-            let hg = e as f32 * 6.2831853 / hzm as f32;
-            let y = cx as f32 + m * libm::zq(hg);
-            let x = ae as f32 + m * libm::st(hg);
-            let fg = y as i32;
-            let og = x as i32;
-            if fg < 0 || og < 0 || fg >= d as i32 - 1 || og >= i as i32 - 1 { continue; }
+        for j in 0..dyz {
+            let cc = j as f32 * 6.2831853 / dyz as f32;
+            let p = cx as f32 + r * libm::cosf(cc);
+            let o = u as f32 + r * libm::sinf(cc);
+            let bi = p as i32;
+            let gg = o as i32;
+            if bi < 0 || gg < 0 || bi >= w as i32 - 1 || gg >= h as i32 - 1 { continue; }
 
             
-            for bg in 0..2i32 {
+            for ad in 0..2i32 {
                 for dx in 0..2i32 {
-                    let jf = (fg + dx) as usize;
-                    let sc = (og + bg) as usize;
-                    if jf >= d || sc >= i { continue; }
-                    let w = sc * d + jf;
+                    let dg = (bi + dx) as usize;
+                    let hj = (gg + ad) as usize;
+                    if dg >= w || hj >= h { continue; }
+                    let idx = hj * w + dg;
                     unsafe {
-                        let ei = core::ptr::read(pq.add(w));
-                        core::ptr::write(pq.add(w), fdm(ei, 0, 255, 204, q.v(180)));
+                        let bg = core::ptr::read(fb.add(idx));
+                        core::ptr::write(fb.add(idx), cgi(bg, 0, 255, 204, a.min(180)));
                     }
                 }
             }
@@ -751,43 +751,43 @@ impl HoloOverlay {
 }
 
 
-fn sep(gz: u32, kc: u32, dq: &str, cxi: u32, dcx: u32, cgn: u32) {
-    let dt = 16u32; 
+fn lka(fb_w: u32, fb_h: u32, title: &str, bbi: u32, bee: u32, aed: u32) {
+    let aq = 16u32; 
 
     
-    let qd = dq.len() as u32 * dt;
-    let gx = (gz.ao(qd)) / 2;
-    crate::framebuffer::ih(gx.ao(12), 10, qd + 24, 36, 0x000000, 120);
-    crate::graphics::scaling::azp(gx as i32, 14, dq, 0x00FFCC, 2);
+    let gr = title.len() as u32 * aq;
+    let bu = (fb_w.saturating_sub(gr)) / 2;
+    crate::framebuffer::co(bu.saturating_sub(12), 10, gr + 24, 36, 0x000000, 120);
+    crate::graphics::scaling::aat(bu as i32, 14, title, 0x00FFCC, 2);
 
     
-    let skg = cxi / 60;
-    let cqf = cxi % 60;
-    let xid = dcx / 60;
-    let wi = dcx % 60;
-    let ptg = format!("{}:{:02} / {}:{:02}", skg, cqf, xid, wi);
-    let cch = ptg.len() as u32 * 8 + 16;
-    crate::framebuffer::ih(8, kc.ao(50), cch, 20, 0x000000, 100);
-    crate::framebuffer::cb(&ptg, 16, kc.ao(48), 0x00AA88);
+    let lpa = bbi / 60;
+    let es = bbi % 60;
+    let pkh = bee / 60;
+    let jy = bee % 60;
+    let jmr = format!("{}:{:02} / {}:{:02}", lpa, es, pkh, jy);
+    let apj = jmr.len() as u32 * 8 + 16;
+    crate::framebuffer::co(8, fb_h.saturating_sub(50), apj, 20, 0x000000, 100);
+    crate::framebuffer::draw_text(&jmr, 16, fb_h.saturating_sub(48), 0x00AA88);
 
     
-    let x = kc.ao(24);
-    let ars = gz.ao(60);
-    let lwk = 30u32;
-    crate::framebuffer::ah(lwk, x, ars, 3, 0x001111);
-    let adu = ars * cgn.v(100) / 100;
-    if adu > 0 {
-        crate::framebuffer::ah(lwk, x, adu, 3, 0x00FFCC);
-        crate::framebuffer::ih(lwk, x.ao(1), adu, 5, 0x00FFCC, 20);
+    let o = fb_h.saturating_sub(24);
+    let wl = fb_w.saturating_sub(60);
+    let gpd = 30u32;
+    crate::framebuffer::fill_rect(gpd, o, wl, 3, 0x001111);
+    let oz = wl * aed.min(100) / 100;
+    if oz > 0 {
+        crate::framebuffer::fill_rect(gpd, o, oz, 3, 0x00FFCC);
+        crate::framebuffer::co(gpd, o.saturating_sub(1), oz, 5, 0x00FFCC, 20);
     }
 
     
     let hint = "[Esc] Exit";
-    let avz = hint.len() as u32 * 8 + 8;
-    crate::framebuffer::ih(
-        gz.ao(avz + 8), kc.ao(50), avz, 20, 0x000000, 80,
+    let xc = hint.len() as u32 * 8 + 8;
+    crate::framebuffer::co(
+        fb_w.saturating_sub(xc + 8), fb_h.saturating_sub(50), xc, 20, 0x000000, 80,
     );
-    crate::framebuffer::cb(hint, gz.ao(avz + 4), kc.ao(48), 0x446666);
+    crate::framebuffer::draw_text(hint, fb_w.saturating_sub(xc + 4), fb_h.saturating_sub(48), 0x446666);
 }
 
 
@@ -801,197 +801,197 @@ fn sep(gz: u32, kc: u32, dq: &str, cxi: u32, dcx: u32, cgn: u32) {
 
 
 
-pub fn jcy(audio: &[i16], dq: &str) -> Result<(), &'static str> {
-    crate::audio::init().bq();
-    let shj = audio.len() as f64 / (48000.0 * 2.0);
+pub fn cma(audio: &[i16], title: &str) -> Result<(), &'static str> {
+    crate::audio::init().ok();
+    let lmq = audio.len() as f64 / (48000.0 * 2.0);
     crate::serial_println!(
         "[VIZ] Starting holographic overlay: {} ({} samples, {:.1}s)",
-        dq, audio.len(), shj
+        title, audio.len(), lmq
     );
 
-    let gz = crate::framebuffer::AB_.load(Ordering::Relaxed) as u32;
-    let kc = crate::framebuffer::Z_.load(Ordering::Relaxed) as u32;
+    let fb_w = crate::framebuffer::X_.load(Ordering::Relaxed) as u32;
+    let fb_h = crate::framebuffer::W_.load(Ordering::Relaxed) as u32;
 
     
-    if !crate::framebuffer::bre() {
-        crate::framebuffer::beo();
-        crate::framebuffer::afi(true);
+    if !crate::framebuffer::ajy() {
+        crate::framebuffer::adw();
+        crate::framebuffer::pr(true);
     }
 
     
-    let mut cte = HoloOverlay::new(gz, kc);
-    cte.qwi();
+    let mut ayx = HoloOverlay::new(fb_w, fb_h);
+    ayx.capture_snapshot();
 
     crate::serial_println!(
         "[VIZ] Using logo_bitmap: {}x{}",
-        crate::logo_bitmap::AY_, crate::logo_bitmap::BL_
+        crate::logo_bitmap::BA_, crate::logo_bitmap::BN_
     );
 
-    let mut dok = BeatState::new();
-    let xkd = audio.len() / 2;
-    let alu = (xkd as u64 * 1000) / 48000;
-    let dcx = (alu / 1000) as u32;
+    let mut bkv = BeatState::new();
+    let plw = audio.len() / 2;
+    let total_ms = (plw as u64 * 1000) / 48000;
+    let bee = (total_ms / 1000) as u32;
 
     
-    let (dqc, axs) = crate::drivers::hda::gic()
+    let (dma_ptr, dma_cap) = crate::drivers::hda::cym()
         .ok_or("HDA not initialized")?;
-    let baa = axs / 2;
-    let hmi = (baa * 2) as u32;
-    let ghq = (axs * 2) as u32;
+    let aaz = dma_cap / 2;
+    let drd = (aaz * 2) as u32;
+    let cye = (dma_cap * 2) as u32;
 
-    let cfo = audio.len().v(axs);
-    crate::drivers::hda::dcg(&audio[0..cfo])?;
+    let are = audio.len().min(dma_cap);
+    crate::drivers::hda::bdu(&audio[0..are])?;
 
-    let mut bph: usize = cfo;
-    let mut cry: u32 = 0;
-    let mut dyo = false;
-    let mut pkv: u32 = 0;
-    let rzk = (axs as u64 * 1000) / (48000 * 2);
-    let aps: u64 = 33;
-    let nrr = ((rzk / aps) + 10) as u32;
+    let mut write_cursor: usize = are;
+    let mut last_half: u32 = 0;
+    let mut audio_exhausted = false;
+    let mut jgi: u32 = 0;
+    let lgg = (dma_cap as u64 * 1000) / (48000 * 2);
+    let vj: u64 = 33;
+    let hwz = ((lgg / vj) + 10) as u32;
 
     crate::serial_println!(
         "[VIZ] DMA: buf={} i16, half={}, exhaust_frames={}",
-        axs, baa, nrr
+        dma_cap, aaz, hwz
     );
 
     
-    for bb in 0..15u32 {
-        cte.jmi();
-        if bb < 8 {
-            let q = (bb * 30).v(230);
-            let fr = "NOW PLAYING";
-            let efp = fr.len() as u32 * 16 + 32;
-            let hl = (gz.ao(efp)) / 2;
-            let ir = kc / 2 - 16;
-            crate::framebuffer::ih(
-                hl.ao(8), ir.ao(8), efp + 16, 48, 0x000000, q,
+    for f in 0..15u32 {
+        ayx.restore_snapshot();
+        if f < 8 {
+            let a = (f * 30).min(230);
+            let bk = "NOW PLAYING";
+            let buk = bk.len() as u32 * 16 + 32;
+            let cg = (fb_w.saturating_sub(buk)) / 2;
+            let cr = fb_h / 2 - 16;
+            crate::framebuffer::co(
+                cg.saturating_sub(8), cr.saturating_sub(8), buk + 16, 48, 0x000000, a,
             );
-            crate::graphics::scaling::azp(hl as i32, ir as i32, fr, 0x00FFCC, 2);
+            crate::graphics::scaling::aat(cg as i32, cr as i32, bk, 0x00FFCC, 2);
         }
-        crate::framebuffer::sv();
-        crate::cpu::tsc::rd(50);
+        crate::framebuffer::ii();
+        crate::cpu::tsc::hq(50);
     }
 
     
-    let mut ekp: u32 = 0;
+    let mut vis_frame: u32 = 0;
 
     loop {
         
-        crate::drivers::hda::ndi();
-        crate::drivers::hda::nqi();
+        crate::drivers::hda::hli();
+        crate::drivers::hda::hwa();
 
-        let bvg = crate::drivers::hda::hlj();
-        let gly = if bvg >= ghq { 0 } else { bvg };
-        let heu = if gly < hmi { 0u32 } else { 1u32 };
+        let alw = crate::drivers::hda::dqq();
+        let dav = if alw >= cye { 0 } else { alw };
+        let dlx = if dav < drd { 0u32 } else { 1u32 };
 
-        if heu != cry {
-            if bph < audio.len() {
-                let cpx = cry as usize * baa;
-                let ia = audio.len() - bph;
-                let acq = ia.v(baa);
+        if dlx != last_half {
+            if write_cursor < audio.len() {
+                let awv = last_half as usize * aaz;
+                let ck = audio.len() - write_cursor;
+                let od = ck.min(aaz);
                 unsafe {
                     core::ptr::copy_nonoverlapping(
-                        audio.fq().add(bph),
-                        dqc.add(cpx),
-                        acq,
+                        audio.as_ptr().add(write_cursor),
+                        dma_ptr.add(awv),
+                        od,
                     );
-                    if acq < baa {
-                        core::ptr::ahx(
-                            dqc.add(cpx + acq), 0, baa - acq,
+                    if od < aaz {
+                        core::ptr::write_bytes(
+                            dma_ptr.add(awv + od), 0, aaz - od,
                         );
                     }
                 }
-                bph += acq;
-                if bph >= audio.len() {
-                    dyo = true;
-                    crate::serial_println!("[VIZ] Audio data exhausted at frame {}", ekp);
+                write_cursor += od;
+                if write_cursor >= audio.len() {
+                    audio_exhausted = true;
+                    crate::serial_println!("[VIZ] Audio data exhausted at frame {}", vis_frame);
                 }
             } else {
-                let cpx = cry as usize * baa;
+                let awv = last_half as usize * aaz;
                 unsafe {
-                    core::ptr::ahx(dqc.add(cpx), 0, baa);
+                    core::ptr::write_bytes(dma_ptr.add(awv), 0, aaz);
                 }
             }
-            cry = heu;
+            last_half = dlx;
         }
 
         
-        let oz = ekp as u64 * aps;
-        if oz >= alu { break; }
-        let gan = ((oz * 48000 * 2) / 1000) as usize;
-        let gan = gan.v(audio.len().ao(2));
+        let elapsed_ms = vis_frame as u64 * vj;
+        if elapsed_ms >= total_ms { break; }
+        let cts = ((elapsed_ms * 48000 * 2) / 1000) as usize;
+        let cts = cts.min(audio.len().saturating_sub(2));
 
-        if dyo {
-            pkv += 1;
-            if pkv >= nrr { break; }
+        if audio_exhausted {
+            jgi += 1;
+            if jgi >= hwz { break; }
         }
 
-        let cxi = (oz / 1000) as u32;
-        let vnb = (oz * 100 / alu.am(1)) as u32;
+        let bbi = (elapsed_ms / 1000) as u32;
+        let nyr = (elapsed_ms * 100 / total_ms.max(1)) as u32;
 
         
-        dok.qs(audio, gan);
+        bkv.update(audio, cts);
 
         
-        crate::trustdaw::live_viz::wif(
-            dok.rf, dok.aee, dok.ato,
-            dok.vs, dok.fkq, dok.axg,
-            dok.abo, ekp,
+        crate::trustdaw::live_viz::oon(
+            bkv.beat, bkv.bass, bkv.sub_bass,
+            bkv.mid, bkv.high_mid, bkv.treble,
+            bkv.energy, vis_frame,
         );
 
         
-        cte.or(&dok);
-        cte.sdc(&dok);
+        ayx.tick(&bkv);
+        ayx.draw_frame(&bkv);
 
         
-        crate::trustdaw::live_viz::wbh();
+        crate::trustdaw::live_viz::ojc();
 
-        sep(gz, kc, dq, cxi, dcx, vnb);
-        crate::framebuffer::sv();
+        lka(fb_w, fb_h, title, bbi, bee, nyr);
+        crate::framebuffer::ii();
 
-        ekp += 1;
+        vis_frame += 1;
 
         
-        let mut lyz = aps;
-        let mut ara = false;
-        while lyz > 0 {
-            let bc = lyz.v(5);
-            crate::cpu::tsc::rd(bc);
-            lyz -= bc;
-            while let Some(jt) = crate::keyboard::xw() {
-                if jt & 0x80 != 0 { continue; }
-                if jt == 0x01 { ara = true; break; }
+        let mut gqz = vj;
+        let mut wc = false;
+        while gqz > 0 {
+            let d = gqz.min(5);
+            crate::cpu::tsc::hq(d);
+            gqz -= d;
+            while let Some(dr) = crate::keyboard::kr() {
+                if dr & 0x80 != 0 { continue; }
+                if dr == 0x01 { wc = true; break; }
             }
-            if ara { break; }
+            if wc { break; }
         }
-        if ara { break; }
+        if wc { break; }
     }
 
     
-    let _ = crate::drivers::hda::qg();
+    let _ = crate::drivers::hda::stop();
 
     
-    for bb in 0..20u32 {
-        cte.jmi();
-        if bb < 10 {
-            let q = ((20 - bb) * 12).v(200);
-            let fr = "PLAYBACK COMPLETE";
-            let efp = fr.len() as u32 * 16 + 32;
-            let hl = (gz.ao(efp)) / 2;
-            let ir = kc / 2 - 16;
-            crate::framebuffer::ih(
-                hl.ao(8), ir.ao(8), efp + 16, 48, 0x000000, q,
+    for f in 0..20u32 {
+        ayx.restore_snapshot();
+        if f < 10 {
+            let a = ((20 - f) * 12).min(200);
+            let bk = "PLAYBACK COMPLETE";
+            let buk = bk.len() as u32 * 16 + 32;
+            let cg = (fb_w.saturating_sub(buk)) / 2;
+            let cr = fb_h / 2 - 16;
+            crate::framebuffer::co(
+                cg.saturating_sub(8), cr.saturating_sub(8), buk + 16, 48, 0x000000, a,
             );
-            crate::graphics::scaling::azp(hl as i32, ir as i32, fr, 0x00FFCC, 2);
+            crate::graphics::scaling::aat(cg as i32, cr as i32, bk, 0x00FFCC, 2);
         }
-        crate::framebuffer::sv();
-        crate::cpu::tsc::rd(50);
+        crate::framebuffer::ii();
+        crate::cpu::tsc::hq(50);
     }
 
     
-    cte.jmi();
-    crate::framebuffer::sv();
+    ayx.restore_snapshot();
+    crate::framebuffer::ii();
 
     crate::serial_println!("[VIZ] Holographic visualizer closed");
     Ok(())
@@ -1004,29 +1004,29 @@ pub fn jcy(audio: &[i16], dq: &str) -> Result<(), &'static str> {
 
 
 
-pub fn owa(path: &str) -> Result<(), &'static str> {
+pub fn ivd(path: &str) -> Result<(), &'static str> {
     crate::serial_println!("[VIZ] Loading file: {}", path);
 
     
-    let f: Vec<u8> = if crate::vfs::hm(path).is_ok() {
+    let data: Vec<u8> = if crate::vfs::stat(path).is_ok() {
         
-        crate::vfs::mq(path).jd(|_| "Failed to read file from VFS")?
+        crate::vfs::read_file(path).map_err(|_| "Failed to read file from VFS")?
     } else {
         
-        crate::ramfs::fh(|fs| {
-            fs.mq(path).map(|r| r.ip())
-        }).jd(|_| "Failed to read file from VFS or ramfs")?
+        crate::ramfs::bh(|fs| {
+            fs.read_file(path).map(|c| c.to_vec())
+        }).map_err(|_| "Failed to read file from VFS or ramfs")?
     };
 
-    if f.is_empty() {
+    if data.is_empty() {
         return Err("File is empty");
     }
 
-    let format = hfz(&f);
-    crate::serial_println!("[VIZ] Detected format: {}, size: {} bytes", format, f.len());
+    let format = dmx(&data);
+    crate::serial_println!("[VIZ] Detected format: {}, size: {} bytes", format, data.len());
 
     let audio = match format {
-        "wav" => hfq(&f)?,
+        "wav" => byq(&data)?,
         "mp3" => return Err("MP3 not yet supported — convert to WAV first (ffmpeg -i song.mp3 song.wav)"),
         _ => return Err("Unknown audio format — only WAV (16-bit PCM) supported"),
     };
@@ -1035,12 +1035,12 @@ pub fn owa(path: &str) -> Result<(), &'static str> {
         return Err("Decoded audio is empty");
     }
 
-    let fhe = audio.len() as f64 / (48000.0 * 2.0);
-    crate::serial_println!("[VIZ] Decoded: {} samples, {:.1}s", audio.len(), fhe);
+    let cip = audio.len() as f64 / (48000.0 * 2.0);
+    crate::serial_println!("[VIZ] Decoded: {} samples, {:.1}s", audio.len(), cip);
 
     
-    let dq = path.cmm('/').next().unwrap_or(path);
-    jcy(&audio, dq)
+    let title = path.rsplit('/').next().unwrap_or(path);
+    cma(&audio, title)
 }
 
 
@@ -1049,12 +1049,12 @@ pub fn owa(path: &str) -> Result<(), &'static str> {
 
 
 #[cfg(feature = "daw")]
-pub static XY_: &[u8] = include_bytes!("untitled2.wav");
+pub static ZF_: &[u8] = include_bytes!("untitled2.wav");
 #[cfg(not(feature = "daw"))]
-pub static XY_: &[u8] = &[];
+pub static ZF_: &[u8] = &[];
 
 
-pub const CZP_: &[&str] = &[
+pub const DDH_: &[&str] = &[
     "/music/untitled2.wav",
     "/mnt/fat32/music/untitled2.wav",
     "/mnt/sda1/music/untitled2.wav",
@@ -1062,40 +1062,88 @@ pub const CZP_: &[&str] = &[
 ];
 
 
-pub fn luh() -> Result<(), &'static str> {
+pub fn gni() -> Result<(), &'static str> {
     
-    for path in CZP_ {
-        if crate::vfs::hm(path).is_ok() {
+    for path in DDH_ {
+        if crate::vfs::stat(path).is_ok() {
             crate::serial_println!("[VIZ] Found '{}' on VFS, loading...", path);
-            if let Ok(f) = crate::vfs::mq(path) {
-                if !f.is_empty() {
-                    crate::serial_println!("[VIZ] Loaded {} bytes from VFS", f.len());
-                    let audio = hfq(&f)?;
-                    let fhe = audio.len() as f64 / (48000.0 * 2.0);
-                    crate::serial_println!("[VIZ] Decoded: {} samples, {:.1}s", audio.len(), fhe);
-                    return jcy(&audio, "Untitled (2)");
+            if let Ok(data) = crate::vfs::read_file(path) {
+                if !data.is_empty() {
+                    crate::serial_println!("[VIZ] Loaded {} bytes from VFS", data.len());
+                    let audio = byq(&data)?;
+                    let cip = audio.len() as f64 / (48000.0 * 2.0);
+                    crate::serial_println!("[VIZ] Decoded: {} samples, {:.1}s", audio.len(), cip);
+                    return cma(&audio, "Untitled (2)");
                 }
             }
         }
     }
 
     
-    if let Ok(f) = crate::trustdaw::disk_audio::uhr() {
-        crate::serial_println!("[VIZ] Loaded {} bytes from data disk", f.len());
-        let audio = hfq(&f)?;
-        let fhe = audio.len() as f64 / (48000.0 * 2.0);
-        crate::serial_println!("[VIZ] Decoded: {} samples, {:.1}s", audio.len(), fhe);
-        return jcy(&audio, "Untitled (2)");
+    if let Ok(data) = crate::trustdaw::disk_audio::nai() {
+        crate::serial_println!("[VIZ] Loaded {} bytes from data disk", data.len());
+        let audio = byq(&data)?;
+        let cip = audio.len() as f64 / (48000.0 * 2.0);
+        crate::serial_println!("[VIZ] Decoded: {} samples, {:.1}s", audio.len(), cip);
+        return cma(&audio, "Untitled (2)");
     }
 
     
-    if !XY_.is_empty() {
-        crate::serial_println!("[VIZ] Using embedded WAV ({} bytes)", XY_.len());
-        let audio = hfq(XY_)?;
-        let fhe = audio.len() as f64 / (48000.0 * 2.0);
-        crate::serial_println!("[VIZ] Decoded: {} samples, {:.1}s", audio.len(), fhe);
-        return jcy(&audio, "Untitled (2)");
+    if !ZF_.is_empty() {
+        crate::serial_println!("[VIZ] Using embedded WAV ({} bytes)", ZF_.len());
+        let audio = byq(ZF_)?;
+        let cip = audio.len() as f64 / (48000.0 * 2.0);
+        crate::serial_println!("[VIZ] Decoded: {} samples, {:.1}s", audio.len(), cip);
+        return cma(&audio, "Untitled (2)");
     }
 
     Err("Audio not found — place untitled2.wav in /music/ or build with --features daw")
+}
+
+
+pub const BMS_: &[&str] = &[
+    "/music/TrustAnthem.wav",
+    "/music/trustanthem.wav",
+    "/mnt/fat32/music/TrustAnthem.wav",
+    "/mnt/sda1/music/TrustAnthem.wav",
+    "/home/music/TrustAnthem.wav",
+];
+
+
+pub fn nvf() -> Result<(), &'static str> {
+    
+    for path in BMS_ {
+        if crate::vfs::stat(path).is_ok() {
+            crate::serial_println!("[VIZ] Found '{}' on VFS, loading...", path);
+            if let Ok(data) = crate::vfs::read_file(path) {
+                if !data.is_empty() {
+                    let audio = byq(&data)?;
+                    return cma(&audio, "TrustAnthem");
+                }
+            }
+        }
+    }
+
+    
+    if let Ok(bs) = crate::trustdaw::disk_audio::exz() {
+        
+        for (i, track) in bs.tracks.iter().enumerate() {
+            let gj = track.name.as_str();
+            if gj.eq_ignore_ascii_case("TrustAnthem") || gj.eq_ignore_ascii_case("trustanthem") {
+                crate::serial_println!("[VIZ] Found TrustAnthem on disk (track {})", i);
+                if let Ok((data, _name)) = crate::trustdaw::disk_audio::etf(i) {
+                    let audio = byq(&data)?;
+                    return cma(&audio, "TrustAnthem");
+                }
+            }
+        }
+        
+        if let Ok((data, name)) = crate::trustdaw::disk_audio::etf(0) {
+            crate::serial_println!("[VIZ] Loading first disk track: '{}'", name);
+            let audio = byq(&data)?;
+            return cma(&audio, &name);
+        }
+    }
+
+    Err("TrustAnthem not found — place TrustAnthem.wav on the data disk or in /music/")
 }

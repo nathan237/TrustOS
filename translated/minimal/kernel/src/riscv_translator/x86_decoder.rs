@@ -22,336 +22,336 @@ use alloc::string::String;
 use super::ir::*;
 
 
-fn ahb(xwf: u8) -> Reg {
-    match xwf {
-        0  => Reg::Je,  
-        1  => Reg::Zo,  
-        2  => Reg::Afw,  
-        3  => Reg::Va,  
-        4  => Reg::Ds,   
-        5  => Reg::Aon,   
-        6  => Reg::Vb,  
-        7  => Reg::Vc,  
-        8  => Reg::Afx,  
-        9  => Reg::Afy,  
-        10 => Reg::Afz,  
-        11 => Reg::Aog,  
-        12 => Reg::Aoh,  
-        13 => Reg::Aoi,  
-        14 => Reg::Aoj,  
-        15 => Reg::Aok,  
-        _  => Reg::Bg,   
+fn qs(x86_reg: u8) -> Reg {
+    match x86_reg {
+        0  => Reg::X10,  
+        1  => Reg::X11,  
+        2  => Reg::X12,  
+        3  => Reg::X13,  
+        4  => Reg::X2,   
+        5  => Reg::X8,   
+        6  => Reg::X14,  
+        7  => Reg::X15,  
+        8  => Reg::X18,  
+        9  => Reg::X19,  
+        10 => Reg::X20,  
+        11 => Reg::X21,  
+        12 => Reg::X22,  
+        13 => Reg::X23,  
+        14 => Reg::X24,  
+        15 => Reg::X25,  
+        _  => Reg::X5,   
     }
 }
 
 
 pub struct X86Decoder {
     
-    aj: Vec<u8>,
+    code: Vec<u8>,
     
-    sm: u64,
+    base_addr: u64,
     
-    l: usize,
+    offset: usize,
     
-    pub cm: TranslationStats,
+    pub stats: TranslationStats,
 }
 
 impl X86Decoder {
-    pub fn new(aj: &[u8], sm: u64) -> Self {
+    pub fn new(code: &[u8], base_addr: u64) -> Self {
         Self {
-            aj: aj.ip(),
-            sm,
-            l: 0,
-            cm: TranslationStats::default(),
+            code: code.to_vec(),
+            base_addr,
+            offset: 0,
+            stats: TranslationStats::default(),
         }
     }
 
     
-    pub fn mmw(&mut self, cun: usize) -> TranslatedBlock {
-        self.l = cun;
-        let cbz = self.sm + cun as u64;
-        let mut block = TranslatedBlock::new(cbz, SourceArch::BT_);
+    pub fn translate_block(&mut self, azv: usize) -> TranslatedBlock {
+        self.offset = azv;
+        let src_addr = self.base_addr + azv as u64;
+        let mut block = TranslatedBlock::new(src_addr, SourceArch::X86_64);
 
-        let eff = 256;
-        let mut az = 0;
+        let max_instructions = 256;
+        let mut count = 0;
 
-        while self.l < self.aj.len() && az < eff {
-            let yyg = self.l;
-            let mkf = self.hfp(&mut block);
-            block.jrg += 1;
-            self.cm.esv += 1;
-            az += 1;
+        while self.offset < self.code.len() && count < max_instructions {
+            let qlo = self.offset;
+            let gyh = self.decode_one(&mut block);
+            block.src_inst_count += 1;
+            self.stats.instructions_translated += 1;
+            count += 1;
 
-            if mkf {
+            if gyh {
                 break;
             }
         }
 
-        self.cm.ilv += 1;
-        self.cm.hyi += block.instructions.len() as u64;
+        self.stats.blocks_translated += 1;
+        self.stats.rv_instructions_emitted += block.instructions.len() as u64;
         block
     }
 
     
-    pub fn iev(&mut self) -> Vec<TranslatedBlock> {
-        let mut xk = Vec::new();
-        let mut fyw: Vec<usize> = Vec::new();
-        let mut bxs: Vec<u64> = Vec::new();
+    pub fn translate_all(&mut self) -> Vec<TranslatedBlock> {
+        let mut blocks = Vec::new();
+        let mut csx: Vec<usize> = Vec::new();
+        let mut anc: Vec<u64> = Vec::new();
 
-        fyw.push(0);
+        csx.push(0);
 
-        while let Some(l) = fyw.pop() {
-            let ag = self.sm + l as u64;
-            if bxs.contains(&ag) {
+        while let Some(offset) = csx.pop() {
+            let addr = self.base_addr + offset as u64;
+            if anc.contains(&addr) {
                 continue;
             }
-            bxs.push(ag);
+            anc.push(addr);
 
-            let block = self.mmw(l);
+            let block = self.translate_block(offset);
 
             
-            for &fvt in &block.bil {
-                if fvt >= self.sm {
-                    let ice = (fvt - self.sm) as usize;
-                    if ice < self.aj.len() && !bxs.contains(&fvt) {
-                        fyw.push(ice);
+            for &succ in &block.successors {
+                if succ >= self.base_addr {
+                    let eaq = (succ - self.base_addr) as usize;
+                    if eaq < self.code.len() && !anc.contains(&succ) {
+                        csx.push(eaq);
                     }
                 }
             }
 
-            xk.push(block);
+            blocks.push(block);
         }
 
-        xk
+        blocks
     }
 
     
     
-    fn hfp(&mut self, block: &mut TranslatedBlock) -> bool {
-        if self.l >= self.aj.len() {
+    fn decode_one(&mut self, block: &mut TranslatedBlock) -> bool {
+        if self.offset >= self.code.len() {
             return true;
         }
 
-        let dik = self.sm + self.l as u64;
+        let bhf = self.base_addr + self.offset as u64;
 
         
-        let mut aip: u8 = 0;
-        let mut kf = false;
-        let mut uyr = false;
+        let mut rp: u8 = 0;
+        let mut dv = false;
+        let mut nnm = false;
 
         loop {
-            if self.l >= self.aj.len() { return true; }
-            let o = self.aj[self.l];
-            match o {
-                0x66 => { uyr = true; self.l += 1; }
-                0x40..=0x4F => { aip = o; kf = true; self.l += 1; }
+            if self.offset >= self.code.len() { return true; }
+            let b = self.code[self.offset];
+            match b {
+                0x66 => { nnm = true; self.offset += 1; }
+                0x40..=0x4F => { rp = b; dv = true; self.offset += 1; }
                 0xF0 | 0xF2 | 0xF3 | 0x2E | 0x3E | 0x26 | 0x64 | 0x65 | 0x36 => {
-                    self.l += 1; 
+                    self.offset += 1; 
                 }
                 _ => break,
             }
         }
 
-        if self.l >= self.aj.len() { return true; }
+        if self.offset >= self.code.len() { return true; }
 
-        let ako = kf && (aip & 0x08) != 0;
-        let nx = kf && (aip & 0x04) != 0;
-        let pg = kf && (aip & 0x02) != 0;
-        let ic = kf && (aip & 0x01) != 0;
+        let rex_w = dv && (rp & 0x08) != 0;
+        let gb = dv && (rp & 0x04) != 0;
+        let gp = dv && (rp & 0x02) != 0;
+        let cq = dv && (rp & 0x01) != 0;
 
-        let opcode = self.aj[self.l];
-        self.l += 1;
+        let opcode = self.code[self.offset];
+        self.offset += 1;
 
         match opcode {
             
             0x90 => {
-                block.fj(RvInst::Fq);
+                block.emit(RvInst::Nop);
                 false
             }
 
             
             0xC7 => {
-                let (hb, _) = self.bmt(ic, nx);
-                let gf = self.amq() as i64;
-                let ck = ahb(hb);
-                block.fj(RvInst::Hu { ck, gf });
+                let (rm, _) = self.decode_modrm(cq, gb);
+                let imm = self.read_i32() as i64;
+                let aj = qs(rm);
+                block.emit(RvInst::Li { aj, imm });
                 false
             }
 
             
             0xB8..=0xBF => {
-                let reg = (opcode - 0xB8) + if ic { 8 } else { 0 };
-                let ck = ahb(reg);
-                let gf = if ako {
-                    self.jll()
+                let reg = (opcode - 0xB8) + if cq { 8 } else { 0 };
+                let aj = qs(reg);
+                let imm = if rex_w {
+                    self.read_i64()
                 } else {
-                    self.amq() as i64
+                    self.read_i32() as i64
                 };
-                block.fj(RvInst::Hu { ck, gf });
+                block.emit(RvInst::Li { aj, imm });
                 false
             }
 
             
             0xB0..=0xB7 => {
-                let reg = (opcode - 0xB0) + if ic { 8 } else { 0 };
-                let ck = ahb(reg);
-                let gf = self.ady() as i64;
+                let reg = (opcode - 0xB0) + if cq { 8 } else { 0 };
+                let aj = qs(reg);
+                let imm = self.read_u8() as i64;
                 
-                block.fj(RvInst::Ou { ck, cp: ck, gf: !0xFF });
-                block.fj(RvInst::Akw { ck, cp: ck, gf: gf & 0xFF });
+                block.emit(RvInst::Andi { aj, rs1: aj, imm: !0xFF });
+                block.emit(RvInst::Ori { aj, rs1: aj, imm: imm & 0xFF });
                 false
             }
 
             
             0x89 => {
-                let (hb, reg) = self.bmt(ic, nx);
-                let acl = ahb(reg);
-                let ck = ahb(hb);
-                block.fj(RvInst::Gl { ck, acl });
+                let (rm, reg) = self.decode_modrm(cq, gb);
+                let oc = qs(reg);
+                let aj = qs(rm);
+                block.emit(RvInst::Mv { aj, oc });
                 false
             }
             0x8B => {
-                let (hb, reg) = self.bmt(ic, nx);
-                let acl = ahb(hb);
-                let ck = ahb(reg);
-                block.fj(RvInst::Gl { ck, acl });
+                let (rm, reg) = self.decode_modrm(cq, gb);
+                let oc = qs(rm);
+                let aj = qs(reg);
+                block.emit(RvInst::Mv { aj, oc });
                 false
             }
 
             
             0x50..=0x57 => {
-                let reg = (opcode - 0x50) + if ic { 8 } else { 0 };
-                let acl = ahb(reg);
+                let reg = (opcode - 0x50) + if cq { 8 } else { 0 };
+                let oc = qs(reg);
                 
-                block.fj(RvInst::Gf { ck: Reg::Ds, cp: Reg::Ds, gf: -8 });
-                block.fj(RvInst::Mi { et: acl, cp: Reg::Ds, l: 0 });
+                block.emit(RvInst::Addi { aj: Reg::X2, rs1: Reg::X2, imm: -8 });
+                block.emit(RvInst::Sd { rs2: oc, rs1: Reg::X2, offset: 0 });
                 false
             }
 
             
             0x58..=0x5F => {
-                let reg = (opcode - 0x58) + if ic { 8 } else { 0 };
-                let ck = ahb(reg);
+                let reg = (opcode - 0x58) + if cq { 8 } else { 0 };
+                let aj = qs(reg);
                 
-                block.fj(RvInst::Pt { ck, cp: Reg::Ds, l: 0 });
-                block.fj(RvInst::Gf { ck: Reg::Ds, cp: Reg::Ds, gf: 8 });
+                block.emit(RvInst::Ld { aj, rs1: Reg::X2, offset: 0 });
+                block.emit(RvInst::Addi { aj: Reg::X2, rs1: Reg::X2, imm: 8 });
                 false
             }
 
             
             0x01 => {
-                let (hb, reg) = self.bmt(ic, nx);
-                let ck = ahb(hb);
-                let acl = ahb(reg);
-                block.fj(RvInst::Add { ck, cp: ck, et: acl });
-                block.fj(RvInst::Ed { cp: ck, et: Reg::Bt });
+                let (rm, reg) = self.decode_modrm(cq, gb);
+                let aj = qs(rm);
+                let oc = qs(reg);
+                block.emit(RvInst::Add { aj, rs1: aj, rs2: oc });
+                block.emit(RvInst::CmpFlags { rs1: aj, rs2: Reg::X0 });
                 false
             }
 
             
             0x03 => {
-                let (hb, reg) = self.bmt(ic, nx);
-                let ck = ahb(reg);
-                let acl = ahb(hb);
-                block.fj(RvInst::Add { ck, cp: ck, et: acl });
-                block.fj(RvInst::Ed { cp: ck, et: Reg::Bt });
+                let (rm, reg) = self.decode_modrm(cq, gb);
+                let aj = qs(reg);
+                let oc = qs(rm);
+                block.emit(RvInst::Add { aj, rs1: aj, rs2: oc });
+                block.emit(RvInst::CmpFlags { rs1: aj, rs2: Reg::X0 });
                 false
             }
 
             
             0x29 => {
-                let (hb, reg) = self.bmt(ic, nx);
-                let ck = ahb(hb);
-                let acl = ahb(reg);
-                block.fj(RvInst::Sub { ck, cp: ck, et: acl });
-                block.fj(RvInst::Ed { cp: ck, et: Reg::Bt });
+                let (rm, reg) = self.decode_modrm(cq, gb);
+                let aj = qs(rm);
+                let oc = qs(reg);
+                block.emit(RvInst::Sub { aj, rs1: aj, rs2: oc });
+                block.emit(RvInst::CmpFlags { rs1: aj, rs2: Reg::X0 });
                 false
             }
 
             
             0x2B => {
-                let (hb, reg) = self.bmt(ic, nx);
-                let ck = ahb(reg);
-                let acl = ahb(hb);
-                block.fj(RvInst::Sub { ck, cp: ck, et: acl });
-                block.fj(RvInst::Ed { cp: ck, et: Reg::Bt });
+                let (rm, reg) = self.decode_modrm(cq, gb);
+                let aj = qs(reg);
+                let oc = qs(rm);
+                block.emit(RvInst::Sub { aj, rs1: aj, rs2: oc });
+                block.emit(RvInst::CmpFlags { rs1: aj, rs2: Reg::X0 });
                 false
             }
 
             
             0x21 => {
-                let (hb, reg) = self.bmt(ic, nx);
-                let ck = ahb(hb);
-                let acl = ahb(reg);
-                block.fj(RvInst::Ex { ck, cp: ck, et: acl });
-                block.fj(RvInst::Ed { cp: ck, et: Reg::Bt });
+                let (rm, reg) = self.decode_modrm(cq, gb);
+                let aj = qs(rm);
+                let oc = qs(reg);
+                block.emit(RvInst::And { aj, rs1: aj, rs2: oc });
+                block.emit(RvInst::CmpFlags { rs1: aj, rs2: Reg::X0 });
                 false
             }
 
             
             0x09 => {
-                let (hb, reg) = self.bmt(ic, nx);
-                let ck = ahb(hb);
-                let acl = ahb(reg);
-                block.fj(RvInst::Fx { ck, cp: ck, et: acl });
-                block.fj(RvInst::Ed { cp: ck, et: Reg::Bt });
+                let (rm, reg) = self.decode_modrm(cq, gb);
+                let aj = qs(rm);
+                let oc = qs(reg);
+                block.emit(RvInst::Or { aj, rs1: aj, rs2: oc });
+                block.emit(RvInst::CmpFlags { rs1: aj, rs2: Reg::X0 });
                 false
             }
 
             
             0x31 => {
-                let (hb, reg) = self.bmt(ic, nx);
-                let ck = ahb(hb);
-                let acl = ahb(reg);
-                block.fj(RvInst::Aga { ck, cp: ck, et: acl });
-                block.fj(RvInst::Ed { cp: ck, et: Reg::Bt });
+                let (rm, reg) = self.decode_modrm(cq, gb);
+                let aj = qs(rm);
+                let oc = qs(reg);
+                block.emit(RvInst::Xor { aj, rs1: aj, rs2: oc });
+                block.emit(RvInst::CmpFlags { rs1: aj, rs2: Reg::X0 });
                 false
             }
 
             
             0x39 => {
-                let (hb, reg) = self.bmt(ic, nx);
-                let aww = ahb(hb);
-                let hyj = ahb(reg);
+                let (rm, reg) = self.decode_modrm(cq, gb);
+                let zk = qs(rm);
+                let dyd = qs(reg);
                 
-                block.fj(RvInst::Ed { cp: aww, et: hyj });
+                block.emit(RvInst::CmpFlags { rs1: zk, rs2: dyd });
                 false
             }
 
             
             0x3B => {
-                let (hb, reg) = self.bmt(ic, nx);
-                let aww = ahb(hb);
-                let hyj = ahb(reg);
-                block.fj(RvInst::Ed { cp: hyj, et: aww });
+                let (rm, reg) = self.decode_modrm(cq, gb);
+                let zk = qs(rm);
+                let dyd = qs(reg);
+                block.emit(RvInst::CmpFlags { rs1: dyd, rs2: zk });
                 false
             }
 
             
             0x83 => {
-                let (hb, lqq) = self.bmt(ic, nx);
-                let gf = self.cmd() as i64;
-                let ck = ahb(hb);
-                match lqq {
+                let (rm, op_ext) = self.decode_modrm(cq, gb);
+                let imm = self.read_i8() as i64;
+                let aj = qs(rm);
+                match op_ext {
                     0 => { 
-                        block.fj(RvInst::Gf { ck, cp: ck, gf });
-                        block.fj(RvInst::Ed { cp: ck, et: Reg::Bt });
+                        block.emit(RvInst::Addi { aj, rs1: aj, imm });
+                        block.emit(RvInst::CmpFlags { rs1: aj, rs2: Reg::X0 });
                     }
                     4 => { 
-                        block.fj(RvInst::Ou { ck, cp: ck, gf });
-                        block.fj(RvInst::Ed { cp: ck, et: Reg::Bt });
+                        block.emit(RvInst::Andi { aj, rs1: aj, imm });
+                        block.emit(RvInst::CmpFlags { rs1: aj, rs2: Reg::X0 });
                     }
                     5 => { 
-                        block.fj(RvInst::Gf { ck, cp: ck, gf: -gf });
-                        block.fj(RvInst::Ed { cp: ck, et: Reg::Bt });
+                        block.emit(RvInst::Addi { aj, rs1: aj, imm: -imm });
+                        block.emit(RvInst::CmpFlags { rs1: aj, rs2: Reg::X0 });
                     }
                     7 => { 
-                        block.fj(RvInst::Hu { ck: Reg::Bg, gf });
-                        block.fj(RvInst::Ed { cp: ck, et: Reg::Bg });
+                        block.emit(RvInst::Li { aj: Reg::X5, imm });
+                        block.emit(RvInst::CmpFlags { rs1: aj, rs2: Reg::X5 });
                     }
                     _ => {
-                        self.cm.ddf += 1;
-                        block.fj(RvInst::Fq);
+                        self.stats.unsupported_instructions += 1;
+                        block.emit(RvInst::Nop);
                     }
                 }
                 false
@@ -359,59 +359,59 @@ impl X86Decoder {
 
             
             0x85 => {
-                let (hb, reg) = self.bmt(ic, nx);
-                let aww = ahb(hb);
-                let hyj = ahb(reg);
+                let (rm, reg) = self.decode_modrm(cq, gb);
+                let zk = qs(rm);
+                let dyd = qs(reg);
                 
-                block.fj(RvInst::Ex { ck: Reg::Bg, cp: aww, et: hyj });
-                block.fj(RvInst::Ed { cp: Reg::Bg, et: Reg::Bt });
+                block.emit(RvInst::And { aj: Reg::X5, rs1: zk, rs2: dyd });
+                block.emit(RvInst::CmpFlags { rs1: Reg::X5, rs2: Reg::X0 });
                 false
             }
 
             
             0x8D => {
-                let (hb, reg) = self.bmt(ic, nx);
-                let ck = ahb(reg);
-                let acl = ahb(hb);
+                let (rm, reg) = self.decode_modrm(cq, gb);
+                let aj = qs(reg);
+                let oc = qs(rm);
                 
-                block.fj(RvInst::Gl { ck, acl });
+                block.emit(RvInst::Mv { aj, oc });
                 false
             }
 
             
             0xFF => {
-                let (hb, lqq) = self.bmt(ic, nx);
-                let ck = ahb(hb);
-                match lqq {
+                let (rm, op_ext) = self.decode_modrm(cq, gb);
+                let aj = qs(rm);
+                match op_ext {
                     0 => { 
-                        block.fj(RvInst::Gf { ck, cp: ck, gf: 1 });
-                        block.fj(RvInst::Ed { cp: ck, et: Reg::Bt });
+                        block.emit(RvInst::Addi { aj, rs1: aj, imm: 1 });
+                        block.emit(RvInst::CmpFlags { rs1: aj, rs2: Reg::X0 });
                     }
                     1 => { 
-                        block.fj(RvInst::Gf { ck, cp: ck, gf: -1 });
-                        block.fj(RvInst::Ed { cp: ck, et: Reg::Bt });
+                        block.emit(RvInst::Addi { aj, rs1: aj, imm: -1 });
+                        block.emit(RvInst::CmpFlags { rs1: aj, rs2: Reg::X0 });
                     }
                     2 => { 
                         
-                        block.fj(RvInst::Gf { ck: Reg::Ds, cp: Reg::Ds, gf: -8 });
-                        let hsu = self.sm + self.l as u64;
-                        block.fj(RvInst::Hu { ck: Reg::Bg, gf: hsu as i64 });
-                        block.fj(RvInst::Mi { et: Reg::Bg, cp: Reg::Ds, l: 0 });
-                        block.fj(RvInst::Xi { ck: Reg::Oq, cp: ck, l: 0 });
-                        block.bil.push(0); 
+                        block.emit(RvInst::Addi { aj: Reg::X2, rs1: Reg::X2, imm: -8 });
+                        let dve = self.base_addr + self.offset as u64;
+                        block.emit(RvInst::Li { aj: Reg::X5, imm: dve as i64 });
+                        block.emit(RvInst::Sd { rs2: Reg::X5, rs1: Reg::X2, offset: 0 });
+                        block.emit(RvInst::Jalr { aj: Reg::X1, rs1: aj, offset: 0 });
+                        block.successors.push(0); 
                         return true;
                     }
                     4 => { 
-                        block.fj(RvInst::Xi { ck: Reg::Bt, cp: ck, l: 0 });
+                        block.emit(RvInst::Jalr { aj: Reg::X0, rs1: aj, offset: 0 });
                         return true;
                     }
                     6 => { 
-                        block.fj(RvInst::Gf { ck: Reg::Ds, cp: Reg::Ds, gf: -8 });
-                        block.fj(RvInst::Mi { et: ck, cp: Reg::Ds, l: 0 });
+                        block.emit(RvInst::Addi { aj: Reg::X2, rs1: Reg::X2, imm: -8 });
+                        block.emit(RvInst::Sd { rs2: aj, rs1: Reg::X2, offset: 0 });
                     }
                     _ => {
-                        self.cm.ddf += 1;
-                        block.fj(RvInst::Fq);
+                        self.stats.unsupported_instructions += 1;
+                        block.emit(RvInst::Nop);
                     }
                 }
                 false
@@ -419,134 +419,134 @@ impl X86Decoder {
 
             
             0x70..=0x7F => {
-                let adj = self.cmd() as i64;
-                let cd = self.sm as i64 + self.l as i64 + adj;
-                let mo = qal(opcode & 0x0F);
-                block.fj(RvInst::Aad { mo, l: cd });
-                let kve = self.sm + self.l as u64;
-                block.bil.push(cd as u64);
-                block.bil.push(kve);
+                let ot = self.read_i8() as i64;
+                let target = self.base_addr as i64 + self.offset as i64 + ot;
+                let fc = jru(opcode & 0x0F);
+                block.emit(RvInst::BranchCond { fc, offset: target });
+                let fwe = self.base_addr + self.offset as u64;
+                block.successors.push(target as u64);
+                block.successors.push(fwe);
                 true
             }
 
             
             0xEB => {
-                let adj = self.cmd() as i64;
-                let cd = self.sm as i64 + self.l as i64 + adj;
-                block.fj(RvInst::Xh { ck: Reg::Bt, l: cd });
-                block.bil.push(cd as u64);
+                let ot = self.read_i8() as i64;
+                let target = self.base_addr as i64 + self.offset as i64 + ot;
+                block.emit(RvInst::Jal { aj: Reg::X0, offset: target });
+                block.successors.push(target as u64);
                 true
             }
 
             
             0xE9 => {
-                let adj = self.amq() as i64;
-                let cd = self.sm as i64 + self.l as i64 + adj;
-                block.fj(RvInst::Xh { ck: Reg::Bt, l: cd });
-                block.bil.push(cd as u64);
+                let ot = self.read_i32() as i64;
+                let target = self.base_addr as i64 + self.offset as i64 + ot;
+                block.emit(RvInst::Jal { aj: Reg::X0, offset: target });
+                block.successors.push(target as u64);
                 true
             }
 
             
             0xE8 => {
-                let adj = self.amq() as i64;
-                let cd = self.sm as i64 + self.l as i64 + adj;
+                let ot = self.read_i32() as i64;
+                let target = self.base_addr as i64 + self.offset as i64 + ot;
                 
-                block.fj(RvInst::Gf { ck: Reg::Ds, cp: Reg::Ds, gf: -8 });
-                let dbg = self.sm + self.l as u64;
-                block.fj(RvInst::Hu { ck: Reg::Bg, gf: dbg as i64 });
-                block.fj(RvInst::Mi { et: Reg::Bg, cp: Reg::Ds, l: 0 });
-                block.fj(RvInst::En { l: cd });
-                block.bil.push(cd as u64);
-                block.bil.push(dbg);
+                block.emit(RvInst::Addi { aj: Reg::X2, rs1: Reg::X2, imm: -8 });
+                let bdk = self.base_addr + self.offset as u64;
+                block.emit(RvInst::Li { aj: Reg::X5, imm: bdk as i64 });
+                block.emit(RvInst::Sd { rs2: Reg::X5, rs1: Reg::X2, offset: 0 });
+                block.emit(RvInst::Call { offset: target });
+                block.successors.push(target as u64);
+                block.successors.push(bdk);
                 true
             }
 
             
             0xC3 => {
                 
-                block.fj(RvInst::Pt { ck: Reg::Oq, cp: Reg::Ds, l: 0 });
-                block.fj(RvInst::Gf { ck: Reg::Ds, cp: Reg::Ds, gf: 8 });
-                block.fj(RvInst::Ama);
+                block.emit(RvInst::Ld { aj: Reg::X1, rs1: Reg::X2, offset: 0 });
+                block.emit(RvInst::Addi { aj: Reg::X2, rs1: Reg::X2, imm: 8 });
+                block.emit(RvInst::Ret);
                 true
             }
 
             
             0x0F => {
-                if self.l < self.aj.len() {
-                    let naw = self.aj[self.l];
-                    self.l += 1;
+                if self.offset < self.code.len() {
+                    let hjh = self.code[self.offset];
+                    self.offset += 1;
 
-                    match naw {
+                    match hjh {
                         0x05 => {
                             
                             
                             
-                            block.fj(RvInst::Od {
-                                arch: SourceArch::BT_,
-                                ag: dik,
+                            block.emit(RvInst::SrcAnnotation {
+                                arch: SourceArch::X86_64,
+                                addr: bhf,
                                 text: String::from("syscall"),
                             });
                             
-                            block.fj(RvInst::Gl { ck: Reg::Vd, acl: Reg::Je });
+                            block.emit(RvInst::Mv { aj: Reg::X17, oc: Reg::X10 });
                             
                             
-                            block.fj(RvInst::Gl { ck: Reg::Bg, acl: Reg::Vc });  
-                            block.fj(RvInst::Gl { ck: Reg::Je, acl: Reg::Bg });  
+                            block.emit(RvInst::Mv { aj: Reg::X5, oc: Reg::X15 });  
+                            block.emit(RvInst::Mv { aj: Reg::X10, oc: Reg::X5 });  
                             
-                            block.fj(RvInst::Gl { ck: Reg::Zo, acl: Reg::Vb });
+                            block.emit(RvInst::Mv { aj: Reg::X11, oc: Reg::X14 });
                             
                             
-                            block.fj(RvInst::Gl { ck: Reg::Va, acl: Reg::Afz });
+                            block.emit(RvInst::Mv { aj: Reg::X13, oc: Reg::X20 });
                             
-                            block.fj(RvInst::Gl { ck: Reg::Vb, acl: Reg::Afx });
+                            block.emit(RvInst::Mv { aj: Reg::X14, oc: Reg::X18 });
                             
-                            block.fj(RvInst::Gl { ck: Reg::Vc, acl: Reg::Afy });
-                            block.fj(RvInst::Wk);
+                            block.emit(RvInst::Mv { aj: Reg::X15, oc: Reg::X19 });
+                            block.emit(RvInst::Ecall);
                             
                             false
                         }
 
                         
                         0x80..=0x8F => {
-                            let adj = self.amq() as i64;
-                            let cd = self.sm as i64 + self.l as i64 + adj;
-                            let mo = qal(naw & 0x0F);
-                            block.fj(RvInst::Aad { mo, l: cd });
-                            let kve = self.sm + self.l as u64;
-                            block.bil.push(cd as u64);
-                            block.bil.push(kve);
+                            let ot = self.read_i32() as i64;
+                            let target = self.base_addr as i64 + self.offset as i64 + ot;
+                            let fc = jru(hjh & 0x0F);
+                            block.emit(RvInst::BranchCond { fc, offset: target });
+                            let fwe = self.base_addr + self.offset as u64;
+                            block.successors.push(target as u64);
+                            block.successors.push(fwe);
                             true
                         }
 
                         
                         0xB6 => {
-                            let (hb, reg) = self.bmt(ic, nx);
-                            let ck = ahb(reg);
-                            let acl = ahb(hb);
-                            block.fj(RvInst::Ou { ck, cp: acl, gf: 0xFF });
+                            let (rm, reg) = self.decode_modrm(cq, gb);
+                            let aj = qs(reg);
+                            let oc = qs(rm);
+                            block.emit(RvInst::Andi { aj, rs1: oc, imm: 0xFF });
                             false
                         }
                         0xB7 => {
-                            let (hb, reg) = self.bmt(ic, nx);
-                            let ck = ahb(reg);
-                            let acl = ahb(hb);
-                            block.fj(RvInst::Ou { ck, cp: acl, gf: 0xFFFF });
+                            let (rm, reg) = self.decode_modrm(cq, gb);
+                            let aj = qs(reg);
+                            let oc = qs(rm);
+                            block.emit(RvInst::Andi { aj, rs1: oc, imm: 0xFFFF });
                             false
                         }
 
                         
                         0xAF => {
-                            let (hb, reg) = self.bmt(ic, nx);
-                            let ck = ahb(reg);
-                            let acl = ahb(hb);
-                            block.fj(RvInst::Mul { ck, cp: ck, et: acl });
+                            let (rm, reg) = self.decode_modrm(cq, gb);
+                            let aj = qs(reg);
+                            let oc = qs(rm);
+                            block.emit(RvInst::Mul { aj, rs1: aj, rs2: oc });
                             false
                         }
 
                         _ => {
-                            self.cm.ddf += 1;
-                            block.fj(RvInst::Fq);
+                            self.stats.unsupported_instructions += 1;
+                            block.emit(RvInst::Nop);
                             false
                         }
                     }
@@ -557,32 +557,32 @@ impl X86Decoder {
 
             
             0xCD => {
-                let tvl = self.ady();
-                if tvl == 0x80 {
+                let mqu = self.read_u8();
+                if mqu == 0x80 {
                     
-                    block.fj(RvInst::Od {
-                        arch: SourceArch::BT_,
-                        ag: dik,
+                    block.emit(RvInst::SrcAnnotation {
+                        arch: SourceArch::X86_64,
+                        addr: bhf,
                         text: String::from("int 0x80 (legacy syscall)"),
                     });
-                    block.fj(RvInst::Gl { ck: Reg::Vd, acl: Reg::Je }); 
-                    block.fj(RvInst::Gl { ck: Reg::Je, acl: Reg::Va }); 
+                    block.emit(RvInst::Mv { aj: Reg::X17, oc: Reg::X10 }); 
+                    block.emit(RvInst::Mv { aj: Reg::X10, oc: Reg::X13 }); 
                     
                     
-                    block.fj(RvInst::Wk);
+                    block.emit(RvInst::Ecall);
                 }
                 false
             }
 
             
             _ => {
-                self.cm.ddf += 1;
-                block.fj(RvInst::Od {
-                    arch: SourceArch::BT_,
-                    ag: dik,
+                self.stats.unsupported_instructions += 1;
+                block.emit(RvInst::SrcAnnotation {
+                    arch: SourceArch::X86_64,
+                    addr: bhf,
                     text: format!("unsupported opcode: 0x{:02X}", opcode),
                 });
-                block.fj(RvInst::Fq);
+                block.emit(RvInst::Nop);
                 false
             }
         }
@@ -590,95 +590,95 @@ impl X86Decoder {
 
     
 
-    fn bmt(&mut self, ic: bool, nx: bool) -> (u8, u8) {
-        if self.l >= self.aj.len() {
+    fn decode_modrm(&mut self, cq: bool, gb: bool) -> (u8, u8) {
+        if self.offset >= self.code.len() {
             return (0, 0);
         }
-        let ms = self.aj[self.l];
-        self.l += 1;
+        let fi = self.code[self.offset];
+        self.offset += 1;
 
-        let omm = (ms >> 6) & 3;
-        let mut reg = (ms >> 3) & 7;
-        let mut hb = ms & 7;
+        let imz = (fi >> 6) & 3;
+        let mut reg = (fi >> 3) & 7;
+        let mut rm = fi & 7;
 
-        if nx { reg += 8; }
-        if ic { hb += 8; }
+        if gb { reg += 8; }
+        if cq { rm += 8; }
 
         
-        if omm != 3 && hb == 4 {
-            if self.l < self.aj.len() {
-                self.l += 1; 
+        if imz != 3 && rm == 4 {
+            if self.offset < self.code.len() {
+                self.offset += 1; 
             }
         }
 
         
-        match omm {
+        match imz {
             0 => {
-                if hb == 5 {
-                    self.l += 4; 
+                if rm == 5 {
+                    self.offset += 4; 
                 }
             }
-            1 => { self.l += 1; } 
-            2 => { self.l += 4; } 
+            1 => { self.offset += 1; } 
+            2 => { self.offset += 4; } 
             _ => {} 
         }
 
-        (hb, reg)
+        (rm, reg)
     }
 
-    fn ady(&mut self) -> u8 {
-        if self.l >= self.aj.len() { return 0; }
-        let p = self.aj[self.l];
-        self.l += 1;
-        p
+    fn read_u8(&mut self) -> u8 {
+        if self.offset >= self.code.len() { return 0; }
+        let v = self.code[self.offset];
+        self.offset += 1;
+        v
     }
 
-    fn cmd(&mut self) -> i8 {
-        self.ady() as i8
+    fn read_i8(&mut self) -> i8 {
+        self.read_u8() as i8
     }
 
-    fn amq(&mut self) -> i32 {
-        if self.l + 4 > self.aj.len() { return 0; }
-        let p = i32::dj([
-            self.aj[self.l],
-            self.aj[self.l + 1],
-            self.aj[self.l + 2],
-            self.aj[self.l + 3],
+    fn read_i32(&mut self) -> i32 {
+        if self.offset + 4 > self.code.len() { return 0; }
+        let v = i32::from_le_bytes([
+            self.code[self.offset],
+            self.code[self.offset + 1],
+            self.code[self.offset + 2],
+            self.code[self.offset + 3],
         ]);
-        self.l += 4;
-        p
+        self.offset += 4;
+        v
     }
 
-    fn jll(&mut self) -> i64 {
-        if self.l + 8 > self.aj.len() { return 0; }
-        let p = i64::dj([
-            self.aj[self.l], self.aj[self.l + 1],
-            self.aj[self.l + 2], self.aj[self.l + 3],
-            self.aj[self.l + 4], self.aj[self.l + 5],
-            self.aj[self.l + 6], self.aj[self.l + 7],
+    fn read_i64(&mut self) -> i64 {
+        if self.offset + 8 > self.code.len() { return 0; }
+        let v = i64::from_le_bytes([
+            self.code[self.offset], self.code[self.offset + 1],
+            self.code[self.offset + 2], self.code[self.offset + 3],
+            self.code[self.offset + 4], self.code[self.offset + 5],
+            self.code[self.offset + 6], self.code[self.offset + 7],
         ]);
-        self.l += 8;
-        p
+        self.offset += 8;
+        v
     }
 }
 
 
-fn qal(nn: u8) -> FlagCond {
-    match nn {
-        0x0 => FlagCond::Awn,    
-        0x1 => FlagCond::Awc,  
-        0x2 => FlagCond::Auz,    
-        0x3 => FlagCond::Atb,    
+fn jru(ft: u8) -> FlagCond {
+    match ft {
+        0x0 => FlagCond::Ovf,    
+        0x1 => FlagCond::NoOvf,  
+        0x2 => FlagCond::Ltu,    
+        0x3 => FlagCond::Geu,    
         0x4 => FlagCond::Eq,     
-        0x5 => FlagCond::Adl,     
-        0x6 => FlagCond::Te,     
-        0x7 => FlagCond::Jn,     
+        0x5 => FlagCond::Ne,     
+        0x6 => FlagCond::Le,     
+        0x7 => FlagCond::Gt,     
         0x8 => FlagCond::Neg,    
         0x9 => FlagCond::Pos,    
         0xC => FlagCond::Lt,     
-        0xD => FlagCond::Wr,     
-        0xE => FlagCond::Te,     
-        0xF => FlagCond::Jn,     
+        0xD => FlagCond::Ge,     
+        0xE => FlagCond::Le,     
+        0xF => FlagCond::Gt,     
         _   => FlagCond::Eq,     
     }
 }

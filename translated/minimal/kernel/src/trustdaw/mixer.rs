@@ -7,8 +7,8 @@
 use alloc::vec::Vec;
 use alloc::vec;
 
-use crate::audio::synth::{SynthEngine, Envelope, BR_};
-use super::track::{Project, Track, Note, jtg};
+use crate::audio::synth::{SynthEngine, Envelope, BT_};
+use super::track::{Project, Track, Note, fcy};
 
 
 
@@ -18,22 +18,22 @@ use super::track::{Project, Track, Note, jtg};
 #[derive(Debug, Clone, Copy)]
 pub struct MixerChannel {
     
-    pub hq: u8,
+    pub volume: u8,
     
-    pub arp: i8,
+    pub pan: i8,
     
-    pub so: bool,
+    pub muted: bool,
     
-    pub cic: bool,
+    pub solo: bool,
 }
 
 impl MixerChannel {
     pub fn new() -> Self {
         Self {
-            hq: 200,
-            arp: 0,
-            so: false,
-            cic: false,
+            volume: 200,
+            pan: 0,
+            muted: false,
+            solo: false,
         }
     }
 }
@@ -45,58 +45,58 @@ impl MixerChannel {
 
 pub struct Mixer {
     
-    pub lq: Vec<MixerChannel>,
+    pub channels: Vec<MixerChannel>,
     
-    pub euo: u8,
+    pub master_volume: u8,
 }
 
 impl Mixer {
     
-    pub fn new(uwf: usize) -> Self {
+    pub fn new(num_channels: usize) -> Self {
         Self {
-            lq: vec![MixerChannel::new(); uwf],
-            euo: 220,
+            channels: vec![MixerChannel::new(); num_channels],
+            master_volume: 220,
         }
     }
 
     
-    pub fn chv(&mut self, bm: usize, hq: u8) -> Result<(), &'static str> {
-        let channel = self.lq.ds(bm).ok_or("Invalid channel")?;
-        channel.hq = hq;
+    pub fn set_volume(&mut self, ch: usize, volume: u8) -> Result<(), &'static str> {
+        let channel = self.channels.get_mut(ch).ok_or("Invalid channel")?;
+        channel.volume = volume;
         Ok(())
     }
 
     
-    pub fn meq(&mut self, bm: usize, arp: i8) -> Result<(), &'static str> {
-        let channel = self.lq.ds(bm).ok_or("Invalid channel")?;
-        channel.arp = arp.qp(-100, 100);
+    pub fn set_pan(&mut self, ch: usize, pan: i8) -> Result<(), &'static str> {
+        let channel = self.channels.get_mut(ch).ok_or("Invalid channel")?;
+        channel.pan = pan.clamp(-100, 100);
         Ok(())
     }
 
     
-    pub fn mlo(&mut self, bm: usize) -> Result<bool, &'static str> {
-        let channel = self.lq.ds(bm).ok_or("Invalid channel")?;
-        channel.so = !channel.so;
-        Ok(channel.so)
+    pub fn toggle_mute(&mut self, ch: usize) -> Result<bool, &'static str> {
+        let channel = self.channels.get_mut(ch).ok_or("Invalid channel")?;
+        channel.muted = !channel.muted;
+        Ok(channel.muted)
     }
 
     
-    pub fn mlr(&mut self, bm: usize) -> Result<bool, &'static str> {
-        let channel = self.lq.ds(bm).ok_or("Invalid channel")?;
-        channel.cic = !channel.cic;
-        Ok(channel.cic)
+    pub fn toggle_solo(&mut self, ch: usize) -> Result<bool, &'static str> {
+        let channel = self.channels.get_mut(ch).ok_or("Invalid channel")?;
+        channel.solo = !channel.solo;
+        Ok(channel.solo)
     }
 
     
-    pub fn tng(&self) -> bool {
-        self.lq.iter().any(|r| r.cic)
+    pub fn has_solo(&self) -> bool {
+        self.channels.iter().any(|c| c.solo)
     }
 
     
-    pub fn tws(&self, bm: usize) -> bool {
-        if let Some(channel) = self.lq.get(bm) {
-            if channel.so { return false; }
-            if self.tng() { return channel.cic; }
+    pub fn is_audible(&self, ch: usize) -> bool {
+        if let Some(channel) = self.channels.get(ch) {
+            if channel.muted { return false; }
+            if self.has_solo() { return channel.solo; }
             true
         } else {
             false
@@ -105,22 +105,22 @@ impl Mixer {
 
     
     
-    pub fn qjo(&self, bm: usize, fd: i32, hw: i32) -> (i32, i32) {
-        if let Some(channel) = self.lq.get(bm) {
-            let api = channel.hq as i32;
+    pub fn apply_channel(&self, ch: usize, left: i32, right: i32) -> (i32, i32) {
+        if let Some(channel) = self.channels.get(ch) {
+            let vd = channel.volume as i32;
             
             
             
             
-            let arp = channel.arp as i32;
-            let udv = (100 - arp).qp(0, 200);
-            let vyv = (100 + arp).qp(0, 200);
+            let pan = channel.pan as i32;
+            let mxt = (100 - pan).clamp(0, 200);
+            let ogz = (100 + pan).clamp(0, 200);
 
-            let dm = fd * api / 255 * udv / 100;
-            let m = hw * api / 255 * vyv / 100;
-            (dm, m)
+            let l = left * vd / 255 * mxt / 100;
+            let r = right * vd / 255 * ogz / 100;
+            (l, r)
         } else {
-            (fd, hw)
+            (left, right)
         }
     }
 }
@@ -130,161 +130,161 @@ impl Mixer {
 
 
 
-fn vwu(track: &Track, kz: u32, vb: u32, ayz: usize) -> Vec<i32> {
-    let mut bi = vec![0i32; ayz];
+fn ofu(track: &Track, bpm: u32, start_tick: u32, aai: usize) -> Vec<i32> {
+    let mut buffer = vec![0i32; aai];
 
-    if track.ts.is_empty() {
-        return bi;
+    if track.notes.is_empty() {
+        return buffer;
     }
 
     
     let mut engine = SynthEngine::new();
-    engine.dvs(track.ve);
-    engine.qr = track.qr;
+    engine.set_waveform(track.waveform);
+    engine.envelope = track.envelope;
 
     
     
-    struct Awe {
-        dvj: usize,
-        jb: u8,
-        qm: u8,
-        lgh: bool,
+    struct Tz {
+        sample_pos: usize,
+        pitch: u8,
+        velocity: u8,
+        is_on: bool,
     }
 
-    let mut events: Vec<Awe> = Vec::new();
+    let mut events: Vec<Tz> = Vec::new();
 
-    for jp in &track.ts {
-        if jp.ckg() <= vb {
+    for note in &track.notes {
+        if note.end_tick() <= start_tick {
             continue; 
         }
 
-        let orb = if jp.vb >= vb {
-            jtg(jp.vb - vb, kz) as usize
+        let iqy = if note.start_tick >= start_tick {
+            fcy(note.start_tick - start_tick, bpm) as usize
         } else {
             0 
         };
 
-        let oqy = jtg(
-            jp.ckg().ao(vb), kz
+        let iqv = fcy(
+            note.end_tick().saturating_sub(start_tick), bpm
         ) as usize;
 
-        if orb < ayz {
-            events.push(Awe {
-                dvj: orb,
-                jb: jp.jb,
-                qm: jp.qm,
-                lgh: true,
+        if iqy < aai {
+            events.push(Tz {
+                sample_pos: iqy,
+                pitch: note.pitch,
+                velocity: note.velocity,
+                is_on: true,
             });
         }
 
-        if oqy < ayz {
-            events.push(Awe {
-                dvj: oqy,
-                jb: jp.jb,
-                qm: jp.qm,
-                lgh: false,
+        if iqv < aai {
+            events.push(Tz {
+                sample_pos: iqv,
+                pitch: note.pitch,
+                velocity: note.velocity,
+                is_on: false,
             });
         }
     }
 
     
-    events.bxf(|aa| aa.dvj);
+    events.sort_by_key(|e| e.sample_pos);
 
     
-    let mut fia = 0;
-    let mut mkd = vec![0i16; 2]; 
+    let mut cjb = 0;
+    let mut gyf = vec![0i16; 2]; 
 
-    for yr in 0..ayz {
+    for sample in 0..aai {
         
-        while fia < events.len() && events[fia].dvj <= yr {
-            let aiz = &events[fia];
-            if aiz.lgh {
-                engine.dtq(aiz.jb, aiz.qm);
+        while cjb < events.len() && events[cjb].sample_pos <= sample {
+            let rt = &events[cjb];
+            if rt.is_on {
+                engine.note_on(rt.pitch, rt.velocity);
             } else {
-                engine.djx(aiz.jb);
+                engine.note_off(rt.pitch);
             }
-            fia += 1;
+            cjb += 1;
         }
 
         
-        engine.tj(&mut mkd, 1);
+        engine.render(&mut gyf, 1);
         
-        bi[yr] = (mkd[0] as i32 + mkd[1] as i32) / 2;
+        buffer[sample] = (gyf[0] as i32 + gyf[1] as i32) / 2;
     }
 
-    bi
+    buffer
 }
 
 
 
-pub fn pcb(nv: &Project, mixer: &Mixer, kz: u32, vb: u32) -> Vec<i16> {
-    if nv.af.is_empty() {
+pub fn izw(project: &Project, mixer: &Mixer, bpm: u32, start_tick: u32) -> Vec<i16> {
+    if project.tracks.is_empty() {
         return Vec::new();
     }
 
     
-    let cng = nv.oiu();
-    if cng <= vb {
+    let total_ticks = project.length_ticks();
+    if total_ticks <= start_tick {
         return Vec::new();
     }
 
-    let vwt = cng - vb;
-    let ayz = jtg(vwt, kz) as usize;
+    let oft = total_ticks - start_tick;
+    let aai = fcy(oft, bpm) as usize;
 
-    if ayz == 0 {
+    if aai == 0 {
         return Vec::new();
     }
 
     
-    let xlf: Vec<Vec<i32>> = nv.af.iter()
-        .map(|track| vwu(track, kz, vb, ayz))
+    let pmq: Vec<Vec<i32>> = project.tracks.iter()
+        .map(|track| ofu(track, bpm, start_tick, aai))
         .collect();
 
     
-    let mut an = vec![0i16; ayz * 2];
+    let mut output = vec![0i16; aai * 2];
 
-    for yr in 0..ayz {
-        let mut glh: i32 = 0;
-        let mut gqz: i32 = 0;
+    for sample in 0..aai {
+        let mut dak: i32 = 0;
+        let mut ddp: i32 = 0;
 
-        for (gck, xle) in xlf.iter().cf() {
-            if !mixer.tws(gck) {
+        for (cuy, track_buf) in pmq.iter().enumerate() {
+            if !mixer.is_audible(cuy) {
                 continue;
             }
 
-            let ony = xle[yr];
-            let (dm, m) = mixer.qjo(gck, ony, ony);
-            glh += dm;
-            gqz += m;
+            let ioi = track_buf[sample];
+            let (l, r) = mixer.apply_channel(cuy, ioi, ioi);
+            dak += l;
+            ddp += r;
         }
 
         
-        glh = glh * mixer.euo as i32 / 255;
-        gqz = gqz * mixer.euo as i32 / 255;
+        dak = dak * mixer.master_volume as i32 / 255;
+        ddp = ddp * mixer.master_volume as i32 / 255;
 
         
-        glh = plx(glh);
-        gqz = plx(gqz);
+        dak = jgz(dak);
+        ddp = jgz(ddp);
 
-        an[yr * 2] = glh.qp(-32767, 32767) as i16;
-        an[yr * 2 + 1] = gqz.qp(-32767, 32767) as i16;
+        output[sample * 2] = dak.clamp(-32767, 32767) as i16;
+        output[sample * 2 + 1] = ddp.clamp(-32767, 32767) as i16;
     }
 
-    an
+    output
 }
 
 
-fn plx(yr: i32) -> i32 {
-    const Yz: i32 = 24000;
-    if yr > Yz {
-        let hik = yr - Yz;
-        let ahf = hik * 8000 / (hik + 8000); 
-        Yz + ahf
-    } else if yr < -Yz {
-        let hik = -yr - Yz;
-        let ahf = hik * 8000 / (hik + 8000);
-        -(Yz + ahf)
+fn jgz(sample: i32) -> i32 {
+    const Ks: i32 = 24000;
+    if sample > Ks {
+        let dox = sample - Ks;
+        let qv = dox * 8000 / (dox + 8000); 
+        Ks + qv
+    } else if sample < -Ks {
+        let dox = -sample - Ks;
+        let qv = dox * 8000 / (dox + 8000);
+        -(Ks + qv)
     } else {
-        yr
+        sample
     }
 }

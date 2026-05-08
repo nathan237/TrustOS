@@ -539,7 +539,8 @@ impl GlyphCache {
             });
         }
         
-        self.glyphs[idx].as_ref().unwrap()
+        // SAFETY: just set above in this function
+        self.glyphs[idx].as_ref().unwrap_or_else(|| unreachable!())
     }
     
     /// Draw a cached glyph to a buffer

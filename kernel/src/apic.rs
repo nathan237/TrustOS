@@ -508,6 +508,54 @@ pub fn init_ap() {
     crate::serial_println!("[APIC] AP LAPIC enabled: id={}", id);
 }
 
+/// Watchdog deadline in milliseconds (uptime_ms). 0 = disarmed.
+static WATCHDOG_DEADLINE_MS: AtomicU64 = AtomicU64::new(0);
+
+/// Arm software watchdog: reboot if not disarmed within `timeout_ms`.
+/// Called from timer handler on every APIC tick — ISA-safe reboot even if PCIe dies.
+pub fn watchdog_arm(timeout_ms: u64) {
+    let deadline = crate::time::uptime_ms() + timeout_ms;
+    WATCHDOG_DEADLINE_MS.store(deadline, Ordering::SeqCst);
+    crate::serial_println!("[WD] Armed: timeout={}ms deadline={}ms", timeout_ms, deadline);
+}
+
+/// Disarm the watchdog. Call after the dangerous operation completes successfully.
+pub fn watchdog_disarm() {
+    WATCHDOG_DEADLINE_MS.store(0, Ordering::SeqCst);
+    crate::serial_println!("[WD] Disarmed");
+}
+
+/// Quietly refresh the watchdog deadline (no log spam). Used by always-on
+/// liveness from the shell main loop. Sets deadline = max(current, now+timeout_ms).
+/// If currently disarmed (0), arms it.
+#[inline]
+pub fn watchdog_kick(timeout_ms: u64) {
+    let now = crate::time::uptime_ms();
+    let new_deadline = now + timeout_ms;
+    let cur = WATCHDOG_DEADLINE_MS.load(Ordering::Relaxed);
+    if cur == 0 || new_deadline > cur {
+        WATCHDOG_DEADLINE_MS.store(new_deadline, Ordering::Relaxed);
+    }
+}
+
+/// Called from APIC timer handler every tick. If armed and deadline passed → reboot.
+/// The reboot uses port 0x64 (keyboard controller, ISA bus) — survives PCIe death.
+#[inline(always)]
+pub fn watchdog_check() {
+    let deadline = WATCHDOG_DEADLINE_MS.load(Ordering::Relaxed);
+    if deadline == 0 { return; }
+    let now = crate::time::uptime_ms();
+    if now >= deadline {
+        crate::serial_println!("[WD] WATCHDOG TIMEOUT at {}ms — rebooting!", now);
+        // Immediate reboot via ISA keyboard controller (doesn't need PCIe)
+        unsafe {
+            x86_64::instructions::port::Port::<u8>::new(0x64).write(0xFE_u8);
+        }
+        // Fallback: ACPI reset
+        crate::acpi::reboot();
+    }
+}
+
 /// Check if APIC is enabled
 pub fn is_enabled() -> bool {
     APIC_ENABLED.load(Ordering::Relaxed)

@@ -5,10 +5,10 @@ use alloc::vec::Vec;
 use spin::Mutex;
 
 
-static AJH_: AtomicU64 = AtomicU64::new(0);
+static ALC_: AtomicU64 = AtomicU64::new(0);
 
 
-static BIU_: Mutex<Vec<(u64, u64)>> = Mutex::new(Vec::new());
+static BLA_: Mutex<Vec<(u64, u64)>> = Mutex::new(Vec::new());
 
 
 pub fn init() {
@@ -16,55 +16,55 @@ pub fn init() {
 }
 
 
-pub fn lc() -> u64 {
-    AJH_.load(Ordering::Relaxed)
+pub fn uptime_ms() -> u64 {
+    ALC_.load(Ordering::Relaxed)
 }
 
 
-pub fn evk() -> u64 {
-    lc() * 1_000_000
+pub fn cbx() -> u64 {
+    uptime_ms() * 1_000_000
 }
 
 
-pub fn ave() -> u64 {
-    AJH_.load(Ordering::Relaxed)
+pub fn yf() -> u64 {
+    ALC_.load(Ordering::Relaxed)
 }
 
 
-pub fn or() {
-    AJH_.fetch_add(10, Ordering::Relaxed); 
+pub fn tick() {
+    ALC_.fetch_add(10, Ordering::Relaxed); 
 
     
-    vmw();
+    nyn();
 }
 
 
 
-pub fn vuf(ni: u64, eao: u64) {
-    let mut fm = BIU_.lock();
-    fm.push((eao, ni));
+pub fn oek(tid: u64, brr: u64) {
+    let mut q = BLA_.lock();
+    q.push((brr, tid));
 }
 
 
-fn vmw() {
-    let iu = evk();
-    let mut fm = BIU_.lock();
+fn nyn() {
+    let cy = cbx();
+    let mut q = BLA_.lock();
     
-    let mut a = 0;
-    while a < fm.len() {
-        if iu >= fm[a].0 {
-            let ni = fm[a].1;
-            fm.zqh(a);
+    let mut i = 0;
+    while i < q.len() {
+        if cy >= q[i].0 {
+            let tid = q[i].1;
+            q.swap_remove(i);
             
             
-            crate::thread::wake(ni);
+            crate::thread::wake(tid);
         } else {
-            a += 1;
+            i += 1;
         }
     }
 }
 
 
-pub fn cnn() -> u64 {
-    lc() / 1000
+pub fn uptime_secs() -> u64 {
+    uptime_ms() / 1000
 }

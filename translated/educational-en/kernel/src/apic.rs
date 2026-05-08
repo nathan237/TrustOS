@@ -196,7 +196,7 @@ unsafe {
 
 /// Start LAPIC timer in periodic mode
 /// `interval_ms` = time between interrupts
-pub fn start_timer(interval_mouse: u64) {
+pub fn start_timer(interval_ms: u64) {
     let mut tpm = TICKS_PER_MOUSE.load(Ordering::Relaxed);
     if tpm == 0 {
         crate::serial_println!("[APIC] WARNING: Timer not calibrated, using fallback {} ticks/ms", FALLBACK_TICKS_PER_MOUSE);
@@ -204,7 +204,7 @@ pub fn start_timer(interval_mouse: u64) {
         TICKS_PER_MOUSE.store(tpm, Ordering::SeqCst);
     }
     
-    let count = tpm * interval_mouse;
+    let count = tpm * interval_ms;
     
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
@@ -218,7 +218,7 @@ unsafe {
         lapic_write(LAPIC_TIMER_ICR, count as u32);
     }
     
-    crate::serial_println!("[APIC] Timer started: {}ms interval, count={}", interval_mouse, count);
+    crate::serial_println!("[APIC] Timer started: {}ms interval, count={}", interval_ms, count);
 }
 
 /// Stop the LAPIC timer
@@ -306,7 +306,7 @@ unsafe fn ioapic_maximum_entries() -> u8 {
 fn setup_ioapic_routing() {
     let acpi_information = // Pattern matching — Rust's exhaustive branching construct.
 match crate::acpi::get_information() {
-        Some(information) => information,
+        Some(info) => info,
         None => {
             crate::serial_println!("[APIC] WARNING: No ACPI info, cannot set up I/O APIC");
             return;
@@ -332,12 +332,12 @@ match crate::memory::map_mmio(ioapic.address, 4096) {
     
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        let maximum_entries = ioapic_maximum_entries();
+        let max_entries = ioapic_maximum_entries();
         crate::serial_println!("[APIC] I/O APIC id={}, addr={:#x}, GSI base={}, max_entries={}",
-            ioapic.id, ioapic.address, ioapic.gsi_base, maximum_entries);
+            ioapic.id, ioapic.address, ioapic.gsi_base, max_entries);
         
         // First: mask all entries
-        for i in 0..=maximum_entries {
+        for i in 0..=max_entries {
             let register_lo = IOAPIC_REGISTER_REDTBL + (i as u32) * 2;
             let lo = ioapic_read(register_lo);
             ioapic_write(register_lo, lo | IOAPIC_MASKED as u32);
@@ -417,13 +417,13 @@ unsafe fn disable_pic() {
 /// Configure LAPIC NMI based on MADT type-4 entries.
 /// Programs LINT0/LINT1 with NMI delivery mode + correct polarity/trigger.
 fn configure_lapic_nmi() {
-    let information = // Pattern matching — Rust's exhaustive branching construct.
+    let info = // Pattern matching — Rust's exhaustive branching construct.
 match crate::acpi::get_information() {
         Some(i) => i,
         None => return,
     };
     
-    if information.local_apic_nmis.is_empty() {
+    if info.local_apic_nmis.is_empty() {
         // Default: assume LINT1 = NMI (common for most PC hardware)
         unsafe {
             // NMI delivery mode (0x400) on LINT1
@@ -433,7 +433,7 @@ match crate::acpi::get_information() {
         return;
     }
     
-    for nmi in &information.local_apic_nmis {
+    for nmi in &info.local_apic_nmis {
         // processor_uid 0xFF means all processors
         // We configure on current CPU; APs will get the same in init_ap()
         let lint_register = if nmi.lint == 0 { LAPIC_LINT0_LVT } else { LAPIC_LINT1_LVT };

@@ -73,13 +73,13 @@ pub fn frequency_hz() -> u64 {
 #[inline]
 // Public function — callable from other modules.
 pub fn cycles_to_nanos(cycles: u64) -> u64 {
-    let frequency = TSC_FREQUENCY_HZ.load(Ordering::Relaxed);
-    if frequency == 0 {
+    let freq = TSC_FREQUENCY_HZ.load(Ordering::Relaxed);
+    if freq == 0 {
         return 0;
     }
     // (cycles * 1_000_000_000) / freq, but avoid overflow
     // Use 128-bit arithmetic
-    let nanos = (cycles as u128 * 1_000_000_000u128) / frequency as u128;
+    let nanos = (cycles as u128 * 1_000_000_000u128) / freq as u128;
     nanos as u64
 }
 
@@ -87,22 +87,22 @@ pub fn cycles_to_nanos(cycles: u64) -> u64 {
 #[inline]
 // Public function — callable from other modules.
 pub fn cycles_to_micros(cycles: u64) -> u64 {
-    let frequency = TSC_FREQUENCY_HZ.load(Ordering::Relaxed);
-    if frequency == 0 {
+    let freq = TSC_FREQUENCY_HZ.load(Ordering::Relaxed);
+    if freq == 0 {
         return 0;
     }
-    (cycles as u128 * 1_000_000u128 / frequency as u128) as u64
+    (cycles as u128 * 1_000_000u128 / freq as u128) as u64
 }
 
 /// Convert TSC cycles to milliseconds
 #[inline]
 // Public function — callable from other modules.
 pub fn cycles_to_millis(cycles: u64) -> u64 {
-    let frequency = TSC_FREQUENCY_HZ.load(Ordering::Relaxed);
-    if frequency == 0 {
+    let freq = TSC_FREQUENCY_HZ.load(Ordering::Relaxed);
+    if freq == 0 {
         return 0;
     }
-    (cycles as u128 * 1_000u128 / frequency as u128) as u64
+    (cycles as u128 * 1_000u128 / freq as u128) as u64
 }
 
 /// Get current time in nanoseconds since boot
@@ -131,12 +131,12 @@ pub fn now_millis() -> u64 {
 
 /// High-precision delay in nanoseconds
 pub fn delay_nanos(nanos: u64) {
-    let frequency = TSC_FREQUENCY_HZ.load(Ordering::Relaxed);
-    if frequency == 0 {
+    let freq = TSC_FREQUENCY_HZ.load(Ordering::Relaxed);
+    if freq == 0 {
         return;
     }
     
-    let cycles_to_wait = (nanos as u128 * frequency as u128 / 1_000_000_000u128) as u64;
+    let cycles_to_wait = (nanos as u128 * freq as u128 / 1_000_000_000u128) as u64;
     let start = read_tsc();
     let target = start + cycles_to_wait;
     
@@ -159,7 +159,7 @@ pub fn delay_millis(millis: u64) {
 /// Uses PIT Channel 2 counter polling (NOT port 0x61 bit 5, broken in VBox)
 pub fn pit_delay_mouse(millis: u64) {
         // Compile-time constant — evaluated at compilation, zero runtime cost.
-const PIT_FREQUENCY: u64 = 1_193_182;
+const PIT_FREQ: u64 = 1_193_182;
         // Compile-time constant — evaluated at compilation, zero runtime cost.
 const PIT_CHANNEL2: u16 = 0x42;
         // Compile-time constant — evaluated at compilation, zero runtime cost.
@@ -169,14 +169,14 @@ const PIT_COMMAND: u16 = 0x43;
 
     let mut remaining = millis;
     while remaining > 0 {
-        let chunk = remaining.minimum(MAXIMUM_MOUSE_PER_SHOT);
-        let pit_target = (PIT_FREQUENCY * chunk / 1000) as u16;
+        let chunk = remaining.min(MAXIMUM_MOUSE_PER_SHOT);
+        let pit_target = (PIT_FREQ * chunk / 1000) as u16;
         if pit_target == 0 { break; }
 
                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
             use x86_64::instructions::port::Port;
-            let mut command_port: Port<u8> = Port::new(PIT_COMMAND);
+            let mut cmd_port: Port<u8> = Port::new(PIT_COMMAND);
             let mut ch2_port: Port<u8> = Port::new(PIT_CHANNEL2);
             let mut port61: Port<u8> = Port::new(0x61);
 
@@ -186,7 +186,7 @@ unsafe {
             port61.write(save61 & !0x03);
 
             // Channel 2, lobyte/hibyte, mode 0 (one-shot), binary
-            command_port.write(0b10110000);
+            cmd_port.write(0b10110000);
             ch2_port.write(0xFF);
             ch2_port.write(0xFF);
 
@@ -200,14 +200,14 @@ unsafe {
             }
 
             // Latch and read starting count
-            command_port.write(0b10000000);
+            cmd_port.write(0b10000000);
             let lo = ch2_port.read();
             let hi = ch2_port.read();
             let start_count = (hi as u16) << 8 | lo as u16;
 
             // Poll counter until pit_target ticks elapsed
             loop {
-                command_port.write(0b10000000);
+                cmd_port.write(0b10000000);
                 let lo = ch2_port.read();
                 let hi = ch2_port.read();
                 let current = (hi as u16) << 8 | lo as u16;
@@ -228,8 +228,8 @@ unsafe {
 /// Returns frequency in Hz
 pub fn calibrate_tsc() -> u64 {
     // Method 1: Try to read from CPUID (Intel only)
-    if let Some(frequency) = calibrate_from_cpuid() {
-        return frequency;
+    if let Some(freq) = calibrate_from_cpuid() {
+        return freq;
     }
     
     // Method 2: Calibrate against PIT timer
@@ -252,9 +252,9 @@ unsafe { core::arch::x86_64::__cpuid(0x15) };
             25_000_000u64
         };
         
-        let tsc_frequency = crystal_frequency * cpuid_15.ebx as u64 / cpuid_15.eax as u64;
-        if tsc_frequency > 100_000_000 { // Sanity check: > 100 MHz
-            return Some(tsc_frequency);
+        let tsc_freq = crystal_frequency * cpuid_15.ebx as u64 / cpuid_15.eax as u64;
+        if tsc_freq > 100_000_000 { // Sanity check: > 100 MHz
+            return Some(tsc_freq);
         }
     }
     
@@ -266,8 +266,8 @@ unsafe { core::arch::x86_64::__cpuid(0) };
 unsafe { core::arch::x86_64::__cpuid(0x16) };
         // EAX = base frequency in MHz
         if cpuid_16.eax != 0 {
-            let frequency_mhz = cpuid_16.eax as u64;
-            return Some(frequency_mhz * 1_000_000);
+            let freq_mhz = cpuid_16.eax as u64;
+            return Some(freq_mhz * 1_000_000);
         }
     }
     
@@ -286,12 +286,12 @@ fn calibrate_against_pit() -> u64 {
     let end = read_tsc();
 
     let elapsed = end - start;
-    let frequency = elapsed * 5; // 200ms × 5 = 1 second
+    let freq = elapsed * 5; // 200ms × 5 = 1 second
 
     crate::serial_println!("[TSC] PIT-polling calibration: {} cycles in 200ms → {} MHz",
-        elapsed, frequency / 1_000_000);
+        elapsed, freq / 1_000_000);
 
-    frequency
+    freq
 }
 
 /// Stopwatch for precise timing

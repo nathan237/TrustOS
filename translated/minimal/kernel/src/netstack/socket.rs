@@ -13,20 +13,20 @@ use spin::Mutex;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u16)]
 pub enum AddressFamily {
-    Bvk = 0,
-    Cow = 1,    
-    Aje = 2,    
-    Cfv = 10,  
+    Unspec = 0,
+    Unix = 1,    
+    Inet = 2,    
+    Inet6 = 10,  
 }
 
 impl From<u16> for AddressFamily {
-    fn from(p: u16) -> Self {
-        match p {
-            0 => Self::Bvk,
-            1 => Self::Cow,
-            2 => Self::Aje,
-            10 => Self::Cfv,
-            _ => Self::Bvk,
+    fn from(v: u16) -> Self {
+        match v {
+            0 => Self::Unspec,
+            1 => Self::Unix,
+            2 => Self::Inet,
+            10 => Self::Inet6,
+            _ => Self::Unspec,
         }
     }
 }
@@ -35,18 +35,18 @@ impl From<u16> for AddressFamily {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
 pub enum SocketType {
-    Qw = 1,     
-    Abb = 2,      
-    Axl = 3,        
+    Stream = 1,     
+    Dgram = 2,      
+    Raw = 3,        
 }
 
 impl From<u32> for SocketType {
-    fn from(p: u32) -> Self {
-        match p {
-            1 => Self::Qw,
-            2 => Self::Abb,
-            3 => Self::Axl,
-            _ => Self::Qw,
+    fn from(v: u32) -> Self {
+        match v {
+            1 => Self::Stream,
+            2 => Self::Dgram,
+            3 => Self::Raw,
+            _ => Self::Stream,
         }
     }
 }
@@ -54,42 +54,42 @@ impl From<u32> for SocketType {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SocketState {
-    Cu,
-    Vq,
-    Blk,
-    Aas,
-    Dl,
-    Dk,
+    Created,
+    Bound,
+    Listening,
+    Connecting,
+    Connected,
+    Closed,
 }
 
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
 pub struct SockAddrIn {
-    pub wot: u16,      
-    pub pla: u16,        
-    pub pky: u32,        
-    pub wou: [u8; 8],    
+    pub sin_family: u16,      
+    pub sin_port: u16,        
+    pub sin_addr: u32,        
+    pub sin_zero: [u8; 8],    
 }
 
 impl SockAddrIn {
-    pub const Am: usize = 16;
+    pub const Z: usize = 16;
     
     pub fn new(ip: [u8; 4], port: u16) -> Self {
         Self {
-            wot: AddressFamily::Aje as u16,
-            pla: port.zsu(),
-            pky: u32::oa(ip),
-            wou: [0; 8],
+            sin_family: AddressFamily::Inet as u16,
+            sin_port: port.to_be(),
+            sin_addr: u32::from_be_bytes(ip),
+            sin_zero: [0; 8],
         }
     }
     
     pub fn ip(&self) -> [u8; 4] {
-        self.pky.ft()
+        self.sin_addr.to_be_bytes()
     }
     
     pub fn port(&self) -> u16 {
-        u16::eqv(self.pla)
+        u16::from_be(self.sin_port)
     }
 }
 
@@ -97,217 +97,217 @@ impl SockAddrIn {
 #[derive(Debug)]
 pub struct Socket {
     pub family: AddressFamily,
-    pub bif: SocketType,
+    pub sock_type: SocketType,
     pub protocol: u32,
-    pub g: SocketState,
+    pub state: SocketState,
     
     
-    pub ljn: Option<SockAddrIn>,
-    pub ahq: u16,
+    pub local_addr: Option<SockAddrIn>,
+    pub local_port: u16,
     
     
-    pub exp: Option<SockAddrIn>,
+    pub remote_addr: Option<SockAddrIn>,
     
     
-    pub fwi: u16,
+    pub tcp_src_port: u16,
     
     
-    pub ehx: Vec<u8>,
-    pub wbs: bool,
+    pub rx_buffer: Vec<u8>,
+    pub rx_closed: bool,
     
     
-    pub fao: Vec<u8>,
+    pub tx_buffer: Vec<u8>,
     
     
-    pub oqv: bool,
+    pub non_blocking: bool,
     
     
-    pub dea: u32,
-    pub vgq: Vec<SockAddrIn>,
+    pub backlog: u32,
+    pub pending_connections: Vec<SockAddrIn>,
 }
 
 impl Socket {
-    pub fn new(family: AddressFamily, bif: SocketType, protocol: u32) -> Self {
+    pub fn new(family: AddressFamily, sock_type: SocketType, protocol: u32) -> Self {
         Self {
             family,
-            bif,
+            sock_type,
             protocol,
-            g: SocketState::Cu,
-            ljn: None,
-            ahq: 0,
-            exp: None,
-            fwi: 0,
-            ehx: Vec::new(),
-            wbs: false,
-            fao: Vec::new(),
-            oqv: false,
-            dea: 0,
-            vgq: Vec::new(),
+            state: SocketState::Created,
+            local_addr: None,
+            local_port: 0,
+            remote_addr: None,
+            tcp_src_port: 0,
+            rx_buffer: Vec::new(),
+            rx_closed: false,
+            tx_buffer: Vec::new(),
+            non_blocking: false,
+            backlog: 0,
+            pending_connections: Vec::new(),
         }
     }
 }
 
 
-pub static BA_: Mutex<BTreeMap<i32, Socket>> = Mutex::new(BTreeMap::new());
-static BBK_: AtomicI32 = AtomicI32::new(100); 
-static VS_: AtomicU16 = AtomicU16::new(49152);
+pub static BC_: Mutex<BTreeMap<i32, Socket>> = Mutex::new(BTreeMap::new());
+static BDN_: AtomicI32 = AtomicI32::new(100); 
+static XB_: AtomicU16 = AtomicU16::new(49152);
 
 
-pub fn socket(vh: u16, bif: u32, protocol: u32) -> Result<i32, i32> {
-    let family = AddressFamily::from(vh);
-    let pph = SocketType::from(bif & 0xFF); 
+pub fn socket(domain: u16, sock_type: u32, protocol: u32) -> Result<i32, i32> {
+    let family = AddressFamily::from(domain);
+    let jjj = SocketType::from(sock_type & 0xFF); 
     
     
-    if family != AddressFamily::Aje {
+    if family != AddressFamily::Inet {
         crate::serial_println!("[SOCKET] Only AF_INET supported");
         return Err(-22); 
     }
     
-    let su = Socket::new(family, pph, protocol);
-    let da = BBK_.fetch_add(1, Ordering::Relaxed);
+    let ih = Socket::new(family, jjj, protocol);
+    let fd = BDN_.fetch_add(1, Ordering::Relaxed);
     
-    BA_.lock().insert(da, su);
+    BC_.lock().insert(fd, ih);
     
-    crate::serial_println!("[SOCKET] Created socket fd={} type={:?}", da, pph);
-    Ok(da)
+    crate::serial_println!("[SOCKET] Created socket fd={} type={:?}", fd, jjj);
+    Ok(fd)
 }
 
 
-pub fn kdj(da: i32, ag: &SockAddrIn) -> Result<(), i32> {
-    let mut gg = BA_.lock();
-    let su = gg.ds(&da).ok_or(-9)?; 
+pub fn fjf(fd: i32, addr: &SockAddrIn) -> Result<(), i32> {
+    let mut bs = BC_.lock();
+    let ih = bs.get_mut(&fd).ok_or(-9)?; 
     
-    if su.g != SocketState::Cu {
+    if ih.state != SocketState::Created {
         return Err(-22); 
     }
     
-    su.ljn = Some(*ag);
-    su.ahq = ag.port();
-    su.g = SocketState::Vq;
+    ih.local_addr = Some(*addr);
+    ih.local_port = addr.port();
+    ih.state = SocketState::Bound;
     
-    crate::serial_println!("[SOCKET] Bound fd={} to port {}", da, ag.port());
+    crate::serial_println!("[SOCKET] Bound fd={} to port {}", fd, addr.port());
     Ok(())
 }
 
 
-pub fn ojr(da: i32, dea: u32) -> Result<(), i32> {
-    let mut gg = BA_.lock();
-    let su = gg.ds(&da).ok_or(-9)?;
+pub fn iks(fd: i32, backlog: u32) -> Result<(), i32> {
+    let mut bs = BC_.lock();
+    let ih = bs.get_mut(&fd).ok_or(-9)?;
     
-    if su.bif != SocketType::Qw {
+    if ih.sock_type != SocketType::Stream {
         return Err(-95); 
     }
     
-    if su.g != SocketState::Vq {
+    if ih.state != SocketState::Bound {
         return Err(-22); 
     }
     
-    su.g = SocketState::Blk;
-    su.dea = dea.am(1);
-    let port = su.ahq;
-    let bl = su.dea;
-    drop(gg);
+    ih.state = SocketState::Listening;
+    ih.backlog = backlog.max(1);
+    let port = ih.local_port;
+    let bl = ih.backlog;
+    drop(bs);
 
     
-    crate::netstack::tcp::jdt(port, bl);
-    crate::serial_println!("[SOCKET] Listening fd={} port={} backlog={}", da, port, bl);
+    crate::netstack::tcp::etd(port, bl);
+    crate::serial_println!("[SOCKET] Listening fd={} port={} backlog={}", fd, port, bl);
     Ok(())
 }
 
 
-pub fn qes(da: i32, azf: u64, bye: u64) -> Result<i32, i32> {
-    let fnd = {
-        let gg = BA_.lock();
-        let su = gg.get(&da).ok_or(-9i32)?; 
-        if su.g != SocketState::Blk {
+pub fn jtj(fd: i32, addr_ptr: u64, addr_len_ptr: u64) -> Result<i32, i32> {
+    let cmi = {
+        let bs = BC_.lock();
+        let ih = bs.get(&fd).ok_or(-9i32)?; 
+        if ih.state != SocketState::Listening {
             return Err(-22); 
         }
-        su.ahq
+        ih.local_port
     };
 
     
     for _ in 0..2000 {
         crate::netstack::poll();
 
-        if let Some((ey, ams, bci)) =
-            crate::netstack::tcp::iir(fnd)
+        if let Some((src_port, tn, remote_port)) =
+            crate::netstack::tcp::eew(cmi)
         {
-            let anp = BBK_.fetch_add(1, Ordering::Relaxed);
-            let mut hss = Socket::new(AddressFamily::Aje, SocketType::Qw, 0);
-            hss.g = SocketState::Dl;
-            hss.ahq = ey;
-            hss.fwi = ey;
-            hss.exp = Some(SockAddrIn::new(ams, bci));
-            BA_.lock().insert(anp, hss);
+            let ue = BDN_.fetch_add(1, Ordering::Relaxed);
+            let mut dvd = Socket::new(AddressFamily::Inet, SocketType::Stream, 0);
+            dvd.state = SocketState::Connected;
+            dvd.local_port = src_port;
+            dvd.tcp_src_port = src_port;
+            dvd.remote_addr = Some(SockAddrIn::new(tn, remote_port));
+            BC_.lock().insert(ue, dvd);
 
             
-            if azf != 0 && bye != 0 {
-                let bcm = SockAddrIn::new(ams, bci);
-                if crate::memory::sw(azf, core::mem::size_of::<SockAddrIn>(), true) {
-                    unsafe { *(azf as *mut SockAddrIn) = bcm; }
+            if addr_ptr != 0 && addr_len_ptr != 0 {
+                let acl = SockAddrIn::new(tn, remote_port);
+                if crate::memory::ij(addr_ptr, core::mem::size_of::<SockAddrIn>(), true) {
+                    unsafe { *(addr_ptr as *mut SockAddrIn) = acl; }
                 }
-                if crate::memory::sw(bye, 4, true) {
-                    unsafe { *(bye as *mut u32) = core::mem::size_of::<SockAddrIn>() as u32; }
+                if crate::memory::ij(addr_len_ptr, 4, true) {
+                    unsafe { *(addr_len_ptr as *mut u32) = core::mem::size_of::<SockAddrIn>() as u32; }
                 }
             }
 
             crate::serial_println!(
                 "[SOCKET] accept fd={} -> new_fd={} remote={}:{}",
-                da, anp,
-                ams.iter().map(|o| alloc::format!("{}", o)).collect::<alloc::vec::Vec<_>>().rr("."),
-                bci
+                fd, ue,
+                tn.iter().map(|b| alloc::format!("{}", b)).collect::<alloc::vec::Vec<_>>().join("."),
+                remote_port
             );
-            return Ok(anp);
+            return Ok(ue);
         }
 
         
-        for _ in 0..5000 { core::hint::hc(); }
+        for _ in 0..5000 { core::hint::spin_loop(); }
     }
 
     Err(-11) 
 }
 
 
-pub fn ipa(da: i32, ag: &SockAddrIn) -> Result<(), i32> {
+pub fn connect(fd: i32, addr: &SockAddrIn) -> Result<(), i32> {
     
-    let (bif, ahq) = {
-        let mut gg = BA_.lock();
-        let su = gg.ds(&da).ok_or(-9)?;
+    let (sock_type, local_port) = {
+        let mut bs = BC_.lock();
+        let ih = bs.get_mut(&fd).ok_or(-9)?;
         
-        if su.g != SocketState::Cu && su.g != SocketState::Vq {
+        if ih.state != SocketState::Created && ih.state != SocketState::Bound {
             return Err(-106); 
         }
         
         
-        if su.ahq == 0 {
-            su.ahq = VS_.fetch_add(1, Ordering::Relaxed);
+        if ih.local_port == 0 {
+            ih.local_port = XB_.fetch_add(1, Ordering::Relaxed);
         }
         
-        su.exp = Some(*ag);
-        su.g = SocketState::Aas;
+        ih.remote_addr = Some(*addr);
+        ih.state = SocketState::Connecting;
         
-        (su.bif, su.ahq)
+        (ih.sock_type, ih.local_port)
     };
     
-    let kv = ag.ip();
-    let rz = ag.port();
+    let dest_ip = addr.ip();
+    let dest_port = addr.port();
     
     crate::serial_println!(
         "[SOCKET] Connecting fd={} to {}.{}.{}.{}:{}",
-        da, kv[0], kv[1], kv[2], kv[3], rz
+        fd, dest_ip[0], dest_ip[1], dest_ip[2], dest_ip[3], dest_port
     );
     
-    if bif == SocketType::Qw {
+    if sock_type == SocketType::Stream {
         
-        match crate::netstack::tcp::cue(kv, rz) {
-            Ok(ey) => {
-                let mut gg = BA_.lock();
-                if let Some(su) = gg.ds(&da) {
-                    su.fwi = ey;
+        match crate::netstack::tcp::azp(dest_ip, dest_port) {
+            Ok(src_port) => {
+                let mut bs = BC_.lock();
+                if let Some(ih) = bs.get_mut(&fd) {
+                    ih.tcp_src_port = src_port;
                 }
             }
-            Err(aa) => {
-                crate::serial_println!("[SOCKET] SYN failed: {}", aa);
+            Err(e) => {
+                crate::serial_println!("[SOCKET] SYN failed: {}", e);
                 return Err(-111); 
             }
         }
@@ -317,106 +317,106 @@ pub fn ipa(da: i32, ag: &SockAddrIn) -> Result<(), i32> {
             crate::netstack::poll();
             
             
-            if crate::netstack::tcp::lfz(kv, rz) {
-                let mut gg = BA_.lock();
-                if let Some(su) = gg.ds(&da) {
-                    su.g = SocketState::Dl;
+            if crate::netstack::tcp::czx(dest_ip, dest_port) {
+                let mut bs = BC_.lock();
+                if let Some(ih) = bs.get_mut(&fd) {
+                    ih.state = SocketState::Connected;
                 }
-                crate::serial_println!("[SOCKET] Connected fd={}", da);
+                crate::serial_println!("[SOCKET] Connected fd={}", fd);
                 return Ok(());
             }
             
             
-            for _ in 0..10000 { core::hint::hc(); }
+            for _ in 0..10000 { core::hint::spin_loop(); }
         }
         
         Err(-110) 
     } else {
         
-        let mut gg = BA_.lock();
-        if let Some(su) = gg.ds(&da) {
-            su.g = SocketState::Dl;
+        let mut bs = BC_.lock();
+        if let Some(ih) = bs.get_mut(&fd) {
+            ih.state = SocketState::Connected;
         }
         Ok(())
     }
 }
 
 
-pub fn baq(da: i32, f: &[u8], ddp: u32) -> Result<usize, i32> {
-    let (bif, bwq, mkc, ahq) = {
-        let gg = BA_.lock();
-        let su = gg.get(&da).ok_or(-9)?;
+pub fn send(fd: i32, data: &[u8], bej: u32) -> Result<usize, i32> {
+    let (sock_type, remote, tcp_port, local_port) = {
+        let bs = BC_.lock();
+        let ih = bs.get(&fd).ok_or(-9)?;
         
-        if su.g != SocketState::Dl {
+        if ih.state != SocketState::Connected {
             return Err(-107); 
         }
         
-        let bwq = su.exp.ok_or(-89)?; 
-        (su.bif, bwq, su.fwi, su.ahq)
+        let remote = ih.remote_addr.ok_or(-89)?; 
+        (ih.sock_type, remote, ih.tcp_src_port, ih.local_port)
     };
     
     
-    if f.len() > 65507 { 
+    if data.len() > 65507 { 
         return Err(-90); 
     }
     
-    match bif {
-        SocketType::Qw => {
+    match sock_type {
+        SocketType::Stream => {
             
-            crate::netstack::tcp::fuf(bwq.ip(), bwq.port(), mkc, f)
-                .jd(|_| -104)?; 
-            Ok(f.len())
+            crate::netstack::tcp::cqj(remote.ip(), remote.port(), tcp_port, data)
+                .map_err(|_| -104)?; 
+            Ok(data.len())
         }
-        SocketType::Abb => {
+        SocketType::Dgram => {
             
-            crate::netstack::udp::dlp(bwq.ip(), bwq.port(), ahq, f)
-                .jd(|_| -101)?; 
-            Ok(f.len())
+            crate::netstack::udp::azq(remote.ip(), remote.port(), local_port, data)
+                .map_err(|_| -101)?; 
+            Ok(data.len())
         }
         _ => Err(-95), 
     }
 }
 
 
-pub fn ehf(da: i32, k: &mut [u8], ddp: u32) -> Result<usize, i32> {
-    let (bif, bwq, mkc) = {
-        let gg = BA_.lock();
-        let su = gg.get(&da).ok_or(-9)?;
+pub fn recv(fd: i32, buf: &mut [u8], bej: u32) -> Result<usize, i32> {
+    let (sock_type, remote, tcp_port) = {
+        let bs = BC_.lock();
+        let ih = bs.get(&fd).ok_or(-9)?;
         
-        if su.g != SocketState::Dl {
+        if ih.state != SocketState::Connected {
             return Err(-107); 
         }
         
-        let bwq = su.exp.ok_or(-107)?;
-        (su.bif, bwq, su.fwi)
+        let remote = ih.remote_addr.ok_or(-107)?;
+        (ih.sock_type, remote, ih.tcp_src_port)
     };
     
     
     crate::netstack::poll();
     
-    match bif {
-        SocketType::Qw => {
+    match sock_type {
+        SocketType::Stream => {
             
-            let f = crate::netstack::tcp::pam(bwq.ip(), bwq.port(), mkc);
+            let data = crate::netstack::tcp::iyp(remote.ip(), remote.port(), tcp_port);
             
-            if let Some(f) = f {
-                let len = f.len().v(k.len());
-                k[..len].dg(&f[..len]);
+            if let Some(data) = data {
+                let len = data.len().min(buf.len());
+                buf[..len].copy_from_slice(&data[..len]);
                 Ok(len)
             } else {
                 
                 Err(-11) 
             }
         }
-        SocketType::Abb => {
-            let ahq = {
-                let gg = BA_.lock();
-                let su = gg.get(&da).ok_or(-9)?;
-                su.ahq
+        SocketType::Dgram => {
+            let local_port = {
+                let bs = BC_.lock();
+                let ih = bs.get(&fd).ok_or(-9)?;
+                ih.local_port
             };
-            if let Some(f) = crate::netstack::udp::jlt(ahq) {
-                let len = f.len().v(k.len());
-                k[..len].dg(&f[..len]);
+            if let Some(data) = crate::netstack::udp::eyc(local_port) {
+                let len = data.len().min(buf.len());
+                buf[..len].copy_from_slice(&data[..len]);
                 Ok(len)
             } else {
                 Err(-11) 
@@ -427,70 +427,70 @@ pub fn ehf(da: i32, k: &mut [u8], ddp: u32) -> Result<usize, i32> {
 }
 
 
-pub fn agj(da: i32) -> Result<(), i32> {
-    let su = BA_.lock().remove(&da).ok_or(-9)?;
+pub fn close(fd: i32) -> Result<(), i32> {
+    let ih = BC_.lock().remove(&fd).ok_or(-9)?;
     
     
-    if su.bif == SocketType::Qw && su.g == SocketState::Dl {
-        if let Some(bwq) = su.exp {
-            let _ = crate::netstack::tcp::bwx(bwq.ip(), bwq.port(), su.fwi);
+    if ih.sock_type == SocketType::Stream && ih.state == SocketState::Connected {
+        if let Some(remote) = ih.remote_addr {
+            let _ = crate::netstack::tcp::ams(remote.ip(), remote.port(), ih.tcp_src_port);
         }
     }
     
-    crate::serial_println!("[SOCKET] Closed fd={}", da);
+    crate::serial_println!("[SOCKET] Closed fd={}", fd);
     Ok(())
 }
 
 
-pub fn whr(da: i32, f: &[u8], ddp: u32, ag: &SockAddrIn) -> Result<usize, i32> {
-    let (bif, ahq) = {
-        let mut gg = BA_.lock();
-        let su = gg.ds(&da).ok_or(-9)?;
+pub fn ooe(fd: i32, data: &[u8], bej: u32, addr: &SockAddrIn) -> Result<usize, i32> {
+    let (sock_type, local_port) = {
+        let mut bs = BC_.lock();
+        let ih = bs.get_mut(&fd).ok_or(-9)?;
         
         
-        if su.ahq == 0 {
-            su.ahq = VS_.fetch_add(1, Ordering::Relaxed);
+        if ih.local_port == 0 {
+            ih.local_port = XB_.fetch_add(1, Ordering::Relaxed);
         }
         
-        (su.bif, su.ahq)
+        (ih.sock_type, ih.local_port)
     };
     
-    if bif != SocketType::Abb {
+    if sock_type != SocketType::Dgram {
         return Err(-95); 
     }
     
     
-    if f.len() > 65507 {
+    if data.len() > 65507 {
         return Err(-90); 
     }
     
-    crate::netstack::udp::dlp(ag.ip(), ag.port(), ahq, f)
-        .jd(|_| -101)?;
+    crate::netstack::udp::azq(addr.ip(), addr.port(), local_port, data)
+        .map_err(|_| -101)?;
     
-    Ok(f.len())
+    Ok(data.len())
 }
 
 
-pub fn zix(da: i32, k: &mut [u8], ddp: u32, jzm: Option<&mut SockAddrIn>) -> Result<usize, i32> {
-    let ahq = {
-        let gg = BA_.lock();
-        let su = gg.get(&da).ok_or(-9)?;
+pub fn qti(fd: i32, buf: &mut [u8], bej: u32, addr_out: Option<&mut SockAddrIn>) -> Result<usize, i32> {
+    let local_port = {
+        let bs = BC_.lock();
+        let ih = bs.get(&fd).ok_or(-9)?;
         
-        if su.bif != SocketType::Abb {
+        if ih.sock_type != SocketType::Dgram {
             return Err(-95);
         }
         
-        su.ahq
+        ih.local_port
     };
     
     
     crate::netstack::poll();
     
-    if let Some((f, jh, ey)) = crate::netstack::udp::vtk(ahq) {
-        let len = f.len().v(k.len());
-        k[..len].dg(&f[..len]);
-        if let Some(jzm) = jzm {
-            *jzm = SockAddrIn::new(jh, ey);
+    if let Some((data, src_ip, src_port)) = crate::netstack::udp::odt(local_port) {
+        let len = data.len().min(buf.len());
+        buf[..len].copy_from_slice(&data[..len]);
+        if let Some(addr_out) = addr_out {
+            *addr_out = SockAddrIn::new(src_ip, src_port);
         }
         Ok(len)
     } else {
@@ -499,47 +499,47 @@ pub fn zix(da: i32, k: &mut [u8], ddp: u32, jzm: Option<&mut SockAddrIn>) -> Res
 }
 
 
-pub fn wkd(da: i32, jy: i32, evr: i32, ctc: &[u8]) -> Result<(), i32> {
-    let mut gg = BA_.lock();
-    let su = gg.ds(&da).ok_or(-9)?;
+pub fn opz(fd: i32, level: i32, optname: i32, optval: &[u8]) -> Result<(), i32> {
+    let mut bs = BC_.lock();
+    let ih = bs.get_mut(&fd).ok_or(-9)?;
     
     
     
     
     
-    match (jy, evr) {
+    match (level, optname) {
         (1, 2) => {
             
             Ok(())
         }
         (1, 4) => {
             
-            su.oqv = ctc.fv().hu().unwrap_or(0) != 0;
+            ih.non_blocking = optval.first().copied().unwrap_or(0) != 0;
             Ok(())
         }
         _ => {
-            crate::serial_println!("[SOCKET] Unknown sockopt level={} name={}", jy, evr);
+            crate::serial_println!("[SOCKET] Unknown sockopt level={} name={}", level, optname);
             Ok(()) 
         }
     }
 }
 
 
-pub fn tfj(da: i32, jy: i32, evr: i32, ctc: &mut [u8]) -> Result<usize, i32> {
-    let gg = BA_.lock();
-    let su = gg.get(&da).ok_or(-9)?;
+pub fn meh(fd: i32, level: i32, optname: i32, optval: &mut [u8]) -> Result<usize, i32> {
+    let bs = BC_.lock();
+    let ih = bs.get(&fd).ok_or(-9)?;
     
-    match (jy, evr) {
+    match (level, optname) {
         (1, 2) => {
             
-            if !ctc.is_empty() {
-                ctc[0] = 1;
+            if !optval.is_empty() {
+                optval[0] = 1;
             }
             Ok(4)
         }
         _ => {
-            if !ctc.is_empty() {
-                ctc[0] = 0;
+            if !optval.is_empty() {
+                optval[0] = 0;
             }
             Ok(4)
         }
@@ -547,22 +547,22 @@ pub fn tfj(da: i32, jy: i32, evr: i32, ctc: &mut [u8]) -> Result<usize, i32> {
 }
 
 
-pub fn tyx(da: i32) -> bool {
-    BA_.lock().bgm(&da)
+pub fn mts(fd: i32) -> bool {
+    BC_.lock().contains_key(&fd)
 }
 
 
-pub fn drd(da: i32) -> Option<SocketState> {
-    BA_.lock().get(&da).map(|e| e.g)
+pub fn get_state(fd: i32) -> Option<SocketState> {
+    BC_.lock().get(&fd).map(|j| j.state)
 }
 
 
-pub fn tna(da: i32) -> bool {
-    let gg = BA_.lock();
-    if let Some(su) = gg.get(&da) {
-        if su.g == SocketState::Dl {
-            if let Some(ag) = &su.exp {
-                return crate::netstack::tcp::pam(ag.ip(), ag.port(), su.fwi).is_some();
+pub fn mjy(fd: i32) -> bool {
+    let bs = BC_.lock();
+    if let Some(ih) = bs.get(&fd) {
+        if ih.state == SocketState::Connected {
+            if let Some(addr) = &ih.remote_addr {
+                return crate::netstack::tcp::iyp(addr.ip(), addr.port(), ih.tcp_src_port).is_some();
             }
         }
     }

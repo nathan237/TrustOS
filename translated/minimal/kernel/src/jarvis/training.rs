@@ -38,16 +38,16 @@ use super::tokenizer;
 
 
 
-const GN_: f32 = 0.001;
+const HE_: f32 = 0.001;
 
 
-const BAB_: usize = 64;
+const BCD_: usize = 64;
 
 
-const BCQ_: f32 = 0.01;
+const BET_: f32 = 0.01;
 
 
-const TQ_: f32 = 1.0;
+const UW_: f32 = 1.0;
 
 
 
@@ -55,11 +55,11 @@ const TQ_: f32 = 1.0;
 
 
 enum WeightTarget {
-    Bkx(usize),
-    Bkv(usize),
-    Bkw(usize),
-    Bku(usize),
-    Dd,
+    LayerWq(usize),
+    LayerWk(usize),
+    LayerWo(usize),
+    LayerWgate(usize),
+    Output,
 }
 
 
@@ -68,77 +68,77 @@ enum WeightTarget {
 
 
 
-pub fn pvw(model: &mut TransformerWeights, eb: &[u8], dsr: f32) -> f32 {
-    let eb = if eb.len() > BAB_ { &eb[..BAB_] } else { eb };
-    if eb.len() < 2 { return f32::O; }
+pub fn jom(model: &mut TransformerWeights, tokens: &[u8], bnh: f32) -> f32 {
+    let tokens = if tokens.len() > BCD_ { &tokens[..BCD_] } else { tokens };
+    if tokens.len() < 2 { return f32::MAX; }
 
     
-    let (gas, _) = inference::cjq(model, eb);
+    let (base_loss, _) = inference::atj(model, tokens);
 
     
     
-    let gu = super::BW_.load(core::sync::atomic::Ordering::Relaxed);
-    let ffm = (gu % 6) as usize;
+    let step = super::BY_.load(core::sync::atomic::Ordering::Relaxed);
+    let chn = (step % 6) as usize;
 
-    match ffm {
+    match chn {
         0 => {
             
-            xlq(model, eb, dsr);
+            pna(model, tokens, bnh);
         }
         1 => {
-            let aup = (gu / 6) as usize % AZ_;
-            iet(model, WeightTarget::Bkx(aup), eb, dsr);
+            let xv = (step / 6) as usize % BB_;
+            eco(model, WeightTarget::LayerWq(xv), tokens, bnh);
         }
         2 => {
-            let aup = (gu / 6) as usize % AZ_;
-            iet(model, WeightTarget::Bkv(aup), eb, dsr);
+            let xv = (step / 6) as usize % BB_;
+            eco(model, WeightTarget::LayerWk(xv), tokens, bnh);
         }
         3 => {
-            let aup = (gu / 6) as usize % AZ_;
-            iet(model, WeightTarget::Bkw(aup), eb, dsr);
+            let xv = (step / 6) as usize % BB_;
+            eco(model, WeightTarget::LayerWo(xv), tokens, bnh);
         }
         4 => {
-            let aup = (gu / 6) as usize % AZ_;
-            iet(model, WeightTarget::Bku(aup), eb, dsr);
+            let xv = (step / 6) as usize % BB_;
+            eco(model, WeightTarget::LayerWgate(xv), tokens, bnh);
         }
         5 => {
-            iet(model, WeightTarget::Dd, eb, dsr);
+            eco(model, WeightTarget::Output, tokens, bnh);
         }
         _ => {}
     }
 
-    gas
+    base_loss
 }
 
 
-fn xlq(model: &mut TransformerWeights, eb: &[u8], aad: f32) {
-    let (gas, _) = inference::cjq(model, eb);
+fn pna(model: &mut TransformerWeights, tokens: &[u8], lr: f32) {
+    let (base_loss, _) = inference::atj(model, tokens);
 
     
-    let mut phm = [false; BG_];
-    for &ab in eb {
-        if phm[ab as usize] { continue; }
-        phm[ab as usize] = true;
+    let mut jef = [false; BI_];
+    for &t in tokens {
+        if jef[t as usize] { continue; }
+        jef[t as usize] = true;
 
-        let ar = ab as usize * E_;
+        let base = t as usize * E_;
         
-        for bc in 0..E_ {
-            if !wnd(ar + bc) { continue; }
+        for d in 0..E_ {
+            if !orx(base + d) { continue; }
 
             
-            model.bpa[ar + bc] += GN_;
-            let (ljx, _) = inference::cjq(model, eb);
+            model.token_embed[base + d] += HE_;
+            let (loss_plus, _) = inference::atj(model, tokens);
 
             
-            model.bpa[ar + bc] -= 2.0 * GN_;
-            let (ljw, _) = inference::cjq(model, eb);
+            model.token_embed[base + d] -= 2.0 * HE_;
+            let (loss_minus, _) = inference::atj(model, tokens);
 
             
-            model.bpa[ar + bc] += GN_; 
+            model.token_embed[base + d] += HE_; 
 
-            let buo = (ljx - ljw) / (2.0 * GN_);
-            let buo = ndm(buo);
-            model.bpa[ar + bc] -= aad * buo;
+            let alp = (loss_plus - loss_minus) / (2.0 * HE_);
+            let alp = hlm(alp);
+            model.token_embed[base + d] -= lr * alp;
         }
     }
 }
@@ -150,48 +150,48 @@ fn xlq(model: &mut TransformerWeights, eb: &[u8], aad: f32) {
 
 
 
-fn iet(model: &mut TransformerWeights, cd: WeightTarget, eb: &[u8], aad: f32) {
+fn eco(model: &mut TransformerWeights, target: WeightTarget, tokens: &[u8], lr: f32) {
     
     
-    let (ptr, bo) = match cd {
-        WeightTarget::Bkx(dm)    => (model.my[dm].biw.mw(), model.my[dm].biw.len()),
-        WeightTarget::Bkv(dm)    => (model.my[dm].biu.mw(), model.my[dm].biu.len()),
-        WeightTarget::Bkw(dm)    => (model.my[dm].biv.mw(), model.my[dm].biv.len()),
-        WeightTarget::Bku(dm) => (model.my[dm].bit.mw(), model.my[dm].bit.len()),
-        WeightTarget::Dd        => (model.bft.mw(), model.bft.len()),
+    let (ptr, ae) = match target {
+        WeightTarget::LayerWq(l)    => (model.layers[l].w_q.as_mut_ptr(), model.layers[l].w_q.len()),
+        WeightTarget::LayerWk(l)    => (model.layers[l].w_k.as_mut_ptr(), model.layers[l].w_k.len()),
+        WeightTarget::LayerWo(l)    => (model.layers[l].w_o.as_mut_ptr(), model.layers[l].w_o.len()),
+        WeightTarget::LayerWgate(l) => (model.layers[l].w_gate.as_mut_ptr(), model.layers[l].w_gate.len()),
+        WeightTarget::Output        => (model.w_output.as_mut_ptr(), model.w_output.len()),
     };
 
-    let wcl = ((bo as f32 * BCQ_) as usize).am(1);
-    let gu = super::BW_.load(core::sync::atomic::Ordering::Relaxed) as usize;
+    let ojy = ((ae as f32 * BET_) as usize).max(1);
+    let step = super::BY_.load(core::sync::atomic::Ordering::Relaxed) as usize;
 
-    for a in 0..wcl {
-        let w = (gu * 7919 + a * 6271) % bo; 
+    for i in 0..ojy {
+        let idx = (step * 7919 + i * 6271) % ae; 
 
         
         
         
         unsafe {
             
-            *ptr.add(w) += GN_;
+            *ptr.add(idx) += HE_;
         }
-        let (ljx, _) = inference::cjq(model, eb);
+        let (loss_plus, _) = inference::atj(model, tokens);
 
         unsafe {
             
-            *ptr.add(w) -= 2.0 * GN_;
+            *ptr.add(idx) -= 2.0 * HE_;
         }
-        let (ljw, _) = inference::cjq(model, eb);
+        let (loss_minus, _) = inference::atj(model, tokens);
 
         unsafe {
             
-            *ptr.add(w) += GN_;
+            *ptr.add(idx) += HE_;
         }
 
         
-        let buo = (ljx - ljw) / (2.0 * GN_);
-        let buo = ndm(buo);
+        let alp = (loss_plus - loss_minus) / (2.0 * HE_);
+        let alp = hlm(alp);
         unsafe {
-            *ptr.add(w) -= aad * buo;
+            *ptr.add(idx) -= lr * alp;
         }
     }
 }
@@ -203,44 +203,44 @@ fn iet(model: &mut TransformerWeights, cd: WeightTarget, eb: &[u8], aad: f32) {
 
 
 
-pub fn xlr(model: &mut TransformerWeights, eb: &[u8], aad: f32) -> f32 {
-    if eb.len() < 2 { return f32::O; }
+pub fn pnb(model: &mut TransformerWeights, tokens: &[u8], lr: f32) -> f32 {
+    if tokens.len() < 2 { return f32::MAX; }
 
-    let (gas, _) = inference::cjq(model, eb);
-
-    
-    let mut rng = crate::time::ave().hx(6364136223846793005);
+    let (base_loss, _) = inference::atj(model, tokens);
 
     
-    let ltp: Vec<f32> = (0..model.bft.len()).map(|_| {
+    let mut rng = crate::time::yf().wrapping_mul(6364136223846793005);
+
+    
+    let gmt: Vec<f32> = (0..model.w_output.len()).map(|_| {
         rng ^= rng << 13; rng ^= rng >> 7; rng ^= rng << 17;
-        let fs = (rng >> 40) as u32;
-        (fs as f32 / (1u32 << 24) as f32) * 2.0 - 1.0
+        let bits = (rng >> 40) as u32;
+        (bits as f32 / (1u32 << 24) as f32) * 2.0 - 1.0
     }).collect();
 
     
-    for (d, &ai) in model.bft.el().fca(ltp.iter()) {
-        *d += aad * ai;
+    for (w, &aa) in model.w_output.iter_mut().zip(gmt.iter()) {
+        *w += lr * aa;
     }
 
     
-    let (uta, _) = inference::cjq(model, eb);
+    let (new_loss, _) = inference::atj(model, tokens);
 
-    if uta >= gas {
+    if new_loss >= base_loss {
         
-        for (d, &ai) in model.bft.el().fca(ltp.iter()) {
-            *d -= 2.0 * aad * ai; 
+        for (w, &aa) in model.w_output.iter_mut().zip(gmt.iter()) {
+            *w -= 2.0 * lr * aa; 
         }
-        let (vyn, _) = inference::cjq(model, eb);
-        if vyn >= gas {
+        let (rev_loss, _) = inference::atj(model, tokens);
+        if rev_loss >= base_loss {
             
-            for (d, &ai) in model.bft.el().fca(ltp.iter()) {
-                *d += aad * ai;
+            for (w, &aa) in model.w_output.iter_mut().zip(gmt.iter()) {
+                *w += lr * aa;
             }
         }
     }
 
-    gas
+    base_loss
 }
 
 
@@ -248,54 +248,54 @@ pub fn xlr(model: &mut TransformerWeights, eb: &[u8], aad: f32) -> f32 {
 
 
 
-pub fn eyj() -> (u32, u32) {
-    let mut afu = 0u32;
-    let mut ace = 0u32;
+pub fn cdp() -> (u32, u32) {
+    let mut gd = 0u32;
+    let mut gv = 0u32;
 
     
     crate::serial_println!("[JARVIS-TRAIN] Test 1: Loss computation");
     {
-        let model = TransformerWeights::dtm();
-        let eb = tokenizer::cxj("Hello world");
-        let (vl, auq) = inference::cjq(&model, &eb);
-        if vl.dsg() && auq.len() > 0 {
-            crate::serial_println!("[JARVIS-TRAIN]   Loss = {:.4} (random weights)", vl);
-            afu += 1;
+        let model = TransformerWeights::bns();
+        let tokens = tokenizer::bbj("Hello world");
+        let (ka, logits) = inference::atj(&model, &tokens);
+        if ka.is_finite() && logits.len() > 0 {
+            crate::serial_println!("[JARVIS-TRAIN]   Loss = {:.4} (random weights)", ka);
+            gd += 1;
         } else {
-            crate::serial_println!("[JARVIS-TRAIN]   FAIL: loss={}", vl);
-            ace += 1;
+            crate::serial_println!("[JARVIS-TRAIN]   FAIL: loss={}", ka);
+            gv += 1;
         }
     }
 
     
     crate::serial_println!("[JARVIS-TRAIN] Test 2: Training step");
     {
-        let mut model = TransformerWeights::dtm();
-        let eb = tokenizer::cxj("AB");
-        let vl = pvw(&mut model, &eb, 0.01);
-        if vl.dsg() {
-            crate::serial_println!("[JARVIS-TRAIN]   Initial loss = {:.4}", vl);
-            afu += 1;
+        let mut model = TransformerWeights::bns();
+        let tokens = tokenizer::bbj("AB");
+        let ka = jom(&mut model, &tokens, 0.01);
+        if ka.is_finite() {
+            crate::serial_println!("[JARVIS-TRAIN]   Initial loss = {:.4}", ka);
+            gd += 1;
         } else {
-            ace += 1;
+            gv += 1;
         }
     }
 
     
     crate::serial_println!("[JARVIS-TRAIN] Test 3: Random perturbation training");
     {
-        let mut model = TransformerWeights::dtm();
-        let eb = tokenizer::cxj("Test");
-        let vl = xlr(&mut model, &eb, 0.001);
-        if vl.dsg() {
-            crate::serial_println!("[JARVIS-TRAIN]   Loss = {:.4}", vl);
-            afu += 1;
+        let mut model = TransformerWeights::bns();
+        let tokens = tokenizer::bbj("Test");
+        let ka = pnb(&mut model, &tokens, 0.001);
+        if ka.is_finite() {
+            crate::serial_println!("[JARVIS-TRAIN]   Loss = {:.4}", ka);
+            gd += 1;
         } else {
-            ace += 1;
+            gv += 1;
         }
     }
 
-    (afu, ace)
+    (gd, gv)
 }
 
 
@@ -303,15 +303,15 @@ pub fn eyj() -> (u32, u32) {
 
 
 
-fn wnd(w: usize) -> bool {
+fn orx(idx: usize) -> bool {
     
-    let i = w.hx(2654435761); 
-    (i % 100) < (BCQ_ * 100.0) as usize
+    let h = idx.wrapping_mul(2654435761); 
+    (h % 100) < (BET_ * 100.0) as usize
 }
 
 
-fn ndm(at: f32) -> f32 {
-    if at > TQ_ { TQ_ }
-    else if at < -TQ_ { -TQ_ }
-    else { at }
+fn hlm(g: f32) -> f32 {
+    if g > UW_ { UW_ }
+    else if g < -UW_ { -UW_ }
+    else { g }
 }

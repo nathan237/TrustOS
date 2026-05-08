@@ -15,145 +15,145 @@ use core::sync::atomic::{AtomicU8, Ordering};
 const H_: usize = 512;
 
 
-const AQJ_: u16 = 128;
-const BRX_: usize = AQJ_ as usize * H_; 
+const ASM_: u16 = 128;
+const BUT_: usize = ASM_ as usize * H_; 
 
-const FM_: usize = 10;
+const GB_: usize = 10;
 
-const ARG_: usize = 48;
+const ATJ_: usize = 48;
 
 
 #[derive(Clone)]
-pub struct Anr {
-    pub ddj: usize,
-    pub aag: u64,
-    pub agw: usize,
-    pub ipo: u32,
-    pub j: String,
+pub struct Qo {
+    pub wav_size: usize,
+    pub start_lba: u64,
+    pub sector_count: usize,
+    pub cvv: u32,
+    pub name: String,
 }
 
 
-pub struct Aqz {
-    pub af: Vec<Anr>,
+pub struct Rt {
+    pub tracks: Vec<Qo>,
 }
 
 
-static ZT_: AtomicU8 = AtomicU8::new(0xFE);
+static ABF_: AtomicU8 = AtomicU8::new(0xFE);
 
 
 
-fn nue() -> Option<u8> {
-    let ene = ZT_.load(Ordering::Relaxed);
-    if ene != 0xFE {
-        return if ene == 0xFF { None } else { Some(ene) };
+fn hyv() -> Option<u8> {
+    let bfd = ABF_.load(Ordering::Relaxed);
+    if bfd != 0xFE {
+        return if bfd == 0xFF { None } else { Some(bfd) };
     }
-    if !crate::drivers::ahci::ky() {
+    if !crate::drivers::ahci::is_initialized() {
         return None;
     }
-    let ik = crate::drivers::ahci::bhh();
-    for ba in &ik {
-        if ba.ceb == crate::drivers::ahci::AhciDeviceType::Qr && ba.agw > 64 {
+    let devices = crate::drivers::ahci::adz();
+    for s in &devices {
+        if s.device_type == crate::drivers::ahci::AhciDeviceType::Sata && s.sector_count > 64 {
             let mut probe = alloc::vec![0u8; 512];
-            if crate::drivers::ahci::ain(ba.kg, 0, 1, &mut probe).is_ok() {
+            if crate::drivers::ahci::read_sectors(s.port_num, 0, 1, &mut probe).is_ok() {
                 if probe.len() >= 4 && &probe[0..4] == b"TWAV" {
-                    crate::serial_println!("[DISK-AUDIO] Found TWAV disk on port {}", ba.kg);
-                    ZT_.store(ba.kg, Ordering::Relaxed);
-                    return Some(ba.kg);
+                    crate::serial_println!("[DISK-AUDIO] Found TWAV disk on port {}", s.port_num);
+                    ABF_.store(s.port_num, Ordering::Relaxed);
+                    return Some(s.port_num);
                 }
             }
         }
     }
-    ZT_.store(0xFF, Ordering::Relaxed);
+    ABF_.store(0xFF, Ordering::Relaxed);
     None
 }
 
 
-pub fn lxv() -> Result<Aqz, &'static str> {
-    let port = nue().ok_or("No data disk found on AHCI")?;
+pub fn exz() -> Result<Rt, &'static str> {
+    let port = hyv().ok_or("No data disk found on AHCI")?;
 
     crate::serial_println!("[DISK-AUDIO] Reading header from port {}...", port);
 
-    let mut vk = vec![0u8; H_];
-    crate::drivers::ahci::ain(port, 0, 1, &mut vk)?;
+    let mut jz = vec![0u8; H_];
+    crate::drivers::ahci::read_sectors(port, 0, 1, &mut jz)?;
 
-    if &vk[0..4] != b"TWAV" {
+    if &jz[0..4] != b"TWAV" {
         return Err("Invalid data disk header (no TWAV magic)");
     }
 
-    let dk = u32::dj([vk[4], vk[5], vk[6], vk[7]]);
+    let version = u32::from_le_bytes([jz[4], jz[5], jz[6], jz[7]]);
 
-    match dk {
+    match version {
         1 => {
             
-            let ddj = u64::dj([
-                vk[8], vk[9], vk[10], vk[11],
-                vk[12], vk[13], vk[14], vk[15],
+            let wav_size = u64::from_le_bytes([
+                jz[8], jz[9], jz[10], jz[11],
+                jz[12], jz[13], jz[14], jz[15],
             ]) as usize;
-            let aag = u32::dj([
-                vk[16], vk[17], vk[18], vk[19],
+            let start_lba = u32::from_le_bytes([
+                jz[16], jz[17], jz[18], jz[19],
             ]) as u64;
-            let agw = u32::dj([
-                vk[20], vk[21], vk[22], vk[23],
+            let sector_count = u32::from_le_bytes([
+                jz[20], jz[21], jz[22], jz[23],
             ]) as usize;
-            let ipo = u32::dj([
-                vk[24], vk[25], vk[26], vk[27],
+            let cvv = u32::from_le_bytes([
+                jz[24], jz[25], jz[26], jz[27],
             ]);
-            crate::serial_println!("[DISK-AUDIO] v1: 1 track, {} bytes", ddj);
-            Ok(Aqz {
-                af: alloc::vec![Anr {
-                    ddj, aag, agw, ipo,
-                    j: String::from("Untitled (2)"),
+            crate::serial_println!("[DISK-AUDIO] v1: 1 track, {} bytes", wav_size);
+            Ok(Rt {
+                tracks: alloc::vec![Qo {
+                    wav_size, start_lba, sector_count, cvv,
+                    name: String::from("Untitled (2)"),
                 }],
             })
         }
         2 => {
-            let alm = u32::dj([
-                vk[8], vk[9], vk[10], vk[11],
+            let num_tracks = u32::from_le_bytes([
+                jz[8], jz[9], jz[10], jz[11],
             ]) as usize;
-            let alm = alm.v(FM_);
-            let mut af = Vec::fc(alm);
-            for a in 0..alm {
-                let dz = 16 + a * ARG_;
-                if dz + ARG_ > H_ { break; }
-                let ddj = u64::dj([
-                    vk[dz], vk[dz+1], vk[dz+2], vk[dz+3],
-                    vk[dz+4], vk[dz+5], vk[dz+6], vk[dz+7],
+            let num_tracks = num_tracks.min(GB_);
+            let mut tracks = Vec::with_capacity(num_tracks);
+            for i in 0..num_tracks {
+                let off = 16 + i * ATJ_;
+                if off + ATJ_ > H_ { break; }
+                let wav_size = u64::from_le_bytes([
+                    jz[off], jz[off+1], jz[off+2], jz[off+3],
+                    jz[off+4], jz[off+5], jz[off+6], jz[off+7],
                 ]) as usize;
-                let aag = u32::dj([
-                    vk[dz+8], vk[dz+9], vk[dz+10], vk[dz+11],
+                let start_lba = u32::from_le_bytes([
+                    jz[off+8], jz[off+9], jz[off+10], jz[off+11],
                 ]) as u64;
-                let agw = u32::dj([
-                    vk[dz+12], vk[dz+13], vk[dz+14], vk[dz+15],
+                let sector_count = u32::from_le_bytes([
+                    jz[off+12], jz[off+13], jz[off+14], jz[off+15],
                 ]) as usize;
-                let ipo = u32::dj([
-                    vk[dz+16], vk[dz+17], vk[dz+18], vk[dz+19],
+                let cvv = u32::from_le_bytes([
+                    jz[off+16], jz[off+17], jz[off+18], jz[off+19],
                 ]);
                 
-                let bko = &vk[dz+20..dz+48];
-                let baf = bko.iter().qf(|&o| o == 0).unwrap_or(28);
-                let j = core::str::jg(&bko[..baf])
+                let agt = &jz[off+20..off+48];
+                let name_len = agt.iter().position(|&b| b == 0).unwrap_or(28);
+                let name = core::str::from_utf8(&agt[..name_len])
                     .unwrap_or("Unknown")
                     .into();
-                crate::serial_println!("[DISK-AUDIO] Track {}: '{}' {} bytes, LBA {}", a, j, ddj, aag);
-                af.push(Anr { ddj, aag, agw, ipo, j });
+                crate::serial_println!("[DISK-AUDIO] Track {}: '{}' {} bytes, LBA {}", i, name, wav_size, start_lba);
+                tracks.push(Qo { wav_size, start_lba, sector_count, cvv, name });
             }
-            if af.is_empty() {
+            if tracks.is_empty() {
                 return Err("No tracks in v2 header");
             }
-            Ok(Aqz { af })
+            Ok(Rt { tracks })
         }
         _ => Err("Unsupported data disk version"),
     }
 }
 
 
-pub fn ojy(zx: usize) -> Result<(Vec<u8>, String), &'static str> {
-    let gg = lxv()?;
-    if zx >= gg.af.len() {
+pub fn etf(mp: usize) -> Result<(Vec<u8>, String), &'static str> {
+    let bs = exz()?;
+    if mp >= bs.tracks.len() {
         return Err("Track index out of range");
     }
-    let track = &gg.af[zx];
-    uhj(track)
+    let track = &bs.tracks[mp];
+    nah(track)
 }
 
 
@@ -161,70 +161,70 @@ pub fn ojy(zx: usize) -> Result<(Vec<u8>, String), &'static str> {
 
 
 
-fn uhj(track: &Anr) -> Result<(Vec<u8>, String), &'static str> {
-    let port = nue().ok_or("No data disk found on AHCI")?;
+fn nah(track: &Qo) -> Result<(Vec<u8>, String), &'static str> {
+    let port = hyv().ok_or("No data disk found on AHCI")?;
 
-    if track.ddj == 0 || track.ddj > 60 * 1024 * 1024 {
+    if track.wav_size == 0 || track.wav_size > 60 * 1024 * 1024 {
         return Err("Invalid WAV size in header");
     }
 
     crate::serial_println!("[DISK-AUDIO] Loading '{}': {} bytes, {} sectors from LBA {}",
-        track.j, track.ddj, track.agw, track.aag);
+        track.name, track.wav_size, track.sector_count, track.start_lba);
 
     
     
-    let mut alb = vec![0u8; BRX_];
+    let mut dma_buf = vec![0u8; BUT_];
 
-    let mut ihc = Vec::fc(track.ddj);
+    let mut eed = Vec::with_capacity(track.wav_size);
 
-    let mut mdb = track.agw;
-    let mut kmx = track.aag;
+    let mut gtk = track.sector_count;
+    let mut fpr = track.start_lba;
 
-    while mdb > 0 {
+    while gtk > 0 {
         
         
         
-        let inp = mdb.v(AQJ_ as usize);
-        let jj = inp as u16;
-        let dov = inp * H_;
+        let ehy = gtk.min(ASM_ as usize);
+        let df = ehy as u16;
+        let blb = ehy * H_;
 
-        crate::drivers::ahci::ain(
-            port, kmx, jj,
-            &mut alb[..dov],
+        crate::drivers::ahci::read_sectors(
+            port, fpr, df,
+            &mut dma_buf[..blb],
         )?;
 
         
-        let lnr = track.ddj.ao(ihc.len());
-        let acq = dov.v(lnr);
-        if acq > 0 {
-            ihc.bk(&alb[..acq]);
+        let giu = track.wav_size.saturating_sub(eed.len());
+        let od = blb.min(giu);
+        if od > 0 {
+            eed.extend_from_slice(&dma_buf[..od]);
         }
 
-        kmx += inp as u64;
-        mdb -= inp;
+        fpr += ehy as u64;
+        gtk -= ehy;
     }
 
-    ihc.dmu(track.ddj);
-    let j = track.j.clone();
-    crate::serial_println!("[DISK-AUDIO] Loaded '{}': {} bytes", j, ihc.len());
-    Ok((ihc, j))
+    eed.truncate(track.wav_size);
+    let name = track.name.clone();
+    crate::serial_println!("[DISK-AUDIO] Loaded '{}': {} bytes", name, eed.len());
+    Ok((eed, name))
 }
 
 
-pub fn xli() -> usize {
-    lxv().map(|ab| ab.af.len()).unwrap_or(0)
+pub fn pmt() -> usize {
+    exz().map(|t| t.tracks.len()).unwrap_or(0)
 }
 
 
-pub fn uhr() -> Result<Vec<u8>, &'static str> {
-    let (f, blu) = ojy(0)?;
-    Ok(f)
+pub fn nai() -> Result<Vec<u8>, &'static str> {
+    let (data, _name) = etf(0)?;
+    Ok(data)
 }
 
 
-pub fn tey() -> Vec<String> {
-    match lxv() {
-        Ok(gg) => gg.af.iter().map(|ab| ab.j.clone()).collect(),
+pub fn mdz() -> Vec<String> {
+    match exz() {
+        Ok(bs) => bs.tracks.iter().map(|t| t.name.clone()).collect(),
         Err(_) => Vec::new(),
     }
 }

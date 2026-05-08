@@ -31,18 +31,18 @@ const ALL_ROUTERS: Self = Self([0xff,0x02,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,2]);
 
     /// Generate EUI-64 link-local address from MAC (fe80::XX:XXff:feXX:XXXX)
     pub fn from_mac_link_local(mac: [u8; 6]) -> Self {
-        let mut address = [0u8; 16];
-        address[0] = 0xfe; address[1] = 0x80;
+        let mut addr = [0u8; 16];
+        addr[0] = 0xfe; addr[1] = 0x80;
         // Interface ID from EUI-64
-        address[8] = mac[0] ^ 0x02;  // flip U/L bit
-        address[9] = mac[1];
-        address[10] = mac[2];
-        address[11] = 0xff;
-        address[12] = 0xfe;
-        address[13] = mac[3];
-        address[14] = mac[4];
-        address[15] = mac[5];
-        Self(address)
+        addr[8] = mac[0] ^ 0x02;  // flip U/L bit
+        addr[9] = mac[1];
+        addr[10] = mac[2];
+        addr[11] = 0xff;
+        addr[12] = 0xfe;
+        addr[13] = mac[3];
+        addr[14] = mac[4];
+        addr[15] = mac[5];
+        Self(addr)
     }
 
     /// Check if this is a link-local address (fe80::/10)
@@ -57,13 +57,13 @@ const ALL_ROUTERS: Self = Self([0xff,0x02,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,2]);
 
     /// Compute solicited-node multicast address (ff02::1:ffXX:XXXX)
     pub fn solicited_node_multicast(&self) -> Self {
-        let mut address = [0u8; 16];
-        address[0] = 0xff; address[1] = 0x02;
-        address[11] = 0x01; address[12] = 0xff;
-        address[13] = self.0[13];
-        address[14] = self.0[14];
-        address[15] = self.0[15];
-        Self(address)
+        let mut addr = [0u8; 16];
+        addr[0] = 0xff; addr[1] = 0x02;
+        addr[11] = 0x01; addr[12] = 0xff;
+        addr[13] = self.0[13];
+        addr[14] = self.0[14];
+        addr[15] = self.0[15];
+        Self(addr)
     }
 
     /// Compute Ethernet multicast MAC for an IPv6 multicast address
@@ -114,8 +114,8 @@ pub struct Ipv6Header {
     pub payload_length: u16,  // Big endian
     pub next_header: u8,
     pub hop_limit: u8,
-    pub source: [u8; 16],
-    pub destination: [u8; 16],
+    pub src: [u8; 16],
+    pub dst: [u8; 16],
 }
 
 // Implementation block — defines methods for the type above.
@@ -127,7 +127,7 @@ const SIZE: usize = 40;
 pub fn parse(data: &[u8]) -> Option<Self> {
         if data.len() < Self::SIZE { return None; }
         Some(        // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::read_unaligned(data.as_pointer() as *const Self) })
+unsafe { core::ptr::read_unaligned(data.as_ptr() as *const Self) })
     }
 
         // Public function — callable from other modules.
@@ -136,14 +136,14 @@ pub fn version(&self) -> u8 {
     }
 
         // Public function — callable from other modules.
-pub fn payload_length(&self) -> u16 {
+pub fn payload_len(&self) -> u16 {
         u16::from_be(self.payload_length)
     }
 
         // Public function — callable from other modules.
-pub fn source_address(&self) -> Ipv6Address { Ipv6Address(self.source) }
+pub fn src_addr(&self) -> Ipv6Address { Ipv6Address(self.src) }
         // Public function — callable from other modules.
-pub fn destination_address(&self) -> Ipv6Address { Ipv6Address(self.destination) }
+pub fn dst_addr(&self) -> Ipv6Address { Ipv6Address(self.dst) }
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -203,51 +203,51 @@ match Ipv6Header::parse(data) {
 
     if header.version() != 6 { return; }
 
-    let payload_length = header.payload_length() as usize;
+    let payload_len = header.payload_len() as usize;
     let payload = &data[Ipv6Header::SIZE..];
-    if payload.len() < payload_length { return; }
-    let payload = &payload[..payload_length];
+    if payload.len() < payload_len { return; }
+    let payload = &payload[..payload_len];
 
-    let destination = header.destination_address();
+    let dst = header.dst_addr();
     let our_address = STATE.lock().link_local;
 
     // Check if packet is for us (unicast, multicast, or all-nodes)
-    let for_us = destination == our_address
-        || destination == Ipv6Address::ALL_NODES
-        || destination == our_address.solicited_node_multicast()
-        || destination.is_multicast();
+    let for_us = dst == our_address
+        || dst == Ipv6Address::ALL_NODES
+        || dst == our_address.solicited_node_multicast()
+        || dst.is_multicast();
 
     if !for_us { return; }
 
         // Pattern matching — Rust's exhaustive branching construct.
 match header.next_header {
         next_header::ICMPV6 => {
-            super::icmpv6::handle_packet(header.source_address(), header.destination_address(), payload);
+            super::icmpv6::handle_packet(header.src_addr(), header.dst_addr(), payload);
         }
         next_header::TCP => {
-            crate::serial_println!("[IPv6] TCP packet from {} (not implemented)", header.source_address());
+            crate::serial_println!("[IPv6] TCP packet from {} (not implemented)", header.src_addr());
         }
         next_header::UDP => {
-            crate::serial_println!("[IPv6] UDP packet from {} (not implemented)", header.source_address());
+            crate::serial_println!("[IPv6] UDP packet from {} (not implemented)", header.src_addr());
         }
         _ => {}
     }
 }
 
 /// Send an IPv6 packet
-pub fn send_packet(destination: Ipv6Address, next_header: u8, payload: &[u8]) -> Result<(), &'static str> {
-    let source = STATE.lock().link_local;
-    if source == Ipv6Address::UNSPECIFIED {
+pub fn send_packet(dst: Ipv6Address, next_header: u8, payload: &[u8]) -> Result<(), &'static str> {
+    let src = STATE.lock().link_local;
+    if src == Ipv6Address::UNSPECIFIED {
         return Err("IPv6 not initialized");
     }
 
-    send_packet_with_source(source, destination, next_header, 64, payload)
+    send_packet_with_source(src, dst, next_header, 64, payload)
 }
 
 /// Send an IPv6 packet with explicit source address
 pub fn send_packet_with_source(
-    source: Ipv6Address,
-    destination: Ipv6Address,
+    src: Ipv6Address,
+    dst: Ipv6Address,
     next_header: u8,
     hop_limit: u8,
     payload: &[u8],
@@ -260,30 +260,30 @@ pub fn send_packet_with_source(
     packet.extend_from_slice(&(payload.len() as u16).to_be_bytes());
     packet.push(next_header);
     packet.push(hop_limit);
-    packet.extend_from_slice(&source.0);
-    packet.extend_from_slice(&destination.0);
+    packet.extend_from_slice(&src.0);
+    packet.extend_from_slice(&dst.0);
     packet.extend_from_slice(payload);
 
     // Determine destination MAC
-    let destination_mac = if destination.is_multicast() {
-        destination.multicast_mac()
+    let dst_mac = if dst.is_multicast() {
+        dst.multicast_mac()
     } else {
         // Try NDP neighbor cache, fallback to all-nodes multicast
-        super::icmpv6::lookup_neighbor(destination).unwrap_or(Ipv6Address::ALL_NODES.multicast_mac())
+        super::icmpv6::lookup_neighbor(dst).unwrap_or(Ipv6Address::ALL_NODES.multicast_mac())
     };
 
-    super::send_frame(destination_mac, super::ethertype::IPV6, &packet)
+    super::send_frame(dst_mac, super::ethertype::IPV6, &packet)
 }
 
 /// Compute ICMPv6 checksum (pseudo-header + payload)
-pub fn icmpv6_checksum(source: &Ipv6Address, destination: &Ipv6Address, payload: &[u8]) -> u16 {
+pub fn icmpv6_checksum(src: &Ipv6Address, dst: &Ipv6Address, payload: &[u8]) -> u16 {
     let mut sum: u32 = 0;
 
     // Pseudo-header
-    for chunk in source.0.chunks(2) {
+    for chunk in src.0.chunks(2) {
         sum += ((chunk[0] as u32) << 8) | (chunk[1] as u32);
     }
-    for chunk in destination.0.chunks(2) {
+    for chunk in dst.0.chunks(2) {
         sum += ((chunk[0] as u32) << 8) | (chunk[1] as u32);
     }
     // Upper-layer packet length (32-bit)

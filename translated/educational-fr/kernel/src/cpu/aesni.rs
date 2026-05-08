@@ -30,7 +30,7 @@ unsafe {
             let mut round_keys: [__m128i; 11] = core::mem::zeroed();
             
             // Load initial key
-            round_keys[0] = _mm_loadu_si128(key.as_pointer() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+            round_keys[0] = _mm_loadu_si128(key.as_ptr() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const __m128i);
             
             // Key expansion
@@ -53,7 +53,7 @@ const __m128i);
     pub fn encrypt_block(&self, plaintext: &[u8; 16]) -> [u8; 16] {
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-            let mut block = _mm_loadu_si128(plaintext.as_pointer() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+            let mut block = _mm_loadu_si128(plaintext.as_ptr() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const __m128i);
             
             // Initial round
@@ -74,7 +74,7 @@ const __m128i);
             block = _mm_aesenclast_si128(block, self.round_keys[10]);
             
             let mut output = [0u8; 16];
-            _mm_storeu_si128(output.as_mut_pointer() as *mut __m128i, block);
+            _mm_storeu_si128(output.as_mut_ptr() as *mut __m128i, block);
             output
         }
     }
@@ -83,7 +83,7 @@ const __m128i);
     pub fn decrypt_block(&self, ciphertext: &[u8; 16]) -> [u8; 16] {
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-            let mut block = _mm_loadu_si128(ciphertext.as_pointer() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+            let mut block = _mm_loadu_si128(ciphertext.as_ptr() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const __m128i);
             
             // Initial round with last key
@@ -104,7 +104,7 @@ const __m128i);
             block = _mm_aesdeclast_si128(block, self.round_keys[0]);
             
             let mut output = [0u8; 16];
-            _mm_storeu_si128(output.as_mut_pointer() as *mut __m128i, block);
+            _mm_storeu_si128(output.as_mut_ptr() as *mut __m128i, block);
             output
         }
     }
@@ -140,7 +140,7 @@ impl AesGcm {
         let h_bytes = aes_key.encrypt_block(&zero);
         
         let h = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { _mm_loadu_si128(h_bytes.as_pointer() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+unsafe { _mm_loadu_si128(h_bytes.as_ptr() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const __m128i) };
         
         Self { key: aes_key, h }
@@ -241,7 +241,7 @@ unsafe { _mm_setzero_si128() };
             block[..chunk.len()].copy_from_slice(chunk);
             
             let data = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { _mm_loadu_si128(block.as_pointer() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+unsafe { _mm_loadu_si128(block.as_ptr() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const __m128i) };
             ghash = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe { _mm_xor_si128(ghash, data) };
@@ -254,7 +254,7 @@ unsafe { _mm_xor_si128(ghash, data) };
             block[..chunk.len()].copy_from_slice(chunk);
             
             let data = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { _mm_loadu_si128(block.as_pointer() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+unsafe { _mm_loadu_si128(block.as_ptr() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const __m128i) };
             ghash = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe { _mm_xor_si128(ghash, data) };
@@ -269,7 +269,7 @@ unsafe { _mm_xor_si128(ghash, data) };
         length_block[8..16].copy_from_slice(&ct_bits.to_be_bytes());
         
         let length_data = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { _mm_loadu_si128(length_block.as_pointer() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+unsafe { _mm_loadu_si128(length_block.as_ptr() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const __m128i) };
         ghash = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe { _mm_xor_si128(ghash, length_data) };
@@ -277,14 +277,14 @@ unsafe { _mm_xor_si128(ghash, length_data) };
         
         // XOR with encrypted J0
         let j0 = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { _mm_loadu_si128(j0_encrypt.as_pointer() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+unsafe { _mm_loadu_si128(j0_encrypt.as_ptr() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const __m128i) };
         ghash = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe { _mm_xor_si128(ghash, j0) };
         
         let mut tag = [0u8; 16];
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { _mm_storeu_si128(tag.as_mut_pointer() as *mut __m128i, ghash) };
+unsafe { _mm_storeu_si128(tag.as_mut_ptr() as *mut __m128i, ghash) };
         tag
     }
 }

@@ -17,167 +17,167 @@ use alloc::format;
 use core::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 
 
-static CZ_: AtomicBool = AtomicBool::new(false);
+static DG_: AtomicBool = AtomicBool::new(false);
 
-static PK_: AtomicU32 = AtomicU32::new(8080);
+static QH_: AtomicU32 = AtomicU32::new(8080);
 
-static PE_: AtomicU64 = AtomicU64::new(0);
+static QB_: AtomicU64 = AtomicU64::new(0);
 
 
-pub fn dsi() -> bool {
-    CZ_.load(Ordering::SeqCst)
+pub fn is_running() -> bool {
+    DG_.load(Ordering::SeqCst)
 }
 
 
-pub fn asx() -> (u16, u64, bool) {
+pub fn get_stats() -> (u16, u64, bool) {
     (
-        PK_.load(Ordering::SeqCst) as u16,
-        PE_.load(Ordering::SeqCst),
-        dsi(),
+        QH_.load(Ordering::SeqCst) as u16,
+        QB_.load(Ordering::SeqCst),
+        is_running(),
     )
 }
 
 
 
-pub fn ay(port: u16, ome: u32) {
-    if CZ_.load(Ordering::SeqCst) {
-        crate::h!(crate::framebuffer::D_, "HTTP server already running");
+pub fn start(port: u16, max_requests: u32) {
+    if DG_.load(Ordering::SeqCst) {
+        crate::n!(crate::framebuffer::D_, "HTTP server already running");
         return;
     }
 
-    PK_.store(port as u32, Ordering::SeqCst);
-    CZ_.store(true, Ordering::SeqCst);
-    PE_.store(0, Ordering::SeqCst);
+    QH_.store(port as u32, Ordering::SeqCst);
+    DG_.store(true, Ordering::SeqCst);
+    QB_.store(0, Ordering::SeqCst);
 
     
-    let aro = crate::network::aou()
-        .map(|(ip, _, _)| { let o = ip.as_bytes(); format!("{}.{}.{}.{}", o[0], o[1], o[2], o[3]) })
+    let wj = crate::network::rd()
+        .map(|(ip, _, _)| { let b = ip.as_bytes(); format!("{}.{}.{}.{}", b[0], b[1], b[2], b[3]) })
         .unwrap_or_else(|| String::from("0.0.0.0"));
 
-    crate::h!(crate::framebuffer::G_,
+    crate::n!(crate::framebuffer::G_,
         "TrustOS HTTP Server v1.0");
-    crate::println!("Listening on http://{}:{}", aro, port);
+    crate::println!("Listening on http://{}:{}", wj, port);
     crate::println!("Press Ctrl+C or run 'httpd stop' to stop");
     crate::println!();
 
     
-    crate::netstack::tcp::jdt(port, 8);
+    crate::netstack::tcp::etd(port, 8);
 
-    let mut mdz: u32 = 0;
-    let ul = if ome == 0 { u32::O } else { ome };
+    let mut guc: u32 = 0;
+    let jm = if max_requests == 0 { u32::MAX } else { max_requests };
 
     
-    while CZ_.load(Ordering::SeqCst) && mdz < ul {
+    while DG_.load(Ordering::SeqCst) && guc < jm {
         crate::netstack::poll();
 
         
-        if let Some((ey, ams, bci)) =
-            crate::netstack::tcp::iir(port)
+        if let Some((src_port, tn, remote_port)) =
+            crate::netstack::tcp::eew(port)
         {
-            let bwq = format!("{}.{}.{}.{}", ams[0], ams[1], ams[2], ams[3]);
-            crate::serial_println!("[HTTPD] Connection from {}:{}", bwq, bci);
+            let remote = format!("{}.{}.{}.{}", tn[0], tn[1], tn[2], tn[3]);
+            crate::serial_println!("[HTTPD] Connection from {}:{}", remote, remote_port);
 
             
-            let request = vsj(ams, port, ey, 3000);
+            let request = oda(tn, port, src_port, 3000);
 
             if !request.is_empty() {
                 
-                let (clk, path) = vdi(&request);
-                crate::println!("{} {} — {}:{}", clk, path, bwq, bci);
+                let (aui, path) = nqz(&request);
+                crate::println!("{} {} — {}:{}", aui, path, remote, remote_port);
 
                 
-                let mk = wai(&clk, &path);
+                let fa = oih(&aui, &path);
 
                 
-                let _ = crate::netstack::tcp::fuf(ams, bci, ey, mk.as_bytes());
+                let _ = crate::netstack::tcp::cqj(tn, remote_port, src_port, fa.as_bytes());
 
                 
-                for _ in 0..50_000 { core::hint::hc(); }
+                for _ in 0..50_000 { core::hint::spin_loop(); }
 
-                mdz += 1;
-                PE_.fetch_add(1, Ordering::SeqCst);
+                guc += 1;
+                QB_.fetch_add(1, Ordering::SeqCst);
             }
 
             
-            let _ = crate::netstack::tcp::bwx(ams, bci, ey);
+            let _ = crate::netstack::tcp::ams(tn, remote_port, src_port);
         }
 
         
-        if crate::keyboard::hmo() {
-            let bs = crate::keyboard::xw();
-            if bs == Some(3) { 
+        if crate::keyboard::has_input() {
+            let key = crate::keyboard::kr();
+            if key == Some(3) { 
                 break;
             }
         }
 
         
-        crate::arch::bhd();
+        crate::arch::acb();
     }
 
     
-    crate::netstack::tcp::mhr(port);
-    CZ_.store(false, Ordering::SeqCst);
+    crate::netstack::tcp::gwj(port);
+    DG_.store(false, Ordering::SeqCst);
     crate::println!();
-    crate::h!(crate::framebuffer::C_,
-        "Server stopped. {} requests served.", mdz);
+    crate::n!(crate::framebuffer::C_,
+        "Server stopped. {} requests served.", guc);
 }
 
 
-pub fn qg() {
-    CZ_.store(false, Ordering::SeqCst);
+pub fn stop() {
+    DG_.store(false, Ordering::SeqCst);
 }
 
 
-fn vsj(ams: [u8; 4], fnd: u16, ey: u16, sg: u32) -> String {
-    let mut f = Vec::new();
-    let ay = crate::logger::lh();
+fn oda(tn: [u8; 4], cmi: u16, src_port: u16, timeout_ms: u32) -> String {
+    let mut data = Vec::new();
+    let start = crate::logger::eg();
 
     loop {
         crate::netstack::poll();
 
-        if let Some(jj) = crate::netstack::tcp::cme(ams, fnd, ey) {
-            f.bk(&jj);
+        if let Some(df) = crate::netstack::tcp::aus(tn, cmi, src_port) {
+            data.extend_from_slice(&df);
             
-            if f.ee(4).any(|d| d == b"\r\n\r\n") {
+            if data.windows(4).any(|w| w == b"\r\n\r\n") {
                 break;
             }
         }
 
-        if crate::logger::lh().ao(ay) > sg as u64 {
+        if crate::logger::eg().saturating_sub(start) > timeout_ms as u64 {
             break;
         }
 
-        core::hint::hc();
+        core::hint::spin_loop();
     }
 
-    String::azw(&f).bkc()
+    String::from_utf8_lossy(&data).into_owned()
 }
 
 
-fn vdi(request: &str) -> (String, String) {
-    let suc = request.ak().next().unwrap_or("");
-    let ek: Vec<&str> = suc.ayt().collect();
-    let clk = String::from(*ek.fv().unwrap_or(&"GET"));
-    let path = String::from(*ek.get(1).unwrap_or(&"/"));
-    (clk, path)
+fn nqz(request: &str) -> (String, String) {
+    let lwj = request.lines().next().unwrap_or("");
+    let au: Vec<&str> = lwj.split_whitespace().collect();
+    let aui = String::from(*au.first().unwrap_or(&"GET"));
+    let path = String::from(*au.get(1).unwrap_or(&"/"));
+    (aui, path)
 }
 
 
-fn wai(clk: &str, path: &str) -> String {
+fn oih(aui: &str, path: &str) -> String {
     match path {
-        "/" => vaz(),
-        "/status" => vba(),
-        "/api/info" => qjg(),
-        "/api/stats" => qji(),
-        "/api/processes" => qjh(),
-        "/favicon.ico" => pcu(),
-        _ if path.cj("/files") => vax(path),
-        _ => pcu(),
+        "/" => npm(),
+        "/status" => npn(),
+        "/api/info" => jwo(),
+        "/api/stats" => jwq(),
+        "/api/processes" => jwp(),
+        "/favicon.ico" => jak(),
+        _ if path.starts_with("/files") => npk(path),
+        _ => jak(),
     }
 }
 
 
-fn gjh(ahg: &str, gj: &str) -> String {
+fn czi(content_type: &str, body: &str) -> String {
     format!(
         "HTTP/1.0 200 OK\r\n\
          Content-Type: {}\r\n\
@@ -186,13 +186,13 @@ fn gjh(ahg: &str, gj: &str) -> String {
          Connection: close\r\n\
          \r\n\
          {}",
-        ahg, gj.len(), gj
+        content_type, body.len(), body
     )
 }
 
 
-fn pcu() -> String {
-    let gj = "<html><head><title>404</title></head><body>\
+fn jak() -> String {
+    let body = "<html><head><title>404</title></head><body>\
                 <h1>404 Not Found</h1><p>The requested resource was not found on TrustOS.</p>\
                 <hr><em>TrustOS/0.4.0</em></body></html>";
     format!(
@@ -203,7 +203,7 @@ fn pcu() -> String {
          Connection: close\r\n\
          \r\n\
          {}",
-        gj.len(), gj
+        body.len(), body
     )
 }
 
@@ -211,19 +211,19 @@ fn pcu() -> String {
 
 
 
-fn vaz() -> String {
-    let ekj = crate::time::lc() / 1000;
-    let cad = ekj / 3600;
-    let bbz = (ekj % 3600) / 60;
-    let tv = ekj % 60;
+fn npm() -> String {
+    let bwq = crate::time::uptime_ms() / 1000;
+    let aoi = bwq / 3600;
+    let acf = (bwq % 3600) / 60;
+    let im = bwq % 60;
 
-    let (es, mr) = crate::memory::frame::cm();
-    let dtd = (es * 4096) / (1024 * 1024);
-    let mol = (mr * 4096) / (1024 * 1024);
+    let (av, used) = crate::memory::frame::stats();
+    let bnn = (av * 4096) / (1024 * 1024);
+    let haw = (used * 4096) / (1024 * 1024);
 
-    let ffw = crate::cpu::smp::boc();
+    let cores = crate::cpu::smp::ail();
 
-    let gj = format!(r#"<!DOCTYPE html>
+    let body = format!(r#"<!DOCTYPE html>
 <html>
 <head>
     <title>TrustOS</title>
@@ -286,24 +286,24 @@ fn vaz() -> String {
 
     <footer>Served by TrustOS HTTP Server v1.0 | Powered by Rust</footer>
 </body>
-</html>"#, ffw, dtd, mol, cad, bbz, tv);
+</html>"#, cores, bnn, haw, aoi, acf, im);
 
-    gjh("text/html; charset=utf-8", &gj)
+    czi("text/html; charset=utf-8", &body)
 }
 
-fn vba() -> String {
-    let ekj = crate::time::lc() / 1000;
-    let (es, mr) = crate::memory::frame::cm();
-    let aez = es - mr;
-    let ffw = crate::cpu::smp::boc();
-    let xka = crate::cpu::smp::aao();
-    let jgp = crate::network::asx();
-    let hxn = PE_.load(Ordering::Relaxed);
+fn npn() -> String {
+    let bwq = crate::time::uptime_ms() / 1000;
+    let (av, used) = crate::memory::frame::stats();
+    let free = av - used;
+    let cores = crate::cpu::smp::ail();
+    let plt = crate::cpu::smp::cpu_count();
+    let euu = crate::network::get_stats();
+    let dxr = QB_.load(Ordering::Relaxed);
 
-    let tmu = crate::drivers::net::bzy();
-    let usc = if tmu { "active" } else { "none" };
+    let mjs = crate::drivers::net::aoh();
+    let nii = if mjs { "active" } else { "none" };
 
-    let gj = format!(r#"<!DOCTYPE html>
+    let body = format!(r#"<!DOCTYPE html>
 <html><head><title>TrustOS Status</title>
 <style>
     body {{ font-family: monospace; background: #0a0a0a; color: #e0e0e0; margin: 40px; }}
@@ -330,45 +330,45 @@ fn vba() -> String {
 <tr><td>HTTP Requests Served</td><td class="green">{}</td></tr>
 </table>
 </body></html>"#,
-        ekj,
-        ffw, xka,
-        es, (es * 4096) / (1024 * 1024),
-        mr, (mr * 4096) / (1024 * 1024),
-        aez, (aez * 4096) / (1024 * 1024),
-        usc,
-        jgp.dub, jgp.egc,
-        jgp.cdm, jgp.feb,
-        hxn,
+        bwq,
+        cores, plt,
+        av, (av * 4096) / (1024 * 1024),
+        used, (used * 4096) / (1024 * 1024),
+        free, (free * 4096) / (1024 * 1024),
+        nii,
+        euu.packets_received, euu.packets_sent,
+        euu.bytes_received, euu.bytes_sent,
+        dxr,
     );
 
-    gjh("text/html; charset=utf-8", &gj)
+    czi("text/html; charset=utf-8", &body)
 }
 
-fn vax(path: &str) -> String {
-    let hko = if path == "/files" || path == "/files/" {
+fn npk(path: &str) -> String {
+    let dqh = if path == "/files" || path == "/files/" {
         "/"
     } else {
         &path[6..] 
     };
 
-    let ch = crate::ramfs::fh(|fs| {
-        fs.awb(Some(hko)).age()
+    let entries = crate::ramfs::bh(|fs| {
+        fs.ls(Some(dqh)).unwrap_or_default()
     });
 
-    let mut lk = String::new();
-    for (j, are, aw) in &ch {
-        let pa = if *are == crate::ramfs::FileType::K { "d" } else { "-" };
-        let arl = format!("/files{}{}{}", hko,
-            if hko.pp('/') { "" } else { "/" }, j);
-        let cae = if *are == crate::ramfs::FileType::K {
-            format!("<a href=\"{}\">{} {}/</a>", arl, pa, j)
+    let mut rows = String::new();
+    for (name, wf, size) in &entries {
+        let icon = if *wf == crate::ramfs::FileType::Directory { "d" } else { "-" };
+        let link = format!("/files{}{}{}", dqh,
+            if dqh.ends_with('/') { "" } else { "/" }, name);
+        let href = if *wf == crate::ramfs::FileType::Directory {
+            format!("<a href=\"{}\">{} {}/</a>", link, icon, name)
         } else {
-            format!("{} {} ({} bytes)", pa, j, aw)
+            format!("{} {} ({} bytes)", icon, name, size)
         };
-        lk.t(&format!("<tr><td>{}</td></tr>\n", cae));
+        rows.push_str(&format!("<tr><td>{}</td></tr>\n", href));
     }
 
-    let gj = format!(r#"<!DOCTYPE html>
+    let body = format!(r#"<!DOCTYPE html>
 <html><head><title>Files: {}</title>
 <style>
     body {{ font-family: monospace; background: #0a0a0a; color: #e0e0e0; margin: 40px; }}
@@ -378,36 +378,36 @@ fn vax(path: &str) -> String {
 <h1>Files: {}</h1>
 <p><a href="/">← Home</a> | <a href="/files/">Root</a></p>
 <table>{}</table>
-</body></html>"#, hko, hko, lk);
+</body></html>"#, dqh, dqh, rows);
 
-    gjh("text/html; charset=utf-8", &gj)
+    czi("text/html; charset=utf-8", &body)
 }
 
-fn qjg() -> String {
-    let bxp = crate::time::lc();
-    let (es, mr) = crate::memory::frame::cm();
-    let ffw = crate::cpu::smp::boc();
+fn jwo() -> String {
+    let aiz = crate::time::uptime_ms();
+    let (av, used) = crate::memory::frame::stats();
+    let cores = crate::cpu::smp::ail();
 
-    let gj = format!(r#"{{"os":"TrustOS","version":"0.4.0","uptime_ms":{},"cores":{},"memory_total_kb":{},"memory_used_kb":{},"rust":"nightly","arch":"x86_64"}}"#,
-        bxp, ffw, es * 4, mr * 4);
+    let body = format!(r#"{{"os":"TrustOS","version":"0.4.0","uptime_ms":{},"cores":{},"memory_total_kb":{},"memory_used_kb":{},"rust":"nightly","arch":"x86_64"}}"#,
+        aiz, cores, av * 4, used * 4);
 
-    gjh("application/json", &gj)
+    czi("application/json", &body)
 }
 
-fn qji() -> String {
-    let net = crate::network::asx();
-    let hxn = PE_.load(Ordering::Relaxed);
-    let port = PK_.load(Ordering::Relaxed);
+fn jwq() -> String {
+    let net = crate::network::get_stats();
+    let dxr = QB_.load(Ordering::Relaxed);
+    let port = QH_.load(Ordering::Relaxed);
 
-    let gj = format!(r#"{{"server_port":{},"requests_served":{},"packets_rx":{},"packets_tx":{},"bytes_rx":{},"bytes_tx":{}}}"#,
-        port, hxn, net.dub, net.egc,
-        net.cdm, net.feb);
+    let body = format!(r#"{{"server_port":{},"requests_served":{},"packets_rx":{},"packets_tx":{},"bytes_rx":{},"bytes_tx":{}}}"#,
+        port, dxr, net.packets_received, net.packets_sent,
+        net.bytes_received, net.bytes_sent);
 
-    gjh("application/json", &gj)
+    czi("application/json", &body)
 }
 
-fn qjh() -> String {
-    let gj = format!(r#"{{"pid":0,"name":"kernel","state":"running","threads":{}}}"#,
-        crate::cpu::smp::boc());
-    gjh("application/json", &gj)
+fn jwp() -> String {
+    let body = format!(r#"{{"pid":0,"name":"kernel","state":"running","threads":{}}}"#,
+        crate::cpu::smp::ail());
+    czi("application/json", &body)
 }

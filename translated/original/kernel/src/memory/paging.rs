@@ -303,36 +303,8 @@ impl AddressSpace {
     
     /// Unmap a page
     pub fn unmap_page(&mut self, virt: u64) -> Option<()> {
-        let pml4_idx = ((virt >> 39) & 0x1FF) as usize;
-        let pdpt_idx = ((virt >> 30) & 0x1FF) as usize;
-        let pd_idx = ((virt >> 21) & 0x1FF) as usize;
-        let pt_idx = ((virt >> 12) & 0x1FF) as usize;
-        
-        let pml4_virt = self.pml4_phys + self.hhdm_offset;
-        let pml4 = unsafe { &mut *(pml4_virt as *mut PageTable) };
-        
-        if !pml4.entries[pml4_idx].is_present() {
-            return None;
-        }
-        
-        let pdpt_virt = pml4.entries[pml4_idx].phys_addr() + self.hhdm_offset;
-        let pdpt = unsafe { &mut *(pdpt_virt as *mut PageTable) };
-        
-        if !pdpt.entries[pdpt_idx].is_present() {
-            return None;
-        }
-        
-        let pd_virt = pdpt.entries[pdpt_idx].phys_addr() + self.hhdm_offset;
-        let pd = unsafe { &mut *(pd_virt as *mut PageTable) };
-        
-        if !pd.entries[pd_idx].is_present() {
-            return None;
-        }
-        
-        let pt_virt = pd.entries[pd_idx].phys_addr() + self.hhdm_offset;
-        let pt = unsafe { &mut *(pt_virt as *mut PageTable) };
-        
-        pt.entries[pt_idx].clear();
+        let entry = Self::walk_pt_mut(self.pml4_phys, self.hhdm_offset, virt)?;
+        entry.clear();
         
         // Invalidate TLB for this page
         #[cfg(target_arch = "x86_64")]
@@ -343,29 +315,59 @@ impl AddressSpace {
         Some(())
     }
     
+    /// Walk page tables PML4→PDPT→PD→PT and return a reference to the leaf entry.
+    /// Shared helper — eliminates 4× duplicated walk logic.
+    #[inline(always)]
+    fn walk_pt(cr3: u64, hhdm: u64, virt: u64) -> Option<&'static PageTableEntry> {
+        let pml4_idx = ((virt >> 39) & 0x1FF) as usize;
+        let pdpt_idx = ((virt >> 30) & 0x1FF) as usize;
+        let pd_idx   = ((virt >> 21) & 0x1FF) as usize;
+        let pt_idx   = ((virt >> 12) & 0x1FF) as usize;
+
+        let pml4 = unsafe { &*((cr3 + hhdm) as *const PageTable) };
+        if !pml4.entries[pml4_idx].is_present() { return None; }
+
+        let pdpt = unsafe { &*((pml4.entries[pml4_idx].phys_addr() + hhdm) as *const PageTable) };
+        if !pdpt.entries[pdpt_idx].is_present() { return None; }
+
+        let pd = unsafe { &*((pdpt.entries[pdpt_idx].phys_addr() + hhdm) as *const PageTable) };
+        if !pd.entries[pd_idx].is_present() { return None; }
+
+        let pt = unsafe { &*((pd.entries[pd_idx].phys_addr() + hhdm) as *const PageTable) };
+        if !pt.entries[pt_idx].is_present() { return None; }
+
+        Some(&pt.entries[pt_idx])
+    }
+
+    /// Mutable variant of walk_pt — returns &mut entry for unmap/modify operations.
+    #[inline(always)]
+    fn walk_pt_mut(cr3: u64, hhdm: u64, virt: u64) -> Option<&'static mut PageTableEntry> {
+        let pml4_idx = ((virt >> 39) & 0x1FF) as usize;
+        let pdpt_idx = ((virt >> 30) & 0x1FF) as usize;
+        let pd_idx   = ((virt >> 21) & 0x1FF) as usize;
+        let pt_idx   = ((virt >> 12) & 0x1FF) as usize;
+
+        let pml4 = unsafe { &*((cr3 + hhdm) as *mut PageTable) };
+        if !pml4.entries[pml4_idx].is_present() { return None; }
+
+        let pdpt = unsafe { &*((pml4.entries[pml4_idx].phys_addr() + hhdm) as *mut PageTable) };
+        if !pdpt.entries[pdpt_idx].is_present() { return None; }
+
+        let pd = unsafe { &*((pdpt.entries[pdpt_idx].phys_addr() + hhdm) as *mut PageTable) };
+        if !pd.entries[pd_idx].is_present() { return None; }
+
+        let pt = unsafe { &mut *((pd.entries[pd_idx].phys_addr() + hhdm) as *mut PageTable) };
+        if !pt.entries[pt_idx].is_present() { return None; }
+
+        Some(&mut pt.entries[pt_idx])
+    }
+
     /// Translate a virtual address to its physical address by walking the page tables.
     /// Returns `Some(phys)` with the physical address of the start of the 4K page + page offset,
     /// or `None` if the page is not mapped.
     pub fn translate(&self, virt: u64) -> Option<u64> {
-        let pml4_idx = ((virt >> 39) & 0x1FF) as usize;
-        let pdpt_idx = ((virt >> 30) & 0x1FF) as usize;
-        let pd_idx = ((virt >> 21) & 0x1FF) as usize;
-        let pt_idx = ((virt >> 12) & 0x1FF) as usize;
-        let page_offset = virt & 0xFFF;
-        
-        let pml4 = unsafe { &*((self.pml4_phys + self.hhdm_offset) as *const PageTable) };
-        if !pml4.entries[pml4_idx].is_present() { return None; }
-        
-        let pdpt = unsafe { &*((pml4.entries[pml4_idx].phys_addr() + self.hhdm_offset) as *const PageTable) };
-        if !pdpt.entries[pdpt_idx].is_present() { return None; }
-        
-        let pd = unsafe { &*((pdpt.entries[pdpt_idx].phys_addr() + self.hhdm_offset) as *const PageTable) };
-        if !pd.entries[pd_idx].is_present() { return None; }
-        
-        let pt = unsafe { &*((pd.entries[pd_idx].phys_addr() + self.hhdm_offset) as *const PageTable) };
-        if !pt.entries[pt_idx].is_present() { return None; }
-        
-        Some(pt.entries[pt_idx].phys_addr() + page_offset)
+        let entry = Self::walk_pt(self.pml4_phys, self.hhdm_offset, virt)?;
+        Some(entry.phys_addr() + (virt & 0xFFF))
     }
     
     /// Switch to this address space
@@ -380,49 +382,13 @@ impl AddressSpace {
     
     /// Check if a virtual address is mapped and accessible with given flags
     pub fn is_accessible(&self, virt: u64, required_flags: PageFlags) -> bool {
-        let pml4_idx = ((virt >> 39) & 0x1FF) as usize;
-        let pdpt_idx = ((virt >> 30) & 0x1FF) as usize;
-        let pd_idx = ((virt >> 21) & 0x1FF) as usize;
-        let pt_idx = ((virt >> 12) & 0x1FF) as usize;
-        
-        let pml4_virt = self.pml4_phys + self.hhdm_offset;
-        let pml4 = unsafe { &*(pml4_virt as *const PageTable) };
-        
-        if !pml4.entries[pml4_idx].is_present() {
-            return false;
-        }
-        
-        let pdpt_virt = pml4.entries[pml4_idx].phys_addr() + self.hhdm_offset;
-        let pdpt = unsafe { &*(pdpt_virt as *const PageTable) };
-        
-        if !pdpt.entries[pdpt_idx].is_present() {
-            return false;
-        }
-        
-        let pd_virt = pdpt.entries[pdpt_idx].phys_addr() + self.hhdm_offset;
-        let pd = unsafe { &*(pd_virt as *const PageTable) };
-        
-        if !pd.entries[pd_idx].is_present() {
-            return false;
-        }
-        
-        let pt_virt = pd.entries[pd_idx].phys_addr() + self.hhdm_offset;
-        let pt = unsafe { &*(pt_virt as *const PageTable) };
-        
-        if !pt.entries[pt_idx].is_present() {
-            return false;
-        }
-        
-        let entry_flags = pt.entries[pt_idx].flags();
-        
-        // Check required flags
-        if required_flags.is_writable() && !entry_flags.is_writable() {
-            return false;
-        }
-        if required_flags.is_user() && !entry_flags.is_user() {
-            return false;
-        }
-        
+        let entry = match Self::walk_pt(self.pml4_phys, self.hhdm_offset, virt) {
+            Some(e) => e,
+            None => return false,
+        };
+        let entry_flags = entry.flags();
+        if required_flags.is_writable() && !entry_flags.is_writable() { return false; }
+        if required_flags.is_user() && !entry_flags.is_user() { return false; }
         true
     }
 }
@@ -606,27 +572,13 @@ pub fn validate_user_ptr(ptr: u64, len: usize, write: bool) -> bool {
 
 /// Check that a single virtual address has the required flags set in the page tables
 fn check_page_flags(cr3: u64, hhdm: u64, virt: u64, required: PageFlags) -> bool {
-    let pml4_idx = ((virt >> 39) & 0x1FF) as usize;
-    let pdpt_idx = ((virt >> 30) & 0x1FF) as usize;
-    let pd_idx   = ((virt >> 21) & 0x1FF) as usize;
-    let pt_idx   = ((virt >> 12) & 0x1FF) as usize;
-    
-    let pml4 = unsafe { &*((cr3 + hhdm) as *const PageTable) };
-    if !pml4.entries[pml4_idx].is_present() { return false; }
-    
-    let pdpt = unsafe { &*((pml4.entries[pml4_idx].phys_addr() + hhdm) as *const PageTable) };
-    if !pdpt.entries[pdpt_idx].is_present() { return false; }
-    
-    let pd = unsafe { &*((pdpt.entries[pdpt_idx].phys_addr() + hhdm) as *const PageTable) };
-    if !pd.entries[pd_idx].is_present() { return false; }
-    
-    let pt = unsafe { &*((pd.entries[pd_idx].phys_addr() + hhdm) as *const PageTable) };
-    if !pt.entries[pt_idx].is_present() { return false; }
-    
-    let flags = pt.entries[pt_idx].flags();
+    let entry = match AddressSpace::walk_pt(cr3, hhdm, virt) {
+        Some(e) => e,
+        None => return false,
+    };
+    let flags = entry.flags();
     if required.is_user() && !flags.is_user() { return false; }
     if required.is_writable() && !flags.is_writable() { return false; }
-    
     true
 }
 

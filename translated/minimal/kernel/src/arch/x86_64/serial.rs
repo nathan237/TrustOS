@@ -4,85 +4,85 @@
 
 
 
-use super::cpu::{cfn, bkt};
+use super::cpu::{om, vp};
 use core::sync::atomic::{AtomicBool, Ordering};
 
 
-const Gg: u16 = 0x3F8;
+const Cu: u16 = 0x3F8;
 
 
-const DBS_: u32 = 100_000;
+const DFN_: u32 = 100_000;
 
 
-static WX_: AtomicBool = AtomicBool::new(false);
+static YE_: AtomicBool = AtomicBool::new(false);
 
 
-pub fn xo() -> bool {
-    WX_.load(Ordering::Relaxed)
+pub fn is_present() -> bool {
+    YE_.load(Ordering::Relaxed)
 }
 
 
 pub fn init() {
     unsafe {
         
-        bkt(Gg + 4, 0x1E); 
-        bkt(Gg, 0xAE);     
-        if cfn(Gg) != 0xAE {
+        vp(Cu + 4, 0x1E); 
+        vp(Cu, 0xAE);     
+        if om(Cu) != 0xAE {
             
             return;
         }
 
         
-        bkt(Gg + 4, 0x0F); 
-        bkt(Gg + 1, 0x00); 
-        bkt(Gg + 3, 0x80); 
-        bkt(Gg + 0, 0x01); 
-        bkt(Gg + 1, 0x00); 
-        bkt(Gg + 3, 0x03); 
-        bkt(Gg + 2, 0xC7); 
-        bkt(Gg + 4, 0x0B); 
+        vp(Cu + 4, 0x0F); 
+        vp(Cu + 1, 0x00); 
+        vp(Cu + 3, 0x80); 
+        vp(Cu + 0, 0x01); 
+        vp(Cu + 1, 0x00); 
+        vp(Cu + 3, 0x03); 
+        vp(Cu + 2, 0xC7); 
+        vp(Cu + 4, 0x0B); 
 
-        WX_.store(true, Ordering::SeqCst);
+        YE_.store(true, Ordering::SeqCst);
     }
 }
 
 
-pub fn cco(hf: u8) {
-    if !WX_.load(Ordering::Relaxed) {
+pub fn write_byte(byte: u8) {
+    if !YE_.load(Ordering::Relaxed) {
         return;
     }
     unsafe {
         
-        let mut aah = DBS_;
-        while cfn(Gg + 5) & 0x20 == 0 {
-            aah -= 1;
-            if aah == 0 {
+        let mut mz = DFN_;
+        while om(Cu + 5) & 0x20 == 0 {
+            mz -= 1;
+            if mz == 0 {
                 return; 
             }
-            core::hint::hc();
+            core::hint::spin_loop();
         }
-        bkt(Gg, hf);
+        vp(Cu, byte);
     }
 }
 
 
-pub fn ahx(bf: &[u8]) {
-    for &o in bf {
-        if o == b'\n' {
-            cco(b'\r');
+pub fn write_bytes(bytes: &[u8]) {
+    for &b in bytes {
+        if b == b'\n' {
+            write_byte(b'\r');
         }
-        cco(o);
+        write_byte(b);
     }
 }
 
 
-pub fn dlb() -> Option<u8> {
-    if !WX_.load(Ordering::Relaxed) {
+pub fn read_byte() -> Option<u8> {
+    if !YE_.load(Ordering::Relaxed) {
         return None;
     }
     unsafe {
-        if cfn(Gg + 5) & 0x01 != 0 {
-            Some(cfn(Gg))
+        if om(Cu + 5) & 0x01 != 0 {
+            Some(om(Cu))
         } else {
             None
         }
@@ -90,6 +90,6 @@ pub fn dlb() -> Option<u8> {
 }
 
 
-pub fn nji() -> bool {
-    unsafe { cfn(Gg + 5) & 0x01 != 0 }
+pub fn hqn() -> bool {
+    unsafe { om(Cu + 5) & 0x01 != 0 }
 }

@@ -2,207 +2,206 @@
 
 
 
-use alloc::string::{String, Gd};
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use alloc::format;
 
 
 #[derive(Debug)]
-pub struct Sv {
-    pub wt: u16,
-    pub zk: Vec<(String, String)>,
-    pub gj: Vec<u8>,
+pub struct Ib {
+    pub status_code: u16,
+    pub headers: Vec<(String, String)>,
+    pub body: Vec<u8>,
 }
 
-impl Sv {
+impl Ib {
     
-    pub fn dh(&self, j: &str) -> Option<&str> {
-        let hsk = jtk(j);
-        self.zk.iter()
-            .du(|(eh, _)| jtk(eh) == hsk)
-            .map(|(_, p)| p.as_str())
+    pub fn header(&self, name: &str) -> Option<&str> {
+        let duw = fdb(name);
+        self.headers.iter()
+            .find(|(k, _)| fdb(k) == duw)
+            .map(|(_, v)| v.as_str())
     }
     
     
-    pub fn dza(&self) -> Option<&str> {
-        core::str::jg(&self.gj).bq()
+    pub fn body_str(&self) -> Option<&str> {
+        core::str::from_utf8(&self.body).ok()
     }
 }
 
 
-fn jtk(e: &str) -> String {
-    e.bw().map(|r| {
-        if r >= 'A' && r <= 'Z' { (r as u8 + 32) as char } else { r }
+fn fdb(j: &str) -> String {
+    j.chars().map(|c| {
+        if c >= 'A' && c <= 'Z' { (c as u8 + 32) as char } else { c }
     }).collect()
 }
 
 
-pub fn get(url: &str) -> Result<Sv, &'static str> {
+pub fn get(url: &str) -> Result<Ib, &'static str> {
     request("GET", url, None, None)
 }
 
 
-pub fn vkc(url: &str, ahg: &str, gj: &[u8]) -> Result<Sv, &'static str> {
-    request("POST", url, Some(ahg), Some(gj))
+pub fn nwh(url: &str, content_type: &str, body: &[u8]) -> Result<Ib, &'static str> {
+    request("POST", url, Some(content_type), Some(body))
 }
 
 
-fn veh(url: &str) -> Result<(&str, u16, &str), &'static str> {
-    let url = url.blj("http://").unwrap_or(url);
+fn nrm(url: &str) -> Result<(&str, u16, &str), &'static str> {
+    let url = url.strip_prefix("http://").unwrap_or(url);
     
-    let (bej, path) = match url.du('/') {
-        Some(a) => (&url[..a], &url[a..]),
+    let (host_port, path) = match url.find('/') {
+        Some(i) => (&url[..i], &url[i..]),
         None => (url, "/"),
     };
     
-    let (kh, port) = match bej.du(':') {
-        Some(a) => (&bej[..a], bej[a+1..].parse().unwrap_or(80)),
-        None => (bej, 80),
+    let (host, port) = match host_port.find(':') {
+        Some(i) => (&host_port[..i], host_port[i+1..].parse().unwrap_or(80)),
+        None => (host_port, 80),
     };
     
-    if kh.is_empty() {
+    if host.is_empty() {
         return Err("Empty host");
     }
     
-    Ok((kh, port, path))
+    Ok((host, port, path))
 }
 
 
-fn request(clk: &str, url: &str, ahg: Option<&str>, gj: Option<&[u8]>) -> Result<Sv, &'static str> {
-    pcj(clk, url, ahg, gj, 0)
+fn request(aui: &str, url: &str, content_type: Option<&str>, body: Option<&[u8]>) -> Result<Ib, &'static str> {
+    jaf(aui, url, content_type, body, 0)
 }
 
 
-fn pcj(clk: &str, url: &str, ahg: Option<&str>, gj: Option<&[u8]>, eo: u32) -> Result<Sv, &'static str> {
-    if eo > 5 {
+fn jaf(aui: &str, url: &str, content_type: Option<&str>, body: Option<&[u8]>, depth: u32) -> Result<Ib, &'static str> {
+    if depth > 5 {
         return Err("Too many redirects");
     }
     
-    let (kh, port, path) = veh(url)?;
+    let (host, port, path) = nrm(url)?;
     
     
-    let ip = if let Ok(uxa) = ewb(kh) {
-        uxa
+    let ip = if let Ok(evn) = bof(host) {
+        evn
     } else {
-        crate::netstack::dns::ayo(kh).ok_or("DNS resolution failed")?
+        crate::netstack::dns::yb(host).ok_or("DNS resolution failed")?
     };
     
-    crate::serial_println!("[HTTP] {} {}.{}.{}.{}:{}{}", clk, ip[0], ip[1], ip[2], ip[3], port, path);
+    crate::serial_println!("[HTTP] {} {}.{}.{}.{}:{}{}", aui, ip[0], ip[1], ip[2], ip[3], port, path);
     
     
-    let ey = crate::netstack::tcp::cue(ip, port)?;
+    let src_port = crate::netstack::tcp::azp(ip, port)?;
     
-    if !crate::netstack::tcp::dnd(ip, port, ey, 5000) {
+    if !crate::netstack::tcp::bjy(ip, port, src_port, 5000) {
         return Err("TCP connection timeout");
     }
     
     
-    let mut ehq = format!("{} {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nUser-Agent: TrustOS/1.0\r\n", clk, path, kh);
+    let mut bvk = format!("{} {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nUser-Agent: TrustOS/1.0\r\n", aui, path, host);
     
-    if let Some(aqx) = ahg {
-        ehq.t(&format!("Content-Type: {}\r\n", aqx));
+    if let Some(wb) = content_type {
+        bvk.push_str(&format!("Content-Type: {}\r\n", wb));
     }
     
-    if let Some(o) = gj {
-        ehq.t(&format!("Content-Length: {}\r\n", o.len()));
+    if let Some(b) = body {
+        bvk.push_str(&format!("Content-Length: {}\r\n", b.len()));
     }
     
-    ehq.t("\r\n");
+    bvk.push_str("\r\n");
     
     
-    crate::netstack::tcp::dlo(ip, port, ey, ehq.as_bytes())?;
+    crate::netstack::tcp::bjc(ip, port, src_port, bvk.as_bytes())?;
     
-    if let Some(o) = gj {
-        crate::netstack::tcp::dlo(ip, port, ey, o)?;
+    if let Some(b) = body {
+        crate::netstack::tcp::bjc(ip, port, src_port, b)?;
     }
     
     
-    let mut dva = Vec::new();
-    let ay = crate::logger::lh();
+    let mut bon = Vec::new();
+    let start = crate::logger::eg();
     
     loop {
         crate::netstack::poll();
         
-        while let Some(jj) = crate::netstack::tcp::cme(ip, port, ey) {
-            dva.bk(&jj);
+        while let Some(df) = crate::netstack::tcp::aus(ip, port, src_port) {
+            bon.extend_from_slice(&df);
         }
         
         
-        if dva.len() > 12 && rof(&dva) {
+        if bon.len() > 12 && kxj(&bon) {
             break;
         }
         
         
-        if crate::netstack::tcp::bqr(ip, port, ey) {
+        if crate::netstack::tcp::fin_received(ip, port, src_port) {
             break;
         }
         
         
-        if crate::logger::lh().ao(ay) > 5000 {
+        if crate::logger::eg().saturating_sub(start) > 5000 {
             break;
         }
         
         
-        crate::thread::cix();
+        crate::thread::ajc();
     }
     
     
-    let _ = crate::netstack::tcp::bwx(ip, port, ey);
+    let _ = crate::netstack::tcp::ams(ip, port, src_port);
     
     
-    let mk = vdj(&dva)?;
+    let fa = nra(&bon)?;
     
     
-    if mk.wt >= 300 && mk.wt < 400 {
-        if let Some(cse) = mk.dh("Location") {
+    if fa.status_code >= 300 && fa.status_code < 400 {
+        if let Some(axx) = fa.header("Location") {
             
             
-            if cse.cj("https://") {
-                crate::serial_println!("[HTTP] Redirect to HTTPS: {} -> {}", mk.wt, cse);
-                return Ok(mk);
+            if axx.starts_with("https://") {
+                crate::serial_println!("[HTTP] Redirect to HTTPS: {} -> {}", fa.status_code, axx);
+                return Ok(fa);
             }
             
-            let fsk = if cse.cj("http://") {
-                String::from(cse)
-            } else if cse.cj("/") {
-                format!("http://{}:{}{}", kh, port, cse)
+            let cpe = if axx.starts_with("http://") {
+                String::from(axx)
+            } else if axx.starts_with("/") {
+                format!("http://{}:{}{}", host, port, axx)
             } else {
                 
-                let gzr = match path.bhx('/') {
-                    Some(a) => &path[..=a],
+                let dij = match path.rfind('/') {
+                    Some(i) => &path[..=i],
                     None => "/",
                 };
-                format!("http://{}:{}{}{}", kh, port, gzr, cse)
+                format!("http://{}:{}{}{}", host, port, dij, axx)
             };
-            crate::serial_println!("[HTTP] Redirect {} -> {}", mk.wt, fsk);
-            return pcj(clk, &fsk, ahg, gj, eo + 1);
+            crate::serial_println!("[HTTP] Redirect {} -> {}", fa.status_code, cpe);
+            return jaf(aui, &cpe, content_type, body, depth + 1);
         }
     }
     
-    Ok(mk)
+    Ok(fa)
 }
 
 
-fn rof(f: &[u8]) -> bool {
+fn kxj(data: &[u8]) -> bool {
     
-    let cfj = nui(f);
-    if cfj.is_none() {
-        return false;
+    let bca = match hyw(data) {
+        Some(v) => v,
+        None => return false,
+    };
+    
+    
+    if let Some(cl) = lvt(data, bca) {
+        let kdb = data.len() - bca;
+        return kdb >= cl;
     }
-    let cfj = cfj.unwrap();
     
     
-    if let Some(cl) = stb(f, cfj) {
-        let qqs = f.len() - cfj;
-        return qqs >= cl;
-    }
-    
-    
-    if jbc(f, cfj) {
+    if erh(data, bca) {
         
-        let gj = &f[cfj..];
-        for a in 0..gj.len().ao(4) {
-            if gj[a] == b'0' && gj[a+1] == b'\r' && gj[a+2] == b'\n' && gj[a+3] == b'\r' && gj.len() > a + 4 && gj[a+4] == b'\n' {
+        let body = &data[bca..];
+        for i in 0..body.len().saturating_sub(4) {
+            if body[i] == b'0' && body[i+1] == b'\r' && body[i+2] == b'\n' && body[i+3] == b'\r' && body.len() > i + 4 && body[i+4] == b'\n' {
                 return true;
             }
         }
@@ -213,77 +212,77 @@ fn rof(f: &[u8]) -> bool {
     false
 }
 
-fn nui(f: &[u8]) -> Option<usize> {
-    for a in 0..f.len().ao(3) {
-        if &f[a..a+4] == b"\r\n\r\n" {
-            return Some(a + 4);
+fn hyw(data: &[u8]) -> Option<usize> {
+    for i in 0..data.len().saturating_sub(3) {
+        if &data[i..i+4] == b"\r\n\r\n" {
+            return Some(i + 4);
         }
     }
     None
 }
 
-fn stb(f: &[u8], cfj: usize) -> Option<usize> {
-    let zk = core::str::jg(&f[..cfj]).bq()?;
-    for line in zk.ak() {
-        let pb = jtk(line);
-        if pb.cj("content-length:") {
-            let ap = line[15..].em();
-            return ap.parse().bq();
+fn lvt(data: &[u8], bca: usize) -> Option<usize> {
+    let headers = core::str::from_utf8(&data[..bca]).ok()?;
+    for line in headers.lines() {
+        let gj = fdb(line);
+        if gj.starts_with("content-length:") {
+            let val = line[15..].trim();
+            return val.parse().ok();
         }
     }
     None
 }
 
 
-fn kol(f: &[u8]) -> Vec<u8> {
+fn fra(data: &[u8]) -> Vec<u8> {
     let mut result = Vec::new();
-    let mut u = 0;
+    let mut pos = 0;
     
-    while u < f.len() {
+    while pos < data.len() {
         
-        let mut cfx = u;
-        while cfx + 1 < f.len() {
-            if f[cfx] == b'\r' && f[cfx + 1] == b'\n' {
+        let mut ari = pos;
+        while ari + 1 < data.len() {
+            if data[ari] == b'\r' && data[ari + 1] == b'\n' {
                 break;
             }
-            cfx += 1;
+            ari += 1;
         }
         
-        if cfx + 1 >= f.len() {
+        if ari + 1 >= data.len() {
             break;
         }
         
         
-        let als = core::str::jg(&f[u..cfx]).unwrap_or("0");
-        let als = als.adk(';').next().unwrap_or("0").em();
-        let aiw = usize::wa(als, 16).unwrap_or(0);
+        let td = core::str::from_utf8(&data[pos..ari]).unwrap_or("0");
+        let td = td.split(';').next().unwrap_or("0").trim();
+        let rs = usize::from_str_radix(td, 16).unwrap_or(0);
         
-        if aiw == 0 {
+        if rs == 0 {
             break; 
         }
         
-        let fet = cfx + 2; 
-        let fes = fet + aiw;
+        let cgz = ari + 2; 
+        let cgy = cgz + rs;
         
-        if fes > f.len() {
+        if cgy > data.len() {
             
-            result.bk(&f[fet..]);
+            result.extend_from_slice(&data[cgz..]);
             break;
         }
         
-        result.bk(&f[fet..fes]);
-        u = fes + 2; 
+        result.extend_from_slice(&data[cgz..cgy]);
+        pos = cgy + 2; 
     }
     
     result
 }
 
 
-fn jbc(f: &[u8], cfj: usize) -> bool {
-    if let Ok(zk) = core::str::jg(&f[..cfj]) {
-        for line in zk.ak() {
-            let pb = jtk(line);
-            if pb.cj("transfer-encoding:") && pb.contains("chunked") {
+fn erh(data: &[u8], bca: usize) -> bool {
+    if let Ok(headers) = core::str::from_utf8(&data[..bca]) {
+        for line in headers.lines() {
+            let gj = fdb(line);
+            if gj.starts_with("transfer-encoding:") && gj.contains("chunked") {
                 return true;
             }
         }
@@ -292,63 +291,63 @@ fn jbc(f: &[u8], cfj: usize) -> bool {
 }
 
 
-fn vdj(f: &[u8]) -> Result<Sv, &'static str> {
-    let cfj = nui(f).ok_or("Incomplete response")?;
+fn nra(data: &[u8]) -> Result<Ib, &'static str> {
+    let bca = hyw(data).ok_or("Incomplete response")?;
     
-    let toa = core::str::jg(&f[..cfj])
-        .jd(|_| "Invalid UTF-8 in headers")?;
+    let mkr = core::str::from_utf8(&data[..bca])
+        .map_err(|_| "Invalid UTF-8 in headers")?;
     
-    let mut ak = toa.ak();
-    let bli = ak.next().ok_or("No status line")?;
+    let mut lines = mkr.lines();
+    let ahd = lines.next().ok_or("No status line")?;
     
     
-    let ek: Vec<&str> = bli.eyv(3, ' ').collect();
-    if ek.len() < 2 {
+    let au: Vec<&str> = ahd.splitn(3, ' ').collect();
+    if au.len() < 2 {
         return Err("Invalid status line");
     }
     
-    let wt: u16 = ek[1].parse().jd(|_| "Invalid status code")?;
+    let status_code: u16 = au[1].parse().map_err(|_| "Invalid status code")?;
     
     
-    let mut zk = Vec::new();
-    for line in ak {
+    let mut headers = Vec::new();
+    for line in lines {
         if line.is_empty() {
             break;
         }
-        if let Some(cpj) = line.du(':') {
-            let bs = String::from(line[..cpj].em());
-            let bn = String::from(line[cpj+1..].em());
-            zk.push((bs, bn));
+        if let Some(ald) = line.find(':') {
+            let key = String::from(line[..ald].trim());
+            let value = String::from(line[ald+1..].trim());
+            headers.push((key, value));
         }
     }
     
     
-    let fry = &f[cfj..];
-    let gj = if jbc(f, cfj) {
-        crate::serial_println!("[HTTP] Decoding chunked transfer encoding ({} raw bytes)", fry.len());
-        kol(fry)
+    let cou = &data[bca..];
+    let body = if erh(data, bca) {
+        crate::serial_println!("[HTTP] Decoding chunked transfer encoding ({} raw bytes)", cou.len());
+        fra(cou)
     } else {
-        fry.ip()
+        cou.to_vec()
     };
     
-    Ok(Sv {
-        wt,
-        zk,
-        gj,
+    Ok(Ib {
+        status_code,
+        headers,
+        body,
     })
 }
 
 
-fn ewb(e: &str) -> Result<[u8; 4], ()> {
-    let ek: Vec<&str> = e.adk('.').collect();
-    if ek.len() != 4 {
+fn bof(j: &str) -> Result<[u8; 4], ()> {
+    let au: Vec<&str> = j.split('.').collect();
+    if au.len() != 4 {
         return Err(());
     }
     
-    let q: u8 = ek[0].parse().jd(|_| ())?;
-    let o: u8 = ek[1].parse().jd(|_| ())?;
-    let r: u8 = ek[2].parse().jd(|_| ())?;
-    let bc: u8 = ek[3].parse().jd(|_| ())?;
+    let a: u8 = au[0].parse().map_err(|_| ())?;
+    let b: u8 = au[1].parse().map_err(|_| ())?;
+    let c: u8 = au[2].parse().map_err(|_| ())?;
+    let d: u8 = au[3].parse().map_err(|_| ())?;
     
-    Ok([q, o, r, bc])
+    Ok([a, b, c, d])
 }

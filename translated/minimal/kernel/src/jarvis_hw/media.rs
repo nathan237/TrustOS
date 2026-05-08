@@ -22,102 +22,102 @@ use alloc::vec::Vec;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BinaryFormat {
-    Wl,
-    Sg,
-    Adr,       
-    Alc,       
-    Avg,    
-    Cdp, 
-    Asd,   
-    Bgi,  
-    Bnn,  
-    Wu,        
-    Nm,        
-    F,
+    Elf32,
+    Elf64,
+    Pe32,       
+    Pe64,       
+    MachO64,    
+    FlatBinary, 
+    FatImage,   
+    Ext4Image,  
+    NtfsImage,  
+    Gpt,        
+    Fu,        
+    Unknown,
 }
 
 impl BinaryFormat {
     pub fn as_str(&self) -> &'static str {
         match self {
-            BinaryFormat::Wl => "ELF32",
-            BinaryFormat::Sg => "ELF64",
-            BinaryFormat::Adr => "PE32",
-            BinaryFormat::Alc => "PE64",
-            BinaryFormat::Avg => "Mach-O 64",
-            BinaryFormat::Cdp => "Flat Binary",
-            BinaryFormat::Asd => "FAT Filesystem",
-            BinaryFormat::Bgi => "ext4 Filesystem",
-            BinaryFormat::Bnn => "NTFS Filesystem",
-            BinaryFormat::Wu => "GPT Partition Table",
-            BinaryFormat::Nm => "MBR Partition Table",
-            BinaryFormat::F => "Unknown",
+            BinaryFormat::Elf32 => "ELF32",
+            BinaryFormat::Elf64 => "ELF64",
+            BinaryFormat::Pe32 => "PE32",
+            BinaryFormat::Pe64 => "PE64",
+            BinaryFormat::MachO64 => "Mach-O 64",
+            BinaryFormat::FlatBinary => "Flat Binary",
+            BinaryFormat::FatImage => "FAT Filesystem",
+            BinaryFormat::Ext4Image => "ext4 Filesystem",
+            BinaryFormat::NtfsImage => "NTFS Filesystem",
+            BinaryFormat::Gpt => "GPT Partition Table",
+            BinaryFormat::Fu => "MBR Partition Table",
+            BinaryFormat::Unknown => "Unknown",
         }
     }
 }
 
 
-pub fn hfz(f: &[u8]) -> BinaryFormat {
-    if f.len() < 16 { return BinaryFormat::F; }
+pub fn dmx(data: &[u8]) -> BinaryFormat {
+    if data.len() < 16 { return BinaryFormat::Unknown; }
 
     
-    if f[0] == 0x7F && f[1] == b'E' && f[2] == b'L' && f[3] == b'F' {
-        return if f[4] == 2 { BinaryFormat::Sg } else { BinaryFormat::Wl };
+    if data[0] == 0x7F && data[1] == b'E' && data[2] == b'L' && data[3] == b'F' {
+        return if data[4] == 2 { BinaryFormat::Elf64 } else { BinaryFormat::Elf32 };
     }
 
     
-    if f[0] == b'M' && f[1] == b'Z' && f.len() >= 64 {
+    if data[0] == b'M' && data[1] == b'Z' && data.len() >= 64 {
         
-        let jja = u32::dj([f[0x3C], f[0x3D], f[0x3E], f[0x3F]]) as usize;
-        if jja + 6 < f.len() && f[jja] == b'P' && f[jja + 1] == b'E' {
+        let ewm = u32::from_le_bytes([data[0x3C], data[0x3D], data[0x3E], data[0x3F]]) as usize;
+        if ewm + 6 < data.len() && data[ewm] == b'P' && data[ewm + 1] == b'E' {
             
-            let lqu = jja + 24;
-            if lqu + 2 <= f.len() {
-                let uyw = u16::dj([f[lqu], f[lqu + 1]]);
-                return if uyw == 0x020B { BinaryFormat::Alc } else { BinaryFormat::Adr };
+            let gld = ewm + 24;
+            if gld + 2 <= data.len() {
+                let nnp = u16::from_le_bytes([data[gld], data[gld + 1]]);
+                return if nnp == 0x020B { BinaryFormat::Pe64 } else { BinaryFormat::Pe32 };
             }
-            return BinaryFormat::Adr;
+            return BinaryFormat::Pe32;
         }
     }
 
     
-    if f.len() >= 4 {
-        let sj = u32::dj([f[0], f[1], f[2], f[3]]);
-        if sj == 0xFEEDFACF || sj == 0xCFFAEDFE {
-            return BinaryFormat::Avg;
+    if data.len() >= 4 {
+        let magic = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
+        if magic == 0xFEEDFACF || magic == 0xCFFAEDFE {
+            return BinaryFormat::MachO64;
         }
     }
 
     
-    if f.len() >= 520 && &f[512..520] == b"EFI PART" {
-        return BinaryFormat::Wu;
+    if data.len() >= 520 && &data[512..520] == b"EFI PART" {
+        return BinaryFormat::Gpt;
     }
 
     
-    if f.len() >= 512 && f[510] == 0x55 && f[511] == 0xAA {
+    if data.len() >= 512 && data[510] == 0x55 && data[511] == 0xAA {
         
-        if f.len() >= 62 && (f[54..62] == *b"FAT12   " || f[54..62] == *b"FAT16   ") {
-            return BinaryFormat::Asd;
+        if data.len() >= 62 && (data[54..62] == *b"FAT12   " || data[54..62] == *b"FAT16   ") {
+            return BinaryFormat::FatImage;
         }
-        if f.len() >= 90 && f[82..90] == *b"FAT32   " {
-            return BinaryFormat::Asd;
+        if data.len() >= 90 && data[82..90] == *b"FAT32   " {
+            return BinaryFormat::FatImage;
         }
-        return BinaryFormat::Nm;
+        return BinaryFormat::Fu;
     }
 
     
-    if f.len() >= 11 && &f[3..11] == b"NTFS    " {
-        return BinaryFormat::Bnn;
+    if data.len() >= 11 && &data[3..11] == b"NTFS    " {
+        return BinaryFormat::NtfsImage;
     }
 
     
-    if f.len() >= 1082 {
-        let sps = u16::dj([f[1080], f[1081]]);
-        if sps == 0xEF53 {
-            return BinaryFormat::Bgi;
+    if data.len() >= 1082 {
+        let lth = u16::from_le_bytes([data[1080], data[1081]]);
+        if lth == 0xEF53 {
+            return BinaryFormat::Ext4Image;
         }
     }
 
-    BinaryFormat::F
+    BinaryFormat::Unknown
 }
 
 
@@ -126,68 +126,68 @@ pub fn hfz(f: &[u8]) -> BinaryFormat {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BinaryArch {
-    Bbc,
-    BT_,
-    Bbx,
-    Fg,
-    Brb,
-    Jy,
-    Bmh,
-    Acz,
-    Aod,
-    F,
+    X86,
+    X86_64,
+    Arm32,
+    Aarch64,
+    Riscv32,
+    Riscv64,
+    Mips32,
+    Mips64,
+    Wasm,
+    Unknown,
 }
 
 impl BinaryArch {
     pub fn as_str(&self) -> &'static str {
         match self {
-            BinaryArch::Bbc => "x86",
-            BinaryArch::BT_ => "x86_64",
-            BinaryArch::Bbx => "ARM32",
-            BinaryArch::Fg => "AArch64",
-            BinaryArch::Brb => "RISC-V 32",
-            BinaryArch::Jy => "RISC-V 64",
-            BinaryArch::Bmh => "MIPS32",
-            BinaryArch::Acz => "MIPS64",
-            BinaryArch::Aod => "WebAssembly",
-            BinaryArch::F => "Unknown",
+            BinaryArch::X86 => "x86",
+            BinaryArch::X86_64 => "x86_64",
+            BinaryArch::Arm32 => "ARM32",
+            BinaryArch::Aarch64 => "AArch64",
+            BinaryArch::Riscv32 => "RISC-V 32",
+            BinaryArch::Riscv64 => "RISC-V 64",
+            BinaryArch::Mips32 => "MIPS32",
+            BinaryArch::Mips64 => "MIPS64",
+            BinaryArch::Wasm => "WebAssembly",
+            BinaryArch::Unknown => "Unknown",
         }
     }
 }
 
 
-pub fn rwm(f: &[u8]) -> BinaryArch {
-    let format = hfz(f);
+pub fn ldt(data: &[u8]) -> BinaryArch {
+    let format = dmx(data);
 
     match format {
-        BinaryFormat::Wl | BinaryFormat::Sg => {
-            if f.len() < 20 { return BinaryArch::F; }
-            let cqb = u16::dj([f[18], f[19]]);
-            match cqb {
-                0x03 => BinaryArch::Bbc,
-                0x3E => BinaryArch::BT_,
-                0x28 => BinaryArch::Bbx,
-                0xB7 => BinaryArch::Fg,
-                0xF3 => if f[4] == 2 { BinaryArch::Jy } else { BinaryArch::Brb },
-                0x08 => BinaryArch::Bmh,
-                _ => BinaryArch::F,
+        BinaryFormat::Elf32 | BinaryFormat::Elf64 => {
+            if data.len() < 20 { return BinaryArch::Unknown; }
+            let e_machine = u16::from_le_bytes([data[18], data[19]]);
+            match e_machine {
+                0x03 => BinaryArch::X86,
+                0x3E => BinaryArch::X86_64,
+                0x28 => BinaryArch::Arm32,
+                0xB7 => BinaryArch::Aarch64,
+                0xF3 => if data[4] == 2 { BinaryArch::Riscv64 } else { BinaryArch::Riscv32 },
+                0x08 => BinaryArch::Mips32,
+                _ => BinaryArch::Unknown,
             }
         }
-        BinaryFormat::Adr => BinaryArch::Bbc,
-        BinaryFormat::Alc => BinaryArch::BT_,
-        BinaryFormat::Avg => {
-            if f.len() >= 8 {
-                let rpy = u32::dj([f[4], f[5], f[6], f[7]]);
-                match rpy {
-                    0x01000007 | 7 => BinaryArch::BT_,
-                    0x0100000C | 12 => BinaryArch::Fg,
-                    _ => BinaryArch::F,
+        BinaryFormat::Pe32 => BinaryArch::X86,
+        BinaryFormat::Pe64 => BinaryArch::X86_64,
+        BinaryFormat::MachO64 => {
+            if data.len() >= 8 {
+                let kyt = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
+                match kyt {
+                    0x01000007 | 7 => BinaryArch::X86_64,
+                    0x0100000C | 12 => BinaryArch::Aarch64,
+                    _ => BinaryArch::Unknown,
                 }
             } else {
-                BinaryArch::F
+                BinaryArch::Unknown
             }
         }
-        _ => BinaryArch::F,
+        _ => BinaryArch::Unknown,
     }
 }
 
@@ -197,99 +197,99 @@ pub fn rwm(f: &[u8]) -> BinaryArch {
 
 
 #[derive(Clone)]
-pub struct Rm {
+pub struct Hf {
     pub format: BinaryFormat,
     pub arch: BinaryArch,
-    pub afz: usize,
+    pub size_bytes: usize,
     
-    pub aeo: Vec<Ayl>,
+    pub sections: Vec<Uz>,
     
-    pub jsg: Vec<String>,
+    pub syscalls_found: Vec<String>,
     
-    pub jam: Vec<String>,
+    pub interesting_strings: Vec<String>,
     
-    pub mmv: bool,
+    pub translatable: bool,
     
-    pub mbi: String,
+    pub rv_disasm_preview: String,
     
-    pub mdc: Vec<String>,
+    pub security_notes: Vec<String>,
 }
 
 #[derive(Clone)]
-pub struct Ayl {
-    pub j: String,
-    pub l: usize,
-    pub aw: usize,
+pub struct Uz {
+    pub name: String,
+    pub offset: usize,
+    pub size: usize,
     pub flags: String,
 }
 
 
-pub fn qhw(f: &[u8]) -> Rm {
-    let format = hfz(f);
-    let arch = rwm(f);
-    let aeo = sqh(f, format);
-    let pd = kut(f);
-    let security = qks(f, format, arch);
+pub fn jvu(data: &[u8]) -> Hf {
+    let format = dmx(data);
+    let arch = ldt(data);
+    let sections = ltt(data, format);
+    let strings = fvx(data);
+    let security = jxv(data, format, arch);
 
     
-    let (mmv, wbp, apd) = match format {
-        BinaryFormat::Sg | BinaryFormat::Wl => {
-            xmv(f)
+    let (translatable, rv_disasm, syscalls) = match format {
+        BinaryFormat::Elf64 | BinaryFormat::Elf32 => {
+            pob(data)
         }
         _ => (false, String::new(), Vec::new()),
     };
 
-    Rm {
+    Hf {
         format,
         arch,
-        afz: f.len(),
-        aeo,
-        jsg: apd,
-        jam: pd,
-        mmv,
-        mbi: wbp,
-        mdc: security,
+        size_bytes: data.len(),
+        sections,
+        syscalls_found: syscalls,
+        interesting_strings: strings,
+        translatable,
+        rv_disasm_preview: rv_disasm,
+        security_notes: security,
     }
 }
 
 
-fn sqh(f: &[u8], format: BinaryFormat) -> Vec<Ayl> {
-    let mut aeo = Vec::new();
+fn ltt(data: &[u8], format: BinaryFormat) -> Vec<Uz> {
+    let mut sections = Vec::new();
 
     match format {
-        BinaryFormat::Sg => {
-            if f.len() < 64 { return aeo; }
+        BinaryFormat::Elf64 => {
+            if data.len() < 64 { return sections; }
 
             
-            let pjx = u64::dj([
-                f[40], f[41], f[42], f[43],
-                f[44], f[45], f[46], f[47],
+            let jfw = u64::from_le_bytes([
+                data[40], data[41], data[42], data[43],
+                data[44], data[45], data[46], data[47],
             ]) as usize;
 
             
-            let mfh = u16::dj([f[58], f[59]]) as usize;
+            let guq = u16::from_le_bytes([data[58], data[59]]) as usize;
             
-            let pjw = u16::dj([f[60], f[61]]) as usize;
+            let jfv = u16::from_le_bytes([data[60], data[61]]) as usize;
 
-            if pjx == 0 || mfh < 64 || pjw > 100 { return aeo; }
+            if jfw == 0 || guq < 64 || jfv > 100 { return sections; }
 
-            for a in 0..pjw.v(50) {
-                let ar = pjx + a * mfh;
-                if ar + 64 > f.len() { break; }
+            for i in 0..jfv.min(50) {
+                let base = jfw + i * guq;
+                if base + 64 > data.len() { break; }
 
-                let dbx = u32::dj([
-                    f[ar + 4], f[ar + 5], f[ar + 6], f[ar + 7]]);
-                let jpp = u64::dj([
-                    f[ar + 8], f[ar + 9], f[ar + 10], f[ar + 11],
-                    f[ar + 12], f[ar + 13], f[ar + 14], f[ar + 15]]);
-                let pjy = u64::dj([
-                    f[ar + 24], f[ar + 25], f[ar + 26], f[ar + 27],
-                    f[ar + 28], f[ar + 29], f[ar + 30], f[ar + 31]]) as usize;
-                let pjz = u64::dj([
-                    f[ar + 32], f[ar + 33], f[ar + 34], f[ar + 35],
-                    f[ar + 36], f[ar + 37], f[ar + 38], f[ar + 39]]) as usize;
+                let sh_type = u32::from_le_bytes([
+                    data[base + 4], data[base + 5], data[base + 6], data[base + 7]]);
+                let fam = u64::from_le_bytes([
+                    data[base + 8], data[base + 9], data[base + 10], data[base + 11],
+                    data[base + 12], data[base + 13], data[base + 14], data[base + 15]]);
+                let jfx = u64::from_le_bytes([
+                    data[base + 24], data[base + 25], data[base + 26], data[base + 27],
+                    data[base + 28], data[base + 29], data[base + 30], data[base + 31]]) as usize;
+                let jfy = u64::from_le_bytes([
+                    data[base + 32], data[base + 33], data[base + 34], data[base + 35],
+                    data[base + 36], data[base + 37], data[base + 38], data[base + 39]]) as usize;
 
-                let bde = match dbx {
+                let ws = match sh_type {
                     0 => continue, 
                     1 => "PROGBITS",
                     2 => "SYMTAB",
@@ -302,124 +302,124 @@ fn sqh(f: &[u8], format: BinaryFormat) -> Vec<Ayl> {
                     _ => "OTHER",
                 };
 
-                let mut ghe = String::new();
-                if jpp & 1 != 0 { ghe.push('W'); }
-                if jpp & 2 != 0 { ghe.push('A'); }
-                if jpp & 4 != 0 { ghe.push('X'); }
+                let mut cxx = String::new();
+                if fam & 1 != 0 { cxx.push('W'); }
+                if fam & 2 != 0 { cxx.push('A'); }
+                if fam & 4 != 0 { cxx.push('X'); }
 
-                aeo.push(Ayl {
-                    j: String::from(bde),
-                    l: pjy,
-                    aw: pjz,
-                    flags: ghe,
+                sections.push(Uz {
+                    name: String::from(ws),
+                    offset: jfx,
+                    size: jfy,
+                    flags: cxx,
                 });
             }
         }
         _ => {}
     }
 
-    aeo
+    sections
 }
 
 
-fn kut(f: &[u8]) -> Vec<String> {
-    let mut pd = Vec::new();
-    let mut cv = String::new();
+fn fvx(data: &[u8]) -> Vec<String> {
+    let mut strings = Vec::new();
+    let mut current = String::new();
 
-    for &hf in f.iter().take(64 * 1024) { 
-        if hf >= 0x20 && hf < 0x7F {
-            cv.push(hf as char);
+    for &byte in data.iter().take(64 * 1024) { 
+        if byte >= 0x20 && byte < 0x7F {
+            current.push(byte as char);
         } else {
-            if cv.len() >= 6 {
+            if current.len() >= 6 {
                 
-                let pb = cv.avd();
-                let tvp = pb.contains("http")
-                    || pb.contains("password")
-                    || pb.contains("key")
-                    || pb.contains("token")
-                    || pb.contains("secret")
-                    || pb.contains("root")
-                    || pb.contains("admin")
-                    || pb.contains("linux")
-                    || pb.contains("android")
-                    || pb.contains("error")
-                    || pb.contains("/dev/")
-                    || pb.contains("/proc/")
-                    || pb.contains("/sys/")
-                    || pb.contains(".so")
-                    || pb.contains(".dll")
-                    || (cv.len() >= 20); 
+                let gj = current.to_ascii_lowercase();
+                let mqy = gj.contains("http")
+                    || gj.contains("password")
+                    || gj.contains("key")
+                    || gj.contains("token")
+                    || gj.contains("secret")
+                    || gj.contains("root")
+                    || gj.contains("admin")
+                    || gj.contains("linux")
+                    || gj.contains("android")
+                    || gj.contains("error")
+                    || gj.contains("/dev/")
+                    || gj.contains("/proc/")
+                    || gj.contains("/sys/")
+                    || gj.contains(".so")
+                    || gj.contains(".dll")
+                    || (current.len() >= 20); 
 
-                if tvp && pd.len() < 50 {
-                    pd.push(cv.clone());
+                if mqy && strings.len() < 50 {
+                    strings.push(current.clone());
                 }
             }
-            cv.clear();
+            current.clear();
         }
     }
 
-    pd
+    strings
 }
 
 
-fn qks(f: &[u8], format: BinaryFormat, arch: BinaryArch) -> Vec<String> {
-    let mut ts = Vec::new();
+fn jxv(data: &[u8], format: BinaryFormat, arch: BinaryArch) -> Vec<String> {
+    let mut notes = Vec::new();
 
     match format {
-        BinaryFormat::Sg | BinaryFormat::Wl => {
+        BinaryFormat::Elf64 | BinaryFormat::Elf32 => {
             
-            if tmk(f) {
-                ts.push(String::from("WARN: Executable stack detected (NX disabled)"));
+            if mjj(data) {
+                notes.push(String::from("WARN: Executable stack detected (NX disabled)"));
             }
 
             
-            if !tnc(f) {
-                ts.push(String::from("NOTE: No RELRO — GOT/PLT writable"));
+            if !mka(data) {
+                notes.push(String::from("NOTE: No RELRO — GOT/PLT writable"));
             }
 
             
-            let tni = f.ee(4).any(|d| {
-                d == [0x02, 0x00, 0x00, 0x00] 
+            let mkf = data.windows(4).any(|w| {
+                w == [0x02, 0x00, 0x00, 0x00] 
             });
-            if !tni {
-                ts.push(String::from("INFO: Likely stripped (no symbol table)"));
+            if !mkf {
+                notes.push(String::from("INFO: Likely stripped (no symbol table)"));
             }
         }
-        BinaryFormat::Adr | BinaryFormat::Alc => {
-            ts.push(format!("PE binary ({})", arch.as_str()));
+        BinaryFormat::Pe32 | BinaryFormat::Pe64 => {
+            notes.push(format!("PE binary ({})", arch.as_str()));
             
         }
         _ => {}
     }
 
-    ts
+    notes
 }
 
-fn tmk(f: &[u8]) -> bool {
+fn mjj(data: &[u8]) -> bool {
     
-    if f.len() < 64 { return false; }
-    let abt = u64::dj([
-        f[32], f[33], f[34], f[35],
-        f[36], f[37], f[38], f[39],
+    if data.len() < 64 { return false; }
+    let nv = u64::from_le_bytes([
+        data[32], data[33], data[34], data[35],
+        data[36], data[37], data[38], data[39],
     ]) as usize;
-    let ovf = u16::dj([f[54], f[55]]) as usize;
-    let vhd = u16::dj([f[56], f[57]]) as usize;
+    let ium = u16::from_le_bytes([data[54], data[55]]) as usize;
+    let ntz = u16::from_le_bytes([data[56], data[57]]) as usize;
 
-    if abt == 0 || ovf < 56 { return false; }
+    if nv == 0 || ium < 56 { return false; }
 
-    for a in 0..vhd.v(20) {
-        let ar = abt + a * ovf;
-        if ar + 8 > f.len() { break; }
-        let bku = u32::dj([f[ar], f[ar+1], f[ar+2], f[ar+3]]);
-        if bku == 0x6474E551 { 
-            let bvv = u32::dj([f[ar+4], f[ar+5], f[ar+6], f[ar+7]]);
-            return bvv & 1 != 0; 
+    for i in 0..ntz.min(20) {
+        let base = nv + i * ium;
+        if base + 8 > data.len() { break; }
+        let p_type = u32::from_le_bytes([data[base], data[base+1], data[base+2], data[base+3]]);
+        if p_type == 0x6474E551 { 
+            let p_flags = u32::from_le_bytes([data[base+4], data[base+5], data[base+6], data[base+7]]);
+            return p_flags & 1 != 0; 
         }
     }
     false
 }
 
-fn tnc(iia: &[u8]) -> bool {
+fn mka(_data: &[u8]) -> bool {
     
     
     true 
@@ -430,26 +430,26 @@ fn tnc(iia: &[u8]) -> bool {
 
 
 
-fn xmv(f: &[u8]) -> (bool, String, Vec<String>) {
+fn pob(data: &[u8]) -> (bool, String, Vec<String>) {
     
-    match crate::riscv_translator::pvz(f) {
+    match crate::riscv_translator::jon(data) {
         Ok(disasm) => {
-            let mut apd = Vec::new();
+            let mut syscalls = Vec::new();
 
             
-            for line in disasm.ak() {
+            for line in disasm.lines() {
                 if line.contains("ECALL") || line.contains("SYSCALL") || line.contains("SVC") {
-                    apd.push(String::from(line.em()));
+                    syscalls.push(String::from(line.trim()));
                 }
             }
 
             
-            let hvz: String = disasm.ak()
+            let dww: String = disasm.lines()
                 .take(40)
                 .collect::<Vec<&str>>()
-                .rr("\n");
+                .join("\n");
 
-            (true, hvz, apd)
+            (true, dww, syscalls)
         }
         Err(_) => (false, String::new(), Vec::new()),
     }
@@ -461,51 +461,51 @@ fn xmv(f: &[u8]) -> (bool, String, Vec<String>) {
 
 
 #[derive(Clone)]
-pub struct Ya {
+pub struct Kj {
     pub index: u8,
-    pub kk: String,
-    pub aag: u64,
-    pub fuv: u64,
-    pub aga: u64,
-    pub cji: bool,
+    pub kind: String,
+    pub start_lba: u64,
+    pub cqs: u64,
+    pub size_mb: u64,
+    pub bootable: bool,
 }
 
 
-pub fn vde(f: &[u8]) -> Vec<Ya> {
-    let mut ek = Vec::new();
+pub fn nqx(data: &[u8]) -> Vec<Kj> {
+    let mut au = Vec::new();
 
-    if f.len() < 512 { return ek; }
+    if data.len() < 512 { return au; }
 
     
-    if f.len() >= 1024 && &f[512..520] == b"EFI PART" {
-        lsk(f, &mut ek);
+    if data.len() >= 1024 && &data[512..520] == b"EFI PART" {
+        gmj(data, &mut au);
     }
     
-    else if f[510] == 0x55 && f[511] == 0xAA {
-        lsp(f, &mut ek);
+    else if data[510] == 0x55 && data[511] == 0xAA {
+        gmm(data, &mut au);
     }
 
-    ek
+    au
 }
 
-fn lsp(f: &[u8], ek: &mut Vec<Ya>) {
+fn gmm(data: &[u8], au: &mut Vec<Kj>) {
     
-    for a in 0..4u8 {
-        let ar = 446 + a as usize * 16;
-        if ar + 16 > f.len() { break; }
+    for i in 0..4u8 {
+        let base = 446 + i as usize * 16;
+        if base + 16 > data.len() { break; }
 
-        let status = f[ar];
-        let frq = f[ar + 4];
-        let aag = u32::dj([
-            f[ar + 8], f[ar + 9], f[ar + 10], f[ar + 11]
+        let status = data[base];
+        let ptype = data[base + 4];
+        let start_lba = u32::from_le_bytes([
+            data[base + 8], data[base + 9], data[base + 10], data[base + 11]
         ]) as u64;
-        let fuv = u32::dj([
-            f[ar + 12], f[ar + 13], f[ar + 14], f[ar + 15]
+        let cqs = u32::from_le_bytes([
+            data[base + 12], data[base + 13], data[base + 14], data[base + 15]
         ]) as u64;
 
-        if frq == 0 || fuv == 0 { continue; }
+        if ptype == 0 || cqs == 0 { continue; }
 
-        let kk = match frq {
+        let kind = match ptype {
             0x01 => "FAT12",
             0x04 | 0x06 | 0x0E => "FAT16",
             0x0B | 0x0C => "FAT32",
@@ -517,80 +517,80 @@ fn lsp(f: &[u8], ek: &mut Vec<Ya>) {
             _ => "Unknown",
         };
 
-        ek.push(Ya {
-            index: a,
-            kk: String::from(kk),
-            aag,
-            fuv,
-            aga: fuv * 512 / (1024 * 1024),
-            cji: status == 0x80,
+        au.push(Kj {
+            index: i,
+            kind: String::from(kind),
+            start_lba,
+            cqs,
+            size_mb: cqs * 512 / (1024 * 1024),
+            bootable: status == 0x80,
         });
     }
 }
 
-fn lsk(f: &[u8], ek: &mut Vec<Ya>) {
-    if f.len() < 1024 { return; }
+fn gmj(data: &[u8], au: &mut Vec<Kj>) {
+    if data.len() < 1024 { return; }
 
     
-    let htd = u32::dj([f[592], f[593], f[594], f[595]]) as usize;
-    let acy = u32::dj([f[596], f[597], f[598], f[599]]) as usize;
-    let ktr = u64::dj([
-        f[584], f[585], f[586], f[587],
-        f[588], f[589], f[590], f[591],
+    let dvn = u32::from_le_bytes([data[592], data[593], data[594], data[595]]) as usize;
+    let oi = u32::from_le_bytes([data[596], data[597], data[598], data[599]]) as usize;
+    let fuz = u64::from_le_bytes([
+        data[584], data[585], data[586], data[587],
+        data[588], data[589], data[590], data[591],
     ]);
 
-    let slx = (ktr * 512) as usize;
-    if acy < 128 { return; }
+    let lql = (fuz * 512) as usize;
+    if oi < 128 { return; }
 
-    for a in 0..htd.v(32) {
-        let ar = slx + a * acy;
-        if ar + 128 > f.len() { break; }
-
-        
-        let fxq = &f[ar..ar + 16];
-        if fxq.iter().xx(|&o| o == 0) { continue; }
-
-        let aag = u64::dj([
-            f[ar + 32], f[ar + 33], f[ar + 34], f[ar + 35],
-            f[ar + 36], f[ar + 37], f[ar + 38], f[ar + 39],
-        ]);
-        let fhr = u64::dj([
-            f[ar + 40], f[ar + 41], f[ar + 42], f[ar + 43],
-            f[ar + 44], f[ar + 45], f[ar + 46], f[ar + 47],
-        ]);
-
-        let fuv = fhr.ao(aag) + 1;
+    for i in 0..dvn.min(32) {
+        let base = lql + i * oi;
+        if base + 128 > data.len() { break; }
 
         
-        let kk = trl(fxq);
+        let type_guid = &data[base..base + 16];
+        if type_guid.iter().all(|&b| b == 0) { continue; }
 
-        ek.push(Ya {
-            index: a as u8,
-            kk,
-            aag,
-            fuv,
-            aga: fuv * 512 / (1024 * 1024),
-            cji: false,
+        let start_lba = u64::from_le_bytes([
+            data[base + 32], data[base + 33], data[base + 34], data[base + 35],
+            data[base + 36], data[base + 37], data[base + 38], data[base + 39],
+        ]);
+        let end_lba = u64::from_le_bytes([
+            data[base + 40], data[base + 41], data[base + 42], data[base + 43],
+            data[base + 44], data[base + 45], data[base + 46], data[base + 47],
+        ]);
+
+        let cqs = end_lba.saturating_sub(start_lba) + 1;
+
+        
+        let kind = mnn(type_guid);
+
+        au.push(Kj {
+            index: i as u8,
+            kind,
+            start_lba,
+            cqs,
+            size_mb: cqs * 512 / (1024 * 1024),
+            bootable: false,
         });
     }
 }
 
-fn trl(aar: &[u8]) -> String {
+fn mnn(guid: &[u8]) -> String {
     
     
-    if aar[0] == 0x28 && aar[1] == 0x73 && aar[2] == 0x2A && aar[3] == 0xC1 {
+    if guid[0] == 0x28 && guid[1] == 0x73 && guid[2] == 0x2A && guid[3] == 0xC1 {
         return String::from("EFI System");
     }
     
-    if aar[0] == 0xAF && aar[1] == 0x3D && aar[2] == 0xC6 && aar[3] == 0x0F {
+    if guid[0] == 0xAF && guid[1] == 0x3D && guid[2] == 0xC6 && guid[3] == 0x0F {
         return String::from("Linux");
     }
     
-    if aar[0] == 0x6D && aar[1] == 0xFD && aar[2] == 0x57 && aar[3] == 0x06 {
+    if guid[0] == 0x6D && guid[1] == 0xFD && guid[2] == 0x57 && guid[3] == 0x06 {
         return String::from("Linux Swap");
     }
     
-    if aar[0] == 0xA2 && aar[1] == 0xA0 && aar[2] == 0xD0 && aar[3] == 0xEB {
+    if guid[0] == 0xA2 && guid[1] == 0xA0 && guid[2] == 0xD0 && guid[3] == 0xEB {
         return String::from("Microsoft Basic Data");
     }
     String::from("Unknown")
@@ -600,76 +600,76 @@ fn trl(aar: &[u8]) -> String {
 
 
 
-impl Rm {
-    pub fn fix(&self) -> String {
-        let mut e = String::new();
+impl Hf {
+    pub fn format_report(&self) -> String {
+        let mut j = String::new();
 
-        e.t("\x01C╔══════════════════════════════════════════════════════════╗\n");
-        e.t("║         JARVIS Binary Intelligence Report                ║\n");
-        e.t("╚══════════════════════════════════════════════════════════╝\x01W\n\n");
+        j.push_str("\x01C╔══════════════════════════════════════════════════════════╗\n");
+        j.push_str("║         JARVIS Binary Intelligence Report                ║\n");
+        j.push_str("╚══════════════════════════════════════════════════════════╝\x01W\n\n");
 
-        e.t(&format!("\x01Y[Format]\x01W {} ({})\n", self.format.as_str(), self.arch.as_str()));
-        e.t(&format!("\x01Y[Size]\x01W {} bytes ({} KB)\n\n", self.afz, self.afz / 1024));
+        j.push_str(&format!("\x01Y[Format]\x01W {} ({})\n", self.format.as_str(), self.arch.as_str()));
+        j.push_str(&format!("\x01Y[Size]\x01W {} bytes ({} KB)\n\n", self.size_bytes, self.size_bytes / 1024));
 
         
-        if !self.aeo.is_empty() {
-            e.t("\x01Y[Sections]\x01W\n");
-            for zw in &self.aeo {
-                e.t(&format!("  {:12} off=0x{:08X} size=0x{:06X} [{}]\n",
-                    zw.j, zw.l, zw.aw, zw.flags));
+        if !self.sections.is_empty() {
+            j.push_str("\x01Y[Sections]\x01W\n");
+            for lx in &self.sections {
+                j.push_str(&format!("  {:12} off=0x{:08X} size=0x{:06X} [{}]\n",
+                    lx.name, lx.offset, lx.size, lx.flags));
             }
-            e.push('\n');
+            j.push('\n');
         }
 
         
-        if self.mmv {
-            e.t("\x01G[RISC-V Translation]\x01W OK — binary decoded into universal IR\n");
-            if !self.jsg.is_empty() {
-                e.t(&format!("  Syscalls detected: {}\n", self.jsg.len()));
-                for jt in self.jsg.iter().take(10) {
-                    e.t(&format!("    {}\n", jt));
+        if self.translatable {
+            j.push_str("\x01G[RISC-V Translation]\x01W OK — binary decoded into universal IR\n");
+            if !self.syscalls_found.is_empty() {
+                j.push_str(&format!("  Syscalls detected: {}\n", self.syscalls_found.len()));
+                for dr in self.syscalls_found.iter().take(10) {
+                    j.push_str(&format!("    {}\n", dr));
                 }
             }
-            if !self.mbi.is_empty() {
-                e.t("\n\x01C  --- Disassembly Preview ---\x01W\n");
-                for line in self.mbi.ak().take(20) {
-                    e.t(&format!("  {}\n", line));
+            if !self.rv_disasm_preview.is_empty() {
+                j.push_str("\n\x01C  --- Disassembly Preview ---\x01W\n");
+                for line in self.rv_disasm_preview.lines().take(20) {
+                    j.push_str(&format!("  {}\n", line));
                 }
-                e.push('\n');
+                j.push('\n');
             }
-        } else if oh!(self.format, BinaryFormat::Wl | BinaryFormat::Sg) {
-            e.t("\x01R[RISC-V Translation]\x01W Failed — unsupported arch or corrupted\n\n");
+        } else if matches!(self.format, BinaryFormat::Elf32 | BinaryFormat::Elf64) {
+            j.push_str("\x01R[RISC-V Translation]\x01W Failed — unsupported arch or corrupted\n\n");
         }
 
         
-        if !self.jam.is_empty() {
-            e.t(&format!("\x01Y[Interesting Strings]\x01W ({} found)\n", self.jam.len()));
-            for apc in self.jam.iter().take(15) {
-                e.t(&format!("  \"{}\"\n", apc));
+        if !self.interesting_strings.is_empty() {
+            j.push_str(&format!("\x01Y[Interesting Strings]\x01W ({} found)\n", self.interesting_strings.len()));
+            for uz in self.interesting_strings.iter().take(15) {
+                j.push_str(&format!("  \"{}\"\n", uz));
             }
-            e.push('\n');
+            j.push('\n');
         }
 
         
-        if !self.mdc.is_empty() {
-            e.t("\x01Y[Security Assessment]\x01W\n");
-            for jp in &self.mdc {
-                e.t(&format!("  {}\n", jp));
+        if !self.security_notes.is_empty() {
+            j.push_str("\x01Y[Security Assessment]\x01W\n");
+            for note in &self.security_notes {
+                j.push_str(&format!("  {}\n", note));
             }
         }
 
-        e
+        j
     }
 }
 
 
-pub fn svx(ek: &[Ya]) -> String {
-    let mut e = String::new();
-    e.t("\x01C═══ Partition Table ═══\x01W\n");
-    for ai in ek {
-        e.t(&format!("  #{}: {} — start=LBA {} size={} MB {}\n",
-            ai.index, ai.kk, ai.aag, ai.aga,
-            if ai.cji { "[BOOT]" } else { "" }));
+pub fn lxp(au: &[Kj]) -> String {
+    let mut j = String::new();
+    j.push_str("\x01C═══ Partition Table ═══\x01W\n");
+    for aa in au {
+        j.push_str(&format!("  #{}: {} — start=LBA {} size={} MB {}\n",
+            aa.index, aa.kind, aa.start_lba, aa.size_mb,
+            if aa.bootable { "[BOOT]" } else { "" }));
     }
-    e
+    j
 }

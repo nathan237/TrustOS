@@ -41,7 +41,7 @@ pub fn fast_cos(x: f32) -> f32 {
 // Public function — callable from other modules.
 pub fn fast_tan(x: f32) -> f32 {
     let c = fast_cos(x);
-    if c.absolute() < 0.0001 { return 99999.0; }
+    if c.abs() < 0.0001 { return 99999.0; }
     fast_sin(x) / c
 }
 
@@ -114,15 +114,15 @@ pub fn fast_absolute(x: f32) -> f32 {
 /// Clamp value to [min, max]
 #[inline(always)]
 // Public function — callable from other modules.
-pub fn clamp(x: f32, minimum: f32, maximum: f32) -> f32 {
-    if x < minimum { minimum } else if x > maximum { maximum } else { x }
+pub fn clamp(x: f32, min: f32, max: f32) -> f32 {
+    if x < min { min } else if x > max { max } else { x }
 }
 
 /// Clamp i32 to [min, max]
 #[inline(always)]
 // Public function — callable from other modules.
-pub fn clamp_i32(x: i32, minimum: i32, maximum: i32) -> i32 {
-    if x < minimum { minimum } else if x > maximum { maximum } else { x }
+pub fn clamp_i32(x: i32, min: i32, max: i32) -> i32 {
+    if x < min { min } else if x > max { max } else { x }
 }
 
 /// Linear interpolation

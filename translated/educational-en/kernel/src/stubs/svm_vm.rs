@@ -95,7 +95,7 @@ pub fn vcpu_state_summary(&self) -> String { String::new() }
         // Public function — callable from other modules.
 pub fn memory_summary(&self) -> String { String::new() }
         // Public function — callable from other modules.
-pub fn read_guest_memory(&self, _gpa: u64, _length: usize) -> Option<&[u8]> { None }
+pub fn read_guest_memory(&self, _gpa: u64, _len: usize) -> Option<&[u8]> { None }
         // Public function — callable from other modules.
 pub fn start_linux(&mut self, _bzimage: &[u8], _cmdline: &str, _initrd: Option<&[u8]>) -> Result<(), String> {
         Err(String::from("SVM not available on this architecture"))

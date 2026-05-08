@@ -44,7 +44,7 @@ pub fn load_png_from_bytes(data: &[u8]) -> Option<Image> {
     }
     
     // Parse chunks
-    let mut position = 8usize;
+    let mut pos = 8usize;
     let mut width: u32 = 0;
     let mut height: u32 = 0;
     let mut bit_depth: u8 = 0;
@@ -52,10 +52,10 @@ pub fn load_png_from_bytes(data: &[u8]) -> Option<Image> {
     let mut interlace: u8 = 0;
     let mut compressed_data: Vec<u8> = Vec::new();
     
-    while position + 12 <= data.len() {
-        let chunk_length = read_u32_be(&data[position..position+4]) as usize;
-        let chunk_type = &data[position+4..position+8];
-        let chunk_data = &data[position+8..position+8+chunk_length.minimum(data.len() - position - 8)];
+    while pos + 12 <= data.len() {
+        let chunk_length = read_u32_be(&data[pos..pos+4]) as usize;
+        let chunk_type = &data[pos+4..pos+8];
+        let chunk_data = &data[pos+8..pos+8+chunk_length.min(data.len() - pos - 8)];
         
                 // Pattern matching — Rust's exhaustive branching construct.
 match chunk_type {
@@ -89,7 +89,7 @@ match chunk_type {
             }
         }
         
-        position += 12 + chunk_length; // 4 len + 4 type + data + 4 crc
+        pos += 12 + chunk_length; // 4 len + 4 type + data + 4 crc
     }
     
     // Validate header
@@ -148,7 +148,7 @@ fn decode_filtered_data(data: &[u8], width: u32, height: u32, channels: usize) -
     let mut pixels = Vec::with_capacity((width * height) as usize);
     
     // Previous row for filter calculations
-    let mut previous_row: Vec<u8> = alloc::vec![0u8; row_bytes];
+    let mut prev_row: Vec<u8> = alloc::vec![0u8; row_bytes];
     let mut current_row: Vec<u8> = alloc::vec![0u8; row_bytes];
     
     for y in 0..height as usize {
@@ -160,8 +160,8 @@ fn decode_filtered_data(data: &[u8], width: u32, height: u32, channels: usize) -
         for x in 0..row_bytes {
             let raw = raw_row[x];
             let a = if x >= channels { current_row[x - channels] } else { 0 }; // Left
-            let b = previous_row[x]; // Above
-            let c = if x >= channels { previous_row[x - channels] } else { 0 }; // Upper-left
+            let b = prev_row[x]; // Above
+            let c = if x >= channels { prev_row[x - channels] } else { 0 }; // Upper-left
             
             current_row[x] = // Pattern matching — Rust's exhaustive branching construct.
 match filter_type {
@@ -211,7 +211,7 @@ match channels {
         }
         
         // Swap rows
-        core::mem::swap(&mut previous_row, &mut current_row);
+        core::mem::swap(&mut prev_row, &mut current_row);
     }
     
     Some(pixels)
@@ -220,9 +220,9 @@ match channels {
 /// Paeth predictor for PNG filtering
 fn paeth_predictor(a: u8, b: u8, c: u8) -> u8 {
     let p = a as i16 + b as i16 - c as i16;
-    let pa = (p - a as i16).absolute();
-    let pb = (p - b as i16).absolute();
-    let pc = (p - c as i16).absolute();
+    let pa = (p - a as i16).abs();
+    let pb = (p - b as i16).abs();
+    let pc = (p - c as i16).abs();
     
     if pa <= pb && pa <= pc {
         a
@@ -288,7 +288,7 @@ pub fn detect_image_format(data: &[u8]) -> ImageFormat {
     
     // BMP
     if data[0] == b'B' && data[1] == b'M' {
-        return ImageFormat::Bitmap;
+        return ImageFormat::Bmp;
     }
     
     // JPEG
@@ -324,7 +324,7 @@ pub fn detect_image_format(data: &[u8]) -> ImageFormat {
 // Enumeration — a type that can be one of several variants.
 pub enum ImageFormat {
     Png,
-    Bitmap,
+    Bmp,
     Jpeg,
     Gif,
     Ppm,
@@ -340,7 +340,7 @@ impl ImageFormat {
                 // Pattern matching — Rust's exhaustive branching construct.
 match self {
             ImageFormat::Png => "png",
-            ImageFormat::Bitmap => "bmp",
+            ImageFormat::Bmp => "bmp",
             ImageFormat::Jpeg => "jpg",
             ImageFormat::Gif => "gif",
             ImageFormat::Ppm => "ppm",
@@ -355,7 +355,7 @@ match self {
                 // Pattern matching — Rust's exhaustive branching construct.
 match self {
             ImageFormat::Png => "image/png",
-            ImageFormat::Bitmap => "image/bmp",
+            ImageFormat::Bmp => "image/bmp",
             ImageFormat::Jpeg => "image/jpeg",
             ImageFormat::Gif => "image/gif",
             ImageFormat::Ppm => "image/x-portable-pixmap",
@@ -371,7 +371,7 @@ pub fn load_image_auto(data: &[u8]) -> Option<Image> {
         // Pattern matching — Rust's exhaustive branching construct.
 match detect_image_format(data) {
         ImageFormat::Png => load_png_from_bytes(data),
-        ImageFormat::Bitmap => super::bmp::load_bitmap_from_bytes(data),
+        ImageFormat::Bmp => super::bmp::load_bitmap_from_bytes(data),
         ImageFormat::Ppm => super::ppm::load_ppm_from_bytes(data),
         ImageFormat::Jpeg => {
             crate::serial_println!("[Image] JPEG not yet supported");

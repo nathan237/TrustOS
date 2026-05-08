@@ -15,276 +15,276 @@ use super::lexer::{Token, TokenKind};
 
 #[derive(Debug, Clone)]
 pub struct Program {
-    pub pj: Vec<Item>,
+    pub items: Vec<Item>,
 }
 
 
 #[derive(Debug, Clone)]
 pub enum Item {
-    Bs(Abu),
-    Yx(Azj),
+    Aq(Md),
+    Struct(Vf),
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Abu {
-    pub j: String,
-    pub oi: Vec<(String, Type)>,
-    pub pcy: Type,
-    pub gj: Dj,
+pub struct Md {
+    pub name: String,
+    pub params: Vec<(String, Type)>,
+    pub jan: Type,
+    pub body: Bl,
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Azj {
-    pub j: String,
+pub struct Vf {
+    pub name: String,
     pub fields: Vec<(String, Type)>,
 }
 
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
-    Ab,
-    R,
-    Em,
-    He,
-    Cn,
-    U(Box<Type>),
-    Chu(String),
+    I64,
+    F64,
+    Bool,
+    Str,
+    Void,
+    Array(Box<Type>),
+    Named(String),
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Dj {
-    pub boq: Vec<Stmt>,
+pub struct Bl {
+    pub stmts: Vec<Stmt>,
 }
 
 
 #[derive(Debug, Clone)]
 pub enum Stmt {
-    Pu { j: String, oos: bool, ty: Option<Type>, init: Option<Expr> },
-    Vk { cd: Expr, bn: Expr },
-    Xw { op: BinOp, cd: Expr, bn: Expr },
+    Let { name: String, ipd: bool, ty: Option<Type>, init: Option<Expr> },
+    Assign { target: Expr, value: Expr },
+    OpAssign { op: BinOp, target: Expr, value: Expr },
     Expr(Expr),
-    Hd(Option<Expr>),
-    Gx { mo: Expr, cne: Dj, ckc: Option<Dj> },
-    La { mo: Expr, gj: Dj },
-    Ll { bfp: String, iter: Expr, gj: Dj },
-    Pz(Dj),
-    Vr,
-    Cg,
+    Return(Option<Expr>),
+    If { fc: Expr, avj: Bl, atp: Option<Bl> },
+    While { fc: Expr, body: Bl },
+    For { ael: String, iter: Expr, body: Bl },
+    Loop(Bl),
+    Break,
+    Continue,
 }
 
 
 #[derive(Debug, Clone)]
 pub enum Expr {
-    Ta(i64),
-    Wq(f64),
-    Yw(String),
-    Rp(bool),
-    Kq(String),
-    BinOp { op: BinOp, fd: Box<Expr>, hw: Box<Expr> },
+    IntLit(i64),
+    FloatLit(f64),
+    StringLit(String),
+    BoolLit(bool),
+    Ident(String),
+    BinOp { op: BinOp, left: Box<Expr>, right: Box<Expr> },
     UnaryOp { op: UnaryOp, expr: Box<Expr> },
-    En { ke: String, n: Vec<Expr> },
+    Call { func: String, args: Vec<Expr> },
     Index { array: Box<Expr>, index: Box<Expr> },
-    Asg { uww: Box<Expr>, buj: String },
-    U(Vec<Expr>),
-    Nt { ay: Box<Expr>, ci: Box<Expr> },
-    Apu { expr: Box<Expr>, ty: Type },
-    Dj(Dj),
+    Field { object: Box<Expr>, field: String },
+    Array(Vec<Expr>),
+    Range { start: Box<Expr>, end: Box<Expr> },
+    Cast { expr: Box<Expr>, ty: Type },
+    Bl(Bl),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BinOp {
-    Add, Sub, Mul, Div, Xp,
-    Eq, Xu, Lt, Jn, Xm, Wx,
-    Ex, Fx,
-    Vm, Vn, Vo, Ob, Oc,
+    Add, Sub, Mul, Div, Mod,
+    Eq, NotEq, Lt, Gt, LtEq, GtEq,
+    And, Or,
+    BitAnd, BitOr, BitXor, Shl, Shr,
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum UnaryOp { Neg, Np }
+pub enum UnaryOp { Neg, Not }
 
 
 
 struct Parser {
-    eb: Vec<Token>,
-    u: usize,
+    tokens: Vec<Token>,
+    pos: usize,
 }
 
 impl Parser {
-    fn new(eb: Vec<Token>) -> Self {
-        Self { eb, u: 0 }
+    fn new(tokens: Vec<Token>) -> Self {
+        Self { tokens, pos: 0 }
     }
 
-    fn amm(&self) -> &TokenKind {
-        &self.eb.get(self.u).map(|ab| &ab.kk).unwrap_or(&TokenKind::Im)
+    fn peek(&self) -> &TokenKind {
+        &self.tokens.get(self.pos).map(|t| &t.kind).unwrap_or(&TokenKind::Eof)
     }
 
-    fn nb(&mut self) -> &Token {
-        let cil = &self.eb[self.u];
-        if self.u < self.eb.len() - 1 { self.u += 1; }
-        cil
+    fn advance(&mut self) -> &Token {
+        let asl = &self.tokens[self.pos];
+        if self.pos < self.tokens.len() - 1 { self.pos += 1; }
+        asl
     }
 
-    fn expect(&mut self, qy: &TokenKind) -> Result<&Token, String> {
-        if core::mem::gew(self.amm()) == core::mem::gew(qy) {
-            Ok(self.nb())
+    fn expect(&mut self, expected: &TokenKind) -> Result<&Token, String> {
+        if core::mem::discriminant(self.peek()) == core::mem::discriminant(expected) {
+            Ok(self.advance())
         } else {
-            let cil = &self.eb[self.u];
-            Err(format!("L{}:{}: expected {:?}, got {:?}", cil.line, cil.bj, qy, cil.kk))
+            let asl = &self.tokens[self.pos];
+            Err(format!("L{}:{}: expected {:?}, got {:?}", asl.line, asl.col, expected, asl.kind))
         }
     }
 
-    fn aoi(&self, kk: &TokenKind) -> bool {
-        core::mem::gew(self.amm()) == core::mem::gew(kk)
+    fn at(&self, kind: &TokenKind) -> bool {
+        core::mem::discriminant(self.peek()) == core::mem::discriminant(kind)
     }
 
-    fn jdn(&self) -> (usize, usize) {
-        let ab = &self.eb[self.u.v(self.eb.len() - 1)];
-        (ab.line, ab.bj)
+    fn line_col(&self) -> (usize, usize) {
+        let t = &self.tokens[self.pos.min(self.tokens.len() - 1)];
+        (t.line, t.col)
     }
 
     
 
-    fn vdf(&mut self) -> Result<Program, String> {
-        let mut pj = Vec::new();
-        while !self.aoi(&TokenKind::Im) {
-            pj.push(self.vct()?);
+    fn parse_program(&mut self) -> Result<Program, String> {
+        let mut items = Vec::new();
+        while !self.at(&TokenKind::Eof) {
+            items.push(self.parse_item()?);
         }
-        Ok(Program { pj })
+        Ok(Program { items })
     }
 
-    fn vct(&mut self) -> Result<Item, String> {
-        match self.amm() {
-            TokenKind::Fn => Ok(Item::Bs(self.vci()?)),
-            TokenKind::Yx => Ok(Item::Yx(self.vdw()?)),
+    fn parse_item(&mut self) -> Result<Item, String> {
+        match self.peek() {
+            TokenKind::Fn => Ok(Item::Aq(self.parse_fn()?)),
+            TokenKind::Struct => Ok(Item::Struct(self.parse_struct()?)),
             _ => {
-                let (dm, r) = self.jdn();
-                Err(format!("L{}:{}: expected 'fn' or 'struct', got {:?}", dm, r, self.amm()))
+                let (l, c) = self.line_col();
+                Err(format!("L{}:{}: expected 'fn' or 'struct', got {:?}", l, c, self.peek()))
             }
         }
     }
 
-    fn vci(&mut self) -> Result<Abu, String> {
+    fn parse_fn(&mut self) -> Result<Md, String> {
         self.expect(&TokenKind::Fn)?;
-        let j = self.fqh()?;
-        self.expect(&TokenKind::Kr)?;
-        let oi = self.lss()?;
-        self.expect(&TokenKind::Jv)?;
+        let name = self.parse_ident()?;
+        self.expect(&TokenKind::LParen)?;
+        let params = self.parse_params()?;
+        self.expect(&TokenKind::RParen)?;
 
-        let pcy = if self.aoi(&TokenKind::Ov) {
-            self.nb();
-            self.gov()?
+        let jan = if self.at(&TokenKind::Arrow) {
+            self.advance();
+            self.parse_type()?
         } else {
-            Type::Cn
+            Type::Void
         };
 
-        let gj = self.fqf()?;
-        Ok(Abu { j, oi, pcy, gj })
+        let body = self.parse_block()?;
+        Ok(Md { name, params, jan, body })
     }
 
-    fn vdw(&mut self) -> Result<Azj, String> {
-        self.expect(&TokenKind::Yx)?;
-        let j = self.fqh()?;
-        self.expect(&TokenKind::Ajn)?;
+    fn parse_struct(&mut self) -> Result<Vf, String> {
+        self.expect(&TokenKind::Struct)?;
+        let name = self.parse_ident()?;
+        self.expect(&TokenKind::LBrace)?;
         let mut fields = Vec::new();
-        while !self.aoi(&TokenKind::Yj) && !self.aoi(&TokenKind::Im) {
-            let ebt = self.fqh()?;
-            self.expect(&TokenKind::Ahb)?;
-            let syr = self.gov()?;
-            fields.push((ebt, syr));
-            if self.aoi(&TokenKind::Aar) { self.nb(); }
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            let bsr = self.parse_ident()?;
+            self.expect(&TokenKind::Colon)?;
+            let lzx = self.parse_type()?;
+            fields.push((bsr, lzx));
+            if self.at(&TokenKind::Comma) { self.advance(); }
         }
-        self.expect(&TokenKind::Yj)?;
-        Ok(Azj { j, fields })
+        self.expect(&TokenKind::RBrace)?;
+        Ok(Vf { name, fields })
     }
 
-    fn lss(&mut self) -> Result<Vec<(String, Type)>, String> {
-        let mut oi = Vec::new();
-        while !self.aoi(&TokenKind::Jv) && !self.aoi(&TokenKind::Im) {
-            let j = self.fqh()?;
-            self.expect(&TokenKind::Ahb)?;
-            let ty = self.gov()?;
-            oi.push((j, ty));
-            if self.aoi(&TokenKind::Aar) { self.nb(); }
+    fn parse_params(&mut self) -> Result<Vec<(String, Type)>, String> {
+        let mut params = Vec::new();
+        while !self.at(&TokenKind::RParen) && !self.at(&TokenKind::Eof) {
+            let name = self.parse_ident()?;
+            self.expect(&TokenKind::Colon)?;
+            let ty = self.parse_type()?;
+            params.push((name, ty));
+            if self.at(&TokenKind::Comma) { self.advance(); }
         }
-        Ok(oi)
+        Ok(params)
     }
 
-    fn gov(&mut self) -> Result<Type, String> {
-        match self.amm().clone() {
-            TokenKind::Buv => { self.nb(); Ok(Type::Ab) }
-            TokenKind::Buu => { self.nb(); Ok(Type::R) }
-            TokenKind::But => { self.nb(); Ok(Type::Em) }
-            TokenKind::Buw => { self.nb(); Ok(Type::He) }
-            TokenKind::Ajo => {
-                self.nb();
-                let ff = self.gov()?;
-                self.expect(&TokenKind::Aed)?;
-                Ok(Type::U(Box::new(ff)))
+    fn parse_type(&mut self) -> Result<Type, String> {
+        match self.peek().clone() {
+            TokenKind::TypeI64 => { self.advance(); Ok(Type::I64) }
+            TokenKind::TypeF64 => { self.advance(); Ok(Type::F64) }
+            TokenKind::TypeBool => { self.advance(); Ok(Type::Bool) }
+            TokenKind::TypeStr => { self.advance(); Ok(Type::Str) }
+            TokenKind::LBracket => {
+                self.advance();
+                let inner = self.parse_type()?;
+                self.expect(&TokenKind::RBracket)?;
+                Ok(Type::Array(Box::new(inner)))
             }
-            TokenKind::Kq(j) => {
-                let bo = j.clone();
-                self.nb();
-                Ok(Type::Chu(bo))
+            TokenKind::Ident(name) => {
+                let ae = name.clone();
+                self.advance();
+                Ok(Type::Named(ae))
             }
             _ => {
-                let (dm, r) = self.jdn();
-                Err(format!("L{}:{}: expected type, got {:?}", dm, r, self.amm()))
+                let (l, c) = self.line_col();
+                Err(format!("L{}:{}: expected type, got {:?}", l, c, self.peek()))
             }
         }
     }
 
-    fn fqh(&mut self) -> Result<String, String> {
-        if let TokenKind::Kq(j) = self.amm().clone() {
-            let bo = j.clone();
-            self.nb();
-            Ok(bo)
+    fn parse_ident(&mut self) -> Result<String, String> {
+        if let TokenKind::Ident(name) = self.peek().clone() {
+            let ae = name.clone();
+            self.advance();
+            Ok(ae)
         } else {
-            let (dm, r) = self.jdn();
-            Err(format!("L{}:{}: expected identifier, got {:?}", dm, r, self.amm()))
+            let (l, c) = self.line_col();
+            Err(format!("L{}:{}: expected identifier, got {:?}", l, c, self.peek()))
         }
     }
 
     
 
-    fn fqf(&mut self) -> Result<Dj, String> {
-        self.expect(&TokenKind::Ajn)?;
-        let mut boq = Vec::new();
-        while !self.aoi(&TokenKind::Yj) && !self.aoi(&TokenKind::Im) {
-            boq.push(self.vdu()?);
+    fn parse_block(&mut self) -> Result<Bl, String> {
+        self.expect(&TokenKind::LBrace)?;
+        let mut stmts = Vec::new();
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            stmts.push(self.parse_stmt()?);
         }
-        self.expect(&TokenKind::Yj)?;
-        Ok(Dj { boq })
+        self.expect(&TokenKind::RBrace)?;
+        Ok(Bl { stmts })
     }
 
-    fn vdu(&mut self) -> Result<Stmt, String> {
-        match self.amm() {
-            TokenKind::Pu => self.vcu(),
-            TokenKind::Hd => self.vdk(),
-            TokenKind::Gx => self.lsn(),
-            TokenKind::La => self.vem(),
-            TokenKind::Ll => self.vcj(),
-            TokenKind::Pz => self.vcv(),
-            TokenKind::Vr => { self.nb(); self.dql(); Ok(Stmt::Vr) }
-            TokenKind::Cg => { self.nb(); self.dql(); Ok(Stmt::Cg) }
+    fn parse_stmt(&mut self) -> Result<Stmt, String> {
+        match self.peek() {
+            TokenKind::Let => self.parse_let(),
+            TokenKind::Return => self.parse_return(),
+            TokenKind::If => self.parse_if(),
+            TokenKind::While => self.parse_while(),
+            TokenKind::For => self.parse_for(),
+            TokenKind::Loop => self.parse_loop(),
+            TokenKind::Break => { self.advance(); self.eat_semi(); Ok(Stmt::Break) }
+            TokenKind::Continue => { self.advance(); self.eat_semi(); Ok(Stmt::Continue) }
             _ => {
-                let expr = self.bey()?;
+                let expr = self.parse_expr()?;
                 
-                match self.amm() {
+                match self.peek() {
                     TokenKind::Eq => {
-                        self.nb();
-                        let bn = self.bey()?;
-                        self.dql();
-                        Ok(Stmt::Vk { cd: expr, bn })
+                        self.advance();
+                        let value = self.parse_expr()?;
+                        self.eat_semi();
+                        Ok(Stmt::Assign { target: expr, value })
                     }
-                    TokenKind::Bpd => { self.nb(); let p = self.bey()?; self.dql(); Ok(Stmt::Xw { op: BinOp::Add, cd: expr, bn: p }) }
-                    TokenKind::Bmg => { self.nb(); let p = self.bey()?; self.dql(); Ok(Stmt::Xw { op: BinOp::Sub, cd: expr, bn: p }) }
-                    TokenKind::Bti => { self.nb(); let p = self.bey()?; self.dql(); Ok(Stmt::Xw { op: BinOp::Mul, cd: expr, bn: p }) }
-                    TokenKind::Bsy => { self.nb(); let p = self.bey()?; self.dql(); Ok(Stmt::Xw { op: BinOp::Div, cd: expr, bn: p }) }
+                    TokenKind::PlusEq => { self.advance(); let v = self.parse_expr()?; self.eat_semi(); Ok(Stmt::OpAssign { op: BinOp::Add, target: expr, value: v }) }
+                    TokenKind::MinusEq => { self.advance(); let v = self.parse_expr()?; self.eat_semi(); Ok(Stmt::OpAssign { op: BinOp::Sub, target: expr, value: v }) }
+                    TokenKind::StarEq => { self.advance(); let v = self.parse_expr()?; self.eat_semi(); Ok(Stmt::OpAssign { op: BinOp::Mul, target: expr, value: v }) }
+                    TokenKind::SlashEq => { self.advance(); let v = self.parse_expr()?; self.eat_semi(); Ok(Stmt::OpAssign { op: BinOp::Div, target: expr, value: v }) }
                     _ => {
-                        self.dql();
+                        self.eat_semi();
                         Ok(Stmt::Expr(expr))
                     }
                 }
@@ -292,216 +292,216 @@ impl Parser {
         }
     }
 
-    fn vcu(&mut self) -> Result<Stmt, String> {
-        self.expect(&TokenKind::Pu)?;
-        let oos = if self.aoi(&TokenKind::Bmy) { self.nb(); true } else { false };
-        let j = self.fqh()?;
-        let ty = if self.aoi(&TokenKind::Ahb) {
-            self.nb();
-            Some(self.gov()?)
+    fn parse_let(&mut self) -> Result<Stmt, String> {
+        self.expect(&TokenKind::Let)?;
+        let ipd = if self.at(&TokenKind::Mut) { self.advance(); true } else { false };
+        let name = self.parse_ident()?;
+        let ty = if self.at(&TokenKind::Colon) {
+            self.advance();
+            Some(self.parse_type()?)
         } else {
             None
         };
-        let init = if self.aoi(&TokenKind::Eq) {
-            self.nb();
-            Some(self.bey()?)
+        let init = if self.at(&TokenKind::Eq) {
+            self.advance();
+            Some(self.parse_expr()?)
         } else {
             None
         };
-        self.dql();
-        Ok(Stmt::Pu { j, oos, ty, init })
+        self.eat_semi();
+        Ok(Stmt::Let { name, ipd, ty, init })
     }
 
-    fn vdk(&mut self) -> Result<Stmt, String> {
-        self.expect(&TokenKind::Hd)?;
-        let ap = if self.aoi(&TokenKind::Ayo) || self.aoi(&TokenKind::Yj) {
+    fn parse_return(&mut self) -> Result<Stmt, String> {
+        self.expect(&TokenKind::Return)?;
+        let val = if self.at(&TokenKind::Semicolon) || self.at(&TokenKind::RBrace) {
             None
         } else {
-            Some(self.bey()?)
+            Some(self.parse_expr()?)
         };
-        self.dql();
-        Ok(Stmt::Hd(ap))
+        self.eat_semi();
+        Ok(Stmt::Return(val))
     }
 
-    fn lsn(&mut self) -> Result<Stmt, String> {
-        self.expect(&TokenKind::Gx)?;
-        let mo = self.bey()?;
-        let cne = self.fqf()?;
-        let ckc = if self.aoi(&TokenKind::Bfw) {
-            self.nb();
-            if self.aoi(&TokenKind::Gx) {
+    fn parse_if(&mut self) -> Result<Stmt, String> {
+        self.expect(&TokenKind::If)?;
+        let fc = self.parse_expr()?;
+        let avj = self.parse_block()?;
+        let atp = if self.at(&TokenKind::Else) {
+            self.advance();
+            if self.at(&TokenKind::If) {
                 
-                let skd = self.lsn()?;
-                Some(Dj { boq: alloc::vec![skd] })
+                let loz = self.parse_if()?;
+                Some(Bl { stmts: alloc::vec![loz] })
             } else {
-                Some(self.fqf()?)
+                Some(self.parse_block()?)
             }
         } else {
             None
         };
-        Ok(Stmt::Gx { mo, cne, ckc })
+        Ok(Stmt::If { fc, avj, atp })
     }
 
-    fn vem(&mut self) -> Result<Stmt, String> {
-        self.expect(&TokenKind::La)?;
-        let mo = self.bey()?;
-        let gj = self.fqf()?;
-        Ok(Stmt::La { mo, gj })
+    fn parse_while(&mut self) -> Result<Stmt, String> {
+        self.expect(&TokenKind::While)?;
+        let fc = self.parse_expr()?;
+        let body = self.parse_block()?;
+        Ok(Stmt::While { fc, body })
     }
 
-    fn vcj(&mut self) -> Result<Stmt, String> {
-        self.expect(&TokenKind::Ll)?;
-        let bfp = self.fqh()?;
-        self.expect(&TokenKind::Bjn)?;
-        let iter = self.bey()?;
-        let gj = self.fqf()?;
-        Ok(Stmt::Ll { bfp, iter, gj })
+    fn parse_for(&mut self) -> Result<Stmt, String> {
+        self.expect(&TokenKind::For)?;
+        let ael = self.parse_ident()?;
+        self.expect(&TokenKind::In)?;
+        let iter = self.parse_expr()?;
+        let body = self.parse_block()?;
+        Ok(Stmt::For { ael, iter, body })
     }
 
-    fn vcv(&mut self) -> Result<Stmt, String> {
-        self.expect(&TokenKind::Pz)?;
-        let gj = self.fqf()?;
-        Ok(Stmt::Pz(gj))
+    fn parse_loop(&mut self) -> Result<Stmt, String> {
+        self.expect(&TokenKind::Loop)?;
+        let body = self.parse_block()?;
+        Ok(Stmt::Loop(body))
     }
 
-    fn dql(&mut self) {
-        if self.aoi(&TokenKind::Ayo) { self.nb(); }
+    fn eat_semi(&mut self) {
+        if self.at(&TokenKind::Semicolon) { self.advance(); }
     }
 
     
 
-    fn bey(&mut self) -> Result<Expr, String> {
-        self.lsr()
+    fn parse_expr(&mut self) -> Result<Expr, String> {
+        self.parse_or()
     }
 
-    fn lsr(&mut self) -> Result<Expr, String> {
-        let mut fd = self.hui()?;
-        while self.aoi(&TokenKind::Fx) {
-            self.nb();
-            let hw = self.hui()?;
-            fd = Expr::BinOp { op: BinOp::Fx, fd: Box::new(fd), hw: Box::new(hw) };
+    fn parse_or(&mut self) -> Result<Expr, String> {
+        let mut left = self.parse_and()?;
+        while self.at(&TokenKind::Or) {
+            self.advance();
+            let right = self.parse_and()?;
+            left = Expr::BinOp { op: BinOp::Or, left: Box::new(left), right: Box::new(right) };
         }
-        Ok(fd)
+        Ok(left)
     }
 
-    fn hui(&mut self) -> Result<Expr, String> {
-        let mut fd = self.huj()?;
-        while self.aoi(&TokenKind::Ex) {
-            self.nb();
-            let hw = self.huj()?;
-            fd = Expr::BinOp { op: BinOp::Ex, fd: Box::new(fd), hw: Box::new(hw) };
+    fn parse_and(&mut self) -> Result<Expr, String> {
+        let mut left = self.parse_comparison()?;
+        while self.at(&TokenKind::And) {
+            self.advance();
+            let right = self.parse_comparison()?;
+            left = Expr::BinOp { op: BinOp::And, left: Box::new(left), right: Box::new(right) };
         }
-        Ok(fd)
+        Ok(left)
     }
 
-    fn huj(&mut self) -> Result<Expr, String> {
-        let mut fd = self.oub()?;
+    fn parse_comparison(&mut self) -> Result<Expr, String> {
+        let mut left = self.parse_bitwise()?;
         loop {
-            let op = match self.amm() {
-                TokenKind::Bfz => BinOp::Eq,
-                TokenKind::Xu => BinOp::Xu,
+            let op = match self.peek() {
+                TokenKind::EqEq => BinOp::Eq,
+                TokenKind::NotEq => BinOp::NotEq,
                 TokenKind::Lt => BinOp::Lt,
-                TokenKind::Jn => BinOp::Jn,
-                TokenKind::Xm => BinOp::Xm,
-                TokenKind::Wx => BinOp::Wx,
+                TokenKind::Gt => BinOp::Gt,
+                TokenKind::LtEq => BinOp::LtEq,
+                TokenKind::GtEq => BinOp::GtEq,
                 _ => break,
             };
-            self.nb();
-            let hw = self.oub()?;
-            fd = Expr::BinOp { op, fd: Box::new(fd), hw: Box::new(hw) };
+            self.advance();
+            let right = self.parse_bitwise()?;
+            left = Expr::BinOp { op, left: Box::new(left), right: Box::new(right) };
         }
-        Ok(fd)
+        Ok(left)
     }
 
-    fn oub(&mut self) -> Result<Expr, String> {
-        let mut fd = self.got()?;
+    fn parse_bitwise(&mut self) -> Result<Expr, String> {
+        let mut left = self.parse_additive()?;
         loop {
-            let op = match self.amm() {
-                TokenKind::Bbs => BinOp::Vm,
-                TokenKind::Yc => BinOp::Vn,
-                TokenKind::Bdj => BinOp::Vo,
-                TokenKind::Ob => BinOp::Ob,
-                TokenKind::Oc => BinOp::Oc,
+            let op = match self.peek() {
+                TokenKind::Ampersand => BinOp::BitAnd,
+                TokenKind::Pipe => BinOp::BitOr,
+                TokenKind::Caret => BinOp::BitXor,
+                TokenKind::Shl => BinOp::Shl,
+                TokenKind::Shr => BinOp::Shr,
                 _ => break,
             };
-            self.nb();
-            let hw = self.got()?;
-            fd = Expr::BinOp { op, fd: Box::new(fd), hw: Box::new(hw) };
+            self.advance();
+            let right = self.parse_additive()?;
+            left = Expr::BinOp { op, left: Box::new(left), right: Box::new(right) };
         }
-        Ok(fd)
+        Ok(left)
     }
 
-    fn got(&mut self) -> Result<Expr, String> {
-        let mut fd = self.huk()?;
+    fn parse_additive(&mut self) -> Result<Expr, String> {
+        let mut left = self.parse_multiplicative()?;
         loop {
-            let op = match self.amm() {
-                TokenKind::Yd => BinOp::Add,
-                TokenKind::Tm => BinOp::Sub,
+            let op = match self.peek() {
+                TokenKind::Plus => BinOp::Add,
+                TokenKind::Minus => BinOp::Sub,
                 _ => break,
             };
-            self.nb();
-            let hw = self.huk()?;
-            fd = Expr::BinOp { op, fd: Box::new(fd), hw: Box::new(hw) };
+            self.advance();
+            let right = self.parse_multiplicative()?;
+            left = Expr::BinOp { op, left: Box::new(left), right: Box::new(right) };
         }
-        Ok(fd)
+        Ok(left)
     }
 
-    fn huk(&mut self) -> Result<Expr, String> {
-        let mut fd = self.fqk()?;
+    fn parse_multiplicative(&mut self) -> Result<Expr, String> {
+        let mut left = self.parse_unary()?;
         loop {
-            let op = match self.amm() {
-                TokenKind::And => BinOp::Mul,
-                TokenKind::Bsx => BinOp::Div,
-                TokenKind::Qk => BinOp::Xp,
+            let op = match self.peek() {
+                TokenKind::Star => BinOp::Mul,
+                TokenKind::Slash => BinOp::Div,
+                TokenKind::Percent => BinOp::Mod,
                 _ => break,
             };
-            self.nb();
-            let hw = self.fqk()?;
-            fd = Expr::BinOp { op, fd: Box::new(fd), hw: Box::new(hw) };
+            self.advance();
+            let right = self.parse_unary()?;
+            left = Expr::BinOp { op, left: Box::new(left), right: Box::new(right) };
         }
-        Ok(fd)
+        Ok(left)
     }
 
-    fn fqk(&mut self) -> Result<Expr, String> {
-        match self.amm() {
-            TokenKind::Tm => {
-                self.nb();
-                let expr = self.hum()?;
+    fn parse_unary(&mut self) -> Result<Expr, String> {
+        match self.peek() {
+            TokenKind::Minus => {
+                self.advance();
+                let expr = self.parse_postfix()?;
                 Ok(Expr::UnaryOp { op: UnaryOp::Neg, expr: Box::new(expr) })
             }
-            TokenKind::Np => {
-                self.nb();
-                let expr = self.hum()?;
-                Ok(Expr::UnaryOp { op: UnaryOp::Np, expr: Box::new(expr) })
+            TokenKind::Not => {
+                self.advance();
+                let expr = self.parse_postfix()?;
+                Ok(Expr::UnaryOp { op: UnaryOp::Not, expr: Box::new(expr) })
             }
-            _ => self.hum(),
+            _ => self.parse_postfix(),
         }
     }
 
-    fn hum(&mut self) -> Result<Expr, String> {
-        let mut expr = self.lsu()?;
+    fn parse_postfix(&mut self) -> Result<Expr, String> {
+        let mut expr = self.parse_primary()?;
         loop {
-            match self.amm() {
-                TokenKind::Ajo => {
-                    self.nb();
-                    let index = self.bey()?;
-                    self.expect(&TokenKind::Aed)?;
+            match self.peek() {
+                TokenKind::LBracket => {
+                    self.advance();
+                    let index = self.parse_expr()?;
+                    self.expect(&TokenKind::RBracket)?;
                     expr = Expr::Index { array: Box::new(expr), index: Box::new(index) };
                 }
-                TokenKind::Bew => {
-                    self.nb();
-                    let buj = self.fqh()?;
-                    expr = Expr::Asg { uww: Box::new(expr), buj };
+                TokenKind::Dot => {
+                    self.advance();
+                    let field = self.parse_ident()?;
+                    expr = Expr::Field { object: Box::new(expr), field };
                 }
-                TokenKind::Bca => {
-                    self.nb();
-                    let ty = self.gov()?;
-                    expr = Expr::Apu { expr: Box::new(expr), ty };
+                TokenKind::As => {
+                    self.advance();
+                    let ty = self.parse_type()?;
+                    expr = Expr::Cast { expr: Box::new(expr), ty };
                 }
-                TokenKind::Bex => {
-                    self.nb();
-                    let ci = self.got()?;
-                    expr = Expr::Nt { ay: Box::new(expr), ci: Box::new(ci) };
+                TokenKind::DotDot => {
+                    self.advance();
+                    let end = self.parse_additive()?;
+                    expr = Expr::Range { start: Box::new(expr), end: Box::new(end) };
                 }
                 _ => break,
             }
@@ -509,72 +509,72 @@ impl Parser {
         Ok(expr)
     }
 
-    fn lsu(&mut self) -> Result<Expr, String> {
-        match self.amm().clone() {
-            TokenKind::Ta(p) => { let ap = p; self.nb(); Ok(Expr::Ta(ap)) }
-            TokenKind::Wq(p) => { let ap = p; self.nb(); Ok(Expr::Wq(ap)) }
-            TokenKind::Yw(e) => { let ap = e.clone(); self.nb(); Ok(Expr::Yw(ap)) }
-            TokenKind::Rp(o) => { let ap = o; self.nb(); Ok(Expr::Rp(ap)) }
-            TokenKind::Kq(j) => {
-                let bo = j.clone();
-                self.nb();
+    fn parse_primary(&mut self) -> Result<Expr, String> {
+        match self.peek().clone() {
+            TokenKind::IntLit(v) => { let val = v; self.advance(); Ok(Expr::IntLit(val)) }
+            TokenKind::FloatLit(v) => { let val = v; self.advance(); Ok(Expr::FloatLit(val)) }
+            TokenKind::StringLit(j) => { let val = j.clone(); self.advance(); Ok(Expr::StringLit(val)) }
+            TokenKind::BoolLit(b) => { let val = b; self.advance(); Ok(Expr::BoolLit(val)) }
+            TokenKind::Ident(name) => {
+                let ae = name.clone();
+                self.advance();
                 
-                if self.aoi(&TokenKind::Kr) {
-                    self.nb();
-                    let mut n = Vec::new();
-                    while !self.aoi(&TokenKind::Jv) && !self.aoi(&TokenKind::Im) {
-                        n.push(self.bey()?);
-                        if self.aoi(&TokenKind::Aar) { self.nb(); }
+                if self.at(&TokenKind::LParen) {
+                    self.advance();
+                    let mut args = Vec::new();
+                    while !self.at(&TokenKind::RParen) && !self.at(&TokenKind::Eof) {
+                        args.push(self.parse_expr()?);
+                        if self.at(&TokenKind::Comma) { self.advance(); }
                     }
-                    self.expect(&TokenKind::Jv)?;
-                    Ok(Expr::En { ke: bo, n })
+                    self.expect(&TokenKind::RParen)?;
+                    Ok(Expr::Call { func: ae, args })
                 } else {
-                    Ok(Expr::Kq(bo))
+                    Ok(Expr::Ident(ae))
                 }
             }
-            TokenKind::Kr => {
-                self.nb();
-                let expr = self.bey()?;
-                self.expect(&TokenKind::Jv)?;
+            TokenKind::LParen => {
+                self.advance();
+                let expr = self.parse_expr()?;
+                self.expect(&TokenKind::RParen)?;
                 Ok(expr)
             }
-            TokenKind::Ajo => {
-                self.nb();
-                let mut hhx = Vec::new();
-                while !self.aoi(&TokenKind::Aed) && !self.aoi(&TokenKind::Im) {
-                    hhx.push(self.bey()?);
-                    if self.aoi(&TokenKind::Aar) { self.nb(); }
+            TokenKind::LBracket => {
+                self.advance();
+                let mut doo = Vec::new();
+                while !self.at(&TokenKind::RBracket) && !self.at(&TokenKind::Eof) {
+                    doo.push(self.parse_expr()?);
+                    if self.at(&TokenKind::Comma) { self.advance(); }
                 }
-                self.expect(&TokenKind::Aed)?;
-                Ok(Expr::U(hhx))
+                self.expect(&TokenKind::RBracket)?;
+                Ok(Expr::Array(doo))
             }
-            TokenKind::Ajn => {
-                let block = self.fqf()?;
+            TokenKind::LBrace => {
+                let block = self.parse_block()?;
                 
-                Ok(Expr::Dj(block))
+                Ok(Expr::Bl(block))
             }
-            TokenKind::Gx => {
+            TokenKind::If => {
                 
-                let stmt = self.lsn()?;
+                let stmt = self.parse_if()?;
                 match stmt {
-                    Stmt::Gx { mo, cne, ckc } => {
-                        Ok(Expr::Dj(Dj { boq: alloc::vec![
-                            Stmt::Gx { mo, cne, ckc }
+                    Stmt::If { fc, avj, atp } => {
+                        Ok(Expr::Bl(Bl { stmts: alloc::vec![
+                            Stmt::If { fc, avj, atp }
                         ]}))
                     }
                     _ => unreachable!(),
                 }
             }
             _ => {
-                let (dm, r) = self.jdn();
-                Err(format!("L{}:{}: unexpected token {:?}", dm, r, self.amm()))
+                let (l, c) = self.line_col();
+                Err(format!("L{}:{}: unexpected token {:?}", l, c, self.peek()))
             }
         }
     }
 }
 
 
-pub fn parse(eb: &[Token]) -> Result<Program, String> {
-    let mut parser = Parser::new(eb.ip());
-    parser.vdf()
+pub fn parse(tokens: &[Token]) -> Result<Program, String> {
+    let mut parser = Parser::new(tokens.to_vec());
+    parser.parse_program()
 }

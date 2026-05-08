@@ -92,7 +92,7 @@ pub struct HpetState {
     /// General configuration register
     pub config: u64,
     /// General interrupt status register
-    pub interrupt_handler: u64,
+    pub isr: u64,
     /// Main counter value at the time of last HPET enable
     pub counter_offset: u64,
     /// TSC value when HPET was last enabled (for counter derivation)
@@ -115,7 +115,7 @@ impl Default for HpetState {
         
         Self {
             config: 0,
-            interrupt_handler: 0,
+            isr: 0,
             counter_offset: 0,
             tsc_at_enable: 0,
             enabled: false,
@@ -159,7 +159,7 @@ match offset {
                 ((HPET_PERIOD_FILESYSTEM as u64) << 32) | number_timers_minus_1 | counter_64bit | rev_id
             }
             regs::GCONF => self.config,
-            regs::GISR => self.interrupt_handler,
+            regs::GISR => self.isr,
             regs::MAIN_COUNTER => self.main_counter(),
             
             // Timer registers
@@ -218,7 +218,7 @@ match offset {
             
             regs::GISR => {
                 // Write-1-to-clear semantics
-                self.interrupt_handler &= !value;
+                self.isr &= !value;
             }
             
             regs::MAIN_COUNTER => {

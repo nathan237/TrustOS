@@ -328,7 +328,7 @@ extern "C" fn syscall_entry() {
         "sysretq",
         
         kernel_stack = sym KERNEL_SYSCALL_STACK_TOP,
-        user_rsp_temporary = sym USER_RSP_TEMPORARY,
+        user_rsp_temp = sym USER_RSP_TEMP,
         user_return_rip = sym USER_RETURN_RIP,
         user_return_rflags = sym USER_RETURN_RFLAGS,
         signal_signo = sym SIGNAL_DELIVER_SIGNO,
@@ -338,7 +338,7 @@ extern "C" fn syscall_entry() {
 
 /// Temporary storage for user RSP during syscall entry (before stack switch)
 #[no_mangle]
-pub static mut USER_RSP_TEMPORARY: u64 = 0;
+pub static mut USER_RSP_TEMP: u64 = 0;
 
 /// User RIP saved by SYSCALL (from RCX) — may be modified by signal delivery
 #[no_mangle]
@@ -363,7 +363,7 @@ pub static mut KERNEL_SYSCALL_STACK_TOP: u64 = 0;
 pub fn initialize_syscall_stack() {
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        let stack_bottom = KERNEL_SYSCALL_STACK.as_pointer() as u64;
+        let stack_bottom = KERNEL_SYSCALL_STACK.as_ptr() as u64;
         KERNEL_SYSCALL_STACK_TOP = stack_bottom + 65536;
         crate::log_debug!("[USERLAND] Syscall stack at {:#x}", KERNEL_SYSCALL_STACK_TOP);
     }

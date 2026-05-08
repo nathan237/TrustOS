@@ -47,51 +47,51 @@ use ir::*;
 use interpreter::{RvInterpreter, ExecResult};
 
 
-pub fn kpn(f: &[u8]) -> Option<SourceArch> {
-    if f.len() < 20 || &f[0..4] != b"\x7FELF" {
+pub fn frv(data: &[u8]) -> Option<SourceArch> {
+    if data.len() < 20 || &data[0..4] != b"\x7FELF" {
         return None;
     }
 
     
-    let cqb = u16::dj([f[18], f[19]]);
+    let e_machine = u16::from_le_bytes([data[18], data[19]]);
 
-    match cqb {
-        0x3E => Some(SourceArch::BT_),    
-        0xB7 => Some(SourceArch::Fg),   
-        0xF3 => Some(SourceArch::Jy),   
-        0x08 => Some(SourceArch::Acz),    
+    match e_machine {
+        0x3E => Some(SourceArch::X86_64),    
+        0xB7 => Some(SourceArch::Aarch64),   
+        0xF3 => Some(SourceArch::Riscv64),   
+        0x08 => Some(SourceArch::Mips64),    
         _    => None,
     }
 }
 
 
-fn nsk(f: &[u8]) -> Option<(u64, Vec<u8>)> {
-    if f.len() < 64 || &f[0..4] != b"\x7FELF" {
+fn hxm(data: &[u8]) -> Option<(u64, Vec<u8>)> {
+    if data.len() < 64 || &data[0..4] != b"\x7FELF" {
         return None;
     }
 
-    let mi = u64::dj(f[24..32].try_into().bq()?);
-    let bnu = u64::dj(f[32..40].try_into().bq()?) as usize;
-    let egq = u16::dj(f[54..56].try_into().bq()?) as usize;
-    let egp = u16::dj(f[56..58].try_into().bq()?) as usize;
+    let entry_point = u64::from_le_bytes(data[24..32].try_into().ok()?);
+    let aii = u64::from_le_bytes(data[32..40].try_into().ok()?) as usize;
+    let but = u16::from_le_bytes(data[54..56].try_into().ok()?) as usize;
+    let bur = u16::from_le_bytes(data[56..58].try_into().ok()?) as usize;
 
     
-    for a in 0..egp {
-        let afv = bnu + a * egq;
-        if afv + egq > f.len() { break; }
+    for i in 0..bur {
+        let qc = aii + i * but;
+        if qc + but > data.len() { break; }
 
-        let bku = u32::dj(f[afv..afv+4].try_into().bq()?);
-        let bvv = u32::dj(f[afv+4..afv+8].try_into().bq()?);
+        let p_type = u32::from_le_bytes(data[qc..qc+4].try_into().ok()?);
+        let p_flags = u32::from_le_bytes(data[qc+4..qc+8].try_into().ok()?);
 
-        if bku == 1 && (bvv & 1) != 0 {
+        if p_type == 1 && (p_flags & 1) != 0 {
             
-            let caz = u64::dj(f[afv+8..afv+16].try_into().bq()?) as usize;
-            let ctg = u64::dj(f[afv+16..afv+24].try_into().bq()?);
-            let cgh = u64::dj(f[afv+32..afv+40].try_into().bq()?) as usize;
+            let p_offset = u64::from_le_bytes(data[qc+8..qc+16].try_into().ok()?) as usize;
+            let p_vaddr = u64::from_le_bytes(data[qc+16..qc+24].try_into().ok()?);
+            let p_filesz = u64::from_le_bytes(data[qc+32..qc+40].try_into().ok()?) as usize;
 
-            if caz + cgh <= f.len() {
-                let aj = f[caz..caz + cgh].ip();
-                return Some((ctg, aj));
+            if p_offset + p_filesz <= data.len() {
+                let code = data[p_offset..p_offset + p_filesz].to_vec();
+                return Some((p_vaddr, code));
             }
         }
     }
@@ -107,268 +107,268 @@ fn nsk(f: &[u8]) -> Option<(u64, Vec<u8>)> {
 
 
 
-pub fn xlv(pu: &[u8]) -> Result<i64, String> {
+pub fn pne(gz: &[u8]) -> Result<i64, String> {
     
-    let arch = kpn(pu)
+    let arch = frv(gz)
         .ok_or_else(|| String::from("Not a valid ELF binary or unsupported architecture"))?;
 
-    crate::serial_println!("[RV-XLAT] Detected architecture: {}", arch.j());
+    crate::serial_println!("[RV-XLAT] Detected architecture: {}", arch.name());
 
     
-    let (sm, aj) = nsk(pu)
+    let (base_addr, code) = hxm(gz)
         .ok_or_else(|| String::from("Failed to extract executable code from ELF"))?;
 
-    crate::serial_println!("[RV-XLAT] Code: {} bytes at 0x{:X}", aj.len(), sm);
+    crate::serial_println!("[RV-XLAT] Code: {} bytes at 0x{:X}", code.len(), base_addr);
 
     
-    let xk = match arch {
-        SourceArch::BT_ => {
-            let mut azm = x86_decoder::X86Decoder::new(&aj, sm);
-            let xk = azm.iev();
+    let blocks = match arch {
+        SourceArch::X86_64 => {
+            let mut aaq = x86_decoder::X86Decoder::new(&code, base_addr);
+            let blocks = aaq.translate_all();
             crate::serial_println!("[RV-XLAT] x86_64: {} blocks, {} instructions → {} RV instructions ({}x expansion)",
-                azm.cm.ilv,
-                azm.cm.esv,
-                azm.cm.hyi,
-                if azm.cm.esv > 0 {
-                    format!("{:.1}", azm.cm.nrx())
+                aaq.stats.blocks_translated,
+                aaq.stats.instructions_translated,
+                aaq.stats.rv_instructions_emitted,
+                if aaq.stats.instructions_translated > 0 {
+                    format!("{:.1}", aaq.stats.expansion_ratio())
                 } else {
                     String::from("N/A")
                 });
-            if azm.cm.ddf > 0 {
+            if aaq.stats.unsupported_instructions > 0 {
                 crate::serial_println!("[RV-XLAT] WARNING: {} unsupported x86 instructions",
-                    azm.cm.ddf);
+                    aaq.stats.unsupported_instructions);
             }
-            xk
+            blocks
         }
-        SourceArch::Fg => {
-            let mut azm = arm_decoder::ArmDecoder::new(&aj, sm);
-            let xk = azm.iev();
+        SourceArch::Aarch64 => {
+            let mut aaq = arm_decoder::ArmDecoder::new(&code, base_addr);
+            let blocks = aaq.translate_all();
             crate::serial_println!("[RV-XLAT] aarch64: {} blocks, {} instructions → {} RV instructions ({}x expansion)",
-                azm.cm.ilv,
-                azm.cm.esv,
-                azm.cm.hyi,
-                if azm.cm.esv > 0 {
-                    format!("{:.1}", azm.cm.nrx())
+                aaq.stats.blocks_translated,
+                aaq.stats.instructions_translated,
+                aaq.stats.rv_instructions_emitted,
+                if aaq.stats.instructions_translated > 0 {
+                    format!("{:.1}", aaq.stats.expansion_ratio())
                 } else {
                     String::from("N/A")
                 });
-            xk
+            blocks
         }
-        SourceArch::Jy => {
+        SourceArch::Riscv64 => {
             
             crate::serial_println!("[RV-XLAT] RISC-V native binary — passthrough");
             return Err(String::from("RISC-V binaries can run natively, no translation needed"));
         }
         _ => {
-            return Err(format!("Architecture {} translation not yet implemented", arch.j()));
+            return Err(format!("Architecture {} translation not yet implemented", arch.name()));
         }
     };
 
-    if xk.is_empty() {
+    if blocks.is_empty() {
         return Err(String::from("No code blocks translated"));
     }
 
     
-    let mut ahp = RvInterpreter::new();
+    let mut interp = RvInterpreter::new();
 
     
-    ahp.mem.ujt(sm, &aj);
+    interp.mem.map_with_data(base_addr, &code);
 
     
-    let dce = 0x7FF0_0000u64;
-    let ibn = 0x10_0000; 
-    ahp.mem.map(dce, ibn);
-    ahp.cpu.oj(Reg::Ds, dce + ibn as u64 - 16); 
+    let bdt = 0x7FF0_0000u64;
+    let eah = 0x10_0000; 
+    interp.mem.map(bdt, eah);
+    interp.cpu.set(Reg::X2, bdt + eah as u64 - 16); 
 
     
-    ahp.mem.map(0x1000_0000, 0x40_0000);
+    interp.mem.map(0x1000_0000, 0x40_0000);
 
     
-    ahp.ugl(&xk);
+    interp.load_blocks(&blocks);
 
     
-    let nqn = xk[0].cbz;
-    ahp.cpu.fz = nqn;
+    let hwf = blocks[0].src_addr;
+    interp.cpu.pc = hwf;
 
-    crate::serial_println!("[RV-XLAT] Starting execution at 0x{:X}", nqn);
+    crate::serial_println!("[RV-XLAT] Starting execution at 0x{:X}", hwf);
 
     
-    let mut nz: i64 = 0;
+    let mut exit_code: i64 = 0;
 
     loop {
         
-        let fz = ahp.cpu.fz;
+        let pc = interp.cpu.pc;
 
-        if let Some(kea) = ahp.block_cache.get(&fz).map(|p| p.clone()) {
-            let result = ahp.nrj(&kea);
+        if let Some(block_insts) = interp.block_cache.get(&pc).map(|v| v.clone()) {
+            let result = interp.exec_block(&block_insts);
 
             match result {
-                ExecResult::Cg => {
+                ExecResult::Continue => {
                     
-                    if ahp.cpu.fz == fz {
+                    if interp.cpu.pc == pc {
                         
                         break;
                     }
                 }
-                ExecResult::Hg { aqb, n } => {
-                    let (aux, wna) = syscall::ixo(
-                        arch, aqb, &n, &mut ahp.mem,
+                ExecResult::Syscall { number, args } => {
+                    let (ret, should_exit) = syscall::handle_syscall(
+                        arch, number, &args, &mut interp.mem,
                     );
 
                     
-                    ahp.cpu.oj(Reg::Je, aux as u64);
+                    interp.cpu.set(Reg::X10, ret as u64);
 
-                    if wna {
-                        nz = n[0] as i64;
+                    if should_exit {
+                        exit_code = args[0] as i64;
                         break;
                     }
                     
                     
                 }
-                ExecResult::Amb(ap) => {
-                    nz = ap as i64;
+                ExecResult::Returned(val) => {
+                    exit_code = val as i64;
                     break;
                 }
-                ExecResult::Bcu => {
-                    crate::serial_println!("[RV-XLAT] Breakpoint at 0x{:X}", ahp.cpu.fz);
-                    crate::serial_println!("{}", ahp.noi());
+                ExecResult::Breakpoint => {
+                    crate::serial_println!("[RV-XLAT] Breakpoint at 0x{:X}", interp.cpu.pc);
+                    crate::serial_println!("{}", interp.dump_state());
                     break;
                 }
-                ExecResult::Hw(ag) => {
-                    crate::serial_println!("[RV-XLAT] SEGFAULT: memory access at 0x{:X}", ag);
-                    crate::serial_println!("{}", ahp.noi());
-                    nz = -11; 
+                ExecResult::MemoryFault(addr) => {
+                    crate::serial_println!("[RV-XLAT] SEGFAULT: memory access at 0x{:X}", addr);
+                    crate::serial_println!("{}", interp.dump_state());
+                    exit_code = -11; 
                     break;
                 }
-                ExecResult::Auj => {
+                ExecResult::InstructionLimit => {
                     crate::serial_println!("[RV-XLAT] Instruction limit reached ({} instructions)",
-                        ahp.cpu.flq);
+                        interp.cpu.inst_count);
                     break;
                 }
-                ExecResult::Ceu => break,
+                ExecResult::Halted => break,
             }
         } else {
             
-            crate::serial_println!("[RV-XLAT] No block at PC=0x{:X}, stopping", fz);
+            crate::serial_println!("[RV-XLAT] No block at PC=0x{:X}, stopping", pc);
             break;
         }
     }
 
     crate::serial_println!("[RV-XLAT] Execution complete: {} instructions, exit code {}",
-        ahp.cpu.flq, nz);
+        interp.cpu.inst_count, exit_code);
 
-    Ok(nz)
+    Ok(exit_code)
 }
 
 
-pub fn pvz(pu: &[u8]) -> Result<String, String> {
-    let arch = kpn(pu)
+pub fn jon(gz: &[u8]) -> Result<String, String> {
+    let arch = frv(gz)
         .ok_or_else(|| String::from("Not a valid ELF"))?;
 
-    let (sm, aj) = nsk(pu)
+    let (base_addr, code) = hxm(gz)
         .ok_or_else(|| String::from("No executable code"))?;
 
-    let xk = match arch {
-        SourceArch::BT_ => {
-            let mut bc = x86_decoder::X86Decoder::new(&aj, sm);
-            bc.iev()
+    let blocks = match arch {
+        SourceArch::X86_64 => {
+            let mut d = x86_decoder::X86Decoder::new(&code, base_addr);
+            d.translate_all()
         }
-        SourceArch::Fg => {
-            let mut bc = arm_decoder::ArmDecoder::new(&aj, sm);
-            bc.iev()
+        SourceArch::Aarch64 => {
+            let mut d = arm_decoder::ArmDecoder::new(&code, base_addr);
+            d.translate_all()
         }
-        _ => return Err(format!("{} not supported for disasm", arch.j())),
+        _ => return Err(format!("{} not supported for disasm", arch.name())),
     };
 
-    let mut an = format!("=== RISC-V IR Translation ({} → rv64) ===\n", arch.j());
-    an.t(&format!("Entry: 0x{:X} | {} blocks\n\n", sm, xk.len()));
+    let mut output = format!("=== RISC-V IR Translation ({} → rv64) ===\n", arch.name());
+    output.push_str(&format!("Entry: 0x{:X} | {} blocks\n\n", base_addr, blocks.len()));
 
-    for block in &xk {
-        an.t(&format!("Block @ 0x{:X} ({} src instructions → {} RV IR):\n",
-            block.cbz, block.jrg, block.instructions.len()));
+    for block in &blocks {
+        output.push_str(&format!("Block @ 0x{:X} ({} src instructions → {} RV IR):\n",
+            block.src_addr, block.src_inst_count, block.instructions.len()));
 
-        for (a, fi) in block.instructions.iter().cf() {
-            an.t(&format!("  {:3}: {}\n", a, swa(fi)));
+        for (i, inst) in block.instructions.iter().enumerate() {
+            output.push_str(&format!("  {:3}: {}\n", i, lxt(inst)));
         }
-        an.push('\n');
+        output.push('\n');
     }
 
-    Ok(an)
+    Ok(output)
 }
 
 
-fn swa(fi: &RvInst) -> String {
-    match fi {
-        RvInst::Add { ck, cp, et } => format!("add  {}, {}, {}", ck.kj(), cp.kj(), et.kj()),
-        RvInst::Sub { ck, cp, et } => format!("sub  {}, {}, {}", ck.kj(), cp.kj(), et.kj()),
-        RvInst::Ex { ck, cp, et } => format!("and  {}, {}, {}", ck.kj(), cp.kj(), et.kj()),
-        RvInst::Fx { ck, cp, et }  => format!("or   {}, {}, {}", ck.kj(), cp.kj(), et.kj()),
-        RvInst::Aga { ck, cp, et } => format!("xor  {}, {}, {}", ck.kj(), cp.kj(), et.kj()),
-        RvInst::Amt { ck, cp, et } => format!("sll  {}, {}, {}", ck.kj(), cp.kj(), et.kj()),
-        RvInst::Amx { ck, cp, et } => format!("srl  {}, {}, {}", ck.kj(), cp.kj(), et.kj()),
-        RvInst::Azc { ck, cp, et } => format!("sra  {}, {}, {}", ck.kj(), cp.kj(), et.kj()),
-        RvInst::Btb { ck, cp, et } => format!("slt  {}, {}, {}", ck.kj(), cp.kj(), et.kj()),
-        RvInst::Bte { ck, cp, et }=> format!("sltu {}, {}, {}", ck.kj(), cp.kj(), et.kj()),
-        RvInst::Mul { ck, cp, et } => format!("mul  {}, {}, {}", ck.kj(), cp.kj(), et.kj()),
-        RvInst::Bms { ck, cp, et }=> format!("mulh {}, {}, {}", ck.kj(), cp.kj(), et.kj()),
-        RvInst::Div { ck, cp, et } => format!("div  {}, {}, {}", ck.kj(), cp.kj(), et.kj()),
-        RvInst::Arb { ck, cp, et }=> format!("divu {}, {}, {}", ck.kj(), cp.kj(), et.kj()),
-        RvInst::Rem { ck, cp, et } => format!("rem  {}, {}, {}", ck.kj(), cp.kj(), et.kj()),
-        RvInst::Bqx { ck, cp, et }=> format!("remu {}, {}, {}", ck.kj(), cp.kj(), et.kj()),
-        RvInst::Gf { ck, cp, gf } => format!("addi {}, {}, {}", ck.kj(), cp.kj(), gf),
-        RvInst::Ou { ck, cp, gf } => format!("andi {}, {}, 0x{:X}", ck.kj(), cp.kj(), *gf as u64),
-        RvInst::Akw { ck, cp, gf }  => format!("ori  {}, {}, 0x{:X}", ck.kj(), cp.kj(), *gf as u64),
-        RvInst::Aoq { ck, cp, gf } => format!("xori {}, {}, 0x{:X}", ck.kj(), cp.kj(), *gf as u64),
-        RvInst::Ayv { ck, cp, bcp }=> format!("slli {}, {}, {}", ck.kj(), cp.kj(), bcp),
-        RvInst::Aze { ck, cp, bcp }=> format!("srli {}, {}, {}", ck.kj(), cp.kj(), bcp),
-        RvInst::Azd { ck, cp, bcp }=> format!("srai {}, {}, {}", ck.kj(), cp.kj(), bcp),
-        RvInst::Btc { ck, cp, gf } => format!("slti {}, {}, {}", ck.kj(), cp.kj(), gf),
-        RvInst::Btd { ck, cp, gf }=> format!("sltiu {}, {}, {}", ck.kj(), cp.kj(), gf),
-        RvInst::Blq { ck, gf } => format!("lui  {}, 0x{:X}", ck.kj(), gf),
-        RvInst::Bce { ck, gf } => format!("auipc {}, 0x{:X}", ck.kj(), gf),
-        RvInst::Bky { ck, cp, l } => format!("lb   {}, {}({})", ck.kj(), l, cp.kj()),
-        RvInst::Ajr { ck, cp, l }=> format!("lbu  {}, {}({})", ck.kj(), l, cp.kj()),
-        RvInst::Bla { ck, cp, l } => format!("lh   {}, {}({})", ck.kj(), l, cp.kj()),
-        RvInst::Ajs { ck, cp, l }=> format!("lhu  {}, {}({})", ck.kj(), l, cp.kj()),
-        RvInst::Blr { ck, cp, l } => format!("lw   {}, {}({})", ck.kj(), l, cp.kj()),
-        RvInst::Aka { ck, cp, l }=> format!("lwu  {}, {}({})", ck.kj(), l, cp.kj()),
-        RvInst::Pt { ck, cp, l } => format!("ld   {}, {}({})", ck.kj(), l, cp.kj()),
-        RvInst::Amf { et, cp, l }=> format!("sb   {}, {}({})", et.kj(), l, cp.kj()),
-        RvInst::Amo { et, cp, l }=> format!("sh   {}, {}({})", et.kj(), l, cp.kj()),
-        RvInst::Ang { et, cp, l }=> format!("sw   {}, {}({})", et.kj(), l, cp.kj()),
-        RvInst::Mi { et, cp, l }=> format!("sd   {}, {}({})", et.kj(), l, cp.kj()),
-        RvInst::Agp { cp, et, l }  => format!("beq  {}, {}, 0x{:X}", cp.kj(), et.kj(), *l as u64),
-        RvInst::Ags { cp, et, l }  => format!("bne  {}, {}, 0x{:X}", cp.kj(), et.kj(), *l as u64),
-        RvInst::Bcr { cp, et, l }  => format!("blt  {}, {}, 0x{:X}", cp.kj(), et.kj(), *l as u64),
-        RvInst::Bcp { cp, et, l }  => format!("bge  {}, {}, 0x{:X}", cp.kj(), et.kj(), *l as u64),
-        RvInst::Bcs { cp, et, l } => format!("bltu {}, {}, 0x{:X}", cp.kj(), et.kj(), *l as u64),
-        RvInst::Bcq { cp, et, l } => format!("bgeu {}, {}, 0x{:X}", cp.kj(), et.kj(), *l as u64),
-        RvInst::Xh { ck, l } => {
-            if *ck as u8 == 0 {
-                format!("j    0x{:X}", *l as u64)
+fn lxt(inst: &RvInst) -> String {
+    match inst {
+        RvInst::Add { aj, rs1, rs2 } => format!("add  {}, {}, {}", aj.abi_name(), rs1.abi_name(), rs2.abi_name()),
+        RvInst::Sub { aj, rs1, rs2 } => format!("sub  {}, {}, {}", aj.abi_name(), rs1.abi_name(), rs2.abi_name()),
+        RvInst::And { aj, rs1, rs2 } => format!("and  {}, {}, {}", aj.abi_name(), rs1.abi_name(), rs2.abi_name()),
+        RvInst::Or { aj, rs1, rs2 }  => format!("or   {}, {}, {}", aj.abi_name(), rs1.abi_name(), rs2.abi_name()),
+        RvInst::Xor { aj, rs1, rs2 } => format!("xor  {}, {}, {}", aj.abi_name(), rs1.abi_name(), rs2.abi_name()),
+        RvInst::Sll { aj, rs1, rs2 } => format!("sll  {}, {}, {}", aj.abi_name(), rs1.abi_name(), rs2.abi_name()),
+        RvInst::Srl { aj, rs1, rs2 } => format!("srl  {}, {}, {}", aj.abi_name(), rs1.abi_name(), rs2.abi_name()),
+        RvInst::Sra { aj, rs1, rs2 } => format!("sra  {}, {}, {}", aj.abi_name(), rs1.abi_name(), rs2.abi_name()),
+        RvInst::Slt { aj, rs1, rs2 } => format!("slt  {}, {}, {}", aj.abi_name(), rs1.abi_name(), rs2.abi_name()),
+        RvInst::Sltu { aj, rs1, rs2 }=> format!("sltu {}, {}, {}", aj.abi_name(), rs1.abi_name(), rs2.abi_name()),
+        RvInst::Mul { aj, rs1, rs2 } => format!("mul  {}, {}, {}", aj.abi_name(), rs1.abi_name(), rs2.abi_name()),
+        RvInst::Mulh { aj, rs1, rs2 }=> format!("mulh {}, {}, {}", aj.abi_name(), rs1.abi_name(), rs2.abi_name()),
+        RvInst::Div { aj, rs1, rs2 } => format!("div  {}, {}, {}", aj.abi_name(), rs1.abi_name(), rs2.abi_name()),
+        RvInst::Divu { aj, rs1, rs2 }=> format!("divu {}, {}, {}", aj.abi_name(), rs1.abi_name(), rs2.abi_name()),
+        RvInst::Rem { aj, rs1, rs2 } => format!("rem  {}, {}, {}", aj.abi_name(), rs1.abi_name(), rs2.abi_name()),
+        RvInst::Remu { aj, rs1, rs2 }=> format!("remu {}, {}, {}", aj.abi_name(), rs1.abi_name(), rs2.abi_name()),
+        RvInst::Addi { aj, rs1, imm } => format!("addi {}, {}, {}", aj.abi_name(), rs1.abi_name(), imm),
+        RvInst::Andi { aj, rs1, imm } => format!("andi {}, {}, 0x{:X}", aj.abi_name(), rs1.abi_name(), *imm as u64),
+        RvInst::Ori { aj, rs1, imm }  => format!("ori  {}, {}, 0x{:X}", aj.abi_name(), rs1.abi_name(), *imm as u64),
+        RvInst::Xori { aj, rs1, imm } => format!("xori {}, {}, 0x{:X}", aj.abi_name(), rs1.abi_name(), *imm as u64),
+        RvInst::Slli { aj, rs1, acn }=> format!("slli {}, {}, {}", aj.abi_name(), rs1.abi_name(), acn),
+        RvInst::Srli { aj, rs1, acn }=> format!("srli {}, {}, {}", aj.abi_name(), rs1.abi_name(), acn),
+        RvInst::Srai { aj, rs1, acn }=> format!("srai {}, {}, {}", aj.abi_name(), rs1.abi_name(), acn),
+        RvInst::Slti { aj, rs1, imm } => format!("slti {}, {}, {}", aj.abi_name(), rs1.abi_name(), imm),
+        RvInst::Sltiu { aj, rs1, imm }=> format!("sltiu {}, {}, {}", aj.abi_name(), rs1.abi_name(), imm),
+        RvInst::Lui { aj, imm } => format!("lui  {}, 0x{:X}", aj.abi_name(), imm),
+        RvInst::Auipc { aj, imm } => format!("auipc {}, 0x{:X}", aj.abi_name(), imm),
+        RvInst::Lb { aj, rs1, offset } => format!("lb   {}, {}({})", aj.abi_name(), offset, rs1.abi_name()),
+        RvInst::Lbu { aj, rs1, offset }=> format!("lbu  {}, {}({})", aj.abi_name(), offset, rs1.abi_name()),
+        RvInst::Lh { aj, rs1, offset } => format!("lh   {}, {}({})", aj.abi_name(), offset, rs1.abi_name()),
+        RvInst::Lhu { aj, rs1, offset }=> format!("lhu  {}, {}({})", aj.abi_name(), offset, rs1.abi_name()),
+        RvInst::Lw { aj, rs1, offset } => format!("lw   {}, {}({})", aj.abi_name(), offset, rs1.abi_name()),
+        RvInst::Lwu { aj, rs1, offset }=> format!("lwu  {}, {}({})", aj.abi_name(), offset, rs1.abi_name()),
+        RvInst::Ld { aj, rs1, offset } => format!("ld   {}, {}({})", aj.abi_name(), offset, rs1.abi_name()),
+        RvInst::Sb { rs2, rs1, offset }=> format!("sb   {}, {}({})", rs2.abi_name(), offset, rs1.abi_name()),
+        RvInst::Sh { rs2, rs1, offset }=> format!("sh   {}, {}({})", rs2.abi_name(), offset, rs1.abi_name()),
+        RvInst::Sw { rs2, rs1, offset }=> format!("sw   {}, {}({})", rs2.abi_name(), offset, rs1.abi_name()),
+        RvInst::Sd { rs2, rs1, offset }=> format!("sd   {}, {}({})", rs2.abi_name(), offset, rs1.abi_name()),
+        RvInst::Beq { rs1, rs2, offset }  => format!("beq  {}, {}, 0x{:X}", rs1.abi_name(), rs2.abi_name(), *offset as u64),
+        RvInst::Bne { rs1, rs2, offset }  => format!("bne  {}, {}, 0x{:X}", rs1.abi_name(), rs2.abi_name(), *offset as u64),
+        RvInst::Blt { rs1, rs2, offset }  => format!("blt  {}, {}, 0x{:X}", rs1.abi_name(), rs2.abi_name(), *offset as u64),
+        RvInst::Bge { rs1, rs2, offset }  => format!("bge  {}, {}, 0x{:X}", rs1.abi_name(), rs2.abi_name(), *offset as u64),
+        RvInst::Bltu { rs1, rs2, offset } => format!("bltu {}, {}, 0x{:X}", rs1.abi_name(), rs2.abi_name(), *offset as u64),
+        RvInst::Bgeu { rs1, rs2, offset } => format!("bgeu {}, {}, 0x{:X}", rs1.abi_name(), rs2.abi_name(), *offset as u64),
+        RvInst::Jal { aj, offset } => {
+            if *aj as u8 == 0 {
+                format!("j    0x{:X}", *offset as u64)
             } else {
-                format!("jal  {}, 0x{:X}", ck.kj(), *l as u64)
+                format!("jal  {}, 0x{:X}", aj.abi_name(), *offset as u64)
             }
         }
-        RvInst::Xi { ck, cp, l } => {
-            if *ck as u8 == 0 && *l == 0 {
-                format!("jr   {}", cp.kj())
+        RvInst::Jalr { aj, rs1, offset } => {
+            if *aj as u8 == 0 && *offset == 0 {
+                format!("jr   {}", rs1.abi_name())
             } else {
-                format!("jalr {}, {}({})", ck.kj(), l, cp.kj())
+                format!("jalr {}, {}({})", aj.abi_name(), offset, rs1.abi_name())
             }
         }
-        RvInst::Wk  => String::from("ecall"),
-        RvInst::Bfr => String::from("ebreak"),
-        RvInst::Bgw  => String::from("fence"),
-        RvInst::Bbr { ck, et, cp } => format!("amoswap.d {}, {}, ({})", ck.kj(), et.kj(), cp.kj()),
-        RvInst::Bbq { ck, et, cp }  => format!("amoadd.d  {}, {}, ({})", ck.kj(), et.kj(), cp.kj()),
-        RvInst::Hu { ck, gf } => format!("li   {}, 0x{:X}", ck.kj(), *gf as u64),
-        RvInst::Gl { ck, acl } => format!("mv   {}, {}", ck.kj(), acl.kj()),
-        RvInst::Fq => String::from("nop"),
-        RvInst::Ama => String::from("ret"),
-        RvInst::En { l } => format!("call 0x{:X}", *l as u64),
-        RvInst::Ed { cp, et } => format!("cmp  {}, {}", cp.kj(), et.kj()),
-        RvInst::Aad { mo, l } => format!("b{:?} 0x{:X}", mo, *l as u64),
-        RvInst::Od { arch, ag, text } => format!("; [{} @ 0x{:X}] {}", arch.j(), ag, text),
+        RvInst::Ecall  => String::from("ecall"),
+        RvInst::Ebreak => String::from("ebreak"),
+        RvInst::Fence  => String::from("fence"),
+        RvInst::AmoswapD { aj, rs2, rs1 } => format!("amoswap.d {}, {}, ({})", aj.abi_name(), rs2.abi_name(), rs1.abi_name()),
+        RvInst::AmoaddD { aj, rs2, rs1 }  => format!("amoadd.d  {}, {}, ({})", aj.abi_name(), rs2.abi_name(), rs1.abi_name()),
+        RvInst::Li { aj, imm } => format!("li   {}, 0x{:X}", aj.abi_name(), *imm as u64),
+        RvInst::Mv { aj, oc } => format!("mv   {}, {}", aj.abi_name(), oc.abi_name()),
+        RvInst::Nop => String::from("nop"),
+        RvInst::Ret => String::from("ret"),
+        RvInst::Call { offset } => format!("call 0x{:X}", *offset as u64),
+        RvInst::CmpFlags { rs1, rs2 } => format!("cmp  {}, {}", rs1.abi_name(), rs2.abi_name()),
+        RvInst::BranchCond { fc, offset } => format!("b{:?} 0x{:X}", fc, *offset as u64),
+        RvInst::SrcAnnotation { arch, addr, text } => format!("; [{} @ 0x{:X}] {}", arch.name(), addr, text),
     }
 }

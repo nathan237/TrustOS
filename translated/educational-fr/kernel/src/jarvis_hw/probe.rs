@@ -39,9 +39,9 @@ pub struct HardwareProfile {
     pub cpu_family: u8,
     pub cpu_model: u8,
     pub cpu_stepping: u8,
-    pub tsc_frequency_hz: u64,
-    pub maximum_logical_cpus: u8,
-    pub maximum_physical_cpus: u8,
+    pub tsc_freq_hz: u64,
+    pub max_logical_cpus: u8,
+    pub max_physical_cpus: u8,
     pub apic_id: u8,
     // SIMD
     pub has_sse: bool,
@@ -86,17 +86,17 @@ pub struct HardwareProfile {
     pub acpi_revision: u8,
     pub acpi_oem_id: String,
     pub fadt_sci_int: u16,
-    pub fadt_hardware_reduced: bool,
+    pub fadt_hw_reduced: bool,
     pub fadt_reset_supported: bool,
     pub fadt_low_power_s0: bool,
-    pub fadt_pm_tmr_block: u32,
+    pub fadt_pm_tmr_blk: u32,
 
     // ── Interrupt Topology ───────────────────────────────────────────────────
-    pub local_apic_address: u64,
+    pub local_apic_addr: u64,
     pub apic_entries: Vec<ApicSummary>,
     pub ioapic_count: usize,
     pub ioapic_entries: Vec<IoApicSummary>,
-    pub interrupt_request_overrides: Vec<IrqOverrideSummary>,
+    pub irq_overrides: Vec<IrqOverrideSummary>,
     pub apic_nmi_count: usize,
 
     // ── PCIe / MCFG ─────────────────────────────────────────────────────────
@@ -135,8 +135,8 @@ pub struct HardwareProfile {
     // ── Timers ───────────────────────────────────────────────────────────────
     pub hpet_available: bool,
     pub tsc_available: bool,
-    pub hpet_frequency_hz: u64,
-    pub hpet_number_timers: u8,
+    pub hpet_freq_hz: u64,
+    pub hpet_num_timers: u8,
     pub hpet_64bit: bool,
     pub hpet_vendor_id: u16,
 
@@ -235,8 +235,8 @@ pub struct IoApicSummary {
 #[derive(Clone)]
 // Structure publique — visible à l'extérieur de ce module.
 pub struct IrqOverrideSummary {
-    pub source_interrupt_request: u8,
-    pub global_interrupt_request: u32,
+    pub source_irq: u8,
+    pub global_irq: u32,
     pub polarity: u8,
     pub trigger: u8,
 }
@@ -334,9 +334,9 @@ pub fn scan_hardware() -> HardwareProfile {
         cpu_family: 0,
         cpu_model: 0,
         cpu_stepping: 0,
-        tsc_frequency_hz: 0,
-        maximum_logical_cpus: 0,
-        maximum_physical_cpus: 0,
+        tsc_freq_hz: 0,
+        max_logical_cpus: 0,
+        max_physical_cpus: 0,
         apic_id: 0,
         has_sse: false,
         has_sse2: false,
@@ -374,16 +374,16 @@ pub fn scan_hardware() -> HardwareProfile {
         acpi_revision: 0,
         acpi_oem_id: String::new(),
         fadt_sci_int: 0,
-        fadt_hardware_reduced: false,
+        fadt_hw_reduced: false,
         fadt_reset_supported: false,
         fadt_low_power_s0: false,
-        fadt_pm_tmr_block: 0,
+        fadt_pm_tmr_blk: 0,
         // Interrupt topology
-        local_apic_address: 0,
+        local_apic_addr: 0,
         apic_entries: Vec::new(),
         ioapic_count: 0,
         ioapic_entries: Vec::new(),
-        interrupt_request_overrides: Vec::new(),
+        irq_overrides: Vec::new(),
         apic_nmi_count: 0,
         // PCIe
         pcie_segments: Vec::new(),
@@ -415,8 +415,8 @@ pub fn scan_hardware() -> HardwareProfile {
         // Timers
         hpet_available: false,
         tsc_available: false,
-        hpet_frequency_hz: 0,
-        hpet_number_timers: 0,
+        hpet_freq_hz: 0,
+        hpet_num_timers: 0,
         hpet_64bit: false,
         hpet_vendor_id: 0,
         // USB
@@ -516,9 +516,9 @@ match caps.vendor {
         profile.cpu_model = caps.model;
         profile.cpu_stepping = caps.stepping;
         profile.cpu_cores = crate::cpu::smp::cpu_count();
-        profile.tsc_frequency_hz = caps.tsc_frequency_hz;
-        profile.maximum_logical_cpus = caps.maximum_logical_cpus;
-        profile.maximum_physical_cpus = caps.maximum_physical_cpus;
+        profile.tsc_freq_hz = caps.tsc_frequency_hz;
+        profile.max_logical_cpus = caps.max_logical_cpus;
+        profile.max_physical_cpus = caps.max_physical_cpus;
         profile.apic_id = caps.apic_id;
 
         // SIMD
@@ -590,15 +590,15 @@ fn probe_acpi_firmware(profile: &mut HardwareProfile) {
     if let Some(acpi) = crate::acpi::get_information() {
         profile.acpi_revision = acpi.revision;
         profile.acpi_oem_id = acpi.oem_id.clone();
-        profile.local_apic_address = acpi.local_apic_address;
+        profile.local_apic_addr = acpi.local_apic_addr;
 
         // FADT
         if let Some(ref fadt) = acpi.fadt {
             profile.fadt_sci_int = fadt.sci_int;
-            profile.fadt_hardware_reduced = fadt.is_hardware_reduced();
+            profile.fadt_hw_reduced = fadt.is_hw_reduced();
             profile.fadt_reset_supported = fadt.supports_reset();
             profile.fadt_low_power_s0 = (fadt.flags & crate::acpi::fadt::FadtInfo::FLAG_LOW_POWER_S0) != 0;
-            profile.fadt_pm_tmr_block = fadt.pm_tmr_block;
+            profile.fadt_pm_tmr_blk = fadt.pm_tmr_blk;
         }
 
         // MADT: Local APICs (per-CPU)
@@ -623,9 +623,9 @@ fn probe_acpi_firmware(profile: &mut HardwareProfile) {
 
         // IRQ overrides
         for ovr in &acpi.int_overrides {
-            profile.interrupt_request_overrides.push(IrqOverrideSummary {
-                source_interrupt_request: ovr.source,
-                global_interrupt_request: ovr.gsi,
+            profile.irq_overrides.push(IrqOverrideSummary {
+                source_irq: ovr.source,
+                global_irq: ovr.gsi,
                 polarity: ovr.polarity,
                 trigger: ovr.trigger,
             });
@@ -636,8 +636,8 @@ fn probe_acpi_firmware(profile: &mut HardwareProfile) {
         // HPET
         if let Some(ref hpet) = acpi.hpet {
             profile.hpet_available = true;
-            profile.hpet_frequency_hz = hpet.frequency();
-            profile.hpet_number_timers = hpet.number_comparators;
+            profile.hpet_freq_hz = hpet.frequency();
+            profile.hpet_num_timers = hpet.num_comparators;
             profile.hpet_64bit = hpet.counter_64bit;
             profile.hpet_vendor_id = hpet.vendor_id;
         }
@@ -655,7 +655,7 @@ fn probe_acpi_firmware(profile: &mut HardwareProfile) {
 
         crate::serial_println!("[JARVIS-HW] ACPI: rev={} OEM='{}' {} CPUs {} IOAPICs {} overrides PCIe={}",
             acpi.revision, acpi.oem_id, acpi.local_apics.len(),
-            profile.ioapic_count, profile.interrupt_request_overrides.len(), profile.pcie_available);
+            profile.ioapic_count, profile.irq_overrides.len(), profile.pcie_available);
     } else {
         crate::serial_println!("[JARVIS-HW] ACPI: not available");
     }
@@ -665,28 +665,28 @@ fn probe_pci(profile: &mut HardwareProfile) {
     let devices = crate::pci::get_devices();
     profile.pci_device_count = devices.len();
 
-    for device in &devices {
+    for dev in &devices {
         profile.pci_devices.push(PciDeviceSummary {
-            bus: device.bus,
-            device: device.device,
-            function: device.function,
-            vendor_id: device.vendor_id,
-            device_id: device.device_id,
-            class_code: device.class_code,
-            subclass: device.subclass,
-            class_name: String::from(device.class_name()),
-            subclass_name: String::from(device.subclass_name()),
+            bus: dev.bus,
+            device: dev.device,
+            function: dev.function,
+            vendor_id: dev.vendor_id,
+            device_id: dev.device_id,
+            class_code: dev.class_code,
+            subclass: dev.subclass,
+            class_name: String::from(dev.class_name()),
+            subclass_name: String::from(dev.subclass_name()),
         });
 
         // Categorize by class
-        match device.class_code {
+        match dev.class_code {
             0x01 => profile.pci_storage_controllers += 1,
             0x02 => profile.pci_network_controllers += 1,
             0x03 => profile.pci_display_controllers += 1,
             0x04 => profile.pci_audio_controllers += 1,
             0x06 => profile.pci_bridge_count += 1,
             0x0C => {
-                if device.subclass == 0x03 { // USB
+                if dev.subclass == 0x03 { // USB
                     profile.pci_usb_controllers += 1;
                 }
             }
@@ -706,12 +706,12 @@ fn probe_storage(profile: &mut HardwareProfile) {
     // AHCI/SATA
     if crate::drivers::ahci::is_initialized() {
         for port in crate::drivers::ahci::list_devices() {
-            let capability = port.sector_count * 512;
-            profile.total_storage_bytes += capability;
+            let cap = port.sector_count * 512;
+            profile.total_storage_bytes += cap;
             profile.storage_devices.push(StorageInformation {
-                name: format!("SATA port {}", port.port_number),
+                name: format!("SATA port {}", port.port_num),
                 kind: StorageKind::Sata,
-                capacity_bytes: capability,
+                capacity_bytes: cap,
                 model: port.model.clone(),
                 serial: port.serial.clone(),
             });
@@ -721,12 +721,12 @@ fn probe_storage(profile: &mut HardwareProfile) {
     // NVMe
     if crate::nvme::is_initialized() {
         for ns in crate::nvme::list_namespaces() {
-            let capability = ns.size_lbas * ns.lba_size as u64;
-            profile.total_storage_bytes += capability;
+            let cap = ns.size_lbas * ns.lba_size as u64;
+            profile.total_storage_bytes += cap;
             profile.storage_devices.push(StorageInformation {
                 name: format!("NVMe ns{}", ns.nsid),
                 kind: StorageKind::Nvme,
-                capacity_bytes: capability,
+                capacity_bytes: cap,
                 model: String::from("NVMe"),
                 serial: String::new(),
             });
@@ -743,11 +743,11 @@ fn probe_partitions_and_encryption(profile: &mut HardwareProfile) {
     // Try to read partition tables from AHCI disks
     if crate::drivers::ahci::is_initialized() {
         let port_count = crate::drivers::ahci::get_port_count();
-        for port_number in 0..port_count {
-            if crate::drivers::ahci::get_port_information(port_number).is_some() {
+        for port_num in 0..port_count {
+            if crate::drivers::ahci::get_port_information(port_num).is_some() {
                 // Read partition table
-                if let Ok(pt) = crate::drivers::partition::read_from_ahci(port_number) {
-                    let disk_name = format!("SATA:{}", port_number);
+                if let Ok(pt) = crate::drivers::partition::read_from_ahci(port_num) {
+                    let disk_name = format!("SATA:{}", port_num);
                     for part in &pt.partitions {
                         profile.partitions.push(PartitionSummary {
                             disk_name: disk_name.clone(),
@@ -762,13 +762,13 @@ fn probe_partitions_and_encryption(profile: &mut HardwareProfile) {
                 }
 
                 // Probe first sector for whole-disk encryption headers
-                let mut buffer = [0u8; 512];
-                if crate::drivers::ahci::read_sectors(port_number, 0, 1, &mut buffer).is_ok() {
-                    detect_encryption_header(&buffer, &format!("SATA:{}", port_number), None, profile);
+                let mut buf = [0u8; 512];
+                if crate::drivers::ahci::read_sectors(port_num, 0, 1, &mut buf).is_ok() {
+                    detect_encryption_header(&buf, &format!("SATA:{}", port_num), None, profile);
                 }
                 // Also check sector 6 (BitLocker backup) and sector 1 (LUKS on partition)
-                if crate::drivers::ahci::read_sectors(port_number, 6, 1, &mut buffer).is_ok() {
-                    detect_encryption_header(&buffer, &format!("SATA:{}", port_number), None, profile);
+                if crate::drivers::ahci::read_sectors(port_num, 6, 1, &mut buf).is_ok() {
+                    detect_encryption_header(&buf, &format!("SATA:{}", port_num), None, profile);
                 }
             }
         }
@@ -779,15 +779,15 @@ fn probe_partitions_and_encryption(profile: &mut HardwareProfile) {
 }
 
 /// Check a 512-byte sector buffer for known encryption magic signatures
-fn detect_encryption_header(buffer: &[u8], disk_name: &str, part_number: Option<u8>, profile: &mut HardwareProfile) {
-    if buffer.len() < 512 { return; }
+fn detect_encryption_header(buf: &[u8], disk_name: &str, part_num: Option<u8>, profile: &mut HardwareProfile) {
+    if buf.len() < 512 { return; }
 
     // LUKS magic: "LUKS\xBA\xBE" at offset 0
-    if buffer.len() >= 6 && buffer[0] == b'L' && buffer[1] == b'U' && buffer[2] == b'K'
-        && buffer[3] == b'S' && buffer[4] == 0xBA && buffer[5] == 0xBE
+    if buf.len() >= 6 && buf[0] == b'L' && buf[1] == b'U' && buf[2] == b'K'
+        && buf[3] == b'S' && buf[4] == 0xBA && buf[5] == 0xBE
     {
-        let version = if buffer.len() >= 8 {
-            ((buffer[6] as u16) << 8) | buffer[7] as u16
+        let version = if buf.len() >= 8 {
+            ((buf[6] as u16) << 8) | buf[7] as u16
         } else { 0 };
 
         let encrypt_type = if version == 2 { EncryptionType::Luks2 } else { EncryptionType::Luks1 };
@@ -797,7 +797,7 @@ fn detect_encryption_header(buffer: &[u8], disk_name: &str, part_number: Option<
         if !profile.encryption_detected.iter().any(|e| e.disk_name == disk_name && e.encryption_type == encrypt_type) {
             profile.encryption_detected.push(EncryptionInformation {
                 disk_name: String::from(disk_name),
-                partition: part_number,
+                partition: part_num,
                 encryption_type: encrypt_type,
                 detail,
             });
@@ -805,14 +805,14 @@ fn detect_encryption_header(buffer: &[u8], disk_name: &str, part_number: Option<
     }
 
     // BitLocker: "-FVE-FS-" at offset 3 (in the OEM ID field of the BPB)
-    if buffer.len() >= 11
-        && buffer[3] == b'-' && buffer[4] == b'F' && buffer[5] == b'V' && buffer[6] == b'E'
-        && buffer[7] == b'-' && buffer[8] == b'F' && buffer[9] == b'S' && buffer[10] == b'-'
+    if buf.len() >= 11
+        && buf[3] == b'-' && buf[4] == b'F' && buf[5] == b'V' && buf[6] == b'E'
+        && buf[7] == b'-' && buf[8] == b'F' && buf[9] == b'S' && buf[10] == b'-'
     {
         if !profile.encryption_detected.iter().any(|e| e.disk_name == disk_name && e.encryption_type == EncryptionType::BitLocker) {
             profile.encryption_detected.push(EncryptionInformation {
                 disk_name: String::from(disk_name),
-                partition: part_number,
+                partition: part_num,
                 encryption_type: EncryptionType::BitLocker,
                 detail: String::from("BitLocker BDE signature (-FVE-FS-) detected"),
             });
@@ -821,11 +821,11 @@ fn detect_encryption_header(buffer: &[u8], disk_name: &str, part_number: Option<
 
     // VeraCrypt: Check for VeraCrypt signature at sector 0
     // VeraCrypt uses "VERA" at specific offset in header, or the TC signature "TRUE"
-    if buffer.len() >= 4 && buffer[0] == b'V' && buffer[1] == b'E' && buffer[2] == b'R' && buffer[3] == b'A' {
+    if buf.len() >= 4 && buf[0] == b'V' && buf[1] == b'E' && buf[2] == b'R' && buf[3] == b'A' {
         if !profile.encryption_detected.iter().any(|e| e.disk_name == disk_name && e.encryption_type == EncryptionType::VeraCrypt) {
             profile.encryption_detected.push(EncryptionInformation {
                 disk_name: String::from(disk_name),
-                partition: part_number,
+                partition: part_num,
                 encryption_type: EncryptionType::VeraCrypt,
                 detail: String::from("VeraCrypt volume header signature detected"),
             });
@@ -850,10 +850,10 @@ fn probe_network(profile: &mut HardwareProfile) {
 fn probe_gpu(profile: &mut HardwareProfile) {
     profile.has_gpu = crate::drivers::amdgpu::is_detected();
     if profile.has_gpu {
-        if let Some(information) = crate::drivers::amdgpu::get_information() {
-            profile.gpu_name = String::from(information.gpu_name());
-            profile.gpu_vram_mb = (information.vram_aperture_size / (1024 * 1024)) as u32;
-            profile.gpu_compute_units = information.compute_units;
+        if let Some(info) = crate::drivers::amdgpu::get_information() {
+            profile.gpu_name = String::from(info.gpu_name());
+            profile.gpu_vram_mb = (info.vram_aperture_size / (1024 * 1024)) as u32;
+            profile.gpu_compute_units = info.compute_units;
         }
     }
 
@@ -866,7 +866,7 @@ fn probe_timers(profile: &mut HardwareProfile) {
     {
         profile.tsc_available = profile.has_tsc;
         // HPET details are filled from ACPI probe; mark available if freq > 0
-        if profile.hpet_frequency_hz > 0 {
+        if profile.hpet_freq_hz > 0 {
             profile.hpet_available = true;
         }
     }
@@ -877,13 +877,13 @@ fn probe_usb(profile: &mut HardwareProfile) {
     if profile.usb_initialized {
         profile.usb_controller_count = crate::drivers::usb::controller_count();
         let devices = crate::drivers::usb::enumerate_devices();
-        for device in &devices {
+        for dev in &devices {
             profile.usb_devices.push(UsbDeviceSummary {
-                address: device.address,
-                class_name: format!("{:?}", device.class),
-                vendor_id: device.vendor_id,
-                product_id: device.product_id,
-                product: device.product.clone(),
+                address: dev.address,
+                class_name: format!("{:?}", dev.class),
+                vendor_id: dev.vendor_id,
+                product_id: dev.product_id,
+                product: dev.product.clone(),
             });
         }
     }
@@ -909,21 +909,21 @@ fn compute_scores(profile: &mut HardwareProfile) {
         else if profile.has_sse2 { 1.0 }
         else { 0.5 };
 
-    let core_factor = (profile.cpu_cores as f32).minimum(32.0) / 32.0;
-    let frequency_factor = (profile.tsc_frequency_hz as f32 / 5_000_000_000.0).minimum(1.0);
+    let core_factor = (profile.cpu_cores as f32).min(32.0) / 32.0;
+    let frequency_factor = (profile.tsc_freq_hz as f32 / 5_000_000_000.0).min(1.0);
     let gpu_bonus = if profile.has_gpu { 0.3 } else { 0.0 };
 
-    profile.compute_score = ((core_factor * 0.4 + frequency_factor * 0.3 + simd_mult / 4.0 * 0.3) + gpu_bonus).minimum(1.0);
+    profile.compute_score = ((core_factor * 0.4 + frequency_factor * 0.3 + simd_mult / 4.0 * 0.3) + gpu_bonus).min(1.0);
 
     // Memory score: how much RAM relative to 64GB reference
     let ram_gb = profile.total_ram_bytes as f32 / (1024.0 * 1024.0 * 1024.0);
-    profile.memory_score = (ram_gb / 64.0).minimum(1.0);
+    profile.memory_score = (ram_gb / 64.0).min(1.0);
 
     // Storage score: capacity + speed tier (NVMe > SATA >> IDE)
     let storage_gb = profile.total_storage_bytes as f32 / (1024.0 * 1024.0 * 1024.0);
     let has_nvme = profile.storage_devices.iter().any(|s| s.kind == StorageKind::Nvme);
     let speed_mult = if has_nvme { 1.0 } else { 0.5 };
-    profile.storage_score = ((storage_gb / 2048.0) * speed_mult).minimum(1.0);
+    profile.storage_score = ((storage_gb / 2048.0) * speed_mult).min(1.0);
 
     // Network score
     profile.network_score = if profile.has_network && profile.link_up { 1.0 }
@@ -931,25 +931,25 @@ fn compute_scores(profile: &mut HardwareProfile) {
         else { 0.0 };
 
     // Security score: comprehensive
-    let mut sector = 0.0f32;
-    if profile.has_aesni { sector += 0.12; }
-    if profile.has_rdrand { sector += 0.08; }
-    if profile.has_rdseed { sector += 0.05; }
-    if profile.has_sha_ext { sector += 0.05; }
-    if profile.has_pclmulqdq { sector += 0.05; }
-    if profile.has_smep { sector += 0.10; }
-    if profile.has_smap { sector += 0.10; }
-    if profile.has_umip { sector += 0.05; }
-    if profile.has_nx { sector += 0.10; }
+    let mut sec = 0.0f32;
+    if profile.has_aesni { sec += 0.12; }
+    if profile.has_rdrand { sec += 0.08; }
+    if profile.has_rdseed { sec += 0.05; }
+    if profile.has_sha_ext { sec += 0.05; }
+    if profile.has_pclmulqdq { sec += 0.05; }
+    if profile.has_smep { sec += 0.10; }
+    if profile.has_smap { sec += 0.10; }
+    if profile.has_umip { sec += 0.05; }
+    if profile.has_nx { sec += 0.10; }
     // ring0 = full control
-    sector += 0.15;
+    sec += 0.15;
     // IOMMU awareness (having IOAPICs is good)
-    if profile.ioapic_count > 0 { sector += 0.05; }
+    if profile.ioapic_count > 0 { sec += 0.05; }
     // PCIe config space access
-    if profile.pcie_available { sector += 0.05; }
+    if profile.pcie_available { sec += 0.05; }
     // TPM/crypto controller on PCI
-    if profile.pci_crypto_controllers > 0 { sector += 0.05; }
-    profile.security_score = sector.minimum(1.0);
+    if profile.pci_crypto_controllers > 0 { sec += 0.05; }
+    profile.security_score = sec.min(1.0);
 
     // Overall = weighted average
     profile.overall_score = profile.compute_score * 0.30
@@ -977,8 +977,8 @@ impl HardwareProfile {
         s.push_str(&format!("  Vendor: {}  Family: {}  Model: {}  Stepping: {}\n",
             self.cpu_vendor, self.cpu_family, self.cpu_model, self.cpu_stepping));
         s.push_str(&format!("  Cores: {} (logical={} physical={})  TSC: {} MHz\n",
-            self.cpu_cores, self.maximum_logical_cpus, self.maximum_physical_cpus,
-            self.tsc_frequency_hz / 1_000_000));
+            self.cpu_cores, self.max_logical_cpus, self.max_physical_cpus,
+            self.tsc_freq_hz / 1_000_000));
         s.push_str(&format!("  APIC ID: {}  TSC: inv={} deadline={} rdtscp={}\n",
             self.apic_id, self.has_tsc_invariant, self.has_tsc_deadline, self.has_rdtscp));
         s.push_str(&format!("  SIMD: SSE={} SSE2={} SSE3={} SSSE3={} SSE4.1={} SSE4.2={}\n",
@@ -1003,12 +1003,12 @@ impl HardwareProfile {
         // ACPI / Firmware
         s.push_str(&format!("\x01Y[ACPI/Firmware]\x01W Rev={} OEM='{}'\n", self.acpi_revision, self.acpi_oem_id));
         s.push_str(&format!("  FADT: SCI={} HW_Reduced={} Reset={} LowPowerS0={} PM_TMR=0x{:X}\n",
-            self.fadt_sci_int, self.fadt_hardware_reduced, self.fadt_reset_supported,
-            self.fadt_low_power_s0, self.fadt_pm_tmr_block));
+            self.fadt_sci_int, self.fadt_hw_reduced, self.fadt_reset_supported,
+            self.fadt_low_power_s0, self.fadt_pm_tmr_blk));
         s.push_str(&format!("  Local APIC: 0x{:X}  {} CPU APIC entries\n",
-            self.local_apic_address, self.apic_entries.len()));
+            self.local_apic_addr, self.apic_entries.len()));
         s.push_str(&format!("  IOAPICs: {}  IRQ Overrides: {}  NMIs: {}\n",
-            self.ioapic_count, self.interrupt_request_overrides.len(), self.apic_nmi_count));
+            self.ioapic_count, self.irq_overrides.len(), self.apic_nmi_count));
         if self.pcie_available {
             s.push_str(&format!("  PCIe: {} segment(s)\n", self.pcie_segments.len()));
         }
@@ -1017,19 +1017,19 @@ impl HardwareProfile {
         // HPET
         if self.hpet_available {
             s.push_str(&format!("\x01Y[HPET]\x01W {} MHz, {} timers, 64-bit={}, vendor=0x{:04X}\n\n",
-                self.hpet_frequency_hz / 1_000_000, self.hpet_number_timers,
+                self.hpet_freq_hz / 1_000_000, self.hpet_num_timers,
                 self.hpet_64bit, self.hpet_vendor_id));
         }
 
         // Storage
         s.push_str(&format!("\x01Y[Storage]\x01W {} device(s), {} GB total\n",
             self.storage_devices.len(), self.total_storage_bytes / (1024 * 1024 * 1024)));
-        for device in &self.storage_devices {
+        for dev in &self.storage_devices {
             s.push_str(&format!("  {} [{}] {} — {} GB\n",
-                device.name, device.kind.as_str(), device.model,
-                device.capacity_bytes / (1024 * 1024 * 1024)));
-            if !device.serial.is_empty() {
-                s.push_str(&format!("    Serial: {}\n", device.serial));
+                dev.name, dev.kind.as_str(), dev.model,
+                dev.capacity_bytes / (1024 * 1024 * 1024)));
+            if !dev.serial.is_empty() {
+                s.push_str(&format!("    Serial: {}\n", dev.serial));
             }
         }
 
@@ -1049,9 +1049,9 @@ impl HardwareProfile {
         // Encryption
         if !self.encryption_detected.is_empty() {
             s.push_str("\x01R  ⚠ Encrypted volumes detected:\x01W\n");
-            for encrypt in &self.encryption_detected {
+            for enc in &self.encryption_detected {
                 s.push_str(&format!("    \x01R[{}]\x01W {} — {}\n",
-                    encrypt.encryption_type.as_str(), encrypt.disk_name, encrypt.detail));
+                    enc.encryption_type.as_str(), enc.disk_name, enc.detail));
             }
         }
         s.push('\n');
@@ -1090,11 +1090,11 @@ impl HardwareProfile {
             self.pci_network_controllers, self.pci_usb_controllers,
             self.pci_audio_controllers, self.pci_display_controllers,
             self.pci_bridge_count, self.pci_crypto_controllers));
-        for device in self.pci_devices.iter().take(20) {
+        for dev in self.pci_devices.iter().take(20) {
             s.push_str(&format!("  {:02X}:{:02X}.{} [{:04X}:{:04X}] {} — {}\n",
-                device.bus, device.device, device.function,
-                device.vendor_id, device.device_id,
-                device.class_name, device.subclass_name));
+                dev.bus, dev.device, dev.function,
+                dev.vendor_id, dev.device_id,
+                dev.class_name, dev.subclass_name));
         }
         if self.pci_device_count > 20 {
             s.push_str(&format!("  ... and {} more\n", self.pci_device_count - 20));
@@ -1133,8 +1133,8 @@ impl HardwareProfile {
             self.cpu_vendor, self.cpu_brand, self.arch, self.cpu_family,
             self.cpu_model, self.cpu_stepping));
         s.push_str(&format!("  cores={} logical={} physical={} tsc_mhz={} apic_id={}\n",
-            self.cpu_cores, self.maximum_logical_cpus, self.maximum_physical_cpus,
-            self.tsc_frequency_hz / 1_000_000, self.apic_id));
+            self.cpu_cores, self.max_logical_cpus, self.max_physical_cpus,
+            self.tsc_freq_hz / 1_000_000, self.apic_id));
 
         // SIMD level
         let simd = if self.has_avx512 { "avx512" }
@@ -1163,17 +1163,17 @@ impl HardwareProfile {
 
         // ACPI
         s.push_str(&format!("ACPI: rev={} oem='{}' hw_reduced={} reset={}\n",
-            self.acpi_revision, self.acpi_oem_id, self.fadt_hardware_reduced, self.fadt_reset_supported));
+            self.acpi_revision, self.acpi_oem_id, self.fadt_hw_reduced, self.fadt_reset_supported));
         s.push_str(&format!("  apic_cpus={} ioapics={} irq_overrides={} pcie_segments={}\n",
             self.apic_entries.len(), self.ioapic_count,
-            self.interrupt_request_overrides.len(), self.pcie_segments.len()));
+            self.irq_overrides.len(), self.pcie_segments.len()));
 
         // Storage
         s.push_str(&format!("STORAGE: devices={} total_gb={}\n",
             self.storage_devices.len(), self.total_storage_bytes / (1024 * 1024 * 1024)));
-        for device in &self.storage_devices {
+        for dev in &self.storage_devices {
             s.push_str(&format!("  {} [{}] {}GB model='{}'\n",
-                device.name, device.kind.as_str(), device.capacity_bytes / (1024 * 1024 * 1024), device.model));
+                dev.name, dev.kind.as_str(), dev.capacity_bytes / (1024 * 1024 * 1024), dev.model));
         }
 
         // Partitions
@@ -1189,9 +1189,9 @@ impl HardwareProfile {
         // Encryption — critical for disk access queries
         if !self.encryption_detected.is_empty() {
             s.push_str("ENCRYPTION_DETECTED:\n");
-            for encrypt in &self.encryption_detected {
+            for enc in &self.encryption_detected {
                 s.push_str(&format!("  disk={} type={} detail='{}'\n",
-                    encrypt.disk_name, encrypt.encryption_type.as_str(), encrypt.detail));
+                    enc.disk_name, enc.encryption_type.as_str(), enc.detail));
             }
         } else {
             s.push_str("ENCRYPTION_DETECTED: none\n");
@@ -1212,7 +1212,7 @@ impl HardwareProfile {
         // Timers
         s.push_str(&format!("TIMERS: tsc={} hpet={} hpet_mhz={} hpet_timers={}\n",
             self.tsc_available, self.hpet_available,
-            self.hpet_frequency_hz / 1_000_000, self.hpet_number_timers));
+            self.hpet_freq_hz / 1_000_000, self.hpet_num_timers));
 
         // USB
         s.push_str(&format!("USB: controllers={} devices={}\n",
@@ -1242,9 +1242,9 @@ impl HardwareProfile {
     }
 
     /// Check if a specific capability is present (for query engine)
-    pub fn has_capability(&self, capability: &str) -> bool {
+    pub fn has_capability(&self, cap: &str) -> bool {
                 // Correspondance de motifs — branchement exhaustif de Rust.
-match capability {
+match cap {
             "aesni" | "aes" => self.has_aesni,
             "rdrand" | "random" => self.has_rdrand,
             "rdseed" => self.has_rdseed,

@@ -12,123 +12,123 @@ use core::sync::atomic::{AtomicU64, AtomicBool, Ordering};
 pub use task::{Task, TaskId, TaskState, TaskPriority};
 
 
-static AFZ_: AtomicU64 = AtomicU64::new(1);
+static AHT_: AtomicU64 = AtomicU64::new(1);
 
 
-static Be: AtomicBool = AtomicBool::new(false);
+static Ah: AtomicBool = AtomicBool::new(false);
 
 
-static AGY_: Mutex<VecDeque<TaskId>> = Mutex::new(VecDeque::new()); 
-static BDV_: Mutex<VecDeque<TaskId>> = Mutex::new(VecDeque::new()); 
-static BDW_: Mutex<VecDeque<TaskId>> = Mutex::new(VecDeque::new()); 
-static BDX_: Mutex<VecDeque<TaskId>> = Mutex::new(VecDeque::new()); 
 
 
-static PX_: Mutex<BTreeMap<u64, Task>> = Mutex::new(BTreeMap::new());
+static AIS_: Mutex<[VecDeque<TaskId>; 4]> = Mutex::new([
+    VecDeque::new(), 
+    VecDeque::new(), 
+    VecDeque::new(), 
+    VecDeque::new(), 
+]);
 
 
-static MQ_: AtomicU64 = AtomicU64::new(0);
+static QU_: Mutex<BTreeMap<u64, Task>> = Mutex::new(BTreeMap::new());
 
 
-static BHE_: AtomicU64 = AtomicU64::new(0);
+static NO_: AtomicU64 = AtomicU64::new(0);
 
 
-const BRF_: u64 = 10;
+static BJI_: AtomicU64 = AtomicU64::new(0);
 
 
-fn lxz(abv: usize) -> &'static Mutex<VecDeque<TaskId>> {
-    match abv {
-        0 => &AGY_,
-        1 => &BDV_,
-        2 => &BDW_,
-        3 => &BDX_,
-        _ => &AGY_,
-    }
+const BUB_: u64 = 10;
+
+
+#[inline(always)]
+fn hlc(priority: usize) -> usize {
+    if priority > 3 { 0 } else { priority }
 }
 
 
 pub fn init() {
-    let ldd = Task::usw();
-    MQ_.store(ldd.ad.0, Ordering::SeqCst);
-    PX_.lock().insert(ldd.ad.0, ldd);
-    Be.store(true, Ordering::SeqCst);
+    let gbp = Task::njb();
+    NO_.store(gbp.id.0, Ordering::SeqCst);
+    QU_.lock().insert(gbp.id.0, gbp);
+    Ah.store(true, Ordering::SeqCst);
     crate::log!("Scheduler ready");
 }
 
 
-pub fn uup() -> TaskId {
-    TaskId(AFZ_.fetch_add(1, Ordering::Relaxed))
+pub fn nki() -> TaskId {
+    TaskId(AHT_.fetch_add(1, Ordering::Relaxed))
 }
 
 
-pub fn eys(task: Task) -> TaskId {
-    let ad = task.ad;
-    let abv = task.abv as usize;
+pub fn spawn(task: Task) -> TaskId {
+    let id = task.id;
+    let priority = task.priority as usize;
     
     
-    PX_.lock().insert(ad.0, task);
+    QU_.lock().insert(id.0, task);
     
     
-    lxz(abv).lock().agt(ad);
+    AIS_.lock()[hlc(priority)].push_back(id);
     
-    crate::log_debug!("Spawned task {:?} with priority {}", ad, abv);
+    crate::log_debug!("Spawned task {:?} with priority {}", id, priority);
     
-    ad
+    id
 }
 
 
-pub fn hto() {
-    if !Be.load(Ordering::Relaxed) {
+pub fn dvv() {
+    if !Ah.load(Ordering::Relaxed) {
         return;
     }
     
     
-    let hev = MQ_.load(Ordering::Relaxed);
-    if let Some(task) = PX_.lock().get(&hev) {
-        task.or();
+    let dly = NO_.load(Ordering::Relaxed);
+    if let Some(task) = QU_.lock().get(&dly) {
+        task.tick();
     }
     
-    let slice = BHE_.fetch_add(1, Ordering::Relaxed);
+    let slice = BJI_.fetch_add(1, Ordering::Relaxed);
     
     
-    if slice >= BRF_ {
-        BHE_.store(0, Ordering::Relaxed);
-        dvk();
+    if slice >= BUB_ {
+        BJI_.store(0, Ordering::Relaxed);
+        boq();
     }
 }
 
 
-pub fn dvk() {
+pub fn boq() {
     
-    for abv in (0..4).vv() {
-        let mut fm = lxz(abv).lock();
-        if let Some(aod) = fm.awp() {
+    let mut zg = AIS_.lock();
+    
+    
+    for priority in (0..4).rev() {
+        if let Some(task_id) = zg[priority].pop_front() {
             
-            let hev = MQ_.load(Ordering::Relaxed);
-            if hev != 0 {
+            let dly = NO_.load(Ordering::Relaxed);
+            if dly != 0 {
                 
-                let kna = PX_.lock()
-                    .get(&hev)
-                    .map(|ab| ab.abv as usize)
+                let fpv = QU_.lock()
+                    .get(&dly)
+                    .map(|t| t.priority as usize)
                     .unwrap_or(0);
-                drop(fm); 
-                lxz(kna).lock().agt(TaskId(hev));
-            } else {
-                drop(fm);
+                zg[hlc(fpv)].push_back(TaskId(dly));
             }
             
-            MQ_.store(aod.0, Ordering::SeqCst);
+            drop(zg); 
             
-            crate::trace::bry(
-                crate::trace::EventType::Caa,
-                aod.0
+            NO_.store(task_id.0, Ordering::SeqCst);
+            
+            crate::trace::akj(
+                crate::trace::EventType::ContextSwitch,
+                task_id.0
             );
             
             
-            crate::lab_mode::trace_bus::fj(
+            crate::lab_mode::trace_bus::emit(
                 crate::lab_mode::trace_bus::EventCategory::Scheduler,
-                alloc::format!("context switch -> task {}", aod.0),
-                aod.0,
+                alloc::format!("context switch -> task {}", task_id.0),
+                task_id.0,
             );
             
             return;
@@ -139,41 +139,40 @@ pub fn dvk() {
 }
 
 
-pub fn eoh() -> Option<TaskId> {
-    let ad = MQ_.load(Ordering::Relaxed);
-    Some(TaskId(ad))
+pub fn byk() -> Option<TaskId> {
+    let id = NO_.load(Ordering::Relaxed);
+    Some(TaskId(id))
 }
 
 
-pub fn gxc() {
-    dvk();
+pub fn dgw() {
+    boq();
 }
 
-pub fn zpb(bt: u64) -> u64 {
-    crate::log!("Spawn task {:#x}", bt);
+pub fn qxi(entry: u64) -> u64 {
+    crate::log!("Spawn task {:#x}", entry);
     1
 }
 
 
-pub fn cm() -> Bsg {
-    let exk = AGY_.lock().len()
-        + BDV_.lock().len()
-        + BDW_.lock().len()
-        + BDX_.lock().len();
-    Bsg {
-        exk,
-        eoh: eoh(),
+pub fn stats() -> Aen {
+    let zg = AIS_.lock();
+    let ready_count = zg[0].len() + zg[1].len()
+        + zg[2].len() + zg[3].len();
+    Aen {
+        ready_count,
+        byk: byk(),
     }
 }
 
 
-pub fn ytz(ad: TaskId) -> Option<TaskState> {
-    PX_.lock().get(&ad.0).map(|ab| ab.g)
+pub fn qiq(id: TaskId) -> Option<TaskState> {
+    QU_.lock().get(&id.0).map(|t| t.state)
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Bsg {
-    pub exk: usize,
-    pub eoh: Option<TaskId>,
+pub struct Aen {
+    pub ready_count: usize,
+    pub byk: Option<TaskId>,
 }

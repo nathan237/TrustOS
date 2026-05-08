@@ -18,64 +18,64 @@ use spin::RwLock;
 use core::sync::atomic::{AtomicU64, Ordering};
 
 use super::{
-    Cc, Et, Ep, Stat, Br, FileType,
-    I, B, VfsError
+    Au, Bx, Bv, Stat, Ap, FileType,
+    K, E, VfsError
 };
-use super::fat32::Bj;
+use super::fat32::Ak;
 
 const H_: usize = 512;
-const Iv: u32 = 0x54525553; 
-const Afl: u32 = 1;
+const Dp: u32 = 0x54525553; 
+const Nt: u32 = 1;
 
-const AIL_: u64 = 0;
-const UF_: u64 = 1;
-const CBS_: u64 = 16;
-const LW_: u64 = 17;
-const ZL_: u64 = 16;
+const AKH_: u64 = 0;
+const VN_: u64 = 1;
+const CFD_: u64 = 16;
+const MT_: u64 = 17;
+const AAX_: u64 = 16;
 
-const BC_: u64 = 97;
+const BD_: u64 = 97;
 
-const AFA_: usize = 256;
-const UE_: usize = H_ / core::mem::size_of::<DiskInode>();
+const AGU_: usize = 256;
+const VM_: usize = H_ / core::mem::size_of::<DiskInode>();
 
-const KP_: usize = 28;
-const BX_: usize = 12;
-const BF_: usize = H_ / 4; 
+const LI_: usize = 28;
+const BZ_: usize = 12;
+const BH_: usize = H_ / 4; 
 
-const AZO_: usize = BX_ + BF_ + BF_ * BF_;
+const BBQ_: usize = BZ_ + BH_ + BH_ * BH_;
 
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 struct Superblock {
-    sj: u32,
-    dk: u32,
-    fxa: u32,
-    ivt: u32,
-    pva: u32,
-    ivv: u32,
-    py: u32,
-    cbm: u32,
-    awt: [u32; 8],
+    magic: u32,
+    version: u32,
+    total_blocks: u32,
+    free_blocks: u32,
+    total_inodes: u32,
+    free_inodes: u32,
+    block_size: u32,
+    root_inode: u32,
+    reserved: [u32; 8],
 }
 
 impl Superblock {
-    fn new(axf: u64) -> Self {
+    fn new(zp: u64) -> Self {
         Self {
-            sj: Iv,
-            dk: Afl,
-            fxa: (axf - BC_) as u32,
-            ivt: (axf - BC_ - 1) as u32, 
-            pva: AFA_ as u32,
-            ivv: (AFA_ - 1) as u32, 
-            py: H_ as u32,
-            cbm: 1,
-            awt: [0; 8],
+            magic: Dp,
+            version: Nt,
+            total_blocks: (zp - BD_) as u32,
+            free_blocks: (zp - BD_ - 1) as u32, 
+            total_inodes: AGU_ as u32,
+            free_inodes: (AGU_ - 1) as u32, 
+            block_size: H_ as u32,
+            root_inode: 1,
+            reserved: [0; 8],
         }
     }
     
-    fn cld(&self) -> bool {
-        self.sj == Iv && self.dk == Afl
+    fn is_valid(&self) -> bool {
+        self.magic == Dp && self.version == Nt
     }
 }
 
@@ -83,284 +83,284 @@ impl Superblock {
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 struct DiskInode {
-    ev: u16,          
-    fpa: u16,         
-    aw: u32,          
-    xk: u32,        
-    byi: u32,         
-    bnp: u32,         
-    eav: [u32; BX_], 
-    brd: u32,      
-    dgn: u32, 
+    mode: u16,          
+    nlink: u16,         
+    size: u32,          
+    blocks: u32,        
+    atime: u32,         
+    mtime: u32,         
+    direct: [u32; BZ_], 
+    indirect: u32,      
+    double_indirect: u32, 
 }
 
 impl Default for DiskInode {
     fn default() -> Self {
         Self {
-            ev: 0,
-            fpa: 0,
-            aw: 0,
-            xk: 0,
-            byi: 0,
-            bnp: 0,
-            eav: [0; BX_],
-            brd: 0,
-            dgn: 0,
+            mode: 0,
+            nlink: 0,
+            size: 0,
+            blocks: 0,
+            atime: 0,
+            mtime: 0,
+            direct: [0; BZ_],
+            indirect: 0,
+            double_indirect: 0,
         }
     }
 }
 
 impl DiskInode {
-    fn kd(&self) -> FileType {
-        match (self.ev >> 12) & 0xF {
-            0x4 => FileType::K,
-            0x8 => FileType::Ea,
-            0x2 => FileType::Mv,
-            0x6 => FileType::Bj,
-            _ => FileType::Ea,
+    fn file_type(&self) -> FileType {
+        match (self.mode >> 12) & 0xF {
+            0x4 => FileType::Directory,
+            0x8 => FileType::Regular,
+            0x2 => FileType::CharDevice,
+            0x6 => FileType::Ak,
+            _ => FileType::Regular,
         }
     }
     
-    fn ta(&self) -> bool {
-        self.kd() == FileType::K
+    fn is_dir(&self) -> bool {
+        self.file_type() == FileType::Directory
     }
     
-    fn pjh(&mut self, agm: FileType) {
-        let xnq = match agm {
-            FileType::K => 0x4,
-            FileType::Ea => 0x8,
-            FileType::Mv => 0x2,
-            FileType::Bj => 0x6,
+    fn set_type(&mut self, qk: FileType) {
+        let poz = match qk {
+            FileType::Directory => 0x4,
+            FileType::Regular => 0x8,
+            FileType::CharDevice => 0x2,
+            FileType::Ak => 0x6,
             _ => 0x8,
         };
-        self.ev = (self.ev & 0x0FFF) | (xnq << 12);
+        self.mode = (self.mode & 0x0FFF) | (poz << 12);
     }
 }
 
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct My {
-    fa: u32,
-    j: [u8; KP_],
+struct Fl {
+    inode: u32,
+    name: [u8; LI_],
 }
 
-impl My {
-    fn amj(&self) -> &str {
-        let ci = self.j.iter().qf(|&o| o == 0).unwrap_or(KP_);
-        core::str::jg(&self.j[..ci]).unwrap_or("")
+impl Fl {
+    fn name_str(&self) -> &str {
+        let end = self.name.iter().position(|&b| b == 0).unwrap_or(LI_);
+        core::str::from_utf8(&self.name[..end]).unwrap_or("")
     }
 }
 
 
 struct InodeCache {
-    arj: BTreeMap<I, DiskInode>,
+    inodes: BTreeMap<K, DiskInode>,
 }
 
 impl InodeCache {
     fn new() -> Self {
         Self {
-            arj: BTreeMap::new(),
+            inodes: BTreeMap::new(),
         }
     }
 }
 
 
-struct Bus {
-    fs: Arc<Afa>,
-    dd: I,
+struct Afm {
+    fs: Arc<Nn>,
+    ino: K,
 }
 
-impl Et for Bus {
-    fn read(&self, l: u64, k: &mut [u8]) -> B<usize> {
-        self.fs.mq(self.dd, l, k)
+impl Bx for Afm {
+    fn read(&self, offset: u64, buf: &mut [u8]) -> E<usize> {
+        self.fs.read_file(self.ino, offset, buf)
     }
     
-    fn write(&self, l: u64, k: &[u8]) -> B<usize> {
-        self.fs.ns(self.dd, l, k)
+    fn write(&self, offset: u64, buf: &[u8]) -> E<usize> {
+        self.fs.write_file(self.ino, offset, buf)
     }
     
-    fn hm(&self) -> B<Stat> {
-        self.fs.hm(self.dd)
+    fn stat(&self) -> E<Stat> {
+        self.fs.stat(self.ino)
     }
     
-    fn dmu(&self, aw: u64) -> B<()> {
-        self.fs.dmu(self.dd, aw)
+    fn truncate(&self, size: u64) -> E<()> {
+        self.fs.truncate(self.ino, size)
     }
     
-    fn sync(&self) -> B<()> {
+    fn sync(&self) -> E<()> {
         self.fs.sync()
     }
 }
 
 
-struct Bur {
-    fs: Arc<Afa>,
-    dd: I,
+struct Afl {
+    fs: Arc<Nn>,
+    ino: K,
 }
 
-impl Ep for Bur {
-    fn cga(&self, j: &str) -> B<I> {
-        self.fs.cga(self.dd, j)
+impl Bv for Afl {
+    fn lookup(&self, name: &str) -> E<K> {
+        self.fs.lookup(self.ino, name)
     }
     
-    fn brx(&self) -> B<Vec<Br>> {
-        self.fs.brx(self.dd)
+    fn readdir(&self) -> E<Vec<Ap>> {
+        self.fs.readdir(self.ino)
     }
     
-    fn avp(&self, j: &str, kd: FileType) -> B<I> {
-        self.fs.avp(self.dd, j, kd)
+    fn create(&self, name: &str, file_type: FileType) -> E<K> {
+        self.fs.create(self.ino, name, file_type)
     }
     
-    fn cnm(&self, j: &str) -> B<()> {
-        self.fs.cnm(self.dd, j)
+    fn unlink(&self, name: &str) -> E<()> {
+        self.fs.unlink(self.ino, name)
     }
     
-    fn hm(&self) -> B<Stat> {
-        self.fs.hm(self.dd)
+    fn stat(&self) -> E<Stat> {
+        self.fs.stat(self.ino)
     }
 }
 
 
-struct Afa {
-    ezg: RwLock<Superblock>,
-    jaf: RwLock<InodeCache>,
-    no: RwLock<bool>,
-    backend: Arc<dyn Bj>,
+struct Nn {
+    superblock: RwLock<Superblock>,
+    inode_cache: RwLock<InodeCache>,
+    dirty: RwLock<bool>,
+    backend: Arc<dyn Ak>,
 }
 
-impl Afa {
+impl Nn {
     
-    fn xr(&self, jk: u64, k: &mut [u8; H_]) -> B<()> {
-        if super::block_cache::qvi(jk, k).is_ok() {
+    fn read_sector(&self, dj: u64, buf: &mut [u8; H_]) -> E<()> {
+        if super::block_cache::kgv(dj, buf).is_ok() {
             return Ok(());
         }
-        self.backend.xr(jk, k)
-            .jd(|_| VfsError::Av)
+        self.backend.read_sector(dj, buf)
+            .map_err(|_| VfsError::IoError)
     }
     
     
-    fn aby(&self, jk: u64, k: &[u8; H_]) -> B<()> {
-        if super::block_cache::qvj(jk, k).is_ok() {
+    fn write_sector(&self, dj: u64, buf: &[u8; H_]) -> E<()> {
+        if super::block_cache::kgw(dj, buf).is_ok() {
             return Ok(());
         }
-        self.backend.aby(jk, k)
-            .jd(|_| VfsError::Av)
+        self.backend.write_sector(dj, buf)
+            .map_err(|_| VfsError::IoError)
     }
 
     
-    fn zwu(&self, jk: u64, k: &[u8; H_]) -> B<()> {
+    fn rde(&self, dj: u64, buf: &[u8; H_]) -> E<()> {
         
-        let _ = super::wal::ljr(jk, k);
-        self.aby(jk, k)
+        let _ = super::wal::log_write(dj, buf);
+        self.write_sector(dj, buf)
     }
 
     
-    fn svd(&self) -> B<()> {
+    fn flush_wal(&self) -> E<()> {
         let backend = &self.backend;
-        let eld = |jk: u64, f: &[u8; H_]| -> Result<(), ()> {
-            backend.aby(jk, f)
+        let write_fn = |dj: u64, data: &[u8; H_]| -> Result<(), ()> {
+            backend.write_sector(dj, data)
         };
-        super::wal::dfc(&eld).jd(|_| VfsError::Av)
+        super::wal::commit(&write_fn).map_err(|_| VfsError::IoError)
     }
     
     
-    fn ayn(&self, dd: I) -> B<DiskInode> {
+    fn read_inode(&self, ino: K) -> E<DiskInode> {
         
         {
-            let bdq = self.jaf.read();
-            if let Some(fa) = bdq.arj.get(&dd) {
-                return Ok(*fa);
+            let adk = self.inode_cache.read();
+            if let Some(inode) = adk.inodes.get(&ino) {
+                return Ok(*inode);
             }
         }
         
         
-        let jk = UF_ + (dd as u64 / UE_ as u64);
-        let l = (dd as usize % UE_) * core::mem::size_of::<DiskInode>();
+        let dj = VN_ + (ino as u64 / VM_ as u64);
+        let offset = (ino as usize % VM_) * core::mem::size_of::<DiskInode>();
         
-        let mut k = [0u8; H_];
-        self.xr(jk, &mut k)?;
+        let mut buf = [0u8; H_];
+        self.read_sector(dj, &mut buf)?;
         
-        let flm = k[l..].fq() as *const DiskInode;
-        let fa = unsafe { *flm };
+        let clc = buf[offset..].as_ptr() as *const DiskInode;
+        let inode = unsafe { *clc };
         
         
         {
-            let mut bdq = self.jaf.write();
-            bdq.arj.insert(dd, fa);
+            let mut adk = self.inode_cache.write();
+            adk.inodes.insert(ino, inode);
         }
         
-        Ok(fa)
+        Ok(inode)
     }
     
     
-    fn jxh(&self, dd: I, fa: &DiskInode) -> B<()> {
-        let jk = UF_ + (dd as u64 / UE_ as u64);
-        let l = (dd as usize % UE_) * core::mem::size_of::<DiskInode>();
+    fn write_inode(&self, ino: K, inode: &DiskInode) -> E<()> {
+        let dj = VN_ + (ino as u64 / VM_ as u64);
+        let offset = (ino as usize % VM_) * core::mem::size_of::<DiskInode>();
         
         
-        let mut k = [0u8; H_];
-        self.xr(jk, &mut k)?;
+        let mut buf = [0u8; H_];
+        self.read_sector(dj, &mut buf)?;
         
-        let flm = k[l..].mw() as *mut DiskInode;
-        unsafe { *flm = *fa; }
+        let clc = buf[offset..].as_mut_ptr() as *mut DiskInode;
+        unsafe { *clc = *inode; }
         
-        self.aby(jk, &k)?;
+        self.write_sector(dj, &buf)?;
         
         
         {
-            let mut bdq = self.jaf.write();
-            bdq.arj.insert(dd, *fa);
+            let mut adk = self.inode_cache.write();
+            adk.inodes.insert(ino, *inode);
         }
         
-        *self.no.write() = true;
+        *self.dirty.write() = true;
         Ok(())
     }
     
     
-    fn qgu(&self) -> B<I> {
-        let mut is = self.ezg.write();
-        if is.ivv == 0 {
-            return Err(VfsError::Tq);
+    fn alloc_inode(&self) -> E<K> {
+        let mut cv = self.superblock.write();
+        if cv.free_inodes == 0 {
+            return Err(VfsError::NoSpace);
         }
         
         
-        for dd in 1..AFA_ as u64 {
-            let fa = self.ayn(dd)?;
-            if fa.fpa == 0 && fa.ev == 0 {
-                is.ivv -= 1;
-                return Ok(dd);
+        for ino in 1..AGU_ as u64 {
+            let inode = self.read_inode(ino)?;
+            if inode.nlink == 0 && inode.mode == 0 {
+                cv.free_inodes -= 1;
+                return Ok(ino);
             }
         }
         
-        Err(VfsError::Tq)
+        Err(VfsError::NoSpace)
     }
     
     
-    fn ijk(&self) -> B<u32> {
-        let mut is = self.ezg.write();
-        if is.ivt == 0 {
-            return Err(VfsError::Tq);
+    fn alloc_block(&self) -> E<u32> {
+        let mut cv = self.superblock.write();
+        if cv.free_blocks == 0 {
+            return Err(VfsError::NoSpace);
         }
         
         
-        for fdj in 0..ZL_ {
-            let mut k = [0u8; H_];
-            self.xr(LW_ + fdj, &mut k)?;
+        for cgh in 0..AAX_ {
+            let mut buf = [0u8; H_];
+            self.read_sector(MT_ + cgh, &mut buf)?;
             
-            for avk in 0..H_ {
-                if k[avk] != 0xFF {
+            for yk in 0..H_ {
+                if buf[yk] != 0xFF {
                     
-                    for ga in 0..8 {
-                        if (k[avk] & (1 << ga)) == 0 {
+                    for bf in 0..8 {
+                        if (buf[yk] & (1 << bf)) == 0 {
                             
-                            k[avk] |= 1 << ga;
-                            self.aby(LW_ + fdj, &k)?;
+                            buf[yk] |= 1 << bf;
+                            self.write_sector(MT_ + cgh, &buf)?;
                             
-                            is.ivt -= 1;
-                            let block = (fdj as u32 * H_ as u32 * 8)
-                                + (avk as u32 * 8)
-                                + ga as u32;
+                            cv.free_blocks -= 1;
+                            let block = (cgh as u32 * H_ as u32 * 8)
+                                + (yk as u32 * 8)
+                                + bf as u32;
                             return Ok(block);
                         }
                     }
@@ -368,487 +368,487 @@ impl Afa {
             }
         }
         
-        Err(VfsError::Tq)
+        Err(VfsError::NoSpace)
     }
     
     
-    fn ebz(&self, block: u32) -> B<()> {
-        let mut is = self.ezg.write();
+    fn free_block(&self, block: u32) -> E<()> {
+        let mut cv = self.superblock.write();
         
-        let fdj = block as u64 / (H_ as u64 * 8);
-        let avk = (block as usize / 8) % H_;
-        let ga = block as usize % 8;
+        let cgh = block as u64 / (H_ as u64 * 8);
+        let yk = (block as usize / 8) % H_;
+        let bf = block as usize % 8;
         
-        if fdj >= ZL_ {
-            return Err(VfsError::Bjs);
+        if cgh >= AAX_ {
+            return Err(VfsError::InvalidData);
         }
         
-        let mut k = [0u8; H_];
-        self.xr(LW_ + fdj, &mut k)?;
+        let mut buf = [0u8; H_];
+        self.read_sector(MT_ + cgh, &mut buf)?;
         
         
-        k[avk] &= !(1 << ga);
-        self.aby(LW_ + fdj, &k)?;
+        buf[yk] &= !(1 << bf);
+        self.write_sector(MT_ + cgh, &buf)?;
         
-        is.ivt += 1;
+        cv.free_blocks += 1;
         Ok(())
     }
     
     
-    fn sxe(&self, fa: &DiskInode) -> B<()> {
+    fn free_inode_blocks(&self, inode: &DiskInode) -> E<()> {
         
-        for a in 0..BX_ {
-            if fa.eav[a] != 0 {
-                self.ebz(fa.eav[a])?;
+        for i in 0..BZ_ {
+            if inode.direct[i] != 0 {
+                self.free_block(inode.direct[i])?;
             }
         }
         
         
-        if fa.brd != 0 {
-            let mut crm = [0u8; H_];
-            self.xr(BC_ + fa.brd as u64, &mut crm)?;
-            let egy = unsafe { &*(crm.fq() as *const [u32; BF_]) };
+        if inode.indirect != 0 {
+            let mut axp = [0u8; H_];
+            self.read_sector(BD_ + inode.indirect as u64, &mut axp)?;
+            let bvb = unsafe { &*(axp.as_ptr() as *const [u32; BH_]) };
             
-            for &ptr in egy.iter() {
+            for &ptr in bvb.iter() {
                 if ptr != 0 {
-                    self.ebz(ptr)?;
+                    self.free_block(ptr)?;
                 }
             }
             
             
-            self.ebz(fa.brd)?;
+            self.free_block(inode.indirect)?;
         }
         
         
-        if fa.dgn != 0 {
-            let mut eef = [0u8; H_];
-            self.xr(BC_ + fa.dgn as u64, &mut eef)?;
-            let etr = unsafe { &*(eef.fq() as *const [u32; BF_]) };
+        if inode.double_indirect != 0 {
+            let mut btt = [0u8; H_];
+            self.read_sector(BD_ + inode.double_indirect as u64, &mut btt)?;
+            let cbg = unsafe { &*(btt.as_ptr() as *const [u32; BH_]) };
             
-            for &eeg in etr.iter() {
-                if eeg != 0 {
-                    let mut eeh = [0u8; H_];
-                    self.xr(BC_ + eeg as u64, &mut eeh)?;
-                    let hpm = unsafe { &*(eeh.fq() as *const [u32; BF_]) };
+            for &btu in cbg.iter() {
+                if btu != 0 {
+                    let mut btv = [0u8; H_];
+                    self.read_sector(BD_ + btu as u64, &mut btv)?;
+                    let dtc = unsafe { &*(btv.as_ptr() as *const [u32; BH_]) };
                     
-                    for &njj in hpm.iter() {
-                        if njj != 0 {
-                            self.ebz(njj)?;
+                    for &data_block in dtc.iter() {
+                        if data_block != 0 {
+                            self.free_block(data_block)?;
                         }
                     }
                     
                     
-                    self.ebz(eeg)?;
+                    self.free_block(btu)?;
                 }
             }
             
             
-            self.ebz(fa.dgn)?;
+            self.free_block(inode.double_indirect)?;
         }
         
         Ok(())
     }
     
     
-    fn pcs(&self, fa: &DiskInode, bbb: usize) -> B<u32> {
-        if bbb < BX_ {
-            Ok(fa.eav[bbb])
-        } else if bbb < BX_ + BF_ {
-            if fa.brd == 0 { return Ok(0); }
-            let mut crm = [0u8; H_];
-            self.xr(BC_ + fa.brd as u64, &mut crm)?;
-            let egy = unsafe { &*(crm.fq() as *const [u32; BF_]) };
-            Ok(egy[bbb - BX_])
-        } else if bbb < AZO_ {
+    fn resolve_block(&self, inode: &DiskInode, abt: usize) -> E<u32> {
+        if abt < BZ_ {
+            Ok(inode.direct[abt])
+        } else if abt < BZ_ + BH_ {
+            if inode.indirect == 0 { return Ok(0); }
+            let mut axp = [0u8; H_];
+            self.read_sector(BD_ + inode.indirect as u64, &mut axp)?;
+            let bvb = unsafe { &*(axp.as_ptr() as *const [u32; BH_]) };
+            Ok(bvb[abt - BZ_])
+        } else if abt < BBQ_ {
             
-            if fa.dgn == 0 { return Ok(0); }
-            let hgb = bbb - BX_ - BF_;
-            let crx = hgb / BF_;
-            let dsn = hgb % BF_;
+            if inode.double_indirect == 0 { return Ok(0); }
+            let dnb = abt - BZ_ - BH_;
+            let axu = dnb / BH_;
+            let bnf = dnb % BH_;
             
-            let mut eef = [0u8; H_];
-            self.xr(BC_ + fa.dgn as u64, &mut eef)?;
-            let etr = unsafe { &*(eef.fq() as *const [u32; BF_]) };
-            let eeg = etr[crx];
-            if eeg == 0 { return Ok(0); }
+            let mut btt = [0u8; H_];
+            self.read_sector(BD_ + inode.double_indirect as u64, &mut btt)?;
+            let cbg = unsafe { &*(btt.as_ptr() as *const [u32; BH_]) };
+            let btu = cbg[axu];
+            if btu == 0 { return Ok(0); }
             
-            let mut eeh = [0u8; H_];
-            self.xr(BC_ + eeg as u64, &mut eeh)?;
-            let hpm = unsafe { &*(eeh.fq() as *const [u32; BF_]) };
-            Ok(hpm[dsn])
+            let mut btv = [0u8; H_];
+            self.read_sector(BD_ + btu as u64, &mut btv)?;
+            let dtc = unsafe { &*(btv.as_ptr() as *const [u32; BH_]) };
+            Ok(dtc[bnf])
         } else {
-            Err(VfsError::Tq) 
+            Err(VfsError::NoSpace) 
         }
     }
 
     
-    fn xvl(&self, fa: &mut DiskInode, w: usize, hau: u32) -> B<()> {
-        if fa.brd == 0 {
-            fa.brd = self.ijk()?;
-            let ajs = [0u8; H_];
-            self.aby(BC_ + fa.brd as u64, &ajs)?;
+    fn write_indirect_ptr(&self, inode: &mut DiskInode, idx: usize, block_num: u32) -> E<()> {
+        if inode.indirect == 0 {
+            inode.indirect = self.alloc_block()?;
+            let zero = [0u8; H_];
+            self.write_sector(BD_ + inode.indirect as u64, &zero)?;
         }
-        let mut crm = [0u8; H_];
-        self.xr(BC_ + fa.brd as u64, &mut crm)?;
-        let egy = unsafe { &mut *(crm.mw() as *mut [u32; BF_]) };
-        egy[w] = hau;
-        self.aby(BC_ + fa.brd as u64, &crm)
+        let mut axp = [0u8; H_];
+        self.read_sector(BD_ + inode.indirect as u64, &mut axp)?;
+        let bvb = unsafe { &mut *(axp.as_mut_ptr() as *mut [u32; BH_]) };
+        bvb[idx] = block_num;
+        self.write_sector(BD_ + inode.indirect as u64, &axp)
     }
 
     
-    fn xvj(&self, fa: &mut DiskInode, hgb: usize, hau: u32) -> B<()> {
-        let ajs = [0u8; H_];
+    fn write_double_indirect_ptr(&self, inode: &mut DiskInode, dnb: usize, block_num: u32) -> E<()> {
+        let zero = [0u8; H_];
         
-        if fa.dgn == 0 {
-            fa.dgn = self.ijk()?;
-            self.aby(BC_ + fa.dgn as u64, &ajs)?;
+        if inode.double_indirect == 0 {
+            inode.double_indirect = self.alloc_block()?;
+            self.write_sector(BD_ + inode.double_indirect as u64, &zero)?;
         }
-        let crx = hgb / BF_;
-        let dsn = hgb % BF_;
+        let axu = dnb / BH_;
+        let bnf = dnb % BH_;
         
-        let mut eef = [0u8; H_];
-        self.xr(BC_ + fa.dgn as u64, &mut eef)?;
-        let etr = unsafe { &mut *(eef.mw() as *mut [u32; BF_]) };
+        let mut btt = [0u8; H_];
+        self.read_sector(BD_ + inode.double_indirect as u64, &mut btt)?;
+        let cbg = unsafe { &mut *(btt.as_mut_ptr() as *mut [u32; BH_]) };
         
-        if etr[crx] == 0 {
-            etr[crx] = self.ijk()?;
-            self.aby(BC_ + fa.dgn as u64, &eef)?;
-            self.aby(BC_ + etr[crx] as u64, &ajs)?;
+        if cbg[axu] == 0 {
+            cbg[axu] = self.alloc_block()?;
+            self.write_sector(BD_ + inode.double_indirect as u64, &btt)?;
+            self.write_sector(BD_ + cbg[axu] as u64, &zero)?;
         }
-        let eeg = etr[crx];
+        let btu = cbg[axu];
         
-        let mut eeh = [0u8; H_];
-        self.xr(BC_ + eeg as u64, &mut eeh)?;
-        let hpm = unsafe { &mut *(eeh.mw() as *mut [u32; BF_]) };
-        hpm[dsn] = hau;
-        self.aby(BC_ + eeg as u64, &eeh)
+        let mut btv = [0u8; H_];
+        self.read_sector(BD_ + btu as u64, &mut btv)?;
+        let dtc = unsafe { &mut *(btv.as_mut_ptr() as *mut [u32; BH_]) };
+        dtc[bnf] = block_num;
+        self.write_sector(BD_ + btu as u64, &btv)
     }
 
     
-    fn mq(&self, dd: I, l: u64, k: &mut [u8]) -> B<usize> {
-        let fa = self.ayn(dd)?;
+    fn read_file(&self, ino: K, offset: u64, buf: &mut [u8]) -> E<usize> {
+        let inode = self.read_inode(ino)?;
         
-        if l >= fa.aw as u64 {
+        if offset >= inode.size as u64 {
             return Ok(0); 
         }
         
-        let ajp = core::cmp::v(k.len(), (fa.aw as u64 - l) as usize);
-        let mut cjl = 0;
-        let mut azv = l as usize;
+        let rz = core::cmp::min(buf.len(), (inode.size as u64 - offset) as usize);
+        let mut atf = 0;
+        let mut aaw = offset as usize;
         
-        while cjl < ajp {
-            let bbb = azv / H_;
-            let emw = azv % H_;
+        while atf < rz {
+            let abt = aaw / H_;
+            let bxu = aaw % H_;
             
-            let clw = self.pcs(&fa, bbb)?;
-            if clw == 0 { break; }
+            let aum = self.resolve_block(&inode, abt)?;
+            if aum == 0 { break; }
             
-            let mut aae = [0u8; H_];
-            self.xr(BC_ + clw as u64, &mut aae)?;
+            let mut mx = [0u8; H_];
+            self.read_sector(BD_ + aum as u64, &mut mx)?;
             
-            let aiw = core::cmp::v(H_ - emw, ajp - cjl);
-            k[cjl..cjl + aiw]
-                .dg(&aae[emw..emw + aiw]);
+            let rs = core::cmp::min(H_ - bxu, rz - atf);
+            buf[atf..atf + rs]
+                .copy_from_slice(&mx[bxu..bxu + rs]);
             
-            cjl += aiw;
-            azv += aiw;
+            atf += rs;
+            aaw += rs;
         }
         
-        Ok(cjl)
+        Ok(atf)
     }
     
     
-    fn ns(&self, dd: I, l: u64, k: &[u8]) -> B<usize> {
-        let mut fa = self.ayn(dd)?;
+    fn write_file(&self, ino: K, offset: u64, buf: &[u8]) -> E<usize> {
+        let mut inode = self.read_inode(ino)?;
         
-        let mut cjm = 0;
-        let mut azv = l as usize;
-        let ukw = AZO_;
+        let mut atg = 0;
+        let mut aaw = offset as usize;
+        let ncr = BBQ_;
         
-        while cjm < k.len() {
-            let bbb = azv / H_;
-            let emw = azv % H_;
+        while atg < buf.len() {
+            let abt = aaw / H_;
+            let bxu = aaw % H_;
             
-            if bbb >= ukw { break; }
+            if abt >= ncr { break; }
             
             
-            let clw = self.pcs(&fa, bbb)?;
-            let clw = if clw == 0 {
-                let jgr = self.ijk()?;
-                fa.xk += 1;
-                if bbb < BX_ {
-                    fa.eav[bbb] = jgr;
-                } else if bbb < BX_ + BF_ {
-                    self.xvl(&mut fa, bbb - BX_, jgr)?;
+            let aum = self.resolve_block(&inode, abt)?;
+            let aum = if aum == 0 {
+                let euv = self.alloc_block()?;
+                inode.blocks += 1;
+                if abt < BZ_ {
+                    inode.direct[abt] = euv;
+                } else if abt < BZ_ + BH_ {
+                    self.write_indirect_ptr(&mut inode, abt - BZ_, euv)?;
                 } else {
-                    self.xvj(&mut fa, bbb - BX_ - BF_, jgr)?;
+                    self.write_double_indirect_ptr(&mut inode, abt - BZ_ - BH_, euv)?;
                 }
-                jgr
+                euv
             } else {
-                clw
+                aum
             };
             
-            let jk = BC_ + clw as u64;
-            let aiw = core::cmp::v(H_ - emw, k.len() - cjm);
+            let dj = BD_ + aum as u64;
+            let rs = core::cmp::min(H_ - bxu, buf.len() - atg);
             
             
-            let mut aae = [0u8; H_];
-            if emw > 0 || aiw < H_ {
-                self.xr(jk, &mut aae)?;
+            let mut mx = [0u8; H_];
+            if bxu > 0 || rs < H_ {
+                self.read_sector(dj, &mut mx)?;
             }
             
-            aae[emw..emw + aiw]
-                .dg(&k[cjm..cjm + aiw]);
+            mx[bxu..bxu + rs]
+                .copy_from_slice(&buf[atg..atg + rs]);
             
-            self.aby(jk, &aae)?;
+            self.write_sector(dj, &mx)?;
             
-            cjm += aiw;
-            azv += aiw;
+            atg += rs;
+            aaw += rs;
         }
         
         
-        let brm = core::cmp::am(fa.aw, (l + cjm as u64) as u32);
-        if brm != fa.aw {
-            fa.aw = brm;
-            fa.bnp = (crate::logger::lh() / 100) as u32;
-            self.jxh(dd, &fa)?;
+        let akf = core::cmp::max(inode.size, (offset + atg as u64) as u32);
+        if akf != inode.size {
+            inode.size = akf;
+            inode.mtime = (crate::logger::eg() / 100) as u32;
+            self.write_inode(ino, &inode)?;
         }
         
-        Ok(cjm)
+        Ok(atg)
     }
     
     
-    fn cga(&self, ger: I, j: &str) -> B<I> {
-        let ch = self.brx(ger)?;
-        for bt in ch {
-            if bt.j == j {
-                return Ok(bt.dd);
+    fn lookup(&self, dir_ino: K, name: &str) -> E<K> {
+        let entries = self.readdir(dir_ino)?;
+        for entry in entries {
+            if entry.name == name {
+                return Ok(entry.ino);
             }
         }
-        Err(VfsError::N)
+        Err(VfsError::NotFound)
     }
     
     
-    fn brx(&self, ger: I) -> B<Vec<Br>> {
-        let fa = self.ayn(ger)?;
-        if !fa.ta() {
-            return Err(VfsError::Lz);
+    fn readdir(&self, dir_ino: K) -> E<Vec<Ap>> {
+        let inode = self.read_inode(dir_ino)?;
+        if !inode.is_dir() {
+            return Err(VfsError::NotDirectory);
         }
         
-        let mut ch = Vec::new();
-        let acy = core::mem::size_of::<My>();
-        let htd = fa.aw as usize / acy;
+        let mut entries = Vec::new();
+        let oi = core::mem::size_of::<Fl>();
+        let dvn = inode.size as usize / oi;
         
-        for a in 0..htd {
-            let l = (a * acy) as u64;
-            let mut k = [0u8; 32]; 
-            self.mq(ger, l, &mut k)?;
+        for i in 0..dvn {
+            let offset = (i * oi) as u64;
+            let mut buf = [0u8; 32]; 
+            self.read_file(dir_ino, offset, &mut buf)?;
             
-            let kts = k.fq() as *const My;
-            let irh = unsafe { &*kts };
+            let entry_ptr = buf.as_ptr() as *const Fl;
+            let ekg = unsafe { &*entry_ptr };
             
-            if irh.fa != 0 {
-                let rag = self.ayn(irh.fa as I)?;
-                ch.push(Br {
-                    j: String::from(irh.amj()),
-                    dd: irh.fa as I,
-                    kd: rag.kd(),
+            if ekg.inode != 0 {
+                let kkd = self.read_inode(ekg.inode as K)?;
+                entries.push(Ap {
+                    name: String::from(ekg.name_str()),
+                    ino: ekg.inode as K,
+                    file_type: kkd.file_type(),
                 });
             }
         }
         
-        Ok(ch)
+        Ok(entries)
     }
     
     
-    fn avp(&self, dak: I, j: &str, kd: FileType) -> B<I> {
-        if j.len() > KP_ {
-            return Err(VfsError::Pr);
+    fn create(&self, parent_ino: K, name: &str, file_type: FileType) -> E<K> {
+        if name.len() > LI_ {
+            return Err(VfsError::InvalidPath);
         }
         
         
-        if self.cga(dak, j).is_ok() {
-            return Err(VfsError::Ri);
+        if self.lookup(parent_ino, name).is_ok() {
+            return Err(VfsError::AlreadyExists);
         }
         
         
-        let lnu = self.qgu()?;
-        let mut hsr = DiskInode::default();
-        hsr.pjh(kd);
-        hsr.fpa = 1;
-        hsr.ev |= 0o644; 
+        let gja = self.alloc_inode()?;
+        let mut dvc = DiskInode::default();
+        dvc.set_type(file_type);
+        dvc.nlink = 1;
+        dvc.mode |= 0o644; 
         
-        if kd == FileType::K {
-            hsr.ev |= 0o111; 
+        if file_type == FileType::Directory {
+            dvc.mode |= 0o111; 
         }
         
-        self.jxh(lnu, &hsr)?;
+        self.write_inode(gja, &dvc)?;
         
         
-        let mut bt = My {
-            fa: lnu as u32,
-            j: [0; KP_],
+        let mut entry = Fl {
+            inode: gja as u32,
+            name: [0; LI_],
         };
-        let bko = j.as_bytes();
-        let zg = core::cmp::v(bko.len(), KP_);
-        bt.j[..zg].dg(&bko[..zg]);
+        let agt = name.as_bytes();
+        let mb = core::cmp::min(agt.len(), LI_);
+        entry.name[..mb].copy_from_slice(&agt[..mb]);
         
-        let vbo = self.ayn(dak)?;
-        let l = vbo.aw as u64;
+        let npx = self.read_inode(parent_ino)?;
+        let offset = npx.size as u64;
         
-        let hif = unsafe {
-            core::slice::anh(
-                &bt as *const My as *const u8,
-                core::mem::size_of::<My>()
+        let dos = unsafe {
+            core::slice::from_raw_parts(
+                &entry as *const Fl as *const u8,
+                core::mem::size_of::<Fl>()
             )
         };
         
-        self.ns(dak, l, hif)?;
+        self.write_file(parent_ino, offset, dos)?;
         
-        Ok(lnu)
+        Ok(gja)
     }
     
     
-    fn cnm(&self, dak: I, j: &str) -> B<()> {
-        let ch = self.brx(dak)?;
-        let acy = core::mem::size_of::<My>();
+    fn unlink(&self, parent_ino: K, name: &str) -> E<()> {
+        let entries = self.readdir(parent_ino)?;
+        let oi = core::mem::size_of::<Fl>();
         
-        for (a, bt) in ch.iter().cf() {
-            if bt.j == j {
+        for (i, entry) in entries.iter().enumerate() {
+            if entry.name == name {
                 
-                let mut fa = self.ayn(bt.dd)?;
+                let mut inode = self.read_inode(entry.ino)?;
                 
                 
-                if fa.ta() && fa.aw > 0 {
-                    let zf = self.brx(bt.dd)?;
-                    if !zf.is_empty() {
-                        return Err(VfsError::Bnj);
+                if inode.is_dir() && inode.size > 0 {
+                    let children = self.readdir(entry.ino)?;
+                    if !children.is_empty() {
+                        return Err(VfsError::NotEmpty);
                     }
                 }
                 
                 
-                fa.fpa = fa.fpa.ao(1);
+                inode.nlink = inode.nlink.saturating_sub(1);
                 
-                if fa.fpa == 0 {
+                if inode.nlink == 0 {
                     
-                    if let Err(aa) = self.sxe(&fa) {
-                        crate::log_warn!("[TRUSTFS] Warning: failed to free blocks for inode {}: {:?}", bt.dd, aa);
+                    if let Err(e) = self.free_inode_blocks(&inode) {
+                        crate::log_warn!("[TRUSTFS] Warning: failed to free blocks for inode {}: {:?}", entry.ino, e);
                     }
                     
-                    fa.ev = 0;
-                    fa.aw = 0;
-                    fa.xk = 0;
-                    fa.eav = [0; BX_];
-                    fa.brd = 0;
+                    inode.mode = 0;
+                    inode.size = 0;
+                    inode.blocks = 0;
+                    inode.direct = [0; BZ_];
+                    inode.indirect = 0;
                     
                     
                     {
-                        let mut is = self.ezg.write();
-                        is.ivv += 1;
+                        let mut cv = self.superblock.write();
+                        cv.free_inodes += 1;
                     }
                 }
                 
-                self.jxh(bt.dd, &fa)?;
+                self.write_inode(entry.ino, &inode)?;
                 
                 
-                let mut xxl = My {
-                    fa: 0,
-                    j: [0; KP_],
+                let mut pwm = Fl {
+                    inode: 0,
+                    name: [0; LI_],
                 };
-                let l = (a * acy) as u64;
-                let hif = unsafe {
-                    core::slice::anh(
-                        &xxl as *const My as *const u8,
-                        acy
+                let offset = (i * oi) as u64;
+                let dos = unsafe {
+                    core::slice::from_raw_parts(
+                        &pwm as *const Fl as *const u8,
+                        oi
                     )
                 };
-                self.ns(dak, l, hif)?;
+                self.write_file(parent_ino, offset, dos)?;
                 
                 return Ok(());
             }
         }
         
-        Err(VfsError::N)
+        Err(VfsError::NotFound)
     }
     
     
-    fn dmu(&self, dd: I, aw: u64) -> B<()> {
-        let mut fa = self.ayn(dd)?;
-        let jhs = fa.aw as u64;
-        let brm = aw;
+    fn truncate(&self, ino: K, size: u64) -> E<()> {
+        let mut inode = self.read_inode(ino)?;
+        let evr = inode.size as u64;
+        let akf = size;
         
-        if brm < jhs {
+        if akf < evr {
             
-            let uxn = ((jhs + H_ as u64 - 1) / H_ as u64) as usize;
-            let opk = ((brm + H_ as u64 - 1) / H_ as u64) as usize;
+            let nmn = ((evr + H_ as u64 - 1) / H_ as u64) as usize;
+            let ipp = ((akf + H_ as u64 - 1) / H_ as u64) as usize;
             
-            for bbb in opk..uxn {
-                if bbb < BX_ {
-                    if fa.eav[bbb] != 0 {
-                        let _ = self.ebz(fa.eav[bbb]);
-                        fa.eav[bbb] = 0;
-                        fa.xk = fa.xk.ao(1);
+            for abt in ipp..nmn {
+                if abt < BZ_ {
+                    if inode.direct[abt] != 0 {
+                        let _ = self.free_block(inode.direct[abt]);
+                        inode.direct[abt] = 0;
+                        inode.blocks = inode.blocks.saturating_sub(1);
                     }
-                } else if bbb < BX_ + BF_ {
-                    if fa.brd != 0 {
-                        let mut crm = [0u8; H_];
-                        self.xr(BC_ + fa.brd as u64, &mut crm)?;
-                        let egy = unsafe { &mut *(crm.mw() as *mut [u32; BF_]) };
-                        let w = bbb - BX_;
-                        if egy[w] != 0 {
-                            let _ = self.ebz(egy[w]);
-                            egy[w] = 0;
-                            fa.xk = fa.xk.ao(1);
-                            self.aby(BC_ + fa.brd as u64, &crm)?;
+                } else if abt < BZ_ + BH_ {
+                    if inode.indirect != 0 {
+                        let mut axp = [0u8; H_];
+                        self.read_sector(BD_ + inode.indirect as u64, &mut axp)?;
+                        let bvb = unsafe { &mut *(axp.as_mut_ptr() as *mut [u32; BH_]) };
+                        let idx = abt - BZ_;
+                        if bvb[idx] != 0 {
+                            let _ = self.free_block(bvb[idx]);
+                            bvb[idx] = 0;
+                            inode.blocks = inode.blocks.saturating_sub(1);
+                            self.write_sector(BD_ + inode.indirect as u64, &axp)?;
                         }
                     }
                 }
             }
             
             
-            if opk <= BX_ && fa.brd != 0 {
-                let _ = self.ebz(fa.brd);
-                fa.brd = 0;
+            if ipp <= BZ_ && inode.indirect != 0 {
+                let _ = self.free_block(inode.indirect);
+                inode.indirect = 0;
             }
         }
         
-        fa.aw = brm as u32;
-        fa.bnp = (crate::logger::lh() / 100) as u32;
-        self.jxh(dd, &fa)
+        inode.size = akf as u32;
+        inode.mtime = (crate::logger::eg() / 100) as u32;
+        self.write_inode(ino, &inode)
     }
     
     
-    fn hm(&self, dd: I) -> B<Stat> {
-        let fa = self.ayn(dd)?;
+    fn stat(&self, ino: K) -> E<Stat> {
+        let inode = self.read_inode(ino)?;
         Ok(Stat {
-            dd,
-            kd: fa.kd(),
-            aw: fa.aw as u64,
-            xk: fa.xk as u64,
-            py: H_ as u32,
-            ev: fa.ev as u32,
-            pi: 0,
-            pw: 0,
-            byi: fa.byi as u64,
-            bnp: fa.bnp as u64,
-            cpq: 0,
+            ino,
+            file_type: inode.file_type(),
+            size: inode.size as u64,
+            blocks: inode.blocks as u64,
+            block_size: H_ as u32,
+            mode: inode.mode as u32,
+            uid: 0,
+            gid: 0,
+            atime: inode.atime as u64,
+            mtime: inode.mtime as u64,
+            ctime: 0,
         })
     }
     
     
-    fn sync(&self) -> B<()> {
+    fn sync(&self) -> E<()> {
         
-        self.svd()?;
+        self.flush_wal()?;
         
         let _ = super::block_cache::sync();
         
-        let is = self.ezg.read();
-        let mut k = [0u8; H_];
-        let hys = k.mw() as *mut Superblock;
-        unsafe { *hys = *is; }
-        self.aby(AIL_, &k)?;
+        let cv = self.superblock.read();
+        let mut buf = [0u8; H_];
+        let dyi = buf.as_mut_ptr() as *mut Superblock;
+        unsafe { *dyi = *cv; }
+        self.write_sector(AKH_, &buf)?;
         
-        *self.no.write() = false;
+        *self.dirty.write() = false;
         crate::log_debug!("[TrustFS] sync complete");
         Ok(())
     }
@@ -856,135 +856,135 @@ impl Afa {
 
 
 pub struct TrustFs {
-    ff: Arc<Afa>,
+    inner: Arc<Nn>,
 }
 
 impl TrustFs {
     
-    pub fn new(backend: Arc<dyn Bj>, aty: u64) -> B<Self> {
+    pub fn new(backend: Arc<dyn Ak>, capacity: u64) -> E<Self> {
         
-        let mut k = [0u8; H_];
-        backend.xr(AIL_, &mut k)
-            .jd(|_| VfsError::Av)?;
+        let mut buf = [0u8; H_];
+        backend.read_sector(AKH_, &mut buf)
+            .map_err(|_| VfsError::IoError)?;
         
-        let hys = k.fq() as *const Superblock;
-        let nrs = unsafe { *hys };
+        let dyi = buf.as_ptr() as *const Superblock;
+        let hxa = unsafe { *dyi };
         
-        let ezg = if nrs.cld() {
+        let superblock = if hxa.is_valid() {
             crate::log_debug!("[TrustFS] Found existing filesystem");
-            nrs
+            hxa
         } else {
             crate::log!("[TrustFS] Formatting new filesystem...");
-            Self::swd(&*backend, aty)?
+            Self::lxw(&*backend, capacity)?
         };
         
         
-        let mxm = &*backend;
-        let vxi = |jk: u64, k: &mut [u8; H_]| -> Result<(), ()> {
-            mxm.xr(jk, k).jd(|_| ())
+        let hgl = &*backend;
+        let ofy = |dj: u64, buf: &mut [u8; H_]| -> Result<(), ()> {
+            hgl.read_sector(dj, buf).map_err(|_| ())
         };
-        let vxj = |jk: u64, f: &[u8; H_]| -> Result<(), ()> {
-            mxm.aby(jk, f).jd(|_| ())
+        let ofz = |dj: u64, data: &[u8; H_]| -> Result<(), ()> {
+            hgl.write_sector(dj, data).map_err(|_| ())
         };
-        match super::wal::vxh(&vxi, &vxj) {
+        match super::wal::ofx(&ofy, &ofz) {
             Ok(0) => {},
-            Ok(bo) => crate::log!("[TrustFS] WAL replay: {} writes recovered", bo),
+            Ok(ae) => crate::log!("[TrustFS] WAL replay: {} writes recovered", ae),
             Err(_) => crate::log_warn!("[TrustFS] WAL replay failed"),
         }
 
-        let ff = Arc::new(Afa {
-            ezg: RwLock::new(ezg),
-            jaf: RwLock::new(InodeCache::new()),
-            no: RwLock::new(false),
+        let inner = Arc::new(Nn {
+            superblock: RwLock::new(superblock),
+            inode_cache: RwLock::new(InodeCache::new()),
+            dirty: RwLock::new(false),
             backend,
         });
         
-        Ok(Self { ff })
+        Ok(Self { inner })
     }
     
     
-    fn swd(backend: &dyn Bj, aty: u64) -> B<Superblock> {
-        let is = Superblock::new(aty);
+    fn lxw(backend: &dyn Ak, capacity: u64) -> E<Superblock> {
+        let cv = Superblock::new(capacity);
         
         
-        let mut k = [0u8; H_];
-        let hys = k.mw() as *mut Superblock;
-        unsafe { *hys = is; }
-        backend.aby(AIL_, &k)
-            .jd(|_| VfsError::Av)?;
+        let mut buf = [0u8; H_];
+        let dyi = buf.as_mut_ptr() as *mut Superblock;
+        unsafe { *dyi = cv; }
+        backend.write_sector(AKH_, &buf)
+            .map_err(|_| VfsError::IoError)?;
         
         
-        let qbb = [0u8; H_];
-        for a in 0..CBS_ {
-            backend.aby(UF_ + a, &qbb)
-                .jd(|_| VfsError::Av)?;
+        let jsi = [0u8; H_];
+        for i in 0..CFD_ {
+            backend.write_sector(VN_ + i, &jsi)
+                .map_err(|_| VfsError::IoError)?;
         }
         
         
-        for a in 0..ZL_ {
-            backend.aby(LW_ + a, &qbb)
-                .jd(|_| VfsError::Av)?;
+        for i in 0..AAX_ {
+            backend.write_sector(MT_ + i, &jsi)
+                .map_err(|_| VfsError::IoError)?;
         }
         
         
-        let mut cbm = DiskInode::default();
-        cbm.pjh(FileType::K);
-        cbm.fpa = 1;
-        cbm.ev |= 0o755;
+        let mut root_inode = DiskInode::default();
+        root_inode.set_type(FileType::Directory);
+        root_inode.nlink = 1;
+        root_inode.mode |= 0o755;
         
-        let tuu = UF_;
-        let mut ler = [0u8; H_];
-        let flm = ler[core::mem::size_of::<DiskInode>()..].mw() as *mut DiskInode;
-        unsafe { *flm = cbm; }
+        let mqh = VN_;
+        let mut gcw = [0u8; H_];
+        let clc = gcw[core::mem::size_of::<DiskInode>()..].as_mut_ptr() as *mut DiskInode;
+        unsafe { *clc = root_inode; }
         
-        let vzy = core::mem::size_of::<DiskInode>(); 
-        let flm = ler[vzy..].mw() as *mut DiskInode;
-        unsafe { *flm = cbm; }
-        backend.aby(tuu, &ler)
-            .jd(|_| VfsError::Av)?;
+        let ohy = core::mem::size_of::<DiskInode>(); 
+        let clc = gcw[ohy..].as_mut_ptr() as *mut DiskInode;
+        unsafe { *clc = root_inode; }
+        backend.write_sector(mqh, &gcw)
+            .map_err(|_| VfsError::IoError)?;
         
-        crate::log!("[TrustFS] Formatted: {} blocks, {} inodes", is.fxa, is.pva);
+        crate::log!("[TrustFS] Formatted: {} blocks, {} inodes", cv.total_blocks, cv.total_inodes);
         
-        Ok(is)
+        Ok(cv)
     }
 }
 
-impl Cc for TrustFs {
-    fn j(&self) -> &str {
+impl Au for TrustFs {
+    fn name(&self) -> &str {
         "trustfs"
     }
     
-    fn cbm(&self) -> I {
+    fn root_inode(&self) -> K {
         1
     }
     
-    fn era(&self, dd: I) -> B<Arc<dyn Et>> {
-        let fa = self.ff.ayn(dd)?;
-        if fa.ta() {
-            return Err(VfsError::Tc);
+    fn get_file(&self, ino: K) -> E<Arc<dyn Bx>> {
+        let inode = self.inner.read_inode(ino)?;
+        if inode.is_dir() {
+            return Err(VfsError::IsDirectory);
         }
-        Ok(Arc::new(Bus {
-            fs: Arc::clone(&self.ff),
-            dd,
+        Ok(Arc::new(Afm {
+            fs: Arc::clone(&self.inner),
+            ino,
         }))
     }
     
-    fn dhl(&self, dd: I) -> B<Arc<dyn Ep>> {
-        let fa = self.ff.ayn(dd)?;
-        if !fa.ta() {
-            return Err(VfsError::Lz);
+    fn get_dir(&self, ino: K) -> E<Arc<dyn Bv>> {
+        let inode = self.inner.read_inode(ino)?;
+        if !inode.is_dir() {
+            return Err(VfsError::NotDirectory);
         }
-        Ok(Arc::new(Bur {
-            fs: Arc::clone(&self.ff),
-            dd,
+        Ok(Arc::new(Afl {
+            fs: Arc::clone(&self.inner),
+            ino,
         }))
     }
     
-    fn hm(&self, dd: I) -> B<Stat> {
-        self.ff.hm(dd)
+    fn stat(&self, ino: K) -> E<Stat> {
+        self.inner.stat(ino)
     }
     
-    fn sync(&self) -> B<()> {
-        self.ff.sync()
+    fn sync(&self) -> E<()> {
+        self.inner.sync()
     }
 }

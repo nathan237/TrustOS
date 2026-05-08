@@ -11,97 +11,97 @@ extern crate alloc;
 use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::format;
-use super::trace_bus::{self, EventCategory, Jq};
+use super::trace_bus::{self, EventCategory, Dw};
 
 
-const T_: u32    = 0xFFE6EDF3;
+const P_: u32    = 0xFFE6EDF3;
 const F_: u32     = 0xFF8B949E;
-const AK_: u32   = 0xFF3FB950;
-const AW_: u32     = 0xFFF85149;
-const AO_: u32  = 0xFFD29922;
-const BB_: u32    = 0xFF79C0FF;
-const BO_: u32  = 0xFFBC8CFF;
-const EZ_: u32  = 0xFFD18616;
-const HS_: u32      = 0xFFFF6B6B; 
+const AC_: u32   = 0xFF3FB950;
+const AN_: u32     = 0xFFF85149;
+const AK_: u32  = 0xFFD29922;
+const AU_: u32    = 0xFF79C0FF;
+const BG_: u32  = 0xFFBC8CFF;
+const DN_: u32  = 0xFFD18616;
+const IL_: u32      = 0xFFFF6B6B; 
 
 
 pub struct VmInspectorState {
     
-    pub events: Vec<Jq>,
+    pub events: Vec<Dw>,
     
-    pub crz: u64,
+    pub last_read_idx: u64,
     
-    pub ahd: usize,
+    pub active_tab: usize,
     
-    pub jc: usize,
+    pub scroll: usize,
     
     pub frame: u64,
     
-    pub dna: u32,
-    pub dcw: u64,
-    pub eel: String,
-    pub hpr: u64,
+    pub vm_count: u32,
+    pub total_exits: u64,
+    pub last_exit_reason: String,
+    pub last_guest_rip: u64,
     
-    pub lyq: u64,
-    pub lyr: u64,
-    pub lys: u64,
-    pub lyt: u64,
-    pub lyu: u64,
-    pub lyv: u64,
+    pub regs_rax: u64,
+    pub regs_rbx: u64,
+    pub regs_rcx: u64,
+    pub regs_rdx: u64,
+    pub regs_rip: u64,
+    pub regs_rsp: u64,
     
-    pub bmp: u64,
-    pub ank: u64,
-    pub bkn: u64,
-    pub axz: u64,
-    pub cay: u64,
-    pub mpq: u64,
+    pub cpuid_exits: u64,
+    pub io_exits: u64,
+    pub msr_exits: u64,
+    pub hlt_exits: u64,
+    pub npf_exits: u64,
+    pub vmcall_exits: u64,
     
-    pub bnn: u64,
+    pub mem_view_addr: u64,
 }
 
 impl VmInspectorState {
     pub fn new() -> Self {
         Self {
             events: Vec::new(),
-            crz: 0,
-            ahd: 0,
-            jc: 0,
+            last_read_idx: 0,
+            active_tab: 0,
+            scroll: 0,
             frame: 0,
-            dna: 0,
-            dcw: 0,
-            eel: String::from("(none)"),
-            hpr: 0,
-            lyq: 0,
-            lyr: 0,
-            lys: 0,
-            lyt: 0,
-            lyu: 0,
-            lyv: 0,
-            bmp: 0,
-            ank: 0,
-            bkn: 0,
-            axz: 0,
-            cay: 0,
-            mpq: 0,
-            bnn: 0x1000,
+            vm_count: 0,
+            total_exits: 0,
+            last_exit_reason: String::from("(none)"),
+            last_guest_rip: 0,
+            regs_rax: 0,
+            regs_rbx: 0,
+            regs_rcx: 0,
+            regs_rdx: 0,
+            regs_rip: 0,
+            regs_rsp: 0,
+            cpuid_exits: 0,
+            io_exits: 0,
+            msr_exits: 0,
+            hlt_exits: 0,
+            npf_exits: 0,
+            vmcall_exits: 0,
+            mem_view_addr: 0x1000,
         }
     }
 
     
-    pub fn qs(&mut self) {
+    pub fn update(&mut self) {
         self.frame += 1;
         if self.frame % 10 != 0 { return; }
         
-        let (jgs, gnn) = trace_bus::hxa(self.crz, 200);
-        self.crz = gnn;
+        let (new_events, new_idx) = trace_bus::dxk(self.last_read_idx, 200);
+        self.last_read_idx = new_idx;
         
-        for aiz in &jgs {
-            if aiz.gb == EventCategory::Ee {
+        for rt in &new_events {
+            if rt.category == EventCategory::Hypervisor {
                 
-                self.vco(aiz);
+                self.parse_hv_event(rt);
                 
                 
-                self.events.push(aiz.clone());
+                self.events.push(rt.clone());
                 if self.events.len() > 200 {
                     self.events.remove(0);
                 }
@@ -110,109 +110,109 @@ impl VmInspectorState {
     }
 
     
-    fn vco(&mut self, aiz: &Jq) {
-        let fr = &aiz.message;
+    fn parse_hv_event(&mut self, rt: &Dw) {
+        let bk = &rt.message;
         
         
-        if fr.contains("EXIT: CPUID") {
-            self.bmp += 1;
-            self.dcw += 1;
-            self.eel = String::from("CPUID");
-        } else if fr.contains("IO ") {
-            self.ank += 1;
-            self.dcw += 1;
-            self.eel = String::from("I/O");
-        } else if fr.contains("RDMSR") || fr.contains("WRMSR") {
-            self.bkn += 1;
-            self.dcw += 1;
-            self.eel = String::from("MSR");
-        } else if fr.contains("EXIT: HLT") {
-            self.axz += 1;
-            self.dcw += 1;
-            self.eel = String::from("HLT");
-        } else if fr.contains("NPF_VIOLATION") || fr.contains("EPT_VIOLATION") {
-            self.cay += 1;
-            self.dcw += 1;
-            self.eel = String::from("PAGE_FAULT");
-        } else if fr.contains("EXIT: VMMCALL") || fr.contains("EXIT: VMCALL") {
-            self.mpq += 1;
-            self.dcw += 1;
-            self.eel = String::from("HYPERCALL");
-        } else if fr.contains("CREATED") {
-            self.dna += 1;
-        } else if fr.contains("STOPPED") || fr.contains("TRIPLE FAULT") {
-            if self.dna > 0 {
-                self.dna -= 1;
+        if bk.contains("EXIT: CPUID") {
+            self.cpuid_exits += 1;
+            self.total_exits += 1;
+            self.last_exit_reason = String::from("CPUID");
+        } else if bk.contains("IO ") {
+            self.io_exits += 1;
+            self.total_exits += 1;
+            self.last_exit_reason = String::from("I/O");
+        } else if bk.contains("RDMSR") || bk.contains("WRMSR") {
+            self.msr_exits += 1;
+            self.total_exits += 1;
+            self.last_exit_reason = String::from("MSR");
+        } else if bk.contains("EXIT: HLT") {
+            self.hlt_exits += 1;
+            self.total_exits += 1;
+            self.last_exit_reason = String::from("HLT");
+        } else if bk.contains("NPF_VIOLATION") || bk.contains("EPT_VIOLATION") {
+            self.npf_exits += 1;
+            self.total_exits += 1;
+            self.last_exit_reason = String::from("PAGE_FAULT");
+        } else if bk.contains("EXIT: VMMCALL") || bk.contains("EXIT: VMCALL") {
+            self.vmcall_exits += 1;
+            self.total_exits += 1;
+            self.last_exit_reason = String::from("HYPERCALL");
+        } else if bk.contains("CREATED") {
+            self.vm_count += 1;
+        } else if bk.contains("STOPPED") || bk.contains("TRIPLE FAULT") {
+            if self.vm_count > 0 {
+                self.vm_count -= 1;
             }
         }
         
         
-        if let Some(mai) = fr.du("RIP=0x") {
-            let maj = &fr[mai + 6..];
-            let ci = maj.du(|r: char| !r.ofp()).unwrap_or(maj.len());
-            if let Ok(pc) = u64::wa(&maj[..ci], 16) {
-                self.hpr = pc;
+        if let Some(grr) = bk.find("RIP=0x") {
+            let grs = &bk[grr + 6..];
+            let end = grs.find(|c: char| !c.is_ascii_hexdigit()).unwrap_or(grs.len());
+            if let Ok(rip) = u64::from_str_radix(&grs[..end], 16) {
+                self.last_guest_rip = rip;
             }
         }
         
         
-        if fr.contains("REGS ") {
-            self.vdg(fr);
+        if bk.contains("REGS ") {
+            self.parse_regs(bk);
         }
     }
     
     
-    fn vdg(&mut self, fr: &str) {
-        fn gou(fr: &str, adx: &str) -> Option<u64> {
-            let u = fr.du(adx)?;
-            let ay = u + adx.len();
-            let kr = &fr[ay..];
-            let ci = kr.du(|r: char| !r.ofp()).unwrap_or(kr.len());
-            u64::wa(&kr[..ci], 16).bq()
+    fn parse_regs(&mut self, bk: &str) {
+        fn dcg(bk: &str, nm: &str) -> Option<u64> {
+            let pos = bk.find(nm)?;
+            let start = pos + nm.len();
+            let ef = &bk[start..];
+            let end = ef.find(|c: char| !c.is_ascii_hexdigit()).unwrap_or(ef.len());
+            u64::from_str_radix(&ef[..end], 16).ok()
         }
         
-        if let Some(p) = gou(fr, "RAX=0x") { self.lyq = p; }
-        if let Some(p) = gou(fr, "RBX=0x") { self.lyr = p; }
-        if let Some(p) = gou(fr, "RCX=0x") { self.lys = p; }
-        if let Some(p) = gou(fr, "RDX=0x") { self.lyt = p; }
-        if let Some(p) = gou(fr, "RIP=0x") { self.lyu = p; }
-        if let Some(p) = gou(fr, "RSP=0x") { self.lyv = p; }
+        if let Some(v) = dcg(bk, "RAX=0x") { self.regs_rax = v; }
+        if let Some(v) = dcg(bk, "RBX=0x") { self.regs_rbx = v; }
+        if let Some(v) = dcg(bk, "RCX=0x") { self.regs_rcx = v; }
+        if let Some(v) = dcg(bk, "RDX=0x") { self.regs_rdx = v; }
+        if let Some(v) = dcg(bk, "RIP=0x") { self.regs_rip = v; }
+        if let Some(v) = dcg(bk, "RSP=0x") { self.regs_rsp = v; }
     }
 
     
-    pub fn vr(&mut self, bs: u8) {
-        use crate::keyboard::{V_, U_, AH_, AI_};
-        match bs {
-            eh if eh == AH_ => {
-                if self.ahd > 0 { self.ahd -= 1; }
+    pub fn handle_key(&mut self, key: u8) {
+        use crate::keyboard::{T_, S_, AI_, AJ_};
+        match key {
+            k if k == AI_ => {
+                if self.active_tab > 0 { self.active_tab -= 1; }
             }
-            eh if eh == AI_ => {
-                if self.ahd < 3 { self.ahd += 1; }
+            k if k == AJ_ => {
+                if self.active_tab < 3 { self.active_tab += 1; }
             }
-            eh if eh == V_ => {
-                if self.jc > 0 { self.jc -= 1; }
+            k if k == T_ => {
+                if self.scroll > 0 { self.scroll -= 1; }
             }
-            eh if eh == U_ => {
-                self.jc += 1;
+            k if k == S_ => {
+                self.scroll += 1;
             }
-            b'1' => self.ahd = 0, 
-            b'2' => self.ahd = 1, 
-            b'3' => self.ahd = 2, 
-            b'4' => self.ahd = 3, 
+            b'1' => self.active_tab = 0, 
+            b'2' => self.active_tab = 1, 
+            b'3' => self.active_tab = 2, 
+            b'4' => self.active_tab = 3, 
             _ => {}
         }
     }
 
     
-    pub fn ago(&mut self, mj: i32, ct: i32, d: u32, dxv: u32) {
-        let bm = crate::graphics::scaling::fep() as i32;
-        let dt = crate::graphics::scaling::bmi() as i32;
+    pub fn handle_click(&mut self, fe: i32, ly: i32, w: u32, _h: u32) {
+        let ch = crate::graphics::scaling::cgu() as i32;
+        let aq = crate::graphics::scaling::agg() as i32;
         
         
-        if ct < bm + 4 && dt > 0 {
-            let axb = d as i32 / 4;
-            let acp = (mj / axb).v(3) as usize;
-            self.ahd = acp;
+        if ly < ch + 4 && aq > 0 {
+            let zm = w as i32 / 4;
+            let tab = (fe / zm).min(3) as usize;
+            self.active_tab = tab;
         }
     }
 }
@@ -220,263 +220,263 @@ impl VmInspectorState {
 
 
 
-pub fn po(g: &VmInspectorState, b: i32, c: i32, d: u32, i: u32) {
-    let bm = super::apm();
-    let dt = super::nk();
-    if bm <= 0 || dt <= 0 { return; }
+pub fn draw(state: &VmInspectorState, x: i32, y: i32, w: u32, h: u32) {
+    let ch = super::qu();
+    let aq = super::ew();
+    if ch <= 0 || aq <= 0 { return; }
     
     
-    let bio = ["Overview", "VM Exits", "Memory", "Registers"];
-    let axb = d as i32 / 4;
-    for (a, acp) in bio.iter().cf() {
-        let gx = b + a as i32 * axb;
-        let s = if a == g.ahd { HS_ } else { F_ };
-        let ei = if a == g.ahd { 0xFF1F2937 } else { 0xFF0D1117 };
-        crate::framebuffer::ah(gx as u32, c as u32, axb as u32, bm as u32, ei);
-        super::kw(gx + 4, c + 2, acp, s);
+    let tabs = ["Overview", "VM Exits", "Memory", "Registers"];
+    let zm = w as i32 / 4;
+    for (i, tab) in tabs.iter().enumerate() {
+        let bu = x + i as i32 * zm;
+        let color = if i == state.active_tab { IL_ } else { F_ };
+        let bg = if i == state.active_tab { 0xFF1F2937 } else { 0xFF0D1117 };
+        crate::framebuffer::fill_rect(bu as u32, y as u32, zm as u32, ch as u32, bg);
+        super::eh(bu + 4, y + 2, tab, color);
     }
     
-    crate::framebuffer::ah(b as u32, (c + bm) as u32, d, 1, HS_);
+    crate::framebuffer::fill_rect(x as u32, (y + ch) as u32, w, 1, IL_);
     
-    let gl = c + bm + 4;
-    let nd = i.ao(bm as u32 + 4);
+    let bn = y + ch + 4;
+    let en = h.saturating_sub(ch as u32 + 4);
     
-    match g.ahd {
-        0 => krf(g, b, gl, d, nd),
-        1 => sct(g, b, gl, d, nd),
-        2 => sdv(g, b, gl, d, nd),
-        3 => sfa(g, b, gl, d, nd),
+    match state.active_tab {
+        0 => dnq(state, x, bn, w, en),
+        1 => lir(state, x, bn, w, en),
+        2 => ljl(state, x, bn, w, en),
+        3 => lkm(state, x, bn, w, en),
         _ => {}
     }
 }
 
 
-fn krf(g: &VmInspectorState, b: i32, c: i32, d: u32, i: u32) {
-    let bm = super::apm();
-    let mut ae = c;
+fn dnq(state: &VmInspectorState, x: i32, y: i32, w: u32, h: u32) {
+    let ch = super::qu();
+    let mut u = y;
     
     
-    let dch = if g.dna > 0 { AK_ } else { F_ };
-    let status = if g.dna > 0 { "RUNNING" } else { "NO VM" };
-    super::kw(b, ae, &format!("Status: {}", status), dch);
-    ae += bm;
+    let bdw = if state.vm_count > 0 { AC_ } else { F_ };
+    let status = if state.vm_count > 0 { "RUNNING" } else { "NO VM" };
+    super::eh(x, u, &format!("Status: {}", status), bdw);
+    u += ch;
     
-    super::kw(b, ae, &format!("VMs Active: {}", g.dna), T_);
-    ae += bm;
+    super::eh(x, u, &format!("VMs Active: {}", state.vm_count), P_);
+    u += ch;
     
-    super::kw(b, ae, &format!("Total Exits: {}", g.dcw), AO_);
-    ae += bm;
+    super::eh(x, u, &format!("Total Exits: {}", state.total_exits), AK_);
+    u += ch;
     
-    super::kw(b, ae, &format!("Last Exit: {}", g.eel), EZ_);
-    ae += bm;
+    super::eh(x, u, &format!("Last Exit: {}", state.last_exit_reason), DN_);
+    u += ch;
     
-    if g.hpr != 0 {
-        super::kw(b, ae, &format!("Guest RIP: 0x{:X}", g.hpr), BB_);
-        ae += bm;
+    if state.last_guest_rip != 0 {
+        super::eh(x, u, &format!("Guest RIP: 0x{:X}", state.last_guest_rip), AU_);
+        u += ch;
     }
     
     
-    ae += bm / 2;
-    let backend = crate::hypervisor::kbt();
-    super::kw(b, ae, &format!("Backend: {}", backend), BO_);
-    ae += bm;
+    u += ch / 2;
+    let backend = crate::hypervisor::fhy();
+    super::eh(x, u, &format!("Backend: {}", backend), BG_);
+    u += ch;
     
     
-    ae += bm / 2;
-    crate::framebuffer::ah(b as u32, ae as u32, d, 1, 0xFF30363D);
-    ae += 4;
+    u += ch / 2;
+    crate::framebuffer::fill_rect(x as u32, u as u32, w, 1, 0xFF30363D);
+    u += 4;
     
     
-    super::kw(b, ae, "Recent VM Events:", HS_);
-    ae += bm;
+    super::eh(x, u, "Recent VM Events:", IL_);
+    u += ch;
     
-    let olq = ((i as i32 - (ae - c)) / bm).am(0) as usize;
-    let ay = if g.events.len() > olq {
-        g.events.len() - olq
+    let imj = ((h as i32 - (u - y)) / ch).max(0) as usize;
+    let start = if state.events.len() > imj {
+        state.events.len() - imj
     } else {
         0
     };
     
-    for aiz in g.events[ay..].iter() {
-        if ae + bm > c + i as i32 { break; }
+    for rt in state.events[start..].iter() {
+        if u + ch > y + h as i32 { break; }
         
-        let wi = aiz.aet;
-        let tv = wi / 1000;
-        let jn = wi % 1000;
-        let bso = format!("{:02}:{:02}.{:03}", tv / 60, tv % 60, jn);
+        let jy = rt.timestamp_ms;
+        let im = jy / 1000;
+        let dh = jy % 1000;
+        let time_str = format!("{:02}:{:02}.{:03}", im / 60, im % 60, dh);
         
         
-        let aem = ((d as i32 - 80) / super::nk()).am(10) as usize;
-        let fr = if aiz.message.len() > aem {
-            &aiz.message[..aem]
+        let nd = ((w as i32 - 80) / super::ew()).max(10) as usize;
+        let bk = if rt.message.len() > nd {
+            &rt.message[..nd]
         } else {
-            &aiz.message
+            &rt.message
         };
         
-        super::kw(b, ae, &bso, F_);
-        super::kw(b + 70, ae, fr, T_);
-        ae += bm;
+        super::eh(x, u, &time_str, F_);
+        super::eh(x + 70, u, bk, P_);
+        u += ch;
     }
 }
 
 
-fn sct(g: &VmInspectorState, b: i32, c: i32, d: u32, dxv: u32) {
-    let bm = super::apm();
-    let mut ae = c;
+fn lir(state: &VmInspectorState, x: i32, y: i32, w: u32, _h: u32) {
+    let ch = super::qu();
+    let mut u = y;
     
-    super::kw(b, ae, "VM Exit Breakdown:", HS_);
-    ae += bm + 4;
+    super::eh(x, u, "VM Exit Breakdown:", IL_);
+    u += ch + 4;
     
     
-    let ith = [
-        ("CPUID", g.bmp, BB_),
-        ("I/O", g.ank, AK_),
-        ("MSR", g.bkn, BO_),
-        ("HLT", g.axz, AO_),
-        ("NPF/EPT", g.cay, AW_),
-        ("VMCALL", g.mpq, EZ_),
+    let exits = [
+        ("CPUID", state.cpuid_exits, AU_),
+        ("I/O", state.io_exits, AC_),
+        ("MSR", state.msr_exits, BG_),
+        ("HLT", state.hlt_exits, AK_),
+        ("NPF/EPT", state.npf_exits, AN_),
+        ("VMCALL", state.vmcall_exits, DN_),
     ];
     
-    let ukz = ith.iter().map(|(_, r, _)| *r).am().unwrap_or(1).am(1);
-    let gar = d.ao(120) as u64;
+    let nct = exits.iter().map(|(_, c, _)| *c).max().unwrap_or(1).max(1);
+    let ctv = w.saturating_sub(120) as u64;
     
-    for (j, az, s) in &ith {
-        let cu = format!("{:<8} {:>8}", j, az);
-        super::kw(b, ae, &cu, T_);
+    for (name, count, color) in &exits {
+        let label = format!("{:<8} {:>8}", name, count);
+        super::eh(x, u, &label, P_);
         
         
-        let lo = if *az > 0 {
-            ((*az as u64 * gar) / ukz).am(2)
+        let ek = if *count > 0 {
+            ((*count as u64 * ctv) / nct).max(2)
         } else {
             0
         };
-        if lo > 0 {
-            crate::framebuffer::ah(
-                (b + 120) as u32, (ae + 2) as u32,
-                lo as u32, (bm - 4) as u32,
-                *s,
+        if ek > 0 {
+            crate::framebuffer::fill_rect(
+                (x + 120) as u32, (u + 2) as u32,
+                ek as u32, (ch - 4) as u32,
+                *color,
             );
         }
         
-        ae += bm;
+        u += ch;
     }
     
     
-    ae += bm / 2;
-    super::kw(b, ae, &format!("Total: {}", g.dcw), T_);
-    ae += bm;
+    u += ch / 2;
+    super::eh(x, u, &format!("Total: {}", state.total_exits), P_);
+    u += ch;
     
     
-    if g.frame > 0 {
-        let cel = g.dcw * 60 / g.frame.am(1);
-        super::kw(b, ae, &format!("Rate: ~{} exits/sec", cel), F_);
+    if state.frame > 0 {
+        let eps = state.total_exits * 60 / state.frame.max(1);
+        super::eh(x, u, &format!("Rate: ~{} exits/sec", eps), F_);
     }
 }
 
 
-fn sdv(gxl: &VmInspectorState, b: i32, c: i32, d: u32, i: u32) {
-    let bm = super::apm();
-    let mut ae = c;
+fn ljl(_state: &VmInspectorState, x: i32, y: i32, w: u32, h: u32) {
+    let ch = super::qu();
+    let mut u = y;
     
-    super::kw(b, ae, "Guest Physical Memory Map:", HS_);
-    ae += bm + 4;
+    super::eh(x, u, "Guest Physical Memory Map:", IL_);
+    u += ch + 4;
     
     
-    let afx = crate::hypervisor::vmi::kfk(64);
+    let regions = crate::hypervisor::vmi::fkc(64);
     
-    for aoz in &afx {
-        if ae + bm > c + i as i32 { break; }
-        let s = match aoz.bwo {
-            crate::hypervisor::vmi::MemoryRegionType::Jw => AK_,
-            crate::hypervisor::vmi::MemoryRegionType::Nn => AW_,
-            crate::hypervisor::vmi::MemoryRegionType::Bre => AO_,
-            crate::hypervisor::vmi::MemoryRegionType::Nw => F_,
-            crate::hypervisor::vmi::MemoryRegionType::Bbk => BO_,
-            crate::hypervisor::vmi::MemoryRegionType::Afg => F_,
+    for qd in &regions {
+        if u + ch > y + h as i32 { break; }
+        let color = match qd.region_type {
+            crate::hypervisor::vmi::MemoryRegionType::Ram => AC_,
+            crate::hypervisor::vmi::MemoryRegionType::Mmio => AN_,
+            crate::hypervisor::vmi::MemoryRegionType::Rom => AK_,
+            crate::hypervisor::vmi::MemoryRegionType::Reserved => F_,
+            crate::hypervisor::vmi::MemoryRegionType::AcpiReclaimable => BG_,
+            crate::hypervisor::vmi::MemoryRegionType::Unmapped => F_,
         };
         
-        let gs = aoz.aw / 1024;
-        let als = if gs >= 1024 {
-            format!("{:>4} MB", gs / 1024)
+        let size_kb = qd.size / 1024;
+        let td = if size_kb >= 1024 {
+            format!("{:>4} MB", size_kb / 1024)
         } else {
-            format!("{:>4} KB", gs)
+            format!("{:>4} KB", size_kb)
         };
         
-        let cu = format!("0x{:09X} {} {}", aoz.ar, als, aoz.cu);
-        super::kw(b, ae, &cu, s);
-        ae += bm;
+        let label = format!("0x{:09X} {} {}", qd.base, td, qd.label);
+        super::eh(x, u, &label, color);
+        u += ch;
     }
     
     
-    ae += bm;
-    let xsk = if crate::hypervisor::vmi::zu() { "ENABLED" } else { "DISABLED" };
-    let xsj = if crate::hypervisor::vmi::zu() { AK_ } else { F_ };
-    super::kw(b, ae, &format!("VMI Engine: {}", xsk), xsj);
-    ae += bm;
+    u += ch;
+    let pss = if crate::hypervisor::vmi::lq() { "ENABLED" } else { "DISABLED" };
+    let psr = if crate::hypervisor::vmi::lq() { AC_ } else { F_ };
+    super::eh(x, u, &format!("VMI Engine: {}", pss), psr);
+    u += ch;
     
     
-    let bfr = crate::hypervisor::vmi::ojm();
-    if !bfr.is_empty() {
-        super::kw(b, ae, "Live VMs:", HS_);
-        ae += bm;
-        for (ad, j, boo) in &bfr {
-            if ae + bm > c + i as i32 { break; }
-            let s = match *boo {
-                "running" => AK_,
-                "created" => BB_,
-                "paused" => AO_,
-                "stopped" => AW_,
+    let aen = crate::hypervisor::vmi::ikn();
+    if !aen.is_empty() {
+        super::eh(x, u, "Live VMs:", IL_);
+        u += ch;
+        for (id, name, acr) in &aen {
+            if u + ch > y + h as i32 { break; }
+            let color = match *acr {
+                "running" => AC_,
+                "created" => AU_,
+                "paused" => AK_,
+                "stopped" => AN_,
                 _ => F_,
             };
-            super::kw(b, ae, &format!("  VM #{}: {} [{}]", ad, j, boo), s);
-            ae += bm;
+            super::eh(x, u, &format!("  VM #{}: {} [{}]", id, name, acr), color);
+            u += ch;
         }
     } else {
-        super::kw(b, ae, "No VMs created yet", F_);
+        super::eh(x, u, "No VMs created yet", F_);
     }
 }
 
 
-fn sfa(g: &VmInspectorState, b: i32, c: i32, dxx: u32, dxv: u32) {
-    let bm = super::apm();
-    let mut ae = c;
+fn lkm(state: &VmInspectorState, x: i32, y: i32, _w: u32, _h: u32) {
+    let ch = super::qu();
+    let mut u = y;
     
-    super::kw(b, ae, "Guest Registers (last snapshot):", HS_);
-    ae += bm + 4;
+    super::eh(x, u, "Guest Registers (last snapshot):", IL_);
+    u += ch + 4;
     
-    let abd = 200i32;
+    let nk = 200i32;
     
     
-    let vug = [
-        ("RAX", g.lyq),
-        ("RBX", g.lyr),
-        ("RCX", g.lys),
-        ("RDX", g.lyt),
+    let oel = [
+        ("RAX", state.regs_rax),
+        ("RBX", state.regs_rbx),
+        ("RCX", state.regs_rcx),
+        ("RDX", state.regs_rdx),
     ];
     
-    let vuh = [
-        ("RIP", g.lyu),
-        ("RSP", g.lyv),
-        ("Last Exit RIP", g.hpr),
+    let oem = [
+        ("RIP", state.regs_rip),
+        ("RSP", state.regs_rsp),
+        ("Last Exit RIP", state.last_guest_rip),
     ];
     
-    for (j, ap) in &vug {
-        let s = if *ap != 0 { AK_ } else { F_ };
-        super::kw(b, ae, &format!("{:<4} = 0x{:016X}", j, ap), s);
-        ae += bm;
+    for (name, val) in &oel {
+        let color = if *val != 0 { AC_ } else { F_ };
+        super::eh(x, u, &format!("{:<4} = 0x{:016X}", name, val), color);
+        u += ch;
     }
     
-    ae += bm / 2;
+    u += ch / 2;
     
-    for (j, ap) in &vuh {
-        let s = if *ap != 0 { BB_ } else { F_ };
-        super::kw(b, ae, &format!("{:<14} = 0x{:016X}", j, ap), s);
-        ae += bm;
+    for (name, val) in &oem {
+        let color = if *val != 0 { AU_ } else { F_ };
+        super::eh(x, u, &format!("{:<14} = 0x{:016X}", name, val), color);
+        u += ch;
     }
     
     
-    ae += bm;
-    super::kw(b, ae, &format!("Last Exit: {}", g.eel), EZ_);
-    ae += bm;
-    super::kw(b, ae, &format!("Total Exits: {}", g.dcw), AO_);
+    u += ch;
+    super::eh(x, u, &format!("Last Exit: {}", state.last_exit_reason), DN_);
+    u += ch;
+    super::eh(x, u, &format!("Total Exits: {}", state.total_exits), AK_);
 }

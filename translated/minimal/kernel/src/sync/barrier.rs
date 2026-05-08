@@ -5,79 +5,79 @@
 use core::sync::atomic::{AtomicU32, Ordering};
 
 
-pub struct Byk {
+pub struct Ahi {
     
-    qy: u32,
+    expected: u32,
     
-    az: AtomicU32,
+    count: AtomicU32,
     
-    iwm: AtomicU32,
+    generation: AtomicU32,
 }
 
-impl Byk {
+impl Ahi {
     
-    pub const fn new(bo: u32) -> Self {
+    pub const fn new(ae: u32) -> Self {
         Self {
-            qy: bo,
-            az: AtomicU32::new(0),
-            iwm: AtomicU32::new(0),
+            expected: ae,
+            count: AtomicU32::new(0),
+            generation: AtomicU32::new(0),
         }
     }
     
     
-    pub fn ccm(&self) -> bool {
-        let tar = self.iwm.load(Ordering::Relaxed);
-        let kbd = self.az.fetch_add(1, Ordering::AcqRel) + 1;
+    pub fn bqb(&self) -> bool {
+        let mbp = self.generation.load(Ordering::Relaxed);
+        let fhn = self.count.fetch_add(1, Ordering::AcqRel) + 1;
         
-        if kbd == self.qy {
+        if fhn == self.expected {
             
-            self.az.store(0, Ordering::Relaxed);
-            self.iwm.fetch_add(1, Ordering::Release);
+            self.count.store(0, Ordering::Relaxed);
+            self.generation.fetch_add(1, Ordering::Release);
             true 
         } else {
             
-            while self.iwm.load(Ordering::Acquire) == tar {
-                core::hint::hc();
+            while self.generation.load(Ordering::Acquire) == mbp {
+                core::hint::spin_loop();
             }
             false
         }
     }
     
     
-    pub unsafe fn apa(&self) {
-        self.az.store(0, Ordering::Relaxed);
+    pub unsafe fn reset(&self) {
+        self.count.store(0, Ordering::Relaxed);
     }
 }
 
 
-pub struct Cig {
-    qy: u32,
-    az: AtomicU32,
-    hxl: AtomicU32,
+pub struct Ana {
+    expected: u32,
+    count: AtomicU32,
+    released: AtomicU32,
 }
 
-impl Cig {
-    pub const fn new(bo: u32) -> Self {
+impl Ana {
+    pub const fn new(ae: u32) -> Self {
         Self {
-            qy: bo,
-            az: AtomicU32::new(0),
-            hxl: AtomicU32::new(0),
+            expected: ae,
+            count: AtomicU32::new(0),
+            released: AtomicU32::new(0),
         }
     }
     
-    pub fn ccm(&self) {
-        let kbd = self.az.fetch_add(1, Ordering::AcqRel) + 1;
+    pub fn bqb(&self) {
+        let fhn = self.count.fetch_add(1, Ordering::AcqRel) + 1;
         
-        if kbd == self.qy {
-            self.hxl.store(1, Ordering::Release);
+        if fhn == self.expected {
+            self.released.store(1, Ordering::Release);
         } else {
-            while self.hxl.load(Ordering::Acquire) == 0 {
-                core::hint::hc();
+            while self.released.load(Ordering::Acquire) == 0 {
+                core::hint::spin_loop();
             }
         }
     }
     
-    pub fn yzy(&self) -> bool {
-        self.hxl.load(Ordering::Relaxed) != 0
+    pub fn qmw(&self) -> bool {
+        self.released.load(Ordering::Relaxed) != 0
     }
 }

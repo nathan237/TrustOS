@@ -1,13 +1,16 @@
 //! ThinkPad Embedded Controller (EC) Driver
 //!
 //! Provides fan control, thermal monitoring, and CPU frequency/voltage
-//! management for ThinkPad laptops (tested on T61).
+//! management for laptops with a standard ACPI EC (ThinkPad and compatible).
 //!
 //! EC communication: ports 0x66 (command/status) and 0x62 (data).
 //! Fan/thermal registers: reverse-engineered from thinkpad_acpi Linux driver.
 //! SpeedStep: Intel Enhanced SpeedStep via MSR 0x198/0x199.
+//!
+//! Hardware tested: ThinkPad T61. Designed to work on other hardware with
+//! standard ACPI EC and Intel SpeedStep.
 
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use crate::arch::Port;
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -44,7 +47,7 @@ const EC_REGISTER_TEMPORARY_BASE: u8 = 0x78;
 // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const EC_TEMPORARY_SENSOR_COUNT: usize = 8;  // 0x78..0x7F
 
-/// Sensor labels for T61 (approximate — varies by model)
+/// Sensor labels (common ThinkPad layout — may vary by model)
 const TEMPORARY_LABELS: [&str; 8] = [
     "CPU",          // 0x78
     "miniPCI",      // 0x79
@@ -112,11 +115,11 @@ unsafe { delay_port.read(); }
 
 /// Read one byte from an EC register
 pub fn ec_read(reg: u8) -> Option<u8> {
-    let mut command_port: Port<u8> = Port::new(EC_COMMAND_PORT);
+    let mut cmd_port: Port<u8> = Port::new(EC_COMMAND_PORT);
     let mut data_port: Port<u8> = Port::new(EC_DATA_PORT);
     if !ec_wait_ibf_clear() { return None; }
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { command_port.write(EC_COMMAND_READ); }
+unsafe { cmd_port.write(EC_COMMAND_READ); }
     if !ec_wait_ibf_clear() { return None; }
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe { data_port.write(reg); }
@@ -126,18 +129,18 @@ unsafe { data_port.read() })
 }
 
 /// Write one byte to an EC register
-pub fn ec_write(reg: u8, value: u8) -> bool {
-    let mut command_port: Port<u8> = Port::new(EC_COMMAND_PORT);
+pub fn ec_write(reg: u8, val: u8) -> bool {
+    let mut cmd_port: Port<u8> = Port::new(EC_COMMAND_PORT);
     let mut data_port: Port<u8> = Port::new(EC_DATA_PORT);
     if !ec_wait_ibf_clear() { return false; }
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { command_port.write(EC_COMMAND_WRITE); }
+unsafe { cmd_port.write(EC_COMMAND_WRITE); }
     if !ec_wait_ibf_clear() { return false; }
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe { data_port.write(reg); }
     if !ec_wait_ibf_clear() { return false; }
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { data_port.write(value); }
+unsafe { data_port.write(val); }
     true
 }
 
@@ -184,7 +187,7 @@ pub fn fan_get_level() -> Option<u8> {
 
 /// Set fan level
 pub fn fan_set_level(level: FanLevel) -> bool {
-    let value = // Correspondance de motifs — branchement exhaustif de Rust.
+    let val = // Correspondance de motifs — branchement exhaustif de Rust.
 match level {
         FanLevel::Level(l) => {
             if l > 7 { return false; }
@@ -193,7 +196,7 @@ match level {
         FanLevel::Auto => 0x80,      // bit 7 = auto mode
         FanLevel::FullSpeed => 0x40, // bit 6 = disengaged (full speed)
     };
-    ec_write(EC_REGISTER_FAN_CONTROL, value)
+    ec_write(EC_REGISTER_FAN_CONTROL, val)
 }
 
 /// Read fan speed in RPM (returns 0 if fan is stopped or unsupported)
@@ -210,10 +213,10 @@ pub fn fan_get_rpm() -> Option<u16> {
 /// Read temperature from a specific sensor (0-7). Returns °C or None.
 pub fn temporary_read(sensor: usize) -> Option<u8> {
     if sensor >= EC_TEMPORARY_SENSOR_COUNT { return None; }
-    let value = ec_read(EC_REGISTER_TEMPORARY_BASE + sensor as u8)?;
+    let val = ec_read(EC_REGISTER_TEMPORARY_BASE + sensor as u8)?;
     // 0x00 or 0x80+ usually means sensor not present
-    if value == 0 || value >= 128 { return None; }
-    Some(value)
+    if val == 0 || val >= 128 { return None; }
+    Some(val)
 }
 
 /// Get label for a temperature sensor
@@ -229,19 +232,90 @@ pub fn temporary_label(sensor: usize) -> &'static str {
 // CPU Frequency / Voltage (Intel SpeedStep via MSR)
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/// Detected FSB frequency in MHz (set by detect_fsb_mhz)
+static DETECTED_FSB_MHZ: AtomicU32 = AtomicU32::new(0);
+
+/// Detect front-side bus frequency from MSR 0xCD.
+/// Core 2 Duo: MSR_FSB_FREQ encodes the bus speed.
+/// Nehalem+: BCLK is typically 100MHz.
+/// Returns FSB in MHz.
+#[cfg(target_arch = "x86_64")]
+// Fonction publique — appelable depuis d'autres modules.
+pub fn detect_fsb_mhz() -> u32 {
+    let cached = DETECTED_FSB_MHZ.load(Ordering::Relaxed);
+    if cached != 0 {
+        return cached;
+    }
+    let fsb = if let Some(val) = crate::debug::read_msr_safe(0xCD) {
+        // MSR_FSB_FREQ (Core 2 Duo / Merom / Conroe / Penryn)
+        match val & 0x07 {
+            0b101 => 100, // 400MHz QDR
+            0b001 => 133, // 533MHz QDR
+            0b011 => 167, // 667MHz QDR
+            0b010 => 200, // 800MHz QDR
+            0b000 => 267, // 1067MHz QDR
+            0b100 => 333, // 1333MHz QDR
+            _     => 200, // Unknown — assume 200MHz
+        }
+    } else {
+        // Nehalem+ or MSR not available — try CPUID leaf 0x16
+        let cpuid_ok = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe {
+            let result: u32;
+            core::arch::asm!(
+                "push rbx",
+                "cpuid",
+                "pop rbx",
+                in("eax") 0u32,
+                lateout("eax") result,
+                out("ecx") _, out("edx") _,
+            );
+            result
+        };
+        if cpuid_ok >= 0x16 {
+            let bus_mhz = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe {
+                let result: u32;
+                core::arch::asm!(
+                    "push rbx",
+                    "cpuid",
+                    "pop rbx",
+                    in("eax") 0x16u32,
+                    lateout("ecx") result,
+                    out("edx") _,
+                );
+                result & 0xFFFF
+            };
+            if bus_mhz > 0 { bus_mhz } else { 100 }
+        } else {
+            100 // Modern default BCLK
+        }
+    };
+    DETECTED_FSB_MHZ.store(fsb, Ordering::Relaxed);
+    fsb
+}
+
+#[cfg(not(target_arch = "x86_64"))]
+// Fonction publique — appelable depuis d'autres modules.
+pub fn detect_fsb_mhz() -> u32 { 100 }
+
+/// Get the FSB multiplier (bus ratio) for a given FID.
+/// freq_mhz = fid * fsb_mhz
+fn fid_to_frequency(fid: u32) -> u32 {
+    fid * detect_fsb_mhz()
+}
+
 /// Current CPU performance status: (frequency_mhz, voltage_mv)
 #[cfg(target_arch = "x86_64")]
 // Fonction publique — appelable depuis d'autres modules.
 pub fn cpu_perf_status() -> Option<(u32, u32)> {
-    let value = crate::debug::read_msr_safe(MSR_IA32_PERF_STATUS)?;
+    let val = crate::debug::read_msr_safe(MSR_IA32_PERF_STATUS)?;
     // Bits [15:0] = Current performance state value
     // Core 2 Duo encoding: bits [15:8] = FID (frequency ID), bits [7:0] = VID (voltage ID)
-    let fid = ((value >> 8) & 0xFF) as u32;
-    let vid = (value & 0xFF) as u32;
+    let fid = ((val >> 8) & 0xFF) as u32;
+    let vid = (val & 0xFF) as u32;
     
-    // Core 2 Duo: freq = FID * FSB (usually 200MHz for T61)
-    // T61 FSB is 800MHz quad-pumped = 200MHz base
-    let frequency_mhz = fid * 200;
+    let freq_mhz = fid_to_frequency(fid);
     
     // Core 2 Duo VID: voltage = 0.7125V + VID * 0.0125V  (approximate)
     // Some models use different tables, but this is the common Merom encoding
@@ -251,7 +325,7 @@ pub fn cpu_perf_status() -> Option<(u32, u32)> {
         0
     };
     
-    Some((frequency_mhz, voltage_mv))
+    Some((freq_mhz, voltage_mv))
 }
 
 #[cfg(not(target_arch = "x86_64"))]
@@ -264,8 +338,8 @@ pub fn cpu_perf_status() -> Option<(u32, u32)> {
 #[cfg(target_arch = "x86_64")]
 // Fonction publique — appelable depuis d'autres modules.
 pub fn cpu_perf_target() -> Option<u16> {
-    let value = crate::debug::read_msr_safe(MSR_IA32_PERF_CONTROLLER)?;
-    Some((value & 0xFFFF) as u16)
+    let val = crate::debug::read_msr_safe(MSR_IA32_PERF_CONTROLLER)?;
+    Some((val & 0xFFFF) as u16)
 }
 
 #[cfg(not(target_arch = "x86_64"))]
@@ -280,8 +354,8 @@ pub fn cpu_perf_target() -> Option<u16> {
 #[cfg(target_arch = "x86_64")]
 // Fonction publique — appelable depuis d'autres modules.
 pub fn cpu_set_pstate(fid: u8, vid: u8) -> bool {
-    let value = ((fid as u64) << 8) | (vid as u64);
-    crate::debug::write_msr(MSR_IA32_PERF_CONTROLLER, value);
+    let val = ((fid as u64) << 8) | (vid as u64);
+    crate::debug::write_msr(MSR_IA32_PERF_CONTROLLER, val);
     true
 }
 
@@ -295,8 +369,8 @@ pub fn cpu_set_pstate(_fid: u8, _vid: u8) -> bool {
 #[cfg(target_arch = "x86_64")]
 // Fonction publique — appelable depuis d'autres modules.
 pub fn eist_enabled() -> Option<bool> {
-    let value = crate::debug::read_msr_safe(MSR_IA32_MISC_ENABLE)?;
-    Some((value & (1 << 16)) != 0)
+    let val = crate::debug::read_msr_safe(MSR_IA32_MISC_ENABLE)?;
+    Some((val & (1 << 16)) != 0)
 }
 
 #[cfg(not(target_arch = "x86_64"))]
@@ -309,9 +383,9 @@ pub fn eist_enabled() -> Option<bool> {
 #[cfg(target_arch = "x86_64")]
 // Fonction publique — appelable depuis d'autres modules.
 pub fn cpu_therm_status() -> Option<(bool, u8)> {
-    let value = crate::debug::read_msr_safe(MSR_IA32_THERM_STATUS)?;
-    let valid = (value & (1 << 31)) != 0;  // Reading valid bit
-    let readout = ((value >> 16) & 0x7F) as u8;  // Digital readout (degrees below TjMax)
+    let val = crate::debug::read_msr_safe(MSR_IA32_THERM_STATUS)?;
+    let valid = (val & (1 << 31)) != 0;  // Reading valid bit
+    let readout = ((val >> 16) & 0x7F) as u8;  // Digital readout (degrees below TjMax)
     Some((valid, readout))
 }
 
@@ -322,18 +396,54 @@ pub fn cpu_therm_status() -> Option<(bool, u8)> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Known P-States for T61 Core 2 Duo T7x00 / T8x00 series
+// CPU P-State Detection (runtime — works on any Intel with SpeedStep)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// (label, FID, VID) — T61 Core 2 Duo T7300 (2.0GHz, FSB 800MHz)
-/// These are approximate. Actual values depend on specific CPU stepping.
-pub // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
-const T61_PSTATES: &[(&str, u8, u8)] = &[
-    ("2.0 GHz (max)",  10, 38),  // FID=10 * 200MHz = 2000MHz
-    ("1.6 GHz",         8, 30),
-    ("1.2 GHz",         6, 22),
-    ("800 MHz (min)",   4, 16),
-];
+/// Detected max FID from current CPU
+#[cfg(target_arch = "x86_64")]
+// Fonction publique — appelable depuis d'autres modules.
+pub fn detect_maximum_fid() -> Option<u8> {
+    // On Core 2 Duo, MSR_PERF_STATUS bits [44:40] = max non-turbo ratio
+    let val = crate::debug::read_msr_safe(MSR_IA32_PERF_STATUS)?;
+    let maximum_ratio = ((val >> 40) & 0x1F) as u8;
+    if maximum_ratio > 0 {
+        return Some(maximum_ratio);
+    }
+    // Fallback: try MSR_PLATFORM_INFO (0xCE) bits [15:8] — Nehalem+
+    if let Some(plat) = crate::debug::read_msr_safe(0xCE) {
+        let maximum_r = ((plat >> 8) & 0xFF) as u8;
+        if maximum_r > 0 {
+            return Some(maximum_r);
+        }
+    }
+    // Last resort: read current FID as max
+    let current_fid = ((val >> 8) & 0xFF) as u8;
+    if current_fid > 0 { Some(current_fid) } else { None }
+}
+
+#[cfg(not(target_arch = "x86_64"))]
+// Fonction publique — appelable depuis d'autres modules.
+pub fn detect_maximum_fid() -> Option<u8> { None }
+
+/// Detected min FID (usually 6x on Core 2, or from MSR_PLATFORM_INFO)
+#[cfg(target_arch = "x86_64")]
+// Fonction publique — appelable depuis d'autres modules.
+pub fn detect_minimum_fid() -> Option<u8> {
+    // MSR_PLATFORM_INFO (0xCE) bits [47:40] = min ratio (Nehalem+)
+    if let Some(plat) = crate::debug::read_msr_safe(0xCE) {
+        let minimum_r = ((plat >> 40) & 0xFF) as u8;
+        if minimum_r > 0 {
+            return Some(minimum_r);
+        }
+    }
+    // Core 2 Duo: min ratio is typically 6x (1.2GHz at 200MHz FSB)
+    // Use 6 as a safe default for pre-Nehalem
+    Some(6)
+}
+
+#[cfg(not(target_arch = "x86_64"))]
+// Fonction publique — appelable depuis d'autres modules.
+pub fn detect_minimum_fid() -> Option<u8> { None }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Shell Command Handlers
@@ -477,17 +587,17 @@ pub fn command_temporary(_args: &[&str]) {
     if let Some((valid, dts)) = cpu_therm_status() {
         if valid {
             // TjMax for Core 2 Duo is typically 100°C
-            let tj_maximum: u8 = 100;
-            let cpu_temporary = tj_maximum.saturating_sub(dts);
-            let color = if cpu_temporary >= 90 {
+            let tj_max: u8 = 100;
+            let cpu_temp = tj_max.saturating_sub(dts);
+            let color = if cpu_temp >= 90 {
                 COLOR_RED
-            } else if cpu_temporary >= 70 {
+            } else if cpu_temp >= 70 {
                 COLOR_YELLOW
             } else {
                 COLOR_GREEN
             };
             crate::print!("  {:10} ", "CPU (DTS)");
-            crate::println_color!(color, "{}°C (TjMax={}, margin={}°C)", cpu_temporary, tj_maximum, dts);
+            crate::println_color!(color, "{}°C (TjMax={}, margin={}°C)", cpu_temp, tj_max, dts);
         }
     }
 
@@ -519,8 +629,8 @@ match args.first().copied() {
             }
 
             // Current P-state
-            if let Some((frequency, voltage)) = cpu_perf_status() {
-                crate::println!("  Current freq:     {} MHz", frequency);
+            if let Some((freq, voltage)) = cpu_perf_status() {
+                crate::println!("  Current freq:     {} MHz", freq);
                 if voltage > 0 {
                     crate::println!("  Current voltage:  {}.{:03} V", voltage / 1000, voltage % 1000);
                 }
@@ -532,7 +642,7 @@ match args.first().copied() {
             if let Some(target) = cpu_perf_target() {
                 let tfid = (target >> 8) & 0xFF;
                 let tvid = target & 0xFF;
-                crate::println!("  Target:           FID={} VID={} ({}MHz)", tfid, tvid, tfid as u32 * 200);
+                crate::println!("  Target:           FID={} VID={} ({}MHz)", tfid, tvid, fid_to_frequency(tfid as u32));
             }
 
             // DTS temperature
@@ -543,11 +653,23 @@ match args.first().copied() {
                 }
             }
 
-            // Show known P-states
+            // Show detected P-state range
             crate::println!();
-            crate::println_color!(COLOR_CYAN, "  Known T61 P-states (Core 2 Duo, FSB 800MHz):");
-            for (label, fid, vid) in T61_PSTATES {
-                crate::println!("    FID={:2} VID={:2}  → {}", fid, vid, label);
+            let fsb = detect_fsb_mhz();
+            crate::println_color!(COLOR_CYAN, "  Detected FSB: {}MHz", fsb);
+            if let (Some(max_fid), Some(min_fid)) = (detect_maximum_fid(), detect_minimum_fid()) {
+                crate::println_color!(COLOR_CYAN, "  P-state range (FID x FSB):");
+                let mut fid = max_fid;
+                while fid >= min_fid && fid > 0 {
+                    let freq = (fid as u32) * fsb;
+                    let label = if fid == max_fid { " (max)" } else if fid == min_fid { " (min)" } else { "" };
+                    crate::println!("    FID={:2}  → {} MHz{}", fid, freq, label);
+                    if fid <= min_fid { break; }
+                    fid = fid.saturating_sub(2); // typical 2-step intervals
+                    if fid < min_fid { fid = min_fid; }
+                }
+            } else {
+                crate::println!("  (Could not detect CPU P-state range)");
             }
         }
 
@@ -573,12 +695,12 @@ match args[2].parse::<u8>() {
                     return;
                 }
             };
-            crate::println_color!(COLOR_YELLOW, "Setting P-state: FID={} VID={} ({}MHz)", fid, vid, fid as u32 * 200);
+            crate::println_color!(COLOR_YELLOW, "Setting P-state: FID={} VID={} ({}MHz)", fid, vid, fid_to_frequency(fid as u32));
             if cpu_set_pstate(fid, vid) {
                 crate::println_color!(COLOR_GREEN, "P-state change requested");
                 // Read back
-                if let Some((frequency, voltage)) = cpu_perf_status() {
-                    crate::println!("  Now running at: {} MHz, {}.{:03} V", frequency, voltage / 1000, voltage % 1000);
+                if let Some((freq, voltage)) = cpu_perf_status() {
+                    crate::println!("  Now running at: {} MHz, {}.{:03} V", freq, voltage / 1000, voltage % 1000);
                 }
             } else {
                 crate::println_color!(COLOR_RED, "Failed to set P-state");
@@ -586,18 +708,27 @@ match args[2].parse::<u8>() {
         }
 
         Some("max") => {
-            if let Some(&(label, fid, vid)) = T61_PSTATES.first() {
-                crate::println_color!(COLOR_YELLOW, "Setting CPU to {}", label);
-                cpu_set_pstate(fid, vid);
+            if let Some(max_fid) = detect_maximum_fid() {
+                let fsb = detect_fsb_mhz();
+                let freq = max_fid as u32 * fsb;
+                crate::println_color!(COLOR_YELLOW, "Setting CPU to max: FID={} ({}MHz)", max_fid, freq);
+                // VID 0 = let CPU pick appropriate voltage
+                cpu_set_pstate(max_fid, 0);
                 crate::println_color!(COLOR_GREEN, "Done");
+            } else {
+                crate::println_color!(COLOR_RED, "Could not detect max P-state");
             }
         }
 
         Some("min") | Some("powersave") => {
-            if let Some(&(label, fid, vid)) = T61_PSTATES.last() {
-                crate::println_color!(COLOR_YELLOW, "Setting CPU to {}", label);
-                cpu_set_pstate(fid, vid);
+            if let Some(min_fid) = detect_minimum_fid() {
+                let fsb = detect_fsb_mhz();
+                let freq = min_fid as u32 * fsb;
+                crate::println_color!(COLOR_YELLOW, "Setting CPU to min: FID={} ({}MHz)", min_fid, freq);
+                cpu_set_pstate(min_fid, 0);
                 crate::println_color!(COLOR_GREEN, "Done");
+            } else {
+                crate::println_color!(COLOR_RED, "Could not detect min P-state");
             }
         }
 

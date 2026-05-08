@@ -106,6 +106,8 @@ mod gpu_emu;      // Virtual GPU - CPU cores emulating GPU parallelism
 mod woa;         // WOA — World of Ants (roguelike platformer engine)
 // TLS 1.3 pure Rust implementation (no C dependencies)
 mod tls13;
+// Crypto primitives shared by TLS / WiFi / etc. (SHA-1, HMAC-SHA1, PBKDF2, AES-CCMP)
+mod crypto;
 // CPU hardware exploitation (TSC, AES-NI, SIMD, SMP)
 #[cfg(target_arch = "x86_64")]
 mod cpu;

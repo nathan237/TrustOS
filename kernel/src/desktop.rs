@@ -1512,11 +1512,14 @@ impl MusicPlayerState {
 
     /// Load track names from disk for the UI list.
     pub fn load_track_list(&mut self) {
-        self.track_names = crate::trustdaw::disk_audio::get_track_names();
-        self.num_tracks = self.track_names.len();
-        crate::serial_println!("[MUSIC] Track list: {} tracks", self.num_tracks);
-        for (i, name) in self.track_names.iter().enumerate() {
-            crate::serial_println!("[MUSIC]   {}: {}", i, name);
+        #[cfg(feature = "daw")]
+        {
+            self.track_names = crate::trustdaw::disk_audio::get_track_names();
+            self.num_tracks = self.track_names.len();
+            crate::serial_println!("[MUSIC] Track list: {} tracks", self.num_tracks);
+            for (i, name) in self.track_names.iter().enumerate() {
+                crate::serial_println!("[MUSIC]   {}: {}", i, name);
+            }
         }
     }
 
@@ -1549,6 +1552,7 @@ impl MusicPlayerState {
             idx, crate::memory::heap::free() / 1024);
 
         // Load track from TWAV disk
+        #[cfg(feature = "daw")]
         match crate::trustdaw::disk_audio::load_track_from_disk(idx) {
             Ok((raw_wav, name)) => {
                 // Debug: log first 12 bytes to verify WAV header
@@ -17047,7 +17051,7 @@ pub fn run() {
     }
     
     crate::serial_println!("[GUI] Starting desktop environment...");
-    crate::serial_println!("[GUI] Hotkeys: Alt+Tab, Win+Arrows, Alt+F4, Win=Start");
+    crate::serial_println!("[GUI] Hotkeys: Alt+Tab, Win+Arrows, Alt+F4, Win=Start, Win+T/E/I/L/D/H, Win+1..9, Ctrl+Alt+Del, F1/F11/F12, ESC");
     crate::serial_println!("[GUI] Target: ~60 FPS (16.6ms) with spin-loop frame limiting");
     
     // Frame counter for safe startup (skip heavy work on first few frames)
@@ -17071,16 +17075,21 @@ pub fn run() {
         
         // ── Scancode-level Alt+Tab detection (poll raw key state) ──
         // This catches Alt+Tab even if VirtualBox or host OS eats the ASCII
+        // Shift held → reverse cycle (Alt+Shift+Tab)
         {
             let alt_held = crate::keyboard::is_key_pressed(0x38);
             let win_held = crate::keyboard::is_key_pressed(0x5B);
             let ctrl_held = crate::keyboard::is_key_pressed(0x1D);
             let tab_held = crate::keyboard::is_key_pressed(0x0F);
+            let shift_held = crate::keyboard::is_key_pressed(0x2A) || crate::keyboard::is_key_pressed(0x36);
             static mut PREV_TAB_RAW: bool = false;
             unsafe {
                 if (alt_held || win_held || ctrl_held) && tab_held && !PREV_TAB_RAW {
                     if !engine::is_alt_tab_active() {
                         engine::start_alt_tab();
+                        if shift_held { engine::alt_tab_prev(); }
+                    } else if shift_held {
+                        engine::alt_tab_prev();
                     } else {
                         engine::alt_tab_next();
                     }
@@ -17159,16 +17168,18 @@ pub fn run() {
                         drop(d);
                         continue;
                     }
-                    // Otherwise close focused window (if any)
+                    // Otherwise close focused window; if no focused window, fall back to shell
                     let focused_info = d.windows.iter().find(|w| w.focused && !w.minimized).map(|w| w.id);
                     if let Some(wid) = focused_info {
                         crate::serial_println!("[GUI] ESC: closing window {}", wid);
                         d.close_focused_window();
                         crate::serial_println!("[GUI] ESC: window closed OK");
+                        drop(d);
                     } else {
-                        crate::serial_println!("[GUI] ESC: no focused window, ignoring");
+                        crate::serial_println!("[GUI] ESC: no focused window, exiting desktop to shell");
+                        drop(d);
+                        EXIT_DESKTOP_FLAG.store(true, Ordering::SeqCst);
                     }
-                    drop(d);
                 } else {
                     crate::serial_println!("[GUI] ESC: lock busy, skipping");
                 }
@@ -17193,15 +17204,51 @@ pub fn run() {
             }
             
             // Alt+Tab, Win+Tab, or Ctrl+Tab → window switcher
+            // Shift held → reverse direction (Alt+Shift+Tab)
             if (alt || win || _ctrl) && key == 9 {
+                let shift_held = crate::keyboard::is_key_pressed(0x2A) || crate::keyboard::is_key_pressed(0x36);
                 if !engine::is_alt_tab_active() {
                     engine::start_alt_tab();
+                    if shift_held { engine::alt_tab_prev(); }
+                } else if shift_held {
+                    engine::alt_tab_prev();
                 } else {
                     engine::alt_tab_next();
                 }
                 continue;
             }
             
+            // Win+Shift+Arrows → move focused window by 40px (no snap, no maximize)
+            // Must come before Win+Arrow snap handlers below.
+            {
+                let shift_held = crate::keyboard::is_key_pressed(0x2A) || crate::keyboard::is_key_pressed(0x36);
+                if win && shift_held && (key == crate::keyboard::KEY_LEFT
+                    || key == crate::keyboard::KEY_RIGHT
+                    || key == crate::keyboard::KEY_UP
+                    || key == crate::keyboard::KEY_DOWN)
+                {
+                    let (dx, dy) = match key {
+                        k if k == crate::keyboard::KEY_LEFT  => (-40i32, 0i32),
+                        k if k == crate::keyboard::KEY_RIGHT => ( 40i32, 0i32),
+                        k if k == crate::keyboard::KEY_UP    => ( 0i32,-40i32),
+                        k if k == crate::keyboard::KEY_DOWN  => ( 0i32, 40i32),
+                        _ => (0,0),
+                    };
+                    let mut d = DESKTOP.lock();
+                    let (sw, sh) = (d.width as i32, d.height as i32);
+                    if let Some(w) = d.windows.iter_mut().rev().find(|w| w.focused && !w.minimized) {
+                        let new_x = (w.x + dx).max(-(w.width as i32 / 2)).min(sw - 40);
+                        let new_y = (w.y + dy).max(0).min(sh - 40);
+                        w.x = new_x;
+                        w.y = new_y;
+                        w.maximized = false;
+                    }
+                    d.windows_dirty = true;
+                    drop(d);
+                    unsafe { WIN_USED_COMBO = true; }
+                    continue;
+                }
+            }
             // Win+Left Arrow → snap window to left half
             if win && key == crate::keyboard::KEY_LEFT {
                 DESKTOP.lock().snap_focused_window(SnapDir::Left);
@@ -17273,6 +17320,81 @@ pub fn run() {
                 unsafe { WIN_USED_COMBO = true; }
                 crate::serial_println!("[GUI] Win+L: lock screen");
                 continue;
+            }
+
+            // Win+T → open new terminal window
+            if win && (key == b't' || key == b'T') {
+                let mut d = DESKTOP.lock();
+                d.open_terminal();
+                drop(d);
+                unsafe { WIN_USED_COMBO = true; }
+                crate::serial_println!("[GUI] Win+T: open terminal");
+                continue;
+            }
+
+            // Win+1..9 → quick-launch dock items (matches dock order)
+            if win && key >= b'1' && key <= b'9' {
+                // Mapping: dock index → start-menu action index
+                // 1=Terminal, 2=Files, 3=Editor, 4=Calc, 5=NetScan,
+                // 6=Chess3D, 7=Browser, 8=TrustEd3D, 9=Settings
+                let action: i32 = match key {
+                    b'1' => 0,  // Terminal
+                    b'2' => 1,  // Files
+                    b'3' => 4,  // Text Editor
+                    b'4' => 2,  // Calculator
+                    b'5' => 3,  // NetScan
+                    b'6' => 7,  // Chess 3D
+                    b'7' => 6,  // Browser
+                    b'8' => 5,  // TrustEdit 3D
+                    b'9' => 15, // Settings
+                    _ => -1,
+                };
+                if action >= 0 {
+                    DESKTOP.lock().handle_menu_action(action as u8);
+                    unsafe { WIN_USED_COMBO = true; }
+                    crate::serial_println!("[GUI] Win+{}: launch action {}", (key - b'0'), action);
+                    continue;
+                }
+            }
+
+            // Ctrl+Alt+Del → open Start menu pre-selected on Shutdown
+            if _ctrl && alt && key == crate::keyboard::KEY_DELETE {
+                let mut d = DESKTOP.lock();
+                d.start_menu_open = true;
+                d.start_menu_search.clear();
+                d.start_menu_selected = 17; // Shutdown
+                drop(d);
+                crate::serial_println!("[GUI] Ctrl+Alt+Del: power menu");
+                continue;
+            }
+
+            // F11 → toggle fullscreen (= maximize) on focused window
+            // F11 scancode 0x57 — has no ASCII, check via is_key_pressed
+            {
+                static mut F11_HANDLED: bool = false;
+                let f11_down = crate::keyboard::is_key_pressed(0x57);
+                unsafe {
+                    if f11_down && !F11_HANDLED {
+                        F11_HANDLED = true;
+                        DESKTOP.lock().toggle_maximize_focused();
+                        crate::serial_println!("[GUI] F11: toggle fullscreen");
+                    }
+                    if !f11_down { F11_HANDLED = false; }
+                }
+            }
+
+            // F12 → screenshot to /pictures/screenshot.ppm (PPM P6)
+            // F12 scancode 0x58
+            {
+                static mut F12_HANDLED: bool = false;
+                let f12_down = crate::keyboard::is_key_pressed(0x58);
+                unsafe {
+                    if f12_down && !F12_HANDLED {
+                        F12_HANDLED = true;
+                        capture_screenshot_to_vfs();
+                    }
+                    if !f12_down { F12_HANDLED = false; }
+                }
             }
             
             // Mark any Win+key combo as used so Win release doesn't toggle start menu
@@ -17683,6 +17805,43 @@ fn render_alt_tab_overlay() {
     }
 }
 
+/// Capture framebuffer to /pictures/screenshot_NN.ppm (P6 binary).
+/// Bound to F12 in the desktop keyboard loop.
+fn capture_screenshot_to_vfs() {
+    use core::sync::atomic::Ordering as AOrd;
+    let width = crate::framebuffer::FB_WIDTH.load(AOrd::Relaxed) as u32;
+    let height = crate::framebuffer::FB_HEIGHT.load(AOrd::Relaxed) as u32;
+    if width == 0 || height == 0 {
+        crate::serial_println!("[GUI] F12: no framebuffer, screenshot aborted");
+        return;
+    }
+    // Pick a non-colliding name: screenshot_0.ppm .. screenshot_99.ppm
+    let mut filename = String::from("/pictures/screenshot.ppm");
+    for n in 0..100u32 {
+        let candidate = alloc::format!("/pictures/screenshot_{}.ppm", n);
+        if crate::vfs::read_file(&candidate).is_err() {
+            filename = candidate;
+            break;
+        }
+    }
+    let header = alloc::format!("P6\n{} {}\n255\n", width, height);
+    let pixel_bytes = (width as usize) * (height as usize) * 3;
+    let mut data: Vec<u8> = Vec::with_capacity(header.len() + pixel_bytes);
+    data.extend_from_slice(header.as_bytes());
+    for y in 0..height {
+        for x in 0..width {
+            let p = crate::framebuffer::get_pixel(x, y);
+            data.push(((p >> 16) & 0xFF) as u8);
+            data.push(((p >> 8) & 0xFF) as u8);
+            data.push((p & 0xFF) as u8);
+        }
+    }
+    match crate::vfs::write_file(&filename, &data) {
+        Ok(_) => crate::serial_println!("[GUI] F12: saved {} ({}x{}, {} bytes)", filename, width, height, data.len()),
+        Err(e) => crate::serial_println!("[GUI] F12: screenshot write failed: {:?}", e),
+    }
+}
+
 /// Render shortcut overlay — keyboard shortcut cheat sheet (F1 toggle)
 fn render_shortcut_overlay() {
     let desktop = DESKTOP.lock();
@@ -17695,21 +17854,27 @@ fn render_shortcut_overlay() {
         ("Navigation", &[
             ("Win", "Toggle Start Menu"),
             ("Alt+Tab", "Switch Windows"),
+            ("Alt+Shift+Tab", "Switch Reverse"),
             ("Win+D", "Show Desktop"),
             ("Win+L", "Lock Screen"),
-            ("ESC", "Close Window / Menu"),
-            ("Alt+F4", "Force Close Window"),
+            ("ESC", "Close Win / Exit"),
+            ("Alt+F4", "Force Close"),
+            ("Ctrl+Alt+Del", "Power Menu"),
         ]),
         ("Windows", &[
-            ("Win+Left", "Snap Left"),
-            ("Win+Right", "Snap Right"),
+            ("Win+Left/Right", "Snap Half"),
             ("Win+Up", "Maximize"),
             ("Win+Down", "Minimize"),
+            ("Win+Shift+Arr", "Move Window"),
+            ("F11", "Fullscreen"),
         ]),
         ("Apps", &[
+            ("Win+T", "Terminal"),
             ("Win+E", "File Manager"),
             ("Win+I", "Settings"),
             ("Win+H", "High Contrast"),
+            ("Win+1..9", "Quick Launch"),
+            ("F12", "Screenshot"),
         ]),
         ("Editor", &[
             ("Ctrl+S", "Save"),

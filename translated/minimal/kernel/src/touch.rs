@@ -17,11 +17,11 @@ use core::sync::atomic::{AtomicBool, AtomicI32, AtomicU8, AtomicU16, AtomicU32, 
 
 
 
-pub const GU_: usize = 10;
+pub const HL_: usize = 10;
 
 
-const CV_: usize = 64;
-const ARI_: usize = CV_ - 1;
+const DB_: usize = 64;
+const ATL_: usize = DB_ - 1;
 
 
 
@@ -32,23 +32,23 @@ const ARI_: usize = CV_ - 1;
 #[repr(u8)]
 pub enum TouchPhase {
     
-    Fm = 0,
+    Down = 0,
     
-    Avu = 1,
+    Moved = 1,
     
-    Ek = 2,
+    Up = 2,
     
-    Aai = 3,
+    Cancelled = 3,
 }
 
 impl TouchPhase {
-    fn ckp(p: u8) -> Self {
-        match p {
-            0 => Self::Fm,
-            1 => Self::Avu,
-            2 => Self::Ek,
-            3 => Self::Aai,
-            _ => Self::Aai,
+    fn atw(v: u8) -> Self {
+        match v {
+            0 => Self::Down,
+            1 => Self::Moved,
+            2 => Self::Up,
+            3 => Self::Cancelled,
+            _ => Self::Cancelled,
         }
     }
 }
@@ -57,28 +57,28 @@ impl TouchPhase {
 #[derive(Debug, Clone, Copy)]
 pub struct TouchPoint {
     
-    pub ad: u16,
+    pub id: u16,
     
-    pub b: i32,
+    pub x: i32,
     
-    pub c: i32,
+    pub y: i32,
     
-    pub cgr: u8,
+    pub pressure: u8,
     
-    pub ib: TouchPhase,
+    pub phase: TouchPhase,
     
-    pub bsp: u64,
+    pub timestamp_us: u64,
 }
 
 impl Default for TouchPoint {
     fn default() -> Self {
         Self {
-            ad: 0,
-            b: 0,
-            c: 0,
-            cgr: 0,
-            ib: TouchPhase::Ek,
-            bsp: 0,
+            id: 0,
+            x: 0,
+            y: 0,
+            pressure: 0,
+            phase: TouchPhase::Up,
+            timestamp_us: 0,
         }
     }
 }
@@ -87,27 +87,27 @@ impl Default for TouchPoint {
 #[derive(Debug, Clone)]
 pub struct TouchState {
     
-    pub egw: [TouchPoint; GU_],
+    pub points: [TouchPoint; HL_],
     
-    pub az: u8,
+    pub count: u8,
     
-    pub bsp: u64,
+    pub timestamp_us: u64,
 }
 
 impl Default for TouchState {
     fn default() -> Self {
         Self {
-            egw: [TouchPoint::default(); GU_],
-            az: 0,
-            bsp: 0,
+            points: [TouchPoint::default(); HL_],
+            count: 0,
+            timestamp_us: 0,
         }
     }
 }
 
 
 #[derive(Debug, Clone, Copy)]
-pub struct Zd {
-    pub nl: TouchPoint,
+pub struct Kv {
+    pub point: TouchPoint,
 }
 
 
@@ -115,76 +115,76 @@ pub struct Zd {
 
 
 
-static Be: AtomicBool = AtomicBool::new(false);
+static Ah: AtomicBool = AtomicBool::new(false);
 
 
-static AQF_: AtomicBool = AtomicBool::new(false);
+static ASI_: AtomicBool = AtomicBool::new(false);
 
 
-static IW_: AtomicU32 = AtomicU32::new(1280);
-static IV_: AtomicU32 = AtomicU32::new(800);
+static JP_: AtomicU32 = AtomicU32::new(1280);
+static JO_: AtomicU32 = AtomicU32::new(800);
 
 
-static AQD_: AtomicU32 = AtomicU32::new(4096);
-static AQE_: AtomicU32 = AtomicU32::new(4096);
+static ASG_: AtomicU32 = AtomicU32::new(4096);
+static ASH_: AtomicU32 = AtomicU32::new(4096);
 
 
-static YT_: AtomicU8 = AtomicU8::new(0);
+static ZY_: AtomicU8 = AtomicU8::new(0);
 
 
 
 struct AtomicTouchSlot {
-    gh: AtomicBool,
-    ad: AtomicU16,
-    b: AtomicI32,
-    c: AtomicI32,
-    cgr: AtomicU8,
-    ib: AtomicU8,
-    bsp: AtomicU64,
+    active: AtomicBool,
+    id: AtomicU16,
+    x: AtomicI32,
+    y: AtomicI32,
+    pressure: AtomicU8,
+    phase: AtomicU8,
+    timestamp_us: AtomicU64,
 }
 
 impl AtomicTouchSlot {
     const fn new() -> Self {
         Self {
-            gh: AtomicBool::new(false),
-            ad: AtomicU16::new(0),
-            b: AtomicI32::new(0),
-            c: AtomicI32::new(0),
-            cgr: AtomicU8::new(0),
-            ib: AtomicU8::new(TouchPhase::Ek as u8),
-            bsp: AtomicU64::new(0),
+            active: AtomicBool::new(false),
+            id: AtomicU16::new(0),
+            x: AtomicI32::new(0),
+            y: AtomicI32::new(0),
+            pressure: AtomicU8::new(0),
+            phase: AtomicU8::new(TouchPhase::Up as u8),
+            timestamp_us: AtomicU64::new(0),
         }
     }
 
     fn load(&self) -> TouchPoint {
         TouchPoint {
-            ad: self.ad.load(Ordering::Relaxed),
-            b: self.b.load(Ordering::Relaxed),
-            c: self.c.load(Ordering::Relaxed),
-            cgr: self.cgr.load(Ordering::Relaxed),
-            ib: TouchPhase::ckp(self.ib.load(Ordering::Relaxed)),
-            bsp: self.bsp.load(Ordering::Relaxed),
+            id: self.id.load(Ordering::Relaxed),
+            x: self.x.load(Ordering::Relaxed),
+            y: self.y.load(Ordering::Relaxed),
+            pressure: self.pressure.load(Ordering::Relaxed),
+            phase: TouchPhase::atw(self.phase.load(Ordering::Relaxed)),
+            timestamp_us: self.timestamp_us.load(Ordering::Relaxed),
         }
     }
 
-    fn store(&self, nl: &TouchPoint) {
-        self.ad.store(nl.ad, Ordering::Relaxed);
-        self.b.store(nl.b, Ordering::Relaxed);
-        self.c.store(nl.c, Ordering::Relaxed);
-        self.cgr.store(nl.cgr, Ordering::Relaxed);
-        self.ib.store(nl.ib as u8, Ordering::Relaxed);
-        self.bsp.store(nl.bsp, Ordering::Relaxed);
-        self.gh.store(nl.ib != TouchPhase::Ek && nl.ib != TouchPhase::Aai, Ordering::Relaxed);
+    fn store(&self, point: &TouchPoint) {
+        self.id.store(point.id, Ordering::Relaxed);
+        self.x.store(point.x, Ordering::Relaxed);
+        self.y.store(point.y, Ordering::Relaxed);
+        self.pressure.store(point.pressure, Ordering::Relaxed);
+        self.phase.store(point.phase as u8, Ordering::Relaxed);
+        self.timestamp_us.store(point.timestamp_us, Ordering::Relaxed);
+        self.active.store(point.phase != TouchPhase::Up && point.phase != TouchPhase::Cancelled, Ordering::Relaxed);
     }
 
     fn clear(&self) {
-        self.gh.store(false, Ordering::Relaxed);
-        self.ib.store(TouchPhase::Ek as u8, Ordering::Relaxed);
+        self.active.store(false, Ordering::Relaxed);
+        self.phase.store(TouchPhase::Up as u8, Ordering::Relaxed);
     }
 }
 
 
-static HG_: [AtomicTouchSlot; GU_] = [
+static HY_: [AtomicTouchSlot; HL_] = [
     AtomicTouchSlot::new(), AtomicTouchSlot::new(),
     AtomicTouchSlot::new(), AtomicTouchSlot::new(),
     AtomicTouchSlot::new(), AtomicTouchSlot::new(),
@@ -197,80 +197,80 @@ static HG_: [AtomicTouchSlot; GU_] = [
 
 
 
-struct Arr {
+struct Rx {
     
     
-    esg: [AtomicU16; CV_],
-    mrt: [AtomicI32; CV_],
-    fzf: [AtomicI32; CV_],
-    lvd: [AtomicU8; CV_],
-    lts: [AtomicU8; CV_],
-    mlc: [AtomicU64; CV_],
+    ids: [AtomicU16; DB_],
+    xs: [AtomicI32; DB_],
+    ys: [AtomicI32; DB_],
+    pressures: [AtomicU8; DB_],
+    phases: [AtomicU8; DB_],
+    timestamps: [AtomicU64; DB_],
     
-    dxt: AtomicU32,
+    write_idx: AtomicU32,
     
-    lxp: AtomicU32,
+    read_idx: AtomicU32,
 }
 
 
-macro_rules! gam {
-    ($type:ty, $ap:expr, $bo:expr) => {{
+macro_rules! ctr {
+    ($type:ty, $val:expr, $ae:expr) => {{
         
         
-        const Dm: $type = $ap;
-        [Dm; $bo]
+        const Bm: $type = $val;
+        [Bm; $ae]
     }};
 }
 
-static GK_: Arr = Arr {
-    esg: gam!(AtomicU16, AtomicU16::new(0), CV_),
-    mrt: gam!(AtomicI32, AtomicI32::new(0), CV_),
-    fzf: gam!(AtomicI32, AtomicI32::new(0), CV_),
-    lvd: gam!(AtomicU8, AtomicU8::new(0), CV_),
-    lts: gam!(AtomicU8, AtomicU8::new(0), CV_),
-    mlc: gam!(AtomicU64, AtomicU64::new(0), CV_),
-    dxt: AtomicU32::new(0),
-    lxp: AtomicU32::new(0),
+static HB_: Rx = Rx {
+    ids: ctr!(AtomicU16, AtomicU16::new(0), DB_),
+    xs: ctr!(AtomicI32, AtomicI32::new(0), DB_),
+    ys: ctr!(AtomicI32, AtomicI32::new(0), DB_),
+    pressures: ctr!(AtomicU8, AtomicU8::new(0), DB_),
+    phases: ctr!(AtomicU8, AtomicU8::new(0), DB_),
+    timestamps: ctr!(AtomicU64, AtomicU64::new(0), DB_),
+    write_idx: AtomicU32::new(0),
+    read_idx: AtomicU32::new(0),
 };
 
-impl Arr {
+impl Rx {
     
-    fn push(&self, nl: &TouchPoint) {
-        let d = self.dxt.load(Ordering::Relaxed);
-        let w = (d as usize) & ARI_;
+    fn push(&self, point: &TouchPoint) {
+        let w = self.write_idx.load(Ordering::Relaxed);
+        let idx = (w as usize) & ATL_;
 
-        self.esg[w].store(nl.ad, Ordering::Relaxed);
-        self.mrt[w].store(nl.b, Ordering::Relaxed);
-        self.fzf[w].store(nl.c, Ordering::Relaxed);
-        self.lvd[w].store(nl.cgr, Ordering::Relaxed);
-        self.lts[w].store(nl.ib as u8, Ordering::Relaxed);
-        self.mlc[w].store(nl.bsp, Ordering::Relaxed);
+        self.ids[idx].store(point.id, Ordering::Relaxed);
+        self.xs[idx].store(point.x, Ordering::Relaxed);
+        self.ys[idx].store(point.y, Ordering::Relaxed);
+        self.pressures[idx].store(point.pressure, Ordering::Relaxed);
+        self.phases[idx].store(point.phase as u8, Ordering::Relaxed);
+        self.timestamps[idx].store(point.timestamp_us, Ordering::Relaxed);
 
         
-        self.dxt.store(d.cn(1), Ordering::Release);
+        self.write_idx.store(w.wrapping_add(1), Ordering::Release);
     }
 
     
-    fn pop(&self) -> Option<Zd> {
-        let m = self.lxp.load(Ordering::Relaxed);
-        let d = self.dxt.load(Ordering::Acquire);
+    fn pop(&self) -> Option<Kv> {
+        let r = self.read_idx.load(Ordering::Relaxed);
+        let w = self.write_idx.load(Ordering::Acquire);
 
-        if m == d {
+        if r == w {
             return None; 
         }
 
-        let w = (m as usize) & ARI_;
-        let nl = TouchPoint {
-            ad: self.esg[w].load(Ordering::Relaxed),
-            b: self.mrt[w].load(Ordering::Relaxed),
-            c: self.fzf[w].load(Ordering::Relaxed),
-            cgr: self.lvd[w].load(Ordering::Relaxed),
-            ib: TouchPhase::ckp(self.lts[w].load(Ordering::Relaxed)),
-            bsp: self.mlc[w].load(Ordering::Relaxed),
+        let idx = (r as usize) & ATL_;
+        let point = TouchPoint {
+            id: self.ids[idx].load(Ordering::Relaxed),
+            x: self.xs[idx].load(Ordering::Relaxed),
+            y: self.ys[idx].load(Ordering::Relaxed),
+            pressure: self.pressures[idx].load(Ordering::Relaxed),
+            phase: TouchPhase::atw(self.phases[idx].load(Ordering::Relaxed)),
+            timestamp_us: self.timestamps[idx].load(Ordering::Relaxed),
         };
 
-        self.lxp.store(m.cn(1), Ordering::Release);
-        Some(Zd { nl })
+        self.read_idx.store(r.wrapping_add(1), Ordering::Release);
+        Some(Kv { point })
     }
 }
 
@@ -281,75 +281,75 @@ impl Arr {
 
 pub fn init() {
     
-    for gk in &HG_ {
-        gk.clear();
+    for slot in &HY_ {
+        slot.clear();
     }
-    YT_.store(0, Ordering::Relaxed);
-    Be.store(true, Ordering::Relaxed);
-    crate::serial_println!("[TOUCH] Touch subsystem initialized (max {} points)", GU_);
+    ZY_.store(0, Ordering::Relaxed);
+    Ah.store(true, Ordering::Relaxed);
+    crate::serial_println!("[TOUCH] Touch subsystem initialized (max {} points)", HL_);
 }
 
 
-pub fn dbw(z: u32, ac: u32) {
-    IW_.store(z, Ordering::Relaxed);
-    IV_.store(ac, Ordering::Relaxed);
+pub fn set_screen_size(width: u32, height: u32) {
+    JP_.store(width, Ordering::Relaxed);
+    JO_.store(height, Ordering::Relaxed);
 }
 
 
-pub fn zmv(bvj: u32, csl: u32) {
-    AQD_.store(bvj, Ordering::Relaxed);
-    AQE_.store(csl, Ordering::Relaxed);
+pub fn qvs(aly: u32, aye: u32) {
+    ASG_.store(aly, Ordering::Relaxed);
+    ASH_.store(aye, Ordering::Relaxed);
 }
 
 
-pub fn zmu(brs: bool) {
-    AQF_.store(brs, Ordering::Relaxed);
-    if brs {
+pub fn qvr(present: bool) {
+    ASI_.store(present, Ordering::Relaxed);
+    if present {
         crate::serial_println!("[TOUCH] Touchscreen device detected");
     }
 }
 
 
-pub fn anl() -> bool {
-    Be.load(Ordering::Relaxed) && AQF_.load(Ordering::Relaxed)
+pub fn sw() -> bool {
+    Ah.load(Ordering::Relaxed) && ASI_.load(Ordering::Relaxed)
 }
 
 
-pub fn ky() -> bool {
-    Be.load(Ordering::Relaxed)
+pub fn is_initialized() -> bool {
+    Ah.load(Ordering::Relaxed)
 }
 
 
-pub fn gxu() -> u8 {
-    YT_.load(Ordering::Relaxed)
+pub fn active_count() -> u8 {
+    ZY_.load(Ordering::Relaxed)
 }
 
 
-pub fn drd() -> TouchState {
-    let mut g = TouchState::default();
-    let mut az = 0u8;
+pub fn get_state() -> TouchState {
+    let mut state = TouchState::default();
+    let mut count = 0u8;
 
-    for gk in &HG_ {
-        if gk.gh.load(Ordering::Relaxed) && (az as usize) < GU_ {
-            g.egw[az as usize] = gk.load();
-            az += 1;
+    for slot in &HY_ {
+        if slot.active.load(Ordering::Relaxed) && (count as usize) < HL_ {
+            state.points[count as usize] = slot.load();
+            count += 1;
         }
     }
 
-    g.az = az;
-    g.bsp = crate::gui::engine::awf();
-    g
+    state.count = count;
+    state.timestamp_us = crate::gui::engine::yy();
+    state
 }
 
 
-pub fn dks() -> Option<Zd> {
-    GK_.pop()
+pub fn bir() -> Option<Kv> {
+    HB_.pop()
 }
 
 
-pub fn say<G: FnMut(Zd)>(mut bb: G) {
-    while let Some(ebi) = GK_.pop() {
-        bb(ebi);
+pub fn lhk<F: FnMut(Kv)>(mut f: F) {
+    while let Some(bsj) = HB_.pop() {
+        f(bsj);
     }
 }
 
@@ -361,80 +361,80 @@ pub fn say<G: FnMut(Zd)>(mut bb: G) {
 
 
 
-pub fn lep(ad: u16, lxf: u32, fsa: u32, cgr: u8, ib: TouchPhase) {
-    let wf = IW_.load(Ordering::Relaxed);
-    let aav = IV_.load(Ordering::Relaxed);
-    let rxa = AQD_.load(Ordering::Relaxed).am(1);
-    let rxb = AQE_.load(Ordering::Relaxed).am(1);
+pub fn gcu(id: u16, gpv: u32, cox: u32, pressure: u8, phase: TouchPhase) {
+    let screen_w = JP_.load(Ordering::Relaxed);
+    let screen_h = JO_.load(Ordering::Relaxed);
+    let lec = ASG_.load(Ordering::Relaxed).max(1);
+    let led = ASH_.load(Ordering::Relaxed).max(1);
 
     
-    let b = ((lxf as u64 * wf as u64) / rxa as u64) as i32;
-    let c = ((fsa as u64 * aav as u64) / rxb as u64) as i32;
+    let x = ((gpv as u64 * screen_w as u64) / lec as u64) as i32;
+    let y = ((cox as u64 * screen_h as u64) / led as u64) as i32;
 
-    tuo(ad, b, c, cgr, ib);
+    mqb(id, x, y, pressure, phase);
 }
 
 
 
 
 
-pub fn tuo(ad: u16, b: i32, c: i32, cgr: u8, ib: TouchPhase) {
-    let wf = IW_.load(Ordering::Relaxed) as i32;
-    let aav = IV_.load(Ordering::Relaxed) as i32;
+pub fn mqb(id: u16, x: i32, y: i32, pressure: u8, phase: TouchPhase) {
+    let screen_w = JP_.load(Ordering::Relaxed) as i32;
+    let screen_h = JO_.load(Ordering::Relaxed) as i32;
 
-    let nl = TouchPoint {
-        ad,
-        b: b.qp(0, wf - 1),
-        c: c.qp(0, aav - 1),
-        cgr,
-        ib,
-        bsp: crate::gui::engine::awf(),
+    let point = TouchPoint {
+        id,
+        x: x.clamp(0, screen_w - 1),
+        y: y.clamp(0, screen_h - 1),
+        pressure,
+        phase,
+        timestamp_us: crate::gui::engine::yy(),
     };
 
     
-    let wpr = stl(ad, ib);
-    if let Some(w) = wpr {
-        HG_[w].store(&nl);
+    let ott = lwa(id, phase);
+    if let Some(idx) = ott {
+        HY_[idx].store(&point);
     }
 
     
-    let mut az = 0u8;
-    for gk in &HG_ {
-        if gk.gh.load(Ordering::Relaxed) {
-            az += 1;
+    let mut count = 0u8;
+    for slot in &HY_ {
+        if slot.active.load(Ordering::Relaxed) {
+            count += 1;
         }
     }
-    YT_.store(az, Ordering::Relaxed);
+    ZY_.store(count, Ordering::Relaxed);
 
     
-    GK_.push(&nl);
+    HB_.push(&point);
 }
 
 
 
-fn stl(ad: u16, ib: TouchPhase) -> Option<usize> {
+fn lwa(id: u16, phase: TouchPhase) -> Option<usize> {
     
-    for (a, gk) in HG_.iter().cf() {
-        if gk.gh.load(Ordering::Relaxed) && gk.ad.load(Ordering::Relaxed) == ad {
-            return Some(a);
+    for (i, slot) in HY_.iter().enumerate() {
+        if slot.active.load(Ordering::Relaxed) && slot.id.load(Ordering::Relaxed) == id {
+            return Some(i);
         }
     }
 
     
-    if ib == TouchPhase::Fm {
-        for (a, gk) in HG_.iter().cf() {
-            if !gk.gh.load(Ordering::Relaxed) {
-                return Some(a);
+    if phase == TouchPhase::Down {
+        for (i, slot) in HY_.iter().enumerate() {
+            if !slot.active.load(Ordering::Relaxed) {
+                return Some(i);
             }
         }
     }
 
     
-    if ib == TouchPhase::Ek || ib == TouchPhase::Aai {
+    if phase == TouchPhase::Up || phase == TouchPhase::Cancelled {
         
-        for (a, gk) in HG_.iter().cf() {
-            if gk.ad.load(Ordering::Relaxed) == ad {
-                return Some(a);
+        for (i, slot) in HY_.iter().enumerate() {
+            if slot.id.load(Ordering::Relaxed) == id {
+                return Some(i);
             }
         }
     }
@@ -449,15 +449,15 @@ fn stl(ad: u16, ib: TouchPhase) -> Option<usize> {
 
 
 
-pub fn yoz() -> Option<(i32, i32, bool)> {
+pub fn qer() -> Option<(i32, i32, bool)> {
     
-    for gk in &HG_ {
-        if gk.gh.load(Ordering::Relaxed) {
-            let b = gk.b.load(Ordering::Relaxed);
-            let c = gk.c.load(Ordering::Relaxed);
-            let ib = TouchPhase::ckp(gk.ib.load(Ordering::Relaxed));
-            let vn = ib == TouchPhase::Fm || ib == TouchPhase::Avu;
-            return Some((b, c, vn));
+    for slot in &HY_ {
+        if slot.active.load(Ordering::Relaxed) {
+            let x = slot.x.load(Ordering::Relaxed);
+            let y = slot.y.load(Ordering::Relaxed);
+            let phase = TouchPhase::atw(slot.phase.load(Ordering::Relaxed));
+            let pressed = phase == TouchPhase::Down || phase == TouchPhase::Moved;
+            return Some((x, y, pressed));
         }
     }
     None

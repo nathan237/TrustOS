@@ -102,6 +102,17 @@ const RDESC_STA_DD: u8 = 1 << 0;     // Descriptor Done
 // Interrupt Bits
 const ICR_LSC: u32 = 1 << 2;         // Link Status Change
 
+// SPT (Skylake PCH) specific registers
+const REG_CTRL_EXT: u32 = 0x0018;    // Extended Device Control
+const REG_FWSM: u32 = 0x5B54;        // Firmware Semaphore
+const REG_EXTCNF_CTRL: u32 = 0x0F00; // Extended Config Control
+const E1000_FLASH_BASE_ADDR: u32 = 0xE000; // Flash registers base (SPT)
+const CTRL_FRCSPD: u32 = 1 << 11;    // Force Speed
+const CTRL_FRCDPX: u32 = 1 << 12;    // Force Duplex
+const CTRL_PHY_RST: u32 = 1 << 31;   // PHY Reset
+const CTRL_EXT_PHYPDEN: u32 = 1 << 20; // PHY Power Down Enable
+const CTRL_EXT_SPD_BYPS: u32 = 1 << 15; // Speed Select Bypass
+
 // ============================================================================
 // Descriptor Structures
 // ============================================================================
@@ -170,6 +181,8 @@ pub struct E1000Driver {
     status: DriverStatus,
     mmio_base: u64,
     mac: [u8; 6],
+    is_ich: bool,       // ICH8/ICH9 variant (e1000e)
+    is_spt: bool,       // SPT variant (I219 Skylake PCH and newer)
     
     // Descriptor rings (must be 16-byte aligned)
     rx_descs: Vec<RxDesc>,
@@ -200,6 +213,8 @@ impl E1000Driver {
             status: DriverStatus::Unloaded,
             mmio_base: 0,
             mac: [0x52, 0x54, 0x00, 0xE1, 0x00, 0x00],
+            is_ich: false,
+            is_spt: false,
             rx_descs: Vec::new(),
             tx_descs: Vec::new(),
             rx_buffers: Vec::new(),
@@ -251,31 +266,76 @@ impl E1000Driver {
         }
     }
     
+    /// Disable ULP (Ultra Low Power) mode for SPT variants
+    /// Without this, the PHY may be inaccessible on I219
+    fn disable_ulp(&mut self) {
+        if !self.is_spt { return; }
+        crate::serial_println!("[E1000] Disabling ULP mode for SPT...");
+        
+        // Clear CTRL_EXT force SMBus mode (if set)
+        let ctrl_ext = self.read_reg(REG_CTRL_EXT);
+        self.write_reg(REG_CTRL_EXT, ctrl_ext & !0x00000800); // clear FORCE_SMBUS
+        
+        // Small delay for PHY to wake
+        for _ in 0..5000 {
+            unsafe { core::arch::asm!("out dx, al", in("dx") 0x80u16, in("al") 0u8, options(nomem, nostack)); }
+        }
+    }
+    
     /// Reset the device
     fn reset(&mut self) {
-        crate::log_debug!("[E1000] Resetting device...");
+        crate::serial_println!("[E1000] Resetting device (is_ich={}, is_spt={})...", self.is_ich, self.is_spt);
         
         // Disable interrupts
         self.write_reg(REG_IMC, 0xFFFFFFFF);
         
-        // Reset device
-        let ctrl = self.read_reg(REG_CTRL);
-        self.write_reg(REG_CTRL, ctrl | CTRL_RST);
+        // Disable TX and RX before reset
+        self.write_reg(REG_RCTL, 0);
+        self.write_reg(0x0400, 0x00000008); // TCTL = PSP only
         
-        // Wait for reset to complete
-        for _ in 0..1000 {
-            if self.read_reg(REG_CTRL) & CTRL_RST == 0 {
+        // Flush
+        let _ = self.read_reg(REG_STATUS);
+        
+        // Wait 10ms for pending transactions
+        for _ in 0..10000 {
+            unsafe { core::arch::asm!("out dx, al", in("dx") 0x80u16, in("al") 0u8, options(nomem, nostack)); }
+        }
+        
+        // For SPT, disable ULP before reset
+        if self.is_spt {
+            self.disable_ulp();
+        }
+        
+        // MAC-only reset — do NOT reset PHY, BIOS has it configured
+        // The Linux e1000e driver re-initializes PHY with Kumeran/MDIO workarounds
+        // after PHY reset, but we don't have that capability yet.
+        let ctrl = self.read_reg(REG_CTRL);
+        self.write_reg(REG_CTRL, (ctrl & !CTRL_PHY_RST) | CTRL_RST);
+        
+        // ICH/SPT needs ~25ms after RST before MMIO is accessible.
+        for _ in 0..25000 {
+            unsafe { core::arch::asm!("out dx, al", in("dx") 0x80u16, in("al") 0u8, options(nomem, nostack)); }
+        }
+        
+        // Wait for reset to complete (bounded: ~50ms max)
+        for i in 0..500u32 {
+            let val = self.read_reg(REG_CTRL);
+            if val & CTRL_RST == 0 {
+                crate::serial_println!("[E1000] Reset cleared after {} polls", i);
                 break;
             }
-            for _ in 0..1000 {
-                core::hint::spin_loop();
+            // ~100µs per iteration
+            for _ in 0..100 {
+                unsafe { core::arch::asm!("out dx, al", in("dx") 0x80u16, in("al") 0u8, options(nomem, nostack)); }
             }
         }
         
         // Disable interrupts again after reset
         self.write_reg(REG_IMC, 0xFFFFFFFF);
+        // Clear pending interrupt causes
+        let _ = self.read_reg(REG_ICR);
         
-        crate::log_debug!("[E1000] Reset complete");
+        crate::serial_println!("[E1000] Reset complete");
     }
     
     /// Read MAC address from EEPROM or RAL/RAH
@@ -295,14 +355,18 @@ impl E1000Driver {
         }
         
         // Try EEPROM read
-        for i in 0..3 {
-            self.write_reg(REG_EERD, 1 | ((i as u32) << 8));
+        // ICH8/ICH9 (e1000e): done bit is bit 1, address shift is 2
+        // Classic e1000: done bit is bit 4, address shift is 8
+        let (done_bit, addr_shift) = if self.is_ich { (1 << 1, 2) } else { (1 << 4, 8) };
+        
+        for i in 0..3u32 {
+            self.write_reg(REG_EERD, 1 | (i << addr_shift));
             for _ in 0..1000 {
                 let eerd = self.read_reg(REG_EERD);
-                if eerd & (1 << 4) != 0 {
+                if eerd & done_bit != 0 {
                     let data = (eerd >> 16) as u16;
-                    self.mac[i * 2] = (data & 0xFF) as u8;
-                    self.mac[i * 2 + 1] = (data >> 8) as u8;
+                    self.mac[i as usize * 2] = (data & 0xFF) as u8;
+                    self.mac[i as usize * 2 + 1] = (data >> 8) as u8;
                     break;
                 }
                 core::hint::spin_loop();
@@ -392,17 +456,25 @@ impl E1000Driver {
     
     /// Setup link
     fn setup_link(&mut self) {
-        let ctrl = self.read_reg(REG_CTRL);
-        let new_ctrl = ctrl | CTRL_SLU | CTRL_ASDE | CTRL_FD;
-        self.write_reg(REG_CTRL, new_ctrl);
+        let mut ctrl = self.read_reg(REG_CTRL);
+        ctrl |= CTRL_SLU;  // Set Link Up
+        if self.is_spt {
+            // SPT/PCH: do NOT force speed/duplex, let auto-neg
+            ctrl &= !(CTRL_FRCSPD | CTRL_FRCDPX);
+            ctrl |= CTRL_ASDE; // Auto-Speed Detection
+        } else {
+            ctrl |= CTRL_ASDE | CTRL_FD;
+        }
+        self.write_reg(REG_CTRL, ctrl);
+        crate::serial_println!("[E1000] CTRL={:#010X}", self.read_reg(REG_CTRL));
         
         // Clear multicast table
         for i in 0..128 {
             self.write_reg(REG_MTA + i * 4, 0);
         }
         
-        // Wait for link - try for longer with VirtualBox
-        for i in 0..500 {
+        // Wait for link — ~200ms max (200 * ~1ms) — fast enough for boot
+        for i in 0..200u32 {
             let status = self.read_reg(REG_STATUS);
             if status & STATUS_LU != 0 {
                 self.link_up.store(true, Ordering::SeqCst);
@@ -412,10 +484,13 @@ impl E1000Driver {
                 crate::log!("[E1000] Link up at {} Mbps (after {} iterations)", speed, i + 1);
                 return;
             }
-            for _ in 0..10000 { core::hint::spin_loop(); }
+            // ~1ms per iteration via port 0x80
+            for _ in 0..1000 {
+                unsafe { core::arch::asm!("out dx, al", in("dx") 0x80u16, in("al") 0u8, options(nomem, nostack)); }
+            }
         }
-        // Continue anyway - VirtualBox may not report link but TX/RX still work
-        crate::log_warn!("[E1000] Link not detected - continuing anyway (VirtualBox NAT mode)");
+        // Continue anyway — no cable or VirtualBox NAT mode
+        crate::log_warn!("[E1000] Link not detected - continuing anyway");
         self.link_up.store(true, Ordering::SeqCst);
     }
 }
@@ -428,21 +503,54 @@ impl Driver for E1000Driver {
     fn probe(&mut self, pci_device: &PciDevice) -> Result<(), &'static str> {
         self.status = DriverStatus::Loading;
         
-        crate::log!("[E1000] Probing {:04X}:{:04X}", pci_device.vendor_id, pci_device.device_id);
+        // Enable PCI Bus Mastering and Memory Space (CRITICAL for DMA)
+        crate::pci::enable_bus_master(pci_device);
+        crate::pci::enable_memory_space(pci_device);
+        crate::serial_println!("[E1000] PCI bus mastering + memory space enabled");
+        
+        // Detect ICH8/ICH9 variant (e1000e)
+        self.is_ich = matches!(pci_device.device_id,
+            0x1049 | 0x104A | 0x104B | 0x104C | 0x104D |  // ICH8
+            0x10BD | 0x10BF | 0x10C0 | 0x10C2 | 0x10C3 |  // ICH9
+            0x10CB | 0x10CC | 0x10CD | 0x10CE |             // ICH9
+            0x10DE | 0x10DF | 0x10E5 |                       // ICH10
+            0x10EA | 0x10EB | 0x10EF | 0x10F0 | 0x10F5 |    // PCH
+            0x153A | 0x153B |                                 // I217 (Haswell)
+            0x15A0 | 0x15A1 | 0x15A2 | 0x15A3 |             // I218 (Wildcat Point)
+            0x15B7 | 0x15B8 | 0x15B9 |                       // I219 (Skylake)
+            0x15D6 | 0x15D7 | 0x15D8 |                       // I219 (Kaby Lake)
+            0x15E3 |                                          // I219 (Cannon Lake)
+            0x0D4C | 0x0D4D | 0x0D4E | 0x0D4F               // I219 (Comet/Ice Lake)
+        );
+        
+        // Detect SPT (Skylake PCH and newer) — different NVM/Flash access
+        self.is_spt = matches!(pci_device.device_id,
+            0x15B7 | 0x15B8 | 0x15B9 |                       // I219 (Skylake/SPT)
+            0x15D6 | 0x15D7 | 0x15D8 |                       // I219 (Kaby Lake/KBP)
+            0x15E3 |                                          // I219 (Cannon Lake/CNP)
+            0x0D4C | 0x0D4D | 0x0D4E | 0x0D4F               // I219 (Comet/Ice Lake)
+        );
+        
+        let variant = if self.is_spt { "e1000e (SPT)" } else if self.is_ich { "e1000e (ICH)" } else { "e1000" };
+        crate::log!("[E1000] Probing {:04X}:{:04X} ({})", pci_device.vendor_id, pci_device.device_id, variant);
         
         let bar0 = pci_device.bar_address(0).ok_or("No BAR0")?;
         if bar0 == 0 { return Err("BAR0 is zero"); }
         
         crate::serial_println!("[E1000] BAR0={:#x}, calling map_mmio...", bar0);
+        crate::println!("    [e1000] map_mmio BAR0={:#X}...", bar0);
         
         // Map MMIO region (128KB for E1000)
         const E1000_MMIO_SIZE: usize = 128 * 1024;
         self.mmio_base = crate::memory::map_mmio(bar0, E1000_MMIO_SIZE)
             .map_err(|e| { crate::serial_println!("[E1000] map_mmio failed: {}", e); "Failed to map E1000 MMIO" })?;
         crate::serial_println!("[E1000] map_mmio returned {:#x}", self.mmio_base);
+        crate::println!("    [e1000] map_mmio OK -> {:#X}", self.mmio_base);
         crate::log_debug!("[E1000] MMIO: phys={:#x} virt={:#x}", bar0, self.mmio_base);
         
+        crate::println!("    [e1000] reset...");
         self.reset();
+        crate::println!("    [e1000] read_mac...");
         self.read_mac();
         
         // Set MAC in receive address registers
@@ -452,9 +560,13 @@ impl Driver for E1000Driver {
         self.write_reg(REG_RAL0, ral);
         self.write_reg(REG_RAH0, rah);
         
+        crate::println!("    [e1000] init_rx...");
         self.init_rx();
+        crate::println!("    [e1000] init_tx...");
         self.init_tx();
+        crate::println!("    [e1000] setup_link...");
         self.setup_link();
+        crate::println!("    [e1000] enable_rx/tx...");
         self.enable_rx();
         self.enable_tx();
         
@@ -463,6 +575,16 @@ impl Driver for E1000Driver {
         
         crate::log!("[E1000] MAC: {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
             self.mac[0], self.mac[1], self.mac[2], self.mac[3], self.mac[4], self.mac[5]);
+        
+        // Dump key registers to serial for hardware debug
+        crate::serial_println!("[E1000] STATUS={:#010X} CTRL={:#010X} RCTL={:#010X} TCTL={:#010X}",
+            self.read_reg(REG_STATUS), self.read_reg(REG_CTRL),
+            self.read_reg(REG_RCTL), self.read_reg(0x0400));
+        if self.is_spt {
+            crate::serial_println!("[E1000] FWSM={:#010X} CTRL_EXT={:#010X} EXTCNF_CTRL={:#010X}",
+                self.read_reg(REG_FWSM), self.read_reg(REG_CTRL_EXT),
+                self.read_reg(REG_EXTCNF_CTRL));
+        }
         
         Ok(())
     }
@@ -627,7 +749,47 @@ const DRIVER_INFO: DriverInfo = DriverInfo {
         (0x8086, 0x100F),  // 82545EM (VMware)
         (0x8086, 0x10D3),  // 82574L
         (0x8086, 0x153A),  // I217-LM
+        (0x8086, 0x153B),  // I217-V
         (0x8086, 0x1533),  // I210
+        // e1000e PCH — Skylake/Kaby Lake (H170, Z170, B150, etc.)
+        (0x8086, 0x15A0),  // I218-LM (Wildcat Point)
+        (0x8086, 0x15A1),  // I218-V (Wildcat Point)
+        (0x8086, 0x15A2),  // I218-LM-3
+        (0x8086, 0x15A3),  // I218-V-3
+        (0x8086, 0x15B7),  // I219-LM (Skylake)
+        (0x8086, 0x15B8),  // I219-V (Skylake) — ASUS H170-PRO
+        (0x8086, 0x15B9),  // I219-LM-2
+        (0x8086, 0x15D6),  // I219-V-2 (Kaby Lake)
+        (0x8086, 0x15D7),  // I219-LM-3 (Kaby Lake)
+        (0x8086, 0x15D8),  // I219-V-3
+        (0x8086, 0x15E3),  // I219-LM (Cannon Lake)
+        (0x8086, 0x0D4E),  // I219-LM (Comet Lake)
+        (0x8086, 0x0D4F),  // I219-V (Comet Lake)
+        (0x8086, 0x0D4C),  // I219-LM (Ice Lake)
+        (0x8086, 0x0D4D),  // I219-V (Ice Lake)
+        // e1000e (ICH8/ICH9) — ThinkPad T61, T400, X200, various laptops/desktops
+        (0x8086, 0x1049),  // 82566MM (T61 onboard)
+        (0x8086, 0x104A),  // 82566DM
+        (0x8086, 0x104B),  // 82566DC
+        (0x8086, 0x104C),  // 82562V
+        (0x8086, 0x104D),  // 82566MC
+        (0x8086, 0x10BD),  // 82566DM-2
+        (0x8086, 0x10BF),  // 82567LF
+        (0x8086, 0x10C0),  // 82562V-2
+        (0x8086, 0x10C2),  // 82562G-2
+        (0x8086, 0x10C3),  // 82562GT-2
+        (0x8086, 0x10CB),  // 82567V
+        (0x8086, 0x10CC),  // 82567LM-2
+        (0x8086, 0x10CD),  // 82567LF-2
+        (0x8086, 0x10CE),  // 82567V-2
+        (0x8086, 0x10DE),  // 82567LM-3 (T500/W500)
+        (0x8086, 0x10DF),  // 82567LF-3
+        (0x8086, 0x10E5),  // 82567LM-4
+        (0x8086, 0x10EA),  // 82577LM
+        (0x8086, 0x10EB),  // 82577LC
+        (0x8086, 0x10EF),  // 82578DM
+        (0x8086, 0x10F0),  // 82578DC
+        (0x8086, 0x10F5),  // 82567LM (ICH9)
     ],
 };
 

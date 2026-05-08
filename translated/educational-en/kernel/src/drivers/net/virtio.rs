@@ -18,10 +18,10 @@ use crate::virtio_net::VirtioNet as VirtioNetImpl;
 pub struct VirtioNetDriver {
     inner: Option<VirtioNetImpl>,
     status: DriverStatus,
-    transmit_pkts: AtomicU64,
-    receive_pkts: AtomicU64,
-    transmit_bytes: AtomicU64,
-    receive_bytes: AtomicU64,
+    tx_pkts: AtomicU64,
+    rx_pkts: AtomicU64,
+    tx_bytes: AtomicU64,
+    rx_bytes: AtomicU64,
 }
 
 // Implementation block — defines methods for the type above.
@@ -31,17 +31,17 @@ pub fn new() -> Self {
         Self {
             inner: None,
             status: DriverStatus::Unloaded,
-            transmit_pkts: AtomicU64::new(0),
-            receive_pkts: AtomicU64::new(0),
-            transmit_bytes: AtomicU64::new(0),
-            receive_bytes: AtomicU64::new(0),
+            tx_pkts: AtomicU64::new(0),
+            rx_pkts: AtomicU64::new(0),
+            tx_bytes: AtomicU64::new(0),
+            rx_bytes: AtomicU64::new(0),
         }
     }
 }
 
 // Trait implementation — fulfills a behavioral contract.
 impl Driver for VirtioNetDriver {
-    fn information(&self) -> &DriverInformation {
+    fn info(&self) -> &DriverInformation {
         &DRIVER_INFORMATION
     }
     
@@ -51,7 +51,7 @@ impl Driver for VirtioNetDriver {
         // Create virtio-net instance
         let mut driver = VirtioNetImpl::new(pci_device)?;
         driver.setup_queues()?;
-        driver.setup_receive_buffers()?;
+        driver.setup_rx_buffers()?;
         
         // Route PCI interrupt through IOAPIC so the VirtIO ISR fires
         let irq = pci_device.interrupt_line;
@@ -101,16 +101,16 @@ impl NetworkDriver for VirtioNetDriver {
     fn send(&mut self, data: &[u8]) -> Result<(), &'static str> {
         let driver = self.inner.as_mut().ok_or("Driver not initialized")?;
         driver.send(data)?;
-        self.transmit_pkts.fetch_add(1, Ordering::Relaxed);
-        self.transmit_bytes.fetch_add(data.len() as u64, Ordering::Relaxed);
+        self.tx_pkts.fetch_add(1, Ordering::Relaxed);
+        self.tx_bytes.fetch_add(data.len() as u64, Ordering::Relaxed);
         Ok(())
     }
     
     fn receive(&mut self) -> Option<Vec<u8>> {
         let driver = self.inner.as_mut()?;
-        if let Some(packet) = driver.poll_receive() {
-            self.receive_pkts.fetch_add(1, Ordering::Relaxed);
-            self.receive_bytes.fetch_add(packet.len() as u64, Ordering::Relaxed);
+        if let Some(packet) = driver.poll_rx() {
+            self.rx_pkts.fetch_add(1, Ordering::Relaxed);
+            self.rx_bytes.fetch_add(packet.len() as u64, Ordering::Relaxed);
             Some(packet)
         } else {
             None
@@ -119,21 +119,21 @@ impl NetworkDriver for VirtioNetDriver {
     
     fn poll(&mut self) {
         if let Some(driver) = self.inner.as_mut() {
-            driver.poll_transmit();
+            driver.poll_tx();
             // RX is polled in receive()
         }
     }
     
     fn stats(&self) -> NetStats {
         NetStats {
-            transmit_packets: self.transmit_pkts.load(Ordering::Relaxed),
-            receive_packets: self.receive_pkts.load(Ordering::Relaxed),
-            transmit_bytes: self.transmit_bytes.load(Ordering::Relaxed),
-            receive_bytes: self.receive_bytes.load(Ordering::Relaxed),
-            transmit_errors: 0,
-            receive_errors: 0,
-            transmit_dropped: 0,
-            receive_dropped: 0,
+            tx_packets: self.tx_pkts.load(Ordering::Relaxed),
+            rx_packets: self.rx_pkts.load(Ordering::Relaxed),
+            tx_bytes: self.tx_bytes.load(Ordering::Relaxed),
+            rx_bytes: self.rx_bytes.load(Ordering::Relaxed),
+            tx_errors: 0,
+            rx_errors: 0,
+            tx_dropped: 0,
+            rx_dropped: 0,
         }
     }
 }

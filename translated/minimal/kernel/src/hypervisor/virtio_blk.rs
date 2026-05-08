@@ -34,37 +34,37 @@ use alloc::vec::Vec;
 
 
 pub mod req_type {
-    pub const DAS_: u32 = 0;     
-    pub const DAT_: u32 = 1;    
-    pub const DAQ_: u32 = 4;  
-    pub const DAR_: u32 = 8; 
+    pub const DEK_: u32 = 0;     
+    pub const DEL_: u32 = 1;    
+    pub const DEI_: u32 = 4;  
+    pub const DEJ_: u32 = 8; 
 }
 
 
 pub mod status {
-    pub const YI_: u8 = 0;
-    pub const EJZ_: u8 = 1;
-    pub const DAP_: u8 = 2;
+    pub const ZM_: u8 = 0;
+    pub const ENN_: u8 = 1;
+    pub const DEH_: u8 = 2;
 }
 
 
 pub mod device_status {
-    pub const Or: u8 = 1;
-    pub const Fl: u8 = 2;
-    pub const HW_: u8 = 4;
-    pub const MZ_: u8 = 8;
-    pub const BRL_: u8 = 64;
-    pub const Arw: u8 = 128;
+    pub const Gf: u8 = 1;
+    pub const Cl: u8 = 2;
+    pub const IQ_: u8 = 4;
+    pub const NY_: u8 = 8;
+    pub const BUH_: u8 = 64;
+    pub const Sa: u8 = 128;
 }
 
 
 pub mod features {
-    pub const DAO_: u32 = 1 << 1;
-    pub const DAN_: u32 = 1 << 2;
-    pub const EJX_: u32 = 1 << 4;
-    pub const EJY_: u32 = 1 << 5;
-    pub const EJW_: u32 = 1 << 6;
-    pub const DAM_: u32 = 1 << 9;
+    pub const DEG_: u32 = 1 << 1;
+    pub const DEF_: u32 = 1 << 2;
+    pub const ENL_: u32 = 1 << 4;
+    pub const ENM_: u32 = 1 << 5;
+    pub const ENK_: u32 = 1 << 6;
+    pub const DEE_: u32 = 1 << 9;
 }
 
 
@@ -75,7 +75,7 @@ pub const H_: usize = 512;
 #[repr(C)]
 pub struct VirtqDesc {
     
-    pub ag: u64,
+    pub addr: u64,
     
     pub len: u32,
     
@@ -88,77 +88,77 @@ pub struct VirtqDesc {
 #[derive(Debug, Clone)]
 pub struct VirtioBlkState {
     
-    pub bju: u32,
+    pub device_features: u32,
     
-    pub cyj: u32,
+    pub guest_features: u32,
     
-    pub dky: u16,
+    pub queue_select: u16,
     
-    pub gqd: u32,
+    pub queue_pfn: u32,
     
-    pub art: u16,
+    pub queue_size: u16,
     
     pub device_status: u8,
     
-    pub czc: u8,
+    pub isr_status: u8,
     
-    pub gce: u64,
+    pub capacity_sectors: u64,
     
-    pub gks: u16,
+    pub last_avail_idx: u16,
 }
 
 impl Default for VirtioBlkState {
     fn default() -> Self {
         Self {
-            bju: features::DAO_
-                           | features::DAN_
-                           | features::DAM_,
-            cyj: 0,
-            dky: 0,
-            gqd: 0,
-            art: 128, 
+            device_features: features::DEG_
+                           | features::DEF_
+                           | features::DEE_,
+            guest_features: 0,
+            queue_select: 0,
+            queue_pfn: 0,
+            queue_size: 128, 
             device_status: 0,
-            czc: 0,
-            gce: 64, 
-            gks: 0,
+            isr_status: 0,
+            capacity_sectors: 64, 
+            last_avail_idx: 0,
         }
     }
 }
 
 impl VirtioBlkState {
     
-    pub fn fc(wuq: usize) -> Self {
-        let mut g = Self::default();
-        g.gce = (wuq / H_) as u64;
-        g
+    pub fn with_capacity(storage_bytes: usize) -> Self {
+        let mut state = Self::default();
+        state.capacity_sectors = (storage_bytes / H_) as u64;
+        state
     }
     
     
     
-    pub fn crq(&mut self, l: u16) -> u32 {
-        match l {
+    pub fn io_read(&mut self, offset: u16) -> u32 {
+        match offset {
             
-            0x00 => self.bju,
+            0x00 => self.device_features,
             
-            0x04 => self.cyj,
+            0x04 => self.guest_features,
             
-            0x08 => self.gqd,
+            0x08 => self.queue_pfn,
             
-            0x0C => self.art as u32,
+            0x0C => self.queue_size as u32,
             
-            0x0E => self.dky as u32,
+            0x0E => self.queue_select as u32,
             
             0x12 => self.device_status as u32,
             
             0x13 => {
-                let ap = self.czc as u32;
-                self.czc = 0;
-                ap
+                let val = self.isr_status as u32;
+                self.isr_status = 0;
+                val
             }
             
-            0x14 => (self.gce & 0xFFFF_FFFF) as u32,
+            0x14 => (self.capacity_sectors & 0xFFFF_FFFF) as u32,
             
-            0x18 => ((self.gce >> 32) & 0xFFFF_FFFF) as u32,
+            0x18 => ((self.capacity_sectors >> 32) & 0xFFFF_FFFF) as u32,
             
             0x1C => 0x1000, 
             
@@ -170,19 +170,19 @@ impl VirtioBlkState {
     
     
     
-    pub fn edp(&mut self, l: u16, bn: u32) -> bool {
-        match l {
+    pub fn io_write(&mut self, offset: u16, value: u32) -> bool {
+        match offset {
             
             0x04 => {
-                self.cyj = bn;
+                self.guest_features = value;
             }
             
             0x08 => {
-                self.gqd = bn;
+                self.queue_pfn = value;
             }
             
             0x0E => {
-                self.dky = bn as u16;
+                self.queue_select = value as u16;
             }
             
             0x10 => {
@@ -191,14 +191,14 @@ impl VirtioBlkState {
             }
             
             0x12 => {
-                self.device_status = bn as u8;
-                if bn == 0 {
+                self.device_status = value as u8;
+                if value == 0 {
                     
-                    self.cyj = 0;
-                    self.gqd = 0;
-                    self.dky = 0;
-                    self.czc = 0;
-                    self.gks = 0;
+                    self.guest_features = 0;
+                    self.queue_pfn = 0;
+                    self.queue_select = 0;
+                    self.isr_status = 0;
+                    self.last_avail_idx = 0;
                 }
             }
             _ => {}
@@ -209,255 +209,255 @@ impl VirtioBlkState {
     
     
     
-    pub fn vmr(&mut self, fe: &mut [u8], storage: &mut [u8]) -> usize {
-        if self.gqd == 0 || self.device_status & device_status::HW_ == 0 {
+    pub fn process_queue(&mut self, guest_memory: &mut [u8], storage: &mut [u8]) -> usize {
+        if self.queue_pfn == 0 || self.device_status & device_status::IQ_ == 0 {
             return 0;
         }
         
-        let lwr = (self.gqd as u64) * 4096; 
-        let art = self.art as usize;
+        let gpg = (self.queue_pfn as u64) * 4096; 
+        let queue_size = self.queue_size as usize;
         
         
         
         
         
-        let dpv = lwr as usize;
-        let kbl = dpv + art * 16;
-        let doe = (kbl + 1) & !1; 
-        let xpp = doe + 4 + art * 2 + 2; 
-        let gvv = (xpp + 4095) & !4095; 
+        let bls = gpg as usize;
+        let fhr = bls + queue_size * 16;
+        let bkt = (fhr + 1) & !1; 
+        let pqm = bkt + 4 + queue_size * 2 + 2; 
+        let dge = (pqm + 4095) & !4095; 
         
         
-        if doe + 2 >= fe.len() {
+        if bkt + 2 >= guest_memory.len() {
             return 0;
         }
-        let kbn = u16::dj([
-            fe[doe + 2],
-            fe[doe + 3],
+        let fht = u16::from_le_bytes([
+            guest_memory[bkt + 2],
+            guest_memory[bkt + 3],
         ]);
         
-        let mut oyd = 0usize;
+        let mut iwv = 0usize;
         
-        while self.gks != kbn {
-            let jml = (self.gks as usize) % art;
-            let fsx = doe + 4 + jml * 2;
+        while self.last_avail_idx != fht {
+            let eys = (self.last_avail_idx as usize) % queue_size;
+            let cpl = bkt + 4 + eys * 2;
             
-            if fsx + 2 > fe.len() {
+            if cpl + 2 > guest_memory.len() {
                 break;
             }
             
-            let and = u16::dj([
-                fe[fsx],
-                fe[fsx + 1],
+            let tx = u16::from_le_bytes([
+                guest_memory[cpl],
+                guest_memory[cpl + 1],
             ]) as usize;
             
             
-            let xpr = self.vms(fe, storage, dpv, and, art);
+            let pqo = self.process_request(guest_memory, storage, bls, tx, queue_size);
             
             
-            if gvv + 4 >= fe.len() {
+            if dge + 4 >= guest_memory.len() {
                 break;
             }
-            let pxq = u16::dj([
-                fe[gvv + 2],
-                fe[gvv + 3],
+            let jpp = u16::from_le_bytes([
+                guest_memory[dge + 2],
+                guest_memory[dge + 3],
             ]);
-            let igc = gvv + 4 + (pxq as usize % art) * 8;
+            let edl = dge + 4 + (jpp as usize % queue_size) * 8;
             
-            if igc + 8 <= fe.len() {
+            if edl + 8 <= guest_memory.len() {
                 
-                let trh = (and as u32).ho();
-                let udx = (xpr as u32).ho();
-                fe[igc..igc + 4].dg(&trh);
-                fe[igc + 4..igc + 8].dg(&udx);
+                let mnj = (tx as u32).to_le_bytes();
+                let mxv = (pqo as u32).to_le_bytes();
+                guest_memory[edl..edl + 4].copy_from_slice(&mnj);
+                guest_memory[edl + 4..edl + 8].copy_from_slice(&mxv);
                 
                 
-                let utx = pxq.cn(1);
-                let bf = utx.ho();
-                fe[gvv + 2] = bf[0];
-                fe[gvv + 3] = bf[1];
+                let nju = jpp.wrapping_add(1);
+                let bytes = nju.to_le_bytes();
+                guest_memory[dge + 2] = bytes[0];
+                guest_memory[dge + 3] = bytes[1];
             }
             
-            self.gks = self.gks.cn(1);
-            oyd += 1;
+            self.last_avail_idx = self.last_avail_idx.wrapping_add(1);
+            iwv += 1;
             
             
-            self.czc |= 1;
+            self.isr_status |= 1;
         }
         
-        oyd
+        iwv
     }
     
     
-    fn vms(
+    fn process_request(
         &self,
-        fe: &mut [u8],
+        guest_memory: &mut [u8],
         storage: &mut [u8],
-        dpv: usize,
-        nuu: usize,
-        art: usize,
+        bls: usize,
+        first_desc: usize,
+        queue_size: usize,
     ) -> usize {
         
-        let dh = self.paa(fe, dpv, nuu);
-        if dh.ag as usize + 16 > fe.len() {
+        let header = self.read_desc(guest_memory, bls, first_desc);
+        if header.addr as usize + 16 > guest_memory.len() {
             return 0;
         }
         
         
-        let req_type = u32::dj([
-            fe[dh.ag as usize],
-            fe[dh.ag as usize + 1],
-            fe[dh.ag as usize + 2],
-            fe[dh.ag as usize + 3],
+        let req_type = u32::from_le_bytes([
+            guest_memory[header.addr as usize],
+            guest_memory[header.addr as usize + 1],
+            guest_memory[header.addr as usize + 2],
+            guest_memory[header.addr as usize + 3],
         ]);
-        let jk = u64::dj([
-            fe[dh.ag as usize + 8],
-            fe[dh.ag as usize + 9],
-            fe[dh.ag as usize + 10],
-            fe[dh.ag as usize + 11],
-            fe[dh.ag as usize + 12],
-            fe[dh.ag as usize + 13],
-            fe[dh.ag as usize + 14],
-            fe[dh.ag as usize + 15],
+        let dj = u64::from_le_bytes([
+            guest_memory[header.addr as usize + 8],
+            guest_memory[header.addr as usize + 9],
+            guest_memory[header.addr as usize + 10],
+            guest_memory[header.addr as usize + 11],
+            guest_memory[header.addr as usize + 12],
+            guest_memory[header.addr as usize + 13],
+            guest_memory[header.addr as usize + 14],
+            guest_memory[header.addr as usize + 15],
         ]);
         
         
-        let mut aeb = 0usize;
-        let mut cv = nuu;
-        let mut hfd: [(u64, u32, u16); 16] = [(0, 0, 0); 16];
-        let mut dpp = 0usize;
-        let mut cmy: Option<(u64, u32)> = None;
-        let mut ofy = true;
+        let mut total_len = 0usize;
+        let mut current = first_desc;
+        let mut dmh: [(u64, u32, u16); 16] = [(0, 0, 0); 16];
+        let mut blp = 0usize;
+        let mut ave: Option<(u64, u32)> = None;
+        let mut ihx = true;
         
         loop {
-            let desc = self.paa(fe, dpv, cv);
+            let desc = self.read_desc(guest_memory, bls, current);
             
-            if ofy {
-                ofy = false;
+            if ihx {
+                ihx = false;
             } else if desc.flags & 2 != 0 {
                 
                 
                 if desc.len == 1 {
-                    cmy = Some((desc.ag, desc.len));
+                    ave = Some((desc.addr, desc.len));
                 } else {
-                    if dpp < 16 {
-                        hfd[dpp] = (desc.ag, desc.len, desc.flags);
-                        dpp += 1;
+                    if blp < 16 {
+                        dmh[blp] = (desc.addr, desc.len, desc.flags);
+                        blp += 1;
                     }
                 }
             } else {
                 
-                if dpp < 16 {
-                    hfd[dpp] = (desc.ag, desc.len, desc.flags);
-                    dpp += 1;
+                if blp < 16 {
+                    dmh[blp] = (desc.addr, desc.len, desc.flags);
+                    blp += 1;
                 }
             }
             
             if desc.flags & 1 == 0 {
                 
                 
-                if cmy.is_none() && desc.len == 1 {
-                    cmy = Some((desc.ag, desc.len));
-                    if dpp > 0 {
-                        dpp -= 1; 
+                if ave.is_none() && desc.len == 1 {
+                    ave = Some((desc.addr, desc.len));
+                    if blp > 0 {
+                        blp -= 1; 
                     }
                 }
                 break;
             }
             
-            cv = desc.next as usize;
-            if cv >= art {
+            current = desc.next as usize;
+            if current >= queue_size {
                 break;
             }
         }
         
         
-        let vyh = match req_type {
-            req_type::DAS_ => {
+        let ogp = match req_type {
+            req_type::DEK_ => {
                 
-                let mut l = jk as usize * H_;
-                for a in 0..dpp {
-                    let (ag, len, _) = hfd[a];
-                    let ag = ag as usize;
+                let mut offset = dj as usize * H_;
+                for i in 0..blp {
+                    let (addr, len, _) = dmh[i];
+                    let addr = addr as usize;
                     let len = len as usize;
-                    if l + len <= storage.len() && ag + len <= fe.len() {
-                        fe[ag..ag + len].dg(&storage[l..l + len]);
-                        aeb += len;
+                    if offset + len <= storage.len() && addr + len <= guest_memory.len() {
+                        guest_memory[addr..addr + len].copy_from_slice(&storage[offset..offset + len]);
+                        total_len += len;
                     }
-                    l += len;
+                    offset += len;
                 }
-                status::YI_
+                status::ZM_
             }
-            req_type::DAT_ => {
+            req_type::DEL_ => {
                 
-                let mut l = jk as usize * H_;
-                for a in 0..dpp {
-                    let (ag, len, _) = hfd[a];
-                    let ag = ag as usize;
+                let mut offset = dj as usize * H_;
+                for i in 0..blp {
+                    let (addr, len, _) = dmh[i];
+                    let addr = addr as usize;
                     let len = len as usize;
-                    if l + len <= storage.len() && ag + len <= fe.len() {
-                        storage[l..l + len].dg(&fe[ag..ag + len]);
-                        aeb += len;
+                    if offset + len <= storage.len() && addr + len <= guest_memory.len() {
+                        storage[offset..offset + len].copy_from_slice(&guest_memory[addr..addr + len]);
+                        total_len += len;
                     }
-                    l += len;
+                    offset += len;
                 }
-                status::YI_
+                status::ZM_
             }
-            req_type::DAQ_ => {
+            req_type::DEI_ => {
                 
-                status::YI_
+                status::ZM_
             }
-            req_type::DAR_ => {
+            req_type::DEJ_ => {
                 
-                let izg = b"trustos-virtio-blk\0";
-                if let Some((ag, _, _)) = hfd.fv() {
-                    let ag = *ag as usize;
-                    let zg = izg.len().v(20);
-                    if ag + zg <= fe.len() {
-                        fe[ag..ag + zg].dg(&izg[..zg]);
-                        aeb += zg;
+                let eqa = b"trustos-virtio-blk\0";
+                if let Some((addr, _, _)) = dmh.first() {
+                    let addr = *addr as usize;
+                    let mb = eqa.len().min(20);
+                    if addr + mb <= guest_memory.len() {
+                        guest_memory[addr..addr + mb].copy_from_slice(&eqa[..mb]);
+                        total_len += mb;
                     }
                 }
-                status::YI_
+                status::ZM_
             }
-            _ => status::DAP_,
+            _ => status::DEH_,
         };
         
         
-        if let Some((ag, _)) = cmy {
-            let ag = ag as usize;
-            if ag < fe.len() {
-                fe[ag] = vyh;
-                aeb += 1;
+        if let Some((addr, _)) = ave {
+            let addr = addr as usize;
+            if addr < guest_memory.len() {
+                guest_memory[addr] = ogp;
+                total_len += 1;
             }
         }
         
-        aeb
+        total_len
     }
     
     
-    fn paa(&self, fe: &[u8], dpv: usize, index: usize) -> VirtqDesc {
-        let l = dpv + index * 16;
-        if l + 16 > fe.len() {
+    fn read_desc(&self, guest_memory: &[u8], bls: usize, index: usize) -> VirtqDesc {
+        let offset = bls + index * 16;
+        if offset + 16 > guest_memory.len() {
             return VirtqDesc::default();
         }
         
         VirtqDesc {
-            ag: u64::dj([
-                fe[l], fe[l + 1],
-                fe[l + 2], fe[l + 3],
-                fe[l + 4], fe[l + 5],
-                fe[l + 6], fe[l + 7],
+            addr: u64::from_le_bytes([
+                guest_memory[offset], guest_memory[offset + 1],
+                guest_memory[offset + 2], guest_memory[offset + 3],
+                guest_memory[offset + 4], guest_memory[offset + 5],
+                guest_memory[offset + 6], guest_memory[offset + 7],
             ]),
-            len: u32::dj([
-                fe[l + 8], fe[l + 9],
-                fe[l + 10], fe[l + 11],
+            len: u32::from_le_bytes([
+                guest_memory[offset + 8], guest_memory[offset + 9],
+                guest_memory[offset + 10], guest_memory[offset + 11],
             ]),
-            flags: u16::dj([
-                fe[l + 12], fe[l + 13],
+            flags: u16::from_le_bytes([
+                guest_memory[offset + 12], guest_memory[offset + 13],
             ]),
-            next: u16::dj([
-                fe[l + 14], fe[l + 15],
+            next: u16::from_le_bytes([
+                guest_memory[offset + 14], guest_memory[offset + 15],
             ]),
         }
     }
@@ -481,46 +481,46 @@ impl VirtioBlkState {
 #[derive(Debug, Clone)]
 pub struct VirtioConsoleState {
     
-    pub bju: u32,
+    pub device_features: u32,
     
-    pub cyj: u32,
+    pub guest_features: u32,
     
-    pub dky: u16,
+    pub queue_select: u16,
     
-    pub jkv: u32,
+    pub queue_pfn_0: u32,
     
-    pub gqe: u32,
+    pub queue_pfn_1: u32,
     
-    pub art: u16,
+    pub queue_size: u16,
     
     pub device_status: u8,
     
-    pub czc: u8,
+    pub isr_status: u8,
     
-    pub ec: u16,
+    pub cols: u16,
     
-    pub lk: u16,
+    pub rows: u16,
     
-    pub jfk: u32,
+    pub max_nr_ports: u32,
     
-    pub gve: u16,
+    pub tx_last_avail_idx: u16,
 }
 
 impl Default for VirtioConsoleState {
     fn default() -> Self {
         Self {
-            bju: 0, 
-            cyj: 0,
-            dky: 0,
-            jkv: 0,
-            gqe: 0,
-            art: 64,
+            device_features: 0, 
+            guest_features: 0,
+            queue_select: 0,
+            queue_pfn_0: 0,
+            queue_pfn_1: 0,
+            queue_size: 64,
             device_status: 0,
-            czc: 0,
-            ec: 80,
-            lk: 25,
-            jfk: 1,
-            gve: 0,
+            isr_status: 0,
+            cols: 80,
+            rows: 25,
+            max_nr_ports: 1,
+            tx_last_avail_idx: 0,
         }
     }
 }
@@ -528,70 +528,70 @@ impl Default for VirtioConsoleState {
 impl VirtioConsoleState {
     
     
-    pub fn crq(&mut self, l: u16) -> u32 {
-        match l {
-            0x00 => self.bju,
-            0x04 => self.cyj,
+    pub fn io_read(&mut self, offset: u16) -> u32 {
+        match offset {
+            0x00 => self.device_features,
+            0x04 => self.guest_features,
             0x08 => {
-                match self.dky {
-                    0 => self.jkv,
-                    1 => self.gqe,
+                match self.queue_select {
+                    0 => self.queue_pfn_0,
+                    1 => self.queue_pfn_1,
                     _ => 0,
                 }
             }
-            0x0C => self.art as u32,
-            0x0E => self.dky as u32,
+            0x0C => self.queue_size as u32,
+            0x0E => self.queue_select as u32,
             0x12 => self.device_status as u32,
             0x13 => {
-                let ap = self.czc as u32;
-                self.czc = 0;
-                ap
+                let val = self.isr_status as u32;
+                self.isr_status = 0;
+                val
             }
             
-            0x14 => self.ec as u32,
-            0x16 => self.lk as u32,
-            0x18 => self.jfk,
+            0x14 => self.cols as u32,
+            0x16 => self.rows as u32,
+            0x18 => self.max_nr_ports,
             _ => 0,
         }
     }
     
     
     
-    pub fn edp(&mut self, l: u16, bn: u32) -> bool {
-        match l {
-            0x04 => { self.cyj = bn; }
+    pub fn io_write(&mut self, offset: u16, value: u32) -> bool {
+        match offset {
+            0x04 => { self.guest_features = value; }
             0x08 => {
-                match self.dky {
-                    0 => self.jkv = bn,
-                    1 => self.gqe = bn,
+                match self.queue_select {
+                    0 => self.queue_pfn_0 = value,
+                    1 => self.queue_pfn_1 = value,
                     _ => {}
                 }
             }
-            0x0E => { self.dky = bn as u16; }
+            0x0E => { self.queue_select = value as u16; }
             0x10 => {
                 
-                let vpj = bn as u16;
-                if vpj == 1 {
+                let oaq = value as u16;
+                if oaq == 1 {
                     
                     return true;
                 }
             }
             0x12 => {
-                self.device_status = bn as u8;
-                if bn == 0 {
+                self.device_status = value as u8;
+                if value == 0 {
                     
-                    self.cyj = 0;
-                    self.jkv = 0;
-                    self.gqe = 0;
-                    self.dky = 0;
-                    self.czc = 0;
-                    self.gve = 0;
+                    self.guest_features = 0;
+                    self.queue_pfn_0 = 0;
+                    self.queue_pfn_1 = 0;
+                    self.queue_select = 0;
+                    self.isr_status = 0;
+                    self.tx_last_avail_idx = 0;
                 }
             }
             
             0x1C => {
-                let bm = (bn & 0xFF) as u8;
-                crate::serial_print!("{}", bm as char);
+                let ch = (value & 0xFF) as u8;
+                crate::serial_print!("{}", ch as char);
             }
             _ => {}
         }
@@ -600,69 +600,69 @@ impl VirtioConsoleState {
     
     
     
-    pub fn vmv(&mut self, fe: &[u8]) -> usize {
-        if self.gqe == 0 || self.device_status & device_status::HW_ == 0 {
+    pub fn process_transmitq(&mut self, guest_memory: &[u8]) -> usize {
+        if self.queue_pfn_1 == 0 || self.device_status & device_status::IQ_ == 0 {
             return 0;
         }
         
-        let lwr = (self.gqe as u64) * 4096;
-        let art = self.art as usize;
+        let gpg = (self.queue_pfn_1 as u64) * 4096;
+        let queue_size = self.queue_size as usize;
         
-        let dpv = lwr as usize;
-        let kbl = dpv + art * 16;
-        let doe = (kbl + 1) & !1;
+        let bls = gpg as usize;
+        let fhr = bls + queue_size * 16;
+        let bkt = (fhr + 1) & !1;
         
-        if doe + 4 > fe.len() {
+        if bkt + 4 > guest_memory.len() {
             return 0;
         }
         
-        let kbn = u16::dj([
-            fe[doe + 2],
-            fe[doe + 3],
+        let fht = u16::from_le_bytes([
+            guest_memory[bkt + 2],
+            guest_memory[bkt + 3],
         ]);
         
-        let mut xv = 0usize;
+        let mut total_bytes = 0usize;
         
-        while self.gve != kbn {
-            let jml = (self.gve as usize) % art;
-            let fsx = doe + 4 + jml * 2;
+        while self.tx_last_avail_idx != fht {
+            let eys = (self.tx_last_avail_idx as usize) % queue_size;
+            let cpl = bkt + 4 + eys * 2;
             
-            if fsx + 2 > fe.len() {
+            if cpl + 2 > guest_memory.len() {
                 break;
             }
             
-            let and = u16::dj([
-                fe[fsx],
-                fe[fsx + 1],
+            let tx = u16::from_le_bytes([
+                guest_memory[cpl],
+                guest_memory[cpl + 1],
             ]) as usize;
             
             
-            let l = dpv + and * 16;
-            if l + 16 <= fe.len() {
-                let ag = u64::dj([
-                    fe[l], fe[l + 1],
-                    fe[l + 2], fe[l + 3],
-                    fe[l + 4], fe[l + 5],
-                    fe[l + 6], fe[l + 7],
+            let offset = bls + tx * 16;
+            if offset + 16 <= guest_memory.len() {
+                let addr = u64::from_le_bytes([
+                    guest_memory[offset], guest_memory[offset + 1],
+                    guest_memory[offset + 2], guest_memory[offset + 3],
+                    guest_memory[offset + 4], guest_memory[offset + 5],
+                    guest_memory[offset + 6], guest_memory[offset + 7],
                 ]) as usize;
-                let len = u32::dj([
-                    fe[l + 8], fe[l + 9],
-                    fe[l + 10], fe[l + 11],
+                let len = u32::from_le_bytes([
+                    guest_memory[offset + 8], guest_memory[offset + 9],
+                    guest_memory[offset + 10], guest_memory[offset + 11],
                 ]) as usize;
                 
                 
-                if ag + len <= fe.len() {
-                    for a in 0..len {
-                        crate::serial_print!("{}", fe[ag + a] as char);
+                if addr + len <= guest_memory.len() {
+                    for i in 0..len {
+                        crate::serial_print!("{}", guest_memory[addr + i] as char);
                     }
-                    xv += len;
+                    total_bytes += len;
                 }
             }
             
-            self.gve = self.gve.cn(1);
-            self.czc |= 1;
+            self.tx_last_avail_idx = self.tx_last_avail_idx.wrapping_add(1);
+            self.isr_status |= 1;
         }
         
-        xv
+        total_bytes
     }
 }

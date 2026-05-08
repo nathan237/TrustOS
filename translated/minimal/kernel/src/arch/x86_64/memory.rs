@@ -6,45 +6,45 @@ use super::cpu;
 
 
 #[inline(always)]
-pub fn ghg(ag: u64) {
+pub fn cxy(addr: u64) {
     unsafe {
-        core::arch::asm!("invlpg [{}]", in(reg) ag, options(nostack, preserves_flags));
+        core::arch::asm!("invlpg [{}]", in(reg) addr, options(nostack, preserves_flags));
     }
 }
 
 
 #[inline(always)]
-pub fn ivc() {
+pub fn emz() {
     unsafe {
-        let jm = cpu::ozy();
-        cpu::pzw(jm);
+        let cr3 = cpu::iyh();
+        cpu::jrm(cr3);
     }
 }
 
 
 #[inline(always)]
-pub fn dle() -> u64 {
-    unsafe { cpu::ozy() }
+pub fn biw() -> u64 {
+    unsafe { cpu::iyh() }
 }
 
 
 #[inline(always)]
-pub fn dnj(ap: u64) {
-    unsafe { cpu::pzw(ap); }
+pub fn bkc(val: u64) {
+    unsafe { cpu::jrm(val); }
 }
 
 
-pub fn ktf() {
+pub fn fun() {
     unsafe {
-        let efer = cpu::lxk(cpu::msr::CN_);
-        cpu::ihm(cpu::msr::CN_, efer | cpu::msr::ARE_);
+        let efer = cpu::gqa(cpu::msr::IA32_EFER);
+        cpu::eei(cpu::msr::IA32_EFER, efer | cpu::msr::ATH_);
     }
 }
 
 
-pub fn yzs() -> bool {
+pub fn qmr() -> bool {
     unsafe {
-        let efer = cpu::lxk(cpu::msr::CN_);
-        efer & cpu::msr::ARE_ != 0
+        let efer = cpu::gqa(cpu::msr::IA32_EFER);
+        efer & cpu::msr::ATH_ != 0
     }
 }

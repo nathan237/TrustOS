@@ -101,6 +101,8 @@ mod rtl8169;
 
 pub mod wifi;
 pub mod iwl4965;
+pub mod iwl_family;
+pub mod ath9k;
 
 // ============================================================================
 // Public API

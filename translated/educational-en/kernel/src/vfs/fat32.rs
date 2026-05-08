@@ -35,29 +35,29 @@ struct Fat32BootSector {
     bytes_per_sector: u16,
     sectors_per_cluster: u8,
     reserved_sectors: u16,
-    number_fats: u8,
+    num_fats: u8,
     root_entry_count: u16,  // 0 for FAT32
     total_sectors_16: u16,  // 0 for FAT32
     media_type: u8,
     fat_size_16: u16,       // 0 for FAT32
     sectors_per_track: u16,
-    number_heads: u16,
+    num_heads: u16,
     hidden_sectors: u32,
     total_sectors_32: u32,
     // FAT32 specific
     fat_size_32: u32,
     ext_flags: u16,
-    filesystem_version: u16,
+    fs_version: u16,
     root_cluster: u32,
-    filesystem_information: u16,
+    fs_info: u16,
     backup_boot: u16,
     reserved: [u8; 12],
     drive_number: u8,
     reserved1: u8,
-    boot_signal: u8,
+    boot_sig: u8,
     volume_id: u32,
     volume_label: [u8; 11],
-    filesystem_type: [u8; 8],
+    fs_type: [u8; 8],
 }
 
 // Implementation block — defines methods for the type above.
@@ -65,39 +65,39 @@ impl Fat32BootSector {
     fn is_valid(&self) -> bool {
         // Check for FAT32 signature - use addr_of! for packed struct fields
         let bytes_per_sector = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::read_unaligned(core::ptr::address_of!(self.bytes_per_sector)) };
+unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(self.bytes_per_sector)) };
         let sectors_per_cluster = self.sectors_per_cluster;
         let reserved = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::read_unaligned(core::ptr::address_of!(self.reserved_sectors)) };
-        let number_fats = self.number_fats;
+unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(self.reserved_sectors)) };
+        let num_fats = self.num_fats;
         
         bytes_per_sector >= 512 && 
         bytes_per_sector <= 4096 &&
         sectors_per_cluster >= 1 &&
         sectors_per_cluster <= 128 &&
         reserved >= 1 &&
-        number_fats >= 1
+        num_fats >= 1
     }
     
     fn cluster_size(&self) -> usize {
         let bps = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::read_unaligned(core::ptr::address_of!(self.bytes_per_sector)) } as usize;
+unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(self.bytes_per_sector)) } as usize;
         let spc = self.sectors_per_cluster as usize;
         bps * spc
     }
     
     fn first_data_sector(&self) -> u64 {
         let reserved = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::read_unaligned(core::ptr::address_of!(self.reserved_sectors)) } as u64;
-        let number_fats = self.number_fats as u64;
+unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(self.reserved_sectors)) } as u64;
+        let num_fats = self.num_fats as u64;
         let fat_size = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::read_unaligned(core::ptr::address_of!(self.fat_size_32)) } as u64;
-        reserved + (number_fats * fat_size)
+unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(self.fat_size_32)) } as u64;
+        reserved + (num_fats * fat_size)
     }
     
     fn first_fat_sector(&self) -> u64 {
         (        // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::read_unaligned(core::ptr::address_of!(self.reserved_sectors)) }) as u64
+unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(self.reserved_sectors)) }) as u64
     }
     
     fn cluster_to_sector(&self, cluster: u32) -> u64 {
@@ -113,7 +113,7 @@ unsafe { core::ptr::read_unaligned(core::ptr::address_of!(self.reserved_sectors)
 struct Fat32DirEntry {
     name: [u8; 8],
     ext: [u8; 3],
-    attribute: u8,
+    attr: u8,
     nt_reserved: u8,
     create_time_tenth: u8,
     create_time: u16,
@@ -152,28 +152,28 @@ const ATTRIBUTE_LONG_NAME: u8 = 0x0F;
     }
     
     fn is_long_name(&self) -> bool {
-        (self.attribute & Self::ATTRIBUTE_LONG_NAME) == Self::ATTRIBUTE_LONG_NAME
+        (self.attr & Self::ATTRIBUTE_LONG_NAME) == Self::ATTRIBUTE_LONG_NAME
     }
     
     fn is_directory(&self) -> bool {
-        (self.attribute & Self::ATTRIBUTE_DIRECTORY) != 0
+        (self.attr & Self::ATTRIBUTE_DIRECTORY) != 0
     }
     
     fn is_volume_label(&self) -> bool {
-        (self.attribute & Self::ATTRIBUTE_VOLUME_ID) != 0 && !self.is_long_name()
+        (self.attr & Self::ATTRIBUTE_VOLUME_ID) != 0 && !self.is_long_name()
     }
     
     fn cluster(&self) -> u32 {
         let hi = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::read_unaligned(core::ptr::address_of!(self.cluster_hi)) } as u32;
+unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(self.cluster_hi)) } as u32;
         let lo = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::read_unaligned(core::ptr::address_of!(self.cluster_lo)) } as u32;
+unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(self.cluster_lo)) } as u32;
         (hi << 16) | lo
     }
     
     fn size(&self) -> u32 {
                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::read_unaligned(core::ptr::address_of!(self.file_size)) }
+unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(self.file_size)) }
     }
     
     fn get_short_name(&self) -> String {
@@ -209,7 +209,7 @@ unsafe { core::ptr::read_unaligned(core::ptr::address_of!(self.file_size)) }
 struct Fat32LfnEntry {
     order: u8,
     name1: [u16; 5],  // First 5 UCS-2 chars
-    attribute: u8,         // Always 0x0F
+    attr: u8,         // Always 0x0F
     lfn_type: u8,     // Always 0
     checksum: u8,
     name2: [u16; 6],  // Next 6 UCS-2 chars
@@ -224,11 +224,11 @@ impl Fat32LfnEntry {
         
         // Copy packed fields using read_unaligned
         let name1 = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::read_unaligned(core::ptr::address_of!(self.name1)) };
+unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(self.name1)) };
         let name2 = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::read_unaligned(core::ptr::address_of!(self.name2)) };
+unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(self.name2)) };
         let name3 = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::read_unaligned(core::ptr::address_of!(self.name3)) };
+unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(self.name3)) };
         
         for &c in &name1 {
             if c == 0 || c == 0xFFFF { return chars; }
@@ -265,12 +265,12 @@ const FAT_BAD: u32 = 0x0FFFFFF7;
 struct Fat32Inode {
     cluster: u32,
     size: u64,
-    is_directory: bool,
+    is_dir: bool,
     name: String,
     /// Directory cluster containing this entry (0 for root)
-    directory_cluster: u32,
+    dir_cluster: u32,
     /// Byte offset within the directory cluster data
-    directory_entry_offset: usize,
+    dir_entry_offset: usize,
 }
 
 /// Block device reader/writer trait
@@ -293,12 +293,12 @@ impl BlockDevice for VirtioBlockDevice {
     fn read_sector(&self, sector: u64, buffer: &mut [u8]) -> Result<(), ()> {
         // virtio_blk::read_sectors takes a generic &mut [u8]
         crate::virtio_blk::read_sectors(sector, 1, buffer)
-            .map_error(|_| ())
+            .map_err(|_| ())
     }
     
     fn write_sector(&self, sector: u64, buffer: &[u8]) -> Result<(), ()> {
         crate::virtio_blk::write_sectors(sector, 1, buffer)
-            .map_error(|_| ())
+            .map_err(|_| ())
     }
 }
 
@@ -322,14 +322,14 @@ impl BlockDevice for AhciBlockReader {
         let absolute_sector = self.partition_start + sector;
         crate::drivers::ahci::read_sectors(self.port as u8, absolute_sector, 1, buffer)
             .map(|_| ())
-            .map_error(|_| ())
+            .map_err(|_| ())
     }
     
     fn write_sector(&self, sector: u64, buffer: &[u8]) -> Result<(), ()> {
         let absolute_sector = self.partition_start + sector;
         crate::drivers::ahci::write_sectors(self.port as u8, absolute_sector, 1, buffer)
             .map(|_| ())
-            .map_error(|_| ())
+            .map_err(|_| ())
     }
 }
 
@@ -349,7 +349,7 @@ impl Fat32Fs {
         // Read boot sector
         let mut boot_buffer = [0u8; SECTOR_SIZE];
         reader.read_sector(0, &mut boot_buffer)
-            .map_error(|_| VfsError::IoError)?;
+            .map_err(|_| VfsError::IoError)?;
         
         // Check boot signature
         if boot_buffer[510] != 0x55 || boot_buffer[511] != 0xAA {
@@ -360,7 +360,7 @@ impl Fat32Fs {
         // Parse BPB
         let bpb = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { 
-            core::ptr::read_unaligned(boot_buffer.as_pointer() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+            core::ptr::read_unaligned(boot_buffer.as_ptr() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const Fat32BootSector)
         };
         
@@ -390,10 +390,10 @@ const Fat32BootSector)
             inodes.insert(1, Fat32Inode {
                 cluster: root_cluster,
                 size: 0,
-                is_directory: true,
+                is_dir: true,
                 name: String::from("/"),
-                directory_cluster: 0,
-                directory_entry_offset: 0,
+                dir_cluster: 0,
+                dir_entry_offset: 0,
             });
         }
         
@@ -411,7 +411,7 @@ const Fat32BootSector)
         for i in 0..sectors_per_cluster {
             let offset = (i as usize) * SECTOR_SIZE;
             self.reader.read_sector(sector + i, &mut data[offset..offset + SECTOR_SIZE])
-                .map_error(|_| VfsError::IoError)?;
+                .map_err(|_| VfsError::IoError)?;
         }
         
         Ok(data)
@@ -426,7 +426,7 @@ const Fat32BootSector)
         
         let mut sector_buffer = [0u8; SECTOR_SIZE];
         self.reader.read_sector(fat_sector, &mut sector_buffer)
-            .map_error(|_| VfsError::IoError)?;
+            .map_err(|_| VfsError::IoError)?;
         
         let entry = u32::from_le_bytes([
             sector_buffer[offset_in_sector],
@@ -489,7 +489,7 @@ const Fat32BootSector)
         for i in 0..sectors_per_cluster {
             let offset = (i as usize) * SECTOR_SIZE;
             self.reader.write_sector(sector + i, &data[offset..offset + SECTOR_SIZE])
-                .map_error(|_| VfsError::IoError)?;
+                .map_err(|_| VfsError::IoError)?;
         }
         
         Ok(())
@@ -505,7 +505,7 @@ const Fat32BootSector)
         // Read the sector
         let mut sector_buffer = [0u8; SECTOR_SIZE];
         self.reader.read_sector(fat_sector, &mut sector_buffer)
-            .map_error(|_| VfsError::IoError)?;
+            .map_err(|_| VfsError::IoError)?;
         
         // Update the entry (preserve high 4 bits for FAT32)
         let new_value = (value & 0x0FFFFFFF) | 
@@ -519,15 +519,15 @@ const Fat32BootSector)
         
         // Write back to primary FAT
         self.reader.write_sector(fat_sector, &sector_buffer)
-            .map_error(|_| VfsError::IoError)?;
+            .map_err(|_| VfsError::IoError)?;
         
         // Write to backup FAT if present
-        let number_fats = { self.bpb.number_fats } as u64;
-        if number_fats > 1 {
+        let num_fats = { self.bpb.num_fats } as u64;
+        if num_fats > 1 {
             let fat_size = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::read_unaligned(core::ptr::address_of!(self.bpb.fat_size_32)) } as u64;
-            for fat_index in 1..number_fats {
-                let backup_sector = fat_sector + fat_index * fat_size;
+unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(self.bpb.fat_size_32)) } as u64;
+            for fat_idx in 1..num_fats {
+                let backup_sector = fat_sector + fat_idx * fat_size;
                 let _ = self.reader.write_sector(backup_sector, &sector_buffer);
             }
         }
@@ -540,9 +540,9 @@ unsafe { core::ptr::read_unaligned(core::ptr::address_of!(self.bpb.fat_size_32))
         let bytes_per_sector = { self.bpb.bytes_per_sector } as u32;
         let fat_start = self.bpb.first_fat_sector();
         let fat_size = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::read_unaligned(core::ptr::address_of!(self.bpb.fat_size_32)) };
+unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(self.bpb.fat_size_32)) };
         let total_sectors_32 = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::read_unaligned(core::ptr::address_of!(self.bpb.total_sectors_32)) };
+unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(self.bpb.total_sectors_32)) };
         let data_sectors = total_sectors_32 as u64 - self.bpb.first_data_sector();
         let spc = self.bpb.sectors_per_cluster as u64;
         let total_clusters = (data_sectors / spc) as u32 + 2;
@@ -553,7 +553,7 @@ unsafe { core::ptr::read_unaligned(core::ptr::address_of!(self.bpb.total_sectors
         
         for sector_offset in 0..fat_size {
             self.reader.read_sector(fat_start + sector_offset as u64, &mut sector_buffer)
-                .map_error(|_| VfsError::IoError)?;
+                .map_err(|_| VfsError::IoError)?;
             
             for entry_index in 0..entries_per_sector {
                 let cluster = sector_offset * entries_per_sector + entry_index;
@@ -629,7 +629,7 @@ unsafe { core::ptr::read_unaligned(core::ptr::address_of!(self.bpb.total_sectors
             // Calculate how much to write to this cluster
             let offset_in_cluster = write_offset - cluster_start;
             let space_in_cluster = cluster_size - offset_in_cluster;
-            let to_write = core::cmp::minimum(space_in_cluster, remaining.len());
+            let to_write = core::cmp::min(space_in_cluster, remaining.len());
             
             // Copy data
             cluster_data[offset_in_cluster..offset_in_cluster + to_write]
@@ -642,7 +642,7 @@ unsafe { core::ptr::read_unaligned(core::ptr::address_of!(self.bpb.total_sectors
             write_offset += to_write;
         }
         
-        let new_size = core::cmp::maximum(current_size, end_offset);
+        let new_size = core::cmp::max(current_size, end_offset);
         let new_start = *chain.first().unwrap_or(&start_cluster);
         
         Ok((new_start, new_size))
@@ -654,32 +654,32 @@ unsafe { core::ptr::read_unaligned(core::ptr::address_of!(self.bpb.total_sectors
         let upper = long_name.to_uppercase();
         
         // Split name and extension
-        let (name_part, ext_part) = if let Some(dot_position) = upper.rfind('.') {
-            (&upper[..dot_position], &upper[dot_position + 1..])
+        let (name_part, ext_part) = if let Some(dot_pos) = upper.rfind('.') {
+            (&upper[..dot_pos], &upper[dot_pos + 1..])
         } else {
             (upper.as_str(), "")
         };
         
         // Copy name (max 8 chars)
-        for (i, character) in name_part.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '_').take(8).enumerate() {
-            short[i] = character as u8;
+        for (i, ch) in name_part.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '_').take(8).enumerate() {
+            short[i] = ch as u8;
         }
         
         // Copy extension (max 3 chars)
-        for (i, character) in ext_part.chars().filter(|c| c.is_ascii_alphanumeric()).take(3).enumerate() {
-            short[8 + i] = character as u8;
+        for (i, ch) in ext_part.chars().filter(|c| c.is_ascii_alphanumeric()).take(3).enumerate() {
+            short[8 + i] = ch as u8;
         }
         
         short
     }
     
     /// Find free directory entry slot in directory cluster chain
-    fn find_free_directory_entry(&self, directory_cluster: u32) -> VfsResult<(u32, usize)> {
+    fn find_free_dir_entry(&self, dir_cluster: u32) -> VfsResult<(u32, usize)> {
         let cluster_size = self.bpb.cluster_size();
         let entry_size = core::mem::size_of::<Fat32DirEntry>();
         let entries_per_cluster = cluster_size / entry_size;
         
-        let chain = self.get_cluster_chain(directory_cluster)?;
+        let chain = self.get_cluster_chain(dir_cluster)?;
         
         for &cluster in &chain {
             let data = self.read_cluster(cluster)?;
@@ -695,7 +695,7 @@ unsafe { core::ptr::read_unaligned(core::ptr::address_of!(self.bpb.total_sectors
         }
         
         // Need to extend directory
-        let last = *chain.last().unwrap_or(&directory_cluster);
+        let last = *chain.last().unwrap_or(&dir_cluster);
         let new_cluster = self.extend_chain(last)?;
         
         // Zero out new cluster
@@ -706,11 +706,11 @@ unsafe { core::ptr::read_unaligned(core::ptr::address_of!(self.bpb.total_sectors
     }
     
     /// Create a new file or directory entry
-    fn create_entry(&self, directory_cluster: u32, name: &str, is_directory: bool) -> VfsResult<(u32, u64)> {
-        let (entry_cluster, entry_offset) = self.find_free_directory_entry(directory_cluster)?;
+    fn create_entry(&self, dir_cluster: u32, name: &str, is_dir: bool) -> VfsResult<(u32, u64)> {
+        let (entry_cluster, entry_offset) = self.find_free_dir_entry(dir_cluster)?;
         
         // Allocate cluster for new file/directory
-        let new_cluster = if is_directory {
+        let new_cluster = if is_dir {
             let cluster = self.allocate_cluster()?;
             // Initialize directory with . and ..
             let cluster_size = self.bpb.cluster_size();
@@ -720,7 +720,7 @@ unsafe { core::ptr::read_unaligned(core::ptr::address_of!(self.bpb.total_sectors
             let dot_entry = Fat32DirEntry {
                 name: [b'.', b' ', b' ', b' ', b' ', b' ', b' ', b' '],
                 ext: [b' ', b' ', b' '],
-                attribute: Fat32DirEntry::ATTRIBUTE_DIRECTORY,
+                attr: Fat32DirEntry::ATTRIBUTE_DIRECTORY,
                 nt_reserved: 0,
                 create_time_tenth: 0,
                 create_time: 0,
@@ -737,24 +737,24 @@ unsafe { core::ptr::read_unaligned(core::ptr::address_of!(self.bpb.total_sectors
             let dotdot_entry = Fat32DirEntry {
                 name: [b'.', b'.', b' ', b' ', b' ', b' ', b' ', b' '],
                 ext: [b' ', b' ', b' '],
-                attribute: Fat32DirEntry::ATTRIBUTE_DIRECTORY,
+                attr: Fat32DirEntry::ATTRIBUTE_DIRECTORY,
                 nt_reserved: 0,
                 create_time_tenth: 0,
                 create_time: 0,
                 create_date: 0,
                 access_date: 0,
-                cluster_hi: ((directory_cluster >> 16) & 0xFFFF) as u16,
+                cluster_hi: ((dir_cluster >> 16) & 0xFFFF) as u16,
                 modify_time: 0,
                 modify_date: 0,
-                cluster_lo: (directory_cluster & 0xFFFF) as u16,
+                cluster_lo: (dir_cluster & 0xFFFF) as u16,
                 file_size: 0,
             };
             
             let entry_size = core::mem::size_of::<Fat32DirEntry>();
                         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-                core::ptr::write(directory_data.as_mut_pointer() as *mut Fat32DirEntry, dot_entry);
-                core::ptr::write((directory_data.as_mut_pointer().add(entry_size)) as *mut Fat32DirEntry, dotdot_entry);
+                core::ptr::write(directory_data.as_mut_ptr() as *mut Fat32DirEntry, dot_entry);
+                core::ptr::write((directory_data.as_mut_ptr().add(entry_size)) as *mut Fat32DirEntry, dotdot_entry);
             }
             
             self.write_cluster(cluster, &directory_data)?;
@@ -768,7 +768,7 @@ unsafe {
         let new_entry = Fat32DirEntry {
             name: short_name[..8].try_into().unwrap_or([b' '; 8]),
             ext: short_name[8..11].try_into().unwrap_or([b' '; 3]),
-            attribute: if is_directory { Fat32DirEntry::ATTRIBUTE_DIRECTORY } else { Fat32DirEntry::ATTRIBUTE_ARCHIVE },
+            attr: if is_dir { Fat32DirEntry::ATTRIBUTE_DIRECTORY } else { Fat32DirEntry::ATTRIBUTE_ARCHIVE },
             nt_reserved: 0,
             create_time_tenth: 0,
             create_time: 0,
@@ -786,7 +786,7 @@ unsafe {
                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
             core::ptr::write(
-                cluster_data.as_mut_pointer().add(entry_offset) as *mut Fat32DirEntry,
+                cluster_data.as_mut_ptr().add(entry_offset) as *mut Fat32DirEntry,
                 new_entry
             );
         }
@@ -796,14 +796,14 @@ unsafe {
     }
     
     /// Update directory entry (size, cluster, etc.)
-    fn update_directory_entry(&self, ino: Ino, new_cluster: u32, new_size: u64) -> VfsResult<()> {
+    fn update_dir_entry(&self, ino: Ino, new_cluster: u32, new_size: u64) -> VfsResult<()> {
         let inodes = self.inodes.read();
         let inode = inodes.get(&ino).ok_or(VfsError::NotFound)?;
-        let directory_cluster = inode.directory_cluster;
-        let directory_offset = inode.directory_entry_offset;
+        let dir_cluster = inode.dir_cluster;
+        let directory_offset = inode.dir_entry_offset;
         drop(inodes);
 
-        if directory_cluster == 0 {
+        if dir_cluster == 0 {
             // Root inode or unknown location — skip
             return Ok(());
         }
@@ -813,7 +813,7 @@ unsafe {
         let entries_per_cluster = cluster_size / entry_size;
 
         // Walk the directory cluster chain to find the right cluster
-        let chain = self.get_cluster_chain(directory_cluster)?;
+        let chain = self.get_cluster_chain(dir_cluster)?;
         let cluster_index = directory_offset / cluster_size;
         let offset_in_cluster = directory_offset % cluster_size;
 
@@ -827,7 +827,7 @@ unsafe {
         // Read existing entry
         let entry = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-            &mut *(data.as_mut_pointer().add(offset_in_cluster) as *mut Fat32DirEntry)
+            &mut *(data.as_mut_ptr().add(offset_in_cluster) as *mut Fat32DirEntry)
         };
 
         // Update cluster pointers
@@ -835,7 +835,7 @@ unsafe {
         entry.cluster_hi = ((new_cluster >> 16) & 0xFFFF) as u16;
 
         // Update file size (only for regular files, not directories)
-        if entry.attribute & Fat32DirEntry::ATTRIBUTE_DIRECTORY == 0 {
+        if entry.attr & Fat32DirEntry::ATTRIBUTE_DIRECTORY == 0 {
             entry.file_size = new_size as u32;
         }
 
@@ -846,12 +846,12 @@ unsafe {
     }
     
     /// Delete a directory entry
-    fn delete_entry(&self, directory_cluster: u32, name: &str) -> VfsResult<()> {
+    fn delete_entry(&self, dir_cluster: u32, name: &str) -> VfsResult<()> {
         let cluster_size = self.bpb.cluster_size();
         let entry_size = core::mem::size_of::<Fat32DirEntry>();
         let entries_per_cluster = cluster_size / entry_size;
         
-        let chain = self.get_cluster_chain(directory_cluster)?;
+        let chain = self.get_cluster_chain(dir_cluster)?;
         
         for &cluster in &chain {
             let mut data = self.read_cluster(cluster)?;
@@ -860,7 +860,7 @@ unsafe {
                 let offset = i * entry_size;
                 let entry = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-                    core::ptr::read_unaligned(data[offset..].as_pointer() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+                    core::ptr::read_unaligned(data[offset..].as_ptr() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const Fat32DirEntry)
                 };
                 
@@ -912,7 +912,7 @@ const Fat32DirEntry)
         while i + entry_size <= data.len() {
             let entry = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-                core::ptr::read_unaligned(data[i..].as_pointer() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+                core::ptr::read_unaligned(data[i..].as_ptr() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const Fat32DirEntry)
             };
             
@@ -930,7 +930,7 @@ const Fat32DirEntry)
                 // Parse LFN entry
                 let lfn = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-                    core::ptr::read_unaligned(data[i..].as_pointer() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+                    core::ptr::read_unaligned(data[i..].as_ptr() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const Fat32LfnEntry)
                 };
                 lfn_parts.push((lfn.order(), lfn.get_chars()));
@@ -965,7 +965,7 @@ const Fat32LfnEntry)
         inodes.get(&ino).cloned().ok_or(VfsError::NotFound)
     }
     
-    fn allocator_ino(&self) -> Ino {
+    fn alloc_ino(&self) -> Ino {
         self.next_ino.fetch_add(1, Ordering::SeqCst)
     }
 }
@@ -976,9 +976,9 @@ impl Clone for Fat32Inode {
         Self {
             cluster: self.cluster,
             size: self.size,
-            is_directory: self.is_directory,
-            directory_cluster: self.directory_cluster,
-            directory_entry_offset: self.directory_entry_offset,
+            is_dir: self.is_dir,
+            dir_cluster: self.dir_cluster,
+            dir_entry_offset: self.dir_entry_offset,
             name: self.name.clone(),
         }
     }
@@ -996,7 +996,7 @@ impl FileSystem for Fat32Fs {
     
     fn get_file(&self, ino: Ino) -> VfsResult<Arc<dyn FileOperations>> {
         let inode = self.get_inode(ino)?;
-        if inode.is_directory {
+        if inode.is_dir {
             return Err(VfsError::IsDirectory);
         }
         
@@ -1009,9 +1009,9 @@ const Fat32Fs,
         }))
     }
     
-    fn get_directory(&self, ino: Ino) -> VfsResult<Arc<dyn DirectoryOperations>> {
+    fn get_dir(&self, ino: Ino) -> VfsResult<Arc<dyn DirectoryOperations>> {
         let inode = self.get_inode(ino)?;
-        if !inode.is_directory {
+        if !inode.is_dir {
             return Err(VfsError::NotDirectory);
         }
         
@@ -1023,16 +1023,16 @@ const Fat32Fs,
         }))
     }
     
-    fn status(&self, ino: Ino) -> VfsResult<Stat> {
+    fn stat(&self, ino: Ino) -> VfsResult<Stat> {
         let inode = self.get_inode(ino)?;
         
         Ok(Stat {
             ino,
-            file_type: if inode.is_directory { FileType::Directory } else { FileType::Regular },
+            file_type: if inode.is_dir { FileType::Directory } else { FileType::Regular },
             size: inode.size,
             blocks: (inode.size + 511) / 512,
             block_size: self.bpb.cluster_size() as u32,
-            mode: if inode.is_directory { 0o755 } else { 0o644 },
+            mode: if inode.is_dir { 0o755 } else { 0o644 },
             uid: 0,
             gid: 0,
             atime: 0,
@@ -1060,7 +1060,7 @@ impl Sync for Fat32File {}
 
 // Trait implementation — fulfills a behavioral contract.
 impl FileOperations for Fat32File {
-    fn read(&self, offset: u64, buffer: &mut [u8]) -> VfsResult<usize> {
+    fn read(&self, offset: u64, buf: &mut [u8]) -> VfsResult<usize> {
         let size = *self.size.read();
         let cluster = *self.cluster.read();
         
@@ -1070,7 +1070,7 @@ impl FileOperations for Fat32File {
         
         let fs = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { &*self.fs };
-        let to_read = core::cmp::minimum(buffer.len() as u64, size - offset) as usize;
+        let to_read = core::cmp::min(buf.len() as u64, size - offset) as usize;
         
         if cluster < 2 {
             // Empty file
@@ -1084,15 +1084,15 @@ unsafe { &*self.fs };
         let end = start + to_read;
         
         if end <= data.len() {
-            buffer[..to_read].copy_from_slice(&data[start..end]);
+            buf[..to_read].copy_from_slice(&data[start..end]);
             Ok(to_read)
         } else {
             Err(VfsError::IoError)
         }
     }
     
-    fn write(&self, offset: u64, buffer: &[u8]) -> VfsResult<usize> {
-        if buffer.is_empty() {
+    fn write(&self, offset: u64, buf: &[u8]) -> VfsResult<usize> {
+        if buf.is_empty() {
             return Ok(0);
         }
         
@@ -1111,7 +1111,7 @@ unsafe { &*self.fs };
         };
         
         // Write data
-        let (new_cluster, new_size) = fs.write_file_data(start_cluster, offset, buffer, current_size)?;
+        let (new_cluster, new_size) = fs.write_file_data(start_cluster, offset, buf, current_size)?;
         
         // Update file state
         *self.cluster.write() = new_cluster;
@@ -1126,12 +1126,12 @@ unsafe { &*self.fs };
         }
         
         // Persist size+cluster to directory entry on disk
-        let _ = fs.update_directory_entry(self.ino, new_cluster, new_size);
+        let _ = fs.update_dir_entry(self.ino, new_cluster, new_size);
         
-        Ok(buffer.len())
+        Ok(buf.len())
     }
     
-    fn status(&self) -> VfsResult<Stat> {
+    fn stat(&self) -> VfsResult<Stat> {
         let size = *self.size.read();
         Ok(Stat {
             ino: self.ino,
@@ -1185,14 +1185,14 @@ unsafe { &*self.fs };
         
         for (entry_name, entry, byte_offset) in entries {
             if entry_name.eq_ignore_ascii_case(name) {
-                let ino = fs.allocator_ino();
+                let ino = fs.alloc_ino();
                 let inode = Fat32Inode {
                     cluster: entry.cluster(),
                     size: entry.size() as u64,
-                    is_directory: entry.is_directory(),
+                    is_dir: entry.is_directory(),
                     name: entry_name,
-                    directory_cluster: self.cluster,
-                    directory_entry_offset: byte_offset,
+                    dir_cluster: self.cluster,
+                    dir_entry_offset: byte_offset,
                 };
                 fs.inodes.write().insert(ino, inode);
                 return Ok(ino);
@@ -1210,23 +1210,23 @@ unsafe { &*self.fs };
         let mut result = Vec::new();
         
         for (name, entry, byte_offset) in entries {
-            let ino = fs.allocator_ino();
-            let is_directory = entry.is_directory();
+            let ino = fs.alloc_ino();
+            let is_dir = entry.is_directory();
             
             // Cache inode
             fs.inodes.write().insert(ino, Fat32Inode {
                 cluster: entry.cluster(),
                 size: entry.size() as u64,
-                is_directory,
+                is_dir,
                 name: name.clone(),
-                directory_cluster: self.cluster,
-                directory_entry_offset: byte_offset,
+                dir_cluster: self.cluster,
+                dir_entry_offset: byte_offset,
             });
             
             result.push(DirectoryEntry {
                 name,
                 ino,
-                file_type: if is_directory { FileType::Directory } else { FileType::Regular },
+                file_type: if is_dir { FileType::Directory } else { FileType::Regular },
             });
         }
         
@@ -1242,13 +1242,13 @@ unsafe { &*self.fs };
             return Err(VfsError::AlreadyExists);
         }
         
-        let is_directory = matches!(file_type, FileType::Directory);
+        let is_dir = matches!(file_type, FileType::Directory);
         
         // Create the entry on disk
-        let (cluster, _size) = fs.create_entry(self.cluster, name, is_directory)?;
+        let (cluster, _size) = fs.create_entry(self.cluster, name, is_dir)?;
         
         // Find the directory entry offset we just created
-        let directory_entry_offset = if let Ok(entries) = fs.parse_directory(self.cluster) {
+        let dir_entry_offset = if let Ok(entries) = fs.parse_directory(self.cluster) {
             entries.iter()
                 .find(|(n, _, _)| n.eq_ignore_ascii_case(name))
                 .map(|(_, _, off)| *off)
@@ -1258,14 +1258,14 @@ unsafe { &*self.fs };
         };
         
         // Create inode
-        let ino = fs.allocator_ino();
+        let ino = fs.alloc_ino();
         fs.inodes.write().insert(ino, Fat32Inode {
             cluster,
             size: 0,
-            is_directory,
+            is_dir,
             name: name.to_string(),
-            directory_cluster: self.cluster,
-            directory_entry_offset,
+            dir_cluster: self.cluster,
+            dir_entry_offset,
         });
         
         Ok(ino)
@@ -1297,10 +1297,10 @@ unsafe { &*self.fs };
         Ok(())
     }
     
-    fn status(&self) -> VfsResult<Stat> {
+    fn stat(&self) -> VfsResult<Stat> {
         let fs = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { &*self.fs };
-        fs.status(self.ino)
+        fs.stat(self.ino)
     }
 }
 
@@ -1314,13 +1314,13 @@ pub fn try_mount_fat32() -> Option<Arc<Fat32Fs>> {
     crate::log_debug!("[FAT32] Checking {} AHCI devices", devices.len());
     
     for device in devices {
-        let port = device.port_number;
+        let port = device.port_num;
         let total_sectors = device.sector_count;
         crate::log_debug!("[FAT32] Port {}: {} sectors", port, total_sectors);
         
         // Create read closure for this port
-        let read_fn = |sector: u64, buffer: &mut [u8]| -> Result<(), &'static str> {
-            ahci::read_sectors(port, sector, 1, buffer)
+        let read_fn = |sector: u64, buf: &mut [u8]| -> Result<(), &'static str> {
+            ahci::read_sectors(port, sector, 1, buf)
                 .map(|_| ())
         };
         

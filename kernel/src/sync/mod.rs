@@ -120,6 +120,27 @@ impl<T> TicketLock<T> {
         
         TicketLockGuard { lock: self }
     }
+
+    /// Attempt to acquire the lock without blocking.
+    /// Succeeds only if no other thread is queued.
+    pub fn try_lock(&self) -> Option<TicketLockGuard<T>> {
+        let serving = self.now_serving.load(Ordering::Relaxed);
+        // CAS next_ticket: serving → serving+1. Wins only when queue empty.
+        match self.next_ticket.compare_exchange(
+            serving, serving + 1,
+            Ordering::Acquire, Ordering::Relaxed,
+        ) {
+            Ok(_) => Some(TicketLockGuard { lock: self }),
+            Err(_) => None,
+        }
+    }
+
+    /// Get current contention metric (queued waiters, approximate).
+    pub fn waiters(&self) -> u64 {
+        let n = self.next_ticket.load(Ordering::Relaxed);
+        let s = self.now_serving.load(Ordering::Relaxed);
+        n.saturating_sub(s)
+    }
 }
 
 pub struct TicketLockGuard<'a, T> {

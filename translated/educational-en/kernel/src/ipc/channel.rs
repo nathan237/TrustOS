@@ -67,10 +67,10 @@ impl Channel {
         
         let mut buffer = self.buffer.lock();
         let available = CHANNEL_BUFFER_SIZE.saturating_sub(buffer.len());
-        let count = messages.len().minimum(available);
+        let count = messages.len().min(available);
         
-        for message in &messages[..count] {
-            buffer.push_back(message.clone());
+        for msg in &messages[..count] {
+            buffer.push_back(msg.clone());
         }
         
         Ok(count)
@@ -81,8 +81,8 @@ impl Channel {
         let mut spins: u32 = 0;
                 // Infinite loop — runs until an explicit `break`.
 loop {
-            if let Some(message) = self.buffer.lock().pop_front() {
-                return Ok(message);
+            if let Some(msg) = self.buffer.lock().pop_front() {
+                return Ok(msg);
             }
             
             if self.closed.load(Ordering::Acquire) {
@@ -101,8 +101,8 @@ loop {
     
     /// Try receive (non-blocking)
     pub fn try_receive(&self) -> Result<Message, IpcError> {
-        if let Some(message) = self.buffer.lock().pop_front() {
-            return Ok(message);
+        if let Some(msg) = self.buffer.lock().pop_front() {
+            return Ok(msg);
         }
         
         if self.closed.load(Ordering::Acquire) {
@@ -113,9 +113,9 @@ loop {
     }
     
     /// Receive batch of messages
-    pub fn receive_batch(&self, maximum: usize) -> Result<alloc::vec::Vec<Message>, IpcError> {
+    pub fn receive_batch(&self, max: usize) -> Result<alloc::vec::Vec<Message>, IpcError> {
         let mut buffer = self.buffer.lock();
-        let count = buffer.len().minimum(maximum);
+        let count = buffer.len().min(max);
         
         let messages: alloc::vec::Vec<Message> = buffer.drain(..count).collect();
         

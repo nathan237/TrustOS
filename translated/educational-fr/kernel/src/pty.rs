@@ -25,9 +25,9 @@ pub struct PtyPair {
     /// Whether the slave side is open
     pub slave_open: bool,
     /// Master-side read buffer (data written by slave → read by master)
-    pub master_buffer: Vec<u8>,
+    pub master_buf: Vec<u8>,
     /// Slave-side read buffer (data written by master → read by slave)
-    pub slave_buffer: Vec<u8>,
+    pub slave_buf: Vec<u8>,
 }
 
 /// Global PTY table
@@ -45,29 +45,29 @@ pub fn init() {
 
 /// Allocate a new PTY pair (/dev/ptmx). Returns (pty_index, tty_index).
 pub fn allocator_pty() -> Option<(u32, u32)> {
-    let pty_index = NEXT_PTY.fetch_add(1, Ordering::SeqCst);
-    if pty_index as usize >= MAXIMUM_PTYS {
+    let pty_idx = NEXT_PTY.fetch_add(1, Ordering::SeqCst);
+    if pty_idx as usize >= MAXIMUM_PTYS {
         NEXT_PTY.fetch_sub(1, Ordering::SeqCst);
         return None;
     }
     
     // Allocate a TTY for the slave side
-    let tty_index = crate::tty::allocator_tty()?;
+    let tty_idx = crate::tty::allocator_tty()?;
     
     let pair = PtyPair {
-        index: pty_index,
-        tty_index: tty_index,
+        index: pty_idx,
+        tty_index: tty_idx,
         master_open: true,
         slave_open: false,
-        master_buffer: Vec::new(),
-        slave_buffer: Vec::new(),
+        master_buf: Vec::new(),
+        slave_buf: Vec::new(),
     };
     
     let mut table = PTY_TABLE.lock();
     if let Some(ref mut ptys) = *table {
         ptys.push(pair);
-        crate::log_debug!("[PTY] Allocated pty{} (tty{})", pty_index, tty_index);
-        Some((pty_index, tty_index))
+        crate::log_debug!("[PTY] Allocated pty{} (tty{})", pty_idx, tty_idx);
+        Some((pty_idx, tty_idx))
     } else {
         None
     }
@@ -77,7 +77,7 @@ pub fn allocator_pty() -> Option<(u32, u32)> {
 pub fn open_slave(pty_index: u32) -> bool {
     let mut table = PTY_TABLE.lock();
     if let Some(ref mut ptys) = *table {
-        for pty in ptys.iterator_mut() {
+        for pty in ptys.iter_mut() {
             if pty.index == pty_index {
                 pty.slave_open = true;
                 return true;
@@ -91,10 +91,10 @@ pub fn open_slave(pty_index: u32) -> bool {
 pub fn master_write(pty_index: u32, data: &[u8]) -> usize {
     let mut table = PTY_TABLE.lock();
     if let Some(ref mut ptys) = *table {
-        for pty in ptys.iterator_mut() {
+        for pty in ptys.iter_mut() {
             if pty.index == pty_index && pty.master_open {
                 // Data written to master appears as input on slave TTY
-                pty.slave_buffer.extend_from_slice(data);
+                pty.slave_buf.extend_from_slice(data);
                 return data.len();
             }
         }
@@ -103,14 +103,14 @@ pub fn master_write(pty_index: u32, data: &[u8]) -> usize {
 }
 
 /// Read from the master side (data that slave wrote)
-pub fn master_read(pty_index: u32, buffer: &mut [u8]) -> usize {
+pub fn master_read(pty_index: u32, buf: &mut [u8]) -> usize {
     let mut table = PTY_TABLE.lock();
     if let Some(ref mut ptys) = *table {
-        for pty in ptys.iterator_mut() {
+        for pty in ptys.iter_mut() {
             if pty.index == pty_index && pty.master_open {
-                let count = buffer.len().minimum(pty.master_buffer.len());
+                let count = buf.len().min(pty.master_buf.len());
                 for i in 0..count {
-                    buffer[i] = pty.master_buffer.remove(0);
+                    buf[i] = pty.master_buf.remove(0);
                 }
                 return count;
             }
@@ -123,9 +123,9 @@ pub fn master_read(pty_index: u32, buffer: &mut [u8]) -> usize {
 pub fn slave_write(pty_index: u32, data: &[u8]) -> usize {
     let mut table = PTY_TABLE.lock();
     if let Some(ref mut ptys) = *table {
-        for pty in ptys.iterator_mut() {
+        for pty in ptys.iter_mut() {
             if pty.index == pty_index && pty.slave_open {
-                pty.master_buffer.extend_from_slice(data);
+                pty.master_buf.extend_from_slice(data);
                 return data.len();
             }
         }
@@ -134,14 +134,14 @@ pub fn slave_write(pty_index: u32, data: &[u8]) -> usize {
 }
 
 /// Read from the slave side (data that master wrote)
-pub fn slave_read(pty_index: u32, buffer: &mut [u8]) -> usize {
+pub fn slave_read(pty_index: u32, buf: &mut [u8]) -> usize {
     let mut table = PTY_TABLE.lock();
     if let Some(ref mut ptys) = *table {
-        for pty in ptys.iterator_mut() {
+        for pty in ptys.iter_mut() {
             if pty.index == pty_index && pty.slave_open {
-                let count = buffer.len().minimum(pty.slave_buffer.len());
+                let count = buf.len().min(pty.slave_buf.len());
                 for i in 0..count {
-                    buffer[i] = pty.slave_buffer.remove(0);
+                    buf[i] = pty.slave_buf.remove(0);
                 }
                 return count;
             }
@@ -154,7 +154,7 @@ pub fn slave_read(pty_index: u32, buffer: &mut [u8]) -> usize {
 pub fn close_master(pty_index: u32) {
     let mut table = PTY_TABLE.lock();
     if let Some(ref mut ptys) = *table {
-        for pty in ptys.iterator_mut() {
+        for pty in ptys.iter_mut() {
             if pty.index == pty_index {
                 pty.master_open = false;
                 break;
@@ -167,7 +167,7 @@ pub fn close_master(pty_index: u32) {
 pub fn close_slave(pty_index: u32) {
     let mut table = PTY_TABLE.lock();
     if let Some(ref mut ptys) = *table {
-        for pty in ptys.iterator_mut() {
+        for pty in ptys.iter_mut() {
             if pty.index == pty_index {
                 pty.slave_open = false;
                 break;

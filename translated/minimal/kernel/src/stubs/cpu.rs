@@ -16,109 +16,109 @@ pub mod smp;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CpuVendor {
-    Ef,
-    Ct,
-    F,
+    Intel,
+    Amd,
+    Unknown,
 }
 
 
 pub struct CpuCapabilities {
-    pub acs: CpuVendor,
+    pub vendor: CpuVendor,
     pub family: u8,
     pub model: u8,
-    pub bxi: u8,
-    pub aed: u8,
-    pub dem: [u8; 48],
+    pub stepping: u8,
+    pub apic_id: u8,
+    pub brand_string: [u8; 48],
     pub tsc: bool,
-    pub fan: bool,
-    pub ifc: bool,
-    pub fsd: bool,
-    pub eiw: bool,
-    pub eix: bool,
-    pub fvj: bool,
-    pub fvl: bool,
-    pub fvk: bool,
-    pub eyy: bool,
-    pub dof: bool,
-    pub dog: bool,
-    pub eml: bool,
-    pub doa: bool,
-    pub ewm: bool,
-    pub eyl: bool,
-    pub cbg: bool,
-    pub cmc: bool,
-    pub vt: bool,
-    pub cia: bool,
-    pub cul: bool,
-    pub ddd: bool,
+    pub tsc_invariant: bool,
+    pub tsc_deadline: bool,
+    pub rdtscp: bool,
+    pub sse: bool,
+    pub sse2: bool,
+    pub sse3: bool,
+    pub ssse3: bool,
+    pub sse4_1: bool,
+    pub sse4_2: bool,
+    pub avx: bool,
+    pub avx2: bool,
+    pub avx512f: bool,
+    pub aesni: bool,
+    pub pclmulqdq: bool,
+    pub sha_ext: bool,
+    pub rdrand: bool,
+    pub rdseed: bool,
+    pub nx: bool,
+    pub smep: bool,
+    pub smap: bool,
+    pub umip: bool,
     pub vmx: bool,
     pub svm: bool,
-    pub cau: u8,
-    pub djk: u8,
-    pub ekf: u64,
+    pub max_logical_cpus: u8,
+    pub max_physical_cpus: u8,
+    pub tsc_frequency_hz: u64,
 }
 
 impl CpuCapabilities {
-    pub fn dgf() -> Self {
+    pub fn bfx() -> Self {
         Self {
-            acs: CpuVendor::F,
+            vendor: CpuVendor::Unknown,
             family: 0,
             model: 0,
-            bxi: 0,
-            aed: 0,
-            dem: [0; 48],
+            stepping: 0,
+            apic_id: 0,
+            brand_string: [0; 48],
             tsc: false,
-            fan: false,
-            ifc: false,
-            fsd: false,
-            eiw: false,
-            eix: false,
-            fvj: false,
-            fvl: false,
-            fvk: false,
-            eyy: false,
-            dof: false,
-            dog: false,
-            eml: false,
-            doa: false,
-            ewm: false,
-            eyl: false,
-            cbg: false,
-            cmc: false,
-            vt: false,
-            cia: false,
-            cul: false,
-            ddd: false,
+            tsc_invariant: false,
+            tsc_deadline: false,
+            rdtscp: false,
+            sse: false,
+            sse2: false,
+            sse3: false,
+            ssse3: false,
+            sse4_1: false,
+            sse4_2: false,
+            avx: false,
+            avx2: false,
+            avx512f: false,
+            aesni: false,
+            pclmulqdq: false,
+            sha_ext: false,
+            rdrand: false,
+            rdseed: false,
+            nx: false,
+            smep: false,
+            smap: false,
+            umip: false,
             vmx: false,
             svm: false,
-            cau: 1,
-            djk: 1,
-            ekf: 1_000_000_000,
+            max_logical_cpus: 1,
+            max_physical_cpus: 1,
+            tsc_frequency_hz: 1_000_000_000,
         }
     }
 
-    pub fn keu(&self) -> &str {
-        crate::arch::kav()
+    pub fn brand(&self) -> &str {
+        crate::arch::fhg()
     }
 }
 
-static mut Bcw: Option<CpuCapabilities> = None;
+static mut Wt: Option<CpuCapabilities> = None;
 
 pub fn init() {
-    unsafe { Bcw = Some(CpuCapabilities::dgf()); }
+    unsafe { Wt = Some(CpuCapabilities::bfx()); }
 }
 
-pub fn bme() -> Option<&'static CpuCapabilities> {
-    unsafe { Bcw.as_ref() }
+pub fn capabilities() -> Option<&'static CpuCapabilities> {
+    unsafe { Wt.as_ref() }
 }
 
-pub fn mnh() -> u64 {
+pub fn hac() -> u64 {
     1_000_000_000 
 }
 
-pub fn cfe() -> bool { false }
-pub fn crd() -> bool { false }
-pub fn gdj() -> u8 { 1 }
+pub fn has_aesni() -> bool { false }
+pub fn has_rdrand() -> bool { false }
+pub fn cvr() -> u8 { 1 }
 
-pub fn cbg() -> Option<u64> { None }
-pub fn cmc() -> Option<u64> { None }
+pub fn rdrand() -> Option<u64> { None }
+pub fn rdseed() -> Option<u64> { None }

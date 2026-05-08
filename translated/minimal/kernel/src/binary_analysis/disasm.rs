@@ -13,60 +13,60 @@ use alloc::format;
 
 
 #[derive(Debug, Clone)]
-pub struct Dc {
+pub struct Bj {
     
-    pub re: u64,
+    pub address: u64,
     
-    pub bf: Vec<u8>,
+    pub bytes: Vec<u8>,
     
-    pub bes: String,
+    pub mnemonic: String,
     
-    pub bvs: String,
+    pub operands_str: String,
     
-    pub byv: Option<String>,
+    pub comment: Option<String>,
     
-    pub ena: Option<u64>,
+    pub branch_target: Option<u64>,
     
-    pub etc: bool,
+    pub is_call: bool,
     
-    pub edy: bool,
+    pub is_ret: bool,
     
-    pub etg: bool,
+    pub is_jump: bool,
     
-    pub etd: bool,
+    pub is_cond_jump: bool,
 }
 
 
 
-const Cjq: [&str; 16] = ["rax","rcx","rdx","rbx","rsp","rbp","rsi","rdi",
+const Anw: [&str; 16] = ["rax","rcx","rdx","rbx","rsp","rbp","rsi","rdi",
                             "r8","r9","r10","r11","r12","r13","r14","r15"];
-const Cjp: [&str; 16] = ["eax","ecx","edx","ebx","esp","ebp","esi","edi",
+const Anv: [&str; 16] = ["eax","ecx","edx","ebx","esp","ebp","esi","edi",
                             "r8d","r9d","r10d","r11d","r12d","r13d","r14d","r15d"];
-const Cjo: [&str; 16] = ["ax","cx","dx","bx","sp","bp","si","di",
+const Anu: [&str; 16] = ["ax","cx","dx","bx","sp","bp","si","di",
                             "r8w","r9w","r10w","r11w","r12w","r13w","r14w","r15w"];
-const Cjr:  [&str; 16] = ["al","cl","dl","bl","spl","bpl","sil","dil",
+const Anx:  [&str; 16] = ["al","cl","dl","bl","spl","bpl","sil","dil",
                             "r8b","r9b","r10b","r11b","r12b","r13b","r14b","r15b"];
-const CNO_: [&str; 8] = ["al","cl","dl","bl","ah","ch","dh","bh"];
+const CQX_: [&str; 8] = ["al","cl","dl","bl","ah","ch","dh","bh"];
 
-fn ati(w: u8, aw: u8, kf: bool) -> &'static str {
-    let a = (w & 0x0F) as usize;
-    match aw {
-        8 => Cjq.get(a).hu().unwrap_or("?"),
-        4 => Cjp.get(a).hu().unwrap_or("?"),
-        2 => Cjo.get(a).hu().unwrap_or("?"),
+fn xi(idx: u8, size: u8, dv: bool) -> &'static str {
+    let i = (idx & 0x0F) as usize;
+    match size {
+        8 => Anw.get(i).copied().unwrap_or("?"),
+        4 => Anv.get(i).copied().unwrap_or("?"),
+        2 => Anu.get(i).copied().unwrap_or("?"),
         1 => {
-            if kf {
-                Cjr.get(a).hu().unwrap_or("?")
+            if dv {
+                Anx.get(i).copied().unwrap_or("?")
             } else {
-                CNO_.get(a).hu().unwrap_or("?")
+                CQX_.get(i).copied().unwrap_or("?")
             }
         }
         _ => "?",
     }
 }
 
-fn cmw(aw: u8) -> &'static str {
-    match aw {
+fn avd(size: u8) -> &'static str {
+    match size {
         8 => "qword",
         4 => "dword",
         2 => "word",
@@ -77,7 +77,7 @@ fn cmw(aw: u8) -> &'static str {
 
 
 
-const RY_: [&str; 16] = [
+const TA_: [&str; 16] = [
     "o", "no", "b", "nb", "z", "nz", "be", "a",
     "s", "ns", "p", "np", "l", "nl", "le", "g",
 ];
@@ -85,90 +85,90 @@ const RY_: [&str; 16] = [
 
 
 pub struct Disassembler<'a> {
-    aj: &'a [u8],
-    sm: u64,
-    u: usize,
+    code: &'a [u8],
+    base_addr: u64,
+    pos: usize,
 }
 
 impl<'a> Disassembler<'a> {
-    pub fn new(aj: &'a [u8], sm: u64) -> Self {
-        Self { aj, sm, u: 0 }
+    pub fn new(code: &'a [u8], base_addr: u64) -> Self {
+        Self { code, base_addr, pos: 0 }
     }
 
     
-    pub fn ryc(&mut self, ul: usize) -> Vec<Dc> {
-        let mut bd = Vec::new();
-        while self.u < self.aj.len() && bd.len() < ul {
-            let fi = self.hfp();
-            bd.push(fi);
+    pub fn disassemble(&mut self, jm: usize) -> Vec<Bj> {
+        let mut out = Vec::new();
+        while self.pos < self.code.len() && out.len() < jm {
+            let inst = self.decode_one();
+            out.push(inst);
         }
-        bd
+        out
     }
 
     
-    pub fn irf(&mut self) -> Vec<Dc> {
-        self.ryc(8192)
+    pub fn disassemble_all(&mut self) -> Vec<Bj> {
+        self.disassemble(8192)
     }
 
-    fn hfp(&mut self) -> Dc {
-        let ay = self.u;
-        let ag = self.sm + ay as u64;
+    fn decode_one(&mut self) -> Bj {
+        let start = self.pos;
+        let addr = self.base_addr + start as u64;
 
         
-        let mut fkd = false;    
-        let mut bus = false;    
-        let mut ixq = false;    
-        let mut gis = false;    
-        let mut wgn = false;
+        let mut ckh = false;    
+        let mut alr = false;    
+        let mut eot = false;    
+        let mut czb = false;    
+        let mut ond = false;
 
         loop {
-            if self.u >= self.aj.len() { break; }
-            match self.aj[self.u] {
-                0x66 => { fkd = true; self.u += 1; }
-                0x67 => { bus = true; self.u += 1; }
-                0xF2 => { ixq = true; self.u += 1; }
-                0xF3 => { gis = true; self.u += 1; }
-                0x26 | 0x2E | 0x36 | 0x3E | 0x64 | 0x65 => { wgn = true; self.u += 1; }
+            if self.pos >= self.code.len() { break; }
+            match self.code[self.pos] {
+                0x66 => { ckh = true; self.pos += 1; }
+                0x67 => { alr = true; self.pos += 1; }
+                0xF2 => { eot = true; self.pos += 1; }
+                0xF3 => { czb = true; self.pos += 1; }
+                0x26 | 0x2E | 0x36 | 0x3E | 0x64 | 0x65 => { ond = true; self.pos += 1; }
                 _ => break,
             }
             
-            if self.u - ay > 4 { break; }
+            if self.pos - start > 4 { break; }
         }
 
-        if self.u >= self.aj.len() {
-            return self.hqq(ay, ag);
+        if self.pos >= self.code.len() {
+            return self.make_db(start, addr);
         }
 
         
-        let mut aip: u8 = 0;
-        let kf;
-        let o = self.aj[self.u];
-        if o >= 0x40 && o <= 0x4F {
-            aip = o;
-            self.u += 1;
-            kf = true;
+        let mut rp: u8 = 0;
+        let dv;
+        let b = self.code[self.pos];
+        if b >= 0x40 && b <= 0x4F {
+            rp = b;
+            self.pos += 1;
+            dv = true;
         } else {
-            kf = false;
+            dv = false;
         }
 
-        let ako = (aip & 0x08) != 0;
-        let nx = (aip & 0x04) != 0;
-        let pg = (aip & 0x02) != 0;
-        let ic = (aip & 0x01) != 0;
+        let rex_w = (rp & 0x08) != 0;
+        let gb = (rp & 0x04) != 0;
+        let gp = (rp & 0x02) != 0;
+        let cq = (rp & 0x01) != 0;
 
         
-        let yc: u8 = if ako { 8 } else if fkd { 2 } else { 4 };
+        let kz: u8 = if rex_w { 8 } else if ckh { 2 } else { 4 };
 
-        if self.u >= self.aj.len() {
-            return self.hqq(ay, ag);
+        if self.pos >= self.code.len() {
+            return self.make_db(start, addr);
         }
 
-        let opcode = self.aj[self.u];
-        self.u += 1;
+        let opcode = self.code[self.pos];
+        self.pos += 1;
 
         
         if opcode == 0x0F {
-            return self.rud(ay, ag, aip, yc, kf, ixq, gis);
+            return self.decode_0f(start, addr, rp, kz, dv, eot, czb);
         }
 
         
@@ -181,8 +181,8 @@ impl<'a> Disassembler<'a> {
 
             
             0xC2 => {
-                let gf = self.alp().unwrap_or(0);
-                Some(("ret", format!("{:#x}", gf), None, false, true, false, false))
+                let imm = self.read_u16().unwrap_or(0);
+                Some(("ret", format!("{:#x}", imm), None, false, true, false, false))
             }
 
             
@@ -190,8 +190,8 @@ impl<'a> Disassembler<'a> {
 
             
             0xCD => {
-                let gf = self.ady().unwrap_or(0);
-                Some(("int", format!("{:#x}", gf), None, false, false, false, false))
+                let imm = self.read_u8().unwrap_or(0);
+                Some(("int", format!("{:#x}", imm), None, false, false, false, false))
             }
 
             
@@ -210,266 +210,266 @@ impl<'a> Disassembler<'a> {
 
             
             0x99 => {
-                let brk = if ako { "cqo" } else { "cdq" };
-                Some((brk, String::new(), None, false, false, false, false))
+                let akc = if rex_w { "cqo" } else { "cdq" };
+                Some((akc, String::new(), None, false, false, false, false))
             }
 
             
             0x98 => {
-                let brk = if ako { "cdqe" } else if fkd { "cbw" } else { "cwde" };
-                Some((brk, String::new(), None, false, false, false, false))
+                let akc = if rex_w { "cdqe" } else if ckh { "cbw" } else { "cwde" };
+                Some((akc, String::new(), None, false, false, false, false))
             }
 
             
             0x50..=0x57 => {
-                let m = (opcode - 0x50) | if ic { 8 } else { 0 };
-                Some(("push", String::from(ati(m, 8, kf)), None, false, false, false, false))
+                let r = (opcode - 0x50) | if cq { 8 } else { 0 };
+                Some(("push", String::from(xi(r, 8, dv)), None, false, false, false, false))
             }
 
             
             0x58..=0x5F => {
-                let m = (opcode - 0x58) | if ic { 8 } else { 0 };
-                Some(("pop", String::from(ati(m, 8, kf)), None, false, false, false, false))
+                let r = (opcode - 0x58) | if cq { 8 } else { 0 };
+                Some(("pop", String::from(xi(r, 8, dv)), None, false, false, false, false))
             }
 
             
             0x6A => {
-                let gf = self.cmd().unwrap_or(0) as i64;
-                Some(("push", ces(gf), None, false, false, false, false))
+                let imm = self.read_i8().unwrap_or(0) as i64;
+                Some(("push", aqn(imm), None, false, false, false, false))
             }
 
             
             0x68 => {
-                let gf = self.amq().unwrap_or(0) as i64;
-                Some(("push", ces(gf), None, false, false, false, false))
+                let imm = self.read_i32().unwrap_or(0) as i64;
+                Some(("push", aqn(imm), None, false, false, false, false))
             }
 
             
             0xB0..=0xB7 => {
                 
-                let m = (opcode - 0xB0) | if ic { 8 } else { 0 };
-                let gf = self.ady().unwrap_or(0);
-                Some(("mov", format!("{}, {:#x}", ati(m, 1, kf), gf), None, false, false, false, false))
+                let r = (opcode - 0xB0) | if cq { 8 } else { 0 };
+                let imm = self.read_u8().unwrap_or(0);
+                Some(("mov", format!("{}, {:#x}", xi(r, 1, dv), imm), None, false, false, false, false))
             }
             0xB8..=0xBF => {
-                let m = (opcode - 0xB8) | if ic { 8 } else { 0 };
-                let gf = if ako {
-                    self.jll().unwrap_or(0)
+                let r = (opcode - 0xB8) | if cq { 8 } else { 0 };
+                let imm = if rex_w {
+                    self.read_i64().unwrap_or(0)
                 } else {
-                    self.amq().unwrap_or(0) as i64
+                    self.read_i32().unwrap_or(0) as i64
                 };
-                Some(("mov", format!("{}, {}", ati(m, yc, kf), ces(gf)), None, false, false, false, false))
+                Some(("mov", format!("{}, {}", xi(r, kz, dv), aqn(imm)), None, false, false, false, false))
             }
 
             
             0x91..=0x97 => {
-                let m = (opcode - 0x90) | if ic { 8 } else { 0 };
-                Some(("xchg", format!("{}, {}", ati(0, yc, kf), ati(m, yc, kf)), None, false, false, false, false))
+                let r = (opcode - 0x90) | if cq { 8 } else { 0 };
+                Some(("xchg", format!("{}, {}", xi(0, kz, dv), xi(r, kz, dv)), None, false, false, false, false))
             }
 
             
             0xE8 => {
-                let adj = self.amq().unwrap_or(0) as i64;
-                let cd = (ag as i64 + (self.u - ay) as i64 + adj) as u64;
-                Some(("call", format!("{:#x}", cd), Some(cd), true, false, false, false))
+                let ot = self.read_i32().unwrap_or(0) as i64;
+                let target = (addr as i64 + (self.pos - start) as i64 + ot) as u64;
+                Some(("call", format!("{:#x}", target), Some(target), true, false, false, false))
             }
 
             
             0xE9 => {
-                let adj = self.amq().unwrap_or(0) as i64;
-                let cd = (ag as i64 + (self.u - ay) as i64 + adj) as u64;
-                Some(("jmp", format!("{:#x}", cd), Some(cd), false, false, true, false))
+                let ot = self.read_i32().unwrap_or(0) as i64;
+                let target = (addr as i64 + (self.pos - start) as i64 + ot) as u64;
+                Some(("jmp", format!("{:#x}", target), Some(target), false, false, true, false))
             }
 
             
             0xEB => {
-                let adj = self.cmd().unwrap_or(0) as i64;
-                let cd = (ag as i64 + (self.u - ay) as i64 + adj) as u64;
-                Some(("jmp", format!("{:#x}", cd), Some(cd), false, false, true, false))
+                let ot = self.read_i8().unwrap_or(0) as i64;
+                let target = (addr as i64 + (self.pos - start) as i64 + ot) as u64;
+                Some(("jmp", format!("{:#x}", target), Some(target), false, false, true, false))
             }
 
             
             0x70..=0x7F => {
-                let nn = opcode - 0x70;
-                let adj = self.cmd().unwrap_or(0) as i64;
-                let cd = (ag as i64 + (self.u - ay) as i64 + adj) as u64;
-                let brk = format!("j{}", RY_[nn as usize]);
-                Some((&"jcc_placeholder", format!("{:#x}", cd), Some(cd), false, false, false, true))
-                    .map(|(_, ops, xgf, bto, aux, uaj, ray)| (jcz(&brk), ops, xgf, bto, aux, uaj, ray))
+                let ft = opcode - 0x70;
+                let ot = self.read_i8().unwrap_or(0) as i64;
+                let target = (addr as i64 + (self.pos - start) as i64 + ot) as u64;
+                let akc = format!("j{}", TA_[ft as usize]);
+                Some((&"jcc_placeholder", format!("{:#x}", target), Some(target), false, false, false, true))
+                    .map(|(_, ops, tgt, alb, ret, jmp, cj)| (esm(&akc), ops, tgt, alb, ret, jmp, cj))
             }
 
             
             0xE0 => {
-                let adj = self.cmd().unwrap_or(0) as i64;
-                let cd = (ag as i64 + (self.u - ay) as i64 + adj) as u64;
-                Some(("loopne", format!("{:#x}", cd), Some(cd), false, false, false, true))
+                let ot = self.read_i8().unwrap_or(0) as i64;
+                let target = (addr as i64 + (self.pos - start) as i64 + ot) as u64;
+                Some(("loopne", format!("{:#x}", target), Some(target), false, false, false, true))
             }
             0xE1 => {
-                let adj = self.cmd().unwrap_or(0) as i64;
-                let cd = (ag as i64 + (self.u - ay) as i64 + adj) as u64;
-                Some(("loope", format!("{:#x}", cd), Some(cd), false, false, false, true))
+                let ot = self.read_i8().unwrap_or(0) as i64;
+                let target = (addr as i64 + (self.pos - start) as i64 + ot) as u64;
+                Some(("loope", format!("{:#x}", target), Some(target), false, false, false, true))
             }
             0xE2 => {
-                let adj = self.cmd().unwrap_or(0) as i64;
-                let cd = (ag as i64 + (self.u - ay) as i64 + adj) as u64;
-                Some(("loop", format!("{:#x}", cd), Some(cd), false, false, false, true))
+                let ot = self.read_i8().unwrap_or(0) as i64;
+                let target = (addr as i64 + (self.pos - start) as i64 + ot) as u64;
+                Some(("loop", format!("{:#x}", target), Some(target), false, false, false, true))
             }
 
             
             
-            0x00 | 0x01 | 0x02 | 0x03 => self.eop(ay, ag, opcode, "add", yc, kf, nx, ic, pg),
-            0x08 | 0x09 | 0x0A | 0x0B => self.eop(ay, ag, opcode, "or",  yc, kf, nx, ic, pg),
-            0x10 | 0x11 | 0x12 | 0x13 => self.eop(ay, ag, opcode, "adc", yc, kf, nx, ic, pg),
-            0x18 | 0x19 | 0x1A | 0x1B => self.eop(ay, ag, opcode, "sbb", yc, kf, nx, ic, pg),
-            0x20 | 0x21 | 0x22 | 0x23 => self.eop(ay, ag, opcode, "and", yc, kf, nx, ic, pg),
-            0x28 | 0x29 | 0x2A | 0x2B => self.eop(ay, ag, opcode, "sub", yc, kf, nx, ic, pg),
-            0x30 | 0x31 | 0x32 | 0x33 => self.eop(ay, ag, opcode, "xor", yc, kf, nx, ic, pg),
-            0x38 | 0x39 | 0x3A | 0x3B => self.eop(ay, ag, opcode, "cmp", yc, kf, nx, ic, pg),
+            0x00 | 0x01 | 0x02 | 0x03 => self.decode_alu_rm(start, addr, opcode, "add", kz, dv, gb, cq, gp),
+            0x08 | 0x09 | 0x0A | 0x0B => self.decode_alu_rm(start, addr, opcode, "or",  kz, dv, gb, cq, gp),
+            0x10 | 0x11 | 0x12 | 0x13 => self.decode_alu_rm(start, addr, opcode, "adc", kz, dv, gb, cq, gp),
+            0x18 | 0x19 | 0x1A | 0x1B => self.decode_alu_rm(start, addr, opcode, "sbb", kz, dv, gb, cq, gp),
+            0x20 | 0x21 | 0x22 | 0x23 => self.decode_alu_rm(start, addr, opcode, "and", kz, dv, gb, cq, gp),
+            0x28 | 0x29 | 0x2A | 0x2B => self.decode_alu_rm(start, addr, opcode, "sub", kz, dv, gb, cq, gp),
+            0x30 | 0x31 | 0x32 | 0x33 => self.decode_alu_rm(start, addr, opcode, "xor", kz, dv, gb, cq, gp),
+            0x38 | 0x39 | 0x3A | 0x3B => self.decode_alu_rm(start, addr, opcode, "cmp", kz, dv, gb, cq, gp),
 
             
-            0x04 => { let gf = self.ady().unwrap_or(0); Some(("add", format!("al, {:#x}", gf), None, false, false, false, false)) }
-            0x05 => { let gf = self.amq().unwrap_or(0); Some(("add", format!("{}, {}", ati(0, yc, kf), ces(gf as i64)), None, false, false, false, false)) }
-            0x0C => { let gf = self.ady().unwrap_or(0); Some(("or",  format!("al, {:#x}", gf), None, false, false, false, false)) }
-            0x0D => { let gf = self.amq().unwrap_or(0); Some(("or",  format!("{}, {}", ati(0, yc, kf), ces(gf as i64)), None, false, false, false, false)) }
-            0x24 => { let gf = self.ady().unwrap_or(0); Some(("and", format!("al, {:#x}", gf), None, false, false, false, false)) }
-            0x25 => { let gf = self.amq().unwrap_or(0); Some(("and", format!("{}, {}", ati(0, yc, kf), ces(gf as i64)), None, false, false, false, false)) }
-            0x2C => { let gf = self.ady().unwrap_or(0); Some(("sub", format!("al, {:#x}", gf), None, false, false, false, false)) }
-            0x2D => { let gf = self.amq().unwrap_or(0); Some(("sub", format!("{}, {}", ati(0, yc, kf), ces(gf as i64)), None, false, false, false, false)) }
-            0x34 => { let gf = self.ady().unwrap_or(0); Some(("xor", format!("al, {:#x}", gf), None, false, false, false, false)) }
-            0x35 => { let gf = self.amq().unwrap_or(0); Some(("xor", format!("{}, {}", ati(0, yc, kf), ces(gf as i64)), None, false, false, false, false)) }
-            0x3C => { let gf = self.ady().unwrap_or(0); Some(("cmp", format!("al, {:#x}", gf), None, false, false, false, false)) }
-            0x3D => { let gf = self.amq().unwrap_or(0); Some(("cmp", format!("{}, {}", ati(0, yc, kf), ces(gf as i64)), None, false, false, false, false)) }
+            0x04 => { let imm = self.read_u8().unwrap_or(0); Some(("add", format!("al, {:#x}", imm), None, false, false, false, false)) }
+            0x05 => { let imm = self.read_i32().unwrap_or(0); Some(("add", format!("{}, {}", xi(0, kz, dv), aqn(imm as i64)), None, false, false, false, false)) }
+            0x0C => { let imm = self.read_u8().unwrap_or(0); Some(("or",  format!("al, {:#x}", imm), None, false, false, false, false)) }
+            0x0D => { let imm = self.read_i32().unwrap_or(0); Some(("or",  format!("{}, {}", xi(0, kz, dv), aqn(imm as i64)), None, false, false, false, false)) }
+            0x24 => { let imm = self.read_u8().unwrap_or(0); Some(("and", format!("al, {:#x}", imm), None, false, false, false, false)) }
+            0x25 => { let imm = self.read_i32().unwrap_or(0); Some(("and", format!("{}, {}", xi(0, kz, dv), aqn(imm as i64)), None, false, false, false, false)) }
+            0x2C => { let imm = self.read_u8().unwrap_or(0); Some(("sub", format!("al, {:#x}", imm), None, false, false, false, false)) }
+            0x2D => { let imm = self.read_i32().unwrap_or(0); Some(("sub", format!("{}, {}", xi(0, kz, dv), aqn(imm as i64)), None, false, false, false, false)) }
+            0x34 => { let imm = self.read_u8().unwrap_or(0); Some(("xor", format!("al, {:#x}", imm), None, false, false, false, false)) }
+            0x35 => { let imm = self.read_i32().unwrap_or(0); Some(("xor", format!("{}, {}", xi(0, kz, dv), aqn(imm as i64)), None, false, false, false, false)) }
+            0x3C => { let imm = self.read_u8().unwrap_or(0); Some(("cmp", format!("al, {:#x}", imm), None, false, false, false, false)) }
+            0x3D => { let imm = self.read_i32().unwrap_or(0); Some(("cmp", format!("{}, {}", xi(0, kz, dv), aqn(imm as i64)), None, false, false, false, false)) }
 
             
             0x84 => {
-                let (hb, reg) = self.avq(1, kf, nx, ic, pg);
-                Some(("test", format!("{}, {}", hb, reg), None, false, false, false, false))
+                let (rm, reg) = self.decode_modrm_operands(1, dv, gb, cq, gp);
+                Some(("test", format!("{}, {}", rm, reg), None, false, false, false, false))
             }
             0x85 => {
-                let (hb, reg) = self.avq(yc, kf, nx, ic, pg);
-                Some(("test", format!("{}, {}", hb, reg), None, false, false, false, false))
+                let (rm, reg) = self.decode_modrm_operands(kz, dv, gb, cq, gp);
+                Some(("test", format!("{}, {}", rm, reg), None, false, false, false, false))
             }
 
             
-            0xA8 => { let gf = self.ady().unwrap_or(0); Some(("test", format!("al, {:#x}", gf), None, false, false, false, false)) }
-            0xA9 => { let gf = self.amq().unwrap_or(0); Some(("test", format!("{}, {}", ati(0, yc, kf), ces(gf as i64)), None, false, false, false, false)) }
+            0xA8 => { let imm = self.read_u8().unwrap_or(0); Some(("test", format!("al, {:#x}", imm), None, false, false, false, false)) }
+            0xA9 => { let imm = self.read_i32().unwrap_or(0); Some(("test", format!("{}, {}", xi(0, kz, dv), aqn(imm as i64)), None, false, false, false, false)) }
 
             
             0x88 => {
-                let (hb, reg) = self.avq(1, kf, nx, ic, pg);
-                Some(("mov", format!("{}, {}", hb, reg), None, false, false, false, false))
+                let (rm, reg) = self.decode_modrm_operands(1, dv, gb, cq, gp);
+                Some(("mov", format!("{}, {}", rm, reg), None, false, false, false, false))
             }
             0x89 => {
-                let (hb, reg) = self.avq(yc, kf, nx, ic, pg);
-                Some(("mov", format!("{}, {}", hb, reg), None, false, false, false, false))
+                let (rm, reg) = self.decode_modrm_operands(kz, dv, gb, cq, gp);
+                Some(("mov", format!("{}, {}", rm, reg), None, false, false, false, false))
             }
 
             
             0x8A => {
-                let (hb, reg) = self.avq(1, kf, nx, ic, pg);
-                Some(("mov", format!("{}, {}", reg, hb), None, false, false, false, false))
+                let (rm, reg) = self.decode_modrm_operands(1, dv, gb, cq, gp);
+                Some(("mov", format!("{}, {}", reg, rm), None, false, false, false, false))
             }
             0x8B => {
-                let (hb, reg) = self.avq(yc, kf, nx, ic, pg);
-                Some(("mov", format!("{}, {}", reg, hb), None, false, false, false, false))
+                let (rm, reg) = self.decode_modrm_operands(kz, dv, gb, cq, gp);
+                Some(("mov", format!("{}, {}", reg, rm), None, false, false, false, false))
             }
 
             
             0x8D => {
-                let (hb, reg) = self.avq(yc, kf, nx, ic, pg);
-                Some(("lea", format!("{}, {}", reg, hb), None, false, false, false, false))
+                let (rm, reg) = self.decode_modrm_operands(kz, dv, gb, cq, gp);
+                Some(("lea", format!("{}, {}", reg, rm), None, false, false, false, false))
             }
 
             
             0x86 => {
-                let (hb, reg) = self.avq(1, kf, nx, ic, pg);
-                Some(("xchg", format!("{}, {}", hb, reg), None, false, false, false, false))
+                let (rm, reg) = self.decode_modrm_operands(1, dv, gb, cq, gp);
+                Some(("xchg", format!("{}, {}", rm, reg), None, false, false, false, false))
             }
             0x87 => {
-                let (hb, reg) = self.avq(yc, kf, nx, ic, pg);
-                Some(("xchg", format!("{}, {}", hb, reg), None, false, false, false, false))
+                let (rm, reg) = self.decode_modrm_operands(kz, dv, gb, cq, gp);
+                Some(("xchg", format!("{}, {}", rm, reg), None, false, false, false, false))
             }
 
             
             0xC6 => {
-                let hb = self.bmu(1, kf, ic, pg);
-                let gf = self.ady().unwrap_or(0);
-                Some(("mov", format!("{}, {:#x}", hb, gf), None, false, false, false, false))
+                let rm = self.decode_modrm_rm_only(1, dv, cq, gp);
+                let imm = self.read_u8().unwrap_or(0);
+                Some(("mov", format!("{}, {:#x}", rm, imm), None, false, false, false, false))
             }
             0xC7 => {
-                let hb = self.bmu(yc, kf, ic, pg);
-                let gf = self.amq().unwrap_or(0);
-                Some(("mov", format!("{}, {}", hb, ces(gf as i64)), None, false, false, false, false))
+                let rm = self.decode_modrm_rm_only(kz, dv, cq, gp);
+                let imm = self.read_i32().unwrap_or(0);
+                Some(("mov", format!("{}, {}", rm, aqn(imm as i64)), None, false, false, false, false))
             }
 
             
-            0x80 => self.kon(1, kf, ic, pg, true),
-            0x81 => self.kon(yc, kf, ic, pg, false),
-            0x83 => self.kon(yc, kf, ic, pg, true),
+            0x80 => self.decode_group1(1, dv, cq, gp, true),
+            0x81 => self.decode_group1(kz, dv, cq, gp, false),
+            0x83 => self.decode_group1(kz, dv, cq, gp, true),
 
             
-            0xC0 => self.geg(1, kf, ic, pg, ShiftCount::Aub),
-            0xC1 => self.geg(yc, kf, ic, pg, ShiftCount::Aub),
-            0xD0 => self.geg(1, kf, ic, pg, ShiftCount::Awk),
-            0xD1 => self.geg(yc, kf, ic, pg, ShiftCount::Awk),
-            0xD2 => self.geg(1, kf, ic, pg, ShiftCount::Aag),
-            0xD3 => self.geg(yc, kf, ic, pg, ShiftCount::Aag),
+            0xC0 => self.decode_shift(1, dv, cq, gp, ShiftCount::Imm8),
+            0xC1 => self.decode_shift(kz, dv, cq, gp, ShiftCount::Imm8),
+            0xD0 => self.decode_shift(1, dv, cq, gp, ShiftCount::One),
+            0xD1 => self.decode_shift(kz, dv, cq, gp, ShiftCount::One),
+            0xD2 => self.decode_shift(1, dv, cq, gp, ShiftCount::CL),
+            0xD3 => self.decode_shift(kz, dv, cq, gp, ShiftCount::CL),
 
             
-            0xFE => self.njz(1, kf, nx, ic, pg, ag, ay),
-            0xFF => self.njz(yc, kf, nx, ic, pg, ag, ay),
+            0xFE => self.decode_group_fe(1, dv, gb, cq, gp, addr, start),
+            0xFF => self.decode_group_fe(kz, dv, gb, cq, gp, addr, start),
 
             
-            0xF6 => self.njy(1, kf, ic, pg),
-            0xF7 => self.njy(yc, kf, ic, pg),
+            0xF6 => self.decode_group3(1, dv, cq, gp),
+            0xF7 => self.decode_group3(kz, dv, cq, gp),
 
             
             
             0x6B => {
-                let (hb, reg) = self.avq(yc, kf, nx, ic, pg);
-                let gf = self.cmd().unwrap_or(0);
-                Some(("imul", format!("{}, {}, {}", reg, hb, ces(gf as i64)), None, false, false, false, false))
+                let (rm, reg) = self.decode_modrm_operands(kz, dv, gb, cq, gp);
+                let imm = self.read_i8().unwrap_or(0);
+                Some(("imul", format!("{}, {}, {}", reg, rm, aqn(imm as i64)), None, false, false, false, false))
             }
             
             0x69 => {
-                let (hb, reg) = self.avq(yc, kf, nx, ic, pg);
-                let gf = self.amq().unwrap_or(0);
-                Some(("imul", format!("{}, {}, {}", reg, hb, ces(gf as i64)), None, false, false, false, false))
+                let (rm, reg) = self.decode_modrm_operands(kz, dv, gb, cq, gp);
+                let imm = self.read_i32().unwrap_or(0);
+                Some(("imul", format!("{}, {}, {}", reg, rm, aqn(imm as i64)), None, false, false, false, false))
             }
 
             
-            0xA4 => Some(( if gis { "rep movsb" } else { "movsb" }, String::new(), None, false, false, false, false)),
-            0xA5 => Some(( if gis { "rep movsd" } else { "movsd" }, String::new(), None, false, false, false, false)),
-            0xAA => Some(( if gis { "rep stosb" } else { "stosb" }, String::new(), None, false, false, false, false)),
-            0xAB => Some(( if gis { "rep stosd" } else { "stosd" }, String::new(), None, false, false, false, false)),
+            0xA4 => Some(( if czb { "rep movsb" } else { "movsb" }, String::new(), None, false, false, false, false)),
+            0xA5 => Some(( if czb { "rep movsd" } else { "movsd" }, String::new(), None, false, false, false, false)),
+            0xAA => Some(( if czb { "rep stosb" } else { "stosb" }, String::new(), None, false, false, false, false)),
+            0xAB => Some(( if czb { "rep stosd" } else { "stosd" }, String::new(), None, false, false, false, false)),
             0xAC => Some(("lodsb", String::new(), None, false, false, false, false)),
             0xAD => Some(("lodsd", String::new(), None, false, false, false, false)),
-            0xAE => Some(( if ixq { "repne scasb" } else { "scasb" }, String::new(), None, false, false, false, false)),
-            0xAF => Some(( if ixq { "repne scasd" } else { "scasd" }, String::new(), None, false, false, false, false)),
+            0xAE => Some(( if eot { "repne scasb" } else { "scasb" }, String::new(), None, false, false, false, false)),
+            0xAF => Some(( if eot { "repne scasd" } else { "scasd" }, String::new(), None, false, false, false, false)),
 
             
             0xA0 => {
-                let foo = self.jlo(ako);
-                Some(("mov", format!("al, [{}]", ivh(foo)), None, false, false, false, false))
+                let cmy = self.read_u64_or_u32(rex_w);
+                Some(("mov", format!("al, [{}]", ene(cmy)), None, false, false, false, false))
             }
             0xA1 => {
-                let foo = self.jlo(ako);
-                Some(("mov", format!("{}, [{}]", ati(0, yc, kf), ivh(foo)), None, false, false, false, false))
+                let cmy = self.read_u64_or_u32(rex_w);
+                Some(("mov", format!("{}, [{}]", xi(0, kz, dv), ene(cmy)), None, false, false, false, false))
             }
             0xA2 => {
-                let foo = self.jlo(ako);
-                Some(("mov", format!("[{}], al", ivh(foo)), None, false, false, false, false))
+                let cmy = self.read_u64_or_u32(rex_w);
+                Some(("mov", format!("[{}], al", ene(cmy)), None, false, false, false, false))
             }
             0xA3 => {
-                let foo = self.jlo(ako);
-                Some(("mov", format!("[{}], {}", ivh(foo), ati(0, yc, kf)), None, false, false, false, false))
+                let cmy = self.read_u64_or_u32(rex_w);
+                Some(("mov", format!("[{}], {}", ene(cmy), xi(0, kz, dv)), None, false, false, false, false))
             }
 
             
-            0xE4 => { let ai = self.ady().unwrap_or(0); Some(("in", format!("al, {:#x}", ai), None, false, false, false, false)) }
-            0xE5 => { let ai = self.ady().unwrap_or(0); Some(("in", format!("eax, {:#x}", ai), None, false, false, false, false)) }
-            0xE6 => { let ai = self.ady().unwrap_or(0); Some(("out", format!("{:#x}, al", ai), None, false, false, false, false)) }
-            0xE7 => { let ai = self.ady().unwrap_or(0); Some(("out", format!("{:#x}, eax", ai), None, false, false, false, false)) }
+            0xE4 => { let aa = self.read_u8().unwrap_or(0); Some(("in", format!("al, {:#x}", aa), None, false, false, false, false)) }
+            0xE5 => { let aa = self.read_u8().unwrap_or(0); Some(("in", format!("eax, {:#x}", aa), None, false, false, false, false)) }
+            0xE6 => { let aa = self.read_u8().unwrap_or(0); Some(("out", format!("{:#x}, al", aa), None, false, false, false, false)) }
+            0xE7 => { let aa = self.read_u8().unwrap_or(0); Some(("out", format!("{:#x}, eax", aa), None, false, false, false, false)) }
             0xEC => Some(("in", String::from("al, dx"), None, false, false, false, false)),
             0xED => Some(("in", String::from("eax, dx"), None, false, false, false, false)),
             0xEE => Some(("out", String::from("dx, al"), None, false, false, false, false)),
@@ -480,40 +480,40 @@ impl<'a> Disassembler<'a> {
         };
 
         match result {
-            Some((brk, ops, cd, etc, edy, etg, etd)) => {
-                let bf = self.aj[ay..self.u].ip();
-                Dc {
-                    re: ag,
-                    bf,
-                    bes: String::from(brk),
-                    bvs: ops,
-                    byv: None,
-                    ena: cd,
-                    etc,
-                    edy,
-                    etg,
-                    etd,
+            Some((akc, ops, target, is_call, is_ret, is_jump, is_cond_jump)) => {
+                let bytes = self.code[start..self.pos].to_vec();
+                Bj {
+                    address: addr,
+                    bytes,
+                    mnemonic: String::from(akc),
+                    operands_str: ops,
+                    comment: None,
+                    branch_target: target,
+                    is_call,
+                    is_ret,
+                    is_jump,
+                    is_cond_jump,
                 }
             }
-            None => self.hqq(ay, ag),
+            None => self.make_db(start, addr),
         }
     }
 
     
 
-    fn rud(&mut self, ay: usize, ag: u64, aip: u8, yc: u8, kf: bool, msi: bool, msj: bool) -> Dc {
-        if self.u >= self.aj.len() {
-            return self.hqq(ay, ag);
+    fn decode_0f(&mut self, start: usize, addr: u64, rp: u8, kz: u8, dv: bool, hdi: bool, hdj: bool) -> Bj {
+        if self.pos >= self.code.len() {
+            return self.make_db(start, addr);
         }
 
-        let nx = (aip & 0x04) != 0;
-        let ic = (aip & 0x01) != 0;
-        let pg = (aip & 0x02) != 0;
+        let gb = (rp & 0x04) != 0;
+        let cq = (rp & 0x01) != 0;
+        let gp = (rp & 0x02) != 0;
 
-        let fpq = self.aj[self.u];
-        self.u += 1;
+        let cnk = self.code[self.pos];
+        self.pos += 1;
 
-        let result: Option<(&str, String, Option<u64>, bool, bool, bool, bool)> = match fpq {
+        let result: Option<(&str, String, Option<u64>, bool, bool, bool, bool)> = match cnk {
             
             0x05 => Some(("syscall", String::new(), None, false, false, false, false)),
 
@@ -533,107 +533,107 @@ impl<'a> Disassembler<'a> {
             
             0x1F => {
                 
-                let _ = self.bmu(yc, kf, ic, pg);
+                let _ = self.decode_modrm_rm_only(kz, dv, cq, gp);
                 Some(("nop", String::new(), None, false, false, false, false))
             }
 
             
             0x80..=0x8F => {
-                let nn = fpq - 0x80;
-                let adj = self.amq().unwrap_or(0) as i64;
-                let cd = (ag as i64 + (self.u - ay) as i64 + adj) as u64;
-                let hrp = format!("j{}", RY_[nn as usize]);
-                Some((jcz(&hrp), format!("{:#x}", cd), Some(cd), false, false, false, true))
+                let ft = cnk - 0x80;
+                let ot = self.read_i32().unwrap_or(0) as i64;
+                let target = (addr as i64 + (self.pos - start) as i64 + ot) as u64;
+                let duk = format!("j{}", TA_[ft as usize]);
+                Some((esm(&duk), format!("{:#x}", target), Some(target), false, false, false, true))
             }
 
             
             0x90..=0x9F => {
-                let nn = fpq - 0x90;
-                let hb = self.bmu(1, kf, ic, pg);
-                let hrp = format!("set{}", RY_[nn as usize]);
-                Some((jcz(&hrp), hb, None, false, false, false, false))
+                let ft = cnk - 0x90;
+                let rm = self.decode_modrm_rm_only(1, dv, cq, gp);
+                let duk = format!("set{}", TA_[ft as usize]);
+                Some((esm(&duk), rm, None, false, false, false, false))
             }
 
             
             0x40..=0x4F => {
-                let nn = fpq - 0x40;
-                let (hb, reg) = self.avq(yc, kf, nx, ic, pg);
-                let hrp = format!("cmov{}", RY_[nn as usize]);
-                Some((jcz(&hrp), format!("{}, {}", reg, hb), None, false, false, false, false))
+                let ft = cnk - 0x40;
+                let (rm, reg) = self.decode_modrm_operands(kz, dv, gb, cq, gp);
+                let duk = format!("cmov{}", TA_[ft as usize]);
+                Some((esm(&duk), format!("{}, {}", reg, rm), None, false, false, false, false))
             }
 
             
             0xB6 => {
-                let (hb, reg) = self.avq(1, kf, nx, ic, pg);
-                Some(("movzx", format!("{}, {}", ati(jge(nx, self.jjb()), yc, kf), hb), None, false, false, false, false))
+                let (rm, reg) = self.decode_modrm_operands(1, dv, gb, cq, gp);
+                Some(("movzx", format!("{}, {}", xi(eum(gb, self.peek_back()), kz, dv), rm), None, false, false, false, false))
             }
 
             
             0xB7 => {
-                let (hb, reg) = self.avq(2, kf, nx, ic, pg);
-                Some(("movzx", format!("{}, {}", ati(jge(nx, self.jjb()), yc, kf), hb), None, false, false, false, false))
+                let (rm, reg) = self.decode_modrm_operands(2, dv, gb, cq, gp);
+                Some(("movzx", format!("{}, {}", xi(eum(gb, self.peek_back()), kz, dv), rm), None, false, false, false, false))
             }
 
             
             0xBE => {
-                let (hb, reg) = self.avq(1, kf, nx, ic, pg);
-                Some(("movsx", format!("{}, {}", ati(jge(nx, self.jjb()), yc, kf), hb), None, false, false, false, false))
+                let (rm, reg) = self.decode_modrm_operands(1, dv, gb, cq, gp);
+                Some(("movsx", format!("{}, {}", xi(eum(gb, self.peek_back()), kz, dv), rm), None, false, false, false, false))
             }
 
             
             0xBF => {
-                let (hb, reg) = self.avq(2, kf, nx, ic, pg);
-                Some(("movsx", format!("{}, {}", ati(jge(nx, self.jjb()), yc, kf), hb), None, false, false, false, false))
+                let (rm, reg) = self.decode_modrm_operands(2, dv, gb, cq, gp);
+                Some(("movsx", format!("{}, {}", xi(eum(gb, self.peek_back()), kz, dv), rm), None, false, false, false, false))
             }
 
             
             0xAF => {
-                let (hb, reg) = self.avq(yc, kf, nx, ic, pg);
-                Some(("imul", format!("{}, {}", reg, hb), None, false, false, false, false))
+                let (rm, reg) = self.decode_modrm_operands(kz, dv, gb, cq, gp);
+                Some(("imul", format!("{}, {}", reg, rm), None, false, false, false, false))
             }
 
             
             0xBC => {
-                let (hb, reg) = self.avq(yc, kf, nx, ic, pg);
-                Some(("bsf", format!("{}, {}", reg, hb), None, false, false, false, false))
+                let (rm, reg) = self.decode_modrm_operands(kz, dv, gb, cq, gp);
+                Some(("bsf", format!("{}, {}", reg, rm), None, false, false, false, false))
             }
             0xBD => {
-                let (hb, reg) = self.avq(yc, kf, nx, ic, pg);
-                Some(("bsr", format!("{}, {}", reg, hb), None, false, false, false, false))
+                let (rm, reg) = self.decode_modrm_operands(kz, dv, gb, cq, gp);
+                Some(("bsr", format!("{}, {}", reg, rm), None, false, false, false, false))
             }
 
             
             0xA3 => {
-                let (hb, reg) = self.avq(yc, kf, nx, ic, pg);
-                Some(("bt", format!("{}, {}", hb, reg), None, false, false, false, false))
+                let (rm, reg) = self.decode_modrm_operands(kz, dv, gb, cq, gp);
+                Some(("bt", format!("{}, {}", rm, reg), None, false, false, false, false))
             }
             0xAB => {
-                let (hb, reg) = self.avq(yc, kf, nx, ic, pg);
-                Some(("bts", format!("{}, {}", hb, reg), None, false, false, false, false))
+                let (rm, reg) = self.decode_modrm_operands(kz, dv, gb, cq, gp);
+                Some(("bts", format!("{}, {}", rm, reg), None, false, false, false, false))
             }
             0xB3 => {
-                let (hb, reg) = self.avq(yc, kf, nx, ic, pg);
-                Some(("btr", format!("{}, {}", hb, reg), None, false, false, false, false))
+                let (rm, reg) = self.decode_modrm_operands(kz, dv, gb, cq, gp);
+                Some(("btr", format!("{}, {}", rm, reg), None, false, false, false, false))
             }
             0xBB => {
-                let (hb, reg) = self.avq(yc, kf, nx, ic, pg);
-                Some(("btc", format!("{}, {}", hb, reg), None, false, false, false, false))
+                let (rm, reg) = self.decode_modrm_operands(kz, dv, gb, cq, gp);
+                Some(("btc", format!("{}, {}", rm, reg), None, false, false, false, false))
             }
 
             
             0xC0 => {
-                let (hb, reg) = self.avq(1, kf, nx, ic, pg);
-                Some(("xadd", format!("{}, {}", hb, reg), None, false, false, false, false))
+                let (rm, reg) = self.decode_modrm_operands(1, dv, gb, cq, gp);
+                Some(("xadd", format!("{}, {}", rm, reg), None, false, false, false, false))
             }
             0xC1 => {
-                let (hb, reg) = self.avq(yc, kf, nx, ic, pg);
-                Some(("xadd", format!("{}, {}", hb, reg), None, false, false, false, false))
+                let (rm, reg) = self.decode_modrm_operands(kz, dv, gb, cq, gp);
+                Some(("xadd", format!("{}, {}", rm, reg), None, false, false, false, false))
             }
 
             
             0xC8..=0xCF => {
-                let m = (fpq - 0xC8) | if ic { 8 } else { 0 };
-                Some(("bswap", String::from(ati(m, yc, kf)), None, false, false, false, false))
+                let r = (cnk - 0xC8) | if cq { 8 } else { 0 };
+                Some(("bswap", String::from(xi(r, kz, dv)), None, false, false, false, false))
             }
 
             
@@ -643,24 +643,24 @@ impl<'a> Disassembler<'a> {
         };
 
         match result {
-            Some((brk, ops, cd, etc, edy, etg, etd)) => {
-                let bf = self.aj[ay..self.u].ip();
-                Dc {
-                    re: ag,
-                    bf,
-                    bes: String::from(brk),
-                    bvs: ops,
-                    byv: None,
-                    ena: cd,
-                    etc,
-                    edy,
-                    etg,
-                    etd,
+            Some((akc, ops, target, is_call, is_ret, is_jump, is_cond_jump)) => {
+                let bytes = self.code[start..self.pos].to_vec();
+                Bj {
+                    address: addr,
+                    bytes,
+                    mnemonic: String::from(akc),
+                    operands_str: ops,
+                    comment: None,
+                    branch_target: target,
+                    is_call,
+                    is_ret,
+                    is_jump,
+                    is_cond_jump,
                 }
             }
             None => {
                 
-                self.hqq(ay, ag)
+                self.make_db(start, addr)
             }
         }
     }
@@ -668,81 +668,81 @@ impl<'a> Disassembler<'a> {
     
 
     
-    fn avq(&mut self, aw: u8, kf: bool, nx: bool, ic: bool, pg: bool) -> (String, String) {
-        if self.u >= self.aj.len() {
+    fn decode_modrm_operands(&mut self, size: u8, dv: bool, gb: bool, cq: bool, gp: bool) -> (String, String) {
+        if self.pos >= self.code.len() {
             return (String::from("?"), String::from("?"));
         }
 
-        let ms = self.aj[self.u];
-        self.u += 1;
+        let fi = self.code[self.pos];
+        self.pos += 1;
 
-        let czy = (ms >> 6) & 3;
-        let fsn = ((ms >> 3) & 7) | if nx { 8 } else { 0 };
-        let ext = (ms & 7) | if ic { 8 } else { 0 };
+        let bct = (fi >> 6) & 3;
+        let cpg = ((fi >> 3) & 7) | if gb { 8 } else { 0 };
+        let cdj = (fi & 7) | if cq { 8 } else { 0 };
 
-        let vtz = String::from(ati(fsn, aw, kf));
-        let vzn = self.nkb(czy, ext & 7, ic, pg, aw, kf);
+        let oeg = String::from(xi(cpg, size, dv));
+        let ohp = self.decode_rm(bct, cdj & 7, cq, gp, size, dv);
 
-        (vzn, vtz)
+        (ohp, oeg)
     }
 
     
-    fn bmu(&mut self, aw: u8, kf: bool, ic: bool, pg: bool) -> String {
-        if self.u >= self.aj.len() {
+    fn decode_modrm_rm_only(&mut self, size: u8, dv: bool, cq: bool, gp: bool) -> String {
+        if self.pos >= self.code.len() {
             return String::from("?");
         }
 
-        let ms = self.aj[self.u];
-        self.u += 1;
+        let fi = self.code[self.pos];
+        self.pos += 1;
 
-        let czy = (ms >> 6) & 3;
-        let ext = (ms & 7) | if ic { 8 } else { 0 };
+        let bct = (fi >> 6) & 3;
+        let cdj = (fi & 7) | if cq { 8 } else { 0 };
 
-        self.nkb(czy, ext & 7, ic, pg, aw, kf)
+        self.decode_rm(bct, cdj & 7, cq, gp, size, dv)
     }
 
     
-    fn nkb(&mut self, czy: u8, man: u8, ic: bool, pg: bool, aw: u8, kf: bool) -> String {
-        let hb = man | if ic { 8 } else { 0 };
+    fn decode_rm(&mut self, bct: u8, rm_low: u8, cq: bool, gp: bool, size: u8, dv: bool) -> String {
+        let rm = rm_low | if cq { 8 } else { 0 };
 
         
-        if czy == 3 {
-            return String::from(ati(hb, aw, kf));
+        if bct == 3 {
+            return String::from(xi(rm, size, dv));
         }
 
         
-        let (dyq, uru) = if man == 4 {
+        let (bql, needs_sib) = if rm_low == 4 {
             
             (String::new(), true)
-        } else if man == 5 && czy == 0 {
+        } else if rm_low == 5 && bct == 0 {
             
-            let aor = self.amq().unwrap_or(0);
-            return format!("{} [rip{:+#x}]", cmw(aw), aor);
+            let uv = self.read_i32().unwrap_or(0);
+            return format!("{} [rip{:+#x}]", avd(size), uv);
         } else {
-            (String::from(ati(hb, 8, kf)), false)
+            (String::from(xi(rm, 8, dv)), false)
         };
 
-        if uru {
-            return self.rur(czy, ic, pg, aw, kf);
+        if needs_sib {
+            return self.decode_sib(bct, cq, gp, size, dv);
         }
 
         
-        match czy {
-            0 => format!("{} [{}]", cmw(aw), dyq),
+        match bct {
+            0 => format!("{} [{}]", avd(size), bql),
             1 => {
-                let aor = self.cmd().unwrap_or(0) as i32;
-                if aor == 0 {
-                    format!("{} [{}]", cmw(aw), dyq)
+                let uv = self.read_i8().unwrap_or(0) as i32;
+                if uv == 0 {
+                    format!("{} [{}]", avd(size), bql)
                 } else {
-                    format!("{} [{}{:+#x}]", cmw(aw), dyq, aor)
+                    format!("{} [{}{:+#x}]", avd(size), bql, uv)
                 }
             }
             2 => {
-                let aor = self.amq().unwrap_or(0);
-                if aor == 0 {
-                    format!("{} [{}]", cmw(aw), dyq)
+                let uv = self.read_i32().unwrap_or(0);
+                if uv == 0 {
+                    format!("{} [{}]", avd(size), bql)
                 } else {
-                    format!("{} [{}{:+#x}]", cmw(aw), dyq, aor)
+                    format!("{} [{}{:+#x}]", avd(size), bql, uv)
                 }
             }
             _ => String::from("?"),
@@ -750,62 +750,62 @@ impl<'a> Disassembler<'a> {
     }
 
     
-    fn rur(&mut self, czy: u8, ic: bool, pg: bool, aw: u8, kf: bool) -> String {
-        if self.u >= self.aj.len() {
+    fn decode_sib(&mut self, bct: u8, cq: bool, gp: bool, size: u8, dv: bool) -> String {
+        if self.pos >= self.code.len() {
             return String::from("?");
         }
 
-        let iam = self.aj[self.u];
-        self.u += 1;
+        let dzk = self.code[self.pos];
+        self.pos += 1;
 
-        let bv = 1u8 << ((iam >> 6) & 3);
-        let index = ((iam >> 3) & 7) | if pg { 8 } else { 0 };
-        let ar = (iam & 7) | if ic { 8 } else { 0 };
+        let scale = 1u8 << ((dzk >> 6) & 3);
+        let index = ((dzk >> 3) & 7) | if gp { 8 } else { 0 };
+        let base = (dzk & 7) | if cq { 8 } else { 0 };
 
-        let oan = index != 4; 
-        let dyq = if (ar & 7) == 5 && czy == 0 {
+        let idp = index != 4; 
+        let bql = if (base & 7) == 5 && bct == 0 {
             
-            let aor = self.amq().unwrap_or(0);
-            if oan {
-                if bv > 1 {
-                    return format!("{} [{}*{}{:+#x}]", cmw(aw), ati(index, 8, kf), bv, aor);
+            let uv = self.read_i32().unwrap_or(0);
+            if idp {
+                if scale > 1 {
+                    return format!("{} [{}*{}{:+#x}]", avd(size), xi(index, 8, dv), scale, uv);
                 } else {
-                    return format!("{} [{}{:+#x}]", cmw(aw), ati(index, 8, kf), aor);
+                    return format!("{} [{}{:+#x}]", avd(size), xi(index, 8, dv), uv);
                 }
             } else {
-                return format!("{} [{:#x}]", cmw(aw), aor);
+                return format!("{} [{:#x}]", avd(size), uv);
             }
         } else {
-            String::from(ati(ar, 8, kf))
+            String::from(xi(base, 8, dv))
         };
 
         
-        let gxz = if oan {
-            if bv > 1 {
-                format!("{}+{}*{}", dyq, ati(index, 8, kf), bv)
+        let dhd = if idp {
+            if scale > 1 {
+                format!("{}+{}*{}", bql, xi(index, 8, dv), scale)
             } else {
-                format!("{}+{}", dyq, ati(index, 8, kf))
+                format!("{}+{}", bql, xi(index, 8, dv))
             }
         } else {
-            dyq
+            bql
         };
 
-        match czy {
-            0 => format!("{} [{}]", cmw(aw), gxz),
+        match bct {
+            0 => format!("{} [{}]", avd(size), dhd),
             1 => {
-                let aor = self.cmd().unwrap_or(0) as i32;
-                if aor == 0 {
-                    format!("{} [{}]", cmw(aw), gxz)
+                let uv = self.read_i8().unwrap_or(0) as i32;
+                if uv == 0 {
+                    format!("{} [{}]", avd(size), dhd)
                 } else {
-                    format!("{} [{}{:+#x}]", cmw(aw), gxz, aor)
+                    format!("{} [{}{:+#x}]", avd(size), dhd, uv)
                 }
             }
             2 => {
-                let aor = self.amq().unwrap_or(0);
-                if aor == 0 {
-                    format!("{} [{}]", cmw(aw), gxz)
+                let uv = self.read_i32().unwrap_or(0);
+                if uv == 0 {
+                    format!("{} [{}]", avd(size), dhd)
                 } else {
-                    format!("{} [{}{:+#x}]", cmw(aw), gxz, aor)
+                    format!("{} [{}{:+#x}]", avd(size), dhd, uv)
                 }
             }
             _ => String::from("?"),
@@ -814,144 +814,144 @@ impl<'a> Disassembler<'a> {
 
     
 
-    fn eop(&mut self, _start: usize, xxr: u64, opcode: u8, bes: &str, yc: u8, kf: bool, nx: bool, ic: bool, pg: bool) -> Option<(&'static str, String, Option<u64>, bool, bool, bool, bool)> {
-        let twu = (opcode & 1) == 0;
-        let te = (opcode & 2) != 0; 
-        let nf = if twu { 1 } else { yc };
-        let (hb, reg) = self.avq(nf, kf, nx, ic, pg);
-        let ops = if te {
-            format!("{}, {}", reg, hb)
+    fn decode_alu_rm(&mut self, _start: usize, _addr: u64, opcode: u8, mnemonic: &str, kz: u8, dv: bool, gb: bool, cq: bool, gp: bool) -> Option<(&'static str, String, Option<u64>, bool, bool, bool, bool)> {
+        let mrz = (opcode & 1) == 0;
+        let it = (opcode & 2) != 0; 
+        let fq = if mrz { 1 } else { kz };
+        let (rm, reg) = self.decode_modrm_operands(fq, dv, gb, cq, gp);
+        let ops = if it {
+            format!("{}, {}", reg, rm)
         } else {
-            format!("{}, {}", hb, reg)
+            format!("{}, {}", rm, reg)
         };
-        let brk: &'static str = match bes {
+        let akc: &'static str = match mnemonic {
             "add" => "add", "or" => "or", "adc" => "adc", "sbb" => "sbb",
             "and" => "and", "sub" => "sub", "xor" => "xor", "cmp" => "cmp",
             _ => "?alu",
         };
-        Some((brk, ops, None, false, false, false, false))
+        Some((akc, ops, None, false, false, false, false))
     }
 
-    fn kon(&mut self, aw: u8, kf: bool, ic: bool, pg: bool, tsb: bool) -> Option<(&'static str, String, Option<u64>, bool, bool, bool, bool)> {
-        if self.u >= self.aj.len() { return None; }
-        let ms = self.aj[self.u]; 
-        let op = (ms >> 3) & 7;
+    fn decode_group1(&mut self, size: u8, dv: bool, cq: bool, gp: bool, imm8: bool) -> Option<(&'static str, String, Option<u64>, bool, bool, bool, bool)> {
+        if self.pos >= self.code.len() { return None; }
+        let fi = self.code[self.pos]; 
+        let op = (fi >> 3) & 7;
 
-        let hb = self.bmu(aw, kf, ic, pg);
-        let gf = if tsb {
-            self.cmd().unwrap_or(0) as i64
+        let rm = self.decode_modrm_rm_only(size, dv, cq, gp);
+        let imm = if imm8 {
+            self.read_i8().unwrap_or(0) as i64
         } else {
-            self.amq().unwrap_or(0) as i64
+            self.read_i32().unwrap_or(0) as i64
         };
 
-        let brk: &'static str = match op {
+        let akc: &'static str = match op {
             0 => "add", 1 => "or", 2 => "adc", 3 => "sbb",
             4 => "and", 5 => "sub", 6 => "xor", 7 => "cmp",
             _ => "?",
         };
 
-        Some((brk, format!("{}, {}", hb, ces(gf)), None, false, false, false, false))
+        Some((akc, format!("{}, {}", rm, aqn(imm)), None, false, false, false, false))
     }
 
-    fn geg(&mut self, aw: u8, kf: bool, ic: bool, pg: bool, az: ShiftCount) -> Option<(&'static str, String, Option<u64>, bool, bool, bool, bool)> {
-        if self.u >= self.aj.len() { return None; }
-        let ms = self.aj[self.u];
-        let op = (ms >> 3) & 7;
+    fn decode_shift(&mut self, size: u8, dv: bool, cq: bool, gp: bool, count: ShiftCount) -> Option<(&'static str, String, Option<u64>, bool, bool, bool, bool)> {
+        if self.pos >= self.code.len() { return None; }
+        let fi = self.code[self.pos];
+        let op = (fi >> 3) & 7;
 
-        let hb = self.bmu(aw, kf, ic, pg);
-        let ffy = match az {
-            ShiftCount::Awk => String::from("1"),
-            ShiftCount::Aag => String::from("cl"),
-            ShiftCount::Aub => {
-                let gf = self.ady().unwrap_or(0);
-                format!("{}", gf)
+        let rm = self.decode_modrm_rm_only(size, dv, cq, gp);
+        let cht = match count {
+            ShiftCount::One => String::from("1"),
+            ShiftCount::CL => String::from("cl"),
+            ShiftCount::Imm8 => {
+                let imm = self.read_u8().unwrap_or(0);
+                format!("{}", imm)
             }
         };
 
-        let brk: &'static str = match op {
+        let akc: &'static str = match op {
             0 => "rol", 1 => "ror", 2 => "rcl", 3 => "rcr",
             4 => "shl", 5 => "shr", 6 => "sal", 7 => "sar",
             _ => "?",
         };
 
-        Some((brk, format!("{}, {}", hb, ffy), None, false, false, false, false))
+        Some((akc, format!("{}, {}", rm, cht), None, false, false, false, false))
     }
 
-    fn njz(&mut self, aw: u8, kf: bool, ycj: bool, ic: bool, pg: bool, ag: u64, ay: usize) -> Option<(&'static str, String, Option<u64>, bool, bool, bool, bool)> {
-        if self.u >= self.aj.len() { return None; }
-        let ms = self.aj[self.u];
-        let op = (ms >> 3) & 7;
+    fn decode_group_fe(&mut self, size: u8, dv: bool, _rex_r: bool, cq: bool, gp: bool, addr: u64, start: usize) -> Option<(&'static str, String, Option<u64>, bool, bool, bool, bool)> {
+        if self.pos >= self.code.len() { return None; }
+        let fi = self.code[self.pos];
+        let op = (fi >> 3) & 7;
 
         match op {
             0 => {
-                let hb = self.bmu(aw, kf, ic, pg);
-                Some(("inc", hb, None, false, false, false, false))
+                let rm = self.decode_modrm_rm_only(size, dv, cq, gp);
+                Some(("inc", rm, None, false, false, false, false))
             }
             1 => {
-                let hb = self.bmu(aw, kf, ic, pg);
-                Some(("dec", hb, None, false, false, false, false))
+                let rm = self.decode_modrm_rm_only(size, dv, cq, gp);
+                Some(("dec", rm, None, false, false, false, false))
             }
-            2 if aw > 1 => {
+            2 if size > 1 => {
                 
-                let hb = self.bmu(8, kf, ic, pg);
-                Some(("call", hb, None, true, false, false, false))
+                let rm = self.decode_modrm_rm_only(8, dv, cq, gp);
+                Some(("call", rm, None, true, false, false, false))
             }
-            4 if aw > 1 => {
+            4 if size > 1 => {
                 
-                let hb = self.bmu(8, kf, ic, pg);
-                Some(("jmp", hb, None, false, false, true, false))
+                let rm = self.decode_modrm_rm_only(8, dv, cq, gp);
+                Some(("jmp", rm, None, false, false, true, false))
             }
-            6 if aw > 1 => {
+            6 if size > 1 => {
                 
-                let hb = self.bmu(8, kf, ic, pg);
-                Some(("push", hb, None, false, false, false, false))
+                let rm = self.decode_modrm_rm_only(8, dv, cq, gp);
+                Some(("push", rm, None, false, false, false, false))
             }
             _ => {
-                let _ = self.bmu(aw, kf, ic, pg);
+                let _ = self.decode_modrm_rm_only(size, dv, cq, gp);
                 None
             }
         }
     }
 
-    fn njy(&mut self, aw: u8, kf: bool, ic: bool, pg: bool) -> Option<(&'static str, String, Option<u64>, bool, bool, bool, bool)> {
-        if self.u >= self.aj.len() { return None; }
-        let ms = self.aj[self.u];
-        let op = (ms >> 3) & 7;
+    fn decode_group3(&mut self, size: u8, dv: bool, cq: bool, gp: bool) -> Option<(&'static str, String, Option<u64>, bool, bool, bool, bool)> {
+        if self.pos >= self.code.len() { return None; }
+        let fi = self.code[self.pos];
+        let op = (fi >> 3) & 7;
 
         match op {
             0 | 1 => {
                 
-                let hb = self.bmu(aw, kf, ic, pg);
-                let gf = if aw == 1 {
-                    self.ady().unwrap_or(0) as i64
+                let rm = self.decode_modrm_rm_only(size, dv, cq, gp);
+                let imm = if size == 1 {
+                    self.read_u8().unwrap_or(0) as i64
                 } else {
-                    self.amq().unwrap_or(0) as i64
+                    self.read_i32().unwrap_or(0) as i64
                 };
-                Some(("test", format!("{}, {}", hb, ces(gf)), None, false, false, false, false))
+                Some(("test", format!("{}, {}", rm, aqn(imm)), None, false, false, false, false))
             }
             2 => {
-                let hb = self.bmu(aw, kf, ic, pg);
-                Some(("not", hb, None, false, false, false, false))
+                let rm = self.decode_modrm_rm_only(size, dv, cq, gp);
+                Some(("not", rm, None, false, false, false, false))
             }
             3 => {
-                let hb = self.bmu(aw, kf, ic, pg);
-                Some(("neg", hb, None, false, false, false, false))
+                let rm = self.decode_modrm_rm_only(size, dv, cq, gp);
+                Some(("neg", rm, None, false, false, false, false))
             }
             4 => {
-                let hb = self.bmu(aw, kf, ic, pg);
-                Some(("mul", hb, None, false, false, false, false))
+                let rm = self.decode_modrm_rm_only(size, dv, cq, gp);
+                Some(("mul", rm, None, false, false, false, false))
             }
             5 => {
-                let hb = self.bmu(aw, kf, ic, pg);
-                Some(("imul", hb, None, false, false, false, false))
+                let rm = self.decode_modrm_rm_only(size, dv, cq, gp);
+                Some(("imul", rm, None, false, false, false, false))
             }
             6 => {
-                let hb = self.bmu(aw, kf, ic, pg);
-                Some(("div", hb, None, false, false, false, false))
+                let rm = self.decode_modrm_rm_only(size, dv, cq, gp);
+                Some(("div", rm, None, false, false, false, false))
             }
             7 => {
-                let hb = self.bmu(aw, kf, ic, pg);
-                Some(("idiv", hb, None, false, false, false, false))
+                let rm = self.decode_modrm_rm_only(size, dv, cq, gp);
+                Some(("idiv", rm, None, false, false, false, false))
             }
             _ => None,
         }
@@ -959,170 +959,170 @@ impl<'a> Disassembler<'a> {
 
     
 
-    fn ady(&mut self) -> Option<u8> {
-        if self.u >= self.aj.len() { return None; }
-        let p = self.aj[self.u];
-        self.u += 1;
-        Some(p)
+    fn read_u8(&mut self) -> Option<u8> {
+        if self.pos >= self.code.len() { return None; }
+        let v = self.code[self.pos];
+        self.pos += 1;
+        Some(v)
     }
 
-    fn cmd(&mut self) -> Option<i8> {
-        self.ady().map(|p| p as i8)
+    fn read_i8(&mut self) -> Option<i8> {
+        self.read_u8().map(|v| v as i8)
     }
 
-    fn alp(&mut self) -> Option<u16> {
-        if self.u + 2 > self.aj.len() { return None; }
-        let p = u16::dj([self.aj[self.u], self.aj[self.u + 1]]);
-        self.u += 2;
-        Some(p)
+    fn read_u16(&mut self) -> Option<u16> {
+        if self.pos + 2 > self.code.len() { return None; }
+        let v = u16::from_le_bytes([self.code[self.pos], self.code[self.pos + 1]]);
+        self.pos += 2;
+        Some(v)
     }
 
-    fn amq(&mut self) -> Option<i32> {
-        if self.u + 4 > self.aj.len() { return None; }
-        let p = i32::dj([
-            self.aj[self.u], self.aj[self.u + 1],
-            self.aj[self.u + 2], self.aj[self.u + 3],
+    fn read_i32(&mut self) -> Option<i32> {
+        if self.pos + 4 > self.code.len() { return None; }
+        let v = i32::from_le_bytes([
+            self.code[self.pos], self.code[self.pos + 1],
+            self.code[self.pos + 2], self.code[self.pos + 3],
         ]);
-        self.u += 4;
-        Some(p)
+        self.pos += 4;
+        Some(v)
     }
 
-    fn jll(&mut self) -> Option<i64> {
-        if self.u + 8 > self.aj.len() { return None; }
-        let p = i64::dj([
-            self.aj[self.u], self.aj[self.u + 1],
-            self.aj[self.u + 2], self.aj[self.u + 3],
-            self.aj[self.u + 4], self.aj[self.u + 5],
-            self.aj[self.u + 6], self.aj[self.u + 7],
+    fn read_i64(&mut self) -> Option<i64> {
+        if self.pos + 8 > self.code.len() { return None; }
+        let v = i64::from_le_bytes([
+            self.code[self.pos], self.code[self.pos + 1],
+            self.code[self.pos + 2], self.code[self.pos + 3],
+            self.code[self.pos + 4], self.code[self.pos + 5],
+            self.code[self.pos + 6], self.code[self.pos + 7],
         ]);
-        self.u += 8;
-        Some(p)
+        self.pos += 8;
+        Some(v)
     }
 
-    fn jlo(&mut self, two: bool) -> u64 {
-        if two {
-            self.jll().unwrap_or(0) as u64
+    fn read_u64_or_u32(&mut self, cba: bool) -> u64 {
+        if cba {
+            self.read_i64().unwrap_or(0) as u64
         } else {
-            self.amq().unwrap_or(0) as u64
+            self.read_i32().unwrap_or(0) as u64
         }
     }
 
     
-    fn jjb(&self) -> u8 {
-        if self.u > 0 {
+    fn peek_back(&self) -> u8 {
+        if self.pos > 0 {
             
             
-            self.aj.get(self.u.nj(1)).hu().unwrap_or(0)
+            self.code.get(self.pos.wrapping_sub(1)).copied().unwrap_or(0)
         } else {
             0
         }
     }
 
-    fn hqq(&mut self, ay: usize, ag: u64) -> Dc {
+    fn make_db(&mut self, start: usize, addr: u64) -> Bj {
         
-        if self.u <= ay {
-            self.u = ay + 1;
+        if self.pos <= start {
+            self.pos = start + 1;
         }
-        let ci = self.u.v(self.aj.len());
-        let bf = self.aj[ay..ci].ip();
-        let nu: String = bf.iter().map(|o| format!("{:#04x}", o)).collect::<Vec<_>>().rr(", ");
-        Dc {
-            re: ag,
-            bf,
-            bes: String::from("db"),
-            bvs: nu,
-            byv: None,
-            ena: None,
-            etc: false,
-            edy: false,
-            etg: false,
-            etd: false,
+        let end = self.pos.min(self.code.len());
+        let bytes = self.code[start..end].to_vec();
+        let ga: String = bytes.iter().map(|b| format!("{:#04x}", b)).collect::<Vec<_>>().join(", ");
+        Bj {
+            address: addr,
+            bytes,
+            mnemonic: String::from("db"),
+            operands_str: ga,
+            comment: None,
+            branch_target: None,
+            is_call: false,
+            is_ret: false,
+            is_jump: false,
+            is_cond_jump: false,
         }
     }
 }
 
 
 
-enum ShiftCount { Awk, Aag, Aub }
+enum ShiftCount { One, CL, Imm8 }
 
-fn ces(p: i64) -> String {
-    if p >= 0 && p <= 9 {
-        format!("{}", p)
-    } else if p >= 0 {
-        format!("{:#x}", p)
-    } else if p >= -128 {
-        format!("-{:#x}", -p)
+fn aqn(v: i64) -> String {
+    if v >= 0 && v <= 9 {
+        format!("{}", v)
+    } else if v >= 0 {
+        format!("{:#x}", v)
+    } else if v >= -128 {
+        format!("-{:#x}", -v)
     } else {
-        format!("-{:#x}", (-p) as u64)
+        format!("-{:#x}", (-v) as u64)
     }
 }
 
-fn ivh(p: u64) -> String {
-    format!("{:#x}", p)
+fn ene(v: u64) -> String {
+    format!("{:#x}", v)
 }
 
 
-fn jge(nx: bool, ms: u8) -> u8 {
-    ((ms >> 3) & 7) | if nx { 8 } else { 0 }
+fn eum(gb: bool, fi: u8) -> u8 {
+    ((fi >> 3) & 7) | if gb { 8 } else { 0 }
 }
 
 
 
 
-fn jcz(e: &str) -> &'static str {
+fn esm(j: &str) -> &'static str {
     use alloc::boxed::Box;
-    let boxed = String::from(e).lfh();
-    Box::fmu(boxed)
+    let boxed = String::from(j).into_boxed_str();
+    Box::leak(boxed)
 }
 
 
 
 
-pub fn qiu(
-    instructions: &mut [Dc],
-    blw: &alloc::collections::BTreeMap<u64, String>,
+pub fn jwh(
+    instructions: &mut [Bj],
+    addr_to_symbol: &alloc::collections::BTreeMap<u64, String>,
 ) {
     
-    let mut lhu: Option<i64> = None;
+    let mut gez: Option<i64> = None;
 
-    for fi in instructions.el() {
+    for inst in instructions.iter_mut() {
         
-        if let Some(cd) = fi.ena {
-            if let Some(j) = blw.get(&cd) {
-                fi.byv = Some(format!("<{}>", j));
+        if let Some(target) = inst.branch_target {
+            if let Some(name) = addr_to_symbol.get(&target) {
+                inst.comment = Some(format!("<{}>", name));
             }
         }
 
         
-        if fi.bes == "mov" && (fi.bvs.cj("eax,") || fi.bvs.cj("rax,")) {
+        if inst.mnemonic == "mov" && (inst.operands_str.starts_with("eax,") || inst.operands_str.starts_with("rax,")) {
             
-            if let Some(rmq) = fi.bvs.du(',') {
-                let tsc = fi.bvs[rmq + 1..].em();
-                if let Some(ap) = vcq(tsc) {
-                    lhu = Some(ap);
+            if let Some(comma_pos) = inst.operands_str.find(',') {
+                let moe = inst.operands_str[comma_pos + 1..].trim();
+                if let Some(val) = nqp(moe) {
+                    gez = Some(val);
                 }
             }
-        } else if fi.bes == "xor" && fi.bvs.contains("eax") && fi.bvs.oh("eax").az() == 2 {
-            lhu = Some(0);
+        } else if inst.mnemonic == "xor" && inst.operands_str.contains("eax") && inst.operands_str.matches("eax").count() == 2 {
+            gez = Some(0);
         }
 
         
-        if fi.bes == "syscall" {
-            if let Some(num) = lhu {
-                let j = crate::transpiler::gty(num as u64);
-                fi.byv = Some(format!("sys_{} ({})", j, num));
+        if inst.mnemonic == "syscall" {
+            if let Some(num) = gez {
+                let name = crate::transpiler::dfe(num as u64);
+                inst.comment = Some(format!("sys_{} ({})", name, num));
             }
         }
     }
 }
 
-fn vcq(e: &str) -> Option<i64> {
-    let e = e.em();
-    if e.cj("0x") || e.cj("0X") {
-        i64::wa(&e[2..], 16).bq()
-    } else if e.cj("-0x") || e.cj("-0X") {
-        i64::wa(&e[3..], 16).bq().map(|p| -p)
+fn nqp(j: &str) -> Option<i64> {
+    let j = j.trim();
+    if j.starts_with("0x") || j.starts_with("0X") {
+        i64::from_str_radix(&j[2..], 16).ok()
+    } else if j.starts_with("-0x") || j.starts_with("-0X") {
+        i64::from_str_radix(&j[3..], 16).ok().map(|v| -v)
     } else {
-        e.parse::<i64>().bq()
+        j.parse::<i64>().ok()
     }
 }

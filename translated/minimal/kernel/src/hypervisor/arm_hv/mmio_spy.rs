@@ -9,141 +9,141 @@
 use core::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 
-const IJ_: usize = 512;
-const KR_: usize = 128;
+const JC_: usize = 512;
+const LK_: usize = 128;
 
 
 #[derive(Debug, Clone, Copy)]
-pub struct Lv {
+pub struct Ey {
     
-    pub akh: u64,
+    pub ipa: u64,
     
-    pub asf: u64,
+    pub va: u64,
     
-    pub bn: u64,
+    pub value: u64,
     
-    pub cct: u32,
+    pub access_size: u32,
     
-    pub rm: bool,
+    pub is_write: bool,
     
-    pub gwm: bool,
+    pub was_inst_fetch: bool,
     
-    pub dgg: &'static str,
+    pub device_name: &'static str,
 }
 
 
 #[derive(Debug, Clone, Copy)]
-pub struct Um {
+pub struct Iz {
     
-    pub aos: u64,
+    pub fid: u64,
     
-    pub dn: u64,
+    pub x1: u64,
     
-    pub hy: u64,
+    pub x2: u64,
     
-    pub ajr: u64,
+    pub x3: u64,
     
-    pub jqo: &'static str,
+    pub smc_type_name: &'static str,
 }
 
 
 #[derive(Clone, Copy)]
-struct Avt {
-    ls: u64,
-    id: Lv,
+struct Tu {
+    seq: u64,
+    event: Ey,
 }
 
 #[derive(Clone, Copy)]
-struct Ayy {
-    ls: u64,
-    id: Um,
+struct Vd {
+    seq: u64,
+    event: Iz,
 }
 
 
-const BTK_: Lv = Lv {
-    akh: 0,
-    asf: 0,
-    bn: 0,
-    cct: 0,
-    rm: false,
-    gwm: false,
-    dgg: "",
+const BWG_: Ey = Ey {
+    ipa: 0,
+    va: 0,
+    value: 0,
+    access_size: 0,
+    is_write: false,
+    was_inst_fetch: false,
+    device_name: "",
 };
 
 
-const BTL_: Um = Um {
-    aos: 0,
-    dn: 0,
-    hy: 0,
-    ajr: 0,
-    jqo: "",
+const BWH_: Iz = Iz {
+    fid: 0,
+    x1: 0,
+    x2: 0,
+    x3: 0,
+    smc_type_name: "",
 };
 
 
-static mut AFR_: [Avt; IJ_] = {
-    let gk = Avt { ls: 0, id: BTK_ };
-    [gk; IJ_]
+static mut AHL_: [Tu; JC_] = {
+    let slot = Tu { seq: 0, event: BWG_ };
+    [slot; JC_]
 };
 
-static mut BFX_: [Ayy; KR_] = {
-    let gk = Ayy { ls: 0, id: BTL_ };
-    [gk; KR_]
+static mut BIB_: [Vd; LK_] = {
+    let slot = Vd { seq: 0, event: BWH_ };
+    [slot; LK_]
 };
 
 
-static BAT_: AtomicUsize = AtomicUsize::new(0);
+static BCV_: AtomicUsize = AtomicUsize::new(0);
 
-static VH_: AtomicU64 = AtomicU64::new(0);
-
-
-static BFY_: AtomicUsize = AtomicUsize::new(0);
-
-static AHZ_: AtomicU64 = AtomicU64::new(0);
+static WQ_: AtomicU64 = AtomicU64::new(0);
 
 
-pub fn jdw(id: Lv) {
-    let w = BAT_.fetch_add(1, Ordering::Relaxed) % IJ_;
-    let ls = VH_.fetch_add(1, Ordering::Relaxed) + 1;
+static BIC_: AtomicUsize = AtomicUsize::new(0);
+
+static AJV_: AtomicU64 = AtomicU64::new(0);
+
+
+pub fn etg(event: Ey) {
+    let idx = BCV_.fetch_add(1, Ordering::Relaxed) % JC_;
+    let seq = WQ_.fetch_add(1, Ordering::Relaxed) + 1;
     unsafe {
-        AFR_[w] = Avt { ls, id };
+        AHL_[idx] = Tu { seq, event };
     }
 }
 
 
-pub fn uhx(id: Um) {
-    let w = BFY_.fetch_add(1, Ordering::Relaxed) % KR_;
-    let ls = AHZ_.fetch_add(1, Ordering::Relaxed) + 1;
+pub fn nal(event: Iz) {
+    let idx = BIC_.fetch_add(1, Ordering::Relaxed) % LK_;
+    let seq = AJV_.fetch_add(1, Ordering::Relaxed) + 1;
     unsafe {
-        BFX_[w] = Ayy { ls, id };
+        BIB_[idx] = Vd { seq, event };
     }
 }
 
 
-pub fn mmj() -> u64 {
-    VH_.load(Ordering::Relaxed)
+pub fn gzs() -> u64 {
+    WQ_.load(Ordering::Relaxed)
 }
 
 
-pub fn jty() -> u64 {
-    AHZ_.load(Ordering::Relaxed)
+pub fn fdl() -> u64 {
+    AJV_.load(Ordering::Relaxed)
 }
 
 
-pub fn paq(az: usize) -> alloc::vec::Vec<Lv> {
-    let es = VH_.load(Ordering::Acquire) as usize;
-    if es == 0 {
+pub fn iyt(count: usize) -> alloc::vec::Vec<Ey> {
+    let av = WQ_.load(Ordering::Acquire) as usize;
+    if av == 0 {
         return alloc::vec::Vec::new();
     }
 
-    let bo = az.v(es).v(IJ_);
-    let bau = BAT_.load(Ordering::Acquire);
-    let mut events = alloc::vec::Vec::fc(bo);
+    let ae = count.min(av).min(JC_);
+    let write_pos = BCV_.load(Ordering::Acquire);
+    let mut events = alloc::vec::Vec::with_capacity(ae);
 
-    for a in 0..bo {
-        let w = (bau + IJ_ - 1 - a) % IJ_;
-        let gk = unsafe { &AFR_[w] };
-        if gk.ls > 0 {
-            events.push(gk.id);
+    for i in 0..ae {
+        let idx = (write_pos + JC_ - 1 - i) % JC_;
+        let slot = unsafe { &AHL_[idx] };
+        if slot.seq > 0 {
+            events.push(slot.event);
         }
     }
 
@@ -151,21 +151,21 @@ pub fn paq(az: usize) -> alloc::vec::Vec<Lv> {
 }
 
 
-pub fn lyf(az: usize) -> alloc::vec::Vec<Um> {
-    let es = AHZ_.load(Ordering::Acquire) as usize;
-    if es == 0 {
+pub fn gqq(count: usize) -> alloc::vec::Vec<Iz> {
+    let av = AJV_.load(Ordering::Acquire) as usize;
+    if av == 0 {
         return alloc::vec::Vec::new();
     }
 
-    let bo = az.v(es).v(KR_);
-    let bau = BFY_.load(Ordering::Acquire);
-    let mut events = alloc::vec::Vec::fc(bo);
+    let ae = count.min(av).min(LK_);
+    let write_pos = BIC_.load(Ordering::Acquire);
+    let mut events = alloc::vec::Vec::with_capacity(ae);
 
-    for a in 0..bo {
-        let w = (bau + KR_ - 1 - a) % KR_;
-        let gk = unsafe { &BFX_[w] };
-        if gk.ls > 0 {
-            events.push(gk.id);
+    for i in 0..ae {
+        let idx = (write_pos + LK_ - 1 - i) % LK_;
+        let slot = unsafe { &BIB_[idx] };
+        if slot.seq > 0 {
+            events.push(slot.event);
         }
     }
 
@@ -173,44 +173,44 @@ pub fn lyf(az: usize) -> alloc::vec::Vec<Um> {
 }
 
 
-pub fn nld() -> alloc::vec::Vec<(&'static str, u64, u64)> {
+pub fn hrz() -> alloc::vec::Vec<(&'static str, u64, u64)> {
     
-    let mut cm: alloc::vec::Vec<(&str, u64, u64)> = alloc::vec::Vec::new();
+    let mut stats: alloc::vec::Vec<(&str, u64, u64)> = alloc::vec::Vec::new();
 
-    let es = VH_.load(Ordering::Acquire) as usize;
-    let bo = es.v(IJ_);
+    let av = WQ_.load(Ordering::Acquire) as usize;
+    let ae = av.min(JC_);
 
-    for a in 0..bo {
-        let gk = unsafe { &AFR_[a] };
-        if gk.ls == 0 {
+    for i in 0..ae {
+        let slot = unsafe { &AHL_[i] };
+        if slot.seq == 0 {
             continue;
         }
 
-        let j = gk.id.dgg;
-        if let Some(bt) = cm.el().du(|e| e.0 == j) {
-            if gk.id.rm {
-                bt.2 += 1;
+        let name = slot.event.device_name;
+        if let Some(entry) = stats.iter_mut().find(|j| j.0 == name) {
+            if slot.event.is_write {
+                entry.2 += 1;
             } else {
-                bt.1 += 1;
+                entry.1 += 1;
             }
         } else {
-            if gk.id.rm {
-                cm.push((j, 0, 1));
+            if slot.event.is_write {
+                stats.push((name, 0, 1));
             } else {
-                cm.push((j, 1, 0));
+                stats.push((name, 1, 0));
             }
         }
     }
 
-    cm
+    stats
 }
 
 
 
 
 
-pub fn eda(akh: u64) -> &'static str {
-    match akh {
+pub fn btg(ipa: u64) -> &'static str {
+    match ipa {
         
         0x0800_0000..=0x0800_FFFF => "GIC-Dist",
         0x0801_0000..=0x0801_FFFF => "GIC-Redist",
@@ -247,10 +247,10 @@ pub fn eda(akh: u64) -> &'static str {
 }
 
 
-pub fn svw(id: &Lv) -> alloc::string::String {
+pub fn lxo(event: &Ey) -> alloc::string::String {
     use alloc::format;
-    let sz = if id.rm { "WR" } else { "RD" };
-    let als = match id.cct {
+    let direction = if event.is_write { "WR" } else { "RD" };
+    let td = match event.access_size {
         1 => "B",
         2 => "H",
         4 => "W",
@@ -259,24 +259,24 @@ pub fn svw(id: &Lv) -> alloc::string::String {
     };
     format!(
         "[{}] {} @0x{:08X} = 0x{:X} ({}{})",
-        id.dgg,
-        sz,
-        id.akh,
-        id.bn,
-        als,
-        if id.gwm { " IFETCH!" } else { "" }
+        event.device_name,
+        direction,
+        event.ipa,
+        event.value,
+        td,
+        if event.was_inst_fetch { " IFETCH!" } else { "" }
     )
 }
 
 
-pub fn nvs(id: &Um) -> alloc::string::String {
+pub fn hzq(event: &Iz) -> alloc::string::String {
     use alloc::format;
     format!(
         "SMC {} FID=0x{:08X} x1=0x{:X} x2=0x{:X} x3=0x{:X}",
-        id.jqo,
-        id.aos,
-        id.dn,
-        id.hy,
-        id.ajr,
+        event.smc_type_name,
+        event.fid,
+        event.x1,
+        event.x2,
+        event.x3,
     )
 }

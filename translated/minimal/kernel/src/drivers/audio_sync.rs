@@ -21,52 +21,50 @@ use core::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicU64, Ordering};
 
 
 
-const BAM_: u32 = 120;
+const BCO_: u32 = 120;
 
-const PW_: usize = 8;
+const QT_: usize = 8;
 
-const ANV_: u32 = 1000;
+const APZ_: u32 = 1000;
 
-const ANU_: u32 = 30;
+const APY_: u32 = 30;
 
-const BR_: u32 = 48_000;
+const BT_: u32 = 48_000;
 
-const AZU_: i32 = 500;
-
-
+const BBW_: i32 = 500;
 
 
 
 
-static LE_: AtomicBool = AtomicBool::new(false);
 
 
-static XR_: AtomicU32 = AtomicU32::new(0);
+static LY_: AtomicBool = AtomicBool::new(false);
 
 
-static RI_: AtomicU32 = AtomicU32::new(0);
+static YY_: AtomicU32 = AtomicU32::new(0);
 
 
-static AEB_: AtomicU64 = AtomicU64::new(0);
+static SK_: AtomicU32 = AtomicU32::new(0);
 
 
-static AHR_: AtomicU64 = AtomicU64::new(0);
+static AFV_: AtomicU64 = AtomicU64::new(0);
 
 
-static AAN_: AtomicI32 = AtomicI32::new(0);
+static AJO_: AtomicU64 = AtomicU64::new(0);
 
 
-static AHF_: AtomicBool = AtomicBool::new(false);
+static ACA_: AtomicI32 = AtomicI32::new(0);
 
 
-static ABC_: AtomicU64 = AtomicU64::new(0);
+static AJB_: AtomicBool = AtomicBool::new(false);
+
+
+static ACS_: AtomicU64 = AtomicU64::new(0);
 
 
 
 
-static AIQ_: spin::Mutex<Vec<i64>> = spin::Mutex::new(Vec::new());
-
-
+static AKL_: spin::Mutex<Vec<i64>> = spin::Mutex::new(Vec::new());
 
 
 
@@ -75,65 +73,67 @@ static AIQ_: spin::Mutex<Vec<i64>> = spin::Mutex::new(Vec::new());
 
 
 
-pub fn zgo() -> u64 {
+
+
+pub fn qrd() -> u64 {
     use crate::drivers::hda;
 
     
-    let gcq = hda::ghw(ANV_, 2, 16000);
-    if gcq.is_empty() { return 0; }
+    let cvd = hda::cyi(APZ_, 2, 16000);
+    if cvd.is_empty() { return 0; }
 
     
-    let _ = hda::qg();
-    hda::jmf();
+    let _ = hda::stop();
+    hda::eyn();
 
     
-    let (aeg, gbq) = match hda::gic() {
-        Some(co) => co,
+    let (buf_ptr, buf_cap) = match hda::cym() {
+        Some(info) => info,
         None => return 0,
     };
 
     
     unsafe {
-        core::ptr::ahx(aeg, 0, gbq);
+        core::ptr::write_bytes(buf_ptr, 0, buf_cap);
     }
 
     
-    let khy = gbq / 4;
-    let rbn = gcq.len().v(gbq - khy);
+    let flx = buf_cap / 4;
+    let kla = cvd.len().min(buf_cap - flx);
     unsafe {
-        core::ptr::copy_nonoverlapping(gcq.fq(), aeg.add(khy), rbn);
+        core::ptr::copy_nonoverlapping(cvd.as_ptr(), buf_ptr.add(flx), kla);
     }
 
     
-    let ndj = (khy * 2) as u32; 
+    let hlj = (flx * 2) as u32; 
 
     
-    let pog = crate::gui::engine::awf();
-    let _ = hda::wsr();
+    let jik = crate::gui::engine::yy();
+    let _ = hda::owe();
 
     
-    let mkv = 200_000; 
+    let gyv = 200_000; 
     loop {
-        let iu = crate::gui::engine::awf();
-        if iu - pog > mkv {
-            let _ = hda::qg();
+        let cy = crate::gui::engine::yy();
+        if cy - jik > gyv {
+            let _ = hda::stop();
             crate::serial_println!("[SYNC] DMA probe timeout (200ms)");
             return 0;
         }
 
-        let bvg = hda::hlj();
-        if bvg >= ndj {
-            let jcw = iu - pog;
-            let _ = hda::qg();
-            ABC_.store(jcw, Ordering::SeqCst);
+        let alw = hda::dqq();
+        if alw >= hlj {
+            let esk = cy - jik;
+            let _ = hda::stop();
+            ACS_.store(esk, Ordering::SeqCst);
             crate::serial_println!("[SYNC] DMA probe: click at byte {} reached after {} µs ({} ms)",
-                ndj, jcw, jcw / 1000);
-            return jcw;
+                hlj, esk, esk / 1000);
+            return esk;
         }
 
         
         for _ in 0..100 {
-            core::hint::hc();
+            core::hint::spin_loop();
         }
     }
 }
@@ -143,14 +143,14 @@ pub fn zgo() -> u64 {
 
 
 
-fn myk() -> u64 {
-    60_000_000 / BAM_ as u64  
+fn hhc() -> u64 {
+    60_000_000 / BCO_ as u64  
 }
 
 
 
-fn tby() -> Vec<i16> {
-    crate::drivers::hda::ghw(ANV_, ANU_, 20000)
+fn mcf() -> Vec<i16> {
+    crate::drivers::hda::cyi(APZ_, APY_, 20000)
 }
 
 
@@ -158,62 +158,62 @@ fn tby() -> Vec<i16> {
 
 
 
-pub fn zpo() {
+pub fn qxq() {
     
-    LE_.store(true, Ordering::SeqCst);
-    XR_.store(0, Ordering::SeqCst);
-    RI_.store(0, Ordering::SeqCst);
-    AHF_.store(false, Ordering::SeqCst);
-    AAN_.store(0, Ordering::SeqCst);
+    LY_.store(true, Ordering::SeqCst);
+    YY_.store(0, Ordering::SeqCst);
+    SK_.store(0, Ordering::SeqCst);
+    AJB_.store(false, Ordering::SeqCst);
+    ACA_.store(0, Ordering::SeqCst);
     {
-        let mut gek = AIQ_.lock();
-        gek.clear();
+        let mut cwh = AKL_.lock();
+        cwh.clear();
     }
 
-    let iu = crate::gui::engine::awf();
-    AHR_.store(iu, Ordering::SeqCst);
-    AEB_.store(0, Ordering::SeqCst);
+    let cy = crate::gui::engine::yy();
+    AJO_.store(cy, Ordering::SeqCst);
+    AFV_.store(0, Ordering::SeqCst);
 
     crate::serial_println!("[SYNC] Metronome calibration started ({} BPM, {} taps needed)",
-        BAM_, PW_);
+        BCO_, QT_);
 
     
-    ovz();
-    AEB_.store(iu, Ordering::SeqCst);
-    RI_.store(1, Ordering::SeqCst);
+    ivc();
+    AFV_.store(cy, Ordering::SeqCst);
+    SK_.store(1, Ordering::SeqCst);
 }
 
 
-pub fn yhi() {
-    LE_.store(false, Ordering::SeqCst);
-    let _ = crate::drivers::hda::qg();
+pub fn pzf() {
+    LY_.store(false, Ordering::SeqCst);
+    let _ = crate::drivers::hda::stop();
     crate::serial_println!("[SYNC] Calibration cancelled");
 }
 
 
 
 
-pub fn or() -> bool {
-    if !LE_.load(Ordering::SeqCst) {
+pub fn tick() -> bool {
+    if !LY_.load(Ordering::SeqCst) {
         return false;
     }
 
     
-    if XR_.load(Ordering::SeqCst) as usize >= PW_ {
-        nup();
+    if YY_.load(Ordering::SeqCst) as usize >= QT_ {
+        hza();
         return false;
     }
 
-    let iu = crate::gui::engine::awf();
-    let hzv = AHR_.load(Ordering::SeqCst);
-    let myj = RI_.load(Ordering::SeqCst);
-    let nry = hzv + myj as u64 * myk();
+    let cy = crate::gui::engine::yy();
+    let dze = AJO_.load(Ordering::SeqCst);
+    let hhb = SK_.load(Ordering::SeqCst);
+    let hxf = dze + hhb as u64 * hhc();
 
-    if iu >= nry {
+    if cy >= hxf {
         
-        ovz();
-        AEB_.store(nry, Ordering::SeqCst);
-        RI_.store(myj + 1, Ordering::SeqCst);
+        ivc();
+        AFV_.store(hxf, Ordering::SeqCst);
+        SK_.store(hhb + 1, Ordering::SeqCst);
     }
 
     true
@@ -221,113 +221,113 @@ pub fn or() -> bool {
 
 
 
-pub fn ziu(mjv: u64) {
-    if !LE_.load(Ordering::SeqCst) {
+pub fn qtf(tap_us: u64) {
+    if !LY_.load(Ordering::SeqCst) {
         return;
     }
 
     
-    let hzv = AHR_.load(Ordering::SeqCst);
-    let crp = myk();
+    let dze = AJO_.load(Ordering::SeqCst);
+    let axr = hhc();
 
-    if mjv <= hzv {
+    if tap_us <= dze {
         return;
     }
 
     
-    let ez = mjv - hzv;
-    let urq = ((ez + crp / 2) / crp) as u64;
-    let urr = hzv + urq * crp;
+    let bb = tap_us - dze;
+    let nhw = ((bb + axr / 2) / axr) as u64;
+    let nhx = dze + nhw * axr;
 
     
     
-    let koz = mjv as i64 - urr as i64;
+    let frk = tap_us as i64 - nhx as i64;
 
     {
-        let mut gek = AIQ_.lock();
-        gek.push(koz);
+        let mut cwh = AKL_.lock();
+        cwh.push(frk);
     }
 
-    let az = XR_.fetch_add(1, Ordering::SeqCst) + 1;
+    let count = YY_.fetch_add(1, Ordering::SeqCst) + 1;
     crate::serial_println!("[SYNC] Tap {}/{}: delta = {} µs ({} ms)",
-        az, PW_, koz, koz / 1000);
+        count, QT_, frk, frk / 1000);
 
     
-    if az as usize >= PW_ {
-        nup();
+    if count as usize >= QT_ {
+        hza();
     }
 }
 
 
-fn ovz() {
-    let gcq = tby();
-    if !gcq.is_empty() {
+fn ivc() {
+    let cvd = mcf();
+    if !cvd.is_empty() {
         
         
-        let _ = crate::drivers::hda::ele(&gcq, ANU_ + 5);
+        let _ = crate::drivers::hda::bxb(&cvd, APY_ + 5);
     }
 }
 
 
-fn nup() {
-    LE_.store(false, Ordering::SeqCst);
+fn hza() {
+    LY_.store(false, Ordering::SeqCst);
 
-    let gek = {
-        let bc = AIQ_.lock();
-        bc.clone()
+    let cwh = {
+        let d = AKL_.lock();
+        d.clone()
     };
 
-    if gek.is_empty() {
+    if cwh.is_empty() {
         crate::serial_println!("[SYNC] No taps recorded");
         return;
     }
 
     
-    let mut bcs = gek.clone();
-    bcs.jqs();
+    let mut acq = cwh.clone();
+    acq.sort();
 
-    let oms = if bcs.len() % 2 == 0 {
-        (bcs[bcs.len() / 2 - 1] + bcs[bcs.len() / 2]) / 2
+    let inf = if acq.len() % 2 == 0 {
+        (acq[acq.len() / 2 - 1] + acq[acq.len() / 2]) / 2
     } else {
-        bcs[bcs.len() / 2]
+        acq[acq.len() / 2]
     };
 
     
-    let sum: i64 = bcs.iter().sum();
-    let omp = sum / bcs.len() as i64;
+    let sum: i64 = acq.iter().sum();
+    let inc = sum / acq.len() as i64;
 
     
-    let xqr: i64 = bcs.iter()
-        .map(|&bc| {
-            let wz = bc - omp;
-            wz * wz
+    let prf: i64 = acq.iter()
+        .map(|&d| {
+            let jr = d - inc;
+            jr * jr
         })
-        .sum::<i64>() / bcs.len() as i64;
+        .sum::<i64>() / acq.len() as i64;
     
-    let wua = tzs(xqr);
-    let wtz = wua / 1000;
+    let oxd = muk(prf);
+    let oxc = oxd / 1000;
 
     
     
-    let ocm: i64 = 80_000;
-    let qle = oms - ocm;
-    let ose = (qle / 1000).qp(-AZU_ as i64, AZU_ as i64) as i32;
+    let ifg: i64 = 80_000;
+    let jyf = inf - ifg;
+    let isa = (jyf / 1000).clamp(-BBW_ as i64, BBW_ as i64) as i32;
 
-    AAN_.store(ose, Ordering::SeqCst);
-    AHF_.store(true, Ordering::SeqCst);
+    ACA_.store(isa, Ordering::SeqCst);
+    AJB_.store(true, Ordering::SeqCst);
 
     crate::serial_println!("[SYNC] ──── Calibration Results ────");
-    crate::serial_println!("[SYNC]   Taps collected: {}", bcs.len());
-    crate::serial_println!("[SYNC]   Median tap delta: {} ms", oms / 1000);
-    crate::serial_println!("[SYNC]   Mean tap delta:   {} ms", omp / 1000);
-    crate::serial_println!("[SYNC]   Std deviation:    {} ms", wtz);
-    crate::serial_println!("[SYNC]   Human reaction:  -{} ms (subtracted)", ocm / 1000);
-    crate::serial_println!("[SYNC]   → Computed A/V offset: {} ms", ose);
+    crate::serial_println!("[SYNC]   Taps collected: {}", acq.len());
+    crate::serial_println!("[SYNC]   Median tap delta: {} ms", inf / 1000);
+    crate::serial_println!("[SYNC]   Mean tap delta:   {} ms", inc / 1000);
+    crate::serial_println!("[SYNC]   Std deviation:    {} ms", oxc);
+    crate::serial_println!("[SYNC]   Human reaction:  -{} ms (subtracted)", ifg / 1000);
+    crate::serial_println!("[SYNC]   → Computed A/V offset: {} ms", isa);
 
     
-    let nmf = ABC_.load(Ordering::SeqCst);
-    if nmf > 0 {
-        crate::serial_println!("[SYNC]   DMA pipeline:    {} ms (measured)", nmf / 1000);
+    let hsw = ACS_.load(Ordering::SeqCst);
+    if hsw > 0 {
+        crate::serial_println!("[SYNC]   DMA pipeline:    {} ms (measured)", hsw / 1000);
     }
 }
 
@@ -336,43 +336,43 @@ fn nup() {
 
 
 
-pub fn rl() -> bool {
-    LE_.load(Ordering::SeqCst)
+pub fn is_active() -> bool {
+    LY_.load(Ordering::SeqCst)
 }
 
 
-pub fn ytk() -> i32 {
-    AAN_.load(Ordering::SeqCst)
+pub fn qia() -> i32 {
+    ACA_.load(Ordering::SeqCst)
 }
 
 
-pub fn ywm() -> bool {
-    AHF_.load(Ordering::SeqCst)
+pub fn qkr() -> bool {
+    AJB_.load(Ordering::SeqCst)
 }
 
 
-pub fn zqz() -> u32 {
-    XR_.load(Ordering::SeqCst)
+pub fn qyu() -> u32 {
+    YY_.load(Ordering::SeqCst)
 }
 
 
-pub fn zra() -> u32 {
-    PW_ as u32
+pub fn qyv() -> u32 {
+    QT_ as u32
 }
 
 
-pub fn yml() -> u64 {
-    ABC_.load(Ordering::SeqCst)
+pub fn qdd() -> u64 {
+    ACS_.load(Ordering::SeqCst)
 }
 
 
-fn tzs(bo: i64) -> i64 {
-    if bo <= 0 { return 0; }
-    let mut b = bo;
-    let mut c = (b + 1) / 2;
-    while c < b {
-        b = c;
-        c = (b + bo / b) / 2;
+fn muk(ae: i64) -> i64 {
+    if ae <= 0 { return 0; }
+    let mut x = ae;
+    let mut y = (x + 1) / 2;
+    while y < x {
+        x = y;
+        y = (x + ae / x) / 2;
     }
-    b
+    x
 }

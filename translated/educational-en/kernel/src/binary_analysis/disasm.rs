@@ -30,11 +30,11 @@ pub struct Instruction {
     /// Is this a call instruction?
     pub is_call: bool,
     /// Is this a return?
-    pub is_return_value: bool,
+    pub is_ret: bool,
     /// Is this an unconditional jump?
     pub is_jump: bool,
     /// Is this a conditional jump?
-    pub is_condition_jump: bool,
+    pub is_cond_jump: bool,
 }
 
 // ──── Register Names ───────────────────────────────────────────────────────
@@ -53,8 +53,8 @@ const REG8:  [&str; 16] = ["al","cl","dl","bl","spl","bpl","sil","dil",
 // Compile-time constant — evaluated at compilation, zero runtime cost.
 const REG8_NOREX: [&str; 8] = ["al","cl","dl","bl","ah","ch","dh","bh"];
 
-fn register_name(index: u8, size: u8, has_rex: bool) -> &'static str {
-    let i = (index & 0x0F) as usize;
+fn register_name(idx: u8, size: u8, has_rex: bool) -> &'static str {
+    let i = (idx & 0x0F) as usize;
         // Pattern matching — Rust's exhaustive branching construct.
 match size {
         8 => REG64.get(i).copied().unwrap_or("?"),
@@ -93,21 +93,21 @@ const CC_NAMES: [&str; 16] = [
 
 pub struct Disassembler<'a> {
     code: &'a [u8],
-    base_address: u64,
-    position: usize,
+    base_addr: u64,
+    pos: usize,
 }
 
 // Implementation block — defines methods for the type above.
 impl<'a> Disassembler<'a> {
         // Public function — callable from other modules.
-pub fn new(code: &'a [u8], base_address: u64) -> Self {
-        Self { code, base_address, position: 0 }
+pub fn new(code: &'a [u8], base_addr: u64) -> Self {
+        Self { code, base_addr, pos: 0 }
     }
 
     /// Disassemble up to `limit` instructions
     pub fn disassemble(&mut self, limit: usize) -> Vec<Instruction> {
         let mut out = Vec::new();
-        while self.position < self.code.len() && out.len() < limit {
+        while self.pos < self.code.len() && out.len() < limit {
             let inst = self.decode_one();
             out.push(inst);
         }
@@ -120,8 +120,8 @@ pub fn new(code: &'a [u8], base_address: u64) -> Self {
     }
 
     fn decode_one(&mut self) -> Instruction {
-        let start = self.position;
-        let address = self.base_address + start as u64;
+        let start = self.pos;
+        let addr = self.base_addr + start as u64;
 
         // ── Parse legacy prefixes ──
         let mut has_66 = false;    // operand size override
@@ -132,31 +132,31 @@ pub fn new(code: &'a [u8], base_address: u64) -> Self {
 
                 // Infinite loop — runs until an explicit `break`.
 loop {
-            if self.position >= self.code.len() { break; }
+            if self.pos >= self.code.len() { break; }
                         // Pattern matching — Rust's exhaustive branching construct.
-match self.code[self.position] {
-                0x66 => { has_66 = true; self.position += 1; }
-                0x67 => { has_67 = true; self.position += 1; }
-                0xF2 => { has_f2 = true; self.position += 1; }
-                0xF3 => { has_f3 = true; self.position += 1; }
-                0x26 | 0x2E | 0x36 | 0x3E | 0x64 | 0x65 => { seg_override = true; self.position += 1; }
+match self.code[self.pos] {
+                0x66 => { has_66 = true; self.pos += 1; }
+                0x67 => { has_67 = true; self.pos += 1; }
+                0xF2 => { has_f2 = true; self.pos += 1; }
+                0xF3 => { has_f3 = true; self.pos += 1; }
+                0x26 | 0x2E | 0x36 | 0x3E | 0x64 | 0x65 => { seg_override = true; self.pos += 1; }
                 _ => break,
             }
             // Safety: don't consume more than 4 prefixes
-            if self.position - start > 4 { break; }
+            if self.pos - start > 4 { break; }
         }
 
-        if self.position >= self.code.len() {
-            return self.make_db(start, address);
+        if self.pos >= self.code.len() {
+            return self.make_db(start, addr);
         }
 
         // ── REX prefix ──
         let mut rex: u8 = 0;
         let has_rex;
-        let b = self.code[self.position];
+        let b = self.code[self.pos];
         if b >= 0x40 && b <= 0x4F {
             rex = b;
-            self.position += 1;
+            self.pos += 1;
             has_rex = true;
         } else {
             has_rex = false;
@@ -170,16 +170,16 @@ match self.code[self.position] {
         // Operand size: REX.W → 64, 66h → 16, else 32
         let operation_size: u8 = if rex_w { 8 } else if has_66 { 2 } else { 4 };
 
-        if self.position >= self.code.len() {
-            return self.make_db(start, address);
+        if self.pos >= self.code.len() {
+            return self.make_db(start, addr);
         }
 
-        let opcode = self.code[self.position];
-        self.position += 1;
+        let opcode = self.code[self.pos];
+        self.pos += 1;
 
         // ── Two-byte opcode (0F xx) ──
         if opcode == 0x0F {
-            return self.decode_0f(start, address, rex, operation_size, has_rex, has_f2, has_f3);
+            return self.decode_0f(start, addr, rex, operation_size, has_rex, has_f2, has_f3);
         }
 
         // ── Single-byte opcodes ──
@@ -281,62 +281,62 @@ match opcode {
 
             // CALL rel32
             0xE8 => {
-                let relative = self.read_i32().unwrap_or(0) as i64;
-                let target = (address as i64 + (self.position - start) as i64 + relative) as u64;
+                let rel = self.read_i32().unwrap_or(0) as i64;
+                let target = (addr as i64 + (self.pos - start) as i64 + rel) as u64;
                 Some(("call", format!("{:#x}", target), Some(target), true, false, false, false))
             }
 
             // JMP rel32
             0xE9 => {
-                let relative = self.read_i32().unwrap_or(0) as i64;
-                let target = (address as i64 + (self.position - start) as i64 + relative) as u64;
+                let rel = self.read_i32().unwrap_or(0) as i64;
+                let target = (addr as i64 + (self.pos - start) as i64 + rel) as u64;
                 Some(("jmp", format!("{:#x}", target), Some(target), false, false, true, false))
             }
 
             // JMP rel8
             0xEB => {
-                let relative = self.read_i8().unwrap_or(0) as i64;
-                let target = (address as i64 + (self.position - start) as i64 + relative) as u64;
+                let rel = self.read_i8().unwrap_or(0) as i64;
+                let target = (addr as i64 + (self.pos - start) as i64 + rel) as u64;
                 Some(("jmp", format!("{:#x}", target), Some(target), false, false, true, false))
             }
 
             // Jcc rel8 (70-7F)
             0x70..=0x7F => {
                 let cc = opcode - 0x70;
-                let relative = self.read_i8().unwrap_or(0) as i64;
-                let target = (address as i64 + (self.position - start) as i64 + relative) as u64;
+                let rel = self.read_i8().unwrap_or(0) as i64;
+                let target = (addr as i64 + (self.pos - start) as i64 + rel) as u64;
                 let mn = format!("j{}", CC_NAMES[cc as usize]);
                 Some((&"jcc_placeholder", format!("{:#x}", target), Some(target), false, false, false, true))
-                    .map(|(_, ops, target, call, return_value, jmp, cj)| (leak_str(&mn), ops, target, call, return_value, jmp, cj))
+                    .map(|(_, ops, tgt, call, ret, jmp, cj)| (leak_str(&mn), ops, tgt, call, ret, jmp, cj))
             }
 
             // LOOP / LOOPE / LOOPNE / JCXZ
             0xE0 => {
-                let relative = self.read_i8().unwrap_or(0) as i64;
-                let target = (address as i64 + (self.position - start) as i64 + relative) as u64;
+                let rel = self.read_i8().unwrap_or(0) as i64;
+                let target = (addr as i64 + (self.pos - start) as i64 + rel) as u64;
                 Some(("loopne", format!("{:#x}", target), Some(target), false, false, false, true))
             }
             0xE1 => {
-                let relative = self.read_i8().unwrap_or(0) as i64;
-                let target = (address as i64 + (self.position - start) as i64 + relative) as u64;
+                let rel = self.read_i8().unwrap_or(0) as i64;
+                let target = (addr as i64 + (self.pos - start) as i64 + rel) as u64;
                 Some(("loope", format!("{:#x}", target), Some(target), false, false, false, true))
             }
             0xE2 => {
-                let relative = self.read_i8().unwrap_or(0) as i64;
-                let target = (address as i64 + (self.position - start) as i64 + relative) as u64;
+                let rel = self.read_i8().unwrap_or(0) as i64;
+                let target = (addr as i64 + (self.pos - start) as i64 + rel) as u64;
                 Some(("loop", format!("{:#x}", target), Some(target), false, false, false, true))
             }
 
             // ── ALU r/m, r (ADD/OR/ADC/SBB/AND/SUB/XOR/CMP) ──
             // opcode = 0x00 + alu_op*8 + direction(0=rm,r 2=r,rm) + width(0=8bit 1=32/64)
-            0x00 | 0x01 | 0x02 | 0x03 => self.decode_alu_rm(start, address, opcode, "add", operation_size, has_rex, rex_r, rex_b, rex_x),
-            0x08 | 0x09 | 0x0A | 0x0B => self.decode_alu_rm(start, address, opcode, "or",  operation_size, has_rex, rex_r, rex_b, rex_x),
-            0x10 | 0x11 | 0x12 | 0x13 => self.decode_alu_rm(start, address, opcode, "adc", operation_size, has_rex, rex_r, rex_b, rex_x),
-            0x18 | 0x19 | 0x1A | 0x1B => self.decode_alu_rm(start, address, opcode, "sbb", operation_size, has_rex, rex_r, rex_b, rex_x),
-            0x20 | 0x21 | 0x22 | 0x23 => self.decode_alu_rm(start, address, opcode, "and", operation_size, has_rex, rex_r, rex_b, rex_x),
-            0x28 | 0x29 | 0x2A | 0x2B => self.decode_alu_rm(start, address, opcode, "sub", operation_size, has_rex, rex_r, rex_b, rex_x),
-            0x30 | 0x31 | 0x32 | 0x33 => self.decode_alu_rm(start, address, opcode, "xor", operation_size, has_rex, rex_r, rex_b, rex_x),
-            0x38 | 0x39 | 0x3A | 0x3B => self.decode_alu_rm(start, address, opcode, "cmp", operation_size, has_rex, rex_r, rex_b, rex_x),
+            0x00 | 0x01 | 0x02 | 0x03 => self.decode_alu_rm(start, addr, opcode, "add", operation_size, has_rex, rex_r, rex_b, rex_x),
+            0x08 | 0x09 | 0x0A | 0x0B => self.decode_alu_rm(start, addr, opcode, "or",  operation_size, has_rex, rex_r, rex_b, rex_x),
+            0x10 | 0x11 | 0x12 | 0x13 => self.decode_alu_rm(start, addr, opcode, "adc", operation_size, has_rex, rex_r, rex_b, rex_x),
+            0x18 | 0x19 | 0x1A | 0x1B => self.decode_alu_rm(start, addr, opcode, "sbb", operation_size, has_rex, rex_r, rex_b, rex_x),
+            0x20 | 0x21 | 0x22 | 0x23 => self.decode_alu_rm(start, addr, opcode, "and", operation_size, has_rex, rex_r, rex_b, rex_x),
+            0x28 | 0x29 | 0x2A | 0x2B => self.decode_alu_rm(start, addr, opcode, "sub", operation_size, has_rex, rex_r, rex_b, rex_x),
+            0x30 | 0x31 | 0x32 | 0x33 => self.decode_alu_rm(start, addr, opcode, "xor", operation_size, has_rex, rex_r, rex_b, rex_x),
+            0x38 | 0x39 | 0x3A | 0x3B => self.decode_alu_rm(start, addr, opcode, "cmp", operation_size, has_rex, rex_r, rex_b, rex_x),
 
             // ALU eAX, imm
             0x04 => { let imm = self.read_u8().unwrap_or(0); Some(("add", format!("al, {:#x}", imm), None, false, false, false, false)) }
@@ -428,8 +428,8 @@ match opcode {
             0xD3 => self.decode_shift(operation_size, has_rex, rex_b, rex_x, ShiftCount::CL),
 
             // INC/DEC (FE/FF)
-            0xFE => self.decode_group_fe(1, has_rex, rex_r, rex_b, rex_x, address, start),
-            0xFF => self.decode_group_fe(operation_size, has_rex, rex_r, rex_b, rex_x, address, start),
+            0xFE => self.decode_group_fe(1, has_rex, rex_r, rex_b, rex_x, addr, start),
+            0xFF => self.decode_group_fe(operation_size, has_rex, rex_r, rex_b, rex_x, addr, start),
 
             // Group 3: TEST/NOT/NEG/MUL/IMUL/DIV/IDIV (F6/F7)
             0xF6 => self.decode_group3(1, has_rex, rex_b, rex_x),
@@ -493,38 +493,38 @@ match opcode {
 
                 // Pattern matching — Rust's exhaustive branching construct.
 match result {
-            Some((mn, ops, target, is_call, is_return_value, is_jump, is_condition_jump)) => {
-                let bytes = self.code[start..self.position].to_vec();
+            Some((mn, ops, target, is_call, is_ret, is_jump, is_cond_jump)) => {
+                let bytes = self.code[start..self.pos].to_vec();
                 Instruction {
-                    address: address,
+                    address: addr,
                     bytes,
                     mnemonic: String::from(mn),
                     operands_str: ops,
                     comment: None,
                     branch_target: target,
                     is_call,
-                    is_return_value,
+                    is_ret,
                     is_jump,
-                    is_condition_jump,
+                    is_cond_jump,
                 }
             }
-            None => self.make_db(start, address),
+            None => self.make_db(start, addr),
         }
     }
 
     // ── Two-byte opcode decoder (0F xx) ────────────────────────────────────
 
-    fn decode_0f(&mut self, start: usize, address: u64, rex: u8, operation_size: u8, has_rex: bool, _has_f2: bool, _has_f3: bool) -> Instruction {
-        if self.position >= self.code.len() {
-            return self.make_db(start, address);
+    fn decode_0f(&mut self, start: usize, addr: u64, rex: u8, operation_size: u8, has_rex: bool, _has_f2: bool, _has_f3: bool) -> Instruction {
+        if self.pos >= self.code.len() {
+            return self.make_db(start, addr);
         }
 
         let rex_r = (rex & 0x04) != 0;
         let rex_b = (rex & 0x01) != 0;
         let rex_x = (rex & 0x02) != 0;
 
-        let op2 = self.code[self.position];
-        self.position += 1;
+        let op2 = self.code[self.pos];
+        self.pos += 1;
 
         let result: Option<(&str, String, Option<u64>, bool, bool, bool, bool)> = // Pattern matching — Rust's exhaustive branching construct.
 match op2 {
@@ -554,8 +554,8 @@ match op2 {
             // Jcc rel32 (0F 80-8F)
             0x80..=0x8F => {
                 let cc = op2 - 0x80;
-                let relative = self.read_i32().unwrap_or(0) as i64;
-                let target = (address as i64 + (self.position - start) as i64 + relative) as u64;
+                let rel = self.read_i32().unwrap_or(0) as i64;
+                let target = (addr as i64 + (self.pos - start) as i64 + rel) as u64;
                 let mn_str = format!("j{}", CC_NAMES[cc as usize]);
                 Some((leak_str(&mn_str), format!("{:#x}", target), Some(target), false, false, false, true))
             }
@@ -658,24 +658,24 @@ match op2 {
 
                 // Pattern matching — Rust's exhaustive branching construct.
 match result {
-            Some((mn, ops, target, is_call, is_return_value, is_jump, is_condition_jump)) => {
-                let bytes = self.code[start..self.position].to_vec();
+            Some((mn, ops, target, is_call, is_ret, is_jump, is_cond_jump)) => {
+                let bytes = self.code[start..self.pos].to_vec();
                 Instruction {
-                    address: address,
+                    address: addr,
                     bytes,
                     mnemonic: String::from(mn),
                     operands_str: ops,
                     comment: None,
                     branch_target: target,
                     is_call,
-                    is_return_value,
+                    is_ret,
                     is_jump,
-                    is_condition_jump,
+                    is_cond_jump,
                 }
             }
             None => {
                 // Unrecognized 0F xx - emit db for both bytes
-                self.make_db(start, address)
+                self.make_db(start, addr)
             }
         }
     }
@@ -684,12 +684,12 @@ match result {
 
     /// Decode ModR/M and return (rm_string, reg_string)
     fn decode_modrm_operands(&mut self, size: u8, has_rex: bool, rex_r: bool, rex_b: bool, rex_x: bool) -> (String, String) {
-        if self.position >= self.code.len() {
+        if self.pos >= self.code.len() {
             return (String::from("?"), String::from("?"));
         }
 
-        let modrm = self.code[self.position];
-        self.position += 1;
+        let modrm = self.code[self.pos];
+        self.pos += 1;
 
         let mod_bits = (modrm >> 6) & 3;
         let register_field = ((modrm >> 3) & 7) | if rex_r { 8 } else { 0 };
@@ -703,12 +703,12 @@ match result {
 
     /// Decode ModR/M but only return the r/m operand (for group instructions)
     fn decode_modrm_rm_only(&mut self, size: u8, has_rex: bool, rex_b: bool, rex_x: bool) -> String {
-        if self.position >= self.code.len() {
+        if self.pos >= self.code.len() {
             return String::from("?");
         }
 
-        let modrm = self.code[self.position];
-        self.position += 1;
+        let modrm = self.code[self.pos];
+        self.pos += 1;
 
         let mod_bits = (modrm >> 6) & 3;
         let rm_field = (modrm & 7) | if rex_b { 8 } else { 0 };
@@ -731,8 +731,8 @@ match result {
             (String::new(), true)
         } else if rm_low == 5 && mod_bits == 0 {
             // RIP-relative or disp32
-            let display = self.read_i32().unwrap_or(0);
-            return format!("{} [rip{:+#x}]", size_prefix(size), display);
+            let disp = self.read_i32().unwrap_or(0);
+            return format!("{} [rip{:+#x}]", size_prefix(size), disp);
         } else {
             (String::from(register_name(rm, 8, has_rex)), false)
         };
@@ -745,19 +745,19 @@ match result {
         match mod_bits {
             0 => format!("{} [{}]", size_prefix(size), base_str),
             1 => {
-                let display = self.read_i8().unwrap_or(0) as i32;
-                if display == 0 {
+                let disp = self.read_i8().unwrap_or(0) as i32;
+                if disp == 0 {
                     format!("{} [{}]", size_prefix(size), base_str)
                 } else {
-                    format!("{} [{}{:+#x}]", size_prefix(size), base_str, display)
+                    format!("{} [{}{:+#x}]", size_prefix(size), base_str, disp)
                 }
             }
             2 => {
-                let display = self.read_i32().unwrap_or(0);
-                if display == 0 {
+                let disp = self.read_i32().unwrap_or(0);
+                if disp == 0 {
                     format!("{} [{}]", size_prefix(size), base_str)
                 } else {
-                    format!("{} [{}{:+#x}]", size_prefix(size), base_str, display)
+                    format!("{} [{}{:+#x}]", size_prefix(size), base_str, disp)
                 }
             }
             _ => String::from("?"),
@@ -766,12 +766,12 @@ match result {
 
     /// Decode SIB byte
     fn decode_sib(&mut self, mod_bits: u8, rex_b: bool, rex_x: bool, size: u8, has_rex: bool) -> String {
-        if self.position >= self.code.len() {
+        if self.pos >= self.code.len() {
             return String::from("?");
         }
 
-        let sib = self.code[self.position];
-        self.position += 1;
+        let sib = self.code[self.pos];
+        self.pos += 1;
 
         let scale = 1u8 << ((sib >> 6) & 3);
         let index = ((sib >> 3) & 7) | if rex_x { 8 } else { 0 };
@@ -780,15 +780,15 @@ match result {
         let has_index = index != 4; // RSP cannot be index
         let base_str = if (base & 7) == 5 && mod_bits == 0 {
             // No base, disp32
-            let display = self.read_i32().unwrap_or(0);
+            let disp = self.read_i32().unwrap_or(0);
             if has_index {
                 if scale > 1 {
-                    return format!("{} [{}*{}{:+#x}]", size_prefix(size), register_name(index, 8, has_rex), scale, display);
+                    return format!("{} [{}*{}{:+#x}]", size_prefix(size), register_name(index, 8, has_rex), scale, disp);
                 } else {
-                    return format!("{} [{}{:+#x}]", size_prefix(size), register_name(index, 8, has_rex), display);
+                    return format!("{} [{}{:+#x}]", size_prefix(size), register_name(index, 8, has_rex), disp);
                 }
             } else {
-                return format!("{} [{:#x}]", size_prefix(size), display);
+                return format!("{} [{:#x}]", size_prefix(size), disp);
             }
         } else {
             String::from(register_name(base, 8, has_rex))
@@ -809,19 +809,19 @@ match result {
 match mod_bits {
             0 => format!("{} [{}]", size_prefix(size), address_expr),
             1 => {
-                let display = self.read_i8().unwrap_or(0) as i32;
-                if display == 0 {
+                let disp = self.read_i8().unwrap_or(0) as i32;
+                if disp == 0 {
                     format!("{} [{}]", size_prefix(size), address_expr)
                 } else {
-                    format!("{} [{}{:+#x}]", size_prefix(size), address_expr, display)
+                    format!("{} [{}{:+#x}]", size_prefix(size), address_expr, disp)
                 }
             }
             2 => {
-                let display = self.read_i32().unwrap_or(0);
-                if display == 0 {
+                let disp = self.read_i32().unwrap_or(0);
+                if disp == 0 {
                     format!("{} [{}]", size_prefix(size), address_expr)
                 } else {
-                    format!("{} [{}{:+#x}]", size_prefix(size), address_expr, display)
+                    format!("{} [{}{:+#x}]", size_prefix(size), address_expr, disp)
                 }
             }
             _ => String::from("?"),
@@ -830,11 +830,11 @@ match mod_bits {
 
     // ── Group decoders ─────────────────────────────────────────────────────
 
-    fn decode_alu_rm(&mut self, _start: usize, _address: u64, opcode: u8, mnemonic: &str, operation_size: u8, has_rex: bool, rex_r: bool, rex_b: bool, rex_x: bool) -> Option<(&'static str, String, Option<u64>, bool, bool, bool, bool)> {
+    fn decode_alu_rm(&mut self, _start: usize, _addr: u64, opcode: u8, mnemonic: &str, operation_size: u8, has_rex: bool, rex_r: bool, rex_b: bool, rex_x: bool) -> Option<(&'static str, String, Option<u64>, bool, bool, bool, bool)> {
         let is_byte = (opcode & 1) == 0;
         let directory = (opcode & 2) != 0; // 0: r/m, r   2: r, r/m
-        let size = if is_byte { 1 } else { operation_size };
-        let (rm, reg) = self.decode_modrm_operands(size, has_rex, rex_r, rex_b, rex_x);
+        let sz = if is_byte { 1 } else { operation_size };
+        let (rm, reg) = self.decode_modrm_operands(sz, has_rex, rex_r, rex_b, rex_x);
         let ops = if directory {
             format!("{}, {}", reg, rm)
         } else {
@@ -850,8 +850,8 @@ match mnemonic {
     }
 
     fn decode_group1(&mut self, size: u8, has_rex: bool, rex_b: bool, rex_x: bool, imm8: bool) -> Option<(&'static str, String, Option<u64>, bool, bool, bool, bool)> {
-        if self.position >= self.code.len() { return None; }
-        let modrm = self.code[self.position]; // don't advance yet
+        if self.pos >= self.code.len() { return None; }
+        let modrm = self.code[self.pos]; // don't advance yet
         let op = (modrm >> 3) & 7;
 
         let rm = self.decode_modrm_rm_only(size, has_rex, rex_b, rex_x);
@@ -872,8 +872,8 @@ match op {
     }
 
     fn decode_shift(&mut self, size: u8, has_rex: bool, rex_b: bool, rex_x: bool, count: ShiftCount) -> Option<(&'static str, String, Option<u64>, bool, bool, bool, bool)> {
-        if self.position >= self.code.len() { return None; }
-        let modrm = self.code[self.position];
+        if self.pos >= self.code.len() { return None; }
+        let modrm = self.code[self.pos];
         let op = (modrm >> 3) & 7;
 
         let rm = self.decode_modrm_rm_only(size, has_rex, rex_b, rex_x);
@@ -897,9 +897,9 @@ match op {
         Some((mn, format!("{}, {}", rm, count_str), None, false, false, false, false))
     }
 
-    fn decode_group_fe(&mut self, size: u8, has_rex: bool, _rex_r: bool, rex_b: bool, rex_x: bool, address: u64, start: usize) -> Option<(&'static str, String, Option<u64>, bool, bool, bool, bool)> {
-        if self.position >= self.code.len() { return None; }
-        let modrm = self.code[self.position];
+    fn decode_group_fe(&mut self, size: u8, has_rex: bool, _rex_r: bool, rex_b: bool, rex_x: bool, addr: u64, start: usize) -> Option<(&'static str, String, Option<u64>, bool, bool, bool, bool)> {
+        if self.pos >= self.code.len() { return None; }
+        let modrm = self.code[self.pos];
         let op = (modrm >> 3) & 7;
 
                 // Pattern matching — Rust's exhaustive branching construct.
@@ -935,8 +935,8 @@ match op {
     }
 
     fn decode_group3(&mut self, size: u8, has_rex: bool, rex_b: bool, rex_x: bool) -> Option<(&'static str, String, Option<u64>, bool, bool, bool, bool)> {
-        if self.position >= self.code.len() { return None; }
-        let modrm = self.code[self.position];
+        if self.pos >= self.code.len() { return None; }
+        let modrm = self.code[self.pos];
         let op = (modrm >> 3) & 7;
 
                 // Pattern matching — Rust's exhaustive branching construct.
@@ -982,9 +982,9 @@ match op {
     // ── Byte reading helpers ───────────────────────────────────────────────
 
     fn read_u8(&mut self) -> Option<u8> {
-        if self.position >= self.code.len() { return None; }
-        let v = self.code[self.position];
-        self.position += 1;
+        if self.pos >= self.code.len() { return None; }
+        let v = self.code[self.pos];
+        self.pos += 1;
         Some(v)
     }
 
@@ -993,31 +993,31 @@ match op {
     }
 
     fn read_u16(&mut self) -> Option<u16> {
-        if self.position + 2 > self.code.len() { return None; }
-        let v = u16::from_le_bytes([self.code[self.position], self.code[self.position + 1]]);
-        self.position += 2;
+        if self.pos + 2 > self.code.len() { return None; }
+        let v = u16::from_le_bytes([self.code[self.pos], self.code[self.pos + 1]]);
+        self.pos += 2;
         Some(v)
     }
 
     fn read_i32(&mut self) -> Option<i32> {
-        if self.position + 4 > self.code.len() { return None; }
+        if self.pos + 4 > self.code.len() { return None; }
         let v = i32::from_le_bytes([
-            self.code[self.position], self.code[self.position + 1],
-            self.code[self.position + 2], self.code[self.position + 3],
+            self.code[self.pos], self.code[self.pos + 1],
+            self.code[self.pos + 2], self.code[self.pos + 3],
         ]);
-        self.position += 4;
+        self.pos += 4;
         Some(v)
     }
 
     fn read_i64(&mut self) -> Option<i64> {
-        if self.position + 8 > self.code.len() { return None; }
+        if self.pos + 8 > self.code.len() { return None; }
         let v = i64::from_le_bytes([
-            self.code[self.position], self.code[self.position + 1],
-            self.code[self.position + 2], self.code[self.position + 3],
-            self.code[self.position + 4], self.code[self.position + 5],
-            self.code[self.position + 6], self.code[self.position + 7],
+            self.code[self.pos], self.code[self.pos + 1],
+            self.code[self.pos + 2], self.code[self.pos + 3],
+            self.code[self.pos + 4], self.code[self.pos + 5],
+            self.code[self.pos + 6], self.code[self.pos + 7],
         ]);
-        self.position += 8;
+        self.pos += 8;
         Some(v)
     }
 
@@ -1031,34 +1031,34 @@ match op {
 
     /// Peek at last consumed ModR/M byte (for MOVZX/MOVSX reg field extraction)
     fn peek_back(&self) -> u8 {
-        if self.position > 0 {
+        if self.pos > 0 {
             // The ModR/M byte was the last thing consumed before SIB/disp
             // We approximate by looking at the byte we know is there
-            self.code.get(self.position.wrapping_sub(1)).copied().unwrap_or(0)
+            self.code.get(self.pos.wrapping_sub(1)).copied().unwrap_or(0)
         } else {
             0
         }
     }
 
-    fn make_db(&mut self, start: usize, address: u64) -> Instruction {
+    fn make_db(&mut self, start: usize, addr: u64) -> Instruction {
         // Ensure we advance by at least 1
-        if self.position <= start {
-            self.position = start + 1;
+        if self.pos <= start {
+            self.pos = start + 1;
         }
-        let end = self.position.minimum(self.code.len());
+        let end = self.pos.min(self.code.len());
         let bytes = self.code[start..end].to_vec();
         let hex: String = bytes.iter().map(|b| format!("{:#04x}", b)).collect::<Vec<_>>().join(", ");
         Instruction {
-            address: address,
+            address: addr,
             bytes,
             mnemonic: String::from("db"),
             operands_str: hex,
             comment: None,
             branch_target: None,
             is_call: false,
-            is_return_value: false,
+            is_ret: false,
             is_jump: false,
-            is_condition_jump: false,
+            is_cond_jump: false,
         }
     }
 }
@@ -1102,15 +1102,15 @@ fn leak_str(s: &str) -> &'static str {
 /// Annotate instructions with symbol names and syscall info
 pub fn annotate_instructions(
     instructions: &mut [Instruction],
-    address_to_symbol: &alloc::collections::BTreeMap<u64, String>,
+    addr_to_symbol: &alloc::collections::BTreeMap<u64, String>,
 ) {
     // Track last value loaded into RAX for syscall detection
     let mut last_rax_value: Option<i64> = None;
 
-    for inst in instructions.iterator_mut() {
+    for inst in instructions.iter_mut() {
         // Label CALL/JMP targets with symbol names
         if let Some(target) = inst.branch_target {
-            if let Some(name) = address_to_symbol.get(&target) {
+            if let Some(name) = addr_to_symbol.get(&target) {
                 inst.comment = Some(format!("<{}>", name));
             }
         }
@@ -1118,10 +1118,10 @@ pub fn annotate_instructions(
         // Track MOV EAX/RAX, imm for syscall annotation
         if inst.mnemonic == "mov" && (inst.operands_str.starts_with("eax,") || inst.operands_str.starts_with("rax,")) {
             // Try to extract the immediate value
-            if let Some(comma_position) = inst.operands_str.find(',') {
-                let imm_str = inst.operands_str[comma_position + 1..].trim();
-                if let Some(value) = parse_imm_str(imm_str) {
-                    last_rax_value = Some(value);
+            if let Some(comma_pos) = inst.operands_str.find(',') {
+                let imm_str = inst.operands_str[comma_pos + 1..].trim();
+                if let Some(val) = parse_imm_str(imm_str) {
+                    last_rax_value = Some(val);
                 }
             }
         } else if inst.mnemonic == "xor" && inst.operands_str.contains("eax") && inst.operands_str.matches("eax").count() == 2 {

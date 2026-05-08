@@ -4251,8 +4251,8 @@ pub fn get_random_sample() -> &'static str {
     if total == 0 {
         return "Hello world";
     }
-    let index = (crate::time::uptime_mouse() as usize) % total;
-    let mut remaining = index;
+    let idx = (crate::time::uptime_ms() as usize) % total;
+    let mut remaining = idx;
     for phase in CORPUS {
         if remaining < phase.len() {
             return phase[remaining];

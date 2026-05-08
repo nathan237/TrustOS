@@ -65,9 +65,9 @@ pub fn get(&self, reg: Reg) -> u64 {
     /// Write register (x0 writes are ignored)
     #[inline]
         // Public function — callable from other modules.
-pub fn set(&mut self, reg: Reg, value: u64) {
+pub fn set(&mut self, reg: Reg, val: u64) {
         if reg as u8 != 0 {
-            self.regs[reg as usize] = value;
+            self.regs[reg as usize] = val;
         }
     }
 
@@ -82,7 +82,7 @@ pub fn set_cmp(&mut self, a: u64, b: u64) {
     }
 
     /// Evaluate a flag-based condition
-    pub fn eval_condition(&self, condition: FlagCond) -> bool {
+    pub fn eval_cond(&self, condition: FlagCond) -> bool {
         let diff = self.cmp_a.wrapping_sub(self.cmp_b);
                 // Pattern matching — Rust's exhaustive branching construct.
 match condition {
@@ -126,100 +126,100 @@ pub fn new() -> Self {
     }
 
     /// Map a memory region
-    pub fn map(&mut self, address: u64, size: usize) {
-        self.regions.insert(address, vec![0u8; size]);
+    pub fn map(&mut self, addr: u64, size: usize) {
+        self.regions.insert(addr, vec![0u8; size]);
         self.total_allocated += size;
     }
 
     /// Map a region with initial data
-    pub fn map_with_data(&mut self, address: u64, data: &[u8]) {
-        self.regions.insert(address, data.to_vec());
+    pub fn map_with_data(&mut self, addr: u64, data: &[u8]) {
+        self.regions.insert(addr, data.to_vec());
         self.total_allocated += data.len();
     }
 
     /// Read a byte
-    pub fn read_u8(&self, address: u64) -> Result<u8, MemError> {
+    pub fn read_u8(&self, addr: u64) -> Result<u8, MemError> {
         for (&base, data) in &self.regions {
-            if address >= base && address < base + data.len() as u64 {
-                return Ok(data[(address - base) as usize]);
+            if addr >= base && addr < base + data.len() as u64 {
+                return Ok(data[(addr - base) as usize]);
             }
         }
-        Err(MemError::Unmapped(address))
+        Err(MemError::Unmapped(addr))
     }
 
     /// Read 2 bytes (little-endian)
-    pub fn read_u16(&self, address: u64) -> Result<u16, MemError> {
+    pub fn read_u16(&self, addr: u64) -> Result<u16, MemError> {
         Ok(u16::from_le_bytes([
-            self.read_u8(address)?,
-            self.read_u8(address + 1)?,
+            self.read_u8(addr)?,
+            self.read_u8(addr + 1)?,
         ]))
     }
 
     /// Read 4 bytes (little-endian)
-    pub fn read_u32(&self, address: u64) -> Result<u32, MemError> {
+    pub fn read_u32(&self, addr: u64) -> Result<u32, MemError> {
         Ok(u32::from_le_bytes([
-            self.read_u8(address)?,
-            self.read_u8(address + 1)?,
-            self.read_u8(address + 2)?,
-            self.read_u8(address + 3)?,
+            self.read_u8(addr)?,
+            self.read_u8(addr + 1)?,
+            self.read_u8(addr + 2)?,
+            self.read_u8(addr + 3)?,
         ]))
     }
 
     /// Read 8 bytes (little-endian)
-    pub fn read_u64(&self, address: u64) -> Result<u64, MemError> {
+    pub fn read_u64(&self, addr: u64) -> Result<u64, MemError> {
         Ok(u64::from_le_bytes([
-            self.read_u8(address)?,
-            self.read_u8(address + 1)?,
-            self.read_u8(address + 2)?,
-            self.read_u8(address + 3)?,
-            self.read_u8(address + 4)?,
-            self.read_u8(address + 5)?,
-            self.read_u8(address + 6)?,
-            self.read_u8(address + 7)?,
+            self.read_u8(addr)?,
+            self.read_u8(addr + 1)?,
+            self.read_u8(addr + 2)?,
+            self.read_u8(addr + 3)?,
+            self.read_u8(addr + 4)?,
+            self.read_u8(addr + 5)?,
+            self.read_u8(addr + 6)?,
+            self.read_u8(addr + 7)?,
         ]))
     }
 
     /// Write a byte
-    pub fn write_u8(&mut self, address: u64, value: u8) -> Result<(), MemError> {
-        for (&base, data) in self.regions.iterator_mut() {
-            if address >= base && address < base + data.len() as u64 {
-                data[(address - base) as usize] = value;
+    pub fn write_u8(&mut self, addr: u64, val: u8) -> Result<(), MemError> {
+        for (&base, data) in self.regions.iter_mut() {
+            if addr >= base && addr < base + data.len() as u64 {
+                data[(addr - base) as usize] = val;
                 return Ok(());
             }
         }
-        Err(MemError::Unmapped(address))
+        Err(MemError::Unmapped(addr))
     }
 
     /// Write 2 bytes (little-endian)
-    pub fn write_u16(&mut self, address: u64, value: u16) -> Result<(), MemError> {
-        let bytes = value.to_le_bytes();
-        self.write_u8(address, bytes[0])?;
-        self.write_u8(address + 1, bytes[1])
+    pub fn write_u16(&mut self, addr: u64, val: u16) -> Result<(), MemError> {
+        let bytes = val.to_le_bytes();
+        self.write_u8(addr, bytes[0])?;
+        self.write_u8(addr + 1, bytes[1])
     }
 
     /// Write 4 bytes (little-endian)
-    pub fn write_u32(&mut self, address: u64, value: u32) -> Result<(), MemError> {
-        let bytes = value.to_le_bytes();
+    pub fn write_u32(&mut self, addr: u64, val: u32) -> Result<(), MemError> {
+        let bytes = val.to_le_bytes();
         for i in 0..4 {
-            self.write_u8(address + i, bytes[i as usize])?;
+            self.write_u8(addr + i, bytes[i as usize])?;
         }
         Ok(())
     }
 
     /// Write 8 bytes (little-endian)
-    pub fn write_u64(&mut self, address: u64, value: u64) -> Result<(), MemError> {
-        let bytes = value.to_le_bytes();
+    pub fn write_u64(&mut self, addr: u64, val: u64) -> Result<(), MemError> {
+        let bytes = val.to_le_bytes();
         for i in 0..8 {
-            self.write_u8(address + i, bytes[i as usize])?;
+            self.write_u8(addr + i, bytes[i as usize])?;
         }
         Ok(())
     }
 
     /// Read a null-terminated string from memory
-    pub fn read_string(&self, address: u64, maximum_length: usize) -> Result<String, MemError> {
+    pub fn read_string(&self, addr: u64, maximum_length: usize) -> Result<String, MemError> {
         let mut s = String::new();
         for i in 0..maximum_length {
-            let b = self.read_u8(address + i as u64)?;
+            let b = self.read_u8(addr + i as u64)?;
             if b == 0 { break; }
             s.push(b as char);
         }
@@ -227,11 +227,11 @@ pub fn new() -> Self {
     }
 
     /// Write a string to memory (with null terminator)
-    pub fn write_string(&mut self, address: u64, s: &str) -> Result<(), MemError> {
+    pub fn write_string(&mut self, addr: u64, s: &str) -> Result<(), MemError> {
         for (i, b) in s.bytes().enumerate() {
-            self.write_u8(address + i as u64, b)?;
+            self.write_u8(addr + i as u64, b)?;
         }
-        self.write_u8(address + s.len() as u64, 0)
+        self.write_u8(addr + s.len() as u64, 0)
     }
 }
 
@@ -274,7 +274,7 @@ pub struct RvInterpreter {
     /// Translation block cache: source_addr → translated block
     pub block_cache: BTreeMap<u64, Vec<RvInst>>,
     /// Maximum instructions to execute before yielding
-    pub maximum_instructions: u64,
+    pub max_instructions: u64,
 }
 
 // Implementation block — defines methods for the type above.
@@ -285,13 +285,13 @@ pub fn new() -> Self {
             cpu: RvCpu::new(),
             mem: RvMemory::new(),
             block_cache: BTreeMap::new(),
-            maximum_instructions: 10_000_000, // 10M instruction limit per run
+            max_instructions: 10_000_000, // 10M instruction limit per run
         }
     }
 
     /// Load a translated block into the cache
     pub fn load_block(&mut self, block: &TranslatedBlock) {
-        self.block_cache.insert(block.source_address, block.instructions.clone());
+        self.block_cache.insert(block.src_addr, block.instructions.clone());
     }
 
     /// Load multiple blocks
@@ -302,7 +302,7 @@ pub fn new() -> Self {
     }
 
     /// Execute a single RISC-V IR instruction
-    pub fn execute_one(&mut self, inst: &RvInst) -> ExecResult {
+    pub fn exec_one(&mut self, inst: &RvInst) -> ExecResult {
         self.cpu.inst_count += 1;
 
                 // Pattern matching — Rust's exhaustive branching construct.
@@ -427,89 +427,89 @@ match inst {
 
             // === Load ===
             RvInst::Lb { rd, rs1, offset } => {
-                let address = self.cpu.get(*rs1).wrapping_add(*offset as u64);
+                let addr = self.cpu.get(*rs1).wrapping_add(*offset as u64);
                                 // Pattern matching — Rust's exhaustive branching construct.
-match self.mem.read_u8(address) {
+match self.mem.read_u8(addr) {
                     Ok(v) => self.cpu.set(*rd, v as i8 as i64 as u64),
-                    Err(_) => return ExecResult::MemoryFault(address),
+                    Err(_) => return ExecResult::MemoryFault(addr),
                 }
             }
             RvInst::Lbu { rd, rs1, offset } => {
-                let address = self.cpu.get(*rs1).wrapping_add(*offset as u64);
+                let addr = self.cpu.get(*rs1).wrapping_add(*offset as u64);
                                 // Pattern matching — Rust's exhaustive branching construct.
-match self.mem.read_u8(address) {
+match self.mem.read_u8(addr) {
                     Ok(v) => self.cpu.set(*rd, v as u64),
-                    Err(_) => return ExecResult::MemoryFault(address),
+                    Err(_) => return ExecResult::MemoryFault(addr),
                 }
             }
             RvInst::Lh { rd, rs1, offset } => {
-                let address = self.cpu.get(*rs1).wrapping_add(*offset as u64);
+                let addr = self.cpu.get(*rs1).wrapping_add(*offset as u64);
                                 // Pattern matching — Rust's exhaustive branching construct.
-match self.mem.read_u16(address) {
+match self.mem.read_u16(addr) {
                     Ok(v) => self.cpu.set(*rd, v as i16 as i64 as u64),
-                    Err(_) => return ExecResult::MemoryFault(address),
+                    Err(_) => return ExecResult::MemoryFault(addr),
                 }
             }
             RvInst::Lhu { rd, rs1, offset } => {
-                let address = self.cpu.get(*rs1).wrapping_add(*offset as u64);
+                let addr = self.cpu.get(*rs1).wrapping_add(*offset as u64);
                                 // Pattern matching — Rust's exhaustive branching construct.
-match self.mem.read_u16(address) {
+match self.mem.read_u16(addr) {
                     Ok(v) => self.cpu.set(*rd, v as u64),
-                    Err(_) => return ExecResult::MemoryFault(address),
+                    Err(_) => return ExecResult::MemoryFault(addr),
                 }
             }
             RvInst::Lw { rd, rs1, offset } => {
-                let address = self.cpu.get(*rs1).wrapping_add(*offset as u64);
+                let addr = self.cpu.get(*rs1).wrapping_add(*offset as u64);
                                 // Pattern matching — Rust's exhaustive branching construct.
-match self.mem.read_u32(address) {
+match self.mem.read_u32(addr) {
                     Ok(v) => self.cpu.set(*rd, v as i32 as i64 as u64),
-                    Err(_) => return ExecResult::MemoryFault(address),
+                    Err(_) => return ExecResult::MemoryFault(addr),
                 }
             }
             RvInst::Lwu { rd, rs1, offset } => {
-                let address = self.cpu.get(*rs1).wrapping_add(*offset as u64);
+                let addr = self.cpu.get(*rs1).wrapping_add(*offset as u64);
                                 // Pattern matching — Rust's exhaustive branching construct.
-match self.mem.read_u32(address) {
+match self.mem.read_u32(addr) {
                     Ok(v) => self.cpu.set(*rd, v as u64),
-                    Err(_) => return ExecResult::MemoryFault(address),
+                    Err(_) => return ExecResult::MemoryFault(addr),
                 }
             }
             RvInst::Ld { rd, rs1, offset } => {
-                let address = self.cpu.get(*rs1).wrapping_add(*offset as u64);
+                let addr = self.cpu.get(*rs1).wrapping_add(*offset as u64);
                                 // Pattern matching — Rust's exhaustive branching construct.
-match self.mem.read_u64(address) {
+match self.mem.read_u64(addr) {
                     Ok(v) => self.cpu.set(*rd, v),
-                    Err(_) => return ExecResult::MemoryFault(address),
+                    Err(_) => return ExecResult::MemoryFault(addr),
                 }
             }
 
             // === Store ===
             RvInst::Sb { rs2, rs1, offset } => {
-                let address = self.cpu.get(*rs1).wrapping_add(*offset as u64);
-                let value = self.cpu.get(*rs2) as u8;
-                if self.mem.write_u8(address, value).is_err() {
-                    return ExecResult::MemoryFault(address);
+                let addr = self.cpu.get(*rs1).wrapping_add(*offset as u64);
+                let val = self.cpu.get(*rs2) as u8;
+                if self.mem.write_u8(addr, val).is_err() {
+                    return ExecResult::MemoryFault(addr);
                 }
             }
             RvInst::Sh { rs2, rs1, offset } => {
-                let address = self.cpu.get(*rs1).wrapping_add(*offset as u64);
-                let value = self.cpu.get(*rs2) as u16;
-                if self.mem.write_u16(address, value).is_err() {
-                    return ExecResult::MemoryFault(address);
+                let addr = self.cpu.get(*rs1).wrapping_add(*offset as u64);
+                let val = self.cpu.get(*rs2) as u16;
+                if self.mem.write_u16(addr, val).is_err() {
+                    return ExecResult::MemoryFault(addr);
                 }
             }
-            RvInst::Software { rs2, rs1, offset } => {
-                let address = self.cpu.get(*rs1).wrapping_add(*offset as u64);
-                let value = self.cpu.get(*rs2) as u32;
-                if self.mem.write_u32(address, value).is_err() {
-                    return ExecResult::MemoryFault(address);
+            RvInst::Sw { rs2, rs1, offset } => {
+                let addr = self.cpu.get(*rs1).wrapping_add(*offset as u64);
+                let val = self.cpu.get(*rs2) as u32;
+                if self.mem.write_u32(addr, val).is_err() {
+                    return ExecResult::MemoryFault(addr);
                 }
             }
             RvInst::Sd { rs2, rs1, offset } => {
-                let address = self.cpu.get(*rs1).wrapping_add(*offset as u64);
-                let value = self.cpu.get(*rs2);
-                if self.mem.write_u64(address, value).is_err() {
-                    return ExecResult::MemoryFault(address);
+                let addr = self.cpu.get(*rs1).wrapping_add(*offset as u64);
+                let val = self.cpu.get(*rs2);
+                if self.mem.write_u64(addr, val).is_err() {
+                    return ExecResult::MemoryFault(addr);
                 }
             }
 
@@ -587,26 +587,26 @@ match self.mem.read_u64(address) {
 
             // === Atomics ===
             RvInst::AmoswapD { rd, rs2, rs1 } => {
-                let address = self.cpu.get(*rs1);
+                let addr = self.cpu.get(*rs1);
                                 // Pattern matching — Rust's exhaustive branching construct.
-match self.mem.read_u64(address) {
+match self.mem.read_u64(addr) {
                     Ok(old) => {
                         self.cpu.set(*rd, old);
-                        let _ = self.mem.write_u64(address, self.cpu.get(*rs2));
+                        let _ = self.mem.write_u64(addr, self.cpu.get(*rs2));
                     }
-                    Err(_) => return ExecResult::MemoryFault(address),
+                    Err(_) => return ExecResult::MemoryFault(addr),
                 }
             }
             RvInst::AmoaddD { rd, rs2, rs1 } => {
-                let address = self.cpu.get(*rs1);
+                let addr = self.cpu.get(*rs1);
                                 // Pattern matching — Rust's exhaustive branching construct.
-match self.mem.read_u64(address) {
+match self.mem.read_u64(addr) {
                     Ok(old) => {
                         self.cpu.set(*rd, old);
                         let new = old.wrapping_add(self.cpu.get(*rs2));
-                        let _ = self.mem.write_u64(address, new);
+                        let _ = self.mem.write_u64(addr, new);
                     }
-                    Err(_) => return ExecResult::MemoryFault(address),
+                    Err(_) => return ExecResult::MemoryFault(addr),
                 }
             }
 
@@ -618,7 +618,7 @@ match self.mem.read_u64(address) {
                 self.cpu.set(*rd, self.cpu.get(*rs));
             }
             RvInst::Nop => {}
-            RvInst::Return_value => {
+            RvInst::Ret => {
                 let ra = self.cpu.get(Reg::X1);
                 if ra == 0 {
                     // Return from top-level
@@ -637,13 +637,13 @@ match self.mem.read_u64(address) {
             RvInst::CmpFlags { rs1, rs2 } => {
                 self.cpu.set_cmp(self.cpu.get(*rs1), self.cpu.get(*rs2));
             }
-            RvInst::BranchCondition { condition, offset } => {
-                if self.cpu.eval_condition(*condition) {
+            RvInst::BranchCond { condition, offset } => {
+                if self.cpu.eval_cond(*condition) {
                     self.cpu.pc = *offset as u64;
                     return ExecResult::Continue;
                 }
             }
-            RvInst::SourceAnnotation { .. } => {
+            RvInst::SrcAnnotation { .. } => {
                 // Debug annotation — no execution effect
             }
         }
@@ -652,14 +652,14 @@ match self.mem.read_u64(address) {
     }
 
     /// Execute a sequence of instructions from a block
-    pub fn execute_block(&mut self, instructions: &[RvInst]) -> ExecResult {
+    pub fn exec_block(&mut self, instructions: &[RvInst]) -> ExecResult {
         let mut ip = 0;
         while ip < instructions.len() {
-            if self.cpu.inst_count >= self.maximum_instructions {
+            if self.cpu.inst_count >= self.max_instructions {
                 return ExecResult::InstructionLimit;
             }
 
-            let result = self.execute_one(&instructions[ip]);
+            let result = self.exec_one(&instructions[ip]);
             ip += 1;
 
                         // Pattern matching — Rust's exhaustive branching construct.
@@ -677,19 +677,19 @@ match result {
     }
 
     /// Execute starting from a source address, using cached blocks
-    pub fn run_from(&mut self, start_address: u64) -> ExecResult {
-        self.cpu.pc = start_address;
+    pub fn run_from(&mut self, start_addr: u64) -> ExecResult {
+        self.cpu.pc = start_addr;
 
                 // Infinite loop — runs until an explicit `break`.
 loop {
-            if self.cpu.inst_count >= self.maximum_instructions {
+            if self.cpu.inst_count >= self.max_instructions {
                 return ExecResult::InstructionLimit;
             }
 
             // Look up cached block for current PC
             if let Some(block_insts) = self.block_cache.get(&self.cpu.pc).cloned() {
                 let old_pc = self.cpu.pc;
-                let result = self.execute_block(&block_insts);
+                let result = self.exec_block(&block_insts);
 
                                 // Pattern matching — Rust's exhaustive branching construct.
 match result {
@@ -715,10 +715,10 @@ match result {
         let mut s = String::from("=== RISC-V IR CPU State ===\n");
         for i in 0..32 {
             let reg = Reg::from_index(i);
-            let value = self.cpu.get(reg);
-            if value != 0 {
+            let val = self.cpu.get(reg);
+            if val != 0 {
                 s.push_str(&format!("  {:4} (x{:2}) = 0x{:016X} ({})\n",
-                    reg.abi_name(), i, value, value as i64));
+                    reg.abi_name(), i, val, val as i64));
             }
         }
         s.push_str(&format!("  pc = 0x{:016X}\n", self.cpu.pc));

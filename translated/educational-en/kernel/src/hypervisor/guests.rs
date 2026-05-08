@@ -31,11 +31,11 @@ pub fn hello_guest() -> Vec<u8> {
 }
 
 /// Guest that counts and prints numbers
-pub fn counter_guest(maximum: u32) -> Vec<u8> {
+pub fn counter_guest(max: u32) -> Vec<u8> {
     let mut code = Vec::new();
     
     // Print "Count: X" for X from 0 to max
-    for i in 0..=maximum {
+    for i in 0..=max {
         // Print "Count: "
         for &byte in b"Count: " {
             code.push(0xB0);    // MOV AL, imm8
@@ -183,16 +183,16 @@ pub fn guest_protected_mode_test() -> Vec<u8> {
     
     // ── Helper closures ──────────────────────────────────────────
     // Print string via COM1 serial (port 0x3F8) — 32-bit pmode
-    fn emit_serial(code: &mut Vec<u8>, message: &[u8]) {
-        for &byte in message {
+    fn emit_serial(code: &mut Vec<u8>, msg: &[u8]) {
+        for &byte in msg {
             code.extend_from_slice(&[0x66, 0xBA, 0xF8, 0x03]); // MOV DX, 0x3F8
             code.extend_from_slice(&[0xB0, byte]);               // MOV AL, byte
             code.push(0xEE);                                     // OUT DX, AL
         }
     }
     // Print string via debug port 0xE9
-    fn emit_debug(code: &mut Vec<u8>, message: &[u8]) {
-        for &byte in message {
+    fn emit_debug(code: &mut Vec<u8>, msg: &[u8]) {
+        for &byte in msg {
             code.extend_from_slice(&[0xB0, byte]);  // MOV AL, imm8
             code.extend_from_slice(&[0xE6, 0xE9]);  // OUT 0xE9, AL
         }

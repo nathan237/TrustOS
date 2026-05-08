@@ -20,33 +20,33 @@ use core::sync::atomic::Ordering;
 
 /// Decode a WAV file (16-bit PCM) to 48 kHz stereo i16 interleaved samples.
 pub fn decode_wav_to_pcm(data: &[u8]) -> Result<Vec<i16>, &'static str> {
-    let information = crate::drivers::hda::parse_wav(data)?;
-    if information.bits_per_sample != 16 {
+    let info = crate::drivers::hda::parse_wav(data)?;
+    if info.bits_per_sample != 16 {
         return Err("Only 16-bit PCM WAV supported");
     }
 
-    let pcm = &data[information.data_offset..information.data_offset + information.data_size];
-    let number_source_frames = information.data_size / (2 * information.channels as usize);
+    let pcm = &data[info.data_offset..info.data_offset + info.data_size];
+    let number_source_frames = info.data_size / (2 * info.channels as usize);
     let target_rate = 48000u32;
     let number_destination_frames = (number_source_frames as u64 * target_rate as u64
-        / information.sample_rate as u64) as usize;
+        / info.sample_rate as u64) as usize;
 
     let mut output = Vec::with_capacity(number_destination_frames * 2);
 
-    for destination_frame in 0..number_destination_frames {
-        let source_frame = (destination_frame as u64 * information.sample_rate as u64
+    for dst_frame in 0..number_destination_frames {
+        let source_frame = (dst_frame as u64 * info.sample_rate as u64
             / target_rate as u64) as usize;
         if source_frame >= number_source_frames { break; }
 
-        let index = source_frame * information.channels as usize;
-        let byte_index = index * 2;
+        let idx = source_frame * info.channels as usize;
+        let byte_index = idx * 2;
 
         let left = if byte_index + 1 < pcm.len() {
             i16::from_le_bytes([pcm[byte_index], pcm[byte_index + 1]])
         } else { 0 };
 
-        let right = if information.channels >= 2 {
-            let ri = (index + 1) * 2;
+        let right = if info.channels >= 2 {
+            let ri = (idx + 1) * 2;
             if ri + 1 < pcm.len() {
                 i16::from_le_bytes([pcm[ri], pcm[ri + 1]])
             } else { left }
@@ -148,7 +148,7 @@ const BAND_TREBLE: (usize, usize)   = (90, 220);    // 4219–10313 Hz (hihat, c
 fn band_energy(re: &[f32], im: &[f32], lo: usize, hi: usize) -> f32 {
     if hi <= lo { return 0.0; }
     let mut sum = 0.0f32;
-    for i in lo..hi.minimum(re.len()) {
+    for i in lo..hi.min(re.len()) {
         // Magnitude = sqrt(re² + im²), but we use magnitude² for speed and take sqrt at end
         sum += libm::sqrtf(re[i] * re[i] + im[i] * im[i]);
     }
@@ -162,7 +162,7 @@ struct BeatState {
     fft_im: [f32; FFT_N],
     /// History of sub-bass energy for beat detection (43 frames ≈ 1.4s at 30fps)
     energy_hist: [f32; 43],
-    hist_index: usize,
+    hist_idx: usize,
     hist_count: usize,
     /// Current beat pulse (snaps to 1.0 on beat, decays)
     beat: f32,
@@ -176,11 +176,11 @@ struct BeatState {
     high_mid: f32,
     treble: f32,
     /// Previous frame energy for onset slope
-    previous_energy: f32,
+    prev_energy: f32,
     /// Auto-gain: tracked peak RMS for normalization
     peak_rms: f32,
     /// Debug frame counter
-    debug_frame: u32,
+    dbg_frame: u32,
 }
 
 // Bloc d'implémentation — définit les méthodes du type ci-dessus.
@@ -190,7 +190,7 @@ impl BeatState {
             fft_re: [0.0; FFT_N],
             fft_im: [0.0; FFT_N],
             energy_hist: [0.0; 43],
-            hist_index: 0,
+            hist_idx: 0,
             hist_count: 0,
             beat: 0.0,
             energy: 0.0,
@@ -200,15 +200,15 @@ impl BeatState {
             mid: 0.0,
             high_mid: 0.0,
             treble: 0.0,
-            previous_energy: 0.0,
+            prev_energy: 0.0,
             peak_rms: 1.0,
-            debug_frame: 0,
+            dbg_frame: 0,
         }
     }
 
     /// Update beat detection from the current audio position using FFT.
     fn update(&mut self, audio: &[i16], center: usize) {
-        self.debug_frame += 1;
+        self.dbg_frame += 1;
 
         // ── Extract FFT_N mono samples centered at `center` ──
         // We take every 2nd sample (left channel only from stereo interleaved)
@@ -217,12 +217,12 @@ impl BeatState {
 
         let mut maximum_absolute: f32 = 0.0;
         for i in 0..FFT_N {
-            let index = mono_start + i * 2; // step by 2 for left channel
-            let sample = if index < audio.len() { audio[index] as f32 } else { 0.0 };
+            let idx = mono_start + i * 2; // step by 2 for left channel
+            let sample = if idx < audio.len() { audio[idx] as f32 } else { 0.0 };
             self.fft_re[i] = sample;
             self.fft_im[i] = 0.0;
-            let absolute = if sample >= 0.0 { sample } else { -sample };
-            if absolute > maximum_absolute { maximum_absolute = absolute; }
+            let abs = if sample >= 0.0 { sample } else { -sample };
+            if abs > maximum_absolute { maximum_absolute = abs; }
         }
 
         // ── Auto-gain normalization ──
@@ -258,26 +258,26 @@ impl BeatState {
             + raw_mid * 0.5 + raw_high_mid * 0.3 + raw_treble * 0.2;
 
         // ── Smooth band energies (fast attack, slow release) ──
-        self.sub_bass = Self::smooth(self.sub_bass, raw_sub_bass.minimum(1.0), 0.75, 0.10);
-        self.bass     = Self::smooth(self.bass,     raw_bass.minimum(1.0),     0.70, 0.10);
-        self.low_mid  = Self::smooth(self.low_mid,  raw_low_mid.minimum(1.0),  0.65, 0.12);
-        self.mid      = Self::smooth(self.mid,      raw_mid.minimum(1.0),      0.60, 0.12);
-        self.high_mid = Self::smooth(self.high_mid, raw_high_mid.minimum(1.0), 0.65, 0.14);
-        self.treble   = Self::smooth(self.treble,   raw_treble.minimum(1.0),   0.70, 0.16);
-        self.energy   = Self::smooth(self.energy,   raw_energy.minimum(1.5),   0.65, 0.10);
+        self.sub_bass = Self::smooth(self.sub_bass, raw_sub_bass.min(1.0), 0.75, 0.10);
+        self.bass     = Self::smooth(self.bass,     raw_bass.min(1.0),     0.70, 0.10);
+        self.low_mid  = Self::smooth(self.low_mid,  raw_low_mid.min(1.0),  0.65, 0.12);
+        self.mid      = Self::smooth(self.mid,      raw_mid.min(1.0),      0.60, 0.12);
+        self.high_mid = Self::smooth(self.high_mid, raw_high_mid.min(1.0), 0.65, 0.14);
+        self.treble   = Self::smooth(self.treble,   raw_treble.min(1.0),   0.70, 0.16);
+        self.energy   = Self::smooth(self.energy,   raw_energy.min(1.5),   0.65, 0.10);
 
         // ── Beat detection with adaptive threshold (variance-based) ──
         let beat_energy = raw_sub_bass + raw_bass * 0.8; // focus on kick drum range
 
         // Store in history ring buffer
-        self.energy_hist[self.hist_index] = beat_energy;
-        self.hist_index = (self.hist_index + 1) % self.energy_hist.len();
+        self.energy_hist[self.hist_idx] = beat_energy;
+        self.hist_idx = (self.hist_idx + 1) % self.energy_hist.len();
         if self.hist_count < self.energy_hist.len() {
             self.hist_count += 1;
         }
 
         // Compute average and variance of history
-        let filled = self.hist_count.maximum(1) as f32;
+        let filled = self.hist_count.max(1) as f32;
         let average: f32 = self.energy_hist.iter().take(self.hist_count).sum::<f32>() / filled;
 
         let mut var_sum = 0.0f32;
@@ -290,33 +290,33 @@ impl BeatState {
         // Adaptive threshold: high variance (energetic music) → lower threshold
         // Low variance (quiet/lofi) → higher threshold to avoid false positives
         // But overall much more sensitive than before
-        let threshold = (-15.0 * variance + 1.45).maximum(1.05).minimum(1.5);
+        let threshold = (-15.0 * variance + 1.45).max(1.05).min(1.5);
 
         // Onset detection: energy spike above adaptive threshold + positive slope
-        let onset_slope = beat_energy - self.previous_energy;
+        let onset_slope = beat_energy - self.prev_energy;
         if beat_energy > average * threshold && onset_slope > 0.002 && self.hist_count > 5 {
-            let strength = ((beat_energy - average * threshold) / average.maximum(0.001)).minimum(1.0);
-            self.beat = (0.6 + strength * 0.4).minimum(1.0);
+            let strength = ((beat_energy - average * threshold) / average.max(0.001)).min(1.0);
+            self.beat = (0.6 + strength * 0.4).min(1.0);
         } else {
             self.beat *= 0.88;
             if self.beat < 0.02 { self.beat = 0.0; }
         }
-        self.previous_energy = beat_energy;
+        self.prev_energy = beat_energy;
 
         // ── Periodic debug logging ──
-        if self.debug_frame == 1 || self.debug_frame % 60 == 0 {
+        if self.dbg_frame == 1 || self.dbg_frame % 60 == 0 {
             crate::serial_println!(
                 "[BEAT] f={} pos={} gain={:.1} E={:.3} beat={:.2} sub={:.2} bass={:.2} lm={:.2} mid={:.2} hm={:.2} tre={:.2} thr={:.2}",
-                self.debug_frame, center, gain, self.energy, self.beat,
+                self.dbg_frame, center, gain, self.energy, self.beat,
                 self.sub_bass, self.bass, self.low_mid, self.mid, self.high_mid, self.treble, threshold
             );
         }
     }
 
     #[inline]
-    fn smooth(previous: f32, new: f32, attack: f32, release: f32) -> f32 {
-        if new > previous { previous + (new - previous) * attack }
-        else { previous + (new - previous) * release }
+    fn smooth(prev: f32, new: f32, attack: f32, release: f32) -> f32 {
+        if new > prev { prev + (new - prev) * attack }
+        else { prev + (new - prev) * release }
     }
 }
 
@@ -326,14 +326,14 @@ impl BeatState {
 
 /// Alpha-blend foreground (fr,fg,fb) over background pixel at given alpha (0–255).
 #[inline(always)]
-fn blend_alpha(bg: u32, fr: u32, fg: u32, framebuffer: u32, alpha: u32) -> u32 {
+fn blend_alpha(bg: u32, fr: u32, fg: u32, fb: u32, alpha: u32) -> u32 {
     let inv = 255 - alpha;
     let br = (bg >> 16) & 0xFF;
     let bgr = (bg >> 8) & 0xFF;
     let bb = bg & 0xFF;
     let r = (fr * alpha + br * inv) / 255;
     let g = (fg * alpha + bgr * inv) / 255;
-    let b = (framebuffer * alpha + bb * inv) / 255;
+    let b = (fb * alpha + bb * inv) / 255;
     0xFF000000 | (r << 16) | (g << 8) | b
 }
 
@@ -368,7 +368,7 @@ struct HoloOverlay {
     /// Animation frame counter
     frame: u32,
     /// Previous beat value for onset edge detection
-    previous_beat: f32,
+    prev_beat: f32,
 }
 
 // Bloc d'implémentation — définit les méthodes du type ci-dessus.
@@ -382,15 +382,15 @@ impl HoloOverlay {
             ring_count: 0,
             sweep: 0.0,
             frame: 0,
-            previous_beat: 0.0,
+            prev_beat: 0.0,
         }
     }
 
     /// Capture the current screen from MMIO framebuffer (the actual displayed pixels).
     /// This works regardless of backbuffer state since MMIO always has the last swapped frame.
     fn capture_snapshot(&mut self) {
-        let address = crate::framebuffer::FRAMEBUFFER_ADDRESS.load(Ordering::Relaxed);
-        if address.is_null() { return; }
+        let addr = crate::framebuffer::FRAMEBUFFER_ADDRESS.load(Ordering::Relaxed);
+        if addr.is_null() { return; }
         let pitch = crate::framebuffer::FRAMEBUFFER_PITCH.load(Ordering::Relaxed) as usize;
         let w = self.snap_w;
         let h = self.snap_h;
@@ -399,7 +399,7 @@ impl HoloOverlay {
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
             for y in 0..h {
-                let row = address.add(y * pitch) as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+                let row = addr.add(y * pitch) as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u32;
                 for x in 0..w {
                     self.snapshot.push(core::ptr::read(row.add(x)));
@@ -417,7 +417,7 @@ const u32;
                         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
                 core::ptr::copy_nonoverlapping(
-                    self.snapshot.as_pointer(),
+                    self.snapshot.as_ptr(),
                     ptr as *mut u32,
                     n,
                 );
@@ -427,7 +427,7 @@ unsafe {
 
     /// Read a pixel from the snapshot with bounds checking.
     #[inline]
-    fn snap_pixel(&self, x: i32, y: i32) -> u32 {
+    fn snap_px(&self, x: i32, y: i32) -> u32 {
         if x < 0 || y < 0 || x as usize >= self.snap_w || y as usize >= self.snap_h {
             return 0xFF000000;
         }
@@ -463,10 +463,10 @@ unsafe {
         if self.sweep > 1.0 { self.sweep -= 1.0; }
 
         // Detect beat onset (rising edge) → spawn shockwave ring
-        if beat.beat > 0.35 && self.previous_beat < 0.25 {
+        if beat.beat > 0.35 && self.prev_beat < 0.25 {
             self.spawn_ring(beat.beat);
         }
-        self.previous_beat = beat.beat;
+        self.prev_beat = beat.beat;
 
         // Update ring physics: expand, decay, cull dead rings
         let mut w = 0usize;
@@ -484,7 +484,7 @@ unsafe {
 
     /// Render the complete overlay frame to the backbuffer.
     fn draw_frame(&self, beat: &BeatState) {
-        let (framebuffer, w, h) = // Correspondance de motifs — branchement exhaustif de Rust.
+        let (fb, w, h) = // Correspondance de motifs — branchement exhaustif de Rust.
 match crate::framebuffer::get_backbuffer_information() {
             Some((p, w, h, _)) => (p as *mut u32, w as usize, h as usize),
             None => return,
@@ -497,23 +497,23 @@ match crate::framebuffer::get_backbuffer_information() {
 
         // 2. Apply radial shockwave distortion from active rings
         if self.ring_count > 0 {
-            self.apply_distortion(framebuffer, w, h, cx, cy);
+            self.apply_distortion(fb, w, h, cx, cy);
         }
 
         // 3. Ambient glow halo behind logo
         self.draw_glow(w as u32, h as u32, cx as u32, cy as u32, beat);
 
         // 4. Holographic logo (semi-transparent, scanlines, chromatic aberration)
-        self.draw_logo(framebuffer, w, h, cx, cy, beat);
+        self.draw_logo(fb, w, h, cx, cy, beat);
 
         // 5. Shockwave ring outlines
         for i in 0..self.ring_count {
-            self.draw_ring(framebuffer, w, h, cx, cy, &self.rings[i]);
+            self.draw_ring(fb, w, h, cx, cy, &self.rings[i]);
         }
     }
 
     /// Apply radial distortion: pixels near active rings get displaced outward from center.
-    fn apply_distortion(&self, framebuffer: *mut u32, w: usize, h: usize, cx: usize, cy: usize) {
+    fn apply_distortion(&self, fb: *mut u32, w: usize, h: usize, cx: usize, cy: usize) {
         let cxf = cx as f32;
         let cyf = cy as f32;
 
@@ -524,10 +524,10 @@ match crate::framebuffer::get_backbuffer_information() {
             if r > maximum_r { maximum_r = r; }
         }
         let ri = maximum_r as i32;
-        let x0 = (cx as i32 - ri).maximum(0) as usize;
-        let x1 = ((cx as i32 + ri) as usize).minimum(w.saturating_sub(1));
-        let y0 = (cy as i32 - ri).maximum(0) as usize;
-        let y1 = ((cy as i32 + ri) as usize).minimum(h.saturating_sub(1));
+        let x0 = (cx as i32 - ri).max(0) as usize;
+        let x1 = ((cx as i32 + ri) as usize).min(w.saturating_sub(1));
+        let y0 = (cy as i32 - ri).max(0) as usize;
+        let y1 = ((cy as i32 + ri) as usize).min(h.saturating_sub(1));
 
         for y in y0..=y1 {
             let dy = y as f32 - cyf;
@@ -537,24 +537,24 @@ match crate::framebuffer::get_backbuffer_information() {
                 if dist < 1.0 { continue; }
 
                 // Accumulate displacement from all active rings
-                let mut display: f32 = 0.0;
+                let mut disp: f32 = 0.0;
                 for i in 0..self.ring_count {
                     let d = (dist - self.rings[i].radius) / RING_WIDTH;
                     if d > 1.0 || d < -1.0 { continue; }
                     // Smooth bell curve: (1 - d²)²
                     let t = 1.0 - d * d;
-                    display += self.rings[i].strength * t * t;
+                    disp += self.rings[i].strength * t * t;
                 }
-                if display < 0.5 { continue; }
+                if disp < 0.5 { continue; }
 
                 // Displace source pixel radially inward → visual "push outward" effect
                 let inv = 1.0 / dist;
-                let sx = (x as f32 - dx * inv * display) as i32;
-                let sy = (y as f32 - dy * inv * display) as i32;
-                let color = self.snap_pixel(sx, sy);
+                let sx = (x as f32 - dx * inv * disp) as i32;
+                let sy = (y as f32 - dy * inv * disp) as i32;
+                let color = self.snap_px(sx, sy);
                                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-                    core::ptr::write(framebuffer.add(y * w + x), color);
+                    core::ptr::write(fb.add(y * w + x), color);
                 }
             }
         }
@@ -564,7 +564,7 @@ unsafe {
     fn draw_glow(&self, fw: u32, fh: u32, cx: u32, cy: u32, beat: &BeatState) {
         let intensity = beat.energy * 0.3 + beat.beat * 0.5;
         if intensity < 0.02 { return; }
-        let maximum_r = fw.minimum(fh) / 4;
+        let maximum_r = fw.min(fh) / 4;
         for ring in 0..10u32 {
             let r = (ring + 1) * maximum_r / 10;
             let t = ring as f32 / 10.0;
@@ -572,23 +572,23 @@ unsafe {
             if a < 1 { continue; }
             let left = cx.saturating_sub(r);
             let top = cy.saturating_sub(r);
-            let rw = (r * 2).minimum(fw.saturating_sub(left));
-            let rh = (r * 2).minimum(fh.saturating_sub(top));
+            let rw = (r * 2).min(fw.saturating_sub(left));
+            let rh = (r * 2).min(fh.saturating_sub(top));
             if rw > 0 && rh > 0 {
-                crate::framebuffer::fill_rect_alpha(left, top, rw, rh, 0x00FFCC, a.minimum(12));
+                crate::framebuffer::fill_rect_alpha(left, top, rw, rh, 0x00FFCC, a.min(12));
             }
         }
     }
 
     /// Draw the holographic 3D logo: semi-transparent cyan tint, scanlines,
     /// sweep beam, chromatic aberration on edges, beat-reactive brightness.
-    fn draw_logo(&self, framebuffer: *mut u32, w: usize, h: usize, cx: usize, cy: usize, beat: &BeatState) {
+    fn draw_logo(&self, fb: *mut u32, w: usize, h: usize, cx: usize, cy: usize, beat: &BeatState) {
         let lw = crate::logo_bitmap::LOGO_W;
         let lh = crate::logo_bitmap::LOGO_H;
-        let sc = ((h as u32) * 45 / lh as u32).maximum(100);
+        let sc = ((h as u32) * 45 / lh as u32).max(100);
         let rw = lw as u32 * sc / 100;
         let rh = lh as u32 * sc / 100;
-        let receive = (cx as u32).saturating_sub(rw / 2);
+        let rx = (cx as u32).saturating_sub(rw / 2);
         let ry = (cy as u32).saturating_sub(rh / 2);
 
         let pulse = beat.beat;
@@ -616,10 +616,10 @@ unsafe {
             let sd = py as f32 - sweep_y as f32;
             let software_b = if libm::fabsf(sd) < 10.0 { 0.5 * (1.0 - libm::fabsf(sd) / 10.0) } else { 0.0f32 };
 
-            for pixel in 0..rw {
-                let sx = (pixel * 100 / sc) as usize;
+            for px in 0..rw {
+                let sx = (px * 100 / sc) as usize;
                 if sx >= lw { continue; }
-                let screen_x = receive + pixel;
+                let screen_x = rx + px;
                 if screen_x >= w as u32 { continue; }
 
                 let argb = crate::logo_bitmap::logo_pixel(sx, sy);
@@ -645,9 +645,9 @@ unsafe {
                 };
 
                 // Apply scanline dimming + sweep highlight + flicker
-                hr = (hr * scan + software_b * 0.2 + flicker).maximum(0.0);
-                hg = (hg * scan + software_b * 0.9 + flicker).maximum(0.0);
-                hb = (hb * scan + software_b * 0.7 + flicker).maximum(0.0);
+                hr = (hr * scan + software_b * 0.2 + flicker).max(0.0);
+                hg = (hg * scan + software_b * 0.9 + flicker).max(0.0);
+                hb = (hb * scan + software_b * 0.7 + flicker).max(0.0);
 
                 // Beat flash: brief bright flash on strong beats
                 if pulse > 0.7 {
@@ -657,17 +657,17 @@ unsafe {
                     hb += fl * 0.5;
                 }
 
-                let cr = (hr * 255.0).minimum(255.0) as u32;
-                let cg = (hg * 255.0).minimum(255.0) as u32;
-                let callback = (hb * 255.0).minimum(255.0) as u32;
+                let cr = (hr * 255.0).min(255.0) as u32;
+                let cg = (hg * 255.0).min(255.0) as u32;
+                let cb = (hb * 255.0).min(255.0) as u32;
                 let a_mult = if edge { 1.3f32 } else { 1.0f32 };
-                let alpha = (base_a * scan * a_mult * 255.0).minimum(255.0) as u32;
+                let alpha = (base_a * scan * a_mult * 255.0).min(255.0) as u32;
 
-                let index = screen_y as usize * w + screen_x as usize;
+                let idx = screen_y as usize * w + screen_x as usize;
                                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-                    let bg = core::ptr::read(framebuffer.add(index));
-                    core::ptr::write(framebuffer.add(index), blend_alpha(bg, cr, cg, callback, alpha));
+                    let bg = core::ptr::read(fb.add(idx));
+                    core::ptr::write(fb.add(idx), blend_alpha(bg, cr, cg, cb, alpha));
                 }
 
                 // Chromatic aberration on edges: red ghost left, blue ghost right
@@ -678,8 +678,8 @@ unsafe {
                         let ci = screen_y as usize * w + lx as usize;
                                                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-                            let bg = core::ptr::read(framebuffer.add(ci));
-                            core::ptr::write(framebuffer.add(ci), blend_alpha(bg, 180, 10, 10, ca_a));
+                            let bg = core::ptr::read(fb.add(ci));
+                            core::ptr::write(fb.add(ci), blend_alpha(bg, 180, 10, 10, ca_a));
                         }
                     }
                     let rx2 = screen_x as usize + ca_off as usize;
@@ -687,8 +687,8 @@ unsafe {
                         let ci = screen_y as usize * w + rx2;
                                                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-                            let bg = core::ptr::read(framebuffer.add(ci));
-                            core::ptr::write(framebuffer.add(ci), blend_alpha(bg, 10, 10, 200, ca_a));
+                            let bg = core::ptr::read(fb.add(ci));
+                            core::ptr::write(fb.add(ci), blend_alpha(bg, 10, 10, 200, ca_a));
                         }
                     }
                 }
@@ -701,18 +701,18 @@ unsafe {
         let gh = lh as u32 * gsc / 100;
         let gx = (cx as u32).saturating_sub(gw / 2);
         let gy = (cy as u32).saturating_sub(gh / 2);
-        let ga = (12.0 + energy * 30.0 + pulse * 50.0).minimum(100.0) as u32;
+        let ga = (12.0 + energy * 30.0 + pulse * 50.0).min(100.0) as u32;
 
         for py in (0..gh).step_by(2) {
             let sy = (py * 100 / gsc) as usize;
             if sy >= lh { continue; }
             let scr_y = gy + py;
             if scr_y >= h as u32 { continue; }
-            for pixel in (0..gw).step_by(2) {
-                let sx = (pixel * 100 / gsc) as usize;
+            for px in (0..gw).step_by(2) {
+                let sx = (px * 100 / gsc) as usize;
                 if sx >= lw { continue; }
                 if !crate::logo_bitmap::logo_edge_pixel(sx, sy) { continue; }
-                let scr_x = gx + pixel;
+                let scr_x = gx + px;
                 if scr_x >= w as u32 { continue; }
                 // 2×2 glow block
                 for dy in 0..2u32 {
@@ -720,11 +720,11 @@ unsafe {
                         let fx = scr_x + dx;
                         let fy = scr_y + dy;
                         if fx >= w as u32 || fy >= h as u32 { continue; }
-                        let index = fy as usize * w + fx as usize;
+                        let idx = fy as usize * w + fx as usize;
                                                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-                            let bg = core::ptr::read(framebuffer.add(index));
-                            core::ptr::write(framebuffer.add(index), blend_alpha(bg, 0, 255, 204, ga));
+                            let bg = core::ptr::read(fb.add(idx));
+                            core::ptr::write(fb.add(idx), blend_alpha(bg, 0, 255, 204, ga));
                         }
                     }
                 }
@@ -733,17 +733,17 @@ unsafe {
     }
 
     /// Draw a single shockwave ring outline (thin cyan circle).
-    fn draw_ring(&self, framebuffer: *mut u32, w: usize, h: usize, cx: usize, cy: usize, ring: &ShockRing) {
+    fn draw_ring(&self, fb: *mut u32, w: usize, h: usize, cx: usize, cy: usize, ring: &ShockRing) {
         if ring.alpha < 0.02 { return; }
         let r = ring.radius;
-        let segs = ((r * 6.28) as u32).maximum(60).minimum(720);
+        let segs = ((r * 6.28) as u32).max(60).min(720);
         let a = (ring.alpha * 180.0) as u32;
 
         for s in 0..segs {
             let angle = s as f32 * 6.2831853 / segs as f32;
-            let pixel = cx as f32 + r * libm::cosf(angle);
+            let px = cx as f32 + r * libm::cosf(angle);
             let py = cy as f32 + r * libm::sinf(angle);
-            let ix = pixel as i32;
+            let ix = px as i32;
             let iy = py as i32;
             if ix < 0 || iy < 0 || ix >= w as i32 - 1 || iy >= h as i32 - 1 { continue; }
 
@@ -753,11 +753,11 @@ unsafe {
                     let fx = (ix + dx) as usize;
                     let fy = (iy + dy) as usize;
                     if fx >= w || fy >= h { continue; }
-                    let index = fy * w + fx;
+                    let idx = fy * w + fx;
                                         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-                        let bg = core::ptr::read(framebuffer.add(index));
-                        core::ptr::write(framebuffer.add(index), blend_alpha(bg, 0, 255, 204, a.minimum(180)));
+                        let bg = core::ptr::read(fb.add(idx));
+                        core::ptr::write(fb.add(idx), blend_alpha(bg, 0, 255, 204, a.min(180)));
                     }
                 }
             }
@@ -766,12 +766,12 @@ unsafe {
 }
 
 /// Draw minimal overlay HUD: title, elapsed/total time, progress bar, Esc hint.
-fn draw_overlay_hud(framebuffer_w: u32, framebuffer_h: u32, title: &str, elapsed_s: u32, total_s: u32, pct: u32) {
+fn draw_overlay_hud(fb_w: u32, fb_h: u32, title: &str, elapsed_s: u32, total_s: u32, pct: u32) {
     let cw = 16u32; // char width at scale 2
 
     // ── Title (top center) ──
     let tw = title.len() as u32 * cw;
-    let transmit = (framebuffer_w.saturating_sub(tw)) / 2;
+    let transmit = (fb_w.saturating_sub(tw)) / 2;
     crate::framebuffer::fill_rect_alpha(transmit.saturating_sub(12), 10, tw + 24, 36, 0x000000, 120);
     crate::graphics::scaling::draw_text_at_scale(transmit as i32, 14, title, 0x00FFCC, 2);
 
@@ -782,15 +782,15 @@ fn draw_overlay_hud(framebuffer_w: u32, framebuffer_h: u32, title: &str, elapsed
     let ts = total_s % 60;
     let time_s = format!("{}:{:02} / {}:{:02}", em, es, tm, ts);
     let tw2 = time_s.len() as u32 * 8 + 16;
-    crate::framebuffer::fill_rect_alpha(8, framebuffer_h.saturating_sub(50), tw2, 20, 0x000000, 100);
-    crate::framebuffer::draw_text(&time_s, 16, framebuffer_h.saturating_sub(48), 0x00AA88);
+    crate::framebuffer::fill_rect_alpha(8, fb_h.saturating_sub(50), tw2, 20, 0x000000, 100);
+    crate::framebuffer::draw_text(&time_s, 16, fb_h.saturating_sub(48), 0x00AA88);
 
     // ── Progress bar (bottom) ──
-    let py = framebuffer_h.saturating_sub(24);
-    let pw = framebuffer_w.saturating_sub(60);
+    let py = fb_h.saturating_sub(24);
+    let pw = fb_w.saturating_sub(60);
     let pixel_bar = 30u32;
     crate::framebuffer::fill_rect(pixel_bar, py, pw, 3, 0x001111);
-    let filled = pw * pct.minimum(100) / 100;
+    let filled = pw * pct.min(100) / 100;
     if filled > 0 {
         crate::framebuffer::fill_rect(pixel_bar, py, filled, 3, 0x00FFCC);
         crate::framebuffer::fill_rect_alpha(pixel_bar, py.saturating_sub(1), filled, 5, 0x00FFCC, 20);
@@ -798,11 +798,11 @@ fn draw_overlay_hud(framebuffer_w: u32, framebuffer_h: u32, title: &str, elapsed
 
     // ── Esc hint (bottom-right) ──
     let hint = "[Esc] Exit";
-    let hardware = hint.len() as u32 * 8 + 8;
+    let hw = hint.len() as u32 * 8 + 8;
     crate::framebuffer::fill_rect_alpha(
-        framebuffer_w.saturating_sub(hardware + 8), framebuffer_h.saturating_sub(50), hardware, 20, 0x000000, 80,
+        fb_w.saturating_sub(hw + 8), fb_h.saturating_sub(50), hw, 20, 0x000000, 80,
     );
-    crate::framebuffer::draw_text(hint, framebuffer_w.saturating_sub(hardware + 4), framebuffer_h.saturating_sub(48), 0x446666);
+    crate::framebuffer::draw_text(hint, fb_w.saturating_sub(hw + 4), fb_h.saturating_sub(48), 0x446666);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -824,8 +824,8 @@ pub fn launch_visualizer(audio: &[i16], title: &str) -> Result<(), &'static str>
         title, audio.len(), dur_s
     );
 
-    let framebuffer_w = crate::framebuffer::FRAMEBUFFER_WIDTH.load(Ordering::Relaxed) as u32;
-    let framebuffer_h = crate::framebuffer::FRAMEBUFFER_HEIGHT.load(Ordering::Relaxed) as u32;
+    let fb_w = crate::framebuffer::FRAMEBUFFER_WIDTH.load(Ordering::Relaxed) as u32;
+    let fb_h = crate::framebuffer::FRAMEBUFFER_HEIGHT.load(Ordering::Relaxed) as u32;
 
     // Ensure double buffer exists (don't reinit if desktop already has one)
     if !crate::framebuffer::is_double_buffer_enabled() {
@@ -834,7 +834,7 @@ pub fn launch_visualizer(audio: &[i16], title: &str) -> Result<(), &'static str>
     }
 
     // Capture the current screen as our desktop backdrop
-    let mut overlay = HoloOverlay::new(framebuffer_w, framebuffer_h);
+    let mut overlay = HoloOverlay::new(fb_w, fb_h);
     overlay.capture_snapshot();
 
     crate::serial_println!(
@@ -844,45 +844,45 @@ pub fn launch_visualizer(audio: &[i16], title: &str) -> Result<(), &'static str>
 
     let mut beat_state = BeatState::new();
     let total_frames_audio = audio.len() / 2;
-    let total_mouse = (total_frames_audio as u64 * 1000) / 48000;
-    let total_s = (total_mouse / 1000) as u32;
+    let total_ms = (total_frames_audio as u64 * 1000) / 48000;
+    let total_s = (total_ms / 1000) as u32;
 
     // ── DMA Streaming Setup ──
-    let (dma_pointer, dma_capability) = crate::drivers::hda::get_dma_buffer_information()
+    let (dma_ptr, dma_cap) = crate::drivers::hda::get_dma_buffer_information()
         .ok_or("HDA not initialized")?;
-    let half_i16 = dma_capability / 2;
+    let half_i16 = dma_cap / 2;
     let half_bytes = (half_i16 * 2) as u32;
-    let full_bytes = (dma_capability * 2) as u32;
+    let full_bytes = (dma_cap * 2) as u32;
 
-    let initial = audio.len().minimum(dma_capability);
+    let initial = audio.len().min(dma_cap);
     crate::drivers::hda::start_looped_playback(&audio[0..initial])?;
 
     let mut write_cursor: usize = initial;
     let mut last_half: u32 = 0;
     let mut audio_exhausted = false;
     let mut silence_countdown: u32 = 0;
-    let dma_play_mouse = (dma_capability as u64 * 1000) / (48000 * 2);
+    let dma_play_mouse = (dma_cap as u64 * 1000) / (48000 * 2);
     let frame_mouse: u64 = 33;
     let exhaust_frames = ((dma_play_mouse / frame_mouse) + 10) as u32;
 
     crate::serial_println!(
         "[VIZ] DMA: buf={} i16, half={}, exhaust_frames={}",
-        dma_capability, half_i16, exhaust_frames
+        dma_cap, half_i16, exhaust_frames
     );
 
     // ── Intro: brief "NOW PLAYING" flash over desktop snapshot ──
     for f in 0..15u32 {
         overlay.restore_snapshot();
         if f < 8 {
-            let a = (f * 30).minimum(230);
-            let message = "NOW PLAYING";
-            let mw = message.len() as u32 * 16 + 32;
-            let mx = (framebuffer_w.saturating_sub(mw)) / 2;
-            let my = framebuffer_h / 2 - 16;
+            let a = (f * 30).min(230);
+            let msg = "NOW PLAYING";
+            let mw = msg.len() as u32 * 16 + 32;
+            let mx = (fb_w.saturating_sub(mw)) / 2;
+            let my = fb_h / 2 - 16;
             crate::framebuffer::fill_rect_alpha(
                 mx.saturating_sub(8), my.saturating_sub(8), mw + 16, 48, 0x000000, a,
             );
-            crate::graphics::scaling::draw_text_at_scale(mx as i32, my as i32, message, 0x00FFCC, 2);
+            crate::graphics::scaling::draw_text_at_scale(mx as i32, my as i32, msg, 0x00FFCC, 2);
         }
         crate::framebuffer::swap_buffers();
         crate::cpu::tsc::pit_delay_mouse(50);
@@ -905,17 +905,17 @@ loop {
             if write_cursor < audio.len() {
                 let dest_offset = last_half as usize * half_i16;
                 let remaining = audio.len() - write_cursor;
-                let to_copy = remaining.minimum(half_i16);
+                let to_copy = remaining.min(half_i16);
                                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
                     core::ptr::copy_nonoverlapping(
-                        audio.as_pointer().add(write_cursor),
-                        dma_pointer.add(dest_offset),
+                        audio.as_ptr().add(write_cursor),
+                        dma_ptr.add(dest_offset),
                         to_copy,
                     );
                     if to_copy < half_i16 {
                         core::ptr::write_bytes(
-                            dma_pointer.add(dest_offset + to_copy), 0, half_i16 - to_copy,
+                            dma_ptr.add(dest_offset + to_copy), 0, half_i16 - to_copy,
                         );
                     }
                 }
@@ -928,25 +928,25 @@ unsafe {
                 let dest_offset = last_half as usize * half_i16;
                                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-                    core::ptr::write_bytes(dma_pointer.add(dest_offset), 0, half_i16);
+                    core::ptr::write_bytes(dma_ptr.add(dest_offset), 0, half_i16);
                 }
             }
             last_half = current_half;
         }
 
         // ── Audio position from frame counter ──
-        let elapsed_mouse = vis_frame as u64 * frame_mouse;
-        if elapsed_mouse >= total_mouse { break; }
-        let audio_position = ((elapsed_mouse * 48000 * 2) / 1000) as usize;
-        let audio_position = audio_position.minimum(audio.len().saturating_sub(2));
+        let elapsed_ms = vis_frame as u64 * frame_mouse;
+        if elapsed_ms >= total_ms { break; }
+        let audio_position = ((elapsed_ms * 48000 * 2) / 1000) as usize;
+        let audio_position = audio_position.min(audio.len().saturating_sub(2));
 
         if audio_exhausted {
             silence_countdown += 1;
             if silence_countdown >= exhaust_frames { break; }
         }
 
-        let elapsed_s = (elapsed_mouse / 1000) as u32;
-        let progress_pct = (elapsed_mouse * 100 / total_mouse.maximum(1)) as u32;
+        let elapsed_s = (elapsed_ms / 1000) as u32;
+        let progress_pct = (elapsed_ms * 100 / total_ms.max(1)) as u32;
 
         // ── Audio analysis ──
         beat_state.update(audio, audio_position);
@@ -965,7 +965,7 @@ unsafe {
         // ── Run live vizfx script (if active) ──
         crate::trustdaw::live_viz::run_frame();
 
-        draw_overlay_hud(framebuffer_w, framebuffer_h, title, elapsed_s, total_s, progress_pct);
+        draw_overlay_hud(fb_w, fb_h, title, elapsed_s, total_s, progress_pct);
         crate::framebuffer::swap_buffers();
 
         vis_frame += 1;
@@ -974,7 +974,7 @@ unsafe {
         let mut remaining_wait = frame_mouse;
         let mut escaped = false;
         while remaining_wait > 0 {
-            let d = remaining_wait.minimum(5);
+            let d = remaining_wait.min(5);
             crate::cpu::tsc::pit_delay_mouse(d);
             remaining_wait -= d;
             while let Some(sc) = crate::keyboard::try_read_key() {
@@ -993,15 +993,15 @@ unsafe {
     for f in 0..20u32 {
         overlay.restore_snapshot();
         if f < 10 {
-            let a = ((20 - f) * 12).minimum(200);
-            let message = "PLAYBACK COMPLETE";
-            let mw = message.len() as u32 * 16 + 32;
-            let mx = (framebuffer_w.saturating_sub(mw)) / 2;
-            let my = framebuffer_h / 2 - 16;
+            let a = ((20 - f) * 12).min(200);
+            let msg = "PLAYBACK COMPLETE";
+            let mw = msg.len() as u32 * 16 + 32;
+            let mx = (fb_w.saturating_sub(mw)) / 2;
+            let my = fb_h / 2 - 16;
             crate::framebuffer::fill_rect_alpha(
                 mx.saturating_sub(8), my.saturating_sub(8), mw + 16, 48, 0x000000, a,
             );
-            crate::graphics::scaling::draw_text_at_scale(mx as i32, my as i32, message, 0x00FFCC, 2);
+            crate::graphics::scaling::draw_text_at_scale(mx as i32, my as i32, msg, 0x00FFCC, 2);
         }
         crate::framebuffer::swap_buffers();
         crate::cpu::tsc::pit_delay_mouse(50);
@@ -1026,14 +1026,14 @@ pub fn play_file(path: &str) -> Result<(), &'static str> {
     crate::serial_println!("[VIZ] Loading file: {}", path);
 
     // Read file bytes — try VFS first, then ramfs
-    let data: Vec<u8> = if crate::vfs::status(path).is_ok() {
+    let data: Vec<u8> = if crate::vfs::stat(path).is_ok() {
         // File exists on VFS (TrustFS, FAT32, ext4, devfs, procfs…)
-        crate::vfs::read_file(path).map_error(|_| "Failed to read file from VFS")?
+        crate::vfs::read_file(path).map_err(|_| "Failed to read file from VFS")?
     } else {
         // ramfs fallback
         crate::ramfs::with_filesystem(|fs| {
             fs.read_file(path).map(|c| c.to_vec())
-        }).map_error(|_| "Failed to read file from VFS or ramfs")?
+        }).map_err(|_| "Failed to read file from VFS or ramfs")?
     };
 
     if data.is_empty() {
@@ -1085,7 +1085,7 @@ const UNTITLED2_VFS_PATHS: &[&str] = &[
 pub fn play_untitled2() -> Result<(), &'static str> {
     // 1) Try loading from VFS (external storage / filesystem)
     for path in UNTITLED2_VFS_PATHS {
-        if crate::vfs::status(path).is_ok() {
+        if crate::vfs::stat(path).is_ok() {
             crate::serial_println!("[VIZ] Found '{}' on VFS, loading...", path);
             if let Ok(data) = crate::vfs::read_file(path) {
                 if !data.is_empty() {
@@ -1118,4 +1118,53 @@ pub fn play_untitled2() -> Result<(), &'static str> {
     }
 
     Err("Audio not found — place untitled2.wav in /music/ or build with --features daw")
+}
+
+/// VFS paths where the TrustAnthem may live.
+pub // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+const ANTHEM_VFS_PATHS: &[&str] = &[
+    "/music/TrustAnthem.wav",
+    "/music/trustanthem.wav",
+    "/mnt/fat32/music/TrustAnthem.wav",
+    "/mnt/sda1/music/TrustAnthem.wav",
+    "/home/music/TrustAnthem.wav",
+];
+
+/// Play "TrustAnthem" — tries VFS → TWAV disk (track named "TrustAnthem").
+pub fn play_anthem() -> Result<(), &'static str> {
+    // 1) Try VFS paths
+    for path in ANTHEM_VFS_PATHS {
+        if crate::vfs::stat(path).is_ok() {
+            crate::serial_println!("[VIZ] Found '{}' on VFS, loading...", path);
+            if let Ok(data) = crate::vfs::read_file(path) {
+                if !data.is_empty() {
+                    let audio = decode_wav_to_pcm(&data)?;
+                    return launch_visualizer(&audio, "TrustAnthem");
+                }
+            }
+        }
+    }
+
+    // 2) Try TWAV disk — search for track named "TrustAnthem" or load first track
+    if let Ok(table) = crate::trustdaw::disk_audio::read_track_table() {
+        // Try to find by name
+        for (i, track) in table.tracks.iter().enumerate() {
+            let lower = track.name.as_str();
+            if lower.eq_ignore_ascii_case("TrustAnthem") || lower.eq_ignore_ascii_case("trustanthem") {
+                crate::serial_println!("[VIZ] Found TrustAnthem on disk (track {})", i);
+                if let Ok((data, _name)) = crate::trustdaw::disk_audio::load_track_from_disk(i) {
+                    let audio = decode_wav_to_pcm(&data)?;
+                    return launch_visualizer(&audio, "TrustAnthem");
+                }
+            }
+        }
+        // Fallback: load first track
+        if let Ok((data, name)) = crate::trustdaw::disk_audio::load_track_from_disk(0) {
+            crate::serial_println!("[VIZ] Loading first disk track: '{}'", name);
+            let audio = decode_wav_to_pcm(&data)?;
+            return launch_visualizer(&audio, &name);
+        }
+    }
+
+    Err("TrustAnthem not found — place TrustAnthem.wav on the data disk or in /music/")
 }

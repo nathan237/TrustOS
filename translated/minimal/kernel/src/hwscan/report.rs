@@ -11,18 +11,18 @@
 use alloc::string::String;
 use alloc::format;
 use alloc::vec::Vec;
-use super::{Aqw, Ju, RiskLevel};
+use super::{Rs, Dy, RiskLevel};
 
 
-pub fn qlk() -> String {
-    let mut an = String::new();
+pub fn jyk() -> String {
+    let mut output = String::new();
     
-    an.t("\x01C");
-    an.t("╔══════════════════════════════════════════════════════════╗\n");
-    an.t("║          TrustProbe — Full Device Cartography           ║\n");
-    an.t("║            Automated Security Assessment                ║\n");
-    an.t("╚══════════════════════════════════════════════════════════╝\n");
-    an.t("\x01W\n");
+    output.push_str("\x01C");
+    output.push_str("╔══════════════════════════════════════════════════════════╗\n");
+    output.push_str("║          TrustProbe — Full Device Cartography           ║\n");
+    output.push_str("║            Automated Security Assessment                ║\n");
+    output.push_str("╚══════════════════════════════════════════════════════════╝\n");
+    output.push_str("\x01W\n");
     
     let arch = if cfg!(target_arch = "aarch64") {
         "aarch64 (ARM64)"
@@ -34,156 +34,156 @@ pub fn qlk() -> String {
         "unknown"
     };
     
-    an.t(&format!("Architecture: {}\n", arch));
-    an.t(&format!("TrustProbe version: 1.0.0\n\n"));
+    output.push_str(&format!("Architecture: {}\n", arch));
+    output.push_str(&format!("TrustProbe version: 1.0.0\n\n"));
     
     
     #[cfg(target_arch = "aarch64")]
     {
-        let bqh = crate::android_main::kry();
-        if bqh != 0 {
-            an.t("\x01Y[0/8] Device Tree Blob (DTB) Analysis...\x01W\n");
-            an.t(&format!("{}\n", "=".afd(60)));
+        let dtb_addr = crate::android_main::ftl();
+        if dtb_addr != 0 {
+            output.push_str("\x01Y[0/8] Device Tree Blob (DTB) Analysis...\x01W\n");
+            output.push_str(&format!("{}\n", "=".repeat(60)));
             unsafe {
-                if let Some(bez) = super::dtb_parser::jis(bqh as *const u8) {
-                    an.t(&super::dtb_parser::nvp(&bez));
+                if let Some(parsed) = super::dtb_parser::ewg(dtb_addr as *const u8) {
+                    output.push_str(&super::dtb_parser::hzo(&parsed));
                     
                     
-                    an.t("\n\x01C--- DTB vs Reality Cross-Reference ---\x01W\n");
-                    let mut mnz = 0u32;
-                    for ba in &bez.ik {
-                        if ba.cbi == 0 { continue; }
-                        let ptr = ba.cbi as *const u32;
-                        let bob = core::ptr::read_volatile(ptr);
+                    output.push_str("\n\x01C--- DTB vs Reality Cross-Reference ---\x01W\n");
+                    let mut haq = 0u32;
+                    for s in &parsed.devices {
+                        if s.reg_base == 0 { continue; }
+                        let ptr = s.reg_base as *const u32;
+                        let readable = core::ptr::read_volatile(ptr);
                         
-                        if ba.status == "disabled" && bob != 0 && bob != 0xFFFFFFFF {
-                            an.t(&format!("  \x01R[!] {} (0x{:X}): DTB says disabled, but RESPONDS (0x{:08X})\x01W\n",
-                                ba.bjp, ba.cbi, bob));
-                            mnz += 1;
+                        if s.status == "disabled" && readable != 0 && readable != 0xFFFFFFFF {
+                            output.push_str(&format!("  \x01R[!] {} (0x{:X}): DTB says disabled, but RESPONDS (0x{:08X})\x01W\n",
+                                s.compatible, s.reg_base, readable));
+                            haq += 1;
                         }
                     }
-                    if mnz == 0 {
-                        an.t("  All DTB entries consistent with MMIO probing.\n");
+                    if haq == 0 {
+                        output.push_str("  All DTB entries consistent with MMIO probing.\n");
                     } else {
-                        an.t(&format!("  \x01R{} devices respond despite being marked disabled!\x01W\n", mnz));
+                        output.push_str(&format!("  \x01R{} devices respond despite being marked disabled!\x01W\n", haq));
                     }
                 }
             }
-            an.t("\n");
+            output.push_str("\n");
         }
     }
     
     
-    an.t("\x01Y[1/7] MMIO Peripheral Discovery...\x01W\n");
-    an.t(&format!("{}\n", "=".afd(60)));
-    an.t(&super::mmio::pge(0, 0));
-    an.t("\n");
+    output.push_str("\x01Y[1/7] MMIO Peripheral Discovery...\x01W\n");
+    output.push_str(&format!("{}\n", "=".repeat(60)));
+    output.push_str(&super::mmio::jdg(0, 0));
+    output.push_str("\n");
     
     
-    an.t("\x01Y[2/7] Security Boundary Mapping...\x01W\n");
-    an.t(&format!("{}\n", "=".afd(60)));
-    an.t(&super::trustzone::oxy());
-    an.t("\n");
+    output.push_str("\x01Y[2/7] Security Boundary Mapping...\x01W\n");
+    output.push_str(&format!("{}\n", "=".repeat(60)));
+    output.push_str(&super::trustzone::iws());
+    output.push_str("\n");
     
     
-    an.t("\x01Y[3/7] DMA Engine & IOMMU Audit...\x01W\n");
-    an.t(&format!("{}\n", "=".afd(60)));
-    an.t(&super::dma::pga());
-    an.t("\n");
+    output.push_str("\x01Y[3/7] DMA Engine & IOMMU Audit...\x01W\n");
+    output.push_str(&format!("{}\n", "=".repeat(60)));
+    output.push_str(&super::dma::jda());
+    output.push_str("\n");
     
     
-    an.t("\x01Y[4/7] Interrupt Controller Mapping...\x01W\n");
-    an.t(&format!("{}\n", "=".afd(60)));
-    an.t(&super::irq::pgd());
-    an.t("\n");
+    output.push_str("\x01Y[4/7] Interrupt Controller Mapping...\x01W\n");
+    output.push_str(&format!("{}\n", "=".repeat(60)));
+    output.push_str(&super::irq::jde());
+    output.push_str("\n");
     
     
-    an.t("\x01Y[5/7] GPIO & Debug Interface Discovery...\x01W\n");
-    an.t(&format!("{}\n", "=".afd(60)));
-    an.t(&super::gpio::oxx());
-    an.t("\n");
+    output.push_str("\x01Y[5/7] GPIO & Debug Interface Discovery...\x01W\n");
+    output.push_str(&format!("{}\n", "=".repeat(60)));
+    output.push_str(&super::gpio::iwr());
+    output.push_str("\n");
     
     
-    an.t("\x01Y[6/7] Timing Side-Channel Analysis...\x01W\n");
-    an.t(&format!("{}\n", "=".afd(60)));
-    an.t(&super::timing::per(""));
-    an.t("\n");
+    output.push_str("\x01Y[6/7] Timing Side-Channel Analysis...\x01W\n");
+    output.push_str(&format!("{}\n", "=".repeat(60)));
+    output.push_str(&super::timing::jbw(""));
+    output.push_str("\n");
     
     
-    an.t("\x01Y[7/7] Firmware Residue Scan...\x01W\n");
-    an.t(&format!("{}\n", "=".afd(60)));
-    an.t(&super::firmware::pgb(""));
-    an.t("\n");
+    output.push_str("\x01Y[7/7] Firmware Residue Scan...\x01W\n");
+    output.push_str(&format!("{}\n", "=".repeat(60)));
+    output.push_str(&super::firmware::jdb(""));
+    output.push_str("\n");
     
     
-    an.t(&nxp());
+    output.push_str(&ibe());
     
-    an
+    output
 }
 
 
-fn nxp() -> String {
-    let mut an = String::new();
+fn ibe() -> String {
+    let mut output = String::new();
     
-    an.t("\x01C");
-    an.t("╔══════════════════════════════════════════════════════════╗\n");
-    an.t("║          TrustProbe — Executive Summary                 ║\n");
-    an.t("╚══════════════════════════════════════════════════════════╝\n");
-    an.t("\x01W\n");
+    output.push_str("\x01C");
+    output.push_str("╔══════════════════════════════════════════════════════════╗\n");
+    output.push_str("║          TrustProbe — Executive Summary                 ║\n");
+    output.push_str("╚══════════════════════════════════════════════════════════╝\n");
+    output.push_str("\x01W\n");
     
-    an.t("Scan complete. Key findings across all modules:\n\n");
+    output.push_str("Scan complete. Key findings across all modules:\n\n");
     
-    an.t("\x01YMMIO Discovery:\x01W\n");
-    an.t("  Probed memory-mapped peripheral regions\n");
-    an.t("  Identified controllers by reading hardware ID registers\n\n");
+    output.push_str("\x01YMMIO Discovery:\x01W\n");
+    output.push_str("  Probed memory-mapped peripheral regions\n");
+    output.push_str("  Identified controllers by reading hardware ID registers\n\n");
     
-    an.t("\x01YSecurity Boundaries:\x01W\n");
+    output.push_str("\x01YSecurity Boundaries:\x01W\n");
     #[cfg(target_arch = "aarch64")]
-    an.t("  Mapped TrustZone Normal/Secure World transitions\n");
+    output.push_str("  Mapped TrustZone Normal/Secure World transitions\n");
     #[cfg(target_arch = "x86_64")]
-    an.t("  Probed SMM and Ring 0/Ring -1 boundaries\n");
+    output.push_str("  Probed SMM and Ring 0/Ring -1 boundaries\n");
     #[cfg(target_arch = "riscv64")]
-    an.t("  Mapped PMP (Physical Memory Protection) boundaries\n");
-    an.t("  Any secure memory accessible from kernel = CRITICAL\n\n");
+    output.push_str("  Mapped PMP (Physical Memory Protection) boundaries\n");
+    output.push_str("  Any secure memory accessible from kernel = CRITICAL\n\n");
     
-    an.t("\x01YDMA & IOMMU:\x01W\n");
-    an.t("  Enumerated DMA-capable controllers\n");
-    an.t("  Checked SMMU/IOMMU isolation status\n");
-    an.t("  Missing IOMMU = all DMA devices can read kernel memory\n\n");
+    output.push_str("\x01YDMA & IOMMU:\x01W\n");
+    output.push_str("  Enumerated DMA-capable controllers\n");
+    output.push_str("  Checked SMMU/IOMMU isolation status\n");
+    output.push_str("  Missing IOMMU = all DMA devices can read kernel memory\n\n");
     
-    an.t("\x01YInterrupts:\x01W\n");
-    an.t("  Mapped interrupt controller topology\n");
-    an.t("  Identified active/pending IRQ routing\n\n");
+    output.push_str("\x01YInterrupts:\x01W\n");
+    output.push_str("  Mapped interrupt controller topology\n");
+    output.push_str("  Identified active/pending IRQ routing\n\n");
     
-    an.t("\x01YGPIO & Debug:\x01W\n");
-    an.t("  Scanned GPIO pin muxing for hidden interfaces\n");
-    an.t("  Active UART/JTAG = direct debug access possible\n\n");
+    output.push_str("\x01YGPIO & Debug:\x01W\n");
+    output.push_str("  Scanned GPIO pin muxing for hidden interfaces\n");
+    output.push_str("  Active UART/JTAG = direct debug access possible\n\n");
     
-    an.t("\x01YTiming Analysis:\x01W\n");
-    an.t("  Measured access latencies across memory regions\n");
-    an.t("  Anomalies may indicate hidden secure boundaries\n\n");
+    output.push_str("\x01YTiming Analysis:\x01W\n");
+    output.push_str("  Measured access latencies across memory regions\n");
+    output.push_str("  Anomalies may indicate hidden secure boundaries\n\n");
     
-    an.t("\x01YFirmware Residue:\x01W\n");
-    an.t("  Searched for bootloader/firmware artifacts in memory\n");
-    an.t("  Keys/certificates/debug tokens left by boot chain\n\n");
+    output.push_str("\x01YFirmware Residue:\x01W\n");
+    output.push_str("  Searched for bootloader/firmware artifacts in memory\n");
+    output.push_str("  Keys/certificates/debug tokens left by boot chain\n\n");
     
-    an.t("\x01C--- Risk Assessment ---\x01W\n");
-    an.t("Use individual scan commands for detailed results:\n");
-    an.t("  hwscan mmio      — MMIO peripheral map\n");
-    an.t("  hwscan trustzone — Security boundary map\n");
-    an.t("  hwscan dma       — DMA/IOMMU audit\n");
-    an.t("  hwscan irq       — Interrupt topology\n");
-    an.t("  hwscan gpio      — Debug interface discovery\n");
-    an.t("  hwscan timing    — Side-channel analysis\n");
-    an.t("  hwscan firmware  — Firmware residue scan\n");
-    an.t("  hwscan report    — This summary\n\n");
+    output.push_str("\x01C--- Risk Assessment ---\x01W\n");
+    output.push_str("Use individual scan commands for detailed results:\n");
+    output.push_str("  hwscan mmio      — MMIO peripheral map\n");
+    output.push_str("  hwscan trustzone — Security boundary map\n");
+    output.push_str("  hwscan dma       — DMA/IOMMU audit\n");
+    output.push_str("  hwscan irq       — Interrupt topology\n");
+    output.push_str("  hwscan gpio      — Debug interface discovery\n");
+    output.push_str("  hwscan timing    — Side-channel analysis\n");
+    output.push_str("  hwscan firmware  — Firmware residue scan\n");
+    output.push_str("  hwscan report    — This summary\n\n");
     
-    an.t("\x01C[TrustOS TrustProbe — Bare-Metal Hardware Security Research Platform]\x01W\n");
+    output.push_str("\x01C[TrustOS TrustProbe — Bare-Metal Hardware Security Research Platform]\x01W\n");
     
-    an
+    output
 }
 
 
-pub fn tck() -> String {
-    nxp()
+pub fn fyi() -> String {
+    ibe()
 }

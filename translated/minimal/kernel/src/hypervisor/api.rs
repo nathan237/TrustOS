@@ -21,86 +21,86 @@ use core::sync::atomic::{AtomicU64, Ordering};
 #[repr(u64)]
 pub enum Capability {
     
-    Cpu = 1 << 0,
+    VmxEnabled = 1 << 0,
     
-    Cbr = 1 << 1,
+    EptSupported = 1 << 1,
     
-    Cpw = 1 << 2,
+    VpidSupported = 1 << 2,
     
-    Cox = 1 << 3,
+    UnrestrictedGuest = 1 << 3,
     
-    Dlp = 1 << 4,
+    VmcsShadowing = 1 << 4,
     
-    Der = 1 << 5,
+    PostedInterrupts = 1 << 5,
     
-    Cvx = 1 << 6,
+    EptAccessDirty = 1 << 6,
     
-    Cpm = 1 << 7,
+    VirtualConsole = 1 << 7,
     
-    Cmw = 1 << 8,
+    SharedFilesystem = 1 << 8,
     
-    Dcx = 1 << 9,
+    NestedVirtualization = 1 << 9,
     
-    Dbj = 1 << 10,
+    LiveMigration = 1 << 10,
     
-    Dcl = 1 << 11,
+    MemoryBallooning = 1 << 11,
     
-    Cui = 1 << 12,
+    DevicePassthrough = 1 << 12,
 }
 
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Capabilities {
-    fs: u64,
+    bits: u64,
 }
 
 impl Capabilities {
     pub fn new() -> Self {
-        Capabilities { fs: 0 }
+        Capabilities { bits: 0 }
     }
     
-    pub fn oj(&mut self, mh: Capability) {
-        self.fs |= mh as u64;
+    pub fn set(&mut self, cap: Capability) {
+        self.bits |= cap as u64;
     }
     
-    pub fn ywe(&self, mh: Capability) -> bool {
-        (self.fs & (mh as u64)) != 0
+    pub fn qki(&self, cap: Capability) -> bool {
+        (self.bits & (cap as u64)) != 0
     }
     
-    pub fn cvr(&self) -> u64 {
-        self.fs
+    pub fn as_u64(&self) -> u64 {
+        self.bits
     }
     
-    pub fn yru(fs: u64) -> Self {
-        Capabilities { fs }
+    pub fn qgo(bits: u64) -> Self {
+        Capabilities { bits }
     }
 }
 
 
-pub fn iwn() -> Capabilities {
-    let mut dr = Capabilities::new();
+pub fn enz() -> Capabilities {
+    let mut caps = Capabilities::new();
     
     
-    if let Ok(jvy) = super::vmx::inj() {
-        if jvy.dme {
-            dr.oj(Capability::Cpu);
+    if let Ok(vmx_caps) = super::vmx::ehv() {
+        if vmx_caps.supported {
+            caps.set(Capability::VmxEnabled);
         }
-        if jvy.fhw {
-            dr.oj(Capability::Cbr);
+        if vmx_caps.ept_supported {
+            caps.set(Capability::EptSupported);
         }
-        if jvy.gwj {
-            dr.oj(Capability::Cpw);
+        if vmx_caps.vpid_supported {
+            caps.set(Capability::VpidSupported);
         }
-        if jvy.gvo {
-            dr.oj(Capability::Cox);
+        if vmx_caps.unrestricted_guest {
+            caps.set(Capability::UnrestrictedGuest);
         }
     }
     
     
-    dr.oj(Capability::Cpm);
-    dr.oj(Capability::Cmw);
+    caps.set(Capability::VirtualConsole);
+    caps.set(Capability::SharedFilesystem);
     
-    dr
+    caps
 }
 
 
@@ -109,52 +109,52 @@ pub fn iwn() -> Capabilities {
 
 
 #[derive(Debug, Clone)]
-pub struct Dlo {
-    pub ad: u64,
-    pub j: String,
-    pub g: Cpo,
-    pub afc: usize,
-    pub jvj: usize,
-    pub lc: u64,
-    pub cm: Cpp,
-    pub isolation: Cgf,
+pub struct Bfj {
+    pub id: u64,
+    pub name: String,
+    pub state: Art,
+    pub memory_mb: usize,
+    pub vcpus: usize,
+    pub uptime_ms: u64,
+    pub stats: Aru,
+    pub isolation: Alx,
 }
 
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Cpo {
-    Cu,
-    Czs,
-    Ai,
-    Cl,
-    Diz,
-    Af,
-    Gu,
-    Dcp,
+pub enum Art {
+    Created,
+    Initializing,
+    Running,
+    Paused,
+    Stopping,
+    Stopped,
+    Crashed,
+    Migrating,
 }
 
 
 #[derive(Debug, Clone, Default)]
-pub struct Cpp {
-    pub dcw: u64,
-    pub bmp: u64,
-    pub ank: u64,
-    pub bkn: u64,
-    pub axz: u64,
-    pub fhx: u64,
-    pub yxd: u64,
-    pub yyk: u64,
-    pub ykf: u64,
+pub struct Aru {
+    pub total_exits: u64,
+    pub cpuid_exits: u64,
+    pub io_exits: u64,
+    pub msr_exits: u64,
+    pub hlt_exits: u64,
+    pub ept_violations: u64,
+    pub hypercalls: u64,
+    pub interrupts_injected: u64,
+    pub cpu_time_ns: u64,
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Cgf {
+pub struct Alx {
     pub vpid: Option<u16>,
-    pub kty: bool,
-    pub ypo: usize,
-    pub yps: bool,
-    pub zpy: bool,
+    pub ept_enabled: bool,
+    pub ept_pages: usize,
+    pub execute_only_supported: bool,
+    pub supervisor_shadow_stack: bool,
 }
 
 
@@ -166,124 +166,124 @@ pub struct Cgf {
 #[repr(u32)]
 pub enum VmEventType {
     
-    Cu = 0,
+    Created = 0,
     
-    Diu = 1,
+    Started = 1,
     
-    Cl = 2,
+    Paused = 2,
     
-    Dgg = 3,
+    Resumed = 3,
     
-    Af = 4,
+    Stopped = 4,
     
-    Gu = 5,
+    Crashed = 5,
     
-    Ctm = 6,
+    ConsoleOutput = 6,
     
-    Acd = 7,
+    Hypercall = 7,
     
-    Lj = 8,
+    Ev = 8,
     
-    Dcn = 9,
+    MemoryWarning = 9,
     
-    Dlv = 10,
+    VpidFlush = 10,
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Uw {
-    pub bqo: VmEventType,
-    pub fk: u64,
-    pub aet: u64,
-    pub f: VmEventData,
+pub struct Je {
+    pub event_type: VmEventType,
+    pub vm_id: u64,
+    pub timestamp_ms: u64,
+    pub data: VmEventData,
 }
 
 
 #[derive(Debug, Clone)]
 pub enum VmEventData {
     None,
-    Cck(i32),
-    Cj(String),
-    Bxs(u64),
-    Cfe { gw: u64, result: i64 },
+    ExitCode(i32),
+    Az(String),
+    Address(u64),
+    HypercallInfo { function: u64, result: i64 },
 }
 
 
-pub type Bgd = fn(id: &Uw);
+pub type Yl = fn(event: &Je);
 
 
-struct Bgf {
-    fed: Bgd,
-    mpo: Option<u64>, 
-    kuf: Option<VmEventType>, 
+struct Ym {
+    callback: Yl,
+    vm_filter: Option<u64>, 
+    event_filter: Option<VmEventType>, 
 }
 
-static ARK_: Mutex<Vec<Bgf>> = Mutex::new(Vec::new());
-static ARJ_: Mutex<Vec<Uw>> = Mutex::new(Vec::new());
-static BUN_: AtomicU64 = AtomicU64::new(0);
+static ATN_: Mutex<Vec<Ym>> = Mutex::new(Vec::new());
+static ATM_: Mutex<Vec<Je>> = Mutex::new(Vec::new());
+static BXJ_: AtomicU64 = AtomicU64::new(0);
 
 
-pub fn zpu(
-    fed: Bgd,
-    mpo: Option<u64>,
-    kuf: Option<VmEventType>,
+pub fn qxu(
+    callback: Yl,
+    vm_filter: Option<u64>,
+    event_filter: Option<VmEventType>,
 ) -> u64 {
-    let sub = Bgf {
-        fed,
-        mpo,
-        kuf,
+    let sub = Ym {
+        callback,
+        vm_filter,
+        event_filter,
     };
     
-    let mut mia = ARK_.lock();
-    mia.push(sub);
-    BUN_.fetch_add(1, Ordering::SeqCst)
+    let mut gwr = ATN_.lock();
+    gwr.push(sub);
+    BXJ_.fetch_add(1, Ordering::SeqCst)
 }
 
 
-pub fn eps(bqo: VmEventType, fk: u64, f: VmEventData) {
-    let id = Uw {
-        bqo,
-        fk,
-        aet: crate::time::lc(),
-        f,
+pub fn bzf(event_type: VmEventType, vm_id: u64, data: VmEventData) {
+    let event = Je {
+        event_type,
+        vm_id,
+        timestamp_ms: crate::time::uptime_ms(),
+        data,
     };
     
     
     {
-        let mut log = ARJ_.lock();
+        let mut log = ATM_.lock();
         if log.len() >= 1000 {
             log.remove(0); 
         }
-        log.push(id.clone());
+        log.push(event.clone());
     }
     
     
-    let mia = ARK_.lock();
-    for sub in mia.iter() {
+    let gwr = ATN_.lock();
+    for sub in gwr.iter() {
         
-        if let Some(ssq) = sub.mpo {
-            if ssq != fk {
+        if let Some(filter_vm) = sub.vm_filter {
+            if filter_vm != vm_id {
                 continue;
             }
         }
         
         
-        if let Some(kwc) = sub.kuf {
-            if kwc != bqo {
+        if let Some(fwx) = sub.event_filter {
+            if fwx != event_type {
                 continue;
             }
         }
         
         
-        (sub.fed)(&id);
+        (sub.callback)(&event);
     }
 }
 
 
-pub fn ten(az: usize) -> Vec<Uw> {
-    let log = ARJ_.lock();
-    let ay = if log.len() > az { log.len() - az } else { 0 };
-    log[ay..].ip()
+pub fn mdr(count: usize) -> Vec<Je> {
+    let log = ATM_.lock();
+    let start = if log.len() > count { log.len() - count } else { 0 };
+    log[start..].to_vec()
 }
 
 
@@ -293,87 +293,87 @@ pub fn ten(az: usize) -> Vec<Uw> {
 
 #[derive(Debug)]
 pub struct VmChannel {
-    ad: u64,
-    fk: u64,
-    j: String,
-    fao: Vec<u8>,
-    ehx: Vec<u8>,
-    ate: usize,
+    id: u64,
+    vm_id: u64,
+    name: String,
+    tx_buffer: Vec<u8>,
+    rx_buffer: Vec<u8>,
+    max_size: usize,
 }
 
 impl VmChannel {
-    pub fn new(ad: u64, fk: u64, j: &str, ate: usize) -> Self {
+    pub fn new(id: u64, vm_id: u64, name: &str, max_size: usize) -> Self {
         VmChannel {
-            ad,
-            fk,
-            j: String::from(j),
-            fao: Vec::fc(ate),
-            ehx: Vec::fc(ate),
-            ate,
+            id,
+            vm_id,
+            name: String::from(name),
+            tx_buffer: Vec::with_capacity(max_size),
+            rx_buffer: Vec::with_capacity(max_size),
+            max_size,
         }
     }
     
     
-    pub fn baq(&mut self, f: &[u8]) -> Result<usize, &'static str> {
-        let bfz = self.ate - self.fao.len();
-        let mll = f.len().v(bfz);
+    pub fn send(&mut self, data: &[u8]) -> Result<usize, &'static str> {
+        let available = self.max_size - self.tx_buffer.len();
+        let gze = data.len().min(available);
         
-        if mll == 0 {
+        if gze == 0 {
             return Err("Channel buffer full");
         }
         
-        self.fao.bk(&f[..mll]);
-        Ok(mll)
+        self.tx_buffer.extend_from_slice(&data[..gze]);
+        Ok(gze)
     }
     
     
-    pub fn ehf(&mut self, k: &mut [u8]) -> usize {
-        let ajp = k.len().v(self.ehx.len());
-        k[..ajp].dg(&self.ehx[..ajp]);
-        self.ehx.bbk(..ajp);
-        ajp
+    pub fn recv(&mut self, buf: &mut [u8]) -> usize {
+        let rz = buf.len().min(self.rx_buffer.len());
+        buf[..rz].copy_from_slice(&self.rx_buffer[..rz]);
+        self.rx_buffer.drain(..rz);
+        rz
     }
     
     
-    pub fn bfz(&self) -> usize {
-        self.ehx.len()
+    pub fn available(&self) -> usize {
+        self.rx_buffer.len()
     }
     
     
-    pub fn atm(&self) -> usize {
-        self.ate - self.fao.len()
+    pub fn space(&self) -> usize {
+        self.max_size - self.tx_buffer.len()
     }
 }
 
 
-static Dv: Mutex<BTreeMap<u64, VmChannel>> = Mutex::new(BTreeMap::new());
-static BMH_: AtomicU64 = AtomicU64::new(0);
+static Bq: Mutex<BTreeMap<u64, VmChannel>> = Mutex::new(BTreeMap::new());
+static BPA_: AtomicU64 = AtomicU64::new(0);
 
 
-pub fn ipp(fk: u64, j: &str, ate: usize) -> u64 {
-    let ad = BMH_.fetch_add(1, Ordering::SeqCst);
-    let channel = VmChannel::new(ad, fk, j, ate);
+pub fn ejc(vm_id: u64, name: &str, max_size: usize) -> u64 {
+    let id = BPA_.fetch_add(1, Ordering::SeqCst);
+    let channel = VmChannel::new(id, vm_id, name, max_size);
     
-    Dv.lock().insert(ad, channel);
+    Bq.lock().insert(id, channel);
     
-    crate::serial_println!("[API] Created channel {} for VM {}: {}", ad, fk, j);
-    ad
+    crate::serial_println!("[API] Created channel {} for VM {}: {}", id, vm_id, name);
+    id
 }
 
 
-pub fn nci(cjo: u64, f: &[u8]) -> Result<usize, &'static str> {
-    let mut lq = Dv.lock();
-    match lq.ds(&cjo) {
-        Some(channel) => channel.baq(f),
+pub fn hkj(ath: u64, data: &[u8]) -> Result<usize, &'static str> {
+    let mut channels = Bq.lock();
+    match channels.get_mut(&ath) {
+        Some(channel) => channel.send(data),
         None => Err("Channel not found"),
     }
 }
 
 
-pub fn yhu(cjo: u64, k: &mut [u8]) -> Result<usize, &'static str> {
-    let mut lq = Dv.lock();
-    match lq.ds(&cjo) {
-        Some(channel) => Ok(channel.ehf(k)),
+pub fn pzj(ath: u64, buf: &mut [u8]) -> Result<usize, &'static str> {
+    let mut channels = Bq.lock();
+    match channels.get_mut(&ath) {
+        Some(channel) => Ok(channel.recv(buf)),
         None => Err("Channel not found"),
     }
 }
@@ -386,39 +386,39 @@ pub fn yhu(cjo: u64, k: &mut [u8]) -> Result<usize, &'static str> {
 #[derive(Debug, Clone)]
 pub struct ResourceQuota {
     
-    pub lla: usize,
+    pub max_memory: usize,
     
-    pub llh: usize,
+    pub max_vcpus: usize,
     
-    pub ulh: usize,
+    pub max_io_bandwidth: usize,
     
-    pub ulg: usize,
+    pub max_hypercalls_per_sec: usize,
     
-    pub rpr: u8,
+    pub cpu_limit_percent: u8,
 }
 
 impl Default for ResourceQuota {
     fn default() -> Self {
         ResourceQuota {
-            lla: 256 * 1024 * 1024, 
-            llh: 4,
-            ulh: 0,
-            ulg: 10000,
-            rpr: 0,
+            max_memory: 256 * 1024 * 1024, 
+            max_vcpus: 4,
+            max_io_bandwidth: 0,
+            max_hypercalls_per_sec: 10000,
+            cpu_limit_percent: 0,
         }
     }
 }
 
-static BIQ_: Mutex<BTreeMap<u64, ResourceQuota>> = Mutex::new(BTreeMap::new());
+static BKW_: Mutex<BTreeMap<u64, ResourceQuota>> = Mutex::new(BTreeMap::new());
 
 
-pub fn wjm(fk: u64, lws: ResourceQuota) {
-    BIQ_.lock().insert(fk, lws);
+pub fn opj(vm_id: u64, gph: ResourceQuota) {
+    BKW_.lock().insert(vm_id, gph);
 }
 
 
-pub fn ytp(fk: u64) -> Option<ResourceQuota> {
-    BIQ_.lock().get(&fk).abn()
+pub fn qig(vm_id: u64) -> Option<ResourceQuota> {
+    BKW_.lock().get(&vm_id).cloned()
 }
 
 
@@ -428,106 +428,106 @@ pub fn ytp(fk: u64) -> Option<ResourceQuota> {
 
 pub mod hypercall {
     
-    pub const Dec: u64 = 0x00;
-    pub const Ahp: u64 = 0x01;
-    pub const DNA_: u64 = 0x02;
-    pub const DGO_: u64 = 0x03;
-    pub const DGN_: u64 = 0x04;
+    pub const Bam: u64 = 0x00;
+    pub const Oq: u64 = 0x01;
+    pub const DQU_: u64 = 0x02;
+    pub const DKH_: u64 = 0x03;
+    pub const DKG_: u64 = 0x04;
     
     
-    pub const EJV_: u64 = 0x100;
+    pub const ENJ_: u64 = 0x100;
     
     
-    pub const BWS_: u64 = 0x200;
-    pub const BXC_: u64 = 0x201;
-    pub const BXA_: u64 = 0x202;
-    pub const BMI_: u64 = 0x210;
-    pub const BMG_: u64 = 0x211;
-    pub const DEP_: u64 = 0x212;
-    pub const DEO_: u64 = 0x213;
-    pub const BMJ_: u64 = 0x214;
-    pub const EFZ_: u64 = 0x220;
-    pub const ECM_: u64 = 0x221;
-    pub const Cqt: u64 = 0x222;
-    pub const Uf: u64 = 0x223;
-    pub const Axh: u64 = 0x224;
+    pub const BZY_: u64 = 0x200;
+    pub const CAI_: u64 = 0x201;
+    pub const CAG_: u64 = 0x202;
+    pub const BPB_: u64 = 0x210;
+    pub const BOZ_: u64 = 0x211;
+    pub const DII_: u64 = 0x212;
+    pub const DIH_: u64 = 0x213;
+    pub const BPC_: u64 = 0x214;
+    pub const EJS_: u64 = 0x220;
+    pub const EGE_: u64 = 0x221;
+    pub const Asg: u64 = 0x222;
+    pub const Iu: u64 = 0x223;
+    pub const Um: u64 = 0x224;
     
     
-    pub const DIW_: u64 = 0x300;
-    pub const BRB_: u64 = 0x301;
-    pub const DIX_: u64 = 0x302;
+    pub const DML_: u64 = 0x300;
+    pub const BTW_: u64 = 0x301;
+    pub const DMM_: u64 = 0x302;
 }
 
 
-pub fn tix(fk: u64, gw: u64, n: &[u64; 4]) -> (i64, u64) {
+pub fn mhg(vm_id: u64, function: u64, args: &[u64; 4]) -> (i64, u64) {
     use hypercall::*;
     
-    match gw {
-        BWS_ => {
-            let dr = iwn();
-            (0, dr.cvr())
+    match function {
+        BZY_ => {
+            let caps = enz();
+            (0, caps.as_u64())
         }
         
-        BXC_ => {
+        CAI_ => {
             
             
-            (0, fk)
+            (0, vm_id)
         }
         
-        BXA_ => {
+        CAG_ => {
             
             (0, 0)
         }
         
-        BMI_ => {
+        BPB_ => {
             
             
-            let cjo = ipp(fk, "guest_channel", 4096);
-            (0, cjo)
+            let ath = ejc(vm_id, "guest_channel", 4096);
+            (0, ath)
         }
         
-        BMG_ => {
-            let cjo = n[0];
-            let mut lq = Dv.lock();
-            if lq.remove(&cjo).is_some() {
+        BOZ_ => {
+            let ath = args[0];
+            let mut channels = Bq.lock();
+            if channels.remove(&ath).is_some() {
                 (0, 0)
             } else {
                 (-1, 0)
             }
         }
         
-        BMJ_ => {
-            let cjo = n[0];
-            let lq = Dv.lock();
-            match lq.get(&cjo) {
-                Some(bm) => (0, bm.bfz() as u64),
+        BPC_ => {
+            let ath = args[0];
+            let channels = Bq.lock();
+            match channels.get(&ath) {
+                Some(ch) => (0, ch.available() as u64),
                 None => (-1, 0),
             }
         }
         
-        Cqt => {
+        Asg => {
             
             
             (0, 0)
         }
         
-        Uf => {
-            eps(VmEventType::Af, fk, VmEventData::Cck(n[0] as i32));
+        Iu => {
+            bzf(VmEventType::Stopped, vm_id, VmEventData::ExitCode(args[0] as i32));
             (-1, 0) 
         }
         
-        Axh => {
-            eps(VmEventType::Af, fk, VmEventData::Cj(String::from("reboot")));
+        Um => {
+            bzf(VmEventType::Stopped, vm_id, VmEventData::Az(String::from("reboot")));
             (-2, 0) 
         }
         
-        BRB_ => {
-            crate::serial_println!("[VM {} DEBUG] 0x{:X}", fk, n[0]);
+        BTW_ => {
+            crate::serial_println!("[VM {} DEBUG] 0x{:X}", vm_id, args[0]);
             (0, 0)
         }
         
         _ => {
-            crate::serial_println!("[API] Unknown hypercall 0x{:X} from VM {}", gw, fk);
+            crate::serial_println!("[API] Unknown hypercall 0x{:X} from VM {}", function, vm_id);
             (-1, 0)
         }
     }
@@ -538,13 +538,13 @@ pub fn tix(fk: u64, gw: u64, n: &[u64; 4]) -> (i64, u64) {
 
 
 
-pub const DAI_: u32 = 1;
-pub const DAJ_: u32 = 0;
-pub const DAK_: u32 = 0;
-pub const DAL_: &str = "1.0.0";
-pub const DEB_: &str = "2026-01-31";
+pub const DEA_: u32 = 1;
+pub const DEB_: u32 = 0;
+pub const DEC_: u32 = 0;
+pub const DED_: &str = "1.0.0";
+pub const DHV_: &str = "2026-01-31";
 
 
-pub fn yuf() -> u64 {
-    ((DAI_ as u64) << 32) | ((DAJ_ as u64) << 16) | (DAK_ as u64)
+pub fn qiv() -> u64 {
+    ((DEA_ as u64) << 32) | ((DEB_ as u64) << 16) | (DEC_ as u64)
 }

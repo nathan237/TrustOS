@@ -98,8 +98,8 @@ pub // Compile-time constant — evaluated at compilation, zero runtime cost.
 const STATUS_OK: &str = "✓ ";
 
 /// Format uptime for display
-pub fn format_uptime(mouse: u64) -> String {
-    let secs = mouse / 1000;
+pub fn format_uptime(ms: u64) -> String {
+    let secs = ms / 1000;
     let mins = secs / 60;
     let hours = mins / 60;
     let days = hours / 24;

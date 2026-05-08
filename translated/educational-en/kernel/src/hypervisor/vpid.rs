@@ -59,11 +59,11 @@ pub struct InvvpidDescriptor {
 // Implementation block — defines methods for the type above.
 impl InvvpidDescriptor {
         // Public function — callable from other modules.
-pub fn new(vpid: u16, address: u64) -> Self {
+pub fn new(vpid: u16, addr: u64) -> Self {
         InvvpidDescriptor {
             vpid,
             reserved: [0; 6],
-            linear_address: address,
+            linear_address: addr,
         }
     }
     
@@ -128,7 +128,7 @@ pub fn allocate() -> Option<u16> {
         
         if !allocated.contains(&vpid) {
             allocated.insert(vpid);
-            NEXT_VPID.store(vpid.wrapping_add(1).maximum(1), Ordering::SeqCst);
+            NEXT_VPID.store(vpid.wrapping_add(1).max(1), Ordering::SeqCst);
             
             crate::serial_println!("[VPID] Allocated VPID {} for new VM", vpid);
             return Some(vpid);
@@ -179,12 +179,12 @@ unsafe {
 }
 
 /// Invalidate a specific address in a VPID's TLB
-pub fn invalidate_address(vpid: u16, address: u64) {
+pub fn invalidate_address(vpid: u16, addr: u64) {
     if !is_enabled() {
         return;
     }
     
-    let desc = InvvpidDescriptor::new(vpid, address);
+    let desc = InvvpidDescriptor::new(vpid, addr);
     
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {

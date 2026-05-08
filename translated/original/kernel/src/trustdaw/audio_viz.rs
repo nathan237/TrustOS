@@ -1099,3 +1099,51 @@ pub fn play_untitled2() -> Result<(), &'static str> {
 
     Err("Audio not found — place untitled2.wav in /music/ or build with --features daw")
 }
+
+/// VFS paths where the TrustAnthem may live.
+pub const ANTHEM_VFS_PATHS: &[&str] = &[
+    "/music/TrustAnthem.wav",
+    "/music/trustanthem.wav",
+    "/mnt/fat32/music/TrustAnthem.wav",
+    "/mnt/sda1/music/TrustAnthem.wav",
+    "/home/music/TrustAnthem.wav",
+];
+
+/// Play "TrustAnthem" — tries VFS → TWAV disk (track named "TrustAnthem").
+pub fn play_anthem() -> Result<(), &'static str> {
+    // 1) Try VFS paths
+    for path in ANTHEM_VFS_PATHS {
+        if crate::vfs::stat(path).is_ok() {
+            crate::serial_println!("[VIZ] Found '{}' on VFS, loading...", path);
+            if let Ok(data) = crate::vfs::read_file(path) {
+                if !data.is_empty() {
+                    let audio = decode_wav_to_pcm(&data)?;
+                    return launch_visualizer(&audio, "TrustAnthem");
+                }
+            }
+        }
+    }
+
+    // 2) Try TWAV disk — search for track named "TrustAnthem" or load first track
+    if let Ok(table) = crate::trustdaw::disk_audio::read_track_table() {
+        // Try to find by name
+        for (i, track) in table.tracks.iter().enumerate() {
+            let lower = track.name.as_str();
+            if lower.eq_ignore_ascii_case("TrustAnthem") || lower.eq_ignore_ascii_case("trustanthem") {
+                crate::serial_println!("[VIZ] Found TrustAnthem on disk (track {})", i);
+                if let Ok((data, _name)) = crate::trustdaw::disk_audio::load_track_from_disk(i) {
+                    let audio = decode_wav_to_pcm(&data)?;
+                    return launch_visualizer(&audio, "TrustAnthem");
+                }
+            }
+        }
+        // Fallback: load first track
+        if let Ok((data, name)) = crate::trustdaw::disk_audio::load_track_from_disk(0) {
+            crate::serial_println!("[VIZ] Loading first disk track: '{}'", name);
+            let audio = decode_wav_to_pcm(&data)?;
+            return launch_visualizer(&audio, &name);
+        }
+    }
+
+    Err("TrustAnthem not found — place TrustAnthem.wav on the data disk or in /music/")
+}

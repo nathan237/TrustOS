@@ -25,7 +25,7 @@ use alloc::format;
 use alloc::string::String;
 use core::sync::atomic::Ordering;
 
-use crate::audio::synth::{Waveform, Envelope, SynthEngine, BR_, Dv};
+use crate::audio::synth::{Waveform, Envelope, SynthEngine, BT_, Bq};
 
 
 
@@ -33,65 +33,65 @@ use crate::audio::synth::{Waveform, Envelope, SynthEngine, BR_, Dv};
 
 mod colors {
     
-    pub const JJ_: u32        = 0x0A0A14;
-    pub const RM_: u32        = 0x0F0F1E;
-    pub const HN_: u32       = 0x141428;
-    pub const JK_: u32      = 0x1A1A30;
-    pub const ALU_: u32    = 0x1E1E38;
+    pub const DW_: u32        = 0x0A0A14;
+    pub const SO_: u32        = 0x0F0F1E;
+    pub const CJ_: u32       = 0x141428;
+    pub const DX_: u32      = 0x1A1A30;
+    pub const ANL_: u32    = 0x1E1E38;
 
     
-    pub const Fj: u32         = 0x2A2A4A;
-    pub const ZN_: u32  = 0x4A4A6A;
-    pub const Aqo: u32        = 0x222240;
+    pub const Bp: u32         = 0x2A2A4A;
+    pub const AAY_: u32  = 0x4A4A6A;
+    pub const Rp: u32        = 0x222240;
 
     
-    pub const AIS_: u32    = 0xEEEEFF;
-    pub const AC_: u32   = 0xCCCCDD;
-    pub const N_: u32 = 0x8888AA;
-    pub const AV_: u32       = 0x555577;
-    pub const PY_: u32    = 0x66BBFF;
+    pub const AKP_: u32    = 0xEEEEFF;
+    pub const AB_: u32   = 0xCCCCDD;
+    pub const O_: u32 = 0x8888AA;
+    pub const AY_: u32       = 0x555577;
+    pub const QV_: u32    = 0x66BBFF;
 
     
-    pub const OY_: u32     = 0x44DD66;
-    pub const AII_: u32      = 0x666688;
-    pub const WN_: u32        = 0xFF3344;
-    pub const XT_: u32   = 0x121228;
+    pub const PW_: u32     = 0x44DD66;
+    pub const AKE_: u32      = 0x666688;
+    pub const XW_: u32        = 0xFF3344;
+    pub const ZA_: u32   = 0x121228;
 
     
-    pub const CUL_: u32       = 0x1A1A30;
-    pub const EGW_: u32        = 0xFF6622;
-    pub const EGX_: u32    = 0xFF8844;
-    pub const BGJ_: u32    = 0x44FF88;
-    pub const BGK_: u32  = 0x66FF66;
-    pub const CUK_: u32    = 0x333355;
-    pub const CUJ_: u32  = 0x444466;
+    pub const CYD_: u32       = 0x1A1A30;
+    pub const EKO_: u32        = 0xFF6622;
+    pub const EKP_: u32    = 0xFF8844;
+    pub const BIN_: u32    = 0x44FF88;
+    pub const BIO_: u32  = 0x66FF66;
+    pub const CYC_: u32    = 0x333355;
+    pub const CYB_: u32  = 0x444466;
 
     
-    pub const AFJ_: u32    = 0x44CC44;
-    pub const AFL_: u32   = 0xCCCC44;
-    pub const AFK_: u32      = 0xCC4444;
-    pub const VD_: u32       = 0x0D0D1A;
-    pub const DLN_: u32     = 0xBBBBCC;
-    pub const CHI_: u32    = 0xFF8800;
-    pub const CTR_: u32    = 0xFFDD00;
+    pub const AHD_: u32    = 0x44CC44;
+    pub const AHF_: u32   = 0xCCCC44;
+    pub const AHE_: u32      = 0xCC4444;
+    pub const WM_: u32       = 0x0D0D1A;
+    pub const DPC_: u32     = 0xBBBBCC;
+    pub const CKR_: u32    = 0xFF8800;
+    pub const CXI_: u32    = 0xFFDD00;
 
     
-    pub const ADT_: u32      = 0xDDDDEE;
-    pub const ADS_: u32      = 0x222233;
-    pub const AYB_: u32    = 0xFF6622;
-    pub const CDB_: u32      = 0x444455;
+    pub const AFN_: u32      = 0xDDDDEE;
+    pub const AFM_: u32      = 0x222233;
+    pub const BAC_: u32    = 0xFF6622;
+    pub const CGK_: u32      = 0x444455;
 
     
-    pub const CQO_: u32     = 0x44DDFF;
-    pub const CQN_: u32       = 0x0A0A18;
-    pub const CTS_: u32     = 0x22CC66;
-    pub const CTT_: u32     = 0x66DD44;
-    pub const CTU_: u32     = 0xCCCC22;
-    pub const CTV_: u32     = 0xDD6622;
-    pub const CTW_: u32     = 0xDD2222;
+    pub const CUF_: u32     = 0x44DDFF;
+    pub const CUE_: u32       = 0x0A0A18;
+    pub const CXJ_: u32     = 0x22CC66;
+    pub const CXK_: u32     = 0x66DD44;
+    pub const CXL_: u32     = 0xCCCC22;
+    pub const CXM_: u32     = 0xDD6622;
+    pub const CXN_: u32     = 0xDD2222;
 
     
-    pub const S_: [u32; 8] = [
+    pub const U_: [u32; 8] = [
         0xFF4444, 
         0xFFAA22, 
         0xFFDD44, 
@@ -108,115 +108,115 @@ mod colors {
 
 
 
-const GP_: usize = 8;
+const HG_: usize = 8;
 
-const FL_: usize = 32;
+const GA_: usize = 32;
 
-const BRH_: usize = 16;
+const BUD_: usize = 16;
 
 
 #[derive(Clone, Copy)]
 pub struct BeatStep {
     
-    pub gh: bool,
+    pub active: bool,
     
-    pub qm: u8,
+    pub velocity: u8,
     
-    pub gnz: i8,
+    pub note_offset: i8,
 }
 
 impl BeatStep {
-    pub fn dz() -> Self {
-        Self { gh: false, qm: 100, gnz: 0 }
+    pub fn off() -> Self {
+        Self { active: false, velocity: 100, note_offset: 0 }
     }
 
-    pub fn ea(qm: u8) -> Self {
-        Self { gh: true, qm, gnz: 0 }
+    pub fn on(velocity: u8) -> Self {
+        Self { active: true, velocity, note_offset: 0 }
     }
 
-    pub fn bz(qm: u8, l: i8) -> Self {
-        Self { gh: true, qm, gnz: l }
+    pub fn ah(velocity: u8, offset: i8) -> Self {
+        Self { active: true, velocity, note_offset: offset }
     }
 }
 
 
 pub struct BeatTrack {
     
-    pub j: [u8; 16],
-    pub baf: usize,
+    pub name: [u8; 16],
+    pub name_len: usize,
     
-    pub au: [BeatStep; FL_],
+    pub steps: [BeatStep; GA_],
     
-    pub aml: usize,
+    pub num_steps: usize,
     
-    pub fdc: u8,
+    pub base_note: u8,
     
-    pub ve: Waveform,
+    pub waveform: Waveform,
     
-    pub qr: Envelope,
+    pub envelope: Envelope,
     
-    pub hq: u8,
+    pub volume: u8,
     
-    pub arp: i8,
+    pub pan: i8,
     
-    pub so: bool,
+    pub muted: bool,
     
-    pub cic: bool,
+    pub solo: bool,
     
-    pub s: u32,
+    pub color: u32,
     
-    pub jbg: bool,
+    pub is_drum: bool,
 }
 
 impl BeatTrack {
-    pub fn new(j: &str, fdc: u8, ve: Waveform, s: u32, jbg: bool) -> Self {
-        let mut djr = [0u8; 16];
-        let bf = j.as_bytes();
-        let len = bf.len().v(16);
-        djr[..len].dg(&bf[..len]);
+    pub fn new(name: &str, base_note: u8, waveform: Waveform, color: u32, is_drum: bool) -> Self {
+        let mut bhz = [0u8; 16];
+        let bytes = name.as_bytes();
+        let len = bytes.len().min(16);
+        bhz[..len].copy_from_slice(&bytes[..len]);
 
         Self {
-            j: djr,
-            baf: len,
-            au: [BeatStep::dz(); FL_],
-            aml: BRH_,
-            fdc,
-            ve,
-            qr: Envelope::hvi(),
-            hq: 200,
-            arp: 0,
-            so: false,
-            cic: false,
-            s,
-            jbg,
+            name: bhz,
+            name_len: len,
+            steps: [BeatStep::off(); GA_],
+            num_steps: BUD_,
+            base_note,
+            waveform,
+            envelope: Envelope::dwp(),
+            volume: 200,
+            pan: 0,
+            muted: false,
+            solo: false,
+            color,
+            is_drum,
         }
     }
 
-    pub fn amj(&self) -> &str {
-        core::str::jg(&self.j[..self.baf]).unwrap_or("???")
+    pub fn name_str(&self) -> &str {
+        core::str::from_utf8(&self.name[..self.name_len]).unwrap_or("???")
     }
 
     
-    pub fn xiy(&mut self, gu: usize) {
-        if gu < self.aml {
-            self.au[gu].gh = !self.au[gu].gh;
+    pub fn toggle_step(&mut self, step: usize) {
+        if step < self.num_steps {
+            self.steps[step].active = !self.steps[step].active;
         }
     }
 
     
-    pub fn lov(&self, gu: usize) -> u8 {
-        if gu < self.aml && self.au[gu].gh {
-            let ar = self.fdc as i16;
-            let l = self.au[gu].gnz as i16;
-            (ar + l).qp(0, 127) as u8
+    pub fn note_at(&self, step: usize) -> u8 {
+        if step < self.num_steps && self.steps[step].active {
+            let base = self.base_note as i16;
+            let offset = self.steps[step].note_offset as i16;
+            (base + offset).clamp(0, 127) as u8
         } else {
             0
         }
     }
 
     
-    pub fn gxu(&self) -> usize {
-        self.au[..self.aml].iter().hi(|e| e.gh).az()
+    pub fn active_count(&self) -> usize {
+        self.steps[..self.num_steps].iter().filter(|j| j.active).count()
     }
 }
 
@@ -227,224 +227,224 @@ impl BeatTrack {
 
 pub struct BeatStudio {
     
-    pub af: [BeatTrack; GP_],
+    pub tracks: [BeatTrack; HG_],
     
-    pub kz: u16,
+    pub bpm: u16,
     
-    pub ezi: u8,
+    pub swing: u8,
     
-    pub uij: u8,
+    pub loop_bars: u8,
 
     
-    pub uu: bool,
-    pub ehe: bool,
-    pub aop: usize,
+    pub playing: bool,
+    pub recording: bool,
+    pub current_step: usize,
 
     
-    pub bdw: usize,
-    pub bzc: usize,
+    pub cursor_track: usize,
+    pub cursor_step: usize,
 
     
-    pub hyy: [i16; 256],
-    pub jnu: usize,
-    pub mgq: [u8; 16],
+    pub scope_buffer: [i16; 256],
+    pub scope_pos: usize,
+    pub spectrum: [u8; 16],
 
     
-    pub dsl: [bool; 128],
-    pub cgg: i8,
-    pub qm: u8,
+    pub keys_pressed: [bool; 128],
+    pub octave: i8,
+    pub velocity: u8,
 
     
-    gz: u32,
-    kc: u32,
+    fb_w: u32,
+    fb_h: u32,
 }
 
 impl BeatStudio {
     
     pub fn new() -> Self {
-        let gz = crate::framebuffer::AB_.load(Ordering::Relaxed) as u32;
-        let kc = crate::framebuffer::Z_.load(Ordering::Relaxed) as u32;
+        let fb_w = crate::framebuffer::X_.load(Ordering::Relaxed) as u32;
+        let fb_h = crate::framebuffer::W_.load(Ordering::Relaxed) as u32;
 
-        let af = [
-            BeatTrack::new("Kick",  36, Waveform::Dg,     colors::S_[0], true),
-            BeatTrack::new("Snare", 38, Waveform::Cr,    colors::S_[1], true),
-            BeatTrack::new("HiHat", 42, Waveform::Cr,    colors::S_[2], true),
-            BeatTrack::new("Bass",  36, Waveform::Gb,   colors::S_[3], false),
-            BeatTrack::new("Lead",  60, Waveform::Ft, colors::S_[4], false),
-            BeatTrack::new("Pad",   60, Waveform::Triangle, colors::S_[5], false),
-            BeatTrack::new("FX",    48, Waveform::Ft, colors::S_[6], false),
-            BeatTrack::new("Perc",  56, Waveform::Cr,    colors::S_[7], true),
+        let tracks = [
+            BeatTrack::new("Kick",  36, Waveform::Sine,     colors::U_[0], true),
+            BeatTrack::new("Snare", 38, Waveform::Noise,    colors::U_[1], true),
+            BeatTrack::new("HiHat", 42, Waveform::Noise,    colors::U_[2], true),
+            BeatTrack::new("Bass",  36, Waveform::Square,   colors::U_[3], false),
+            BeatTrack::new("Lead",  60, Waveform::Sawtooth, colors::U_[4], false),
+            BeatTrack::new("Pad",   60, Waveform::Triangle, colors::U_[5], false),
+            BeatTrack::new("FX",    48, Waveform::Sawtooth, colors::U_[6], false),
+            BeatTrack::new("Perc",  56, Waveform::Noise,    colors::U_[7], true),
         ];
 
-        let mut er = Self {
-            af,
-            kz: 128,
-            ezi: 50,
-            uij: 1,
-            uu: false,
-            ehe: false,
-            aop: 0,
-            bdw: 0,
-            bzc: 0,
-            hyy: [0i16; 256],
-            jnu: 0,
-            mgq: [0u8; 16],
-            dsl: [false; 128],
-            cgg: 0,
-            qm: 100,
-            gz,
-            kc,
+        let mut ba = Self {
+            tracks,
+            bpm: 128,
+            swing: 50,
+            loop_bars: 1,
+            playing: false,
+            recording: false,
+            current_step: 0,
+            cursor_track: 0,
+            cursor_step: 0,
+            scope_buffer: [0i16; 256],
+            scope_pos: 0,
+            spectrum: [0u8; 16],
+            keys_pressed: [false; 128],
+            octave: 0,
+            velocity: 100,
+            fb_w,
+            fb_h,
         };
 
         
-        er.ugq();
+        ba.load_demo_beat();
 
         
-        er.af[0].qr = Envelope::new(2, 80, 0, 50);    
-        er.af[1].qr = Envelope::new(1, 40, 0, 30);    
-        er.af[2].qr = Envelope::new(1, 20, 0, 15);    
-        er.af[3].qr = Envelope::hvi();                
-        er.af[4].qr = Envelope::new(5, 100, 70, 80);  
-        er.af[5].qr = Envelope::ov();                  
-        er.af[6].qr = Envelope::new(1, 200, 0, 100);  
-        er.af[7].qr = Envelope::new(1, 30, 0, 20);    
+        ba.tracks[0].envelope = Envelope::new(2, 80, 0, 50);    
+        ba.tracks[1].envelope = Envelope::new(1, 40, 0, 30);    
+        ba.tracks[2].envelope = Envelope::new(1, 20, 0, 15);    
+        ba.tracks[3].envelope = Envelope::dwp();                
+        ba.tracks[4].envelope = Envelope::new(5, 100, 70, 80);  
+        ba.tracks[5].envelope = Envelope::pad();                  
+        ba.tracks[6].envelope = Envelope::new(1, 200, 0, 100);  
+        ba.tracks[7].envelope = Envelope::new(1, 30, 0, 20);    
 
-        er
+        ba
     }
 
     
-    fn ugq(&mut self) {
+    fn load_demo_beat(&mut self) {
         
-        for a in [0, 4, 8, 12] {
-            self.af[0].au[a] = BeatStep::ea(127);
+        for i in [0, 4, 8, 12] {
+            self.tracks[0].steps[i] = BeatStep::on(127);
         }
 
         
-        for a in [4, 12] {
-            self.af[1].au[a] = BeatStep::ea(110);
+        for i in [4, 12] {
+            self.tracks[1].steps[i] = BeatStep::on(110);
         }
 
         
-        for a in [0, 2, 4, 6, 8, 10, 12, 14] {
-            self.af[2].au[a] = BeatStep::ea(80);
+        for i in [0, 2, 4, 6, 8, 10, 12, 14] {
+            self.tracks[2].steps[i] = BeatStep::on(80);
         }
         
-        for a in [1, 3, 5, 7, 9, 11, 13, 15] {
-            self.af[2].au[a] = BeatStep::ea(40);
+        for i in [1, 3, 5, 7, 9, 11, 13, 15] {
+            self.tracks[2].steps[i] = BeatStep::on(40);
         }
 
         
-        self.af[3].au[0] = BeatStep::bz(120, 0);   
-        self.af[3].au[3] = BeatStep::bz(100, 0);   
-        self.af[3].au[6] = BeatStep::bz(110, 3);   
-        self.af[3].au[10] = BeatStep::bz(100, 5);  
-        self.af[3].au[13] = BeatStep::bz(90, 3);   
+        self.tracks[3].steps[0] = BeatStep::ah(120, 0);   
+        self.tracks[3].steps[3] = BeatStep::ah(100, 0);   
+        self.tracks[3].steps[6] = BeatStep::ah(110, 3);   
+        self.tracks[3].steps[10] = BeatStep::ah(100, 5);  
+        self.tracks[3].steps[13] = BeatStep::ah(90, 3);   
 
         
-        self.af[4].au[0] = BeatStep::bz(100, 0);   
-        self.af[4].au[2] = BeatStep::bz(90, 3);    
-        self.af[4].au[4] = BeatStep::bz(100, 7);   
-        self.af[4].au[8] = BeatStep::bz(110, 5);   
-        self.af[4].au[11] = BeatStep::bz(90, 3);   
+        self.tracks[4].steps[0] = BeatStep::ah(100, 0);   
+        self.tracks[4].steps[2] = BeatStep::ah(90, 3);    
+        self.tracks[4].steps[4] = BeatStep::ah(100, 7);   
+        self.tracks[4].steps[8] = BeatStep::ah(110, 5);   
+        self.tracks[4].steps[11] = BeatStep::ah(90, 3);   
 
         
-        self.af[5].au[0] = BeatStep::bz(70, 0);    
+        self.tracks[5].steps[0] = BeatStep::ah(70, 0);    
 
         
-        self.af[6].au[6] = BeatStep::ea(60);
-        self.af[6].au[14] = BeatStep::ea(50);
+        self.tracks[6].steps[6] = BeatStep::on(60);
+        self.tracks[6].steps[14] = BeatStep::on(50);
 
         
-        self.af[7].au[1] = BeatStep::ea(80);
-        self.af[7].au[5] = BeatStep::ea(90);
-        self.af[7].au[9] = BeatStep::ea(80);
-        self.af[7].au[13] = BeatStep::ea(70);
+        self.tracks[7].steps[1] = BeatStep::on(80);
+        self.tracks[7].steps[5] = BeatStep::on(90);
+        self.tracks[7].steps[9] = BeatStep::on(80);
+        self.tracks[7].steps[13] = BeatStep::on(70);
     }
 
     
     
-    pub fn ljh(&mut self) {
+    pub fn load_funky_house(&mut self) {
         
-        self.kz = 100;
-        self.ezi = 56; 
+        self.bpm = 100;
+        self.swing = 56; 
 
         
-        for ab in self.af.el() {
-            ab.aml = 32;
-            for e in 0..FL_ {
-                ab.au[e] = BeatStep::dz();
+        for t in self.tracks.iter_mut() {
+            t.num_steps = 32;
+            for j in 0..GA_ {
+                t.steps[j] = BeatStep::off();
             }
         }
 
         
-        self.af[0] = BeatTrack::new("Kick",    36, Waveform::Dg,     colors::S_[0], true);
-        self.af[1] = BeatTrack::new("Clap",    39, Waveform::Cr,    colors::S_[1], true);
-        self.af[2] = BeatTrack::new("HiHat",   42, Waveform::Cr,    colors::S_[2], true);
-        self.af[3] = BeatTrack::new("Sub Bass", 24, Waveform::Dg,    colors::S_[3], false);
-        self.af[4] = BeatTrack::new("Mid Bass", 36, Waveform::Gb,  colors::S_[4], false);
-        self.af[5] = BeatTrack::new("Chords",  60, Waveform::Triangle, colors::S_[5], false);
-        self.af[6] = BeatTrack::new("Lead",    72, Waveform::Ft, colors::S_[6], false);
-        self.af[7] = BeatTrack::new("Perc",    56, Waveform::Cr,    colors::S_[7], true);
+        self.tracks[0] = BeatTrack::new("Kick",    36, Waveform::Sine,     colors::U_[0], true);
+        self.tracks[1] = BeatTrack::new("Clap",    39, Waveform::Noise,    colors::U_[1], true);
+        self.tracks[2] = BeatTrack::new("HiHat",   42, Waveform::Noise,    colors::U_[2], true);
+        self.tracks[3] = BeatTrack::new("Sub Bass", 24, Waveform::Sine,    colors::U_[3], false);
+        self.tracks[4] = BeatTrack::new("Mid Bass", 36, Waveform::Square,  colors::U_[4], false);
+        self.tracks[5] = BeatTrack::new("Chords",  60, Waveform::Triangle, colors::U_[5], false);
+        self.tracks[6] = BeatTrack::new("Lead",    72, Waveform::Sawtooth, colors::U_[6], false);
+        self.tracks[7] = BeatTrack::new("Perc",    56, Waveform::Noise,    colors::U_[7], true);
 
-        for ab in self.af.el() {
-            ab.aml = 32;
+        for t in self.tracks.iter_mut() {
+            t.num_steps = 32;
         }
 
         
-        self.af[0].qr = Envelope::new(2, 200, 0, 80);    
-        self.af[1].qr = Envelope::new(1, 70, 0, 45);     
-        self.af[2].qr = Envelope::new(1, 22, 0, 12);     
-        self.af[3].qr = Envelope::new(8, 400, 85, 250);  
-        self.af[4].qr = Envelope::new(5, 150, 50, 100);  
-        self.af[5].qr = Envelope::ov();                   
-        self.af[6].qr = Envelope::new(10, 200, 70, 180); 
-        self.af[7].qr = Envelope::new(1, 30, 0, 18);     
+        self.tracks[0].envelope = Envelope::new(2, 200, 0, 80);    
+        self.tracks[1].envelope = Envelope::new(1, 70, 0, 45);     
+        self.tracks[2].envelope = Envelope::new(1, 22, 0, 12);     
+        self.tracks[3].envelope = Envelope::new(8, 400, 85, 250);  
+        self.tracks[4].envelope = Envelope::new(5, 150, 50, 100);  
+        self.tracks[5].envelope = Envelope::pad();                   
+        self.tracks[6].envelope = Envelope::new(10, 200, 70, 180); 
+        self.tracks[7].envelope = Envelope::new(1, 30, 0, 18);     
 
         
         
         
-        for a in (0..32).akt(4) {
-            self.af[0].au[a] = BeatStep::ea(127);
+        for i in (0..32).step_by(4) {
+            self.tracks[0].steps[i] = BeatStep::on(127);
         }
-        self.af[0].au[3]  = BeatStep::ea(45);  
-        self.af[0].au[15] = BeatStep::ea(40);  
-        self.af[0].au[27] = BeatStep::ea(45);  
+        self.tracks[0].steps[3]  = BeatStep::on(45);  
+        self.tracks[0].steps[15] = BeatStep::on(40);  
+        self.tracks[0].steps[27] = BeatStep::on(45);  
 
         
         
         
-        self.af[1].au[4]  = BeatStep::ea(120);
-        self.af[1].au[12] = BeatStep::ea(120);
-        self.af[1].au[20] = BeatStep::ea(120);
-        self.af[1].au[28] = BeatStep::ea(120);
-        self.af[1].au[11] = BeatStep::ea(50);  
-        self.af[1].au[27] = BeatStep::ea(55);  
+        self.tracks[1].steps[4]  = BeatStep::on(120);
+        self.tracks[1].steps[12] = BeatStep::on(120);
+        self.tracks[1].steps[20] = BeatStep::on(120);
+        self.tracks[1].steps[28] = BeatStep::on(120);
+        self.tracks[1].steps[11] = BeatStep::on(50);  
+        self.tracks[1].steps[27] = BeatStep::on(55);  
 
         
         
         
-        for a in 0..16 {
-            let bxr = match a % 4 {
+        for i in 0..16 {
+            let anb = match i % 4 {
                 0 => 85,
                 2 => 105,  
                 1 => 35,
                 3 => 50,
                 _ => 45,
             };
-            self.af[2].au[a] = BeatStep::ea(bxr);
+            self.tracks[2].steps[i] = BeatStep::on(anb);
         }
-        for a in 16..32 {
-            let bxr = match a % 4 {
+        for i in 16..32 {
+            let anb = match i % 4 {
                 0 => 80,
                 2 => 110,  
                 1 => 30,
                 3 => 45,
                 _ => 40,
             };
-            self.af[2].au[a] = BeatStep::ea(bxr);
+            self.tracks[2].steps[i] = BeatStep::on(anb);
         }
-        self.af[2].au[23] = BeatStep::dz(); 
-        self.af[2].au[31] = BeatStep::dz();
+        self.tracks[2].steps[23] = BeatStep::off(); 
+        self.tracks[2].steps[31] = BeatStep::off();
 
         
         
@@ -452,102 +452,102 @@ impl BeatStudio {
         
         
         
-        self.af[3].au[0]  = BeatStep::bz(127, 0);   
-        self.af[3].au[6]  = BeatStep::bz(100, 0);   
-        self.af[3].au[8]  = BeatStep::bz(120, 0);   
-        self.af[3].au[14] = BeatStep::bz(100, 0);   
+        self.tracks[3].steps[0]  = BeatStep::ah(127, 0);   
+        self.tracks[3].steps[6]  = BeatStep::ah(100, 0);   
+        self.tracks[3].steps[8]  = BeatStep::ah(120, 0);   
+        self.tracks[3].steps[14] = BeatStep::ah(100, 0);   
         
-        self.af[3].au[16] = BeatStep::bz(127, 8);   
-        self.af[3].au[20] = BeatStep::bz(110, 8);   
-        self.af[3].au[24] = BeatStep::bz(127, 10);  
-        self.af[3].au[28] = BeatStep::bz(110, 10);  
+        self.tracks[3].steps[16] = BeatStep::ah(127, 8);   
+        self.tracks[3].steps[20] = BeatStep::ah(110, 8);   
+        self.tracks[3].steps[24] = BeatStep::ah(127, 10);  
+        self.tracks[3].steps[28] = BeatStep::ah(110, 10);  
 
         
         
         
         
         
-        self.af[4].au[0]  = BeatStep::bz(120, 0);   
-        self.af[4].au[3]  = BeatStep::bz(110, 0);   
-        self.af[4].au[5]  = BeatStep::bz(100, 3);   
-        self.af[4].au[7]  = BeatStep::bz(115, 7);   
-        self.af[4].au[10] = BeatStep::bz(105, 5);   
-        self.af[4].au[13] = BeatStep::bz(95, 3);    
+        self.tracks[4].steps[0]  = BeatStep::ah(120, 0);   
+        self.tracks[4].steps[3]  = BeatStep::ah(110, 0);   
+        self.tracks[4].steps[5]  = BeatStep::ah(100, 3);   
+        self.tracks[4].steps[7]  = BeatStep::ah(115, 7);   
+        self.tracks[4].steps[10] = BeatStep::ah(105, 5);   
+        self.tracks[4].steps[13] = BeatStep::ah(95, 3);    
         
-        self.af[4].au[16] = BeatStep::bz(120, 8);   
-        self.af[4].au[19] = BeatStep::bz(110, 7);   
-        self.af[4].au[21] = BeatStep::bz(100, 5);   
-        self.af[4].au[24] = BeatStep::bz(120, 10);  
-        self.af[4].au[26] = BeatStep::bz(105, 7);   
-        self.af[4].au[29] = BeatStep::bz(100, 5);   
-        self.af[4].au[31] = BeatStep::bz(90, 3);    
+        self.tracks[4].steps[16] = BeatStep::ah(120, 8);   
+        self.tracks[4].steps[19] = BeatStep::ah(110, 7);   
+        self.tracks[4].steps[21] = BeatStep::ah(100, 5);   
+        self.tracks[4].steps[24] = BeatStep::ah(120, 10);  
+        self.tracks[4].steps[26] = BeatStep::ah(105, 7);   
+        self.tracks[4].steps[29] = BeatStep::ah(100, 5);   
+        self.tracks[4].steps[31] = BeatStep::ah(90, 3);    
 
         
         
         
         
-        self.af[5].au[0]  = BeatStep::bz(80, 0);    
-        self.af[5].au[4]  = BeatStep::bz(70, 3);    
-        self.af[5].au[8]  = BeatStep::bz(75, 7);    
-        self.af[5].au[12] = BeatStep::bz(70, 3);    
+        self.tracks[5].steps[0]  = BeatStep::ah(80, 0);    
+        self.tracks[5].steps[4]  = BeatStep::ah(70, 3);    
+        self.tracks[5].steps[8]  = BeatStep::ah(75, 7);    
+        self.tracks[5].steps[12] = BeatStep::ah(70, 3);    
         
-        self.af[5].au[16] = BeatStep::bz(80, 8);    
-        self.af[5].au[20] = BeatStep::bz(75, 7);    
-        self.af[5].au[24] = BeatStep::bz(80, 10);   
-        self.af[5].au[28] = BeatStep::bz(75, 7);    
+        self.tracks[5].steps[16] = BeatStep::ah(80, 8);    
+        self.tracks[5].steps[20] = BeatStep::ah(75, 7);    
+        self.tracks[5].steps[24] = BeatStep::ah(80, 10);   
+        self.tracks[5].steps[28] = BeatStep::ah(75, 7);    
 
         
         
         
         
         
-        self.af[6].au[0]  = BeatStep::bz(100, 7);   
-        self.af[6].au[2]  = BeatStep::bz(105, 10);  
-        self.af[6].au[3]  = BeatStep::bz(115, 12);  
-        self.af[6].au[5]  = BeatStep::bz(100, 10);  
-        self.af[6].au[7]  = BeatStep::bz(90, 7);    
-        self.af[6].au[8]  = BeatStep::bz(105, 5);   
-        self.af[6].au[10] = BeatStep::bz(100, 3);   
-        self.af[6].au[12] = BeatStep::bz(110, 5);   
-        self.af[6].au[14] = BeatStep::bz(105, 7);   
+        self.tracks[6].steps[0]  = BeatStep::ah(100, 7);   
+        self.tracks[6].steps[2]  = BeatStep::ah(105, 10);  
+        self.tracks[6].steps[3]  = BeatStep::ah(115, 12);  
+        self.tracks[6].steps[5]  = BeatStep::ah(100, 10);  
+        self.tracks[6].steps[7]  = BeatStep::ah(90, 7);    
+        self.tracks[6].steps[8]  = BeatStep::ah(105, 5);   
+        self.tracks[6].steps[10] = BeatStep::ah(100, 3);   
+        self.tracks[6].steps[12] = BeatStep::ah(110, 5);   
+        self.tracks[6].steps[14] = BeatStep::ah(105, 7);   
         
-        self.af[6].au[16] = BeatStep::bz(115, 12);  
-        self.af[6].au[17] = BeatStep::bz(100, 10);  
-        self.af[6].au[19] = BeatStep::bz(110, 12);  
-        self.af[6].au[20] = BeatStep::bz(120, 15);  
-        self.af[6].au[22] = BeatStep::bz(105, 12);  
-        self.af[6].au[24] = BeatStep::bz(100, 10);  
-        self.af[6].au[25] = BeatStep::bz(95, 7);    
-        self.af[6].au[27] = BeatStep::bz(90, 5);    
-        self.af[6].au[29] = BeatStep::bz(85, 3);    
-        self.af[6].au[31] = BeatStep::bz(80, 0);    
+        self.tracks[6].steps[16] = BeatStep::ah(115, 12);  
+        self.tracks[6].steps[17] = BeatStep::ah(100, 10);  
+        self.tracks[6].steps[19] = BeatStep::ah(110, 12);  
+        self.tracks[6].steps[20] = BeatStep::ah(120, 15);  
+        self.tracks[6].steps[22] = BeatStep::ah(105, 12);  
+        self.tracks[6].steps[24] = BeatStep::ah(100, 10);  
+        self.tracks[6].steps[25] = BeatStep::ah(95, 7);    
+        self.tracks[6].steps[27] = BeatStep::ah(90, 5);    
+        self.tracks[6].steps[29] = BeatStep::ah(85, 3);    
+        self.tracks[6].steps[31] = BeatStep::ah(80, 0);    
 
         
         
         
-        for a in (1..32).akt(2) {
-            self.af[7].au[a] = BeatStep::ea(55);
+        for i in (1..32).step_by(2) {
+            self.tracks[7].steps[i] = BeatStep::on(55);
         }
-        for a in (2..32).akt(4) {
-            self.af[7].au[a] = BeatStep::ea(90);
+        for i in (2..32).step_by(4) {
+            self.tracks[7].steps[i] = BeatStep::on(90);
         }
         
-        self.af[7].au[26] = BeatStep::ea(90);
-        self.af[7].au[27] = BeatStep::ea(100);
-        self.af[7].au[28] = BeatStep::ea(105);
-        self.af[7].au[29] = BeatStep::ea(110);
-        self.af[7].au[30] = BeatStep::ea(120);
-        self.af[7].au[31] = BeatStep::ea(127); 
+        self.tracks[7].steps[26] = BeatStep::on(90);
+        self.tracks[7].steps[27] = BeatStep::on(100);
+        self.tracks[7].steps[28] = BeatStep::on(105);
+        self.tracks[7].steps[29] = BeatStep::on(110);
+        self.tracks[7].steps[30] = BeatStep::on(120);
+        self.tracks[7].steps[31] = BeatStep::on(127); 
 
         
-        self.af[0].hq = 230; 
-        self.af[1].hq = 185; 
-        self.af[2].hq = 140; 
-        self.af[3].hq = 255; 
-        self.af[4].hq = 200; 
-        self.af[5].hq = 110; 
-        self.af[6].hq = 175; 
-        self.af[7].hq = 120; 
+        self.tracks[0].volume = 230; 
+        self.tracks[1].volume = 185; 
+        self.tracks[2].volume = 140; 
+        self.tracks[3].volume = 255; 
+        self.tracks[4].volume = 200; 
+        self.tracks[5].volume = 110; 
+        self.tracks[6].volume = 175; 
+        self.tracks[7].volume = 120; 
     }
 
     
@@ -557,1034 +557,355 @@ impl BeatStudio {
     
 
     
-    fn gyu(&mut self) {
-        self.kz = 106;
-        self.ezi = 50; 
+    fn anthem_init(&mut self) {
+        self.bpm = 106;
+        self.swing = 50; 
 
-        self.af[0] = BeatTrack::new("Kick",  36, Waveform::Dg,     colors::S_[0], true);
-        self.af[1] = BeatTrack::new("Snare", 38, Waveform::Cr,    colors::S_[1], true);
-        self.af[2] = BeatTrack::new("HiHat", 42, Waveform::Cr,    colors::S_[2], true);
-        self.af[3] = BeatTrack::new("Sub",   24, Waveform::Dg,     colors::S_[3], false);
-        self.af[4] = BeatTrack::new("Bass",  36, Waveform::Gb,   colors::S_[4], false);
-        self.af[5] = BeatTrack::new("Pad",   60, Waveform::Triangle, colors::S_[5], false);
-        self.af[6] = BeatTrack::new("Lead",  72, Waveform::Ft, colors::S_[6], false);
-        self.af[7] = BeatTrack::new("Arp",   72, Waveform::Triangle, colors::S_[7], false);
+        self.tracks[0] = BeatTrack::new("Kick",  36, Waveform::Sine,     colors::U_[0], true);
+        self.tracks[1] = BeatTrack::new("Snare", 38, Waveform::Noise,    colors::U_[1], true);
+        self.tracks[2] = BeatTrack::new("HiHat", 42, Waveform::Noise,    colors::U_[2], true);
+        self.tracks[3] = BeatTrack::new("Sub",   24, Waveform::Sine,     colors::U_[3], false);
+        self.tracks[4] = BeatTrack::new("Bass",  36, Waveform::Square,   colors::U_[4], false);
+        self.tracks[5] = BeatTrack::new("Pad",   60, Waveform::Triangle, colors::U_[5], false);
+        self.tracks[6] = BeatTrack::new("Lead",  72, Waveform::Sawtooth, colors::U_[6], false);
+        self.tracks[7] = BeatTrack::new("Arp",   72, Waveform::Triangle, colors::U_[7], false);
 
-        for ab in self.af.el() {
-            ab.aml = 32;
-            for e in 0..FL_ { ab.au[e] = BeatStep::dz(); }
-        }
-
-        
-        self.af[0].qr = Envelope::new(2, 200, 0, 80);
-        self.af[1].qr = Envelope::new(1, 65, 0, 40);
-        self.af[2].qr = Envelope::new(1, 18, 0, 8);
-        self.af[3].qr = Envelope::new(15, 600, 90, 350);
-        self.af[4].qr = Envelope::new(5, 200, 45, 130);
-        self.af[5].qr = Envelope::ov();
-        self.af[6].qr = Envelope::new(10, 280, 75, 220);
-        self.af[7].qr = Envelope::new(3, 100, 25, 70);
-
-        self.af[0].hq = 200;
-        self.af[1].hq = 175;
-        self.af[2].hq = 130;
-        self.af[3].hq = 240;
-        self.af[4].hq = 190;
-        self.af[5].hq = 100;
-        self.af[6].hq = 180;
-        self.af[7].hq = 140;
-    }
-
-    
-    fn qiz(&mut self) {
-        self.gyu();
-        
-        self.af[0].so = true;  
-        self.af[1].so = true;  
-        self.af[2].so = true;  
-        self.af[4].so = true;  
-        self.af[6].so = true;  
-
-        
-        self.af[3].hq = 180;
-        self.af[3].au[0]  = BeatStep::bz(70, 0);   
-        self.af[3].au[16] = BeatStep::bz(50, 0);   
-
-        
-        self.af[5].hq = 75;
-        self.af[5].au[0]  = BeatStep::bz(45, 0);   
-        self.af[5].au[8]  = BeatStep::bz(40, 3);   
-        self.af[5].au[16] = BeatStep::bz(45, 7);   
-        self.af[5].au[24] = BeatStep::bz(40, 3);   
-
-        
-        self.af[7] = BeatTrack::new("Texture", 72, Waveform::Cr, colors::S_[7], true);
-        self.af[7].aml = 32;
-        self.af[7].qr = Envelope::new(1, 15, 0, 5);
-        self.af[7].hq = 50;
-        self.af[7].au[4]  = BeatStep::ea(25);
-        self.af[7].au[5]  = BeatStep::ea(20);  
-        self.af[7].au[11] = BeatStep::ea(30);
-        self.af[7].au[18] = BeatStep::ea(18);
-        self.af[7].au[19] = BeatStep::ea(25);
-        self.af[7].au[26] = BeatStep::ea(28);
-    }
-
-    
-    fn qix(&mut self) {
-        self.gyu();
-        self.af[1].so = true;  
-        self.af[6].so = true;  
-
-        
-        self.af[0].hq = 160;
-        for a in (0..32).akt(8) {
-            self.af[0].au[a] = BeatStep::ea(80);
+        for t in self.tracks.iter_mut() {
+            t.num_steps = 32;
+            for j in 0..GA_ { t.steps[j] = BeatStep::off(); }
         }
 
         
-        self.af[2].hq = 90;
-        for a in (0..32).akt(4) {
-            self.af[2].au[a] = BeatStep::ea(30);
-        }
-        for a in (2..32).akt(4) {
-            self.af[2].au[a] = BeatStep::ea(55);
-        }
+        self.tracks[0].envelope = Envelope::new(2, 200, 0, 80);
+        self.tracks[1].envelope = Envelope::new(1, 65, 0, 40);
+        self.tracks[2].envelope = Envelope::new(1, 18, 0, 8);
+        self.tracks[3].envelope = Envelope::new(15, 600, 90, 350);
+        self.tracks[4].envelope = Envelope::new(5, 200, 45, 130);
+        self.tracks[5].envelope = Envelope::pad();
+        self.tracks[6].envelope = Envelope::new(10, 280, 75, 220);
+        self.tracks[7].envelope = Envelope::new(3, 100, 25, 70);
 
-        
-        self.af[3].hq = 220;
-        self.af[3].au[0]  = BeatStep::bz(100, 0);  
-        self.af[3].au[8]  = BeatStep::bz(90, 0);   
-        self.af[3].au[16] = BeatStep::bz(100, 8);  
-        self.af[3].au[24] = BeatStep::bz(95, 10);  
-
-        
-        self.af[4].hq = 150;
-        self.af[4].au[0]  = BeatStep::bz(90, 0);   
-        self.af[4].au[4]  = BeatStep::bz(75, 0);   
-        self.af[4].au[8]  = BeatStep::bz(85, 3);   
-        self.af[4].au[12] = BeatStep::bz(80, 7);   
-        self.af[4].au[16] = BeatStep::bz(90, 8);   
-        self.af[4].au[20] = BeatStep::bz(80, 7);   
-        self.af[4].au[24] = BeatStep::bz(95, 10);  
-        self.af[4].au[28] = BeatStep::bz(85, 7);   
-
-        
-        self.af[5].hq = 90;
-        self.af[5].au[0]  = BeatStep::bz(55, 0);   
-        self.af[5].au[4]  = BeatStep::bz(50, 3);   
-        self.af[5].au[8]  = BeatStep::bz(55, 7);   
-        self.af[5].au[12] = BeatStep::bz(50, 3);   
-        self.af[5].au[16] = BeatStep::bz(55, 8);   
-        self.af[5].au[20] = BeatStep::bz(50, 7);   
-        self.af[5].au[24] = BeatStep::bz(55, 10);  
-        self.af[5].au[28] = BeatStep::bz(50, 7);   
-
-        
-        self.af[7].hq = 120;
-        
-        self.af[7].au[0]  = BeatStep::bz(80, 0);   
-        self.af[7].au[2]  = BeatStep::bz(85, 3);   
-        self.af[7].au[4]  = BeatStep::bz(90, 7);   
-        self.af[7].au[6]  = BeatStep::bz(95, 12);  
-        self.af[7].au[8]  = BeatStep::bz(80, 0);   
-        self.af[7].au[10] = BeatStep::bz(85, 3);   
-        self.af[7].au[12] = BeatStep::bz(90, 7);   
-        self.af[7].au[14] = BeatStep::bz(100, 12); 
-        
-        self.af[7].au[16] = BeatStep::bz(80, 8);   
-        self.af[7].au[18] = BeatStep::bz(85, 0);   
-        self.af[7].au[20] = BeatStep::bz(90, 3);   
-        self.af[7].au[22] = BeatStep::bz(85, 8);   
-        self.af[7].au[24] = BeatStep::bz(85, 10);  
-        self.af[7].au[26] = BeatStep::bz(90, 2);   
-        self.af[7].au[28] = BeatStep::bz(95, 5);   
-        self.af[7].au[30] = BeatStep::bz(100, 10); 
+        self.tracks[0].volume = 200;
+        self.tracks[1].volume = 175;
+        self.tracks[2].volume = 130;
+        self.tracks[3].volume = 240;
+        self.tracks[4].volume = 190;
+        self.tracks[5].volume = 100;
+        self.tracks[6].volume = 180;
+        self.tracks[7].volume = 140;
     }
 
     
-    fn qiy(&mut self) {
-        self.gyu();
+    fn anthem_intro(&mut self) {
+        self.anthem_init();
         
+        self.tracks[0].muted = true;  
+        self.tracks[1].muted = true;  
+        self.tracks[2].muted = true;  
+        self.tracks[4].muted = true;  
+        self.tracks[6].muted = true;  
 
         
-        self.af[0].hq = 225;
-        for a in (0..32).akt(4) {
-            self.af[0].au[a] = BeatStep::ea(120);
-        }
-        self.af[0].au[3]  = BeatStep::ea(40);
-        self.af[0].au[15] = BeatStep::ea(35);
-        self.af[0].au[19] = BeatStep::ea(40);
-        self.af[0].au[27] = BeatStep::ea(35);
+        self.tracks[3].volume = 180;
+        self.tracks[3].steps[0]  = BeatStep::ah(70, 0);   
+        self.tracks[3].steps[16] = BeatStep::ah(50, 0);   
 
         
-        self.af[1].hq = 180;
-        self.af[1].au[4]  = BeatStep::ea(115);
-        self.af[1].au[12] = BeatStep::ea(115);
-        self.af[1].au[20] = BeatStep::ea(115);
-        self.af[1].au[28] = BeatStep::ea(115);
-        self.af[1].au[11] = BeatStep::ea(45); 
+        self.tracks[5].volume = 75;
+        self.tracks[5].steps[0]  = BeatStep::ah(45, 0);   
+        self.tracks[5].steps[8]  = BeatStep::ah(40, 3);   
+        self.tracks[5].steps[16] = BeatStep::ah(45, 7);   
+        self.tracks[5].steps[24] = BeatStep::ah(40, 3);   
 
         
-        self.af[2].hq = 140;
-        for a in 0..32 {
-            let bxr = match a % 4 { 0 => 80, 2 => 100, 1 => 35, _ => 50 };
-            self.af[2].au[a] = BeatStep::ea(bxr);
-        }
-        self.af[2].au[15] = BeatStep::dz();
-        self.af[2].au[31] = BeatStep::dz();
-
-        
-        self.af[3].hq = 250;
-        self.af[3].au[0]  = BeatStep::bz(127, 0);
-        self.af[3].au[6]  = BeatStep::bz(100, 0);
-        self.af[3].au[8]  = BeatStep::bz(120, 0);
-        self.af[3].au[14] = BeatStep::bz(95, 0);
-        self.af[3].au[16] = BeatStep::bz(127, 8);  
-        self.af[3].au[20] = BeatStep::bz(105, 8);
-        self.af[3].au[24] = BeatStep::bz(127, 10); 
-        self.af[3].au[28] = BeatStep::bz(105, 10);
-
-        
-        self.af[4].hq = 200;
-        self.af[4].au[0]  = BeatStep::bz(115, 0);  
-        self.af[4].au[3]  = BeatStep::bz(105, 0);  
-        self.af[4].au[5]  = BeatStep::bz(95, 3);   
-        self.af[4].au[7]  = BeatStep::bz(110, 7);  
-        self.af[4].au[10] = BeatStep::bz(100, 5);  
-        self.af[4].au[13] = BeatStep::bz(90, 3);   
-        self.af[4].au[16] = BeatStep::bz(115, 8);  
-        self.af[4].au[19] = BeatStep::bz(105, 7);  
-        self.af[4].au[21] = BeatStep::bz(95, 5);   
-        self.af[4].au[24] = BeatStep::bz(115, 10); 
-        self.af[4].au[26] = BeatStep::bz(100, 7);  
-        self.af[4].au[29] = BeatStep::bz(95, 5);   
-        self.af[4].au[31] = BeatStep::bz(85, 3);   
-
-        
-        self.af[5].hq = 110;
-        self.af[5].au[0]  = BeatStep::bz(70, 0);   
-        self.af[5].au[4]  = BeatStep::bz(65, 3);   
-        self.af[5].au[8]  = BeatStep::bz(70, 7);   
-        self.af[5].au[12] = BeatStep::bz(65, 3);   
-        self.af[5].au[16] = BeatStep::bz(70, 8);   
-        self.af[5].au[20] = BeatStep::bz(65, 7);   
-        self.af[5].au[24] = BeatStep::bz(70, 10);  
-        self.af[5].au[28] = BeatStep::bz(65, 7);   
-
-        
-        self.af[6].hq = 190;
-        
-        self.af[6].au[0]  = BeatStep::bz(100, 7);  
-        self.af[6].au[3]  = BeatStep::bz(110, 10); 
-        self.af[6].au[6]  = BeatStep::bz(120, 12); 
-        self.af[6].au[10] = BeatStep::bz(105, 10); 
-        self.af[6].au[12] = BeatStep::bz(100, 8);  
-        self.af[6].au[14] = BeatStep::bz(95, 7);   
-        
-        self.af[6].au[16] = BeatStep::bz(105, 3);  
-        self.af[6].au[18] = BeatStep::bz(110, 7);  
-        self.af[6].au[20] = BeatStep::bz(120, 12); 
-        self.af[6].au[22] = BeatStep::bz(127, 15); 
-        self.af[6].au[24] = BeatStep::bz(110, 12); 
-        self.af[6].au[26] = BeatStep::bz(100, 10); 
-        self.af[6].au[28] = BeatStep::bz(90, 7);   
-        self.af[6].au[30] = BeatStep::bz(85, 0);   
-
-        
-        self.af[7].hq = 130;
-        self.af[7].au[1]  = BeatStep::bz(70, 12);  
-        self.af[7].au[5]  = BeatStep::bz(65, 7);   
-        self.af[7].au[9]  = BeatStep::bz(70, 12);  
-        self.af[7].au[13] = BeatStep::bz(65, 3);   
-        self.af[7].au[17] = BeatStep::bz(70, 8);   
-        self.af[7].au[21] = BeatStep::bz(75, 12);  
-        self.af[7].au[25] = BeatStep::bz(70, 10);  
-        self.af[7].au[29] = BeatStep::bz(65, 7);   
+        self.tracks[7] = BeatTrack::new("Texture", 72, Waveform::Noise, colors::U_[7], true);
+        self.tracks[7].num_steps = 32;
+        self.tracks[7].envelope = Envelope::new(1, 15, 0, 5);
+        self.tracks[7].volume = 50;
+        self.tracks[7].steps[4]  = BeatStep::on(25);
+        self.tracks[7].steps[5]  = BeatStep::on(20);  
+        self.tracks[7].steps[11] = BeatStep::on(30);
+        self.tracks[7].steps[18] = BeatStep::on(18);
+        self.tracks[7].steps[19] = BeatStep::on(25);
+        self.tracks[7].steps[26] = BeatStep::on(28);
     }
 
     
-    fn qjb(&mut self) {
-        self.gyu();
+    fn anthem_build(&mut self) {
+        self.anthem_init();
+        self.tracks[1].muted = true;  
+        self.tracks[6].muted = true;  
 
         
-        self.af[0].hq = 210;
-        for a in (0..32).akt(8) {
-            self.af[0].au[a] = BeatStep::ea(110);
+        self.tracks[0].volume = 160;
+        for i in (0..32).step_by(8) {
+            self.tracks[0].steps[i] = BeatStep::on(80);
         }
 
         
-        self.af[1].hq = 165;
-        self.af[1].au[4]  = BeatStep::ea(105);
-        self.af[1].au[12] = BeatStep::ea(105);
-        self.af[1].au[20] = BeatStep::ea(105);
-        self.af[1].au[28] = BeatStep::ea(105);
-
-        
-        self.af[2].hq = 100;
-        for a in (2..32).akt(4) {
-            self.af[2].au[a] = BeatStep::ea(60);
+        self.tracks[2].volume = 90;
+        for i in (0..32).step_by(4) {
+            self.tracks[2].steps[i] = BeatStep::on(30);
+        }
+        for i in (2..32).step_by(4) {
+            self.tracks[2].steps[i] = BeatStep::on(55);
         }
 
         
-        self.af[3].hq = 230;
-        self.af[3].au[0]  = BeatStep::bz(110, 0);  
-        self.af[3].au[8]  = BeatStep::bz(100, 0);
-        self.af[3].au[16] = BeatStep::bz(110, 8);  
-        self.af[3].au[24] = BeatStep::bz(105, 10); 
+        self.tracks[3].volume = 220;
+        self.tracks[3].steps[0]  = BeatStep::ah(100, 0);  
+        self.tracks[3].steps[8]  = BeatStep::ah(90, 0);   
+        self.tracks[3].steps[16] = BeatStep::ah(100, 8);  
+        self.tracks[3].steps[24] = BeatStep::ah(95, 10);  
 
         
-        self.af[4].hq = 180;
-        self.af[4].au[0]  = BeatStep::bz(100, 0);  
-        self.af[4].au[4]  = BeatStep::bz(85, 7);   
-        self.af[4].au[8]  = BeatStep::bz(95, 4);   
-        self.af[4].au[12] = BeatStep::bz(85, 0);   
-        self.af[4].au[16] = BeatStep::bz(100, 8);  
-        self.af[4].au[20] = BeatStep::bz(85, 7);   
-        self.af[4].au[24] = BeatStep::bz(100, 10); 
-        self.af[4].au[28] = BeatStep::bz(90, 5);   
+        self.tracks[4].volume = 150;
+        self.tracks[4].steps[0]  = BeatStep::ah(90, 0);   
+        self.tracks[4].steps[4]  = BeatStep::ah(75, 0);   
+        self.tracks[4].steps[8]  = BeatStep::ah(85, 3);   
+        self.tracks[4].steps[12] = BeatStep::ah(80, 7);   
+        self.tracks[4].steps[16] = BeatStep::ah(90, 8);   
+        self.tracks[4].steps[20] = BeatStep::ah(80, 7);   
+        self.tracks[4].steps[24] = BeatStep::ah(95, 10);  
+        self.tracks[4].steps[28] = BeatStep::ah(85, 7);   
 
         
-        self.af[5].hq = 105;
-        self.af[5].au[0]  = BeatStep::bz(60, 0);   
-        self.af[5].au[8]  = BeatStep::bz(55, 4);   
-        self.af[5].au[16] = BeatStep::bz(60, 7);   
-        self.af[5].au[24] = BeatStep::bz(55, 12);  
+        self.tracks[5].volume = 90;
+        self.tracks[5].steps[0]  = BeatStep::ah(55, 0);   
+        self.tracks[5].steps[4]  = BeatStep::ah(50, 3);   
+        self.tracks[5].steps[8]  = BeatStep::ah(55, 7);   
+        self.tracks[5].steps[12] = BeatStep::ah(50, 3);   
+        self.tracks[5].steps[16] = BeatStep::ah(55, 8);   
+        self.tracks[5].steps[20] = BeatStep::ah(50, 7);   
+        self.tracks[5].steps[24] = BeatStep::ah(55, 10);  
+        self.tracks[5].steps[28] = BeatStep::ah(50, 7);   
 
         
+        self.tracks[7].volume = 120;
         
-        self.af[6].hq = 200;
+        self.tracks[7].steps[0]  = BeatStep::ah(80, 0);   
+        self.tracks[7].steps[2]  = BeatStep::ah(85, 3);   
+        self.tracks[7].steps[4]  = BeatStep::ah(90, 7);   
+        self.tracks[7].steps[6]  = BeatStep::ah(95, 12);  
+        self.tracks[7].steps[8]  = BeatStep::ah(80, 0);   
+        self.tracks[7].steps[10] = BeatStep::ah(85, 3);   
+        self.tracks[7].steps[12] = BeatStep::ah(90, 7);   
+        self.tracks[7].steps[14] = BeatStep::ah(100, 12); 
         
-        self.af[6].au[0]  = BeatStep::bz(110, 0);  
-        self.af[6].au[4]  = BeatStep::bz(115, 4);  
-        self.af[6].au[8]  = BeatStep::bz(120, 7);  
-        self.af[6].au[12] = BeatStep::bz(127, 12); 
-        
-        self.af[6].au[16] = BeatStep::bz(120, 12); 
-        self.af[6].au[20] = BeatStep::bz(115, 7);  
-        self.af[6].au[24] = BeatStep::bz(110, 4);  
-        self.af[6].au[28] = BeatStep::bz(105, 0);  
-
-        
-        self.af[7].hq = 115;
-        self.af[7].au[2]  = BeatStep::bz(75, 12);  
-        self.af[7].au[6]  = BeatStep::bz(70, 16);  
-        self.af[7].au[10] = BeatStep::bz(75, 19);  
-        self.af[7].au[14] = BeatStep::bz(80, 12);  
-        self.af[7].au[18] = BeatStep::bz(70, 19);  
-        self.af[7].au[22] = BeatStep::bz(75, 16);  
-        self.af[7].au[26] = BeatStep::bz(70, 12);  
-        self.af[7].au[30] = BeatStep::bz(65, 7);   
+        self.tracks[7].steps[16] = BeatStep::ah(80, 8);   
+        self.tracks[7].steps[18] = BeatStep::ah(85, 0);   
+        self.tracks[7].steps[20] = BeatStep::ah(90, 3);   
+        self.tracks[7].steps[22] = BeatStep::ah(85, 8);   
+        self.tracks[7].steps[24] = BeatStep::ah(85, 10);  
+        self.tracks[7].steps[26] = BeatStep::ah(90, 2);   
+        self.tracks[7].steps[28] = BeatStep::ah(95, 5);   
+        self.tracks[7].steps[30] = BeatStep::ah(100, 10); 
     }
 
     
-    fn qja(&mut self) {
-        self.gyu();
+    fn anthem_drop(&mut self) {
+        self.anthem_init();
         
-        self.af[0].so = true;  
-        self.af[1].so = true;  
-        self.af[2].so = true;  
-        self.af[4].so = true;  
-        self.af[7].so = true;  
 
         
-        self.af[3].hq = 150;
-        self.af[3].au[0]  = BeatStep::bz(60, 0);   
-        self.af[3].au[16] = BeatStep::bz(40, 0);   
+        self.tracks[0].volume = 225;
+        for i in (0..32).step_by(4) {
+            self.tracks[0].steps[i] = BeatStep::on(120);
+        }
+        self.tracks[0].steps[3]  = BeatStep::on(40);
+        self.tracks[0].steps[15] = BeatStep::on(35);
+        self.tracks[0].steps[19] = BeatStep::on(40);
+        self.tracks[0].steps[27] = BeatStep::on(35);
 
         
-        self.af[5].hq = 80;
-        self.af[5].au[0]  = BeatStep::bz(40, 0);   
-        self.af[5].au[8]  = BeatStep::bz(35, 7);   
-        self.af[5].au[16] = BeatStep::bz(40, 12);  
-        self.af[5].au[24] = BeatStep::bz(35, 7);   
+        self.tracks[1].volume = 180;
+        self.tracks[1].steps[4]  = BeatStep::on(115);
+        self.tracks[1].steps[12] = BeatStep::on(115);
+        self.tracks[1].steps[20] = BeatStep::on(115);
+        self.tracks[1].steps[28] = BeatStep::on(115);
+        self.tracks[1].steps[11] = BeatStep::on(45); 
 
         
-        self.af[6].hq = 140;
-        self.af[6].au[0]  = BeatStep::bz(80, 0);   
-        self.af[6].au[4]  = BeatStep::bz(75, 4);   
-        self.af[6].au[8]  = BeatStep::bz(80, 7);   
-        self.af[6].au[12] = BeatStep::bz(85, 12);  
+        self.tracks[2].volume = 140;
+        for i in 0..32 {
+            let anb = match i % 4 { 0 => 80, 2 => 100, 1 => 35, _ => 50 };
+            self.tracks[2].steps[i] = BeatStep::on(anb);
+        }
+        self.tracks[2].steps[15] = BeatStep::off();
+        self.tracks[2].steps[31] = BeatStep::off();
+
         
+        self.tracks[3].volume = 250;
+        self.tracks[3].steps[0]  = BeatStep::ah(127, 0);
+        self.tracks[3].steps[6]  = BeatStep::ah(100, 0);
+        self.tracks[3].steps[8]  = BeatStep::ah(120, 0);
+        self.tracks[3].steps[14] = BeatStep::ah(95, 0);
+        self.tracks[3].steps[16] = BeatStep::ah(127, 8);  
+        self.tracks[3].steps[20] = BeatStep::ah(105, 8);
+        self.tracks[3].steps[24] = BeatStep::ah(127, 10); 
+        self.tracks[3].steps[28] = BeatStep::ah(105, 10);
+
+        
+        self.tracks[4].volume = 200;
+        self.tracks[4].steps[0]  = BeatStep::ah(115, 0);  
+        self.tracks[4].steps[3]  = BeatStep::ah(105, 0);  
+        self.tracks[4].steps[5]  = BeatStep::ah(95, 3);   
+        self.tracks[4].steps[7]  = BeatStep::ah(110, 7);  
+        self.tracks[4].steps[10] = BeatStep::ah(100, 5);  
+        self.tracks[4].steps[13] = BeatStep::ah(90, 3);   
+        self.tracks[4].steps[16] = BeatStep::ah(115, 8);  
+        self.tracks[4].steps[19] = BeatStep::ah(105, 7);  
+        self.tracks[4].steps[21] = BeatStep::ah(95, 5);   
+        self.tracks[4].steps[24] = BeatStep::ah(115, 10); 
+        self.tracks[4].steps[26] = BeatStep::ah(100, 7);  
+        self.tracks[4].steps[29] = BeatStep::ah(95, 5);   
+        self.tracks[4].steps[31] = BeatStep::ah(85, 3);   
+
+        
+        self.tracks[5].volume = 110;
+        self.tracks[5].steps[0]  = BeatStep::ah(70, 0);   
+        self.tracks[5].steps[4]  = BeatStep::ah(65, 3);   
+        self.tracks[5].steps[8]  = BeatStep::ah(70, 7);   
+        self.tracks[5].steps[12] = BeatStep::ah(65, 3);   
+        self.tracks[5].steps[16] = BeatStep::ah(70, 8);   
+        self.tracks[5].steps[20] = BeatStep::ah(65, 7);   
+        self.tracks[5].steps[24] = BeatStep::ah(70, 10);  
+        self.tracks[5].steps[28] = BeatStep::ah(65, 7);   
+
+        
+        self.tracks[6].volume = 190;
+        
+        self.tracks[6].steps[0]  = BeatStep::ah(100, 7);  
+        self.tracks[6].steps[3]  = BeatStep::ah(110, 10); 
+        self.tracks[6].steps[6]  = BeatStep::ah(120, 12); 
+        self.tracks[6].steps[10] = BeatStep::ah(105, 10); 
+        self.tracks[6].steps[12] = BeatStep::ah(100, 8);  
+        self.tracks[6].steps[14] = BeatStep::ah(95, 7);   
+        
+        self.tracks[6].steps[16] = BeatStep::ah(105, 3);  
+        self.tracks[6].steps[18] = BeatStep::ah(110, 7);  
+        self.tracks[6].steps[20] = BeatStep::ah(120, 12); 
+        self.tracks[6].steps[22] = BeatStep::ah(127, 15); 
+        self.tracks[6].steps[24] = BeatStep::ah(110, 12); 
+        self.tracks[6].steps[26] = BeatStep::ah(100, 10); 
+        self.tracks[6].steps[28] = BeatStep::ah(90, 7);   
+        self.tracks[6].steps[30] = BeatStep::ah(85, 0);   
+
+        
+        self.tracks[7].volume = 130;
+        self.tracks[7].steps[1]  = BeatStep::ah(70, 12);  
+        self.tracks[7].steps[5]  = BeatStep::ah(65, 7);   
+        self.tracks[7].steps[9]  = BeatStep::ah(70, 12);  
+        self.tracks[7].steps[13] = BeatStep::ah(65, 3);   
+        self.tracks[7].steps[17] = BeatStep::ah(70, 8);   
+        self.tracks[7].steps[21] = BeatStep::ah(75, 12);  
+        self.tracks[7].steps[25] = BeatStep::ah(70, 10);  
+        self.tracks[7].steps[29] = BeatStep::ah(65, 7);   
     }
 
     
-    
-    
-    
-    
-    
-    
-    
-    
-    
-
-    
-    
-    fn fxi(&mut self) {
-        self.kz = 100;   
-        self.ezi = 50;
+    fn anthem_stable(&mut self) {
+        self.anthem_init();
 
         
-        
-        self.af[0] = BeatTrack::new("Sub",     27, Waveform::Dg,     colors::S_[0], false);  
-        self.af[1] = BeatTrack::new("Snare",   38, Waveform::Cr,    colors::S_[1], true);
-        self.af[2] = BeatTrack::new("HiHat",   56, Waveform::Cr,    colors::S_[2], true);
-        self.af[3] = BeatTrack::new("OpenHat", 53, Waveform::Cr,    colors::S_[3], true);
-        self.af[4] = BeatTrack::new("Synth",   63, Waveform::Gb,   colors::S_[4], false);  
-        self.af[5] = BeatTrack::new("Pad",     51, Waveform::Ft, colors::S_[5], false);  
-        self.af[6] = BeatTrack::new("Lead",    75, Waveform::Ft, colors::S_[6], false);  
-        self.af[7] = BeatTrack::new("Perc",    63, Waveform::Cr,    colors::S_[7], true);
-
-        for ab in self.af.el() {
-            ab.aml = 32;
-            for e in 0..FL_ { ab.au[e] = BeatStep::dz(); }
-            ab.so = false;
+        self.tracks[0].volume = 210;
+        for i in (0..32).step_by(8) {
+            self.tracks[0].steps[i] = BeatStep::on(110);
         }
 
         
-        self.af[0].qr = Envelope::new(1, 1800, 80, 600);  
-        self.af[1].qr = Envelope::new(1, 80, 0, 35);      
-        self.af[2].qr = Envelope::new(1, 16, 0, 6);       
-        self.af[3].qr = Envelope::new(1, 140, 0, 80);     
-        self.af[4].qr = Envelope::new(3, 380, 25, 260);   
-        self.af[5].qr = Envelope::ov();                   
-        self.af[6].qr = Envelope::new(4, 300, 50, 220);   
-        self.af[7].qr = Envelope::new(1, 25, 0, 8);       
-    }
-
-    
-    
-    
-    
-    
-    pub fn uhn(&mut self) {
-        self.fxi();
-        self.af[1].so = true;   
-        self.af[2].so = true;   
-        self.af[3].so = true;   
-        self.af[7].so = true;   
+        self.tracks[1].volume = 165;
+        self.tracks[1].steps[4]  = BeatStep::on(105);
+        self.tracks[1].steps[12] = BeatStep::on(105);
+        self.tracks[1].steps[20] = BeatStep::on(105);
+        self.tracks[1].steps[28] = BeatStep::on(105);
 
         
-        self.af[0].hq = 120;
-        self.af[0].au[0]  = BeatStep::bz(60, 0);     
-
-        
-        self.af[5].hq = 50;
-        self.af[5].au[0]  = BeatStep::bz(35, 0);     
-        self.af[5].au[8]  = BeatStep::bz(30, 5);     
-        self.af[5].au[16] = BeatStep::bz(35, 3);     
-        self.af[5].au[24] = BeatStep::bz(30, -2);    
-
-        
-        self.af[4].hq = 55;
-        self.af[4].au[4]  = BeatStep::bz(40, 0);     
-        self.af[4].au[12] = BeatStep::bz(35, -3);    
-        self.af[4].au[20] = BeatStep::bz(38, 5);     
-
-        
-        self.af[6].hq = 35;
-        self.af[6].au[16] = BeatStep::bz(30, 7);     
-        self.af[6].au[24] = BeatStep::bz(25, 0);     
-    }
-
-    
-    
-    
-    
-    
-    
-    pub fn jdv(&mut self) {
-        self.fxi();
-
-        
-        self.af[0].hq = 255;
-        self.af[0].au[0]  = BeatStep::bz(127, 0);    
-        self.af[0].au[6]  = BeatStep::bz(90, 0);     
-        self.af[0].au[8]  = BeatStep::bz(118, 0);    
-        self.af[0].au[16] = BeatStep::bz(125, 5);    
-        self.af[0].au[20] = BeatStep::bz(105, 3);    
-        self.af[0].au[24] = BeatStep::bz(120, -2);   
-        self.af[0].au[28] = BeatStep::bz(100, 0);    
-
-        
-        self.af[1].hq = 185;
-        self.af[1].au[8]  = BeatStep::ea(120);
-        self.af[1].au[24] = BeatStep::ea(118);
-        self.af[1].au[6]  = BeatStep::ea(32);             
-        self.af[1].au[22] = BeatStep::ea(30);             
-        self.af[1].au[15] = BeatStep::ea(40);             
-
-        
-        
-        self.af[2].hq = 100;
-        
-        self.af[2].au[0]  = BeatStep::ea(90);
-        self.af[2].au[1]  = BeatStep::ea(38);
-        self.af[2].au[2]  = BeatStep::ea(72);
-        self.af[2].au[3]  = BeatStep::ea(35);
-        self.af[2].au[4]  = BeatStep::ea(85);
-        self.af[2].au[5]  = BeatStep::ea(32);
-        self.af[2].au[6]  = BeatStep::ea(68);
-        self.af[2].au[7]  = BeatStep::ea(30);
-        self.af[2].au[8]  = BeatStep::ea(88);
-        self.af[2].au[9]  = BeatStep::ea(36);
-        self.af[2].au[10] = BeatStep::ea(70);
-        self.af[2].au[11] = BeatStep::ea(33);
-        self.af[2].au[12] = BeatStep::ea(82);
-        self.af[2].au[13] = BeatStep::ea(35);
-        self.af[2].au[14] = BeatStep::ea(75);
-        self.af[2].au[15] = BeatStep::ea(40);
-        
-        self.af[2].au[16] = BeatStep::ea(90);
-        self.af[2].au[17] = BeatStep::ea(38);
-        self.af[2].au[18] = BeatStep::ea(72);
-        self.af[2].au[19] = BeatStep::ea(35);
-        self.af[2].au[20] = BeatStep::ea(85);
-        self.af[2].au[21] = BeatStep::ea(32);
-        self.af[2].au[22] = BeatStep::ea(68);
-        self.af[2].au[23] = BeatStep::ea(30);
-        
-        self.af[2].au[24] = BeatStep::ea(42);
-        self.af[2].au[25] = BeatStep::ea(52);
-        self.af[2].au[26] = BeatStep::ea(62);
-        self.af[2].au[27] = BeatStep::ea(72);
-        self.af[2].au[28] = BeatStep::ea(82);
-        self.af[2].au[29] = BeatStep::ea(92);
-        self.af[2].au[30] = BeatStep::ea(102);
-        self.af[2].au[31] = BeatStep::ea(115);
-
-        
-        self.af[3].hq = 70;
-        self.af[3].au[4]  = BeatStep::ea(65);
-        self.af[3].au[12] = BeatStep::ea(60);
-        self.af[3].au[20] = BeatStep::ea(58);
-
-        
-        self.af[4].hq = 95;
-        
-        self.af[4].au[0]  = BeatStep::bz(82, 0);     
-        self.af[4].au[2]  = BeatStep::bz(60, 3);     
-        self.af[4].au[4]  = BeatStep::bz(70, 7);     
-        self.af[4].au[6]  = BeatStep::bz(55, 12);    
-        self.af[4].au[8]  = BeatStep::bz(78, -4);    
-        self.af[4].au[10] = BeatStep::bz(58, 0);     
-        self.af[4].au[12] = BeatStep::bz(68, 3);     
-        
-        self.af[4].au[16] = BeatStep::bz(80, 5);     
-        self.af[4].au[18] = BeatStep::bz(58, 9);     
-        self.af[4].au[20] = BeatStep::bz(72, 12);    
-        self.af[4].au[24] = BeatStep::bz(75, 3);     
-        self.af[4].au[26] = BeatStep::bz(55, 7);     
-        self.af[4].au[28] = BeatStep::bz(65, -2);    
-
-        
-        self.af[5].hq = 42;
-        self.af[5].au[0]  = BeatStep::bz(32, 0);     
-        self.af[5].au[8]  = BeatStep::bz(28, 5);     
-        self.af[5].au[16] = BeatStep::bz(32, 3);     
-        self.af[5].au[24] = BeatStep::bz(28, -2);    
-
-        
-        
-        self.af[6].hq = 125;
-        self.af[6].au[0]  = BeatStep::bz(105, 7);    
-        self.af[6].au[2]  = BeatStep::bz(88, 3);     
-        self.af[6].au[4]  = BeatStep::bz(95, 7);     
-        self.af[6].au[8]  = BeatStep::bz(118, 12);   
-        
-        self.af[6].au[14] = BeatStep::bz(80, 5);     
-        
-        self.af[6].au[16] = BeatStep::bz(95, 5);     
-        self.af[6].au[19] = BeatStep::bz(85, 3);     
-        self.af[6].au[22] = BeatStep::bz(78, -2);    
-        self.af[6].au[26] = BeatStep::bz(72, 0);     
-
-        
-        self.af[7].hq = 55;
-        self.af[7].au[3]  = BeatStep::ea(42);
-        self.af[7].au[7]  = BeatStep::ea(38);
-        self.af[7].au[11] = BeatStep::ea(48);
-        self.af[7].au[15] = BeatStep::ea(35);
-        self.af[7].au[19] = BeatStep::ea(45);
-        self.af[7].au[23] = BeatStep::ea(40);
-        self.af[7].au[27] = BeatStep::ea(50);
-        self.af[7].au[31] = BeatStep::ea(55);
-    }
-
-    
-    
-    
-    
-    
-    pub fn uhq(&mut self) {
-        self.fxi();
-
-        
-        self.af[0].hq = 160;
-        self.af[0].au[0]  = BeatStep::bz(85, 0);     
-        self.af[0].au[16] = BeatStep::bz(75, 0);     
-
-        
-        self.af[1].hq = 140;
-        self.af[1].au[8]  = BeatStep::ea(90);
-        self.af[1].au[24] = BeatStep::ea(85);
-
-        
-        self.af[2].hq = 72;
-        self.af[2].au[0]  = BeatStep::ea(65);
-        self.af[2].au[4]  = BeatStep::ea(55);
-        self.af[2].au[8]  = BeatStep::ea(60);
-        self.af[2].au[12] = BeatStep::ea(50);
-        self.af[2].au[16] = BeatStep::ea(65);
-        self.af[2].au[20] = BeatStep::ea(55);
-        self.af[2].au[24] = BeatStep::ea(60);
-        self.af[2].au[28] = BeatStep::ea(50);
-
-        
-        self.af[3].hq = 55;
-        self.af[3].au[14] = BeatStep::ea(55);
-
-        
-        self.af[4].hq = 70;
-        self.af[4].au[4]  = BeatStep::bz(55, 0);     
-        self.af[4].au[12] = BeatStep::bz(48, -3);    
-        self.af[4].au[20] = BeatStep::bz(52, 5);     
-        self.af[4].au[28] = BeatStep::bz(45, 3);     
-
-        
-        self.af[5].hq = 55;
-        self.af[5].au[0]  = BeatStep::bz(32, 0);     
-        self.af[5].au[16] = BeatStep::bz(28, 7);     
-
-        
-        self.af[6].hq = 65;
-        self.af[6].au[0]  = BeatStep::bz(55, 7);     
-        self.af[6].au[12] = BeatStep::bz(48, 0);     
-
-        
-        self.af[7].hq = 35;
-        self.af[7].au[7]  = BeatStep::ea(30);
-        self.af[7].au[23] = BeatStep::ea(28);
-    }
-
-    
-    
-    
-    
-    
-    pub fn uhl(&mut self) {
-        self.fxi();
-
-        
-        self.af[0].hq = 235;
-        self.af[0].au[0]  = BeatStep::bz(118, 0);    
-        self.af[0].au[8]  = BeatStep::bz(105, 0);    
-        self.af[0].au[16] = BeatStep::bz(115, 5);    
-        self.af[0].au[20] = BeatStep::bz(95, 3);     
-        self.af[0].au[24] = BeatStep::bz(110, 0);    
-        self.af[0].au[28] = BeatStep::bz(88, -2);    
-
-        
-        self.af[1].hq = 175;
-        self.af[1].au[8]  = BeatStep::ea(115);
-        self.af[1].au[24] = BeatStep::ea(112);
-        self.af[1].au[4]  = BeatStep::ea(28);
-        self.af[1].au[12] = BeatStep::ea(35);
-        self.af[1].au[20] = BeatStep::ea(30);
-
-        
-        self.af[2].hq = 90;
-        
-        self.af[2].au[0]  = BeatStep::ea(82);
-        self.af[2].au[2]  = BeatStep::ea(40);
-        self.af[2].au[4]  = BeatStep::ea(75);
-        self.af[2].au[6]  = BeatStep::ea(38);
-        self.af[2].au[8]  = BeatStep::ea(80);
-        self.af[2].au[10] = BeatStep::ea(42);
-        self.af[2].au[12] = BeatStep::ea(72);
-        self.af[2].au[14] = BeatStep::ea(35);
-        
-        self.af[2].au[16] = BeatStep::ea(85);
-        self.af[2].au[17] = BeatStep::ea(35);
-        self.af[2].au[18] = BeatStep::ea(70);
-        self.af[2].au[19] = BeatStep::ea(32);
-        self.af[2].au[20] = BeatStep::ea(80);
-        self.af[2].au[21] = BeatStep::ea(38);
-        self.af[2].au[22] = BeatStep::ea(68);
-        self.af[2].au[23] = BeatStep::ea(30);
-        
-        self.af[2].au[24] = BeatStep::ea(40);
-        self.af[2].au[25] = BeatStep::ea(48);
-        self.af[2].au[26] = BeatStep::ea(58);
-        self.af[2].au[27] = BeatStep::ea(68);
-        self.af[2].au[28] = BeatStep::ea(78);
-        self.af[2].au[29] = BeatStep::ea(88);
-        self.af[2].au[30] = BeatStep::ea(98);
-        self.af[2].au[31] = BeatStep::ea(110);
-
-        
-        self.af[3].hq = 60;
-        self.af[3].au[6]  = BeatStep::ea(60);
-        self.af[3].au[14] = BeatStep::ea(55);
-        self.af[3].au[22] = BeatStep::ea(58);
-
-        
-        self.af[4].hq = 85;
-        self.af[4].au[0]  = BeatStep::bz(72, 0);     
-        self.af[4].au[4]  = BeatStep::bz(58, 3);     
-        self.af[4].au[8]  = BeatStep::bz(68, 7);     
-        self.af[4].au[12] = BeatStep::bz(55, 5);     
-        self.af[4].au[16] = BeatStep::bz(75, 0);     
-        self.af[4].au[20] = BeatStep::bz(62, 3);     
-        self.af[4].au[24] = BeatStep::bz(70, -2);    
-        self.af[4].au[28] = BeatStep::bz(60, 0);     
-
-        
-        self.af[5].hq = 48;
-        self.af[5].au[0]  = BeatStep::bz(35, 0);     
-        self.af[5].au[8]  = BeatStep::bz(30, 5);     
-        self.af[5].au[16] = BeatStep::bz(35, 3);     
-        self.af[5].au[24] = BeatStep::bz(32, 7);     
-
-        
-        self.af[6].hq = 100;
-        self.af[6].au[0]  = BeatStep::bz(75, 0);     
-        self.af[6].au[4]  = BeatStep::bz(82, 3);     
-        self.af[6].au[8]  = BeatStep::bz(90, 7);     
-        self.af[6].au[16] = BeatStep::bz(80, 5);     
-        self.af[6].au[20] = BeatStep::bz(88, 7);     
-        self.af[6].au[24] = BeatStep::bz(95, 12);    
-
-        
-        self.af[7].hq = 48;
-        self.af[7].au[3]  = BeatStep::ea(35);
-        self.af[7].au[7]  = BeatStep::ea(32);
-        self.af[7].au[11] = BeatStep::ea(40);
-        self.af[7].au[15] = BeatStep::ea(30);
-        self.af[7].au[19] = BeatStep::ea(38);
-        self.af[7].au[23] = BeatStep::ea(35);
-        self.af[7].au[27] = BeatStep::ea(42);
-        self.af[7].au[31] = BeatStep::ea(48);
-    }
-
-    
-    
-    
-    
-    
-    
-    pub fn uhk(&mut self) {
-        self.fxi();
-        self.af[0].so = true;   
-        self.af[1].so = true;   
-        self.af[2].so = true;   
-        self.af[3].so = true;   
-        self.af[7].so = true;   
-
-        
-        self.af[5].hq = 55;
-        self.af[5].au[0]  = BeatStep::bz(35, 0);     
-        self.af[5].au[8]  = BeatStep::bz(28, 7);     
-        self.af[5].au[16] = BeatStep::bz(32, -2);    
-        self.af[5].au[24] = BeatStep::bz(28, 0);     
-
-        
-        self.af[4].hq = 45;
-        self.af[4].au[8]  = BeatStep::bz(35, 0);     
-        self.af[4].au[20] = BeatStep::bz(30, -3);    
-
-        
-        self.af[6].hq = 30;
-        self.af[6].au[0]  = BeatStep::bz(28, 7);     
-        self.af[6].au[16] = BeatStep::bz(25, 0);     
-    }
-
-    
-    
-    
-    
-    
-    pub fn uhp(&mut self) {
-        self.fxi();
-
-        
-        self.af[0].hq = 195;
-        self.af[0].au[0]  = BeatStep::bz(100, 0);    
-        self.af[0].au[8]  = BeatStep::bz(88, 0);     
-        self.af[0].au[16] = BeatStep::bz(95, 5);     
-        self.af[0].au[24] = BeatStep::bz(85, 0);     
-
-        
-        self.af[1].hq = 155;
-        self.af[1].au[8]  = BeatStep::ea(105);
-        self.af[1].au[24] = BeatStep::ea(100);
-        self.af[1].au[7]  = BeatStep::ea(25);
-        self.af[1].au[23] = BeatStep::ea(22);
-
-        
-        self.af[2].hq = 78;
-        self.af[2].au[0]  = BeatStep::ea(72);
-        self.af[2].au[2]  = BeatStep::ea(38);
-        self.af[2].au[4]  = BeatStep::ea(65);
-        self.af[2].au[6]  = BeatStep::ea(35);
-        self.af[2].au[8]  = BeatStep::ea(70);
-        self.af[2].au[10] = BeatStep::ea(36);
-        self.af[2].au[12] = BeatStep::ea(62);
-        self.af[2].au[14] = BeatStep::ea(33);
-        self.af[2].au[16] = BeatStep::ea(72);
-        self.af[2].au[18] = BeatStep::ea(38);
-        self.af[2].au[20] = BeatStep::ea(65);
-        self.af[2].au[22] = BeatStep::ea(35);
-        self.af[2].au[24] = BeatStep::ea(70);
-        self.af[2].au[26] = BeatStep::ea(40);
-        self.af[2].au[28] = BeatStep::ea(65);
-        self.af[2].au[30] = BeatStep::ea(50);
-
-        
-        self.af[3].hq = 55;
-        self.af[3].au[6]  = BeatStep::ea(52);
-        self.af[3].au[22] = BeatStep::ea(48);
-
-        
-        self.af[4].hq = 78;
-        self.af[4].au[0]  = BeatStep::bz(65, 0);     
-        self.af[4].au[4]  = BeatStep::bz(52, 3);     
-        self.af[4].au[8]  = BeatStep::bz(60, 7);     
-        self.af[4].au[16] = BeatStep::bz(68, 5);     
-        self.af[4].au[20] = BeatStep::bz(55, 0);     
-        self.af[4].au[24] = BeatStep::bz(62, 3);     
-
-        
-        self.af[5].hq = 45;
-        self.af[5].au[0]  = BeatStep::bz(30, 0);     
-        self.af[5].au[16] = BeatStep::bz(28, 5);     
-
-        
-        self.af[6].hq = 90;
-        self.af[6].au[0]  = BeatStep::bz(78, 7);     
-        self.af[6].au[4]  = BeatStep::bz(65, 3);     
-        self.af[6].au[12] = BeatStep::bz(72, 0);     
-        self.af[6].au[20] = BeatStep::bz(82, 7);     
-        self.af[6].au[24] = BeatStep::bz(70, 5);     
-
-        
-        self.af[7].hq = 40;
-        self.af[7].au[3]  = BeatStep::ea(28);
-        self.af[7].au[11] = BeatStep::ea(35);
-        self.af[7].au[19] = BeatStep::ea(30);
-        self.af[7].au[27] = BeatStep::ea(38);
-    }
-
-    
-    
-    
-    
-    
-    pub fn uhm(&mut self) {
-        self.jdv();
-
-        
-        self.af[0].hq = 255;     
-        self.af[1].hq = 195;     
-        self.af[2].hq = 115;     
-        self.af[3].hq = 78;      
-        self.af[4].hq = 110;     
-        self.af[5].hq = 52;      
-        self.af[6].hq = 145;     
-        self.af[7].hq = 65;      
-
-        
-        self.af[1].au[4]  = BeatStep::ea(55);
-        self.af[1].au[12] = BeatStep::ea(50);
-        self.af[1].au[20] = BeatStep::ea(58);
-
-        
-        self.af[2].au[1]  = BeatStep::ea(52);
-        self.af[2].au[3]  = BeatStep::ea(48);
-
-        
-        self.af[6].au[8]  = BeatStep::bz(127, 12);   
-        self.af[6].au[12] = BeatStep::bz(115, 12);   
-    }
-
-    
-    
-    
-    
-    
-    pub fn uho(&mut self) {
-        self.fxi();
-        self.af[1].so = true;   
-        self.af[2].so = true;   
-        self.af[3].so = true;   
-        self.af[7].so = true;   
-
-        
-        self.af[0].hq = 130;
-        self.af[0].au[0]  = BeatStep::bz(55, 0);     
-
-        
-        self.af[5].hq = 35;
-        self.af[5].au[0]  = BeatStep::bz(22, 0);     
-        self.af[5].au[16] = BeatStep::bz(18, 7);     
-
-        
-        self.af[4].hq = 48;
-        self.af[4].au[4]  = BeatStep::bz(32, 0);     
-        self.af[4].au[14] = BeatStep::bz(25, -3);    
-        self.af[4].au[22] = BeatStep::bz(28, 0);     
-
-        
-        self.af[6].hq = 45;
-        self.af[6].au[0]  = BeatStep::bz(32, 7);     
-        self.af[6].au[10] = BeatStep::bz(28, 0);     
-        self.af[6].au[20] = BeatStep::bz(22, 0);     
-    }
-
-    
-    pub fn zbg(&mut self) {
-        self.jdv();
-    }
-
-    
-    
-    
-    
-    
-
-    
-    fn gvj(&mut self) {
-        self.kz = 85;
-        self.ezi = 58; 
-
-        self.af[0] = BeatTrack::new("Kick",   36, Waveform::Dg,     colors::S_[0], true);   
-        self.af[1] = BeatTrack::new("Snare",  38, Waveform::Cr,    colors::S_[1], true);
-        self.af[2] = BeatTrack::new("HiHat",  54, Waveform::Cr,    colors::S_[2], true);
-        self.af[3] = BeatTrack::new("Sub",    33, Waveform::Dg,     colors::S_[3], false);  
-        self.af[4] = BeatTrack::new("Keys",   69, Waveform::Triangle, colors::S_[4], false);  
-        self.af[5] = BeatTrack::new("Pad",    57, Waveform::Ft, colors::S_[5], false);  
-        self.af[6] = BeatTrack::new("Lead",   81, Waveform::Gb,   colors::S_[6], false);  
-        self.af[7] = BeatTrack::new("Perc",   60, Waveform::Cr,    colors::S_[7], true);
-
-        for ab in self.af.el() {
-            ab.aml = 32;
-            for e in 0..FL_ { ab.au[e] = BeatStep::dz(); }
-            ab.so = false;
+        self.tracks[2].volume = 100;
+        for i in (2..32).step_by(4) {
+            self.tracks[2].steps[i] = BeatStep::on(60);
         }
 
         
-        self.af[0].qr = Envelope::new(2, 120, 0, 80);     
-        self.af[1].qr = Envelope::new(1, 60, 0, 40);      
-        self.af[2].qr = Envelope::new(1, 22, 0, 10);      
-        self.af[3].qr = Envelope::new(2, 2000, 75, 800);  
-        self.af[4].qr = Envelope::new(8, 500, 40, 350);   
-        self.af[5].qr = Envelope::ov();                   
-        self.af[6].qr = Envelope::new(6, 400, 55, 280);   
-        self.af[7].qr = Envelope::new(1, 35, 0, 12);      
+        self.tracks[3].volume = 230;
+        self.tracks[3].steps[0]  = BeatStep::ah(110, 0);  
+        self.tracks[3].steps[8]  = BeatStep::ah(100, 0);
+        self.tracks[3].steps[16] = BeatStep::ah(110, 8);  
+        self.tracks[3].steps[24] = BeatStep::ah(105, 10); 
+
+        
+        self.tracks[4].volume = 180;
+        self.tracks[4].steps[0]  = BeatStep::ah(100, 0);  
+        self.tracks[4].steps[4]  = BeatStep::ah(85, 7);   
+        self.tracks[4].steps[8]  = BeatStep::ah(95, 4);   
+        self.tracks[4].steps[12] = BeatStep::ah(85, 0);   
+        self.tracks[4].steps[16] = BeatStep::ah(100, 8);  
+        self.tracks[4].steps[20] = BeatStep::ah(85, 7);   
+        self.tracks[4].steps[24] = BeatStep::ah(100, 10); 
+        self.tracks[4].steps[28] = BeatStep::ah(90, 5);   
+
+        
+        self.tracks[5].volume = 105;
+        self.tracks[5].steps[0]  = BeatStep::ah(60, 0);   
+        self.tracks[5].steps[8]  = BeatStep::ah(55, 4);   
+        self.tracks[5].steps[16] = BeatStep::ah(60, 7);   
+        self.tracks[5].steps[24] = BeatStep::ah(55, 12);  
+
+        
+        
+        self.tracks[6].volume = 200;
+        
+        self.tracks[6].steps[0]  = BeatStep::ah(110, 0);  
+        self.tracks[6].steps[4]  = BeatStep::ah(115, 4);  
+        self.tracks[6].steps[8]  = BeatStep::ah(120, 7);  
+        self.tracks[6].steps[12] = BeatStep::ah(127, 12); 
+        
+        self.tracks[6].steps[16] = BeatStep::ah(120, 12); 
+        self.tracks[6].steps[20] = BeatStep::ah(115, 7);  
+        self.tracks[6].steps[24] = BeatStep::ah(110, 4);  
+        self.tracks[6].steps[28] = BeatStep::ah(105, 0);  
+
+        
+        self.tracks[7].volume = 115;
+        self.tracks[7].steps[2]  = BeatStep::ah(75, 12);  
+        self.tracks[7].steps[6]  = BeatStep::ah(70, 16);  
+        self.tracks[7].steps[10] = BeatStep::ah(75, 19);  
+        self.tracks[7].steps[14] = BeatStep::ah(80, 12);  
+        self.tracks[7].steps[18] = BeatStep::ah(70, 19);  
+        self.tracks[7].steps[22] = BeatStep::ah(75, 16);  
+        self.tracks[7].steps[26] = BeatStep::ah(70, 12);  
+        self.tracks[7].steps[30] = BeatStep::ah(65, 7);   
     }
 
     
-    
-    
-    
-    pub fn zbk(&mut self) {
-        self.gvj();
-        self.af[0].so = true;   
-        self.af[1].so = true;   
-        self.af[2].so = true;   
-        self.af[7].so = true;   
+    fn anthem_outro(&mut self) {
+        self.anthem_init();
+        
+        self.tracks[0].muted = true;  
+        self.tracks[1].muted = true;  
+        self.tracks[2].muted = true;  
+        self.tracks[4].muted = true;  
+        self.tracks[7].muted = true;  
 
         
-        self.af[3].hq = 80;
-        self.af[3].au[0]  = BeatStep::bz(50, 0);     
+        self.tracks[3].volume = 150;
+        self.tracks[3].steps[0]  = BeatStep::ah(60, 0);   
+        self.tracks[3].steps[16] = BeatStep::ah(40, 0);   
 
         
-        self.af[5].hq = 55;
-        self.af[5].au[0]  = BeatStep::bz(30, 0);     
-        self.af[5].au[8]  = BeatStep::bz(25, 4);     
-        self.af[5].au[16] = BeatStep::bz(28, 7);     
-        self.af[5].au[24] = BeatStep::bz(25, 5);     
+        self.tracks[5].volume = 80;
+        self.tracks[5].steps[0]  = BeatStep::ah(40, 0);   
+        self.tracks[5].steps[8]  = BeatStep::ah(35, 7);   
+        self.tracks[5].steps[16] = BeatStep::ah(40, 12);  
+        self.tracks[5].steps[24] = BeatStep::ah(35, 7);   
 
         
-        self.af[4].hq = 40;
-        self.af[4].au[4]  = BeatStep::bz(32, 0);     
-        self.af[4].au[12] = BeatStep::bz(28, 4);     
-        self.af[4].au[20] = BeatStep::bz(30, 7);     
-        self.af[4].au[28] = BeatStep::bz(25, 10);    
-
+        self.tracks[6].volume = 140;
+        self.tracks[6].steps[0]  = BeatStep::ah(80, 0);   
+        self.tracks[6].steps[4]  = BeatStep::ah(75, 4);   
+        self.tracks[6].steps[8]  = BeatStep::ah(80, 7);   
+        self.tracks[6].steps[12] = BeatStep::ah(85, 12);  
         
-        self.af[6].hq = 25;
-        self.af[6].au[16] = BeatStep::bz(22, 7);     
-    }
-
-    
-    
-    
-    
-    
-    pub fn zbm(&mut self) {
-        self.gvj();
-        self.af[1].so = true;    
-        self.af[7].so = true;    
-
-        
-        self.af[0].hq = 145;
-        self.af[0].au[0]  = BeatStep::ea(100);
-        self.af[0].au[8]  = BeatStep::ea(85);
-        self.af[0].au[16] = BeatStep::ea(95);
-        self.af[0].au[24] = BeatStep::ea(80);
-
-        
-        self.af[2].hq = 65;
-        for a in (0..32).akt(2) {
-            self.af[2].au[a] = BeatStep::ea(60 + (a as u8 % 3) * 10);
-        }
-        
-        self.af[2].au[3]  = BeatStep::ea(25);
-        self.af[2].au[11] = BeatStep::ea(22);
-        self.af[2].au[19] = BeatStep::ea(25);
-        self.af[2].au[27] = BeatStep::ea(20);
-
-        
-        self.af[3].hq = 160;
-        self.af[3].au[0]  = BeatStep::bz(105, 0);    
-        self.af[3].au[8]  = BeatStep::bz(95, -4);    
-        self.af[3].au[16] = BeatStep::bz(100, -9);   
-        self.af[3].au[24] = BeatStep::bz(90, -2);    
-
-        
-        self.af[4].hq = 72;
-        
-        self.af[4].au[0]  = BeatStep::bz(68, 0);     
-        self.af[4].au[2]  = BeatStep::bz(55, 4);     
-        self.af[4].au[4]  = BeatStep::bz(62, 7);     
-        
-        self.af[4].au[8]  = BeatStep::bz(65, -4);    
-        self.af[4].au[10] = BeatStep::bz(52, 0);     
-        self.af[4].au[12] = BeatStep::bz(60, 4);     
-        
-        self.af[4].au[16] = BeatStep::bz(65, -9);    
-        self.af[4].au[18] = BeatStep::bz(50, -5);    
-        self.af[4].au[20] = BeatStep::bz(58, -2);    
-        
-        self.af[4].au[24] = BeatStep::bz(62, -2);    
-        self.af[4].au[26] = BeatStep::bz(48, 2);     
-        self.af[4].au[28] = BeatStep::bz(55, 5);     
-
-        
-        self.af[5].hq = 38;
-        self.af[5].au[0]  = BeatStep::bz(28, 0);     
-        self.af[5].au[16] = BeatStep::bz(26, -9);    
-
-        
-        self.af[6].hq = 50;
-        self.af[6].au[0]  = BeatStep::bz(55, 0);     
-        self.af[6].au[6]  = BeatStep::bz(48, 7);     
-        self.af[6].au[12] = BeatStep::bz(52, 5);     
-        self.af[6].au[18] = BeatStep::bz(50, 4);     
-        self.af[6].au[24] = BeatStep::bz(48, 2);     
-        self.af[6].au[30] = BeatStep::bz(42, 0);     
     }
 
     
@@ -1592,682 +913,1361 @@ impl BeatStudio {
     
     
     
-    pub fn zbi(&mut self) {
-        self.gvj();
+    
+    
+    
+    
+    
+
+    
+    
+    fn trap_base(&mut self) {
+        self.bpm = 100;   
+        self.swing = 50;
 
         
-        self.af[0].hq = 195;
-        self.af[0].au[0]  = BeatStep::ea(125);
-        self.af[0].au[6]  = BeatStep::ea(40);  
-        self.af[0].au[8]  = BeatStep::ea(120);
-        self.af[0].au[16] = BeatStep::ea(125);
-        self.af[0].au[22] = BeatStep::ea(35);  
-        self.af[0].au[24] = BeatStep::ea(115);
-
         
-        self.af[1].hq = 150;
-        self.af[1].au[8]  = BeatStep::ea(115);
-        self.af[1].au[24] = BeatStep::ea(110);
-        self.af[1].au[5]  = BeatStep::ea(28);  
-        self.af[1].au[21] = BeatStep::ea(25);  
+        self.tracks[0] = BeatTrack::new("Sub",     27, Waveform::Sine,     colors::U_[0], false);  
+        self.tracks[1] = BeatTrack::new("Snare",   38, Waveform::Noise,    colors::U_[1], true);
+        self.tracks[2] = BeatTrack::new("HiHat",   56, Waveform::Noise,    colors::U_[2], true);
+        self.tracks[3] = BeatTrack::new("OpenHat", 53, Waveform::Noise,    colors::U_[3], true);
+        self.tracks[4] = BeatTrack::new("Synth",   63, Waveform::Square,   colors::U_[4], false);  
+        self.tracks[5] = BeatTrack::new("Pad",     51, Waveform::Sawtooth, colors::U_[5], false);  
+        self.tracks[6] = BeatTrack::new("Lead",    75, Waveform::Sawtooth, colors::U_[6], false);  
+        self.tracks[7] = BeatTrack::new("Perc",    63, Waveform::Noise,    colors::U_[7], true);
 
-        
-        self.af[2].hq = 75;
-        for a in 0..32 {
-            let bxr = if a % 4 == 0 { 80 } else if a % 2 == 0 { 55 } else { 30 };
-            self.af[2].au[a] = BeatStep::ea(bxr);
+        for t in self.tracks.iter_mut() {
+            t.num_steps = 32;
+            for j in 0..GA_ { t.steps[j] = BeatStep::off(); }
+            t.muted = false;
         }
 
         
-        self.af[7].hq = 45;
-        self.af[7].au[4]  = BeatStep::ea(55);
-        self.af[7].au[12] = BeatStep::ea(50);
-        self.af[7].au[20] = BeatStep::ea(52);
-        self.af[7].au[28] = BeatStep::ea(48);
-
-        
-        self.af[3].hq = 220;
-        self.af[3].au[0]  = BeatStep::bz(120, 0);    
-        self.af[3].au[4]  = BeatStep::bz(80, 0);     
-        self.af[3].au[8]  = BeatStep::bz(115, 5);    
-        self.af[3].au[16] = BeatStep::bz(118, -4);   
-        self.af[3].au[20] = BeatStep::bz(75, -4);    
-        self.af[3].au[24] = BeatStep::bz(110, -5);   
-        self.af[3].au[28] = BeatStep::bz(90, -5);    
-
-        
-        self.af[4].hq = 90;
-        
-        self.af[4].au[0]  = BeatStep::bz(75, 0);     
-        self.af[4].au[2]  = BeatStep::bz(60, 4);     
-        self.af[4].au[4]  = BeatStep::bz(68, 7);     
-        self.af[4].au[6]  = BeatStep::bz(50, 12);    
-        
-        self.af[4].au[8]  = BeatStep::bz(72, 5);     
-        self.af[4].au[10] = BeatStep::bz(58, 8);     
-        self.af[4].au[12] = BeatStep::bz(65, 12);    
-        
-        self.af[4].au[16] = BeatStep::bz(70, -4);    
-        self.af[4].au[18] = BeatStep::bz(55, 0);     
-        self.af[4].au[20] = BeatStep::bz(62, 4);     
-        
-        self.af[4].au[24] = BeatStep::bz(68, -5);    
-        self.af[4].au[26] = BeatStep::bz(52, -1);    
-        self.af[4].au[28] = BeatStep::bz(60, 2);     
-        self.af[4].au[30] = BeatStep::bz(48, 5);     
-
-        
-        self.af[5].hq = 35;
-        self.af[5].au[0]  = BeatStep::bz(30, 0);     
-        self.af[5].au[16] = BeatStep::bz(28, -4);    
-
-        
-        self.af[6].hq = 95;
-        self.af[6].au[0]  = BeatStep::bz(85, 7);     
-        self.af[6].au[4]  = BeatStep::bz(72, 5);     
-        self.af[6].au[8]  = BeatStep::bz(90, 4);     
-        self.af[6].au[12] = BeatStep::bz(78, 2);     
-        self.af[6].au[16] = BeatStep::bz(95, 0);     
-        self.af[6].au[20] = BeatStep::bz(70, 4);     
-        self.af[6].au[24] = BeatStep::bz(100, 7);    
-        self.af[6].au[28] = BeatStep::bz(65, 5);     
+        self.tracks[0].envelope = Envelope::new(1, 1800, 80, 600);  
+        self.tracks[1].envelope = Envelope::new(1, 80, 0, 35);      
+        self.tracks[2].envelope = Envelope::new(1, 16, 0, 6);       
+        self.tracks[3].envelope = Envelope::new(1, 140, 0, 80);     
+        self.tracks[4].envelope = Envelope::new(3, 380, 25, 260);   
+        self.tracks[5].envelope = Envelope::pad();                   
+        self.tracks[6].envelope = Envelope::new(4, 300, 50, 220);   
+        self.tracks[7].envelope = Envelope::new(1, 25, 0, 8);       
     }
 
     
     
     
     
-    pub fn zbh(&mut self) {
-        self.gvj();
-        self.af[0].so = true;   
-        self.af[1].so = true;   
-        self.af[7].so = true;   
+    
+    pub fn load_trap_intro(&mut self) {
+        self.trap_base();
+        self.tracks[1].muted = true;   
+        self.tracks[2].muted = true;   
+        self.tracks[3].muted = true;   
+        self.tracks[7].muted = true;   
 
         
-        self.af[2].hq = 35;
-        self.af[2].au[0]  = BeatStep::ea(40);
-        self.af[2].au[8]  = BeatStep::ea(35);
-        self.af[2].au[16] = BeatStep::ea(38);
-        self.af[2].au[24] = BeatStep::ea(32);
+        self.tracks[0].volume = 120;
+        self.tracks[0].steps[0]  = BeatStep::ah(60, 0);     
 
         
-        self.af[3].hq = 70;
-        self.af[3].au[0]  = BeatStep::bz(55, 0);     
-        self.af[3].au[16] = BeatStep::bz(50, 5);     
+        self.tracks[5].volume = 50;
+        self.tracks[5].steps[0]  = BeatStep::ah(35, 0);     
+        self.tracks[5].steps[8]  = BeatStep::ah(30, 5);     
+        self.tracks[5].steps[16] = BeatStep::ah(35, 3);     
+        self.tracks[5].steps[24] = BeatStep::ah(30, -2);    
 
         
-        self.af[4].hq = 60;
-        self.af[4].au[0]  = BeatStep::bz(55, 5);     
-        self.af[4].au[4]  = BeatStep::bz(45, 8);     
-        self.af[4].au[8]  = BeatStep::bz(52, 0);     
-        self.af[4].au[12] = BeatStep::bz(42, 4);     
-        self.af[4].au[16] = BeatStep::bz(50, -5);    
-        self.af[4].au[20] = BeatStep::bz(40, -1);    
-        self.af[4].au[24] = BeatStep::bz(48, 0);     
-        self.af[4].au[28] = BeatStep::bz(38, 7);     
+        self.tracks[4].volume = 55;
+        self.tracks[4].steps[4]  = BeatStep::ah(40, 0);     
+        self.tracks[4].steps[12] = BeatStep::ah(35, -3);    
+        self.tracks[4].steps[20] = BeatStep::ah(38, 5);     
 
         
-        self.af[5].hq = 50;
-        self.af[5].au[0]  = BeatStep::bz(32, 5);     
-        self.af[5].au[16] = BeatStep::bz(30, 0);     
-
-        
-        self.af[6].hq = 42;
-        self.af[6].au[8]  = BeatStep::bz(50, 12);    
-        self.af[6].au[16] = BeatStep::bz(42, 7);     
-        self.af[6].au[24] = BeatStep::bz(38, 5);     
+        self.tracks[6].volume = 35;
+        self.tracks[6].steps[16] = BeatStep::ah(30, 7);     
+        self.tracks[6].steps[24] = BeatStep::ah(25, 0);     
     }
 
     
     
     
     
-    pub fn zbj(&mut self) {
-        self.gvj();
+    
+    
+    pub fn load_trap_hook(&mut self) {
+        self.trap_base();
 
         
-        self.af[0].hq = 210;
-        self.af[0].au[0]  = BeatStep::ea(127);
-        self.af[0].au[4]  = BeatStep::ea(45);  
-        self.af[0].au[8]  = BeatStep::ea(122);
-        self.af[0].au[12] = BeatStep::ea(40);  
-        self.af[0].au[16] = BeatStep::ea(127);
-        self.af[0].au[20] = BeatStep::ea(42);
-        self.af[0].au[24] = BeatStep::ea(120);
-        self.af[0].au[30] = BeatStep::ea(90);  
+        self.tracks[0].volume = 255;
+        self.tracks[0].steps[0]  = BeatStep::ah(127, 0);    
+        self.tracks[0].steps[6]  = BeatStep::ah(90, 0);     
+        self.tracks[0].steps[8]  = BeatStep::ah(118, 0);    
+        self.tracks[0].steps[16] = BeatStep::ah(125, 5);    
+        self.tracks[0].steps[20] = BeatStep::ah(105, 3);    
+        self.tracks[0].steps[24] = BeatStep::ah(120, -2);   
+        self.tracks[0].steps[28] = BeatStep::ah(100, 0);    
 
         
-        self.af[1].hq = 165;
-        self.af[1].au[8]  = BeatStep::ea(120);
-        self.af[1].au[24] = BeatStep::ea(118);
-        self.af[1].au[6]  = BeatStep::ea(30);
-        self.af[1].au[22] = BeatStep::ea(28);
-        
-        self.af[1].au[28] = BeatStep::ea(55);
-        self.af[1].au[29] = BeatStep::ea(65);
-        self.af[1].au[30] = BeatStep::ea(80);
-        self.af[1].au[31] = BeatStep::ea(100);
+        self.tracks[1].volume = 185;
+        self.tracks[1].steps[8]  = BeatStep::on(120);
+        self.tracks[1].steps[24] = BeatStep::on(118);
+        self.tracks[1].steps[6]  = BeatStep::on(32);             
+        self.tracks[1].steps[22] = BeatStep::on(30);             
+        self.tracks[1].steps[15] = BeatStep::on(40);             
 
         
-        self.af[2].hq = 82;
-        for a in 0..32 {
-            let bxr = if a % 4 == 0 { 85 } else if a % 2 == 0 { 60 } else { 35 };
-            self.af[2].au[a] = BeatStep::ea(bxr);
+        
+        self.tracks[2].volume = 100;
+        
+        self.tracks[2].steps[0]  = BeatStep::on(90);
+        self.tracks[2].steps[1]  = BeatStep::on(38);
+        self.tracks[2].steps[2]  = BeatStep::on(72);
+        self.tracks[2].steps[3]  = BeatStep::on(35);
+        self.tracks[2].steps[4]  = BeatStep::on(85);
+        self.tracks[2].steps[5]  = BeatStep::on(32);
+        self.tracks[2].steps[6]  = BeatStep::on(68);
+        self.tracks[2].steps[7]  = BeatStep::on(30);
+        self.tracks[2].steps[8]  = BeatStep::on(88);
+        self.tracks[2].steps[9]  = BeatStep::on(36);
+        self.tracks[2].steps[10] = BeatStep::on(70);
+        self.tracks[2].steps[11] = BeatStep::on(33);
+        self.tracks[2].steps[12] = BeatStep::on(82);
+        self.tracks[2].steps[13] = BeatStep::on(35);
+        self.tracks[2].steps[14] = BeatStep::on(75);
+        self.tracks[2].steps[15] = BeatStep::on(40);
+        
+        self.tracks[2].steps[16] = BeatStep::on(90);
+        self.tracks[2].steps[17] = BeatStep::on(38);
+        self.tracks[2].steps[18] = BeatStep::on(72);
+        self.tracks[2].steps[19] = BeatStep::on(35);
+        self.tracks[2].steps[20] = BeatStep::on(85);
+        self.tracks[2].steps[21] = BeatStep::on(32);
+        self.tracks[2].steps[22] = BeatStep::on(68);
+        self.tracks[2].steps[23] = BeatStep::on(30);
+        
+        self.tracks[2].steps[24] = BeatStep::on(42);
+        self.tracks[2].steps[25] = BeatStep::on(52);
+        self.tracks[2].steps[26] = BeatStep::on(62);
+        self.tracks[2].steps[27] = BeatStep::on(72);
+        self.tracks[2].steps[28] = BeatStep::on(82);
+        self.tracks[2].steps[29] = BeatStep::on(92);
+        self.tracks[2].steps[30] = BeatStep::on(102);
+        self.tracks[2].steps[31] = BeatStep::on(115);
+
+        
+        self.tracks[3].volume = 70;
+        self.tracks[3].steps[4]  = BeatStep::on(65);
+        self.tracks[3].steps[12] = BeatStep::on(60);
+        self.tracks[3].steps[20] = BeatStep::on(58);
+
+        
+        self.tracks[4].volume = 95;
+        
+        self.tracks[4].steps[0]  = BeatStep::ah(82, 0);     
+        self.tracks[4].steps[2]  = BeatStep::ah(60, 3);     
+        self.tracks[4].steps[4]  = BeatStep::ah(70, 7);     
+        self.tracks[4].steps[6]  = BeatStep::ah(55, 12);    
+        self.tracks[4].steps[8]  = BeatStep::ah(78, -4);    
+        self.tracks[4].steps[10] = BeatStep::ah(58, 0);     
+        self.tracks[4].steps[12] = BeatStep::ah(68, 3);     
+        
+        self.tracks[4].steps[16] = BeatStep::ah(80, 5);     
+        self.tracks[4].steps[18] = BeatStep::ah(58, 9);     
+        self.tracks[4].steps[20] = BeatStep::ah(72, 12);    
+        self.tracks[4].steps[24] = BeatStep::ah(75, 3);     
+        self.tracks[4].steps[26] = BeatStep::ah(55, 7);     
+        self.tracks[4].steps[28] = BeatStep::ah(65, -2);    
+
+        
+        self.tracks[5].volume = 42;
+        self.tracks[5].steps[0]  = BeatStep::ah(32, 0);     
+        self.tracks[5].steps[8]  = BeatStep::ah(28, 5);     
+        self.tracks[5].steps[16] = BeatStep::ah(32, 3);     
+        self.tracks[5].steps[24] = BeatStep::ah(28, -2);    
+
+        
+        
+        self.tracks[6].volume = 125;
+        self.tracks[6].steps[0]  = BeatStep::ah(105, 7);    
+        self.tracks[6].steps[2]  = BeatStep::ah(88, 3);     
+        self.tracks[6].steps[4]  = BeatStep::ah(95, 7);     
+        self.tracks[6].steps[8]  = BeatStep::ah(118, 12);   
+        
+        self.tracks[6].steps[14] = BeatStep::ah(80, 5);     
+        
+        self.tracks[6].steps[16] = BeatStep::ah(95, 5);     
+        self.tracks[6].steps[19] = BeatStep::ah(85, 3);     
+        self.tracks[6].steps[22] = BeatStep::ah(78, -2);    
+        self.tracks[6].steps[26] = BeatStep::ah(72, 0);     
+
+        
+        self.tracks[7].volume = 55;
+        self.tracks[7].steps[3]  = BeatStep::on(42);
+        self.tracks[7].steps[7]  = BeatStep::on(38);
+        self.tracks[7].steps[11] = BeatStep::on(48);
+        self.tracks[7].steps[15] = BeatStep::on(35);
+        self.tracks[7].steps[19] = BeatStep::on(45);
+        self.tracks[7].steps[23] = BeatStep::on(40);
+        self.tracks[7].steps[27] = BeatStep::on(50);
+        self.tracks[7].steps[31] = BeatStep::on(55);
+    }
+
+    
+    
+    
+    
+    
+    pub fn load_trap_verse(&mut self) {
+        self.trap_base();
+
+        
+        self.tracks[0].volume = 160;
+        self.tracks[0].steps[0]  = BeatStep::ah(85, 0);     
+        self.tracks[0].steps[16] = BeatStep::ah(75, 0);     
+
+        
+        self.tracks[1].volume = 140;
+        self.tracks[1].steps[8]  = BeatStep::on(90);
+        self.tracks[1].steps[24] = BeatStep::on(85);
+
+        
+        self.tracks[2].volume = 72;
+        self.tracks[2].steps[0]  = BeatStep::on(65);
+        self.tracks[2].steps[4]  = BeatStep::on(55);
+        self.tracks[2].steps[8]  = BeatStep::on(60);
+        self.tracks[2].steps[12] = BeatStep::on(50);
+        self.tracks[2].steps[16] = BeatStep::on(65);
+        self.tracks[2].steps[20] = BeatStep::on(55);
+        self.tracks[2].steps[24] = BeatStep::on(60);
+        self.tracks[2].steps[28] = BeatStep::on(50);
+
+        
+        self.tracks[3].volume = 55;
+        self.tracks[3].steps[14] = BeatStep::on(55);
+
+        
+        self.tracks[4].volume = 70;
+        self.tracks[4].steps[4]  = BeatStep::ah(55, 0);     
+        self.tracks[4].steps[12] = BeatStep::ah(48, -3);    
+        self.tracks[4].steps[20] = BeatStep::ah(52, 5);     
+        self.tracks[4].steps[28] = BeatStep::ah(45, 3);     
+
+        
+        self.tracks[5].volume = 55;
+        self.tracks[5].steps[0]  = BeatStep::ah(32, 0);     
+        self.tracks[5].steps[16] = BeatStep::ah(28, 7);     
+
+        
+        self.tracks[6].volume = 65;
+        self.tracks[6].steps[0]  = BeatStep::ah(55, 7);     
+        self.tracks[6].steps[12] = BeatStep::ah(48, 0);     
+
+        
+        self.tracks[7].volume = 35;
+        self.tracks[7].steps[7]  = BeatStep::on(30);
+        self.tracks[7].steps[23] = BeatStep::on(28);
+    }
+
+    
+    
+    
+    
+    
+    pub fn load_trap_build(&mut self) {
+        self.trap_base();
+
+        
+        self.tracks[0].volume = 235;
+        self.tracks[0].steps[0]  = BeatStep::ah(118, 0);    
+        self.tracks[0].steps[8]  = BeatStep::ah(105, 0);    
+        self.tracks[0].steps[16] = BeatStep::ah(115, 5);    
+        self.tracks[0].steps[20] = BeatStep::ah(95, 3);     
+        self.tracks[0].steps[24] = BeatStep::ah(110, 0);    
+        self.tracks[0].steps[28] = BeatStep::ah(88, -2);    
+
+        
+        self.tracks[1].volume = 175;
+        self.tracks[1].steps[8]  = BeatStep::on(115);
+        self.tracks[1].steps[24] = BeatStep::on(112);
+        self.tracks[1].steps[4]  = BeatStep::on(28);
+        self.tracks[1].steps[12] = BeatStep::on(35);
+        self.tracks[1].steps[20] = BeatStep::on(30);
+
+        
+        self.tracks[2].volume = 90;
+        
+        self.tracks[2].steps[0]  = BeatStep::on(82);
+        self.tracks[2].steps[2]  = BeatStep::on(40);
+        self.tracks[2].steps[4]  = BeatStep::on(75);
+        self.tracks[2].steps[6]  = BeatStep::on(38);
+        self.tracks[2].steps[8]  = BeatStep::on(80);
+        self.tracks[2].steps[10] = BeatStep::on(42);
+        self.tracks[2].steps[12] = BeatStep::on(72);
+        self.tracks[2].steps[14] = BeatStep::on(35);
+        
+        self.tracks[2].steps[16] = BeatStep::on(85);
+        self.tracks[2].steps[17] = BeatStep::on(35);
+        self.tracks[2].steps[18] = BeatStep::on(70);
+        self.tracks[2].steps[19] = BeatStep::on(32);
+        self.tracks[2].steps[20] = BeatStep::on(80);
+        self.tracks[2].steps[21] = BeatStep::on(38);
+        self.tracks[2].steps[22] = BeatStep::on(68);
+        self.tracks[2].steps[23] = BeatStep::on(30);
+        
+        self.tracks[2].steps[24] = BeatStep::on(40);
+        self.tracks[2].steps[25] = BeatStep::on(48);
+        self.tracks[2].steps[26] = BeatStep::on(58);
+        self.tracks[2].steps[27] = BeatStep::on(68);
+        self.tracks[2].steps[28] = BeatStep::on(78);
+        self.tracks[2].steps[29] = BeatStep::on(88);
+        self.tracks[2].steps[30] = BeatStep::on(98);
+        self.tracks[2].steps[31] = BeatStep::on(110);
+
+        
+        self.tracks[3].volume = 60;
+        self.tracks[3].steps[6]  = BeatStep::on(60);
+        self.tracks[3].steps[14] = BeatStep::on(55);
+        self.tracks[3].steps[22] = BeatStep::on(58);
+
+        
+        self.tracks[4].volume = 85;
+        self.tracks[4].steps[0]  = BeatStep::ah(72, 0);     
+        self.tracks[4].steps[4]  = BeatStep::ah(58, 3);     
+        self.tracks[4].steps[8]  = BeatStep::ah(68, 7);     
+        self.tracks[4].steps[12] = BeatStep::ah(55, 5);     
+        self.tracks[4].steps[16] = BeatStep::ah(75, 0);     
+        self.tracks[4].steps[20] = BeatStep::ah(62, 3);     
+        self.tracks[4].steps[24] = BeatStep::ah(70, -2);    
+        self.tracks[4].steps[28] = BeatStep::ah(60, 0);     
+
+        
+        self.tracks[5].volume = 48;
+        self.tracks[5].steps[0]  = BeatStep::ah(35, 0);     
+        self.tracks[5].steps[8]  = BeatStep::ah(30, 5);     
+        self.tracks[5].steps[16] = BeatStep::ah(35, 3);     
+        self.tracks[5].steps[24] = BeatStep::ah(32, 7);     
+
+        
+        self.tracks[6].volume = 100;
+        self.tracks[6].steps[0]  = BeatStep::ah(75, 0);     
+        self.tracks[6].steps[4]  = BeatStep::ah(82, 3);     
+        self.tracks[6].steps[8]  = BeatStep::ah(90, 7);     
+        self.tracks[6].steps[16] = BeatStep::ah(80, 5);     
+        self.tracks[6].steps[20] = BeatStep::ah(88, 7);     
+        self.tracks[6].steps[24] = BeatStep::ah(95, 12);    
+
+        
+        self.tracks[7].volume = 48;
+        self.tracks[7].steps[3]  = BeatStep::on(35);
+        self.tracks[7].steps[7]  = BeatStep::on(32);
+        self.tracks[7].steps[11] = BeatStep::on(40);
+        self.tracks[7].steps[15] = BeatStep::on(30);
+        self.tracks[7].steps[19] = BeatStep::on(38);
+        self.tracks[7].steps[23] = BeatStep::on(35);
+        self.tracks[7].steps[27] = BeatStep::on(42);
+        self.tracks[7].steps[31] = BeatStep::on(48);
+    }
+
+    
+    
+    
+    
+    
+    
+    pub fn load_trap_bridge(&mut self) {
+        self.trap_base();
+        self.tracks[0].muted = true;   
+        self.tracks[1].muted = true;   
+        self.tracks[2].muted = true;   
+        self.tracks[3].muted = true;   
+        self.tracks[7].muted = true;   
+
+        
+        self.tracks[5].volume = 55;
+        self.tracks[5].steps[0]  = BeatStep::ah(35, 0);     
+        self.tracks[5].steps[8]  = BeatStep::ah(28, 7);     
+        self.tracks[5].steps[16] = BeatStep::ah(32, -2);    
+        self.tracks[5].steps[24] = BeatStep::ah(28, 0);     
+
+        
+        self.tracks[4].volume = 45;
+        self.tracks[4].steps[8]  = BeatStep::ah(35, 0);     
+        self.tracks[4].steps[20] = BeatStep::ah(30, -3);    
+
+        
+        self.tracks[6].volume = 30;
+        self.tracks[6].steps[0]  = BeatStep::ah(28, 7);     
+        self.tracks[6].steps[16] = BeatStep::ah(25, 0);     
+    }
+
+    
+    
+    
+    
+    
+    pub fn load_trap_rebuild(&mut self) {
+        self.trap_base();
+
+        
+        self.tracks[0].volume = 195;
+        self.tracks[0].steps[0]  = BeatStep::ah(100, 0);    
+        self.tracks[0].steps[8]  = BeatStep::ah(88, 0);     
+        self.tracks[0].steps[16] = BeatStep::ah(95, 5);     
+        self.tracks[0].steps[24] = BeatStep::ah(85, 0);     
+
+        
+        self.tracks[1].volume = 155;
+        self.tracks[1].steps[8]  = BeatStep::on(105);
+        self.tracks[1].steps[24] = BeatStep::on(100);
+        self.tracks[1].steps[7]  = BeatStep::on(25);
+        self.tracks[1].steps[23] = BeatStep::on(22);
+
+        
+        self.tracks[2].volume = 78;
+        self.tracks[2].steps[0]  = BeatStep::on(72);
+        self.tracks[2].steps[2]  = BeatStep::on(38);
+        self.tracks[2].steps[4]  = BeatStep::on(65);
+        self.tracks[2].steps[6]  = BeatStep::on(35);
+        self.tracks[2].steps[8]  = BeatStep::on(70);
+        self.tracks[2].steps[10] = BeatStep::on(36);
+        self.tracks[2].steps[12] = BeatStep::on(62);
+        self.tracks[2].steps[14] = BeatStep::on(33);
+        self.tracks[2].steps[16] = BeatStep::on(72);
+        self.tracks[2].steps[18] = BeatStep::on(38);
+        self.tracks[2].steps[20] = BeatStep::on(65);
+        self.tracks[2].steps[22] = BeatStep::on(35);
+        self.tracks[2].steps[24] = BeatStep::on(70);
+        self.tracks[2].steps[26] = BeatStep::on(40);
+        self.tracks[2].steps[28] = BeatStep::on(65);
+        self.tracks[2].steps[30] = BeatStep::on(50);
+
+        
+        self.tracks[3].volume = 55;
+        self.tracks[3].steps[6]  = BeatStep::on(52);
+        self.tracks[3].steps[22] = BeatStep::on(48);
+
+        
+        self.tracks[4].volume = 78;
+        self.tracks[4].steps[0]  = BeatStep::ah(65, 0);     
+        self.tracks[4].steps[4]  = BeatStep::ah(52, 3);     
+        self.tracks[4].steps[8]  = BeatStep::ah(60, 7);     
+        self.tracks[4].steps[16] = BeatStep::ah(68, 5);     
+        self.tracks[4].steps[20] = BeatStep::ah(55, 0);     
+        self.tracks[4].steps[24] = BeatStep::ah(62, 3);     
+
+        
+        self.tracks[5].volume = 45;
+        self.tracks[5].steps[0]  = BeatStep::ah(30, 0);     
+        self.tracks[5].steps[16] = BeatStep::ah(28, 5);     
+
+        
+        self.tracks[6].volume = 90;
+        self.tracks[6].steps[0]  = BeatStep::ah(78, 7);     
+        self.tracks[6].steps[4]  = BeatStep::ah(65, 3);     
+        self.tracks[6].steps[12] = BeatStep::ah(72, 0);     
+        self.tracks[6].steps[20] = BeatStep::ah(82, 7);     
+        self.tracks[6].steps[24] = BeatStep::ah(70, 5);     
+
+        
+        self.tracks[7].volume = 40;
+        self.tracks[7].steps[3]  = BeatStep::on(28);
+        self.tracks[7].steps[11] = BeatStep::on(35);
+        self.tracks[7].steps[19] = BeatStep::on(30);
+        self.tracks[7].steps[27] = BeatStep::on(38);
+    }
+
+    
+    
+    
+    
+    
+    pub fn load_trap_hook_final(&mut self) {
+        self.load_trap_hook();
+
+        
+        self.tracks[0].volume = 255;     
+        self.tracks[1].volume = 195;     
+        self.tracks[2].volume = 115;     
+        self.tracks[3].volume = 78;      
+        self.tracks[4].volume = 110;     
+        self.tracks[5].volume = 52;      
+        self.tracks[6].volume = 145;     
+        self.tracks[7].volume = 65;      
+
+        
+        self.tracks[1].steps[4]  = BeatStep::on(55);
+        self.tracks[1].steps[12] = BeatStep::on(50);
+        self.tracks[1].steps[20] = BeatStep::on(58);
+
+        
+        self.tracks[2].steps[1]  = BeatStep::on(52);
+        self.tracks[2].steps[3]  = BeatStep::on(48);
+
+        
+        self.tracks[6].steps[8]  = BeatStep::ah(127, 12);   
+        self.tracks[6].steps[12] = BeatStep::ah(115, 12);   
+    }
+
+    
+    
+    
+    
+    
+    pub fn load_trap_outro(&mut self) {
+        self.trap_base();
+        self.tracks[1].muted = true;   
+        self.tracks[2].muted = true;   
+        self.tracks[3].muted = true;   
+        self.tracks[7].muted = true;   
+
+        
+        self.tracks[0].volume = 130;
+        self.tracks[0].steps[0]  = BeatStep::ah(55, 0);     
+
+        
+        self.tracks[5].volume = 35;
+        self.tracks[5].steps[0]  = BeatStep::ah(22, 0);     
+        self.tracks[5].steps[16] = BeatStep::ah(18, 7);     
+
+        
+        self.tracks[4].volume = 48;
+        self.tracks[4].steps[4]  = BeatStep::ah(32, 0);     
+        self.tracks[4].steps[14] = BeatStep::ah(25, -3);    
+        self.tracks[4].steps[22] = BeatStep::ah(28, 0);     
+
+        
+        self.tracks[6].volume = 45;
+        self.tracks[6].steps[0]  = BeatStep::ah(32, 7);     
+        self.tracks[6].steps[10] = BeatStep::ah(28, 0);     
+        self.tracks[6].steps[20] = BeatStep::ah(22, 0);     
+    }
+
+    
+    pub fn qnv(&mut self) {
+        self.load_trap_hook();
+    }
+
+    
+    
+    
+    
+    
+
+    
+    fn u2_base(&mut self) {
+        self.bpm = 85;
+        self.swing = 58; 
+
+        self.tracks[0] = BeatTrack::new("Kick",   36, Waveform::Sine,     colors::U_[0], true);   
+        self.tracks[1] = BeatTrack::new("Snare",  38, Waveform::Noise,    colors::U_[1], true);
+        self.tracks[2] = BeatTrack::new("HiHat",  54, Waveform::Noise,    colors::U_[2], true);
+        self.tracks[3] = BeatTrack::new("Sub",    33, Waveform::Sine,     colors::U_[3], false);  
+        self.tracks[4] = BeatTrack::new("Keys",   69, Waveform::Triangle, colors::U_[4], false);  
+        self.tracks[5] = BeatTrack::new("Pad",    57, Waveform::Sawtooth, colors::U_[5], false);  
+        self.tracks[6] = BeatTrack::new("Lead",   81, Waveform::Square,   colors::U_[6], false);  
+        self.tracks[7] = BeatTrack::new("Perc",   60, Waveform::Noise,    colors::U_[7], true);
+
+        for t in self.tracks.iter_mut() {
+            t.num_steps = 32;
+            for j in 0..GA_ { t.steps[j] = BeatStep::off(); }
+            t.muted = false;
         }
 
         
-        self.af[7].hq = 55;
-        self.af[7].au[2]  = BeatStep::ea(45);
-        self.af[7].au[6]  = BeatStep::ea(55);
-        self.af[7].au[14] = BeatStep::ea(50);
-        self.af[7].au[18] = BeatStep::ea(42);
-        self.af[7].au[26] = BeatStep::ea(52);
-        self.af[7].au[30] = BeatStep::ea(60);
-
-        
-        self.af[3].hq = 245;
-        self.af[3].au[0]  = BeatStep::bz(127, 0);    
-        self.af[3].au[4]  = BeatStep::bz(85, 0);     
-        self.af[3].au[8]  = BeatStep::bz(120, -4);   
-        self.af[3].au[16] = BeatStep::bz(125, -2);   
-        self.af[3].au[20] = BeatStep::bz(80, -2);    
-        self.af[3].au[24] = BeatStep::bz(118, -5);   
-        self.af[3].au[28] = BeatStep::bz(95, -5);    
-
-        
-        self.af[4].hq = 100;
-        
-        self.af[4].au[0]  = BeatStep::bz(80, 0);     
-        self.af[4].au[1]  = BeatStep::bz(62, 4);     
-        self.af[4].au[2]  = BeatStep::bz(72, 7);     
-        self.af[4].au[4]  = BeatStep::bz(65, 12);    
-        
-        self.af[4].au[8]  = BeatStep::bz(78, -4);    
-        self.af[4].au[9]  = BeatStep::bz(60, 0);     
-        self.af[4].au[10] = BeatStep::bz(70, 4);     
-        self.af[4].au[12] = BeatStep::bz(58, 8);     
-        
-        self.af[4].au[16] = BeatStep::bz(75, -2);    
-        self.af[4].au[17] = BeatStep::bz(58, 2);     
-        self.af[4].au[18] = BeatStep::bz(68, 5);     
-        self.af[4].au[20] = BeatStep::bz(55, 10);    
-        
-        self.af[4].au[24] = BeatStep::bz(72, -5);    
-        self.af[4].au[25] = BeatStep::bz(55, -1);    
-        self.af[4].au[26] = BeatStep::bz(65, 2);     
-        self.af[4].au[28] = BeatStep::bz(52, 5);     
-
-        
-        self.af[5].hq = 42;
-        self.af[5].au[0]  = BeatStep::bz(32, 0);     
-        self.af[5].au[8]  = BeatStep::bz(28, -4);    
-        self.af[5].au[16] = BeatStep::bz(30, -2);    
-        self.af[5].au[24] = BeatStep::bz(28, -5);    
-
-        
-        self.af[6].hq = 110;
-        self.af[6].au[0]  = BeatStep::bz(95, 12);    
-        self.af[6].au[3]  = BeatStep::bz(80, 7);     
-        self.af[6].au[6]  = BeatStep::bz(88, 5);     
-        self.af[6].au[8]  = BeatStep::bz(100, 4);    
-        self.af[6].au[12] = BeatStep::bz(92, 0);     
-        self.af[6].au[16] = BeatStep::bz(105, 7);    
-        self.af[6].au[18] = BeatStep::bz(85, 5);     
-        self.af[6].au[20] = BeatStep::bz(98, 4);     
-        self.af[6].au[24] = BeatStep::bz(110, 12);   
-        self.af[6].au[28] = BeatStep::bz(75, 7);     
+        self.tracks[0].envelope = Envelope::new(2, 120, 0, 80);     
+        self.tracks[1].envelope = Envelope::new(1, 60, 0, 40);      
+        self.tracks[2].envelope = Envelope::new(1, 22, 0, 10);      
+        self.tracks[3].envelope = Envelope::new(2, 2000, 75, 800);  
+        self.tracks[4].envelope = Envelope::new(8, 500, 40, 350);   
+        self.tracks[5].envelope = Envelope::pad();                   
+        self.tracks[6].envelope = Envelope::new(6, 400, 55, 280);   
+        self.tracks[7].envelope = Envelope::new(1, 35, 0, 12);      
     }
 
     
     
     
     
-    pub fn zbl(&mut self) {
-        self.gvj();
-        self.af[0].so = true;   
-        self.af[1].so = true;   
-        self.af[2].so = true;   
-        self.af[7].so = true;   
+    pub fn qnz(&mut self) {
+        self.u2_base();
+        self.tracks[0].muted = true;   
+        self.tracks[1].muted = true;   
+        self.tracks[2].muted = true;   
+        self.tracks[7].muted = true;   
 
         
-        self.af[3].hq = 60;
-        self.af[3].au[0]  = BeatStep::bz(40, 0);     
+        self.tracks[3].volume = 80;
+        self.tracks[3].steps[0]  = BeatStep::ah(50, 0);     
 
         
-        self.af[4].hq = 35;
-        self.af[4].au[0]  = BeatStep::bz(35, 0);     
-        self.af[4].au[8]  = BeatStep::bz(28, 4);     
-        self.af[4].au[20] = BeatStep::bz(30, 7);     
+        self.tracks[5].volume = 55;
+        self.tracks[5].steps[0]  = BeatStep::ah(30, 0);     
+        self.tracks[5].steps[8]  = BeatStep::ah(25, 4);     
+        self.tracks[5].steps[16] = BeatStep::ah(28, 7);     
+        self.tracks[5].steps[24] = BeatStep::ah(25, 5);     
 
         
-        self.af[5].hq = 30;
-        self.af[5].au[0]  = BeatStep::bz(22, 0);     
-        self.af[5].au[16] = BeatStep::bz(18, 7);     
+        self.tracks[4].volume = 40;
+        self.tracks[4].steps[4]  = BeatStep::ah(32, 0);     
+        self.tracks[4].steps[12] = BeatStep::ah(28, 4);     
+        self.tracks[4].steps[20] = BeatStep::ah(30, 7);     
+        self.tracks[4].steps[28] = BeatStep::ah(25, 10);    
 
         
-        self.af[6].hq = 40;
-        self.af[6].au[0]  = BeatStep::bz(30, 7);     
-        self.af[6].au[8]  = BeatStep::bz(25, 5);     
-        self.af[6].au[16] = BeatStep::bz(22, 4);     
-        self.af[6].au[26] = BeatStep::bz(18, 0);     
+        self.tracks[6].volume = 25;
+        self.tracks[6].steps[16] = BeatStep::ah(22, 7);     
+    }
+
+    
+    
+    
+    
+    
+    pub fn qob(&mut self) {
+        self.u2_base();
+        self.tracks[1].muted = true;    
+        self.tracks[7].muted = true;    
+
+        
+        self.tracks[0].volume = 145;
+        self.tracks[0].steps[0]  = BeatStep::on(100);
+        self.tracks[0].steps[8]  = BeatStep::on(85);
+        self.tracks[0].steps[16] = BeatStep::on(95);
+        self.tracks[0].steps[24] = BeatStep::on(80);
+
+        
+        self.tracks[2].volume = 65;
+        for i in (0..32).step_by(2) {
+            self.tracks[2].steps[i] = BeatStep::on(60 + (i as u8 % 3) * 10);
+        }
+        
+        self.tracks[2].steps[3]  = BeatStep::on(25);
+        self.tracks[2].steps[11] = BeatStep::on(22);
+        self.tracks[2].steps[19] = BeatStep::on(25);
+        self.tracks[2].steps[27] = BeatStep::on(20);
+
+        
+        self.tracks[3].volume = 160;
+        self.tracks[3].steps[0]  = BeatStep::ah(105, 0);    
+        self.tracks[3].steps[8]  = BeatStep::ah(95, -4);    
+        self.tracks[3].steps[16] = BeatStep::ah(100, -9);   
+        self.tracks[3].steps[24] = BeatStep::ah(90, -2);    
+
+        
+        self.tracks[4].volume = 72;
+        
+        self.tracks[4].steps[0]  = BeatStep::ah(68, 0);     
+        self.tracks[4].steps[2]  = BeatStep::ah(55, 4);     
+        self.tracks[4].steps[4]  = BeatStep::ah(62, 7);     
+        
+        self.tracks[4].steps[8]  = BeatStep::ah(65, -4);    
+        self.tracks[4].steps[10] = BeatStep::ah(52, 0);     
+        self.tracks[4].steps[12] = BeatStep::ah(60, 4);     
+        
+        self.tracks[4].steps[16] = BeatStep::ah(65, -9);    
+        self.tracks[4].steps[18] = BeatStep::ah(50, -5);    
+        self.tracks[4].steps[20] = BeatStep::ah(58, -2);    
+        
+        self.tracks[4].steps[24] = BeatStep::ah(62, -2);    
+        self.tracks[4].steps[26] = BeatStep::ah(48, 2);     
+        self.tracks[4].steps[28] = BeatStep::ah(55, 5);     
+
+        
+        self.tracks[5].volume = 38;
+        self.tracks[5].steps[0]  = BeatStep::ah(28, 0);     
+        self.tracks[5].steps[16] = BeatStep::ah(26, -9);    
+
+        
+        self.tracks[6].volume = 50;
+        self.tracks[6].steps[0]  = BeatStep::ah(55, 0);     
+        self.tracks[6].steps[6]  = BeatStep::ah(48, 7);     
+        self.tracks[6].steps[12] = BeatStep::ah(52, 5);     
+        self.tracks[6].steps[18] = BeatStep::ah(50, 4);     
+        self.tracks[6].steps[24] = BeatStep::ah(48, 2);     
+        self.tracks[6].steps[30] = BeatStep::ah(42, 0);     
+    }
+
+    
+    
+    
+    
+    
+    pub fn qnx(&mut self) {
+        self.u2_base();
+
+        
+        self.tracks[0].volume = 195;
+        self.tracks[0].steps[0]  = BeatStep::on(125);
+        self.tracks[0].steps[6]  = BeatStep::on(40);  
+        self.tracks[0].steps[8]  = BeatStep::on(120);
+        self.tracks[0].steps[16] = BeatStep::on(125);
+        self.tracks[0].steps[22] = BeatStep::on(35);  
+        self.tracks[0].steps[24] = BeatStep::on(115);
+
+        
+        self.tracks[1].volume = 150;
+        self.tracks[1].steps[8]  = BeatStep::on(115);
+        self.tracks[1].steps[24] = BeatStep::on(110);
+        self.tracks[1].steps[5]  = BeatStep::on(28);  
+        self.tracks[1].steps[21] = BeatStep::on(25);  
+
+        
+        self.tracks[2].volume = 75;
+        for i in 0..32 {
+            let anb = if i % 4 == 0 { 80 } else if i % 2 == 0 { 55 } else { 30 };
+            self.tracks[2].steps[i] = BeatStep::on(anb);
+        }
+
+        
+        self.tracks[7].volume = 45;
+        self.tracks[7].steps[4]  = BeatStep::on(55);
+        self.tracks[7].steps[12] = BeatStep::on(50);
+        self.tracks[7].steps[20] = BeatStep::on(52);
+        self.tracks[7].steps[28] = BeatStep::on(48);
+
+        
+        self.tracks[3].volume = 220;
+        self.tracks[3].steps[0]  = BeatStep::ah(120, 0);    
+        self.tracks[3].steps[4]  = BeatStep::ah(80, 0);     
+        self.tracks[3].steps[8]  = BeatStep::ah(115, 5);    
+        self.tracks[3].steps[16] = BeatStep::ah(118, -4);   
+        self.tracks[3].steps[20] = BeatStep::ah(75, -4);    
+        self.tracks[3].steps[24] = BeatStep::ah(110, -5);   
+        self.tracks[3].steps[28] = BeatStep::ah(90, -5);    
+
+        
+        self.tracks[4].volume = 90;
+        
+        self.tracks[4].steps[0]  = BeatStep::ah(75, 0);     
+        self.tracks[4].steps[2]  = BeatStep::ah(60, 4);     
+        self.tracks[4].steps[4]  = BeatStep::ah(68, 7);     
+        self.tracks[4].steps[6]  = BeatStep::ah(50, 12);    
+        
+        self.tracks[4].steps[8]  = BeatStep::ah(72, 5);     
+        self.tracks[4].steps[10] = BeatStep::ah(58, 8);     
+        self.tracks[4].steps[12] = BeatStep::ah(65, 12);    
+        
+        self.tracks[4].steps[16] = BeatStep::ah(70, -4);    
+        self.tracks[4].steps[18] = BeatStep::ah(55, 0);     
+        self.tracks[4].steps[20] = BeatStep::ah(62, 4);     
+        
+        self.tracks[4].steps[24] = BeatStep::ah(68, -5);    
+        self.tracks[4].steps[26] = BeatStep::ah(52, -1);    
+        self.tracks[4].steps[28] = BeatStep::ah(60, 2);     
+        self.tracks[4].steps[30] = BeatStep::ah(48, 5);     
+
+        
+        self.tracks[5].volume = 35;
+        self.tracks[5].steps[0]  = BeatStep::ah(30, 0);     
+        self.tracks[5].steps[16] = BeatStep::ah(28, -4);    
+
+        
+        self.tracks[6].volume = 95;
+        self.tracks[6].steps[0]  = BeatStep::ah(85, 7);     
+        self.tracks[6].steps[4]  = BeatStep::ah(72, 5);     
+        self.tracks[6].steps[8]  = BeatStep::ah(90, 4);     
+        self.tracks[6].steps[12] = BeatStep::ah(78, 2);     
+        self.tracks[6].steps[16] = BeatStep::ah(95, 0);     
+        self.tracks[6].steps[20] = BeatStep::ah(70, 4);     
+        self.tracks[6].steps[24] = BeatStep::ah(100, 7);    
+        self.tracks[6].steps[28] = BeatStep::ah(65, 5);     
+    }
+
+    
+    
+    
+    
+    pub fn qnw(&mut self) {
+        self.u2_base();
+        self.tracks[0].muted = true;   
+        self.tracks[1].muted = true;   
+        self.tracks[7].muted = true;   
+
+        
+        self.tracks[2].volume = 35;
+        self.tracks[2].steps[0]  = BeatStep::on(40);
+        self.tracks[2].steps[8]  = BeatStep::on(35);
+        self.tracks[2].steps[16] = BeatStep::on(38);
+        self.tracks[2].steps[24] = BeatStep::on(32);
+
+        
+        self.tracks[3].volume = 70;
+        self.tracks[3].steps[0]  = BeatStep::ah(55, 0);     
+        self.tracks[3].steps[16] = BeatStep::ah(50, 5);     
+
+        
+        self.tracks[4].volume = 60;
+        self.tracks[4].steps[0]  = BeatStep::ah(55, 5);     
+        self.tracks[4].steps[4]  = BeatStep::ah(45, 8);     
+        self.tracks[4].steps[8]  = BeatStep::ah(52, 0);     
+        self.tracks[4].steps[12] = BeatStep::ah(42, 4);     
+        self.tracks[4].steps[16] = BeatStep::ah(50, -5);    
+        self.tracks[4].steps[20] = BeatStep::ah(40, -1);    
+        self.tracks[4].steps[24] = BeatStep::ah(48, 0);     
+        self.tracks[4].steps[28] = BeatStep::ah(38, 7);     
+
+        
+        self.tracks[5].volume = 50;
+        self.tracks[5].steps[0]  = BeatStep::ah(32, 5);     
+        self.tracks[5].steps[16] = BeatStep::ah(30, 0);     
+
+        
+        self.tracks[6].volume = 42;
+        self.tracks[6].steps[8]  = BeatStep::ah(50, 12);    
+        self.tracks[6].steps[16] = BeatStep::ah(42, 7);     
+        self.tracks[6].steps[24] = BeatStep::ah(38, 5);     
+    }
+
+    
+    
+    
+    
+    pub fn qny(&mut self) {
+        self.u2_base();
+
+        
+        self.tracks[0].volume = 210;
+        self.tracks[0].steps[0]  = BeatStep::on(127);
+        self.tracks[0].steps[4]  = BeatStep::on(45);  
+        self.tracks[0].steps[8]  = BeatStep::on(122);
+        self.tracks[0].steps[12] = BeatStep::on(40);  
+        self.tracks[0].steps[16] = BeatStep::on(127);
+        self.tracks[0].steps[20] = BeatStep::on(42);
+        self.tracks[0].steps[24] = BeatStep::on(120);
+        self.tracks[0].steps[30] = BeatStep::on(90);  
+
+        
+        self.tracks[1].volume = 165;
+        self.tracks[1].steps[8]  = BeatStep::on(120);
+        self.tracks[1].steps[24] = BeatStep::on(118);
+        self.tracks[1].steps[6]  = BeatStep::on(30);
+        self.tracks[1].steps[22] = BeatStep::on(28);
+        
+        self.tracks[1].steps[28] = BeatStep::on(55);
+        self.tracks[1].steps[29] = BeatStep::on(65);
+        self.tracks[1].steps[30] = BeatStep::on(80);
+        self.tracks[1].steps[31] = BeatStep::on(100);
+
+        
+        self.tracks[2].volume = 82;
+        for i in 0..32 {
+            let anb = if i % 4 == 0 { 85 } else if i % 2 == 0 { 60 } else { 35 };
+            self.tracks[2].steps[i] = BeatStep::on(anb);
+        }
+
+        
+        self.tracks[7].volume = 55;
+        self.tracks[7].steps[2]  = BeatStep::on(45);
+        self.tracks[7].steps[6]  = BeatStep::on(55);
+        self.tracks[7].steps[14] = BeatStep::on(50);
+        self.tracks[7].steps[18] = BeatStep::on(42);
+        self.tracks[7].steps[26] = BeatStep::on(52);
+        self.tracks[7].steps[30] = BeatStep::on(60);
+
+        
+        self.tracks[3].volume = 245;
+        self.tracks[3].steps[0]  = BeatStep::ah(127, 0);    
+        self.tracks[3].steps[4]  = BeatStep::ah(85, 0);     
+        self.tracks[3].steps[8]  = BeatStep::ah(120, -4);   
+        self.tracks[3].steps[16] = BeatStep::ah(125, -2);   
+        self.tracks[3].steps[20] = BeatStep::ah(80, -2);    
+        self.tracks[3].steps[24] = BeatStep::ah(118, -5);   
+        self.tracks[3].steps[28] = BeatStep::ah(95, -5);    
+
+        
+        self.tracks[4].volume = 100;
+        
+        self.tracks[4].steps[0]  = BeatStep::ah(80, 0);     
+        self.tracks[4].steps[1]  = BeatStep::ah(62, 4);     
+        self.tracks[4].steps[2]  = BeatStep::ah(72, 7);     
+        self.tracks[4].steps[4]  = BeatStep::ah(65, 12);    
+        
+        self.tracks[4].steps[8]  = BeatStep::ah(78, -4);    
+        self.tracks[4].steps[9]  = BeatStep::ah(60, 0);     
+        self.tracks[4].steps[10] = BeatStep::ah(70, 4);     
+        self.tracks[4].steps[12] = BeatStep::ah(58, 8);     
+        
+        self.tracks[4].steps[16] = BeatStep::ah(75, -2);    
+        self.tracks[4].steps[17] = BeatStep::ah(58, 2);     
+        self.tracks[4].steps[18] = BeatStep::ah(68, 5);     
+        self.tracks[4].steps[20] = BeatStep::ah(55, 10);    
+        
+        self.tracks[4].steps[24] = BeatStep::ah(72, -5);    
+        self.tracks[4].steps[25] = BeatStep::ah(55, -1);    
+        self.tracks[4].steps[26] = BeatStep::ah(65, 2);     
+        self.tracks[4].steps[28] = BeatStep::ah(52, 5);     
+
+        
+        self.tracks[5].volume = 42;
+        self.tracks[5].steps[0]  = BeatStep::ah(32, 0);     
+        self.tracks[5].steps[8]  = BeatStep::ah(28, -4);    
+        self.tracks[5].steps[16] = BeatStep::ah(30, -2);    
+        self.tracks[5].steps[24] = BeatStep::ah(28, -5);    
+
+        
+        self.tracks[6].volume = 110;
+        self.tracks[6].steps[0]  = BeatStep::ah(95, 12);    
+        self.tracks[6].steps[3]  = BeatStep::ah(80, 7);     
+        self.tracks[6].steps[6]  = BeatStep::ah(88, 5);     
+        self.tracks[6].steps[8]  = BeatStep::ah(100, 4);    
+        self.tracks[6].steps[12] = BeatStep::ah(92, 0);     
+        self.tracks[6].steps[16] = BeatStep::ah(105, 7);    
+        self.tracks[6].steps[18] = BeatStep::ah(85, 5);     
+        self.tracks[6].steps[20] = BeatStep::ah(98, 4);     
+        self.tracks[6].steps[24] = BeatStep::ah(110, 12);   
+        self.tracks[6].steps[28] = BeatStep::ah(75, 7);     
+    }
+
+    
+    
+    
+    
+    pub fn qoa(&mut self) {
+        self.u2_base();
+        self.tracks[0].muted = true;   
+        self.tracks[1].muted = true;   
+        self.tracks[2].muted = true;   
+        self.tracks[7].muted = true;   
+
+        
+        self.tracks[3].volume = 60;
+        self.tracks[3].steps[0]  = BeatStep::ah(40, 0);     
+
+        
+        self.tracks[4].volume = 35;
+        self.tracks[4].steps[0]  = BeatStep::ah(35, 0);     
+        self.tracks[4].steps[8]  = BeatStep::ah(28, 4);     
+        self.tracks[4].steps[20] = BeatStep::ah(30, 7);     
+
+        
+        self.tracks[5].volume = 30;
+        self.tracks[5].steps[0]  = BeatStep::ah(22, 0);     
+        self.tracks[5].steps[16] = BeatStep::ah(18, 7);     
+
+        
+        self.tracks[6].volume = 40;
+        self.tracks[6].steps[0]  = BeatStep::ah(30, 7);     
+        self.tracks[6].steps[8]  = BeatStep::ah(25, 5);     
+        self.tracks[6].steps[16] = BeatStep::ah(22, 4);     
+        self.tracks[6].steps[26] = BeatStep::ah(18, 0);     
     }
 
     
     
     
 
-    fn pwc(&self) -> u32 { 48 }
+    fn transport_h(&self) -> u32 { 48 }
 
-    fn fxg(&self) -> u32 { 120 }
+    fn track_label_w(&self) -> u32 { 120 }
 
-    fn pgi(&self) -> u32 { self.gz.ao(self.fxg() + self.auk()).am(120) }
+    fn scope_w(&self) -> u32 { self.fb_w.saturating_sub(self.track_label_w() + self.grid_w()).max(120) }
 
-    fn auk(&self) -> u32 {
+    fn grid_w(&self) -> u32 {
         
-        let gtg = ((self.gz - self.fxg() - 120) / self.af[0].aml as u32).am(20).v(44);
-        gtg * self.af[0].aml as u32
+        let step_w = ((self.fb_w - self.track_label_w() - 120) / self.tracks[0].num_steps as u32).max(20).min(44);
+        step_w * self.tracks[0].num_steps as u32
     }
 
-    fn gtg(&self) -> u32 {
-        self.auk() / self.af[0].aml as u32
+    fn step_w(&self) -> u32 {
+        self.grid_w() / self.tracks[0].num_steps as u32
     }
 
-    fn mmr(&self) -> u32 { 32 }
+    fn track_row_h(&self) -> u32 { 32 }
 
-    fn bhc(&self) -> u32 {
+    fn grid_h(&self) -> u32 {
         
-        24 + GP_ as u32 * self.mmr()
+        24 + HG_ as u32 * self.track_row_h()
     }
 
-    fn jom(&self) -> u32 { self.pwc() }
-    fn whu(&self) -> u32 { self.fxg() }
-    fn pgj(&self) -> u32 { self.fxg() + self.auk() }
+    fn seq_y(&self) -> u32 { self.transport_h() }
+    fn seq_grid_x(&self) -> u32 { self.track_label_w() }
+    fn scope_x(&self) -> u32 { self.track_label_w() + self.grid_w() }
 
-    fn imd(&self) -> u32 { self.jom() + self.bhc() + 2 }
-    fn qrl(&self) -> u32 { self.kc.ao(self.imd() + 48) }
-    fn uo(&self) -> u32 { self.kc.ao(48) }
-
-    
-    
-    
+    fn bottom_y(&self) -> u32 { self.seq_y() + self.grid_h() + 2 }
+    fn bottom_h(&self) -> u32 { self.fb_h.saturating_sub(self.bottom_y() + 48) }
+    fn status_y(&self) -> u32 { self.fb_h.saturating_sub(48) }
 
     
-    pub fn po(&self) {
-        if self.gz == 0 || self.kc == 0 { return; }
+    
+    
+
+    
+    pub fn draw(&self) {
+        if self.fb_w == 0 || self.fb_h == 0 { return; }
 
         
-        crate::framebuffer::ah(0, 0, self.gz, self.kc, colors::JJ_);
+        crate::framebuffer::fill_rect(0, 0, self.fb_w, self.fb_h, colors::DW_);
 
-        self.krn();
-        self.sgi();
-        self.sfs();
-        self.sfi();
-        self.sbx();
-        self.hgw();
+        self.draw_transport();
+        self.draw_track_labels();
+        self.draw_step_grid();
+        self.draw_scope();
+        self.draw_bottom_panel();
+        self.draw_status_bar();
     }
 
     
 
-    fn krn(&self) {
-        let i = self.pwc();
-        crate::framebuffer::ah(0, 0, self.gz, i, colors::XT_);
+    fn draw_transport(&self) {
+        let h = self.transport_h();
+        crate::framebuffer::fill_rect(0, 0, self.fb_w, h, colors::ZA_);
 
         
-        crate::framebuffer::cb("TrustDAW Beat Studio", 8, 4, colors::PY_);
+        crate::framebuffer::draw_text("TrustDAW Beat Studio", 8, 4, colors::QV_);
 
         
         let bx = 220;
         
-        let wul = if !self.uu { colors::AIS_ } else { colors::AII_ };
-        crate::framebuffer::ah(bx, 4, 14, 14, wul);
+        let oxl = if !self.playing { colors::AKP_ } else { colors::AKE_ };
+        crate::framebuffer::fill_rect(bx, 4, 14, 14, oxl);
 
         
-        let luf = if self.uu { colors::OY_ } else { colors::AII_ };
-        crate::framebuffer::ah(bx + 22, 4, 4, 14, luf);
-        crate::framebuffer::ah(bx + 26, 6, 3, 10, luf);
-        crate::framebuffer::ah(bx + 29, 8, 2, 6, luf);
+        let gng = if self.playing { colors::PW_ } else { colors::AKE_ };
+        crate::framebuffer::fill_rect(bx + 22, 4, 4, 14, gng);
+        crate::framebuffer::fill_rect(bx + 26, 6, 3, 10, gng);
+        crate::framebuffer::fill_rect(bx + 29, 8, 2, 6, gng);
 
         
-        let vtb = if self.ehe { colors::WN_ } else { colors::AII_ };
-        crate::framebuffer::abc(bx + 52, 11, 6, vtb);
+        let odn = if self.recording { colors::XW_ } else { colors::AKE_ };
+        crate::framebuffer::fill_circle(bx + 52, 11, 6, odn);
 
         
-        let gbk = format!("BPM:{}", self.kz);
-        crate::framebuffer::cb(&gbk, bx + 80, 4, colors::AIS_);
+        let cuh = format!("BPM:{}", self.bpm);
+        crate::framebuffer::draw_text(&cuh, bx + 80, 4, colors::AKP_);
 
         
-        let bar = self.aop / 16 + 1;
-        let rf = (self.aop % 16) / 4 + 1;
-        let sub = self.aop % 4 + 1;
-        let dar = format!("{}:{}.{}", bar, rf, sub);
-        crate::framebuffer::cb(&dar, bx + 160, 4, colors::OY_);
+        let bar = self.current_step / 16 + 1;
+        let beat = (self.current_step % 16) / 4 + 1;
+        let sub = self.current_step % 4 + 1;
+        let bdb = format!("{}:{}.{}", bar, beat, sub);
+        crate::framebuffer::draw_text(&bdb, bx + 160, 4, colors::PW_);
 
         
-        let wwr = format!("Swing:{}%", self.ezi);
-        crate::framebuffer::cb(&wwr, bx + 240, 4, colors::N_);
+        let ozg = format!("Swing:{}%", self.swing);
+        crate::framebuffer::draw_text(&ozg, bx + 240, 4, colors::O_);
 
         
-        let wuf = format!("{} steps", self.af[0].aml);
-        crate::framebuffer::cb(&wuf, bx + 340, 4, colors::N_);
+        let oxg = format!("{} steps", self.tracks[0].num_steps);
+        crate::framebuffer::draw_text(&oxg, bx + 340, 4, colors::O_);
 
         
-        crate::framebuffer::cb("Key: C# minor", 8, 24, colors::AV_);
+        crate::framebuffer::draw_text("Key: C# minor", 8, 24, colors::AY_);
 
-        let xll = self.af[self.bdw].amj();
-        let wgs = format!("Track: {} [{}]", xll, self.bdw);
-        crate::framebuffer::cb(&wgs, 140, 24, colors::N_);
+        let pmw = self.tracks[self.cursor_track].name_str();
+        let ong = format!("Track: {} [{}]", pmw, self.cursor_track);
+        crate::framebuffer::draw_text(&ong, 140, 24, colors::O_);
 
-        let lps = format!("Oct:{}", 4i8 + self.cgg);
-        crate::framebuffer::cb(&lps, 340, 24, colors::N_);
+        let gkh = format!("Oct:{}", 4i8 + self.octave);
+        crate::framebuffer::draw_text(&gkh, 340, 24, colors::O_);
 
-        let moy = format!("Vel:{}", self.qm);
-        crate::framebuffer::cb(&moy, 420, 24, colors::N_);
+        let hbh = format!("Vel:{}", self.velocity);
+        crate::framebuffer::draw_text(&hbh, 420, 24, colors::O_);
 
         
-        crate::framebuffer::zs(0, i - 1, self.gz, colors::ZN_);
+        crate::framebuffer::mn(0, h - 1, self.fb_w, colors::AAY_);
     }
 
     
 
-    fn sgi(&self) {
-        let b = 0;
-        let c = self.jom();
-        let d = self.fxg();
-        let ph = self.mmr();
+    fn draw_track_labels(&self) {
+        let x = 0;
+        let y = self.seq_y();
+        let w = self.track_label_w();
+        let ep = self.track_row_h();
 
         
-        crate::framebuffer::ah(b, c, d, 24, colors::JK_);
-        crate::framebuffer::cb("TRACKS", 8, c + 4, colors::AV_);
-        crate::framebuffer::zs(b, c + 23, d, colors::Fj);
+        crate::framebuffer::fill_rect(x, y, w, 24, colors::DX_);
+        crate::framebuffer::draw_text("TRACKS", 8, y + 4, colors::AY_);
+        crate::framebuffer::mn(x, y + 23, w, colors::Bp);
 
-        for a in 0..GP_ {
-            let ix = c + 24 + a as u32 * ph;
-            let qe = a == self.bdw;
-
-            
-            let ei = if qe { colors::ALU_ } else { colors::HN_ };
-            crate::framebuffer::ah(b, ix, d, ph, ei);
+        for i in 0..HG_ {
+            let cm = y + 24 + i as u32 * ep;
+            let hd = i == self.cursor_track;
 
             
-            crate::framebuffer::ah(b, ix, 4, ph, self.af[a].s);
+            let bg = if hd { colors::ANL_ } else { colors::CJ_ };
+            crate::framebuffer::fill_rect(x, cm, w, ep, bg);
 
             
-            if qe {
-                crate::framebuffer::cb(">", 6, ix + 8, colors::BGJ_);
+            crate::framebuffer::fill_rect(x, cm, 4, ep, self.tracks[i].color);
+
+            
+            if hd {
+                crate::framebuffer::draw_text(">", 6, cm + 8, colors::BIN_);
             }
 
             
-            let j = self.af[a].amj();
-            let ure = if self.af[a].so { colors::AV_ }
-                         else { colors::AC_ };
-            crate::framebuffer::cb(j, 18, ix + 8, ure);
+            let name = self.tracks[i].name_str();
+            let nhm = if self.tracks[i].muted { colors::AY_ }
+                         else { colors::AB_ };
+            crate::framebuffer::draw_text(name, 18, cm + 8, nhm);
 
             
-            if self.af[a].so {
-                crate::framebuffer::cb("M", 82, ix + 8, colors::CHI_);
+            if self.tracks[i].muted {
+                crate::framebuffer::draw_text("M", 82, cm + 8, colors::CKR_);
             }
-            if self.af[a].cic {
-                crate::framebuffer::cb("S", 96, ix + 8, colors::CTR_);
+            if self.tracks[i].solo {
+                crate::framebuffer::draw_text("S", 96, cm + 8, colors::CXI_);
             }
 
             
-            crate::framebuffer::zs(b, ix + ph - 1, d, colors::Aqo);
+            crate::framebuffer::mn(x, cm + ep - 1, w, colors::Rp);
         }
 
         
-        crate::framebuffer::axt(d - 1, c, self.bhc(), colors::Fj);
+        crate::framebuffer::zv(w - 1, y, self.grid_h(), colors::Bp);
     }
 
     
 
-    fn sfs(&self) {
-        let qz = self.whu();
-        let ub = self.jom();
-        let kp = self.gtg();
-        let ph = self.mmr();
-        let orw = self.af[0].aml;
+    fn draw_step_grid(&self) {
+        let hc = self.seq_grid_x();
+        let jh = self.seq_y();
+        let dy = self.step_w();
+        let ep = self.track_row_h();
+        let irt = self.tracks[0].num_steps;
 
         
-        crate::framebuffer::ah(qz, ub, self.auk(), 24, colors::JK_);
-        for e in 0..orw {
-            let cr = qz + e as u32 * kp;
-            let ajh = format!("{}", e + 1);
+        crate::framebuffer::fill_rect(hc, jh, self.grid_w(), 24, colors::DX_);
+        for j in 0..irt {
+            let am = hc + j as u32 * dy;
+            let rw = format!("{}", j + 1);
             
-            let s = if e % 4 == 0 { colors::AC_ } else { colors::AV_ };
-            crate::framebuffer::cb(&ajh, cr + 2, ub + 4, s);
+            let color = if j % 4 == 0 { colors::AB_ } else { colors::AY_ };
+            crate::framebuffer::draw_text(&rw, am + 2, jh + 4, color);
 
             
-            if e % 4 == 0 && e > 0 {
-                crate::framebuffer::axt(cr, ub, self.bhc(), colors::CUJ_);
+            if j % 4 == 0 && j > 0 {
+                crate::framebuffer::zv(am, jh, self.grid_h(), colors::CYB_);
             }
         }
-        crate::framebuffer::zs(qz, ub + 23, self.auk(), colors::Fj);
+        crate::framebuffer::mn(hc, jh + 23, self.grid_w(), colors::Bp);
 
         
-        for ab in 0..GP_ {
-            let ix = ub + 24 + ab as u32 * ph;
+        for t in 0..HG_ {
+            let cm = jh + 24 + t as u32 * ep;
 
-            for e in 0..orw {
-                let cr = qz + e as u32 * kp;
-                let gu = &self.af[ab].au[e];
-
-                
-                let lrr = cr + 2;
-                let lrs = ix + 2;
-                let lrq = kp.ao(4).am(4);
-                let lrp = ph.ao(4).am(4);
+            for j in 0..irt {
+                let am = hc + j as u32 * dy;
+                let step = &self.tracks[t].steps[j];
 
                 
-                let txc = ab == self.bdw && e == self.bzc;
-                let ogp = self.uu && e == self.aop;
+                let gls = am + 2;
+                let glt = cm + 2;
+                let glr = dy.saturating_sub(4).max(4);
+                let glq = ep.saturating_sub(4).max(4);
 
-                let var = if gu.gh {
-                    if ogp {
-                        colors::BGK_  
+                
+                let msg = t == self.cursor_track && j == self.cursor_step;
+                let iig = self.playing && j == self.current_step;
+
+                let npe = if step.active {
+                    if iig {
+                        colors::BIO_  
                     } else {
                         
-                        let kt = gu.qm as u32 * 100 / 127;
-                        jzn(self.af[ab].s, kt.am(40))
+                        let brightness = step.velocity as u32 * 100 / 127;
+                        fgh(self.tracks[t].color, brightness.max(40))
                     }
-                } else if ogp {
-                    colors::ALU_  
+                } else if iig {
+                    colors::ANL_  
                 } else {
-                    colors::CUL_
+                    colors::CYD_
                 };
 
                 
-                crate::framebuffer::ah(lrr, lrs, lrq, lrp, var);
+                crate::framebuffer::fill_rect(gls, glt, glr, glq, npe);
 
                 
-                if txc {
-                    crate::framebuffer::lx(lrr.ao(1), lrs.ao(1),
-                        lrq + 2, lrp + 2, colors::BGJ_);
+                if msg {
+                    crate::framebuffer::draw_rect(gls.saturating_sub(1), glt.saturating_sub(1),
+                        glr + 2, glq + 2, colors::BIN_);
                 }
 
                 
-                crate::framebuffer::lx(lrr, lrs, lrq, lrp, colors::CUK_);
+                crate::framebuffer::draw_rect(gls, glt, glr, glq, colors::CYC_);
             }
 
             
-            crate::framebuffer::zs(qz, ix + ph - 1, self.auk(), colors::Aqo);
+            crate::framebuffer::mn(hc, cm + ep - 1, self.grid_w(), colors::Rp);
         }
 
         
-        if self.uu {
-            let y = qz + self.aop as u32 * kp + kp / 2;
-            crate::framebuffer::axt(y, ub, self.bhc(), colors::BGK_);
+        if self.playing {
+            let p = hc + self.current_step as u32 * dy + dy / 2;
+            crate::framebuffer::zv(p, jh, self.grid_h(), colors::BIO_);
         }
     }
 
     
 
-    fn sfi(&self) {
-        let cr = self.pgj();
-        let cq = self.jom();
-        let kp = self.pgi();
-        let kl = self.bhc();
+    fn draw_scope(&self) {
+        let am = self.scope_x();
+        let ak = self.seq_y();
+        let dy = self.scope_w();
+        let dw = self.grid_h();
 
-        crate::framebuffer::ah(cr, cq, kp, kl, colors::CQN_);
-        crate::framebuffer::axt(cr, cq, kl, colors::Fj);
-
-        
-        crate::framebuffer::ah(cr, cq, kp, 24, colors::JK_);
-        crate::framebuffer::cb("SCOPE", cr + 8, cq + 4, colors::AV_);
-        crate::framebuffer::zs(cr, cq + 23, kp, colors::Fj);
+        crate::framebuffer::fill_rect(am, ak, dy, dw, colors::CUE_);
+        crate::framebuffer::zv(am, ak, dw, colors::Bp);
 
         
-        let hza = cq + 24;
-        let hyz = kl / 2 - 24;
-        let uq = hza + hyz / 2;
+        crate::framebuffer::fill_rect(am, ak, dy, 24, colors::DX_);
+        crate::framebuffer::draw_text("SCOPE", am + 8, ak + 4, colors::AY_);
+        crate::framebuffer::mn(am, ak + 23, dy, colors::Bp);
 
         
-        crate::framebuffer::zs(cr + 4, uq, kp - 8, colors::Aqo);
+        let dyp = ak + 24;
+        let dyo = dw / 2 - 24;
+        let center_y = dyp + dyo / 2;
 
         
-        let hgy = (kp - 8).v(256) as usize;
-        for a in 1..hgy {
-            let trt = (self.jnu + a - 1) % 256;
-            let tru = (self.jnu + a) % 256;
+        crate::framebuffer::mn(am + 4, center_y, dy - 8, colors::Rp);
 
-            let dp = uq as i32 - (self.hyy[trt] as i32 * hyz as i32 / 2) / 32768;
-            let jz = uq as i32 - (self.hyy[tru] as i32 * hyz as i32 / 2) / 32768;
+        
+        let dnr = (dy - 8).min(256) as usize;
+        for i in 1..dnr {
+            let mnw = (self.scope_pos + i - 1) % 256;
+            let mnx = (self.scope_pos + i) % 256;
 
-            let egz = (dp.am(hza as i32) as u32).v(hza + hyz);
-            let eha = (jz.am(hza as i32) as u32).v(hza + hyz);
+            let y1 = center_y as i32 - (self.scope_buffer[mnw] as i32 * dyo as i32 / 2) / 32768;
+            let y2 = center_y as i32 - (self.scope_buffer[mnx] as i32 * dyo as i32 / 2) / 32768;
+
+            let bvc = (y1.max(dyp as i32) as u32).min(dyp + dyo);
+            let bvd = (y2.max(dyp as i32) as u32).min(dyp + dyo);
 
             
-            let onm = egz.v(eha);
-            let csl = egz.am(eha);
-            let gy = (csl - onm).am(1);
-            crate::framebuffer::ah(cr + 4 + a as u32, onm, 1, gy, colors::CQO_);
+            let inw = bvc.min(bvd);
+            let aye = bvc.max(bvd);
+            let bw = (aye - inw).max(1);
+            crate::framebuffer::fill_rect(am + 4 + i as u32, inw, 1, bw, colors::CUF_);
         }
 
         
-        let dcd = cq + kl / 2;
-        let wqr = kl / 2;
+        let spec_y = ak + dw / 2;
+        let oun = dw / 2;
 
-        crate::framebuffer::zs(cr, dcd, kp, colors::Fj);
-        crate::framebuffer::cb("SPECTRUM", cr + 8, dcd + 4, colors::AV_);
+        crate::framebuffer::mn(am, spec_y, dy, colors::Bp);
+        crate::framebuffer::draw_text("SPECTRUM", am + 8, spec_y + 4, colors::AY_);
 
-        let mxt = dcd + 20;
-        let kbz = wqr - 24;
-        let orl = 16usize;
-        let lo = ((kp - 16) / orl as u32).am(4);
+        let dii = spec_y + 20;
+        let bxp = oun - 24;
+        let irh = 16usize;
+        let ek = ((dy - 16) / irh as u32).max(4);
 
-        for a in 0..orl {
-            let bx = cr + 8 + a as u32 * lo;
-            let jy = self.mgq[a].v(100) as u32;
-            let kvz = kbz * jy / 100;
-            let pl = mxt + kbz - kvz;
-
-            
-            let emn = if jy > 85 { colors::CTW_ }
-                           else if jy > 70 { colors::CTV_ }
-                           else if jy > 50 { colors::CTU_ }
-                           else if jy > 30 { colors::CTT_ }
-                           else { colors::CTS_ };
+        for i in 0..irh {
+            let bx = am + 8 + i as u32 * ek;
+            let level = self.spectrum[i].min(100) as u32;
+            let fwv = bxp * level / 100;
+            let gk = dii + bxp - fwv;
 
             
-            crate::framebuffer::ah(bx, mxt, lo - 2, kbz, colors::VD_);
+            let bxq = if level > 85 { colors::CXN_ }
+                           else if level > 70 { colors::CXM_ }
+                           else if level > 50 { colors::CXL_ }
+                           else if level > 30 { colors::CXK_ }
+                           else { colors::CXJ_ };
 
             
-            if kvz > 0 {
-                crate::framebuffer::ah(bx, pl, lo - 2, kvz, emn);
+            crate::framebuffer::fill_rect(bx, dii, ek - 2, bxp, colors::WM_);
+
+            
+            if fwv > 0 {
+                crate::framebuffer::fill_rect(bx, gk, ek - 2, fwv, bxq);
             }
         }
     }
 
     
 
-    fn sbx(&self) {
-        let je = self.imd();
-        let adn = self.qrl();
+    fn draw_bottom_panel(&self) {
+        let dc = self.bottom_y();
+        let ov = self.bottom_h();
 
-        crate::framebuffer::zs(0, je, self.gz, colors::ZN_);
+        crate::framebuffer::mn(0, dc, self.fb_w, colors::AAY_);
 
         
-        self.sdx(0, je + 1, self.fxg(), adn);
-        self.sgm(self.fxg(), je + 1, self.auk(), adn);
-        self.krc(self.pgj(), je + 1, self.pgi(), adn);
+        self.draw_mixer(0, dc + 1, self.track_label_w(), ov);
+        self.draw_visual_keyboard(self.track_label_w(), dc + 1, self.grid_w(), ov);
+        self.draw_info_panel(self.scope_x(), dc + 1, self.scope_w(), ov);
     }
 
     
 
-    fn sdx(&self, b: u32, c: u32, d: u32, i: u32) {
-        crate::framebuffer::ah(b, c, d, i, colors::HN_);
+    fn draw_mixer(&self, x: u32, y: u32, w: u32, h: u32) {
+        crate::framebuffer::fill_rect(x, y, w, h, colors::CJ_);
 
         
-        crate::framebuffer::cb("MIXER", b + 8, c + 4, colors::AV_);
+        crate::framebuffer::draw_text("MIXER", x + 8, y + 4, colors::AY_);
 
-        let sqt = i.ao(40);
-        let alm = GP_;
-        let nss = ((d - 8) / alm as u32).am(8);
+        let lua = h.saturating_sub(40);
+        let num_tracks = HG_;
+        let hxt = ((w - 8) / num_tracks as u32).max(8);
 
-        for a in 0..alm {
-            let jf = b + 4 + a as u32 * nss;
-            let sc = c + 24;
-
-            
-            let cfo = self.af[a].amj().bw().next().unwrap_or('?');
-            let tue = format!("{}", cfo);
-            crate::framebuffer::cb(&tue, jf + 2, sc, self.af[a].s);
+        for i in 0..num_tracks {
+            let dg = x + 4 + i as u32 * hxt;
+            let hj = y + 24;
 
             
-            let kux = jf + 2;
-            let kuy = sc + 18;
-            let kuw = nss.ao(6).am(3);
-            let ggt = sqt.ao(30);
-
-            crate::framebuffer::ah(kux, kuy, kuw, ggt, colors::VD_);
+            let are = self.tracks[i].name_str().chars().next().unwrap_or('?');
+            let mpu = format!("{}", are);
+            crate::framebuffer::draw_text(&mpu, dg + 2, hj, self.tracks[i].color);
 
             
-            let jy = self.af[a].hq as u32 * ggt / 255;
-            if jy > 0 {
-                let uei = kuy + ggt - jy;
-                let ueg = if self.af[a].so { colors::AV_ }
-                    else if jy > ggt * 90 / 100 { colors::AFK_ }
-                    else if jy > ggt * 70 / 100 { colors::AFL_ }
-                    else { colors::AFJ_ };
-                crate::framebuffer::ah(kux, uei, kuw, jy, ueg);
+            let fwb = dg + 2;
+            let fwc = hj + 18;
+            let fwa = hxt.saturating_sub(6).max(3);
+            let cxq = lua.saturating_sub(30);
+
+            crate::framebuffer::fill_rect(fwb, fwc, fwa, cxq, colors::WM_);
+
+            
+            let level = self.tracks[i].volume as u32 * cxq / 255;
+            if level > 0 {
+                let mye = fwc + cxq - level;
+                let myc = if self.tracks[i].muted { colors::AY_ }
+                    else if level > cxq * 90 / 100 { colors::AHE_ }
+                    else if level > cxq * 70 / 100 { colors::AHF_ }
+                    else { colors::AHD_ };
+                crate::framebuffer::fill_rect(fwb, mye, fwa, level, myc);
             }
 
             
-            crate::framebuffer::lx(kux, kuy, kuw, ggt, colors::Fj);
+            crate::framebuffer::draw_rect(fwb, fwc, fwa, cxq, colors::Bp);
         }
 
         
-        crate::framebuffer::axt(b + d - 1, c, i, colors::Fj);
+        crate::framebuffer::zv(x + w - 1, y, h, colors::Bp);
     }
 
     
 
-    fn sgm(&self, b: u32, c: u32, d: u32, i: u32) {
-        crate::framebuffer::ah(b, c, d, i, colors::RM_);
+    fn draw_visual_keyboard(&self, x: u32, y: u32, w: u32, h: u32) {
+        crate::framebuffer::fill_rect(x, y, w, h, colors::SO_);
 
         
-        crate::framebuffer::cb("KEYBOARD", b + 8, c + 4, colors::AV_);
+        crate::framebuffer::draw_text("KEYBOARD", x + 8, y + 4, colors::AY_);
 
         
-        let fmg = c + 22;
-        let oho = i.ao(26);
-        let jwr = oho;
-        let mzh = oho * 60 / 100;
+        let clp = y + 22;
+        let iiw = h.saturating_sub(26);
+        let ffc = iiw;
+        let hhx = iiw * 60 / 100;
 
         
-        let lpp = 14u32;
-        let diq = (d - 16) / lpp;
-        let ohp = b + 8;
+        let gkf = 14u32;
+        let bhl = (w - 16) / gkf;
+        let iix = x + 8;
 
-        let kcg = (4 + self.cgg) as u8;
+        let fii = (4 + self.octave) as u8;
 
         
-        for a in 0..lpp {
-            let jcd = ohp + a * diq;
+        for i in 0..gkf {
+            let esc = iix + i * bhl;
 
             
-            let jhp = a / 7;
-            let gkp = a % 7;
-            let mdn = match gkp {
+            let evm = i / 7;
+            let daf = i % 7;
+            let gts = match daf {
                 0 => 0,  
                 1 => 2,  
                 2 => 4,  
@@ -2277,36 +2277,36 @@ impl BeatStudio {
                 6 => 11, 
                 _ => 0,
             };
-            let ti = (kcg + jhp as u8) * 12 + mdn as u8;
+            let midi_note = (fii + evm as u8) * 12 + gts as u8;
 
-            let eth = ti < 128 && self.dsl[ti as usize];
-            let lhc = if eth { colors::AYB_ } else { colors::ADT_ };
+            let cbd = midi_note < 128 && self.keys_pressed[midi_note as usize];
+            let gem = if cbd { colors::BAC_ } else { colors::AFN_ };
 
-            crate::framebuffer::ah(jcd, fmg, diq - 2, jwr, lhc);
-            crate::framebuffer::lx(jcd, fmg, diq - 2, jwr, colors::Fj);
+            crate::framebuffer::fill_rect(esc, clp, bhl - 2, ffc, gem);
+            crate::framebuffer::draw_rect(esc, clp, bhl - 2, ffc, colors::Bp);
 
             
-            let uvj = ["C", "D", "E", "F", "G", "A", "B"];
-            if gkp < 7 {
-                let cu = uvj[gkp as usize];
-                let bbw = if eth { colors::AIS_ } else { colors::CDB_ };
-                crate::framebuffer::cb(cu, jcd + diq / 2 - 4, fmg + jwr - 18, bbw);
+            let nlb = ["C", "D", "E", "F", "G", "A", "B"];
+            if daf < 7 {
+                let label = nlb[daf as usize];
+                let ace = if cbd { colors::AKP_ } else { colors::CGK_ };
+                crate::framebuffer::draw_text(label, esc + bhl / 2 - 4, clp + ffc - 18, ace);
             }
 
             
-            if gkp == 0 {
-                let lps = format!("{}", kcg + jhp as u8);
-                crate::framebuffer::cb(&lps, jcd + 2, fmg + 2, colors::AV_);
+            if daf == 0 {
+                let gkh = format!("{}", fii + evm as u8);
+                crate::framebuffer::draw_text(&gkh, esc + 2, clp + 2, colors::AY_);
             }
         }
 
         
-        for a in 0..lpp {
-            let jhp = a / 7;
-            let gkp = a % 7;
+        for i in 0..gkf {
+            let evm = i / 7;
+            let daf = i % 7;
 
             
-            let mdn = match gkp {
+            let gts = match daf {
                 0 => Some(1),  
                 1 => Some(3),  
                 
@@ -2316,100 +2316,100 @@ impl BeatStudio {
                 _ => None,
             };
 
-            if let Some(grz) = mdn {
-                let ti = (kcg + jhp as u8) * 12 + grz as u8;
-                let eth = ti < 128 && self.dsl[ti as usize];
+            if let Some(dee) = gts {
+                let midi_note = (fii + evm as u8) * 12 + dee as u8;
+                let cbd = midi_note < 128 && self.keys_pressed[midi_note as usize];
 
-                let bx = ohp + a * diq + diq * 2 / 3;
-                let nm = diq * 2 / 3;
-                let lhc = if eth { colors::AYB_ } else { colors::ADS_ };
+                let bx = iix + i * bhl + bhl * 2 / 3;
+                let fv = bhl * 2 / 3;
+                let gem = if cbd { colors::BAC_ } else { colors::AFM_ };
 
-                crate::framebuffer::ah(bx, fmg, nm, mzh, lhc);
-                crate::framebuffer::lx(bx, fmg, nm, mzh, colors::Fj);
+                crate::framebuffer::fill_rect(bx, clp, fv, hhx, gem);
+                crate::framebuffer::draw_rect(bx, clp, fv, hhx, colors::Bp);
             }
         }
 
         
-        let fmn = fmg + jwr + 2;
-        if fmn + 16 < c + i {
-            crate::framebuffer::cb("[Z X C V B N M] Low  [Q W E R T Y U] High", b + 8, fmn, colors::AV_);
+        let clw = clp + ffc + 2;
+        if clw + 16 < y + h {
+            crate::framebuffer::draw_text("[Z X C V B N M] Low  [Q W E R T Y U] High", x + 8, clw, colors::AY_);
         }
     }
 
     
 
-    fn krc(&self, b: u32, c: u32, d: u32, i: u32) {
-        crate::framebuffer::ah(b, c, d, i, colors::HN_);
-        crate::framebuffer::axt(b, c, i, colors::Fj);
+    fn draw_info_panel(&self, x: u32, y: u32, w: u32, h: u32) {
+        crate::framebuffer::fill_rect(x, y, w, h, colors::CJ_);
+        crate::framebuffer::zv(x, y, h, colors::Bp);
 
-        crate::framebuffer::cb("INFO", b + 8, c + 4, colors::AV_);
+        crate::framebuffer::draw_text("INFO", x + 8, y + 4, colors::AY_);
 
-        let mut ct = c + 24;
-        let gy = 18u32;
-
-        
-        let ab = &self.af[self.bdw];
-        let amj = format!("Track: {}", ab.amj());
-        crate::framebuffer::cb(&amj, b + 8, ct, colors::AC_);
-        ct += gy;
-
-        let xua = format!("Wave: {}", ab.ve.j());
-        crate::framebuffer::cb(&xua, b + 8, ct, colors::N_);
-        ct += gy;
-
-        let bde = if ab.jbg { "Type: Drum" } else { "Type: Melodic" };
-        crate::framebuffer::cb(bde, b + 8, ct, colors::N_);
-        ct += gy;
-
-        let bkp = crate::audio::tables::dtf(ab.fdc);
-        let uvk = crate::audio::tables::efk(ab.fdc);
-        let uvn = format!("Note: {}{}", bkp, uvk);
-        crate::framebuffer::cb(&uvn, b + 8, ct, colors::N_);
-        ct += gy;
-
-        let coh = format!("Steps: {}/{}", ab.gxu(), ab.aml);
-        crate::framebuffer::cb(&coh, b + 8, ct, colors::N_);
-        ct += gy;
-
-        let igu = format!("Vol: {}", ab.hq);
-        crate::framebuffer::cb(&igu, b + 8, ct, colors::N_);
-        ct += gy;
-
-        let lry = if ab.arp == 0 { String::from("Pan: C") }
-                     else if ab.arp > 0 { format!("Pan: R{}", ab.arp) }
-                     else { format!("Pan: L{}", -ab.arp) };
-        crate::framebuffer::cb(&lry, b + 8, ct, colors::N_);
-        ct += gy + 8;
+        let mut ly = y + 24;
+        let bw = 18u32;
 
         
-        let rrq = format!("Step: {}/{}", self.bzc + 1, ab.aml);
-        crate::framebuffer::cb(&rrq, b + 8, ct, colors::PY_);
-        ct += gy;
+        let t = &self.tracks[self.cursor_track];
+        let name_str = format!("Track: {}", t.name_str());
+        crate::framebuffer::draw_text(&name_str, x + 8, ly, colors::AB_);
+        ly += bw;
+
+        let pue = format!("Wave: {}", t.waveform.name());
+        crate::framebuffer::draw_text(&pue, x + 8, ly, colors::O_);
+        ly += bw;
+
+        let ws = if t.is_drum { "Type: Drum" } else { "Type: Melodic" };
+        crate::framebuffer::draw_text(ws, x + 8, ly, colors::O_);
+        ly += bw;
+
+        let agu = crate::audio::tables::bno(t.base_note);
+        let nlc = crate::audio::tables::bui(t.base_note);
+        let nlf = format!("Note: {}{}", agu, nlc);
+        crate::framebuffer::draw_text(&nlf, x + 8, ly, colors::O_);
+        ly += bw;
+
+        let avy = format!("Steps: {}/{}", t.active_count(), t.num_steps);
+        crate::framebuffer::draw_text(&avy, x + 8, ly, colors::O_);
+        ly += bw;
+
+        let edy = format!("Vol: {}", t.volume);
+        crate::framebuffer::draw_text(&edy, x + 8, ly, colors::O_);
+        ly += bw;
+
+        let glz = if t.pan == 0 { String::from("Pan: C") }
+                     else if t.pan > 0 { format!("Pan: R{}", t.pan) }
+                     else { format!("Pan: L{}", -t.pan) };
+        crate::framebuffer::draw_text(&glz, x + 8, ly, colors::O_);
+        ly += bw + 8;
 
         
-        let gu = &ab.au[self.bzc];
-        if gu.gh {
-            let moy = format!("Hit Vel: {}", gu.qm);
-            crate::framebuffer::cb(&moy, b + 8, ct, colors::AC_);
+        let lai = format!("Step: {}/{}", self.cursor_step + 1, t.num_steps);
+        crate::framebuffer::draw_text(&lai, x + 8, ly, colors::QV_);
+        ly += bw;
+
+        
+        let step = &t.steps[self.cursor_step];
+        if step.active {
+            let hbh = format!("Hit Vel: {}", step.velocity);
+            crate::framebuffer::draw_text(&hbh, x + 8, ly, colors::AB_);
         } else {
-            crate::framebuffer::cb("Hit: ---", b + 8, ct, colors::AV_);
+            crate::framebuffer::draw_text("Hit: ---", x + 8, ly, colors::AY_);
         }
     }
 
     
 
-    fn hgw(&self) {
-        let cq = self.uo();
-        crate::framebuffer::ah(0, cq, self.gz, 48, colors::XT_);
-        crate::framebuffer::zs(0, cq, self.gz, colors::ZN_);
+    fn draw_status_bar(&self) {
+        let ak = self.status_y();
+        crate::framebuffer::fill_rect(0, ak, self.fb_w, 48, colors::ZA_);
+        crate::framebuffer::mn(0, ak, self.fb_w, colors::AAY_);
 
-        crate::framebuffer::cb(
+        crate::framebuffer::draw_text(
             "[Space] Play/Stop  [Enter] Toggle Step  [R] Record  [Tab] Track  [+/-] BPM",
-            8, cq + 6, colors::AV_
+            8, ak + 6, colors::AY_
         );
-        crate::framebuffer::cb(
+        crate::framebuffer::draw_text(
             "[Arrows] Navigate  [Z-M] Low Piano  [Q-P] High Piano  [F8] Export  [Esc] Exit",
-            8, cq + 24, colors::AV_
+            8, ak + 24, colors::AY_
         );
     }
 
@@ -2420,170 +2420,170 @@ impl BeatStudio {
     
     
     
-    pub fn ehn(&self) -> Vec<i16> {
-        let dwk = (60 * BR_) / (self.kz as u32 * 4); 
-        let tk = self.af[0].aml;
-        let agc = dwk as usize * tk;
-        let ayz = agc * Dv as usize;
+    pub fn render_loop(&self) -> Vec<i16> {
+        let bpf = (60 * BT_) / (self.bpm as u32 * 4); 
+        let ix = self.tracks[0].num_steps;
+        let total_frames = bpf as usize * ix;
+        let aai = total_frames * Bq as usize;
 
-        let mut bno = vec![0i32; ayz];
+        let mut aif = vec![0i32; aai];
 
         
         let mut rng: u32 = 0xCAFE_B0BA;
 
         
-        let qjc = self.af.iter().any(|ab| ab.cic);
+        let jwj = self.tracks.iter().any(|t| t.solo);
 
-        for (zx, ab) in self.af.iter().cf() {
-            if ab.so { continue; }
-            if qjc && !ab.cic { continue; }
+        for (mp, t) in self.tracks.iter().enumerate() {
+            if t.muted { continue; }
+            if jwj && !t.solo { continue; }
 
             let mut engine = SynthEngine::new();
-            engine.dvs(ab.ve);
-            engine.qr = ab.qr;
+            engine.set_waveform(t.waveform);
+            engine.envelope = t.envelope;
 
-            let api = ab.hq as i32;
+            let vd = t.volume as i32;
 
             
-            let mut e = 0usize;
-            while e < tk {
-                let gu = &ab.au[e];
-                if !gu.gh {
-                    e += 1;
+            let mut j = 0usize;
+            while j < ix {
+                let step = &t.steps[j];
+                if !step.active {
+                    j += 1;
                     continue;
                 }
 
-                let ayg = ab.lov(e);
-                if ayg == 0 { e += 1; continue; }
+                let aad = t.note_at(j);
+                if aad == 0 { j += 1; continue; }
 
                 
-                let orc = if ab.jbg {
+                let iqz = if t.is_drum {
                     1usize
                 } else {
-                    let mut dqi = 1usize;
-                    while e + dqi < tk && !ab.au[e + dqi].gh {
-                        dqi += 1;
+                    let mut blz = 1usize;
+                    while j + blz < ix && !t.steps[j + blz].active {
+                        blz += 1;
                     }
-                    dqi
+                    blz
                 };
 
                 
-                let qnq = e * dwk as usize;
+                let kag = j * bpf as usize;
                 rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5;
-                let uae = ((rng % 769) as i32 - 384) as isize; 
-                let uvm = (qnq as isize + uae).am(0) as usize;
+                let muw = ((rng % 769) as i32 - 384) as isize; 
+                let nle = (kag as isize + muw).max(0) as usize;
 
-                let uvg = dwk as usize * orc;
+                let nky = bpf as usize * iqz;
 
-                let bxr = gu.qm;
-                let uvl = engine.lzf(ayg, bxr,
-                    (uvg as u32 * 1000) / BR_);
+                let anb = step.velocity;
+                let nld = engine.render_note(aad, anb,
+                    (nky as u32 * 1000) / BT_);
 
-                for (fb, &yr) in uvl.iter().cf() {
-                    let w = uvm * Dv as usize + fb;
-                    if w < bno.len() {
-                        bno[w] += (yr as i32 * api) / 255;
+                for (ay, &sample) in nld.iter().enumerate() {
+                    let idx = nle * Bq as usize + ay;
+                    if idx < aif.len() {
+                        aif[idx] += (sample as i32 * vd) / 255;
                     }
                 }
 
-                e += orc;
+                j += iqz;
             }
         }
 
         
-        let hft = (dwk as usize * 3) * Dv as usize;
-        let ntb = 50i32;
+        let dmr = (bpf as usize * 3) * Bq as usize;
+        let hxy = 50i32;
 
-        if hft > 0 && hft < bno.len() {
-            for a in hft..bno.len() {
-                let kot = bno[a - hft];
-                bno[a] += (kot * ntb) / 100;
+        if dmr > 0 && dmr < aif.len() {
+            for i in dmr..aif.len() {
+                let frg = aif[i - dmr];
+                aif[i] += (frg * hxy) / 100;
             }
-            let mju = hft * 2;
-            if mju < bno.len() {
-                for a in mju..bno.len() {
-                    let kot = bno[a - mju];
-                    bno[a] += (kot * ntb / 3) / 100;
+            let gxz = dmr * 2;
+            if gxz < aif.len() {
+                for i in gxz..aif.len() {
+                    let frg = aif[i - gxz];
+                    aif[i] += (frg * hxy / 3) / 100;
                 }
             }
         }
 
         
-        let mut jhd: u16 = 0xACE1;
-        for yr in bno.el() {
-            let ga = jhd & 1;
-            jhd >>= 1;
-            if ga == 1 { jhd ^= 0xB400; }
-            let bnq = (jhd as i16 as i32) / 180; 
-            *yr += bnq;
+        let mut evd: u16 = 0xACE1;
+        for sample in aif.iter_mut() {
+            let bf = evd & 1;
+            evd >>= 1;
+            if bf == 1 { evd ^= 0xB400; }
+            let aig = (evd as i16 as i32) / 180; 
+            *sample += aig;
         }
 
         
-        bno.iter().map(|&e| {
-            let e = e.qp(-48000, 48000);
-            if e > 24000 {
-                (24000 + (e - 24000) / 3) as i16
-            } else if e < -24000 {
-                (-24000 + (e + 24000) / 3) as i16
+        aif.iter().map(|&j| {
+            let j = j.clamp(-48000, 48000);
+            if j > 24000 {
+                (24000 + (j - 24000) / 3) as i16
+            } else if j < -24000 {
+                (-24000 + (j + 24000) / 3) as i16
             } else {
-                e as i16
+                j as i16
             }
         }).collect()
     }
 
     
-    pub fn dwh(&self) -> u32 {
-        60_000 / (self.kz as u32 * 4) 
+    pub fn step_duration_ms(&self) -> u32 {
+        60_000 / (self.bpm as u32 * 4) 
     }
 
     
-    pub fn fat(&mut self, un: &[i16]) {
+    pub fn update_scope(&mut self, jo: &[i16]) {
         
-        let gu = (un.len() / 256).am(1);
-        for a in 0..256 {
-            let w = (a * gu).v(un.len().ao(1));
-            self.hyy[a] = un[w];
+        let step = (jo.len() / 256).max(1);
+        for i in 0..256 {
+            let idx = (i * step).min(jo.len().saturating_sub(1));
+            self.scope_buffer[i] = jo[idx];
         }
-        self.jnu = 0;
+        self.scope_pos = 0;
     }
 
     
-    pub fn fxu(&mut self) {
+    pub fn update_spectrum(&mut self) {
         
-        for a in 0..16 {
-            let mut jy: u32 = 0;
-            for ab in &self.af {
-                if !ab.so && self.aop < ab.aml {
-                    let gu = &ab.au[self.aop];
-                    if gu.gh {
+        for i in 0..16 {
+            let mut level: u32 = 0;
+            for t in &self.tracks {
+                if !t.muted && self.current_step < t.num_steps {
+                    let step = &t.steps[self.current_step];
+                    if step.active {
                         
-                        let bti = (ab.fdc as u32 / 8).v(15);
-                        let eoy = (bti as i32 - a as i32).eki();
-                        if eoy < 4 {
-                            jy += gu.qm as u32 * (4 - eoy) / 4;
+                        let akx = (t.base_note as u32 / 8).min(15);
+                        let byu = (akx as i32 - i as i32).unsigned_abs();
+                        if byu < 4 {
+                            level += step.velocity as u32 * (4 - byu) / 4;
                         }
                     }
                 }
             }
-            self.mgq[a] = jy.v(100) as u8;
+            self.spectrum[i] = level.min(100) as u8;
         }
     }
 
     
-    pub fn xmh(&mut self, ti: u8, qm: u8) {
-        if ti < 128 {
-            self.dsl[ti as usize] = true;
+    pub fn trigger_note(&mut self, midi_note: u8, velocity: u8) {
+        if midi_note < 128 {
+            self.keys_pressed[midi_note as usize] = true;
         }
         
-        let azd = self.af[self.bdw].ve;
-        let _ = crate::audio::dvs(azd);
-        let _ = crate::audio::owb(ti, qm, 150);
+        let aal = self.tracks[self.cursor_track].waveform;
+        let _ = crate::audio::set_waveform(aal);
+        let _ = crate::audio::ive(midi_note, velocity, 150);
     }
 
     
-    pub fn vum(&mut self, ti: u8) {
-        if ti < 128 {
-            self.dsl[ti as usize] = false;
+    pub fn release_note(&mut self, midi_note: u8) {
+        if midi_note < 128 {
+            self.keys_pressed[midi_note as usize] = false;
         }
     }
 }
@@ -2593,48 +2593,48 @@ impl BeatStudio {
 
 
 
-pub fn ucu() -> Result<(), &'static str> {
+pub fn mwv() -> Result<(), &'static str> {
     
-    crate::audio::init().bq(); 
+    crate::audio::init().ok(); 
 
-    let mut er = BeatStudio::new();
-    er.po();
+    let mut ba = BeatStudio::new();
+    ba.draw();
 
     crate::serial_println!("[BEAT_STUDIO] Launched — press Esc to exit");
 
-    oih(&mut er)
+    ijm(&mut ba)
 }
 
 
-pub fn ucw() -> Result<(), &'static str> {
-    crate::audio::init().bq();
+pub fn mwx() -> Result<(), &'static str> {
+    crate::audio::init().ok();
 
-    let mut er = BeatStudio::new();
-    er.ljh();
-    er.po();
+    let mut ba = BeatStudio::new();
+    ba.load_funky_house();
+    ba.draw();
 
     crate::serial_println!("[BEAT_STUDIO] Funky House loaded — press Esc to exit");
 
-    oih(&mut er)
+    ijm(&mut ba)
 }
 
 
-fn oih(er: &mut BeatStudio) -> Result<(), &'static str> {
+fn ijm(ba: &mut BeatStudio) -> Result<(), &'static str> {
     loop {
-        if let Some(scancode) = crate::keyboard::xw() {
-            let bep = scancode & 0x80 != 0;
-            let vla = scancode & 0x7F;
+        if let Some(scancode) = crate::keyboard::kr() {
+            let adx = scancode & 0x80 != 0;
+            let nwy = scancode & 0x7F;
 
             
-            if bep {
-                if let Some(ayg) = super::keyboard_midi::hyv(vla) {
-                    er.vum(ayg);
-                    er.po();
+            if adx {
+                if let Some(aad) = super::keyboard_midi::dyl(nwy) {
+                    ba.release_note(aad);
+                    ba.draw();
                 }
                 continue;
             }
 
-            let mut paz = true;
+            let mut iza = true;
 
             match scancode {
                 
@@ -2642,187 +2642,187 @@ fn oih(er: &mut BeatStudio) -> Result<(), &'static str> {
 
                 
                 0x39 => {
-                    if er.uu {
-                        er.uu = false;
-                        er.aop = 0;
-                        let _ = crate::audio::qg();
+                    if ba.playing {
+                        ba.playing = false;
+                        ba.current_step = 0;
+                        let _ = crate::audio::stop();
                     } else {
-                        er.uu = true;
+                        ba.playing = true;
                         
-                        let audio = er.ehn();
-                        er.fat(&audio);
-                        let _ = crate::drivers::hda::dcg(&audio);
+                        let audio = ba.render_loop();
+                        ba.update_scope(&audio);
+                        let _ = crate::drivers::hda::bdu(&audio);
                         
-                        qit(er);
+                        jwg(ba);
                     }
                 }
 
                 
                 0x1C => {
-                    er.af[er.bdw].xiy(er.bzc);
+                    ba.tracks[ba.cursor_track].toggle_step(ba.cursor_step);
                 }
 
                 
                 0x0F => {
-                    er.bdw = (er.bdw + 1) % GP_;
+                    ba.cursor_track = (ba.cursor_track + 1) % HG_;
                 }
 
                 
                 0x4D => { 
-                    let am = er.af[er.bdw].aml;
-                    er.bzc = (er.bzc + 1) % am;
+                    let max = ba.tracks[ba.cursor_track].num_steps;
+                    ba.cursor_step = (ba.cursor_step + 1) % max;
                 }
                 0x4B => { 
-                    let am = er.af[er.bdw].aml;
-                    if er.bzc == 0 {
-                        er.bzc = am - 1;
+                    let max = ba.tracks[ba.cursor_track].num_steps;
+                    if ba.cursor_step == 0 {
+                        ba.cursor_step = max - 1;
                     } else {
-                        er.bzc -= 1;
+                        ba.cursor_step -= 1;
                     }
                 }
                 0x50 => { 
-                    er.bdw = (er.bdw + 1) % GP_;
+                    ba.cursor_track = (ba.cursor_track + 1) % HG_;
                 }
                 0x48 => { 
-                    if er.bdw == 0 {
-                        er.bdw = GP_ - 1;
+                    if ba.cursor_track == 0 {
+                        ba.cursor_track = HG_ - 1;
                     } else {
-                        er.bdw -= 1;
+                        ba.cursor_track -= 1;
                     }
                 }
 
                 
                 0x0D => { 
-                    er.kz = (er.kz + 5).v(300);
+                    ba.bpm = (ba.bpm + 5).min(300);
                 }
                 0x0C => { 
-                    er.kz = er.kz.ao(5).am(40);
+                    ba.bpm = ba.bpm.saturating_sub(5).max(40);
                 }
 
                 
                 0x49 => { 
-                    er.cgg = (er.cgg + 1).v(4);
+                    ba.octave = (ba.octave + 1).min(4);
                 }
                 0x51 => { 
-                    er.cgg = (er.cgg - 1).am(-4);
+                    ba.octave = (ba.octave - 1).max(-4);
                 }
 
                 
                 0x32 => {
-                    let aqx = er.bdw;
-                    er.af[aqx].so = !er.af[aqx].so;
+                    let wb = ba.cursor_track;
+                    ba.tracks[wb].muted = !ba.tracks[wb].muted;
                 }
 
                 
                 0x3B => {
-                    let aqx = er.bdw;
-                    er.af[aqx].ve = match er.af[aqx].ve {
-                        Waveform::Dg => Waveform::Gb,
-                        Waveform::Gb => Waveform::Ft,
-                        Waveform::Ft => Waveform::Triangle,
-                        Waveform::Triangle => Waveform::Cr,
-                        Waveform::Cr => Waveform::Dg,
+                    let wb = ba.cursor_track;
+                    ba.tracks[wb].waveform = match ba.tracks[wb].waveform {
+                        Waveform::Sine => Waveform::Square,
+                        Waveform::Square => Waveform::Sawtooth,
+                        Waveform::Sawtooth => Waveform::Triangle,
+                        Waveform::Triangle => Waveform::Noise,
+                        Waveform::Noise => Waveform::Sine,
                     };
                 }
 
                 
                 0x3C => {
-                    for ab in er.af.el() {
-                        ab.aml = if ab.aml == 16 { 32 } else { 16 };
+                    for t in ba.tracks.iter_mut() {
+                        t.num_steps = if t.num_steps == 16 { 32 } else { 16 };
                     }
-                    if er.bzc >= er.af[0].aml {
-                        er.bzc = 0;
+                    if ba.cursor_step >= ba.tracks[0].num_steps {
+                        ba.cursor_step = 0;
                     }
                 }
 
                 
                 0x42 => {
-                    let audio = er.ehn();
-                    let _ = super::wav_export::hio(
-                        "/home/beat.wav", &audio, BR_, Dv as u16
+                    let audio = ba.render_loop();
+                    let _ = super::wav_export::dpb(
+                        "/home/beat.wav", &audio, BT_, Bq as u16
                     );
                     crate::serial_println!("[BEAT_STUDIO] Exported to /home/beat.wav");
                 }
 
                 
                 0x13 => {
-                    er.ehe = !er.ehe;
+                    ba.recording = !ba.recording;
                 }
 
                 
                 0x0E => {
-                    let aqx = er.bdw;
-                    for e in 0..er.af[aqx].aml {
-                        er.af[aqx].au[e] = BeatStep::dz();
+                    let wb = ba.cursor_track;
+                    for j in 0..ba.tracks[wb].num_steps {
+                        ba.tracks[wb].steps[j] = BeatStep::off();
                     }
                 }
 
                 
                 _ => {
-                    if let Some(ayg) = super::keyboard_midi::hyv(scancode) {
-                        er.xmh(ayg, er.qm);
+                    if let Some(aad) = super::keyboard_midi::dyl(scancode) {
+                        ba.trigger_note(aad, ba.velocity);
 
                         
-                        if er.ehe {
-                            let aqx = er.bdw;
-                            let aap = er.bzc;
-                            let ar = er.af[aqx].fdc;
-                            let l = ayg as i8 - ar as i8;
-                            er.af[aqx].au[aap] = BeatStep::bz(er.qm, l);
+                        if ba.recording {
+                            let wb = ba.cursor_track;
+                            let cs = ba.cursor_step;
+                            let base = ba.tracks[wb].base_note;
+                            let offset = aad as i8 - base as i8;
+                            ba.tracks[wb].steps[cs] = BeatStep::ah(ba.velocity, offset);
                             
-                            let am = er.af[aqx].aml;
-                            er.bzc = (er.bzc + 1) % am;
+                            let max = ba.tracks[wb].num_steps;
+                            ba.cursor_step = (ba.cursor_step + 1) % max;
                         }
                     } else {
-                        paz = false;
+                        iza = false;
                     }
                 }
             }
 
-            if paz {
-                er.fxu();
-                er.po();
+            if iza {
+                ba.update_spectrum();
+                ba.draw();
             }
         }
 
         
         for _ in 0..3000 {
-            core::hint::hc();
+            core::hint::spin_loop();
         }
     }
 
     
-    let _ = crate::audio::qg();
+    let _ = crate::audio::stop();
     crate::serial_println!("[BEAT_STUDIO] Exited");
     Ok(())
 }
 
 
-fn qit(er: &mut BeatStudio) {
-    let tk = er.af[0].aml;
-    let bop = er.dwh();
+fn jwg(ba: &mut BeatStudio) {
+    let ix = ba.tracks[0].num_steps;
+    let ait = ba.step_duration_ms();
 
-    for e in 0..tk {
-        er.aop = e;
-        er.fxu();
-        er.po();
+    for j in 0..ix {
+        ba.current_step = j;
+        ba.update_spectrum();
+        ba.draw();
 
         
-        match eks(bop as u64) {
+        match bwv(ait as u64) {
             1 | 2 => {  
-                er.uu = false;
-                er.aop = 0;
-                let _ = crate::audio::qg();
+                ba.playing = false;
+                ba.current_step = 0;
+                let _ = crate::audio::stop();
                 return;
             }
             _ => {}
         }
     }
 
-    if er.uu {
+    if ba.playing {
         
-        er.uu = false;
-        er.aop = 0;
+        ba.playing = false;
+        ba.current_step = 0;
     }
 }
 
@@ -2831,11 +2831,11 @@ fn qit(er: &mut BeatStudio) {
 
 
 
-fn jzn(s: u32, kt: u32) -> u32 {
-    let m = ((s >> 16) & 0xFF) * kt / 100;
-    let at = ((s >> 8) & 0xFF) * kt / 100;
-    let o = (s & 0xFF) * kt / 100;
-    (m.v(255) << 16) | (at.v(255) << 8) | o.v(255)
+fn fgh(color: u32, brightness: u32) -> u32 {
+    let r = ((color >> 16) & 0xFF) * brightness / 100;
+    let g = ((color >> 8) & 0xFF) * brightness / 100;
+    let b = (color & 0xFF) * brightness / 100;
+    (r.min(255) << 16) | (g.min(255) << 8) | b.min(255)
 }
 
 
@@ -2850,366 +2850,366 @@ fn jzn(s: u32, kt: u32) -> u32 {
 
 
 
-struct Blz {
+struct Abf {
     
-    buu: i32,
+    head_y: i32,
     
-    ig: u8,
+    speed: u8,
     
-    acr: u8,
+    trail_len: u8,
     
-    gh: bool,
+    active: bool,
     
-    hcq: u8,
+    char_offset: u8,
     
-    ceq: u8,
+    flash: u8,
 }
 
 
 struct MatrixState {
-    cpm: Vec<Blz>,
-    ajg: usize,
-    bnr: usize,
-    gz: u32,
-    kc: u32,
+    columns: Vec<Abf>,
+    num_cols: usize,
+    num_rows: usize,
+    fb_w: u32,
+    fb_h: u32,
     
     frame: u32,
     
-    cam: u32,
+    lfsr: u32,
 }
 
 impl MatrixState {
     
     
     fn new() -> Self {
-        let gz = crate::framebuffer::AB_.load(Ordering::Relaxed) as u32;
-        let kc = crate::framebuffer::Z_.load(Ordering::Relaxed) as u32;
+        let fb_w = crate::framebuffer::X_.load(Ordering::Relaxed) as u32;
+        let fb_h = crate::framebuffer::W_.load(Ordering::Relaxed) as u32;
 
-        const R_: usize = 160;
-        let bnr = (kc / 16) as usize;
+        const AD_: usize = 160;
+        let num_rows = (fb_h / 16) as usize;
 
-        let mut cpm = Vec::fc(R_);
-        let mut cam: u32 = 0xDEAD_BEEF;
+        let mut columns = Vec::with_capacity(AD_);
+        let mut lfsr: u32 = 0xDEAD_BEEF;
 
-        for a in 0..R_ {
+        for i in 0..AD_ {
             
-            let dv = (a as u32).hx(2654435761) ^ 0xDEADBEEF;
-            cam = lin(cam);
-            let ig = (dv % 3) as u8 + 1;        
-            let ase = 30u8;                         
-            let vc = -((dv % (bnr as u32 / 2)) as i32);
-            let qyg = (dv.hx(7919) % 94) as u8;
+            let seed = (i as u32).wrapping_mul(2654435761) ^ 0xDEADBEEF;
+            lfsr = gfj(lfsr);
+            let speed = (seed % 3) as u8 + 1;        
+            let wr = 30u8;                         
+            let start_y = -((seed % (num_rows as u32 / 2)) as i32);
+            let kio = (seed.wrapping_mul(7919) % 94) as u8;
 
-            cpm.push(Blz {
-                buu: vc,
-                ig,
-                acr: ase,
-                gh: true,
-                hcq: qyg,
-                ceq: 100,
+            columns.push(Abf {
+                head_y: start_y,
+                speed,
+                trail_len: wr,
+                active: true,
+                char_offset: kio,
+                flash: 100,
             });
         }
 
         Self {
-            cpm,
-            ajg: R_,
-            bnr,
-            gz,
-            kc,
+            columns,
+            num_cols: AD_,
+            num_rows,
+            fb_w,
+            fb_h,
             frame: 0,
-            cam,
+            lfsr,
         }
     }
 
     
-    fn or(&mut self) {
+    fn tick(&mut self) {
         self.frame += 1;
 
-        for (a, bj) in self.cpm.el().cf() {
-            bj.buu += bj.ig as i32;
+        for (i, col) in self.columns.iter_mut().enumerate() {
+            col.head_y += col.speed as i32;
 
             
-            let xks = bj.acr as i32 * 16;
-            if bj.buu > (self.kc as i32 + xks) {
-                let dv = (a as u32).hx(1103515245).cn(self.frame);
-                bj.buu = -((dv % (self.kc / 2)) as i32);
-                bj.ig = (dv % 3) as u8 + 1;
-                bj.hcq = ((dv.hx(7919)) % 94) as u8;
+            let pmh = col.trail_len as i32 * 16;
+            if col.head_y > (self.fb_h as i32 + pmh) {
+                let seed = (i as u32).wrapping_mul(1103515245).wrapping_add(self.frame);
+                col.head_y = -((seed % (self.fb_h / 2)) as i32);
+                col.speed = (seed % 3) as u8 + 1;
+                col.char_offset = ((seed.wrapping_mul(7919)) % 94) as u8;
             }
         }
     }
 
     
-    fn nuz(&mut self, hj: u8) {
+    fn flash_beat(&mut self, intensity: u8) {
         
-        let az = (self.ajg * hj as usize / 255).am(3);
-        for _ in 0..az {
-            self.cam = lin(self.cam);
-            let adq = (self.cam as usize) % self.ajg;
-            self.cpm[adq].ceq = 255;
-            self.cpm[adq].gh = true;
-            self.cpm[adq].buu = 0;
-            self.cam = lin(self.cam);
-            self.cpm[adq].ig = (self.cam % 3) as u8 + 3; 
+        let count = (self.num_cols * intensity as usize / 255).max(3);
+        for _ in 0..count {
+            self.lfsr = gfj(self.lfsr);
+            let ow = (self.lfsr as usize) % self.num_cols;
+            self.columns[ow].flash = 255;
+            self.columns[ow].active = true;
+            self.columns[ow].head_y = 0;
+            self.lfsr = gfj(self.lfsr);
+            self.columns[ow].speed = (self.lfsr % 3) as u8 + 3; 
         }
     }
 
     
-    fn po(&self, gu: usize, tk: usize, pvq: &str, kz: u16, qmu: &str) {
+    fn draw(&self, step: usize, ix: usize, track_info: &str, bpm: u16, bar_beat: &str) {
         
-        crate::framebuffer::ah(0, 0, self.gz, self.kc, 0x000000);
-
-        
-        const Pm: &[u8] = b"@#$%&*0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!?<>{}[]|/\\~^";
+        crate::framebuffer::fill_rect(0, 0, self.fb_w, self.fb_h, 0x000000);
 
         
-        for (adq, bj) in self.cpm.iter().cf() {
-            if !bj.gh { continue; }
+        const Gm: &[u8] = b"@#$%&*0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!?<>{}[]|/\\~^";
 
-            let b = adq as u32 * 8;
+        
+        for (ow, col) in self.columns.iter().enumerate() {
+            if !col.active { continue; }
 
-            for afg in 0..(bj.acr as i32 + 1) {
-                let br = bj.buu - afg;
-                if br < 0 || br >= self.bnr as i32 { continue; }
+            let x = ow as u32 * 8;
 
-                let c = br as u32 * 16;
+            for pq in 0..(col.trail_len as i32 + 1) {
+                let row = col.head_y - pq;
+                if row < 0 || row >= self.num_rows as i32 { continue; }
+
+                let y = row as u32 * 16;
 
                 
-                let gcl = if afg == 0 {
+                let cuz = if pq == 0 {
                     
-                    ((bj.hcq as u32 + self.frame * 3 + adq as u32) % Pm.len() as u32) as usize
+                    ((col.char_offset as u32 + self.frame * 3 + ow as u32) % Gm.len() as u32) as usize
                 } else {
                     
-                    ((bj.hcq as u32 + br as u32 * 7 + adq as u32 * 13) % Pm.len() as u32) as usize
+                    ((col.char_offset as u32 + row as u32 * 7 + ow as u32 * 13) % Gm.len() as u32) as usize
                 };
-                let bm = Pm[gcl] as char;
+                let ch = Gm[cuz] as char;
 
                 
-                let kt = if afg == 0 {
+                let brightness = if pq == 0 {
                     
                     255u32
                 } else {
                     
-                    let yx = 255u32.ao(afg as u32 * 255 / bj.acr as u32);
-                    yx.am(20)
+                    let ln = 255u32.saturating_sub(pq as u32 * 255 / col.trail_len as u32);
+                    ln.max(20)
                 };
 
                 
-                let sup = bj.ceq as u32;
-                let hhv = (kt * sup / 100).v(255);
+                let lwt = col.flash as u32;
+                let dom = (brightness * lwt / 100).min(255);
 
                 
-                let m = if afg == 0 { hhv * 80 / 100 } else { hhv * 10 / 100 };
-                let at = hhv;
-                let o = if afg == 0 { hhv * 60 / 100 } else { hhv * 20 / 100 };
-                let s = ((m.v(255)) << 16) | ((at.v(255)) << 8) | o.v(255);
+                let r = if pq == 0 { dom * 80 / 100 } else { dom * 10 / 100 };
+                let g = dom;
+                let b = if pq == 0 { dom * 60 / 100 } else { dom * 20 / 100 };
+                let color = ((r.min(255)) << 16) | ((g.min(255)) << 8) | b.min(255);
 
-                crate::framebuffer::afn(b, c, bm, s);
+                crate::framebuffer::px(x, y, ch, color);
             }
         }
 
         
-        let pl = self.kc - 32;
-        let tn = 8;
-        let lo = self.gz - 40;
-        let ajx = 20;
+        let gk = self.fb_h - 32;
+        let hs = 8;
+        let ek = self.fb_w - 40;
+        let pv = 20;
 
         
-        crate::framebuffer::ah(ajx, pl, lo, tn, 0x002200);
+        crate::framebuffer::fill_rect(pv, gk, ek, hs, 0x002200);
         
-        crate::framebuffer::lx(ajx, pl, lo, tn, 0x00AA00);
+        crate::framebuffer::draw_rect(pv, gk, ek, hs, 0x00AA00);
 
         
-        if tk > 0 {
-            let adu = lo * gu as u32 / tk as u32;
-            crate::framebuffer::ah(ajx + 1, pl + 1, adu, tn - 2, 0x00FF44);
+        if ix > 0 {
+            let oz = ek * step as u32 / ix as u32;
+            crate::framebuffer::fill_rect(pv + 1, gk + 1, oz, hs - 2, 0x00FF44);
 
             
-            for a in 1..tk {
-                if a % 4 == 0 {
-                    let hl = ajx + lo * a as u32 / tk as u32;
-                    crate::framebuffer::axt(hl, pl, tn, 0x00CC00);
+            for i in 1..ix {
+                if i % 4 == 0 {
+                    let cg = pv + ek * i as u32 / ix as u32;
+                    crate::framebuffer::zv(cg, gk, hs, 0x00CC00);
                 }
             }
         }
 
         
-        let dq = "TRUSTDAW // BEAT MATRIX";
-        let dcs = dq.len() as u32 * 8 + 16;
-        let cnf = (self.gz - dcs) / 2;
-        crate::framebuffer::ah(cnf, 8, dcs, 24, 0x001100);
-        crate::framebuffer::lx(cnf, 8, dcs, 24, 0x00CC00);
-        crate::framebuffer::cb(dq, cnf + 8, 12, 0x00FF66);
+        let title = "TRUSTDAW // BEAT MATRIX";
+        let bea = title.len() as u32 * 8 + 16;
+        let avk = (self.fb_w - bea) / 2;
+        crate::framebuffer::fill_rect(avk, 8, bea, 24, 0x001100);
+        crate::framebuffer::draw_rect(avk, 8, bea, 24, 0x00CC00);
+        crate::framebuffer::draw_text(title, avk + 8, 12, 0x00FF66);
 
         
-        let edf = 40;
-        let izw = pvq.len() as u32 * 8 + 16;
-        crate::framebuffer::ah(8, edf, izw.v(self.gz - 16), 20, 0x000800);
-        crate::framebuffer::cb(pvq, 16, edf + 2, 0x00AA44);
+        let btj = 40;
+        let eql = track_info.len() as u32 * 8 + 16;
+        crate::framebuffer::fill_rect(8, btj, eql.min(self.fb_w - 16), 20, 0x000800);
+        crate::framebuffer::draw_text(track_info, 16, btj + 2, 0x00AA44);
 
         
-        let gbk = format!("{} BPM  {}", kz, qmu);
-        let mzz = gbk.len() as u32 * 8 + 16;
-        let naa = self.gz - mzz - 8;
-        crate::framebuffer::ah(naa, edf, mzz, 20, 0x000800);
-        crate::framebuffer::cb(&gbk, naa + 8, edf + 2, 0x00CC66);
+        let cuh = format!("{} BPM  {}", bpm, bar_beat);
+        let hin = cuh.len() as u32 * 8 + 16;
+        let hio = self.fb_w - hin - 8;
+        crate::framebuffer::fill_rect(hio, btj, hin, 20, 0x000800);
+        crate::framebuffer::draw_text(&cuh, hio + 8, btj + 2, 0x00CC66);
 
         
-        let pov = format!("{:02}/{:02}", gu + 1, tk);
-        let gtg = pov.len() as u32 * 8 + 12;
-        let dcj = (self.gz - gtg) / 2;
-        let ejd = pl - 24;
-        crate::framebuffer::ah(dcj, ejd, gtg, 20, 0x001100);
-        crate::framebuffer::cb(&pov, dcj + 6, ejd + 2, 0x44FF88);
+        let jiw = format!("{:02}/{:02}", step + 1, ix);
+        let step_w = jiw.len() as u32 * 8 + 12;
+        let avf = (self.fb_w - step_w) / 2;
+        let bwa = gk - 24;
+        crate::framebuffer::fill_rect(avf, bwa, step_w, 20, 0x001100);
+        crate::framebuffer::draw_text(&jiw, avf + 6, bwa + 2, 0x44FF88);
 
         
-        let gjv = 70;
-        let dxb = ["Ki", "Cl", "HH", "SB", "MB", "Ch", "Ld", "Pc"];
-        for (a, j) in dxb.iter().cf() {
-            let ty = gjv + a as u32 * 20;
-            let s = if a < 8 { colors::S_[a] } else { 0x00FF00 };
-            crate::framebuffer::cb(j, 8, ty, s);
+        let czr = 70;
+        let track_names = ["Ki", "Cl", "HH", "SB", "MB", "Ch", "Ld", "Pc"];
+        for (i, name) in track_names.iter().enumerate() {
+            let ty = czr + i as u32 * 20;
+            let color = if i < 8 { colors::U_[i] } else { 0x00FF00 };
+            crate::framebuffer::draw_text(name, 8, ty, color);
         }
     }
 
     
     
-    fn eba(&self) {
-        crate::framebuffer::ah(0, 0, self.gz, self.kc, 0xFF000000);
+    fn draw_rain(&self) {
+        crate::framebuffer::fill_rect(0, 0, self.fb_w, self.fb_h, 0xFF000000);
 
-        const Pm: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ@#$%&*+=<>[]{}|";
-        const CYL_: i32 = 30;
-        const BMK_: i32 = 16;
+        const Gm: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ@#$%&*+=<>[]{}|";
+        const DCD_: i32 = 30;
+        const CK_: i32 = 16;
 
-        let byt = self.gz / self.ajg as u32;
+        let ati = self.fb_w / self.num_cols as u32;
 
-        for (adq, bj) in self.cpm.iter().cf() {
-            let b = (adq as u32 * byt) + byt / 2;
-            let buu = bj.buu;
+        for (ow, col) in self.columns.iter().enumerate() {
+            let x = (ow as u32 * ati) + ati / 2;
+            let head_y = col.head_y;
 
             
-            let nkn = ((bj.ig as u32).ao(1)) * 50; 
-            let fdr = 30 + nkn * 70 / 100; 
-            let pfj = 20 + nkn * 80 / 100;      
+            let hrk = ((col.speed as u32).saturating_sub(1)) * 50; 
+            let cgm = 30 + hrk * 70 / 100; 
+            let jcm = 20 + hrk * 80 / 100;      
 
-            for a in 0..CYL_ {
-                let avl = buu - (a * BMK_);
-                if avl < 0 || avl >= self.kc as i32 { continue; }
-
-                
-                let ar: u32 = if a == 0 { 255 }
-                    else if a == 1 { 200 }
-                    else { 160u32.ao(a as u32 * 7) };
-                if ar < 15 { continue; }
-
-                let kt = ar * fdr / 100;
+            for i in 0..DCD_ {
+                let yl = head_y - (i * CK_);
+                if yl < 0 || yl >= self.fb_h as i32 { continue; }
 
                 
-                let (m, at, o) = if a == 0 {
+                let base: u32 = if i == 0 { 255 }
+                    else if i == 1 { 200 }
+                    else { 160u32.saturating_sub(i as u32 * 7) };
+                if base < 15 { continue; }
+
+                let brightness = base * cgm / 100;
+
+                
+                let (r, g, b) = if i == 0 {
                     
-                    let d = 140 * fdr / 100;
-                    (d, kt.am(d), d)
+                    let w = 140 * cgm / 100;
+                    (w, brightness.max(w), w)
                 } else {
                     
-                    let thk = (15 * (100 - pfj) / 100).v(40);
-                    let qqn = (30 * (100 - pfj) / 100).v(50);
-                    (thk, kt, qqn)
+                    let mfz = (15 * (100 - jcm) / 100).min(40);
+                    let kcw = (30 * (100 - jcm) / 100).min(50);
+                    (mfz, brightness, kcw)
                 };
 
-                let s = ((m.v(255)) << 16) | ((at.v(255)) << 8) | o.v(255);
+                let color = ((r.min(255)) << 16) | ((g.min(255)) << 8) | b.min(255);
 
                 
-                let des = bj.hcq as u32
-                    + (a as u32 * 7919)
+                let bfe = col.char_offset as u32
+                    + (i as u32 * 7919)
                     ^ (self.frame / 12);
-                let bm = Pm[(des as usize) % Pm.len()] as char;
+                let ch = Gm[(bfe as usize) % Gm.len()] as char;
 
-                crate::framebuffer::afn(b, avl as u32, bm, s);
+                crate::framebuffer::px(x, yl as u32, ch, color);
             }
         }
     }
 }
 
 
-pub fn ucy() -> Result<(), &'static str> {
-    crate::audio::init().bq();
+pub fn mwz() -> Result<(), &'static str> {
+    crate::audio::init().ok();
 
-    let mut er = BeatStudio::new();
-    er.ljh();
+    let mut ba = BeatStudio::new();
+    ba.load_funky_house();
 
     let mut matrix = MatrixState::new();
 
     
-    matrix.po(0, er.af[0].aml, "> INITIALIZING BEAT MATRIX...", er.kz, "1:1.1");
+    matrix.draw(0, ba.tracks[0].num_steps, "> INITIALIZING BEAT MATRIX...", ba.bpm, "1:1.1");
 
     
-    let audio = er.ehn();
-    er.fat(&audio);
+    let audio = ba.render_loop();
+    ba.update_scope(&audio);
 
-    let tk = er.af[0].aml;
-    let bop = er.dwh();
-    let zth = bop * tk as u32;
+    let ix = ba.tracks[0].num_steps;
+    let ait = ba.step_duration_ms();
+    let rar = ait * ix as u32;
 
-    crate::serial_println!("[MATRIX] Funky House: {} BPM, {} steps, {}ms per step", er.kz, tk, bop);
+    crate::serial_println!("[MATRIX] Funky House: {} BPM, {} steps, {}ms per step", ba.bpm, ix, ait);
 
     
-    for bb in 0..30 {
-        matrix.or();
-        let lfj = match bb {
+    for f in 0..30 {
+        matrix.tick();
+        let gdf = match f {
             0..=5   => "> LOADING BEAT DATA...",
             6..=12  => "> DECODING FREQUENCY MATRIX...",
             13..=20 => "> SYNTH ENGINES ONLINE...",
             _       => "> READY. ENTERING THE BEAT.",
         };
-        matrix.po(0, tk, lfj, er.kz, "---");
+        matrix.draw(0, ix, gdf, ba.bpm, "---");
 
-        if cnw(100) { return Ok(()); } 
+        if avs(100) { return Ok(()); } 
     }
 
     
-    let ulm = 4u32;
+    let nda = 4u32;
 
     
-    let _ = crate::drivers::hda::dcg(&audio);
+    let _ = crate::drivers::hda::bdu(&audio);
 
-    'outer: for yaq in 0..ulm {
+    'outer: for _loop_count in 0..nda {
 
         
-        for e in 0..tk {
-            er.aop = e;
+        for j in 0..ix {
+            ba.current_step = j;
 
             
-            for ab in 0..8 {
-                if er.af[ab].au[e].gh && !er.af[ab].so {
-                    let bxr = er.af[ab].au[e].qm;
-                    matrix.nuz(bxr);
+            for t in 0..8 {
+                if ba.tracks[t].steps[j].active && !ba.tracks[t].muted {
+                    let anb = ba.tracks[t].steps[j].velocity;
+                    matrix.flash_beat(anb);
                 }
             }
 
             
-            let mut coh = String::from("> ");
-            for ab in 0..8 {
-                if er.af[ab].au[e].gh && !er.af[ab].so {
-                    coh.t(er.af[ab].amj());
-                    coh.push(' ');
+            let mut avy = String::from("> ");
+            for t in 0..8 {
+                if ba.tracks[t].steps[j].active && !ba.tracks[t].muted {
+                    avy.push_str(ba.tracks[t].name_str());
+                    avy.push(' ');
                 }
             }
-            if coh.len() <= 2 {
-                coh.t("...");
+            if avy.len() <= 2 {
+                avy.push_str("...");
             }
 
             
-            let bar = e / 16 + 1;
-            let rf = (e % 16) / 4 + 1;
-            let sub = e % 4 + 1;
-            let dar = format!("{}:{}.{}", bar, rf, sub);
+            let bar = j / 16 + 1;
+            let beat = (j % 16) / 4 + 1;
+            let sub = j % 4 + 1;
+            let bdb = format!("{}:{}.{}", bar, beat, sub);
 
             
-            matrix.or();
-            matrix.po(e, tk, &coh, er.kz, &dar);
+            matrix.tick();
+            matrix.draw(j, ix, &avy, ba.bpm, &bdb);
 
             
-            match eks(bop as u64) {
+            match bwv(ait as u64) {
                 1 | 2 => { break 'outer; } 
                 _ => {}
             }
@@ -3217,46 +3217,46 @@ pub fn ucy() -> Result<(), &'static str> {
     }
 
     
-    let _ = crate::audio::qg();
+    let _ = crate::audio::stop();
 
-    for bb in 0..40 {
-        matrix.or();
-        let lrd = match bb {
+    for f in 0..40 {
+        matrix.tick();
+        let glj = match f {
             0..=10  => "> DISCONNECTING...",
             11..=25 => "> SIGNAL LOST",
             _       => "> TRUSTDAW // SYSTEM OFFLINE",
         };
-        matrix.po(0, tk, lrd, er.kz, "---");
+        matrix.draw(0, ix, glj, ba.bpm, "---");
 
         
-        let hfk = matrix.ajg / 40;
-        for r in 0..hfk {
-            let w = (bb as usize * hfk + r) % matrix.ajg;
-            matrix.cpm[w].gh = false;
+        let dmm = matrix.num_cols / 40;
+        for c in 0..dmm {
+            let idx = (f as usize * dmm + c) % matrix.num_cols;
+            matrix.columns[idx].active = false;
         }
 
-        crate::cpu::tsc::asq(80); 
+        crate::cpu::tsc::ww(80); 
     }
 
     
-    crate::framebuffer::ah(0, 0, matrix.gz, matrix.kc, 0x000000);
-    let nua = "TRUSTDAW BEAT MATRIX // BUILT ON TRUSTOS";
-    let ua = nua.len() as u32 * 8;
-    let jf = (matrix.gz - ua) / 2;
-    let sc = matrix.kc / 2 - 8;
-    crate::framebuffer::cb(nua, jf, sc, 0x00FF44);
+    crate::framebuffer::fill_rect(0, 0, matrix.fb_w, matrix.fb_h, 0x000000);
+    let hyr = "TRUSTDAW BEAT MATRIX // BUILT ON TRUSTOS";
+    let fo = hyr.len() as u32 * 8;
+    let dg = (matrix.fb_w - fo) / 2;
+    let hj = matrix.fb_h / 2 - 8;
+    crate::framebuffer::draw_text(hyr, dg, hj, 0x00FF44);
 
-    let ppk = "Bare-metal. No OS. Pure Rust.";
-    let kp = ppk.len() as u32 * 8;
-    let cr = (matrix.gz - kp) / 2;
-    crate::framebuffer::cb(ppk, cr, sc + 24, 0x008822);
+    let jjm = "Bare-metal. No OS. Pure Rust.";
+    let dy = jjm.len() as u32 * 8;
+    let am = (matrix.fb_w - dy) / 2;
+    crate::framebuffer::draw_text(jjm, am, hj + 24, 0x008822);
 
     
     loop {
-        if let Some(jt) = crate::keyboard::xw() {
-            if jt & 0x80 == 0 { break; }
+        if let Some(dr) = crate::keyboard::kr() {
+            if dr & 0x80 == 0 { break; }
         }
-        crate::cpu::tsc::asq(20);
+        crate::cpu::tsc::ww(20);
     }
 
     crate::serial_println!("[MATRIX] Showcase complete");
@@ -3282,100 +3282,100 @@ pub fn ucy() -> Result<(), &'static str> {
 
 
 
-struct Gz {
-    dq: &'static str,
-    atp: &'static str,
-    eu: &'static str,
-    vj: u32,
+struct Dc {
+    title: &'static str,
+    subtitle: &'static str,
+    detail: &'static str,
+    frames: u32,
 }
 
 
-fn epe(btp: &Gz, gz: u32, kc: u32, ib: &str, li: u32, es: u32) {
+fn byx(alc: &Dc, fb_w: u32, fb_h: u32, phase: &str, progress: u32, av: u32) {
     
-    let del = 200u32;
-    let bjk = kc.ao(del + 52); 
-    let btm = 16u32;
-    let dom = gz.ao(32);
+    let apw = 200u32;
+    let agf = fb_h.saturating_sub(apw + 52); 
+    let ala = 16u32;
+    let bkx = fb_w.saturating_sub(32);
 
-    crate::framebuffer::ih(btm, bjk, dom, del, 0x000000, 230);
-
-    
-    crate::framebuffer::lx(btm, bjk, dom, del, 0x00EEFF);
-    crate::framebuffer::lx(btm + 1, bjk + 1, dom - 2, del - 2, 0x00EEFF);
+    crate::framebuffer::co(ala, agf, bkx, apw, 0x000000, 230);
 
     
-    let bv = 2u32;
-    let fg = (btm + 16) as i32;
+    crate::framebuffer::draw_rect(ala, agf, bkx, apw, 0x00EEFF);
+    crate::framebuffer::draw_rect(ala + 1, agf + 1, bkx - 2, apw - 2, 0x00EEFF);
 
     
-    crate::graphics::scaling::azp(fg, (bjk + 12) as i32, ib, 0x00DDFF, bv);
+    let scale = 2u32;
+    let bi = (ala + 16) as i32;
 
     
-    crate::graphics::scaling::azp(fg, (bjk + 48) as i32, btp.dq, 0xFFFFFF, bv);
+    crate::graphics::scaling::aat(bi, (agf + 12) as i32, phase, 0x00DDFF, scale);
 
     
-    crate::graphics::scaling::azp(fg, (bjk + 88) as i32, btp.atp, 0x55FF99, bv);
+    crate::graphics::scaling::aat(bi, (agf + 48) as i32, alc.title, 0xFFFFFF, scale);
 
     
-    crate::graphics::scaling::azp(fg, (bjk + 128) as i32, btp.eu, 0xAADDFF, bv);
+    crate::graphics::scaling::aat(bi, (agf + 88) as i32, alc.subtitle, 0x55FF99, scale);
 
     
-    let ewi = btm + 16;
-    let ewj = bjk + del - 20;
-    let fqm = dom - 32;
-    let ewh = 8u32;
-    crate::framebuffer::ah(ewi, ewj, fqm, ewh, 0x112233);
-    if es > 0 {
-        let adu = fqm * li / es;
-        crate::framebuffer::ah(ewi, ewj, adu, ewh, 0x00EEFF);
+    crate::graphics::scaling::aat(bi, (agf + 128) as i32, alc.detail, 0xAADDFF, scale);
+
+    
+    let ccl = ala + 16;
+    let ccm = agf + apw - 20;
+    let cny = bkx - 32;
+    let cck = 8u32;
+    crate::framebuffer::fill_rect(ccl, ccm, cny, cck, 0x112233);
+    if av > 0 {
+        let oz = cny * progress / av;
+        crate::framebuffer::fill_rect(ccl, ccm, oz, cck, 0x00EEFF);
     }
 }
 
 
-fn dgs(gz: u32, kc: u32, ojc: &str, ojd: &str, oje: &str, mm: u32) {
-    crate::framebuffer::ah(0, 0, gz, kc, 0x050510);
+fn bgd(fb_w: u32, fb_h: u32, line1: &str, line2: &str, line3: &str, accent: u32) {
+    crate::framebuffer::fill_rect(0, 0, fb_w, fb_h, 0x050510);
 
-    let bv = 2u32;
-    let nk = 8 * bv; 
-
-    
-    let bkl = kc / 2;
-    crate::framebuffer::ah(0, bkl - 80, gz, 2, mm);
-    crate::framebuffer::ah(0, bkl + 80, gz, 2, mm);
+    let scale = 2u32;
+    let ew = 8 * scale; 
 
     
-    let blt = ojc.len() as u32 * nk;
-    crate::graphics::scaling::azp(
-        ((gz.ao(blt)) / 2) as i32, (bkl - 52) as i32,
-        ojc, 0xFFFFFF, bv);
+    let ags = fb_h / 2;
+    crate::framebuffer::fill_rect(0, ags - 80, fb_w, 2, accent);
+    crate::framebuffer::fill_rect(0, ags + 80, fb_w, 2, accent);
 
     
-    let bfs = ojd.len() as u32 * nk;
-    crate::graphics::scaling::azp(
-        ((gz.ao(bfs)) / 2) as i32, (bkl - 10) as i32,
-        ojd, mm, bv);
+    let ahg = line1.len() as u32 * ew;
+    crate::graphics::scaling::aat(
+        ((fb_w.saturating_sub(ahg)) / 2) as i32, (ags - 52) as i32,
+        line1, 0xFFFFFF, scale);
 
     
-    let bxu = oje.len() as u32 * nk;
-    crate::graphics::scaling::azp(
-        ((gz.ao(bxu)) / 2) as i32, (bkl + 36) as i32,
-        oje, 0x99AABB, bv);
+    let aeo = line2.len() as u32 * ew;
+    crate::graphics::scaling::aat(
+        ((fb_w.saturating_sub(aeo)) / 2) as i32, (ags - 10) as i32,
+        line2, accent, scale);
+
+    
+    let ane = line3.len() as u32 * ew;
+    crate::graphics::scaling::aat(
+        ((fb_w.saturating_sub(ane)) / 2) as i32, (ags + 36) as i32,
+        line3, 0x99AABB, scale);
 }
 
 
 
-fn cnw(alu: u64) -> bool {
+fn avs(total_ms: u64) -> bool {
     
-    let jj = 50u64; 
-    let mut ia = alu;
-    while ia > 0 {
-        let bmv = ia.v(jj);
-        crate::cpu::tsc::asq(bmv);
-        ia -= bmv;
+    let df = 50u64; 
+    let mut ck = total_ms;
+    while ck > 0 {
+        let delay = ck.min(df);
+        crate::cpu::tsc::ww(delay);
+        ck -= delay;
         
-        while let Some(jt) = crate::keyboard::xw() {
-            if jt & 0x80 != 0 { continue; }
-            if jt == 0x01 { return true; } 
+        while let Some(dr) = crate::keyboard::kr() {
+            if dr & 0x80 != 0 { continue; }
+            if dr == 0x01 { return true; } 
         }
     }
     false
@@ -3383,17 +3383,17 @@ fn cnw(alu: u64) -> bool {
 
 
 
-fn eks(alu: u64) -> u8 {
-    let jj = 50u64;
-    let mut ia = alu;
-    while ia > 0 {
-        let bmv = ia.v(jj);
-        crate::cpu::tsc::asq(bmv);
-        ia -= bmv;
-        while let Some(jt) = crate::keyboard::xw() {
-            if jt & 0x80 != 0 { continue; }
-            if jt == 0x01 { return 1; } 
-            if jt == 0x39 { return 2; } 
+fn bwv(total_ms: u64) -> u8 {
+    let df = 50u64;
+    let mut ck = total_ms;
+    while ck > 0 {
+        let delay = ck.min(df);
+        crate::cpu::tsc::ww(delay);
+        ck -= delay;
+        while let Some(dr) = crate::keyboard::kr() {
+            if dr & 0x80 != 0 { continue; }
+            if dr == 0x01 { return 1; } 
+            if dr == 0x39 { return 2; } 
         }
     }
     0
@@ -3404,14 +3404,14 @@ fn eks(alu: u64) -> u8 {
 
 
 
-fn rng(audio: &[i16], ay: usize, ci: usize) -> u32 {
-    let e = ay.v(audio.len());
-    let aa = ci.v(audio.len());
-    if aa <= e { return 0; }
-    let slice = &audio[e..aa];
-    let wvx: u64 = slice.iter().map(|p| p.eki() as u64).sum();
-    let abl = (wvx / slice.len().am(1) as u64) as u32;
-    (abl * 100 / 8000).v(100)
+fn kwl(audio: &[i16], start: usize, end: usize) -> u32 {
+    let j = start.min(audio.len());
+    let e = end.min(audio.len());
+    if e <= j { return 0; }
+    let slice = &audio[j..e];
+    let oyn: u64 = slice.iter().map(|v| v.unsigned_abs() as u64).sum();
+    let ns = (oyn / slice.len().max(1) as u64) as u32;
+    (ns * 100 / 8000).min(100)
 }
 
 
@@ -3419,53 +3419,53 @@ fn rng(audio: &[i16], ay: usize, ci: usize) -> u32 {
 
 
 
-fn sdh(
-    gz: u32, kc: u32,
-    wej: &[i16; 256],
-    abo: u32, 
+fn lja(
+    fb_w: u32, fb_h: u32,
+    scope: &[i16; 256],
+    energy: u32, 
     frame: u32,
 ) {
-    let gwn = gz * 72 / 100;
-    let ddk = kc * 34 / 100;
-    let gwo = (gz - gwn) / 2;
-    let uq = kc / 2;
+    let dgl = fb_w * 72 / 100;
+    let beh = fb_h * 34 / 100;
+    let dgm = (fb_w - dgl) / 2;
+    let center_y = fb_h / 2;
 
     
-    let xg = 35 + abo * 65 / 100;
+    let kq = 35 + energy * 65 / 100;
 
     
-    let keh = (frame % 40) as u32;
-    let qrv = if keh < 20 { keh } else { 40 - keh }; 
-    let qrw = 92 + qrv * 16 / 20; 
+    let fjr = (frame % 40) as u32;
+    let kdv = if fjr < 20 { fjr } else { 40 - fjr }; 
+    let kdw = 92 + kdv * 16 / 20; 
 
-    let qhs = xg * qrw / 100;
+    let jvq = kq * kdw / 100;
 
-    let lpl: usize = 256;
-    let jxp = (gwn / lpl as u32).am(1);
+    let gkc: usize = 256;
+    let ffp = (dgl / gkc as u32).max(1);
 
     
-    let mut fzf = [0i32; 256];
-    for a in 0..256 {
-        let yr = wej[a] as i32;
-        let mrv = yr * (ddk as i32 / 2) * qhs as i32 / (32768 * 100);
-        fzf[a] = uq as i32 - mrv;
+    let mut ys = [0i32; 256];
+    for i in 0..256 {
+        let sample = scope[i] as i32;
+        let hdc = sample * (beh as i32 / 2) * jvq as i32 / (32768 * 100);
+        ys[i] = center_y as i32 - hdc;
     }
 
     
-    for a in 0..lpl {
-        let b = gwo + a as u32 * jxp;
-        let c = fzf[a];
-        let ae = uq as i32;
-        let (qc, i) = if c < ae {
-            (c.am(0) as u32, (ae - c).am(1) as u32)
+    for i in 0..gkc {
+        let x = dgm + i as u32 * ffp;
+        let y = ys[i];
+        let u = center_y as i32;
+        let (top, h) = if y < u {
+            (y.max(0) as u32, (u - y).max(1) as u32)
         } else {
-            (ae.am(0) as u32, (c - ae).am(1) as u32)
+            (u.max(0) as u32, (y - u).max(1) as u32)
         };
-        crate::framebuffer::ih(b, qc, jxp, i, 0x00DDCC, 18);
+        crate::framebuffer::co(x, top, ffp, h, 0x00DDCC, 18);
     }
 
     
-    let tq: [(i32, u32, u32); 5] = [
+    let glow: [(i32, u32, u32); 5] = [
         (14, 10,  0x6622FF), 
         (8,  20,  0x4444FF), 
         (4,  45,  0x00AAEE), 
@@ -3473,132 +3473,132 @@ fn sdh(
         (1,  220, 0x44FFDD), 
     ];
 
-    for &(wp, dw, s) in &tq {
-        for a in 0..lpl {
-            let b = gwo + a as u32 * jxp;
-            let c = fzf[a];
-            let qc = (c - wp).am(0) as u32;
-            let bjj = (c + wp).v(kc as i32) as u32;
-            let i = bjj.ao(qc).am(1);
-            crate::framebuffer::ih(b, qc, jxp, i, s, dw);
+    for &(kh, alpha, color) in &glow {
+        for i in 0..gkc {
+            let x = dgm + i as u32 * ffp;
+            let y = ys[i];
+            let top = (y - kh).max(0) as u32;
+            let age = (y + kh).min(fb_h as i32) as u32;
+            let h = age.saturating_sub(top).max(1);
+            crate::framebuffer::co(x, top, ffp, h, color, alpha);
         }
     }
 
     
-    crate::framebuffer::ih(gwo, uq.ao(1), gwn, 2, 0x00FFCC, 12);
+    crate::framebuffer::co(dgm, center_y.saturating_sub(1), dgl, 2, 0x00FFCC, 12);
 
     
-    let mzr = uq.ao(ddk / 2);
-    let qqp = uq + ddk / 2;
-    crate::framebuffer::ih(gwo, mzr, gwn, 1, 0x00FFCC, 10);
-    crate::framebuffer::ih(gwo, qqp, gwn, 1, 0x00FFCC, 10);
+    let hih = center_y.saturating_sub(beh / 2);
+    let kcy = center_y + beh / 2;
+    crate::framebuffer::co(dgm, hih, dgl, 1, 0x00FFCC, 10);
+    crate::framebuffer::co(dgm, kcy, dgl, 1, 0x00FFCC, 10);
 
     
-    let wdy = mzr + (frame % ddk.am(1));
-    crate::framebuffer::ih(gwo, wdy, gwn, 2, 0x00FFCC, 18);
+    let olg = hih + (frame % beh.max(1));
+    crate::framebuffer::co(dgm, olg, dgl, 2, 0x00FFCC, 18);
 }
 
 
-fn scm(
-    gz: u32, kc: u32,
-    phe: &str,
-    hzg: usize,
-    djd: u32, xki: u32,
-    gu: usize, tk: usize,
-    kz: u16,
+fn lim(
+    fb_w: u32, fb_h: u32,
+    section_name: &str,
+    sec_idx: usize,
+    loop_num: u32, total_loops: u32,
+    step: usize, ix: usize,
+    bpm: u16,
 ) {
-    let bv = 2u32;
-    let nk = 8 * bv;
+    let scale = 2u32;
+    let ew = 8 * scale;
 
     
-    let dq = "NEON PROTOCOL";
-    let qd = dq.len() as u32 * nk;
-    let gx = (gz.ao(qd)) / 2;
-    crate::framebuffer::ih(gx.ao(12), 10, qd + 24, 36, 0x000000, 160);
-    crate::graphics::scaling::azp(gx as i32, 14, dq, 0x00FFCC, bv);
+    let title = "NEON PROTOCOL";
+    let gr = title.len() as u32 * ew;
+    let bu = (fb_w.saturating_sub(gr)) / 2;
+    crate::framebuffer::co(bu.saturating_sub(12), 10, gr + 24, 36, 0x000000, 160);
+    crate::graphics::scaling::aat(bu as i32, 14, title, 0x00FFCC, scale);
 
     
-    let pls = phe.len() as u32 * 8 + 16;
-    let plt = (gz.ao(pls)) / 2;
-    crate::framebuffer::ih(plt.ao(4), 50, pls + 8, 20, 0x000000, 140);
-    crate::framebuffer::cb(phe, plt, 52, 0xBB44FF);
+    let jgv = section_name.len() as u32 * 8 + 16;
+    let jgw = (fb_w.saturating_sub(jgv)) / 2;
+    crate::framebuffer::co(jgw.saturating_sub(4), 50, jgv + 8, 20, 0x000000, 140);
+    crate::framebuffer::draw_text(section_name, jgw, 52, 0xBB44FF);
 
     
-    let mzy = format!("{} BPM", kz);
-    let nm = mzy.len() as u32 * 8 + 16;
-    crate::framebuffer::ih(6, 8, nm, 20, 0x000000, 140);
-    crate::framebuffer::cb(&mzy, 14, 12, 0x00AA88);
+    let him = format!("{} BPM", bpm);
+    let fv = him.len() as u32 * 8 + 16;
+    crate::framebuffer::co(6, 8, fv, 20, 0x000000, 140);
+    crate::framebuffer::draw_text(&him, 14, 12, 0x00AA88);
 
     
-    let phb = format!("{}/8 L{}/{}", hzg + 1, djd + 1, xki);
-    let kp = phb.len() as u32 * 8 + 16;
-    let cr = gz.ao(kp + 8);
-    crate::framebuffer::ih(cr, 8, kp, 20, 0x000000, 140);
-    crate::framebuffer::cb(&phb, cr + 8, 12, 0x00AA88);
+    let jdx = format!("{}/8 L{}/{}", sec_idx + 1, loop_num + 1, total_loops);
+    let dy = jdx.len() as u32 * 8 + 16;
+    let am = fb_w.saturating_sub(dy + 8);
+    crate::framebuffer::co(am, 8, dy, 20, 0x000000, 140);
+    crate::framebuffer::draw_text(&jdx, am + 8, 12, 0x00AA88);
 
     
-    let ewj = kc.ao(28);
-    let ewh = 4u32;
-    let fqm = gz.ao(60);
-    let ewi = 30u32;
+    let ccm = fb_h.saturating_sub(28);
+    let cck = 4u32;
+    let cny = fb_w.saturating_sub(60);
+    let ccl = 30u32;
     
-    crate::framebuffer::ih(ewi.ao(6), ewj.ao(6), fqm + 12, ewh + 12, 0x00FFCC, 6);
+    crate::framebuffer::co(ccl.saturating_sub(6), ccm.saturating_sub(6), cny + 12, cck + 12, 0x00FFCC, 6);
     
-    crate::framebuffer::ah(ewi, ewj, fqm, ewh, 0x001111);
-    if tk > 0 {
-        let adu = fqm * gu as u32 / tk as u32;
-        crate::framebuffer::ah(ewi, ewj, adu, ewh, 0x00FFCC);
+    crate::framebuffer::fill_rect(ccl, ccm, cny, cck, 0x001111);
+    if ix > 0 {
+        let oz = cny * step as u32 / ix as u32;
+        crate::framebuffer::fill_rect(ccl, ccm, oz, cck, 0x00FFCC);
         
-        crate::framebuffer::ih(ewi, ewj.ao(2), adu, ewh + 4, 0x00FFCC, 30);
+        crate::framebuffer::co(ccl, ccm.saturating_sub(2), oz, cck + 4, 0x00FFCC, 30);
     }
     
-    for a in 1..tk {
-        if a % 8 == 0 {
-            let hl = ewi + fqm * a as u32 / tk as u32;
-            crate::framebuffer::axt(hl, ewj, ewh, 0x005555);
+    for i in 1..ix {
+        if i % 8 == 0 {
+            let cg = ccl + cny * i as u32 / ix as u32;
+            crate::framebuffer::zv(cg, ccm, cck, 0x005555);
         }
     }
 
     
-    let ohu = "Eb minor";
-    let yo = ohu.len() as u32 * 8 + 8;
-    crate::framebuffer::ih(gz.ao(yo + 8), kc.ao(48), yo, 16, 0x000000, 120);
-    crate::framebuffer::cb(ohu, gz.ao(yo + 4), kc.ao(46), 0x665588);
+    let ija = "Eb minor";
+    let li = ija.len() as u32 * 8 + 8;
+    crate::framebuffer::co(fb_w.saturating_sub(li + 8), fb_h.saturating_sub(48), li, 16, 0x000000, 120);
+    crate::framebuffer::draw_text(ija, fb_w.saturating_sub(li + 4), fb_h.saturating_sub(46), 0x665588);
 }
 
 
-pub fn uda() -> Result<(), &'static str> {
-    crate::audio::init().bq();
+pub fn mxb() -> Result<(), &'static str> {
+    crate::audio::init().ok();
     crate::serial_println!("[SHOWCASE] Starting narrated showcase...");
 
-    let gz = crate::framebuffer::AB_.load(Ordering::Relaxed) as u32;
-    let kc = crate::framebuffer::Z_.load(Ordering::Relaxed) as u32;
+    let fb_w = crate::framebuffer::X_.load(Ordering::Relaxed) as u32;
+    let fb_h = crate::framebuffer::W_.load(Ordering::Relaxed) as u32;
 
     
-    crate::framebuffer::beo();
-    crate::framebuffer::afi(true);
+    crate::framebuffer::adw();
+    crate::framebuffer::pr(true);
 
     
     
     
 
-    dgs(gz, kc,
+    bgd(fb_w, fb_h,
         "T R U S T D A W",
         "Building a Funky House Track from Scratch",
         "Bare-Metal  //  No OS  //  Pure Rust  //  Real-Time Audio",
         0x00CCFF,
     );
-    crate::framebuffer::sv();
-    if cnw(6500) { bcq(); return Ok(()); }
+    crate::framebuffer::ii();
+    if avs(6500) { aco(); return Ok(()); }
 
-    dgs(gz, kc,
+    bgd(fb_w, fb_h,
         "PHASE 1: BUILDING THE BEAT",
         "Watch each layer come to life, one track at a time",
         "100 BPM  //  C Minor  //  32 Steps (2 Bars)  //  Echo FX",
         0x44FF88,
     );
-    crate::framebuffer::sv();
-    if cnw(5500) { bcq(); return Ok(()); }
+    crate::framebuffer::ii();
+    if avs(5500) { aco(); return Ok(()); }
 
     
     
@@ -3606,211 +3606,211 @@ pub fn uda() -> Result<(), &'static str> {
     crate::serial_println!("[SHOWCASE] Phase 1: Building the beat");
 
     
-    let mut fsl = BeatStudio::new();
-    fsl.ljh();
+    let mut cpf = BeatStudio::new();
+    cpf.load_funky_house();
 
     
-    let mut er = BeatStudio::new();
-    er.kz = fsl.kz;
-    er.ezi = fsl.ezi;
+    let mut ba = BeatStudio::new();
+    ba.bpm = cpf.bpm;
+    ba.swing = cpf.swing;
     
-    for ab in er.af.el() {
-        ab.aml = 32;
-        for e in 0..FL_ {
-            ab.au[e] = BeatStep::dz();
+    for t in ba.tracks.iter_mut() {
+        t.num_steps = 32;
+        for j in 0..GA_ {
+            t.steps[j] = BeatStep::off();
         }
     }
-    er.af[0] = BeatTrack::new("Kick",     36, Waveform::Dg,     colors::S_[0], true);
-    er.af[1] = BeatTrack::new("Clap",     39, Waveform::Cr,    colors::S_[1], true);
-    er.af[2] = BeatTrack::new("HiHat",    42, Waveform::Cr,    colors::S_[2], true);
-    er.af[3] = BeatTrack::new("Sub Bass", 24, Waveform::Dg,     colors::S_[3], false);
-    er.af[4] = BeatTrack::new("Mid Bass", 36, Waveform::Gb,   colors::S_[4], false);
-    er.af[5] = BeatTrack::new("Chords",   60, Waveform::Triangle, colors::S_[5], false);
-    er.af[6] = BeatTrack::new("Lead",     72, Waveform::Ft, colors::S_[6], false);
-    er.af[7] = BeatTrack::new("Perc",     56, Waveform::Cr,    colors::S_[7], true);
-    for ab in er.af.el() {
-        ab.aml = 32;
+    ba.tracks[0] = BeatTrack::new("Kick",     36, Waveform::Sine,     colors::U_[0], true);
+    ba.tracks[1] = BeatTrack::new("Clap",     39, Waveform::Noise,    colors::U_[1], true);
+    ba.tracks[2] = BeatTrack::new("HiHat",    42, Waveform::Noise,    colors::U_[2], true);
+    ba.tracks[3] = BeatTrack::new("Sub Bass", 24, Waveform::Sine,     colors::U_[3], false);
+    ba.tracks[4] = BeatTrack::new("Mid Bass", 36, Waveform::Square,   colors::U_[4], false);
+    ba.tracks[5] = BeatTrack::new("Chords",   60, Waveform::Triangle, colors::U_[5], false);
+    ba.tracks[6] = BeatTrack::new("Lead",     72, Waveform::Sawtooth, colors::U_[6], false);
+    ba.tracks[7] = BeatTrack::new("Perc",     56, Waveform::Noise,    colors::U_[7], true);
+    for t in ba.tracks.iter_mut() {
+        t.num_steps = 32;
     }
     
-    for a in 0..8 {
-        er.af[a].qr = fsl.af[a].qr;
-        er.af[a].hq = fsl.af[a].hq;
-        er.af[a].so = false;
+    for i in 0..8 {
+        ba.tracks[i].envelope = cpf.tracks[i].envelope;
+        ba.tracks[i].volume = cpf.tracks[i].volume;
+        ba.tracks[i].muted = false;
     }
 
-    let bop = er.dwh();
-    let tk = 32usize;
-    let zbr = bop * tk as u32;
+    let ait = ba.step_duration_ms();
+    let ix = 32usize;
+    let qof = ait * ix as u32;
 
     
-    let xlg: [Gz; 8] = [
-        Gz {
-            dq: "KICK -- The Foundation",
-            atp: "Four-on-the-floor kicks + ghost notes",
-            eu: "Sine wave @ C2  |  Deep 808 thump  |  150ms decay",
-            vj: 0,
+    let pmr: [Dc; 8] = [
+        Dc {
+            title: "KICK -- The Foundation",
+            subtitle: "Four-on-the-floor kicks + ghost notes",
+            detail: "Sine wave @ C2  |  Deep 808 thump  |  150ms decay",
+            frames: 0,
         },
-        Gz {
-            dq: "CLAP -- The Backbeat",
-            atp: "Beats 2 & 4 with ghost flams",
-            eu: "Noise burst  |  Tight snap  |  55ms decay",
-            vj: 0,
+        Dc {
+            title: "CLAP -- The Backbeat",
+            subtitle: "Beats 2 & 4 with ghost flams",
+            detail: "Noise burst  |  Tight snap  |  55ms decay",
+            frames: 0,
         },
-        Gz {
-            dq: "HI-HAT -- The Groove Engine",
-            atp: "16th note groove with velocity dynamics",
-            eu: "Noise  |  Crispy short  |  Off-beat accents for the funk",
-            vj: 0,
+        Dc {
+            title: "HI-HAT -- The Groove Engine",
+            subtitle: "16th note groove with velocity dynamics",
+            detail: "Noise  |  Crispy short  |  Off-beat accents for the funk",
+            frames: 0,
         },
-        Gz {
-            dq: "SUB BASS -- The Rumble",
-            atp: "Deep sine sub following Cm -> Ab -> Bb",
-            eu: "Sine wave @ C1 (33Hz!)  |  Long sustain  |  Feel it in your chest",
-            vj: 0,
+        Dc {
+            title: "SUB BASS -- The Rumble",
+            subtitle: "Deep sine sub following Cm -> Ab -> Bb",
+            detail: "Sine wave @ C1 (33Hz!)  |  Long sustain  |  Feel it in your chest",
+            frames: 0,
         },
-        Gz {
-            dq: "MID BASS -- The Funk",
-            atp: "Syncopated pluck riding on top of the sub",
-            eu: "Square wave @ C2  |  Punchy pluck  |  Funky syncopation",
-            vj: 0,
+        Dc {
+            title: "MID BASS -- The Funk",
+            subtitle: "Syncopated pluck riding on top of the sub",
+            detail: "Square wave @ C2  |  Punchy pluck  |  Funky syncopation",
+            frames: 0,
         },
-        Gz {
-            dq: "CHORDS -- The Atmosphere",
-            atp: "Lush pads: Cm -> Ab -> Bb progression",
-            eu: "Triangle wave @ C4  |  Pad envelope  |  Harmonic movement",
-            vj: 0,
+        Dc {
+            title: "CHORDS -- The Atmosphere",
+            subtitle: "Lush pads: Cm -> Ab -> Bb progression",
+            detail: "Triangle wave @ C4  |  Pad envelope  |  Harmonic movement",
+            frames: 0,
         },
-        Gz {
-            dq: "LEAD -- The Hook",
-            atp: "Catchy melody: G5-Bb5-C6 rising, Eb6 peak!",
-            eu: "Sawtooth @ C5  |  Singing melody  |  Call & response over 2 bars",
-            vj: 0,
+        Dc {
+            title: "LEAD -- The Hook",
+            subtitle: "Catchy melody: G5-Bb5-C6 rising, Eb6 peak!",
+            detail: "Sawtooth @ C5  |  Singing melody  |  Call & response over 2 bars",
+            frames: 0,
         },
-        Gz {
-            dq: "PERCUSSION -- The Energy",
-            atp: "Shakers + fill buildup into the drop",
-            eu: "Noise burst  |  Snap envelope  |  Crescendo at bar 2 end",
-            vj: 0,
+        Dc {
+            title: "PERCUSSION -- The Energy",
+            subtitle: "Shakers + fill buildup into the drop",
+            detail: "Noise burst  |  Snap envelope  |  Crescendo at bar 2 end",
+            frames: 0,
         },
     ];
 
     
-    for zx in 0..8 {
-        er.bdw = zx;
+    for mp in 0..8 {
+        ba.cursor_track = mp;
 
         
-        let btp = &xlg[zx];
-        dgs(gz, kc,
-            &format!("TRACK {}/8", zx + 1),
-            btp.dq,
-            btp.eu,
-            colors::S_[zx],
+        let alc = &pmr[mp];
+        bgd(fb_w, fb_h,
+            &format!("TRACK {}/8", mp + 1),
+            alc.title,
+            alc.detail,
+            colors::U_[mp],
         );
-        crate::framebuffer::sv();
-        if cnw(5000) { bcq(); return Ok(()); }
+        crate::framebuffer::ii();
+        if avs(5000) { aco(); return Ok(()); }
 
         
-        let mut jrt: Vec<usize> = Vec::new();
-        for e in 0..tk {
-            if fsl.af[zx].au[e].gh {
-                jrt.push(e);
+        let mut fbt: Vec<usize> = Vec::new();
+        for j in 0..ix {
+            if cpf.tracks[mp].steps[j].active {
+                fbt.push(j);
             }
         }
 
         
-        let hva = format!("PHASE 1  //  TRACK {}/8  //  PLACING PATTERN", zx + 1);
+        let dwl = format!("PHASE 1  //  TRACK {}/8  //  PLACING PATTERN", mp + 1);
 
         
-        er.po();
-        epe(btp, gz, kc, &hva, 0, jrt.len() as u32);
-        crate::framebuffer::sv();
-        crate::cpu::tsc::asq(1200);
+        ba.draw();
+        byx(alc, fb_w, fb_h, &dwl, 0, fbt.len() as u32);
+        crate::framebuffer::ii();
+        crate::cpu::tsc::ww(1200);
 
         
-        for (vin, &mhq) in jrt.iter().cf() {
+        for (place_idx, &step_pos) in fbt.iter().enumerate() {
             
-            er.bzc = mhq;
+            ba.cursor_step = step_pos;
 
             
-            er.po();
-            let li = vin as u32;
-            let es = jrt.len() as u32;
-            epe(btp, gz, kc, &hva, li, es);
-            crate::framebuffer::sv();
+            ba.draw();
+            let progress = place_idx as u32;
+            let av = fbt.len() as u32;
+            byx(alc, fb_w, fb_h, &dwl, progress, av);
+            crate::framebuffer::ii();
 
             
-            crate::cpu::tsc::asq(200);
+            crate::cpu::tsc::ww(200);
 
             
-            er.af[zx].au[mhq] = fsl.af[zx].au[mhq];
+            ba.tracks[mp].steps[step_pos] = cpf.tracks[mp].steps[step_pos];
 
             
-            er.po();
-            epe(btp, gz, kc, &hva, li + 1, es);
-            crate::framebuffer::sv();
+            ba.draw();
+            byx(alc, fb_w, fb_h, &dwl, progress + 1, av);
+            crate::framebuffer::ii();
 
             
-            crate::cpu::tsc::asq(280);
+            crate::cpu::tsc::ww(280);
 
             
-            while let Some(jt) = crate::keyboard::xw() {
-                if jt & 0x80 != 0 { continue; }
-                if jt == 0x01 { bcq(); return Ok(()); }
-                if jt == 0x39 { break; } 
+            while let Some(dr) = crate::keyboard::kr() {
+                if dr & 0x80 != 0 { continue; }
+                if dr == 0x01 { aco(); return Ok(()); }
+                if dr == 0x39 { break; } 
             }
         }
 
         
-        let ugc = format!("PHASE 1  //  TRACK {}/8  //  LISTEN", zx + 1);
+        let mzn = format!("PHASE 1  //  TRACK {}/8  //  LISTEN", mp + 1);
 
-        let uga = Gz {
-            dq: btp.dq,
-            atp: if zx == 0 {
+        let mzl = Dc {
+            title: alc.title,
+            subtitle: if mp == 0 {
                 "Listening to the kick pattern..."
             } else {
                 "Hear how this layer adds to the mix..."
             },
-            eu: btp.eu,
-            vj: 0,
+            detail: alc.detail,
+            frames: 0,
         };
 
         
-        let audio = er.ehn();
-        er.fat(&audio);
+        let audio = ba.render_loop();
+        ba.update_scope(&audio);
 
         
-        let _ = crate::drivers::hda::dcg(&audio);
-        er.uu = true;
+        let _ = crate::drivers::hda::bdu(&audio);
+        ba.playing = true;
 
         
-        let mut ara = false;
-        for yar in 0..3u32 {
-            for e in 0..tk {
-                er.aop = e;
-                er.fxu();
-                er.po();
-                let li = (e as u32 * 100) / tk as u32;
-                epe(&uga, gz, kc, &ugc, li, 100);
-                crate::framebuffer::sv();
+        let mut wc = false;
+        for _loop_num in 0..3u32 {
+            for j in 0..ix {
+                ba.current_step = j;
+                ba.update_spectrum();
+                ba.draw();
+                let progress = (j as u32 * 100) / ix as u32;
+                byx(&mzl, fb_w, fb_h, &mzn, progress, 100);
+                crate::framebuffer::ii();
 
-                match eks(bop as u64) {
-                    1 => { ara = true; break; }
+                match bwv(ait as u64) {
+                    1 => { wc = true; break; }
                     2 => { break; } 
                     _ => {}
                 }
             }
-            if ara { break; }
+            if wc { break; }
         }
 
         
-        let _ = crate::drivers::hda::qg();
-        er.uu = false;
-        er.aop = 0;
+        let _ = crate::drivers::hda::stop();
+        ba.playing = false;
+        ba.current_step = 0;
 
-        if ara { bcq(); return Ok(()); }
+        if wc { aco(); return Ok(()); }
 
         
-        crate::cpu::tsc::asq(1200);
+        crate::cpu::tsc::ww(1200);
     }
 
     
@@ -3818,130 +3818,130 @@ pub fn uda() -> Result<(), &'static str> {
     
     crate::serial_println!("[SHOWCASE] Phase 2: Full mix playback");
 
-    dgs(gz, kc,
+    bgd(fb_w, fb_h,
         "PHASE 2: THE FULL MIX",
         "All 8 tracks together -- the complete Deep House groove",
         "Listen to how the layers combine with echo and sustain",
         0xFF6622,
     );
-    crate::framebuffer::sv();
-    if cnw(5500) { bcq(); return Ok(()); }
+    crate::framebuffer::ii();
+    if avs(5500) { aco(); return Ok(()); }
 
     
-    let dqy = er.ehn();
-    er.fat(&dqy);
+    let bmh = ba.render_loop();
+    ba.update_scope(&bmh);
 
-    let uop = Gz {
-        dq: "FULL MIX -- All 8 Tracks",
-        atp: "Kick + Clap + HiHat + Sub + Bass + Chords + Lead + Perc",
-        eu: "100 BPM  |  C Minor  |  Deep House  |  Echo FX  |  Bare-Metal Audio",
-        vj: 0,
+    let nfk = Dc {
+        title: "FULL MIX -- All 8 Tracks",
+        subtitle: "Kick + Clap + HiHat + Sub + Bass + Chords + Lead + Perc",
+        detail: "100 BPM  |  C Minor  |  Deep House  |  Echo FX  |  Bare-Metal Audio",
+        frames: 0,
     };
 
     
-    let _ = crate::drivers::hda::dcg(&dqy);
-    er.uu = true;
+    let _ = crate::drivers::hda::bdu(&bmh);
+    ba.playing = true;
 
-    let mut ara = false;
-    for djd in 0..3u32 {
-        for e in 0..tk {
-            er.aop = e;
-            er.fxu();
-            er.po();
-            let uik = format!("PHASE 2  //  LOOP {}/3", djd + 1);
-            let li = (e as u32 * 100) / tk as u32;
-            epe(&uop, gz, kc, &uik, li, 100);
-            crate::framebuffer::sv();
+    let mut wc = false;
+    for loop_num in 0..3u32 {
+        for j in 0..ix {
+            ba.current_step = j;
+            ba.update_spectrum();
+            ba.draw();
+            let nat = format!("PHASE 2  //  LOOP {}/3", loop_num + 1);
+            let progress = (j as u32 * 100) / ix as u32;
+            byx(&nfk, fb_w, fb_h, &nat, progress, 100);
+            crate::framebuffer::ii();
 
-            match eks(bop as u64) {
-                1 => { ara = true; break; }
+            match bwv(ait as u64) {
+                1 => { wc = true; break; }
                 2 => { break; }
                 _ => {}
             }
         }
-        if ara { break; }
+        if wc { break; }
     }
 
-    let _ = crate::drivers::hda::qg();
-    er.uu = false;
-    er.aop = 0;
-    if ara { bcq(); return Ok(()); }
+    let _ = crate::drivers::hda::stop();
+    ba.playing = false;
+    ba.current_step = 0;
+    if wc { aco(); return Ok(()); }
 
     
     
     
     crate::serial_println!("[SHOWCASE] Phase 3: Matrix visualizer");
 
-    dgs(gz, kc,
+    bgd(fb_w, fb_h,
         "PHASE 3: ENTER THE MATRIX",
         "The same beat, visualized as a living data stream",
         "Matrix rain  //  Beat-reactive  //  Pure framebuffer rendering",
         0x00FF44,
     );
-    crate::framebuffer::sv();
-    if cnw(5500) { bcq(); return Ok(()); }
+    crate::framebuffer::ii();
+    if avs(5500) { aco(); return Ok(()); }
 
     let mut matrix = MatrixState::new();
 
     
-    for bb in 0..25 {
-        matrix.or();
-        let lfj = match bb {
+    for f in 0..25 {
+        matrix.tick();
+        let gdf = match f {
             0..=6   => "> LOADING BEAT DATA...",
             7..=14  => "> DECODING FREQUENCY MATRIX...",
             15..=20 => "> SYNTH ENGINES ONLINE...",
             _       => "> ENTERING THE BEAT MATRIX...",
         };
-        matrix.po(0, tk, lfj, er.kz, "---");
-        crate::framebuffer::sv();
-        if cnw(150) { bcq(); return Ok(()); }
+        matrix.draw(0, ix, gdf, ba.bpm, "---");
+        crate::framebuffer::ii();
+        if avs(150) { aco(); return Ok(()); }
     }
 
     
-    let _ = crate::drivers::hda::dcg(&dqy);
+    let _ = crate::drivers::hda::bdu(&bmh);
 
-    let olk = 3u32;
-    ara = false;
-    for djd in 0..olk {
-        for e in 0..tk {
-            er.aop = e;
+    let imc = 3u32;
+    wc = false;
+    for loop_num in 0..imc {
+        for j in 0..ix {
+            ba.current_step = j;
 
             
-            for ab in 0..8 {
-                if er.af[ab].au[e].gh && !er.af[ab].so {
-                    matrix.nuz(er.af[ab].au[e].qm);
+            for t in 0..8 {
+                if ba.tracks[t].steps[j].active && !ba.tracks[t].muted {
+                    matrix.flash_beat(ba.tracks[t].steps[j].velocity);
                 }
             }
 
             
-            let mut coh = format!("LOOP {}/{}  > ", djd + 1, olk);
-            for ab in 0..8 {
-                if er.af[ab].au[e].gh && !er.af[ab].so {
-                    coh.t(er.af[ab].amj());
-                    coh.push(' ');
+            let mut avy = format!("LOOP {}/{}  > ", loop_num + 1, imc);
+            for t in 0..8 {
+                if ba.tracks[t].steps[j].active && !ba.tracks[t].muted {
+                    avy.push_str(ba.tracks[t].name_str());
+                    avy.push(' ');
                 }
             }
-            if coh.pp("> ") { coh.t("..."); }
+            if avy.ends_with("> ") { avy.push_str("..."); }
 
-            let bar = e / 16 + 1;
-            let rf = (e % 16) / 4 + 1;
-            let sub = e % 4 + 1;
-            let dar = format!("{}:{}.{}", bar, rf, sub);
+            let bar = j / 16 + 1;
+            let beat = (j % 16) / 4 + 1;
+            let sub = j % 4 + 1;
+            let bdb = format!("{}:{}.{}", bar, beat, sub);
 
-            matrix.or();
-            matrix.po(e, tk, &coh, er.kz, &dar);
-            crate::framebuffer::sv();
+            matrix.tick();
+            matrix.draw(j, ix, &avy, ba.bpm, &bdb);
+            crate::framebuffer::ii();
 
-            match eks(bop as u64) {
-                1 => { ara = true; break; }
+            match bwv(ait as u64) {
+                1 => { wc = true; break; }
                 2 => { break; }
                 _ => {}
             }
         }
-        if ara { break; }
+        if wc { break; }
     }
 
-    let _ = crate::drivers::hda::qg();
+    let _ = crate::drivers::hda::stop();
 
     
     
@@ -3949,36 +3949,36 @@ pub fn uda() -> Result<(), &'static str> {
     crate::serial_println!("[SHOWCASE] Outro");
 
     
-    for bb in 0..35 {
-        matrix.or();
-        let lrd = match bb {
+    for f in 0..35 {
+        matrix.tick();
+        let glj = match f {
             0..=8   => "> SIGNAL FADING...",
             9..=20  => "> DISCONNECTING FROM THE MATRIX...",
             _       => "> TRUSTDAW // SYSTEM OFFLINE",
         };
-        matrix.po(0, tk, lrd, er.kz, "---");
-        crate::framebuffer::sv();
+        matrix.draw(0, ix, glj, ba.bpm, "---");
+        crate::framebuffer::ii();
 
         
-        let ptv = matrix.ajg / 30;
-        for r in 0..ptv {
-            let w = (bb as usize * ptv + r) % matrix.ajg;
-            matrix.cpm[w].gh = false;
+        let jna = matrix.num_cols / 30;
+        for c in 0..jna {
+            let idx = (f as usize * jna + c) % matrix.num_cols;
+            matrix.columns[idx].active = false;
         }
 
-        crate::cpu::tsc::asq(100); 
+        crate::cpu::tsc::ww(100); 
     }
 
     
-    crate::framebuffer::ah(0, 0, gz, kc, 0x020208);
+    crate::framebuffer::fill_rect(0, 0, fb_w, fb_h, 0x020208);
 
-    let vs = kc / 2;
+    let mid = fb_h / 2;
 
     
-    crate::framebuffer::ah(gz / 4, vs - 80, gz / 2, 1, 0x00CCFF);
-    crate::framebuffer::ah(gz / 4, vs + 80, gz / 2, 1, 0x00CCFF);
+    crate::framebuffer::fill_rect(fb_w / 4, mid - 80, fb_w / 2, 1, 0x00CCFF);
+    crate::framebuffer::fill_rect(fb_w / 4, mid + 80, fb_w / 2, 1, 0x00CCFF);
 
-    let rqx: [(&str, u32); 8] = [
+    let kzp: [(&str, u32); 8] = [
         ("T R U S T D A W",                          0x00FF66),
         ("",                                          0x000000),
         ("A bare-metal beat production studio",       0xCCCCDD),
@@ -3989,46 +3989,46 @@ pub fn uda() -> Result<(), &'static str> {
         ("",                                          0x000000),
     ];
 
-    let vc = vs - 60;
-    for (a, (text, s)) in rqx.iter().cf() {
+    let start_y = mid - 60;
+    for (i, (text, color)) in kzp.iter().enumerate() {
         if text.is_empty() { continue; }
-        let qd = text.len() as u32 * 8;
-        let gx = (gz - qd) / 2;
-        crate::framebuffer::cb(text, gx, vc + a as u32 * 20, *s);
+        let gr = text.len() as u32 * 8;
+        let bu = (fb_w - gr) / 2;
+        crate::framebuffer::draw_text(text, bu, start_y + i as u32 * 20, *color);
     }
 
     
-    let ll = "Press any key to exit";
-    let qd = ll.len() as u32 * 8;
-    crate::framebuffer::cb(ll, (gz - qd) / 2, vs + 60, 0x556677);
-    crate::framebuffer::sv();
+    let tag = "Press any key to exit";
+    let gr = tag.len() as u32 * 8;
+    crate::framebuffer::draw_text(tag, (fb_w - gr) / 2, mid + 60, 0x556677);
+    crate::framebuffer::ii();
 
     
     loop {
-        if let Some(jt) = crate::keyboard::xw() {
-            if jt & 0x80 == 0 { break; }
+        if let Some(dr) = crate::keyboard::kr() {
+            if dr & 0x80 == 0 { break; }
         }
-        crate::cpu::tsc::asq(20);
+        crate::cpu::tsc::ww(20);
     }
 
-    bcq();
+    aco();
     crate::serial_println!("[SHOWCASE] Narrated showcase complete");
     Ok(())
 }
 
 
-fn bcq() {
-    crate::framebuffer::afi(false);
+fn aco() {
+    crate::framebuffer::pr(false);
 }
 
 
-fn lin(g: u32) -> u32 {
-    let mut e = g;
-    if e == 0 { e = 0xDEAD_BEEF; }
-    e ^= e << 13;
-    e ^= e >> 17;
-    e ^= e << 5;
-    e
+fn gfj(state: u32) -> u32 {
+    let mut j = state;
+    if j == 0 { j = 0xDEAD_BEEF; }
+    j ^= j << 13;
+    j ^= j >> 17;
+    j ^= j << 5;
+    j
 }
 
 
@@ -4036,186 +4036,186 @@ fn lin(g: u32) -> u32 {
 
 
 
-pub fn ucv() -> Result<(), &'static str> {
-    crate::audio::init().bq();
+pub fn mww() -> Result<(), &'static str> {
+    crate::audio::init().ok();
     crate::serial_println!("[ANTHEM] Starting TrustOS Anthem...");
 
-    let gz = crate::framebuffer::AB_.load(Ordering::Relaxed) as u32;
-    let kc = crate::framebuffer::Z_.load(Ordering::Relaxed) as u32;
+    let fb_w = crate::framebuffer::X_.load(Ordering::Relaxed) as u32;
+    let fb_h = crate::framebuffer::W_.load(Ordering::Relaxed) as u32;
 
-    crate::framebuffer::beo();
-    crate::framebuffer::afi(true);
+    crate::framebuffer::adw();
+    crate::framebuffer::pr(true);
 
     
     
     
-    dgs(gz, kc,
+    bgd(fb_w, fb_h,
         "T R U S T O S    A N T H E M",
         "Renaissance Numerique",
         "Cm -> C Major  //  106 BPM  //  Tension -> Revelation -> Maitrise",
         0x00CCFF,
     );
-    crate::framebuffer::sv();
-    if cnw(6000) { bcq(); return Ok(()); }
+    crate::framebuffer::ii();
+    if avs(6000) { aco(); return Ok(()); }
 
     
     
     
-    struct Zu {
-        dq: &'static str,
-        atp: &'static str,
-        eu: &'static str,
-        s: u32,
-        bkh: u32,
+    struct La {
+        title: &'static str,
+        subtitle: &'static str,
+        detail: &'static str,
+        color: u32,
+        loops: u32,
     }
 
-    let aeo = [
-        Zu {
-            dq: "INTRO -- L'EVEIL",
-            atp: "Quelque chose s'eveille...",
-            eu: "Pad drone  |  Heartbeat sub  |  Texture digitale",
-            s: 0x4466CC, bkh: 6,
+    let sections = [
+        La {
+            title: "INTRO -- L'EVEIL",
+            subtitle: "Quelque chose s'eveille...",
+            detail: "Pad drone  |  Heartbeat sub  |  Texture digitale",
+            color: 0x4466CC, loops: 6,
         },
-        Zu {
-            dq: "BUILD -- L'ESPOIR",
-            atp: "L'espoir nait, le rythme s'installe",
-            eu: "Kick doux  |  Arpege montant  |  Basse chaude",
-            s: 0x44AAFF, bkh: 8,
+        La {
+            title: "BUILD -- L'ESPOIR",
+            subtitle: "L'espoir nait, le rythme s'installe",
+            detail: "Kick doux  |  Arpege montant  |  Basse chaude",
+            color: 0x44AAFF, loops: 8,
         },
-        Zu {
-            dq: "DROP -- LA REVELATION",
-            atp: "Explosion controlee. Le controle est repris.",
-            eu: "Full mix  |  Lead lumineux  |  Groove electro-funk",
-            s: 0xFF6622, bkh: 10,
+        La {
+            title: "DROP -- LA REVELATION",
+            subtitle: "Explosion controlee. Le controle est repris.",
+            detail: "Full mix  |  Lead lumineux  |  Groove electro-funk",
+            color: 0xFF6622, loops: 10,
         },
-        Zu {
-            dq: "STABLE -- LA MAITRISE",
-            atp: "Le theme TrustOS. Souverain. Reconnaissable.",
-            eu: "Motif C-E-G-C  |  Cm -> C Major!  |  Identite sonore",
-            s: 0x00FF66, bkh: 10,
+        La {
+            title: "STABLE -- LA MAITRISE",
+            subtitle: "Le theme TrustOS. Souverain. Reconnaissable.",
+            detail: "Motif C-E-G-C  |  Cm -> C Major!  |  Identite sonore",
+            color: 0x00FF66, loops: 10,
         },
-        Zu {
-            dq: "OUTRO -- FUTUR SOUVERAIN",
-            atp: "Le signal s'estompe... le motif reste.",
-            eu: "Pad + motif  |  Serenite  |  Un futur souverain",
-            s: 0x8844FF, bkh: 6,
+        La {
+            title: "OUTRO -- FUTUR SOUVERAIN",
+            subtitle: "Le signal s'estompe... le motif reste.",
+            detail: "Pad + motif  |  Serenite  |  Un futur souverain",
+            color: 0x8844FF, loops: 6,
         },
     ];
 
     
     
     
-    for (hzg, zw) in aeo.iter().cf() {
+    for (sec_idx, lx) in sections.iter().enumerate() {
         
-        dgs(gz, kc,
-            &format!("SECTION {}/5", hzg + 1),
-            zw.dq,
-            zw.eu,
-            zw.s,
+        bgd(fb_w, fb_h,
+            &format!("SECTION {}/5", sec_idx + 1),
+            lx.title,
+            lx.detail,
+            lx.color,
         );
-        crate::framebuffer::sv();
-        if cnw(4500) { bcq(); return Ok(()); }
+        crate::framebuffer::ii();
+        if avs(4500) { aco(); return Ok(()); }
 
         
-        let mut er = BeatStudio::new();
-        match hzg {
-            0 => er.qiz(),
-            1 => er.qix(),
-            2 => er.qiy(),
-            3 => er.qjb(),
-            _ => er.qja(),
+        let mut ba = BeatStudio::new();
+        match sec_idx {
+            0 => ba.anthem_intro(),
+            1 => ba.anthem_build(),
+            2 => ba.anthem_drop(),
+            3 => ba.anthem_stable(),
+            _ => ba.anthem_outro(),
         }
 
         
-        let audio = er.ehn();
-        er.fat(&audio);
-        let _ = crate::drivers::hda::dcg(&audio);
-        er.uu = true;
+        let audio = ba.render_loop();
+        ba.update_scope(&audio);
+        let _ = crate::drivers::hda::bdu(&audio);
+        ba.playing = true;
 
-        let bop = er.dwh();
-        let tk = 32usize;
+        let ait = ba.step_duration_ms();
+        let ix = 32usize;
 
-        let btp = Gz {
-            dq: zw.dq,
-            atp: zw.atp,
-            eu: zw.eu,
-            vj: 0,
+        let alc = Dc {
+            title: lx.title,
+            subtitle: lx.subtitle,
+            detail: lx.detail,
+            frames: 0,
         };
 
         
-        let mut ara = false;
-        for djd in 0..zw.bkh {
-            for e in 0..tk {
-                er.aop = e;
-                er.fxu();
-                er.po();
-                let hva = format!(
+        let mut wc = false;
+        for loop_num in 0..lx.loops {
+            for j in 0..ix {
+                ba.current_step = j;
+                ba.update_spectrum();
+                ba.draw();
+                let dwl = format!(
                     "SECTION {}/5  //  LOOP {}/{}",
-                    hzg + 1, djd + 1, zw.bkh
+                    sec_idx + 1, loop_num + 1, lx.loops
                 );
-                let li = (e as u32 * 100) / tk as u32;
-                epe(&btp, gz, kc, &hva, li, 100);
-                crate::framebuffer::sv();
+                let progress = (j as u32 * 100) / ix as u32;
+                byx(&alc, fb_w, fb_h, &dwl, progress, 100);
+                crate::framebuffer::ii();
 
-                match eks(bop as u64) {
-                    1 => { ara = true; break; } 
+                match bwv(ait as u64) {
+                    1 => { wc = true; break; } 
                     2 => { break; }                  
                     _ => {}
                 }
             }
-            if ara { break; }
+            if wc { break; }
         }
 
-        let _ = crate::drivers::hda::qg();
-        er.uu = false;
-        if ara { bcq(); return Ok(()); }
+        let _ = crate::drivers::hda::stop();
+        ba.playing = false;
+        if wc { aco(); return Ok(()); }
 
         
-        crate::cpu::tsc::asq(800);
+        crate::cpu::tsc::ww(800);
     }
 
     
     
     
-    crate::framebuffer::ah(0, 0, gz, kc, 0x020208);
-    let vs = kc / 2;
-    crate::framebuffer::ah(gz / 4, vs - 80, gz / 2, 2, 0x00CCFF);
-    crate::framebuffer::ah(gz / 4, vs + 80, gz / 2, 2, 0x00CCFF);
+    crate::framebuffer::fill_rect(0, 0, fb_w, fb_h, 0x020208);
+    let mid = fb_h / 2;
+    crate::framebuffer::fill_rect(fb_w / 4, mid - 80, fb_w / 2, 2, 0x00CCFF);
+    crate::framebuffer::fill_rect(fb_w / 4, mid + 80, fb_w / 2, 2, 0x00CCFF);
 
-    let bv = 2u32;
-    let nk = 8 * bv;
+    let scale = 2u32;
+    let ew = 8 * scale;
 
-    let dq = "T R U S T O S   A N T H E M";
-    let blt = dq.len() as u32 * nk;
-    crate::graphics::scaling::azp(
-        ((gz.ao(blt)) / 2) as i32, (vs - 55) as i32,
-        dq, 0x00FF66, bv);
+    let title = "T R U S T O S   A N T H E M";
+    let ahg = title.len() as u32 * ew;
+    crate::graphics::scaling::aat(
+        ((fb_w.saturating_sub(ahg)) / 2) as i32, (mid - 55) as i32,
+        title, 0x00FF66, scale);
 
     let sub = "Renaissance Numerique  --  Un futur souverain.";
-    let bfs = sub.len() as u32 * nk;
-    crate::graphics::scaling::azp(
-        ((gz.ao(bfs)) / 2) as i32, (vs - 10) as i32,
-        sub, 0xCCCCDD, bv);
+    let aeo = sub.len() as u32 * ew;
+    crate::graphics::scaling::aat(
+        ((fb_w.saturating_sub(aeo)) / 2) as i32, (mid - 10) as i32,
+        sub, 0xCCCCDD, scale);
 
-    let co = "Composed on TrustOS  //  Bare-metal Rust  //  Native HDA Audio";
-    let bxu = co.len() as u32 * nk;
-    crate::graphics::scaling::azp(
-        ((gz.ao(bxu)) / 2) as i32, (vs + 30) as i32,
-        co, 0x88AACC, bv);
+    let info = "Composed on TrustOS  //  Bare-metal Rust  //  Native HDA Audio";
+    let ane = info.len() as u32 * ew;
+    crate::graphics::scaling::aat(
+        ((fb_w.saturating_sub(ane)) / 2) as i32, (mid + 30) as i32,
+        info, 0x88AACC, scale);
 
-    let ll = "Press any key to exit";
-    let qd = ll.len() as u32 * 8;
-    crate::framebuffer::cb(ll, (gz - qd) / 2, vs + 65, 0x556677);
-    crate::framebuffer::sv();
+    let tag = "Press any key to exit";
+    let gr = tag.len() as u32 * 8;
+    crate::framebuffer::draw_text(tag, (fb_w - gr) / 2, mid + 65, 0x556677);
+    crate::framebuffer::ii();
 
     loop {
-        if let Some(jt) = crate::keyboard::xw() {
-            if jt & 0x80 == 0 { break; }
+        if let Some(dr) = crate::keyboard::kr() {
+            if dr & 0x80 == 0 { break; }
         }
-        crate::cpu::tsc::asq(20);
+        crate::cpu::tsc::ww(20);
     }
 
-    bcq();
+    aco();
     crate::serial_println!("[ANTHEM] TrustOS Anthem complete");
     Ok(())
 }
@@ -4226,40 +4226,40 @@ pub fn ucv() -> Result<(), &'static str> {
 
 
 
-pub fn udb() -> Result<(), &'static str> {
-    crate::audio::init().bq();
+pub fn mxc() -> Result<(), &'static str> {
+    crate::audio::init().ok();
     crate::serial_println!("[CYBER] 'Neon Protocol' — Creative Process + Full Song");
 
-    let gz = crate::framebuffer::AB_.load(Ordering::Relaxed) as u32;
-    let kc = crate::framebuffer::Z_.load(Ordering::Relaxed) as u32;
+    let fb_w = crate::framebuffer::X_.load(Ordering::Relaxed) as u32;
+    let fb_h = crate::framebuffer::W_.load(Ordering::Relaxed) as u32;
 
-    crate::framebuffer::beo();
-    crate::framebuffer::afi(true);
+    crate::framebuffer::adw();
+    crate::framebuffer::pr(true);
 
-    let tk = 32usize;
-    let mut er = BeatStudio::new();
+    let ix = 32usize;
+    let mut ba = BeatStudio::new();
 
     
     
     
     
 
-    dgs(gz, kc,
+    bgd(fb_w, fb_h,
         "T R U S T D A W",
         "\"NEON PROTOCOL\" — Creative Process",
         "Watch the beat come alive  |  100 BPM  |  Eb minor",
         0x00FFCC,
     );
-    crate::framebuffer::sv();
-    if cnw(5000) { bcq(); return Ok(()); }
+    crate::framebuffer::ii();
+    if avs(5000) { aco(); return Ok(()); }
 
     
-    er.jdv();
-    let bop = er.dwh();
-    for ab in 0..8 { er.af[ab].so = true; }
+    ba.load_trap_hook();
+    let ait = ba.step_duration_ms();
+    for t in 0..8 { ba.tracks[t].muted = true; }
 
     
-    let my: [(usize, &str, &str, u32, u32); 8] = [
+    let layers: [(usize, &str, &str, u32, u32); 8] = [
         (0, "+ SUB BASS",  "The foundation — 43 Hz Eb1 rumble",    3, 0xFF4444),
         (1, "+ SNARE",     "Hard mechanical crack — beats 3 & 7",  2, 0xFFAA22),
         (2, "+ HI-HAT",    "Aggressive 16th-note machine gun",     2, 0xFFFF44),
@@ -4270,119 +4270,119 @@ pub fn udb() -> Result<(), &'static str> {
         (7, "+ PERC",      "Glitch percussion accents",             1, 0xCCCCCC),
     ];
 
-    for &(zx, j, desc, bkh, mm) in &my {
+    for &(mp, name, desc, loops, accent) in &layers {
         
-        er.af[zx].so = false;
+        ba.tracks[mp].muted = false;
 
         
-        dgs(gz, kc, j, desc, "", mm);
-        crate::framebuffer::sv();
-        if cnw(1800) { bcq(); return Ok(()); }
+        bgd(fb_w, fb_h, name, desc, "", accent);
+        crate::framebuffer::ii();
+        if avs(1800) { aco(); return Ok(()); }
 
         
-        let audio = er.ehn();
-        er.fat(&audio);
-        let _ = crate::drivers::hda::dcg(&audio);
-        er.uu = true;
+        let audio = ba.render_loop();
+        ba.update_scope(&audio);
+        let _ = crate::drivers::hda::bdu(&audio);
+        ba.playing = true;
 
-        let btp = Gz {
-            dq: j,
-            atp: desc,
-            eu: "Building the beat...",
-            vj: 0,
+        let alc = Dc {
+            title: name,
+            subtitle: desc,
+            detail: "Building the beat...",
+            frames: 0,
         };
 
-        let mut ara = false;
-        for djd in 0..bkh {
-            for e in 0..tk {
-                er.aop = e;
-                er.fxu();
+        let mut wc = false;
+        for loop_num in 0..loops {
+            for j in 0..ix {
+                ba.current_step = j;
+                ba.update_spectrum();
 
-                for jp in 0..128 { er.dsl[jp] = false; }
-                for fvz in 0..8 {
-                    if er.af[fvz].so { continue; }
-                    if er.af[fvz].au[e].gh {
-                        let ayg = er.af[fvz].lov(e);
-                        if ayg > 0 && ayg < 128 {
-                            er.dsl[ayg as usize] = true;
+                for note in 0..128 { ba.keys_pressed[note] = false; }
+                for t_idx in 0..8 {
+                    if ba.tracks[t_idx].muted { continue; }
+                    if ba.tracks[t_idx].steps[j].active {
+                        let aad = ba.tracks[t_idx].note_at(j);
+                        if aad > 0 && aad < 128 {
+                            ba.keys_pressed[aad as usize] = true;
                         }
                     }
                 }
 
-                er.po();
-                let cu = format!("{} — Loop {}/{}", j, djd + 1, bkh);
-                let li = (e as u32 * 100) / tk as u32;
-                epe(&btp, gz, kc, &cu, li, 100);
-                crate::framebuffer::sv();
+                ba.draw();
+                let label = format!("{} — Loop {}/{}", name, loop_num + 1, loops);
+                let progress = (j as u32 * 100) / ix as u32;
+                byx(&alc, fb_w, fb_h, &label, progress, 100);
+                crate::framebuffer::ii();
 
-                match eks(bop as u64) {
-                    1 => { ara = true; break; }
+                match bwv(ait as u64) {
+                    1 => { wc = true; break; }
                     2 => { break; }
                     _ => {}
                 }
             }
-            if ara { break; }
+            if wc { break; }
         }
 
-        let _ = crate::drivers::hda::qg();
-        er.uu = false;
-        er.aop = 0;
-        for jp in 0..128 { er.dsl[jp] = false; }
-        if ara { bcq(); return Ok(()); }
+        let _ = crate::drivers::hda::stop();
+        ba.playing = false;
+        ba.current_step = 0;
+        for note in 0..128 { ba.keys_pressed[note] = false; }
+        if wc { aco(); return Ok(()); }
     }
 
     
-    dgs(gz, kc,
+    bgd(fb_w, fb_h,
         "ALL LAYERS ACTIVE",
         "The complete beat — \"Neon Protocol\"",
         "8 tracks  |  100 BPM  |  Eb minor",
         0x00FFCC,
     );
-    crate::framebuffer::sv();
-    if cnw(2500) { bcq(); return Ok(()); }
+    crate::framebuffer::ii();
+    if avs(2500) { aco(); return Ok(()); }
 
     {
-        let audio = er.ehn();
-        er.fat(&audio);
-        let _ = crate::drivers::hda::dcg(&audio);
-        er.uu = true;
+        let audio = ba.render_loop();
+        ba.update_scope(&audio);
+        let _ = crate::drivers::hda::bdu(&audio);
+        ba.playing = true;
 
-        let btp = Gz {
-            dq: "FULL MIX",
-            atp: "All 8 layers combined",
-            eu: "Neon Protocol — complete beat",
-            vj: 0,
+        let alc = Dc {
+            title: "FULL MIX",
+            subtitle: "All 8 layers combined",
+            detail: "Neon Protocol — complete beat",
+            frames: 0,
         };
 
-        let mut ara = false;
-        for djd in 0..3u32 {
-            for e in 0..tk {
-                er.aop = e;
-                er.fxu();
-                for jp in 0..128 { er.dsl[jp] = false; }
-                for fvz in 0..8 {
-                    if !er.af[fvz].so && er.af[fvz].au[e].gh {
-                        let ayg = er.af[fvz].lov(e);
-                        if ayg > 0 && ayg < 128 { er.dsl[ayg as usize] = true; }
+        let mut wc = false;
+        for loop_num in 0..3u32 {
+            for j in 0..ix {
+                ba.current_step = j;
+                ba.update_spectrum();
+                for note in 0..128 { ba.keys_pressed[note] = false; }
+                for t_idx in 0..8 {
+                    if !ba.tracks[t_idx].muted && ba.tracks[t_idx].steps[j].active {
+                        let aad = ba.tracks[t_idx].note_at(j);
+                        if aad > 0 && aad < 128 { ba.keys_pressed[aad as usize] = true; }
                     }
                 }
-                er.po();
-                let cu = format!("FULL MIX — Loop {}/3", djd + 1);
-                epe(&btp, gz, kc, &cu, (e as u32 * 100) / tk as u32, 100);
-                crate::framebuffer::sv();
-                match eks(bop as u64) {
-                    1 => { ara = true; break; }
+                ba.draw();
+                let label = format!("FULL MIX — Loop {}/3", loop_num + 1);
+                byx(&alc, fb_w, fb_h, &label, (j as u32 * 100) / ix as u32, 100);
+                crate::framebuffer::ii();
+                match bwv(ait as u64) {
+                    1 => { wc = true; break; }
                     2 => { break; }
                     _ => {}
                 }
             }
-            if ara { break; }
+            if wc { break; }
         }
 
-        let _ = crate::drivers::hda::qg();
-        er.uu = false;
-        er.aop = 0;
-        if ara { bcq(); return Ok(()); }
+        let _ = crate::drivers::hda::stop();
+        ba.playing = false;
+        ba.current_step = 0;
+        if wc { aco(); return Ok(()); }
     }
 
     
@@ -4392,18 +4392,18 @@ pub fn udb() -> Result<(), &'static str> {
     
     
 
-    dgs(gz, kc,
+    bgd(fb_w, fb_h,
         "ENTERING THE MATRIX",
         "\"NEON PROTOCOL\" — Full Song",
         "8 sections  |  Pulsing waveform  |  [Esc] Exit",
         0x00FFCC,
     );
-    crate::framebuffer::sv();
-    if cnw(4000) { bcq(); return Ok(()); }
+    crate::framebuffer::ii();
+    if avs(4000) { aco(); return Ok(()); }
 
     let mut matrix = MatrixState::new();
 
-    let wfs: [&str; 8] = [
+    let omo: [&str; 8] = [
         "INTRO — System Boot",
         "DROP — Neon Protocol",
         "BREAKDOWN — Signal Lost",
@@ -4413,170 +4413,170 @@ pub fn udb() -> Result<(), &'static str> {
         "FINAL DROP — Full Override",
         "OUTRO — Shutdown",
     ];
-    let pha: [u32; 8] = [3, 5, 1, 4, 1, 3, 3, 1];
+    let jdw: [u32; 8] = [3, 5, 1, 4, 1, 3, 3, 1];
 
     
-    for bb in 0..30u32 {
-        matrix.or();
-        matrix.eba();
-        let fr = match bb {
+    for f in 0..30u32 {
+        matrix.tick();
+        matrix.draw_rain();
+        let bk = match f {
             0..=8   => "INITIALIZING NEON PROTOCOL...",
             9..=18  => "LOADING WAVEFORM ENGINE...",
             _       => "READY.",
         };
-        let hsf = fr.len() as u32 * 16 + 32;
-        let hl = (gz.ao(hsf)) / 2;
-        let ir = kc / 2 - 16;
-        crate::framebuffer::ih(hl.ao(8), ir.ao(8), hsf + 16, 48, 0x000000, 180);
-        crate::graphics::scaling::azp(hl as i32, ir as i32, fr, 0x00FFCC, 2);
-        crate::framebuffer::sv();
-        if cnw(80) { bcq(); return Ok(()); }
+        let dur = bk.len() as u32 * 16 + 32;
+        let cg = (fb_w.saturating_sub(dur)) / 2;
+        let cr = fb_h / 2 - 16;
+        crate::framebuffer::co(cg.saturating_sub(8), cr.saturating_sub(8), dur + 16, 48, 0x000000, 180);
+        crate::graphics::scaling::aat(cg as i32, cr as i32, bk, 0x00FFCC, 2);
+        crate::framebuffer::ii();
+        if avs(80) { aco(); return Ok(()); }
     }
 
     
     
-    let mut dqy: Vec<i16> = Vec::new();
+    let mut bmh: Vec<i16> = Vec::new();
     
-    let mut mcx: Vec<(usize, usize)> = Vec::new(); 
-    let mut kzf: usize = 0;
+    let mut gtg: Vec<(usize, usize)> = Vec::new(); 
+    let mut fzd: usize = 0;
 
-    for zw in 0..8usize {
-        match zw {
-            0 => er.uhn(),
-            1 => er.jdv(),
-            2 => er.uhq(),
-            3 => er.uhl(),
-            4 => er.uhk(),
-            5 => er.uhp(),
-            6 => er.uhm(),
-            _ => er.uho(),
+    for lx in 0..8usize {
+        match lx {
+            0 => ba.load_trap_intro(),
+            1 => ba.load_trap_hook(),
+            2 => ba.load_trap_verse(),
+            3 => ba.load_trap_build(),
+            4 => ba.load_trap_bridge(),
+            5 => ba.load_trap_rebuild(),
+            6 => ba.load_trap_hook_final(),
+            _ => ba.load_trap_outro(),
         }
-        let wfx = er.ehn();
-        for yas in 0..pha[zw] {
-            mcx.push((zw, kzf));
-            dqy.bk(&wfx);
-            kzf += tk;
+        let omq = ba.render_loop();
+        for _lp in 0..jdw[lx] {
+            gtg.push((lx, fzd));
+            bmh.extend_from_slice(&omq);
+            fzd += ix;
         }
     }
 
-    let bop = er.dwh();
-    let wuc = (60u32 * 48000) / (er.kz as u32 * 4);
-    let pff = wuc as usize * 2; 
-    let xkf = kzf;
+    let ait = ba.step_duration_ms();
+    let oxe = (60u32 * 48000) / (ba.bpm as u32 * 4);
+    let jci = oxe as usize * 2; 
+    let ply = fzd;
 
     
-    let _ = crate::drivers::hda::dcg(&dqy);
+    let _ = crate::drivers::hda::bdu(&bmh);
 
     
-    let mut ara = false;
-    let mut ipx = 0usize;
-    let mut nib = 0u32;
+    let mut wc = false;
+    let mut ejj = 0usize;
+    let mut hpl = 0u32;
 
-    for at in 0..xkf {
+    for g in 0..ply {
         
         
-        for (cvv, &(si, ckx)) in mcx.iter().cf() {
-            if ckx <= at {
-                ipx = si;
+        for (bal, &(si, gs)) in gtg.iter().enumerate() {
+            if gs <= g {
+                ejj = si;
                 
-                nib = mcx[..=cvv].iter().hi(|&&(e, _)| e == si).az() as u32 - 1;
+                hpl = gtg[..=bal].iter().filter(|&&(j, _)| j == si).count() as u32 - 1;
             }
         }
-        let e = at % tk; 
+        let j = g % ix; 
 
         
-        let bcm = at * pff;
-        let is = ((at + 1) * pff).v(dqy.len());
-        if bcm < dqy.len() {
-            er.fat(&dqy[bcm..is]);
+        let acl = g * jci;
+        let cv = ((g + 1) * jci).min(bmh.len());
+        if acl < bmh.len() {
+            ba.update_scope(&bmh[acl..cv]);
         }
-        let abo = rng(&dqy, bcm, is);
+        let energy = kwl(&bmh, acl, cv);
 
         
-        matrix.or();
+        matrix.tick();
 
         
-        matrix.eba();
-        sdh(gz, kc, &er.hyy, abo, matrix.frame);
-        scm(gz, kc, wfs[ipx], ipx,
-            nib, pha[ipx], e, tk, er.kz);
+        matrix.draw_rain();
+        lja(fb_w, fb_h, &ba.scope_buffer, energy, matrix.frame);
+        lim(fb_w, fb_h, omo[ejj], ejj,
+            hpl, jdw[ejj], j, ix, ba.bpm);
 
-        crate::framebuffer::sv();
+        crate::framebuffer::ii();
 
-        match eks(bop as u64) {
-            1 => { ara = true; break; }
+        match bwv(ait as u64) {
+            1 => { wc = true; break; }
             2 => {} 
             _ => {}
         }
     }
 
-    let _ = crate::drivers::hda::qg();
-    if ara { bcq(); return Ok(()); }
+    let _ = crate::drivers::hda::stop();
+    if wc { aco(); return Ok(()); }
 
     
-    for bb in 0..50u32 {
-        matrix.or();
-        let hfk = matrix.ajg / 50;
-        for r in 0..hfk {
-            let w = (bb as usize * hfk + r) % matrix.ajg;
-            matrix.cpm[w].gh = false;
+    for f in 0..50u32 {
+        matrix.tick();
+        let dmm = matrix.num_cols / 50;
+        for c in 0..dmm {
+            let idx = (f as usize * dmm + c) % matrix.num_cols;
+            matrix.columns[idx].active = false;
         }
-        matrix.eba();
+        matrix.draw_rain();
 
-        let fr = match bb {
+        let bk = match f {
             0..=15  => "DISCONNECTING...",
             16..=30 => "SIGNAL LOST",
             _       => "NEON PROTOCOL // OFFLINE",
         };
-        let hsf = fr.len() as u32 * 16 + 32;
-        let hl = (gz.ao(hsf)) / 2;
-        let ir = kc / 2 - 16;
-        crate::framebuffer::ih(hl.ao(8), ir.ao(8), hsf + 16, 48, 0x000000, 180);
-        crate::graphics::scaling::azp(hl as i32, ir as i32, fr, 0x00FFCC, 2);
-        crate::framebuffer::sv();
-        crate::cpu::tsc::asq(80);
+        let dur = bk.len() as u32 * 16 + 32;
+        let cg = (fb_w.saturating_sub(dur)) / 2;
+        let cr = fb_h / 2 - 16;
+        crate::framebuffer::co(cg.saturating_sub(8), cr.saturating_sub(8), dur + 16, 48, 0x000000, 180);
+        crate::graphics::scaling::aat(cg as i32, cr as i32, bk, 0x00FFCC, 2);
+        crate::framebuffer::ii();
+        crate::cpu::tsc::ww(80);
     }
 
     
-    crate::framebuffer::ah(0, 0, gz, kc, 0x050510);
-    let vs = kc / 2;
-    crate::framebuffer::ah(gz / 4, vs - 80, gz / 2, 2, 0x00FFCC);
-    crate::framebuffer::ah(gz / 4, vs + 80, gz / 2, 2, 0x00FFCC);
+    crate::framebuffer::fill_rect(0, 0, fb_w, fb_h, 0x050510);
+    let mid = fb_h / 2;
+    crate::framebuffer::fill_rect(fb_w / 4, mid - 80, fb_w / 2, 2, 0x00FFCC);
+    crate::framebuffer::fill_rect(fb_w / 4, mid + 80, fb_w / 2, 2, 0x00FFCC);
 
-    let bv = 2u32;
-    let nk = 8 * bv;
+    let scale = 2u32;
+    let ew = 8 * scale;
 
-    let aax = "\"NEON PROTOCOL\"";
-    let blt = aax.len() as u32 * nk;
-    crate::graphics::scaling::azp(
-        ((gz.ao(blt)) / 2) as i32, (vs - 55) as i32,
-        aax, 0x00FFCC, bv);
+    let ll = "\"NEON PROTOCOL\"";
+    let ahg = ll.len() as u32 * ew;
+    crate::graphics::scaling::aat(
+        ((fb_w.saturating_sub(ahg)) / 2) as i32, (mid - 55) as i32,
+        ll, 0x00FFCC, scale);
 
-    let aco = "Cyberpunk Trap — 100 BPM — Eb minor";
-    let bfs = aco.len() as u32 * nk;
-    crate::graphics::scaling::azp(
-        ((gz.ao(bfs)) / 2) as i32, (vs - 10) as i32,
-        aco, 0xCCCCDD, bv);
+    let np = "Cyberpunk Trap — 100 BPM — Eb minor";
+    let aeo = np.len() as u32 * ew;
+    crate::graphics::scaling::aat(
+        ((fb_w.saturating_sub(aeo)) / 2) as i32, (mid - 10) as i32,
+        np, 0xCCCCDD, scale);
 
-    let bcx = "Creative Process + Full Song — Bare Metal Rust";
-    let bxu = bcx.len() as u32 * nk;
-    crate::graphics::scaling::azp(
-        ((gz.ao(bxu)) / 2) as i32, (vs + 30) as i32,
-        bcx, 0x8844CC, bv);
+    let acw = "Creative Process + Full Song — Bare Metal Rust";
+    let ane = acw.len() as u32 * ew;
+    crate::graphics::scaling::aat(
+        ((fb_w.saturating_sub(ane)) / 2) as i32, (mid + 30) as i32,
+        acw, 0x8844CC, scale);
 
-    let ll = "Press any key to exit";
-    let qd = ll.len() as u32 * 8;
-    crate::framebuffer::cb(ll, (gz - qd) / 2, vs + 65, 0x446688);
-    crate::framebuffer::sv();
+    let tag = "Press any key to exit";
+    let gr = tag.len() as u32 * 8;
+    crate::framebuffer::draw_text(tag, (fb_w - gr) / 2, mid + 65, 0x446688);
+    crate::framebuffer::ii();
 
     loop {
-        if let Some(jt) = crate::keyboard::xw() {
-            if jt & 0x80 == 0 { break; }
+        if let Some(dr) = crate::keyboard::kr() {
+            if dr & 0x80 == 0 { break; }
         }
-        crate::cpu::tsc::asq(20);
+        crate::cpu::tsc::ww(20);
     }
 
-    bcq();
+    aco();
     crate::serial_println!("[CYBER] 'Neon Protocol' complete");
     Ok(())
 }

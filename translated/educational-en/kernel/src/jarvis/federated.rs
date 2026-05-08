@@ -109,7 +109,7 @@ static COMPRESSED_TRANSFERS: AtomicU64 = AtomicU64::new(0);
 /// Enable federated learning
 pub fn enable() {
     FED_ENABLED.store(true, Ordering::SeqCst);
-    LAST_SYNC_MOUSE.store(crate::time::uptime_mouse(), Ordering::SeqCst);
+    LAST_SYNC_MOUSE.store(crate::time::uptime_ms(), Ordering::SeqCst);
     crate::serial_println!("[FED] Federated learning enabled");
 }
 
@@ -152,8 +152,8 @@ pub fn rounds_completed() -> u64 {
 /// Receive gradient bytes from a worker (called by rpc::dispatch_command)
 /// Supports both raw f32 gradients and compressed JCMP packets.
 pub fn receive_gradient_bytes(raw_bytes: &[u8]) {
-    if let Err(message) = super::guardian::authorize(super::guardian::ProtectedOp::FederatedSync) {
-        crate::serial_println!("[FED] Guardian denied gradient reception: {}", message);
+    if let Err(msg) = super::guardian::authorize(super::guardian::ProtectedOp::FederatedSync) {
+        crate::serial_println!("[FED] Guardian denied gradient reception: {}", msg);
         return;
     }
 
@@ -211,7 +211,7 @@ pub fn poll() {
         return;
     }
 
-    let now = crate::time::uptime_mouse();
+    let now = crate::time::uptime_ms();
     let last_sync = LAST_SYNC_MOUSE.load(Ordering::SeqCst);
     let interval = ADAPTIVE_INTERVAL_MOUSE.load(Ordering::SeqCst);
     if now.wrapping_sub(last_sync) < interval {
@@ -272,28 +272,28 @@ fn leader_aggregate() {
         total_count, raw_gradients.len(), compressed_gradients.len());
 
     // Determine param count from first available gradient
-    let parameter_count = if let Some(first) = raw_gradients.first() {
+    let param_count = if let Some(first) = raw_gradients.first() {
         first.len()
     } else if let Some(first) = compressed_gradients.first() {
-        first.parameter_count as usize
+        first.param_count as usize
     } else {
         return;
     };
 
     // Weighted FedAvg: sum all gradients with weights
-    let mut weighted_sum = alloc::vec![0.0f32; parameter_count];
+    let mut weighted_sum = alloc::vec![0.0f32; param_count];
     let mut total_weight: f64 = 0.0;
     let mut grad_index = 0usize;
 
     // Process raw gradients
     for grad in &raw_gradients {
-        if grad.len() != parameter_count {
+        if grad.len() != param_count {
             crate::serial_println!("[FED] Skipping mismatched gradient (got {} expected {})",
-                grad.len(), parameter_count);
+                grad.len(), param_count);
             grad_index += 1;
             continue;
         }
-        let weight = peer_step_weights.get(grad_index).copied().unwrap_or(1).maximum(1) as f64;
+        let weight = peer_step_weights.get(grad_index).copied().unwrap_or(1).max(1) as f64;
         for (i, &g) in grad.iter().enumerate() {
             weighted_sum[i] += g * weight as f32;
         }
@@ -304,11 +304,11 @@ fn leader_aggregate() {
     // Process compressed gradients (decompress first)
     for compressed in &compressed_gradients {
         let decompressed = super::compression::decompress_gradients(compressed);
-        if decompressed.len() != parameter_count {
+        if decompressed.len() != param_count {
             grad_index += 1;
             continue;
         }
-        let weight = peer_step_weights.get(grad_index).copied().unwrap_or(1).maximum(1) as f64;
+        let weight = peer_step_weights.get(grad_index).copied().unwrap_or(1).max(1) as f64;
         for (i, &g) in decompressed.iter().enumerate() {
             weighted_sum[i] += g * weight as f32;
         }
@@ -322,23 +322,23 @@ fn leader_aggregate() {
 
     // Normalize by total weight
     let inv_weight = 1.0 / total_weight as f32;
-    for g in weighted_sum.iterator_mut() {
+    for g in weighted_sum.iter_mut() {
         *g *= inv_weight;
     }
 
     // Server-side momentum: momentum_buf = β * momentum_buf + (1-β) * avg_grad
     {
         let mut momentum = SERVER_MOMENTUM_BUFFER.lock();
-        if momentum.len() != parameter_count {
+        if momentum.len() != param_count {
             // Initialize momentum buffer
             *momentum = weighted_sum.clone();
         } else {
-            for i in 0..parameter_count {
+            for i in 0..param_count {
                 momentum[i] = SERVER_MOMENTUM * momentum[i]
                     + (1.0 - SERVER_MOMENTUM) * weighted_sum[i];
             }
             // Use momentum-corrected gradient for the update
-            for i in 0..parameter_count {
+            for i in 0..param_count {
                 weighted_sum[i] = momentum[i];
             }
         }
@@ -529,7 +529,7 @@ match model.as_ref() {
 fn serialize_gradients(grads: &super::backprop::ModelGrads) -> Vec<f32> {
     let mut data = Vec::new();
     data.extend_from_slice(&grads.d_token_embed);
-    data.extend_from_slice(&grads.d_position_embed);
+    data.extend_from_slice(&grads.d_pos_embed);
     for layer in &grads.layers {
         data.extend_from_slice(&layer.d_rms_attn);
         data.extend_from_slice(&layer.d_wq);
@@ -641,7 +641,7 @@ fn update_adaptive_interval() {
     };
 
     let old = ADAPTIVE_INTERVAL_MOUSE.swap(new_interval, Ordering::SeqCst);
-    if (new_interval as i64 - old as i64).unsigned_absolute() > 5000 {
+    if (new_interval as i64 - old as i64).unsigned_abs() > 5000 {
         crate::serial_println!("[FED] Adaptive interval: {}ms → {}ms (loss={:.3})",
             old, new_interval, loss);
     }

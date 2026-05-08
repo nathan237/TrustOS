@@ -139,21 +139,21 @@ pub fn analyze_data(data: &[u8]) -> String {
 /// Called before generation to make Jarvis "aware" of its environment
 pub fn hardware_context_for_jarvis() -> String {
     if let Some(profile) = probe::cached_profile() {
-        let mut context = profile.to_ai_context();
+        let mut ctx = profile.to_ai_context();
 
         // Add execution plan info
         if let Some(plan) = optimizer::current_plan() {
-            context.push_str(&format!("PLAN: simd={} batch={} gpu={} workers={}\n",
+            ctx.push_str(&format!("PLAN: simd={} batch={} gpu={} workers={}\n",
                 plan.simd_tier.as_str(), plan.optimal_batch_size,
                 plan.use_gpu, plan.worker_threads));
         }
 
         // Add recent optimization status
         if optimizer::is_active() {
-            context.push_str("OPTIMIZER: active, self-tuning enabled\n");
+            ctx.push_str("OPTIMIZER: active, self-tuning enabled\n");
         }
 
-        context
+        ctx
     } else {
         String::from("HARDWARE: not yet scanned\n")
     }

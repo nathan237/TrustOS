@@ -140,13 +140,13 @@ pub fn init() {
 
 /// Initialize memory for Android boot (no HHDM — flat physical addressing)
 /// Called from android_main when booting without Limine.
-pub fn initialize_android_heap(physical_base: u64, heap_bytes: usize) {
+pub fn initialize_android_heap(phys_base: u64, heap_bytes: usize) {
     // No HHDM offset — physical address IS the virtual address (MMU off)
     HHDM_OFFSET.store(0, Ordering::SeqCst);
     HEAP_SIZE_ACTUAL.store(heap_bytes, Ordering::SeqCst);
-    HEAP_START.store(physical_base as usize, Ordering::SeqCst);
+    HEAP_START.store(phys_base as usize, Ordering::SeqCst);
     
-    heap::initialize_at(physical_base as usize, heap_bytes);
+    heap::initialize_at(phys_base as usize, heap_bytes);
 }
 
 /// Get memory statistics
@@ -176,8 +176,8 @@ pub fn hhdm_offset() -> u64 {
 }
 
 /// Convert physical address to virtual (via HHDM)
-pub fn physical_to_virt(physical: u64) -> u64 {
-    hhdm_offset() + physical
+pub fn physical_to_virt(phys: u64) -> u64 {
+    hhdm_offset() + phys
 }
 
 /// Convert virtual HHDM address to physical
@@ -195,21 +195,21 @@ pub fn virt_to_physical(virt: u64) -> Option<u64> {
 /// 
 /// This maps the physical MMIO address directly using HHDM offset,
 /// but also ensures the pages are marked with proper MMIO flags (no cache).
-pub fn map_mmio(physical_address: u64, size: usize) -> Result<u64, &'static str> {
+pub fn map_mmio(phys_addr: u64, size: usize) -> Result<u64, &'static str> {
     // For Limine with HHDM, we try to use the HHDM mapping first
     // But MMIO regions may not be covered by HHDM, so we need to 
     // actually map them in the page tables
     
-    let virt_address = physical_to_virt(physical_address);
+    let virt_addr = physical_to_virt(phys_addr);
     
     // Map pages with MMIO flags (present, writable, no cache, no execute)
     let page_size = 4096u64;
-    let start_page = physical_address & !0xFFF;
-    let end_page = (physical_address + size as u64 + 0xFFF) & !0xFFF;
+    let start_page = phys_addr & !0xFFF;
+    let end_page = (phys_addr + size as u64 + 0xFFF) & !0xFFF;
     let number_pages = ((end_page - start_page) / page_size) as usize;
     
     crate::serial_println!("[MMIO] Mapping {:#x} -> {:#x} ({} pages)", 
-        physical_address, virt_address, number_pages);
+        phys_addr, virt_addr, number_pages);
     
     // Map each page
     for i in 0..number_pages {
@@ -231,40 +231,40 @@ unsafe {
         }
     }
     
-    Ok(virt_address)
+    Ok(virt_addr)
 }
 
 /// Unmap an MMIO region (optional, mainly for cleanup)
-pub fn unmap_mmio(_virt_address: u64, _size: usize) {
+pub fn unmap_mmio(_virt_addr: u64, _size: usize) {
     // TODO: Implement if needed for hot-unplug support
 }
 
 /// Read a u64 from a user process's address space
 /// Used by ptrace for PTRACE_PEEK*
-pub fn read_user_u64(_pid: u32, address: u64) -> Result<u64, i32> {
+pub fn read_user_u64(_pid: u32, addr: u64) -> Result<u64, i32> {
     // For now, just read from the address directly
     // In a real implementation, we would switch to the process's page table
-    if !is_user_address(address) {
+    if !is_user_address(addr) {
         return Err(-14); // EFAULT
     }
     
     // Safety: We've validated this is a user address
     let value = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { core::ptr::read_volatile(address as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+unsafe { core::ptr::read_volatile(addr as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u64) };
     Ok(value)
 }
 
 /// Write a u64 to a user process's address space  
 /// Used by ptrace for PTRACE_POKE*
-pub fn write_user_u64(_pid: u32, address: u64, value: u64) -> Result<(), i32> {
+pub fn write_user_u64(_pid: u32, addr: u64, value: u64) -> Result<(), i32> {
     // For now, just write to the address directly
     // In a real implementation, we would switch to the process's page table
-    if !is_user_address(address) {
+    if !is_user_address(addr) {
         return Err(-14); // EFAULT
     }
     
     // Safety: We've validated this is a user address
-    unsafe { core::ptr::write_volatile(address as *mut u64, value) };
+    unsafe { core::ptr::write_volatile(addr as *mut u64, value) };
     Ok(())
 }

@@ -9,61 +9,61 @@ use alloc::vec;
 use alloc::format;
 
 use crate::ui::{
-    Cf, WidgetState, Color, Theme, Rect, Point, Size,
+    Aw, WidgetState, Color, Theme, Rect, Point, Size,
     UiEvent, MouseEvent, MouseButton,
-    Vs, Dy, bvo, cb,
+    Jl, Br, ama, draw_text,
 };
 use crate::drivers::virtio_gpu::GpuSurface;
 
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum CalcButton {
-    Bu(u8),      
+    Digit(u8),      
     Add,            
-    Ur,       
-    To,       
-    Sc,         
-    Wn,         
-    Aan,          
-    Aao,     
-    Zz,      
-    Aay,        
-    Akm,         
-    Qk,        
-    Avm,      
-    Avq,      
-    Avp,   
-    Avn,    
+    Subtract,       
+    Multiply,       
+    Divide,         
+    Equals,         
+    Clear,          
+    ClearEntry,     
+    Backspace,      
+    Decimal,        
+    Negate,         
+    Percent,        
+    MemoryAdd,      
+    MemorySub,      
+    MemoryRecall,   
+    MemoryClear,    
 }
 
 impl CalcButton {
-    fn cu(&self) -> &'static str {
+    fn label(&self) -> &'static str {
         match self {
-            CalcButton::Bu(0) => "0",
-            CalcButton::Bu(1) => "1",
-            CalcButton::Bu(2) => "2",
-            CalcButton::Bu(3) => "3",
-            CalcButton::Bu(4) => "4",
-            CalcButton::Bu(5) => "5",
-            CalcButton::Bu(6) => "6",
-            CalcButton::Bu(7) => "7",
-            CalcButton::Bu(8) => "8",
-            CalcButton::Bu(9) => "9",
+            CalcButton::Digit(0) => "0",
+            CalcButton::Digit(1) => "1",
+            CalcButton::Digit(2) => "2",
+            CalcButton::Digit(3) => "3",
+            CalcButton::Digit(4) => "4",
+            CalcButton::Digit(5) => "5",
+            CalcButton::Digit(6) => "6",
+            CalcButton::Digit(7) => "7",
+            CalcButton::Digit(8) => "8",
+            CalcButton::Digit(9) => "9",
             CalcButton::Add => "+",
-            CalcButton::Ur => "-",
-            CalcButton::To => "x",
-            CalcButton::Sc => "/",
-            CalcButton::Wn => "=",
-            CalcButton::Aan => "C",
-            CalcButton::Aao => "CE",
-            CalcButton::Zz => "<",
-            CalcButton::Aay => ".",
-            CalcButton::Akm => "+/-",
-            CalcButton::Qk => "%",
-            CalcButton::Avm => "M+",
-            CalcButton::Avq => "M-",
-            CalcButton::Avp => "MR",
-            CalcButton::Avn => "MC",
+            CalcButton::Subtract => "-",
+            CalcButton::Multiply => "x",
+            CalcButton::Divide => "/",
+            CalcButton::Equals => "=",
+            CalcButton::Clear => "C",
+            CalcButton::ClearEntry => "CE",
+            CalcButton::Backspace => "<",
+            CalcButton::Decimal => ".",
+            CalcButton::Negate => "+/-",
+            CalcButton::Percent => "%",
+            CalcButton::MemoryAdd => "M+",
+            CalcButton::MemorySub => "M-",
+            CalcButton::MemoryRecall => "MR",
+            CalcButton::MemoryClear => "MC",
             _ => "?",
         }
     }
@@ -71,154 +71,154 @@ impl CalcButton {
 
 
 pub struct Calculator {
-    ad: u32,
-    eg: Rect,
-    g: WidgetState,
+    id: u32,
+    bounds: Rect,
+    state: WidgetState,
     
     
     display: String,
-    xz: String,
+    expression: String,
     
     
-    cv: f64,
-    fre: f64,
-    htr: Option<CalcButton>,
-    daf: bool,
+    current: f64,
+    previous: f64,
+    operator: Option<CalcButton>,
+    new_entry: bool,
     
     
     memory: f64,
     
     
-    gbv: Vec<(CalcButton, Rect)>,
-    hnc: Option<usize>,
-    gpr: Option<usize>,
+    button_grid: Vec<(CalcButton, Rect)>,
+    hovered_button: Option<usize>,
+    pressed_button: Option<usize>,
     
     
-    xpk: bool,
+    use_dark_theme: bool,
 }
 
 impl Calculator {
     pub fn new() -> Self {
         Self {
-            ad: bvo(),
-            eg: Rect::Dh,
-            g: WidgetState::new(),
+            id: ama(),
+            bounds: Rect::Bk,
+            state: WidgetState::new(),
             display: String::from("0"),
-            xz: String::new(),
-            cv: 0.0,
-            fre: 0.0,
-            htr: None,
-            daf: true,
+            expression: String::new(),
+            current: 0.0,
+            previous: 0.0,
+            operator: None,
+            new_entry: true,
             memory: 0.0,
-            gbv: Vec::new(),
-            hnc: None,
-            gpr: None,
-            xpk: true,
+            button_grid: Vec::new(),
+            hovered_button: None,
+            pressed_button: None,
+            use_dark_theme: true,
         }
     }
     
     
-    fn udl(&mut self) {
-        self.gbv.clear();
+    fn layout_buttons(&mut self) {
+        self.button_grid.clear();
         
-        let b = self.eg.b as u32 + 10;
-        let c = self.eg.c as u32 + 90; 
-        let bym = 60;
-        let doq = 50;
-        let qi = 8;
+        let x = self.bounds.x as u32 + 10;
+        let y = self.bounds.y as u32 + 90; 
+        let anp = 60;
+        let bkz = 50;
+        let gap = 8;
         
         
         let layout: [[CalcButton; 5]; 5] = [
-            [CalcButton::Avn, CalcButton::Avp, CalcButton::Avm, CalcButton::Avq, CalcButton::Zz],
-            [CalcButton::Aan, CalcButton::Aao, CalcButton::Qk, CalcButton::Sc, CalcButton::Bu(7)],
-            [CalcButton::Bu(4), CalcButton::Bu(5), CalcButton::Bu(6), CalcButton::To, CalcButton::Bu(8)],
-            [CalcButton::Bu(1), CalcButton::Bu(2), CalcButton::Bu(3), CalcButton::Ur, CalcButton::Bu(9)],
-            [CalcButton::Akm, CalcButton::Bu(0), CalcButton::Aay, CalcButton::Add, CalcButton::Wn],
+            [CalcButton::MemoryClear, CalcButton::MemoryRecall, CalcButton::MemoryAdd, CalcButton::MemorySub, CalcButton::Backspace],
+            [CalcButton::Clear, CalcButton::ClearEntry, CalcButton::Percent, CalcButton::Divide, CalcButton::Digit(7)],
+            [CalcButton::Digit(4), CalcButton::Digit(5), CalcButton::Digit(6), CalcButton::Multiply, CalcButton::Digit(8)],
+            [CalcButton::Digit(1), CalcButton::Digit(2), CalcButton::Digit(3), CalcButton::Subtract, CalcButton::Digit(9)],
+            [CalcButton::Negate, CalcButton::Digit(0), CalcButton::Decimal, CalcButton::Add, CalcButton::Equals],
         ];
         
         
-        let wsh: [[CalcButton; 4]; 5] = [
-            [CalcButton::Aan, CalcButton::Aao, CalcButton::Zz, CalcButton::Sc],
-            [CalcButton::Bu(7), CalcButton::Bu(8), CalcButton::Bu(9), CalcButton::To],
-            [CalcButton::Bu(4), CalcButton::Bu(5), CalcButton::Bu(6), CalcButton::Ur],
-            [CalcButton::Bu(1), CalcButton::Bu(2), CalcButton::Bu(3), CalcButton::Add],
-            [CalcButton::Akm, CalcButton::Bu(0), CalcButton::Aay, CalcButton::Wn],
+        let ovy: [[CalcButton; 4]; 5] = [
+            [CalcButton::Clear, CalcButton::ClearEntry, CalcButton::Backspace, CalcButton::Divide],
+            [CalcButton::Digit(7), CalcButton::Digit(8), CalcButton::Digit(9), CalcButton::Multiply],
+            [CalcButton::Digit(4), CalcButton::Digit(5), CalcButton::Digit(6), CalcButton::Subtract],
+            [CalcButton::Digit(1), CalcButton::Digit(2), CalcButton::Digit(3), CalcButton::Add],
+            [CalcButton::Negate, CalcButton::Digit(0), CalcButton::Decimal, CalcButton::Equals],
         ];
         
-        for (bwv, br) in wsh.iter().cf() {
-            for (adq, bmc) in br.iter().cf() {
-                let bx = b + (adq as u32) * (bym + qi);
-                let je = c + (bwv as u32) * (doq + qi);
+        for (amq, row) in ovy.iter().enumerate() {
+            for (ow, ahl) in row.iter().enumerate() {
+                let bx = x + (ow as u32) * (anp + gap);
+                let dc = y + (amq as u32) * (bkz + gap);
                 
-                self.gbv.push((*bmc, Rect::new(
-                    bx as i32, je as i32, bym, doq
+                self.button_grid.push((*ahl, Rect::new(
+                    bx as i32, dc as i32, anp, bkz
                 )));
             }
         }
     }
     
-    fn nau(&self, b: i32, c: i32) -> Option<usize> {
-        for (a, (_, ha)) in self.gbv.iter().cf() {
-            if ha.contains(Point::new(b, c)) {
-                return Some(a);
+    fn button_at(&self, x: i32, y: i32) -> Option<usize> {
+        for (i, (_, rect)) in self.button_grid.iter().enumerate() {
+            if rect.contains(Point::new(x, y)) {
+                return Some(i);
             }
         }
         None
     }
     
-    fn tjb(&mut self, bmc: CalcButton) {
-        match bmc {
-            CalcButton::Bu(bc) => {
-                if self.daf {
-                    self.display = format!("{}", bc);
-                    self.daf = false;
+    fn handle_button(&mut self, ahl: CalcButton) {
+        match ahl {
+            CalcButton::Digit(d) => {
+                if self.new_entry {
+                    self.display = format!("{}", d);
+                    self.new_entry = false;
                 } else if self.display.len() < 15 {
                     if self.display == "0" {
-                        self.display = format!("{}", bc);
+                        self.display = format!("{}", d);
                     } else {
-                        self.display.push((b'0' + bc) as char);
+                        self.display.push((b'0' + d) as char);
                     }
                 }
-                self.cv = self.display.parse().unwrap_or(0.0);
+                self.current = self.display.parse().unwrap_or(0.0);
             }
             
-            CalcButton::Aay => {
-                if self.daf {
+            CalcButton::Decimal => {
+                if self.new_entry {
                     self.display = String::from("0.");
-                    self.daf = false;
+                    self.new_entry = false;
                 } else if !self.display.contains('.') {
                     self.display.push('.');
                 }
             }
             
-            CalcButton::Aan => {
+            CalcButton::Clear => {
                 self.display = String::from("0");
-                self.xz.clear();
-                self.cv = 0.0;
-                self.fre = 0.0;
-                self.htr = None;
-                self.daf = true;
+                self.expression.clear();
+                self.current = 0.0;
+                self.previous = 0.0;
+                self.operator = None;
+                self.new_entry = true;
             }
             
-            CalcButton::Aao => {
+            CalcButton::ClearEntry => {
                 self.display = String::from("0");
-                self.cv = 0.0;
-                self.daf = true;
+                self.current = 0.0;
+                self.new_entry = true;
             }
             
-            CalcButton::Zz => {
+            CalcButton::Backspace => {
                 if self.display.len() > 1 {
                     self.display.pop();
                 } else {
                     self.display = String::from("0");
                 }
-                self.cv = self.display.parse().unwrap_or(0.0);
+                self.current = self.display.parse().unwrap_or(0.0);
             }
             
-            CalcButton::Akm => {
-                if self.cv != 0.0 {
-                    self.cv = -self.cv;
-                    if self.display.cj('-') {
+            CalcButton::Negate => {
+                if self.current != 0.0 {
+                    self.current = -self.current;
+                    if self.display.starts_with('-') {
                         self.display = String::from(&self.display[1..]);
                     } else {
                         self.display = format!("-{}", self.display);
@@ -226,248 +226,248 @@ impl Calculator {
                 }
             }
             
-            CalcButton::Qk => {
-                self.cv = self.cv / 100.0;
-                self.display = self.hkd(self.cv);
+            CalcButton::Percent => {
+                self.current = self.current / 100.0;
+                self.display = self.format_number(self.current);
             }
             
-            CalcButton::Add | CalcButton::Ur | CalcButton::To | CalcButton::Sc => {
-                self.nro();
-                self.htr = Some(bmc);
-                self.fre = self.cv;
-                self.daf = true;
+            CalcButton::Add | CalcButton::Subtract | CalcButton::Multiply | CalcButton::Divide => {
+                self.execute_pending();
+                self.operator = Some(ahl);
+                self.previous = self.current;
+                self.new_entry = true;
                 
-                let uyp = match bmc {
+                let nnk = match ahl {
                     CalcButton::Add => "+",
-                    CalcButton::Ur => "-",
-                    CalcButton::To => "×",
-                    CalcButton::Sc => "÷",
+                    CalcButton::Subtract => "-",
+                    CalcButton::Multiply => "×",
+                    CalcButton::Divide => "÷",
                     _ => "",
                 };
-                self.xz = format!("{} {}", self.display, uyp);
+                self.expression = format!("{} {}", self.display, nnk);
             }
             
-            CalcButton::Wn => {
-                self.nro();
-                self.xz.clear();
-                self.htr = None;
-                self.daf = true;
+            CalcButton::Equals => {
+                self.execute_pending();
+                self.expression.clear();
+                self.operator = None;
+                self.new_entry = true;
             }
             
-            CalcButton::Avm => {
-                self.memory += self.cv;
+            CalcButton::MemoryAdd => {
+                self.memory += self.current;
             }
-            CalcButton::Avq => {
-                self.memory -= self.cv;
+            CalcButton::MemorySub => {
+                self.memory -= self.current;
             }
-            CalcButton::Avp => {
-                self.cv = self.memory;
-                self.display = self.hkd(self.memory);
-                self.daf = true;
+            CalcButton::MemoryRecall => {
+                self.current = self.memory;
+                self.display = self.format_number(self.memory);
+                self.new_entry = true;
             }
-            CalcButton::Avn => {
+            CalcButton::MemoryClear => {
                 self.memory = 0.0;
             }
         }
     }
     
-    fn nro(&mut self) {
-        if let Some(op) = self.htr {
+    fn execute_pending(&mut self) {
+        if let Some(op) = self.operator {
             let result = match op {
-                CalcButton::Add => self.fre + self.cv,
-                CalcButton::Ur => self.fre - self.cv,
-                CalcButton::To => self.fre * self.cv,
-                CalcButton::Sc => {
-                    if self.cv != 0.0 {
-                        self.fre / self.cv
+                CalcButton::Add => self.previous + self.current,
+                CalcButton::Subtract => self.previous - self.current,
+                CalcButton::Multiply => self.previous * self.current,
+                CalcButton::Divide => {
+                    if self.current != 0.0 {
+                        self.previous / self.current
                     } else {
-                        f64::Lx
+                        f64::NAN
                     }
                 }
-                _ => self.cv,
+                _ => self.current,
             };
             
-            self.cv = result;
-            self.display = self.hkd(result);
+            self.current = result;
+            self.display = self.format_number(result);
         }
     }
     
-    fn hkd(&self, bo: f64) -> String {
-        if bo.ogj() {
+    fn format_number(&self, ae: f64) -> String {
+        if ae.is_nan() {
             return String::from("Error");
         }
-        if bo.yzk() {
+        if ae.is_infinite() {
             return String::from("Infinity");
         }
         
         
         
-        let txs = bo == (bo as i64) as f64 && bo.gp() < 1e15;
-        if txs {
-            format!("{:.0}", bo)
+        let mss = ae == (ae as i64) as f64 && ae.abs() < 1e15;
+        if mss {
+            format!("{:.0}", ae)
         } else {
-            let e = format!("{:.10}", bo);
+            let j = format!("{:.10}", ae);
             
-            let e = e.bdd('0');
-            let e = e.bdd('.');
-            String::from(e)
+            let j = j.trim_end_matches('0');
+            let j = j.trim_end_matches('.');
+            String::from(j)
         }
     }
     
-    fn qur(&self, bmc: &CalcButton, theme: &Theme, apx: bool, eth: bool) -> Color {
-        let ar = match bmc {
-            CalcButton::Wn => theme.mm,
-            CalcButton::Add | CalcButton::Ur | CalcButton::To | CalcButton::Sc => {
+    fn button_color(&self, ahl: &CalcButton, theme: &Theme, vl: bool, cbd: bool) -> Color {
+        let base = match ahl {
+            CalcButton::Equals => theme.accent,
+            CalcButton::Add | CalcButton::Subtract | CalcButton::Multiply | CalcButton::Divide => {
                 Color::new(80, 80, 90, 255)
             }
-            CalcButton::Aan | CalcButton::Aao => {
+            CalcButton::Clear | CalcButton::ClearEntry => {
                 Color::new(120, 60, 60, 255)
             }
-            _ => theme.dop,
+            _ => theme.button_bg,
         };
         
-        if eth {
-            ar.cdz(20)
-        } else if apx {
-            ar.clh(15)
+        if cbd {
+            base.darken(20)
+        } else if vl {
+            base.lighten(15)
         } else {
-            ar
+            base
         }
     }
 }
 
-impl Cf for Calculator {
-    fn ad(&self) -> u32 { self.ad }
-    fn eg(&self) -> Rect { self.eg }
-    fn cbq(&mut self, eg: Rect) { 
-        self.eg = eg;
-        self.udl();
+impl Aw for Calculator {
+    fn id(&self) -> u32 { self.id }
+    fn bounds(&self) -> Rect { self.bounds }
+    fn set_bounds(&mut self, bounds: Rect) { 
+        self.bounds = bounds;
+        self.layout_buttons();
     }
-    fn g(&self) -> WidgetState { self.g }
-    fn cbr(&mut self, g: WidgetState) { self.g = g; }
+    fn state(&self) -> WidgetState { self.state }
+    fn apc(&mut self, state: WidgetState) { self.state = state; }
     
-    fn ctk(&self) -> Size {
+    fn preferred_size(&self) -> Size {
         Size::new(290, 400)
     }
     
-    fn ecj(&mut self, id: &UiEvent) -> bool {
-        match id {
-            UiEvent::Cp(MouseEvent::Fw { b, c }) => {
-                self.hnc = self.nau(*b, *c);
+    fn btb(&mut self, event: &UiEvent) -> bool {
+        match event {
+            UiEvent::Mouse(MouseEvent::Move { x, y }) => {
+                self.hovered_button = self.button_at(*x, *y);
                 true
             }
-            UiEvent::Cp(MouseEvent::Fm { b, c, bdp: MouseButton::Ap }) => {
-                self.gpr = self.nau(*b, *c);
+            UiEvent::Mouse(MouseEvent::Down { x, y, button: MouseButton::Left }) => {
+                self.pressed_button = self.button_at(*x, *y);
                 true
             }
-            UiEvent::Cp(MouseEvent::Ek { bdp: MouseButton::Ap, .. }) => {
-                if let Some(w) = self.gpr {
-                    if Some(w) == self.hnc {
-                        let bmc = self.gbv[w].0;
-                        self.tjb(bmc);
+            UiEvent::Mouse(MouseEvent::Up { button: MouseButton::Left, .. }) => {
+                if let Some(idx) = self.pressed_button {
+                    if Some(idx) == self.hovered_button {
+                        let ahl = self.button_grid[idx].0;
+                        self.handle_button(ahl);
                     }
                 }
-                self.gpr = None;
+                self.pressed_button = None;
                 true
             }
-            UiEvent::Cp(MouseEvent::Tf) => {
-                self.hnc = None;
-                self.gpr = None;
+            UiEvent::Mouse(MouseEvent::Leave) => {
+                self.hovered_button = None;
+                self.pressed_button = None;
                 true
             }
             _ => false
         }
     }
     
-    fn tj(&self, surface: &mut GpuSurface, theme: &Theme) {
-        if !self.g.iw { return; }
+    fn render(&self, surface: &mut GpuSurface, theme: &Theme) {
+        if !self.state.visible { return; }
         
-        let b = self.eg.b as u32;
-        let c = self.eg.c as u32;
-        let d = self.eg.z;
-        let i = self.eg.ac;
-        
-        
-        surface.afp(b, c, d, i, 12, theme.gay.lv());
-        surface.mf(b, c, d, i, 12, theme.acu.lv());
+        let x = self.bounds.x as u32;
+        let y = self.bounds.y as u32;
+        let w = self.bounds.width;
+        let h = self.bounds.height;
         
         
-        surface.ah(b + 1, c + 1, d - 2, 28, theme.ems.lv());
-        cb(surface, b as i32 + 10, c as i32 + 6, "Calculator", theme.ebn.lv());
+        surface.fill_rounded_rect(x, y, w, h, 12, theme.bg_primary.to_u32());
+        surface.draw_rounded_rect(x, y, w, h, 12, theme.border.to_u32());
         
         
-        let hgh = b + 10;
-        let hgi = c + 35;
-        let dgi = d - 20;
-        let eaw = 50;
-        surface.afp(hgh, hgi, dgi, eaw, 6, Color::new(30, 30, 35, 255).lv());
+        surface.fill_rect(x + 1, y + 1, w - 2, 28, theme.bg_tertiary.to_u32());
+        draw_text(surface, x as i32 + 10, y as i32 + 6, "Calculator", theme.fg_secondary.to_u32());
         
         
-        if !self.xz.is_empty() {
-            let spm = hgh as i32 + dgi as i32 - (self.xz.len() as i32 * 8) - 8;
-            cb(surface, spm, hgi as i32 + 4, &self.xz, theme.ebn.lv());
+        let dng = x + 10;
+        let dnh = y + 35;
+        let bfz = w - 20;
+        let bsa = 50;
+        surface.fill_rounded_rect(dng, dnh, bfz, bsa, 6, Color::new(30, 30, 35, 255).to_u32());
+        
+        
+        if !self.expression.is_empty() {
+            let ltb = dng as i32 + bfz as i32 - (self.expression.len() as i32 * 8) - 8;
+            draw_text(surface, ltb, dnh as i32 + 4, &self.expression, theme.fg_secondary.to_u32());
         }
         
         
-        let ryr = hgh as i32 + dgi as i32 - (self.display.len() as i32 * 12) - 10;
-        let nlz = hgi as i32 + 22;
+        let lfo = dng as i32 + bfz as i32 - (self.display.len() as i32 * 12) - 10;
+        let hsr = dnh as i32 + 22;
         
         
-        for (a, r) in self.display.bw().cf() {
-            let cx = ryr + (a as i32 * 12);
-            let inh = alloc::string::String::from(r);
-            cb(surface, cx, nlz, &inh, theme.bui.lv());
-            cb(surface, cx + 1, nlz, &inh, theme.bui.lv());
+        for (i, c) in self.display.chars().enumerate() {
+            let cx = lfo + (i as i32 * 12);
+            let eht = alloc::string::String::from(c);
+            draw_text(surface, cx, hsr, &eht, theme.fg_primary.to_u32());
+            draw_text(surface, cx + 1, hsr, &eht, theme.fg_primary.to_u32());
         }
         
         
         if self.memory != 0.0 {
-            surface.afp(hgh, hgi, 20, 16, 3, theme.mm.fbo(60).lv());
-            cb(surface, hgh as i32 + 4, hgi as i32 + 2, "M", theme.mm.lv());
+            surface.fill_rounded_rect(dng, dnh, 20, 16, 3, theme.accent.with_alpha(60).to_u32());
+            draw_text(surface, dng as i32 + 4, dnh as i32 + 2, "M", theme.accent.to_u32());
         }
         
         
-        for (a, (bmc, ha)) in self.gbv.iter().cf() {
-            let apx = self.hnc == Some(a);
-            let eth = self.gpr == Some(a);
+        for (i, (ahl, rect)) in self.button_grid.iter().enumerate() {
+            let vl = self.hovered_button == Some(i);
+            let cbd = self.pressed_button == Some(i);
             
-            let vp = self.qur(bmc, theme, apx, eth);
+            let bg_color = self.button_color(ahl, theme, vl, cbd);
             
-            surface.afp(
-                ha.b as u32, ha.c as u32,
-                ha.z, ha.ac,
+            surface.fill_rounded_rect(
+                rect.x as u32, rect.y as u32,
+                rect.width, rect.height,
                 8,
-                vp.lv()
+                bg_color.to_u32()
             );
             
             
-            surface.mf(
-                ha.b as u32, ha.c as u32,
-                ha.z, ha.ac,
+            surface.draw_rounded_rect(
+                rect.x as u32, rect.y as u32,
+                rect.width, rect.height,
                 8,
-                theme.acu.lv()
+                theme.border.to_u32()
             );
             
             
-            let cu = bmc.cu();
-            let bda = cu.len() as i32 * 8;
-            let wg = ha.b + (ha.z as i32 - bda) / 2;
-            let sl = ha.c + (ha.ac as i32 - 16) / 2;
+            let label = ahl.label();
+            let acy = label.len() as i32 * 8;
+            let kd = rect.x + (rect.width as i32 - acy) / 2;
+            let ie = rect.y + (rect.height as i32 - 16) / 2;
             
-            let agx = if oh!(bmc, CalcButton::Wn) {
-                Color::Zm
+            let text_color = if matches!(ahl, CalcButton::Equals) {
+                Color::WHITE
             } else {
-                theme.bui
+                theme.fg_primary
             };
             
-            cb(surface, wg, sl, cu, agx.lv());
+            draw_text(surface, kd, ie, label, text_color.to_u32());
         }
     }
 }
 
 
-pub fn rqj() -> Calculator {
-    let mut akz = Calculator::new();
-    akz.cbq(Rect::new(100, 100, 290, 400));
-    akz
+pub fn kze() -> Calculator {
+    let mut sq = Calculator::new();
+    sq.set_bounds(Rect::new(100, 100, 290, 400));
+    sq
 }

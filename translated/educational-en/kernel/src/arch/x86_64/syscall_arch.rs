@@ -9,7 +9,7 @@ use super::cpu::{self, msr};
 /// 
 /// This configures the CPU so that the `syscall` instruction jumps to the
 /// kernel syscall handler with the correct segment selectors.
-pub fn initialize_syscall_msrs(handler_address: u64) {
+pub fn initialize_syscall_msrs(handler_addr: u64) {
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
         // Enable SCE (System Call Extensions) in EFER
@@ -23,7 +23,7 @@ unsafe {
         cpu::wrmsr(msr::IA32_STAR, star);
         
         // LSTAR: syscall entry point
-        cpu::wrmsr(msr::IA32_LSTAR, handler_address);
+        cpu::wrmsr(msr::IA32_LSTAR, handler_addr);
         
         // SFMASK: flags to clear on SYSCALL (clear IF and DF)
         cpu::wrmsr(msr::IA32_FMASK, 0x200 | 0x400); // IF + DF

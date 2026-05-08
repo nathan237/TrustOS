@@ -86,13 +86,13 @@ struct StageActivity {
     /// Total hits since start
     hits: u64,
     /// Last event message
-    last_message: String,
+    last_msg: String,
 }
 
 // Implementation block — defines methods for the type above.
 impl StageActivity {
     fn new() -> Self {
-        Self { heat: 0, hits: 0, last_message: String::new() }
+        Self { heat: 0, hits: 0, last_msg: String::new() }
     }
 }
 
@@ -103,9 +103,9 @@ pub struct PipelineState {
     /// Recent flow items (stage transitions)
     pub flows: Vec<FlowEntry>,
     /// Max flows to keep
-    maximum_flows: usize,
+    max_flows: usize,
     /// Last read index for trace bus
-    last_read_index: u64,
+    last_read_idx: u64,
     /// Frame counter
     frame: u64,
     /// Scroll in flow log
@@ -114,7 +114,7 @@ pub struct PipelineState {
 
 /// A recorded flow through the pipeline
 pub struct FlowEntry {
-    timestamp_mouse: u64,
+    timestamp_ms: u64,
     from_stage: usize,
     to_stage: usize,
     label: String,
@@ -132,8 +132,8 @@ pub fn new() -> Self {
                 StageActivity::new(),
             ],
             flows: Vec::new(),
-            maximum_flows: 50,
-            last_read_index: 0,
+            max_flows: 50,
+            last_read_idx: 0,
             frame: 0,
             scroll: 0,
         }
@@ -153,16 +153,16 @@ pub fn new() -> Self {
         // Read new events from trace bus
         if self.frame % 5 != 0 { return; }
         
-        let (events, new_index) = read_since(self.last_read_index, 50);
+        let (events, new_idx) = read_since(self.last_read_idx, 50);
         if events.is_empty() {
-            self.last_read_index = new_index;
+            self.last_read_idx = new_idx;
             return;
         }
         
-        for event in &events {
+        for ev in &events {
             // Map event category to pipeline stages
             let (from, to) = // Pattern matching — Rust's exhaustive branching construct.
-match event.category {
+match ev.category {
                 EventCategory::Keyboard => (0, 1),   // Input → Parser
                 EventCategory::Syscall  => (1, 2),   // Parser → Scheduler
                 EventCategory::Scheduler => (2, 3),  // Scheduler → Memory (context switch needs memory)
@@ -182,35 +182,35 @@ match event.category {
             self.stages[to].hits += 1;
             
             // Update last message on destination stage
-            if event.message.len() < 40 {
-                self.stages[to].last_message = event.message.clone();
+            if ev.message.len() < 40 {
+                self.stages[to].last_msg = ev.message.clone();
             } else {
-                self.stages[to].last_message = String::from(&event.message[..37]);
-                self.stages[to].last_message.push_str("...");
+                self.stages[to].last_msg = String::from(&ev.message[..37]);
+                self.stages[to].last_msg.push_str("...");
             }
             
             // Record flow
             self.flows.push(FlowEntry {
-                timestamp_mouse: event.timestamp_mouse,
+                timestamp_ms: ev.timestamp_ms,
                 from_stage: from,
                 to_stage: to,
-                label: if event.message.len() > 25 {
-                    let mut s = String::from(&event.message[..22]);
+                label: if ev.message.len() > 25 {
+                    let mut s = String::from(&ev.message[..22]);
                     s.push_str("...");
                     s
                 } else {
-                    event.message.clone()
+                    ev.message.clone()
                 },
             });
         }
         
         // Trim flow log
-        if self.flows.len() > self.maximum_flows {
-            let drain = self.flows.len() - self.maximum_flows;
+        if self.flows.len() > self.max_flows {
+            let drain = self.flows.len() - self.max_flows;
             self.flows.drain(..drain);
         }
         
-        self.last_read_index = new_index;
+        self.last_read_idx = new_idx;
     }
     
         // Public function — callable from other modules.
@@ -228,7 +228,7 @@ match key {
                 for s in &mut self.stages {
                     s.hits = 0;
                     s.heat = 0;
-                    s.last_message.clear();
+                    s.last_msg.clear();
                 }
             }
             _ => {}
@@ -246,22 +246,22 @@ match key {
         let stage_area_h = lh * diagram_rows + 4;
         if local_y < stage_area_h {
             // Click on a stage box → reset its counters
-            let stage_w = (w as i32 / 4).maximum(12 * cw);
+            let stage_w = (w as i32 / 4).max(12 * cw);
             let gap = 2i32;
             // Row 0: stages 0,1,2
             if local_y < lh + gap {
-                let column = local_x / (stage_w + cw);
-                if column < 3 {
-                    let index = column as usize;
-                    self.stages[index].heat = 255; // flash it
+                let col = local_x / (stage_w + cw);
+                if col < 3 {
+                    let idx = col as usize;
+                    self.stages[idx].heat = 255; // flash it
                 }
             }
             // Row 1: stages 3,4,5
             else if local_y < 2 * (lh + gap) {
-                let column = local_x / (stage_w + cw);
-                if column < 3 {
-                    let index = 3 + column as usize;
-                    if index < 6 { self.stages[index].heat = 255; }
+                let col = local_x / (stage_w + cw);
+                if col < 3 {
+                    let idx = 3 + col as usize;
+                    if idx < 6 { self.stages[idx].heat = 255; }
                 }
             }
             return;
@@ -288,7 +288,7 @@ pub fn draw(state: &PipelineState, x: i32, y: i32, w: u32, h: u32) {
     // ── Top section: Pipeline diagram (visual stages) ──────────
     // Draw stages as boxes connected by arrows
     let diagram_h = lh * 4; // 4 lines for the diagram
-    let stage_w = (w as i32 / 4).maximum(12 * cw); // width per stage box
+    let stage_w = (w as i32 / 4).max(12 * cw); // width per stage box
     let gap = 2i32;
     
     // Row 1: Input → Parser → Scheduler
@@ -321,8 +321,8 @@ pub fn draw(state: &PipelineState, x: i32, y: i32, w: u32, h: u32) {
     for (i, stage) in ALL_STAGES.iter().enumerate() {
         let hits = state.stages[i].hits;
         let label = format!("{}:{}", stage.icon(), hits);
-        let column = if state.stages[i].heat > 50 { stage.color() } else { COLUMN_DIM };
-        draw_lab_text(sx, stats_line_y, &label, column);
+        let col = if state.stages[i].heat > 50 { stage.color() } else { COLUMN_DIM };
+        draw_lab_text(sx, stats_line_y, &label, col);
         sx += (label.len() as i32 + 1) * cw;
         if sx > x + w as i32 - 10 { break; }
     }
@@ -359,7 +359,7 @@ pub fn draw(state: &PipelineState, x: i32, y: i32, w: u32, h: u32) {
         let to = &ALL_STAGES[flow.to_stage];
         
         // Timestamp
-        let ts = format_ts(flow.timestamp_mouse);
+        let ts = format_ts(flow.timestamp_ms);
         draw_lab_text(x, cy, &ts, COLUMN_DIM);
         
         // From → To
@@ -386,9 +386,9 @@ pub fn draw(state: &PipelineState, x: i32, y: i32, w: u32, h: u32) {
 }
 
 /// Draw a single pipeline stage box
-fn draw_stage_box(state: &PipelineState, index: usize, x: i32, y: i32, w: u32, h: i32, cw: i32) {
-    let stage = &ALL_STAGES[index];
-    let activity = &state.stages[index];
+fn draw_stage_box(state: &PipelineState, idx: usize, x: i32, y: i32, w: u32, h: i32, cw: i32) {
+    let stage = &ALL_STAGES[idx];
+    let activity = &state.stages[idx];
     
     // Background: brighter when active (heat)
     let bg = if activity.heat > 150 {
@@ -424,7 +424,7 @@ fn draw_arrow(x: i32, y: i32, _cw: i32, color: u32) {
 
 /// Blend two colors by an amount (0-63)
 fn blend_color(base: u32, accent: u32, amount: u32) -> u32 {
-    let amount = amount.minimum(63);
+    let amount = amount.min(63);
     let inv = 63 - amount;
     let r = (((base >> 16) & 0xFF) * inv + ((accent >> 16) & 0xFF) * amount) / 63;
     let g = (((base >> 8) & 0xFF) * inv + ((accent >> 8) & 0xFF) * amount) / 63;
@@ -433,9 +433,9 @@ fn blend_color(base: u32, accent: u32, amount: u32) -> u32 {
 }
 
 /// Format timestamp as MM:SS.mmm  
-fn format_ts(mouse: u64) -> String {
-    let s = mouse / 1000;
+fn format_ts(ms: u64) -> String {
+    let s = ms / 1000;
     let m = s / 60;
-    let frac = mouse % 1000;
+    let frac = ms % 1000;
     format!("{:02}:{:02}.{:03}", m % 100, s % 60, frac)
 }

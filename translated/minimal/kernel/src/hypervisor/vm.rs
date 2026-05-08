@@ -20,22 +20,22 @@ use super::vmx;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum VmState {
-    Cu,
-    Ai,
-    Cl,
-    Af,
-    Gu,
+    Created,
+    Running,
+    Paused,
+    Stopped,
+    Crashed,
 }
 
 
 #[derive(Debug, Clone, Default)]
 pub struct VmStats {
-    pub gwg: u64,
-    pub bmp: u64,
-    pub ank: u64,
-    pub bkn: u64,
-    pub axz: u64,
-    pub fhx: u64,
+    pub vm_exits: u64,
+    pub cpuid_exits: u64,
+    pub io_exits: u64,
+    pub msr_exits: u64,
+    pub hlt_exits: u64,
+    pub ept_violations: u64,
 }
 
 
@@ -61,148 +61,148 @@ pub struct GuestRegs {
 
 
 pub struct VirtualMachine {
-    pub ad: u64,
-    pub j: String,
-    pub g: VmState,
-    pub apy: usize,
-    pub cm: VmStats,
+    pub id: u64,
+    pub name: String,
+    pub state: VmState,
+    pub memory_size: usize,
+    pub stats: VmStats,
     vmcs: Option<Vmcs>,
     ept: Option<EptManager>,
-    fe: Vec<u8>,
-    ej: GuestRegs,
+    guest_memory: Vec<u8>,
+    guest_regs: GuestRegs,
     
-    bjq: Option<usize>,
+    console_id: Option<usize>,
     
     vpid: Option<u16>,
 }
 
 impl VirtualMachine {
-    pub fn new(ad: u64, j: &str, afc: usize) -> Result<Self> {
-        let apy = afc * 1024 * 1024;
+    pub fn new(id: u64, name: &str, memory_mb: usize) -> Result<Self> {
+        let memory_size = memory_mb * 1024 * 1024;
         
         
-        let fe = alloc::vec![0u8; apy];
+        let guest_memory = alloc::vec![0u8; memory_size];
         
         
-        let bjq = super::console::fgb(ad, j);
+        let console_id = super::console::create_console(id, name);
         
         
-        super::virtfs::nhj(ad);
+        super::virtfs::hot(id);
         
         
-        let vpid = super::vpid::ijo();
+        let vpid = super::vpid::allocate();
         if vpid.is_some() {
-            crate::serial_println!("[VM {}] Allocated VPID {} for TLB isolation", ad, vpid.unwrap());
+            crate::serial_println!("[VM {}] Allocated VPID {} for TLB isolation", id, vpid.unwrap());
         }
         
         
-        super::api::eps(
-            super::api::VmEventType::Cu,
-            ad,
-            super::api::VmEventData::Cj(alloc::format!("VM '{}' created", j)),
+        super::api::bzf(
+            super::api::VmEventType::Created,
+            id,
+            super::api::VmEventData::Az(alloc::format!("VM '{}' created", name)),
         );
         
         Ok(VirtualMachine {
-            ad,
-            j: String::from(j),
-            g: VmState::Cu,
-            apy,
-            cm: VmStats::default(),
+            id,
+            name: String::from(name),
+            state: VmState::Created,
+            memory_size,
+            stats: VmStats::default(),
             vmcs: None,
             ept: None,
-            fe,
-            ej: GuestRegs::default(),
-            bjq: Some(bjq),
+            guest_memory,
+            guest_regs: GuestRegs::default(),
+            console_id: Some(console_id),
             vpid,
         })
     }
     
     
-    pub fn elx(&mut self, cac: &str, bqx: &str, awr: bool) {
-        super::virtfs::elx(self.ad, cac, bqx, awr);
+    pub fn add_mount(&mut self, host_path: &str, guest_path: &str, readonly: bool) {
+        super::virtfs::add_mount(self.id, host_path, guest_path, readonly);
     }
     
     
-    pub fn cfp(&mut self) -> Result<()> {
-        crate::serial_println!("[VM {}] Initializing VMCS and EPT", self.ad);
+    pub fn initialize(&mut self) -> Result<()> {
+        crate::serial_println!("[VM {}] Initializing VMCS and EPT", self.id);
         
         
-        let fyj = vmx::bcg(vmx::TZ_);
-        let cty = (fyj & 0x7FFF_FFFF) as u32;
+        let csl = vmx::ach(vmx::VH_);
+        let azj = (csl & 0x7FFF_FFFF) as u32;
         
         
-        let mut vmcs = Vmcs::new(cty)?;
+        let mut vmcs = Vmcs::new(azj)?;
         vmcs.load()?;
         
         
-        vmcs.wks()?;
-        vmcs.wkt()?;
-        vmcs.wkq()?;
+        vmcs.setup_execution_controls()?;
+        vmcs.setup_exit_controls()?;
+        vmcs.setup_entry_controls()?;
         
         
-        vmcs.wlm(self.vpid)?;
+        vmcs.setup_vpid(self.vpid)?;
         
         
-        let mut ept = EptManager::new(self.apy)?;
-        ept.wky(&self.fe)?;
+        let mut ept = EptManager::new(self.memory_size)?;
+        ept.setup_guest_memory_mapping(&self.guest_memory)?;
         
         
-        vmcs.write(fields::BUH_, ept.sna().cvr())?;
+        vmcs.write(fields::BXD_, ept.ept_pointer().as_u64())?;
         
         self.vmcs = Some(vmcs);
         self.ept = Some(ept);
         
-        crate::serial_println!("[VM {}] Initialization complete (VPID={:?})", self.ad, self.vpid);
+        crate::serial_println!("[VM {}] Initialization complete (VPID={:?})", self.id, self.vpid);
         
         Ok(())
     }
     
     
-    pub fn diy(&mut self, f: &[u8], dst: u64) -> Result<()> {
-        let l = dst as usize;
+    pub fn load_binary(&mut self, data: &[u8], load_address: u64) -> Result<()> {
+        let offset = load_address as usize;
         
-        if l + f.len() > self.fe.len() {
-            return Err(HypervisorError::Ns);
+        if offset + data.len() > self.guest_memory.len() {
+            return Err(HypervisorError::OutOfMemory);
         }
         
-        self.fe[l..l + f.len()].dg(f);
+        self.guest_memory[offset..offset + data.len()].copy_from_slice(data);
         
         crate::serial_println!("[VM {}] Loaded {} bytes at 0x{:X}", 
-                              self.ad, f.len(), dst);
+                              self.id, data.len(), load_address);
         
         Ok(())
     }
     
     
-    pub fn ay(&mut self, mi: u64, ahu: u64) -> Result<()> {
+    pub fn start(&mut self, entry_point: u64, stack_ptr: u64) -> Result<()> {
         if self.vmcs.is_none() {
-            self.cfp()?;
+            self.initialize()?;
         }
         
         let vmcs = self.vmcs.as_ref().unwrap();
         
         
-        vmcs.wla(mi, ahu)?;
+        vmcs.setup_guest_state(entry_point, stack_ptr)?;
         
         
-        let fic = pyn as *const () as u64;
+        let cjc = jqi as *const () as u64;
         
         
-        let hnb = alloc::vec![0u8; 16384];
-        let iyr = (hnb.fq() as u64 + 16384) & !0xF;
-        core::mem::forget(hnb); 
+        let drm = alloc::vec![0u8; 16384];
+        let epn = (drm.as_ptr() as u64 + 16384) & !0xF;
+        core::mem::forget(drm); 
         
-        vmcs.pjo(fic, iyr)?;
+        vmcs.setup_host_state(cjc, epn)?;
         
-        self.g = VmState::Ai;
+        self.state = VmState::Running;
         
         crate::serial_println!("[VM {}] Starting at RIP=0x{:X}, RSP=0x{:X}", 
-                              self.ad, mi, ahu);
+                              self.id, entry_point, stack_ptr);
         crate::serial_println!("[VM {}] Host exit handler=0x{:X}, host stack=0x{:X}",
-                              self.ad, fic, iyr);
+                              self.id, cjc, epn);
         
         
-        self.hyg()?;
+        self.run_loop()?;
         
         Ok(())
     }
@@ -211,53 +211,53 @@ impl VirtualMachine {
     
     
     
-    pub fn fvn(
+    pub fn start_linux(
         &mut self,
-        cwc: &[u8],
-        wx: &str,
-        apw: Option<&[u8]>,
+        bas: &[u8],
+        cmdline: &str,
+        initrd: Option<&[u8]>,
     ) -> Result<()> {
         use super::linux_loader;
         
-        crate::serial_println!("[VM {}] Starting Linux kernel ({} bytes)", self.ad, cwc.len());
+        crate::serial_println!("[VM {}] Starting Linux kernel ({} bytes)", self.id, bas.len());
         
         
-        let aeq = linux_loader::vks(
-            &mut self.fe,
-            cwc,
-            wx,
-            apw,
+        let pk = linux_loader::nwu(
+            &mut self.guest_memory,
+            bas,
+            cmdline,
+            initrd,
         )?;
         
         
         if self.vmcs.is_none() {
-            self.cfp()?;
+            self.initialize()?;
         }
         
         let vmcs = self.vmcs.as_ref().unwrap();
         
         
-        linux_loader::rnu(vmcs, &aeq)?;
+        linux_loader::kwy(vmcs, &pk)?;
         
         
-        self.ej.rsi = aeq.avg;
-        self.pfl();
+        self.guest_regs.rsi = pk.boot_params_addr;
+        self.save_guest_regs_for_entry();
         
         
-        let fic = pyn as *const () as u64;
-        let hnb = alloc::vec![0u8; 16384];
-        let iyr = (hnb.fq() as u64 + 16384) & !0xF;
-        core::mem::forget(hnb);
+        let cjc = jqi as *const () as u64;
+        let drm = alloc::vec![0u8; 16384];
+        let epn = (drm.as_ptr() as u64 + 16384) & !0xF;
+        core::mem::forget(drm);
         
-        vmcs.pjo(fic, iyr)?;
+        vmcs.setup_host_state(cjc, epn)?;
         
-        self.g = VmState::Ai;
+        self.state = VmState::Running;
         
         crate::serial_println!("[VM {}] Linux: RIP=0x{:X} RSP=0x{:X} RSI(boot_params)=0x{:X} CR3=0x{:X}",
-                              self.ad, aeq.mi, aeq.ahu,
-                              aeq.avg, aeq.jm);
+                              self.id, pk.entry_point, pk.stack_ptr,
+                              pk.boot_params_addr, pk.cr3);
         
-        self.hyg()?;
+        self.run_loop()?;
         
         Ok(())
     }
@@ -266,273 +266,273 @@ impl VirtualMachine {
     
     
     
-    fn hyg(&mut self) -> Result<()> {
-        let mut lib = false;
+    fn run_loop(&mut self) -> Result<()> {
+        let mut gfb = false;
         
         loop {
             
-            let result = xso(lib);
+            let result = psv(gfb);
             
             if result != 0 {
                 
-                let rq = vmx::igs(fields::DBI_).unwrap_or(0xFFFF);
-                crate::serial_println!("[VM {}] VM entry failed! error={}", self.ad, rq);
-                self.g = VmState::Gu;
-                return if lib {
-                    Err(HypervisorError::Bwb)
+                let err = vmx::edv(fields::DFA_).unwrap_or(0xFFFF);
+                crate::serial_println!("[VM {}] VM entry failed! error={}", self.id, err);
+                self.state = VmState::Crashed;
+                return if gfb {
+                    Err(HypervisorError::VmresumeFailed)
                 } else {
-                    Err(HypervisorError::Bvz)
+                    Err(HypervisorError::VmlaunchFailed)
                 };
             }
             
-            lib = true;
+            gfb = true;
             
             
-            self.cm.gwg += 1;
+            self.stats.vm_exits += 1;
             
             
-            self.ugy();
+            self.load_guest_regs_from_exit();
             
             
-            let ipf = self.tlm()?;
+            let eix = self.handle_vm_exit()?;
             
-            if !ipf {
+            if !eix {
                 break;
             }
             
             
-            self.pfl();
+            self.save_guest_regs_for_entry();
         }
         
-        self.g = VmState::Af;
+        self.state = VmState::Stopped;
         crate::serial_println!("[VM {}] Stopped after {} exits (cpuid={} io={} hlt={} ept={})",
-                              self.ad, self.cm.gwg, self.cm.bmp,
-                              self.cm.ank, self.cm.axz,
-                              self.cm.fhx);
+                              self.id, self.stats.vm_exits, self.stats.cpuid_exits,
+                              self.stats.io_exits, self.stats.hlt_exits,
+                              self.stats.ept_violations);
         Ok(())
     }
     
     
-    fn ugy(&mut self) {
+    fn load_guest_regs_from_exit(&mut self) {
         unsafe {
-            let ahy = &YL_;
-            self.ej.rax = ahy.rax;
-            self.ej.rbx = ahy.rbx;
-            self.ej.rcx = ahy.rcx;
-            self.ej.rdx = ahy.rdx;
-            self.ej.rsi = ahy.rsi;
-            self.ej.rdi = ahy.rdi;
-            self.ej.rbp = ahy.rbp;
-            self.ej.r8  = ahy.r8;
-            self.ej.r9  = ahy.r9;
-            self.ej.r10 = ahy.r10;
-            self.ej.r11 = ahy.r11;
-            self.ej.r12 = ahy.r12;
-            self.ej.r13 = ahy.r13;
-            self.ej.r14 = ahy.r14;
-            self.ej.r15 = ahy.r15;
+            let area = &VM_EXIT_GUEST_REGS;
+            self.guest_regs.rax = area.rax;
+            self.guest_regs.rbx = area.rbx;
+            self.guest_regs.rcx = area.rcx;
+            self.guest_regs.rdx = area.rdx;
+            self.guest_regs.rsi = area.rsi;
+            self.guest_regs.rdi = area.rdi;
+            self.guest_regs.rbp = area.rbp;
+            self.guest_regs.r8  = area.r8;
+            self.guest_regs.r9  = area.r9;
+            self.guest_regs.r10 = area.r10;
+            self.guest_regs.r11 = area.r11;
+            self.guest_regs.r12 = area.r12;
+            self.guest_regs.r13 = area.r13;
+            self.guest_regs.r14 = area.r14;
+            self.guest_regs.r15 = area.r15;
         }
     }
     
     
-    fn pfl(&self) {
+    fn save_guest_regs_for_entry(&self) {
         unsafe {
-            let ahy = &mut YL_;
-            ahy.rax = self.ej.rax;
-            ahy.rbx = self.ej.rbx;
-            ahy.rcx = self.ej.rcx;
-            ahy.rdx = self.ej.rdx;
-            ahy.rsi = self.ej.rsi;
-            ahy.rdi = self.ej.rdi;
-            ahy.rbp = self.ej.rbp;
-            ahy.r8  = self.ej.r8;
-            ahy.r9  = self.ej.r9;
-            ahy.r10 = self.ej.r10;
-            ahy.r11 = self.ej.r11;
-            ahy.r12 = self.ej.r12;
-            ahy.r13 = self.ej.r13;
-            ahy.r14 = self.ej.r14;
-            ahy.r15 = self.ej.r15;
+            let area = &mut VM_EXIT_GUEST_REGS;
+            area.rax = self.guest_regs.rax;
+            area.rbx = self.guest_regs.rbx;
+            area.rcx = self.guest_regs.rcx;
+            area.rdx = self.guest_regs.rdx;
+            area.rsi = self.guest_regs.rsi;
+            area.rdi = self.guest_regs.rdi;
+            area.rbp = self.guest_regs.rbp;
+            area.r8  = self.guest_regs.r8;
+            area.r9  = self.guest_regs.r9;
+            area.r10 = self.guest_regs.r10;
+            area.r11 = self.guest_regs.r11;
+            area.r12 = self.guest_regs.r12;
+            area.r13 = self.guest_regs.r13;
+            area.r14 = self.guest_regs.r14;
+            area.r15 = self.guest_regs.r15;
         }
     }
     
     
-    fn tlm(&mut self) -> Result<bool> {
+    fn handle_vm_exit(&mut self) -> Result<bool> {
         
-        let (exit_reason, dqq, wb, hof) = {
+        let (exit_reason, exit_qual, guest_rip, instr_len) = {
             let vmcs = self.vmcs.as_ref().unwrap();
-            let ctt = vmcs.read(fields::DBG_)? as u32 & 0xFFFF;
-            let vow = vmcs.read(fields::BUR_)?;
-            let pc = vmcs.read(fields::FG_)?;
-            let len = vmcs.read(fields::DBD_).unwrap_or(0);
-            (ctt, vow, pc, len)
+            let azg = vmcs.read(fields::DEY_)? as u32 & 0xFFFF;
+            let oac = vmcs.read(fields::BXN_)?;
+            let rip = vmcs.read(fields::FV_)?;
+            let len = vmcs.read(fields::DEV_).unwrap_or(0);
+            (azg, oac, rip, len)
         };
         
         match exit_reason {
-            exit_reason::Apr => {
-                self.cm.bmp += 1;
-                crate::lab_mode::trace_bus::ept(
-                    self.ad, "CPUID", wb,
-                    &alloc::format!("EAX=0x{:X}", self.ej.rax)
+            exit_reason::Rh => {
+                self.stats.cpuid_exits += 1;
+                crate::lab_mode::trace_bus::bzg(
+                    self.id, "CPUID", guest_rip,
+                    &alloc::format!("EAX=0x{:X}", self.guest_regs.rax)
                 );
-                self.lat()?;
+                self.handle_cpuid()?;
                 
                 let vmcs = self.vmcs.as_ref().unwrap();
-                vmcs.write(fields::FG_, wb + 2)?;
+                vmcs.write(fields::FV_, guest_rip + 2)?;
                 Ok(true)
             }
             
-            exit_reason::Atl => {
-                self.cm.axz += 1;
+            exit_reason::Su => {
+                self.stats.hlt_exits += 1;
                 
                 
                 let vmcs = self.vmcs.as_ref().unwrap();
-                vmcs.write(fields::FG_, wb + hof)?;
+                vmcs.write(fields::FV_, guest_rip + instr_len)?;
                 
                 
-                if self.cm.axz > 50000 {
-                    crate::serial_println!("[VM {}] Too many HLTs ({}), stopping", self.ad, self.cm.axz);
+                if self.stats.hlt_exits > 50000 {
+                    crate::serial_println!("[VM {}] Too many HLTs ({}), stopping", self.id, self.stats.hlt_exits);
                     Ok(false)
                 } else {
                     Ok(true)
                 }
             }
             
-            exit_reason::CCI_ => {
-                self.cm.ank += 1;
-                let port = ((dqq >> 16) & 0xFFFF) as u16;
-                let te = if (dqq & 8) == 0 { "OUT" } else { "IN" };
-                crate::lab_mode::trace_bus::npq(self.ad, te, port, self.ej.rax);
-                self.lav(dqq)?;
+            exit_reason::CFT_ => {
+                self.stats.io_exits += 1;
+                let port = ((exit_qual >> 16) & 0xFFFF) as u16;
+                let it = if (exit_qual & 8) == 0 { "OUT" } else { "IN" };
+                crate::lab_mode::trace_bus::hvk(self.id, it, port, self.guest_regs.rax);
+                self.handle_io(exit_qual)?;
                 let vmcs = self.vmcs.as_ref().unwrap();
-                vmcs.write(fields::FG_, wb + hof)?;
+                vmcs.write(fields::FV_, guest_rip + instr_len)?;
                 Ok(true)
             }
             
-            exit_reason::Cjh | exit_reason::Bwl => {
-                self.cm.bkn += 1;
-                self.laz(exit_reason == exit_reason::Bwl)?;
+            exit_reason::Ann | exit_reason::Agn => {
+                self.stats.msr_exits += 1;
+                self.handle_msr(exit_reason == exit_reason::Agn)?;
                 let vmcs = self.vmcs.as_ref().unwrap();
-                vmcs.write(fields::FG_, wb + hof)?;
+                vmcs.write(fields::FV_, guest_rip + instr_len)?;
                 Ok(true)
             }
             
-            exit_reason::BUI_ => {
-                self.cm.fhx += 1;
+            exit_reason::BXE_ => {
+                self.stats.ept_violations += 1;
                 let vmcs = self.vmcs.as_ref().unwrap();
-                let axy = vmcs.read(fields::BYR_)?;
-                let hmb = vmcs.read(fields::BYP_).bq();
+                let zy = vmcs.read(fields::CBX_)?;
+                let drb = vmcs.read(fields::CBV_).ok();
                 
-                crate::lab_mode::trace_bus::npr(
-                    self.ad, "EPT_VIOLATION", axy, dqq
+                crate::lab_mode::trace_bus::hvl(
+                    self.id, "EPT_VIOLATION", zy, exit_qual
                 );
                 
                 
-                super::isolation::pau(
-                    self.ad,
-                    axy,
-                    hmb,
-                    dqq,
-                    wb,
+                super::isolation::iyv(
+                    self.id,
+                    zy,
+                    drb,
+                    exit_qual,
+                    guest_rip,
                 );
                 
                 
-                super::api::eps(
-                    super::api::VmEventType::Lj,
-                    self.ad,
-                    super::api::VmEventData::Bxs(axy),
+                super::api::bzf(
+                    super::api::VmEventType::Ev,
+                    self.id,
+                    super::api::VmEventData::Address(zy),
                 );
                 
                 Ok(false)
             }
             
-            exit_reason::Cpd => {
-                crate::lab_mode::trace_bus::ept(
-                    self.ad, "VMCALL", wb,
-                    &alloc::format!("func=0x{:X}", self.ej.rax)
+            exit_reason::Arm => {
+                crate::lab_mode::trace_bus::bzg(
+                    self.id, "VMCALL", guest_rip,
+                    &alloc::format!("func=0x{:X}", self.guest_regs.rax)
                 );
                 
-                let result = self.tln()?;
+                let result = self.handle_vmcall()?;
                 let vmcs = self.vmcs.as_ref().unwrap();
-                vmcs.write(fields::FG_, wb + hof)?;
+                vmcs.write(fields::FV_, guest_rip + instr_len)?;
                 Ok(result)
             }
             
-            exit_reason::CYQ_ => {
-                crate::lab_mode::trace_bus::epu(self.ad, "TRIPLE FAULT (crashed)");
-                crate::serial_println!("[VM {}] TRIPLE FAULT! Guest crashed.", self.ad);
-                self.g = VmState::Gu;
+            exit_reason::DCI_ => {
+                crate::lab_mode::trace_bus::bzh(self.id, "TRIPLE FAULT (crashed)");
+                crate::serial_println!("[VM {}] TRIPLE FAULT! Guest crashed.", self.id);
+                self.state = VmState::Crashed;
                 Ok(false)
             }
             
-            exit_reason::Bbf => {
+            exit_reason::Wb => {
                 
                 
-                let qao = self.ej.rcx as u32;
-                let qap = (self.ej.rdx << 32) | (self.ej.rax & 0xFFFF_FFFF);
+                let jrw = self.guest_regs.rcx as u32;
+                let jrx = (self.guest_regs.rdx << 32) | (self.guest_regs.rax & 0xFFFF_FFFF);
                 
-                if qao == 0 {
+                if jrw == 0 {
                     
-                    let grf = qap | 1; 
+                    let safe_value = jrx | 1; 
                     unsafe {
                         core::arch::asm!(
                             "xsetbv",
                             in("ecx") 0u32,
-                            in("edx") (grf >> 32) as u32,
-                            in("eax") grf as u32,
+                            in("edx") (safe_value >> 32) as u32,
+                            in("eax") safe_value as u32,
                         );
                     }
-                    crate::serial_println!("[VM {}] XSETBV XCR0=0x{:X}", self.ad, grf);
+                    crate::serial_println!("[VM {}] XSETBV XCR0=0x{:X}", self.id, safe_value);
                 } else {
-                    crate::serial_println!("[VM {}] XSETBV ignored XCR{}=0x{:X}", self.ad, qao, qap);
+                    crate::serial_println!("[VM {}] XSETBV ignored XCR{}=0x{:X}", self.id, jrw, jrx);
                 }
                 
                 let vmcs = self.vmcs.as_ref().unwrap();
-                vmcs.write(fields::FG_, wb + hof)?;
+                vmcs.write(fields::FV_, guest_rip + instr_len)?;
                 Ok(true)
             }
             
-            exit_reason::CBZ_ => {
-                crate::serial_println!("[VM {}] Invalid guest state! Check VMCS.", self.ad);
-                self.g = VmState::Gu;
+            exit_reason::CFK_ => {
+                crate::serial_println!("[VM {}] Invalid guest state! Check VMCS.", self.id);
+                self.state = VmState::Crashed;
                 Ok(false)
             }
             
             _ => {
                 crate::serial_println!("[VM {}] Unhandled VM exit reason: {} at RIP=0x{:X}", 
-                                      self.ad, exit_reason, wb);
+                                      self.id, exit_reason, guest_rip);
                 Ok(false)
             }
         }
     }
     
     
-    fn lat(&mut self) -> Result<()> {
-        let awa = self.ej.rax as u32;
-        let bxj = self.ej.rcx as u32;
+    fn handle_cpuid(&mut self) -> Result<()> {
+        let leaf = self.guest_regs.rax as u32;
+        let subleaf = self.guest_regs.rcx as u32;
         
         
-        match awa {
+        match leaf {
             0x4000_0000 => {
                 
-                self.ej.rax = 0x4000_0001;
-                self.ej.rbx = 0x7473_7254; 
-                self.ej.rcx = 0x7254_534F; 
-                self.ej.rdx = 0x534F_7473; 
+                self.guest_regs.rax = 0x4000_0001;
+                self.guest_regs.rbx = 0x7473_7254; 
+                self.guest_regs.rcx = 0x7254_534F; 
+                self.guest_regs.rdx = 0x534F_7473; 
                 return Ok(());
             }
             0x4000_0001 => {
-                self.ej.rax = 0;
-                self.ej.rbx = 0;
-                self.ej.rcx = 0;
-                self.ej.rdx = 0;
+                self.guest_regs.rax = 0;
+                self.guest_regs.rbx = 0;
+                self.guest_regs.rcx = 0;
+                self.guest_regs.rdx = 0;
                 return Ok(());
             }
             _ => {}
         }
         
         
-        let (htx, fpy, hty, htz): (u32, u32, u32, u32);
+        let (out_eax, out_ebx, out_ecx, out_edx): (u32, u32, u32, u32);
         
         unsafe {
             core::arch::asm!(
@@ -540,16 +540,16 @@ impl VirtualMachine {
                 "cpuid",
                 "mov {out_ebx:e}, ebx",
                 "pop rbx",
-                inout("eax") awa => htx,
-                inout("ecx") bxj => hty,
-                fpy = bd(reg) fpy,
-                bd("edx") htz,
+                inout("eax") leaf => out_eax,
+                inout("ecx") subleaf => out_ecx,
+                out_ebx = out(reg) out_ebx,
+                out("edx") out_edx,
             );
         }
         
-        let (mut eax, ebx, mut ecx, edx) = (htx, fpy, hty, htz);
+        let (mut eax, ebx, mut ecx, edx) = (out_eax, out_ebx, out_ecx, out_edx);
         
-        match awa {
+        match leaf {
             0x0000_0001 => {
                 ecx &= !(1 << 5);   
                 ecx |= 1 << 31;     
@@ -562,38 +562,38 @@ impl VirtualMachine {
             _ => {}
         }
         
-        self.ej.rax = eax as u64;
-        self.ej.rbx = ebx as u64;
-        self.ej.rcx = ecx as u64;
-        self.ej.rdx = edx as u64;
+        self.guest_regs.rax = eax as u64;
+        self.guest_regs.rbx = ebx as u64;
+        self.guest_regs.rcx = ecx as u64;
+        self.guest_regs.rdx = edx as u64;
         
         Ok(())
     }
     
     
-    fn lav(&mut self, dqq: u64) -> Result<()> {
-        let port = ((dqq >> 16) & 0xFFFF) as u16;
-        let tym = (dqq & 8) == 0;
-        let yaf = (dqq & 16) != 0;
-        let dds = (dqq & 7) as u8 + 1; 
+    fn handle_io(&mut self, exit_qual: u64) -> Result<()> {
+        let port = ((exit_qual >> 16) & 0xFFFF) as u16;
+        let mtj = (exit_qual & 8) == 0;
+        let pxa = (exit_qual & 16) != 0;
+        let bek = (exit_qual & 7) as u8 + 1; 
         
-        if tym {
+        if mtj {
             
-            let bn = self.ej.rax as u32;
+            let value = self.guest_regs.rax as u32;
             
             match port {
                 
                 0x3F8 => {
-                    let bm = (bn & 0xFF) as u8;
-                    crate::serial_print!("{}", bm as char);
-                    if let Some(bjq) = self.bjq {
-                        super::console::write_char(bjq, bm as char);
+                    let ch = (value & 0xFF) as u8;
+                    crate::serial_print!("{}", ch as char);
+                    if let Some(console_id) = self.console_id {
+                        super::console::write_char(console_id, ch as char);
                     }
                 }
                 
                 0x2F8 => {
-                    let bm = (bn & 0xFF) as u8;
-                    crate::serial_print!("{}", bm as char);
+                    let ch = (value & 0xFF) as u8;
+                    crate::serial_print!("{}", ch as char);
                 }
                 
                 0x3F9..=0x3FF | 0x2F9..=0x2FF => {}
@@ -608,19 +608,19 @@ impl VirtualMachine {
                 0xCF8 | 0xCFC..=0xCFF => {} 
                 0xB000..=0xB03F => {} 
                 0xE9 => {
-                    let bm = (bn & 0xFF) as u8;
-                    crate::serial_print!("{}", bm as char);
+                    let ch = (value & 0xFF) as u8;
+                    crate::serial_print!("{}", ch as char);
                 }
                 0xED => {} 
                 _ => {
-                    if self.cm.ank < 50 {
-                        crate::serial_println!("[VM {}] OUT port 0x{:X} val=0x{:X}", self.ad, port, bn);
+                    if self.stats.io_exits < 50 {
+                        crate::serial_println!("[VM {}] OUT port 0x{:X} val=0x{:X}", self.id, port, value);
                     }
                 }
             }
         } else {
             
-            let bn: u32 = match port {
+            let value: u32 = match port {
                 
                 0x3F8 => 0,         
                 0x3F9 => 0,         
@@ -659,8 +659,8 @@ impl VirtualMachine {
                 0xCFC..=0xCFF => 0xFFFF_FFFF,
                 
                 0xB008 => {
-                    let qb = self.cm.gwg.hx(4);
-                    (qb & 0xFFFF_FFFF) as u32
+                    let gx = self.stats.vm_exits.wrapping_mul(4);
+                    (gx & 0xFFFF_FFFF) as u32
                 }
                 0xB000..=0xB03F => 0,
                 
@@ -669,62 +669,62 @@ impl VirtualMachine {
                 0xE9 => 0,
                 0xED => 0,
                 _ => {
-                    if self.cm.ank < 50 {
-                        crate::serial_println!("[VM {}] IN port 0x{:X}", self.ad, port);
+                    if self.stats.io_exits < 50 {
+                        crate::serial_println!("[VM {}] IN port 0x{:X}", self.id, port);
                     }
                     0xFF
                 }
             };
-            self.ej.rax = (self.ej.rax & !0xFFFF_FFFF) | (bn as u64);
+            self.guest_regs.rax = (self.guest_regs.rax & !0xFFFF_FFFF) | (value as u64);
         }
         
         Ok(())
     }
     
     
-    fn laz(&mut self, rm: bool) -> Result<()> {
-        let msr = self.ej.rcx as u32;
+    fn handle_msr(&mut self, is_write: bool) -> Result<()> {
+        let msr = self.guest_regs.rcx as u32;
         
         
-        const KK_: u32 = 0x001B;
-        const NN_: u32 = 0x01A0;
-        const KL_: u32 = 0x0277;
-        const CN_: u32 = 0xC000_0080;
-        const VQ_: u32 = 0xC000_0081;
-        const VO_: u32 = 0xC000_0082;
-        const VK_: u32 = 0xC000_0083;
-        const VP_: u32 = 0xC000_0084;
-        const VL_: u32 = 0xC000_0100;
-        const VM_: u32 = 0xC000_0101;
-        const VN_: u32 = 0xC000_0102;
-        const OI_: u32 = 0xC000_0103;
+        const LD_: u32 = 0x001B;
+        const OO_: u32 = 0x01A0;
+        const LE_: u32 = 0x0277;
+        const IA32_EFER: u32 = 0xC000_0080;
+        const WZ_: u32 = 0xC000_0081;
+        const WX_: u32 = 0xC000_0082;
+        const WT_: u32 = 0xC000_0083;
+        const WY_: u32 = 0xC000_0084;
+        const WU_: u32 = 0xC000_0100;
+        const WV_: u32 = 0xC000_0101;
+        const WW_: u32 = 0xC000_0102;
+        const PG_: u32 = 0xC000_0103;
         
-        if rm {
-            let msy = (self.ej.rdx << 32) | (self.ej.rax & 0xFFFF_FFFF);
+        if is_write {
+            let hdm = (self.guest_regs.rdx << 32) | (self.guest_regs.rax & 0xFFFF_FFFF);
             
             
             match msr {
-                VQ_ | VO_ | VK_ | VP_ |
-                VL_ | VM_ | VN_ |
-                KL_ | CN_ | KK_ | NN_ |
-                OI_ => {}
+                WZ_ | WX_ | WT_ | WY_ |
+                WU_ | WV_ | WW_ |
+                LE_ | IA32_EFER | LD_ | OO_ |
+                PG_ => {}
                 0x0174..=0x0176 => {} 
                 0x0200..=0x020F => {} 
                 0x0400..=0x047F => {} 
                 _ => {
-                    if self.cm.gwg < 100 {
-                        crate::serial_println!("[VM {}] WRMSR 0x{:X} (ignored)", self.ad, msr);
+                    if self.stats.vm_exits < 100 {
+                        crate::serial_println!("[VM {}] WRMSR 0x{:X} (ignored)", self.id, msr);
                     }
                 }
             }
         } else {
             
-            let bn: u64 = match msr {
-                KK_ => 0xFEE0_0900, 
-                NN_ => 1,          
-                KL_ => 0x0007040600070406, 
-                CN_ => 0x501,             
-                OI_ => 0,
+            let value: u64 = match msr {
+                LD_ => 0xFEE0_0900, 
+                OO_ => 1,          
+                LE_ => 0x0007040600070406, 
+                IA32_EFER => 0x501,             
+                PG_ => 0,
                 0x00FE => 0,   
                 0x0179 => 0,   
                 0x017A => 0,   
@@ -732,99 +732,99 @@ impl VirtualMachine {
                 0x0200..=0x020F => 0, 
                 0x0400..=0x047F => 0, 
                 _ => {
-                    if self.cm.gwg < 100 {
-                        crate::serial_println!("[VM {}] RDMSR 0x{:X} = 0", self.ad, msr);
+                    if self.stats.vm_exits < 100 {
+                        crate::serial_println!("[VM {}] RDMSR 0x{:X} = 0", self.id, msr);
                     }
                     0
                 }
             };
-            self.ej.rax = bn & 0xFFFF_FFFF;
-            self.ej.rdx = bn >> 32;
+            self.guest_regs.rax = value & 0xFFFF_FFFF;
+            self.guest_regs.rdx = value >> 32;
         }
         
         Ok(())
     }
     
     
-    fn tln(&mut self) -> Result<bool> {
-        let gw = self.ej.rax;
+    fn handle_vmcall(&mut self) -> Result<bool> {
+        let function = self.guest_regs.rax;
         
-        match gw {
+        match function {
             
             0 => {
-                crate::serial_println!("[VM {}] Hypercall: print", self.ad);
+                crate::serial_println!("[VM {}] Hypercall: print", self.id);
                 Ok(true)
             }
             
             
             1 => {
-                let nz = self.ej.rbx;
-                crate::serial_println!("[VM {}] Hypercall: exit (code={})", self.ad, nz);
+                let exit_code = self.guest_regs.rbx;
+                crate::serial_println!("[VM {}] Hypercall: exit (code={})", self.id, exit_code);
                 Ok(false)
             }
             
             
             2 => {
-                let qb = crate::time::lc();
-                self.ej.rax = qb;
+                let gx = crate::time::uptime_ms();
+                self.guest_regs.rax = gx;
                 Ok(true)
             }
             
             
             3 => {
-                let r = (self.ej.rbx & 0xFF) as u8;
-                super::console::oac(self.ad, 0xE9, true, r);
+                let c = (self.guest_regs.rbx & 0xFF) as u8;
+                super::console::idg(self.id, 0xE9, true, c);
                 Ok(true)
             }
             
             
             4 => {
-                let r = super::console::oac(self.ad, 0x3F8, false, 0);
-                self.ej.rax = r as u64;
+                let c = super::console::idg(self.id, 0x3F8, false, 0);
+                self.guest_regs.rax = c as u64;
                 Ok(true)
             }
             
             
             0x100..=0x1FF => {
-                let mpi = (gw - 0x100) as u32;
-                let n = [
-                    self.ej.rbx,
-                    self.ej.rcx,
-                    self.ej.rdx,
-                    self.ej.rsi,
+                let hbo = (function - 0x100) as u32;
+                let args = [
+                    self.guest_regs.rbx,
+                    self.guest_regs.rcx,
+                    self.guest_regs.rdx,
+                    self.guest_regs.rsi,
                 ];
-                let (result, iia) = super::virtfs::lau(self.ad, mpi, &n);
-                self.ej.rax = result as u64;
+                let (result, _data) = super::virtfs::fzs(self.id, hbo, &args);
+                self.guest_regs.rax = result as u64;
                 Ok(true)
             }
             
             
             0x200..=0x3FF => {
-                let n = [
-                    self.ej.rbx,
-                    self.ej.rcx,
-                    self.ej.rdx,
-                    self.ej.rsi,
+                let args = [
+                    self.guest_regs.rbx,
+                    self.guest_regs.rcx,
+                    self.guest_regs.rdx,
+                    self.guest_regs.rsi,
                 ];
-                let (result, f) = super::api::tix(self.ad, gw, &n);
+                let (result, data) = super::api::mhg(self.id, function, &args);
                 
                 
-                if result == -1 && gw == super::api::hypercall::Uf {
+                if result == -1 && function == super::api::hypercall::Iu {
                     
                     return Ok(false);
                 }
-                if result == -2 && gw == super::api::hypercall::Axh {
+                if result == -2 && function == super::api::hypercall::Um {
                     
                     return Ok(false);
                 }
                 
-                self.ej.rax = f;
+                self.guest_regs.rax = data;
                 Ok(true)
             }
             
             _ => {
-                crate::serial_println!("[VM {}] Unknown hypercall: 0x{:X}", self.ad, gw);
-                self.ej.rax = u64::O; 
+                crate::serial_println!("[VM {}] Unknown hypercall: 0x{:X}", self.id, function);
+                self.guest_regs.rax = u64::MAX; 
                 Ok(true)
             }
         }
@@ -832,63 +832,63 @@ impl VirtualMachine {
 }
 
 
-static Bai: Mutex<Vec<VirtualMachine>> = Mutex::new(Vec::new());
+static Vs: Mutex<Vec<VirtualMachine>> = Mutex::new(Vec::new());
 
 
-pub fn dpg(ad: u64, j: &str, afc: usize) -> Result<()> {
-    let vm = VirtualMachine::new(ad, j, afc)?;
-    Bai.lock().push(vm);
+pub fn blh(id: u64, name: &str, memory_mb: usize) -> Result<()> {
+    let vm = VirtualMachine::new(id, name, memory_mb)?;
+    Vs.lock().push(vm);
     Ok(())
 }
 
 
-pub fn poi(ad: u64) -> Result<()> {
-    gte(ad, "hello")
+pub fn jil(id: u64) -> Result<()> {
+    dev(id, "hello")
 }
 
 
-pub fn gte(ad: u64, bzw: &str) -> Result<()> {
-    let mut bfr = Bai.lock();
+pub fn dev(id: u64, guest_name: &str) -> Result<()> {
+    let mut aen = Vs.lock();
     
-    for vm in bfr.el() {
-        if vm.ad == ad {
+    for vm in aen.iter_mut() {
+        if vm.id == id {
             
-            if bzw == "linux-test" || bzw.pp(".bzimage") {
-                let uz = super::guests::iwr(bzw)
-                    .unwrap_or_else(|| super::linux_loader::klw());
+            if guest_name == "linux-test" || guest_name.ends_with(".bzimage") {
+                let jx = super::guests::eoc(guest_name)
+                    .unwrap_or_else(|| super::linux_loader::fpb());
                 crate::serial_println!("[VM {}] Loading Linux guest '{}' ({} bytes)", 
-                                      ad, bzw, uz.len());
-                vm.fvn(&uz, "console=ttyS0 earlyprintk=serial nokaslr", None)?;
+                                      id, guest_name, jx.len());
+                vm.start_linux(&jx, "console=ttyS0 earlyprintk=serial nokaslr", None)?;
                 return Ok(());
             }
             
             
-            let aj = super::guests::iwr(bzw)
-                .unwrap_or_else(|| super::guests::obp());
+            let code = super::guests::eoc(guest_name)
+                .unwrap_or_else(|| super::guests::ieq());
             
-            crate::serial_println!("[VM {}] Loading guest '{}' ({} bytes)", ad, bzw, aj.len());
+            crate::serial_println!("[VM {}] Loading guest '{}' ({} bytes)", id, guest_name, code.len());
             
-            vm.diy(&aj, 0x1000)?;
-            vm.ay(0x1000, 0x8000)?;
+            vm.load_binary(&code, 0x1000)?;
+            vm.start(0x1000, 0x8000)?;
             return Ok(());
         }
     }
     
-    Err(HypervisorError::Mo)
+    Err(HypervisorError::VmNotFound)
 }
 
 
-pub fn jru(ad: u64) -> Result<()> {
-    let mut bfr = Bai.lock();
+pub fn fbu(id: u64) -> Result<()> {
+    let mut aen = Vs.lock();
     
-    for vm in bfr.el() {
-        if vm.ad == ad {
-            vm.g = VmState::Af;
+    for vm in aen.iter_mut() {
+        if vm.id == id {
+            vm.state = VmState::Stopped;
             return Ok(());
         }
     }
     
-    Err(HypervisorError::Mo)
+    Err(HypervisorError::VmNotFound)
 }
 
 
@@ -898,7 +898,7 @@ pub fn jru(ad: u64) -> Result<()> {
 use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
 
-static mut YL_: GuestRegs = GuestRegs {
+static mut VM_EXIT_GUEST_REGS: GuestRegs = GuestRegs {
     rax: 0, rbx: 0, rcx: 0, rdx: 0,
     rsi: 0, rdi: 0, rbp: 0,
     r8: 0, r9: 0, r10: 0, r11: 0,
@@ -907,13 +907,10 @@ static mut YL_: GuestRegs = GuestRegs {
 
 
 
-static mut AVW_: u64 = 0;
+static mut HOST_SAVED_RSP: u64 = 0;
 
 
-static BIO_: AtomicU8 = AtomicU8::new(0);
-
-
-
+static VMX_USE_RESUME: AtomicU8 = AtomicU8::new(0);
 
 
 
@@ -924,16 +921,19 @@ static BIO_: AtomicU8 = AtomicU8::new(0);
 
 
 
-fn xso(xpn: bool) -> u64 {
-    BIO_.store(xpn as u8, Ordering::SeqCst);
-    unsafe { xsp() }
+
+
+
+fn psv(use_resume: bool) -> u64 {
+    VMX_USE_RESUME.store(use_resume as u8, Ordering::SeqCst);
+    unsafe { psw() }
 }
 
 
 
-#[unsafe(evb)]
-unsafe extern "C" fn xsp() -> u64 {
-    core::arch::evc!(
+#[unsafe(naked)]
+unsafe extern "C" fn psw() -> u64 {
+    core::arch::naked_asm!(
         
         "push rbx",
         "push rbp",
@@ -1010,9 +1010,9 @@ unsafe extern "C" fn xsp() -> u64 {
         "mov rax, 1",
         "ret",
         
-        tpw = aaw AVW_,
-        thn = aaw YL_,
-        cqp = aaw BIO_,
+        host_rsp = sym HOST_SAVED_RSP,
+        gregs = sym VM_EXIT_GUEST_REGS,
+        flag = sym VMX_USE_RESUME,
     );
 }
 
@@ -1026,9 +1026,9 @@ unsafe extern "C" fn xsp() -> u64 {
 
 
 
-#[unsafe(evb)]
-extern "C" fn pyn() {
-    core::arch::evc!(
+#[unsafe(naked)]
+extern "C" fn jqi() {
+    core::arch::naked_asm!(
         
         
         "push rax",
@@ -1071,7 +1071,7 @@ extern "C" fn pyn() {
         "xor eax, eax",
         "ret",
         
-        thn = aaw YL_,
-        tpw = aaw AVW_,
+        gregs = sym VM_EXIT_GUEST_REGS,
+        host_rsp = sym HOST_SAVED_RSP,
     );
 }

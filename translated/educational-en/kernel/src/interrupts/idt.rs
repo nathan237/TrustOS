@@ -21,7 +21,7 @@ lazy_static! {
         // Set up separate stack for double faults
         tss.interrupt_stack_table[DOUBLE_FAULT_IST_INDEX as usize] = {
             static mut STACK: [u8; STACK_SIZE] = [0; STACK_SIZE];
-            let stack_start = VirtAddr::from_pointer(// SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+            let stack_start = VirtAddr::from_ptr(// SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { &STACK });
             let stack_end = stack_start + STACK_SIZE as u64;
             stack_end

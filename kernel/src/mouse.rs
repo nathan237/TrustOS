@@ -52,7 +52,7 @@ static PACKET_INDEX: AtomicU8 = AtomicU8::new(0);
 /// Wait for PS/2 controller to be ready for reading
 fn wait_read() {
     let mut status = Port::<u8>::new(PS2_STATUS);
-    for _ in 0..100_000 {
+    for _ in 0..1_000u32 {
         if unsafe { status.read() } & 0x01 != 0 {
             return;
         }
@@ -63,7 +63,7 @@ fn wait_read() {
 /// Wait for PS/2 controller to be ready for writing
 fn wait_write() {
     let mut status = Port::<u8>::new(PS2_STATUS);
-    for _ in 0..100_000 {
+    for _ in 0..1_000u32 {
         if unsafe { status.read() } & 0x02 == 0 {
             return;
         }
@@ -108,6 +108,16 @@ fn mouse_write_data(data: u8) {
 
 /// Initialize PS/2 mouse
 pub fn init() {
+    // Quick probe: if PS/2 status port reads 0xFF, no controller exists
+    {
+        let mut status = Port::<u8>::new(PS2_STATUS);
+        let val = unsafe { status.read() };
+        if val == 0xFF {
+            crate::serial_println!("[MOUSE] No PS/2 controller detected (status=0xFF) — skipping");
+            return;
+        }
+    }
+
     // Enable auxiliary device (mouse)
     ps2_command(0xA8);
     

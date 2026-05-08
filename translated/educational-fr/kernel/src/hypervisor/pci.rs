@@ -29,7 +29,7 @@
 // Structure publique — visible à l'extérieur de ce module.
 pub struct PciBus {
     /// Currently latched CONFIG_ADDRESS value
-    pub config_address: u32,
+    pub config_addr: u32,
     /// Host Bridge config space (256 bytes)
     pub host_bridge: [u8; 256],
     /// ISA Bridge config space (256 bytes)
@@ -44,30 +44,30 @@ pub struct PciBus {
 impl Default for PciBus {
     fn default() -> Self {
         let mut bus = Self {
-            config_address: 0,
+            config_addr: 0,
             host_bridge: [0u8; 256],
             isa_bridge: [0u8; 256],
             virtio_console: [0u8; 256],
             virtio_blk: [0u8; 256],
         };
-        bus.initialize_host_bridge();
-        bus.initialize_isa_bridge();
-        bus.initialize_virtio_console();
-        bus.initialize_virtio_block();
+        bus.init_host_bridge();
+        bus.init_isa_bridge();
+        bus.init_virtio_console();
+        bus.init_virtio_blk();
         bus
     }
 }
 
 /// Write a little-endian u16 into a config space buffer
-fn write_config_u16(config: &mut [u8], offset: usize, value: u16) {
-    let bytes = value.to_le_bytes();
+fn write_config_u16(config: &mut [u8], offset: usize, val: u16) {
+    let bytes = val.to_le_bytes();
     config[offset] = bytes[0];
     config[offset + 1] = bytes[1];
 }
 
 /// Write a little-endian u32 into a config space buffer
-fn write_config_u32(config: &mut [u8], offset: usize, value: u32) {
-    let bytes = value.to_le_bytes();
+fn write_config_u32(config: &mut [u8], offset: usize, val: u32) {
+    let bytes = val.to_le_bytes();
     config[offset] = bytes[0];
     config[offset + 1] = bytes[1];
     config[offset + 2] = bytes[2];
@@ -134,7 +134,7 @@ impl PciBus {
     ///   Vendor: 0x8086 (Intel)
     ///   Device: 0x1237 (440FX - Natoma)
     ///   Class:  0x06/0x00 (Host Bridge)
-    fn initialize_host_bridge(&mut self) {
+    fn init_host_bridge(&mut self) {
         let c = &mut self.host_bridge;
         
         // Vendor ID: Intel
@@ -164,7 +164,7 @@ impl PciBus {
     ///   Vendor: 0x8086 (Intel)
     ///   Device: 0x7000 (82371SB PIIX3 ISA)
     ///   Class:  0x06/0x01 (ISA Bridge)
-    fn initialize_isa_bridge(&mut self) {
+    fn init_isa_bridge(&mut self) {
         let c = &mut self.isa_bridge;
         
         // Vendor ID: Intel
@@ -196,7 +196,7 @@ impl PciBus {
     ///   Class:  0x07/0x80 (Communication controller / Other)
     ///   BAR0:   0xC000 (I/O space, 64 bytes)
     ///   IRQ:    INTA → GSI 17 (via _PRT)
-    fn initialize_virtio_console(&mut self) {
+    fn init_virtio_console(&mut self) {
         let c = &mut self.virtio_console;
         
         // VirtIO vendor
@@ -233,7 +233,7 @@ impl PciBus {
     ///   Class:  0x01/0x80 (Mass storage / Other)
     ///   BAR0:   0xC040 (I/O space, 64 bytes)
     ///   IRQ:    INTA → GSI 18 (via _PRT)
-    fn initialize_virtio_block(&mut self) {
+    fn init_virtio_blk(&mut self) {
         let c = &mut self.virtio_blk;
         
         // VirtIO vendor
@@ -264,22 +264,22 @@ impl PciBus {
     
     /// Handle write to CONFIG_ADDRESS port (0xCF8)
     pub fn write_config_address(&mut self, value: u32) {
-        self.config_address = value;
+        self.config_addr = value;
     }
     
     /// Handle read from CONFIG_ADDRESS port (0xCF8)
     pub fn read_config_address(&self) -> u32 {
-        self.config_address
+        self.config_addr
     }
     
     /// Parse CONFIG_ADDRESS into (enable, bus, device, function, register)
     fn parse_address(&self) -> (bool, u8, u8, u8, u8) {
-        let address = self.config_address;
-        let enable = (address >> 31) & 1 != 0;
-        let bus = ((address >> 16) & 0xFF) as u8;
-        let device = ((address >> 11) & 0x1F) as u8;
-        let function = ((address >> 8) & 0x7) as u8;
-        let register = (address & 0xFC) as u8; // DWORD aligned
+        let addr = self.config_addr;
+        let enable = (addr >> 31) & 1 != 0;
+        let bus = ((addr >> 16) & 0xFF) as u8;
+        let device = ((addr >> 11) & 0x1F) as u8;
+        let function = ((addr >> 8) & 0x7) as u8;
+        let register = (addr & 0xFC) as u8; // DWORD aligned
         (enable, bus, device, function, register)
     }
     
@@ -431,8 +431,8 @@ mod tests {
         let mut bus = PciBus::default();
         // Select bus 0, dev 31, fn 0, reg 0 — no device here
         bus.write_config_address(0x8000_F800);
-        let value = bus.read_config_data(0);
-        assert_eq!(value, 0xFFFF_FFFF);
+        let val = bus.read_config_data(0);
+        assert_eq!(val, 0xFFFF_FFFF);
     }
     
     #[test]
@@ -440,9 +440,9 @@ mod tests {
         let mut bus = PciBus::default();
         // Select bus 0, dev 0, fn 0, reg 0 (vendor + device ID)
         bus.write_config_address(0x8000_0000);
-        let value = bus.read_config_data(0);
-        assert_eq!(value & 0xFFFF, 0x8086);       // Vendor ID
-        assert_eq!((value >> 16) & 0xFFFF, 0x1237); // Device ID
+        let val = bus.read_config_data(0);
+        assert_eq!(val & 0xFFFF, 0x8086);       // Vendor ID
+        assert_eq!((val >> 16) & 0xFFFF, 0x1237); // Device ID
     }
     
     #[test]
@@ -450,8 +450,8 @@ mod tests {
         let mut bus = PciBus::default();
         // Bit 31 not set = disabled
         bus.write_config_address(0x0000_0000);
-        let value = bus.read_config_data(0);
-        assert_eq!(value, 0xFFFF_FFFF);
+        let val = bus.read_config_data(0);
+        assert_eq!(val, 0xFFFF_FFFF);
     }
     
     #[test]
@@ -462,8 +462,8 @@ mod tests {
         // Write all 1s (standard BAR probe)
         bus.write_config_data(0, 0xFFFF_FFFF);
         // Read back — for our host bridge it's just memory
-        let value = bus.read_config_data(0);
+        let val = bus.read_config_data(0);
         // Value should be 0xFFFF_FFFF (no BAR implemented → all writable)
-        assert_eq!(value, 0xFFFF_FFFF);
+        assert_eq!(val, 0xFFFF_FFFF);
     }
 }

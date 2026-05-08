@@ -77,17 +77,17 @@ pub struct InferenceEngine {
     /// Configuration
     pub config: InferenceConfig,
     /// Scratch buffers (reused across calls)
-    buffer_x: Vec<f32>,      // [D_MODEL] — current hidden state
-    buffer_xn: Vec<f32>,     // [D_MODEL] — normalized hidden state
-    buffer_q: Vec<f32>,      // [D_MODEL]
-    buffer_k: Vec<f32>,      // [D_MODEL]
-    buffer_v: Vec<f32>,      // [D_MODEL]
-    buffer_attn: Vec<f32>,   // [MAX_SEQ] — attention scores
-    buffer_gate: Vec<f32>,   // [D_FF]
-    buffer_up: Vec<f32>,     // [D_FF]
-    buffer_logits: Vec<f32>, // [VOCAB_SIZE]
+    buf_x: Vec<f32>,      // [D_MODEL] — current hidden state
+    buf_xn: Vec<f32>,     // [D_MODEL] — normalized hidden state
+    buf_q: Vec<f32>,      // [D_MODEL]
+    buf_k: Vec<f32>,      // [D_MODEL]
+    buf_v: Vec<f32>,      // [D_MODEL]
+    buf_attn: Vec<f32>,   // [MAX_SEQ] — attention scores
+    buf_gate: Vec<f32>,   // [D_FF]
+    buf_up: Vec<f32>,     // [D_FF]
+    buf_logits: Vec<f32>, // [VOCAB_SIZE]
     /// PRNG state for sampling
-    random_generator_state: u64,
+    rng_state: u64,
 }
 
 // Implementation block — defines methods for the type above.
@@ -97,24 +97,24 @@ pub fn new() -> Self {
         InferenceEngine {
             kv_cache: KVCache::new(),
             config: InferenceConfig::default(),
-            buffer_x: vec![0.0; D_MODEL],
-            buffer_xn: vec![0.0; D_MODEL],
-            buffer_q: vec![0.0; D_MODEL],
-            buffer_k: vec![0.0; D_MODEL],
-            buffer_v: vec![0.0; D_MODEL],
-            buffer_attn: vec![0.0; MAXIMUM_SEQUENCE],
-            buffer_gate: vec![0.0; D_FF],
-            buffer_up: vec![0.0; D_FF],
-            buffer_logits: vec![0.0; VOCAB_SIZE],
-            random_generator_state: crate::time::uptime_ticks().wrapping_add(0xDEAD_BEEF),
+            buf_x: vec![0.0; D_MODEL],
+            buf_xn: vec![0.0; D_MODEL],
+            buf_q: vec![0.0; D_MODEL],
+            buf_k: vec![0.0; D_MODEL],
+            buf_v: vec![0.0; D_MODEL],
+            buf_attn: vec![0.0; MAXIMUM_SEQUENCE],
+            buf_gate: vec![0.0; D_FF],
+            buf_up: vec![0.0; D_FF],
+            buf_logits: vec![0.0; VOCAB_SIZE],
+            rng_state: crate::time::uptime_ticks().wrapping_add(0xDEAD_BEEF),
         }
     }
 
     /// Generate tokens autoregressively from a prompt
     pub fn generate(&mut self, model: &TransformerWeights, prompt: &[u8], maximum_tokens: usize) -> Vec<u8> {
         self.kv_cache.clear();
-        let maximum = maximum_tokens.minimum(MAXIMUM_SEQUENCE);
-        let mut output = Vec::with_capacity(maximum);
+        let max = maximum_tokens.min(MAXIMUM_SEQUENCE);
+        let mut output = Vec::with_capacity(max);
 
         // Process prompt tokens (prefill)
         for &token in prompt.iter().take(MAXIMUM_SEQUENCE - 1) {
@@ -128,7 +128,7 @@ pub fn new() -> Self {
             tokenizer::BOS_TOKEN
         };
 
-        for _ in 0..maximum {
+        for _ in 0..max {
             if next_token == tokenizer::EOS_TOKEN { break; }
             output.push(next_token);
 
@@ -146,19 +146,19 @@ pub fn new() -> Self {
             self.forward_one(model, token);
         }
         // Greedy: take argmax
-        argmax(&self.buffer_logits)
+        argmax(&self.buf_logits)
     }
 
     /// Forward pass for a single token at the current position
     fn forward_one(&mut self, model: &TransformerWeights, token: u8) {
-        let position = self.kv_cache.len;
-        if position >= MAXIMUM_SEQUENCE { return; }
+        let pos = self.kv_cache.len;
+        if pos >= MAXIMUM_SEQUENCE { return; }
 
         // ── Token + Position Embedding ──────────────────────────────────
         let token_index = token as usize;
         for i in 0..D_MODEL {
-            self.buffer_x[i] = model.token_embed[token_index * D_MODEL + i]
-                           + model.position_embed[position * D_MODEL + i];
+            self.buf_x[i] = model.token_embed[token_index * D_MODEL + i]
+                           + model.pos_embed[pos * D_MODEL + i];
         }
 
         // ── Transformer Layers ──────────────────────────────────────────
@@ -166,20 +166,20 @@ pub fn new() -> Self {
             let layer = &model.layers[layer_index];
 
             // ── Pre-attention RMSNorm (SSE2 SIMD) ──
-            super::simd::rmsnorm(&mut self.buffer_xn, &self.buffer_x, &layer.rms_attn);
+            super::simd::rmsnorm(&mut self.buf_xn, &self.buf_x, &layer.rms_attn);
 
             // ── QKV Projections (SSE2 SIMD) ──
-            super::simd::matvec(&mut self.buffer_q, &layer.w_q, &self.buffer_xn, D_MODEL, D_MODEL);
-            super::simd::matvec(&mut self.buffer_k, &layer.w_k, &self.buffer_xn, D_MODEL, D_MODEL);
-            super::simd::matvec(&mut self.buffer_v, &layer.w_v, &self.buffer_xn, D_MODEL, D_MODEL);
+            super::simd::matvec(&mut self.buf_q, &layer.w_q, &self.buf_xn, D_MODEL, D_MODEL);
+            super::simd::matvec(&mut self.buf_k, &layer.w_k, &self.buf_xn, D_MODEL, D_MODEL);
+            super::simd::matvec(&mut self.buf_v, &layer.w_v, &self.buf_xn, D_MODEL, D_MODEL);
 
             // ── Store K,V in cache ──
-            self.kv_cache.k[layer_index].extend_from_slice(&self.buffer_k);
-            self.kv_cache.v[layer_index].extend_from_slice(&self.buffer_v);
+            self.kv_cache.k[layer_index].extend_from_slice(&self.buf_k);
+            self.kv_cache.v[layer_index].extend_from_slice(&self.buf_v);
 
             // ── Multi-head Attention ──
             // For each head: score = Q_h · K_h^T / sqrt(d_k), then softmax, then weighted V_h
-            let n_position = position + 1; // Number of positions including current
+            let n_position = pos + 1; // Number of positions including current
             let mut attn_out = vec![0.0f32; D_MODEL];
 
             for h in 0..N_HEADS {
@@ -189,20 +189,20 @@ pub fn new() -> Self {
                 for t in 0..n_position {
                     let mut score = 0.0f32;
                     for d in 0..D_K {
-                        score += self.buffer_q[head_offset + d]
+                        score += self.buf_q[head_offset + d]
                                * self.kv_cache.k[layer_index][t * D_MODEL + head_offset + d];
                     }
-                    self.buffer_attn[t] = score / (D_K as f32).sqrt_approx();
+                    self.buf_attn[t] = score / (D_K as f32).sqrt_approx();
                 }
 
                 // Causal masking is implicit: we only have positions 0..pos+1
 
                 // Softmax over positions
-                softmax_slice(&mut self.buffer_attn[..n_position]);
+                softmax_slice(&mut self.buf_attn[..n_position]);
 
                 // Weighted sum of values
                 for t in 0..n_position {
-                    let w = self.buffer_attn[t];
+                    let w = self.buf_attn[t];
                     for d in 0..D_K {
                         attn_out[head_offset + d] +=
                             w * self.kv_cache.v[layer_index][t * D_MODEL + head_offset + d];
@@ -216,40 +216,40 @@ pub fn new() -> Self {
 
             // ── Residual ──
             for i in 0..D_MODEL {
-                self.buffer_x[i] += proj_out[i];
+                self.buf_x[i] += proj_out[i];
             }
 
             // ── Pre-FFN RMSNorm (SSE2 SIMD) ──
-            super::simd::rmsnorm(&mut self.buffer_xn, &self.buffer_x, &layer.rms_ffn);
+            super::simd::rmsnorm(&mut self.buf_xn, &self.buf_x, &layer.rms_ffn);
 
             // ── SwiGLU FFN (SSE2 SIMD) ──
             // gate = SiLU(x @ W_gate)
-            super::simd::matvec(&mut self.buffer_gate, &layer.w_gate, &self.buffer_xn, D_MODEL, D_FF);
+            super::simd::matvec(&mut self.buf_gate, &layer.w_gate, &self.buf_xn, D_MODEL, D_FF);
             // up = x @ W_up
-            super::simd::matvec(&mut self.buffer_up, &layer.w_up, &self.buffer_xn, D_MODEL, D_FF);
+            super::simd::matvec(&mut self.buf_up, &layer.w_up, &self.buf_xn, D_MODEL, D_FF);
             // gate = SiLU(gate) * up
             for i in 0..D_FF {
-                let g = self.buffer_gate[i];
+                let g = self.buf_gate[i];
                 let sig = 1.0 / (1.0 + (-g).exp_approx());
-                self.buffer_gate[i] = g * sig * self.buffer_up[i];
+                self.buf_gate[i] = g * sig * self.buf_up[i];
             }
             // down = gate @ W_down (SSE2 SIMD)
             let mut ffn_out = vec![0.0f32; D_MODEL];
-            super::simd::matvec(&mut ffn_out, &layer.w_down, &self.buffer_gate, D_FF, D_MODEL);
+            super::simd::matvec(&mut ffn_out, &layer.w_down, &self.buf_gate, D_FF, D_MODEL);
 
             // ── Residual ──
             for i in 0..D_MODEL {
-                self.buffer_x[i] += ffn_out[i];
+                self.buf_x[i] += ffn_out[i];
             }
         }
 
         // ── Final RMSNorm (SSE2 SIMD) ──
-        super::simd::rmsnorm(&mut self.buffer_xn, &self.buffer_x, &model.rms_final);
+        super::simd::rmsnorm(&mut self.buf_xn, &self.buf_x, &model.rms_final);
 
         // ── Output Logits (SSE2 SIMD) ──
-        super::simd::matvec(&mut self.buffer_logits, &model.w_output, &self.buffer_xn, D_MODEL, VOCAB_SIZE);
+        super::simd::matvec(&mut self.buf_logits, &model.w_output, &self.buf_xn, D_MODEL, VOCAB_SIZE);
 
-        self.kv_cache.len = position + 1;
+        self.kv_cache.len = pos + 1;
     }
 
     /// Sample a token from the logit distribution (no penalty)
@@ -263,27 +263,27 @@ pub fn new() -> Self {
 
         if temporary <= 0.01 {
             // Greedy decoding
-            return argmax(&self.buffer_logits);
+            return argmax(&self.buf_logits);
         }
 
         // Apply temperature
-        let mut logits = self.buffer_logits.clone();
-        for l in logits.iterator_mut() {
+        let mut logits = self.buf_logits.clone();
+        for l in logits.iter_mut() {
             *l /= temporary;
         }
 
         // Repetition penalty: penalize tokens seen in the last 32 generated tokens
-        let penalty_window = recent_tokens.len().minimum(32);
+        let penalty_window = recent_tokens.len().min(32);
         if penalty_window > 0 {
             let start = recent_tokens.len() - penalty_window;
-            for &token in &recent_tokens[start..] {
-                let index = token as usize;
-                if index < VOCAB_SIZE {
+            for &tok in &recent_tokens[start..] {
+                let idx = tok as usize;
+                if idx < VOCAB_SIZE {
                     // Multiplicative penalty: if logit > 0 divide, if < 0 multiply
-                    if logits[index] > 0.0 {
-                        logits[index] /= 1.3;
+                    if logits[idx] > 0.0 {
+                        logits[idx] /= 1.3;
                     } else {
-                        logits[index] *= 1.3;
+                        logits[idx] *= 1.3;
                     }
                 }
             }
@@ -294,9 +294,9 @@ pub fn new() -> Self {
             let mut indices: Vec<(f32, usize)> = logits.iter().copied()
                 .enumerate().map(|(i, v)| (v, i)).collect();
             indices.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(core::cmp::Ordering::Equal));
-            let threshold = indices[self.config.top_k.minimum(indices.len() - 1)].0;
-            for l in logits.iterator_mut() {
-                if *l < threshold { *l = f32::NEGATIVE_INFINITY; }
+            let threshold = indices[self.config.top_k.min(indices.len() - 1)].0;
+            for l in logits.iter_mut() {
+                if *l < threshold { *l = f32::NEG_INFINITY; }
             }
         }
 
@@ -304,7 +304,7 @@ pub fn new() -> Self {
         softmax_slice(&mut logits);
 
         // Sample from distribution
-        let r = self.random_f32();
+        let r = self.rand_f32();
         let mut cum = 0.0f32;
         for (i, &p) in logits.iter().enumerate() {
             cum += p;
@@ -316,12 +316,12 @@ pub fn new() -> Self {
     }
 
     /// Random f32 in [0, 1)
-    fn random_f32(&mut self) -> f32 {
-        let mut x = self.random_generator_state;
+    fn rand_f32(&mut self) -> f32 {
+        let mut x = self.rng_state;
         x ^= x << 13;
         x ^= x >> 7;
         x ^= x << 17;
-        self.random_generator_state = x;
+        self.rng_state = x;
         ((x >> 40) as u32 as f32) / ((1u32 << 24) as f32)
     }
 }
@@ -362,23 +362,23 @@ fn rmsnorm(out: &mut [f32], x: &[f32], weight: &[f32]) {
 /// Softmax in-place over a slice (numerically stable)
 fn softmax_slice(data: &mut [f32]) {
     if data.is_empty() { return; }
-    let mut maximum = data[0];
-    for &v in data.iter() { if v > maximum { maximum = v; } }
+    let mut max = data[0];
+    for &v in data.iter() { if v > max { max = v; } }
     let mut sum = 0.0f32;
-    for v in data.iterator_mut() {
-        *v = (*v - maximum).exp_approx();
+    for v in data.iter_mut() {
+        *v = (*v - max).exp_approx();
         sum += *v;
     }
     if sum > 0.0 {
         let inv = 1.0 / sum;
-        for v in data.iterator_mut() { *v *= inv; }
+        for v in data.iter_mut() { *v *= inv; }
     }
 }
 
 /// Argmax of a slice → index (as u8)
 fn argmax(data: &[f32]) -> u8 {
     let mut best_i = 0u8;
-    let mut best_v = f32::NEGATIVE_INFINITY;
+    let mut best_v = f32::NEG_INFINITY;
     for (i, &v) in data.iter().enumerate() {
         if v > best_v {
             best_v = v;
@@ -402,9 +402,9 @@ impl ApproxMath for f32 {
     fn exp_approx(self) -> f32 {
         if self > 88.0 { return f32::MAX; }
         if self < -88.0 { return 0.0; }
-        let a = (1 << 23) as f32 / core::f32::consts::LINE_2;
+        let a = (1 << 23) as f32 / core::f32::consts::LN_2;
         let b = (1 << 23) as f32 * (127.0 - 0.04368);
-        let bits = ((a * self + b) as i32).maximum(0) as u32;
+        let bits = ((a * self + b) as i32).max(0) as u32;
         f32::from_bits(bits)
     }
 
@@ -434,39 +434,39 @@ pub fn compute_loss(model: &TransformerWeights, tokens: &[u8]) -> (f32, Vec<Vec<
 
         // Log-softmax for cross-entropy
         let target = tokens[t + 1] as usize;
-        let mut logits = engine.buffer_logits.clone();
+        let mut logits = engine.buf_logits.clone();
 
         // Numerically stable log-softmax
-        let maximum = logits.iter().copied().fold(f32::NEGATIVE_INFINITY, f32::maximum);
+        let max = logits.iter().copied().fold(f32::NEG_INFINITY, f32::max);
         let mut sum_exp = 0.0f32;
-        for l in logits.iterator_mut() {
-            *l = (*l - maximum).exp_approx();
+        for l in logits.iter_mut() {
+            *l = (*l - max).exp_approx();
             sum_exp += *l;
         }
-        let log_sum = maximum + sum_exp.line_approx();
+        let log_sum = max + sum_exp.ln_approx();
 
-        let loss = -(engine.buffer_logits[target] - log_sum);
+        let loss = -(engine.buf_logits[target] - log_sum);
         total_loss += loss;
 
-        all_logits.push(engine.buffer_logits.clone());
+        all_logits.push(engine.buf_logits.clone());
     }
 
-    let n = (tokens.len() - 1).maximum(1);
+    let n = (tokens.len() - 1).max(1);
     (total_loss / n as f32, all_logits)
 }
 
 trait LineApprox {
-    fn line_approx(self) -> f32;
+    fn ln_approx(self) -> f32;
 }
 // Trait implementation — fulfills a behavioral contract.
 impl LineApprox for f32 {
-    fn line_approx(self) -> f32 {
+    fn ln_approx(self) -> f32 {
         if self <= 0.0 { return -88.0; }
         let bits = self.to_bits();
         let e = ((bits >> 23) & 0xFF) as f32 - 127.0;
         let m = f32::from_bits((bits & 0x007FFFFF) | 0x3F800000);
         // ln(x) = (e + ln(m)) * ln(2)
         // ln(m) ≈ m - 1 for m ∈ [1, 2)
-        (e + (m - 1.0) * 1.4427) * core::f32::consts::LINE_2
+        (e + (m - 1.0) * 1.4427) * core::f32::consts::LN_2
     }
 }

@@ -11,44 +11,44 @@
 
 
 
-use crate::touch::{self, Zd, TouchPhase, TouchPoint, GU_};
+use crate::touch::{self, Kv, TouchPhase, TouchPoint, HL_};
 
 
 
 
 
 
-const CXJ_: u64 = 200_000;
+const DBB_: u64 = 200_000;
 
 
-const CXI_: i32 = 10;
+const DBA_: i32 = 10;
 
 
-const CEV_: u64 = 500_000;
+const CIE_: u64 = 500_000;
 
 
-const CEU_: i32 = 15;
+const CID_: i32 = 15;
 
 
-const LD_: i32 = 50;
+const LX_: i32 = 50;
 
 
-const CUT_: i32 = 200;
+const CYL_: i32 = 200;
 
 
-const SY_: i32 = 30;
+const UE_: i32 = 30;
 
 
-const CJQ_: i32 = 15;
+const CMZ_: i32 = 15;
 
 
-const BFB_: i32 = 8;
+const BHF_: i32 = 8;
 
 
-const BSD_: u64 = 300_000;
+const BUZ_: u64 = 300_000;
 
 
-const BSC_: i32 = 30;
+const BUY_: i32 = 30;
 
 
 
@@ -57,87 +57,87 @@ const BSC_: i32 = 30;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SwipeDirection {
-    Ap,
-    Ca,
-    Ek,
-    Fm,
+    Left,
+    Right,
+    Up,
+    Down,
 }
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EdgeOrigin {
     
-    Hk,
+    Bottom,
     
-    Jd,
+    Top,
     
-    Ap,
+    Left,
     
-    Ca,
+    Right,
 }
 
 
 #[derive(Debug, Clone, Copy)]
 pub enum GestureEvent {
     
-    Bty { b: i32, c: i32 },
+    Tap { x: i32, y: i32 },
 
     
-    Bey { b: i32, c: i32 },
+    DoubleTap { x: i32, y: i32 },
 
     
-    Blp { b: i32, c: i32 },
+    LongPress { x: i32, y: i32 },
 
     
-    Btt {
-        sz: SwipeDirection,
-        ql: i32,
-        vc: i32,
-        cqe: i32,
-        hic: i32,
-        qm: i32, 
+    Swipe {
+        direction: SwipeDirection,
+        start_x: i32,
+        start_y: i32,
+        awy: i32,
+        doq: i32,
+        velocity: i32, 
     },
 
     
-    Abp {
-        atf: EdgeOrigin,
-        li: i32, 
+    EdgeSwipe {
+        origin: EdgeOrigin,
+        progress: i32, 
     },
 
     
-    Boz {
-        yv: i32,
-        uq: i32,
+    Pinch {
+        center_x: i32,
+        center_y: i32,
         
-        bv: i32,
+        scale: i32,
     },
 
     
-    Yq {
-        iqw: i32,
-        iqx: i32,
+    Scroll {
+        delta_x: i32,
+        delta_y: i32,
     },
 
     
-    Bui {
-        sz: SwipeDirection,
+    ThreeFingerSwipe {
+        direction: SwipeDirection,
     },
 
     
-    Bum { b: i32, c: i32 },
+    TouchDown { x: i32, y: i32 },
 
     
-    Bun { b: i32, c: i32 },
+    TouchMove { x: i32, y: i32 },
 
     
-    Qy { b: i32, c: i32 },
+    TouchUp { x: i32, y: i32 },
 
     
-    Arf {
-        b: i32,
-        c: i32,
-        ql: i32,
-        vc: i32,
+    Drag {
+        x: i32,
+        y: i32,
+        start_x: i32,
+        start_y: i32,
     },
 }
 
@@ -148,34 +148,34 @@ pub enum GestureEvent {
 
 #[derive(Clone, Copy)]
 struct FingerTracker {
-    gh: bool,
-    ad: u16,
+    active: bool,
+    id: u16,
     
-    ql: i32,
-    vc: i32,
+    start_x: i32,
+    start_y: i32,
     
-    aua: i32,
-    bbi: i32,
+    current_x: i32,
+    current_y: i32,
     
-    gtd: u64,
+    start_time_us: u64,
     
-    gkw: u64,
+    last_time_us: u64,
     
-    gmg: i32,
+    max_displacement: i32,
 }
 
 impl Default for FingerTracker {
     fn default() -> Self {
         Self {
-            gh: false,
-            ad: 0,
-            ql: 0,
-            vc: 0,
-            aua: 0,
-            bbi: 0,
-            gtd: 0,
-            gkw: 0,
-            gmg: 0,
+            active: false,
+            id: 0,
+            start_x: 0,
+            start_y: 0,
+            current_x: 0,
+            current_y: 0,
+            start_time_us: 0,
+            last_time_us: 0,
+            max_displacement: 0,
         }
     }
 }
@@ -183,33 +183,33 @@ impl Default for FingerTracker {
 impl FingerTracker {
     const fn new() -> Self {
         Self {
-            gh: false,
-            ad: 0,
-            ql: 0,
-            vc: 0,
-            aua: 0,
-            bbi: 0,
-            gtd: 0,
-            gkw: 0,
-            gmg: 0,
+            active: false,
+            id: 0,
+            start_x: 0,
+            start_y: 0,
+            current_x: 0,
+            current_y: 0,
+            start_time_us: 0,
+            last_time_us: 0,
+            max_displacement: 0,
         }
     }
 
-    fn hgj(&self) -> i32 {
-        let dx = self.aua - self.ql;
-        let bg = self.bbi - self.vc;
+    fn displacement(&self) -> i32 {
+        let dx = self.current_x - self.start_x;
+        let ad = self.current_y - self.start_y;
         
-        dx.gp() + bg.gp()
+        dx.abs() + ad.abs()
     }
 
-    fn ypq(&self) -> i32 {
-        let dx = self.aua - self.ql;
-        let bg = self.bbi - self.vc;
-        dx * dx + bg * bg
+    fn qfg(&self) -> i32 {
+        let dx = self.current_x - self.start_x;
+        let ad = self.current_y - self.start_y;
+        dx * dx + ad * ad
     }
 
-    fn ynx(&self) -> u64 {
-        self.gkw.ao(self.gtd)
+    fn qeh(&self) -> u64 {
+        self.last_time_us.saturating_sub(self.start_time_us)
     }
 }
 
@@ -221,117 +221,117 @@ impl FingerTracker {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RecogState {
     
-    Cv,
+    Idle,
     
-    Ans,
+    Tracking,
     
-    Axa,
+    PossibleLongPress,
     
-    Arg,
+    Dragging,
     
-    Baa,
+    TwoFinger,
     
-    Azv,
+    ThreeFinger,
 }
 
 
 pub struct GestureRecognizer {
-    g: RecogState,
+    state: RecogState,
     
-    axx: [FingerTracker; GU_],
+    fingers: [FingerTracker; HL_],
     
-    cxy: u8,
+    finger_count: u8,
     
-    anv: i32,
-    akr: i32,
+    screen_width: i32,
+    screen_height: i32,
     
-    lhz: i32,
-    lia: i32,
-    jcu: u64,
+    last_tap_x: i32,
+    last_tap_y: i32,
+    last_tap_time_us: u64,
     
-    hqk: bool,
+    long_press_fired: bool,
     
-    hnx: i32,
+    initial_two_finger_dist: i32,
     
-    jjw: i32,
-    jjx: i32,
+    prev_two_finger_mid_x: i32,
+    prev_two_finger_mid_y: i32,
 }
 
 impl GestureRecognizer {
     
-    pub const fn new(anv: i32, akr: i32) -> Self {
+    pub const fn new(screen_width: i32, screen_height: i32) -> Self {
         Self {
-            g: RecogState::Cv,
-            axx: [FingerTracker::new(); GU_],
-            cxy: 0,
-            anv,
-            akr,
-            lhz: 0,
-            lia: 0,
-            jcu: 0,
-            hqk: false,
-            hnx: 0,
-            jjw: 0,
-            jjx: 0,
+            state: RecogState::Idle,
+            fingers: [FingerTracker::new(); HL_],
+            finger_count: 0,
+            screen_width,
+            screen_height,
+            last_tap_x: 0,
+            last_tap_y: 0,
+            last_tap_time_us: 0,
+            long_press_fired: false,
+            initial_two_finger_dist: 0,
+            prev_two_finger_mid_x: 0,
+            prev_two_finger_mid_y: 0,
         }
     }
 
     
-    pub fn dbw(&mut self, z: i32, ac: i32) {
-        self.anv = z;
-        self.akr = ac;
+    pub fn set_screen_size(&mut self, width: i32, height: i32) {
+        self.screen_width = width;
+        self.screen_height = height;
     }
 
     
     
     
     
-    pub fn process(&mut self, id: &Zd) -> Option<GestureEvent> {
-        let nl = &id.nl;
+    pub fn process(&mut self, event: &Kv) -> Option<GestureEvent> {
+        let point = &event.point;
 
-        match nl.ib {
-            TouchPhase::Fm => self.uyc(nl),
-            TouchPhase::Avu => self.uyd(nl),
-            TouchPhase::Ek | TouchPhase::Aai => self.uye(nl),
+        match point.phase {
+            TouchPhase::Down => self.on_finger_down(point),
+            TouchPhase::Moved => self.on_finger_move(point),
+            TouchPhase::Up | TouchPhase::Cancelled => self.on_finger_up(point),
         }
     }
 
     
-    pub fn vml(&mut self, fjl: &mut GestureBuffer) {
-        while let Some(id) = touch::dks() {
-            if let Some(at) = self.process(&id) {
-                fjl.push(at);
+    pub fn process_all(&mut self, gestures: &mut GestureBuffer) {
+        while let Some(event) = touch::bir() {
+            if let Some(g) = self.process(&event) {
+                gestures.push(g);
             }
         }
 
         
-        if let Some(at) = self.qzd() {
-            fjl.push(at);
+        if let Some(g) = self.check_long_press() {
+            gestures.push(g);
         }
     }
 
     
-    pub fn qzd(&mut self) -> Option<GestureEvent> {
-        if self.g == RecogState::Ans
-            && self.cxy == 1
-            && !self.hqk
+    pub fn check_long_press(&mut self) -> Option<GestureEvent> {
+        if self.state == RecogState::Tracking
+            && self.finger_count == 1
+            && !self.long_press_fired
         {
             
-            let (jf, sc, wte, ulb) = match self.ssw() {
-                Some(bb) => (bb.aua, bb.bbi, bb.gtd, bb.gmg),
+            let (dg, hj, start_t, max_disp) = match self.find_active_finger() {
+                Some(f) => (f.current_x, f.current_y, f.start_time_us, f.max_displacement),
                 None => return None,
             };
-            let iu = crate::gui::engine::awf();
-            let avr = iu.ao(wte);
+            let cy = crate::gui::engine::yy();
+            let yq = cy.saturating_sub(start_t);
 
-            if avr >= CEV_
-                && ulb < CEU_
+            if yq >= CIE_
+                && max_disp < CID_
             {
-                self.hqk = true;
-                self.g = RecogState::Axa;
-                return Some(GestureEvent::Blp {
-                    b: jf,
-                    c: sc,
+                self.long_press_fired = true;
+                self.state = RecogState::PossibleLongPress;
+                return Some(GestureEvent::LongPress {
+                    x: dg,
+                    y: hj,
                 });
             }
         }
@@ -342,47 +342,47 @@ impl GestureRecognizer {
     
     
 
-    fn uyc(&mut self, nl: &TouchPoint) -> Option<GestureEvent> {
+    fn on_finger_down(&mut self, point: &TouchPoint) -> Option<GestureEvent> {
         
-        let gk = self.stg()?;
+        let slot = self.find_free_slot()?;
 
-        self.axx[gk] = FingerTracker {
-            gh: true,
-            ad: nl.ad,
-            ql: nl.b,
-            vc: nl.c,
-            aua: nl.b,
-            bbi: nl.c,
-            gtd: nl.bsp,
-            gkw: nl.bsp,
-            gmg: 0,
+        self.fingers[slot] = FingerTracker {
+            active: true,
+            id: point.id,
+            start_x: point.x,
+            start_y: point.y,
+            current_x: point.x,
+            current_y: point.y,
+            start_time_us: point.timestamp_us,
+            last_time_us: point.timestamp_us,
+            max_displacement: 0,
         };
 
-        self.cxy += 1;
+        self.finger_count += 1;
 
         
-        match self.cxy {
+        match self.finger_count {
             1 => {
-                self.g = RecogState::Ans;
-                self.hqk = false;
+                self.state = RecogState::Tracking;
+                self.long_press_fired = false;
             }
             2 => {
-                self.g = RecogState::Baa;
+                self.state = RecogState::TwoFinger;
                 
-                self.hnx = self.pwo();
-                let (hl, ir) = self.mnl();
-                self.jjw = hl;
-                self.jjx = ir;
+                self.initial_two_finger_dist = self.two_finger_distance();
+                let (cg, cr) = self.two_finger_midpoint();
+                self.prev_two_finger_mid_x = cg;
+                self.prev_two_finger_mid_y = cr;
             }
             3 => {
-                self.g = RecogState::Azv;
+                self.state = RecogState::ThreeFinger;
             }
             _ => {}
         }
 
-        Some(GestureEvent::Bum {
-            b: nl.b,
-            c: nl.c,
+        Some(GestureEvent::TouchDown {
+            x: point.x,
+            y: point.y,
         })
     }
 
@@ -390,50 +390,50 @@ impl GestureRecognizer {
     
     
 
-    fn uyd(&mut self, nl: &TouchPoint) -> Option<GestureEvent> {
+    fn on_finger_move(&mut self, point: &TouchPoint) -> Option<GestureEvent> {
         
-        let gk = self.nul(nl.ad)?;
-        let acz = &mut self.axx[gk];
-        acz.aua = nl.b;
-        acz.bbi = nl.c;
-        acz.gkw = nl.bsp;
-        let aor = acz.hgj();
-        if aor > acz.gmg {
-            acz.gmg = aor;
+        let slot = self.find_slot_by_id(point.id)?;
+        let oj = &mut self.fingers[slot];
+        oj.current_x = point.x;
+        oj.current_y = point.y;
+        oj.last_time_us = point.timestamp_us;
+        let uv = oj.displacement();
+        if uv > oj.max_displacement {
+            oj.max_displacement = uv;
         }
 
-        match self.g {
-            RecogState::Ans if self.cxy == 1 => {
+        match self.state {
+            RecogState::Tracking if self.finger_count == 1 => {
                 
-                Some(GestureEvent::Bun {
-                    b: nl.b,
-                    c: nl.c,
+                Some(GestureEvent::TouchMove {
+                    x: point.x,
+                    y: point.y,
                 })
             }
-            RecogState::Axa => {
+            RecogState::PossibleLongPress => {
                 
-                let acz = &self.axx[gk];
-                self.g = RecogState::Arg;
-                Some(GestureEvent::Arf {
-                    b: nl.b,
-                    c: nl.c,
-                    ql: acz.ql,
-                    vc: acz.vc,
+                let oj = &self.fingers[slot];
+                self.state = RecogState::Dragging;
+                Some(GestureEvent::Drag {
+                    x: point.x,
+                    y: point.y,
+                    start_x: oj.start_x,
+                    start_y: oj.start_y,
                 })
             }
-            RecogState::Arg => {
-                let acz = &self.axx[gk];
-                Some(GestureEvent::Arf {
-                    b: nl.b,
-                    c: nl.c,
-                    ql: acz.ql,
-                    vc: acz.vc,
+            RecogState::Dragging => {
+                let oj = &self.fingers[slot];
+                Some(GestureEvent::Drag {
+                    x: point.x,
+                    y: point.y,
+                    start_x: oj.start_x,
+                    start_y: oj.start_y,
                 })
             }
-            RecogState::Baa => {
-                self.tll()
+            RecogState::TwoFinger => {
+                self.handle_two_finger_move()
             }
-            RecogState::Azv => {
+            RecogState::ThreeFinger => {
                 
                 None
             }
@@ -445,56 +445,56 @@ impl GestureRecognizer {
     
     
 
-    fn uye(&mut self, nl: &TouchPoint) -> Option<GestureEvent> {
-        let gk = self.nul(nl.ad)
-            .or_else(|| self.ssy());
+    fn on_finger_up(&mut self, point: &TouchPoint) -> Option<GestureEvent> {
+        let slot = self.find_slot_by_id(point.id)
+            .or_else(|| self.find_any_active_slot());
 
-        let gk = match gk {
-            Some(e) => e,
+        let slot = match slot {
+            Some(j) => j,
             None => {
-                self.apa();
-                return Some(GestureEvent::Qy { b: nl.b, c: nl.c });
+                self.reset();
+                return Some(GestureEvent::TouchUp { x: point.x, y: point.y });
             }
         };
 
         
-        self.axx[gk].aua = nl.b;
-        self.axx[gk].bbi = nl.c;
-        self.axx[gk].gkw = nl.bsp;
+        self.fingers[slot].current_x = point.x;
+        self.fingers[slot].current_y = point.y;
+        self.fingers[slot].last_time_us = point.timestamp_us;
 
-        let acz = self.axx[gk];
-        let gesture = match self.g {
-            RecogState::Ans if self.cxy == 1 => {
-                self.raz(&acz, nl.bsp)
+        let oj = self.fingers[slot];
+        let gesture = match self.state {
+            RecogState::Tracking if self.finger_count == 1 => {
+                self.classify_single_finger_lift(&oj, point.timestamp_us)
             }
-            RecogState::Axa => {
+            RecogState::PossibleLongPress => {
                 
-                Some(GestureEvent::Qy { b: nl.b, c: nl.c })
+                Some(GestureEvent::TouchUp { x: point.x, y: point.y })
             }
-            RecogState::Arg => {
-                Some(GestureEvent::Qy { b: nl.b, c: nl.c })
+            RecogState::Dragging => {
+                Some(GestureEvent::TouchUp { x: point.x, y: point.y })
             }
-            RecogState::Baa if self.cxy <= 2 => {
+            RecogState::TwoFinger if self.finger_count <= 2 => {
                 
-                Some(GestureEvent::Qy { b: nl.b, c: nl.c })
+                Some(GestureEvent::TouchUp { x: point.x, y: point.y })
             }
-            RecogState::Azv if self.cxy <= 3 => {
-                self.rba()
+            RecogState::ThreeFinger if self.finger_count <= 3 => {
+                self.classify_three_finger_lift()
             }
             _ => {
-                Some(GestureEvent::Qy { b: nl.b, c: nl.c })
+                Some(GestureEvent::TouchUp { x: point.x, y: point.y })
             }
         };
 
         
-        self.axx[gk].gh = false;
-        if self.cxy > 0 {
-            self.cxy -= 1;
+        self.fingers[slot].active = false;
+        if self.finger_count > 0 {
+            self.finger_count -= 1;
         }
 
         
-        if self.cxy == 0 {
-            self.g = RecogState::Cv;
+        if self.finger_count == 0 {
+            self.state = RecogState::Idle;
         }
 
         gesture
@@ -504,172 +504,172 @@ impl GestureRecognizer {
     
     
 
-    fn raz(&mut self, acz: &FingerTracker, awf: u64) -> Option<GestureEvent> {
-        let avr = awf.ao(acz.gtd);
-        let dx = acz.aua - acz.ql;
-        let bg = acz.bbi - acz.vc;
-        let hgj = dx.gp() + bg.gp();
+    fn classify_single_finger_lift(&mut self, oj: &FingerTracker, yy: u64) -> Option<GestureEvent> {
+        let yq = yy.saturating_sub(oj.start_time_us);
+        let dx = oj.current_x - oj.start_x;
+        let ad = oj.current_y - oj.start_y;
+        let displacement = dx.abs() + ad.abs();
 
         
-        if avr < CXJ_ && hgj < CXI_ {
+        if yq < DBB_ && displacement < DBA_ {
             
-            let wow = awf.ao(self.jcu);
-            let xas = (acz.aua - self.lhz).gp()
-                + (acz.bbi - self.lia).gp();
+            let otf = yy.saturating_sub(self.last_tap_time_us);
+            let pdc = (oj.current_x - self.last_tap_x).abs()
+                + (oj.current_y - self.last_tap_y).abs();
 
-            self.lhz = acz.aua;
-            self.lia = acz.bbi;
-            self.jcu = awf;
+            self.last_tap_x = oj.current_x;
+            self.last_tap_y = oj.current_y;
+            self.last_tap_time_us = yy;
 
-            if wow < BSD_ && xas < BSC_ {
+            if otf < BUZ_ && pdc < BUY_ {
                 
-                self.jcu = 0;
-                return Some(GestureEvent::Bey {
-                    b: acz.aua,
-                    c: acz.bbi,
+                self.last_tap_time_us = 0;
+                return Some(GestureEvent::DoubleTap {
+                    x: oj.current_x,
+                    y: oj.current_y,
                 });
             }
 
-            return Some(GestureEvent::Bty {
-                b: acz.aua,
-                c: acz.bbi,
+            return Some(GestureEvent::Tap {
+                x: oj.current_x,
+                y: oj.current_y,
             });
         }
 
         
-        if hgj >= LD_ {
-            let shn = (avr / 10_000).am(1) as i32; 
-            let qm = (hgj * 100) / shn; 
+        if displacement >= LX_ {
+            let lms = (yq / 10_000).max(1) as i32; 
+            let velocity = (displacement * 100) / lms; 
 
-            if qm >= CUT_ {
+            if velocity >= CYL_ {
                 
-                if let Some(siv) = self.qys(acz, dx, bg) {
-                    return Some(siv);
+                if let Some(edge_gesture) = self.check_edge_swipe(oj, dx, ad) {
+                    return Some(edge_gesture);
                 }
 
                 
-                let sz = if dx.gp() > bg.gp() {
-                    if dx > 0 { SwipeDirection::Ca } else { SwipeDirection::Ap }
+                let direction = if dx.abs() > ad.abs() {
+                    if dx > 0 { SwipeDirection::Right } else { SwipeDirection::Left }
                 } else {
-                    if bg > 0 { SwipeDirection::Fm } else { SwipeDirection::Ek }
+                    if ad > 0 { SwipeDirection::Down } else { SwipeDirection::Up }
                 };
 
-                return Some(GestureEvent::Btt {
-                    sz,
-                    ql: acz.ql,
-                    vc: acz.vc,
-                    cqe: acz.aua,
-                    hic: acz.bbi,
-                    qm,
+                return Some(GestureEvent::Swipe {
+                    direction,
+                    start_x: oj.start_x,
+                    start_y: oj.start_y,
+                    awy: oj.current_x,
+                    doq: oj.current_y,
+                    velocity,
                 });
             }
         }
 
         
-        Some(GestureEvent::Qy {
-            b: acz.aua,
-            c: acz.bbi,
+        Some(GestureEvent::TouchUp {
+            x: oj.current_x,
+            y: oj.current_y,
         })
     }
 
-    fn qys(&self, acz: &FingerTracker, dx: i32, bg: i32) -> Option<GestureEvent> {
+    fn check_edge_swipe(&self, oj: &FingerTracker, dx: i32, ad: i32) -> Option<GestureEvent> {
         
-        if acz.vc >= self.akr - SY_ && bg < -LD_ {
-            return Some(GestureEvent::Abp {
-                atf: EdgeOrigin::Hk,
-                li: bg.gp(),
+        if oj.start_y >= self.screen_height - UE_ && ad < -LX_ {
+            return Some(GestureEvent::EdgeSwipe {
+                origin: EdgeOrigin::Bottom,
+                progress: ad.abs(),
             });
         }
 
         
-        if acz.vc <= SY_ && bg > LD_ {
-            return Some(GestureEvent::Abp {
-                atf: EdgeOrigin::Jd,
-                li: bg.gp(),
+        if oj.start_y <= UE_ && ad > LX_ {
+            return Some(GestureEvent::EdgeSwipe {
+                origin: EdgeOrigin::Top,
+                progress: ad.abs(),
             });
         }
 
         
-        if acz.ql <= SY_ && dx > LD_ {
-            return Some(GestureEvent::Abp {
-                atf: EdgeOrigin::Ap,
-                li: dx.gp(),
+        if oj.start_x <= UE_ && dx > LX_ {
+            return Some(GestureEvent::EdgeSwipe {
+                origin: EdgeOrigin::Left,
+                progress: dx.abs(),
             });
         }
 
         
-        if acz.ql >= self.anv - SY_ && dx < -LD_ {
-            return Some(GestureEvent::Abp {
-                atf: EdgeOrigin::Ca,
-                li: dx.gp(),
+        if oj.start_x >= self.screen_width - UE_ && dx < -LX_ {
+            return Some(GestureEvent::EdgeSwipe {
+                origin: EdgeOrigin::Right,
+                progress: dx.abs(),
             });
         }
 
         None
     }
 
-    fn tll(&mut self) -> Option<GestureEvent> {
-        let (yqd, nsp) = self.kyy()?;
+    fn handle_two_finger_move(&mut self) -> Option<GestureEvent> {
+        let (f0, f1) = self.get_two_active_fingers()?;
 
-        let nia = self.pwo();
-        let rza = nia - self.hnx;
+        let hpk = self.two_finger_distance();
+        let lfx = hpk - self.initial_two_finger_dist;
 
         
-        if rza.gp() >= CJQ_ {
-            let (cx, ae) = self.mnl();
+        if lfx.abs() >= CMZ_ {
+            let (cx, u) = self.two_finger_midpoint();
             
-            let bv = if self.hnx > 0 {
-                (nia * 100) / self.hnx.am(1)
+            let scale = if self.initial_two_finger_dist > 0 {
+                (hpk * 100) / self.initial_two_finger_dist.max(1)
             } else {
                 100
             };
-            return Some(GestureEvent::Boz {
-                yv: cx,
-                uq: ae,
-                bv,
+            return Some(GestureEvent::Pinch {
+                center_x: cx,
+                center_y: u,
+                scale,
             });
         }
 
         
-        let (hl, ir) = self.mnl();
-        let pgq = hl - self.jjw;
-        let pgr = ir - self.jjx;
+        let (cg, cr) = self.two_finger_midpoint();
+        let jdn = cg - self.prev_two_finger_mid_x;
+        let jdo = cr - self.prev_two_finger_mid_y;
 
-        if pgq.gp() >= BFB_ || pgr.gp() >= BFB_ {
-            self.jjw = hl;
-            self.jjx = ir;
-            return Some(GestureEvent::Yq {
-                iqw: pgq,
-                iqx: pgr,
+        if jdn.abs() >= BHF_ || jdo.abs() >= BHF_ {
+            self.prev_two_finger_mid_x = cg;
+            self.prev_two_finger_mid_y = cr;
+            return Some(GestureEvent::Scroll {
+                delta_x: jdn,
+                delta_y: jdo,
             });
         }
 
         None
     }
 
-    fn rba(&self) -> Option<GestureEvent> {
+    fn classify_three_finger_lift(&self) -> Option<GestureEvent> {
         
-        let mut jtq = 0i32;
-        let mut az = 0;
-        for acz in &self.axx {
-            if acz.gh {
-                jtq += acz.aua - acz.ql;
-                az += 1;
+        let mut fde = 0i32;
+        let mut count = 0;
+        for oj in &self.fingers {
+            if oj.active {
+                fde += oj.current_x - oj.start_x;
+                count += 1;
             }
         }
-        if az == 0 { return None; }
+        if count == 0 { return None; }
 
-        let mxb = jtq / az;
+        let hgf = fde / count;
 
-        if mxb.gp() >= LD_ {
-            let sz = if mxb > 0 {
-                SwipeDirection::Ca
+        if hgf.abs() >= LX_ {
+            let direction = if hgf > 0 {
+                SwipeDirection::Right
             } else {
-                SwipeDirection::Ap
+                SwipeDirection::Left
             };
-            Some(GestureEvent::Bui { sz })
+            Some(GestureEvent::ThreeFingerSwipe { direction })
         } else {
-            Some(GestureEvent::Qy { b: 0, c: 0 })
+            Some(GestureEvent::TouchUp { x: 0, y: 0 })
         }
     }
 
@@ -677,80 +677,80 @@ impl GestureRecognizer {
     
     
 
-    fn stg(&self) -> Option<usize> {
-        for (a, bb) in self.axx.iter().cf() {
-            if !bb.gh {
-                return Some(a);
+    fn find_free_slot(&self) -> Option<usize> {
+        for (i, f) in self.fingers.iter().enumerate() {
+            if !f.active {
+                return Some(i);
             }
         }
         None
     }
 
-    fn nul(&self, ad: u16) -> Option<usize> {
-        for (a, bb) in self.axx.iter().cf() {
-            if bb.gh && bb.ad == ad {
-                return Some(a);
+    fn find_slot_by_id(&self, id: u16) -> Option<usize> {
+        for (i, f) in self.fingers.iter().enumerate() {
+            if f.active && f.id == id {
+                return Some(i);
             }
         }
         None
     }
 
-    fn ssy(&self) -> Option<usize> {
-        for (a, bb) in self.axx.iter().cf() {
-            if bb.gh {
-                return Some(a);
+    fn find_any_active_slot(&self) -> Option<usize> {
+        for (i, f) in self.fingers.iter().enumerate() {
+            if f.active {
+                return Some(i);
             }
         }
         None
     }
 
-    fn ssw(&self) -> Option<&FingerTracker> {
-        self.axx.iter().du(|bb| bb.gh)
+    fn find_active_finger(&self) -> Option<&FingerTracker> {
+        self.fingers.iter().find(|f| f.active)
     }
 
-    fn kyy(&self) -> Option<(usize, usize)> {
-        let mut aig = [0usize; 2];
-        let mut az = 0;
-        for (a, bb) in self.axx.iter().cf() {
-            if bb.gh && az < 2 {
-                aig[az] = a;
-                az += 1;
+    fn get_two_active_fingers(&self) -> Option<(usize, usize)> {
+        let mut nj = [0usize; 2];
+        let mut count = 0;
+        for (i, f) in self.fingers.iter().enumerate() {
+            if f.active && count < 2 {
+                nj[count] = i;
+                count += 1;
             }
         }
-        if az == 2 {
-            Some((aig[0], aig[1]))
+        if count == 2 {
+            Some((nj[0], nj[1]))
         } else {
             None
         }
     }
 
-    fn pwo(&self) -> i32 {
-        if let Some((q, o)) = self.kyy() {
-            let dx = self.axx[q].aua - self.axx[o].aua;
-            let bg = self.axx[q].bbi - self.axx[o].bbi;
+    fn two_finger_distance(&self) -> i32 {
+        if let Some((a, b)) = self.get_two_active_fingers() {
+            let dx = self.fingers[a].current_x - self.fingers[b].current_x;
+            let ad = self.fingers[a].current_y - self.fingers[b].current_y;
             
-            hpe((dx * dx + bg * bg) as u32) as i32
+            dsw((dx * dx + ad * ad) as u32) as i32
         } else {
             0
         }
     }
 
-    fn mnl(&self) -> (i32, i32) {
-        if let Some((q, o)) = self.kyy() {
-            let hl = (self.axx[q].aua + self.axx[o].aua) / 2;
-            let ir = (self.axx[q].bbi + self.axx[o].bbi) / 2;
-            (hl, ir)
+    fn two_finger_midpoint(&self) -> (i32, i32) {
+        if let Some((a, b)) = self.get_two_active_fingers() {
+            let cg = (self.fingers[a].current_x + self.fingers[b].current_x) / 2;
+            let cr = (self.fingers[a].current_y + self.fingers[b].current_y) / 2;
+            (cg, cr)
         } else {
             (0, 0)
         }
     }
 
-    fn apa(&mut self) {
-        self.g = RecogState::Cv;
-        self.cxy = 0;
-        self.hqk = false;
-        for bb in &mut self.axx {
-            bb.gh = false;
+    fn reset(&mut self) {
+        self.state = RecogState::Idle;
+        self.finger_count = 0;
+        self.long_press_fired = false;
+        for f in &mut self.fingers {
+            f.active = false;
         }
     }
 }
@@ -761,59 +761,59 @@ impl GestureRecognizer {
 
 
 pub struct GestureBuffer {
-    fjl: [Option<GestureEvent>; 8],
-    az: usize,
+    gestures: [Option<GestureEvent>; 8],
+    count: usize,
 }
 
 impl GestureBuffer {
     pub const fn new() -> Self {
         Self {
-            fjl: [None; 8],
-            az: 0,
+            gestures: [None; 8],
+            count: 0,
         }
     }
 
     pub fn push(&mut self, gesture: GestureEvent) {
-        if self.az < 8 {
-            self.fjl[self.az] = Some(gesture);
-            self.az += 1;
+        if self.count < 8 {
+            self.gestures[self.count] = Some(gesture);
+            self.count += 1;
         }
     }
 
     pub fn len(&self) -> usize {
-        self.az
+        self.count
     }
 
     pub fn is_empty(&self) -> bool {
-        self.az == 0
+        self.count == 0
     }
 
-    pub fn iter(&self) -> Asx<'_> {
-        Asx {
-            k: self,
-            w: 0,
+    pub fn iter(&self) -> Sq<'_> {
+        Sq {
+            buf: self,
+            idx: 0,
         }
     }
 
     pub fn clear(&mut self) {
-        self.az = 0;
-        self.fjl = [None; 8];
+        self.count = 0;
+        self.gestures = [None; 8];
     }
 }
 
-pub struct Asx<'a> {
-    k: &'a GestureBuffer,
-    w: usize,
+pub struct Sq<'a> {
+    buf: &'a GestureBuffer,
+    idx: usize,
 }
 
-impl<'a> Iterator for Asx<'a> {
+impl<'a> Iterator for Sq<'a> {
     type Item = &'a GestureEvent;
     fn next(&mut self) -> Option<Self::Item> {
-        while self.w < self.k.az {
-            let a = self.w;
-            self.w += 1;
-            if let Some(ref at) = self.k.fjl[a] {
-                return Some(at);
+        while self.idx < self.buf.count {
+            let i = self.idx;
+            self.idx += 1;
+            if let Some(ref g) = self.buf.gestures[i] {
+                return Some(g);
             }
         }
         None
@@ -825,13 +825,13 @@ impl<'a> Iterator for Asx<'a> {
 
 
 
-fn hpe(bo: u32) -> u32 {
-    if bo == 0 { return 0; }
-    let mut b = bo;
-    let mut c = (b + 1) / 2;
-    while c < b {
-        b = c;
-        c = (b + bo / b) / 2;
+fn dsw(ae: u32) -> u32 {
+    if ae == 0 { return 0; }
+    let mut x = ae;
+    let mut y = (x + 1) / 2;
+    while y < x {
+        x = y;
+        y = (x + ae / x) / 2;
     }
-    b
+    x
 }

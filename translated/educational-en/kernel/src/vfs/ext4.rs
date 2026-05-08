@@ -86,7 +86,7 @@ struct Ext4SuperBlock {
     s_mtime: u32,                // 0x2C
     s_wtime: u32,                // 0x30
     s_mnt_count: u16,            // 0x34
-    s_maximum_mnt_count: u16,        // 0x36
+    s_max_mnt_count: u16,        // 0x36
     s_magic: u16,                // 0x38
     s_state: u16,                // 0x3A
     s_errors: u16,               // 0x3C
@@ -100,7 +100,7 @@ struct Ext4SuperBlock {
     // -- EXT4_DYNAMIC_REV fields --
     s_first_ino: u32,            // 0x54
     s_inode_size: u16,           // 0x58
-    s_block_group_number: u16,       // 0x5A
+    s_block_group_nr: u16,       // 0x5A
     s_feature_compat: u32,       // 0x5C
     s_feature_incompat: u32,     // 0x60
     s_feature_ro_compat: u32,    // 0x64
@@ -165,7 +165,7 @@ struct Ext4Inode {
 struct Ext4ExtentHeader {
     eh_magic: u16,      // 0xF30A
     eh_entries: u16,     // Number of valid entries
-    eh_maximum: u16,         // Capacity of entries
+    eh_max: u16,         // Capacity of entries
     eh_depth: u16,       // 0 = leaf, >0 = internal node
     eh_generation: u32,  // Generation (not used for read)
 }
@@ -176,7 +176,7 @@ struct Ext4ExtentHeader {
 #[derive(Clone, Copy)]
 struct Ext4Extent {
     ee_block: u32,       // First file block covered
-    ee_length: u16,         // Number of blocks covered
+    ee_len: u16,         // Number of blocks covered
     ee_start_hi: u16,    // High 16 bits of physical block
     ee_start_lo: u32,    // Low 32 bits of physical block
 }
@@ -197,7 +197,7 @@ struct Ext4ExtentIndex {
 struct Ext4DirectoryEntry2 {
     inode: u32,          // Inode number
     rec_length: u16,        // Total entry length
-    name_length: u8,        // Name length
+    name_len: u8,        // Name length
     file_type: u8,       // File type
     // name follows (name_len bytes)
 }
@@ -217,7 +217,7 @@ struct Ext4FilesystemInner {
     inodes_per_group: u32,
     blocks_per_group: u32,
     first_data_block: u32,
-    group_descriptor_size: u32,
+    group_desc_size: u32,
     total_groups: u32,
     device: Arc<dyn BlockDevice>,
 }
@@ -225,26 +225,26 @@ struct Ext4FilesystemInner {
 // Implementation block — defines methods for the type above.
 impl Ext4FilesystemInner {
     /// Read raw bytes from device by byte offset
-    fn read_bytes(&self, byte_offset: u64, buffer: &mut [u8]) -> Result<(), ()> {
+    fn read_bytes(&self, byte_offset: u64, buf: &mut [u8]) -> Result<(), ()> {
         let sector_size = self.device.sector_size() as u64;
         let start_sector = byte_offset / sector_size;
         let offset_in_sector = (byte_offset % sector_size) as usize;
         
         // Calculate how many sectors we need
-        let total_bytes = offset_in_sector + buffer.len();
+        let total_bytes = offset_in_sector + buf.len();
         let number_sectors = (total_bytes + sector_size as usize - 1) / sector_size as usize;
         
         let mut sector_buffer = vec![0u8; sector_size as usize];
-        let mut remaining = buffer.len();
+        let mut remaining = buf.len();
         let mut buffer_offset = 0usize;
         
         for i in 0..number_sectors {
             self.device.read_sector(start_sector + i as u64, &mut sector_buffer)?;
             
             let source_start = if i == 0 { offset_in_sector } else { 0 };
-            let copy_length = (sector_size as usize - source_start).minimum(remaining);
+            let copy_length = (sector_size as usize - source_start).min(remaining);
             
-            buffer[buffer_offset..buffer_offset + copy_length]
+            buf[buffer_offset..buffer_offset + copy_length]
                 .copy_from_slice(&sector_buffer[source_start..source_start + copy_length]);
             
             buffer_offset += copy_length;
@@ -255,9 +255,9 @@ impl Ext4FilesystemInner {
     }
     
     /// Read a full block
-    fn read_block(&self, block_number: u64, buffer: &mut [u8]) -> Result<(), ()> {
-        let byte_offset = block_number * self.block_size as u64;
-        self.read_bytes(byte_offset, buffer)
+    fn read_block(&self, block_num: u64, buf: &mut [u8]) -> Result<(), ()> {
+        let byte_offset = block_num * self.block_size as u64;
+        self.read_bytes(byte_offset, buf)
     }
     
     /// Get inode table block for a given block group
@@ -265,14 +265,14 @@ impl Ext4FilesystemInner {
         // Block Group Descriptor Table starts at block after superblock
         let gdt_block = if self.block_size == 1024 { 2 } else { 1 };
         let gdt_offset = gdt_block as u64 * self.block_size as u64
-            + group as u64 * self.group_descriptor_size as u64;
+            + group as u64 * self.group_desc_size as u64;
         
         let mut descriptor_buffer = [0u8; 64];
-        let read_length = (self.group_descriptor_size as usize).minimum(64);
+        let read_length = (self.group_desc_size as usize).min(64);
         self.read_bytes(gdt_offset, &mut descriptor_buffer[..read_length])?;
         
         let lo = u32::from_le_bytes([descriptor_buffer[8], descriptor_buffer[9], descriptor_buffer[10], descriptor_buffer[11]]);
-        let hi = if self.group_descriptor_size >= 64 {
+        let hi = if self.group_desc_size >= 64 {
             u32::from_le_bytes([descriptor_buffer[0x28], descriptor_buffer[0x29], descriptor_buffer[0x2A], descriptor_buffer[0x2B]])
         } else {
             0
@@ -292,11 +292,11 @@ impl Ext4FilesystemInner {
         let inode_offset = inode_table * self.block_size as u64
             + index as u64 * self.inode_size as u64;
         
-        let mut buffer = [0u8; 128];
-        self.read_bytes(inode_offset, &mut buffer)?;
+        let mut buf = [0u8; 128];
+        self.read_bytes(inode_offset, &mut buf)?;
         
         Ok(        // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::read_unaligned(buffer.as_pointer() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe { core::ptr::read_unaligned(buf.as_ptr() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const Ext4Inode) })
     }
     
@@ -317,7 +317,7 @@ const Ext4Inode) })
         let raw = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
             core::slice::from_raw_parts(
-                inode.i_block.as_pointer() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+                inode.i_block.as_ptr() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u8,
                 60, // 15 * 4 bytes
             )
@@ -331,7 +331,7 @@ const u8,
         if data.len() < 12 || depth_limit == 0 { return Err(()); }
         
         let header = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::read_unaligned(data.as_pointer() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe { core::ptr::read_unaligned(data.as_ptr() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const Ext4ExtentHeader) };
         
         if header.eh_magic != 0xF30A {
@@ -348,12 +348,12 @@ const Ext4ExtentHeader) };
                 
                 let extent = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-                    core::ptr::read_unaligned(data[offset..].as_pointer() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+                    core::ptr::read_unaligned(data[offset..].as_ptr() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const Ext4Extent)
                 };
                 
                 let start = extent.ee_block;
-                let len = extent.ee_length as u32;
+                let len = extent.ee_len as u32;
                 
                 if logical_block >= start && logical_block < start + len {
                     let physical_start = (extent.ee_start_hi as u64) << 32
@@ -371,15 +371,15 @@ const Ext4Extent)
                 let offset = 12 + i * 12;
                 if offset + 12 > data.len() { break; }
                 
-                let index = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+                let idx = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-                    core::ptr::read_unaligned(data[offset..].as_pointer() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+                    core::ptr::read_unaligned(data[offset..].as_ptr() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const Ext4ExtentIndex)
                 };
                 
-                if logical_block >= index.ei_block {
-                    let child_block = (index.ei_leaf_hi as u64) << 32
-                        | index.ei_leaf_lo as u64;
+                if logical_block >= idx.ei_block {
+                    let child_block = (idx.ei_leaf_hi as u64) << 32
+                        | idx.ei_leaf_lo as u64;
                     target_index = Some((i, child_block));
                 }
             }
@@ -395,13 +395,13 @@ const Ext4ExtentIndex)
     }
     
     /// Read file data at a given file offset into buffer
-    fn read_file_data(&self, inode: &Ext4Inode, file_offset: u64, buffer: &mut [u8]) -> Result<usize, ()> {
+    fn read_file_data(&self, inode: &Ext4Inode, file_offset: u64, buf: &mut [u8]) -> Result<usize, ()> {
         let file_size = self.inode_size(inode);
         if file_offset >= file_size {
             return Ok(0);
         }
         
-        let read_length = ((file_size - file_offset) as usize).minimum(buffer.len());
+        let read_length = ((file_size - file_offset) as usize).min(buf.len());
         if read_length == 0 { return Ok(0); }
         
         let block_size = self.block_size as u64;
@@ -412,7 +412,7 @@ const Ext4ExtentIndex)
         while remaining > 0 {
             let logical_block = (offset / block_size) as u32;
             let offset_in_block = (offset % block_size) as usize;
-            let copy_length = (block_size as usize - offset_in_block).minimum(remaining);
+            let copy_length = (block_size as usize - offset_in_block).min(remaining);
             
             if (inode.i_flags & EXT4_EXTENTS_FL) != 0 {
                                 // Pattern matching — Rust's exhaustive branching construct.
@@ -420,12 +420,12 @@ match self.extent_lookup(inode, logical_block) {
                     Ok(physical_block) => {
                         let mut block_buffer = vec![0u8; block_size as usize];
                         self.read_block(physical_block, &mut block_buffer)?;
-                        buffer[buffer_offset..buffer_offset + copy_length]
+                        buf[buffer_offset..buffer_offset + copy_length]
                             .copy_from_slice(&block_buffer[offset_in_block..offset_in_block + copy_length]);
                     }
                     Err(()) => {
                         // Sparse hole: zero-fill
-                        for b in &mut buffer[buffer_offset..buffer_offset + copy_length] {
+                        for b in &mut buf[buffer_offset..buffer_offset + copy_length] {
                             *b = 0;
                         }
                     }
@@ -436,12 +436,12 @@ match self.extent_lookup(inode, logical_block) {
                     Some(physical_block) if physical_block != 0 => {
                         let mut block_buffer = vec![0u8; block_size as usize];
                         self.read_block(physical_block as u64, &mut block_buffer)?;
-                        buffer[buffer_offset..buffer_offset + copy_length]
+                        buf[buffer_offset..buffer_offset + copy_length]
                             .copy_from_slice(&block_buffer[offset_in_block..offset_in_block + copy_length]);
                     }
                     _ => {
                         // Sparse hole
-                        for b in &mut buffer[buffer_offset..buffer_offset + copy_length] {
+                        for b in &mut buf[buffer_offset..buffer_offset + copy_length] {
                             *b = 0;
                         }
                     }
@@ -472,9 +472,9 @@ match self.extent_lookup(inode, logical_block) {
             // Double indirect
             let dind_block = inode.i_block[13];
             if dind_block == 0 { return Some(0); }
-            let index = logical_block - 12 - ptrs_per_block;
-            let l1 = index / ptrs_per_block;
-            let l2 = index % ptrs_per_block;
+            let idx = logical_block - 12 - ptrs_per_block;
+            let l1 = idx / ptrs_per_block;
+            let l2 = idx % ptrs_per_block;
             let ind_block = self.read_indirect_entry(dind_block as u64, l1 as usize)?;
             if ind_block == 0 { return Some(0); }
             self.read_indirect_entry(ind_block as u64, l2 as usize)
@@ -487,13 +487,13 @@ match self.extent_lookup(inode, logical_block) {
     /// Read a single u32 entry from an indirect block
     fn read_indirect_entry(&self, block: u64, index: usize) -> Option<u32> {
         let byte_offset = block * self.block_size as u64 + (index * 4) as u64;
-        let mut buffer = [0u8; 4];
-        self.read_bytes(byte_offset, &mut buffer).ok()?;
-        Some(u32::from_le_bytes(buffer))
+        let mut buf = [0u8; 4];
+        self.read_bytes(byte_offset, &mut buf).ok()?;
+        Some(u32::from_le_bytes(buf))
     }
     
     /// Read directory entries from an inode
-    fn read_directory_entries(&self, ino: u32) -> Result<Vec<(u32, String, u8)>, ()> {
+    fn read_dir_entries(&self, ino: u32) -> Result<Vec<(u32, String, u8)>, ()> {
         let inode = self.read_inode(ino)?;
         let file_size = self.inode_size(&inode);
         
@@ -516,19 +516,19 @@ match self.extent_lookup(inode, logical_block) {
             let mut block_buffer = vec![0u8; block_size as usize];
             self.read_block(physical_block, &mut block_buffer)?;
             
-            let mut position = offset_in_block;
-            while position + 8 <= block_size as usize {
+            let mut pos = offset_in_block;
+            while pos + 8 <= block_size as usize {
                 let entry_inode = u32::from_le_bytes([
-                    block_buffer[position], block_buffer[position+1], block_buffer[position+2], block_buffer[position+3]
+                    block_buffer[pos], block_buffer[pos+1], block_buffer[pos+2], block_buffer[pos+3]
                 ]);
-                let rec_length = u16::from_le_bytes([block_buffer[position+4], block_buffer[position+5]]) as usize;
-                let name_length = block_buffer[position+6] as usize;
-                let file_type = block_buffer[position+7];
+                let rec_length = u16::from_le_bytes([block_buffer[pos+4], block_buffer[pos+5]]) as usize;
+                let name_len = block_buffer[pos+6] as usize;
+                let file_type = block_buffer[pos+7];
                 
                 if rec_length == 0 { break; } // Prevent infinite loop
                 
-                if entry_inode != 0 && name_length > 0 && position + 8 + name_length <= block_buffer.len() {
-                    let name = core::str::from_utf8(&block_buffer[position+8..position+8+name_length])
+                if entry_inode != 0 && name_len > 0 && pos + 8 + name_len <= block_buffer.len() {
+                    let name = core::str::from_utf8(&block_buffer[pos+8..pos+8+name_len])
                         .unwrap_or("")
                         .to_string();
                     if !name.is_empty() {
@@ -536,13 +536,13 @@ match self.extent_lookup(inode, logical_block) {
                     }
                 }
                 
-                position += rec_length;
+                pos += rec_length;
                 offset += rec_length as u64;
             }
             
             // If we haven't advanced to next block boundary, do so
             let next_block_offset = ((offset / block_size) + 1) * block_size;
-            if offset < next_block_offset && position >= block_size as usize {
+            if offset < next_block_offset && pos >= block_size as usize {
                 offset = next_block_offset;
             }
         }
@@ -551,8 +551,8 @@ match self.extent_lookup(inode, logical_block) {
     }
     
     /// Lookup a name in a directory, return inode number
-    fn directory_lookup(&self, directory_ino: u32, name: &str) -> Result<u32, ()> {
-        let entries = self.read_directory_entries(directory_ino)?;
+    fn dir_lookup(&self, dir_ino: u32, name: &str) -> Result<u32, ()> {
+        let entries = self.read_dir_entries(dir_ino)?;
         for (ino, entry_name, _ft) in &entries {
             if entry_name == name {
                 return Ok(*ino);
@@ -571,7 +571,7 @@ match self.extent_lookup(inode, logical_block) {
         let mut current = EXT4_ROOT_INO;
         for component in path.split('/') {
             if component.is_empty() || component == "." { continue; }
-            current = self.directory_lookup(current, component)?;
+            current = self.dir_lookup(current, component)?;
         }
         Ok(current)
     }
@@ -614,19 +614,19 @@ struct Ext4File {
 
 // Trait implementation — fulfills a behavioral contract.
 impl FileOperations for Ext4File {
-    fn read(&self, offset: u64, buffer: &mut [u8]) -> VfsResult<usize> {
+    fn read(&self, offset: u64, buf: &mut [u8]) -> VfsResult<usize> {
         let inner = self.fs.inner.lock();
-        let inode = inner.read_inode(self.ino).map_error(|_| VfsError::IoError)?;
-        inner.read_file_data(&inode, offset, buffer).map_error(|_| VfsError::IoError)
+        let inode = inner.read_inode(self.ino).map_err(|_| VfsError::IoError)?;
+        inner.read_file_data(&inode, offset, buf).map_err(|_| VfsError::IoError)
     }
     
-    fn write(&self, _offset: u64, _buffer: &[u8]) -> VfsResult<usize> {
+    fn write(&self, _offset: u64, _buf: &[u8]) -> VfsResult<usize> {
         Err(VfsError::ReadOnly) // Read-only filesystem
     }
     
-    fn status(&self) -> VfsResult<Stat> {
+    fn stat(&self) -> VfsResult<Stat> {
         let inner = self.fs.inner.lock();
-        let inode = inner.read_inode(self.ino).map_error(|_| VfsError::IoError)?;
+        let inode = inner.read_inode(self.ino).map_err(|_| VfsError::IoError)?;
         let file_size = inner.inode_size(&inode);
         let ft = inner.inode_file_type(&inode);
         
@@ -656,17 +656,17 @@ struct Ext4Directory {
 impl DirectoryOperations for Ext4Directory {
     fn lookup(&self, name: &str) -> VfsResult<Ino> {
         let inner = self.fs.inner.lock();
-        inner.directory_lookup(self.ino, name)
+        inner.dir_lookup(self.ino, name)
             .map(|ino| ino as u64)
-            .map_error(|_| VfsError::NotFound)
+            .map_err(|_| VfsError::NotFound)
     }
     
     fn readdir(&self) -> VfsResult<Vec<DirectoryEntry>> {
         let inner = self.fs.inner.lock();
-        let entries = inner.read_directory_entries(self.ino)
-            .map_error(|_| VfsError::IoError)?;
+        let entries = inner.read_dir_entries(self.ino)
+            .map_err(|_| VfsError::IoError)?;
         
-        Ok(entries.into_iterator()
+        Ok(entries.into_iter()
             .filter(|(_, name, _)| name != "." && name != "..")
             .map(|(ino, name, ft)| DirectoryEntry {
                 name,
@@ -684,9 +684,9 @@ impl DirectoryOperations for Ext4Directory {
         Err(VfsError::ReadOnly)
     }
     
-    fn status(&self) -> VfsResult<Stat> {
+    fn stat(&self) -> VfsResult<Stat> {
         let inner = self.fs.inner.lock();
-        let inode = inner.read_inode(self.ino).map_error(|_| VfsError::IoError)?;
+        let inode = inner.read_inode(self.ino).map_err(|_| VfsError::IoError)?;
         
         Ok(Stat {
             ino: self.ino as u64,
@@ -712,7 +712,7 @@ impl FileSystem for Ext4Filesystem {
     
     fn get_file(&self, ino: Ino) -> VfsResult<Arc<dyn FileOperations>> {
         let inner = self.inner.lock();
-        let inode = inner.read_inode(ino as u32).map_error(|_| VfsError::NotFound)?;
+        let inode = inner.read_inode(ino as u32).map_err(|_| VfsError::NotFound)?;
         let ft = inner.inode_file_type(&inode);
         if ft == FileType::Directory {
             return Err(VfsError::IsDirectory);
@@ -730,13 +730,13 @@ impl FileSystem for Ext4Filesystem {
             inodes_per_group: self.inner.lock().inodes_per_group,
             blocks_per_group: self.inner.lock().blocks_per_group,
             first_data_block: self.inner.lock().first_data_block,
-            group_descriptor_size: self.inner.lock().group_descriptor_size,
+            group_desc_size: self.inner.lock().group_desc_size,
         }))
     }
     
-    fn get_directory(&self, ino: Ino) -> VfsResult<Arc<dyn DirectoryOperations>> {
+    fn get_dir(&self, ino: Ino) -> VfsResult<Arc<dyn DirectoryOperations>> {
         let inner = self.inner.lock();
-        let inode = inner.read_inode(ino as u32).map_error(|_| VfsError::NotFound)?;
+        let inode = inner.read_inode(ino as u32).map_err(|_| VfsError::NotFound)?;
         let ft = inner.inode_file_type(&inode);
         if ft != FileType::Directory {
             return Err(VfsError::NotDirectory);
@@ -751,13 +751,13 @@ impl FileSystem for Ext4Filesystem {
             inodes_per_group: self.inner.lock().inodes_per_group,
             blocks_per_group: self.inner.lock().blocks_per_group,
             first_data_block: self.inner.lock().first_data_block,
-            group_descriptor_size: self.inner.lock().group_descriptor_size,
+            group_desc_size: self.inner.lock().group_desc_size,
         }))
     }
     
-    fn status(&self, ino: Ino) -> VfsResult<Stat> {
+    fn stat(&self, ino: Ino) -> VfsResult<Stat> {
         let inner = self.inner.lock();
-        let inode = inner.read_inode(ino as u32).map_error(|_| VfsError::NotFound)?;
+        let inode = inner.read_inode(ino as u32).map_err(|_| VfsError::NotFound)?;
         let file_size = inner.inode_size(&inode);
         let ft = inner.inode_file_type(&inode);
         
@@ -786,7 +786,7 @@ struct Ext4FileStandalone {
     inodes_per_group: u32,
     blocks_per_group: u32,
     first_data_block: u32,
-    group_descriptor_size: u32,
+    group_desc_size: u32,
 }
 
 // Implementation block — defines methods for the type above.
@@ -798,7 +798,7 @@ impl Ext4FileStandalone {
             inodes_per_group: self.inodes_per_group,
             blocks_per_group: self.blocks_per_group,
             first_data_block: self.first_data_block,
-            group_descriptor_size: self.group_descriptor_size,
+            group_desc_size: self.group_desc_size,
             total_groups: 0,
             device: self.device.clone(),
         }
@@ -807,19 +807,19 @@ impl Ext4FileStandalone {
 
 // Trait implementation — fulfills a behavioral contract.
 impl FileOperations for Ext4FileStandalone {
-    fn read(&self, offset: u64, buffer: &mut [u8]) -> VfsResult<usize> {
+    fn read(&self, offset: u64, buf: &mut [u8]) -> VfsResult<usize> {
         let inner = self.make_inner();
-        let inode = inner.read_inode(self.ino).map_error(|_| VfsError::IoError)?;
-        inner.read_file_data(&inode, offset, buffer).map_error(|_| VfsError::IoError)
+        let inode = inner.read_inode(self.ino).map_err(|_| VfsError::IoError)?;
+        inner.read_file_data(&inode, offset, buf).map_err(|_| VfsError::IoError)
     }
     
-    fn write(&self, _offset: u64, _buffer: &[u8]) -> VfsResult<usize> {
+    fn write(&self, _offset: u64, _buf: &[u8]) -> VfsResult<usize> {
         Err(VfsError::ReadOnly)
     }
     
-    fn status(&self) -> VfsResult<Stat> {
+    fn stat(&self) -> VfsResult<Stat> {
         let inner = self.make_inner();
-        let inode = inner.read_inode(self.ino).map_error(|_| VfsError::IoError)?;
+        let inode = inner.read_inode(self.ino).map_err(|_| VfsError::IoError)?;
         let file_size = inner.inode_size(&inode);
         let ft = inner.inode_file_type(&inode);
         Ok(Stat {
@@ -847,7 +847,7 @@ struct Ext4DirectoryStandalone {
     inodes_per_group: u32,
     blocks_per_group: u32,
     first_data_block: u32,
-    group_descriptor_size: u32,
+    group_desc_size: u32,
 }
 
 // Implementation block — defines methods for the type above.
@@ -859,7 +859,7 @@ impl Ext4DirectoryStandalone {
             inodes_per_group: self.inodes_per_group,
             blocks_per_group: self.blocks_per_group,
             first_data_block: self.first_data_block,
-            group_descriptor_size: self.group_descriptor_size,
+            group_desc_size: self.group_desc_size,
             total_groups: 0,
             device: self.device.clone(),
         }
@@ -870,17 +870,17 @@ impl Ext4DirectoryStandalone {
 impl DirectoryOperations for Ext4DirectoryStandalone {
     fn lookup(&self, name: &str) -> VfsResult<Ino> {
         let inner = self.make_inner();
-        inner.directory_lookup(self.ino, name)
+        inner.dir_lookup(self.ino, name)
             .map(|ino| ino as u64)
-            .map_error(|_| VfsError::NotFound)
+            .map_err(|_| VfsError::NotFound)
     }
     
     fn readdir(&self) -> VfsResult<Vec<DirectoryEntry>> {
         let inner = self.make_inner();
-        let entries = inner.read_directory_entries(self.ino)
-            .map_error(|_| VfsError::IoError)?;
+        let entries = inner.read_dir_entries(self.ino)
+            .map_err(|_| VfsError::IoError)?;
         
-        Ok(entries.into_iterator()
+        Ok(entries.into_iter()
             .filter(|(_, name, _)| name != "." && name != "..")
             .map(|(ino, name, ft)| DirectoryEntry {
                 name,
@@ -898,9 +898,9 @@ impl DirectoryOperations for Ext4DirectoryStandalone {
         Err(VfsError::ReadOnly)
     }
     
-    fn status(&self) -> VfsResult<Stat> {
+    fn stat(&self) -> VfsResult<Stat> {
         let inner = self.make_inner();
-        let inode = inner.read_inode(self.ino).map_error(|_| VfsError::IoError)?;
+        let inode = inner.read_inode(self.ino).map_err(|_| VfsError::IoError)?;
         Ok(Stat {
             ino: self.ino as u64,
             file_type: FileType::Directory,
@@ -941,7 +941,7 @@ pub fn mount(device: Arc<dyn BlockDevice>) -> Result<Arc<Ext4Filesystem>, &'stat
     sb_buffer.copy_from_slice(&raw[sb_offset..sb_offset + 256]);
     
     let sb = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { core::ptr::read_unaligned(sb_buffer.as_pointer() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe { core::ptr::read_unaligned(sb_buffer.as_ptr() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const Ext4SuperBlock) };
     
     // Verify magic
@@ -954,7 +954,7 @@ const Ext4SuperBlock) };
     
     // Group descriptor size: 32 for non-64bit, 64 for 64-bit
     let is_64bit = (sb.s_feature_incompat & 0x80) != 0; // INCOMPAT_64BIT
-    let group_descriptor_size = if is_64bit { 64u32 } else { 32 };
+    let group_desc_size = if is_64bit { 64u32 } else { 32 };
     
     let total_groups = (sb.s_blocks_count_lo + sb.s_blocks_per_group - 1) / sb.s_blocks_per_group;
     
@@ -974,7 +974,7 @@ const Ext4SuperBlock) };
             inodes_per_group: sb.s_inodes_per_group,
             blocks_per_group: sb.s_blocks_per_group,
             first_data_block: sb.s_first_data_block,
-            group_descriptor_size,
+            group_desc_size,
             total_groups,
             device,
         }),
@@ -1005,8 +1005,8 @@ pub fn probe(device: &dyn BlockDevice) -> bool {
 /// Read a file from ext4 by path (convenience function)
 pub fn read_file(fs: &Ext4Filesystem, path: &str) -> Result<Vec<u8>, &'static str> {
     let inner = fs.inner.lock();
-    let ino = inner.resolve_path(path).map_error(|_| "File not found")?;
-    let inode = inner.read_inode(ino).map_error(|_| "Failed to read inode")?;
+    let ino = inner.resolve_path(path).map_err(|_| "File not found")?;
+    let inode = inner.read_inode(ino).map_err(|_| "Failed to read inode")?;
     
     let ft = inner.inode_file_type(&inode);
     if ft == FileType::Directory {
@@ -1018,23 +1018,23 @@ pub fn read_file(fs: &Ext4Filesystem, path: &str) -> Result<Vec<u8>, &'static st
         return Err("File too large (>64MB)");
     }
     
-    let mut buffer = vec![0u8; size as usize];
-    inner.read_file_data(&inode, 0, &mut buffer).map_error(|_| "Read error")?;
-    Ok(buffer)
+    let mut buf = vec![0u8; size as usize];
+    inner.read_file_data(&inode, 0, &mut buf).map_err(|_| "Read error")?;
+    Ok(buf)
 }
 
 /// List directory contents from ext4 by path (convenience function)
 pub fn list_directory(fs: &Ext4Filesystem, path: &str) -> Result<Vec<(String, FileType, u64)>, &'static str> {
     let inner = fs.inner.lock();
-    let ino = inner.resolve_path(path).map_error(|_| "Directory not found")?;
-    let inode = inner.read_inode(ino).map_error(|_| "Failed to read inode")?;
+    let ino = inner.resolve_path(path).map_err(|_| "Directory not found")?;
+    let inode = inner.read_inode(ino).map_err(|_| "Failed to read inode")?;
     
     let ft = inner.inode_file_type(&inode);
     if ft != FileType::Directory {
         return Err("Not a directory");
     }
     
-    let entries = inner.read_directory_entries(ino).map_error(|_| "Read error")?;
+    let entries = inner.read_dir_entries(ino).map_err(|_| "Read error")?;
     
     let mut result = Vec::new();
     for (entry_ino, name, ft_byte) in entries {

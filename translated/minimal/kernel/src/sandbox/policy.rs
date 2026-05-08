@@ -14,11 +14,11 @@ use alloc::format;
 #[derive(Debug, Clone)]
 pub enum PolicyVerdict {
     
-    Zs,
+    Allow,
     
-    Pf(String),
+    Deny(String),
     
-    Nl,
+    Log,
 }
 
 
@@ -27,11 +27,11 @@ pub enum PolicyVerdict {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PolicyPreset {
     
-    Aet,
+    Strict,
     
-    Ade,
+    Moderate,
     
-    Ads,
+    Permissive,
 }
 
 
@@ -55,13 +55,13 @@ impl DomainRule {
     }
 
     
-    pub fn oh(&self, vh: &str) -> bool {
-        if self.pattern.cj("*.") {
+    pub fn matches(&self, domain: &str) -> bool {
+        if self.pattern.starts_with("*.") {
             
-            let cif = &self.pattern[1..]; 
-            vh.pp(cif) || vh == &self.pattern[2..]
+            let asi = &self.pattern[1..]; 
+            domain.ends_with(asi) || domain == &self.pattern[2..]
         } else {
-            vh == self.pattern
+            domain == self.pattern
         }
     }
 }
@@ -72,25 +72,25 @@ impl DomainRule {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ContentFilter {
     
-    Age,
+    AllowHtml,
     
-    Agd,
+    AllowCss,
     
-    Agf,
+    AllowImages,
     
-    Aox,
+    AllowJavaScript,
     
-    Aoy,
+    AllowJson,
     
-    Agg,
+    AllowText,
     
-    Aow,
+    AllowFonts,
 }
 
 
 
 
-const BLH_: &[u16] = &[
+const BNZ_: &[u16] = &[
     21,   
     22,   
     23,   
@@ -109,7 +109,7 @@ const BLH_: &[u16] = &[
 
 
 
-const BQY_: &[&str] = &[
+const BTT_: &[&str] = &[
     "file://",
     "javascript:",
     "data:text/html",
@@ -129,24 +129,24 @@ const BQY_: &[&str] = &[
 
 
 
-fn txd(url: &str) -> Option<&'static str> {
-    let pb = url.avd();
-    for &pat in BQY_ {
-        if pb.contains(pat) {
+fn msh(url: &str) -> Option<&'static str> {
+    let gj = url.to_ascii_lowercase();
+    for &pat in BTT_ {
+        if gj.contains(pat) {
             return Some(pat);
         }
     }
     
     
-    if let Some(tpx) = pb.du("://") {
-        let ddv = &pb[tpx + 3..];
-        if let Some(fv) = ddv.bw().next() {
-            if fv.atb() {
+    if let Some(host_start) = gj.find("://") {
+        let beo = &gj[host_start + 3..];
+        if let Some(first) = beo.chars().next() {
+            if first.is_ascii_digit() {
                 
                 
-                if ddv.cj("10.") || ddv.cj("192.168.") 
-                    || ddv.cj("172.16.") || ddv.cj("127.")
-                    || ddv.cj("0.") {
+                if beo.starts_with("10.") || beo.starts_with("192.168.") 
+                    || beo.starts_with("172.16.") || beo.starts_with("127.")
+                    || beo.starts_with("0.") {
                     return Some("private IP address");
                 }
             }
@@ -156,45 +156,45 @@ fn txd(url: &str) -> Option<&'static str> {
 }
 
 
-pub fn ggn(url: &str) -> Option<&str> {
-    let fbq = if let Some(u) = url.du("://") {
-        &url[u + 3..]
+pub fn cxk(url: &str) -> Option<&str> {
+    let cfk = if let Some(pos) = url.find("://") {
+        &url[pos + 3..]
     } else {
         url
     };
     
-    let kh = fbq.adk('/').next()?;
+    let host = cfk.split('/').next()?;
     
-    let vh = if kh.contains(':') {
-        kh.adk(':').next()?
+    let domain = if host.contains(':') {
+        host.split(':').next()?
     } else {
-        kh
+        host
     };
     
-    let vh = if vh.contains('@') {
-        vh.adk('@').qv()?
+    let domain = if domain.contains('@') {
+        domain.split('@').last()?
     } else {
-        vh
+        domain
     };
-    if vh.is_empty() { None } else { Some(vh) }
+    if domain.is_empty() { None } else { Some(domain) }
 }
 
 
-fn sqf(url: &str) -> u16 {
-    let pb = url.avd();
-    let fmc = pb.cj("https://");
-    let eaq = if fmc { 443 } else { 80 };
+fn ltr(url: &str) -> u16 {
+    let gj = url.to_ascii_lowercase();
+    let cln = gj.starts_with("https://");
+    let bru = if cln { 443 } else { 80 };
 
-    let fbq = if let Some(u) = url.du("://") {
-        &url[u + 3..]
+    let cfk = if let Some(pos) = url.find("://") {
+        &url[pos + 3..]
     } else {
         url
     };
-    let kh = fbq.adk('/').next().unwrap_or("");
-    if let Some(cpj) = kh.bhx(':') {
-        kh[cpj + 1..].parse().unwrap_or(eaq)
+    let host = cfk.split('/').next().unwrap_or("");
+    if let Some(ald) = host.rfind(':') {
+        host[ald + 1..].parse().unwrap_or(bru)
     } else {
-        eaq
+        bru
     }
 }
 
@@ -203,72 +203,72 @@ fn sqf(url: &str) -> u16 {
 
 #[derive(Debug, Clone)]
 pub struct SandboxPolicy {
-    pub akl: PolicyPreset,
+    pub preset: PolicyPreset,
     
-    pub epa: Vec<DomainRule>,
+    pub domain_rules: Vec<DomainRule>,
     
-    pub ijq: Vec<ContentFilter>,
+    pub allowed_content: Vec<ContentFilter>,
     
-    pub gqf: u32,
+    pub rate_limit_per_min: u32,
     
-    pub eur: usize,
+    pub max_response_bytes: usize,
     
-    pub gbf: bool,
+    pub block_javascript: bool,
     
-    pub kdz: bool,
+    pub block_inline_scripts: bool,
     
-    pub kdx: bool,
+    pub block_external_scripts: bool,
     
-    pub fcr: bool,
+    pub allow_redirects: bool,
     
-    pub fny: u8,
+    pub max_redirect_depth: u8,
     
-    pub emx: bool,
+    pub block_private_ips: bool,
     
-    pub glv: bool,
+    pub log_all: bool,
     
-    pub ilu: Vec<String>,
+    pub blocked_substrings: Vec<String>,
 }
 
 impl SandboxPolicy {
     
-    pub fn sye(akl: PolicyPreset) -> Self {
-        match akl {
-            PolicyPreset::Aet => Self::wvb(),
-            PolicyPreset::Ade => Self::upk(),
-            PolicyPreset::Ads => Self::vgu(),
+    pub fn lzo(preset: PolicyPreset) -> Self {
+        match preset {
+            PolicyPreset::Strict => Self::oyd(),
+            PolicyPreset::Moderate => Self::ngb(),
+            PolicyPreset::Permissive => Self::ntr(),
         }
     }
 
     
-    fn wvb() -> Self {
+    fn oyd() -> Self {
         Self {
-            akl: PolicyPreset::Aet,
-            epa: Vec::new(), 
-            ijq: alloc::vec![
-                ContentFilter::Age,
-                ContentFilter::Agd,
-                ContentFilter::Agf,
-                ContentFilter::Agg,
+            preset: PolicyPreset::Strict,
+            domain_rules: Vec::new(), 
+            allowed_content: alloc::vec![
+                ContentFilter::AllowHtml,
+                ContentFilter::AllowCss,
+                ContentFilter::AllowImages,
+                ContentFilter::AllowText,
             ],
-            gqf: 30,
-            eur: 512 * 1024, 
-            gbf: true,
-            kdz: true,
-            kdx: true,
-            fcr: true,
-            fny: 2,
-            emx: true,
-            glv: true,
-            ilu: Vec::new(),
+            rate_limit_per_min: 30,
+            max_response_bytes: 512 * 1024, 
+            block_javascript: true,
+            block_inline_scripts: true,
+            block_external_scripts: true,
+            allow_redirects: true,
+            max_redirect_depth: 2,
+            block_private_ips: true,
+            log_all: true,
+            blocked_substrings: Vec::new(),
         }
     }
 
     
-    fn upk() -> Self {
+    fn ngb() -> Self {
         Self {
-            akl: PolicyPreset::Ade,
-            epa: alloc::vec![
+            preset: PolicyPreset::Moderate,
+            domain_rules: alloc::vec![
                 
                 DomainRule::deny("*.doubleclick.net"),
                 DomainRule::deny("*.googlesyndication.com"),
@@ -276,156 +276,156 @@ impl SandboxPolicy {
                 DomainRule::deny("*.facebook.com"),
                 DomainRule::deny("*.fbcdn.net"),
             ],
-            ijq: alloc::vec![
-                ContentFilter::Age,
-                ContentFilter::Agd,
-                ContentFilter::Agf,
-                ContentFilter::Aoy,
-                ContentFilter::Agg,
-                ContentFilter::Aox,
-                ContentFilter::Aow,
+            allowed_content: alloc::vec![
+                ContentFilter::AllowHtml,
+                ContentFilter::AllowCss,
+                ContentFilter::AllowImages,
+                ContentFilter::AllowJson,
+                ContentFilter::AllowText,
+                ContentFilter::AllowJavaScript,
+                ContentFilter::AllowFonts,
             ],
-            gqf: 60,
-            eur: 1024 * 1024, 
-            gbf: false,
-            kdz: false,
-            kdx: false,
-            fcr: true,
-            fny: 5,
-            emx: true,
-            glv: false,
-            ilu: Vec::new(),
+            rate_limit_per_min: 60,
+            max_response_bytes: 1024 * 1024, 
+            block_javascript: false,
+            block_inline_scripts: false,
+            block_external_scripts: false,
+            allow_redirects: true,
+            max_redirect_depth: 5,
+            block_private_ips: true,
+            log_all: false,
+            blocked_substrings: Vec::new(),
         }
     }
 
     
-    fn vgu() -> Self {
+    fn ntr() -> Self {
         Self {
-            akl: PolicyPreset::Ads,
-            epa: Vec::new(), 
-            ijq: alloc::vec![
-                ContentFilter::Age,
-                ContentFilter::Agd,
-                ContentFilter::Agf,
-                ContentFilter::Aoy,
-                ContentFilter::Agg,
-                ContentFilter::Aox,
-                ContentFilter::Aow,
+            preset: PolicyPreset::Permissive,
+            domain_rules: Vec::new(), 
+            allowed_content: alloc::vec![
+                ContentFilter::AllowHtml,
+                ContentFilter::AllowCss,
+                ContentFilter::AllowImages,
+                ContentFilter::AllowJson,
+                ContentFilter::AllowText,
+                ContentFilter::AllowJavaScript,
+                ContentFilter::AllowFonts,
             ],
-            gqf: 120,
-            eur: 4 * 1024 * 1024, 
-            gbf: false,
-            kdz: false,
-            kdx: false,
-            fcr: true,
-            fny: 10,
-            emx: true, 
-            glv: false,
-            ilu: Vec::new(),
+            rate_limit_per_min: 120,
+            max_response_bytes: 4 * 1024 * 1024, 
+            block_javascript: false,
+            block_inline_scripts: false,
+            block_external_scripts: false,
+            allow_redirects: true,
+            max_redirect_depth: 10,
+            block_private_ips: true, 
+            log_all: false,
+            blocked_substrings: Vec::new(),
         }
     }
 
     
-    pub fn kaf(&mut self, pattern: &str) {
-        self.epa.insert(0, DomainRule::allow(pattern));
+    pub fn allow_domain(&mut self, pattern: &str) {
+        self.domain_rules.insert(0, DomainRule::allow(pattern));
     }
 
     
-    pub fn kpc(&mut self, pattern: &str) {
-        self.epa.insert(0, DomainRule::deny(pattern));
+    pub fn deny_domain(&mut self, pattern: &str) {
+        self.domain_rules.insert(0, DomainRule::deny(pattern));
     }
 
     
-    pub fn nrf(&self, url: &str) -> PolicyVerdict {
+    pub fn evaluate_url(&self, url: &str) -> PolicyVerdict {
         
-        if let Some(pattern) = txd(url) {
-            return PolicyVerdict::Pf(format!("blocked dangerous pattern: {}", pattern));
+        if let Some(pattern) = msh(url) {
+            return PolicyVerdict::Deny(format!("blocked dangerous pattern: {}", pattern));
         }
 
         
-        let port = sqf(url);
-        if BLH_.contains(&port) {
-            return PolicyVerdict::Pf(format!("blocked port: {}", port));
+        let port = ltr(url);
+        if BNZ_.contains(&port) {
+            return PolicyVerdict::Deny(format!("blocked port: {}", port));
         }
 
         
-        let pb = url.avd();
-        for cdg in &self.ilu {
-            if pb.contains(&cdg.avd()) {
-                return PolicyVerdict::Pf(format!("blocked pattern: {}", cdg));
+        let gj = url.to_ascii_lowercase();
+        for blocked in &self.blocked_substrings {
+            if gj.contains(&blocked.to_ascii_lowercase()) {
+                return PolicyVerdict::Deny(format!("blocked pattern: {}", blocked));
             }
         }
 
         
-        let vh = match ggn(url) {
-            Some(bc) => bc,
-            None => return PolicyVerdict::Pf(String::from("cannot extract domain")),
+        let domain = match cxk(url) {
+            Some(d) => d,
+            None => return PolicyVerdict::Deny(String::from("cannot extract domain")),
         };
 
         
-        for agu in &self.epa {
-            if agu.oh(vh) {
-                if agu.allow {
-                    return if self.glv { PolicyVerdict::Nl } else { PolicyVerdict::Zs };
+        for qo in &self.domain_rules {
+            if qo.matches(domain) {
+                if qo.allow {
+                    return if self.log_all { PolicyVerdict::Log } else { PolicyVerdict::Allow };
                 } else {
-                    return PolicyVerdict::Pf(format!("domain blocked: {}", vh));
+                    return PolicyVerdict::Deny(format!("domain blocked: {}", domain));
                 }
             }
         }
 
         
-        match self.akl {
-            PolicyPreset::Aet => {
+        match self.preset {
+            PolicyPreset::Strict => {
                 
-                PolicyVerdict::Pf(format!("domain not in allowlist: {}", vh))
+                PolicyVerdict::Deny(format!("domain not in allowlist: {}", domain))
             },
-            PolicyPreset::Ade => {
+            PolicyPreset::Moderate => {
                 
-                if self.glv { PolicyVerdict::Nl } else { PolicyVerdict::Zs }
+                if self.log_all { PolicyVerdict::Log } else { PolicyVerdict::Allow }
             },
-            PolicyPreset::Ads => {
-                PolicyVerdict::Zs
+            PolicyPreset::Permissive => {
+                PolicyVerdict::Allow
             },
         }
     }
 
     
-    pub fn ohg(&self) -> bool {
-        !self.gbf
+    pub fn js_allowed(&self) -> bool {
+        !self.block_javascript
     }
 
     
-    pub fn yjy(&self, ahg: &str) -> bool {
-        let aqx = ahg.avd();
-        for hi in &self.ijq {
-            match hi {
-                ContentFilter::Age => if aqx.contains("text/html") || aqx.contains("application/xhtml") { return true; },
-                ContentFilter::Agd => if aqx.contains("text/css") { return true; },
-                ContentFilter::Agf => if aqx.contains("image/") { return true; },
-                ContentFilter::Aox => if aqx.contains("javascript") || aqx.contains("ecmascript") { return true; },
-                ContentFilter::Aoy => if aqx.contains("json") || aqx.contains("application/xml") { return true; },
-                ContentFilter::Agg => if aqx.contains("text/plain") || aqx.contains("text/") { return true; },
-                ContentFilter::Aow => if aqx.contains("font/") || aqx.contains("woff") { return true; },
+    pub fn qbg(&self, content_type: &str) -> bool {
+        let wb = content_type.to_ascii_lowercase();
+        for filter in &self.allowed_content {
+            match filter {
+                ContentFilter::AllowHtml => if wb.contains("text/html") || wb.contains("application/xhtml") { return true; },
+                ContentFilter::AllowCss => if wb.contains("text/css") { return true; },
+                ContentFilter::AllowImages => if wb.contains("image/") { return true; },
+                ContentFilter::AllowJavaScript => if wb.contains("javascript") || wb.contains("ecmascript") { return true; },
+                ContentFilter::AllowJson => if wb.contains("json") || wb.contains("application/xml") { return true; },
+                ContentFilter::AllowText => if wb.contains("text/plain") || wb.contains("text/") { return true; },
+                ContentFilter::AllowFonts => if wb.contains("font/") || wb.contains("woff") { return true; },
             }
         }
         false
     }
 
     
-    pub fn awz(&self) -> String {
-        let qhf: usize = self.epa.iter().hi(|m| m.allow).az();
-        let rvp: usize = self.epa.iter().hi(|m| !m.allow).az();
+    pub fn summary(&self) -> String {
+        let jvd: usize = self.domain_rules.iter().filter(|r| r.allow).count();
+        let ldf: usize = self.domain_rules.iter().filter(|r| !r.allow).count();
         format!(
             "Policy: {:?}\n  Domain rules: {} allow, {} deny\n  Rate limit: {}/min\n  Max response: {} KB\n  JS: {}\n  Redirects: {} (max depth {})\n  SSRF protection: {}\n  Log all: {}",
-            self.akl,
-            qhf, rvp,
-            self.gqf,
-            self.eur / 1024,
-            if self.gbf { "BLOCKED" } else { "sandboxed" },
-            if self.fcr { "allowed" } else { "blocked" },
-            self.fny,
-            if self.emx { "ON" } else { "OFF" },
-            if self.glv { "yes" } else { "no" },
+            self.preset,
+            jvd, ldf,
+            self.rate_limit_per_min,
+            self.max_response_bytes / 1024,
+            if self.block_javascript { "BLOCKED" } else { "sandboxed" },
+            if self.allow_redirects { "allowed" } else { "blocked" },
+            self.max_redirect_depth,
+            if self.block_private_ips { "ON" } else { "OFF" },
+            if self.log_all { "yes" } else { "no" },
         )
     }
 }

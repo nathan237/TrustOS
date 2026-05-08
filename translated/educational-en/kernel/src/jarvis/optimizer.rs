@@ -40,10 +40,10 @@ pub struct AdamState {
 // Implementation block — defines methods for the type above.
 impl AdamState {
     /// Create new Adam optimizer with default hyperparams
-    pub fn new(parameter_count: usize) -> Self {
+    pub fn new(param_count: usize) -> Self {
         AdamState {
-            m: vec![0.0; parameter_count],
-            v: vec![0.0; parameter_count],
+            m: vec![0.0; param_count],
+            v: vec![0.0; param_count],
             t: 0,
             lr: 0.001,
             beta1: 0.9,
@@ -55,8 +55,8 @@ impl AdamState {
     }
 
     /// Create with custom learning rate
-    pub fn with_lr(parameter_count: usize, lr: f32) -> Self {
-        let mut s = Self::new(parameter_count);
+    pub fn with_lr(param_count: usize, lr: f32) -> Self {
+        let mut s = Self::new(param_count);
         s.lr = lr;
         s
     }
@@ -70,43 +70,43 @@ impl AdamState {
         let bc2 = 1.0 - pow_approx(self.beta2, self.t);
         let lr_t = self.lr / bc1; // effective LR with bias correction
 
-        let mut index = 0;
+        let mut idx = 0;
 
         // Token embeddings
-        self.update_slice(&mut model.token_embed, &grads.d_token_embed, &mut index, lr_t, bc2);
+        self.update_slice(&mut model.token_embed, &grads.d_token_embed, &mut idx, lr_t, bc2);
 
         // Position embeddings
-        self.update_slice(&mut model.position_embed, &grads.d_position_embed, &mut index, lr_t, bc2);
+        self.update_slice(&mut model.pos_embed, &grads.d_pos_embed, &mut idx, lr_t, bc2);
 
         // Layer weights
         for l in 0..N_LAYERS {
             let lg = &grads.layers[l];
             let lw = &mut model.layers[l];
 
-            self.update_slice(&mut lw.rms_attn, &lg.d_rms_attn, &mut index, lr_t, bc2);
-            self.update_slice(&mut lw.w_q, &lg.d_wq, &mut index, lr_t, bc2);
-            self.update_slice(&mut lw.w_k, &lg.d_wk, &mut index, lr_t, bc2);
-            self.update_slice(&mut lw.w_v, &lg.d_wv, &mut index, lr_t, bc2);
-            self.update_slice(&mut lw.w_o, &lg.d_wo, &mut index, lr_t, bc2);
-            self.update_slice(&mut lw.rms_ffn, &lg.d_rms_ffn, &mut index, lr_t, bc2);
-            self.update_slice(&mut lw.w_gate, &lg.d_wgate, &mut index, lr_t, bc2);
-            self.update_slice(&mut lw.w_up, &lg.d_wup, &mut index, lr_t, bc2);
-            self.update_slice(&mut lw.w_down, &lg.d_wdown, &mut index, lr_t, bc2);
+            self.update_slice(&mut lw.rms_attn, &lg.d_rms_attn, &mut idx, lr_t, bc2);
+            self.update_slice(&mut lw.w_q, &lg.d_wq, &mut idx, lr_t, bc2);
+            self.update_slice(&mut lw.w_k, &lg.d_wk, &mut idx, lr_t, bc2);
+            self.update_slice(&mut lw.w_v, &lg.d_wv, &mut idx, lr_t, bc2);
+            self.update_slice(&mut lw.w_o, &lg.d_wo, &mut idx, lr_t, bc2);
+            self.update_slice(&mut lw.rms_ffn, &lg.d_rms_ffn, &mut idx, lr_t, bc2);
+            self.update_slice(&mut lw.w_gate, &lg.d_wgate, &mut idx, lr_t, bc2);
+            self.update_slice(&mut lw.w_up, &lg.d_wup, &mut idx, lr_t, bc2);
+            self.update_slice(&mut lw.w_down, &lg.d_wdown, &mut idx, lr_t, bc2);
         }
 
         // Final RMSNorm
-        self.update_slice(&mut model.rms_final, &grads.d_rms_final, &mut index, lr_t, bc2);
+        self.update_slice(&mut model.rms_final, &grads.d_rms_final, &mut idx, lr_t, bc2);
 
         // Output projection
-        self.update_slice(&mut model.w_output, &grads.d_output, &mut index, lr_t, bc2);
+        self.update_slice(&mut model.w_output, &grads.d_output, &mut idx, lr_t, bc2);
     }
 
     /// Update a weight slice using AdamW (decoupled weight decay)
-    fn update_slice(&mut self, weights: &mut [f32], grads: &[f32], index: &mut usize, lr_t: f32, bc2: f32) {
+    fn update_slice(&mut self, weights: &mut [f32], grads: &[f32], idx: &mut usize, lr_t: f32, bc2: f32) {
         let wd = self.weight_decay;
         let lr_raw = self.lr; // un-bias-corrected lr for weight decay
         for i in 0..weights.len() {
-            let j = *index + i;
+            let j = *idx + i;
             if j >= self.m.len() { break; }
 
             let g = grads[i];
@@ -126,13 +126,13 @@ impl AdamState {
             // Adam update
             weights[i] -= lr_t * self.m[j] / (approx_sqrt(v_hat) + self.eps);
         }
-        *index += weights.len();
+        *idx += weights.len();
     }
 
     /// Reset optimizer state (keep hyperparams)
     pub fn reset(&mut self) {
-        for v in self.m.iterator_mut() { *v = 0.0; }
-        for v in self.v.iterator_mut() { *v = 0.0; }
+        for v in self.m.iter_mut() { *v = 0.0; }
+        for v in self.v.iter_mut() { *v = 0.0; }
         self.t = 0;
     }
 
@@ -153,17 +153,17 @@ impl AdamState {
 /// - `warmup_steps`: linear warmup phase (typically 10% of total)
 /// - `lr_max`: peak learning rate
 /// - `lr_min`: minimum learning rate (typically lr_max * 0.1)
-pub fn cosine_lr(step: u64, total_steps: u64, warmup_steps: u64, lr_maximum: f32, lr_minimum: f32) -> f32 {
-    if total_steps == 0 { return lr_maximum; }
+pub fn cosine_lr(step: u64, total_steps: u64, warmup_steps: u64, lr_max: f32, lr_minimum: f32) -> f32 {
+    if total_steps == 0 { return lr_max; }
     if step < warmup_steps {
         // Linear warmup
-        lr_minimum + (lr_maximum - lr_minimum) * (step as f32 / warmup_steps.maximum(1) as f32)
+        lr_minimum + (lr_max - lr_minimum) * (step as f32 / warmup_steps.max(1) as f32)
     } else {
         // Cosine decay from lr_max to lr_min
-        let decay_steps = total_steps.saturating_sub(warmup_steps).maximum(1);
+        let decay_steps = total_steps.saturating_sub(warmup_steps).max(1);
         let progress = (step - warmup_steps) as f32 / decay_steps as f32;
         let progress = if progress > 1.0 { 1.0 } else { progress };
-        lr_minimum + 0.5 * (lr_maximum - lr_minimum) * (1.0 + cos_approx(progress * 3.14159265))
+        lr_minimum + 0.5 * (lr_max - lr_minimum) * (1.0 + cos_approx(progress * 3.14159265))
     }
 }
 
@@ -181,8 +181,8 @@ fn cos_approx(x: f32) -> f32 {
     // Bhaskara's approximation for [0, π]:
     // cos(x) ≈ (π² - 4x²) / (π² + x²)
     let pi2 = pi * pi;
-    let value = (pi2 - 4.0 * a * a) / (pi2 + a * a);
-    if negate { -value } else { value }
+    let val = (pi2 - 4.0 * a * a) / (pi2 + a * a);
+    if negate { -val } else { val }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

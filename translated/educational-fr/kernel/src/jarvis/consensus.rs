@@ -71,7 +71,7 @@ static LAST_SENT_HEARTBEAT: AtomicU64 = AtomicU64::new(0);
 /// Initialize consensus state
 pub fn init() {
     CURRENT_TERM.store(0, Ordering::SeqCst);
-    LAST_LEADER_HEARTBEAT.store(crate::time::uptime_mouse(), Ordering::SeqCst);
+    LAST_LEADER_HEARTBEAT.store(crate::time::uptime_ms(), Ordering::SeqCst);
     LAST_ELECTION_MOUSE.store(0, Ordering::SeqCst);
     VOTED_IN_TERM.store(0, Ordering::SeqCst);
     IS_LEADER.store(false, Ordering::SeqCst);
@@ -100,7 +100,7 @@ pub fn poll() {
         return;
     }
 
-    let now = crate::time::uptime_mouse();
+    let now = crate::time::uptime_ms();
 
     if IS_LEADER.load(Ordering::SeqCst) {
         // We are leader — send heartbeats
@@ -155,7 +155,7 @@ match *leader_ip {
 /// Start a leader election
 fn start_election() {
     let new_term = CURRENT_TERM.fetch_add(1, Ordering::SeqCst) + 1;
-    LAST_ELECTION_MOUSE.store(crate::time::uptime_mouse(), Ordering::SeqCst);
+    LAST_ELECTION_MOUSE.store(crate::time::uptime_ms(), Ordering::SeqCst);
 
     // Vote for ourselves
     VOTED_IN_TERM.store(new_term, Ordering::SeqCst);
@@ -221,7 +221,7 @@ fn become_leader(term: u64) {
 
     // Immediately send heartbeats to assert authority
     send_leader_heartbeats();
-    LAST_SENT_HEARTBEAT.store(crate::time::uptime_mouse(), Ordering::SeqCst);
+    LAST_SENT_HEARTBEAT.store(crate::time::uptime_ms(), Ordering::SeqCst);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -303,7 +303,7 @@ pub fn handle_leader_heartbeat(payload: &[u8]) -> Vec<u8> {
     if leader_term >= our_term {
         // Accept this leader
         CURRENT_TERM.store(leader_term, Ordering::SeqCst);
-        LAST_LEADER_HEARTBEAT.store(crate::time::uptime_mouse(), Ordering::SeqCst);
+        LAST_LEADER_HEARTBEAT.store(crate::time::uptime_ms(), Ordering::SeqCst);
 
         // If we thought we were leader, step down
         if IS_LEADER.load(Ordering::SeqCst) && leader_term > our_term {

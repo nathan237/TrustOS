@@ -50,22 +50,22 @@ pub fn new() -> Self {
 
         // Fonction publique — appelable depuis d'autres modules.
 pub fn zero(&mut self) {
-        for v in self.d_rms_attn.iterator_mut() { *v = 0.0; }
-        for v in self.d_wq.iterator_mut() { *v = 0.0; }
-        for v in self.d_wk.iterator_mut() { *v = 0.0; }
-        for v in self.d_wv.iterator_mut() { *v = 0.0; }
-        for v in self.d_wo.iterator_mut() { *v = 0.0; }
-        for v in self.d_rms_ffn.iterator_mut() { *v = 0.0; }
-        for v in self.d_wgate.iterator_mut() { *v = 0.0; }
-        for v in self.d_wup.iterator_mut() { *v = 0.0; }
-        for v in self.d_wdown.iterator_mut() { *v = 0.0; }
+        for v in self.d_rms_attn.iter_mut() { *v = 0.0; }
+        for v in self.d_wq.iter_mut() { *v = 0.0; }
+        for v in self.d_wk.iter_mut() { *v = 0.0; }
+        for v in self.d_wv.iter_mut() { *v = 0.0; }
+        for v in self.d_wo.iter_mut() { *v = 0.0; }
+        for v in self.d_rms_ffn.iter_mut() { *v = 0.0; }
+        for v in self.d_wgate.iter_mut() { *v = 0.0; }
+        for v in self.d_wup.iter_mut() { *v = 0.0; }
+        for v in self.d_wdown.iter_mut() { *v = 0.0; }
     }
 }
 
 /// All gradients for the full model
 pub struct ModelGrads {
     pub d_token_embed: Vec<f32>,  // [VOCAB_SIZE × D_MODEL]
-    pub d_position_embed: Vec<f32>,    // [MAX_SEQ × D_MODEL]
+    pub d_pos_embed: Vec<f32>,    // [MAX_SEQ × D_MODEL]
     pub layers: Vec<LayerGrads>,
     pub d_rms_final: Vec<f32>,    // [D_MODEL]
     pub d_output: Vec<f32>,       // [D_MODEL × VOCAB_SIZE]
@@ -81,7 +81,7 @@ pub fn new() -> Self {
         }
         ModelGrads {
             d_token_embed: vec![0.0; VOCAB_SIZE * D_MODEL],
-            d_position_embed: vec![0.0; MAXIMUM_SEQUENCE * D_MODEL],
+            d_pos_embed: vec![0.0; MAXIMUM_SEQUENCE * D_MODEL],
             layers,
             d_rms_final: vec![0.0; D_MODEL],
             d_output: vec![0.0; D_MODEL * VOCAB_SIZE],
@@ -90,16 +90,16 @@ pub fn new() -> Self {
 
         // Fonction publique — appelable depuis d'autres modules.
 pub fn zero(&mut self) {
-        for v in self.d_token_embed.iterator_mut() { *v = 0.0; }
-        for v in self.d_position_embed.iterator_mut() { *v = 0.0; }
+        for v in self.d_token_embed.iter_mut() { *v = 0.0; }
+        for v in self.d_pos_embed.iter_mut() { *v = 0.0; }
         for l in &mut self.layers { l.zero(); }
-        for v in self.d_rms_final.iterator_mut() { *v = 0.0; }
-        for v in self.d_output.iterator_mut() { *v = 0.0; }
+        for v in self.d_rms_final.iter_mut() { *v = 0.0; }
+        for v in self.d_output.iter_mut() { *v = 0.0; }
     }
 
     /// Total number of gradient values
     pub fn count(&self) -> usize {
-        self.d_token_embed.len() + self.d_position_embed.len()
+        self.d_token_embed.len() + self.d_pos_embed.len()
         + self.layers.iter().map(|l| {
             l.d_rms_attn.len() + l.d_wq.len() + l.d_wk.len() + l.d_wv.len()
             + l.d_wo.len() + l.d_rms_ffn.len() + l.d_wgate.len() + l.d_wup.len()
@@ -113,7 +113,7 @@ pub fn zero(&mut self) {
         let mut ss = 0.0f32;
         let add_ss = |ss: &mut f32, s: &[f32]| { for &g in s { *ss += g * g; } };
         add_ss(&mut ss, &self.d_token_embed);
-        add_ss(&mut ss, &self.d_position_embed);
+        add_ss(&mut ss, &self.d_pos_embed);
         for l in &self.layers {
             add_ss(&mut ss, &l.d_rms_attn);
             add_ss(&mut ss, &l.d_wq); add_ss(&mut ss, &l.d_wk);
@@ -128,13 +128,13 @@ pub fn zero(&mut self) {
     }
 
     /// Clip gradients by global L2 norm (if norm > max_norm, scale down)
-    pub fn clip_norm(&mut self, maximum_norm: f32) {
+    pub fn clip_norm(&mut self, max_norm: f32) {
         let norm = self.grad_norm();
-        if norm > maximum_norm && norm > 0.0 {
-            let s = maximum_norm / norm;
-            let sc = |v: &mut [f32], s: f32| { for g in v.iterator_mut() { *g *= s; } };
+        if norm > max_norm && norm > 0.0 {
+            let s = max_norm / norm;
+            let sc = |v: &mut [f32], s: f32| { for g in v.iter_mut() { *g *= s; } };
             sc(&mut self.d_token_embed, s);
-            sc(&mut self.d_position_embed, s);
+            sc(&mut self.d_pos_embed, s);
             for l in &mut self.layers {
                 sc(&mut l.d_rms_attn, s); sc(&mut l.d_wq, s); sc(&mut l.d_wk, s);
                 sc(&mut l.d_wv, s); sc(&mut l.d_wo, s); sc(&mut l.d_rms_ffn, s);
@@ -147,12 +147,12 @@ pub fn zero(&mut self) {
 
     /// Accumulate gradients from another ModelGrads (for mini-batch accumulation)
     pub fn accumulate(&mut self, other: &ModelGrads) {
-        let add = |destination: &mut [f32], source: &[f32]| {
-            for (d, s) in destination.iterator_mut().zip(source.iter()) { *d += *s; }
+        let add = |dst: &mut [f32], src: &[f32]| {
+            for (d, s) in dst.iter_mut().zip(src.iter()) { *d += *s; }
         };
         add(&mut self.d_token_embed, &other.d_token_embed);
-        add(&mut self.d_position_embed, &other.d_position_embed);
-        for (dl, sl) in self.layers.iterator_mut().zip(other.layers.iter()) {
+        add(&mut self.d_pos_embed, &other.d_pos_embed);
+        for (dl, sl) in self.layers.iter_mut().zip(other.layers.iter()) {
             add(&mut dl.d_rms_attn, &sl.d_rms_attn);
             add(&mut dl.d_wq, &sl.d_wq); add(&mut dl.d_wk, &sl.d_wk);
             add(&mut dl.d_wv, &sl.d_wv); add(&mut dl.d_wo, &sl.d_wo);
@@ -166,9 +166,9 @@ pub fn zero(&mut self) {
 
     /// Scale all gradients by a constant (for averaging over mini-batch)
     pub fn scale(&mut self, s: f32) {
-        let sc = |v: &mut [f32]| { for g in v.iterator_mut() { *g *= s; } };
+        let sc = |v: &mut [f32]| { for g in v.iter_mut() { *g *= s; } };
         sc(&mut self.d_token_embed);
-        sc(&mut self.d_position_embed);
+        sc(&mut self.d_pos_embed);
         for l in &mut self.layers {
             sc(&mut l.d_rms_attn); sc(&mut l.d_wq); sc(&mut l.d_wk);
             sc(&mut l.d_wv); sc(&mut l.d_wo); sc(&mut l.d_rms_ffn);
@@ -248,24 +248,24 @@ fn rmsnorm(out: &mut [f32], x: &[f32], weight: &[f32]) -> f32 {
 
 fn softmax(data: &mut [f32]) {
     if data.is_empty() { return; }
-    let maximum = data.iter().copied().fold(f32::NEGATIVE_INFINITY, f32::maximum);
+    let max = data.iter().copied().fold(f32::NEG_INFINITY, f32::max);
     let mut sum = 0.0f32;
-    for v in data.iterator_mut() {
-        *v = approx_exp(*v - maximum);
+    for v in data.iter_mut() {
+        *v = approx_exp(*v - max);
         sum += *v;
     }
     if sum > 0.0 {
         let inv = 1.0 / sum;
-        for v in data.iterator_mut() { *v *= inv; }
+        for v in data.iter_mut() { *v *= inv; }
     }
 }
 
 fn approx_exp(x: f32) -> f32 {
     if x > 88.0 { return f32::MAX; }
     if x < -88.0 { return 0.0; }
-    let a = (1 << 23) as f32 / core::f32::consts::LINE_2;
+    let a = (1 << 23) as f32 / core::f32::consts::LN_2;
     let b = (1 << 23) as f32 * (127.0 - 0.04368);
-    let bits = ((a * x + b) as i32).maximum(0) as u32;
+    let bits = ((a * x + b) as i32).max(0) as u32;
     f32::from_bits(bits)
 }
 
@@ -297,7 +297,7 @@ fn silu_grad(x: f32) -> f32 {
 /// This replaces ~6000 forward passes from numerical gradients with exactly
 /// 1 forward + 1 backward pass.
 pub fn forward_backward(model: &TransformerWeights, tokens: &[u8]) -> (f32, ModelGrads) {
-    let sequence_length = tokens.len().minimum(super::model::MAXIMUM_SEQUENCE);
+    let sequence_length = tokens.len().min(super::model::MAXIMUM_SEQUENCE);
     if sequence_length < 2 {
         return (f32::MAX, ModelGrads::new());
     }
@@ -309,13 +309,13 @@ pub fn forward_backward(model: &TransformerWeights, tokens: &[u8]) -> (f32, Mode
     let mut all_v: Vec<Vec<Vec<f32>>> = vec![Vec::new(); N_LAYERS];
 
     for t in 0..sequence_length {
-        let token = tokens[t] as usize;
-        let position = t;
+        let tok = tokens[t] as usize;
+        let pos = t;
 
         // Embedding
         let mut x = vec![0.0f32; D_MODEL];
         for i in 0..D_MODEL {
-            x[i] = model.token_embed[token * D_MODEL + i] + model.position_embed[position * D_MODEL + i];
+            x[i] = model.token_embed[tok * D_MODEL + i] + model.pos_embed[pos * D_MODEL + i];
         }
 
         let mut layer_acts_vec = Vec::with_capacity(N_LAYERS);
@@ -441,14 +441,14 @@ pub fn forward_backward(model: &TransformerWeights, tokens: &[u8]) -> (f32, Mode
         softmax(&mut probs);
 
         // Loss = -log(prob[target])
-        let p_target = probs[target].maximum(1e-10);
-        total_loss += -line_approx(p_target);
+        let p_target = probs[target].max(1e-10);
+        total_loss += -ln_approx(p_target);
 
         let mut d_logits = probs; // softmax output
         d_logits[target] -= 1.0;  // subtract one-hot
         // Scale by 1/n_targets for average loss
         let scale = 1.0 / n_targets as f32;
-        for v in d_logits.iterator_mut() { *v *= scale; }
+        for v in d_logits.iter_mut() { *v *= scale; }
 
         // ── dL/d_w_output (SSE2 outer product) ──
         // w_output is [VOCAB_SIZE rows × D_MODEL cols]: logits[r] = Σ_c w[r*D_MODEL+c]*x[c]
@@ -569,10 +569,10 @@ pub fn forward_backward(model: &TransformerWeights, tokens: &[u8]) -> (f32, Mode
         }
 
         // ── Embedding gradients ──
-        let token = tokens[t] as usize;
+        let tok = tokens[t] as usize;
         for i in 0..D_MODEL {
-            grads.d_token_embed[token * D_MODEL + i] += d_x[i];
-            grads.d_position_embed[t * D_MODEL + i] += d_x[i];
+            grads.d_token_embed[tok * D_MODEL + i] += d_x[i];
+            grads.d_pos_embed[t * D_MODEL + i] += d_x[i];
         }
     }
 
@@ -624,10 +624,10 @@ fn backward_rmsnorm(d_out: &[f32], x: &[f32], weight: &[f32], d_weight: &mut [f3
 // Approximate ln (for loss computation)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-fn line_approx(x: f32) -> f32 {
+fn ln_approx(x: f32) -> f32 {
     if x <= 0.0 { return -88.0; }
     let bits = x.to_bits();
     let e = ((bits >> 23) & 0xFF) as f32 - 127.0;
     let m = f32::from_bits((bits & 0x007FFFFF) | 0x3F800000);
-    (e + (m - 1.0) * 1.4427) * core::f32::consts::LINE_2
+    (e + (m - 1.0) * 1.4427) * core::f32::consts::LN_2
 }

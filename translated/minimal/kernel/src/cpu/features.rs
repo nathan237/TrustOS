@@ -3,30 +3,30 @@
 
 
 
-pub fn oam(feature: Feature) -> bool {
-    let dr = super::bme();
+pub fn ido(feature: Feature) -> bool {
+    let caps = super::capabilities();
     
     match feature {
-        Feature::Anv => dr.map(|r| r.tsc).unwrap_or(false),
-        Feature::Anw => dr.map(|r| r.fan).unwrap_or(false),
-        Feature::Uc => dr.map(|r| r.fsd).unwrap_or(false),
-        Feature::Amy => dr.map(|r| r.eiw).unwrap_or(false),
-        Feature::Qu => dr.map(|r| r.eix).unwrap_or(false),
-        Feature::Amz => dr.map(|r| r.fvj).unwrap_or(false),
-        Feature::Anc => dr.map(|r| r.fvl).unwrap_or(false),
-        Feature::Ana => dr.map(|r| r.fvk).unwrap_or(false),
-        Feature::Anb => dr.map(|r| r.eyy).unwrap_or(false),
-        Feature::Agk => dr.map(|r| r.dof).unwrap_or(false),
-        Feature::Ow => dr.map(|r| r.dog).unwrap_or(false),
-        Feature::Agl => dr.map(|r| r.eml).unwrap_or(false),
-        Feature::Asm => dr.map(|r| r.hka).unwrap_or(false),
-        Feature::Agb => dr.map(|r| r.doa).unwrap_or(false),
-        Feature::Alb => dr.map(|r| r.ewm).unwrap_or(false),
-        Feature::Amp => dr.map(|r| r.eyl).unwrap_or(false),
-        Feature::Alv => dr.map(|r| r.cbg).unwrap_or(false),
-        Feature::Alw => dr.map(|r| r.cmc).unwrap_or(false),
-        Feature::Aoc => dr.map(|r| r.vmx).unwrap_or(false),
-        Feature::Anf => dr.map(|r| r.svm).unwrap_or(false),
+        Feature::Tsc => caps.map(|c| c.tsc).unwrap_or(false),
+        Feature::TscInvariant => caps.map(|c| c.tsc_invariant).unwrap_or(false),
+        Feature::Rdtscp => caps.map(|c| c.rdtscp).unwrap_or(false),
+        Feature::Sse => caps.map(|c| c.sse).unwrap_or(false),
+        Feature::Sse2 => caps.map(|c| c.sse2).unwrap_or(false),
+        Feature::Sse3 => caps.map(|c| c.sse3).unwrap_or(false),
+        Feature::Ssse3 => caps.map(|c| c.ssse3).unwrap_or(false),
+        Feature::Sse41 => caps.map(|c| c.sse4_1).unwrap_or(false),
+        Feature::Sse42 => caps.map(|c| c.sse4_2).unwrap_or(false),
+        Feature::Avx => caps.map(|c| c.avx).unwrap_or(false),
+        Feature::Avx2 => caps.map(|c| c.avx2).unwrap_or(false),
+        Feature::Avx512f => caps.map(|c| c.avx512f).unwrap_or(false),
+        Feature::Fma => caps.map(|c| c.fma).unwrap_or(false),
+        Feature::AesNi => caps.map(|c| c.aesni).unwrap_or(false),
+        Feature::Pclmulqdq => caps.map(|c| c.pclmulqdq).unwrap_or(false),
+        Feature::Sha => caps.map(|c| c.sha_ext).unwrap_or(false),
+        Feature::Rdrand => caps.map(|c| c.rdrand).unwrap_or(false),
+        Feature::Rdseed => caps.map(|c| c.rdseed).unwrap_or(false),
+        Feature::Vmx => caps.map(|c| c.vmx).unwrap_or(false),
+        Feature::Svm => caps.map(|c| c.svm).unwrap_or(false),
     }
 }
 
@@ -34,89 +34,89 @@ pub fn oam(feature: Feature) -> bool {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Feature {
     
-    Anv,
-    Anw,
-    Uc,
+    Tsc,
+    TscInvariant,
+    Rdtscp,
     
     
-    Amy,
-    Qu,
-    Amz,
-    Anc,
-    Ana,
-    Anb,
-    Agk,
-    Ow,
-    Agl,
-    Asm,
+    Sse,
+    Sse2,
+    Sse3,
+    Ssse3,
+    Sse41,
+    Sse42,
+    Avx,
+    Avx2,
+    Avx512f,
+    Fma,
     
     
-    Agb,
-    Alb,
-    Amp,
-    Alv,
-    Alw,
+    AesNi,
+    Pclmulqdq,
+    Sha,
+    Rdrand,
+    Rdseed,
     
     
-    Aoc,
-    Anf,
+    Vmx,
+    Svm,
 }
 
 impl core::fmt::Display for Feature {
-    fn fmt(&self, bb: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Feature::Anv => write!(bb, "TSC"),
-            Feature::Anw => write!(bb, "Invariant TSC"),
-            Feature::Uc => write!(bb, "RDTSCP"),
-            Feature::Amy => write!(bb, "SSE"),
-            Feature::Qu => write!(bb, "SSE2"),
-            Feature::Amz => write!(bb, "SSE3"),
-            Feature::Anc => write!(bb, "SSSE3"),
-            Feature::Ana => write!(bb, "SSE4.1"),
-            Feature::Anb => write!(bb, "SSE4.2"),
-            Feature::Agk => write!(bb, "AVX"),
-            Feature::Ow => write!(bb, "AVX2"),
-            Feature::Agl => write!(bb, "AVX-512F"),
-            Feature::Asm => write!(bb, "FMA"),
-            Feature::Agb => write!(bb, "AES-NI"),
-            Feature::Alb => write!(bb, "PCLMULQDQ"),
-            Feature::Amp => write!(bb, "SHA-NI"),
-            Feature::Alv => write!(bb, "RDRAND"),
-            Feature::Alw => write!(bb, "RDSEED"),
-            Feature::Aoc => write!(bb, "VMX"),
-            Feature::Anf => write!(bb, "SVM"),
+            Feature::Tsc => write!(f, "TSC"),
+            Feature::TscInvariant => write!(f, "Invariant TSC"),
+            Feature::Rdtscp => write!(f, "RDTSCP"),
+            Feature::Sse => write!(f, "SSE"),
+            Feature::Sse2 => write!(f, "SSE2"),
+            Feature::Sse3 => write!(f, "SSE3"),
+            Feature::Ssse3 => write!(f, "SSSE3"),
+            Feature::Sse41 => write!(f, "SSE4.1"),
+            Feature::Sse42 => write!(f, "SSE4.2"),
+            Feature::Avx => write!(f, "AVX"),
+            Feature::Avx2 => write!(f, "AVX2"),
+            Feature::Avx512f => write!(f, "AVX-512F"),
+            Feature::Fma => write!(f, "FMA"),
+            Feature::AesNi => write!(f, "AES-NI"),
+            Feature::Pclmulqdq => write!(f, "PCLMULQDQ"),
+            Feature::Sha => write!(f, "SHA-NI"),
+            Feature::Rdrand => write!(f, "RDRAND"),
+            Feature::Rdseed => write!(f, "RDSEED"),
+            Feature::Vmx => write!(f, "VMX"),
+            Feature::Svm => write!(f, "SVM"),
         }
     }
 }
 
 
-pub fn vlg() {
+pub fn nxe() {
     let features = [
-        Feature::Anv,
-        Feature::Anw,
-        Feature::Uc,
-        Feature::Amy,
-        Feature::Qu,
-        Feature::Amz,
-        Feature::Anc,
-        Feature::Ana,
-        Feature::Anb,
-        Feature::Agk,
-        Feature::Ow,
-        Feature::Agl,
-        Feature::Asm,
-        Feature::Agb,
-        Feature::Alb,
-        Feature::Amp,
-        Feature::Alv,
-        Feature::Alw,
-        Feature::Aoc,
-        Feature::Anf,
+        Feature::Tsc,
+        Feature::TscInvariant,
+        Feature::Rdtscp,
+        Feature::Sse,
+        Feature::Sse2,
+        Feature::Sse3,
+        Feature::Ssse3,
+        Feature::Sse41,
+        Feature::Sse42,
+        Feature::Avx,
+        Feature::Avx2,
+        Feature::Avx512f,
+        Feature::Fma,
+        Feature::AesNi,
+        Feature::Pclmulqdq,
+        Feature::Sha,
+        Feature::Rdrand,
+        Feature::Rdseed,
+        Feature::Vmx,
+        Feature::Svm,
     ];
     
     crate::println!("CPU Features:");
     for feature in features.iter() {
-        let status = if oam(*feature) { "✓" } else { "✗" };
+        let status = if ido(*feature) { "✓" } else { "✗" };
         crate::println!("  {} {}", status, feature);
     }
 }

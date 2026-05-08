@@ -116,93 +116,93 @@ pub fn from_ines(data: &[u8]) -> Option<Self> {
 
     // ======================== CPU Read ($6000-$FFFF) ========================
 
-    pub fn cpu_read(&self, address: u16) -> u8 {
+    pub fn cpu_read(&self, addr: u16) -> u8 {
                 // Pattern matching — Rust's exhaustive branching construct.
 match self.mapper_id {
-            0 => self.mapper0_cpu_read(address),
-            1 => self.mapper1_cpu_read(address),
-            2 => self.mapper2_cpu_read(address),
-            3 => self.mapper3_cpu_read(address),
-            _ => self.mapper0_cpu_read(address),
+            0 => self.mapper0_cpu_read(addr),
+            1 => self.mapper1_cpu_read(addr),
+            2 => self.mapper2_cpu_read(addr),
+            3 => self.mapper3_cpu_read(addr),
+            _ => self.mapper0_cpu_read(addr),
         }
     }
 
         // Public function — callable from other modules.
-pub fn cpu_write(&mut self, address: u16, value: u8) {
+pub fn cpu_write(&mut self, addr: u16, val: u8) {
                 // Pattern matching — Rust's exhaustive branching construct.
 match self.mapper_id {
             0 => {} // NROM is read-only
-            1 => self.mapper1_cpu_write(address, value),
-            2 => self.mapper2_cpu_write(address, value),
-            3 => self.mapper3_cpu_write(address, value),
+            1 => self.mapper1_cpu_write(addr, val),
+            2 => self.mapper2_cpu_write(addr, val),
+            3 => self.mapper3_cpu_write(addr, val),
             _ => {}
         }
         // PRG RAM ($6000-$7FFF)
-        if address >= 0x6000 && address < 0x8000 {
-            self.prg_ram[(address - 0x6000) as usize] = value;
+        if addr >= 0x6000 && addr < 0x8000 {
+            self.prg_ram[(addr - 0x6000) as usize] = val;
         }
     }
 
     // ======================== PPU Read ($0000-$1FFF) ========================
 
-    pub fn ppu_read(&self, address: u16) -> u8 {
+    pub fn ppu_read(&self, addr: u16) -> u8 {
                 // Pattern matching — Rust's exhaustive branching construct.
 match self.mapper_id {
             3 => {
                 let bank_offset = (self.m3_chr_bank as usize) * 8192;
-                let index = bank_offset + (address as usize & 0x1FFF);
-                if index < self.chr_rom.len() { self.chr_rom[index] } else { 0 }
+                let idx = bank_offset + (addr as usize & 0x1FFF);
+                if idx < self.chr_rom.len() { self.chr_rom[idx] } else { 0 }
             }
-            1 => self.mapper1_ppu_read(address),
+            1 => self.mapper1_ppu_read(addr),
             _ => {
-                let index = address as usize & (self.chr_rom.len() - 1).maximum(0x1FFF);
-                if index < self.chr_rom.len() { self.chr_rom[index] } else { 0 }
+                let idx = addr as usize & (self.chr_rom.len() - 1).max(0x1FFF);
+                if idx < self.chr_rom.len() { self.chr_rom[idx] } else { 0 }
             }
         }
     }
 
         // Public function — callable from other modules.
-pub fn ppu_write(&mut self, address: u16, value: u8) {
+pub fn ppu_write(&mut self, addr: u16, val: u8) {
         if self.chr_ram {
-            let index = address as usize & 0x1FFF;
-            if index < self.chr_rom.len() {
-                self.chr_rom[index] = value;
+            let idx = addr as usize & 0x1FFF;
+            if idx < self.chr_rom.len() {
+                self.chr_rom[idx] = val;
             }
         }
     }
 
         // Public function — callable from other modules.
-pub fn mirror_nametable(&self, address: u16) -> u16 {
-        let address = address & 0x0FFF;
+pub fn mirror_nametable(&self, addr: u16) -> u16 {
+        let addr = addr & 0x0FFF;
                 // Pattern matching — Rust's exhaustive branching construct.
 match self.mirror {
             Mirror::Horizontal => {
                 // $2000=$2400, $2800=$2C00
-                let table = (address >> 11) & 1;
-                (table * 0x400) | (address & 0x03FF)
+                let table = (addr >> 11) & 1;
+                (table * 0x400) | (addr & 0x03FF)
             }
             Mirror::Vertical => {
                 // $2000=$2800, $2400=$2C00
-                address & 0x07FF
+                addr & 0x07FF
             }
-            Mirror::Single0 => address & 0x03FF,
-            Mirror::Single1 => 0x400 | (address & 0x03FF),
-            Mirror::FourScreen => address & 0x0FFF,
+            Mirror::Single0 => addr & 0x03FF,
+            Mirror::Single1 => 0x400 | (addr & 0x03FF),
+            Mirror::FourScreen => addr & 0x0FFF,
         }
     }
 
     // ======================== Mapper 0 (NROM) ========================
 
-    fn mapper0_cpu_read(&self, address: u16) -> u8 {
+    fn mapper0_cpu_read(&self, addr: u16) -> u8 {
                 // Pattern matching — Rust's exhaustive branching construct.
-match address {
-            0x6000..=0x7FFF => self.prg_ram[(address - 0x6000) as usize],
+match addr {
+            0x6000..=0x7FFF => self.prg_ram[(addr - 0x6000) as usize],
             0x8000..=0xFFFF => {
-                let index = (address - 0x8000) as usize;
+                let idx = (addr - 0x8000) as usize;
                 if self.prg_rom.len() <= 16384 {
-                    self.prg_rom[index & 0x3FFF] // 16KB mirrored
+                    self.prg_rom[idx & 0x3FFF] // 16KB mirrored
                 } else {
-                    self.prg_rom[index & (self.prg_rom.len() - 1)]
+                    self.prg_rom[idx & (self.prg_rom.len() - 1)]
                 }
             }
             _ => 0,
@@ -211,10 +211,10 @@ match address {
 
     // ======================== Mapper 1 (MMC1) ========================
 
-    fn mapper1_cpu_read(&self, address: u16) -> u8 {
+    fn mapper1_cpu_read(&self, addr: u16) -> u8 {
                 // Pattern matching — Rust's exhaustive branching construct.
-match address {
-            0x6000..=0x7FFF => self.prg_ram[(address - 0x6000) as usize],
+match addr {
+            0x6000..=0x7FFF => self.prg_ram[(addr - 0x6000) as usize],
             0x8000..=0xFFFF => {
                 let prg_mode = (self.m1_control >> 2) & 3;
                 let bank = self.m1_prg_bank as usize & 0x0F;
@@ -224,26 +224,26 @@ match prg_mode {
                     0 | 1 => {
                         // 32KB mode: ignore low bit
                         let base = (bank & !1) * 16384;
-                        let index = base + (address as usize - 0x8000);
-                        self.prg_rom[index % self.prg_rom.len()]
+                        let idx = base + (addr as usize - 0x8000);
+                        self.prg_rom[idx % self.prg_rom.len()]
                     }
                     2 => {
                         // Fix first, switch second
-                        if address < 0xC000 {
-                            self.prg_rom[(address as usize - 0x8000) % self.prg_rom.len()]
+                        if addr < 0xC000 {
+                            self.prg_rom[(addr as usize - 0x8000) % self.prg_rom.len()]
                         } else {
                             let base = bank * 16384;
-                            self.prg_rom[(base + (address as usize - 0xC000)) % self.prg_rom.len()]
+                            self.prg_rom[(base + (addr as usize - 0xC000)) % self.prg_rom.len()]
                         }
                     }
                     _ => {
                         // Switch first, fix last
-                        if address < 0xC000 {
+                        if addr < 0xC000 {
                             let base = bank * 16384;
-                            self.prg_rom[(base + (address as usize - 0x8000)) % self.prg_rom.len()]
+                            self.prg_rom[(base + (addr as usize - 0x8000)) % self.prg_rom.len()]
                         } else {
                             let base = (prg_banks - 1) * 16384;
-                            self.prg_rom[(base + (address as usize - 0xC000)) % self.prg_rom.len()]
+                            self.prg_rom[(base + (addr as usize - 0xC000)) % self.prg_rom.len()]
                         }
                     }
                 }
@@ -252,23 +252,23 @@ match prg_mode {
         }
     }
 
-    fn mapper1_cpu_write(&mut self, address: u16, value: u8) {
-        if address < 0x8000 { return; }
+    fn mapper1_cpu_write(&mut self, addr: u16, val: u8) {
+        if addr < 0x8000 { return; }
 
-        if value & 0x80 != 0 {
+        if val & 0x80 != 0 {
             self.m1_shift = 0x10;
             self.m1_shift_count = 0;
             self.m1_control |= 0x0C;
             return;
         }
 
-        self.m1_shift = (self.m1_shift >> 1) | ((value & 1) << 4);
+        self.m1_shift = (self.m1_shift >> 1) | ((val & 1) << 4);
         self.m1_shift_count += 1;
 
         if self.m1_shift_count == 5 {
             let value = self.m1_shift;
                         // Pattern matching — Rust's exhaustive branching construct.
-match address {
+match addr {
                 0x8000..=0x9FFF => {
                     self.m1_control = value;
                     self.mirror = // Pattern matching — Rust's exhaustive branching construct.
@@ -289,57 +289,57 @@ match value & 3 {
         }
     }
 
-    fn mapper1_ppu_read(&self, address: u16) -> u8 {
+    fn mapper1_ppu_read(&self, addr: u16) -> u8 {
         let chr_mode = (self.m1_control >> 4) & 1;
-        let index = if chr_mode == 0 {
+        let idx = if chr_mode == 0 {
             // 8KB mode
             let bank = (self.m1_chr_bank0 as usize & !1) * 4096;
-            bank + (address as usize & 0x1FFF)
+            bank + (addr as usize & 0x1FFF)
         } else {
             // 4KB mode
-            if address < 0x1000 {
-                (self.m1_chr_bank0 as usize) * 4096 + (address as usize & 0x0FFF)
+            if addr < 0x1000 {
+                (self.m1_chr_bank0 as usize) * 4096 + (addr as usize & 0x0FFF)
             } else {
-                (self.m1_chr_bank1 as usize) * 4096 + (address as usize & 0x0FFF)
+                (self.m1_chr_bank1 as usize) * 4096 + (addr as usize & 0x0FFF)
             }
         };
-        if index < self.chr_rom.len() { self.chr_rom[index] } else { 0 }
+        if idx < self.chr_rom.len() { self.chr_rom[idx] } else { 0 }
     }
 
     // ======================== Mapper 2 (UxROM) ========================
 
-    fn mapper2_cpu_read(&self, address: u16) -> u8 {
+    fn mapper2_cpu_read(&self, addr: u16) -> u8 {
                 // Pattern matching — Rust's exhaustive branching construct.
-match address {
-            0x6000..=0x7FFF => self.prg_ram[(address - 0x6000) as usize],
+match addr {
+            0x6000..=0x7FFF => self.prg_ram[(addr - 0x6000) as usize],
             0x8000..=0xBFFF => {
                 let base = (self.m2_prg_bank as usize) * 16384;
-                self.prg_rom[(base + (address as usize - 0x8000)) % self.prg_rom.len()]
+                self.prg_rom[(base + (addr as usize - 0x8000)) % self.prg_rom.len()]
             }
             0xC000..=0xFFFF => {
                 let last_bank = (self.prg_rom.len() / 16384).saturating_sub(1);
                 let base = last_bank * 16384;
-                self.prg_rom[(base + (address as usize - 0xC000)) % self.prg_rom.len()]
+                self.prg_rom[(base + (addr as usize - 0xC000)) % self.prg_rom.len()]
             }
             _ => 0,
         }
     }
 
-    fn mapper2_cpu_write(&mut self, address: u16, value: u8) {
-        if address >= 0x8000 {
-            self.m2_prg_bank = value;
+    fn mapper2_cpu_write(&mut self, addr: u16, val: u8) {
+        if addr >= 0x8000 {
+            self.m2_prg_bank = val;
         }
     }
 
     // ======================== Mapper 3 (CNROM) ========================
 
-    fn mapper3_cpu_read(&self, address: u16) -> u8 {
-        self.mapper0_cpu_read(address) // Same PRG mapping as NROM
+    fn mapper3_cpu_read(&self, addr: u16) -> u8 {
+        self.mapper0_cpu_read(addr) // Same PRG mapping as NROM
     }
 
-    fn mapper3_cpu_write(&mut self, address: u16, value: u8) {
-        if address >= 0x8000 {
-            self.m3_chr_bank = value & 0x03;
+    fn mapper3_cpu_write(&mut self, addr: u16, val: u8) {
+        if addr >= 0x8000 {
+            self.m3_chr_bank = val & 0x03;
         }
     }
 }

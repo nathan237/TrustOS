@@ -11,50 +11,50 @@ use crate::arch::Port;
 
 
 pub mod status {
-    pub const Or: u8 = 1;
-    pub const Fl: u8 = 2;
-    pub const HW_: u8 = 4;
-    pub const MZ_: u8 = 8;
-    pub const BRL_: u8 = 64;
-    pub const Arw: u8 = 128;
+    pub const Gf: u8 = 1;
+    pub const Cl: u8 = 2;
+    pub const IQ_: u8 = 4;
+    pub const NY_: u8 = 8;
+    pub const BUH_: u8 = 64;
+    pub const Sa: u8 = 128;
 }
 
 
 pub mod cap_type {
-    pub const AOU_: u8 = 1;
-    pub const BBO_: u8 = 2;
-    pub const AXK_: u8 = 3;
-    pub const AQA_: u8 = 4;
-    pub const DZE_: u8 = 5;
+    pub const AQU_: u8 = 1;
+    pub const BDR_: u8 = 2;
+    pub const AZL_: u8 = 3;
+    pub const ASD_: u8 = 4;
+    pub const ECV_: u8 = 5;
 }
 
 
 pub mod legacy_reg {
-    pub const BRK_: u16 = 0x00;      
-    pub const BSE_: u16 = 0x04;      
-    pub const CMV_: u16 = 0x08;        
-    pub const WM_: u16 = 0x0C;           
-    pub const AGU_: u16 = 0x0E;         
-    pub const CNB_: u16 = 0x10;         
-    pub const EF_: u16 = 0x12;        
-    pub const CCO_: u16 = 0x13;           
+    pub const BUG_: u16 = 0x00;      
+    pub const BVA_: u16 = 0x04;      
+    pub const CQE_: u16 = 0x08;        
+    pub const XV_: u16 = 0x0C;           
+    pub const AIO_: u16 = 0x0E;         
+    pub const CQK_: u16 = 0x10;         
+    pub const ES_: u16 = 0x12;        
+    pub const CFZ_: u16 = 0x13;           
     
-    pub const AFW_: u16 = 0x14;              
-    pub const DVC_: u16 = 0x1A;           
+    pub const AHQ_: u16 = 0x14;              
+    pub const DYT_: u16 = 0x1A;           
 }
 
 
 pub mod desc_flags {
-    pub const Akj: u16 = 1;       
-    pub const Db: u16 = 2;      
-    pub const Cyr: u16 = 4;   
+    pub const Pn: u16 = 1;       
+    pub const Bh: u16 = 2;      
+    pub const Axc: u16 = 4;   
 }
 
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
 pub struct VirtqDesc {
-    pub ag: u64,    
+    pub addr: u64,    
     pub len: u32,     
     pub flags: u16,   
     pub next: u16,    
@@ -63,49 +63,49 @@ pub struct VirtqDesc {
 
 #[repr(C)]
 #[derive(Debug)]
-pub struct Zk {
+pub struct Kx {
     pub flags: u16,
-    pub w: u16,
+    pub idx: u16,
     
 }
 
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
-pub struct Aob {
-    pub ad: u32,    
+pub struct Qv {
+    pub id: u32,    
     pub len: u32,   
 }
 
 
 #[repr(C)]
 #[derive(Debug)]
-pub struct Zl {
+pub struct Ky {
     pub flags: u16,
-    pub w: u16,
+    pub idx: u16,
     
 }
 
 
 pub struct Virtqueue {
     
-    pub aw: u16,
+    pub size: u16,
     
-    pub ki: u64,
+    pub phys_addr: u64,
     
     pub desc: *mut VirtqDesc,
     
-    pub apk: *mut Zk,
+    pub avail: *mut Kx,
     
-    pub mr: *mut Zl,
+    pub used: *mut Ky,
     
-    pub csa: u16,
+    pub last_used_idx: u16,
     
-    pub cyb: u16,
+    pub free_head: u16,
     
-    pub dts: u16,
+    pub num_free: u16,
     
-    pub buk: Vec<u16>,
+    pub free_list: Vec<u16>,
 }
 
 
@@ -115,101 +115,101 @@ unsafe impl Sync for Virtqueue {}
 
 impl Virtqueue {
     
-    pub fn nbh(art: u16) -> usize {
-        let kpj = core::mem::size_of::<VirtqDesc>() * art as usize;
-        let qlr = 6 + 2 * art as usize; 
-        let fxx = 6 + 8 * art as usize;  
+    pub fn hjs(queue_size: u16) -> usize {
+        let frr = core::mem::size_of::<VirtqDesc>() * queue_size as usize;
+        let jyq = 6 + 2 * queue_size as usize; 
+        let used_size = 6 + 8 * queue_size as usize;  
         
         
-        let fcw = kpj;
-        let dxe = ((fcw + qlr) + 4095) & !4095; 
+        let cfz = frr;
+        let bps = ((cfz + jyq) + 4095) & !4095; 
         
-        dxe + fxx
+        bps + used_size
     }
     
     
-    pub fn blx(&mut self) -> Option<u16> {
-        if self.dts == 0 {
+    pub fn alloc_desc(&mut self) -> Option<u16> {
+        if self.num_free == 0 {
             return None;
         }
         
-        let w = self.cyb;
-        self.cyb = self.buk[w as usize];
-        self.dts -= 1;
-        Some(w)
+        let idx = self.free_head;
+        self.free_head = self.free_list[idx as usize];
+        self.num_free -= 1;
+        Some(idx)
     }
     
     
-    pub fn ald(&mut self, w: u16) {
-        self.buk[w as usize] = self.cyb;
-        self.cyb = w;
-        self.dts += 1;
+    pub fn free_desc(&mut self, idx: u16) {
+        self.free_list[idx as usize] = self.free_head;
+        self.free_head = idx;
+        self.num_free += 1;
     }
     
     
-    pub unsafe fn gxv(&mut self, ale: u16) {
-        let apk = &mut *self.apk;
-        let fsy = (self.apk as *mut u8).add(4) as *mut u16;
-        let w = apk.w;
-        *fsy.add((w % self.aw) as usize) = ale;
+    pub unsafe fn add_available(&mut self, su: u16) {
+        let avail = &mut *self.avail;
+        let cpm = (self.avail as *mut u8).add(4) as *mut u16;
+        let idx = avail.idx;
+        *cpm.add((idx % self.size) as usize) = su;
         
         
-        core::sync::atomic::cxt(Ordering::Release);
+        core::sync::atomic::fence(Ordering::Release);
         
-        apk.w = w.cn(1);
+        avail.idx = idx.wrapping_add(1);
     }
 
 
-    pub fn new(aw: u16) -> Result<Box<Self>, &'static str> {
+    pub fn new(size: u16) -> Result<Box<Self>, &'static str> {
         use alloc::alloc::{alloc_zeroed, Layout};
         
-        let aay = Self::nbh(aw);
-        let layout = Layout::bjy(aay, 4096)
-            .jd(|_| "Invalid layout")?;
+        let total_size = Self::hjs(size);
+        let layout = Layout::from_size_align(total_size, 4096)
+            .map_err(|_| "Invalid layout")?;
         
         let ptr = unsafe { alloc_zeroed(layout) };
-        if ptr.abq() {
+        if ptr.is_null() {
             return Err("Failed to allocate virtqueue");
         }
         
-        let ki = ptr as u64; 
+        let phys_addr = ptr as u64; 
         
         
-        let kpj = core::mem::size_of::<VirtqDesc>() * aw as usize;
-        let fcw = kpj;
-        let dxe = ((fcw + 6 + 2 * aw as usize) + 4095) & !4095;
+        let frr = core::mem::size_of::<VirtqDesc>() * size as usize;
+        let cfz = frr;
+        let bps = ((cfz + 6 + 2 * size as usize) + 4095) & !4095;
         
         let desc = ptr as *mut VirtqDesc;
-        let apk = unsafe { ptr.add(fcw) as *mut Zk };
-        let mr = unsafe { ptr.add(dxe) as *mut Zl };
+        let avail = unsafe { ptr.add(cfz) as *mut Kx };
+        let used = unsafe { ptr.add(bps) as *mut Ky };
         
         
-        let mut buk = alloc::vec::Vec::fc(aw as usize);
-        for a in 0..aw {
-            buk.push(a + 1);
+        let mut free_list = alloc::vec::Vec::with_capacity(size as usize);
+        for i in 0..size {
+            free_list.push(i + 1);
         }
-        if aw > 0 {
-            buk[aw as usize - 1] = 0;
+        if size > 0 {
+            free_list[size as usize - 1] = 0;
         }
         
         Ok(Box::new(Self {
-            aw,
-            ki,
+            size,
+            phys_addr,
             desc,
-            apk,
-            mr,
-            csa: 0,
-            cyb: 0,
-            dts: aw,
-            buk,
+            avail,
+            used,
+            last_used_idx: 0,
+            free_head: 0,
+            num_free: size,
+            free_list,
         }))
     }
     
     
-    pub fn bwz(&mut self, w: u16, ag: u64, len: u32, flags: u16, next: u16) {
+    pub fn set_desc(&mut self, idx: u16, addr: u64, len: u32, flags: u16, next: u16) {
         unsafe {
-            let desc = &mut *self.desc.add(w as usize);
-            desc.ag = ag;
+            let desc = &mut *self.desc.add(idx as usize);
+            desc.addr = addr;
             desc.len = len;
             desc.flags = flags;
             desc.next = next;
@@ -217,34 +217,34 @@ impl Virtqueue {
     }
     
     
-    pub fn dmd(&mut self, ale: u16) {
-        unsafe { self.gxv(ale) }
+    pub fn submit(&mut self, su: u16) {
+        unsafe { self.add_available(su) }
     }
     
     
-    pub fn ixy(&self) -> bool {
+    pub fn has_used(&self) -> bool {
         unsafe { 
-            let mr = &*self.mr;
-            core::sync::atomic::cxt(Ordering::Acquire);
-            mr.w != self.csa
+            let used = &*self.used;
+            core::sync::atomic::fence(Ordering::Acquire);
+            used.idx != self.last_used_idx
         }
     }
     
     
-    pub fn jjp(&mut self) -> Option<(u32, u32)> {
+    pub fn pop_used(&mut self) -> Option<(u32, u32)> {
         unsafe {
-            let mr = &*self.mr;
-            core::sync::atomic::cxt(Ordering::Acquire);
+            let used = &*self.used;
+            core::sync::atomic::fence(Ordering::Acquire);
             
-            if mr.w == self.csa {
+            if used.idx == self.last_used_idx {
                 return None;
             }
             
-            let fsy = (self.mr as *mut u8).add(4) as *mut Aob;
-            let fhm = *fsy.add((self.csa % self.aw) as usize);
-            self.csa = self.csa.cn(1);
+            let cpm = (self.used as *mut u8).add(4) as *mut Qv;
+            let cit = *cpm.add((self.last_used_idx % self.size) as usize);
+            self.last_used_idx = self.last_used_idx.wrapping_add(1);
             
-            Some((fhm.ad, fhm.len))
+            Some((cit.id, cit.len))
         }
     }
 }
@@ -252,128 +252,128 @@ impl Virtqueue {
 
 pub struct VirtioDevice {
     
-    pub agq: u16,
+    pub iobase: u16,
     
-    pub bju: u32,
+    pub device_features: u32,
     
-    pub ckb: u32,
+    pub driver_features: u32,
 }
 
 impl VirtioDevice {
     
-    pub fn new(agq: u16) -> Self {
+    pub fn new(iobase: u16) -> Self {
         Self {
-            agq,
-            bju: 0,
-            ckb: 0,
+            iobase,
+            device_features: 0,
+            driver_features: 0,
         }
     }
     
     
-    pub fn vsp(&self) -> u8 {
+    pub fn read_status(&self) -> u8 {
         unsafe {
-            let mut port = Port::<u8>::new(self.agq + legacy_reg::EF_);
+            let mut port = Port::<u8>::new(self.iobase + legacy_reg::ES_);
             port.read()
         }
     }
     
     
-    pub fn qac(&mut self, status: u8) {
+    pub fn write_status(&mut self, status: u8) {
         unsafe {
-            let mut port = Port::<u8>::new(self.agq + legacy_reg::EF_);
+            let mut port = Port::<u8>::new(self.iobase + legacy_reg::ES_);
             port.write(status);
         }
     }
     
     
-    pub fn fzu(&mut self, fs: u8) {
-        let cv = self.vsp();
-        self.qac(cv | fs);
+    pub fn add_status(&mut self, bits: u8) {
+        let current = self.read_status();
+        self.write_status(current | bits);
     }
     
     
-    pub fn apa(&mut self) {
-        self.qac(0);
+    pub fn reset(&mut self) {
+        self.write_status(0);
     }
     
     
-    pub fn pab(&mut self) -> u32 {
+    pub fn read_device_features(&mut self) -> u32 {
         unsafe {
-            let mut port = Port::<u32>::new(self.agq + legacy_reg::BRK_);
-            self.bju = port.read();
-            self.bju
+            let mut port = Port::<u32>::new(self.iobase + legacy_reg::BUG_);
+            self.device_features = port.read();
+            self.device_features
         }
     }
     
     
-    pub fn pzx(&mut self, features: u32) {
-        self.ckb = features;
+    pub fn write_driver_features(&mut self, features: u32) {
+        self.driver_features = features;
         unsafe {
-            let mut port = Port::<u32>::new(self.agq + legacy_reg::BSE_);
+            let mut port = Port::<u32>::new(self.iobase + legacy_reg::BVA_);
             port.write(features);
         }
     }
     
     
-    pub fn mdl(&mut self, queue: u16) {
+    pub fn select_queue(&mut self, queue: u16) {
         unsafe {
-            let mut port = Port::<u16>::new(self.agq + legacy_reg::AGU_);
+            let mut port = Port::<u16>::new(self.iobase + legacy_reg::AIO_);
             port.write(queue);
         }
     }
     
     
-    pub fn kyw(&self) -> u16 {
+    pub fn get_queue_size(&self) -> u16 {
         unsafe {
-            let mut port = Port::<u16>::new(self.agq + legacy_reg::WM_);
+            let mut port = Port::<u16>::new(self.iobase + legacy_reg::XV_);
             port.read()
         }
     }
     
     
-    pub fn meu(&mut self, duh: u32) {
+    pub fn set_queue_address(&mut self, bog: u32) {
         unsafe {
-            let mut port = Port::<u32>::new(self.agq + legacy_reg::CMV_);
-            port.write(duh);
+            let mut port = Port::<u32>::new(self.iobase + legacy_reg::CQE_);
+            port.write(bog);
         }
     }
     
     
-    pub fn jhj(&self, queue: u16) {
+    pub fn notify_queue(&self, queue: u16) {
         unsafe {
-            let mut port = Port::<u16>::new(self.agq + legacy_reg::CNB_);
+            let mut port = Port::<u16>::new(self.iobase + legacy_reg::CQK_);
             port.write(queue);
         }
     }
     
     
-    pub fn zhv(&self) -> u8 {
+    pub fn qsh(&self) -> u8 {
         unsafe {
-            let mut port = Port::<u8>::new(self.agq + legacy_reg::CCO_);
+            let mut port = Port::<u8>::new(self.iobase + legacy_reg::CFZ_);
             port.read()
         }
     }
     
     
-    pub fn vrj(&self, l: u16) -> u8 {
+    pub fn read_config8(&self, offset: u16) -> u8 {
         unsafe {
-            let mut port = Port::<u8>::new(self.agq + legacy_reg::AFW_ + l);
+            let mut port = Port::<u8>::new(self.iobase + legacy_reg::AHQ_ + offset);
             port.read()
         }
     }
     
     
-    pub fn vri(&self, l: u16) -> u16 {
+    pub fn read_config16(&self, offset: u16) -> u16 {
         unsafe {
-            let mut port = Port::<u16>::new(self.agq + legacy_reg::AFW_ + l);
+            let mut port = Port::<u16>::new(self.iobase + legacy_reg::AHQ_ + offset);
             port.read()
         }
     }
     
     
-    pub fn ozw(&self, l: u16) -> u32 {
+    pub fn read_config32(&self, offset: u16) -> u32 {
         unsafe {
-            let mut port = Port::<u32>::new(self.agq + legacy_reg::AFW_ + l);
+            let mut port = Port::<u32>::new(self.iobase + legacy_reg::AHQ_ + offset);
             port.read()
         }
     }

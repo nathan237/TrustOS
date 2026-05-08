@@ -96,6 +96,7 @@ pub fn handle_hwdbg_command(args: &[&str]) {
         "regwatch" | "watch" => regwatch::run(args.get(1..).unwrap_or(&[])),
         "aer" => pci_aer::run(args.get(1..).unwrap_or(&[])),
         "timing" | "boottiming" => boot_timing::run(args.get(1..).unwrap_or(&[])),
+        "smbios" | "dmi" => smbios::run(args.get(1..).unwrap_or(&[])),
         "export" | "dump" => cmd_export(),
         "help" | _ => cmd_help(),
     }
@@ -191,6 +192,7 @@ fn cmd_help() {
     dbg_out!("  hwdbg regwatch pci|msr|io   Live register monitor (polls for changes)");
     dbg_out!("  hwdbg aer [B:D.F]           PCIe Advanced Error Reporting");
     dbg_out!("  hwdbg timing [slow]         Boot timing profiler (checkpoint deltas)");
+    dbg_out!("  hwdbg smbios [-v]           SMBIOS/DMI system + motherboard tables");
     dbg_out!("");
     dbg_out!("Tip: All output is mirrored to serial (115200 8N1) for remote capture.");
     dbg_out!("     PXE boot TrustOS, connect serial cable, run `hwdbg auto`.");

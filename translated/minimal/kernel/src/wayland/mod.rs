@@ -54,52 +54,52 @@ pub use display::*;
 
 
 
-static Oz: Mutex<Option<WaylandCompositor>> = Mutex::new(None);
+static Gg: Mutex<Option<WaylandCompositor>> = Mutex::new(None);
 
 
-static CHS_: AtomicU32 = AtomicU32::new(1);
+static CLB_: AtomicU32 = AtomicU32::new(1);
 
 
-pub fn lny() -> u32 {
-    CHS_.fetch_add(1, Ordering::SeqCst)
+pub fn gjd() -> u32 {
+    CLB_.fetch_add(1, Ordering::SeqCst)
 }
 
 
 pub fn init() -> Result<(), &'static str> {
-    let mut compositor = Oz.lock();
+    let mut compositor = Gg.lock();
     if compositor.is_some() {
         return Err("Wayland compositor already initialized");
     }
     
-    let (z, ac) = crate::framebuffer::yn();
+    let (width, height) = crate::framebuffer::kv();
     
-    let ekv = WaylandCompositor::new(z, ac);
-    *compositor = Some(ekv);
+    let bww = WaylandCompositor::new(width, height);
+    *compositor = Some(bww);
     
-    crate::serial_println!("[WAYLAND] Compositor initialized ({}x{})", z, ac);
+    crate::serial_println!("[WAYLAND] Compositor initialized ({}x{})", width, height);
     Ok(())
 }
 
 
-pub fn dne<G, Ac>(bb: G) -> Option<Ac>
+pub fn bjz<F, U>(f: F) -> Option<U>
 where
-    G: FnOnce(&mut WaylandCompositor) -> Ac,
+    F: FnOnce(&mut WaylandCompositor) -> U,
 {
-    let mut adb = Oz.lock();
-    adb.as_mut().map(bb)
+    let mut jg = Gg.lock();
+    jg.as_mut().map(f)
 }
 
 
-pub fn ffn() {
-    dne(|compositor| {
-        compositor.nff();
+pub fn cho() {
+    bjz(|compositor| {
+        compositor.compose();
     });
 }
 
 
-pub fn oyb() {
-    dne(|compositor| {
-        compositor.oyb();
+pub fn process_input() {
+    bjz(|compositor| {
+        compositor.process_input();
     });
 }
 
@@ -110,213 +110,213 @@ pub fn oyb() {
 
 pub struct WaylandCompositor {
     
-    pub z: u32,
-    pub ac: u32,
+    pub width: u32,
+    pub height: u32,
     
     
-    pub axa: BTreeMap<u32, Surface>,
+    pub surfaces: BTreeMap<u32, Surface>,
     
     
-    pub ezh: Vec<u32>,
+    pub surface_order: Vec<u32>,
     
     
-    pub eqq: Option<u32>,
+    pub focused_surface: Option<u32>,
     
     
-    pub hvo: i32,
-    pub hvp: i32,
+    pub pointer_x: i32,
+    pub pointer_y: i32,
     
     
-    pub mfn: BTreeMap<u32, ShmPool>,
+    pub shm_pools: BTreeMap<u32, ShmPool>,
     
     
-    pub rbr: BTreeMap<u32, Cqi>,
+    pub clients: BTreeMap<u32, Arz>,
     
     
-    pub kxa: u64,
+    pub frame_number: u64,
     
     
-    pub cdb: u32,
+    pub background_color: u32,
 }
 
 impl WaylandCompositor {
-    pub fn new(z: u32, ac: u32) -> Self {
+    pub fn new(width: u32, height: u32) -> Self {
         Self {
-            z,
-            ac,
-            axa: BTreeMap::new(),
-            ezh: Vec::new(),
-            eqq: None,
-            hvo: (z / 2) as i32,
-            hvp: (ac / 2) as i32,
-            mfn: BTreeMap::new(),
-            rbr: BTreeMap::new(),
-            kxa: 0,
-            cdb: 0xFF0A0F0C, 
+            width,
+            height,
+            surfaces: BTreeMap::new(),
+            surface_order: Vec::new(),
+            focused_surface: None,
+            pointer_x: (width / 2) as i32,
+            pointer_y: (height / 2) as i32,
+            shm_pools: BTreeMap::new(),
+            clients: BTreeMap::new(),
+            frame_number: 0,
+            background_color: 0xFF0A0F0C, 
         }
     }
     
     
-    pub fn fgc(&mut self) -> u32 {
-        let ad = lny();
-        let surface = Surface::new(ad);
-        self.axa.insert(ad, surface);
-        self.ezh.push(ad);
-        crate::serial_println!("[WAYLAND] Created surface {}", ad);
-        ad
+    pub fn create_surface(&mut self) -> u32 {
+        let id = gjd();
+        let surface = Surface::new(id);
+        self.surfaces.insert(id, surface);
+        self.surface_order.push(id);
+        crate::serial_println!("[WAYLAND] Created surface {}", id);
+        id
     }
     
     
-    pub fn ylu(&mut self, ad: u32) {
-        self.axa.remove(&ad);
-        self.ezh.ajm(|&b| b != ad);
-        if self.eqq == Some(ad) {
-            self.eqq = self.ezh.qv().hu();
+    pub fn qct(&mut self, id: u32) {
+        self.surfaces.remove(&id);
+        self.surface_order.retain(|&x| x != id);
+        if self.focused_surface == Some(id) {
+            self.focused_surface = self.surface_order.last().copied();
         }
-        crate::serial_println!("[WAYLAND] Destroyed surface {}", ad);
+        crate::serial_println!("[WAYLAND] Destroyed surface {}", id);
     }
     
     
-    pub fn zhg(&mut self, ad: u32) {
-        self.ezh.ajm(|&b| b != ad);
-        self.ezh.push(ad);
-        self.eqq = Some(ad);
+    pub fn qrs(&mut self, id: u32) {
+        self.surface_order.retain(|&x| x != id);
+        self.surface_order.push(id);
+        self.focused_surface = Some(id);
     }
     
     
-    pub fn ykq(&mut self, aw: usize) -> u32 {
-        let ad = lny();
-        let lut = ShmPool::new(ad, aw);
-        self.mfn.insert(ad, lut);
-        crate::serial_println!("[WAYLAND] Created SHM pool {} ({} bytes)", ad, aw);
-        ad
+    pub fn qbx(&mut self, size: usize) -> u32 {
+        let id = gjd();
+        let gnr = ShmPool::new(id, size);
+        self.shm_pools.insert(id, gnr);
+        crate::serial_println!("[WAYLAND] Created SHM pool {} ({} bytes)", id, size);
+        id
     }
     
     
-    pub fn nff(&mut self) {
-        self.kxa += 1;
+    pub fn compose(&mut self) {
+        self.frame_number += 1;
         
         
-        let (z, ac) = crate::framebuffer::yn();
+        let (width, height) = crate::framebuffer::kv();
         
         
-        self.gff(z, ac);
+        self.draw_background(width, height);
         
         
-        for &cmz in &self.ezh {
-            if let Some(surface) = self.axa.get(&cmz) {
-                if surface.iw && surface.gda {
-                    self.sfu(surface);
+        for &avh in &self.surface_order {
+            if let Some(surface) = self.surfaces.get(&avh) {
+                if surface.visible && surface.committed {
+                    self.draw_surface(surface);
                 }
             }
         }
         
         
-        self.dqf();
+        self.draw_cursor();
     }
     
-    fn gff(&self, z: u32, ac: u32) {
+    fn draw_background(&self, width: u32, height: u32) {
         
-        for c in 0..ac {
-            for b in 0..z {
-                let pattern: u32 = if (b + c) % 32 < 16 { 0x00 } else { 0x02 };
-                let xyj: u32 = 0xFF000000u32 | (pattern << 16) | ((pattern + 0x08) << 8) | pattern;
-                crate::framebuffer::sf(b, c, self.cdb);
+        for y in 0..height {
+            for x in 0..width {
+                let pattern: u32 = if (x + y) % 32 < 16 { 0x00 } else { 0x02 };
+                let pwv: u32 = 0xFF000000u32 | (pattern << 16) | ((pattern + 0x08) << 8) | pattern;
+                crate::framebuffer::put_pixel(x, y, self.background_color);
             }
         }
     }
     
-    fn sfu(&self, surface: &Surface) {
-        if surface.bi.is_empty() {
+    fn draw_surface(&self, surface: &Surface) {
+        if surface.buffer.is_empty() {
             return;
         }
         
-        let b = surface.b;
-        let c = surface.c;
-        let d = surface.z;
-        let i = surface.ac;
+        let x = surface.x;
+        let y = surface.y;
+        let w = surface.width;
+        let h = surface.height;
         
         
-        if surface.hmn {
-            self.sco(surface);
+        if surface.has_decorations {
+            self.draw_decorations(surface);
         }
         
         
-        for cq in 0..i {
-            for cr in 0..d {
-                let w = (cq * d + cr) as usize;
-                if w < surface.bi.len() {
-                    let il = surface.bi[w];
-                    let y = b + cr as i32;
-                    let x = c + cq as i32;
-                    if y >= 0 && x >= 0 {
-                        crate::framebuffer::sf(y as u32, x as u32, il);
+        for ak in 0..h {
+            for am in 0..w {
+                let idx = (ak * w + am) as usize;
+                if idx < surface.buffer.len() {
+                    let ct = surface.buffer[idx];
+                    let p = x + am as i32;
+                    let o = y + ak as i32;
+                    if p >= 0 && o >= 0 {
+                        crate::framebuffer::put_pixel(p as u32, o as u32, ct);
                     }
                 }
             }
         }
     }
     
-    fn sco(&self, surface: &Surface) {
-        let b = surface.b;
-        let c = surface.c;
-        let d = surface.z as i32;
-        let fwu = 28;
+    fn draw_decorations(&self, surface: &Surface) {
+        let x = surface.x;
+        let y = surface.y;
+        let w = surface.width as i32;
+        let crr = 28;
         
         
-        let ejy = if self.eqq == Some(surface.ad) {
+        let bwl = if self.focused_surface == Some(surface.id) {
             0xFF1A2A20 
         } else {
             0xFF0D1310 
         };
         
-        for ty in 0..fwu {
-            for gx in 0..d {
-                let y = b + gx;
-                let x = c - fwu + ty;
-                if y >= 0 && x >= 0 {
-                    crate::framebuffer::sf(y as u32, x as u32, ejy);
+        for ty in 0..crr {
+            for bu in 0..w {
+                let p = x + bu;
+                let o = y - crr + ty;
+                if p >= 0 && o >= 0 {
+                    crate::framebuffer::put_pixel(p as u32, o as u32, bwl);
                 }
             }
         }
         
         
-        let kn = c - fwu + 6;
-        let ask = 14;
+        let ed = y - crr + 6;
+        let wv = 14;
         
         
-        self.cxc(b + 12, kn + 7, ask / 2, 0xFF3A2828);
+        self.draw_circle(x + 12, ed + 7, wv / 2, 0xFF3A2828);
         
-        self.cxc(b + 32, kn + 7, ask / 2, 0xFF2A3028);
+        self.draw_circle(x + 32, ed + 7, wv / 2, 0xFF2A3028);
         
-        self.cxc(b + 52, kn + 7, ask / 2, 0xFF2A2A20);
+        self.draw_circle(x + 52, ed + 7, wv / 2, 0xFF2A2A20);
         
         
-        if !surface.dq.is_empty() {
+        if !surface.title.is_empty() {
             
-            let cnf = b + 70;
-            let cce = kn + 4;
+            let avk = x + 70;
+            let apg = ed + 4;
             
         }
     }
     
-    fn cxc(&self, cx: i32, ae: i32, m: i32, s: u32) {
-        for bg in -m..=m {
-            for dx in -m..=m {
-                if dx * dx + bg * bg <= m * m {
-                    let y = cx + dx;
-                    let x = ae + bg;
-                    if y >= 0 && x >= 0 {
-                        crate::framebuffer::sf(y as u32, x as u32, s);
+    fn draw_circle(&self, cx: i32, u: i32, r: i32, color: u32) {
+        for ad in -r..=r {
+            for dx in -r..=r {
+                if dx * dx + ad * ad <= r * r {
+                    let p = cx + dx;
+                    let o = u + ad;
+                    if p >= 0 && o >= 0 {
+                        crate::framebuffer::put_pixel(p as u32, o as u32, color);
                     }
                 }
             }
         }
     }
     
-    fn dqf(&self) {
+    fn draw_cursor(&self) {
         
-        let gi = [
+        let cursor = [
             0b11000000u8,
             0b11100000u8,
             0b11110000u8,
@@ -334,13 +334,13 @@ impl WaylandCompositor {
             0b00000000u8,
         ];
         
-        for (c, br) in gi.iter().cf() {
-            for b in 0..8 {
-                if (br >> (7 - b)) & 1 == 1 {
-                    let y = self.hvo + b;
-                    let x = self.hvp + c as i32;
-                    if y >= 0 && x >= 0 && (y as u32) < self.z && (x as u32) < self.ac {
-                        crate::framebuffer::sf(y as u32, x as u32, 0xFFFFFFFF);
+        for (y, row) in cursor.iter().enumerate() {
+            for x in 0..8 {
+                if (row >> (7 - x)) & 1 == 1 {
+                    let p = self.pointer_x + x;
+                    let o = self.pointer_y + y as i32;
+                    if p >= 0 && o >= 0 && (p as u32) < self.width && (o as u32) < self.height {
+                        crate::framebuffer::put_pixel(p as u32, o as u32, 0xFFFFFFFF);
                     }
                 }
             }
@@ -348,23 +348,23 @@ impl WaylandCompositor {
     }
     
     
-    pub fn zdc(&mut self, dx: i32, bg: i32) {
-        self.hvo = (self.hvo + dx).qp(0, self.z as i32 - 1);
-        self.hvp = (self.hvp + bg).qp(0, self.ac as i32 - 1);
+    pub fn qpe(&mut self, dx: i32, ad: i32) {
+        self.pointer_x = (self.pointer_x + dx).clamp(0, self.width as i32 - 1);
+        self.pointer_y = (self.pointer_y + ad).clamp(0, self.height as i32 - 1);
     }
     
     
-    pub fn oyb(&mut self) {
+    pub fn process_input(&mut self) {
         
     }
     
     
-    pub fn zqc(&self, b: i32, c: i32) -> Option<u32> {
+    pub fn qya(&self, x: i32, y: i32) -> Option<u32> {
         
-        for &ad in self.ezh.iter().vv() {
-            if let Some(surface) = self.axa.get(&ad) {
-                if surface.contains(b, c) {
-                    return Some(ad);
+        for &id in self.surface_order.iter().rev() {
+            if let Some(surface) = self.surfaces.get(&id) {
+                if surface.contains(x, y) {
+                    return Some(id);
                 }
             }
         }
@@ -373,7 +373,7 @@ impl WaylandCompositor {
 }
 
 
-pub struct Cqi {
-    pub ad: u32,
-    pub axa: Vec<u32>,
+pub struct Arz {
+    pub id: u32,
+    pub surfaces: Vec<u32>,
 }

@@ -71,10 +71,10 @@ pub struct ThemeColors {
     pub border_focused: u32,
     
     // Button colors
-    pub button_close: u32,
-    pub button_close_hover: u32,
-    pub button_maximize: u32,
-    pub button_minimize: u32,
+    pub btn_close: u32,
+    pub btn_close_hover: u32,
+    pub btn_maximize: u32,
+    pub btn_minimize: u32,
     
     // Taskbar
     pub taskbar_bg: u32,
@@ -239,10 +239,10 @@ impl ThemeColors {
             border_focused: 0xFF00D26A,
             
             // Buttons
-            button_close: 0xFFE81123,
-            button_close_hover: 0xFFFF4D5E,
-            button_maximize: 0xFF00D26A,
-            button_minimize: 0xFF606060,
+            btn_close: 0xFFE81123,
+            btn_close_hover: 0xFFFF4D5E,
+            btn_maximize: 0xFF00D26A,
+            btn_minimize: 0xFF606060,
             
             // Taskbar
             taskbar_bg: 0xF0101410,
@@ -284,10 +284,10 @@ impl ThemeColors {
             border_focused: 0xFF0078D4,
             
             // Buttons
-            button_close: 0xFFC42B1C,
-            button_close_hover: 0xFFE81123,
-            button_maximize: 0xFF666666,
-            button_minimize: 0xFF666666,
+            btn_close: 0xFFC42B1C,
+            btn_close_hover: 0xFFE81123,
+            btn_maximize: 0xFF666666,
+            btn_minimize: 0xFF666666,
             
             // Taskbar
             taskbar_bg: 0xE61C1C1C,
@@ -324,10 +324,10 @@ impl ThemeColors {
             border: 0xFFE0E0E0,
             border_focused: 0xFF0078D4,
             
-            button_close: 0xFFC42B1C,
-            button_close_hover: 0xFFE81123,
-            button_maximize: 0xFF666666,
-            button_minimize: 0xFF666666,
+            btn_close: 0xFFC42B1C,
+            btn_close_hover: 0xFFE81123,
+            btn_maximize: 0xFF666666,
+            btn_minimize: 0xFF666666,
             
             taskbar_bg: 0xF0FFFFFF,
             taskbar_hover: 0xFFE5E5E5,

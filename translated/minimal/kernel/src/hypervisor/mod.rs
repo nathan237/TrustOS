@@ -71,85 +71,85 @@ pub mod linux_vm;
 use core::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 
 
-static TY_: AtomicBool = AtomicBool::new(false);
-static AJR_: AtomicU64 = AtomicU64::new(0);
+static VG_: AtomicBool = AtomicBool::new(false);
+static ALM_: AtomicU64 = AtomicU64::new(0);
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum CpuVendor {
-    F = 0,
-    Ef = 1,
-    Ct = 2,
+    Unknown = 0,
+    Intel = 1,
+    Amd = 2,
 }
 
 
-static AAT_: AtomicU8 = AtomicU8::new(0);
+static ACG_: AtomicU8 = AtomicU8::new(0);
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VirtBackend {
     None,
-    Ajf,
-    Agh,
+    IntelVmx,
+    AmdSvm,
 }
 
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum HypervisorError {
     
-    Bwd,
+    VmxNotSupported,
     
-    Btq,
+    SvmNotSupported,
     
-    Tr,
+    NoVirtualizationSupport,
     
-    Dlu,
+    VmxAlreadyEnabled,
     
-    Cpv,
+    VmxonFailed,
     
-    Cpq,
+    VmclearFailed,
     
-    Cpr,
+    VmptrldFailed,
     
-    Bvz,
+    VmlaunchFailed,
     
-    Bwb,
+    VmresumeFailed,
     
-    Cps,
+    VmreadFailed,
     
-    Cpt,
+    VmwriteFailed,
     
-    Ns,
+    OutOfMemory,
     
-    Mo,
+    VmNotFound,
     
-    Xd,
+    InvalidConfiguration,
     
-    Lj,
+    Ev,
     
-    Cid,
+    NptViolation,
     
-    Cno,
+    SvmInitFailed,
     
-    Bd,
+    VmcbNotLoaded,
     
-    Bxw,
+    AlreadyRunning,
     
-    Acg,
+    InvalidState,
     
-    Cgc,
+    InvalidBinary,
     
-    Bjt,
+    InvalidGuest,
 }
 
 pub type Result<T> = core::result::Result<T, HypervisorError>;
 
 
-pub fn dpw() -> CpuVendor {
-    let fyb: u32;
-    let fyc: u32;
-    let fyd: u32;
+pub fn blt() -> CpuVendor {
+    let vendor_ebx: u32;
+    let vendor_ecx: u32;
+    let vendor_edx: u32;
     
     unsafe {
         core::arch::asm!(
@@ -157,303 +157,303 @@ pub fn dpw() -> CpuVendor {
             "cpuid",
             "mov {0:e}, ebx",
             "pop rbx",
-            bd(reg) fyb,
+            out(reg) vendor_ebx,
             inout("eax") 0u32 => _,
-            lateout("ecx") fyc,
-            lateout("edx") fyd,
+            lateout("ecx") vendor_ecx,
+            lateout("edx") vendor_edx,
             options(nostack, preserves_flags)
         );
     }
     
     
-    let txt = fyb == 0x756E_6547 
-        && fyd == 0x4965_6E69 
-        && fyc == 0x6C65_746E;
+    let mst = vendor_ebx == 0x756E_6547 
+        && vendor_edx == 0x4965_6E69 
+        && vendor_ecx == 0x6C65_746E;
     
     
-    let jba = fyb == 0x6874_7541 
-        && fyd == 0x6974_6E65 
-        && fyc == 0x444D_4163;
+    let erg = vendor_ebx == 0x6874_7541 
+        && vendor_edx == 0x6974_6E65 
+        && vendor_ecx == 0x444D_4163;
     
-    if txt {
-        AAT_.store(CpuVendor::Ef as u8, Ordering::SeqCst);
-        CpuVendor::Ef
-    } else if jba {
-        AAT_.store(CpuVendor::Ct as u8, Ordering::SeqCst);
-        CpuVendor::Ct
+    if mst {
+        ACG_.store(CpuVendor::Intel as u8, Ordering::SeqCst);
+        CpuVendor::Intel
+    } else if erg {
+        ACG_.store(CpuVendor::Amd as u8, Ordering::SeqCst);
+        CpuVendor::Amd
     } else {
-        CpuVendor::F
+        CpuVendor::Unknown
     }
 }
 
 
-pub fn avo() -> CpuVendor {
-    match AAT_.load(Ordering::SeqCst) {
-        1 => CpuVendor::Ef,
-        2 => CpuVendor::Ct,
-        _ => CpuVendor::F,
+pub fn cpu_vendor() -> CpuVendor {
+    match ACG_.load(Ordering::SeqCst) {
+        1 => CpuVendor::Intel,
+        2 => CpuVendor::Amd,
+        _ => CpuVendor::Unknown,
     }
 }
 
 
-pub fn xrs() -> VirtBackend {
-    if !zu() {
+pub fn psd() -> VirtBackend {
+    if !lq() {
         return VirtBackend::None;
     }
-    match avo() {
-        CpuVendor::Ef => VirtBackend::Ajf,
-        CpuVendor::Ct => VirtBackend::Agh,
-        CpuVendor::F => VirtBackend::None,
+    match cpu_vendor() {
+        CpuVendor::Intel => VirtBackend::IntelVmx,
+        CpuVendor::Amd => VirtBackend::AmdSvm,
+        CpuVendor::Unknown => VirtBackend::None,
     }
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Afp {
-    pub dme: bool,
-    pub fhw: bool,
-    pub gvo: bool,
-    pub gwj: bool,
-    pub igr: u32,
+pub struct Nv {
+    pub supported: bool,
+    pub ept_supported: bool,
+    pub unrestricted_guest: bool,
+    pub vpid_supported: bool,
+    pub vmcs_revision_id: u32,
 }
 
 
 pub fn init() -> Result<()> {
-    crate::serial_println!("{}", branding::wth());
+    crate::serial_println!("{}", branding::owm());
     crate::serial_println!("[HV] Initializing TrustVM hypervisor...");
     
     
-    let acs = dpw();
-    crate::serial_println!("[HV] CPU Vendor: {:?}", acs);
+    let vendor = blt();
+    crate::serial_println!("[HV] CPU Vendor: {:?}", vendor);
     
-    match acs {
-        CpuVendor::Ef => ttq(),
-        CpuVendor::Ct => tsz(),
-        CpuVendor::F => {
+    match vendor {
+        CpuVendor::Intel => mpi(),
+        CpuVendor::Amd => mou(),
+        CpuVendor::Unknown => {
             crate::serial_println!("[HV] Unknown CPU vendor - virtualization not supported");
-            Err(HypervisorError::Tr)
+            Err(HypervisorError::NoVirtualizationSupport)
         }
     }
 }
 
 
-fn ttq() -> Result<()> {
+fn mpi() -> Result<()> {
     crate::serial_println!("[HV] Initializing Intel VT-x (VMX)...");
     
     
-    let dr = vmx::inj()?;
+    let caps = vmx::ehv()?;
     
-    crate::serial_println!("[HV] VMX supported: {}", dr.dme);
-    crate::serial_println!("[HV] EPT supported: {}", dr.fhw);
-    crate::serial_println!("[HV] VPID supported: {}", dr.gwj);
-    crate::serial_println!("[HV] Unrestricted guest: {}", dr.gvo);
-    crate::serial_println!("[HV] VMCS revision: 0x{:08X}", dr.igr);
+    crate::serial_println!("[HV] VMX supported: {}", caps.supported);
+    crate::serial_println!("[HV] EPT supported: {}", caps.ept_supported);
+    crate::serial_println!("[HV] VPID supported: {}", caps.vpid_supported);
+    crate::serial_println!("[HV] Unrestricted guest: {}", caps.unrestricted_guest);
+    crate::serial_println!("[HV] VMCS revision: 0x{:08X}", caps.vmcs_revision_id);
     
-    if !dr.dme {
-        return Err(HypervisorError::Bwd);
+    if !caps.supported {
+        return Err(HypervisorError::VmxNotSupported);
     }
     
     
-    vmx::slg()?;
+    vmx::lpv()?;
     
     
-    vmx::xsr()?;
+    vmx::psy()?;
     
     
-    let fyk = vpid::init();
+    let csm = vpid::init();
     
-    TY_.store(true, Ordering::SeqCst);
+    VG_.store(true, Ordering::SeqCst);
     
     crate::serial_println!("[HV] TrustVM hypervisor initialized successfully (Intel VT-x)!");
-    crate::serial_println!("{}", branding::pzg(fyk, dr.fhw));
+    crate::serial_println!("{}", branding::jqz(csm, caps.ept_supported));
     
     
-    api::eps(
-        api::VmEventType::Cu,
+    api::bzf(
+        api::VmEventType::Created,
         0, 
-        api::VmEventData::Cj(alloc::string::String::from("TrustVM initialized (Intel VT-x)")),
+        api::VmEventData::Az(alloc::string::String::from("TrustVM initialized (Intel VT-x)")),
     );
     
     Ok(())
 }
 
 
-fn tsz() -> Result<()> {
+fn mou() -> Result<()> {
     crate::serial_println!("[HV] Initializing AMD-V (SVM)...");
     
     
-    if !svm::gkj() {
+    if !svm::is_supported() {
         crate::serial_println!("[HV] SVM not supported or disabled in BIOS");
-        return Err(HypervisorError::Btq);
+        return Err(HypervisorError::SvmNotSupported);
     }
     
     
-    let features = svm::fjn();
+    let features = svm::ckb();
     
-    crate::serial_println!("[HV] SVM Revision: {}", features.afe);
+    crate::serial_println!("[HV] SVM Revision: {}", features.revision);
     crate::serial_println!("[HV] NPT supported: {}", features.npt);
-    crate::serial_println!("[HV] NRIP Save: {}", features.evl);
-    crate::serial_println!("[HV] Flush by ASID: {}", features.hjy);
-    crate::serial_println!("[HV] Decode Assists: {}", features.iqs);
-    crate::serial_println!("[HV] Available ASIDs: {}", features.fph);
+    crate::serial_println!("[HV] NRIP Save: {}", features.nrip_save);
+    crate::serial_println!("[HV] Flush by ASID: {}", features.flush_by_asid);
+    crate::serial_println!("[HV] Decode Assists: {}", features.decode_assists);
+    crate::serial_println!("[HV] Available ASIDs: {}", features.num_asids);
     
     
-    svm::init().jd(|_| HypervisorError::Cno)?;
+    svm::init().map_err(|_| HypervisorError::SvmInitFailed)?;
     
-    TY_.store(true, Ordering::SeqCst);
+    VG_.store(true, Ordering::SeqCst);
     
     crate::serial_println!("[HV] TrustVM hypervisor initialized successfully (AMD SVM)!");
-    crate::serial_println!("{}", branding::pzg(true, features.npt));
+    crate::serial_println!("{}", branding::jqz(true, features.npt));
     
     
-    api::eps(
-        api::VmEventType::Cu,
+    api::bzf(
+        api::VmEventType::Created,
         0, 
-        api::VmEventData::Cj(alloc::string::String::from("TrustVM initialized (AMD SVM)")),
+        api::VmEventData::Az(alloc::string::String::from("TrustVM initialized (AMD SVM)")),
     );
     
     Ok(())
 }
 
 
-pub fn zu() -> bool {
-    TY_.load(Ordering::SeqCst)
+pub fn lq() -> bool {
+    VG_.load(Ordering::SeqCst)
 }
 
 
-pub fn dpg(j: &str, afc: usize) -> Result<u64> {
-    if !zu() {
-        return Err(HypervisorError::Tr);
+pub fn blh(name: &str, memory_mb: usize) -> Result<u64> {
+    if !lq() {
+        return Err(HypervisorError::NoVirtualizationSupport);
     }
     
-    crate::serial_println!("[HV] Creating VM '{}' (Memory: {}MB)", j, afc);
+    crate::serial_println!("[HV] Creating VM '{}' (Memory: {}MB)", name, memory_mb);
     
     
-    match avo() {
-        CpuVendor::Ct => {
-            svm_vm::dpg(j, afc)
+    match cpu_vendor() {
+        CpuVendor::Amd => {
+            svm_vm::blh(name, memory_mb)
         }
-        CpuVendor::Ef => {
-            let fk = AJR_.fetch_add(1, Ordering::SeqCst);
-            vm::dpg(fk, j, afc)?;
-            Ok(fk)
+        CpuVendor::Intel => {
+            let vm_id = ALM_.fetch_add(1, Ordering::SeqCst);
+            vm::blh(vm_id, name, memory_mb)?;
+            Ok(vm_id)
         }
-        CpuVendor::F => {
-            Err(HypervisorError::Tr)
+        CpuVendor::Unknown => {
+            Err(HypervisorError::NoVirtualizationSupport)
         }
     }
 }
 
 
-pub fn poi(fk: u64) -> Result<()> {
-    match avo() {
-        CpuVendor::Ct => {
-            svm_vm::coa(fk, |vm| vm.ay()).unwrap_or(Err(HypervisorError::Mo))?;
+pub fn jil(vm_id: u64) -> Result<()> {
+    match cpu_vendor() {
+        CpuVendor::Amd => {
+            svm_vm::avv(vm_id, |vm| vm.start()).unwrap_or(Err(HypervisorError::VmNotFound))?;
             Ok(())
         }
-        CpuVendor::Ef => vm::poi(fk),
-        CpuVendor::F => Err(HypervisorError::Tr),
+        CpuVendor::Intel => vm::jil(vm_id),
+        CpuVendor::Unknown => Err(HypervisorError::NoVirtualizationSupport),
     }
 }
 
 
-pub fn gte(fk: u64, bzw: &str) -> Result<()> {
-    match avo() {
-        CpuVendor::Ct => {
+pub fn dev(vm_id: u64, guest_name: &str) -> Result<()> {
+    match cpu_vendor() {
+        CpuVendor::Amd => {
             
-            let txz = bzw == "linux-test" 
-                || bzw.pp(".bzimage") 
-                || bzw.pp(".bzImage");
+            let msx = guest_name == "linux-test" 
+                || guest_name.ends_with(".bzimage") 
+                || guest_name.ends_with(".bzImage");
             
-            if txz {
+            if msx {
                 
-                let cwc = if bzw == "linux-test" {
-                    linux_loader::klw()
+                let bas = if guest_name == "linux-test" {
+                    linux_loader::fpb()
                 } else {
-                    guests::iwr(bzw)
-                        .ok_or(HypervisorError::Mo)?
-                        .ip()
+                    guests::eoc(guest_name)
+                        .ok_or(HypervisorError::VmNotFound)?
+                        .to_vec()
                 };
                 
-                svm_vm::coa(fk, |vm| {
-                    vm.fvn(
-                        &cwc,
+                svm_vm::avv(vm_id, |vm| {
+                    vm.start_linux(
+                        &bas,
                         "console=ttyS0 earlyprintk=serial nokaslr",
                         None,
                     )
-                }).unwrap_or(Err(HypervisorError::Mo))?;
+                }).unwrap_or(Err(HypervisorError::VmNotFound))?;
                 Ok(())
             } else {
                 
-                let thx = guests::iwr(bzw)
-                    .ok_or(HypervisorError::Mo)?;
+                let mgh = guests::eoc(guest_name)
+                    .ok_or(HypervisorError::VmNotFound)?;
                 
-                let typ = bzw == "pm-test" || bzw == "protected";
+                let mtl = guest_name == "pm-test" || guest_name == "protected";
                 
-                svm_vm::coa(fk, |vm| {
+                svm_vm::avv(vm_id, |vm| {
                     
                     if vm.vmcb.is_none() {
-                        vm.cfp()?;
+                        vm.initialize()?;
                     }
                     
-                    vm.diy(&thx, 0x1000)?;
-                    if typ {
+                    vm.load_binary(&mgh, 0x1000)?;
+                    if mtl {
                         
-                        vm.iab(0x1000, 0x8000)?;
+                        vm.setup_protected_mode(0x1000, 0x8000)?;
                     } else {
                         
-                        vm.jpk(0x1000)?;
+                        vm.setup_real_mode(0x1000)?;
                     }
-                    vm.ay()
-                }).unwrap_or(Err(HypervisorError::Mo))?;
+                    vm.start()
+                }).unwrap_or(Err(HypervisorError::VmNotFound))?;
                 Ok(())
             }
         }
-        CpuVendor::Ef => vm::gte(fk, bzw),
-        CpuVendor::F => Err(HypervisorError::Tr),
+        CpuVendor::Intel => vm::dev(vm_id, guest_name),
+        CpuVendor::Unknown => Err(HypervisorError::NoVirtualizationSupport),
     }
 }
 
 
-pub fn jru(fk: u64) -> Result<()> {
-    match avo() {
-        CpuVendor::Ct => {
-            svm_vm::coa(fk, |vm| vm.rb()).unwrap_or(Err(HypervisorError::Mo))?;
+pub fn fbu(vm_id: u64) -> Result<()> {
+    match cpu_vendor() {
+        CpuVendor::Amd => {
+            svm_vm::avv(vm_id, |vm| vm.pause()).unwrap_or(Err(HypervisorError::VmNotFound))?;
             Ok(())
         }
-        CpuVendor::Ef => vm::jru(fk),
-        CpuVendor::F => Err(HypervisorError::Tr),
+        CpuVendor::Intel => vm::fbu(vm_id),
+        CpuVendor::Unknown => Err(HypervisorError::NoVirtualizationSupport),
     }
 }
 
 
-pub fn elx(fk: u64, cac: &str, bqx: &str, awr: bool) {
-    virtfs::elx(fk, cac, bqx, awr);
+pub fn add_mount(vm_id: u64, host_path: &str, guest_path: &str, readonly: bool) {
+    virtfs::add_mount(vm_id, host_path, guest_path, readonly);
 }
 
 
-pub fn leo(fk: u64, f: &[u8]) {
-    console::hoa(fk, f);
+pub fn gct(vm_id: u64, data: &[u8]) {
+    console::inject_input(vm_id, data);
 }
 
 
-pub fn iwo(fk: u64) -> alloc::string::String {
-    console::teh(fk)
+pub fn eoa(vm_id: u64) -> alloc::string::String {
+    console::mdo(vm_id)
 }
 
 
-pub fn hpy() -> &'static [&'static str] {
-    guests::hpy()
+pub fn dtj() -> &'static [&'static str] {
+    guests::dtj()
 }
 
 
-pub fn dna() -> u64 {
-    AJR_.load(Ordering::SeqCst)
+pub fn vm_count() -> u64 {
+    ALM_.load(Ordering::SeqCst)
 }
 
 
-pub fn cbu() -> Result<()> {
-    if !zu() {
+pub fn shutdown() -> Result<()> {
+    if !lq() {
         return Ok(());
     }
     
@@ -463,9 +463,9 @@ pub fn cbu() -> Result<()> {
     
     
     
-    vmx::xsq()?;
+    vmx::psx()?;
     
-    TY_.store(false, Ordering::SeqCst);
+    VG_.store(false, Ordering::SeqCst);
     
     crate::serial_println!("[HV] Hypervisor shutdown complete");
     
@@ -477,38 +477,38 @@ pub fn cbu() -> Result<()> {
 
 
 
-pub fn iwn() -> api::Capabilities {
-    api::iwn()
+pub fn enz() -> api::Capabilities {
+    api::enz()
 }
 
 
-pub fn dk() -> &'static str {
-    api::DAL_
+pub fn version() -> &'static str {
+    api::DED_
 }
 
 
-pub fn nya(az: usize) -> alloc::vec::Vec<api::Uw> {
-    api::ten(az)
+pub fn ibl(count: usize) -> alloc::vec::Vec<api::Je> {
+    api::mdr(count)
 }
 
 
-pub fn ipp(fk: u64, j: &str) -> u64 {
-    api::ipp(fk, j, 4096)
+pub fn ejc(vm_id: u64, name: &str) -> u64 {
+    api::ejc(vm_id, name, 4096)
 }
 
 
-pub fn nci(cjo: u64, f: &[u8]) -> core::result::Result<usize, &'static str> {
-    api::nci(cjo, f)
+pub fn hkj(ath: u64, data: &[u8]) -> core::result::Result<usize, &'static str> {
+    api::hkj(ath, data)
 }
 
 
-pub fn znu(fk: u64, lla: usize, llh: usize) {
-    let lws = api::ResourceQuota {
-        lla,
-        llh,
+pub fn qwq(vm_id: u64, max_memory: usize, max_vcpus: usize) {
+    let gph = api::ResourceQuota {
+        max_memory,
+        max_vcpus,
         ..api::ResourceQuota::default()
     };
-    api::wjm(fk, lws);
+    api::opj(vm_id, gph);
 }
 
 
@@ -516,28 +516,28 @@ pub fn znu(fk: u64, lla: usize, llh: usize) {
 
 
 
-pub fn fyk() -> bool {
-    vpid::zu()
+pub fn csm() -> bool {
+    vpid::lq()
 }
 
 
-pub fn pyu() -> usize {
-    vpid::qgz()
+pub fn jqo() -> usize {
+    vpid::jvb()
 }
 
 
-pub fn fhx() -> u64 {
-    isolation::pyh()
+pub fn ept_violations() -> u64 {
+    isolation::jqd()
 }
 
 
-pub fn pap(az: usize) -> alloc::vec::Vec<isolation::Lj> {
-    isolation::vte(az)
+pub fn iys(count: usize) -> alloc::vec::Vec<isolation::Ev> {
+    isolation::odq(count)
 }
 
 
-pub fn zqb() -> bool {
-    isolation::ppw()
+pub fn qxz() -> bool {
+    isolation::jjv()
 }
 
 
@@ -546,22 +546,22 @@ pub fn zqb() -> bool {
 
 
 pub fn logo() -> &'static str {
-    branding::AZC_
+    branding::BBD_
 }
 
 
-pub fn jma() -> alloc::string::String {
-    let dr = iwn();
-    branding::jma(dr.cvr())
+pub fn eyj() -> alloc::string::String {
+    let caps = enz();
+    branding::eyj(caps.as_u64())
 }
 
 
-pub fn jmb() -> alloc::string::String {
-    branding::jmb(
-        vpid::zu(),
+pub fn eyk() -> alloc::string::String {
+    branding::eyk(
+        vpid::lq(),
         true, 
-        isolation::ppw(),
-        isolation::pyh(),
+        isolation::jjv(),
+        isolation::jqd(),
     )
 }
 
@@ -570,18 +570,18 @@ pub fn jmb() -> alloc::string::String {
 
 
 
-pub fn kbt() -> alloc::string::String {
-    match xrs() {
-        VirtBackend::Ajf => {
+pub fn fhy() -> alloc::string::String {
+    match psd() {
+        VirtBackend::IntelVmx => {
             alloc::format!("Intel VT-x (VMX) - VMCS, EPT, VPID")
         }
-        VirtBackend::Agh => {
-            let features = svm::fjn();
+        VirtBackend::AmdSvm => {
+            let features = svm::ckb();
             alloc::format!(
                 "AMD-V (SVM) Rev{} - VMCB, NPT:{}, ASIDs:{}",
-                features.afe,
+                features.revision,
                 if features.npt { "Yes" } else { "No" },
-                features.fph
+                features.num_asids
             )
         }
         VirtBackend::None => {
@@ -591,19 +591,19 @@ pub fn kbt() -> alloc::string::String {
 }
 
 
-pub fn yyv() -> bool {
-    avo() == CpuVendor::Ct && zu()
+pub fn qly() -> bool {
+    cpu_vendor() == CpuVendor::Amd && lq()
 }
 
 
-pub fn yzl() -> bool {
-    avo() == CpuVendor::Ef && zu()
+pub fn qmk() -> bool {
+    cpu_vendor() == CpuVendor::Intel && lq()
 }
 
 
-pub fn zqf() -> Option<svm::SvmFeatures> {
-    if avo() == CpuVendor::Ct {
-        Some(svm::fjn())
+pub fn qyd() -> Option<svm::SvmFeatures> {
+    if cpu_vendor() == CpuVendor::Amd {
+        Some(svm::ckb())
     } else {
         None
     }

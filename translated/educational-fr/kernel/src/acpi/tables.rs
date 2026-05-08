@@ -151,16 +151,16 @@ match self.bit_width {
                 }
             }
             Self::SPACE_SYSTEM_MEMORY => {
-                let address = self.address + crate::memory::hhdm_offset();
+                let addr = self.address + crate::memory::hhdm_offset();
                                 // Correspondance de motifs — branchement exhaustif de Rust.
 match self.bit_width {
-                    8 => core::ptr::read_volatile(address as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+                    8 => core::ptr::read_volatile(addr as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u8) as u64,
-                    16 => core::ptr::read_volatile(address as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+                    16 => core::ptr::read_volatile(addr as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u16) as u64,
-                    32 => core::ptr::read_volatile(address as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+                    32 => core::ptr::read_volatile(addr as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u32) as u64,
-                    64 => core::ptr::read_volatile(address as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+                    64 => core::ptr::read_volatile(addr as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u64),
                     _ => 0,
                 }
@@ -185,13 +185,13 @@ match self.bit_width {
                 }
             }
             Self::SPACE_SYSTEM_MEMORY => {
-                let address = self.address + crate::memory::hhdm_offset();
+                let addr = self.address + crate::memory::hhdm_offset();
                                 // Correspondance de motifs — branchement exhaustif de Rust.
 match self.bit_width {
-                    8 => core::ptr::write_volatile(address as *mut u8, value as u8),
-                    16 => core::ptr::write_volatile(address as *mut u16, value as u16),
-                    32 => core::ptr::write_volatile(address as *mut u32, value as u32),
-                    64 => core::ptr::write_volatile(address as *mut u64, value),
+                    8 => core::ptr::write_volatile(addr as *mut u8, value as u8),
+                    16 => core::ptr::write_volatile(addr as *mut u16, value as u16),
+                    32 => core::ptr::write_volatile(addr as *mut u32, value as u32),
+                    64 => core::ptr::write_volatile(addr as *mut u64, value),
                     _ => {}
                 }
             }

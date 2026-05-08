@@ -20,18 +20,19 @@ pub const PMC_INTR_HOST: u32 = 0x000100;
 /// Interrupt enable (host)
 pub const PMC_INTR_EN_HOST: u32 = 0x000140;
 
-/// Engine master enable
-/// bit 0: all engines, bit 4: PFIFO, bit 8: PTIMER
-/// bit 12: PGRAPH, bit 20: PFB, bit 24: PCOPY
-/// bit 26: PVDEC, bit 30: PDISPLAY
+/// Engine master enable (NV50)
+/// See envytools rnndb: PMC_ENABLE for NV50 family.
+/// bit 0: all engines, bit 1: PPMI, bit 4: PTIMER
+/// bit 8: PFB, bit 12: PGRAPH, bit 26: PDISP
+/// Note: PFIFO has its own enable at 0x002200.
 pub const PMC_ENABLE: u32 = 0x000200;
 
-// PMC_ENABLE bits
+// PMC_ENABLE bits (NV50/G80-G98 verified)
 pub const PMC_ENABLE_ALL: u32 = 1 << 0;
-pub const PMC_ENABLE_PFIFO: u32 = 1 << 8;
+pub const PMC_ENABLE_PTIMER: u32 = 1 << 4;
+pub const PMC_ENABLE_PFB: u32 = 1 << 8;
 pub const PMC_ENABLE_PGRAPH: u32 = 1 << 12;
-pub const PMC_ENABLE_PFB: u32 = 1 << 20;
-pub const PMC_ENABLE_PDISPLAY: u32 = 1 << 30;
+pub const PMC_ENABLE_PDISPLAY: u32 = 1 << 26;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // PBUS — Bus Interface (0x001000)
@@ -125,6 +126,32 @@ pub const PDISP_HEAD0_BASE: u32 = 0x610B58;
 pub const PDISP_HEAD0_SURFACE: u32 = 0x610B60;
 /// CRTC head 0 display size
 pub const PDISP_HEAD0_SIZE: u32 = 0x610B68;
+
+/// DAC0 control register
+pub const PDISP_DAC0_CTRL: u32 = 0x610B5C;
+/// SOR (Serial Output Resource) 0 control
+pub const PDISP_SOR0_CTRL: u32 = 0x610B70;
+/// Display channel base (EVO master channel)
+pub const PDISP_CHAN_STAT: u32 = 0x610200;
+/// VRAM base address used by display engine
+pub const PDISP_FB_BASE: u32 = 0x610010;
+/// Clock control
+pub const PDISP_CLK_CTRL0: u32 = 0x614100;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PRAMIN — Instance Memory (0x700000)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+pub const PRAMIN_BASE: u32 = 0x700000;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PROM/VBIOS (0x300000)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// VBIOS ROM shadow window
+pub const PROM_BASE: u32 = 0x300000;
+/// PROM access control
+pub const PROM_CTRL: u32 = 0x001850;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // NV50 2D Engine Methods (class 0x502D)

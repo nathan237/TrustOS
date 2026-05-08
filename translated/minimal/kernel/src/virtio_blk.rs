@@ -8,37 +8,37 @@ use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use spin::Mutex;
 
 use crate::virtio::{VirtioDevice, Virtqueue, desc_flags, status};
-use crate::pci::S;
+use crate::pci::L;
 
 
-pub const AR_: usize = 512;
+pub const AT_: usize = 512;
 
 
 pub mod features {
-    pub const EGL_: u32 = 1 << 1;      
-    pub const EFJ_: u32 = 1 << 2;       
-    pub const Cxk: u32 = 1 << 4;      
-    pub const Bqf: u32 = 1 << 5;            
-    pub const DDQ_: u32 = 1 << 6;      
-    pub const Cdb: u32 = 1 << 9;         
-    pub const Djm: u32 = 1 << 10;     
-    pub const DGM_: u32 = 1 << 11;   
+    pub const EKE_: u32 = 1 << 1;      
+    pub const EJC_: u32 = 1 << 2;       
+    pub const Awg: u32 = 1 << 4;      
+    pub const Adf: u32 = 1 << 5;            
+    pub const DHK_: u32 = 1 << 6;      
+    pub const Ajv: u32 = 1 << 9;         
+    pub const Bdw: u32 = 1 << 10;     
+    pub const DKF_: u32 = 1 << 11;   
 }
 
 
 pub mod req_type {
-    pub const Cfk: u32 = 0;       
-    pub const Cif: u32 = 1;      
-    pub const Cdb: u32 = 4;    
-    pub const Cua: u32 = 11; 
-    pub const EKT_: u32 = 13;
+    pub const Alj: u32 = 0;       
+    pub const Amz: u32 = 1;      
+    pub const Ajv: u32 = 4;    
+    pub const Atw: u32 = 11; 
+    pub const EOE_: u32 = 13;
 }
 
 
 pub mod blk_status {
-    pub const Bnq: u8 = 0;
-    pub const Czb: u8 = 1;
-    pub const Dke: u8 = 2;
+    pub const Abx: u8 = 0;
+    pub const Axm: u8 = 1;
+    pub const Bei: u8 = 2;
 }
 
 
@@ -46,382 +46,382 @@ pub mod blk_status {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct VirtioBlkReqHdr {
     pub req_type: u32,
-    pub awt: u32,
-    pub jk: u64,
+    pub reserved: u32,
+    pub dj: u64,
 }
 
 impl VirtioBlkReqHdr {
-    pub const Am: usize = 16;
+    pub const Z: usize = 16;
 }
 
 
 pub struct VirtioBlk {
     
-    de: VirtioDevice,
+    device: VirtioDevice,
     
     queue: Option<Box<Virtqueue>>,
     
-    aty: u64,
+    capacity: u64,
     
-    zn: u32,
+    sector_size: u32,
     
-    hwy: bool,
+    read_only: bool,
 }
 
 
-static Fl: Mutex<Option<VirtioBlk>> = Mutex::new(None);
-static Be: AtomicBool = AtomicBool::new(false);
+static Cl: Mutex<Option<VirtioBlk>> = Mutex::new(None);
+static Ah: AtomicBool = AtomicBool::new(false);
 
 
-static BIK_: core::sync::atomic::AtomicU16 = core::sync::atomic::AtomicU16::new(0);
+static BKR_: core::sync::atomic::AtomicU16 = core::sync::atomic::AtomicU16::new(0);
 
-static QO_: AtomicBool = AtomicBool::new(false);
+static RI_: AtomicBool = AtomicBool::new(false);
 
 
-static Bpz: AtomicU64 = AtomicU64::new(0);
-static Bwj: AtomicU64 = AtomicU64::new(0);
-static JO_: AtomicU64 = AtomicU64::new(0);
-static JP_: AtomicU64 = AtomicU64::new(0);
+static Acy: AtomicU64 = AtomicU64::new(0);
+static Agl: AtomicU64 = AtomicU64::new(0);
+static KF_: AtomicU64 = AtomicU64::new(0);
+static KG_: AtomicU64 = AtomicU64::new(0);
 
 impl VirtioBlk {
     
-    pub fn new(sq: &S) -> Result<Self, &'static str> {
+    pub fn new(go: &L) -> Result<Self, &'static str> {
         
-        let aew = sq.bar[0];
-        if aew == 0 {
+        let bar0 = go.bar[0];
+        if bar0 == 0 {
             return Err("BAR0 not configured");
         }
         
         
-        let agq = if aew & 1 == 1 {
-            (aew & 0xFFFC) as u16
+        let iobase = if bar0 & 1 == 1 {
+            (bar0 & 0xFFFC) as u16
         } else {
             return Err("MMIO not supported yet, need I/O port BAR");
         };
         
-        crate::log_debug!("[virtio-blk] I/O base: {:#X}", agq);
+        crate::log_debug!("[virtio-blk] I/O base: {:#X}", iobase);
         
-        let mut de = VirtioDevice::new(agq);
-        
-        
-        de.apa();
+        let mut device = VirtioDevice::new(iobase);
         
         
-        de.fzu(status::Or);
-        de.fzu(status::Fl);
+        device.reset();
         
         
-        let bju = de.pab();
-        crate::log_debug!("[virtio-blk] Device features: {:#X}", bju);
+        device.add_status(status::Gf);
+        device.add_status(status::Cl);
         
         
-        let hwy = (bju & features::Bqf) != 0;
+        let device_features = device.read_device_features();
+        crate::log_debug!("[virtio-blk] Device features: {:#X}", device_features);
         
         
-        let ckb = 0u32; 
-        de.pzx(ckb);
+        let read_only = (device_features & features::Adf) != 0;
+        
+        
+        let driver_features = 0u32; 
+        device.write_driver_features(driver_features);
         
         
         
-        let kgk = de.ozw(0) as u64;
-        let kgj = de.ozw(4) as u64;
-        let aty = kgk | (kgj << 32);
+        let fkt = device.read_config32(0) as u64;
+        let fks = device.read_config32(4) as u64;
+        let capacity = fkt | (fks << 32);
         
         crate::log!("[virtio-blk] Capacity: {} sectors ({} MB)", 
-            aty, (aty * 512) / (1024 * 1024));
+            capacity, (capacity * 512) / (1024 * 1024));
         
-        if hwy {
+        if read_only {
             crate::log!("[virtio-blk] Device is read-only");
         }
         
         Ok(Self {
-            de,
+            device,
             queue: None,
-            aty,
-            zn: 512,
-            hwy,
+            capacity,
+            sector_size: 512,
+            read_only,
         })
     }
     
     
-    pub fn wli(&mut self) -> Result<(), &'static str> {
-        self.de.mdl(0);
-        let aw = self.de.kyw();
-        crate::log_debug!("[virtio-blk] Queue size: {}", aw);
+    pub fn setup_queue(&mut self) -> Result<(), &'static str> {
+        self.device.select_queue(0);
+        let size = self.device.get_queue_size();
+        crate::log_debug!("[virtio-blk] Queue size: {}", size);
         
-        if aw == 0 {
+        if size == 0 {
             return Err("Queue not available");
         }
         
-        let queue = self.ijn(aw)?;
+        let queue = self.alloc_queue(size)?;
         
         
-        let duh = (queue.ki / 4096) as u32;
-        self.de.meu(duh);
+        let bog = (queue.phys_addr / 4096) as u32;
+        self.device.set_queue_address(bog);
         
         self.queue = Some(queue);
         Ok(())
     }
     
     
-    fn ijn(&self, aw: u16) -> Result<Box<Virtqueue>, &'static str> {
-        Virtqueue::new(aw)
+    fn alloc_queue(&self, size: u16) -> Result<Box<Virtqueue>, &'static str> {
+        Virtqueue::new(size)
     }
     
     
-    pub fn ay(&mut self) -> Result<(), &'static str> {
-        self.de.fzu(status::HW_);
+    pub fn start(&mut self) -> Result<(), &'static str> {
+        self.device.add_status(status::IQ_);
         crate::log!("[virtio-blk] Device started");
         Ok(())
     }
     
     
-    pub fn ain(&mut self, awy: u64, az: usize, bi: &mut [u8]) -> Result<(), &'static str> {
-        if bi.len() < az * AR_ {
+    pub fn read_sectors(&mut self, start_sector: u64, count: usize, buffer: &mut [u8]) -> Result<(), &'static str> {
+        if buffer.len() < count * AT_ {
             return Err("Buffer too small");
         }
         
-        if awy + az as u64 > self.aty {
+        if start_sector + count as u64 > self.capacity {
             return Err("Read beyond device capacity");
         }
         
         
-        for a in 0..az {
-            self.vsf(awy + a as u64, 
-                &mut bi[a * AR_..(a + 1) * AR_])?;
+        for i in 0..count {
+            self.read_one_sector(start_sector + i as u64, 
+                &mut buffer[i * AT_..(i + 1) * AT_])?;
         }
         
-        Bpz.fetch_add(az as u64, Ordering::Relaxed);
-        JO_.fetch_add((az * AR_) as u64, Ordering::Relaxed);
+        Acy.fetch_add(count as u64, Ordering::Relaxed);
+        KF_.fetch_add((count * AT_) as u64, Ordering::Relaxed);
         
         Ok(())
     }
     
     
-    fn vsf(&mut self, jk: u64, bi: &mut [u8]) -> Result<(), &'static str> {
+    fn read_one_sector(&mut self, dj: u64, buffer: &mut [u8]) -> Result<(), &'static str> {
         
         use alloc::boxed::Box;
         use alloc::vec;
         
         
         
-        let aay = VirtioBlkReqHdr::Am + AR_ + 1;
-        let mut alb = vec![0u8; aay].dsd();
+        let total_size = VirtioBlkReqHdr::Z + AT_ + 1;
+        let mut dma_buf = vec![0u8; total_size].into_boxed_slice();
         
         
-        let dh = VirtioBlkReqHdr {
-            req_type: req_type::Cfk,
-            awt: 0,
-            jk,
+        let header = VirtioBlkReqHdr {
+            req_type: req_type::Alj,
+            reserved: 0,
+            dj,
         };
         unsafe {
-            let lbu = alb.mw() as *mut VirtioBlkReqHdr;
-            core::ptr::write(lbu, dh);
+            let gak = dma_buf.as_mut_ptr() as *mut VirtioBlkReqHdr;
+            core::ptr::write(gak, header);
         }
         
         
-        alb[VirtioBlkReqHdr::Am + AR_] = 0xFF;
+        dma_buf[VirtioBlkReqHdr::Z + AT_] = 0xFF;
         
         
-        let hp = crate::memory::lr();
-        let kqi = alb.fq() as u64;
-        let bua = kqi - hp;
+        let bz = crate::memory::hhdm_offset();
+        let fso = dma_buf.as_ptr() as u64;
+        let ali = fso - bz;
         
-        let lbt = bua;
-        let cpu = bua + VirtioBlkReqHdr::Am as u64;
-        let bik = bua + (VirtioBlkReqHdr::Am + AR_) as u64;
+        let gaj = ali;
+        let data_phys = ali + VirtioBlkReqHdr::Z as u64;
+        let status_phys = ali + (VirtioBlkReqHdr::Z + AT_) as u64;
         
         let queue = self.queue.as_mut().ok_or("Queue not initialized")?;
         
         
-        let ale = queue.blx().ok_or("No free descriptor")?;
-        let eal = queue.blx().ok_or("No free descriptor")?;
-        let cmy = queue.blx().ok_or("No free descriptor")?;
+        let su = queue.alloc_desc().ok_or("No free descriptor")?;
+        let bro = queue.alloc_desc().ok_or("No free descriptor")?;
+        let ave = queue.alloc_desc().ok_or("No free descriptor")?;
         
         
-        queue.bwz(ale, lbt, VirtioBlkReqHdr::Am as u32, 
-            desc_flags::Akj, eal);
+        queue.set_desc(su, gaj, VirtioBlkReqHdr::Z as u32, 
+            desc_flags::Pn, bro);
         
         
-        queue.bwz(eal, cpu, AR_ as u32,
-            desc_flags::Db | desc_flags::Akj, cmy);
+        queue.set_desc(bro, data_phys, AT_ as u32,
+            desc_flags::Bh | desc_flags::Pn, ave);
         
         
-        queue.bwz(cmy, bik, 1, desc_flags::Db, 0);
+        queue.set_desc(ave, status_phys, 1, desc_flags::Bh, 0);
         
         
-        queue.dmd(ale);
+        queue.submit(su);
         
         
-        let agq = self.de.agq;
+        let iobase = self.device.iobase;
         
         
         unsafe {
-            let mut port = crate::arch::Port::<u16>::new(agq + 0x10);
+            let mut port = crate::arch::Port::<u16>::new(iobase + 0x10);
             port.write(0);
         }
         
         
-        QO_.store(false, Ordering::Release);
+        RI_.store(false, Ordering::Release);
         
         
         let queue = self.queue.as_mut().ok_or("Queue not initialized")?;
         
         
-        let mut aah = 1_000_000u32;
-        while !queue.ixy() && aah > 0 {
-            if QO_.load(Ordering::Acquire) {
+        let mut mz = 1_000_000u32;
+        while !queue.has_used() && mz > 0 {
+            if RI_.load(Ordering::Acquire) {
                 break;
             }
-            core::hint::hc();
-            aah -= 1;
+            core::hint::spin_loop();
+            mz -= 1;
         }
         
-        if aah == 0 {
-            queue.ald(ale);
-            queue.ald(eal);
-            queue.ald(cmy);
+        if mz == 0 {
+            queue.free_desc(su);
+            queue.free_desc(bro);
+            queue.free_desc(ave);
             return Err("Request timeout");
         }
         
         
-        let qdw = queue.jjp().ok_or("No completion")?;
+        let jsu = queue.pop_used().ok_or("No completion")?;
         
         
-        queue.ald(ale);
-        queue.ald(eal);
-        queue.ald(cmy);
+        queue.free_desc(su);
+        queue.free_desc(bro);
+        queue.free_desc(ave);
         
-        if alb[VirtioBlkReqHdr::Am + AR_] != blk_status::Bnq {
+        if dma_buf[VirtioBlkReqHdr::Z + AT_] != blk_status::Abx {
             return Err("Device error");
         }
         
         
-        bi.dg(&alb[VirtioBlkReqHdr::Am..VirtioBlkReqHdr::Am + AR_]);
+        buffer.copy_from_slice(&dma_buf[VirtioBlkReqHdr::Z..VirtioBlkReqHdr::Z + AT_]);
         
         Ok(())
     }
     
     
-    pub fn bpi(&mut self, awy: u64, az: usize, bi: &[u8]) -> Result<(), &'static str> {
-        if self.hwy {
+    pub fn write_sectors(&mut self, start_sector: u64, count: usize, buffer: &[u8]) -> Result<(), &'static str> {
+        if self.read_only {
             return Err("Device is read-only");
         }
         
-        if bi.len() < az * AR_ {
+        if buffer.len() < count * AT_ {
             return Err("Buffer too small");
         }
         
-        if awy + az as u64 > self.aty {
+        if start_sector + count as u64 > self.capacity {
             return Err("Write beyond device capacity");
         }
         
         
-        for a in 0..az {
-            self.xvp(awy + a as u64,
-                &bi[a * AR_..(a + 1) * AR_])?;
+        for i in 0..count {
+            self.write_one_sector(start_sector + i as u64,
+                &buffer[i * AT_..(i + 1) * AT_])?;
         }
         
-        Bwj.fetch_add(az as u64, Ordering::Relaxed);
-        JP_.fetch_add((az * AR_) as u64, Ordering::Relaxed);
+        Agl.fetch_add(count as u64, Ordering::Relaxed);
+        KG_.fetch_add((count * AT_) as u64, Ordering::Relaxed);
         
         Ok(())
     }
     
     
-    fn xvp(&mut self, jk: u64, bi: &[u8]) -> Result<(), &'static str> {
+    fn write_one_sector(&mut self, dj: u64, buffer: &[u8]) -> Result<(), &'static str> {
         
         use alloc::vec;
         
         
         
-        let aay = VirtioBlkReqHdr::Am + AR_ + 1;
-        let mut alb = vec![0u8; aay].dsd();
+        let total_size = VirtioBlkReqHdr::Z + AT_ + 1;
+        let mut dma_buf = vec![0u8; total_size].into_boxed_slice();
         
         
-        let dh = VirtioBlkReqHdr {
-            req_type: req_type::Cif,
-            awt: 0,
-            jk,
+        let header = VirtioBlkReqHdr {
+            req_type: req_type::Amz,
+            reserved: 0,
+            dj,
         };
         unsafe {
-            let lbu = alb.mw() as *mut VirtioBlkReqHdr;
-            core::ptr::write(lbu, dh);
+            let gak = dma_buf.as_mut_ptr() as *mut VirtioBlkReqHdr;
+            core::ptr::write(gak, header);
         }
         
         
-        alb[VirtioBlkReqHdr::Am..VirtioBlkReqHdr::Am + AR_]
-            .dg(&bi[..AR_]);
+        dma_buf[VirtioBlkReqHdr::Z..VirtioBlkReqHdr::Z + AT_]
+            .copy_from_slice(&buffer[..AT_]);
         
         
-        alb[VirtioBlkReqHdr::Am + AR_] = 0xFF;
+        dma_buf[VirtioBlkReqHdr::Z + AT_] = 0xFF;
         
         
-        let hp = crate::memory::lr();
-        let kqi = alb.fq() as u64;
-        let bua = kqi - hp;
+        let bz = crate::memory::hhdm_offset();
+        let fso = dma_buf.as_ptr() as u64;
+        let ali = fso - bz;
         
-        let lbt = bua;
-        let cpu = bua + VirtioBlkReqHdr::Am as u64;
-        let bik = bua + (VirtioBlkReqHdr::Am + AR_) as u64;
+        let gaj = ali;
+        let data_phys = ali + VirtioBlkReqHdr::Z as u64;
+        let status_phys = ali + (VirtioBlkReqHdr::Z + AT_) as u64;
         
         let queue = self.queue.as_mut().ok_or("Queue not initialized")?;
         
-        let ale = queue.blx().ok_or("No free descriptor")?;
-        let eal = queue.blx().ok_or("No free descriptor")?;
-        let cmy = queue.blx().ok_or("No free descriptor")?;
+        let su = queue.alloc_desc().ok_or("No free descriptor")?;
+        let bro = queue.alloc_desc().ok_or("No free descriptor")?;
+        let ave = queue.alloc_desc().ok_or("No free descriptor")?;
         
         
-        queue.bwz(ale, lbt, VirtioBlkReqHdr::Am as u32,
-            desc_flags::Akj, eal);
+        queue.set_desc(su, gaj, VirtioBlkReqHdr::Z as u32,
+            desc_flags::Pn, bro);
         
         
-        queue.bwz(eal, cpu, AR_ as u32,
-            desc_flags::Akj, cmy);
+        queue.set_desc(bro, data_phys, AT_ as u32,
+            desc_flags::Pn, ave);
         
         
-        queue.bwz(cmy, bik, 1, desc_flags::Db, 0);
+        queue.set_desc(ave, status_phys, 1, desc_flags::Bh, 0);
         
-        queue.dmd(ale);
+        queue.submit(su);
         
         
-        let agq = self.de.agq;
+        let iobase = self.device.iobase;
         
         
         unsafe {
-            let mut port = crate::arch::Port::<u16>::new(agq + 0x10);
+            let mut port = crate::arch::Port::<u16>::new(iobase + 0x10);
             port.write(0);
         }
         
         
-        QO_.store(false, Ordering::Release);
+        RI_.store(false, Ordering::Release);
         
         
         let queue = self.queue.as_mut().ok_or("Queue not initialized")?;
         
-        let mut aah = 1_000_000u32;
-        while !queue.ixy() && aah > 0 {
-            if QO_.load(Ordering::Acquire) {
+        let mut mz = 1_000_000u32;
+        while !queue.has_used() && mz > 0 {
+            if RI_.load(Ordering::Acquire) {
                 break;
             }
-            core::hint::hc();
-            aah -= 1;
+            core::hint::spin_loop();
+            mz -= 1;
         }
         
-        if aah == 0 {
-            queue.ald(ale);
-            queue.ald(eal);
-            queue.ald(cmy);
+        if mz == 0 {
+            queue.free_desc(su);
+            queue.free_desc(bro);
+            queue.free_desc(ave);
             return Err("Request timeout");
         }
         
-        let qdw = queue.jjp().ok_or("No completion")?;
+        let jsu = queue.pop_used().ok_or("No completion")?;
         
-        queue.ald(ale);
-        queue.ald(eal);
-        queue.ald(cmy);
+        queue.free_desc(su);
+        queue.free_desc(bro);
+        queue.free_desc(ave);
         
-        if alb[VirtioBlkReqHdr::Am + AR_] != blk_status::Bnq {
+        if dma_buf[VirtioBlkReqHdr::Z + AT_] != blk_status::Abx {
             return Err("Device error");
         }
         
@@ -429,105 +429,105 @@ impl VirtioBlk {
     }
     
     
-    pub fn aty(&self) -> u64 {
-        self.aty
+    pub fn capacity(&self) -> u64 {
+        self.capacity
     }
     
     
-    pub fn jbr(&self) -> bool {
-        self.hwy
+    pub fn is_read_only(&self) -> bool {
+        self.read_only
     }
 }
 
 
 
 
-pub fn init(sq: &S) -> Result<(), &'static str> {
+pub fn init(go: &L) -> Result<(), &'static str> {
     crate::log!("[virtio-blk] Initializing...");
     
-    let mut rj = VirtioBlk::new(sq)?;
-    rj.wli()?;
-    rj.ay()?;
+    let mut driver = VirtioBlk::new(go)?;
+    driver.setup_queue()?;
+    driver.start()?;
     
     
-    BIK_.store(rj.de.agq, Ordering::SeqCst);
+    BKR_.store(driver.device.iobase, Ordering::SeqCst);
     
-    Be.store(true, Ordering::SeqCst);
-    *Fl.lock() = Some(rj);
+    Ah.store(true, Ordering::SeqCst);
+    *Cl.lock() = Some(driver);
     
     
-    let irq = sq.esw;
+    let irq = go.interrupt_line;
     if irq > 0 && irq < 255 {
-        crate::apic::jmw(irq, crate::apic::HH_);
-        crate::serial_println!("[virtio-blk] IRQ {} routed to vector {}", irq, crate::apic::HH_);
+        crate::apic::eyz(irq, crate::apic::HZ_);
+        crate::serial_println!("[virtio-blk] IRQ {} routed to vector {}", irq, crate::apic::HZ_);
     }
     
     Ok(())
 }
 
 
-pub fn ky() -> bool {
-    Be.load(Ordering::Relaxed)
+pub fn is_initialized() -> bool {
+    Ah.load(Ordering::Relaxed)
 }
 
 
-pub fn aty() -> u64 {
-    Fl.lock().as_ref().map(|bc| bc.aty()).unwrap_or(0)
+pub fn capacity() -> u64 {
+    Cl.lock().as_ref().map(|d| d.capacity()).unwrap_or(0)
 }
 
 
-pub fn jbr() -> bool {
-    Fl.lock().as_ref().map(|bc| bc.jbr()).unwrap_or(true)
+pub fn is_read_only() -> bool {
+    Cl.lock().as_ref().map(|d| d.is_read_only()).unwrap_or(true)
 }
 
 
-pub fn ain(ay: u64, az: usize, bi: &mut [u8]) -> Result<(), &'static str> {
-    let mut rj = Fl.lock();
-    let ane = rj.as_mut().ok_or("Driver not initialized")?;
-    ane.ain(ay, az, bi)
+pub fn read_sectors(start: u64, count: usize, buffer: &mut [u8]) -> Result<(), &'static str> {
+    let mut driver = Cl.lock();
+    let tz = driver.as_mut().ok_or("Driver not initialized")?;
+    tz.read_sectors(start, count, buffer)
 }
 
 
-pub fn bpi(ay: u64, az: usize, bi: &[u8]) -> Result<(), &'static str> {
-    let mut rj = Fl.lock();
-    let ane = rj.as_mut().ok_or("Driver not initialized")?;
-    ane.bpi(ay, az, bi)
+pub fn write_sectors(start: u64, count: usize, buffer: &[u8]) -> Result<(), &'static str> {
+    let mut driver = Cl.lock();
+    let tz = driver.as_mut().ok_or("Driver not initialized")?;
+    tz.write_sectors(start, count, buffer)
 }
 
 
-pub fn xr(jk: u64, bi: &mut [u8; 512]) -> Result<(), &'static str> {
-    ain(jk, 1, bi)
+pub fn read_sector(dj: u64, buffer: &mut [u8; 512]) -> Result<(), &'static str> {
+    read_sectors(dj, 1, buffer)
 }
 
 
-pub fn aby(jk: u64, bi: &[u8; 512]) -> Result<(), &'static str> {
-    bpi(jk, 1, bi)
+pub fn write_sector(dj: u64, buffer: &[u8; 512]) -> Result<(), &'static str> {
+    write_sectors(dj, 1, buffer)
 }
 
 
-pub fn asx() -> (u64, u64, u64, u64) {
+pub fn get_stats() -> (u64, u64, u64, u64) {
     (
-        Bpz.load(Ordering::Relaxed),
-        Bwj.load(Ordering::Relaxed),
-        JO_.load(Ordering::Relaxed),
-        JP_.load(Ordering::Relaxed),
+        Acy.load(Ordering::Relaxed),
+        Agl.load(Ordering::Relaxed),
+        KF_.load(Ordering::Relaxed),
+        KG_.load(Ordering::Relaxed),
     )
 }
 
 
 
-pub fn eck() {
-    let agq = BIK_.load(Ordering::Relaxed);
-    if agq == 0 { return; }
+pub fn btc() {
+    let iobase = BKR_.load(Ordering::Relaxed);
+    if iobase == 0 { return; }
     
     
-    let cru: u8 = unsafe {
-        let mut port = crate::arch::Port::<u8>::new(agq + 0x13);
+    let isr: u8 = unsafe {
+        let mut port = crate::arch::Port::<u8>::new(iobase + 0x13);
         port.read()
     };
     
-    if cru & 1 != 0 {
+    if isr & 1 != 0 {
         
-        QO_.store(true, Ordering::Release);
+        RI_.store(true, Ordering::Release);
     }
 }

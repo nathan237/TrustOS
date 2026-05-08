@@ -97,7 +97,7 @@ pub struct MmioPageResult {
 
 /// Safe volatile read with fault recovery
 /// Returns None if the access causes a fault
-fn safe_volatile_read(address: u64) -> Option<u32> {
+fn safe_volatile_read(addr: u64) -> Option<u32> {
     // On real hardware, we'd install a fault handler and attempt the read.
     // In this implementation, we do a volatile read and catch common patterns.
     // The kernel's fault handler will recover from actual data aborts.
@@ -106,57 +106,57 @@ fn safe_volatile_read(address: u64) -> Option<u32> {
     {
         // ARM: Check if address is within a reasonable range
         // Addresses above 0x1_0000_0000_0000 are typically kernel VA
-        if address == 0 || address > 0xFFFF_FFFF_FFFF {
+        if addr == 0 || addr > 0xFFFF_FFFF_FFFF {
             return None;
         }
         
                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-            let ptr = address as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+            let ptr = addr as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u32;
             // Use volatile to prevent optimization
-            let value = core::ptr::read_volatile(ptr);
-            Some(value)
+            let val = core::ptr::read_volatile(ptr);
+            Some(val)
         }
     }
     
     #[cfg(target_arch = "x86_64")]
     {
-        if address == 0 || address > 0xFFFF_FFFF_FFFF {
+        if addr == 0 || addr > 0xFFFF_FFFF_FFFF {
             return None;
         }
                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-            let ptr = address as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+            let ptr = addr as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u32;
-            let value = core::ptr::read_volatile(ptr);
-            Some(value)
+            let val = core::ptr::read_volatile(ptr);
+            Some(val)
         }
     }
     
     #[cfg(target_arch = "riscv64")]
     {
-        if address == 0 {
+        if addr == 0 {
             return None;
         }
                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-            let ptr = address as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+            let ptr = addr as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u32;
-            let value = core::ptr::read_volatile(ptr);
-            Some(value)
+            let val = core::ptr::read_volatile(ptr);
+            Some(val)
         }
     }
     
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64", target_arch = "riscv64")))]
     {
-        let _ = address;
+        let _ = addr;
         None
     }
 }
 
 /// Identify a peripheral by its register values
-fn identify_peripheral(first_word: u32, address: u64) -> Option<&'static str> {
+fn identify_peripheral(first_word: u32, addr: u64) -> Option<&'static str> {
     // Check magic patterns
     for &(magic, name) in MAGIC_PATTERNS {
         if first_word == magic {
@@ -169,7 +169,7 @@ fn identify_peripheral(first_word: u32, address: u64) -> Option<&'static str> {
         .chain(KNOWN_REGIONS_BCM2711.iter())
         .chain(KNOWN_REGIONS_SNAPDRAGON.iter())
     {
-        if address >= base && address < base + size {
+        if addr >= base && addr < base + size {
             return Some(name);
         }
     }
@@ -194,8 +194,8 @@ fn probe_page(base: u64) -> MmioPageResult {
             result.access = AccessLevel::Faulted;
             return result;
         }
-        Some(value) => {
-            result.first_word = value;
+        Some(val) => {
+            result.first_word = val;
         }
     }
     
@@ -215,9 +215,9 @@ fn probe_page(base: u64) -> MmioPageResult {
         if base + offset >= base + 0x1000 { break; }
                 // Pattern matching — Rust's exhaustive branching construct.
 match safe_volatile_read(base + offset) {
-            Some(value) => {
-                if !values.contains(&value) {
-                    values.push(value);
+            Some(val) => {
+                if !values.contains(&val) {
+                    values.push(val);
                 }
                 result.register_count += 1;
             }
@@ -306,10 +306,10 @@ pub fn scan_mmio_regions(user_base: u64, user_size: u64) -> String {
         let mut region_live = 0u64;
         let mut i = 0u64;
         while i < pages {
-            let page_address = base + i * 0x1000;
+            let page_addr = base + i * 0x1000;
             total_pages += 1;
             
-            let page = probe_page(page_address);
+            let page = probe_page(page_addr);
             
                         // Pattern matching — Rust's exhaustive branching construct.
 match page.access {
@@ -324,7 +324,7 @@ match page.access {
                     let risk = if page.access == AccessLevel::Partial {
                         RiskLevel::Medium
                     } else if page.identified_as.is_some() {
-                        RiskLevel::Information
+                        RiskLevel::Info
                     } else {
                         RiskLevel::Low // Unknown peripheral = interesting
                     };
@@ -334,7 +334,7 @@ match page.access {
                     results.push(ProbeResult {
                         category: "MMIO",
                         name: String::from(name),
-                        address: page_address,
+                        address: page_addr,
                         size: 0x1000,
                         access: page.access,
                         details: format!("first=0x{:08X} regs={} unique={}", 

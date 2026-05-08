@@ -14,331 +14,331 @@ pub mod record;
 pub mod x509;
 
 
-pub const EIJ_: u16 = 0x0303; 
-pub const EIK_: u16 = 0x0304;
+pub const ELY_: u16 = 0x0303; 
+pub const ELZ_: u16 = 0x0304;
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum ContentType {
-    Csx = 20,
-    Bbo = 21,
-    Atm = 22,
-    Kd = 23,
+    ChangeCipherSpec = 20,
+    Alert = 21,
+    Handshake = 22,
+    ApplicationData = 23,
 }
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum HandshakeType {
-    Bzk = 1,
-    Cmu = 2,
-    Dda = 4,
-    Cvw = 5,
-    Cbq = 8,
+    ClientHello = 1,
+    ServerHello = 2,
+    NewSessionTicket = 4,
+    EndOfEarlyData = 5,
+    EncryptedExtensions = 8,
     Certificate = 11,
-    Csv = 13,
-    Bzi = 15,
-    Bhf = 20,
-    Dat = 24,
-    Dco = 254,
+    CertificateRequest = 13,
+    CertificateVerify = 15,
+    Finished = 20,
+    KeyUpdate = 24,
+    MessageHash = 254,
 }
 
 
 #[derive(Debug, Clone, Copy)]
 #[repr(u8)]
 pub enum AlertLevel {
-    Oo = 1,
-    Nd = 2,
+    Warning = 1,
+    Fatal = 2,
 }
 
 
 #[derive(Debug, Clone, Copy)]
 #[repr(u8)]
 pub enum AlertDescription {
-    Bzm = 0,
-    Oj = 10,
-    Crx = 20,
-    Dft = 22,
-    Cyh = 40,
-    Crw = 42,
-    Csu = 45,
-    Csw = 46,
-    Czn = 47,
-    Cue = 50,
-    Cuf = 51,
-    Dey = 70,
-    Cga = 80,
+    CloseNotify = 0,
+    UnexpectedMessage = 10,
+    BadRecordMac = 20,
+    RecordOverflow = 22,
+    HandshakeFailure = 40,
+    BadCertificate = 42,
+    CertificateExpired = 45,
+    CertificateUnknown = 46,
+    IllegalParameter = 47,
+    DecodeError = 50,
+    DecryptError = 51,
+    ProtocolVersion = 70,
+    InternalError = 80,
 }
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TlsState {
-    Cfx,
-    Bzl,
-    Bsn,
-    Cyg,
-    Kd,
-    Dk,
-    Q,
+    Initial,
+    ClientHelloSent,
+    ServerHelloReceived,
+    HandshakeComplete,
+    ApplicationData,
+    Closed,
+    Error,
 }
 
 
 #[derive(Debug, Clone, Copy)]
 pub enum TlsError {
     
-    Rv,
+    ConnectionFailed,
     
-    Atn,
+    HandshakeFailed,
     
-    Apv,
+    CertificateInvalid,
     
-    Aqq,
+    DecryptionFailed,
     
-    Oj,
+    UnexpectedMessage,
     
-    Fs,
+    ProtocolError,
     
-    Cga,
+    InternalError,
     
-    Ahe,
+    ConnectionClosed,
     
-    Zn,
+    WouldBlock,
 }
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u16)]
 pub enum CipherSuite {
-    AIW_ = 0x1301,
-    EIH_ = 0x1302,
-    EII_ = 0x1303,
+    TLS_AES_128_GCM_SHA256 = 0x1301,
+    TLS_AES_256_GCM_SHA384 = 0x1302,
+    TLS_CHACHA20_POLY1305_SHA256 = 0x1303,
 }
 
 
 pub struct TlsSession {
     
-    pub g: TlsState,
+    pub state: TlsState,
     
     
-    pub ajc: String,
+    pub hostname: String,
     
     
-    pub ins: Option<CipherSuite>,
+    pub cipher_suite: Option<CipherSuite>,
     
     
-    inx: [u8; 32],
+    client_random: [u8; 32],
     
     
-    pim: [u8; 32],
+    server_random: [u8; 32],
     
     
-    ape: crypto::Sha256,
+    transcript_hash: crypto::Sha256,
     
     
-    hml: [u8; 32],
-    inw: [u8; 32],
-    jon: [u8; 32],
-    kib: [u8; 32],
-    mea: [u8; 32],
+    handshake_secret: [u8; 32],
+    client_handshake_traffic_secret: [u8; 32],
+    server_handshake_traffic_secret: [u8; 32],
+    client_application_traffic_secret: [u8; 32],
+    server_application_traffic_secret: [u8; 32],
     
     
-    ioa: [u8; 16],
-    inz: [u8; 12],
-    gse: [u8; 16],
-    hzu: [u8; 12],
+    client_write_key: [u8; 16],
+    client_write_iv: [u8; 12],
+    server_write_key: [u8; 16],
+    server_write_iv: [u8; 12],
     
     
-    iny: u64,
-    hzt: u64,
+    client_seq: u64,
+    server_seq: u64,
     
     
-    gfv: [u8; 32],
-    kso: [u8; 32],
+    ecdhe_private: [u8; 32],
+    ecdhe_public: [u8; 32],
     
     
-    ehx: Vec<u8>,
+    rx_buffer: Vec<u8>,
     
     
-    fao: Vec<u8>,
+    tx_buffer: Vec<u8>,
     
     
-    pub joo: Vec<u8>,
+    pub server_pubkey: Vec<u8>,
     
     
-    pub pik: Vec<u8>,
+    pub server_pubkey_algo: Vec<u8>,
 }
 
 impl TlsSession {
     
-    pub fn new(ajc: &str) -> Self {
-        let mut inx = [0u8; 32];
-        crate::rng::ntq(&mut inx);
+    pub fn new(hostname: &str) -> Self {
+        let mut client_random = [0u8; 32];
+        crate::rng::hyj(&mut client_random);
         
         
-        let mut gfv = [0u8; 32];
-        crate::rng::ntq(&mut gfv);
-        let kso = crypto::xwd(&gfv);
+        let mut ecdhe_private = [0u8; 32];
+        crate::rng::hyj(&mut ecdhe_private);
+        let ecdhe_public = crypto::pvn(&ecdhe_private);
         
         Self {
-            g: TlsState::Cfx,
-            ajc: String::from(ajc),
-            ins: None,
-            inx,
-            pim: [0u8; 32],
-            ape: crypto::Sha256::new(),
-            hml: [0u8; 32],
-            inw: [0u8; 32],
-            jon: [0u8; 32],
-            kib: [0u8; 32],
-            mea: [0u8; 32],
-            ioa: [0u8; 16],
-            inz: [0u8; 12],
-            gse: [0u8; 16],
-            hzu: [0u8; 12],
-            iny: 0,
-            hzt: 0,
-            gfv,
-            kso,
-            ehx: Vec::new(),
-            fao: Vec::new(),
-            joo: Vec::new(),
-            pik: Vec::new(),
+            state: TlsState::Initial,
+            hostname: String::from(hostname),
+            cipher_suite: None,
+            client_random,
+            server_random: [0u8; 32],
+            transcript_hash: crypto::Sha256::new(),
+            handshake_secret: [0u8; 32],
+            client_handshake_traffic_secret: [0u8; 32],
+            server_handshake_traffic_secret: [0u8; 32],
+            client_application_traffic_secret: [0u8; 32],
+            server_application_traffic_secret: [0u8; 32],
+            client_write_key: [0u8; 16],
+            client_write_iv: [0u8; 12],
+            server_write_key: [0u8; 16],
+            server_write_iv: [0u8; 12],
+            client_seq: 0,
+            server_seq: 0,
+            ecdhe_private,
+            ecdhe_public,
+            rx_buffer: Vec::new(),
+            tx_buffer: Vec::new(),
+            server_pubkey: Vec::new(),
+            server_pubkey_algo: Vec::new(),
         }
     }
     
     
-    pub fn kfj(&mut self) -> Vec<u8> {
-        handshake::kfj(self)
+    pub fn build_client_hello(&mut self) -> Vec<u8> {
+        handshake::build_client_hello(self)
     }
     
     
-    pub fn jkd(&mut self, f: &[u8]) -> Result<Option<Vec<u8>>, TlsError> {
-        record::jkd(self, f)
+    pub fn process_record(&mut self, data: &[u8]) -> Result<Option<Vec<u8>>, TlsError> {
+        record::process_record(self, data)
     }
     
     
-    pub fn npy(&mut self, ajk: &[u8]) -> Result<Vec<u8>, TlsError> {
-        if self.g != TlsState::Kd {
-            return Err(TlsError::Fs);
+    pub fn encrypt(&mut self, ry: &[u8]) -> Result<Vec<u8>, TlsError> {
+        if self.state != TlsState::ApplicationData {
+            return Err(TlsError::ProtocolError);
         }
         
-        record::kti(self, ContentType::Kd, ajk)
+        record::fuq(self, ContentType::ApplicationData, ry)
     }
     
     
-    pub fn ruw(&mut self, afm: &[u8]) -> Result<Vec<u8>, TlsError> {
-        if self.g != TlsState::Kd {
-            return Err(TlsError::Fs);
+    pub fn lcw(&mut self, pw: &[u8]) -> Result<Vec<u8>, TlsError> {
+        if self.state != TlsState::ApplicationData {
+            return Err(TlsError::ProtocolError);
         }
         
-        record::kop(self, afm)
+        record::frc(self, pw)
     }
     
     
-    pub fn uc(&self) -> bool {
-        self.g == TlsState::Kd
+    pub fn is_ready(&self) -> bool {
+        self.state == TlsState::ApplicationData
     }
     
     
-    pub fn agj(&mut self) -> Vec<u8> {
-        self.g = TlsState::Dk;
+    pub fn close(&mut self) -> Vec<u8> {
+        self.state = TlsState::Closed;
         
-        let qgb = [AlertLevel::Oo as u8, AlertDescription::Bzm as u8];
-        record::kti(self, ContentType::Bbo, &qgb).age()
+        let jug = [AlertLevel::Warning as u8, AlertDescription::CloseNotify as u8];
+        record::fuq(self, ContentType::Alert, &jug).unwrap_or_default()
     }
 }
 
 
-pub fn nmh<G, Aii>(
-    he: &mut TlsSession,
-    baq: &mut G,
-    ehf: &mut Aii,
+pub fn hsy<F, G>(
+    by: &mut TlsSession,
+    send: &mut F,
+    recv: &mut G,
 ) -> Result<(), TlsError>
 where
-    G: FnMut(&[u8]) -> Result<(), TlsError>,
-    Aii: FnMut(&mut [u8]) -> Result<usize, TlsError>,
+    F: FnMut(&[u8]) -> Result<(), TlsError>,
+    G: FnMut(&mut [u8]) -> Result<usize, TlsError>,
 {
     
-    let rbq = he.kfj();
-    baq(&rbq)?;
-    he.g = TlsState::Bzl;
+    let klc = by.build_client_hello();
+    send(&klc)?;
+    by.state = TlsState::ClientHelloSent;
     
     
-    let mut ccu: Vec<u8> = Vec::fc(32768);
-    let mut paw = [0u8; 4096];
+    let mut apo: Vec<u8> = Vec::with_capacity(32768);
+    let mut iyx = [0u8; 4096];
     
     loop {
         
-        while ccu.len() >= 5 {
+        while apo.len() >= 5 {
             
-            let ahg = ccu[0];
-            let dk = u16::oa([ccu[1], ccu[2]]);
-            let lyh = u16::oa([ccu[3], ccu[4]]) as usize;
-            let mml = 5 + lyh;
+            let content_type = apo[0];
+            let version = u16::from_be_bytes([apo[1], apo[2]]);
+            let gqr = u16::from_be_bytes([apo[3], apo[4]]) as usize;
+            let gzt = 5 + gqr;
             
-            crate::serial_println!("[TLS] Header: type={} ver=0x{:04x} len={}", ahg, dk, lyh);
+            crate::serial_println!("[TLS] Header: type={} ver=0x{:04x} len={}", content_type, version, gqr);
             
             
-            if ahg < 20 || ahg > 23 {
+            if content_type < 20 || content_type > 23 {
                 crate::serial_println!("[TLS] Invalid content type {}, first 10 bytes: {:02x?}", 
-                    ahg, &ccu[..ccu.len().v(10)]);
-                return Err(TlsError::Fs);
+                    content_type, &apo[..apo.len().min(10)]);
+                return Err(TlsError::ProtocolError);
             }
             
-            if ccu.len() < mml {
+            if apo.len() < gzt {
                 
-                crate::serial_println!("[TLS] Need {} bytes, have {}", mml, ccu.len());
+                crate::serial_println!("[TLS] Need {} bytes, have {}", gzt, apo.len());
                 break;
             }
             
             
-            let ehd: Vec<u8> = ccu.bbk(..mml).collect();
-            crate::serial_println!("[TLS] Processing record: type={} len={}", ehd[0], lyh);
+            let bvf: Vec<u8> = apo.drain(..gzt).collect();
+            crate::serial_println!("[TLS] Processing record: type={} len={}", bvf[0], gqr);
             
-            match he.jkd(&ehd) {
-                Ok(Some(mk)) => {
-                    if !mk.is_empty() {
-                        baq(&mk)?;
+            match by.process_record(&bvf) {
+                Ok(Some(fa)) => {
+                    if !fa.is_empty() {
+                        send(&fa)?;
                     }
                 }
                 Ok(None) => {}
-                Err(aa) => {
-                    crate::serial_println!("[TLS] Record error: {:?}", aa);
-                    return Err(aa);
+                Err(e) => {
+                    crate::serial_println!("[TLS] Record error: {:?}", e);
+                    return Err(e);
                 }
             }
             
-            if he.g == TlsState::Kd {
+            if by.state == TlsState::ApplicationData {
                 return Ok(());
             }
             
-            if he.g == TlsState::Q {
-                return Err(TlsError::Atn);
+            if by.state == TlsState::Error {
+                return Err(TlsError::HandshakeFailed);
             }
         }
         
         
-        match ehf(&mut paw) {
+        match recv(&mut iyx) {
             Ok(0) => {
-                if ccu.is_empty() {
-                    return Err(TlsError::Ahe);
+                if apo.is_empty() {
+                    return Err(TlsError::ConnectionClosed);
                 }
                 
                 continue;
             }
-            Ok(bo) => {
-                crate::serial_println!("[TLS] Received {} bytes, accumulator has {}", bo, ccu.len());
-                ccu.bk(&paw[..bo]);
+            Ok(ae) => {
+                crate::serial_println!("[TLS] Received {} bytes, accumulator has {}", ae, apo.len());
+                apo.extend_from_slice(&iyx[..ae]);
             }
-            Err(TlsError::Zn) => {
+            Err(TlsError::WouldBlock) => {
                 
-                crate::serial_println!("[TLS] WouldBlock, accumulator has {} bytes", ccu.len());
+                crate::serial_println!("[TLS] WouldBlock, accumulator has {} bytes", apo.len());
                 continue;
             }
-            Err(aa) => {
-                crate::serial_println!("[TLS] Recv error: {:?}", aa);
-                return Err(aa);
+            Err(e) => {
+                crate::serial_println!("[TLS] Recv error: {:?}", e);
+                return Err(e);
             }
         }
     }

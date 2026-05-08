@@ -275,7 +275,11 @@ pub fn send_packet(dest_ip: [u8; 4], protocol: u8, payload: &[u8]) -> Result<(),
     // Send via Ethernet
     crate::netstack::send_frame(dest_mac, 0x0800, &packet)?;
     
-    // (send logging removed to keep serial clean)
+    crate::serial_println!("[IP] TX {}.{}.{}.{} -> {}.{}.{}.{} proto={} len={} mac={:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+        source_ip[0], source_ip[1], source_ip[2], source_ip[3],
+        dest_ip[0], dest_ip[1], dest_ip[2], dest_ip[3],
+        protocol, total_length,
+        dest_mac[0], dest_mac[1], dest_mac[2], dest_mac[3], dest_mac[4], dest_mac[5]);
     
     Ok(())
 }

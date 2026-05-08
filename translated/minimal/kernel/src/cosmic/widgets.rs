@@ -11,104 +11,104 @@ use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use super::{Cf, Cj, Event, MouseEvent, Rect, Size, Color, CosmicRenderer, ButtonState, theme};
+use super::{Aw, Az, Event, MouseEvent, Rect, Size, Color, CosmicRenderer, ButtonState, theme};
 
 
 
 
 
 
-pub struct Vs {
-    pub cu: String,
-    pub jhu: Option<Cj>,
-    pub amx: ButtonStyle,
-    g: ButtonState,
-    asy: bool,
-    vn: bool,
+pub struct Jl {
+    pub label: String,
+    pub on_press: Option<Az>,
+    pub style: ButtonStyle,
+    state: ButtonState,
+    hovered: bool,
+    pressed: bool,
 }
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum ButtonStyle {
-    Gc,
-    Us,
-    We,
+    Standard,
+    Suggested,
+    Destructive,
     Text,
 }
 
-impl Vs {
-    pub fn new(cu: &str) -> Self {
+impl Jl {
+    pub fn new(label: &str) -> Self {
         Self {
-            cu: String::from(cu),
-            jhu: None,
-            amx: ButtonStyle::Gc,
-            g: ButtonState::M,
-            asy: false,
-            vn: false,
+            label: String::from(label),
+            on_press: None,
+            style: ButtonStyle::Standard,
+            state: ButtonState::Normal,
+            hovered: false,
+            pressed: false,
         }
     }
     
-    pub fn jhu(mut self, fr: Cj) -> Self {
-        self.jhu = Some(fr);
+    pub fn on_press(mut self, bk: Az) -> Self {
+        self.on_press = Some(bk);
         self
     }
     
-    pub fn amx(mut self, amx: ButtonStyle) -> Self {
-        self.amx = amx;
+    pub fn style(mut self, style: ButtonStyle) -> Self {
+        self.style = style;
         self
     }
     
-    fn jut(&mut self) {
-        self.g = if self.vn {
-            ButtonState::Alg
-        } else if self.asy {
-            match self.amx {
-                ButtonStyle::Us => ButtonState::Us,
-                ButtonStyle::We => ButtonState::We,
-                _ => ButtonState::Aiz,
+    fn update_state(&mut self) {
+        self.state = if self.pressed {
+            ButtonState::Pressed
+        } else if self.hovered {
+            match self.style {
+                ButtonStyle::Suggested => ButtonState::Suggested,
+                ButtonStyle::Destructive => ButtonState::Destructive,
+                _ => ButtonState::Hovered,
             }
         } else {
-            match self.amx {
-                ButtonStyle::Us => ButtonState::Us,
-                ButtonStyle::We => ButtonState::We,
-                _ => ButtonState::M,
+            match self.style {
+                ButtonStyle::Suggested => ButtonState::Suggested,
+                ButtonStyle::Destructive => ButtonState::Destructive,
+                _ => ButtonState::Normal,
             }
         };
     }
 }
 
-impl Cf for Vs {
-    fn aw(&self) -> Size {
+impl Aw for Jl {
+    fn size(&self) -> Size {
         
-        let idh = self.cu.len() as f32 * 8.0;
-        Size::new(idh + 32.0, 36.0)
+        let ebn = self.label.len() as f32 * 8.0;
+        Size::new(ebn + 32.0, 36.0)
     }
     
-    fn po(&self, renderer: &mut CosmicRenderer, eg: Rect) {
-        renderer.sca(eg, &self.cu, self.g);
+    fn draw(&self, renderer: &mut CosmicRenderer, bounds: Rect) {
+        renderer.draw_button(bounds, &self.label, self.state);
     }
     
-    fn goi(&mut self, id: &Event, eg: Rect) -> Option<Cj> {
-        match id {
-            Event::Cp(MouseEvent::Fw { b, c }) => {
-                self.asy = eg.contains(*b, *c);
-                self.jut();
+    fn on_event(&mut self, event: &Event, bounds: Rect) -> Option<Az> {
+        match event {
+            Event::Mouse(MouseEvent::Move { x, y }) => {
+                self.hovered = bounds.contains(*x, *y);
+                self.update_state();
                 None
             }
-            Event::Cp(MouseEvent::Axb { b, c, .. }) => {
-                if eg.contains(*b, *c) {
-                    self.vn = true;
-                    self.jut();
+            Event::Mouse(MouseEvent::Press { x, y, .. }) => {
+                if bounds.contains(*x, *y) {
+                    self.pressed = true;
+                    self.update_state();
                 }
                 None
             }
-            Event::Cp(MouseEvent::Release { b, c, .. }) => {
-                if self.vn && eg.contains(*b, *c) {
-                    self.vn = false;
-                    self.jut();
-                    return self.jhu;
+            Event::Mouse(MouseEvent::Release { x, y, .. }) => {
+                if self.pressed && bounds.contains(*x, *y) {
+                    self.pressed = false;
+                    self.update_state();
+                    return self.on_press;
                 }
-                self.vn = false;
-                self.jut();
+                self.pressed = false;
+                self.update_state();
                 None
             }
             _ => None,
@@ -121,73 +121,73 @@ impl Cf for Vs {
 
 
 
-pub struct Dy {
+pub struct Br {
     pub text: String,
-    pub s: Option<Color>,
-    pub aw: LabelSize,
+    pub color: Option<Color>,
+    pub size: LabelSize,
 }
 
 #[derive(Clone, Copy)]
 pub enum LabelSize {
-    Ew,
-    M,
-    Ht,
-    Bul,
+    Small,
+    Normal,
+    Large,
+    Title,
 }
 
-impl Dy {
+impl Br {
     pub fn new(text: &str) -> Self {
         Self {
             text: String::from(text),
-            s: None,
-            aw: LabelSize::M,
+            color: None,
+            size: LabelSize::Normal,
         }
     }
     
-    pub fn s(mut self, r: Color) -> Self {
-        self.s = Some(r);
+    pub fn color(mut self, c: Color) -> Self {
+        self.color = Some(c);
         self
     }
     
-    pub fn zoo(mut self, e: LabelSize) -> Self {
-        self.aw = e;
+    pub fn qxb(mut self, j: LabelSize) -> Self {
+        self.size = j;
         self
     }
 }
 
-impl Cf for Dy {
-    fn aw(&self) -> Size {
-        let nk = match self.aw {
-            LabelSize::Ew => 6.0,
-            LabelSize::M => 8.0,
-            LabelSize::Ht => 10.0,
-            LabelSize::Bul => 14.0,
+impl Aw for Br {
+    fn size(&self) -> Size {
+        let ew = match self.size {
+            LabelSize::Small => 6.0,
+            LabelSize::Normal => 8.0,
+            LabelSize::Large => 10.0,
+            LabelSize::Title => 14.0,
         };
-        let ac = match self.aw {
-            LabelSize::Ew => 14.0,
-            LabelSize::M => 18.0,
-            LabelSize::Ht => 24.0,
-            LabelSize::Bul => 32.0,
+        let height = match self.size {
+            LabelSize::Small => 14.0,
+            LabelSize::Normal => 18.0,
+            LabelSize::Large => 24.0,
+            LabelSize::Title => 32.0,
         };
-        Size::new(self.text.len() as f32 * nk, ac)
+        Size::new(self.text.len() as f32 * ew, height)
     }
     
-    fn po(&self, renderer: &mut CosmicRenderer, eg: Rect) {
+    fn draw(&self, renderer: &mut CosmicRenderer, bounds: Rect) {
         
         
-        let ab = theme();
-        let s = self.s.unwrap_or(ab.dcp);
+        let t = theme();
+        let color = self.color.unwrap_or(t.text_primary);
         
         
-        renderer.ahj(
-            super::Point::new(eg.b, eg.c + eg.ac - 2.0),
-            super::Point::new(eg.b + eg.z, eg.c + eg.ac - 2.0),
-            s.fbo(0.3),
+        renderer.draw_line(
+            super::Point::new(bounds.x, bounds.y + bounds.height - 2.0),
+            super::Point::new(bounds.x + bounds.width, bounds.y + bounds.height - 2.0),
+            color.with_alpha(0.3),
             1.0,
         );
     }
     
-    fn goi(&mut self, qbu: &Event, qbh: Rect) -> Option<Cj> {
+    fn on_event(&mut self, _event: &Event, _bounds: Rect) -> Option<Az> {
         None 
     }
 }
@@ -197,162 +197,162 @@ impl Cf for Dy {
 
 
 
-pub struct Bds {
-    zf: Vec<Box<dyn Cf>>,
-    pub ob: f32,
-    pub aoa: f32,
-    pub sz: Direction,
-    pub cop: Option<Color>,
-    pub avh: f32,
+pub struct Xi {
+    children: Vec<Box<dyn Aw>>,
+    pub padding: f32,
+    pub spacing: f32,
+    pub direction: Direction,
+    pub background: Option<Color>,
+    pub border_radius: f32,
 }
 
 #[derive(Clone, Copy)]
 pub enum Direction {
-    On,
-    Po,
+    Vertical,
+    Horizontal,
 }
 
-impl Bds {
+impl Xi {
     pub fn new() -> Self {
         Self {
-            zf: Vec::new(),
-            ob: 12.0,
-            aoa: 8.0,
-            sz: Direction::On,
-            cop: None,
-            avh: 0.0,
+            children: Vec::new(),
+            padding: 12.0,
+            spacing: 8.0,
+            direction: Direction::Vertical,
+            background: None,
+            border_radius: 0.0,
         }
     }
     
-    pub fn push<Cpy: Cf + 'static>(mut self, bsy: Cpy) -> Self {
-        self.zf.push(Box::new(bsy));
+    pub fn push<W: Aw + 'static>(mut self, akq: W) -> Self {
+        self.children.push(Box::new(akq));
         self
     }
     
-    pub fn ob(mut self, ai: f32) -> Self {
-        self.ob = ai;
+    pub fn padding(mut self, aa: f32) -> Self {
+        self.padding = aa;
         self
     }
     
-    pub fn aoa(mut self, e: f32) -> Self {
-        self.aoa = e;
+    pub fn spacing(mut self, j: f32) -> Self {
+        self.spacing = j;
         self
     }
     
-    pub fn sz(mut self, bc: Direction) -> Self {
-        self.sz = bc;
+    pub fn direction(mut self, d: Direction) -> Self {
+        self.direction = d;
         self
     }
     
-    pub fn cop(mut self, r: Color) -> Self {
-        self.cop = Some(r);
+    pub fn background(mut self, c: Color) -> Self {
+        self.background = Some(c);
         self
     }
     
-    pub fn avh(mut self, m: f32) -> Self {
-        self.avh = m;
+    pub fn border_radius(mut self, r: f32) -> Self {
+        self.border_radius = r;
         self
     }
 }
 
-impl Cf for Bds {
-    fn aw(&self) -> Size {
-        let mut z = 0.0f32;
-        let mut ac = 0.0f32;
+impl Aw for Xi {
+    fn size(&self) -> Size {
+        let mut width = 0.0f32;
+        let mut height = 0.0f32;
         
-        for aeh in &self.zf {
-            let e = aeh.aw();
-            match self.sz {
-                Direction::On => {
-                    z = z.am(e.z);
-                    ac += e.ac + self.aoa;
+        for pd in &self.children {
+            let j = pd.size();
+            match self.direction {
+                Direction::Vertical => {
+                    width = width.max(j.width);
+                    height += j.height + self.spacing;
                 }
-                Direction::Po => {
-                    z += e.z + self.aoa;
-                    ac = ac.am(e.ac);
+                Direction::Horizontal => {
+                    width += j.width + self.spacing;
+                    height = height.max(j.height);
                 }
             }
         }
         
         Size::new(
-            z + self.ob * 2.0,
-            ac + self.ob * 2.0 - self.aoa,
+            width + self.padding * 2.0,
+            height + self.padding * 2.0 - self.spacing,
         )
     }
     
-    fn po(&self, renderer: &mut CosmicRenderer, eg: Rect) {
+    fn draw(&self, renderer: &mut CosmicRenderer, bounds: Rect) {
         
-        if let Some(ei) = self.cop {
-            if self.avh > 0.0 {
-                renderer.afp(eg, self.avh, ei);
+        if let Some(bg) = self.background {
+            if self.border_radius > 0.0 {
+                renderer.fill_rounded_rect(bounds, self.border_radius, bg);
             } else {
-                renderer.ah(eg, ei);
+                renderer.fill_rect(bounds, bg);
             }
         }
         
         
-        let mut l = self.ob;
+        let mut offset = self.padding;
         
-        for aeh in &self.zf {
-            let e = aeh.aw();
-            let khl = match self.sz {
-                Direction::On => {
-                    let o = Rect::new(
-                        eg.b + self.ob,
-                        eg.c + l,
-                        eg.z - self.ob * 2.0,
-                        e.ac,
+        for pd in &self.children {
+            let j = pd.size();
+            let flo = match self.direction {
+                Direction::Vertical => {
+                    let b = Rect::new(
+                        bounds.x + self.padding,
+                        bounds.y + offset,
+                        bounds.width - self.padding * 2.0,
+                        j.height,
                     );
-                    l += e.ac + self.aoa;
-                    o
+                    offset += j.height + self.spacing;
+                    b
                 }
-                Direction::Po => {
-                    let o = Rect::new(
-                        eg.b + l,
-                        eg.c + self.ob,
-                        e.z,
-                        eg.ac - self.ob * 2.0,
+                Direction::Horizontal => {
+                    let b = Rect::new(
+                        bounds.x + offset,
+                        bounds.y + self.padding,
+                        j.width,
+                        bounds.height - self.padding * 2.0,
                     );
-                    l += e.z + self.aoa;
-                    o
+                    offset += j.width + self.spacing;
+                    b
                 }
             };
             
-            aeh.po(renderer, khl);
+            pd.draw(renderer, flo);
         }
     }
     
-    fn goi(&mut self, id: &Event, eg: Rect) -> Option<Cj> {
+    fn on_event(&mut self, event: &Event, bounds: Rect) -> Option<Az> {
         
-        let mut l = self.ob;
+        let mut offset = self.padding;
         
-        for aeh in &mut self.zf {
-            let e = aeh.aw();
-            let khl = match self.sz {
-                Direction::On => {
-                    let o = Rect::new(
-                        eg.b + self.ob,
-                        eg.c + l,
-                        eg.z - self.ob * 2.0,
-                        e.ac,
+        for pd in &mut self.children {
+            let j = pd.size();
+            let flo = match self.direction {
+                Direction::Vertical => {
+                    let b = Rect::new(
+                        bounds.x + self.padding,
+                        bounds.y + offset,
+                        bounds.width - self.padding * 2.0,
+                        j.height,
                     );
-                    l += e.ac + self.aoa;
-                    o
+                    offset += j.height + self.spacing;
+                    b
                 }
-                Direction::Po => {
-                    let o = Rect::new(
-                        eg.b + l,
-                        eg.c + self.ob,
-                        e.z,
-                        eg.ac - self.ob * 2.0,
+                Direction::Horizontal => {
+                    let b = Rect::new(
+                        bounds.x + offset,
+                        bounds.y + self.padding,
+                        j.width,
+                        bounds.height - self.padding * 2.0,
                     );
-                    l += e.z + self.aoa;
-                    o
+                    offset += j.width + self.spacing;
+                    b
                 }
             };
             
-            if let Some(fr) = aeh.goi(id, khl) {
-                return Some(fr);
+            if let Some(bk) = pd.on_event(event, flo) {
+                return Some(bk);
             }
         }
         
@@ -365,59 +365,59 @@ impl Cf for Bds {
 
 
 
-pub struct Biq {
-    pub dq: String,
-    pub wnf: bool,
-    ja: bool,
+pub struct Zr {
+    pub title: String,
+    pub show_controls: bool,
+    focused: bool,
 }
 
-impl Biq {
-    pub fn new(dq: &str) -> Self {
+impl Zr {
+    pub fn new(title: &str) -> Self {
         Self {
-            dq: String::from(dq),
-            wnf: true,
-            ja: true,
+            title: String::from(title),
+            show_controls: true,
+            focused: true,
         }
     }
     
-    pub fn zmz(&mut self, bb: bool) {
-        self.ja = bb;
+    pub fn qvw(&mut self, f: bool) {
+        self.focused = f;
     }
 }
 
-impl Cf for Biq {
-    fn aw(&self) -> Size {
+impl Aw for Zr {
+    fn size(&self) -> Size {
         Size::new(400.0, 40.0) 
     }
     
-    fn po(&self, renderer: &mut CosmicRenderer, eg: Rect) {
-        renderer.nnb(eg, &self.dq, self.ja);
+    fn draw(&self, renderer: &mut CosmicRenderer, bounds: Rect) {
+        renderer.draw_header(bounds, &self.title, self.focused);
     }
     
-    fn goi(&mut self, id: &Event, eg: Rect) -> Option<Cj> {
+    fn on_event(&mut self, event: &Event, bounds: Rect) -> Option<Az> {
         
-        if let Event::Cp(MouseEvent::Axb { b, c, .. }) = id {
-            let ask = 14.0;
-            let kn = eg.c + (eg.ac - ask) / 2.0;
+        if let Event::Mouse(MouseEvent::Press { x, y, .. }) = event {
+            let wv = 14.0;
+            let ed = bounds.y + (bounds.height - wv) / 2.0;
             
             
-            let bdr = eg.b + eg.z - ask - 12.0;
-            if *b >= bdr && *b <= bdr + ask &&
-               *c >= kn && *c <= kn + ask {
+            let adl = bounds.x + bounds.width - wv - 12.0;
+            if *x >= adl && *x <= adl + wv &&
+               *y >= ed && *y <= ed + wv {
                 return Some(1); 
             }
             
             
-            let bvj = bdr - ask - 8.0;
-            if *b >= bvj && *b <= bvj + ask &&
-               *c >= kn && *c <= kn + ask {
+            let aly = adl - wv - 8.0;
+            if *x >= aly && *x <= aly + wv &&
+               *y >= ed && *y <= ed + wv {
                 return Some(2); 
             }
             
             
-            let cso = bvj - ask - 8.0;
-            if *b >= cso && *b <= cso + ask &&
-               *c >= kn && *c <= kn + ask {
+            let ayg = aly - wv - 8.0;
+            if *x >= ayg && *x <= ayg + wv &&
+               *y >= ed && *y <= ed + wv {
                 return Some(3); 
             }
         }
@@ -431,26 +431,26 @@ impl Cf for Biq {
 
 
 
-pub struct Dz {
-    pub ac: f32,
+pub struct Bs {
+    pub height: f32,
 }
 
-impl Dz {
+impl Bs {
     pub fn new() -> Self {
-        Self { ac: 32.0 }
+        Self { height: 32.0 }
     }
 }
 
-impl Cf for Dz {
-    fn aw(&self) -> Size {
-        Size::new(1280.0, self.ac)
+impl Aw for Bs {
+    fn size(&self) -> Size {
+        Size::new(1280.0, self.height)
     }
     
-    fn po(&self, renderer: &mut CosmicRenderer, eg: Rect) {
-        renderer.nnl(eg);
+    fn draw(&self, renderer: &mut CosmicRenderer, bounds: Rect) {
+        renderer.draw_panel(bounds);
     }
     
-    fn goi(&mut self, qbu: &Event, qbh: Rect) -> Option<Cj> {
+    fn on_event(&mut self, _event: &Event, _bounds: Rect) -> Option<Az> {
         None
     }
 }

@@ -6,83 +6,83 @@
 use alloc::collections::BTreeMap;
 use spin::Mutex;
 
-const BLT_: usize = 256; 
+const BOM_: usize = 256; 
 const H_: usize = 512;
 
-struct Bdh {
-    f: [u8; H_],
-    no: bool,
-    vz: u64,     
+struct Xe {
+    data: [u8; H_],
+    dirty: bool,
+    access: u64,     
 }
 
 pub struct BlockCache {
-    ch: BTreeMap<u64, Bdh>,
-    va: u64,
-    dld: fn(u64, &mut [u8; H_]) -> Result<(), ()>,
-    eld: fn(u64, &[u8; H_]) -> Result<(), ()>,
+    entries: BTreeMap<u64, Xe>,
+    counter: u64,
+    read_fn: fn(u64, &mut [u8; H_]) -> Result<(), ()>,
+    write_fn: fn(u64, &[u8; H_]) -> Result<(), ()>,
 }
 
 impl BlockCache {
     pub fn new(
-        dld: fn(u64, &mut [u8; H_]) -> Result<(), ()>,
-        eld: fn(u64, &[u8; H_]) -> Result<(), ()>,
+        read_fn: fn(u64, &mut [u8; H_]) -> Result<(), ()>,
+        write_fn: fn(u64, &[u8; H_]) -> Result<(), ()>,
     ) -> Self {
         Self {
-            ch: BTreeMap::new(),
-            va: 0,
-            dld,
-            eld,
+            entries: BTreeMap::new(),
+            counter: 0,
+            read_fn,
+            write_fn,
         }
     }
 
     
-    pub fn read(&mut self, jk: u64, k: &mut [u8; H_]) -> Result<(), ()> {
-        self.va += 1;
-        if let Some(bt) = self.ch.ds(&jk) {
-            bt.vz = self.va;
-            k.dg(&bt.f);
+    pub fn read(&mut self, dj: u64, buf: &mut [u8; H_]) -> Result<(), ()> {
+        self.counter += 1;
+        if let Some(entry) = self.entries.get_mut(&dj) {
+            entry.access = self.counter;
+            buf.copy_from_slice(&entry.data);
             return Ok(());
         }
         
-        (self.dld)(jk, k)?;
-        self.insert(jk, *k, false);
+        (self.read_fn)(dj, buf)?;
+        self.insert(dj, *buf, false);
         Ok(())
     }
 
     
-    pub fn write(&mut self, jk: u64, k: &[u8; H_]) -> Result<(), ()> {
-        self.va += 1;
-        if let Some(bt) = self.ch.ds(&jk) {
-            bt.f.dg(k);
-            bt.no = true;
-            bt.vz = self.va;
+    pub fn write(&mut self, dj: u64, buf: &[u8; H_]) -> Result<(), ()> {
+        self.counter += 1;
+        if let Some(entry) = self.entries.get_mut(&dj) {
+            entry.data.copy_from_slice(buf);
+            entry.dirty = true;
+            entry.access = self.counter;
             return Ok(());
         }
-        self.insert(jk, *k, true);
+        self.insert(dj, *buf, true);
         Ok(())
     }
 
     
-    fn insert(&mut self, jk: u64, f: [u8; H_], no: bool) {
-        if self.ch.len() >= BLT_ {
-            self.snv();
+    fn insert(&mut self, dj: u64, data: [u8; H_], dirty: bool) {
+        if self.entries.len() >= BOM_ {
+            self.evict_lru();
         }
-        self.ch.insert(jk, Bdh {
-            f,
-            no,
-            vz: self.va,
+        self.entries.insert(dj, Xe {
+            data,
+            dirty,
+            access: self.counter,
         });
     }
 
     
-    fn snv(&mut self) {
-        let uiq = self.ch.iter()
-            .zct(|(_, aa)| aa.vz)
-            .map(|(&e, _)| e);
-        if let Some(jk) = uiq {
-            if let Some(bt) = self.ch.remove(&jk) {
-                if bt.no {
-                    let _ = (self.eld)(jk, &bt.f);
+    fn evict_lru(&mut self) {
+        let nbb = self.entries.iter()
+            .min_by_key(|(_, e)| e.access)
+            .map(|(&j, _)| j);
+        if let Some(dj) = nbb {
+            if let Some(entry) = self.entries.remove(&dj) {
+                if entry.dirty {
+                    let _ = (self.write_fn)(dj, &entry.data);
                 }
             }
         }
@@ -90,59 +90,59 @@ impl BlockCache {
 
     
     pub fn sync(&mut self) -> Result<(), ()> {
-        for (&jk, bt) in self.ch.el() {
-            if bt.no {
-                (self.eld)(jk, &bt.f)?;
-                bt.no = false;
+        for (&dj, entry) in self.entries.iter_mut() {
+            if entry.dirty {
+                (self.write_fn)(dj, &entry.data)?;
+                entry.dirty = false;
             }
         }
         Ok(())
     }
 
     
-    pub fn yyo(&mut self, jk: u64) {
-        if let Some(bt) = self.ch.remove(&jk) {
-            if bt.no {
-                let _ = (self.eld)(jk, &bt.f);
+    pub fn qlt(&mut self, dj: u64) {
+        if let Some(entry) = self.entries.remove(&dj) {
+            if entry.dirty {
+                let _ = (self.write_fn)(dj, &entry.data);
             }
         }
     }
 
     
-    pub fn qvh(&self) -> usize {
-        self.ch.len()
+    pub fn cached_count(&self) -> usize {
+        self.entries.len()
     }
 
     
-    pub fn rxv(&self) -> usize {
-        self.ch.alv().hi(|aa| aa.no).az()
+    pub fn dirty_count(&self) -> usize {
+        self.entries.values().filter(|e| e.dirty).count()
     }
 }
 
 
-static LX_: Mutex<Option<BlockCache>> = Mutex::new(None);
+static MU_: Mutex<Option<BlockCache>> = Mutex::new(None);
 
 
 pub fn init(
-    dld: fn(u64, &mut [u8; H_]) -> Result<(), ()>,
-    eld: fn(u64, &[u8; H_]) -> Result<(), ()>,
+    read_fn: fn(u64, &mut [u8; H_]) -> Result<(), ()>,
+    write_fn: fn(u64, &[u8; H_]) -> Result<(), ()>,
 ) {
-    *LX_.lock() = Some(BlockCache::new(dld, eld));
+    *MU_.lock() = Some(BlockCache::new(read_fn, write_fn));
 }
 
 
-pub fn qvi(jk: u64, k: &mut [u8; H_]) -> Result<(), ()> {
-    if let Some(bdq) = LX_.lock().as_mut() {
-        bdq.read(jk, k)
+pub fn kgv(dj: u64, buf: &mut [u8; H_]) -> Result<(), ()> {
+    if let Some(adk) = MU_.lock().as_mut() {
+        adk.read(dj, buf)
     } else {
         Err(()) 
     }
 }
 
 
-pub fn qvj(jk: u64, k: &[u8; H_]) -> Result<(), ()> {
-    if let Some(bdq) = LX_.lock().as_mut() {
-        bdq.write(jk, k)
+pub fn kgw(dj: u64, buf: &[u8; H_]) -> Result<(), ()> {
+    if let Some(adk) = MU_.lock().as_mut() {
+        adk.write(dj, buf)
     } else {
         Err(())
     }
@@ -150,17 +150,17 @@ pub fn qvj(jk: u64, k: &[u8; H_]) -> Result<(), ()> {
 
 
 pub fn sync() -> Result<(), ()> {
-    if let Some(bdq) = LX_.lock().as_mut() {
-        bdq.sync()
+    if let Some(adk) = MU_.lock().as_mut() {
+        adk.sync()
     } else {
         Ok(())
     }
 }
 
 
-pub fn cm() -> (usize, usize) {
-    if let Some(bdq) = LX_.lock().as_ref() {
-        (bdq.qvh(), bdq.rxv())
+pub fn stats() -> (usize, usize) {
+    if let Some(adk) = MU_.lock().as_ref() {
+        (adk.cached_count(), adk.dirty_count())
     } else {
         (0, 0)
     }

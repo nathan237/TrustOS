@@ -4,34 +4,34 @@
 
 
 pub struct CpuSecurityFeatures {
-    pub cia: bool,  
-    pub cul: bool,  
-    pub ddd: bool,  
-    pub vt: bool,    
+    pub smep: bool,  
+    pub smap: bool,  
+    pub umip: bool,  
+    pub nx: bool,    
 }
 
 impl CpuSecurityFeatures {
     
-    pub fn dgf() -> Self {
+    pub fn bfx() -> Self {
         let mut features = Self {
-            cia: false,
-            cul: false,
-            ddd: false,
-            vt: false,
+            smep: false,
+            smap: false,
+            umip: false,
+            nx: false,
         };
         
         #[cfg(target_arch = "x86_64")]
         {
             
-            let dfh = unsafe { core::arch::x86_64::qbf(7, 0) };
+            let bfp = unsafe { core::arch::x86_64::__cpuid_count(7, 0) };
             
-            features.cia = (dfh.ebx & (1 << 7)) != 0;
-            features.cul = (dfh.ebx & (1 << 20)) != 0;
-            features.ddd = (dfh.ecx & (1 << 2)) != 0;
+            features.smep = (bfp.ebx & (1 << 7)) != 0;
+            features.smap = (bfp.ebx & (1 << 20)) != 0;
+            features.umip = (bfp.ecx & (1 << 2)) != 0;
             
             
-            let rqa = unsafe { core::arch::x86_64::ddo(0x80000001) };
-            features.vt = (rqa.edx & (1 << 20)) != 0;
+            let kyw = unsafe { core::arch::x86_64::__cpuid(0x80000001) };
+            features.nx = (kyw.edx & (1 << 20)) != 0;
         }
         
         features
@@ -40,17 +40,17 @@ impl CpuSecurityFeatures {
 
 
 mod cr4 {
-    pub const Cmb: u64 = 1 << 20;  
-    pub const Clz: u64 = 1 << 21;  
-    pub const Cos: u64 = 1 << 11;  
+    pub const SMEP: u64 = 1 << 20;  
+    pub const SMAP: u64 = 1 << 21;  
+    pub const UMIP: u64 = 1 << 11;  
 }
 
 
 
-pub fn npw() -> bool {
-    let features = CpuSecurityFeatures::dgf();
+pub fn hvq() -> bool {
+    let features = CpuSecurityFeatures::bfx();
     
-    if !features.cia {
+    if !features.smep {
         crate::log_warn!("[SECURITY] SMEP not supported by CPU");
         return false;
     }
@@ -58,8 +58,8 @@ pub fn npw() -> bool {
     #[cfg(target_arch = "x86_64")]
     unsafe {
         let cr4: u64;
-        core::arch::asm!("mov {}, cr4", bd(reg) cr4);
-        core::arch::asm!("mov cr4, {}", in(reg) cr4 | cr4::Cmb);
+        core::arch::asm!("mov {}, cr4", out(reg) cr4);
+        core::arch::asm!("mov cr4, {}", in(reg) cr4 | cr4::SMEP);
     }
     #[cfg(not(target_arch = "x86_64"))]
     return false;
@@ -70,10 +70,10 @@ pub fn npw() -> bool {
 
 
 
-pub fn sle() -> bool {
-    let features = CpuSecurityFeatures::dgf();
+pub fn lpu() -> bool {
+    let features = CpuSecurityFeatures::bfx();
     
-    if !features.cul {
+    if !features.smap {
         crate::log_warn!("[SECURITY] SMAP not supported by CPU");
         return false;
     }
@@ -81,8 +81,8 @@ pub fn sle() -> bool {
     #[cfg(target_arch = "x86_64")]
     unsafe {
         let cr4: u64;
-        core::arch::asm!("mov {}, cr4", bd(reg) cr4);
-        core::arch::asm!("mov cr4, {}", in(reg) cr4 | cr4::Clz);
+        core::arch::asm!("mov {}, cr4", out(reg) cr4);
+        core::arch::asm!("mov cr4, {}", in(reg) cr4 | cr4::SMAP);
     }
     #[cfg(not(target_arch = "x86_64"))]
     return false;
@@ -93,10 +93,10 @@ pub fn sle() -> bool {
 
 
 
-pub fn npx() -> bool {
-    let features = CpuSecurityFeatures::dgf();
+pub fn hvr() -> bool {
+    let features = CpuSecurityFeatures::bfx();
     
-    if !features.ddd {
+    if !features.umip {
         crate::log_warn!("[SECURITY] UMIP not supported by CPU");
         return false;
     }
@@ -104,8 +104,8 @@ pub fn npx() -> bool {
     #[cfg(target_arch = "x86_64")]
     unsafe {
         let cr4: u64;
-        core::arch::asm!("mov {}, cr4", bd(reg) cr4);
-        core::arch::asm!("mov cr4, {}", in(reg) cr4 | cr4::Cos);
+        core::arch::asm!("mov {}, cr4", out(reg) cr4);
+        core::arch::asm!("mov cr4, {}", in(reg) cr4 | cr4::UMIP);
     }
     #[cfg(not(target_arch = "x86_64"))]
     return false;
@@ -117,19 +117,19 @@ pub fn npx() -> bool {
 
 
 #[inline(always)]
-pub fn rxy() -> Ayx {
+pub fn lez() -> Vc {
     #[cfg(target_arch = "x86_64")]
     unsafe {
         
         core::arch::asm!("stac", options(nomem, nostack));
     }
-    Ayx
+    Vc
 }
 
 
-pub struct Ayx;
+pub struct Vc;
 
-impl Drop for Ayx {
+impl Drop for Vc {
     #[inline(always)]
     fn drop(&mut self) {
         #[cfg(target_arch = "x86_64")]
@@ -142,17 +142,17 @@ impl Drop for Ayx {
 
 
 pub fn init() -> CpuSecurityFeatures {
-    let features = CpuSecurityFeatures::dgf();
+    let features = CpuSecurityFeatures::bfx();
     
     crate::log!("[SECURITY] CPU features: SMEP={}, SMAP={}, UMIP={}, NX={}",
-        features.cia, features.cul, features.ddd, features.vt);
+        features.smep, features.smap, features.umip, features.nx);
     
     
     
     
     
-    if features.cia {
-        npw();
+    if features.smep {
+        hvq();
     }
     
     
@@ -161,8 +161,8 @@ pub fn init() -> CpuSecurityFeatures {
     
     
     
-    if features.ddd {
-        npx();
+    if features.umip {
+        hvr();
     }
     
     features

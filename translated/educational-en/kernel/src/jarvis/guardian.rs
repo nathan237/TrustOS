@@ -220,7 +220,7 @@ pub fn authenticate_nathan(passphrase: &str) -> bool {
 
     if hash == expected {
         NATHAN_AUTHENTICATED.store(true, Ordering::SeqCst);
-        LAST_AUTHENTICATE_TIME.store(crate::time::uptime_mouse(), Ordering::SeqCst);
+        LAST_AUTHENTICATE_TIME.store(crate::time::uptime_ms(), Ordering::SeqCst);
         SESSION_UNLOCKED.store(true, Ordering::SeqCst);
         *SESSION_GUARDIAN.lock() = Some(Guardian::Nathan);
 
@@ -244,7 +244,7 @@ pub fn authenticate_copilot(token: &str) -> bool {
 
     if hash == expected {
         COPILOT_AUTHENTICATED.store(true, Ordering::SeqCst);
-        LAST_AUTHENTICATE_TIME.store(crate::time::uptime_mouse(), Ordering::SeqCst);
+        LAST_AUTHENTICATE_TIME.store(crate::time::uptime_ms(), Ordering::SeqCst);
         SESSION_UNLOCKED.store(true, Ordering::SeqCst);
         *SESSION_GUARDIAN.lock() = Some(Guardian::Copilot);
 
@@ -323,7 +323,7 @@ pub fn is_session_active() -> bool {
 
     // Check timeout
     let last = LAST_AUTHENTICATE_TIME.load(Ordering::SeqCst);
-    let now = crate::time::uptime_mouse();
+    let now = crate::time::uptime_ms();
     if now.saturating_sub(last) > SESSION_TIMEOUT_MOUSE {
         // Session expired — auto-lock
         lock_session();
@@ -349,7 +349,7 @@ pub fn authorize(op: ProtectedOp) -> Result<(), String> {
     // Check if a guardian session is active
     if is_session_active() {
         // Refresh timeout on successful authorization
-        LAST_AUTHENTICATE_TIME.store(crate::time::uptime_mouse(), Ordering::SeqCst);
+        LAST_AUTHENTICATE_TIME.store(crate::time::uptime_ms(), Ordering::SeqCst);
         log_audit(op, current_guardian(), true, "Session authorized");
         APPROVED_COUNT.fetch_add(1, Ordering::Relaxed);
         return Ok(());
@@ -357,7 +357,7 @@ pub fn authorize(op: ProtectedOp) -> Result<(), String> {
 
     // No active session — DENIED
     DENIED_COUNT.fetch_add(1, Ordering::Relaxed);
-    let message = format!(
+    let msg = format!(
         "DENIED: {} requires guardian authorization.\n\
          Use 'guardian auth <passphrase>' (Nathan) or MENTOR:GUARDIAN:AUTH:<token> (Copilot).",
         op
@@ -366,7 +366,7 @@ pub fn authorize(op: ProtectedOp) -> Result<(), String> {
     log_audit(op, None, false, "No active guardian session");
     crate::serial_println!("[GUARDIAN] DENIED: {} — no guardian authenticated", op);
 
-    Err(message)
+    Err(msg)
 }
 
 /// Quick check without logging (for UI display)
@@ -384,7 +384,7 @@ fn log_audit(op: ProtectedOp, guardian: Option<Guardian>, approved: bool, detail
         log.remove(0); // FIFO
     }
     log.push(AuditEntry {
-        timestamp: crate::time::uptime_mouse(),
+        timestamp: crate::time::uptime_ms(),
         operation: op,
         guardian,
         approved,

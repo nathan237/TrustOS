@@ -6,10 +6,10 @@ use alloc::string::String;
 use alloc::format;
 
 
-pub fn ytc(ml: u16, mx: u16) -> String {
-    match ml {
+pub fn qhr(vendor_id: u16, device_id: u16) -> String {
+    match vendor_id {
         
-        0x8086 => match mx {
+        0x8086 => match device_id {
             0x100E | 0x100F => String::from("Intel 82540EM (e1000)"),
             0x10D3 => String::from("Intel 82574L GigE"),
             0x1237 => String::from("Intel 440FX Host Bridge"),
@@ -26,11 +26,11 @@ pub fn ytc(ml: u16, mx: u16) -> String {
             0x2936 => String::from("Intel ICH9 USB UHCI #3"),
             0x293A => String::from("Intel ICH9 USB EHCI"),
             0x293C => String::from("Intel ICH9 HD Audio"),
-            _ => format!("Intel {:04X}", mx),
+            _ => format!("Intel {:04X}", device_id),
         },
         
         
-        0x1AF4 => match mx {
+        0x1AF4 => match device_id {
             0x1000 => String::from("VirtIO Network"),
             0x1001 => String::from("VirtIO Block"),
             0x1002 => String::from("VirtIO Balloon"),
@@ -42,42 +42,42 @@ pub fn ytc(ml: u16, mx: u16) -> String {
             0x1042 => String::from("VirtIO Block (1.0)"),
             0x1050 => String::from("VirtIO GPU"),
             0x1052 => String::from("VirtIO Input"),
-            _ => format!("VirtIO {:04X}", mx),
+            _ => format!("VirtIO {:04X}", device_id),
         },
         
         
-        0x1234 => match mx {
+        0x1234 => match device_id {
             0x1111 => String::from("QEMU VGA"),
-            _ => format!("QEMU {:04X}", mx),
+            _ => format!("QEMU {:04X}", device_id),
         },
         
         
-        0x10EC => match mx {
+        0x10EC => match device_id {
             0x8139 => String::from("Realtek RTL8139"),
             0x8168 => String::from("Realtek RTL8168/8111"),
             0x8169 => String::from("Realtek RTL8169"),
-            _ => format!("Realtek {:04X}", mx),
+            _ => format!("Realtek {:04X}", device_id),
         },
         
         
-        0x1002 => match mx {
+        0x1002 => match device_id {
             0x4752 => String::from("AMD Rage XL PCI"),
             0x515E => String::from("AMD ES1000"),
-            _ => format!("AMD {:04X}", mx),
+            _ => format!("AMD {:04X}", device_id),
         },
         
         
-        0x10DE => format!("NVIDIA {:04X}", mx),
+        0x10DE => format!("NVIDIA {:04X}", device_id),
         
         
-        0x80EE => match mx {
+        0x80EE => match device_id {
             0xBEEF => String::from("VirtualBox Graphics"),
             0xCAFE => String::from("VirtualBox Guest"),
-            _ => format!("VirtualBox {:04X}", mx),
+            _ => format!("VirtualBox {:04X}", device_id),
         },
         
         
-        0x15AD => match mx {
+        0x15AD => match device_id {
             0x0405 => String::from("VMware SVGA II"),
             0x0710 => String::from("VMware SVGA"),
             0x0720 => String::from("VMware VMXNET"),
@@ -89,20 +89,20 @@ pub fn ytc(ml: u16, mx: u16) -> String {
             0x07B0 => String::from("VMware VMXNET3"),
             0x07C0 => String::from("VMware PVSCSI"),
             0x0801 => String::from("VMware Virtual Machine Interface"),
-            _ => format!("VMware {:04X}", mx),
+            _ => format!("VMware {:04X}", device_id),
         },
         
         
-        0x14E4 => format!("Broadcom {:04X}", mx),
+        0x14E4 => format!("Broadcom {:04X}", device_id),
         
         
-        _ => format!("{:04X}:{:04X}", ml, mx),
+        _ => format!("{:04X}:{:04X}", vendor_id, device_id),
     }
 }
 
 
-pub fn yue(ml: u16) -> &'static str {
-    match ml {
+pub fn qiu(vendor_id: u16) -> &'static str {
+    match vendor_id {
         0x8086 => "Intel",
         0x1AF4 => "Red Hat (VirtIO)",
         0x1234 => "QEMU",

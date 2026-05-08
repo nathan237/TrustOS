@@ -136,9 +136,9 @@ const u8, rdx as usize),
     }
 }
 
-fn emulate_write(fd: i32, buffer: *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+fn emulate_write(fd: i32, buf: *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u8, count: usize) -> SyscallResult {
-    if buffer.is_null() {
+    if buf.is_null() {
         return SyscallResult::error(14); // EFAULT
     }
     
@@ -147,7 +147,7 @@ match fd {
         1 | 2 => {
             // stdout/stderr - print to console
             let slice = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { core::slice::from_raw_parts(buffer, count) };
+unsafe { core::slice::from_raw_parts(buf, count) };
             if let Ok(s) = core::str::from_utf8(slice) {
                 crate::print!("{}", s);
             } else {
@@ -166,8 +166,8 @@ unsafe { core::slice::from_raw_parts(buffer, count) };
     }
 }
 
-fn emulate_read(fd: i32, buffer: *mut u8, count: usize) -> SyscallResult {
-    if buffer.is_null() {
+fn emulate_read(fd: i32, buf: *mut u8, count: usize) -> SyscallResult {
+    if buf.is_null() {
         return SyscallResult::error(14); // EFAULT
     }
     
@@ -190,8 +190,8 @@ fn emulate_getpid() -> SyscallResult {
     SyscallResult::success(1) // PID 1
 }
 
-fn emulate_getcwd(buffer: *mut u8, size: usize) -> SyscallResult {
-    if buffer.is_null() || size == 0 {
+fn emulate_getcwd(buf: *mut u8, size: usize) -> SyscallResult {
+    if buf.is_null() || size == 0 {
         return SyscallResult::error(14); // EFAULT
     }
     
@@ -202,10 +202,10 @@ fn emulate_getcwd(buffer: *mut u8, size: usize) -> SyscallResult {
     
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-        core::ptr::copy_nonoverlapping(cwd.as_pointer(), buffer, cwd.len());
+        core::ptr::copy_nonoverlapping(cwd.as_ptr(), buf, cwd.len());
     }
     
-    SyscallResult::success(buffer as i64)
+    SyscallResult::success(buf as i64)
 }
 
 #[repr(C)]
@@ -219,50 +219,50 @@ pub struct UnameInformation {
     pub domainname: [u8; 65],
 }
 
-fn emulate_uname(buffer: *mut UnameInformation) -> SyscallResult {
-    if buffer.is_null() {
+fn emulate_uname(buf: *mut UnameInformation) -> SyscallResult {
+    if buf.is_null() {
         return SyscallResult::error(14); // EFAULT
     }
     
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-        let information = &mut *buffer;
-        copy_str(&mut information.sysname, "TrustOS");
-        copy_str(&mut information.nodename, "trustos");
-        copy_str(&mut information.release, "1.0.0-transpiled");
-        copy_str(&mut information.version, "#1 SMP TrustOS Kernel");
-        copy_str(&mut information.machine, "x86_64");
-        copy_str(&mut information.domainname, "(none)");
+        let info = &mut *buf;
+        copy_str(&mut info.sysname, "TrustOS");
+        copy_str(&mut info.nodename, "trustos");
+        copy_str(&mut info.release, "1.0.0-transpiled");
+        copy_str(&mut info.version, "#1 SMP TrustOS Kernel");
+        copy_str(&mut info.machine, "x86_64");
+        copy_str(&mut info.domainname, "(none)");
     }
     
     SyscallResult::success(0)
 }
 
-fn copy_str(dest: &mut [u8; 65], source: &str) {
-    let bytes = source.as_bytes();
-    let len = bytes.len().minimum(64);
+fn copy_str(dest: &mut [u8; 65], src: &str) {
+    let bytes = src.as_bytes();
+    let len = bytes.len().min(64);
     dest[..len].copy_from_slice(&bytes[..len]);
     dest[len] = 0;
 }
 
-fn emulate_brk(address: u64) -> SyscallResult {
+fn emulate_brk(addr: u64) -> SyscallResult {
     // Simple brk emulation
     static mut BRK_ADDRESS: u64 = 0x10000000;
     
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-        if address == 0 {
+        if addr == 0 {
             SyscallResult::success(BRK_ADDRESS as i64)
-        } else if address > BRK_ADDRESS {
-            BRK_ADDRESS = address;
-            SyscallResult::success(address as i64)
+        } else if addr > BRK_ADDRESS {
+            BRK_ADDRESS = addr;
+            SyscallResult::success(addr as i64)
         } else {
             SyscallResult::success(BRK_ADDRESS as i64)
         }
     }
 }
 
-fn emulate_mmap(address: u64, len: u64, prot: i32, flags: i32, fd: i32, offset: i64) -> SyscallResult {
+fn emulate_mmap(addr: u64, len: u64, prot: i32, flags: i32, fd: i32, offset: i64) -> SyscallResult {
     // Anonymous mapping only
     if fd != -1 {
         return SyscallResult::error(22); // EINVAL
@@ -278,12 +278,12 @@ unsafe {
     }
 }
 
-fn emulate_munmap(address: u64, len: u64) -> SyscallResult {
+fn emulate_munmap(addr: u64, len: u64) -> SyscallResult {
     // Just pretend it worked
     SyscallResult::success(0)
 }
 
-fn emulate_arch_prctl(code: i32, address: u64) -> SyscallResult {
+fn emulate_arch_prctl(code: i32, addr: u64) -> SyscallResult {
         // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const ARCH_SET_FILESYSTEM: i32 = 0x1002;
         // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.

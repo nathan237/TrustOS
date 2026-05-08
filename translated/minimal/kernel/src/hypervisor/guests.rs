@@ -6,379 +6,379 @@ use alloc::vec::Vec;
 use alloc::vec;
 
 
-pub fn obp() -> Vec<u8> {
+pub fn ieq() -> Vec<u8> {
     
     
     
     
-    let mut aj = Vec::new();
+    let mut code = Vec::new();
     
     
     let message = b"Hello from TrustVM!\n";
     
     
-    for &hf in message {
-        aj.push(0xB0);        
-        aj.push(hf);        
-        aj.push(0xE6);        
-        aj.push(0xE9);        
+    for &byte in message {
+        code.push(0xB0);        
+        code.push(byte);        
+        code.push(0xE6);        
+        code.push(0xE9);        
     }
     
     
-    aj.push(0xF4);
+    code.push(0xF4);
     
-    aj
+    code
 }
 
 
-pub fn rph(am: u32) -> Vec<u8> {
-    let mut aj = Vec::new();
+pub fn kyf(max: u32) -> Vec<u8> {
+    let mut code = Vec::new();
     
     
-    for a in 0..=am {
+    for i in 0..=max {
         
-        for &hf in b"Count: " {
-            aj.push(0xB0);    
-            aj.push(hf);
-            aj.push(0xE6);    
-            aj.push(0xE9);
+        for &byte in b"Count: " {
+            code.push(0xB0);    
+            code.push(byte);
+            code.push(0xE6);    
+            code.push(0xE9);
         }
         
         
-        let dpy = b'0' + (a % 10) as u8;
-        aj.push(0xB0);
-        aj.push(dpy);
-        aj.push(0xE6);
-        aj.push(0xE9);
+        let blu = b'0' + (i % 10) as u8;
+        code.push(0xB0);
+        code.push(blu);
+        code.push(0xE6);
+        code.push(0xE9);
         
         
-        aj.push(0xB0);
-        aj.push(b'\n');
-        aj.push(0xE6);
-        aj.push(0xE9);
+        code.push(0xB0);
+        code.push(b'\n');
+        code.push(0xE6);
+        code.push(0xE9);
     }
     
     
-    aj.push(0xF4);
+    code.push(0xF4);
     
-    aj
+    code
 }
 
 
-pub fn tqs() -> Vec<u8> {
-    let mut aj = Vec::new();
+pub fn mmw() -> Vec<u8> {
+    let mut code = Vec::new();
     
     
-    for &hf in b"Testing VMCALL hypercall...\n" {
-        aj.push(0xB0);
-        aj.push(hf);
-        aj.push(0xE6);
-        aj.push(0xE9);
+    for &byte in b"Testing VMCALL hypercall...\n" {
+        code.push(0xB0);
+        code.push(byte);
+        code.push(0xE6);
+        code.push(0xE9);
     }
     
     
     
-    aj.bk(&[0xB8, 0x00, 0x00, 0x00, 0x00]);
+    code.extend_from_slice(&[0xB8, 0x00, 0x00, 0x00, 0x00]);
     
-    aj.bk(&[0x0F, 0x01, 0xC1]);
+    code.extend_from_slice(&[0x0F, 0x01, 0xC1]);
     
     
-    for &hf in b"VMCALL returned!\n" {
-        aj.push(0xB0);
-        aj.push(hf);
-        aj.push(0xE6);
-        aj.push(0xE9);
+    for &byte in b"VMCALL returned!\n" {
+        code.push(0xB0);
+        code.push(byte);
+        code.push(0xE6);
+        code.push(0xE9);
     }
     
     
-    aj.bk(&[0xB8, 0x01, 0x00, 0x00, 0x00]); 
-    aj.bk(&[0x0F, 0x01, 0xC1]); 
+    code.extend_from_slice(&[0xB8, 0x01, 0x00, 0x00, 0x00]); 
+    code.extend_from_slice(&[0x0F, 0x01, 0xC1]); 
     
     
-    aj.push(0xF4);
+    code.push(0xF4);
     
-    aj
+    code
 }
 
 
-pub fn rqd() -> Vec<u8> {
-    let mut aj = Vec::new();
+pub fn kyz() -> Vec<u8> {
+    let mut code = Vec::new();
     
     
-    for &hf in b"CPUID Test:\n" {
-        aj.push(0xB0);
-        aj.push(hf);
-        aj.push(0xE6);
-        aj.push(0xE9);
+    for &byte in b"CPUID Test:\n" {
+        code.push(0xB0);
+        code.push(byte);
+        code.push(0xE6);
+        code.push(0xE9);
     }
     
     
     
-    aj.bk(&[0x31, 0xC0]);
+    code.extend_from_slice(&[0x31, 0xC0]);
     
-    aj.bk(&[0x0F, 0xA2]);
+    code.extend_from_slice(&[0x0F, 0xA2]);
     
     
     
-    for &hf in b"Vendor: " {
-        aj.push(0xB0);
-        aj.push(hf);
-        aj.push(0xE6);
-        aj.push(0xE9);
+    for &byte in b"Vendor: " {
+        code.push(0xB0);
+        code.push(byte);
+        code.push(0xE6);
+        code.push(0xE9);
     }
     
     
     
-    for &hf in b"(detected)\n" {
-        aj.push(0xB0);
-        aj.push(hf);
-        aj.push(0xE6);
-        aj.push(0xE9);
+    for &byte in b"(detected)\n" {
+        code.push(0xB0);
+        code.push(byte);
+        code.push(0xE6);
+        code.push(0xE9);
     }
     
     
-    aj.push(0xF4);
+    code.push(0xF4);
     
-    aj
+    code
 }
 
 
-pub fn wmr() -> Vec<u8> {
-    let mut aj = Vec::new();
+pub fn orp() -> Vec<u8> {
+    let mut code = Vec::new();
     
     
     
     
     
-    for &hf in b"TrustVM Shell v0.1\n> " {
-        aj.push(0xB0);
-        aj.push(hf);
-        aj.push(0xE6);
-        aj.push(0xE9);
+    for &byte in b"TrustVM Shell v0.1\n> " {
+        code.push(0xB0);
+        code.push(byte);
+        code.push(0xE6);
+        code.push(0xE9);
     }
     
     
     
     
     
-    aj.clear();
-    for &hf in b"TrustVM Shell v0.1\n> " {
-        aj.push(0xB0);
-        aj.push(hf);
-        aj.push(0xE6);
-        aj.push(0xE9);
+    code.clear();
+    for &byte in b"TrustVM Shell v0.1\n> " {
+        code.push(0xB0);
+        code.push(byte);
+        code.push(0xE6);
+        code.push(0xE9);
     }
     
     
     
-    aj.push(0xF4);
+    code.push(0xF4);
     
-    aj
+    code
 }
 
 
 
-pub fn tic() -> Vec<u8> {
-    let mut aj = Vec::new();
+pub fn mgl() -> Vec<u8> {
+    let mut code = Vec::new();
     
     
     
-    fn bqk(aj: &mut Vec<u8>, fr: &[u8]) {
-        for &hf in fr {
-            aj.bk(&[0x66, 0xBA, 0xF8, 0x03]); 
-            aj.bk(&[0xB0, hf]);               
-            aj.push(0xEE);                                     
+    fn ajo(code: &mut Vec<u8>, bk: &[u8]) {
+        for &byte in bk {
+            code.extend_from_slice(&[0x66, 0xBA, 0xF8, 0x03]); 
+            code.extend_from_slice(&[0xB0, byte]);               
+            code.push(0xEE);                                     
         }
     }
     
-    fn dgx(aj: &mut Vec<u8>, fr: &[u8]) {
-        for &hf in fr {
-            aj.bk(&[0xB0, hf]);  
-            aj.bk(&[0xE6, 0xE9]);  
+    fn bgh(code: &mut Vec<u8>, bk: &[u8]) {
+        for &byte in bk {
+            code.extend_from_slice(&[0xB0, byte]);  
+            code.extend_from_slice(&[0xE6, 0xE9]);  
         }
     }
     
     
-    bqk(&mut aj, b"\r\n");
-    bqk(&mut aj, b"========================================\r\n");
-    bqk(&mut aj, b"  TrustVM Protected-Mode Mini-Kernel\r\n");
-    bqk(&mut aj, b"  AMD SVM hardware virtualization\r\n");
-    bqk(&mut aj, b"========================================\r\n");
-    dgx(&mut aj, b"[PM-test] Boot OK\n");
+    ajo(&mut code, b"\r\n");
+    ajo(&mut code, b"========================================\r\n");
+    ajo(&mut code, b"  TrustVM Protected-Mode Mini-Kernel\r\n");
+    ajo(&mut code, b"  AMD SVM hardware virtualization\r\n");
+    ajo(&mut code, b"========================================\r\n");
+    bgh(&mut code, b"[PM-test] Boot OK\n");
     
     
-    bqk(&mut aj, b"[1/7] CPUID vendor... \r\n");
+    ajo(&mut code, b"[1/7] CPUID vendor... \r\n");
     
-    aj.bk(&[0x31, 0xC0]);       
-    aj.bk(&[0x0F, 0xA2]);       
-    dgx(&mut aj, b"[PM-test] CPUID leaf 0 OK\n");
-    
-    
-    bqk(&mut aj, b"[2/7] CPUID features... \r\n");
-    aj.bk(&[0xB8, 0x01, 0x00, 0x00, 0x00]); 
-    aj.bk(&[0x0F, 0xA2]);                     
-    dgx(&mut aj, b"[PM-test] CPUID leaf 1 OK\n");
+    code.extend_from_slice(&[0x31, 0xC0]);       
+    code.extend_from_slice(&[0x0F, 0xA2]);       
+    bgh(&mut code, b"[PM-test] CPUID leaf 0 OK\n");
     
     
-    bqk(&mut aj, b"[3/7] CPUID extended... \r\n");
-    aj.bk(&[0xB8, 0x00, 0x00, 0x00, 0x80]); 
-    aj.bk(&[0x0F, 0xA2]);                     
-    dgx(&mut aj, b"[PM-test] CPUID leaf 80000000 OK\n");
+    ajo(&mut code, b"[2/7] CPUID features... \r\n");
+    code.extend_from_slice(&[0xB8, 0x01, 0x00, 0x00, 0x00]); 
+    code.extend_from_slice(&[0x0F, 0xA2]);                     
+    bgh(&mut code, b"[PM-test] CPUID leaf 1 OK\n");
     
     
-    bqk(&mut aj, b"[4/7] I/O port tests... \r\n");
+    ajo(&mut code, b"[3/7] CPUID extended... \r\n");
+    code.extend_from_slice(&[0xB8, 0x00, 0x00, 0x00, 0x80]); 
+    code.extend_from_slice(&[0x0F, 0xA2]);                     
+    bgh(&mut code, b"[PM-test] CPUID leaf 80000000 OK\n");
     
     
-    aj.bk(&[0xE4, 0x21]); 
-    
-    aj.bk(&[0xB0, 0xFF]); 
-    aj.bk(&[0xE6, 0x21]); 
+    ajo(&mut code, b"[4/7] I/O port tests... \r\n");
     
     
-    aj.bk(&[0xE4, 0x40]); 
+    code.extend_from_slice(&[0xE4, 0x21]); 
+    
+    code.extend_from_slice(&[0xB0, 0xFF]); 
+    code.extend_from_slice(&[0xE6, 0x21]); 
     
     
-    aj.bk(&[0xB0, 0x00]); 
-    aj.bk(&[0xE6, 0x70]); 
-    aj.bk(&[0xE4, 0x71]); 
+    code.extend_from_slice(&[0xE4, 0x40]); 
     
     
-    aj.bk(&[0xE4, 0x64]); 
-    
-    dgx(&mut aj, b"[PM-test] I/O ports OK\n");
-    
-    
-    bqk(&mut aj, b"[5/7] Control register tests... \r\n");
+    code.extend_from_slice(&[0xB0, 0x00]); 
+    code.extend_from_slice(&[0xE6, 0x70]); 
+    code.extend_from_slice(&[0xE4, 0x71]); 
     
     
-    aj.bk(&[0x0F, 0x20, 0xC0]); 
+    code.extend_from_slice(&[0xE4, 0x64]); 
     
-    aj.bk(&[0x0D, 0x20, 0x00, 0x00, 0x00]); 
-    
-    aj.bk(&[0x0F, 0x22, 0xC0]); 
-    dgx(&mut aj, b"[PM-test] CR0 write OK\n");
+    bgh(&mut code, b"[PM-test] I/O ports OK\n");
     
     
-    aj.bk(&[0x0F, 0x20, 0xE0]); 
-    aj.bk(&[0x0D, 0x00, 0x02, 0x00, 0x00]); 
-    aj.bk(&[0x0F, 0x22, 0xE0]); 
-    dgx(&mut aj, b"[PM-test] CR4 write OK\n");
+    ajo(&mut code, b"[5/7] Control register tests... \r\n");
     
     
-    bqk(&mut aj, b"[6/7] Memory test... \r\n");
+    code.extend_from_slice(&[0x0F, 0x20, 0xC0]); 
+    
+    code.extend_from_slice(&[0x0D, 0x20, 0x00, 0x00, 0x00]); 
+    
+    code.extend_from_slice(&[0x0F, 0x22, 0xC0]); 
+    bgh(&mut code, b"[PM-test] CR0 write OK\n");
     
     
-    
-    aj.bk(&[0xBF, 0x00, 0x50, 0x00, 0x00]);
-    
-    aj.bk(&[0xB8, 0xEF, 0xBE, 0xAD, 0xDE]);
-    
-    aj.bk(&[0x89, 0x07]);
-    
-    aj.bk(&[0x31, 0xC0]);
-    
-    aj.bk(&[0x8B, 0x07]);
-    
-    dgx(&mut aj, b"[PM-test] Memory OK\n");
+    code.extend_from_slice(&[0x0F, 0x20, 0xE0]); 
+    code.extend_from_slice(&[0x0D, 0x00, 0x02, 0x00, 0x00]); 
+    code.extend_from_slice(&[0x0F, 0x22, 0xE0]); 
+    bgh(&mut code, b"[PM-test] CR4 write OK\n");
     
     
-    bqk(&mut aj, b"[7/7] Hypercall tests... \r\n");
-    
-    
-    aj.bk(&[0xB8, 0x02, 0x00, 0x00, 0x00]); 
-    aj.bk(&[0x0F, 0x01, 0xD9]);               
-    
-    dgx(&mut aj, b"[PM-test] VMMCALL get_time OK\n");
+    ajo(&mut code, b"[6/7] Memory test... \r\n");
     
     
     
-    let tno = b"Hello from TrustVM hypercall!\0";
+    code.extend_from_slice(&[0xBF, 0x00, 0x50, 0x00, 0x00]);
     
-    aj.bk(&[0xBF, 0x00, 0x60, 0x00, 0x00]);
-    for (a, &hf) in tno.iter().cf() {
+    code.extend_from_slice(&[0xB8, 0xEF, 0xBE, 0xAD, 0xDE]);
+    
+    code.extend_from_slice(&[0x89, 0x07]);
+    
+    code.extend_from_slice(&[0x31, 0xC0]);
+    
+    code.extend_from_slice(&[0x8B, 0x07]);
+    
+    bgh(&mut code, b"[PM-test] Memory OK\n");
+    
+    
+    ajo(&mut code, b"[7/7] Hypercall tests... \r\n");
+    
+    
+    code.extend_from_slice(&[0xB8, 0x02, 0x00, 0x00, 0x00]); 
+    code.extend_from_slice(&[0x0F, 0x01, 0xD9]);               
+    
+    bgh(&mut code, b"[PM-test] VMMCALL get_time OK\n");
+    
+    
+    
+    let mkk = b"Hello from TrustVM hypercall!\0";
+    
+    code.extend_from_slice(&[0xBF, 0x00, 0x60, 0x00, 0x00]);
+    for (i, &byte) in mkk.iter().enumerate() {
         
-        aj.bk(&[0xC6, 0x87]);
-        aj.bk(&(a as u32).ho());
-        aj.push(hf);
+        code.extend_from_slice(&[0xC6, 0x87]);
+        code.extend_from_slice(&(i as u32).to_le_bytes());
+        code.push(byte);
     }
     
     
-    aj.bk(&[0xBB, 0x00, 0x60, 0x00, 0x00]); 
-    aj.bk(&[0xB8, 0x01, 0x00, 0x00, 0x00]); 
-    aj.bk(&[0x0F, 0x01, 0xD9]);               
-    dgx(&mut aj, b"[PM-test] VMMCALL print OK\n");
+    code.extend_from_slice(&[0xBB, 0x00, 0x60, 0x00, 0x00]); 
+    code.extend_from_slice(&[0xB8, 0x01, 0x00, 0x00, 0x00]); 
+    code.extend_from_slice(&[0x0F, 0x01, 0xD9]);               
+    bgh(&mut code, b"[PM-test] VMMCALL print OK\n");
     
     
-    bqk(&mut aj, b"[*] HLT (waiting for timer inject)...\r\n");
-    aj.push(0xF4); 
+    ajo(&mut code, b"[*] HLT (waiting for timer inject)...\r\n");
+    code.push(0xF4); 
     
     
-    bqk(&mut aj, b"[*] Woke from HLT!\r\n");
-    bqk(&mut aj, b"========================================\r\n");
-    bqk(&mut aj, b"  All 7 phases PASSED\r\n");
-    bqk(&mut aj, b"  VM exiting via VMMCALL...\r\n");
-    bqk(&mut aj, b"========================================\r\n");
-    dgx(&mut aj, b"[PM-test] ALL TESTS PASSED\n");
+    ajo(&mut code, b"[*] Woke from HLT!\r\n");
+    ajo(&mut code, b"========================================\r\n");
+    ajo(&mut code, b"  All 7 phases PASSED\r\n");
+    ajo(&mut code, b"  VM exiting via VMMCALL...\r\n");
+    ajo(&mut code, b"========================================\r\n");
+    bgh(&mut code, b"[PM-test] ALL TESTS PASSED\n");
     
     
     
-    aj.bk(&[0xB8, 0xAD, 0xDE, 0x00, 0x00]); 
+    code.extend_from_slice(&[0xB8, 0xAD, 0xDE, 0x00, 0x00]); 
     
-    aj.bk(&[0xBB, 0xFE, 0xCA, 0x00, 0x00]); 
+    code.extend_from_slice(&[0xBB, 0xFE, 0xCA, 0x00, 0x00]); 
     
-    aj.bk(&[0xB8, 0x00, 0x00, 0x00, 0x00]); 
-    aj.bk(&[0x0F, 0x01, 0xD9]);               
+    code.extend_from_slice(&[0xB8, 0x00, 0x00, 0x00, 0x00]); 
+    code.extend_from_slice(&[0x0F, 0x01, 0xD9]);               
     
     
-    aj.push(0xF4);
+    code.push(0xF4);
     
-    aj
+    code
 }
 
 
 
-pub fn thw() -> Vec<u8> {
+pub fn mgg() -> Vec<u8> {
     
-    let mut aj = Vec::new();
+    let mut code = Vec::new();
     
     
     let message = b"[TrustVM Guest] Running in 64-bit mode!\n";
     
-    for &hf in message {
+    for &byte in message {
         
-        aj.bk(&[0xB0, hf]);
+        code.extend_from_slice(&[0xB0, byte]);
         
-        aj.bk(&[0xE6, 0xE9]);
+        code.extend_from_slice(&[0xE6, 0xE9]);
     }
     
     
     
-    aj.bk(&[0x48, 0xC7, 0xC0, 0x01, 0x00, 0x00, 0x00]);
+    code.extend_from_slice(&[0x48, 0xC7, 0xC0, 0x01, 0x00, 0x00, 0x00]);
     
-    aj.bk(&[0x0F, 0x01, 0xC1]);
+    code.extend_from_slice(&[0x0F, 0x01, 0xC1]);
     
     
-    aj.push(0xF4);
+    code.push(0xF4);
     
-    aj
+    code
 }
 
 
-pub fn iwr(j: &str) -> Option<Vec<u8>> {
-    match j {
-        "hello" => Some(obp()),
-        "counter" => Some(rph(9)),
-        "hypercall" => Some(tqs()),
-        "cpuid" => Some(rqd()),
-        "shell" => Some(wmr()),
-        "hello64" => Some(thw()),
-        "pm-test" | "protected" => Some(tic()),
-        "linux-test" => Some(super::linux_loader::klw()),
+pub fn eoc(name: &str) -> Option<Vec<u8>> {
+    match name {
+        "hello" => Some(ieq()),
+        "counter" => Some(kyf(9)),
+        "hypercall" => Some(mmw()),
+        "cpuid" => Some(kyz()),
+        "shell" => Some(orp()),
+        "hello64" => Some(mgg()),
+        "pm-test" | "protected" => Some(mgl()),
+        "linux-test" => Some(super::linux_loader::fpb()),
         _ => None,
     }
 }
 
 
-pub fn hpy() -> &'static [&'static str] {
+pub fn dtj() -> &'static [&'static str] {
     &["hello", "counter", "hypercall", "cpuid", "shell", "hello64", "pm-test", "linux-test"]
 }

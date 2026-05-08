@@ -40,7 +40,7 @@ struct LiveEffect {
 
 struct EffectRegistry {
     effects: Vec<LiveEffect>,
-    active_index: Option<usize>,
+    active_idx: Option<usize>,
 }
 
 // Implementation block — defines methods for the type above.
@@ -48,7 +48,7 @@ impl EffectRegistry {
     const fn new() -> Self {
         Self {
             effects: Vec::new(),
-            active_index: None,
+            active_idx: None,
         }
     }
 }
@@ -139,7 +139,7 @@ pub fn add_effect(name: &str, source: &str) -> Result<(), &'static str> {
     });
     // Auto-select if first effect
     if reg.effects.len() == 1 {
-        reg.active_index = Some(0);
+        reg.active_idx = Some(0);
         LIVE_VIZ_ACTIVE.store(true, Ordering::Relaxed);
     }
     Ok(())
@@ -153,7 +153,7 @@ pub fn edit_effect(name: &str, source: &str) -> Result<(), &'static str> {
         return Err("TrustLang syntax error — check your script");
     }
     let mut reg = REGISTRY.lock();
-    if let Some(eff) = reg.effects.iterator_mut().find(|e| e.name == name) {
+    if let Some(eff) = reg.effects.iter_mut().find(|e| e.name == name) {
         eff.source = String::from(source);
         Ok(())
     } else {
@@ -164,18 +164,18 @@ pub fn edit_effect(name: &str, source: &str) -> Result<(), &'static str> {
 /// Remove an effect by name.
 pub fn remove_effect(name: &str) -> Result<(), &'static str> {
     let mut reg = REGISTRY.lock();
-    let index = reg.effects.iter().position(|e| e.name == name)
+    let idx = reg.effects.iter().position(|e| e.name == name)
         .ok_or("Effect not found")?;
-    reg.effects.remove(index);
+    reg.effects.remove(idx);
     // Fix active index
-    match reg.active_index {
-        Some(i) if i == index => {
-            reg.active_index = if reg.effects.is_empty() { None } else { Some(0) };
-            if reg.active_index.is_none() {
+    match reg.active_idx {
+        Some(i) if i == idx => {
+            reg.active_idx = if reg.effects.is_empty() { None } else { Some(0) };
+            if reg.active_idx.is_none() {
                 LIVE_VIZ_ACTIVE.store(false, Ordering::Relaxed);
             }
         }
-        Some(i) if i > index => reg.active_index = Some(i - 1),
+        Some(i) if i > idx => reg.active_idx = Some(i - 1),
         _ => {}
     }
     Ok(())
@@ -184,9 +184,9 @@ pub fn remove_effect(name: &str) -> Result<(), &'static str> {
 /// Select an effect by name.
 pub fn select_effect(name: &str) -> Result<(), &'static str> {
     let mut reg = REGISTRY.lock();
-    let index = reg.effects.iter().position(|e| e.name == name)
+    let idx = reg.effects.iter().position(|e| e.name == name)
         .ok_or("Effect not found")?;
-    reg.active_index = Some(index);
+    reg.active_idx = Some(idx);
     LIVE_VIZ_ACTIVE.store(true, Ordering::Relaxed);
     Ok(())
 }
@@ -199,7 +199,7 @@ pub fn disable() {
 /// Enable live viz (re-enable the selected effect).
 pub fn enable() -> Result<(), &'static str> {
     let reg = REGISTRY.lock();
-    if reg.active_index.is_some() {
+    if reg.active_idx.is_some() {
         LIVE_VIZ_ACTIVE.store(true, Ordering::Relaxed);
         Ok(())
     } else {
@@ -211,7 +211,7 @@ pub fn enable() -> Result<(), &'static str> {
 pub fn list_effects() -> Vec<(String, bool)> {
     let reg = REGISTRY.lock();
     reg.effects.iter().enumerate().map(|(i, e)| {
-        (e.name.clone(), reg.active_index == Some(i))
+        (e.name.clone(), reg.active_idx == Some(i))
     }).collect()
 }
 
@@ -236,16 +236,16 @@ pub fn run_frame() -> bool {
     let source = {
         let reg = REGISTRY.lock();
                 // Pattern matching — Rust's exhaustive branching construct.
-match reg.active_index {
-            Some(index) => reg.effects.get(index).map(|e| e.source.clone()),
+match reg.active_idx {
+            Some(idx) => reg.effects.get(idx).map(|e| e.source.clone()),
             None => None,
         }
     };
 
-    if let Some(source) = source {
+    if let Some(src) = source {
         // Execute the TrustLang script
         // Errors are logged to serial but don't crash
-        match crate::trustlang::run(&source) {
+        match crate::trustlang::run(&src) {
             Ok(_) => {}
             Err(e) => {
                 let frame = FRAME_NUMBER.load(Ordering::Relaxed);

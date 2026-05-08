@@ -450,8 +450,10 @@ pub fn init(mmio_base: u64) {
     }
     
     // Step 1: Allocate ring buffer (4KB, page-aligned → naturally GPU-aligned)
-    let ring_layout = alloc::alloc::Layout::from_size_align(RING_SIZE_BYTES, 4096)
-        .expect("ring layout");
+    let ring_layout = match alloc::alloc::Layout::from_size_align(RING_SIZE_BYTES, 4096) {
+        Ok(l) => l,
+        Err(_) => { crate::log!("[GPU-COMPUTE] ERROR: invalid ring layout"); return; }
+    };
     let ring_virt = unsafe { alloc::alloc::alloc_zeroed(ring_layout) } as u64;
     let ring_phys = memory::virt_to_phys(ring_virt).unwrap_or(0);
     
@@ -463,8 +465,10 @@ pub fn init(mmio_base: u64) {
         ring_virt, ring_phys, RING_SIZE_DWORDS);
     
     // Step 2: Allocate data buffer (64KB — shader I/O + fence)
-    let data_layout = alloc::alloc::Layout::from_size_align(DATA_BUFFER_SIZE, 4096)
-        .expect("data layout");
+    let data_layout = match alloc::alloc::Layout::from_size_align(DATA_BUFFER_SIZE, 4096) {
+        Ok(l) => l,
+        Err(_) => { crate::log!("[GPU-COMPUTE] ERROR: invalid data layout"); return; }
+    };
     let data_virt = unsafe { alloc::alloc::alloc_zeroed(data_layout) } as u64;
     let data_phys = memory::virt_to_phys(data_virt).unwrap_or(0);
     
@@ -476,8 +480,10 @@ pub fn init(mmio_base: u64) {
         data_virt, data_phys, DATA_BUFFER_SIZE / 1024);
     
     // Step 3: Allocate shader code buffer (4KB — holds RDNA ISA binaries)
-    let code_layout = alloc::alloc::Layout::from_size_align(4096, 256)
-        .expect("code layout");
+    let code_layout = match alloc::alloc::Layout::from_size_align(4096, 256) {
+        Ok(l) => l,
+        Err(_) => { crate::log!("[GPU-COMPUTE] ERROR: invalid code layout"); return; }
+    };
     let code_virt = unsafe { alloc::alloc::alloc_zeroed(code_layout) } as u64;
     let code_phys = memory::virt_to_phys(code_virt).unwrap_or(0);
     

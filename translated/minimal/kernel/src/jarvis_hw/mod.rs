@@ -70,90 +70,90 @@ use alloc::format;
 
 
 pub fn boot() -> String {
-    optimizer::qrd()
+    optimizer::kdk()
 }
 
 
-pub fn wnl() -> String {
-    if let Some(cc) = probe::gby() {
-        cc.fix()
+pub fn osd() -> String {
+    if let Some(ai) = probe::cur() {
+        ai.format_report()
     } else {
         String::from("\x01RJARVIS hardware scan not yet performed.\x01W\nRun: \x01Cjarvis boot\x01W\n")
     }
 }
 
 
-pub fn wnj() -> String {
-    if let Some(cc) = probe::gby() {
-        let abp = analyzer::mvq(&cc);
-        analyzer::svu(&abp)
+pub fn osa() -> String {
+    if let Some(ai) = probe::cur() {
+        let nu = analyzer::hfd(&ai);
+        analyzer::lxm(&nu)
     } else {
         String::from("\x01RNo hardware data. Run: jarvis boot\x01W\n")
     }
 }
 
 
-pub fn wnk() -> String {
-    if let Some(aqg) = optimizer::gea() {
-        analyzer::nvr(&aqg)
-    } else if let Some(cc) = probe::gby() {
-        let aqg = analyzer::nxn(&cc);
-        analyzer::nvr(&aqg)
+pub fn osb() -> String {
+    if let Some(vr) = optimizer::current_plan() {
+        analyzer::hzp(&vr)
+    } else if let Some(ai) = probe::cur() {
+        let vr = analyzer::ibc(&ai);
+        analyzer::hzp(&vr)
     } else {
         String::from("\x01RNo hardware data. Run: jarvis boot\x01W\n")
     }
 }
 
 
-pub fn uyx() -> String {
-    if let Some(an) = optimizer::wbk() {
-        an
+pub fn nnq() -> String {
+    if let Some(output) = optimizer::oje() {
+        output
     } else {
         String::from("\x01ROptimizer not active. Run: jarvis boot\x01W\n")
     }
 }
 
 
-pub fn wnn() -> String {
+pub fn ose() -> String {
     optimizer::status()
 }
 
 
-pub fn qhy(f: &[u8]) -> String {
-    let ln = media::qhw(f);
-    let mut an = ln.fix();
+pub fn jvw(data: &[u8]) -> String {
+    let analysis = media::jvu(data);
+    let mut output = analysis.format_report();
 
     
-    let format = media::hfz(f);
-    if oh!(format, media::BinaryFormat::Nm | media::BinaryFormat::Wu) {
-        let ek = media::vde(f);
-        if !ek.is_empty() {
-            an.t(&media::svx(&ek));
+    let format = media::dmx(data);
+    if matches!(format, media::BinaryFormat::Fu | media::BinaryFormat::Gpt) {
+        let au = media::nqx(data);
+        if !au.is_empty() {
+            output.push_str(&media::lxp(&au));
         }
     }
 
-    an
+    output
 }
 
 
 
-pub fn yvz() -> String {
-    if let Some(cc) = probe::gby() {
-        let mut be = cc.xig();
+pub fn qkf() -> String {
+    if let Some(ai) = probe::cur() {
+        let mut ab = ai.to_ai_context();
 
         
-        if let Some(aqg) = optimizer::gea() {
-            be.t(&format!("PLAN: simd={} batch={} gpu={} workers={}\n",
-                aqg.fut.as_str(), aqg.jhx,
-                aqg.mok, aqg.mqw));
+        if let Some(vr) = optimizer::current_plan() {
+            ab.push_str(&format!("PLAN: simd={} batch={} gpu={} workers={}\n",
+                vr.simd_tier.as_str(), vr.optimal_batch_size,
+                vr.use_gpu, vr.worker_threads));
         }
 
         
-        if optimizer::rl() {
-            be.t("OPTIMIZER: active, self-tuning enabled\n");
+        if optimizer::is_active() {
+            ab.push_str("OPTIMIZER: active, self-tuning enabled\n");
         }
 
-        be
+        ab
     } else {
         String::from("HARDWARE: not yet scanned\n")
     }
@@ -161,10 +161,10 @@ pub fn yvz() -> String {
 
 
 
-pub fn tqr(lwq: &str) -> String {
-    if let Some(cc) = probe::gby() {
-        let result = query::qiv(lwq, &cc);
-        query::svy(&result)
+pub fn mmt(gpf: &str) -> String {
+    if let Some(ai) = probe::cur() {
+        let result = query::jwi(gpf, &ai);
+        query::lxq(&result)
     } else {
         String::from("\x01RHardware not scanned. Run: jarvis boot\x01W\n")
     }

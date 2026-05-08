@@ -81,7 +81,7 @@ loop {
             let mut reg = REGISTRY.write();
             let &(pipe_id, is_write) = // Pattern matching — Rust's exhaustive branching construct.
 match reg.fd_map.get(&fd) {
-                Some(information) => information,
+                Some(info) => info,
                 None => return -9, // EBADF
             };
             if !is_write {
@@ -97,7 +97,7 @@ match reg.pipes.get_mut(&pipe_id) {
             }
             let space = PIPE_BUFFER_SIZE - pipe.data.len();
             if space > 0 {
-                let n = data.len().minimum(space);
+                let n = data.len().min(space);
                 for &b in &data[..n] {
                     pipe.data.push_back(b);
                 }
@@ -116,8 +116,8 @@ match reg.pipes.get_mut(&pipe_id) {
 
 /// Read bytes from a pipe (via read-end fd). Returns bytes read or negative errno.
 /// Blocks (yields) if the pipe is empty and the write end is still open.
-pub fn read(fd: i32, buffer: &mut [u8]) -> i64 {
-    if buffer.is_empty() { return 0; }
+pub fn read(fd: i32, buf: &mut [u8]) -> i64 {
+    if buf.is_empty() { return 0; }
     
     let mut retries = 0u32;
         // Infinite loop — runs until an explicit `break`.
@@ -126,7 +126,7 @@ loop {
             let mut reg = REGISTRY.write();
             let &(pipe_id, is_write) = // Pattern matching — Rust's exhaustive branching construct.
 match reg.fd_map.get(&fd) {
-                Some(information) => information,
+                Some(info) => info,
                 None => return -9, // EBADF
             };
             if is_write {
@@ -138,9 +138,9 @@ match reg.pipes.get_mut(&pipe_id) {
                 None => return -9,
             };
             if !pipe.data.is_empty() {
-                let n = buffer.len().minimum(pipe.data.len());
+                let n = buf.len().min(pipe.data.len());
                 for i in 0..n {
-                    buffer[i] = pipe.data.pop_front().unwrap();
+                    buf[i] = pipe.data.pop_front().unwrap();
                 }
                 return n as i64;
             }
@@ -163,7 +163,7 @@ pub fn close(fd: i32) -> i64 {
     let mut reg = REGISTRY.write();
     let (pipe_id, is_write) = // Pattern matching — Rust's exhaustive branching construct.
 match reg.fd_map.remove(&fd) {
-        Some(information) => information,
+        Some(info) => info,
         None => return -9, // EBADF
     };
     if let Some(pipe) = reg.pipes.get_mut(&pipe_id) {
@@ -191,7 +191,7 @@ pub fn poll(fd: i32) -> (bool, bool, bool) {
     let reg = REGISTRY.read();
     let (pipe_id, is_write) = // Pattern matching — Rust's exhaustive branching construct.
 match reg.fd_map.get(&fd) {
-        Some(&information) => information,
+        Some(&info) => info,
         None => return (false, false, false),
     };
     let pipe = // Pattern matching — Rust's exhaustive branching construct.

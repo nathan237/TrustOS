@@ -7,409 +7,422 @@ use core::sync::atomic::{AtomicBool, Ordering};
 use spin::Mutex;
 
 
-static ABB_: AtomicBool = AtomicBool::new(false);
+static ACR_: AtomicBool = AtomicBool::new(false);
 
 
-pub fn fvw() {
-    ABB_.store(true, Ordering::SeqCst);
+pub fn crf() {
+    ACR_.store(true, Ordering::SeqCst);
 }
 
 
-pub fn anu() {
-    ABB_.store(false, Ordering::SeqCst);
+pub fn resume() {
+    ACR_.store(false, Ordering::SeqCst);
 }
 
 
-pub fn tzb() -> bool {
-    ABB_.load(Ordering::Relaxed)
+pub fn mtt() -> bool {
+    ACR_.load(Ordering::Relaxed)
 }
 
 
 mod msg_type {
-    pub const Aqn: u8 = 1;
-    pub const Akp: u8 = 2;
-    pub const Ua: u8 = 3;
-    pub const Ie: u8 = 5;
-    pub const Xr: u8 = 6;
+    pub const Ro: u8 = 1;
+    pub const Ps: u8 = 2;
+    pub const Iq: u8 = 3;
+    pub const Dk: u8 = 5;
+    pub const Kf: u8 = 6;
 }
 
 
 mod option {
-    pub const Cin: u8 = 0;
-    pub const XL_: u8 = 1;
-    pub const Als: u8 = 3;
-    pub const GG_: u8 = 6;
-    pub const Bim: u8 = 12;
-    pub const AHE_: u8 = 50;
-    pub const UQ_: u8 = 51;
-    pub const OH_: u8 = 53;
-    pub const WY_: u8 = 54;
-    pub const CIS_: u8 = 55;
-    pub const Abj: u8 = 255;
+    pub const Dx: u8 = 0;
+    pub const YS_: u8 = 1;
+    pub const Qa: u8 = 3;
+    pub const GX_: u8 = 6;
+    pub const Zo: u8 = 12;
+    pub const AJA_: u8 = 50;
+    pub const VZ_: u8 = 51;
+    pub const PF_: u8 = 53;
+    pub const YF_: u8 = 54;
+    pub const CMB_: u8 = 55;
+    pub const Lq: u8 = 255;
 }
 
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum DhcpState {
-    Nf,
-    Amk,
-    Axy,
-    Vq,
-    Axw,
-    Axq,
+    Init,
+    Selecting,
+    Requesting,
+    Bound,
+    Renewing,
+    Rebinding,
 }
 
 
-struct Ahl {
-    g: DhcpState,
-    bxz: u32,
-    evp: [u8; 4],
-    aep: [u8; 4],
-    jrw: [u8; 4],
-    auj: [u8; 4],
-    gfc: [u8; 4],
-    fmw: u32,
-    hbb: u64,
-    clg: u64,
-    arv: u8,
+struct Om {
+    state: DhcpState,
+    xid: u32,
+    offered_ip: [u8; 4],
+    server_ip: [u8; 4],
+    subnet_mask: [u8; 4],
+    gateway: [u8; 4],
+    dns_server: [u8; 4],
+    lease_time: u32,
+    bound_time: u64,
+    last_send: u64,
+    retries: u8,
 }
 
-static Kf: Mutex<Ahl> = Mutex::new(Ahl {
-    g: DhcpState::Nf,
-    bxz: 0x12345678,
-    evp: [0; 4],
-    aep: [0; 4],
-    jrw: [255, 255, 255, 0],
-    auj: [0; 4],
-    gfc: [8, 8, 8, 8],
-    fmw: 0,
-    hbb: 0,
-    clg: 0,
-    arv: 0,
+static Ec: Mutex<Om> = Mutex::new(Om {
+    state: DhcpState::Init,
+    xid: 0x12345678,
+    offered_ip: [0; 4],
+    server_ip: [0; 4],
+    subnet_mask: [255, 255, 255, 0],
+    gateway: [0; 4],
+    dns_server: [8, 8, 8, 8],
+    lease_time: 0,
+    bound_time: 0,
+    last_send: 0,
+    retries: 0,
 });
 
-static Li: AtomicBool = AtomicBool::new(false);
-static Zy: AtomicBool = AtomicBool::new(false);
+static Cq: AtomicBool = AtomicBool::new(false);
+static Jj: AtomicBool = AtomicBool::new(false);
 
 
-pub fn ay() {
-    Li.store(true, Ordering::SeqCst);
-    Zy.store(false, Ordering::SeqCst);
+pub fn start() {
+    Cq.store(true, Ordering::SeqCst);
+    Jj.store(false, Ordering::SeqCst);
     
-    let mut acx = Kf.lock();
-    acx.g = DhcpState::Nf;
-    acx.bxz = hld();
-    acx.arv = 0;
-    drop(acx);
+    let mut oh = Ec.lock();
+    oh.state = DhcpState::Init;
+    oh.xid = dqm();
+    oh.retries = 0;
+    drop(oh);
     
     crate::log!("[DHCP] Client started");
-    let _ = hzo();
+    let _ = dzb();
 }
 
 
-pub fn flz() -> bool {
-    Zy.load(Ordering::Relaxed)
+pub fn clk() -> bool {
+    Jj.load(Ordering::Relaxed)
 }
 
 
-pub fn nxw() -> Option<([u8; 4], [u8; 4], [u8; 4], [u8; 4])> {
-    if !flz() { return None; }
-    let acx = Kf.lock();
-    Some((acx.evp, acx.jrw, acx.auj, acx.gfc))
+pub fn ibj() -> Option<([u8; 4], [u8; 4], [u8; 4], [u8; 4])> {
+    if !clk() { return None; }
+    let oh = Ec.lock();
+    Some((oh.offered_ip, oh.subnet_mask, oh.gateway, oh.dns_server))
 }
 
-fn hld() -> u32 {
-    let qb = crate::logger::lh() as u32;
-    let ed = crate::drivers::net::cez().unwrap_or([0x52, 0x54, 0x00, 0x12, 0x34, 0x56]);
-    qb ^ ((ed[4] as u32) << 8) ^ (ed[5] as u32)
+fn dqm() -> u32 {
+    let gx = crate::logger::eg() as u32;
+    let mac = crate::drivers::net::aqt().unwrap_or([0x52, 0x54, 0x00, 0x12, 0x34, 0x56]);
+    gx ^ ((mac[4] as u32) << 8) ^ (mac[5] as u32)
 }
 
-fn gbt(msg_type: u8, acx: &Ahl) -> Vec<u8> {
-    kfl(msg_type, acx, [0u8; 4])
+fn cun(msg_type: u8, oh: &Om) -> Vec<u8> {
+    fkd(msg_type, oh, [0u8; 4])
 }
 
-fn kfl(msg_type: u8, acx: &Ahl, gco: [u8; 4]) -> Vec<u8> {
-    let ed = crate::drivers::net::cez().unwrap_or([0x52, 0x54, 0x00, 0x12, 0x34, 0x56]);
-    let mut ex = Vec::fc(300);
+fn fkd(msg_type: u8, oh: &Om, cvc: [u8; 4]) -> Vec<u8> {
+    let mac = crate::drivers::net::aqt().unwrap_or([0x52, 0x54, 0x00, 0x12, 0x34, 0x56]);
+    let mut be = Vec::with_capacity(300);
     
     
-    ex.push(1); ex.push(1); ex.push(6); ex.push(0);
-    ex.bk(&acx.bxz.ft());
-    ex.bk(&0u16.ft());
-    ex.bk(&0x8000u16.ft());
-    ex.bk(&gco); 
-    ex.bk(&[0u8; 12]); 
-    ex.bk(&ed);
-    ex.bk(&[0u8; 10 + 64 + 128]); 
-    ex.bk(&[99, 130, 83, 99]); 
+    be.push(1); be.push(1); be.push(6); be.push(0);
+    be.extend_from_slice(&oh.xid.to_be_bytes());
+    be.extend_from_slice(&0u16.to_be_bytes());
+    be.extend_from_slice(&0x8000u16.to_be_bytes());
+    be.extend_from_slice(&cvc); 
+    be.extend_from_slice(&[0u8; 12]); 
+    be.extend_from_slice(&mac);
+    be.extend_from_slice(&[0u8; 10 + 64 + 128]); 
+    be.extend_from_slice(&[99, 130, 83, 99]); 
     
     
-    ex.bk(&[option::OH_, 1, msg_type]);
+    be.extend_from_slice(&[option::PF_, 1, msg_type]);
     
-    if msg_type == msg_type::Ua && acx.evp != [0; 4] {
+    if msg_type == msg_type::Iq && oh.offered_ip != [0; 4] {
         
         
-        if acx.g != DhcpState::Axw && acx.g != DhcpState::Axq {
-            ex.bk(&[option::AHE_, 4]);
-            ex.bk(&acx.evp);
-            if acx.aep != [0; 4] {
-                ex.bk(&[option::WY_, 4]);
-                ex.bk(&acx.aep);
+        if oh.state != DhcpState::Renewing && oh.state != DhcpState::Rebinding {
+            be.extend_from_slice(&[option::AJA_, 4]);
+            be.extend_from_slice(&oh.offered_ip);
+            if oh.server_ip != [0; 4] {
+                be.extend_from_slice(&[option::YF_, 4]);
+                be.extend_from_slice(&oh.server_ip);
             }
         }
     }
     
-    ex.bk(&[option::CIS_, 4, option::XL_, option::Als, option::GG_, option::UQ_]);
-    ex.bk(&[option::Bim, 7]);
-    ex.bk(b"trustos");
-    ex.push(option::Abj);
+    be.extend_from_slice(&[option::CMB_, 4, option::YS_, option::Qa, option::GX_, option::VZ_]);
+    be.extend_from_slice(&[option::Zo, 7]);
+    be.extend_from_slice(b"trustos");
+    be.push(option::Lq);
     
-    while ex.len() < 300 { ex.push(0); }
-    ex
+    while be.len() < 300 { be.push(0); }
+    be
 }
 
-fn hzo() -> Result<(), &'static str> {
-    let mut acx = Kf.lock();
-    acx.g = DhcpState::Amk;
-    acx.clg = crate::logger::lh();
-    let ex = gbt(msg_type::Aqn, &acx);
-    drop(acx);
+fn dzb() -> Result<(), &'static str> {
+    let mut oh = Ec.lock();
+    oh.state = DhcpState::Selecting;
+    oh.last_send = crate::logger::eg();
+    let be = cun(msg_type::Ro, &oh);
+    drop(oh);
     crate::serial_println!("[DHCP] Sending DISCOVER");
-    mdq(&ex)
+    gtv(&be)
 }
 
-fn eii() -> Result<(), &'static str> {
-    let mut acx = Kf.lock();
-    acx.g = DhcpState::Axy;
-    acx.clg = crate::logger::lh();
-    let ex = gbt(msg_type::Ua, &acx);
-    drop(acx);
+fn bos() -> Result<(), &'static str> {
+    let mut oh = Ec.lock();
+    oh.state = DhcpState::Requesting;
+    oh.last_send = crate::logger::eg();
+    let be = cun(msg_type::Iq, &oh);
+    drop(oh);
     crate::serial_println!("[DHCP] Sending REQUEST");
-    mdq(&ex)
+    gtv(&be)
 }
 
 
-fn phw() -> Result<(), &'static str> {
-    let mut acx = Kf.lock();
-    acx.g = DhcpState::Axw;
-    acx.bxz = hld();
-    acx.clg = crate::logger::lh();
-    let gco = acx.evp;
-    let bog = acx.aep;
-    let ex = kfl(msg_type::Ua, &acx, gco);
-    drop(acx);
-    crate::serial_println!("[DHCP] Sending RENEW (unicast to {}.{}.{}.{})", bog[0], bog[1], bog[2], bog[3]);
-    whb(&ex, gco, bog)
+fn jen() -> Result<(), &'static str> {
+    let mut oh = Ec.lock();
+    oh.state = DhcpState::Renewing;
+    oh.xid = dqm();
+    oh.last_send = crate::logger::eg();
+    let cvc = oh.offered_ip;
+    let ain = oh.server_ip;
+    let be = fkd(msg_type::Iq, &oh, cvc);
+    drop(oh);
+    crate::serial_println!("[DHCP] Sending RENEW (unicast to {}.{}.{}.{})", ain[0], ain[1], ain[2], ain[3]);
+    onn(&be, cvc, ain)
 }
 
 
-fn mdu() -> Result<(), &'static str> {
-    let mut acx = Kf.lock();
-    acx.g = DhcpState::Axq;
-    acx.bxz = hld();
-    acx.clg = crate::logger::lh();
-    let gco = acx.evp;
-    let ex = kfl(msg_type::Ua, &acx, gco);
-    drop(acx);
+fn gtz() -> Result<(), &'static str> {
+    let mut oh = Ec.lock();
+    oh.state = DhcpState::Rebinding;
+    oh.xid = dqm();
+    oh.last_send = crate::logger::eg();
+    let cvc = oh.offered_ip;
+    let be = fkd(msg_type::Iq, &oh, cvc);
+    drop(oh);
     crate::serial_println!("[DHCP] Sending REBIND (broadcast)");
-    mdq(&ex)
+    gtv(&be)
 }
 
-fn mdq(ew: &[u8]) -> Result<(), &'static str> {
-    pht(ew, [0, 0, 0, 0], [255, 255, 255, 255], [0xFF; 6])
+fn gtv(payload: &[u8]) -> Result<(), &'static str> {
+    jek(payload, [0, 0, 0, 0], [255, 255, 255, 255], [0xFF; 6])
 }
 
 
-fn whb(ew: &[u8], jh: [u8; 4], pz: [u8; 4]) -> Result<(), &'static str> {
+fn onn(payload: &[u8], src_ip: [u8; 4], dst_ip: [u8; 4]) -> Result<(), &'static str> {
     
-    let amc = crate::netstack::arp::ayo(pz).unwrap_or([0xFF; 6]);
-    pht(ew, jh, pz, amc)
+    let dst_mac = crate::netstack::arp::yb(dst_ip).unwrap_or([0xFF; 6]);
+    jek(payload, src_ip, dst_ip, dst_mac)
 }
 
-fn pht(ew: &[u8], jh: [u8; 4], pz: [u8; 4], amc: [u8; 6]) -> Result<(), &'static str> {
-    let mut udp = Vec::fc(8 + ew.len());
-    udp.bk(&68u16.ft()); 
-    udp.bk(&67u16.ft()); 
-    udp.bk(&((8 + ew.len()) as u16).ft());
-    udp.bk(&0u16.ft());
-    udp.bk(ew);
+fn jek(payload: &[u8], src_ip: [u8; 4], dst_ip: [u8; 4], dst_mac: [u8; 6]) -> Result<(), &'static str> {
+    let mut udp = Vec::with_capacity(8 + payload.len());
+    udp.extend_from_slice(&68u16.to_be_bytes()); 
+    udp.extend_from_slice(&67u16.to_be_bytes()); 
+    udp.extend_from_slice(&((8 + payload.len()) as u16).to_be_bytes());
+    udp.extend_from_slice(&0u16.to_be_bytes());
+    udp.extend_from_slice(payload);
     
-    let mut ip = Vec::fc(20 + udp.len());
+    let mut ip = Vec::with_capacity(20 + udp.len());
     ip.push(0x45); ip.push(0);
-    ip.bk(&((20 + udp.len()) as u16).ft());
-    ip.bk(&[0, 0, 0, 0]); 
+    ip.extend_from_slice(&((20 + udp.len()) as u16).to_be_bytes());
+    ip.extend_from_slice(&[0, 0, 0, 0]); 
     ip.push(64); ip.push(17); 
-    ip.bk(&0u16.ft()); 
-    ip.bk(&jh);
-    ip.bk(&pz);
+    ip.extend_from_slice(&0u16.to_be_bytes()); 
+    ip.extend_from_slice(&src_ip);
+    ip.extend_from_slice(&dst_ip);
     
     let mut sum: u32 = 0;
-    for a in (0..20).akt(2) { sum += ((ip[a] as u32) << 8) | (ip[a + 1] as u32); }
+    for i in (0..20).step_by(2) { sum += ((ip[i] as u32) << 8) | (ip[i + 1] as u32); }
     while sum >> 16 != 0 { sum = (sum & 0xFFFF) + (sum >> 16); }
-    let td = !(sum as u16);
-    ip[10] = (td >> 8) as u8; ip[11] = (td & 0xFF) as u8;
-    ip.bk(&udp);
+    let ig = !(sum as u16);
+    ip[10] = (ig >> 8) as u8; ip[11] = (ig & 0xFF) as u8;
+    ip.extend_from_slice(&udp);
     
-    crate::netstack::fug(amc, crate::netstack::ethertype::Aty, &ip)
+    crate::netstack::cdq(dst_mac, crate::netstack::ethertype::Tb, &ip)
 }
 
-pub fn bur(f: &[u8]) {
-    if !Li.load(Ordering::Relaxed) || f.len() < 240 { return; }
-    if f[0] != 2 { return; } 
+pub fn alq(data: &[u8]) {
+    if !Cq.load(Ordering::Relaxed) || data.len() < 240 { return; }
+    if data[0] != 2 { return; } 
     
-    let bxz = u32::oa([f[4], f[5], f[6], f[7]]);
-    { let r = Kf.lock(); if bxz != r.bxz { return; } }
+    let xid = u32::from_be_bytes([data[4], data[5], data[6], data[7]]);
+    { let c = Ec.lock(); if xid != c.xid { return; } }
     
-    let btb = [f[16], f[17], f[18], f[19]];
-    let wnt = [f[20], f[21], f[22], f[23]];
-    if f[236..240] != [99, 130, 83, 99] { return; }
+    let akt = [data[16], data[17], data[18], data[19]];
+    let osi = [data[20], data[21], data[22], data[23]];
+    if data[236..240] != [99, 130, 83, 99] { return; }
     
-    let (mut msg_type, mut up, mut nt, mut dns, mut pii, mut anm) = 
-        (0u8, [255,255,255,0], [0u8;4], [8,8,8,8], wnt, 86400u32);
+    let (mut msg_type, mut subnet, mut fz, mut dns, mut server_id, mut lease) = 
+        (0u8, [255,255,255,0], [0u8;4], [8,8,8,8], osi, 86400u32);
     
-    let mut a = 240;
-    while a < f.len() {
-        let fpt = f[a];
-        if fpt == option::Abj { break; }
-        if fpt == option::Cin { a += 1; continue; }
-        if a + 1 >= f.len() { break; }
-        let len = f[a + 1] as usize;
-        if a + 2 + len > f.len() { break; }
-        let p = &f[a + 2..a + 2 + len];
-        match fpt {
-            option::OH_ if len >= 1 => msg_type = p[0],
-            option::XL_ if len >= 4 => up = [p[0], p[1], p[2], p[3]],
-            option::Als if len >= 4 => nt = [p[0], p[1], p[2], p[3]],
-            option::GG_ if len >= 4 => dns = [p[0], p[1], p[2], p[3]],
-            option::WY_ if len >= 4 => pii = [p[0], p[1], p[2], p[3]],
-            option::UQ_ if len >= 4 => anm = u32::oa([p[0], p[1], p[2], p[3]]),
+    let mut i = 240;
+    while i < data.len() {
+        let cnn = data[i];
+        if cnn == option::Lq { break; }
+        if cnn == option::Dx { i += 1; continue; }
+        if i + 1 >= data.len() { break; }
+        let len = data[i + 1] as usize;
+        if i + 2 + len > data.len() { break; }
+        let v = &data[i + 2..i + 2 + len];
+        match cnn {
+            option::PF_ if len >= 1 => msg_type = v[0],
+            option::YS_ if len >= 4 => subnet = [v[0], v[1], v[2], v[3]],
+            option::Qa if len >= 4 => fz = [v[0], v[1], v[2], v[3]],
+            option::GX_ if len >= 4 => dns = [v[0], v[1], v[2], v[3]],
+            option::YF_ if len >= 4 => server_id = [v[0], v[1], v[2], v[3]],
+            option::VZ_ if len >= 4 => lease = u32::from_be_bytes([v[0], v[1], v[2], v[3]]),
             _ => {}
         }
-        a += 2 + len;
+        i += 2 + len;
     }
     
     match msg_type {
-        msg_type::Akp => {
-            crate::serial_println!("[DHCP] OFFER: {}.{}.{}.{}", btb[0], btb[1], btb[2], btb[3]);
-            let mut r = Kf.lock();
-            if r.g == DhcpState::Amk {
-                r.evp = btb; r.aep = pii;
-                r.jrw = up; r.auj = nt; r.gfc = dns;
-                drop(r);
-                let _ = eii();
+        msg_type::Ps => {
+            crate::serial_println!("[DHCP] OFFER: {}.{}.{}.{}", akt[0], akt[1], akt[2], akt[3]);
+            let mut c = Ec.lock();
+            if c.state == DhcpState::Selecting {
+                c.offered_ip = akt; c.server_ip = server_id;
+                c.subnet_mask = subnet; c.gateway = fz; c.dns_server = dns;
+                drop(c);
+                let _ = bos();
             }
         }
-        msg_type::Ie => {
-            crate::log!("[DHCP] ACK: {}.{}.{}.{} (lease={}s)", btb[0], btb[1], btb[2], btb[3], anm);
+        msg_type::Dk => {
+            crate::log!("[DHCP] ACK: {}.{}.{}.{} (lease={}s)", akt[0], akt[1], akt[2], akt[3], lease);
             
             
-            if tzb() {
+            if mtt() {
                 crate::serial_println!("[DHCP] Suspended - ignoring ACK");
                 return;
             }
             
-            let mut r = Kf.lock();
-            r.g = DhcpState::Vq; r.evp = btb;
-            r.jrw = up; r.auj = nt; r.gfc = dns; r.fmw = anm;
-            r.hbb = crate::logger::lh();
-            let ip = crate::network::Ipv4Address::new(btb[0], btb[1], btb[2], btb[3]);
-            let hs = crate::network::Ipv4Address::new(up[0], up[1], up[2], up[3]);
-            let til = crate::network::Ipv4Address::new(nt[0], nt[1], nt[2], nt[3]);
-            crate::network::hzx(ip, hs, Some(til));
+            let mut c = Ec.lock();
+            c.state = DhcpState::Bound; c.offered_ip = akt;
+            c.subnet_mask = subnet; c.gateway = fz; c.dns_server = dns; c.lease_time = lease;
+            c.bound_time = crate::logger::eg();
+            let ip = crate::network::Ipv4Address::new(akt[0], akt[1], akt[2], akt[3]);
+            let mask = crate::network::Ipv4Address::new(subnet[0], subnet[1], subnet[2], subnet[3]);
+            let mgu = crate::network::Ipv4Address::new(fz[0], fz[1], fz[2], fz[3]);
+            crate::network::deh(ip, mask, Some(mgu));
             
-            crate::network::wis(dns);
-            drop(r);
-            Zy.store(true, Ordering::SeqCst);
+            crate::network::oou(dns);
+            drop(c);
+            Jj.store(true, Ordering::SeqCst);
             crate::log!("[DHCP] Configured: IP={}.{}.{}.{} GW={}.{}.{}.{} DNS={}.{}.{}.{}", 
-                btb[0], btb[1], btb[2], btb[3], 
-                nt[0], nt[1], nt[2], nt[3],
+                akt[0], akt[1], akt[2], akt[3], 
+                fz[0], fz[1], fz[2], fz[3],
                 dns[0], dns[1], dns[2], dns[3]);
         }
-        msg_type::Xr => {
+        msg_type::Kf => {
             crate::log_warn!("[DHCP] NAK, restarting");
-            Kf.lock().g = DhcpState::Nf;
-            Zy.store(false, Ordering::SeqCst);
-            let _ = hzo();
+            Ec.lock().state = DhcpState::Init;
+            Jj.store(false, Ordering::SeqCst);
+            let _ = dzb();
         }
         _ => {}
     }
 }
 
 pub fn poll() {
-    if !Li.load(Ordering::Relaxed) { return; }
-    let iu = crate::logger::lh();
-    let mut r = Kf.lock();
+    if !Cq.load(Ordering::Relaxed) { return; }
+    let cy = crate::logger::eg();
+    let mut c = Ec.lock();
     
-    match r.g {
-        DhcpState::Vq => {
+    match c.state {
+        DhcpState::Bound => {
             
-            let oz = iu.ao(r.hbb);
-            let glg = (r.fmw as u64) * 1000;
-            let aax = glg / 2;        
-            let aco = glg * 7 / 8;    
+            let elapsed_ms = cy.saturating_sub(c.bound_time);
+            let daj = (c.lease_time as u64) * 1000;
+            let ll = daj / 2;        
+            let np = daj * 7 / 8;    
             
-            if oz >= aco {
+            if elapsed_ms >= np {
                 crate::serial_println!("[DHCP] T2 expired, rebinding");
-                drop(r);
-                let _ = mdu();
-            } else if oz >= aax {
+                drop(c);
+                let _ = gtz();
+            } else if elapsed_ms >= ll {
                 crate::serial_println!("[DHCP] T1 expired, renewing");
-                drop(r);
-                let _ = phw();
+                drop(c);
+                let _ = jen();
             }
         }
-        DhcpState::Axw => {
+        DhcpState::Renewing => {
             
-            let oz = iu.ao(r.hbb);
-            let glg = (r.fmw as u64) * 1000;
-            let aco = glg * 7 / 8;
+            let elapsed_ms = cy.saturating_sub(c.bound_time);
+            let daj = (c.lease_time as u64) * 1000;
+            let np = daj * 7 / 8;
             
-            if oz >= aco {
+            if elapsed_ms >= np {
                 crate::serial_println!("[DHCP] Renew failed, rebinding");
-                drop(r);
-                let _ = mdu();
-            } else if iu.ao(r.clg) > 30_000 {
-                drop(r);
-                let _ = phw();
+                drop(c);
+                let _ = gtz();
+            } else if cy.saturating_sub(c.last_send) > 30_000 {
+                drop(c);
+                let _ = jen();
             }
         }
-        DhcpState::Axq => {
+        DhcpState::Rebinding => {
             
-            let oz = iu.ao(r.hbb);
-            let glg = (r.fmw as u64) * 1000;
+            let elapsed_ms = cy.saturating_sub(c.bound_time);
+            let daj = (c.lease_time as u64) * 1000;
             
-            if oz >= glg {
+            if elapsed_ms >= daj {
                 crate::log_warn!("[DHCP] Lease expired, restarting");
-                r.g = DhcpState::Nf;
-                r.arv = 0;
-                drop(r);
-                Zy.store(false, Ordering::SeqCst);
-                let _ = hzo();
-            } else if iu.ao(r.clg) > 30_000 {
-                drop(r);
-                let _ = mdu();
+                c.state = DhcpState::Init;
+                c.retries = 0;
+                drop(c);
+                Jj.store(false, Ordering::SeqCst);
+                let _ = dzb();
+            } else if cy.saturating_sub(c.last_send) > 30_000 {
+                drop(c);
+                let _ = gtz();
             }
         }
-        DhcpState::Amk | DhcpState::Axy => {
-            let aah = if r.g == DhcpState::Nf { 1000 } else { 3000 };
-            if iu.ao(r.clg) > aah {
-                r.arv += 1;
-                if r.arv > 5 { r.g = DhcpState::Nf; r.bxz = hld(); r.arv = 0; }
-                let g = r.g;
-                drop(r);
-                match g {
-                    DhcpState::Nf | DhcpState::Amk => { let _ = hzo(); }
-                    DhcpState::Axy => { let _ = eii(); }
+        DhcpState::Selecting | DhcpState::Requesting => {
+            let mz = if c.state == DhcpState::Init { 1000 } else { 3000 };
+            if cy.saturating_sub(c.last_send) > mz {
+                c.retries += 1;
+                if c.retries > 5 { c.state = DhcpState::Init; c.xid = dqm(); c.retries = 0; }
+                let state = c.state;
+                drop(c);
+                match state {
+                    DhcpState::Init | DhcpState::Selecting => { let _ = dzb(); }
+                    DhcpState::Requesting => { let _ = bos(); }
                     _ => {}
                 }
             }
         }
-        DhcpState::Nf => {
-            if iu.ao(r.clg) > 1000 {
-                r.arv += 1;
-                if r.arv > 5 { r.bxz = hld(); r.arv = 0; }
-                drop(r);
-                let _ = hzo();
+        DhcpState::Init => {
+            if cy.saturating_sub(c.last_send) > 1000 {
+                c.retries += 1;
+                if c.retries > 10 {
+                    
+                    drop(c);
+                    Cq.store(false, Ordering::SeqCst);
+                    crate::log!("[DHCP] No server found, applying fallback 10.0.0.2/24");
+                    crate::network::opd(
+                        crate::network::Ipv4Address::new(10, 0, 0, 2),
+                        crate::network::Ipv4Address::new(255, 255, 255, 0),
+                        crate::network::Ipv4Address::new(10, 0, 0, 1),
+                    );
+                    Jj.store(true, Ordering::SeqCst);
+                    return;
+                }
+                if c.retries > 5 { c.xid = dqm(); }
+                drop(c);
+                let _ = dzb();
             }
         }
     }

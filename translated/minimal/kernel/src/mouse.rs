@@ -8,340 +8,340 @@ use spin::Mutex;
 use core::sync::atomic::{AtomicI32, AtomicBool, AtomicI8, AtomicU8, AtomicU64, Ordering};
 
 
-const HA_: u16 = 0x60;
-const HB_: u16 = 0x64;
-const AGS_: u16 = 0x64;
+const HR_: u16 = 0x60;
+const HS_: u16 = 0x64;
+const AIM_: u16 = 0x64;
 
 
-static IN_: AtomicI32 = AtomicI32::new(640);
-static IO_: AtomicI32 = AtomicI32::new(400);
-static UR_: AtomicBool = AtomicBool::new(false);
-static WT_: AtomicBool = AtomicBool::new(false);
-static AFN_: AtomicBool = AtomicBool::new(false);
-static WV_: AtomicI8 = AtomicI8::new(0);
+static JG_: AtomicI32 = AtomicI32::new(640);
+static JH_: AtomicI32 = AtomicI32::new(400);
+static WA_: AtomicBool = AtomicBool::new(false);
+static YA_: AtomicBool = AtomicBool::new(false);
+static AHH_: AtomicBool = AtomicBool::new(false);
+static YC_: AtomicI8 = AtomicI8::new(0);
 
 
-static IW_: AtomicI32 = AtomicI32::new(1280);
-static IV_: AtomicI32 = AtomicI32::new(800);
+static JP_: AtomicI32 = AtomicI32::new(1280);
+static JO_: AtomicI32 = AtomicI32::new(800);
 
 
 #[derive(Clone, Copy, Debug, Default)]
-pub struct Bmr {
-    pub b: i32,
-    pub c: i32,
-    pub jda: bool,
-    pub pdd: bool,
-    pub uoh: bool,
-    pub jnw: i8,
+pub struct Abn {
+    pub x: i32,
+    pub y: i32,
+    pub left_button: bool,
+    pub right_button: bool,
+    pub middle_button: bool,
+    pub ezq: i8,
 }
 
 
-static AYR_: AtomicU64 = AtomicU64::new(0);
-static AAB_: Mutex<u8> = Mutex::new(0);
+static BAS_: AtomicU64 = AtomicU64::new(0);
+static ABN_: Mutex<u8> = Mutex::new(0);
 
 
-static ADI_: AtomicBool = AtomicBool::new(false);
+static AEY_: AtomicBool = AtomicBool::new(false);
 
 
-static BCJ_: AtomicU8 = AtomicU8::new(0);
-static BCK_: AtomicU8 = AtomicU8::new(0);
-static BCL_: AtomicU8 = AtomicU8::new(0);
-static BCM_: AtomicU8 = AtomicU8::new(0);
-static VZ_: AtomicU8 = AtomicU8::new(0);
+static BEM_: AtomicU8 = AtomicU8::new(0);
+static BEN_: AtomicU8 = AtomicU8::new(0);
+static BEO_: AtomicU8 = AtomicU8::new(0);
+static BEP_: AtomicU8 = AtomicU8::new(0);
+static XI_: AtomicU8 = AtomicU8::new(0);
 
 
-fn xtl() {
-    let mut status = Port::<u8>::new(HB_);
+fn ptl() {
+    let mut status = Port::<u8>::new(HS_);
     for _ in 0..100_000 {
         if unsafe { status.read() } & 0x01 != 0 {
             return;
         }
-        core::hint::hc();
+        core::hint::spin_loop();
     }
 }
 
 
-fn pza() {
-    let mut status = Port::<u8>::new(HB_);
+fn jqs() {
+    let mut status = Port::<u8>::new(HS_);
     for _ in 0..100_000 {
         if unsafe { status.read() } & 0x02 == 0 {
             return;
         }
-        core::hint::hc();
+        core::hint::spin_loop();
     }
 }
 
 
-fn hwc(cmd: u8) {
-    let mut ro = Port::<u8>::new(AGS_);
-    pza();
-    unsafe { ro.write(cmd); }
+fn dwy(cmd: u8) {
+    let mut command = Port::<u8>::new(AIM_);
+    jqs();
+    unsafe { command.write(cmd); }
 }
 
 
-fn lwa(f: u8) {
-    let mut port = Port::<u8>::new(HA_);
-    pza();
-    unsafe { port.write(f); }
+fn gov(data: u8) {
+    let mut port = Port::<u8>::new(HR_);
+    jqs();
+    unsafe { port.write(data); }
 }
 
 
-fn jkl() -> u8 {
-    let mut port = Port::<u8>::new(HA_);
-    xtl();
+fn exf() -> u8 {
+    let mut port = Port::<u8>::new(HR_);
+    ptl();
     unsafe { port.read() }
 }
 
 
-fn gmy(cmd: u8) {
-    hwc(0xD4); 
-    lwa(cmd);
-    jkl(); 
+fn dbi(cmd: u8) {
+    dwy(0xD4); 
+    gov(cmd);
+    exf(); 
 }
 
 
-fn lmt(f: u8) {
-    hwc(0xD4); 
-    lwa(f);
-    jkl(); 
+fn gig(data: u8) {
+    dwy(0xD4); 
+    gov(data);
+    exf(); 
 }
 
 
 pub fn init() {
     
-    hwc(0xA8);
+    dwy(0xA8);
     
     
-    hwc(0x20);
-    let status = jkl();
+    dwy(0x20);
+    let status = exf();
     
     
     let status = (status | 0x02) & !0x20;
-    hwc(0x60);
-    lwa(status);
+    dwy(0x60);
+    gov(status);
     
     
-    gmy(0xF6);
+    dbi(0xF6);
     
     
     
     
-    gmy(0xF3); lmt(200); 
-    gmy(0xF3); lmt(100); 
-    gmy(0xF3); lmt(80);  
+    dbi(0xF3); gig(200); 
+    dbi(0xF3); gig(100); 
+    dbi(0xF3); gig(80);  
     
     
-    gmy(0xF2); 
-    let mx = jkl();
-    if mx == 3 || mx == 4 {
-        ADI_.store(true, Ordering::Relaxed);
-        crate::serial_println!("[MOUSE] IntelliMouse scroll wheel enabled (ID={})", mx);
+    dbi(0xF2); 
+    let device_id = exf();
+    if device_id == 3 || device_id == 4 {
+        AEY_.store(true, Ordering::Relaxed);
+        crate::serial_println!("[MOUSE] IntelliMouse scroll wheel enabled (ID={})", device_id);
     }
     
     
-    gmy(0xF4);
+    dbi(0xF4);
     
-    crate::serial_println!("[MOUSE] PS/2 mouse initialized (ID={})", mx);
+    crate::serial_println!("[MOUSE] PS/2 mouse initialized (ID={})", device_id);
 }
 
 
-pub fn dbw(z: u32, ac: u32) {
-    IW_.store(z as i32, Ordering::Relaxed);
-    IV_.store(ac as i32, Ordering::Relaxed);
+pub fn set_screen_size(width: u32, height: u32) {
+    JP_.store(width as i32, Ordering::Relaxed);
+    JO_.store(height as i32, Ordering::Relaxed);
 }
 
 
 
-pub fn eck() {
-    let mut axr = Port::<u8>::new(HA_);
-    let hf = unsafe { axr.read() };
+pub fn btc() {
+    let mut zu = Port::<u8>::new(HR_);
+    let byte = unsafe { zu.read() };
     
     
-    let lbg = ADI_.load(Ordering::Relaxed);
-    let vap: u8 = if lbg { 4 } else { 3 };
-    let w = VZ_.load(Ordering::Relaxed);
+    let fzz = AEY_.load(Ordering::Relaxed);
+    let npd: u8 = if fzz { 4 } else { 3 };
+    let idx = XI_.load(Ordering::Relaxed);
     
     
-    if w == 0 && hf & 0x08 == 0 {
+    if idx == 0 && byte & 0x08 == 0 {
         return; 
     }
     
     
-    match w {
-        0 => BCJ_.store(hf, Ordering::Relaxed),
-        1 => BCK_.store(hf, Ordering::Relaxed),
-        2 => BCL_.store(hf, Ordering::Relaxed),
-        3 => BCM_.store(hf, Ordering::Relaxed),
+    match idx {
+        0 => BEM_.store(byte, Ordering::Relaxed),
+        1 => BEN_.store(byte, Ordering::Relaxed),
+        2 => BEO_.store(byte, Ordering::Relaxed),
+        3 => BEP_.store(byte, Ordering::Relaxed),
         _ => {
             
-            VZ_.store(0, Ordering::Relaxed);
+            XI_.store(0, Ordering::Relaxed);
             return;
         }
     }
     
-    let jgx = w + 1;
-    if jgx < vap {
-        VZ_.store(jgx, Ordering::Relaxed);
+    let euz = idx + 1;
+    if euz < npd {
+        XI_.store(euz, Ordering::Relaxed);
         return;
     }
     
     
-    VZ_.store(0, Ordering::Relaxed);
+    XI_.store(0, Ordering::Relaxed);
     
     
-    let wu = BCJ_.load(Ordering::Relaxed);
-    let of = BCK_.load(Ordering::Relaxed);
-    let tb = BCL_.load(Ordering::Relaxed);
-    let ajw = if lbg { BCM_.load(Ordering::Relaxed) } else { 0 };
+    let kl = BEM_.load(Ordering::Relaxed);
+    let gf = BEN_.load(Ordering::Relaxed);
+    let iq = BEO_.load(Ordering::Relaxed);
+    let sc = if fzz { BEP_.load(Ordering::Relaxed) } else { 0 };
     
     
-    UR_.store(wu & 0x01 != 0, Ordering::Relaxed);
-    WT_.store(wu & 0x02 != 0, Ordering::Relaxed);
-    AFN_.store(wu & 0x04 != 0, Ordering::Relaxed);
+    WA_.store(kl & 0x01 != 0, Ordering::Relaxed);
+    YA_.store(kl & 0x02 != 0, Ordering::Relaxed);
+    AHH_.store(kl & 0x04 != 0, Ordering::Relaxed);
     
     
-    let lxf = of as i8 as i32;
-    let fsa = tb as i8 as i32;
+    let gpv = gf as i8 as i32;
+    let cox = iq as i8 as i32;
     
     
-    let (xwj, xxa) = crate::accessibility::qjz(lxf, fsa);
+    let (x_rel, y_rel) = crate::accessibility::jxe(gpv, cox);
     
     
-    let xwh = wu & 0x40 != 0;
-    let xwz = wu & 0x80 != 0;
-    if xwh || xwz {
+    let pvq = kl & 0x40 != 0;
+    let pwe = kl & 0x80 != 0;
+    if pvq || pwe {
         return;
     }
     
-    let z = IW_.load(Ordering::Relaxed);
-    let ac = IV_.load(Ordering::Relaxed);
+    let width = JP_.load(Ordering::Relaxed);
+    let height = JO_.load(Ordering::Relaxed);
     
-    let lqc = IN_.load(Ordering::Relaxed);
-    let lqd = IO_.load(Ordering::Relaxed);
-    
-    
-    let evh = (lqc + xwj).qp(0, z - 1);
-    let bhn = (lqd - xxa).qp(0, ac - 1);
-    
-    IN_.store(evh, Ordering::Relaxed);
-    IO_.store(bhn, Ordering::Relaxed);
+    let gks = JG_.load(Ordering::Relaxed);
+    let gkt = JH_.load(Ordering::Relaxed);
     
     
-    if lbg {
-        let qba = ajw as i8;
-        if qba != 0 {
-            let _ = WV_.yqk(Ordering::Relaxed, Ordering::Relaxed, |aft| {
-                Some(aft.akq(qba))
+    let cbw = (gks + x_rel).clamp(0, width - 1);
+    let afk = (gkt - y_rel).clamp(0, height - 1);
+    
+    JG_.store(cbw, Ordering::Relaxed);
+    JH_.store(afk, Ordering::Relaxed);
+    
+    
+    if fzz {
+        let jsh = sc as i8;
+        if jsh != 0 {
+            let _ = YC_.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |qb| {
+                Some(qb.saturating_add(jsh))
             });
         }
     }
 }
 
 
-pub fn drd() -> Bmr {
-    Bmr {
-        b: IN_.load(Ordering::Relaxed),
-        c: IO_.load(Ordering::Relaxed),
-        jda: UR_.load(Ordering::Relaxed),
-        pdd: WT_.load(Ordering::Relaxed),
-        uoh: AFN_.load(Ordering::Relaxed),
-        jnw: WV_.swap(0, Ordering::Relaxed),
+pub fn get_state() -> Abn {
+    Abn {
+        x: JG_.load(Ordering::Relaxed),
+        y: JH_.load(Ordering::Relaxed),
+        left_button: WA_.load(Ordering::Relaxed),
+        right_button: YA_.load(Ordering::Relaxed),
+        middle_button: AHH_.load(Ordering::Relaxed),
+        ezq: YC_.swap(0, Ordering::Relaxed),
     }
 }
 
 
-pub fn tup(dx: i32, bg: i32, fd: bool, hw: bool, uog: bool, jc: i8) {
-    let d = IW_.load(Ordering::Relaxed);
-    let i = IV_.load(Ordering::Relaxed);
+pub fn mqc(dx: i32, ad: i32, left: bool, right: bool, middle: bool, scroll: i8) {
+    let w = JP_.load(Ordering::Relaxed);
+    let h = JO_.load(Ordering::Relaxed);
 
     
-    let evh = IN_.load(Ordering::Relaxed) + dx;
-    let bhn = IO_.load(Ordering::Relaxed) + bg;
-    IN_.store(evh.am(0).v(d - 1), Ordering::Relaxed);
-    IO_.store(bhn.am(0).v(i - 1), Ordering::Relaxed);
+    let cbw = JG_.load(Ordering::Relaxed) + dx;
+    let afk = JH_.load(Ordering::Relaxed) + ad;
+    JG_.store(cbw.max(0).min(w - 1), Ordering::Relaxed);
+    JH_.store(afk.max(0).min(h - 1), Ordering::Relaxed);
 
-    UR_.store(fd, Ordering::Relaxed);
-    WT_.store(hw, Ordering::Relaxed);
-    AFN_.store(uog, Ordering::Relaxed);
-    if jc != 0 {
-        WV_.store(jc, Ordering::Relaxed);
+    WA_.store(left, Ordering::Relaxed);
+    YA_.store(right, Ordering::Relaxed);
+    AHH_.store(middle, Ordering::Relaxed);
+    if scroll != 0 {
+        YC_.store(scroll, Ordering::Relaxed);
     }
 }
 
 
-pub fn teo() -> i8 {
-    WV_.swap(0, Ordering::Relaxed)
+pub fn mds() -> i8 {
+    YC_.swap(0, Ordering::Relaxed)
 }
 
 
-pub fn vtf() {
+pub fn odr() {
     
-    let iu = crate::logger::lh();
-    let qv = AYR_.load(Ordering::Relaxed);
-    AYR_.store(iu, Ordering::Relaxed);
+    let cy = crate::logger::eg();
+    let last = BAS_.load(Ordering::Relaxed);
+    BAS_.store(cy, Ordering::Relaxed);
     
-    let mut az = AAB_.lock();
+    let mut count = ABN_.lock();
     
-    if iu - qv < 30 {
-        *az = 2;
+    if cy - last < 30 {
+        *count = 2;
     } else {
-        *az = 1;
+        *count = 1;
     }
 }
 
 
-pub fn jbf() -> bool {
-    let az = AAB_.lock();
-    *az >= 2
+pub fn erj() -> bool {
+    let count = ABN_.lock();
+    *count >= 2
 }
 
 
-pub fn pcp() {
-    *AAB_.lock() = 0;
+pub fn jah() {
+    *ABN_.lock() = 0;
 }
 
 
-pub fn yto() -> (i32, i32) {
-    (IN_.load(Ordering::Relaxed), IO_.load(Ordering::Relaxed))
+pub fn qif() -> (i32, i32) {
+    (JG_.load(Ordering::Relaxed), JH_.load(Ordering::Relaxed))
 }
 
 
-pub fn yzn() -> bool {
-    UR_.load(Ordering::Relaxed)
+pub fn qmm() -> bool {
+    WA_.load(Ordering::Relaxed)
 }
 
 
-pub fn yzz() -> bool {
-    WT_.load(Ordering::Relaxed)
+pub fn qmx() -> bool {
+    YA_.load(Ordering::Relaxed)
 }
 
 
-pub fn ky() -> bool {
+pub fn is_initialized() -> bool {
     
     
-    ADI_.load(Ordering::Relaxed) || true  
+    AEY_.load(Ordering::Relaxed) || true  
 }
 
 
 
 
 
-static CDQ_: AtomicI32 = AtomicI32::new(640);
-static CDR_: AtomicI32 = AtomicI32::new(400);
+static CGZ_: AtomicI32 = AtomicI32::new(640);
+static CHA_: AtomicI32 = AtomicI32::new(400);
 
 
 
-pub fn yta() -> Option<(i32, i32)> {
-    let nic = IN_.load(Ordering::Relaxed);
-    let nid = IO_.load(Ordering::Relaxed);
-    let jcv = CDQ_.swap(nic, Ordering::Relaxed);
-    let ucs = CDR_.swap(nid, Ordering::Relaxed);
+pub fn qhp() -> Option<(i32, i32)> {
+    let hpm = JG_.load(Ordering::Relaxed);
+    let hpn = JH_.load(Ordering::Relaxed);
+    let esj = CGZ_.swap(hpm, Ordering::Relaxed);
+    let mwt = CHA_.swap(hpn, Ordering::Relaxed);
     
-    let dx = nic - jcv;
-    let bg = nid - ucs;
+    let dx = hpm - esj;
+    let ad = hpn - mwt;
     
-    if dx != 0 || bg != 0 {
-        Some((dx, bg))
+    if dx != 0 || ad != 0 {
+        Some((dx, ad))
     } else {
         None
     }

@@ -319,9 +319,9 @@ pub fn initialize_ide() -> bool {
 
 /// Check if a drive supports LBA48 (returns false if drive not found)
 fn drive_supports_lba48(channel: IdeChannel, slave: bool) -> bool {
-    let position = if slave { DrivePosition::Slave } else { DrivePosition::Master };
+    let pos = if slave { DrivePosition::Slave } else { DrivePosition::Master };
     CONTROLLER.lock().as_ref()
-        .and_then(|c| c.drives.iter().find(|d| d.channel == channel && d.position == position))
+        .and_then(|c| c.drives.iter().find(|d| d.channel == channel && d.position == pos))
         .map(|d| d.lba48)
         .unwrap_or(false)
 }

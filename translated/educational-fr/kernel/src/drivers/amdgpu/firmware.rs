@@ -304,8 +304,8 @@ unsafe {
         
         // Wait for RLC to idle
         for _ in 0..10000 {
-            let status = mmio_read32(mmio, RLC_STATUS);
-            if status & 1 == 0 { break; } // Bit 0 = busy
+            let stat = mmio_read32(mmio, RLC_STATUS);
+            if stat & 1 == 0 { break; } // Bit 0 = busy
             core::hint::spin_loop();
         }
         
@@ -330,9 +330,9 @@ unsafe {
         
         // 6. Verify RLC started
         for _ in 0..FW_LOAD_TIMEOUT {
-            let status = mmio_read32(mmio, RLC_STATUS);
-            if status & 1 != 0 {
-                crate::log!("[AMDGPU-FW] RLC running (stat={:#X})", status);
+            let stat = mmio_read32(mmio, RLC_STATUS);
+            if stat & 1 != 0 {
+                crate::log!("[AMDGPU-FW] RLC running (stat={:#X})", stat);
                 return Ok(());
             }
             core::hint::spin_loop();
@@ -468,7 +468,7 @@ fn load_sdma(mmio: u64, engine: usize, fw: &[u8]) -> Result<(), &'static str> {
     let dwords = fw.len() / 4;
     if dwords == 0 { return Err("SDMA firmware is empty"); }
     
-    let (address_register, data_register, f32_cntl) = // Correspondance de motifs — branchement exhaustif de Rust.
+    let (addr_reg, data_reg, f32_cntl) = // Correspondance de motifs — branchement exhaustif de Rust.
 match engine {
         0 => (SDMA0_UCODE_ADDRESS, SDMA0_UCODE_DATA, regs::SDMA0_F32_CNTL),
         1 => (SDMA1_UCODE_ADDRESS, SDMA1_UCODE_DATA, regs::SDMA1_F32_CNTL),
@@ -484,14 +484,14 @@ unsafe {
         for _ in 0..10000 { core::hint::spin_loop(); }
         
         // 2. Set ucode start address to 0
-        mmio_write32(mmio, address_register, 0);
+        mmio_write32(mmio, addr_reg, 0);
         
         // 3. Write firmware DWORDs
         for i in 0..dwords {
             let off = i * 4;
             if off + 4 > fw.len() { break; }
             let dw = u32::from_le_bytes([fw[off], fw[off+1], fw[off+2], fw[off+3]]);
-            mmio_write32(mmio, data_register, dw);
+            mmio_write32(mmio, data_reg, dw);
         }
         
         // 4. Un-halt the SDMA engine

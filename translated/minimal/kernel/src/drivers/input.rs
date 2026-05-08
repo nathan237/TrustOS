@@ -7,84 +7,84 @@ use spin::Mutex;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum InputDeviceType {
-    Ciw,
-    Cix,
-    Dki,
-    Dkj,
-    Dkh,
+    PS2Keyboard,
+    PS2Mouse,
+    USBKeyboard,
+    USBMouse,
+    USBGamepad,
 }
 
 
 #[derive(Clone, Debug)]
-pub struct Czv {
-    pub ceb: InputDeviceType,
-    pub j: &'static str,
-    pub bfz: bool,
+pub struct Axz {
+    pub device_type: InputDeviceType,
+    pub name: &'static str,
+    pub available: bool,
 }
 
 
-static KM_: Mutex<InputState> = Mutex::new(InputState::new());
+static LF_: Mutex<InputState> = Mutex::new(InputState::new());
 
 struct InputState {
-    lhf: bool,
-    lmq: bool,
-    hpl: Option<InputDeviceType>,
-    hry: Option<InputDeviceType>,
+    keyboard_available: bool,
+    mouse_available: bool,
+    keyboard_type: Option<InputDeviceType>,
+    mouse_type: Option<InputDeviceType>,
 }
 
 impl InputState {
     const fn new() -> Self {
         InputState {
-            lhf: false,
-            lmq: false,
-            hpl: None,
-            hry: None,
+            keyboard_available: false,
+            mouse_available: false,
+            keyboard_type: None,
+            mouse_type: None,
         }
     }
 }
 
 
 pub fn init() {
-    let mut g = KM_.lock();
+    let mut state = LF_.lock();
     
     
     
-    g.lhf = true;
-    g.hpl = Some(InputDeviceType::Ciw);
+    state.keyboard_available = true;
+    state.keyboard_type = Some(InputDeviceType::PS2Keyboard);
     
     
-    if crate::mouse::ky() {
-        g.lmq = true;
-        g.hry = Some(InputDeviceType::Cix);
+    if crate::mouse::is_initialized() {
+        state.mouse_available = true;
+        state.mouse_type = Some(InputDeviceType::PS2Mouse);
     }
     
     crate::serial_println!("[INPUT] Keyboard: {:?}, Mouse: {:?}",
-        g.hpl, g.hry);
+        state.keyboard_type, state.mouse_type);
 }
 
 
-pub fn oar() -> bool {
-    KM_.lock().lhf
+pub fn idr() -> bool {
+    LF_.lock().keyboard_available
 }
 
 
-pub fn tms() -> bool {
-    KM_.lock().lmq
+pub fn mjr() -> bool {
+    LF_.lock().mouse_available
 }
 
 
-pub fn hpl() -> Option<InputDeviceType> {
-    KM_.lock().hpl
+pub fn keyboard_type() -> Option<InputDeviceType> {
+    LF_.lock().keyboard_type
 }
 
 
-pub fn hry() -> Option<InputDeviceType> {
-    KM_.lock().hry
+pub fn mouse_type() -> Option<InputDeviceType> {
+    LF_.lock().mouse_type
 }
 
 
-pub fn zqk(yai: bool, ybj: bool) {
-    let mut g = KM_.lock();
+pub fn qyh(_keyboard: bool, _mouse: bool) {
+    let mut state = LF_.lock();
     
     
     
@@ -97,5 +97,5 @@ pub fn zqk(yai: bool, ybj: bool) {
     
     
     
-    let _ = g;  
+    let _ = state;  
 }

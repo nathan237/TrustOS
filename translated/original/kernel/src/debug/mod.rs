@@ -12,6 +12,8 @@
 //! - Memory map display
 //! - E9 debug port (Bochs/QEMU debug console)
 
+pub mod netconsole;
+
 use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::format;
@@ -814,7 +816,7 @@ pub fn watchdog_disable() {
 
 /// Read TSC (Time Stamp Counter)
 #[cfg(target_arch = "x86_64")]
-fn read_tsc() -> u64 {
+pub fn read_tsc() -> u64 {
     let lo: u32;
     let hi: u32;
     unsafe {
@@ -824,7 +826,7 @@ fn read_tsc() -> u64 {
 }
 
 #[cfg(not(target_arch = "x86_64"))]
-fn read_tsc() -> u64 { 0 }
+pub fn read_tsc() -> u64 { 0 }
 
 /// Busy-wait for approximately `ms` milliseconds (TSC-based when available)
 fn busy_wait_ms(ms: u32) {

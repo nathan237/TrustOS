@@ -74,131 +74,131 @@ unsafe {
 #[inline(always)]
 // Public function — callable from other modules.
 pub fn read_sstatus() -> u64 {
-    let value: u64;
+    let val: u64;
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        core::arch::asm!("csrr {}, sstatus", out(reg) value, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("csrr {}, sstatus", out(reg) val, options(nomem, nostack, preserves_flags));
     }
-    value
+    val
 }
 
 /// Write sstatus CSR
 #[inline(always)]
 pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe fn write_sstatus(value: u64) {
-    core::arch::asm!("csrw sstatus, {}", in(reg) value, options(nomem, nostack, preserves_flags));
+unsafe fn write_sstatus(val: u64) {
+    core::arch::asm!("csrw sstatus, {}", in(reg) val, options(nomem, nostack, preserves_flags));
 }
 
 /// Read sie CSR (Supervisor Interrupt Enable)
 #[inline(always)]
 // Public function — callable from other modules.
 pub fn read_sie() -> u64 {
-    let value: u64;
+    let val: u64;
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        core::arch::asm!("csrr {}, sie", out(reg) value, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("csrr {}, sie", out(reg) val, options(nomem, nostack, preserves_flags));
     }
-    value
+    val
 }
 
 /// Write sie CSR
 #[inline(always)]
 pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe fn write_sie(value: u64) {
-    core::arch::asm!("csrw sie, {}", in(reg) value, options(nomem, nostack, preserves_flags));
+unsafe fn write_sie(val: u64) {
+    core::arch::asm!("csrw sie, {}", in(reg) val, options(nomem, nostack, preserves_flags));
 }
 
 /// Read sip CSR (Supervisor Interrupt Pending)
 #[inline(always)]
 // Public function — callable from other modules.
 pub fn read_sip() -> u64 {
-    let value: u64;
+    let val: u64;
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        core::arch::asm!("csrr {}, sip", out(reg) value, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("csrr {}, sip", out(reg) val, options(nomem, nostack, preserves_flags));
     }
-    value
+    val
 }
 
 /// Read stvec CSR (Supervisor Trap Vector Base)
 #[inline(always)]
 // Public function — callable from other modules.
 pub fn read_stvec() -> u64 {
-    let value: u64;
+    let val: u64;
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        core::arch::asm!("csrr {}, stvec", out(reg) value, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("csrr {}, stvec", out(reg) val, options(nomem, nostack, preserves_flags));
     }
-    value
+    val
 }
 
 /// Write stvec CSR
 #[inline(always)]
 pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe fn write_stvec(value: u64) {
-    core::arch::asm!("csrw stvec, {}", in(reg) value, options(nomem, nostack, preserves_flags));
+unsafe fn write_stvec(val: u64) {
+    core::arch::asm!("csrw stvec, {}", in(reg) val, options(nomem, nostack, preserves_flags));
 }
 
 /// Read sepc CSR (Supervisor Exception Program Counter)
 #[inline(always)]
 // Public function — callable from other modules.
 pub fn read_sepc() -> u64 {
-    let value: u64;
+    let val: u64;
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        core::arch::asm!("csrr {}, sepc", out(reg) value, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("csrr {}, sepc", out(reg) val, options(nomem, nostack, preserves_flags));
     }
-    value
+    val
 }
 
 /// Write sepc CSR
 #[inline(always)]
 pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe fn write_sepc(value: u64) {
-    core::arch::asm!("csrw sepc, {}", in(reg) value, options(nomem, nostack, preserves_flags));
+unsafe fn write_sepc(val: u64) {
+    core::arch::asm!("csrw sepc, {}", in(reg) val, options(nomem, nostack, preserves_flags));
 }
 
 /// Read scause CSR (Supervisor Cause)
 #[inline(always)]
 // Public function — callable from other modules.
 pub fn read_scause() -> u64 {
-    let value: u64;
+    let val: u64;
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        core::arch::asm!("csrr {}, scause", out(reg) value, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("csrr {}, scause", out(reg) val, options(nomem, nostack, preserves_flags));
     }
-    value
+    val
 }
 
 /// Read stval CSR (Supervisor Trap Value — fault address)
 #[inline(always)]
 // Public function — callable from other modules.
 pub fn read_stval() -> u64 {
-    let value: u64;
+    let val: u64;
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        core::arch::asm!("csrr {}, stval", out(reg) value, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("csrr {}, stval", out(reg) val, options(nomem, nostack, preserves_flags));
     }
-    value
+    val
 }
 
 /// Read satp CSR (Supervisor Address Translation and Protection)
 #[inline(always)]
 // Public function — callable from other modules.
 pub fn read_satp() -> u64 {
-    let value: u64;
+    let val: u64;
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        core::arch::asm!("csrr {}, satp", out(reg) value, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("csrr {}, satp", out(reg) val, options(nomem, nostack, preserves_flags));
     }
-    value
+    val
 }
 
 /// Write satp CSR
 #[inline(always)]
 pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe fn write_satp(value: u64) {
-    core::arch::asm!("csrw satp, {}", in(reg) value, options(nomem, nostack, preserves_flags));
+unsafe fn write_satp(val: u64) {
+    core::arch::asm!("csrw satp, {}", in(reg) val, options(nomem, nostack, preserves_flags));
     // Flush pipeline after changing satp
     core::arch::asm!("sfence.vma", options(nomem, nostack, preserves_flags));
 }
@@ -207,43 +207,43 @@ unsafe fn write_satp(value: u64) {
 #[inline(always)]
 // Public function — callable from other modules.
 pub fn read_sscratch() -> u64 {
-    let value: u64;
+    let val: u64;
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        core::arch::asm!("csrr {}, sscratch", out(reg) value, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("csrr {}, sscratch", out(reg) val, options(nomem, nostack, preserves_flags));
     }
-    value
+    val
 }
 
 /// Write sscratch CSR
 #[inline(always)]
 pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe fn write_sscratch(value: u64) {
-    core::arch::asm!("csrw sscratch, {}", in(reg) value, options(nomem, nostack, preserves_flags));
+unsafe fn write_sscratch(val: u64) {
+    core::arch::asm!("csrw sscratch, {}", in(reg) val, options(nomem, nostack, preserves_flags));
 }
 
 /// Read cycle counter (rdcycle)
 #[inline(always)]
 // Public function — callable from other modules.
 pub fn rdcycle() -> u64 {
-    let value: u64;
+    let val: u64;
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        core::arch::asm!("rdcycle {}", out(reg) value, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("rdcycle {}", out(reg) val, options(nomem, nostack, preserves_flags));
     }
-    value
+    val
 }
 
 /// Read time counter (rdtime) — real-time clock
 #[inline(always)]
 // Public function — callable from other modules.
 pub fn rdtime() -> u64 {
-    let value: u64;
+    let val: u64;
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-        core::arch::asm!("rdtime {}", out(reg) value, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("rdtime {}", out(reg) val, options(nomem, nostack, preserves_flags));
     }
-    value
+    val
 }
 
 /// Read hart ID (mhartid) — only accessible in M-mode, use sscratch in S-mode
@@ -264,25 +264,25 @@ unsafe {
 /// Read a 32-bit value from an MMIO address
 #[inline(always)]
 pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe fn mmio_read32(address: u64) -> u32 {
-    let value: u32;
+unsafe fn mmio_read32(addr: u64) -> u32 {
+    let val: u32;
     core::arch::asm!(
         "lw {val}, 0({addr})",
-        address = in(reg) address,
-        value = out(reg) value,
+        addr = in(reg) addr,
+        val = out(reg) val,
         options(nostack, preserves_flags)
     );
-    value
+    val
 }
 
 /// Write a 32-bit value to an MMIO address
 #[inline(always)]
 pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe fn mmio_write32(address: u64, value: u32) {
+unsafe fn mmio_write32(addr: u64, val: u32) {
     core::arch::asm!(
         "sw {val}, 0({addr})",
-        address = in(reg) address,
-        value = in(reg) value,
+        addr = in(reg) addr,
+        val = in(reg) val,
         options(nostack, preserves_flags)
     );
 }
@@ -290,25 +290,25 @@ unsafe fn mmio_write32(address: u64, value: u32) {
 /// Read an 8-bit value from an MMIO address
 #[inline(always)]
 pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe fn mmio_read8(address: u64) -> u8 {
-    let value: u32;
+unsafe fn mmio_read8(addr: u64) -> u8 {
+    let val: u32;
     core::arch::asm!(
         "lbu {val}, 0({addr})",
-        address = in(reg) address,
-        value = out(reg) value,
+        addr = in(reg) addr,
+        val = out(reg) val,
         options(nostack, preserves_flags)
     );
-    value as u8
+    val as u8
 }
 
 /// Write an 8-bit value to an MMIO address
 #[inline(always)]
 pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe fn mmio_write8(address: u64, value: u8) {
+unsafe fn mmio_write8(addr: u64, val: u8) {
     core::arch::asm!(
         "sb {val}, 0({addr})",
-        address = in(reg) address,
-        value = in(reg) value,
+        addr = in(reg) addr,
+        val = in(reg) val,
         options(nostack, preserves_flags)
     );
 }

@@ -21,36 +21,36 @@ static DNS_CACHE: Mutex<BTreeMap<String, DnsCacheEntry>> = Mutex::new(BTreeMap::
 /// Default cache TTL in ticks (~60 seconds at 1ms/tick)
 const DNS_CACHE_TTL: u64 = 60_000;
 
-fn write_qname(buffer: &mut Vec<u8>, name: &str) -> bool {
+fn write_qname(buf: &mut Vec<u8>, name: &str) -> bool {
     for label in name.split('.') {
         let len = label.len();
         if len == 0 || len > 63 {
             return false;
         }
-        buffer.push(len as u8);
-        buffer.extend_from_slice(label.as_bytes());
+        buf.push(len as u8);
+        buf.extend_from_slice(label.as_bytes());
     }
-    buffer.push(0);
+    buf.push(0);
     true
 }
 
-fn skip_name(data: &[u8], mut index: usize) -> Option<usize> {
+fn skip_name(data: &[u8], mut idx: usize) -> Option<usize> {
         // Infinite loop — runs until an explicit `break`.
 loop {
-        if index >= data.len() {
+        if idx >= data.len() {
             return None;
         }
-        let len = data[index];
+        let len = data[idx];
         if len & 0xC0 == 0xC0 {
-            if index + 1 >= data.len() {
+            if idx + 1 >= data.len() {
                 return None;
             }
-            return Some(index + 2);
+            return Some(idx + 2);
         }
         if len == 0 {
-            return Some(index + 1);
+            return Some(idx + 1);
         }
-        index += 1 + len as usize;
+        idx += 1 + len as usize;
     }
 }
 
@@ -69,7 +69,7 @@ pub fn resolve(name: &str) -> Option<[u8; 4]> {
 
     // Use DHCP-provided DNS, or platform-detected default
     let dns_server = crate::network::get_dns_server();
-    let source_port = crate::netstack::udp::allocator_ephemeral_port();
+    let src_port = crate::netstack::udp::allocator_ephemeral_port();
     let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
 
     let mut query = Vec::with_capacity(64);
@@ -85,49 +85,49 @@ pub fn resolve(name: &str) -> Option<[u8; 4]> {
     query.extend_from_slice(&1u16.to_be_bytes()); // QTYPE=A
     query.extend_from_slice(&1u16.to_be_bytes()); // QCLASS=IN
 
-    let _ = crate::netstack::udp::send_to(dns_server, 53, source_port, &query);
+    let _ = crate::netstack::udp::send_to(dns_server, 53, src_port, &query);
 
     let start = crate::logger::get_ticks();
         // Infinite loop — runs until an explicit `break`.
 loop {
         crate::netstack::poll();
-        if let Some(response) = crate::netstack::udp::recv_on(source_port) {
-            if response.len() < 12 {
+        if let Some(resp) = crate::netstack::udp::recv_on(src_port) {
+            if resp.len() < 12 {
                 continue;
             }
-            if u16::from_be_bytes([response[0], response[1]]) != id {
+            if u16::from_be_bytes([resp[0], resp[1]]) != id {
                 continue;
             }
-            let flags = u16::from_be_bytes([response[2], response[3]]);
+            let flags = u16::from_be_bytes([resp[2], resp[3]]);
             if (flags & 0x8000) == 0 {
                 continue;
             }
-            let qd = u16::from_be_bytes([response[4], response[5]]) as usize;
-            let an = u16::from_be_bytes([response[6], response[7]]) as usize;
+            let qd = u16::from_be_bytes([resp[4], resp[5]]) as usize;
+            let an = u16::from_be_bytes([resp[6], resp[7]]) as usize;
 
-            let mut index = 12;
+            let mut idx = 12;
             for _ in 0..qd {
-                index = skip_name(&response, index)?;
-                if index + 4 > response.len() {
+                idx = skip_name(&resp, idx)?;
+                if idx + 4 > resp.len() {
                     return None;
                 }
-                index += 4; // QTYPE + QCLASS
+                idx += 4; // QTYPE + QCLASS
             }
 
             for _ in 0..an {
-                index = skip_name(&response, index)?;
-                if index + 10 > response.len() {
+                idx = skip_name(&resp, idx)?;
+                if idx + 10 > resp.len() {
                     return None;
                 }
-                let rtype = u16::from_be_bytes([response[index], response[index + 1]]);
-                let rclass = u16::from_be_bytes([response[index + 2], response[index + 3]]);
-                let rdlen = u16::from_be_bytes([response[index + 8], response[index + 9]]) as usize;
-                index += 10;
-                if index + rdlen > response.len() {
+                let rtype = u16::from_be_bytes([resp[idx], resp[idx + 1]]);
+                let rclass = u16::from_be_bytes([resp[idx + 2], resp[idx + 3]]);
+                let rdlen = u16::from_be_bytes([resp[idx + 8], resp[idx + 9]]) as usize;
+                idx += 10;
+                if idx + rdlen > resp.len() {
                     return None;
                 }
                 if rtype == 1 && rclass == 1 && rdlen == 4 {
-                    let ip = [response[index], response[index + 1], response[index + 2], response[index + 3]];
+                    let ip = [resp[idx], resp[idx + 1], resp[idx + 2], resp[idx + 3]];
                     // Cache the result
                     let expire = crate::logger::get_ticks() + DNS_CACHE_TTL;
                     DNS_CACHE.lock().insert(
@@ -136,7 +136,7 @@ loop {
                     );
                     return Some(ip);
                 }
-                index += rdlen;
+                idx += rdlen;
             }
         }
 

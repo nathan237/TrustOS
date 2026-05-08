@@ -28,11 +28,11 @@
 #[derive(Debug, Clone)]
 pub struct PciBus {
     
-    pub dfe: u32,
+    pub config_addr: u32,
     
-    pub ery: [u8; 256],
+    pub host_bridge: [u8; 256],
     
-    pub gkk: [u8; 256],
+    pub isa_bridge: [u8; 256],
     
     pub virtio_console: [u8; 256],
     
@@ -41,68 +41,68 @@ pub struct PciBus {
 
 impl Default for PciBus {
     fn default() -> Self {
-        let mut aq = Self {
-            dfe: 0,
-            ery: [0u8; 256],
-            gkk: [0u8; 256],
+        let mut bus = Self {
+            config_addr: 0,
+            host_bridge: [0u8; 256],
+            isa_bridge: [0u8; 256],
             virtio_console: [0u8; 256],
             virtio_blk: [0u8; 256],
         };
-        aq.ttn();
-        aq.ttr();
-        aq.tuc();
-        aq.tub();
-        aq
+        bus.init_host_bridge();
+        bus.init_isa_bridge();
+        bus.init_virtio_console();
+        bus.init_virtio_blk();
+        bus
     }
 }
 
 
-fn axk(config: &mut [u8], l: usize, ap: u16) {
-    let bf = ap.ho();
-    config[l] = bf[0];
-    config[l + 1] = bf[1];
+fn zq(config: &mut [u8], offset: usize, val: u16) {
+    let bytes = val.to_le_bytes();
+    config[offset] = bytes[0];
+    config[offset + 1] = bytes[1];
 }
 
 
-fn jxf(config: &mut [u8], l: usize, ap: u32) {
-    let bf = ap.ho();
-    config[l] = bf[0];
-    config[l + 1] = bf[1];
-    config[l + 2] = bf[2];
-    config[l + 3] = bf[3];
+fn ffi(config: &mut [u8], offset: usize, val: u32) {
+    let bytes = val.to_le_bytes();
+    config[offset] = bytes[0];
+    config[offset + 1] = bytes[1];
+    config[offset + 2] = bytes[2];
+    config[offset + 3] = bytes[3];
 }
 
 
-fn vrk(config: &[u8], l: usize) -> u32 {
-    u32::dj([
-        config[l],
-        config[l + 1],
-        config[l + 2],
-        config[l + 3],
+fn ock(config: &[u8], offset: usize) -> u32 {
+    u32::from_le_bytes([
+        config[offset],
+        config[offset + 1],
+        config[offset + 2],
+        config[offset + 3],
     ])
 }
 
 
 mod regs {
-    pub const YF_: usize      = 0x00; 
-    pub const SQ_: usize      = 0x02; 
-    pub const Aah: usize        = 0x04; 
-    pub const Nz: usize         = 0x06; 
-    pub const WS_: usize    = 0x08; 
-    pub const WJ_: usize        = 0x09; 
-    pub const Aeo: usize       = 0x0A; 
-    pub const ME_: usize     = 0x0B; 
-    pub const BLS_: usize     = 0x0C; 
-    pub const CDS_: usize  = 0x0D; 
-    pub const TU_: usize    = 0x0E; 
-    pub const Crs: usize           = 0x0F; 
-    pub const Bcg: usize           = 0x10; 
-    pub const Crq: usize           = 0x14; 
-    pub const XN_: usize = 0x2C; 
-    pub const XM_: usize   = 0x2E; 
-    pub const Ig: usize   = 0x34; 
-    pub const ADO_: usize = 0x3C; 
-    pub const AXC_: usize  = 0x3D; 
+    pub const ZJ_: usize      = 0x00; 
+    pub const TX_: usize      = 0x02; 
+    pub const Lg: usize        = 0x04; 
+    pub const Fz: usize         = 0x06; 
+    pub const XZ_: usize    = 0x08; 
+    pub const XS_: usize        = 0x09; 
+    pub const Ng: usize       = 0x0A; 
+    pub const NC_: usize     = 0x0B; 
+    pub const BOL_: usize     = 0x0C; 
+    pub const CHB_: usize  = 0x0D; 
+    pub const VC_: usize    = 0x0E; 
+    pub const Asy: usize           = 0x0F; 
+    pub const Wl: usize           = 0x10; 
+    pub const Asw: usize           = 0x14; 
+    pub const YU_: usize = 0x2C; 
+    pub const YT_: usize   = 0x2E; 
+    pub const Dl: usize   = 0x34; 
+    pub const AFE_: usize = 0x3C; 
+    pub const AZD_: usize  = 0x3D; 
 }
 
 impl PciBus {
@@ -112,28 +112,28 @@ impl PciBus {
     
     
     
-    fn ttn(&mut self) {
-        let r = &mut self.ery;
+    fn init_host_bridge(&mut self) {
+        let c = &mut self.host_bridge;
         
         
-        axk(r, regs::YF_, 0x8086);
+        zq(c, regs::ZJ_, 0x8086);
         
-        axk(r, regs::SQ_, 0x1237);
+        zq(c, regs::TX_, 0x1237);
         
-        axk(r, regs::Aah, 0x0006);
+        zq(c, regs::Lg, 0x0006);
         
-        axk(r, regs::Nz, 0x0000);
+        zq(c, regs::Fz, 0x0000);
         
-        r[regs::WS_] = 0x02;
+        c[regs::XZ_] = 0x02;
         
-        r[regs::WJ_] = 0x00;
-        r[regs::Aeo] = 0x00;
-        r[regs::ME_] = 0x06;
+        c[regs::XS_] = 0x00;
+        c[regs::Ng] = 0x00;
+        c[regs::NC_] = 0x06;
         
-        r[regs::TU_] = 0x00;
+        c[regs::VC_] = 0x00;
         
-        axk(r, regs::XN_, 0x8086);
-        axk(r, regs::XM_, 0x1237);
+        zq(c, regs::YU_, 0x8086);
+        zq(c, regs::YT_, 0x1237);
     }
     
     
@@ -142,65 +142,28 @@ impl PciBus {
     
     
     
-    fn ttr(&mut self) {
-        let r = &mut self.gkk;
+    fn init_isa_bridge(&mut self) {
+        let c = &mut self.isa_bridge;
         
         
-        axk(r, regs::YF_, 0x8086);
+        zq(c, regs::ZJ_, 0x8086);
         
-        axk(r, regs::SQ_, 0x7000);
+        zq(c, regs::TX_, 0x7000);
         
-        axk(r, regs::Aah, 0x0007);
+        zq(c, regs::Lg, 0x0007);
         
-        axk(r, regs::Nz, 0x0200); 
+        zq(c, regs::Fz, 0x0200); 
         
-        r[regs::WS_] = 0x00;
+        c[regs::XZ_] = 0x00;
         
-        r[regs::WJ_] = 0x00;
-        r[regs::Aeo] = 0x01;
-        r[regs::ME_] = 0x06;
+        c[regs::XS_] = 0x00;
+        c[regs::Ng] = 0x01;
+        c[regs::NC_] = 0x06;
         
-        r[regs::TU_] = 0x80;
+        c[regs::VC_] = 0x80;
         
-        axk(r, regs::XN_, 0x8086);
-        axk(r, regs::XM_, 0x7000);
-    }
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    fn tuc(&mut self) {
-        let r = &mut self.virtio_console;
-        
-        
-        axk(r, regs::YF_, 0x1AF4);
-        
-        axk(r, regs::SQ_, 0x1003);
-        
-        axk(r, regs::Aah, 0x0005);
-        
-        axk(r, regs::Nz, 0x0010); 
-        
-        r[regs::WS_] = 0x00;
-        
-        r[regs::WJ_] = 0x00;
-        r[regs::Aeo] = 0x80;
-        r[regs::ME_] = 0x07;
-        
-        r[regs::TU_] = 0x00;
-        
-        jxf(r, regs::Bcg, 0xC001);
-        
-        axk(r, regs::XN_, 0x1AF4);
-        axk(r, regs::XM_, 0x0003);
-        
-        r[regs::ADO_] = 17;
-        r[regs::AXC_] = 0x01; 
+        zq(c, regs::YU_, 0x8086);
+        zq(c, regs::YT_, 0x7000);
     }
     
     
@@ -211,61 +174,98 @@ impl PciBus {
     
     
     
-    fn tub(&mut self) {
-        let r = &mut self.virtio_blk;
+    fn init_virtio_console(&mut self) {
+        let c = &mut self.virtio_console;
         
         
-        axk(r, regs::YF_, 0x1AF4);
+        zq(c, regs::ZJ_, 0x1AF4);
         
-        axk(r, regs::SQ_, 0x1001);
+        zq(c, regs::TX_, 0x1003);
         
-        axk(r, regs::Aah, 0x0005);
+        zq(c, regs::Lg, 0x0005);
         
-        axk(r, regs::Nz, 0x0010); 
+        zq(c, regs::Fz, 0x0010); 
         
-        r[regs::WS_] = 0x00;
+        c[regs::XZ_] = 0x00;
         
-        r[regs::WJ_] = 0x00;
-        r[regs::Aeo] = 0x80;
-        r[regs::ME_] = 0x01;
+        c[regs::XS_] = 0x00;
+        c[regs::Ng] = 0x80;
+        c[regs::NC_] = 0x07;
         
-        r[regs::TU_] = 0x00;
+        c[regs::VC_] = 0x00;
         
-        jxf(r, regs::Bcg, 0xC041);
+        ffi(c, regs::Wl, 0xC001);
         
-        axk(r, regs::XN_, 0x1AF4);
-        axk(r, regs::XM_, 0x0002);
+        zq(c, regs::YU_, 0x1AF4);
+        zq(c, regs::YT_, 0x0003);
         
-        r[regs::ADO_] = 18;
-        r[regs::AXC_] = 0x01; 
+        c[regs::AFE_] = 17;
+        c[regs::AZD_] = 0x01; 
     }
     
     
-    pub fn dni(&mut self, bn: u32) {
-        self.dfe = bn;
+    
+    
+    
+    
+    
+    
+    
+    fn init_virtio_blk(&mut self) {
+        let c = &mut self.virtio_blk;
+        
+        
+        zq(c, regs::ZJ_, 0x1AF4);
+        
+        zq(c, regs::TX_, 0x1001);
+        
+        zq(c, regs::Lg, 0x0005);
+        
+        zq(c, regs::Fz, 0x0010); 
+        
+        c[regs::XZ_] = 0x00;
+        
+        c[regs::XS_] = 0x00;
+        c[regs::Ng] = 0x80;
+        c[regs::NC_] = 0x01;
+        
+        c[regs::VC_] = 0x00;
+        
+        ffi(c, regs::Wl, 0xC041);
+        
+        zq(c, regs::YU_, 0x1AF4);
+        zq(c, regs::YT_, 0x0002);
+        
+        c[regs::AFE_] = 18;
+        c[regs::AZD_] = 0x01; 
     }
     
     
-    pub fn ozx(&self) -> u32 {
-        self.dfe
+    pub fn write_config_address(&mut self, value: u32) {
+        self.config_addr = value;
     }
     
     
-    fn otw(&self) -> (bool, u8, u8, u8, u8) {
-        let ag = self.dfe;
-        let aiy = (ag >> 31) & 1 != 0;
-        let aq = ((ag >> 16) & 0xFF) as u8;
-        let de = ((ag >> 11) & 0x1F) as u8;
-        let gw = ((ag >> 8) & 0x7) as u8;
-        let nw = (ag & 0xFC) as u8; 
-        (aiy, aq, de, gw, nw)
+    pub fn read_config_address(&self) -> u32 {
+        self.config_addr
     }
     
     
-    fn nxx(&self, aq: u8, de: u8, gw: u8) -> Option<&[u8; 256]> {
-        match (aq, de, gw) {
-            (0, 0, 0) => Some(&self.ery),
-            (0, 1, 0) => Some(&self.gkk),
+    fn parse_address(&self) -> (bool, u8, u8, u8, u8) {
+        let addr = self.config_addr;
+        let enable = (addr >> 31) & 1 != 0;
+        let bus = ((addr >> 16) & 0xFF) as u8;
+        let device = ((addr >> 11) & 0x1F) as u8;
+        let function = ((addr >> 8) & 0x7) as u8;
+        let register = (addr & 0xFC) as u8; 
+        (enable, bus, device, function, register)
+    }
+    
+    
+    fn get_config_space(&self, bus: u8, device: u8, function: u8) -> Option<&[u8; 256]> {
+        match (bus, device, function) {
+            (0, 0, 0) => Some(&self.host_bridge),
+            (0, 1, 0) => Some(&self.isa_bridge),
             (0, 2, 0) => Some(&self.virtio_console),
             (0, 3, 0) => Some(&self.virtio_blk),
             _ => None,
@@ -273,10 +273,10 @@ impl PciBus {
     }
     
     
-    fn tdd(&mut self, aq: u8, de: u8, gw: u8) -> Option<&mut [u8; 256]> {
-        match (aq, de, gw) {
-            (0, 0, 0) => Some(&mut self.ery),
-            (0, 1, 0) => Some(&mut self.gkk),
+    fn get_config_space_mut(&mut self, bus: u8, device: u8, function: u8) -> Option<&mut [u8; 256]> {
+        match (bus, device, function) {
+            (0, 0, 0) => Some(&mut self.host_bridge),
+            (0, 1, 0) => Some(&mut self.isa_bridge),
             (0, 2, 0) => Some(&mut self.virtio_console),
             (0, 3, 0) => Some(&mut self.virtio_blk),
             _ => None,
@@ -285,17 +285,17 @@ impl PciBus {
     
     
     
-    pub fn duw(&self, l: u8) -> u32 {
-        let (aiy, aq, de, gw, nw) = self.otw();
+    pub fn read_config_data(&self, offset: u8) -> u32 {
+        let (enable, bus, device, function, register) = self.parse_address();
         
-        if !aiy {
+        if !enable {
             return 0xFFFF_FFFF;
         }
         
-        if let Some(config) = self.nxx(aq, de, gw) {
-            let ban = (nw as usize) + (l as usize);
-            if ban + 4 <= 256 {
-                vrk(config, ban & 0xFC) 
+        if let Some(config) = self.get_config_space(bus, device, function) {
+            let abg = (register as usize) + (offset as usize);
+            if abg + 4 <= 256 {
+                ock(config, abg & 0xFC) 
             } else {
                 0xFFFF_FFFF
             }
@@ -306,48 +306,48 @@ impl PciBus {
     }
     
     
-    pub fn mra(&mut self, l: u8, bn: u32) {
-        let (aiy, aq, de, gw, nw) = self.otw();
+    pub fn write_config_data(&mut self, offset: u8, value: u32) {
+        let (enable, bus, device, function, register) = self.parse_address();
         
-        if !aiy {
+        if !enable {
             return;
         }
         
-        if let Some(config) = self.tdd(aq, de, gw) {
-            let ban = nw as usize;
-            if ban + 4 <= 256 {
+        if let Some(config) = self.get_config_space_mut(bus, device, function) {
+            let abg = register as usize;
+            if abg + 4 <= 256 {
                 
-                match ban {
+                match abg {
                     
                     0x00 => {}
                     
                     0x04 => {
                         
-                        axk(config, regs::Aah, bn as u16);
+                        zq(config, regs::Lg, value as u16);
                         
-                        let uxv = u16::dj([config[0x06], config[0x07]]);
-                        let xtg = (bn >> 16) as u16;
-                        axk(config, regs::Nz, uxv & !xtg);
+                        let nmw = u16::from_le_bytes([config[0x06], config[0x07]]);
+                        let ptg = (value >> 16) as u16;
+                        zq(config, regs::Fz, nmw & !ptg);
                     }
                     
                     0x08 => {}
                     
                     0x0C => {
-                        config[regs::BLS_] = bn as u8;
-                        config[regs::CDS_] = (bn >> 8) as u8;
+                        config[regs::BOL_] = value as u8;
+                        config[regs::CHB_] = (value >> 8) as u8;
                     }
                     
                     0x10..=0x27 => {
-                        jxf(config, ban, bn);
+                        ffi(config, abg, value);
                     }
                     
                     0x3C => {
-                        config[regs::ADO_] = bn as u8;
+                        config[regs::AFE_] = value as u8;
                     }
                     
                     _ => {
-                        if ban + 4 <= 256 {
-                            jxf(config, ban, bn);
+                        if abg + 4 <= 256 {
+                            ffi(config, abg, value);
                         }
                     }
                 }
@@ -356,13 +356,13 @@ impl PciBus {
     }
     
     
-    pub fn ylr(&self) -> &'static str {
+    pub fn qcq(&self) -> &'static str {
         "PCI Bus 0: [0:0.0] Host Bridge (440FX), [0:1.0] ISA Bridge (PIIX3), [0:2.0] VirtIO Console, [0:3.0] VirtIO Block"
     }
     
     
-    pub fn dpx(&self, aq: u8, de: u8, gw: u8) -> bool {
-        self.nxx(aq, de, gw).is_some()
+    pub fn device_exists(&self, bus: u8, device: u8, function: u8) -> bool {
+        self.get_config_space(bus, device, function).is_some()
     }
 }
 
@@ -375,71 +375,71 @@ mod tests {
     use super::*;
     
     #[test]
-    fn psm() {
-        let aq = PciBus::default();
+    fn jma() {
+        let bus = PciBus::default();
         
-        assert!(aq.dpx(0, 0, 0));
+        assert!(bus.device_exists(0, 0, 0));
         
-        assert!(aq.dpx(0, 1, 0));
+        assert!(bus.device_exists(0, 1, 0));
         
-        assert!(!aq.dpx(0, 2, 0));
-        assert!(!aq.dpx(1, 0, 0));
+        assert!(!bus.device_exists(0, 2, 0));
+        assert!(!bus.device_exists(1, 0, 0));
     }
     
     #[test]
-    fn zrr() {
-        let aq = PciBus::default();
-        let acs = u16::dj([aq.ery[0], aq.ery[1]]);
-        let de = u16::dj([aq.ery[2], aq.ery[3]]);
-        assert_eq!(acs, 0x8086);
-        assert_eq!(de, 0x1237);
+    fn qzl() {
+        let bus = PciBus::default();
+        let vendor = u16::from_le_bytes([bus.host_bridge[0], bus.host_bridge[1]]);
+        let device = u16::from_le_bytes([bus.host_bridge[2], bus.host_bridge[3]]);
+        assert_eq!(vendor, 0x8086);
+        assert_eq!(device, 0x1237);
     }
     
     #[test]
-    fn zrv() {
-        let aq = PciBus::default();
-        assert_eq!(aq.gkk[regs::ME_], 0x06);
-        assert_eq!(aq.gkk[regs::Aeo], 0x01);
+    fn qzp() {
+        let bus = PciBus::default();
+        assert_eq!(bus.isa_bridge[regs::NC_], 0x06);
+        assert_eq!(bus.isa_bridge[regs::Ng], 0x01);
     }
     
     #[test]
-    fn zri() {
-        let mut aq = PciBus::default();
+    fn qzc() {
+        let mut bus = PciBus::default();
         
-        aq.dni(0x8000_F800);
-        let ap = aq.duw(0);
-        assert_eq!(ap, 0xFFFF_FFFF);
+        bus.write_config_address(0x8000_F800);
+        let val = bus.read_config_data(0);
+        assert_eq!(val, 0xFFFF_FFFF);
     }
     
     #[test]
-    fn zrh() {
-        let mut aq = PciBus::default();
+    fn qzb() {
+        let mut bus = PciBus::default();
         
-        aq.dni(0x8000_0000);
-        let ap = aq.duw(0);
-        assert_eq!(ap & 0xFFFF, 0x8086);       
-        assert_eq!((ap >> 16) & 0xFFFF, 0x1237); 
+        bus.write_config_address(0x8000_0000);
+        let val = bus.read_config_data(0);
+        assert_eq!(val & 0xFFFF, 0x8086);       
+        assert_eq!((val >> 16) & 0xFFFF, 0x1237); 
     }
     
     #[test]
-    fn zrg() {
-        let mut aq = PciBus::default();
+    fn qza() {
+        let mut bus = PciBus::default();
         
-        aq.dni(0x0000_0000);
-        let ap = aq.duw(0);
-        assert_eq!(ap, 0xFFFF_FFFF);
+        bus.write_config_address(0x0000_0000);
+        let val = bus.read_config_data(0);
+        assert_eq!(val, 0xFFFF_FFFF);
     }
     
     #[test]
-    fn zre() {
-        let mut aq = PciBus::default();
+    fn qyy() {
+        let mut bus = PciBus::default();
         
-        aq.dni(0x8000_0010);
+        bus.write_config_address(0x8000_0010);
         
-        aq.mra(0, 0xFFFF_FFFF);
+        bus.write_config_data(0, 0xFFFF_FFFF);
         
-        let ap = aq.duw(0);
+        let val = bus.read_config_data(0);
         
-        assert_eq!(ap, 0xFFFF_FFFF);
+        assert_eq!(val, 0xFFFF_FFFF);
     }
 }

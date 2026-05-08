@@ -70,8 +70,8 @@ unsafe fn gicd_read(offset: u64) -> u32 {
 
 #[inline(always)]
 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe fn gicd_write(offset: u64, value: u32) {
-    cpu::mmio_write32(GICD_BASE + offset, value);
+unsafe fn gicd_write(offset: u64, val: u32) {
+    cpu::mmio_write32(GICD_BASE + offset, val);
 }
 
 #[inline(always)]
@@ -82,8 +82,8 @@ unsafe fn gicc_read(offset: u64) -> u32 {
 
 #[inline(always)]
 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe fn gicc_write(offset: u64, value: u32) {
-    cpu::mmio_write32(GICC_BASE + offset, value);
+unsafe fn gicc_write(offset: u64, val: u32) {
+    cpu::mmio_write32(GICC_BASE + offset, val);
 }
 
 // ============================================================================
@@ -109,13 +109,13 @@ unsafe {
         crate::serial_println!("[GIC] Distributor: {} IRQ lines", maximum_irqs);
 
         // Disable all interrupts
-        let register_count = maximum_irqs / 32;
-        for i in 0..register_count {
+        let reg_count = maximum_irqs / 32;
+        for i in 0..reg_count {
             gicd_write(GICD_ICENABLER + (i as u64) * 4, 0xFFFF_FFFF);
         }
 
         // Clear all pending
-        for i in 0..register_count {
+        for i in 0..reg_count {
             gicd_write(GICD_ICPENDR + (i as u64) * 4, 0xFFFF_FFFF);
         }
 
@@ -226,22 +226,22 @@ pub fn is_initialized() -> bool {
 /// Enable the ARM Generic Timer interrupt (CNTP PPI 30) through the GIC.
 ///
 /// Also arms the timer with the specified interval.
-pub fn enable_timer(interval_mouse: u64) {
+pub fn enable_timer(interval_ms: u64) {
     // Enable PPI 30 (non-secure physical timer)
     enable_interrupt_request(TIMER_PPI);
 
     // Arm the timer
-    let frequency = super::timer::frequency();
-    let ticks = (interval_mouse * frequency) / 1000;
+    let freq = super::timer::frequency();
+    let ticks = (interval_ms * freq) / 1000;
     super::timer::set_oneshot(ticks);
 
     crate::serial_println!("[GIC] Timer IRQ enabled (PPI {}, {}ms, {} ticks)", 
-        TIMER_PPI, interval_mouse, ticks);
+        TIMER_PPI, interval_ms, ticks);
 }
 
 /// Start preemptive scheduling timer (10ms ticks = 100Hz)
-pub fn start_timer(interval_mouse: u64) {
-    enable_timer(interval_mouse);
+pub fn start_timer(interval_ms: u64) {
+    enable_timer(interval_ms);
 }
 
 /// Stop the timer
@@ -251,8 +251,8 @@ pub fn stop_timer() {
 }
 
 /// Re-arm the timer for next tick (called from IRQ handler)
-pub fn rearm_timer(interval_mouse: u64) {
-    let frequency = super::timer::frequency();
-    let ticks = (interval_mouse * frequency) / 1000;
+pub fn rearm_timer(interval_ms: u64) {
+    let freq = super::timer::frequency();
+    let ticks = (interval_ms * freq) / 1000;
     super::timer::set_oneshot(ticks);
 }

@@ -7,74 +7,74 @@
 use alloc::vec::Vec;
 use alloc::string::String;
 use alloc::format;
-use crate::formula3d::{V3, Bh, lz, rk};
+use crate::formula3d::{V3, Ai, eu, hr};
 
 
 
-const ATW_: f32 = 8.0;
-const ADD_: usize = 16;
-const BIF_: f32 = 12.0;
-const ZG_: f32 = 2.0;
+const AWA_: f32 = 8.0;
+const AET_: usize = 16;
+const BKM_: f32 = 12.0;
+const AAN_: f32 = 2.0;
 
 
-const MH_: u32        = 0xFF1A1A2E;
-const BNT_: u32      = 0xFF2A2A3A;
-const BNU_: u32 = 0xFF3A3A4A;
-const BNQ_: u32    = 0xFFFF4444;
-const BNR_: u32    = 0xFF44FF44;
-const BNS_: u32    = 0xFF4488FF;
-const BOI_: u32      = 0xFF00FFAA;
-const BOJ_: u32  = 0xFFFFFF00;
-const BOF_: u32    = 0xFFFFFFFF;
-const BOH_: u32  = 0xFFFFAA00;
-const BOG_: u32 = 0xFF88FFFF;
-const SG_: u32   = 0xFF0D0D1A;
-const MI_: u32 = 0xFF2A2A4A;
-const BOD_: u32 = 0xFF0055AA;
-const AAJ_: u32    = 0xFF0D0D1A;
-const T_: u32      = 0xFFCCCCCC;
-const AOR_: u32   = 0xFFFFFFFF;
-const AAK_: u32  = 0xFF777777;
-const AOS_: u32    = 0xCC1A1A2E;
-const SF_: u32 = 0xFF00AAFF;
+const IK_: u32        = 0xFF1A1A2E;
+const BQL_: u32      = 0xFF2A2A3A;
+const BQM_: u32 = 0xFF3A3A4A;
+const BQI_: u32    = 0xFFFF4444;
+const BQJ_: u32    = 0xFF44FF44;
+const BQK_: u32    = 0xFF4488FF;
+const BQZ_: u32      = 0xFF00FFAA;
+const BRA_: u32  = 0xFFFFFF00;
+const BQW_: u32    = 0xFFFFFFFF;
+const BQY_: u32  = 0xFFFFAA00;
+const BQX_: u32 = 0xFF88FFFF;
+const TJ_: u32   = 0xFF0D0D1A;
+const NH_: u32 = 0xFF2A2A4A;
+const BQU_: u32 = 0xFF0055AA;
+const ABW_: u32    = 0xFF0D0D1A;
+const P_: u32      = 0xFFCCCCCC;
+const AQR_: u32   = 0xFFFFFFFF;
+const ABX_: u32  = 0xFF777777;
+const AQS_: u32    = 0xCC1A1A2E;
+const TI_: u32 = 0xFF00AAFF;
 
 
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum EditTool {
-    Qs,     
-    Rh,  
-    Rg,    
-    Fw,       
-    Jj,     
+    Select,     
+    AddVertex,  
+    AddEdge,    
+    Move,       
+    Delete,     
 }
 
 impl EditTool {
-    fn j(self) -> &'static str {
+    fn name(self) -> &'static str {
         match self {
-            EditTool::Qs => "Select",
-            EditTool::Rh => "Add Vertex",
-            EditTool::Rg => "Add Edge",
-            EditTool::Fw => "Move",
-            EditTool::Jj => "Delete",
+            EditTool::Select => "Select",
+            EditTool::AddVertex => "Add Vertex",
+            EditTool::AddEdge => "Add Edge",
+            EditTool::Move => "Move",
+            EditTool::Delete => "Delete",
         }
     }
-    fn tpy(self) -> &'static str {
+    fn hotkey(self) -> &'static str {
         match self {
-            EditTool::Qs => "S",
-            EditTool::Rh => "A",
-            EditTool::Rg => "E",
-            EditTool::Fw => "G",
-            EditTool::Jj => "X",
+            EditTool::Select => "S",
+            EditTool::AddVertex => "A",
+            EditTool::AddEdge => "E",
+            EditTool::Move => "G",
+            EditTool::Delete => "X",
         }
     }
-    fn idq(self) -> &'static str {
+    fn tip(self) -> &'static str {
         match self {
-            EditTool::Qs => "Click vertex to select. Shift+click for multi-select.",
-            EditTool::Rh => "Click in viewport to place a vertex on the grid.",
-            EditTool::Rg => "Click two vertices to connect them with an edge.",
-            EditTool::Fw => "Drag selected vertices. Arrows = fine move.",
-            EditTool::Jj => "Click a vertex or edge to remove it.",
+            EditTool::Select => "Click vertex to select. Shift+click for multi-select.",
+            EditTool::AddVertex => "Click in viewport to place a vertex on the grid.",
+            EditTool::AddEdge => "Click two vertices to connect them with an edge.",
+            EditTool::Move => "Drag selected vertices. Arrows = fine move.",
+            EditTool::Delete => "Click a vertex or edge to remove it.",
         }
     }
 }
@@ -84,222 +84,222 @@ impl EditTool {
 #[derive(Clone)]
 pub struct ModelEditorState {
     
-    pub lm: Vec<V3>,
-    pub bu: Vec<(usize, usize)>,
+    pub vertices: Vec<V3>,
+    pub edges: Vec<(usize, usize)>,
     
     
-    pub bbc: f32,    
-    pub atx: f32,    
-    pub aab: f32,       
-    pub eng: V3,      
+    pub cam_angle_y: f32,    
+    pub cam_angle_x: f32,    
+    pub cam_dist: f32,       
+    pub cam_target: V3,      
     
     
-    pub bxo: EditTool,
-    pub awx: Vec<usize>,
-    pub lcn: Option<usize>,
-    pub bgv: Option<usize>, 
+    pub tool: EditTool,
+    pub selected_verts: Vec<usize>,
+    pub hover_vert: Option<usize>,
+    pub edge_start: Option<usize>, 
     
     
-    pub daa: i32,
-    pub dab: i32,
-    pub jgf: bool,
-    pub hrx: bool,
-    pub kqs: i32,
-    pub kqt: i32,
-    pub vyu: bool,  
+    pub mouse_x: i32,
+    pub mouse_y: i32,
+    pub mouse_pressed: bool,
+    pub mouse_dragging: bool,
+    pub drag_start_x: i32,
+    pub drag_start_y: i32,
+    pub right_dragging: bool,  
     
     
-    pub pkm: bool,
-    pub pkl: bool,
-    pub ial: bool,
-    pub jqd: bool,
-    pub aoc: String,
-    pub hrr: String,
+    pub show_grid: bool,
+    pub show_axes: bool,
+    pub show_tips: bool,
+    pub show_vertices: bool,
+    pub status_msg: String,
+    pub model_name: String,
     
     
-    pub bsu: Vec<(Vec<V3>, Vec<(usize, usize)>)>,
+    pub undo_stack: Vec<(Vec<V3>, Vec<(usize, usize)>)>,
     
     
     frame: u32,
     
-    kga: f32,
-    kgc: f32,
-    kfz: f32,
-    kgb: f32,
+    cached_cy: f32,
+    cached_sy: f32,
+    cached_cx: f32,
+    cached_sx: f32,
 }
 
 impl ModelEditorState {
     pub fn new() -> Self {
         Self {
-            lm: Vec::new(),
-            bu: Vec::new(),
-            bbc: 0.6,
-            atx: 0.4,
-            aab: 6.0,
-            eng: V3 { b: 0.0, c: 0.0, av: 0.0 },
-            bxo: EditTool::Qs,
-            awx: Vec::new(),
-            lcn: None,
-            bgv: None,
-            daa: 0,
-            dab: 0,
-            jgf: false,
-            hrx: false,
-            kqs: 0,
-            kqt: 0,
-            vyu: false,
-            pkm: true,
-            pkl: true,
-            ial: true,
-            jqd: true,
-            aoc: String::from("TrustEdit 3D ready — Press H for help"),
-            hrr: String::from("untitled"),
-            bsu: Vec::new(),
+            vertices: Vec::new(),
+            edges: Vec::new(),
+            cam_angle_y: 0.6,
+            cam_angle_x: 0.4,
+            cam_dist: 6.0,
+            cam_target: V3 { x: 0.0, y: 0.0, z: 0.0 },
+            tool: EditTool::Select,
+            selected_verts: Vec::new(),
+            hover_vert: None,
+            edge_start: None,
+            mouse_x: 0,
+            mouse_y: 0,
+            mouse_pressed: false,
+            mouse_dragging: false,
+            drag_start_x: 0,
+            drag_start_y: 0,
+            right_dragging: false,
+            show_grid: true,
+            show_axes: true,
+            show_tips: true,
+            show_vertices: true,
+            status_msg: String::from("TrustEdit 3D ready — Press H for help"),
+            model_name: String::from("untitled"),
+            undo_stack: Vec::new(),
             frame: 0,
-            kga: rk(0.6),
-            kgc: lz(0.6),
-            kfz: rk(0.4),
-            kgb: lz(0.4),
+            cached_cy: hr(0.6),
+            cached_sy: eu(0.6),
+            cached_cx: hr(0.4),
+            cached_sx: eu(0.4),
         }
     }
     
     
-    pub fn gls(&mut self, j: &str) {
-        self.bru();
-        let mesh = match j {
-            "cube" => crate::formula3d::czt(),
-            "pyramid" => crate::formula3d::czv(),
-            "diamond" => crate::formula3d::czu(),
-            "torus" => crate::formula3d::czw(1.0, 0.4, 16, 8),
-            "icosphere" => crate::formula3d::fod(1.2),
-            "grid" => crate::formula3d::foc(2.0, 4),
+    pub fn load_preset(&mut self, name: &str) {
+        self.push_undo();
+        let mesh = match name {
+            "cube" => crate::formula3d::mesh_cube(),
+            "pyramid" => crate::formula3d::mesh_pyramid(),
+            "diamond" => crate::formula3d::mesh_diamond(),
+            "torus" => crate::formula3d::mesh_torus(1.0, 0.4, 16, 8),
+            "icosphere" => crate::formula3d::mesh_icosphere(1.2),
+            "grid" => crate::formula3d::mesh_grid(2.0, 4),
             _ => return,
         };
-        self.lm = mesh.lm;
-        self.bu = mesh.bu;
-        self.awx.clear();
-        self.bgv = None;
-        self.aoc = format!("Loaded preset: {} ({} verts, {} edges)", 
-            j, self.lm.len(), self.bu.len());
+        self.vertices = mesh.vertices;
+        self.edges = mesh.edges;
+        self.selected_verts.clear();
+        self.edge_start = None;
+        self.status_msg = format!("Loaded preset: {} ({} verts, {} edges)", 
+            name, self.vertices.len(), self.edges.len());
     }
     
     
     pub fn clear(&mut self) {
-        self.bru();
-        self.lm.clear();
-        self.bu.clear();
-        self.awx.clear();
-        self.bgv = None;
-        self.aoc = String::from("Scene cleared");
+        self.push_undo();
+        self.vertices.clear();
+        self.edges.clear();
+        self.selected_verts.clear();
+        self.edge_start = None;
+        self.status_msg = String::from("Scene cleared");
     }
     
     
-    fn bru(&mut self) {
-        if self.bsu.len() > 20 {
-            self.bsu.remove(0);
+    fn push_undo(&mut self) {
+        if self.undo_stack.len() > 20 {
+            self.undo_stack.remove(0);
         }
-        self.bsu.push((self.lm.clone(), self.bu.clone()));
+        self.undo_stack.push((self.vertices.clone(), self.edges.clone()));
     }
     
     
-    pub fn ifu(&mut self) {
-        if let Some((by, bu)) = self.bsu.pop() {
-            self.lm = by;
-            self.bu = bu;
-            self.awx.clear();
-            self.bgv = None;
-            self.aoc = String::from("Undo");
+    pub fn undo(&mut self) {
+        if let Some((verts, edges)) = self.undo_stack.pop() {
+            self.vertices = verts;
+            self.edges = edges;
+            self.selected_verts.clear();
+            self.edge_start = None;
+            self.status_msg = String::from("Undo");
         } else {
-            self.aoc = String::from("Nothing to undo");
+            self.status_msg = String::from("Nothing to undo");
         }
     }
     
     
-    pub fn mbr(&mut self) {
+    pub fn save(&mut self) {
         
-        let mut f = String::new();
-        f.t("TRUSTEDIT3D v1\n");
-        f.t(&format!("vertices {}\n", self.lm.len()));
-        for p in &self.lm {
-            f.t(&format!("v {:.4} {:.4} {:.4}\n", p.b, p.c, p.av));
+        let mut data = String::new();
+        data.push_str("TRUSTEDIT3D v1\n");
+        data.push_str(&format!("vertices {}\n", self.vertices.len()));
+        for v in &self.vertices {
+            data.push_str(&format!("v {:.4} {:.4} {:.4}\n", v.x, v.y, v.z));
         }
-        f.t(&format!("edges {}\n", self.bu.len()));
-        for &(q, o) in &self.bu {
-            f.t(&format!("e {} {}\n", q, o));
+        data.push_str(&format!("edges {}\n", self.edges.len()));
+        for &(a, b) in &self.edges {
+            data.push_str(&format!("e {} {}\n", a, b));
         }
         
-        let path = format!("/{}.t3d", self.hrr);
-        let bf = f.as_bytes();
+        let path = format!("/{}.t3d", self.model_name);
+        let bytes = data.as_bytes();
         
         
-        let _ = crate::ramfs::fh(|fs| fs.touch(&path));
-        match crate::ramfs::fh(|fs| fs.ns(&path, bf)) {
+        let _ = crate::ramfs::bh(|fs| fs.touch(&path));
+        match crate::ramfs::bh(|fs| fs.write_file(&path, bytes)) {
             Ok(_) => {
-                self.aoc = format!("Saved to {}", path);
+                self.status_msg = format!("Saved to {}", path);
             },
             Err(_) => {
-                self.aoc = String::from("Error: Could not save file");
+                self.status_msg = String::from("Error: Could not save file");
             }
         }
     }
     
     
     pub fn load(&mut self, path: &str) {
-        let rto: Result<Vec<u8>, ()> = crate::ramfs::fh(|fs| {
-            match fs.mq(path) {
-                Ok(bf) => Ok(bf.ip()),
+        let lbq: Result<Vec<u8>, ()> = crate::ramfs::bh(|fs| {
+            match fs.read_file(path) {
+                Ok(bytes) => Ok(bytes.to_vec()),
                 Err(_) => Err(()),
             }
         });
         
-        match rto {
-            Ok(f) => {
-                self.bru();
-                if let Ok(text) = core::str::jg(&f) {
-                    self.vdx(text);
+        match lbq {
+            Ok(data) => {
+                self.push_undo();
+                if let Ok(text) = core::str::from_utf8(&data) {
+                    self.parse_t3d(text);
                     
-                    if let Some(j) = path.blj('/') {
-                        if let Some(j) = j.ezc(".t3d") {
-                            self.hrr = String::from(j);
+                    if let Some(name) = path.strip_prefix('/') {
+                        if let Some(name) = name.strip_suffix(".t3d") {
+                            self.model_name = String::from(name);
                         }
                     }
-                    self.aoc = format!("Loaded {} ({} verts, {} edges)", 
-                        path, self.lm.len(), self.bu.len());
+                    self.status_msg = format!("Loaded {} ({} verts, {} edges)", 
+                        path, self.vertices.len(), self.edges.len());
                 } else {
-                    self.aoc = String::from("Error: Invalid file data");
+                    self.status_msg = String::from("Error: Invalid file data");
                 }
             },
             Err(_) => {
-                self.aoc = format!("Error: Could not read {}", path);
+                self.status_msg = format!("Error: Could not read {}", path);
             }
         }
     }
     
     
-    fn vdx(&mut self, text: &str) {
-        self.lm.clear();
-        self.bu.clear();
-        self.awx.clear();
+    fn parse_t3d(&mut self, text: &str) {
+        self.vertices.clear();
+        self.edges.clear();
+        self.selected_verts.clear();
         
-        for line in text.ak() {
-            let ek: Vec<&str> = line.ayt().collect();
-            if ek.is_empty() { continue; }
-            match ek[0] {
-                "v" if ek.len() >= 4 => {
-                    if let (Ok(b), Ok(c), Ok(av)) = (
-                        ek[1].parse::<f32>(),
-                        ek[2].parse::<f32>(),
-                        ek[3].parse::<f32>(),
+        for line in text.lines() {
+            let au: Vec<&str> = line.split_whitespace().collect();
+            if au.is_empty() { continue; }
+            match au[0] {
+                "v" if au.len() >= 4 => {
+                    if let (Ok(x), Ok(y), Ok(z)) = (
+                        au[1].parse::<f32>(),
+                        au[2].parse::<f32>(),
+                        au[3].parse::<f32>(),
                     ) {
-                        self.lm.push(V3 { b, c, av });
+                        self.vertices.push(V3 { x, y, z });
                     }
                 },
-                "e" if ek.len() >= 3 => {
-                    if let (Ok(q), Ok(o)) = (
-                        ek[1].parse::<usize>(),
-                        ek[2].parse::<usize>(),
+                "e" if au.len() >= 3 => {
+                    if let (Ok(a), Ok(b)) = (
+                        au[1].parse::<usize>(),
+                        au[2].parse::<usize>(),
                     ) {
-                        self.bu.push((q, o));
+                        self.edges.push((a, b));
                     }
                 },
                 _ => {}
@@ -308,180 +308,180 @@ impl ModelEditorState {
     }
     
     
-    pub fn zsw(&self) -> Bh {
-        Bh {
-            lm: self.lm.clone(),
-            bu: self.bu.clone(),
-            cqd: None,
-            ks: None,
-            cxq: None,
+    pub fn rak(&self) -> Ai {
+        Ai {
+            vertices: self.vertices.clone(),
+            edges: self.edges.clone(),
+            edge_colors: None,
+            faces: None,
+            face_colors: None,
         }
     }
     
     
     
-    fn dkv(&self, p: V3, gm: usize, me: usize) -> (i32, i32, f32) {
+    fn project_vertex(&self, v: V3, bt: usize, ex: usize) -> (i32, i32, f32) {
         
-        let p = V3 { 
-            b: p.b - self.eng.b, 
-            c: p.c - self.eng.c, 
-            av: p.av - self.eng.av 
+        let v = V3 { 
+            x: v.x - self.cam_target.x, 
+            y: v.y - self.cam_target.y, 
+            z: v.z - self.cam_target.z 
         };
         
-        let ae = self.kga;
-        let cq = self.kgc;
-        let kb = V3 { b: p.b * ae + p.av * cq, c: p.c, av: -p.b * cq + p.av * ae };
+        let u = self.cached_cy;
+        let ak = self.cached_sy;
+        let da = V3 { x: v.x * u + v.z * ak, y: v.y, z: -v.x * ak + v.z * u };
         
-        let cx = self.kfz;
-        let cr = self.kgb;
-        let ix = V3 { b: kb.b, c: kb.c * cx - kb.av * cr, av: kb.c * cr + kb.av * cx };
-        
-        
-        let ifo = ix.av + self.aab;
+        let cx = self.cached_cx;
+        let am = self.cached_sx;
+        let cm = V3 { x: da.x, y: da.y * cx - da.z * am, z: da.y * am + da.z * cx };
         
         
-        if ifo < 0.1 { return (0, 0, -999.0); }
-        let bv = (gm.v(me) as f32) * 0.45;
-        let wwt = (ix.b / ifo * bv) + (gm as f32 * 0.5);
-        let wwu = (-ix.c / ifo * bv) + (me as f32 * 0.5);
-        (wwt as i32, wwu as i32, ifo)
+        let edb = cm.z + self.cam_dist;
+        
+        
+        if edb < 0.1 { return (0, 0, -999.0); }
+        let scale = (bt.min(ex) as f32) * 0.45;
+        let ozh = (cm.x / edb * scale) + (bt as f32 * 0.5);
+        let ozi = (-cm.y / edb * scale) + (ex as f32 * 0.5);
+        (ozh as i32, ozi as i32, edb)
     }
     
     
-    fn xol(&self, cr: i32, cq: i32, gm: usize, me: usize) -> V3 {
+    fn unproject_to_grid(&self, am: i32, ak: i32, bt: usize, ex: usize) -> V3 {
         
-        let bv = (gm.v(me) as f32) * 0.45;
-        let kb = (cr as f32 - gm as f32 * 0.5) / bv;
-        let ix = -(cq as f32 - me as f32 * 0.5) / bv;
-        
-        
-        let te = V3 { b: kb, c: ix, av: 1.0 };
+        let scale = (bt.min(ex) as f32) * 0.45;
+        let da = (am as f32 - bt as f32 * 0.5) / scale;
+        let cm = -(ak as f32 - ex as f32 * 0.5) / scale;
         
         
-        let cx = rk(-self.atx);
-        let pqi = lz(-self.atx);
-        let apo = V3 { b: te.b, c: te.c * cx - te.av * pqi, av: te.c * pqi + te.av * cx };
-        
-        let ae = rk(-self.bbc);
-        let pql = lz(-self.bbc);
-        let us = V3 { b: apo.b * ae + apo.av * pql, c: apo.c, av: -apo.b * pql + apo.av * ae };
+        let it = V3 { x: da, y: cm, z: 1.0 };
         
         
-        let fee = V3 {
-            b: self.eng.b - self.aab * lz(self.bbc) * rk(self.atx),
-            c: self.eng.c + self.aab * lz(self.atx),
-            av: self.eng.av - self.aab * rk(self.bbc) * rk(self.atx),
+        let cx = hr(-self.cam_angle_x);
+        let jke = eu(-self.cam_angle_x);
+        let vh = V3 { x: it.x, y: it.y * cx - it.z * jke, z: it.y * jke + it.z * cx };
+        
+        let u = hr(-self.cam_angle_y);
+        let jkh = eu(-self.cam_angle_y);
+        let jq = V3 { x: vh.x * u + vh.z * jkh, y: vh.y, z: -vh.x * jkh + vh.z * u };
+        
+        
+        let cgo = V3 {
+            x: self.cam_target.x - self.cam_dist * eu(self.cam_angle_y) * hr(self.cam_angle_x),
+            y: self.cam_target.y + self.cam_dist * eu(self.cam_angle_x),
+            z: self.cam_target.z - self.cam_dist * hr(self.cam_angle_y) * hr(self.cam_angle_x),
         };
         
         
-        if us.c.gp() < 0.001 {
+        if jq.y.abs() < 0.001 {
             
-            return V3 { b: fee.b + us.b * 5.0, c: 0.0, av: fee.av + us.av * 5.0 };
+            return V3 { x: cgo.x + jq.x * 5.0, y: 0.0, z: cgo.z + jq.z * 5.0 };
         }
-        let ab = -fee.c / us.c;
-        if ab < 0.0 {
+        let t = -cgo.y / jq.y;
+        if t < 0.0 {
             
-            return V3 { b: fee.b + us.b * 5.0, c: 0.0, av: fee.av + us.av * 5.0 };
+            return V3 { x: cgo.x + jq.x * 5.0, y: 0.0, z: cgo.z + jq.z * 5.0 };
         }
         
-        let dnh = V3 {
-            b: fee.b + us.b * ab,
-            c: 0.0,
-            av: fee.av + us.av * ab,
+        let bkb = V3 {
+            x: cgo.x + jq.x * t,
+            y: 0.0,
+            z: cgo.z + jq.z * t,
         };
         
         
         V3 {
-            b: (dnh.b * 2.0 + 0.5) as i32 as f32 * 0.5,
-            c: 0.0,
-            av: (dnh.av * 2.0 + 0.5) as i32 as f32 * 0.5,
+            x: (bkb.x * 2.0 + 0.5) as i32 as f32 * 0.5,
+            y: 0.0,
+            z: (bkb.z * 2.0 + 0.5) as i32 as f32 * 0.5,
         }
     }
     
     
-    fn hjn(&self, cr: i32, cq: i32, gm: usize, me: usize) -> Option<usize> {
-        let mut bdn: Option<(usize, f32)> = None;
-        for (a, p) in self.lm.iter().cf() {
-            let (y, x, av) = self.dkv(*p, gm, me);
-            if av < 0.1 { continue; }
-            let dx = (y - cr) as f32;
-            let bg = (x - cq) as f32;
-            let la = dx * dx + bg * bg;
-            if la < BIF_ * BIF_ {
-                if let Some((_, ilj)) = bdn {
-                    if la < ilj { bdn = Some((a, la)); }
+    fn find_vertex_at(&self, am: i32, ak: i32, bt: usize, ex: usize) -> Option<usize> {
+        let mut adj: Option<(usize, f32)> = None;
+        for (i, v) in self.vertices.iter().enumerate() {
+            let (p, o, z) = self.project_vertex(*v, bt, ex);
+            if z < 0.1 { continue; }
+            let dx = (p - am) as f32;
+            let ad = (o - ak) as f32;
+            let em = dx * dx + ad * ad;
+            if em < BKM_ * BKM_ {
+                if let Some((_, egt)) = adj {
+                    if em < egt { adj = Some((i, em)); }
                 } else {
-                    bdn = Some((a, la));
+                    adj = Some((i, em));
                 }
             }
         }
-        bdn.map(|(a, _)| a)
+        adj.map(|(i, _)| i)
     }
     
     
     
-    pub fn vr(&mut self, bs: u8) {
+    pub fn handle_key(&mut self, key: u8) {
         use crate::keyboard::*;
         
-        match bs {
+        match key {
             
             b's' | b'S' => {
-                self.bxo = EditTool::Qs;
-                self.bgv = None;
-                self.aoc = String::from("Tool: Select");
+                self.tool = EditTool::Select;
+                self.edge_start = None;
+                self.status_msg = String::from("Tool: Select");
             },
             b'a' | b'A' => {
-                self.bxo = EditTool::Rh;
-                self.bgv = None;
-                self.aoc = String::from("Tool: Add Vertex — Click to place");
+                self.tool = EditTool::AddVertex;
+                self.edge_start = None;
+                self.status_msg = String::from("Tool: Add Vertex — Click to place");
             },
             b'e' | b'E' => {
-                self.bxo = EditTool::Rg;
-                self.bgv = None;
-                self.aoc = String::from("Tool: Add Edge — Click two vertices");
+                self.tool = EditTool::AddEdge;
+                self.edge_start = None;
+                self.status_msg = String::from("Tool: Add Edge — Click two vertices");
             },
             b'g' | b'G' => {
-                self.bxo = EditTool::Fw;
-                self.bgv = None;
-                self.aoc = String::from("Tool: Move — Drag vertices");
+                self.tool = EditTool::Move;
+                self.edge_start = None;
+                self.status_msg = String::from("Tool: Move — Drag vertices");
             },
             b'x' | b'X' => {
-                if self.bxo == EditTool::Jj {
+                if self.tool == EditTool::Delete {
                     
-                    if !self.awx.is_empty() {
-                        self.rvk();
+                    if !self.selected_verts.is_empty() {
+                        self.delete_selected();
                     }
                 } else {
-                    self.bxo = EditTool::Jj;
-                    self.bgv = None;
-                    self.aoc = String::from("Tool: Delete — Click to remove");
+                    self.tool = EditTool::Delete;
+                    self.edge_start = None;
+                    self.status_msg = String::from("Tool: Delete — Click to remove");
                 }
             },
             
             
-            b'z' | b'Z' => self.ifu(),
+            b'z' | b'Z' => self.undo(),
             
             
             b'h' | b'H' => {
-                self.ial = !self.ial;
-                self.aoc = format!("Tips: {}", if self.ial { "ON" } else { "OFF" });
+                self.show_tips = !self.show_tips;
+                self.status_msg = format!("Tips: {}", if self.show_tips { "ON" } else { "OFF" });
             },
             b'v' | b'V' => {
-                self.jqd = !self.jqd;
+                self.show_vertices = !self.show_vertices;
             },
             
             
-            b'1' => self.gls("cube"),
-            b'2' => self.gls("pyramid"),
-            b'3' => self.gls("diamond"),
-            b'4' => self.gls("torus"),
-            b'5' => self.gls("icosphere"),
-            b'6' => self.gls("grid"),
+            b'1' => self.load_preset("cube"),
+            b'2' => self.load_preset("pyramid"),
+            b'3' => self.load_preset("diamond"),
+            b'4' => self.load_preset("torus"),
+            b'5' => self.load_preset("icosphere"),
+            b'6' => self.load_preset("grid"),
             
             
-            b'w' | b'W' => self.mbr(),
+            b'w' | b'W' => self.save(),
             b'l' | b'L' => {
-                let path = format!("/{}.t3d", self.hrr);
+                let path = format!("/{}.t3d", self.model_name);
                 self.load(&path);
             },
             
@@ -489,37 +489,37 @@ impl ModelEditorState {
             b'c' | b'C' => self.clear(),
             
             
-            AH_ => self.bbc -= 0.15,
-            AI_ => self.bbc += 0.15,
-            V_ => {
-                self.atx = (self.atx - 0.15).am(-1.5);
+            AI_ => self.cam_angle_y -= 0.15,
+            AJ_ => self.cam_angle_y += 0.15,
+            T_ => {
+                self.cam_angle_x = (self.cam_angle_x - 0.15).max(-1.5);
             },
-            U_ => {
-                self.atx = (self.atx + 0.15).v(1.5);
+            S_ => {
+                self.cam_angle_x = (self.cam_angle_x + 0.15).min(1.5);
             },
             
             
             b'd' | b'D' => {
-                self.awx.clear();
-                self.bgv = None;
-                self.aoc = String::from("Deselected all");
+                self.selected_verts.clear();
+                self.edge_start = None;
+                self.status_msg = String::from("Deselected all");
             },
             
             
             b'+' | b'=' => {
-                self.aab = (self.aab - 0.5).am(1.5);
+                self.cam_dist = (self.cam_dist - 0.5).max(1.5);
             },
             b'-' | b'_' => {
-                self.aab = (self.aab + 0.5).v(20.0);
+                self.cam_dist = (self.cam_dist + 0.5).min(20.0);
             },
             
             
             b'r' | b'R' => {
-                self.bbc = 0.6;
-                self.atx = 0.4;
-                self.aab = 6.0;
-                self.eng = V3 { b: 0.0, c: 0.0, av: 0.0 };
-                self.aoc = String::from("Camera reset");
+                self.cam_angle_y = 0.6;
+                self.cam_angle_x = 0.4;
+                self.cam_dist = 6.0;
+                self.cam_target = V3 { x: 0.0, y: 0.0, z: 0.0 };
+                self.status_msg = String::from("Camera reset");
             },
             
             _ => {}
@@ -527,124 +527,124 @@ impl ModelEditorState {
     }
     
     
-    pub fn ago(&mut self, fp: i32, iz: i32, gm: usize, me: usize, vn: bool) {
-        if vn {
-            self.jgf = true;
-            self.kqs = fp;
-            self.kqt = iz;
-            self.hrx = false;
+    pub fn handle_click(&mut self, vx: i32, vy: i32, bt: usize, ex: usize, pressed: bool) {
+        if pressed {
+            self.mouse_pressed = true;
+            self.drag_start_x = vx;
+            self.drag_start_y = vy;
+            self.mouse_dragging = false;
             
-            match self.bxo {
-                EditTool::Qs => {
-                    if let Some(w) = self.hjn(fp, iz, gm, me) {
-                        if self.awx.contains(&w) {
-                            self.awx.ajm(|&p| p != w);
+            match self.tool {
+                EditTool::Select => {
+                    if let Some(idx) = self.find_vertex_at(vx, vy, bt, ex) {
+                        if self.selected_verts.contains(&idx) {
+                            self.selected_verts.retain(|&v| v != idx);
                         } else {
-                            self.awx.push(w);
+                            self.selected_verts.push(idx);
                         }
-                        self.aoc = format!("Selected {} vertex(es)", self.awx.len());
+                        self.status_msg = format!("Selected {} vertex(es)", self.selected_verts.len());
                     } else {
-                        self.awx.clear();
-                        self.aoc = String::from("Selection cleared");
+                        self.selected_verts.clear();
+                        self.status_msg = String::from("Selection cleared");
                     }
                 },
-                EditTool::Rh => {
-                    self.bru();
-                    let dnh = self.xol(fp, iz, gm, me);
-                    self.lm.push(dnh);
-                    self.aoc = format!("Added vertex at ({:.1}, {:.1}, {:.1}) — {} total",
-                        dnh.b, dnh.c, dnh.av, self.lm.len());
+                EditTool::AddVertex => {
+                    self.push_undo();
+                    let bkb = self.unproject_to_grid(vx, vy, bt, ex);
+                    self.vertices.push(bkb);
+                    self.status_msg = format!("Added vertex at ({:.1}, {:.1}, {:.1}) — {} total",
+                        bkb.x, bkb.y, bkb.z, self.vertices.len());
                 },
-                EditTool::Rg => {
-                    if let Some(w) = self.hjn(fp, iz, gm, me) {
-                        if let Some(ay) = self.bgv {
-                            if ay != w {
+                EditTool::AddEdge => {
+                    if let Some(idx) = self.find_vertex_at(vx, vy, bt, ex) {
+                        if let Some(start) = self.edge_start {
+                            if start != idx {
                                 
-                                let aja = self.bu.iter().any(|&(q, o)| 
-                                    (q == ay && o == w) || (q == w && o == ay));
-                                if !aja {
-                                    self.bru();
-                                    self.bu.push((ay, w));
-                                    self.aoc = format!("Edge {} -> {} created — {} edges total",
-                                        ay, w, self.bu.len());
+                                let exists = self.edges.iter().any(|&(a, b)| 
+                                    (a == start && b == idx) || (a == idx && b == start));
+                                if !exists {
+                                    self.push_undo();
+                                    self.edges.push((start, idx));
+                                    self.status_msg = format!("Edge {} -> {} created — {} edges total",
+                                        start, idx, self.edges.len());
                                 } else {
-                                    self.aoc = String::from("Edge already exists");
+                                    self.status_msg = String::from("Edge already exists");
                                 }
                             }
-                            self.bgv = None;
+                            self.edge_start = None;
                         } else {
-                            self.bgv = Some(w);
-                            self.aoc = format!("Edge start: vertex {} — Click another vertex", w);
+                            self.edge_start = Some(idx);
+                            self.status_msg = format!("Edge start: vertex {} — Click another vertex", idx);
                         }
                     } else {
-                        self.bgv = None;
-                        self.aoc = String::from("No vertex found — click on a vertex");
+                        self.edge_start = None;
+                        self.status_msg = String::from("No vertex found — click on a vertex");
                     }
                 },
-                EditTool::Fw => {
-                    if let Some(w) = self.hjn(fp, iz, gm, me) {
-                        if !self.awx.contains(&w) {
-                            self.awx.clear();
-                            self.awx.push(w);
+                EditTool::Move => {
+                    if let Some(idx) = self.find_vertex_at(vx, vy, bt, ex) {
+                        if !self.selected_verts.contains(&idx) {
+                            self.selected_verts.clear();
+                            self.selected_verts.push(idx);
                         }
-                        self.bru();
+                        self.push_undo();
                     }
                 },
-                EditTool::Jj => {
-                    if let Some(w) = self.hjn(fp, iz, gm, me) {
-                        self.bru();
-                        self.rvl(w);
-                        self.aoc = format!("Deleted vertex {} — {} remaining", w, self.lm.len());
+                EditTool::Delete => {
+                    if let Some(idx) = self.find_vertex_at(vx, vy, bt, ex) {
+                        self.push_undo();
+                        self.delete_vertex(idx);
+                        self.status_msg = format!("Deleted vertex {} — {} remaining", idx, self.vertices.len());
                     }
                 },
             }
         } else {
-            self.jgf = false;
-            self.hrx = false;
+            self.mouse_pressed = false;
+            self.mouse_dragging = false;
         }
     }
     
     
-    pub fn lax(&mut self, fp: i32, iz: i32, gm: usize, me: usize) {
-        let dx = fp - self.daa;
-        let bg = iz - self.dab;
-        self.daa = fp;
-        self.dab = iz;
+    pub fn handle_mouse_move(&mut self, vx: i32, vy: i32, bt: usize, ex: usize) {
+        let dx = vx - self.mouse_x;
+        let ad = vy - self.mouse_y;
+        self.mouse_x = vx;
+        self.mouse_y = vy;
         
         
-        self.lcn = self.hjn(fp, iz, gm, me);
+        self.hover_vert = self.find_vertex_at(vx, vy, bt, ex);
         
-        if self.jgf {
-            let jtq = (fp - self.kqs).gp();
-            let xkc = (iz - self.kqt).gp();
-            if jtq > 3 || xkc > 3 {
-                self.hrx = true;
+        if self.mouse_pressed {
+            let fde = (vx - self.drag_start_x).abs();
+            let plv = (vy - self.drag_start_y).abs();
+            if fde > 3 || plv > 3 {
+                self.mouse_dragging = true;
             }
             
-            if self.hrx {
-                match self.bxo {
-                    EditTool::Fw if !self.awx.is_empty() => {
+            if self.mouse_dragging {
+                match self.tool {
+                    EditTool::Move if !self.selected_verts.is_empty() => {
                         
-                        let oob = 0.01 * self.aab;
-                        let ooc = dx as f32 * oob;
-                        let upx = -bg as f32 * oob;
+                        let iok = 0.01 * self.cam_dist;
+                        let iol = dx as f32 * iok;
+                        let ngk = -ad as f32 * iok;
                         
                         
-                        let ae = rk(self.bbc);
-                        let cq = lz(self.bbc);
+                        let u = hr(self.cam_angle_y);
+                        let ak = eu(self.cam_angle_y);
                         
-                        for &w in &self.awx.clone() {
-                            if w < self.lm.len() {
-                                self.lm[w].b += ooc * ae;
-                                self.lm[w].av += ooc * cq;
-                                self.lm[w].c += upx;
+                        for &idx in &self.selected_verts.clone() {
+                            if idx < self.vertices.len() {
+                                self.vertices[idx].x += iol * u;
+                                self.vertices[idx].z += iol * ak;
+                                self.vertices[idx].y += ngk;
                             }
                         }
                     },
-                    EditTool::Qs | EditTool::Rh | EditTool::Rg | EditTool::Jj => {
+                    EditTool::Select | EditTool::AddVertex | EditTool::AddEdge | EditTool::Delete => {
                         
-                        self.bbc += dx as f32 * 0.01;
-                        self.atx = (self.atx + bg as f32 * 0.01).qp(-1.5, 1.5);
+                        self.cam_angle_y += dx as f32 * 0.01;
+                        self.cam_angle_x = (self.cam_angle_x + ad as f32 * 0.01).clamp(-1.5, 1.5);
                     },
                     _ => {}
                 }
@@ -653,382 +653,382 @@ impl ModelEditorState {
     }
     
     
-    pub fn ers(&mut self, aaq: i8) {
-        if aaq > 0 {
-            self.aab = (self.aab - 0.5).am(1.5);
+    pub fn handle_scroll(&mut self, mk: i8) {
+        if mk > 0 {
+            self.cam_dist = (self.cam_dist - 0.5).max(1.5);
         } else {
-            self.aab = (self.aab + 0.5).v(20.0);
+            self.cam_dist = (self.cam_dist + 0.5).min(20.0);
         }
     }
     
-    fn rvl(&mut self, w: usize) {
-        if w >= self.lm.len() { return; }
-        self.lm.remove(w);
+    fn delete_vertex(&mut self, idx: usize) {
+        if idx >= self.vertices.len() { return; }
+        self.vertices.remove(idx);
         
-        self.bu.ajm(|&(q, o)| q != w && o != w);
-        for amd in &mut self.bu {
-            if amd.0 > w { amd.0 -= 1; }
-            if amd.1 > w { amd.1 -= 1; }
+        self.edges.retain(|&(a, b)| a != idx && b != idx);
+        for th in &mut self.edges {
+            if th.0 > idx { th.0 -= 1; }
+            if th.1 > idx { th.1 -= 1; }
         }
-        self.awx.ajm(|&p| p != w);
-        for bxk in &mut self.awx {
-            if *bxk > w { *bxk -= 1; }
+        self.selected_verts.retain(|&v| v != idx);
+        for amx in &mut self.selected_verts {
+            if *amx > idx { *amx -= 1; }
         }
     }
     
-    fn rvk(&mut self) {
-        if self.awx.is_empty() { return; }
-        self.bru();
+    fn delete_selected(&mut self) {
+        if self.selected_verts.is_empty() { return; }
+        self.push_undo();
         
-        let mut cik = self.awx.clone();
-        cik.zox();
-        cik.dbh();
-        for w in cik {
-            if w < self.lm.len() {
-                self.lm.remove(w);
-                self.bu.ajm(|&(q, o)| q != w && o != w);
-                for amd in &mut self.bu {
-                    if amd.0 > w { amd.0 -= 1; }
-                    if amd.1 > w { amd.1 -= 1; }
+        let mut aph = self.selected_verts.clone();
+        aph.sort_unstable();
+        aph.reverse();
+        for idx in aph {
+            if idx < self.vertices.len() {
+                self.vertices.remove(idx);
+                self.edges.retain(|&(a, b)| a != idx && b != idx);
+                for th in &mut self.edges {
+                    if th.0 > idx { th.0 -= 1; }
+                    if th.1 > idx { th.1 -= 1; }
                 }
             }
         }
-        let az = self.awx.len();
-        self.awx.clear();
-        self.aoc = format!("Deleted {} vertices", az);
+        let count = self.selected_verts.len();
+        self.selected_verts.clear();
+        self.status_msg = format!("Deleted {} vertices", count);
     }
     
     
     
-    pub fn tj(&mut self, k: &mut [u32], d: usize, i: usize) {
+    pub fn render(&mut self, buf: &mut [u32], w: usize, h: usize) {
         self.frame += 1;
         
         
-        self.kga = rk(self.bbc);
-        self.kgc = lz(self.bbc);
-        self.kfz = rk(self.atx);
-        self.kgb = lz(self.atx);
+        self.cached_cy = hr(self.cam_angle_y);
+        self.cached_sy = eu(self.cam_angle_y);
+        self.cached_cx = hr(self.cam_angle_x);
+        self.cached_sx = eu(self.cam_angle_x);
         
-        let bpb = 32;
-        let bfm = 20;
-        let fyh = bpb;
-        let mpg = i.ao(bpb + bfm);
+        let aiy = 32;
+        let aej = 20;
+        let viewport_y = aiy;
+        let hbm = h.saturating_sub(aiy + aej);
         
         
-        for il in k.el() {
-            *il = MH_;
+        for ct in buf.iter_mut() {
+            *ct = IK_;
         }
         
         
-        self.sgh(k, d, i, bpb);
+        self.draw_toolbar(buf, w, h, aiy);
         
         
-        if mpg > 10 {
-            self.sgl(k, d, i, 0, fyh, d, mpg);
+        if hbm > 10 {
+            self.draw_viewport(buf, w, h, 0, viewport_y, w, hbm);
         }
         
         
-        self.hgw(k, d, i, i - bfm, bfm);
+        self.draw_status_bar(buf, w, h, h - aej, aej);
         
         
-        if self.ial {
-            self.sgg(k, d, i, fyh, mpg);
+        if self.show_tips {
+            self.draw_tips(buf, w, h, viewport_y, hbm);
         }
     }
     
-    fn sgh(&self, k: &mut [u32], d: usize, i: usize, ejt: usize) {
+    fn draw_toolbar(&self, buf: &mut [u32], w: usize, h: usize, bwj: usize) {
         
-        for c in 0..ejt {
-            for b in 0..d {
-                k[c * d + b] = SG_;
+        for y in 0..bwj {
+            for x in 0..w {
+                buf[y * w + x] = TJ_;
             }
         }
         
         
-        if ejt < i {
-            for b in 0..d {
-                k[ejt * d + b] = 0xFF333355;
+        if bwj < h {
+            for x in 0..w {
+                buf[bwj * w + x] = 0xFF333355;
             }
         }
         
         
-        let mlu = [EditTool::Qs, EditTool::Rh, EditTool::Rg, EditTool::Fw, EditTool::Jj];
-        let pm = 60;
-        let qx = 22;
-        let kn = 5;
+        let gzk = [EditTool::Select, EditTool::AddVertex, EditTool::AddEdge, EditTool::Move, EditTool::Delete];
+        let gu = 60;
+        let hn = 22;
+        let ed = 5;
         let mut bx = 8;
         
-        for bxo in &mlu {
-            let gh = self.bxo == *bxo;
-            let ei = if gh { BOD_ } else { MI_ };
-            ah(k, d, i, bx, kn, pm, qx, ei);
+        for tool in &gzk {
+            let active = self.tool == *tool;
+            let bg = if active { BQU_ } else { NH_ };
+            fill_rect(buf, w, h, bx, ed, gu, hn, bg);
             
-            lx(k, d, i, bx, kn, pm, qx, if gh { 0xFF00AAFF } else { 0xFF444466 });
+            draw_rect(buf, w, h, bx, ed, gu, hn, if active { 0xFF00AAFF } else { 0xFF444466 });
             
-            let cu = format!("{} [{}]", bxo.j(), bxo.tpy());
-            bbl(k, d, i, bx + 3, kn + 7, &cu, 
-                if gh { AOR_ } else { T_ });
-            bx += pm + 4;
+            let label = format!("{} [{}]", tool.name(), tool.hotkey());
+            aby(buf, w, h, bx + 3, ed + 7, &label, 
+                if active { AQR_ } else { P_ });
+            bx += gu + 4;
         }
         
         
-        let hvx = ["1:Cube", "2:Pyr", "3:Dia", "4:Tor", "5:Ico", "6:Grid"];
-        let mut y = d - 8;
-        for akl in hvx.iter().vv() {
-            let ars = akl.len() * 6 + 8;
-            y -= ars;
-            ah(k, d, i, y, kn, ars, qx, MI_);
-            lx(k, d, i, y, kn, ars, qx, 0xFF444466);
-            bbl(k, d, i, y + 4, kn + 7, akl, AAK_);
-            y -= 4;
+        let dwu = ["1:Cube", "2:Pyr", "3:Dia", "4:Tor", "5:Ico", "6:Grid"];
+        let mut p = w - 8;
+        for preset in dwu.iter().rev() {
+            let wl = preset.len() * 6 + 8;
+            p -= wl;
+            fill_rect(buf, w, h, p, ed, wl, hn, NH_);
+            draw_rect(buf, w, h, p, ed, wl, hn, 0xFF444466);
+            aby(buf, w, h, p + 4, ed + 7, preset, ABX_);
+            p -= 4;
         }
         
         
-        let dbq = bx + 20;
-        ah(k, d, i, dbq, kn, 50, qx, MI_);
-        lx(k, d, i, dbq, kn, 50, qx, 0xFF444466);
-        bbl(k, d, i, dbq + 4, kn + 7, "Save[W]", T_);
+        let bdn = bx + 20;
+        fill_rect(buf, w, h, bdn, ed, 50, hn, NH_);
+        draw_rect(buf, w, h, bdn, ed, 50, hn, 0xFF444466);
+        aby(buf, w, h, bdn + 4, ed + 7, "Save[W]", P_);
         
-        ah(k, d, i, dbq + 54, kn, 50, qx, MI_);
-        lx(k, d, i, dbq + 54, kn, 50, qx, 0xFF444466);
-        bbl(k, d, i, dbq + 58, kn + 7, "Load[L]", T_);
+        fill_rect(buf, w, h, bdn + 54, ed, 50, hn, NH_);
+        draw_rect(buf, w, h, bdn + 54, ed, 50, hn, 0xFF444466);
+        aby(buf, w, h, bdn + 58, ed + 7, "Load[L]", P_);
         
-        ah(k, d, i, dbq + 108, kn, 50, qx, MI_);
-        lx(k, d, i, dbq + 108, kn, 50, qx, 0xFF444466);
-        bbl(k, d, i, dbq + 112, kn + 7, "Undo[Z]", T_);
+        fill_rect(buf, w, h, bdn + 108, ed, 50, hn, NH_);
+        draw_rect(buf, w, h, bdn + 108, ed, 50, hn, 0xFF444466);
+        aby(buf, w, h, bdn + 112, ed + 7, "Undo[Z]", P_);
     }
     
-    fn sgl(&self, k: &mut [u32], nm: usize, adn: usize,
-                     fp: usize, iz: usize, gm: usize, me: usize) {
+    fn draw_viewport(&self, buf: &mut [u32], fv: usize, ov: usize,
+                     vx: usize, vy: usize, bt: usize, ex: usize) {
         
-        if self.pkm {
-            self.fgx(k, nm, adn, fp, iz, gm, me);
+        if self.show_grid {
+            self.draw_grid(buf, fv, ov, vx, vy, bt, ex);
         }
         
         
-        if self.pkl {
-            self.sbt(k, nm, adn, fp, iz, gm, me);
+        if self.show_axes {
+            self.draw_axes(buf, fv, ov, vx, vy, bt, ex);
         }
         
         
-        for (w, &(q, o)) in self.bu.iter().cf() {
-            if q >= self.lm.len() || o >= self.lm.len() { continue; }
-            let (fy, fo, alw) = self.dkv(self.lm[q], gm, me);
-            let (dn, dp, aeu) = self.dkv(self.lm[o], gm, me);
-            if alw < 0.1 || aeu < 0.1 { continue; }
+        for (idx, &(a, b)) in self.edges.iter().enumerate() {
+            if a >= self.vertices.len() || b >= self.vertices.len() { continue; }
+            let (bm, az, z0) = self.project_vertex(self.vertices[a], bt, ex);
+            let (x1, y1, po) = self.project_vertex(self.vertices[b], bt, ex);
+            if z0 < 0.1 || po < 0.1 { continue; }
             
             
-            let fua = self.awx.contains(&q) || self.awx.contains(&o);
-            let txi = self.bgv == Some(q) || self.bgv == Some(o);
+            let sel = self.selected_verts.contains(&a) || self.selected_verts.contains(&b);
+            let msl = self.edge_start == Some(a) || self.edge_start == Some(b);
             
-            let s = if txi { 0xFFFF8800 } else if fua { BOJ_ } else { BOI_ };
+            let color = if msl { 0xFFFF8800 } else if sel { BRA_ } else { BQZ_ };
             
             
-            let bth = (alw + aeu) * 0.5;
-            let yx = (1.0 - (bth - 3.0) * 0.1).qp(0.3, 1.0);
-            let s = sqr(s, yx);
+            let avg_z = (z0 + po) * 0.5;
+            let ln = (1.0 - (avg_z - 3.0) * 0.1).clamp(0.3, 1.0);
+            let color = lty(color, ln);
             
-            dgr(k, nm, adn, 
-                fp as i32 + fy, iz as i32 + fo,
-                fp as i32 + dn, iz as i32 + dp, s);
+            draw_line_buf(buf, fv, ov, 
+                vx as i32 + bm, vy as i32 + az,
+                vx as i32 + x1, vy as i32 + y1, color);
         }
         
         
-        if self.jqd {
-            for (a, p) in self.lm.iter().cf() {
-                let (cr, cq, av) = self.dkv(*p, gm, me);
-                if av < 0.1 { continue; }
+        if self.show_vertices {
+            for (i, v) in self.vertices.iter().enumerate() {
+                let (am, ak, z) = self.project_vertex(*v, bt, ex);
+                if z < 0.1 { continue; }
                 
-                let y = fp as i32 + cr;
-                let x = iz as i32 + cq;
+                let p = vx as i32 + am;
+                let o = vy as i32 + ak;
                 
-                let na = self.awx.contains(&a);
-                let asy = self.lcn == Some(a);
-                let bgv = self.bgv == Some(a);
+                let selected = self.selected_verts.contains(&i);
+                let hovered = self.hover_vert == Some(i);
+                let edge_start = self.edge_start == Some(i);
                 
-                let s = if bgv { 0xFFFF8800 }
-                    else if na { BOH_ }
-                    else if asy { BOG_ }
-                    else { BOF_ };
+                let color = if edge_start { 0xFFFF8800 }
+                    else if selected { BQY_ }
+                    else if hovered { BQX_ }
+                    else { BQW_ };
                 
-                let aw = if na || asy || bgv { 3 } else { 2 };
+                let size = if selected || hovered || edge_start { 3 } else { 2 };
                 
                 
-                for bg in -aw..=aw {
-                    for dx in -aw..=aw {
-                        if dx * dx + bg * bg <= aw * aw {
-                            oyo(k, nm, adn, y + dx, x + bg, s);
+                for ad in -size..=size {
+                    for dx in -size..=size {
+                        if dx * dx + ad * ad <= size * size {
+                            put_buf_pixel(buf, fv, ov, p + dx, o + ad, color);
                         }
                     }
                 }
                 
                 
-                if na || asy {
-                    let cu = format!("{}", a);
-                    bbl(k, nm, adn, (y + aw + 3) as usize, (x - 3) as usize, &cu, s);
+                if selected || hovered {
+                    let label = format!("{}", i);
+                    aby(buf, fv, ov, (p + size + 3) as usize, (o - 3) as usize, &label, color);
                 }
             }
         }
         
         
-        if let Some(dlz) = self.bgv {
-            if dlz < self.lm.len() {
-                let (cr, cq, av) = self.dkv(self.lm[dlz], gm, me);
-                if av > 0.1 {
+        if let Some(bjj) = self.edge_start {
+            if bjj < self.vertices.len() {
+                let (am, ak, z) = self.project_vertex(self.vertices[bjj], bt, ex);
+                if z > 0.1 {
                     
-                    scn(k, nm, adn,
-                        fp as i32 + cr, iz as i32 + cq,
-                        fp as i32 + self.daa, iz as i32 + self.dab,
+                    lin(buf, fv, ov,
+                        vx as i32 + am, vy as i32 + ak,
+                        vx as i32 + self.mouse_x, vy as i32 + self.mouse_y,
                         0xFFFF8800);
                 }
             }
         }
     }
     
-    fn fgx(&self, k: &mut [u32], nm: usize, adn: usize,
-                 fp: usize, iz: usize, gm: usize, me: usize) {
-        let iv = ATW_ * 0.5;
-        let gu = ATW_ / ADD_ as f32;
+    fn draw_grid(&self, buf: &mut [u32], fv: usize, ov: usize,
+                 vx: usize, vy: usize, bt: usize, ex: usize) {
+        let cw = AWA_ * 0.5;
+        let step = AWA_ / AET_ as f32;
         
-        for a in 0..=ADD_ {
-            let ab = -iv + a as f32 * gu;
-            let tww = (a == ADD_ / 2);
-            let s = if tww { BNU_ } else { BNT_ };
+        for i in 0..=AET_ {
+            let t = -cw + i as f32 * step;
+            let msb = (i == AET_ / 2);
+            let color = if msb { BQM_ } else { BQL_ };
             
             
-            let (fy, fo, alw) = self.dkv(V3 { b: -iv, c: 0.0, av: ab }, gm, me);
-            let (dn, dp, aeu) = self.dkv(V3 { b: iv, c: 0.0, av: ab }, gm, me);
-            if alw > 0.1 && aeu > 0.1 {
-                dgr(k, nm, adn, 
-                    fp as i32 + fy, iz as i32 + fo,
-                    fp as i32 + dn, iz as i32 + dp, s);
+            let (bm, az, z0) = self.project_vertex(V3 { x: -cw, y: 0.0, z: t }, bt, ex);
+            let (x1, y1, po) = self.project_vertex(V3 { x: cw, y: 0.0, z: t }, bt, ex);
+            if z0 > 0.1 && po > 0.1 {
+                draw_line_buf(buf, fv, ov, 
+                    vx as i32 + bm, vy as i32 + az,
+                    vx as i32 + x1, vy as i32 + y1, color);
             }
             
             
-            let (fy, fo, alw) = self.dkv(V3 { b: ab, c: 0.0, av: -iv }, gm, me);
-            let (dn, dp, aeu) = self.dkv(V3 { b: ab, c: 0.0, av: iv }, gm, me);
-            if alw > 0.1 && aeu > 0.1 {
-                dgr(k, nm, adn, 
-                    fp as i32 + fy, iz as i32 + fo,
-                    fp as i32 + dn, iz as i32 + dp, s);
+            let (bm, az, z0) = self.project_vertex(V3 { x: t, y: 0.0, z: -cw }, bt, ex);
+            let (x1, y1, po) = self.project_vertex(V3 { x: t, y: 0.0, z: cw }, bt, ex);
+            if z0 > 0.1 && po > 0.1 {
+                draw_line_buf(buf, fv, ov, 
+                    vx as i32 + bm, vy as i32 + az,
+                    vx as i32 + x1, vy as i32 + y1, color);
             }
         }
     }
     
-    fn sbt(&self, k: &mut [u32], nm: usize, adn: usize,
-                 fp: usize, iz: usize, gm: usize, me: usize) {
-        let atf = V3 { b: 0.0, c: 0.0, av: 0.0 };
-        let qly = [
-            (V3 { b: ZG_, c: 0.0, av: 0.0 }, BNQ_, "X"),
-            (V3 { b: 0.0, c: ZG_, av: 0.0 }, BNR_, "Y"),
-            (V3 { b: 0.0, c: 0.0, av: ZG_ }, BNS_, "Z"),
+    fn draw_axes(&self, buf: &mut [u32], fv: usize, ov: usize,
+                 vx: usize, vy: usize, bt: usize, ex: usize) {
+        let origin = V3 { x: 0.0, y: 0.0, z: 0.0 };
+        let jyv = [
+            (V3 { x: AAN_, y: 0.0, z: 0.0 }, BQI_, "X"),
+            (V3 { x: 0.0, y: AAN_, z: 0.0 }, BQJ_, "Y"),
+            (V3 { x: 0.0, y: 0.0, z: AAN_ }, BQK_, "Z"),
         ];
         
-        let (mp, qw, jig) = self.dkv(atf, gm, me);
-        if jig < 0.1 { return; }
+        let (fh, hk, evy) = self.project_vertex(origin, bt, ex);
+        if evy < 0.1 { return; }
         
-        for (ci, s, cu) in &qly {
-            let (bqp, ahm, sqo) = self.dkv(*ci, gm, me);
-            if sqo < 0.1 { continue; }
+        for (end, color, label) in &jyv {
+            let (ajq, qz, ez) = self.project_vertex(*end, bt, ex);
+            if ez < 0.1 { continue; }
             
             
-            for bc in -1..=1i32 {
-                dgr(k, nm, adn,
-                    fp as i32 + mp + bc, iz as i32 + qw,
-                    fp as i32 + bqp + bc, iz as i32 + ahm, *s);
-                dgr(k, nm, adn,
-                    fp as i32 + mp, iz as i32 + qw + bc,
-                    fp as i32 + bqp, iz as i32 + ahm + bc, *s);
+            for d in -1..=1i32 {
+                draw_line_buf(buf, fv, ov,
+                    vx as i32 + fh + d, vy as i32 + hk,
+                    vx as i32 + ajq + d, vy as i32 + qz, *color);
+                draw_line_buf(buf, fv, ov,
+                    vx as i32 + fh, vy as i32 + hk + d,
+                    vx as i32 + ajq, vy as i32 + qz + d, *color);
             }
             
             
-            bbl(k, nm, adn, (fp as i32 + bqp + 5) as usize, (iz as i32 + ahm - 3) as usize,
-                cu, *s);
+            aby(buf, fv, ov, (vx as i32 + ajq + 5) as usize, (vy as i32 + qz - 3) as usize,
+                label, *color);
         }
     }
     
-    fn hgw(&self, k: &mut [u32], d: usize, i: usize, cq: usize, kl: usize) {
+    fn draw_status_bar(&self, buf: &mut [u32], w: usize, h: usize, ak: usize, dw: usize) {
         
-        for c in cq..cq + kl {
-            if c >= i { break; }
-            for b in 0..d {
-                k[c * d + b] = AAJ_;
+        for y in ak..ak + dw {
+            if y >= h { break; }
+            for x in 0..w {
+                buf[y * w + x] = ABW_;
             }
         }
         
-        if cq > 0 && cq < i {
-            for b in 0..d {
-                k[cq * d + b] = 0xFF333355;
+        if ak > 0 && ak < h {
+            for x in 0..w {
+                buf[ak * w + x] = 0xFF333355;
             }
         }
         
         
-        bbl(k, d, i, 8, cq + 6, &self.aoc, T_);
+        aby(buf, w, h, 8, ak + 6, &self.status_msg, P_);
         
         
-        let cm = format!("V:{} E:{} | {} | Zoom:{:.1}", 
-            self.lm.len(), self.bu.len(), self.hrr, self.aab);
-        let wtq = d.ao(cm.len() * 6 + 8);
-        bbl(k, d, i, wtq, cq + 6, &cm, AAK_);
+        let stats = format!("V:{} E:{} | {} | Zoom:{:.1}", 
+            self.vertices.len(), self.edges.len(), self.model_name, self.cam_dist);
+        let owu = w.saturating_sub(stats.len() * 6 + 8);
+        aby(buf, w, h, owu, ak + 6, &stats, ABX_);
     }
     
-    fn sgg(&self, k: &mut [u32], d: usize, i: usize, iz: usize, me: usize) {
-        let yd = 200;
-        let ans = 180;
-        let awm = d.ao(yd + 10);
-        let atg = iz + 10;
+    fn draw_tips(&self, buf: &mut [u32], w: usize, h: usize, vy: usize, ex: usize) {
+        let he = 200;
+        let ug = 180;
+        let zc = w.saturating_sub(he + 10);
+        let xg = vy + 10;
         
-        if atg + ans >= i { return; }
+        if xg + ug >= h { return; }
         
         
-        for c in atg..atg + ans {
-            for b in awm..awm + yd {
-                if c < i && b < d {
-                    k[c * d + b] = fdm(k[c * d + b], AOS_);
+        for y in xg..xg + ug {
+            for x in zc..zc + he {
+                if y < h && x < w {
+                    buf[y * w + x] = cgi(buf[y * w + x], AQS_);
                 }
             }
         }
         
         
-        lx(k, d, i, awm, atg, yd, ans, SF_);
+        draw_rect(buf, w, h, zc, xg, he, ug, TI_);
         
-        let mut ty = atg + 6;
-        let gx = awm + 8;
+        let mut ty = xg + 6;
+        let bu = zc + 8;
         
-        bbl(k, d, i, gx, ty, "--- Controls ---", SF_);
+        aby(buf, w, h, bu, ty, "--- Controls ---", TI_);
         ty += 12;
-        bbl(k, d, i, gx, ty, "S: Select  A: Add Vtx", T_);
+        aby(buf, w, h, bu, ty, "S: Select  A: Add Vtx", P_);
         ty += 10;
-        bbl(k, d, i, gx, ty, "E: Add Edge  G: Move", T_);
+        aby(buf, w, h, bu, ty, "E: Add Edge  G: Move", P_);
         ty += 10;
-        bbl(k, d, i, gx, ty, "X: Delete  D: Deselect", T_);
+        aby(buf, w, h, bu, ty, "X: Delete  D: Deselect", P_);
         ty += 10;
-        bbl(k, d, i, gx, ty, "Z: Undo  C: Clear", T_);
+        aby(buf, w, h, bu, ty, "Z: Undo  C: Clear", P_);
         ty += 10;
-        bbl(k, d, i, gx, ty, "Arrows: Orbit camera", T_);
+        aby(buf, w, h, bu, ty, "Arrows: Orbit camera", P_);
         ty += 10;
-        bbl(k, d, i, gx, ty, "+/-: Zoom  R: Reset cam", T_);
+        aby(buf, w, h, bu, ty, "+/-: Zoom  R: Reset cam", P_);
         ty += 14;
-        bbl(k, d, i, gx, ty, "--- Presets ---", SF_);
+        aby(buf, w, h, bu, ty, "--- Presets ---", TI_);
         ty += 12;
-        bbl(k, d, i, gx, ty, "1:Cube 2:Pyr 3:Dia", T_);
+        aby(buf, w, h, bu, ty, "1:Cube 2:Pyr 3:Dia", P_);
         ty += 10;
-        bbl(k, d, i, gx, ty, "4:Torus 5:Ico 6:Grid", T_);
+        aby(buf, w, h, bu, ty, "4:Torus 5:Ico 6:Grid", P_);
         ty += 14;
-        bbl(k, d, i, gx, ty, "--- File ---", SF_);
+        aby(buf, w, h, bu, ty, "--- File ---", TI_);
         ty += 12;
-        bbl(k, d, i, gx, ty, "W: Save  L: Load", T_);
+        aby(buf, w, h, bu, ty, "W: Save  L: Load", P_);
         ty += 10;
-        bbl(k, d, i, gx, ty, "H: Toggle this panel", AAK_);
+        aby(buf, w, h, bu, ty, "H: Toggle this panel", ABX_);
         
         
-        let idq = self.bxo.idq();
-        if idq.len() > 0 {
-            let fwt = atg + ans + 5;
-            if fwt + 16 < i {
-                let xho = idq.len() * 6 + 12;
-                ah(k, d, i, awm, fwt, xho, 14, AOS_ & 0xDDFFFFFF);
-                bbl(k, d, i, awm + 6, fwt + 3, idq, AOR_);
+        let tip = self.tool.tip();
+        if tip.len() > 0 {
+            let crq = xg + ug + 5;
+            if crq + 16 < h {
+                let pjx = tip.len() * 6 + 12;
+                fill_rect(buf, w, h, zc, crq, pjx, 14, AQS_ & 0xDDFFFFFF);
+                aby(buf, w, h, zc + 6, crq + 3, tip, AQR_);
             }
         }
     }
@@ -1037,69 +1037,69 @@ impl ModelEditorState {
 
 
 use crate::draw_utils::{
-    sf as oyo,
-    ah,
-    lx,
-    ahj as dgr,
+    put_pixel as put_buf_pixel,
+    fill_rect,
+    draw_rect,
+    draw_line as draw_line_buf,
 };
 
-fn scn(k: &mut [u32], d: usize, i: usize, fy: i32, fo: i32, dn: i32, dp: i32, s: u32) {
-    let mut b = fy;
-    let mut c = fo;
-    let dx = (dn - fy).gp();
-    let bg = -(dp - fo).gp();
-    let cr = if fy < dn { 1 } else { -1 };
-    let cq = if fo < dp { 1 } else { -1 };
-    let mut rq = dx + bg;
-    let mut gu = 0;
-    let csk = (dx.gp() + bg.gp()) as usize + 1;
-    let csk = csk.v(4000);
+fn lin(buf: &mut [u32], w: usize, h: usize, bm: i32, az: i32, x1: i32, y1: i32, color: u32) {
+    let mut x = bm;
+    let mut y = az;
+    let dx = (x1 - bm).abs();
+    let ad = -(y1 - az).abs();
+    let am = if bm < x1 { 1 } else { -1 };
+    let ak = if az < y1 { 1 } else { -1 };
+    let mut err = dx + ad;
+    let mut step = 0;
+    let ayd = (dx.abs() + ad.abs()) as usize + 1;
+    let ayd = ayd.min(4000);
     
-    for _ in 0..csk {
-        if gu % 8 < 4 {
-            oyo(k, d, i, b, c, s);
+    for _ in 0..ayd {
+        if step % 8 < 4 {
+            put_buf_pixel(buf, w, h, x, y, color);
         }
-        gu += 1;
-        if b == dn && c == dp { break; }
-        let agl = 2 * rq;
-        if agl >= bg { rq += bg; b += cr; }
-        if agl <= dx { rq += dx; c += cq; }
+        step += 1;
+        if x == x1 && y == y1 { break; }
+        let pg = 2 * err;
+        if pg >= ad { err += ad; x += am; }
+        if pg <= dx { err += dx; y += ak; }
     }
 }
 
-fn sqr(s: u32, pv: f32) -> u32 {
-    let m = ((s >> 16) & 0xFF) as f32 * pv;
-    let at = ((s >> 8) & 0xFF) as f32 * pv;
-    let o = (s & 0xFF) as f32 * pv;
-    0xFF000000 | ((m as u32) << 16) | ((at as u32) << 8) | (o as u32)
+fn lty(color: u32, ha: f32) -> u32 {
+    let r = ((color >> 16) & 0xFF) as f32 * ha;
+    let g = ((color >> 8) & 0xFF) as f32 * ha;
+    let b = (color & 0xFF) as f32 * ha;
+    0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32)
 }
 
-fn fdm(ei: u32, lp: u32) -> u32 {
-    let dw = ((lp >> 24) & 0xFF) as f32 / 255.0;
-    let wq = 1.0 - dw;
-    let m = ((lp >> 16) & 0xFF) as f32 * dw + ((ei >> 16) & 0xFF) as f32 * wq;
-    let at = ((lp >> 8) & 0xFF) as f32 * dw + ((ei >> 8) & 0xFF) as f32 * wq;
-    let o = (lp & 0xFF) as f32 * dw + (ei & 0xFF) as f32 * wq;
-    0xFF000000 | ((m as u32) << 16) | ((at as u32) << 8) | (o as u32)
+fn cgi(bg: u32, fg: u32) -> u32 {
+    let alpha = ((fg >> 24) & 0xFF) as f32 / 255.0;
+    let ki = 1.0 - alpha;
+    let r = ((fg >> 16) & 0xFF) as f32 * alpha + ((bg >> 16) & 0xFF) as f32 * ki;
+    let g = ((fg >> 8) & 0xFF) as f32 * alpha + ((bg >> 8) & 0xFF) as f32 * ki;
+    let b = (fg & 0xFF) as f32 * alpha + (bg & 0xFF) as f32 * ki;
+    0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32)
 }
 
 
-fn bbl(k: &mut [u32], nm: usize, adn: usize, b: usize, c: usize, text: &str, s: u32) {
-    let mut cx = b;
-    for bm in text.bf() {
-        sfp(k, nm, adn, cx, c, bm, s);
+fn aby(buf: &mut [u32], fv: usize, ov: usize, x: usize, y: usize, text: &str, color: u32) {
+    let mut cx = x;
+    for ch in text.bytes() {
+        lkt(buf, fv, ov, cx, y, ch, color);
         cx += 6;
     }
 }
 
 
-fn sfp(k: &mut [u32], nm: usize, adn: usize, b: usize, c: usize, bm: u8, s: u32) {
+fn lkt(buf: &mut [u32], fv: usize, ov: usize, x: usize, y: usize, ch: u8, color: u32) {
     
-    let r = bm as char;
-    if r == ' ' { return; }
+    let c = ch as char;
+    if c == ' ' { return; }
     
     
-    let fs: [u8; 7] = match r {
+    let bits: [u8; 7] = match c {
         '0' => [0b01110, 0b10001, 0b10011, 0b10101, 0b11001, 0b10001, 0b01110],
         '1' => [0b00100, 0b01100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110],
         '2' => [0b01110, 0b10001, 0b00001, 0b00110, 0b01000, 0b10000, 0b11111],
@@ -1159,13 +1159,13 @@ fn sfp(k: &mut [u32], nm: usize, adn: usize, b: usize, c: usize, bm: u8, s: u32)
         _ => [0b01110, 0b01010, 0b01010, 0b01010, 0b01010, 0b01010, 0b01110], 
     };
     
-    for br in 0..7 {
-        for bj in 0..5 {
-            if fs[br] & (1 << (4 - bj)) != 0 {
-                let y = b + bj;
-                let x = c + br;
-                if y < nm && x < adn {
-                    k[x * nm + y] = s;
+    for row in 0..7 {
+        for col in 0..5 {
+            if bits[row] & (1 << (4 - col)) != 0 {
+                let p = x + col;
+                let o = y + row;
+                if p < fv && o < ov {
+                    buf[o * fv + p] = color;
                 }
             }
         }

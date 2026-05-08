@@ -10,14 +10,14 @@ use alloc::collections::VecDeque;
 use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 
-pub const CFM_: usize = 1518;
+pub const CIV_: usize = 1518;
 
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum NetworkState {
-    Fm,
-    Ek,
-    Q,
+    Down,
+    Up,
+    Error,
 }
 
 
@@ -25,8 +25,8 @@ pub enum NetworkState {
 pub struct MacAddress([u8; 6]);
 
 impl MacAddress {
-    pub const fn new(bf: [u8; 6]) -> Self {
-        Self(bf)
+    pub const fn new(bytes: [u8; 6]) -> Self {
+        Self(bytes)
     }
     
     pub fn as_bytes(&self) -> &[u8; 6] {
@@ -35,8 +35,8 @@ impl MacAddress {
 }
 
 impl core::fmt::Display for MacAddress {
-    fn fmt(&self, bb: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(bb, "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
             self.0[0], self.0[1], self.0[2], self.0[3], self.0[4], self.0[5])
     }
 }
@@ -46,8 +46,8 @@ impl core::fmt::Display for MacAddress {
 pub struct Ipv4Address([u8; 4]);
 
 impl Ipv4Address {
-    pub const fn new(q: u8, o: u8, r: u8, bc: u8) -> Self {
-        Self([q, o, r, bc])
+    pub const fn new(a: u8, b: u8, c: u8, d: u8) -> Self {
+        Self([a, b, c, d])
     }
     
     pub fn as_bytes(&self) -> &[u8; 4] {
@@ -56,128 +56,128 @@ impl Ipv4Address {
 }
 
 impl core::fmt::Display for Ipv4Address {
-    fn fmt(&self, bb: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(bb, "{}.{}.{}.{}",
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}.{}.{}.{}",
             self.0[0], self.0[1], self.0[2], self.0[3])
     }
 }
 
 
-pub struct Bnf {
-    pub ed: MacAddress,
+pub struct Abr {
+    pub mac: MacAddress,
     pub ip: Option<Ipv4Address>,
-    pub up: Option<Ipv4Address>,
-    pub auj: Option<Ipv4Address>,
-    pub g: NetworkState,
+    pub subnet: Option<Ipv4Address>,
+    pub gateway: Option<Ipv4Address>,
+    pub state: NetworkState,
 }
 
 
 #[derive(Debug, Clone, Copy, Default)]
-pub struct Avy {
-    pub egc: u64,
-    pub dub: u64,
-    pub feb: u64,
-    pub cdm: u64,
-    pub bqn: u64,
+pub struct Tw {
+    pub packets_sent: u64,
+    pub packets_received: u64,
+    pub bytes_sent: u64,
+    pub bytes_received: u64,
+    pub errors: u64,
 }
 
 
 #[repr(C, packed)]
-pub struct Cwe {
-    pub amc: [u8; 6],
-    pub atn: [u8; 6],
+pub struct Avi {
+    pub dst_mac: [u8; 6],
+    pub src_mac: [u8; 6],
     pub ethertype: u16,
 }
 
 
 #[repr(C, packed)]
 pub struct ArpPacket {
-    pub ock: u16,      
-    pub frq: u16,      
-    pub tpg: u8,        
-    pub hvh: u8,        
-    pub ayh: u16,  
-    pub eik: [u8; 6],
-    pub eij: [u8; 4],
-    pub jsl: [u8; 6],
-    pub blk: [u8; 4],
+    pub htype: u16,      
+    pub ptype: u16,      
+    pub hlen: u8,        
+    pub plen: u8,        
+    pub operation: u16,  
+    pub sender_mac: [u8; 6],
+    pub sender_ip: [u8; 4],
+    pub target_mac: [u8; 6],
+    pub target_ip: [u8; 4],
 }
 
 
-static Jo: Mutex<Option<Bnf>> = Mutex::new(None);
+static Dv: Mutex<Option<Abr>> = Mutex::new(None);
 
 
-static AHK_: Mutex<VecDeque<Vec<u8>>> = Mutex::new(VecDeque::new());
+static AJG_: Mutex<VecDeque<Vec<u8>>> = Mutex::new(VecDeque::new());
 
 
-static CZC_: Mutex<VecDeque<Vec<u8>>> = Mutex::new(VecDeque::new());
+static DCU_: Mutex<VecDeque<Vec<u8>>> = Mutex::new(VecDeque::new());
 
 
-static Uh: Mutex<Avy> = Mutex::new(Avy {
-    egc: 0,
-    dub: 0,
-    feb: 0,
-    cdm: 0,
-    bqn: 0,
+static Iw: Mutex<Tw> = Mutex::new(Tw {
+    packets_sent: 0,
+    packets_received: 0,
+    bytes_sent: 0,
+    bytes_received: 0,
+    errors: 0,
 });
 
 
-static Be: AtomicBool = AtomicBool::new(false);
+static Ah: AtomicBool = AtomicBool::new(false);
 
 
-static BBN_: Mutex<Option<Awb>> = Mutex::new(None);
+static BDQ_: Mutex<Option<Tx>> = Mutex::new(None);
 
 
-static GG_: Mutex<[u8; 4]> = Mutex::new([8, 8, 8, 8]);
+static GX_: Mutex<[u8; 4]> = Mutex::new([8, 8, 8, 8]);
 
 
-static Boj: Mutex<Platform> = Mutex::new(Platform::F);
+static Acc: Mutex<Platform> = Mutex::new(Platform::Unknown);
 
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Platform {
-    F,
-    Yi,         
-    Axg,      
-    Afo,   
-    Baj,       
-    Biw,       
-    Bcn,    
+    Unknown,
+    Qemu,         
+    QemuKvm,      
+    VirtualBox,   
+    VMware,       
+    HyperV,       
+    BareMetal,    
 }
 
 impl core::fmt::Display for Platform {
-    fn fmt(&self, bb: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Platform::F => write!(bb, "Unknown"),
-            Platform::Yi => write!(bb, "QEMU (TCG)"),
-            Platform::Axg => write!(bb, "QEMU/KVM"),
-            Platform::Afo => write!(bb, "VirtualBox"),
-            Platform::Baj => write!(bb, "VMware"),
-            Platform::Biw => write!(bb, "Hyper-V"),
-            Platform::Bcn => write!(bb, "Bare Metal"),
+            Platform::Unknown => write!(f, "Unknown"),
+            Platform::Qemu => write!(f, "QEMU (TCG)"),
+            Platform::QemuKvm => write!(f, "QEMU/KVM"),
+            Platform::VirtualBox => write!(f, "VirtualBox"),
+            Platform::VMware => write!(f, "VMware"),
+            Platform::HyperV => write!(f, "Hyper-V"),
+            Platform::BareMetal => write!(f, "Bare Metal"),
         }
     }
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Awb {
-    pub ml: u16,
-    pub mx: u16,
-    pub cip: String,
-    pub rj: String,
-    pub aew: u64,
+pub struct Tx {
+    pub vendor_id: u16,
+    pub device_id: u16,
+    pub vendor_name: String,
+    pub driver: String,
+    pub bar0: u64,
     pub irq: u8,
 }
 
 
-pub fn tef() -> Option<Awb> {
-    BBN_.lock().clone()
+pub fn mdn() -> Option<Tx> {
+    BDQ_.lock().clone()
 }
 
 
-fn trk(ml: u16, mx: u16) -> &'static str {
-    match (ml, mx) {
+fn mnm(vendor_id: u16, device_id: u16) -> &'static str {
+    match (vendor_id, device_id) {
         
         (0x8086, 0x100E) => "e1000",      
         (0x8086, 0x100F) => "e1000",      
@@ -206,15 +206,15 @@ fn trk(ml: u16, mx: u16) -> &'static str {
 }
 
 
-pub fn rwu() -> Platform {
+pub fn ldy() -> Platform {
     
     
     #[cfg(target_arch = "x86_64")]
-    let (ocn, iap) = unsafe {
-        let q: u32;
-        let o: u32;
-        let r: u32;
-        let bc: u32;
+    let (hv_max, dzl) = unsafe {
+        let a: u32;
+        let b: u32;
+        let c: u32;
+        let d: u32;
         
         
         core::arch::asm!(
@@ -223,409 +223,409 @@ pub fn rwu() -> Platform {
             "cpuid",
             "mov r8d, ebx",
             "pop rbx",
-            bd("eax") q,
-            bd("r8d") o,
-            bd("ecx") r,
-            bd("edx") bc,
+            out("eax") a,
+            out("r8d") b,
+            out("ecx") c,
+            out("edx") d,
         );
         let mut sig = [0u8; 12];
-        sig[0..4].dg(&o.ho());
-        sig[4..8].dg(&r.ho());
-        sig[8..12].dg(&bc.ho());
-        (q, sig)
+        sig[0..4].copy_from_slice(&b.to_le_bytes());
+        sig[4..8].copy_from_slice(&c.to_le_bytes());
+        sig[8..12].copy_from_slice(&d.to_le_bytes());
+        (a, sig)
     };
     #[cfg(not(target_arch = "x86_64"))]
-    let (ocn, iap): (u32, [u8; 12]) = (0, [0u8; 12]);
-    if ocn >= 0x40000000 {
+    let (hv_max, dzl): (u32, [u8; 12]) = (0, [0u8; 12]);
+    if hv_max >= 0x40000000 {
         
-        if let Ok(e) = core::str::jg(&iap) {
-            crate::serial_println!("[NET] Hypervisor CPUID: '{}'", e);
-            if e.contains("KVMKVMKVM") {
-                return Platform::Axg;
-            } else if e.contains("VBoxVBoxVBox") {
-                return Platform::Afo;
-            } else if e.contains("VMwareVMware") {
-                return Platform::Baj;
-            } else if e.contains("Microsoft Hv") {
-                return Platform::Biw;
-            } else if e.contains("TCGTCGTCGTCG") {
-                return Platform::Yi;
+        if let Ok(j) = core::str::from_utf8(&dzl) {
+            crate::serial_println!("[NET] Hypervisor CPUID: '{}'", j);
+            if j.contains("KVMKVMKVM") {
+                return Platform::QemuKvm;
+            } else if j.contains("VBoxVBoxVBox") {
+                return Platform::VirtualBox;
+            } else if j.contains("VMwareVMware") {
+                return Platform::VMware;
+            } else if j.contains("Microsoft Hv") {
+                return Platform::HyperV;
+            } else if j.contains("TCGTCGTCGTCG") {
+                return Platform::Qemu;
             }
         }
     }
     
     
-    if let Some(co) = crate::acpi::ani() {
-        let lpu = co.clo.em();
-        if lpu.dha("VBOX") {
-            return Platform::Afo;
-        } else if lpu.dha("BOCHS") || lpu.dha("BXPC") {
-            return Platform::Yi;
+    if let Some(info) = crate::acpi::rk() {
+        let gkj = info.oem_id.trim();
+        if gkj.eq_ignore_ascii_case("VBOX") {
+            return Platform::VirtualBox;
+        } else if gkj.eq_ignore_ascii_case("BOCHS") || gkj.eq_ignore_ascii_case("BXPC") {
+            return Platform::Qemu;
         }
     }
     
     
-    let jix = crate::pci::fjm();
-    for ba in &jix {
-        match ba.ml {
-            0x80EE => return Platform::Afo, 
-            0x15AD => return Platform::Baj,     
-            0x1234 => return Platform::Yi,       
+    let ccn = crate::pci::aqs();
+    for s in &ccn {
+        match s.vendor_id {
+            0x80EE => return Platform::VirtualBox, 
+            0x15AD => return Platform::VMware,     
+            0x1234 => return Platform::Qemu,       
             0x1AF4 => {
                 
                 
-                return Platform::Yi;
+                return Platform::Qemu;
             }
             _ => {}
         }
     }
     
     
-    Platform::Bcn
+    Platform::BareMetal
 }
 
 
-pub fn tej() -> Platform {
-    *Boj.lock()
+pub fn fyv() -> Platform {
+    *Acc.lock()
 }
 
 
-pub fn tdl() -> [u8; 4] {
-    *GG_.lock()
+pub fn mcy() -> [u8; 4] {
+    *GX_.lock()
 }
 
 
-pub fn wis(dns: [u8; 4]) {
-    *GG_.lock() = dns;
+pub fn oou(dns: [u8; 4]) {
+    *GX_.lock() = dns;
     crate::log!("[NET] DNS server: {}.{}.{}.{}", dns[0], dns[1], dns[2], dns[3]);
 }
 
 
 pub fn init() {
     
-    let platform = rwu();
-    *Boj.lock() = platform;
+    let platform = ldy();
+    *Acc.lock() = platform;
     crate::log!("[NET] Platform detected: {}", platform);
     
     
-    let hfr = match platform {
-        Platform::Yi | Platform::Axg => [10, 0, 2, 3],     
-        Platform::Afo => [10, 0, 2, 3],                    
+    let dmp = match platform {
+        Platform::Qemu | Platform::QemuKvm => [10, 0, 2, 3],     
+        Platform::VirtualBox => [10, 0, 2, 3],                    
         _ => [8, 8, 8, 8],                                       
     };
-    *GG_.lock() = hfr;
-    crate::serial_println!("[NET] Default DNS: {}.{}.{}.{}", hfr[0], hfr[1], hfr[2], hfr[3]);
+    *GX_.lock() = dmp;
+    crate::serial_println!("[NET] Default DNS: {}.{}.{}.{}", dmp[0], dmp[1], dmp[2], dmp[3]);
     
     
-    let opg = crate::pci::ebq(crate::pci::class::Qa);
+    let ipm = crate::pci::bsp(crate::pci::class::Gr);
     
-    if opg.is_empty() {
+    if ipm.is_empty() {
         crate::log_warn!("[NET] No network controller found");
         return;
     }
     
     
-    let ba = &opg[0];
-    let rj = trk(ba.ml, ba.mx);
+    let s = &ipm[0];
+    let driver = mnm(s.vendor_id, s.device_id);
     
     
-    let lot = Awb {
-        ml: ba.ml,
-        mx: ba.mx,
-        cip: String::from(ba.cip()),
-        rj: String::from(rj),
-        aew: ba.cje(0).unwrap_or(0),
-        irq: ba.esw,
+    let gjo = Tx {
+        vendor_id: s.vendor_id,
+        device_id: s.device_id,
+        vendor_name: String::from(s.vendor_name()),
+        driver: String::from(driver),
+        bar0: s.bar_address(0).unwrap_or(0),
+        irq: s.interrupt_line,
     };
     
     crate::log!("[NET] NIC: {:04X}:{:04X} {} [{}] BAR0={:#X} IRQ={}",
-        ba.ml, ba.mx, 
-        rj, ba.cip(),
-        lot.aew, lot.irq);
+        s.vendor_id, s.device_id, 
+        driver, s.vendor_name(),
+        gjo.bar0, gjo.irq);
     
-    *BBN_.lock() = Some(lot);
-    
-    
-    crate::pci::fhp(ba);
-    crate::pci::fhq(ba);
+    *BDQ_.lock() = Some(gjo);
     
     
-    let ed = if crate::virtio_net::ky() {
-        if let Some(hxd) = crate::virtio_net::cez() {
-            MacAddress::new(hxd)
+    crate::pci::bzi(s);
+    crate::pci::bzj(s);
+    
+    
+    let mac = if crate::virtio_net::is_initialized() {
+        if let Some(real_mac) = crate::virtio_net::aqt() {
+            MacAddress::new(real_mac)
         } else {
-            nxl()
+            iba()
         }
     } else {
-        nxl()
+        iba()
     };
     
     
     
-    let akf = Bnf {
-        ed,
+    let interface = Abr {
+        mac,
         ip: None,
-        up: None,
-        auj: None,
-        g: NetworkState::Ek,
+        subnet: None,
+        gateway: None,
+        state: NetworkState::Up,
     };
     
-    *Jo.lock() = Some(akf);
-    Be.store(true, Ordering::SeqCst);
+    *Dv.lock() = Some(interface);
+    Ah.store(true, Ordering::SeqCst);
     
-    crate::log!("[NET] Interface up: MAC={} (awaiting DHCP)", ed);
+    crate::log!("[NET] Interface up: MAC={} (awaiting DHCP)", mac);
 }
 
 
-fn nxl() -> MacAddress {
-    let qb = crate::logger::lh();
+fn iba() -> MacAddress {
+    let gx = crate::logger::eg();
     MacAddress::new([
         0x52, 0x54, 0x00,  
-        ((qb >> 8) & 0xFF) as u8,
-        ((qb >> 16) & 0xFF) as u8,
-        (qb & 0xFF) as u8,
+        ((gx >> 8) & 0xFF) as u8,
+        ((gx >> 16) & 0xFF) as u8,
+        (gx & 0xFF) as u8,
     ])
 }
 
 
-pub fn anl() -> bool {
-    Be.load(Ordering::Relaxed)
+pub fn sw() -> bool {
+    Ah.load(Ordering::Relaxed)
 }
 
 
-pub fn gif() -> Option<(MacAddress, Option<Ipv4Address>, NetworkState)> {
-    let ben = Jo.lock();
-    ben.as_ref().map(|a| (a.ed, a.ip, a.g))
+pub fn cyp() -> Option<(MacAddress, Option<Ipv4Address>, NetworkState)> {
+    let adv = Dv.lock();
+    adv.as_ref().map(|i| (i.mac, i.ip, i.state))
 }
 
 
-pub fn aou() -> Option<(Ipv4Address, Ipv4Address, Option<Ipv4Address>)> {
-    let ben = Jo.lock();
-    ben.as_ref().and_then(|a| {
-        let ip = a.ip?;
-        let up = a.up.unwrap_or(Ipv4Address::new(255, 255, 255, 0));
-        Some((ip, up, a.auj))
+pub fn rd() -> Option<(Ipv4Address, Ipv4Address, Option<Ipv4Address>)> {
+    let adv = Dv.lock();
+    adv.as_ref().and_then(|i| {
+        let ip = i.ip?;
+        let subnet = i.subnet.unwrap_or(Ipv4Address::new(255, 255, 255, 0));
+        Some((ip, subnet, i.gateway))
     })
 }
 
 
-pub fn ckt() -> Option<[u8; 6]> {
-    let ben = Jo.lock();
-    ben.as_ref().map(|a| *a.ed.as_bytes())
+pub fn aqu() -> Option<[u8; 6]> {
+    let adv = Dv.lock();
+    adv.as_ref().map(|i| *i.mac.as_bytes())
 }
 
 
-pub fn asx() -> Avy {
-    *Uh.lock()
+pub fn get_stats() -> Tw {
+    *Iw.lock()
 }
 
 
-pub fn blc(f: &[u8]) -> Result<(), &'static str> {
-    if !Be.load(Ordering::Relaxed) {
+pub fn aha(data: &[u8]) -> Result<(), &'static str> {
+    if !Ah.load(Ordering::Relaxed) {
         return Err("Network not initialized");
     }
     
-    if f.len() > CFM_ {
+    if data.len() > CIV_ {
         return Err("Packet too large");
     }
     
     
-    if crate::drivers::net::bzy() {
-        return crate::drivers::net::baq(f);
+    if crate::drivers::net::aoh() {
+        return crate::drivers::net::send(data);
     }
     
     
-    if crate::virtio_net::ky() {
-        return crate::virtio_net::blc(f);
+    if crate::virtio_net::is_initialized() {
+        return crate::virtio_net::aha(data);
     }
     
     
-    let mut gx = CZC_.lock();
-    gx.agt(f.ip());
+    let mut bu = DCU_.lock();
+    bu.push_back(data.to_vec());
     
     
-    let mut cm = Uh.lock();
-    cm.egc += 1;
-    cm.feb += f.len() as u64;
+    let mut stats = Iw.lock();
+    stats.packets_sent += 1;
+    stats.bytes_sent += data.len() as u64;
     
     Ok(())
 }
 
 
-pub fn pao() -> Option<Vec<u8>> {
-    if !Be.load(Ordering::Relaxed) {
+pub fn iyr() -> Option<Vec<u8>> {
+    if !Ah.load(Ordering::Relaxed) {
         return None;
     }
     
     
-    if crate::drivers::net::bzy() {
-        if let Some(ex) = crate::drivers::net::chb() {
-            let mut cm = Uh.lock();
-            cm.dub += 1;
-            cm.cdm += ex.len() as u64;
-            return Some(ex);
+    if crate::drivers::net::aoh() {
+        if let Some(be) = crate::drivers::net::receive() {
+            let mut stats = Iw.lock();
+            stats.packets_received += 1;
+            stats.bytes_received += be.len() as u64;
+            return Some(be);
         }
     }
     
     
-    if crate::virtio_net::ky() {
-        if let Some(ex) = crate::virtio_net::pao() {
-            let mut cm = Uh.lock();
-            cm.dub += 1;
-            cm.cdm += ex.len() as u64;
-            return Some(ex);
+    if crate::virtio_net::is_initialized() {
+        if let Some(be) = crate::virtio_net::iyr() {
+            let mut stats = Iw.lock();
+            stats.packets_received += 1;
+            stats.bytes_received += be.len() as u64;
+            return Some(be);
         }
     }
     
     
-    let mut kb = AHK_.lock();
-    if let Some(ex) = kb.awp() {
-        let mut cm = Uh.lock();
-        cm.dub += 1;
-        cm.cdm += ex.len() as u64;
-        Some(ex)
+    let mut da = AJG_.lock();
+    if let Some(be) = da.pop_front() {
+        let mut stats = Iw.lock();
+        stats.packets_received += 1;
+        stats.bytes_received += be.len() as u64;
+        Some(be)
     } else {
         None
     }
 }
 
 
-pub fn yya(f: Vec<u8>) {
-    let mut kb = AHK_.lock();
-    kb.agt(f);
+pub fn qlj(data: Vec<u8>) {
+    let mut da = AJG_.lock();
+    da.push_back(data);
 }
 
 
-pub fn zmg(blk: Ipv4Address) -> Result<(), &'static str> {
-    let ben = Jo.lock();
-    let akf = ben.as_ref().ok_or("No interface")?;
+pub fn qvf(target_ip: Ipv4Address) -> Result<(), &'static str> {
+    let adv = Dv.lock();
+    let interface = adv.as_ref().ok_or("No interface")?;
     
-    let mut ex = Vec::fc(42); 
-    
-    
-    ex.bk(&[0xFF; 6]); 
-    ex.bk(akf.ed.as_bytes());
-    ex.push(0x08); ex.push(0x06); 
+    let mut be = Vec::with_capacity(42); 
     
     
-    ex.push(0x00); ex.push(0x01); 
-    ex.push(0x08); ex.push(0x00); 
-    ex.push(0x06);                     
-    ex.push(0x04);                     
-    ex.push(0x00); ex.push(0x01); 
-    ex.bk(akf.ed.as_bytes()); 
-    if let Some(ip) = akf.ip {
-        ex.bk(ip.as_bytes()); 
+    be.extend_from_slice(&[0xFF; 6]); 
+    be.extend_from_slice(interface.mac.as_bytes());
+    be.push(0x08); be.push(0x06); 
+    
+    
+    be.push(0x00); be.push(0x01); 
+    be.push(0x08); be.push(0x00); 
+    be.push(0x06);                     
+    be.push(0x04);                     
+    be.push(0x00); be.push(0x01); 
+    be.extend_from_slice(interface.mac.as_bytes()); 
+    if let Some(ip) = interface.ip {
+        be.extend_from_slice(ip.as_bytes()); 
     } else {
-        ex.bk(&[0; 4]);
+        be.extend_from_slice(&[0; 4]);
     }
-    ex.bk(&[0; 6]);    
-    ex.bk(blk.as_bytes()); 
+    be.extend_from_slice(&[0; 6]);    
+    be.extend_from_slice(target_ip.as_bytes()); 
     
-    drop(ben);
-    blc(&ex)
+    drop(adv);
+    aha(&be)
 }
 
 
-pub fn mdt(blk: Ipv4Address) -> Result<Awy, &'static str> {
+pub fn gty(target_ip: Ipv4Address) -> Result<Ul, &'static str> {
     
-    static Clh: AtomicU64 = AtomicU64::new(1);
-    let ls = Clh.fetch_add(1, Ordering::Relaxed) as u16;
-    
-    
-    crate::netstack::icmp::hcx();
+    static Aow: AtomicU64 = AtomicU64::new(1);
+    let seq = Aow.fetch_add(1, Ordering::Relaxed) as u16;
     
     
-    let wsw = crate::cpu::tsc::loz();
+    crate::netstack::icmp::dkt();
     
     
-    let jaw = blk.as_bytes();
-    crate::netstack::icmp::mdr([jaw[0], jaw[1], jaw[2], jaw[3]], 0x1234, ls)?;
+    let owh = crate::cpu::tsc::gjt();
     
     
-    let mk = crate::netstack::icmp::mqe(ls, 1000);
+    let erd = target_ip.as_bytes();
+    crate::netstack::icmp::gtw([erd[0], erd[1], erd[2], erd[3]], 0x1234, seq)?;
     
     
-    let fhk = crate::cpu::tsc::loz().ao(wsw);
+    let fa = crate::netstack::icmp::hcb(seq, 1000);
     
     
-    let ejx = if fhk < 1000 {
+    let elapsed_micros = crate::cpu::tsc::gjt().saturating_sub(owh);
+    
+    
+    let time_ms = if elapsed_micros < 1000 {
         
         1
     } else {
-        (fhk / 1000) as u32
+        (elapsed_micros / 1000) as u32
     };
     
-    if let Some(lj) = mk {
+    if let Some(eo) = fa {
         
-        let mut cm = Uh.lock();
-        cm.dub += 1;
-        cm.cdm += 64; 
+        let mut stats = Iw.lock();
+        stats.packets_received += 1;
+        stats.bytes_received += 64; 
         
-        Ok(Awy {
-            ls: lj.ls,
-            akv: lj.akv,
-            ejx,
-            dwu: fhk,
-            vx: true,
+        Ok(Ul {
+            seq: eo.seq,
+            ttl: eo.ttl,
+            time_ms,
+            time_us: elapsed_micros,
+            success: true,
         })
     } else {
         
-        Ok(Awy {
-            ls,
-            akv: 0,
-            ejx,
-            dwu: fhk,
-            vx: false,
+        Ok(Ul {
+            seq,
+            ttl: 0,
+            time_ms,
+            time_us: elapsed_micros,
+            success: false,
         })
     }
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Awy {
-    pub ls: u16,
-    pub akv: u8,
-    pub ejx: u32,
-    pub dwu: u64,  
-    pub vx: bool,
+pub struct Ul {
+    pub seq: u16,
+    pub ttl: u8,
+    pub time_ms: u32,
+    pub time_us: u64,  
+    pub success: bool,
 }
 
 
-fn zon(cd: &Ipv4Address) -> u32 {
-    let bf = cd.as_bytes();
+fn qxa(target: &Ipv4Address) -> u32 {
+    let bytes = target.as_bytes();
     
     
-    if bf[0] == 127 {
+    if bytes[0] == 127 {
         return 1;
     }
     
     
-    if bf[0] == 10 && bf[1] == 0 && bf[2] == 2 && bf[3] == 2 {
+    if bytes[0] == 10 && bytes[1] == 0 && bytes[2] == 2 && bytes[3] == 2 {
         return 2;
     }
     
     
-    if bf[0] == 10 && bf[1] == 0 && bf[2] == 2 {
+    if bytes[0] == 10 && bytes[1] == 0 && bytes[2] == 2 {
         return 5;
     }
     
     
-    if bf[0] == 192 && bf[1] == 168 {
+    if bytes[0] == 192 && bytes[1] == 168 {
         return 10;
     }
-    if bf[0] == 10 {
+    if bytes[0] == 10 {
         return 15;
     }
     
     
     
-    if bf[0] == 8 && bf[1] == 8 && bf[2] == 8 && bf[3] == 8 {
+    if bytes[0] == 8 && bytes[1] == 8 && bytes[2] == 8 && bytes[3] == 8 {
         return 25;
     }
     
     
-    if bf[0] == 1 && bf[1] == 1 && bf[2] == 1 && bf[3] == 1 {
+    if bytes[0] == 1 && bytes[1] == 1 && bytes[2] == 1 && bytes[3] == 1 {
         return 20;
     }
     
@@ -634,109 +634,109 @@ fn zon(cd: &Ipv4Address) -> u32 {
 }
 
 
-pub fn znf(ip: Ipv4Address, up: Ipv4Address, auj: Ipv4Address) {
-    let mut ben = Jo.lock();
-    if let Some(ref mut akf) = *ben {
-        akf.ip = Some(ip);
-        akf.up = Some(up);
-        akf.auj = Some(auj);
+pub fn opd(ip: Ipv4Address, subnet: Ipv4Address, gateway: Ipv4Address) {
+    let mut adv = Dv.lock();
+    if let Some(ref mut interface) = *adv {
+        interface.ip = Some(ip);
+        interface.subnet = Some(subnet);
+        interface.gateway = Some(gateway);
         crate::log!("[NET] IP configured: {}", ip);
     }
 }
 
 
-pub fn hzx(ip: Ipv4Address, up: Ipv4Address, auj: Option<Ipv4Address>) {
-    let mut ben = Jo.lock();
-    if let Some(ref mut akf) = *ben {
-        akf.ip = Some(ip);
-        akf.up = Some(up);
-        akf.auj = auj;
-        akf.g = NetworkState::Ek;
+pub fn deh(ip: Ipv4Address, subnet: Ipv4Address, gateway: Option<Ipv4Address>) {
+    let mut adv = Dv.lock();
+    if let Some(ref mut interface) = *adv {
+        interface.ip = Some(ip);
+        interface.subnet = Some(subnet);
+        interface.gateway = gateway;
+        interface.state = NetworkState::Up;
     }
 }
 
 
 
 
-pub fn slt() {
-    let qhi = {
-        let ben = Jo.lock();
-        ben.as_ref().and_then(|a| a.ip).is_some()
+pub fn lqi() {
+    let jvf = {
+        let adv = Dv.lock();
+        adv.as_ref().and_then(|i| i.ip).is_some()
     };
-    if qhi {
+    if jvf {
         return;
     }
-    let ed = ckt().unwrap_or([0x52, 0x54, 0x00, 0x12, 0x34, 0x56]);
-    let kh = if ed[5] == 0 { 1 } else if ed[5] == 255 { 254 } else { ed[5] };
-    let ip = Ipv4Address::new(10, 0, 100, kh);
-    let up = Ipv4Address::new(255, 255, 255, 0);
-    hzx(ip, up, None);
+    let mac = aqu().unwrap_or([0x52, 0x54, 0x00, 0x12, 0x34, 0x56]);
+    let host = if mac[5] == 0 { 1 } else if mac[5] == 255 { 254 } else { mac[5] };
+    let ip = Ipv4Address::new(10, 0, 100, host);
+    let subnet = Ipv4Address::new(255, 255, 255, 0);
+    deh(ip, subnet, None);
     crate::serial_println!("[NET] Fallback IP from MAC: {}", ip);
 }
 
 
-pub fn bln() {
-    let mut ben = Jo.lock();
-    if let Some(ref mut akf) = *ben {
-        akf.g = NetworkState::Ek;
+pub fn up() {
+    let mut adv = Dv.lock();
+    if let Some(ref mut interface) = *adv {
+        interface.state = NetworkState::Up;
         crate::log!("[NET] Interface up");
     }
 }
 
 
-pub fn hgr() {
-    let mut ben = Jo.lock();
-    if let Some(ref mut akf) = *ben {
-        akf.g = NetworkState::Fm;
+pub fn dno() {
+    let mut adv = Dv.lock();
+    if let Some(ref mut interface) = *adv {
+        interface.state = NetworkState::Down;
         crate::log!("[NET] Interface down");
     }
 }
 
 
-pub fn pxf() {
+pub fn jpe() {
     
-    if let Some(hxd) = crate::drivers::net::cez() {
-        let mut ben = Jo.lock();
-        if let Some(ref mut akf) = *ben {
-            akf.ed = MacAddress::new(hxd);
-            crate::log!("[NET] MAC updated: {}", akf.ed);
+    if let Some(real_mac) = crate::drivers::net::aqt() {
+        let mut adv = Dv.lock();
+        if let Some(ref mut interface) = *adv {
+            interface.mac = MacAddress::new(real_mac);
+            crate::log!("[NET] MAC updated: {}", interface.mac);
         }
         return;
     }
     
     
-    if let Some(hxd) = crate::virtio_net::cez() {
-        let mut ben = Jo.lock();
-        if let Some(ref mut akf) = *ben {
-            akf.ed = MacAddress::new(hxd);
-            crate::log!("[NET] MAC updated: {}", akf.ed);
+    if let Some(real_mac) = crate::virtio_net::aqt() {
+        let mut adv = Dv.lock();
+        if let Some(ref mut interface) = *adv {
+            interface.mac = MacAddress::new(real_mac);
+            crate::log!("[NET] MAC updated: {}", interface.mac);
         }
     }
 }
 
 
 pub fn poll() {
-    if crate::drivers::net::bzy() {
+    if crate::drivers::net::aoh() {
         crate::netstack::poll(); 
-    } else if crate::virtio_net::ky() {
+    } else if crate::virtio_net::is_initialized() {
         crate::virtio_net::poll();
     }
 }
 
 
-pub fn tnb() -> bool {
-    crate::drivers::net::bzy() || crate::virtio_net::ky()
+pub fn mjz() -> bool {
+    crate::drivers::net::aoh() || crate::virtio_net::is_initialized()
 }
 
 
-pub fn tdm() -> (u64, u64, u64, u64) {
-    if crate::drivers::net::bzy() {
-        let cm = crate::drivers::net::cm();
-        (cm.cuz, cm.dbo, cm.bpc, cm.bsc)
-    } else if crate::virtio_net::ky() {
-        crate::virtio_net::asx()
+pub fn mcz() -> (u64, u64, u64, u64) {
+    if crate::drivers::net::aoh() {
+        let stats = crate::drivers::net::stats();
+        (stats.tx_packets, stats.rx_packets, stats.tx_bytes, stats.rx_bytes)
+    } else if crate::virtio_net::is_initialized() {
+        crate::virtio_net::get_stats()
     } else {
-        let cm = Uh.lock();
-        (cm.egc, cm.dub, cm.feb, cm.cdm)
+        let stats = Iw.lock();
+        (stats.packets_sent, stats.packets_received, stats.bytes_sent, stats.bytes_received)
     }
 }

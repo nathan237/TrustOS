@@ -20,10 +20,10 @@ pub use windows11::*;
 
 
 pub fn init() {
-    engine::oep();
+    engine::igw();
     crate::serial_println!("[GUI] TrustOS GUI Engine initialized (Windows 11 style)");
 }
 
-pub fn ytf() -> u64 {
-    crate::framebuffer::iwp() as u64
+pub fn qhv() -> u64 {
+    crate::framebuffer::eob() as u64
 }

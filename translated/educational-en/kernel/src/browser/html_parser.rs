@@ -43,7 +43,7 @@ pub fn new(tag: &str) -> Self {
     }
     
     /// Get attribute value
-    pub fn attribute(&self, name: &str) -> Option<&str> {
+    pub fn attr(&self, name: &str) -> Option<&str> {
         self.attributes.iter()
             .find(|(k, _)| k == name)
             .map(|(_, v)| v.as_str())
@@ -97,19 +97,19 @@ match node {
 /// HTML Parser
 struct HtmlParser<'a> {
     input: &'a str,
-    position: usize,
+    pos: usize,
 }
 
 // Implementation block — defines methods for the type above.
 impl<'a> HtmlParser<'a> {
     fn new(input: &'a str) -> Self {
-        Self { input, position: 0 }
+        Self { input, pos: 0 }
     }
     
     fn parse_nodes(&mut self) -> Vec<HtmlNode> {
         let mut nodes = Vec::new();
         
-        while self.position < self.input.len() {
+        while self.pos < self.input.len() {
             self.skip_whitespace();
             
             if self.starts_with("<!--") {
@@ -192,30 +192,30 @@ impl<'a> HtmlParser<'a> {
     }
     
     fn parse_tag_name(&mut self) -> String {
-        let start = self.position;
-        while self.position < self.input.len() {
+        let start = self.pos;
+        while self.pos < self.input.len() {
             let c = self.current_char();
             if c.is_alphanumeric() || c == '-' || c == '_' || c == ':' {
-                self.position += 1;
+                self.pos += 1;
             } else {
                 break;
             }
         }
-        self.input[start..self.position].to_lowercase()
+        self.input[start..self.pos].to_lowercase()
     }
     
     fn parse_attribute(&mut self) -> Option<(String, String)> {
-        let name_start = self.position;
-        while self.position < self.input.len() {
+        let name_start = self.pos;
+        while self.pos < self.input.len() {
             let c = self.current_char();
             if c.is_alphanumeric() || c == '-' || c == '_' || c == ':' {
-                self.position += 1;
+                self.pos += 1;
             } else {
                 break;
             }
         }
         
-        let name = self.input[name_start..self.position].to_lowercase();
+        let name = self.input[name_start..self.pos].to_lowercase();
         if name.is_empty() {
             return None;
         }
@@ -245,62 +245,62 @@ impl<'a> HtmlParser<'a> {
             value
         } else {
             // Unquoted value
-            let start = self.position;
-            while self.position < self.input.len() {
+            let start = self.pos;
+            while self.pos < self.input.len() {
                 let c = self.current_char();
                 if c.is_whitespace() || c == '>' || c == '/' {
                     break;
                 }
-                self.position += 1;
+                self.pos += 1;
             }
-            self.input[start..self.position].to_string()
+            self.input[start..self.pos].to_string()
         }
     }
     
     fn parse_text(&mut self) -> Option<String> {
-        let start = self.position;
-        while self.position < self.input.len() && !self.starts_with("<") {
-            self.position += 1;
+        let start = self.pos;
+        while self.pos < self.input.len() && !self.starts_with("<") {
+            self.pos += 1;
         }
-        if self.position > start {
-            Some(decode_entities(&self.input[start..self.position]))
+        if self.pos > start {
+            Some(decode_entities(&self.input[start..self.pos]))
         } else {
             None
         }
     }
     
     fn skip_whitespace(&mut self) {
-        while self.position < self.input.len() && self.current_char().is_whitespace() {
-            self.position += 1;
+        while self.pos < self.input.len() && self.current_char().is_whitespace() {
+            self.pos += 1;
         }
     }
     
     fn skip_comment(&mut self) {
         self.consume("<!--");
-        while self.position < self.input.len() && !self.starts_with("-->") {
-            self.position += 1;
+        while self.pos < self.input.len() && !self.starts_with("-->") {
+            self.pos += 1;
         }
         self.consume("-->");
     }
     
     fn skip_doctype(&mut self) {
-        while self.position < self.input.len() && !self.starts_with(">") {
-            self.position += 1;
+        while self.pos < self.input.len() && !self.starts_with(">") {
+            self.pos += 1;
         }
         self.consume(">");
     }
     
     fn current_char(&self) -> char {
-        self.input[self.position..].chars().next().unwrap_or('\0')
+        self.input[self.pos..].chars().next().unwrap_or('\0')
     }
     
     fn starts_with(&self, s: &str) -> bool {
-        self.input[self.position..].starts_with(s)
+        self.input[self.pos..].starts_with(s)
     }
     
     fn consume(&mut self, s: &str) -> bool {
         if self.starts_with(s) {
-            self.position += s.len();
+            self.pos += s.len();
             true
         } else {
             false
@@ -308,11 +308,11 @@ impl<'a> HtmlParser<'a> {
     }
     
     fn consume_until(&mut self, c: char) -> String {
-        let start = self.position;
-        while self.position < self.input.len() && self.current_char() != c {
-            self.position += 1;
+        let start = self.pos;
+        while self.pos < self.input.len() && self.current_char() != c {
+            self.pos += 1;
         }
-        self.input[start..self.position].to_string()
+        self.input[start..self.pos].to_string()
     }
 }
 

@@ -21,84 +21,84 @@ pub use png::*;
 
 #[derive(Clone)]
 pub struct Image {
-    pub z: u32,
-    pub ac: u32,
-    pub hz: Vec<u32>,  
+    pub width: u32,
+    pub height: u32,
+    pub pixels: Vec<u32>,  
 }
 
 impl Image {
     
-    pub fn new(z: u32, ac: u32) -> Self {
-        let aw = (z * ac) as usize;
+    pub fn new(width: u32, height: u32) -> Self {
+        let size = (width * height) as usize;
         Self {
-            z,
-            ac,
-            hz: alloc::vec![0xFF000000; aw],
+            width,
+            height,
+            pixels: alloc::vec![0xFF000000; size],
         }
     }
     
     
-    pub fn fjd(z: u32, ac: u32, hz: Vec<u32>) -> Self {
-        Self { z, ac, hz }
+    pub fn cjv(width: u32, height: u32, pixels: Vec<u32>) -> Self {
+        Self { width, height, pixels }
     }
     
     
-    pub fn beg(&self, b: u32, c: u32) -> u32 {
-        if b < self.z && c < self.ac {
-            self.hz[(c * self.z + b) as usize]
+    pub fn get_pixel(&self, x: u32, y: u32) -> u32 {
+        if x < self.width && y < self.height {
+            self.pixels[(y * self.width + x) as usize]
         } else {
             0
         }
     }
     
     
-    pub fn aht(&mut self, b: u32, c: u32, s: u32) {
-        if b < self.z && c < self.ac {
-            self.hz[(c * self.z + b) as usize] = s;
+    pub fn set_pixel(&mut self, x: u32, y: u32, color: u32) {
+        if x < self.width && y < self.height {
+            self.pixels[(y * self.width + x) as usize] = color;
         }
     }
     
     
-    pub fn vi(&mut self, s: u32) {
-        for il in &mut self.hz {
-            *il = s;
+    pub fn fill(&mut self, color: u32) {
+        for ct in &mut self.pixels {
+            *ct = color;
         }
     }
     
     
-    pub fn po(&self, b: i32, c: i32) {
-        self.nnp(b, c, self.z, self.ac);
+    pub fn draw(&self, x: i32, y: i32) {
+        self.draw_scaled(x, y, self.width, self.height);
     }
     
     
-    pub fn nnp(&self, b: i32, c: i32, fgq: u32, fgp: u32) {
-        let (lu, qh) = crate::framebuffer::yn();
+    pub fn draw_scaled(&self, x: i32, y: i32, cif: u32, cie: u32) {
+        let (fb_width, fb_height) = crate::framebuffer::kv();
         
-        for bg in 0..fgp {
-            let abi = c + bg as i32;
-            if abi < 0 || abi >= qh as i32 { continue; }
+        for ad in 0..cie {
+            let nn = y + ad as i32;
+            if nn < 0 || nn >= fb_height as i32 { continue; }
             
             
-            let bih = (bg as u64 * self.ac as u64 / fgp as u64) as u32;
+            let aft = (ad as u64 * self.height as u64 / cie as u64) as u32;
             
-            for dx in 0..fgq {
-                let xu = b + dx as i32;
-                if xu < 0 || xu >= lu as i32 { continue; }
+            for dx in 0..cif {
+                let lw = x + dx as i32;
+                if lw < 0 || lw >= fb_width as i32 { continue; }
                 
                 
-                let blg = (dx as u64 * self.z as u64 / fgq as u64) as u32;
+                let ahc = (dx as u64 * self.width as u64 / cif as u64) as u32;
                 
-                let il = self.beg(blg, bih);
-                let dw = (il >> 24) & 0xFF;
+                let ct = self.get_pixel(ahc, aft);
+                let alpha = (ct >> 24) & 0xFF;
                 
-                if dw == 255 {
+                if alpha == 255 {
                     
-                    crate::framebuffer::sf(xu as u32, abi as u32, il);
-                } else if dw > 0 {
+                    crate::framebuffer::put_pixel(lw as u32, nn as u32, ct);
+                } else if alpha > 0 {
                     
-                    let ei = crate::framebuffer::beg(xu as u32, abi as u32);
-                    let dei = mzm(il, ei);
-                    crate::framebuffer::sf(xu as u32, abi as u32, dei);
+                    let bg = crate::framebuffer::get_pixel(lw as u32, nn as u32);
+                    let bex = hic(ct, bg);
+                    crate::framebuffer::put_pixel(lw as u32, nn as u32, bex);
                 }
                 
             }
@@ -106,81 +106,81 @@ impl Image {
     }
     
     
-    pub fn sbv(&self, b: i32, c: i32, tfy: u8) {
-        let (lu, qh) = crate::framebuffer::yn();
+    pub fn lic(&self, x: i32, y: i32, global_alpha: u8) {
+        let (fb_width, fb_height) = crate::framebuffer::kv();
         
-        for cq in 0..self.ac {
-            let abi = c + cq as i32;
-            if abi < 0 || abi >= qh as i32 { continue; }
+        for ak in 0..self.height {
+            let nn = y + ak as i32;
+            if nn < 0 || nn >= fb_height as i32 { continue; }
             
-            for cr in 0..self.z {
-                let xu = b + cr as i32;
-                if xu < 0 || xu >= lu as i32 { continue; }
+            for am in 0..self.width {
+                let lw = x + am as i32;
+                if lw < 0 || lw >= fb_width as i32 { continue; }
                 
-                let il = self.beg(cr, cq);
-                let vif = ((il >> 24) & 0xFF) as u32;
-                let nfa = (vif * tfy as u32) / 255;
+                let ct = self.get_pixel(am, ak);
+                let nux = ((ct >> 24) & 0xFF) as u32;
+                let hna = (nux * global_alpha as u32) / 255;
                 
-                if nfa > 0 {
-                    let bvl = (nfa << 24) | (il & 0x00FFFFFF);
-                    let ei = crate::framebuffer::beg(xu as u32, abi as u32);
-                    let dei = mzm(bvl, ei);
-                    crate::framebuffer::sf(xu as u32, abi as u32, dei);
+                if hna > 0 {
+                    let modified = (hna << 24) | (ct & 0x00FFFFFF);
+                    let bg = crate::framebuffer::get_pixel(lw as u32, nn as u32);
+                    let bex = hic(modified, bg);
+                    crate::framebuffer::put_pixel(lw as u32, nn as u32, bex);
                 }
             }
         }
     }
     
     
-    pub fn bv(&self, cst: u32, csr: u32) -> Image {
-        let mut hyu = Image::new(cst, csr);
+    pub fn scale(&self, aym: u32, ayk: u32) -> Image {
+        let mut dyk = Image::new(aym, ayk);
         
-        for bg in 0..csr {
-            let bih = (bg as u64 * self.ac as u64 / csr as u64) as u32;
-            for dx in 0..cst {
-                let blg = (dx as u64 * self.z as u64 / cst as u64) as u32;
-                hyu.aht(dx, bg, self.beg(blg, bih));
+        for ad in 0..ayk {
+            let aft = (ad as u64 * self.height as u64 / ayk as u64) as u32;
+            for dx in 0..aym {
+                let ahc = (dx as u64 * self.width as u64 / aym as u64) as u32;
+                dyk.set_pixel(dx, ad, self.get_pixel(ahc, aft));
             }
         }
         
-        hyu
+        dyk
     }
     
     
-    pub fn ykw(&self, b: u32, c: u32, d: u32, i: u32) -> Image {
-        let mut nhn = Image::new(d, i);
+    pub fn qcb(&self, x: u32, y: u32, w: u32, h: u32) -> Image {
+        let mut hoy = Image::new(w, h);
         
-        for bg in 0..i {
-            for dx in 0..d {
-                nhn.aht(dx, bg, self.beg(b + dx, c + bg));
+        for ad in 0..h {
+            for dx in 0..w {
+                hoy.set_pixel(dx, ad, self.get_pixel(x + dx, y + ad));
             }
         }
         
-        nhn
+        hoy
     }
 }
 
 
-fn mzm(lp: u32, ei: u32) -> u32 {
-    let dw = ((lp >> 24) & 0xFF) as u32;
-    if dw == 0 { return ei; }
-    if dw == 255 { return lp; }
+fn hic(fg: u32, bg: u32) -> u32 {
+    let alpha = ((fg >> 24) & 0xFF) as u32;
+    if alpha == 0 { return bg; }
+    if alpha == 255 { return fg; }
     
-    let akg = 255 - dw;
+    let sg = 255 - alpha;
     
-    let ebm = ((lp >> 16) & 0xFF) as u32;
-    let ebl = ((lp >> 8) & 0xFF) as u32;
-    let ebk = (lp & 0xFF) as u32;
+    let bsn = ((fg >> 16) & 0xFF) as u32;
+    let bsm = ((fg >> 8) & 0xFF) as u32;
+    let bsl = (fg & 0xFF) as u32;
     
-    let cos = ((ei >> 16) & 0xFF) as u32;
-    let cor = ((ei >> 8) & 0xFF) as u32;
-    let coq = (ei & 0xFF) as u32;
+    let awg = ((bg >> 16) & 0xFF) as u32;
+    let awf = ((bg >> 8) & 0xFF) as u32;
+    let awe = (bg & 0xFF) as u32;
     
-    let m = (ebm * dw + cos * akg) / 255;
-    let at = (ebl * dw + cor * akg) / 255;
-    let o = (ebk * dw + coq * akg) / 255;
+    let r = (bsn * alpha + awg * sg) / 255;
+    let g = (bsm * alpha + awf * sg) / 255;
+    let b = (bsl * alpha + awe * sg) / 255;
     
-    0xFF000000 | (m << 16) | (at << 8) | o
+    0xFF000000 | (r << 16) | (g << 8) | b
 }
 
 
@@ -190,63 +190,63 @@ fn mzm(lp: u32, ei: u32) -> u32 {
 
 pub fn load(path: &str) -> Option<Image> {
     
-    let hql = path.ptw();
+    let dtv = path.to_lowercase_simple();
     
-    if hql.pp(".bmp") {
-        bmp::jdu(path)
-    } else if hql.pp(".ppm") || hql.pp(".pnm") {
-        ppm::ojv(path)
-    } else if hql.pp(".raw") || hql.pp(".rgba") {
+    if dtv.ends_with(".bmp") {
+        bmp::ete(path)
+    } else if dtv.ends_with(".ppm") || dtv.ends_with(".pnm") {
+        ppm::ikw(path)
+    } else if dtv.ends_with(".raw") || dtv.ends_with(".rgba") {
         
-        if let Ok(f) = crate::vfs::mq(path) {
+        if let Ok(data) = crate::vfs::read_file(path) {
             
-            if f.len() >= 8 {
-                let z = u32::dj([f[0], f[1], f[2], f[3]]);
-                let ac = u32::dj([f[4], f[5], f[6], f[7]]);
-                let amn = &f[8..];
+            if data.len() >= 8 {
+                let width = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
+                let height = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
+                let tm = &data[8..];
                 
-                if amn.len() >= (z * ac * 4) as usize {
-                    let mut hz = Vec::fc((z * ac) as usize);
-                    for a in 0..(z * ac) as usize {
-                        let l = a * 4;
-                        let il = u32::dj([
-                            amn[l],
-                            amn[l + 1],
-                            amn[l + 2],
-                            amn[l + 3],
+                if tm.len() >= (width * height * 4) as usize {
+                    let mut pixels = Vec::with_capacity((width * height) as usize);
+                    for i in 0..(width * height) as usize {
+                        let offset = i * 4;
+                        let ct = u32::from_le_bytes([
+                            tm[offset],
+                            tm[offset + 1],
+                            tm[offset + 2],
+                            tm[offset + 3],
                         ]);
-                        hz.push(il);
+                        pixels.push(ct);
                     }
-                    return Some(Image::fjd(z, ac, hz));
+                    return Some(Image::cjv(width, height, pixels));
                 }
             }
         }
         None
     } else {
         
-        bmp::jdu(path).or_else(|| ppm::ojv(path))
+        bmp::ete(path).or_else(|| ppm::ikw(path))
     }
 }
 
 
-pub fn ljf(f: &[u8], format: ImageFormat) -> Option<Image> {
+pub fn gfw(data: &[u8], format: ImageFormat) -> Option<Image> {
     match format {
-        ImageFormat::Vp => bmp::hqf(f),
-        ImageFormat::Yf => ppm::ljj(f),
-        ImageFormat::Axl { z, ac } => {
-            if f.len() >= (z * ac * 4) as usize {
-                let mut hz = Vec::fc((z * ac) as usize);
-                for a in 0..(z * ac) as usize {
-                    let l = a * 4;
-                    let il = u32::dj([
-                        f[l],
-                        f[l + 1],
-                        f[l + 2],
-                        f[l + 3],
+        ImageFormat::Bmp => bmp::dtq(data),
+        ImageFormat::Ppm => ppm::gfz(data),
+        ImageFormat::Raw { width, height } => {
+            if data.len() >= (width * height * 4) as usize {
+                let mut pixels = Vec::with_capacity((width * height) as usize);
+                for i in 0..(width * height) as usize {
+                    let offset = i * 4;
+                    let ct = u32::from_le_bytes([
+                        data[offset],
+                        data[offset + 1],
+                        data[offset + 2],
+                        data[offset + 3],
                     ]);
-                    hz.push(il);
+                    pixels.push(ct);
                 }
-                Some(Image::fjd(z, ac, hz))
+                Some(Image::cjv(width, height, pixels))
             } else {
                 None
             }
@@ -256,23 +256,23 @@ pub fn ljf(f: &[u8], format: ImageFormat) -> Option<Image> {
 
 #[derive(Clone, Copy)]
 pub enum ImageFormat {
-    Vp,
-    Yf,
-    Axl { z: u32, ac: u32 },
+    Bmp,
+    Ppm,
+    Raw { width: u32, height: u32 },
 }
 
 
-trait Cob {
-    fn ptw(&self) -> String;
+trait Aqq {
+    fn to_lowercase_simple(&self) -> String;
 }
 
-impl Cob for str {
-    fn ptw(&self) -> String {
-        self.bw().map(|r| {
-            if r >= 'A' && r <= 'Z' {
-                (r as u8 + 32) as char
+impl Aqq for str {
+    fn to_lowercase_simple(&self) -> String {
+        self.chars().map(|c| {
+            if c >= 'A' && c <= 'Z' {
+                (c as u8 + 32) as char
             } else {
-                r
+                c
             }
         }).collect()
     }
@@ -283,49 +283,49 @@ impl Cob for str {
 
 
 
-pub fn rqs(z: u32, ac: u32, s: u32) -> Image {
-    let mut th = Image::new(z, ac);
-    th.vi(s);
-    th
+pub fn kzk(width: u32, height: u32, color: u32) -> Image {
+    let mut iv = Image::new(width, height);
+    iv.fill(color);
+    iv
 }
 
 
-pub fn nhd(z: u32, ac: u32, idz: u32, hba: u32) -> Image {
-    let mut th = Image::new(z, ac);
+pub fn hop(width: u32, height: u32, top_color: u32, bottom_color: u32) -> Image {
+    let mut iv = Image::new(width, height);
     
-    let agd = ((idz >> 16) & 0xFF) as i32;
-    let ejs = ((idz >> 8) & 0xFF) as i32;
-    let bov = (idz & 0xFF) as i32;
+    let tr = ((top_color >> 16) & 0xFF) as i32;
+    let bwi = ((top_color >> 8) & 0xFF) as i32;
+    let aiv = (top_color & 0xFF) as i32;
     
-    let avi = ((hba >> 16) & 0xFF) as i32;
-    let ei = ((hba >> 8) & 0xFF) as i32;
-    let aaa = (hba & 0xFF) as i32;
+    let yi = ((bottom_color >> 16) & 0xFF) as i32;
+    let bg = ((bottom_color >> 8) & 0xFF) as i32;
+    let mq = (bottom_color & 0xFF) as i32;
     
-    for c in 0..ac {
-        let ab = c as f32 / ac as f32;
-        let m = (agd as f32 * (1.0 - ab) + avi as f32 * ab) as u32;
-        let at = (ejs as f32 * (1.0 - ab) + ei as f32 * ab) as u32;
-        let o = (bov as f32 * (1.0 - ab) + aaa as f32 * ab) as u32;
-        let s = 0xFF000000 | (m << 16) | (at << 8) | o;
+    for y in 0..height {
+        let t = y as f32 / height as f32;
+        let r = (tr as f32 * (1.0 - t) + yi as f32 * t) as u32;
+        let g = (bwi as f32 * (1.0 - t) + bg as f32 * t) as u32;
+        let b = (aiv as f32 * (1.0 - t) + mq as f32 * t) as u32;
+        let color = 0xFF000000 | (r << 16) | (g << 8) | b;
         
-        for b in 0..z {
-            th.aht(b, c, s);
+        for x in 0..width {
+            iv.set_pixel(x, y, color);
         }
     }
     
-    th
+    iv
 }
 
 
-pub fn rql(z: u32, ac: u32, aw: u32, bjo: u32, btr: u32) -> Image {
-    let mut th = Image::new(z, ac);
+pub fn kzg(width: u32, height: u32, size: u32, agh: u32, ale: u32) -> Image {
+    let mut iv = Image::new(width, height);
     
-    for c in 0..ac {
-        for b in 0..z {
-            let rac = ((b / aw) + (c / aw)) % 2 == 0;
-            th.aht(b, c, if rac { bjo } else { btr });
+    for y in 0..height {
+        for x in 0..width {
+            let kjz = ((x / size) + (y / size)) % 2 == 0;
+            iv.set_pixel(x, y, if kjz { agh } else { ale });
         }
     }
     
-    th
+    iv
 }

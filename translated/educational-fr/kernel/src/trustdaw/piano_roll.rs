@@ -119,13 +119,13 @@ impl PianoRoll {
 
     /// Draw the complete piano roll for a track
     pub fn draw(&self, track: &Track, playhead_tick: u32) {
-        let framebuffer_w = crate::framebuffer::FRAMEBUFFER_WIDTH.load(Ordering::Relaxed) as u32;
-        let framebuffer_h = crate::framebuffer::FRAMEBUFFER_HEIGHT.load(Ordering::Relaxed) as u32;
-        if framebuffer_w == 0 || framebuffer_h == 0 { return; }
+        let fb_w = crate::framebuffer::FRAMEBUFFER_WIDTH.load(Ordering::Relaxed) as u32;
+        let fb_h = crate::framebuffer::FRAMEBUFFER_HEIGHT.load(Ordering::Relaxed) as u32;
+        if fb_w == 0 || fb_h == 0 { return; }
 
         // Clamp dimensions
-        let w = self.width.minimum(framebuffer_w - self.x);
-        let h = self.height.minimum(framebuffer_h - self.y);
+        let w = self.width.min(fb_w - self.x);
+        let h = self.height.min(fb_h - self.y);
         let grid_x = self.x + KEY_LABEL_WIDTH;
         let grid_y = self.y + TIMELINE_HEIGHT;
         let grid_w = w.saturating_sub(KEY_LABEL_WIDTH);
@@ -205,7 +205,7 @@ impl PianoRoll {
 
         // Draw vertical lines (beat and bar lines)
         let ticks_per_bar = TICKS_PER_QUARTER * 4; // Assuming 4/4 time
-        let ticks_visible = gw / self.h_zoom.maximum(1);
+        let ticks_visible = gw / self.h_zoom.max(1);
 
         let start_tick = self.scroll_x;
         let end_tick = start_tick + ticks_visible;
@@ -214,9 +214,9 @@ impl PianoRoll {
         let first_bar_tick = (start_tick / ticks_per_bar) * ticks_per_bar;
         let mut tick = first_bar_tick;
         while tick <= end_tick {
-            let pixel = self.tick_to_pixel(tick, gx);
-            if pixel >= gx && pixel < gx + gw {
-                crate::framebuffer::draw_vline(pixel, gy, gh, colors::GRID_BAR);
+            let px = self.tick_to_pixel(tick, gx);
+            if px >= gx && px < gx + gw {
+                crate::framebuffer::draw_vline(px, gy, gh, colors::GRID_BAR);
             }
             tick += ticks_per_bar;
         }
@@ -226,9 +226,9 @@ impl PianoRoll {
         tick = first_beat_tick;
         while tick <= end_tick {
             if tick % ticks_per_bar != 0 { // Don't overdraw bar lines
-                let pixel = self.tick_to_pixel(tick, gx);
-                if pixel >= gx && pixel < gx + gw {
-                    crate::framebuffer::draw_vline(pixel, gy, gh, colors::GRID_BEAT);
+                let px = self.tick_to_pixel(tick, gx);
+                if px >= gx && px < gx + gw {
+                    crate::framebuffer::draw_vline(px, gy, gh, colors::GRID_BEAT);
                 }
             }
             tick += TICKS_PER_QUARTER;
@@ -241,7 +241,7 @@ impl PianoRoll {
         crate::framebuffer::fill_rect(self.x, ty, self.width, TIMELINE_HEIGHT, colors::TIMELINE_BG);
 
         let ticks_per_bar = TICKS_PER_QUARTER * 4;
-        let ticks_visible = gw / self.h_zoom.maximum(1);
+        let ticks_visible = gw / self.h_zoom.max(1);
         let start_tick = self.scroll_x;
         let end_tick = start_tick + ticks_visible;
 
@@ -249,11 +249,11 @@ impl PianoRoll {
         let mut tick = first_bar_tick;
         while tick <= end_tick {
             let bar_number = tick / ticks_per_bar + 1;
-            let pixel = self.tick_to_pixel(tick, gx);
-            if pixel >= gx && pixel < gx + gw {
+            let px = self.tick_to_pixel(tick, gx);
+            if px >= gx && px < gx + gw {
                 let label = format!("{}", bar_number);
-                crate::framebuffer::draw_text(&label, pixel + 2, ty + 4, colors::TIMELINE_TEXT);
-                crate::framebuffer::draw_vline(pixel, ty, TIMELINE_HEIGHT, colors::GRID_BAR);
+                crate::framebuffer::draw_text(&label, px + 2, ty + 4, colors::TIMELINE_TEXT);
+                crate::framebuffer::draw_vline(px, ty, TIMELINE_HEIGHT, colors::GRID_BAR);
             }
             tick += ticks_per_bar;
         }
@@ -267,7 +267,7 @@ impl PianoRoll {
             // Check if note is visible in our viewport
             let note_pixel_start = self.tick_to_pixel(note.start_tick, gx);
             let note_pixel_end = self.tick_to_pixel(note.end_tick(), gx);
-            let note_width = (note_pixel_end.saturating_sub(note_pixel_start)).maximum(2);
+            let note_width = (note_pixel_end.saturating_sub(note_pixel_start)).max(2);
 
             // Check if note pitch is visible
             if note.pitch < self.scroll_y || note.pitch >= self.scroll_y + visible_keys as u8 {
@@ -283,8 +283,8 @@ impl PianoRoll {
             let note_y = gy + (visible_keys - 1 - row_from_bottom) * self.key_height + 1;
 
             // Clamp horizontal position
-            let draw_x = note_pixel_start.maximum(gx);
-            let draw_w = note_width.minimum(gx + gw - draw_x);
+            let draw_x = note_pixel_start.max(gx);
+            let draw_w = note_width.min(gx + gw - draw_x);
 
             // Note color — use track color with velocity brightness
             let brightness = note.velocity as u32 * 100 / 127;
@@ -308,12 +308,12 @@ impl PianoRoll {
 
     /// Draw the playhead (vertical red line at current position)
     fn draw_playhead(&self, tick: u32, gx: u32, gy: u32, gw: u32, gh: u32) {
-        let pixel = self.tick_to_pixel(tick, gx);
-        if pixel >= gx && pixel < gx + gw {
-            crate::framebuffer::draw_vline(pixel, gy, gh, colors::PLAYHEAD);
+        let px = self.tick_to_pixel(tick, gx);
+        if px >= gx && px < gx + gw {
+            crate::framebuffer::draw_vline(px, gy, gh, colors::PLAYHEAD);
             // Small triangle at top
             for i in 0..4u32 {
-                crate::framebuffer::draw_hline(pixel.saturating_sub(i), gy.saturating_sub(i + 1), i * 2 + 1, colors::PLAYHEAD);
+                crate::framebuffer::draw_hline(px.saturating_sub(i), gy.saturating_sub(i + 1), i * 2 + 1, colors::PLAYHEAD);
             }
         }
     }
@@ -348,9 +348,9 @@ impl PianoRoll {
     }
 
     /// Convert pixel X to tick position
-    pub fn pixel_to_tick(&self, pixel: u32, grid_x: u32) -> u32 {
-        if pixel >= grid_x && self.h_zoom > 0 {
-            self.scroll_x + (pixel - grid_x) / self.h_zoom
+    pub fn pixel_to_tick(&self, px: u32, grid_x: u32) -> u32 {
+        if px >= grid_x && self.h_zoom > 0 {
+            self.scroll_x + (px - grid_x) / self.h_zoom
         } else {
             self.scroll_x
         }
@@ -467,11 +467,11 @@ match division {
     pub fn delete_note_at_cursor(&self, track: &mut Track) -> bool {
         let notes_at = track.notes_at_tick(self.cursor_tick);
         if let Some(note) = notes_at.iter().find(|n| n.pitch == self.cursor_pitch) {
-            let index = track.notes.iter().position(|n|
+            let idx = track.notes.iter().position(|n|
                 n.pitch == note.pitch && n.start_tick == note.start_tick
             );
-            if let Some(index) = index {
-                track.remove_note(index);
+            if let Some(idx) = idx {
+                track.remove_note(idx);
                 return true;
             }
         }
@@ -493,7 +493,7 @@ fn adjust_brightness(color: u32, brightness: u32) -> u32 {
     let r = ((color >> 16) & 0xFF) * brightness / 100;
     let g = ((color >> 8) & 0xFF) * brightness / 100;
     let b = (color & 0xFF) * brightness / 100;
-    (r.minimum(255) << 16) | (g.minimum(255) << 8) | b.minimum(255)
+    (r.min(255) << 16) | (g.min(255) << 8) | b.min(255)
 }
 
 /// Render a text-mode piano roll (for serial/terminal output)
@@ -521,16 +521,16 @@ pub fn text_piano_roll(track: &Track, bars: u32) -> String {
     s.push('\n');
 
     // Find pitch range of notes in track
-    let (minimum_pitch, maximum_pitch) = if track.notes.is_empty() {
+    let (min_pitch, max_pitch) = if track.notes.is_empty() {
         (57, 72) // A3 to C5 default
     } else {
-        let minimum = track.notes.iter().map(|n| n.pitch).minimum().unwrap_or(60);
-        let maximum = track.notes.iter().map(|n| n.pitch).maximum().unwrap_or(72);
-        (minimum.saturating_sub(2), (maximum + 2).minimum(127))
+        let min = track.notes.iter().map(|n| n.pitch).min().unwrap_or(60);
+        let max = track.notes.iter().map(|n| n.pitch).max().unwrap_or(72);
+        (min.saturating_sub(2), (max + 2).min(127))
     };
 
     // Draw rows from highest to lowest pitch
-    for pitch in (minimum_pitch..=maximum_pitch).rev() {
+    for pitch in (min_pitch..=max_pitch).rev() {
         let name = crate::audio::tables::midi_to_note_name(pitch);
         let oct = crate::audio::tables::midi_octave(pitch);
         let is_c = pitch % 12 == 0;
@@ -538,8 +538,8 @@ pub fn text_piano_roll(track: &Track, bars: u32) -> String {
         s.push_str(&format!("{}{:<2} {}│", name, oct,
             if is_c { "─" } else { " " }));
 
-        for column in 0..cols {
-            let tick = column as u32 * tick_per_column;
+        for col in 0..cols {
+            let tick = col as u32 * tick_per_column;
             let active = track.notes.iter().any(|n|
                 n.pitch == pitch && n.start_tick <= tick && tick < n.end_tick()
             );
@@ -551,9 +551,9 @@ pub fn text_piano_roll(track: &Track, bars: u32) -> String {
                 s.push('█');
             } else if active {
                 s.push('▓');
-            } else if column % 16 == 0 {
+            } else if col % 16 == 0 {
                 s.push('│');
-            } else if column % 4 == 0 {
+            } else if col % 4 == 0 {
                 s.push('┊');
             } else {
                 s.push('·');

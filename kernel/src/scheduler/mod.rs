@@ -117,12 +117,15 @@ pub fn schedule() {
             
             drop(queues); // release lock before trace logging (which may alloc)
             
-            CURRENT_TASK.store(task_id.0, Ordering::SeqCst);
+            let prev_id = CURRENT_TASK.swap(task_id.0, Ordering::SeqCst);
             
             crate::trace::record_event(
                 crate::trace::EventType::ContextSwitch,
                 task_id.0
             );
+            // JARVIS data-gathering tracepoint DISABLED for boot-loop isolation.
+            let _ = prev_id;
+            // crate::jarvis::trace::trace_sched_switch(prev_id, task_id.0, 0, 0);
             
             // TrustLab trace
             crate::lab_mode::trace_bus::emit(

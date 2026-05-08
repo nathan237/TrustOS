@@ -58,16 +58,16 @@ pub fn new(width: u16, height: u16, fps: u16, frame_count: u32) -> Self {
 
         // Public function — callable from other modules.
 pub fn to_bytes(&self) -> Vec<u8> {
-        let mut buffer = Vec::with_capacity(24);
-        buffer.extend_from_slice(&self.magic.to_le_bytes());
-        buffer.extend_from_slice(&self.version.to_le_bytes());
-        buffer.extend_from_slice(&self.width.to_le_bytes());
-        buffer.extend_from_slice(&self.height.to_le_bytes());
-        buffer.extend_from_slice(&self.fps.to_le_bytes());
-        buffer.extend_from_slice(&self.frame_count.to_le_bytes());
-        buffer.extend_from_slice(&self.keyframe_interval.to_le_bytes());
-        buffer.extend_from_slice(&self._reserved);
-        buffer
+        let mut buf = Vec::with_capacity(24);
+        buf.extend_from_slice(&self.magic.to_le_bytes());
+        buf.extend_from_slice(&self.version.to_le_bytes());
+        buf.extend_from_slice(&self.width.to_le_bytes());
+        buf.extend_from_slice(&self.height.to_le_bytes());
+        buf.extend_from_slice(&self.fps.to_le_bytes());
+        buf.extend_from_slice(&self.frame_count.to_le_bytes());
+        buf.extend_from_slice(&self.keyframe_interval.to_le_bytes());
+        buf.extend_from_slice(&self._reserved);
+        buf
     }
 
         // Public function — callable from other modules.
@@ -96,16 +96,16 @@ fn rle_encode(pixels: &[u32]) -> Vec<u8> {
     if pixels.is_empty() { return out; }
     let mut i = 0;
     while i < pixels.len() {
-        let value = pixels[i];
+        let val = pixels[i];
         let mut run: u8 = 0; // 0 means 1 pixel
         while i + (run as usize) + 1 < pixels.len()
-            && pixels[i + (run as usize) + 1] == value
+            && pixels[i + (run as usize) + 1] == val
             && run < 255
         {
             run += 1;
         }
         out.push(run);
-        out.extend_from_slice(&value.to_le_bytes());
+        out.extend_from_slice(&val.to_le_bytes());
         i += run as usize + 1;
     }
     out
@@ -117,10 +117,10 @@ fn rle_decode(data: &[u8], pixel_count: usize) -> Vec<u32> {
     let mut i = 0;
     while i + 4 < data.len() && pixels.len() < pixel_count {
         let run = data[i] as usize + 1;
-        let value = u32::from_le_bytes([data[i + 1], data[i + 2], data[i + 3], data[i + 4]]);
+        let val = u32::from_le_bytes([data[i + 1], data[i + 2], data[i + 3], data[i + 4]]);
         for _ in 0..run {
             if pixels.len() >= pixel_count { break; }
-            pixels.push(value);
+            pixels.push(val);
         }
         i += 5;
     }
@@ -131,7 +131,7 @@ fn rle_decode(data: &[u8], pixel_count: usize) -> Vec<u32> {
 
 pub struct TvEncoder {
     pub header: TvHeader,
-    previous_frame: Vec<u32>,
+    prev_frame: Vec<u32>,
     frames_encoded: u32,
     pub data: Vec<u8>,
 }
@@ -143,7 +143,7 @@ pub fn new(width: u16, height: u16, fps: u16) -> Self {
         let npix = width as usize * height as usize;
         Self {
             header: TvHeader::new(width, height, fps, 0),
-            previous_frame: vec![0u32; npix],
+            prev_frame: vec![0u32; npix],
             frames_encoded: 0,
             data: Vec::new(),
         }
@@ -163,19 +163,19 @@ pub fn new(width: u16, height: u16, fps: u16) -> Self {
             self.data.extend_from_slice(&(frame_size as u32).to_le_bytes());
             self.data.push(FRAME_KEY);
             self.data.extend_from_slice(&compressed);
-            self.previous_frame[..npix].copy_from_slice(&pixels[..npix]);
+            self.prev_frame[..npix].copy_from_slice(&pixels[..npix]);
         } else {
             // Delta frame: XOR with previous, then RLE
             let mut delta = vec![0u32; npix];
             for i in 0..npix {
-                delta[i] = pixels[i] ^ self.previous_frame[i];
+                delta[i] = pixels[i] ^ self.prev_frame[i];
             }
             let compressed = rle_encode(&delta);
             let frame_size = 1 + compressed.len();
             self.data.extend_from_slice(&(frame_size as u32).to_le_bytes());
             self.data.push(FRAME_DELTA);
             self.data.extend_from_slice(&compressed);
-            self.previous_frame[..npix].copy_from_slice(&pixels[..npix]);
+            self.prev_frame[..npix].copy_from_slice(&pixels[..npix]);
         }
         self.frames_encoded += 1;
         self.header.frame_count = self.frames_encoded;
@@ -235,11 +235,11 @@ pub fn new(file_data: Vec<u8>) -> Option<Self> {
 
         if frame_type == FRAME_KEY {
             let pixels = rle_decode(rle_data, npix);
-            self.current_frame[..npix].copy_from_slice(&pixels[..npix.minimum(pixels.len())]);
+            self.current_frame[..npix].copy_from_slice(&pixels[..npix.min(pixels.len())]);
         } else {
             // Delta: XOR decoded delta with current frame
             let delta = rle_decode(rle_data, npix);
-            for i in 0..npix.minimum(delta.len()) {
+            for i in 0..npix.min(delta.len()) {
                 self.current_frame[i] ^= delta[i];
             }
         }

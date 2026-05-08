@@ -7,41 +7,44 @@
 
 
 
-use core::sync::atomic::{AtomicBool, Ordering};
+
+
+
+use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use crate::arch::Port;
 
 
 
 
 
-const ARB_: u16 = 0x62;
-const SW_: u16 = 0x66;  
+const ATE_: u16 = 0x62;
+const UC_: u16 = 0x66;  
 
 
-const BTD_: u8 = 0x01;  
-const BTC_: u8 = 0x02;  
+const BVZ_: u8 = 0x01;  
+const BVY_: u8 = 0x02;  
 
 
-const BSY_: u8 = 0x80;
-const BSZ_: u8 = 0x81;
-
-
-
+const BVU_: u8 = 0x80;
+const BVV_: u8 = 0x81;
 
 
 
-const ARC_: u8 = 0x2F;
 
 
-const BTA_: u8 = 0x84;
-const BTB_: u8 = 0x85;
+
+const ATF_: u8 = 0x2F;
 
 
-const ARD_: u8 = 0x78;
-const ABT_: usize = 8;  
+const BVW_: u8 = 0x84;
+const BVX_: u8 = 0x85;
 
 
-const CXV_: [&str; 8] = [
+const ATG_: u8 = 0x78;
+const ADJ_: usize = 8;  
+
+
+const DBN_: [&str; 8] = [
     "CPU",          
     "miniPCI",      
     "HDD",          
@@ -56,71 +59,71 @@ const CXV_: [&str; 8] = [
 
 
 
-const CHD_: u32 = 0x198;
-const BBA_: u32 = 0x199;
-const CHC_: u32 = 0x1A0;
-const CHE_: u32 = 0x19C;
+const BDD_: u32 = 0x198;
+const BDC_: u32 = 0x199;
+const CKM_: u32 = 0x1A0;
+const CKN_: u32 = 0x19C;
 
 
 
 
 
-static ARA_: AtomicBool = AtomicBool::new(false);
+static ATD_: AtomicBool = AtomicBool::new(false);
 
 
 
 
 
 
-fn hhr() -> bool {
-    let mut dma: Port<u8> = Port::new(SW_);
-    let mut kos: Port<u8> = Port::new(0x80);
+fn doi() -> bool {
+    let mut bjk: Port<u8> = Port::new(UC_);
+    let mut frf: Port<u8> = Port::new(0x80);
     for _ in 0..100_000u32 {
-        let status = unsafe { dma.read() };
-        if status & BTC_ == 0 {
+        let status = unsafe { bjk.read() };
+        if status & BVY_ == 0 {
             return true;
         }
-        unsafe { kos.read(); }
+        unsafe { frf.read(); }
     }
     false
 }
 
 
-fn sih() -> bool {
-    let mut dma: Port<u8> = Port::new(SW_);
-    let mut kos: Port<u8> = Port::new(0x80);
+fn lnj() -> bool {
+    let mut bjk: Port<u8> = Port::new(UC_);
+    let mut frf: Port<u8> = Port::new(0x80);
     for _ in 0..100_000u32 {
-        let status = unsafe { dma.read() };
-        if status & BTD_ != 0 {
+        let status = unsafe { bjk.read() };
+        if status & BVZ_ != 0 {
             return true;
         }
-        unsafe { kos.read(); }
+        unsafe { frf.read(); }
     }
     false
 }
 
 
-pub fn hhq(reg: u8) -> Option<u8> {
-    let mut ffa: Port<u8> = Port::new(SW_);
-    let mut axr: Port<u8> = Port::new(ARB_);
-    if !hhr() { return None; }
-    unsafe { ffa.write(BSY_); }
-    if !hhr() { return None; }
-    unsafe { axr.write(reg); }
-    if !sih() { return None; }
-    Some(unsafe { axr.read() })
+pub fn ciq(reg: u8) -> Option<u8> {
+    let mut chg: Port<u8> = Port::new(UC_);
+    let mut zu: Port<u8> = Port::new(ATE_);
+    if !doi() { return None; }
+    unsafe { chg.write(BVU_); }
+    if !doi() { return None; }
+    unsafe { zu.write(reg); }
+    if !lnj() { return None; }
+    Some(unsafe { zu.read() })
 }
 
 
-pub fn sii(reg: u8, ap: u8) -> bool {
-    let mut ffa: Port<u8> = Port::new(SW_);
-    let mut axr: Port<u8> = Port::new(ARB_);
-    if !hhr() { return false; }
-    unsafe { ffa.write(BSZ_); }
-    if !hhr() { return false; }
-    unsafe { axr.write(reg); }
-    if !hhr() { return false; }
-    unsafe { axr.write(ap); }
+pub fn lnk(reg: u8, val: u8) -> bool {
+    let mut chg: Port<u8> = Port::new(UC_);
+    let mut zu: Port<u8> = Port::new(ATE_);
+    if !doi() { return false; }
+    unsafe { chg.write(BVV_); }
+    if !doi() { return false; }
+    unsafe { zu.write(reg); }
+    if !doi() { return false; }
+    unsafe { zu.write(val); }
     true
 }
 
@@ -130,11 +133,11 @@ pub fn sii(reg: u8, ap: u8) -> bool {
 
 
 pub fn probe() -> bool {
-    if let Some(bcz) = hhq(ARD_) {
+    if let Some(ts) = ciq(ATG_) {
         
-        if bcz >= 10 && bcz <= 120 {
-            ARA_.store(true, Ordering::Relaxed);
-            crate::serial_println!("[EC] ThinkPad EC detected — CPU temp: {}°C", bcz);
+        if ts >= 10 && ts <= 120 {
+            ATD_.store(true, Ordering::Relaxed);
+            crate::serial_println!("[EC] ThinkPad EC detected — CPU temp: {}°C", ts);
             return true;
         }
     }
@@ -142,8 +145,8 @@ pub fn probe() -> bool {
     false
 }
 
-pub fn anl() -> bool {
-    ARA_.load(Ordering::Relaxed)
+pub fn sw() -> bool {
+    ATD_.load(Ordering::Relaxed)
 }
 
 
@@ -153,34 +156,34 @@ pub fn anl() -> bool {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum FanLevel {
-    Pv(u8),   
-    Api,        
-    Bhl,   
+    Gp(u8),   
+    Auto,        
+    FullSpeed,   
 }
 
 
-pub fn sqz() -> Option<u8> {
-    hhq(ARC_)
+pub fn luh() -> Option<u8> {
+    ciq(ATF_)
 }
 
 
-pub fn ity(jy: FanLevel) -> bool {
-    let ap = match jy {
-        FanLevel::Pv(dm) => {
-            if dm > 7 { return false; }
-            dm
+pub fn eme(level: FanLevel) -> bool {
+    let val = match level {
+        FanLevel::Gp(l) => {
+            if l > 7 { return false; }
+            l
         }
-        FanLevel::Api => 0x80,      
-        FanLevel::Bhl => 0x40, 
+        FanLevel::Auto => 0x80,      
+        FanLevel::FullSpeed => 0x40, 
     };
-    sii(ARC_, ap)
+    lnk(ATF_, val)
 }
 
 
-pub fn nsu() -> Option<u16> {
-    let gd = hhq(BTA_)?;
-    let hh = hhq(BTB_)?;
-    Some(((gd as u16) << 8) | hh as u16)
+pub fn fwf() -> Option<u16> {
+    let hi = ciq(BVW_)?;
+    let lo = ciq(BVX_)?;
+    Some(((hi as u16) << 8) | lo as u16)
 }
 
 
@@ -188,18 +191,18 @@ pub fn nsu() -> Option<u16> {
 
 
 
-pub fn xbo(hzq: usize) -> Option<u8> {
-    if hzq >= ABT_ { return None; }
-    let ap = hhq(ARD_ + hzq as u8)?;
+pub fn pdu(sensor: usize) -> Option<u8> {
+    if sensor >= ADJ_ { return None; }
+    let val = ciq(ATG_ + sensor as u8)?;
     
-    if ap == 0 || ap >= 128 { return None; }
-    Some(ap)
+    if val == 0 || val >= 128 { return None; }
+    Some(val)
 }
 
 
-pub fn xbn(hzq: usize) -> &'static str {
-    if hzq < ABT_ {
-        CXV_[hzq]
+pub fn pdr(sensor: usize) -> &'static str {
+    if sensor < ADJ_ {
+        DBN_[sensor]
     } else {
         "Unknown"
     }
@@ -210,43 +213,110 @@ pub fn xbn(hzq: usize) -> &'static str {
 
 
 
+static ASC_: AtomicU32 = AtomicU32::new(0);
+
+
+
+
+
 #[cfg(target_arch = "x86_64")]
-pub fn kll() -> Option<(u32, u32)> {
-    let ap = crate::debug::fsg(CHD_)?;
+pub fn dmy() -> u32 {
+    let bfd = ASC_.load(Ordering::Relaxed);
+    if bfd != 0 {
+        return bfd;
+    }
+    let bsx = if let Some(val) = crate::debug::rf(0xCD) {
+        
+        match val & 0x07 {
+            0b101 => 100, 
+            0b001 => 133, 
+            0b011 => 167, 
+            0b010 => 200, 
+            0b000 => 267, 
+            0b100 => 333, 
+            _     => 200, 
+        }
+    } else {
+        
+        let kza = unsafe {
+            let result: u32;
+            core::arch::asm!(
+                "push rbx",
+                "cpuid",
+                "pop rbx",
+                in("eax") 0u32,
+                lateout("eax") result,
+                out("ecx") _, out("edx") _,
+            );
+            result
+        };
+        if kza >= 0x16 {
+            let ehh = unsafe {
+                let result: u32;
+                core::arch::asm!(
+                    "push rbx",
+                    "cpuid",
+                    "pop rbx",
+                    in("eax") 0x16u32,
+                    lateout("ecx") result,
+                    out("edx") _,
+                );
+                result & 0xFFFF
+            };
+            if ehh > 0 { ehh } else { 100 }
+        } else {
+            100 
+        }
+    };
+    ASC_.store(bsx, Ordering::Relaxed);
+    bsx
+}
+
+#[cfg(not(target_arch = "x86_64"))]
+pub fn dmy() -> u32 { 100 }
+
+
+
+fn fwn(fid: u32) -> u32 {
+    fid * dmy()
+}
+
+
+#[cfg(target_arch = "x86_64")]
+pub fn fou() -> Option<(u32, u32)> {
+    let val = crate::debug::rf(BDD_)?;
     
     
-    let aos = ((ap >> 8) & 0xFF) as u32;
-    let cck = (ap & 0xFF) as u32;
+    let fid = ((val >> 8) & 0xFF) as u32;
+    let bpx = (val & 0xFF) as u32;
+    
+    let dqg = fwn(fid);
     
     
     
-    let kxe = aos * 200;
-    
-    
-    
-    let xsu = if cck > 0 {
-        712 + cck * 12  
+    let ptb = if bpx > 0 {
+        712 + bpx * 12  
     } else {
         0
     };
     
-    Some((kxe, xsu))
+    Some((dqg, ptb))
 }
 
 #[cfg(not(target_arch = "x86_64"))]
-pub fn kll() -> Option<(u32, u32)> {
+pub fn fou() -> Option<(u32, u32)> {
     None
 }
 
 
 #[cfg(target_arch = "x86_64")]
-pub fn ngq() -> Option<u16> {
-    let ap = crate::debug::fsg(BBA_)?;
-    Some((ap & 0xFFFF) as u16)
+pub fn hoi() -> Option<u16> {
+    let val = crate::debug::rf(BDC_)?;
+    Some((val & 0xFFFF) as u16)
 }
 
 #[cfg(not(target_arch = "x86_64"))]
-pub fn ngq() -> Option<u16> {
+pub fn hoi() -> Option<u16> {
     None
 }
 
@@ -254,40 +324,40 @@ pub fn ngq() -> Option<u16> {
 
 
 #[cfg(target_arch = "x86_64")]
-pub fn ipk(aos: u8, cck: u8) -> bool {
-    let ap = ((aos as u64) << 8) | (cck as u64);
-    crate::debug::fbs(BBA_, ap);
+pub fn eja(fid: u8, bpx: u8) -> bool {
+    let val = ((fid as u64) << 8) | (bpx as u64);
+    crate::debug::cfm(BDC_, val);
     true
 }
 
 #[cfg(not(target_arch = "x86_64"))]
-pub fn ipk(xzg: u8, yds: u8) -> bool {
+pub fn eja(_fid: u8, _vid: u8) -> bool {
     false
 }
 
 
 #[cfg(target_arch = "x86_64")]
-pub fn npk() -> Option<bool> {
-    let ap = crate::debug::fsg(CHC_)?;
-    Some((ap & (1 << 16)) != 0)
+pub fn hvg() -> Option<bool> {
+    let val = crate::debug::rf(CKM_)?;
+    Some((val & (1 << 16)) != 0)
 }
 
 #[cfg(not(target_arch = "x86_64"))]
-pub fn npk() -> Option<bool> {
+pub fn hvg() -> Option<bool> {
     None
 }
 
 
 #[cfg(target_arch = "x86_64")]
-pub fn klq() -> Option<(bool, u8)> {
-    let ap = crate::debug::fsg(CHE_)?;
-    let blq = (ap & (1 << 31)) != 0;  
-    let vsv = ((ap >> 16) & 0x7F) as u8;  
-    Some((blq, vsv))
+pub fn foy() -> Option<(bool, u8)> {
+    let val = crate::debug::rf(CKN_)?;
+    let valid = (val & (1 << 31)) != 0;  
+    let gqm = ((val >> 16) & 0x7F) as u8;  
+    Some((valid, gqm))
 }
 
 #[cfg(not(target_arch = "x86_64"))]
-pub fn klq() -> Option<(bool, u8)> {
+pub fn foy() -> Option<(bool, u8)> {
     None
 }
 
@@ -296,39 +366,72 @@ pub fn klq() -> Option<(bool, u8)> {
 
 
 
+#[cfg(target_arch = "x86_64")]
+pub fn frx() -> Option<u8> {
+    
+    let val = crate::debug::rf(BDD_)?;
+    let ims = ((val >> 40) & 0x1F) as u8;
+    if ims > 0 {
+        return Some(ims);
+    }
+    
+    if let Some(plat) = crate::debug::rf(0xCE) {
+        let aug = ((plat >> 8) & 0xFF) as u8;
+        if aug > 0 {
+            return Some(aug);
+        }
+    }
+    
+    let hpr = ((val >> 8) & 0xFF) as u8;
+    if hpr > 0 { Some(hpr) } else { None }
+}
 
-pub const AIP_: &[(&str, u8, u8)] = &[
-    ("2.0 GHz (max)",  10, 38),  
-    ("1.6 GHz",         8, 30),
-    ("1.2 GHz",         6, 22),
-    ("800 MHz (min)",   4, 16),
-];
+#[cfg(not(target_arch = "x86_64"))]
+pub fn frx() -> Option<u8> { None }
+
+
+#[cfg(target_arch = "x86_64")]
+pub fn fry() -> Option<u8> {
+    
+    if let Some(plat) = crate::debug::rf(0xCE) {
+        let inu = ((plat >> 40) & 0xFF) as u8;
+        if inu > 0 {
+            return Some(inu);
+        }
+    }
+    
+    
+    Some(6)
+}
+
+#[cfg(not(target_arch = "x86_64"))]
+pub fn fry() -> Option<u8> { None }
 
 
 
 
 
 
-pub fn reg(n: &[&str]) {
+pub fn knt(args: &[&str]) {
     use crate::framebuffer::*;
 
-    if !anl() {
+    if !sw() {
         if !probe() {
-            crate::h!(A_, "EC not available — not a ThinkPad or EC unresponsive");
+            crate::n!(A_, "EC not available — not a ThinkPad or EC unresponsive");
             return;
         }
     }
 
-    match n.fv().hu() {
+    match args.first().copied() {
         None | Some("status") => {
             
-            crate::h!(C_, "=== ThinkPad Fan Status ===");
+            crate::n!(C_, "=== ThinkPad Fan Status ===");
             
-            if let Some(jy) = sqz() {
-                let desc = match jy {
+            if let Some(level) = luh() {
+                let desc = match level {
                     0x80 => "auto (EC controlled)",
                     0x40 => "DISENGAGED (full speed)",
-                    dm if dm <= 7 => match dm {
+                    l if l <= 7 => match l {
                         0 => "0 (off)",
                         1 => "1 (lowest)",
                         2 => "2",
@@ -341,16 +444,16 @@ pub fn reg(n: &[&str]) {
                     },
                     _ => "unknown",
                 };
-                crate::println!("  Level: 0x{:02X} — {}", jy, desc);
+                crate::println!("  Level: 0x{:02X} — {}", level, desc);
             } else {
-                crate::h!(A_, "  Level: read failed");
+                crate::n!(A_, "  Level: read failed");
             }
 
-            if let Some(ftf) = nsu() {
-                if ftf == 0 || ftf == 0xFFFF {
+            if let Some(bvn) = fwf() {
+                if bvn == 0 || bvn == 0xFFFF {
                     crate::println!("  RPM:   stopped or N/A");
                 } else {
-                    crate::println!("  RPM:   {}", ftf);
+                    crate::println!("  RPM:   {}", bvn);
                 }
             } else {
                 crate::println!("  RPM:   read failed");
@@ -358,40 +461,40 @@ pub fn reg(n: &[&str]) {
         }
 
         Some("auto") => {
-            if ity(FanLevel::Api) {
-                crate::h!(B_, "Fan set to AUTO (EC controlled)");
+            if eme(FanLevel::Auto) {
+                crate::n!(B_, "Fan set to AUTO (EC controlled)");
             } else {
-                crate::h!(A_, "Failed to set fan to auto");
+                crate::n!(A_, "Failed to set fan to auto");
             }
         }
 
         Some("max") | Some("full") => {
-            if ity(FanLevel::Bhl) {
-                crate::h!(D_, "Fan set to FULL SPEED (disengaged)");
+            if eme(FanLevel::FullSpeed) {
+                crate::n!(D_, "Fan set to FULL SPEED (disengaged)");
             } else {
-                crate::h!(A_, "Failed to set fan to full speed");
+                crate::n!(A_, "Failed to set fan to full speed");
             }
         }
 
         Some("off") | Some("0") => {
-            crate::h!(D_, "WARNING: Turning fan off! Monitor temperatures carefully.");
-            if ity(FanLevel::Pv(0)) {
-                crate::h!(A_, "Fan OFF");
+            crate::n!(D_, "WARNING: Turning fan off! Monitor temperatures carefully.");
+            if eme(FanLevel::Gp(0)) {
+                crate::n!(A_, "Fan OFF");
             } else {
-                crate::h!(A_, "Failed to turn fan off");
+                crate::n!(A_, "Failed to turn fan off");
             }
         }
 
-        Some(bo) => {
-            if let Ok(jy) = bo.parse::<u8>() {
-                if jy <= 7 {
-                    if ity(FanLevel::Pv(jy)) {
-                        crate::h!(B_, "Fan set to level {}", jy);
+        Some(ae) => {
+            if let Ok(level) = ae.parse::<u8>() {
+                if level <= 7 {
+                    if eme(FanLevel::Gp(level)) {
+                        crate::n!(B_, "Fan set to level {}", level);
                     } else {
-                        crate::h!(A_, "Failed to set fan level");
+                        crate::n!(A_, "Failed to set fan level");
                     }
                 } else {
-                    crate::h!(A_, "Fan level must be 0-7, 'auto', 'max', or 'off'");
+                    crate::n!(A_, "Fan level must be 0-7, 'auto', 'max', or 'off'");
                 }
             } else {
                 crate::println!("Usage: fan [status|auto|max|off|0-7]");
@@ -406,62 +509,62 @@ pub fn reg(n: &[&str]) {
 }
 
 
-pub fn rjc(elm: &[&str]) {
+pub fn ksn(_args: &[&str]) {
     use crate::framebuffer::*;
 
-    if !anl() {
+    if !sw() {
         if !probe() {
-            crate::h!(A_, "EC not available — not a ThinkPad or EC unresponsive");
+            crate::n!(A_, "EC not available — not a ThinkPad or EC unresponsive");
             return;
         }
     }
 
-    crate::h!(C_, "=== ThinkPad Temperature Sensors ===");
+    crate::n!(C_, "=== ThinkPad Temperature Sensors ===");
     
-    let mut mvw = false;
-    for a in 0..ABT_ {
-        if let Some(bcz) = xbo(a) {
-            mvw = true;
-            let s = if bcz >= 90 {
+    let mut hfj = false;
+    for i in 0..ADJ_ {
+        if let Some(ts) = pdu(i) {
+            hfj = true;
+            let color = if ts >= 90 {
                 A_
-            } else if bcz >= 70 {
+            } else if ts >= 70 {
                 D_
             } else {
                 B_
             };
-            crate::print!("  {:10} ", xbn(a));
-            crate::h!(s, "{}°C", bcz);
+            crate::print!("  {:10} ", pdr(i));
+            crate::n!(color, "{}°C", ts);
         }
     }
 
-    if !mvw {
+    if !hfj {
         crate::println!("  No temperature sensors responded");
     }
 
     
     #[cfg(target_arch = "x86_64")]
-    if let Some((blq, hhf)) = klq() {
-        if blq {
+    if let Some((valid, dts)) = foy() {
+        if valid {
             
-            let pto: u8 = 100;
-            let klp = pto.ao(hhf);
-            let s = if klp >= 90 {
+            let tj_max: u8 = 100;
+            let cpu_temp = tj_max.saturating_sub(dts);
+            let color = if cpu_temp >= 90 {
                 A_
-            } else if klp >= 70 {
+            } else if cpu_temp >= 70 {
                 D_
             } else {
                 B_
             };
             crate::print!("  {:10} ", "CPU (DTS)");
-            crate::h!(s, "{}°C (TjMax={}, margin={}°C)", klp, pto, hhf);
+            crate::n!(color, "{}°C (TjMax={}, margin={}°C)", cpu_temp, tj_max, dts);
         }
     }
 
     
     crate::println!();
-    if let Some(ftf) = nsu() {
-        if ftf > 0 && ftf != 0xFFFF {
-            crate::println!("  Fan:       {} RPM", ftf);
+    if let Some(bvn) = fwf() {
+        if bvn > 0 && bvn != 0xFFFF {
+            crate::println!("  Fan:       {} RPM", bvn);
         } else {
             crate::println!("  Fan:       stopped");
         }
@@ -469,98 +572,119 @@ pub fn rjc(elm: &[&str]) {
 }
 
 
-pub fn rdd(n: &[&str]) {
+pub fn kmn(args: &[&str]) {
     use crate::framebuffer::*;
 
-    match n.fv().hu() {
+    match args.first().copied() {
         None | Some("status") => {
-            crate::h!(C_, "=== CPU Frequency / Voltage ===");
+            crate::n!(C_, "=== CPU Frequency / Voltage ===");
 
             
-            match npk() {
-                Some(true) => crate::h!(B_, "  SpeedStep (EIST): enabled"),
-                Some(false) => crate::h!(D_, "  SpeedStep (EIST): disabled"),
+            match hvg() {
+                Some(true) => crate::n!(B_, "  SpeedStep (EIST): enabled"),
+                Some(false) => crate::n!(D_, "  SpeedStep (EIST): disabled"),
                 None => crate::println!("  SpeedStep (EIST): unknown"),
             }
 
             
-            if let Some((kx, gwi)) = kll() {
-                crate::println!("  Current freq:     {} MHz", kx);
-                if gwi > 0 {
-                    crate::println!("  Current voltage:  {}.{:03} V", gwi / 1000, gwi % 1000);
+            if let Some((freq, voltage)) = fou() {
+                crate::println!("  Current freq:     {} MHz", freq);
+                if voltage > 0 {
+                    crate::println!("  Current voltage:  {}.{:03} V", voltage / 1000, voltage % 1000);
                 }
             } else {
                 crate::println!("  Current P-state:  read failed");
             }
 
             
-            if let Some(cd) = ngq() {
-                let psv = (cd >> 8) & 0xFF;
-                let xni = cd & 0xFF;
-                crate::println!("  Target:           FID={} VID={} ({}MHz)", psv, xni, psv as u32 * 200);
+            if let Some(target) = hoi() {
+                let jmg = (target >> 8) & 0xFF;
+                let pok = target & 0xFF;
+                crate::println!("  Target:           FID={} VID={} ({}MHz)", jmg, pok, fwn(jmg as u32));
             }
 
             
             #[cfg(target_arch = "x86_64")]
-            if let Some((blq, hhf)) = klq() {
-                if blq {
-                    crate::println!("  CPU temp (DTS):   {}°C (margin: {}°C to TjMax)", 100u8.ao(hhf), hhf);
+            if let Some((valid, dts)) = foy() {
+                if valid {
+                    crate::println!("  CPU temp (DTS):   {}°C (margin: {}°C to TjMax)", 100u8.saturating_sub(dts), dts);
                 }
             }
 
             
             crate::println!();
-            crate::h!(C_, "  Known T61 P-states (Core 2 Duo, FSB 800MHz):");
-            for (cu, aos, cck) in AIP_ {
-                crate::println!("    FID={:2} VID={:2}  → {}", aos, cck, cu);
+            let bsx = dmy();
+            crate::n!(C_, "  Detected FSB: {}MHz", bsx);
+            if let (Some(max_fid), Some(min_fid)) = (frx(), fry()) {
+                crate::n!(C_, "  P-state range (FID x FSB):");
+                let mut fid = max_fid;
+                while fid >= min_fid && fid > 0 {
+                    let freq = (fid as u32) * bsx;
+                    let label = if fid == max_fid { " (max)" } else if fid == min_fid { " (min)" } else { "" };
+                    crate::println!("    FID={:2}  → {} MHz{}", fid, freq, label);
+                    if fid <= min_fid { break; }
+                    fid = fid.saturating_sub(2); 
+                    if fid < min_fid { fid = min_fid; }
+                }
+            } else {
+                crate::println!("  (Could not detect CPU P-state range)");
             }
         }
 
         Some("set") => {
-            if n.len() < 3 {
+            if args.len() < 3 {
                 crate::println!("Usage: cpufreq set <fid> <vid>");
                 crate::println!("  Use 'cpufreq status' to see known P-states");
                 return;
             }
-            let aos = match n[1].parse::<u8>() {
-                Ok(bb) => bb,
+            let fid = match args[1].parse::<u8>() {
+                Ok(f) => f,
                 Err(_) => {
-                    crate::h!(A_, "Invalid FID: {}", n[1]);
+                    crate::n!(A_, "Invalid FID: {}", args[1]);
                     return;
                 }
             };
-            let cck = match n[2].parse::<u8>() {
-                Ok(p) => p,
+            let bpx = match args[2].parse::<u8>() {
+                Ok(v) => v,
                 Err(_) => {
-                    crate::h!(A_, "Invalid VID: {}", n[2]);
+                    crate::n!(A_, "Invalid VID: {}", args[2]);
                     return;
                 }
             };
-            crate::h!(D_, "Setting P-state: FID={} VID={} ({}MHz)", aos, cck, aos as u32 * 200);
-            if ipk(aos, cck) {
-                crate::h!(B_, "P-state change requested");
+            crate::n!(D_, "Setting P-state: FID={} VID={} ({}MHz)", fid, bpx, fwn(fid as u32));
+            if eja(fid, bpx) {
+                crate::n!(B_, "P-state change requested");
                 
-                if let Some((kx, gwi)) = kll() {
-                    crate::println!("  Now running at: {} MHz, {}.{:03} V", kx, gwi / 1000, gwi % 1000);
+                if let Some((freq, voltage)) = fou() {
+                    crate::println!("  Now running at: {} MHz, {}.{:03} V", freq, voltage / 1000, voltage % 1000);
                 }
             } else {
-                crate::h!(A_, "Failed to set P-state");
+                crate::n!(A_, "Failed to set P-state");
             }
         }
 
         Some("max") => {
-            if let Some(&(cu, aos, cck)) = AIP_.fv() {
-                crate::h!(D_, "Setting CPU to {}", cu);
-                ipk(aos, cck);
-                crate::h!(B_, "Done");
+            if let Some(max_fid) = frx() {
+                let bsx = dmy();
+                let freq = max_fid as u32 * bsx;
+                crate::n!(D_, "Setting CPU to max: FID={} ({}MHz)", max_fid, freq);
+                
+                eja(max_fid, 0);
+                crate::n!(B_, "Done");
+            } else {
+                crate::n!(A_, "Could not detect max P-state");
             }
         }
 
         Some("min") | Some("powersave") => {
-            if let Some(&(cu, aos, cck)) = AIP_.qv() {
-                crate::h!(D_, "Setting CPU to {}", cu);
-                ipk(aos, cck);
-                crate::h!(B_, "Done");
+            if let Some(min_fid) = fry() {
+                let bsx = dmy();
+                let freq = min_fid as u32 * bsx;
+                crate::n!(D_, "Setting CPU to min: FID={} ({}MHz)", min_fid, freq);
+                eja(min_fid, 0);
+                crate::n!(B_, "Done");
+            } else {
+                crate::n!(A_, "Could not detect min P-state");
             }
         }
 

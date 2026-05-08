@@ -179,15 +179,15 @@ unsafe { data_port.read() };
     // All state is atomic — no locks needed
     let has_scroll = HAS_SCROLL_WHEEL.load(Ordering::Relaxed);
     let packet_size: u8 = if has_scroll { 4 } else { 3 };
-    let index = PACKET_INDEX.load(Ordering::Relaxed);
+    let idx = PACKET_INDEX.load(Ordering::Relaxed);
     
     // First byte must have bit 3 set (PS/2 protocol — always 1 in byte 0)
-    if index == 0 && byte & 0x08 == 0 {
+    if idx == 0 && byte & 0x08 == 0 {
         return; // Out of sync, wait for valid first byte
     }
     
     // Store byte in atomic packet buffer
-    match index {
+    match idx {
         0 => PACKET_BYTE0.store(byte, Ordering::Relaxed),
         1 => PACKET_BYTE1.store(byte, Ordering::Relaxed),
         2 => PACKET_BYTE2.store(byte, Ordering::Relaxed),
@@ -199,7 +199,7 @@ unsafe { data_port.read() };
         }
     }
     
-    let next_index = index + 1;
+    let next_index = idx + 1;
     if next_index < packet_size {
         PACKET_INDEX.store(next_index, Ordering::Relaxed);
         return;
@@ -224,7 +224,7 @@ unsafe { data_port.read() };
     let raw_y = b2 as i8 as i32;
     
     // Apply accessibility mouse speed multiplier
-    let (x_relative, y_relative) = crate::accessibility::apply_mouse_speed(raw_x, raw_y);
+    let (x_rel, y_rel) = crate::accessibility::apply_mouse_speed(raw_x, raw_y);
     
     // Handle overflow: skip movement update but keep button state
     let x_overflow = b0 & 0x40 != 0;
@@ -240,8 +240,8 @@ unsafe { data_port.read() };
     let old_y = MOUSE_Y.load(Ordering::Relaxed);
     
     // Update position (Y is inverted in PS/2)
-    let new_x = (old_x + x_relative).clamp(0, width - 1);
-    let new_y = (old_y - y_relative).clamp(0, height - 1);
+    let new_x = (old_x + x_rel).clamp(0, width - 1);
+    let new_y = (old_y - y_rel).clamp(0, height - 1);
     
     MOUSE_X.store(new_x, Ordering::Relaxed);
     MOUSE_Y.store(new_y, Ordering::Relaxed);
@@ -277,8 +277,8 @@ pub fn inject_usb_mouse(dx: i32, dy: i32, left: bool, right: bool, middle: bool,
     // Atomic fetch_add for relative movement
     let new_x = MOUSE_X.load(Ordering::Relaxed) + dx;
     let new_y = MOUSE_Y.load(Ordering::Relaxed) + dy;
-    MOUSE_X.store(new_x.maximum(0).minimum(w - 1), Ordering::Relaxed);
-    MOUSE_Y.store(new_y.maximum(0).minimum(h - 1), Ordering::Relaxed);
+    MOUSE_X.store(new_x.max(0).min(w - 1), Ordering::Relaxed);
+    MOUSE_Y.store(new_y.max(0).min(h - 1), Ordering::Relaxed);
 
     LEFT_BUTTON.store(left, Ordering::Relaxed);
     RIGHT_BUTTON.store(right, Ordering::Relaxed);

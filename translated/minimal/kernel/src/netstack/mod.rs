@@ -27,62 +27,62 @@ use spin::Mutex;
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
 pub struct EthernetFrame {
-    pub amc: [u8; 6],
-    pub atn: [u8; 6],
+    pub dst_mac: [u8; 6],
+    pub src_mac: [u8; 6],
     pub ethertype: u16,  
 }
 
 impl EthernetFrame {
-    pub const Am: usize = 14;
+    pub const Z: usize = 14;
     
-    pub fn parse(f: &[u8]) -> Option<Self> {
-        if f.len() < Self::Am {
+    pub fn parse(data: &[u8]) -> Option<Self> {
+        if data.len() < Self::Z {
             return None;
         }
         
-        Some(unsafe { core::ptr::md(f.fq() as *const Self) })
+        Some(unsafe { core::ptr::read_unaligned(data.as_ptr() as *const Self) })
     }
     
     pub fn ethertype(&self) -> u16 {
-        u16::eqv(self.ethertype)
+        u16::from_be(self.ethertype)
     }
 }
 
 
 pub mod ethertype {
-    pub const Aty: u16 = 0x0800;
-    pub const Aot: u16 = 0x0806;
-    pub const Bjg: u16 = 0x86DD;
+    pub const Tb: u16 = 0x0800;
+    pub const Qz: u16 = 0x0806;
+    pub const Zz: u16 = 0x86DD;
 }
 
 
-static AHK_: Mutex<VecDeque<Vec<u8>>> = Mutex::new(VecDeque::new());
+static AJG_: Mutex<VecDeque<Vec<u8>>> = Mutex::new(VecDeque::new());
 
 
-pub fn jkc(f: Vec<u8>) {
-    if f.len() < EthernetFrame::Am {
+pub fn exa(data: Vec<u8>) {
+    if data.len() < EthernetFrame::Z {
         return;
     }
 
     
-    crate::netscan::sniffer::jkc(&f);
+    crate::netscan::sniffer::exa(&data);
     
-    let frame = match EthernetFrame::parse(&f) {
-        Some(bb) => bb,
+    let frame = match EthernetFrame::parse(&data) {
+        Some(f) => f,
         None => return,
     };
     
-    let ew = &f[EthernetFrame::Am..];
+    let payload = &data[EthernetFrame::Z..];
     
     match frame.ethertype() {
-        ethertype::Aot => {
-            arp::bur(ew);
+        ethertype::Qz => {
+            arp::alq(payload);
         }
-        ethertype::Aty => {
-            ip::bur(ew);
+        ethertype::Tb => {
+            ip::alq(payload);
         }
-        ethertype::Bjg => {
-            ipv6::bur(ew);
+        ethertype::Zz => {
+            ipv6::alq(payload);
         }
         _ => {
             
@@ -96,8 +96,8 @@ pub fn poll() {
     crate::drivers::net::poll();
     
     
-    while let Some(ex) = crate::drivers::net::chb() {
-        jkc(ex);
+    while let Some(be) = crate::drivers::net::receive() {
+        exa(be);
     }
     
     
@@ -107,25 +107,25 @@ pub fn poll() {
     tftpd::poll();
 
     
-    tcp::qzp();
+    tcp::kjp();
 }
 
 
-pub fn fug(amc: [u8; 6], ethertype: u16, ew: &[u8]) -> Result<(), &'static str> {
-    let atn = crate::drivers::net::cez()
-        .or_else(crate::network::ckt)
+pub fn cdq(dst_mac: [u8; 6], ethertype: u16, payload: &[u8]) -> Result<(), &'static str> {
+    let src_mac = crate::drivers::net::aqt()
+        .or_else(crate::network::aqu)
         .ok_or("No MAC address")?;
     
-    let mut frame = Vec::fc(64); 
-    frame.bk(&amc);
-    frame.bk(&atn);
-    frame.bk(&ethertype.ft());
-    frame.bk(ew);
+    let mut frame = Vec::with_capacity(64); 
+    frame.extend_from_slice(&dst_mac);
+    frame.extend_from_slice(&src_mac);
+    frame.extend_from_slice(&ethertype.to_be_bytes());
+    frame.extend_from_slice(payload);
     
     
     while frame.len() < 60 {
         frame.push(0);
     }
     
-    crate::drivers::net::baq(&frame)
+    crate::drivers::net::send(&frame)
 }

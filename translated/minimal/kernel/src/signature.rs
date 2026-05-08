@@ -36,12 +36,12 @@ use spin::Mutex;
 
 
 
-pub const APJ_: &str = 
+pub const ARJ_: &str = 
     "TrustOS Kernel — Created by Nated0ge (nathan237) — Sole author and originator — All rights reserved 2025-2026";
 
 
-pub const BPS_: &str = "Nated0ge";
-pub const BPR_: &str = "nathan237";
+pub const BSJ_: &str = "Nated0ge";
+pub const BSI_: &str = "nathan237";
 
 
 
@@ -51,7 +51,7 @@ pub const BPR_: &str = "nathan237";
 
 
 
-pub const API_: [u8; 32] = [
+pub const ARI_: [u8; 32] = [
     0x0c, 0x1a, 0x99, 0xfb, 0x1e, 0x87, 0x77, 0xce,
     0x12, 0x0c, 0xca, 0x83, 0x4e, 0x75, 0x60, 0x8e,
     0x95, 0xa4, 0xb6, 0xc5, 0xd3, 0x04, 0x7a, 0x92,
@@ -59,119 +59,119 @@ pub const API_: [u8; 32] = [
 ];
 
 
-pub const BLM_: &str = env!("TRUSTOS_BUILD_TIME", "unknown");
+pub const BOF_: &str = env!("TRUSTOS_BUILD_TIME", "unknown");
 
 
-pub const NU_: &str = "0.1.2";
-
-
-
+pub const OS_: &str = "0.1.2";
 
 
 
-pub struct Bvn {
-    pub j: String,
-    pub ius: [u8; 32],
-    pub aea: u64, 
+
+
+
+pub struct Aga {
+    pub name: String,
+    pub fingerprint: [u8; 32],
+    pub timestamp: u64, 
 }
 
 
-static YE_: Mutex<Option<Bvn>> = Mutex::new(None);
+static ZI_: Mutex<Option<Aga>> = Mutex::new(None);
 
 
 
 
 
 
-pub fn dhw(hash: &[u8; 32]) -> String {
-    let mut e = String::fc(64);
-    for &o in hash.iter() {
-        let gd = o >> 4;
-        let hh = o & 0x0F;
-        e.push(if gd < 10 { (b'0' + gd) as char } else { (b'a' + gd - 10) as char });
-        e.push(if hh < 10 { (b'0' + hh) as char } else { (b'a' + hh - 10) as char });
+pub fn bgu(hash: &[u8; 32]) -> String {
+    let mut j = String::with_capacity(64);
+    for &b in hash.iter() {
+        let hi = b >> 4;
+        let lo = b & 0x0F;
+        j.push(if hi < 10 { (b'0' + hi) as char } else { (b'a' + hi - 10) as char });
+        j.push(if lo < 10 { (b'0' + lo) as char } else { (b'a' + lo - 10) as char });
     }
-    e
+    j
 }
 
 
-pub fn nhk() -> String {
-    dhw(&API_)
+pub fn hou() -> String {
+    bgu(&ARI_)
 }
 
 
 
 
-pub fn xrg(dv: &[u8]) -> bool {
-    let kkg = crate::tls13::crypto::drt(dv, APJ_.as_bytes());
+pub fn prq(seed: &[u8]) -> bool {
+    let fnx = crate::tls13::crypto::bmu(seed, ARJ_.as_bytes());
     
-    let mut wz = 0u8;
-    for a in 0..32 {
-        wz |= kkg[a] ^ API_[a];
+    let mut jr = 0u8;
+    for i in 0..32 {
+        jr |= fnx[i] ^ ARI_[i];
     }
-    wz == 0
+    jr == 0
 }
 
 
 
 
-pub fn wnz(j: &str, bvw: &[u8]) {
+pub fn oso(name: &str, amd: &[u8]) {
     
-    let mut ew = Vec::new();
-    ew.bk(b"TrustOS User Signature: ");
-    ew.bk(j.as_bytes());
-    ew.bk(b" -- co-signed kernel v");
-    ew.bk(NU_.as_bytes());
+    let mut payload = Vec::new();
+    payload.extend_from_slice(b"TrustOS User Signature: ");
+    payload.extend_from_slice(name.as_bytes());
+    payload.extend_from_slice(b" -- co-signed kernel v");
+    payload.extend_from_slice(OS_.as_bytes());
 
-    let ius = crate::tls13::crypto::drt(bvw, &ew);
+    let fingerprint = crate::tls13::crypto::bmu(amd, &payload);
 
-    let wi = crate::rtc::nyr() as u64;
+    let jy = crate::rtc::iby() as u64;
 
-    let sig = Bvn {
-        j: String::from(j),
-        ius,
-        aea: wi,
+    let sig = Aga {
+        name: String::from(name),
+        fingerprint,
+        timestamp: jy,
     };
 
-    let mut gk = YE_.lock();
-    *gk = Some(sig);
+    let mut slot = ZI_.lock();
+    *slot = Some(sig);
 }
 
 
-pub fn iww() -> Option<(String, String, u64)> {
-    let gk = YE_.lock();
-    gk.as_ref().map(|e| (e.j.clone(), dhw(&e.ius), e.aea))
+pub fn eoe() -> Option<(String, String, u64)> {
+    let slot = ZI_.lock();
+    slot.as_ref().map(|j| (j.name.clone(), bgu(&j.fingerprint), j.timestamp))
 }
 
 
-pub fn xrm(j: &str, bvw: &[u8]) -> bool {
-    let mut ew = Vec::new();
-    ew.bk(b"TrustOS User Signature: ");
-    ew.bk(j.as_bytes());
-    ew.bk(b" -- co-signed kernel v");
-    ew.bk(NU_.as_bytes());
+pub fn prv(name: &str, amd: &[u8]) -> bool {
+    let mut payload = Vec::new();
+    payload.extend_from_slice(b"TrustOS User Signature: ");
+    payload.extend_from_slice(name.as_bytes());
+    payload.extend_from_slice(b" -- co-signed kernel v");
+    payload.extend_from_slice(OS_.as_bytes());
 
-    let kkg = crate::tls13::crypto::drt(bvw, &ew);
+    let fnx = crate::tls13::crypto::bmu(amd, &payload);
 
-    let gk = YE_.lock();
-    if let Some(ref sig) = *gk {
-        if sig.j != j {
+    let slot = ZI_.lock();
+    if let Some(ref sig) = *slot {
+        if sig.name != name {
             return false;
         }
-        let mut wz = 0u8;
-        for a in 0..32 {
-            wz |= kkg[a] ^ sig.ius[a];
+        let mut jr = 0u8;
+        for i in 0..32 {
+            jr |= fnx[i] ^ sig.fingerprint[i];
         }
-        wz == 0
+        jr == 0
     } else {
         false
     }
 }
 
 
-pub fn rbh() {
-    let mut gk = YE_.lock();
-    *gk = None;
+pub fn kkv() {
+    let mut slot = ZI_.lock();
+    *slot = None;
 }
 
 
@@ -216,334 +216,334 @@ pub fn rbh() {
 
 
 
-static MW_: Mutex<Option<[u8; 32]>> = Mutex::new(None);
+static NV_: Mutex<Option<[u8; 32]>> = Mutex::new(None);
 
 
-static SX_: Mutex<Option<[u8; 64]>> = Mutex::new(None);
+static UD_: Mutex<Option<[u8; 64]>> = Mutex::new(None);
 
 
 
-pub fn ttl(dv: &[u8]) {
+pub fn mpe(seed: &[u8]) {
     
-    let hzk = crate::tls13::crypto::chw(dv);
-    let cbd = crate::ed25519::ksp(&hzk);
+    let dyx = crate::tls13::crypto::asg(seed);
+    let pubkey = crate::ed25519::ftz(&dyx);
     
     
-    let fgt = LZ_.lock();
-    if let Some(eau) = *fgt {
-        drop(fgt);
-        let sig = crate::ed25519::npd(&eau, &hzk, &cbd);
-        *MW_.lock() = Some(cbd);
-        *SX_.lock() = Some(sig);
+    let cik = MW_.lock();
+    if let Some(bry) = *cik {
+        drop(cik);
+        let sig = crate::ed25519::huz(&bry, &dyx, &pubkey);
+        *NV_.lock() = Some(pubkey);
+        *UD_.lock() = Some(sig);
         
-        let oyj = crate::ed25519::kfv(&cbd);
-        crate::serial_println!("[ED25519] Public key: {}...{}", &oyj[..16], &oyj[48..]);
+        let ixb = crate::ed25519::fkk(&pubkey);
+        crate::serial_println!("[ED25519] Public key: {}...{}", &ixb[..16], &ixb[48..]);
         crate::serial_println!("[ED25519] Kernel digest signed");
     } else {
-        drop(fgt);
+        drop(cik);
         
-        *MW_.lock() = Some(cbd);
+        *NV_.lock() = Some(pubkey);
         crate::serial_println!("[ED25519] Public key initialized (no digest to sign yet)");
     }
 }
 
 
-pub fn sio() -> Option<String> {
-    MW_.lock().map(|eh| crate::ed25519::kfv(&eh))
+pub fn lnv() -> Option<String> {
+    NV_.lock().map(|k| crate::ed25519::fkk(&k))
 }
 
 
-pub fn sin() -> Option<String> {
-    SX_.lock().map(|e| crate::ed25519::kfv(&e))
+pub fn lnu() -> Option<String> {
+    UD_.lock().map(|j| crate::ed25519::fkk(&j))
 }
 
 
 
 
-pub fn xri() -> Result<bool, &'static str> {
-    let cbd = MW_.lock().ok_or("Ed25519 not initialized")?;
-    let sig = SX_.lock().ok_or("No Ed25519 signature")?;
-    let qqx = LZ_.lock().ok_or("Integrity not initialized")?;
+pub fn prs() -> Result<bool, &'static str> {
+    let pubkey = NV_.lock().ok_or("Ed25519 not initialized")?;
+    let sig = UD_.lock().ok_or("No Ed25519 signature")?;
+    let kdf = MW_.lock().ok_or("Integrity not initialized")?;
     
-    Ok(crate::ed25519::npe(&qqx, &sig, &cbd))
+    Ok(crate::ed25519::hva(&kdf, &sig, &pubkey))
 }
 
 
 
-pub fn sip(dv: &[u8]) -> bool {
-    let hzk = crate::tls13::crypto::chw(dv);
-    let cbd = crate::ed25519::ksp(&hzk);
+pub fn lnw(seed: &[u8]) -> bool {
+    let dyx = crate::tls13::crypto::asg(seed);
+    let pubkey = crate::ed25519::ftz(&dyx);
     
-    let fgt = LZ_.lock();
-    if let Some(eau) = *fgt {
-        drop(fgt);
-        let sig = crate::ed25519::npd(&eau, &hzk, &cbd);
+    let cik = MW_.lock();
+    if let Some(bry) = *cik {
+        drop(cik);
+        let sig = crate::ed25519::huz(&bry, &dyx, &pubkey);
         
         
-        if crate::ed25519::npe(&eau, &sig, &cbd) {
-            *MW_.lock() = Some(cbd);
-            *SX_.lock() = Some(sig);
+        if crate::ed25519::hva(&bry, &sig, &pubkey) {
+            *NV_.lock() = Some(pubkey);
+            *UD_.lock() = Some(sig);
             true
         } else {
             false
         }
     } else {
-        drop(fgt);
+        drop(cik);
         false
     }
 }
 
 
-pub fn npc() -> Vec<String> {
-    let mut ak = Vec::new();
-    ak.push(String::from("  Ed25519 Digital Signature"));
-    ak.push(String::from("  ─────────────────────────────────────────────────"));
+pub fn huy() -> Vec<String> {
+    let mut lines = Vec::new();
+    lines.push(String::from("  Ed25519 Digital Signature"));
+    lines.push(String::from("  ─────────────────────────────────────────────────"));
     
-    if let Some(nu) = sio() {
-        ak.push(alloc::format!("  Public key  : {}", nu));
+    if let Some(ga) = lnv() {
+        lines.push(alloc::format!("  Public key  : {}", ga));
     } else {
-        ak.push(String::from("  Public key  : NOT INITIALIZED"));
-        ak.push(String::from("  Run: signature ed25519 sign <seed>"));
-        return ak;
+        lines.push(String::from("  Public key  : NOT INITIALIZED"));
+        lines.push(String::from("  Run: signature ed25519 sign <seed>"));
+        return lines;
     }
     
-    if let Some(nu) = sin() {
-        ak.push(alloc::format!("  Signature   : {}...", &nu[..64]));
-        ak.push(alloc::format!("                ...{}", &nu[64..]));
+    if let Some(ga) = lnu() {
+        lines.push(alloc::format!("  Signature   : {}...", &ga[..64]));
+        lines.push(alloc::format!("                ...{}", &ga[64..]));
     } else {
-        ak.push(String::from("  Signature   : NONE"));
+        lines.push(String::from("  Signature   : NONE"));
     }
     
-    match xri() {
+    match prs() {
         Ok(true) => {
-            ak.push(String::from("  Verification: ✅ VALID — kernel signed by key holder"));
+            lines.push(String::from("  Verification: ✅ VALID — kernel signed by key holder"));
         }
         Ok(false) => {
-            ak.push(String::from("  Verification: ❌ INVALID — signature does not match!"));
+            lines.push(String::from("  Verification: ❌ INVALID — signature does not match!"));
         }
-        Err(aa) => {
-            ak.push(alloc::format!("  Verification: ⚠  {}", aa));
+        Err(e) => {
+            lines.push(alloc::format!("  Verification: ⚠  {}", e));
         }
     }
     
-    ak.push(String::from("  ─────────────────────────────────────────────────"));
-    ak.push(String::from("  Algorithm: Ed25519 (RFC 8032)"));
-    ak.push(String::from("  Curve: twisted Edwards / Curve25519"));
-    ak.push(String::from("  Asymmetric: public key verifies, private key signs"));
+    lines.push(String::from("  ─────────────────────────────────────────────────"));
+    lines.push(String::from("  Algorithm: Ed25519 (RFC 8032)"));
+    lines.push(String::from("  Curve: twisted Edwards / Curve25519"));
+    lines.push(String::from("  Asymmetric: public key verifies, private key signs"));
     
-    ak
+    lines
 }
 
 extern "C" {
-    static msd: u8;
-    static msc: u8;
-    static msb: u8;
-    static msa: u8;
+    static __text_start: u8;
+    static __text_end: u8;
+    static __rodata_start: u8;
+    static __rodata_end: u8;
 }
 
 
-static RO_: Mutex<Option<[u8; 32]>> = Mutex::new(None);
+static SQ_: Mutex<Option<[u8; 32]>> = Mutex::new(None);
 
 
-static RN_: Mutex<Option<[u8; 32]>> = Mutex::new(None);
+static SP_: Mutex<Option<[u8; 32]>> = Mutex::new(None);
 
 
-static LZ_: Mutex<Option<[u8; 32]>> = Mutex::new(None);
+static MW_: Mutex<Option<[u8; 32]>> = Mutex::new(None);
 
 
-fn iya() -> [u8; 32] {
-    let ay = unsafe { &msd as *const u8 as usize };
-    let ci = unsafe { &msc as *const u8 as usize };
-    let aw = ci.ao(ay);
+fn eox() -> [u8; 32] {
+    let start = unsafe { &__text_start as *const u8 as usize };
+    let end = unsafe { &__text_end as *const u8 as usize };
+    let size = end.saturating_sub(start);
     
-    let xfs = unsafe {
-        core::slice::anh(ay as *const u8, aw)
+    let pig = unsafe {
+        core::slice::from_raw_parts(start as *const u8, size)
     };
     
-    crate::tls13::crypto::chw(xfs)
+    crate::tls13::crypto::asg(pig)
 }
 
 
-fn ixz() -> [u8; 32] {
-    let ay = unsafe { &msb as *const u8 as usize };
-    let ci = unsafe { &msa as *const u8 as usize };
-    let aw = ci.ao(ay);
+fn eow() -> [u8; 32] {
+    let start = unsafe { &__rodata_start as *const u8 as usize };
+    let end = unsafe { &__rodata_end as *const u8 as usize };
+    let size = end.saturating_sub(start);
     
-    let vzv = unsafe {
-        core::slice::anh(ay as *const u8, aw)
+    let ohv = unsafe {
+        core::slice::from_raw_parts(start as *const u8, size)
     };
     
-    crate::tls13::crypto::chw(vzv)
+    crate::tls13::crypto::asg(ohv)
 }
 
 
 
-fn nfi(idg: &[u8; 32], hxv: &[u8; 32]) -> [u8; 32] {
-    let mut cwk = [0u8; 64];
-    cwk[..32].dg(idg);
-    cwk[32..].dg(hxv);
-    crate::tls13::crypto::chw(&cwk)
+fn hng(ebm: &[u8; 32], dxx: &[u8; 32]) -> [u8; 32] {
+    let mut bav = [0u8; 64];
+    bav[..32].copy_from_slice(ebm);
+    bav[32..].copy_from_slice(dxx);
+    crate::tls13::crypto::asg(&bav)
 }
 
 
 
-pub fn ttp() {
-    let idg = iya();
-    let hxv = ixz();
-    let eau = nfi(&idg, &hxv);
+pub fn mph() {
+    let ebm = eox();
+    let dxx = eow();
+    let bry = hng(&ebm, &dxx);
     
-    let pss = dhw(&idg);
-    let pdv = dhw(&hxv);
-    let nll = dhw(&eau);
+    let jmd = bgu(&ebm);
+    let jbf = bgu(&dxx);
+    let hsf = bgu(&bry);
     
     crate::serial_println!("[INTEGRITY] .text   : {} bytes, SHA-256: {}...{}", 
-        pst(), &pss[..16], &pss[56..]);
+        jme(), &jmd[..16], &jmd[56..]);
     crate::serial_println!("[INTEGRITY] .rodata : {} bytes, SHA-256: {}...{}", 
-        pdw(), &pdv[..16], &pdv[56..]);
+        jbg(), &jbf[..16], &jbf[56..]);
     crate::serial_println!("[INTEGRITY] kernel digest: {}...{}", 
-        &nll[..16], &nll[56..]);
+        &hsf[..16], &hsf[56..]);
     
-    *RO_.lock() = Some(idg);
-    *RN_.lock() = Some(hxv);
-    *LZ_.lock() = Some(eau);
+    *SQ_.lock() = Some(ebm);
+    *SP_.lock() = Some(dxx);
+    *MW_.lock() = Some(bry);
 }
 
 
-pub fn pst() -> usize {
-    let ay = unsafe { &msd as *const u8 as usize };
-    let ci = unsafe { &msc as *const u8 as usize };
-    ci.ao(ay)
+pub fn jme() -> usize {
+    let start = unsafe { &__text_start as *const u8 as usize };
+    let end = unsafe { &__text_end as *const u8 as usize };
+    end.saturating_sub(start)
 }
 
 
-pub fn pdw() -> usize {
-    let ay = unsafe { &msb as *const u8 as usize };
-    let ci = unsafe { &msa as *const u8 as usize };
-    ci.ao(ay)
+pub fn jbg() -> usize {
+    let start = unsafe { &__rodata_start as *const u8 as usize };
+    let end = unsafe { &__rodata_end as *const u8 as usize };
+    end.saturating_sub(start)
 }
 
 
-pub fn qrf() -> Option<String> {
-    RO_.lock().map(|i| dhw(&i))
+pub fn kdm() -> Option<String> {
+    SQ_.lock().map(|h| bgu(&h))
 }
 
 
-pub fn qrc() -> Option<String> {
-    RN_.lock().map(|i| dhw(&i))
+pub fn kdj() -> Option<String> {
+    SP_.lock().map(|h| bgu(&h))
 }
 
 
-pub fn qqy() -> Option<String> {
-    LZ_.lock().map(|i| dhw(&i))
+pub fn kdg() -> Option<String> {
+    MW_.lock().map(|h| bgu(&h))
 }
 
 
 
-pub fn pye() -> Result<bool, &'static str> {
-    let qre = RO_.lock().ok_or("Integrity not initialized")?;
-    let qrb = RN_.lock().ok_or("Integrity not initialized")?;
+pub fn jqa() -> Result<bool, &'static str> {
+    let kdl = SQ_.lock().ok_or("Integrity not initialized")?;
+    let kdi = SP_.lock().ok_or("Integrity not initialized")?;
     
-    let iqf = iya();
-    let iqd = ixz();
+    let ejo = eox();
+    let ejn = eow();
     
     
-    let mut wz = 0u8;
-    for a in 0..32 {
-        wz |= qre[a] ^ iqf[a];
-        wz |= qrb[a] ^ iqd[a];
+    let mut jr = 0u8;
+    for i in 0..32 {
+        jr |= kdl[i] ^ ejo[i];
+        jr |= kdi[i] ^ ejn[i];
     }
     
-    Ok(wz == 0)
+    Ok(jr == 0)
 }
 
 
-pub fn xrl() -> Result<bool, &'static str> {
-    let kee = RO_.lock().ok_or("Integrity not initialized")?;
-    let cv = iya();
-    let mut wz = 0u8;
-    for a in 0..32 { wz |= kee[a] ^ cv[a]; }
-    Ok(wz == 0)
+pub fn pru() -> Result<bool, &'static str> {
+    let fjp = SQ_.lock().ok_or("Integrity not initialized")?;
+    let current = eox();
+    let mut jr = 0u8;
+    for i in 0..32 { jr |= fjp[i] ^ current[i]; }
+    Ok(jr == 0)
 }
 
 
-pub fn xrk() -> Result<bool, &'static str> {
-    let kee = RN_.lock().ok_or("Integrity not initialized")?;
-    let cv = ixz();
-    let mut wz = 0u8;
-    for a in 0..32 { wz |= kee[a] ^ cv[a]; }
-    Ok(wz == 0)
+pub fn prt() -> Result<bool, &'static str> {
+    let fjp = SP_.lock().ok_or("Integrity not initialized")?;
+    let current = eow();
+    let mut jr = 0u8;
+    for i in 0..32 { jr |= fjp[i] ^ current[i]; }
+    Ok(jr == 0)
 }
 
 
-pub fn tvn() -> Vec<String> {
-    let mut ak = Vec::new();
-    let fwp = pst();
-    let pdx = pdw();
+pub fn mqw() -> Vec<String> {
+    let mut lines = Vec::new();
+    let crn = jme();
+    let jbh = jbg();
     
-    ak.push(String::from("  Kernel Integrity Verification"));
-    ak.push(String::from("  ─────────────────────────────────────────────────"));
-    ak.push(alloc::format!("  .text section   : {} bytes ({} KB)", fwp, fwp / 1024));
-    ak.push(alloc::format!("  .rodata section : {} bytes ({} KB)", pdx, pdx / 1024));
-    ak.push(String::from("  ─────────────────────────────────────────────────"));
+    lines.push(String::from("  Kernel Integrity Verification"));
+    lines.push(String::from("  ─────────────────────────────────────────────────"));
+    lines.push(alloc::format!("  .text section   : {} bytes ({} KB)", crn, crn / 1024));
+    lines.push(alloc::format!("  .rodata section : {} bytes ({} KB)", jbh, jbh / 1024));
+    lines.push(String::from("  ─────────────────────────────────────────────────"));
     
     
-    if let Some(nu) = qrf() {
-        ak.push(alloc::format!("  .text boot hash   : {}", nu));
+    if let Some(ga) = kdm() {
+        lines.push(alloc::format!("  .text boot hash   : {}", ga));
     } else {
-        ak.push(String::from("  .text boot hash   : NOT INITIALIZED"));
-        return ak;
+        lines.push(String::from("  .text boot hash   : NOT INITIALIZED"));
+        return lines;
     }
-    let iqf = iya();
-    ak.push(alloc::format!("  .text current     : {}", dhw(&iqf)));
+    let ejo = eox();
+    lines.push(alloc::format!("  .text current     : {}", bgu(&ejo)));
     
-    match xrl() {
-        Ok(true) => ak.push(String::from("  .text status      : ✅ INTACT")),
-        Ok(false) => ak.push(String::from("  .text status      : ❌ MODIFIED")),
-        Err(aa) => ak.push(alloc::format!("  .text status      : ⚠️  {}", aa)),
+    match pru() {
+        Ok(true) => lines.push(String::from("  .text status      : ✅ INTACT")),
+        Ok(false) => lines.push(String::from("  .text status      : ❌ MODIFIED")),
+        Err(e) => lines.push(alloc::format!("  .text status      : ⚠️  {}", e)),
     }
     
-    ak.push(String::from("  ─────────────────────────────────────────────────"));
+    lines.push(String::from("  ─────────────────────────────────────────────────"));
     
     
-    if let Some(nu) = qrc() {
-        ak.push(alloc::format!("  .rodata boot hash : {}", nu));
+    if let Some(ga) = kdj() {
+        lines.push(alloc::format!("  .rodata boot hash : {}", ga));
     } else {
-        ak.push(String::from("  .rodata boot hash : NOT INITIALIZED"));
+        lines.push(String::from("  .rodata boot hash : NOT INITIALIZED"));
     }
-    let iqd = ixz();
-    ak.push(alloc::format!("  .rodata current   : {}", dhw(&iqd)));
+    let ejn = eow();
+    lines.push(alloc::format!("  .rodata current   : {}", bgu(&ejn)));
     
-    match xrk() {
-        Ok(true) => ak.push(String::from("  .rodata status    : ✅ INTACT")),
-        Ok(false) => ak.push(String::from("  .rodata status    : ❌ MODIFIED")),
-        Err(aa) => ak.push(alloc::format!("  .rodata status    : ⚠️  {}", aa)),
+    match prt() {
+        Ok(true) => lines.push(String::from("  .rodata status    : ✅ INTACT")),
+        Ok(false) => lines.push(String::from("  .rodata status    : ❌ MODIFIED")),
+        Err(e) => lines.push(alloc::format!("  .rodata status    : ⚠️  {}", e)),
     }
     
-    ak.push(String::from("  ─────────────────────────────────────────────────"));
+    lines.push(String::from("  ─────────────────────────────────────────────────"));
     
     
-    if let Some(nu) = qqy() {
-        ak.push(alloc::format!("  Kernel digest     : {}", nu));
+    if let Some(ga) = kdg() {
+        lines.push(alloc::format!("  Kernel digest     : {}", ga));
     }
-    let eau = nfi(&iqf, &iqd);
-    ak.push(alloc::format!("  Current digest    : {}", dhw(&eau)));
+    let bry = hng(&ejo, &ejn);
+    lines.push(alloc::format!("  Current digest    : {}", bgu(&bry)));
     
-    match pye() {
+    match jqa() {
         Ok(true) => {
-            ak.push(String::from("  Overall status    : ✅ INTEGRITY OK — kernel unmodified"));
+            lines.push(String::from("  Overall status    : ✅ INTEGRITY OK — kernel unmodified"));
         }
         Ok(false) => {
-            ak.push(String::from("  Overall status    : ❌ INTEGRITY VIOLATION — kernel was tampered!"));
-            ak.push(String::from("  WARNING: Code or read-only data modified since boot."));
+            lines.push(String::from("  Overall status    : ❌ INTEGRITY VIOLATION — kernel was tampered!"));
+            lines.push(String::from("  WARNING: Code or read-only data modified since boot."));
         }
-        Err(aa) => {
-            ak.push(alloc::format!("  Overall status    : ⚠️  {}", aa));
+        Err(e) => {
+            lines.push(alloc::format!("  Overall status    : ⚠️  {}", e));
         }
     }
     
-    ak.push(String::from("  ─────────────────────────────────────────────────"));
-    ak.push(String::from("  Algorithm: SHA-256 per-section + combined digest"));
-    ak.push(String::from("  Threat model: detects post-boot code/data tampering"));
+    lines.push(String::from("  ─────────────────────────────────────────────────"));
+    lines.push(String::from("  Algorithm: SHA-256 per-section + combined digest"));
+    lines.push(String::from("  Threat model: detects post-boot code/data tampering"));
     
-    ak
+    lines
 }

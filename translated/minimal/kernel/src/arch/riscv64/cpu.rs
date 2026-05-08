@@ -4,27 +4,27 @@
 
 
 #[inline(always)]
-pub fn jln() -> u64 {
+pub fn exy() -> u64 {
     let sp: u64;
     unsafe {
-        core::arch::asm!("mv {}, sp", bd(reg) sp, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("mv {}, sp", out(reg) sp, options(nomem, nostack, preserves_flags));
     }
     sp
 }
 
 
 #[inline(always)]
-pub fn pae() -> u64 {
-    let ghm: u64;
+pub fn iyk() -> u64 {
+    let fp: u64;
     unsafe {
-        core::arch::asm!("mv {}, s0", bd(reg) ghm, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("mv {}, s0", out(reg) fp, options(nomem, nostack, preserves_flags));
     }
-    ghm
+    fp
 }
 
 
 #[inline(always)]
-pub fn jat() {
+pub fn erb() {
     unsafe {
         core::arch::asm!("fence iorw, iorw", options(nomem, nostack, preserves_flags));
     }
@@ -32,7 +32,7 @@ pub fn jat() {
 
 
 #[inline(always)]
-pub fn hbf() {
+pub fn breakpoint() {
     unsafe {
         core::arch::asm!("ebreak", options(nomem, nostack));
     }
@@ -40,7 +40,7 @@ pub fn hbf() {
 
 
 #[inline(always)]
-pub fn cxt() {
+pub fn bbq() {
     unsafe {
         core::arch::asm!("fence iorw, iorw", options(nomem, nostack, preserves_flags));
     }
@@ -48,7 +48,7 @@ pub fn cxt() {
 
 
 #[inline(always)]
-pub fn yqi() {
+pub fn qfm() {
     unsafe {
         core::arch::asm!("fence.i", options(nomem, nostack, preserves_flags));
     }
@@ -60,160 +60,160 @@ pub fn yqi() {
 
 
 #[inline(always)]
-pub fn vsm() -> u64 {
-    let ap: u64;
+pub fn odd() -> u64 {
+    let val: u64;
     unsafe {
-        core::arch::asm!("csrr {}, sstatus", bd(reg) ap, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("csrr {}, sstatus", out(reg) val, options(nomem, nostack, preserves_flags));
     }
-    ap
+    val
 }
 
 
 #[inline(always)]
-pub unsafe fn zwy(ap: u64) {
-    core::arch::asm!("csrw sstatus, {}", in(reg) ap, options(nomem, nostack, preserves_flags));
+pub unsafe fn rdj(val: u64) {
+    core::arch::asm!("csrw sstatus, {}", in(reg) val, options(nomem, nostack, preserves_flags));
 }
 
 
 #[inline(always)]
-pub fn vsl() -> u64 {
-    let ap: u64;
+pub fn odc() -> u64 {
+    let val: u64;
     unsafe {
-        core::arch::asm!("csrr {}, sie", bd(reg) ap, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("csrr {}, sie", out(reg) val, options(nomem, nostack, preserves_flags));
     }
-    ap
+    val
 }
 
 
 #[inline(always)]
-pub unsafe fn xvs(ap: u64) {
-    core::arch::asm!("csrw sie, {}", in(reg) ap, options(nomem, nostack, preserves_flags));
+pub unsafe fn pvd(val: u64) {
+    core::arch::asm!("csrw sie, {}", in(reg) val, options(nomem, nostack, preserves_flags));
 }
 
 
 #[inline(always)]
-pub fn zic() -> u64 {
-    let ap: u64;
+pub fn qso() -> u64 {
+    let val: u64;
     unsafe {
-        core::arch::asm!("csrr {}, sip", bd(reg) ap, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("csrr {}, sip", out(reg) val, options(nomem, nostack, preserves_flags));
     }
-    ap
+    val
 }
 
 
 #[inline(always)]
-pub fn zii() -> u64 {
-    let ap: u64;
+pub fn qsu() -> u64 {
+    let val: u64;
     unsafe {
-        core::arch::asm!("csrr {}, stvec", bd(reg) ap, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("csrr {}, stvec", out(reg) val, options(nomem, nostack, preserves_flags));
     }
-    ap
+    val
 }
 
 
 #[inline(always)]
-pub unsafe fn zxa(ap: u64) {
-    core::arch::asm!("csrw stvec, {}", in(reg) ap, options(nomem, nostack, preserves_flags));
+pub unsafe fn rdl(val: u64) {
+    core::arch::asm!("csrw stvec, {}", in(reg) val, options(nomem, nostack, preserves_flags));
 }
 
 
 #[inline(always)]
-pub fn zib() -> u64 {
-    let ap: u64;
+pub fn qsn() -> u64 {
+    let val: u64;
     unsafe {
-        core::arch::asm!("csrr {}, sepc", bd(reg) ap, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("csrr {}, sepc", out(reg) val, options(nomem, nostack, preserves_flags));
     }
-    ap
+    val
 }
 
 
 #[inline(always)]
-pub unsafe fn zwv(ap: u64) {
-    core::arch::asm!("csrw sepc, {}", in(reg) ap, options(nomem, nostack, preserves_flags));
+pub unsafe fn rdf(val: u64) {
+    core::arch::asm!("csrw sepc, {}", in(reg) val, options(nomem, nostack, preserves_flags));
 }
 
 
 #[inline(always)]
-pub fn zia() -> u64 {
-    let ap: u64;
+pub fn qsm() -> u64 {
+    let val: u64;
     unsafe {
-        core::arch::asm!("csrr {}, scause", bd(reg) ap, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("csrr {}, scause", out(reg) val, options(nomem, nostack, preserves_flags));
     }
-    ap
+    val
 }
 
 
 #[inline(always)]
-pub fn zih() -> u64 {
-    let ap: u64;
+pub fn qst() -> u64 {
+    let val: u64;
     unsafe {
-        core::arch::asm!("csrr {}, stval", bd(reg) ap, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("csrr {}, stval", out(reg) val, options(nomem, nostack, preserves_flags));
     }
-    ap
+    val
 }
 
 
 #[inline(always)]
-pub fn vsk() -> u64 {
-    let ap: u64;
+pub fn odb() -> u64 {
+    let val: u64;
     unsafe {
-        core::arch::asm!("csrr {}, satp", bd(reg) ap, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("csrr {}, satp", out(reg) val, options(nomem, nostack, preserves_flags));
     }
-    ap
+    val
 }
 
 
 #[inline(always)]
-pub unsafe fn xvr(ap: u64) {
-    core::arch::asm!("csrw satp, {}", in(reg) ap, options(nomem, nostack, preserves_flags));
+pub unsafe fn pvc(val: u64) {
+    core::arch::asm!("csrw satp, {}", in(reg) val, options(nomem, nostack, preserves_flags));
     
     core::arch::asm!("sfence.vma", options(nomem, nostack, preserves_flags));
 }
 
 
 #[inline(always)]
-pub fn zie() -> u64 {
-    let ap: u64;
+pub fn qsq() -> u64 {
+    let val: u64;
     unsafe {
-        core::arch::asm!("csrr {}, sscratch", bd(reg) ap, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("csrr {}, sscratch", out(reg) val, options(nomem, nostack, preserves_flags));
     }
-    ap
+    val
 }
 
 
 #[inline(always)]
-pub unsafe fn zwx(ap: u64) {
-    core::arch::asm!("csrw sscratch, {}", in(reg) ap, options(nomem, nostack, preserves_flags));
+pub unsafe fn rdh(val: u64) {
+    core::arch::asm!("csrw sscratch, {}", in(reg) val, options(nomem, nostack, preserves_flags));
 }
 
 
 #[inline(always)]
-pub fn vqy() -> u64 {
-    let ap: u64;
+pub fn ocd() -> u64 {
+    let val: u64;
     unsafe {
-        core::arch::asm!("rdcycle {}", bd(reg) ap, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("rdcycle {}", out(reg) val, options(nomem, nostack, preserves_flags));
     }
-    ap
+    val
 }
 
 
 #[inline(always)]
-pub fn vrd() -> u64 {
-    let ap: u64;
+pub fn och() -> u64 {
+    let val: u64;
     unsafe {
-        core::arch::asm!("rdtime {}", bd(reg) ap, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("rdtime {}", out(reg) val, options(nomem, nostack, preserves_flags));
     }
-    ap
+    val
 }
 
 
-pub fn ywd() -> u64 {
+pub fn qkh() -> u64 {
     
-    let aaz: u64;
+    let tp: u64;
     unsafe {
-        core::arch::asm!("mv {}, tp", bd(reg) aaz, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("mv {}, tp", out(reg) tp, options(nomem, nostack, preserves_flags));
     }
-    aaz
+    tp
 }
 
 
@@ -222,48 +222,48 @@ pub fn ywd() -> u64 {
 
 
 #[inline(always)]
-pub unsafe fn wr(ag: u64) -> u32 {
-    let ap: u32;
+pub unsafe fn kj(addr: u64) -> u32 {
+    let val: u32;
     core::arch::asm!(
         "lw {val}, 0({addr})",
-        ag = in(reg) ag,
-        ap = bd(reg) ap,
+        addr = in(reg) addr,
+        val = out(reg) val,
         options(nostack, preserves_flags)
     );
-    ap
+    val
 }
 
 
 #[inline(always)]
-pub unsafe fn sk(ag: u64, ap: u32) {
+pub unsafe fn ib(addr: u64, val: u32) {
     core::arch::asm!(
         "sw {val}, 0({addr})",
-        ag = in(reg) ag,
-        ap = in(reg) ap,
+        addr = in(reg) addr,
+        val = in(reg) val,
         options(nostack, preserves_flags)
     );
 }
 
 
 #[inline(always)]
-pub unsafe fn fom(ag: u64) -> u8 {
-    let ap: u32;
+pub unsafe fn cmx(addr: u64) -> u8 {
+    let val: u32;
     core::arch::asm!(
         "lbu {val}, 0({addr})",
-        ag = in(reg) ag,
-        ap = bd(reg) ap,
+        addr = in(reg) addr,
+        val = out(reg) val,
         options(nostack, preserves_flags)
     );
-    ap as u8
+    val as u8
 }
 
 
 #[inline(always)]
-pub unsafe fn djp(ag: u64, ap: u8) {
+pub unsafe fn bhy(addr: u64, val: u8) {
     core::arch::asm!(
         "sb {val}, 0({addr})",
-        ag = in(reg) ag,
-        ap = in(reg) ap,
+        addr = in(reg) addr,
+        val = in(reg) val,
         options(nostack, preserves_flags)
     );
 }
@@ -274,24 +274,24 @@ pub unsafe fn djp(ag: u64, ap: u8) {
 
 
 pub mod sstatus {
-    pub const Clr: u64 = 1 << 1;   
-    pub const Dhs: u64 = 1 << 5;  
-    pub const Dhu: u64 = 1 << 8;   
-    pub const Dia: u64 = 1 << 18;  
-    pub const Dcg: u64 = 1 << 19;  
+    pub const Apg: u64 = 1 << 1;   
+    pub const Bcu: u64 = 1 << 5;  
+    pub const Bcw: u64 = 1 << 8;   
+    pub const Bdc: u64 = 1 << 18;  
+    pub const Azl: u64 = 1 << 19;  
 }
 
 
 pub mod sie_bits {
-    pub const Cmd: u64 = 1 << 1;  
-    pub const Cmf: u64 = 1 << 5;  
-    pub const Cld: u64 = 1 << 9;  
+    pub const Apr: u64 = 1 << 1;  
+    pub const Apt: u64 = 1 << 5;  
+    pub const Aos: u64 = 1 << 9;  
 }
 
 
 pub mod satp_mode {
-    pub const Crr: u64 = 0;
-    pub const Cmi: u64 = 8 << 60;  
-    pub const Cmj: u64 = 9 << 60;  
-    pub const Dib: u64 = 10 << 60; 
+    pub const Asx: u64 = 0;
+    pub const Apw: u64 = 8 << 60;  
+    pub const Apx: u64 = 9 << 60;  
+    pub const Bdd: u64 = 10 << 60; 
 }

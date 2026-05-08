@@ -134,7 +134,7 @@ pub enum HypervisorError {
     /// NPT (AMD) violation
     NptViolation,
     /// SVM initialization failed
-    SvmInitializeFailed,
+    SvmInitFailed,
     /// VMCB not loaded (AMD SVM)
     VmcbNotLoaded,
     /// Already running (Linux Subsystem)
@@ -305,10 +305,10 @@ fn initialize_amd_svm() -> Result<()> {
     crate::serial_println!("[HV] NRIP Save: {}", features.nrip_save);
     crate::serial_println!("[HV] Flush by ASID: {}", features.flush_by_asid);
     crate::serial_println!("[HV] Decode Assists: {}", features.decode_assists);
-    crate::serial_println!("[HV] Available ASIDs: {}", features.number_asids);
+    crate::serial_println!("[HV] Available ASIDs: {}", features.num_asids);
     
     // Initialize SVM
-    svm::init().map_error(|_| HypervisorError::SvmInitializeFailed)?;
+    svm::init().map_err(|_| HypervisorError::SvmInitFailed)?;
     
     HYPERVISOR_ENABLED.store(true, Ordering::SeqCst);
     
@@ -515,10 +515,10 @@ pub fn channel_send(channel_id: u64, data: &[u8]) -> core::result::Result<usize,
 }
 
 /// Set resource quota for a VM
-pub fn set_vm_quota(vm_id: u64, maximum_memory: usize, maximum_vcpus: usize) {
+pub fn set_vm_quota(vm_id: u64, max_memory: usize, max_vcpus: usize) {
     let quota = api::ResourceQuota {
-        maximum_memory,
-        maximum_vcpus,
+        max_memory,
+        max_vcpus,
         ..api::ResourceQuota::default()
     };
     api::set_quota(vm_id, quota);
@@ -595,7 +595,7 @@ match virt_backend() {
                 "AMD-V (SVM) Rev{} - VMCB, NPT:{}, ASIDs:{}",
                 features.revision,
                 if features.npt { "Yes" } else { "No" },
-                features.number_asids
+                features.num_asids
             )
         }
         VirtBackend::None => {

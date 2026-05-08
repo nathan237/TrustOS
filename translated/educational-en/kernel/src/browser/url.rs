@@ -24,38 +24,38 @@ impl Url {
         let url = url.trim();
         
         // Extract scheme
-        let (scheme, rest) = if let Some(index) = url.find("://") {
-            (&url[..index], &url[index + 3..])
+        let (scheme, rest) = if let Some(idx) = url.find("://") {
+            (&url[..idx], &url[idx + 3..])
         } else {
             ("http", url)
         };
         
         // Extract fragment
-        let (rest, fragment) = if let Some(index) = rest.find('#') {
-            (&rest[..index], Some(rest[index + 1..].to_string()))
+        let (rest, fragment) = if let Some(idx) = rest.find('#') {
+            (&rest[..idx], Some(rest[idx + 1..].to_string()))
         } else {
             (rest, None)
         };
         
         // Extract query
-        let (rest, query) = if let Some(index) = rest.find('?') {
-            (&rest[..index], Some(rest[index + 1..].to_string()))
+        let (rest, query) = if let Some(idx) = rest.find('?') {
+            (&rest[..idx], Some(rest[idx + 1..].to_string()))
         } else {
             (rest, None)
         };
         
         // Extract path
-        let (host_port, path) = if let Some(index) = rest.find('/') {
-            (&rest[..index], rest[index..].to_string())
+        let (host_port, path) = if let Some(idx) = rest.find('/') {
+            (&rest[..idx], rest[idx..].to_string())
         } else {
             (rest, "/".to_string())
         };
         
         // Extract port
-        let (host, port) = if let Some(index) = host_port.find(':') {
-            let port_str = &host_port[index + 1..];
+        let (host, port) = if let Some(idx) = host_port.find(':') {
+            let port_str = &host_port[idx + 1..];
             let port = port_str.parse().unwrap_or(80);
-            (&host_port[..index], port)
+            (&host_port[..idx], port)
         } else {
             let default_port = if scheme == "https" { 443 } else { 80 };
             (host_port, default_port)
@@ -139,8 +139,8 @@ impl Url {
         }
         
         // Relative path
-        let base_path = if let Some(index) = self.path.rfind('/') {
-            &self.path[..index + 1]
+        let base_path = if let Some(idx) = self.path.rfind('/') {
+            &self.path[..idx + 1]
         } else {
             "/"
         };
@@ -216,8 +216,8 @@ match c {
                 result.push('+');
             }
             _ => {
-                let mut buffer = [0u8; 4];
-                let encoded = c.encode_utf8(&mut buffer);
+                let mut buf = [0u8; 4];
+                let encoded = c.encode_utf8(&mut buf);
                 for byte in encoded.bytes() {
                     result.push('%');
                     result.push_str(&alloc::format!("{:02X}", byte));

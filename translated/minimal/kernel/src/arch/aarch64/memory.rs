@@ -7,16 +7,16 @@ use super::cpu;
 
 
 #[inline(always)]
-pub fn ghg(ag: u64) {
+pub fn cxy(addr: u64) {
     unsafe {
         
         
-        let asf = ag >> 12;
+        let va = addr >> 12;
         core::arch::asm!(
             "tlbi vae1is, {}",
             "dsb ish",
             "isb",
-            in(reg) asf,
+            in(reg) va,
             options(nostack, preserves_flags)
         );
     }
@@ -24,7 +24,7 @@ pub fn ghg(ag: u64) {
 
 
 #[inline(always)]
-pub fn ivc() {
+pub fn emz() {
     unsafe {
         core::arch::asm!(
             "tlbi vmalle1is",
@@ -37,22 +37,22 @@ pub fn ivc() {
 
 
 #[inline(always)]
-pub fn dle() -> u64 {
-    let ap: u64;
+pub fn biw() -> u64 {
+    let val: u64;
     unsafe {
-        core::arch::asm!("mrs {}, TTBR0_EL1", bd(reg) ap, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("mrs {}, TTBR0_EL1", out(reg) val, options(nomem, nostack, preserves_flags));
     }
-    ap
+    val
 }
 
 
 #[inline(always)]
-pub fn dnj(ap: u64) {
+pub fn bkc(val: u64) {
     unsafe {
         core::arch::asm!(
             "msr TTBR0_EL1, {}",
             "isb",
-            in(reg) ap,
+            in(reg) val,
             options(nostack, preserves_flags)
         );
     }
@@ -60,42 +60,42 @@ pub fn dnj(ap: u64) {
 
 
 #[inline(always)]
-pub fn zhw() -> u64 {
-    let ap: u64;
+pub fn qsi() -> u64 {
+    let val: u64;
     unsafe {
-        core::arch::asm!("mrs {}, TTBR1_EL1", bd(reg) ap, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("mrs {}, TTBR1_EL1", out(reg) val, options(nomem, nostack, preserves_flags));
     }
-    ap
+    val
 }
 
 
 #[inline(always)]
-pub fn zwt(ap: u64) {
+pub fn rdd(val: u64) {
     unsafe {
         core::arch::asm!(
             "msr TTBR1_EL1, {}",
             "isb",
-            in(reg) ap,
+            in(reg) val,
             options(nostack, preserves_flags)
         );
     }
 }
 
 
-pub fn ype() {
+pub fn qew() {
     unsafe {
-        let mut dln = cpu::lxs();
-        dln |= 1 << 0;  
-        dln |= 1 << 2;  
-        dln |= 1 << 12; 
-        cpu::qab(dln);
+        let mut bjb = cpu::gqf();
+        bjb |= 1 << 0;  
+        bjb |= 1 << 2;  
+        bjb |= 1 << 12; 
+        cpu::jrq(bjb);
     }
 }
 
 
-pub fn yzr() -> bool {
+pub fn qmq() -> bool {
     unsafe {
-        let dln = cpu::lxs();
-        dln & 1 != 0
+        let bjb = cpu::gqf();
+        bjb & 1 != 0
     }
 }

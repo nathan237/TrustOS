@@ -53,13 +53,13 @@ use alloc::format;
 
 
 
-static UP_: spin::Mutex<f32> = spin::Mutex::new(0.001);
+static VY_: spin::Mutex<f32> = spin::Mutex::new(0.001);
 
 
-static ZH_: spin::Mutex<(f32, u32)> = spin::Mutex::new((0.0, 0));
+static AAO_: spin::Mutex<(f32, u32)> = spin::Mutex::new((0.0, 0));
 
 
-static ZI_: core::sync::atomic::AtomicBool =
+static AAP_: core::sync::atomic::AtomicBool =
     core::sync::atomic::AtomicBool::new(false);
 
 
@@ -67,100 +67,100 @@ static ZI_: core::sync::atomic::AtomicBool =
 
 
 
-pub fn vjt() {
+pub fn nwa() {
     
-    let mut k = [0u8; 512];
-    let mut u = 0;
+    let mut buf = [0u8; 512];
+    let mut pos = 0;
 
     
-    while u < k.len() - 1 {
-        if let Some(o) = crate::serial::dlb() {
-            if o == b'\n' || o == b'\r' {
-                if u > 0 { break; }
+    while pos < buf.len() - 1 {
+        if let Some(b) = crate::serial::read_byte() {
+            if b == b'\n' || b == b'\r' {
+                if pos > 0 { break; }
                 continue;
             }
-            k[u] = o;
-            u += 1;
+            buf[pos] = b;
+            pos += 1;
         } else {
             break;
         }
     }
 
-    if u == 0 { return; }
+    if pos == 0 { return; }
 
     
-    let line = match core::str::jg(&k[..u]) {
-        Ok(e) => e,
+    let line = match core::str::from_utf8(&buf[..pos]) {
+        Ok(j) => j,
         Err(_) => return,
     };
 
     
-    if line.cj("MENTOR:") {
-        vmm(&line[7..]);
+    if line.starts_with("MENTOR:") {
+        nyg(&line[7..]);
     }
 }
 
 
-fn vmm(cmd: &str) {
+fn nyg(cmd: &str) {
     
-    if cmd.cj("GUARDIAN:AUTH:") {
-        let bat = &cmd[13..];
-        if super::guardian::qlg(bat) {
-            aru("OK:Copilot guardian authenticated");
+    if cmd.starts_with("GUARDIAN:AUTH:") {
+        let abm = &cmd[13..];
+        if super::guardian::jyg(abm) {
+            wm("OK:Copilot guardian authenticated");
         } else {
-            aru("ERROR:Authentication failed");
+            wm("ERROR:Authentication failed");
         }
         return;
     }
     if cmd == "GUARDIAN:LOCK" {
-        super::guardian::ljp();
-        aru("OK:Guardian session locked");
+        super::guardian::ggd();
+        wm("OK:Guardian session locked");
         return;
     }
     if cmd == "GUARDIAN:STATUS" {
-        let ak = super::guardian::nly();
-        for dm in &ak { aru(dm); }
+        let lines = super::guardian::hsq();
+        for l in &lines { wm(l); }
         return;
     }
     if cmd == "GUARDIAN:PACT" {
-        aru(super::guardian::BHA_);
+        wm(super::guardian::BJE_);
         return;
     }
 
-    if cmd.cj("TEACH:") {
+    if cmd.starts_with("TEACH:") {
         let text = &cmd[6..];
-        tli(text);
-    } else if cmd.cj("CORRECT:") {
+        mis(text);
+    } else if cmd.starts_with("CORRECT:") {
         let text = &cmd[8..];
-        tje(text);
-    } else if cmd.cj("EVAL:") {
-        let aau = &cmd[5..];
-        tjn(aau);
-    } else if cmd.cj("GENERATE:") {
-        let aau = &cmd[9..];
-        tjs(aau);
-    } else if cmd.cj("CONFIG:") {
+        mhm(text);
+    } else if cmd.starts_with("EVAL:") {
+        let nh = &cmd[5..];
+        mhs(nh);
+    } else if cmd.starts_with("GENERATE:") {
+        let nh = &cmd[9..];
+        mhu(nh);
+    } else if cmd.starts_with("CONFIG:") {
         let config = &cmd[7..];
-        tjc(config);
+        mhk(config);
     } else if cmd == "STATUS" {
-        tkz();
+        mil();
     } else if cmd == "SAVE" {
-        tku();
+        mii();
     } else if cmd == "LOAD" {
-        tkh();
+        mia();
     } else if cmd == "RESET" {
-        tks();
+        mig();
     } else if cmd == "BATCH_START" {
-        ZI_.store(true, core::sync::atomic::Ordering::Relaxed);
-        *ZH_.lock() = (0.0, 0);
-        aru("OK:Batch mode started");
+        AAP_.store(true, core::sync::atomic::Ordering::Relaxed);
+        *AAO_.lock() = (0.0, 0);
+        wm("OK:Batch mode started");
     } else if cmd == "BATCH_END" {
-        ZI_.store(false, core::sync::atomic::Ordering::Relaxed);
-        let (ayy, az) = *ZH_.lock();
-        let abl = if az > 0 { ayy / az as f32 } else { 0.0 };
-        aru(&format!("OK:Batch ended. {} sequences, avg loss={:.4}", az, abl));
+        AAP_.store(false, core::sync::atomic::Ordering::Relaxed);
+        let (aah, count) = *AAO_.lock();
+        let ns = if count > 0 { aah / count as f32 } else { 0.0 };
+        wm(&format!("OK:Batch ended. {} sequences, avg loss={:.4}", count, ns));
     } else {
-        aru(&format!("ERROR:Unknown command '{}'", cmd));
+        wm(&format!("ERROR:Unknown command '{}'", cmd));
     }
 }
 
@@ -169,118 +169,118 @@ fn vmm(cmd: &str) {
 
 
 
-fn tli(text: &str) {
-    let aad = *UP_.lock();
-    let vl = super::ekd(text, aad);
+fn mis(text: &str) {
+    let lr = *VY_.lock();
+    let ka = super::bwo(text, lr);
 
-    if ZI_.load(core::sync::atomic::Ordering::Relaxed) {
-        let mut bl = ZH_.lock();
-        bl.0 += vl;
+    if AAP_.load(core::sync::atomic::Ordering::Relaxed) {
+        let mut bl = AAO_.lock();
+        bl.0 += ka;
         bl.1 += 1;
     }
 
-    aru(&format!("LOSS:{:.4}", vl));
+    wm(&format!("LOSS:{:.4}", ka));
 }
 
 
-fn tje(text: &str) {
-    if let Some(phz) = text.du('|') {
-        let xxy = &text[..phz];
-        let tgq = &text[phz + 1..];
+fn mhm(text: &str) {
+    if let Some(sep_pos) = text.find('|') {
+        let pws = &text[..sep_pos];
+        let mfi = &text[sep_pos + 1..];
         
-        let aad = *UP_.lock() * 2.0;
-        let vl = super::ekd(tgq, aad);
-        aru(&format!("OK:Correction trained, loss={:.4}", vl));
+        let lr = *VY_.lock() * 2.0;
+        let ka = super::bwo(mfi, lr);
+        wm(&format!("OK:Correction trained, loss={:.4}", ka));
     } else {
-        aru("ERROR:Expected format: wrong|correct");
+        wm("ERROR:Expected format: wrong|correct");
     }
 }
 
 
-fn tjn(aau: &str) {
-    if !super::uc() {
-        aru("ERROR:Model not ready");
+fn mhs(nh: &str) {
+    if !super::is_ready() {
+        wm("ERROR:Model not ready");
         return;
     }
 
-    let eb = super::tokenizer::cxj(aau);
-    let bet = super::Ci.lock();
-    if let Some(model) = bet.as_ref() {
-        let (vl, _) = super::inference::cjq(model, &eb);
-        aru(&format!("LOSS:{:.4}", vl));
+    let tokens = super::tokenizer::bbj(nh);
+    let aea = super::Ay.lock();
+    if let Some(model) = aea.as_ref() {
+        let (ka, _) = super::inference::atj(model, &tokens);
+        wm(&format!("LOSS:{:.4}", ka));
     } else {
-        aru("ERROR:No model loaded");
+        wm("ERROR:No model loaded");
     }
 }
 
 
-fn tjs(aau: &str) {
-    let an = super::cks(aau, 128);
-    aru(&format!("GEN:{}", an));
+fn mhu(nh: &str) {
+    let output = super::generate(nh, 128);
+    wm(&format!("GEN:{}", output));
 }
 
 
-fn tjc(config: &str) {
-    if let Err(fr) = super::guardian::emj(super::guardian::ProtectedOp::Pc) {
-        aru(&alloc::format!("ERROR:Guardian denied — {}", fr));
+fn mhk(config: &str) {
+    if let Err(bk) = super::guardian::bxo(super::guardian::ProtectedOp::ConfigChange) {
+        wm(&alloc::format!("ERROR:Guardian denied — {}", bk));
         return;
     }
-    if config.cj("temp=") {
-        if let Ok(ab) = config[5..].parse::<f32>() {
+    if config.starts_with("temp=") {
+        if let Ok(t) = config[5..].parse::<f32>() {
             
-            aru(&format!("OK:Temperature set to {}", ab));
+            wm(&format!("OK:Temperature set to {}", t));
         }
-    } else if config.cj("topk=") {
-        if let Ok(eh) = config[5..].parse::<usize>() {
-            aru(&format!("OK:Top-k set to {}", eh));
+    } else if config.starts_with("topk=") {
+        if let Ok(k) = config[5..].parse::<usize>() {
+            wm(&format!("OK:Top-k set to {}", k));
         }
-    } else if config.cj("lr=") {
-        if let Ok(aad) = config[3..].parse::<f32>() {
-            *UP_.lock() = aad;
-            aru(&format!("OK:Learning rate set to {}", aad));
+    } else if config.starts_with("lr=") {
+        if let Ok(lr) = config[3..].parse::<f32>() {
+            *VY_.lock() = lr;
+            wm(&format!("OK:Learning rate set to {}", lr));
         }
     } else {
-        aru(&format!("ERROR:Unknown config '{}'", config));
+        wm(&format!("ERROR:Unknown config '{}'", config));
     }
 }
 
 
-fn tkz() {
-    let cm = super::cm();
-    aru(&format!("STATUS:{}", cm));
+fn mil() {
+    let stats = super::stats();
+    wm(&format!("STATUS:{}", stats));
 }
 
 
-fn tku() {
-    match super::pfn() {
-        Ok(bf) => aru(&format!("OK:Saved {} KB to /jarvis/weights.bin", bf / 1024)),
-        Err(aa) => aru(&format!("ERROR:{}", aa)),
+fn mii() {
+    match super::jco() {
+        Ok(bytes) => wm(&format!("OK:Saved {} KB to /jarvis/weights.bin", bytes / 1024)),
+        Err(e) => wm(&format!("ERROR:{}", e)),
     }
 }
 
 
-fn tkh() {
-    if let Err(fr) = super::guardian::emj(super::guardian::ProtectedOp::Bwu) {
-        aru(&alloc::format!("ERROR:Guardian denied — {}", fr));
+fn mia() {
+    if let Err(bk) = super::guardian::bxo(super::guardian::ProtectedOp::WeightLoad) {
+        wm(&alloc::format!("ERROR:Guardian denied — {}", bk));
         return;
     }
-    match super::oka() {
-        Ok(bf) => aru(&format!("OK:Loaded {} KB from /jarvis/weights.bin", bf / 1024)),
-        Err(aa) => aru(&format!("ERROR:{}", aa)),
+    match super::iky() {
+        Ok(bytes) => wm(&format!("OK:Loaded {} KB from /jarvis/weights.bin", bytes / 1024)),
+        Err(e) => wm(&format!("ERROR:{}", e)),
     }
 }
 
 
-fn tks() {
-    if let Err(fr) = super::guardian::emj(super::guardian::ProtectedOp::Bmm) {
-        aru(&alloc::format!("ERROR:Guardian denied — {}", fr));
+fn mig() {
+    if let Err(bk) = super::guardian::bxo(super::guardian::ProtectedOp::ModelReset) {
+        wm(&alloc::format!("ERROR:Guardian denied — {}", bk));
         return;
     }
-    if let Some(model) = super::Ci.lock().as_mut() {
-        model.apa();
-        aru("OK:Weights reset to random initialization");
+    if let Some(model) = super::Ay.lock().as_mut() {
+        model.reset();
+        wm("OK:Weights reset to random initialization");
     } else {
-        aru("ERROR:No model to reset");
+        wm("ERROR:No model to reset");
     }
 }
 
@@ -289,11 +289,11 @@ fn tks() {
 
 
 
-fn aru(fr: &str) {
-    crate::serial_println!("JARVIS:{}", fr);
+fn wm(bk: &str) {
+    crate::serial_println!("JARVIS:{}", bk);
 }
 
 
-pub fn dsr() -> f32 {
-    *UP_.lock()
+pub fn bnh() -> f32 {
+    *VY_.lock()
 }

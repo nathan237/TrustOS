@@ -3,7 +3,7 @@
 
 
 
-use alloc::string::{String, Gd};
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use alloc::format;
 use alloc::collections::BTreeMap;
@@ -11,83 +11,83 @@ use spin::Mutex;
 use core::sync::atomic::{AtomicBool, Ordering};
 
 
-pub type Mm = u32;
+pub type Ff = u32;
 
-pub type Ln = u32;
-
-
-pub const BET_: Mm = 0;
-
-pub const BES_: Ln = 0;
-
-pub const AJJ_: Ln = 100;
+pub type Ew = u32;
 
 
-pub const CFV_: usize = 32;
+pub const BGV_: Ff = 0;
 
-pub const DTK_: usize = 128;
+pub const BGU_: Ew = 0;
+
+pub const ALE_: Ew = 100;
 
 
+pub const CJF_: usize = 32;
 
-const BYX_: u32 = 10_000;
+pub const DXC_: usize = 128;
 
 
 
-fn lbn(aqe: &str, bsd: &str) -> [u8; 32] {
-    use crate::tls13::crypto::{chw, drt};
+const CCD_: u32 = 10_000;
 
-    
-    let mut result = drt(bsd.as_bytes(), aqe.as_bytes());
+
+
+fn gac(uy: &str, salt: &str) -> [u8; 32] {
+    use crate::tls13::crypto::{asg, bmu};
 
     
-    for _ in 1..BYX_ {
-        result = chw(&result);
+    let mut result = bmu(salt.as_bytes(), uy.as_bytes());
+
+    
+    for _ in 1..CCD_ {
+        result = asg(&result);
     }
     result
 }
 
 
-fn rob(q: &[u8], o: &[u8]) -> bool {
-    if q.len() != o.len() {
+fn kxf(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
         return false;
     }
-    let mut wz: u8 = 0;
-    for (b, c) in q.iter().fca(o.iter()) {
-        wz |= b ^ c;
+    let mut jr: u8 = 0;
+    for (x, y) in a.iter().zip(b.iter()) {
+        jr |= x ^ y;
     }
-    wz == 0
+    jr == 0
 }
 
 
-fn nxo(ydq: &str) -> String {
-    let mut k = [0u8; 16];
-    crate::rng::phh(&mut k);
-    let mut e = String::fc(32);
-    for o in &k {
-        e.t(&format!("{:02x}", o));
+fn ibd(_username: &str) -> String {
+    let mut buf = [0u8; 16];
+    crate::rng::jeb(&mut buf);
+    let mut j = String::with_capacity(32);
+    for b in &buf {
+        j.push_str(&format!("{:02x}", b));
     }
-    e
+    j
 }
 
 
-fn tol(nu: &str) -> [u8; 32] {
-    let mut bd = [0u8; 32];
-    let bf = nu.as_bytes();
-    for a in 0..32 {
-        let gd = a * 2;
-        if gd + 1 >= bf.len() { break; }
-        let afq = obr(bf[gd]);
-        let ail = obr(bf[gd + 1]);
-        bd[a] = (afq << 4) | ail;
+fn mlc(ga: &str) -> [u8; 32] {
+    let mut out = [0u8; 32];
+    let bytes = ga.as_bytes();
+    for i in 0..32 {
+        let hi = i * 2;
+        if hi + 1 >= bytes.len() { break; }
+        let high = ies(bytes[hi]);
+        let low = ies(bytes[hi + 1]);
+        out[i] = (high << 4) | low;
     }
-    bd
+    out
 }
 
-fn obr(r: u8) -> u8 {
-    match r {
-        b'0'..=b'9' => r - b'0',
-        b'a'..=b'f' => r - b'a' + 10,
-        b'A'..=b'F' => r - b'A' + 10,
+fn ies(c: u8) -> u8 {
+    match c {
+        b'0'..=b'9' => c - b'0',
+        b'a'..=b'f' => c - b'a' + 10,
+        b'A'..=b'F' => c - b'A' + 10,
         _ => 0,
     }
 }
@@ -95,60 +95,60 @@ fn obr(r: u8) -> u8 {
 
 #[derive(Clone, Debug)]
 pub struct UserEntry {
-    pub ox: String,
-    pub pi: Mm,
-    pub pw: Ln,
-    pub eqz: String,       
-    pub dib: String,
+    pub username: String,
+    pub uid: Ff,
+    pub gid: Ew,
+    pub gecos: String,       
+    pub home_dir: String,
     pub shell: String,
 }
 
 impl UserEntry {
     
-    pub fn new(ox: &str, pi: Mm, pw: Ln) -> Self {
+    pub fn new(username: &str, uid: Ff, gid: Ew) -> Self {
         Self {
-            ox: String::from(ox),
-            pi,
-            pw,
-            eqz: String::new(),
-            dib: format!("/home/{}", ox),
+            username: String::from(username),
+            uid,
+            gid,
+            gecos: String::new(),
+            home_dir: format!("/home/{}", username),
             shell: String::from("/bin/tsh"),
         }
     }
     
     
-    pub fn exv() -> Self {
+    pub fn cdl() -> Self {
         Self {
-            ox: String::from("root"),
-            pi: BET_,
-            pw: BES_,
-            eqz: String::from("System Administrator"),
-            dib: String::from("/root"),
+            username: String::from("root"),
+            uid: BGV_,
+            gid: BGU_,
+            gecos: String::from("System Administrator"),
+            home_dir: String::from("/root"),
             shell: String::from("/bin/tsh"),
         }
     }
     
     
-    pub fn xim(&self) -> String {
+    pub fn to_passwd_line(&self) -> String {
         format!("{}:x:{}:{}:{}:{}:{}",
-            self.ox, self.pi, self.pw,
-            self.eqz, self.dib, self.shell)
+            self.username, self.uid, self.gid,
+            self.gecos, self.home_dir, self.shell)
     }
     
     
-    pub fn syd(line: &str) -> Option<Self> {
-        let ek: Vec<&str> = line.adk(':').collect();
-        if ek.len() < 7 {
+    pub fn lzn(line: &str) -> Option<Self> {
+        let au: Vec<&str> = line.split(':').collect();
+        if au.len() < 7 {
             return None;
         }
         
         Some(Self {
-            ox: String::from(ek[0]),
-            pi: ek[2].parse().bq()?,
-            pw: ek[3].parse().bq()?,
-            eqz: String::from(ek[4]),
-            dib: String::from(ek[5]),
-            shell: String::from(ek[6]),
+            username: String::from(au[0]),
+            uid: au[2].parse().ok()?,
+            gid: au[3].parse().ok()?,
+            gecos: String::from(au[4]),
+            home_dir: String::from(au[5]),
+            shell: String::from(au[6]),
         })
     }
 }
@@ -156,110 +156,110 @@ impl UserEntry {
 
 #[derive(Clone, Debug)]
 pub struct ShadowEntry {
-    pub ox: String,
-    pub gow: [u8; 32],
-    pub bsd: String,
-    pub jcm: u64,    
-    pub jga: u32,        
-    pub jfg: u32,        
-    pub jwj: u32,       
-    pub izv: i32,   
-    pub iti: i64,     
+    pub username: String,
+    pub password_hash: [u8; 32],
+    pub salt: String,
+    pub last_changed: u64,    
+    pub min_days: u32,        
+    pub max_days: u32,        
+    pub warn_days: u32,       
+    pub inactive_days: i32,   
+    pub expire_date: i64,     
 }
 
 impl ShadowEntry {
     
-    pub fn new(ox: &str, aqe: &str) -> Self {
-        let bsd = nxo(ox);
-        let hash = lbn(aqe, &bsd);
+    pub fn new(username: &str, uy: &str) -> Self {
+        let salt = ibd(username);
+        let hash = gac(uy, &salt);
         
         Self {
-            ox: String::from(ox),
-            gow: hash,
-            bsd,
-            jcm: 0,
-            jga: 0,
-            jfg: 99999,
-            jwj: 7,
-            izv: -1,
-            iti: -1,
+            username: String::from(username),
+            password_hash: hash,
+            salt,
+            last_changed: 0,
+            min_days: 0,
+            max_days: 99999,
+            warn_days: 7,
+            inactive_days: -1,
+            expire_date: -1,
         }
     }
     
     
-    pub fn caq(ox: &str) -> Self {
+    pub fn locked(username: &str) -> Self {
         Self {
-            ox: String::from(ox),
-            gow: [0u8; 32],
-            bsd: String::from("!"),
-            jcm: 0,
-            jga: 0,
-            jfg: 99999,
-            jwj: 7,
-            izv: -1,
-            iti: -1,
+            username: String::from(username),
+            password_hash: [0u8; 32],
+            salt: String::from("!"),
+            last_changed: 0,
+            min_days: 0,
+            max_days: 99999,
+            warn_days: 7,
+            inactive_days: -1,
+            expire_date: -1,
         }
     }
     
     
-    pub fn xrj(&self, aqe: &str) -> bool {
-        if self.bsd == "!" {
+    pub fn verify_password(&self, uy: &str) -> bool {
+        if self.salt == "!" {
             return false; 
         }
-        let hash = lbn(aqe, &self.bsd);
-        rob(&hash, &self.gow)
+        let hash = gac(uy, &self.salt);
+        kxf(&hash, &self.password_hash)
     }
     
     
-    pub fn wjj(&mut self, aqe: &str) {
-        self.bsd = nxo(&self.ox);
-        self.gow = lbn(aqe, &self.bsd);
+    pub fn set_password(&mut self, uy: &str) {
+        self.salt = ibd(&self.username);
+        self.password_hash = gac(uy, &self.salt);
     }
     
     
-    pub fn zsx(&self) -> String {
+    pub fn ral(&self) -> String {
         
-        let mut obc = String::fc(64);
-        for o in &self.gow {
-            obc.t(&format!("{:02x}", o));
+        let mut ieg = String::with_capacity(64);
+        for b in &self.password_hash {
+            ieg.push_str(&format!("{:02x}", b));
         }
         format!("{}:{}${}:{}:{}:{}:{}:{}:{}:",
-            self.ox,
-            obc,
-            self.bsd,
-            self.jcm,
-            self.jga,
-            self.jfg,
-            self.jwj,
-            self.izv,
-            self.iti)
+            self.username,
+            ieg,
+            self.salt,
+            self.last_changed,
+            self.min_days,
+            self.max_days,
+            self.warn_days,
+            self.inactive_days,
+            self.expire_date)
     }
     
     
-    pub fn yrs(line: &str) -> Option<Self> {
-        let ek: Vec<&str> = line.adk(':').collect();
-        if ek.len() < 9 {
+    pub fn qgm(line: &str) -> Option<Self> {
+        let au: Vec<&str> = line.split(':').collect();
+        if au.len() < 9 {
             return None;
         }
         
         
-        let lbo: Vec<&str> = ek[1].adk('$').collect();
-        let (hash, bsd) = if lbo.len() >= 2 {
-            (tol(lbo[0]), String::from(lbo[1]))
+        let gad: Vec<&str> = au[1].split('$').collect();
+        let (hash, salt) = if gad.len() >= 2 {
+            (mlc(gad[0]), String::from(gad[1]))
         } else {
             ([0u8; 32], String::from("!"))
         };
         
         Some(Self {
-            ox: String::from(ek[0]),
-            gow: hash,
-            bsd,
-            jcm: ek[2].parse().unwrap_or(0),
-            jga: ek[3].parse().unwrap_or(0),
-            jfg: ek[4].parse().unwrap_or(99999),
-            jwj: ek[5].parse().unwrap_or(7),
-            izv: ek[6].parse().unwrap_or(-1),
-            iti: ek[7].parse().unwrap_or(-1),
+            username: String::from(au[0]),
+            password_hash: hash,
+            salt,
+            last_changed: au[2].parse().unwrap_or(0),
+            min_days: au[3].parse().unwrap_or(0),
+            max_days: au[4].parse().unwrap_or(99999),
+            warn_days: au[5].parse().unwrap_or(7),
+            inactive_days: au[6].parse().unwrap_or(-1),
+            expire_date: au[7].parse().unwrap_or(-1),
         })
     }
 }
@@ -267,183 +267,183 @@ impl ShadowEntry {
 
 #[derive(Clone, Debug)]
 pub struct GroupEntry {
-    pub j: String,
-    pub pw: Ln,
-    pub jft: Vec<String>,
+    pub name: String,
+    pub gid: Ew,
+    pub members: Vec<String>,
 }
 
 impl GroupEntry {
-    pub fn new(j: &str, pw: Ln) -> Self {
+    pub fn new(name: &str, gid: Ew) -> Self {
         Self {
-            j: String::from(j),
-            pw,
-            jft: Vec::new(),
+            name: String::from(name),
+            gid,
+            members: Vec::new(),
         }
     }
     
     
-    pub fn xij(&self) -> String {
-        format!("{}:x:{}:{}", self.j, self.pw, self.jft.rr(","))
+    pub fn to_group_line(&self) -> String {
+        format!("{}:x:{}:{}", self.name, self.gid, self.members.join(","))
     }
     
     
-    pub fn yrp(line: &str) -> Option<Self> {
-        let ek: Vec<&str> = line.adk(':').collect();
-        if ek.len() < 3 {
+    pub fn qgk(line: &str) -> Option<Self> {
+        let au: Vec<&str> = line.split(':').collect();
+        if au.len() < 3 {
             return None;
         }
-        let j = String::from(ek[0]);
-        let pw: u32 = ek[2].parse().bq()?;
-        let jft = if ek.len() > 3 && !ek[3].is_empty() {
-            ek[3].adk(',').map(|e| String::from(e.em())).collect()
+        let name = String::from(au[0]);
+        let gid: u32 = au[2].parse().ok()?;
+        let members = if au.len() > 3 && !au[3].is_empty() {
+            au[3].split(',').map(|j| String::from(j.trim())).collect()
         } else {
             Vec::new()
         };
-        Some(Self { j, pw, jft })
+        Some(Self { name, gid, members })
     }
 }
 
 
 pub struct Session {
-    pub hqi: bool,
-    pub pi: Mm,
-    pub pw: Ln,
-    pub ox: String,
-    pub dib: String,
-    pub ljt: u64,
+    pub logged_in: bool,
+    pub uid: Ff,
+    pub gid: Ew,
+    pub username: String,
+    pub home_dir: String,
+    pub login_time: u64,
 }
 
 impl Session {
     pub fn new() -> Self {
         Self {
-            hqi: false,
-            pi: 0,
-            pw: 0,
-            ox: String::new(),
-            dib: String::from("/"),
-            ljt: 0,
+            logged_in: false,
+            uid: 0,
+            gid: 0,
+            username: String::new(),
+            home_dir: String::from("/"),
+            login_time: 0,
         }
     }
     
-    pub fn crt(&self) -> bool {
-        self.pi == BET_
+    pub fn is_root(&self) -> bool {
+        self.uid == BGV_
     }
 }
 
 
 pub struct UserDatabase {
-    ddg: BTreeMap<String, UserEntry>,
-    fup: BTreeMap<String, ShadowEntry>,
-    hlz: BTreeMap<String, GroupEntry>,
-    jha: Mm,
-    uuf: Ln,
+    users: BTreeMap<String, UserEntry>,
+    shadows: BTreeMap<String, ShadowEntry>,
+    groups: BTreeMap<String, GroupEntry>,
+    next_uid: Ff,
+    next_gid: Ew,
 }
 
 impl UserDatabase {
     pub fn new() -> Self {
-        let mut ng = Self {
-            ddg: BTreeMap::new(),
-            fup: BTreeMap::new(),
-            hlz: BTreeMap::new(),
-            jha: 1000, 
-            uuf: 1000,
+        let mut fu = Self {
+            users: BTreeMap::new(),
+            shadows: BTreeMap::new(),
+            groups: BTreeMap::new(),
+            next_uid: 1000, 
+            next_gid: 1000,
         };
         
         
-        ng.hlz.insert(String::from("root"), GroupEntry::new("root", BES_));
-        ng.hlz.insert(String::from("users"), GroupEntry::new("users", AJJ_));
-        ng.hlz.insert(String::from("wheel"), GroupEntry::new("wheel", 10)); 
+        fu.groups.insert(String::from("root"), GroupEntry::new("root", BGU_));
+        fu.groups.insert(String::from("users"), GroupEntry::new("users", ALE_));
+        fu.groups.insert(String::from("wheel"), GroupEntry::new("wheel", 10)); 
         
         
-        let exv = UserEntry::exv();
-        let vzz = ShadowEntry::new("root", "toor");
-        ng.ddg.insert(String::from("root"), exv);
-        ng.fup.insert(String::from("root"), vzz);
+        let cdl = UserEntry::cdl();
+        let ohz = ShadowEntry::new("root", "toor");
+        fu.users.insert(String::from("root"), cdl);
+        fu.shadows.insert(String::from("root"), ohz);
         
         
-        let cra = UserEntry {
-            ox: String::from("guest"),
-            pi: 1000,
-            pw: AJJ_,
-            eqz: String::from("Guest User"),
-            dib: String::from("/home/guest"),
+        let axj = UserEntry {
+            username: String::from("guest"),
+            uid: 1000,
+            gid: ALE_,
+            gecos: String::from("Guest User"),
+            home_dir: String::from("/home/guest"),
             shell: String::from("/bin/tsh"),
         };
-        let tid = ShadowEntry::new("guest", "guest");
-        ng.ddg.insert(String::from("guest"), cra);
-        ng.fup.insert(String::from("guest"), tid);
-        ng.jha = 1001;
+        let mgm = ShadowEntry::new("guest", "guest");
+        fu.users.insert(String::from("guest"), axj);
+        fu.shadows.insert(String::from("guest"), mgm);
+        fu.next_uid = 1001;
         
-        ng
+        fu
     }
     
     
-    pub fn nyt(&self, ox: &str) -> Option<&UserEntry> {
-        self.ddg.get(ox)
+    pub fn get_user(&self, username: &str) -> Option<&UserEntry> {
+        self.users.get(username)
     }
     
     
-    pub fn yud(&self, pi: Mm) -> Option<&UserEntry> {
-        self.ddg.alv().du(|tm| tm.pi == pi)
+    pub fn qit(&self, uid: Ff) -> Option<&UserEntry> {
+        self.users.values().find(|iy| iy.uid == uid)
     }
     
     
-    pub fn mwu(&self, ox: &str, aqe: &str) -> bool {
-        if let Some(zc) = self.fup.get(ox) {
-            zc.xrj(aqe)
+    pub fn authenticate(&self, username: &str, uy: &str) -> bool {
+        if let Some(shadow) = self.shadows.get(username) {
+            shadow.verify_password(uy)
         } else {
             false
         }
     }
     
     
-    pub fn jzj(&mut self, ox: &str, aqe: &str, hos: bool) -> Result<Mm, &'static str> {
+    pub fn add_user(&mut self, username: &str, uy: &str, dsj: bool) -> Result<Ff, &'static str> {
         
-        if ox.is_empty() || ox.len() > CFV_ {
+        if username.is_empty() || username.len() > CJF_ {
             return Err("Invalid username length");
         }
         
-        if self.ddg.bgm(ox) {
+        if self.users.contains_key(username) {
             return Err("User already exists");
         }
         
         
-        if !ox.bw().xx(|r| r.etb() || r == '_' || r == '-') {
+        if !username.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
             return Err("Invalid characters in username");
         }
         
-        let pi = self.jha;
-        self.jha += 1;
+        let uid = self.next_uid;
+        self.next_uid += 1;
         
-        let pw = if hos { 10 } else { AJJ_ }; 
+        let gid = if dsj { 10 } else { ALE_ }; 
         
-        let cnp = UserEntry::new(ox, pi, pw);
-        let zc = ShadowEntry::new(ox, aqe);
+        let avp = UserEntry::new(username, uid, gid);
+        let shadow = ShadowEntry::new(username, uy);
         
-        self.ddg.insert(String::from(ox), cnp);
-        self.fup.insert(String::from(ox), zc);
+        self.users.insert(String::from(username), avp);
+        self.shadows.insert(String::from(username), shadow);
         
-        Ok(pi)
+        Ok(uid)
     }
     
     
-    pub fn kou(&mut self, ox: &str) -> Result<(), &'static str> {
-        if ox == "root" {
+    pub fn delete_user(&mut self, username: &str) -> Result<(), &'static str> {
+        if username == "root" {
             return Err("Cannot delete root user");
         }
         
-        if self.ddg.remove(ox).is_none() {
+        if self.users.remove(username).is_none() {
             return Err("User not found");
         }
         
-        self.fup.remove(ox);
+        self.shadows.remove(username);
         Ok(())
     }
     
     
-    pub fn khc(&mut self, ox: &str, fov: &str) -> Result<(), &'static str> {
-        if let Some(zc) = self.fup.ds(ox) {
-            zc.wjj(fov);
+    pub fn change_password(&mut self, username: &str, cnc: &str) -> Result<(), &'static str> {
+        if let Some(shadow) = self.shadows.get_mut(username) {
+            shadow.set_password(cnc);
             Ok(())
         } else {
             Err("User not found")
@@ -451,203 +451,203 @@ impl UserDatabase {
     }
     
     
-    pub fn liz(&self) -> Vec<&UserEntry> {
-        self.ddg.alv().collect()
+    pub fn list_users(&self) -> Vec<&UserEntry> {
+        self.users.values().collect()
     }
     
     
-    pub fn tci(&self) -> String {
-        self.ddg.alv()
-            .map(|tm| tm.xim())
+    pub fn generate_passwd(&self) -> String {
+        self.users.values()
+            .map(|iy| iy.to_passwd_line())
             .collect::<Vec<_>>()
-            .rr("\n")
+            .join("\n")
     }
     
     
-    pub fn tce(&self) -> String {
-        self.hlz.alv()
-            .map(|at| at.xij())
+    pub fn generate_group(&self) -> String {
+        self.groups.values()
+            .map(|g| g.to_group_line())
             .collect::<Vec<_>>()
-            .rr("\n")
+            .join("\n")
     }
 }
 
 
-static EX_: Mutex<Option<UserDatabase>> = Mutex::new(None);
-static GE_: Mutex<Option<Session>> = Mutex::new(None);
-static AZA_: AtomicBool = AtomicBool::new(false);
-static Be: AtomicBool = AtomicBool::new(false);
+static FN_: Mutex<Option<UserDatabase>> = Mutex::new(None);
+static GV_: Mutex<Option<Session>> = Mutex::new(None);
+static BBB_: AtomicBool = AtomicBool::new(false);
+static Ah: AtomicBool = AtomicBool::new(false);
 
 
 pub fn init() {
-    let mut ng = EX_.lock();
-    *ng = Some(UserDatabase::new());
+    let mut fu = FN_.lock();
+    *fu = Some(UserDatabase::new());
     
-    let mut he = GE_.lock();
-    *he = Some(Session::new());
+    let mut by = GV_.lock();
+    *by = Some(Session::new());
     
-    Be.store(true, Ordering::SeqCst);
+    Ah.store(true, Ordering::SeqCst);
     
     crate::log_debug!("[AUTH] Authentication system initialized");
 }
 
 
-pub fn ky() -> bool {
-    Be.load(Ordering::SeqCst)
+pub fn is_initialized() -> bool {
+    Ah.load(Ordering::SeqCst)
 }
 
 
-pub fn znj(cbj: bool) {
-    AZA_.store(cbj, Ordering::SeqCst);
+pub fn qwf(aov: bool) {
+    BBB_.store(aov, Ordering::SeqCst);
 }
 
 
-pub fn yzo() -> bool {
-    AZA_.load(Ordering::SeqCst)
+pub fn qmn() -> bool {
+    BBB_.load(Ordering::SeqCst)
 }
 
 
-pub fn hey() -> String {
-    let he = GE_.lock();
-    if let Some(ref e) = *he {
-        if e.hqi {
-            return e.ox.clone();
+pub fn dmb() -> String {
+    let by = GV_.lock();
+    if let Some(ref j) = *by {
+        if j.logged_in {
+            return j.username.clone();
         }
     }
     String::from("nobody")
 }
 
 
-pub fn kne() -> Mm {
-    let he = GE_.lock();
-    if let Some(ref e) = *he {
-        e.pi
+pub fn fpz() -> Ff {
+    let by = GV_.lock();
+    if let Some(ref j) = *by {
+        j.uid
     } else {
         65534 
     }
 }
 
 
-pub fn kmu() -> Ln {
-    let he = GE_.lock();
-    if let Some(ref e) = *he {
-        e.pw
+pub fn fpp() -> Ew {
+    let by = GV_.lock();
+    if let Some(ref j) = *by {
+        j.gid
     } else {
         65534 
     }
 }
 
 
-pub fn crt() -> bool {
-    let he = GE_.lock();
-    if let Some(ref e) = *he {
-        e.crt()
+pub fn is_root() -> bool {
+    let by = GV_.lock();
+    if let Some(ref j) = *by {
+        j.is_root()
     } else {
         false
     }
 }
 
 
-pub fn tyd() -> bool {
-    let he = GE_.lock();
-    if let Some(ref e) = *he {
-        e.hqi
+pub fn mta() -> bool {
+    let by = GV_.lock();
+    if let Some(ref j) = *by {
+        j.logged_in
     } else {
         false
     }
 }
 
 
-pub fn ljs(ox: &str, aqe: &str) -> Result<(), &'static str> {
-    let ng = EX_.lock();
-    let ng = ng.as_ref().ok_or("Auth not initialized")?;
+pub fn ggf(username: &str, uy: &str) -> Result<(), &'static str> {
+    let fu = FN_.lock();
+    let fu = fu.as_ref().ok_or("Auth not initialized")?;
     
-    if !ng.mwu(ox, aqe) {
+    if !fu.authenticate(username, uy) {
         return Err("Invalid username or password");
     }
     
-    let cnp = ng.nyt(ox).ok_or("User not found")?;
+    let avp = fu.get_user(username).ok_or("User not found")?;
     
-    drop(ng); 
+    drop(fu); 
     
-    let mut he = GE_.lock();
-    if let Some(ref mut e) = *he {
-        e.hqi = true;
-        e.pi = cnp.pi;
-        e.pw = cnp.pw;
-        e.ox = cnp.ox.clone();
-        e.dib = cnp.dib.clone();
-        e.ljt = crate::time::lc();
+    let mut by = GV_.lock();
+    if let Some(ref mut j) = *by {
+        j.logged_in = true;
+        j.uid = avp.uid;
+        j.gid = avp.gid;
+        j.username = avp.username.clone();
+        j.home_dir = avp.home_dir.clone();
+        j.login_time = crate::time::uptime_ms();
     }
     
     Ok(())
 }
 
 
-pub fn oki() {
-    let mut he = GE_.lock();
-    if let Some(ref mut e) = *he {
-        e.hqi = false;
-        e.pi = 0;
-        e.pw = 0;
-        e.ox.clear();
-        e.dib = String::from("/");
-        e.ljt = 0;
+pub fn ilf() {
+    let mut by = GV_.lock();
+    if let Some(ref mut j) = *by {
+        j.logged_in = false;
+        j.uid = 0;
+        j.gid = 0;
+        j.username.clear();
+        j.home_dir = String::from("/");
+        j.login_time = 0;
     }
 }
 
 
-pub fn jzj(ox: &str, aqe: &str, hos: bool) -> Result<Mm, &'static str> {
-    if !crt() && tyd() {
+pub fn add_user(username: &str, uy: &str, dsj: bool) -> Result<Ff, &'static str> {
+    if !is_root() && mta() {
         return Err("Permission denied: must be root");
     }
     
-    let mut ng = EX_.lock();
-    let ng = ng.as_mut().ok_or("Auth not initialized")?;
-    ng.jzj(ox, aqe, hos)
+    let mut fu = FN_.lock();
+    let fu = fu.as_mut().ok_or("Auth not initialized")?;
+    fu.add_user(username, uy, dsj)
 }
 
 
-pub fn kou(ox: &str) -> Result<(), &'static str> {
-    if !crt() {
+pub fn delete_user(username: &str) -> Result<(), &'static str> {
+    if !is_root() {
         return Err("Permission denied: must be root");
     }
     
-    let mut ng = EX_.lock();
-    let ng = ng.as_mut().ok_or("Auth not initialized")?;
-    ng.kou(ox)
+    let mut fu = FN_.lock();
+    let fu = fu.as_mut().ok_or("Auth not initialized")?;
+    fu.delete_user(username)
 }
 
 
-pub fn khc(ox: &str, lqa: &str, fov: &str) -> Result<(), &'static str> {
-    let ng = EX_.lock();
-    let rtu = ng.as_ref().ok_or("Auth not initialized")?;
+pub fn change_password(username: &str, gkq: &str, cnc: &str) -> Result<(), &'static str> {
+    let fu = FN_.lock();
+    let lbw = fu.as_ref().ok_or("Auth not initialized")?;
     
     
-    let cv = hey();
-    if cv != ox && !crt() {
+    let current = dmb();
+    if current != username && !is_root() {
         return Err("Permission denied");
     }
     
     
-    if !crt() && !rtu.mwu(ox, lqa) {
+    if !is_root() && !lbw.authenticate(username, gkq) {
         return Err("Current password incorrect");
     }
     
-    drop(ng);
+    drop(fu);
     
-    let mut ng = EX_.lock();
-    let rtt = ng.as_mut().ok_or("Auth not initialized")?;
-    rtt.khc(ox, fov)
+    let mut fu = FN_.lock();
+    let lbv = fu.as_mut().ok_or("Auth not initialized")?;
+    lbv.change_password(username, cnc)
 }
 
 
-pub fn liz() -> Vec<(String, Mm, Ln, String)> {
-    let ng = EX_.lock();
-    if let Some(ref ng) = *ng {
-        ng.liz()
+pub fn list_users() -> Vec<(String, Ff, Ew, String)> {
+    let fu = FN_.lock();
+    if let Some(ref fu) = *fu {
+        fu.list_users()
             .iter()
-            .map(|tm| (tm.ox.clone(), tm.pi, tm.pw, tm.eqz.clone()))
+            .map(|iy| (iy.username.clone(), iy.uid, iy.gid, iy.gecos.clone()))
             .collect()
     } else {
         Vec::new()
@@ -655,61 +655,61 @@ pub fn liz() -> Vec<(String, Mm, Ln, String)> {
 }
 
 
-pub fn yth(ox: &str) -> Option<String> {
-    let ng = EX_.lock();
-    ng.as_ref()?.nyt(ox).map(|tm| tm.dib.clone())
+pub fn qhx(username: &str) -> Option<String> {
+    let fu = FN_.lock();
+    fu.as_ref()?.get_user(username).map(|iy| iy.home_dir.clone())
 }
 
 
-pub fn okd() -> bool {
-    use crate::framebuffer::{C_, B_, A_, Q_, D_};
+pub fn ila() -> bool {
+    use crate::framebuffer::{C_, B_, A_, R_, D_};
     
     crate::println!();
-    crate::h!(C_, "╔════════════════════════════════════════╗");
-    crate::h!(C_, "║         T-RustOS Login                 ║");
-    crate::h!(C_, "╚════════════════════════════════════════╝");
+    crate::n!(C_, "╔════════════════════════════════════════╗");
+    crate::n!(C_, "║         T-RustOS Login                 ║");
+    crate::n!(C_, "╚════════════════════════════════════════╝");
     crate::println!();
     
-    let mut ikd = 0;
-    const AEU_: u32 = 3;
+    let mut efr = 0;
+    const AGO_: u32 = 3;
     
-    while ikd < AEU_ {
+    while efr < AGO_ {
         
-        crate::gr!(B_, "login: ");
-        let mut pxt = [0u8; 64];
-        let xpx = crate::keyboard::cts(&mut pxt);
-        let ox = core::str::jg(&pxt[..xpx])
+        crate::bq!(B_, "login: ");
+        let mut jpq = [0u8; 64];
+        let pqq = crate::keyboard::read_line(&mut jpq);
+        let username = core::str::from_utf8(&jpq[..pqq])
             .unwrap_or("")
-            .em();
+            .trim();
         
-        if ox.is_empty() {
+        if username.is_empty() {
             continue;
         }
         
         
-        crate::gr!(B_, "password: ");
-        let mut ewe = [0u8; 128];
-        let hun = crate::keyboard::fsf(&mut ewe);
-        let aqe = core::str::jg(&ewe[..hun])
+        crate::bq!(B_, "password: ");
+        let mut cci = [0u8; 128];
+        let dwg = crate::keyboard::cpb(&mut cci);
+        let uy = core::str::from_utf8(&cci[..dwg])
             .unwrap_or("")
-            .em();
+            .trim();
         crate::println!(); 
         
         
-        match ljs(ox, aqe) {
+        match ggf(username, uy) {
             Ok(()) => {
                 crate::println!();
-                crate::h!(B_, "Welcome, {}!", ox);
+                crate::n!(B_, "Welcome, {}!", username);
                 crate::println!();
                 return true;
             }
             Err(_) => {
-                ikd += 1;
-                if ikd < AEU_ {
-                    crate::h!(A_, "Login incorrect. {} attempts remaining.", 
-                        AEU_ - ikd);
+                efr += 1;
+                if efr < AGO_ {
+                    crate::n!(A_, "Login incorrect. {} attempts remaining.", 
+                        AGO_ - efr);
                 } else {
-                    crate::h!(A_, "Too many failed attempts.");
+                    crate::n!(A_, "Too many failed attempts.");
                 }
             }
         }
@@ -719,78 +719,78 @@ pub fn okd() -> bool {
 }
 
 
-pub fn mww() {
-    let _ = ljs("root", "toor");
+pub fn hgb() {
+    let _ = ggf("root", "toor");
 }
 
 
-pub fn nhc() {
-    if !crate::ramfs::ky() {
+pub fn hoo() {
+    if !crate::ramfs::is_initialized() {
         return;
     }
     
     
-    let ng = EX_.lock();
-    if let Some(ref ng) = *ng {
-        let vet = ng.tci();
-        let thp = ng.tce();
+    let fu = FN_.lock();
+    if let Some(ref fu) = *fu {
+        let nru = fu.generate_passwd();
+        let mgd = fu.generate_group();
         
-        drop(ng);
+        drop(fu);
         
-        crate::ramfs::fh(|fs| {
+        crate::ramfs::bh(|fs| {
             
             let _ = fs.touch("/etc/passwd");
-            let _ = fs.ns("/etc/passwd", vet.as_bytes());
+            let _ = fs.write_file("/etc/passwd", nru.as_bytes());
             
             
             let _ = fs.touch("/etc/group");
-            let _ = fs.ns("/etc/group", thp.as_bytes());
+            let _ = fs.write_file("/etc/group", mgd.as_bytes());
             
             
             let _ = fs.touch("/etc/shadow");
-            let _ = fs.ns("/etc/shadow", b"# Shadow file - passwords hidden\n");
+            let _ = fs.write_file("/etc/shadow", b"# Shadow file - passwords hidden\n");
         });
     }
 }
 
 
 
-pub fn ugw() {
-    if !crate::ramfs::ky() {
+pub fn nab() {
+    if !crate::ramfs::is_initialized() {
         return;
     }
     
-    let mut our: Option<alloc::vec::Vec<u8>> = None;
-    let mut nzu: Option<alloc::vec::Vec<u8>> = None;
+    let mut iua: Option<alloc::vec::Vec<u8>> = None;
+    let mut icy: Option<alloc::vec::Vec<u8>> = None;
     
-    crate::ramfs::fh(|fs| {
-        if let Ok(f) = fs.mq("/etc/passwd") {
-            our = Some(f.ip());
+    crate::ramfs::bh(|fs| {
+        if let Ok(data) = fs.read_file("/etc/passwd") {
+            iua = Some(data.to_vec());
         }
-        if let Ok(f) = fs.mq("/etc/group") {
-            nzu = Some(f.ip());
+        if let Ok(data) = fs.read_file("/etc/group") {
+            icy = Some(data.to_vec());
         }
     });
     
-    let mut ng = EX_.lock();
-    if let Some(ref mut ng) = *ng {
+    let mut fu = FN_.lock();
+    if let Some(ref mut fu) = *fu {
         
-        if let Some(ref f) = our {
-            if let Ok(ca) = core::str::jg(f) {
-                let mut diz = 0u32;
-                for line in ca.ak() {
-                    let line = line.em();
-                    if line.is_empty() || line.cj('#') { continue; }
-                    if let Some(bt) = UserEntry::syd(line) {
-                        if !ng.ddg.bgm(&bt.ox) {
-                            let j = bt.ox.clone();
-                            ng.ddg.insert(j, bt);
-                            diz += 1;
+        if let Some(ref data) = iua {
+            if let Ok(content) = core::str::from_utf8(data) {
+                let mut bhq = 0u32;
+                for line in content.lines() {
+                    let line = line.trim();
+                    if line.is_empty() || line.starts_with('#') { continue; }
+                    if let Some(entry) = UserEntry::lzn(line) {
+                        if !fu.users.contains_key(&entry.username) {
+                            let name = entry.username.clone();
+                            fu.users.insert(name, entry);
+                            bhq += 1;
                         }
                     }
                 }
-                if diz > 0 {
-                    crate::log!("[AUTH] Loaded {} users from /etc/passwd", diz);
+                if bhq > 0 {
+                    crate::log!("[AUTH] Loaded {} users from /etc/passwd", bhq);
                 }
             }
         }
@@ -798,12 +798,12 @@ pub fn ugw() {
         
         
         
-        let _ = nzu; 
+        let _ = icy; 
     }
 }
 
 
-pub fn zqo() {
-    nhc();
+pub fn qyk() {
+    hoo();
     crate::log_debug!("[AUTH] Synced user database to /etc files");
 }

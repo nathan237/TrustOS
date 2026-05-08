@@ -9,7 +9,7 @@ use alloc::vec::Vec;
 use alloc::boxed::Box;
 
 
-pub const AN_: usize = 32;
+pub const AR_: usize = 32;
 
 
 
@@ -18,60 +18,60 @@ pub const AN_: usize = 32;
 #[repr(C, align(64))] 
 pub struct PercpuBlock {
     
-    pub fjy: u64,
+    pub gs_base: u64,
     
-    pub qq: u32,
-    iig: u32,
+    pub cpu_id: u32,
+    _pad0: u32,
     
-    pub bqd: AtomicU64,
+    pub current_tid: AtomicU64,
     
-    pub tve: AtomicBool,
+    pub inside_syscall: AtomicBool,
     
-    pub ldu: AtomicBool,
+    pub in_interrupt: AtomicBool,
     
-    pub flu: AtomicUsize,
+    pub interrupt_depth: AtomicUsize,
     
-    pub jjt: AtomicUsize,
+    pub preempt_disabled: AtomicUsize,
     
-    pub jgo: AtomicBool,
+    pub need_reschedule: AtomicBool,
     
-    pub edw: AtomicBool,
+    pub is_idle: AtomicBool,
     
-    pub gdf: AtomicU64,
+    pub context_switches: AtomicU64,
     
-    pub gtx: AtomicU64,
+    pub syscall_count: AtomicU64,
     
-    pub lfd: AtomicU64,
+    pub interrupt_count: AtomicU64,
     
-    pub ucp: AtomicU64,
+    pub last_tick_tsc: AtomicU64,
     
-    pub pgn: [u64; 8],
+    pub scratch: [u64; 8],
     
-    pub bhg: u64,
+    pub kernel_stack: u64,
     
-    pub ais: u64,
+    pub user_stack: u64,
 }
 
 impl PercpuBlock {
-    pub const fn new(qq: u32) -> Self {
+    pub const fn new(cpu_id: u32) -> Self {
         Self {
-            fjy: 0, 
-            qq,
-            iig: 0,
-            bqd: AtomicU64::new(0),
-            tve: AtomicBool::new(false),
-            ldu: AtomicBool::new(false),
-            flu: AtomicUsize::new(0),
-            jjt: AtomicUsize::new(0),
-            jgo: AtomicBool::new(false),
-            edw: AtomicBool::new(true),
-            gdf: AtomicU64::new(0),
-            gtx: AtomicU64::new(0),
-            lfd: AtomicU64::new(0),
-            ucp: AtomicU64::new(0),
-            pgn: [0; 8],
-            bhg: 0,
-            ais: 0,
+            gs_base: 0, 
+            cpu_id,
+            _pad0: 0,
+            current_tid: AtomicU64::new(0),
+            inside_syscall: AtomicBool::new(false),
+            in_interrupt: AtomicBool::new(false),
+            interrupt_depth: AtomicUsize::new(0),
+            preempt_disabled: AtomicUsize::new(0),
+            need_reschedule: AtomicBool::new(false),
+            is_idle: AtomicBool::new(true),
+            context_switches: AtomicU64::new(0),
+            syscall_count: AtomicU64::new(0),
+            interrupt_count: AtomicU64::new(0),
+            last_tick_tsc: AtomicU64::new(0),
+            scratch: [0; 8],
+            kernel_stack: 0,
+            user_stack: 0,
         }
     }
     
@@ -80,246 +80,246 @@ impl PercpuBlock {
     
     
     #[inline]
-    pub fn cv() -> &'static Self {
+    pub fn current() -> &'static Self {
         #[cfg(target_arch = "x86_64")]
         unsafe {
-            let mdm: u64;
+            let self_ptr: u64;
             core::arch::asm!(
                 "mov {}, gs:[0]",
-                bd(reg) mdm,
-                options(zgw, nomem, nostack)
+                out(reg) self_ptr,
+                options(pure, nomem, nostack)
             );
             
             
-            if mdm == 0 {
-                return &EO_[0];
+            if self_ptr == 0 {
+                return &FD_[0];
             }
             
-            return &*(mdm as *const Self);
+            return &*(self_ptr as *const Self);
         }
         #[cfg(not(target_arch = "x86_64"))]
-        unsafe { &EO_[0] }
+        unsafe { &FD_[0] }
     }
     
     
     #[inline]
-    pub fn ypn(&self) {
-        self.flu.fetch_add(1, Ordering::Relaxed);
-        self.ldu.store(true, Ordering::Release);
-        self.lfd.fetch_add(1, Ordering::Relaxed);
+    pub fn qfe(&self) {
+        self.interrupt_depth.fetch_add(1, Ordering::Relaxed);
+        self.in_interrupt.store(true, Ordering::Release);
+        self.interrupt_count.fetch_add(1, Ordering::Relaxed);
     }
     
     
     #[inline]
-    pub fn zao(&self) {
-        let eo = self.flu.fetch_sub(1, Ordering::Relaxed);
-        if eo == 1 {
-            self.ldu.store(false, Ordering::Release);
+    pub fn qnh(&self) {
+        let depth = self.interrupt_depth.fetch_sub(1, Ordering::Relaxed);
+        if depth == 1 {
+            self.in_interrupt.store(false, Ordering::Release);
         }
     }
     
     
     #[inline]
-    pub fn zgf(&self) {
-        self.jjt.fetch_add(1, Ordering::Relaxed);
+    pub fn qqv(&self) {
+        self.preempt_disabled.fetch_add(1, Ordering::Relaxed);
     }
     
     
     #[inline]
-    pub fn zgg(&self) {
-        let az = self.jjt.fetch_sub(1, Ordering::Relaxed);
-        if az == 1 && self.jgo.load(Ordering::Relaxed) {
+    pub fn qqw(&self) {
+        let count = self.preempt_disabled.fetch_sub(1, Ordering::Relaxed);
+        if count == 1 && self.need_reschedule.load(Ordering::Relaxed) {
             
             
-            crate::scheduler::dvk();
+            crate::scheduler::boq();
         }
     }
     
     
     #[inline]
-    pub fn zgh(&self) -> bool {
-        self.jjt.load(Ordering::Relaxed) == 0
+    pub fn qqx(&self) -> bool {
+        self.preempt_disabled.load(Ordering::Relaxed) == 0
     }
     
     
     #[inline]
-    pub fn znn(&self) {
-        self.jgo.store(true, Ordering::Release);
+    pub fn qwj(&self) {
+        self.need_reschedule.store(true, Ordering::Release);
     }
     
     
     #[inline]
-    pub fn yil(&self) {
-        self.jgo.store(false, Ordering::Release);
+    pub fn pzz(&self) {
+        self.need_reschedule.store(false, Ordering::Release);
     }
 }
 
 
-static mut EO_: [PercpuBlock; AN_] = {
-    const Dm: PercpuBlock = PercpuBlock::new(0);
-    [Dm; AN_]
+static mut FD_: [PercpuBlock; AR_] = {
+    const Bm: PercpuBlock = PercpuBlock::new(0);
+    [Bm; AR_]
 };
 
 
-static VV_: AtomicUsize = AtomicUsize::new(1);
+static XE_: AtomicUsize = AtomicUsize::new(1);
 
 
-pub fn yxn() {
+pub fn qky() {
     unsafe {
-        EO_[0].qq = 0;
+        FD_[0].cpu_id = 0;
         
         
-        let fdn = &EO_[0] as *const _ as u64;
+        let cgj = &FD_[0] as *const _ as u64;
         
         #[cfg(target_arch = "x86_64")]
         {
             
             let msr = 0xC0000102u32; 
-            let ail = fdn as u32;
-            let afq = (fdn >> 32) as u32;
+            let low = cgj as u32;
+            let high = (cgj >> 32) as u32;
             
             core::arch::asm!(
                 "wrmsr",
                 in("ecx") msr,
-                in("eax") ail,
-                in("edx") afq,
+                in("eax") low,
+                in("edx") high,
                 options(nostack)
             );
             
             
-            let lap = 0xC0000101u32; 
+            let gs_msr = 0xC0000101u32; 
             core::arch::asm!(
                 "wrmsr",
-                in("ecx") lap,
-                in("eax") ail,
-                in("edx") afq,
+                in("ecx") gs_msr,
+                in("eax") low,
+                in("edx") high,
                 options(nostack)
             );
         }
         
-        EO_[0].fjy = fdn;
+        FD_[0].gs_base = cgj;
     }
     
     crate::log!("Per-CPU data initialized for BSP");
 }
 
 
-pub fn eso(qq: u32) {
-    if qq as usize >= AN_ {
+pub fn cau(cpu_id: u32) {
+    if cpu_id as usize >= AR_ {
         return;
     }
     
     unsafe {
-        EO_[qq as usize].qq = qq;
+        FD_[cpu_id as usize].cpu_id = cpu_id;
         
         
-        let fdn = &EO_[qq as usize] as *const _ as u64;
+        let cgj = &FD_[cpu_id as usize] as *const _ as u64;
         
         #[cfg(target_arch = "x86_64")]
         {
             let msr = 0xC0000102u32;
-            let ail = fdn as u32;
-            let afq = (fdn >> 32) as u32;
+            let low = cgj as u32;
+            let high = (cgj >> 32) as u32;
             
             core::arch::asm!(
                 "wrmsr",
                 in("ecx") msr,
-                in("eax") ail,
-                in("edx") afq,
+                in("eax") low,
+                in("edx") high,
                 options(nostack)
             );
             
-            let lap = 0xC0000101u32;
+            let gs_msr = 0xC0000101u32;
             core::arch::asm!(
                 "wrmsr",
-                in("ecx") lap,
-                in("eax") ail,
-                in("edx") afq,
+                in("ecx") gs_msr,
+                in("eax") low,
+                in("edx") high,
                 options(nostack)
             );
         }
         
-        EO_[qq as usize].fjy = fdn;
+        FD_[cpu_id as usize].gs_base = cgj;
     }
     
-    VV_.fetch_add(1, Ordering::Relaxed);
+    XE_.fetch_add(1, Ordering::Relaxed);
 }
 
 
-pub fn tde(qq: u32) -> Option<&'static PercpuBlock> {
-    if (qq as usize) < VV_.load(Ordering::Relaxed) {
-        unsafe { Some(&EO_[qq as usize]) }
+pub fn mcu(cpu_id: u32) -> Option<&'static PercpuBlock> {
+    if (cpu_id as usize) < XE_.load(Ordering::Relaxed) {
+        unsafe { Some(&FD_[cpu_id as usize]) }
     } else {
         None
     }
 }
 
 
-pub fn bcc() -> usize {
-    VV_.load(Ordering::Relaxed)
+pub fn num_cpus() -> usize {
+    XE_.load(Ordering::Relaxed)
 }
 
 
 #[inline]
-pub fn ead() -> u32 {
-    PercpuBlock::cv().qq
+pub fn bll() -> u32 {
+    PercpuBlock::current().cpu_id
 }
 
 
-pub fn tzz() -> impl Iterator<Item = &'static PercpuBlock> {
-    let bo = VV_.load(Ordering::Relaxed);
-    unsafe { EO_[..bo].iter() }
+pub fn mur() -> impl Iterator<Item = &'static PercpuBlock> {
+    let ae = XE_.load(Ordering::Relaxed);
+    unsafe { FD_[..ae].iter() }
 }
 
 
-pub struct Awt<T> {
-    f: UnsafeCell<[Option<T>; AN_]>,
+pub struct Ui<T> {
+    data: UnsafeCell<[Option<T>; AR_]>,
 }
 
-unsafe impl<T: Send> Send for Awt<T> {}
-unsafe impl<T: Send + Sync> Sync for Awt<T> {}
+unsafe impl<T: Send> Send for Ui<T> {}
+unsafe impl<T: Send + Sync> Sync for Ui<T> {}
 
-impl<T> Awt<T> {
+impl<T> Ui<T> {
     pub const fn new() -> Self {
-        const Cq: Option<()> = None;
+        const Bc: Option<()> = None;
         Self {
-            f: UnsafeCell::new([const { None }; AN_]),
+            data: UnsafeCell::new([const { None }; AR_]),
         }
     }
     
     
     pub fn get(&self) -> Option<&T> {
-        let cpu = ead() as usize;
-        if cpu < AN_ {
-            unsafe { (*self.f.get())[cpu].as_ref() }
+        let cpu = bll() as usize;
+        if cpu < AR_ {
+            unsafe { (*self.data.get())[cpu].as_ref() }
         } else {
             None
         }
     }
     
     
-    pub fn ds(&self) -> Option<&mut T> {
-        let cpu = ead() as usize;
-        if cpu < AN_ {
-            unsafe { (*self.f.get())[cpu].as_mut() }
+    pub fn get_mut(&self) -> Option<&mut T> {
+        let cpu = bll() as usize;
+        if cpu < AR_ {
+            unsafe { (*self.data.get())[cpu].as_mut() }
         } else {
             None
         }
     }
     
     
-    pub fn oj(&self, bn: T) {
-        let cpu = ead() as usize;
-        if cpu < AN_ {
-            unsafe { (*self.f.get())[cpu] = Some(bn) };
+    pub fn set(&self, value: T) {
+        let cpu = bll() as usize;
+        if cpu < AR_ {
+            unsafe { (*self.data.get())[cpu] = Some(value) };
         }
     }
     
     
-    pub fn tde(&self, qq: u32) -> Option<&T> {
-        let cpu = qq as usize;
-        if cpu < AN_ {
-            unsafe { (*self.f.get())[cpu].as_ref() }
+    pub fn mcu(&self, cpu_id: u32) -> Option<&T> {
+        let cpu = cpu_id as usize;
+        if cpu < AR_ {
+            unsafe { (*self.data.get())[cpu].as_ref() }
         } else {
             None
         }
@@ -328,25 +328,25 @@ impl<T> Awt<T> {
 
 
 #[derive(Debug, Clone)]
-pub struct Aqf {
-    pub qq: u32,
-    pub gdf: u64,
-    pub apd: u64,
+pub struct Rl {
+    pub cpu_id: u32,
+    pub context_switches: u64,
+    pub syscalls: u64,
     pub interrupts: u64,
-    pub edw: bool,
-    pub bqd: u64,
+    pub is_idle: bool,
+    pub current_tid: u64,
 }
 
 
-pub fn gyf() -> Vec<Aqf> {
-    tzz()
-        .map(|block| Aqf {
-            qq: block.qq,
-            gdf: block.gdf.load(Ordering::Relaxed),
-            apd: block.gtx.load(Ordering::Relaxed),
-            interrupts: block.lfd.load(Ordering::Relaxed),
-            edw: block.edw.load(Ordering::Relaxed),
-            bqd: block.bqd.load(Ordering::Relaxed),
+pub fn dhj() -> Vec<Rl> {
+    mur()
+        .map(|block| Rl {
+            cpu_id: block.cpu_id,
+            context_switches: block.context_switches.load(Ordering::Relaxed),
+            syscalls: block.syscall_count.load(Ordering::Relaxed),
+            interrupts: block.interrupt_count.load(Ordering::Relaxed),
+            is_idle: block.is_idle.load(Ordering::Relaxed),
+            current_tid: block.current_tid.load(Ordering::Relaxed),
         })
         .collect()
 }

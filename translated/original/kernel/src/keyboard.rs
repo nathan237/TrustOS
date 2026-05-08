@@ -93,7 +93,7 @@ fn i8042_cmd(cmd: u8) {
     let mut status = Port::<u8>::new(PS2_STATUS);
     let mut command = Port::<u8>::new(PS2_COMMAND);
     // Wait for input buffer empty (bit 1 = 0)
-    // Use large timeout for slow controllers (e.g. Lenovo T61)
+    // Use large timeout for slow controllers (e.g. older laptops)
     for _ in 0..1_000_000 {
         if unsafe { status.read() } & 0x02 == 0 { break; }
         core::hint::spin_loop();

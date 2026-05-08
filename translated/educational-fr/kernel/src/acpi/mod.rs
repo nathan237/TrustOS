@@ -34,7 +34,7 @@ pub struct AcpiInfo {
     /// Local APIC NMI configurations (MADT type 4)
     pub local_apic_nmis: Vec<madt::LocalApicNmiInformation>,
     /// Local APIC address
-    pub local_apic_address: u64,
+    pub local_apic_addr: u64,
     /// FADT information
     pub fadt: Option<fadt::FadtInfo>,
     /// PCIe MCFG regions
@@ -55,7 +55,7 @@ impl Default for AcpiInfo {
             io_apics: Vec::new(),
             int_overrides: Vec::new(),
             local_apic_nmis: Vec::new(),
-            local_apic_address: 0xFEE0_0000,
+            local_apic_addr: 0xFEE0_0000,
             fadt: None,
             mcfg_regions: Vec::new(),
             hpet: None,
@@ -157,15 +157,15 @@ const u8).add(i)) };
     
     // Check signature manually
     let expected = b"RSD PTR ";
-    let signal_ok = signal_bytes == *expected;
-    crate::serial_println!("[ACPI] Sig OK: {}", signal_ok);
+    let sig_ok = signal_bytes == *expected;
+    crate::serial_println!("[ACPI] Sig OK: {}", sig_ok);
     
     // Parse RSDP
     let rsdp = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe { &*(rsdp_virt as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const tables::Rsdp) };
     
-    if !signal_ok {
+    if !sig_ok {
         crate::serial_println!("[ACPI] Invalid RSDP signature");
         return false;
     }
@@ -175,42 +175,42 @@ const tables::Rsdp) };
 unsafe {
         let bytes = core::slice::from_raw_parts(rsdp_virt as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u8, 20);
-        bytes.iter().fold(0u8, |accumulator, &b| accumulator.wrapping_add(b))
+        bytes.iter().fold(0u8, |acc, &b| acc.wrapping_add(b))
     };
     if sum != 0 {
         crate::serial_println!("[ACPI] Invalid RSDP checksum (sum={})", sum);
         return false;
     }
     
-    let mut information = AcpiInfo::default();
-    information.revision = rsdp.revision;
-    information.oem_id = core::str::from_utf8(&rsdp.oem_id)
+    let mut info = AcpiInfo::default();
+    info.revision = rsdp.revision;
+    info.oem_id = core::str::from_utf8(&rsdp.oem_id)
         .unwrap_or("Unknown")
         .trim()
         .into();
     
-    crate::serial_println!("[ACPI] Revision: {}, OEM: {}", information.revision, information.oem_id);
+    crate::serial_println!("[ACPI] Revision: {}, OEM: {}", info.revision, info.oem_id);
     
     // Use XSDT if ACPI 2.0+, otherwise RSDT
-    let table_addrs = if information.revision >= 2 {
+    let table_addrs = if info.revision >= 2 {
         let xsdp = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe { &*(rsdp_virt as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const tables::Xsdp) };
         
         // Read fields from packed struct
         let xsdp_length = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { ptr::read_unaligned(ptr::address_of!(xsdp.length)) };
+unsafe { ptr::read_unaligned(ptr::addr_of!(xsdp.length)) };
         let xsdt_address = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { ptr::read_unaligned(ptr::address_of!(xsdp.xsdt_address)) };
+unsafe { ptr::read_unaligned(ptr::addr_of!(xsdp.xsdt_address)) };
         let rsdt_address = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { ptr::read_unaligned(ptr::address_of!(rsdp.rsdt_address)) };
+unsafe { ptr::read_unaligned(ptr::addr_of!(rsdp.rsdt_address)) };
         
         // Validate extended checksum
         let ext_sum: u8 = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
             let bytes = core::slice::from_raw_parts(rsdp_virt as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u8, xsdp_length as usize);
-            bytes.iter().fold(0u8, |accumulator, &b| accumulator.wrapping_add(b))
+            bytes.iter().fold(0u8, |acc, &b| acc.wrapping_add(b))
         };
         if ext_sum != 0 {
             crate::serial_println!("[ACPI] Invalid XSDP extended checksum, falling back to RSDT");
@@ -231,7 +231,7 @@ const u8, xsdp_length as usize);
         }
     } else {
         let rsdt_address = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { ptr::read_unaligned(ptr::address_of!(rsdp.rsdt_address)) };
+unsafe { ptr::read_unaligned(ptr::addr_of!(rsdp.rsdt_address)) };
         crate::serial_println!("[ACPI] Using RSDT at {:#x}", rsdt_address);
         // Map RSDT before accessing
         if let Err(e) = crate::memory::map_mmio(rsdt_address as u64, 4096) {
@@ -258,7 +258,7 @@ const tables::SdtHeader) };
         
         let sig = core::str::from_utf8(&header.signature).unwrap_or("????");
         let header_length = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { ptr::read_unaligned(ptr::address_of!(header.length)) };
+unsafe { ptr::read_unaligned(ptr::addr_of!(header.length)) };
         
         // Map additional pages if table is larger than 4KB
         if header_length > 4096 {
@@ -275,37 +275,37 @@ match &header.signature {
             b"APIC" => {
                 // MADT - Multiple APIC Description Table
                 if let Some((lapic_address, lapics, ioapics, overrides, nmis)) = madt::parse(table_virt) {
-                    information.local_apic_address = lapic_address;
-                    information.local_apics = lapics;
-                    information.io_apics = ioapics;
-                    information.int_overrides = overrides;
-                    information.local_apic_nmis = nmis;
-                    information.cpu_count = information.local_apics.len();
+                    info.local_apic_addr = lapic_address;
+                    info.local_apics = lapics;
+                    info.io_apics = ioapics;
+                    info.int_overrides = overrides;
+                    info.local_apic_nmis = nmis;
+                    info.cpu_count = info.local_apics.len();
                     crate::serial_println!("[ACPI] MADT: {} CPUs, {} I/O APICs, {} NMI entries", 
-                        information.cpu_count, information.io_apics.len(), information.local_apic_nmis.len());
+                        info.cpu_count, info.io_apics.len(), info.local_apic_nmis.len());
                 }
             }
             b"FACP" => {
                 // FADT - Fixed ACPI Description Table
-                if let Some(fadt_information) = fadt::parse(table_virt, hhdm) {
+                if let Some(fadt_info) = fadt::parse(table_virt, hhdm) {
                     crate::serial_println!("[ACPI] FADT: PM1a={:#x}, century={}", 
-                        fadt_information.pm1a_event_block, fadt_information.century_register);
-                    information.fadt = Some(fadt_information);
+                        fadt_info.pm1a_evt_blk, fadt_info.century_reg);
+                    info.fadt = Some(fadt_info);
                 }
             }
             b"MCFG" => {
                 // MCFG - PCI Express configuration
                 if let Some(regions) = mcfg::parse(table_virt) {
                     crate::serial_println!("[ACPI] MCFG: {} PCIe regions", regions.len());
-                    information.mcfg_regions = regions;
+                    info.mcfg_regions = regions;
                 }
             }
             b"HPET" => {
                 // HPET - High Precision Event Timer
-                if let Some(hpet_information) = hpet::parse(table_virt) {
+                if let Some(hpet_info) = hpet::parse(table_virt) {
                     crate::serial_println!("[ACPI] HPET: base={:#x}, min_tick={}", 
-                        hpet_information.base_address, hpet_information.minimum_tick);
-                    information.hpet = Some(hpet_information);
+                        hpet_info.base_address, hpet_info.min_tick);
+                    info.hpet = Some(hpet_info);
                 }
             }
             _ => {
@@ -314,7 +314,7 @@ match &header.signature {
         }
     }
     
-    ACPI_INFORMATION.call_once(|| information);
+    ACPI_INFORMATION.call_once(|| info);
     
     true
 }
@@ -336,10 +336,10 @@ const tables::SdtHeader) };
     
     let mut addrs = Vec::with_capacity(entries_length);
     for i in 0..entries_length {
-        let address = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+        let addr = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe { ptr::read_unaligned((entries_start + i as u64 * 4) as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u32) };
-        addrs.push(address as u64);
+        addrs.push(addr as u64);
     }
     
     addrs
@@ -362,10 +362,10 @@ const tables::SdtHeader) };
     
     let mut addrs = Vec::with_capacity(entries_length);
     for i in 0..entries_length {
-        let address = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+        let addr = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe { ptr::read_unaligned((entries_start + i as u64 * 8) as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u64) };
-        addrs.push(address);
+        addrs.push(addr);
     }
     
     addrs
@@ -378,7 +378,7 @@ pub fn cpu_count() -> usize {
 
 /// Get Local APIC base address
 pub fn local_apic_address() -> u64 {
-    ACPI_INFORMATION.get().map(|i| i.local_apic_address).unwrap_or(0xFEE0_0000)
+    ACPI_INFORMATION.get().map(|i| i.local_apic_addr).unwrap_or(0xFEE0_0000)
 }
 
 /// Check if ACPI is initialized
@@ -388,8 +388,8 @@ pub fn is_initialized() -> bool {
 
 /// Shutdown the system using ACPI
 pub fn shutdown() -> ! {
-    if let Some(information) = ACPI_INFORMATION.get() {
-        if let Some(ref fadt) = information.fadt {
+    if let Some(info) = ACPI_INFORMATION.get() {
+        if let Some(ref fadt) = info.fadt {
             fadt::shutdown(fadt);
         }
     }
@@ -405,8 +405,8 @@ unsafe { core::arch::asm!("hlt"); }
 
 /// Suspend to S3 (sleep-to-RAM). Returns true if wake-up occurred.
 pub fn suspend() -> bool {
-    if let Some(information) = ACPI_INFORMATION.get() {
-        if let Some(ref fadt) = information.fadt {
+    if let Some(info) = ACPI_INFORMATION.get() {
+        if let Some(ref fadt) = info.fadt {
             return fadt::suspend_s3(fadt);
         }
     }
@@ -430,8 +430,8 @@ pub fn reboot() -> ! {
     }
     
     // If that didn't work, try ACPI reset
-    if let Some(information) = ACPI_INFORMATION.get() {
-        if let Some(ref fadt) = information.fadt {
+    if let Some(info) = ACPI_INFORMATION.get() {
+        if let Some(ref fadt) = info.fadt {
             fadt::reset(fadt);
         }
     }

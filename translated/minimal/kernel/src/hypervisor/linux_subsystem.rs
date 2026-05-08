@@ -25,55 +25,55 @@ use alloc::boxed::Box;
 use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use spin::Mutex;
 
-use super::{HypervisorError, Result, CpuVendor, avo};
+use super::{HypervisorError, Result, CpuVendor, cpu_vendor};
 use super::virtio_console::{self, VirtioConsole, ConsolePort};
 
 
-pub const AEO_: u64 = 0xFFFF_FFFF_FFFF_0001;
+pub const AGI_: u64 = 0xFFFF_FFFF_FFFF_0001;
 
 
-pub const US_: usize = 64;
+pub const WB_: usize = 64;
 
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum LinuxState {
     
-    Ma,
+    NotStarted,
     
-    Agt,
+    Booting,
     
-    At,
+    Ready,
     
-    Rq,
+    Busy,
     
-    Q,
+    Error,
     
-    Ays,
+    ShuttingDown,
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Auv {
+pub struct Tk {
     
-    pub ohs: Option<String>,
+    pub kernel_path: Option<String>,
     
-    pub oeq: Option<String>,
+    pub initramfs_path: Option<String>,
     
-    pub wx: String,
+    pub cmdline: String,
     
-    pub afc: usize,
+    pub memory_mb: usize,
     
-    pub gsc: bool,
+    pub serial_console: bool,
 }
 
-impl Default for Auv {
+impl Default for Tk {
     fn default() -> Self {
         Self {
-            ohs: None,
-            oeq: None,
-            wx: String::from("console=hvc0 quiet"),
-            afc: US_,
-            gsc: true,
+            kernel_path: None,
+            initramfs_path: None,
+            cmdline: String::from("console=hvc0 quiet"),
+            memory_mb: WB_,
+            serial_console: true,
         }
     }
 }
@@ -82,31 +82,31 @@ impl Default for Auv {
 #[derive(Debug, Clone)]
 pub struct CommandResult {
     
-    pub nz: i32,
+    pub exit_code: i32,
     
-    pub ejc: String,
+    pub stdout: String,
     
-    pub dwg: String,
+    pub stderr: String,
     
-    pub uk: u64,
+    pub duration_ms: u64,
 }
 
 impl CommandResult {
-    pub fn vx(ejc: String) -> Self {
+    pub fn success(stdout: String) -> Self {
         Self {
-            nz: 0,
-            ejc,
-            dwg: String::new(),
-            uk: 0,
+            exit_code: 0,
+            stdout,
+            stderr: String::new(),
+            duration_ms: 0,
         }
     }
 
-    pub fn zt(aj: i32, dwg: String) -> Self {
+    pub fn error(code: i32, stderr: String) -> Self {
         Self {
-            nz: aj,
-            ejc: String::new(),
-            dwg,
-            uk: 0,
+            exit_code: code,
+            stdout: String::new(),
+            stderr,
+            duration_ms: 0,
         }
     }
 }
@@ -115,390 +115,390 @@ impl CommandResult {
 
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
-pub struct Bli {
-    pub boi: u8,
-    pub zkj: u16,
-    pub prf: u32,
-    pub cbf: u16,
-    pub zvi: u16,
-    pub zkh: u16,
-    pub ilz: u16,
-    pub eeb: u16,
-    pub dh: u32,           
-    pub dk: u16,
-    pub zio: u32,
-    pub zpp: u16,
-    pub zah: u16,
-    pub pwt: u8,
-    pub eet: u8,
-    pub znx: u16,
-    pub ffh: u32,
-    pub ozh: u32,
-    pub hwp: u32,
-    pub ygu: u32,
-    pub ywz: u16,
-    pub ypy: u8,
-    pub ypx: u8,
-    pub nec: u32,
-    pub gjy: u32,
-    pub hpj: u32,
-    pub pbo: u8,
-    pub ong: u8,
-    pub mrr: u16,
-    pub kjm: u32,
-    pub ywa: u32,
-    pub ywb: u64,
-    pub zew: u32,
-    pub oux: u32,
-    pub dlq: u64,
-    pub gpq: u64,
-    pub gjx: u32,
-    pub yvx: u32,
+pub struct Aau {
+    pub setup_sects: u8,
+    pub root_flags: u16,
+    pub syssize: u32,
+    pub ram_size: u16,
+    pub vid_mode: u16,
+    pub root_dev: u16,
+    pub boot_flag: u16,
+    pub jump: u16,
+    pub header: u32,           
+    pub version: u16,
+    pub realmode_swtch: u32,
+    pub start_sys_seg: u16,
+    pub kernel_version: u16,
+    pub type_of_loader: u8,
+    pub btz: u8,
+    pub setup_move_size: u16,
+    pub code32_start: u32,
+    pub ramdisk_image: u32,
+    pub ramdisk_size: u32,
+    pub bootsect_kludge: u32,
+    pub heap_end_ptr: u16,
+    pub ext_loader_ver: u8,
+    pub ext_loader_type: u8,
+    pub cmd_line_ptr: u32,
+    pub initrd_addr_max: u32,
+    pub kernel_alignment: u32,
+    pub relocatable_kernel: u8,
+    pub min_alignment: u8,
+    pub xloadflags: u16,
+    pub fnk: u32,
+    pub hardware_subarch: u32,
+    pub hardware_subarch_data: u64,
+    pub payload_offset: u32,
+    pub payload_length: u32,
+    pub setup_data: u64,
+    pub pref_address: u64,
+    pub init_size: u32,
+    pub handover_offset: u32,
 }
 
 
 #[repr(C)]
 #[derive(Clone)]
-pub struct Byq {
-    pub zlt: [u8; 64],
-    pub yey: [u8; 20],
-    pub msr: [u8; 4],
-    pub zrc: u64,
-    pub zaf: [u8; 16],
-    pub qdf: [u8; 16],
-    pub ywt: [u8; 16],
-    pub ywu: [u8; 16],
-    pub zqp: [u8; 16],
-    pub zeg: [u8; 16],
-    pub ypz: u32,
-    pub yqa: u32,
-    pub ypv: u32,
-    pub ybo: [u8; 116],
-    pub yom: [u8; 128],
-    pub yon: [u8; 32],
-    pub yet: u32,
-    pub pgn: u32,
-    pub ksf: u8,
-    pub yol: u8,
-    pub yoi: u8,
-    pub zag: u8,
-    pub zmc: u8,
-    pub ybp: [u8; 2],
-    pub zmj: u8,
-    pub ybq: [u8; 1],
-    pub zj: Bli,
-    pub ybr: [u8; 36],
-    pub yoj: [u32; 16],
-    pub yoa: [Arj; 128],
-    pub ybs: [u8; 48],
-    pub yok: [u8; 492],
-    pub ybt: [u8; 276],
+pub struct Ahn {
+    pub screen_info: [u8; 64],
+    pub apm_bios_info: [u8; 20],
+    pub _pad1: [u8; 4],
+    pub tboot_addr: u64,
+    pub ist_info: [u8; 16],
+    pub _pad2: [u8; 16],
+    pub hd0_info: [u8; 16],
+    pub hd1_info: [u8; 16],
+    pub sys_desc_table: [u8; 16],
+    pub olpc_ofw_header: [u8; 16],
+    pub ext_ramdisk_image: u32,
+    pub ext_ramdisk_size: u32,
+    pub ext_cmd_line_ptr: u32,
+    pub _pad3: [u8; 116],
+    pub edid_info: [u8; 128],
+    pub efi_info: [u8; 32],
+    pub alt_mem_k: u32,
+    pub scratch: u32,
+    pub ftr: u8,
+    pub eddbuf_entries: u8,
+    pub edd_mbr_sig_buf_entries: u8,
+    pub kbd_status: u8,
+    pub secure_boot: u8,
+    pub _pad4: [u8; 2],
+    pub sentinel: u8,
+    pub _pad5: [u8; 1],
+    pub kp: Aau,
+    pub _pad6: [u8; 36],
+    pub edd_mbr_sig_buffer: [u32; 16],
+    pub e820_table: [Ru; 128],
+    pub _pad7: [u8; 48],
+    pub eddbuf: [u8; 492],
+    pub _pad8: [u8; 276],
 }
 
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
-pub struct Arj {
-    pub ag: u64,
-    pub aw: u64,
-    pub avt: u32,
-    pub fzo: u32,
+pub struct Ru {
+    pub addr: u64,
+    pub size: u64,
+    pub entry_type: u32,
+    pub _pad: u32,
 }
 
 
 pub mod e820_type {
-    pub const Dfe: u32 = 1;
-    pub const Bqb: u32 = 2;
-    pub const Cqz: u32 = 3;
-    pub const Dcw: u32 = 4;
-    pub const Dkf: u32 = 5;
+    pub const Bax: u32 = 1;
+    pub const Ada: u32 = 2;
+    pub const Ask: u32 = 3;
+    pub const Azt: u32 = 4;
+    pub const Bej: u32 = 5;
 }
 
 
 #[derive(Debug, Clone)]
-pub struct E {
-    pub j: &'static str,
-    pub dk: &'static str,
-    pub gs: u32,
-    pub dc: &'static str,
-    pub jw: &'static [&'static str],
+pub struct J {
+    pub name: &'static str,
+    pub version: &'static str,
+    pub size_kb: u32,
+    pub description: &'static str,
+    pub deps: &'static [&'static str],
 }
 
 
-const PD_: &[E] = &[
+const QA_: &[J] = &[
     
-    E { j: "vim", dk: "9.0.2127-r0", gs: 1824, dc: "Improved vi-style text editor", jw: &["ncurses-libs", "vim-common"] },
-    E { j: "vim-common", dk: "9.0.2127-r0", gs: 6240, dc: "Vim common files", jw: &[] },
-    E { j: "nano", dk: "7.2-r1", gs: 612, dc: "Nano text editor", jw: &["ncurses-libs"] },
-    E { j: "emacs", dk: "29.1-r0", gs: 48000, dc: "GNU Emacs editor", jw: &[] },
-    E { j: "micro", dk: "2.0.13-r0", gs: 11264, dc: "Modern terminal text editor", jw: &[] },
-    E { j: "helix", dk: "23.10-r0", gs: 24576, dc: "Post-modern modal text editor", jw: &[] },
+    J { name: "vim", version: "9.0.2127-r0", size_kb: 1824, description: "Improved vi-style text editor", deps: &["ncurses-libs", "vim-common"] },
+    J { name: "vim-common", version: "9.0.2127-r0", size_kb: 6240, description: "Vim common files", deps: &[] },
+    J { name: "nano", version: "7.2-r1", size_kb: 612, description: "Nano text editor", deps: &["ncurses-libs"] },
+    J { name: "emacs", version: "29.1-r0", size_kb: 48000, description: "GNU Emacs editor", deps: &[] },
+    J { name: "micro", version: "2.0.13-r0", size_kb: 11264, description: "Modern terminal text editor", deps: &[] },
+    J { name: "helix", version: "23.10-r0", size_kb: 24576, description: "Post-modern modal text editor", deps: &[] },
     
-    E { j: "bash", dk: "5.2.21-r0", gs: 1320, dc: "The GNU Bourne Again shell", jw: &["ncurses-libs"] },
-    E { j: "zsh", dk: "5.9.0-r0", gs: 3200, dc: "Z shell", jw: &["ncurses-libs"] },
-    E { j: "fish", dk: "3.7.0-r0", gs: 6400, dc: "Friendly interactive shell", jw: &["ncurses-libs"] },
-    E { j: "dash", dk: "0.5.12-r0", gs: 96, dc: "POSIX compliant shell", jw: &[] },
+    J { name: "bash", version: "5.2.21-r0", size_kb: 1320, description: "The GNU Bourne Again shell", deps: &["ncurses-libs"] },
+    J { name: "zsh", version: "5.9.0-r0", size_kb: 3200, description: "Z shell", deps: &["ncurses-libs"] },
+    J { name: "fish", version: "3.7.0-r0", size_kb: 6400, description: "Friendly interactive shell", deps: &["ncurses-libs"] },
+    J { name: "dash", version: "0.5.12-r0", size_kb: 96, description: "POSIX compliant shell", deps: &[] },
     
-    E { j: "ncurses-libs", dk: "6.4_p20231125-r0", gs: 308, dc: "Ncurses libraries", jw: &[] },
-    E { j: "openssl", dk: "3.1.4-r5", gs: 7168, dc: "Toolkit for SSL/TLS", jw: &["ca-certificates"] },
-    E { j: "ca-certificates", dk: "20240226-r0", gs: 680, dc: "Common CA certificates PEM files", jw: &[] },
-    E { j: "libcurl", dk: "8.5.0-r0", gs: 512, dc: "The multiprotocol file transfer library", jw: &["openssl"] },
-    E { j: "libffi", dk: "3.4.4-r3", gs: 52, dc: "Portable foreign function interface library", jw: &[] },
+    J { name: "ncurses-libs", version: "6.4_p20231125-r0", size_kb: 308, description: "Ncurses libraries", deps: &[] },
+    J { name: "openssl", version: "3.1.4-r5", size_kb: 7168, description: "Toolkit for SSL/TLS", deps: &["ca-certificates"] },
+    J { name: "ca-certificates", version: "20240226-r0", size_kb: 680, description: "Common CA certificates PEM files", deps: &[] },
+    J { name: "libcurl", version: "8.5.0-r0", size_kb: 512, description: "The multiprotocol file transfer library", deps: &["openssl"] },
+    J { name: "libffi", version: "3.4.4-r3", size_kb: 52, description: "Portable foreign function interface library", deps: &[] },
     
-    E { j: "curl", dk: "8.5.0-r0", gs: 356, dc: "URL retrieval utility and library", jw: &["ca-certificates", "libcurl"] },
-    E { j: "wget", dk: "1.21.4-r0", gs: 480, dc: "Network utility to retrieve files from the Web", jw: &["openssl"] },
-    E { j: "git", dk: "2.43.0-r0", gs: 14336, dc: "Distributed version control system", jw: &["openssl", "curl", "perl"] },
-    E { j: "openssh", dk: "9.6_p1-r0", gs: 3072, dc: "Port of OpenBSD's free SSH release", jw: &["openssl"] },
-    E { j: "nmap", dk: "7.94-r0", gs: 5120, dc: "Network exploration and security scanner", jw: &[] },
-    E { j: "tcpdump", dk: "4.99.4-r1", gs: 640, dc: "Network packet analyzer", jw: &[] },
-    E { j: "socat", dk: "1.8.0.0-r0", gs: 384, dc: "Multipurpose relay for binary protocols", jw: &[] },
-    E { j: "iperf3", dk: "3.16-r0", gs: 192, dc: "Network bandwidth measurement tool", jw: &[] },
-    E { j: "bind-tools", dk: "9.18.24-r0", gs: 2048, dc: "ISC BIND DNS tools (dig)", jw: &[] },
-    E { j: "mtr", dk: "0.95-r2", gs: 192, dc: "Network diagnostic tool", jw: &[] },
-    E { j: "wireguard-tools", dk: "1.0.20210914-r3", gs: 64, dc: "WireGuard VPN tools", jw: &[] },
-    E { j: "openvpn", dk: "2.6.8-r0", gs: 1024, dc: "VPN solution", jw: &["openssl"] },
-    E { j: "lynx", dk: "2.8.9-r5", gs: 2048, dc: "Text-mode web browser", jw: &[] },
+    J { name: "curl", version: "8.5.0-r0", size_kb: 356, description: "URL retrieval utility and library", deps: &["ca-certificates", "libcurl"] },
+    J { name: "wget", version: "1.21.4-r0", size_kb: 480, description: "Network utility to retrieve files from the Web", deps: &["openssl"] },
+    J { name: "git", version: "2.43.0-r0", size_kb: 14336, description: "Distributed version control system", deps: &["openssl", "curl", "perl"] },
+    J { name: "openssh", version: "9.6_p1-r0", size_kb: 3072, description: "Port of OpenBSD's free SSH release", deps: &["openssl"] },
+    J { name: "nmap", version: "7.94-r0", size_kb: 5120, description: "Network exploration and security scanner", deps: &[] },
+    J { name: "tcpdump", version: "4.99.4-r1", size_kb: 640, description: "Network packet analyzer", deps: &[] },
+    J { name: "socat", version: "1.8.0.0-r0", size_kb: 384, description: "Multipurpose relay for binary protocols", deps: &[] },
+    J { name: "iperf3", version: "3.16-r0", size_kb: 192, description: "Network bandwidth measurement tool", deps: &[] },
+    J { name: "bind-tools", version: "9.18.24-r0", size_kb: 2048, description: "ISC BIND DNS tools (dig)", deps: &[] },
+    J { name: "mtr", version: "0.95-r2", size_kb: 192, description: "Network diagnostic tool", deps: &[] },
+    J { name: "wireguard-tools", version: "1.0.20210914-r3", size_kb: 64, description: "WireGuard VPN tools", deps: &[] },
+    J { name: "openvpn", version: "2.6.8-r0", size_kb: 1024, description: "VPN solution", deps: &["openssl"] },
+    J { name: "lynx", version: "2.8.9-r5", size_kb: 2048, description: "Text-mode web browser", deps: &[] },
     
-    E { j: "python3", dk: "3.11.8-r0", gs: 25600, dc: "High-level scripting language", jw: &["libffi", "openssl"] },
-    E { j: "perl", dk: "5.38.2-r0", gs: 16384, dc: "Larry Wall's Practical Extraction and Report Language", jw: &[] },
-    E { j: "gcc", dk: "13.2.1_git20231014-r0", gs: 102400, dc: "The GNU Compiler Collection", jw: &["binutils", "musl-dev"] },
-    E { j: "rust", dk: "1.75.0-r0", gs: 204800, dc: "The Rust programming language", jw: &["gcc", "musl-dev"] },
-    E { j: "nodejs", dk: "20.11.1-r0", gs: 30720, dc: "JavaScript runtime built on V8", jw: &["openssl", "libffi"] },
-    E { j: "go", dk: "1.21.6-r0", gs: 143360, dc: "Go programming language", jw: &[] },
-    E { j: "ruby", dk: "3.2.3-r0", gs: 12288, dc: "Ruby programming language", jw: &[] },
-    E { j: "php83", dk: "8.3.2-r0", gs: 15360, dc: "PHP programming language", jw: &[] },
-    E { j: "lua5.4", dk: "5.4.6-r2", gs: 256, dc: "Lua programming language", jw: &[] },
-    E { j: "zig", dk: "0.11.0-r0", gs: 51200, dc: "Zig programming language", jw: &[] },
-    E { j: "nim", dk: "2.0.2-r0", gs: 10240, dc: "Nim programming language", jw: &[] },
-    E { j: "openjdk17-jre", dk: "17.0.10-r0", gs: 204800, dc: "OpenJDK 17 Runtime", jw: &[] },
-    E { j: "elixir", dk: "1.16.1-r0", gs: 7680, dc: "Elixir programming language", jw: &[] },
-    E { j: "clang", dk: "17.0.5-r0", gs: 81920, dc: "C language family frontend for LLVM", jw: &[] },
-    E { j: "cmake", dk: "3.27.8-r0", gs: 9728, dc: "Cross-platform build system", jw: &[] },
+    J { name: "python3", version: "3.11.8-r0", size_kb: 25600, description: "High-level scripting language", deps: &["libffi", "openssl"] },
+    J { name: "perl", version: "5.38.2-r0", size_kb: 16384, description: "Larry Wall's Practical Extraction and Report Language", deps: &[] },
+    J { name: "gcc", version: "13.2.1_git20231014-r0", size_kb: 102400, description: "The GNU Compiler Collection", deps: &["binutils", "musl-dev"] },
+    J { name: "rust", version: "1.75.0-r0", size_kb: 204800, description: "The Rust programming language", deps: &["gcc", "musl-dev"] },
+    J { name: "nodejs", version: "20.11.1-r0", size_kb: 30720, description: "JavaScript runtime built on V8", deps: &["openssl", "libffi"] },
+    J { name: "go", version: "1.21.6-r0", size_kb: 143360, description: "Go programming language", deps: &[] },
+    J { name: "ruby", version: "3.2.3-r0", size_kb: 12288, description: "Ruby programming language", deps: &[] },
+    J { name: "php83", version: "8.3.2-r0", size_kb: 15360, description: "PHP programming language", deps: &[] },
+    J { name: "lua5.4", version: "5.4.6-r2", size_kb: 256, description: "Lua programming language", deps: &[] },
+    J { name: "zig", version: "0.11.0-r0", size_kb: 51200, description: "Zig programming language", deps: &[] },
+    J { name: "nim", version: "2.0.2-r0", size_kb: 10240, description: "Nim programming language", deps: &[] },
+    J { name: "openjdk17-jre", version: "17.0.10-r0", size_kb: 204800, description: "OpenJDK 17 Runtime", deps: &[] },
+    J { name: "elixir", version: "1.16.1-r0", size_kb: 7680, description: "Elixir programming language", deps: &[] },
+    J { name: "clang", version: "17.0.5-r0", size_kb: 81920, description: "C language family frontend for LLVM", deps: &[] },
+    J { name: "cmake", version: "3.27.8-r0", size_kb: 9728, description: "Cross-platform build system", deps: &[] },
     
-    E { j: "binutils", dk: "2.41-r0", gs: 8192, dc: "Tools necessary to build programs", jw: &[] },
-    E { j: "musl-dev", dk: "1.2.4_git20230717-r4", gs: 1024, dc: "musl C library development files", jw: &[] },
-    E { j: "make", dk: "4.4.1-r2", gs: 272, dc: "GNU make utility", jw: &[] },
-    E { j: "nasm", dk: "2.16.01-r0", gs: 640, dc: "Netwide Assembler", jw: &[] },
+    J { name: "binutils", version: "2.41-r0", size_kb: 8192, description: "Tools necessary to build programs", deps: &[] },
+    J { name: "musl-dev", version: "1.2.4_git20230717-r4", size_kb: 1024, description: "musl C library development files", deps: &[] },
+    J { name: "make", version: "4.4.1-r2", size_kb: 272, description: "GNU make utility", deps: &[] },
+    J { name: "nasm", version: "2.16.01-r0", size_kb: 640, description: "Netwide Assembler", deps: &[] },
     
-    E { j: "gdb", dk: "14.1-r0", gs: 12800, dc: "GNU debugger", jw: &[] },
-    E { j: "valgrind", dk: "3.22.0-r0", gs: 22528, dc: "Memory debugging tool", jw: &[] },
-    E { j: "strace", dk: "6.7-r0", gs: 580, dc: "System call tracer", jw: &[] },
-    E { j: "ltrace", dk: "0.7.3-r8", gs: 384, dc: "Library call tracer", jw: &[] },
-    E { j: "lsof", dk: "4.99.3-r0", gs: 320, dc: "List open files", jw: &[] },
+    J { name: "gdb", version: "14.1-r0", size_kb: 12800, description: "GNU debugger", deps: &[] },
+    J { name: "valgrind", version: "3.22.0-r0", size_kb: 22528, description: "Memory debugging tool", deps: &[] },
+    J { name: "strace", version: "6.7-r0", size_kb: 580, description: "System call tracer", deps: &[] },
+    J { name: "ltrace", version: "0.7.3-r8", size_kb: 384, description: "Library call tracer", deps: &[] },
+    J { name: "lsof", version: "4.99.3-r0", size_kb: 320, description: "List open files", deps: &[] },
     
-    E { j: "nginx", dk: "1.24.0-r15", gs: 2048, dc: "HTTP and reverse proxy server", jw: &["openssl"] },
-    E { j: "apache2", dk: "2.4.58-r0", gs: 5120, dc: "Apache HTTP Server", jw: &[] },
-    E { j: "haproxy", dk: "2.8.5-r0", gs: 3072, dc: "TCP/HTTP Load Balancer", jw: &[] },
-    E { j: "dnsmasq", dk: "2.90-r0", gs: 384, dc: "Lightweight DNS/DHCP server", jw: &[] },
-    E { j: "squid", dk: "6.6-r0", gs: 7680, dc: "HTTP caching proxy", jw: &[] },
+    J { name: "nginx", version: "1.24.0-r15", size_kb: 2048, description: "HTTP and reverse proxy server", deps: &["openssl"] },
+    J { name: "apache2", version: "2.4.58-r0", size_kb: 5120, description: "Apache HTTP Server", deps: &[] },
+    J { name: "haproxy", version: "2.8.5-r0", size_kb: 3072, description: "TCP/HTTP Load Balancer", deps: &[] },
+    J { name: "dnsmasq", version: "2.90-r0", size_kb: 384, description: "Lightweight DNS/DHCP server", deps: &[] },
+    J { name: "squid", version: "6.6-r0", size_kb: 7680, description: "HTTP caching proxy", deps: &[] },
     
-    E { j: "redis", dk: "7.2.4-r0", gs: 4096, dc: "In-memory data structure store", jw: &[] },
-    E { j: "postgresql16", dk: "16.2-r0", gs: 15360, dc: "PostgreSQL database server", jw: &[] },
-    E { j: "mariadb", dk: "10.11.6-r0", gs: 25600, dc: "MariaDB database server", jw: &[] },
-    E { j: "sqlite", dk: "3.44.2-r0", gs: 1024, dc: "SQLite database engine", jw: &[] },
+    J { name: "redis", version: "7.2.4-r0", size_kb: 4096, description: "In-memory data structure store", deps: &[] },
+    J { name: "postgresql16", version: "16.2-r0", size_kb: 15360, description: "PostgreSQL database server", deps: &[] },
+    J { name: "mariadb", version: "10.11.6-r0", size_kb: 25600, description: "MariaDB database server", deps: &[] },
+    J { name: "sqlite", version: "3.44.2-r0", size_kb: 1024, description: "SQLite database engine", deps: &[] },
     
-    E { j: "docker-cli", dk: "24.0.7-r0", gs: 50000, dc: "Docker container runtime", jw: &[] },
-    E { j: "podman", dk: "4.8.3-r0", gs: 40960, dc: "Daemonless container engine", jw: &[] },
-    E { j: "helm", dk: "3.14.0-r0", gs: 15360, dc: "Kubernetes package manager", jw: &[] },
-    E { j: "kubectl", dk: "1.29.1-r0", gs: 20480, dc: "Kubernetes CLI", jw: &[] },
-    E { j: "terraform", dk: "1.7.2-r0", gs: 81920, dc: "Infrastructure as code", jw: &[] },
-    E { j: "ansible", dk: "9.2.0-r0", gs: 25600, dc: "IT automation tool", jw: &[] },
+    J { name: "docker-cli", version: "24.0.7-r0", size_kb: 50000, description: "Docker container runtime", deps: &[] },
+    J { name: "podman", version: "4.8.3-r0", size_kb: 40960, description: "Daemonless container engine", deps: &[] },
+    J { name: "helm", version: "3.14.0-r0", size_kb: 15360, description: "Kubernetes package manager", deps: &[] },
+    J { name: "kubectl", version: "1.29.1-r0", size_kb: 20480, description: "Kubernetes CLI", deps: &[] },
+    J { name: "terraform", version: "1.7.2-r0", size_kb: 81920, description: "Infrastructure as code", deps: &[] },
+    J { name: "ansible", version: "9.2.0-r0", size_kb: 25600, description: "IT automation tool", deps: &[] },
     
-    E { j: "coreutils", dk: "9.4-r1", gs: 6400, dc: "GNU core utilities", jw: &[] },
-    E { j: "findutils", dk: "4.9.0-r5", gs: 640, dc: "GNU find utilities", jw: &[] },
-    E { j: "grep", dk: "3.11-r0", gs: 320, dc: "GNU grep", jw: &[] },
-    E { j: "sed", dk: "4.9-r2", gs: 224, dc: "GNU stream editor", jw: &[] },
-    E { j: "gawk", dk: "5.3.0-r0", gs: 1024, dc: "GNU awk", jw: &[] },
-    E { j: "diffutils", dk: "3.10-r0", gs: 384, dc: "GNU diff utilities", jw: &[] },
-    E { j: "patch", dk: "2.7.6-r10", gs: 128, dc: "GNU patch", jw: &[] },
-    E { j: "less", dk: "643-r0", gs: 192, dc: "Pager program", jw: &[] },
-    E { j: "file", dk: "5.45-r1", gs: 640, dc: "File type identification", jw: &[] },
-    E { j: "iproute2", dk: "6.7.0-r0", gs: 1024, dc: "IP routing utilities", jw: &[] },
-    E { j: "util-linux", dk: "2.39.3-r0", gs: 4096, dc: "System utilities", jw: &[] },
-    E { j: "procps", dk: "4.0.4-r0", gs: 480, dc: "Process monitoring utilities", jw: &[] },
-    E { j: "shadow", dk: "4.14.3-r0", gs: 480, dc: "User/group management", jw: &[] },
-    E { j: "e2fsprogs", dk: "1.47.0-r5", gs: 2048, dc: "Ext2/3/4 filesystem utilities", jw: &[] },
+    J { name: "coreutils", version: "9.4-r1", size_kb: 6400, description: "GNU core utilities", deps: &[] },
+    J { name: "findutils", version: "4.9.0-r5", size_kb: 640, description: "GNU find utilities", deps: &[] },
+    J { name: "grep", version: "3.11-r0", size_kb: 320, description: "GNU grep", deps: &[] },
+    J { name: "sed", version: "4.9-r2", size_kb: 224, description: "GNU stream editor", deps: &[] },
+    J { name: "gawk", version: "5.3.0-r0", size_kb: 1024, description: "GNU awk", deps: &[] },
+    J { name: "diffutils", version: "3.10-r0", size_kb: 384, description: "GNU diff utilities", deps: &[] },
+    J { name: "patch", version: "2.7.6-r10", size_kb: 128, description: "GNU patch", deps: &[] },
+    J { name: "less", version: "643-r0", size_kb: 192, description: "Pager program", deps: &[] },
+    J { name: "file", version: "5.45-r1", size_kb: 640, description: "File type identification", deps: &[] },
+    J { name: "iproute2", version: "6.7.0-r0", size_kb: 1024, description: "IP routing utilities", deps: &[] },
+    J { name: "util-linux", version: "2.39.3-r0", size_kb: 4096, description: "System utilities", deps: &[] },
+    J { name: "procps", version: "4.0.4-r0", size_kb: 480, description: "Process monitoring utilities", deps: &[] },
+    J { name: "shadow", version: "4.14.3-r0", size_kb: 480, description: "User/group management", deps: &[] },
+    J { name: "e2fsprogs", version: "1.47.0-r5", size_kb: 2048, description: "Ext2/3/4 filesystem utilities", deps: &[] },
     
-    E { j: "gzip", dk: "1.13-r0", gs: 96, dc: "GNU zip compression", jw: &[] },
-    E { j: "bzip2", dk: "1.0.8-r6", gs: 128, dc: "Block-sorting compressor", jw: &[] },
-    E { j: "xz", dk: "5.4.5-r0", gs: 256, dc: "XZ Utils compression", jw: &[] },
-    E { j: "zstd", dk: "1.5.5-r8", gs: 384, dc: "Zstandard compression", jw: &[] },
-    E { j: "zip", dk: "3.0-r12", gs: 192, dc: "Create ZIP archives", jw: &[] },
-    E { j: "unzip", dk: "6.0-r14", gs: 192, dc: "Extract ZIP archives", jw: &[] },
-    E { j: "p7zip", dk: "17.05-r0", gs: 2048, dc: "7-Zip file archiver", jw: &[] },
+    J { name: "gzip", version: "1.13-r0", size_kb: 96, description: "GNU zip compression", deps: &[] },
+    J { name: "bzip2", version: "1.0.8-r6", size_kb: 128, description: "Block-sorting compressor", deps: &[] },
+    J { name: "xz", version: "5.4.5-r0", size_kb: 256, description: "XZ Utils compression", deps: &[] },
+    J { name: "zstd", version: "1.5.5-r8", size_kb: 384, description: "Zstandard compression", deps: &[] },
+    J { name: "zip", version: "3.0-r12", size_kb: 192, description: "Create ZIP archives", deps: &[] },
+    J { name: "unzip", version: "6.0-r14", size_kb: 192, description: "Extract ZIP archives", deps: &[] },
+    J { name: "p7zip", version: "17.05-r0", size_kb: 2048, description: "7-Zip file archiver", deps: &[] },
     
-    E { j: "ffmpeg", dk: "6.1.1-r0", gs: 20480, dc: "Complete multimedia framework", jw: &[] },
-    E { j: "imagemagick", dk: "7.1.1-r0", gs: 15360, dc: "Image manipulation tools", jw: &[] },
-    E { j: "mpv", dk: "0.37.0-r0", gs: 5120, dc: "Media player", jw: &[] },
+    J { name: "ffmpeg", version: "6.1.1-r0", size_kb: 20480, description: "Complete multimedia framework", deps: &[] },
+    J { name: "imagemagick", version: "7.1.1-r0", size_kb: 15360, description: "Image manipulation tools", deps: &[] },
+    J { name: "mpv", version: "0.37.0-r0", size_kb: 5120, description: "Media player", deps: &[] },
     
-    E { j: "ripgrep", dk: "14.1.0-r0", gs: 6144, dc: "Fast recursive grep alternative (rg)", jw: &[] },
-    E { j: "fd", dk: "9.0.0-r0", gs: 3072, dc: "Simple fast alternative to find", jw: &[] },
-    E { j: "bat", dk: "0.24.0-r0", gs: 5120, dc: "Cat clone with syntax highlighting", jw: &[] },
-    E { j: "exa", dk: "0.10.1-r3", gs: 1536, dc: "Modern replacement for ls", jw: &[] },
-    E { j: "fzf", dk: "0.44.1-r0", gs: 3072, dc: "Fuzzy finder", jw: &[] },
-    E { j: "dust", dk: "0.8.6-r0", gs: 2048, dc: "Intuitive version of du", jw: &[] },
-    E { j: "hyperfine", dk: "1.18.0-r0", gs: 2048, dc: "Command-line benchmarking tool", jw: &[] },
-    E { j: "tokei", dk: "12.1.2-r4", gs: 3072, dc: "Code statistics tool", jw: &[] },
+    J { name: "ripgrep", version: "14.1.0-r0", size_kb: 6144, description: "Fast recursive grep alternative (rg)", deps: &[] },
+    J { name: "fd", version: "9.0.0-r0", size_kb: 3072, description: "Simple fast alternative to find", deps: &[] },
+    J { name: "bat", version: "0.24.0-r0", size_kb: 5120, description: "Cat clone with syntax highlighting", deps: &[] },
+    J { name: "exa", version: "0.10.1-r3", size_kb: 1536, description: "Modern replacement for ls", deps: &[] },
+    J { name: "fzf", version: "0.44.1-r0", size_kb: 3072, description: "Fuzzy finder", deps: &[] },
+    J { name: "dust", version: "0.8.6-r0", size_kb: 2048, description: "Intuitive version of du", deps: &[] },
+    J { name: "hyperfine", version: "1.18.0-r0", size_kb: 2048, description: "Command-line benchmarking tool", deps: &[] },
+    J { name: "tokei", version: "12.1.2-r4", size_kb: 3072, description: "Code statistics tool", deps: &[] },
     
-    E { j: "mercurial", dk: "6.6.3-r0", gs: 7680, dc: "Mercurial version control", jw: &[] },
-    E { j: "subversion", dk: "1.14.3-r0", gs: 5120, dc: "Subversion version control", jw: &[] },
-    E { j: "fossil", dk: "2.23-r0", gs: 3072, dc: "Fossil version control", jw: &[] },
+    J { name: "mercurial", version: "6.6.3-r0", size_kb: 7680, description: "Mercurial version control", deps: &[] },
+    J { name: "subversion", version: "1.14.3-r0", size_kb: 5120, description: "Subversion version control", deps: &[] },
+    J { name: "fossil", version: "2.23-r0", size_kb: 3072, description: "Fossil version control", deps: &[] },
     
-    E { j: "htop", dk: "3.3.0-r0", gs: 216, dc: "Interactive process viewer", jw: &["ncurses-libs"] },
-    E { j: "neofetch", dk: "7.1.0-r3", gs: 76, dc: "CLI system information tool", jw: &["bash"] },
-    E { j: "tree", dk: "2.1.1-r0", gs: 48, dc: "Directory listing in tree-like format", jw: &[] },
-    E { j: "jq", dk: "1.7.1-r0", gs: 312, dc: "Lightweight JSON processor", jw: &[] },
-    E { j: "tmux", dk: "3.3a-r5", gs: 424, dc: "Terminal multiplexer", jw: &["ncurses-libs"] },
-    E { j: "screen", dk: "4.9.1-r0", gs: 640, dc: "Terminal multiplexer", jw: &[] },
-    E { j: "bc", dk: "1.07.1-r4", gs: 128, dc: "Calculator language", jw: &[] },
-    E { j: "ncdu", dk: "2.3-r0", gs: 192, dc: "NCurses disk usage", jw: &[] },
-    E { j: "ranger", dk: "1.9.3-r6", gs: 640, dc: "Console file manager", jw: &[] },
-    E { j: "mc", dk: "4.8.31-r0", gs: 3072, dc: "Midnight Commander file manager", jw: &[] },
-    E { j: "cowsay", dk: "3.04-r2", gs: 24, dc: "Talking cow", jw: &[] },
-    E { j: "figlet", dk: "2.2.5-r3", gs: 128, dc: "Large text banners", jw: &[] },
-    E { j: "sl", dk: "5.05-r0", gs: 24, dc: "Steam locomotive", jw: &[] },
-    E { j: "fortune", dk: "0.1-r2", gs: 1024, dc: "Fortune cookie program", jw: &[] },
-    E { j: "py3-pip", dk: "23.3.2-r0", gs: 5120, dc: "Python package installer", jw: &["python3"] },
-    E { j: "certbot", dk: "2.8.0-r0", gs: 3072, dc: "ACME client for Let's Encrypt", jw: &[] },
-    E { j: "fail2ban", dk: "1.0.2-r0", gs: 2048, dc: "Intrusion prevention", jw: &[] },
+    J { name: "htop", version: "3.3.0-r0", size_kb: 216, description: "Interactive process viewer", deps: &["ncurses-libs"] },
+    J { name: "neofetch", version: "7.1.0-r3", size_kb: 76, description: "CLI system information tool", deps: &["bash"] },
+    J { name: "tree", version: "2.1.1-r0", size_kb: 48, description: "Directory listing in tree-like format", deps: &[] },
+    J { name: "jq", version: "1.7.1-r0", size_kb: 312, description: "Lightweight JSON processor", deps: &[] },
+    J { name: "tmux", version: "3.3a-r5", size_kb: 424, description: "Terminal multiplexer", deps: &["ncurses-libs"] },
+    J { name: "screen", version: "4.9.1-r0", size_kb: 640, description: "Terminal multiplexer", deps: &[] },
+    J { name: "bc", version: "1.07.1-r4", size_kb: 128, description: "Calculator language", deps: &[] },
+    J { name: "ncdu", version: "2.3-r0", size_kb: 192, description: "NCurses disk usage", deps: &[] },
+    J { name: "ranger", version: "1.9.3-r6", size_kb: 640, description: "Console file manager", deps: &[] },
+    J { name: "mc", version: "4.8.31-r0", size_kb: 3072, description: "Midnight Commander file manager", deps: &[] },
+    J { name: "cowsay", version: "3.04-r2", size_kb: 24, description: "Talking cow", deps: &[] },
+    J { name: "figlet", version: "2.2.5-r3", size_kb: 128, description: "Large text banners", deps: &[] },
+    J { name: "sl", version: "5.05-r0", size_kb: 24, description: "Steam locomotive", deps: &[] },
+    J { name: "fortune", version: "0.1-r2", size_kb: 1024, description: "Fortune cookie program", deps: &[] },
+    J { name: "py3-pip", version: "23.3.2-r0", size_kb: 5120, description: "Python package installer", deps: &["python3"] },
+    J { name: "certbot", version: "2.8.0-r0", size_kb: 3072, description: "ACME client for Let's Encrypt", deps: &[] },
+    J { name: "fail2ban", version: "1.0.2-r0", size_kb: 2048, description: "Intrusion prevention", deps: &[] },
 ];
 
-fn hjm(j: &str) -> Option<&'static E> {
-    PD_.iter().du(|ai| ai.j == j)
+fn dpp(name: &str) -> Option<&'static J> {
+    QA_.iter().find(|aa| aa.name == name)
 }
 
 
 pub struct LinuxSubsystem {
     
-    g: LinuxState,
+    state: LinuxState,
     
-    fk: u64,
+    vm_id: u64,
     
-    gbg: Auv,
+    boot_params: Tk,
     
     console: Option<VirtioConsole>,
     
-    vgp: Vec<String>,
+    pending_commands: Vec<String>,
     
-    oif: Option<CommandResult>,
+    last_result: Option<CommandResult>,
     
-    gbh: u64,
+    boot_time: u64,
     
-    epr: Option<&'static [u8]>,
+    embedded_kernel: Option<&'static [u8]>,
     
-    ggb: Option<&'static [u8]>,
+    embedded_initramfs: Option<&'static [u8]>,
     
-    cah: Vec<(&'static str, &'static str)>,   
+    installed_packages: Vec<(&'static str, &'static str)>,   
     
-    lzj: bool,
+    repo_updated: bool,
     
-    dty: bool,
+    online_mode: bool,
     
-    fqw: Option<String>,
+    pkg_server: Option<String>,
     
-    lyb: u32,
+    real_files_installed: u32,
     
-    iee: usize,
+    total_bytes_downloaded: usize,
 }
 
 impl LinuxSubsystem {
     pub const fn new() -> Self {
         Self {
-            g: LinuxState::Ma,
-            fk: AEO_,
-            gbg: Auv {
-                ohs: None,
-                oeq: None,
-                wx: String::new(),
-                afc: US_,
-                gsc: true,
+            state: LinuxState::NotStarted,
+            vm_id: AGI_,
+            boot_params: Tk {
+                kernel_path: None,
+                initramfs_path: None,
+                cmdline: String::new(),
+                memory_mb: WB_,
+                serial_console: true,
             },
             console: None,
-            vgp: Vec::new(),
-            oif: None,
-            gbh: 0,
-            epr: None,
-            ggb: None,
-            cah: Vec::new(),
-            lzj: false,
-            dty: false,
-            fqw: None,
-            lyb: 0,
-            iee: 0,
+            pending_commands: Vec::new(),
+            last_result: None,
+            boot_time: 0,
+            embedded_kernel: None,
+            embedded_initramfs: None,
+            installed_packages: Vec::new(),
+            repo_updated: false,
+            online_mode: false,
+            pkg_server: None,
+            real_files_installed: 0,
+            total_bytes_downloaded: 0,
         }
     }
 
     
-    pub fn g(&self) -> LinuxState {
-        self.g
+    pub fn state(&self) -> LinuxState {
+        self.state
     }
 
     
-    pub fn uc(&self) -> bool {
-        self.g == LinuxState::At
+    pub fn is_ready(&self) -> bool {
+        self.state == LinuxState::Ready
     }
 
     
-    pub fn ogm(&self, j: &str) -> bool {
-        self.cah.iter().any(|(bo, _)| *bo == j)
+    pub fn is_package_installed(&self, name: &str) -> bool {
+        self.installed_packages.iter().any(|(ae, _)| *ae == name)
     }
 
     
     
-    fn qzh(&self) -> bool {
+    fn check_network(&self) -> bool {
         
-        if crate::netstack::dhcp::flz() {
+        if crate::netstack::dhcp::clk() {
             return true;
         }
         
-        let tmi = crate::drivers::net::bzy();
-        let tnl = crate::virtio_net::ky();
-        if !tmi && !tnl {
+        let mjh = crate::drivers::net::aoh();
+        let mki = crate::virtio_net::is_initialized();
+        if !mjh && !mki {
             return false;
         }
         
-        crate::netstack::dhcp::ay();
+        crate::netstack::dhcp::start();
         
-        let ay = crate::logger::lh();
+        let start = crate::logger::eg();
         loop {
             crate::netstack::poll();
-            if crate::netstack::dhcp::flz() {
+            if crate::netstack::dhcp::clk() {
                 return true;
             }
-            let ez = crate::logger::lh().ao(ay);
-            if ez > 3000 {
+            let bb = crate::logger::eg().saturating_sub(start);
+            if bb > 3000 {
                 return false;
             }
-            for _ in 0..10000 { core::hint::hc(); }
+            for _ in 0..10000 { core::hint::spin_loop(); }
         }
     }
 
     
-    fn rwt(&self) -> Option<String> {
+    fn detect_pkg_server(&self) -> Option<String> {
         use alloc::vec::Vec;
-        let mut hch: Vec<String> = Vec::new();
+        let mut dkh: Vec<String> = Vec::new();
 
         
-        if let Some((fcc, elo, nt, xyv)) = crate::netstack::dhcp::nxw() {
-            if nt != [0, 0, 0, 0] {
-                hch.push(alloc::format!("http://{}.{}.{}.{}:8080", nt[0], nt[1], nt[2], nt[3]));
+        if let Some((_ip, _mask, fz, _dns)) = crate::netstack::dhcp::ibj() {
+            if fz != [0, 0, 0, 0] {
+                dkh.push(alloc::format!("http://{}.{}.{}.{}:8080", fz[0], fz[1], fz[2], fz[3]));
             }
         }
         
-        hch.push(String::from("http://10.0.2.2:8080"));
-        hch.push(String::from("http://192.168.56.1:8080"));
+        dkh.push(String::from("http://10.0.2.2:8080"));
+        dkh.push(String::from("http://192.168.56.1:8080"));
 
         
-        hch.rux();
+        dkh.dedup();
 
-        for bog in &hch {
-            let url = alloc::format!("{}/repo/index", bog);
+        for ain in &dkh {
+            let url = alloc::format!("{}/repo/index", ain);
             crate::serial_println!("[TSL-PKG] Trying server: {}", url);
-            if let Ok(lj) = crate::netstack::http::get(&url) {
-                if lj.wt == 200 && lj.gj.len() > 10 {
+            if let Ok(eo) = crate::netstack::http::get(&url) {
+                if eo.status_code == 200 && eo.body.len() > 10 {
                     crate::serial_println!("[TSL-PKG] Server found: {} ({} bytes index)",
-                        bog, lj.gj.len());
-                    return Some(bog.clone());
+                        ain, eo.body.len());
+                    return Some(ain.clone());
                 }
             }
         }
@@ -506,20 +506,20 @@ impl LinuxSubsystem {
     }
 
     
-    fn nmp(&self, bog: &str, j: &str) -> Option<Vec<u8>> {
-        let url = alloc::format!("{}/repo/pool/{}.pkg", bog, j);
+    fn download_package(&self, ain: &str, name: &str) -> Option<Vec<u8>> {
+        let url = alloc::format!("{}/repo/pool/{}.pkg", ain, name);
         crate::serial_println!("[TSL-PKG] Downloading: {}", url);
         match crate::netstack::http::get(&url) {
-            Ok(lj) if lj.wt == 200 && !lj.gj.is_empty() => {
-                crate::serial_println!("[TSL-PKG] Downloaded {} bytes for {}", lj.gj.len(), j);
-                Some(lj.gj)
+            Ok(eo) if eo.status_code == 200 && !eo.body.is_empty() => {
+                crate::serial_println!("[TSL-PKG] Downloaded {} bytes for {}", eo.body.len(), name);
+                Some(eo.body)
             }
-            Ok(lj) => {
-                crate::serial_println!("[TSL-PKG] Server returned {} for {}", lj.wt, j);
+            Ok(eo) => {
+                crate::serial_println!("[TSL-PKG] Server returned {} for {}", eo.status_code, name);
                 None
             }
-            Err(aa) => {
-                crate::serial_println!("[TSL-PKG] Download failed for {}: {}", j, aa);
+            Err(e) => {
+                crate::serial_println!("[TSL-PKG] Download failed for {}: {}", name, e);
                 None
             }
         }
@@ -532,69 +532,69 @@ impl LinuxSubsystem {
     
     
     
-    fn nsl(&mut self, f: &[u8]) -> u32 {
-        let text = match core::str::jg(f) {
-            Ok(ab) => ab,
+    fn extract_package_to_ramfs(&mut self, data: &[u8]) -> u32 {
+        let text = match core::str::from_utf8(data) {
+            Ok(t) => t,
             Err(_) => return 0,
         };
 
-        let mut ium = 0u32;
-        let mut rp: Option<&str> = None;
-        let mut gdy = String::new();
+        let mut emo = 0u32;
+        let mut ht: Option<&str> = None;
+        let mut cwb = String::new();
 
-        for line in text.ak() {
-            if line.cj("PKG ") {
+        for line in text.lines() {
+            if line.starts_with("PKG ") {
                 
                 continue;
-            } else if line.cj("FILE /") {
+            } else if line.starts_with("FILE /") {
                 
-                if let Some(path) = rp {
-                    if self.oeu(path, gdy.as_bytes()) {
-                        ium += 1;
+                if let Some(path) = ht {
+                    if self.install_file_to_ramfs(path, cwb.as_bytes()) {
+                        emo += 1;
                     }
                 }
-                rp = Some(&line[5..]);
-                gdy = String::new();
+                ht = Some(&line[5..]);
+                cwb = String::new();
             } else if line == "EOF" {
                 
-                if let Some(path) = rp {
-                    if self.oeu(path, gdy.as_bytes()) {
-                        ium += 1;
+                if let Some(path) = ht {
+                    if self.install_file_to_ramfs(path, cwb.as_bytes()) {
+                        emo += 1;
                     }
                 }
                 break;
             } else {
                 
-                if rp.is_some() {
-                    if !gdy.is_empty() {
-                        gdy.push('\n');
+                if ht.is_some() {
+                    if !cwb.is_empty() {
+                        cwb.push('\n');
                     }
-                    gdy.t(line);
+                    cwb.push_str(line);
                 }
             }
         }
 
-        self.lyb += ium;
-        ium
+        self.real_files_installed += emo;
+        emo
     }
 
     
-    fn oeu(&self, path: &str, ca: &[u8]) -> bool {
-        crate::ramfs::fh(|fs| {
+    fn install_file_to_ramfs(&self, path: &str, content: &[u8]) -> bool {
+        crate::ramfs::bh(|fs| {
             
-            let mut te = String::new();
-            let ek: Vec<&str> = path.adk('/').hi(|e| !e.is_empty()).collect();
-            if ek.len() > 1 {
-                for vu in &ek[..ek.len() - 1] {
-                    te.push('/');
-                    te.t(vu);
-                    let _ = fs.ut(&te);
+            let mut it = String::new();
+            let au: Vec<&str> = path.split('/').filter(|j| !j.is_empty()).collect();
+            if au.len() > 1 {
+                for jn in &au[..au.len() - 1] {
+                    it.push('/');
+                    it.push_str(jn);
+                    let _ = fs.mkdir(&it);
                 }
             }
             
             if fs.touch(path).is_ok() {
-                if fs.ns(path, ca).is_ok() {
-                    crate::serial_println!("[TSL-PKG] Installed: {} ({} bytes)", path, ca.len());
+                if fs.write_file(path, content).is_ok() {
+                    crate::serial_println!("[TSL-PKG] Installed: {} ({} bytes)", path, content.len());
                     return true;
                 }
             }
@@ -603,100 +603,100 @@ impl LinuxSubsystem {
     }
 
     
-    pub fn jbn(&self) -> bool {
-        self.dty
+    pub fn erp(&self) -> bool {
+        self.online_mode
     }
 
     
-    pub fn ygy(&self) -> usize {
-        self.iee
+    pub fn pyz(&self) -> usize {
+        self.total_bytes_downloaded
     }
     
     
-    pub fn oaq(&self) -> bool {
-        self.epr.is_some()
+    pub fn has_kernel(&self) -> bool {
+        self.embedded_kernel.is_some()
     }
     
     
-    pub fn bvc(&self) -> usize {
-        self.epr.map(|eh| eh.len()).unwrap_or(0)
+    pub fn kernel_size(&self) -> usize {
+        self.embedded_kernel.map(|k| k.len()).unwrap_or(0)
     }
     
     
-    pub fn oao(&self) -> bool {
-        self.ggb.is_some()
+    pub fn has_initramfs(&self) -> bool {
+        self.embedded_initramfs.is_some()
     }
     
     
-    pub fn jaa(&self) -> usize {
-        self.ggb.map(|a| a.len()).unwrap_or(0)
+    pub fn initramfs_size(&self) -> usize {
+        self.embedded_initramfs.map(|i| i.len()).unwrap_or(0)
     }
     
     
-    pub fn oht(&self) -> Option<String> {
-        let acf = self.epr?;
-        if acf.len() < 0x210 {
+    pub fn kernel_version_string(&self) -> Option<String> {
+        let ny = self.embedded_kernel?;
+        if ny.len() < 0x210 {
             return None;
         }
         
-        let czd = u16::dj([acf[0x20E], acf[0x20F]]) as usize;
-        if czd == 0 || czd + 0x200 >= acf.len() {
+        let kernel_version_offset = u16::from_le_bytes([ny[0x20E], ny[0x20F]]) as usize;
+        if kernel_version_offset == 0 || kernel_version_offset + 0x200 >= ny.len() {
             return None;
         }
         
-        let igk = czd + 0x200;
-        let mut gwb = alloc::vec::Vec::new();
-        for a in 0..80 {
-            if igk + a >= acf.len() {
+        let edr = kernel_version_offset + 0x200;
+        let mut dgg = alloc::vec::Vec::new();
+        for i in 0..80 {
+            if edr + i >= ny.len() {
                 break;
             }
-            let r = acf[igk + a];
-            if r == 0 {
+            let c = ny[edr + i];
+            if c == 0 {
                 break;
             }
-            gwb.push(r);
+            dgg.push(c);
         }
         
-        core::str::jg(&gwb).bq().map(|e| String::from(e))
+        core::str::from_utf8(&dgg).ok().map(|j| String::from(j))
     }
     
     
-    pub fn mzu(&self) -> Option<(u8, u8)> {
-        let acf = self.epr?;
-        if acf.len() < 0x208 {
+    pub fn boot_protocol_version(&self) -> Option<(u8, u8)> {
+        let ny = self.embedded_kernel?;
+        if ny.len() < 0x208 {
             return None;
         }
         
-        let sj = u32::dj([
-            acf[0x202],
-            acf[0x203],
-            acf[0x204],
-            acf[0x205],
+        let magic = u32::from_le_bytes([
+            ny[0x202],
+            ny[0x203],
+            ny[0x204],
+            ny[0x205],
         ]);
         
-        if sj != 0x53726448 {
+        if magic != 0x53726448 {
             return None;
         }
         
-        let dk = u16::dj([acf[0x206], acf[0x207]]);
-        Some(((dk >> 8) as u8, (dk & 0xFF) as u8))
+        let version = u16::from_le_bytes([ny[0x206], ny[0x207]]);
+        Some(((version >> 8) as u8, (version & 0xFF) as u8))
     }
 
     
     pub fn init(&mut self) -> Result<()> {
-        if self.g != LinuxState::Ma {
-            return Err(HypervisorError::Bxw);
+        if self.state != LinuxState::NotStarted {
+            return Err(HypervisorError::AlreadyRunning);
         }
 
         crate::serial_println!("[TSL] Initializing TrustOS Subsystem for Linux...");
         
         
-        self.console = Some(VirtioConsole::new(self.fk));
+        self.console = Some(VirtioConsole::new(self.vm_id));
         
         
-        self.gbg.wx = String::from("console=hvc0 quiet init=/init");
+        self.boot_params.cmdline = String::from("console=hvc0 quiet init=/init");
         
-        self.g = LinuxState::Ma;
+        self.state = LinuxState::NotStarted;
         
         crate::serial_println!("[TSL] Subsystem initialized (waiting for kernel)");
         
@@ -704,204 +704,204 @@ impl LinuxSubsystem {
     }
 
     
-    pub fn piw(&mut self, acf: &'static [u8], buz: &'static [u8]) {
-        self.epr = Some(acf);
-        self.ggb = Some(buz);
+    pub fn set_embedded_images(&mut self, ny: &'static [u8], initramfs: &'static [u8]) {
+        self.embedded_kernel = Some(ny);
+        self.embedded_initramfs = Some(initramfs);
         
         
-        if acf.len() >= 0x210 {
-            let sj = u32::dj([
-                acf[0x202],
-                acf[0x203],
-                acf[0x204],
-                acf[0x205],
+        if ny.len() >= 0x210 {
+            let magic = u32::from_le_bytes([
+                ny[0x202],
+                ny[0x203],
+                ny[0x204],
+                ny[0x205],
             ]);
             
-            if sj == 0x53726448 {  
-                let dk = u16::dj([acf[0x206], acf[0x207]]);
+            if magic == 0x53726448 {  
+                let version = u16::from_le_bytes([ny[0x206], ny[0x207]]);
                 crate::serial_println!("[TSL] Linux kernel: {} bytes, boot protocol v{}.{}", 
-                    acf.len(), dk >> 8, dk & 0xFF);
+                    ny.len(), version >> 8, version & 0xFF);
             } else {
-                crate::serial_println!("[TSL] Warning: Invalid kernel magic: {:#X}", sj);
+                crate::serial_println!("[TSL] Warning: Invalid kernel magic: {:#X}", magic);
             }
         }
         
-        crate::serial_println!("[TSL] Initramfs: {} bytes", buz.len());
+        crate::serial_println!("[TSL] Initramfs: {} bytes", initramfs.len());
         crate::serial_println!("[TSL] Total Linux guest size: {} KB", 
-            (acf.len() + buz.len()) / 1024);
+            (ny.len() + initramfs.len()) / 1024);
     }
 
     
     pub fn boot(&mut self) -> Result<()> {
-        if self.g == LinuxState::At || self.g == LinuxState::Agt {
+        if self.state == LinuxState::Ready || self.state == LinuxState::Booting {
             return Ok(());
         }
 
         crate::serial_println!("[TSL] Booting Linux VM...");
-        self.g = LinuxState::Agt;
+        self.state = LinuxState::Booting;
 
         
-        let abr = match self.epr {
-            Some(eh) => eh,
+        let kernel_data = match self.embedded_kernel {
+            Some(k) => k,
             None => {
                 crate::serial_println!("[TSL] No kernel image available");
                 crate::serial_println!("[TSL] Falling back to simulated mode");
-                self.g = LinuxState::At;
+                self.state = LinuxState::Ready;
                 return Ok(());
             }
         };
 
         
-        if abr.len() < 0x210 {
-            crate::serial_println!("[TSL] Kernel too small ({} bytes)", abr.len());
-            self.g = LinuxState::At;
+        if kernel_data.len() < 0x210 {
+            crate::serial_println!("[TSL] Kernel too small ({} bytes)", kernel_data.len());
+            self.state = LinuxState::Ready;
             return Ok(());
         }
 
-        let sj = u32::dj([
-            abr[0x202],
-            abr[0x203],
-            abr[0x204],
-            abr[0x205],
+        let magic = u32::from_le_bytes([
+            kernel_data[0x202],
+            kernel_data[0x203],
+            kernel_data[0x204],
+            kernel_data[0x205],
         ]);
 
-        if sj != 0x53726448 {  
-            crate::serial_println!("[TSL] Invalid kernel magic: {:#X} (expected HdrS)", sj);
+        if magic != 0x53726448 {  
+            crate::serial_println!("[TSL] Invalid kernel magic: {:#X} (expected HdrS)", magic);
             crate::serial_println!("[TSL] Falling back to simulated mode");
-            self.g = LinuxState::At;
+            self.state = LinuxState::Ready;
             return Ok(());
         }
 
-        let dk = u16::dj([abr[0x206], abr[0x207]]);
+        let version = u16::from_le_bytes([kernel_data[0x206], kernel_data[0x207]]);
         crate::serial_println!("[TSL] Linux boot protocol version: {}.{}", 
-            dk >> 8, dk & 0xFF);
+            version >> 8, version & 0xFF);
             
         
-        let boi = abr[0x1F1];
-        let eet = abr[0x211];
-        let czd = u16::dj([abr[0x20E], abr[0x20F]]) as usize;
+        let setup_sects = kernel_data[0x1F1];
+        let btz = kernel_data[0x211];
+        let kernel_version_offset = u16::from_le_bytes([kernel_data[0x20E], kernel_data[0x20F]]) as usize;
         
-        crate::serial_println!("[TSL] Setup sectors: {}", boi);
-        crate::serial_println!("[TSL] Load flags: {:#X}", eet);
+        crate::serial_println!("[TSL] Setup sectors: {}", setup_sects);
+        crate::serial_println!("[TSL] Load flags: {:#X}", btz);
         
         
-        if czd > 0 && czd + 0x200 < abr.len() {
-            let igk = czd + 0x200;
-            let mut gwb = alloc::vec::Vec::new();
-            for a in 0..64 {
-                if igk + a >= abr.len() {
+        if kernel_version_offset > 0 && kernel_version_offset + 0x200 < kernel_data.len() {
+            let edr = kernel_version_offset + 0x200;
+            let mut dgg = alloc::vec::Vec::new();
+            for i in 0..64 {
+                if edr + i >= kernel_data.len() {
                     break;
                 }
-                let r = abr[igk + a];
-                if r == 0 {
+                let c = kernel_data[edr + i];
+                if c == 0 {
                     break;
                 }
-                gwb.push(r);
+                dgg.push(c);
             }
-            if !gwb.is_empty() {
-                if let Ok(e) = core::str::jg(&gwb) {
-                    crate::serial_println!("[TSL] Kernel version: {}", e);
+            if !dgg.is_empty() {
+                if let Ok(j) = core::str::from_utf8(&dgg) {
+                    crate::serial_println!("[TSL] Kernel version: {}", j);
                 }
             }
         }
         
         
-        if let Some(apw) = self.ggb {
+        if let Some(initrd) = self.embedded_initramfs {
             crate::serial_println!("[TSL] Initramfs: {} bytes ({} KB)", 
-                apw.len(), apw.len() / 1024);
+                initrd.len(), initrd.len() / 1024);
         }
 
         
-        if abr.len() > 0x1000 {
+        if kernel_data.len() > 0x1000 {
             
-            match self.qqz() {
+            match self.boot_real_linux() {
                 Ok(()) => {
                     crate::serial_println!("[TSL] Linux VM booted successfully!");
-                    self.g = LinuxState::At;
+                    self.state = LinuxState::Ready;
                     return Ok(());
                 }
-                Err(aa) => {
-                    crate::serial_println!("[TSL] Real boot failed: {:?}", aa);
+                Err(e) => {
+                    crate::serial_println!("[TSL] Real boot failed: {:?}", e);
                     crate::serial_println!("[TSL] Falling back to simulated mode");
                 }
             }
         }
 
         
-        self.g = LinuxState::At;
+        self.state = LinuxState::Ready;
         crate::serial_println!("[TSL] Linux VM ready (simulated mode)");
 
         Ok(())
     }
     
     
-    fn qqz(&mut self) -> Result<()> {
-        let abr = self.epr.ok_or(HypervisorError::Acg)?;
-        let izz = self.ggb.ok_or(HypervisorError::Acg)?;
+    fn boot_real_linux(&mut self) -> Result<()> {
+        let kernel_data = self.embedded_kernel.ok_or(HypervisorError::InvalidState)?;
+        let eqn = self.embedded_initramfs.ok_or(HypervisorError::InvalidState)?;
         
         
-        let wx = &self.gbg.wx;
-        let fk = super::linux_vm::ima(abr, izz, wx)?;
+        let cmdline = &self.boot_params.cmdline;
+        let vm_id = super::linux_vm::ehd(kernel_data, eqn, cmdline)?;
         
-        crate::serial_println!("[TSL] Linux VM started with ID: {}", fk);
+        crate::serial_println!("[TSL] Linux VM started with ID: {}", vm_id);
         
         Ok(())
     }
 
     
-    pub fn bna(&mut self, ro: &str) -> Result<CommandResult> {
-        if self.g != LinuxState::At {
+    pub fn execute(&mut self, command: &str) -> Result<CommandResult> {
+        if self.state != LinuxState::Ready {
             
-            if self.g == LinuxState::Ma {
+            if self.state == LinuxState::NotStarted {
                 self.init()?;
             }
             
             
-            if self.g != LinuxState::At {
-                return self.pkx(ro);
+            if self.state != LinuxState::Ready {
+                return self.simulate_command(command);
             }
         }
 
-        self.g = LinuxState::Rq;
+        self.state = LinuxState::Busy;
 
         
         if let Some(ref mut console) = self.console {
-            let kiv = format!("{}\n", ro);
-            console.write(kiv.as_bytes());
+            let fms = format!("{}\n", command);
+            console.write(fms.as_bytes());
         }
 
         
-        let result = self.pkx(ro)?;
+        let result = self.simulate_command(command)?;
 
-        self.g = LinuxState::At;
-        self.oif = Some(result.clone());
+        self.state = LinuxState::Ready;
+        self.last_result = Some(result.clone());
 
         Ok(result)
     }
 
     
-    fn pkx(&mut self, ro: &str) -> Result<CommandResult> {
-        let ek: Vec<&str> = ro.ayt().collect();
+    fn simulate_command(&mut self, command: &str) -> Result<CommandResult> {
+        let au: Vec<&str> = command.split_whitespace().collect();
         
-        if ek.is_empty() {
-            return Ok(CommandResult::vx(String::new()));
+        if au.is_empty() {
+            return Ok(CommandResult::success(String::new()));
         }
 
-        let cmd = ek[0];
-        let n = &ek[1..];
+        let cmd = au[0];
+        let args = &au[1..];
 
-        let an = match cmd {
+        let output = match cmd {
             "uname" => {
-                if n.contains(&"-a") {
+                if args.contains(&"-a") {
                     String::from("Linux trustos-vm 6.1.0 #1 SMP x86_64 GNU/Linux")
-                } else if n.contains(&"-r") {
+                } else if args.contains(&"-r") {
                     String::from("6.1.0")
                 } else {
                     String::from("Linux")
                 }
             }
             "echo" => {
-                n.rr(" ")
+                args.join(" ")
             }
             "whoami" => {
                 String::from("root")
@@ -910,9 +910,9 @@ impl LinuxSubsystem {
                 String::from("/")
             }
             "ls" => {
-                if n.is_empty() || n.contains(&"/") {
+                if args.is_empty() || args.contains(&"/") {
                     String::from("bin  dev  etc  home  init  lib  mnt  proc  root  run  sbin  sys  tmp  usr  var")
-                } else if n.contains(&"-la") || n.contains(&"-l") {
+                } else if args.contains(&"-la") || args.contains(&"-l") {
                     String::from(
 "total 48
 drwxr-xr-x   18 root root  4096 Jan 31 12:00 .
@@ -936,16 +936,16 @@ drwxr-xr-x    8 root root  4096 Jan 31 12:00 var")
                 }
             }
             "cat" => {
-                if n.contains(&"/etc/os-release") {
+                if args.contains(&"/etc/os-release") {
                     String::from(
 "NAME=\"TrustOS Linux\"
 VERSION=\"1.0\"
 ID=trustos
 PRETTY_NAME=\"TrustOS Linux 1.0\"
 HOME_URL=\"https://trustos.local\"")
-                } else if n.contains(&"/proc/version") {
+                } else if args.contains(&"/proc/version") {
                     String::from("Linux version 6.1.0 (gcc version 12.2.0) #1 SMP Jan 31 2026")
-                } else if n.contains(&"/proc/cpuinfo") {
+                } else if args.contains(&"/proc/cpuinfo") {
                     String::from(
 "processor	: 0
 vendor_id	: AuthenticAMD
@@ -953,7 +953,7 @@ model name	: AMD Ryzen 7 5800X
 cpu MHz		: 3800.000
 cache size	: 512 KB
 flags		: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm 3dnowext 3dnow pni cx16 sse4_1 sse4_2 popcnt aes xsave avx hypervisor lahf_lm svm")
-                } else if n.contains(&"/proc/meminfo") {
+                } else if args.contains(&"/proc/meminfo") {
                     String::from(
 "MemTotal:          65536 kB
 MemFree:           32768 kB
@@ -961,7 +961,7 @@ MemAvailable:      48000 kB
 Buffers:            4096 kB
 Cached:            16384 kB")
                 } else {
-                    return Ok(CommandResult::zt(1, format!("cat: {}: No such file or directory", n.rr(" "))));
+                    return Ok(CommandResult::error(1, format!("cat: {}: No such file or directory", args.join(" "))));
                 }
             }
             "date" => {
@@ -974,7 +974,7 @@ Cached:            16384 kB")
                 String::from(" 12:00:00 up 0 min,  0 users,  load average: 0.00, 0.00, 0.00")
             }
             "free" => {
-                if n.contains(&"-h") {
+                if args.contains(&"-h") {
                     String::from(
 "              total        used        free      shared  buff/cache   available
 Mem:            64Mi        16Mi        32Mi       0.0Ki        16Mi        48Mi
@@ -987,7 +987,7 @@ Swap:             0           0           0")
                 }
             }
             "df" => {
-                if n.contains(&"-h") {
+                if args.contains(&"-h") {
                     String::from(
 "Filesystem      Size  Used Avail Use% Mounted on
 rootfs           64M   16M   48M  25% /
@@ -1013,37 +1013,37 @@ SHELL=/bin/sh
 USER=root")
             }
             "apt-get" | "apt" => {
-                return self.pkw(n);
+                return self.simulate_apt(args);
             }
             "apk" => {
-                return self.wor(n);
+                return self.simulate_apk(args);
             }
             "dpkg" => {
-                if n.contains(&"-l") || n.contains(&"--list") {
-                    let mut bd = String::from("Desired=Unknown/Install/Remove/Purge/Hold\n| Status=Not/Inst/Conf-files/Unpacked/halF-conf/Half-inst/trig-aWait/Trig-pend\n|/ Err?=(none)/Reinst-required (Status,Err: uppercase=bad)\n||/ Name                    Version          Architecture Description\n+++-=======================-================-============-=================================\n");
-                    for (j, axh) in &self.cah {
-                        bd.t(&format!("ii  {:<24}{:<17}x86_64       {}\n", j, axh,
-                            hjm(j).map(|ai| ai.dc).unwrap_or("")));
+                if args.contains(&"-l") || args.contains(&"--list") {
+                    let mut out = String::from("Desired=Unknown/Install/Remove/Purge/Hold\n| Status=Not/Inst/Conf-files/Unpacked/halF-conf/Half-inst/trig-aWait/Trig-pend\n|/ Err?=(none)/Reinst-required (Status,Err: uppercase=bad)\n||/ Name                    Version          Architecture Description\n+++-=======================-================-============-=================================\n");
+                    for (name, tu) in &self.installed_packages {
+                        out.push_str(&format!("ii  {:<24}{:<17}x86_64       {}\n", name, tu,
+                            dpp(name).map(|aa| aa.description).unwrap_or("")));
                     }
-                    return Ok(CommandResult::vx(bd));
+                    return Ok(CommandResult::success(out));
                 }
-                return Ok(CommandResult::zt(1, String::from("dpkg: use apt-get to manage packages")));
+                return Ok(CommandResult::error(1, String::from("dpkg: use apt-get to manage packages")));
             }
             "which" => {
-                if n.is_empty() {
-                    return Ok(CommandResult::zt(1, String::from("which: missing argument")));
+                if args.is_empty() {
+                    return Ok(CommandResult::error(1, String::from("which: missing argument")));
                 }
-                let hao = n[0];
+                let dji = args[0];
                 
-                if self.cah.iter().any(|(bo, _)| *bo == hao) {
-                    return Ok(CommandResult::vx(format!("/usr/bin/{}", hao)));
+                if self.installed_packages.iter().any(|(ae, _)| *ae == dji) {
+                    return Ok(CommandResult::success(format!("/usr/bin/{}", dji)));
                 }
                 
-                let kfn = ["ls", "cat", "echo", "whoami", "pwd", "date", "uname", "sh", "ash"];
-                if kfn.contains(&hao) {
-                    return Ok(CommandResult::vx(format!("/bin/{}", hao)));
+                let fke = ["ls", "cat", "echo", "whoami", "pwd", "date", "uname", "sh", "ash"];
+                if fke.contains(&dji) {
+                    return Ok(CommandResult::success(format!("/bin/{}", dji)));
                 }
-                return Ok(CommandResult::zt(1, format!("{} not found", hao)));
+                return Ok(CommandResult::error(1, format!("{} not found", dji)));
             }
             "help" | "--help" => {
                 String::from(
@@ -1069,389 +1069,389 @@ USER=root")
 Note: Running in simulated mode (no real Linux kernel)")
             }
             _ => {
-                return Ok(CommandResult::zt(127, format!("{}: command not found", cmd)));
+                return Ok(CommandResult::error(127, format!("{}: command not found", cmd)));
             }
         };
 
-        Ok(CommandResult::vx(an))
+        Ok(CommandResult::success(output))
     }
 
     
-    fn pkw(&mut self, n: &[&str]) -> Result<CommandResult> {
-        if n.is_empty() {
-            return Ok(CommandResult::zt(1, String::from(
+    fn simulate_apt(&mut self, args: &[&str]) -> Result<CommandResult> {
+        if args.is_empty() {
+            return Ok(CommandResult::error(1, String::from(
                 "Usage: apt-get [update|install|remove|list|search|upgrade] [packages...]")));
         }
 
-        let air = n[0];
-        let ews = &n[1..];
+        let je = args[0];
+        let cct = &args[1..];
 
-        match air {
+        match je {
             "update" => {
-                let mut bd = String::new();
+                let mut out = String::new();
 
                 
-                if self.qzh() {
-                    if let Some(bog) = self.rwt() {
-                        bd.t(&format!("Connected to package server: {}\n", bog));
-                        bd.t(&format!("Get:1 {}/repo/index Packages [online]\n", bog));
-                        self.fqw = Some(bog);
-                        self.dty = true;
+                if self.check_network() {
+                    if let Some(ain) = self.detect_pkg_server() {
+                        out.push_str(&format!("Connected to package server: {}\n", ain));
+                        out.push_str(&format!("Get:1 {}/repo/index Packages [online]\n", ain));
+                        self.pkg_server = Some(ain);
+                        self.online_mode = true;
                     } else {
-                        bd.t("No package server found, using built-in repository.\n");
-                        self.dty = false;
+                        out.push_str("No package server found, using built-in repository.\n");
+                        self.online_mode = false;
                     }
                 } else {
-                    self.dty = false;
+                    self.online_mode = false;
                 }
 
-                if !self.dty {
-                    bd.t("Hit:1 http://dl-cdn.alpinelinux.org/alpine/v3.19/main x86_64 Packages\n");
-                    bd.t("Hit:2 http://dl-cdn.alpinelinux.org/alpine/v3.19/community x86_64 Packages\n");
-                    bd.t("Hit:3 http://security.alpinelinux.org/alpine/v3.19/main x86_64 Packages\n");
+                if !self.online_mode {
+                    out.push_str("Hit:1 http://dl-cdn.alpinelinux.org/alpine/v3.19/main x86_64 Packages\n");
+                    out.push_str("Hit:2 http://dl-cdn.alpinelinux.org/alpine/v3.19/community x86_64 Packages\n");
+                    out.push_str("Hit:3 http://security.alpinelinux.org/alpine/v3.19/main x86_64 Packages\n");
                 }
-                bd.t("Reading package lists... Done\n");
-                bd.t("Building dependency tree... Done\n");
-                if self.dty {
+                out.push_str("Reading package lists... Done\n");
+                out.push_str("Building dependency tree... Done\n");
+                if self.online_mode {
                     
-                    let mut puw = PD_.len();
-                    if let Some(ref eiv) = self.fqw {
-                        let tsx = alloc::format!("{}/repo", eiv);
-                        if let Ok(lj) = crate::netstack::http::get(&tsx) {
+                    let mut jns = QA_.len();
+                    if let Some(ref bvw) = self.pkg_server {
+                        let mot = alloc::format!("{}/repo", bvw);
+                        if let Ok(eo) = crate::netstack::http::get(&mot) {
                             
-                            if let Some(u) = lj.gj.ee(17).qf(|d| d == b"total_available\":") {
-                                let kr = &lj.gj[u + 17..];
-                                let uwi = kr.iter().qf(|&o| !o.atb() && o != b' ').unwrap_or(kr.len());
-                                let ajh = core::str::jg(&kr[..uwi]).unwrap_or("").em();
-                                if let Ok(bo) = ajh.parse::<usize>() {
-                                    puw = bo;
+                            if let Some(pos) = eo.body.windows(17).position(|w| w == b"total_available\":") {
+                                let ef = &eo.body[pos + 17..];
+                                let nlt = ef.iter().position(|&b| !b.is_ascii_digit() && b != b' ').unwrap_or(ef.len());
+                                let rw = core::str::from_utf8(&ef[..nlt]).unwrap_or("").trim();
+                                if let Ok(ae) = rw.parse::<usize>() {
+                                    jns = ae;
                                 }
                             }
                         }
                     }
-                    bd.t(&format!("{} packages available (live).\n", puw));
+                    out.push_str(&format!("{} packages available (live).\n", jns));
                 } else {
-                    bd.t(&format!("{} packages can be upgraded. Run 'apt-get upgrade' to see them.\n",
-                        PD_.len().ao(self.cah.len()).v(8)));
+                    out.push_str(&format!("{} packages can be upgraded. Run 'apt-get upgrade' to see them.\n",
+                        QA_.len().saturating_sub(self.installed_packages.len()).min(8)));
                 }
-                self.lzj = true;
-                Ok(CommandResult::vx(bd))
+                self.repo_updated = true;
+                Ok(CommandResult::success(out))
             }
 
             "install" | "add" => {
-                if ews.is_empty() {
-                    return Ok(CommandResult::zt(1, String::from(
+                if cct.is_empty() {
+                    return Ok(CommandResult::error(1, String::from(
                         "E: No packages specified for installation.")));
                 }
 
-                if !self.lzj {
-                    return Ok(CommandResult::zt(1, String::from(
+                if !self.repo_updated {
+                    return Ok(CommandResult::error(1, String::from(
                         "E: The package lists are not up to date. Run 'apt-get update' first.")));
                 }
 
-                let mut bd = String::new();
-                bd.t("Reading package lists... Done\n");
-                bd.t("Building dependency tree... Done\n");
+                let mut out = String::new();
+                out.push_str("Reading package lists... Done\n");
+                out.push_str("Building dependency tree... Done\n");
 
                 
-                let mut dcu: Vec<&'static E> = Vec::new();
-                let mut jhh: Vec<&str> = Vec::new();
-                let mut isf: Vec<&str> = Vec::new(); 
+                let mut bec: Vec<&'static J> = Vec::new();
+                let mut evg: Vec<&str> = Vec::new();
+                let mut ela: Vec<&str> = Vec::new(); 
 
-                for &j in ews {
+                for &name in cct {
                     
-                    if j.cj('-') { continue; }
-                    if let Some(op) = hjm(j) {
+                    if name.starts_with('-') { continue; }
+                    if let Some(gh) = dpp(name) {
                         
-                        for kpd in op.jw {
-                            if !self.cah.iter().any(|(bo, _)| bo == kpd)
-                                && !dcu.iter().any(|ai| ai.j == *kpd)
+                        for dep_name in gh.deps {
+                            if !self.installed_packages.iter().any(|(ae, _)| ae == dep_name)
+                                && !bec.iter().any(|aa| aa.name == *dep_name)
                             {
-                                if let Some(gem) = hjm(kpd) {
-                                    dcu.push(gem);
+                                if let Some(dep) = dpp(dep_name) {
+                                    bec.push(dep);
                                 }
                             }
                         }
                         
-                        if !self.cah.iter().any(|(bo, _)| *bo == op.j)
-                            && !dcu.iter().any(|ai| ai.j == op.j)
+                        if !self.installed_packages.iter().any(|(ae, _)| *ae == gh.name)
+                            && !bec.iter().any(|aa| aa.name == gh.name)
                         {
-                            dcu.push(op);
+                            bec.push(gh);
                         }
-                    } else if self.dty && self.fqw.is_some() {
+                    } else if self.online_mode && self.pkg_server.is_some() {
                         
-                        isf.push(j);
+                        ela.push(name);
                     } else {
-                        jhh.push(j);
+                        evg.push(name);
                     }
                 }
 
-                for gns in &jhh {
-                    bd.t(&format!("E: Unable to locate package {}\n", gns));
+                for nf in &evg {
+                    out.push_str(&format!("E: Unable to locate package {}\n", nf));
                 }
 
                 
-                let mut kse = 0u32;
-                if !isf.is_empty() {
-                    let eiv = self.fqw.clone().age();
-                    for &gft in &isf {
-                        bd.t(&format!("Resolving {} via package server...\n", gft));
-                        if let Some(f) = self.nmp(&eiv, gft) {
-                            let gfb = f.len();
-                            self.iee += gfb;
-                            let sb = self.nsl(&f);
-                            if sb > 0 {
-                                bd.t(&format!("Get:1 {}/repo/pool/{}.pkg [{} B]\n", eiv, gft, gfb));
-                                bd.t(&format!("  -> Downloaded {} bytes, extracted {} files\n", gfb, sb));
+                let mut ftq = 0u32;
+                if !ela.is_empty() {
+                    let bvw = self.pkg_server.clone().unwrap_or_default();
+                    for &dyn_name in &ela {
+                        out.push_str(&format!("Resolving {} via package server...\n", dyn_name));
+                        if let Some(data) = self.download_package(&bvw, dyn_name) {
+                            let cwt = data.len();
+                            self.total_bytes_downloaded += cwt;
+                            let files = self.extract_package_to_ramfs(&data);
+                            if files > 0 {
+                                out.push_str(&format!("Get:1 {}/repo/pool/{}.pkg [{} B]\n", bvw, dyn_name, cwt));
+                                out.push_str(&format!("  -> Downloaded {} bytes, extracted {} files\n", cwt, files));
                                 
-                                let xrd = core::str::jg(&f).unwrap_or("")
-                                    .ak().next().unwrap_or("")
-                                    .eyv(3, ' ').goc(2).unwrap_or("latest");
+                                let pro = core::str::from_utf8(&data).unwrap_or("")
+                                    .lines().next().unwrap_or("")
+                                    .splitn(3, ' ').nth(2).unwrap_or("latest");
                                 
-                                let urd = alloc::boxed::Box::fmu(String::from(gft).lfh());
-                                let xrc = alloc::boxed::Box::fmu(String::from(xrd).lfh());
-                                self.cah.push((urd, xrc));
-                                kse += 1;
+                                let nhl = alloc::boxed::Box::leak(String::from(dyn_name).into_boxed_str());
+                                let prn = alloc::boxed::Box::leak(String::from(pro).into_boxed_str());
+                                self.installed_packages.push((nhl, prn));
+                                ftq += 1;
                             } else {
-                                bd.t(&format!("E: Unable to locate package {}\n", gft));
+                                out.push_str(&format!("E: Unable to locate package {}\n", dyn_name));
                             }
                         } else {
-                            bd.t(&format!("E: Unable to locate package {}\n", gft));
+                            out.push_str(&format!("E: Unable to locate package {}\n", dyn_name));
                         }
                     }
                 }
 
-                if dcu.is_empty() && kse == 0 && jhh.is_empty() && isf.is_empty() {
-                    bd.t("All requested packages are already installed.\n");
-                    return Ok(CommandResult::vx(bd));
+                if bec.is_empty() && ftq == 0 && evg.is_empty() && ela.is_empty() {
+                    out.push_str("All requested packages are already installed.\n");
+                    return Ok(CommandResult::success(out));
                 }
 
-                if dcu.is_empty() && kse == 0 {
-                    return Ok(CommandResult::zt(1, bd));
+                if bec.is_empty() && ftq == 0 {
+                    return Ok(CommandResult::error(1, out));
                 }
 
                 
-                let utd: Vec<&str> = dcu.iter().map(|ai| ai.j).collect();
-                let aay: u32 = dcu.iter().map(|ai| ai.gs).sum();
+                let njg: Vec<&str> = bec.iter().map(|aa| aa.name).collect();
+                let total_size: u32 = bec.iter().map(|aa| aa.size_kb).sum();
 
-                bd.t("The following NEW packages will be installed:\n  ");
-                bd.t(&utd.rr(" "));
-                bd.t("\n");
-                bd.t(&format!("{} newly installed, 0 to remove and 0 not upgraded.\n",
-                    dcu.len()));
-                bd.t(&format!("Need to get {} kB of archives.\n", aay));
-                bd.t(&format!("After this operation, {} kB of additional disk space will be used.\n",
-                    aay * 3));
+                out.push_str("The following NEW packages will be installed:\n  ");
+                out.push_str(&njg.join(" "));
+                out.push_str("\n");
+                out.push_str(&format!("{} newly installed, 0 to remove and 0 not upgraded.\n",
+                    bec.len()));
+                out.push_str(&format!("Need to get {} kB of archives.\n", total_size));
+                out.push_str(&format!("After this operation, {} kB of additional disk space will be used.\n",
+                    total_size * 3));
 
                 
-                let bog = self.fqw.clone();
-                let jbn = self.dty && bog.is_some();
+                let ain = self.pkg_server.clone();
+                let erp = self.online_mode && ain.is_some();
 
-                for op in &dcu {
-                    if jbn {
-                        let eiv = bog.ahz().unwrap();
-                        bd.t(&format!("Get:1 {}/repo/pool/{}.pkg {} [{} kB]\n",
-                            eiv, op.j, op.dk, op.gs));
+                for gh in &bec {
+                    if erp {
+                        let bvw = ain.as_deref().unwrap();
+                        out.push_str(&format!("Get:1 {}/repo/pool/{}.pkg {} [{} kB]\n",
+                            bvw, gh.name, gh.version, gh.size_kb));
 
                         
-                        if let Some(f) = self.nmp(eiv, op.j) {
-                            let gfb = f.len();
-                            self.iee += gfb;
-                            let sb = self.nsl(&f);
-                            bd.t(&format!("  -> Downloaded {} bytes, extracted {} files\n",
-                                gfb, sb));
+                        if let Some(data) = self.download_package(bvw, gh.name) {
+                            let cwt = data.len();
+                            self.total_bytes_downloaded += cwt;
+                            let files = self.extract_package_to_ramfs(&data);
+                            out.push_str(&format!("  -> Downloaded {} bytes, extracted {} files\n",
+                                cwt, files));
                         } else {
-                            bd.t("  -> Download failed, using cached metadata\n");
+                            out.push_str("  -> Download failed, using cached metadata\n");
                         }
                     } else {
-                        bd.t(&format!("Get:1 http://dl-cdn.alpinelinux.org/alpine/v3.19/main x86_64 {} {} [{} kB]\n",
-                            op.j, op.dk, op.gs));
+                        out.push_str(&format!("Get:1 http://dl-cdn.alpinelinux.org/alpine/v3.19/main x86_64 {} {} [{} kB]\n",
+                            gh.name, gh.version, gh.size_kb));
                     }
                 }
-                if jbn {
-                    bd.t(&format!("Fetched {} bytes from {}\n",
-                        self.iee, bog.ahz().unwrap()));
+                if erp {
+                    out.push_str(&format!("Fetched {} bytes from {}\n",
+                        self.total_bytes_downloaded, ain.as_deref().unwrap()));
                 } else {
-                    bd.t(&format!("Fetched {} kB in 0s (internal)\n", aay));
+                    out.push_str(&format!("Fetched {} kB in 0s (internal)\n", total_size));
                 }
 
                 
-                for op in &dcu {
-                    bd.t(&format!("Selecting previously unselected package {}.\n", op.j));
-                    bd.t(&format!("Preparing to unpack {}_{}_amd64.deb ...\n", op.j, op.dk));
-                    bd.t(&format!("Unpacking {} ({}) ...\n", op.j, op.dk));
+                for gh in &bec {
+                    out.push_str(&format!("Selecting previously unselected package {}.\n", gh.name));
+                    out.push_str(&format!("Preparing to unpack {}_{}_amd64.deb ...\n", gh.name, gh.version));
+                    out.push_str(&format!("Unpacking {} ({}) ...\n", gh.name, gh.version));
                 }
 
                 
-                bd.t("Setting up packages ...\n");
-                for op in &dcu {
-                    bd.t(&format!("Setting up {} ({}) ...\n", op.j, op.dk));
-                    self.cah.push((op.j, op.dk));
+                out.push_str("Setting up packages ...\n");
+                for gh in &bec {
+                    out.push_str(&format!("Setting up {} ({}) ...\n", gh.name, gh.version));
+                    self.installed_packages.push((gh.name, gh.version));
                 }
 
-                bd.t("Processing triggers for man-db ...\n");
-                if jbn {
-                    bd.t(&format!("[online] {} files installed to filesystem.\n",
-                        self.lyb));
+                out.push_str("Processing triggers for man-db ...\n");
+                if erp {
+                    out.push_str(&format!("[online] {} files installed to filesystem.\n",
+                        self.real_files_installed));
                 }
 
-                if !jhh.is_empty() {
-                    return Ok(CommandResult { nz: 1, ejc: bd, dwg: String::new(), uk: 0 });
+                if !evg.is_empty() {
+                    return Ok(CommandResult { exit_code: 1, stdout: out, stderr: String::new(), duration_ms: 0 });
                 }
-                Ok(CommandResult::vx(bd))
+                Ok(CommandResult::success(out))
             }
 
             "remove" | "purge" | "del" => {
-                if ews.is_empty() {
-                    return Ok(CommandResult::zt(1, String::from(
+                if cct.is_empty() {
+                    return Ok(CommandResult::error(1, String::from(
                         "E: No packages specified for removal.")));
                 }
 
-                let mut bd = String::new();
-                bd.t("Reading package lists... Done\n");
-                bd.t("Building dependency tree... Done\n");
+                let mut out = String::new();
+                out.push_str("Reading package lists... Done\n");
+                out.push_str("Building dependency tree... Done\n");
 
-                let mut gqs = 0u32;
-                let mut nwc = 0u32;
-                for &j in ews {
-                    if j.cj('-') { continue; }
-                    if let Some(u) = self.cah.iter().qf(|(bo, _)| *bo == j) {
-                        let (dkq, von) = self.cah.remove(u);
-                        let aw = hjm(dkq).map(|ai| ai.gs).unwrap_or(100);
-                        bd.t(&format!("Removing {} ({}) ...\n", dkq, von));
-                        nwc += aw * 3;
-                        gqs += 1;
+                let mut ddj = 0u32;
+                let mut iab = 0u32;
+                for &name in cct {
+                    if name.starts_with('-') { continue; }
+                    if let Some(pos) = self.installed_packages.iter().position(|(ae, _)| *ae == name) {
+                        let (biq, pver) = self.installed_packages.remove(pos);
+                        let size = dpp(biq).map(|aa| aa.size_kb).unwrap_or(100);
+                        out.push_str(&format!("Removing {} ({}) ...\n", biq, pver));
+                        iab += size * 3;
+                        ddj += 1;
                     } else {
-                        bd.t(&format!("Package '{}' is not installed, so not removed.\n", j));
+                        out.push_str(&format!("Package '{}' is not installed, so not removed.\n", name));
                     }
                 }
 
-                if gqs > 0 {
-                    bd.t(&format!("{} packages removed, {} kB disk space freed.\n",
-                        gqs, nwc));
+                if ddj > 0 {
+                    out.push_str(&format!("{} packages removed, {} kB disk space freed.\n",
+                        ddj, iab));
                 }
-                Ok(CommandResult::vx(bd))
+                Ok(CommandResult::success(out))
             }
 
             "list" | "list-installed" => {
-                let mut bd = String::new();
-                if self.cah.is_empty() {
-                    bd.t("No packages installed.\n");
-                    bd.t("Use 'apt-get install <package>' to install packages.\n");
+                let mut out = String::new();
+                if self.installed_packages.is_empty() {
+                    out.push_str("No packages installed.\n");
+                    out.push_str("Use 'apt-get install <package>' to install packages.\n");
                 } else {
-                    bd.t("Listing installed packages...\n");
-                    bd.t(&format!("{:<24} {:<24} {}\n", "Package", "Version", "Description"));
-                    bd.t(&format!("{:-<24} {:-<24} {:-<30}\n", "", "", ""));
-                    for (j, axh) in &self.cah {
-                        let desc = hjm(j).map(|ai| ai.dc).unwrap_or("");
-                        bd.t(&format!("{:<24} {:<24} {}\n", j, axh, desc));
+                    out.push_str("Listing installed packages...\n");
+                    out.push_str(&format!("{:<24} {:<24} {}\n", "Package", "Version", "Description"));
+                    out.push_str(&format!("{:-<24} {:-<24} {:-<30}\n", "", "", ""));
+                    for (name, tu) in &self.installed_packages {
+                        let desc = dpp(name).map(|aa| aa.description).unwrap_or("");
+                        out.push_str(&format!("{:<24} {:<24} {}\n", name, tu, desc));
                     }
-                    bd.t(&format!("\n{} packages installed.\n", self.cah.len()));
+                    out.push_str(&format!("\n{} packages installed.\n", self.installed_packages.len()));
                 }
-                Ok(CommandResult::vx(bd))
+                Ok(CommandResult::success(out))
             }
 
             "search" => {
-                if ews.is_empty() {
-                    return Ok(CommandResult::zt(1, String::from("Usage: apt-get search <keyword>")));
+                if cct.is_empty() {
+                    return Ok(CommandResult::error(1, String::from("Usage: apt-get search <keyword>")));
                 }
-                let ohx = ews[0].aqn();
+                let ijd = cct[0].to_lowercase();
                 
-                let mut bd = String::new();
-                let mut az = 0;
+                let mut out = String::new();
+                let mut count = 0;
                 
-                for op in PD_ {
-                    if op.j.contains(ohx.as_str()) || op.dc.aqn().contains(ohx.as_str()) {
-                        let adw = if self.cah.iter().any(|(bo, _)| *bo == op.j) {
+                for gh in QA_ {
+                    if gh.name.contains(ijd.as_str()) || gh.description.to_lowercase().contains(ijd.as_str()) {
+                        let installed = if self.installed_packages.iter().any(|(ae, _)| *ae == gh.name) {
                             " [installed]"
                         } else {
                             ""
                         };
-                        bd.t(&format!("{}/{} {} x86_64{}\n  {}\n\n",
-                            op.j, op.dk, op.gs, adw, op.dc));
-                        az += 1;
+                        out.push_str(&format!("{}/{} {} x86_64{}\n  {}\n\n",
+                            gh.name, gh.version, gh.size_kb, installed, gh.description));
+                        count += 1;
                     }
                 }
                 
-                if self.dty {
-                    if let Some(ref eiv) = self.fqw {
-                        let wfr = alloc::format!("{}/repo/search?q={}", eiv, ews[0]);
-                        if let Ok(lj) = crate::netstack::http::get(&wfr) {
-                            if lj.wt == 200 {
-                                let text = core::str::jg(&lj.gj).unwrap_or("");
-                                for line in text.ak() {
+                if self.online_mode {
+                    if let Some(ref bvw) = self.pkg_server {
+                        let omn = alloc::format!("{}/repo/search?q={}", bvw, cct[0]);
+                        if let Ok(eo) = crate::netstack::http::get(&omn) {
+                            if eo.status_code == 200 {
+                                let text = core::str::from_utf8(&eo.body).unwrap_or("");
+                                for line in text.lines() {
                                     if line.is_empty() || line == "No results" { continue; }
                                     
-                                    let ek: Vec<&str> = line.eyv(7, ' ').collect();
-                                    if ek.len() >= 7 {
-                                        let dkq = ek[0];
+                                    let au: Vec<&str> = line.splitn(7, ' ').collect();
+                                    if au.len() >= 7 {
+                                        let biq = au[0];
                                         
-                                        if PD_.iter().any(|ai| ai.j == dkq) { continue; }
-                                        let adw = if self.cah.iter().any(|(bo, _)| *bo == dkq) {
+                                        if QA_.iter().any(|aa| aa.name == biq) { continue; }
+                                        let installed = if self.installed_packages.iter().any(|(ae, _)| *ae == biq) {
                                             " [installed]"
                                         } else {
                                             ""
                                         };
-                                        bd.t(&format!("{}/{} {} {}{}\n  {}\n\n",
-                                            dkq, ek[1], ek[2], ek[3], adw, ek[6]));
-                                        az += 1;
+                                        out.push_str(&format!("{}/{} {} {}{}\n  {}\n\n",
+                                            biq, au[1], au[2], au[3], installed, au[6]));
+                                        count += 1;
                                     }
                                 }
                             }
                         }
                     }
                 }
-                if az == 0 {
-                    bd.t(&format!("No packages found matching '{}'.\n", ews[0]));
+                if count == 0 {
+                    out.push_str(&format!("No packages found matching '{}'.\n", cct[0]));
                 } else {
-                    bd.t(&format!("{} packages found.\n", az));
+                    out.push_str(&format!("{} packages found.\n", count));
                 }
-                Ok(CommandResult::vx(bd))
+                Ok(CommandResult::success(out))
             }
 
             "upgrade" => {
-                let mut bd = String::new();
-                bd.t("Reading package lists... Done\n");
-                bd.t("Building dependency tree... Done\n");
-                bd.t("Calculating upgrade... Done\n");
-                bd.t("0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.\n");
-                Ok(CommandResult::vx(bd))
+                let mut out = String::new();
+                out.push_str("Reading package lists... Done\n");
+                out.push_str("Building dependency tree... Done\n");
+                out.push_str("Calculating upgrade... Done\n");
+                out.push_str("0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.\n");
+                Ok(CommandResult::success(out))
             }
 
             _ => {
-                Ok(CommandResult::zt(1, format!("E: Invalid operation '{}'", air)))
+                Ok(CommandResult::error(1, format!("E: Invalid operation '{}'", je)))
             }
         }
     }
 
     
-    fn wor(&mut self, n: &[&str]) -> Result<CommandResult> {
-        if n.is_empty() {
-            return Ok(CommandResult::zt(1, String::from(
+    fn simulate_apk(&mut self, args: &[&str]) -> Result<CommandResult> {
+        if args.is_empty() {
+            return Ok(CommandResult::error(1, String::from(
                 "Usage: apk [update|add|del|list|search|info] [packages...]")));
         }
 
         
-        let lki: &[&str] = match n[0] {
+        let ggn: &[&str] = match args[0] {
             "add" => &["install"],
             "del" => &["remove"],
             "info" => &["search"],
-            gq => &[gq],
+            other => &[other],
         };
 
-        let mut nwp = lki.ip();
-        nwp.bk(&n[1..]);
-        self.pkw(&nwp)
+        let mut iah = ggn.to_vec();
+        iah.extend_from_slice(&args[1..]);
+        self.simulate_apt(&iah)
     }
 
     
-    pub fn cbu(&mut self) -> Result<()> {
-        if self.g == LinuxState::Ma {
+    pub fn shutdown(&mut self) -> Result<()> {
+        if self.state == LinuxState::NotStarted {
             return Ok(());
         }
 
         crate::serial_println!("[TSL] Shutting down Linux VM...");
-        self.g = LinuxState::Ays;
+        self.state = LinuxState::ShuttingDown;
 
         
         if let Some(ref mut console) = self.console {
@@ -1460,7 +1460,7 @@ Note: Running in simulated mode (no real Linux kernel)")
 
         
         self.console = None;
-        self.g = LinuxState::Ma;
+        self.state = LinuxState::NotStarted;
 
         crate::serial_println!("[TSL] Linux VM stopped");
 
@@ -1474,39 +1474,39 @@ Note: Running in simulated mode (no real Linux kernel)")
 }
 
 
-static IE_: Mutex<LinuxSubsystem> = Mutex::new(LinuxSubsystem::new());
+static IY_: Mutex<LinuxSubsystem> = Mutex::new(LinuxSubsystem::new());
 
 
 pub fn init() -> Result<()> {
-    IE_.lock().init()
+    IY_.lock().init()
 }
 
 
 pub fn boot() -> Result<()> {
-    IE_.lock().boot()
+    IY_.lock().boot()
 }
 
 
-pub fn bna(ro: &str) -> Result<CommandResult> {
-    IE_.lock().bna(ro)
+pub fn execute(command: &str) -> Result<CommandResult> {
+    IY_.lock().execute(command)
 }
 
 
-pub fn uc() -> bool {
-    IE_.lock().uc()
+pub fn is_ready() -> bool {
+    IY_.lock().is_ready()
 }
 
 
-pub fn g() -> LinuxState {
-    IE_.lock().g()
+pub fn state() -> LinuxState {
+    IY_.lock().state()
 }
 
 
-pub fn cbu() -> Result<()> {
-    IE_.lock().cbu()
+pub fn shutdown() -> Result<()> {
+    IY_.lock().shutdown()
 }
 
 
-pub fn bcu() -> spin::Aki<'static, LinuxSubsystem> {
-    IE_.lock()
+pub fn acs() -> spin::MutexGuard<'static, LinuxSubsystem> {
+    IY_.lock()
 }

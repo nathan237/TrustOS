@@ -86,15 +86,15 @@ pub fn next_u64() -> u64 {
 }
 
 // Public function — callable from other modules.
-pub fn fill_bytes(buffer: &mut [u8]) {
+pub fn fill_bytes(buf: &mut [u8]) {
     let mut i = 0;
-    while i < buffer.len() {
+    while i < buf.len() {
         let chunk = next_u64().to_le_bytes();
         for &b in &chunk {
-            if i >= buffer.len() {
+            if i >= buf.len() {
                 break;
             }
-            buffer[i] = b;
+            buf[i] = b;
             i += 1;
         }
     }
@@ -124,19 +124,19 @@ fn rdrand64_raw() -> Option<u64> {
             return None;
         }
         for _ in 0..10 {
-            let value: u64;
+            let val: u64;
             let ok: u8;
                         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
                 core::arch::asm!(
                     "rdrand {v}",
                     "setc {ok}",
-                    v = out(reg) value,
+                    v = out(reg) val,
                     ok = out(reg_byte) ok,
                 );
             }
             if ok != 0 {
-                return Some(value);
+                return Some(val);
             }
         }
         None
@@ -154,19 +154,19 @@ fn rdseed64_raw() -> Option<u64> {
             return None;
         }
         for _ in 0..10 {
-            let value: u64;
+            let val: u64;
             let ok: u8;
                         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
                 core::arch::asm!(
                     "rdseed {v}",
                     "setc {ok}",
-                    v = out(reg) value,
+                    v = out(reg) val,
                     ok = out(reg_byte) ok,
                 );
             }
             if ok != 0 {
-                return Some(value);
+                return Some(val);
             }
         }
         None
@@ -193,15 +193,15 @@ pub fn secure_random_u32() -> u32 {
 }
 
 /// Fill a buffer with cryptographically secure random bytes.
-pub fn secure_fill_bytes(buffer: &mut [u8]) {
+pub fn secure_fill_bytes(buf: &mut [u8]) {
     let mut i = 0;
-    while i < buffer.len() {
+    while i < buf.len() {
         let chunk = secure_random_u64().to_le_bytes();
         for &b in &chunk {
-            if i >= buffer.len() {
+            if i >= buf.len() {
                 break;
             }
-            buffer[i] = b;
+            buf[i] = b;
             i += 1;
         }
     }

@@ -34,6 +34,7 @@ lazy_static! {
         // CPU exceptions
         idt.breakpoint.set_handler_fn(handlers::breakpoint_handler);
         idt.double_fault.set_handler_fn(handlers::double_fault_handler);
+        idt.non_maskable_interrupt.set_handler_fn(handlers::nmi_handler); // Vector 2 = NMI
         idt.page_fault.set_handler_fn(handlers::page_fault_handler);
         idt.general_protection_fault.set_handler_fn(handlers::general_protection_fault_handler);
         idt.invalid_opcode.set_handler_fn(handlers::invalid_opcode_handler);
@@ -42,6 +43,7 @@ lazy_static! {
         idt.stack_segment_fault.set_handler_fn(handlers::stack_segment_fault_handler);
         idt.x87_floating_point.set_handler_fn(handlers::x87_fpu_error_handler);
         idt.simd_floating_point.set_handler_fn(handlers::simd_floating_point_handler);
+        idt.machine_check.set_handler_fn(handlers::machine_check_handler);
         
         // Hardware interrupts (legacy PIC vectors — used if APIC unavailable)
         idt[pic::InterruptIndex::Timer.as_usize()]

@@ -6,60 +6,60 @@ use alloc::vec::Vec;
 use alloc::vec;
 use alloc::format;
 
-use super::{Dc, Anj, BinaryType, gty, Register, Operand};
+use super::{Bj, Ql, BinaryType, dfe, Register, Operand};
 
 
 pub struct Transpiler {
-    pub instructions: Vec<Dc>,
-    pub apd: Vec<Anj>,
-    hws: Option<u64>,
-    hwv: Option<u64>,
-    hye: Option<u64>,
-    hww: Option<u64>,
+    pub instructions: Vec<Bj>,
+    pub syscalls: Vec<Ql>,
+    rax_value: Option<u64>,
+    rdi_value: Option<u64>,
+    rsi_value: Option<u64>,
+    rdx_value: Option<u64>,
 }
 
 impl Transpiler {
-    pub fn new(instructions: Vec<Dc>) -> Self {
+    pub fn new(instructions: Vec<Bj>) -> Self {
         Self {
             instructions,
-            apd: Vec::new(),
-            hws: None,
-            hwv: None,
-            hye: None,
-            hww: None,
+            syscalls: Vec::new(),
+            rax_value: None,
+            rdi_value: None,
+            rsi_value: None,
+            rdx_value: None,
         }
     }
     
     
-    pub fn qie(&mut self) {
-        self.hws = None;
-        self.hwv = None;
-        self.hye = None;
-        self.hww = None;
+    pub fn analyze_syscalls(&mut self) {
+        self.rax_value = None;
+        self.rdi_value = None;
+        self.rsi_value = None;
+        self.rdx_value = None;
         
-        for fi in &self.instructions {
+        for inst in &self.instructions {
             
-            if fi.bes == "mov" && fi.bvr.len() >= 2 {
-                if let (Operand::Register(reg), Operand::Acf(ap)) = (&fi.bvr[0], &fi.bvr[1]) {
+            if inst.mnemonic == "mov" && inst.operands.len() >= 2 {
+                if let (Operand::Register(reg), Operand::Immediate(val)) = (&inst.operands[0], &inst.operands[1]) {
                     match reg {
-                        Register::Me | Register::Abh => self.hws = Some(*ap as u64),
-                        Register::Alq => self.hwv = Some(*ap as u64),
-                        Register::Alt => self.hye = Some(*ap as u64),
-                        Register::Alr => self.hww = Some(*ap as u64),
+                        Register::Fa | Register::EAX => self.rax_value = Some(*val as u64),
+                        Register::RDI => self.rdi_value = Some(*val as u64),
+                        Register::RSI => self.rsi_value = Some(*val as u64),
+                        Register::RDX => self.rdx_value = Some(*val as u64),
                         _ => {}
                     }
                 }
             }
             
             
-            if fi.bes == "xor" && fi.bvr.len() >= 2 {
-                if let (Operand::Register(aqh), Operand::Register(uv)) = (&fi.bvr[0], &fi.bvr[1]) {
-                    if aqh == uv {
-                        match aqh {
-                            Register::Me | Register::Abh => self.hws = Some(0),
-                            Register::Alq => self.hwv = Some(0),
-                            Register::Alt => self.hye = Some(0),
-                            Register::Alr => self.hww = Some(0),
+            if inst.mnemonic == "xor" && inst.operands.len() >= 2 {
+                if let (Operand::Register(uh), Operand::Register(ju)) = (&inst.operands[0], &inst.operands[1]) {
+                    if uh == ju {
+                        match uh {
+                            Register::Fa | Register::EAX => self.rax_value = Some(0),
+                            Register::RDI => self.rdi_value = Some(0),
+                            Register::RSI => self.rsi_value = Some(0),
+                            Register::RDX => self.rdx_value = Some(0),
                             _ => {}
                         }
                     }
@@ -67,18 +67,18 @@ impl Transpiler {
             }
             
             
-            if fi.bes == "syscall" {
-                if let Some(num) = self.hws {
-                    let mut n = Vec::new();
-                    if let Some(p) = self.hwv { n.push(p); }
-                    if let Some(p) = self.hye { n.push(p); }
-                    if let Some(p) = self.hww { n.push(p); }
+            if inst.mnemonic == "syscall" {
+                if let Some(num) = self.rax_value {
+                    let mut args = Vec::new();
+                    if let Some(v) = self.rdi_value { args.push(v); }
+                    if let Some(v) = self.rsi_value { args.push(v); }
+                    if let Some(v) = self.rdx_value { args.push(v); }
                     
-                    self.apd.push(Anj {
-                        re: fi.re,
-                        aqb: num,
-                        j: gty(num),
-                        n,
+                    self.syscalls.push(Ql {
+                        address: inst.address,
+                        number: num,
+                        name: dfe(num),
+                        args,
                     });
                 }
             }
@@ -86,454 +86,454 @@ impl Transpiler {
     }
     
     
-    pub fn rwn(&self) -> BinaryType {
-        if self.apd.is_empty() {
-            return BinaryType::F;
+    pub fn detect_binary_type(&self) -> BinaryType {
+        if self.syscalls.is_empty() {
+            return BinaryType::Unknown;
         }
         
         
-        if self.apd.len() == 1 {
-            let jt = &self.apd[0];
-            if jt.j == "exit" || jt.j == "exit_group" {
-                return BinaryType::Buq;
+        if self.syscalls.len() == 1 {
+            let dr = &self.syscalls[0];
+            if dr.name == "exit" || dr.name == "exit_group" {
+                return BinaryType::TrueFalse;
             }
         }
         
         
-        let prd: Vec<&str> = self.apd.iter().map(|e| e.j).collect();
+        let jkz: Vec<&str> = self.syscalls.iter().map(|j| j.name).collect();
         
-        if prd.contains(&"getcwd") {
-            return BinaryType::Bps;
+        if jkz.contains(&"getcwd") {
+            return BinaryType::Pwd;
         }
         
-        if prd.contains(&"uname") {
-            return BinaryType::Ra;
+        if jkz.contains(&"uname") {
+            return BinaryType::Uname;
         }
         
         
-        for jt in &self.apd {
-            if jt.j == "write" && jt.n.len() > 0 && jt.n[0] == 1 {
-                return BinaryType::Bfs;
+        for dr in &self.syscalls {
+            if dr.name == "write" && dr.args.len() > 0 && dr.args[0] == 1 {
+                return BinaryType::Echo;
             }
         }
         
-        BinaryType::F
+        BinaryType::Unknown
     }
     
     
-    pub fn tcc(&self, kdi: BinaryType, f: &[u8]) -> String {
-        let mut aj = String::new();
+    pub fn generate_functional_rust(&self, fje: BinaryType, data: &[u8]) -> String {
+        let mut code = String::new();
         
-        aj.t("// Auto-generated by TrustOS Binary Transpiler\n");
-        aj.t("// This code is functionally equivalent to the original binary\n\n");
-        aj.t("#![no_std]\n#![no_main]\n\n");
+        code.push_str("// Auto-generated by TrustOS Binary Transpiler\n");
+        code.push_str("// This code is functionally equivalent to the original binary\n\n");
+        code.push_str("#![no_std]\n#![no_main]\n\n");
         
-        match kdi {
-            BinaryType::Buq => {
-                self.tcq(&mut aj);
+        match fje {
+            BinaryType::TrueFalse => {
+                self.generate_true_false(&mut code);
             }
-            BinaryType::Bfs => {
-                self.tcb(&mut aj, f);
+            BinaryType::Echo => {
+                self.generate_echo(&mut code, data);
             }
-            BinaryType::Bps => {
-                self.tcj(&mut aj);
+            BinaryType::Pwd => {
+                self.generate_pwd(&mut code);
             }
-            BinaryType::Ra => {
-                self.tcr(&mut aj);
+            BinaryType::Uname => {
+                self.generate_uname(&mut code);
             }
-            BinaryType::Cfb => {
-                self.tcf(&mut aj);
+            BinaryType::Hostname => {
+                self.generate_hostname(&mut code);
             }
-            BinaryType::Bzh => {
-                self.tbx(&mut aj);
+            BinaryType::Cat => {
+                self.generate_cat(&mut code);
             }
-            BinaryType::Cgx => {
-                self.tcg(&mut aj);
+            BinaryType::Ls => {
+                self.generate_ls(&mut code);
             }
-            BinaryType::F => {
-                self.tcd(&mut aj);
+            BinaryType::Unknown => {
+                self.generate_generic(&mut code);
             }
         }
         
-        aj
+        code
     }
     
-    fn tcq(&self, aj: &mut String) {
-        let nz = if let Some(jt) = self.apd.fv() {
-            if jt.n.len() > 0 { jt.n[0] as i32 } else { 0 }
+    fn generate_true_false(&self, code: &mut String) {
+        let exit_code = if let Some(dr) = self.syscalls.first() {
+            if dr.args.len() > 0 { dr.args[0] as i32 } else { 0 }
         } else {
             0
         };
         
-        aj.t("/// Transpiled: exit program\n");
-        aj.t("/// Original: mov rax, 60; mov rdi, ");
-        aj.t(&format!("{}; syscall\n", nz));
-        aj.t("\n");
-        aj.t("use trustos_rt::prelude::*;\n\n");
-        aj.t("#[no_mangle]\n");
-        aj.t("pub extern \"C\" fn _start() -> ! {\n");
-        aj.t(&format!("    sys_exit({});\n", nz));
-        aj.t("}\n\n");
-        aj.t("// TrustOS native implementation\n");
-        aj.t("mod trustos_rt {\n");
-        aj.t("    pub mod prelude {\n");
-        aj.t("        pub fn sys_exit(code: i32) -> ! {\n");
-        aj.t("            // Call TrustOS exit syscall\n");
-        aj.t("            unsafe {\n");
-        aj.t("                core::arch::asm!(\n");
-        aj.t("                    \"syscall\",\n");
-        aj.t("                    in(\"rax\") 60u64,  // exit\n");
-        aj.t("                    in(\"rdi\") code as u64,\n");
-        aj.t("                    options(noreturn)\n");
-        aj.t("                );\n");
-        aj.t("            }\n");
-        aj.t("        }\n");
-        aj.t("    }\n");
-        aj.t("}\n");
+        code.push_str("/// Transpiled: exit program\n");
+        code.push_str("/// Original: mov rax, 60; mov rdi, ");
+        code.push_str(&format!("{}; syscall\n", exit_code));
+        code.push_str("\n");
+        code.push_str("use trustos_rt::prelude::*;\n\n");
+        code.push_str("#[no_mangle]\n");
+        code.push_str("pub extern \"C\" fn _start() -> ! {\n");
+        code.push_str(&format!("    sys_exit({});\n", exit_code));
+        code.push_str("}\n\n");
+        code.push_str("// TrustOS native implementation\n");
+        code.push_str("mod trustos_rt {\n");
+        code.push_str("    pub mod prelude {\n");
+        code.push_str("        pub fn sys_exit(code: i32) -> ! {\n");
+        code.push_str("            // Call TrustOS exit syscall\n");
+        code.push_str("            unsafe {\n");
+        code.push_str("                core::arch::asm!(\n");
+        code.push_str("                    \"syscall\",\n");
+        code.push_str("                    in(\"rax\") 60u64,  // exit\n");
+        code.push_str("                    in(\"rdi\") code as u64,\n");
+        code.push_str("                    options(noreturn)\n");
+        code.push_str("                );\n");
+        code.push_str("            }\n");
+        code.push_str("        }\n");
+        code.push_str("    }\n");
+        code.push_str("}\n");
     }
     
-    fn tcb(&self, aj: &mut String, f: &[u8]) {
+    fn generate_echo(&self, code: &mut String, data: &[u8]) {
         
-        let message = self.sqi(f);
+        let message = self.extract_string_from_write(data);
         
-        aj.t("/// Transpiled: echo/print program\n");
-        aj.t("/// Original syscall: write(1, message, len)\n\n");
-        aj.t("use trustos_rt::prelude::*;\n\n");
-        aj.t("#[no_mangle]\n");
-        aj.t("pub extern \"C\" fn main(argc: i32, argv: *const *const u8) {\n");
-        aj.t("    // Echo all arguments\n");
-        aj.t("    for i in 1..argc {\n");
-        aj.t("        let arg = unsafe { *argv.offset(i as isize) };\n");
-        aj.t("        print_cstr(arg);\n");
-        aj.t("        if i < argc - 1 {\n");
-        aj.t("            print(\" \");\n");
-        aj.t("        }\n");
-        aj.t("    }\n");
-        aj.t("    println(\"\");\n");
-        aj.t("    sys_exit(0);\n");
-        aj.t("}\n\n");
+        code.push_str("/// Transpiled: echo/print program\n");
+        code.push_str("/// Original syscall: write(1, message, len)\n\n");
+        code.push_str("use trustos_rt::prelude::*;\n\n");
+        code.push_str("#[no_mangle]\n");
+        code.push_str("pub extern \"C\" fn main(argc: i32, argv: *const *const u8) {\n");
+        code.push_str("    // Echo all arguments\n");
+        code.push_str("    for i in 1..argc {\n");
+        code.push_str("        let arg = unsafe { *argv.offset(i as isize) };\n");
+        code.push_str("        print_cstr(arg);\n");
+        code.push_str("        if i < argc - 1 {\n");
+        code.push_str("            print(\" \");\n");
+        code.push_str("        }\n");
+        code.push_str("    }\n");
+        code.push_str("    println(\"\");\n");
+        code.push_str("    sys_exit(0);\n");
+        code.push_str("}\n\n");
         
         if !message.is_empty() {
-            aj.t(&format!("// Static message found: \"{}\"\n\n", message));
+            code.push_str(&format!("// Static message found: \"{}\"\n\n", message));
         }
         
-        self.fjk(aj);
+        self.generate_runtime(code);
     }
     
-    fn tcj(&self, aj: &mut String) {
-        aj.t("/// Transpiled: pwd - print working directory\n");
-        aj.t("/// Original syscall: getcwd(buf, size)\n\n");
-        aj.t("use trustos_rt::prelude::*;\n\n");
-        aj.t("#[no_mangle]\n");
-        aj.t("pub extern \"C\" fn main() {\n");
-        aj.t("    let cwd = sys_getcwd();\n");
-        aj.t("    println(&cwd);\n");
-        aj.t("    sys_exit(0);\n");
-        aj.t("}\n\n");
-        self.fjk(aj);
+    fn generate_pwd(&self, code: &mut String) {
+        code.push_str("/// Transpiled: pwd - print working directory\n");
+        code.push_str("/// Original syscall: getcwd(buf, size)\n\n");
+        code.push_str("use trustos_rt::prelude::*;\n\n");
+        code.push_str("#[no_mangle]\n");
+        code.push_str("pub extern \"C\" fn main() {\n");
+        code.push_str("    let cwd = sys_getcwd();\n");
+        code.push_str("    println(&cwd);\n");
+        code.push_str("    sys_exit(0);\n");
+        code.push_str("}\n\n");
+        self.generate_runtime(code);
     }
     
-    fn tcr(&self, aj: &mut String) {
-        aj.t("/// Transpiled: uname - print system information\n");
-        aj.t("/// Original syscall: uname(buf)\n\n");
-        aj.t("use trustos_rt::prelude::*;\n\n");
-        aj.t("#[no_mangle]\n");
-        aj.t("pub extern \"C\" fn main() {\n");
-        aj.t("    let info = sys_uname();\n");
-        aj.t("    print(&info.sysname);\n");
-        aj.t("    print(\" \");\n");
-        aj.t("    print(&info.nodename);\n");
-        aj.t("    print(\" \");\n");
-        aj.t("    print(&info.release);\n");
-        aj.t("    print(\" \");\n");
-        aj.t("    print(&info.version);\n");
-        aj.t("    print(\" \");\n");
-        aj.t("    println(&info.machine);\n");
-        aj.t("    sys_exit(0);\n");
-        aj.t("}\n\n");
-        self.fjk(aj);
+    fn generate_uname(&self, code: &mut String) {
+        code.push_str("/// Transpiled: uname - print system information\n");
+        code.push_str("/// Original syscall: uname(buf)\n\n");
+        code.push_str("use trustos_rt::prelude::*;\n\n");
+        code.push_str("#[no_mangle]\n");
+        code.push_str("pub extern \"C\" fn main() {\n");
+        code.push_str("    let info = sys_uname();\n");
+        code.push_str("    print(&info.sysname);\n");
+        code.push_str("    print(\" \");\n");
+        code.push_str("    print(&info.nodename);\n");
+        code.push_str("    print(\" \");\n");
+        code.push_str("    print(&info.release);\n");
+        code.push_str("    print(\" \");\n");
+        code.push_str("    print(&info.version);\n");
+        code.push_str("    print(\" \");\n");
+        code.push_str("    println(&info.machine);\n");
+        code.push_str("    sys_exit(0);\n");
+        code.push_str("}\n\n");
+        self.generate_runtime(code);
     }
     
-    fn tcf(&self, aj: &mut String) {
-        aj.t("/// Transpiled: hostname\n\n");
-        aj.t("use trustos_rt::prelude::*;\n\n");
-        aj.t("#[no_mangle]\n");
-        aj.t("pub extern \"C\" fn main() {\n");
-        aj.t("    let info = sys_uname();\n");
-        aj.t("    println(&info.nodename);\n");
-        aj.t("    sys_exit(0);\n");
-        aj.t("}\n\n");
-        self.fjk(aj);
+    fn generate_hostname(&self, code: &mut String) {
+        code.push_str("/// Transpiled: hostname\n\n");
+        code.push_str("use trustos_rt::prelude::*;\n\n");
+        code.push_str("#[no_mangle]\n");
+        code.push_str("pub extern \"C\" fn main() {\n");
+        code.push_str("    let info = sys_uname();\n");
+        code.push_str("    println(&info.nodename);\n");
+        code.push_str("    sys_exit(0);\n");
+        code.push_str("}\n\n");
+        self.generate_runtime(code);
     }
     
-    fn tbx(&self, aj: &mut String) {
-        aj.t("/// Transpiled: cat - concatenate files\n\n");
-        aj.t("use trustos_rt::prelude::*;\n\n");
-        aj.t("#[no_mangle]\n");
-        aj.t("pub extern \"C\" fn main(argc: i32, argv: *const *const u8) {\n");
-        aj.t("    if argc < 2 {\n");
-        aj.t("        // Read from stdin\n");
-        aj.t("        let mut buf = [0u8; 4096];\n");
-        aj.t("        loop {\n");
-        aj.t("            let n = sys_read(0, &mut buf);\n");
-        aj.t("            if n <= 0 { break; }\n");
-        aj.t("            sys_write(1, &buf[..n as usize]);\n");
-        aj.t("        }\n");
-        aj.t("    } else {\n");
-        aj.t("        for i in 1..argc {\n");
-        aj.t("            let path = unsafe { cstr_to_str(*argv.offset(i as isize)) };\n");
-        aj.t("            let fd = sys_open(&path, 0);\n");
-        aj.t("            if fd >= 0 {\n");
-        aj.t("                let mut buf = [0u8; 4096];\n");
-        aj.t("                loop {\n");
-        aj.t("                    let n = sys_read(fd, &mut buf);\n");
-        aj.t("                    if n <= 0 { break; }\n");
-        aj.t("                    sys_write(1, &buf[..n as usize]);\n");
-        aj.t("                }\n");
-        aj.t("                sys_close(fd);\n");
-        aj.t("            }\n");
-        aj.t("        }\n");
-        aj.t("    }\n");
-        aj.t("    sys_exit(0);\n");
-        aj.t("}\n\n");
-        self.fjk(aj);
+    fn generate_cat(&self, code: &mut String) {
+        code.push_str("/// Transpiled: cat - concatenate files\n\n");
+        code.push_str("use trustos_rt::prelude::*;\n\n");
+        code.push_str("#[no_mangle]\n");
+        code.push_str("pub extern \"C\" fn main(argc: i32, argv: *const *const u8) {\n");
+        code.push_str("    if argc < 2 {\n");
+        code.push_str("        // Read from stdin\n");
+        code.push_str("        let mut buf = [0u8; 4096];\n");
+        code.push_str("        loop {\n");
+        code.push_str("            let n = sys_read(0, &mut buf);\n");
+        code.push_str("            if n <= 0 { break; }\n");
+        code.push_str("            sys_write(1, &buf[..n as usize]);\n");
+        code.push_str("        }\n");
+        code.push_str("    } else {\n");
+        code.push_str("        for i in 1..argc {\n");
+        code.push_str("            let path = unsafe { cstr_to_str(*argv.offset(i as isize)) };\n");
+        code.push_str("            let fd = sys_open(&path, 0);\n");
+        code.push_str("            if fd >= 0 {\n");
+        code.push_str("                let mut buf = [0u8; 4096];\n");
+        code.push_str("                loop {\n");
+        code.push_str("                    let n = sys_read(fd, &mut buf);\n");
+        code.push_str("                    if n <= 0 { break; }\n");
+        code.push_str("                    sys_write(1, &buf[..n as usize]);\n");
+        code.push_str("                }\n");
+        code.push_str("                sys_close(fd);\n");
+        code.push_str("            }\n");
+        code.push_str("        }\n");
+        code.push_str("    }\n");
+        code.push_str("    sys_exit(0);\n");
+        code.push_str("}\n\n");
+        self.generate_runtime(code);
     }
     
-    fn tcg(&self, aj: &mut String) {
-        aj.t("/// Transpiled: ls - list directory\n\n");
-        aj.t("use trustos_rt::prelude::*;\n\n");
-        aj.t("#[no_mangle]\n");
-        aj.t("pub extern \"C\" fn main(argc: i32, argv: *const *const u8) {\n");
-        aj.t("    let path = if argc > 1 {\n");
-        aj.t("        unsafe { cstr_to_str(*argv.offset(1)) }\n");
-        aj.t("    } else {\n");
-        aj.t("        \".\"\n");
-        aj.t("    };\n");
-        aj.t("    \n");
-        aj.t("    let entries = sys_readdir(path);\n");
-        aj.t("    for entry in entries {\n");
-        aj.t("        println(&entry);\n");
-        aj.t("    }\n");
-        aj.t("    sys_exit(0);\n");
-        aj.t("}\n\n");
-        self.fjk(aj);
+    fn generate_ls(&self, code: &mut String) {
+        code.push_str("/// Transpiled: ls - list directory\n\n");
+        code.push_str("use trustos_rt::prelude::*;\n\n");
+        code.push_str("#[no_mangle]\n");
+        code.push_str("pub extern \"C\" fn main(argc: i32, argv: *const *const u8) {\n");
+        code.push_str("    let path = if argc > 1 {\n");
+        code.push_str("        unsafe { cstr_to_str(*argv.offset(1)) }\n");
+        code.push_str("    } else {\n");
+        code.push_str("        \".\"\n");
+        code.push_str("    };\n");
+        code.push_str("    \n");
+        code.push_str("    let entries = sys_readdir(path);\n");
+        code.push_str("    for entry in entries {\n");
+        code.push_str("        println(&entry);\n");
+        code.push_str("    }\n");
+        code.push_str("    sys_exit(0);\n");
+        code.push_str("}\n\n");
+        self.generate_runtime(code);
     }
     
-    fn tcd(&self, aj: &mut String) {
-        aj.t("/// Transpiled: Generic binary\n");
-        aj.t("/// Syscalls detected:\n");
-        for jt in &self.apd {
-            aj.t(&format!("///   - {} (0x{:x})\n", jt.j, jt.aqb));
+    fn generate_generic(&self, code: &mut String) {
+        code.push_str("/// Transpiled: Generic binary\n");
+        code.push_str("/// Syscalls detected:\n");
+        for dr in &self.syscalls {
+            code.push_str(&format!("///   - {} (0x{:x})\n", dr.name, dr.number));
         }
-        aj.t("\n");
-        aj.t("use trustos_rt::prelude::*;\n\n");
-        aj.t("#[no_mangle]\n");
-        aj.t("pub extern \"C\" fn main() {\n");
+        code.push_str("\n");
+        code.push_str("use trustos_rt::prelude::*;\n\n");
+        code.push_str("#[no_mangle]\n");
+        code.push_str("pub extern \"C\" fn main() {\n");
         
         
-        for jt in &self.apd {
-            match jt.j {
+        for dr in &self.syscalls {
+            match dr.name {
                 "write" => {
-                    let da = jt.n.get(0).hu().unwrap_or(1);
-                    aj.t(&format!("    sys_write({}, b\"output\");\n", da));
+                    let fd = dr.args.get(0).copied().unwrap_or(1);
+                    code.push_str(&format!("    sys_write({}, b\"output\");\n", fd));
                 }
                 "read" => {
-                    let da = jt.n.get(0).hu().unwrap_or(0);
-                    aj.t(&format!("    let mut buf = [0u8; 256];\n"));
-                    aj.t(&format!("    sys_read({}, &mut buf);\n", da));
+                    let fd = dr.args.get(0).copied().unwrap_or(0);
+                    code.push_str(&format!("    let mut buf = [0u8; 256];\n"));
+                    code.push_str(&format!("    sys_read({}, &mut buf);\n", fd));
                 }
                 "exit" | "exit_group" => {
-                    let status = jt.n.get(0).hu().unwrap_or(0) as i32;
-                    aj.t(&format!("    sys_exit({});\n", status));
+                    let status = dr.args.get(0).copied().unwrap_or(0) as i32;
+                    code.push_str(&format!("    sys_exit({});\n", status));
                 }
                 "getcwd" => {
-                    aj.t("    let cwd = sys_getcwd();\n");
-                    aj.t("    println(&cwd);\n");
+                    code.push_str("    let cwd = sys_getcwd();\n");
+                    code.push_str("    println(&cwd);\n");
                 }
                 "getpid" => {
-                    aj.t("    let pid = sys_getpid();\n");
+                    code.push_str("    let pid = sys_getpid();\n");
                 }
                 "open" | "openat" => {
-                    aj.t("    let fd = sys_open(\"file\", 0);\n");
+                    code.push_str("    let fd = sys_open(\"file\", 0);\n");
                 }
                 "close" => {
-                    let da = jt.n.get(0).hu().unwrap_or(3) as i32;
-                    aj.t(&format!("    sys_close({});\n", da));
+                    let fd = dr.args.get(0).copied().unwrap_or(3) as i32;
+                    code.push_str(&format!("    sys_close({});\n", fd));
                 }
                 _ => {
-                    aj.t(&format!("    // TODO: {} syscall\n", jt.j));
+                    code.push_str(&format!("    // TODO: {} syscall\n", dr.name));
                 }
             }
         }
         
         
-        if !self.apd.iter().any(|e| e.j == "exit" || e.j == "exit_group") {
-            aj.t("    sys_exit(0);\n");
+        if !self.syscalls.iter().any(|j| j.name == "exit" || j.name == "exit_group") {
+            code.push_str("    sys_exit(0);\n");
         }
         
-        aj.t("}\n\n");
-        self.fjk(aj);
+        code.push_str("}\n\n");
+        self.generate_runtime(code);
     }
     
-    fn fjk(&self, aj: &mut String) {
-        aj.t("// TrustOS Runtime Library\n");
-        aj.t("mod trustos_rt {\n");
-        aj.t("    pub mod prelude {\n");
-        aj.t("        pub use super::*;\n");
-        aj.t("    }\n\n");
+    fn generate_runtime(&self, code: &mut String) {
+        code.push_str("// TrustOS Runtime Library\n");
+        code.push_str("mod trustos_rt {\n");
+        code.push_str("    pub mod prelude {\n");
+        code.push_str("        pub use super::*;\n");
+        code.push_str("    }\n\n");
         
-        aj.t("    pub struct UnameInfo {\n");
-        aj.t("        pub sysname: &'static str,\n");
-        aj.t("        pub nodename: &'static str,\n");
-        aj.t("        pub release: &'static str,\n");
-        aj.t("        pub version: &'static str,\n");
-        aj.t("        pub machine: &'static str,\n");
-        aj.t("    }\n\n");
-        
-        
-        aj.t("    pub fn sys_exit(code: i32) -> ! {\n");
-        aj.t("        unsafe {\n");
-        aj.t("            core::arch::asm!(\n");
-        aj.t("                \"syscall\",\n");
-        aj.t("                in(\"rax\") 60u64,\n");
-        aj.t("                in(\"rdi\") code as u64,\n");
-        aj.t("                options(noreturn)\n");
-        aj.t("            );\n");
-        aj.t("        }\n");
-        aj.t("    }\n\n");
+        code.push_str("    pub struct UnameInfo {\n");
+        code.push_str("        pub sysname: &'static str,\n");
+        code.push_str("        pub nodename: &'static str,\n");
+        code.push_str("        pub release: &'static str,\n");
+        code.push_str("        pub version: &'static str,\n");
+        code.push_str("        pub machine: &'static str,\n");
+        code.push_str("    }\n\n");
         
         
-        aj.t("    pub fn sys_write(fd: i32, buf: &[u8]) -> isize {\n");
-        aj.t("        let ret: isize;\n");
-        aj.t("        unsafe {\n");
-        aj.t("            core::arch::asm!(\n");
-        aj.t("                \"syscall\",\n");
-        aj.t("                in(\"rax\") 1u64,\n");
-        aj.t("                in(\"rdi\") fd as u64,\n");
-        aj.t("                in(\"rsi\") buf.as_ptr(),\n");
-        aj.t("                in(\"rdx\") buf.len(),\n");
-        aj.t("                lateout(\"rax\") ret,\n");
-        aj.t("            );\n");
-        aj.t("        }\n");
-        aj.t("        ret\n");
-        aj.t("    }\n\n");
+        code.push_str("    pub fn sys_exit(code: i32) -> ! {\n");
+        code.push_str("        unsafe {\n");
+        code.push_str("            core::arch::asm!(\n");
+        code.push_str("                \"syscall\",\n");
+        code.push_str("                in(\"rax\") 60u64,\n");
+        code.push_str("                in(\"rdi\") code as u64,\n");
+        code.push_str("                options(noreturn)\n");
+        code.push_str("            );\n");
+        code.push_str("        }\n");
+        code.push_str("    }\n\n");
         
         
-        aj.t("    pub fn sys_read(fd: i32, buf: &mut [u8]) -> isize {\n");
-        aj.t("        let ret: isize;\n");
-        aj.t("        unsafe {\n");
-        aj.t("            core::arch::asm!(\n");
-        aj.t("                \"syscall\",\n");
-        aj.t("                in(\"rax\") 0u64,\n");
-        aj.t("                in(\"rdi\") fd as u64,\n");
-        aj.t("                in(\"rsi\") buf.as_mut_ptr(),\n");
-        aj.t("                in(\"rdx\") buf.len(),\n");
-        aj.t("                lateout(\"rax\") ret,\n");
-        aj.t("            );\n");
-        aj.t("        }\n");
-        aj.t("        ret\n");
-        aj.t("    }\n\n");
+        code.push_str("    pub fn sys_write(fd: i32, buf: &[u8]) -> isize {\n");
+        code.push_str("        let ret: isize;\n");
+        code.push_str("        unsafe {\n");
+        code.push_str("            core::arch::asm!(\n");
+        code.push_str("                \"syscall\",\n");
+        code.push_str("                in(\"rax\") 1u64,\n");
+        code.push_str("                in(\"rdi\") fd as u64,\n");
+        code.push_str("                in(\"rsi\") buf.as_ptr(),\n");
+        code.push_str("                in(\"rdx\") buf.len(),\n");
+        code.push_str("                lateout(\"rax\") ret,\n");
+        code.push_str("            );\n");
+        code.push_str("        }\n");
+        code.push_str("        ret\n");
+        code.push_str("    }\n\n");
         
         
-        aj.t("    pub fn sys_open(path: &str, flags: i32) -> i32 {\n");
-        aj.t("        let ret: i64;\n");
-        aj.t("        unsafe {\n");
-        aj.t("            core::arch::asm!(\n");
-        aj.t("                \"syscall\",\n");
-        aj.t("                in(\"rax\") 2u64,\n");
-        aj.t("                in(\"rdi\") path.as_ptr(),\n");
-        aj.t("                in(\"rsi\") flags as u64,\n");
-        aj.t("                lateout(\"rax\") ret,\n");
-        aj.t("            );\n");
-        aj.t("        }\n");
-        aj.t("        ret as i32\n");
-        aj.t("    }\n\n");
+        code.push_str("    pub fn sys_read(fd: i32, buf: &mut [u8]) -> isize {\n");
+        code.push_str("        let ret: isize;\n");
+        code.push_str("        unsafe {\n");
+        code.push_str("            core::arch::asm!(\n");
+        code.push_str("                \"syscall\",\n");
+        code.push_str("                in(\"rax\") 0u64,\n");
+        code.push_str("                in(\"rdi\") fd as u64,\n");
+        code.push_str("                in(\"rsi\") buf.as_mut_ptr(),\n");
+        code.push_str("                in(\"rdx\") buf.len(),\n");
+        code.push_str("                lateout(\"rax\") ret,\n");
+        code.push_str("            );\n");
+        code.push_str("        }\n");
+        code.push_str("        ret\n");
+        code.push_str("    }\n\n");
         
         
-        aj.t("    pub fn sys_close(fd: i32) -> i32 {\n");
-        aj.t("        let ret: i64;\n");
-        aj.t("        unsafe {\n");
-        aj.t("            core::arch::asm!(\n");
-        aj.t("                \"syscall\",\n");
-        aj.t("                in(\"rax\") 3u64,\n");
-        aj.t("                in(\"rdi\") fd as u64,\n");
-        aj.t("                lateout(\"rax\") ret,\n");
-        aj.t("            );\n");
-        aj.t("        }\n");
-        aj.t("        ret as i32\n");
-        aj.t("    }\n\n");
+        code.push_str("    pub fn sys_open(path: &str, flags: i32) -> i32 {\n");
+        code.push_str("        let ret: i64;\n");
+        code.push_str("        unsafe {\n");
+        code.push_str("            core::arch::asm!(\n");
+        code.push_str("                \"syscall\",\n");
+        code.push_str("                in(\"rax\") 2u64,\n");
+        code.push_str("                in(\"rdi\") path.as_ptr(),\n");
+        code.push_str("                in(\"rsi\") flags as u64,\n");
+        code.push_str("                lateout(\"rax\") ret,\n");
+        code.push_str("            );\n");
+        code.push_str("        }\n");
+        code.push_str("        ret as i32\n");
+        code.push_str("    }\n\n");
         
         
-        aj.t("    pub fn sys_getcwd() -> &'static str {\n");
-        aj.t("        // TrustOS implementation\n");
-        aj.t("        \"/\"\n");
-        aj.t("    }\n\n");
+        code.push_str("    pub fn sys_close(fd: i32) -> i32 {\n");
+        code.push_str("        let ret: i64;\n");
+        code.push_str("        unsafe {\n");
+        code.push_str("            core::arch::asm!(\n");
+        code.push_str("                \"syscall\",\n");
+        code.push_str("                in(\"rax\") 3u64,\n");
+        code.push_str("                in(\"rdi\") fd as u64,\n");
+        code.push_str("                lateout(\"rax\") ret,\n");
+        code.push_str("            );\n");
+        code.push_str("        }\n");
+        code.push_str("        ret as i32\n");
+        code.push_str("    }\n\n");
         
         
-        aj.t("    pub fn sys_getpid() -> i32 {\n");
-        aj.t("        let ret: i64;\n");
-        aj.t("        unsafe {\n");
-        aj.t("            core::arch::asm!(\n");
-        aj.t("                \"syscall\",\n");
-        aj.t("                in(\"rax\") 39u64,\n");
-        aj.t("                lateout(\"rax\") ret,\n");
-        aj.t("            );\n");
-        aj.t("        }\n");
-        aj.t("        ret as i32\n");
-        aj.t("    }\n\n");
+        code.push_str("    pub fn sys_getcwd() -> &'static str {\n");
+        code.push_str("        // TrustOS implementation\n");
+        code.push_str("        \"/\"\n");
+        code.push_str("    }\n\n");
         
         
-        aj.t("    pub fn sys_uname() -> UnameInfo {\n");
-        aj.t("        UnameInfo {\n");
-        aj.t("            sysname: \"TrustOS\",\n");
-        aj.t("            nodename: \"trustos\",\n");
-        aj.t("            release: \"1.0.0\",\n");
-        aj.t("            version: \"#1 SMP Transpiled\",\n");
-        aj.t("            machine: \"x86_64\",\n");
-        aj.t("        }\n");
-        aj.t("    }\n\n");
+        code.push_str("    pub fn sys_getpid() -> i32 {\n");
+        code.push_str("        let ret: i64;\n");
+        code.push_str("        unsafe {\n");
+        code.push_str("            core::arch::asm!(\n");
+        code.push_str("                \"syscall\",\n");
+        code.push_str("                in(\"rax\") 39u64,\n");
+        code.push_str("                lateout(\"rax\") ret,\n");
+        code.push_str("            );\n");
+        code.push_str("        }\n");
+        code.push_str("        ret as i32\n");
+        code.push_str("    }\n\n");
         
         
-        aj.t("    pub fn sys_readdir(_path: &str) -> &'static [&'static str] {\n");
-        aj.t("        &[\".\", \"..\"]\n");
-        aj.t("    }\n\n");
+        code.push_str("    pub fn sys_uname() -> UnameInfo {\n");
+        code.push_str("        UnameInfo {\n");
+        code.push_str("            sysname: \"TrustOS\",\n");
+        code.push_str("            nodename: \"trustos\",\n");
+        code.push_str("            release: \"1.0.0\",\n");
+        code.push_str("            version: \"#1 SMP Transpiled\",\n");
+        code.push_str("            machine: \"x86_64\",\n");
+        code.push_str("        }\n");
+        code.push_str("    }\n\n");
         
         
-        aj.t("    pub fn print(s: &str) {\n");
-        aj.t("        sys_write(1, s.as_bytes());\n");
-        aj.t("    }\n\n");
+        code.push_str("    pub fn sys_readdir(_path: &str) -> &'static [&'static str] {\n");
+        code.push_str("        &[\".\", \"..\"]\n");
+        code.push_str("    }\n\n");
         
-        aj.t("    pub fn println(s: &str) {\n");
-        aj.t("        print(s);\n");
-        aj.t("        sys_write(1, b\"\\n\");\n");
-        aj.t("    }\n\n");
         
-        aj.t("    pub fn print_cstr(s: *const u8) {\n");
-        aj.t("        if s.is_null() { return; }\n");
-        aj.t("        let mut len = 0;\n");
-        aj.t("        unsafe {\n");
-        aj.t("            while *s.offset(len) != 0 { len += 1; }\n");
-        aj.t("            let slice = core::slice::from_raw_parts(s, len as usize);\n");
-        aj.t("            sys_write(1, slice);\n");
-        aj.t("        }\n");
-        aj.t("    }\n\n");
+        code.push_str("    pub fn print(s: &str) {\n");
+        code.push_str("        sys_write(1, s.as_bytes());\n");
+        code.push_str("    }\n\n");
         
-        aj.t("    pub unsafe fn cstr_to_str(s: *const u8) -> &'static str {\n");
-        aj.t("        if s.is_null() { return \"\"; }\n");
-        aj.t("        let mut len = 0isize;\n");
-        aj.t("        while *s.offset(len) != 0 { len += 1; }\n");
-        aj.t("        let slice = core::slice::from_raw_parts(s, len as usize);\n");
-        aj.t("        core::str::from_utf8_unchecked(slice)\n");
-        aj.t("    }\n");
+        code.push_str("    pub fn println(s: &str) {\n");
+        code.push_str("        print(s);\n");
+        code.push_str("        sys_write(1, b\"\\n\");\n");
+        code.push_str("    }\n\n");
         
-        aj.t("}\n");
+        code.push_str("    pub fn print_cstr(s: *const u8) {\n");
+        code.push_str("        if s.is_null() { return; }\n");
+        code.push_str("        let mut len = 0;\n");
+        code.push_str("        unsafe {\n");
+        code.push_str("            while *s.offset(len) != 0 { len += 1; }\n");
+        code.push_str("            let slice = core::slice::from_raw_parts(s, len as usize);\n");
+        code.push_str("            sys_write(1, slice);\n");
+        code.push_str("        }\n");
+        code.push_str("    }\n\n");
+        
+        code.push_str("    pub unsafe fn cstr_to_str(s: *const u8) -> &'static str {\n");
+        code.push_str("        if s.is_null() { return \"\"; }\n");
+        code.push_str("        let mut len = 0isize;\n");
+        code.push_str("        while *s.offset(len) != 0 { len += 1; }\n");
+        code.push_str("        let slice = core::slice::from_raw_parts(s, len as usize);\n");
+        code.push_str("        core::str::from_utf8_unchecked(slice)\n");
+        code.push_str("    }\n");
+        
+        code.push_str("}\n");
     }
     
-    fn sqi(&self, f: &[u8]) -> String {
+    fn extract_string_from_write(&self, data: &[u8]) -> String {
         
-        for jt in &self.apd {
-            if jt.j == "write" && jt.n.len() >= 2 {
-                let ag = jt.n[1];
+        for dr in &self.syscalls {
+            if dr.name == "write" && dr.args.len() >= 2 {
+                let addr = dr.args[1];
                 
                 
             }
@@ -542,76 +542,76 @@ impl Transpiler {
     }
     
     
-    pub fn nxk(&self) -> String {
-        let mut an = String::new();
-        an.t("; TrustOS Disassembly Listing\n");
-        an.t("; Generated by Binary Transpiler\n\n");
+    pub fn generate_listing(&self) -> String {
+        let mut output = String::new();
+        output.push_str("; TrustOS Disassembly Listing\n");
+        output.push_str("; Generated by Binary Transpiler\n\n");
         
-        for fi in &self.instructions {
+        for inst in &self.instructions {
             
-            an.t(&format!("{:016x}  ", fi.re));
+            output.push_str(&format!("{:016x}  ", inst.address));
             
             
-            for o in &fi.bf {
-                an.t(&format!("{:02x} ", o));
+            for b in &inst.bytes {
+                output.push_str(&format!("{:02x} ", b));
             }
             
-            let nbc = fi.bf.len() * 3;
-            if nbc < 16 {
-                for _ in 0..(16 - nbc) {
-                    an.push(' ');
+            let hjm = inst.bytes.len() * 3;
+            if hjm < 16 {
+                for _ in 0..(16 - hjm) {
+                    output.push(' ');
                 }
             }
             
             
-            an.t(&fi.bes);
-            if !fi.bvr.is_empty() {
-                an.t("  ");
-                for (a, op) in fi.bvr.iter().cf() {
-                    if a > 0 { an.t(", "); }
+            output.push_str(&inst.mnemonic);
+            if !inst.operands.is_empty() {
+                output.push_str("  ");
+                for (i, op) in inst.operands.iter().enumerate() {
+                    if i > 0 { output.push_str(", "); }
                     match op {
-                        Operand::Register(m) => an.t(m.j()),
-                        Operand::Acf(p) => {
-                            if *p >= 0 && *p < 256 {
-                                an.t(&format!("{}", p));
+                        Operand::Register(r) => output.push_str(r.name()),
+                        Operand::Immediate(v) => {
+                            if *v >= 0 && *v < 256 {
+                                output.push_str(&format!("{}", v));
                             } else {
-                                an.t(&format!("0x{:x}", p));
+                                output.push_str(&format!("0x{:x}", v));
                             }
                         }
-                        Operand::Cy { ar, index, bv, aor } => {
-                            an.push('[');
-                            if let Some(o) = ar {
-                                an.t(o.j());
+                        Operand::Memory { base, index, scale, uv } => {
+                            output.push('[');
+                            if let Some(b) = base {
+                                output.push_str(b.name());
                             }
-                            if let Some(w) = index {
-                                an.t("+");
-                                an.t(w.j());
-                                if *bv > 1 {
-                                    an.t(&format!("*{}", bv));
+                            if let Some(idx) = index {
+                                output.push_str("+");
+                                output.push_str(idx.name());
+                                if *scale > 1 {
+                                    output.push_str(&format!("*{}", scale));
                                 }
                             }
-                            if *aor != 0 {
-                                if *aor > 0 {
-                                    an.t(&format!("+0x{:x}", aor));
+                            if *uv != 0 {
+                                if *uv > 0 {
+                                    output.push_str(&format!("+0x{:x}", uv));
                                 } else {
-                                    an.t(&format!("-0x{:x}", -aor));
+                                    output.push_str(&format!("-0x{:x}", -uv));
                                 }
                             }
-                            an.push(']');
+                            output.push(']');
                         }
-                        Operand::Dy(dm) => an.t(dm),
+                        Operand::Br(l) => output.push_str(l),
                     }
                 }
             }
             
             
-            if let Some(r) = &fi.byv {
-                an.t(&format!("  ; {}", r));
+            if let Some(c) = &inst.comment {
+                output.push_str(&format!("  ; {}", c));
             }
             
-            an.push('\n');
+            output.push('\n');
         }
         
-        an
+        output
     }
 }

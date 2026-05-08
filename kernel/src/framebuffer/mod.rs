@@ -542,6 +542,103 @@ const CHAR_HEIGHT: usize = 16;
 /// Maximum framebuffer size for backbuffer allocation (32 MB = supports up to 4K)
 const MAX_BACKBUFFER_BYTES: usize = 32 * 1024 * 1024;
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// VISUAL POST CODES — Big on-screen phase indicator for hardware debugging
+// Works BEFORE heap init (direct framebuffer write only, no allocations)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// 5x7 bitmap font for digits 0-9 and letters A-F (for hex POST codes)
+/// Each entry is 7 rows of 5-bit patterns
+const POST_GLYPHS: [[u8; 7]; 16] = [
+    [0b01110, 0b10001, 0b10011, 0b10101, 0b11001, 0b10001, 0b01110], // 0
+    [0b00100, 0b01100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110], // 1
+    [0b01110, 0b10001, 0b00001, 0b00110, 0b01000, 0b10000, 0b11111], // 2
+    [0b01110, 0b10001, 0b00001, 0b00110, 0b00001, 0b10001, 0b01110], // 3
+    [0b00010, 0b00110, 0b01010, 0b10010, 0b11111, 0b00010, 0b00010], // 4
+    [0b11111, 0b10000, 0b11110, 0b00001, 0b00001, 0b10001, 0b01110], // 5
+    [0b01110, 0b10000, 0b10000, 0b11110, 0b10001, 0b10001, 0b01110], // 6
+    [0b11111, 0b00001, 0b00010, 0b00100, 0b01000, 0b01000, 0b01000], // 7
+    [0b01110, 0b10001, 0b10001, 0b01110, 0b10001, 0b10001, 0b01110], // 8
+    [0b01110, 0b10001, 0b10001, 0b01111, 0b00001, 0b00001, 0b01110], // 9
+    [0b01110, 0b10001, 0b10001, 0b11111, 0b10001, 0b10001, 0b10001], // A
+    [0b11110, 0b10001, 0b10001, 0b11110, 0b10001, 0b10001, 0b11110], // B
+    [0b01110, 0b10001, 0b10000, 0b10000, 0b10000, 0b10001, 0b01110], // C
+    [0b11110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b11110], // D
+    [0b11111, 0b10000, 0b10000, 0b11110, 0b10000, 0b10000, 0b11111], // E
+    [0b11111, 0b10000, 0b10000, 0b11110, 0b10000, 0b10000, 0b10000], // F
+];
+
+/// Draw a visual POST code on the framebuffer — BIG digits at top-right corner.
+/// Works pre-heap: writes directly to FB memory via atomics.
+/// `code`: hex POST code (e.g. 0x30 for ACPI)
+/// Each digit is drawn at 6x scale (30x42 pixels per digit).
+pub fn visual_post_code(code: u8) {
+    let addr = FB_ADDR.load(Ordering::SeqCst);
+    if addr.is_null() { return; }
+    let w = FB_WIDTH.load(Ordering::SeqCst) as u32;
+    let h = FB_HEIGHT.load(Ordering::SeqCst) as u32;
+    let pitch = FB_PITCH.load(Ordering::SeqCst) as usize;
+    if w == 0 || h == 0 { return; }
+
+    let scale: u32 = 6;
+    let glyph_w = 5 * scale; // 30px per digit
+    let glyph_h = 7 * scale; // 42px per digit
+    let pad: u32 = 8;
+    let box_w = glyph_w * 2 + pad * 3; // two hex digits + padding
+    let box_h = glyph_h + pad * 2;
+
+    // Position: top-right corner
+    let box_x = w.saturating_sub(box_w + 10);
+    let box_y: u32 = 10;
+
+    // Color: bright green on dark background (high visibility)
+    let bg_color: u32 = 0xFF001100;
+    let fg_color: u32 = 0xFF00FF44;
+    let border_color: u32 = 0xFF00AA33;
+
+    // Draw background box directly to FB
+    for py in box_y..box_y + box_h {
+        if py >= h { break; }
+        for px in box_x..box_x + box_w {
+            if px >= w { break; }
+            let is_border = py == box_y || py == box_y + box_h - 1 ||
+                            px == box_x || px == box_x + box_w - 1;
+            let color = if is_border { border_color } else { bg_color };
+            let offset = py as usize * pitch + px as usize * 4;
+            unsafe { addr.add(offset).cast::<u32>().write_volatile(color); }
+        }
+    }
+
+    // Draw high nibble
+    let hi = ((code >> 4) & 0xF) as usize;
+    let lo = (code & 0xF) as usize;
+
+    let digits = [hi, lo];
+    for (di, &digit) in digits.iter().enumerate() {
+        let dx = box_x + pad + di as u32 * (glyph_w + pad);
+        let dy = box_y + pad;
+        let glyph = &POST_GLYPHS[digit];
+        for row in 0..7u32 {
+            let bits = glyph[row as usize];
+            for col in 0..5u32 {
+                if bits & (1 << (4 - col)) != 0 {
+                    // Draw scaled pixel block
+                    for sy in 0..scale {
+                        for sx in 0..scale {
+                            let px = dx + col * scale + sx;
+                            let py = dy + row * scale + sy;
+                            if px < w && py < h {
+                                let offset = py as usize * pitch + px as usize * 4;
+                                unsafe { addr.add(offset).cast::<u32>().write_volatile(fg_color); }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Initialize framebuffer with Limine info
 /// NOTE: This does NOT allocate memory. Call init_scrollback() after heap is ready.
 pub fn init(addr: *mut u8, width: u64, height: u64, pitch: u64, bpp: u16) {

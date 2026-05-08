@@ -39,65 +39,65 @@ use spin::Mutex;
 
 
 
-pub const EM_: u16 = 7700;
+pub const FA_: u16 = 7700;
 
 
-pub const GV_: u16 = 7701;
+pub const HM_: u16 = 7701;
 
 
-const Iv: &[u8; 4] = b"JMSH";
+const Dp: &[u8; 4] = b"JMSH";
 
 
-const AGH_: usize = 41;
+const AIB_: usize = 41;
 
 
-const BKH_: u64 = 5000;
+const BMR_: u64 = 5000;
 
 
-const BZC_: u64 = 3000;
+const CCN_: u64 = 3000;
 
 
-const CIW_: u64 = 15000;
+const CMF_: u64 = 15000;
 
 
-const CFN_: usize = 64;
+const CIW_: usize = 64;
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum CpuArch {
-    BT_ = 0,
-    Fg = 1,
-    Jy = 2,
-    F = 255,
+    X86_64 = 0,
+    Aarch64 = 1,
+    Riscv64 = 2,
+    Unknown = 255,
 }
 
 impl CpuArch {
-    fn kxf(o: u8) -> Self {
-        match o {
-            0 => CpuArch::BT_,
-            1 => CpuArch::Fg,
-            2 => CpuArch::Jy,
-            _ => CpuArch::F,
+    fn fxt(b: u8) -> Self {
+        match b {
+            0 => CpuArch::X86_64,
+            1 => CpuArch::Aarch64,
+            2 => CpuArch::Riscv64,
+            _ => CpuArch::Unknown,
         }
     }
 
     
-    pub fn cv() -> Self {
+    pub fn current() -> Self {
         #[cfg(target_arch = "x86_64")]
-        { CpuArch::BT_ }
+        { CpuArch::X86_64 }
         #[cfg(target_arch = "aarch64")]
-        { CpuArch::Fg }
+        { CpuArch::Aarch64 }
         #[cfg(target_arch = "riscv64")]
-        { CpuArch::Jy }
+        { CpuArch::Riscv64 }
     }
 
-    pub fn j(&self) -> &'static str {
+    pub fn name(&self) -> &'static str {
         match self {
-            CpuArch::BT_ => "x86_64",
-            CpuArch::Fg => "aarch64",
-            CpuArch::Jy => "riscv64",
-            CpuArch::F => "unknown",
+            CpuArch::X86_64 => "x86_64",
+            CpuArch::Aarch64 => "aarch64",
+            CpuArch::Riscv64 => "riscv64",
+            CpuArch::Unknown => "unknown",
         }
     }
 }
@@ -110,61 +110,61 @@ impl CpuArch {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum MsgType {
-    Agi = 0,
-    Atq = 1,
-    Tf = 2,
+    Announce = 0,
+    Heartbeat = 1,
+    Leave = 2,
 }
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum NodeRole {
-    Lb = 0,
-    Ni = 1,
-    Mu = 2,
+    Worker = 0,
+    Leader = 1,
+    Candidate = 2,
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Tw {
+pub struct Im {
     
     pub ip: [u8; 4],
     
-    pub ed: [u8; 6],
+    pub mac: [u8; 6],
     
-    pub bwt: NodeRole,
+    pub role: NodeRole,
     
-    pub lc: u64,
+    pub uptime_ms: u64,
     
-    pub vm: u32,
+    pub param_count: u32,
     
-    pub fae: u32,
+    pub training_steps: u32,
     
-    pub azj: u16,
+    pub cpu_cores: u16,
     
-    pub amo: u32,
+    pub ram_mb: u32,
     
-    pub bsb: u16,
+    pub rpc_port: u16,
     
     pub arch: CpuArch,
     
-    pub hpt: u64,
+    pub last_seen_ms: u64,
     
-    pub bje: bool,
+    pub alive: bool,
 }
 
-impl Tw {
+impl Im {
     
     pub fn display(&self) -> String {
-        let hxw = match self.bwt {
-            NodeRole::Lb => "Worker",
-            NodeRole::Ni => "Leader",
-            NodeRole::Mu => "Candidate",
+        let dxy = match self.role {
+            NodeRole::Worker => "Worker",
+            NodeRole::Leader => "Leader",
+            NodeRole::Candidate => "Candidate",
         };
         format!("{}.{}.{}.{}  arch={}  role={}  params={}  steps={}  cores={}  ram={}MB",
             self.ip[0], self.ip[1], self.ip[2], self.ip[3],
-            self.arch.j(), hxw, self.vm, self.fae,
-            self.azj, self.amo)
+            self.arch.name(), dxy, self.param_count, self.training_steps,
+            self.cpu_cores, self.ram_mb)
     }
 }
 
@@ -173,139 +173,139 @@ impl Tw {
 
 
 
-static KS_: AtomicBool = AtomicBool::new(false);
+static LL_: AtomicBool = AtomicBool::new(false);
 
 
-static AGG_: AtomicU8 = AtomicU8::new(0); 
+static AIA_: AtomicU8 = AtomicU8::new(0); 
 
 
-static Ku: Mutex<Vec<Tw>> = Mutex::new(Vec::new());
+static Ej: Mutex<Vec<Im>> = Mutex::new(Vec::new());
 
 
-static ADZ_: AtomicU64 = AtomicU64::new(0);
+static AFT_: AtomicU64 = AtomicU64::new(0);
 
 
-static AED_: AtomicU64 = AtomicU64::new(0);
+static AFX_: AtomicU64 = AtomicU64::new(0);
 
 
-static BCV_: AtomicU64 = AtomicU64::new(0);
-
-
-
+static BEY_: AtomicU64 = AtomicU64::new(0);
 
 
 
-pub fn ay() {
-    if KS_.load(Ordering::SeqCst) {
+
+
+
+pub fn start() {
+    if LL_.load(Ordering::SeqCst) {
         crate::serial_println!("[MESH] Already active");
         return;
     }
 
-    if !crate::network::anl() {
+    if !crate::network::sw() {
         crate::serial_println!("[MESH] Network not available — cannot start mesh");
         return;
     }
 
     
-    crate::network::slt();
+    crate::network::lqi();
 
-    KS_.store(true, Ordering::SeqCst);
-    Ku.lock().clear();
-    ADZ_.store(0, Ordering::SeqCst);
-    AED_.store(0, Ordering::SeqCst);
+    LL_.store(true, Ordering::SeqCst);
+    Ej.lock().clear();
+    AFT_.store(0, Ordering::SeqCst);
+    AFX_.store(0, Ordering::SeqCst);
 
-    crate::serial_println!("[MESH] JARVIS mesh started on port {}", EM_);
+    crate::serial_println!("[MESH] JARVIS mesh started on port {}", FA_);
 
     
-    mdo();
+    gtt();
 }
 
 
-pub fn qg() {
-    if !KS_.load(Ordering::SeqCst) {
+pub fn stop() {
+    if !LL_.load(Ordering::SeqCst) {
         return;
     }
 
     
-    whh();
+    ont();
 
-    KS_.store(false, Ordering::SeqCst);
-    Ku.lock().clear();
+    LL_.store(false, Ordering::SeqCst);
+    Ej.lock().clear();
     crate::serial_println!("[MESH] JARVIS mesh stopped");
 }
 
 
-pub fn rl() -> bool {
-    KS_.load(Ordering::SeqCst)
+pub fn is_active() -> bool {
+    LL_.load(Ordering::SeqCst)
 }
 
 
-pub fn htw() -> NodeRole {
-    match AGG_.load(Ordering::SeqCst) {
-        1 => NodeRole::Ni,
-        2 => NodeRole::Mu,
-        _ => NodeRole::Lb,
+pub fn dwa() -> NodeRole {
+    match AIA_.load(Ordering::SeqCst) {
+        1 => NodeRole::Leader,
+        2 => NodeRole::Candidate,
+        _ => NodeRole::Worker,
     }
 }
 
 
-pub fn gsf(bwt: NodeRole) {
-    AGG_.store(bwt as u8, Ordering::SeqCst);
+pub fn dei(role: NodeRole) {
+    AIA_.store(role as u8, Ordering::SeqCst);
 }
 
 
-pub fn dhn() -> Vec<Tw> {
-    let yp = Ku.lock();
-    yp.iter().hi(|ai| ai.bje).abn().collect()
+pub fn bgo() -> Vec<Im> {
+    let lj = Ej.lock();
+    lj.iter().filter(|aa| aa.alive).cloned().collect()
 }
 
 
-pub fn cti() -> usize {
-    let yp = Ku.lock();
-    yp.iter().hi(|ai| ai.bje).az()
+pub fn ayz() -> usize {
+    let lj = Ej.lock();
+    lj.iter().filter(|aa| aa.alive).count()
 }
 
 
-pub fn xkb() -> u64 {
-    BCV_.load(Ordering::SeqCst)
+pub fn plu() -> u64 {
+    BEY_.load(Ordering::SeqCst)
 }
 
 
-pub fn kyu() -> Option<Tw> {
-    let yp = Ku.lock();
-    yp.iter().du(|ai| ai.bje && ai.bwt == NodeRole::Ni).abn()
+pub fn fyt() -> Option<Im> {
+    let lj = Ej.lock();
+    lj.iter().find(|aa| aa.alive && aa.role == NodeRole::Leader).cloned()
 }
 
 
 
 pub fn poll() {
-    if !KS_.load(Ordering::SeqCst) {
+    if !LL_.load(Ordering::SeqCst) {
         return;
     }
 
-    let iu = crate::time::lc();
+    let cy = crate::time::uptime_ms();
 
     
-    while let Some(f) = crate::netstack::udp::jlt(EM_) {
-        tjw(&f, iu);
+    while let Some(data) = crate::netstack::udp::eyc(FA_) {
+        mhw(&data, cy);
     }
 
     
-    let ubz = ADZ_.load(Ordering::SeqCst);
-    if iu.nj(ubz) >= BKH_ {
-        mdo();
-        ADZ_.store(iu, Ordering::SeqCst);
+    let mwh = AFT_.load(Ordering::SeqCst);
+    if cy.wrapping_sub(mwh) >= BMR_ {
+        gtt();
+        AFT_.store(cy, Ordering::SeqCst);
     }
 
     
-    let lht = AED_.load(Ordering::SeqCst);
-    if iu.nj(lht) >= BZC_ {
-        whe();
-        AED_.store(iu, Ordering::SeqCst);
+    let gey = AFX_.load(Ordering::SeqCst);
+    if cy.wrapping_sub(gey) >= CCN_ {
+        onq();
+        AFX_.store(cy, Ordering::SeqCst);
     }
 
     
-    spj(iu);
+    lsu(cy);
 }
 
 
@@ -313,127 +313,127 @@ pub fn poll() {
 
 
 
-fn gbt(msg_type: MsgType) -> [u8; AGH_] {
-    let mut mt = [0u8; AGH_];
+fn cun(msg_type: MsgType) -> [u8; AIB_] {
+    let mut fj = [0u8; AIB_];
 
     
-    mt[0..4].dg(Iv);
+    fj[0..4].copy_from_slice(Dp);
 
     
-    mt[4] = msg_type as u8;
+    fj[4] = msg_type as u8;
 
     
-    if let Some((ip, _, _)) = crate::network::aou() {
-        mt[5..9].dg(ip.as_bytes());
+    if let Some((ip, _, _)) = crate::network::rd() {
+        fj[5..9].copy_from_slice(ip.as_bytes());
     }
 
     
-    if let Some(ed) = crate::network::ckt() {
-        mt[9..15].dg(&ed);
+    if let Some(mac) = crate::network::aqu() {
+        fj[9..15].copy_from_slice(&mac);
     }
 
     
-    mt[15] = AGG_.load(Ordering::SeqCst);
+    fj[15] = AIA_.load(Ordering::SeqCst);
 
     
-    let bxp = crate::time::lc();
-    mt[16..24].dg(&bxp.ft());
+    let aiz = crate::time::uptime_ms();
+    fj[16..24].copy_from_slice(&aiz.to_be_bytes());
 
     
-    let oi = if super::uc() {
-        super::Ci.lock().as_ref().map(|ef| ef.vm() as u32).unwrap_or(0)
+    let params = if super::is_ready() {
+        super::Ay.lock().as_ref().map(|m| m.param_count() as u32).unwrap_or(0)
     } else {
         0
     };
-    mt[24..28].dg(&oi.ft());
+    fj[24..28].copy_from_slice(&params.to_be_bytes());
 
     
-    let au = super::BW_.load(Ordering::SeqCst) as u32;
-    mt[28..32].dg(&au.ft());
+    let steps = super::BY_.load(Ordering::SeqCst) as u32;
+    fj[28..32].copy_from_slice(&steps.to_be_bytes());
 
     
-    let ffw: u16 = {
+    let cores: u16 = {
         #[cfg(target_arch = "x86_64")]
-        { crate::cpu::smp::aao() as u16 }
+        { crate::cpu::smp::cpu_count() as u16 }
         #[cfg(not(target_arch = "x86_64"))]
         { 1 }
     };
-    mt[32..34].dg(&ffw.ft());
+    fj[32..34].copy_from_slice(&cores.to_be_bytes());
 
     
-    let amo: u32 = (crate::memory::fxc() / (1024 * 1024)) as u32;
-    mt[34..38].dg(&amo.ft());
+    let ram_mb: u32 = (crate::memory::ceo() / (1024 * 1024)) as u32;
+    fj[34..38].copy_from_slice(&ram_mb.to_be_bytes());
 
     
-    mt[38..40].dg(&GV_.ft());
+    fj[38..40].copy_from_slice(&HM_.to_be_bytes());
 
     
-    mt[40] = CpuArch::cv() as u8;
+    fj[40] = CpuArch::current() as u8;
 
-    mt
+    fj
 }
 
 
-fn vdd(f: &[u8]) -> Option<(MsgType, Tw)> {
-    if f.len() < AGH_ {
+fn nqw(data: &[u8]) -> Option<(MsgType, Im)> {
+    if data.len() < AIB_ {
         return None;
     }
 
     
-    if &f[0..4] != Iv {
+    if &data[0..4] != Dp {
         return None;
     }
 
-    let msg_type = match f[4] {
-        0 => MsgType::Agi,
-        1 => MsgType::Atq,
-        2 => MsgType::Tf,
+    let msg_type = match data[4] {
+        0 => MsgType::Announce,
+        1 => MsgType::Heartbeat,
+        2 => MsgType::Leave,
         _ => return None,
     };
 
     let mut ip = [0u8; 4];
-    ip.dg(&f[5..9]);
+    ip.copy_from_slice(&data[5..9]);
 
-    let mut ed = [0u8; 6];
-    ed.dg(&f[9..15]);
+    let mut mac = [0u8; 6];
+    mac.copy_from_slice(&data[9..15]);
 
-    let bwt = match f[15] {
-        1 => NodeRole::Ni,
-        2 => NodeRole::Mu,
-        _ => NodeRole::Lb,
+    let role = match data[15] {
+        1 => NodeRole::Leader,
+        2 => NodeRole::Candidate,
+        _ => NodeRole::Worker,
     };
 
-    let bxp = u64::oa([
-        f[16], f[17], f[18], f[19],
-        f[20], f[21], f[22], f[23],
+    let aiz = u64::from_be_bytes([
+        data[16], data[17], data[18], data[19],
+        data[20], data[21], data[22], data[23],
     ]);
 
-    let vm = u32::oa([f[24], f[25], f[26], f[27]]);
-    let fae = u32::oa([f[28], f[29], f[30], f[31]]);
-    let azj = u16::oa([f[32], f[33]]);
-    let amo = u32::oa([f[34], f[35], f[36], f[37]]);
-    let bsb = u16::oa([f[38], f[39]]);
+    let param_count = u32::from_be_bytes([data[24], data[25], data[26], data[27]]);
+    let training_steps = u32::from_be_bytes([data[28], data[29], data[30], data[31]]);
+    let cpu_cores = u16::from_be_bytes([data[32], data[33]]);
+    let ram_mb = u32::from_be_bytes([data[34], data[35], data[36], data[37]]);
+    let rpc_port = u16::from_be_bytes([data[38], data[39]]);
 
     
-    let arch = if f.len() > 40 {
-        CpuArch::kxf(f[40])
+    let arch = if data.len() > 40 {
+        CpuArch::fxt(data[40])
     } else {
-        CpuArch::F
+        CpuArch::Unknown
     };
 
-    Some((msg_type, Tw {
+    Some((msg_type, Im {
         ip,
-        ed,
-        bwt,
-        lc: bxp,
-        vm,
-        fae,
-        azj,
-        amo,
-        bsb,
+        mac,
+        role,
+        uptime_ms: aiz,
+        param_count,
+        training_steps,
+        cpu_cores,
+        ram_mb,
+        rpc_port,
         arch,
-        hpt: 0, 
-        bje: true,
+        last_seen_ms: 0, 
+        alive: true,
     }))
 }
 
@@ -442,35 +442,35 @@ fn vdd(f: &[u8]) -> Option<(MsgType, Tw)> {
 
 
 
-fn mdo() {
-    let mt = gbt(MsgType::Agi);
-    let kew = nxs();
-    let ey = EM_;
+fn gtt() {
+    let fj = cun(MsgType::Announce);
+    let fju = ibi();
+    let src_port = FA_;
 
-    if let Err(aa) = crate::netstack::udp::dlp(kew, EM_, ey, &mt) {
-        crate::serial_println!("[MESH] Announce send failed: {}", aa);
+    if let Err(e) = crate::netstack::udp::azq(fju, FA_, src_port, &fj) {
+        crate::serial_println!("[MESH] Announce send failed: {}", e);
     }
 }
 
 
-fn whe() {
-    let mt = gbt(MsgType::Atq);
-    let yp = Ku.lock();
+fn onq() {
+    let fj = cun(MsgType::Heartbeat);
+    let lj = Ej.lock();
 
-    for ko in yp.iter().hi(|ai| ai.bje) {
-        let _ = crate::netstack::udp::dlp(ko.ip, EM_, EM_, &mt);
+    for peer in lj.iter().filter(|aa| aa.alive) {
+        let _ = crate::netstack::udp::azq(peer.ip, FA_, FA_, &fj);
     }
 }
 
 
-fn whh() {
-    let mt = gbt(MsgType::Tf);
-    let kew = nxs();
-    let _ = crate::netstack::udp::dlp(kew, EM_, EM_, &mt);
+fn ont() {
+    let fj = cun(MsgType::Leave);
+    let fju = ibi();
+    let _ = crate::netstack::udp::azq(fju, FA_, FA_, &fj);
 
-    let yp = Ku.lock();
-    for ko in yp.iter().hi(|ai| ai.bje) {
-        let _ = crate::netstack::udp::dlp(ko.ip, EM_, EM_, &mt);
+    let lj = Ej.lock();
+    for peer in lj.iter().filter(|aa| aa.alive) {
+        let _ = crate::netstack::udp::azq(peer.ip, FA_, FA_, &fj);
     }
 }
 
@@ -479,89 +479,89 @@ fn whh() {
 
 
 
-fn tjw(f: &[u8], efu: u64) {
-    let (msg_type, mut huy) = match vdd(f) {
-        Some(p) => p,
+fn mhw(data: &[u8], bih: u64) {
+    let (msg_type, mut peer_info) = match nqw(data) {
+        Some(v) => v,
         None => return,
     };
 
     
-    if tyl(huy.ip) {
+    if mti(peer_info.ip) {
         return;
     }
 
-    huy.hpt = efu;
+    peer_info.last_seen_ms = bih;
 
     match msg_type {
-        MsgType::Agi | MsgType::Atq => {
-            let tyi = !vgm(huy.ip);
-            xoz(huy);
+        MsgType::Announce | MsgType::Heartbeat => {
+            let mtf = !ntm(peer_info.ip);
+            ppx(peer_info);
             
-            if tyi && msg_type == MsgType::Agi {
-                mdo();
+            if mtf && msg_type == MsgType::Announce {
+                gtt();
             }
         }
-        MsgType::Tf => {
-            vuy(huy.ip);
+        MsgType::Leave => {
+            ofa(peer_info.ip);
         }
     }
 }
 
 
-fn vgm(ip: [u8; 4]) -> bool {
-    let yp = Ku.lock();
-    yp.iter().any(|ai| ai.ip == ip)
+fn ntm(ip: [u8; 4]) -> bool {
+    let lj = Ej.lock();
+    lj.iter().any(|aa| aa.ip == ip)
 }
 
 
-fn xoz(co: Tw) {
-    let mut yp = Ku.lock();
+fn ppx(info: Im) {
+    let mut lj = Ej.lock();
 
     
-    for ko in yp.el() {
-        if ko.ip == co.ip {
-            ko.bwt = co.bwt;
-            ko.lc = co.lc;
-            ko.vm = co.vm;
-            ko.fae = co.fae;
-            ko.azj = co.azj;
-            ko.amo = co.amo;
-            ko.bsb = co.bsb;
-            ko.arch = co.arch;
-            ko.hpt = co.hpt;
-            ko.bje = true;
+    for peer in lj.iter_mut() {
+        if peer.ip == info.ip {
+            peer.role = info.role;
+            peer.uptime_ms = info.uptime_ms;
+            peer.param_count = info.param_count;
+            peer.training_steps = info.training_steps;
+            peer.cpu_cores = info.cpu_cores;
+            peer.ram_mb = info.ram_mb;
+            peer.rpc_port = info.rpc_port;
+            peer.arch = info.arch;
+            peer.last_seen_ms = info.last_seen_ms;
+            peer.alive = true;
             return;
         }
     }
 
     
-    if yp.len() < CFN_ {
+    if lj.len() < CIW_ {
         crate::serial_println!("[MESH] New peer discovered: {}.{}.{}.{} (arch={}, role={:?}, params={})",
-            co.ip[0], co.ip[1], co.ip[2], co.ip[3],
-            co.arch.j(), co.bwt, co.vm);
-        BCV_.fetch_add(1, Ordering::SeqCst);
-        yp.push(co);
+            info.ip[0], info.ip[1], info.ip[2], info.ip[3],
+            info.arch.name(), info.role, info.param_count);
+        BEY_.fetch_add(1, Ordering::SeqCst);
+        lj.push(info);
     }
 }
 
 
-fn vuy(ip: [u8; 4]) {
-    let mut yp = Ku.lock();
-    if let Some(ko) = yp.el().du(|ai| ai.ip == ip) {
+fn ofa(ip: [u8; 4]) {
+    let mut lj = Ej.lock();
+    if let Some(peer) = lj.iter_mut().find(|aa| aa.ip == ip) {
         crate::serial_println!("[MESH] Peer left: {}.{}.{}.{}",
             ip[0], ip[1], ip[2], ip[3]);
-        ko.bje = false;
+        peer.alive = false;
     }
 }
 
 
-fn spj(efu: u64) {
-    let mut yp = Ku.lock();
-    for ko in yp.el().hi(|ai| ai.bje) {
-        if efu.nj(ko.hpt) > CIW_ {
+fn lsu(bih: u64) {
+    let mut lj = Ej.lock();
+    for peer in lj.iter_mut().filter(|aa| aa.alive) {
+        if bih.wrapping_sub(peer.last_seen_ms) > CMF_ {
             crate::serial_println!("[MESH] Peer timed out: {}.{}.{}.{}",
-                ko.ip[0], ko.ip[1], ko.ip[2], ko.ip[3]);
-            ko.bje = false;
+                peer.ip[0], peer.ip[1], peer.ip[2], peer.ip[3]);
+            peer.alive = false;
         }
     }
 }
@@ -571,15 +571,15 @@ fn spj(efu: u64) {
 
 
 
-fn nxs() -> [u8; 4] {
-    if let Some((ip, up, _)) = crate::network::aou() {
-        let gkc = ip.as_bytes();
-        let jqp = up.as_bytes();
+fn ibi() -> [u8; 4] {
+    if let Some((ip, subnet, _)) = crate::network::rd() {
+        let czv = ip.as_bytes();
+        let fbd = subnet.as_bytes();
         [
-            gkc[0] | !jqp[0],
-            gkc[1] | !jqp[1],
-            gkc[2] | !jqp[2],
-            gkc[3] | !jqp[3],
+            czv[0] | !fbd[0],
+            czv[1] | !fbd[1],
+            czv[2] | !fbd[2],
+            czv[3] | !fbd[3],
         ]
     } else {
         [255, 255, 255, 255] 
@@ -587,31 +587,31 @@ fn nxs() -> [u8; 4] {
 }
 
 
-fn tyl(ip: [u8; 4]) -> bool {
-    if let Some((aro, _, _)) = crate::network::aou() {
-        *aro.as_bytes() == ip
+fn mti(ip: [u8; 4]) -> bool {
+    if let Some((wj, _, _)) = crate::network::rd() {
+        *wj.as_bytes() == ip
     } else {
         false
     }
 }
 
 
-pub fn poq() -> String {
-    let bje = cti();
-    let bwt = htw();
-    let hxw = match bwt {
-        NodeRole::Ni => "Leader",
-        NodeRole::Lb => "Worker",
-        NodeRole::Mu => "Candidate",
+pub fn jis() -> String {
+    let alive = ayz();
+    let role = dwa();
+    let dxy = match role {
+        NodeRole::Leader => "Leader",
+        NodeRole::Worker => "Worker",
+        NodeRole::Candidate => "Candidate",
     };
 
-    if !rl() {
+    if !is_active() {
         return String::from("Mesh: inactive");
     }
 
     format!("Mesh: {} | Role: {} | Peers: {} alive | Discovered: {}",
-        if rl() { "active" } else { "inactive" },
-        hxw,
-        bje,
-        xkb())
+        if is_active() { "active" } else { "inactive" },
+        dxy,
+        alive,
+        plu())
 }

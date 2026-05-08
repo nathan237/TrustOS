@@ -397,6 +397,14 @@ pub fn reboot() -> ! {
         x86_64::instructions::port::Port::<u8>::new(0x64).write(0xFE);
     }
     
+    // PCH system reset via port 0xCF9 (reliable on Intel Skylake/mining boards)
+    unsafe {
+        x86_64::instructions::port::Port::<u8>::new(0xCF9).write(0x02); // SRST bit
+        for _ in 0..1000 { core::hint::spin_loop(); }
+        x86_64::instructions::port::Port::<u8>::new(0xCF9).write(0x06); // hard reset
+        for _ in 0..100_000 { core::hint::spin_loop(); }
+    }
+
     // If that didn't work, try ACPI reset
     if let Some(info) = ACPI_INFO.get() {
         if let Some(ref fadt) = info.fadt {

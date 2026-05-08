@@ -51,11 +51,11 @@ pub enum GuestMode {
     /// 16-bit real mode (entry_point only)
     RealMode { entry_point: u64 },
     /// 32-bit protected mode (entry_point + stack)
-    ProtectedMode { entry_point: u64, stack_pointer: u64 },
+    ProtectedMode { entry_point: u64, stack_ptr: u64 },
     /// 32-bit protected mode for Linux boot protocol (with boot_params GPA)
-    LinuxProtectedMode { entry_point: u64, stack_pointer: u64, boot_params: u64 },
+    LinuxProtectedMode { entry_point: u64, stack_ptr: u64, boot_params: u64 },
     /// 64-bit long mode (entry_point + stack + page table CR3)
-    LongMode { entry_point: u64, stack_pointer: u64, cr3: u64 },
+    LongMode { entry_point: u64, stack_ptr: u64, cr3: u64 },
 }
 
 /// Backend type identifier
@@ -203,14 +203,14 @@ match self.vm.get_state() {
                 // Correspondance de motifs — branchement exhaustif de Rust.
 match mode {
             GuestMode::RealMode { entry_point } => self.vm.setup_real_mode(entry_point),
-            GuestMode::ProtectedMode { entry_point, stack_pointer } => {
-                self.vm.setup_protected_mode(entry_point, stack_pointer)
+            GuestMode::ProtectedMode { entry_point, stack_ptr } => {
+                self.vm.setup_protected_mode(entry_point, stack_ptr)
             }
-            GuestMode::LinuxProtectedMode { entry_point, stack_pointer, boot_params } => {
-                self.vm.setup_protected_mode_for_linux(entry_point, stack_pointer, boot_params)
+            GuestMode::LinuxProtectedMode { entry_point, stack_ptr, boot_params } => {
+                self.vm.setup_protected_mode_for_linux(entry_point, stack_ptr, boot_params)
             }
-            GuestMode::LongMode { entry_point, stack_pointer, cr3 } => {
-                self.vm.setup_long_mode(entry_point, stack_pointer, cr3)
+            GuestMode::LongMode { entry_point, stack_ptr, cr3 } => {
+                self.vm.setup_long_mode(entry_point, stack_ptr, cr3)
             }
         }
     }
@@ -285,12 +285,12 @@ match self.vm.state {
     fn setup_guest_mode(&mut self, mode: GuestMode) -> Result<()> {
                 // Correspondance de motifs — branchement exhaustif de Rust.
 match mode {
-            GuestMode::ProtectedMode { entry_point, stack_pointer } |
-            GuestMode::LinuxProtectedMode { entry_point, stack_pointer, .. } |
-            GuestMode::LongMode { entry_point, stack_pointer, .. } => {
+            GuestMode::ProtectedMode { entry_point, stack_ptr } |
+            GuestMode::LinuxProtectedMode { entry_point, stack_ptr, .. } |
+            GuestMode::LongMode { entry_point, stack_ptr, .. } => {
                 // VT-x uses VMCS guest state — configure via start()
                 // Store entry/stack for later use by run()
-                self.vm.start(entry_point, stack_pointer)?;
+                self.vm.start(entry_point, stack_ptr)?;
                 Ok(())
             }
             GuestMode::RealMode { entry_point } => {

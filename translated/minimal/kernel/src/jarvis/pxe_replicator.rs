@@ -22,129 +22,129 @@ use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use super::mesh::CpuArch;
 
 
-static Yk: AtomicBool = AtomicBool::new(false);
+static Kl: AtomicBool = AtomicBool::new(false);
 
 
-static OL_: AtomicU8 = AtomicU8::new(0);
-
-
-
-static AYZ_: &[u8] = include_bytes!("../../../limine/limine-bios-pxe.bin");
+static PJ_: AtomicU8 = AtomicU8::new(0);
 
 
 
-static AEM_: &[u8] = b"timeout: 0\n\n/TrustOS\n    protocol: limine\n    kernel_path: tftp():/trustos_kernel\n";
+static BBA_: &[u8] = include_bytes!("../../../limine/limine-bios-pxe.bin");
 
 
 
-struct Ajl {
+static AGG_: &[u8] = b"timeout: 0\n\n/TrustOS\n    protocol: limine\n    kernel_path: tftp():/trustos_kernel\n";
+
+
+
+struct Pf {
     ptr: usize,  
-    aw: usize,
+    size: usize,
 }
 
-unsafe impl Send for Ajl {}
-unsafe impl Sync for Ajl {}
+unsafe impl Send for Pf {}
+unsafe impl Sync for Pf {}
 
 
-static AXQ_: spin::Mutex<Option<Ajl>> = spin::Mutex::new(None);
-
-
-
+static AZT_: spin::Mutex<Option<Pf>> = spin::Mutex::new(None);
 
 
 
-pub unsafe fn vue(ptr: *const u8, aw: usize) {
-    let mut lhi = AXQ_.lock();
-    *lhi = Some(Ajl { ptr: ptr as usize, aw });
+
+
+
+pub unsafe fn oej(ptr: *const u8, size: usize) {
+    let mut ger = AZT_.lock();
+    *ger = Some(Pf { ptr: ptr as usize, size });
     crate::serial_println!("[PXE-REPL] Kernel file registered: {:p}, {} bytes ({} KB)",
-        ptr, aw, aw / 1024);
+        ptr, size, size / 1024);
 }
 
 
-fn tdv() -> Option<&'static [u8]> {
-    let lhi = AXQ_.lock();
-    lhi.as_ref().map(|m| unsafe { core::slice::anh(m.ptr as *const u8, m.aw) })
+fn mdh() -> Option<&'static [u8]> {
+    let ger = AZT_.lock();
+    ger.as_ref().map(|r| unsafe { core::slice::from_raw_parts(r.ptr as *const u8, r.size) })
 }
 
 
-pub fn rl() -> bool {
-    Yk.load(Ordering::Relaxed)
+pub fn is_active() -> bool {
+    Kl.load(Ordering::Relaxed)
 }
 
 
-pub fn uux() -> u8 {
-    OL_.load(Ordering::Relaxed)
+pub fn nkp() -> u8 {
+    PJ_.load(Ordering::Relaxed)
 }
 
 
 
 
 
-pub fn ay() -> Result<(), &'static str> {
-    if Yk.load(Ordering::Relaxed) {
+pub fn start() -> Result<(), &'static str> {
+    if Kl.load(Ordering::Relaxed) {
         return Err("Already replicating");
     }
 
     
-    let abr = tdv().ok_or("Kernel file not registered (KernelFileRequest missing)")?;
+    let kernel_data = mdh().ok_or("Kernel file not registered (KernelFileRequest missing)")?;
 
     
-    let (aro, up, qcb) = crate::network::aou()
+    let (wj, subnet, _gw) = crate::network::rd()
         .ok_or("No IP configuration — run DHCP or set static IP first")?;
 
-    let ip = *aro.as_bytes();
-    let hs = *up.as_bytes();
+    let ip = *wj.as_bytes();
+    let mask = *subnet.as_bytes();
 
     
-    let dkt = [ip[0], ip[1], ip[2], ip[3].cn(10)];
+    let bis = [ip[0], ip[1], ip[2], ip[3].wrapping_add(10)];
 
     crate::serial_println!("[PXE-REPL] === TrustOS Self-Replication via PXE ===");
     crate::serial_println!("[PXE-REPL] Server IP: {}.{}.{}.{}", ip[0], ip[1], ip[2], ip[3]);
-    crate::serial_println!("[PXE-REPL] Kernel size: {} bytes ({} KB)", abr.len(), abr.len() / 1024);
-    crate::serial_println!("[PXE-REPL] Limine PXE: {} bytes", AYZ_.len());
-    crate::serial_println!("[PXE-REPL] Limine conf: {} bytes", AEM_.len());
+    crate::serial_println!("[PXE-REPL] Kernel size: {} bytes ({} KB)", kernel_data.len(), kernel_data.len() / 1024);
+    crate::serial_println!("[PXE-REPL] Limine PXE: {} bytes", BBA_.len());
+    crate::serial_println!("[PXE-REPL] Limine conf: {} bytes", AGG_.len());
 
     
     
-    crate::netstack::tftpd::exo("limine-bios-pxe.bin", AYZ_);
-    crate::netstack::tftpd::exo("limine.conf", AEM_);
+    crate::netstack::tftpd::cdg("limine-bios-pxe.bin", BBA_);
+    crate::netstack::tftpd::cdg("limine.conf", AGG_);
 
     
     
-    crate::netstack::tftpd::exo("trustos_kernel", abr);
+    crate::netstack::tftpd::cdg("trustos_kernel", kernel_data);
 
     
-    let kav = CpuArch::cv().j();
-    let mwe: &'static str = alloc::string::String::from(format!("trustos_{}", kav)).fmu();
-    crate::netstack::tftpd::exo(mwe, abr);
-    crate::serial_println!("[PXE-REPL] Serving kernel as: trustos_kernel + {}", mwe);
+    let fhg = CpuArch::current().name();
+    let hfp: &'static str = alloc::string::String::from(format!("trustos_{}", fhg)).leak();
+    crate::netstack::tftpd::cdg(hfp, kernel_data);
+    crate::serial_println!("[PXE-REPL] Serving kernel as: trustos_kernel + {}", hfp);
 
     
     
-    for arch in &[CpuArch::BT_, CpuArch::Fg, CpuArch::Jy] {
-        let rno = format!(
+    for arch in &[CpuArch::X86_64, CpuArch::Aarch64, CpuArch::Riscv64] {
+        let kws = format!(
             "timeout: 0\n\n/TrustOS ({})\n    protocol: limine\n    kernel_path: tftp():/trustos_{}\n",
-            arch.j(), arch.j()
+            arch.name(), arch.name()
         );
-        let rnq: &'static str = alloc::string::String::from(format!("limine_{}.conf", arch.j())).fmu();
+        let kwu: &'static str = alloc::string::String::from(format!("limine_{}.conf", arch.name())).leak();
         
-        let rnp: &'static [u8] = rno.cfq().fmu();
-        crate::netstack::tftpd::exo(rnq, rnp);
+        let kwt: &'static [u8] = kws.into_bytes().leak();
+        crate::netstack::tftpd::cdg(kwu, kwt);
     }
 
     
-    crate::netstack::tftpd::exo("boot/trustos_kernel", abr);
-    crate::netstack::tftpd::exo("boot/limine/limine.conf", AEM_);
+    crate::netstack::tftpd::cdg("boot/trustos_kernel", kernel_data);
+    crate::netstack::tftpd::cdg("boot/limine/limine.conf", AGG_);
 
     
-    crate::netstack::tftpd::ay();
+    crate::netstack::tftpd::start();
 
     
     
-    crate::netstack::dhcpd::ay(ip, hs, dkt, 16, "limine-bios-pxe.bin");
+    crate::netstack::dhcpd::start(ip, mask, bis, 16, "limine-bios-pxe.bin");
 
-    Yk.store(true, Ordering::Relaxed);
-    OL_.store(0, Ordering::Relaxed);
+    Kl.store(true, Ordering::Relaxed);
+    PJ_.store(0, Ordering::Relaxed);
 
     crate::serial_println!("[PXE-REPL] Self-replication ACTIVE — waiting for PXE boot requests...");
     crate::serial_println!("[PXE-REPL] Boot sequence: PXE ROM → DHCP → TFTP(limine-bios-pxe.bin) → TFTP(limine.conf) → TFTP(trustos_kernel)");
@@ -153,22 +153,22 @@ pub fn ay() -> Result<(), &'static str> {
 }
 
 
-pub fn qg() {
-    if !Yk.load(Ordering::Relaxed) {
+pub fn stop() {
+    if !Kl.load(Ordering::Relaxed) {
         return;
     }
 
-    crate::netstack::tftpd::qg();
-    crate::netstack::dhcpd::qg();
-    Yk.store(false, Ordering::Relaxed);
+    crate::netstack::tftpd::stop();
+    crate::netstack::dhcpd::stop();
+    Kl.store(false, Ordering::Relaxed);
 
     crate::serial_println!("[PXE-REPL] Self-replication stopped. {} nodes booted via PXE.",
-        OL_.load(Ordering::Relaxed));
+        PJ_.load(Ordering::Relaxed));
 }
 
 
 pub fn poll() {
-    if !Yk.load(Ordering::Relaxed) {
+    if !Kl.load(Ordering::Relaxed) {
         return;
     }
 
@@ -177,21 +177,21 @@ pub fn poll() {
 
     
     
-    let bkf = crate::netstack::dhcpd::qez();
-    let ubp = OL_.load(Ordering::Relaxed);
-    if bkf > ubp {
-        OL_.store(bkf, Ordering::Relaxed);
-        crate::serial_println!("[PXE-REPL] New node detected! Total PXE clients: {}", bkf);
+    let agp = crate::netstack::dhcpd::jtn();
+    let mvy = PJ_.load(Ordering::Relaxed);
+    if agp > mvy {
+        PJ_.store(agp, Ordering::Relaxed);
+        crate::serial_println!("[PXE-REPL] New node detected! Total PXE clients: {}", agp);
     }
 }
 
 
 pub fn status() -> (bool, u8, u64, usize) {
     (
-        rl(),
-        uux(),
-        crate::netstack::tftpd::kvt(),
-        crate::netstack::tftpd::jzc(),
+        is_active(),
+        nkp(),
+        crate::netstack::tftpd::fwq(),
+        crate::netstack::tftpd::fgb(),
     )
 }
 
@@ -199,14 +199,14 @@ pub fn status() -> (bool, u8, u64, usize) {
 
 
 
-pub fn zjb(arch: CpuArch, f: &'static [u8]) {
-    let j: &'static str = alloc::string::String::from(format!("trustos_{}", arch.j())).fmu();
-    crate::netstack::tftpd::exo(j, f);
+pub fn qtm(arch: CpuArch, data: &'static [u8]) {
+    let name: &'static str = alloc::string::String::from(format!("trustos_{}", arch.name())).leak();
+    crate::netstack::tftpd::cdg(name, data);
     crate::serial_println!("[PXE-REPL] Remote kernel registered: {} ({} KB)",
-        j, f.len() / 1024);
+        name, data.len() / 1024);
 }
 
 
-pub fn zml() -> CpuArch {
-    CpuArch::cv()
+pub fn qvi() -> CpuArch {
+    CpuArch::current()
 }

@@ -51,116 +51,116 @@ use spin::Mutex;
 
 
 
-const BJU_: usize         = 0x0004;
+const BME_: usize         = 0x0004;
 
-const BJO_: usize        = 0x2004;
+const BLY_: usize        = 0x2004;
 
-const BJY_: usize     = 0x2008;
+const BMI_: usize     = 0x2008;
 
-const DCI_: usize = 0x200C;
+const DGD_: usize = 0x200C;
 
-const BJZ_: usize = 0x2010;
+const BMJ_: usize = 0x2010;
 
-const BJX_: usize      = 0x2014;
+const BMH_: usize      = 0x2014;
 
-const DCJ_: usize = 0x2008;
+const DGE_: usize = 0x2008;
 
-const BKA_: usize = 0x200C;
-
-
-const AKJ_: usize = 0x3000;
-
-const AKI_: usize   = 0x4000;
-
-const BKB_: usize   = 0x4080;
-
-const DCL_: usize     = 0x4100;
-
-const DCK_: usize     = 0x4180;
+const BMK_: usize = 0x200C;
 
 
+const AMD_: usize = 0x3000;
 
-const BJV_: u32 = 0xFFFF;
+const AMC_: usize   = 0x4000;
 
-const BJW_: u32 = 28;
+const BML_: usize   = 0x4080;
+
+const DGG_: usize     = 0x4100;
+
+const DGF_: usize     = 0x4180;
 
 
 
-const BJT_: u32 = 16;
+const BMF_: u32 = 0xFFFF;
 
-const BJP_: u32   = 0xFFFF;
-
-const BJS_: u32  = 0;
-
-const BJR_: u32   = 1;
-
-const BJQ_: u32   = 4;
+const BMG_: u32 = 28;
 
 
 
-const AKH_: u32 = 1 << 31;
+const BMD_: u32 = 16;
 
-const AKG_: u32 = 1 << 0;
+const BLZ_: u32   = 0xFFFF;
+
+const BMC_: u32  = 0;
+
+const BMB_: u32   = 1;
+
+const BMA_: u32   = 4;
 
 
+
+const AMB_: u32 = 1 << 31;
+
+const AMA_: u32 = 1 << 0;
 
 
 
 
-const UY_: usize = 1024;
 
 
-pub type Bkd = fn(irq: u32);
+const WH_: usize = 1024;
+
+
+pub type Aah = fn(irq: u32);
 
 
 #[derive(Clone, Copy)]
 struct IrqConfig {
     
-    cfd: Option<Bkd>,
+    handler: Option<Aah>,
     
-    cih: u8,
+    target_cpu: u8,
     
-    iq: bool,
+    enabled: bool,
     
-    az: u64,
+    count: u64,
     
-    j: &'static str,
+    name: &'static str,
 }
 
 impl Default for IrqConfig {
     fn default() -> Self {
         Self {
-            cfd: None,
-            cih: 0,
-            iq: false,
-            az: 0,
-            j: "unknown",
+            handler: None,
+            target_cpu: 0,
+            enabled: false,
+            count: 0,
+            name: "unknown",
         }
     }
 }
 
 
-pub struct Bbv {
+pub struct Wi {
     
-    ar: u64,
+    base: u64,
     
-    cln: u32,
+    num_irqs: u32,
     
-    dk: u32,
+    version: u32,
     
-    bcc: u32,
+    num_cpus: u32,
     
-    eta: [IrqConfig; UY_],
+    irqs: [IrqConfig; WH_],
     
-    blm: u64,
+    total_irqs: u64,
     
-    mmh: u64,
+    total_ipis: u64,
     
-    jr: bool,
+    initialized: bool,
 }
 
-static Mq: Mutex<Option<Bbv>> = Mutex::new(None);
-static YX_: AtomicBool = AtomicBool::new(false);
+static Fh: Mutex<Option<Wi>> = Mutex::new(None);
+static AAC_: AtomicBool = AtomicBool::new(false);
 
 
 
@@ -168,16 +168,16 @@ static YX_: AtomicBool = AtomicBool::new(false);
 
 
 #[inline(always)]
-unsafe fn jzu(ar: u64, l: usize) -> u32 {
-    let ag = (ar as usize + l) as *const u32;
-    ptr::read_volatile(ag)
+unsafe fn fgp(base: u64, offset: usize) -> u32 {
+    let addr = (base as usize + offset) as *const u32;
+    ptr::read_volatile(addr)
 }
 
 
 #[inline(always)]
-unsafe fn ema(ar: u64, l: usize, ap: u32) {
-    let ag = (ar as usize + l) as *mut u32;
-    ptr::write_volatile(ag, ap);
+unsafe fn bxi(base: u64, offset: usize, val: u32) {
+    let addr = (base as usize + offset) as *mut u32;
+    ptr::write_volatile(addr, val);
 }
 
 
@@ -192,139 +192,139 @@ unsafe fn ema(ar: u64, l: usize, ap: u32) {
 
 
 
-pub unsafe fn init(ar: u64, bcc: u32) -> Result<(), &'static str> {
-    crate::serial_println!("[AIC] Initializing Apple Interrupt Controller @ {:#x}", ar);
+pub unsafe fn init(base: u64, num_cpus: u32) -> Result<(), &'static str> {
+    crate::serial_println!("[AIC] Initializing Apple Interrupt Controller @ {:#x}", base);
     
     
-    let co = jzu(ar, BJU_);
-    let cln = co & BJV_;
-    let dk = (co >> BJW_) & 0xF;
+    let info = fgp(base, BME_);
+    let num_irqs = info & BMF_;
+    let version = (info >> BMG_) & 0xF;
     
-    crate::serial_println!("[AIC] Version: AICv{}", dk + 1);
-    crate::serial_println!("[AIC] Hardware IRQs: {}", cln);
-    crate::serial_println!("[AIC] CPUs: {}", bcc);
+    crate::serial_println!("[AIC] Version: AICv{}", version + 1);
+    crate::serial_println!("[AIC] Hardware IRQs: {}", num_irqs);
+    crate::serial_println!("[AIC] CPUs: {}", num_cpus);
     
-    if cln == 0 || cln as usize > UY_ {
+    if num_irqs == 0 || num_irqs as usize > WH_ {
         return Err("AIC: invalid IRQ count from hardware");
     }
     
-    let mut aic = Bbv {
-        ar,
-        cln,
-        dk,
-        bcc,
-        eta: [IrqConfig::default(); UY_],
-        blm: 0,
-        mmh: 0,
-        jr: false,
+    let mut aic = Wi {
+        base,
+        num_irqs,
+        version,
+        num_cpus,
+        irqs: [IrqConfig::default(); WH_],
+        total_irqs: 0,
+        total_ipis: 0,
+        initialized: false,
     };
     
     
-    let uwp = (cln + 31) / 32;
-    for d in 0..uwp as usize {
-        ema(ar, AKI_ + d * 4, 0xFFFFFFFF);
+    let nly = (num_irqs + 31) / 32;
+    for w in 0..nly as usize {
+        bxi(base, AMC_ + w * 4, 0xFFFFFFFF);
     }
     
     
-    for a in 0..cln as usize {
-        ema(ar, AKJ_ + a * 4, 1 << 0); 
+    for i in 0..num_irqs as usize {
+        bxi(base, AMD_ + i * 4, 1 << 0); 
     }
     
     
-    ema(ar, BJZ_, AKH_ | AKG_);
+    bxi(base, BMJ_, AMB_ | AMA_);
     
-    aic.jr = true;
+    aic.initialized = true;
     
-    *Mq.lock() = Some(aic);
-    YX_.store(true, Ordering::SeqCst);
+    *Fh.lock() = Some(aic);
+    AAC_.store(true, Ordering::SeqCst);
     
     crate::serial_println!("[AIC] Initialization complete — all IRQs masked, IPIs enabled");
     Ok(())
 }
 
 
-pub fn zja(irq: u32, j: &'static str, cfd: Bkd) -> Result<(), &'static str> {
-    let mut adb = Mq.lock();
-    let aic = adb.as_mut().ok_or("AIC not initialized")?;
+pub fn qtl(irq: u32, name: &'static str, handler: Aah) -> Result<(), &'static str> {
+    let mut jg = Fh.lock();
+    let aic = jg.as_mut().ok_or("AIC not initialized")?;
     
-    if irq >= aic.cln {
+    if irq >= aic.num_irqs {
         return Err("IRQ number out of range");
     }
     
-    let config = &mut aic.eta[irq as usize];
-    config.cfd = Some(cfd);
-    config.j = j;
+    let config = &mut aic.irqs[irq as usize];
+    config.handler = Some(handler);
+    config.name = name;
     
-    crate::serial_println!("[AIC] Registered IRQ {} → {}", irq, j);
+    crate::serial_println!("[AIC] Registered IRQ {} → {}", irq, name);
     Ok(())
 }
 
 
-pub fn kte(irq: u32) -> Result<(), &'static str> {
-    let mut adb = Mq.lock();
-    let aic = adb.as_mut().ok_or("AIC not initialized")?;
+pub fn fum(irq: u32) -> Result<(), &'static str> {
+    let mut jg = Fh.lock();
+    let aic = jg.as_mut().ok_or("AIC not initialized")?;
     
-    if irq >= aic.cln {
+    if irq >= aic.num_irqs {
         return Err("IRQ number out of range");
     }
     
-    let od = irq / 32;
-    let ga = irq % 32;
+    let fx = irq / 32;
+    let bf = irq % 32;
     
     unsafe {
-        ema(aic.ar, BKB_ + od as usize * 4, 1 << ga);
+        bxi(aic.base, BML_ + fx as usize * 4, 1 << bf);
     }
     
-    aic.eta[irq as usize].iq = true;
+    aic.irqs[irq as usize].enabled = true;
     Ok(())
 }
 
 
-pub fn nlr(irq: u32) -> Result<(), &'static str> {
-    let mut adb = Mq.lock();
-    let aic = adb.as_mut().ok_or("AIC not initialized")?;
+pub fn hsk(irq: u32) -> Result<(), &'static str> {
+    let mut jg = Fh.lock();
+    let aic = jg.as_mut().ok_or("AIC not initialized")?;
     
-    if irq >= aic.cln {
+    if irq >= aic.num_irqs {
         return Err("IRQ number out of range");
     }
     
-    let od = irq / 32;
-    let ga = irq % 32;
+    let fx = irq / 32;
+    let bf = irq % 32;
     
     unsafe {
-        ema(aic.ar, AKI_ + od as usize * 4, 1 << ga);
+        bxi(aic.base, AMC_ + fx as usize * 4, 1 << bf);
     }
     
-    aic.eta[irq as usize].iq = false;
+    aic.irqs[irq as usize].enabled = false;
     Ok(())
 }
 
 
-pub fn zng(irq: u32, cpu: u32) -> Result<(), &'static str> {
-    let mut adb = Mq.lock();
-    let aic = adb.as_mut().ok_or("AIC not initialized")?;
+pub fn qwc(irq: u32, cpu: u32) -> Result<(), &'static str> {
+    let mut jg = Fh.lock();
+    let aic = jg.as_mut().ok_or("AIC not initialized")?;
     
-    if irq >= aic.cln {
+    if irq >= aic.num_irqs {
         return Err("IRQ number out of range");
     }
-    if cpu >= aic.bcc {
+    if cpu >= aic.num_cpus {
         return Err("CPU number out of range");
     }
     
     unsafe {
-        ema(aic.ar, AKJ_ + irq as usize * 4, 1 << cpu);
+        bxi(aic.base, AMD_ + irq as usize * 4, 1 << cpu);
     }
     
-    aic.eta[irq as usize].cih = cpu as u8;
+    aic.irqs[irq as usize].target_cpu = cpu as u8;
     Ok(())
 }
 
 
-pub fn mds(cih: u32) -> Result<(), &'static str> {
-    let adb = Mq.lock();
-    let aic = adb.as_ref().ok_or("AIC not initialized")?;
+pub fn gtx(target_cpu: u32) -> Result<(), &'static str> {
+    let jg = Fh.lock();
+    let aic = jg.as_ref().ok_or("AIC not initialized")?;
     
-    if cih >= aic.bcc {
+    if target_cpu >= aic.num_cpus {
         return Err("Target CPU out of range");
     }
     
@@ -333,7 +333,7 @@ pub fn mds(cih: u32) -> Result<(), &'static str> {
         
         
         
-        ema(aic.ar, BKA_, 1 << cih);
+        bxi(aic.base, BMK_, 1 << target_cpu);
     }
     
     Ok(())
@@ -345,64 +345,64 @@ pub fn mds(cih: u32) -> Result<(), &'static str> {
 
 
 
-pub unsafe fn yvw() -> bool {
-    if !YX_.load(Ordering::SeqCst) {
+pub unsafe fn qke() -> bool {
+    if !AAC_.load(Ordering::SeqCst) {
         return false;
     }
     
-    let mut adb = Mq.lock();
-    let aic = match adb.as_mut() {
-        Some(q) => q,
+    let mut jg = Fh.lock();
+    let aic = match jg.as_mut() {
+        Some(a) => a,
         None => return false,
     };
     
     
-    let id = jzu(aic.ar, BJO_);
-    let bqo = (id >> BJT_) & 0xFFFF;
-    let hij = id & BJP_;
+    let event = fgp(aic.base, BLY_);
+    let event_type = (event >> BMD_) & 0xFFFF;
+    let dow = event & BLZ_;
     
-    match bqo {
-        BJS_ => {
+    match event_type {
+        BMC_ => {
             
             false
         }
         
-        BJR_ => {
+        BMB_ => {
             
-            aic.blm += 1;
+            aic.total_irqs += 1;
             
-            if (hij as usize) < UY_ {
-                let config = &mut aic.eta[hij as usize];
-                config.az += 1;
+            if (dow as usize) < WH_ {
+                let config = &mut aic.irqs[dow as usize];
+                config.count += 1;
                 
-                if let Some(cfd) = config.cfd {
+                if let Some(handler) = config.handler {
                     
-                    let tlv = cfd;
-                    drop(adb);
-                    tlv(hij);
+                    let miw = handler;
+                    drop(jg);
+                    miw(dow);
                     return true;
                 }
             }
             
             
-            crate::serial_println!("[AIC] Unhandled IRQ {}", hij);
+            crate::serial_println!("[AIC] Unhandled IRQ {}", dow);
             true
         }
         
-        BJQ_ => {
+        BMA_ => {
             
-            aic.mmh += 1;
-            
-            
-            let lfs = jzu(aic.ar, BJY_);
+            aic.total_ipis += 1;
             
             
-            ema(aic.ar, BJX_, lfs);
+            let gdn = fgp(aic.base, BMI_);
             
-            if lfs & AKH_ != 0 {
+            
+            bxi(aic.base, BMH_, gdn);
+            
+            if gdn & AMB_ != 0 {
                 crate::serial_println!("[AIC] Self-IPI received");
             }
-            if lfs & AKG_ != 0 {
+            if gdn & AMA_ != 0 {
                 
                 
                 
@@ -414,51 +414,51 @@ pub unsafe fn yvw() -> bool {
         }
         
         _ => {
-            crate::serial_println!("[AIC] Unknown event type {} num {}", bqo, hij);
+            crate::serial_println!("[AIC] Unknown event type {} num {}", event_type, dow);
             true
         }
     }
 }
 
 
-pub fn ky() -> bool {
-    YX_.load(Ordering::SeqCst)
+pub fn is_initialized() -> bool {
+    AAC_.load(Ordering::SeqCst)
 }
 
 
-pub fn poq() -> String {
-    let adb = Mq.lock();
-    match adb.as_ref() {
+pub fn jis() -> String {
+    let jg = Fh.lock();
+    match jg.as_ref() {
         None => String::from("AIC: not initialized"),
         Some(aic) => {
-            let iq = aic.eta[..aic.cln as usize]
+            let enabled = aic.irqs[..aic.num_irqs as usize]
                 .iter()
-                .hi(|r| r.iq)
-                .az();
+                .filter(|c| c.enabled)
+                .count();
             format!(
                 "AIC v{} @ {:#x}: {} IRQs ({} enabled), {} total handled, {} IPIs",
-                aic.dk + 1, aic.ar, aic.cln,
-                iq, aic.blm, aic.mmh
+                aic.version + 1, aic.base, aic.num_irqs,
+                enabled, aic.total_irqs, aic.total_ipis
             )
         }
     }
 }
 
 
-pub fn zay() -> Vec<(u32, &'static str, bool, u64)> {
-    let adb = Mq.lock();
-    match adb.as_ref() {
+pub fn qnn() -> Vec<(u32, &'static str, bool, u64)> {
+    let jg = Fh.lock();
+    match jg.as_ref() {
         None => Vec::new(),
         Some(aic) => {
             let mut result = Vec::new();
-            for a in 0..aic.cln as usize {
-                let config = &aic.eta[a];
-                if config.cfd.is_some() || config.iq {
+            for i in 0..aic.num_irqs as usize {
+                let config = &aic.irqs[i];
+                if config.handler.is_some() || config.enabled {
                     result.push((
-                        a as u32,
-                        config.j,
-                        config.iq,
-                        config.az,
+                        i as u32,
+                        config.name,
+                        config.enabled,
+                        config.count,
                     ));
                 }
             }

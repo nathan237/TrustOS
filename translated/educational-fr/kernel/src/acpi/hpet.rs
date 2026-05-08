@@ -36,9 +36,9 @@ pub struct HpetInformation {
     /// HPET number (for systems with multiple HPETs)
     pub hpet_number: u8,
     /// Minimum tick value for periodic mode
-    pub minimum_tick: u16,
+    pub min_tick: u16,
     /// Number of comparators (from hardware ID)
-    pub number_comparators: u8,
+    pub num_comparators: u8,
     /// Counter size (true = 64-bit, false = 32-bit)
     pub counter_64bit: bool,
     /// Supports legacy replacement (IRQ0/IRQ8)
@@ -46,7 +46,7 @@ pub struct HpetInformation {
     /// Vendor ID
     pub vendor_id: u16,
     /// Period in femtoseconds
-    pub period_filesystem: u32,
+    pub period_fs: u32,
 }
 
 /// HPET Register offsets
@@ -90,30 +90,30 @@ unsafe { &*(hpet_virt as *// Constante de compilation — évaluée à la compil
 const HpetTable) };
     
     let event_id = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { core::ptr::read_unaligned(core::ptr::address_of!(hpet.event_timer_block_id)) };
-    let base_address = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { core::ptr::read_unaligned(core::ptr::address_of!(hpet.base_address)) };
-    let minimum_tick = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { core::ptr::read_unaligned(core::ptr::address_of!(hpet.minimum_tick)) };
+unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(hpet.event_timer_block_id)) };
+    let base_addr = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(hpet.base_address)) };
+    let min_tick = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(hpet.minimum_tick)) };
     
     // Parse hardware ID
-    let number_comparators = ((event_id >> 8) & 0x1F) as u8 + 1;
+    let num_comparators = ((event_id >> 8) & 0x1F) as u8 + 1;
     let counter_64bit = (event_id & (1 << 13)) != 0;
     let legacy_capable = (event_id & (1 << 15)) != 0;
     let vendor_id = (event_id >> 16) as u16;
     
     // Read period from hardware registers if accessible
-    let period_filesystem = if base_address != 0 {
+    let period_fs = if base_addr != 0 {
         // Map the HPET MMIO region before accessing
-        match crate::memory::map_mmio(base_address, 4096) {
-            Ok(virt_address) => {
-                let capability = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { core::ptr::read_volatile((virt_address + regs::CAPABILITY_ID) as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+        match crate::memory::map_mmio(base_addr, 4096) {
+            Ok(virt_addr) => {
+                let cap = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe { core::ptr::read_volatile((virt_addr + regs::CAPABILITY_ID) as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u64) };
-                (capability >> 32) as u32
+                (cap >> 32) as u32
             }
             Err(e) => {
-                crate::serial_println!("[HPET] Failed to map HPET MMIO at {:#x}: {}", base_address, e);
+                crate::serial_println!("[HPET] Failed to map HPET MMIO at {:#x}: {}", base_addr, e);
                 0
             }
         }
@@ -122,14 +122,14 @@ const u64) };
     };
     
     Some(HpetInformation {
-        base_address: base_address,
+        base_address: base_addr,
         hpet_number: hpet.hpet_number,
-        minimum_tick,
-        number_comparators,
+        min_tick,
+        num_comparators,
         counter_64bit,
         legacy_capable,
         vendor_id,
-        period_filesystem,
+        period_fs,
     })
 }
 
@@ -137,37 +137,37 @@ const u64) };
 impl HpetInformation {
     /// Get frequency in Hz
     pub fn frequency(&self) -> u64 {
-        if self.period_filesystem == 0 {
+        if self.period_fs == 0 {
             return 0;
         }
         // frequency = 10^15 / period_fs
-        1_000_000_000_000_000u64 / self.period_filesystem as u64
+        1_000_000_000_000_000u64 / self.period_fs as u64
     }
     
     /// Read current counter value
     pub fn read_counter(&self) -> u64 {
         let hhdm = crate::memory::hhdm_offset();
-        let address = self.base_address + hhdm + regs::COUNTER;
+        let addr = self.base_address + hhdm + regs::COUNTER;
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { core::ptr::read_volatile(address as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+unsafe { core::ptr::read_volatile(addr as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u64) }
     }
     
     /// Enable/disable HPET
     pub fn set_enabled(&self, enabled: bool) {
         let hhdm = crate::memory::hhdm_offset();
-        let config_address = self.base_address + hhdm + regs::CONFIG;
+        let config_addr = self.base_address + hhdm + regs::CONFIG;
         
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-            let mut config = core::ptr::read_volatile(config_address as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+            let mut config = core::ptr::read_volatile(config_addr as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u64);
             if enabled {
                 config |= 1; // ENABLE_CNF
             } else {
                 config &= !1;
             }
-            core::ptr::write_volatile(config_address as *mut u64, config);
+            core::ptr::write_volatile(config_addr as *mut u64, config);
         }
     }
     
@@ -178,49 +178,49 @@ const u64);
         }
         
         let hhdm = crate::memory::hhdm_offset();
-        let config_address = self.base_address + hhdm + regs::CONFIG;
+        let config_addr = self.base_address + hhdm + regs::CONFIG;
         
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-            let mut config = core::ptr::read_volatile(config_address as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+            let mut config = core::ptr::read_volatile(config_addr as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u64);
             if enabled {
                 config |= 2; // LEG_RT_CNF
             } else {
                 config &= !2;
             }
-            core::ptr::write_volatile(config_address as *mut u64, config);
+            core::ptr::write_volatile(config_addr as *mut u64, config);
         }
     }
     
     /// Convert HPET ticks to nanoseconds
     pub fn ticks_to_nanos(&self, ticks: u64) -> u64 {
         // nanos = ticks * period_fs / 10^6
-        if self.period_filesystem == 0 {
+        if self.period_fs == 0 {
             return 0;
         }
-        (ticks as u128 * self.period_filesystem as u128 / 1_000_000) as u64
+        (ticks as u128 * self.period_fs as u128 / 1_000_000) as u64
     }
     
     /// Convert nanoseconds to HPET ticks
     pub fn nanos_to_ticks(&self, nanos: u64) -> u64 {
-        if self.period_filesystem == 0 {
+        if self.period_fs == 0 {
             return 0;
         }
-        (nanos as u128 * 1_000_000 / self.period_filesystem as u128) as u64
+        (nanos as u128 * 1_000_000 / self.period_fs as u128) as u64
     }
 }
 
 /// Initialize HPET if available
 pub fn init() -> bool {
-    let information = // Correspondance de motifs — branchement exhaustif de Rust.
+    let info = // Correspondance de motifs — branchement exhaustif de Rust.
 match super::get_information() {
         Some(i) => i,
         None => return false,
     };
     
     let hpet = // Correspondance de motifs — branchement exhaustif de Rust.
-match &information.hpet {
+match &info.hpet {
         Some(h) => h,
         None => {
             crate::serial_println!("[HPET] No HPET table found");

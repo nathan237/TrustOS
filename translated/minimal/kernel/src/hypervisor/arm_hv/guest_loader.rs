@@ -55,7 +55,7 @@ use alloc::vec;
 use alloc::format;
 use core::ptr;
 
-use super::Sw;
+use super::Ic;
 use super::stage2::Stage2Tables;
 
 
@@ -63,40 +63,40 @@ use super::stage2::Stage2Tables;
 
 
 
-pub const BYS_: u64 = 0x4000_0000;
+pub const CBY_: u64 = 0x4000_0000;
 
 
-pub const ADR_: u64 = 0x0020_0000;  
+pub const AFL_: u64 = 0x0020_0000;  
 
 
-pub const ABF_: u64 = 0x0400_0000;     
+pub const ACV_: u64 = 0x0400_0000;     
 
 
-pub const ADM_: u64 = 0x0500_0000;  
+pub const AFC_: u64 = 0x0500_0000;  
 
 
-pub const BRG_: u64 = 512 * 1024 * 1024;
+pub const BUC_: u64 = 512 * 1024 * 1024;
 
 
-pub const AZS_: usize = 64 * 1024 * 1024;
+pub const BBU_: usize = 64 * 1024 * 1024;
 
 
-pub const AZM_: usize = 1 * 1024 * 1024;
+pub const BBO_: usize = 1 * 1024 * 1024;
 
 
-pub const AZR_: usize = 400 * 1024 * 1024;
+pub const BBT_: usize = 400 * 1024 * 1024;
 
 
-pub const AKT_: u32 = 0x644d5241; 
+pub const AMO_: u32 = 0x644d5241; 
 
 
-pub const UW_: usize = 0x38;
+pub const WF_: usize = 0x38;
 
 
-pub const DQW_: usize = 0x10;
+pub const DUQ_: usize = 0x10;
 
 
-pub const EHN_: usize = 0x08;
+pub const ELE_: usize = 0x08;
 
 
 
@@ -106,72 +106,72 @@ pub const EHN_: usize = 0x08;
 #[derive(Debug, Clone)]
 pub struct Arm64ImageHeader {
     
-    pub nem: u32,
+    pub hmj: u32,
     
-    pub fwo: u64,
+    pub crm: u64,
     
-    pub gjn: u64,
+    pub image_size: u64,
     
     pub flags: u64,
     
-    pub sj: u32,
+    pub magic: u32,
 }
 
 impl Arm64ImageHeader {
     
-    pub fn parse(f: &[u8]) -> Result<Self, &'static str> {
-        if f.len() < 64 {
+    pub fn parse(data: &[u8]) -> Result<Self, &'static str> {
+        if data.len() < 64 {
             return Err("Image too small (need at least 64 bytes for header)");
         }
 
-        let sj = u32::dj([
-            f[UW_],
-            f[UW_ + 1],
-            f[UW_ + 2],
-            f[UW_ + 3],
+        let magic = u32::from_le_bytes([
+            data[WF_],
+            data[WF_ + 1],
+            data[WF_ + 2],
+            data[WF_ + 3],
         ]);
 
-        if sj != AKT_ {
+        if magic != AMO_ {
             return Err("Invalid ARM64 Image magic (expected 0x644d5241 'ARM\\x64')");
         }
 
-        let nem = u32::dj([f[0], f[1], f[2], f[3]]);
+        let hmj = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
 
-        let fwo = u64::dj([
-            f[0x08], f[0x09], f[0x0A], f[0x0B],
-            f[0x0C], f[0x0D], f[0x0E], f[0x0F],
+        let crm = u64::from_le_bytes([
+            data[0x08], data[0x09], data[0x0A], data[0x0B],
+            data[0x0C], data[0x0D], data[0x0E], data[0x0F],
         ]);
 
-        let gjn = u64::dj([
-            f[0x10], f[0x11], f[0x12], f[0x13],
-            f[0x14], f[0x15], f[0x16], f[0x17],
+        let image_size = u64::from_le_bytes([
+            data[0x10], data[0x11], data[0x12], data[0x13],
+            data[0x14], data[0x15], data[0x16], data[0x17],
         ]);
 
-        let flags = u64::dj([
-            f[0x18], f[0x19], f[0x1A], f[0x1B],
-            f[0x1C], f[0x1D], f[0x1E], f[0x1F],
+        let flags = u64::from_le_bytes([
+            data[0x18], data[0x19], data[0x1A], data[0x1B],
+            data[0x1C], data[0x1D], data[0x1E], data[0x1F],
         ]);
 
         Ok(Arm64ImageHeader {
-            nem,
-            fwo,
-            gjn,
+            hmj,
+            crm,
+            image_size,
             flags,
-            sj,
+            magic,
         })
     }
 
     
-    pub fn tyb(&self) -> bool {
+    pub fn is_little_endian(&self) -> bool {
         self.flags & 1 == 0
     }
 
     
-    pub fn npj(&self, yy: usize) -> usize {
-        if self.gjn > 0 && (self.gjn as usize) <= yy {
-            self.gjn as usize
+    pub fn effective_size(&self, file_size: usize) -> usize {
+        if self.image_size > 0 && (self.image_size as usize) <= file_size {
+            self.image_size as usize
         } else {
-            yy
+            file_size
         }
     }
 }
@@ -181,26 +181,26 @@ impl Arm64ImageHeader {
 
 
 
-const JZ_: u32 = 0xD00DFEED;
+const KT_: u32 = 0xD00DFEED;
 
 
-const ARR_: u32 = 0x00000001;
-const ARS_: u32   = 0x00000002;
-const ARU_: u32        = 0x00000003;
-const ART_: u32         = 0x00000004;
-const ACA_: u32         = 0x00000009;
+const ATT_: u32 = 0x00000001;
+const ATU_: u32   = 0x00000002;
+const ATW_: u32        = 0x00000003;
+const ATV_: u32         = 0x00000004;
+const ADQ_: u32         = 0x00000009;
 
 
-pub fn pxx(f: &[u8]) -> Result<(), &'static str> {
-    if f.len() < 40 {
+pub fn jpt(data: &[u8]) -> Result<(), &'static str> {
+    if data.len() < 40 {
         return Err("DTB too small");
     }
-    let sj = u32::oa([f[0], f[1], f[2], f[3]]);
-    if sj != JZ_ {
+    let magic = u32::from_be_bytes([data[0], data[1], data[2], data[3]]);
+    if magic != KT_ {
         return Err("Invalid DTB magic (expected 0xD00DFEED)");
     }
-    let aay = u32::oa([f[4], f[5], f[6], f[7]]) as usize;
-    if aay > f.len() {
+    let total_size = u32::from_be_bytes([data[4], data[5], data[6], data[7]]) as usize;
+    if total_size > data.len() {
         return Err("DTB total_size exceeds buffer");
     }
     Ok(())
@@ -213,12 +213,12 @@ pub fn pxx(f: &[u8]) -> Result<(), &'static str> {
 
 
 
-pub fn veu(
-    azq: &mut [u8],
-    nog: usize,
-    yxy: Option<u64>,
-    gjz: Option<u64>,
-    haz: Option<&str>,
+pub fn nrv(
+    dtb: &mut [u8],
+    dtb_len: usize,
+    initrd_start: Option<u64>,
+    czt: Option<u64>,
+    bootargs: Option<&str>,
 ) -> Result<usize, &'static str> {
     
     
@@ -230,11 +230,11 @@ pub fn veu(
     
     
     
-    pxx(&azq[..nog])?;
+    jpt(&dtb[..dtb_len])?;
     
     
     
-    Ok(nog)
+    Ok(dtb_len)
 }
 
 
@@ -245,26 +245,26 @@ pub fn veu(
 #[derive(Debug, Clone)]
 pub struct GuestLoadConfig {
     
-    pub brw: u64,
+    pub ram_base: u64,
     
-    pub cbf: u64,
+    pub ram_size: u64,
     
-    pub wx: String,
+    pub cmdline: String,
     
-    pub guw: Vec<(u64, u64)>,
+    pub trap_mmio: Vec<(u64, u64)>,
     
-    pub fxj: bool,
+    pub trap_smc: bool,
     
-    pub fxk: bool,
+    pub trap_wfi: bool,
 }
 
 impl Default for GuestLoadConfig {
     fn default() -> Self {
         Self {
-            brw: BYS_,
-            cbf: BRG_,
-            wx: String::from("console=ttyAMA0 earlycon=pl011,0x09000000 earlyprintk"),
-            guw: vec![
+            ram_base: CBY_,
+            ram_size: BUC_,
+            cmdline: String::from("console=ttyAMA0 earlycon=pl011,0x09000000 earlyprintk"),
+            trap_mmio: vec![
                 
                 (0x0800_0000, 0x0001_0000),  
                 (0x0801_0000, 0x0001_0000),  
@@ -273,31 +273,31 @@ impl Default for GuestLoadConfig {
                 (0x0A00_0000, 0x0000_0200),  
                 (0x0A00_0200, 0x0000_0200),  
             ],
-            fxj: true,
-            fxk: false,
+            trap_smc: true,
+            trap_wfi: false,
         }
     }
 }
 
 
 #[derive(Debug)]
-pub struct Aiu {
+pub struct Pb {
     
-    pub eed: u64,
+    pub kernel_addr: u64,
     
-    pub bvc: usize,
+    pub kernel_size: usize,
     
-    pub bqh: u64,
+    pub dtb_addr: u64,
     
-    pub dgv: usize,
+    pub dtb_size: usize,
     
-    pub edg: Option<u64>,
+    pub initrd_addr: Option<u64>,
     
-    pub hny: Option<usize>,
+    pub initrd_size: Option<usize>,
     
-    pub dh: Arm64ImageHeader,
+    pub header: Arm64ImageHeader,
     
-    pub dru: Sw,
+    pub hv_config: Ic,
 }
 
 
@@ -309,104 +309,104 @@ pub struct Aiu {
 
 
 
-pub fn ugj(
-    abr: &[u8],
-    hhe: &[u8],
-    cyw: Option<&[u8]>,
+pub fn mzs(
+    kernel_data: &[u8],
+    dtb_data: &[u8],
+    bck: Option<&[u8]>,
     config: &GuestLoadConfig,
-) -> Result<Aiu, String> {
+) -> Result<Pb, String> {
     
-    if abr.len() < 64 {
+    if kernel_data.len() < 64 {
         return Err(String::from("Kernel image too small"));
     }
-    if abr.len() > AZS_ {
+    if kernel_data.len() > BBU_ {
         return Err(format!("Kernel too large: {}MB (max {}MB)",
-            abr.len() / (1024*1024), AZS_ / (1024*1024)));
+            kernel_data.len() / (1024*1024), BBU_ / (1024*1024)));
     }
 
-    let dh = Arm64ImageHeader::parse(abr)
-        .jd(|aa| String::from(aa))?;
+    let header = Arm64ImageHeader::parse(kernel_data)
+        .map_err(|e| String::from(e))?;
 
     
-    pxx(hhe).jd(|aa| String::from(aa))?;
-    if hhe.len() > AZM_ {
+    jpt(dtb_data).map_err(|e| String::from(e))?;
+    if dtb_data.len() > BBO_ {
         return Err(format!("DTB too large: {}KB (max {}KB)",
-            hhe.len() / 1024, AZM_ / 1024));
+            dtb_data.len() / 1024, BBO_ / 1024));
     }
 
     
-    if let Some(apw) = cyw {
-        if apw.len() > AZR_ {
+    if let Some(initrd) = bck {
+        if initrd.len() > BBT_ {
             return Err(format!("initrd too large: {}MB (max {}MB)",
-                apw.len() / (1024*1024), AZR_ / (1024*1024)));
+                initrd.len() / (1024*1024), BBT_ / (1024*1024)));
         }
     }
 
     
-    let eed = config.brw + ADR_;
-    let bqh = config.brw + ABF_;
-    let edg = config.brw + ADM_;
+    let kernel_addr = config.ram_base + AFL_;
+    let dtb_addr = config.ram_base + ACV_;
+    let initrd_addr = config.ram_base + AFC_;
 
     
-    let dip = eed + dh.npj(abr.len()) as u64;
-    if dip > bqh {
+    let bhk = kernel_addr + header.effective_size(kernel_data.len()) as u64;
+    if bhk > dtb_addr {
         return Err(format!("Kernel too large ({}MB), overlaps DTB region",
-            abr.len() / (1024*1024)));
+            kernel_data.len() / (1024*1024)));
     }
-    if let Some(apw) = cyw {
-        let gjz = edg + apw.len() as u64;
-        let ozg = config.brw + config.cbf;
-        if gjz > ozg {
+    if let Some(initrd) = bck {
+        let czt = initrd_addr + initrd.len() as u64;
+        let ixu = config.ram_base + config.ram_size;
+        if czt > ixu {
             return Err(format!("initrd doesn't fit in guest RAM (need {}MB, have {}MB free)",
-                apw.len() / (1024*1024),
-                (ozg - edg) / (1024*1024)));
+                initrd.len() / (1024*1024),
+                (ixu - initrd_addr) / (1024*1024)));
         }
     }
 
     
-    let bvc = dh.npj(abr.len());
+    let kernel_size = header.effective_size(kernel_data.len());
     unsafe {
         ptr::copy_nonoverlapping(
-            abr.fq(),
-            eed as *mut u8,
-            bvc,
+            kernel_data.as_ptr(),
+            kernel_addr as *mut u8,
+            kernel_size,
         );
     }
 
     
     
-    let mut isa = [0u8; 1048576]; 
-    let krz = hhe.len().v(isa.len());
-    isa[..krz].dg(&hhe[..krz]);
+    let mut ekw = [0u8; 1048576]; 
+    let ftm = dtb_data.len().min(ekw.len());
+    ekw[..ftm].copy_from_slice(&dtb_data[..ftm]);
 
     
-    let tui = cyw.map(|bc| edg + bc.len() as u64);
-    let nof = veu(
-        &mut isa,
-        krz,
-        cyw.map(|_| edg),
-        tui,
-        if config.wx.is_empty() { None } else { Some(&config.wx) },
-    ).jd(|aa| String::from(aa))?;
+    let mpx = bck.map(|d| initrd_addr + d.len() as u64);
+    let hud = nrv(
+        &mut ekw,
+        ftm,
+        bck.map(|_| initrd_addr),
+        mpx,
+        if config.cmdline.is_empty() { None } else { Some(&config.cmdline) },
+    ).map_err(|e| String::from(e))?;
 
     unsafe {
         ptr::copy_nonoverlapping(
-            isa.fq(),
-            bqh as *mut u8,
-            nof,
+            ekw.as_ptr(),
+            dtb_addr as *mut u8,
+            hud,
         );
     }
 
     
-    let (tuk, tul) = if let Some(apw) = cyw {
+    let (initrd_result_addr, initrd_result_size) = if let Some(initrd) = bck {
         unsafe {
             ptr::copy_nonoverlapping(
-                apw.fq(),
-                edg as *mut u8,
-                apw.len(),
+                initrd.as_ptr(),
+                initrd_addr as *mut u8,
+                initrd.len(),
             );
         }
-        (Some(edg), Some(apw.len()))
+        (Some(initrd_addr), Some(initrd.len()))
     } else {
         (None, None)
     };
@@ -426,55 +426,55 @@ pub fn ugj(
     }
 
     
-    let dru = Sw {
-        hma: eed,
-        ixj: bqh,
-        hmd: config.brw,
-        hme: config.cbf,
-        iew: config.guw.clone(),
-        fxj: config.fxj,
-        fxk: config.fxk,
+    let hv_config = Ic {
+        guest_entry: kernel_addr,
+        guest_dtb: dtb_addr,
+        guest_ram_base: config.ram_base,
+        guest_ram_size: config.ram_size,
+        trapped_mmio: config.trap_mmio.clone(),
+        trap_smc: config.trap_smc,
+        trap_wfi: config.trap_wfi,
     };
 
-    Ok(Aiu {
-        eed,
-        bvc,
-        bqh,
-        dgv: nof,
-        edg: tuk,
-        hny: tul,
-        dh,
-        dru,
+    Ok(Pb {
+        kernel_addr,
+        kernel_size,
+        dtb_addr,
+        dtb_size: hud,
+        initrd_addr: initrd_result_addr,
+        initrd_size: initrd_result_size,
+        header,
+        hv_config,
     })
 }
 
 
-pub fn svv(result: &Aiu) -> String {
-    let mut e = String::new();
-    e.t("=== ARM64 Guest Loaded ===\n");
-    e.t(&format!("  Kernel:  0x{:08X} ({} KB)\n",
-        result.eed, result.bvc / 1024));
-    e.t(&format!("  DTB:     0x{:08X} ({} KB)\n",
-        result.bqh, result.dgv / 1024));
-    if let (Some(ag), Some(aw)) = (result.edg, result.hny) {
-        e.t(&format!("  initrd:  0x{:08X} ({} KB)\n", ag, aw / 1024));
+pub fn lxn(result: &Pb) -> String {
+    let mut j = String::new();
+    j.push_str("=== ARM64 Guest Loaded ===\n");
+    j.push_str(&format!("  Kernel:  0x{:08X} ({} KB)\n",
+        result.kernel_addr, result.kernel_size / 1024));
+    j.push_str(&format!("  DTB:     0x{:08X} ({} KB)\n",
+        result.dtb_addr, result.dtb_size / 1024));
+    if let (Some(addr), Some(size)) = (result.initrd_addr, result.initrd_size) {
+        j.push_str(&format!("  initrd:  0x{:08X} ({} KB)\n", addr, size / 1024));
     }
-    e.t(&format!("  Entry:   0x{:08X}\n", result.dru.hma));
-    e.t(&format!("  RAM:     0x{:08X} - 0x{:08X} ({} MB)\n",
-        result.dru.hmd,
-        result.dru.hmd + result.dru.hme,
-        result.dru.hme / (1024*1024)));
-    e.t(&format!("  Endian:  {}\n",
-        if result.dh.tyb() { "Little (LE)" } else { "Big (BE)" }));
-    e.t(&format!("  MMIO traps: {} regions\n",
-        result.dru.iew.len()));
-    for (ar, aw) in &result.dru.iew {
-        e.t(&format!("    0x{:08X} - 0x{:08X} ({})\n",
-            ar, ar + aw, super::mmio_spy::eda(*ar)));
+    j.push_str(&format!("  Entry:   0x{:08X}\n", result.hv_config.guest_entry));
+    j.push_str(&format!("  RAM:     0x{:08X} - 0x{:08X} ({} MB)\n",
+        result.hv_config.guest_ram_base,
+        result.hv_config.guest_ram_base + result.hv_config.guest_ram_size,
+        result.hv_config.guest_ram_size / (1024*1024)));
+    j.push_str(&format!("  Endian:  {}\n",
+        if result.header.is_little_endian() { "Little (LE)" } else { "Big (BE)" }));
+    j.push_str(&format!("  MMIO traps: {} regions\n",
+        result.hv_config.trapped_mmio.len()));
+    for (base, size) in &result.hv_config.trapped_mmio {
+        j.push_str(&format!("    0x{:08X} - 0x{:08X} ({})\n",
+            base, base + size, super::mmio_spy::btg(*base)));
     }
-    e.t(&format!("  SMC trap: {}\n",
-        if result.dru.fxj { "ON" } else { "OFF" }));
-    e
+    j.push_str(&format!("  SMC trap: {}\n",
+        if result.hv_config.trap_smc { "ON" } else { "OFF" }));
+    j
 }
 
 
@@ -483,49 +483,49 @@ pub fn svv(result: &Aiu) -> String {
 
 
 
-pub fn wgy(brw: u64, cbf: u64) -> Result<Aiu, String> {
+pub fn onl(ram_base: u64, ram_size: u64) -> Result<Pb, String> {
     
     
     
     
     
-    let mut guo = [0u8; 72];
+    let mut dfo = [0u8; 72];
     
     
     
-    guo[0..4].dg(&0x14000010u32.ho());
+    dfo[0..4].copy_from_slice(&0x14000010u32.to_le_bytes());
     
     
     
-    guo[0x10..0x18].dg(&72u64.ho());
+    dfo[0x10..0x18].copy_from_slice(&72u64.to_le_bytes());
     
     
-    guo[0x38..0x3C].dg(&AKT_.ho());
+    dfo[0x38..0x3C].copy_from_slice(&AMO_.to_le_bytes());
     
     
     
-    guo[64..68].dg(&0xD503207Fu32.ho()); 
-    guo[68..72].dg(&0x17FFFFFFu32.ho()); 
+    dfo[64..68].copy_from_slice(&0xD503207Fu32.to_le_bytes()); 
+    dfo[68..72].copy_from_slice(&0x17FFFFFFu32.to_le_bytes()); 
     
     
-    let mut efl = [0u8; 48];
-    efl[0..4].dg(&JZ_.ft());     
-    efl[4..8].dg(&48u32.ft());          
-    efl[8..12].dg(&40u32.ft());         
-    efl[12..16].dg(&44u32.ft());        
-    efl[16..20].dg(&28u32.ft());        
-    efl[20..24].dg(&17u32.ft());        
-    efl[24..28].dg(&16u32.ft());        
+    let mut buj = [0u8; 48];
+    buj[0..4].copy_from_slice(&KT_.to_be_bytes());     
+    buj[4..8].copy_from_slice(&48u32.to_be_bytes());          
+    buj[8..12].copy_from_slice(&40u32.to_be_bytes());         
+    buj[12..16].copy_from_slice(&44u32.to_be_bytes());        
+    buj[16..20].copy_from_slice(&28u32.to_be_bytes());        
+    buj[20..24].copy_from_slice(&17u32.to_be_bytes());        
+    buj[24..28].copy_from_slice(&16u32.to_be_bytes());        
     
     
-    efl[40..44].dg(&ACA_.ft());
+    buj[40..44].copy_from_slice(&ADQ_.to_be_bytes());
     
     
     let mut config = GuestLoadConfig::default();
-    config.brw = brw;
-    config.cbf = cbf;
-    config.fxk = true; 
-    config.wx = String::new();
+    config.ram_base = ram_base;
+    config.ram_size = ram_size;
+    config.trap_wfi = true; 
+    config.cmdline = String::new();
     
-    ugj(&guo, &efl, None, &config)
+    mzs(&dfo, &buj, None, &config)
 }

@@ -18,64 +18,64 @@ use alloc::vec::Vec;
 use alloc::vec;
 
 
-const BHU_: u32 = 0x5476_5264;
-const ASK_: u8 = 0;
-const BVL_: u8 = 1;
+const BJY_: u32 = 0x5476_5264;
+const AUO_: u8 = 0;
+const BYR_: u8 = 1;
 
 
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct TvHeader {
-    pub sj: u32,
-    pub dk: u16,
-    pub z: u16,
-    pub ac: u16,
-    pub tz: u16,
-    pub oo: u32,
-    pub gkq: u16, 
-    pub asi: [u8; 6],
+    pub magic: u32,
+    pub version: u16,
+    pub width: u16,
+    pub height: u16,
+    pub fps: u16,
+    pub frame_count: u32,
+    pub keyframe_interval: u16, 
+    pub _reserved: [u8; 6],
 }
 
 impl TvHeader {
-    pub fn new(z: u16, ac: u16, tz: u16, oo: u32) -> Self {
+    pub fn new(width: u16, height: u16, fps: u16, frame_count: u32) -> Self {
         Self {
-            sj: BHU_,
-            dk: 1,
-            z,
-            ac,
-            tz,
-            oo,
-            gkq: 30,
-            asi: [0; 6],
+            magic: BJY_,
+            version: 1,
+            width,
+            height,
+            fps,
+            frame_count,
+            keyframe_interval: 30,
+            _reserved: [0; 6],
         }
     }
 
-    pub fn pts(&self) -> Vec<u8> {
-        let mut k = Vec::fc(24);
-        k.bk(&self.sj.ho());
-        k.bk(&self.dk.ho());
-        k.bk(&self.z.ho());
-        k.bk(&self.ac.ho());
-        k.bk(&self.tz.ho());
-        k.bk(&self.oo.ho());
-        k.bk(&self.gkq.ho());
-        k.bk(&self.asi);
-        k
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(24);
+        buf.extend_from_slice(&self.magic.to_le_bytes());
+        buf.extend_from_slice(&self.version.to_le_bytes());
+        buf.extend_from_slice(&self.width.to_le_bytes());
+        buf.extend_from_slice(&self.height.to_le_bytes());
+        buf.extend_from_slice(&self.fps.to_le_bytes());
+        buf.extend_from_slice(&self.frame_count.to_le_bytes());
+        buf.extend_from_slice(&self.keyframe_interval.to_le_bytes());
+        buf.extend_from_slice(&self._reserved);
+        buf
     }
 
-    pub fn eca(f: &[u8]) -> Option<Self> {
-        if f.len() < 24 { return None; }
-        let sj = u32::dj([f[0], f[1], f[2], f[3]]);
-        if sj != BHU_ { return None; }
+    pub fn bsv(data: &[u8]) -> Option<Self> {
+        if data.len() < 24 { return None; }
+        let magic = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
+        if magic != BJY_ { return None; }
         Some(Self {
-            sj,
-            dk: u16::dj([f[4], f[5]]),
-            z: u16::dj([f[6], f[7]]),
-            ac: u16::dj([f[8], f[9]]),
-            tz: u16::dj([f[10], f[11]]),
-            oo: u32::dj([f[12], f[13], f[14], f[15]]),
-            gkq: u16::dj([f[16], f[17]]),
-            asi: [f[18], f[19], f[20], f[21], f[22], f[23]],
+            magic,
+            version: u16::from_le_bytes([data[4], data[5]]),
+            width: u16::from_le_bytes([data[6], data[7]]),
+            height: u16::from_le_bytes([data[8], data[9]]),
+            fps: u16::from_le_bytes([data[10], data[11]]),
+            frame_count: u32::from_le_bytes([data[12], data[13], data[14], data[15]]),
+            keyframe_interval: u16::from_le_bytes([data[16], data[17]]),
+            _reserved: [data[18], data[19], data[20], data[21], data[22], data[23]],
         })
     }
 }
@@ -83,169 +83,169 @@ impl TvHeader {
 
 
 
-fn pds(hz: &[u32]) -> Vec<u8> {
-    let mut bd = Vec::new();
-    if hz.is_empty() { return bd; }
-    let mut a = 0;
-    while a < hz.len() {
-        let ap = hz[a];
-        let mut vw: u8 = 0; 
-        while a + (vw as usize) + 1 < hz.len()
-            && hz[a + (vw as usize) + 1] == ap
-            && vw < 255
+fn jbd(pixels: &[u32]) -> Vec<u8> {
+    let mut out = Vec::new();
+    if pixels.is_empty() { return out; }
+    let mut i = 0;
+    while i < pixels.len() {
+        let val = pixels[i];
+        let mut run: u8 = 0; 
+        while i + (run as usize) + 1 < pixels.len()
+            && pixels[i + (run as usize) + 1] == val
+            && run < 255
         {
-            vw += 1;
+            run += 1;
         }
-        bd.push(vw);
-        bd.bk(&ap.ho());
-        a += vw as usize + 1;
+        out.push(run);
+        out.extend_from_slice(&val.to_le_bytes());
+        i += run as usize + 1;
     }
-    bd
+    out
 }
 
 
-fn pdr(f: &[u8], fqv: usize) -> Vec<u32> {
-    let mut hz = Vec::fc(fqv);
-    let mut a = 0;
-    while a + 4 < f.len() && hz.len() < fqv {
-        let vw = f[a] as usize + 1;
-        let ap = u32::dj([f[a + 1], f[a + 2], f[a + 3], f[a + 4]]);
-        for _ in 0..vw {
-            if hz.len() >= fqv { break; }
-            hz.push(ap);
+fn jbc(data: &[u8], cod: usize) -> Vec<u32> {
+    let mut pixels = Vec::with_capacity(cod);
+    let mut i = 0;
+    while i + 4 < data.len() && pixels.len() < cod {
+        let run = data[i] as usize + 1;
+        let val = u32::from_le_bytes([data[i + 1], data[i + 2], data[i + 3], data[i + 4]]);
+        for _ in 0..run {
+            if pixels.len() >= cod { break; }
+            pixels.push(val);
         }
-        a += 5;
+        i += 5;
     }
-    hz
+    pixels
 }
 
 
 
 pub struct TvEncoder {
-    pub dh: TvHeader,
-    jjv: Vec<u32>,
-    hkl: u32,
-    pub f: Vec<u8>,
+    pub header: TvHeader,
+    prev_frame: Vec<u32>,
+    frames_encoded: u32,
+    pub data: Vec<u8>,
 }
 
 impl TvEncoder {
-    pub fn new(z: u16, ac: u16, tz: u16) -> Self {
-        let awg = z as usize * ac as usize;
+    pub fn new(width: u16, height: u16, fps: u16) -> Self {
+        let yz = width as usize * height as usize;
         Self {
-            dh: TvHeader::new(z, ac, tz, 0),
-            jjv: vec![0u32; awg],
-            hkl: 0,
-            f: Vec::new(),
+            header: TvHeader::new(width, height, fps, 0),
+            prev_frame: vec![0u32; yz],
+            frames_encoded: 0,
+            data: Vec::new(),
         }
     }
 
     
-    pub fn jzf(&mut self, hz: &[u32]) {
-        let awg = self.dh.z as usize * self.dh.ac as usize;
-        let txw = self.hkl == 0
-            || (self.dh.gkq > 0
-                && self.hkl % self.dh.gkq as u32 == 0);
+    pub fn add_frame(&mut self, pixels: &[u32]) {
+        let yz = self.header.width as usize * self.header.height as usize;
+        let msw = self.frames_encoded == 0
+            || (self.header.keyframe_interval > 0
+                && self.frames_encoded % self.header.keyframe_interval as u32 == 0);
 
-        if txw {
+        if msw {
             
-            let ahf = pds(&hz[..awg]);
-            let bzt = 1 + ahf.len(); 
-            self.f.bk(&(bzt as u32).ho());
-            self.f.push(ASK_);
-            self.f.bk(&ahf);
-            self.jjv[..awg].dg(&hz[..awg]);
+            let qv = jbd(&pixels[..yz]);
+            let frame_size = 1 + qv.len(); 
+            self.data.extend_from_slice(&(frame_size as u32).to_le_bytes());
+            self.data.push(AUO_);
+            self.data.extend_from_slice(&qv);
+            self.prev_frame[..yz].copy_from_slice(&pixels[..yz]);
         } else {
             
-            let mut aaq = vec![0u32; awg];
-            for a in 0..awg {
-                aaq[a] = hz[a] ^ self.jjv[a];
+            let mut mk = vec![0u32; yz];
+            for i in 0..yz {
+                mk[i] = pixels[i] ^ self.prev_frame[i];
             }
-            let ahf = pds(&aaq);
-            let bzt = 1 + ahf.len();
-            self.f.bk(&(bzt as u32).ho());
-            self.f.push(BVL_);
-            self.f.bk(&ahf);
-            self.jjv[..awg].dg(&hz[..awg]);
+            let qv = jbd(&mk);
+            let frame_size = 1 + qv.len();
+            self.data.extend_from_slice(&(frame_size as u32).to_le_bytes());
+            self.data.push(BYR_);
+            self.data.extend_from_slice(&qv);
+            self.prev_frame[..yz].copy_from_slice(&pixels[..yz]);
         }
-        self.hkl += 1;
-        self.dh.oo = self.hkl;
+        self.frames_encoded += 1;
+        self.header.frame_count = self.frames_encoded;
     }
 
     
-    pub fn bqs(&self) -> Vec<u8> {
-        let mut bd = self.dh.pts();
-        bd.bk(&self.f);
-        bd
+    pub fn finalize(&self) -> Vec<u8> {
+        let mut out = self.header.to_bytes();
+        out.extend_from_slice(&self.data);
+        out
     }
 }
 
 
 
 pub struct TvDecoder {
-    pub dh: TvHeader,
-    f: Vec<u8>,
-    l: usize,
-    het: Vec<u32>,
-    pub hkk: u32,
+    pub header: TvHeader,
+    data: Vec<u8>,
+    offset: usize,
+    current_frame: Vec<u32>,
+    pub frames_decoded: u32,
 }
 
 impl TvDecoder {
-    pub fn new(cxw: Vec<u8>) -> Option<Self> {
-        let dh = TvHeader::eca(&cxw)?;
-        let awg = dh.z as usize * dh.ac as usize;
+    pub fn new(file_data: Vec<u8>) -> Option<Self> {
+        let header = TvHeader::bsv(&file_data)?;
+        let yz = header.width as usize * header.height as usize;
         Some(Self {
-            dh,
-            f: cxw,
-            l: 24, 
-            het: vec![0u32; awg],
-            hkk: 0,
+            header,
+            data: file_data,
+            offset: 24, 
+            current_frame: vec![0u32; yz],
+            frames_decoded: 0,
         })
     }
 
     
-    pub fn uue(&mut self) -> Option<&[u32]> {
-        if self.hkk >= self.dh.oo { return None; }
-        if self.l + 5 > self.f.len() { return None; }
+    pub fn next_frame(&mut self) -> Option<&[u32]> {
+        if self.frames_decoded >= self.header.frame_count { return None; }
+        if self.offset + 5 > self.data.len() { return None; }
 
-        let bzt = u32::dj([
-            self.f[self.l],
-            self.f[self.l + 1],
-            self.f[self.l + 2],
-            self.f[self.l + 3],
+        let frame_size = u32::from_le_bytes([
+            self.data[self.offset],
+            self.data[self.offset + 1],
+            self.data[self.offset + 2],
+            self.data[self.offset + 3],
         ]) as usize;
-        self.l += 4;
+        self.offset += 4;
 
-        if self.l + bzt > self.f.len() { return None; }
+        if self.offset + frame_size > self.data.len() { return None; }
 
-        let swz = self.f[self.l];
-        let pdq = &self.f[self.l + 1..self.l + bzt];
-        let awg = self.dh.z as usize * self.dh.ac as usize;
+        let lyn = self.data[self.offset];
+        let jbb = &self.data[self.offset + 1..self.offset + frame_size];
+        let yz = self.header.width as usize * self.header.height as usize;
 
-        if swz == ASK_ {
-            let hz = pdr(pdq, awg);
-            self.het[..awg].dg(&hz[..awg.v(hz.len())]);
+        if lyn == AUO_ {
+            let pixels = jbc(jbb, yz);
+            self.current_frame[..yz].copy_from_slice(&pixels[..yz.min(pixels.len())]);
         } else {
             
-            let aaq = pdr(pdq, awg);
-            for a in 0..awg.v(aaq.len()) {
-                self.het[a] ^= aaq[a];
+            let mk = jbc(jbb, yz);
+            for i in 0..yz.min(mk.len()) {
+                self.current_frame[i] ^= mk[i];
             }
         }
 
-        self.l += bzt;
-        self.hkk += 1;
-        Some(&self.het)
+        self.offset += frame_size;
+        self.frames_decoded += 1;
+        Some(&self.current_frame)
     }
 
     
-    pub fn lzz(&mut self) {
-        self.l = 24;
-        self.hkk = 0;
-        self.het.vi(0);
+    pub fn rewind(&mut self) {
+        self.offset = 24;
+        self.frames_decoded = 0;
+        self.current_frame.fill(0);
     }
 
     
-    pub fn ywj(&self) -> bool {
-        self.hkk < self.dh.oo && self.l + 5 <= self.f.len()
+    pub fn qko(&self) -> bool {
+        self.frames_decoded < self.header.frame_count && self.offset + 5 <= self.data.len()
     }
 }

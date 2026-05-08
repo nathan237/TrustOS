@@ -74,18 +74,18 @@ impl Image {
     
     /// Draw with scaling
     pub fn draw_scaled(&self, x: i32, y: i32, dest_w: u32, dest_h: u32) {
-        let (framebuffer_width, framebuffer_height) = crate::framebuffer::get_dimensions();
+        let (fb_width, fb_height) = crate::framebuffer::get_dimensions();
         
         for dy in 0..dest_h {
             let screen_y = y + dy as i32;
-            if screen_y < 0 || screen_y >= framebuffer_height as i32 { continue; }
+            if screen_y < 0 || screen_y >= fb_height as i32 { continue; }
             
             // Source Y coordinate (scaled)
             let source_y = (dy as u64 * self.height as u64 / dest_h as u64) as u32;
             
             for dx in 0..dest_w {
                 let screen_x = x + dx as i32;
-                if screen_x < 0 || screen_x >= framebuffer_width as i32 { continue; }
+                if screen_x < 0 || screen_x >= fb_width as i32 { continue; }
                 
                 // Source X coordinate (scaled)
                 let source_x = (dx as u64 * self.width as u64 / dest_w as u64) as u32;
@@ -109,15 +109,15 @@ impl Image {
     
     /// Draw with alpha blending (for overlays)
     pub fn draw_blended(&self, x: i32, y: i32, global_alpha: u8) {
-        let (framebuffer_width, framebuffer_height) = crate::framebuffer::get_dimensions();
+        let (fb_width, fb_height) = crate::framebuffer::get_dimensions();
         
         for sy in 0..self.height {
             let screen_y = y + sy as i32;
-            if screen_y < 0 || screen_y >= framebuffer_height as i32 { continue; }
+            if screen_y < 0 || screen_y >= fb_height as i32 { continue; }
             
             for sx in 0..self.width {
                 let screen_x = x + sx as i32;
-                if screen_x < 0 || screen_x >= framebuffer_width as i32 { continue; }
+                if screen_x < 0 || screen_x >= fb_width as i32 { continue; }
                 
                 let pixel = self.get_pixel(sx, sy);
                 let pixel_alpha = ((pixel >> 24) & 0xFF) as u32;
@@ -234,7 +234,7 @@ pub fn load(path: &str) -> Option<Image> {
 pub fn load_from_bytes(data: &[u8], format: ImageFormat) -> Option<Image> {
         // Pattern matching — Rust's exhaustive branching construct.
 match format {
-        ImageFormat::Bitmap => bmp::load_bitmap_from_bytes(data),
+        ImageFormat::Bmp => bmp::load_bitmap_from_bytes(data),
         ImageFormat::Ppm => ppm::load_ppm_from_bytes(data),
         ImageFormat::Raw { width, height } => {
             if data.len() >= (width * height * 4) as usize {
@@ -261,7 +261,7 @@ match format {
 #[derive(Clone, Copy)]
 // Enumeration — a type that can be one of several variants.
 pub enum ImageFormat {
-    Bitmap,
+    Bmp,
     Ppm,
     Raw { width: u32, height: u32 },
 }
@@ -290,14 +290,14 @@ impl ToLowercaseSimple for str {
 
 /// Create a solid color image
 pub fn create_solid(width: u32, height: u32, color: u32) -> Image {
-    let mut image = Image::new(width, height);
-    image.fill(color);
-    image
+    let mut img = Image::new(width, height);
+    img.fill(color);
+    img
 }
 
 /// Create a gradient image (vertical)
 pub fn create_gradient_v(width: u32, height: u32, top_color: u32, bottom_color: u32) -> Image {
-    let mut image = Image::new(width, height);
+    let mut img = Image::new(width, height);
     
     let tr = ((top_color >> 16) & 0xFF) as i32;
     let tg = ((top_color >> 8) & 0xFF) as i32;
@@ -315,23 +315,23 @@ pub fn create_gradient_v(width: u32, height: u32, top_color: u32, bottom_color: 
         let color = 0xFF000000 | (r << 16) | (g << 8) | b;
         
         for x in 0..width {
-            image.set_pixel(x, y, color);
+            img.set_pixel(x, y, color);
         }
     }
     
-    image
+    img
 }
 
 /// Create a checkerboard pattern
 pub fn create_checkerboard(width: u32, height: u32, size: u32, color1: u32, color2: u32) -> Image {
-    let mut image = Image::new(width, height);
+    let mut img = Image::new(width, height);
     
     for y in 0..height {
         for x in 0..width {
             let checker = ((x / size) + (y / size)) % 2 == 0;
-            image.set_pixel(x, y, if checker { color1 } else { color2 });
+            img.set_pixel(x, y, if checker { color1 } else { color2 });
         }
     }
     
-    image
+    img
 }

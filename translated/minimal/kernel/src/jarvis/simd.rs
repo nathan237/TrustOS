@@ -20,18 +20,18 @@ use core::arch::aarch64::*;
 use core::sync::atomic::{AtomicBool, Ordering};
 
 
-static ALG_: AtomicBool = AtomicBool::new(false);
+static ANB_: AtomicBool = AtomicBool::new(false);
 
 
 
-pub fn oei() {
+pub fn igp() {
     #[cfg(target_arch = "x86_64")]
     {
-        let dr = crate::cpu::bme();
-        let tmd = dr.map(|r| r.dog && r.hka).unwrap_or(false);
+        let caps = crate::cpu::capabilities();
+        let mjd = caps.map(|c| c.avx2 && c.fma).unwrap_or(false);
 
-        if tmd {
-            ALG_.store(true, Ordering::Release);
+        if mjd {
+            ANB_.store(true, Ordering::Release);
             crate::serial_println!("[SIMD] Jarvis dispatch: AVX2+FMA (8-wide, fused multiply-add)");
         } else {
             crate::serial_println!("[SIMD] Jarvis dispatch: SSE2 (4-wide)");
@@ -51,8 +51,8 @@ pub fn oei() {
 
 
 #[inline(always)]
-fn gvt() -> bool {
-    ALG_.load(Ordering::Relaxed)
+fn dgd() -> bool {
+    ANB_.load(Ordering::Relaxed)
 }
 
 
@@ -65,63 +65,63 @@ fn gvt() -> bool {
 
 #[cfg(target_arch = "x86_64")]
 #[inline]
-fn sak(q: &[f32], o: &[f32], len: usize) -> f32 {
+fn lhc(a: &[f32], b: &[f32], len: usize) -> f32 {
     unsafe {
-        let yj = q.fq();
-        let bp = o.fq();
+        let lf = a.as_ptr();
+        let bp = b.as_ptr();
 
-        let mut wk = gxi();
-        let mut bav = gxi();
-        let mut btd = gxi();
-        let mut ddu = gxi();
+        let mut ke = _mm_setzero_ps();
+        let mut abo = _mm_setzero_ps();
+        let mut akv = _mm_setzero_ps();
+        let mut bem = _mm_setzero_ps();
 
         
-        let avm = len / 16;
-        for a in 0..avm {
-            let ar = a * 16;
-            let bfv = zz(yj.add(ar));
-            let wu = zz(bp.add(ar));
-            wk = aky(wk, axl(bfv, wu));
+        let ym = len / 16;
+        for i in 0..ym {
+            let base = i * 16;
+            let abn = _mm_loadu_ps(lf.add(base));
+            let kl = _mm_loadu_ps(bp.add(base));
+            ke = _mm_add_ps(ke, _mm_mul_ps(abn, kl));
 
-            let km = zz(yj.add(ar + 4));
-            let of = zz(bp.add(ar + 4));
-            bav = aky(bav, axl(km, of));
+            let eb = _mm_loadu_ps(lf.add(base + 4));
+            let gf = _mm_loadu_ps(bp.add(base + 4));
+            abo = _mm_add_ps(abo, _mm_mul_ps(eb, gf));
 
-            let oe = zz(yj.add(ar + 8));
-            let tb = zz(bp.add(ar + 8));
-            btd = aky(btd, axl(oe, tb));
+            let fy = _mm_loadu_ps(lf.add(base + 8));
+            let iq = _mm_loadu_ps(bp.add(base + 8));
+            akv = _mm_add_ps(akv, _mm_mul_ps(fy, iq));
 
-            let vy = zz(yj.add(ar + 12));
-            let ajw = zz(bp.add(ar + 12));
-            ddu = aky(ddu, axl(vy, ajw));
+            let kb = _mm_loadu_ps(lf.add(base + 12));
+            let sc = _mm_loadu_ps(bp.add(base + 12));
+            bem = _mm_add_ps(bem, _mm_mul_ps(kb, sc));
         }
 
         
-        wk = aky(wk, bav);
-        btd = aky(btd, ddu);
-        wk = aky(wk, btd);
+        ke = _mm_add_ps(ke, abo);
+        akv = _mm_add_ps(akv, bem);
+        ke = _mm_add_ps(ke, akv);
 
         
-        let uw = avm * 16;
-        let bch = (len - uw) / 4;
-        for a in 0..bch {
-            let l = uw + a * 4;
-            let btg = zz(yj.add(l));
-            let yu = zz(bp.add(l));
-            wk = aky(wk, axl(btg, yu));
+        let jv = ym * 16;
+        let aci = (len - jv) / 4;
+        for i in 0..aci {
+            let offset = jv + i * 4;
+            let akw = _mm_loadu_ps(lf.add(offset));
+            let lm = _mm_loadu_ps(bp.add(offset));
+            ke = _mm_add_ps(ke, _mm_mul_ps(akw, lm));
         }
 
         
-        let gd = jyd(wk, wk);     
-        let sum = aky(wk, gd);          
-        let fuq = jye(sum, sum, 1);  
-        let es = jya(sum, fuq);       
-        let mut result = jyc(es);
+        let hi = _mm_movehl_ps(ke, ke);     
+        let sum = _mm_add_ps(ke, hi);          
+        let cqm = _mm_shuffle_ps(sum, sum, 1);  
+        let av = _mm_add_ss(sum, cqm);       
+        let mut result = _mm_cvtss_f32(av);
 
         
-        let zm = uw + bch * 4;
-        for a in zm..len {
-            result += *yj.add(a) * *bp.add(a);
+        let mg = jv + aci * 4;
+        for i in mg..len {
+            result += *lf.add(i) * *bp.add(i);
         }
 
         result
@@ -138,59 +138,59 @@ fn sak(q: &[f32], o: &[f32], len: usize) -> f32 {
 
 #[cfg(target_arch = "aarch64")]
 #[inline]
-fn saj(q: &[f32], o: &[f32], len: usize) -> f32 {
+fn lhb(a: &[f32], b: &[f32], len: usize) -> f32 {
     unsafe {
-        let yj = q.fq();
-        let bp = o.fq();
+        let lf = a.as_ptr();
+        let bp = b.as_ptr();
 
-        let mut wk = dxk(0.0);
-        let mut bav = dxk(0.0);
-        let mut btd = dxk(0.0);
-        let mut ddu = dxk(0.0);
+        let mut ke = vdupq_n_f32(0.0);
+        let mut abo = vdupq_n_f32(0.0);
+        let mut akv = vdupq_n_f32(0.0);
+        let mut bem = vdupq_n_f32(0.0);
 
         
-        let avm = len / 16;
-        for a in 0..avm {
-            let ar = a * 16;
-            let bfv = aba(yj.add(ar));
-            let wu = aba(bp.add(ar));
-            wk = bis(wk, bfv, wu);
+        let ym = len / 16;
+        for i in 0..ym {
+            let base = i * 16;
+            let abn = vld1q_f32(lf.add(base));
+            let kl = vld1q_f32(bp.add(base));
+            ke = vfmaq_f32(ke, abn, kl);
 
-            let km = aba(yj.add(ar + 4));
-            let of = aba(bp.add(ar + 4));
-            bav = bis(bav, km, of);
+            let eb = vld1q_f32(lf.add(base + 4));
+            let gf = vld1q_f32(bp.add(base + 4));
+            abo = vfmaq_f32(abo, eb, gf);
 
-            let oe = aba(yj.add(ar + 8));
-            let tb = aba(bp.add(ar + 8));
-            btd = bis(btd, oe, tb);
+            let fy = vld1q_f32(lf.add(base + 8));
+            let iq = vld1q_f32(bp.add(base + 8));
+            akv = vfmaq_f32(akv, fy, iq);
 
-            let vy = aba(yj.add(ar + 12));
-            let ajw = aba(bp.add(ar + 12));
-            ddu = bis(ddu, vy, ajw);
+            let kb = vld1q_f32(lf.add(base + 12));
+            let sc = vld1q_f32(bp.add(base + 12));
+            bem = vfmaq_f32(bem, kb, sc);
         }
 
         
-        wk = igf(wk, bav);
-        btd = igf(btd, ddu);
-        wk = igf(wk, btd);
+        ke = vaddq_f32(ke, abo);
+        akv = vaddq_f32(akv, bem);
+        ke = vaddq_f32(ke, akv);
 
         
-        let uw = avm * 16;
-        let bch = (len - uw) / 4;
-        for a in 0..bch {
-            let l = uw + a * 4;
-            let btg = aba(yj.add(l));
-            let yu = aba(bp.add(l));
-            wk = bis(wk, btg, yu);
+        let jv = ym * 16;
+        let aci = (len - jv) / 4;
+        for i in 0..aci {
+            let offset = jv + i * 4;
+            let akw = vld1q_f32(lf.add(offset));
+            let lm = vld1q_f32(bp.add(offset));
+            ke = vfmaq_f32(ke, akw, lm);
         }
 
         
-        let mut result = xqg(wk);
+        let mut result = vaddvq_f32(ke);
 
         
-        let zm = uw + bch * 4;
-        for a in zm..len {
-            result += *yj.add(a) * *bp.add(a);
+        let mg = jv + aci * 4;
+        for i in mg..len {
+            result += *lf.add(i) * *bp.add(i);
         }
 
         result
@@ -209,31 +209,31 @@ fn saj(q: &[f32], o: &[f32], len: usize) -> f32 {
 
 
 #[cfg(target_arch = "x86_64")]
-pub fn ami(bd: &mut [f32], d: &[f32], b: &[f32], ec: usize, lk: usize) {
-    for m in 0..lk {
-        let ar = m * ec;
-        bd[m] = sak(&d[ar..ar + ec], b, ec);
+pub fn tk(out: &mut [f32], w: &[f32], x: &[f32], cols: usize, rows: usize) {
+    for r in 0..rows {
+        let base = r * cols;
+        out[r] = lhc(&w[base..base + cols], x, cols);
     }
 }
 
 
 #[cfg(target_arch = "aarch64")]
-pub fn ami(bd: &mut [f32], d: &[f32], b: &[f32], ec: usize, lk: usize) {
-    for m in 0..lk {
-        bd[m] = saj(&d[m * ec..m * ec + ec], b, ec);
+pub fn tk(out: &mut [f32], w: &[f32], x: &[f32], cols: usize, rows: usize) {
+    for r in 0..rows {
+        out[r] = lhb(&w[r * cols..r * cols + cols], x, cols);
     }
 }
 
 
 #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-pub fn ami(bd: &mut [f32], d: &[f32], b: &[f32], ec: usize, lk: usize) {
-    for m in 0..lk {
+pub fn tk(out: &mut [f32], w: &[f32], x: &[f32], cols: usize, rows: usize) {
+    for r in 0..rows {
         let mut sum = 0.0f32;
-        let ar = m * ec;
-        for r in 0..ec {
-            sum += d[ar + r] * b[r];
+        let base = r * cols;
+        for c in 0..cols {
+            sum += w[base + c] * x[c];
         }
-        bd[m] = sum;
+        out[r] = sum;
     }
 }
 
@@ -250,63 +250,63 @@ pub fn ami(bd: &mut [f32], d: &[f32], b: &[f32], ec: usize, lk: usize) {
 
 
 #[cfg(target_arch = "x86_64")]
-pub fn dta(bd: &mut [f32], d: &[f32], c: &[f32], ec: usize, lk: usize) {
-    if gvt() {
-        unsafe { ukr(bd, d, c, ec, lk); }
+pub fn bnm(out: &mut [f32], w: &[f32], y: &[f32], cols: usize, rows: usize) {
+    if dgd() {
+        unsafe { ncq(out, w, y, cols, rows); }
         return;
     }
     
-    for p in bd[..ec].el() { *p = 0.0; }
+    for v in out[..cols].iter_mut() { *v = 0.0; }
 
     unsafe {
-        let zd = d.fq();
-        let op = bd.mw();
+        let ma = w.as_ptr();
+        let op = out.as_mut_ptr();
 
-        for m in 0..lk {
-            let bdh = c[m];
-            if bdh == 0.0 { continue; } 
+        for r in 0..rows {
+            let ade = y[r];
+            if ade == 0.0 { continue; } 
 
-            let akx = iid(bdh);
-            let ar = m * ec;
+            let so = _mm_set1_ps(ade);
+            let base = r * cols;
 
             
-            let avm = ec / 16;
-            for a in 0..avm {
-                let l = ar + a * 16;
-                let rt = a * 16;
+            let ym = cols / 16;
+            for i in 0..ym {
+                let offset = base + i * 16;
+                let hv = i * 16;
 
-                let cnv = zz(zd.add(l));
-                let dkc = zz(op.add(rt));
-                bpo(op.add(rt), aky(dkc, axl(cnv, akx)));
+                let avr = _mm_loadu_ps(ma.add(offset));
+                let bij = _mm_loadu_ps(op.add(hv));
+                _mm_storeu_ps(op.add(hv), _mm_add_ps(bij, _mm_mul_ps(avr, so)));
 
-                let blt = zz(zd.add(l + 4));
-                let csy = zz(op.add(rt + 4));
-                bpo(op.add(rt + 4), aky(csy, axl(blt, akx)));
+                let ahg = _mm_loadu_ps(ma.add(offset + 4));
+                let ayt = _mm_loadu_ps(op.add(hv + 4));
+                _mm_storeu_ps(op.add(hv + 4), _mm_add_ps(ayt, _mm_mul_ps(ahg, so)));
 
-                let bfs = zz(zd.add(l + 8));
-                let csz = zz(op.add(rt + 8));
-                bpo(op.add(rt + 8), aky(csz, axl(bfs, akx)));
+                let aeo = _mm_loadu_ps(ma.add(offset + 8));
+                let ayu = _mm_loadu_ps(op.add(hv + 8));
+                _mm_storeu_ps(op.add(hv + 8), _mm_add_ps(ayu, _mm_mul_ps(aeo, so)));
 
-                let bxu = zz(zd.add(l + 12));
-                let cta = zz(op.add(rt + 12));
-                bpo(op.add(rt + 12), aky(cta, axl(bxu, akx)));
+                let ane = _mm_loadu_ps(ma.add(offset + 12));
+                let ayv = _mm_loadu_ps(op.add(hv + 12));
+                _mm_storeu_ps(op.add(hv + 12), _mm_add_ps(ayv, _mm_mul_ps(ane, so)));
             }
 
             
-            let uw = avm * 16;
-            let bch = (ec - uw) / 4;
-            for a in 0..bch {
-                let l = ar + uw + a * 4;
-                let rt = uw + a * 4;
-                let bxx = zz(zd.add(l));
-                let dki = zz(op.add(rt));
-                bpo(op.add(rt), aky(dki, axl(bxx, akx)));
+            let jv = ym * 16;
+            let aci = (cols - jv) / 4;
+            for i in 0..aci {
+                let offset = base + jv + i * 4;
+                let hv = jv + i * 4;
+                let anh = _mm_loadu_ps(ma.add(offset));
+                let bim = _mm_loadu_ps(op.add(hv));
+                _mm_storeu_ps(op.add(hv), _mm_add_ps(bim, _mm_mul_ps(anh, so)));
             }
 
             
-            let zm = uw + bch * 4;
-            for r in zm..ec {
-                *op.add(r) += *zd.add(ar + r) * bdh;
+            let mg = jv + aci * 4;
+            for c in mg..cols {
+                *op.add(c) += *ma.add(base + c) * ade;
             }
         }
     }
@@ -314,45 +314,45 @@ pub fn dta(bd: &mut [f32], d: &[f32], c: &[f32], ec: usize, lk: usize) {
 
 
 #[cfg(target_arch = "aarch64")]
-pub fn dta(bd: &mut [f32], d: &[f32], c: &[f32], ec: usize, lk: usize) {
-    for p in bd[..ec].el() { *p = 0.0; }
+pub fn bnm(out: &mut [f32], w: &[f32], y: &[f32], cols: usize, rows: usize) {
+    for v in out[..cols].iter_mut() { *v = 0.0; }
     unsafe {
-        let zd = d.fq();
-        let op = bd.mw();
-        for m in 0..lk {
-            let bdh = c[m];
-            if bdh == 0.0 { continue; }
-            let akx = dxk(bdh);
-            let ar = m * ec;
-            let avm = ec / 16;
-            for a in 0..avm {
-                let l = ar + a * 16;
-                let rt = a * 16;
-                let cnv = aba(zd.add(l));
-                let dkc = aba(op.add(rt));
-                bsv(op.add(rt), bis(dkc, cnv, akx));
-                let blt = aba(zd.add(l + 4));
-                let csy = aba(op.add(rt + 4));
-                bsv(op.add(rt + 4), bis(csy, blt, akx));
-                let bfs = aba(zd.add(l + 8));
-                let csz = aba(op.add(rt + 8));
-                bsv(op.add(rt + 8), bis(csz, bfs, akx));
-                let bxu = aba(zd.add(l + 12));
-                let cta = aba(op.add(rt + 12));
-                bsv(op.add(rt + 12), bis(cta, bxu, akx));
+        let ma = w.as_ptr();
+        let op = out.as_mut_ptr();
+        for r in 0..rows {
+            let ade = y[r];
+            if ade == 0.0 { continue; }
+            let so = vdupq_n_f32(ade);
+            let base = r * cols;
+            let ym = cols / 16;
+            for i in 0..ym {
+                let offset = base + i * 16;
+                let hv = i * 16;
+                let avr = vld1q_f32(ma.add(offset));
+                let bij = vld1q_f32(op.add(hv));
+                vst1q_f32(op.add(hv), vfmaq_f32(bij, avr, so));
+                let ahg = vld1q_f32(ma.add(offset + 4));
+                let ayt = vld1q_f32(op.add(hv + 4));
+                vst1q_f32(op.add(hv + 4), vfmaq_f32(ayt, ahg, so));
+                let aeo = vld1q_f32(ma.add(offset + 8));
+                let ayu = vld1q_f32(op.add(hv + 8));
+                vst1q_f32(op.add(hv + 8), vfmaq_f32(ayu, aeo, so));
+                let ane = vld1q_f32(ma.add(offset + 12));
+                let ayv = vld1q_f32(op.add(hv + 12));
+                vst1q_f32(op.add(hv + 12), vfmaq_f32(ayv, ane, so));
             }
-            let uw = avm * 16;
-            let bch = (ec - uw) / 4;
-            for a in 0..bch {
-                let l = ar + uw + a * 4;
-                let rt = uw + a * 4;
-                let bxx = aba(zd.add(l));
-                let dki = aba(op.add(rt));
-                bsv(op.add(rt), bis(dki, bxx, akx));
+            let jv = ym * 16;
+            let aci = (cols - jv) / 4;
+            for i in 0..aci {
+                let offset = base + jv + i * 4;
+                let hv = jv + i * 4;
+                let anh = vld1q_f32(ma.add(offset));
+                let bim = vld1q_f32(op.add(hv));
+                vst1q_f32(op.add(hv), vfmaq_f32(bim, anh, so));
             }
-            let zm = uw + bch * 4;
-            for r in zm..ec {
-                *op.add(r) += *zd.add(ar + r) * bdh;
+            let mg = jv + aci * 4;
+            for c in mg..cols {
+                *op.add(c) += *ma.add(base + c) * ade;
             }
         }
     }
@@ -360,12 +360,12 @@ pub fn dta(bd: &mut [f32], d: &[f32], c: &[f32], ec: usize, lk: usize) {
 
 
 #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-pub fn dta(bd: &mut [f32], d: &[f32], c: &[f32], ec: usize, lk: usize) {
-    for p in bd[..ec].el() { *p = 0.0; }
-    for m in 0..lk {
-        let ar = m * ec;
-        for r in 0..ec {
-            bd[r] += d[ar + r] * c[m];
+pub fn bnm(out: &mut [f32], w: &[f32], y: &[f32], cols: usize, rows: usize) {
+    for v in out[..cols].iter_mut() { *v = 0.0; }
+    for r in 0..rows {
+        let base = r * cols;
+        for c in 0..cols {
+            out[c] += w[base + c] * y[r];
         }
     }
 }
@@ -373,57 +373,57 @@ pub fn dta(bd: &mut [f32], d: &[f32], c: &[f32], ec: usize, lk: usize) {
 
 
 #[cfg(target_arch = "x86_64")]
-pub fn euq(bd: &mut [f32], d: &[f32], c: &[f32], ec: usize, lk: usize) {
-    if gvt() {
-        unsafe { ukq(bd, d, c, ec, lk); }
+pub fn cbq(out: &mut [f32], w: &[f32], y: &[f32], cols: usize, rows: usize) {
+    if dgd() {
+        unsafe { ncp(out, w, y, cols, rows); }
         return;
     }
     unsafe {
-        let zd = d.fq();
-        let op = bd.mw();
+        let ma = w.as_ptr();
+        let op = out.as_mut_ptr();
 
-        for m in 0..lk {
-            let bdh = c[m];
-            if bdh == 0.0 { continue; }
+        for r in 0..rows {
+            let ade = y[r];
+            if ade == 0.0 { continue; }
 
-            let akx = iid(bdh);
-            let ar = m * ec;
+            let so = _mm_set1_ps(ade);
+            let base = r * cols;
 
-            let avm = ec / 16;
-            for a in 0..avm {
-                let l = ar + a * 16;
-                let rt = a * 16;
+            let ym = cols / 16;
+            for i in 0..ym {
+                let offset = base + i * 16;
+                let hv = i * 16;
 
-                let cnv = zz(zd.add(l));
-                let dkc = zz(op.add(rt));
-                bpo(op.add(rt), aky(dkc, axl(cnv, akx)));
+                let avr = _mm_loadu_ps(ma.add(offset));
+                let bij = _mm_loadu_ps(op.add(hv));
+                _mm_storeu_ps(op.add(hv), _mm_add_ps(bij, _mm_mul_ps(avr, so)));
 
-                let blt = zz(zd.add(l + 4));
-                let csy = zz(op.add(rt + 4));
-                bpo(op.add(rt + 4), aky(csy, axl(blt, akx)));
+                let ahg = _mm_loadu_ps(ma.add(offset + 4));
+                let ayt = _mm_loadu_ps(op.add(hv + 4));
+                _mm_storeu_ps(op.add(hv + 4), _mm_add_ps(ayt, _mm_mul_ps(ahg, so)));
 
-                let bfs = zz(zd.add(l + 8));
-                let csz = zz(op.add(rt + 8));
-                bpo(op.add(rt + 8), aky(csz, axl(bfs, akx)));
+                let aeo = _mm_loadu_ps(ma.add(offset + 8));
+                let ayu = _mm_loadu_ps(op.add(hv + 8));
+                _mm_storeu_ps(op.add(hv + 8), _mm_add_ps(ayu, _mm_mul_ps(aeo, so)));
 
-                let bxu = zz(zd.add(l + 12));
-                let cta = zz(op.add(rt + 12));
-                bpo(op.add(rt + 12), aky(cta, axl(bxu, akx)));
+                let ane = _mm_loadu_ps(ma.add(offset + 12));
+                let ayv = _mm_loadu_ps(op.add(hv + 12));
+                _mm_storeu_ps(op.add(hv + 12), _mm_add_ps(ayv, _mm_mul_ps(ane, so)));
             }
 
-            let uw = avm * 16;
-            let bch = (ec - uw) / 4;
-            for a in 0..bch {
-                let l = ar + uw + a * 4;
-                let rt = uw + a * 4;
-                let bxx = zz(zd.add(l));
-                let dki = zz(op.add(rt));
-                bpo(op.add(rt), aky(dki, axl(bxx, akx)));
+            let jv = ym * 16;
+            let aci = (cols - jv) / 4;
+            for i in 0..aci {
+                let offset = base + jv + i * 4;
+                let hv = jv + i * 4;
+                let anh = _mm_loadu_ps(ma.add(offset));
+                let bim = _mm_loadu_ps(op.add(hv));
+                _mm_storeu_ps(op.add(hv), _mm_add_ps(bim, _mm_mul_ps(anh, so)));
             }
 
-            let zm = uw + bch * 4;
-            for r in zm..ec {
-                *op.add(r) += *zd.add(ar + r) * bdh;
+            let mg = jv + aci * 4;
+            for c in mg..cols {
+                *op.add(c) += *ma.add(base + c) * ade;
             }
         }
     }
@@ -431,55 +431,55 @@ pub fn euq(bd: &mut [f32], d: &[f32], c: &[f32], ec: usize, lk: usize) {
 
 
 #[cfg(target_arch = "aarch64")]
-pub fn euq(bd: &mut [f32], d: &[f32], c: &[f32], ec: usize, lk: usize) {
+pub fn cbq(out: &mut [f32], w: &[f32], y: &[f32], cols: usize, rows: usize) {
     unsafe {
-        let zd = d.fq();
-        let op = bd.mw();
-        for m in 0..lk {
-            let bdh = c[m];
-            if bdh == 0.0 { continue; }
-            let akx = dxk(bdh);
-            let ar = m * ec;
-            let avm = ec / 16;
-            for a in 0..avm {
-                let l = ar + a * 16;
-                let rt = a * 16;
-                let cnv = aba(zd.add(l));
-                let dkc = aba(op.add(rt));
-                bsv(op.add(rt), bis(dkc, cnv, akx));
-                let blt = aba(zd.add(l + 4));
-                let csy = aba(op.add(rt + 4));
-                bsv(op.add(rt + 4), bis(csy, blt, akx));
-                let bfs = aba(zd.add(l + 8));
-                let csz = aba(op.add(rt + 8));
-                bsv(op.add(rt + 8), bis(csz, bfs, akx));
-                let bxu = aba(zd.add(l + 12));
-                let cta = aba(op.add(rt + 12));
-                bsv(op.add(rt + 12), bis(cta, bxu, akx));
+        let ma = w.as_ptr();
+        let op = out.as_mut_ptr();
+        for r in 0..rows {
+            let ade = y[r];
+            if ade == 0.0 { continue; }
+            let so = vdupq_n_f32(ade);
+            let base = r * cols;
+            let ym = cols / 16;
+            for i in 0..ym {
+                let offset = base + i * 16;
+                let hv = i * 16;
+                let avr = vld1q_f32(ma.add(offset));
+                let bij = vld1q_f32(op.add(hv));
+                vst1q_f32(op.add(hv), vfmaq_f32(bij, avr, so));
+                let ahg = vld1q_f32(ma.add(offset + 4));
+                let ayt = vld1q_f32(op.add(hv + 4));
+                vst1q_f32(op.add(hv + 4), vfmaq_f32(ayt, ahg, so));
+                let aeo = vld1q_f32(ma.add(offset + 8));
+                let ayu = vld1q_f32(op.add(hv + 8));
+                vst1q_f32(op.add(hv + 8), vfmaq_f32(ayu, aeo, so));
+                let ane = vld1q_f32(ma.add(offset + 12));
+                let ayv = vld1q_f32(op.add(hv + 12));
+                vst1q_f32(op.add(hv + 12), vfmaq_f32(ayv, ane, so));
             }
-            let uw = avm * 16;
-            let bch = (ec - uw) / 4;
-            for a in 0..bch {
-                let l = ar + uw + a * 4;
-                let rt = uw + a * 4;
-                let bxx = aba(zd.add(l));
-                let dki = aba(op.add(rt));
-                bsv(op.add(rt), bis(dki, bxx, akx));
+            let jv = ym * 16;
+            let aci = (cols - jv) / 4;
+            for i in 0..aci {
+                let offset = base + jv + i * 4;
+                let hv = jv + i * 4;
+                let anh = vld1q_f32(ma.add(offset));
+                let bim = vld1q_f32(op.add(hv));
+                vst1q_f32(op.add(hv), vfmaq_f32(bim, anh, so));
             }
-            let zm = uw + bch * 4;
-            for r in zm..ec {
-                *op.add(r) += *zd.add(ar + r) * bdh;
+            let mg = jv + aci * 4;
+            for c in mg..cols {
+                *op.add(c) += *ma.add(base + c) * ade;
             }
         }
     }
 }
 
 #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-pub fn euq(bd: &mut [f32], d: &[f32], c: &[f32], ec: usize, lk: usize) {
-    for m in 0..lk {
-        let ar = m * ec;
-        for r in 0..ec {
-            bd[r] += d[ar + r] * c[m];
+pub fn cbq(out: &mut [f32], w: &[f32], y: &[f32], cols: usize, rows: usize) {
+    for r in 0..rows {
+        let base = r * cols;
+        for c in 0..cols {
+            out[c] += w[base + c] * y[r];
         }
     }
 }
@@ -493,60 +493,60 @@ pub fn euq(bd: &mut [f32], d: &[f32], c: &[f32], ec: usize, lk: usize) {
 
 
 #[cfg(target_arch = "x86_64")]
-pub fn ctd(aix: &mut [f32], bg: &[f32], b: &[f32], ec: usize, lk: usize) {
-    if gvt() {
-        unsafe { uzz(aix, bg, b, ec, lk); }
+pub fn ayw(qx: &mut [f32], ad: &[f32], x: &[f32], cols: usize, rows: usize) {
+    if dgd() {
+        unsafe { noo(qx, ad, x, cols, rows); }
         return;
     }
     unsafe {
-        let akc = aix.mw();
-        let zp = b.fq();
+        let sf = qx.as_mut_ptr();
+        let mh = x.as_ptr();
 
-        for m in 0..lk {
-            let dgw = bg[m];
-            if dgw == 0.0 { continue; }
+        for r in 0..rows {
+            let bgf = ad[r];
+            if bgf == 0.0 { continue; }
 
-            let bud = iid(dgw);
-            let ar = m * ec;
+            let alk = _mm_set1_ps(bgf);
+            let base = r * cols;
 
             
-            let avm = ec / 16;
-            for a in 0..avm {
-                let l = ar + a * 16;
-                let aze = a * 16;
+            let ym = cols / 16;
+            for i in 0..ym {
+                let offset = base + i * 16;
+                let aam = i * 16;
 
-                let fy = zz(zp.add(aze));
-                let cdx = zz(akc.add(l));
-                bpo(akc.add(l), aky(cdx, axl(bud, fy)));
+                let bm = _mm_loadu_ps(mh.add(aam));
+                let aqd = _mm_loadu_ps(sf.add(offset));
+                _mm_storeu_ps(sf.add(offset), _mm_add_ps(aqd, _mm_mul_ps(alk, bm)));
 
-                let dn = zz(zp.add(aze + 4));
-                let apo = zz(akc.add(l + 4));
-                bpo(akc.add(l + 4), aky(apo, axl(bud, dn)));
+                let x1 = _mm_loadu_ps(mh.add(aam + 4));
+                let vh = _mm_loadu_ps(sf.add(offset + 4));
+                _mm_storeu_ps(sf.add(offset + 4), _mm_add_ps(vh, _mm_mul_ps(alk, x1)));
 
-                let hy = zz(zp.add(aze + 8));
-                let us = zz(akc.add(l + 8));
-                bpo(akc.add(l + 8), aky(us, axl(bud, hy)));
+                let x2 = _mm_loadu_ps(mh.add(aam + 8));
+                let jq = _mm_loadu_ps(sf.add(offset + 8));
+                _mm_storeu_ps(sf.add(offset + 8), _mm_add_ps(jq, _mm_mul_ps(alk, x2)));
 
-                let ajr = zz(zp.add(aze + 12));
-                let cdy = zz(akc.add(l + 12));
-                bpo(akc.add(l + 12), aky(cdy, axl(bud, ajr)));
+                let x3 = _mm_loadu_ps(mh.add(aam + 12));
+                let aqe = _mm_loadu_ps(sf.add(offset + 12));
+                _mm_storeu_ps(sf.add(offset + 12), _mm_add_ps(aqe, _mm_mul_ps(alk, x3)));
             }
 
             
-            let uw = avm * 16;
-            let bch = (ec - uw) / 4;
-            for a in 0..bch {
-                let l = ar + uw + a * 4;
-                let aze = uw + a * 4;
-                let dnm = zz(zp.add(aze));
-                let hhg = zz(akc.add(l));
-                bpo(akc.add(l), aky(hhg, axl(bud, dnm)));
+            let jv = ym * 16;
+            let aci = (cols - jv) / 4;
+            for i in 0..aci {
+                let offset = base + jv + i * 4;
+                let aam = jv + i * 4;
+                let bke = _mm_loadu_ps(mh.add(aam));
+                let dny = _mm_loadu_ps(sf.add(offset));
+                _mm_storeu_ps(sf.add(offset), _mm_add_ps(dny, _mm_mul_ps(alk, bke)));
             }
 
             
-            let zm = uw + bch * 4;
-            for r in zm..ec {
-                *akc.add(ar + r) += dgw * *zp.add(r);
+            let mg = jv + aci * 4;
+            for c in mg..cols {
+                *sf.add(base + c) += bgf * *mh.add(c);
             }
         }
     }
@@ -554,44 +554,44 @@ pub fn ctd(aix: &mut [f32], bg: &[f32], b: &[f32], ec: usize, lk: usize) {
 
 
 #[cfg(target_arch = "aarch64")]
-pub fn ctd(aix: &mut [f32], bg: &[f32], b: &[f32], ec: usize, lk: usize) {
+pub fn ayw(qx: &mut [f32], ad: &[f32], x: &[f32], cols: usize, rows: usize) {
     unsafe {
-        let akc = aix.mw();
-        let zp = b.fq();
-        for m in 0..lk {
-            let dgw = bg[m];
-            if dgw == 0.0 { continue; }
-            let bud = dxk(dgw);
-            let ar = m * ec;
-            let avm = ec / 16;
-            for a in 0..avm {
-                let l = ar + a * 16;
-                let aze = a * 16;
-                let fy = aba(zp.add(aze));
-                let cdx = aba(akc.add(l));
-                bsv(akc.add(l), bis(cdx, bud, fy));
-                let dn = aba(zp.add(aze + 4));
-                let apo = aba(akc.add(l + 4));
-                bsv(akc.add(l + 4), bis(apo, bud, dn));
-                let hy = aba(zp.add(aze + 8));
-                let us = aba(akc.add(l + 8));
-                bsv(akc.add(l + 8), bis(us, bud, hy));
-                let ajr = aba(zp.add(aze + 12));
-                let cdy = aba(akc.add(l + 12));
-                bsv(akc.add(l + 12), bis(cdy, bud, ajr));
+        let sf = qx.as_mut_ptr();
+        let mh = x.as_ptr();
+        for r in 0..rows {
+            let bgf = ad[r];
+            if bgf == 0.0 { continue; }
+            let alk = vdupq_n_f32(bgf);
+            let base = r * cols;
+            let ym = cols / 16;
+            for i in 0..ym {
+                let offset = base + i * 16;
+                let aam = i * 16;
+                let bm = vld1q_f32(mh.add(aam));
+                let aqd = vld1q_f32(sf.add(offset));
+                vst1q_f32(sf.add(offset), vfmaq_f32(aqd, alk, bm));
+                let x1 = vld1q_f32(mh.add(aam + 4));
+                let vh = vld1q_f32(sf.add(offset + 4));
+                vst1q_f32(sf.add(offset + 4), vfmaq_f32(vh, alk, x1));
+                let x2 = vld1q_f32(mh.add(aam + 8));
+                let jq = vld1q_f32(sf.add(offset + 8));
+                vst1q_f32(sf.add(offset + 8), vfmaq_f32(jq, alk, x2));
+                let x3 = vld1q_f32(mh.add(aam + 12));
+                let aqe = vld1q_f32(sf.add(offset + 12));
+                vst1q_f32(sf.add(offset + 12), vfmaq_f32(aqe, alk, x3));
             }
-            let uw = avm * 16;
-            let bch = (ec - uw) / 4;
-            for a in 0..bch {
-                let l = ar + uw + a * 4;
-                let aze = uw + a * 4;
-                let dnm = aba(zp.add(aze));
-                let hhg = aba(akc.add(l));
-                bsv(akc.add(l), bis(hhg, bud, dnm));
+            let jv = ym * 16;
+            let aci = (cols - jv) / 4;
+            for i in 0..aci {
+                let offset = base + jv + i * 4;
+                let aam = jv + i * 4;
+                let bke = vld1q_f32(mh.add(aam));
+                let dny = vld1q_f32(sf.add(offset));
+                vst1q_f32(sf.add(offset), vfmaq_f32(dny, alk, bke));
             }
-            let zm = uw + bch * 4;
-            for r in zm..ec {
-                *akc.add(ar + r) += dgw * *zp.add(r);
+            let mg = jv + aci * 4;
+            for c in mg..cols {
+                *sf.add(base + c) += bgf * *mh.add(c);
             }
         }
     }
@@ -599,11 +599,11 @@ pub fn ctd(aix: &mut [f32], bg: &[f32], b: &[f32], ec: usize, lk: usize) {
 
 
 #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-pub fn ctd(aix: &mut [f32], bg: &[f32], b: &[f32], ec: usize, lk: usize) {
-    for m in 0..lk {
-        let ar = m * ec;
-        for r in 0..ec {
-            aix[ar + r] += bg[m] * b[r];
+pub fn ayw(qx: &mut [f32], ad: &[f32], x: &[f32], cols: usize, rows: usize) {
+    for r in 0..rows {
+        let base = r * cols;
+        for c in 0..cols {
+            qx[base + c] += ad[r] * x[c];
         }
     }
 }
@@ -617,136 +617,136 @@ pub fn ctd(aix: &mut [f32], bg: &[f32], b: &[f32], ec: usize, lk: usize) {
 
 
 #[cfg(target_arch = "x86_64")]
-pub fn cbl(bd: &mut [f32], b: &[f32], amz: &[f32]) -> f32 {
-    let bo = b.len();
+pub fn aox(out: &mut [f32], x: &[f32], tv: &[f32]) -> f32 {
+    let ae = x.len();
 
     
-    let rv = unsafe {
-        let zp = b.fq();
-        let mut wk = gxi();
-        let mut bav = gxi();
+    let ss = unsafe {
+        let mh = x.as_ptr();
+        let mut ke = _mm_setzero_ps();
+        let mut abo = _mm_setzero_ps();
 
-        let byq = bo / 8;
-        for a in 0..byq {
-            let ar = a * 8;
-            let abk = zz(zp.add(ar));
-            wk = aky(wk, axl(abk, abk));
-            let agy = zz(zp.add(ar + 4));
-            bav = aky(bav, axl(agy, agy));
+        let ant = ae / 8;
+        for i in 0..ant {
+            let base = i * 8;
+            let v0 = _mm_loadu_ps(mh.add(base));
+            ke = _mm_add_ps(ke, _mm_mul_ps(v0, v0));
+            let v1 = _mm_loadu_ps(mh.add(base + 4));
+            abo = _mm_add_ps(abo, _mm_mul_ps(v1, v1));
         }
-        wk = aky(wk, bav);
+        ke = _mm_add_ps(ke, abo);
 
         
-        let uw = byq * 8;
-        for a in (uw..bo).akt(4) {
-            if a + 4 <= bo {
-                let p = zz(zp.add(a));
-                wk = aky(wk, axl(p, p));
+        let jv = ant * 8;
+        for i in (jv..ae).step_by(4) {
+            if i + 4 <= ae {
+                let v = _mm_loadu_ps(mh.add(i));
+                ke = _mm_add_ps(ke, _mm_mul_ps(v, v));
             }
         }
 
-        let gd = jyd(wk, wk);
-        let sum = aky(wk, gd);
-        let fuq = jye(sum, sum, 1);
-        let es = jya(sum, fuq);
-        let mut result = jyc(es);
+        let hi = _mm_movehl_ps(ke, ke);
+        let sum = _mm_add_ps(ke, hi);
+        let cqm = _mm_shuffle_ps(sum, sum, 1);
+        let av = _mm_add_ss(sum, cqm);
+        let mut result = _mm_cvtss_f32(av);
 
         
-        let zm = (bo / 4) * 4;
-        for a in zm..bo {
-            result += *zp.add(a) * *zp.add(a);
+        let mg = (ae / 4) * 4;
+        for i in mg..ae {
+            result += *mh.add(i) * *mh.add(i);
         }
         result
     };
 
-    let bfd = super::backprop::ccw(rv / bo as f32 + super::model::HC_);
-    let bva = 1.0 / bfd;
+    let aeg = super::backprop::apq(ss / ae as f32 + super::model::HT_);
+    let alu = 1.0 / aeg;
 
     
     unsafe {
-        let zp = b.fq();
-        let zd = amz.fq();
-        let op = bd.mw();
-        let hol = iid(bva);
+        let mh = x.as_ptr();
+        let ma = tv.as_ptr();
+        let op = out.as_mut_ptr();
+        let dsg = _mm_set1_ps(alu);
 
-        let bbe = bo / 4;
-        for a in 0..bbe {
-            let dz = a * 4;
-            let dnm = zz(zp.add(dz));
-            let bxx = zz(zd.add(dz));
-            let dtp = axl(dnm, hol);
-            bpo(op.add(dz), axl(dtp, bxx));
+        let abu = ae / 4;
+        for i in 0..abu {
+            let off = i * 4;
+            let bke = _mm_loadu_ps(mh.add(off));
+            let anh = _mm_loadu_ps(ma.add(off));
+            let bnv = _mm_mul_ps(bke, dsg);
+            _mm_storeu_ps(op.add(off), _mm_mul_ps(bnv, anh));
         }
 
         
-        let zm = bbe * 4;
-        for a in zm..bo {
-            *op.add(a) = *zp.add(a) * bva * *zd.add(a);
+        let mg = abu * 4;
+        for i in mg..ae {
+            *op.add(i) = *mh.add(i) * alu * *ma.add(i);
         }
     }
 
-    bfd
+    aeg
 }
 
 
 #[cfg(target_arch = "aarch64")]
-pub fn cbl(bd: &mut [f32], b: &[f32], amz: &[f32]) -> f32 {
-    let bo = b.len();
-    let rv = unsafe {
-        let zp = b.fq();
-        let mut wk = dxk(0.0);
-        let mut bav = dxk(0.0);
-        let byq = bo / 8;
-        for a in 0..byq {
-            let ar = a * 8;
-            let abk = aba(zp.add(ar));
-            wk = bis(wk, abk, abk);
-            let agy = aba(zp.add(ar + 4));
-            bav = bis(bav, agy, agy);
+pub fn aox(out: &mut [f32], x: &[f32], tv: &[f32]) -> f32 {
+    let ae = x.len();
+    let ss = unsafe {
+        let mh = x.as_ptr();
+        let mut ke = vdupq_n_f32(0.0);
+        let mut abo = vdupq_n_f32(0.0);
+        let ant = ae / 8;
+        for i in 0..ant {
+            let base = i * 8;
+            let v0 = vld1q_f32(mh.add(base));
+            ke = vfmaq_f32(ke, v0, v0);
+            let v1 = vld1q_f32(mh.add(base + 4));
+            abo = vfmaq_f32(abo, v1, v1);
         }
-        wk = igf(wk, bav);
-        let mut result = xqg(wk);
-        let zm = (bo / 4) * 4;
-        for a in zm..bo {
-            result += *zp.add(a) * *zp.add(a);
+        ke = vaddq_f32(ke, abo);
+        let mut result = vaddvq_f32(ke);
+        let mg = (ae / 4) * 4;
+        for i in mg..ae {
+            result += *mh.add(i) * *mh.add(i);
         }
         result
     };
-    let bfd = super::backprop::ccw(rv / bo as f32 + super::model::HC_);
-    let bva = 1.0 / bfd;
+    let aeg = super::backprop::apq(ss / ae as f32 + super::model::HT_);
+    let alu = 1.0 / aeg;
     unsafe {
-        let zp = b.fq();
-        let zd = amz.fq();
-        let op = bd.mw();
-        let hol = dxk(bva);
-        let bbe = bo / 4;
-        for a in 0..bbe {
-            let dz = a * 4;
-            let dnm = aba(zp.add(dz));
-            let bxx = aba(zd.add(dz));
-            let dtp = pyq(dnm, hol);
-            bsv(op.add(dz), pyq(dtp, bxx));
+        let mh = x.as_ptr();
+        let ma = tv.as_ptr();
+        let op = out.as_mut_ptr();
+        let dsg = vdupq_n_f32(alu);
+        let abu = ae / 4;
+        for i in 0..abu {
+            let off = i * 4;
+            let bke = vld1q_f32(mh.add(off));
+            let anh = vld1q_f32(ma.add(off));
+            let bnv = vmulq_f32(bke, dsg);
+            vst1q_f32(op.add(off), vmulq_f32(bnv, anh));
         }
-        let zm = bbe * 4;
-        for a in zm..bo {
-            *op.add(a) = *zp.add(a) * bva * *zd.add(a);
+        let mg = abu * 4;
+        for i in mg..ae {
+            *op.add(i) = *mh.add(i) * alu * *ma.add(i);
         }
     }
-    bfd
+    aeg
 }
 
 
 #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-pub fn cbl(bd: &mut [f32], b: &[f32], amz: &[f32]) -> f32 {
-    let bo = b.len();
-    let mut rv = 0.0f32;
-    for &p in b { rv += p * p; }
-    let bfd = super::backprop::ccw(rv / bo as f32 + super::model::HC_);
-    let bva = 1.0 / bfd;
-    for a in 0..bo {
-        bd[a] = b[a] * bva * amz[a];
+pub fn aox(out: &mut [f32], x: &[f32], tv: &[f32]) -> f32 {
+    let ae = x.len();
+    let mut ss = 0.0f32;
+    for &v in x { ss += v * v; }
+    let aeg = super::backprop::apq(ss / ae as f32 + super::model::HT_);
+    let alu = 1.0 / aeg;
+    for i in 0..ae {
+        out[i] = x[i] * alu * tv[i];
     }
-    bfd
+    aeg
 }
 
 
@@ -755,152 +755,152 @@ pub fn cbl(bd: &mut [f32], b: &[f32], amz: &[f32]) -> f32 {
 
 
 #[cfg(target_arch = "x86_64")]
-pub fn pxz(bd: &mut [f32], q: &[f32], o: &[f32], len: usize) {
-    if gvt() {
-        unsafe { xqw(bd, q, o, len); }
+pub fn jpv(out: &mut [f32], a: &[f32], b: &[f32], len: usize) {
+    if dgd() {
+        unsafe { pri(out, a, b, len); }
         return;
     }
     unsafe {
-        let yj = q.fq();
-        let bp = o.fq();
-        let op = bd.mw();
+        let lf = a.as_ptr();
+        let bp = b.as_ptr();
+        let op = out.as_mut_ptr();
 
-        let bbe = len / 4;
-        for a in 0..bbe {
-            let dz = a * 4;
-            let btg = zz(yj.add(dz));
-            let yu = zz(bp.add(dz));
-            bpo(op.add(dz), aky(btg, yu));
+        let abu = len / 4;
+        for i in 0..abu {
+            let off = i * 4;
+            let akw = _mm_loadu_ps(lf.add(off));
+            let lm = _mm_loadu_ps(bp.add(off));
+            _mm_storeu_ps(op.add(off), _mm_add_ps(akw, lm));
         }
 
-        let zm = bbe * 4;
-        for a in zm..len {
-            *op.add(a) = *yj.add(a) + *bp.add(a);
+        let mg = abu * 4;
+        for i in mg..len {
+            *op.add(i) = *lf.add(i) + *bp.add(i);
         }
     }
 }
 
 #[cfg(target_arch = "aarch64")]
-pub fn pxz(bd: &mut [f32], q: &[f32], o: &[f32], len: usize) {
+pub fn jpv(out: &mut [f32], a: &[f32], b: &[f32], len: usize) {
     unsafe {
-        let yj = q.fq();
-        let bp = o.fq();
-        let op = bd.mw();
-        let bbe = len / 4;
-        for a in 0..bbe {
-            let dz = a * 4;
-            let btg = aba(yj.add(dz));
-            let yu = aba(bp.add(dz));
-            bsv(op.add(dz), igf(btg, yu));
+        let lf = a.as_ptr();
+        let bp = b.as_ptr();
+        let op = out.as_mut_ptr();
+        let abu = len / 4;
+        for i in 0..abu {
+            let off = i * 4;
+            let akw = vld1q_f32(lf.add(off));
+            let lm = vld1q_f32(bp.add(off));
+            vst1q_f32(op.add(off), vaddq_f32(akw, lm));
         }
-        let zm = bbe * 4;
-        for a in zm..len {
-            *op.add(a) = *yj.add(a) + *bp.add(a);
+        let mg = abu * 4;
+        for i in mg..len {
+            *op.add(i) = *lf.add(i) + *bp.add(i);
         }
     }
 }
 
 #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-pub fn pxz(bd: &mut [f32], q: &[f32], o: &[f32], len: usize) {
-    for a in 0..len { bd[a] = q[a] + o[a]; }
+pub fn jpv(out: &mut [f32], a: &[f32], b: &[f32], len: usize) {
+    for i in 0..len { out[i] = a[i] + b[i]; }
 }
 
 
 #[cfg(target_arch = "x86_64")]
-pub fn pya(q: &mut [f32], o: &[f32], len: usize) {
-    if gvt() {
-        unsafe { xqx(q, o, len); }
+pub fn jpw(a: &mut [f32], b: &[f32], len: usize) {
+    if dgd() {
+        unsafe { prj(a, b, len); }
         return;
     }
     unsafe {
-        let yj = q.mw();
-        let bp = o.fq();
+        let lf = a.as_mut_ptr();
+        let bp = b.as_ptr();
 
-        let bbe = len / 4;
-        for a in 0..bbe {
-            let dz = a * 4;
-            let btg = zz(yj.add(dz));
-            let yu = zz(bp.add(dz));
-            bpo(yj.add(dz), aky(btg, yu));
+        let abu = len / 4;
+        for i in 0..abu {
+            let off = i * 4;
+            let akw = _mm_loadu_ps(lf.add(off));
+            let lm = _mm_loadu_ps(bp.add(off));
+            _mm_storeu_ps(lf.add(off), _mm_add_ps(akw, lm));
         }
 
-        let zm = bbe * 4;
-        for a in zm..len {
-            *yj.add(a) += *bp.add(a);
+        let mg = abu * 4;
+        for i in mg..len {
+            *lf.add(i) += *bp.add(i);
         }
     }
 }
 
 #[cfg(target_arch = "aarch64")]
-pub fn pya(q: &mut [f32], o: &[f32], len: usize) {
+pub fn jpw(a: &mut [f32], b: &[f32], len: usize) {
     unsafe {
-        let yj = q.mw();
-        let bp = o.fq();
-        let bbe = len / 4;
-        for a in 0..bbe {
-            let dz = a * 4;
-            let btg = aba(yj.add(dz));
-            let yu = aba(bp.add(dz));
-            bsv(yj.add(dz), igf(btg, yu));
+        let lf = a.as_mut_ptr();
+        let bp = b.as_ptr();
+        let abu = len / 4;
+        for i in 0..abu {
+            let off = i * 4;
+            let akw = vld1q_f32(lf.add(off));
+            let lm = vld1q_f32(bp.add(off));
+            vst1q_f32(lf.add(off), vaddq_f32(akw, lm));
         }
-        let zm = bbe * 4;
-        for a in zm..len {
-            *yj.add(a) += *bp.add(a);
+        let mg = abu * 4;
+        for i in mg..len {
+            *lf.add(i) += *bp.add(i);
         }
     }
 }
 
 #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-pub fn pya(q: &mut [f32], o: &[f32], len: usize) {
-    for a in 0..len { q[a] += o[a]; }
+pub fn jpw(a: &mut [f32], b: &[f32], len: usize) {
+    for i in 0..len { a[i] += b[i]; }
 }
 
 
 #[cfg(target_arch = "x86_64")]
-pub fn pyb(q: &mut [f32], bfe: f32, len: usize) {
-    if gvt() {
-        unsafe { xqy(q, bfe, len); }
+pub fn jpx(a: &mut [f32], aeh: f32, len: usize) {
+    if dgd() {
+        unsafe { prl(a, aeh, len); }
         return;
     }
     unsafe {
-        let yj = q.mw();
-        let bxk = iid(bfe);
+        let lf = a.as_mut_ptr();
+        let amx = _mm_set1_ps(aeh);
 
-        let bbe = len / 4;
-        for a in 0..bbe {
-            let dz = a * 4;
-            let p = zz(yj.add(dz));
-            bpo(yj.add(dz), axl(p, bxk));
+        let abu = len / 4;
+        for i in 0..abu {
+            let off = i * 4;
+            let v = _mm_loadu_ps(lf.add(off));
+            _mm_storeu_ps(lf.add(off), _mm_mul_ps(v, amx));
         }
 
-        let zm = bbe * 4;
-        for a in zm..len {
-            *yj.add(a) *= bfe;
+        let mg = abu * 4;
+        for i in mg..len {
+            *lf.add(i) *= aeh;
         }
     }
 }
 
 #[cfg(target_arch = "aarch64")]
-pub fn pyb(q: &mut [f32], bfe: f32, len: usize) {
+pub fn jpx(a: &mut [f32], aeh: f32, len: usize) {
     unsafe {
-        let yj = q.mw();
-        let bxk = dxk(bfe);
-        let bbe = len / 4;
-        for a in 0..bbe {
-            let dz = a * 4;
-            let p = aba(yj.add(dz));
-            bsv(yj.add(dz), pyq(p, bxk));
+        let lf = a.as_mut_ptr();
+        let amx = vdupq_n_f32(aeh);
+        let abu = len / 4;
+        for i in 0..abu {
+            let off = i * 4;
+            let v = vld1q_f32(lf.add(off));
+            vst1q_f32(lf.add(off), vmulq_f32(v, amx));
         }
-        let zm = bbe * 4;
-        for a in zm..len {
-            *yj.add(a) *= bfe;
+        let mg = abu * 4;
+        for i in mg..len {
+            *lf.add(i) *= aeh;
         }
     }
 }
 
 #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-pub fn pyb(q: &mut [f32], bfe: f32, len: usize) {
-    for a in 0..len { q[a] *= bfe; }
+pub fn jpx(a: &mut [f32], aeh: f32, len: usize) {
+    for i in 0..len { a[i] *= aeh; }
 }
 
 
@@ -918,67 +918,67 @@ pub fn pyb(q: &mut [f32], bfe: f32, len: usize) {
 
 
 #[cfg(target_arch = "x86_64")]
-#[dmi(aiy = "avx2,fma")]
+#[target_feature(enable = "avx2,fma")]
 #[inline]
-unsafe fn sag(q: &[f32], o: &[f32], len: usize) -> f32 {
-    let yj = q.fq();
-    let bp = o.fq();
+unsafe fn lgy(a: &[f32], b: &[f32], len: usize) -> f32 {
+    let lf = a.as_ptr();
+    let bp = b.as_ptr();
 
-    let mut wk = gxh();
-    let mut bav = gxh();
-    let mut btd = gxh();
-    let mut ddu = gxh();
+    let mut ke = _mm256_setzero_ps();
+    let mut abo = _mm256_setzero_ps();
+    let mut akv = _mm256_setzero_ps();
+    let mut bem = _mm256_setzero_ps();
 
     
-    let deu = len / 32;
-    for a in 0..deu {
-        let ar = a * 32;
-        let bfv = zy(yj.add(ar));
-        let wu = zy(bp.add(ar));
-        wk = bdi(bfv, wu, wk);
+    let bfg = len / 32;
+    for i in 0..bfg {
+        let base = i * 32;
+        let abn = _mm256_loadu_ps(lf.add(base));
+        let kl = _mm256_loadu_ps(bp.add(base));
+        ke = _mm256_fmadd_ps(abn, kl, ke);
 
-        let km = zy(yj.add(ar + 8));
-        let of = zy(bp.add(ar + 8));
-        bav = bdi(km, of, bav);
+        let eb = _mm256_loadu_ps(lf.add(base + 8));
+        let gf = _mm256_loadu_ps(bp.add(base + 8));
+        abo = _mm256_fmadd_ps(eb, gf, abo);
 
-        let oe = zy(yj.add(ar + 16));
-        let tb = zy(bp.add(ar + 16));
-        btd = bdi(oe, tb, btd);
+        let fy = _mm256_loadu_ps(lf.add(base + 16));
+        let iq = _mm256_loadu_ps(bp.add(base + 16));
+        akv = _mm256_fmadd_ps(fy, iq, akv);
 
-        let vy = zy(yj.add(ar + 24));
-        let ajw = zy(bp.add(ar + 24));
-        ddu = bdi(vy, ajw, ddu);
+        let kb = _mm256_loadu_ps(lf.add(base + 24));
+        let sc = _mm256_loadu_ps(bp.add(base + 24));
+        bem = _mm256_fmadd_ps(kb, sc, bem);
     }
 
     
-    wk = gxg(wk, bav);
-    btd = gxg(btd, ddu);
-    wk = gxg(wk, btd);
+    ke = _mm256_add_ps(ke, abo);
+    akv = _mm256_add_ps(akv, bem);
+    ke = _mm256_add_ps(ke, akv);
 
     
-    let uw = deu * 32;
-    let cmf = (len - uw) / 8;
-    for a in 0..cmf {
-        let l = uw + a * 8;
-        let btg = zy(yj.add(l));
-        let yu = zy(bp.add(l));
-        wk = bdi(btg, yu, wk);
+    let jv = bfg * 32;
+    let aut = (len - jv) / 8;
+    for i in 0..aut {
+        let offset = jv + i * 8;
+        let akw = _mm256_loadu_ps(lf.add(offset));
+        let lm = _mm256_loadu_ps(bp.add(offset));
+        ke = _mm256_fmadd_ps(akw, lm, ke);
     }
 
     
-    let lcb = qcp(wk, 1);
-    let ljd = qcn(wk);
-    let fvu = aky(ljd, lcb);
-    let gd = jyd(fvu, fvu);
-    let sum = aky(fvu, gd);
-    let fuq = jye(sum, sum, 1);
-    let es = jya(sum, fuq);
-    let mut result = jyc(es);
+    let gar = _mm256_extractf128_ps(ke, 1);
+    let gfv = _mm256_castps256_ps128(ke);
+    let cre = _mm_add_ps(gfv, gar);
+    let hi = _mm_movehl_ps(cre, cre);
+    let sum = _mm_add_ps(cre, hi);
+    let cqm = _mm_shuffle_ps(sum, sum, 1);
+    let av = _mm_add_ss(sum, cqm);
+    let mut result = _mm_cvtss_f32(av);
 
     
-    let zm = uw + cmf * 8;
-    for a in zm..len {
-        result += *yj.add(a) * *bp.add(a);
+    let mg = jv + aut * 8;
+    for i in mg..len {
+        result += *lf.add(i) * *bp.add(i);
     }
 
     result
@@ -986,311 +986,311 @@ unsafe fn sag(q: &[f32], o: &[f32], len: usize) -> f32 {
 
 
 #[cfg(target_arch = "x86_64")]
-#[dmi(aiy = "avx2,fma")]
-unsafe fn zci(bd: &mut [f32], d: &[f32], b: &[f32], ec: usize, lk: usize) {
-    for m in 0..lk {
-        let ar = m * ec;
-        bd[m] = sag(&d[ar..ar + ec], b, ec);
+#[target_feature(enable = "avx2,fma")]
+unsafe fn qot(out: &mut [f32], w: &[f32], x: &[f32], cols: usize, rows: usize) {
+    for r in 0..rows {
+        let base = r * cols;
+        out[r] = lgy(&w[base..base + cols], x, cols);
     }
 }
 
 
 #[cfg(target_arch = "x86_64")]
-#[dmi(aiy = "avx2,fma")]
-unsafe fn ukr(bd: &mut [f32], d: &[f32], c: &[f32], ec: usize, lk: usize) {
-    for p in bd[..ec].el() { *p = 0.0; }
+#[target_feature(enable = "avx2,fma")]
+unsafe fn ncq(out: &mut [f32], w: &[f32], y: &[f32], cols: usize, rows: usize) {
+    for v in out[..cols].iter_mut() { *v = 0.0; }
 
-    let zd = d.fq();
-    let op = bd.mw();
+    let ma = w.as_ptr();
+    let op = out.as_mut_ptr();
 
-    for m in 0..lk {
-        let bdh = c[m];
-        if bdh == 0.0 { continue; }
+    for r in 0..rows {
+        let ade = y[r];
+        if ade == 0.0 { continue; }
 
-        let akx = iib(bdh);
-        let ar = m * ec;
-
-        
-        let deu = ec / 32;
-        for a in 0..deu {
-            let l = ar + a * 32;
-            let rt = a * 32;
-
-            let dkc = zy(op.add(rt));
-            let cnv = zy(zd.add(l));
-            bpn(op.add(rt), bdi(cnv, akx, dkc));
-
-            let csy = zy(op.add(rt + 8));
-            let blt = zy(zd.add(l + 8));
-            bpn(op.add(rt + 8), bdi(blt, akx, csy));
-
-            let csz = zy(op.add(rt + 16));
-            let bfs = zy(zd.add(l + 16));
-            bpn(op.add(rt + 16), bdi(bfs, akx, csz));
-
-            let cta = zy(op.add(rt + 24));
-            let bxu = zy(zd.add(l + 24));
-            bpn(op.add(rt + 24), bdi(bxu, akx, cta));
-        }
+        let so = _mm256_set1_ps(ade);
+        let base = r * cols;
 
         
-        let uw = deu * 32;
-        let cmf = (ec - uw) / 8;
-        for a in 0..cmf {
-            let l = ar + uw + a * 8;
-            let rt = uw + a * 8;
-            let dki = zy(op.add(rt));
-            let bxx = zy(zd.add(l));
-            bpn(op.add(rt), bdi(bxx, akx, dki));
+        let bfg = cols / 32;
+        for i in 0..bfg {
+            let offset = base + i * 32;
+            let hv = i * 32;
+
+            let bij = _mm256_loadu_ps(op.add(hv));
+            let avr = _mm256_loadu_ps(ma.add(offset));
+            _mm256_storeu_ps(op.add(hv), _mm256_fmadd_ps(avr, so, bij));
+
+            let ayt = _mm256_loadu_ps(op.add(hv + 8));
+            let ahg = _mm256_loadu_ps(ma.add(offset + 8));
+            _mm256_storeu_ps(op.add(hv + 8), _mm256_fmadd_ps(ahg, so, ayt));
+
+            let ayu = _mm256_loadu_ps(op.add(hv + 16));
+            let aeo = _mm256_loadu_ps(ma.add(offset + 16));
+            _mm256_storeu_ps(op.add(hv + 16), _mm256_fmadd_ps(aeo, so, ayu));
+
+            let ayv = _mm256_loadu_ps(op.add(hv + 24));
+            let ane = _mm256_loadu_ps(ma.add(offset + 24));
+            _mm256_storeu_ps(op.add(hv + 24), _mm256_fmadd_ps(ane, so, ayv));
         }
 
         
-        let zm = uw + cmf * 8;
-        for r in zm..ec {
-            *op.add(r) += *zd.add(ar + r) * bdh;
-        }
-    }
-}
-
-
-#[cfg(target_arch = "x86_64")]
-#[dmi(aiy = "avx2,fma")]
-unsafe fn ukq(bd: &mut [f32], d: &[f32], c: &[f32], ec: usize, lk: usize) {
-    let zd = d.fq();
-    let op = bd.mw();
-
-    for m in 0..lk {
-        let bdh = c[m];
-        if bdh == 0.0 { continue; }
-
-        let akx = iib(bdh);
-        let ar = m * ec;
-
-        let deu = ec / 32;
-        for a in 0..deu {
-            let l = ar + a * 32;
-            let rt = a * 32;
-
-            let dkc = zy(op.add(rt));
-            let cnv = zy(zd.add(l));
-            bpn(op.add(rt), bdi(cnv, akx, dkc));
-
-            let csy = zy(op.add(rt + 8));
-            let blt = zy(zd.add(l + 8));
-            bpn(op.add(rt + 8), bdi(blt, akx, csy));
-
-            let csz = zy(op.add(rt + 16));
-            let bfs = zy(zd.add(l + 16));
-            bpn(op.add(rt + 16), bdi(bfs, akx, csz));
-
-            let cta = zy(op.add(rt + 24));
-            let bxu = zy(zd.add(l + 24));
-            bpn(op.add(rt + 24), bdi(bxu, akx, cta));
-        }
-
-        let uw = deu * 32;
-        let cmf = (ec - uw) / 8;
-        for a in 0..cmf {
-            let l = ar + uw + a * 8;
-            let rt = uw + a * 8;
-            let dki = zy(op.add(rt));
-            let bxx = zy(zd.add(l));
-            bpn(op.add(rt), bdi(bxx, akx, dki));
-        }
-
-        let zm = uw + cmf * 8;
-        for r in zm..ec {
-            *op.add(r) += *zd.add(ar + r) * bdh;
-        }
-    }
-}
-
-
-#[cfg(target_arch = "x86_64")]
-#[dmi(aiy = "avx2,fma")]
-unsafe fn uzz(aix: &mut [f32], bg: &[f32], b: &[f32], ec: usize, lk: usize) {
-    let akc = aix.mw();
-    let zp = b.fq();
-
-    for m in 0..lk {
-        let dgw = bg[m];
-        if dgw == 0.0 { continue; }
-
-        let bud = iib(dgw);
-        let ar = m * ec;
-
-        
-        let deu = ec / 32;
-        for a in 0..deu {
-            let l = ar + a * 32;
-            let aze = a * 32;
-
-            let fy = zy(zp.add(aze));
-            let cdx = zy(akc.add(l));
-            bpn(akc.add(l), bdi(bud, fy, cdx));
-
-            let dn = zy(zp.add(aze + 8));
-            let apo = zy(akc.add(l + 8));
-            bpn(akc.add(l + 8), bdi(bud, dn, apo));
-
-            let hy = zy(zp.add(aze + 16));
-            let us = zy(akc.add(l + 16));
-            bpn(akc.add(l + 16), bdi(bud, hy, us));
-
-            let ajr = zy(zp.add(aze + 24));
-            let cdy = zy(akc.add(l + 24));
-            bpn(akc.add(l + 24), bdi(bud, ajr, cdy));
+        let jv = bfg * 32;
+        let aut = (cols - jv) / 8;
+        for i in 0..aut {
+            let offset = base + jv + i * 8;
+            let hv = jv + i * 8;
+            let bim = _mm256_loadu_ps(op.add(hv));
+            let anh = _mm256_loadu_ps(ma.add(offset));
+            _mm256_storeu_ps(op.add(hv), _mm256_fmadd_ps(anh, so, bim));
         }
 
         
-        let uw = deu * 32;
-        let cmf = (ec - uw) / 8;
-        for a in 0..cmf {
-            let l = ar + uw + a * 8;
-            let aze = uw + a * 8;
-            let dnm = zy(zp.add(aze));
-            let hhg = zy(akc.add(l));
-            bpn(akc.add(l), bdi(bud, dnm, hhg));
+        let mg = jv + aut * 8;
+        for c in mg..cols {
+            *op.add(c) += *ma.add(base + c) * ade;
+        }
+    }
+}
+
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
+unsafe fn ncp(out: &mut [f32], w: &[f32], y: &[f32], cols: usize, rows: usize) {
+    let ma = w.as_ptr();
+    let op = out.as_mut_ptr();
+
+    for r in 0..rows {
+        let ade = y[r];
+        if ade == 0.0 { continue; }
+
+        let so = _mm256_set1_ps(ade);
+        let base = r * cols;
+
+        let bfg = cols / 32;
+        for i in 0..bfg {
+            let offset = base + i * 32;
+            let hv = i * 32;
+
+            let bij = _mm256_loadu_ps(op.add(hv));
+            let avr = _mm256_loadu_ps(ma.add(offset));
+            _mm256_storeu_ps(op.add(hv), _mm256_fmadd_ps(avr, so, bij));
+
+            let ayt = _mm256_loadu_ps(op.add(hv + 8));
+            let ahg = _mm256_loadu_ps(ma.add(offset + 8));
+            _mm256_storeu_ps(op.add(hv + 8), _mm256_fmadd_ps(ahg, so, ayt));
+
+            let ayu = _mm256_loadu_ps(op.add(hv + 16));
+            let aeo = _mm256_loadu_ps(ma.add(offset + 16));
+            _mm256_storeu_ps(op.add(hv + 16), _mm256_fmadd_ps(aeo, so, ayu));
+
+            let ayv = _mm256_loadu_ps(op.add(hv + 24));
+            let ane = _mm256_loadu_ps(ma.add(offset + 24));
+            _mm256_storeu_ps(op.add(hv + 24), _mm256_fmadd_ps(ane, so, ayv));
+        }
+
+        let jv = bfg * 32;
+        let aut = (cols - jv) / 8;
+        for i in 0..aut {
+            let offset = base + jv + i * 8;
+            let hv = jv + i * 8;
+            let bim = _mm256_loadu_ps(op.add(hv));
+            let anh = _mm256_loadu_ps(ma.add(offset));
+            _mm256_storeu_ps(op.add(hv), _mm256_fmadd_ps(anh, so, bim));
+        }
+
+        let mg = jv + aut * 8;
+        for c in mg..cols {
+            *op.add(c) += *ma.add(base + c) * ade;
+        }
+    }
+}
+
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
+unsafe fn noo(qx: &mut [f32], ad: &[f32], x: &[f32], cols: usize, rows: usize) {
+    let sf = qx.as_mut_ptr();
+    let mh = x.as_ptr();
+
+    for r in 0..rows {
+        let bgf = ad[r];
+        if bgf == 0.0 { continue; }
+
+        let alk = _mm256_set1_ps(bgf);
+        let base = r * cols;
+
+        
+        let bfg = cols / 32;
+        for i in 0..bfg {
+            let offset = base + i * 32;
+            let aam = i * 32;
+
+            let bm = _mm256_loadu_ps(mh.add(aam));
+            let aqd = _mm256_loadu_ps(sf.add(offset));
+            _mm256_storeu_ps(sf.add(offset), _mm256_fmadd_ps(alk, bm, aqd));
+
+            let x1 = _mm256_loadu_ps(mh.add(aam + 8));
+            let vh = _mm256_loadu_ps(sf.add(offset + 8));
+            _mm256_storeu_ps(sf.add(offset + 8), _mm256_fmadd_ps(alk, x1, vh));
+
+            let x2 = _mm256_loadu_ps(mh.add(aam + 16));
+            let jq = _mm256_loadu_ps(sf.add(offset + 16));
+            _mm256_storeu_ps(sf.add(offset + 16), _mm256_fmadd_ps(alk, x2, jq));
+
+            let x3 = _mm256_loadu_ps(mh.add(aam + 24));
+            let aqe = _mm256_loadu_ps(sf.add(offset + 24));
+            _mm256_storeu_ps(sf.add(offset + 24), _mm256_fmadd_ps(alk, x3, aqe));
         }
 
         
-        let zm = uw + cmf * 8;
-        for r in zm..ec {
-            *akc.add(ar + r) += dgw * *zp.add(r);
+        let jv = bfg * 32;
+        let aut = (cols - jv) / 8;
+        for i in 0..aut {
+            let offset = base + jv + i * 8;
+            let aam = jv + i * 8;
+            let bke = _mm256_loadu_ps(mh.add(aam));
+            let dny = _mm256_loadu_ps(sf.add(offset));
+            _mm256_storeu_ps(sf.add(offset), _mm256_fmadd_ps(alk, bke, dny));
+        }
+
+        
+        let mg = jv + aut * 8;
+        for c in mg..cols {
+            *sf.add(base + c) += bgf * *mh.add(c);
         }
     }
 }
 
 
 #[cfg(target_arch = "x86_64")]
-#[dmi(aiy = "avx2,fma")]
-unsafe fn zkg(bd: &mut [f32], b: &[f32], amz: &[f32]) -> f32 {
-    let bo = b.len();
-    let zp = b.fq();
+#[target_feature(enable = "avx2,fma")]
+unsafe fn qul(out: &mut [f32], x: &[f32], tv: &[f32]) -> f32 {
+    let ae = x.len();
+    let mh = x.as_ptr();
 
     
-    let mut wk = gxh();
-    let mut bav = gxh();
+    let mut ke = _mm256_setzero_ps();
+    let mut abo = _mm256_setzero_ps();
 
-    let avm = bo / 16;
-    for a in 0..avm {
-        let ar = a * 16;
-        let abk = zy(zp.add(ar));
-        wk = bdi(abk, abk, wk);
-        let agy = zy(zp.add(ar + 8));
-        bav = bdi(agy, agy, bav);
+    let ym = ae / 16;
+    for i in 0..ym {
+        let base = i * 16;
+        let v0 = _mm256_loadu_ps(mh.add(base));
+        ke = _mm256_fmadd_ps(v0, v0, ke);
+        let v1 = _mm256_loadu_ps(mh.add(base + 8));
+        abo = _mm256_fmadd_ps(v1, v1, abo);
     }
-    wk = gxg(wk, bav);
+    ke = _mm256_add_ps(ke, abo);
 
     
-    let uw = avm * 16;
-    let cmf = (bo - uw) / 8;
-    for a in 0..cmf {
-        let p = zy(zp.add(uw + a * 8));
-        wk = bdi(p, p, wk);
-    }
-
-    
-    let lcb = qcp(wk, 1);
-    let ljd = qcn(wk);
-    let fvu = aky(ljd, lcb);
-    let gd = jyd(fvu, fvu);
-    let sum = aky(fvu, gd);
-    let fuq = jye(sum, sum, 1);
-    let es = jya(sum, fuq);
-    let mut rv = jyc(es);
-
-    
-    let zm = uw + cmf * 8;
-    for a in zm..bo {
-        rv += *zp.add(a) * *zp.add(a);
-    }
-
-    let bfd = super::backprop::ccw(rv / bo as f32 + super::model::HC_);
-    let bva = 1.0 / bfd;
-
-    
-    let zd = amz.fq();
-    let op = bd.mw();
-    let hol = iib(bva);
-
-    let byq = bo / 8;
-    for a in 0..byq {
-        let dz = a * 8;
-        let dnm = zy(zp.add(dz));
-        let bxx = zy(zd.add(dz));
-        let dtp = msm(dnm, hol);
-        bpn(op.add(dz), msm(dtp, bxx));
+    let jv = ym * 16;
+    let aut = (ae - jv) / 8;
+    for i in 0..aut {
+        let v = _mm256_loadu_ps(mh.add(jv + i * 8));
+        ke = _mm256_fmadd_ps(v, v, ke);
     }
 
     
-    let wdi = byq * 8;
-    for a in wdi..bo {
-        *op.add(a) = *zp.add(a) * bva * *zd.add(a);
+    let gar = _mm256_extractf128_ps(ke, 1);
+    let gfv = _mm256_castps256_ps128(ke);
+    let cre = _mm_add_ps(gfv, gar);
+    let hi = _mm_movehl_ps(cre, cre);
+    let sum = _mm_add_ps(cre, hi);
+    let cqm = _mm_shuffle_ps(sum, sum, 1);
+    let av = _mm_add_ss(sum, cqm);
+    let mut ss = _mm_cvtss_f32(av);
+
+    
+    let mg = jv + aut * 8;
+    for i in mg..ae {
+        ss += *mh.add(i) * *mh.add(i);
     }
 
-    bfd
+    let aeg = super::backprop::apq(ss / ae as f32 + super::model::HT_);
+    let alu = 1.0 / aeg;
+
+    
+    let ma = tv.as_ptr();
+    let op = out.as_mut_ptr();
+    let dsg = _mm256_set1_ps(alu);
+
+    let ant = ae / 8;
+    for i in 0..ant {
+        let off = i * 8;
+        let bke = _mm256_loadu_ps(mh.add(off));
+        let anh = _mm256_loadu_ps(ma.add(off));
+        let bnv = _mm256_mul_ps(bke, dsg);
+        _mm256_storeu_ps(op.add(off), _mm256_mul_ps(bnv, anh));
+    }
+
+    
+    let okr = ant * 8;
+    for i in okr..ae {
+        *op.add(i) = *mh.add(i) * alu * *ma.add(i);
+    }
+
+    aeg
 }
 
 
 #[cfg(target_arch = "x86_64")]
-#[dmi(aiy = "avx2")]
-unsafe fn xqw(bd: &mut [f32], q: &[f32], o: &[f32], len: usize) {
-    let yj = q.fq();
-    let bp = o.fq();
-    let op = bd.mw();
+#[target_feature(enable = "avx2")]
+unsafe fn pri(out: &mut [f32], a: &[f32], b: &[f32], len: usize) {
+    let lf = a.as_ptr();
+    let bp = b.as_ptr();
+    let op = out.as_mut_ptr();
 
-    let byq = len / 8;
-    for a in 0..byq {
-        let dz = a * 8;
-        let btg = zy(yj.add(dz));
-        let yu = zy(bp.add(dz));
-        bpn(op.add(dz), gxg(btg, yu));
+    let ant = len / 8;
+    for i in 0..ant {
+        let off = i * 8;
+        let akw = _mm256_loadu_ps(lf.add(off));
+        let lm = _mm256_loadu_ps(bp.add(off));
+        _mm256_storeu_ps(op.add(off), _mm256_add_ps(akw, lm));
     }
 
-    let zm = byq * 8;
-    for a in zm..len {
-        *op.add(a) = *yj.add(a) + *bp.add(a);
-    }
-}
-
-
-#[cfg(target_arch = "x86_64")]
-#[dmi(aiy = "avx2")]
-unsafe fn xqx(q: &mut [f32], o: &[f32], len: usize) {
-    let yj = q.mw();
-    let bp = o.fq();
-
-    let byq = len / 8;
-    for a in 0..byq {
-        let dz = a * 8;
-        let btg = zy(yj.add(dz));
-        let yu = zy(bp.add(dz));
-        bpn(yj.add(dz), gxg(btg, yu));
-    }
-
-    let zm = byq * 8;
-    for a in zm..len {
-        *yj.add(a) += *bp.add(a);
+    let mg = ant * 8;
+    for i in mg..len {
+        *op.add(i) = *lf.add(i) + *bp.add(i);
     }
 }
 
 
 #[cfg(target_arch = "x86_64")]
-#[dmi(aiy = "avx2")]
-unsafe fn xqy(q: &mut [f32], bfe: f32, len: usize) {
-    let yj = q.mw();
-    let bxk = iib(bfe);
+#[target_feature(enable = "avx2")]
+unsafe fn prj(a: &mut [f32], b: &[f32], len: usize) {
+    let lf = a.as_mut_ptr();
+    let bp = b.as_ptr();
 
-    let byq = len / 8;
-    for a in 0..byq {
-        let dz = a * 8;
-        let p = zy(yj.add(dz));
-        bpn(yj.add(dz), msm(p, bxk));
+    let ant = len / 8;
+    for i in 0..ant {
+        let off = i * 8;
+        let akw = _mm256_loadu_ps(lf.add(off));
+        let lm = _mm256_loadu_ps(bp.add(off));
+        _mm256_storeu_ps(lf.add(off), _mm256_add_ps(akw, lm));
     }
 
-    let zm = byq * 8;
-    for a in zm..len {
-        *yj.add(a) *= bfe;
+    let mg = ant * 8;
+    for i in mg..len {
+        *lf.add(i) += *bp.add(i);
+    }
+}
+
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+unsafe fn prl(a: &mut [f32], aeh: f32, len: usize) {
+    let lf = a.as_mut_ptr();
+    let amx = _mm256_set1_ps(aeh);
+
+    let ant = len / 8;
+    for i in 0..ant {
+        let off = i * 8;
+        let v = _mm256_loadu_ps(lf.add(off));
+        _mm256_storeu_ps(lf.add(off), _mm256_mul_ps(v, amx));
+    }
+
+    let mg = ant * 8;
+    for i in mg..len {
+        *lf.add(i) *= aeh;
     }
 }

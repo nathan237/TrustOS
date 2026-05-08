@@ -122,36 +122,36 @@ fn process_encrypted_handshake(session: &mut TlsSession, data: &[u8]) -> Result<
     let handshake_data = &plaintext[..content_end];
     
     // Process handshake messages (may be multiple in one record)
-    let mut position = 0;
-    while position + 4 <= handshake_data.len() {
-        let msg_type = handshake_data[position];
-        let message_length = ((handshake_data[position + 1] as usize) << 16)
-            | ((handshake_data[position + 2] as usize) << 8)
-            | (handshake_data[position + 3] as usize);
+    let mut pos = 0;
+    while pos + 4 <= handshake_data.len() {
+        let msg_type = handshake_data[pos];
+        let message_length = ((handshake_data[pos + 1] as usize) << 16)
+            | ((handshake_data[pos + 2] as usize) << 8)
+            | (handshake_data[pos + 3] as usize);
         
-        if position + 4 + message_length > handshake_data.len() {
+        if pos + 4 + message_length > handshake_data.len() {
             break;
         }
         
-        let message = &handshake_data[position..position + 4 + message_length];
+        let msg = &handshake_data[pos..pos + 4 + message_length];
         
                 // Correspondance de motifs — branchement exhaustif de Rust.
 match msg_type {
             8 => {
                 // EncryptedExtensions
-                handshake::parse_encrypted_extensions(session, message)?;
+                handshake::parse_encrypted_extensions(session, msg)?;
             }
             11 => {
                 // Certificate
-                handshake::parse_certificate(session, message)?;
+                handshake::parse_certificate(session, msg)?;
             }
             15 => {
                 // CertificateVerify
-                handshake::parse_certificate_verify(session, message)?;
+                handshake::parse_certificate_verify(session, msg)?;
             }
             20 => {
                 // Finished
-                handshake::parse_finished(session, message)?;
+                handshake::parse_finished(session, msg)?;
                 
                 // Get transcript hash for application secrets (BEFORE adding client Finished)
                 let mut transcript = session.transcript_hash.clone();
@@ -170,14 +170,14 @@ match msg_type {
             }
             4 => {
                 // NewSessionTicket (after handshake, just update transcript)
-                session.transcript_hash.update(message);
+                session.transcript_hash.update(msg);
             }
             _ => {
                 crate::serial_println!("[TLS] Unknown encrypted handshake type: {}", msg_type);
             }
         }
         
-        position += 4 + message_length;
+        pos += 4 + message_length;
     }
     
     Ok(None)
@@ -193,11 +193,11 @@ pub fn encrypt_record(session: &mut TlsSession, content_type: ContentType, plain
     // Build nonce (IV XOR sequence number)
     let mut nonce = [0u8; 12];
     nonce.copy_from_slice(&session.client_write_iv);
-    let sequence_bytes = session.client_sequence.to_be_bytes();
+    let sequence_bytes = session.client_seq.to_be_bytes();
     for i in 0..8 {
         nonce[4 + i] ^= sequence_bytes[i];
     }
-    session.client_sequence += 1;
+    session.client_seq += 1;
     
     // Additional authenticated data (record header for TLS 1.3)
     let aad = [
@@ -226,16 +226,16 @@ pub fn decrypt_record(session: &mut TlsSession, ciphertext: &[u8]) -> Result<Vec
         return Err(TlsError::DecryptionFailed);
     }
     
-    crate::serial_println!("[TLS] Decrypting {} bytes, seq={}", ciphertext.len(), session.server_sequence);
+    crate::serial_println!("[TLS] Decrypting {} bytes, seq={}", ciphertext.len(), session.server_seq);
     
     // Build nonce
     let mut nonce = [0u8; 12];
     nonce.copy_from_slice(&session.server_write_iv);
-    let sequence_bytes = session.server_sequence.to_be_bytes();
+    let sequence_bytes = session.server_seq.to_be_bytes();
     for i in 0..8 {
         nonce[4 + i] ^= sequence_bytes[i];
     }
-    session.server_sequence += 1;
+    session.server_seq += 1;
     
     crate::serial_println!("[TLS] Key={:02x?} Nonce={:02x?}", &session.server_write_key[..8], &nonce[..8]);
     
@@ -249,7 +249,7 @@ pub fn decrypt_record(session: &mut TlsSession, ciphertext: &[u8]) -> Result<Vec
     
     // Decrypt
     let plaintext = aes_gcm_decrypt(&session.server_write_key, &nonce, &aad, ciphertext)
-        .map_error(|_| TlsError::DecryptionFailed)?;
+        .map_err(|_| TlsError::DecryptionFailed)?;
     
     Ok(plaintext)
 }

@@ -15,8 +15,8 @@
 //! Navi 10 has 2 independent SDMA engines (SDMA0 + SDMA1).
 //! Each engine has its own GFX ring buffer for command submission.
 //!
-//! SDMA packet format (different from PM4):
-//!   DW0: [31:28]=0, [27:26]=sub_op, [25:8]=op, [7:0]=extra_info
+//! SDMA packet format (SDMA v5.0 — Navi 10):
+//!   DW0: [7:0]=opcode, [15:8]=sub_opcode, [31:16]=extra (varies by opcode)
 //!
 //! Supported operations:
 //! - **LINEAR COPY**: Copy N bytes from src_addr to dst_addr
@@ -36,7 +36,7 @@
 use alloc::string::String;
 use alloc::format;
 use alloc::vec::Vec;
-use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use core::sync::atomic::{self, AtomicBool, AtomicU64, Ordering};
 use spin::Mutex;
 
 use super::{mmio_read32, mmio_write32, GpuInfo};
@@ -79,17 +79,18 @@ static TOTAL_TRANSFERS: AtomicU64 = AtomicU64::new(0);
 // SDMA Packet Builders
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// SDMA packets use a different format than PM4:
-//   DW0: [31:28] = 0 (always)
-//        [27:26] = sub_op
-//        [25:8]  = opcode
-//        [7:0]   = extra_info (varies by opcode)
+// SDMA v5.0 (Navi 10) packet format — DIFFERENT from older generations:
+//   DW0: [7:0] = opcode
+//        [15:8] = sub_opcode
+//        [31:16] = extra fields (varies by opcode, e.g. MTYPE for FENCE)
+//
+// Reference: navi10_sdma_pkt_open.h
 //
 
-/// Build SDMA packet header
+/// Build SDMA v5.0 packet header (Navi 10 format)
 #[inline]
 fn sdma_header(op: u32, sub_op: u32) -> u32 {
-    ((sub_op & 0x3) << 26) | ((op & 0x3FFFF) << 8)
+    (op & 0xFF) | ((sub_op & 0xFF) << 8)
 }
 
 /// Build a NOP packet (1 DWORD)
@@ -114,8 +115,8 @@ fn sdma_nop() -> u32 {
 fn sdma_copy_linear(src_addr: u64, dst_addr: u64, byte_count: u32) -> [u32; 7] {
     [
         sdma_header(regs::SDMA_OP_COPY, regs::SDMA_COPY_SUB_LINEAR),
-        byte_count,
-        0, // parameter (src/dst array pitch for 2D — 0 for linear)
+        byte_count, // byte count (SDMA v3.0 uses raw count, not count-1)
+        0, // parameter (src/dst endian swap — 0 for linear)
         (src_addr & 0xFFFFFFFF) as u32,
         ((src_addr >> 32) & 0xFFFFFFFF) as u32,
         (dst_addr & 0xFFFFFFFF) as u32,
@@ -140,7 +141,7 @@ fn sdma_const_fill(dst_addr: u64, fill_value: u32, byte_count: u32) -> [u32; 5] 
         (dst_addr & 0xFFFFFFFF) as u32,
         ((dst_addr >> 32) & 0xFFFFFFFF) as u32,
         fill_value,
-        byte_count,
+        byte_count, // byte count (SDMA v3.0 uses raw count, not count-1)
     ]
 }
 
@@ -156,7 +157,7 @@ fn sdma_const_fill(dst_addr: u64, fill_value: u32, byte_count: u32) -> [u32; 5] 
 ///   DW3: fence_value
 fn sdma_fence(addr: u64, value: u32) -> [u32; 4] {
     [
-        sdma_header(regs::SDMA_OP_FENCE, 0),
+        sdma_header(regs::SDMA_OP_FENCE, 0), // No MTYPE for SDMA v3.0 (Polaris)
         (addr & 0xFFFFFFFF) as u32,
         ((addr >> 32) & 0xFFFFFFFF) as u32,
         value,
@@ -212,6 +213,12 @@ struct SdmaEngine {
     mmio_base: u64,
     /// Register base offset for this engine's GFX ring
     reg_base: u32,
+    /// Absolute MMIO byte offset for WPTR register
+    wptr_off: u32,
+    /// Absolute MMIO byte offset for WPTR_HI register
+    wptr_hi_off: u32,
+    /// Absolute MMIO byte offset for RPTR register
+    rptr_off: u32,
     /// Ring buffer virtual address
     ring_virt: u64,
     /// Ring buffer physical address (GPU-visible)
@@ -238,6 +245,12 @@ struct SdmaState {
     /// Staging buffer virtual/physical (for CPU→GPU staging)
     staging_virt: u64,
     staging_phys: u64,
+    /// Test buffer A virtual/physical (in VRAM, 4KB)
+    test_a_virt: u64,
+    test_a_phys: u64,
+    /// Test buffer B virtual/physical (in VRAM, 4KB)
+    test_b_virt: u64,
+    test_b_phys: u64,
 }
 
 static SDMA_STATE: Mutex<SdmaState> = Mutex::new(SdmaState {
@@ -248,6 +261,10 @@ static SDMA_STATE: Mutex<SdmaState> = Mutex::new(SdmaState {
     status_phys: 0,
     staging_virt: 0,
     staging_phys: 0,
+    test_a_virt: 0,
+    test_a_phys: 0,
+    test_b_virt: 0,
+    test_b_phys: 0,
 });
 
 static SDMA_READY: AtomicBool = AtomicBool::new(false);
@@ -268,22 +285,45 @@ fn ring_write(engine: &mut SdmaEngine, data: &[u32]) {
     engine.wptr = ((engine.wptr as usize + data.len()) % RING_SIZE_DWORDS) as u32;
 }
 
-/// Submit the ring buffer by updating WPTR register
+/// Navi10 HDP flush — ensures coherency between CPU and GPU memory views.
+///
+/// HDP v5.0 (Navi10/RDNA1) does NOT have HDP_MEM_COHERENCY_FLUSH_CNTL.
+/// Instead, uses BIF-based GPU_HDP_FLUSH_REQ/DONE mechanism.
+/// Matches Linux hdp_v5_0_flush_hdp() behavior.
+///
+/// Call before reading GPU-written memory (fence values, RPTR writeback).
+#[inline]
+fn hdp_flush(mmio_base: u64) {
+    unsafe {
+        // Write to FLUSH_DONE register triggers flush
+        // (Linux writes FLUSH_REQ offset value to FLUSH_DONE register)
+        mmio_write32(mmio_base, regs::BIF_BX_PF0_GPU_HDP_FLUSH_DONE,
+                     regs::BIF_BX_PF0_GPU_HDP_FLUSH_REQ);
+        // Readback for ordering — ensures flush completes before next operation
+        let _ = mmio_read32(mmio_base, regs::BIF_BX_PF0_GPU_HDP_FLUSH_DONE);
+    }
+}
+
+/// Submit the ring buffer by updating WPTR register.
+/// Includes CPU memory fence to ensure ring buffer writes are globally visible
+/// before the GPU reads them.
 fn ring_submit(engine: &SdmaEngine) {
+    // CPU store fence: ensure all ring_write() stores are committed
+    // before the WPTR MMIO write tells the GPU to read them.
+    atomic::fence(Ordering::Release);
+
     unsafe {
         // SDMA WPTR is in bytes, not dwords
         let wptr_bytes = engine.wptr * 4;
-        let wptr_reg = engine.reg_base + regs::SDMA_GFX_RB_WPTR;
-        mmio_write32(engine.mmio_base, wptr_reg, wptr_bytes);
-        mmio_write32(engine.mmio_base, wptr_reg + 4, 0); // WPTR_HI
+        mmio_write32(engine.mmio_base, engine.wptr_off, wptr_bytes);
+        mmio_write32(engine.mmio_base, engine.wptr_hi_off, 0);
     }
 }
 
 /// Read the hardware RPTR (in DWORDs)
 fn ring_rptr(engine: &SdmaEngine) -> u32 {
     unsafe {
-        let rptr_reg = engine.reg_base + regs::SDMA_GFX_RB_RPTR;
-        let rptr_bytes = mmio_read32(engine.mmio_base, rptr_reg);
+        let rptr_bytes = mmio_read32(engine.mmio_base, engine.rptr_off);
         rptr_bytes / 4
     }
 }
@@ -317,71 +357,117 @@ fn init_engine(
             regs::SDMA1_STATUS_REG
         };
         let status = mmio_read32(mmio_base, status_reg);
-        crate::log!("[SDMA{}] STATUS={:#010X} (idle={})",
-            engine_idx, status, (status & regs::SDMA_STATUS_IDLE) != 0);
-
-        // Step 2: Halt engine by setting F32_CNTL halt bit
         let f32_reg = if engine_idx == 0 {
             regs::SDMA0_F32_CNTL
         } else {
             regs::SDMA1_F32_CNTL
         };
-        mmio_write32(mmio_base, f32_reg, 1); // HALT=1
+        let f32 = mmio_read32(mmio_base, f32_reg);
+        crate::log!("[SDMA{}] STATUS={:#010X} F32_CNTL={:#010X} (halt={})",
+            engine_idx, status, f32, f32 & 1);
 
-        // Small delay for halt to take effect
-        for _ in 0..1000 {
-            core::hint::spin_loop();
-        }
+        // NOTE: Do NOT halt the engine! The SDMA firmware was loaded and
+        // un-halted by firmware::init(). Halting and un-halting causes
+        // the firmware to restart and reset all ring configuration.
+        // Linux's sdma_v5_0_gfx_resume_instance() configures the ring
+        // while the firmware is running, then enables RB_ENABLE last.
 
-        // Step 3: Disable GFX ring
         let rb_cntl_reg = base + regs::SDMA_GFX_RB_CNTL;
-        mmio_write32(mmio_base, rb_cntl_reg, 0); // Disable ring
 
-        // Step 4: Set ring buffer base address (256-byte aligned, store in 256B units)
-        let rb_base_256 = ring_phys >> 8;
-        let rb_base_reg = base + regs::SDMA_GFX_RB_BASE;
-        let rb_base_hi_reg = base + regs::SDMA_GFX_RB_BASE_HI;
-        mmio_write32(mmio_base, rb_base_reg, (rb_base_256 & 0xFFFFFFFF) as u32);
-        mmio_write32(mmio_base, rb_base_hi_reg, ((rb_base_256 >> 32) & 0xFFFFFFFF) as u32);
+        // Step 4: Configure RB_CNTL WITHOUT RB_ENABLE first (Linux: set size, priv, etc.)
+        //  - RB_SIZE = log2(4096 dwords) = 12, shifted into bits [6:1]
+        //  - RB_PRIV = 1 (bit 23) — REQUIRED for bare-metal without IOMMU
+        //  - No RB_ENABLE yet!
+        let rb_cntl_base = (RING_SIZE_LOG2 << regs::SDMA_RB_CNTL_RB_SIZE_SHIFT)
+            | regs::SDMA_RB_CNTL_RB_PRIV;
+        mmio_write32(mmio_base, rb_cntl_reg, rb_cntl_base);
 
         // Step 5: Clear RPTR/WPTR
         mmio_write32(mmio_base, base + regs::SDMA_GFX_RB_RPTR, 0);
         mmio_write32(mmio_base, base + regs::SDMA_GFX_RB_RPTR_HI, 0);
-        mmio_write32(mmio_base, base + regs::SDMA_GFX_RB_WPTR, 0);
-        mmio_write32(mmio_base, base + regs::SDMA_GFX_RB_WPTR_HI, 0);
 
         // Step 6: Set RPTR writeback address (GPU writes RPTR here so CPU can track)
         let rptr_wb_addr = status_phys + rptr_wb_offset as u64;
-        mmio_write32(mmio_base, base + regs::SDMA_GFX_RB_RPTR_ADDR_LO,
-            (rptr_wb_addr & 0xFFFFFFFF) as u32);
         mmio_write32(mmio_base, base + regs::SDMA_GFX_RB_RPTR_ADDR_HI,
             ((rptr_wb_addr >> 32) & 0xFFFFFFFF) as u32);
+        mmio_write32(mmio_base, base + regs::SDMA_GFX_RB_RPTR_ADDR_LO,
+            (rptr_wb_addr & 0xFFFFFFFC) as u32);
 
-        // Step 7: Configure ring control and enable
-        //  - RB_SIZE = log2(4096 dwords) = 12, shifted into bits [6:1]
-        //  - RPTR_WRITEBACK_ENABLE = 1 (bit 12)
-        //  - RB_ENABLE = 1 (bit 0)
-        //  - VMID = 0 (bits [19:16], bare-metal, no IOMMU translation)
-        let rb_cntl = regs::SDMA_RB_CNTL_RB_ENABLE
-            | (RING_SIZE_LOG2 << regs::SDMA_RB_CNTL_RB_SIZE_SHIFT)
-            | regs::SDMA_RB_CNTL_RPTR_WRITEBACK_ENABLE;
-        mmio_write32(mmio_base, rb_cntl_reg, rb_cntl);
+        // Step 7: Enable RPTR writeback in rb_cntl
+        let rb_cntl_wb = rb_cntl_base | regs::SDMA_RB_CNTL_RPTR_WRITEBACK_ENABLE;
+        mmio_write32(mmio_base, rb_cntl_reg, rb_cntl_wb);
 
-        // Step 8: Un-halt engine
-        mmio_write32(mmio_base, f32_reg, 0); // HALT=0
+        // Step 8: Set ring buffer base address (256-byte aligned, store in 256B units)
+        mmio_write32(mmio_base, base + regs::SDMA_GFX_RB_BASE,
+            (ring_phys >> 8) as u32);
+        mmio_write32(mmio_base, base + regs::SDMA_GFX_RB_BASE_HI,
+            (ring_phys >> 40) as u32);
 
-        // Step 9: Verify engine came back alive
+        // Step 9: MINOR_PTR_UPDATE = 1 before writing WPTR
+        let minor_ptr_reg = base + regs::SDMA_GFX_MINOR_PTR_UPDATE;
+        mmio_write32(mmio_base, minor_ptr_reg, 1);
+
+        // Step 10: Clear WPTR (bare-metal = register write, not doorbell)
+        mmio_write32(mmio_base, base + regs::SDMA_GFX_RB_WPTR, 0);
+        mmio_write32(mmio_base, base + regs::SDMA_GFX_RB_WPTR_HI, 0);
+
+        // Step 11: Disable doorbell (bare-metal uses MMIO WPTR)
+        mmio_write32(mmio_base, base + regs::SDMA_GFX_DOORBELL, 0);
+
+        // Step 12: MINOR_PTR_UPDATE = 0 after WPTR write
+        mmio_write32(mmio_base, minor_ptr_reg, 0);
+
+        // Step 13: Configure SDMA_CNTL — enable UTC_L1 for address translation
+        let cntl_reg = if engine_idx == 0 {
+            regs::SDMA0_CNTL
+        } else {
+            regs::SDMA1_CNTL
+        };
+        let cntl = mmio_read32(mmio_base, cntl_reg);
+        // UTC_L1_ENABLE = bit 15
+        mmio_write32(mmio_base, cntl_reg, cntl | (1 << 15));
+
+        // Step 14: Configure UTCL1 RESP_MODE = 3, REDO_DELAY = 9
+        let utcl1_cntl_reg = base + regs::SDMA_UTCL1_CNTL;
+        let utcl1 = mmio_read32(mmio_base, utcl1_cntl_reg);
+        // RESP_MODE bits [1:0] = 3, REDO_DELAY bits [13:9] = 9
+        let utcl1_new = (utcl1 & !0x3E03) | 3 | (9 << 9);
+        mmio_write32(mmio_base, utcl1_cntl_reg, utcl1_new);
+
+        // Step 13: Ensure engine is un-halted (should be from firmware::init)
+        let f32_val = mmio_read32(mmio_base, f32_reg);
+        if f32_val & 1 != 0 {
+            crate::log!("[SDMA{}] Engine was halted, un-halting...", engine_idx);
+            mmio_write32(mmio_base, f32_reg, f32_val & !1u32);
+            for _ in 0..100000 { core::hint::spin_loop(); }
+        }
+
+        // Step 14: Enable DMA RB (RB_ENABLE=1) — FINAL STEP
+        let rb_cntl_en = rb_cntl_wb | regs::SDMA_RB_CNTL_RB_ENABLE;
+        mmio_write32(mmio_base, rb_cntl_reg, rb_cntl_en);
+
+        // Step 15: Enable IB (Indirect Buffer)
+        let ib_cntl_reg = base + regs::SDMA_GFX_IB_CNTL;
+        let ib_cntl = mmio_read32(mmio_base, ib_cntl_reg);
+        mmio_write32(mmio_base, ib_cntl_reg, ib_cntl | 1); // IB_ENABLE=1
+
+        // Step 16: Verify engine came back alive
         for _ in 0..10000 {
             core::hint::spin_loop();
         }
         let status_after = mmio_read32(mmio_base, status_reg);
-        crate::log!("[SDMA{}] Post-init STATUS={:#010X}", engine_idx, status_after);
+        let rb_cntl_readback = mmio_read32(mmio_base, rb_cntl_reg);
+        crate::log!("[SDMA{}] Post-init STATUS={:#010X} RB_CNTL={:#010X}",
+            engine_idx, status_after, rb_cntl_readback);
     }
 
     Some(SdmaEngine {
         index: engine_idx,
         mmio_base,
         reg_base: base,
+        wptr_off: base + regs::SDMA_GFX_RB_WPTR,
+        wptr_hi_off: base + regs::SDMA_GFX_RB_WPTR_HI,
+        rptr_off: base + regs::SDMA_GFX_RB_RPTR,
         ring_virt,
         ring_phys,
         wptr: 0,
@@ -550,16 +636,24 @@ pub fn copy(src_phys: u64, dst_phys: u64, byte_count: u32, engine_idx: usize) ->
         eidx, src_phys, dst_phys, byte_count, fence_val);
 
     // Poll for fence completion
+    let mmio_base = engine.mmio_base;
     let mut elapsed = 0u64;
     loop {
+        // Periodic HDP flush ensures GPU fence writes are visible to CPU
+        // (matches Polaris firmware.rs pattern of flushing every 256 iterations)
+        if elapsed & 0xFF == 0 {
+            hdp_flush(mmio_base);
+        }
         let current = unsafe { core::ptr::read_volatile(fence_virt as *const u32) };
         if current == fence_val {
             break;
         }
         elapsed += 1;
         if elapsed >= SDMA_TIMEOUT_ITERS {
-            crate::serial_println!("[SDMA{}] TIMEOUT: fence expected {} got {}",
-                eidx, fence_val, current);
+            hdp_flush(mmio_base);
+            let final_val = unsafe { core::ptr::read_volatile(fence_virt as *const u32) };
+            crate::serial_println!("[SDMA{}] TIMEOUT: fence expected {} got {} (post-flush={})",
+                eidx, fence_val, current, final_val);
             return Err("SDMA copy timed out");
         }
         if elapsed % 100 == 0 {
@@ -625,16 +719,22 @@ pub fn fill(dst_phys: u64, fill_value: u32, byte_count: u32, engine_idx: usize) 
     crate::serial_println!("[SDMA{}] FILL: {:#X} = {:#010X} x{} bytes, fence={}",
         eidx, dst_phys, fill_value, byte_count, fence_val);
 
+    let mmio_base = engine.mmio_base;
     let mut elapsed = 0u64;
     loop {
+        if elapsed & 0xFF == 0 {
+            hdp_flush(mmio_base);
+        }
         let current = unsafe { core::ptr::read_volatile(fence_virt_addr as *const u32) };
         if current == fence_val {
             break;
         }
         elapsed += 1;
         if elapsed >= SDMA_TIMEOUT_ITERS {
-            crate::serial_println!("[SDMA{}] TIMEOUT: fence expected {} got {}",
-                eidx, fence_val, current);
+            hdp_flush(mmio_base);
+            let final_val = unsafe { core::ptr::read_volatile(fence_virt_addr as *const u32) };
+            crate::serial_println!("[SDMA{}] TIMEOUT: fence expected {} got {} (post-flush={})",
+                eidx, fence_val, current, final_val);
             return Err("SDMA fill timed out");
         }
         if elapsed % 100 == 0 {
@@ -772,26 +872,34 @@ pub fn self_test() -> (u32, u32) {
     let mut pass = 0u32;
     let mut fail = 0u32;
 
-    // Allocate two test buffers (4KB each)
-    let layout = match alloc::alloc::Layout::from_size_align(4096, 4096) {
-        Ok(l) => l,
-        Err(_) => { crate::serial_println!("[SDMA-TEST] FAIL: invalid test layout"); return (0, 1); }
-    };
-    let buf_a_virt = unsafe { alloc::alloc::alloc_zeroed(layout) } as u64;
-    let buf_b_virt = unsafe { alloc::alloc::alloc_zeroed(layout) } as u64;
-    let buf_a_phys = memory::virt_to_phys(buf_a_virt).unwrap_or(0);
-    let buf_b_phys = memory::virt_to_phys(buf_b_virt).unwrap_or(0);
+    // Use VRAM test buffers (GPU can always access its own VRAM)
+    let state = SDMA_STATE.lock();
+    let buf_a_virt = state.test_a_virt;
+    let buf_a_phys = state.test_a_phys;
+    let buf_b_virt = state.test_b_virt;
+    let buf_b_phys = state.test_b_phys;
+    drop(state);
 
-    if buf_a_phys == 0 || buf_b_phys == 0 {
-        crate::serial_println!("[SDMA-TEST] FAIL: cannot allocate test buffers");
+    if buf_a_virt == 0 || buf_b_virt == 0 {
+        crate::serial_println!("[SDMA-TEST] FAIL: no VRAM test buffers");
         return (0, 1);
+    }
+
+    crate::serial_println!("[SDMA-TEST] Using VRAM buffers: A={:#X}(gpu={:#X}) B={:#X}(gpu={:#X})",
+        buf_a_virt, buf_a_phys, buf_b_virt, buf_b_phys);
+
+    // Zero both test buffers via CPU (through BAR0 aperture)
+    unsafe {
+        for i in 0..(4096 / 4) {
+            core::ptr::write_volatile((buf_a_virt as *mut u32).add(i), 0);
+            core::ptr::write_volatile((buf_b_virt as *mut u32).add(i), 0);
+        }
     }
 
     // Test 1: CONST_FILL on engine 0
     crate::serial_println!("[SDMA-TEST] Test 1: CONST_FILL (engine 0, 1024 bytes, pattern=0xFACEFEED)");
     match fill(buf_a_phys, 0xFACE_FEED, 1024, 0) {
         Ok(_) => {
-            // Verify first 256 DWORDs
             let ptr = buf_a_virt as *const u32;
             let mut ok = true;
             for i in 0..256 {
@@ -834,9 +942,11 @@ pub fn self_test() -> (u32, u32) {
 
     // Test 3: CONST_FILL on engine 1
     crate::serial_println!("[SDMA-TEST] Test 3: CONST_FILL (engine 1, 512 bytes, pattern=0xBAAD_C0DE)");
-    // Clear buf_b first
+    // Clear buf_b via BAR0
     unsafe {
-        core::ptr::write_bytes(buf_b_virt as *mut u8, 0, 4096);
+        for i in 0..(4096 / 4) {
+            core::ptr::write_volatile((buf_b_virt as *mut u32).add(i), 0);
+        }
     }
     match fill(buf_b_phys, 0xBAAD_C0DE, 512, 1) {
         Ok(_) => {
@@ -860,8 +970,12 @@ pub fn self_test() -> (u32, u32) {
 
     // Test 4: Upload from CPU via staging
     crate::serial_println!("[SDMA-TEST] Test 4: CPU Upload via staging (256 bytes)");
-    // Clear destination
-    unsafe { core::ptr::write_bytes(buf_a_virt as *mut u8, 0, 4096); }
+    // Clear destination via BAR0
+    unsafe {
+        for i in 0..(4096 / 4) {
+            core::ptr::write_volatile((buf_a_virt as *mut u32).add(i), 0);
+        }
+    }
     let test_data: [u8; 256] = {
         let mut d = [0u8; 256];
         for i in 0..256 { d[i] = i as u8; }
@@ -908,12 +1022,6 @@ pub fn self_test() -> (u32, u32) {
         }
     }
 
-    // Cleanup: deallocate test buffers
-    unsafe {
-        alloc::alloc::dealloc(buf_a_virt as *mut u8, layout);
-        alloc::alloc::dealloc(buf_b_virt as *mut u8, layout);
-    }
-
     (pass, fail)
 }
 
@@ -928,16 +1036,18 @@ pub fn benchmark(size_kb: u32) -> Result<(u64, u64), &'static str> {
     if !SDMA_READY.load(Ordering::Relaxed) {
         return Err("SDMA not initialized");
     }
-    let size_bytes = (size_kb as usize * 1024).min(STAGING_BUFFER_SIZE);
-    let aligned = (size_bytes + 3) & !3;
+    // Use VRAM test buffers (4KB each), clamp size
+    let state = SDMA_STATE.lock();
+    let phys_a = state.test_a_phys;
+    let phys_b = state.test_b_phys;
+    drop(state);
 
-    // Allocate test buffers
-    let layout = alloc::alloc::Layout::from_size_align(aligned, 4096)
-        .map_err(|_| "allocation error")?;
-    let buf_a = unsafe { alloc::alloc::alloc_zeroed(layout) } as u64;
-    let buf_b = unsafe { alloc::alloc::alloc_zeroed(layout) } as u64;
-    let phys_a = memory::virt_to_phys(buf_a).ok_or("virt_to_phys failed")?;
-    let phys_b = memory::virt_to_phys(buf_b).ok_or("virt_to_phys failed")?;
+    if phys_a == 0 || phys_b == 0 {
+        return Err("No VRAM test buffers");
+    }
+
+    let size_bytes = (size_kb as usize * 1024).min(4096);
+    let aligned = (size_bytes + 3) & !3;
 
     // Warm up
     let _ = fill(phys_a, 0, aligned as u32, 0);
@@ -956,12 +1066,6 @@ pub fn benchmark(size_kb: u32) -> Result<(u64, u64), &'static str> {
         copy(phys_a, phys_b, aligned as u32, 0)?;
     }
     let t_end_copy = crate::time::uptime_ticks();
-
-    // Free buffers
-    unsafe {
-        alloc::alloc::dealloc(buf_a as *mut u8, layout);
-        alloc::alloc::dealloc(buf_b as *mut u8, layout);
-    }
 
     // Calculate bandwidth (approximate — using timer ticks)
     let fill_ticks = t_end_fill.saturating_sub(t_start_fill).max(1);
@@ -1056,4 +1160,221 @@ pub fn staging_phys() -> Option<u64> {
 /// Get staging buffer size
 pub fn staging_size() -> usize {
     STAGING_BUFFER_SIZE
+}
+
+/// Dump SDMA hardware registers for diagnostics
+pub fn diag_lines() -> Vec<String> {
+    let mut lines = Vec::new();
+    if !is_ready() {
+        lines.push(String::from("SDMA not initialized"));
+        return lines;
+    }
+    let mut state = SDMA_STATE.lock();
+    let mmio = state.mmio_base;
+    if mmio == 0 {
+        lines.push(String::from("No MMIO base"));
+        return lines;
+    }
+    lines.push(String::from("=== SDMA Hardware Register Dump ==="));
+    for i in 0..2usize {
+        let base = if i == 0 { regs::SDMA0_BASE } else { regs::SDMA1_BASE };
+        let f32_reg = if i == 0 { regs::SDMA0_F32_CNTL } else { regs::SDMA1_F32_CNTL };
+        let status_reg = if i == 0 { regs::SDMA0_STATUS_REG } else { regs::SDMA1_STATUS_REG };
+        let cntl_reg = if i == 0 { regs::SDMA0_CNTL } else { regs::SDMA1_CNTL };
+        unsafe {
+            lines.push(format!("--- SDMA{} ---", i));
+            lines.push(format!("  F32_CNTL:    {:#010X}", mmio_read32(mmio, f32_reg)));
+            lines.push(format!("  STATUS:      {:#010X}", mmio_read32(mmio, status_reg)));
+            lines.push(format!("  CNTL:        {:#010X}", mmio_read32(mmio, cntl_reg)));
+            // Extra diag: F32_COUNTER, FREEZE, GFX_CONTEXT_STATUS, CHICKEN_BITS
+            let chicken = if i == 0 { regs::SDMA0_CHICKEN_BITS } else { regs::SDMA1_CHICKEN_BITS };
+            let freeze_reg = base + 0x002b * 4; // mmSDMA0_FREEZE relative = 0x002b
+            let f32_ctr = base + 0x0055 * 4;    // mmSDMA0_F32_COUNTER
+            let ctx_sts = base + 0x0091 * 4;  // mmSDMA0_GFX_CONTEXT_STATUS
+            lines.push(format!("  CHICKEN:     {:#010X}", mmio_read32(mmio, chicken)));
+            lines.push(format!("  FREEZE:      {:#010X}", mmio_read32(mmio, freeze_reg)));
+            lines.push(format!("  F32_CTR:     {:#010X}", mmio_read32(mmio, f32_ctr)));
+            lines.push(format!("  GFX_CTX_STS: {:#010X}", mmio_read32(mmio, ctx_sts)));
+            lines.push(format!("  RB_CNTL:     {:#010X}", mmio_read32(mmio, base + regs::SDMA_GFX_RB_CNTL)));
+            let rb_base = mmio_read32(mmio, base + regs::SDMA_GFX_RB_BASE) as u64
+                | ((mmio_read32(mmio, base + regs::SDMA_GFX_RB_BASE_HI) as u64) << 32);
+            lines.push(format!("  RB_BASE:     {:#010X} (phys={:#X})", rb_base, rb_base << 8));
+            lines.push(format!("  RB_RPTR:     {:#010X}", mmio_read32(mmio, base + regs::SDMA_GFX_RB_RPTR)));
+            lines.push(format!("  RB_WPTR:     {:#010X}", mmio_read32(mmio, base + regs::SDMA_GFX_RB_WPTR)));
+            let rptr_addr = mmio_read32(mmio, base + regs::SDMA_GFX_RB_RPTR_ADDR_LO) as u64
+                | ((mmio_read32(mmio, base + regs::SDMA_GFX_RB_RPTR_ADDR_HI) as u64) << 32);
+            lines.push(format!("  RPTR_ADDR:   {:#018X}", rptr_addr));
+            lines.push(format!("  DOORBELL:    {:#010X}", mmio_read32(mmio, base + regs::SDMA_GFX_DOORBELL)));
+            if let Some(ref eng) = state.engines[i] {
+                lines.push(format!("  sw_wptr:     {} (ring_phys={:#X})", eng.wptr, eng.ring_phys));
+                // Read first 4 DWORDs of ring buffer for debug
+                let ring_ptr = eng.ring_virt as *const u32;
+                lines.push(format!("  ring[0..3]:  {:#010X} {:#010X} {:#010X} {:#010X}",
+                    core::ptr::read_volatile(ring_ptr),
+                    core::ptr::read_volatile(ring_ptr.add(1)),
+                    core::ptr::read_volatile(ring_ptr.add(2)),
+                    core::ptr::read_volatile(ring_ptr.add(3)),
+                ));
+            }
+        }
+    }
+    // Also dump fence area
+    lines.push(format!("--- Fence Status ---"));
+    let fence_ptr0 = (state.status_virt + FENCE_OFFSET_E0 as u64) as *const u32;
+    let fence_ptr1 = (state.status_virt + FENCE_OFFSET_E1 as u64) as *const u32;
+    unsafe {
+        lines.push(format!("  Fence0: {:#010X}", core::ptr::read_volatile(fence_ptr0)));
+        lines.push(format!("  Fence1: {:#010X}", core::ptr::read_volatile(fence_ptr1)));
+    }
+
+    // Quick NOP+FENCE probe on engine 0 to test command processing
+    let probe_status_phys = state.status_phys;
+    let probe_status_virt = state.status_virt;
+    if let Some(ref mut eng) = state.engines[0] {
+        lines.push(String::from("--- Quick FENCE probe (engine 0) ---"));
+        let fence_val = 0xDEAD_0001u32;
+        let fence_offset = FENCE_OFFSET_E0;
+        let fence_phys = probe_status_phys + fence_offset as u64;
+        let fence_virt = probe_status_virt + fence_offset as u64;
+        // Clear fence
+        unsafe { core::ptr::write_volatile(fence_virt as *mut u32, 0); }
+        // Record WPTR before
+        let wptr_before = eng.wptr;
+        // Write NOP + FENCE
+        let nop = sdma_nop();
+        let fence_pkt = sdma_fence(fence_phys, fence_val);
+        ring_write(eng, &[nop]);
+        ring_write(eng, &fence_pkt);
+        // Submit
+        ring_submit(eng);
+        let wptr_after = eng.wptr;
+        // Read WPTR/RPTR from hardware
+        let hw_wptr = unsafe { mmio_read32(mmio, regs::SDMA0_BASE + regs::SDMA_GFX_RB_WPTR) };
+        let hw_rptr = unsafe { mmio_read32(mmio, regs::SDMA0_BASE + regs::SDMA_GFX_RB_RPTR) };
+        lines.push(format!("  sw_wptr: {} -> {} (submitted {} DW)", wptr_before, wptr_after, wptr_after - wptr_before));
+        lines.push(format!("  HW WPTR: {:#010X}  HW RPTR: {:#010X}", hw_wptr, hw_rptr));
+        // Poll fence with short timeout
+        let mut found = false;
+        for _ in 0..500_000u32 {
+            let v = unsafe { core::ptr::read_volatile(fence_virt as *const u32) };
+            if v == fence_val {
+                found = true;
+                break;
+            }
+            core::hint::spin_loop();
+        }
+        let fence_readback = unsafe { core::ptr::read_volatile(fence_virt as *const u32) };
+        if found {
+            lines.push(format!("  FENCE OK: {:#010X} (engine is processing commands!)", fence_readback));
+        } else {
+            lines.push(format!("  FENCE TIMEOUT: got {:#010X}, expected {:#010X}", fence_readback, fence_val));
+            // Read RPTR again after timeout
+            let hw_rptr2 = unsafe { mmio_read32(mmio, regs::SDMA0_BASE + regs::SDMA_GFX_RB_RPTR) };
+            lines.push(format!("  HW RPTR after poll: {:#010X} (moved={})", hw_rptr2, hw_rptr2 != hw_rptr));
+        }
+    }
+
+    lines
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Polaris SDMA Init — called from firmware::init_polaris()
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Initialize SDMA state for Polaris with VRAM-based buffers.
+///
+/// All buffers (ring, status, staging) are in VRAM — the GPU can access
+/// them directly without GART/MC system aperture setup.
+///
+/// ring0/ring1: (cpu_virt, gpu_addr) — CPU virtual address + GPU VRAM address
+/// status/staging: (cpu_virt, gpu_addr) — same pattern
+pub fn init_polaris_vram(
+    mmio_base: u64,
+    ring0: Option<(u64, u64)>,
+    ring1: Option<(u64, u64)>,
+    status_cpu: u64,
+    status_gpu: u64,
+    staging_cpu: u64,
+    staging_gpu: u64,
+    test_a_cpu: u64,
+    test_a_gpu: u64,
+    test_b_cpu: u64,
+    test_b_gpu: u64,
+) {
+    crate::log!("[SDMA] Polaris SDMA init (VRAM buffers)");
+
+    if mmio_base == 0 {
+        crate::log!("[SDMA] No MMIO base — skipping");
+        return;
+    }
+
+    // Polaris SDMA v3.0 GFX ring register base offsets (byte)
+    let sdma0_ring_base: u32 = 0x3480 * 4; // 0xD200
+    let sdma1_ring_base: u32 = (0x3480 + 0x200) * 4; // 0xDA00
+
+    // Zero status + staging via CPU (through VRAM aperture)
+    unsafe {
+        for i in 0..(STATUS_BUFFER_SIZE / 4) {
+            core::ptr::write_volatile((status_cpu + i as u64 * 4) as *mut u32, 0);
+        }
+        for i in 0..(STAGING_BUFFER_SIZE / 4) {
+            core::ptr::write_volatile((staging_cpu + i as u64 * 4) as *mut u32, 0);
+        }
+    }
+
+    // ring_virt = CPU virtual address (for writing commands via BAR0)
+    // ring_phys = GPU VRAM address (what the SDMA engine uses)
+    let engine0 = ring0.map(|(virt, gpu_addr)| SdmaEngine {
+        index: 0,
+        mmio_base,
+        reg_base: sdma0_ring_base,
+        wptr_off: sdma0_ring_base + 0x10,
+        wptr_hi_off: sdma0_ring_base + 0x14,
+        rptr_off: sdma0_ring_base + 0x0C,
+        ring_virt: virt,
+        ring_phys: gpu_addr,
+        wptr: 0,
+        fence_seq: 1,
+        transfers: 0,
+        bytes: 0,
+    });
+
+    let engine1 = ring1.map(|(virt, gpu_addr)| SdmaEngine {
+        index: 1,
+        mmio_base,
+        reg_base: sdma1_ring_base,
+        wptr_off: sdma1_ring_base + 0x10,
+        wptr_hi_off: sdma1_ring_base + 0x14,
+        rptr_off: sdma1_ring_base + 0x0C,
+        ring_virt: virt,
+        ring_phys: gpu_addr,
+        wptr: 0,
+        fence_seq: 1,
+        transfers: 0,
+        bytes: 0,
+    });
+
+    let e0_ok = engine0.is_some();
+    let e1_ok = engine1.is_some();
+
+    let mut state = SDMA_STATE.lock();
+    state.initialized = true;
+    state.mmio_base = mmio_base;
+    state.engines[0] = engine0;
+    state.engines[1] = engine1;
+    state.status_virt = status_cpu;
+    state.status_phys = status_gpu;
+    state.staging_virt = staging_cpu;
+    state.staging_phys = staging_gpu;
+    state.test_a_virt = test_a_cpu;
+    state.test_a_phys = test_a_gpu;
+    state.test_b_virt = test_b_cpu;
+    state.test_b_phys = test_b_gpu;
+    drop(state);
+
+    SDMA_READY.store(true, Ordering::SeqCst);
+
+    crate::log!("[SDMA] Polaris SDMA ready: E0={} E1={} (VRAM mode)", 
+        if e0_ok { "OK" } else { "NONE" },
+        if e1_ok { "OK" } else { "NONE" });
 }

@@ -471,11 +471,17 @@ pub fn is_initialized() -> bool {
     FILESYSTEM.lock().is_some()
 }
 
-/// Get filesystem (for commands)
+/// Get filesystem (for commands). Auto-initializes if not yet ready.
 pub fn with_fs<F, R>(f: F) -> R
 where
     F: FnOnce(&mut RamFs) -> R,
 {
     let mut guard = FILESYSTEM.lock();
-    f(guard.as_mut().expect("Filesystem not initialized"))
+    if guard.is_none() {
+        crate::serial_println!("[RAMFS] WARNING: with_fs called before init, auto-initializing");
+        let mut fs = RamFs::new();
+        fs.init();
+        *guard = Some(fs);
+    }
+    f(guard.as_mut().unwrap())
 }

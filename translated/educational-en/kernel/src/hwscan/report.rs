@@ -40,28 +40,28 @@ pub fn auto_scan_all() -> String {
     // Phase 0: DTB Discovery (aarch64/riscv64)
     #[cfg(target_arch = "aarch64")]
     {
-        let dtb_address = crate::android_main::dtb_address();
-        if dtb_address != 0 {
+        let dtb_addr = crate::android_main::dtb_address();
+        if dtb_addr != 0 {
             output.push_str("\x01Y[0/8] Device Tree Blob (DTB) Analysis...\x01W\n");
             output.push_str(&format!("{}\n", "=".repeat(60)));
                         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-                if let Some(parsed) = super::dtb_parser::parse_dtb(dtb_address as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+                if let Some(parsed) = super::dtb_parser::parse_dtb(dtb_addr as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u8) {
                     output.push_str(&super::dtb_parser::format_dtb_report(&parsed));
                     
                     // Cross-reference: DTB devices vs what we can actually access
                     output.push_str("\n\x01C--- DTB vs Reality Cross-Reference ---\x01W\n");
                     let mut undocumented = 0u32;
-                    for device in &parsed.devices {
-                        if device.register_base == 0 { continue; }
-                        let ptr = device.register_base as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+                    for dev in &parsed.devices {
+                        if dev.reg_base == 0 { continue; }
+                        let ptr = dev.reg_base as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u32;
                         let readable = core::ptr::read_volatile(ptr);
                         // If DTB says "disabled" but we can read it → interesting
-                        if device.status == "disabled" && readable != 0 && readable != 0xFFFFFFFF {
+                        if dev.status == "disabled" && readable != 0 && readable != 0xFFFFFFFF {
                             output.push_str(&format!("  \x01R[!] {} (0x{:X}): DTB says disabled, but RESPONDS (0x{:08X})\x01W\n",
-                                device.compatible, device.register_base, readable));
+                                dev.compatible, dev.reg_base, readable));
                             undocumented += 1;
                         }
                     }

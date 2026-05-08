@@ -22,11 +22,11 @@ pub struct CpuContext {
     pub r13: u64,
     pub r14: u64,
     pub r15: u64,
-    pub pc: u64,
+    pub rip: u64,
     pub rflags: u64,
-    pub jm: u64,
+    pub cr3: u64,
     
-    pub swq: [u8; 512],
+    pub fpu_state: [u8; 512],
 }
 
 impl CpuContext {
@@ -36,34 +36,34 @@ impl CpuContext {
             rsi: 0, rdi: 0, rbp: 0, rsp: 0,
             r8: 0, r9: 0, r10: 0, r11: 0,
             r12: 0, r13: 0, r14: 0, r15: 0,
-            pc: 0, rflags: 0x202, 
-            jm: 0,
-            swq: [0; 512],
+            rip: 0, rflags: 0x202, 
+            cr3: 0,
+            fpu_state: [0; 512],
         }
     }
     
     
-    pub fn pix(&mut self, bt: u64) {
-        self.pc = bt;
+    pub fn jfc(&mut self, entry: u64) {
+        self.rip = entry;
     }
     
     
-    pub fn pjg(&mut self, sp: u64) {
+    pub fn jfl(&mut self, sp: u64) {
         self.rsp = sp;
     }
     
     
-    pub fn pjc(&mut self, se: u64) {
-        self.jm = se;
+    pub fn jfh(&mut self, jd: u64) {
+        self.cr3 = jd;
     }
     
     
-    pub fn edk(&self) -> u64 {
-        self.pc
+    pub fn instruction_pointer(&self) -> u64 {
+        self.rip
     }
     
     
-    pub fn pns(&self) -> u64 {
+    pub fn jic(&self) -> u64 {
         self.rsp
     }
 }

@@ -191,7 +191,8 @@ impl GlState {
         if stack.is_empty() {
             stack.push(Mat4::IDENTITY);
         }
-        stack.last_mut().unwrap()
+        // SAFETY: push above guarantees non-empty
+        stack.last_mut().unwrap_or_else(|| unreachable!())
     }
 
     fn get_mvp(&self) -> Mat4 {

@@ -8,7 +8,7 @@ pub fn is_supported() -> bool { false }
 // Public structure — visible outside this module.
 pub struct SvmFeatures {
     pub revision: u8,
-    pub number_asids: u32,
+    pub num_asids: u32,
     pub npt: bool,
     pub lbr_virt: bool,
     pub svm_lock: bool,
@@ -28,7 +28,7 @@ pub struct SvmFeatures {
 pub fn get_features() -> SvmFeatures {
     SvmFeatures {
         revision: 0,
-        number_asids: 0,
+        num_asids: 0,
         npt: false,
         lbr_virt: false,
         svm_lock: false,

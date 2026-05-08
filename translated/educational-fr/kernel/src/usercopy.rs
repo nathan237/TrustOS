@@ -117,19 +117,19 @@ impl UserSlice {
     }
     
     /// Read into kernel buffer
-    pub fn read_to(&self, buffer: &mut [u8]) -> Result<usize, UserCopyError> {
-        let to_read = buffer.len().minimum(self.len);
-        copy_from_user(&mut buffer[..to_read], self.ptr)?;
+    pub fn read_to(&self, buf: &mut [u8]) -> Result<usize, UserCopyError> {
+        let to_read = buf.len().min(self.len);
+        copy_from_user(&mut buf[..to_read], self.ptr)?;
         Ok(to_read)
     }
     
     /// Write from kernel buffer
-    pub fn write_from(&self, buffer: &[u8]) -> Result<usize, UserCopyError> {
+    pub fn write_from(&self, buf: &[u8]) -> Result<usize, UserCopyError> {
         if !self.writable {
             return Err(UserCopyError::Permission);
         }
-        let to_write = buffer.len().minimum(self.len);
-        copy_to_user(self.ptr, &buffer[..to_write])?;
+        let to_write = buf.len().min(self.len);
+        copy_to_user(self.ptr, &buf[..to_write])?;
         Ok(to_write)
     }
     
@@ -180,8 +180,8 @@ const u8,
 }
 
 /// Copy data from user space to kernel buffer
-pub fn copy_from_user(destination: &mut [u8], source_pointer: u64) -> Result<(), UserCopyError> {
-    if destination.is_empty() {
+pub fn copy_from_user(dst: &mut [u8], source_pointer: u64) -> Result<(), UserCopyError> {
+    if dst.is_empty() {
         return Ok(());
     }
     
@@ -195,23 +195,23 @@ pub fn copy_from_user(destination: &mut [u8], source_pointer: u64) -> Result<(),
     }
     
     // Validate pages
-    if !crate::memory::validate_user_pointer(source_pointer, destination.len(), false) {
+    if !crate::memory::validate_user_pointer(source_pointer, dst.len(), false) {
         return Err(UserCopyError::PageFault);
     }
     
     // Perform copy (in real kernel, this might use special instructions)
     unsafe {
-        let source = source_pointer as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+        let src = source_pointer as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u8;
-        core::ptr::copy_nonoverlapping(source, destination.as_mut_pointer(), destination.len());
+        core::ptr::copy_nonoverlapping(src, dst.as_mut_ptr(), dst.len());
     }
     
     Ok(())
 }
 
 /// Copy data from kernel buffer to user space
-pub fn copy_to_user(destination_pointer: u64, source: &[u8]) -> Result<(), UserCopyError> {
-    if source.is_empty() {
+pub fn copy_to_user(destination_pointer: u64, src: &[u8]) -> Result<(), UserCopyError> {
+    if src.is_empty() {
         return Ok(());
     }
     
@@ -225,14 +225,14 @@ pub fn copy_to_user(destination_pointer: u64, source: &[u8]) -> Result<(), UserC
     }
     
     // Validate pages (need write access)
-    if !crate::memory::validate_user_pointer(destination_pointer, source.len(), true) {
+    if !crate::memory::validate_user_pointer(destination_pointer, src.len(), true) {
         return Err(UserCopyError::PageFault);
     }
     
     // Perform copy
     unsafe {
-        let destination = destination_pointer as *mut u8;
-        core::ptr::copy_nonoverlapping(source.as_pointer(), destination, source.len());
+        let dst = destination_pointer as *mut u8;
+        core::ptr::copy_nonoverlapping(src.as_ptr(), dst, src.len());
     }
     
     Ok(())
@@ -257,15 +257,15 @@ loop {
             break;
         }
         
-        let address = ptr.checked_add(offset)
+        let addr = ptr.checked_add(offset)
             .ok_or(UserCopyError::Overflow)?;
         
-        if !crate::memory::validate_user_pointer(address, 1, false) {
+        if !crate::memory::validate_user_pointer(addr, 1, false) {
             return Err(UserCopyError::PageFault);
         }
         
         let byte = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { *(address as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+unsafe { *(addr as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u8) };
         
         if byte == 0 {
@@ -276,7 +276,7 @@ const u8) };
         offset += 1;
     }
     
-    String::from_utf8(result).map_error(|_| UserCopyError::InvalidLength)
+    String::from_utf8(result).map_err(|_| UserCopyError::InvalidLength)
 }
 
 /// Read a fixed-size struct from user space

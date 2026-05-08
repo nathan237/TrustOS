@@ -6,18 +6,18 @@
 use alloc::vec::Vec;
 use alloc::boxed::Box;
 use embedded_graphics_core::{
-    draw_target::Cba,
-    geometry::{Cuj, Cim, Size as EgSize},
-    pixelcolor::{Rgb888, Dgh},
-    Bpb,
+    draw_target::DrawTarget,
+    geometry::{Dimensions, OriginDimensions, Size as EgSize},
+    pixelcolor::{Rgb888, RgbColor},
+    Pixel,
 };
 use embedded_graphics::prelude::*;
 use embedded_graphics::primitives::{
     Circle, Ellipse, Line, Rectangle, RoundedRectangle, Triangle,
-    PrimitiveStyle, Dev, Dja,
+    PrimitiveStyle, PrimitiveStyleBuilder, StrokeAlignment,
     CornerRadii,
 };
-use embedded_graphics::mono_font::{ascii::BVI_, MonoTextStyle};
+use embedded_graphics::mono_font::{ascii::FONT_8X13, MonoTextStyle};
 use embedded_graphics::text::Text;
 
 
@@ -25,49 +25,49 @@ use embedded_graphics::text::Text;
 
 
 
-pub struct Sn {
-    pub bi: *mut u32,
-    pub z: u32,
-    pub ac: u32,
-    pub oq: u32, 
+pub struct Hy {
+    pub buffer: *mut u32,
+    pub width: u32,
+    pub height: u32,
+    pub stride: u32, 
 }
 
-impl Sn {
+impl Hy {
     
     
     
-    pub unsafe fn new(bi: *mut u32, z: u32, ac: u32, oq: u32) -> Self {
-        Self { bi, z, ac, oq }
+    pub unsafe fn new(buffer: *mut u32, width: u32, height: u32, stride: u32) -> Self {
+        Self { buffer, width, height, stride }
     }
 
     
-    pub fn yrt(bi: &mut [u32], z: u32, ac: u32) -> Self {
+    pub fn qgn(buffer: &mut [u32], width: u32, height: u32) -> Self {
         Self {
-            bi: bi.mw(),
-            z,
-            ac,
-            oq: z,
+            buffer: buffer.as_mut_ptr(),
+            width,
+            height,
+            stride: width,
         }
     }
 
     
     #[inline]
-    pub fn aht(&mut self, b: u32, c: u32, s: u32) {
-        if b < self.z && c < self.ac {
+    pub fn set_pixel(&mut self, x: u32, y: u32, color: u32) {
+        if x < self.width && y < self.height {
             unsafe {
-                let l = (c * self.oq + b) as isize;
-                *self.bi.l(l) = s;
+                let offset = (y * self.stride + x) as isize;
+                *self.buffer.offset(offset) = color;
             }
         }
     }
 
     
     #[inline]
-    pub fn beg(&self, b: u32, c: u32) -> u32 {
-        if b < self.z && c < self.ac {
+    pub fn get_pixel(&self, x: u32, y: u32) -> u32 {
+        if x < self.width && y < self.height {
             unsafe {
-                let l = (c * self.oq + b) as isize;
-                *self.bi.l(l)
+                let offset = (y * self.stride + x) as isize;
+                *self.buffer.offset(offset)
             }
         } else {
             0
@@ -75,52 +75,52 @@ impl Sn {
     }
 
     
-    pub fn hcv(&mut self, s: u32) {
-        for c in 0..self.ac {
-            for b in 0..self.z {
-                self.aht(b, c, s);
+    pub fn clear_color(&mut self, color: u32) {
+        for y in 0..self.height {
+            for x in 0..self.width {
+                self.set_pixel(x, y, color);
             }
         }
     }
 
     
     #[inline]
-    pub fn z(&self) -> u32 {
-        self.z
+    pub fn width(&self) -> u32 {
+        self.width
     }
 
     
     #[inline]
-    pub fn ac(&self) -> u32 {
-        self.ac
+    pub fn height(&self) -> u32 {
+        self.height
     }
 }
 
 
-impl Cim for Sn {
-    fn aw(&self) -> EgSize {
-        EgSize::new(self.z, self.ac)
+impl OriginDimensions for Hy {
+    fn size(&self) -> EgSize {
+        EgSize::new(self.width, self.height)
     }
 }
 
-impl Cba for Sn {
+impl DrawTarget for Hy {
     type Color = Rgb888;
-    type Q = core::convert::Czr;
+    type Error = core::convert::Infallible;
 
-    fn draw_iter<Bix>(&mut self, hz: Bix) -> Result<(), Self::Q>
+    fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
     where
-        Bix: IntoIterator<Item = Bpb<Self::Color>>,
+        I: IntoIterator<Item = Pixel<Self::Color>>,
     {
-        for Bpb(dff, s) in hz {
-            if dff.b >= 0 && dff.c >= 0 
-                && (dff.b as u32) < self.z 
-                && (dff.c as u32) < self.ac 
+        for Pixel(coord, color) in pixels {
+            if coord.x >= 0 && coord.y >= 0 
+                && (coord.x as u32) < self.width 
+                && (coord.y as u32) < self.height 
             {
-                let r = ((s.m() as u32) << 16)
-                    | ((s.at() as u32) << 8)
-                    | (s.o() as u32)
+                let c = ((color.r() as u32) << 16)
+                    | ((color.g() as u32) << 8)
+                    | (color.b() as u32)
                     | 0xFF000000;
-                self.aht(dff.b as u32, dff.c as u32, r);
+                self.set_pixel(coord.x as u32, coord.y as u32, c);
             }
         }
         Ok(())
@@ -134,271 +134,271 @@ impl Cba for Sn {
 
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub struct Color2D {
-    pub m: u8,
-    pub at: u8,
-    pub o: u8,
-    pub q: u8,
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+    pub a: u8,
 }
 
 impl Color2D {
-    pub const fn new(m: u8, at: u8, o: u8, q: u8) -> Self {
-        Self { m, at, o, q }
+    pub const fn new(r: u8, g: u8, b: u8, a: u8) -> Self {
+        Self { r, g, b, a }
     }
 
-    pub const fn xt(m: u8, at: u8, o: u8) -> Self {
-        Self { m, at, o, q: 255 }
+    pub const fn rgb(r: u8, g: u8, b: u8) -> Self {
+        Self { r, g, b, a: 255 }
     }
 
-    pub const fn dbi(m: u8, at: u8, o: u8, q: u8) -> Self {
-        Self { m, at, o, q }
+    pub const fn bdl(r: u8, g: u8, b: u8, a: u8) -> Self {
+        Self { r, g, b, a }
     }
 
-    pub const fn zi(r: u32) -> Self {
+    pub const fn from_u32(c: u32) -> Self {
         Self {
-            q: ((r >> 24) & 0xFF) as u8,
-            m: ((r >> 16) & 0xFF) as u8,
-            at: ((r >> 8) & 0xFF) as u8,
-            o: (r & 0xFF) as u8,
+            a: ((c >> 24) & 0xFF) as u8,
+            r: ((c >> 16) & 0xFF) as u8,
+            g: ((c >> 8) & 0xFF) as u8,
+            b: (c & 0xFF) as u8,
         }
     }
 
-    pub const fn lv(self) -> u32 {
-        ((self.q as u32) << 24) | ((self.m as u32) << 16) | ((self.at as u32) << 8) | (self.o as u32)
+    pub const fn to_u32(self) -> u32 {
+        ((self.a as u32) << 24) | ((self.r as u32) << 16) | ((self.g as u32) << 8) | (self.b as u32)
     }
 
-    pub fn dcv(self) -> Rgb888 {
-        Rgb888::new(self.m, self.at, self.o)
+    pub fn to_rgb888(self) -> Rgb888 {
+        Rgb888::new(self.r, self.g, self.b)
     }
 
     
-    pub const Ox: Color2D = Color2D::xt(0, 0, 0);
-    pub const Zm: Color2D = Color2D::xt(255, 255, 255);
-    pub const Bqa: Color2D = Color2D::xt(255, 0, 0);
-    pub const Bht: Color2D = Color2D::xt(0, 255, 0);
-    pub const Bci: Color2D = Color2D::xt(0, 0, 255);
-    pub const Cqs: Color2D = Color2D::xt(255, 255, 0);
-    pub const Bzg: Color2D = Color2D::xt(0, 255, 255);
-    pub const Cgz: Color2D = Color2D::xt(255, 0, 255);
-    pub const Cxx: Color2D = Color2D::xt(128, 128, 128);
-    pub const DIN_: Color2D = Color2D::xt(64, 64, 64);
-    pub const DSO_: Color2D = Color2D::xt(192, 192, 192);
-    pub const Ddj: Color2D = Color2D::xt(255, 165, 0);
-    pub const Dee: Color2D = Color2D::xt(128, 0, 128);
-    pub const Anl: Color2D = Color2D::new(0, 0, 0, 0);
+    pub const BLACK: Color2D = Color2D::rgb(0, 0, 0);
+    pub const WHITE: Color2D = Color2D::rgb(255, 255, 255);
+    pub const Acz: Color2D = Color2D::rgb(255, 0, 0);
+    pub const Zf: Color2D = Color2D::rgb(0, 255, 0);
+    pub const Wn: Color2D = Color2D::rgb(0, 0, 255);
+    pub const Asf: Color2D = Color2D::rgb(255, 255, 0);
+    pub const Ahy: Color2D = Color2D::rgb(0, 255, 255);
+    pub const Amm: Color2D = Color2D::rgb(255, 0, 255);
+    pub const Awt: Color2D = Color2D::rgb(128, 128, 128);
+    pub const DMC_: Color2D = Color2D::rgb(64, 64, 64);
+    pub const DWH_: Color2D = Color2D::rgb(192, 192, 192);
+    pub const Azw: Color2D = Color2D::rgb(255, 165, 0);
+    pub const Bao: Color2D = Color2D::rgb(128, 0, 128);
+    pub const TRANSPARENT: Color2D = Color2D::new(0, 0, 0, 0);
 }
 
 
-pub struct Ckk<'a> {
-    cd: &'a mut Sn,
+pub struct Aon<'a> {
+    target: &'a mut Hy,
 }
 
-impl<'a> Ckk<'a> {
-    pub fn new(cd: &'a mut Sn) -> Self {
-        Self { cd }
+impl<'a> Aon<'a> {
+    pub fn new(target: &'a mut Hy) -> Self {
+        Self { target }
     }
 
     
-    pub fn clear(&mut self, s: Color2D) {
-        self.cd.hcv(s.lv());
+    pub fn clear(&mut self, color: Color2D) {
+        self.target.clear_color(color.to_u32());
     }
 
     
-    pub fn line(&mut self, dn: i32, dp: i32, hy: i32, jz: i32, s: Color2D, ahw: u32) {
-        let amx = PrimitiveStyle::ihi(s.dcv(), ahw);
-        let _ = Line::new(Point::new(dn, dp), Point::new(hy, jz))
-            .dsf(amx)
-            .po(self.cd);
+    pub fn line(&mut self, x1: i32, y1: i32, x2: i32, y2: i32, color: Color2D, rh: u32) {
+        let style = PrimitiveStyle::with_stroke(color.to_rgb888(), rh);
+        let _ = Line::new(Point::new(x1, y1), Point::new(x2, y2))
+            .into_styled(style)
+            .draw(self.target);
     }
 
     
-    pub fn ha(&mut self, b: i32, c: i32, d: u32, i: u32, s: Color2D, ahw: u32) {
-        let amx = PrimitiveStyle::ihi(s.dcv(), ahw);
-        let _ = Rectangle::new(Point::new(b, c), EgSize::new(d, i))
-            .dsf(amx)
-            .po(self.cd);
+    pub fn rect(&mut self, x: i32, y: i32, w: u32, h: u32, color: Color2D, rh: u32) {
+        let style = PrimitiveStyle::with_stroke(color.to_rgb888(), rh);
+        let _ = Rectangle::new(Point::new(x, y), EgSize::new(w, h))
+            .into_styled(style)
+            .draw(self.target);
     }
 
     
-    pub fn ah(&mut self, b: i32, c: i32, d: u32, i: u32, s: Color2D) {
-        let amx = PrimitiveStyle::jwz(s.dcv());
-        let _ = Rectangle::new(Point::new(b, c), EgSize::new(d, i))
-            .dsf(amx)
-            .po(self.cd);
+    pub fn fill_rect(&mut self, x: i32, y: i32, w: u32, h: u32, color: Color2D) {
+        let style = PrimitiveStyle::with_fill(color.to_rgb888());
+        let _ = Rectangle::new(Point::new(x, y), EgSize::new(w, h))
+            .into_styled(style)
+            .draw(self.target);
     }
 
     
-    pub fn zkl(&mut self, b: i32, c: i32, d: u32, i: u32, dy: u32, s: Color2D, ahw: u32) {
-        let amx = PrimitiveStyle::ihi(s.dcv(), ahw);
+    pub fn qum(&mut self, x: i32, y: i32, w: u32, h: u32, radius: u32, color: Color2D, rh: u32) {
+        let style = PrimitiveStyle::with_stroke(color.to_rgb888(), rh);
         let _ = RoundedRectangle::new(
-            Rectangle::new(Point::new(b, c), EgSize::new(d, i)),
-            CornerRadii::new(EgSize::new(dy, dy)),
+            Rectangle::new(Point::new(x, y), EgSize::new(w, h)),
+            CornerRadii::new(EgSize::new(radius, radius)),
         )
-        .dsf(amx)
-        .po(self.cd);
+        .into_styled(style)
+        .draw(self.target);
     }
 
     
-    pub fn afp(&mut self, b: i32, c: i32, d: u32, i: u32, dy: u32, s: Color2D) {
-        let amx = PrimitiveStyle::jwz(s.dcv());
+    pub fn fill_rounded_rect(&mut self, x: i32, y: i32, w: u32, h: u32, radius: u32, color: Color2D) {
+        let style = PrimitiveStyle::with_fill(color.to_rgb888());
         let _ = RoundedRectangle::new(
-            Rectangle::new(Point::new(b, c), EgSize::new(d, i)),
-            CornerRadii::new(EgSize::new(dy, dy)),
+            Rectangle::new(Point::new(x, y), EgSize::new(w, h)),
+            CornerRadii::new(EgSize::new(radius, radius)),
         )
-        .dsf(amx)
-        .po(self.cd);
+        .into_styled(style)
+        .draw(self.target);
     }
 
     
-    pub fn yie(&mut self, cx: i32, ae: i32, dy: u32, s: Color2D, ahw: u32) {
-        let amx = PrimitiveStyle::ihi(s.dcv(), ahw);
-        let _ = Circle::new(Point::new(cx - dy as i32, ae - dy as i32), dy * 2)
-            .dsf(amx)
-            .po(self.cd);
+    pub fn pzs(&mut self, cx: i32, u: i32, radius: u32, color: Color2D, rh: u32) {
+        let style = PrimitiveStyle::with_stroke(color.to_rgb888(), rh);
+        let _ = Circle::new(Point::new(cx - radius as i32, u - radius as i32), radius * 2)
+            .into_styled(style)
+            .draw(self.target);
     }
 
     
-    pub fn abc(&mut self, cx: i32, ae: i32, dy: u32, s: Color2D) {
-        let amx = PrimitiveStyle::jwz(s.dcv());
-        let _ = Circle::new(Point::new(cx - dy as i32, ae - dy as i32), dy * 2)
-            .dsf(amx)
-            .po(self.cd);
+    pub fn fill_circle(&mut self, cx: i32, u: i32, radius: u32, color: Color2D) {
+        let style = PrimitiveStyle::with_fill(color.to_rgb888());
+        let _ = Circle::new(Point::new(cx - radius as i32, u - radius as i32), radius * 2)
+            .into_styled(style)
+            .draw(self.target);
     }
 
     
-    pub fn you(&mut self, cx: i32, ae: i32, kb: u32, ix: u32, s: Color2D, ahw: u32) {
-        let amx = PrimitiveStyle::ihi(s.dcv(), ahw);
-        let _ = Ellipse::new(Point::new(cx - kb as i32, ae - ix as i32), EgSize::new(kb * 2, ix * 2))
-            .dsf(amx)
-            .po(self.cd);
+    pub fn qeo(&mut self, cx: i32, u: i32, da: u32, cm: u32, color: Color2D, rh: u32) {
+        let style = PrimitiveStyle::with_stroke(color.to_rgb888(), rh);
+        let _ = Ellipse::new(Point::new(cx - da as i32, u - cm as i32), EgSize::new(da * 2, cm * 2))
+            .into_styled(style)
+            .draw(self.target);
     }
 
     
-    pub fn yql(&mut self, cx: i32, ae: i32, kb: u32, ix: u32, s: Color2D) {
-        let amx = PrimitiveStyle::jwz(s.dcv());
-        let _ = Ellipse::new(Point::new(cx - kb as i32, ae - ix as i32), EgSize::new(kb * 2, ix * 2))
-            .dsf(amx)
-            .po(self.cd);
+    pub fn qfn(&mut self, cx: i32, u: i32, da: u32, cm: u32, color: Color2D) {
+        let style = PrimitiveStyle::with_fill(color.to_rgb888());
+        let _ = Ellipse::new(Point::new(cx - da as i32, u - cm as i32), EgSize::new(da * 2, cm * 2))
+            .into_styled(style)
+            .draw(self.target);
     }
 
     
-    pub fn ztp(&mut self, dn: i32, dp: i32, hy: i32, jz: i32, ajr: i32, dnn: i32, s: Color2D, ahw: u32) {
-        let amx = PrimitiveStyle::ihi(s.dcv(), ahw);
+    pub fn ray(&mut self, x1: i32, y1: i32, x2: i32, y2: i32, x3: i32, bkf: i32, color: Color2D, rh: u32) {
+        let style = PrimitiveStyle::with_stroke(color.to_rgb888(), rh);
         let _ = Triangle::new(
-            Point::new(dn, dp),
-            Point::new(hy, jz),
-            Point::new(ajr, dnn),
+            Point::new(x1, y1),
+            Point::new(x2, y2),
+            Point::new(x3, bkf),
         )
-        .dsf(amx)
-        .po(self.cd);
+        .into_styled(style)
+        .draw(self.target);
     }
 
     
-    pub fn kvx(&mut self, dn: i32, dp: i32, hy: i32, jz: i32, ajr: i32, dnn: i32, s: Color2D) {
-        let amx = PrimitiveStyle::jwz(s.dcv());
+    pub fn fwt(&mut self, x1: i32, y1: i32, x2: i32, y2: i32, x3: i32, bkf: i32, color: Color2D) {
+        let style = PrimitiveStyle::with_fill(color.to_rgb888());
         let _ = Triangle::new(
-            Point::new(dn, dp),
-            Point::new(hy, jz),
-            Point::new(ajr, dnn),
+            Point::new(x1, y1),
+            Point::new(x2, y2),
+            Point::new(x3, bkf),
         )
-        .dsf(amx)
-        .po(self.cd);
+        .into_styled(style)
+        .draw(self.target);
     }
 
     
-    pub fn text(&mut self, b: i32, c: i32, text: &str, s: Color2D) {
-        let amx = MonoTextStyle::new(&BVI_, s.dcv());
-        let _ = Text::new(text, Point::new(b, c), amx).po(self.cd);
+    pub fn text(&mut self, x: i32, y: i32, text: &str, color: Color2D) {
+        let style = MonoTextStyle::new(&FONT_8X13, color.to_rgb888());
+        let _ = Text::new(text, Point::new(x, y), style).draw(self.target);
     }
 
     
-    pub fn yvk(&mut self, b: i32, c: i32, d: u32, i: u32, qc: Color2D, abm: Color2D) {
-        if i == 0 || d == 0 { return; }
-        for br in 0..i {
-            let ab = br as f32 / i as f32;
-            let m = (qc.m as f32 + (abm.m as f32 - qc.m as f32) * ab) as u8;
-            let at = (qc.at as f32 + (abm.at as f32 - qc.at as f32) * ab) as u8;
-            let o = (qc.o as f32 + (abm.o as f32 - qc.o as f32) * ab) as u8;
-            let s = 0xFF000000 | ((m as u32) << 16) | ((at as u32) << 8) | (o as u32);
+    pub fn qju(&mut self, x: i32, y: i32, w: u32, h: u32, top: Color2D, bottom: Color2D) {
+        if h == 0 || w == 0 { return; }
+        for row in 0..h {
+            let t = row as f32 / h as f32;
+            let r = (top.r as f32 + (bottom.r as f32 - top.r as f32) * t) as u8;
+            let g = (top.g as f32 + (bottom.g as f32 - top.g as f32) * t) as u8;
+            let b = (top.b as f32 + (bottom.b as f32 - top.b as f32) * t) as u8;
+            let color = 0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
             
-            let x = c + br as i32;
-            if x < 0 || x >= self.cd.ac as i32 { continue; }
-            let dav = b.am(0) as u32;
-            let hwe = ((b + d as i32) as u32).v(self.cd.z);
-            if hwe <= dav { continue; }
+            let o = y + row as i32;
+            if o < 0 || o >= self.target.height as i32 { continue; }
+            let bdd = x.max(0) as u32;
+            let dwz = ((x + w as i32) as u32).min(self.target.width);
+            if dwz <= bdd { continue; }
             
-            let afg = (x as u32 * self.cd.oq + dav) as usize;
-            let hjj = (hwe - dav) as usize;
+            let pq = (o as u32 * self.target.stride + bdd) as usize;
+            let dpn = (dwz - bdd) as usize;
             
             #[cfg(target_arch = "x86_64")]
             unsafe {
-                crate::graphics::simd::bed(
-                    self.cd.bi.add(afg),
-                    hjj,
-                    s,
+                crate::graphics::simd::adq(
+                    self.target.buffer.add(pq),
+                    dpn,
+                    color,
                 );
             }
             #[cfg(not(target_arch = "x86_64"))]
             {
-                for bj in 0..hjj {
-                    unsafe { *self.cd.bi.add(afg + bj) = s; }
+                for col in 0..dpn {
+                    unsafe { *self.target.buffer.add(pq + col) = color; }
                 }
             }
         }
     }
 
     
-    pub fn yvj(&mut self, b: i32, c: i32, d: u32, i: u32, fd: Color2D, hw: Color2D) {
-        if i == 0 || d == 0 { return; }
+    pub fn qjt(&mut self, x: i32, y: i32, w: u32, h: u32, left: Color2D, right: Color2D) {
+        if h == 0 || w == 0 { return; }
         
-        let mut lah = alloc::vec![0u32; d as usize];
-        for bj in 0..d {
-            let ab = bj as f32 / d as f32;
-            let m = (fd.m as f32 + (hw.m as f32 - fd.m as f32) * ab) as u8;
-            let at = (fd.at as f32 + (hw.at as f32 - fd.at as f32) * ab) as u8;
-            let o = (fd.o as f32 + (hw.o as f32 - fd.o as f32) * ab) as u8;
-            lah[bj as usize] = 0xFF000000 | ((m as u32) << 16) | ((at as u32) << 8) | (o as u32);
+        let mut fzi = alloc::vec![0u32; w as usize];
+        for col in 0..w {
+            let t = col as f32 / w as f32;
+            let r = (left.r as f32 + (right.r as f32 - left.r as f32) * t) as u8;
+            let g = (left.g as f32 + (right.g as f32 - left.g as f32) * t) as u8;
+            let b = (left.b as f32 + (right.b as f32 - left.b as f32) * t) as u8;
+            fzi[col as usize] = 0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
         }
         
-        for br in 0..i {
-            let x = c + br as i32;
-            if x < 0 || x >= self.cd.ac as i32 { continue; }
-            let dav = b.am(0) as u32;
-            let hwe = ((b + d as i32) as u32).v(self.cd.z);
-            if hwe <= dav { continue; }
+        for row in 0..h {
+            let o = y + row as i32;
+            if o < 0 || o >= self.target.height as i32 { continue; }
+            let bdd = x.max(0) as u32;
+            let dwz = ((x + w as i32) as u32).min(self.target.width);
+            if dwz <= bdd { continue; }
             
-            let pmt = (dav as i32 - b).am(0) as usize;
-            let zg = (hwe - dav) as usize;
-            let bgu = (x as u32 * self.cd.oq + dav) as usize;
+            let jhq = (bdd as i32 - x).max(0) as usize;
+            let mb = (dwz - bdd) as usize;
+            let afd = (o as u32 * self.target.stride + bdd) as usize;
             
             #[cfg(target_arch = "x86_64")]
             unsafe {
-                crate::graphics::simd::dpd(
-                    self.cd.bi.add(bgu),
-                    lah.fq().add(pmt),
-                    zg,
+                crate::graphics::simd::blg(
+                    self.target.buffer.add(afd),
+                    fzi.as_ptr().add(jhq),
+                    mb,
                 );
             }
             #[cfg(not(target_arch = "x86_64"))]
             {
-                for a in 0..zg {
-                    unsafe { *self.cd.bi.add(bgu + a) = lah[pmt + a]; }
+                for i in 0..mb {
+                    unsafe { *self.target.buffer.add(afd + i) = fzi[jhq + i]; }
                 }
             }
         }
     }
 
     
-    pub fn zc(&mut self, b: i32, c: i32, d: u32, i: u32, cou: u32, s: Color2D) {
-        let qhg = s.q as f32 / cou as f32;
-        for a in 0..cou {
-            let dw = (s.q as f32 - qhg * a as f32) as u8;
-            let dls = Color2D::new(s.m, s.at, s.o, dw);
-            self.ha(
-                b - a as i32,
-                c - a as i32,
-                d + a * 2,
-                i + a * 2,
-                dls,
+    pub fn shadow(&mut self, x: i32, y: i32, w: u32, h: u32, awi: u32, color: Color2D) {
+        let jve = color.a as f32 / awi as f32;
+        for i in 0..awi {
+            let alpha = (color.a as f32 - jve * i as f32) as u8;
+            let bjd = Color2D::new(color.r, color.g, color.b, alpha);
+            self.rect(
+                x - i as i32,
+                y - i as i32,
+                w + i * 2,
+                h + i * 2,
+                bjd,
                 1,
             );
         }
@@ -411,57 +411,57 @@ impl<'a> Ckk<'a> {
 
 
 pub struct Sprite {
-    pub z: u32,
-    pub ac: u32,
-    pub hz: Box<[u32]>,
+    pub width: u32,
+    pub height: u32,
+    pub pixels: Box<[u32]>,
 }
 
 impl Sprite {
     
-    pub fn new(z: u32, ac: u32) -> Self {
-        let aw = (z * ac) as usize;
+    pub fn new(width: u32, height: u32) -> Self {
+        let size = (width * height) as usize;
         Self {
-            z,
-            ac,
-            hz: alloc::vec![0u32; aw].dsd(),
+            width,
+            height,
+            pixels: alloc::vec![0u32; size].into_boxed_slice(),
         }
     }
 
     
-    pub fn fjd(z: u32, ac: u32, hz: Vec<u32>) -> Self {
+    pub fn cjv(width: u32, height: u32, pixels: Vec<u32>) -> Self {
         Self {
-            z,
-            ac,
-            hz: hz.dsd(),
+            width,
+            height,
+            pixels: pixels.into_boxed_slice(),
         }
     }
 
     
-    pub fn get(&self, b: u32, c: u32) -> u32 {
-        if b < self.z && c < self.ac {
-            self.hz[(c * self.z + b) as usize]
+    pub fn get(&self, x: u32, y: u32) -> u32 {
+        if x < self.width && y < self.height {
+            self.pixels[(y * self.width + x) as usize]
         } else {
             0
         }
     }
 
     
-    pub fn oj(&mut self, b: u32, c: u32, s: u32) {
-        if b < self.z && c < self.ac {
-            self.hz[(c * self.z + b) as usize] = s;
+    pub fn set(&mut self, x: u32, y: u32, color: u32) {
+        if x < self.width && y < self.height {
+            self.pixels[(y * self.width + x) as usize] = color;
         }
     }
 
     
-    pub fn po(&self, cd: &mut Sn, b: i32, c: i32) {
-        for cq in 0..self.ac {
-            for cr in 0..self.z {
-                let y = b + cr as i32;
-                let x = c + cq as i32;
-                if y >= 0 && x >= 0 {
-                    let s = self.get(cr, cq);
-                    if (s >> 24) > 0 { 
-                        cd.aht(y as u32, x as u32, s);
+    pub fn draw(&self, target: &mut Hy, x: i32, y: i32) {
+        for ak in 0..self.height {
+            for am in 0..self.width {
+                let p = x + am as i32;
+                let o = y + ak as i32;
+                if p >= 0 && o >= 0 {
+                    let color = self.get(am, ak);
+                    if (color >> 24) > 0 { 
+                        target.set_pixel(p as u32, o as u32, color);
                     }
                 }
             }
@@ -469,28 +469,28 @@ impl Sprite {
     }
 
     
-    pub fn sbv(&self, cd: &mut Sn, b: i32, c: i32) {
-        for cq in 0..self.ac {
-            for cr in 0..self.z {
-                let y = b + cr as i32;
-                let x = c + cq as i32;
-                if y >= 0 && x >= 0 && (y as u32) < cd.z && (x as u32) < cd.ac {
-                    let cy = self.get(cr, cq);
-                    let gsw = ((cy >> 24) & 0xFF) as f32 / 255.0;
+    pub fn lic(&self, target: &mut Hy, x: i32, y: i32) {
+        for ak in 0..self.height {
+            for am in 0..self.width {
+                let p = x + am as i32;
+                let o = y + ak as i32;
+                if p >= 0 && o >= 0 && (p as u32) < target.width && (o as u32) < target.height {
+                    let src = self.get(am, ak);
+                    let des = ((src >> 24) & 0xFF) as f32 / 255.0;
                     
-                    if gsw > 0.0 {
-                        if gsw >= 1.0 {
-                            cd.aht(y as u32, x as u32, cy);
+                    if des > 0.0 {
+                        if des >= 1.0 {
+                            target.set_pixel(p as u32, o as u32, src);
                         } else {
-                            let cs = cd.beg(y as u32, x as u32);
-                            let krr = 1.0 - gsw;
+                            let dst = target.get_pixel(p as u32, o as u32);
+                            let fth = 1.0 - des;
                             
-                            let m = (((cy >> 16) & 0xFF) as f32 * gsw + ((cs >> 16) & 0xFF) as f32 * krr) as u32;
-                            let at = (((cy >> 8) & 0xFF) as f32 * gsw + ((cs >> 8) & 0xFF) as f32 * krr) as u32;
-                            let o = ((cy & 0xFF) as f32 * gsw + (cs & 0xFF) as f32 * krr) as u32;
+                            let r = (((src >> 16) & 0xFF) as f32 * des + ((dst >> 16) & 0xFF) as f32 * fth) as u32;
+                            let g = (((src >> 8) & 0xFF) as f32 * des + ((dst >> 8) & 0xFF) as f32 * fth) as u32;
+                            let b = ((src & 0xFF) as f32 * des + (dst & 0xFF) as f32 * fth) as u32;
                             
-                            let dei = 0xFF000000 | (m << 16) | (at << 8) | o;
-                            cd.aht(y as u32, x as u32, dei);
+                            let bex = 0xFF000000 | (r << 16) | (g << 8) | b;
+                            target.set_pixel(p as u32, o as u32, bex);
                         }
                     }
                 }
@@ -499,17 +499,17 @@ impl Sprite {
     }
 
     
-    pub fn bv(&self, cst: u32, csr: u32) -> Self {
-        let mut hyu = Sprite::new(cst, csr);
+    pub fn scale(&self, aym: u32, ayk: u32) -> Self {
+        let mut dyk = Sprite::new(aym, ayk);
         
-        for c in 0..csr {
-            for b in 0..cst {
-                let blg = (b * self.z / cst).v(self.z - 1);
-                let bih = (c * self.ac / csr).v(self.ac - 1);
-                hyu.oj(b, c, self.get(blg, bih));
+        for y in 0..ayk {
+            for x in 0..aym {
+                let ahc = (x * self.width / aym).min(self.width - 1);
+                let aft = (y * self.height / ayk).min(self.height - 1);
+                dyk.set(x, y, self.get(ahc, aft));
             }
         }
         
-        hyu
+        dyk
     }
 }

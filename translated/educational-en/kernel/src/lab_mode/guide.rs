@@ -146,9 +146,9 @@ match key {
     }
     
         // Public function — callable from other modules.
-pub fn handle_char(&mut self, character: char) {
-        if character.is_ascii_graphic() || character == ' ' {
-            self.search.insert(self.cursor, character);
+pub fn handle_char(&mut self, ch: char) {
+        if ch.is_ascii_graphic() || ch == ' ' {
+            self.search.insert(self.cursor, ch);
             self.cursor += 1;
             self.selected = 0;
             self.scroll = 0;
@@ -264,7 +264,7 @@ match state.category_filter {
     }
     
     // Clamp selected
-    let selected = state.selected.minimum(filtered.len().saturating_sub(1));
+    let selected = state.selected.min(filtered.len().saturating_sub(1));
     
     // Auto-scroll to keep selection visible
     let scroll = if selected >= state.scroll + visible {
@@ -275,7 +275,7 @@ match state.category_filter {
         state.scroll
     };
     
-    let end = (scroll + visible).minimum(filtered.len());
+    let end = (scroll + visible).min(filtered.len());
     
     for i in scroll..end {
         let cmd = filtered[i];

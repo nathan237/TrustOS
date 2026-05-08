@@ -7,10 +7,10 @@ use super::cpu;
 /// Flush a single TLB entry (INVLPG)
 #[inline(always)]
 // Fonction publique — appelable depuis d'autres modules.
-pub fn flush_tlb(address: u64) {
+pub fn flush_tlb(addr: u64) {
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-        core::arch::asm!("invlpg [{}]", in(reg) address, options(nostack, preserves_flags));
+        core::arch::asm!("invlpg [{}]", in(reg) addr, options(nostack, preserves_flags));
     }
 }
 
@@ -36,9 +36,9 @@ unsafe { cpu::read_cr3() }
 /// Write the page table root (CR3)
 #[inline(always)]
 // Fonction publique — appelable depuis d'autres modules.
-pub fn write_page_table_root(value: u64) {
+pub fn write_page_table_root(val: u64) {
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { cpu::write_cr3(value); }
+unsafe { cpu::write_cr3(val); }
 }
 
 /// Enable the NX (No-Execute) bit via EFER MSR

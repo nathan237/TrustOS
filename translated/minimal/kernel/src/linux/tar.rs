@@ -9,135 +9,135 @@ use alloc::format;
 
 
 #[repr(C)]
-struct Djs {
-    j: [u8; 100],
-    ev: [u8; 8],
-    pi: [u8; 8],
-    pw: [u8; 8],
-    aw: [u8; 12],
-    bnp: [u8; 12],
-    yid: [u8; 8],
-    pwu: u8,
-    zau: [u8; 100],
-    sj: [u8; 6],
-    dk: [u8; 2],
-    cin: [u8; 32],
-    yvd: [u8; 32],
-    yly: [u8; 8],
-    ylz: [u8; 8],
-    adx: [u8; 155],
-    fzo: [u8; 12],
+struct Beb {
+    name: [u8; 100],
+    mode: [u8; 8],
+    uid: [u8; 8],
+    gid: [u8; 8],
+    size: [u8; 12],
+    mtime: [u8; 12],
+    chksum: [u8; 8],
+    joz: u8,
+    linkname: [u8; 100],
+    magic: [u8; 6],
+    version: [u8; 2],
+    asq: [u8; 32],
+    gname: [u8; 32],
+    devmajor: [u8; 8],
+    devminor: [u8; 8],
+    nm: [u8; 155],
+    _pad: [u8; 12],
 }
 
-const HF_: usize = 512;
+const HX_: usize = 512;
 
 
-const Cjs: u8 = b'0';
-const Bxj: u8 = 0;
-const Cah: u8 = b'5';
-const Cmn: u8 = b'2';
+const Aoa: u8 = b'0';
+const Agw: u8 = 0;
+const Aih: u8 = b'5';
+const Aqb: u8 = b'2';
 
 
-pub fn sqk(xau: &str, aac: &str) -> Result<usize, &'static str> {
+pub fn ltv(tarball_path: &str, mt: &str) -> Result<usize, &'static str> {
     
-    let ahf = crate::ramfs::fh(|fs| {
-        fs.mq(xau)
-            .map(|f| f.ip())
-            .jd(|_| "tarball not found")
+    let qv = crate::ramfs::bh(|fs| {
+        fs.read_file(tarball_path)
+            .map(|data| data.to_vec())
+            .map_err(|_| "tarball not found")
     })?;
     
     
-    let dpu = rut(&ahf)?;
+    let blr = lcu(&qv)?;
     
     
-    sqj(&dpu, aac)
+    ltu(&blr, mt)
 }
 
 
-fn rut(f: &[u8]) -> Result<Vec<u8>, &'static str> {
+fn lcu(data: &[u8]) -> Result<Vec<u8>, &'static str> {
     
-    if f.len() < 10 || f[0] != 0x1f || f[1] != 0x8b {
+    if data.len() < 10 || data[0] != 0x1f || data[1] != 0x8b {
         return Err("not a gzip file");
     }
     
     
-    if f[2] != 8 {
+    if data[2] != 8 {
         return Err("unsupported compression method");
     }
     
-    let flags = f[3];
-    let mut u = 10;
+    let flags = data[3];
+    let mut pos = 10;
     
     
     if flags & 0x04 != 0 {
-        if u + 2 > f.len() {
+        if pos + 2 > data.len() {
             return Err("truncated gzip");
         }
-        let mrq = (f[u] as usize) | ((f[u + 1] as usize) << 8);
-        u += 2 + mrq;
+        let hcy = (data[pos] as usize) | ((data[pos + 1] as usize) << 8);
+        pos += 2 + hcy;
     }
     
     
     if flags & 0x08 != 0 {
-        while u < f.len() && f[u] != 0 {
-            u += 1;
+        while pos < data.len() && data[pos] != 0 {
+            pos += 1;
         }
-        u += 1;
+        pos += 1;
     }
     
     
     if flags & 0x10 != 0 {
-        while u < f.len() && f[u] != 0 {
-            u += 1;
+        while pos < data.len() && data[pos] != 0 {
+            pos += 1;
         }
-        u += 1;
+        pos += 1;
     }
     
     
     if flags & 0x02 != 0 {
-        u += 2;
+        pos += 2;
     }
     
-    if u >= f.len() {
+    if pos >= data.len() {
         return Err("truncated gzip header");
     }
     
     
-    let len = f.len();
+    let len = data.len();
     if len < 8 {
         return Err("truncated gzip");
     }
-    let ota = (f[len - 4] as usize)
-        | ((f[len - 3] as usize) << 8)
-        | ((f[len - 2] as usize) << 16)
-        | ((f[len - 1] as usize) << 24);
+    let iss = (data[len - 4] as usize)
+        | ((data[len - 3] as usize) << 8)
+        | ((data[len - 2] as usize) << 16)
+        | ((data[len - 1] as usize) << 24);
     
     
-    let gde = &f[u..len - 8];
+    let cvm = &data[pos..len - 8];
     
     
-    let mut an = Vec::fc(ota);
+    let mut output = Vec::with_capacity(iss);
     
     
-    match tsv(gde, &mut an, ota) {
-        Ok(()) => Ok(an),
-        Err(aa) => Err(aa),
+    match mor(cvm, &mut output, iss) {
+        Ok(()) => Ok(output),
+        Err(e) => Err(e),
     }
 }
 
 
-fn tsv(input: &[u8], an: &mut Vec<u8>, ggm: usize) -> Result<(), &'static str> {
+fn mor(input: &[u8], output: &mut Vec<u8>, cxj: usize) -> Result<(), &'static str> {
     
-    let mut azm = DeflateDecoder::new(input);
+    let mut aaq = DeflateDecoder::new(input);
     
     loop {
-        match azm.rug(an)? {
-            BlockResult::Cg => continue,
-            BlockResult::Bev => break,
+        match aaq.decode_block(output)? {
+            BlockResult::Continue => continue,
+            BlockResult::Done => break,
         }
         
         
-        if an.len() > ggm + 1024 * 1024 {
+        if output.len() > cxj + 1024 * 1024 {
             return Err("decompression overflow");
         }
     }
@@ -146,115 +146,115 @@ fn tsv(input: &[u8], an: &mut Vec<u8>, ggm: usize) -> Result<(), &'static str> {
 }
 
 enum BlockResult {
-    Cg,
-    Bev,
+    Continue,
+    Done,
 }
 
 struct DeflateDecoder<'a> {
     input: &'a [u8],
-    u: usize,
-    har: u32,
-    gbc: u8,
+    pos: usize,
+    bit_buf: u32,
+    bit_count: u8,
 }
 
 impl<'a> DeflateDecoder<'a> {
     fn new(input: &'a [u8]) -> Self {
         Self {
             input,
-            u: 0,
-            har: 0,
-            gbc: 0,
+            pos: 0,
+            bit_buf: 0,
+            bit_count: 0,
         }
     }
     
-    fn dax(&mut self, bo: u8) -> Result<u32, &'static str> {
-        while self.gbc < bo {
-            if self.u >= self.input.len() {
+    fn read_bits(&mut self, ae: u8) -> Result<u32, &'static str> {
+        while self.bit_count < ae {
+            if self.pos >= self.input.len() {
                 return Err("unexpected end of input");
             }
-            self.har |= (self.input[self.u] as u32) << self.gbc;
-            self.u += 1;
-            self.gbc += 8;
+            self.bit_buf |= (self.input[self.pos] as u32) << self.bit_count;
+            self.pos += 1;
+            self.bit_count += 8;
         }
         
-        let result = self.har & ((1 << bo) - 1);
-        self.har >>= bo;
-        self.gbc -= bo;
+        let result = self.bit_buf & ((1 << ae) - 1);
+        self.bit_buf >>= ae;
+        self.bit_count -= ae;
         Ok(result)
     }
     
-    fn rug(&mut self, an: &mut Vec<u8>) -> Result<BlockResult, &'static str> {
-        let qpa = self.dax(1)?;
-        let qsn = self.dax(2)?;
+    fn decode_block(&mut self, output: &mut Vec<u8>) -> Result<BlockResult, &'static str> {
+        let kbm = self.read_bits(1)?;
+        let kel = self.read_bits(2)?;
         
-        match qsn {
+        match kel {
             0 => {
                 
-                self.har = 0;
-                self.gbc = 0;
+                self.bit_buf = 0;
+                self.bit_count = 0;
                 
-                if self.u + 4 > self.input.len() {
+                if self.pos + 4 > self.input.len() {
                     return Err("truncated stored block");
                 }
                 
-                let len = (self.input[self.u] as u16) | ((self.input[self.u + 1] as u16) << 8);
-                self.u += 4;
+                let len = (self.input[self.pos] as u16) | ((self.input[self.pos + 1] as u16) << 8);
+                self.pos += 4;
                 
                 let len = len as usize;
-                if self.u + len > self.input.len() {
+                if self.pos + len > self.input.len() {
                     return Err("truncated stored block data");
                 }
                 
-                an.bk(&self.input[self.u..self.u + len]);
-                self.u += len;
+                output.extend_from_slice(&self.input[self.pos..self.pos + len]);
+                self.pos += len;
             }
             1 => {
                 
-                self.nka(an, true)?;
+                self.decode_huffman_block(output, true)?;
             }
             2 => {
                 
-                self.nka(an, false)?;
+                self.decode_huffman_block(output, false)?;
             }
             _ => return Err("invalid block type"),
         }
         
-        if qpa != 0 {
-            Ok(BlockResult::Bev)
+        if kbm != 0 {
+            Ok(BlockResult::Done)
         } else {
-            Ok(BlockResult::Cg)
+            Ok(BlockResult::Continue)
         }
     }
     
-    fn nka(&mut self, an: &mut Vec<u8>, sui: bool) -> Result<(), &'static str> {
+    fn decode_huffman_block(&mut self, output: &mut Vec<u8>, fixed: bool) -> Result<(), &'static str> {
         
-        let (eer, hgk) = if sui {
-            Self::suj()
+        let (bty, dni) = if fixed {
+            Self::lwo()
         } else {
-            self.vrp()?
+            self.read_dynamic_tables()?
         };
         
         loop {
-            let aaw = self.koo(&eer)?;
+            let sym = self.decode_symbol(&bty)?;
             
-            if aaw < 256 {
-                an.push(aaw as u8);
-            } else if aaw == 256 {
+            if sym < 256 {
+                output.push(sym as u8);
+            } else if sym == 256 {
                 break;
             } else {
                 
-                let go = self.rup(aaw)?;
-                let rzd = self.koo(&hgk)?;
-                let eoy = self.rui(rzd)?;
+                let length = self.decode_length(sym)?;
+                let lga = self.decode_symbol(&dni)?;
+                let byu = self.decode_distance(lga)?;
                 
-                if eoy > an.len() {
+                if byu > output.len() {
                     return Err("invalid back reference");
                 }
                 
-                let ay = an.len() - eoy;
-                for a in 0..go {
-                    let hf = an[ay + (a % eoy)];
-                    an.push(hf);
+                let start = output.len() - byu;
+                for i in 0..length {
+                    let byte = output[start + (i % byu)];
+                    output.push(byte);
                 }
             }
         }
@@ -262,231 +262,231 @@ impl<'a> DeflateDecoder<'a> {
         Ok(())
     }
     
-    fn suj() -> (Vec<u8>, Vec<u8>) {
-        let mut eer = vec![0u8; 288];
-        for a in 0..144 { eer[a] = 8; }
-        for a in 144..256 { eer[a] = 9; }
-        for a in 256..280 { eer[a] = 7; }
-        for a in 280..288 { eer[a] = 8; }
+    fn lwo() -> (Vec<u8>, Vec<u8>) {
+        let mut bty = vec![0u8; 288];
+        for i in 0..144 { bty[i] = 8; }
+        for i in 144..256 { bty[i] = 9; }
+        for i in 256..280 { bty[i] = 7; }
+        for i in 280..288 { bty[i] = 8; }
         
-        let hgk = vec![5u8; 32];
+        let dni = vec![5u8; 32];
         
-        (eer, hgk)
+        (bty, dni)
     }
     
-    fn vrp(&mut self) -> Result<(Vec<u8>, Vec<u8>), &'static str> {
-        let iyl = self.dax(5)? as usize + 257;
-        let obe = self.dax(5)? as usize + 1;
-        let tnr = self.dax(4)? as usize + 4;
+    fn read_dynamic_tables(&mut self) -> Result<(Vec<u8>, Vec<u8>), &'static str> {
+        let eph = self.read_bits(5)? as usize + 257;
+        let ieh = self.read_bits(5)? as usize + 1;
+        let mkl = self.read_bits(4)? as usize + 4;
         
-        const BMU_: [usize; 19] = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
+        const BPM_: [usize; 19] = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
         
-        let mut gcu = [0u8; 19];
-        for a in 0..tnr {
-            gcu[BMU_[a]] = self.dax(3)? as u8;
+        let mut cvg = [0u8; 19];
+        for i in 0..mkl {
+            cvg[BPM_[i]] = self.read_bits(3)? as u8;
         }
         
-        let rle = gcu.ip();
+        let kup = cvg.to_vec();
         
         
-        let mut emc = Vec::fc(iyl + obe);
-        while emc.len() < iyl + obe {
-            let aaw = self.koo(&rle)?;
-            match aaw {
-                0..=15 => emc.push(aaw as u8),
+        let mut bxk = Vec::with_capacity(eph + ieh);
+        while bxk.len() < eph + ieh {
+            let sym = self.decode_symbol(&kup)?;
+            match sym {
+                0..=15 => bxk.push(sym as u8),
                 16 => {
-                    let az = self.dax(2)? as usize + 3;
-                    let qv = *emc.qv().ok_or("invalid code")?;
-                    for _ in 0..az { emc.push(qv); }
+                    let count = self.read_bits(2)? as usize + 3;
+                    let last = *bxk.last().ok_or("invalid code")?;
+                    for _ in 0..count { bxk.push(last); }
                 }
                 17 => {
-                    let az = self.dax(3)? as usize + 3;
-                    for _ in 0..az { emc.push(0); }
+                    let count = self.read_bits(3)? as usize + 3;
+                    for _ in 0..count { bxk.push(0); }
                 }
                 18 => {
-                    let az = self.dax(7)? as usize + 11;
-                    for _ in 0..az { emc.push(0); }
+                    let count = self.read_bits(7)? as usize + 11;
+                    for _ in 0..count { bxk.push(0); }
                 }
                 _ => return Err("invalid code length symbol"),
             }
         }
         
-        let eer = emc[..iyl].ip();
-        let hgk = emc[iyl..].ip();
+        let bty = bxk[..eph].to_vec();
+        let dni = bxk[eph..].to_vec();
         
-        Ok((eer, hgk))
+        Ok((bty, dni))
     }
     
-    fn koo(&mut self, gcu: &[u8]) -> Result<u16, &'static str> {
+    fn decode_symbol(&mut self, cvg: &[u8]) -> Result<u16, &'static str> {
         
-        let mut aj = 0u32;
-        let mut fv = [0u32; 16];
+        let mut code = 0u32;
+        let mut first = [0u32; 16];
         let mut index = [0u16; 16];
         
         
-        let mut az = [0u16; 16];
-        for &len in gcu {
+        let mut count = [0u16; 16];
+        for &len in cvg {
             if len > 0 && (len as usize) < 16 {
-                az[len as usize] += 1;
+                count[len as usize] += 1;
             }
         }
         
         
-        let mut w = 0u16;
-        for a in 1..16 {
-            fv[a] = aj;
-            index[a] = w;
-            aj = (aj + az[a] as u32) << 1;
-            w += az[a];
+        let mut idx = 0u16;
+        for i in 1..16 {
+            first[i] = code;
+            index[i] = idx;
+            code = (code + count[i] as u32) << 1;
+            idx += count[i];
         }
         
         
-        let mut bot = vec![0u16; gcu.len()];
-        for (aaw, &len) in gcu.iter().cf() {
+        let mut symbols = vec![0u16; cvg.len()];
+        for (sym, &len) in cvg.iter().enumerate() {
             if len > 0 {
                 let len = len as usize;
-                let dwm = index[len] as usize;
-                if dwm < bot.len() {
-                    bot[dwm] = aaw as u16;
+                let sym_idx = index[len] as usize;
+                if sym_idx < symbols.len() {
+                    symbols[sym_idx] = sym as u16;
                     index[len] += 1;
                 }
             }
         }
         
         
-        let mut aj = 0u32;
-        let mut iuv = [0u16; 16];
-        let mut kwk = [0u32; 16];
+        let mut code = 0u32;
+        let mut emt = [0u16; 16];
+        let mut fxd = [0u32; 16];
         
-        w = 0;
-        let mut r = 0u32;
-        for a in 1..16 {
-            kwk[a] = r;
-            iuv[a] = w;
-            r = (r + az[a] as u32) << 1;
-            w += az[a];
+        idx = 0;
+        let mut c = 0u32;
+        for i in 1..16 {
+            fxd[i] = c;
+            emt[i] = idx;
+            c = (c + count[i] as u32) << 1;
+            idx += count[i];
         }
         
         for len in 1..16 {
-            aj = (aj << 1) | self.dax(1)?;
-            let ffg = az[len];
-            if aj < kwk[len] + ffg as u32 {
-                let dwm = iuv[len] + (aj - kwk[len]) as u16;
-                return Ok(bot[dwm as usize]);
+            code = (code << 1) | self.read_bits(1)?;
+            let cnt = count[len];
+            if code < fxd[len] + cnt as u32 {
+                let sym_idx = emt[len] + (code - fxd[len]) as u16;
+                return Ok(symbols[sym_idx as usize]);
             }
         }
         
         Err("invalid huffman code")
     }
     
-    fn rup(&mut self, aaw: u16) -> Result<usize, &'static str> {
-        const AYY_: [u16; 29] = [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258];
-        const CEL_: [u8; 29] = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0];
+    fn decode_length(&mut self, sym: u16) -> Result<usize, &'static str> {
+        const BAZ_: [u16; 29] = [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258];
+        const CHU_: [u8; 29] = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0];
         
-        let w = (aaw - 257) as usize;
-        if w >= AYY_.len() {
+        let idx = (sym - 257) as usize;
+        if idx >= BAZ_.len() {
             return Err("invalid length code");
         }
         
-        let ar = AYY_[w] as usize;
-        let ang = CEL_[w];
-        let kur = if ang > 0 { self.dax(ang)? as usize } else { 0 };
+        let base = BAZ_[idx] as usize;
+        let ua = CHU_[idx];
+        let fvv = if ua > 0 { self.read_bits(ua)? as usize } else { 0 };
         
-        Ok(ar + kur)
+        Ok(base + fvv)
     }
     
-    fn rui(&mut self, aaw: u16) -> Result<usize, &'static str> {
-        const AQI_: [u16; 30] = [1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577];
-        const BRV_: [u8; 30] = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13];
+    fn decode_distance(&mut self, sym: u16) -> Result<usize, &'static str> {
+        const ASL_: [u16; 30] = [1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577];
+        const BUR_: [u8; 30] = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13];
         
-        let w = aaw as usize;
-        if w >= AQI_.len() {
+        let idx = sym as usize;
+        if idx >= ASL_.len() {
             return Err("invalid distance code");
         }
         
-        let ar = AQI_[w] as usize;
-        let ang = BRV_[w];
-        let kur = if ang > 0 { self.dax(ang)? as usize } else { 0 };
+        let base = ASL_[idx] as usize;
+        let ua = BUR_[idx];
+        let fvv = if ua > 0 { self.read_bits(ua)? as usize } else { 0 };
         
-        Ok(ar + kur)
+        Ok(base + fvv)
     }
 }
 
 
-fn sqj(f: &[u8], aac: &str) -> Result<usize, &'static str> {
-    let mut u = 0;
-    let mut bec = 0;
+fn ltu(data: &[u8], mt: &str) -> Result<usize, &'static str> {
+    let mut pos = 0;
+    let mut adp = 0;
     
-    while u + HF_ <= f.len() {
-        let dh = &f[u..u + HF_];
+    while pos + HX_ <= data.len() {
+        let header = &data[pos..pos + HX_];
         
         
-        if dh.iter().xx(|&o| o == 0) {
+        if header.iter().all(|&b| b == 0) {
             break;
         }
         
         
-        let j = vdy(dh)?;
-        let aw = vda(&dh[124..136])?;
-        let pwu = dh[156];
+        let name = nrg(header)?;
+        let size = nqt(&header[124..136])?;
+        let joz = header[156];
         
         
-        let adx = jit(&dh[345..500]);
-        let ghr = if adx.is_empty() {
-            j
+        let nm = ewi(&header[345..500]);
+        let cyf = if nm.is_empty() {
+            name
         } else {
-            format!("{}/{}", adx, j)
+            format!("{}/{}", nm, name)
         };
         
         
-        if ghr.is_empty() || ghr == "." || ghr == "./" {
-            u += HF_;
-            u += jzv(aw);
+        if cyf.is_empty() || cyf == "." || cyf == "./" {
+            pos += HX_;
+            pos += fgq(size);
             continue;
         }
         
         
-        let doy = ghr.tl("./").tl('/');
-        if doy.is_empty() {
-            u += HF_;
-            u += jzv(aw);
+        let bld = cyf.trim_start_matches("./").trim_start_matches('/');
+        if bld.is_empty() {
+            pos += HX_;
+            pos += fgq(size);
             continue;
         }
         
-        let dge = format!("{}/{}", aac, doy);
+        let bfw = format!("{}/{}", mt, bld);
         
-        u += HF_;
+        pos += HX_;
         
-        match pwu {
-            Cah | b'/' => {
+        match joz {
+            Aih | b'/' => {
                 
-                crate::ramfs::fh(|fs| {
-                    let _ = fs.ut(&dge);
+                crate::ramfs::bh(|fs| {
+                    let _ = fs.mkdir(&bfw);
                 });
             }
-            Cjs | Bxj | b'\0' => {
+            Aoa | Agw | b'\0' => {
                 
-                if aw > 0 && u + aw <= f.len() {
-                    let ca = &f[u..u + aw];
+                if size > 0 && pos + size <= data.len() {
+                    let content = &data[pos..pos + size];
                     
                     
-                    let tu = bhs(&dge);
-                    nqh(&tu);
+                    let parent = parent_path(&bfw);
+                    hvz(&parent);
                     
-                    crate::ramfs::fh(|fs| {
-                        let _ = fs.touch(&dge);
-                        let _ = fs.ns(&dge, ca);
+                    crate::ramfs::bh(|fs| {
+                        let _ = fs.touch(&bfw);
+                        let _ = fs.write_file(&bfw, content);
                     });
                     
-                    bec += 1;
+                    adp += 1;
                 }
             }
-            Cmn => {
+            Aqb => {
                 
-                let uff = jit(&dh[157..257]);
-                crate::ramfs::fh(|fs| {
-                    let _ = fs.touch(&dge);
-                    let _ = fs.ns(&dge, uff.as_bytes());
+                let mys = ewi(&header[157..257]);
+                crate::ramfs::bh(|fs| {
+                    let _ = fs.touch(&bfw);
+                    let _ = fs.write_file(&bfw, mys.as_bytes());
                 });
             }
             _ => {
@@ -494,60 +494,60 @@ fn sqj(f: &[u8], aac: &str) -> Result<usize, &'static str> {
             }
         }
         
-        u += jzv(aw);
+        pos += fgq(size);
     }
     
-    Ok(bec)
+    Ok(adp)
 }
 
-fn vdy(dh: &[u8]) -> Result<String, &'static str> {
-    Ok(jit(&dh[0..100]))
+fn nrg(header: &[u8]) -> Result<String, &'static str> {
+    Ok(ewi(&header[0..100]))
 }
 
-fn jit(bf: &[u8]) -> String {
-    let ci = bf.iter().qf(|&o| o == 0).unwrap_or(bf.len());
-    let cow = String::azw(&bf[..ci]);
-    String::from(cow.em())
+fn ewi(bytes: &[u8]) -> String {
+    let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
+    let cow = String::from_utf8_lossy(&bytes[..end]);
+    String::from(cow.trim())
 }
 
-fn vda(bf: &[u8]) -> Result<usize, &'static str> {
-    let e = jit(bf);
-    if e.is_empty() {
+fn nqt(bytes: &[u8]) -> Result<usize, &'static str> {
+    let j = ewi(bytes);
+    if j.is_empty() {
         return Ok(0);
     }
-    usize::wa(&e, 8).jd(|_| "invalid octal")
+    usize::from_str_radix(&j, 8).map_err(|_| "invalid octal")
 }
 
-fn jzv(aw: usize) -> usize {
-    if aw == 0 {
+fn fgq(size: usize) -> usize {
+    if size == 0 {
         0
     } else {
-        ((aw + HF_ - 1) / HF_) * HF_
+        ((size + HX_ - 1) / HX_) * HX_
     }
 }
 
-fn bhs(path: &str) -> String {
-    if let Some(u) = path.bhx('/') {
-        if u == 0 {
+fn parent_path(path: &str) -> String {
+    if let Some(pos) = path.rfind('/') {
+        if pos == 0 {
             String::from("/")
         } else {
-            String::from(&path[..u])
+            String::from(&path[..pos])
         }
     } else {
         String::from("/")
     }
 }
 
-fn nqh(path: &str) {
+fn hvz(path: &str) {
     if path == "/" || path.is_empty() {
         return;
     }
     
-    crate::ramfs::fh(|fs| {
-        if !fs.aja(path) {
-            let tu = bhs(path);
-            nqh(&tu);
-            let _ = fs.ut(path);
+    crate::ramfs::bh(|fs| {
+        if !fs.exists(path) {
+            let parent = parent_path(path);
+            hvz(&parent);
+            let _ = fs.mkdir(path);
         }
     });
 }

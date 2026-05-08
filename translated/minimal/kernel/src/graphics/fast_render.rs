@@ -18,13 +18,13 @@ use spin::Mutex;
 
 
 
-const DZW_: usize = 8;
+const EDN_: usize = 8;
 
 
-const GQ_: usize = 64;
+const HH_: usize = 64;
 
 
-const TE_: usize = 128;
+const UL_: usize = 128;
 
 
 
@@ -33,90 +33,90 @@ const TE_: usize = 128;
 
 pub struct FastSurface {
     
-    pub f: Box<[u32]>,
+    pub data: Box<[u32]>,
     
-    pub z: u32,
+    pub width: u32,
     
-    pub ac: u32,
+    pub height: u32,
     
-    no: DirtyRegion,
+    dirty: DirtyRegion,
 }
 
 impl FastSurface {
     
-    pub fn new(z: u32, ac: u32) -> Self {
-        let aw = (z * ac) as usize;
+    pub fn new(width: u32, height: u32) -> Self {
+        let size = (width * height) as usize;
         Self {
-            f: alloc::vec![0u32; aw].dsd(),
-            z,
-            ac,
-            no: DirtyRegion::new(z, ac),
+            data: alloc::vec![0u32; size].into_boxed_slice(),
+            width,
+            height,
+            dirty: DirtyRegion::new(width, height),
         }
     }
 
     
     #[inline]
-    pub fn clear(&mut self, s: u32) {
+    pub fn clear(&mut self, color: u32) {
         #[cfg(target_arch = "x86_64")]
         unsafe {
-            crate::graphics::simd::bed(
-                self.f.mw(),
-                self.f.len(),
-                s
+            crate::graphics::simd::adq(
+                self.data.as_mut_ptr(),
+                self.data.len(),
+                color
             );
         }
         #[cfg(not(target_arch = "x86_64"))]
         {
-            self.f.vi(s);
+            self.data.fill(color);
         }
-        self.no.olb();
+        self.dirty.mark_full();
     }
 
     
     #[inline]
-    pub fn ah(&mut self, b: i32, c: i32, d: u32, i: u32, s: u32) {
-        let dn = b.am(0) as u32;
-        let dp = c.am(0) as u32;
-        let hy = ((b + d as i32) as u32).v(self.z);
-        let jz = ((c + i as i32) as u32).v(self.ac);
+    pub fn fill_rect(&mut self, x: i32, y: i32, w: u32, h: u32, color: u32) {
+        let x1 = x.max(0) as u32;
+        let y1 = y.max(0) as u32;
+        let x2 = ((x + w as i32) as u32).min(self.width);
+        let y2 = ((y + h as i32) as u32).min(self.height);
         
-        if hy <= dn || jz <= dp { return; }
+        if x2 <= x1 || y2 <= y1 { return; }
         
-        let cml = (hy - dn) as usize;
-        let oq = self.z as usize;
+        let auv = (x2 - x1) as usize;
+        let stride = self.width as usize;
         
-        for x in dp..jz {
-            let mu = x as usize * oq + dn as usize;
+        for o in y1..y2 {
+            let fk = o as usize * stride + x1 as usize;
             #[cfg(target_arch = "x86_64")]
             unsafe {
-                crate::graphics::simd::bed(
-                    self.f.mw().add(mu),
-                    cml,
-                    s
+                crate::graphics::simd::adq(
+                    self.data.as_mut_ptr().add(fk),
+                    auv,
+                    color
                 );
             }
             #[cfg(not(target_arch = "x86_64"))]
             {
-                self.f[mu..mu + cml].vi(s);
+                self.data[fk..fk + auv].fill(color);
             }
         }
         
-        self.no.gxx(dn, dp, hy - dn, jz - dp);
+        self.dirty.add_rect(x1, y1, x2 - x1, y2 - y1);
     }
 
     
     #[inline(always)]
-    pub fn aht(&mut self, b: u32, c: u32, s: u32) {
-        if b < self.z && c < self.ac {
-            self.f[(c * self.z + b) as usize] = s;
+    pub fn set_pixel(&mut self, x: u32, y: u32, color: u32) {
+        if x < self.width && y < self.height {
+            self.data[(y * self.width + x) as usize] = color;
         }
     }
 
     
     #[inline(always)]
-    pub fn beg(&self, b: u32, c: u32) -> u32 {
-        if b < self.z && c < self.ac {
-            self.f[(c * self.z + b) as usize]
+    pub fn get_pixel(&self, x: u32, y: u32) -> u32 {
+        if x < self.width && y < self.height {
+            self.data[(y * self.width + x) as usize]
         } else {
             0
         }
@@ -124,239 +124,239 @@ impl FastSurface {
 
     
     #[inline]
-    pub fn obx(&mut self, b: i32, c: i32, len: u32, s: u32) {
-        if c < 0 || c >= self.ac as i32 { return; }
+    pub fn hline(&mut self, x: i32, y: i32, len: u32, color: u32) {
+        if y < 0 || y >= self.height as i32 { return; }
         
-        let dn = b.am(0) as u32;
-        let hy = ((b + len as i32) as u32).v(self.z);
-        if hy <= dn { return; }
+        let x1 = x.max(0) as u32;
+        let x2 = ((x + len as i32) as u32).min(self.width);
+        if x2 <= x1 { return; }
         
-        let c = c as u32;
-        let ay = (c * self.z + dn) as usize;
-        let hjj = (hy - dn) as usize;
+        let y = y as u32;
+        let start = (y * self.width + x1) as usize;
+        let dpn = (x2 - x1) as usize;
         
         #[cfg(target_arch = "x86_64")]
         unsafe {
-            crate::graphics::simd::bed(
-                self.f.mw().add(ay),
-                hjj,
-                s,
+            crate::graphics::simd::adq(
+                self.data.as_mut_ptr().add(start),
+                dpn,
+                color,
             );
         }
         #[cfg(not(target_arch = "x86_64"))]
         {
-            self.f[ay..ay + hjj].vi(s);
+            self.data[start..start + dpn].fill(color);
         }
         
-        self.no.gxx(dn, c, hy - dn, 1);
+        self.dirty.add_rect(x1, y, x2 - x1, 1);
     }
 
     
     #[inline]
-    pub fn pym(&mut self, b: i32, c: i32, len: u32, s: u32) {
-        if b < 0 || b >= self.z as i32 { return; }
+    pub fn vline(&mut self, x: i32, y: i32, len: u32, color: u32) {
+        if x < 0 || x >= self.width as i32 { return; }
         
-        let dp = c.am(0) as u32;
-        let jz = ((c + len as i32) as u32).v(self.ac);
-        if jz <= dp { return; }
+        let y1 = y.max(0) as u32;
+        let y2 = ((y + len as i32) as u32).min(self.height);
+        if y2 <= y1 { return; }
         
-        let b = b as u32;
-        let oq = self.z;
-        for x in dp..jz {
-            self.f[(x * oq + b) as usize] = s;
+        let x = x as u32;
+        let stride = self.width;
+        for o in y1..y2 {
+            self.data[(o * stride + x) as usize] = color;
         }
         
-        self.no.gxx(b, dp, 1, jz - dp);
+        self.dirty.add_rect(x, y1, 1, y2 - y1);
     }
 
     
-    pub fn lx(&mut self, b: i32, c: i32, d: u32, i: u32, s: u32) {
-        self.obx(b, c, d, s);
-        self.obx(b, c + i as i32 - 1, d, s);
-        self.pym(b, c, i, s);
-        self.pym(b + d as i32 - 1, c, i, s);
+    pub fn draw_rect(&mut self, x: i32, y: i32, w: u32, h: u32, color: u32) {
+        self.hline(x, y, w, color);
+        self.hline(x, y + h as i32 - 1, w, color);
+        self.vline(x, y, h, color);
+        self.vline(x + w as i32 - 1, y, h, color);
     }
 
     
-    pub fn bge(&mut self, cy: &FastSurface, buc: i32, bqg: i32) {
-        self.qqf(cy, 0, 0, cy.z, cy.ac, buc, bqg);
+    pub fn blit(&mut self, src: &FastSurface, dst_x: i32, dst_y: i32) {
+        self.blit_region(src, 0, 0, src.width, src.height, dst_x, dst_y);
     }
 
     
-    pub fn qqf(&mut self, cy: &FastSurface, 
-                       blg: u32, bih: u32, jri: u32, mhc: u32,
-                       buc: i32, bqg: i32) {
+    pub fn blit_region(&mut self, src: &FastSurface, 
+                       ahc: u32, aft: u32, fbk: u32, gvv: u32,
+                       dst_x: i32, dst_y: i32) {
         
-        let asa = blg.v(cy.z);
-        let bos = bih.v(cy.ac);
-        let amy = (blg + jri).v(cy.z);
-        let bcw = (bih + mhc).v(cy.ac);
+        let wn = ahc.min(src.width);
+        let aiu = aft.min(src.height);
+        let tq = (ahc + fbk).min(src.width);
+        let acv = (aft + gvv).min(src.height);
         
-        if amy <= asa || bcw <= bos { return; }
+        if tq <= wn || acv <= aiu { return; }
         
         
-        let mut dx = buc;
-        let mut bg = bqg;
-        let mut aoo = (amy - asa) as i32;
-        let mut bbg = (bcw - bos) as i32;
-        let mut pmu = 0i32;
-        let mut pmv = 0i32;
+        let mut dx = dst_x;
+        let mut ad = dst_y;
+        let mut ut = (tq - wn) as i32;
+        let mut abw = (acv - aiu) as i32;
+        let mut jhr = 0i32;
+        let mut jhs = 0i32;
         
         
         if dx < 0 {
-            pmu = -dx;
-            aoo += dx;
+            jhr = -dx;
+            ut += dx;
             dx = 0;
         }
         
-        if bg < 0 {
-            pmv = -bg;
-            bbg += bg;
-            bg = 0;
+        if ad < 0 {
+            jhs = -ad;
+            abw += ad;
+            ad = 0;
         }
         
-        if dx + aoo > self.z as i32 {
-            aoo = self.z as i32 - dx;
+        if dx + ut > self.width as i32 {
+            ut = self.width as i32 - dx;
         }
         
-        if bg + bbg > self.ac as i32 {
-            bbg = self.ac as i32 - bg;
+        if ad + abw > self.height as i32 {
+            abw = self.height as i32 - ad;
         }
         
-        if aoo <= 0 || bbg <= 0 { return; }
+        if ut <= 0 || abw <= 0 { return; }
         
-        let aoo = aoo as usize;
-        let bbg = bbg as usize;
+        let ut = ut as usize;
+        let abw = abw as usize;
         let dx = dx as usize;
-        let bg = bg as usize;
-        let qfd = (asa as i32 + pmu) as usize;
-        let qfe = (bos as i32 + pmv) as usize;
+        let ad = ad as usize;
+        let jtq = (wn as i32 + jhr) as usize;
+        let jtr = (aiu as i32 + jhs) as usize;
         
         
-        let cid = cy.z as usize;
-        let epi = self.z as usize;
+        let src_stride = src.width as usize;
+        let dst_stride = self.width as usize;
         
-        for br in 0..bbg {
-            let mhd = (qfe + br) * cid + qfd;
-            let krw = (bg + br) * epi + dx;
+        for row in 0..abw {
+            let gvy = (jtr + row) * src_stride + jtq;
+            let ftk = (ad + row) * dst_stride + dx;
             
             #[cfg(target_arch = "x86_64")]
             unsafe {
-                crate::graphics::simd::dpd(
-                    self.f.mw().add(krw),
-                    cy.f.fq().add(mhd),
-                    aoo
+                crate::graphics::simd::blg(
+                    self.data.as_mut_ptr().add(ftk),
+                    src.data.as_ptr().add(gvy),
+                    ut
                 );
             }
             #[cfg(not(target_arch = "x86_64"))]
             {
-                self.f[krw..krw + aoo]
-                    .dg(&cy.f[mhd..mhd + aoo]);
+                self.data[ftk..ftk + ut]
+                    .copy_from_slice(&src.data[gvy..gvy + ut]);
             }
         }
         
-        self.no.gxx(dx as u32, bg as u32, aoo as u32, bbg as u32);
+        self.dirty.add_rect(dx as u32, ad as u32, ut as u32, abw as u32);
     }
 
     
-    pub fn qqd(&mut self, cy: &FastSurface, buc: i32, bqg: i32) {
-        let hhj = buc.am(0) as u32;
-        let ksd = bqg.am(0) as u32;
-        let jrj = if buc < 0 { (-buc) as u32 } else { 0 };
-        let pmz = if bqg < 0 { (-bqg) as u32 } else { 0 };
+    pub fn blit_alpha(&mut self, src: &FastSurface, dst_x: i32, dst_y: i32) {
+        let dod = dst_x.max(0) as u32;
+        let ftp = dst_y.max(0) as u32;
+        let fbl = if dst_x < 0 { (-dst_x) as u32 } else { 0 };
+        let jhv = if dst_y < 0 { (-dst_y) as u32 } else { 0 };
         
-        let aoo = (cy.z - jrj).v(self.z - hhj);
-        let bbg = (cy.ac - pmz).v(self.ac - ksd);
+        let ut = (src.width - fbl).min(self.width - dod);
+        let abw = (src.height - jhv).min(self.height - ftp);
         
-        if aoo == 0 || bbg == 0 { return; }
+        if ut == 0 || abw == 0 { return; }
         
-        let cid = cy.z as usize;
-        let epi = self.z as usize;
+        let src_stride = src.width as usize;
+        let dst_stride = self.width as usize;
         
-        for br in 0..bbg {
-            let bxg = (pmz + br) as usize * cid;
-            let hhd = (ksd + br) as usize * epi;
+        for row in 0..abw {
+            let amv = (jhv + row) as usize * src_stride;
+            let dnw = (ftp + row) as usize * dst_stride;
             
             
             #[cfg(target_arch = "x86_64")]
             unsafe {
-                let aob = cy.f.fq().add(bxg + jrj as usize);
-                let alc = self.f.mw().add(hhd + hhj as usize);
-                crate::graphics::simd::kdu(alc, aob, aoo as usize);
+                let ps = src.data.as_ptr().add(amv + fbl as usize);
+                let nt = self.data.as_mut_ptr().add(dnw + dod as usize);
+                crate::graphics::simd::egy(nt, ps, ut as usize);
             }
             #[cfg(not(target_arch = "x86_64"))]
             {
                 
-                let mut b = 0u32;
-                while b + 8 <= aoo {
-                    for a in 0..8 {
-                        let blf = bxg + (jrj + b + a) as usize;
-                        let bbm = hhd + (hhj + b + a) as usize;
-                        let fvh = cy.f[blf];
-                        let dw = fvh >> 24;
+                let mut x = 0u32;
+                while x + 8 <= ut {
+                    for i in 0..8 {
+                        let amu = amv + (fbl + x + i) as usize;
+                        let ajm = dnw + (dod + x + i) as usize;
+                        let cra = src.data[amu];
+                        let alpha = cra >> 24;
                         
-                        if dw == 255 {
-                            self.f[bbm] = fvh;
-                        } else if dw > 0 {
-                            self.f[bbm] = kds(fvh, self.f[bbm]);
+                        if alpha == 255 {
+                            self.data[ajm] = cra;
+                        } else if alpha > 0 {
+                            self.data[ajm] = fji(cra, self.data[ajm]);
                         }
                     }
-                    b += 8;
+                    x += 8;
                 }
                 
                 
-                while b < aoo {
-                    let blf = bxg + (jrj + b) as usize;
-                    let bbm = hhd + (hhj + b) as usize;
-                    let fvh = cy.f[blf];
-                    let dw = fvh >> 24;
+                while x < ut {
+                    let amu = amv + (fbl + x) as usize;
+                    let ajm = dnw + (dod + x) as usize;
+                    let cra = src.data[amu];
+                    let alpha = cra >> 24;
                 
-                    if dw == 255 {
-                        self.f[bbm] = fvh;
-                    } else if dw > 0 {
-                        self.f[bbm] = kds(fvh, self.f[bbm]);
+                    if alpha == 255 {
+                        self.data[ajm] = cra;
+                    } else if alpha > 0 {
+                        self.data[ajm] = fji(cra, self.data[ajm]);
                     }
-                    b += 1;
+                    x += 1;
                 }
             }
         }
         
-        self.no.gxx(hhj, ksd, aoo, bbg);
+        self.dirty.add_rect(dod, ftp, ut, abw);
     }
 
     
-    pub fn afp(&mut self, b: i32, c: i32, d: u32, i: u32, m: u32, s: u32) {
-        let m = m.v(d / 2).v(i / 2);
+    pub fn fill_rounded_rect(&mut self, x: i32, y: i32, w: u32, h: u32, r: u32, color: u32) {
+        let r = r.min(w / 2).min(h / 2);
         
         
-        self.ah(b + m as i32, c, d - 2 * m, i, s);
+        self.fill_rect(x + r as i32, y, w - 2 * r, h, color);
         
         
-        self.ah(b, c + m as i32, m, i - 2 * m, s);
-        self.ah(b + d as i32 - m as i32, c + m as i32, m, i - 2 * m, s);
+        self.fill_rect(x, y + r as i32, r, h - 2 * r, color);
+        self.fill_rect(x + w as i32 - r as i32, y + r as i32, r, h - 2 * r, color);
         
         
-        self.iun(b + m as i32, c + m as i32, m, s, Corner::Dp);
-        self.iun(b + d as i32 - m as i32 - 1, c + m as i32, m, s, Corner::Dq);
-        self.iun(b + m as i32, c + i as i32 - m as i32 - 1, m, s, Corner::Dt);
-        self.iun(b + d as i32 - m as i32 - 1, c + i as i32 - m as i32 - 1, m, s, Corner::Du);
+        self.fill_corner(x + r as i32, y + r as i32, r, color, Corner::TopLeft);
+        self.fill_corner(x + w as i32 - r as i32 - 1, y + r as i32, r, color, Corner::TopRight);
+        self.fill_corner(x + r as i32, y + h as i32 - r as i32 - 1, r, color, Corner::BottomLeft);
+        self.fill_corner(x + w as i32 - r as i32 - 1, y + h as i32 - r as i32 - 1, r, color, Corner::BottomRight);
     }
 
-    fn iun(&mut self, cx: i32, ae: i32, m: u32, s: u32, hea: Corner) {
-        let m = m as i32;
-        let bwl = m * m;
+    fn fill_corner(&mut self, cx: i32, u: i32, r: u32, color: u32, corner: Corner) {
+        let r = r as i32;
+        let amn = r * r;
         
-        for bg in 0..=m {
-            for dx in 0..=m {
-                if dx * dx + bg * bg <= bwl {
-                    let (y, x) = match hea {
-                        Corner::Dp => (cx - dx, ae - bg),
-                        Corner::Dq => (cx + dx, ae - bg),
-                        Corner::Dt => (cx - dx, ae + bg),
-                        Corner::Du => (cx + dx, ae + bg),
+        for ad in 0..=r {
+            for dx in 0..=r {
+                if dx * dx + ad * ad <= amn {
+                    let (p, o) = match corner {
+                        Corner::TopLeft => (cx - dx, u - ad),
+                        Corner::TopRight => (cx + dx, u - ad),
+                        Corner::BottomLeft => (cx - dx, u + ad),
+                        Corner::BottomRight => (cx + dx, u + ad),
                     };
-                    if y >= 0 && x >= 0 && y < self.z as i32 && x < self.ac as i32 {
-                        self.aht(y as u32, x as u32, s);
+                    if p >= 0 && o >= 0 && p < self.width as i32 && o < self.height as i32 {
+                        self.set_pixel(p as u32, o as u32, color);
                     }
                 }
             }
@@ -364,90 +364,90 @@ impl FastSurface {
     }
 
     
-    pub fn tdi(&self) -> &DirtyRegion {
-        &self.no
+    pub fn mcw(&self) -> &DirtyRegion {
+        &self.dirty
     }
 
     
-    pub fn yij(&mut self) {
-        self.no.clear();
+    pub fn pzx(&mut self) {
+        self.dirty.clear();
     }
 
     
-    pub fn suz(&mut self) {
-        if self.no.asw {
-            self.svc();
+    pub fn flush_dirty_to_fb(&mut self) {
+        if self.dirty.full_redraw {
+            self.flush_to_fb();
         } else {
-            for a in 0..self.no.az {
-                let ha = self.no.akn[a];
-                self.svb(ha.b, ha.c, ha.d, ha.i);
+            for i in 0..self.dirty.count {
+                let rect = self.dirty.rects[i];
+                self.flush_rect_to_fb(rect.x, rect.y, rect.w, rect.h);
             }
         }
-        self.no.clear();
+        self.dirty.clear();
     }
 
     
-    pub fn svc(&self) {
-        let (lu, qh) = crate::framebuffer::yn();
-        let aoo = self.z.v(lu) as usize;
-        let bbg = self.ac.v(qh) as usize;
+    pub fn flush_to_fb(&self) {
+        let (fb_width, fb_height) = crate::framebuffer::kv();
+        let ut = self.width.min(fb_width) as usize;
+        let abw = self.height.min(fb_height) as usize;
         
-        let dqt = crate::framebuffer::iwp();
-        let fij = crate::framebuffer::kyo();
+        let bme = crate::framebuffer::eob();
+        let cjh = crate::framebuffer::fyo();
         
-        if dqt.abq() { return; }
+        if bme.is_null() { return; }
         
-        let cid = self.z as usize;
+        let src_stride = self.width as usize;
         
-        for br in 0..bbg {
-            let big = br * cid;
-            let bgu = br * fij;
+        for row in 0..abw {
+            let zl = row * src_stride;
+            let afd = row * cjh;
             
             unsafe {
-                let cy = self.f.fq().add(big);
-                let cs = dqt.add(bgu) as *mut u32;
-                core::ptr::copy_nonoverlapping(cy, cs, aoo);
+                let src = self.data.as_ptr().add(zl);
+                let dst = bme.add(afd) as *mut u32;
+                core::ptr::copy_nonoverlapping(src, dst, ut);
             }
         }
     }
 
     
-    fn svb(&self, b: u32, c: u32, d: u32, i: u32) {
-        let (lu, qh) = crate::framebuffer::yn();
+    fn flush_rect_to_fb(&self, x: u32, y: u32, w: u32, h: u32) {
+        let (fb_width, fb_height) = crate::framebuffer::kv();
         
-        let dn = b.v(lu).v(self.z);
-        let dp = c.v(qh).v(self.ac);
-        let hy = (b + d).v(lu).v(self.z);
-        let jz = (c + i).v(qh).v(self.ac);
+        let x1 = x.min(fb_width).min(self.width);
+        let y1 = y.min(fb_height).min(self.height);
+        let x2 = (x + w).min(fb_width).min(self.width);
+        let y2 = (y + h).min(fb_height).min(self.height);
         
-        if hy <= dn || jz <= dp { return; }
+        if x2 <= x1 || y2 <= y1 { return; }
         
-        let dqt = crate::framebuffer::iwp();
-        let fij = crate::framebuffer::kyo();
+        let bme = crate::framebuffer::eob();
+        let cjh = crate::framebuffer::fyo();
         
-        if dqt.abq() { return; }
+        if bme.is_null() { return; }
         
-        let aoo = (hy - dn) as usize;
-        let cid = self.z as usize;
+        let ut = (x2 - x1) as usize;
+        let src_stride = self.width as usize;
         
-        for br in dp..jz {
-            let big = br as usize * cid + dn as usize;
-            let bgu = br as usize * fij + dn as usize * 4;
+        for row in y1..y2 {
+            let zl = row as usize * src_stride + x1 as usize;
+            let afd = row as usize * cjh + x1 as usize * 4;
             
             unsafe {
-                let cy = self.f.fq().add(big);
-                let cs = dqt.add(bgu) as *mut u32;
-                core::ptr::copy_nonoverlapping(cy, cs, aoo);
+                let src = self.data.as_ptr().add(zl);
+                let dst = bme.add(afd) as *mut u32;
+                core::ptr::copy_nonoverlapping(src, dst, ut);
             }
         }
     }
 }
 
 enum Corner {
-    Dp,
-    Dq,
-    Dt,
-    Du,
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
 }
 
 
@@ -456,76 +456,76 @@ enum Corner {
 
 #[derive(Clone, Copy, Default)]
 pub struct Rect {
-    pub b: u32,
-    pub c: u32,
-    pub d: u32,
-    pub i: u32,
+    pub x: u32,
+    pub y: u32,
+    pub w: u32,
+    pub h: u32,
 }
 
 pub struct DirtyRegion {
-    pub akn: [Rect; GQ_],
-    pub az: usize,
-    pub asw: bool,
-    wf: u32,
-    aav: u32,
+    pub rects: [Rect; HH_],
+    pub count: usize,
+    pub full_redraw: bool,
+    screen_w: u32,
+    screen_h: u32,
 }
 
 impl DirtyRegion {
-    pub fn new(z: u32, ac: u32) -> Self {
+    pub fn new(width: u32, height: u32) -> Self {
         Self {
-            akn: [Rect::default(); GQ_],
-            az: 0,
-            asw: true, 
-            wf: z,
-            aav: ac,
+            rects: [Rect::default(); HH_],
+            count: 0,
+            full_redraw: true, 
+            screen_w: width,
+            screen_h: height,
         }
     }
 
-    pub fn gxx(&mut self, b: u32, c: u32, d: u32, i: u32) {
-        if self.asw { return; }
-        if d == 0 || i == 0 { return; }
+    pub fn add_rect(&mut self, x: u32, y: u32, w: u32, h: u32) {
+        if self.full_redraw { return; }
+        if w == 0 || h == 0 { return; }
         
-        let lob = Rect { b, c, d, i };
+        let gjg = Rect { x, y, w, h };
         
         
-        for a in 0..self.az {
-            if vtj(&self.akn[a], &lob) {
-                self.akn[a] = ung(&self.akn[a], &lob);
+        for i in 0..self.count {
+            if ods(&self.rects[i], &gjg) {
+                self.rects[i] = nem(&self.rects[i], &gjg);
                 return;
             }
         }
         
         
-        if self.az < GQ_ {
-            self.akn[self.az] = lob;
-            self.az += 1;
+        if self.count < HH_ {
+            self.rects[self.count] = gjg;
+            self.count += 1;
         } else {
             
-            self.asw = true;
+            self.full_redraw = true;
         }
     }
 
-    pub fn olb(&mut self) {
-        self.asw = true;
+    pub fn mark_full(&mut self) {
+        self.full_redraw = true;
     }
 
     pub fn clear(&mut self) {
-        self.az = 0;
-        self.asw = false;
+        self.count = 0;
+        self.full_redraw = false;
     }
 }
 
-fn vtj(q: &Rect, o: &Rect) -> bool {
-    !(q.b + q.d <= o.b || o.b + o.d <= q.b ||
-      q.c + q.i <= o.c || o.c + o.i <= q.c)
+fn ods(a: &Rect, b: &Rect) -> bool {
+    !(a.x + a.w <= b.x || b.x + b.w <= a.x ||
+      a.y + a.h <= b.y || b.y + b.h <= a.y)
 }
 
-fn ung(q: &Rect, o: &Rect) -> Rect {
-    let dn = q.b.v(o.b);
-    let dp = q.c.v(o.c);
-    let hy = (q.b + q.d).am(o.b + o.d);
-    let jz = (q.c + q.i).am(o.c + o.i);
-    Rect { b: dn, c: dp, d: hy - dn, i: jz - dp }
+fn nem(a: &Rect, b: &Rect) -> Rect {
+    let x1 = a.x.min(b.x);
+    let y1 = a.y.min(b.y);
+    let x2 = (a.x + a.w).max(b.x + b.w);
+    let y2 = (a.y + a.h).max(b.y + b.h);
+    Rect { x: x1, y: y1, w: x2 - x1, h: y2 - y1 }
 }
 
 
@@ -534,28 +534,28 @@ fn ung(q: &Rect, o: &Rect) -> Rect {
 
 
 #[inline(always)]
-fn kds(cy: u32, cs: u32) -> u32 {
-    let dw = (cy >> 24) & 0xFF;
-    if dw == 0 { return cs; }
-    if dw == 255 { return cy; }
+fn fji(src: u32, dst: u32) -> u32 {
+    let alpha = (src >> 24) & 0xFF;
+    if alpha == 0 { return dst; }
+    if alpha == 255 { return src; }
     
-    let akg = 255 - dw;
-    
-    
-    let adz = (cy >> 16) & 0xFF;
-    let bsi = (cy >> 8) & 0xFF;
-    let is = cy & 0xFF;
-    
-    let ahh = (cs >> 16) & 0xFF;
-    let bgs = (cs >> 8) & 0xFF;
-    let ng = cs & 0xFF;
+    let sg = 255 - alpha;
     
     
-    let m = (adz * dw + ahh * akg + 127) / 255;
-    let at = (bsi * dw + bgs * akg + 127) / 255;
-    let o = (is * dw + ng * akg + 127) / 255;
+    let pb = (src >> 16) & 0xFF;
+    let akl = (src >> 8) & 0xFF;
+    let cv = src & 0xFF;
     
-    0xFF000000 | (m << 16) | (at << 8) | o
+    let qw = (dst >> 16) & 0xFF;
+    let afb = (dst >> 8) & 0xFF;
+    let fu = dst & 0xFF;
+    
+    
+    let r = (pb * alpha + qw * sg + 127) / 255;
+    let g = (akl * alpha + afb * sg + 127) / 255;
+    let b = (cv * alpha + fu * sg + 127) / 255;
+    
+    0xFF000000 | (r << 16) | (g << 8) | b
 }
 
 
@@ -565,91 +565,91 @@ fn kds(cy: u32, cs: u32) -> u32 {
 
 pub struct GlyphCache {
     
-    cqz: [[u32; 128]; TE_], 
-    axw: u32,
-    jr: bool,
+    glyphs: [[u32; 128]; UL_], 
+    fg_color: u32,
+    initialized: bool,
 }
 
 impl GlyphCache {
     pub const fn new() -> Self {
         Self {
-            cqz: [[0u32; 128]; TE_],
-            axw: 0xFFFFFFFF,
-            jr: false,
+            glyphs: [[0u32; 128]; UL_],
+            fg_color: 0xFFFFFFFF,
+            initialized: false,
         }
     }
 
     
-    pub fn init(&mut self, axw: u32) {
-        self.axw = axw;
+    pub fn init(&mut self, fg_color: u32) {
+        self.fg_color = fg_color;
         
-        for r in 0..TE_ {
-            let hlr = crate::framebuffer::font::ada(r as u8 as char);
-            let mut ctj = 0;
+        for c in 0..UL_ {
+            let dqw = crate::framebuffer::font::ol(c as u8 as char);
+            let mut aza = 0;
             
-            for br in 0..16 {
-                let fs = hlr[br];
-                for bj in 0..8 {
-                    if (fs >> (7 - bj)) & 1 == 1 {
-                        self.cqz[r][ctj] = axw;
+            for row in 0..16 {
+                let bits = dqw[row];
+                for col in 0..8 {
+                    if (bits >> (7 - col)) & 1 == 1 {
+                        self.glyphs[c][aza] = fg_color;
                     } else {
-                        self.cqz[r][ctj] = 0; 
+                        self.glyphs[c][aza] = 0; 
                     }
-                    ctj += 1;
+                    aza += 1;
                 }
             }
         }
         
-        self.jr = true;
+        self.initialized = true;
     }
 
     
-    pub fn sdi(&self, surface: &mut FastSurface, r: char, b: i32, c: i32) {
-        let w = (r as usize).v(TE_ - 1);
-        let ka = &self.cqz[w];
+    pub fn draw_glyph(&self, surface: &mut FastSurface, c: char, x: i32, y: i32) {
+        let idx = (c as usize).min(UL_ - 1);
+        let du = &self.glyphs[idx];
         
-        let mut ctj = 0;
-        for br in 0..16 {
-            let x = c + br;
-            if x >= 0 && x < surface.ac as i32 {
-                for bj in 0..8 {
-                    let y = b + bj;
-                    if y >= 0 && y < surface.z as i32 {
-                        let s = ka[ctj];
-                        if s != 0 {
-                            surface.aht(y as u32, x as u32, s);
+        let mut aza = 0;
+        for row in 0..16 {
+            let o = y + row;
+            if o >= 0 && o < surface.height as i32 {
+                for col in 0..8 {
+                    let p = x + col;
+                    if p >= 0 && p < surface.width as i32 {
+                        let color = du[aza];
+                        if color != 0 {
+                            surface.set_pixel(p as u32, o as u32, color);
                         }
                     }
-                    ctj += 1;
+                    aza += 1;
                 }
             } else {
-                ctj += 8;
+                aza += 8;
             }
         }
     }
 
     
-    pub fn sft(&self, surface: &mut FastSurface, e: &str, b: i32, c: i32) {
-        let mut cx = b;
-        for r in e.bw() {
-            if cx >= surface.z as i32 { break; }
-            self.sdi(surface, r, cx, c);
+    pub fn draw_string(&self, surface: &mut FastSurface, j: &str, x: i32, y: i32) {
+        let mut cx = x;
+        for c in j.chars() {
+            if cx >= surface.width as i32 { break; }
+            self.draw_glyph(surface, c, cx, y);
             cx += 8;
         }
     }
 }
 
 
-static ASF_: Mutex<GlyphCache> = Mutex::new(GlyphCache::new());
+static AUJ_: Mutex<GlyphCache> = Mutex::new(GlyphCache::new());
 
 
-pub fn yxq(axw: u32) {
-    ASF_.lock().init(axw);
+pub fn qlb(fg_color: u32) {
+    AUJ_.lock().init(fg_color);
 }
 
 
-pub fn cb(surface: &mut FastSurface, e: &str, b: i32, c: i32) {
-    ASF_.lock().sft(surface, e, b, c);
+pub fn draw_text(surface: &mut FastSurface, j: &str, x: i32, y: i32) {
+    AUJ_.lock().draw_string(surface, j, x, y);
 }
 
 
@@ -659,112 +659,112 @@ pub fn cb(surface: &mut FastSurface, e: &str, b: i32, c: i32) {
 
 pub struct Layer {
     pub surface: FastSurface,
-    pub b: i32,
-    pub c: i32,
-    pub av: i32,
-    pub iw: bool,
-    pub ad: u32,
+    pub x: i32,
+    pub y: i32,
+    pub z: i32,
+    pub visible: bool,
+    pub id: u32,
 }
 
 
-pub struct Cdk {
+pub struct Akc {
     
-    pub an: FastSurface,
+    pub output: FastSurface,
     
-    my: Vec<Layer>,
+    layers: Vec<Layer>,
     
-    bcb: u32,
+    next_id: u32,
     
-    vp: u32,
+    bg_color: u32,
 }
 
-impl Cdk {
-    pub fn new(z: u32, ac: u32) -> Self {
+impl Akc {
+    pub fn new(width: u32, height: u32) -> Self {
         Self {
-            an: FastSurface::new(z, ac),
-            my: Vec::new(),
-            bcb: 1,
-            vp: 0xFF101010,
+            output: FastSurface::new(width, height),
+            layers: Vec::new(),
+            next_id: 1,
+            bg_color: 0xFF101010,
         }
     }
 
     
-    pub fn wig(&mut self, s: u32) {
-        self.vp = s;
+    pub fn ooo(&mut self, color: u32) {
+        self.bg_color = color;
     }
 
     
-    pub fn ykl(&mut self, z: u32, ac: u32, b: i32, c: i32, av: i32) -> u32 {
-        let ad = self.bcb;
-        self.bcb += 1;
+    pub fn qbs(&mut self, width: u32, height: u32, x: i32, y: i32, z: i32) -> u32 {
+        let id = self.next_id;
+        self.next_id += 1;
         
-        let fl = Layer {
-            surface: FastSurface::new(z, ac),
-            b,
-            c,
-            av,
-            iw: true,
-            ad,
+        let bj = Layer {
+            surface: FastSurface::new(width, height),
+            x,
+            y,
+            z,
+            visible: true,
+            id,
         };
         
-        self.my.push(fl);
-        self.pmb();
+        self.layers.push(bj);
+        self.sort_layers();
         
-        ad
+        id
     }
 
     
-    pub fn iws(&mut self, ad: u32) -> Option<&mut Layer> {
-        self.my.el().du(|dm| dm.ad == ad)
+    pub fn get_layer(&mut self, id: u32) -> Option<&mut Layer> {
+        self.layers.iter_mut().find(|l| l.id == id)
     }
 
     
-    pub fn vux(&mut self, ad: u32) {
-        self.my.ajm(|dm| dm.ad != ad);
+    pub fn oez(&mut self, id: u32) {
+        self.layers.retain(|l| l.id != id);
     }
 
     
-    pub fn zdb(&mut self, ad: u32, b: i32, c: i32) {
-        if let Some(fl) = self.iws(ad) {
-            fl.b = b;
-            fl.c = c;
+    pub fn qpd(&mut self, id: u32, x: i32, y: i32) {
+        if let Some(bj) = self.get_layer(id) {
+            bj.x = x;
+            bj.y = y;
         }
     }
 
     
-    pub fn zhf(&mut self, ad: u32) {
-        let umd = self.my.iter().map(|dm| dm.av).am().unwrap_or(0);
-        if let Some(fl) = self.iws(ad) {
-            fl.av = umd + 1;
+    pub fn qrr(&mut self, id: u32) {
+        let ndp = self.layers.iter().map(|l| l.z).max().unwrap_or(0);
+        if let Some(bj) = self.get_layer(id) {
+            bj.z = ndp + 1;
         }
-        self.pmb();
+        self.sort_layers();
     }
 
-    fn pmb(&mut self) {
-        self.my.bxf(|dm| dm.av);
+    fn sort_layers(&mut self) {
+        self.layers.sort_by_key(|l| l.z);
     }
 
     
-    pub fn iov(&mut self) {
+    pub fn composite(&mut self) {
         
-        self.an.clear(self.vp);
+        self.output.clear(self.bg_color);
         
         
-        for fl in &self.my {
-            if fl.iw {
-                self.an.qqd(&fl.surface, fl.b, fl.c);
+        for bj in &self.layers {
+            if bj.visible {
+                self.output.blit_alpha(&bj.surface, bj.x, bj.y);
             }
         }
     }
 
     
-    pub fn brs(&mut self) {
-        self.an.suz();
+    pub fn present(&mut self) {
+        self.output.flush_dirty_to_fb();
     }
 
     
-    pub fn tj(&mut self) {
-        self.iov();
-        self.brs();
+    pub fn render(&mut self) {
+        self.composite();
+        self.present();
     }
 }

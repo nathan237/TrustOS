@@ -5,24 +5,24 @@
 use alloc::vec::Vec;
 use alloc::string::String;
 use super::LinuxProcess;
-use super::loader::Ajv;
+use super::loader::Pk;
 
 
-pub fn aeq(dyy: &super::loader::Ajv, process: &LinuxProcess) -> Result<u64, &'static str> {
-    crate::serial_println!("[RUNTIME] Setting up environment for PID {}", process.ce);
+pub fn pk(bqr: &super::loader::Pk, process: &LinuxProcess) -> Result<u64, &'static str> {
+    crate::serial_println!("[RUNTIME] Setting up environment for PID {}", process.pid);
     
     
     
     
-    Ok(dyy.bt)
+    Ok(bqr.entry)
 }
 
 
 
 
 
-pub fn vw(bt: u64, process: &mut LinuxProcess) -> Result<i32, &'static str> {
-    crate::serial_println!("[RUNTIME] Starting execution at {:#x}", bt);
+pub fn run(entry: u64, process: &mut LinuxProcess) -> Result<i32, &'static str> {
+    crate::serial_println!("[RUNTIME] Starting execution at {:#x}", entry);
     
     
     
@@ -38,33 +38,33 @@ pub fn vw(bt: u64, process: &mut LinuxProcess) -> Result<i32, &'static str> {
     
     crate::println!("Linux binary execution not yet fully implemented.");
     crate::println!("Binary: {}", process.path);
-    crate::println!("Entry point: {:#x}", bt);
+    crate::println!("Entry point: {:#x}", entry);
     
     
     Ok(0)
 }
 
 
-pub fn wbl(eib: &str, process: &mut LinuxProcess) -> Result<i32, &'static str> {
+pub fn ojf(script: &str, process: &mut LinuxProcess) -> Result<i32, &'static str> {
     
-    let ca = crate::linux::rootfs::mq(eib)?;
-    let text = core::str::jg(&ca).jd(|_| "invalid script")?;
+    let content = crate::linux::rootfs::read_file(script)?;
+    let text = core::str::from_utf8(&content).map_err(|_| "invalid script")?;
     
     
-    let ak: Vec<&str> = text.ak().collect();
-    if ak.is_empty() {
+    let lines: Vec<&str> = text.lines().collect();
+    if lines.is_empty() {
         return Ok(0);
     }
     
     
-    for line in ak.iter().chz(if ak[0].cj("#!") { 1 } else { 0 }) {
-        let line = line.em();
-        if line.is_empty() || line.cj('#') {
+    for line in lines.iter().skip(if lines[0].starts_with("#!") { 1 } else { 0 }) {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
             continue;
         }
         
         
-        if let Err(_) = crate::linux::shell::azu(line) {
+        if let Err(_) = crate::linux::shell::aav(line) {
             
             break;
         }

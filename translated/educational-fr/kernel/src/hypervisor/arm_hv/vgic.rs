@@ -100,10 +100,10 @@ const HW: u64 = 1 << 63;
 const GROUP1: u64 = 1 << 60;
 
     /// Build a List Register value
-    pub fn build_lr(vintid: u32, pintid: u32, priority: u8, hardware: bool) -> u64 {
+    pub fn build_lr(vintid: u32, pintid: u32, priority: u8, hw: bool) -> u64 {
         let mut lr: u64 = 0;
         lr |= (vintid as u64) & 0xFFFF_FFFF;    // vINTID [31:0]
-        if hardware {
+        if hw {
             lr |= HW;
             lr |= ((pintid as u64) & 0x1FFF) << 32;  // pINTID [44:32]
         }
@@ -117,7 +117,7 @@ const GROUP1: u64 = 1 << 60;
 /// Virtual GIC state
 pub struct VirtualGic {
     /// Number of available List Registers
-    number_lrs: u32,
+    num_lrs: u32,
     /// Pending virtual IRQs that couldn't be injected yet
     pending_queue: [u32; 64],
     pending_count: usize,
@@ -133,7 +133,7 @@ impl VirtualGic {
     /// Create a new virtual GIC (uninitialized)
     pub const fn new() -> Self {
         VirtualGic {
-            number_lrs: 0,
+            num_lrs: 0,
             pending_queue: [0; 64],
             pending_count: 0,
             initialized: false,
@@ -158,9 +158,9 @@ unsafe {
             }
 
             // ListRegs field is bits [4:0], value is (n+1) LRs
-            self.number_lrs = ((vtr & 0x1F) + 1) as u32;
-            if self.number_lrs > MAXIMUM_LRS as u32 {
-                self.number_lrs = MAXIMUM_LRS as u32;
+            self.num_lrs = ((vtr & 0x1F) + 1) as u32;
+            if self.num_lrs > MAXIMUM_LRS as u32 {
+                self.num_lrs = MAXIMUM_LRS as u32;
             }
 
             // Enable the virtual CPU interface
@@ -172,16 +172,16 @@ unsafe {
                     "orr {tmp}, {tmp}, #0x8",   // Enable for lower ELs
                     "msr icc_sre_el2, {tmp}",
                     "isb",
-                    temporary = out(reg) _,
+                    tmp = out(reg) _,
                     options(nomem, nostack)
                 );
 
                 // Enable ICH_HCR_EL2
-                let hcr_value = ich_hcr::EN;
+                let hcr_val = ich_hcr::EN;
                 core::arch::asm!(
                     "msr ich_hcr_el2, {val}",
                     "isb",
-                    value = in(reg) hcr_value,
+                    val = in(reg) hcr_val,
                     options(nomem, nostack)
                 );
             }
@@ -192,7 +192,7 @@ unsafe {
 
         #[cfg(not(target_arch = "aarch64"))]
         {
-            self.number_lrs = 4;
+            self.num_lrs = 4;
             self.initialized = true;
             VGIC_INITIALIZED.store(true, Ordering::Release);
         }
@@ -205,18 +205,18 @@ unsafe {
 
     /// Number of List Registers available
     pub fn number_list_registers(&self) -> u32 {
-        self.number_lrs
+        self.num_lrs
     }
 
     /// Inject a virtual interrupt into the guest
     ///
     /// Finds a free List Register and writes the interrupt.
     /// If all LRs are full, queues it for later injection.
-    pub fn inject_interrupt_request(&mut self, vintid: u32, pintid: u32, priority: u8) -> bool {
+    pub fn inject_irq(&mut self, vintid: u32, pintid: u32, priority: u8) -> bool {
         #[cfg(target_arch = "aarch64")]
         {
             // Try to find a free List Register
-            for i in 0..self.number_lrs {
+            for i in 0..self.num_lrs {
                 let lr_value = self.read_lr(i);
                 let state = (lr_value >> 60) & 0x3;
                 if state == 0 {
@@ -251,7 +251,7 @@ unsafe {
         let mut remaining = 0;
         for i in 0..self.pending_count {
             let vintid = self.pending_queue[i];
-            if !self.inject_interrupt_request(vintid, vintid, 0xA0) {
+            if !self.inject_irq(vintid, vintid, 0xA0) {
                 // Still can't inject, keep in queue
                 self.pending_queue[remaining] = vintid;
                 remaining += 1;
@@ -261,69 +261,69 @@ unsafe {
     }
 
     /// Read a List Register
-    fn read_lr(&self, index: u32) -> u64 {
+    fn read_lr(&self, idx: u32) -> u64 {
         #[cfg(target_arch = "aarch64")]
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-            let value: u64;
+            let val: u64;
                         // Correspondance de motifs — branchement exhaustif de Rust.
-match index {
-                0 => core::arch::asm!("mrs {v}, ich_lr0_el2", v = out(reg) value, options(nomem, nostack)),
-                1 => core::arch::asm!("mrs {v}, ich_lr1_el2", v = out(reg) value, options(nomem, nostack)),
-                2 => core::arch::asm!("mrs {v}, ich_lr2_el2", v = out(reg) value, options(nomem, nostack)),
-                3 => core::arch::asm!("mrs {v}, ich_lr3_el2", v = out(reg) value, options(nomem, nostack)),
-                4 => core::arch::asm!("mrs {v}, ich_lr4_el2", v = out(reg) value, options(nomem, nostack)),
-                5 => core::arch::asm!("mrs {v}, ich_lr5_el2", v = out(reg) value, options(nomem, nostack)),
-                6 => core::arch::asm!("mrs {v}, ich_lr6_el2", v = out(reg) value, options(nomem, nostack)),
-                7 => core::arch::asm!("mrs {v}, ich_lr7_el2", v = out(reg) value, options(nomem, nostack)),
-                8 => core::arch::asm!("mrs {v}, ich_lr8_el2", v = out(reg) value, options(nomem, nostack)),
-                9 => core::arch::asm!("mrs {v}, ich_lr9_el2", v = out(reg) value, options(nomem, nostack)),
-                10 => core::arch::asm!("mrs {v}, ich_lr10_el2", v = out(reg) value, options(nomem, nostack)),
-                11 => core::arch::asm!("mrs {v}, ich_lr11_el2", v = out(reg) value, options(nomem, nostack)),
-                12 => core::arch::asm!("mrs {v}, ich_lr12_el2", v = out(reg) value, options(nomem, nostack)),
-                13 => core::arch::asm!("mrs {v}, ich_lr13_el2", v = out(reg) value, options(nomem, nostack)),
-                14 => core::arch::asm!("mrs {v}, ich_lr14_el2", v = out(reg) value, options(nomem, nostack)),
-                15 => core::arch::asm!("mrs {v}, ich_lr15_el2", v = out(reg) value, options(nomem, nostack)),
+match idx {
+                0 => core::arch::asm!("mrs {v}, ich_lr0_el2", v = out(reg) val, options(nomem, nostack)),
+                1 => core::arch::asm!("mrs {v}, ich_lr1_el2", v = out(reg) val, options(nomem, nostack)),
+                2 => core::arch::asm!("mrs {v}, ich_lr2_el2", v = out(reg) val, options(nomem, nostack)),
+                3 => core::arch::asm!("mrs {v}, ich_lr3_el2", v = out(reg) val, options(nomem, nostack)),
+                4 => core::arch::asm!("mrs {v}, ich_lr4_el2", v = out(reg) val, options(nomem, nostack)),
+                5 => core::arch::asm!("mrs {v}, ich_lr5_el2", v = out(reg) val, options(nomem, nostack)),
+                6 => core::arch::asm!("mrs {v}, ich_lr6_el2", v = out(reg) val, options(nomem, nostack)),
+                7 => core::arch::asm!("mrs {v}, ich_lr7_el2", v = out(reg) val, options(nomem, nostack)),
+                8 => core::arch::asm!("mrs {v}, ich_lr8_el2", v = out(reg) val, options(nomem, nostack)),
+                9 => core::arch::asm!("mrs {v}, ich_lr9_el2", v = out(reg) val, options(nomem, nostack)),
+                10 => core::arch::asm!("mrs {v}, ich_lr10_el2", v = out(reg) val, options(nomem, nostack)),
+                11 => core::arch::asm!("mrs {v}, ich_lr11_el2", v = out(reg) val, options(nomem, nostack)),
+                12 => core::arch::asm!("mrs {v}, ich_lr12_el2", v = out(reg) val, options(nomem, nostack)),
+                13 => core::arch::asm!("mrs {v}, ich_lr13_el2", v = out(reg) val, options(nomem, nostack)),
+                14 => core::arch::asm!("mrs {v}, ich_lr14_el2", v = out(reg) val, options(nomem, nostack)),
+                15 => core::arch::asm!("mrs {v}, ich_lr15_el2", v = out(reg) val, options(nomem, nostack)),
                 _ => return 0,
             }
-            value
+            val
         }
         #[cfg(not(target_arch = "aarch64"))]
         {
-            let _ = index;
+            let _ = idx;
             0
         }
     }
 
     /// Write a List Register
-    fn write_lr(&self, index: u32, value: u64) {
+    fn write_lr(&self, idx: u32, val: u64) {
         #[cfg(target_arch = "aarch64")]
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
                         // Correspondance de motifs — branchement exhaustif de Rust.
-match index {
-                0 => core::arch::asm!("msr ich_lr0_el2, {v}", v = in(reg) value, options(nomem, nostack)),
-                1 => core::arch::asm!("msr ich_lr1_el2, {v}", v = in(reg) value, options(nomem, nostack)),
-                2 => core::arch::asm!("msr ich_lr2_el2, {v}", v = in(reg) value, options(nomem, nostack)),
-                3 => core::arch::asm!("msr ich_lr3_el2, {v}", v = in(reg) value, options(nomem, nostack)),
-                4 => core::arch::asm!("msr ich_lr4_el2, {v}", v = in(reg) value, options(nomem, nostack)),
-                5 => core::arch::asm!("msr ich_lr5_el2, {v}", v = in(reg) value, options(nomem, nostack)),
-                6 => core::arch::asm!("msr ich_lr6_el2, {v}", v = in(reg) value, options(nomem, nostack)),
-                7 => core::arch::asm!("msr ich_lr7_el2, {v}", v = in(reg) value, options(nomem, nostack)),
-                8 => core::arch::asm!("msr ich_lr8_el2, {v}", v = in(reg) value, options(nomem, nostack)),
-                9 => core::arch::asm!("msr ich_lr9_el2, {v}", v = in(reg) value, options(nomem, nostack)),
-                10 => core::arch::asm!("msr ich_lr10_el2, {v}", v = in(reg) value, options(nomem, nostack)),
-                11 => core::arch::asm!("msr ich_lr11_el2, {v}", v = in(reg) value, options(nomem, nostack)),
-                12 => core::arch::asm!("msr ich_lr12_el2, {v}", v = in(reg) value, options(nomem, nostack)),
-                13 => core::arch::asm!("msr ich_lr13_el2, {v}", v = in(reg) value, options(nomem, nostack)),
-                14 => core::arch::asm!("msr ich_lr14_el2, {v}", v = in(reg) value, options(nomem, nostack)),
-                15 => core::arch::asm!("msr ich_lr15_el2, {v}", v = in(reg) value, options(nomem, nostack)),
+match idx {
+                0 => core::arch::asm!("msr ich_lr0_el2, {v}", v = in(reg) val, options(nomem, nostack)),
+                1 => core::arch::asm!("msr ich_lr1_el2, {v}", v = in(reg) val, options(nomem, nostack)),
+                2 => core::arch::asm!("msr ich_lr2_el2, {v}", v = in(reg) val, options(nomem, nostack)),
+                3 => core::arch::asm!("msr ich_lr3_el2, {v}", v = in(reg) val, options(nomem, nostack)),
+                4 => core::arch::asm!("msr ich_lr4_el2, {v}", v = in(reg) val, options(nomem, nostack)),
+                5 => core::arch::asm!("msr ich_lr5_el2, {v}", v = in(reg) val, options(nomem, nostack)),
+                6 => core::arch::asm!("msr ich_lr6_el2, {v}", v = in(reg) val, options(nomem, nostack)),
+                7 => core::arch::asm!("msr ich_lr7_el2, {v}", v = in(reg) val, options(nomem, nostack)),
+                8 => core::arch::asm!("msr ich_lr8_el2, {v}", v = in(reg) val, options(nomem, nostack)),
+                9 => core::arch::asm!("msr ich_lr9_el2, {v}", v = in(reg) val, options(nomem, nostack)),
+                10 => core::arch::asm!("msr ich_lr10_el2, {v}", v = in(reg) val, options(nomem, nostack)),
+                11 => core::arch::asm!("msr ich_lr11_el2, {v}", v = in(reg) val, options(nomem, nostack)),
+                12 => core::arch::asm!("msr ich_lr12_el2, {v}", v = in(reg) val, options(nomem, nostack)),
+                13 => core::arch::asm!("msr ich_lr13_el2, {v}", v = in(reg) val, options(nomem, nostack)),
+                14 => core::arch::asm!("msr ich_lr14_el2, {v}", v = in(reg) val, options(nomem, nostack)),
+                15 => core::arch::asm!("msr ich_lr15_el2, {v}", v = in(reg) val, options(nomem, nostack)),
                 _ => {}
             }
         }
         #[cfg(not(target_arch = "aarch64"))]
         {
-            let _ = (index, value);
+            let _ = (idx, val);
         }
     }
 }
@@ -351,7 +351,7 @@ unsafe {
         }
 
         // Inject as virtual IRQ to guest
-        vgic.inject_interrupt_request(intid, intid, 0xA0);
+        vgic.inject_irq(intid, intid, 0xA0);
 
         // Signal EOI for the physical interrupt
         unsafe {

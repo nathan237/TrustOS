@@ -20,7 +20,7 @@ use spin::Mutex;
 /// Ring buffer entry
 #[derive(Clone)]
 struct DmesgEntry {
-    timestamp_mouse: u64,
+    timestamp_ms: u64,
     level: u8,       // 0=trace..5=fatal
     message: String,
 }
@@ -31,7 +31,7 @@ const DMESG_CAPACITY: usize = 2048;
 struct DmesgBuffer {
     entries: Vec<DmesgEntry>,
     /// Write index (wraps around)
-    write_index: usize,
+    write_idx: usize,
     /// Total messages ever written
     total_count: u64,
     /// Whether buffer has wrapped
@@ -43,27 +43,27 @@ impl DmesgBuffer {
     const fn new() -> Self {
         Self {
             entries: Vec::new(),
-            write_index: 0,
+            write_idx: 0,
             total_count: 0,
             wrapped: false,
         }
     }
     
-    fn push(&mut self, timestamp_mouse: u64, level: u8, message: String) {
+    fn push(&mut self, timestamp_ms: u64, level: u8, message: String) {
         if self.entries.len() < DMESG_CAPACITY {
-            self.entries.push(DmesgEntry { timestamp_mouse, level, message });
+            self.entries.push(DmesgEntry { timestamp_ms, level, message });
         } else {
-            self.entries[self.write_index] = DmesgEntry { timestamp_mouse, level, message };
+            self.entries[self.write_idx] = DmesgEntry { timestamp_ms, level, message };
             self.wrapped = true;
         }
-        self.write_index = (self.write_index + 1) % DMESG_CAPACITY;
+        self.write_idx = (self.write_idx + 1) % DMESG_CAPACITY;
         self.total_count += 1;
     }
     
     /// Iterate entries in chronological order
-    fn iterator_ordered(&self) -> // Bloc d'implémentation — définit les méthodes du type ci-dessus.
+    fn iter_ordered(&self) -> // Bloc d'implémentation — définit les méthodes du type ci-dessus.
 impl Iterator<Item = &DmesgEntry> {
-        let start = if self.wrapped { self.write_index } else { 0 };
+        let start = if self.wrapped { self.write_idx } else { 0 };
         let len = self.entries.len();
         (0..len).map(move |i| &self.entries[(start + i) % len])
     }
@@ -80,21 +80,21 @@ static DMESG: Mutex<DmesgBuffer> = Mutex::new(DmesgBuffer::new());
 /// Called from the logging macros or boot code.
 pub fn dmesg_write(level: u8, message: String) {
     // Safely get uptime (returns 0 if time not initialized yet)
-    let ts = crate::time::uptime_mouse();
-    if let Some(mut buffer) = DMESG.try_lock() {
-        buffer.push(ts, level, message);
+    let ts = crate::time::uptime_ms();
+    if let Some(mut buf) = DMESG.try_lock() {
+        buf.push(ts, level, message);
     }
 }
 
 /// Record a message (from &str, avoids allocation in some paths)
-pub fn dmesg_record(level: u8, message: &str) {
-    dmesg_write(level, String::from(message));
+pub fn dmesg_record(level: u8, msg: &str) {
+    dmesg_write(level, String::from(msg));
 }
 
 /// Get the last N dmesg lines (or all if n=0)
 pub fn dmesg_read(n: usize) -> Vec<String> {
-    let buffer = DMESG.lock();
-    let entries: Vec<_> = buffer.iterator_ordered().collect();
+    let buf = DMESG.lock();
+    let entries: Vec<_> = buf.iter_ordered().collect();
     let start = if n > 0 && n < entries.len() { entries.len() - n } else { 0 };
     entries[start..]
         .iter()
@@ -110,15 +110,15 @@ match e.level {
                 _ => "?????",
             };
             format!("[{:>10.3}] [{}] {}", 
-                e.timestamp_mouse as f64 / 1000.0, level, e.message)
+                e.timestamp_ms as f64 / 1000.0, level, e.message)
         })
         .collect()
 }
 
 /// Get dmesg stats
 pub fn dmesg_stats() -> (usize, u64) {
-    let buffer = DMESG.lock();
-    (buffer.len(), buffer.total_count)
+    let buf = DMESG.lock();
+    (buf.len(), buf.total_count)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -148,10 +148,10 @@ pub fn track_allocator(size: usize) {
     
     // Update peak
     let used = crate::memory::heap::used();
-    let _ = PEAK_HEAP_USED.fetch_maximum(used, Ordering::Relaxed);
+    let _ = PEAK_HEAP_USED.fetch_max(used, Ordering::Relaxed);
     
     // Update largest alloc
-    let _ = LARGEST_ALLOCATOR.fetch_maximum(size, Ordering::Relaxed);
+    let _ = LARGEST_ALLOCATOR.fetch_max(size, Ordering::Relaxed);
     
     // TrustLab trace (only large allocations to avoid flood)
     if size >= 4096 {
@@ -181,16 +181,16 @@ pub fn track_dealloc(size: usize) {
 
 /// Memory debug stats
 pub struct MemoryDebugStats {
-    pub allocator_count: u64,
+    pub alloc_count: u64,
     pub dealloc_count: u64,
-    pub allocator_bytes_total: u64,
+    pub alloc_bytes_total: u64,
     pub dealloc_bytes_total: u64,
     pub peak_heap_used: usize,
     pub current_heap_used: usize,
     pub current_heap_free: usize,
     pub heap_total: usize,
     pub live_allocs: u64,
-    pub largest_allocator: usize,
+    pub largest_alloc: usize,
     pub fragmentation_pct: f32,
 }
 
@@ -203,34 +203,34 @@ pub fn memdbg_stats() -> MemoryDebugStats {
     // Simple fragmentation estimate:
     // If we have lots of free space but can't allocate large blocks,
     // that's fragmentation. We approximate by checking dealloc/alloc ratio.
-    let allocator_count = ALLOCATOR_COUNT.load(Ordering::Relaxed);
+    let alloc_count = ALLOCATOR_COUNT.load(Ordering::Relaxed);
     let dealloc_count = DEALLOC_COUNT.load(Ordering::Relaxed);
-    let frag = if total > 0 && allocator_count > 100 {
+    let frag = if total > 0 && alloc_count > 100 {
         // Fragmentation heuristic: ratio of deallocated operations to total,
         // weighted by how much free space is scattered
-        let churn = if allocator_count > 0 {
-            (dealloc_count as f32) / (allocator_count as f32)
+        let churn = if alloc_count > 0 {
+            (dealloc_count as f32) / (alloc_count as f32)
         } else {
             0.0
         };
         // High churn + low free = high fragmentation
         let free_ratio = free as f32 / total as f32;
-        (churn * (1.0 - free_ratio) * 100.0).minimum(100.0)
+        (churn * (1.0 - free_ratio) * 100.0).min(100.0)
     } else {
         0.0
     };
     
     MemoryDebugStats {
-        allocator_count,
+        alloc_count,
         dealloc_count,
-        allocator_bytes_total: ALLOCATOR_BYTES_TOTAL.load(Ordering::Relaxed),
+        alloc_bytes_total: ALLOCATOR_BYTES_TOTAL.load(Ordering::Relaxed),
         dealloc_bytes_total: DEALLOC_BYTES_TOTAL.load(Ordering::Relaxed),
         peak_heap_used: PEAK_HEAP_USED.load(Ordering::Relaxed),
         current_heap_used: used,
         current_heap_free: free,
         heap_total: total,
         live_allocs: CURRENT_LIVE_ALLOCS.load(Ordering::Relaxed),
-        largest_allocator: LARGEST_ALLOCATOR.load(Ordering::Relaxed),
+        largest_alloc: LARGEST_ALLOCATOR.load(Ordering::Relaxed),
         fragmentation_pct: frag,
     }
 }
@@ -274,7 +274,7 @@ pub fn cpu_utilization() -> u32 {
 pub fn update_interrupt_request_rate() {
     let stats = crate::sync::percpu::all_cpu_stats();
     let total_irqs: u64 = stats.iter().map(|s| s.interrupts).sum();
-    let now = crate::time::uptime_mouse();
+    let now = crate::time::uptime_ms();
     
     let last_irqs = LAST_INTERRUPT_REQUEST_SNAPSHOT.swap(total_irqs, Ordering::Relaxed);
     let last_time = LAST_INTERRUPT_REQUEST_TIME_MOUSE.swap(now, Ordering::Relaxed);
@@ -287,18 +287,18 @@ pub fn update_interrupt_request_rate() {
 }
 
 /// Get current IRQ/sec rate
-pub fn interrupt_request_rate() -> u64 {
+pub fn irq_rate() -> u64 {
     INTERRUPT_REQUEST_RATE.load(Ordering::Relaxed)
 }
 
 /// Per-CPU detailed stats
 pub struct PerfSnapshot {
-    pub uptime_mouse: u64,
+    pub uptime_ms: u64,
     pub cpu_stats: Vec<crate::sync::percpu::CpuStats>,
     pub total_irqs: u64,
     pub total_syscalls: u64,
-    pub total_context_switches: u64,
-    pub interrupt_request_per_sector: u64,
+    pub total_ctx_switches: u64,
+    pub irq_per_sec: u64,
     pub heap_used: usize,
     pub heap_free: usize,
     pub fps: u64,
@@ -309,15 +309,15 @@ pub fn perf_snapshot() -> PerfSnapshot {
     let stats = crate::sync::percpu::all_cpu_stats();
     let total_irqs: u64 = stats.iter().map(|s| s.interrupts).sum();
     let total_syscalls: u64 = stats.iter().map(|s| s.syscalls).sum();
-    let total_context_switches: u64 = stats.iter().map(|s| s.context_switches).sum();
+    let total_ctx_switches: u64 = stats.iter().map(|s| s.context_switches).sum();
     
     PerfSnapshot {
-        uptime_mouse: crate::time::uptime_mouse(),
+        uptime_ms: crate::time::uptime_ms(),
         cpu_stats: stats,
         total_irqs,
         total_syscalls,
-        total_context_switches,
-        interrupt_request_per_sector: interrupt_request_rate(),
+        total_ctx_switches,
+        irq_per_sec: irq_rate(),
         heap_used: crate::memory::heap::used(),
         heap_free: crate::memory::heap::free(),
         fps: crate::gui::engine::get_fps(),
@@ -330,7 +330,7 @@ pub fn perf_snapshot() -> PerfSnapshot {
 
 /// Read memory at virtual address, returning hex dump.
 /// Restricted to root users only — arbitrary memory reads are dangerous.
-pub fn peek(address: usize, count: usize) -> Vec<String> {
+pub fn peek(addr: usize, count: usize) -> Vec<String> {
     let mut lines = Vec::new();
 
     // Authorization: only root may inspect raw memory
@@ -339,10 +339,10 @@ pub fn peek(address: usize, count: usize) -> Vec<String> {
         return lines;
     }
 
-    let count = count.minimum(256); // Max 256 bytes per peek
+    let count = count.min(256); // Max 256 bytes per peek
     
     // Safety check: don't read from NULL or obviously bad addresses
-    if address == 0 {
+    if addr == 0 {
         lines.push(String::from("Error: NULL pointer"));
         return lines;
     }
@@ -351,7 +351,7 @@ pub fn peek(address: usize, count: usize) -> Vec<String> {
     let mut offset = 0;
     
     while offset < count {
-        let line_bytes = (count - offset).minimum(bytes_per_line);
+        let line_bytes = (count - offset).min(bytes_per_line);
         let mut hex = String::new();
         let mut ascii = String::new();
         
@@ -360,7 +360,7 @@ pub fn peek(address: usize, count: usize) -> Vec<String> {
                 let byte = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
                     // Read with volatile to avoid optimization
-                    core::ptr::read_volatile((address + offset + i) as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+                    core::ptr::read_volatile((addr + offset + i) as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u8)
                 };
                 hex.push_str(&format!("{:02x} ", byte));
@@ -372,7 +372,7 @@ const u8)
             if i == 7 { hex.push(' '); }
         }
         
-        lines.push(format!("  {:016x}  {}|{}|", address + offset, hex, ascii));
+        lines.push(format!("  {:016x}  {}|{}|", addr + offset, hex, ascii));
         offset += bytes_per_line;
     }
     
@@ -381,21 +381,21 @@ const u8)
 
 /// Write a byte to a virtual address (very dangerous!)
 /// Restricted to root users only.
-pub fn poke(address: usize, value: u8) -> Result<(), &'static str> {
+pub fn poke(addr: usize, value: u8) -> Result<(), &'static str> {
     // Authorization: only root may write raw memory
     if !crate::auth::is_root() {
         return Err("poke requires root privileges");
     }
-    if address == 0 {
+    if addr == 0 {
         return Err("NULL pointer");
     }
-    if address < 0x1000 {
+    if addr < 0x1000 {
         return Err("Address too low (first page guard)");
     }
     
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-        core::ptr::write_volatile(address as *mut u8, value);
+        core::ptr::write_volatile(addr as *mut u8, value);
     }
     Ok(())
 }
@@ -493,8 +493,8 @@ static DEVPANEL_VISIBLE: AtomicBool = AtomicBool::new(false);
 
 /// Toggle devpanel visibility (F12 or `devpanel` command)
 pub fn toggle_devpanel() {
-    let previous = DEVPANEL_VISIBLE.load(Ordering::Relaxed);
-    DEVPANEL_VISIBLE.store(!previous, Ordering::Relaxed);
+    let prev = DEVPANEL_VISIBLE.load(Ordering::Relaxed);
+    DEVPANEL_VISIBLE.store(!prev, Ordering::Relaxed);
 }
 
 // Fonction publique — appelable depuis d'autres modules.
@@ -511,11 +511,11 @@ pub fn is_devpanel_visible() -> bool {
 pub struct DevicePanelData {
     pub fps: u64,
     pub frame_time_us: u64,
-    pub heap_used_keyboard: usize,
-    pub heap_total_keyboard: usize,
+    pub heap_used_kb: usize,
+    pub heap_total_kb: usize,
     pub heap_pct: u32,
     pub live_allocs: u64,
-    pub interrupt_request_per_sector: u64,
+    pub irq_per_sec: u64,
     pub uptime_secs: u64,
     pub cpu_count: usize,
     pub total_irqs: u64,
@@ -532,13 +532,13 @@ pub fn devpanel_data() -> DevicePanelData {
     DevicePanelData {
         fps: crate::gui::engine::get_fps(),
         frame_time_us: 0, // will be filled by renderer
-        heap_used_keyboard: used / 1024,
-        heap_total_keyboard: total / 1024,
+        heap_used_kb: used / 1024,
+        heap_total_kb: total / 1024,
         heap_pct: if total > 0 { ((used * 100) / total) as u32 } else { 0 },
         live_allocs: CURRENT_LIVE_ALLOCS.load(Ordering::Relaxed),
-        interrupt_request_per_sector: interrupt_request_rate(),
-        uptime_secs: crate::time::uptime_mouse() / 1000,
-        cpu_count: stats.len().maximum(1),
+        irq_per_sec: irq_rate(),
+        uptime_secs: crate::time::uptime_ms() / 1000,
+        cpu_count: stats.len().max(1),
         total_irqs,
     }
 }
@@ -596,7 +596,7 @@ pub fn render_devpanel(width: u32, _height: u32, frame_time_us: u64) {
     
     // Heap usage with bar
     draw_overlay_text(x, y, &format!("Heap: {} / {} KB ({}%)", 
-        data.heap_used_keyboard, data.heap_total_keyboard, data.heap_pct), label_color);
+        data.heap_used_kb, data.heap_total_kb, data.heap_pct), label_color);
     y += 12;
     
     // Heap bar
@@ -616,7 +616,7 @@ pub fn render_devpanel(width: u32, _height: u32, frame_time_us: u64) {
     y += 14;
     
     // IRQ rate
-    draw_overlay_text(x, y, &format!("IRQ/s: {}   Total: {}", data.interrupt_request_per_sector, data.total_irqs), label_color);
+    draw_overlay_text(x, y, &format!("IRQ/s: {}   Total: {}", data.irq_per_sec, data.total_irqs), label_color);
     y += 14;
     
     // CPUs
@@ -647,17 +647,17 @@ fn draw_overlay_text(x: i32, y: i32, text: &str, color: u32) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /// Capture a boot message into dmesg
-pub fn capture_boot_message(message: &str) {
-    dmesg_record(2, message); // level 2 = INFO
+pub fn capture_boot_message(msg: &str) {
+    dmesg_record(2, msg); // level 2 = INFO
 }
 
 /// Macro-friendly capture — only captures after heap is available
-pub fn capture_serial_line(message: core::fmt::Arguments) {
+pub fn capture_serial_line(msg: core::fmt::Arguments) {
     // Don't attempt to allocate before the heap is ready.
     // Check if the heap has been initialized (free > 0 means it's set up).
     if crate::memory::heap::free() == 0 {
         return;
     }
-    let s = format!("{}", message);
+    let s = format!("{}", msg);
     dmesg_record(2, &s);
 }

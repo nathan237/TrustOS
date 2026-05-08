@@ -80,14 +80,14 @@ loop {
 
             if self.state == PlayState::Paused {
                 // Spin while paused
-                let pause_start = crate::time::uptime_mouse();
-                while crate::time::uptime_mouse() < pause_start + 50 {
+                let pause_start = crate::time::uptime_ms();
+                while crate::time::uptime_ms() < pause_start + 50 {
                     core::hint::spin_loop();
                 }
                 continue;
             }
 
-            let frame_start = crate::time::uptime_mouse();
+            let frame_start = crate::time::uptime_ms();
 
             if let Some(pixels) = decoder.next_frame() {
                 // Blit frame to backbuffer
@@ -106,11 +106,11 @@ loop {
             }
 
             // Frame timing
-            let elapsed = crate::time::uptime_mouse() - frame_start;
+            let elapsed = crate::time::uptime_ms() - frame_start;
             if elapsed < frame_mouse {
                 let wait = frame_mouse - elapsed;
-                let end = crate::time::uptime_mouse() + wait;
-                while crate::time::uptime_mouse() < end {
+                let end = crate::time::uptime_ms() + wait;
+                while crate::time::uptime_ms() < end {
                     core::hint::spin_loop();
                 }
             }
@@ -122,7 +122,7 @@ loop {
 
     /// Blit decoded pixel buffer to framebuffer backbuffer
     fn blit_frame(pixels: &[u32], vw: u32, vh: u32, ox: u32, oy: u32, software: u32) {
-        let context = crate::framebuffer::FastPixelContext::new();
+        let ctx = crate::framebuffer::FastPixelContext::new();
         let sh = crate::framebuffer::height();
         for y in 0..vh {
             let dy = oy + y;
@@ -131,8 +131,8 @@ loop {
             for x in 0..vw {
                 let dx = ox + x;
                 if dx >= software { break; }
-                let pixel = pixels[row_start + x as usize];
-                context.put_pixel(dx as usize, dy as usize, pixel);
+                let px = pixels[row_start + x as usize];
+                ctx.put_pixel(dx as usize, dy as usize, px);
             }
         }
     }
@@ -158,7 +158,7 @@ loop {
 pub fn generate_plasma_demo(width: u16, height: u16, frames: u32, fps: u16) -> Vec<u8> {
     let mut encoder = TvEncoder::new(width, height, fps);
     let npix = width as usize * height as usize;
-    let mut buffer = vec![0u32; npix];
+    let mut buf = vec![0u32; npix];
     let w = width as usize;
     let h = height as usize;
 
@@ -175,10 +175,10 @@ pub fn generate_plasma_demo(width: u16, height: u16, frames: u32, fps: u16) -> V
                 let average = (v1 as i32 + v2 as i32 + v3 as i32 + v4 as i32) / 4;
                 let hue = ((average + 128) & 0xFF) as u8;
                 let (r, g, b) = hue_to_rgb_int(hue);
-                buffer[y * w + x] = 0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | b as u32;
+                buf[y * w + x] = 0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | b as u32;
             }
         }
-        encoder.add_frame(&buffer);
+        encoder.add_frame(&buf);
         if f % 10 == 0 {
             crate::serial_println!("[video] Encoding frame {}/{}", f + 1, frames);
         }
@@ -194,7 +194,7 @@ pub fn generate_fire_demo(width: u16, height: u16, frames: u32, fps: u16) -> Vec
     let h = height as usize;
     let npix = w * h;
     let mut heat = vec![0u8; npix]; // heat map
-    let mut buffer = vec![0u32; npix];
+    let mut buf = vec![0u32; npix];
     let mut seed: u32 = 42;
 
     for f in 0..frames {
@@ -204,7 +204,7 @@ pub fn generate_fire_demo(width: u16, height: u16, frames: u32, fps: u16) -> Vec
             heat[(h - 1) * w + x] = (seed & 0xFF) as u8;
             // Extra intensity at bottom
             seed = xorshift(seed);
-            heat[(h - 2) * w + x] = ((seed & 0xFF) as u16).minimum(255) as u8;
+            heat[(h - 2) * w + x] = ((seed & 0xFF) as u16).min(255) as u8;
         }
 
         // Propagate heat upward with cooling
@@ -213,10 +213,10 @@ pub fn generate_fire_demo(width: u16, height: u16, frames: u32, fps: u16) -> Vec
                 let below = heat[(y + 1) * w + x] as u16;
                 let bl = if x > 0 { heat[(y + 1) * w + x - 1] as u16 } else { below };
                 let br = if x + 1 < w { heat[(y + 1) * w + x + 1] as u16 } else { below };
-                let bb = heat[((y + 2).minimum(h - 1)) * w + x] as u16;
+                let bb = heat[((y + 2).min(h - 1)) * w + x] as u16;
                 let average = (below + bl + br + bb) / 4;
                 let cool = if average > 2 { average - 2 } else { 0 };
-                heat[y * w + x] = cool.minimum(255) as u8;
+                heat[y * w + x] = cool.min(255) as u8;
             }
         }
 
@@ -232,10 +232,10 @@ pub fn generate_fire_demo(width: u16, height: u16, frames: u32, fps: u16) -> Vec
             } else {
                 (255, 255, 255) // white
             };
-            buffer[i] = 0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | b as u32;
+            buf[i] = 0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | b as u32;
         }
 
-        encoder.add_frame(&buffer);
+        encoder.add_frame(&buf);
         if f % 10 == 0 {
             crate::serial_println!("[video] Fire frame {}/{}", f + 1, frames);
         }
@@ -250,10 +250,10 @@ pub fn generate_matrix_demo(width: u16, height: u16, frames: u32, fps: u16) -> V
     let w = width as usize;
     let h = height as usize;
     let npix = w * h;
-    let mut buffer = vec![0u32; npix];
+    let mut buf = vec![0u32; npix];
 
-    let column_w = 8; // pixel width of each "column"
-    let ncols = w / column_w + 1;
+    let col_w = 8; // pixel width of each "column"
+    let ncols = w / col_w + 1;
     let mut drops = vec![0i32; ncols];
     let mut speeds = vec![0u8; ncols];
     let mut seed: u32 = 1337;
@@ -269,32 +269,32 @@ pub fn generate_matrix_demo(width: u16, height: u16, frames: u32, fps: u16) -> V
     for f in 0..frames {
         // Fade existing pixels (darken by ~10%)
         for i in 0..npix {
-            let pixel = buffer[i];
-            let r = ((pixel >> 16) & 0xFF) * 92 / 100;
-            let g = ((pixel >> 8) & 0xFF) * 92 / 100;
-            let b = (pixel & 0xFF) * 92 / 100;
-            buffer[i] = 0xFF000000 | (r << 16) | (g << 8) | b;
+            let px = buf[i];
+            let r = ((px >> 16) & 0xFF) * 92 / 100;
+            let g = ((px >> 8) & 0xFF) * 92 / 100;
+            let b = (px & 0xFF) * 92 / 100;
+            buf[i] = 0xFF000000 | (r << 16) | (g << 8) | b;
         }
 
         // Draw drops
         for c in 0..ncols {
-            let x_base = c * column_w;
+            let x_base = c * col_w;
             let dy = drops[c];
 
             if dy >= 0 && (dy as usize) < h {
                 let y = dy as usize;
                 // Head of drop: bright white-green
-                for pixel in 0..column_w.minimum(w - x_base) {
-                    buffer[y * w + x_base + pixel] = 0xFFCCFFCC;
+                for px in 0..col_w.min(w - x_base) {
+                    buf[y * w + x_base + px] = 0xFFCCFFCC;
                 }
                 // Trail: green
                 for trail in 1..8u32 {
                     let ty = dy - trail as i32;
                     if ty >= 0 && (ty as usize) < h {
                         let intensity = 200 - trail * 20;
-                        let g = intensity.minimum(255);
-                        for pixel in 0..column_w.minimum(w - x_base) {
-                            buffer[ty as usize * w + x_base + pixel] =
+                        let g = intensity.min(255);
+                        for px in 0..col_w.min(w - x_base) {
+                            buf[ty as usize * w + x_base + px] =
                                 0xFF000000 | ((g / 4) << 16) | (g << 8) | (g / 4);
                         }
                     }
@@ -312,7 +312,7 @@ pub fn generate_matrix_demo(width: u16, height: u16, frames: u32, fps: u16) -> V
             }
         }
 
-        encoder.add_frame(&buffer);
+        encoder.add_frame(&buf);
         if f % 10 == 0 {
             crate::serial_println!("[video] Matrix frame {}/{}", f + 1, frames);
         }
@@ -334,13 +334,13 @@ pub fn render_realtime(effect: &str, width: u16, height: u16, fps: u16) {
 
     let software = crate::framebuffer::width();
     let sh = crate::framebuffer::height();
-    let rw = (width as u32).minimum(software) as usize;
-    let rh = (height as u32).minimum(sh) as usize;
+    let rw = (width as u32).min(software) as usize;
+    let rh = (height as u32).min(sh) as usize;
     let ox = if software > rw as u32 { (software - rw as u32) / 2 } else { 0 } as usize;
     let oy = if sh > rh as u32 { (sh - rh as u32) / 2 } else { 0 } as usize;
 
     let rnpix = rw * rh;
-    let mut buffer = vec![0u32; rnpix];
+    let mut buf = vec![0u32; rnpix];
     let mut frame: u32 = 0;
     let mut seed: u32 = 42;
 
@@ -348,8 +348,8 @@ pub fn render_realtime(effect: &str, width: u16, height: u16, fps: u16) {
     let mut heat = if effect == "fire" { vec![0u8; rnpix] } else { Vec::new() };
 
     // State for matrix effect
-    let column_w: usize = 8;
-    let ncols = rw / column_w + 1;
+    let col_w: usize = 8;
+    let ncols = rw / col_w + 1;
     let mut drops = vec![0i32; ncols];
     let mut speeds = vec![0u8; ncols];
     if effect == "matrix" {
@@ -377,7 +377,7 @@ pub fn render_realtime(effect: &str, width: u16, height: u16, fps: u16) {
 
         // Infinite loop — runs until an explicit `break`.
 loop {
-        let frame_start = crate::time::uptime_mouse();
+        let frame_start = crate::time::uptime_ms();
 
         // Check for Q/ESC
         if let Some(key) = crate::keyboard::try_read_key() {
@@ -386,25 +386,25 @@ loop {
 
         // Generate frame data in local RAM buffer (pure computation, very fast)
         match effect {
-            "plasma" => render_plasma_frame(&mut buffer, rw, rh, frame),
-            "fire" => render_fire_frame(&mut buffer, &mut heat, rw, rh, &mut seed),
-            "matrix" => render_matrix_frame(&mut buffer, rw, rh, &mut drops, &mut speeds, &mut seed, column_w, ncols),
-            "shader" => render_shader_frame(&mut buffer, rw, rh, frame),
+            "plasma" => render_plasma_frame(&mut buf, rw, rh, frame),
+            "fire" => render_fire_frame(&mut buf, &mut heat, rw, rh, &mut seed),
+            "matrix" => render_matrix_frame(&mut buf, rw, rh, &mut drops, &mut speeds, &mut seed, col_w, ncols),
+            "shader" => render_shader_frame(&mut buf, rw, rh, frame),
             _ => break,
         }
 
         // Blit to backbuffer (RAM→RAM copy, very fast) then swap once to MMIO
-        if let Some((bb_pointer, _bb_w, bb_h, bb_stride)) = crate::framebuffer::get_backbuffer_information() {
-            let bb = bb_pointer as *mut u32;
+        if let Some((bb_ptr, _bb_w, bb_h, bb_stride)) = crate::framebuffer::get_backbuffer_information() {
+            let bb = bb_ptr as *mut u32;
             let bb_s = bb_stride as usize;
             for y in 0..rh {
                 let dy = oy + y;
                 if dy >= bb_h as usize { break; }
-                let source_row = &buffer[y * rw..y * rw + rw];
+                let source_row = &buf[y * rw..y * rw + rw];
                                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-                    let destination = bb.add(dy * bb_s + ox);
-                    core::ptr::copy_nonoverlapping(source_row.as_pointer(), destination, rw);
+                    let dst = bb.add(dy * bb_s + ox);
+                    core::ptr::copy_nonoverlapping(source_row.as_ptr(), dst, rw);
                 }
             }
         }
@@ -428,23 +428,23 @@ unsafe {
 
 /// Timed version of render_realtime — auto-stops after `duration_ms` milliseconds.
 /// Used by the showcase command for automated demo sequences.
-pub fn render_realtime_timed(effect: &str, width: u16, height: u16, fps: u16, duration_mouse: u64) {
+pub fn render_realtime_timed(effect: &str, width: u16, height: u16, fps: u16, duration_ms: u64) {
     let software = crate::framebuffer::width();
     let sh = crate::framebuffer::height();
-    let rw = (width as u32).minimum(software) as usize;
-    let rh = (height as u32).minimum(sh) as usize;
+    let rw = (width as u32).min(software) as usize;
+    let rh = (height as u32).min(sh) as usize;
     let ox = if software > rw as u32 { (software - rw as u32) / 2 } else { 0 } as usize;
     let oy = if sh > rh as u32 { (sh - rh as u32) / 2 } else { 0 } as usize;
 
     let rnpix = rw * rh;
-    let mut buffer = vec![0u32; rnpix];
+    let mut buf = vec![0u32; rnpix];
     let mut frame: u32 = 0;
     let mut seed: u32 = 42;
 
     let mut heat = if effect == "fire" { vec![0u8; rnpix] } else { Vec::new() };
 
-    let column_w: usize = 8;
-    let ncols = rw / column_w + 1;
+    let col_w: usize = 8;
+    let ncols = rw / col_w + 1;
     let mut drops = vec![0i32; ncols];
     let mut speeds = vec![0u8; ncols];
     if effect == "matrix" {
@@ -467,8 +467,8 @@ pub fn render_realtime_timed(effect: &str, width: u16, height: u16, fps: u16, du
 
     // Use TSC for timing — uptime_ms() doesn't advance during spin_loop()
     let start_tsc = crate::cpu::tsc::read_tsc();
-    let frequency = crate::cpu::tsc::frequency_hz();
-    let target_cycles = if frequency > 0 { frequency / 1000 * duration_mouse } else { u64::MAX };
+    let freq = crate::cpu::tsc::frequency_hz();
+    let target_cycles = if freq > 0 { freq / 1000 * duration_ms } else { u64::MAX };
 
         // Infinite loop — runs until an explicit `break`.
 loop {
@@ -483,24 +483,24 @@ loop {
 
                 // Pattern matching — Rust's exhaustive branching construct.
 match effect {
-            "plasma" => render_plasma_frame(&mut buffer, rw, rh, frame),
-            "fire" => render_fire_frame(&mut buffer, &mut heat, rw, rh, &mut seed),
-            "matrix" => render_matrix_frame(&mut buffer, rw, rh, &mut drops, &mut speeds, &mut seed, column_w, ncols),
-            "shader" => render_shader_frame(&mut buffer, rw, rh, frame),
+            "plasma" => render_plasma_frame(&mut buf, rw, rh, frame),
+            "fire" => render_fire_frame(&mut buf, &mut heat, rw, rh, &mut seed),
+            "matrix" => render_matrix_frame(&mut buf, rw, rh, &mut drops, &mut speeds, &mut seed, col_w, ncols),
+            "shader" => render_shader_frame(&mut buf, rw, rh, frame),
             _ => break,
         }
 
-        if let Some((bb_pointer, _bb_w, bb_h, bb_stride)) = crate::framebuffer::get_backbuffer_information() {
-            let bb = bb_pointer as *mut u32;
+        if let Some((bb_ptr, _bb_w, bb_h, bb_stride)) = crate::framebuffer::get_backbuffer_information() {
+            let bb = bb_ptr as *mut u32;
             let bb_s = bb_stride as usize;
             for y in 0..rh {
                 let dy = oy + y;
                 if dy >= bb_h as usize { break; }
-                let source_row = &buffer[y * rw..y * rw + rw];
+                let source_row = &buf[y * rw..y * rw + rw];
                                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {
-                    let destination = bb.add(dy * bb_s + ox);
-                    core::ptr::copy_nonoverlapping(source_row.as_pointer(), destination, rw);
+                    let dst = bb.add(dy * bb_s + ox);
+                    core::ptr::copy_nonoverlapping(source_row.as_ptr(), dst, rw);
                 }
             }
         }
@@ -512,10 +512,10 @@ unsafe {
         crate::framebuffer::set_double_buffer_mode(false);
     }
 
-    crate::serial_println!("[video] Timed demo '{}' stopped after {} frames ({} ms)", effect, frame, duration_mouse);
+    crate::serial_println!("[video] Timed demo '{}' stopped after {} frames ({} ms)", effect, frame, duration_ms);
 }
 
-fn render_plasma_frame(buffer: &mut [u32], w: usize, h: usize, frame: u32) {
+fn render_plasma_frame(buf: &mut [u32], w: usize, h: usize, frame: u32) {
     // Fixed-point integer plasma (no floating point)
     // Uses 256-entry sine LUT, 8-bit fractional precision
     let t = frame as i32;
@@ -533,14 +533,14 @@ fn render_plasma_frame(buffer: &mut [u32], w: usize, h: usize, frame: u32) {
             let average = (v1 as i32 + v2 as i32 + v3 as i32 + v4 as i32) / 4;
             let hue = ((average + 128) & 0xFF) as u8;
             let (r, g, b) = hue_to_rgb_int(hue);
-            buffer[y * w + x] = 0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | b as u32;
+            buf[y * w + x] = 0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | b as u32;
         }
     }
 }
 
 /// Integer sine table: 256 entries, output -127..127
 #[inline(always)]
-fn isin(index: u8) -> i8 {
+fn isin(idx: u8) -> i8 {
     // Pre-computed sine table (one full cycle in 256 steps)
     static SINTAB: [i8; 256] = {
         let mut t = [0i8; 256];
@@ -551,7 +551,7 @@ fn isin(index: u8) -> i8 {
             let phase = i as i32; // 0..255 maps to 0..2pi
             // Quadrant-based sine approximation
             let q = (phase & 0xFF) as i32;
-            let value = if q < 64 {
+            let val = if q < 64 {
                 // 0..pi/2: rising 0..127
                 (q * 127 / 64) as i8
             } else if q < 128 {
@@ -564,12 +564,12 @@ fn isin(index: u8) -> i8 {
                 // 3pi/2..2pi: rising -127..0
                 -((256 - q) * 127 / 64) as i8
             };
-            t[i as usize] = value;
+            t[i as usize] = val;
             i += 1;
         }
         t
     };
-    SINTAB[index as usize]
+    SINTAB[idx as usize]
 }
 
 /// Integer hue (0-255) to RGB
@@ -590,13 +590,13 @@ match sector {
     }
 }
 
-fn render_fire_frame(buffer: &mut [u32], heat: &mut [u8], w: usize, h: usize, seed: &mut u32) {
+fn render_fire_frame(buf: &mut [u32], heat: &mut [u8], w: usize, h: usize, seed: &mut u32) {
     // Random heat at bottom
     for x in 0..w {
         *seed = xorshift(*seed);
         heat[(h - 1) * w + x] = (*seed & 0xFF) as u8;
         *seed = xorshift(*seed);
-        heat[(h - 2) * w + x] = ((*seed & 0xFF) as u16).minimum(255) as u8;
+        heat[(h - 2) * w + x] = ((*seed & 0xFF) as u16).min(255) as u8;
     }
     // Propagate upward
     for y in 0..h.saturating_sub(2) {
@@ -604,9 +604,9 @@ fn render_fire_frame(buffer: &mut [u32], heat: &mut [u8], w: usize, h: usize, se
             let below = heat[(y + 1) * w + x] as u16;
             let bl = if x > 0 { heat[(y + 1) * w + x - 1] as u16 } else { below };
             let br = if x + 1 < w { heat[(y + 1) * w + x + 1] as u16 } else { below };
-            let bb = heat[((y + 2).minimum(h - 1)) * w + x] as u16;
+            let bb = heat[((y + 2).min(h - 1)) * w + x] as u16;
             let average = (below + bl + br + bb) / 4;
-            heat[y * w + x] = if average > 2 { (average - 2).minimum(255) as u8 } else { 0 };
+            heat[y * w + x] = if average > 2 { (average - 2).min(255) as u8 } else { 0 };
         }
     }
     // Color map
@@ -621,38 +621,38 @@ fn render_fire_frame(buffer: &mut [u32], heat: &mut [u8], w: usize, h: usize, se
         } else {
             (255, 255, 255)
         };
-        buffer[i] = 0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | b as u32;
+        buf[i] = 0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | b as u32;
     }
 }
 
-fn render_matrix_frame(buffer: &mut [u32], w: usize, h: usize,
+fn render_matrix_frame(buf: &mut [u32], w: usize, h: usize,
     drops: &mut [i32], speeds: &mut [u8], seed: &mut u32,
-    column_w: usize, ncols: usize)
+    col_w: usize, ncols: usize)
 {
     // Fade existing
     for i in 0..w * h {
-        let pixel = buffer[i];
-        let r = ((pixel >> 16) & 0xFF) * 90 / 100;
-        let g = ((pixel >> 8) & 0xFF) * 90 / 100;
-        let b = (pixel & 0xFF) * 90 / 100;
-        buffer[i] = 0xFF000000 | (r << 16) | (g << 8) | b;
+        let px = buf[i];
+        let r = ((px >> 16) & 0xFF) * 90 / 100;
+        let g = ((px >> 8) & 0xFF) * 90 / 100;
+        let b = (px & 0xFF) * 90 / 100;
+        buf[i] = 0xFF000000 | (r << 16) | (g << 8) | b;
     }
     // Draw drops
     for c in 0..ncols {
-        let x_base = c * column_w;
+        let x_base = c * col_w;
         let dy = drops[c];
         if dy >= 0 && (dy as usize) < h {
             let y = dy as usize;
-            for pixel in 0..column_w.minimum(w.saturating_sub(x_base)) {
-                buffer[y * w + x_base + pixel] = 0xFFCCFFCC;
+            for px in 0..col_w.min(w.saturating_sub(x_base)) {
+                buf[y * w + x_base + px] = 0xFFCCFFCC;
             }
             for trail in 1..8u32 {
                 let ty = dy - trail as i32;
                 if ty >= 0 && (ty as usize) < h {
                     let intensity = (200u32).saturating_sub(trail * 20);
-                    let g = intensity.minimum(255);
-                    for pixel in 0..column_w.minimum(w.saturating_sub(x_base)) {
-                        buffer[ty as usize * w + x_base + pixel] =
+                    let g = intensity.min(255);
+                    for px in 0..col_w.min(w.saturating_sub(x_base)) {
+                        buf[ty as usize * w + x_base + px] =
                             0xFF000000 | ((g / 4) << 16) | (g << 8) | (g / 4);
                     }
                 }
@@ -679,7 +679,7 @@ fn fast_exp(x: f32) -> f32 {
     // Clamp to avoid overflow/underflow
     let x = if x > 10.0 { 10.0 } else if x < -10.0 { -10.0 } else { x };
     // 2^(x / ln2) via IEEE 754 float bit manipulation
-    let a = (1 << 23) as f32 / core::f32::consts::LINE_2;
+    let a = (1 << 23) as f32 / core::f32::consts::LN_2;
     let b = (1 << 23) as f32 * (127.0 - 0.04367744890362246);
     let v = (a * x + b) as i32;
     f32::from_bits(if v > 0 { v as u32 } else { 0 })
@@ -691,10 +691,10 @@ fn fast_tanh(x: f32) -> f32 {
     if x > 5.0 { return 1.0; }
     if x < -5.0 { return -1.0; }
     let x2 = x * x;
-    x / (1.0 + x.absolute() + x2 * 0.28)
+    x / (1.0 + x.abs() + x2 * 0.28)
 }
 
-fn render_shader_frame(buffer: &mut [u32], w: usize, h: usize, frame: u32) {
+fn render_shader_frame(buf: &mut [u32], w: usize, h: usize, frame: u32) {
     // Render at 1/4 resolution then upscale 4x — makes it feasible on bare-metal CPU
     let scale = 4usize;
     let software = w / scale;
@@ -702,7 +702,7 @@ fn render_shader_frame(buffer: &mut [u32], w: usize, h: usize, frame: u32) {
 
     let t = frame as f32 * 0.03;
     let ry = sh as f32;
-    let receive = software as f32;
+    let rx = software as f32;
 
     // Pre-compute sin/cos via LUT (256 entries, avoid per-pixel micromath)
     static SINLUT: [f32; 256] = {
@@ -729,14 +729,14 @@ fn render_shader_frame(buffer: &mut [u32], w: usize, h: usize, frame: u32) {
     #[inline(always)]
     fn fsin(x: f32) -> f32 {
         // Map x to 0..255 LUT index (one cycle = 2*pi)
-        let index = ((x * (256.0 / 6.2831853)) as i32 & 255) as u8;
-        SINLUT[index as usize]
+        let idx = ((x * (256.0 / 6.2831853)) as i32 & 255) as u8;
+        SINLUT[idx as usize]
     }
     
     #[inline(always)]
     fn fcos(x: f32) -> f32 {
-        let index = (((x + 1.5707963) * (256.0 / 6.2831853)) as i32 & 255) as u8;
-        SINLUT[index as usize]
+        let idx = (((x + 1.5707963) * (256.0 / 6.2831853)) as i32 & 255) as u8;
+        SINLUT[idx as usize]
     }
 
     for sy in 0..sh {
@@ -747,10 +747,10 @@ fn render_shader_frame(buffer: &mut [u32], w: usize, h: usize, frame: u32) {
         let e_pyn2 = fast_exp(p_y * -2.0);
 
         for sx in 0..software {
-            let p_x = (sx as f32 * 2.0 - receive) / ry;
+            let p_x = (sx as f32 * 2.0 - rx) / ry;
 
             let dot_pp = p_x * p_x + p_y * p_y;
-            let l = (0.7 - dot_pp).absolute();
+            let l = (0.7 - dot_pp).abs();
 
             let s = (1.0 - l) * 5.0; // /0.2 = *5
             let mut vx = p_x * s;
@@ -767,7 +767,7 @@ fn render_shader_frame(buffer: &mut [u32], w: usize, h: usize, frame: u32) {
                 vx += fcos(vy * i + t) * inv_i + 0.7;
                 vy += fcos(vx * i + i + t) * inv_i + 0.7;
 
-                let diff = (vx - vy).absolute() * 0.2;
+                let diff = (vx - vy).abs() * 0.2;
                 o_r += (fsin(vx) + 1.0) * diff;
                 o_g += (fsin(vy) + 1.0) * diff;
                 o_b += (fsin(vy) + 1.0) * diff;
@@ -777,11 +777,11 @@ fn render_shader_frame(buffer: &mut [u32], w: usize, h: usize, frame: u32) {
             let radial = fast_exp(-4.0 * l);
             let fr = fast_tanh(e_py1 * radial / (o_r + 0.001));
             let fg = fast_tanh(e_pyn1 * radial / (o_g + 0.001));
-            let framebuffer = fast_tanh(e_pyn2 * radial / (o_b + 0.001));
+            let fb = fast_tanh(e_pyn2 * radial / (o_b + 0.001));
 
-            let r = (fr.absolute() * 255.0).minimum(255.0) as u32;
-            let g = (fg.absolute() * 255.0).minimum(255.0) as u32;
-            let b = (framebuffer.absolute() * 255.0).minimum(255.0) as u32;
+            let r = (fr.abs() * 255.0).min(255.0) as u32;
+            let g = (fg.abs() * 255.0).min(255.0) as u32;
+            let b = (fb.abs() * 255.0).min(255.0) as u32;
             let color = 0xFF000000 | (r << 16) | (g << 8) | b;
 
             // Upscale: fill scale x scale block
@@ -790,9 +790,9 @@ fn render_shader_frame(buffer: &mut [u32], w: usize, h: usize, frame: u32) {
                 if py >= h { break; }
                 let row_off = py * w + sx * scale;
                 for dx in 0..scale {
-                    let pixel = sx * scale + dx;
-                    if pixel < w {
-                        buffer[row_off + dx] = color;
+                    let px = sx * scale + dx;
+                    if px < w {
+                        buf[row_off + dx] = color;
                     }
                 }
             }

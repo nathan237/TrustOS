@@ -120,8 +120,8 @@ pub fn end(&self) -> u64 {
     }
     
         // Public function — callable from other modules.
-pub fn contains(&self, address: u64) -> bool {
-        address >= self.start && address < self.end()
+pub fn contains(&self, addr: u64) -> bool {
+        addr >= self.start && addr < self.end()
     }
 }
 
@@ -167,8 +167,8 @@ impl VmMemoryLayout {
     }
     
     /// Find region containing an address
-    pub fn find_region(&self, address: u64) -> Option<&MemoryRegion> {
-        self.regions.iter().find(|r| r.contains(address))
+    pub fn find_region(&self, addr: u64) -> Option<&MemoryRegion> {
+        self.regions.iter().find(|r| r.contains(addr))
     }
     
     /// Add a new region
@@ -178,8 +178,8 @@ impl VmMemoryLayout {
     }
     
     /// Check if access is allowed
-    pub fn check_access(&self, address: u64, is_write: bool, is_execute: bool) -> bool {
-        if let Some(region) = self.find_region(address) {
+    pub fn check_access(&self, addr: u64, is_write: bool, is_execute: bool) -> bool {
+        if let Some(region) = self.find_region(addr) {
             if is_write && !region.protection.is_writable() {
                 return false;
             }
@@ -219,7 +219,7 @@ pub struct EptViolation {
     pub guest_physical: u64,
     pub guest_linear: Option<u64>,
     pub violation_type: ViolationType,
-    pub timestamp_mouse: u64,
+    pub timestamp_ms: u64,
     pub guest_rip: u64,
 }
 
@@ -243,7 +243,7 @@ pub fn record_violation(
         guest_physical,
         guest_linear,
         violation_type,
-        timestamp_mouse: crate::time::uptime_mouse(),
+        timestamp_ms: crate::time::uptime_ms(),
         guest_rip,
     };
     
@@ -306,7 +306,7 @@ pub struct SecurityCheck {
 #[derive(Debug, Clone, Copy, PartialEq)]
 // Enumeration — a type that can be one of several variants.
 pub enum SecuritySeverity {
-    Information,
+    Info,
     Warning,
     Critical,
 }
@@ -396,27 +396,27 @@ pub fn update_metrics(vm_id: u64, metrics: IsolationMetrics) {
 /// Check if execute-only EPT pages are supported
 pub fn supports_execute_only() -> bool {
     // Read IA32_VMX_EPT_VPID_CAP MSR
-    let capability = super::vmx::read_msr(0x48C);
+    let cap = super::vmx::read_msr(0x48C);
     // Bit 0: Execute-only pages supported
-    (capability & 1) != 0
+    (cap & 1) != 0
 }
 
 /// Check if accessed/dirty bits in EPT are supported
 pub fn supports_accessed_dirty() -> bool {
-    let capability = super::vmx::read_msr(0x48C);
+    let cap = super::vmx::read_msr(0x48C);
     // Bit 21: A/D bits supported
-    (capability & (1 << 21)) != 0
+    (cap & (1 << 21)) != 0
 }
 
 /// Check if 1GB pages in EPT are supported
 pub fn supports_1gb_pages() -> bool {
-    let capability = super::vmx::read_msr(0x48C);
+    let cap = super::vmx::read_msr(0x48C);
     // Bit 17: 1GB pages supported
-    (capability & (1 << 17)) != 0
+    (cap & (1 << 17)) != 0
 }
 
 /// Get EPT memory types supported
 pub fn get_ept_memory_types() -> u8 {
-    let capability = super::vmx::read_msr(0x48C);
-    ((capability >> 8) & 0xFF) as u8
+    let cap = super::vmx::read_msr(0x48C);
+    ((cap >> 8) & 0xFF) as u8
 }

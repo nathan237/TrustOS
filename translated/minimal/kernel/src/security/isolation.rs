@@ -43,333 +43,333 @@ use core::sync::atomic::{AtomicU64, Ordering};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Subsystem {
     
-    Cy,
+    Memory,
     
-    Og,
+    Storage,
     
-    As,
+    Network,
     
-    Jm,
+    Graphics,
     
-    Tz,
+    ProcessMgr,
     
-    Ee,
+    Hypervisor,
     
-    Df,
+    Shell,
     
-    Jh,
+    Crypto,
     
-    Nj,
+    LinuxCompat,
     
-    Yu,
+    SerialDebug,
     
-    Hb,
+    Power,
     
-    Lq,
+    Interrupts,
     
     PciBus,
     
-    Ol,
+    Usb,
 }
 
 impl Subsystem {
     
-    pub fn pcl(&self) -> CapabilityType {
+    pub fn required_capability_type(&self) -> CapabilityType {
         match self {
-            Self::Cy => CapabilityType::Cy,
-            Self::Og => CapabilityType::Agr,
-            Self::As => CapabilityType::As,
-            Self::Jm => CapabilityType::Jm,
-            Self::Tz => CapabilityType::Process,
-            Self::Ee => CapabilityType::Ee,
-            Self::Df => CapabilityType::Ayr,
-            Self::Jh => CapabilityType::Jh,
-            Self::Nj => CapabilityType::Nj,
-            Self::Yu => CapabilityType::Amm,
-            Self::Hb => CapabilityType::Hb,
-            Self::Lq => CapabilityType::Fv,
+            Self::Memory => CapabilityType::Memory,
+            Self::Storage => CapabilityType::BlockDeviceRead,
+            Self::Network => CapabilityType::Network,
+            Self::Graphics => CapabilityType::Graphics,
+            Self::ProcessMgr => CapabilityType::Process,
+            Self::Hypervisor => CapabilityType::Hypervisor,
+            Self::Shell => CapabilityType::ShellExec,
+            Self::Crypto => CapabilityType::Crypto,
+            Self::LinuxCompat => CapabilityType::LinuxCompat,
+            Self::SerialDebug => CapabilityType::Serial,
+            Self::Power => CapabilityType::Power,
+            Self::Interrupts => CapabilityType::Interrupt,
             Self::PciBus => CapabilityType::PciBus,
-            Self::Ol => CapabilityType::Ol,
+            Self::Usb => CapabilityType::Usb,
         }
     }
 
     
-    pub fn j(&self) -> &'static str {
+    pub fn name(&self) -> &'static str {
         match self {
-            Self::Cy => "Memory",
-            Self::Og => "Storage",
-            Self::As => "Network",
-            Self::Jm => "Graphics",
-            Self::Tz => "Process",
-            Self::Ee => "Hypervisor",
-            Self::Df => "Shell",
-            Self::Jh => "Crypto",
-            Self::Nj => "LinuxCompat",
-            Self::Yu => "Serial/Debug",
-            Self::Hb => "Power",
-            Self::Lq => "Interrupts",
+            Self::Memory => "Memory",
+            Self::Storage => "Storage",
+            Self::Network => "Network",
+            Self::Graphics => "Graphics",
+            Self::ProcessMgr => "Process",
+            Self::Hypervisor => "Hypervisor",
+            Self::Shell => "Shell",
+            Self::Crypto => "Crypto",
+            Self::LinuxCompat => "LinuxCompat",
+            Self::SerialDebug => "Serial/Debug",
+            Self::Power => "Power",
+            Self::Interrupts => "Interrupts",
             Self::PciBus => "PCI Bus",
-            Self::Ol => "USB",
+            Self::Usb => "USB",
         }
     }
 
     
-    fn nkf(&self) -> CapabilityRights {
+    fn default_rights(&self) -> CapabilityRights {
         match self {
             
-            Self::Cy => CapabilityRights::Mr,
-            Self::Lq => CapabilityRights::Mr,
+            Self::Memory => CapabilityRights::Fi,
+            Self::Interrupts => CapabilityRights::Fi,
             
-            Self::Og => CapabilityRights(
-                CapabilityRights::Cm.0 | CapabilityRights::Db.0 | CapabilityRights::Mt.0
+            Self::Storage => CapabilityRights(
+                CapabilityRights::Ba.0 | CapabilityRights::Bh.0 | CapabilityRights::Fj.0
             ),
             
-            Self::As => CapabilityRights(
-                CapabilityRights::Cm.0 | CapabilityRights::Db.0 | CapabilityRights::Vx.0
+            Self::Network => CapabilityRights(
+                CapabilityRights::Ba.0 | CapabilityRights::Bh.0 | CapabilityRights::Jq.0
             ),
             
-            Self::Jm => CapabilityRights(
-                CapabilityRights::Cm.0 | CapabilityRights::Db.0 | CapabilityRights::Blt.0
+            Self::Graphics => CapabilityRights(
+                CapabilityRights::Ba.0 | CapabilityRights::Bh.0 | CapabilityRights::Aaz.0
             ),
             
-            Self::Tz => CapabilityRights(
-                CapabilityRights::Cm.0 | CapabilityRights::Db.0 |
-                CapabilityRights::Vx.0 | CapabilityRights::Mt.0 |
-                CapabilityRights::Ayg.0
+            Self::ProcessMgr => CapabilityRights(
+                CapabilityRights::Ba.0 | CapabilityRights::Bh.0 |
+                CapabilityRights::Jq.0 | CapabilityRights::Fj.0 |
+                CapabilityRights::Uv.0
             ),
             
-            Self::Ee => CapabilityRights::Mr,
+            Self::Hypervisor => CapabilityRights::Fi,
             
-            Self::Df => CapabilityRights(
-                CapabilityRights::Cm.0 | CapabilityRights::Mz.0
+            Self::Shell => CapabilityRights(
+                CapabilityRights::Ba.0 | CapabilityRights::Fm.0
             ),
             
-            Self::Jh => CapabilityRights::AHA_,
+            Self::Crypto => CapabilityRights::AIU_,
             
-            Self::Nj => CapabilityRights(
-                CapabilityRights::Cm.0 | CapabilityRights::Db.0 | CapabilityRights::Mz.0
+            Self::LinuxCompat => CapabilityRights(
+                CapabilityRights::Ba.0 | CapabilityRights::Bh.0 | CapabilityRights::Fm.0
             ),
             
-            Self::Yu => CapabilityRights::KZ_,
+            Self::SerialDebug => CapabilityRights::LQ_,
             
-            Self::Hb => CapabilityRights(
-                CapabilityRights::Mt.0 | CapabilityRights::Xy.0
+            Self::Power => CapabilityRights(
+                CapabilityRights::Fj.0 | CapabilityRights::Kh.0
             ),
             
             Self::PciBus => CapabilityRights(
-                CapabilityRights::Cm.0 | CapabilityRights::Mt.0
+                CapabilityRights::Ba.0 | CapabilityRights::Fj.0
             ),
             
-            Self::Ol => CapabilityRights(
-                CapabilityRights::Cm.0 | CapabilityRights::Db.0 | CapabilityRights::Mt.0
+            Self::Usb => CapabilityRights(
+                CapabilityRights::Ba.0 | CapabilityRights::Bh.0 | CapabilityRights::Fj.0
             ),
         }
     }
 
     
-    pub fn tzp(&self) -> &'static str {
+    pub fn isolation_level(&self) -> &'static str {
         match self {
             
-            Self::Cy | Self::Lq => "ring0-tcb",
+            Self::Memory | Self::Interrupts => "ring0-tcb",
             
-            Self::As | Self::Jm | Self::Df |
-            Self::Nj | Self::Jh | Self::Ol |
-            Self::Yu => "ring3-candidate",
+            Self::Network | Self::Graphics | Self::Shell |
+            Self::LinuxCompat | Self::Crypto | Self::Usb |
+            Self::SerialDebug => "ring3-candidate",
             
-            Self::Og | Self::Ee | Self::Tz |
-            Self::Hb | Self::PciBus => "ring0-isolated",
+            Self::Storage | Self::Hypervisor | Self::ProcessMgr |
+            Self::Power | Self::PciBus => "ring0-isolated",
         }
     }
 
     
-    pub fn xx() -> &'static [Subsystem] {
+    pub fn all() -> &'static [Subsystem] {
         &[
-            Self::Cy, Self::Og, Self::As, Self::Jm,
-            Self::Tz, Self::Ee, Self::Df, Self::Jh,
-            Self::Nj, Self::Yu, Self::Hb, Self::Lq,
-            Self::PciBus, Self::Ol,
+            Self::Memory, Self::Storage, Self::Network, Self::Graphics,
+            Self::ProcessMgr, Self::Hypervisor, Self::Shell, Self::Crypto,
+            Self::LinuxCompat, Self::SerialDebug, Self::Power, Self::Interrupts,
+            Self::PciBus, Self::Usb,
         ]
     }
 }
 
 
-struct Djb {
+struct Bdm {
     
     capability: CapabilityId,
     
-    yed: AtomicU64,
+    accesses: AtomicU64,
     
-    cnt: AtomicU64,
+    violations: AtomicU64,
 }
 
 
-static PT_: Mutex<BTreeMap<Subsystem, CapabilityId>> = Mutex::new(BTreeMap::new());
+static QQ_: Mutex<BTreeMap<Subsystem, CapabilityId>> = Mutex::new(BTreeMap::new());
 
 
-static EGY_: Mutex<BTreeMap<u8, (u64, u64)>> = Mutex::new(BTreeMap::new());
+static EKQ_: Mutex<BTreeMap<u8, (u64, u64)>> = Mutex::new(BTreeMap::new());
 
 
-static ACR_: AtomicU64 = AtomicU64::new(0);
+static AEH_: AtomicU64 = AtomicU64::new(0);
 
-static ASQ_: AtomicU64 = AtomicU64::new(0);
+static AUU_: AtomicU64 = AtomicU64::new(0);
 
 
 
-pub fn tty() {
-    for bcu in Subsystem::xx() {
-        let cap_type = bcu.pcl();
-        let bap = bcu.nkf();
+pub fn mpn() {
+    for acs in Subsystem::all() {
+        let cap_type = acs.required_capability_type();
+        let rights = acs.default_rights();
         
-        let awj = 0x5500 + (*bcu as u64);
-        let cap_id = super::klu(cap_type, bap, awj);
-        PT_.lock().insert(*bcu, cap_id);
+        let owner = 0x5500 + (*acs as u64);
+        let cap_id = super::fpa(cap_type, rights, owner);
+        QQ_.lock().insert(*acs, cap_id);
     }
     
     crate::serial_println!("[ISOLATION] {} subsystem capability tokens created", 
-        Subsystem::xx().len());
+        Subsystem::all().len());
 }
 
 
-pub fn yty(bcu: Subsystem) -> Option<CapabilityId> {
-    PT_.lock().get(&bcu).hu()
+pub fn qip(acs: Subsystem) -> Option<CapabilityId> {
+    QQ_.lock().get(&acs).copied()
 }
 
 
 
 
-pub fn drb(
-    bcu: Subsystem,
-    bao: CapabilityRights,
+pub fn bmj(
+    acs: Subsystem,
+    abh: CapabilityRights,
 ) -> Result<(), super::SecurityError> {
-    ASQ_.fetch_add(1, Ordering::Relaxed);
+    AUU_.fetch_add(1, Ordering::Relaxed);
     
-    let cap_id = match PT_.lock().get(&bcu).hu() {
-        Some(ad) => ad,
+    let cap_id = match QQ_.lock().get(&acs).copied() {
+        Some(id) => id,
         None => {
-            ACR_.fetch_add(1, Ordering::Relaxed);
-            crate::log_warn!("[ISOLATION] Gate denied: subsystem {:?} has no capability token", bcu);
-            return Err(super::SecurityError::Tb);
+            AEH_.fetch_add(1, Ordering::Relaxed);
+            crate::log_warn!("[ISOLATION] Gate denied: subsystem {:?} has no capability token", acs);
+            return Err(super::SecurityError::InvalidCapability);
         }
     };
     
-    let result = super::xqm(
+    let result = super::prc(
         cap_id,
-        bcu.pcl(),
-        bao,
+        acs.required_capability_type(),
+        abh,
     );
     
     if result.is_err() {
-        ACR_.fetch_add(1, Ordering::Relaxed);
-        crate::log_warn!("[ISOLATION] Gate denied: {:?} lacks rights for operation", bcu);
+        AEH_.fetch_add(1, Ordering::Relaxed);
+        crate::log_warn!("[ISOLATION] Gate denied: {:?} lacks rights for operation", acs);
     }
     
     result
 }
 
 
-pub fn ysg() -> Result<(), super::SecurityError> {
-    drb(Subsystem::Og, CapabilityRights::Cm)
+pub fn qgw() -> Result<(), super::SecurityError> {
+    bmj(Subsystem::Storage, CapabilityRights::Ba)
 }
 
 
-pub fn ysh() -> Result<(), super::SecurityError> {
-    drb(Subsystem::Og, CapabilityRights::Db)
+pub fn qgx() -> Result<(), super::SecurityError> {
+    bmj(Subsystem::Storage, CapabilityRights::Bh)
 }
 
 
-pub fn ysc() -> Result<(), super::SecurityError> {
-    drb(Subsystem::As, CapabilityRights::KZ_)
+pub fn qgs() -> Result<(), super::SecurityError> {
+    bmj(Subsystem::Network, CapabilityRights::LQ_)
 }
 
 
-pub fn ysa() -> Result<(), super::SecurityError> {
-    drb(Subsystem::Jm, CapabilityRights::KZ_)
+pub fn qgq() -> Result<(), super::SecurityError> {
+    bmj(Subsystem::Graphics, CapabilityRights::LQ_)
 }
 
 
-pub fn yse() -> Result<(), super::SecurityError> {
-    drb(Subsystem::Tz, CapabilityRights::Vx)
+pub fn qgu() -> Result<(), super::SecurityError> {
+    bmj(Subsystem::ProcessMgr, CapabilityRights::Jq)
 }
 
 
-pub fn ysb() -> Result<(), super::SecurityError> {
-    drb(Subsystem::Ee, CapabilityRights::Mr)
+pub fn qgr() -> Result<(), super::SecurityError> {
+    bmj(Subsystem::Hypervisor, CapabilityRights::Fi)
 }
 
 
-pub fn ysf() -> Result<(), super::SecurityError> {
-    drb(Subsystem::Df, CapabilityRights::Mz)
+pub fn qgv() -> Result<(), super::SecurityError> {
+    bmj(Subsystem::Shell, CapabilityRights::Fm)
 }
 
 
-pub fn yrz() -> Result<(), super::SecurityError> {
-    drb(Subsystem::Jh, CapabilityRights::AHA_)
+pub fn qgp() -> Result<(), super::SecurityError> {
+    bmj(Subsystem::Crypto, CapabilityRights::AIU_)
 }
 
 
-pub fn ysd() -> Result<(), super::SecurityError> {
-    drb(Subsystem::Hb, CapabilityRights::Mt)
+pub fn qgt() -> Result<(), super::SecurityError> {
+    bmj(Subsystem::Power, CapabilityRights::Fj)
 }
 
 
-pub fn ppp() -> usize {
-    PT_.lock().len()
+pub fn jjq() -> usize {
+    QQ_.lock().len()
 }
 
 
-pub fn puy() -> u64 {
-    ASQ_.load(Ordering::Relaxed)
+pub fn jnu() -> u64 {
+    AUU_.load(Ordering::Relaxed)
 }
 
 
-pub fn puz() -> u64 {
-    ACR_.load(Ordering::Relaxed)
+pub fn jnv() -> u64 {
+    AEH_.load(Ordering::Relaxed)
 }
 
 
-pub fn tzq() -> Vec<String> {
-    let mut ak = Vec::new();
-    let dr = PT_.lock();
+pub fn mui() -> Vec<String> {
+    let mut lines = Vec::new();
+    let caps = QQ_.lock();
     
-    ak.push(String::from("  Subsystem Isolation Status"));
-    ak.push(String::from("  ──────────────────────────────────────────────────────────"));
-    ak.push(String::from("  Subsystem       │ Isolation     │ Cap ID │ Rights"));
-    ak.push(String::from("  ────────────────┼───────────────┼────────┼─────────────"));
+    lines.push(String::from("  Subsystem Isolation Status"));
+    lines.push(String::from("  ──────────────────────────────────────────────────────────"));
+    lines.push(String::from("  Subsystem       │ Isolation     │ Cap ID │ Rights"));
+    lines.push(String::from("  ────────────────┼───────────────┼────────┼─────────────"));
     
-    for bcu in Subsystem::xx() {
-        let j = bcu.j();
-        let jy = bcu.tzp();
-        let cap_id = dr.get(bcu).map(|ad| ad.0).unwrap_or(0);
-        let bap = bcu.nkf();
+    for acs in Subsystem::all() {
+        let name = acs.name();
+        let level = acs.isolation_level();
+        let cap_id = caps.get(acs).map(|id| id.0).unwrap_or(0);
+        let rights = acs.default_rights();
         
-        let vyx = svz(bap);
+        let ohb = lxs(rights);
         
-        ak.push(alloc::format!(
+        lines.push(alloc::format!(
             "  {:<16}│ {:<14}│ {:>6} │ {}",
-            j, jy, cap_id, vyx
+            name, level, cap_id, ohb
         ));
     }
     
-    ak.push(String::from("  ──────────────────────────────────────────────────────────"));
-    ak.push(alloc::format!("  Gate checks: {}  |  Violations: {}",
-        puy(), puz()));
+    lines.push(String::from("  ──────────────────────────────────────────────────────────"));
+    lines.push(alloc::format!("  Gate checks: {}  |  Violations: {}",
+        jnu(), jnv()));
     
-    ak
+    lines
 }
 
 
-fn svz(bap: CapabilityRights) -> String {
-    let mut e = String::new();
-    if bap.contains(CapabilityRights::Cm) { e.push('R'); }
-    if bap.contains(CapabilityRights::Db) { e.push('W'); }
-    if bap.contains(CapabilityRights::Mz) { e.push('X'); }
-    if bap.contains(CapabilityRights::Bea) { e.push('D'); }
-    if bap.contains(CapabilityRights::Vx) { e.push('C'); }
-    if bap.contains(CapabilityRights::Bhs) { e.push('G'); }
-    if bap.contains(CapabilityRights::Mt) { e.push('c'); }
-    if bap.contains(CapabilityRights::Blt) { e.push('M'); }
-    if bap.contains(CapabilityRights::Ayg) { e.push('S'); }
-    if bap.contains(CapabilityRights::Xy) { e.push('P'); }
-    if e.is_empty() { e.t("none"); }
-    e
+fn lxs(rights: CapabilityRights) -> String {
+    let mut j = String::new();
+    if rights.contains(CapabilityRights::Ba) { j.push('R'); }
+    if rights.contains(CapabilityRights::Bh) { j.push('W'); }
+    if rights.contains(CapabilityRights::Fm) { j.push('X'); }
+    if rights.contains(CapabilityRights::Xl) { j.push('D'); }
+    if rights.contains(CapabilityRights::Jq) { j.push('C'); }
+    if rights.contains(CapabilityRights::Ze) { j.push('G'); }
+    if rights.contains(CapabilityRights::Fj) { j.push('c'); }
+    if rights.contains(CapabilityRights::Aaz) { j.push('M'); }
+    if rights.contains(CapabilityRights::Uv) { j.push('S'); }
+    if rights.contains(CapabilityRights::Kh) { j.push('P'); }
+    if j.is_empty() { j.push_str("none"); }
+    j
 }

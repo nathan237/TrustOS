@@ -18,7 +18,7 @@ const MAXIMUM_TTYS: usize = 16;
 // Structure publique — visible à l'extérieur de ce module.
 pub struct WinSize {
     pub ws_row: u16,
-    pub ws_column: u16,
+    pub ws_col: u16,
     pub ws_xpixel: u16,
     pub ws_ypixel: u16,
 }
@@ -26,7 +26,7 @@ pub struct WinSize {
 // Implémentation de trait — remplit un contrat comportemental.
 impl Default for WinSize {
     fn default() -> Self {
-        Self { ws_row: 25, ws_column: 80, ws_xpixel: 0, ws_ypixel: 0 }
+        Self { ws_row: 25, ws_col: 80, ws_xpixel: 0, ws_ypixel: 0 }
     }
 }
 
@@ -74,11 +74,11 @@ pub struct TtyDevice {
     /// Line discipline settings
     pub termios: Termios,
     /// Input buffer (line-edited in canonical mode)
-    pub input_buffer: VecDeque<u8>,
+    pub input_buf: VecDeque<u8>,
     /// Canonical line buffer (current line being edited)
-    pub line_buffer: Vec<u8>,
+    pub line_buf: Vec<u8>,
     /// Output buffer
-    pub output_buffer: VecDeque<u8>,
+    pub output_buf: VecDeque<u8>,
     /// Window size
     pub winsize: WinSize,
     /// Whether the TTY is open
@@ -94,16 +94,16 @@ pub fn new(index: u32) -> Self {
             session_id: 0,
             foreground_pgid: 0,
             termios: Termios::default(),
-            input_buffer: VecDeque::new(),
-            line_buffer: Vec::new(),
-            output_buffer: VecDeque::new(),
+            input_buf: VecDeque::new(),
+            line_buf: Vec::new(),
+            output_buf: VecDeque::new(),
             winsize: WinSize::default(),
             active: false,
         }
     }
 
     /// Process input character through line discipline
-    pub fn input_char(&mut self, character: u8) {
+    pub fn input_char(&mut self, ch: u8) {
         let canonical = (self.termios.lflag & ICANON) != 0;
         let echo = (self.termios.lflag & ECHO) != 0;
         let signals = (self.termios.lflag & ISIG) != 0;
@@ -111,7 +111,7 @@ pub fn new(index: u32) -> Self {
         // Signal characters (Ctrl-C, Ctrl-Z, Ctrl-\)
         if signals {
                         // Correspondance de motifs — branchement exhaustif de Rust.
-match character {
+match ch {
                 3 => {
                     // Ctrl-C → SIGINT to foreground process group
                     if self.foreground_pgid > 0 {
@@ -139,50 +139,50 @@ match character {
 
         if canonical {
             // Canonical mode: line editing
-            match character {
+            match ch {
                 b'\n' | b'\r' => {
-                    self.line_buffer.push(b'\n');
+                    self.line_buf.push(b'\n');
                     // Transfer completed line to input queue
-                    for &b in &self.line_buffer {
-                        self.input_buffer.push_back(b);
+                    for &b in &self.line_buf {
+                        self.input_buf.push_back(b);
                     }
-                    self.line_buffer.clear();
+                    self.line_buf.clear();
                     if echo {
-                        self.output_buffer.push_back(b'\n');
+                        self.output_buf.push_back(b'\n');
                     }
                 }
                 0x7F | 8 => {
                     // Backspace / DEL
-                    if !self.line_buffer.is_empty() {
-                        self.line_buffer.pop();
+                    if !self.line_buf.is_empty() {
+                        self.line_buf.pop();
                         if echo {
-                            self.output_buffer.push_back(8);
-                            self.output_buffer.push_back(b' ');
-                            self.output_buffer.push_back(8);
+                            self.output_buf.push_back(8);
+                            self.output_buf.push_back(b' ');
+                            self.output_buf.push_back(8);
                         }
                     }
                 }
                 _ => {
-                    self.line_buffer.push(character);
+                    self.line_buf.push(ch);
                     if echo {
-                        self.output_buffer.push_back(character);
+                        self.output_buf.push_back(ch);
                     }
                 }
             }
         } else {
             // Raw mode: characters go directly to input
-            self.input_buffer.push_back(character);
+            self.input_buf.push_back(ch);
             if echo {
-                self.output_buffer.push_back(character);
+                self.output_buf.push_back(ch);
             }
         }
     }
 
     /// Read from TTY input buffer
-    pub fn read(&mut self, buffer: &mut [u8]) -> usize {
-        let count = buffer.len().minimum(self.input_buffer.len());
+    pub fn read(&mut self, buf: &mut [u8]) -> usize {
+        let count = buf.len().min(self.input_buf.len());
         for i in 0..count {
-            buffer[i] = self.input_buffer.pop_front().unwrap_or(0);
+            buf[i] = self.input_buf.pop_front().unwrap_or(0);
         }
         count
     }
@@ -190,7 +190,7 @@ match character {
     /// Write to TTY output buffer
     pub fn write(&mut self, data: &[u8]) -> usize {
         for &b in data {
-            self.output_buffer.push_back(b);
+            self.output_buf.push_back(b);
         }
         // Flush to serial immediately
         for &b in data {
@@ -201,7 +201,7 @@ match character {
 
     /// Drain any pending output
     pub fn flush_output(&mut self) -> Vec<u8> {
-        self.output_buffer.drain(..).collect()
+        self.output_buf.drain(..).collect()
     }
 
     /// Check if this TTY is the controlling terminal of a given session
@@ -236,17 +236,17 @@ pub fn init() {
 
 /// Allocate a new TTY device, returns its index
 pub fn allocator_tty() -> Option<u32> {
-    let index = NEXT_TTY.fetch_add(1, Ordering::SeqCst);
-    if index as usize >= MAXIMUM_TTYS {
+    let idx = NEXT_TTY.fetch_add(1, Ordering::SeqCst);
+    if idx as usize >= MAXIMUM_TTYS {
         NEXT_TTY.fetch_sub(1, Ordering::SeqCst);
         return None;
     }
     
     let mut table = TTY_TABLE.lock();
     if let Some(ref mut devices) = *table {
-        let tty = TtyDevice::new(index);
+        let tty = TtyDevice::new(idx);
         devices.push(tty);
-        Some(index)
+        Some(idx)
     } else {
         None
     }
@@ -259,7 +259,7 @@ where
 {
     let mut table = TTY_TABLE.lock();
     if let Some(ref mut devices) = *table {
-        for tty in devices.iterator_mut() {
+        for tty in devices.iter_mut() {
             if tty.index == index {
                 return Some(f(tty));
             }

@@ -32,9 +32,9 @@ pub enum Op {
     StoreGlobal, // store global (next 2 bytes = index)
 
     // Arithmetic (i64)
-    AddI, SubI, MulI, DivI, ModI, NegativeI,
+    AddI, SubI, MulI, DivI, ModI, NegI,
     // Arithmetic (f64)
-    AddF, SubF, MulF, DivF, NegativeF,
+    AddF, SubF, MulF, DivF, NegF,
     // Comparison
     EqI, NeI, LtI, GtI, LeI, GeI,
     EqF, NeF, LtF, GtF, LeF, GeF,
@@ -57,7 +57,7 @@ pub enum Op {
     NewArray,   // create array (next 2 bytes = count)
     ArrayGet,   // array[index]
     ArraySet,   // array[index] = value
-    ArrayLength,   // len(array)
+    ArrayLen,   // len(array)
     ArrayPush,  // push to array
 
     // String
@@ -146,7 +146,7 @@ pub struct Bytecode {
 
 /// Call frame
 struct CallFrame {
-    func_index: usize,
+    func_idx: usize,
     ip: usize,
     base: usize, // stack base for locals
     locals: [Value; 256],
@@ -154,11 +154,11 @@ struct CallFrame {
 
 // Implementation block — defines methods for the type above.
 impl CallFrame {
-    fn new(func_index: usize, base: usize) -> Self {
+    fn new(func_idx: usize, base: usize) -> Self {
                 // Compile-time constant — evaluated at compilation, zero runtime cost.
 const VOID: Value = Value::Void;
         Self {
-            func_index,
+            func_idx,
             ip: 0,
             base,
             locals: [VOID; 256],
@@ -291,7 +291,7 @@ loop {
         }
 
         let frame = frames.last_mut().ok_or("no call frame")?;
-        let func = &bytecode.functions[frame.func_index];
+        let func = &bytecode.functions[frame.func_idx];
 
         if frame.ip >= func.code.len() {
             // Implicit return
@@ -328,8 +328,8 @@ match op {
                 stack.push(Value::Bool(v));
             }
             Op::PushStr => {
-                let index = read_u16(&func.code, &mut frame.ip) as usize;
-                let s = bytecode.strings.get(index).cloned().unwrap_or_default();
+                let idx = read_u16(&func.code, &mut frame.ip) as usize;
+                let s = bytecode.strings.get(idx).cloned().unwrap_or_default();
                 stack.push(Value::Str(s));
             }
             Op::Pop => { stack.pop(); }
@@ -345,8 +345,8 @@ match op {
             Op::StoreLocal => {
                 let slot = func.code[frame.ip] as usize;
                 frame.ip += 1;
-                let value = stack.pop().unwrap_or(Value::Void);
-                frame.locals[slot] = value;
+                let val = stack.pop().unwrap_or(Value::Void);
+                frame.locals[slot] = val;
             }
             Op::LoadGlobal | Op::StoreGlobal => {
                 // Globals not yet implemented — skip 2 bytes
@@ -388,7 +388,7 @@ match (&a_value, &b_value) {
                     }
                 }
             }
-            Op::NegativeI => {
+            Op::NegI => {
                 let v = stack.pop().unwrap_or(Value::I64(0));
                                 // Pattern matching — Rust's exhaustive branching construct.
 match v {
@@ -401,7 +401,7 @@ match v {
             Op::SubF => { bin_operation_f64(&mut stack, |a, b| a - b)?; }
             Op::MulF => { bin_operation_f64(&mut stack, |a, b| a * b)?; }
             Op::DivF => { bin_operation_f64(&mut stack, |a, b| a / b)?; }
-            Op::NegativeF => {
+            Op::NegF => {
                 let v = stack.pop().unwrap_or(Value::F64(0.0)).as_f64()?;
                 stack.push(Value::F64(-v));
             }
@@ -460,7 +460,7 @@ match v {
                 if !condition { frame.ip = off; }
             }
             Op::Call => {
-                let func_index = read_u16(&func.code, &mut frame.ip) as usize;
+                let func_idx = read_u16(&func.code, &mut frame.ip) as usize;
                 let argc = func.code[frame.ip] as usize;
                 frame.ip += 1;
                 // Pop args
@@ -470,8 +470,8 @@ match v {
                 }
                 args.reverse();
                 // Create new frame
-                let mut new_frame = CallFrame::new(func_index, stack.len());
-                for (i, argument) in args.into_iterator().enumerate() {
+                let mut new_frame = CallFrame::new(func_idx, stack.len());
+                for (i, argument) in args.into_iter().enumerate() {
                     new_frame.locals[i] = argument;
                 }
                 frames.push(new_frame);
@@ -490,13 +490,13 @@ match v {
                 stack.push(result);
             }
             Op::Return => {
-                let return_value = stack.pop().unwrap_or(Value::Void);
+                let ret = stack.pop().unwrap_or(Value::Void);
                 if frames.len() <= 1 {
-                    stack.push(return_value);
+                    stack.push(ret);
                     break;
                 }
                 frames.pop();
-                stack.push(return_value);
+                stack.push(ret);
             }
             // Array
             Op::NewArray => {
@@ -509,35 +509,35 @@ match v {
                 stack.push(Value::Array(arr));
             }
             Op::ArrayGet => {
-                let index = stack.pop().unwrap_or(Value::I64(0)).as_i64()? as usize;
+                let idx = stack.pop().unwrap_or(Value::I64(0)).as_i64()? as usize;
                 let arr = stack.pop().unwrap_or(Value::Array(Vec::new()));
                                 // Pattern matching — Rust's exhaustive branching construct.
 match arr {
                     Value::Array(a) => {
-                        let v = a.get(index).cloned().unwrap_or(Value::Void);
+                        let v = a.get(idx).cloned().unwrap_or(Value::Void);
                         stack.push(v);
                     }
                     Value::Str(s) => {
-                        let c = s.as_bytes().get(index).copied().unwrap_or(0);
+                        let c = s.as_bytes().get(idx).copied().unwrap_or(0);
                         stack.push(Value::I64(c as i64));
                     }
                     _ => return Err(String::from("index on non-array")),
                 }
             }
             Op::ArraySet => {
-                let value = stack.pop().unwrap_or(Value::Void);
-                let index = stack.pop().unwrap_or(Value::I64(0)).as_i64()? as usize;
+                let val = stack.pop().unwrap_or(Value::Void);
+                let idx = stack.pop().unwrap_or(Value::I64(0)).as_i64()? as usize;
                 let arr = stack.pop().unwrap_or(Value::Array(Vec::new()));
                                 // Pattern matching — Rust's exhaustive branching construct.
 match arr {
                     Value::Array(mut a) => {
-                        if index < a.len() { a[index] = value; }
+                        if idx < a.len() { a[idx] = val; }
                         stack.push(Value::Array(a));
                     }
                     _ => return Err(String::from("index-set on non-array")),
                 }
             }
-            Op::ArrayLength => {
+            Op::ArrayLen => {
                 let v = stack.pop().unwrap_or(Value::Void);
                 let len = // Pattern matching — Rust's exhaustive branching construct.
 match &v {
@@ -548,12 +548,12 @@ match &v {
                 stack.push(Value::I64(len));
             }
             Op::ArrayPush => {
-                let value = stack.pop().unwrap_or(Value::Void);
+                let val = stack.pop().unwrap_or(Value::Void);
                 let arr = stack.pop().unwrap_or(Value::Array(Vec::new()));
                                 // Pattern matching — Rust's exhaustive branching construct.
 match arr {
                     Value::Array(mut a) => {
-                        a.push(value);
+                        a.push(val);
                         stack.push(Value::Array(a));
                     }
                     _ => return Err(String::from("push on non-array")),
@@ -689,7 +689,7 @@ match v {
         BUILTIN_ABSOLUTE => {
                         // Pattern matching — Rust's exhaustive branching construct.
 match args.first().unwrap_or(&Value::I64(0)) {
-                Value::I64(n) => Ok(Value::I64(n.absolute())),
+                Value::I64(n) => Ok(Value::I64(n.abs())),
                 Value::F64(f) => Ok(Value::F64(libm::fabs(*f))),
                 _ => Ok(Value::I64(0)),
             }
@@ -744,20 +744,20 @@ match args.first().unwrap_or(&Value::I64(0)) {
             // Bresenham line
             let mut cx = x0;
             let mut cy = y0;
-            let dx = (x1 - x0).absolute();
-            let dy = -(y1 - y0).absolute();
+            let dx = (x1 - x0).abs();
+            let dy = -(y1 - y0).abs();
             let sx: i64 = if x0 < x1 { 1 } else { -1 };
             let sy: i64 = if y0 < y1 { 1 } else { -1 };
-            let mut error = dx + dy;
+            let mut err = dx + dy;
                         // Infinite loop — runs until an explicit `break`.
 loop {
                 if cx >= 0 && cy >= 0 {
                     crate::framebuffer::put_pixel(cx as u32, cy as u32, color);
                 }
                 if cx == x1 && cy == y1 { break; }
-                let e2 = 2 * error;
-                if e2 >= dy { error += dy; cx += sx; }
-                if e2 <= dx { error += dx; cy += sy; }
+                let e2 = 2 * err;
+                if e2 >= dy { err += dy; cx += sx; }
+                if e2 <= dx { err += dx; cy += sy; }
             }
             Ok(Value::Void)
         }
@@ -781,9 +781,9 @@ loop {
                     (cx + y, cy + x), (cx - y, cy + x),
                     (cx + y, cy - x), (cx - y, cy - x),
                 ];
-                for (pixel, py) in pts {
-                    if pixel >= 0 && py >= 0 {
-                        crate::framebuffer::put_pixel(pixel as u32, py as u32, color);
+                for (px, py) in pts {
+                    if px >= 0 && py >= 0 {
+                        crate::framebuffer::put_pixel(px as u32, py as u32, color);
                     }
                 }
                 y += 1;
@@ -845,8 +845,8 @@ loop {
         }
         BUILTIN_SLEEP => {
             // sleep(ms) — use PIT for reliable wall-clock timing
-            let mouse = args.get(0).and_then(|v| v.as_i64().ok()).unwrap_or(0) as u64;
-            crate::cpu::tsc::pit_delay_mouse(mouse);
+            let ms = args.get(0).and_then(|v| v.as_i64().ok()).unwrap_or(0) as u64;
+            crate::cpu::tsc::pit_delay_mouse(ms);
             Ok(Value::Void)
         }
         BUILTIN_TO_FLOAT => {
@@ -905,33 +905,33 @@ match v {
 
 /// Parse i64 from string without stdlib
 fn parse_i64_simple(s: &str) -> i64 {
-    let mut value: i64 = 0;
+    let mut val: i64 = 0;
     let mut neg = false;
-    for (i, character) in s.chars().enumerate() {
-        if i == 0 && character == '-' { neg = true; continue; }
-        if !character.is_ascii_digit() { break; }
-        value = value.wrapping_mul(10).wrapping_add((character as i64) - 48);
+    for (i, ch) in s.chars().enumerate() {
+        if i == 0 && ch == '-' { neg = true; continue; }
+        if !ch.is_ascii_digit() { break; }
+        val = val.wrapping_mul(10).wrapping_add((ch as i64) - 48);
     }
-    if neg { -value } else { value }
+    if neg { -val } else { val }
 }
 
 /// Parse f64 from string without stdlib
 fn parse_f64_simple(s: &str) -> f64 {
-    let mut value: f64 = 0.0;
+    let mut val: f64 = 0.0;
     let mut neg = false;
     let mut frac = false;
     let mut frac_div: f64 = 1.0;
-    for (i, character) in s.chars().enumerate() {
-        if i == 0 && character == '-' { neg = true; continue; }
-        if character == '.' && !frac { frac = true; continue; }
-        if !character.is_ascii_digit() { break; }
-        let d = (character as u8 - b'0') as f64;
+    for (i, ch) in s.chars().enumerate() {
+        if i == 0 && ch == '-' { neg = true; continue; }
+        if ch == '.' && !frac { frac = true; continue; }
+        if !ch.is_ascii_digit() { break; }
+        let d = (ch as u8 - b'0') as f64;
         if frac {
             frac_div *= 10.0;
-            value += d / frac_div;
+            val += d / frac_div;
         } else {
-            value = value * 10.0 + d;
+            val = val * 10.0 + d;
         }
     }
-    if neg { -value } else { value }
+    if neg { -val } else { val }
 }

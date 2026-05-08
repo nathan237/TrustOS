@@ -18,40 +18,40 @@ extern crate alloc;
 use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::format;
-use super::{kw, nk, apm,
-            T_, F_, O_, AK_, AO_, AW_,
-            BO_, BB_, EZ_};
+use super::{eh, ew, qu,
+            P_, F_, M_, AC_, AK_, AN_,
+            BG_, AU_, DN_};
 
 
-fn nax(o: u8) -> u32 {
-    match o {
+fn hji(b: u8) -> u32 {
+    match b {
         0x00 => F_,                   
-        0x09 | 0x0A | 0x0D | 0x20 => BB_,  
-        0x01..=0x1F => AO_,         
-        0x20..=0x7E => AK_,          
-        0x7F => AO_,                
-        0xFF => AW_,                   
-        0x80..=0xFE => BO_,         
+        0x09 | 0x0A | 0x0D | 0x20 => AU_,  
+        0x01..=0x1F => AK_,         
+        0x20..=0x7E => AC_,          
+        0x7F => AK_,                
+        0xFF => AN_,                   
+        0x80..=0xFE => BG_,         
     }
 }
 
 
-fn quu(o: u8) -> char {
-    if o >= 0x20 && o <= 0x7E { o as char } else { '.' }
+fn kgj(b: u8) -> char {
+    if b >= 0x20 && b <= 0x7E { b as char } else { '.' }
 }
 
 
 pub struct HexEditorState {
     
-    pub f: Vec<u8>,
+    pub data: Vec<u8>,
     
-    pub wn: String,
+    pub file_path: String,
     
-    pub jc: usize,
+    pub scroll: usize,
     
-    pub gi: usize,
+    pub cursor: usize,
     
-    pub hca: usize,
+    pub bytes_per_row: usize,
     
     pub frame: u64,
 }
@@ -59,246 +59,246 @@ pub struct HexEditorState {
 impl HexEditorState {
     pub fn new() -> Self {
         
-        let mut e = Self {
-            f: Vec::new(),
-            wn: String::new(),
-            jc: 0,
-            gi: 0,
-            hca: 16,
+        let mut j = Self {
+            data: Vec::new(),
+            file_path: String::new(),
+            scroll: 0,
+            cursor: 0,
+            bytes_per_row: 16,
             frame: 0,
         };
         
-        e.dsu("/home/welcome.txt");
-        if e.f.is_empty() {
-            e.uhg();
+        j.load_file("/home/welcome.txt");
+        if j.data.is_empty() {
+            j.load_sample();
         }
-        e
+        j
     }
 
     
-    pub fn dsu(&mut self, path: &str) {
-        let f = crate::ramfs::fh(|fs| {
-            fs.mq(path).bq().map(|bf| bf.ip())
+    pub fn load_file(&mut self, path: &str) {
+        let data = crate::ramfs::bh(|fs| {
+            fs.read_file(path).ok().map(|bytes| bytes.to_vec())
         });
-        if let Some(bf) = f {
-            self.f = bf;
-            self.wn = String::from(path);
-            self.gi = 0;
-            self.jc = 0;
+        if let Some(bytes) = data {
+            self.data = bytes;
+            self.file_path = String::from(path);
+            self.cursor = 0;
+            self.scroll = 0;
         }
     }
 
     
-    fn uhg(&mut self) {
-        self.wn = String::from("<sample>");
-        self.f.clear();
+    fn load_sample(&mut self) {
+        self.file_path = String::from("<sample>");
+        self.data.clear();
         
-        self.f.bk(&[0x7F, b'E', b'L', b'F', 0x02, 0x01, 0x01, 0x00]);
-        self.f.bk(&[0x00; 8]); 
+        self.data.extend_from_slice(&[0x7F, b'E', b'L', b'F', 0x02, 0x01, 0x01, 0x00]);
+        self.data.extend_from_slice(&[0x00; 8]); 
         
-        for a in 0u8..=255 {
-            self.f.push(a);
+        for i in 0u8..=255 {
+            self.data.push(i);
         }
         
-        self.f.bk(b"TrustOS Kernel v0.1\x00");
-        self.f.bk(b"Built with Rust\x00\xFF\xFF");
-        self.gi = 0;
-        self.jc = 0;
+        self.data.extend_from_slice(b"TrustOS Kernel v0.1\x00");
+        self.data.extend_from_slice(b"Built with Rust\x00\xFF\xFF");
+        self.cursor = 0;
+        self.scroll = 0;
     }
 
-    pub fn vr(&mut self, bs: u8) {
-        use crate::keyboard::{V_, U_, AH_, AI_, AM_, AQ_};
-        let cow = self.hca;
-        match bs {
-            V_ => {
-                self.gi = self.gi.ao(cow);
+    pub fn handle_key(&mut self, key: u8) {
+        use crate::keyboard::{T_, S_, AI_, AJ_, AM_, AO_};
+        let awk = self.bytes_per_row;
+        match key {
+            T_ => {
+                self.cursor = self.cursor.saturating_sub(awk);
             }
-            U_ => {
-                if self.gi + cow < self.f.len() {
-                    self.gi += cow;
+            S_ => {
+                if self.cursor + awk < self.data.len() {
+                    self.cursor += awk;
                 }
             }
-            AH_ => {
-                self.gi = self.gi.ao(1);
-            }
             AI_ => {
-                if self.gi + 1 < self.f.len() {
-                    self.gi += 1;
+                self.cursor = self.cursor.saturating_sub(1);
+            }
+            AJ_ => {
+                if self.cursor + 1 < self.data.len() {
+                    self.cursor += 1;
                 }
             }
             AM_ => {
-                self.gi = self.gi.ao(cow * 8);
+                self.cursor = self.cursor.saturating_sub(awk * 8);
             }
-            AQ_ => {
-                self.gi = (self.gi + cow * 8).v(self.f.len().ao(1));
+            AO_ => {
+                self.cursor = (self.cursor + awk * 8).min(self.data.len().saturating_sub(1));
             }
             _ => {}
         }
     }
 
     
-    pub fn ago(&mut self, b: i32, c: i32, d: u32, i: u32) {
-        let dt = nk();
-        let kq = apm() + 1;
-        if kq <= 0 || dt <= 0 { return; }
+    pub fn handle_click(&mut self, x: i32, y: i32, w: u32, h: u32) {
+        let aq = ew();
+        let ee = qu() + 1;
+        if ee <= 0 || aq <= 0 { return; }
 
         
-        let ou = kq + 2;
-        if c < ou { return; }
+        let gc = ee + 2;
+        if y < gc { return; }
 
-        let br = ((c - ou) / kq) as usize;
-        let xax = self.jc + br;
+        let row = ((y - gc) / ee) as usize;
+        let pdh = self.scroll + row;
 
         
-        let obt = 10 * dt;
+        let ieu = 10 * aq;
         
-        if b >= obt {
-            let adj = (b - obt) as usize;
-            let hcr = adj / dt as usize;
+        if x >= ieu {
+            let ot = (x - ieu) as usize;
+            let dkn = ot / aq as usize;
             
-            let quw = if hcr >= 25 {
-                (hcr - 1) / 3
+            let kgl = if dkn >= 25 {
+                (dkn - 1) / 3
             } else {
-                hcr / 3
+                dkn / 3
             };
-            let avk = xax * self.hca + quw.v(self.hca - 1);
-            if avk < self.f.len() {
-                self.gi = avk;
+            let yk = pdh * self.bytes_per_row + kgl.min(self.bytes_per_row - 1);
+            if yk < self.data.len() {
+                self.cursor = yk;
             }
         }
     }
 }
 
 
-pub fn po(g: &HexEditorState, b: i32, c: i32, d: u32, i: u32) {
-    let dt = nk();
-    let kq = apm() + 1;
-    if kq <= 0 || dt <= 0 { return; }
+pub fn draw(state: &HexEditorState, x: i32, y: i32, w: u32, h: u32) {
+    let aq = ew();
+    let ee = qu() + 1;
+    if ee <= 0 || aq <= 0 { return; }
 
     
-    let dh = if g.wn.is_empty() {
+    let header = if state.file_path.is_empty() {
         String::from("No file loaded — use: hex <path>")
     } else {
-        format!("{} ({} bytes)", g.wn, g.f.len())
+        format!("{} ({} bytes)", state.file_path, state.data.len())
     };
-    kw(b, c, &dh, O_);
+    eh(x, y, &header, M_);
 
     
-    let osc = format!("@{:04X}", g.gi);
-    let lpw = b + d as i32 - (osc.len() as i32 * dt) - 2;
-    kw(lpw, c, &osc, F_);
+    let iry = format!("@{:04X}", state.cursor);
+    let dbz = x + w as i32 - (iry.len() as i32 * aq) - 2;
+    eh(dbz, y, &iry, F_);
 
-    let ou = c + kq + 2;
-    let bae = i as i32 - kq - 2;
-    if bae <= 0 { return; }
+    let gc = y + ee + 2;
+    let abc = h as i32 - ee - 2;
+    if abc <= 0 { return; }
 
-    let bpd = (bae / kq) as usize;
-    if g.f.is_empty() {
-        kw(b + 4, ou, "Empty — type 'hex <path>' to load a file", F_);
+    let yh = (abc / ee) as usize;
+    if state.data.is_empty() {
+        eh(x + 4, gc, "Empty — type 'hex <path>' to load a file", F_);
         return;
     }
 
-    let cow = g.hca;
-    let fxd = (g.f.len() + cow - 1) / cow;
+    let awk = state.bytes_per_row;
+    let crx = (state.data.len() + awk - 1) / awk;
 
     
-    let qu = g.gi / cow;
-    let jc = if qu >= g.jc + bpd {
-        qu - bpd + 1
-    } else if qu < g.jc {
-        qu
+    let cursor_row = state.cursor / awk;
+    let scroll = if cursor_row >= state.scroll + yh {
+        cursor_row - yh + 1
+    } else if cursor_row < state.scroll {
+        cursor_row
     } else {
-        g.jc
+        state.scroll
     };
 
-    let ktn = (jc + bpd).v(fxd);
-    let mut ae = ou;
+    let fuv = (scroll + yh).min(crx);
+    let mut u = gc;
 
     
-    let mut zj = String::from("Offset    ");
-    for a in 0..cow.v(16) {
-        if a == 8 { zj.push(' '); }
-        zj.t(&format!("{:02X} ", a));
+    let mut kp = String::from("Offset    ");
+    for i in 0..awk.min(16) {
+        if i == 8 { kp.push(' '); }
+        kp.push_str(&format!("{:02X} ", i));
     }
-    zj.t(" ASCII");
-    kw(b, ae, &zj, F_);
-    ae += kq;
+    kp.push_str(" ASCII");
+    eh(x, u, &kp, F_);
+    u += ee;
 
-    for br in jc..ktn {
-        let l = br * cow;
+    for row in scroll..fuv {
+        let offset = row * awk;
         
-        let uxf = format!("{:08X}  ", l);
-        kw(b, ae, &uxf, F_);
+        let gkk = format!("{:08X}  ", offset);
+        eh(x, u, &gkk, F_);
 
-        let fkp = b + 10 * dt;
-        let mut bng = fkp;
+        let ckp = x + 10 * aq;
+        let mut aib = ckp;
 
         
-        let cub = (l + cow).v(g.f.len());
-        for a in l..cub {
-            if (a - l) == 8 { bng += dt; } 
+        let azm = (offset + awk).min(state.data.len());
+        for i in offset..azm {
+            if (i - offset) == 8 { aib += aq; } 
 
-            let o = g.f[a];
-            let bj = if a == g.gi { T_ } else { nax(o) };
+            let b = state.data[i];
+            let col = if i == state.cursor { P_ } else { hji(b) };
 
             
-            if a == g.gi {
-                crate::framebuffer::ah(
-                    bng as u32, ae as u32, (2 * dt + 1) as u32, kq as u32,
+            if i == state.cursor {
+                crate::framebuffer::fill_rect(
+                    aib as u32, u as u32, (2 * aq + 1) as u32, ee as u32,
                     0xFF1F6FEB,
                 );
             }
 
-            let nu = format!("{:02X}", o);
-            kw(bng, ae, &nu, bj);
-            bng += 3 * dt;
+            let ga = format!("{:02X}", b);
+            eh(aib, u, &ga, col);
+            aib += 3 * aq;
         }
 
         
-        let ikb = fkp + (cow as i32 * 3 + 2) * dt;
+        let efq = ckp + (awk as i32 * 3 + 2) * aq;
 
         
-        kw(ikb - 2 * dt, ae, "|", F_);
+        eh(efq - 2 * aq, u, "|", F_);
 
-        let mut ax = ikb;
-        for a in l..cub {
-            let o = g.f[a];
-            let khb = alloc::format!("{}", quu(o));
-            let bj = if a == g.gi { T_ } else { nax(o) };
-            kw(ax, ae, &khb, bj);
-            ax += dt;
+        let mut ax = efq;
+        for i in offset..azm {
+            let b = state.data[i];
+            let fle = alloc::format!("{}", kgj(b));
+            let col = if i == state.cursor { P_ } else { hji(b) };
+            eh(ax, u, &fle, col);
+            ax += aq;
         }
 
-        ae += kq;
-        if ae > c + i as i32 { break; }
+        u += ee;
+        if u > y + h as i32 { break; }
     }
 
     
-    if fxd > bpd {
-        let bdc = bae;
-        let axd = ((bpd as i32 * bdc) / fxd as i32).am(8);
-        let idk = (jc as i32 * (bdc - axd)) / fxd.ao(1).am(1) as i32;
-        let auz = (b + d as i32 - 3) as u32;
-        crate::framebuffer::ah(auz, (ou) as u32, 2, bdc as u32, 0xFF21262D);
-        crate::framebuffer::ah(auz, (ou + idk) as u32, 2, axd as u32, O_);
+    if crx > yh {
+        let ada = abc;
+        let zo = ((yh as i32 * ada) / crx as i32).max(8);
+        let ebq = (scroll as i32 * (ada - zo)) / crx.saturating_sub(1).max(1) as i32;
+        let yc = (x + w as i32 - 3) as u32;
+        crate::framebuffer::fill_rect(yc, (gc) as u32, 2, ada as u32, 0xFF21262D);
+        crate::framebuffer::fill_rect(yc, (gc + ebq) as u32, 2, zo as u32, M_);
     }
 
     
-    let jdg = ae + 2;
-    if jdg + kq < c + i as i32 {
-        crate::framebuffer::ah(b as u32, jdg as u32, d, 1, 0xFF30363D);
-        let mut mj = b;
-        let pj: &[(&str, u32)] = &[
-            ("ASCII", AK_), ("WS", BB_), ("CTRL", AO_),
-            ("HIGH", BO_), ("NULL", F_), ("0xFF", AW_),
+    let esu = u + 2;
+    if esu + ee < y + h as i32 {
+        crate::framebuffer::fill_rect(x as u32, esu as u32, w, 1, 0xFF30363D);
+        let mut fe = x;
+        let items: &[(&str, u32)] = &[
+            ("ASCII", AC_), ("WS", AU_), ("CTRL", AK_),
+            ("HIGH", BG_), ("NULL", F_), ("0xFF", AN_),
         ];
-        for (cu, s) in pj {
+        for (label, color) in items {
             
-            crate::framebuffer::ah(mj as u32, (jdg + 3) as u32, 6, 6, *s);
-            mj += dt;
-            kw(mj, jdg + 2, cu, *s);
-            mj += (cu.len() as i32 + 1) * dt;
-            if mj > b + d as i32 - 10 { break; }
+            crate::framebuffer::fill_rect(fe as u32, (esu + 3) as u32, 6, 6, *color);
+            fe += aq;
+            eh(fe, esu + 2, label, *color);
+            fe += (label.len() as i32 + 1) * aq;
+            if fe > x + w as i32 - 10 { break; }
         }
     }
 }

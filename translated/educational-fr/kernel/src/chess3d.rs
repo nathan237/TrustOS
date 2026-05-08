@@ -29,8 +29,8 @@ pub struct Chess3DState {
     pub auto_rotate: bool,   // Auto-rotate camera
     pub frame: u32,
     // Render dimensions
-    pub buffer_w: usize,
-    pub buffer_h: usize,
+    pub buf_w: usize,
+    pub buf_h: usize,
     // Interaction
     pub hover_sq: Option<usize>,   // Square under mouse
     pub anim_piece: Option<usize>, // Piece being animated
@@ -54,8 +54,8 @@ pub fn new() -> Self {
             cam_dist: 18.0,         // Telephoto distance — minimal distortion
             auto_rotate: false,
             frame: 0,
-            buffer_w: 0,
-            buffer_h: 0,
+            buf_w: 0,
+            buf_h: 0,
             hover_sq: None,
             anim_piece: None,
             anim_t: 0.0,
@@ -76,10 +76,10 @@ match key {
             // Camera controls
             b'a' | b'A' => self.cam_angle_y -= 0.12,
             b'd' | b'D' => self.cam_angle_y += 0.12,
-            b'w' | b'W' => { self.cam_angle_x = (self.cam_angle_x + 0.08).minimum(1.40); },
-            b's' | b'S' => { self.cam_angle_x = (self.cam_angle_x - 0.08).maximum(0.15); },
-            b'z' | b'Z' => { self.cam_dist = (self.cam_dist - 0.8).maximum(8.0); },
-            b'x' | b'X' => { self.cam_dist = (self.cam_dist + 0.8).minimum(35.0); },
+            b'w' | b'W' => { self.cam_angle_x = (self.cam_angle_x + 0.08).min(1.40); },
+            b's' | b'S' => { self.cam_angle_x = (self.cam_angle_x - 0.08).max(0.15); },
+            b'z' | b'Z' => { self.cam_dist = (self.cam_dist - 0.8).max(8.0); },
+            b'x' | b'X' => { self.cam_dist = (self.cam_dist + 0.8).min(35.0); },
             b'o' | b'O' => self.auto_rotate = !self.auto_rotate,
             // Forward chess keys
             _ => self.chess.handle_key(key),
@@ -102,9 +102,9 @@ match key {
         let mut best_dist = 999999.0f32;
 
         for row in 0..8u32 {
-            for column in 0..8u32 {
-                let sq = (row * 8 + column) as usize;
-                let (sx, sy, _) = self.project_square_center(row, column, w, h);
+            for col in 0..8u32 {
+                let sq = (row * 8 + col) as usize;
+                let (sx, sy, _) = self.project_square_center(row, col, w, h);
                 let dx = (sx - mx) as f32;
                 let dy = (sy - my) as f32;
                 let dist = dx * dx + dy * dy;
@@ -116,9 +116,9 @@ match key {
         }
 
         if let Some(sq) = best_sq {
-            let column = (sq % 8) as i32;
+            let col = (sq % 8) as i32;
             let row = (sq / 8) as i32;
-            self.chess.handle_mouse_click(column, row);
+            self.chess.handle_mouse_click(col, row);
         } else {
             // Clicked outside board — start drag rotation
             self.drag_rotating = true;
@@ -150,16 +150,16 @@ match key {
     pub fn handle_scroll(&mut self, delta: i8) {
         if delta > 0 {
             // Scroll up → zoom in
-            self.cam_dist = (self.cam_dist - 0.8).maximum(8.0);
+            self.cam_dist = (self.cam_dist - 0.8).max(8.0);
         } else if delta < 0 {
             // Scroll down → zoom out
-            self.cam_dist = (self.cam_dist + 0.8).minimum(35.0);
+            self.cam_dist = (self.cam_dist + 0.8).min(35.0);
         }
     }
 
     /// Project a board square center to screen coordinates
-    fn project_square_center(&self, row: u32, column: u32, w: usize, h: usize) -> (i32, i32, f32) {
-        let world = board_square_to_world(row as i32, column as i32);
+    fn project_square_center(&self, row: u32, col: u32, w: usize, h: usize) -> (i32, i32, f32) {
+        let world = board_square_to_world(row as i32, col as i32);
         self.project_point(world, w, h)
     }
 
@@ -212,7 +212,7 @@ match key {
         }
 
         // Perspective projection (telephoto FOV)
-        let fov = w.minimum(h) as f32 * 1.6;
+        let fov = w.min(h) as f32 * 1.6;
         let sx = (cam_x / cam_z * fov) as i32 + w as i32 / 2;
         let sy = (-cam_y / cam_z * fov) as i32 + h as i32 / 2;
         (sx, sy, cam_z)
@@ -235,37 +235,37 @@ pub fn tick(&mut self) {
     }
 
     /// Main render function — renders the 3D chess scene into a buffer
-    pub fn render(&mut self, out_buffer: &mut [u32], w: usize, h: usize) {
+    pub fn render(&mut self, out_buf: &mut [u32], w: usize, h: usize) {
         if w < 100 || h < 100 { return; }
 
         // Clear output buffer — dark matrix green
-        for pixel in out_buffer.iterator_mut() {
-            *pixel = 0xFF050808;
+        for px in out_buf.iter_mut() {
+            *px = 0xFF050808;
         }
         
-        self.buffer_w = w;
-        self.buffer_h = h;
+        self.buf_w = w;
+        self.buf_h = h;
 
         // ── Render board reflection (below board) ──
-        self.render_board_reflection(out_buffer, w, h);
+        self.render_board_reflection(out_buf, w, h);
 
         // ── Render board ──
-        self.render_board(out_buffer, w, h);
+        self.render_board(out_buf, w, h);
 
         // ── Board labels a-h / 1-8 ──
-        self.render_board_labels(out_buffer, w, h);
+        self.render_board_labels(out_buf, w, h);
 
         // ── Shadows under pieces ──
-        self.render_piece_shadows(out_buffer, w, h);
+        self.render_piece_shadows(out_buf, w, h);
 
         // ── Render pieces ──
-        self.render_pieces(out_buffer, w, h);
+        self.render_pieces(out_buf, w, h);
         
         // ── HUD overlay ──
-        self.render_hud(out_buffer, w, h);
+        self.render_hud(out_buf, w, h);
     }
 
-    fn render_board(&self, buffer: &mut [u32], w: usize, h: usize) {
+    fn render_board(&self, buf: &mut [u32], w: usize, h: usize) {
         // Draw the 8x8 board as filled quads (two triangles per square)
         // Render back-to-front (painter's algorithm) based on camera angle
 
@@ -273,11 +273,11 @@ pub fn tick(&mut self) {
         // Sort squares by depth for painter's algorithm
         let mut squares: [(u32, u32, f32); 64] = [(0, 0, 0.0); 64];
         for row in 0..8u32 {
-            for column in 0..8u32 {
-                let index = (row * 8 + column) as usize;
-                let center = board_square_to_world(row as i32, column as i32);
+            for col in 0..8u32 {
+                let idx = (row * 8 + col) as usize;
+                let center = board_square_to_world(row as i32, col as i32);
                 let cam_space = self.to_camera_space(center);
-                squares[index] = (row, column, cam_space.z);
+                squares[idx] = (row, col, cam_space.z);
             }
         }
 
@@ -290,9 +290,9 @@ pub fn tick(&mut self) {
             }
         }
 
-        for &(row, column, _) in &squares {
-            let sq = (row * 8 + column) as usize;
-            let is_light = (row + column) % 2 == 0;
+        for &(row, col, _) in &squares {
+            let sq = (row * 8 + col) as usize;
+            let is_light = (row + col) % 2 == 0;
 
             // Determine square color
             let mut base_color = if is_light { 0xFF3D6B3D } else { 0xFF1A3E1A };
@@ -315,10 +315,10 @@ pub fn tick(&mut self) {
             }
 
             // Get 4 corners of the square in 3D
-            let c0 = board_corner_to_world(row as i32, column as i32);
-            let c1 = board_corner_to_world(row as i32, column as i32 + 1);
-            let c2 = board_corner_to_world(row as i32 + 1, column as i32 + 1);
-            let c3 = board_corner_to_world(row as i32 + 1, column as i32);
+            let c0 = board_corner_to_world(row as i32, col as i32);
+            let c1 = board_corner_to_world(row as i32, col as i32 + 1);
+            let c2 = board_corner_to_world(row as i32 + 1, col as i32 + 1);
+            let c3 = board_corner_to_world(row as i32 + 1, col as i32);
 
             // Project to screen
             let (sx0, sy0, _) = self.project_point(c0, w, h);
@@ -327,76 +327,76 @@ pub fn tick(&mut self) {
             let (sx3, sy3, _) = self.project_point(c3, w, h);
 
             // Draw as two triangles
-            fill_triangle_solid(buffer, w, h, sx0, sy0, sx1, sy1, sx2, sy2, base_color);
-            fill_triangle_solid(buffer, w, h, sx0, sy0, sx2, sy2, sx3, sy3, base_color);
+            fill_triangle_solid(buf, w, h, sx0, sy0, sx1, sy1, sx2, sy2, base_color);
+            fill_triangle_solid(buf, w, h, sx0, sy0, sx2, sy2, sx3, sy3, base_color);
 
             // Draw grid lines (darker)
             let edge_color = 0xFF0A1A0A;
-            draw_line_buffer(buffer, w, h, sx0, sy0, sx1, sy1, edge_color);
-            draw_line_buffer(buffer, w, h, sx1, sy1, sx2, sy2, edge_color);
-            draw_line_buffer(buffer, w, h, sx2, sy2, sx3, sy3, edge_color);
-            draw_line_buffer(buffer, w, h, sx3, sy3, sx0, sy0, edge_color);
+            draw_line_buf(buf, w, h, sx0, sy0, sx1, sy1, edge_color);
+            draw_line_buf(buf, w, h, sx1, sy1, sx2, sy2, edge_color);
+            draw_line_buf(buf, w, h, sx2, sy2, sx3, sy3, edge_color);
+            draw_line_buf(buf, w, h, sx3, sy3, sx0, sy0, edge_color);
 
             // Valid move indicator dot
             if self.chess.valid_moves.contains(&sq) && self.chess.board[sq] == EMPTY {
-                let (cx, cy, _) = self.project_square_center(row, column, w, h);
-                fill_circle_buffer(buffer, w, h, cx, cy, 4, 0xFF00FF66);
+                let (cx, cy, _) = self.project_square_center(row, col, w, h);
+                fill_circle_buf(buf, w, h, cx, cy, 4, 0xFF00FF66);
             }
         }
 
         // Draw board edge (thickness) — draw side faces for depth
-        self.render_board_edge(buffer, w, h);
+        self.render_board_edge(buf, w, h);
     }
 
     /// Render board labels (a-h along columns, 1-8 along rows)
-    fn render_board_labels(&self, buffer: &mut [u32], w: usize, h: usize) {
+    fn render_board_labels(&self, buf: &mut [u32], w: usize, h: usize) {
         let label_color = 0xFF55AA55;
         let sq_size = 0.8;
 
         // Column labels: a-h below the board (row = 8 edge, slightly below)
-        for column in 0..8 {
-            let letter = (b'a' + column as u8) as char;
-            let position = V3 {
-                x: (column as f32 - 3.5) * sq_size,
+        for col in 0..8 {
+            let letter = (b'a' + col as u8) as char;
+            let pos = V3 {
+                x: (col as f32 - 3.5) * sq_size,
                 y: -0.05,
                 z: (8.0 - 4.0) * sq_size + 0.3, // just past row 8 edge
             };
-            let (sx, sy, size) = self.project_point(position, w, h);
-            if size > 0.5 {
-                draw_char_buffer(buffer, w, h, sx - 4, sy - 8, letter, label_color);
+            let (sx, sy, sz) = self.project_point(pos, w, h);
+            if sz > 0.5 {
+                draw_char_buffer(buf, w, h, sx - 4, sy - 8, letter, label_color);
             }
         }
 
         // Row labels: 1-8 along the left edge of the board
         for row in 0..8 {
             let digit = (b'8' - row as u8) as char; // row 0 = rank 8
-            let position = V3 {
+            let pos = V3 {
                 x: (0.0 - 4.0) * sq_size - 0.3, // just past col 0 edge
                 y: -0.05,
                 z: (row as f32 - 3.5) * sq_size,
             };
-            let (sx, sy, size) = self.project_point(position, w, h);
-            if size > 0.5 {
-                draw_char_buffer(buffer, w, h, sx - 4, sy - 8, digit, label_color);
+            let (sx, sy, sz) = self.project_point(pos, w, h);
+            if sz > 0.5 {
+                draw_char_buffer(buf, w, h, sx - 4, sy - 8, digit, label_color);
             }
         }
     }
 
     /// Render shadows (dark ellipses) under each piece on the board
-    fn render_piece_shadows(&self, buffer: &mut [u32], w: usize, h: usize) {
+    fn render_piece_shadows(&self, buf: &mut [u32], w: usize, h: usize) {
         let shadow_color = 0x40000000u32; // Semi-transparent black idea
         for sq in 0..64 {
             let piece = self.chess.board[sq];
             if piece == EMPTY { continue; }
 
             let row = sq / 8;
-            let column = sq % 8;
-            let center = board_square_to_world(row as i32, column as i32);
-            let (sx, sy, size) = self.project_point(center, w, h);
-            if size < 0.5 { continue; }
+            let col = sq % 8;
+            let center = board_square_to_world(row as i32, col as i32);
+            let (sx, sy, sz) = self.project_point(center, w, h);
+            if sz < 0.5 { continue; }
 
             // Draw shadow as a small ellipse (flattened circle) darkening existing pixels
-            let radius = (w.minimum(h) as f32 * 0.012 * (8.0 / size)).maximum(2.0) as i32;
+            let radius = (w.min(h) as f32 * 0.012 * (8.0 / sz)).max(2.0) as i32;
             let ry = (radius as f32 * 0.5) as i32; // Flatten vertically for perspective
             for dy in -ry..=ry {
                 for dx in -radius..=radius {
@@ -404,17 +404,17 @@ pub fn tick(&mut self) {
                     let ny = dy as f32 / ry as f32;
                     if nx * nx + ny * ny > 1.0 { continue; }
 
-                    let pixel = sx + dx;
+                    let px = sx + dx;
                     let py = sy + dy;
-                    if pixel >= 0 && py >= 0 && pixel < w as i32 && py < h as i32 {
-                        let index = py as usize * w + pixel as usize;
-                        if index < buffer.len() {
+                    if px >= 0 && py >= 0 && px < w as i32 && py < h as i32 {
+                        let idx = py as usize * w + px as usize;
+                        if idx < buf.len() {
                             // Darken existing pixel
-                            let existing = buffer[index];
+                            let existing = buf[idx];
                             let r = ((existing >> 16) & 0xFF) * 3 / 4;
                             let g = ((existing >> 8) & 0xFF) * 3 / 4;
                             let b = (existing & 0xFF) * 3 / 4;
-                            buffer[index] = 0xFF000000 | (r << 16) | (g << 8) | b;
+                            buf[idx] = 0xFF000000 | (r << 16) | (g << 8) | b;
                         }
                     }
                 }
@@ -423,21 +423,21 @@ pub fn tick(&mut self) {
     }
 
     /// Render a subtle reflection of the board below it
-    fn render_board_reflection(&self, buffer: &mut [u32], w: usize, h: usize) {
+    fn render_board_reflection(&self, buf: &mut [u32], w: usize, h: usize) {
         let reflect_depth = 0.35; // How far below the board the reflection extends
         let reflect_alpha = 0.15; // Reflection brightness factor (very subtle)
 
         // Render reflected board squares (mirrored below y=0)
         for row in 0..8u32 {
-            for column in 0..8u32 {
-                let is_light = (row + column) % 2 == 0;
+            for col in 0..8u32 {
+                let is_light = (row + col) % 2 == 0;
                 let base_color: u32 = if is_light { 0xFF3D6B3D } else { 0xFF1A3E1A };
 
                 // Get corners, mirror Y to negative and fade
-                let c0 = board_corner_to_world(row as i32, column as i32);
-                let c1 = board_corner_to_world(row as i32, column as i32 + 1);
-                let c2 = board_corner_to_world(row as i32 + 1, column as i32 + 1);
-                let c3 = board_corner_to_world(row as i32 + 1, column as i32);
+                let c0 = board_corner_to_world(row as i32, col as i32);
+                let c1 = board_corner_to_world(row as i32, col as i32 + 1);
+                let c2 = board_corner_to_world(row as i32 + 1, col as i32 + 1);
+                let c3 = board_corner_to_world(row as i32 + 1, col as i32);
 
                 // Mirror below the board surface
                 let mirror = |p: V3| V3 { x: p.x, y: -reflect_depth - p.y * 0.3, z: p.z };
@@ -453,13 +453,13 @@ pub fn tick(&mut self) {
                 let b = ((base_color & 0xFF) as f32 * reflect_alpha) as u32;
                 let refl_color = 0xFF000000 | (r << 16) | (g << 8) | b;
 
-                fill_triangle_solid(buffer, w, h, sx0, sy0, sx1, sy1, sx2, sy2, refl_color);
-                fill_triangle_solid(buffer, w, h, sx0, sy0, sx2, sy2, sx3, sy3, refl_color);
+                fill_triangle_solid(buf, w, h, sx0, sy0, sx1, sy1, sx2, sy2, refl_color);
+                fill_triangle_solid(buf, w, h, sx0, sy0, sx2, sy2, sx3, sy3, refl_color);
             }
         }
     }
 
-    fn render_board_edge(&self, buffer: &mut [u32], w: usize, h: usize) {
+    fn render_board_edge(&self, buf: &mut [u32], w: usize, h: usize) {
         let thickness = 0.15;
         let edge_color = 0xFF0A200A;
 
@@ -485,17 +485,17 @@ pub fn tick(&mut self) {
             let (b0x, b0y, _) = self.project_point(corners_bot[i], w, h);
             let (b1x, b1y, _) = self.project_point(corners_bot[j], w, h);
 
-            fill_triangle_solid(buffer, w, h, t0x, t0y, t1x, t1y, b1x, b1y, edge_color);
-            fill_triangle_solid(buffer, w, h, t0x, t0y, b1x, b1y, b0x, b0y, edge_color);
+            fill_triangle_solid(buf, w, h, t0x, t0y, t1x, t1y, b1x, b1y, edge_color);
+            fill_triangle_solid(buf, w, h, t0x, t0y, b1x, b1y, b0x, b0y, edge_color);
         }
     }
 
-    fn render_pieces(&self, buffer: &mut [u32], w: usize, h: usize) {
+    fn render_pieces(&self, buf: &mut [u32], w: usize, h: usize) {
         // Collect all pieces with their depth for painter's sort
         struct PieceRender {
             sq: usize,
             piece: i8,
-            position: V3,
+            pos: V3,
             depth: f32,
         }
 
@@ -506,13 +506,13 @@ pub fn tick(&mut self) {
             if piece == EMPTY { continue; }
 
             let row = sq / 8;
-            let column = sq % 8;
-            let position = board_square_to_world(row as i32, column as i32);
+            let col = sq % 8;
+            let pos = board_square_to_world(row as i32, col as i32);
 
             // Compute depth using look-at camera
-            let cam_space = self.to_camera_space(position);
+            let cam_space = self.to_camera_space(pos);
 
-            pieces.push(PieceRender { sq, piece, position, depth: cam_space.z });
+            pieces.push(PieceRender { sq, piece, pos, depth: cam_space.z });
         }
 
         // Sort far-to-near
@@ -534,32 +534,32 @@ pub fn tick(&mut self) {
             let edge_color = if is_white { 0xFF1A1A1A } else { 0xFF888888 };
 
             // Render filled piece with flat shading
-            self.render_piece_mesh(buffer, w, h, &mesh, pr.position, base_color, edge_color);
+            self.render_piece_mesh(buf, w, h, &mesh, pr.pos, base_color, edge_color);
         }
     }
 
-    fn render_piece_mesh(&self, buffer: &mut [u32], w: usize, h: usize,
-                         mesh: &PieceMesh, position: V3, base_color: u32, edge_color: u32) {
+    fn render_piece_mesh(&self, buf: &mut [u32], w: usize, h: usize,
+                         mesh: &PieceMesh, pos: V3, base_color: u32, edge_color: u32) {
         // Transform all vertices: translate to board position, then camera transform
         let mut screen_pts: Vec<(i32, i32)> = Vec::with_capacity(mesh.vertices.len());
         let mut depths: Vec<f32> = Vec::with_capacity(mesh.vertices.len());
 
         for v in &mesh.vertices {
             let world = V3 {
-                x: position.x + v.x,
-                y: position.y + v.y,
-                z: position.z + v.z,
+                x: pos.x + v.x,
+                y: pos.y + v.y,
+                z: pos.z + v.z,
             };
-            let (sx, sy, size) = self.project_point(world, w, h);
+            let (sx, sy, sz) = self.project_point(world, w, h);
             screen_pts.push((sx, sy));
-            depths.push(size);
+            depths.push(sz);
         }
 
         // Render faces with flat shading (painter's sort)
         if let Some(ref faces) = mesh.faces {
             struct FaceDepth {
-                index: usize,
-                average_z: f32,
+                idx: usize,
+                avg_z: f32,
                 brightness: f32,
             }
 
@@ -572,9 +572,9 @@ pub fn tick(&mut self) {
             for (i, &(a, b, c)) in faces.iter().enumerate() {
                 if a >= mesh.vertices.len() || b >= mesh.vertices.len() || c >= mesh.vertices.len() { continue; }
 
-                let va = V3 { x: position.x + mesh.vertices[a].x, y: position.y + mesh.vertices[a].y, z: position.z + mesh.vertices[a].z };
-                let vb = V3 { x: position.x + mesh.vertices[b].x, y: position.y + mesh.vertices[b].y, z: position.z + mesh.vertices[b].z };
-                let vc = V3 { x: position.x + mesh.vertices[c].x, y: position.y + mesh.vertices[c].y, z: position.z + mesh.vertices[c].z };
+                let va = V3 { x: pos.x + mesh.vertices[a].x, y: pos.y + mesh.vertices[a].y, z: pos.z + mesh.vertices[a].z };
+                let vb = V3 { x: pos.x + mesh.vertices[b].x, y: pos.y + mesh.vertices[b].y, z: pos.z + mesh.vertices[b].z };
+                let vc = V3 { x: pos.x + mesh.vertices[c].x, y: pos.y + mesh.vertices[c].y, z: pos.z + mesh.vertices[c].z };
 
                 // Camera-space transform for normal calculation
                 let ta = self.to_camera_space(va);
@@ -594,16 +594,16 @@ pub fn tick(&mut self) {
                 if n.z > 0.0 { continue; }
 
                 let ndotl = -(n.x * light.x + n.y * light.y + n.z * light.z);
-                let brightness = 0.3 + 0.7 * ndotl.maximum(0.0);
+                let brightness = 0.3 + 0.7 * ndotl.max(0.0);
 
-                let average_z = (ta.z + tb.z + tc.z) / 3.0;
-                visible.push(FaceDepth { index: i, average_z, brightness });
+                let avg_z = (ta.z + tb.z + tc.z) / 3.0;
+                visible.push(FaceDepth { idx: i, avg_z, brightness });
             }
 
             // Far first
             for i in 1..visible.len() {
                 let mut j = i;
-                while j > 0 && visible[j].average_z > visible[j - 1].average_z {
+                while j > 0 && visible[j].avg_z > visible[j - 1].avg_z {
                     visible.swap(j, j - 1);
                     j -= 1;
                 }
@@ -614,18 +614,18 @@ pub fn tick(&mut self) {
             let base_b = base_color & 0xFF;
 
             for fd in &visible {
-                let (a, b, c) = faces[fd.index];
+                let (a, b, c) = faces[fd.idx];
                 if a >= screen_pts.len() || b >= screen_pts.len() || c >= screen_pts.len() { continue; }
                 let (sx0, sy0) = screen_pts[a];
                 let (sx1, sy1) = screen_pts[b];
                 let (sx2, sy2) = screen_pts[c];
 
-                let r = ((base_r as f32 * fd.brightness) as u32).minimum(255);
-                let g = ((base_g as f32 * fd.brightness) as u32).minimum(255);
-                let b_c = ((base_b as f32 * fd.brightness) as u32).minimum(255);
+                let r = ((base_r as f32 * fd.brightness) as u32).min(255);
+                let g = ((base_g as f32 * fd.brightness) as u32).min(255);
+                let b_c = ((base_b as f32 * fd.brightness) as u32).min(255);
                 let shaded = 0xFF000000 | (r << 16) | (g << 8) | b_c;
 
-                fill_triangle_solid(buffer, w, h, sx0, sy0, sx1, sy1, sx2, sy2, shaded);
+                fill_triangle_solid(buf, w, h, sx0, sy0, sx1, sy1, sx2, sy2, shaded);
             }
         }
 
@@ -635,7 +635,7 @@ pub fn tick(&mut self) {
                 if a >= screen_pts.len() || b >= screen_pts.len() { continue; }
                 let (x0, y0) = screen_pts[a];
                 let (x1, y1) = screen_pts[b];
-                draw_line_buffer(buffer, w, h, x0, y0, x1, y1, edge_color);
+                draw_line_buf(buf, w, h, x0, y0, x1, y1, edge_color);
             }
         }
     }
@@ -680,7 +680,7 @@ pub fn tick(&mut self) {
     }
 
     /// Render HUD overlay (turn indicator, score, controls)
-    fn render_hud(&self, buffer: &mut [u32], w: usize, h: usize) {
+    fn render_hud(&self, buf: &mut [u32], w: usize, h: usize) {
         // Turn indicator
         let turn_text = if self.chess.white_turn { "WHITE" } else { "BLACK" };
         let phase_text = // Correspondance de motifs — branchement exhaustif de Rust.
@@ -694,7 +694,7 @@ match self.chess.phase {
         
         // Draw turn text at top-left
         let turn_color = if self.chess.white_turn { 0xFFE0E0E0 } else { 0xFF40FF40 };
-        hud_text(buffer, w, h, 8, 8, turn_text, turn_color);
+        hud_text(buf, w, h, 8, 8, turn_text, turn_color);
         if !phase_text.is_empty() {
             let phase_color = // Correspondance de motifs — branchement exhaustif de Rust.
 match self.chess.phase {
@@ -704,25 +704,25 @@ match self.chess.phase {
                 GamePhase::Promotion => 0xFF4488FF,
                 _ => 0xFF40FF40,
             };
-            hud_text(buffer, w, h, 8 + turn_text.len() as i32 * 8, 8, phase_text, phase_color);
+            hud_text(buf, w, h, 8 + turn_text.len() as i32 * 8, 8, phase_text, phase_color);
         }
         
         // Score bar at top-right
         let score = self.chess.material_score();
         let score_str = format!("{:+}", score);
         let score_color = if score > 0 { 0xFFE0E0E0 } else if score < 0 { 0xFF40FF40 } else { 0xFF888888 };
-        hud_text(buffer, w, h, w as i32 - 60, 8, &score_str, score_color);
+        hud_text(buf, w, h, w as i32 - 60, 8, &score_str, score_color);
         
         // Controls hint at bottom
         let hint = "WASD:Cam Scroll/ZX:Zoom O:Rotate Drag:Orbit";
-        hud_text(buffer, w, h, 8, h as i32 - 14, hint, 0xFF336633);
+        hud_text(buf, w, h, 8, h as i32 - 14, hint, 0xFF336633);
         
         // Move history (last 5 moves)
         let history = &self.chess.move_history;
         let start = if history.len() > 5 { history.len() - 5 } else { 0 };
         for (i, mv) in history[start..].iter().enumerate() {
             let y_position = 24 + i as i32 * 12;
-            hud_text(buffer, w, h, 8, y_position, mv, 0xFF448844);
+            hud_text(buf, w, h, 8, y_position, mv, 0xFF448844);
         }
     }
 }
@@ -732,20 +732,20 @@ match self.chess.phase {
 // ═══════════════════════════════════════════════════════════════
 
 /// Convert board row/col (0-7) to world XZ position (centered on origin)
-fn board_square_to_world(row: i32, column: i32) -> V3 {
+fn board_square_to_world(row: i32, col: i32) -> V3 {
     let sq_size = 0.8;
     V3 {
-        x: (column as f32 - 3.5) * sq_size,
+        x: (col as f32 - 3.5) * sq_size,
         y: 0.0,
         z: (row as f32 - 3.5) * sq_size,
     }
 }
 
 /// Convert board corner to world position (corners are row 0-8, col 0-8)
-fn board_corner_to_world(row: i32, column: i32) -> V3 {
+fn board_corner_to_world(row: i32, col: i32) -> V3 {
     let sq_size = 0.8;
     V3 {
-        x: (column as f32 - 4.0) * sq_size,
+        x: (col as f32 - 4.0) * sq_size,
         y: 0.0,
         z: (row as f32 - 4.0) * sq_size,
     }
@@ -895,12 +895,12 @@ fn mesh_knight() -> PieceMesh {
 
     // Head (offset forward for horse profile)
     let mut head_ring = ring(0.42, 0.20 * s, SIDES);
-    for v in head_ring.iterator_mut() { v.z -= 0.06; } // offset forward
+    for v in head_ring.iter_mut() { v.z -= 0.06; } // offset forward
     let b4 = verts.len(); verts.extend_from_slice(&head_ring);
 
     // Muzzle (extended forward)
     let mut muzzle = ring(0.47, 0.12 * s, SIDES);
-    for v in muzzle.iterator_mut() { v.z -= 0.12; }
+    for v in muzzle.iter_mut() { v.z -= 0.12; }
     let b5 = verts.len(); verts.extend_from_slice(&muzzle);
 
     // Ear tip
@@ -1163,7 +1163,7 @@ fn mesh_king() -> PieceMesh {
 // DRAWING HELPERS (local to chess3d, operate on buffer)
 // ═══════════════════════════════════════════════════════════════
 
-fn fill_triangle_solid(buffer: &mut [u32], w: usize, h: usize,
+fn fill_triangle_solid(buf: &mut [u32], w: usize, h: usize,
                        mut x0: i32, mut y0: i32,
                        mut x1: i32, mut y1: i32,
                        mut x2: i32, mut y2: i32,
@@ -1176,8 +1176,8 @@ fn fill_triangle_solid(buffer: &mut [u32], w: usize, h: usize,
     let total_h = y2 - y0;
     if total_h == 0 { return; }
 
-    let y_start = y0.maximum(0);
-    let y_end = y2.minimum(h as i32 - 1);
+    let y_start = y0.max(0);
+    let y_end = y2.min(h as i32 - 1);
 
     for y in y_start..=y_end {
         let second_half = y >= y1;
@@ -1200,43 +1200,43 @@ fn fill_triangle_solid(buffer: &mut [u32], w: usize, h: usize,
         let mut right = xb as i32;
         if left > right { core::mem::swap(&mut left, &mut right); }
 
-        left = left.maximum(0);
-        right = right.minimum(w as i32 - 1);
+        left = left.max(0);
+        right = right.min(w as i32 - 1);
 
         let row = y as usize * w;
         for x in left..=right {
-            let index = row + x as usize;
-            if index < buffer.len() {
-                buffer[index] = color;
+            let idx = row + x as usize;
+            if idx < buf.len() {
+                buf[idx] = color;
             }
         }
     }
 }
 
-use crate::draw_utils::{draw_line as draw_line_buffer, fill_circle as fill_circle_buffer};
+use crate::draw_utils::{draw_line as draw_line_buf, fill_circle as fill_circle_buf};
 
 /// Draw text into a buffer using 8x16 bitmap font
-fn hud_text(buffer: &mut [u32], w: usize, h: usize, x: i32, y: i32, text: &str, color: u32) {
+fn hud_text(buf: &mut [u32], w: usize, h: usize, x: i32, y: i32, text: &str, color: u32) {
     let mut cx = x;
-    for character in text.chars() {
-        draw_char_buffer(buffer, w, h, cx, y, character, color);
+    for ch in text.chars() {
+        draw_char_buffer(buf, w, h, cx, y, ch, color);
         cx += 8;
     }
 }
 
 /// Simple 8x16 character renderer into buffer
-fn draw_char_buffer(buffer: &mut [u32], w: usize, h: usize, x: i32, y: i32, c: char, color: u32) {
+fn draw_char_buffer(buf: &mut [u32], w: usize, h: usize, x: i32, y: i32, c: char, color: u32) {
     let glyph = crate::framebuffer::font::get_glyph(c);
     for row in 0..16 {
         let bits = glyph[row];
-        for column in 0..8 {
-            if bits & (0x80 >> column) != 0 {
-                let pixel = x + column as i32;
+        for col in 0..8 {
+            if bits & (0x80 >> col) != 0 {
+                let px = x + col as i32;
                 let py = y + row as i32;
-                if pixel >= 0 && py >= 0 && pixel < w as i32 && py < h as i32 {
-                    let index = py as usize * w + pixel as usize;
-                    if index < buffer.len() {
-                        buffer[index] = color;
+                if px >= 0 && py >= 0 && px < w as i32 && py < h as i32 {
+                    let idx = py as usize * w + px as usize;
+                    if idx < buf.len() {
+                        buf[idx] = color;
                     }
                 }
             }

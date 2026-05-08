@@ -18,19 +18,19 @@ pub struct BannerResult {
 }
 
 /// Grab banner from an open TCP port
-pub fn grab_banner(target: [u8; 4], port: u16, timeout_mouse: u32) -> Option<BannerResult> {
+pub fn grab_banner(target: [u8; 4], port: u16, timeout_ms: u32) -> Option<BannerResult> {
     let service = super::service_name(port);
 
     // Connect to target
-    let source_port = crate::netstack::tcp::send_syn(target, port).ok()?;
-    if !crate::netstack::tcp::wait_for_established(target, port, source_port, timeout_mouse) {
+    let src_port = crate::netstack::tcp::send_syn(target, port).ok()?;
+    if !crate::netstack::tcp::wait_for_established(target, port, src_port, timeout_ms) {
         return None;
     }
 
     // Send protocol-specific probe
     let probe = get_probe(port);
     if !probe.is_empty() {
-        let _ = crate::netstack::tcp::send_payload(target, port, source_port, &probe);
+        let _ = crate::netstack::tcp::send_payload(target, port, src_port, &probe);
     }
 
     // Wait for response
@@ -42,7 +42,7 @@ pub fn grab_banner(target: [u8; 4], port: u16, timeout_mouse: u32) -> Option<Ban
 loop {
         crate::netstack::poll();
 
-        if let Some(data) = crate::netstack::tcp::recv_data(target, port, source_port) {
+        if let Some(data) = crate::netstack::tcp::recv_data(target, port, src_port) {
             banner_data.extend_from_slice(&data);
             // Got some data, break early if enough
             if banner_data.len() > 4 {
@@ -50,7 +50,7 @@ loop {
             }
         }
 
-        if crate::logger::get_ticks().saturating_sub(start) > timeout_mouse as u64 {
+        if crate::logger::get_ticks().saturating_sub(start) > timeout_ms as u64 {
             break;
         }
         spins = spins.wrapping_add(1);
@@ -59,7 +59,7 @@ loop {
     }
 
     // Clean close
-    let _ = crate::netstack::tcp::send_fin(target, port, source_port);
+    let _ = crate::netstack::tcp::send_fin(target, port, src_port);
 
     if banner_data.is_empty() {
         return None;
@@ -78,10 +78,10 @@ loop {
 }
 
 /// Grab banners from multiple ports
-pub fn grab_banners(target: [u8; 4], ports: &[u16], timeout_mouse: u32) -> Vec<BannerResult> {
+pub fn grab_banners(target: [u8; 4], ports: &[u16], timeout_ms: u32) -> Vec<BannerResult> {
     let mut results = Vec::new();
     for &port in ports {
-        if let Some(result) = grab_banner(target, port, timeout_mouse) {
+        if let Some(result) = grab_banner(target, port, timeout_ms) {
             results.push(result);
         }
     }
@@ -142,7 +142,7 @@ match port {
 /// Sanitize banner bytes to printable string
 fn sanitize_banner(data: &[u8]) -> String {
     let mut s = String::new();
-    let maximum_length = data.len().minimum(256); // Limit banner length
+    let maximum_length = data.len().min(256); // Limit banner length
 
     for &b in &data[..maximum_length] {
                 // Correspondance de motifs — branchement exhaustif de Rust.
@@ -206,7 +206,7 @@ fn extract_version(banner: &str, port: u16) -> Option<String> {
 
     // MySQL
     if port == 3306 && banner.len() > 5 {
-        return Some(format!("MySQL ({})", &banner[..banner.len().minimum(30)]));
+        return Some(format!("MySQL ({})", &banner[..banner.len().min(30)]));
     }
 
     // Redis

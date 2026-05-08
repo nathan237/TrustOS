@@ -67,7 +67,7 @@ pub fn install_acpi_tables(guest_memory: &mut [u8]) -> u64 {
     }
     
     let rsdp_address = base;           // 0x50000
-    let xsdt_address = base + 0x040;   // 0x50040
+    let xsdt_addr = base + 0x040;   // 0x50040
     let madt_address = base + 0x080;   // 0x50080
     let fadt_address = base + 0x100;   // 0x50100
     let dsdt_address = base + 0x200;   // 0x50200
@@ -86,14 +86,14 @@ pub fn install_acpi_tables(guest_memory: &mut [u8]) -> u64 {
     let hpet_length = build_hpet(guest_memory, hpet_address);
     
     // 5. Build XSDT (points to MADT, FADT, and HPET)
-    let xsdt_length = build_xsdt(guest_memory, xsdt_address, &[
+    let xsdt_length = build_xsdt(guest_memory, xsdt_addr, &[
         madt_address as u64,
         fadt_address as u64,
         hpet_address as u64,
     ]);
     
     // 6. Build RSDP (points to XSDT)
-    build_rsdp(guest_memory, rsdp_address, xsdt_address as u64);
+    build_rsdp(guest_memory, rsdp_address, xsdt_addr as u64);
     
     // 7. Also copy RSDP to BIOS ROM scan area (0xE0000) for firmware-based discovery
     // Linux scans 0xE0000-0xFFFFF in 16-byte increments looking for "RSD PTR "
@@ -107,7 +107,7 @@ pub fn install_acpi_tables(guest_memory: &mut [u8]) -> u64 {
     
     crate::serial_println!("[ACPI] Tables installed at GPA 0x{:X}:", ACPI_TABLES_ADDRESS);
     crate::serial_println!("[ACPI]   RSDP: 0x{:X} (also at 0x{:X})", rsdp_address, RSDP_BIOS_ADDRESS);
-    crate::serial_println!("[ACPI]   XSDT: 0x{:X} ({} bytes, {} entries)", xsdt_address, xsdt_length, 3);
+    crate::serial_println!("[ACPI]   XSDT: 0x{:X} ({} bytes, {} entries)", xsdt_addr, xsdt_length, 3);
     crate::serial_println!("[ACPI]   MADT: 0x{:X} ({} bytes)", madt_address, madt_length);
     crate::serial_println!("[ACPI]   FADT: 0x{:X} ({} bytes)", fadt_address, fadt_length);
     crate::serial_println!("[ACPI]   HPET: 0x{:X} ({} bytes)", hpet_address, hpet_length);
@@ -133,7 +133,7 @@ pub fn install_acpi_tables(guest_memory: &mut [u8]) -> u64 {
 ///   [24..32] XSDT Address (64-bit)
 ///   [32]     Extended checksum (bytes 0-35)
 ///   [33..36] Reserved
-fn build_rsdp(mem: &mut [u8], offset: usize, xsdt_physical: u64) {
+fn build_rsdp(mem: &mut [u8], offset: usize, xsdt_phys: u64) {
     // Signature
     mem[offset..offset + 8].copy_from_slice(b"RSD PTR ");
     
@@ -150,7 +150,7 @@ fn build_rsdp(mem: &mut [u8], offset: usize, xsdt_physical: u64) {
     write_u32(mem, offset + 20, 36);
     
     // XSDT Address (64-bit)
-    write_u64(mem, offset + 24, xsdt_physical);
+    write_u64(mem, offset + 24, xsdt_phys);
     
     // Compute v1 checksum (bytes 0-19)
     mem[offset + 8] = 0; // clear checksum field first
@@ -177,13 +177,13 @@ fn build_rsdp(mem: &mut [u8], offset: usize, xsdt_physical: u64) {
 /// Header (36 bytes) + array of 64-bit physical pointers to other tables.
 fn build_xsdt(mem: &mut [u8], offset: usize, table_addrs: &[u64]) -> usize {
     let entry_count = table_addrs.len();
-    let total_length = 36 + entry_count * 8;
+    let total_len = 36 + entry_count * 8;
     
     // Signature
     mem[offset..offset + 4].copy_from_slice(b"XSDT");
     
     // Length
-    write_u32(mem, offset + 4, total_length as u32);
+    write_u32(mem, offset + 4, total_len as u32);
     
     // Revision
     mem[offset + 8] = 1;
@@ -207,14 +207,14 @@ fn build_xsdt(mem: &mut [u8], offset: usize, table_addrs: &[u64]) -> usize {
     write_u32(mem, offset + 32, 1);
     
     // Entry array (64-bit pointers)
-    for (i, &address) in table_addrs.iter().enumerate() {
-        write_u64(mem, offset + 36 + i * 8, address);
+    for (i, &addr) in table_addrs.iter().enumerate() {
+        write_u64(mem, offset + 36 + i * 8, addr);
     }
     
     // Compute checksum
-    fixup_checksum(mem, offset, total_length);
+    fixup_checksum(mem, offset, total_len);
     
-    total_length
+    total_len
 }
 
 // ============================================================================
@@ -233,14 +233,14 @@ fn build_madt(mem: &mut [u8], offset: usize) -> usize {
     // MADT has a standard ACPI header (36 bytes) + 
     // 4 bytes LAPIC address + 4 bytes flags = 44 byte header total
     
-    let mut position = offset;
+    let mut pos = offset;
     
     // === Standard ACPI table header ===
-    mem[position..position + 4].copy_from_slice(b"APIC"); // Signature
+    mem[pos..pos + 4].copy_from_slice(b"APIC"); // Signature
     // Length — filled later
-    position += 4;
-    let length_offset = position;
-    position += 4; // skip length for now
+    pos += 4;
+    let length_offset = pos;
+    pos += 4; // skip length for now
     
     mem[offset + 8] = 4; // Revision (MADT rev 4 for ACPI 6.0)
     mem[offset + 9] = 0; // Checksum — filled later
@@ -250,73 +250,73 @@ fn build_madt(mem: &mut [u8], offset: usize) -> usize {
     mem[offset + 28..offset + 32].copy_from_slice(b"TROS"); // Creator ID
     write_u32(mem, offset + 32, 1); // Creator Revision
     
-    position = offset + 36;
+    pos = offset + 36;
     
     // === MADT-specific fields (after standard header) ===
     
     // Local APIC Address (32-bit physical)
-    write_u32(mem, position, LAPIC_PHYSICAL_ADDRESS);
-    position += 4;
+    write_u32(mem, pos, LAPIC_PHYSICAL_ADDRESS);
+    pos += 4;
     
     // Flags: bit 0 = PCAT_COMPAT (dual-8259 legacy setup present)
-    write_u32(mem, position, 1); // Yes, we emulate 8259 PICs
-    position += 4;
+    write_u32(mem, pos, 1); // Yes, we emulate 8259 PICs
+    pos += 4;
     
     // === MADT Entry: Processor Local APIC (Type 0, Length 8) ===
-    mem[position] = 0;     // Type = Processor Local APIC
-    mem[position + 1] = 8; // Length
-    mem[position + 2] = 0; // ACPI Processor UID
-    mem[position + 3] = 0; // APIC ID = 0 (BSP)
-    write_u32(mem, position + 4, 1); // Flags: bit 0 = Processor Enabled
-    position += 8;
+    mem[pos] = 0;     // Type = Processor Local APIC
+    mem[pos + 1] = 8; // Length
+    mem[pos + 2] = 0; // ACPI Processor UID
+    mem[pos + 3] = 0; // APIC ID = 0 (BSP)
+    write_u32(mem, pos + 4, 1); // Flags: bit 0 = Processor Enabled
+    pos += 8;
     
     // === MADT Entry: I/O APIC (Type 1, Length 12) ===
-    mem[position] = 1;      // Type = I/O APIC
-    mem[position + 1] = 12; // Length
-    mem[position + 2] = IOAPIC_ID; // I/O APIC ID
-    mem[position + 3] = 0;  // Reserved
-    write_u32(mem, position + 4, IOAPIC_PHYSICAL_ADDRESS); // I/O APIC Address
-    write_u32(mem, position + 8, 0); // Global System Interrupt Base
-    position += 12;
+    mem[pos] = 1;      // Type = I/O APIC
+    mem[pos + 1] = 12; // Length
+    mem[pos + 2] = IOAPIC_ID; // I/O APIC ID
+    mem[pos + 3] = 0;  // Reserved
+    write_u32(mem, pos + 4, IOAPIC_PHYSICAL_ADDRESS); // I/O APIC Address
+    write_u32(mem, pos + 8, 0); // Global System Interrupt Base
+    pos += 12;
     
     // === MADT Entry: Interrupt Source Override (Type 2, Length 10) ===
     // IRQ 0 (PIT timer) → GSI 2 (standard PC remap via IOAPIC)
-    mem[position] = 2;      // Type = Interrupt Source Override
-    mem[position + 1] = 10; // Length
-    mem[position + 2] = 0;  // Bus = ISA
-    mem[position + 3] = 0;  // Source = IRQ 0
-    write_u32(mem, position + 4, 2); // Global System Interrupt = 2
-    write_u16(mem, position + 8, 0); // Flags: conforms to bus spec
-    position += 10;
+    mem[pos] = 2;      // Type = Interrupt Source Override
+    mem[pos + 1] = 10; // Length
+    mem[pos + 2] = 0;  // Bus = ISA
+    mem[pos + 3] = 0;  // Source = IRQ 0
+    write_u32(mem, pos + 4, 2); // Global System Interrupt = 2
+    write_u16(mem, pos + 8, 0); // Flags: conforms to bus spec
+    pos += 10;
     
     // === MADT Entry: Interrupt Source Override (Type 2, Length 10) ===
     // IRQ 9 → GSI 9 (ACPI SCI, level-triggered active-low)
-    mem[position] = 2;      // Type = Interrupt Source Override
-    mem[position + 1] = 10; // Length
-    mem[position + 2] = 0;  // Bus = ISA
-    mem[position + 3] = 9;  // Source = IRQ 9
-    write_u32(mem, position + 4, 9); // Global System Interrupt = 9
-    write_u16(mem, position + 8, 0x000D); // Flags: active low, level-triggered
-    position += 10;
+    mem[pos] = 2;      // Type = Interrupt Source Override
+    mem[pos + 1] = 10; // Length
+    mem[pos + 2] = 0;  // Bus = ISA
+    mem[pos + 3] = 9;  // Source = IRQ 9
+    write_u32(mem, pos + 4, 9); // Global System Interrupt = 9
+    write_u16(mem, pos + 8, 0x000D); // Flags: active low, level-triggered
+    pos += 10;
     
     // === MADT Entry: Local APIC NMI (Type 4, Length 6) ===
     // NMI connected to LINT1 on all processors
-    mem[position] = 4;     // Type = Local APIC NMI
-    mem[position + 1] = 6; // Length
-    mem[position + 2] = 0xFF; // ACPI Processor UID = 0xFF (all processors)
-    write_u16(mem, position + 3, 0x0005); // Flags: active high, edge-triggered
-    mem[position + 5] = 1; // Local APIC LINT# = 1
-    position += 6;
+    mem[pos] = 4;     // Type = Local APIC NMI
+    mem[pos + 1] = 6; // Length
+    mem[pos + 2] = 0xFF; // ACPI Processor UID = 0xFF (all processors)
+    write_u16(mem, pos + 3, 0x0005); // Flags: active high, edge-triggered
+    mem[pos + 5] = 1; // Local APIC LINT# = 1
+    pos += 6;
     
-    let total_length = position - offset;
+    let total_len = pos - offset;
     
     // Fill in length
-    write_u32(mem, length_offset, total_length as u32);
+    write_u32(mem, length_offset, total_len as u32);
     
     // Compute checksum
-    fixup_checksum(mem, offset, total_length);
+    fixup_checksum(mem, offset, total_len);
     
-    total_length
+    total_len
 }
 
 // ============================================================================
@@ -330,13 +330,13 @@ fn build_madt(mem: &mut [u8], offset: usize) -> usize {
 /// - SCI interrupt number
 /// - ACPI enable/disable ports
 /// - Pointer to DSDT
-fn build_fadt(mem: &mut [u8], offset: usize, dsdt_physical: u64) -> usize {
+fn build_fadt(mem: &mut [u8], offset: usize, dsdt_phys: u64) -> usize {
     // FADT rev 5 is 276 bytes
-    let total_length: usize = 276;
+    let total_len: usize = 276;
     
     // Signature
     mem[offset..offset + 4].copy_from_slice(b"FACP");
-    write_u32(mem, offset + 4, total_length as u32);
+    write_u32(mem, offset + 4, total_len as u32);
     mem[offset + 8] = 5; // Revision 5
     mem[offset + 9] = 0; // Checksum — filled later
     mem[offset + 10..offset + 16].copy_from_slice(OEM_ID);
@@ -351,7 +351,7 @@ fn build_fadt(mem: &mut [u8], offset: usize, dsdt_physical: u64) -> usize {
     write_u32(mem, offset + 36, 0);
     
     // DSDT (32-bit pointer)
-    write_u32(mem, offset + 40, dsdt_physical as u32);
+    write_u32(mem, offset + 40, dsdt_phys as u32);
     
     // INT_MODEL (offset 45) — not used in ACPI 2.0+, set to 0
     mem[offset + 45] = 0;
@@ -436,7 +436,7 @@ fn build_fadt(mem: &mut [u8], offset: usize, dsdt_physical: u64) -> usize {
     write_u64(mem, offset + 132, 0);
     
     // X_DSDT (offset 140, 64-bit) — 64-bit DSDT pointer
-    write_u64(mem, offset + 140, dsdt_physical);
+    write_u64(mem, offset + 140, dsdt_phys);
     
     // X_PM1a_EVT_BLK (offset 148) — GAS for PM1a event block
     write_gas(mem, offset + 148, 1, 32, 0, 2, 0xB000); // I/O, 32-bit
@@ -452,9 +452,9 @@ fn build_fadt(mem: &mut [u8], offset: usize, dsdt_physical: u64) -> usize {
     write_gas(mem, offset + 208, 1, 32, 0, 3, 0xB008); // I/O, 32-bit, DWORD access
     
     // Compute checksum
-    fixup_checksum(mem, offset, total_length);
+    fixup_checksum(mem, offset, total_len);
     
-    total_length
+    total_len
 }
 
 // ============================================================================
@@ -477,184 +477,184 @@ fn build_fadt(mem: &mut [u8], offset: usize, dsdt_physical: u64) -> usize {
 fn build_dsdt(mem: &mut [u8], offset: usize) -> usize {
     // We'll build the AML body first, then prepend the header
     let mut aml: [u8; 512] = [0u8; 512];
-    let mut position: usize = 0;
+    let mut pos: usize = 0;
     
     // ── Scope(\_SB) ──────────────────────────────────────────────
     // AML: ScopeOp PkgLength NameString
-    let sb_start = position;
-    aml[position] = 0x10; // ScopeOp
-    position += 1;
-    let sb_pkg_position = position;
-    position += 2; // PkgLength placeholder (2 bytes for medium package)
+    let sb_start = pos;
+    aml[pos] = 0x10; // ScopeOp
+    pos += 1;
+    let sb_pkg_position = pos;
+    pos += 2; // PkgLength placeholder (2 bytes for medium package)
     // NameString: \_SB ("\_SB" = RootPrefix + "SB__" but encoded as: 5C 2E 5F53 425F)
     // Simpler: Use "\\_SB_" → 0x5C, '_', 'S', 'B', '_'
-    aml[position..position + 4].copy_from_slice(b"_SB_");
-    position += 4;
+    aml[pos..pos + 4].copy_from_slice(b"_SB_");
+    pos += 4;
     
     // ── Device(PCI0) inside \_SB ──────────────────────────────────
-    let pci0_start = position;
-    aml[position] = 0x5B; position += 1; // ExtOpPrefix
-    aml[position] = 0x82; position += 1; // DeviceOp
-    let pci0_pkg_position = position;
-    position += 2; // PkgLength placeholder
-    aml[position..position + 4].copy_from_slice(b"PCI0");
-    position += 4;
+    let pci0_start = pos;
+    aml[pos] = 0x5B; pos += 1; // ExtOpPrefix
+    aml[pos] = 0x82; pos += 1; // DeviceOp
+    let pci0_pkg_position = pos;
+    pos += 2; // PkgLength placeholder
+    aml[pos..pos + 4].copy_from_slice(b"PCI0");
+    pos += 4;
     
     // _HID = "PNP0A03" (PCI Host Bridge)
     // Name(_HID, EisaId("PNP0A03"))
-    aml[position] = 0x08; position += 1; // NameOp
-    aml[position..position + 4].copy_from_slice(b"_HID");
-    position += 4;
+    aml[pos] = 0x08; pos += 1; // NameOp
+    aml[pos..pos + 4].copy_from_slice(b"_HID");
+    pos += 4;
     // EisaId("PNP0A03") = 0x030AD041 (compressed EISA ID)
-    aml[position] = 0x0C; position += 1; // DWordPrefix
+    aml[pos] = 0x0C; pos += 1; // DWordPrefix
     let eisa_pci = encode_eisa_id(b"PNP", 0x0A03);
-    aml[position..position + 4].copy_from_slice(&eisa_pci.to_le_bytes());
-    position += 4;
+    aml[pos..pos + 4].copy_from_slice(&eisa_pci.to_le_bytes());
+    pos += 4;
     
     // _ADR = 0 (address on parent bus)
-    aml[position] = 0x08; position += 1; // NameOp
-    aml[position..position + 4].copy_from_slice(b"_ADR");
-    position += 4;
-    aml[position] = 0x00; position += 1; // ZeroOp
+    aml[pos] = 0x08; pos += 1; // NameOp
+    aml[pos..pos + 4].copy_from_slice(b"_ADR");
+    pos += 4;
+    aml[pos] = 0x00; pos += 1; // ZeroOp
     
     // _BBN = 0 (base bus number)
-    aml[position] = 0x08; position += 1; // NameOp
-    aml[position..position + 4].copy_from_slice(b"_BBN");
-    position += 4;
-    aml[position] = 0x00; position += 1; // ZeroOp
+    aml[pos] = 0x08; pos += 1; // NameOp
+    aml[pos..pos + 4].copy_from_slice(b"_BBN");
+    pos += 4;
+    aml[pos] = 0x00; pos += 1; // ZeroOp
     
     // _PRT — PCI Interrupt Routing Table
     // Name(_PRT, Package() { ... })
-    aml[position] = 0x08; position += 1; // NameOp
-    aml[position..position + 4].copy_from_slice(b"_PRT");
-    position += 4;
+    aml[pos] = 0x08; pos += 1; // NameOp
+    aml[pos..pos + 4].copy_from_slice(b"_PRT");
+    pos += 4;
     
     // Package with 4 entries (one per PCI slot, each routing INTA-D)
-    let prt_pkg_start = position;
-    aml[position] = 0x12; position += 1; // PackageOp
-    let prt_pkg_length_position = position;
-    position += 2; // PkgLength placeholder
-    aml[position] = 0x04; position += 1; // NumElements = 4
+    let prt_pkg_start = pos;
+    aml[pos] = 0x12; pos += 1; // PackageOp
+    let prt_pkg_length_position = pos;
+    pos += 2; // PkgLength placeholder
+    aml[pos] = 0x04; pos += 1; // NumElements = 4
     
     // Each _PRT entry: Package(4) { Address, Pin, Source, SourceIndex }
     // For hardwired routing (Source=0, SourceIndex=GSI):
     // Slot 1 (ISA bridge): INTA→GSI 16
-    position = emit_prt_entry(&mut aml, position, 1, 0, 16);
+    pos = emit_prt_entry(&mut aml, pos, 1, 0, 16);
     // Slot 2 (VirtIO console): INTA→GSI 17
-    position = emit_prt_entry(&mut aml, position, 2, 0, 17);
+    pos = emit_prt_entry(&mut aml, pos, 2, 0, 17);
     // Slot 3 (VirtIO block): INTA→GSI 18
-    position = emit_prt_entry(&mut aml, position, 3, 0, 18);
+    pos = emit_prt_entry(&mut aml, pos, 3, 0, 18);
     // Slot 4 (future): INTA→GSI 19
-    position = emit_prt_entry(&mut aml, position, 4, 0, 19);
+    pos = emit_prt_entry(&mut aml, pos, 4, 0, 19);
     
     // Fix _PRT package length
-    let prt_pkg_length = position - prt_pkg_start;
+    let prt_pkg_length = pos - prt_pkg_start;
     encode_pkg_length(&mut aml, prt_pkg_length_position, prt_pkg_length - 1); // exclude PackageOp byte
     
     // ── Device(ISA_) inside PCI0 ─────────────────────────────────
-    let isa_start = position;
-    aml[position] = 0x5B; position += 1; // ExtOpPrefix
-    aml[position] = 0x82; position += 1; // DeviceOp
-    let isa_pkg_position = position;
-    position += 2; // PkgLength placeholder
-    aml[position..position + 4].copy_from_slice(b"ISA_");
-    position += 4;
+    let isa_start = pos;
+    aml[pos] = 0x5B; pos += 1; // ExtOpPrefix
+    aml[pos] = 0x82; pos += 1; // DeviceOp
+    let isa_pkg_position = pos;
+    pos += 2; // PkgLength placeholder
+    aml[pos..pos + 4].copy_from_slice(b"ISA_");
+    pos += 4;
     
     // _ADR = 0x00010000 (Device 1, Function 0 — PIIX3 ISA bridge)
-    aml[position] = 0x08; position += 1; // NameOp
-    aml[position..position + 4].copy_from_slice(b"_ADR");
-    position += 4;
-    aml[position] = 0x0C; position += 1; // DWordPrefix
-    aml[position..position + 4].copy_from_slice(&0x0001_0000u32.to_le_bytes());
-    position += 4;
+    aml[pos] = 0x08; pos += 1; // NameOp
+    aml[pos..pos + 4].copy_from_slice(b"_ADR");
+    pos += 4;
+    aml[pos] = 0x0C; pos += 1; // DWordPrefix
+    aml[pos..pos + 4].copy_from_slice(&0x0001_0000u32.to_le_bytes());
+    pos += 4;
     
     // ── Device(COM1) inside ISA ──────────────────────────────────
-    let com1_start = position;
-    aml[position] = 0x5B; position += 1; // ExtOpPrefix
-    aml[position] = 0x82; position += 1; // DeviceOp
-    let com1_pkg_position = position;
-    position += 2; // PkgLength placeholder
-    aml[position..position + 4].copy_from_slice(b"COM1");
-    position += 4;
+    let com1_start = pos;
+    aml[pos] = 0x5B; pos += 1; // ExtOpPrefix
+    aml[pos] = 0x82; pos += 1; // DeviceOp
+    let com1_pkg_position = pos;
+    pos += 2; // PkgLength placeholder
+    aml[pos..pos + 4].copy_from_slice(b"COM1");
+    pos += 4;
     
     // _HID = "PNP0501" (16550A-compatible COM port)
-    aml[position] = 0x08; position += 1; // NameOp
-    aml[position..position + 4].copy_from_slice(b"_HID");
-    position += 4;
-    aml[position] = 0x0C; position += 1; // DWordPrefix
+    aml[pos] = 0x08; pos += 1; // NameOp
+    aml[pos..pos + 4].copy_from_slice(b"_HID");
+    pos += 4;
+    aml[pos] = 0x0C; pos += 1; // DWordPrefix
     let eisa_com = encode_eisa_id(b"PNP", 0x0501);
-    aml[position..position + 4].copy_from_slice(&eisa_com.to_le_bytes());
-    position += 4;
+    aml[pos..pos + 4].copy_from_slice(&eisa_com.to_le_bytes());
+    pos += 4;
     
     // _UID = 1
-    aml[position] = 0x08; position += 1; // NameOp
-    aml[position..position + 4].copy_from_slice(b"_UID");
-    position += 4;
-    aml[position] = 0x01; position += 1; // OneOp
+    aml[pos] = 0x08; pos += 1; // NameOp
+    aml[pos..pos + 4].copy_from_slice(b"_UID");
+    pos += 4;
+    aml[pos] = 0x01; pos += 1; // OneOp
     
     // Close COM1 device
-    let com1_length = position - com1_start;
+    let com1_length = pos - com1_start;
     encode_pkg_length(&mut aml, com1_pkg_position, com1_length - 2); // exclude ExtOp+DeviceOp
     
     // Close ISA device
-    let isa_length = position - isa_start;
+    let isa_length = pos - isa_start;
     encode_pkg_length(&mut aml, isa_pkg_position, isa_length - 2);
     
     // Close PCI0 device
-    let pci0_length = position - pci0_start;
+    let pci0_length = pos - pci0_start;
     encode_pkg_length(&mut aml, pci0_pkg_position, pci0_length - 2);
     
     // ── Device(PWRB) — Power Button inside \_SB ──────────────────
-    let pwrb_start = position;
-    aml[position] = 0x5B; position += 1; // ExtOpPrefix
-    aml[position] = 0x82; position += 1; // DeviceOp
-    let pwrb_pkg_position = position;
-    position += 2; // PkgLength placeholder
-    aml[position..position + 4].copy_from_slice(b"PWRB");
-    position += 4;
+    let pwrb_start = pos;
+    aml[pos] = 0x5B; pos += 1; // ExtOpPrefix
+    aml[pos] = 0x82; pos += 1; // DeviceOp
+    let pwrb_pkg_position = pos;
+    pos += 2; // PkgLength placeholder
+    aml[pos..pos + 4].copy_from_slice(b"PWRB");
+    pos += 4;
     
     // _HID = "PNP0C0C" (Power Button Device)
-    aml[position] = 0x08; position += 1; // NameOp
-    aml[position..position + 4].copy_from_slice(b"_HID");
-    position += 4;
-    aml[position] = 0x0C; position += 1; // DWordPrefix
+    aml[pos] = 0x08; pos += 1; // NameOp
+    aml[pos..pos + 4].copy_from_slice(b"_HID");
+    pos += 4;
+    aml[pos] = 0x0C; pos += 1; // DWordPrefix
     let eisa_pwr = encode_eisa_id(b"PNP", 0x0C0C);
-    aml[position..position + 4].copy_from_slice(&eisa_pwr.to_le_bytes());
-    position += 4;
+    aml[pos..pos + 4].copy_from_slice(&eisa_pwr.to_le_bytes());
+    pos += 4;
     
     // Close PWRB device
-    let pwrb_length = position - pwrb_start;
+    let pwrb_length = pos - pwrb_start;
     encode_pkg_length(&mut aml, pwrb_pkg_position, pwrb_length - 2);
     
     // Close \_SB scope
-    let sb_length = position - sb_start;
+    let sb_length = pos - sb_start;
     encode_pkg_length(&mut aml, sb_pkg_position, sb_length - 1); // exclude ScopeOp
     
     // ── \_S5 sleep state definition (for ACPI shutdown) ──────────
     // Name(\_S5, Package(0x04) { 0x05, 0x05, 0x00, 0x00 })
-    aml[position] = 0x08; position += 1; // NameOp
+    aml[pos] = 0x08; pos += 1; // NameOp
     // \_S5 = RootPrefix + "_S5_"
-    aml[position] = 0x5C; position += 1; // RootPrefix '\'
-    aml[position..position + 4].copy_from_slice(b"_S5_");
-    position += 4;
-    aml[position] = 0x12; position += 1; // PackageOp
-    aml[position] = 0x06; position += 1; // PkgLength = 6
-    aml[position] = 0x04; position += 1; // NumElements = 4
-    aml[position] = 0x0A; position += 1; // BytePrefix
-    aml[position] = 0x05; position += 1; // SLP_TYP = 5 (S5)
-    aml[position] = 0x0A; position += 1; // BytePrefix
-    aml[position] = 0x05; position += 1; // SLP_TYP = 5
-    aml[position] = 0x00; position += 1; // ZeroOp
-    aml[position] = 0x00; position += 1; // ZeroOp
+    aml[pos] = 0x5C; pos += 1; // RootPrefix '\'
+    aml[pos..pos + 4].copy_from_slice(b"_S5_");
+    pos += 4;
+    aml[pos] = 0x12; pos += 1; // PackageOp
+    aml[pos] = 0x06; pos += 1; // PkgLength = 6
+    aml[pos] = 0x04; pos += 1; // NumElements = 4
+    aml[pos] = 0x0A; pos += 1; // BytePrefix
+    aml[pos] = 0x05; pos += 1; // SLP_TYP = 5 (S5)
+    aml[pos] = 0x0A; pos += 1; // BytePrefix
+    aml[pos] = 0x05; pos += 1; // SLP_TYP = 5
+    aml[pos] = 0x00; pos += 1; // ZeroOp
+    aml[pos] = 0x00; pos += 1; // ZeroOp
     
-    let aml_length = position;
+    let aml_length = pos;
     
     // Now build the complete DSDT: header (36 bytes) + AML body
-    let total_length = 36 + aml_length;
+    let total_len = 36 + aml_length;
     
     // Standard ACPI header
     mem[offset..offset + 4].copy_from_slice(b"DSDT");
-    write_u32(mem, offset + 4, total_length as u32);
+    write_u32(mem, offset + 4, total_len as u32);
     mem[offset + 8] = 2; // Revision 2
     mem[offset + 9] = 0; // Checksum (will fix up)
     mem[offset + 10..offset + 16].copy_from_slice(OEM_ID);
@@ -666,9 +666,9 @@ fn build_dsdt(mem: &mut [u8], offset: usize) -> usize {
     // Copy AML body after header
     mem[offset + 36..offset + 36 + aml_length].copy_from_slice(&aml[..aml_length]);
     
-    fixup_checksum(mem, offset, total_length);
+    fixup_checksum(mem, offset, total_len);
     
-    total_length
+    total_len
 }
 
 /// Encode a PCI EISA ID from 3-letter manufacturer code + product number.
@@ -694,45 +694,45 @@ fn encode_eisa_id(mfr: &[u8; 3], product: u16) -> u32 {
 
 /// Emit a _PRT entry: Package(4) { DWord(address), Byte(pin), Zero, DWord(gsi) }
 /// address = (dev_slot << 16) | 0xFFFF  (all functions)
-fn emit_prt_entry(aml: &mut [u8], mut position: usize, slot: u32, pin: u8, gsi: u32) -> usize {
-    let entry_start = position;
-    aml[position] = 0x12; position += 1; // PackageOp
-    let entry_pkg_position = position;
-    position += 1; // PkgLength (single byte, < 63)
-    aml[position] = 0x04; position += 1; // NumElements = 4
+fn emit_prt_entry(aml: &mut [u8], mut pos: usize, slot: u32, pin: u8, gsi: u32) -> usize {
+    let entry_start = pos;
+    aml[pos] = 0x12; pos += 1; // PackageOp
+    let entry_pkg_position = pos;
+    pos += 1; // PkgLength (single byte, < 63)
+    aml[pos] = 0x04; pos += 1; // NumElements = 4
     
     // Address: (slot << 16) | 0xFFFF
-    let address = (slot << 16) | 0xFFFF;
-    aml[position] = 0x0C; position += 1; // DWordPrefix
-    aml[position..position + 4].copy_from_slice(&address.to_le_bytes());
-    position += 4;
+    let addr = (slot << 16) | 0xFFFF;
+    aml[pos] = 0x0C; pos += 1; // DWordPrefix
+    aml[pos..pos + 4].copy_from_slice(&addr.to_le_bytes());
+    pos += 4;
     
     // Pin (0=INTA, 1=INTB, etc.)
-    aml[position] = 0x0A; position += 1; // BytePrefix
-    aml[position] = pin; position += 1;
+    aml[pos] = 0x0A; pos += 1; // BytePrefix
+    aml[pos] = pin; pos += 1;
     
     // Source = 0 (hardwired, no PCI link device)
-    aml[position] = 0x00; position += 1; // ZeroOp
+    aml[pos] = 0x00; pos += 1; // ZeroOp
     
     // Source Index = GSI number
-    aml[position] = 0x0C; position += 1; // DWordPrefix
-    aml[position..position + 4].copy_from_slice(&gsi.to_le_bytes());
-    position += 4;
+    aml[pos] = 0x0C; pos += 1; // DWordPrefix
+    aml[pos..pos + 4].copy_from_slice(&gsi.to_le_bytes());
+    pos += 4;
     
     // Fix entry package length
-    let entry_length = position - entry_start;
-    aml[entry_pkg_position] = (entry_length - 1) as u8; // single-byte PkgLength
+    let entry_len = pos - entry_start;
+    aml[entry_pkg_position] = (entry_len - 1) as u8; // single-byte PkgLength
     
-    position
+    pos
 }
 
 /// Encode a PkgLength in AML medium format (2 bytes) at the given position.
 /// `length` is the number of bytes following the PkgLength field itself.
-fn encode_pkg_length(aml: &mut [u8], position: usize, length: usize) {
+fn encode_pkg_length(aml: &mut [u8], pos: usize, length: usize) {
     if length < 63 {
         // Single byte format: bits [5:0] = length, bits [7:6] = 0 (0 follow bytes)
-        aml[position] = length as u8;
-        aml[position + 1] = 0; // unused second byte — will be part of content
+        aml[pos] = length as u8;
+        aml[pos + 1] = 0; // unused second byte — will be part of content
         // Actually for single byte we need to shift everything... 
         // Let's use 2-byte format consistently for simplicity
     }
@@ -740,8 +740,8 @@ fn encode_pkg_length(aml: &mut [u8], position: usize, length: usize) {
     // byte1 = length >> 4
     let lo = (length & 0x0F) as u8;
     let hi = ((length >> 4) & 0xFF) as u8;
-    aml[position] = 0x40 | lo; // bit 6 set = 1 follow byte
-    aml[position + 1] = hi;
+    aml[pos] = 0x40 | lo; // bit 6 set = 1 follow byte
+    aml[pos + 1] = hi;
 }
 
 // ============================================================================
@@ -759,8 +759,8 @@ fn fixup_checksum(mem: &mut [u8], offset: usize, len: usize) {
 }
 
 /// Write a Generic Address Structure (GAS, 12 bytes) at the given offset.
-fn write_gas(mem: &mut [u8], offset: usize, address_space: u8, bit_width: u8, bit_offset: u8, access_size: u8, address: u64) {
-    mem[offset] = address_space;
+fn write_gas(mem: &mut [u8], offset: usize, addr_space: u8, bit_width: u8, bit_offset: u8, access_size: u8, address: u64) {
+    mem[offset] = addr_space;
     mem[offset + 1] = bit_width;
     mem[offset + 2] = bit_offset;
     mem[offset + 3] = access_size;
@@ -806,13 +806,13 @@ fn write_u64(mem: &mut [u8], offset: usize, value: u64) {
 ///   [53..55] Minimum Clock Tick
 ///   [55]     Page Protection and OEM Attribute
 fn build_hpet(mem: &mut [u8], offset: usize) -> usize {
-    let total_length: usize = 56;
+    let total_len: usize = 56;
     
     // Signature
     mem[offset..offset + 4].copy_from_slice(b"HPET");
     
     // Length
-    write_u32(mem, offset + 4, total_length as u32);
+    write_u32(mem, offset + 4, total_len as u32);
     
     // Revision
     mem[offset + 8] = 1;
@@ -868,9 +868,9 @@ fn build_hpet(mem: &mut [u8], offset: usize) -> usize {
     mem[offset + 55] = 0;
     
     // Fixup checksum
-    fixup_checksum(mem, offset, total_length);
+    fixup_checksum(mem, offset, total_len);
     
-    total_length
+    total_len
 }
 
 // ============================================================================

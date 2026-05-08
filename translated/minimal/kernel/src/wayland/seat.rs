@@ -7,152 +7,152 @@ use alloc::vec::Vec;
 
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Cgh {
-    Cki = 0,
-    Alg = 1,
+pub enum Amb {
+    Released = 0,
+    Pressed = 1,
 }
 
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ButtonState {
-    Cki = 0,
-    Alg = 1,
+    Released = 0,
+    Pressed = 1,
 }
 
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ModifierState {
-    pub nkk: u32,
-    pub czf: u32,
-    pub caq: u32,
-    pub cyi: u32,
+    pub depressed: u32,
+    pub latched: u32,
+    pub locked: u32,
+    pub bbz: u32,
 }
 
 
-pub struct Cmr {
+pub struct Aqd {
     
-    pub j: String,
-    
-    
-    pub bme: u32,
+    pub name: String,
     
     
-    pub vjr: PointerState,
+    pub capabilities: u32,
+    
+    
+    pub pointer: PointerState,
     
     
     pub keyboard: KeyboardState,
     
     
-    pub eqq: Option<u32>,
+    pub focused_surface: Option<u32>,
     
     
     serial: u32,
 }
 
-impl Cmr {
-    pub fn new(j: &str) -> Self {
+impl Aqd {
+    pub fn new(name: &str) -> Self {
         Self {
-            j: String::from(j),
-            bme: 0b11, 
-            vjr: PointerState::new(),
+            name: String::from(name),
+            capabilities: 0b11, 
+            pointer: PointerState::new(),
             keyboard: KeyboardState::new(),
-            eqq: None,
+            focused_surface: None,
             serial: 1,
         }
     }
     
     
-    pub fn zdq(&mut self) -> u32 {
-        let e = self.serial;
-        self.serial = self.serial.cn(1);
-        e
+    pub fn qpo(&mut self) -> u32 {
+        let j = self.serial;
+        self.serial = self.serial.wrapping_add(1);
+        j
     }
     
     
-    pub fn znh(&mut self, cmz: Option<u32>) {
-        self.eqq = cmz;
+    pub fn qwd(&mut self, avh: Option<u32>) {
+        self.focused_surface = avh;
     }
     
     
-    pub fn ywl(&self) -> bool {
-        self.bme & 1 != 0
+    pub fn qkq(&self) -> bool {
+        self.capabilities & 1 != 0
     }
     
     
-    pub fn oar(&self) -> bool {
-        self.bme & 2 != 0
+    pub fn idr(&self) -> bool {
+        self.capabilities & 2 != 0
     }
     
     
-    pub fn ywn(&self) -> bool {
-        self.bme & 4 != 0
+    pub fn qks(&self) -> bool {
+        self.capabilities & 4 != 0
     }
 }
 
 
 pub struct PointerState {
     
-    pub b: f64,
+    pub x: f64,
     
     
-    pub c: f64,
+    pub y: f64,
     
     
-    pub arc: Option<u32>,
+    pub focus: Option<u32>,
     
     
-    pub pqb: f64,
-    pub pqc: f64,
+    pub surface_x: f64,
+    pub surface_y: f64,
     
     
-    pub cjk: u32,
+    pub buttons: u32,
     
     
-    pub nip: Option<u32>,
-    pub nim: i32,
-    pub nin: i32,
+    pub cursor_surface: Option<u32>,
+    pub cursor_hotspot_x: i32,
+    pub cursor_hotspot_y: i32,
 }
 
 impl PointerState {
     pub fn new() -> Self {
         Self {
-            b: 0.0,
-            c: 0.0,
-            arc: None,
-            pqb: 0.0,
-            pqc: 0.0,
-            cjk: 0,
-            nip: None,
-            nim: 0,
-            nin: 0,
+            x: 0.0,
+            y: 0.0,
+            focus: None,
+            surface_x: 0.0,
+            surface_y: 0.0,
+            buttons: 0,
+            cursor_surface: None,
+            cursor_hotspot_x: 0,
+            cursor_hotspot_y: 0,
         }
     }
     
     
-    pub fn hsa(&mut self, b: f64, c: f64) {
-        self.b = b;
-        self.c = c;
+    pub fn move_to(&mut self, x: f64, y: f64) {
+        self.x = x;
+        self.y = y;
     }
     
     
-    pub fn zmo(&mut self, bdp: u32, vn: bool) {
-        if vn {
-            self.cjk |= 1 << bdp;
+    pub fn qvl(&mut self, button: u32, pressed: bool) {
+        if pressed {
+            self.buttons |= 1 << button;
         } else {
-            self.cjk &= !(1 << bdp);
+            self.buttons &= !(1 << button);
         }
     }
     
     
-    pub fn yzd(&self, bdp: u32) -> bool {
-        self.cjk & (1 << bdp) != 0
+    pub fn qme(&self, button: u32) -> bool {
+        self.buttons & (1 << button) != 0
     }
     
     
-    pub fn bld(&mut self, surface: Option<u32>, tpz: i32, tqa: i32) {
-        self.nip = surface;
-        self.nim = tpz;
-        self.nin = tqa;
+    pub fn afr(&mut self, surface: Option<u32>, hotspot_x: i32, hotspot_y: i32) {
+        self.cursor_surface = surface;
+        self.cursor_hotspot_x = hotspot_x;
+        self.cursor_hotspot_y = hotspot_y;
     }
 }
 
@@ -165,62 +165,62 @@ impl Default for PointerState {
 
 pub struct KeyboardState {
     
-    pub gps: Vec<u32>,
+    pub pressed_keys: Vec<u32>,
     
     
     pub modifiers: ModifierState,
     
     
-    pub vxe: i32,
+    pub repeat_rate: i32,
     
     
-    pub vxd: i32,
+    pub repeat_delay: i32,
     
     
-    pub arc: Option<u32>,
+    pub focus: Option<u32>,
 }
 
 impl KeyboardState {
     pub fn new() -> Self {
         Self {
-            gps: Vec::new(),
+            pressed_keys: Vec::new(),
             modifiers: ModifierState::default(),
-            vxe: 25,
-            vxd: 400,
-            arc: None,
+            repeat_rate: 25,
+            repeat_delay: 400,
+            focus: None,
         }
     }
     
     
-    pub fn zai(&mut self, bs: u32) {
-        if !self.gps.contains(&bs) {
-            self.gps.push(bs);
+    pub fn qnd(&mut self, key: u32) {
+        if !self.pressed_keys.contains(&key) {
+            self.pressed_keys.push(key);
         }
     }
     
     
-    pub fn zaj(&mut self, bs: u32) {
-        self.gps.ajm(|&eh| eh != bs);
+    pub fn qne(&mut self, key: u32) {
+        self.pressed_keys.retain(|&k| k != key);
     }
     
     
-    pub fn alh(&self, bs: u32) -> bool {
-        self.gps.contains(&bs)
+    pub fn sx(&self, key: u32) -> bool {
+        self.pressed_keys.contains(&key)
     }
     
     
-    pub fn znl(&mut self, nkk: u32, czf: u32, caq: u32, cyi: u32) {
+    pub fn qwh(&mut self, depressed: u32, latched: u32, locked: u32, bbz: u32) {
         self.modifiers = ModifierState {
-            nkk,
-            czf,
-            caq,
-            cyi,
+            depressed,
+            latched,
+            locked,
+            bbz,
         };
     }
     
     
     pub fn clear(&mut self) {
-        self.gps.clear();
+        self.pressed_keys.clear();
     }
 }
 
@@ -236,44 +236,44 @@ impl Default for KeyboardState {
 
 
 #[derive(Debug, Clone)]
-pub struct Deo {
+pub struct Bav {
     pub time: u32,
-    pub pqb: f64,
-    pub pqc: f64,
+    pub surface_x: f64,
+    pub surface_y: f64,
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Den {
+pub struct Bau {
     pub serial: u32,
     pub time: u32,
-    pub bdp: u32,
-    pub g: ButtonState,
+    pub button: u32,
+    pub state: ButtonState,
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Dem {
+pub struct Bat {
     pub time: u32,
-    pub gao: u32, 
-    pub bn: f64,
+    pub ctt: u32, 
+    pub value: f64,
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Dav {
+pub struct Ayg {
     pub serial: u32,
     pub time: u32,
-    pub bs: u32,
-    pub g: Cgh,
+    pub key: u32,
+    pub state: Amb,
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Daw {
+pub struct Ayh {
     pub serial: u32,
-    pub zcx: u32,
-    pub zcy: u32,
-    pub zcz: u32,
-    pub cyi: u32,
+    pub mods_depressed: u32,
+    pub mods_latched: u32,
+    pub mods_locked: u32,
+    pub bbz: u32,
 }

@@ -246,13 +246,13 @@ pub fn new(width: u32, height: u32) -> Self {
         // Draw surface content
         for sy in 0..h {
             for sx in 0..w {
-                let index = (sy * w + sx) as usize;
-                if index < surface.buffer.len() {
-                    let pixel = surface.buffer[index];
-                    let pixel = x + sx as i32;
+                let idx = (sy * w + sx) as usize;
+                if idx < surface.buffer.len() {
+                    let pixel = surface.buffer[idx];
+                    let px = x + sx as i32;
                     let py = y + sy as i32;
-                    if pixel >= 0 && py >= 0 {
-                        crate::framebuffer::put_pixel(pixel as u32, py as u32, pixel);
+                    if px >= 0 && py >= 0 {
+                        crate::framebuffer::put_pixel(px as u32, py as u32, pixel);
                     }
                 }
             }
@@ -274,30 +274,30 @@ pub fn new(width: u32, height: u32) -> Self {
         
         for ty in 0..title_height {
             for transmit in 0..w {
-                let pixel = x + transmit;
+                let px = x + transmit;
                 let py = y - title_height + ty;
-                if pixel >= 0 && py >= 0 {
-                    crate::framebuffer::put_pixel(pixel as u32, py as u32, title_color);
+                if px >= 0 && py >= 0 {
+                    crate::framebuffer::put_pixel(px as u32, py as u32, title_color);
                 }
             }
         }
         
         // Window buttons (close, minimize, maximize)
-        let button_y = y - title_height + 6;
-        let button_size = 14;
+        let btn_y = y - title_height + 6;
+        let btn_size = 14;
         
         // Close button (red)
-        self.draw_circle(x + 12, button_y + 7, button_size / 2, 0xFF3A2828);
+        self.draw_circle(x + 12, btn_y + 7, btn_size / 2, 0xFF3A2828);
         // Minimize button
-        self.draw_circle(x + 32, button_y + 7, button_size / 2, 0xFF2A3028);
+        self.draw_circle(x + 32, btn_y + 7, btn_size / 2, 0xFF2A3028);
         // Maximize button  
-        self.draw_circle(x + 52, button_y + 7, button_size / 2, 0xFF2A2A20);
+        self.draw_circle(x + 52, btn_y + 7, btn_size / 2, 0xFF2A2A20);
         
         // Title text
         if !surface.title.is_empty() {
             // Simple title rendering (would use font in real impl)
             let title_x = x + 70;
-            let title_y = button_y + 4;
+            let title_y = btn_y + 4;
             // crate::framebuffer::draw_string(&surface.title, title_x as usize, title_y as usize, 0xFFE0E8E4);
         }
     }
@@ -306,10 +306,10 @@ pub fn new(width: u32, height: u32) -> Self {
         for dy in -r..=r {
             for dx in -r..=r {
                 if dx * dx + dy * dy <= r * r {
-                    let pixel = cx + dx;
+                    let px = cx + dx;
                     let py = cy + dy;
-                    if pixel >= 0 && py >= 0 {
-                        crate::framebuffer::put_pixel(pixel as u32, py as u32, color);
+                    if px >= 0 && py >= 0 {
+                        crate::framebuffer::put_pixel(px as u32, py as u32, color);
                     }
                 }
             }
@@ -339,10 +339,10 @@ pub fn new(width: u32, height: u32) -> Self {
         for (y, row) in cursor.iter().enumerate() {
             for x in 0..8 {
                 if (row >> (7 - x)) & 1 == 1 {
-                    let pixel = self.pointer_x + x;
+                    let px = self.pointer_x + x;
                     let py = self.pointer_y + y as i32;
-                    if pixel >= 0 && py >= 0 && (pixel as u32) < self.width && (py as u32) < self.height {
-                        crate::framebuffer::put_pixel(pixel as u32, py as u32, 0xFFFFFFFF);
+                    if px >= 0 && py >= 0 && (px as u32) < self.width && (py as u32) < self.height {
+                        crate::framebuffer::put_pixel(px as u32, py as u32, 0xFFFFFFFF);
                     }
                 }
             }

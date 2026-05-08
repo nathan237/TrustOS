@@ -78,7 +78,7 @@ pub struct SparseEntry {
 
 /// Compressed gradient packet (ready for network transmission)
 pub struct CompressedGradient {
-    pub parameter_count: u32,
+    pub param_count: u32,
     pub entries: Vec<SparseEntry>,
     pub scale: f32,
 }
@@ -106,19 +106,19 @@ pub fn compress_gradients(gradients: &[f32]) -> CompressedGradient {
     }
 
     // Step 2: Compute TopK threshold
-    let k = ((n as f32 * TOPK_RATIO) as usize).maximum(MINIMUM_ENTRIES).minimum(MAXIMUM_ENTRIES).minimum(n);
+    let k = ((n as f32 * TOPK_RATIO) as usize).max(MINIMUM_ENTRIES).min(MAXIMUM_ENTRIES).min(n);
 
     // Find the k-th largest absolute value using partial sort
     // (We use a simple approach: collect abs values, sort descending, pick threshold)
-    let mut absolute_values: Vec<f32> = combined.iter().map(|x| x.absolute()).collect();
+    let mut absolute_values: Vec<f32> = combined.iter().map(|x| x.abs()).collect();
     // Partial sort: we only need to find the k-th largest
     // For efficiency, use selection algorithm (quickselect-style)
     let threshold = find_kth_largest(&mut absolute_values, k);
 
     // Step 3: Select entries above threshold
     let mut selected_indices: Vec<usize> = Vec::with_capacity(k);
-    for (i, &value) in combined.iter().enumerate() {
-        if value.absolute() >= threshold && selected_indices.len() < MAXIMUM_ENTRIES {
+    for (i, &val) in combined.iter().enumerate() {
+        if val.abs() >= threshold && selected_indices.len() < MAXIMUM_ENTRIES {
             selected_indices.push(i);
         }
     }
@@ -126,20 +126,20 @@ pub fn compress_gradients(gradients: &[f32]) -> CompressedGradient {
     // Step 4: Compute scale factor for i8 quantization
     // scale = max_abs / 127.0, so that max value maps to ±127
     let maximum_absolute = selected_indices.iter()
-        .map(|&i| combined[i].absolute())
-        .fold(0.0f32, f32::maximum);
+        .map(|&i| combined[i].abs())
+        .fold(0.0f32, f32::max);
 
     let scale = if maximum_absolute > 0.0 { maximum_absolute / 127.0 } else { 1.0 };
     let inv_scale = 1.0 / scale;
 
     // Step 5: Quantize selected entries
     let mut entries = Vec::with_capacity(selected_indices.len());
-    for &index in &selected_indices {
-        let raw = combined[index] * inv_scale;
+    for &idx in &selected_indices {
+        let raw = combined[idx] * inv_scale;
         let quantized = if raw >= 0.0 { (raw + 0.5) as i32 } else { (raw - 0.5) as i32 };
-        let quantized = quantized.maximum(-127).minimum(127) as i8;
+        let quantized = quantized.max(-127).min(127) as i8;
         entries.push(SparseEntry {
-            index: index as u32,
+            index: idx as u32,
             value: quantized,
         });
     }
@@ -154,14 +154,14 @@ pub fn compress_gradients(gradients: &[f32]) -> CompressedGradient {
         }
         // Subtract what we actually sent (dequantized)
         for entry in &entries {
-            let index = entry.index as usize;
+            let idx = entry.index as usize;
             let sent = entry.value as f32 * scale;
-            residual[index] = combined[index] - sent;
+            residual[idx] = combined[idx] - sent;
         }
     }
 
     CompressedGradient {
-        parameter_count: n as u32,
+        param_count: n as u32,
         entries,
         scale,
     }
@@ -170,11 +170,11 @@ pub fn compress_gradients(gradients: &[f32]) -> CompressedGradient {
 /// Decompress received gradient packet back to a full gradient vector.
 /// Non-transmitted entries are set to 0 (sparse representation).
 pub fn decompress_gradients(compressed: &CompressedGradient) -> Vec<f32> {
-    let mut gradients = alloc::vec![0.0f32; compressed.parameter_count as usize];
+    let mut gradients = alloc::vec![0.0f32; compressed.param_count as usize];
     for entry in &compressed.entries {
-        let index = entry.index as usize;
-        if index < gradients.len() {
-            gradients[index] = entry.value as f32 * compressed.scale;
+        let idx = entry.index as usize;
+        if idx < gradients.len() {
+            gradients[idx] = entry.value as f32 * compressed.scale;
         }
     }
     gradients
@@ -198,23 +198,23 @@ pub fn serialize_compressed(compressed: &CompressedGradient) -> Vec<u8> {
     let entry_size = 5; // u32 index + i8 value
     let total = header_size + compressed.entries.len() * entry_size;
 
-    let mut buffer = Vec::with_capacity(total);
+    let mut buf = Vec::with_capacity(total);
 
     // Header
-    buffer.extend_from_slice(MAGIC);
-    buffer.push(VERSION);
-    buffer.push(CompressionType::TopKQuant as u8);
-    buffer.extend_from_slice(&compressed.parameter_count.to_be_bytes());
-    buffer.extend_from_slice(&(compressed.entries.len() as u32).to_be_bytes());
-    buffer.extend_from_slice(&compressed.scale.to_be_bytes());
+    buf.extend_from_slice(MAGIC);
+    buf.push(VERSION);
+    buf.push(CompressionType::TopKQuant as u8);
+    buf.extend_from_slice(&compressed.param_count.to_be_bytes());
+    buf.extend_from_slice(&(compressed.entries.len() as u32).to_be_bytes());
+    buf.extend_from_slice(&compressed.scale.to_be_bytes());
 
     // Entries
     for entry in &compressed.entries {
-        buffer.extend_from_slice(&entry.index.to_be_bytes());
-        buffer.push(entry.value as u8);
+        buf.extend_from_slice(&entry.index.to_be_bytes());
+        buf.push(entry.value as u8);
     }
 
-    buffer
+    buf
 }
 
 /// Deserialize a compressed gradient from network bytes.
@@ -233,7 +233,7 @@ pub fn deserialize_compressed(data: &[u8]) -> Option<CompressedGradient> {
         return None;
     }
 
-    let parameter_count = u32::from_be_bytes([data[6], data[7], data[8], data[9]]);
+    let param_count = u32::from_be_bytes([data[6], data[7], data[8], data[9]]);
     let entry_count = u32::from_be_bytes([data[10], data[11], data[12], data[13]]);
     let scale = f32::from_be_bytes([data[14], data[15], data[16], data[17]]);
 
@@ -254,7 +254,7 @@ pub fn deserialize_compressed(data: &[u8]) -> Option<CompressedGradient> {
         let value = data[offset + 4] as i8;
 
         // Validate index is within bounds
-        if index >= parameter_count {
+        if index >= param_count {
             return None;
         }
 
@@ -263,7 +263,7 @@ pub fn deserialize_compressed(data: &[u8]) -> Option<CompressedGradient> {
     }
 
     Some(CompressedGradient {
-        parameter_count,
+        param_count,
         entries,
         scale,
     })
@@ -309,9 +309,9 @@ pub fn compute_weight_delta(current_weights: &[f32]) -> CompressedGradient {
 /// Apply a received weight delta to the current model weights
 pub fn apply_weight_delta(current_weights: &mut [f32], delta: &CompressedGradient) {
     for entry in &delta.entries {
-        let index = entry.index as usize;
-        if index < current_weights.len() {
-            current_weights[index] += entry.value as f32 * delta.scale;
+        let idx = entry.index as usize;
+        if idx < current_weights.len() {
+            current_weights[idx] += entry.value as f32 * delta.scale;
         }
     }
 }
@@ -326,40 +326,40 @@ pub fn update_sync_snapshot(weights: &[f32]) {
 /// Compress a delta vector without affecting the gradient error feedback
 fn compress_delta_vector(delta: &[f32]) -> CompressedGradient {
     let n = delta.len();
-    let k = ((n as f32 * TOPK_RATIO) as usize).maximum(MINIMUM_ENTRIES).minimum(MAXIMUM_ENTRIES).minimum(n);
+    let k = ((n as f32 * TOPK_RATIO) as usize).max(MINIMUM_ENTRIES).min(MAXIMUM_ENTRIES).min(n);
 
-    let mut absolute_values: Vec<f32> = delta.iter().map(|x| x.absolute()).collect();
+    let mut absolute_values: Vec<f32> = delta.iter().map(|x| x.abs()).collect();
     let threshold = find_kth_largest(&mut absolute_values, k);
 
     let mut selected: Vec<usize> = Vec::with_capacity(k);
-    for (i, &value) in delta.iter().enumerate() {
-        if value.absolute() >= threshold && selected.len() < MAXIMUM_ENTRIES {
+    for (i, &val) in delta.iter().enumerate() {
+        if val.abs() >= threshold && selected.len() < MAXIMUM_ENTRIES {
             selected.push(i);
         }
     }
 
     let maximum_absolute = selected.iter()
-        .map(|&i| delta[i].absolute())
-        .fold(0.0f32, f32::maximum);
+        .map(|&i| delta[i].abs())
+        .fold(0.0f32, f32::max);
 
     let scale = if maximum_absolute > 0.0 { maximum_absolute / 127.0 } else { 1.0 };
     let inv_scale = 1.0 / scale;
 
     let mut entries = Vec::with_capacity(selected.len());
-    for &index in &selected {
-        let raw = delta[index] * inv_scale;
+    for &idx in &selected {
+        let raw = delta[idx] * inv_scale;
         let quantized = if raw >= 0.0 { (raw + 0.5) as i32 } else { (raw - 0.5) as i32 };
-        let quantized = quantized.maximum(-127).minimum(127) as i8;
+        let quantized = quantized.max(-127).min(127) as i8;
         if quantized != 0 {
             entries.push(SparseEntry {
-                index: index as u32,
+                index: idx as u32,
                 value: quantized,
             });
         }
     }
 
     CompressedGradient {
-        parameter_count: n as u32,
+        param_count: n as u32,
         entries,
         scale,
     }
@@ -375,7 +375,7 @@ fn find_kth_largest(values: &mut [f32], k: usize) -> f32 {
     if values.is_empty() || k == 0 {
         return 0.0;
     }
-    let k = k.minimum(values.len());
+    let k = k.min(values.len());
 
     // Sort descending, return k-th element
     // For 4.4M params, sorting ~4.4M f32 is fast enough (< 100ms)

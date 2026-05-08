@@ -21,74 +21,74 @@ use core::ptr;
 #[derive(Debug, Clone)]
 pub struct AcpiInfo {
     
-    pub afe: u8,
+    pub revision: u8,
     
-    pub clo: String,
+    pub oem_id: String,
     
-    pub dja: Vec<madt::Xl>,
+    pub local_apics: Vec<madt::Kc>,
     
-    pub cyx: Vec<madt::Ach>,
+    pub io_apics: Vec<madt::Mh>,
     
-    pub gka: Vec<madt::Xc>,
+    pub int_overrides: Vec<madt::Kb>,
     
-    pub fne: Vec<madt::Acs>,
+    pub local_apic_nmis: Vec<madt::Mn>,
     
-    pub cap: u64,
+    pub local_apic_addr: u64,
     
     pub fadt: Option<fadt::FadtInfo>,
     
-    pub eut: Vec<mcfg::Tl>,
+    pub mcfg_regions: Vec<mcfg::Ij>,
     
-    pub hpet: Option<hpet::Wy>,
+    pub hpet: Option<hpet::Jx>,
     
-    pub aao: usize,
+    pub cpu_count: usize,
 }
 
 impl Default for AcpiInfo {
     fn default() -> Self {
         Self {
-            afe: 0,
-            clo: String::new(),
-            dja: Vec::new(),
-            cyx: Vec::new(),
-            gka: Vec::new(),
-            fne: Vec::new(),
-            cap: 0xFEE0_0000,
+            revision: 0,
+            oem_id: String::new(),
+            local_apics: Vec::new(),
+            io_apics: Vec::new(),
+            int_overrides: Vec::new(),
+            local_apic_nmis: Vec::new(),
+            local_apic_addr: 0xFEE0_0000,
             fadt: None,
-            eut: Vec::new(),
+            mcfg_regions: Vec::new(),
             hpet: None,
-            aao: 1,
+            cpu_count: 1,
         }
     }
 }
 
-static FZ_: Once<AcpiInfo> = Once::new();
+static GO_: Once<AcpiInfo> = Once::new();
 
 
-pub fn ani() -> Option<&'static AcpiInfo> {
-    FZ_.get()
+pub fn rk() -> Option<&'static AcpiInfo> {
+    GO_.get()
 }
 
 
-pub fn oeh(gre: u64) -> bool {
-    if gre == 0 {
+pub fn igo(ddr: u64) -> bool {
+    if ddr == 0 {
         crate::serial_println!("[ACPI] No RSDP provided");
         return false;
     }
     
-    let hp = crate::memory::lr();
+    let bz = crate::memory::hhdm_offset();
     
     
-    crate::serial_println!("[ACPI] RSDP phys={:#x}, mapping...", gre);
+    crate::serial_println!("[ACPI] RSDP phys={:#x}, mapping...", ddr);
     
     
-    match crate::memory::bki(gre, 4096) {
-        Ok(cbo) => {
-            crate::serial_println!("[ACPI] RSDP mapped at virt={:#x}", cbo);
-            lee(cbo, hp)
+    match crate::memory::yv(ddr, 4096) {
+        Ok(aoz) => {
+            crate::serial_println!("[ACPI] RSDP mapped at virt={:#x}", aoz);
+            gco(aoz, bz)
         }
-        Err(aa) => {
-            crate::serial_println!("[ACPI] Failed to map RSDP: {}", aa);
+        Err(e) => {
+            crate::serial_println!("[ACPI] Failed to map RSDP: {}", e);
             false
         }
     }
@@ -96,194 +96,194 @@ pub fn oeh(gre: u64) -> bool {
 
 
 
-pub fn ttm(dll: u64) -> bool {
-    if dll == 0 {
+pub fn mpf(biz: u64) -> bool {
+    if biz == 0 {
         crate::serial_println!("[ACPI] No RSDP provided");
         return false;
     }
     
-    let hp = crate::memory::lr();
+    let bz = crate::memory::hhdm_offset();
     
     
     
-    let cbo = if dll >= hp {
+    let aoz = if biz >= bz {
         
-        dll
+        biz
     } else {
         
-        dll + hp
+        biz + bz
     };
     
-    let hyd = cbo - hp;
-    crate::serial_println!("[ACPI] RSDP at phys={:#x} virt={:#x}", hyd, cbo);
+    let dyc = aoz - bz;
+    crate::serial_println!("[ACPI] RSDP at phys={:#x} virt={:#x}", dyc, aoz);
     
-    lee(cbo, hp)
+    gco(aoz, bz)
 }
 
 
-pub fn init(hyd: u64) -> bool {
-    if hyd == 0 {
+pub fn init(dyc: u64) -> bool {
+    if dyc == 0 {
         crate::serial_println!("[ACPI] No RSDP provided");
         return false;
     }
     
-    let hp = crate::memory::lr();
-    let cbo = hyd + hp;
+    let bz = crate::memory::hhdm_offset();
+    let aoz = dyc + bz;
     
-    crate::serial_println!("[ACPI] RSDP at phys={:#x} virt={:#x}", hyd, cbo);
+    crate::serial_println!("[ACPI] RSDP at phys={:#x} virt={:#x}", dyc, aoz);
     
-    lee(cbo, hp)
+    gco(aoz, bz)
 }
 
 
-fn lee(cbo: u64, hp: u64) -> bool {
+fn gco(aoz: u64, bz: u64) -> bool {
     crate::serial_println!("[ACPI] About to read RSDP...");
     
     
-    let iuu = unsafe { core::ptr::read_volatile(cbo as *const u8) };
-    crate::serial_println!("[ACPI] First byte: {:#x}", iuu);
+    let ems = unsafe { core::ptr::read_volatile(aoz as *const u8) };
+    crate::serial_println!("[ACPI] First byte: {:#x}", ems);
     
     
-    let mut iap = [0u8; 8];
-    for a in 0..8 {
-        iap[a] = unsafe { core::ptr::read_volatile((cbo as *const u8).add(a)) };
+    let mut dzl = [0u8; 8];
+    for i in 0..8 {
+        dzl[i] = unsafe { core::ptr::read_volatile((aoz as *const u8).add(i)) };
     }
     
     
-    let qy = b"RSD PTR ";
-    let pkt = iap == *qy;
-    crate::serial_println!("[ACPI] Sig OK: {}", pkt);
+    let expected = b"RSD PTR ";
+    let jgh = dzl == *expected;
+    crate::serial_println!("[ACPI] Sig OK: {}", jgh);
     
     
-    let chl = unsafe { &*(cbo as *const tables::Cky) };
+    let asd = unsafe { &*(aoz as *const tables::Aoo) };
     
-    if !pkt {
+    if !jgh {
         crate::serial_println!("[ACPI] Invalid RSDP signature");
         return false;
     }
     
     
     let sum: u8 = unsafe {
-        let bf = core::slice::anh(cbo as *const u8, 20);
-        bf.iter().cqs(0u8, |btc, &o| btc.cn(o))
+        let bytes = core::slice::from_raw_parts(aoz as *const u8, 20);
+        bytes.iter().fold(0u8, |aku, &b| aku.wrapping_add(b))
     };
     if sum != 0 {
         crate::serial_println!("[ACPI] Invalid RSDP checksum (sum={})", sum);
         return false;
     }
     
-    let mut co = AcpiInfo::default();
-    co.afe = chl.afe;
-    co.clo = core::str::jg(&chl.clo)
+    let mut info = AcpiInfo::default();
+    info.revision = asd.revision;
+    info.oem_id = core::str::from_utf8(&asd.oem_id)
         .unwrap_or("Unknown")
-        .em()
+        .trim()
         .into();
     
-    crate::serial_println!("[ACPI] Revision: {}, OEM: {}", co.afe, co.clo);
+    crate::serial_println!("[ACPI] Revision: {}, OEM: {}", info.revision, info.oem_id);
     
     
-    let icw = if co.afe >= 2 {
-        let qat = unsafe { &*(cbo as *const tables::Cqr) };
+    let ebf = if info.revision >= 2 {
+        let jsb = unsafe { &*(aoz as *const tables::Ase) };
         
         
-        let xwq = unsafe { ptr::md(ptr::vf!(qat.go)) };
-        let ihx = unsafe { ptr::md(ptr::vf!(qat.ihx)) };
-        let dvi = unsafe { ptr::md(ptr::vf!(chl.dvi)) };
+        let pvv = unsafe { ptr::read_unaligned(ptr::addr_of!(jsb.length)) };
+        let xsdt_address = unsafe { ptr::read_unaligned(ptr::addr_of!(jsb.xsdt_address)) };
+        let rsdt_address = unsafe { ptr::read_unaligned(ptr::addr_of!(asd.rsdt_address)) };
         
         
-        let spu: u8 = unsafe {
-            let bf = core::slice::anh(cbo as *const u8, xwq as usize);
-            bf.iter().cqs(0u8, |btc, &o| btc.cn(o))
+        let lti: u8 = unsafe {
+            let bytes = core::slice::from_raw_parts(aoz as *const u8, pvv as usize);
+            bytes.iter().fold(0u8, |aku, &b| aku.wrapping_add(b))
         };
-        if spu != 0 {
+        if lti != 0 {
             crate::serial_println!("[ACPI] Invalid XSDP extended checksum, falling back to RSDT");
             
-            if let Err(aa) = crate::memory::bki(dvi as u64, 4096) {
-                crate::serial_println!("[ACPI] Failed to map RSDT: {}", aa);
+            if let Err(e) = crate::memory::yv(rsdt_address as u64, 4096) {
+                crate::serial_println!("[ACPI] Failed to map RSDT: {}", e);
                 return false;
             }
-            oul(dvi as u64 + hp)
+            itx(rsdt_address as u64 + bz)
         } else {
-            crate::serial_println!("[ACPI] Using XSDT at {:#x}", ihx);
+            crate::serial_println!("[ACPI] Using XSDT at {:#x}", xsdt_address);
             
-            if let Err(aa) = crate::memory::bki(ihx, 4096) {
-                crate::serial_println!("[ACPI] Failed to map XSDT: {}", aa);
+            if let Err(e) = crate::memory::yv(xsdt_address, 4096) {
+                crate::serial_println!("[ACPI] Failed to map XSDT: {}", e);
                 return false;
             }
-            ven(ihx + hp)
+            nrq(xsdt_address + bz)
         }
     } else {
-        let dvi = unsafe { ptr::md(ptr::vf!(chl.dvi)) };
-        crate::serial_println!("[ACPI] Using RSDT at {:#x}", dvi);
+        let rsdt_address = unsafe { ptr::read_unaligned(ptr::addr_of!(asd.rsdt_address)) };
+        crate::serial_println!("[ACPI] Using RSDT at {:#x}", rsdt_address);
         
-        if let Err(aa) = crate::memory::bki(dvi as u64, 4096) {
-            crate::serial_println!("[ACPI] Failed to map RSDT: {}", aa);
+        if let Err(e) = crate::memory::yv(rsdt_address as u64, 4096) {
+            crate::serial_println!("[ACPI] Failed to map RSDT: {}", e);
             return false;
         }
-        oul(dvi as u64 + hp)
+        itx(rsdt_address as u64 + bz)
     };
     
-    crate::serial_println!("[ACPI] Found {} tables", icw.len());
+    crate::serial_println!("[ACPI] Found {} tables", ebf.len());
     
     
-    for &cig in &icw {
+    for &asj in &ebf {
         
-        if let Err(aa) = crate::memory::bki(cig, 4096) {
-            crate::serial_println!("[ACPI] Failed to map table at {:#x}: {}", cig, aa);
+        if let Err(e) = crate::memory::yv(asj, 4096) {
+            crate::serial_println!("[ACPI] Failed to map table at {:#x}: {}", asj, e);
             continue;
         }
         
-        let ejk = cig + hp;
-        let dh = unsafe { &*(ejk as *const tables::Ei) };
+        let bwf = asj + bz;
+        let header = unsafe { &*(bwf as *const tables::Bu) };
         
-        let sig = core::str::jg(&dh.signature).unwrap_or("????");
-        let lbs = unsafe { ptr::md(ptr::vf!(dh.go)) };
+        let sig = core::str::from_utf8(&header.signature).unwrap_or("????");
+        let gai = unsafe { ptr::read_unaligned(ptr::addr_of!(header.length)) };
         
         
-        if lbs > 4096 {
-            let sqa = lbs as usize - 4096;
-            if let Err(aa) = crate::memory::bki(cig + 4096, sqa) {
-                crate::serial_println!("[ACPI] Failed to map extended table: {}", aa);
+        if gai > 4096 {
+            let ltm = gai as usize - 4096;
+            if let Err(e) = crate::memory::yv(asj + 4096, ltm) {
+                crate::serial_println!("[ACPI] Failed to map extended table: {}", e);
             }
         }
         
-        crate::serial_println!("[ACPI] Table: {} at {:#x}, len={}", sig, cig, lbs);
+        crate::serial_println!("[ACPI] Table: {} at {:#x}, len={}", sig, asj, gai);
         
-        match &dh.signature {
+        match &header.signature {
             b"APIC" => {
                 
-                if let Some((jch, uby, twh, jif, uut)) = madt::parse(ejk) {
-                    co.cap = jch;
-                    co.dja = uby;
-                    co.cyx = twh;
-                    co.gka = jif;
-                    co.fne = uut;
-                    co.aao = co.dja.len();
+                if let Some((ese, lapics, ioapics, evx, nmis)) = madt::parse(bwf) {
+                    info.local_apic_addr = ese;
+                    info.local_apics = lapics;
+                    info.io_apics = ioapics;
+                    info.int_overrides = evx;
+                    info.local_apic_nmis = nmis;
+                    info.cpu_count = info.local_apics.len();
                     crate::serial_println!("[ACPI] MADT: {} CPUs, {} I/O APICs, {} NMI entries", 
-                        co.aao, co.cyx.len(), co.fne.len());
+                        info.cpu_count, info.io_apics.len(), info.local_apic_nmis.len());
                 }
             }
             b"FACP" => {
                 
-                if let Some(kva) = fadt::parse(ejk, hp) {
+                if let Some(fadt_info) = fadt::parse(bwf, bz) {
                     crate::serial_println!("[ACPI] FADT: PM1a={:#x}, century={}", 
-                        kva.gpl, kva.nca);
-                    co.fadt = Some(kva);
+                        fadt_info.pm1a_evt_blk, fadt_info.century_reg);
+                    info.fadt = Some(fadt_info);
                 }
             }
             b"MCFG" => {
                 
-                if let Some(afx) = mcfg::parse(ejk) {
-                    crate::serial_println!("[ACPI] MCFG: {} PCIe regions", afx.len());
-                    co.eut = afx;
+                if let Some(regions) = mcfg::parse(bwf) {
+                    crate::serial_println!("[ACPI] MCFG: {} PCIe regions", regions.len());
+                    info.mcfg_regions = regions;
                 }
             }
             b"HPET" => {
                 
-                if let Some(lcs) = hpet::parse(ejk) {
+                if let Some(hpet_info) = hpet::parse(bwf) {
                     crate::serial_println!("[ACPI] HPET: base={:#x}, min_tick={}", 
-                        lcs.bps, lcs.llx);
-                    co.hpet = Some(lcs);
+                        hpet_info.base_address, hpet_info.min_tick);
+                    info.hpet = Some(hpet_info);
                 }
             }
             _ => {
@@ -292,75 +292,75 @@ fn lee(cbo: u64, hp: u64) -> bool {
         }
     }
     
-    FZ_.nbm(|| co);
+    GO_.call_once(|| info);
     
     true
 }
 
 
-fn oul(pel: u64) -> Vec<u64> {
-    let dh = unsafe { &*(pel as *const tables::Ei) };
+fn itx(rsdt_virt: u64) -> Vec<u64> {
+    let header = unsafe { &*(rsdt_virt as *const tables::Bu) };
     
     
-    if &dh.signature != b"RSDT" {
+    if &header.signature != b"RSDT" {
         crate::serial_println!("[ACPI] Invalid RSDT signature");
         return Vec::new();
     }
     
-    let fhu = pel + core::mem::size_of::<tables::Ei>() as u64;
-    let ebf = (dh.go as usize - core::mem::size_of::<tables::Ei>()) / 4;
+    let ciy = rsdt_virt + core::mem::size_of::<tables::Bu>() as u64;
+    let bsg = (header.length as usize - core::mem::size_of::<tables::Bu>()) / 4;
     
-    let mut gya = Vec::fc(ebf);
-    for a in 0..ebf {
-        let ag = unsafe { ptr::md((fhu + a as u64 * 4) as *const u32) };
-        gya.push(ag as u64);
+    let mut dhf = Vec::with_capacity(bsg);
+    for i in 0..bsg {
+        let addr = unsafe { ptr::read_unaligned((ciy + i as u64 * 4) as *const u32) };
+        dhf.push(addr as u64);
     }
     
-    gya
+    dhf
 }
 
 
-fn ven(qau: u64) -> Vec<u64> {
-    let dh = unsafe { &*(qau as *const tables::Ei) };
+fn nrq(xsdt_virt: u64) -> Vec<u64> {
+    let header = unsafe { &*(xsdt_virt as *const tables::Bu) };
     
     
-    if &dh.signature != b"XSDT" {
+    if &header.signature != b"XSDT" {
         crate::serial_println!("[ACPI] Invalid XSDT signature");
         return Vec::new();
     }
     
-    let fhu = qau + core::mem::size_of::<tables::Ei>() as u64;
-    let ebf = (dh.go as usize - core::mem::size_of::<tables::Ei>()) / 8;
+    let ciy = xsdt_virt + core::mem::size_of::<tables::Bu>() as u64;
+    let bsg = (header.length as usize - core::mem::size_of::<tables::Bu>()) / 8;
     
-    let mut gya = Vec::fc(ebf);
-    for a in 0..ebf {
-        let ag = unsafe { ptr::md((fhu + a as u64 * 8) as *const u64) };
-        gya.push(ag);
+    let mut dhf = Vec::with_capacity(bsg);
+    for i in 0..bsg {
+        let addr = unsafe { ptr::read_unaligned((ciy + i as u64 * 8) as *const u64) };
+        dhf.push(addr);
     }
     
-    gya
+    dhf
 }
 
 
-pub fn aao() -> usize {
-    FZ_.get().map(|a| a.aao).unwrap_or(1)
+pub fn cpu_count() -> usize {
+    GO_.get().map(|i| i.cpu_count).unwrap_or(1)
 }
 
 
-pub fn ljo() -> u64 {
-    FZ_.get().map(|a| a.cap).unwrap_or(0xFEE0_0000)
+pub fn ggc() -> u64 {
+    GO_.get().map(|i| i.local_apic_addr).unwrap_or(0xFEE0_0000)
 }
 
 
-pub fn ky() -> bool {
-    FZ_.get().is_some()
+pub fn is_initialized() -> bool {
+    GO_.get().is_some()
 }
 
 
-pub fn cbu() -> ! {
-    if let Some(co) = FZ_.get() {
-        if let Some(ref fadt) = co.fadt {
-            fadt::cbu(fadt);
+pub fn shutdown() -> ! {
+    if let Some(info) = GO_.get() {
+        if let Some(ref fadt) = info.fadt {
+            fadt::shutdown(fadt);
         }
     }
     
@@ -372,10 +372,10 @@ pub fn cbu() -> ! {
 }
 
 
-pub fn fvw() -> bool {
-    if let Some(co) = FZ_.get() {
-        if let Some(ref fadt) = co.fadt {
-            return fadt::wwc(fadt);
+pub fn crf() -> bool {
+    if let Some(info) = GO_.get() {
+        if let Some(ref fadt) = info.fadt {
+            return fadt::oyt(fadt);
         }
     }
     crate::serial_println!("[ACPI] No FADT available for S3 suspend");
@@ -383,7 +383,7 @@ pub fn fvw() -> bool {
 }
 
 
-pub fn jlq() -> ! {
+pub fn eya() -> ! {
     
     unsafe {
         
@@ -398,9 +398,9 @@ pub fn jlq() -> ! {
     }
     
     
-    if let Some(co) = FZ_.get() {
-        if let Some(ref fadt) = co.fadt {
-            fadt::apa(fadt);
+    if let Some(info) = GO_.get() {
+        if let Some(ref fadt) = info.fadt {
+            fadt::reset(fadt);
         }
     }
     
@@ -412,7 +412,7 @@ pub fn jlq() -> ! {
             "lidt [{}]",
             "int3",
             in(reg) &[0u64; 2],
-            options(jhe)
+            options(noreturn)
         );
     }
 }

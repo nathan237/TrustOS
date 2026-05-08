@@ -17,10 +17,10 @@
 use alloc::string::String;
 use alloc::format;
 use alloc::vec::Vec;
-use super::{Ju, AccessLevel, RiskLevel};
+use super::{Dy, AccessLevel, RiskLevel};
 
 
-const CDF_: &[(u64, u64, &str)] = &[
+const CGO_: &[(u64, u64, &str)] = &[
     (0x0800_0000, 0x0001_0000, "GIC Distributor (GICD)"),
     (0x0801_0000, 0x0001_0000, "GIC CPU Interface (GICC)"),
     (0x0900_0000, 0x0000_1000, "PL011 UART0"),
@@ -34,7 +34,7 @@ const CDF_: &[(u64, u64, &str)] = &[
     (0x4000_0000, 0xc000_0000, "RAM"),
 ];
 
-const CDE_: &[(u64, u64, &str)] = &[
+const CGN_: &[(u64, u64, &str)] = &[
     (0xFE00_0000, 0x0000_1000, "System Timer"),
     (0xFE00_3000, 0x0000_1000, "DMA Controller"),
     (0xFE00_B000, 0x0000_1000, "ARM Interrupt Controller"),
@@ -53,7 +53,7 @@ const CDE_: &[(u64, u64, &str)] = &[
     (0xFF80_0000, 0x0000_1000, "PCIe Root Complex"),
 ];
 
-const CDG_: &[(u64, u64, &str)] = &[
+const CGP_: &[(u64, u64, &str)] = &[
     (0x0100_0000, 0x0010_0000, "RPM (Resource Power Manager)"),
     (0x0600_0000, 0x0010_0000, "TCSR (Top-level CSR)"),
     (0x0780_0000, 0x0008_0000, "SMMU (System MMU)"),
@@ -69,7 +69,7 @@ const CDG_: &[(u64, u64, &str)] = &[
 ];
 
 
-const CEY_: &[(u32, &str)] = &[
+const CIH_: &[(u32, &str)] = &[
     (0x0011_0004, "PL011 UART (ARM PrimeCell)"),
     (0x0011_0044, "PL011 UART (variant)"),
     (0x0034_1011, "PL031 RTC (ARM PrimeCell)"),
@@ -83,18 +83,18 @@ const CEY_: &[(u32, &str)] = &[
 
 
 #[derive(Debug, Clone)]
-pub struct Bmi {
-    pub ar: u64,
-    pub cqo: u32,
-    pub vz: AccessLevel,
-    pub izh: Option<&'static str>,
-    pub lyp: u32,
-    pub juq: u32,
+pub struct Abj {
+    pub base: u64,
+    pub first_word: u32,
+    pub access: AccessLevel,
+    pub identified_as: Option<&'static str>,
+    pub register_count: u32,
+    pub unique_values: u32,
 }
 
 
 
-fn pfd(ag: u64) -> Option<u32> {
+fn jcg(addr: u64) -> Option<u32> {
     
     
     
@@ -103,65 +103,65 @@ fn pfd(ag: u64) -> Option<u32> {
     {
         
         
-        if ag == 0 || ag > 0xFFFF_FFFF_FFFF {
+        if addr == 0 || addr > 0xFFFF_FFFF_FFFF {
             return None;
         }
         
         unsafe {
-            let ptr = ag as *const u32;
+            let ptr = addr as *const u32;
             
-            let ap = core::ptr::read_volatile(ptr);
-            Some(ap)
+            let val = core::ptr::read_volatile(ptr);
+            Some(val)
         }
     }
     
     #[cfg(target_arch = "x86_64")]
     {
-        if ag == 0 || ag > 0xFFFF_FFFF_FFFF {
+        if addr == 0 || addr > 0xFFFF_FFFF_FFFF {
             return None;
         }
         unsafe {
-            let ptr = ag as *const u32;
-            let ap = core::ptr::read_volatile(ptr);
-            Some(ap)
+            let ptr = addr as *const u32;
+            let val = core::ptr::read_volatile(ptr);
+            Some(val)
         }
     }
     
     #[cfg(target_arch = "riscv64")]
     {
-        if ag == 0 {
+        if addr == 0 {
             return None;
         }
         unsafe {
-            let ptr = ag as *const u32;
-            let ap = core::ptr::read_volatile(ptr);
-            Some(ap)
+            let ptr = addr as *const u32;
+            let val = core::ptr::read_volatile(ptr);
+            Some(val)
         }
     }
     
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64", target_arch = "riscv64")))]
     {
-        let _ = ag;
+        let _ = addr;
         None
     }
 }
 
 
-fn trp(cqo: u32, ag: u64) -> Option<&'static str> {
+fn mns(first_word: u32, addr: u64) -> Option<&'static str> {
     
-    for &(sj, j) in CEY_ {
-        if cqo == sj {
-            return Some(j);
+    for &(magic, name) in CIH_ {
+        if first_word == magic {
+            return Some(name);
         }
     }
     
     
-    for &(ar, aw, j) in CDF_.iter()
-        .rh(CDE_.iter())
-        .rh(CDG_.iter())
+    for &(base, size, name) in CGO_.iter()
+        .chain(CGN_.iter())
+        .chain(CGP_.iter())
     {
-        if ag >= ar && ag < ar + aw {
-            return Some(j);
+        if addr >= base && addr < base + size {
+            return Some(name);
         }
     }
     
@@ -169,111 +169,111 @@ fn trp(cqo: u32, ag: u64) -> Option<&'static str> {
 }
 
 
-fn vma(ar: u64) -> Bmi {
-    let mut result = Bmi {
-        ar,
-        cqo: 0,
-        vz: AccessLevel::Ez,
-        izh: None,
-        lyp: 0,
-        juq: 0,
+fn nxu(base: u64) -> Abj {
+    let mut result = Abj {
+        base,
+        first_word: 0,
+        access: AccessLevel::Dead,
+        identified_as: None,
+        register_count: 0,
+        unique_values: 0,
     };
     
     
-    match pfd(ar) {
+    match jcg(base) {
         None => {
-            result.vz = AccessLevel::In;
+            result.access = AccessLevel::Faulted;
             return result;
         }
-        Some(ap) => {
-            result.cqo = ap;
+        Some(val) => {
+            result.first_word = val;
         }
     }
     
     
-    if result.cqo == 0xFFFF_FFFF || result.cqo == 0xDEAD_DEAD {
-        result.vz = AccessLevel::Ez;
+    if result.first_word == 0xFFFF_FFFF || result.first_word == 0xDEAD_DEAD {
+        result.access = AccessLevel::Dead;
         return result;
     }
     
     
-    let mut alv = Vec::new();
-    let bkr = [0x00, 0x04, 0x08, 0x0C, 0x10, 0x14, 0x18, 0x1C,
+    let mut values = Vec::new();
+    let agv = [0x00, 0x04, 0x08, 0x0C, 0x10, 0x14, 0x18, 0x1C,
                    0x20, 0x30, 0x40, 0x80, 0xFC];
-    let mut kvg = 0u32;
+    let mut fwg = 0u32;
     
-    for &l in &bkr {
-        if ar + l >= ar + 0x1000 { break; }
-        match pfd(ar + l) {
-            Some(ap) => {
-                if !alv.contains(&ap) {
-                    alv.push(ap);
+    for &offset in &agv {
+        if base + offset >= base + 0x1000 { break; }
+        match jcg(base + offset) {
+            Some(val) => {
+                if !values.contains(&val) {
+                    values.push(val);
                 }
-                result.lyp += 1;
+                result.register_count += 1;
             }
             None => {
-                kvg += 1;
+                fwg += 1;
             }
         }
     }
     
-    result.juq = alv.len() as u32;
+    result.unique_values = values.len() as u32;
     
     
-    if kvg == bkr.len() as u32 {
-        result.vz = AccessLevel::In;
-    } else if kvg > 0 {
-        result.vz = AccessLevel::Adq;
-    } else if result.juq <= 1 && result.cqo == 0 {
-        result.vz = AccessLevel::Ez;
+    if fwg == agv.len() as u32 {
+        result.access = AccessLevel::Faulted;
+    } else if fwg > 0 {
+        result.access = AccessLevel::Partial;
+    } else if result.unique_values <= 1 && result.first_word == 0 {
+        result.access = AccessLevel::Dead;
     } else {
         
-        result.vz = AccessLevel::Bz; 
+        result.access = AccessLevel::ReadOnly; 
     }
     
     
-    result.izh = trp(result.cqo, ar);
+    result.identified_as = mns(result.first_word, base);
     
     result
 }
 
 
-pub fn pge(mom: u64, pxs: u64) -> String {
-    let mut an = String::new();
-    an.t("\x01C== TrustProbe MMIO Scanner ==\x01W\n\n");
+pub fn jdg(hax: u64, user_size: u64) -> String {
+    let mut output = String::new();
+    output.push_str("\x01C== TrustProbe MMIO Scanner ==\x01W\n\n");
     
     
-    let wdw: Vec<(u64, u64, &str)> = if mom > 0 && pxs > 0 {
-        alloc::vec![(mom, pxs, "User-specified range")]
+    let ole: Vec<(u64, u64, &str)> = if hax > 0 && user_size > 0 {
+        alloc::vec![(hax, user_size, "User-specified range")]
     } else {
         
         #[cfg(target_arch = "aarch64")]
         {
-            let mut bnz: Vec<(u64, u64, &str)> = Vec::new();
+            let mut aef: Vec<(u64, u64, &str)> = Vec::new();
             
-            bnz.push((0x0800_0000, 0x0002_0000, "GIC Region"));
-            bnz.push((0x0900_0000, 0x0000_2000, "UART Region"));
-            bnz.push((0x0A00_0000, 0x0000_4000, "VirtIO Region"));
-            bnz.push((0xFE00_0000, 0x0200_0000, "BCM2711 Peripherals"));
-            bnz
+            aef.push((0x0800_0000, 0x0002_0000, "GIC Region"));
+            aef.push((0x0900_0000, 0x0000_2000, "UART Region"));
+            aef.push((0x0A00_0000, 0x0000_4000, "VirtIO Region"));
+            aef.push((0xFE00_0000, 0x0200_0000, "BCM2711 Peripherals"));
+            aef
         }
         #[cfg(target_arch = "x86_64")]
         {
-            let mut bnz: Vec<(u64, u64, &str)> = Vec::new();
+            let mut aef: Vec<(u64, u64, &str)> = Vec::new();
             
-            bnz.push((0xFEC0_0000, 0x0000_1000, "I/O APIC"));
-            bnz.push((0xFEE0_0000, 0x0000_1000, "Local APIC"));
-            bnz.push((0xFED0_0000, 0x0000_1000, "HPET"));
-            bnz.push((0xE000_0000, 0x1000_0000, "PCIe ECAM"));
-            bnz
+            aef.push((0xFEC0_0000, 0x0000_1000, "I/O APIC"));
+            aef.push((0xFEE0_0000, 0x0000_1000, "Local APIC"));
+            aef.push((0xFED0_0000, 0x0000_1000, "HPET"));
+            aef.push((0xE000_0000, 0x1000_0000, "PCIe ECAM"));
+            aef
         }
         #[cfg(target_arch = "riscv64")]
         {
-            let mut bnz: Vec<(u64, u64, &str)> = Vec::new();
-            bnz.push((0x0C00_0000, 0x0040_0000, "PLIC"));
-            bnz.push((0x1000_0000, 0x0000_1000, "UART0"));
-            bnz.push((0x1000_1000, 0x0000_1000, "VirtIO Region"));
-            bnz
+            let mut aef: Vec<(u64, u64, &str)> = Vec::new();
+            aef.push((0x0C00_0000, 0x0040_0000, "PLIC"));
+            aef.push((0x1000_0000, 0x0000_1000, "UART0"));
+            aef.push((0x1000_1000, 0x0000_1000, "VirtIO Region"));
+            aef
         }
         #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64", target_arch = "riscv64")))]
         {
@@ -281,85 +281,85 @@ pub fn pge(mom: u64, pxs: u64) -> String {
         }
     };
     
-    let mut jtu = 0u64;
-    let mut ljc = 0u64;
-    let mut iub = 0u64;
-    let mut hd: Vec<Ju> = Vec::new();
+    let mut fdh = 0u64;
+    let mut gfu = 0u64;
+    let mut emh = 0u64;
+    let mut results: Vec<Dy> = Vec::new();
     
-    for &(ar, aw, lyn) in &wdw {
-        an.t(&format!("\x01YScanning: {} (0x{:X} - 0x{:X})\x01W\n", 
-            lyn, ar, ar + aw));
+    for &(base, size, region_name) in &ole {
+        output.push_str(&format!("\x01YScanning: {} (0x{:X} - 0x{:X})\x01W\n", 
+            region_name, base, base + size));
         
-        let bcd = aw / 0x1000;
-        let gu = if bcd > 256 { bcd / 256 } else { 1 };
+        let acg = size / 0x1000;
+        let step = if acg > 256 { acg / 256 } else { 1 };
         
-        let mut pbj = 0u64;
-        let mut a = 0u64;
-        while a < bcd {
-            let dkk = ar + a * 0x1000;
-            jtu += 1;
+        let mut izi = 0u64;
+        let mut i = 0u64;
+        while i < acg {
+            let page_addr = base + i * 0x1000;
+            fdh += 1;
             
-            let awl = vma(dkk);
+            let za = nxu(page_addr);
             
-            match awl.vz {
-                AccessLevel::Ez => {}
-                AccessLevel::In => {
-                    iub += 1;
+            match za.access {
+                AccessLevel::Dead => {}
+                AccessLevel::Faulted => {
+                    emh += 1;
                 }
                 _ => {
-                    ljc += 1;
-                    pbj += 1;
+                    gfu += 1;
+                    izi += 1;
                     
-                    let bhz = if awl.vz == AccessLevel::Adq {
-                        RiskLevel::Bc
-                    } else if awl.izh.is_some() {
-                        RiskLevel::V
+                    let risk = if za.access == AccessLevel::Partial {
+                        RiskLevel::Medium
+                    } else if za.identified_as.is_some() {
+                        RiskLevel::Info
                     } else {
-                        RiskLevel::Eg 
+                        RiskLevel::Low 
                     };
                     
-                    let j = awl.izh.unwrap_or("Unknown Peripheral");
+                    let name = za.identified_as.unwrap_or("Unknown Peripheral");
                     
-                    hd.push(Ju {
-                        gb: "MMIO",
-                        j: String::from(j),
-                        re: dkk,
-                        aw: 0x1000,
-                        vz: awl.vz,
-                        yw: format!("first=0x{:08X} regs={} unique={}", 
-                            awl.cqo, awl.lyp, awl.juq),
-                        bhz,
+                    results.push(Dy {
+                        category: "MMIO",
+                        name: String::from(name),
+                        address: page_addr,
+                        size: 0x1000,
+                        access: za.access,
+                        details: format!("first=0x{:08X} regs={} unique={}", 
+                            za.first_word, za.register_count, za.unique_values),
+                        risk,
                     });
                 }
             }
             
-            a += gu;
+            i += step;
         }
         
-        an.t(&format!("  Live: {} pages | Faulted: {} | Dead: {}\n",
-            pbj, iub, jtu - ljc - iub));
+        output.push_str(&format!("  Live: {} pages | Faulted: {} | Dead: {}\n",
+            izi, emh, fdh - gfu - emh));
     }
     
     
-    an.t(&format!("\n\x01C== Results: {} peripherals found ==\x01W\n\n", hd.len()));
-    an.t(&format!("{:<14} {:<12} {:<8} {:<30} {}\n",
+    output.push_str(&format!("\n\x01C== Results: {} peripherals found ==\x01W\n\n", results.len()));
+    output.push_str(&format!("{:<14} {:<12} {:<8} {:<30} {}\n",
         "ADDRESS", "ACCESS", "RISK", "PERIPHERAL", "DETAILS"));
-    an.t(&format!("{}\n", "-".afd(90)));
+    output.push_str(&format!("{}\n", "-".repeat(90)));
     
-    for m in &hd {
-        an.t(&format!("{}0x{:010X}\x01W  {:<12} {}{:<8}\x01W {:<30} {}\n",
-            m.vz.cpk(),
-            m.re,
-            m.vz.as_str(),
-            m.bhz.cpk(),
-            m.bhz.as_str(),
-            m.j,
-            m.yw,
+    for r in &results {
+        output.push_str(&format!("{}0x{:010X}\x01W  {:<12} {}{:<8}\x01W {:<30} {}\n",
+            r.access.color_code(),
+            r.address,
+            r.access.as_str(),
+            r.risk.color_code(),
+            r.risk.as_str(),
+            r.name,
+            r.details,
         ));
     }
     
-    an.t(&format!("\n\x01YTotal: {} pages scanned | {} live | {} faulted\x01W\n",
-        jtu, ljc, iub));
+    output.push_str(&format!("\n\x01YTotal: {} pages scanned | {} live | {} faulted\x01W\n",
+        fdh, gfu, emh));
     
-    an
+    output
 }

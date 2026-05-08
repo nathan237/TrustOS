@@ -10,191 +10,192 @@ use alloc::boxed::Box;
 #[derive(Debug)]
 pub struct ShmPool {
     
-    pub ad: u32,
+    pub id: u32,
     
     
-    pub f: Vec<u8>,
+    pub data: Vec<u8>,
     
     
-    pub aw: usize,
+    pub size: usize,
     
     
-    pub imi: Vec<Amq>,
+    pub buffers: Vec<Qh>,
 }
 
 impl ShmPool {
-    pub fn new(ad: u32, aw: usize) -> Self {
+    pub fn new(id: u32, size: usize) -> Self {
         Self {
-            ad,
-            f: alloc::vec![0u8; aw],
-            aw,
-            imi: Vec::new(),
+            id,
+            data: alloc::vec![0u8; size],
+            size,
+            buffers: Vec::new(),
         }
     }
     
     
-    pub fn cmg(&mut self, brm: usize) {
-        if brm > self.aw {
-            self.f.cmg(brm, 0);
-            self.aw = brm;
+    pub fn resize(&mut self, akf: usize) {
+        if akf > self.size {
+            self.data.resize(akf, 0);
+            self.size = akf;
         }
     }
     
     
-    pub fn ngz(
+    pub fn create_buffer(
         &mut self,
-        gbs: u32,
-        l: usize,
-        z: u32,
-        ac: u32,
-        oq: u32,
+        cum: u32,
+        offset: usize,
+        width: u32,
+        height: u32,
+        stride: u32,
         format: u32,
-    ) -> Result<&Amq, &'static str> {
+    ) -> Result<&Qh, &'static str> {
         
-        let kfi = (oq * ac) as usize;
-        if l + kfi > self.aw {
+        let fkb = (stride * height) as usize;
+        if offset + fkb > self.size {
             return Err("Buffer extends beyond pool");
         }
         
-        let bi = Amq {
-            ad: gbs,
-            luu: self.ad,
-            l,
-            z,
-            ac,
-            oq,
+        let buffer = Qh {
+            id: cum,
+            pool_id: self.id,
+            offset,
+            width,
+            height,
+            stride,
             format,
-            imk: false,
+            ehi: false,
         };
         
-        self.imi.push(bi);
-        Ok(self.imi.qv().unwrap())
+        self.buffers.push(buffer);
+        
+        Ok(self.buffers.last().unwrap_or_else(|| unreachable!()))
     }
     
     
-    pub fn ysq(&self, gbs: u32) -> Option<Vec<u32>> {
-        let bi = self.imi.iter().du(|o| o.ad == gbs)?;
+    pub fn qhf(&self, cum: u32) -> Option<Vec<u32>> {
+        let buffer = self.buffers.iter().find(|b| b.id == cum)?;
         
-        let mut hz = Vec::fc((bi.z * bi.ac) as usize);
+        let mut pixels = Vec::with_capacity((buffer.width * buffer.height) as usize);
         
-        for c in 0..bi.ac {
-            for b in 0..bi.z {
-                let aok = bi.l + (c * bi.oq + b * 4) as usize;
-                if aok + 4 <= self.f.len() {
-                    let o = self.f[aok];
-                    let at = self.f[aok + 1];
-                    let m = self.f[aok + 2];
-                    let q = self.f[aok + 3];
-                    hz.push(u32::oa([q, m, at, o]));
+        for y in 0..buffer.height {
+            for x in 0..buffer.width {
+                let uo = buffer.offset + (y * buffer.stride + x * 4) as usize;
+                if uo + 4 <= self.data.len() {
+                    let b = self.data[uo];
+                    let g = self.data[uo + 1];
+                    let r = self.data[uo + 2];
+                    let a = self.data[uo + 3];
+                    pixels.push(u32::from_be_bytes([a, r, g, b]));
                 } else {
-                    hz.push(0xFF000000); 
+                    pixels.push(0xFF000000); 
                 }
             }
         }
         
-        Some(hz)
+        Some(pixels)
     }
     
     
-    pub fn write(&mut self, l: usize, f: &[u8]) {
-        let ci = (l + f.len()).v(self.aw);
-        let len = ci - l;
-        self.f[l..ci].dg(&f[..len]);
+    pub fn write(&mut self, offset: usize, data: &[u8]) {
+        let end = (offset + data.len()).min(self.size);
+        let len = end - offset;
+        self.data[offset..end].copy_from_slice(&data[..len]);
     }
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Amq {
+pub struct Qh {
     
-    pub ad: u32,
-    
-    
-    pub luu: u32,
+    pub id: u32,
     
     
-    pub l: usize,
+    pub pool_id: u32,
     
     
-    pub z: u32,
+    pub offset: usize,
     
     
-    pub ac: u32,
+    pub width: u32,
     
     
-    pub oq: u32,
+    pub height: u32,
+    
+    
+    pub stride: u32,
     
     
     pub format: u32,
     
     
-    pub imk: bool,
+    pub ehi: bool,
 }
 
-impl Amq {
+impl Qh {
     
-    pub fn aw(&self) -> usize {
-        (self.oq * self.ac) as usize
+    pub fn size(&self) -> usize {
+        (self.stride * self.height) as usize
     }
 }
 
 
-pub struct Bss {
-    gpo: Vec<ShmPool>,
-    lol: u32,
-    loj: u32,
+pub struct Aev {
+    pools: Vec<ShmPool>,
+    next_pool_id: u32,
+    next_buffer_id: u32,
 }
 
-impl Bss {
+impl Aev {
     pub fn new() -> Self {
         Self {
-            gpo: Vec::new(),
-            lol: 1,
-            loj: 1,
+            pools: Vec::new(),
+            next_pool_id: 1,
+            next_buffer_id: 1,
         }
     }
     
-    pub fn yko(&mut self, aw: usize) -> u32 {
-        let ad = self.lol;
-        self.lol += 1;
-        self.gpo.push(ShmPool::new(ad, aw));
-        ad
+    pub fn qbv(&mut self, size: usize) -> u32 {
+        let id = self.next_pool_id;
+        self.next_pool_id += 1;
+        self.pools.push(ShmPool::new(id, size));
+        id
     }
     
-    pub fn ylt(&mut self, ad: u32) {
-        self.gpo.ajm(|ai| ai.ad != ad);
+    pub fn qcs(&mut self, id: u32) {
+        self.pools.retain(|aa| aa.id != id);
     }
     
-    pub fn ytm(&self, ad: u32) -> Option<&ShmPool> {
-        self.gpo.iter().du(|ai| ai.ad == ad)
+    pub fn qic(&self, id: u32) -> Option<&ShmPool> {
+        self.pools.iter().find(|aa| aa.id == id)
     }
     
-    pub fn ytn(&mut self, ad: u32) -> Option<&mut ShmPool> {
-        self.gpo.el().du(|ai| ai.ad == ad)
+    pub fn qie(&mut self, id: u32) -> Option<&mut ShmPool> {
+        self.pools.iter_mut().find(|aa| aa.id == id)
     }
     
-    pub fn ngz(
+    pub fn create_buffer(
         &mut self,
-        luu: u32,
-        l: usize,
-        z: u32,
-        ac: u32,
-        oq: u32,
+        pool_id: u32,
+        offset: usize,
+        width: u32,
+        height: u32,
+        stride: u32,
         format: u32,
     ) -> Result<u32, &'static str> {
-        let gbs = self.loj;
-        self.loj += 1;
+        let cum = self.next_buffer_id;
+        self.next_buffer_id += 1;
         
-        let lut = self.gpo.el()
-            .du(|ai| ai.ad == luu)
+        let gnr = self.pools.iter_mut()
+            .find(|aa| aa.id == pool_id)
             .ok_or("Pool not found")?;
         
-        lut.ngz(gbs, l, z, ac, oq, format)?;
-        Ok(gbs)
+        gnr.create_buffer(cum, offset, width, height, stride, format)?;
+        Ok(cum)
     }
 }
 
-impl Default for Bss {
+impl Default for Aev {
     fn default() -> Self {
         Self::new()
     }

@@ -18,13 +18,15 @@ pub static WAITING_KERNEL_TID: AtomicU64 = AtomicU64::new(0);
 pub fn init() {}
 
 pub unsafe fn jump_to_ring3(_entry_point: u64, _user_stack: u64) -> ! {
-    panic!("jump_to_ring3 not implemented for this architecture");
+    crate::serial_println!("[STUB] jump_to_ring3 not implemented for this architecture");
+    loop { core::hint::spin_loop(); }
 }
 
 pub unsafe fn jump_to_ring3_with_args(
     _entry_point: u64, _user_stack: u64, _arg1: u64, _arg2: u64,
 ) -> ! {
-    panic!("jump_to_ring3_with_args not implemented for this architecture");
+    crate::serial_println!("[STUB] jump_to_ring3_with_args not implemented for this architecture");
+    loop { core::hint::spin_loop(); }
 }
 
 pub fn init_syscall_stack() {}
@@ -34,7 +36,8 @@ pub unsafe fn exec_ring3_process(_entry_point: u64, _user_stack: u64) -> i32 {
 }
 
 pub unsafe fn return_from_ring3(_exit_code: i32) -> ! {
-    panic!("return_from_ring3 not implemented for this architecture");
+    crate::serial_println!("[STUB] return_from_ring3 not implemented for this architecture");
+    loop { core::hint::spin_loop(); }
 }
 
 pub fn is_process_active() -> bool { false }

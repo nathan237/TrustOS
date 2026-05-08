@@ -32,10 +32,10 @@ use spin::Mutex;
 
 
 
-const Iv: &[u8; 4] = b"JRPC";
-const DJ_: usize = 13;
-const AZW_: usize = 32 * 1024 * 1024; 
-const AAQ_: u32 = 30000;
+const Dp: &[u8; 4] = b"JRPC";
+const DR_: usize = 13;
+const BBY_: usize = 32 * 1024 * 1024; 
+const ACD_: u32 = 30000;
 
 
 
@@ -46,69 +46,69 @@ const AAQ_: u32 = 30000;
 #[repr(u8)]
 pub enum Command {
     
-    Aww = 0,
+    Ping = 0,
 
     
     
-    Asy = 1,
+    GetWeights = 1,
 
     
     
-    Axf = 2,
+    PushWeights = 2,
 
     
     
-    Axe = 3,
+    PushGradients = 3,
 
     
     
-    Aue = 4,
+    Inference = 4,
 
     
     
-    Bhx = 5,
+    GetStatus = 5,
 
     
     
-    Bao = 6,
+    VoteRequest = 6,
 
     
     
-    Auu = 7,
+    LeaderHeartbeat = 7,
 
     
     
-    Azz = 8,
+    TrainData = 8,
 
     
     
-    Bhy = 9,
+    GetTrainingSteps = 9,
 
     
     
-    Azs = 10,
+    TaskExecute = 10,
 
     
     
     
-    Asz = 11,
+    GetWeightsChunk = 11,
 }
 
 impl Command {
-    fn kxf(o: u8) -> Option<Self> {
-        match o {
-            0 => Some(Command::Aww),
-            1 => Some(Command::Asy),
-            2 => Some(Command::Axf),
-            3 => Some(Command::Axe),
-            4 => Some(Command::Aue),
-            5 => Some(Command::Bhx),
-            6 => Some(Command::Bao),
-            7 => Some(Command::Auu),
-            8 => Some(Command::Azz),
-            9 => Some(Command::Bhy),
-            10 => Some(Command::Azs),
-            11 => Some(Command::Asz),
+    fn fxt(b: u8) -> Option<Self> {
+        match b {
+            0 => Some(Command::Ping),
+            1 => Some(Command::GetWeights),
+            2 => Some(Command::PushWeights),
+            3 => Some(Command::PushGradients),
+            4 => Some(Command::Inference),
+            5 => Some(Command::GetStatus),
+            6 => Some(Command::VoteRequest),
+            7 => Some(Command::LeaderHeartbeat),
+            8 => Some(Command::TrainData),
+            9 => Some(Command::GetTrainingSteps),
+            10 => Some(Command::TaskExecute),
+            11 => Some(Command::GetWeightsChunk),
             _ => None,
         }
     }
@@ -119,8 +119,8 @@ impl Command {
 #[repr(u8)]
 pub enum Status {
     Ok = 0,
-    Q = 1,
-    Rq = 2,
+    Error = 1,
+    Busy = 2,
 }
 
 
@@ -128,71 +128,71 @@ pub enum Status {
 
 
 
-static CZ_: AtomicBool = AtomicBool::new(false);
+static DG_: AtomicBool = AtomicBool::new(false);
 
 
-static CHU_: AtomicU32 = AtomicU32::new(1);
+static CLD_: AtomicU32 = AtomicU32::new(1);
 
 
-static ANR_: AtomicU64 = AtomicU64::new(0);
+static APV_: AtomicU64 = AtomicU64::new(0);
 
 
-static ANQ_: AtomicU64 = AtomicU64::new(0);
-
-
-
+static APU_: AtomicU64 = AtomicU64::new(0);
 
 
 
-fn qtz(ctv: u32, cmd: Command, ew: &[u8]) -> Vec<u8> {
-    let mut mt = Vec::fc(DJ_ + ew.len());
-    mt.bk(Iv);
-    mt.bk(&ctv.ft());
-    mt.push(cmd as u8);
-    mt.bk(&(ew.len() as u32).ft());
-    mt.bk(ew);
-    mt
+
+
+
+fn kfs(azh: u32, cmd: Command, payload: &[u8]) -> Vec<u8> {
+    let mut fj = Vec::with_capacity(DR_ + payload.len());
+    fj.extend_from_slice(Dp);
+    fj.extend_from_slice(&azh.to_be_bytes());
+    fj.push(cmd as u8);
+    fj.extend_from_slice(&(payload.len() as u32).to_be_bytes());
+    fj.extend_from_slice(payload);
+    fj
 }
 
 
-fn naq(ctv: u32, status: Status, ew: &[u8]) -> Vec<u8> {
-    let mut mt = Vec::fc(DJ_ + ew.len());
-    mt.bk(Iv);
-    mt.bk(&ctv.ft());
-    mt.push(status as u8);
-    mt.bk(&(ew.len() as u32).ft());
-    mt.bk(ew);
-    mt
+fn hjc(azh: u32, status: Status, payload: &[u8]) -> Vec<u8> {
+    let mut fj = Vec::with_capacity(DR_ + payload.len());
+    fj.extend_from_slice(Dp);
+    fj.extend_from_slice(&azh.to_be_bytes());
+    fj.push(status as u8);
+    fj.extend_from_slice(&(payload.len() as u32).to_be_bytes());
+    fj.extend_from_slice(payload);
+    fj
 }
 
 
-fn qua(ctv: u32, status: Status, bvx: u32) -> Vec<u8> {
-    let mut mt = Vec::fc(DJ_);
-    mt.bk(Iv);
-    mt.bk(&ctv.ft());
-    mt.push(status as u8);
-    mt.bk(&bvx.ft());
-    mt
+fn kft(azh: u32, status: Status, payload_len: u32) -> Vec<u8> {
+    let mut fj = Vec::with_capacity(DR_);
+    fj.extend_from_slice(Dp);
+    fj.extend_from_slice(&azh.to_be_bytes());
+    fj.push(status as u8);
+    fj.extend_from_slice(&payload_len.to_be_bytes());
+    fj
 }
 
 
 
-fn fqg(f: &[u8]) -> Option<(u32, u8, u32)> {
-    if f.len() < DJ_ {
+fn cnu(data: &[u8]) -> Option<(u32, u8, u32)> {
+    if data.len() < DR_ {
         return None;
     }
-    if &f[0..4] != Iv {
+    if &data[0..4] != Dp {
         return None;
     }
-    let ctv = u32::oa([f[4], f[5], f[6], f[7]]);
-    let cmd = f[8];
-    let bvx = u32::oa([f[9], f[10], f[11], f[12]]);
+    let azh = u32::from_be_bytes([data[4], data[5], data[6], data[7]]);
+    let cmd = data[8];
+    let payload_len = u32::from_be_bytes([data[9], data[10], data[11], data[12]]);
 
-    if bvx as usize > AZW_ {
+    if payload_len as usize > BBY_ {
         return None;
     }
 
-    Some((ctv, cmd, bvx))
+    Some((azh, cmd, payload_len))
 }
 
 
@@ -201,61 +201,61 @@ fn fqg(f: &[u8]) -> Option<(u32, u8, u32)> {
 
 
 
-pub fn bto(kv: [u8; 4], rz: u16, cmd: Command, ew: &[u8]) -> Result<(Status, Vec<u8>), &'static str> {
-    let ctv = CHU_.fetch_add(1, Ordering::SeqCst);
+pub fn alb(dest_ip: [u8; 4], dest_port: u16, cmd: Command, payload: &[u8]) -> Result<(Status, Vec<u8>), &'static str> {
+    let azh = CLD_.fetch_add(1, Ordering::SeqCst);
 
     
-    let ey = crate::netstack::tcp::cue(kv, rz)?;
+    let src_port = crate::netstack::tcp::azp(dest_ip, dest_port)?;
 
-    if !crate::netstack::tcp::dnd(kv, rz, ey, AAQ_) {
+    if !crate::netstack::tcp::bjy(dest_ip, dest_port, src_port, ACD_) {
         return Err("RPC connect timeout");
     }
     
-    let request = qtz(ctv, cmd, ew);
-    crate::netstack::tcp::fuf(kv, rz, ey, &request)?;
+    let request = kfs(azh, cmd, payload);
+    crate::netstack::tcp::cqj(dest_ip, dest_port, src_port, &request)?;
 
     
-    let mut gqx = Vec::new();
-    let ay = crate::time::lc();
-    let sg = AAQ_ as u64 * 4; 
+    let mut ddn = Vec::new();
+    let start = crate::time::uptime_ms();
+    let timeout_ms = ACD_ as u64 * 4; 
     loop {
         crate::netstack::poll();
 
         
-        while let Some(f) = crate::netstack::tcp::cme(kv, rz, ey) {
-            gqx.bk(&f);
+        while let Some(data) = crate::netstack::tcp::aus(dest_ip, dest_port, src_port) {
+            ddn.extend_from_slice(&data);
         }
 
         
-        if gqx.len() >= DJ_ {
-            if let Some((_, _, hvh)) = fqg(&gqx) {
-                let es = DJ_ + hvh as usize;
-                if gqx.len() >= es {
+        if ddn.len() >= DR_ {
+            if let Some((_, _, plen)) = cnu(&ddn) {
+                let av = DR_ + plen as usize;
+                if ddn.len() >= av {
                     
-                    let status = match gqx[8] {
+                    let status = match ddn[8] {
                         0 => Status::Ok,
-                        2 => Status::Rq,
-                        _ => Status::Q,
+                        2 => Status::Busy,
+                        _ => Status::Error,
                     };
-                    let vya = gqx[DJ_..es].ip();
+                    let ogk = ddn[DR_..av].to_vec();
 
                     
-                    let _ = crate::netstack::tcp::bwx(kv, rz, ey);
-                    ANQ_.fetch_add(1, Ordering::SeqCst);
+                    let _ = crate::netstack::tcp::ams(dest_ip, dest_port, src_port);
+                    APU_.fetch_add(1, Ordering::SeqCst);
 
-                    return Ok((status, vya));
+                    return Ok((status, ogk));
                 }
             }
         }
 
         
-        if crate::time::lc().nj(ay) > sg {
-            let _ = crate::netstack::tcp::bwx(kv, rz, ey);
+        if crate::time::uptime_ms().wrapping_sub(start) > timeout_ms {
+            let _ = crate::netstack::tcp::ams(dest_ip, dest_port, src_port);
             return Err("RPC response timeout");
         }
 
         
-        for _ in 0..200 { core::hint::hc(); }
+        for _ in 0..200 { core::hint::spin_loop(); }
     }
 }
 
@@ -264,25 +264,25 @@ pub fn bto(kv: [u8; 4], rz: u16, cmd: Command, ew: &[u8]) -> Result<(Status, Vec
 
 
 
-pub fn ovs(kv: [u8; 4], rz: u16) -> Result<bool, &'static str> {
-    let (status, _) = bto(kv, rz, Command::Aww, &[])?;
+pub fn iux(dest_ip: [u8; 4], dest_port: u16) -> Result<bool, &'static str> {
+    let (status, _) = alb(dest_ip, dest_port, Command::Ping, &[])?;
     Ok(status == Status::Ok)
 }
 
 
 
-pub fn kyz(kv: [u8; 4], rz: u16) -> Result<Vec<u8>, &'static str> {
-    let (status, ew) = bto(kv, rz, Command::Asy, &[])?;
+pub fn fyy(dest_ip: [u8; 4], dest_port: u16) -> Result<Vec<u8>, &'static str> {
+    let (status, payload) = alb(dest_ip, dest_port, Command::GetWeights, &[])?;
     if status == Status::Ok {
-        Ok(ew)
+        Ok(payload)
     } else {
         Err("Peer returned error for GetWeights")
     }
 }
 
 
-pub fn oym(kv: [u8; 4], rz: u16, mqk: &[u8]) -> Result<(), &'static str> {
-    let (status, _) = bto(kv, rz, Command::Axf, mqk)?;
+pub fn ixc(dest_ip: [u8; 4], dest_port: u16, hcg: &[u8]) -> Result<(), &'static str> {
+    let (status, _) = alb(dest_ip, dest_port, Command::PushWeights, hcg)?;
     if status == Status::Ok {
         Ok(())
     } else {
@@ -292,13 +292,13 @@ pub fn oym(kv: [u8; 4], rz: u16, mqk: &[u8]) -> Result<(), &'static str> {
 
 
 
-pub fn tfd(kv: [u8; 4], rz: u16, l: u32, aiw: u32) -> Result<Vec<u8>, &'static str> {
-    let mut ew = Vec::fc(8);
-    ew.bk(&l.ft());
-    ew.bk(&aiw.ft());
-    let (status, f) = bto(kv, rz, Command::Asz, &ew)?;
+pub fn mec(dest_ip: [u8; 4], dest_port: u16, offset: u32, rs: u32) -> Result<Vec<u8>, &'static str> {
+    let mut payload = Vec::with_capacity(8);
+    payload.extend_from_slice(&offset.to_be_bytes());
+    payload.extend_from_slice(&rs.to_be_bytes());
+    let (status, data) = alb(dest_ip, dest_port, Command::GetWeightsChunk, &payload)?;
     if status == Status::Ok {
-        Ok(f)
+        Ok(data)
     } else {
         Err("Peer returned error for GetWeightsChunk")
     }
@@ -306,16 +306,16 @@ pub fn tfd(kv: [u8; 4], rz: u16, l: u32, aiw: u32) -> Result<Vec<u8>, &'static s
 
 
 
-pub fn yuj(kv: [u8; 4], rz: u16, aay: u32, aiw: u32) -> Result<Vec<u8>, &'static str> {
-    let mut result = Vec::fc(aay as usize);
-    let mut l: u32 = 0;
-    while l < aay {
-        let ia = aay - l;
-        let xgj = aiw.v(ia);
-        let jj = tfd(kv, rz, l, xgj)?;
-        result.bk(&jj);
-        l += jj.len() as u32;
-        if jj.is_empty() {
+pub fn qiz(dest_ip: [u8; 4], dest_port: u16, total_size: u32, rs: u32) -> Result<Vec<u8>, &'static str> {
+    let mut result = Vec::with_capacity(total_size as usize);
+    let mut offset: u32 = 0;
+    while offset < total_size {
+        let ck = total_size - offset;
+        let piv = rs.min(ck);
+        let df = mec(dest_ip, dest_port, offset, piv)?;
+        result.extend_from_slice(&df);
+        offset += df.len() as u32;
+        if df.is_empty() {
             break; 
         }
     }
@@ -323,8 +323,8 @@ pub fn yuj(kv: [u8; 4], rz: u16, aay: u32, aiw: u32) -> Result<Vec<u8>, &'static
 }
 
 
-pub fn voi(kv: [u8; 4], rz: u16, ixe: &[u8]) -> Result<(), &'static str> {
-    let (status, _) = bto(kv, rz, Command::Axe, ixe)?;
+pub fn nzr(dest_ip: [u8; 4], dest_port: u16, grad_bytes: &[u8]) -> Result<(), &'static str> {
+    let (status, _) = alb(dest_ip, dest_port, Command::PushGradients, grad_bytes)?;
     if status == Status::Ok {
         Ok(())
     } else {
@@ -333,20 +333,20 @@ pub fn voi(kv: [u8; 4], rz: u16, ixe: &[u8]) -> Result<(), &'static str> {
 }
 
 
-pub fn vut(kv: [u8; 4], rz: u16, aau: &str) -> Result<String, &'static str> {
-    let (status, ew) = bto(kv, rz, Command::Aue, aau.as_bytes())?;
+pub fn oev(dest_ip: [u8; 4], dest_port: u16, nh: &str) -> Result<String, &'static str> {
+    let (status, payload) = alb(dest_ip, dest_port, Command::Inference, nh.as_bytes())?;
     if status == Status::Ok {
-        Ok(String::azw(&ew).bkc())
+        Ok(String::from_utf8_lossy(&payload).into_owned())
     } else {
         Err("Remote inference failed")
     }
 }
 
 
-pub fn zjf(kv: [u8; 4], rz: u16, text: &str) -> Result<f32, &'static str> {
-    let (status, ew) = bto(kv, rz, Command::Azz, text.as_bytes())?;
-    if status == Status::Ok && ew.len() == 4 {
-        Ok(f32::oa([ew[0], ew[1], ew[2], ew[3]]))
+pub fn qtp(dest_ip: [u8; 4], dest_port: u16, text: &str) -> Result<f32, &'static str> {
+    let (status, payload) = alb(dest_ip, dest_port, Command::TrainData, text.as_bytes())?;
+    if status == Status::Ok && payload.len() == 4 {
+        Ok(f32::from_be_bytes([payload[0], payload[1], payload[2], payload[3]]))
     } else {
         Err("Remote train failed")
     }
@@ -357,259 +357,259 @@ pub fn zjf(kv: [u8; 4], rz: u16, text: &str) -> Result<f32, &'static str> {
 
 
 
-pub fn wtc() {
-    if CZ_.load(Ordering::SeqCst) {
+pub fn owj() {
+    if DG_.load(Ordering::SeqCst) {
         return;
     }
 
-    let port = super::mesh::GV_;
-    crate::netstack::tcp::jdt(port, 8);
-    CZ_.store(true, Ordering::SeqCst);
+    let port = super::mesh::HM_;
+    crate::netstack::tcp::etd(port, 8);
+    DG_.store(true, Ordering::SeqCst);
     crate::serial_println!("[RPC] Server started on port {}", port);
 }
 
 
-pub fn wup() {
-    if !CZ_.load(Ordering::SeqCst) {
+pub fn oxo() {
+    if !DG_.load(Ordering::SeqCst) {
         return;
     }
 
-    crate::netstack::tcp::mhr(super::mesh::GV_);
-    CZ_.store(false, Ordering::SeqCst);
+    crate::netstack::tcp::gwj(super::mesh::HM_);
+    DG_.store(false, Ordering::SeqCst);
     crate::serial_println!("[RPC] Server stopped");
 }
 
 
-pub fn vju() {
-    if !CZ_.load(Ordering::SeqCst) {
+pub fn nwb() {
+    if !DG_.load(Ordering::SeqCst) {
         return;
     }
 
-    let port = super::mesh::GV_;
+    let port = super::mesh::HM_;
 
     
-    if let Some((ey, ams, bci)) = crate::netstack::tcp::iir(port) {
-        tjd(ey, ams, bci);
+    if let Some((src_port, tn, remote_port)) = crate::netstack::tcp::eew(port) {
+        mhl(src_port, tn, remote_port);
     }
 }
 
 
-fn tjd(ey: u16, ams: [u8; 4], bci: u16) {
-    let mut k = Vec::new();
-    let ay = crate::time::lc();
+fn mhl(src_port: u16, tn: [u8; 4], remote_port: u16) {
+    let mut buf = Vec::new();
+    let start = crate::time::uptime_ms();
 
     
-    while let Some(f) = crate::netstack::tcp::cme(ams, bci, ey) {
-        k.bk(&f);
+    while let Some(data) = crate::netstack::tcp::aus(tn, remote_port, src_port) {
+        buf.extend_from_slice(&data);
     }
 
     loop {
         crate::netstack::poll();
 
-        while let Some(f) = crate::netstack::tcp::cme(ams, bci, ey) {
-            k.bk(&f);
+        while let Some(data) = crate::netstack::tcp::aus(tn, remote_port, src_port) {
+            buf.extend_from_slice(&data);
         }
 
         
-        if k.len() >= DJ_ {
-            if let Some((_, _, hvh)) = fqg(&k) {
-                if k.len() >= DJ_ + hvh as usize {
+        if buf.len() >= DR_ {
+            if let Some((_, _, plen)) = cnu(&buf) {
+                if buf.len() >= DR_ + plen as usize {
                     break;
                 }
             }
         }
 
-        if crate::time::lc().nj(ay) > AAQ_ as u64 {
-            let _ = crate::netstack::tcp::bwx(ams, bci, ey);
+        if crate::time::uptime_ms().wrapping_sub(start) > ACD_ as u64 {
+            let _ = crate::netstack::tcp::ams(tn, remote_port, src_port);
             return;
         }
 
-        for _ in 0..200 { core::hint::hc(); }
+        for _ in 0..200 { core::hint::spin_loop(); }
     }
 
     
-    let (ctv, rct, bvx) = match fqg(&k) {
-        Some(p) => p,
+    let (azh, cmd_byte, payload_len) = match cnu(&buf) {
+        Some(v) => v,
         None => {
-            let _ = crate::netstack::tcp::bwx(ams, bci, ey);
+            let _ = crate::netstack::tcp::ams(tn, remote_port, src_port);
             return;
         }
     };
 
-    let cmd = match Command::kxf(rct) {
-        Some(r) => r,
+    let cmd = match Command::fxt(cmd_byte) {
+        Some(c) => c,
         None => {
-            let lj = naq(ctv, Status::Q, b"Unknown command");
-            let _ = crate::netstack::tcp::fuf(ams, bci, ey, &lj);
-            let _ = crate::netstack::tcp::bwx(ams, bci, ey);
+            let eo = hjc(azh, Status::Error, b"Unknown command");
+            let _ = crate::netstack::tcp::cqj(tn, remote_port, src_port, &eo);
+            let _ = crate::netstack::tcp::ams(tn, remote_port, src_port);
             return;
         }
     };
 
-    let ew = &k[DJ_..DJ_ + bvx as usize];
+    let payload = &buf[DR_..DR_ + payload_len as usize];
 
     
-    let (status, hxq) = ryg(cmd, ew);
+    let (status, response_payload) = lfe(cmd, payload);
 
     
     
-    let xkq = DJ_ + hxq.len();
+    let pmf = DR_ + response_payload.len();
 
-    if hxq.len() <= 65536 {
+    if response_payload.len() <= 65536 {
         
-        let lj = naq(ctv, status, &hxq);
-        let _ = crate::netstack::tcp::fuf(ams, bci, ey, &lj);
+        let eo = hjc(azh, status, &response_payload);
+        let _ = crate::netstack::tcp::cqj(tn, remote_port, src_port, &eo);
     } else {
         
-        let vxy = qua(ctv, status, hxq.len() as u32);
-        let _ = crate::netstack::tcp::fuf(ams, bci, ey, &vxy);
+        let ogj = kft(azh, status, response_payload.len() as u32);
+        let _ = crate::netstack::tcp::cqj(tn, remote_port, src_port, &ogj);
         crate::netstack::poll();
-        let _ = crate::netstack::tcp::fuf(ams, bci, ey, &hxq);
+        let _ = crate::netstack::tcp::cqj(tn, remote_port, src_port, &response_payload);
     }
 
     
     
-    let sva = if xkq > 1_000_000 { 100 } else { 20 };
-    for _ in 0..sva {
+    let lxd = if pmf > 1_000_000 { 100 } else { 20 };
+    for _ in 0..lxd {
         crate::netstack::poll();
-        for _ in 0..10_000 { core::hint::hc(); }
+        for _ in 0..10_000 { core::hint::spin_loop(); }
     }
 
-    let _ = crate::netstack::tcp::bwx(ams, bci, ey);
-    ANR_.fetch_add(1, Ordering::SeqCst);
+    let _ = crate::netstack::tcp::ams(tn, remote_port, src_port);
+    APV_.fetch_add(1, Ordering::SeqCst);
 }
 
 
-fn ryg(cmd: Command, ew: &[u8]) -> (Status, Vec<u8>) {
+fn lfe(cmd: Command, payload: &[u8]) -> (Status, Vec<u8>) {
     match cmd {
-        Command::Aww => {
+        Command::Ping => {
             (Status::Ok, Vec::new())
         }
 
-        Command::Asy => {
-            if !super::uc() {
-                return (Status::Q, b"Brain not ready".ip());
+        Command::GetWeights => {
+            if !super::is_ready() {
+                return (Status::Error, b"Brain not ready".to_vec());
             }
-            let model = super::Ci.lock();
+            let model = super::Ay.lock();
             match model.as_ref() {
-                Some(ef) => {
-                    let bf = ef.pih();
+                Some(m) => {
+                    let bytes = m.serialize_to_bytes();
                     drop(model);
-                    (Status::Ok, bf)
+                    (Status::Ok, bytes)
                 }
-                None => (Status::Q, b"No model".ip()),
+                None => (Status::Error, b"No model".to_vec()),
             }
         }
 
-        Command::Axf => {
-            if let Err(_) = super::guardian::emj(super::guardian::ProtectedOp::Bml) {
-                return (Status::Q, b"Guardian denied: PushWeights".ip());
+        Command::PushWeights => {
+            if let Err(_) = super::guardian::bxo(super::guardian::ProtectedOp::ModelReplace) {
+                return (Status::Error, b"Guardian denied: PushWeights".to_vec());
             }
-            if !super::uc() {
-                return (Status::Q, b"Brain not ready".ip());
+            if !super::is_ready() {
+                return (Status::Error, b"Brain not ready".to_vec());
             }
-            let aue = kfu(ew);
-            match super::model::TransformerWeights::eos(&aue) {
-                Some(hst) => {
-                    *super::Ci.lock() = Some(hst);
+            let xn = fkj(payload);
+            match super::model::TransformerWeights::byt(&xn) {
+                Some(new_weights) => {
+                    *super::Ay.lock() = Some(new_weights);
                     crate::serial_println!("[RPC] Model weights replaced from remote");
                     (Status::Ok, Vec::new())
                 }
-                None => (Status::Q, b"Invalid weights data".ip()),
+                None => (Status::Error, b"Invalid weights data".to_vec()),
             }
         }
 
-        Command::Axe => {
-            if let Err(_) = super::guardian::emj(super::guardian::ProtectedOp::Asf) {
-                return (Status::Q, b"Guardian denied: PushGradients".ip());
+        Command::PushGradients => {
+            if let Err(_) = super::guardian::bxo(super::guardian::ProtectedOp::FederatedSync) {
+                return (Status::Error, b"Guardian denied: PushGradients".to_vec());
             }
             
-            if !super::uc() {
-                return (Status::Q, b"Brain not ready".ip());
+            if !super::is_ready() {
+                return (Status::Error, b"Brain not ready".to_vec());
             }
-            super::federated::pan(ew);
+            super::federated::iyq(payload);
             (Status::Ok, Vec::new())
         }
 
-        Command::Aue => {
-            if !super::uc() {
-                return (Status::Q, b"Brain not ready".ip());
+        Command::Inference => {
+            if !super::is_ready() {
+                return (Status::Error, b"Brain not ready".to_vec());
             }
-            let aau = core::str::jg(ew).unwrap_or("");
-            let result = super::cks(aau, 64);
-            (Status::Ok, result.cfq())
+            let nh = core::str::from_utf8(payload).unwrap_or("");
+            let result = super::generate(nh, 64);
+            (Status::Ok, result.into_bytes())
         }
 
-        Command::Bhx => {
+        Command::GetStatus => {
             let status = format!(
                 "ready={} steps={} role={:?} peers={}",
-                super::uc(),
-                super::BW_.load(Ordering::SeqCst),
-                super::mesh::htw(),
-                super::mesh::cti()
+                super::is_ready(),
+                super::BY_.load(Ordering::SeqCst),
+                super::mesh::dwa(),
+                super::mesh::ayz()
             );
-            (Status::Ok, status.cfq())
+            (Status::Ok, status.into_bytes())
         }
 
-        Command::Bao => {
-            let result = super::consensus::tlq(ew);
+        Command::VoteRequest => {
+            let result = super::consensus::miu(payload);
             (Status::Ok, result)
         }
 
-        Command::Auu => {
-            let result = super::consensus::tkg(ew);
+        Command::LeaderHeartbeat => {
+            let result = super::consensus::mhz(payload);
             (Status::Ok, result)
         }
 
-        Command::Azz => {
-            if let Err(_) = super::guardian::emj(super::guardian::ProtectedOp::Zf) {
-                return (Status::Q, b"Guardian denied: TrainData".ip());
+        Command::TrainData => {
+            if let Err(_) = super::guardian::bxo(super::guardian::ProtectedOp::Train) {
+                return (Status::Error, b"Guardian denied: TrainData".to_vec());
             }
-            if !super::uc() {
-                return (Status::Q, b"Brain not ready".ip());
+            if !super::is_ready() {
+                return (Status::Error, b"Brain not ready".to_vec());
             }
-            let text = core::str::jg(ew).unwrap_or("");
+            let text = core::str::from_utf8(payload).unwrap_or("");
             if text.is_empty() {
-                return (Status::Q, b"Empty training data".ip());
+                return (Status::Error, b"Empty training data".to_vec());
             }
-            let vl = super::ekd(text, 0.001);
-            (Status::Ok, vl.ft().ip())
+            let ka = super::bwo(text, 0.001);
+            (Status::Ok, ka.to_be_bytes().to_vec())
         }
 
-        Command::Bhy => {
-            let au = super::BW_.load(Ordering::SeqCst);
-            (Status::Ok, au.ft().ip())
+        Command::GetTrainingSteps => {
+            let steps = super::BY_.load(Ordering::SeqCst);
+            (Status::Ok, steps.to_be_bytes().to_vec())
         }
 
-        Command::Azs => {
-            super::task::tlg(ew)
+        Command::TaskExecute => {
+            super::task::mir(payload)
         }
 
-        Command::Asz => {
-            if !super::uc() {
-                return (Status::Q, b"Brain not ready".ip());
+        Command::GetWeightsChunk => {
+            if !super::is_ready() {
+                return (Status::Error, b"Brain not ready".to_vec());
             }
             
-            if ew.len() < 8 {
-                return (Status::Q, b"Invalid chunk request".ip());
+            if payload.len() < 8 {
+                return (Status::Error, b"Invalid chunk request".to_vec());
             }
-            let l = u32::oa([ew[0], ew[1], ew[2], ew[3]]) as usize;
-            let go = u32::oa([ew[4], ew[5], ew[6], ew[7]]) as usize;
+            let offset = u32::from_be_bytes([payload[0], payload[1], payload[2], payload[3]]) as usize;
+            let length = u32::from_be_bytes([payload[4], payload[5], payload[6], payload[7]]) as usize;
 
-            let model = super::Ci.lock();
+            let model = super::Ay.lock();
             match model.as_ref() {
-                Some(ef) => {
-                    let xv = ef.vm() * 4;
-                    if l >= xv {
-                        return (Status::Q, b"Offset out of range".ip());
+                Some(m) => {
+                    let total_bytes = m.param_count() * 4;
+                    if offset >= total_bytes {
+                        return (Status::Error, b"Offset out of range".to_vec());
                     }
-                    let ci = (l + go).v(xv);
-                    let auh = ef.pih();
+                    let end = (offset + length).min(total_bytes);
+                    let xo = m.serialize_to_bytes();
                     drop(model);
-                    let jj = auh[l..ci].ip();
-                    (Status::Ok, jj)
+                    let df = xo[offset..end].to_vec();
+                    (Status::Ok, df)
                 }
-                None => (Status::Q, b"No model".ip()),
+                None => (Status::Error, b"No model".to_vec()),
             }
         }
     }
@@ -620,30 +620,30 @@ fn ryg(cmd: Command, ew: &[u8]) -> (Status, Vec<u8>) {
 
 
 
-pub fn nvc(aue: &[f32]) -> Vec<u8> {
-    let mut bf = Vec::fc(aue.len() * 4);
-    for bb in aue {
-        bf.bk(&bb.ft());
+pub fn hzf(xn: &[f32]) -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(xn.len() * 4);
+    for f in xn {
+        bytes.extend_from_slice(&f.to_be_bytes());
     }
-    bf
+    bytes
 }
 
 
-pub fn kfu(bf: &[u8]) -> Vec<f32> {
-    let az = bf.len() / 4;
-    let mut aue = Vec::fc(az);
-    for a in 0..az {
-        let o = [bf[a*4], bf[a*4+1], bf[a*4+2], bf[a*4+3]];
-        aue.push(f32::oa(o));
+pub fn fkj(bytes: &[u8]) -> Vec<f32> {
+    let count = bytes.len() / 4;
+    let mut xn = Vec::with_capacity(count);
+    for i in 0..count {
+        let b = [bytes[i*4], bytes[i*4+1], bytes[i*4+2], bytes[i*4+3]];
+        xn.push(f32::from_be_bytes(b));
     }
-    aue
+    xn
 }
 
 
-pub fn asx() -> (u64, u64, bool) {
+pub fn get_stats() -> (u64, u64, bool) {
     (
-        ANR_.load(Ordering::SeqCst),
-        ANQ_.load(Ordering::SeqCst),
-        CZ_.load(Ordering::SeqCst),
+        APV_.load(Ordering::SeqCst),
+        APU_.load(Ordering::SeqCst),
+        DG_.load(Ordering::SeqCst),
     )
 }

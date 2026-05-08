@@ -8,9 +8,9 @@ use alloc::format;
 use alloc::string::String;
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
-use super::track::{Note, hse};
+use super::track::{Note, duq};
 use super::keyboard_midi;
-use super::{Mf, FR_, Hi, AE_};
+use super::{Fb, GG_, Df, AF_};
 
 
 
@@ -18,145 +18,145 @@ use super::{Mf, FR_, Hi, AE_};
 
 
 #[derive(Debug, Clone, Copy)]
-struct Bbl {
+struct We {
     
-    jb: u8,
+    pitch: u8,
     
-    qm: u8,
+    velocity: u8,
     
-    gtc: u32,
+    start_ms: u32,
 }
 
 
 pub struct RecordSession {
     
-    pub ts: Vec<Note>,
+    pub notes: Vec<Note>,
     
-    elv: Vec<Bbl>,
+    active_notes: Vec<We>,
     
-    poe: u32,
+    start_time_ms: u32,
     
-    kz: u32,
+    bpm: u32,
     
-    pub hwh: u32,
+    pub quantize_ticks: u32,
     
-    pub mhl: u32,
+    pub start_tick_offset: u32,
 }
 
 impl RecordSession {
     
-    pub fn new(kz: u32, vb: u32) -> Self {
+    pub fn new(bpm: u32, start_tick: u32) -> Self {
         Self {
-            ts: Vec::new(),
-            elv: Vec::new(),
-            poe: crate::time::lc() as u32,
-            kz,
-            hwh: AE_ / 4, 
-            mhl: vb,
+            notes: Vec::new(),
+            active_notes: Vec::new(),
+            start_time_ms: crate::time::uptime_ms() as u32,
+            bpm,
+            quantize_ticks: AF_ / 4, 
+            start_tick_offset: start_tick,
         }
     }
 
     
-    pub fn dtq(&mut self, scancode: u8) {
-        if let Some(jb) = keyboard_midi::hyv(scancode) {
+    pub fn note_on(&mut self, scancode: u8) {
+        if let Some(pitch) = keyboard_midi::dyl(scancode) {
             
-            if self.elv.iter().any(|bo| bo.jb == jb) {
+            if self.active_notes.iter().any(|ae| ae.pitch == pitch) {
                 return;
             }
 
-            let oz = self.oz();
-            let qm = keyboard_midi::hlm();
+            let elapsed_ms = self.elapsed_ms();
+            let velocity = keyboard_midi::dqs();
 
-            self.elv.push(Bbl {
-                jb,
-                qm,
-                gtc: oz,
+            self.active_notes.push(We {
+                pitch,
+                velocity,
+                start_ms: elapsed_ms,
             });
 
             
-            let _ = crate::audio::owb(jb, qm, 100);
+            let _ = crate::audio::ive(pitch, velocity, 100);
         }
     }
 
     
-    pub fn djx(&mut self, scancode: u8) {
-        if let Some(jb) = keyboard_midi::hyv(scancode) {
-            let oz = self.oz();
+    pub fn note_off(&mut self, scancode: u8) {
+        if let Some(pitch) = keyboard_midi::dyl(scancode) {
+            let elapsed_ms = self.elapsed_ms();
 
             
-            if let Some(u) = self.elv.iter().qf(|bo| bo.jb == jb) {
-                let gh = self.elv.remove(u);
-                let uk = oz.ao(gh.gtc).am(10);
+            if let Some(pos) = self.active_notes.iter().position(|ae| ae.pitch == pitch) {
+                let active = self.active_notes.remove(pos);
+                let duration_ms = elapsed_ms.saturating_sub(active.start_ms).max(10);
 
                 
-                let vb = self.mhl + hse(gh.gtc, self.kz);
-                let bbn = hse(uk, self.kz).am(1);
+                let start_tick = self.start_tick_offset + duq(active.start_ms, self.bpm);
+                let duration_ticks = duq(duration_ms, self.bpm).max(1);
 
                 
-                let (vb, bbn) = if self.hwh > 0 {
-                    let fm = self.hwh;
-                    let wqg = ((vb + fm / 2) / fm) * fm;
-                    let wqe = ((bbn + fm / 2) / fm) * fm;
-                    (wqg, wqe.am(fm))
+                let (start_tick, duration_ticks) = if self.quantize_ticks > 0 {
+                    let q = self.quantize_ticks;
+                    let ouh = ((start_tick + q / 2) / q) * q;
+                    let ouf = ((duration_ticks + q / 2) / q) * q;
+                    (ouh, ouf.max(q))
                 } else {
-                    (vb, bbn)
+                    (start_tick, duration_ticks)
                 };
 
-                self.ts.push(Note::new(jb, gh.qm, vb, bbn));
+                self.notes.push(Note::new(pitch, active.velocity, start_tick, duration_ticks));
             }
         }
     }
 
     
-    fn oz(&self) -> u32 {
-        let iu = crate::time::lc() as u32;
-        iu.ao(self.poe)
+    fn elapsed_ms(&self) -> u32 {
+        let cy = crate::time::uptime_ms() as u32;
+        cy.saturating_sub(self.start_time_ms)
     }
 
     
-    pub fn bqs(&mut self) -> Vec<Note> {
-        let oz = self.oz();
+    pub fn finalize(&mut self) -> Vec<Note> {
+        let elapsed_ms = self.elapsed_ms();
 
         
-        for gh in self.elv.bbk(..) {
-            let uk = oz.ao(gh.gtc).am(10);
-            let vb = self.mhl + hse(gh.gtc, self.kz);
-            let bbn = hse(uk, self.kz).am(1);
+        for active in self.active_notes.drain(..) {
+            let duration_ms = elapsed_ms.saturating_sub(active.start_ms).max(10);
+            let start_tick = self.start_tick_offset + duq(active.start_ms, self.bpm);
+            let duration_ticks = duq(duration_ms, self.bpm).max(1);
 
-            self.ts.push(Note::new(gh.jb, gh.qm, vb, bbn));
+            self.notes.push(Note::new(active.pitch, active.velocity, start_tick, duration_ticks));
         }
 
         
-        self.ts.bxf(|bo| bo.vb);
+        self.notes.sort_by_key(|ae| ae.start_tick);
 
-        core::mem::take(&mut self.ts)
+        core::mem::take(&mut self.notes)
     }
 
     
-    pub fn uve(&self) -> usize {
-        self.ts.len()
+    pub fn nkw(&self) -> usize {
+        self.notes.len()
     }
 
     
-    pub fn gxu(&self) -> usize {
-        self.elv.len()
+    pub fn active_count(&self) -> usize {
+        self.active_notes.len()
     }
 
     
-    pub fn uk(&self) -> u32 {
-        self.oz()
+    pub fn duration_ms(&self) -> u32 {
+        self.elapsed_ms()
     }
 
     
     pub fn status(&self) -> String {
-        let ez = self.oz();
-        let tv = ez / 1000;
-        let jn = ez % 1000;
+        let bb = self.elapsed_ms();
+        let im = bb / 1000;
+        let dh = bb % 1000;
         format!("REC {:02}:{:02}.{:03} | Notes: {} | Active: {} | Quantize: {}",
-            tv / 60, tv % 60, jn,
-            self.ts.len(), self.elv.len(),
-            if self.hwh > 0 {
-                format!("1/{}", AE_ * 4 / self.hwh)
+            im / 60, im % 60, dh,
+            self.notes.len(), self.active_notes.len(),
+            if self.quantize_ticks > 0 {
+                format!("1/{}", AF_ * 4 / self.quantize_ticks)
             } else {
                 String::from("off")
             }
@@ -166,28 +166,28 @@ impl RecordSession {
 
 
 
-pub fn pas(zx: usize) -> Result<usize, &'static str> {
-    super::aqz()?;
+pub fn iyu(mp: usize) -> Result<usize, &'static str> {
+    super::ensure_init()?;
 
-    let kz = Hi.load(Ordering::Relaxed);
-    let vb = FR_.load(Ordering::Relaxed);
+    let bpm = Df.load(Ordering::Relaxed);
+    let start_tick = GG_.load(Ordering::Relaxed);
 
-    Mf.store(true, Ordering::Relaxed);
+    Fb.store(true, Ordering::Relaxed);
 
-    crate::println!("Recording on track {}...", zx);
+    crate::println!("Recording on track {}...", mp);
     crate::println!("Play notes on keyboard. Press [Esc] to stop recording.\n");
-    crate::println!("{}", keyboard_midi::nlx());
+    crate::println!("{}", keyboard_midi::hsp());
 
-    let mut he = RecordSession::new(kz, vb);
+    let mut by = RecordSession::new(bpm, start_tick);
 
     
     loop {
-        if !Mf.load(Ordering::Relaxed) {
+        if !Fb.load(Ordering::Relaxed) {
             break; 
         }
 
         
-        if let Some(scancode) = crate::keyboard::xw() {
+        if let Some(scancode) = crate::keyboard::kr() {
             
             if scancode == 0x01 {
                 break;
@@ -196,66 +196,66 @@ pub fn pas(zx: usize) -> Result<usize, &'static str> {
             
             match scancode {
                 0x3B => { 
-                    let bvq = keyboard_midi::uwx();
-                    crate::println!("Octave: {:+}", bvq);
+                    let amb = keyboard_midi::nme();
+                    crate::println!("Octave: {:+}", amb);
                     continue;
                 }
                 0x3C => { 
-                    let bvq = keyboard_midi::uwy();
-                    crate::println!("Octave: {:+}", bvq);
+                    let amb = keyboard_midi::nmf();
+                    crate::println!("Octave: {:+}", amb);
                     continue;
                 }
                 0x3D => { 
-                    let p = keyboard_midi::hlm();
-                    keyboard_midi::pjj(p.ao(10));
-                    crate::println!("Velocity: {}", keyboard_midi::hlm());
+                    let v = keyboard_midi::dqs();
+                    keyboard_midi::jfn(v.saturating_sub(10));
+                    crate::println!("Velocity: {}", keyboard_midi::dqs());
                     continue;
                 }
                 0x3E => { 
-                    let p = keyboard_midi::hlm();
-                    keyboard_midi::pjj((p + 10).v(127));
-                    crate::println!("Velocity: {}", keyboard_midi::hlm());
+                    let v = keyboard_midi::dqs();
+                    keyboard_midi::jfn((v + 10).min(127));
+                    crate::println!("Velocity: {}", keyboard_midi::dqs());
                     continue;
                 }
                 _ => {}
             }
 
-            let bep = scancode & 0x80 != 0;
-            let bs = scancode & 0x7F;
+            let adx = scancode & 0x80 != 0;
+            let key = scancode & 0x7F;
 
-            if bep {
-                he.djx(bs);
+            if adx {
+                by.note_off(key);
             } else {
-                he.dtq(bs);
+                by.note_on(key);
             }
         }
 
         
         
         for _ in 0..1000 {
-            core::hint::hc();
+            core::hint::spin_loop();
         }
     }
 
-    Mf.store(false, Ordering::Relaxed);
+    Fb.store(false, Ordering::Relaxed);
 
     
-    let ts = he.bqs();
-    let az = ts.len();
+    let notes = by.finalize();
+    let count = notes.len();
 
-    if az > 0 {
-        let mut nv = super::Fc.lock();
-        let nv = nv.as_mut().ok_or("No project")?;
-        let track = nv.af.ds(zx).ok_or("Invalid track index")?;
+    if count > 0 {
+        let mut project = super::Ce.lock();
+        let project = project.as_mut().ok_or("No project")?;
+        let track = project.tracks.get_mut(mp).ok_or("Invalid track index")?;
 
-        for jp in ts {
-            track.axn(jp);
+        for note in notes {
+            track.add_note(note);
         }
 
-        crate::println!("\nRecording complete: {} notes added to track {}", az, zx);
+        crate::println!("\nRecording complete: {} notes added to track {}", count, mp);
     } else {
         crate::println!("\nRecording complete: no notes recorded");
     }
 
-    Ok(az)
+    Ok(count)
 }

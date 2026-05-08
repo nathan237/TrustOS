@@ -521,23 +521,16 @@ pub fn fade_out_splash() {
     let (width, height) = super::get_dimensions();
     if width == 0 || height == 0 { return; }
     
-    // 8-step fade: overlay increasingly opaque black rectangles
-    for step in 0u32..8 {
-        let alpha = (step + 1) * 32; // 32, 64, 96 ... 256
+    // 2-step fast fade (minimal delay)
+    for step in 0u32..2 {
+        let alpha = (step + 1) * 128;
         let shade = if alpha >= 255 { 0xFF000000 } else {
-            // Blend: darken existing pixels
             let inv = 255 - alpha;
             let g = (0x05 * inv) / 255;
             0xFF000000 | (g << 8)
         };
         super::fill_rect(0, 0, width, height, shade);
-        
-        // Small delay between frames (~20ms per step)
-        for _ in 0..2_000_000 { core::hint::spin_loop(); }
+        for _ in 0..50_000 { core::hint::spin_loop(); }
     }
-    
-    // Final: full black
     super::fill_rect(0, 0, width, height, 0xFF000000);
-    // Brief pause before shell appears
-    for _ in 0..3_000_000 { core::hint::spin_loop(); }
 }

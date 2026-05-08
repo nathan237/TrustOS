@@ -18,58 +18,58 @@ use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 
 #[repr(C)]
-pub struct Ql {
-    pub cy: *const u32,
-    pub cs: *mut u32,
-    pub cid: usize,
-    pub epi: usize,
-    pub z: usize,
-    pub ac: usize,
+pub struct Gy {
+    pub src: *const u32,
+    pub dst: *mut u32,
+    pub src_stride: usize,
+    pub dst_stride: usize,
+    pub width: usize,
+    pub height: usize,
 }
 
-unsafe impl Send for Ql {}
-unsafe impl Sync for Ql {}
+unsafe impl Send for Gy {}
+unsafe impl Sync for Gy {}
 
 
-fn vkx(ay: usize, ci: usize, f: *mut u8) {
-    let oi = unsafe { &*(f as *const Ql) };
+fn nwx(start: usize, end: usize, data: *mut u8) {
+    let params = unsafe { &*(data as *const Gy) };
     
-    for c in ay..ci {
-        if c >= oi.ac { break; }
+    for y in start..end {
+        if y >= params.height { break; }
         
-        let cum = c * oi.cid;
-        let bgu = c * oi.epi;
+        let azu = y * params.src_stride;
+        let afd = y * params.dst_stride;
         
         unsafe {
-            let cy = oi.cy.add(cum);
-            let cs = oi.cs.add(bgu);
+            let src = params.src.add(azu);
+            let dst = params.dst.add(afd);
             
             #[cfg(target_arch = "x86_64")]
-            crate::graphics::simd::dpd(cs, cy, oi.z);
+            crate::graphics::simd::blg(dst, src, params.width);
             #[cfg(not(target_arch = "x86_64"))]
-            core::ptr::copy_nonoverlapping(cy, cs, oi.z);
+            core::ptr::copy_nonoverlapping(src, dst, params.width);
         }
     }
 }
 
 
-fn xvw(ay: usize, ci: usize, f: *mut u8) {
-    let oi = unsafe { &*(f as *const Ql) };
+fn pvh(start: usize, end: usize, data: *mut u8) {
+    let params = unsafe { &*(data as *const Gy) };
     
-    for c in ay..ci {
-        if c >= oi.ac { break; }
+    for y in start..end {
+        if y >= params.height { break; }
         
-        let cum = c * oi.cid;
-        let bgu = c * oi.epi;
+        let azu = y * params.src_stride;
+        let afd = y * params.dst_stride;
         
         unsafe {
-            let cy = oi.cy.add(cum);
-            let cs = oi.cs.add(bgu);
+            let src = params.src.add(azu);
+            let dst = params.dst.add(afd);
             
             #[cfg(target_arch = "x86_64")]
-            crate::graphics::simd::dpd(cs, cy, oi.z);
+            crate::graphics::simd::blg(dst, src, params.width);
             #[cfg(not(target_arch = "x86_64"))]
-            core::ptr::copy_nonoverlapping(cy, cs, oi.z);
+            core::ptr::copy_nonoverlapping(src, dst, params.width);
         }
     }
 }
@@ -81,205 +81,205 @@ fn xvw(ay: usize, ci: usize, f: *mut u8) {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum LayerType {
-    Apm = 0,    
-    Caz = 1,          
-    Cqm = 2,       
-    Coa = 3,       
-    Akx = 4,       
-    Ctq = 5,        
+    Background = 0,    
+    Dock = 1,          
+    Windows = 2,       
+    Taskbar = 3,       
+    Overlay = 4,       
+    Cursor = 5,        
 }
 
 
 pub struct Layer {
-    pub eem: LayerType,
-    pub b: u32,
-    pub c: u32,
-    pub z: u32,
-    pub ac: u32,
-    pub bi: Box<[u32]>,
-    pub no: AtomicBool,
-    pub iw: AtomicBool,
-    pub adh: AtomicU32,  
+    pub layer_type: LayerType,
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+    pub buffer: Box<[u32]>,
+    pub dirty: AtomicBool,
+    pub visible: AtomicBool,
+    pub opacity: AtomicU32,  
 }
 
 impl Layer {
     
-    pub fn new(eem: LayerType, b: u32, c: u32, z: u32, ac: u32) -> Self {
-        let aw = (z * ac) as usize;
+    pub fn new(layer_type: LayerType, x: u32, y: u32, width: u32, height: u32) -> Self {
+        let size = (width * height) as usize;
         Layer {
-            eem,
-            b,
-            c,
-            z,
-            ac,
-            bi: vec![0u32; aw].dsd(),
-            no: AtomicBool::new(true),
-            iw: AtomicBool::new(true),
-            adh: AtomicU32::new(255),
+            layer_type,
+            x,
+            y,
+            width,
+            height,
+            buffer: vec![0u32; size].into_boxed_slice(),
+            dirty: AtomicBool::new(true),
+            visible: AtomicBool::new(true),
+            opacity: AtomicU32::new(255),
         }
     }
     
     
-    pub fn eyk(&mut self, b: u32, c: u32) {
-        self.b = b;
-        self.c = c;
-        self.no.store(true, Ordering::SeqCst);
+    pub fn set_position(&mut self, x: u32, y: u32) {
+        self.x = x;
+        self.y = y;
+        self.dirty.store(true, Ordering::SeqCst);
     }
     
     
-    pub fn clear(&mut self, s: u32) {
-        self.bi.vi(s);
-        self.no.store(true, Ordering::SeqCst);
+    pub fn clear(&mut self, color: u32) {
+        self.buffer.fill(color);
+        self.dirty.store(true, Ordering::SeqCst);
     }
     
     
-    pub fn ah(&mut self, b: u32, c: u32, d: u32, i: u32, s: u32) {
-        let dn = b.v(self.z);
-        let dp = c.v(self.ac);
-        let hy = (b + d).v(self.z);
-        let jz = (c + i).v(self.ac);
+    pub fn fill_rect(&mut self, x: u32, y: u32, w: u32, h: u32, color: u32) {
+        let x1 = x.min(self.width);
+        let y1 = y.min(self.height);
+        let x2 = (x + w).min(self.width);
+        let y2 = (y + h).min(self.height);
         
-        for x in dp..jz {
-            let mu = (x * self.z + dn) as usize;
-            let cub = (x * self.z + hy) as usize;
-            if cub <= self.bi.len() {
-                self.bi[mu..cub].vi(s);
+        for o in y1..y2 {
+            let fk = (o * self.width + x1) as usize;
+            let azm = (o * self.width + x2) as usize;
+            if azm <= self.buffer.len() {
+                self.buffer[fk..azm].fill(color);
             }
         }
-        self.no.store(true, Ordering::SeqCst);
+        self.dirty.store(true, Ordering::SeqCst);
     }
     
     
-    pub fn lx(&mut self, b: u32, c: u32, d: u32, i: u32, s: u32) {
+    pub fn draw_rect(&mut self, x: u32, y: u32, w: u32, h: u32, color: u32) {
         
-        self.ah(b, c, d, 1, s);
-        self.ah(b, c + i.ao(1), d, 1, s);
+        self.fill_rect(x, y, w, 1, color);
+        self.fill_rect(x, y + h.saturating_sub(1), w, 1, color);
         
-        self.ah(b, c, 1, i, s);
-        self.ah(b + d.ao(1), c, 1, i, s);
+        self.fill_rect(x, y, 1, h, color);
+        self.fill_rect(x + w.saturating_sub(1), y, 1, h, color);
     }
     
     
     #[inline]
-    pub fn aht(&mut self, b: u32, c: u32, s: u32) {
-        if b < self.z && c < self.ac {
-            let w = (c * self.z + b) as usize;
-            if w < self.bi.len() {
-                self.bi[w] = s;
+    pub fn set_pixel(&mut self, x: u32, y: u32, color: u32) {
+        if x < self.width && y < self.height {
+            let idx = (y * self.width + x) as usize;
+            if idx < self.buffer.len() {
+                self.buffer[idx] = color;
             }
         }
     }
     
     
     #[inline]
-    pub fn beg(&self, b: u32, c: u32) -> u32 {
-        if b < self.z && c < self.ac {
-            let w = (c * self.z + b) as usize;
-            if w < self.bi.len() {
-                return self.bi[w];
+    pub fn get_pixel(&self, x: u32, y: u32) -> u32 {
+        if x < self.width && y < self.height {
+            let idx = (y * self.width + x) as usize;
+            if idx < self.buffer.len() {
+                return self.buffer[idx];
             }
         }
         0
     }
     
     
-    pub fn abc(&mut self, cx: u32, ae: u32, dy: u32, s: u32) {
-        let m = dy as i32;
+    pub fn fill_circle(&mut self, cx: u32, u: u32, radius: u32, color: u32) {
+        let r = radius as i32;
         let cx = cx as i32;
-        let ae = ae as i32;
+        let u = u as i32;
         
-        for bg in -m..=m {
-            for dx in -m..=m {
-                if dx * dx + bg * bg <= m * m {
-                    let y = cx + dx;
-                    let x = ae + bg;
-                    if y >= 0 && x >= 0 {
-                        self.aht(y as u32, x as u32, s);
+        for ad in -r..=r {
+            for dx in -r..=r {
+                if dx * dx + ad * ad <= r * r {
+                    let p = cx + dx;
+                    let o = u + ad;
+                    if p >= 0 && o >= 0 {
+                        self.set_pixel(p as u32, o as u32, color);
                     }
                 }
             }
         }
-        self.no.store(true, Ordering::SeqCst);
+        self.dirty.store(true, Ordering::SeqCst);
     }
     
     
-    pub fn cb(&mut self, text: &str, b: u32, c: u32, s: u32) {
-        let mut cx = b;
-        for r in text.bw() {
-            if r == ' ' {
+    pub fn draw_text(&mut self, text: &str, x: u32, y: u32, color: u32) {
+        let mut cx = x;
+        for c in text.chars() {
+            if c == ' ' {
                 cx += 8;
                 continue;
             }
             
-            let ka = crate::framebuffer::font::ada(r);
-            for (br, &fs) in ka.iter().cf() {
-                for bj in 0..8 {
-                    if fs & (0x80 >> bj) != 0 {
-                        self.aht(cx + bj, c + br as u32, s);
+            let du = crate::framebuffer::font::ol(c);
+            for (row, &bits) in du.iter().enumerate() {
+                for col in 0..8 {
+                    if bits & (0x80 >> col) != 0 {
+                        self.set_pixel(cx + col, y + row as u32, color);
                     }
                 }
             }
             cx += 8;
         }
-        self.no.store(true, Ordering::SeqCst);
+        self.dirty.store(true, Ordering::SeqCst);
     }
 }
 
 
 pub struct Compositor {
-    my: Vec<Layer>,
-    anv: u32,
-    akr: u32,
-    hdt: Box<[u32]>,
+    layers: Vec<Layer>,
+    screen_width: u32,
+    screen_height: u32,
+    composite_buffer: Box<[u32]>,
     
     
-    fjw: usize,  
-    laa: usize,
+    gpu_target_ptr: usize,  
+    gpu_target_len: usize,
 }
 
 impl Compositor {
     
-    pub fn new(z: u32, ac: u32) -> Self {
-        let aw = (z * ac) as usize;
+    pub fn new(width: u32, height: u32) -> Self {
+        let size = (width * height) as usize;
         Compositor {
-            my: Vec::new(),
-            anv: z,
-            akr: ac,
-            hdt: vec![0u32; aw].dsd(),
-            fjw: 0,
-            laa: 0,
+            layers: Vec::new(),
+            screen_width: width,
+            screen_height: height,
+            composite_buffer: vec![0u32; size].into_boxed_slice(),
+            gpu_target_ptr: 0,
+            gpu_target_len: 0,
         }
     }
     
     
-    pub fn dyc(&mut self, eem: LayerType, b: u32, c: u32, d: u32, i: u32) -> usize {
-        let fl = Layer::new(eem, b, c, d, i);
-        self.my.push(fl);
-        self.my.len() - 1
+    pub fn add_layer(&mut self, layer_type: LayerType, x: u32, y: u32, w: u32, h: u32) -> usize {
+        let bj = Layer::new(layer_type, x, y, w, h);
+        self.layers.push(bj);
+        self.layers.len() - 1
     }
     
     
-    pub fn qfj(&mut self, eem: LayerType) -> usize {
-        self.dyc(eem, 0, 0, self.anv, self.akr)
+    pub fn add_fullscreen_layer(&mut self, layer_type: LayerType) -> usize {
+        self.add_layer(layer_type, 0, 0, self.screen_width, self.screen_height)
     }
     
     
-    pub fn dhm(&mut self, index: usize) -> Option<&mut Layer> {
-        self.my.ds(index)
+    pub fn get_layer_mut(&mut self, index: usize) -> Option<&mut Layer> {
+        self.layers.get_mut(index)
     }
     
     
-    pub fn iws(&self, index: usize) -> Option<&Layer> {
-        self.my.get(index)
+    pub fn get_layer(&self, index: usize) -> Option<&Layer> {
+        self.layers.get(index)
     }
     
     
     
-    pub fn skz(&mut self) {
-        if crate::drivers::virtio_gpu::anl() {
-            if let Some((ptr, d, i)) = crate::drivers::virtio_gpu::iwv() {
-                self.fjw = ptr as usize;
-                self.laa = (d * i) as usize;
+    pub fn enable_gpu_direct(&mut self) {
+        if crate::drivers::virtio_gpu::sw() {
+            if let Some((ptr, w, h)) = crate::drivers::virtio_gpu::eod() {
+                self.gpu_target_ptr = ptr as usize;
+                self.gpu_target_len = (w * h) as usize;
                 crate::serial_println!("[COMPOSITOR] GPU direct mode: composite → GPU buffer (skip 4MB copy!)");
             }
         }
@@ -289,110 +289,119 @@ impl Compositor {
     
     
     
-    pub fn iov(&mut self) {
+    pub fn composite(&mut self) {
         
-        let (ejp, dwp) = if self.fjw != 0 {
-            (self.fjw as *mut u32, self.laa)
+        let (target_ptr, bpi) = if self.gpu_target_ptr != 0 {
+            (self.gpu_target_ptr as *mut u32, self.gpu_target_len)
         } else {
-            (self.hdt.mw(), self.hdt.len())
+            (self.composite_buffer.as_mut_ptr(), self.composite_buffer.len())
         };
 
         
-        let mut lzg: Vec<usize> = (0..self.my.len()).collect();
-        lzg.bxf(|&a| self.my[a].eem as u8);
+        let mut grd: Vec<usize> = (0..self.layers.len()).collect();
+        grd.sort_by_key(|&i| self.layers[i].layer_type as u8);
         
         
         
-        let wpi = if let Some(&iuv) = lzg.fv() {
-            let fl = &self.my[iuv];
-            fl.iw.load(Ordering::SeqCst) 
-                && fl.eem == LayerType::Apm
-                && fl.b == 0 && fl.c == 0
-                && fl.z >= self.anv
-                && fl.ac >= self.akr
-                && fl.adh.load(Ordering::SeqCst) == 255
+        let oto = if let Some(&emt) = grd.first() {
+            let bj = &self.layers[emt];
+            bj.visible.load(Ordering::SeqCst) 
+                && bj.layer_type == LayerType::Background
+                && bj.x == 0 && bj.y == 0
+                && bj.width >= self.screen_width
+                && bj.height >= self.screen_height
+                && bj.opacity.load(Ordering::SeqCst) == 255
         } else {
             false
         };
         
         
-        if !wpi {
+        if !oto {
             
             #[cfg(target_arch = "x86_64")]
             unsafe {
-                crate::graphics::simd::bed(
-                    ejp,
-                    dwp,
+                crate::graphics::simd::adq(
+                    target_ptr,
+                    bpi,
                     0xFF000000
                 );
             }
             #[cfg(not(target_arch = "x86_64"))]
             unsafe {
-                for a in 0..dwp {
-                    *ejp.add(a) = 0xFF000000;
+                for i in 0..bpi {
+                    *target_ptr.add(i) = 0xFF000000;
                 }
             }
         }
         
         
-        for &aup in &lzg {
-            let fl = &self.my[aup];
-            if !fl.iw.load(Ordering::SeqCst) {
+        for &xv in &grd {
+            let bj = &self.layers[xv];
+            if !bj.visible.load(Ordering::SeqCst) {
                 continue;
             }
             
-            let adh = fl.adh.load(Ordering::SeqCst);
+            let opacity = bj.opacity.load(Ordering::SeqCst);
             
             
             
-            if adh == 255 && fl.b == 0 && fl.z == self.anv 
-               && fl.eem == LayerType::Apm {
-                let jrf = fl.ac.v(self.akr.ao(fl.c));
+            if opacity == 255 && bj.x == 0 && bj.width == self.screen_width 
+               && bj.layer_type == LayerType::Background {
+                let fbj = bj.height.min(self.screen_height.saturating_sub(bj.y));
                 
                 
-                let oi = Ql {
-                    cy: fl.bi.fq(),
-                    cs: ejp,
-                    cid: fl.z as usize,
-                    epi: self.anv as usize,
-                    z: fl.z as usize,
-                    ac: jrf as usize,
+                let params = Gy {
+                    src: bj.buffer.as_ptr(),
+                    dst: target_ptr,
+                    src_stride: bj.width as usize,
+                    dst_stride: self.screen_width as usize,
+                    width: bj.width as usize,
+                    height: fbj as usize,
                 };
                 
-                crate::cpu::smp::daj(
-                    jrf as usize,
-                    vkx,
-                    &oi as *const Ql as *mut u8,
+                crate::cpu::smp::bcz(
+                    fbj as usize,
+                    nwx,
+                    &params as *const Gy as *mut u8,
                 );
                 continue;
             }
             
             
-            if adh == 255 {
-                for ct in 0..fl.ac {
-                    let abi = fl.c + ct;
-                    if abi >= self.akr {
+            if opacity == 255 {
+                for ly in 0..bj.height {
+                    let nn = bj.y + ly;
+                    if nn >= self.screen_height {
                         continue;
                     }
                     
+                    let zl = (ly * bj.width) as usize;
+                    let alj = (nn * self.screen_width + bj.x) as usize;
+                    let aoy = bj.width.min(self.screen_width - bj.x) as usize;
                     
-                    let big = (ct * fl.z) as usize;
-                    let dqh = (abi * self.anv + fl.b) as usize;
-                    let mau = fl.z.v(self.anv - fl.b) as usize;
-                    
-                    if fl.b < self.anv 
-                       && big + mau <= fl.bi.len()
-                       && dqh + mau <= dwp {
+                    if bj.x < self.screen_width 
+                       && zl + aoy <= bj.buffer.len()
+                       && alj + aoy <= bpi {
                         
-                        for a in 0..mau {
-                            let fvg = fl.bi[big + a];
-                            let gsx = (fvg >> 24) & 0xFF;
-                            if gsx > 200 { 
-                                unsafe { *ejp.add(dqh + a) = fvg; }
-                            } else if gsx > 0 {
-                                
-                                let krs = unsafe { *ejp.add(dqh + a) };
-                                unsafe { *ejp.add(dqh + a) = gyl(fvg, krs, gsx); }
+                        #[cfg(target_arch = "x86_64")]
+                        unsafe {
+                            crate::graphics::simd::egy(
+                                target_ptr.add(alj),
+                                bj.buffer.as_ptr().add(zl),
+                                aoy,
+                            );
+                        }
+                        #[cfg(not(target_arch = "x86_64"))]
+                        {
+                            for i in 0..aoy {
+                                let bjh = bj.buffer[zl + i];
+                                let bvv = (bjh >> 24) & 0xFF;
+                                if bvv > 200 {
+                                    unsafe { *target_ptr.add(alj + i) = bjh; }
+                                } else if bvv > 0 {
+                                    let fti = unsafe { *target_ptr.add(alj + i) };
+                                    unsafe { *target_ptr.add(alj + i) = ctm(bjh, fti, bvv); }
+                                }
                             }
                         }
                     }
@@ -401,43 +410,45 @@ impl Compositor {
             }
             
             
-            for ct in 0..fl.ac {
-                let abi = fl.c + ct;
-                if abi >= self.akr {
+            for ly in 0..bj.height {
+                let nn = bj.y + ly;
+                if nn >= self.screen_height {
                     continue;
                 }
                 
-                for mj in 0..fl.z {
-                    let xu = fl.b + mj;
-                    if xu >= self.anv {
-                        continue;
-                    }
-                    
-                    let blf = (ct * fl.z + mj) as usize;
-                    let bbm = (abi * self.anv + xu) as usize;
-                    
-                    if blf >= fl.bi.len() || bbm >= dwp {
-                        continue;
-                    }
-                    
-                    let fvg = fl.bi[blf];
-                    let gsx = ((fvg >> 24) & 0xFF) as u32;
-                    
-                    
-                    if gsx == 0 {
-                        continue;
-                    }
-                    
-                    
-                    let kwe = (gsx * adh) / 255;
-                    
-                    if kwe >= 255 {
-                        
-                        unsafe { *ejp.add(bbm) = fvg; }
-                    } else if kwe > 0 {
-                        
-                        let krs = unsafe { *ejp.add(bbm) };
-                        unsafe { *ejp.add(bbm) = gyl(fvg, krs, kwe); }
+                let zl = (ly * bj.width) as usize;
+                let aoy = bj.width.min(self.screen_width.saturating_sub(bj.x)) as usize;
+                let alj = (nn * self.screen_width + bj.x) as usize;
+                
+                if bj.x >= self.screen_width 
+                   || zl + aoy > bj.buffer.len()
+                   || alj + aoy > bpi {
+                    continue;
+                }
+                
+                
+                #[cfg(target_arch = "x86_64")]
+                unsafe {
+                    kcf(
+                        target_ptr.add(alj),
+                        bj.buffer.as_ptr().add(zl),
+                        aoy,
+                        opacity,
+                    );
+                }
+                #[cfg(not(target_arch = "x86_64"))]
+                {
+                    for i in 0..aoy {
+                        let bjh = bj.buffer[zl + i];
+                        let bvv = ((bjh >> 24) & 0xFF) as u32;
+                        if bvv == 0 { continue; }
+                        let cjo = (bvv * opacity) / 255;
+                        if cjo >= 255 {
+                            unsafe { *target_ptr.add(alj + i) = bjh; }
+                        } else if cjo > 0 {
+                            let fti = unsafe { *target_ptr.add(alj + i) };
+                            unsafe { *target_ptr.add(alj + i) = ctm(bjh, fti, cjo); }
+                        }
                     }
                 }
             }
@@ -454,45 +465,45 @@ impl Compositor {
     
     
     
-    pub fn brs(&self) {
+    pub fn present(&self) {
         
-        if self.fjw != 0 {
+        if self.gpu_target_ptr != 0 {
             
-            let _ = crate::drivers::virtio_gpu::owx();
+            let _ = crate::drivers::virtio_gpu::ivv();
             
-            self.qaf();
+            
             return;
         }
         
         
-        if crate::drivers::virtio_gpu::anl() {
-            if let Some((hlu, erl, hlt)) = crate::drivers::virtio_gpu::iwv() {
-                let aoo = (self.anv as usize).v(erl as usize);
-                let bbg = (self.akr as usize).v(hlt as usize);
+        if crate::drivers::virtio_gpu::sw() {
+            if let Some((gpu_ptr, gpu_w, gpu_h)) = crate::drivers::virtio_gpu::eod() {
+                let ut = (self.screen_width as usize).min(gpu_w as usize);
+                let abw = (self.screen_height as usize).min(gpu_h as usize);
                 
                 unsafe {
-                    let mha = self.hdt.fq();
-                    let sgy = hlu;
+                    let gvt = self.composite_buffer.as_ptr();
+                    let lln = gpu_ptr;
                     
-                    for c in 0..bbg {
-                        let cy = mha.add(c * self.anv as usize);
-                        let cs = sgy.add(c * erl as usize);
+                    for y in 0..abw {
+                        let src = gvt.add(y * self.screen_width as usize);
+                        let dst = lln.add(y * gpu_w as usize);
                         
                         #[cfg(target_arch = "x86_64")]
-                        crate::graphics::simd::dpd(cs, cy, aoo);
+                        crate::graphics::simd::blg(dst, src, ut);
                         #[cfg(not(target_arch = "x86_64"))]
-                        core::ptr::copy_nonoverlapping(cy, cs, aoo);
+                        core::ptr::copy_nonoverlapping(src, dst, ut);
                     }
                 }
                 
-                let _ = crate::drivers::virtio_gpu::owx();
+                let _ = crate::drivers::virtio_gpu::ivv();
                 return;
             }
         }
         
         
         
-        self.qaf();
+        self.writeback_mmio_nt();
     }
     
     
@@ -500,7 +511,7 @@ impl Compositor {
     
     
     
-    pub fn vkv(&self) {
+    pub fn present_only(&self) {
         
         
     }
@@ -512,94 +523,180 @@ impl Compositor {
     
     
     
-    fn qaf(&self) {
-        use crate::framebuffer::{BJ_, AB_, Z_, CA_};
+    fn writeback_mmio_nt(&self) {
+        use crate::framebuffer::{BL_, X_, W_, CB_};
         
-        let ag = BJ_.load(Ordering::SeqCst);
-        if ag.abq() { return; }
+        let addr = BL_.load(Ordering::SeqCst);
+        if addr.is_null() { return; }
         
-        let lu = AB_.load(Ordering::SeqCst) as usize;
-        let qh = Z_.load(Ordering::SeqCst) as usize;
-        let jb = CA_.load(Ordering::SeqCst) as usize;
-        let luc = jb / 4;
+        let fb_width = X_.load(Ordering::SeqCst) as usize;
+        let fb_height = W_.load(Ordering::SeqCst) as usize;
+        let pitch = CB_.load(Ordering::SeqCst) as usize;
+        let gne = pitch / 4;
         
-        let row = lu.v(self.anv as usize);
-        let nfw = qh.v(self.akr as usize);
+        let kxv = fb_width.min(self.screen_width as usize);
+        let hnp = fb_height.min(self.screen_height as usize);
         
         
-        let mha = if self.fjw != 0 {
-            self.fjw as *const u32
+        let gvt = if self.gpu_target_ptr != 0 {
+            self.gpu_target_ptr as *const u32
         } else {
-            self.hdt.fq()
+            self.composite_buffer.as_ptr()
         };
         
         
-        let oi = Ql {
-            cy: mha,
-            cs: ag as *mut u32,
-            cid: self.anv as usize,
-            epi: luc,
-            z: row,
-            ac: nfw,
+        let params = Gy {
+            src: gvt,
+            dst: addr as *mut u32,
+            src_stride: self.screen_width as usize,
+            dst_stride: gne,
+            width: kxv,
+            height: hnp,
         };
         
-        crate::cpu::smp::daj(
-            nfw,
-            xvw,
-            &oi as *const Ql as *mut u8,
+        crate::cpu::smp::bcz(
+            hnp,
+            pvh,
+            &params as *const Gy as *mut u8,
         );
     }
     
     
-    pub fn ude(&self) -> usize {
-        self.my.len()
+    pub fn layer_count(&self) -> usize {
+        self.layers.len()
     }
 }
 
 
+#[inline(always)]
+fn ctm(src: u32, dst: u32, alpha: u32) -> u32 {
+    let sg = 255 - alpha;
+    
+    let pb = (src >> 16) & 0xFF;
+    let akl = (src >> 8) & 0xFF;
+    let cv = src & 0xFF;
+    
+    let qw = (dst >> 16) & 0xFF;
+    let afb = (dst >> 8) & 0xFF;
+    let fu = dst & 0xFF;
+    
+    let r = (pb * alpha + qw * sg + 128) >> 8;
+    let g = (akl * alpha + afb * sg + 128) >> 8;
+    let b = (cv * alpha + fu * sg + 128) >> 8;
+    
+    0xFF000000 | (r << 16) | (g << 8) | b
+}
+
+
+
+#[cfg(target_arch = "x86_64")]
 #[inline]
-fn gyl(cy: u32, cs: u32, dw: u32) -> u32 {
-    let akg = 255 - dw;
+unsafe fn kcf(dst: *mut u32, src: *const u32, count: usize, opacity: u32) {
+    use core::arch::x86_64::*;
     
-    let adz = (cy >> 16) & 0xFF;
-    let bsi = (cy >> 8) & 0xFF;
-    let is = cy & 0xFF;
+    let mut nt = dst;
+    let mut ps = src;
+    let mut ck = count;
     
-    let ahh = (cs >> 16) & 0xFF;
-    let bgs = (cs >> 8) & 0xFF;
-    let ng = cs & 0xFF;
+    let zero = _mm_setzero_si128();
+    let isi = _mm_set1_epi16(opacity as i16);
+    let cpo = _mm_set1_epi16(128);
+    let ctn = _mm_set1_epi32(0xFF000000u32 as i32);
+    let imd = _mm_set1_epi16(255);
     
-    let m = (adz * dw + ahh * akg) / 255;
-    let at = (bsi * dw + bgs * akg) / 255;
-    let o = (is * dw + ng * akg) / 255;
+    while ck >= 4 {
+        let j = _mm_loadu_si128(ps as *const __m128i);
+        
+        
+        let ojt = _mm_srli_epi32(j, 24);
+        let dhl = _mm_cmpeq_epi32(ojt, zero);
+        if _mm_movemask_epi8(dhl) == 0xFFFF {
+            ps = ps.add(4);
+            nt = nt.add(4);
+            ck -= 4;
+            continue;
+        }
+        
+        let d = _mm_loadu_si128(nt as *const __m128i);
+        
+        
+        let cpw = _mm_unpacklo_epi8(j, zero);
+        let dmf = _mm_unpacklo_epi8(d, zero);
+        
+        
+        let abn = _mm_shufflelo_epi16(cpw, 0xFF);
+        let eeq = _mm_shufflehi_epi16(abn, 0xFF);
+        let hxs = _mm_srli_epi16(_mm_add_epi16(_mm_mullo_epi16(eeq, isi), cpo), 8);
+        let mrh = _mm_sub_epi16(imd, hxs);
+        
+        let gvw = _mm_mullo_epi16(cpw, hxs);
+        let ftj = _mm_mullo_epi16(dmf, mrh);
+        let eat = _mm_srli_epi16(_mm_add_epi16(_mm_add_epi16(gvw, ftj), cpo), 8);
+        
+        
+        let cpv = _mm_unpackhi_epi8(j, zero);
+        let dme = _mm_unpackhi_epi8(d, zero);
+        
+        let fy = _mm_shufflelo_epi16(cpv, 0xFF);
+        let eep = _mm_shufflehi_epi16(fy, 0xFF);
+        let hxr = _mm_srli_epi16(_mm_add_epi16(_mm_mullo_epi16(eep, isi), cpo), 8);
+        let mrg = _mm_sub_epi16(imd, hxr);
+        
+        let gvx = _mm_mullo_epi16(cpv, hxr);
+        let dnu = _mm_mullo_epi16(dme, mrg);
+        let eas = _mm_srli_epi16(_mm_add_epi16(_mm_add_epi16(gvx, dnu), cpo), 8);
+        
+        
+        let result = _mm_packus_epi16(eat, eas);
+        let result = _mm_or_si128(result, ctn);
+        _mm_storeu_si128(nt as *mut __m128i, result);
+        
+        ps = ps.add(4);
+        nt = nt.add(4);
+        ck -= 4;
+    }
     
-    0xFF000000 | (m << 16) | (at << 8) | o
+    
+    for _ in 0..ck {
+        let bjh = *ps;
+        let bvv = ((bjh >> 24) & 0xFF) as u32;
+        if bvv > 0 {
+            let cjo = (bvv * opacity + 128) >> 8;
+            if cjo >= 255 {
+                *nt = bjh;
+            } else if cjo > 0 {
+                *nt = ctm(bjh, *nt, cjo);
+            }
+        }
+        ps = ps.add(1);
+        nt = nt.add(1);
+    }
 }
 
 
 
 
-static Oz: Mutex<Option<Compositor>> = Mutex::new(None);
+static Gg: Mutex<Option<Compositor>> = Mutex::new(None);
 
 
-pub fn init(z: u32, ac: u32) {
-    let compositor = Compositor::new(z, ac);
-    *Oz.lock() = Some(compositor);
-    crate::serial_println!("[COMPOSITOR] Initialized {}x{}", z, ac);
+pub fn init(width: u32, height: u32) {
+    let compositor = Compositor::new(width, height);
+    *Gg.lock() = Some(compositor);
+    crate::serial_println!("[COMPOSITOR] Initialized {}x{}", width, height);
 }
 
 
-pub fn dne<G, Ac>(bb: G) -> Option<Ac>
+pub fn bjz<F, U>(f: F) -> Option<U>
 where
-    G: FnOnce(&mut Compositor) -> Ac,
+    F: FnOnce(&mut Compositor) -> U,
 {
-    Oz.lock().as_mut().map(bb)
+    Gg.lock().as_mut().map(f)
 }
 
 
-pub fn zwb<G, Ac>(bb: G) -> Option<Ac>
+pub fn rcn<F, U>(f: F) -> Option<U>
 where
-    G: FnOnce(&Compositor) -> Ac,
+    F: FnOnce(&Compositor) -> U,
 {
-    Oz.lock().as_ref().map(bb)
+    Gg.lock().as_ref().map(f)
 }

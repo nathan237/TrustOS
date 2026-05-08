@@ -14,27 +14,27 @@ use core::sync::atomic::{AtomicU64, AtomicU32, Ordering};
 use spin::{Mutex, RwLock};
 
 
-pub type Cs = u64;
+pub type Bd = u64;
 
 
-pub const QB_: Cs = 0;
+pub const QY_: Bd = 0;
 
 
-static VT_: AtomicU64 = AtomicU64::new(1);
+static XC_: AtomicU64 = AtomicU64::new(1);
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ThreadState {
     
-    At,
+    Ready,
     
-    Ai,
+    Running,
     
-    Hj,
+    Blocked,
     
-    Cnb,
+    Sleeping,
     
-    Ez,
+    Dead,
 }
 
 
@@ -42,10 +42,10 @@ pub enum ThreadState {
 pub struct ThreadFlags(pub u32);
 
 impl ThreadFlags {
-    pub const Cq: u32 = 0;
-    pub const Ps: u32 = 1 << 0;      
-    pub const Ava: u32 = 1 << 1;        
-    pub const Ctz: u32 = 1 << 2;    
+    pub const Bc: u32 = 0;
+    pub const Go: u32 = 1 << 0;      
+    pub const Tl: u32 = 1 << 1;        
+    pub const Atv: u32 = 1 << 2;    
 }
 
 
@@ -65,24 +65,24 @@ pub struct ThreadContext {
     pub rsp: u64,       
     
     
-    pub pc: u64,       
+    pub rip: u64,       
     
     
-    pub dxg: u64,  
-    pub fxy: u64,  
+    pub user_rsp: u64,  
+    pub user_rip: u64,  
     
     
-    pub aap: u64,        
-    pub rv: u64,        
+    pub cs: u64,        
+    pub ss: u64,        
     
     
     pub rflags: u64,    
     
     
-    pub qbx: u64,  
+    pub _fpu_pad: u64,  
     
     
-    pub szt: [u8; 512],  
+    pub fxsave_area: [u8; 512],  
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -90,9 +90,9 @@ impl Default for ThreadContext {
     fn default() -> Self {
         Self {
             rbx: 0, rbp: 0, r12: 0, r13: 0, r14: 0, r15: 0,
-            rsp: 0, pc: 0, dxg: 0, fxy: 0,
-            aap: 0, rv: 0, rflags: 0, qbx: 0,
-            szt: [0; 512],
+            rsp: 0, rip: 0, user_rsp: 0, user_rip: 0,
+            cs: 0, ss: 0, rflags: 0, _fpu_pad: 0,
+            fxsave_area: [0; 512],
         }
     }
 }
@@ -103,18 +103,18 @@ impl Default for ThreadContext {
 #[repr(C)]
 pub struct ThreadContext {
     
-    pub qah: u64,
-    pub qai: u64,
-    pub xwc: u64,
-    pub zxd: u64,
-    pub zxe: u64,
-    pub zxf: u64,
-    pub zxg: u64,
-    pub zxh: u64,
-    pub zxi: u64,
-    pub zxj: u64,
-    pub ghm: u64,   
-    pub aad: u64,   
+    pub x19: u64,
+    pub x20: u64,
+    pub x21: u64,
+    pub x22: u64,
+    pub x23: u64,
+    pub x24: u64,
+    pub x25: u64,
+    pub x26: u64,
+    pub x27: u64,
+    pub x28: u64,
+    pub fp: u64,   
+    pub lr: u64,   
     pub sp: u64,
 }
 
@@ -123,22 +123,22 @@ pub struct ThreadContext {
 #[derive(Debug, Clone, Default)]
 #[repr(C)]
 pub struct ThreadContext {
-    ybw: u64,
+    _placeholder: u64,
 }
 
 
 pub struct Thread {
     
-    pub ni: Cs,
+    pub tid: Bd,
     
     
-    pub ce: u32,
+    pub pid: u32,
     
     
-    pub j: String,
+    pub name: String,
     
     
-    pub g: ThreadState,
+    pub state: ThreadState,
     
     
     pub flags: ThreadFlags,
@@ -147,41 +147,41 @@ pub struct Thread {
     pub context: ThreadContext,
     
     
-    bhg: Option<Box<[u8; NS_]>>,
+    kernel_stack: Option<Box<[u8; OR_]>>,
     
     
-    pub etp: u64,
+    pub kernel_stack_top: u64,
     
     
-    pub jvc: u64,
+    pub user_stack_top: u64,
     
     
-    pub mi: u64,
+    pub entry_point: u64,
     
     
-    pub isv: u64,
+    pub entry_arg: u64,
     
     
-    pub nz: i32,
+    pub exit_code: i32,
     
     
-    pub cdu: u64,
+    pub cpu_time: u64,
     
     
-    pub eto: Option<Cs>,
+    pub joiner: Option<Bd>,
 }
 
 
-const NS_: usize = 256 * 1024; 
+const OR_: usize = 256 * 1024; 
 
 impl Thread {
     
-    pub fn opw(ce: u32, j: &str, bt: u64, ji: u64) -> Self {
-        let ni = VT_.fetch_add(1, Ordering::SeqCst);
+    pub fn iqa(pid: u32, name: &str, entry: u64, db: u64) -> Self {
+        let tid = XC_.fetch_add(1, Ordering::SeqCst);
         
         
-        let mut bhg = Box::new([0u8; NS_]);
-        let alt = bhg.fq() as u64 + NS_ as u64;
+        let mut kernel_stack = Box::new([0u8; OR_]);
+        let te = kernel_stack.as_ptr() as u64 + OR_ as u64;
         
         
         let mut context = ThreadContext::default();
@@ -189,69 +189,69 @@ impl Thread {
         #[cfg(target_arch = "x86_64")]
         {
             
-            context.rsp = alt - 8;
-            context.pc = bt;
+            context.rsp = te - 8;
+            context.rip = entry;
             context.rflags = 0x202; 
-            context.aap = crate::gdt::NQ_ as u64;
-            context.rv = crate::gdt::NR_ as u64;
+            context.cs = crate::gdt::KERNEL_CODE_SELECTOR as u64;
+            context.ss = crate::gdt::KERNEL_DATA_SELECTOR as u64;
             
             
             
             unsafe {
-                let vyi = (alt - 8) as *mut u64;
-                *vyi = idj as u64;
+                let ogq = (te - 8) as *mut u64;
+                *ogq = ebo as u64;
             }
             
             
-            context.r12 = bt;
-            context.r13 = ji;
-            context.pc = idj as u64;
+            context.r12 = entry;
+            context.r13 = db;
+            context.rip = ebo as u64;
         }
         
         #[cfg(target_arch = "aarch64")]
         {
-            context.sp = alt;
-            context.aad = idj as u64;
-            context.qah = bt;
-            context.qai = ji;
+            context.sp = te;
+            context.lr = ebo as u64;
+            context.x19 = entry;
+            context.x20 = db;
         }
         
         Self {
-            ni,
-            ce,
-            j: String::from(j),
-            g: ThreadState::At,
-            flags: ThreadFlags(ThreadFlags::Ps),
+            tid,
+            pid,
+            name: String::from(name),
+            state: ThreadState::Ready,
+            flags: ThreadFlags(ThreadFlags::Go),
             context,
-            bhg: Some(bhg),
-            etp: alt,
-            jvc: 0,
-            mi: bt,
-            isv: ji,
-            nz: 0,
-            cdu: 0,
-            eto: None,
+            kernel_stack: Some(kernel_stack),
+            kernel_stack_top: te,
+            user_stack_top: 0,
+            entry_point: entry,
+            entry_arg: db,
+            exit_code: 0,
+            cpu_time: 0,
+            joiner: None,
         }
     }
     
     
-    pub fn zdl(ce: u32, j: &str, bt: u64, ais: u64, oge: bool) -> Self {
-        let mut thread = if oge {
-            Self::opw(ce, j, bt, 0)
+    pub fn qpl(pid: u32, name: &str, entry: u64, user_stack: u64, ihz: bool) -> Self {
+        let mut thread = if ihz {
+            Self::iqa(pid, name, entry, 0)
         } else {
-            Self::oqg(ce, j, bt, ais, 0)
+            Self::iqj(pid, name, entry, user_stack, 0)
         };
-        thread.flags.0 |= ThreadFlags::Ava;
+        thread.flags.0 |= ThreadFlags::Tl;
         thread
     }
     
     
-    pub fn oqg(ce: u32, j: &str, bt: u64, ais: u64, ji: u64) -> Self {
-        let ni = VT_.fetch_add(1, Ordering::SeqCst);
+    pub fn iqj(pid: u32, name: &str, entry: u64, user_stack: u64, db: u64) -> Self {
+        let tid = XC_.fetch_add(1, Ordering::SeqCst);
         
         
-        let bhg = Box::new([0u8; NS_]);
-        let etp = bhg.fq() as u64 + NS_ as u64;
+        let kernel_stack = Box::new([0u8; OR_]);
+        let kernel_stack_top = kernel_stack.as_ptr() as u64 + OR_ as u64;
         
         
         let mut context = ThreadContext::default();
@@ -259,66 +259,66 @@ impl Thread {
         #[cfg(target_arch = "x86_64")]
         {
             
-            context.dxg = ais;
-            context.fxy = bt;
+            context.user_rsp = user_stack;
+            context.user_rip = entry;
             context.rflags = 0x202; 
-            context.aap = crate::gdt::AJK_ as u64;
-            context.rv = crate::gdt::AJL_ as u64;
+            context.cs = crate::gdt::ALF_ as u64;
+            context.ss = crate::gdt::ALG_ as u64;
             
             
-            context.rsp = etp;
-            context.pc = moo as u64;
+            context.rsp = kernel_stack_top;
+            context.rip = hay as u64;
             
             
-            context.r12 = bt;
-            context.r13 = ais;
-            context.r14 = ji;
+            context.r12 = entry;
+            context.r13 = user_stack;
+            context.r14 = db;
         }
         
         #[cfg(target_arch = "aarch64")]
         {
-            context.sp = etp;
-            context.aad = moo as u64;
-            context.qah = bt;
-            context.qai = ais;
-            context.xwc = ji;
+            context.sp = kernel_stack_top;
+            context.lr = hay as u64;
+            context.x19 = entry;
+            context.x20 = user_stack;
+            context.x21 = db;
         }
         
         Self {
-            ni,
-            ce,
-            j: String::from(j),
-            g: ThreadState::At,
-            flags: ThreadFlags(ThreadFlags::Cq),
+            tid,
+            pid,
+            name: String::from(name),
+            state: ThreadState::Ready,
+            flags: ThreadFlags(ThreadFlags::Bc),
             context,
-            bhg: Some(bhg),
-            etp,
-            jvc: ais,
-            mi: bt,
-            isv: ji,
-            nz: 0,
-            cdu: 0,
-            eto: None,
+            kernel_stack: Some(kernel_stack),
+            kernel_stack_top,
+            user_stack_top: user_stack,
+            entry_point: entry,
+            entry_arg: db,
+            exit_code: 0,
+            cpu_time: 0,
+            joiner: None,
         }
     }
     
     
-    pub fn oge(&self) -> bool {
-        self.flags.0 & ThreadFlags::Ps != 0
+    pub fn ihz(&self) -> bool {
+        self.flags.0 & ThreadFlags::Go != 0
     }
     
     
-    pub fn yzp(&self) -> bool {
-        self.flags.0 & ThreadFlags::Ava != 0
+    pub fn qmo(&self) -> bool {
+        self.flags.0 & ThreadFlags::Tl != 0
     }
 }
 
 
 
 #[cfg(target_arch = "x86_64")]
-#[unsafe(evb)]
-extern "C" fn idj() {
-    core::arch::evc!(
+#[unsafe(naked)]
+extern "C" fn ebo() {
+    core::arch::naked_asm!(
         
         
         "sti",
@@ -334,25 +334,25 @@ extern "C" fn idj() {
         
         "ud2",
         
-        cxn = aaw mkq,
+        exit = sym thread_exit,
     );
 }
 
 #[cfg(target_arch = "aarch64")]
-#[unsafe(evb)]
-extern "C" fn idj() {
-    core::arch::evc!(
+#[unsafe(naked)]
+extern "C" fn ebo() {
+    core::arch::naked_asm!(
         "msr daifclr, #0xf",   
         "mov x0, x20",         
         "blr x19",             
         "bl {exit}",           
         "brk #0",              
-        cxn = aaw mkq,
+        exit = sym thread_exit,
     );
 }
 
 #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-extern "C" fn idj() {
+extern "C" fn ebo() {
     
 }
 
@@ -360,47 +360,47 @@ extern "C" fn idj() {
 
 
 #[cfg(target_arch = "x86_64")]
-#[unsafe(evb)]
-extern "C" fn moo() {
-    core::arch::evc!(
+#[unsafe(naked)]
+extern "C" fn hay() {
+    core::arch::naked_asm!(
         
         "mov rdi, r12",          
         "mov rsi, r13",          
         "mov rdx, r14",          
         "xor ecx, ecx",         
         "jmp {jump}",
-        eeb = aaw crate::userland::ohk,
+        jump = sym crate::userland::jump_to_ring3_with_args,
     );
 }
 
 #[cfg(not(target_arch = "x86_64"))]
-extern "C" fn moo() {
+extern "C" fn hay() {
     
 }
 
 
 #[no_mangle]
-extern "C" fn mkq(nz: i32) {
-    let ni = bqd();
+extern "C" fn thread_exit(exit_code: i32) {
+    let tid = current_tid();
     
-    if let Some(mut thread) = Do.write().ds(&ni) {
-        thread.g = ThreadState::Ez;
-        thread.nz = nz;
+    if let Some(mut thread) = Bo.write().get_mut(&tid) {
+        thread.state = ThreadState::Dead;
+        thread.exit_code = exit_code;
         
         
-        if let Some(uam) = thread.eto {
-            if let Some(eto) = Do.write().ds(&uam) {
-                if eto.g == ThreadState::Hj {
-                    eto.g = ThreadState::At;
+        if let Some(joiner_tid) = thread.joiner {
+            if let Some(joiner) = Bo.write().get_mut(&joiner_tid) {
+                if joiner.state == ThreadState::Blocked {
+                    joiner.state = ThreadState::Ready;
                 }
             }
         }
     }
     
-    crate::log_debug!("[THREAD] Thread {} exited with code {}", ni, nz);
+    crate::log_debug!("[THREAD] Thread {} exited with code {}", tid, exit_code);
     
     
-    cix();
+    ajc();
 }
 
 
@@ -409,97 +409,97 @@ extern "C" fn mkq(nz: i32) {
 
 lazy_static::lazy_static! {
     
-    static ref Do: RwLock<BTreeMap<Cs, Thread>> = RwLock::new(BTreeMap::new());
+    static ref Bo: RwLock<BTreeMap<Bd, Thread>> = RwLock::new(BTreeMap::new());
 }
 
 
-const KO_: usize = 64;
-static SL_: [AtomicU64; KO_] = {
-    const Dm: AtomicU64 = AtomicU64::new(QB_);
-    [Dm; KO_]
+const LH_: usize = 64;
+static TR_: [AtomicU64; LH_] = {
+    const Bm: AtomicU64 = AtomicU64::new(QY_);
+    [Bm; LH_]
 };
 
 
-const AWW_: Cs = 0x8000_0000_0000_0000;
+const AYY_: Bd = 0x8000_0000_0000_0000;
 
 
-fn ode(qq: usize) -> Cs {
-    if qq == 0 { 0 } else { AWW_ + qq as u64 }
+fn ifp(cpu_id: usize) -> Bd {
+    if cpu_id == 0 { 0 } else { AYY_ + cpu_id as u64 }
 }
 
 
-fn jbm(ni: Cs) -> bool {
-    ni == 0 || ni >= AWW_
+fn ero(tid: Bd) -> bool {
+    tid == 0 || tid >= AYY_
 }
 
 
 #[inline]
-fn jns() -> usize {
-    (crate::cpu::smp::ead() as usize).v(KO_ - 1)
+fn ezm() -> usize {
+    (crate::cpu::smp::bll() as usize).min(LH_ - 1)
 }
 
 
-pub fn bqd() -> Cs {
-    SL_[jns()].load(Ordering::Relaxed)
+pub fn current_tid() -> Bd {
+    TR_[ezm()].load(Ordering::Relaxed)
 }
 
 
-pub fn wip(ni: Cs) {
-    SL_[jns()].store(ni, Ordering::SeqCst);
+pub fn oos(tid: Bd) {
+    TR_[ezm()].store(tid, Ordering::SeqCst);
 }
 
 
-pub fn jqu(j: &str, bt: fn(u64) -> i32, ji: u64) -> Cs {
-    let ce = crate::process::aei();
-    let thread = Thread::opw(ce, j, bt as *const () as u64, ji);
-    let ni = thread.ni;
+pub fn dzu(name: &str, entry: fn(u64) -> i32, db: u64) -> Bd {
+    let pid = crate::process::pe();
+    let thread = Thread::iqa(pid, name, entry as *const () as u64, db);
+    let tid = thread.tid;
     
-    Do.write().insert(ni, thread);
-    fhs(ni);
+    Bo.write().insert(tid, thread);
+    ciw(tid);
     
-    crate::log_debug!("[THREAD] Spawned kernel thread {} '{}'", ni, j);
-    ni
+    crate::log_debug!("[THREAD] Spawned kernel thread {} '{}'", tid, name);
+    tid
 }
 
 
-pub fn pme(ce: u32, j: &str, bt: u64, ais: u64, ji: u64) -> Cs {
-    let thread = Thread::oqg(ce, j, bt, ais, ji);
-    let ni = thread.ni;
+pub fn jhc(pid: u32, name: &str, entry: u64, user_stack: u64, db: u64) -> Bd {
+    let thread = Thread::iqj(pid, name, entry, user_stack, db);
+    let tid = thread.tid;
     
-    Do.write().insert(ni, thread);
-    fhs(ni);
+    Bo.write().insert(tid, thread);
+    ciw(tid);
     
-    crate::log_debug!("[THREAD] Spawned user thread {} '{}'", ni, j);
-    ni
+    crate::log_debug!("[THREAD] Spawned user thread {} '{}'", tid, name);
+    tid
 }
 
 
-pub fn cix() {
-    dvk();
+pub fn ajc() {
+    boq();
 }
 
 
-pub fn cxn(aj: i32) {
-    mkq(aj);
+pub fn exit(code: i32) {
+    thread_exit(code);
 }
 
 
-pub fn wake(ni: Cs) {
-    let mut axc = Do.write();
-    if let Some(thread) = axc.ds(&ni) {
-        if thread.g == ThreadState::Hj {
-            thread.g = ThreadState::At;
-            drop(axc);
-            fhs(ni);
+pub fn wake(tid: Bd) {
+    let mut zn = Bo.write();
+    if let Some(thread) = zn.get_mut(&tid) {
+        if thread.state == ThreadState::Blocked {
+            thread.state = ThreadState::Ready;
+            drop(zn);
+            ciw(tid);
         }
     }
 }
 
 
-pub fn block(ni: Cs) {
-    let mut axc = Do.write();
-    if let Some(thread) = axc.ds(&ni) {
-        thread.g = ThreadState::Hj;
+pub fn block(tid: Bd) {
+    let mut zn = Bo.write();
+    if let Some(thread) = zn.get_mut(&tid) {
+        thread.state = ThreadState::Blocked;
     }
 }
 
@@ -507,41 +507,41 @@ pub fn block(ni: Cs) {
 
 
 
-pub fn mzq() {
-    let ni = bqd();
-    if jbm(ni) {
+pub fn hig() {
+    let tid = current_tid();
+    if ero(tid) {
         return; 
     }
     {
-        let mut axc = Do.write();
-        if let Some(thread) = axc.ds(&ni) {
-            thread.g = ThreadState::Hj;
+        let mut zn = Bo.write();
+        if let Some(thread) = zn.get_mut(&tid) {
+            thread.state = ThreadState::Blocked;
         }
     }
     
-    dvk();
+    boq();
 }
 
 
 
 
-pub fn eyp(eao: u64) {
-    let ni = bqd();
-    if jbm(ni) {
+pub fn cds(brr: u64) {
+    let tid = current_tid();
+    if ero(tid) {
         return;
     }
 
     
-    crate::time::vuf(ni, eao);
+    crate::time::oek(tid, brr);
 
     
-    mzq();
+    hig();
 }
 
 
-pub fn wpl(shm: u64) {
-    let ean = crate::time::evk().akq(shm);
-    eyp(ean);
+pub fn otp(duration_ns: u64) {
+    let brq = crate::time::cbx().saturating_add(duration_ns);
+    cds(brq);
 }
 
 
@@ -556,7 +556,7 @@ use alloc::collections::VecDeque;
 
 
 struct PerCpuQueue {
-    queue: Mutex<VecDeque<Cs>>,
+    queue: Mutex<VecDeque<Bd>>,
 }
 
 impl PerCpuQueue {
@@ -564,17 +564,17 @@ impl PerCpuQueue {
         Self { queue: Mutex::new(VecDeque::new()) }
     }
     
-    fn push(&self, ni: Cs) {
-        self.queue.lock().agt(ni);
+    fn push(&self, tid: Bd) {
+        self.queue.lock().push_back(tid);
     }
     
-    fn pop(&self) -> Option<Cs> {
-        self.queue.lock().awp()
+    fn pop(&self) -> Option<Bd> {
+        self.queue.lock().pop_front()
     }
     
     
-    fn por(&self) -> Option<Cs> {
-        self.queue.lock().owo()
+    fn jit(&self) -> Option<Bd> {
+        self.queue.lock().pop_back()
     }
     
     fn len(&self) -> usize {
@@ -582,214 +582,214 @@ impl PerCpuQueue {
     }
     
     
-    fn juf(&self, ni: Cs) -> bool {
-        if let Some(mut fm) = self.queue.try_lock() {
-            fm.agt(ni);
+    fn try_push(&self, tid: Bd) -> bool {
+        if let Some(mut q) = self.queue.try_lock() {
+            q.push_back(tid);
             true
         } else {
             false
         }
     }
     
-    fn xms(&self) -> Option<Cs> {
-        self.queue.try_lock()?.awp()
+    fn try_pop(&self) -> Option<Bd> {
+        self.queue.try_lock()?.pop_front()
     }
     
-    fn xmw(&self) -> Option<Cs> {
-        self.queue.try_lock()?.owo()
+    fn try_steal(&self) -> Option<Bd> {
+        self.queue.try_lock()?.pop_back()
     }
     
-    fn xmp(&self) -> usize {
-        self.queue.try_lock().efd(0, |fm| fm.len())
+    fn try_len(&self) -> usize {
+        self.queue.try_lock().map_or(0, |q| q.len())
     }
 }
 
 
-static GY_: [PerCpuQueue; KO_] = {
-    const Dm: PerCpuQueue = PerCpuQueue::new();
-    [Dm; KO_]
+static HP_: [PerCpuQueue; LH_] = {
+    const Bm: PerCpuQueue = PerCpuQueue::new();
+    [Bm; LH_]
 };
 
 
-static CHO_: AtomicU64 = AtomicU64::new(0);
+static CKX_: AtomicU64 = AtomicU64::new(0);
 
 
 lazy_static::lazy_static! {
-    static ref CNL_: Mutex<VecDeque<Cs>> = Mutex::new(VecDeque::new());
+    static ref CQU_: Mutex<VecDeque<Bd>> = Mutex::new(VecDeque::new());
 }
 
 
-fn fhs(ni: Cs) {
-    let bcc = crate::cpu::smp::boc().am(1) as usize;
+fn ciw(tid: Bd) {
+    let num_cpus = crate::cpu::smp::ail().max(1) as usize;
     
     
-    let cih = (CHO_.fetch_add(1, Ordering::Relaxed) % bcc as u64) as usize;
-    GY_[cih].push(ni);
+    let target_cpu = (CKX_.fetch_add(1, Ordering::Relaxed) % num_cpus as u64) as usize;
+    HP_[target_cpu].push(tid);
     
     
-    let rrv = jns();
-    if cih != rrv && cih > 0 {
-        crate::cpu::smp::phx(cih as u32);
+    let laj = ezm();
+    if target_cpu != laj && target_cpu > 0 {
+        crate::cpu::smp::jeo(target_cpu as u32);
     }
 }
 
 
-fn xmx(uqz: usize) -> Option<Cs> {
-    let bcc = crate::cpu::smp::boc().am(1) as usize;
+fn poc(my_cpu: usize) -> Option<Bd> {
+    let num_cpus = crate::cpu::smp::ail().max(1) as usize;
     
     
-    let mut kcs = usize::O;
-    let mut cjg = 0;
+    let mut fit = usize::MAX;
+    let mut atb = 0;
     
-    for cpu in 0..bcc {
-        if cpu == uqz { continue; }
-        let len = GY_[cpu].xmp();
-        if len > cjg {
-            cjg = len;
-            kcs = cpu;
+    for cpu in 0..num_cpus {
+        if cpu == my_cpu { continue; }
+        let len = HP_[cpu].try_len();
+        if len > atb {
+            atb = len;
+            fit = cpu;
         }
     }
     
-    if kcs < KO_ && cjg > 1 {
-        return GY_[kcs].xmw();
+    if fit < LH_ && atb > 1 {
+        return HP_[fit].try_steal();
     }
     
     
-    CNL_.try_lock()?.awp()
+    CQU_.try_lock()?.pop_front()
 }
 
 
 pub fn init() {
     crate::serial_println!("[THREAD] Creating idle thread...");
     
-    crate::arch::cvh(|| {
+    crate::arch::bag(|| {
         
-        let trr = Thread {
-            ni: 0,
-            ce: 0,
-            j: String::from("idle"),
-            g: ThreadState::Ai,
-            flags: ThreadFlags(ThreadFlags::Ps | ThreadFlags::Ava),
+        let mnu = Thread {
+            tid: 0,
+            pid: 0,
+            name: String::from("idle"),
+            state: ThreadState::Running,
+            flags: ThreadFlags(ThreadFlags::Go | ThreadFlags::Tl),
             context: ThreadContext::default(),
-            bhg: None,
-            etp: 0,
-            jvc: 0,
-            mi: 0,
-            isv: 0,
-            nz: 0,
-            cdu: 0,
-            eto: None,
+            kernel_stack: None,
+            kernel_stack_top: 0,
+            user_stack_top: 0,
+            entry_point: 0,
+            entry_arg: 0,
+            exit_code: 0,
+            cpu_time: 0,
+            joiner: None,
         };
         
-        Do.write().insert(0, trr);
-        SL_[0].store(0, Ordering::SeqCst);
+        Bo.write().insert(0, mnu);
+        TR_[0].store(0, Ordering::SeqCst);
     });
     crate::serial_println!("[THREAD] Thread subsystem initialized");
 }
 
 
 
-pub fn ttb(qq: u32) {
-    let w = qq as usize;
-    let izj = ode(w);
+pub fn mow(cpu_id: u32) {
+    let idx = cpu_id as usize;
+    let eqc = ifp(idx);
     
-    let fkz = Thread {
-        ni: izj,
-        ce: 0,
-        j: String::from("idle-ap"),
-        g: ThreadState::Ai,
-        flags: ThreadFlags(ThreadFlags::Ps),
+    let ckv = Thread {
+        tid: eqc,
+        pid: 0,
+        name: String::from("idle-ap"),
+        state: ThreadState::Running,
+        flags: ThreadFlags(ThreadFlags::Go),
         context: ThreadContext::default(),
-        bhg: None,
-        etp: 0,
-        jvc: 0,
-        mi: 0,
-        isv: 0,
-        nz: 0,
-        cdu: 0,
-        eto: None,
+        kernel_stack: None,
+        kernel_stack_top: 0,
+        user_stack_top: 0,
+        entry_point: 0,
+        entry_arg: 0,
+        exit_code: 0,
+        cpu_time: 0,
+        joiner: None,
     };
     
-    Do.write().insert(izj, fkz);
-    SL_[w].store(izj, Ordering::SeqCst);
+    Bo.write().insert(eqc, ckv);
+    TR_[idx].store(eqc, Ordering::SeqCst);
     
-    crate::serial_println!("[THREAD] AP {} idle thread created (TID={:#x})", qq, izj);
+    crate::serial_println!("[THREAD] AP {} idle thread created (TID={:#x})", cpu_id, eqc);
 }
 
 
-pub fn hto() {
-    let ni = bqd();
+pub fn dvv() {
+    let tid = current_tid();
     
     
-    if let Some(mut axc) = Do.ifb() {
-        if let Some(thread) = axc.ds(&ni) {
-            thread.cdu += 1;
+    if let Some(mut zn) = Bo.try_write() {
+        if let Some(thread) = zn.get_mut(&tid) {
+            thread.cpu_time += 1;
         }
     }
     
     
-    static CXX_: AtomicU64 = AtomicU64::new(0);
-    let qb = CXX_.fetch_add(1, Ordering::Relaxed);
+    static DBP_: AtomicU64 = AtomicU64::new(0);
+    let gx = DBP_.fetch_add(1, Ordering::Relaxed);
     
-    if qb % 10 == 0 {
-        dvk();
+    if gx % 10 == 0 {
+        boq();
     }
 }
 
 
-pub fn dvk() {
-    let qq = jns();
-    let cv = bqd();
-    let fkz = ode(qq);
+pub fn boq() {
+    let cpu_id = ezm();
+    let current = current_tid();
+    let ckv = ifp(cpu_id);
     
     
     
-    if cv != QB_ && !jbm(cv) {
-        let wnb = if let Some(axc) = Do.mnf() {
-            axc.get(&cv).efd(false, |ab| ab.g == ThreadState::Ai)
+    if current != QY_ && !ero(current) {
+        let orv = if let Some(zn) = Bo.try_read() {
+            zn.get(&current).map_or(false, |t| t.state == ThreadState::Running)
         } else {
             return; 
         };
-        if wnb {
+        if orv {
             
-            if !GY_[qq].juf(cv) {
+            if !HP_[cpu_id].try_push(current) {
                 return; 
             }
-            if let Some(mut axc) = Do.ifb() {
-                if let Some(ab) = axc.ds(&cv) {
-                    ab.g = ThreadState::At;
+            if let Some(mut zn) = Bo.try_write() {
+                if let Some(t) = zn.get_mut(&current) {
+                    t.state = ThreadState::Ready;
                 }
             }
         }
     }
     
     
-    let uuq = loop {
+    let nkj = loop {
         
-        if let Some(ni) = GY_[qq].xms() {
-            let mbg = if let Some(axc) = Do.mnf() {
-                axc.get(&ni).efd(false, |ab| ab.g == ThreadState::At || ab.g == ThreadState::Ai)
+        if let Some(tid) = HP_[cpu_id].try_pop() {
+            let gsd = if let Some(zn) = Bo.try_read() {
+                zn.get(&tid).map_or(false, |t| t.state == ThreadState::Ready || t.state == ThreadState::Running)
             } else {
                 
-                let _ = GY_[qq].juf(ni);
+                let _ = HP_[cpu_id].try_push(tid);
                 return;
             };
-            if mbg {
-                break Some(ni);
+            if gsd {
+                break Some(tid);
             }
             continue; 
         }
         
         
-        if let Some(ni) = xmx(qq) {
-            let mbg = if let Some(axc) = Do.mnf() {
-                axc.get(&ni).efd(false, |ab| ab.g == ThreadState::At || ab.g == ThreadState::Ai)
+        if let Some(tid) = poc(cpu_id) {
+            let gsd = if let Some(zn) = Bo.try_read() {
+                zn.get(&tid).map_or(false, |t| t.state == ThreadState::Ready || t.state == ThreadState::Running)
             } else {
-                let _ = GY_[qq].juf(ni);
+                let _ = HP_[cpu_id].try_push(tid);
                 return;
             };
-            if mbg {
-                break Some(ni);
+            if gsd {
+                break Some(tid);
             }
             continue;
         }
@@ -798,25 +798,25 @@ pub fn dvk() {
         break None;
     };
     
-    match uuq {
-        Some(next) if next != cv => {
+    match nkj {
+        Some(next) if next != current => {
             
-            if let Some(mut axc) = Do.ifb() {
-                if let Some(thread) = axc.ds(&next) {
-                    thread.g = ThreadState::Ai;
+            if let Some(mut zn) = Bo.try_write() {
+                if let Some(thread) = zn.get_mut(&next) {
+                    thread.state = ThreadState::Running;
                 }
             } else {
                 
-                let _ = GY_[qq].juf(next);
+                let _ = HP_[cpu_id].try_push(next);
                 return;
             }
             
             
-            nfs(cv, next);
+            hnm(current, next);
         }
-        None if !jbm(cv) && cv != QB_ => {
+        None if !ero(current) && current != QY_ => {
             
-            nfs(cv, fkz);
+            hnm(current, ckv);
         }
         _ => {
             
@@ -825,63 +825,63 @@ pub fn dvk() {
 }
 
 
-fn nfs(from: Cs, wh: Cs) {
-    if from == wh {
+fn hnm(from: Bd, to: Bd) {
+    if from == to {
         return;
     }
     
     
-    let nwd: *mut ThreadContext;
-    let ptt: *const ThreadContext;
-    let jtj: u64;
+    let iac: *mut ThreadContext;
+    let jmy: *const ThreadContext;
+    let fda: u64;
     
     {
-        let mut axc = match Do.ifb() {
-            Some(ab) => ab,
+        let mut zn = match Bo.try_write() {
+            Some(t) => t,
             None => return, 
         };
         
-        let syj = match axc.ds(&from) {
-            Some(ab) => ab as *mut Thread,
+        let lzs = match zn.get_mut(&from) {
+            Some(t) => t as *mut Thread,
             None => return,
         };
         
-        let ptz = match axc.get(&wh) {
-            Some(ab) => ab,
+        let jnc = match zn.get(&to) {
+            Some(t) => t,
             None => return,
         };
         
-        nwd = unsafe { &mut (*syj).context as *mut ThreadContext };
-        ptt = &ptz.context as *const ThreadContext;
-        jtj = ptz.etp;
+        iac = unsafe { &mut (*lzs).context as *mut ThreadContext };
+        jmy = &jnc.context as *const ThreadContext;
+        fda = jnc.kernel_stack_top;
     }
     
     
     #[cfg(target_arch = "x86_64")]
-    if jtj != 0 {
-        crate::gdt::pjb(jtj);
+    if fda != 0 {
+        crate::gdt::jfg(fda);
         
         
         
         unsafe {
-            crate::userland::NT_ = jtj;
+            crate::userland::KERNEL_SYSCALL_STACK_TOP = fda;
         }
     }
     
     
-    wip(wh);
+    oos(to);
     
     
     unsafe {
-        mii(nwd, ptt);
+        gwu(iac, jmy);
     }
 }
 
 
 #[cfg(target_arch = "x86_64")]
-#[unsafe(evb)]
-extern "C" fn mii(from: *mut ThreadContext, wh: *const ThreadContext) {
-    core::arch::evc!(
+#[unsafe(naked)]
+extern "C" fn gwu(from: *mut ThreadContext, to: *const ThreadContext) {
+    core::arch::naked_asm!(
         
         
         
@@ -931,9 +931,9 @@ extern "C" fn mii(from: *mut ThreadContext, wh: *const ThreadContext) {
 
 
 #[cfg(target_arch = "aarch64")]
-#[unsafe(evb)]
-extern "C" fn mii(msh: *mut ThreadContext, qdu: *const ThreadContext) {
-    core::arch::evc!(
+#[unsafe(naked)]
+extern "C" fn gwu(_from: *mut ThreadContext, _to: *const ThreadContext) {
+    core::arch::naked_asm!(
         
         "stp x19, x20, [x0, #0]",
         "stp x21, x22, [x0, #16]",
@@ -957,7 +957,7 @@ extern "C" fn mii(msh: *mut ThreadContext, qdu: *const ThreadContext) {
 }
 
 #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-extern "C" fn mii(msh: *mut ThreadContext, qdu: *const ThreadContext) {
+extern "C" fn gwu(_from: *mut ThreadContext, _to: *const ThreadContext) {
     
 }
 
@@ -966,62 +966,62 @@ extern "C" fn mii(msh: *mut ThreadContext, qdu: *const ThreadContext) {
 
 
 
-pub struct Buh {
-    caq: AtomicU32,
-    awj: AtomicU64,
-    cny: Mutex<VecDeque<Cs>>,
+pub struct Afh {
+    locked: AtomicU32,
+    owner: AtomicU64,
+    waiters: Mutex<VecDeque<Bd>>,
 }
 
-impl Buh {
+impl Afh {
     pub const fn new() -> Self {
         Self {
-            caq: AtomicU32::new(0),
-            awj: AtomicU64::new(QB_),
-            cny: Mutex::new(VecDeque::new()),
+            locked: AtomicU32::new(0),
+            owner: AtomicU64::new(QY_),
+            waiters: Mutex::new(VecDeque::new()),
         }
     }
     
     pub fn lock(&self) {
-        let ni = bqd();
+        let tid = current_tid();
         
         loop {
             
-            if self.caq.compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed).is_ok() {
-                self.awj.store(ni, Ordering::Relaxed);
+            if self.locked.compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed).is_ok() {
+                self.owner.store(tid, Ordering::Relaxed);
                 return;
             }
             
             
             {
-                self.cny.lock().agt(ni);
-                if let Some(thread) = Do.write().ds(&ni) {
-                    thread.g = ThreadState::Hj;
+                self.waiters.lock().push_back(tid);
+                if let Some(thread) = Bo.write().get_mut(&tid) {
+                    thread.state = ThreadState::Blocked;
                 }
             }
             
             
-            cix();
+            ajc();
         }
     }
     
-    pub fn xog(&self) {
-        self.awj.store(QB_, Ordering::Relaxed);
-        self.caq.store(0, Ordering::Release);
+    pub fn unlock(&self) {
+        self.owner.store(QY_, Ordering::Relaxed);
+        self.locked.store(0, Ordering::Release);
         
         
-        if let Some(cnx) = self.cny.lock().awp() {
-            if let Some(thread) = Do.write().ds(&cnx) {
-                thread.g = ThreadState::At;
+        if let Some(avt) = self.waiters.lock().pop_front() {
+            if let Some(thread) = Bo.write().get_mut(&avt) {
+                thread.state = ThreadState::Ready;
             }
-            fhs(cnx);
+            ciw(avt);
         }
     }
     
     pub fn try_lock(&self) -> bool {
-        let ni = bqd();
+        let tid = current_tid();
         
-        if self.caq.compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed).is_ok() {
-            self.awj.store(ni, Ordering::Relaxed);
+        if self.locked.compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed).is_ok() {
+            self.owner.store(tid, Ordering::Relaxed);
             true
         } else {
             false
@@ -1030,106 +1030,106 @@ impl Buh {
 }
 
 
-pub struct Aml {
-    az: AtomicU32,
-    cny: Mutex<VecDeque<Cs>>,
+pub struct Qg {
+    count: AtomicU32,
+    waiters: Mutex<VecDeque<Bd>>,
 }
 
-impl Aml {
-    pub const fn new(cfo: u32) -> Self {
+impl Qg {
+    pub const fn new(are: u32) -> Self {
         Self {
-            az: AtomicU32::new(cfo),
-            cny: Mutex::new(VecDeque::new()),
+            count: AtomicU32::new(are),
+            waiters: Mutex::new(VecDeque::new()),
         }
     }
     
-    pub fn ccm(&self) {
+    pub fn bqb(&self) {
         loop {
-            let az = self.az.load(Ordering::Relaxed);
+            let count = self.count.load(Ordering::Relaxed);
             
-            if az > 0 {
-                if self.az.compare_exchange(az, az - 1, Ordering::Acquire, Ordering::Relaxed).is_ok() {
+            if count > 0 {
+                if self.count.compare_exchange(count, count - 1, Ordering::Acquire, Ordering::Relaxed).is_ok() {
                     return;
                 }
             } else {
                 
-                let ni = bqd();
+                let tid = current_tid();
                 {
-                    self.cny.lock().agt(ni);
-                    if let Some(thread) = Do.write().ds(&ni) {
-                        thread.g = ThreadState::Hj;
+                    self.waiters.lock().push_back(tid);
+                    if let Some(thread) = Bo.write().get_mut(&tid) {
+                        thread.state = ThreadState::Blocked;
                     }
                 }
-                cix();
+                ajc();
             }
         }
     }
     
-    pub fn cug(&self) {
-        self.az.fetch_add(1, Ordering::Release);
+    pub fn ash(&self) {
+        self.count.fetch_add(1, Ordering::Release);
         
         
-        if let Some(cnx) = self.cny.lock().awp() {
-            if let Some(thread) = Do.write().ds(&cnx) {
-                thread.g = ThreadState::At;
+        if let Some(avt) = self.waiters.lock().pop_front() {
+            if let Some(thread) = Bo.write().get_mut(&avt) {
+                thread.state = ThreadState::Ready;
             }
-            fhs(cnx);
+            ciw(avt);
         }
     }
 }
 
 
-pub struct Bzy {
-    cny: Mutex<VecDeque<Cs>>,
+pub struct Aia {
+    waiters: Mutex<VecDeque<Bd>>,
 }
 
-impl Bzy {
+impl Aia {
     pub const fn new() -> Self {
         Self {
-            cny: Mutex::new(VecDeque::new()),
+            waiters: Mutex::new(VecDeque::new()),
         }
     }
     
     
-    pub fn ccm(&self, oot: &Buh) {
-        let ni = bqd();
+    pub fn bqb(&self, mutex: &Afh) {
+        let tid = current_tid();
         
         
-        self.cny.lock().agt(ni);
+        self.waiters.lock().push_back(tid);
         
         
-        if let Some(thread) = Do.write().ds(&ni) {
-            thread.g = ThreadState::Hj;
+        if let Some(thread) = Bo.write().get_mut(&tid) {
+            thread.state = ThreadState::Blocked;
         }
         
         
-        oot.xog();
+        mutex.unlock();
         
         
-        cix();
+        ajc();
         
         
-        oot.lock();
+        mutex.lock();
     }
     
     
-    pub fn cug(&self) {
-        if let Some(cnx) = self.cny.lock().awp() {
-            if let Some(thread) = Do.write().ds(&cnx) {
-                thread.g = ThreadState::At;
+    pub fn ash(&self) {
+        if let Some(avt) = self.waiters.lock().pop_front() {
+            if let Some(thread) = Bo.write().get_mut(&avt) {
+                thread.state = ThreadState::Ready;
             }
-            fhs(cnx);
+            ciw(avt);
         }
     }
     
     
-    pub fn nad(&self) {
-        let mut cny = self.cny.lock();
-        while let Some(cnx) = cny.awp() {
-            if let Some(thread) = Do.write().ds(&cnx) {
-                thread.g = ThreadState::At;
+    pub fn hiq(&self) {
+        let mut waiters = self.waiters.lock();
+        while let Some(avt) = waiters.pop_front() {
+            if let Some(thread) = Bo.write().get_mut(&avt) {
+                thread.state = ThreadState::Ready;
             }
-            fhs(cnx);
+            ciw(avt);
         }
     }
 }
@@ -1138,15 +1138,15 @@ impl Bzy {
 
 
 
-pub fn ufx() -> alloc::vec::Vec<(u64, u32, ThreadState, alloc::string::String)> {
-    let axc = Do.read();
+pub fn mzi() -> alloc::vec::Vec<(u64, u32, ThreadState, alloc::string::String)> {
+    let zn = Bo.read();
     let mut result = alloc::vec::Vec::new();
     
-    for (ni, thread) in axc.iter() {
-        result.push((*ni, thread.ce, thread.g, thread.j.clone()));
+    for (tid, thread) in zn.iter() {
+        result.push((*tid, thread.pid, thread.state, thread.name.clone()));
     }
     
     
-    result.bxf(|(ni, _, _, _)| *ni);
+    result.sort_by_key(|(tid, _, _, _)| *tid);
     result
 }

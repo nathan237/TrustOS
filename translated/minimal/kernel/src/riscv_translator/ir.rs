@@ -12,73 +12,73 @@ use alloc::vec::Vec;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum Reg {
-    Bt = 0,   
-    Oq = 1,   
-    Ds = 2,   
-    Bxa = 3,   
-    Bbb = 4,   
-    Bg = 5,   
-    Mp = 6,   
-    Aom = 7,   
-    Aon = 8,   
-    Bbd = 9,   
-    Je = 10, 
-    Zo = 11, 
-    Afw = 12, 
-    Va = 13, 
-    Vb = 14, 
-    Vc = 15, 
-    Bav = 16, 
-    Vd = 17, 
-    Afx = 18, 
-    Afy = 19, 
-    Afz = 20, 
-    Aog = 21, 
-    Aoh = 22, 
-    Aoi = 23, 
-    Aoj = 24, 
-    Aok = 25, 
-    Baw = 26, 
-    Bax = 27, 
-    Aol = 28, 
-    Bay = 29, 
-    Baz = 30, 
-    Bba = 31, 
+    X0 = 0,   
+    X1 = 1,   
+    X2 = 2,   
+    X3 = 3,   
+    X4 = 4,   
+    X5 = 5,   
+    X6 = 6,   
+    X7 = 7,   
+    X8 = 8,   
+    X9 = 9,   
+    X10 = 10, 
+    X11 = 11, 
+    X12 = 12, 
+    X13 = 13, 
+    X14 = 14, 
+    X15 = 15, 
+    X16 = 16, 
+    X17 = 17, 
+    X18 = 18, 
+    X19 = 19, 
+    X20 = 20, 
+    X21 = 21, 
+    X22 = 22, 
+    X23 = 23, 
+    X24 = 24, 
+    X25 = 25, 
+    X26 = 26, 
+    X27 = 27, 
+    X28 = 28, 
+    X29 = 29, 
+    X30 = 30, 
+    X31 = 31, 
 
     
     
-    Bvo = 32,  
-    Bvp = 33,     
+    VFlags = 32,  
+    VPc = 33,     
 }
 
 impl Reg {
-    pub fn ivy(a: u8) -> Self {
-        match a {
-            0 => Reg::Bt, 1 => Reg::Oq, 2 => Reg::Ds, 3 => Reg::Bxa,
-            4 => Reg::Bbb, 5 => Reg::Bg, 6 => Reg::Mp, 7 => Reg::Aom,
-            8 => Reg::Aon, 9 => Reg::Bbd, 10 => Reg::Je, 11 => Reg::Zo,
-            12 => Reg::Afw, 13 => Reg::Va, 14 => Reg::Vb, 15 => Reg::Vc,
-            16 => Reg::Bav, 17 => Reg::Vd, 18 => Reg::Afx, 19 => Reg::Afy,
-            20 => Reg::Afz, 21 => Reg::Aog, 22 => Reg::Aoh, 23 => Reg::Aoi,
-            24 => Reg::Aoj, 25 => Reg::Aok, 26 => Reg::Baw, 27 => Reg::Bax,
-            28 => Reg::Aol, 29 => Reg::Bay, 30 => Reg::Baz, 31 => Reg::Bba,
-            32 => Reg::Bvo, 33 => Reg::Bvp,
-            _ => Reg::Bt,
+    pub fn enm(i: u8) -> Self {
+        match i {
+            0 => Reg::X0, 1 => Reg::X1, 2 => Reg::X2, 3 => Reg::X3,
+            4 => Reg::X4, 5 => Reg::X5, 6 => Reg::X6, 7 => Reg::X7,
+            8 => Reg::X8, 9 => Reg::X9, 10 => Reg::X10, 11 => Reg::X11,
+            12 => Reg::X12, 13 => Reg::X13, 14 => Reg::X14, 15 => Reg::X15,
+            16 => Reg::X16, 17 => Reg::X17, 18 => Reg::X18, 19 => Reg::X19,
+            20 => Reg::X20, 21 => Reg::X21, 22 => Reg::X22, 23 => Reg::X23,
+            24 => Reg::X24, 25 => Reg::X25, 26 => Reg::X26, 27 => Reg::X27,
+            28 => Reg::X28, 29 => Reg::X29, 30 => Reg::X30, 31 => Reg::X31,
+            32 => Reg::VFlags, 33 => Reg::VPc,
+            _ => Reg::X0,
         }
     }
 
     
-    pub fn kj(&self) -> &'static str {
+    pub fn abi_name(&self) -> &'static str {
         match self {
-            Reg::Bt => "zero", Reg::Oq => "ra", Reg::Ds => "sp", Reg::Bxa => "gp",
-            Reg::Bbb => "tp", Reg::Bg => "t0", Reg::Mp => "t1", Reg::Aom => "t2",
-            Reg::Aon => "fp", Reg::Bbd => "s1", Reg::Je => "a0", Reg::Zo => "a1",
-            Reg::Afw => "a2", Reg::Va => "a3", Reg::Vb => "a4", Reg::Vc => "a5",
-            Reg::Bav => "a6", Reg::Vd => "a7", Reg::Afx => "s2", Reg::Afy => "s3",
-            Reg::Afz => "s4", Reg::Aog => "s5", Reg::Aoh => "s6", Reg::Aoi => "s7",
-            Reg::Aoj => "s8", Reg::Aok => "s9", Reg::Baw => "s10", Reg::Bax => "s11",
-            Reg::Aol => "t3", Reg::Bay => "t4", Reg::Baz => "t5", Reg::Bba => "t6",
-            Reg::Bvo => "vflags", Reg::Bvp => "vpc",
+            Reg::X0 => "zero", Reg::X1 => "ra", Reg::X2 => "sp", Reg::X3 => "gp",
+            Reg::X4 => "tp", Reg::X5 => "t0", Reg::X6 => "t1", Reg::X7 => "t2",
+            Reg::X8 => "fp", Reg::X9 => "s1", Reg::X10 => "a0", Reg::X11 => "a1",
+            Reg::X12 => "a2", Reg::X13 => "a3", Reg::X14 => "a4", Reg::X15 => "a5",
+            Reg::X16 => "a6", Reg::X17 => "a7", Reg::X18 => "s2", Reg::X19 => "s3",
+            Reg::X20 => "s4", Reg::X21 => "s5", Reg::X22 => "s6", Reg::X23 => "s7",
+            Reg::X24 => "s8", Reg::X25 => "s9", Reg::X26 => "s10", Reg::X27 => "s11",
+            Reg::X28 => "t3", Reg::X29 => "t4", Reg::X30 => "t5", Reg::X31 => "t6",
+            Reg::VFlags => "vflags", Reg::VPc => "vpc",
         }
     }
 }
@@ -90,131 +90,131 @@ impl Reg {
 #[derive(Debug, Clone)]
 pub enum RvInst {
     
-    Add { ck: Reg, cp: Reg, et: Reg },
-    Sub { ck: Reg, cp: Reg, et: Reg },
-    Ex { ck: Reg, cp: Reg, et: Reg },
-    Fx  { ck: Reg, cp: Reg, et: Reg },
-    Aga { ck: Reg, cp: Reg, et: Reg },
-    Amt { ck: Reg, cp: Reg, et: Reg },  
-    Amx { ck: Reg, cp: Reg, et: Reg },  
-    Azc { ck: Reg, cp: Reg, et: Reg },  
-    Btb { ck: Reg, cp: Reg, et: Reg },  
-    Bte { ck: Reg, cp: Reg, et: Reg }, 
+    Add { aj: Reg, rs1: Reg, rs2: Reg },
+    Sub { aj: Reg, rs1: Reg, rs2: Reg },
+    And { aj: Reg, rs1: Reg, rs2: Reg },
+    Or  { aj: Reg, rs1: Reg, rs2: Reg },
+    Xor { aj: Reg, rs1: Reg, rs2: Reg },
+    Sll { aj: Reg, rs1: Reg, rs2: Reg },  
+    Srl { aj: Reg, rs1: Reg, rs2: Reg },  
+    Sra { aj: Reg, rs1: Reg, rs2: Reg },  
+    Slt { aj: Reg, rs1: Reg, rs2: Reg },  
+    Sltu { aj: Reg, rs1: Reg, rs2: Reg }, 
 
     
-    Mul    { ck: Reg, cp: Reg, et: Reg },
-    Bms   { ck: Reg, cp: Reg, et: Reg }, 
-    Div    { ck: Reg, cp: Reg, et: Reg },
-    Arb   { ck: Reg, cp: Reg, et: Reg },
-    Rem    { ck: Reg, cp: Reg, et: Reg },
-    Bqx   { ck: Reg, cp: Reg, et: Reg },
+    Mul    { aj: Reg, rs1: Reg, rs2: Reg },
+    Mulh   { aj: Reg, rs1: Reg, rs2: Reg }, 
+    Div    { aj: Reg, rs1: Reg, rs2: Reg },
+    Divu   { aj: Reg, rs1: Reg, rs2: Reg },
+    Rem    { aj: Reg, rs1: Reg, rs2: Reg },
+    Remu   { aj: Reg, rs1: Reg, rs2: Reg },
 
     
-    Gf  { ck: Reg, cp: Reg, gf: i64 },
-    Ou  { ck: Reg, cp: Reg, gf: i64 },
-    Akw   { ck: Reg, cp: Reg, gf: i64 },
-    Aoq  { ck: Reg, cp: Reg, gf: i64 },
-    Ayv  { ck: Reg, cp: Reg, bcp: u8 },
-    Aze  { ck: Reg, cp: Reg, bcp: u8 },
-    Azd  { ck: Reg, cp: Reg, bcp: u8 },
-    Btc  { ck: Reg, cp: Reg, gf: i64 },
-    Btd { ck: Reg, cp: Reg, gf: i64 },
+    Addi  { aj: Reg, rs1: Reg, imm: i64 },
+    Andi  { aj: Reg, rs1: Reg, imm: i64 },
+    Ori   { aj: Reg, rs1: Reg, imm: i64 },
+    Xori  { aj: Reg, rs1: Reg, imm: i64 },
+    Slli  { aj: Reg, rs1: Reg, acn: u8 },
+    Srli  { aj: Reg, rs1: Reg, acn: u8 },
+    Srai  { aj: Reg, rs1: Reg, acn: u8 },
+    Slti  { aj: Reg, rs1: Reg, imm: i64 },
+    Sltiu { aj: Reg, rs1: Reg, imm: i64 },
 
     
-    Blq   { ck: Reg, gf: i64 },           
-    Bce { ck: Reg, gf: i64 },           
+    Lui   { aj: Reg, imm: i64 },           
+    Auipc { aj: Reg, imm: i64 },           
 
     
-    Bky  { ck: Reg, cp: Reg, l: i64 },  
-    Ajr { ck: Reg, cp: Reg, l: i64 },  
-    Bla  { ck: Reg, cp: Reg, l: i64 },  
-    Ajs { ck: Reg, cp: Reg, l: i64 },  
-    Blr  { ck: Reg, cp: Reg, l: i64 },  
-    Aka { ck: Reg, cp: Reg, l: i64 },  
-    Pt  { ck: Reg, cp: Reg, l: i64 },  
-    Amf  { et: Reg, cp: Reg, l: i64 }, 
-    Amo  { et: Reg, cp: Reg, l: i64 }, 
-    Ang  { et: Reg, cp: Reg, l: i64 }, 
-    Mi  { et: Reg, cp: Reg, l: i64 }, 
+    Lb  { aj: Reg, rs1: Reg, offset: i64 },  
+    Lbu { aj: Reg, rs1: Reg, offset: i64 },  
+    Lh  { aj: Reg, rs1: Reg, offset: i64 },  
+    Lhu { aj: Reg, rs1: Reg, offset: i64 },  
+    Lw  { aj: Reg, rs1: Reg, offset: i64 },  
+    Lwu { aj: Reg, rs1: Reg, offset: i64 },  
+    Ld  { aj: Reg, rs1: Reg, offset: i64 },  
+    Sb  { rs2: Reg, rs1: Reg, offset: i64 }, 
+    Sh  { rs2: Reg, rs1: Reg, offset: i64 }, 
+    Sw  { rs2: Reg, rs1: Reg, offset: i64 }, 
+    Sd  { rs2: Reg, rs1: Reg, offset: i64 }, 
 
     
-    Agp  { cp: Reg, et: Reg, l: i64 },  
-    Ags  { cp: Reg, et: Reg, l: i64 },  
-    Bcr  { cp: Reg, et: Reg, l: i64 },  
-    Bcp  { cp: Reg, et: Reg, l: i64 },  
-    Bcs { cp: Reg, et: Reg, l: i64 },  
-    Bcq { cp: Reg, et: Reg, l: i64 },  
+    Beq  { rs1: Reg, rs2: Reg, offset: i64 },  
+    Bne  { rs1: Reg, rs2: Reg, offset: i64 },  
+    Blt  { rs1: Reg, rs2: Reg, offset: i64 },  
+    Bge  { rs1: Reg, rs2: Reg, offset: i64 },  
+    Bltu { rs1: Reg, rs2: Reg, offset: i64 },  
+    Bgeu { rs1: Reg, rs2: Reg, offset: i64 },  
 
     
-    Xh  { ck: Reg, l: i64 },              
-    Xi { ck: Reg, cp: Reg, l: i64 },    
+    Jal  { aj: Reg, offset: i64 },              
+    Jalr { aj: Reg, rs1: Reg, offset: i64 },    
 
     
-    Wk,                                        
-    Bfr,                                       
-    Bgw,                                        
+    Ecall,                                        
+    Ebreak,                                       
+    Fence,                                        
 
     
-    Bbr { ck: Reg, et: Reg, cp: Reg },   
-    Bbq  { ck: Reg, et: Reg, cp: Reg },   
-
-    
-    
-    Hu { ck: Reg, gf: i64 },
-    
-    Gl { ck: Reg, acl: Reg },
-    
-    Fq,
-    
-    Ama,
-    
-    En { l: i64 },
+    AmoswapD { aj: Reg, rs2: Reg, rs1: Reg },   
+    AmoaddD  { aj: Reg, rs2: Reg, rs1: Reg },   
 
     
     
+    Li { aj: Reg, imm: i64 },
     
-    Ed { cp: Reg, et: Reg },
+    Mv { aj: Reg, oc: Reg },
     
-    Aad { mo: FlagCond, l: i64 },
+    Nop,
     
-    Od { arch: SourceArch, ag: u64, text: String },
+    Ret,
+    
+    Call { offset: i64 },
+
+    
+    
+    
+    CmpFlags { rs1: Reg, rs2: Reg },
+    
+    BranchCond { fc: FlagCond, offset: i64 },
+    
+    SrcAnnotation { arch: SourceArch, addr: u64, text: String },
 }
 
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum FlagCond {
     Eq,    
-    Adl,    
+    Ne,    
     Lt,    
-    Wr,    
-    Auz,   
-    Atb,   
-    Te,    
-    Jn,    
+    Ge,    
+    Ltu,   
+    Geu,   
+    Le,    
+    Gt,    
     Neg,   
     Pos,   
-    Awn,   
-    Awc, 
+    Ovf,   
+    NoOvf, 
 }
 
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SourceArch {
-    BT_,
-    Fg,
-    Jy,  
-    Acz,
-    Aod,     
+    X86_64,
+    Aarch64,
+    Riscv64,  
+    Mips64,
+    Wasm,     
 }
 
 impl SourceArch {
-    pub fn j(&self) -> &'static str {
+    pub fn name(&self) -> &'static str {
         match self {
-            SourceArch::BT_ => "x86_64",
-            SourceArch::Fg => "aarch64",
-            SourceArch::Jy => "riscv64",
-            SourceArch::Acz => "mips64",
-            SourceArch::Aod => "wasm",
+            SourceArch::X86_64 => "x86_64",
+            SourceArch::Aarch64 => "aarch64",
+            SourceArch::Riscv64 => "riscv64",
+            SourceArch::Mips64 => "mips64",
+            SourceArch::Wasm => "wasm",
         }
     }
 }
@@ -224,53 +224,53 @@ impl SourceArch {
 #[derive(Debug, Clone)]
 pub struct TranslatedBlock {
     
-    pub cbz: u64,
+    pub src_addr: u64,
     
-    pub gsy: SourceArch,
+    pub src_arch: SourceArch,
     
     pub instructions: Vec<RvInst>,
     
-    pub jrg: usize,
+    pub src_inst_count: usize,
     
-    pub bil: Vec<u64>,
+    pub successors: Vec<u64>,
 }
 
 impl TranslatedBlock {
-    pub fn new(cbz: u64, gsy: SourceArch) -> Self {
+    pub fn new(src_addr: u64, src_arch: SourceArch) -> Self {
         Self {
-            cbz,
-            gsy,
+            src_addr,
+            src_arch,
             instructions: Vec::new(),
-            jrg: 0,
-            bil: Vec::new(),
+            src_inst_count: 0,
+            successors: Vec::new(),
         }
     }
 
-    pub fn fj(&mut self, fi: RvInst) {
-        self.instructions.push(fi);
+    pub fn emit(&mut self, inst: RvInst) {
+        self.instructions.push(inst);
     }
 
-    pub fn yoy(&mut self, edl: &[RvInst]) {
-        self.instructions.bk(edl);
+    pub fn qeq(&mut self, btl: &[RvInst]) {
+        self.instructions.extend_from_slice(btl);
     }
 }
 
 
 #[derive(Debug, Default, Clone)]
 pub struct TranslationStats {
-    pub ilv: u64,
-    pub esv: u64,
-    pub hyi: u64,
-    pub yhb: u64,
-    pub yhc: u64,
-    pub ddf: u64,
+    pub blocks_translated: u64,
+    pub instructions_translated: u64,
+    pub rv_instructions_emitted: u64,
+    pub cache_hits: u64,
+    pub cache_misses: u64,
+    pub unsupported_instructions: u64,
 }
 
 impl TranslationStats {
-    pub fn nrx(&self) -> f64 {
-        if self.esv == 0 {
+    pub fn expansion_ratio(&self) -> f64 {
+        if self.instructions_translated == 0 {
             return 0.0;
         }
-        self.hyi as f64 / self.esv as f64
+        self.rv_instructions_emitted as f64 / self.instructions_translated as f64
     }
 }

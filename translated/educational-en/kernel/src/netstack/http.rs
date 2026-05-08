@@ -94,30 +94,30 @@ fn request_inner(method: &str, url: &str, content_type: Option<&str>, body: Opti
     crate::serial_println!("[HTTP] {} {}.{}.{}.{}:{}{}", method, ip[0], ip[1], ip[2], ip[3], port, path);
     
     // Connect via TCP
-    let source_port = crate::netstack::tcp::send_syn(ip, port)?;
+    let src_port = crate::netstack::tcp::send_syn(ip, port)?;
     
-    if !crate::netstack::tcp::wait_for_established(ip, port, source_port, 5000) {
+    if !crate::netstack::tcp::wait_for_established(ip, port, src_port, 5000) {
         return Err("TCP connection timeout");
     }
     
     // Build HTTP request
-    let mut request = format!("{} {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nUser-Agent: TrustOS/1.0\r\n", method, path, host);
+    let mut req = format!("{} {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nUser-Agent: TrustOS/1.0\r\n", method, path, host);
     
     if let Some(ct) = content_type {
-        request.push_str(&format!("Content-Type: {}\r\n", ct));
+        req.push_str(&format!("Content-Type: {}\r\n", ct));
     }
     
     if let Some(b) = body {
-        request.push_str(&format!("Content-Length: {}\r\n", b.len()));
+        req.push_str(&format!("Content-Length: {}\r\n", b.len()));
     }
     
-    request.push_str("\r\n");
+    req.push_str("\r\n");
     
     // Send request
-    crate::netstack::tcp::send_payload(ip, port, source_port, request.as_bytes())?;
+    crate::netstack::tcp::send_payload(ip, port, src_port, req.as_bytes())?;
     
     if let Some(b) = body {
-        crate::netstack::tcp::send_payload(ip, port, source_port, b)?;
+        crate::netstack::tcp::send_payload(ip, port, src_port, b)?;
     }
     
     // Receive response
@@ -128,7 +128,7 @@ fn request_inner(method: &str, url: &str, content_type: Option<&str>, body: Opti
 loop {
         crate::netstack::poll();
         
-        while let Some(chunk) = crate::netstack::tcp::recv_data(ip, port, source_port) {
+        while let Some(chunk) = crate::netstack::tcp::recv_data(ip, port, src_port) {
             response_data.extend_from_slice(&chunk);
         }
         
@@ -138,7 +138,7 @@ loop {
         }
         
         // Check for FIN (connection closed by server)
-        if crate::netstack::tcp::fin_received(ip, port, source_port) {
+        if crate::netstack::tcp::fin_received(ip, port, src_port) {
             break;
         }
         
@@ -152,7 +152,7 @@ loop {
     }
     
     // Send FIN to close connection
-    let _ = crate::netstack::tcp::send_fin(ip, port, source_port);
+    let _ = crate::netstack::tcp::send_fin(ip, port, src_port);
     
     // Parse response
     let response = parse_response(&response_data)?;
@@ -191,11 +191,11 @@ match path.rfind('/') {
 /// Check if response contains end marker (for chunked or content-length based)
 fn contains_end_marker(data: &[u8]) -> bool {
     // Find header end
-    let header_end = find_header_end(data);
-    if header_end.is_none() {
-        return false;
-    }
-    let header_end = header_end.unwrap();
+    let header_end = // Pattern matching — Rust's exhaustive branching construct.
+match find_header_end(data) {
+        Some(v) => v,
+        None => return false,
+    };
     
     // Check Content-Length
     if let Some(cl) = find_content_length(data, header_end) {
@@ -233,8 +233,8 @@ fn find_content_length(data: &[u8], header_end: usize) -> Option<usize> {
     for line in headers.lines() {
         let lower = to_lower(line);
         if lower.starts_with("content-length:") {
-            let value = line[15..].trim();
-            return value.parse().ok();
+            let val = line[15..].trim();
+            return val.parse().ok();
         }
     }
     None
@@ -243,11 +243,11 @@ fn find_content_length(data: &[u8], header_end: usize) -> Option<usize> {
 /// Decode chunked transfer encoding
 fn decode_chunked(data: &[u8]) -> Vec<u8> {
     let mut result = Vec::new();
-    let mut position = 0;
+    let mut pos = 0;
     
-    while position < data.len() {
+    while pos < data.len() {
         // Find end of chunk size line
-        let mut line_end = position;
+        let mut line_end = pos;
         while line_end + 1 < data.len() {
             if data[line_end] == b'\r' && data[line_end + 1] == b'\n' {
                 break;
@@ -260,7 +260,7 @@ fn decode_chunked(data: &[u8]) -> Vec<u8> {
         }
         
         // Parse hex chunk size (ignore extensions after ';')
-        let size_str = core::str::from_utf8(&data[position..line_end]).unwrap_or("0");
+        let size_str = core::str::from_utf8(&data[pos..line_end]).unwrap_or("0");
         let size_str = size_str.split(';').next().unwrap_or("0").trim();
         let chunk_size = usize::from_str_radix(size_str, 16).unwrap_or(0);
         
@@ -278,7 +278,7 @@ fn decode_chunked(data: &[u8]) -> Vec<u8> {
         }
         
         result.extend_from_slice(&data[chunk_start..chunk_end]);
-        position = chunk_end + 2; // Skip \r\n after chunk data
+        pos = chunk_end + 2; // Skip \r\n after chunk data
     }
     
     result
@@ -302,7 +302,7 @@ fn parse_response(data: &[u8]) -> Result<HttpResponse, &'static str> {
     let header_end = find_header_end(data).ok_or("Incomplete response")?;
     
     let header_str = core::str::from_utf8(&data[..header_end])
-        .map_error(|_| "Invalid UTF-8 in headers")?;
+        .map_err(|_| "Invalid UTF-8 in headers")?;
     
     let mut lines = header_str.lines();
     let status_line = lines.next().ok_or("No status line")?;
@@ -313,7 +313,7 @@ fn parse_response(data: &[u8]) -> Result<HttpResponse, &'static str> {
         return Err("Invalid status line");
     }
     
-    let status_code: u16 = parts[1].parse().map_error(|_| "Invalid status code")?;
+    let status_code: u16 = parts[1].parse().map_err(|_| "Invalid status code")?;
     
     // Parse headers
     let mut headers = Vec::new();
@@ -351,10 +351,10 @@ fn parse_ip(s: &str) -> Result<[u8; 4], ()> {
         return Err(());
     }
     
-    let a: u8 = parts[0].parse().map_error(|_| ())?;
-    let b: u8 = parts[1].parse().map_error(|_| ())?;
-    let c: u8 = parts[2].parse().map_error(|_| ())?;
-    let d: u8 = parts[3].parse().map_error(|_| ())?;
+    let a: u8 = parts[0].parse().map_err(|_| ())?;
+    let b: u8 = parts[1].parse().map_err(|_| ())?;
+    let c: u8 = parts[2].parse().map_err(|_| ())?;
+    let d: u8 = parts[3].parse().map_err(|_| ())?;
     
     Ok([a, b, c, d])
 }

@@ -65,8 +65,8 @@ pub struct CpuCapabilities {
     pub svm: bool,           // AMD-V
     
     // Multi-core
-    pub maximum_logical_cpus: u8,
-    pub maximum_physical_cpus: u8,
+    pub max_logical_cpus: u8,
+    pub max_physical_cpus: u8,
     pub apic_id: u8,
     
     // TSC frequency (calibrated)
@@ -117,8 +117,8 @@ impl CpuCapabilities {
             nx: false,
             vmx: false,
             svm: false,
-            maximum_logical_cpus: 1,
-            maximum_physical_cpus: 1,
+            max_logical_cpus: 1,
+            max_physical_cpus: 1,
             apic_id: 0,
             tsc_frequency_hz: 0,
         };
@@ -167,7 +167,7 @@ unsafe { core::arch::x86_64::__cpuid(1) };
             
             // APIC ID
             caps.apic_id = ((cpuid_1.ebx >> 24) & 0xFF) as u8;
-            caps.maximum_logical_cpus = ((cpuid_1.ebx >> 16) & 0xFF) as u8;
+            caps.max_logical_cpus = ((cpuid_1.ebx >> 16) & 0xFF) as u8;
             
             // ECX features
             caps.sse3 = (cpuid_1.ecx & (1 << 0)) != 0;
@@ -322,7 +322,7 @@ pub fn has_rdrand() -> bool {
 
 /// Get the number of logical CPU cores detected
 pub fn core_count() -> u8 {
-    capabilities().map(|c| c.maximum_logical_cpus).unwrap_or(1)
+    capabilities().map(|c| c.max_logical_cpus).unwrap_or(1)
 }
 
 /// Get hardware random number (RDRAND)

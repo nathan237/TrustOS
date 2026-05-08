@@ -376,8 +376,18 @@ pub fn sys_mmap(addr: u64, length: u64, prot: u64, flags: u64, fd: i64, _offset:
         }
         aligned
     } else {
-        // Kernel chooses address
-        NEXT_MMAP_ADDR.fetch_add(aligned_length, Ordering::SeqCst)
+        // Kernel chooses address — atomic bump allocator with bounds check
+        let max_user = crate::userland::USER_STACK_TOP - 0x10_0000; // guard gap
+        loop {
+            let current = NEXT_MMAP_ADDR.load(Ordering::SeqCst);
+            let next = match current.checked_add(aligned_length) {
+                Some(n) if n <= max_user => n,
+                _ => return errno::ENOMEM,
+            };
+            if NEXT_MMAP_ADDR.compare_exchange(current, next, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
+                break current;
+            }
+        }
     };
     
     // Only anonymous mappings for now
@@ -1494,13 +1504,16 @@ pub fn sys_sched_yield() -> i64 {
 
 /// sys_sched_getaffinity - Get CPU affinity
 pub fn sys_sched_getaffinity(pid: u32, cpusetsize: u64, mask: u64) -> i64 {
+    const MAX_CPUSET: u64 = 128;
+    if cpusetsize == 0 || cpusetsize > MAX_CPUSET {
+        return errno::EINVAL;
+    }
     if mask != 0 && validate_user_ptr(mask, cpusetsize as usize, true) {
-        // Return all CPUs (simplified)
         unsafe {
             core::ptr::write_bytes(mask as *mut u8, 0xFF, cpusetsize as usize);
         }
     }
-    0
+    cpusetsize as i64
 }
 
 // ============================================================================
@@ -1550,7 +1563,15 @@ pub struct Iovec {
 
 /// sys_writev - Write to multiple buffers
 pub fn sys_writev(fd: i32, iov: u64, iovcnt: u32) -> i64 {
-    if !validate_user_ptr(iov, (iovcnt as usize) * core::mem::size_of::<Iovec>(), false) {
+    const MAX_IOVCNT: u32 = 1024;
+    if iovcnt > MAX_IOVCNT {
+        return errno::EINVAL;
+    }
+    let total_size = match (iovcnt as usize).checked_mul(core::mem::size_of::<Iovec>()) {
+        Some(s) => s,
+        None => return errno::EINVAL,
+    };
+    if !validate_user_ptr(iov, total_size, false) {
         return errno::EFAULT;
     }
     
@@ -1586,7 +1607,15 @@ pub fn sys_writev(fd: i32, iov: u64, iovcnt: u32) -> i64 {
 
 /// sys_readv - Read from multiple buffers
 pub fn sys_readv(fd: i32, iov: u64, iovcnt: u32) -> i64 {
-    if !validate_user_ptr(iov, (iovcnt as usize) * core::mem::size_of::<Iovec>(), false) {
+    const MAX_IOVCNT: u32 = 1024;
+    if iovcnt > MAX_IOVCNT {
+        return errno::EINVAL;
+    }
+    let total_size = match (iovcnt as usize).checked_mul(core::mem::size_of::<Iovec>()) {
+        Some(s) => s,
+        None => return errno::EINVAL,
+    };
+    if !validate_user_ptr(iov, total_size, false) {
         return errno::EFAULT;
     }
     
@@ -1669,7 +1698,14 @@ const POLLNVAL: i16 = 32;
 /// sys_poll - Check readiness of file descriptors
 pub fn sys_poll(fds_ptr: u64, nfds: u32, timeout_ms: i32) -> i64 {
     if nfds == 0 { return 0; }
-    let size = (nfds as usize) * core::mem::size_of::<PollFd>();
+    const MAX_POLL_FDS: u32 = 4096;
+    if nfds > MAX_POLL_FDS {
+        return errno::EINVAL;
+    }
+    let size = match (nfds as usize).checked_mul(core::mem::size_of::<PollFd>()) {
+        Some(s) => s,
+        None => return errno::EINVAL,
+    };
     if !validate_user_ptr(fds_ptr, size, true) {
         return errno::EFAULT;
     }

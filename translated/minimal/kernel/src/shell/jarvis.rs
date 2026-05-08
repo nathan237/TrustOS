@@ -13,109 +13,109 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::format;
-use crate::framebuffer::{C_, B_, G_, D_, A_, Q_, L_, DF_};
+use crate::framebuffer::{C_, B_, G_, D_, A_, R_, K_, DM_};
 
 
 
 
 
-const CO_: u32 = 0xFF00DDFF;      
-const AXL_: u32 = 0xFF00FFAA;     
-const DRZ_: u32 = 0xFFFFAA00;       
-const DRY_: u32 = 0xFFFF4444;        
-const AZQ_: usize = 32;
+const CU_: u32 = 0xFF00DDFF;      
+const AZO_: u32 = 0xFF00FFAA;     
+const DVS_: u32 = 0xFFFFAA00;       
+const DVR_: u32 = 0xFFFF4444;        
+const BBS_: usize = 32;
 
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Intent {
     
-    Qx,         
-    Bpk,        
-    Wi,           
-    Hy,        
-    Aat,            
-    Afh,             
+    SystemInfo,         
+    ProcessList,        
+    Jt,           
+    Cn,        
+    Fk,            
+    Uptime,             
     
     
-    Aux,          
-    Axn,           
-    Aqh,         
-    Aqs,         
-    Ask,           
+    ListFiles,          
+    ReadFile,           
+    CreateFile,         
+    DeleteFile,         
+    FindFile,           
     
     
-    Ayd,         
-    Akr,            
-    Bpc,          
-    Ayq,           
+    RunCommand,         
+    OpenApp,            
+    PlayMusic,          
+    SetTheme,           
     
     
-    Bis,               
-    Ars,            
-    Atr,              
+    Help,               
+    Explain,            
+    HowTo,              
     
     
-    Bij,           
-    Buf,             
-    Bww,          
-    Bkg,               
-    Bdr,         
-    Bjq,             
-    Bhz,            
+    Greeting,           
+    Thanks,             
+    WhoAreYou,          
+    Joke,               
+    Compliment,         
+    Insult,             
+    Goodbye,            
     
     
-    Jf,              
-    Re,            
-    Btj,              
+    About,              
+    Version,            
+    Stats,              
     
-    F,
+    Unknown,
 }
 
 
 #[derive(Debug, Clone)]
-struct Nc {
-    kk: EntityKind,
-    bn: String,
+struct Fp {
+    kind: EntityKind,
+    value: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum EntityKind {
-    Pk,
+    FilePath,
     Command,
-    Bbu,
-    L,
-    Bug,
-    Ami,
-    Cyc,
+    AppName,
+    Number,
+    ThemeName,
+    SearchTerm,
+    Generic,
 }
 
 
 #[derive(Debug)]
-struct Bxq {
-    dc: String,
-    hr: Action,
+struct Ahb {
+    description: String,
+    action: Action,
 }
 
 #[derive(Debug)]
 enum Action {
-    Kb(String),
-    Cmy(String),
-    Ad(String),
-    Chn(Vec<Bxq>),
+    ShellCommand(String),
+    ShowInfo(String),
+    Respond(String),
+    MultiStep(Vec<Ahb>),
 }
 
 
-struct Cab {
-    uch: Intent,
-    ucr: String,
-    pwl: u32,
-    sh: Lang,
+struct Aic {
+    last_intent: Intent,
+    last_topic: String,
+    turn_count: u32,
+    ia: Lang,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Lang {
-    Bb,
-    Az,
+    Fr,
+    En,
 }
 
 
@@ -123,7 +123,7 @@ enum Lang {
 
 
 
-const Csm: &[&str] = &[
+const Atk: &[&str] = &[
     "Be helpful, concise, and accurate.",
     "Never execute destructive commands without confirmation.",
     "Respect user privacy — never log or transmit personal data.",
@@ -138,30 +138,30 @@ const Csm: &[&str] = &[
 
 
 
-fn all(input: &str) -> String {
-    let mut e = String::fc(input.len());
-    for r in input.bw() {
-        match r {
-            'A'..='Z' => e.push((r as u8 + 32) as char),
-            'a'..='z' | '0'..='9' | ' ' | '/' | '.' | '-' | '_' => e.push(r),
+fn normalize(input: &str) -> String {
+    let mut j = String::with_capacity(input.len());
+    for c in input.chars() {
+        match c {
+            'A'..='Z' => j.push((c as u8 + 32) as char),
+            'a'..='z' | '0'..='9' | ' ' | '/' | '.' | '-' | '_' => j.push(c),
             
-            'é' | 'è' | 'ê' | 'ë' => e.push('e'),
-            'à' | 'â' | 'ä' => e.push('a'),
-            'ù' | 'û' | 'ü' => e.push('u'),
-            'ô' | 'ö' => e.push('o'),
-            'î' | 'ï' => e.push('i'),
-            'ç' => e.push('c'),
-            'É' | 'È' | 'Ê' | 'Ë' => e.push('e'),
-            'À' | 'Â' | 'Ä' => e.push('a'),
-            _ => e.push(' '),
+            'é' | 'è' | 'ê' | 'ë' => j.push('e'),
+            'à' | 'â' | 'ä' => j.push('a'),
+            'ù' | 'û' | 'ü' => j.push('u'),
+            'ô' | 'ö' => j.push('o'),
+            'î' | 'ï' => j.push('i'),
+            'ç' => j.push('c'),
+            'É' | 'È' | 'Ê' | 'Ë' => j.push('e'),
+            'À' | 'Â' | 'Ä' => j.push('a'),
+            _ => j.push(' '),
         }
     }
-    e
+    j
 }
 
 
-fn nla(input: &str) -> Lang {
-    let swr = [
+fn hrx(input: &str) -> Lang {
+    let lyg = [
         "est", "les", "des", "une", "que", "qui", "pas", "mon", "mes", "ton",
         "ses", "pour", "dans", "avec", "sur", "fait", "peut", "quel", "quoi",
         "comment", "combien", "pourquoi", "montre", "affiche", "donne", "ouvre",
@@ -169,392 +169,392 @@ fn nla(input: &str) -> Lang {
         "bonjour", "merci", "stp", "svp", "moi", "fichier", "dossier",
         "memoire", "disque", "reseau", "processus", "aide", "blague",
     ];
-    let aoh: Vec<&str> = input.ayt().collect();
-    let mut nvv = 0u32;
-    for d in &aoh {
-        let zv = d.avd();
-        for &marker in &swr {
-            if zv == marker || zv.cj(marker) {
-                nvv += 1;
+    let um: Vec<&str> = input.split_whitespace().collect();
+    let mut hzt = 0u32;
+    for w in &um {
+        let mo = w.to_ascii_lowercase();
+        for &marker in &lyg {
+            if mo == marker || mo.starts_with(marker) {
+                hzt += 1;
             }
         }
     }
     
-    if nvv >= 1 { Lang::Bb } else { Lang::Az }
+    if hzt >= 1 { Lang::Fr } else { Lang::En }
 }
 
 
-fn yb(abh: &str, clv: &[&str]) -> bool {
-    for &ai in clv {
-        if abh.contains(ai) { return true; }
+fn kx(mu: &str, patterns: &[&str]) -> bool {
+    for &aa in patterns {
+        if mu.contains(aa) { return true; }
     }
     false
 }
 
 
-fn rwr(abh: &str) -> Intent {
+fn ldx(mu: &str) -> Intent {
     
-    if yb(abh, &["hello", "hi ", "hey ", "salut", "bonjour", "bonsoir", "yo ", "coucou", "allo"]) {
-        return Intent::Bij;
+    if kx(mu, &["hello", "hi ", "hey ", "salut", "bonjour", "bonsoir", "yo ", "coucou", "allo"]) {
+        return Intent::Greeting;
     }
-    if yb(abh, &["bye", "au revoir", "a plus", "ciao", "goodbye", "quit", "exit"]) {
-        return Intent::Bhz;
+    if kx(mu, &["bye", "au revoir", "a plus", "ciao", "goodbye", "quit", "exit"]) {
+        return Intent::Goodbye;
     }
-    if yb(abh, &["thank", "merci", "thanks", "thx"]) {
-        return Intent::Buf;
+    if kx(mu, &["thank", "merci", "thanks", "thx"]) {
+        return Intent::Thanks;
     }
-    if yb(abh, &["who are you", "qui es tu", "c est qui", "tes qui", "your name", "ton nom", "tu es quoi"]) {
-        return Intent::Bww;
+    if kx(mu, &["who are you", "qui es tu", "c est qui", "tes qui", "your name", "ton nom", "tu es quoi"]) {
+        return Intent::WhoAreYou;
     }
-    if yb(abh, &["joke", "blague", "funny", "drole", "humour", "raconte"]) {
-        return Intent::Bkg;
+    if kx(mu, &["joke", "blague", "funny", "drole", "humour", "raconte"]) {
+        return Intent::Joke;
     }
-    if yb(abh, &["great", "awesome", "amazing", "genial", "super", "bravo", "bien joue", "nice", "cool", "good job", "bien fait"]) {
-        return Intent::Bdr;
+    if kx(mu, &["great", "awesome", "amazing", "genial", "super", "bravo", "bien joue", "nice", "cool", "good job", "bien fait"]) {
+        return Intent::Compliment;
     }
-    if yb(abh, &["suck", "nul", "bad", "horrible", "useless", "inutile", "pourri", "merde"]) {
-        return Intent::Bjq;
-    }
-    
-    
-    if yb(abh, &["memory", "memoire", "ram", "heap", "free mem", "mem usage"]) {
-        return Intent::Qx;
-    }
-    if yb(abh, &["system", "systeme", "status", "etat", "sante", "health", "overview"]) {
-        return Intent::Qx;
-    }
-    if yb(abh, &["process", "processus", "running", "tourne", "ps ", "qui tourne", "what run"]) {
-        return Intent::Bpk;
-    }
-    if yb(abh, &["disk", "disque", "storage", "stockage", "space", "espace", "df "]) {
-        return Intent::Wi;
-    }
-    if yb(abh, &["network", "reseau", "ip ", "ifconfig", "internet", "connect", "connexion", "net "]) {
-        return Intent::Hy;
-    }
-    if yb(abh, &["cpu", "processor", "processeur", "core", "coeur", "smp"]) {
-        return Intent::Aat;
-    }
-    if yb(abh, &["uptime", "how long", "depuis combien", "temps", "duree"]) {
-        return Intent::Afh;
+    if kx(mu, &["suck", "nul", "bad", "horrible", "useless", "inutile", "pourri", "merde"]) {
+        return Intent::Insult;
     }
     
     
-    if yb(abh, &["list file", "liste fichier", "ls ", "show file", "montre fichier", "affiche fichier", "what file", "quels fichier"]) {
-        return Intent::Aux;
+    if kx(mu, &["memory", "memoire", "ram", "heap", "free mem", "mem usage"]) {
+        return Intent::SystemInfo;
     }
-    if yb(abh, &["read file", "lire fichier", "lis ", "cat ", "show content", "montre contenu", "ouvre fichier", "open file"]) {
-        return Intent::Axn;
+    if kx(mu, &["system", "systeme", "status", "etat", "sante", "health", "overview"]) {
+        return Intent::SystemInfo;
     }
-    if yb(abh, &["create file", "cree fichier", "creer", "touch ", "nouveau fichier", "new file"]) {
-        return Intent::Aqh;
+    if kx(mu, &["process", "processus", "running", "tourne", "ps ", "qui tourne", "what run"]) {
+        return Intent::ProcessList;
     }
-    if yb(abh, &["delete file", "supprime", "supprimer", "rm ", "remove", "efface", "detruit"]) {
-        return Intent::Aqs;
+    if kx(mu, &["disk", "disque", "storage", "stockage", "space", "espace", "df "]) {
+        return Intent::Jt;
     }
-    if yb(abh, &["find file", "cherche fichier", "find ", "search", "ou est", "where is", "locate", "trouve"]) {
-        return Intent::Ask;
+    if kx(mu, &["network", "reseau", "ip ", "ifconfig", "internet", "connect", "connexion", "net "]) {
+        return Intent::Cn;
     }
-    
-    
-    if yb(abh, &["run ", "execute", "lance commande", "executer", "fais "]) {
-        return Intent::Ayd;
+    if kx(mu, &["cpu", "processor", "processeur", "core", "coeur", "smp"]) {
+        return Intent::Fk;
     }
-    if yb(abh, &["open ", "ouvre ", "launch", "lance ", "start ", "demarre"]) {
-        return Intent::Akr;
-    }
-    if yb(abh, &["music", "musique", "play", "beep", "son", "sound", "audio"]) {
-        return Intent::Bpc;
-    }
-    if yb(abh, &["theme", "color", "couleur", "dark", "light", "sombre", "clair"]) {
-        return Intent::Ayq;
+    if kx(mu, &["uptime", "how long", "depuis combien", "temps", "duree"]) {
+        return Intent::Uptime;
     }
     
     
-    if yb(abh, &["help", "aide", "what can", "que peux", "quoi faire", "commande", "command"]) {
-        return Intent::Bis;
+    if kx(mu, &["list file", "liste fichier", "ls ", "show file", "montre fichier", "affiche fichier", "what file", "quels fichier"]) {
+        return Intent::ListFiles;
     }
-    if yb(abh, &["explain", "explique", "what is", "c est quoi", "definition", "qu est ce"]) {
-        return Intent::Ars;
+    if kx(mu, &["read file", "lire fichier", "lis ", "cat ", "show content", "montre contenu", "ouvre fichier", "open file"]) {
+        return Intent::ReadFile;
     }
-    if yb(abh, &["how to", "comment", "how do", "how can", "tuto"]) {
-        return Intent::Atr;
+    if kx(mu, &["create file", "cree fichier", "creer", "touch ", "nouveau fichier", "new file"]) {
+        return Intent::CreateFile;
+    }
+    if kx(mu, &["delete file", "supprime", "supprimer", "rm ", "remove", "efface", "detruit"]) {
+        return Intent::DeleteFile;
+    }
+    if kx(mu, &["find file", "cherche fichier", "find ", "search", "ou est", "where is", "locate", "trouve"]) {
+        return Intent::FindFile;
+    }
+    
+    
+    if kx(mu, &["run ", "execute", "lance commande", "executer", "fais "]) {
+        return Intent::RunCommand;
+    }
+    if kx(mu, &["open ", "ouvre ", "launch", "lance ", "start ", "demarre"]) {
+        return Intent::OpenApp;
+    }
+    if kx(mu, &["music", "musique", "play", "beep", "son", "sound", "audio"]) {
+        return Intent::PlayMusic;
+    }
+    if kx(mu, &["theme", "color", "couleur", "dark", "light", "sombre", "clair"]) {
+        return Intent::SetTheme;
     }
     
     
-    if yb(abh, &["about", "a propos", "trustos"]) && !yb(abh, &["open", "ouvre"]) {
-        return Intent::Jf;
+    if kx(mu, &["help", "aide", "what can", "que peux", "quoi faire", "commande", "command"]) {
+        return Intent::Help;
     }
-    if yb(abh, &["version"]) {
-        return Intent::Re;
+    if kx(mu, &["explain", "explique", "what is", "c est quoi", "definition", "qu est ce"]) {
+        return Intent::Explain;
     }
-    if yb(abh, &["stats", "statistique", "chiffre", "number", "count"]) {
-        return Intent::Btj;
+    if kx(mu, &["how to", "comment", "how do", "how can", "tuto"]) {
+        return Intent::HowTo;
     }
     
-    Intent::F
+    
+    if kx(mu, &["about", "a propos", "trustos"]) && !kx(mu, &["open", "ouvre"]) {
+        return Intent::About;
+    }
+    if kx(mu, &["version"]) {
+        return Intent::Version;
+    }
+    if kx(mu, &["stats", "statistique", "chiffre", "number", "count"]) {
+        return Intent::Stats;
+    }
+    
+    Intent::Unknown
 }
 
 
-fn sqd(abh: &str, dsb: Intent) -> Vec<Nc> {
-    let mut axu = Vec::new();
-    let aoh: Vec<&str> = abh.ayt().collect();
+fn ltp(mu: &str, bna: Intent) -> Vec<Fp> {
+    let mut zw = Vec::new();
+    let um: Vec<&str> = mu.split_whitespace().collect();
     
-    match dsb {
-        Intent::Axn | Intent::Aqh | Intent::Aqs | Intent::Ask => {
+    match bna {
+        Intent::ReadFile | Intent::CreateFile | Intent::DeleteFile | Intent::FindFile => {
             
-            for d in &aoh {
-                if d.contains('/') || d.contains('.') || d.cj('~') {
-                    axu.push(Nc { kk: EntityKind::Pk, bn: String::from(*d) });
+            for w in &um {
+                if w.contains('/') || w.contains('.') || w.starts_with('~') {
+                    zw.push(Fp { kind: EntityKind::FilePath, value: String::from(*w) });
                 }
             }
             
-            if axu.is_empty() {
-                if let Some(qv) = aoh.qv() {
-                    if !["file", "fichier", "it", "le", "la", "les"].contains(qv) {
-                        axu.push(Nc { kk: EntityKind::Pk, bn: String::from(*qv) });
+            if zw.is_empty() {
+                if let Some(last) = um.last() {
+                    if !["file", "fichier", "it", "le", "la", "les"].contains(last) {
+                        zw.push(Fp { kind: EntityKind::FilePath, value: String::from(*last) });
                     }
                 }
             }
         }
-        Intent::Ayd => {
+        Intent::RunCommand => {
             
-            let iez = ["run ", "execute ", "lance ", "executer ", "fais "];
-            for ab in &iez {
-                if let Some(u) = abh.du(ab) {
-                    let cmd = &abh[u + ab.len()..];
+            let ecq = ["run ", "execute ", "lance ", "executer ", "fais "];
+            for t in &ecq {
+                if let Some(pos) = mu.find(t) {
+                    let cmd = &mu[pos + t.len()..];
                     if !cmd.is_empty() {
-                        axu.push(Nc { kk: EntityKind::Command, bn: String::from(cmd.em()) });
+                        zw.push(Fp { kind: EntityKind::Command, value: String::from(cmd.trim()) });
                     }
                     break;
                 }
             }
         }
-        Intent::Akr => {
-            let iez = ["open ", "ouvre ", "launch ", "lance ", "start ", "demarre "];
-            for ab in &iez {
-                if let Some(u) = abh.du(ab) {
-                    let bjf = &abh[u + ab.len()..];
-                    if !bjf.is_empty() {
-                        axu.push(Nc { kk: EntityKind::Bbu, bn: String::from(bjf.em()) });
+        Intent::OpenApp => {
+            let ecq = ["open ", "ouvre ", "launch ", "lance ", "start ", "demarre "];
+            for t in &ecq {
+                if let Some(pos) = mu.find(t) {
+                    let afz = &mu[pos + t.len()..];
+                    if !afz.is_empty() {
+                        zw.push(Fp { kind: EntityKind::AppName, value: String::from(afz.trim()) });
                     }
                     break;
                 }
             }
         }
-        Intent::Ars | Intent::Atr => {
-            let iez = ["explain ", "explique ", "what is ", "c est quoi ", "how to ", "comment "];
-            for ab in &iez {
-                if let Some(u) = abh.du(ab) {
-                    let gus = &abh[u + ab.len()..];
-                    if !gus.is_empty() {
-                        axu.push(Nc { kk: EntityKind::Ami, bn: String::from(gus.em()) });
+        Intent::Explain | Intent::HowTo => {
+            let ecq = ["explain ", "explique ", "what is ", "c est quoi ", "how to ", "comment "];
+            for t in &ecq {
+                if let Some(pos) = mu.find(t) {
+                    let dfq = &mu[pos + t.len()..];
+                    if !dfq.is_empty() {
+                        zw.push(Fp { kind: EntityKind::SearchTerm, value: String::from(dfq.trim()) });
                     }
                     break;
                 }
             }
         }
-        Intent::Ayq => {
-            for d in &aoh {
-                match *d {
+        Intent::SetTheme => {
+            for w in &um {
+                match *w {
                     "matrix" | "green" | "vert" | "dark" | "sombre" | "cyber" | "retro" | "hacker" => {
-                        axu.push(Nc { kk: EntityKind::Bug, bn: String::from(*d) });
+                        zw.push(Fp { kind: EntityKind::ThemeName, value: String::from(*w) });
                     }
                     _ => {}
                 }
             }
         }
-        Intent::Aux => {
-            for d in &aoh {
-                if d.contains('/') {
-                    axu.push(Nc { kk: EntityKind::Pk, bn: String::from(*d) });
+        Intent::ListFiles => {
+            for w in &um {
+                if w.contains('/') {
+                    zw.push(Fp { kind: EntityKind::FilePath, value: String::from(*w) });
                 }
             }
         }
         _ => {}
     }
     
-    axu
+    zw
 }
 
 
 
 
 
-fn ovy(dsb: Intent, axu: &[Nc], sh: Lang) -> Action {
-    match dsb {
-        Intent::Qx => {
-            let mr = crate::memory::heap::mr();
-            let aez = crate::memory::heap::aez();
-            let es = mr + aez;
-            let jvb = mr / 1024;
-            let cuu = es / 1024;
-            let cgn = if es > 0 { mr * 100 / es } else { 0 };
-            let bcy = crate::task::dmj();
-            match sh {
-                Lang::Bb => Action::Ad(format!(
+fn ivb(bna: Intent, zw: &[Fp], ia: Lang) -> Action {
+    match bna {
+        Intent::SystemInfo => {
+            let used = crate::memory::heap::used();
+            let free = crate::memory::heap::free();
+            let av = used + free;
+            let fee = used / 1024;
+            let baa = av / 1024;
+            let aed = if av > 0 { used * 100 / av } else { 0 };
+            let tasks = crate::task::task_count();
+            match ia {
+                Lang::Fr => Action::Respond(format!(
                     "Memoire: {} KB utilises / {} KB total ({}%)\nTaches actives: {}\nCPUs detectes: {}",
-                    jvb, cuu, cgn, bcy + 2, crate::cpu::smp::aao()
+                    fee, baa, aed, tasks + 2, crate::cpu::smp::cpu_count()
                 )),
-                Lang::Az => Action::Ad(format!(
+                Lang::En => Action::Respond(format!(
                     "Memory: {} KB used / {} KB total ({}%)\nActive tasks: {}\nCPUs detected: {}",
-                    jvb, cuu, cgn, bcy + 2, crate::cpu::smp::aao()
+                    fee, baa, aed, tasks + 2, crate::cpu::smp::cpu_count()
                 )),
             }
         }
-        Intent::Bpk => {
-            let bcy = crate::task::dmj();
-            match sh {
-                Lang::Bb => Action::Ad(format!(
+        Intent::ProcessList => {
+            let tasks = crate::task::task_count();
+            match ia {
+                Lang::Fr => Action::Respond(format!(
                     "Processus actifs:\n  PID 1  kernel    (en cours)\n  PID 2  tsh       (en cours)\n  +{} taches en arriere-plan",
-                    bcy
+                    tasks
                 )),
-                Lang::Az => Action::Ad(format!(
+                Lang::En => Action::Respond(format!(
                     "Running processes:\n  PID 1  kernel    (running)\n  PID 2  tsh       (running)\n  +{} background tasks",
-                    bcy
+                    tasks
                 )),
             }
         }
-        Intent::Wi => {
-            match sh {
-                Lang::Bb => Action::Ad(String::from(
+        Intent::Jt => {
+            match ia {
+                Lang::Fr => Action::Respond(String::from(
                     "Systeme de fichiers:\n  ramfs    64 KB (journalise)\n  Pas de disque physique monte"
                 )),
-                Lang::Az => Action::Ad(String::from(
+                Lang::En => Action::Respond(String::from(
                     "File systems:\n  ramfs    64 KB (journaled)\n  No physical disk mounted"
                 )),
             }
         }
-        Intent::Hy => {
-            Action::Kb(String::from("ifconfig"))
+        Intent::Cn => {
+            Action::ShellCommand(String::from("ifconfig"))
         }
-        Intent::Aat => {
-            let cdv = crate::cpu::smp::aao();
-            let ack = crate::cpu::smp::boc();
-            match sh {
-                Lang::Bb => Action::Ad(format!(
+        Intent::Fk => {
+            let cpus = crate::cpu::smp::cpu_count();
+            let ready = crate::cpu::smp::ail();
+            match ia {
+                Lang::Fr => Action::Respond(format!(
                     "CPU: x86_64\nCoeurs detectes: {}\nCoeurs actifs: {} (BSP)\nSSE2: active\nMode: 64-bit Long Mode",
-                    cdv, ack
+                    cpus, ready
                 )),
-                Lang::Az => Action::Ad(format!(
+                Lang::En => Action::Respond(format!(
                     "CPU: x86_64\nCores detected: {}\nActive cores: {} (BSP)\nSSE2: enabled\nMode: 64-bit Long Mode",
-                    cdv, ack
+                    cpus, ready
                 )),
             }
         }
-        Intent::Afh => {
-            Action::Kb(String::from("uptime"))
+        Intent::Uptime => {
+            Action::ShellCommand(String::from("uptime"))
         }
         
         
-        Intent::Aux => {
-            let path = axu.iter()
-                .du(|aa| aa.kk == EntityKind::Pk)
-                .map(|aa| aa.bn.as_str())
+        Intent::ListFiles => {
+            let path = zw.iter()
+                .find(|e| e.kind == EntityKind::FilePath)
+                .map(|e| e.value.as_str())
                 .unwrap_or("/");
-            Action::Kb(format!("ls {}", path))
+            Action::ShellCommand(format!("ls {}", path))
         }
-        Intent::Axn => {
-            if let Some(aa) = axu.iter().du(|aa| aa.kk == EntityKind::Pk) {
-                Action::Kb(format!("cat {}", aa.bn))
+        Intent::ReadFile => {
+            if let Some(e) = zw.iter().find(|e| e.kind == EntityKind::FilePath) {
+                Action::ShellCommand(format!("cat {}", e.value))
             } else {
-                match sh {
-                    Lang::Bb => Action::Ad(String::from("Quel fichier veux-tu lire ? Donne-moi le chemin.")),
-                    Lang::Az => Action::Ad(String::from("Which file should I read? Give me the path.")),
+                match ia {
+                    Lang::Fr => Action::Respond(String::from("Quel fichier veux-tu lire ? Donne-moi le chemin.")),
+                    Lang::En => Action::Respond(String::from("Which file should I read? Give me the path.")),
                 }
             }
         }
-        Intent::Aqh => {
-            if let Some(aa) = axu.iter().du(|aa| aa.kk == EntityKind::Pk) {
-                Action::Kb(format!("touch {}", aa.bn))
+        Intent::CreateFile => {
+            if let Some(e) = zw.iter().find(|e| e.kind == EntityKind::FilePath) {
+                Action::ShellCommand(format!("touch {}", e.value))
             } else {
-                match sh {
-                    Lang::Bb => Action::Ad(String::from("Quel nom pour le fichier ?")),
-                    Lang::Az => Action::Ad(String::from("What should the file be called?")),
+                match ia {
+                    Lang::Fr => Action::Respond(String::from("Quel nom pour le fichier ?")),
+                    Lang::En => Action::Respond(String::from("What should the file be called?")),
                 }
             }
         }
-        Intent::Aqs => {
-            if let Some(aa) = axu.iter().du(|aa| aa.kk == EntityKind::Pk) {
-                match sh {
-                    Lang::Bb => Action::Ad(format!(
-                        "Confirme: tu veux supprimer '{}' ?\nTape: rm {}", aa.bn, aa.bn
+        Intent::DeleteFile => {
+            if let Some(e) = zw.iter().find(|e| e.kind == EntityKind::FilePath) {
+                match ia {
+                    Lang::Fr => Action::Respond(format!(
+                        "Confirme: tu veux supprimer '{}' ?\nTape: rm {}", e.value, e.value
                     )),
-                    Lang::Az => Action::Ad(format!(
-                        "Confirm: delete '{}' ?\nType: rm {}", aa.bn, aa.bn
+                    Lang::En => Action::Respond(format!(
+                        "Confirm: delete '{}' ?\nType: rm {}", e.value, e.value
                     )),
                 }
             } else {
-                match sh {
-                    Lang::Bb => Action::Ad(String::from("Quel fichier supprimer ?")),
-                    Lang::Az => Action::Ad(String::from("Which file should I delete?")),
+                match ia {
+                    Lang::Fr => Action::Respond(String::from("Quel fichier supprimer ?")),
+                    Lang::En => Action::Respond(String::from("Which file should I delete?")),
                 }
             }
         }
-        Intent::Ask => {
-            if let Some(aa) = axu.iter().du(|aa| aa.kk == EntityKind::Pk || aa.kk == EntityKind::Ami) {
-                Action::Kb(format!("find {}", aa.bn))
+        Intent::FindFile => {
+            if let Some(e) = zw.iter().find(|e| e.kind == EntityKind::FilePath || e.kind == EntityKind::SearchTerm) {
+                Action::ShellCommand(format!("find {}", e.value))
             } else {
-                match sh {
-                    Lang::Bb => Action::Ad(String::from("Que cherches-tu ?")),
-                    Lang::Az => Action::Ad(String::from("What are you looking for?")),
+                match ia {
+                    Lang::Fr => Action::Respond(String::from("Que cherches-tu ?")),
+                    Lang::En => Action::Respond(String::from("What are you looking for?")),
                 }
             }
         }
         
         
-        Intent::Ayd => {
-            if let Some(aa) = axu.iter().du(|aa| aa.kk == EntityKind::Command) {
-                Action::Kb(aa.bn.clone())
+        Intent::RunCommand => {
+            if let Some(e) = zw.iter().find(|e| e.kind == EntityKind::Command) {
+                Action::ShellCommand(e.value.clone())
             } else {
-                match sh {
-                    Lang::Bb => Action::Ad(String::from("Quelle commande veux-tu executer ?")),
-                    Lang::Az => Action::Ad(String::from("What command should I run?")),
+                match ia {
+                    Lang::Fr => Action::Respond(String::from("Quelle commande veux-tu executer ?")),
+                    Lang::En => Action::Respond(String::from("What command should I run?")),
                 }
             }
         }
-        Intent::Akr => {
-            if let Some(aa) = axu.iter().du(|aa| aa.kk == EntityKind::Bbu) {
-                let bjf = aa.bn.as_str();
+        Intent::OpenApp => {
+            if let Some(e) = zw.iter().find(|e| e.kind == EntityKind::AppName) {
+                let afz = e.value.as_str();
                 
-                let cmd = match bjf {
-                    e if yb(e, &["browser", "navigateur", "web", "internet"]) => "browse",
-                    e if yb(e, &["chess", "echec"]) => "chess",
-                    e if yb(e, &["editor", "editeur", "trustcode", "code"]) => "trustcode",
-                    e if yb(e, &["desktop", "bureau"]) => "desktop",
-                    e if yb(e, &["calculator", "calculatrice", "calc"]) => "calc",
-                    e if yb(e, &["snake", "serpent", "game", "jeu"]) => "snake",
-                    e if yb(e, &["terminal", "shell", "term"]) => "gterm",
-                    e if yb(e, &["lab", "trustlab", "introspect"]) => "lab",
-                    e if yb(e, &["3d", "model", "edit3d"]) => "trustedit",
-                    e if yb(e, &["film", "movie"]) => "film",
-                    e if yb(e, &["trailer", "bande annonce"]) => "trailer",
-                    e if yb(e, &["music", "musique", "audio"]) => "synth",
-                    _ => bjf,
+                let cmd = match afz {
+                    j if kx(j, &["browser", "navigateur", "web", "internet"]) => "browse",
+                    j if kx(j, &["chess", "echec"]) => "chess",
+                    j if kx(j, &["editor", "editeur", "trustcode", "code"]) => "trustcode",
+                    j if kx(j, &["desktop", "bureau"]) => "desktop",
+                    j if kx(j, &["calculator", "calculatrice", "calc"]) => "calc",
+                    j if kx(j, &["snake", "serpent", "game", "jeu"]) => "snake",
+                    j if kx(j, &["terminal", "shell", "term"]) => "gterm",
+                    j if kx(j, &["lab", "trustlab", "introspect"]) => "lab",
+                    j if kx(j, &["3d", "model", "edit3d"]) => "trustedit",
+                    j if kx(j, &["film", "movie"]) => "film",
+                    j if kx(j, &["trailer", "bande annonce"]) => "trailer",
+                    j if kx(j, &["music", "musique", "audio"]) => "synth",
+                    _ => afz,
                 };
-                Action::Kb(String::from(cmd))
+                Action::ShellCommand(String::from(cmd))
             } else {
-                match sh {
-                    Lang::Bb => Action::Ad(String::from("Quelle application ouvrir ?")),
-                    Lang::Az => Action::Ad(String::from("Which app should I open?")),
+                match ia {
+                    Lang::Fr => Action::Respond(String::from("Quelle application ouvrir ?")),
+                    Lang::En => Action::Respond(String::from("Which app should I open?")),
                 }
             }
         }
-        Intent::Bpc => {
-            Action::Kb(String::from("synth"))
+        Intent::PlayMusic => {
+            Action::ShellCommand(String::from("synth"))
         }
-        Intent::Ayq => {
-            if let Some(aa) = axu.iter().du(|aa| aa.kk == EntityKind::Bug) {
-                Action::Kb(format!("theme {}", aa.bn))
+        Intent::SetTheme => {
+            if let Some(e) = zw.iter().find(|e| e.kind == EntityKind::ThemeName) {
+                Action::ShellCommand(format!("theme {}", e.value))
             } else {
-                Action::Kb(String::from("theme matrix"))
+                Action::ShellCommand(String::from("theme matrix"))
             }
         }
         
         
-        Intent::Bis => {
-            match sh {
-                Lang::Bb => Action::Ad(String::from(
+        Intent::Help => {
+            match ia {
+                Lang::Fr => Action::Respond(String::from(
                     "Je peux t'aider avec:\n\
                      - Info systeme: \"memoire\", \"cpu\", \"processus\"\n\
                      - Fichiers: \"liste les fichiers\", \"lis /readme.md\"\n\
@@ -563,7 +563,7 @@ fn ovy(dsb: Intent, axu: &[Nc], sh: Lang) -> Action {
                      - Questions: \"explique TLS\", \"comment compiler\"\n\
                      - Fun: \"une blague\", \"qui es-tu\""
                 )),
-                Lang::Az => Action::Ad(String::from(
+                Lang::En => Action::Respond(String::from(
                     "I can help with:\n\
                      - System info: \"memory\", \"cpu\", \"processes\"\n\
                      - Files: \"list files\", \"read /readme.md\"\n\
@@ -574,49 +574,49 @@ fn ovy(dsb: Intent, axu: &[Nc], sh: Lang) -> Action {
                 )),
             }
         }
-        Intent::Ars => {
-            if let Some(aa) = axu.iter().du(|aa| aa.kk == EntityKind::Ami) {
-                spk(&aa.bn, sh)
+        Intent::Explain => {
+            if let Some(e) = zw.iter().find(|e| e.kind == EntityKind::SearchTerm) {
+                lsv(&e.value, ia)
             } else {
-                match sh {
-                    Lang::Bb => Action::Ad(String::from("Qu'est-ce que tu veux que j'explique ?")),
-                    Lang::Az => Action::Ad(String::from("What would you like me to explain?")),
+                match ia {
+                    Lang::Fr => Action::Respond(String::from("Qu'est-ce que tu veux que j'explique ?")),
+                    Lang::En => Action::Respond(String::from("What would you like me to explain?")),
                 }
             }
         }
-        Intent::Atr => {
-            if let Some(aa) = axu.iter().du(|aa| aa.kk == EntityKind::Ami) {
-                tqe(&aa.bn, sh)
+        Intent::HowTo => {
+            if let Some(e) = zw.iter().find(|e| e.kind == EntityKind::SearchTerm) {
+                mmi(&e.value, ia)
             } else {
-                match sh {
-                    Lang::Bb => Action::Ad(String::from("Comment faire quoi exactement ?")),
-                    Lang::Az => Action::Ad(String::from("How to do what exactly?")),
+                match ia {
+                    Lang::Fr => Action::Respond(String::from("Comment faire quoi exactement ?")),
+                    Lang::En => Action::Respond(String::from("How to do what exactly?")),
                 }
             }
         }
         
         
-        Intent::Bij => {
-            match sh {
-                Lang::Bb => Action::Ad(String::from("Salut ! Je suis Jarvis, ton assistant TrustOS. Comment puis-je t'aider ?")),
-                Lang::Az => Action::Ad(String::from("Hello! I'm Jarvis, your TrustOS assistant. How can I help?")),
+        Intent::Greeting => {
+            match ia {
+                Lang::Fr => Action::Respond(String::from("Salut ! Je suis Jarvis, ton assistant TrustOS. Comment puis-je t'aider ?")),
+                Lang::En => Action::Respond(String::from("Hello! I'm Jarvis, your TrustOS assistant. How can I help?")),
             }
         }
-        Intent::Buf => {
-            match sh {
-                Lang::Bb => Action::Ad(String::from("De rien ! N'hesite pas si tu as besoin d'autre chose.")),
-                Lang::Az => Action::Ad(String::from("You're welcome! Let me know if you need anything else.")),
+        Intent::Thanks => {
+            match ia {
+                Lang::Fr => Action::Respond(String::from("De rien ! N'hesite pas si tu as besoin d'autre chose.")),
+                Lang::En => Action::Respond(String::from("You're welcome! Let me know if you need anything else.")),
             }
         }
-        Intent::Bww => {
-            match sh {
-                Lang::Bb => Action::Ad(String::from(
+        Intent::WhoAreYou => {
+            match ia {
+                Lang::Fr => Action::Respond(String::from(
                     "Je suis Jarvis — Just A Rather Very Intelligent System.\n\
                      Assistant IA integre a TrustOS, 100% local, zero cloud.\n\
                      Je comprends le francais et l'anglais.\n\
                      Demande-moi n'importe quoi sur le systeme !"
                 )),
-                Lang::Az => Action::Ad(String::from(
+                Lang::En => Action::Respond(String::from(
                     "I'm Jarvis — Just A Rather Very Intelligent System.\n\
                      AI assistant built into TrustOS, 100% local, zero cloud.\n\
                      I understand both French and English.\n\
@@ -624,56 +624,56 @@ fn ovy(dsb: Intent, axu: &[Nc], sh: Lang) -> Action {
                 )),
             }
         }
-        Intent::Bkg => {
-            let uao = [
+        Intent::Joke => {
+            let mvd = [
                 "Pourquoi les developpeurs Rust ne font jamais de segfault ?\nParce qu'ils ont le borrow checker comme garde du corps.",
                 "C'est un octet qui rentre dans un bar.\nLe barman lui dit : \"Desole, on sert pas les types non signes ici.\"",
                 "Combien de programmeurs faut-il pour changer une ampoule ?\nAucun, c'est un probleme hardware.",
                 "Un bug rentre dans un bar.\nIl n'en sort jamais. C'est une feature.",
                 "Pourquoi TrustOS est ecrit en Rust ?\nParce que la confiance se merite... et la memoire aussi.",
             ];
-            let uan = [
+            let mvc = [
                 "Why do Rust devs never get segfaults?\nBecause the borrow checker is their bodyguard.",
                 "A byte walks into a bar.\nBartender says: \"Sorry, we don't serve unsigned types here.\"",
                 "How many programmers does it take to change a light bulb?\nNone, that's a hardware problem.",
                 "A bug walks into a bar.\nIt never leaves. It's a feature.",
                 "Why is TrustOS written in Rust?\nBecause trust is earned... and so is memory safety.",
             ];
-            let w = (crate::rtc::nyr() as usize) % 5;
-            match sh {
-                Lang::Bb => Action::Ad(String::from(uao[w])),
-                Lang::Az => Action::Ad(String::from(uan[w])),
+            let idx = (crate::rtc::iby() as usize) % 5;
+            match ia {
+                Lang::Fr => Action::Respond(String::from(mvd[idx])),
+                Lang::En => Action::Respond(String::from(mvc[idx])),
             }
         }
-        Intent::Bdr => {
-            match sh {
-                Lang::Bb => Action::Ad(String::from("Merci ! C'est grace a 131K lignes de Rust et un developpeur passionne.")),
-                Lang::Az => Action::Ad(String::from("Thanks! It's all 131K lines of Rust and one passionate developer.")),
+        Intent::Compliment => {
+            match ia {
+                Lang::Fr => Action::Respond(String::from("Merci ! C'est grace a 131K lignes de Rust et un developpeur passionne.")),
+                Lang::En => Action::Respond(String::from("Thanks! It's all 131K lines of Rust and one passionate developer.")),
             }
         }
-        Intent::Bjq => {
-            match sh {
-                Lang::Bb => Action::Ad(String::from("J'encaisse. Mais je suis open source — tu peux m'ameliorer toi-meme. :)")),
-                Lang::Az => Action::Ad(String::from("Fair enough. But I'm open source — you can improve me yourself. :)")),
+        Intent::Insult => {
+            match ia {
+                Lang::Fr => Action::Respond(String::from("J'encaisse. Mais je suis open source — tu peux m'ameliorer toi-meme. :)")),
+                Lang::En => Action::Respond(String::from("Fair enough. But I'm open source — you can improve me yourself. :)")),
             }
         }
-        Intent::Bhz => {
-            match sh {
-                Lang::Bb => Action::Ad(String::from("A plus ! Tape 'jarvis' quand tu veux me reparler.")),
-                Lang::Az => Action::Ad(String::from("See you! Type 'jarvis' when you want to chat again.")),
+        Intent::Goodbye => {
+            match ia {
+                Lang::Fr => Action::Respond(String::from("A plus ! Tape 'jarvis' quand tu veux me reparler.")),
+                Lang::En => Action::Respond(String::from("See you! Type 'jarvis' when you want to chat again.")),
             }
         }
         
         
-        Intent::Jf => {
-            match sh {
-                Lang::Bb => Action::Ad(String::from(
+        Intent::About => {
+            match ia {
+                Lang::Fr => Action::Respond(String::from(
                     "TrustOS v0.3.3 — OS bare-metal ecrit en Rust pur.\n\
                      131K lignes de code, 253 fichiers source, 1 auteur.\n\
                      Zero C, zero secrets, 100% auditable.\n\
                      github.com/nathan237/TrustOS"
                 )),
-                Lang::Az => Action::Ad(String::from(
+                Lang::En => Action::Respond(String::from(
                     "TrustOS v0.3.3 — Bare-metal OS written in pure Rust.\n\
                      131K lines of code, 253 source files, 1 author.\n\
                      Zero C, zero secrets, 100% auditable.\n\
@@ -681,16 +681,16 @@ fn ovy(dsb: Intent, axu: &[Nc], sh: Lang) -> Action {
                 )),
             }
         }
-        Intent::Re => {
-            Action::Ad(String::from("TrustOS v0.3.3 (kernel build 2026-02-16)"))
+        Intent::Version => {
+            Action::Respond(String::from("TrustOS v0.3.3 (kernel build 2026-02-16)"))
         }
-        Intent::Btj => {
-            let mr = crate::memory::heap::mr();
-            let aez = crate::memory::heap::aez();
-            let es = mr + aez;
-            let cdv = crate::cpu::smp::aao();
-            match sh {
-                Lang::Bb => Action::Ad(format!(
+        Intent::Stats => {
+            let used = crate::memory::heap::used();
+            let free = crate::memory::heap::free();
+            let av = used + free;
+            let cpus = crate::cpu::smp::cpu_count();
+            match ia {
+                Lang::Fr => Action::Respond(format!(
                     "--- Statistiques TrustOS ---\n\
                      Code: 131,985 lignes de Rust\n\
                      Fichiers: 253 modules .rs\n\
@@ -698,9 +698,9 @@ fn ovy(dsb: Intent, axu: &[Nc], sh: Lang) -> Action {
                      Heap: {} / {} KB\n\
                      ISO: ~8.4 MB\n\
                      Commandes shell: 120+",
-                    cdv, mr / 1024, es / 1024
+                    cpus, used / 1024, av / 1024
                 )),
-                Lang::Az => Action::Ad(format!(
+                Lang::En => Action::Respond(format!(
                     "--- TrustOS Statistics ---\n\
                      Code: 131,985 lines of Rust\n\
                      Files: 253 .rs modules\n\
@@ -708,17 +708,17 @@ fn ovy(dsb: Intent, axu: &[Nc], sh: Lang) -> Action {
                      Heap: {} / {} KB\n\
                      ISO: ~8.4 MB\n\
                      Shell commands: 120+",
-                    cdv, mr / 1024, es / 1024
+                    cpus, used / 1024, av / 1024
                 )),
             }
         }
         
-        Intent::F => {
-            match sh {
-                Lang::Bb => Action::Ad(String::from(
+        Intent::Unknown => {
+            match ia {
+                Lang::Fr => Action::Respond(String::from(
                     "Hmm, je ne suis pas sur de comprendre.\nEssaie \"aide\" pour voir ce que je peux faire."
                 )),
-                Lang::Az => Action::Ad(String::from(
+                Lang::En => Action::Respond(String::from(
                     "Hmm, I'm not sure I understand.\nTry \"help\" to see what I can do."
                 )),
             }
@@ -730,105 +730,105 @@ fn ovy(dsb: Intent, axu: &[Nc], sh: Lang) -> Action {
 
 
 
-fn spk(gus: &str, sh: Lang) -> Action {
-    let spl = match gus {
-        ab if yb(ab, &["rust", "langage"]) => match sh {
-            Lang::Bb => "Rust est un langage systeme qui garantit la securite memoire sans garbage collector. TrustOS est ecrit a 100% en Rust.",
-            Lang::Az => "Rust is a systems language that guarantees memory safety without a garbage collector. TrustOS is 100% Rust.",
+fn lsv(dfq: &str, ia: Lang) -> Action {
+    let lsw = match dfq {
+        t if kx(t, &["rust", "langage"]) => match ia {
+            Lang::Fr => "Rust est un langage systeme qui garantit la securite memoire sans garbage collector. TrustOS est ecrit a 100% en Rust.",
+            Lang::En => "Rust is a systems language that guarantees memory safety without a garbage collector. TrustOS is 100% Rust.",
         },
-        ab if yb(ab, &["tls", "ssl", "https", "crypto"]) => match sh {
-            Lang::Bb => "TLS 1.3 est le protocole de chiffrement utilise pour HTTPS. TrustOS implemente le handshake complet + Ed25519 from scratch.",
-            Lang::Az => "TLS 1.3 is the encryption protocol for HTTPS. TrustOS implements the full handshake + Ed25519 from scratch.",
+        t if kx(t, &["tls", "ssl", "https", "crypto"]) => match ia {
+            Lang::Fr => "TLS 1.3 est le protocole de chiffrement utilise pour HTTPS. TrustOS implemente le handshake complet + Ed25519 from scratch.",
+            Lang::En => "TLS 1.3 is the encryption protocol for HTTPS. TrustOS implements the full handshake + Ed25519 from scratch.",
         },
-        ab if yb(ab, &["kernel", "noyau"]) => match sh {
-            Lang::Bb => "Le kernel est le coeur de l'OS. Il gere la memoire, les interruptions, le scheduler, les drivers. TrustOS tourne en Ring 0.",
-            Lang::Az => "The kernel is the OS core. It manages memory, interrupts, the scheduler, drivers. TrustOS runs in Ring 0.",
+        t if kx(t, &["kernel", "noyau"]) => match ia {
+            Lang::Fr => "Le kernel est le coeur de l'OS. Il gere la memoire, les interruptions, le scheduler, les drivers. TrustOS tourne en Ring 0.",
+            Lang::En => "The kernel is the OS core. It manages memory, interrupts, the scheduler, drivers. TrustOS runs in Ring 0.",
         },
-        ab if yb(ab, &["smp", "multicore", "multi-core"]) => match sh {
-            Lang::Bb => "SMP = Symmetric Multi-Processing. TrustOS detecte tous les CPU via ACPI. Actuellement le BSP fait tout le travail.",
-            Lang::Az => "SMP = Symmetric Multi-Processing. TrustOS detects all CPUs via ACPI. Currently the BSP does all the work.",
+        t if kx(t, &["smp", "multicore", "multi-core"]) => match ia {
+            Lang::Fr => "SMP = Symmetric Multi-Processing. TrustOS detecte tous les CPU via ACPI. Actuellement le BSP fait tout le travail.",
+            Lang::En => "SMP = Symmetric Multi-Processing. TrustOS detects all CPUs via ACPI. Currently the BSP does all the work.",
         },
-        ab if yb(ab, &["trustlang", "language", "langage de prog"]) => match sh {
-            Lang::Bb => "TrustLang est le langage de programmation integre a TrustOS. Lexer > Parser > VM bytecode. Tape 'trustlang' pour l'essayer.",
-            Lang::Az => "TrustLang is TrustOS's built-in programming language. Lexer > Parser > VM bytecode. Type 'trustlang' to try it.",
+        t if kx(t, &["trustlang", "language", "langage de prog"]) => match ia {
+            Lang::Fr => "TrustLang est le langage de programmation integre a TrustOS. Lexer > Parser > VM bytecode. Tape 'trustlang' pour l'essayer.",
+            Lang::En => "TrustLang is TrustOS's built-in programming language. Lexer > Parser > VM bytecode. Type 'trustlang' to try it.",
         },
-        ab if yb(ab, &["browser", "navigateur", "html"]) => match sh {
-            Lang::Bb => "TrustBrowser est le navigateur integre. Il parse du HTML + CSS et supporte HTTPS via TLS 1.3. Tape 'browse' pour l'ouvrir.",
-            Lang::Az => "TrustBrowser is the built-in browser. It parses HTML + CSS and supports HTTPS via TLS 1.3. Type 'browse' to open it.",
+        t if kx(t, &["browser", "navigateur", "html"]) => match ia {
+            Lang::Fr => "TrustBrowser est le navigateur integre. Il parse du HTML + CSS et supporte HTTPS via TLS 1.3. Tape 'browse' pour l'ouvrir.",
+            Lang::En => "TrustBrowser is the built-in browser. It parses HTML + CSS and supports HTTPS via TLS 1.3. Type 'browse' to open it.",
         },
-        ab if yb(ab, &["compositor", "gui", "desktop", "bureau"]) => match sh {
-            Lang::Bb => "COSMIC2 est le compositeur graphique. Multi-couches, optimise SSE2, 144 FPS. Tape 'desktop' pour le lancer.",
-            Lang::Az => "COSMIC2 is the desktop compositor. Multi-layer, SSE2 optimized, 144 FPS. Type 'desktop' to launch it.",
+        t if kx(t, &["compositor", "gui", "desktop", "bureau"]) => match ia {
+            Lang::Fr => "COSMIC2 est le compositeur graphique. Multi-couches, optimise SSE2, 144 FPS. Tape 'desktop' pour le lancer.",
+            Lang::En => "COSMIC2 is the desktop compositor. Multi-layer, SSE2 optimized, 144 FPS. Type 'desktop' to launch it.",
         },
-        ab if yb(ab, &["jarvis", "ia", "ai", "intelligence"]) => match sh {
-            Lang::Bb => "C'est moi ! Jarvis = Just A Rather Very Intelligent System. NLU par pattern matching, bilingue FR/EN, execution kernel directe.",
-            Lang::Az => "That's me! Jarvis = Just A Rather Very Intelligent System. NLU via pattern matching, bilingual FR/EN, direct kernel execution.",
+        t if kx(t, &["jarvis", "ia", "ai", "intelligence"]) => match ia {
+            Lang::Fr => "C'est moi ! Jarvis = Just A Rather Very Intelligent System. NLU par pattern matching, bilingue FR/EN, execution kernel directe.",
+            Lang::En => "That's me! Jarvis = Just A Rather Very Intelligent System. NLU via pattern matching, bilingual FR/EN, direct kernel execution.",
         },
-        _ => match sh {
-            Lang::Bb => "Je n'ai pas d'info precise sur ce sujet. Essaie un autre mot-cle.",
-            Lang::Az => "I don't have specific info on that topic. Try another keyword.",
-        },
-    };
-    Action::Ad(String::from(spl))
-}
-
-fn tqe(gus: &str, sh: Lang) -> Action {
-    let tqd = match gus {
-        ab if yb(ab, &["compile", "build", "construire"]) => match sh {
-            Lang::Bb => "Pour compiler TrustOS:\n  1. cargo build\n  2. powershell build-limine.ps1\nL'ISO sera dans trustos.iso",
-            Lang::Az => "To build TrustOS:\n  1. cargo build\n  2. powershell build-limine.ps1\nThe ISO will be at trustos.iso",
-        },
-        ab if yb(ab, &["file", "fichier", "creer"]) => match sh {
-            Lang::Bb => "Pour creer un fichier:\n  touch /mon_fichier.txt\n  echo 'contenu' > /mon_fichier.txt",
-            Lang::Az => "To create a file:\n  touch /my_file.txt\n  echo 'content' > /my_file.txt",
-        },
-        ab if yb(ab, &["network", "reseau", "internet"]) => match sh {
-            Lang::Bb => "Pour tester le reseau:\n  ifconfig      (voir l'IP)\n  ping 8.8.8.8  (tester la connexion)\n  browse        (ouvrir le navigateur)",
-            Lang::Az => "To test networking:\n  ifconfig       (see IP)\n  ping 8.8.8.8   (test connection)\n  browse         (open browser)",
-        },
-        ab if yb(ab, &["theme", "personnaliser", "customize"]) => match sh {
-            Lang::Bb => "Pour changer le theme:\n  theme matrix   (vert hacker)\n  theme cyber    (bleu futuriste)\n  theme retro    (amber)",
-            Lang::Az => "To change theme:\n  theme matrix   (green hacker)\n  theme cyber    (blue futuristic)\n  theme retro    (amber)",
-        },
-        _ => match sh {
-            Lang::Bb => "Je n'ai pas de tutoriel sur ce sujet. Tape 'help' pour les commandes disponibles.",
-            Lang::Az => "I don't have a tutorial for that. Type 'help' for available commands.",
+        _ => match ia {
+            Lang::Fr => "Je n'ai pas d'info precise sur ce sujet. Essaie un autre mot-cle.",
+            Lang::En => "I don't have specific info on that topic. Try another keyword.",
         },
     };
-    Action::Ad(String::from(tqd))
+    Action::Respond(String::from(lsw))
+}
+
+fn mmi(dfq: &str, ia: Lang) -> Action {
+    let mmh = match dfq {
+        t if kx(t, &["compile", "build", "construire"]) => match ia {
+            Lang::Fr => "Pour compiler TrustOS:\n  1. cargo build\n  2. powershell build-limine.ps1\nL'ISO sera dans trustos.iso",
+            Lang::En => "To build TrustOS:\n  1. cargo build\n  2. powershell build-limine.ps1\nThe ISO will be at trustos.iso",
+        },
+        t if kx(t, &["file", "fichier", "creer"]) => match ia {
+            Lang::Fr => "Pour creer un fichier:\n  touch /mon_fichier.txt\n  echo 'contenu' > /mon_fichier.txt",
+            Lang::En => "To create a file:\n  touch /my_file.txt\n  echo 'content' > /my_file.txt",
+        },
+        t if kx(t, &["network", "reseau", "internet"]) => match ia {
+            Lang::Fr => "Pour tester le reseau:\n  ifconfig      (voir l'IP)\n  ping 8.8.8.8  (tester la connexion)\n  browse        (ouvrir le navigateur)",
+            Lang::En => "To test networking:\n  ifconfig       (see IP)\n  ping 8.8.8.8   (test connection)\n  browse         (open browser)",
+        },
+        t if kx(t, &["theme", "personnaliser", "customize"]) => match ia {
+            Lang::Fr => "Pour changer le theme:\n  theme matrix   (vert hacker)\n  theme cyber    (bleu futuriste)\n  theme retro    (amber)",
+            Lang::En => "To change theme:\n  theme matrix   (green hacker)\n  theme cyber    (blue futuristic)\n  theme retro    (amber)",
+        },
+        _ => match ia {
+            Lang::Fr => "Je n'ai pas de tutoriel sur ce sujet. Tape 'help' pour les commandes disponibles.",
+            Lang::En => "I don't have a tutorial for that. Type 'help' for available commands.",
+        },
+    };
+    Action::Respond(String::from(mmh))
 }
 
 
 
 
 
-fn nrn(hr: Action) {
-    match hr {
-        Action::Ad(fr) => {
-            for line in fr.ak() {
-                crate::gr!(CO_, "  ");
+fn hwy(action: Action) {
+    match action {
+        Action::Respond(bk) => {
+            for line in bk.lines() {
+                crate::bq!(CU_, "  ");
                 crate::println!("{}", line);
             }
         }
-        Action::Kb(cmd) => {
-            crate::gr!(AXL_, "  > ");
-            crate::h!(L_, "{}", cmd);
+        Action::ShellCommand(cmd) => {
+            crate::bq!(AZO_, "  > ");
+            crate::n!(K_, "{}", cmd);
             
-            super::azu(&cmd);
+            super::aav(&cmd);
         }
-        Action::Cmy(fr) => {
-            for line in fr.ak() {
-                crate::gr!(C_, "  ");
+        Action::ShowInfo(bk) => {
+            for line in bk.lines() {
+                crate::bq!(C_, "  ");
                 crate::println!("{}", line);
             }
         }
-        Action::Chn(au) => {
-            for (a, gu) in au.iter().cf() {
-                crate::gr!(AXL_, "  [{}] ", a + 1);
-                crate::println!("{}", gu.dc);
+        Action::MultiStep(steps) => {
+            for (i, step) in steps.iter().enumerate() {
+                crate::bq!(AZO_, "  [{}] ", i + 1);
+                crate::println!("{}", step.description);
             }
-            for gu in au {
-                nrn(gu.hr);
+            for step in steps {
+                hwy(step.action);
             }
         }
     }
@@ -839,49 +839,49 @@ fn nrn(hr: Action) {
 
 
 
-pub(super) fn rfp(n: &[&str]) {
+pub(super) fn kpa(args: &[&str]) {
     
-    if !n.is_empty() && (n[0] == "brain" || n[0] == "neural" || n[0] == "nn") {
-        rcr(&n[1..]);
+    if !args.is_empty() && (args[0] == "brain" || args[0] == "neural" || args[0] == "nn") {
+        kmd(&args[1..]);
         return;
     }
 
     
-    if !n.is_empty() {
-        match n[0] {
+    if !args.is_empty() {
+        match args[0] {
             "boot" | "scan" | "wake" => {
                 crate::print!("{}", crate::jarvis_hw::boot());
                 return;
             }
             "hw" | "hardware" | "profile" => {
-                crate::print!("{}", crate::jarvis_hw::wnl());
+                crate::print!("{}", crate::jarvis_hw::osd());
                 return;
             }
             "insights" | "insight" => {
-                crate::print!("{}", crate::jarvis_hw::wnj());
+                crate::print!("{}", crate::jarvis_hw::osa());
                 return;
             }
             "plan" | "strategy" => {
-                crate::print!("{}", crate::jarvis_hw::wnk());
+                crate::print!("{}", crate::jarvis_hw::osb());
                 return;
             }
             "optimize" | "opt" | "tune" => {
-                crate::print!("{}", crate::jarvis_hw::uyx());
+                crate::print!("{}", crate::jarvis_hw::nnq());
                 return;
             }
             "status" | "stat" => {
-                crate::print!("{}", crate::jarvis_hw::wnn());
+                crate::print!("{}", crate::jarvis_hw::ose());
                 return;
             }
             "analyze" | "analyse" | "inspect" => {
-                if n.len() < 2 {
+                if args.len() < 2 {
                     crate::println!("Usage: jarvis analyze <file>");
                     return;
                 }
-                let path = n[1..].rr(" ");
-                match crate::ramfs::fh(|fs| fs.mq(&path).map(|bc| bc.ip())) {
-                    Ok(f) => {
-                        crate::print!("{}", crate::jarvis_hw::qhy(&f));
+                let path = args[1..].join(" ");
+                match crate::ramfs::bh(|fs| fs.read_file(&path).map(|d| d.to_vec())) {
+                    Ok(data) => {
+                        crate::print!("{}", crate::jarvis_hw::jvw(&data));
                     }
                     Err(_) => {
                         crate::println!("Cannot read file: {}", path);
@@ -890,13 +890,13 @@ pub(super) fn rfp(n: &[&str]) {
                 return;
             }
             "query" | "ask" | "q" => {
-                if n.len() < 2 {
+                if args.len() < 2 {
                     crate::println!("Usage: jarvis query <question>");
                     crate::println!("  e.g. jarvis query can you access the encrypted data on this disk?");
                     return;
                 }
-                let lwq = n[1..].rr(" ");
-                crate::print!("{}", crate::jarvis_hw::tqr(&lwq));
+                let gpf = args[1..].join(" ");
+                crate::print!("{}", crate::jarvis_hw::mmt(&gpf));
                 return;
             }
             _ => {} 
@@ -904,134 +904,134 @@ pub(super) fn rfp(n: &[&str]) {
     }
     
     
-    if !n.is_empty() {
-        let query = n.rr(" ");
-        oyc(&query);
+    if !args.is_empty() {
+        let query = args.join(" ");
+        iwu(&query);
         return;
     }
     
     
-    vlh();
+    nxf();
     
-    let mut be = Cab {
-        uch: Intent::F,
-        ucr: String::new(),
-        pwl: 0,
-        sh: Lang::Az,
+    let mut ab = Aic {
+        last_intent: Intent::Unknown,
+        last_topic: String::new(),
+        turn_count: 0,
+        ia: Lang::En,
     };
     
-    let mut esq = [0u8; 256];
+    let mut input_buf = [0u8; 256];
     
     loop {
-        if crate::shell::etf() {
-            crate::h!(CO_, "  [interrupted]");
+        if crate::shell::cbc() {
+            crate::n!(CU_, "  [interrupted]");
             break;
         }
         
-        crate::gr!(CO_, "\n  jarvis");
-        crate::gr!(Q_, " > ");
+        crate::bq!(CU_, "\n  jarvis");
+        crate::bq!(R_, " > ");
         
         
-        let len = vrw(&mut esq);
-        let js = core::str::jg(&esq[..len]).unwrap_or("").em();
+        let len = ocs(&mut input_buf);
+        let dm = core::str::from_utf8(&input_buf[..len]).unwrap_or("").trim();
         
-        if js.is_empty() { continue; }
+        if dm.is_empty() { continue; }
         
         
-        if js == "exit" || js == "quit" || js == "q" || js == "bye" || js == "au revoir" {
-            let sh = nla(js);
-            match sh {
-                Lang::Bb => crate::h!(CO_, "  A bientot !"),
-                Lang::Az => crate::h!(CO_, "  See you later!"),
+        if dm == "exit" || dm == "quit" || dm == "q" || dm == "bye" || dm == "au revoir" {
+            let ia = hrx(dm);
+            match ia {
+                Lang::Fr => crate::n!(CU_, "  A bientot !"),
+                Lang::En => crate::n!(CU_, "  See you later!"),
             }
             break;
         }
         
-        be.pwl += 1;
-        oyc(js);
+        ab.turn_count += 1;
+        iwu(dm);
     }
 }
 
 
-fn oyc(js: &str) {
-    let abh = all(js);
-    let sh = nla(js);
-    let dsb = rwr(&abh);
-    let axu = sqd(&abh, dsb);
+fn iwu(dm: &str) {
+    let mu = normalize(dm);
+    let ia = hrx(dm);
+    let bna = ldx(&mu);
+    let zw = ltp(&mu, bna);
     
     
-    crate::gr!(L_, "  ");
-    crate::gr!(0xFF444444, "[{:?}]", dsb);
-    if !axu.is_empty() {
-        for aa in &axu {
-            crate::gr!(0xFF444444, " {:?}={}", aa.kk, aa.bn);
+    crate::bq!(K_, "  ");
+    crate::bq!(0xFF444444, "[{:?}]", bna);
+    if !zw.is_empty() {
+        for e in &zw {
+            crate::bq!(0xFF444444, " {:?}={}", e.kind, e.value);
         }
     }
-    if dsb == Intent::F && crate::jarvis::uc() {
-        crate::gr!(0xFF444444, " ->brain");
+    if bna == Intent::Unknown && crate::jarvis::is_ready() {
+        crate::bq!(0xFF444444, " ->brain");
     }
     crate::println!();
     
     
-    let hr = if dsb == Intent::F {
+    let action = if bna == Intent::Unknown {
         
-        if let Some(usj) = crate::jarvis::usi(js) {
-            Action::Ad(usj)
+        if let Some(neural_response) = crate::jarvis::nio(dm) {
+            Action::Respond(neural_response)
         } else {
-            ovy(dsb, &axu, sh)
+            ivb(bna, &zw, ia)
         }
     } else {
-        ovy(dsb, &axu, sh)
+        ivb(bna, &zw, ia)
     };
-    nrn(hr);
+    hwy(action);
 }
 
 
-fn vlh() {
+fn nxf() {
     crate::println!();
-    crate::h!(CO_, "  ╔═══════════════════════════════════════════════╗");
-    crate::h!(CO_, "  ║          J.A.R.V.I.S. v1.0                   ║");
-    crate::h!(CO_, "  ║    Just A Rather Very Intelligent System      ║");
-    crate::h!(CO_, "  ╠═══════════════════════════════════════════════╣");
-    crate::gr!(CO_,   "  ║  ");
-    crate::gr!(Q_,    "TrustOS AI Assistant — 100%% local, 0%% cloud");
-    crate::h!(CO_, "  ║");
-    crate::gr!(CO_,   "  ║  ");
-    crate::gr!(L_,     "Type 'help' for commands, 'exit' to leave");
-    crate::h!(CO_, "   ║");
-    crate::h!(CO_, "  ╚═══════════════════════════════════════════════╝");
+    crate::n!(CU_, "  ╔═══════════════════════════════════════════════╗");
+    crate::n!(CU_, "  ║          J.A.R.V.I.S. v1.0                   ║");
+    crate::n!(CU_, "  ║    Just A Rather Very Intelligent System      ║");
+    crate::n!(CU_, "  ╠═══════════════════════════════════════════════╣");
+    crate::bq!(CU_,   "  ║  ");
+    crate::bq!(R_,    "TrustOS AI Assistant — 100%% local, 0%% cloud");
+    crate::n!(CU_, "  ║");
+    crate::bq!(CU_,   "  ║  ");
+    crate::bq!(K_,     "Type 'help' for commands, 'exit' to leave");
+    crate::n!(CU_, "   ║");
+    crate::n!(CU_, "  ╚═══════════════════════════════════════════════╝");
     crate::println!();
 }
 
 
-fn vrw(bi: &mut [u8]) -> usize {
-    use crate::keyboard::auw;
-    let mut u = 0;
+fn ocs(buffer: &mut [u8]) -> usize {
+    use crate::keyboard::ya;
+    let mut pos = 0;
 
     loop {
-        if let Some(r) = auw() {
-            match r {
+        if let Some(c) = ya() {
+            match c {
                 b'\n' | b'\r' => {
                     crate::println!();
-                    return u;
+                    return pos;
                 }
                 8 | 127 => { 
-                    if u > 0 {
-                        u -= 1;
+                    if pos > 0 {
+                        pos -= 1;
                         crate::print!("\x08 \x08");
                     }
                 }
                 0x1B => {} 
-                r if r >= 0x20 && u < bi.len() - 1 => {
-                    bi[u] = r;
-                    u += 1;
-                    crate::print!("{}", r as char);
+                c if c >= 0x20 && pos < buffer.len() - 1 => {
+                    buffer[pos] = c;
+                    pos += 1;
+                    crate::print!("{}", c as char);
                 }
                 _ => {}
             }
         } else {
             
-            core::hint::hc();
+            core::hint::spin_loop();
         }
     }
 }
@@ -1040,12 +1040,12 @@ fn vrw(bi: &mut [u8]) -> usize {
 
 
 
-const AL_: u32 = 0xFF00BBFF;
+const AQ_: u32 = 0xFF00BBFF;
 
 
-fn rcr(n: &[&str]) {
-    if n.is_empty() {
-        crate::h!(AL_, "  Jarvis Neural Brain v2.0");
+fn kmd(args: &[&str]) {
+    if args.is_empty() {
+        crate::n!(AQ_, "  Jarvis Neural Brain v2.0");
         crate::println!();
         crate::println!("  Usage: jarvis brain <command>");
         crate::println!();
@@ -1078,138 +1078,138 @@ fn rcr(n: &[&str]) {
         return;
     }
 
-    match n[0] {
+    match args[0] {
         "init" => {
-            crate::h!(AL_, "  Initializing neural brain...");
+            crate::n!(AQ_, "  Initializing neural brain...");
             crate::jarvis::init();
-            crate::h!(B_, "  Neural brain ready.");
+            crate::n!(B_, "  Neural brain ready.");
         }
 
         "info" => {
-            if !crate::jarvis::uc() {
-                crate::h!(D_, "  Brain not initialized. Run: jarvis brain init");
+            if !crate::jarvis::is_ready() {
+                crate::n!(D_, "  Brain not initialized. Run: jarvis brain init");
                 return;
             }
-            for line in crate::jarvis::zl() {
+            for line in crate::jarvis::info_lines() {
                 crate::println!("  {}", line);
             }
         }
 
         "generate" | "gen" | "g" => {
-            if !cxl() { return; }
-            if crate::jarvis::ogq() {
-                crate::h!(D_, "  [Private mode] Generation disabled");
+            if !bbk() { return; }
+            if crate::jarvis::iih() {
+                crate::n!(D_, "  [Private mode] Generation disabled");
                 return;
             }
-            let aau = if n.len() > 1 { n[1..].rr(" ") } else { String::from("Hello") };
-            crate::gr!(AL_, "  Prompt: ");
-            crate::h!(Q_, "{}", aau);
+            let nh = if args.len() > 1 { args[1..].join(" ") } else { String::from("Hello") };
+            crate::bq!(AQ_, "  Prompt: ");
+            crate::n!(R_, "{}", nh);
             
-            let ay = crate::time::ave();
-            let an = crate::jarvis::cks(&aau, 64);
-            let ez = crate::time::ave().ao(ay);
+            let start = crate::time::yf();
+            let output = crate::jarvis::generate(&nh, 64);
+            let bb = crate::time::yf().saturating_sub(start);
             
-            crate::gr!(AL_, "  Output: ");
-            crate::h!(B_, "{}", an);
-            crate::h!(L_, "  ({} ms, {} tokens)", ez, an.len());
+            crate::bq!(AQ_, "  Output: ");
+            crate::n!(B_, "{}", output);
+            crate::n!(K_, "  ({} ms, {} tokens)", bb, output.len());
         }
 
         "train" => {
-            if !cxl() { return; }
-            let text = if n.len() > 1 { n[1..].rr(" ") } else {
+            if !bbk() { return; }
+            let text = if args.len() > 1 { args[1..].join(" ") } else {
                 crate::println!("  Usage: jarvis brain train <text>");
                 return;
             };
-            crate::h!(AL_, "  Training on: \"{}\"", text);
-            let vl = crate::jarvis::ekd(&text, 0.001);
-            crate::h!(B_, "  Loss: {:.4}", vl);
+            crate::n!(AQ_, "  Training on: \"{}\"", text);
+            let ka = crate::jarvis::bwo(&text, 0.001);
+            crate::n!(B_, "  Loss: {:.4}", ka);
         }
 
         "test" => {
-            if !cxl() { return; }
-            crate::h!(AL_, "  Running neural brain self-test...");
+            if !bbk() { return; }
+            crate::n!(AQ_, "  Running neural brain self-test...");
             crate::println!();
 
             
-            crate::h!(C_, "  Tokenizer:");
-            let eb = crate::jarvis::tokenizer::cxj("Hello");
-            crate::println!("    encode(\"Hello\") = {:?} ({} tokens)", &eb, eb.len());
-            let aoq = crate::jarvis::tokenizer::hfo(&eb);
-            crate::println!("    decode() = \"{}\"", aoq);
+            crate::n!(C_, "  Tokenizer:");
+            let tokens = crate::jarvis::tokenizer::bbj("Hello");
+            crate::println!("    encode(\"Hello\") = {:?} ({} tokens)", &tokens, tokens.len());
+            let uu = crate::jarvis::tokenizer::dmo(&tokens);
+            crate::println!("    decode() = \"{}\"", uu);
 
             
-            crate::h!(C_, "  Generation:");
-            let an = crate::jarvis::cks("Test", 16);
-            crate::println!("    generate(\"Test\", 16) = \"{}\" ({} chars)", an, an.len());
+            crate::n!(C_, "  Generation:");
+            let output = crate::jarvis::generate("Test", 16);
+            crate::println!("    generate(\"Test\", 16) = \"{}\" ({} chars)", output, output.len());
 
             
-            crate::h!(C_, "  Training:");
-            let uil = crate::jarvis::ekd("Hello world", 0.001);
-            crate::println!("    Step 1 loss: {:.4}", uil);
-            let uim = crate::jarvis::ekd("Hello world", 0.001);
-            crate::println!("    Step 2 loss: {:.4}", uim);
+            crate::n!(C_, "  Training:");
+            let nav = crate::jarvis::bwo("Hello world", 0.001);
+            crate::println!("    Step 1 loss: {:.4}", nav);
+            let naw = crate::jarvis::bwo("Hello world", 0.001);
+            crate::println!("    Step 2 loss: {:.4}", naw);
 
             
-            crate::h!(C_, "  Training module:");
-            let (aaz, boy) = crate::jarvis::training::eyj();
-            crate::println!("    {} passed, {} failed", aaz, boy);
+            crate::n!(C_, "  Training module:");
+            let (tp, tf) = crate::jarvis::training::cdp();
+            crate::println!("    {} passed, {} failed", tp, tf);
 
             
-            crate::h!(C_, "  Introspection:");
-            let co = crate::jarvis::agent::flw(
-                &crate::jarvis::agent::IntrospectTarget::Agj);
-            for line in co.iter().take(5) {
+            crate::n!(C_, "  Introspection:");
+            let info = crate::jarvis::agent::cli(
+                &crate::jarvis::agent::IntrospectTarget::Architecture);
+            for line in info.iter().take(5) {
                 crate::println!("    {}", line);
             }
 
             crate::println!();
-            let dwz = 4 + aaz; 
-            let cut = boy;
-            if cut == 0 {
-                crate::h!(B_, "  All {} tests passed!", dwz);
+            let bpq = 4 + tp; 
+            let azz = tf;
+            if azz == 0 {
+                crate::n!(B_, "  All {} tests passed!", bpq);
             } else {
-                crate::h!(A_, "  {} passed, {} failed", dwz, cut);
+                crate::n!(A_, "  {} passed, {} failed", bpq, azz);
             }
         }
 
         "bench" => {
-            if !cxl() { return; }
-            crate::h!(AL_, "  Benchmarking inference speed...");
-            let (xjc, oz) = crate::jarvis::agent::qox();
-            crate::println!("  Speed: {:.1} tokens/sec", xjc);
-            crate::println!("  32 tokens generated in {} ms", oz);
-            crate::h!(L_, "  (CPU reference — GPU dispatch target: 100×)");
+            if !bbk() { return; }
+            crate::n!(AQ_, "  Benchmarking inference speed...");
+            let (tok_per_sec, elapsed_ms) = crate::jarvis::agent::kbk();
+            crate::println!("  Speed: {:.1} tokens/sec", tok_per_sec);
+            crate::println!("  32 tokens generated in {} ms", elapsed_ms);
+            crate::n!(K_, "  (CPU reference — GPU dispatch target: 100×)");
         }
 
         "introspect" | "self" => {
-            if !cxl() { return; }
-            let ak = crate::jarvis::agent::flw(
-                &crate::jarvis::agent::IntrospectTarget::Bv);
-            for line in &ak {
-                crate::h!(AL_, "  {}", line);
+            if !bbk() { return; }
+            let lines = crate::jarvis::agent::cli(
+                &crate::jarvis::agent::IntrospectTarget::Full);
+            for line in &lines {
+                crate::n!(AQ_, "  {}", line);
             }
         }
 
         "weights" => {
-            if !cxl() { return; }
-            let ak = crate::jarvis::agent::flw(
-                &crate::jarvis::agent::IntrospectTarget::Bat);
-            for line in &ak {
+            if !bbk() { return; }
+            let lines = crate::jarvis::agent::cli(
+                &crate::jarvis::agent::IntrospectTarget::WeightStats);
+            for line in &lines {
                 crate::println!("  {}", line);
             }
         }
 
         "hardware" | "hw" => {
-            if !cxl() { return; }
-            let ak = crate::jarvis::agent::flw(
-                &crate::jarvis::agent::IntrospectTarget::Ip);
-            for line in &ak {
+            if !bbk() { return; }
+            let lines = crate::jarvis::agent::cli(
+                &crate::jarvis::agent::IntrospectTarget::Hardware);
+            for line in &lines {
                 crate::println!("  {}", line);
             }
         }
 
         "mentor" => {
-            crate::h!(AL_, "  Serial Mentoring Mode");
+            crate::n!(AQ_, "  Serial Mentoring Mode");
             crate::println!("  Listening on COM1 for MENTOR: commands...");
             crate::println!("  (Send MENTOR:STATUS from host to verify connection)");
             crate::println!();
@@ -1221,408 +1221,408 @@ fn rcr(n: &[&str]) {
             crate::println!("    MENTOR:SAVE               Save weights");
             crate::println!("    MENTOR:RESET              Reset weights");
             crate::println!();
-            crate::h!(L_, "  (Mentor polling active in shell idle loop)");
+            crate::n!(K_, "  (Mentor polling active in shell idle loop)");
         }
 
         "reset" => {
-            if !cxl() { return; }
-            crate::h!(D_, "  Resetting all weights to random...");
-            crate::jarvis::apa();
-            crate::h!(B_, "  Weights reset. Training steps cleared.");
+            if !bbk() { return; }
+            crate::n!(D_, "  Resetting all weights to random...");
+            crate::jarvis::reset();
+            crate::n!(B_, "  Weights reset. Training steps cleared.");
         }
 
         "save" => {
-            if !cxl() { return; }
-            crate::h!(AL_, "  Saving weights to /jarvis/weights.bin...");
-            match crate::jarvis::pfn() {
-                Ok(bf) => crate::h!(B_, "  Saved {} KB", bf / 1024),
-                Err(aa) => crate::h!(A_, "  Save failed: {}", aa),
+            if !bbk() { return; }
+            crate::n!(AQ_, "  Saving weights to /jarvis/weights.bin...");
+            match crate::jarvis::jco() {
+                Ok(bytes) => crate::n!(B_, "  Saved {} KB", bytes / 1024),
+                Err(e) => crate::n!(A_, "  Save failed: {}", e),
             }
         }
 
         "load" => {
-            if n.len() > 1 {
-                match n[1] {
+            if args.len() > 1 {
+                match args[1] {
                     "fat32" => {
-                        let it = if n.len() > 2 { Some(n[2]) } else { None };
-                        let gez = it.unwrap_or("jarvis_weights.bin");
-                        crate::h!(AL_, "  Loading brain from FAT32: /mnt/fat32/{}", gez);
-                        match crate::jarvis::ojs(it) {
-                            Ok(bf) => {
-                                crate::h!(B_, "  Loaded {} KB from FAT32", bf / 1024);
-                                crate::h!(L_, "  Caching to RamFS...");
-                                let _ = crate::jarvis::gbx();
+                        let filename = if args.len() > 2 { Some(args[2]) } else { None };
+                        let cwr = filename.unwrap_or("jarvis_weights.bin");
+                        crate::n!(AQ_, "  Loading brain from FAT32: /mnt/fat32/{}", cwr);
+                        match crate::jarvis::ikt(filename) {
+                            Ok(bytes) => {
+                                crate::n!(B_, "  Loaded {} KB from FAT32", bytes / 1024);
+                                crate::n!(K_, "  Caching to RamFS...");
+                                let _ = crate::jarvis::cuq();
                             }
-                            Err(aa) => crate::h!(A_, "  FAT32 load failed: {}", aa),
+                            Err(e) => crate::n!(A_, "  FAT32 load failed: {}", e),
                         }
                     }
                     "vfs" => {
-                        if n.len() < 3 {
-                            crate::h!(D_, "  Usage: jarvis brain load vfs <path>");
-                            crate::h!(L_, "  Example: jarvis brain load vfs /mnt/fat32/brain.bin");
+                        if args.len() < 3 {
+                            crate::n!(D_, "  Usage: jarvis brain load vfs <path>");
+                            crate::n!(K_, "  Example: jarvis brain load vfs /mnt/fat32/brain.bin");
                             return;
                         }
-                        crate::h!(AL_, "  Loading brain from VFS: {}", n[2]);
-                        match crate::jarvis::ugn(n[2]) {
-                            Ok(bf) => {
-                                crate::h!(B_, "  Loaded {} KB from {}", bf / 1024, n[2]);
-                                crate::h!(L_, "  Caching to RamFS...");
-                                let _ = crate::jarvis::gbx();
+                        crate::n!(AQ_, "  Loading brain from VFS: {}", args[2]);
+                        match crate::jarvis::mzu(args[2]) {
+                            Ok(bytes) => {
+                                crate::n!(B_, "  Loaded {} KB from {}", bytes / 1024, args[2]);
+                                crate::n!(K_, "  Caching to RamFS...");
+                                let _ = crate::jarvis::cuq();
                             }
-                            Err(aa) => crate::h!(A_, "  VFS load failed: {}", aa),
+                            Err(e) => crate::n!(A_, "  VFS load failed: {}", e),
                         }
                     }
                     "http" => {
-                        if n.len() < 3 {
-                            crate::h!(D_, "  Usage: jarvis brain load http <url>");
-                            crate::h!(L_, "  Example: jarvis brain load http 192.168.1.10/jarvis_weights.bin");
+                        if args.len() < 3 {
+                            crate::n!(D_, "  Usage: jarvis brain load http <url>");
+                            crate::n!(K_, "  Example: jarvis brain load http 192.168.1.10/jarvis_weights.bin");
                             return;
                         }
-                        crate::h!(AL_, "  Downloading brain from: {}", n[2]);
-                        crate::h!(L_, "  This may take a moment (~17 MB)...");
-                        match crate::jarvis::ugm(n[2]) {
-                            Ok(bf) => {
-                                crate::h!(B_, "  Downloaded & loaded {} KB", bf / 1024);
-                                crate::h!(L_, "  Caching to RamFS...");
-                                let _ = crate::jarvis::gbx();
+                        crate::n!(AQ_, "  Downloading brain from: {}", args[2]);
+                        crate::n!(K_, "  This may take a moment (~17 MB)...");
+                        match crate::jarvis::mzt(args[2]) {
+                            Ok(bytes) => {
+                                crate::n!(B_, "  Downloaded & loaded {} KB", bytes / 1024);
+                                crate::n!(K_, "  Caching to RamFS...");
+                                let _ = crate::jarvis::cuq();
                             }
-                            Err(aa) => crate::h!(A_, "  HTTP load failed: {}", aa),
+                            Err(e) => crate::n!(A_, "  HTTP load failed: {}", e),
                         }
                     }
                     _ => {
-                        crate::h!(D_, "  Unknown source: {}", n[1]);
-                        crate::h!(L_, "  Usage: jarvis brain load [fat32|vfs|http]");
+                        crate::n!(D_, "  Unknown source: {}", args[1]);
+                        crate::n!(K_, "  Usage: jarvis brain load [fat32|vfs|http]");
                     }
                 }
             } else {
                 
-                crate::h!(AL_, "  Loading weights from /jarvis/weights.bin...");
-                match crate::jarvis::oka() {
-                    Ok(bf) => crate::h!(B_, "  Loaded {} KB", bf / 1024),
-                    Err(aa) => crate::h!(A_, "  Load failed: {}", aa),
+                crate::n!(AQ_, "  Loading weights from /jarvis/weights.bin...");
+                match crate::jarvis::iky() {
+                    Ok(bytes) => crate::n!(B_, "  Loaded {} KB", bytes / 1024),
+                    Err(e) => crate::n!(A_, "  Load failed: {}", e),
                 }
             }
         }
 
         "pretrain" | "pt" => {
-            if !cxl() { return; }
-            let bmz: usize = if n.len() > 1 {
-                n[1].parse().unwrap_or(3)
+            if !bbk() { return; }
+            let ahx: usize = if args.len() > 1 {
+                args[1].parse().unwrap_or(3)
             } else { 3 }; 
-            crate::h!(AL_, "  Pre-training on embedded corpus ({} epoch(s))...", bmz);
-            crate::h!(L_, "  Using cosine LR + gradient accumulation (batch=4)");
-            crate::h!(L_, "  {} phases, {} sequences total",
-                crate::jarvis::corpus::htg(), crate::jarvis::corpus::ien());
+            crate::n!(AQ_, "  Pre-training on embedded corpus ({} epoch(s))...", ahx);
+            crate::n!(K_, "  Using cosine LR + gradient accumulation (batch=4)");
+            crate::n!(K_, "  {} phases, {} sequences total",
+                crate::jarvis::corpus::dvp(), crate::jarvis::corpus::eci());
             crate::println!();
 
             
-            let fnh = crate::jarvis::itc();
-            crate::h!(L_, "  Loss before: {:.3}", fnh);
+            let cmk = crate::jarvis::elq();
+            crate::n!(K_, "  Loss before: {:.3}", cmk);
             crate::println!();
 
             
-            let (au, bdl, ez) = crate::jarvis::oxe(bmz, 0.001);
+            let (steps, adh, bb) = crate::jarvis::ivx(ahx, 0.001);
 
-            crate::h!(AL_, "  Training complete!");
-            crate::h!(L_, "  {} steps, avg loss={:.3}, {}ms ({:.1}s)",
-                au, bdl, ez, ez as f64 / 1000.0);
+            crate::n!(AQ_, "  Training complete!");
+            crate::n!(K_, "  {} steps, avg loss={:.3}, {}ms ({:.1}s)",
+                steps, adh, bb, bb as f64 / 1000.0);
             crate::println!();
 
             
-            let fng = crate::jarvis::itc();
-            crate::gr!(L_, "  Loss after:  {:.3}", fng);
-            if fng < fnh {
-                crate::h!(B_, " (improved by {:.3})", fnh - fng);
+            let cmj = crate::jarvis::elq();
+            crate::bq!(K_, "  Loss after:  {:.3}", cmj);
+            if cmj < cmk {
+                crate::n!(B_, " (improved by {:.3})", cmk - cmj);
             } else {
-                crate::h!(D_, " (no improvement)");
+                crate::n!(D_, " (no improvement)");
             }
             crate::println!();
-            crate::h!(L_, "  Training steps global: {}",
-                crate::jarvis::fae());
+            crate::n!(K_, "  Training steps global: {}",
+                crate::jarvis::training_steps());
         }
 
         "eval" => {
-            if !cxl() { return; }
+            if !bbk() { return; }
             
-            let syy = n.len() >= 2 && n[1] == "full";
-            if syy {
-                crate::h!(AL_, "  Evaluating FULL corpus (this may take a while)...");
-                let bdl = crate::jarvis::kud();
+            let mae = args.len() >= 2 && args[1] == "full";
+            if mae {
+                crate::n!(AQ_, "  Evaluating FULL corpus (this may take a while)...");
+                let adh = crate::jarvis::fvj();
                 crate::println!();
 
                 
-                let upf = !crate::jarvis::uc();
-                if !upf {
-                    for ib in 0..crate::jarvis::corpus::htg() {
-                        let j = crate::jarvis::corpus::jjg(ib);
-                        let mut az = 0u32;
-                        for &text in crate::jarvis::corpus::Gr[ib] {
-                            let eb = crate::jarvis::tokenizer::cxj(text);
-                            if eb.len() >= 2 {
-                                az += 1;
+                let nfx = !crate::jarvis::is_ready();
+                if !nfx {
+                    for phase in 0..crate::jarvis::corpus::dvp() {
+                        let name = crate::jarvis::corpus::ewq(phase);
+                        let mut count = 0u32;
+                        for &text in crate::jarvis::corpus::Da[phase] {
+                            let tokens = crate::jarvis::tokenizer::bbj(text);
+                            if tokens.len() >= 2 {
+                                count += 1;
                             }
                         }
-                        crate::gr!(AL_, "  Phase {} ", ib);
-                        crate::gr!(Q_, "({}) ", j);
-                        crate::h!(L_, "{} sequences", az);
+                        crate::bq!(AQ_, "  Phase {} ", phase);
+                        crate::bq!(R_, "({}) ", name);
+                        crate::n!(K_, "{} sequences", count);
                     }
                 }
 
                 crate::println!();
-                crate::gr!(Q_, "  Average loss: ");
-                if bdl < 4.0 {
-                    crate::h!(B_, "{:.3} (learning!)", bdl);
-                } else if bdl < 5.5 {
-                    crate::h!(D_, "{:.3} (early stage)", bdl);
+                crate::bq!(R_, "  Average loss: ");
+                if adh < 4.0 {
+                    crate::n!(B_, "{:.3} (learning!)", adh);
+                } else if adh < 5.5 {
+                    crate::n!(D_, "{:.3} (early stage)", adh);
                 } else {
-                    crate::h!(A_, "{:.3} (random/untrained)", bdl);
+                    crate::n!(A_, "{:.3} (random/untrained)", adh);
                 }
-                crate::h!(L_, "  (Random baseline: ~5.5, Good: <3.0, Memorized: <1.0)");
+                crate::n!(K_, "  (Random baseline: ~5.5, Good: <3.0, Memorized: <1.0)");
             } else {
-                crate::h!(AL_, "  Quick eval (1 sample/phase)...");
-                let bdl = crate::jarvis::itc();
+                crate::n!(AQ_, "  Quick eval (1 sample/phase)...");
+                let adh = crate::jarvis::elq();
                 crate::println!();
-                crate::gr!(Q_, "  Average loss: ");
-                if bdl < 4.0 {
-                    crate::h!(B_, "{:.3} (learning!)", bdl);
-                } else if bdl < 5.5 {
-                    crate::h!(D_, "{:.3} (early stage)", bdl);
+                crate::bq!(R_, "  Average loss: ");
+                if adh < 4.0 {
+                    crate::n!(B_, "{:.3} (learning!)", adh);
+                } else if adh < 5.5 {
+                    crate::n!(D_, "{:.3} (early stage)", adh);
                 } else {
-                    crate::h!(A_, "{:.3} (random/untrained)", bdl);
+                    crate::n!(A_, "{:.3} (random/untrained)", adh);
                 }
-                crate::h!(L_, "  (Quick: 1/phase. Use 'eval full' for complete corpus)");
+                crate::n!(K_, "  (Quick: 1/phase. Use 'eval full' for complete corpus)");
             }
         }
 
         "chat" => {
-            if !cxl() { return; }
-            if crate::jarvis::ogq() {
-                crate::h!(D_, "  [Private mode] Chat disabled");
+            if !bbk() { return; }
+            if crate::jarvis::iih() {
+                crate::n!(D_, "  [Private mode] Chat disabled");
                 return;
             }
-            if n.len() < 2 {
+            if args.len() < 2 {
                 crate::println!("  Usage: jarvis brain chat <text>");
                 return;
             }
-            let aau = n[1..].rr(" ");
-            crate::gr!(Q_, "  You: ");
-            crate::println!("{}", aau);
+            let nh = args[1..].join(" ");
+            crate::bq!(R_, "  You: ");
+            crate::println!("{}", nh);
 
-            let ay = crate::time::ave();
-            let an = crate::jarvis::cks(&aau, 64);
-            let ez = crate::time::ave().ao(ay);
+            let start = crate::time::yf();
+            let output = crate::jarvis::generate(&nh, 64);
+            let bb = crate::time::yf().saturating_sub(start);
 
-            crate::gr!(AL_, "  Jarvis: ");
+            crate::bq!(AQ_, "  Jarvis: ");
             
-            for r in an.bw() {
-                if r.jbb() || r == ' ' {
-                    crate::print!("{}", r);
+            for c in output.chars() {
+                if c.is_ascii_graphic() || c == ' ' {
+                    crate::print!("{}", c);
                 } else {
-                    crate::gr!(L_, ".");
+                    crate::bq!(K_, ".");
                 }
             }
             crate::println!();
-            crate::h!(L_, "  ({} ms, {} chars)", ez, an.len());
+            crate::n!(K_, "  ({} ms, {} chars)", bb, output.len());
         }
 
         "task" => {
             
             
-            if !crate::jarvis::mesh::rl() {
-                crate::h!(A_, "  Mesh not active. Run 'jarvis brain swarm' first.");
+            if !crate::jarvis::mesh::is_active() {
+                crate::n!(A_, "  Mesh not active. Run 'jarvis brain swarm' first.");
                 return;
             }
 
-            crate::h!(AL_, "  === JARVIS Distributed Task Verification ===");
+            crate::n!(AQ_, "  === JARVIS Distributed Task Verification ===");
             crate::println!();
 
-            let yp = crate::jarvis::mesh::dhn();
-            let es = yp.len() + 1;
-            crate::h!(L_, "  Cluster: {} node(s) ({} peers + self)", es, yp.len());
+            let lj = crate::jarvis::mesh::bgo();
+            let av = lj.len() + 1;
+            crate::n!(K_, "  Cluster: {} node(s) ({} peers + self)", av, lj.len());
             crate::println!();
 
-            crate::h!(AL_, "  Generating unique math tasks per node...");
-            let ay = crate::time::lc();
-            let hd = crate::jarvis::task::wbf();
-            let ez = crate::time::lc().nj(ay);
+            crate::n!(AQ_, "  Generating unique math tasks per node...");
+            let start = crate::time::uptime_ms();
+            let results = crate::jarvis::task::oja();
+            let bb = crate::time::uptime_ms().wrapping_sub(start);
 
             crate::println!();
-            crate::h!(AL_, "  Results:");
+            crate::n!(AQ_, "  Results:");
             crate::println!();
 
-            let mut mur = true;
-            for m in &hd {
-                let ejb = if m.dzv { "OK" } else { "FAIL" };
-                let dch = if m.dzv { B_ } else { A_ };
-                let sse = if m.ggz { "file written" } else { "no file" };
+            let mut hep = true;
+            for r in &results {
+                let bvz = if r.correct { "OK" } else { "FAIL" };
+                let bdw = if r.correct { B_ } else { A_ };
+                let lvd = if r.file_written { "file written" } else { "no file" };
 
                 crate::print!("    ");
-                crate::gr!(dch, "[{}]", ejb);
-                crate::print!(" {} ", m.evj);
-                crate::gr!(L_, "| {} = ", m.xz);
-                if m.dzv {
-                    crate::gr!(B_, "{}", m.ecf);
+                crate::bq!(bdw, "[{}]", bvz);
+                crate::print!(" {} ", r.node_name);
+                crate::bq!(K_, "| {} = ", r.expression);
+                if r.correct {
+                    crate::bq!(B_, "{}", r.got);
                 } else {
-                    crate::gr!(A_, "{}", m.ecf);
-                    crate::gr!(L_, " (expected {})", m.qy);
-                    mur = false;
+                    crate::bq!(A_, "{}", r.got);
+                    crate::bq!(K_, " (expected {})", r.expected);
+                    hep = false;
                 }
-                crate::h!(L_, " | {}", sse);
+                crate::n!(K_, " | {}", lvd);
             }
 
             crate::println!();
-            if mur {
-                crate::h!(B_,
-                    "  All {} nodes returned correct answers in {} ms", hd.len(), ez);
-                crate::h!(B_,
+            if hep {
+                crate::n!(B_,
+                    "  All {} nodes returned correct answers in {} ms", results.len(), bb);
+                crate::n!(B_,
                     "  Distributed verification: PASSED");
             } else {
-                let rpe = hd.iter().hi(|m| m.dzv).az();
-                crate::h!(A_,
-                    "  {}/{} correct — verification FAILED ({} ms)", rpe, hd.len(), ez);
+                let kyc = results.iter().filter(|r| r.correct).count();
+                crate::n!(A_,
+                    "  {}/{} correct — verification FAILED ({} ms)", kyc, results.len(), bb);
             }
         }
 
         "propagate" | "autoprop" | "spread" => {
-            let ggc = n.len() > 1 && (n[1] == "pxe" || n[1] == "replicate");
-            crate::h!(AL_, "  === JARVIS Auto-Propagation ===");
+            let cxd = args.len() > 1 && (args[1] == "pxe" || args[1] == "replicate");
+            crate::n!(AQ_, "  === JARVIS Auto-Propagation ===");
             crate::println!();
-            if ggc {
-                crate::h!(L_, "  Mode: FULL (mesh + brain pull + federated + PXE)");
+            if cxd {
+                crate::n!(K_, "  Mode: FULL (mesh + brain pull + federated + PXE)");
             } else {
-                crate::h!(L_, "  Mode: JOIN (mesh + brain pull + federated)");
+                crate::n!(K_, "  Mode: JOIN (mesh + brain pull + federated)");
             }
             crate::println!();
 
-            let report = crate::jarvis::mwy(ggc);
-            for line in report.ak() {
+            let report = crate::jarvis::hgd(cxd);
+            for line in report.lines() {
                 if line.contains("FAIL") || line.contains("failed") {
-                    crate::h!(A_, "  {}", line);
+                    crate::n!(A_, "  {}", line);
                 } else if line.contains("OK") || line.contains("active") || line.contains("DOWNLOADED") || line.contains("enabled") || line.contains("FULL") {
-                    crate::h!(B_, "  {}", line);
+                    crate::n!(B_, "  {}", line);
                 } else {
-                    crate::h!(L_, "  {}", line);
+                    crate::n!(K_, "  {}", line);
                 }
             }
 
             
             crate::println!();
-            let yp = crate::jarvis::mesh::dhn();
-            if !yp.is_empty() {
-                crate::h!(AL_, "  Connected nodes:");
-                for ko in &yp {
-                    let bwt = match ko.bwt {
-                        crate::jarvis::mesh::NodeRole::Ni => "LEADER",
-                        crate::jarvis::mesh::NodeRole::Mu => "CAND",
-                        crate::jarvis::mesh::NodeRole::Lb => "WORKER",
+            let lj = crate::jarvis::mesh::bgo();
+            if !lj.is_empty() {
+                crate::n!(AQ_, "  Connected nodes:");
+                for peer in &lj {
+                    let role = match peer.role {
+                        crate::jarvis::mesh::NodeRole::Leader => "LEADER",
+                        crate::jarvis::mesh::NodeRole::Candidate => "CAND",
+                        crate::jarvis::mesh::NodeRole::Worker => "WORKER",
                     };
                     crate::println!("    {}.{}.{}.{} [{}] {} params, {} steps",
-                        ko.ip[0], ko.ip[1], ko.ip[2], ko.ip[3],
-                        bwt, ko.vm, ko.fae);
+                        peer.ip[0], peer.ip[1], peer.ip[2], peer.ip[3],
+                        role, peer.param_count, peer.training_steps);
                 }
             }
 
             crate::println!();
-            if crate::jarvis::fkf() {
-                crate::h!(B_, "  JARVIS is fully operational and connected.");
+            if crate::jarvis::cki() {
+                crate::n!(B_, "  JARVIS is fully operational and connected.");
             } else {
-                crate::h!(D_, "  JARVIS running in micro mode. Full brain will download when a peer joins.");
+                crate::n!(D_, "  JARVIS running in micro mode. Full brain will download when a peer joins.");
             }
         }
 
         "swarm" => {
             
-            let bmz: usize = if n.len() > 1 {
-                n[1].parse().unwrap_or(3)
+            let ahx: usize = if args.len() > 1 {
+                args[1].parse().unwrap_or(3)
             } else { 3 };
 
-            crate::h!(AL_, "  === JARVIS Swarm Training Mode ===");
+            crate::n!(AQ_, "  === JARVIS Swarm Training Mode ===");
             crate::println!();
 
             
-            if !crate::jarvis::uc() {
-                crate::h!(AL_, "  [1/4] Initializing neural brain...");
+            if !crate::jarvis::is_ready() {
+                crate::n!(AQ_, "  [1/4] Initializing neural brain...");
                 crate::jarvis::init();
-                if !crate::jarvis::uc() {
-                    crate::h!(A_, "  Brain init failed");
+                if !crate::jarvis::is_ready() {
+                    crate::n!(A_, "  Brain init failed");
                     return;
                 }
             } else {
-                crate::h!(B_, "  [1/4] Brain already initialized");
+                crate::n!(B_, "  [1/4] Brain already initialized");
             }
 
             
-            crate::h!(AL_, "  [2/4] Starting mesh network...");
-            crate::jarvis::jfy();
-            crate::h!(B_, "  Mesh active on UDP 7700 / TCP 7701");
+            crate::n!(AQ_, "  [2/4] Starting mesh network...");
+            crate::jarvis::euj();
+            crate::n!(B_, "  Mesh active on UDP 7700 / TCP 7701");
 
             
-            if let Some((ura, _, _)) = crate::network::aou() {
-                crate::h!(L_, "  Scanning subnet for peers...");
-                let bsb = crate::jarvis::mesh::GV_;
-                let jgi = ura.as_bytes();
-                let mut aig = 0u32;
-                for kh in 1u8..=10 {
-                    if kh == jgi[3] { continue; }
-                    let huz = [jgi[0], jgi[1], jgi[2], kh];
-                    if let Ok(true) = crate::jarvis::rpc::ovs(huz, bsb) {
-                        crate::h!(B_, "    Found peer: {}.{}.{}.{}",
-                            huz[0], huz[1], huz[2], huz[3]);
-                        aig += 1;
+            if let Some((my_ip, _, _)) = crate::network::rd() {
+                crate::n!(K_, "  Scanning subnet for peers...");
+                let rpc_port = crate::jarvis::mesh::HM_;
+                let euq = my_ip.as_bytes();
+                let mut nj = 0u32;
+                for host in 1u8..=10 {
+                    if host == euq[3] { continue; }
+                    let dwk = [euq[0], euq[1], euq[2], host];
+                    if let Ok(true) = crate::jarvis::rpc::iux(dwk, rpc_port) {
+                        crate::n!(B_, "    Found peer: {}.{}.{}.{}",
+                            dwk[0], dwk[1], dwk[2], dwk[3]);
+                        nj += 1;
                     }
                 }
-                if aig == 0 {
-                    crate::h!(D_, "    No peers found (training solo)");
+                if nj == 0 {
+                    crate::n!(D_, "    No peers found (training solo)");
                 } else {
-                    crate::h!(B_, "    {} peer(s) discovered", aig);
+                    crate::n!(B_, "    {} peer(s) discovered", nj);
                 }
             }
 
             
-            crate::h!(AL_, "  [3/4] Enabling federated learning...");
-            crate::jarvis::federated::aiy();
-            crate::h!(B_, "  Federated gradient exchange enabled (30s sync)");
+            crate::n!(AQ_, "  [3/4] Enabling federated learning...");
+            crate::jarvis::federated::enable();
+            crate::n!(B_, "  Federated gradient exchange enabled (30s sync)");
 
             
-            crate::h!(AL_, "  [4/4] Pre-training {} epoch(s)...", bmz);
+            crate::n!(AQ_, "  [4/4] Pre-training {} epoch(s)...", ahx);
             crate::println!();
 
-            let fnh = crate::jarvis::kud();
-            crate::h!(L_, "  Loss before: {:.3}", fnh);
+            let cmk = crate::jarvis::fvj();
+            crate::n!(K_, "  Loss before: {:.3}", cmk);
 
-            let (au, bdl, ez) = crate::jarvis::oxe(bmz, 0.001);
+            let (steps, adh, bb) = crate::jarvis::ivx(ahx, 0.001);
 
             crate::println!();
-            crate::h!(AL_, "  Swarm training complete!");
-            crate::h!(L_, "  {} steps, avg loss={:.3}, {:.1}s",
-                au, bdl, ez as f64 / 1000.0);
+            crate::n!(AQ_, "  Swarm training complete!");
+            crate::n!(K_, "  {} steps, avg loss={:.3}, {:.1}s",
+                steps, adh, bb as f64 / 1000.0);
 
-            let fng = crate::jarvis::kud();
-            crate::gr!(L_, "  Loss after:  {:.3}", fng);
-            if fng < fnh {
-                crate::h!(B_, " (improved by {:.3})", fnh - fng);
+            let cmj = crate::jarvis::fvj();
+            crate::bq!(K_, "  Loss after:  {:.3}", cmj);
+            if cmj < cmk {
+                crate::n!(B_, " (improved by {:.3})", cmk - cmj);
             } else {
-                crate::h!(D_, " (no improvement)");
+                crate::n!(D_, " (no improvement)");
             }
 
             
-            let yp = crate::jarvis::mesh::dhn();
-            crate::h!(L_, "  Mesh peers: {}", yp.len());
-            crate::h!(L_, "  Pre-training done");
+            let lj = crate::jarvis::mesh::bgo();
+            crate::n!(K_, "  Mesh peers: {}", lj.len());
+            crate::n!(K_, "  Pre-training done");
         }
 
         _ => {
-            crate::h!(A_, "  Unknown: jarvis brain {}", n[0]);
+            crate::n!(A_, "  Unknown: jarvis brain {}", args[0]);
             crate::println!("  Use 'jarvis brain' for help");
         }
     }
 }
 
 
-fn cxl() -> bool {
-    if !crate::jarvis::uc() {
-        crate::h!(L_, "  Auto-initializing neural brain...");
+fn bbk() -> bool {
+    if !crate::jarvis::is_ready() {
+        crate::n!(K_, "  Auto-initializing neural brain...");
         crate::jarvis::init();
     }
-    crate::jarvis::uc()
+    crate::jarvis::is_ready()
 }

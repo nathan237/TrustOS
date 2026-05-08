@@ -6,24 +6,24 @@
 #[inline(always)]
 // Fonction publique — appelable depuis d'autres modules.
 pub fn timestamp() -> u64 {
-    let value: u64;
+    let val: u64;
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-        core::arch::asm!("mrs {}, CNTPCT_EL0", out(reg) value, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("mrs {}, CNTPCT_EL0", out(reg) val, options(nomem, nostack, preserves_flags));
     }
-    value
+    val
 }
 
 /// Read the counter frequency (CNTFRQ_EL0) — ticks per second
 #[inline(always)]
 // Fonction publique — appelable depuis d'autres modules.
 pub fn frequency() -> u64 {
-    let value: u64;
+    let val: u64;
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-        core::arch::asm!("mrs {}, CNTFRQ_EL0", out(reg) value, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("mrs {}, CNTFRQ_EL0", out(reg) val, options(nomem, nostack, preserves_flags));
     }
-    value
+    val
 }
 
 /// Set the physical timer compare value (CNTP_CVAL_EL0)
@@ -71,7 +71,7 @@ pub fn set_oneshot(ticks: u64) {
 
 /// Set a one-shot timer to fire after `us` microseconds
 pub fn set_oneshot_us(us: u64) {
-    let frequency = frequency();
-    let ticks = (us * frequency) / 1_000_000;
+    let freq = frequency();
+    let ticks = (us * freq) / 1_000_000;
     set_oneshot(ticks);
 }

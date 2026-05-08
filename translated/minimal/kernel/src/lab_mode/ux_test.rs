@@ -21,202 +21,202 @@ use alloc::format;
 use super::{LabState, PanelId, trace_bus};
 
 
-struct A {
-    j: &'static str,
-    cg: bool,
-    eu: String,
+struct D {
+    name: &'static str,
+    passed: bool,
+    detail: String,
 }
 
 
-pub fn wbn(g: &mut LabState) {
-    let mut hd: Vec<A> = Vec::new();
+pub fn ojh(state: &mut LabState) {
+    let mut results: Vec<D> = Vec::new();
 
     
     {
-        g.ckl = 0; 
+        state.focused_slot = 0; 
         
-        let spg: [usize; 7] = [1, 2, 3, 4, 5, 6, 0];
-        let mut bq = true;
-        let mut eu = String::new();
-        for (a, bgz) in spg.iter().cf() {
-            g.vr(0x09); 
-            if g.ckl != *bgz {
-                bq = false;
-                eu = format!("step {}: expected slot {}, got slot {}", a, bgz, g.ckl);
+        let lsq: [usize; 7] = [1, 2, 3, 4, 5, 6, 0];
+        let mut ok = true;
+        let mut detail = String::new();
+        for (i, afe) in lsq.iter().enumerate() {
+            state.handle_key(0x09); 
+            if state.focused_slot != *afe {
+                ok = false;
+                detail = format!("step {}: expected slot {}, got slot {}", i, afe, state.focused_slot);
                 break;
             }
         }
-        if bq { eu = String::from("7 tab presses cycle all slots correctly"); }
-        hd.push(A { j: "Tab cycle", cg: bq, eu });
+        if ok { detail = String::from("7 tab presses cycle all slots correctly"); }
+        results.push(D { name: "Tab cycle", passed: ok, detail });
     }
 
     
     {
-        let kjn: [(&str, PanelId); 7] = [
-            ("hw", PanelId::Iq),
-            ("trace", PanelId::Gk),
-            ("help", PanelId::Hm),
-            ("fs", PanelId::Hp),
-            ("edit", PanelId::Gp),
-            ("pipeline", PanelId::Iz),
-            ("hex", PanelId::Hr),
+        let fnl: [(&str, PanelId); 7] = [
+            ("hw", PanelId::HardwareStatus),
+            ("trace", PanelId::KernelTrace),
+            ("help", PanelId::CommandGuide),
+            ("fs", PanelId::FileTree),
+            ("edit", PanelId::TrustLangEditor),
+            ("pipeline", PanelId::Pipeline),
+            ("hex", PanelId::HexEditor),
         ];
-        let mut bq = true;
-        let mut eu = String::new();
-        for (cmd, qy) in &kjn {
-            g.bfh = String::from(*cmd);
-            g.dvx = cmd.len();
-            g.nrq();
-            if g.eqp() != *qy {
-                bq = false;
-                eu = format!("'{}' => {:?}, expected {:?}", cmd, g.eqp(), qy);
+        let mut ok = true;
+        let mut detail = String::new();
+        for (cmd, expected) in &fnl {
+            state.shell_input = String::from(*cmd);
+            state.shell_cursor = cmd.len();
+            state.execute_shell_command();
+            if state.focused_module() != *expected {
+                ok = false;
+                detail = format!("'{}' => {:?}, expected {:?}", cmd, state.focused_module(), expected);
                 break;
             }
         }
-        if bq { eu = String::from("7 shell commands focus correct panels"); }
-        hd.push(A { j: "Shell cmds", cg: bq, eu });
+        if ok { detail = String::from("7 shell commands focus correct panels"); }
+        results.push(D { name: "Shell cmds", passed: ok, detail });
     }
 
     
     {
         
         
-        let hk = 1200u32;
-        let mg = 800u32;
+        let ca = 1200u32;
+        let er = 800u32;
         let cx = 2i32;
-        let ae = 30i32; 
-        let dt = hk - 4;
-        let bm = mg - 32;
+        let u = 30i32; 
+        let aq = ca - 4;
+        let ch = er - 32;
 
-        let cls = super::ioy(cx, ae, dt, bm);
-        let mut bq = true;
-        let mut eu = String::new();
-        for (a, oc) in cls.iter().cf() {
-            let agi = oc.b + oc.d as i32 / 2;
-            let bbf = oc.c + oc.i as i32 / 2;
-            g.ago(agi, bbf, hk, mg);
-            if g.ckl != a {
-                bq = false;
-                eu = format!("click slot {} => focused_slot {}, expected {}", a, g.ckl, a);
+        let aoq = super::cvn(cx, u, aq, ch);
+        let mut ok = true;
+        let mut detail = String::new();
+        for (i, ej) in aoq.iter().enumerate() {
+            let qh = ej.x + ej.w as i32 / 2;
+            let abv = ej.y + ej.h as i32 / 2;
+            state.handle_click(qh, abv, ca, er);
+            if state.focused_slot != i {
+                ok = false;
+                detail = format!("click slot {} => focused_slot {}, expected {}", i, state.focused_slot, i);
                 break;
             }
         }
-        if bq { eu = String::from("clicks on all 7 slot areas set focus correctly"); }
-        hd.push(A { j: "Click focus", cg: bq, eu });
+        if ok { detail = String::from("clicks on all 7 slot areas set focus correctly"); }
+        results.push(D { name: "Click focus", passed: ok, detail });
     }
 
     
     {
         
-        trace_bus::dgy(trace_bus::EventCategory::Gv, "ux_test_marker", 42);
-        g.ccg.qs();
-        g.ccg.qs(); 
+        trace_bus::bgi(trace_bus::EventCategory::Custom, "ux_test_marker", 42);
+        state.trace_state.update();
+        state.trace_state.update(); 
         
-        let oas = g.ccg.events.iter()
-            .any(|aa| aa.message.contains("ux_test_marker"));
-        let eu = if oas {
+        let idu = state.trace_state.events.iter()
+            .any(|e| e.message.contains("ux_test_marker"));
+        let detail = if idu {
             String::from("test event propagated to trace panel")
         } else {
             String::from("test event NOT found in trace panel (may need more ticks)")
         };
-        hd.push(A { j: "Trace recv", cg: oas, eu });
+        results.push(D { name: "Trace recv", passed: idu, detail });
     }
 
     
     {
         
-        trace_bus::ktb(1, [1, 0x1000, 32], 32);
-        g.ccg.qs();
-        let obb = g.ccg.events.iter()
-            .any(|aa| aa.fvy == Some(1));
-        let eu = if obb {
+        trace_bus::fuj(1, [1, 0x1000, 32], 32);
+        state.trace_state.update();
+        let iee = state.trace_state.events.iter()
+            .any(|e| e.syscall_nr == Some(1));
+        let detail = if iee {
             String::from("syscall event with nr=1 (write) found with structured data")
         } else {
             String::from("syscall structured event NOT found")
         };
-        hd.push(A { j: "Syscall data", cg: obb, eu });
+        results.push(D { name: "Syscall data", passed: iee, detail });
     }
 
     
     {
-        let jwl = g.ccg.ckk[0]; 
-        g.ccg.vr(b'1'); 
-        let uvt = g.ccg.ckk[0];
-        let pue = jwl != uvt;
+        let fez = state.trace_state.filters[0]; 
+        state.trace_state.handle_key(b'1'); 
+        let nlj = state.trace_state.filters[0];
+        let jne = fez != nlj;
         
-        g.ccg.vr(b'1');
-        let eu = if pue {
+        state.trace_state.handle_key(b'1');
+        let detail = if jne {
             String::from("filter toggle via key '1' works")
         } else {
             String::from("filter toggle FAILED")
         };
-        hd.push(A { j: "Filter key", cg: pue, eu });
+        results.push(D { name: "Filter key", passed: jne, detail });
     }
 
     
     {
-        g.cri.nvo();
-        g.cri.qs();
-        let cyk = g.cri.cnn > 0 || g.cri.aul > 0;
-        let eu = format!("uptime={}s heap={}B irq_rate={}",
-            g.cri.cnn, g.cri.aul, g.cri.eds);
-        hd.push(A { j: "HW live data", cg: cyk, eu });
+        state.hw_state.force_refresh();
+        state.hw_state.update();
+        let has_data = state.hw_state.uptime_secs > 0 || state.hw_state.heap_total > 0;
+        let detail = format!("uptime={}s heap={}B irq_rate={}",
+            state.hw_state.uptime_secs, state.hw_state.heap_total, state.hw_state.irq_rate);
+        results.push(D { name: "HW live data", passed: has_data, detail });
     }
 
     
     {
-        let cvu = g.egs.cqq.len();
-        trace_bus::dgy(trace_bus::EventCategory::Hs, "ux_test_key", 0);
-        trace_bus::dgy(trace_bus::EventCategory::Scheduler, "ux_test_sched", 0);
+        let bak = state.pipeline_state.flows.len();
+        trace_bus::bgi(trace_bus::EventCategory::Keyboard, "ux_test_key", 0);
+        trace_bus::bgi(trace_bus::EventCategory::Scheduler, "ux_test_sched", 0);
         
         for _ in 0..10 {
-            g.egs.qs();
+            state.pipeline_state.update();
         }
-        let ddv = g.egs.cqq.len();
-        let nzp = ddv > cvu;
-        let eu = format!("flows: {} -> {} (grew={})", cvu, ddv, nzp);
-        hd.push(A { j: "Pipeline upd", cg: nzp, eu });
+        let beo = state.pipeline_state.flows.len();
+        let ict = beo > bak;
+        let detail = format!("flows: {} -> {} (grew={})", bak, beo, ict);
+        results.push(D { name: "Pipeline upd", passed: ict, detail });
     }
 
     
     {
-        g.crb.anw.clear();
-        g.crb.gi = 0;
-        g.crb.fka('l');
-        g.crb.fka('s');
-        let oaz = g.crb.anw == "ls";
+        state.guide_state.search.clear();
+        state.guide_state.cursor = 0;
+        state.guide_state.handle_char('l');
+        state.guide_state.handle_char('s');
+        let iec = state.guide_state.search == "ls";
         
-        g.crb.anw.clear();
-        g.crb.gi = 0;
-        let eu = if oaz {
+        state.guide_state.search.clear();
+        state.guide_state.cursor = 0;
+        let detail = if iec {
             String::from("guide search input 'ls' recorded correctly")
         } else {
-            format!("guide search: expected 'ls', got '{}'", g.crb.anw)
+            format!("guide search: expected 'ls', got '{}'", state.guide_state.search)
         };
-        hd.push(A { j: "Guide search", cg: oaz, eu });
+        results.push(D { name: "Guide search", passed: iec, detail });
     }
 
     
-    let cg = hd.iter().hi(|m| m.cg).az();
-    let es = hd.len();
-    let awz = format!("=== UX TEST: {}/{} passed ===", cg, es);
+    let passed = results.iter().filter(|r| r.passed).count();
+    let av = results.len();
+    let summary = format!("=== UX TEST: {}/{} passed ===", passed, av);
 
-    trace_bus::fj(trace_bus::EventCategory::Gv, awz, cg as u64);
+    trace_bus::emit(trace_bus::EventCategory::Custom, summary, passed as u64);
 
-    for m in &hd {
-        let pa = if m.cg { "PASS" } else { "FAIL" };
-        let fr = format!("[{}] {} | {}", pa, m.j, m.eu);
-        trace_bus::fj(trace_bus::EventCategory::Gv, fr, if m.cg { 1 } else { 0 });
+    for r in &results {
+        let icon = if r.passed { "PASS" } else { "FAIL" };
+        let bk = format!("[{}] {} | {}", icon, r.name, r.detail);
+        trace_bus::emit(trace_bus::EventCategory::Custom, bk, if r.passed { 1 } else { 0 });
     }
 
     
-    crate::serial_println!("=== TrustLab UX Test Results: {}/{} passed ===", cg, es);
-    for m in &hd {
-        let pa = if m.cg { "PASS" } else { "FAIL" };
-        crate::serial_println!("  [{}] {} - {}", pa, m.j, m.eu);
+    crate::serial_println!("=== TrustLab UX Test Results: {}/{} passed ===", passed, av);
+    for r in &results {
+        let icon = if r.passed { "PASS" } else { "FAIL" };
+        crate::serial_println!("  [{}] {} - {}", icon, r.name, r.detail);
     }
 
     
-    g.cqr(PanelId::Gk);
-    g.ccg.jc = 0;
+    state.focus_module(PanelId::KernelTrace);
+    state.trace_state.scroll = 0;
 }

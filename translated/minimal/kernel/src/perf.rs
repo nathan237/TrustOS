@@ -1,16 +1,16 @@
 
 
 #[inline(always)]
-pub fn zpd() {
-    core::hint::hc();
+pub fn qxk() {
+    core::hint::spin_loop();
 }
 
 #[inline(always)]
-pub fn zas(o: bool) -> bool {
-    o
+pub fn qnj(b: bool) -> bool {
+    b
 }
 
 #[inline(always)]
-pub fn ztz(o: bool) -> bool {
-    o
+pub fn rbf(b: bool) -> bool {
+    b
 }

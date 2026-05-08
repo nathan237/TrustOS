@@ -19,111 +19,111 @@ use alloc::vec;
 
 #[derive(Clone, Copy)]
 pub struct Vec3 {
-    pub b: f32,
-    pub c: f32,
-    pub av: f32,
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
 }
 
 impl Vec3 {
-    pub const Dh: Vec3 = Vec3 { b: 0.0, c: 0.0, av: 0.0 };
-    pub const Cie: Vec3 = Vec3 { b: 1.0, c: 1.0, av: 1.0 };
-    pub const Afc: Vec3 = Vec3 { b: 0.0, c: 1.0, av: 0.0 };
+    pub const Bk: Vec3 = Vec3 { x: 0.0, y: 0.0, z: 0.0 };
+    pub const Amy: Vec3 = Vec3 { x: 1.0, y: 1.0, z: 1.0 };
+    pub const Np: Vec3 = Vec3 { x: 0.0, y: 1.0, z: 0.0 };
     
     #[inline]
-    pub fn new(b: f32, c: f32, av: f32) -> Self {
-        Self { b, c, av }
+    pub fn new(x: f32, y: f32, z: f32) -> Self {
+        Self { x, y, z }
     }
     
     #[inline]
-    pub fn amb(self, gq: Vec3) -> f32 {
-        self.b * gq.b + self.c * gq.c + self.av * gq.av
+    pub fn dot(self, other: Vec3) -> f32 {
+        self.x * other.x + self.y * other.y + self.z * other.z
     }
     
     #[inline]
-    pub fn bjr(self, gq: Vec3) -> Vec3 {
+    pub fn cross(self, other: Vec3) -> Vec3 {
         Vec3::new(
-            self.c * gq.av - self.av * gq.c,
-            self.av * gq.b - self.b * gq.av,
-            self.b * gq.c - self.c * gq.b,
+            self.y * other.z - self.z * other.y,
+            self.z * other.x - self.x * other.z,
+            self.x * other.y - self.y * other.x,
         )
     }
     
     #[inline]
-    pub fn lil(self) -> f32 {
-        self.amb(self)
+    pub fn length_sq(self) -> f32 {
+        self.dot(self)
     }
     
     #[inline]
-    pub fn go(self) -> f32 {
-        pmn(self.lil())
+    pub fn length(self) -> f32 {
+        jhj(self.length_sq())
     }
     
     #[inline]
-    pub fn all(self) -> Vec3 {
-        let len = self.go();
+    pub fn normalize(self) -> Vec3 {
+        let len = self.length();
         if len > 0.0001 {
             self * (1.0 / len)
         } else {
-            Vec3::Dh
+            Vec3::Bk
         }
     }
     
     #[inline]
-    pub fn pbb(self, adg: Vec3) -> Vec3 {
-        self - adg * (2.0 * self.amb(adg))
+    pub fn reflect(self, normal: Vec3) -> Vec3 {
+        self - normal * (2.0 * self.dot(normal))
     }
     
     #[inline]
-    pub fn csb(self, gq: Vec3, ab: f32) -> Vec3 {
-        self * (1.0 - ab) + gq * ab
+    pub fn lerp(self, other: Vec3, t: f32) -> Vec3 {
+        self * (1.0 - t) + other * t
     }
 }
 
 impl core::ops::Add for Vec3 {
-    type Dd = Vec3;
-    fn add(self, bwr: Vec3) -> Vec3 {
-        Vec3::new(self.b + bwr.b, self.c + bwr.c, self.av + bwr.av)
+    type Output = Vec3;
+    fn add(self, amp: Vec3) -> Vec3 {
+        Vec3::new(self.x + amp.x, self.y + amp.y, self.z + amp.z)
     }
 }
 
 impl core::ops::Sub for Vec3 {
-    type Dd = Vec3;
-    fn sub(self, bwr: Vec3) -> Vec3 {
-        Vec3::new(self.b - bwr.b, self.c - bwr.c, self.av - bwr.av)
+    type Output = Vec3;
+    fn sub(self, amp: Vec3) -> Vec3 {
+        Vec3::new(self.x - amp.x, self.y - amp.y, self.z - amp.z)
     }
 }
 
 impl core::ops::Mul<f32> for Vec3 {
-    type Dd = Vec3;
-    fn mul(self, bwr: f32) -> Vec3 {
-        Vec3::new(self.b * bwr, self.c * bwr, self.av * bwr)
+    type Output = Vec3;
+    fn mul(self, amp: f32) -> Vec3 {
+        Vec3::new(self.x * amp, self.y * amp, self.z * amp)
     }
 }
 
 impl core::ops::Neg for Vec3 {
-    type Dd = Vec3;
+    type Output = Vec3;
     fn neg(self) -> Vec3 {
-        Vec3::new(-self.b, -self.c, -self.av)
+        Vec3::new(-self.x, -self.y, -self.z)
     }
 }
 
 impl core::ops::Mul<Vec3> for Vec3 {
-    type Dd = Vec3;
-    fn mul(self, bwr: Vec3) -> Vec3 {
-        Vec3::new(self.b * bwr.b, self.c * bwr.c, self.av * bwr.av)
+    type Output = Vec3;
+    fn mul(self, amp: Vec3) -> Vec3 {
+        Vec3::new(self.x * amp.x, self.y * amp.y, self.z * amp.z)
     }
 }
 
 
-fn pmn(b: f32) -> f32 { crate::math::ahn(b) }
+fn jhj(x: f32) -> f32 { crate::math::ra(x) }
 
 
-fn iat(b: f32) -> f32 { crate::math::lz(b) }
+fn dzp(x: f32) -> f32 { crate::math::eu(x) }
 
-fn kkv(b: f32) -> f32 { crate::math::rk(b) }
+fn fon(x: f32) -> f32 { crate::math::hr(x) }
 
 
-fn xar(b: f32) -> f32 { crate::math::nsw(b) }
+fn pdb(x: f32) -> f32 { crate::math::hxv(x) }
 
 
 
@@ -132,41 +132,41 @@ fn xar(b: f32) -> f32 { crate::math::nsw(b) }
 
 #[derive(Clone, Copy)]
 pub struct Ray {
-    pub atf: Vec3,
-    pub sz: Vec3,
+    pub origin: Vec3,
+    pub direction: Vec3,
 }
 
 impl Ray {
-    pub fn new(atf: Vec3, sz: Vec3) -> Self {
-        Self { atf, sz: sz.all() }
+    pub fn new(origin: Vec3, direction: Vec3) -> Self {
+        Self { origin, direction: direction.normalize() }
     }
     
-    pub fn aoi(self, ab: f32) -> Vec3 {
-        self.atf + self.sz * ab
+    pub fn at(self, t: f32) -> Vec3 {
+        self.origin + self.direction * t
     }
 }
 
 
 #[derive(Clone, Copy)]
 pub struct HitInfo {
-    pub ab: f32,           
-    pub nl: Vec3,      
-    pub adg: Vec3,     
-    pub bby: u8,  
+    pub t: f32,           
+    pub point: Vec3,      
+    pub normal: Vec3,     
+    pub material_id: u8,  
 }
 
 impl HitInfo {
-    pub fn fpc() -> Self {
+    pub fn cng() -> Self {
         Self {
-            ab: f32::O,
-            nl: Vec3::Dh,
-            adg: Vec3::Afc,
-            bby: 0,
+            t: f32::MAX,
+            point: Vec3::Bk,
+            normal: Vec3::Np,
+            material_id: 0,
         }
     }
     
-    pub fn agp(&self) -> bool {
-        self.ab < f32::O - 1.0
+    pub fn hit(&self) -> bool {
+        self.t < f32::MAX - 1.0
     }
 }
 
@@ -176,145 +176,145 @@ impl HitInfo {
 
 
 pub struct Sphere {
-    pub pn: Vec3,
-    pub dy: f32,
-    pub bby: u8,
+    pub center: Vec3,
+    pub radius: f32,
+    pub material_id: u8,
 }
 
 impl Sphere {
-    pub fn new(pn: Vec3, dy: f32, bby: u8) -> Self {
-        Self { pn, dy, bby }
+    pub fn new(center: Vec3, radius: f32, material_id: u8) -> Self {
+        Self { center, radius, material_id }
     }
     
     
-    pub fn hoj(&self, acj: &Ray) -> HitInfo {
-        let dtu = acj.atf - self.pn;
-        let q = acj.sz.lil();
-        let ixm = dtu.amb(acj.sz);
-        let r = dtu.lil() - self.dy * self.dy;
-        let gew = ixm * ixm - q * r;
+    pub fn intersect(&self, ob: &Ray) -> HitInfo {
+        let bnx = ob.origin - self.center;
+        let a = ob.direction.length_sq();
+        let eoq = bnx.dot(ob.direction);
+        let c = bnx.length_sq() - self.radius * self.radius;
+        let cwp = eoq * eoq - a * c;
         
-        if gew < 0.0 {
-            return HitInfo::fpc();
+        if cwp < 0.0 {
+            return HitInfo::cng();
         }
         
-        let pmo = pmn(gew);
-        let mut ab = (-ixm - pmo) / q;
+        let jhk = jhj(cwp);
+        let mut t = (-eoq - jhk) / a;
         
-        if ab < 0.001 {
-            ab = (-ixm + pmo) / q;
-            if ab < 0.001 {
-                return HitInfo::fpc();
+        if t < 0.001 {
+            t = (-eoq + jhk) / a;
+            if t < 0.001 {
+                return HitInfo::cng();
             }
         }
         
-        let nl = acj.aoi(ab);
-        let adg = (nl - self.pn).all();
+        let point = ob.at(t);
+        let normal = (point - self.center).normalize();
         
         HitInfo {
-            ab,
-            nl,
-            adg,
-            bby: self.bby,
+            t,
+            point,
+            normal,
+            material_id: self.material_id,
         }
     }
 }
 
 
 pub struct Plane {
-    pub nl: Vec3,
-    pub adg: Vec3,
-    pub bby: u8,
+    pub point: Vec3,
+    pub normal: Vec3,
+    pub material_id: u8,
 }
 
 impl Plane {
-    pub fn new(nl: Vec3, adg: Vec3, bby: u8) -> Self {
-        Self { nl, adg: adg.all(), bby }
+    pub fn new(point: Vec3, normal: Vec3, material_id: u8) -> Self {
+        Self { point, normal: normal.normalize(), material_id }
     }
     
-    pub fn hoj(&self, acj: &Ray) -> HitInfo {
-        let gel = self.adg.amb(acj.sz);
+    pub fn intersect(&self, ob: &Ray) -> HitInfo {
+        let cwi = self.normal.dot(ob.direction);
         
-        if gel.gp() < 0.0001 {
-            return HitInfo::fpc();
+        if cwi.abs() < 0.0001 {
+            return HitInfo::cng();
         }
         
-        let ab = (self.nl - acj.atf).amb(self.adg) / gel;
+        let t = (self.point - ob.origin).dot(self.normal) / cwi;
         
-        if ab < 0.001 {
-            return HitInfo::fpc();
+        if t < 0.001 {
+            return HitInfo::cng();
         }
         
         HitInfo {
-            ab,
-            nl: acj.aoi(ab),
-            adg: self.adg,
-            bby: self.bby,
+            t,
+            point: ob.at(t),
+            normal: self.normal,
+            material_id: self.material_id,
         }
     }
 }
 
 
 pub struct Box3D {
-    pub v: Vec3,
-    pub am: Vec3,
-    pub bby: u8,
+    pub min: Vec3,
+    pub max: Vec3,
+    pub material_id: u8,
 }
 
 impl Box3D {
-    pub fn new(pn: Vec3, ixn: Vec3, bby: u8) -> Self {
+    pub fn new(center: Vec3, half_size: Vec3, material_id: u8) -> Self {
         Self {
-            v: pn - ixn,
-            am: pn + ixn,
-            bby,
+            min: center - half_size,
+            max: center + half_size,
+            material_id,
         }
     }
     
-    pub fn hoj(&self, acj: &Ray) -> HitInfo {
-        let cla = Vec3::new(
-            1.0 / acj.sz.b,
-            1.0 / acj.sz.c,
-            1.0 / acj.sz.av,
+    pub fn intersect(&self, ob: &Ray) -> HitInfo {
+        let aub = Vec3::new(
+            1.0 / ob.direction.x,
+            1.0 / ob.direction.y,
+            1.0 / ob.direction.z,
         );
         
-        let aax = (self.v.b - acj.atf.b) * cla.b;
-        let aco = (self.am.b - acj.atf.b) * cla.b;
-        let bcx = (self.v.c - acj.atf.c) * cla.c;
-        let dcl = (self.am.c - acj.atf.c) * cla.c;
-        let eji = (self.v.av - acj.atf.av) * cla.av;
-        let ejj = (self.am.av - acj.atf.av) * cla.av;
+        let ll = (self.min.x - ob.origin.x) * aub.x;
+        let np = (self.max.x - ob.origin.x) * aub.x;
+        let acw = (self.min.y - ob.origin.y) * aub.y;
+        let bdx = (self.max.y - ob.origin.y) * aub.y;
+        let bwd = (self.min.z - ob.origin.z) * aub.z;
+        let bwe = (self.max.z - ob.origin.z) * aub.z;
         
-        let mlh = aax.v(aco).am(bcx.v(dcl)).am(eji.v(ejj));
-        let mlg = aax.am(aco).v(bcx.am(dcl)).v(eji.am(ejj));
+        let gzb = ll.min(np).max(acw.min(bdx)).max(bwd.min(bwe));
+        let gza = ll.max(np).min(acw.max(bdx)).min(bwd.max(bwe));
         
-        if mlg < 0.0 || mlh > mlg {
-            return HitInfo::fpc();
+        if gza < 0.0 || gzb > gza {
+            return HitInfo::cng();
         }
         
-        let ab = if mlh < 0.001 { mlg } else { mlh };
-        if ab < 0.001 {
-            return HitInfo::fpc();
+        let t = if gzb < 0.001 { gza } else { gzb };
+        if t < 0.001 {
+            return HitInfo::cng();
         }
         
-        let nl = acj.aoi(ab);
+        let point = ob.at(t);
         
         
-        let pn = (self.v + self.am) * 0.5;
-        let ljm = nl - pn;
-        let iv = (self.am - self.v) * 0.5;
+        let center = (self.min + self.max) * 0.5;
+        let ggb = point - center;
+        let cw = (self.max - self.min) * 0.5;
         
-        let kde = 1.0001;
-        let adg = Vec3::new(
-            (ljm.b / iv.b * kde) as i32 as f32,
-            (ljm.c / iv.c * kde) as i32 as f32,
-            (ljm.av / iv.av * kde) as i32 as f32,
-        ).all();
+        let fjb = 1.0001;
+        let normal = Vec3::new(
+            (ggb.x / cw.x * fjb) as i32 as f32,
+            (ggb.y / cw.y * fjb) as i32 as f32,
+            (ggb.z / cw.z * fjb) as i32 as f32,
+        ).normalize();
         
         HitInfo {
-            ab,
-            nl,
-            adg,
-            bby: self.bby,
+            t,
+            point,
+            normal,
+            material_id: self.material_id,
         }
     }
 }
@@ -326,61 +326,61 @@ impl Box3D {
 
 #[derive(Clone, Copy)]
 pub struct Material {
-    pub s: Vec3,       
-    pub cvo: f32,      
-    pub cpz: f32,      
-    pub amv: f32,     
-    pub gsm: f32,    
-    pub fsm: f32, 
-    pub fho: f32,     
+    pub color: Vec3,       
+    pub ambient: f32,      
+    pub diffuse: f32,      
+    pub specular: f32,     
+    pub shininess: f32,    
+    pub reflectivity: f32, 
+    pub emission: f32,     
 }
 
 impl Material {
-    pub const fn koq() -> Self {
+    pub const fn frd() -> Self {
         Self {
-            s: Vec3 { b: 0.0, c: 1.0, av: 0.4 }, 
-            cvo: 0.1,
-            cpz: 0.6,
-            amv: 0.8,
-            gsm: 32.0,
-            fsm: 0.3,
-            fho: 0.2,
+            color: Vec3 { x: 0.0, y: 1.0, z: 0.4 }, 
+            ambient: 0.1,
+            diffuse: 0.6,
+            specular: 0.8,
+            shininess: 32.0,
+            reflectivity: 0.3,
+            emission: 0.2,
         }
     }
     
-    pub const fn yox(m: f32, at: f32, o: f32) -> Self {
+    pub const fn qep(r: f32, g: f32, b: f32) -> Self {
         Self {
-            s: Vec3 { b: m, c: at, av: o },
-            cvo: 0.0,
-            cpz: 0.0,
-            amv: 0.0,
-            gsm: 1.0,
-            fsm: 0.0,
-            fho: 1.0,
+            color: Vec3 { x: r, y: g, z: b },
+            ambient: 0.0,
+            diffuse: 0.0,
+            specular: 0.0,
+            shininess: 1.0,
+            reflectivity: 0.0,
+            emission: 1.0,
         }
     }
     
-    pub const fn ukp(m: f32, at: f32, o: f32) -> Self {
+    pub const fn nco(r: f32, g: f32, b: f32) -> Self {
         Self {
-            s: Vec3 { b: m, c: at, av: o },
-            cvo: 0.15,
-            cpz: 0.85,
-            amv: 0.1,
-            gsm: 8.0,
-            fsm: 0.0,
-            fho: 0.0,
+            color: Vec3 { x: r, y: g, z: b },
+            ambient: 0.15,
+            diffuse: 0.85,
+            specular: 0.1,
+            shininess: 8.0,
+            reflectivity: 0.0,
+            emission: 0.0,
         }
     }
     
-    pub const fn unv(m: f32, at: f32, o: f32) -> Self {
+    pub const fn nfc(r: f32, g: f32, b: f32) -> Self {
         Self {
-            s: Vec3 { b: m, c: at, av: o },
-            cvo: 0.05,
-            cpz: 0.3,
-            amv: 1.0,
-            gsm: 128.0,
-            fsm: 0.7,
-            fho: 0.0,
+            color: Vec3 { x: r, y: g, z: b },
+            ambient: 0.05,
+            diffuse: 0.3,
+            specular: 1.0,
+            shininess: 128.0,
+            reflectivity: 0.7,
+            emission: 0.0,
         }
     }
 }
@@ -390,137 +390,137 @@ impl Material {
 
 
 
-pub struct Bpe {
-    pub qf: Vec3,
-    pub s: Vec3,
-    pub hj: f32,
+pub struct Acq {
+    pub position: Vec3,
+    pub color: Vec3,
+    pub intensity: f32,
 }
 
 
 pub struct RayTracer {
-    pub z: usize,
-    pub ac: usize,
-    pub jqz: Vec<Sphere>,
-    pub hvf: Vec<Plane>,
-    pub ime: Vec<Box3D>,
-    pub hqu: Vec<Material>,
-    pub jdm: Vec<Bpe>,
-    pub hce: Vec3,
-    pub ims: Vec3,
-    pub ckm: f32,
+    pub width: usize,
+    pub height: usize,
+    pub spheres: Vec<Sphere>,
+    pub planes: Vec<Plane>,
+    pub boxes: Vec<Box3D>,
+    pub materials: Vec<Material>,
+    pub lights: Vec<Acq>,
+    pub camera_pos: Vec3,
+    pub camera_target: Vec3,
+    pub fov: f32,
     pub time: f32,
-    pub oln: u8,
+    pub max_bounces: u8,
 }
 
 impl RayTracer {
-    pub fn new(z: usize, ac: usize) -> Self {
+    pub fn new(width: usize, height: usize) -> Self {
         Self {
-            z,
-            ac,
-            jqz: Vec::new(),
-            hvf: Vec::new(),
-            ime: Vec::new(),
-            hqu: vec![Material::koq()],
-            jdm: Vec::new(),
-            hce: Vec3::new(0.0, 0.0, -3.0),
-            ims: Vec3::Dh,
-            ckm: 60.0,
+            width,
+            height,
+            spheres: Vec::new(),
+            planes: Vec::new(),
+            boxes: Vec::new(),
+            materials: vec![Material::frd()],
+            lights: Vec::new(),
+            camera_pos: Vec3::new(0.0, 0.0, -3.0),
+            camera_target: Vec3::Bk,
+            fov: 60.0,
             time: 0.0,
-            oln: 2,
+            max_bounces: 2,
         }
     }
     
     
-    pub fn ndh(&mut self) {
-        self.jqz.clear();
-        self.hvf.clear();
-        self.ime.clear();
-        self.jdm.clear();
+    pub fn clear_scene(&mut self) {
+        self.spheres.clear();
+        self.planes.clear();
+        self.boxes.clear();
+        self.lights.clear();
     }
     
     
-    pub fn gxy(&mut self, pn: Vec3, dy: f32, bby: u8) {
-        self.jqz.push(Sphere::new(pn, dy, bby));
+    pub fn add_sphere(&mut self, center: Vec3, radius: f32, material_id: u8) {
+        self.spheres.push(Sphere::new(center, radius, material_id));
     }
     
     
-    pub fn qfl(&mut self, nl: Vec3, adg: Vec3, bby: u8) {
-        self.hvf.push(Plane::new(nl, adg, bby));
+    pub fn add_plane(&mut self, point: Vec3, normal: Vec3, material_id: u8) {
+        self.planes.push(Plane::new(point, normal, material_id));
     }
     
     
-    pub fn coi(&mut self, pn: Vec3, ixn: Vec3, bby: u8) {
-        self.ime.push(Box3D::new(pn, ixn, bby));
+    pub fn avz(&mut self, center: Vec3, half_size: Vec3, material_id: u8) {
+        self.boxes.push(Box3D::new(center, half_size, material_id));
     }
     
     
-    pub fn iiz(&mut self, qf: Vec3, s: Vec3, hj: f32) {
-        self.jdm.push(Bpe { qf, s, hj });
+    pub fn add_light(&mut self, position: Vec3, color: Vec3, intensity: f32) {
+        self.lights.push(Acq { position, color, intensity });
     }
     
     
-    pub fn gxw(&mut self, csj: Material) -> u8 {
-        let ad = self.hqu.len() as u8;
-        self.hqu.push(csj);
-        ad
+    pub fn add_material(&mut self, ayb: Material) -> u8 {
+        let id = self.materials.len() as u8;
+        self.materials.push(ayb);
+        id
     }
     
     
-    fn nyl(&self, b: usize, c: usize) -> Ray {
-        let dyk = self.z as f32 / self.ac as f32;
-        let swi = self.ckm * 3.14159 / 180.0;
-        let prv = xar(swi / 2.0);
+    fn get_ray(&self, x: usize, y: usize) -> Ray {
+        let bqh = self.width as f32 / self.height as f32;
+        let lya = self.fov * 3.14159 / 180.0;
+        let jll = pdb(lya / 2.0);
         
         
-        let y = (2.0 * (b as f32 + 0.5) / self.z as f32 - 1.0) * prv * dyk;
-        let x = (1.0 - 2.0 * (c as f32 + 0.5) / self.ac as f32) * prv;
+        let p = (2.0 * (x as f32 + 0.5) / self.width as f32 - 1.0) * jll * bqh;
+        let o = (1.0 - 2.0 * (y as f32 + 0.5) / self.height as f32) * jll;
         
         
-        let fiz = (self.ims - self.hce).all();
-        let hw = fiz.bjr(Vec3::Afc).all();
-        let bln = hw.bjr(fiz);
+        let forward = (self.camera_target - self.camera_pos).normalize();
+        let right = forward.cross(Vec3::Np).normalize();
+        let up = right.cross(forward);
         
-        let sz = (fiz + hw * y + bln * x).all();
+        let direction = (forward + right * p + up * o).normalize();
         
-        Ray::new(self.hce, sz)
+        Ray::new(self.camera_pos, direction)
     }
     
     
-    fn trace(&self, acj: &Ray) -> HitInfo {
-        let mut fey = HitInfo::fpc();
+    fn trace(&self, ob: &Ray) -> HitInfo {
+        let mut chc = HitInfo::cng();
         
-        for wrb in &self.jqz {
-            let agp = wrb.hoj(acj);
-            if agp.agp() && agp.ab < fey.ab {
-                fey = agp;
+        for sphere in &self.spheres {
+            let hit = sphere.intersect(ob);
+            if hit.hit() && hit.t < chc.t {
+                chc = hit;
             }
         }
         
-        for vio in &self.hvf {
-            let agp = vio.hoj(acj);
-            if agp.agp() && agp.ab < fey.ab {
-                fey = agp;
+        for plane in &self.planes {
+            let hit = plane.intersect(ob);
+            if hit.hit() && hit.t < chc.t {
+                chc = hit;
             }
         }
         
-        for qro in &self.ime {
-            let agp = qro.hoj(acj);
-            if agp.agp() && agp.ab < fey.ab {
-                fey = agp;
+        for box3d in &self.boxes {
+            let hit = box3d.intersect(ob);
+            if hit.hit() && hit.t < chc.t {
+                chc = hit;
             }
         }
         
-        fey
+        chc
     }
     
     
-    fn tso(&self, nl: Vec3, uen: Vec3) -> f32 {
-        let gur = uen - nl;
-        let eoy = gur.go();
-        let acj = Ray::new(nl + gur.all() * 0.01, gur.all());
+    fn in_shadow(&self, point: Vec3, light_pos: Vec3) -> f32 {
+        let dfp = light_pos - point;
+        let byu = dfp.length();
+        let ob = Ray::new(point + dfp.normalize() * 0.01, dfp.normalize());
         
-        let agp = self.trace(&acj);
-        if agp.agp() && agp.ab < eoy {
+        let hit = self.trace(&ob);
+        if hit.hit() && hit.t < byu {
             0.3 
         } else {
             1.0 
@@ -528,223 +528,223 @@ impl RayTracer {
     }
     
     
-    fn dlr(&self, agp: &HitInfo, acj: &Ray, eo: u8) -> Vec3 {
-        if !agp.agp() {
+    fn shade(&self, hit: &HitInfo, ob: &Ray, depth: u8) -> Vec3 {
+        if !hit.hit() {
             
-            let ab = (acj.sz.c + 1.0) * 0.5;
-            return Vec3::new(0.0, 0.02, 0.05).csb(Vec3::new(0.0, 0.1, 0.15), ab);
+            let t = (ob.direction.y + 1.0) * 0.5;
+            return Vec3::new(0.0, 0.02, 0.05).lerp(Vec3::new(0.0, 0.1, 0.15), t);
         }
         
-        let csj = &self.hqu[agp.bby as usize % self.hqu.len()];
-        let mut s = csj.s * csj.cvo;
+        let ayb = &self.materials[hit.material_id as usize % self.materials.len()];
+        let mut color = ayb.color * ayb.ambient;
         
         
-        if csj.fho > 0.0 {
-            s = s + csj.s * csj.fho;
-        }
-        
-        
-        for light in &self.jdm {
-            let gur = (light.qf - agp.nl).all();
-            let zc = self.tso(agp.nl, light.qf);
-            
-            
-            let wz = agp.adg.amb(gur).am(0.0);
-            let rxl = csj.s * light.s * (wz * csj.cpz * zc * light.hj);
-            s = s + rxl;
-            
-            
-            let jlx = (-gur).pbb(agp.adg);
-            let avc = (-acj.sz).amb(jlx).am(0.0);
-            let wqs = vkg(avc, csj.gsm) * csj.amv * zc;
-            s = s + light.s * (wqs * light.hj);
+        if ayb.emission > 0.0 {
+            color = color + ayb.color * ayb.emission;
         }
         
         
-        if csj.fsm > 0.0 && eo < self.oln {
-            let jlx = acj.sz.pbb(agp.adg);
-            let pbc = Ray::new(agp.nl + jlx * 0.01, jlx);
-            let vtu = self.trace(&pbc);
-            let vts = self.dlr(&vtu, &pbc, eo + 1);
-            s = s.csb(vts, csj.fsm);
+        for light in &self.lights {
+            let dfp = (light.position - hit.point).normalize();
+            let shadow = self.in_shadow(hit.point, light.position);
+            
+            
+            let jr = hit.normal.dot(dfp).max(0.0);
+            let leo = ayb.color * light.color * (jr * ayb.diffuse * shadow * light.intensity);
+            color = color + leo;
+            
+            
+            let eyg = (-dfp).reflect(hit.normal);
+            let ye = (-ob.direction).dot(eyg).max(0.0);
+            let ouo = nwj(ye, ayb.shininess) * ayb.specular * shadow;
+            color = color + light.color * (ouo * light.intensity);
+        }
+        
+        
+        if ayb.reflectivity > 0.0 && depth < self.max_bounces {
+            let eyg = ob.direction.reflect(hit.normal);
+            let izc = Ray::new(hit.point + eyg * 0.01, eyg);
+            let oec = self.trace(&izc);
+            let oea = self.shade(&oec, &izc, depth + 1);
+            color = color.lerp(oea, ayb.reflectivity);
         }
         
         
         Vec3::new(
-            s.b.v(1.0),
-            s.c.v(1.0),
-            s.av.v(1.0),
+            color.x.min(1.0),
+            color.y.min(1.0),
+            color.z.min(1.0),
         )
     }
     
     
-    pub fn tj(&self) -> Vec<u32> {
-        let mut bi = vec![0u32; self.z * self.ac];
+    pub fn render(&self) -> Vec<u32> {
+        let mut buffer = vec![0u32; self.width * self.height];
         
-        for c in 0..self.ac {
-            for b in 0..self.z {
-                let acj = self.nyl(b, c);
-                let agp = self.trace(&acj);
-                let s = self.dlr(&agp, &acj, 0);
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let ob = self.get_ray(x, y);
+                let hit = self.trace(&ob);
+                let color = self.shade(&hit, &ob, 0);
                 
                 
-                let m = (s.b * 255.0) as u32;
-                let at = (s.c * 255.0) as u32;
-                let o = (s.av * 255.0) as u32;
-                bi[c * self.z + b] = 0xFF000000 | (m << 16) | (at << 8) | o;
+                let r = (color.x * 255.0) as u32;
+                let g = (color.y * 255.0) as u32;
+                let b = (color.z * 255.0) as u32;
+                buffer[y * self.width + x] = 0xFF000000 | (r << 16) | (g << 8) | b;
             }
         }
         
-        bi
+        buffer
     }
     
     
-    pub fn zjp(&self, bkq: usize) -> Vec<Vec<u8>> {
-        let mut my = Vec::fc(bkq);
+    pub fn qtz(&self, num_layers: usize) -> Vec<Vec<u8>> {
+        let mut layers = Vec::with_capacity(num_layers);
         
-        for _ in 0..bkq {
-            my.push(vec![0u8; self.z * self.ac]);
+        for _ in 0..num_layers {
+            layers.push(vec![0u8; self.width * self.height]);
         }
         
         
-        for c in 0..self.ac {
-            for b in 0..self.z {
-                let acj = self.nyl(b, c);
-                let agp = self.trace(&acj);
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let ob = self.get_ray(x, y);
+                let hit = self.trace(&ob);
                 
-                if agp.agp() {
+                if hit.hit() {
                     
-                    let xxg = ((agp.ab - 1.0) / 10.0).am(0.0).v(1.0);
-                    let aup = (xxg * (bkq - 1) as f32) as usize;
+                    let pwi = ((hit.t - 1.0) / 10.0).max(0.0).min(1.0);
+                    let xv = (pwi * (num_layers - 1) as f32) as usize;
                     
                     
-                    let s = self.dlr(&agp, &acj, 0);
-                    let hj = ((s.b + s.c + s.av) / 3.0 * 255.0) as u8;
+                    let color = self.shade(&hit, &ob, 0);
+                    let intensity = ((color.x + color.y + color.z) / 3.0 * 255.0) as u8;
                     
-                    let w = c * self.z + b;
-                    if aup < bkq {
-                        my[aup][w] = my[aup][w].akq(hj);
+                    let idx = y * self.width + x;
+                    if xv < num_layers {
+                        layers[xv][idx] = layers[xv][idx].saturating_add(intensity);
                     }
                 }
             }
         }
         
-        my
+        layers
     }
     
     
-    pub fn qs(&mut self, iqv: f32) {
-        self.time += iqv;
+    pub fn update(&mut self, delta_time: f32) {
+        self.time += delta_time;
     }
     
     
-    pub fn wko(&mut self) {
-        self.ndh();
+    pub fn setup_dna_scene(&mut self) {
+        self.clear_scene();
         
         
-        let lcl = self.gxw(Material {
-            s: Vec3::new(0.0, 1.0, 0.5),
-            cvo: 0.1,
-            cpz: 0.5,
-            amv: 0.9,
-            gsm: 64.0,
-            fsm: 0.2,
-            fho: 0.3,
+        let gaz = self.add_material(Material {
+            color: Vec3::new(0.0, 1.0, 0.5),
+            ambient: 0.1,
+            diffuse: 0.5,
+            specular: 0.9,
+            shininess: 64.0,
+            reflectivity: 0.2,
+            emission: 0.3,
         });
         
         
-        let fkm = 4.0;
-        let dy = 1.0;
-        let cuy = 3.0;
-        let jq = 30;
+        let ckm = 4.0;
+        let radius = 1.0;
+        let bac = 3.0;
+        let segments = 30;
         
-        for a in 0..jq {
-            let ab = a as f32 / jq as f32;
-            let c = -fkm / 2.0 + ab * fkm;
-            let hg = ab * cuy * 2.0 * 3.14159 + self.time;
+        for i in 0..segments {
+            let t = i as f32 / segments as f32;
+            let y = -ckm / 2.0 + t * ckm;
+            let cc = t * bac * 2.0 * 3.14159 + self.time;
             
             
-            let dn = dy * kkv(hg);
-            let aeu = dy * iat(hg);
-            self.gxy(Vec3::new(dn, c, aeu), 0.1, lcl);
+            let x1 = radius * fon(cc);
+            let po = radius * dzp(cc);
+            self.add_sphere(Vec3::new(x1, y, po), 0.1, gaz);
             
             
-            let hy = dy * kkv(hg + 3.14159);
-            let ahc = dy * iat(hg + 3.14159);
-            self.gxy(Vec3::new(hy, c, ahc), 0.1, lcl);
+            let x2 = radius * fon(cc + 3.14159);
+            let qt = radius * dzp(cc + 3.14159);
+            self.add_sphere(Vec3::new(x2, y, qt), 0.1, gaz);
             
             
-            if a % 3 == 0 {
-                self.gxy(Vec3::new((dn + hy) / 2.0, c, (aeu + ahc) / 2.0), 0.08, lcl);
+            if i % 3 == 0 {
+                self.add_sphere(Vec3::new((x1 + x2) / 2.0, y, (po + qt) / 2.0), 0.08, gaz);
             }
         }
         
         
-        self.iiz(Vec3::new(5.0, 5.0, -5.0), Vec3::new(0.0, 1.0, 0.5), 1.2);
-        self.iiz(Vec3::new(-5.0, 3.0, -3.0), Vec3::new(0.5, 0.0, 1.0), 0.8);
+        self.add_light(Vec3::new(5.0, 5.0, -5.0), Vec3::new(0.0, 1.0, 0.5), 1.2);
+        self.add_light(Vec3::new(-5.0, 3.0, -3.0), Vec3::new(0.5, 0.0, 1.0), 0.8);
         
         
-        self.hce = Vec3::new(0.0, 0.0, -6.0);
-        self.ims = Vec3::Dh;
+        self.camera_pos = Vec3::new(0.0, 0.0, -6.0);
+        self.camera_target = Vec3::Bk;
     }
     
     
-    pub fn wlk(&mut self) {
-        self.ndh();
+    pub fn setup_spheres_scene(&mut self) {
+        self.clear_scene();
         
         
-        let ukd = self.gxw(Material::koq());
-        let ukg = self.gxw(Material {
-            s: Vec3::new(1.0, 0.0, 0.8),
-            ..Material::koq()
+        let ncc = self.add_material(Material::frd());
+        let ncf = self.add_material(Material {
+            color: Vec3::new(1.0, 0.0, 0.8),
+            ..Material::frd()
         });
-        let ukf = self.gxw(Material::unv(1.0, 0.8, 0.2));
-        let uke = self.gxw(Material::ukp(0.1, 0.1, 0.15));
+        let nce = self.add_material(Material::nfc(1.0, 0.8, 0.2));
+        let ncd = self.add_material(Material::nco(0.1, 0.1, 0.15));
         
         
-        let xwx = iat(self.time) * 0.3;
-        self.gxy(Vec3::new(0.0, xwx, 0.0), 0.8, ukd);
+        let pwb = dzp(self.time) * 0.3;
+        self.add_sphere(Vec3::new(0.0, pwb, 0.0), 0.8, ncc);
         
         
-        for a in 0..6 {
-            let hg = (a as f32 / 6.0) * 2.0 * 3.14159 + self.time * 0.5;
-            let htu = 2.0;
-            let b = htu * kkv(hg);
-            let av = htu * iat(hg);
-            let c = iat(self.time + a as f32) * 0.4;
+        for i in 0..6 {
+            let cc = (i as f32 / 6.0) * 2.0 * 3.14159 + self.time * 0.5;
+            let dvy = 2.0;
+            let x = dvy * fon(cc);
+            let z = dvy * dzp(cc);
+            let y = dzp(self.time + i as f32) * 0.4;
             
-            let lkl = if a % 2 == 0 { ukg } else { ukf };
-            self.gxy(Vec3::new(b, c, av), 0.3, lkl);
+            let ggo = if i % 2 == 0 { ncf } else { nce };
+            self.add_sphere(Vec3::new(x, y, z), 0.3, ggo);
         }
         
         
-        self.qfl(Vec3::new(0.0, -1.5, 0.0), Vec3::Afc, uke);
+        self.add_plane(Vec3::new(0.0, -1.5, 0.0), Vec3::Np, ncd);
         
         
-        self.iiz(Vec3::new(4.0, 6.0, -4.0), Vec3::new(1.0, 1.0, 0.9), 1.0);
-        self.iiz(Vec3::new(-3.0, 4.0, 2.0), Vec3::new(0.2, 0.4, 1.0), 0.6);
+        self.add_light(Vec3::new(4.0, 6.0, -4.0), Vec3::new(1.0, 1.0, 0.9), 1.0);
+        self.add_light(Vec3::new(-3.0, 4.0, 2.0), Vec3::new(0.2, 0.4, 1.0), 0.6);
         
         
-        self.hce = Vec3::new(0.0, 2.0, -5.0);
-        self.ims = Vec3::Dh;
+        self.camera_pos = Vec3::new(0.0, 2.0, -5.0);
+        self.camera_target = Vec3::Bk;
     }
 }
 
 
-fn vkg(ar: f32, bgz: f32) -> f32 {
+fn nwj(base: f32, afe: f32) -> f32 {
     
-    if bgz <= 1.0 { return ar; }
-    if bgz <= 2.0 { return ar * ar; }
-    if bgz <= 4.0 { return ar * ar * ar * ar; }
-    if bgz <= 8.0 { 
-        let elf = ar * ar * ar * ar;
-        return elf * elf;
+    if afe <= 1.0 { return base; }
+    if afe <= 2.0 { return base * base; }
+    if afe <= 4.0 { return base * base * base * base; }
+    if afe <= 8.0 { 
+        let bxc = base * base * base * base;
+        return bxc * bxc;
     }
-    if bgz <= 16.0 {
-        let elf = ar * ar * ar * ar;
-        return elf * elf * elf * elf;
+    if afe <= 16.0 {
+        let bxc = base * base * base * base;
+        return bxc * bxc * bxc * bxc;
     }
     
-    let qak = ar * ar * ar * ar * ar * ar * ar * ar;
-    qak * qak
+    let jrt = base * base * base * base * base * base * base * base;
+    jrt * jrt
 }

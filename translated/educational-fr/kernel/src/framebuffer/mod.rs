@@ -17,7 +17,7 @@ use crate::math::fast_sqrt;
 
 /// Framebuffer info stored after initialization
 struct FramebufferInformation {
-    address: *mut u8,
+    addr: *mut u8,
     width: u64,
     height: u64,
     pitch: u64,
@@ -106,8 +106,8 @@ pub fn clip_test(x: u32, y: u32) -> bool {
 /// All subsequent `put_pixel_fast`/`get_pixel_fast` calls will use this
 /// cached pointer with ZERO mutex overhead.
 pub fn begin_frame() {
-    if let Some(ref mut buffer) = *BACKBUFFER.lock() {
-        FRAME_BB_POINTER.store(buffer.as_mut_pointer(), Ordering::Release);
+    if let Some(ref mut buf) = *BACKBUFFER.lock() {
+        FRAME_BB_POINTER.store(buf.as_mut_ptr(), Ordering::Release);
         FRAME_BB_STRIDE.store(FRAMEBUFFER_WIDTH.load(Ordering::Relaxed), Ordering::Release);
         FRAME_BB_HEIGHT.store(FRAMEBUFFER_HEIGHT.load(Ordering::Relaxed), Ordering::Release);
     }
@@ -116,6 +116,26 @@ pub fn begin_frame() {
 /// Call at the end of each frame (before swap_buffers).
 pub fn end_frame() {
     FRAME_BB_POINTER.store(core::ptr::null_mut(), Ordering::Release);
+}
+
+/// Redirect all rendering functions to write to a custom buffer.
+/// Used by the BG render thread to render into its private buffer.
+/// Caller MUST call `reset_rendering()` when done.
+pub fn redirect_rendering(ptr: *mut u32) {
+    FRAME_BB_POINTER.store(ptr, Ordering::Release);
+    FRAME_BB_STRIDE.store(FRAMEBUFFER_WIDTH.load(Ordering::Relaxed), Ordering::Release);
+    FRAME_BB_HEIGHT.store(FRAMEBUFFER_HEIGHT.load(Ordering::Relaxed), Ordering::Release);
+}
+
+/// Reset rendering redirect (clear FRAME_BB_PTR).
+pub fn reset_rendering() {
+    FRAME_BB_POINTER.store(core::ptr::null_mut(), Ordering::Release);
+}
+
+/// Get the current frame-cached backbuffer pointer (for zero-copy BG blit).
+/// Returns null if not in a frame (begin_frame not called).
+pub fn frame_bb_pointer() -> *mut u32 {
+    FRAME_BB_POINTER.load(Ordering::Relaxed)
 }
 
 /// Get raw frame context for batch pixel writes.
@@ -128,6 +148,60 @@ pub fn frame_context() -> (*mut u32, u32, u32) {
     let stride = FRAME_BB_STRIDE.load(Ordering::Relaxed) as u32;
     let height = FRAME_BB_HEIGHT.load(Ordering::Relaxed) as u32;
     (ptr, stride, height)
+}
+
+/// Cached frame context including clip rectangle — snapshot all atomics once.
+pub struct FrameCtx {
+    pub ptr: *mut u32,
+    pub stride: u32,
+    pub height: u32,
+    pub clip_active: bool,
+    pub clip_x1: u32,
+    pub clip_y1: u32,
+    pub clip_x2: u32,
+    pub clip_y2: u32,
+}
+
+// Bloc d'implémentation — définit les méthodes du type ci-dessus.
+impl FrameCtx {
+    /// Snapshot current framebuffer + clip state (call once per batch).
+    #[inline(always)]
+        // Fonction publique — appelable depuis d'autres modules.
+pub fn snapshot() -> Self {
+        Self {
+            ptr: FRAME_BB_POINTER.load(Ordering::Relaxed),
+            stride: FRAME_BB_STRIDE.load(Ordering::Relaxed) as u32,
+            height: FRAME_BB_HEIGHT.load(Ordering::Relaxed) as u32,
+            clip_active: CLIP_ACTIVE.load(Ordering::Relaxed),
+            clip_x1: CLIP_X1.load(Ordering::Relaxed),
+            clip_y1: CLIP_Y1.load(Ordering::Relaxed),
+            clip_x2: CLIP_X2.load(Ordering::Relaxed),
+            clip_y2: CLIP_Y2.load(Ordering::Relaxed),
+        }
+    }
+
+    /// Write a pixel using cached context (zero atomic loads per pixel).
+    #[inline(always)]
+        // Fonction publique — appelable depuis d'autres modules.
+pub fn put_pixel(&self, x: u32, y: u32, color: u32) {
+        if self.ptr.is_null() { put_pixel(x, y, color); return; }
+        if x >= self.stride || y >= self.height { return; }
+        if self.clip_active && !(x >= self.clip_x1 && x < self.clip_x2 && y >= self.clip_y1 && y < self.clip_y2) {
+            return;
+        }
+                // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe { *self.ptr.add(y as usize * self.stride as usize + x as usize) = color; }
+    }
+
+    /// Read a pixel using cached context.
+    #[inline(always)]
+        // Fonction publique — appelable depuis d'autres modules.
+pub fn get_pixel(&self, x: u32, y: u32) -> u32 {
+        if self.ptr.is_null() { return get_pixel(x, y); }
+        if x >= self.stride || y >= self.height { return 0; }
+                // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe { *self.ptr.add(y as usize * self.stride as usize + x as usize) }
+    }
 }
 
 /// Ultra-fast pixel write — uses cached backbuffer pointer, no mutex per call.
@@ -249,6 +323,157 @@ static BACKGROUND_CACHE: Mutex<Option<Box<[u32]>>> = Mutex::new(None);
 // Variable atomique — accès thread-safe sans verrou.
 static BACKGROUND_VALID: AtomicBool = AtomicBool::new(false);
 
+// ==================== WINDOW OVERLAY CACHE ====================
+// Stores a full-screen snapshot after windows are composited onto the background.
+// On frames where windows haven't changed, we draw a fresh background and then
+// blit only the window rectangles from this cache — avoiding expensive per-window
+// re-rendering (shadows, alpha blending, text, content widgets).
+static WINDOW_OVERLAY: Mutex<Option<Box<[u32]>>> = Mutex::new(None);
+// Variable atomique — accès thread-safe sans verrou.
+static WINDOW_OVERLAY_VALID: AtomicBool = AtomicBool::new(false);
+
+// ==================== BACKGROUND RING BUFFER ====================
+// Pre-render future background frames when FPS is high (no windows).
+// When windows are visible, consume pre-rendered frames (~0.3ms memcpy)
+// instead of rendering live (~5-10ms). This keeps rain fluid regardless
+// of window rendering cost.
+const BG_RING_CAPACITY: usize = 8;
+
+struct BgRingBuffer {
+    frames: alloc::vec::Vec<Box<[u32]>>,
+    write_idx: usize,
+    read_idx: usize,
+    count: usize,
+    frame_size: usize, // width * height
+}
+
+// État global partagé protégé par un Mutex (verrou d'exclusion mutuelle).
+static BG_RING: Mutex<Option<BgRingBuffer>> = Mutex::new(None);
+
+/// Allocate the background ring buffer (call once during desktop init)
+pub fn initialize_bg_ring() {
+    let width = FRAMEBUFFER_WIDTH.load(Ordering::SeqCst) as usize;
+    let height = FRAMEBUFFER_HEIGHT.load(Ordering::SeqCst) as usize;
+    if width == 0 || height == 0 { return; }
+    let frame_size = width * height;
+    let mut frames = alloc::vec::Vec::new();
+    for i in 0..BG_RING_CAPACITY {
+        let mut buf = alloc::vec::Vec::new();
+        if buf.try_reserve_exact(frame_size).is_err() {
+            crate::serial_println!("[FB] BG ring: OOM at slot {} — allocated {}/{}", i, i, BG_RING_CAPACITY);
+            break;
+        }
+        buf.resize(frame_size, 0u32);
+        frames.push(buf.into_boxed_slice());
+    }
+    let allocated = frames.len();
+    if allocated == 0 {
+        crate::serial_println!("[FB] BG ring: no slots allocated — disabled");
+        return;
+    }
+    *BG_RING.lock() = Some(BgRingBuffer {
+        frames,
+        write_idx: 0,
+        read_idx: 0,
+        count: 0,
+        frame_size,
+    });
+    crate::serial_println!("[FB] BG ring: {} slots × {} KB = {} KB total",
+        allocated, frame_size * 4 / 1024, allocated * frame_size * 4 / 1024);
+}
+
+/// How many pre-rendered background frames are available to consume
+pub fn bg_ring_available() -> usize {
+    if let Some(ref ring) = *BG_RING.lock() {
+        ring.count
+    } else {
+        0
+    }
+}
+
+/// Is the ring buffer full? (no room for more pre-renders)
+pub fn bg_ring_full() -> bool {
+    if let Some(ref ring) = *BG_RING.lock() {
+        ring.count >= ring.frames.len()
+    } else {
+        true
+    }
+}
+
+/// Redirect FRAME_BB_PTR to the next available ring slot for pre-rendering.
+/// Returns true if successful. Caller must call commit_bg_prerender() after drawing.
+/// The caller MUST NOT call begin_frame() before this — this replaces it.
+pub fn begin_bg_prerender() -> bool {
+    let mut guard = BG_RING.lock();
+    let ring = // Correspondance de motifs — branchement exhaustif de Rust.
+match guard.as_mut() {
+        Some(r) => r,
+        None => return false,
+    };
+    if ring.count >= ring.frames.len() { return false; }
+    let slot = &mut ring.frames[ring.write_idx];
+    FRAME_BB_POINTER.store(slot.as_mut_ptr(), Ordering::Release);
+    let width = FRAMEBUFFER_WIDTH.load(Ordering::Relaxed);
+    let height = FRAMEBUFFER_HEIGHT.load(Ordering::Relaxed);
+    FRAME_BB_STRIDE.store(width, Ordering::Release);
+    FRAME_BB_HEIGHT.store(height, Ordering::Release);
+    true
+}
+
+/// Commit the pre-rendered frame and advance write pointer.
+/// Resets FRAME_BB_PTR to null (caller should call begin_frame() for normal rendering).
+pub fn commit_bg_prerender() {
+    FRAME_BB_POINTER.store(core::ptr::null_mut(), Ordering::Release);
+    let mut guard = BG_RING.lock();
+    if let Some(ref mut ring) = *guard {
+        ring.write_idx = (ring.write_idx + 1) % ring.frames.len();
+        ring.count += 1;
+    }
+}
+
+/// Consume the next pre-rendered background frame by copying it to the backbuffer.
+/// Returns true if a frame was consumed.
+pub fn consume_bg_frame() -> bool {
+    let mut guard = BG_RING.lock();
+    let ring = // Correspondance de motifs — branchement exhaustif de Rust.
+match guard.as_mut() {
+        Some(r) if r.count > 0 => r,
+        _ => return false,
+    };
+    let slot = &ring.frames[ring.read_idx];
+    // Copy ring slot → backbuffer using frame-cached pointer for speed
+    let ptr = FRAME_BB_POINTER.load(Ordering::Relaxed);
+    if !ptr.is_null() {
+        let len = ring.frame_size;
+                // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe {
+            core::ptr::copy_nonoverlapping(slot.as_ptr(), ptr, len);
+        }
+    } else {
+        // Fallback: mutex-locked backbuffer
+        if let Some(ref mut back_buf) = *BACKBUFFER.lock() {
+            let len = ring.frame_size.min(back_buf.len());
+                        // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe {
+                core::ptr::copy_nonoverlapping(slot.as_ptr(), back_buf.as_mut_ptr(), len);
+            }
+        }
+    }
+    ring.read_idx = (ring.read_idx + 1) % ring.frames.len();
+    ring.count -= 1;
+    true
+}
+
+/// Flush all pre-rendered frames (call when background state changes externally,
+/// e.g. theme change, resolution change)
+pub fn flush_bg_ring() {
+    if let Some(ref mut ring) = *BG_RING.lock() {
+        ring.read_idx = 0;
+        ring.write_idx = 0;
+        ring.count = 0;
+    }
+}
+
 // ==================== DIRTY RECTANGLES ====================
 // Only redraw regions that have changed
 pub // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
@@ -280,10 +505,10 @@ impl DirtyRect {
         if !self.is_valid() { return *other; }
         if !other.is_valid() { return *self; }
         
-        let x1 = self.x.minimum(other.x);
-        let y1 = self.y.minimum(other.y);
-        let x2 = (self.x + self.w).maximum(other.x + other.w);
-        let y2 = (self.y + self.h).maximum(other.y + other.h);
+        let x1 = self.x.min(other.x);
+        let y1 = self.y.min(other.y);
+        let x2 = (self.x + self.w).max(other.x + other.w);
+        let y2 = (self.y + self.h).max(other.y + other.h);
         
         DirtyRect { x: x1, y: y1, w: x2 - x1, h: y2 - y1 }
     }
@@ -359,18 +584,18 @@ const CHAR_WIDTH: usize = 8;
 // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const CHAR_HEIGHT: usize = 16;
 
-/// Maximum framebuffer size for backbuffer allocation (16 MB = ~2560×1600×4)
-const MAXIMUM_BACKBUFFER_BYTES: usize = 16 * 1024 * 1024;
+/// Maximum framebuffer size for backbuffer allocation (32 MB = supports up to 4K)
+const MAXIMUM_BACKBUFFER_BYTES: usize = 32 * 1024 * 1024;
 
 /// Initialize framebuffer with Limine info
 /// NOTE: This does NOT allocate memory. Call init_scrollback() after heap is ready.
-pub fn init(address: *mut u8, width: u64, height: u64, pitch: u64, bpp: u16) {
+pub fn init(addr: *mut u8, width: u64, height: u64, pitch: u64, bpp: u16) {
     // Safety: only support 32bpp framebuffers (all pixel code uses u32)
     if bpp != 32 {
         crate::serial_println!("[FB] WARNING: unsupported bpp={}, forcing 32bpp interpretation (may have color artifacts)", bpp);
     }
 
-    FRAMEBUFFER_ADDRESS.store(address, Ordering::SeqCst);
+    FRAMEBUFFER_ADDRESS.store(addr, Ordering::SeqCst);
     FRAMEBUFFER_WIDTH.store(width, Ordering::SeqCst);
     FRAMEBUFFER_HEIGHT.store(height, Ordering::SeqCst);
     FRAMEBUFFER_PITCH.store(pitch, Ordering::SeqCst);
@@ -412,8 +637,8 @@ pub fn get_framebuffer() -> *mut u32 {
 
 /// Clear the screen
 pub fn clear() {
-    let address = FRAMEBUFFER_ADDRESS.load(Ordering::SeqCst);
-    if address.is_null() {
+    let addr = FRAMEBUFFER_ADDRESS.load(Ordering::SeqCst);
+    if addr.is_null() {
         return;
     }
     
@@ -423,7 +648,7 @@ pub fn clear() {
     
     for y in 0..height {
         let row = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { address.add(y * pitch) };
+unsafe { addr.add(y * pitch) };
         for x in 0..(pitch / 4) {
                         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
@@ -449,8 +674,8 @@ pub fn set_bg_color(color: u32) {
 
 /// Put a pixel at (x, y) - public for GUI use
 pub fn put_pixel(x: u32, y: u32, color: u32) {
-    let address = FRAMEBUFFER_ADDRESS.load(Ordering::SeqCst);
-    if address.is_null() {
+    let addr = FRAMEBUFFER_ADDRESS.load(Ordering::SeqCst);
+    if addr.is_null() {
         return;
     }
     
@@ -465,25 +690,25 @@ pub fn put_pixel(x: u32, y: u32, color: u32) {
     
     // Write to backbuffer if enabled, otherwise direct to framebuffer
     if USE_BACKBUFFER.load(Ordering::SeqCst) {
-        if let Some(ref mut buffer) = *BACKBUFFER.lock() {
-            let index = y as usize * width as usize + x as usize;
-            if index < buffer.len() {
-                buffer[index] = color;
+        if let Some(ref mut buf) = *BACKBUFFER.lock() {
+            let idx = y as usize * width as usize + x as usize;
+            if idx < buf.len() {
+                buf[idx] = color;
             }
         }
     } else {
         let offset = y as usize * pitch + x as usize * 4;
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-            address.add(offset).cast::<u32>().write_volatile(color);
+            addr.add(offset).cast::<u32>().write_volatile(color);
         }
     }
 }
 
 /// Get a pixel at (x, y) - for alpha blending and image compositing
 pub fn get_pixel(x: u32, y: u32) -> u32 {
-    let address = FRAMEBUFFER_ADDRESS.load(Ordering::SeqCst);
-    if address.is_null() {
+    let addr = FRAMEBUFFER_ADDRESS.load(Ordering::SeqCst);
+    if addr.is_null() {
         return 0;
     }
     
@@ -497,10 +722,10 @@ pub fn get_pixel(x: u32, y: u32) -> u32 {
     
     // Read from backbuffer if enabled, otherwise from framebuffer
     if USE_BACKBUFFER.load(Ordering::SeqCst) {
-        if let Some(ref buffer) = *BACKBUFFER.lock() {
-            let index = y as usize * width as usize + x as usize;
-            if index < buffer.len() {
-                return buffer[index];
+        if let Some(ref buf) = *BACKBUFFER.lock() {
+            let idx = y as usize * width as usize + x as usize;
+            if idx < buf.len() {
+                return buf[idx];
             }
         }
         0
@@ -508,7 +733,7 @@ pub fn get_pixel(x: u32, y: u32) -> u32 {
         let offset = y as usize * pitch + x as usize * 4;
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-            address.add(offset).cast::<u32>().read_volatile()
+            addr.add(offset).cast::<u32>().read_volatile()
         }
     }
 }
@@ -520,7 +745,7 @@ unsafe {
 /// Cached framebuffer context for fast pixel operations
 /// Use when drawing many pixels to avoid 4 atomic loads per put_pixel call
 pub struct FastPixelContext {
-    pub address: *mut u8,
+    pub addr: *mut u8,
     pub width: usize,
     pub height: usize,
     pub pitch: usize,
@@ -534,7 +759,7 @@ impl FastPixelContext {
         // Fonction publique — appelable depuis d'autres modules.
 pub fn new() -> Self {
         FastPixelContext {
-            address: FRAMEBUFFER_ADDRESS.load(Ordering::SeqCst),
+            addr: FRAMEBUFFER_ADDRESS.load(Ordering::SeqCst),
             width: FRAMEBUFFER_WIDTH.load(Ordering::SeqCst) as usize,
             height: FRAMEBUFFER_HEIGHT.load(Ordering::SeqCst) as usize,
             pitch: FRAMEBUFFER_PITCH.load(Ordering::SeqCst) as usize,
@@ -549,13 +774,13 @@ pub fn new() -> Self {
 unsafe fn put_pixel_unchecked(&self, x: usize, y: usize, color: u32) {
         if self.backbuffer {
             // Fast path for backbuffer
-            if let Some(ref mut buffer) = *BACKBUFFER.lock() {
-                let index = y * self.width + x;
-                *buffer.get_unchecked_mut(index) = color;
+            if let Some(ref mut buf) = *BACKBUFFER.lock() {
+                let idx = y * self.width + x;
+                *buf.get_unchecked_mut(idx) = color;
             }
         } else {
             let offset = y * self.pitch + x * 4;
-            (self.address.add(offset) as *mut u32).write_volatile(color);
+            (self.addr.add(offset) as *mut u32).write_volatile(color);
         }
     }
     
@@ -573,29 +798,29 @@ unsafe { self.put_pixel_unchecked(x, y, color); }
         // Fonction publique — appelable depuis d'autres modules.
 pub fn fill_hspan(&self, x: usize, y: usize, len: usize, color: u32) {
         if y >= self.height || x >= self.width { return; }
-        let actual_length = len.minimum(self.width - x);
+        let actual_length = len.min(self.width - x);
         
         if self.backbuffer {
-            if let Some(ref mut buffer) = *BACKBUFFER.lock() {
+            if let Some(ref mut buf) = *BACKBUFFER.lock() {
                 let start = y * self.width + x;
                 #[cfg(target_arch = "x86_64")]
                                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
                     crate::graphics::simd::fill_row_sse2(
-                        buffer.as_mut_pointer().add(start),
+                        buf.as_mut_ptr().add(start),
                         actual_length,
                         color
                     );
                 }
                 #[cfg(not(target_arch = "x86_64"))]
                 {
-                    buffer[start..start + actual_length].fill(color);
+                    buf[start..start + actual_length].fill(color);
                 }
             }
         } else {
                         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-                let ptr = (self.address.add(y * self.pitch + x * 4)) as *mut u32;
+                let ptr = (self.addr.add(y * self.pitch + x * 4)) as *mut u32;
                 #[cfg(target_arch = "x86_64")]
                 {
                     crate::graphics::simd::fill_row_sse2(ptr, actual_length, color);
@@ -614,9 +839,9 @@ unsafe {
     /// Returns None if backbuffer is not available
     pub fn get_backbuffer_slice(&self) -> Option<alloc::boxed::Box<[u32]>> {
         if self.backbuffer {
-            if let Some(ref buffer) = *BACKBUFFER.lock() {
+            if let Some(ref buf) = *BACKBUFFER.lock() {
                 // We need to clone, can't return reference
-                return Some(buffer.clone());
+                return Some(buf.clone());
             }
         }
         None
@@ -640,8 +865,8 @@ pub fn with_backbuffer_mut<F: FnOnce(*mut u32, usize, usize, usize)>(f: F) -> bo
     let width = FRAMEBUFFER_WIDTH.load(Ordering::SeqCst) as usize;
     let height = FRAMEBUFFER_HEIGHT.load(Ordering::SeqCst) as usize;
     if width == 0 || height == 0 { return false; }
-    if let Some(ref mut buffer) = *BACKBUFFER.lock() {
-        f(buffer.as_mut_pointer(), width, height, width);
+    if let Some(ref mut buf) = *BACKBUFFER.lock() {
+        f(buf.as_mut_ptr(), width, height, width);
         true
     } else {
         false
@@ -722,9 +947,9 @@ pub fn get_backbuffer_information() -> Option<(*mut u8, u32, u32, u32)> {
     }
     
     let backbuffer = BACKBUFFER.lock();
-    if let Some(ref buffer) = *backbuffer {
+    if let Some(ref buf) = *backbuffer {
         // Return pointer to the boxed slice's data
-        let ptr = buffer.as_pointer() as *mut u8;
+        let ptr = buf.as_ptr() as *mut u8;
         Some((ptr, width, height, width)) // stride = width for backbuffer
     } else {
         None
@@ -738,7 +963,7 @@ pub fn get_backbuffer_information() -> Option<(*mut u8, u32, u32, u32)> {
 /// Upgrade #6: Row-diff MMIO — only copies rows that changed since last frame,
 /// reducing MMIO volume by 40-70% for typical desktop animations.
 pub fn swap_buffers() {
-    let address = FRAMEBUFFER_ADDRESS.load(Ordering::Relaxed);
+    let addr = FRAMEBUFFER_ADDRESS.load(Ordering::Relaxed);
     let width = FRAMEBUFFER_WIDTH.load(Ordering::Relaxed) as usize;
     let height = FRAMEBUFFER_HEIGHT.load(Ordering::Relaxed) as usize;
     let pitch = FRAMEBUFFER_PITCH.load(Ordering::Relaxed) as usize;
@@ -752,19 +977,19 @@ pub fn swap_buffers() {
         // Prefer back buffer (double-buffered), fall back to raw buffer
         let gpu_buffer = crate::drivers::virtio_gpu::get_back_buffer()
             .or_else(|| crate::drivers::virtio_gpu::get_raw_buffer());
-        if let Some((gpu_pointer, gpu_w, gpu_h)) = gpu_buffer {
-            if let Some(ref buffer) = *BACKBUFFER.lock() {
-                let copy_w = width.minimum(gpu_w as usize);
-                let copy_h = height.minimum(gpu_h as usize);
+        if let Some((gpu_ptr, gpu_w, gpu_h)) = gpu_buffer {
+            if let Some(ref buf) = *BACKBUFFER.lock() {
+                let copy_w = width.min(gpu_w as usize);
+                let copy_h = height.min(gpu_h as usize);
                                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
                     for y in 0..copy_h {
-                        let source = buffer.as_pointer().add(y * width);
-                        let destination = gpu_pointer.add(y * gpu_w as usize);
+                        let src = buf.as_ptr().add(y * width);
+                        let dst = gpu_ptr.add(y * gpu_w as usize);
                         #[cfg(target_arch = "x86_64")]
-                        crate::graphics::simd::copy_row_sse2(destination, source, copy_w);
+                        crate::graphics::simd::copy_row_sse2(dst, src, copy_w);
                         #[cfg(not(target_arch = "x86_64"))]
-                        core::ptr::copy_nonoverlapping(source, destination, copy_w);
+                        core::ptr::copy_nonoverlapping(src, dst, copy_w);
                     }
                 }
             }
@@ -777,15 +1002,15 @@ unsafe {
     }
     
     // ── MMIO fallback path ──
-    if address.is_null() { return; }
+    if addr.is_null() { return; }
     // Use row-diff version: only copies changed rows (40-70% reduction on matrix rain)
-    swap_buffers_mmio_diff(address, width, height, pitch);
+    swap_buffers_mmio_diff(addr, width, height, pitch);
 }
 
 /// MMIO framebuffer copy with row-diff — only copies rows that changed.
 /// Compares each row against the previous frame's shadow buffer.
 /// On typical matrix rain frames, 40-70% of rows are unchanged and skipped.
-fn swap_buffers_mmio_diff(address: *mut u8, width: usize, height: usize, pitch: usize) {
+fn swap_buffers_mmio_diff(addr: *mut u8, width: usize, height: usize, pitch: usize) {
     let bb_guard = BACKBUFFER.lock();
     let mut pf_guard = PREVIOUS_FRAME.lock();
     
@@ -799,12 +1024,12 @@ match (bb_guard.as_ref(), pf_guard.as_mut()) {
                 let destination_offset = y * pitch;
                                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-                    let source = b.as_pointer().add(source_offset);
-                    let destination = address.add(destination_offset) as *mut u32;
+                    let src = b.as_ptr().add(source_offset);
+                    let dst = addr.add(destination_offset) as *mut u32;
                     #[cfg(target_arch = "x86_64")]
-                    crate::graphics::simd::copy_row_sse2_nt(destination, source, width);
+                    crate::graphics::simd::copy_row_sse2_nt(dst, src, width);
                     #[cfg(not(target_arch = "x86_64"))]
-                    core::ptr::copy_nonoverlapping(source, destination, width);
+                    core::ptr::copy_nonoverlapping(src, dst, width);
                 }
             }
             return;
@@ -819,9 +1044,9 @@ unsafe {
         
         // Fast 64-bit comparison: check 8 pixels at a time
         let mut changed = false;
-        let bb8 = bb_row.as_pointer() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+        let bb8 = bb_row.as_ptr() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u64;
-        let pf8 = pf_row.as_pointer() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+        let pf8 = pf_row.as_ptr() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u64;
         let pairs = width / 2;
         
@@ -868,12 +1093,12 @@ unsafe {
             let destination_offset = y * pitch;
                         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-                let source = bb_row.as_pointer();
-                let destination = address.add(destination_offset) as *mut u32;
+                let src = bb_row.as_ptr();
+                let dst = addr.add(destination_offset) as *mut u32;
                 #[cfg(target_arch = "x86_64")]
-                crate::graphics::simd::copy_row_sse2_nt(destination, source, width);
+                crate::graphics::simd::copy_row_sse2_nt(dst, src, width);
                 #[cfg(not(target_arch = "x86_64"))]
-                core::ptr::copy_nonoverlapping(source, destination, width);
+                core::ptr::copy_nonoverlapping(src, dst, width);
             }
             // Update shadow buffer for this row
             pf_row.copy_from_slice(bb_row);
@@ -884,19 +1109,19 @@ unsafe {
 /// MMIO framebuffer copy — uses non-temporal stores (movnti) for optimal VRAM writes.
 /// NT stores bypass CPU cache and use write-combining, which is 2-4x faster for
 /// memory-mapped framebuffers (VGA, SVGA, VBox VRAM) and reduces cache pollution.
-fn swap_buffers_mmio(address: *mut u8, width: usize, height: usize, pitch: usize) {
-    if let Some(ref buffer) = *BACKBUFFER.lock() {
+fn swap_buffers_mmio(addr: *mut u8, width: usize, height: usize, pitch: usize) {
+    if let Some(ref buf) = *BACKBUFFER.lock() {
         for y in 0..height {
             let source_offset = y * width;
             let destination_offset = y * pitch;
                         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-                let source = buffer.as_pointer().add(source_offset);
-                let destination = address.add(destination_offset) as *mut u32;
+                let src = buf.as_ptr().add(source_offset);
+                let dst = addr.add(destination_offset) as *mut u32;
                 #[cfg(target_arch = "x86_64")]
-                crate::graphics::simd::copy_row_sse2_nt(destination, source, width);
+                crate::graphics::simd::copy_row_sse2_nt(dst, src, width);
                 #[cfg(not(target_arch = "x86_64"))]
-                core::ptr::copy_nonoverlapping(source, destination, width);
+                core::ptr::copy_nonoverlapping(src, dst, width);
             }
         }
     }
@@ -907,32 +1132,32 @@ unsafe {
 pub fn get_backbuffer_pointer() -> Option<*// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u32> {
     let bb = BACKBUFFER.lock();
-    bb.as_ref().map(|buffer| buffer.as_pointer())
+    bb.as_ref().map(|buf| buf.as_ptr())
 }
 
 /// MMIO-only swap: copy backbuffer to MMIO framebuffer without VirtIO GPU path.
 /// Used when VirtIO GPU present is handled separately (dirty rect path).
 pub fn swap_buffers_mmio_only() {
-    let address = FRAMEBUFFER_ADDRESS.load(Ordering::Relaxed);
-    if address.is_null() { return; }
+    let addr = FRAMEBUFFER_ADDRESS.load(Ordering::Relaxed);
+    if addr.is_null() { return; }
     let width = FRAMEBUFFER_WIDTH.load(Ordering::Relaxed) as usize;
     let height = FRAMEBUFFER_HEIGHT.load(Ordering::Relaxed) as usize;
     let pitch = FRAMEBUFFER_PITCH.load(Ordering::Relaxed) as usize;
     if width == 0 || height == 0 { return; }
-    swap_buffers_mmio(address, width, height, pitch);
+    swap_buffers_mmio(addr, width, height, pitch);
 }
 
 /// Clear backbuffer with color (SSE2 optimized)
 pub fn clear_backbuffer(color: u32) {
-    if let Some(ref mut buffer) = *BACKBUFFER.lock() {
+    if let Some(ref mut buf) = *BACKBUFFER.lock() {
         #[cfg(target_arch = "x86_64")]
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-            crate::graphics::simd::fill_row_sse2(buffer.as_mut_pointer(), buffer.len(), color);
+            crate::graphics::simd::fill_row_sse2(buf.as_mut_ptr(), buf.len(), color);
         }
         #[cfg(not(target_arch = "x86_64"))]
         {
-            buffer.fill(color);
+            buf.fill(color);
         }
     }
 }
@@ -944,11 +1169,11 @@ unsafe {
 /// Context for parallel blit operation
 #[repr(C)]
 struct ParallelBlitContext {
-    source: *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+    src: *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u32,
-    destination: *mut u8,
-    source_stride: usize,   // source width in u32s
-    destination_pitch: usize,    // destination pitch in bytes
+    dst: *mut u8,
+    src_stride: usize,   // source width in u32s
+    dst_pitch: usize,    // destination pitch in bytes
     width: usize,        // copy width in u32s
 }
 
@@ -961,21 +1186,21 @@ impl Sync for ParallelBlitContext {}
 
 /// Worker function for parallel blit (called on each core)
 fn blit_rows_worker(start: usize, end: usize, data: *mut u8) {
-    let context = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+    let ctx = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe { &*(data as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const ParallelBlitContext) };
     for y in start..end {
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-            let source = context.source.add(y * context.source_stride);
-            let destination = context.destination.add(y * context.destination_pitch) as *mut u32;
+            let src = ctx.src.add(y * ctx.src_stride);
+            let dst = ctx.dst.add(y * ctx.dst_pitch) as *mut u32;
             #[cfg(target_arch = "x86_64")]
             {
-                crate::graphics::simd::copy_row_sse2_nt(destination, source, context.width);
+                crate::graphics::simd::copy_row_sse2_nt(dst, src, ctx.width);
             }
             #[cfg(not(target_arch = "x86_64"))]
             {
-                core::ptr::copy_nonoverlapping(source, destination, context.width);
+                core::ptr::copy_nonoverlapping(src, dst, ctx.width);
             }
         }
     }
@@ -989,23 +1214,23 @@ unsafe {
 /// `src`: pointer to ARGB pixel buffer (w * h)
 /// `w`: width in pixels
 /// `h`: height in pixels
-pub fn blit_to_framebuffer_parallel(source: *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+pub fn blit_to_framebuffer_parallel(src: *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const u32, w: usize, h: usize) {
-    let address = FRAMEBUFFER_ADDRESS.load(Ordering::SeqCst);
-    if address.is_null() { return; }
+    let addr = FRAMEBUFFER_ADDRESS.load(Ordering::SeqCst);
+    if addr.is_null() { return; }
 
-    let framebuffer_w = FRAMEBUFFER_WIDTH.load(Ordering::SeqCst) as usize;
+    let fb_w = FRAMEBUFFER_WIDTH.load(Ordering::SeqCst) as usize;
     let pitch = FRAMEBUFFER_PITCH.load(Ordering::SeqCst) as usize;
-    let framebuffer_h = FRAMEBUFFER_HEIGHT.load(Ordering::SeqCst) as usize;
+    let fb_h = FRAMEBUFFER_HEIGHT.load(Ordering::SeqCst) as usize;
 
-    let copy_w = w.minimum(framebuffer_w);
-    let copy_h = h.minimum(framebuffer_h);
+    let copy_w = w.min(fb_w);
+    let copy_h = h.min(fb_h);
 
-    let context = ParallelBlitContext {
-        source,
-        destination: address,
-        source_stride: w,
-        destination_pitch: pitch,
+    let ctx = ParallelBlitContext {
+        src,
+        dst: addr,
+        src_stride: w,
+        dst_pitch: pitch,
         width: copy_w,
     };
 
@@ -1013,14 +1238,14 @@ const u32, w: usize, h: usize) {
     crate::cpu::smp::parallel_for(
         copy_h,
         blit_rows_worker,
-        &context as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+        &ctx as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const ParallelBlitContext as *mut u8,
     );
 
     // Safety net: BSP re-blits ALL rows to fill any that APs missed.
     // Writing the same pixels twice is idempotent, so this is safe.
     // Cost: ~1ms extra on BSP, but guarantees no missing rows.
-    blit_rows_worker(0, copy_h, &context as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+    blit_rows_worker(0, copy_h, &ctx as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const ParallelBlitContext as *mut u8);
 }
 
@@ -1029,10 +1254,10 @@ pub fn fill_rect(x: u32, y: u32, w: u32, h: u32, color: u32) {
     let width = FRAMEBUFFER_WIDTH.load(Ordering::SeqCst) as u32;
     let height = FRAMEBUFFER_HEIGHT.load(Ordering::SeqCst) as u32;
     
-    let x1 = x.minimum(width);
-    let y1 = y.minimum(height);
-    let x2 = (x + w).minimum(width);
-    let y2 = (y + h).minimum(height);
+    let x1 = x.min(width);
+    let y1 = y.min(height);
+    let x2 = (x + w).min(width);
+    let y2 = (y + h).min(height);
     
     if x2 <= x1 || y2 <= y1 { return; }
     
@@ -1064,32 +1289,32 @@ unsafe {
     }
     
     if USE_BACKBUFFER.load(Ordering::SeqCst) {
-        if let Some(ref mut buffer) = *BACKBUFFER.lock() {
+        if let Some(ref mut buf) = *BACKBUFFER.lock() {
             let rect_width = (x2 - x1) as usize;
             for py in y1..y2 {
                 let row_start = py as usize * width as usize + x1 as usize;
-                if row_start + rect_width <= buffer.len() {
+                if row_start + rect_width <= buf.len() {
                     // Use SSE2 for each row (much faster)
                     #[cfg(target_arch = "x86_64")]
                                         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
                         crate::graphics::simd::fill_row_sse2(
-                            buffer.as_mut_pointer().add(row_start),
+                            buf.as_mut_ptr().add(row_start),
                             rect_width,
                             color
                         );
                     }
                     #[cfg(not(target_arch = "x86_64"))]
                     {
-                        buffer[row_start..row_start + rect_width].fill(color);
+                        buf[row_start..row_start + rect_width].fill(color);
                     }
                 }
             }
         }
     } else {
         for py in y1..y2 {
-            for pixel in x1..x2 {
-                put_pixel(pixel, py, color);
+            for px in x1..x2 {
+                put_pixel(px, py, color);
             }
         }
     }
@@ -1104,20 +1329,20 @@ pub fn draw_pixel(x: u32, y: u32, color: u32) {
     
     // Use backbuffer if double buffering is enabled
     if USE_BACKBUFFER.load(Ordering::SeqCst) {
-        if let Some(ref mut buffer) = *BACKBUFFER.lock() {
+        if let Some(ref mut buf) = *BACKBUFFER.lock() {
             let offset = y as usize * width as usize + x as usize;
-            if offset < buffer.len() {
-                buffer[offset] = color;
+            if offset < buf.len() {
+                buf[offset] = color;
             }
         }
     } else {
-        let address = FRAMEBUFFER_ADDRESS.load(Ordering::SeqCst);
-        if address.is_null() { return; }
+        let addr = FRAMEBUFFER_ADDRESS.load(Ordering::SeqCst);
+        if addr.is_null() { return; }
         let pitch = FRAMEBUFFER_PITCH.load(Ordering::SeqCst) as usize;
         let offset = y as usize * pitch + x as usize * 4;
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-            let ptr = address.add(offset) as *mut u32;
+            let ptr = addr.add(offset) as *mut u32;
             *ptr = color;
         }
     }
@@ -1134,13 +1359,13 @@ pub fn fill_rect_alpha(x: u32, y: u32, w: u32, h: u32, color: u32, alpha: u32) {
     let width = FRAMEBUFFER_WIDTH.load(Ordering::SeqCst) as u32;
     let height = FRAMEBUFFER_HEIGHT.load(Ordering::SeqCst) as u32;
     
-    let x1 = x.minimum(width);
-    let y1 = y.minimum(height);
-    let x2 = (x + w).minimum(width);
-    let y2 = (y + h).minimum(height);
+    let x1 = x.min(width);
+    let y1 = y.min(height);
+    let x2 = (x + w).min(width);
+    let y2 = (y + h).min(height);
     if x2 <= x1 || y2 <= y1 { return; }
     
-    let alpha = alpha.minimum(255);
+    let alpha = alpha.min(255);
     let inv = 255 - alpha;
     let sr = (color >> 16) & 0xFF;
     let sg = (color >> 8) & 0xFF;
@@ -1158,18 +1383,18 @@ unsafe { ptr.add(py as usize * stride + x1 as usize) };
                         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe { crate::graphics::simd::blend_fill_row_sse2(row_pointer, row_w, color, alpha); }
             #[cfg(not(target_arch = "x86_64"))]
-            for pixel in x1..x2 {
-                let index = py as usize * stride + pixel as usize;
+            for px in x1..x2 {
+                let idx = py as usize * stride + px as usize;
                                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-                    let existing = *ptr.add(index);
+                    let existing = *ptr.add(idx);
                     let dr = (existing >> 16) & 0xFF;
                     let dg = (existing >> 8) & 0xFF;
                     let db = existing & 0xFF;
-                    let r = ((sr * alpha + dr * inv + 128) >> 8).minimum(255);
-                    let g = ((sg * alpha + dg * inv + 128) >> 8).minimum(255);
-                    let b = ((sb * alpha + db * inv + 128) >> 8).minimum(255);
-                    *ptr.add(index) = 0xFF000000 | (r << 16) | (g << 8) | b;
+                    let r = ((sr * alpha + dr * inv + 128) >> 8).min(255);
+                    let g = ((sg * alpha + dg * inv + 128) >> 8).min(255);
+                    let b = ((sb * alpha + db * inv + 128) >> 8).min(255);
+                    *ptr.add(idx) = 0xFF000000 | (r << 16) | (g << 8) | b;
                 }
             }
         }
@@ -1178,42 +1403,42 @@ unsafe {
     
     // Fallback: use mutex-locked backbuffer
     if USE_BACKBUFFER.load(Ordering::SeqCst) {
-        if let Some(ref mut buffer) = *BACKBUFFER.lock() {
-            let buffer_length = buffer.len();
+        if let Some(ref mut buf) = *BACKBUFFER.lock() {
+            let buf_len = buf.len();
             for py in y1..y2 {
                 let row = py as usize * width as usize;
                 let row_start = row + x1 as usize;
                 let row_w = (x2 - x1) as usize;
-                if row_start + row_w <= buffer_length {
+                if row_start + row_w <= buf_len {
                     #[cfg(target_arch = "x86_64")]
                                         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { crate::graphics::simd::blend_fill_row_sse2(buffer.as_mut_pointer().add(row_start), row_w, color, alpha); }
+unsafe { crate::graphics::simd::blend_fill_row_sse2(buf.as_mut_ptr().add(row_start), row_w, color, alpha); }
                     #[cfg(not(target_arch = "x86_64"))]
-                    for pixel in x1..x2 {
-                        let index = row + pixel as usize;
-                        let existing = buffer[index];
+                    for px in x1..x2 {
+                        let idx = row + px as usize;
+                        let existing = buf[idx];
                         let dr = (existing >> 16) & 0xFF;
                         let dg = (existing >> 8) & 0xFF;
                         let db = existing & 0xFF;
-                        let r = ((sr * alpha + dr * inv + 128) >> 8).minimum(255);
-                        let g = ((sg * alpha + dg * inv + 128) >> 8).minimum(255);
-                        let b = ((sb * alpha + db * inv + 128) >> 8).minimum(255);
-                        buffer[index] = 0xFF000000 | (r << 16) | (g << 8) | b;
+                        let r = ((sr * alpha + dr * inv + 128) >> 8).min(255);
+                        let g = ((sg * alpha + dg * inv + 128) >> 8).min(255);
+                        let b = ((sb * alpha + db * inv + 128) >> 8).min(255);
+                        buf[idx] = 0xFF000000 | (r << 16) | (g << 8) | b;
                     }
                 }
             }
         }
     } else {
         for py in y1..y2 {
-            for pixel in x1..x2 {
-                let existing = get_pixel(pixel, py);
+            for px in x1..x2 {
+                let existing = get_pixel(px, py);
                 let dr = (existing >> 16) & 0xFF;
                 let dg = (existing >> 8) & 0xFF;
                 let db = existing & 0xFF;
-                let r = ((sr * alpha + dr * inv + 128) >> 8).minimum(255);
-                let g = ((sg * alpha + dg * inv + 128) >> 8).minimum(255);
-                let b = ((sb * alpha + db * inv + 128) >> 8).minimum(255);
-                put_pixel(pixel, py, 0xFF000000 | (r << 16) | (g << 8) | b);
+                let r = ((sr * alpha + dr * inv + 128) >> 8).min(255);
+                let g = ((sg * alpha + dg * inv + 128) >> 8).min(255);
+                let b = ((sb * alpha + db * inv + 128) >> 8).min(255);
+                put_pixel(px, py, 0xFF000000 | (r << 16) | (g << 8) | b);
             }
         }
     }
@@ -1255,7 +1480,7 @@ pub fn fill_circle(cx: u32, cy: u32, radius: u32, color: u32) {
 pub fn fill_rounded_rect(x: u32, y: u32, w: u32, h: u32, radius: u32, color: u32) {
     if w == 0 || h == 0 { return; }
     
-    let r = radius.minimum(w / 2).minimum(h / 2);
+    let r = radius.min(w / 2).min(h / 2);
     
     if r == 0 {
         fill_rect(x, y, w, h, color);
@@ -1290,7 +1515,7 @@ pub fn fill_rounded_rect(x: u32, y: u32, w: u32, h: u32, radius: u32, color: u32
 pub fn stroke_rounded_rect(x: u32, y: u32, w: u32, h: u32, radius: u32, color: u32) {
     if w == 0 || h == 0 { return; }
     
-    let r = radius.minimum(w / 2).minimum(h / 2);
+    let r = radius.min(w / 2).min(h / 2);
     
     if r == 0 {
         draw_rect(x, y, w, h, color);
@@ -1305,29 +1530,29 @@ pub fn stroke_rounded_rect(x: u32, y: u32, w: u32, h: u32, radius: u32, color: u
     draw_vline(x + w - 1, y + r, h - r * 2, color);   // Right
     
     // Draw corner arcs using Midpoint circle algorithm
-    let mut pixel = r as i32;
+    let mut px = r as i32;
     let mut py = 0i32;
-    let mut error = 0i32;
+    let mut err = 0i32;
     
-    while pixel >= py {
+    while px >= py {
         // Top-left corner
-        draw_pixel(x + r - pixel as u32, y + r - py as u32, color);
-        draw_pixel(x + r - py as u32, y + r - pixel as u32, color);
+        draw_pixel(x + r - px as u32, y + r - py as u32, color);
+        draw_pixel(x + r - py as u32, y + r - px as u32, color);
         // Top-right corner  
-        draw_pixel(x + w - 1 - r + pixel as u32, y + r - py as u32, color);
-        draw_pixel(x + w - 1 - r + py as u32, y + r - pixel as u32, color);
+        draw_pixel(x + w - 1 - r + px as u32, y + r - py as u32, color);
+        draw_pixel(x + w - 1 - r + py as u32, y + r - px as u32, color);
         // Bottom-left corner
-        draw_pixel(x + r - pixel as u32, y + h - 1 - r + py as u32, color);
-        draw_pixel(x + r - py as u32, y + h - 1 - r + pixel as u32, color);
+        draw_pixel(x + r - px as u32, y + h - 1 - r + py as u32, color);
+        draw_pixel(x + r - py as u32, y + h - 1 - r + px as u32, color);
         // Bottom-right corner
-        draw_pixel(x + w - 1 - r + pixel as u32, y + h - 1 - r + py as u32, color);
-        draw_pixel(x + w - 1 - r + py as u32, y + h - 1 - r + pixel as u32, color);
+        draw_pixel(x + w - 1 - r + px as u32, y + h - 1 - r + py as u32, color);
+        draw_pixel(x + w - 1 - r + py as u32, y + h - 1 - r + px as u32, color);
         
         py += 1;
-        error += 1 + 2 * py;
-        if 2 * (error - pixel) + 1 > 0 {
-            pixel -= 1;
-            error += 1 - 2 * pixel;
+        err += 1 + 2 * py;
+        if 2 * (err - px) + 1 > 0 {
+            px -= 1;
+            err += 1 - 2 * px;
         }
     }
 }
@@ -1347,9 +1572,9 @@ fn draw_char(c: char, x: usize, y: usize, fg: u32, bg: u32) {
     
     for row in 0..CHAR_HEIGHT {
         let bits = glyph[row];
-        for column in 0..CHAR_WIDTH {
-            let color = if (bits >> (7 - column)) & 1 == 1 { fg } else { bg };
-            put_pixel((x + column) as u32, (y + row) as u32, color);
+        for col in 0..CHAR_WIDTH {
+            let color = if (bits >> (7 - col)) & 1 == 1 { fg } else { bg };
+            put_pixel((x + col) as u32, (y + row) as u32, color);
         }
     }
 }
@@ -1365,20 +1590,20 @@ pub fn draw_char_at(x: u32, y: u32, c: char, color: u32) {
     
     // Fast path: write directly to backbuffer with single lock
     if USE_BACKBUFFER.load(Ordering::SeqCst) {
-        if let Some(ref mut buffer) = *BACKBUFFER.lock() {
+        if let Some(ref mut buf) = *BACKBUFFER.lock() {
             let stride = width as usize;
             for row in 0..CHAR_HEIGHT {
                 let py = y as usize + row;
                 if py >= height as usize { break; }
                 let bits = glyph[row];
                 let row_offset = py * stride;
-                for column in 0..CHAR_WIDTH {
-                    if (bits >> (7 - column)) & 1 == 1 {
-                        let pixel = x as usize + column;
-                        if pixel < width as usize && clip_test(pixel as u32, py as u32) {
-                            let offset = row_offset + pixel;
-                            if offset < buffer.len() {
-                                buffer[offset] = color;
+                for col in 0..CHAR_WIDTH {
+                    if (bits >> (7 - col)) & 1 == 1 {
+                        let px = x as usize + col;
+                        if px < width as usize && clip_test(px as u32, py as u32) {
+                            let offset = row_offset + px;
+                            if offset < buf.len() {
+                                buf[offset] = color;
                             }
                         }
                     }
@@ -1387,21 +1612,21 @@ pub fn draw_char_at(x: u32, y: u32, c: char, color: u32) {
         }
     } else {
         // Fallback: direct framebuffer
-        let address = FRAMEBUFFER_ADDRESS.load(Ordering::SeqCst);
-        if address.is_null() { return; }
+        let addr = FRAMEBUFFER_ADDRESS.load(Ordering::SeqCst);
+        if addr.is_null() { return; }
         let pitch = FRAMEBUFFER_PITCH.load(Ordering::SeqCst) as usize;
         for row in 0..CHAR_HEIGHT {
             let py = y as usize + row;
             if py >= height as usize { break; }
             let bits = glyph[row];
-            for column in 0..CHAR_WIDTH {
-                if (bits >> (7 - column)) & 1 == 1 {
-                    let pixel = x as usize + column;
-                    if pixel < width as usize && clip_test(pixel as u32, py as u32) {
-                        let offset = py * pitch + pixel * 4;
+            for col in 0..CHAR_WIDTH {
+                if (bits >> (7 - col)) & 1 == 1 {
+                    let px = x as usize + col;
+                    if px < width as usize && clip_test(px as u32, py as u32) {
+                        let offset = py * pitch + px * 4;
                                                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-                            let ptr = address.add(offset) as *mut u32;
+                            let ptr = addr.add(offset) as *mut u32;
                             *ptr = color;
                         }
                     }
@@ -1448,12 +1673,12 @@ match c {
                 return;
             }
 
-            let pixel = console.cursor_x * CHAR_WIDTH;
+            let px = console.cursor_x * CHAR_WIDTH;
             let py = console.cursor_y * CHAR_HEIGHT;
             let fg = console.fg_color;
             let bg = console.bg_color;
             drop(console);
-            draw_char(' ', pixel, py, fg, bg);
+            draw_char(' ', px, py, fg, bg);
             return;
         }
         '\n' => {
@@ -1472,7 +1697,7 @@ match c {
                 console.cursor_y += 1;
             }
             
-            let pixel = console.cursor_x * CHAR_WIDTH;
+            let px = console.cursor_x * CHAR_WIDTH;
             let py = console.cursor_y * CHAR_HEIGHT;
             
             // Drop lock before drawing (to avoid holding it too long)
@@ -1480,7 +1705,7 @@ match c {
             console.cursor_x += 1;
             drop(console);
             
-            draw_char(c, pixel, py, fg, bg);
+            draw_char(c, px, py, fg, bg);
             return;
         }
     }
@@ -1495,8 +1720,8 @@ match c {
 
 /// Scroll the screen up by one line
 pub fn scroll_up() {
-    let address = FRAMEBUFFER_ADDRESS.load(Ordering::SeqCst);
-    if address.is_null() {
+    let addr = FRAMEBUFFER_ADDRESS.load(Ordering::SeqCst);
+    if addr.is_null() {
         return;
     }
     
@@ -1508,16 +1733,16 @@ pub fn scroll_up() {
     for y in CHAR_HEIGHT..height {
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-            let source = address.add(y * pitch);
-            let destination = address.add((y - CHAR_HEIGHT) * pitch);
-            core::ptr::copy(source, destination, pitch);
+            let src = addr.add(y * pitch);
+            let dst = addr.add((y - CHAR_HEIGHT) * pitch);
+            core::ptr::copy(src, dst, pitch);
         }
     }
     
     // Clear last line
     for y in (height - CHAR_HEIGHT)..height {
         let row = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { address.add(y * pitch) };
+unsafe { addr.add(y * pitch) };
         for x in 0..(pitch / 4) {
                         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
@@ -1671,8 +1896,8 @@ pub fn set_classic_theme() {
 /// Draw text at specific pixel position with custom colors
 pub fn draw_text_at(text: &str, x: u32, y: u32, fg: u32, bg: u32) {
     for (i, c) in text.chars().enumerate() {
-        let pixel = x + (i as u32) * CHAR_WIDTH as u32;
-        draw_char(c, pixel as usize, y as usize, fg, bg);
+        let px = x + (i as u32) * CHAR_WIDTH as u32;
+        draw_char(c, px as usize, y as usize, fg, bg);
     }
 }
 
@@ -1705,7 +1930,7 @@ pub fn clear_char_row(row: usize) {
 
 /// Draw text at a character row/col directly — bypasses Writer/scrollback.
 /// Returns the number of characters drawn.
-pub fn draw_text_raw(column: usize, row: usize, text: &str, fg: u32, bg: u32) -> usize {
+pub fn draw_text_raw(col: usize, row: usize, text: &str, fg: u32, bg: u32) -> usize {
     let width = FRAMEBUFFER_WIDTH.load(Ordering::SeqCst) as usize;
     let height = FRAMEBUFFER_HEIGHT.load(Ordering::SeqCst) as usize;
     if width == 0 || height == 0 { return 0; }
@@ -1713,19 +1938,19 @@ pub fn draw_text_raw(column: usize, row: usize, text: &str, fg: u32, bg: u32) ->
     let py = row * CHAR_HEIGHT;
     if py + CHAR_HEIGHT > height { return 0; }
     let mut count = 0;
-    for (i, character) in text.chars().enumerate() {
-        let c = column + i;
+    for (i, ch) in text.chars().enumerate() {
+        let c = col + i;
         if c >= cols { break; }
-        draw_char(character, c * CHAR_WIDTH, py, fg, bg);
+        draw_char(ch, c * CHAR_WIDTH, py, fg, bg);
         count += 1;
     }
     count
 }
 
 /// Set cursor position (in character coordinates)
-pub fn set_cursor(column: usize, row: usize) {
+pub fn set_cursor(col: usize, row: usize) {
     let mut console = CONSOLE.lock();
-    console.cursor_x = column;
+    console.cursor_x = col;
     console.cursor_y = row;
 }
 
@@ -1737,7 +1962,7 @@ pub fn get_cursor() -> (usize, usize) {
 
 /// Draw progress bar
 pub fn draw_progress_bar(x: u32, y: u32, width: u32, progress: u32, fg: u32, bg: u32) {
-    let filled = (width * progress.minimum(100)) / 100;
+    let filled = (width * progress.min(100)) / 100;
     
     // Background
     fill_rect(x, y, width, 16, bg);
@@ -1752,13 +1977,13 @@ pub fn draw_progress_bar(x: u32, y: u32, width: u32, progress: u32, fg: u32, bg:
 }
 
 /// Print styled boot message [OK], [--], [!!]
-pub fn print_boot_status(message: &str, status: BootStatus) {
+pub fn print_boot_status(msg: &str, status: BootStatus) {
     let (status_str, color) = // Correspondance de motifs — branchement exhaustif de Rust.
 match status {
         BootStatus::Ok => ("[OK]", COLOR_GREEN),
         BootStatus::Skip => ("[--]", COLOR_GRAY),
         BootStatus::Fail => ("[!!]", COLOR_RED),
-        BootStatus::Information => ("[..]", COLOR_CYAN),
+        BootStatus::Info => ("[..]", COLOR_CYAN),
     };
     
     // Print status with color
@@ -1766,7 +1991,7 @@ match status {
     set_fg_color(color);
     crate::print!("{} ", status_str);
     set_fg_color(old_fg);
-    crate::println!("{}", message);
+    crate::println!("{}", msg);
 }
 
 /// Boot status enum for styled messages
@@ -1776,7 +2001,7 @@ pub enum BootStatus {
     Ok,
     Skip,
     Fail,
-    Information,
+    Info,
 }
 
 /// Draw the boot splash screen with logo
@@ -1891,13 +2116,13 @@ pub fn restore_background_to_backbuffer() {
     let width = FRAMEBUFFER_WIDTH.load(Ordering::SeqCst) as usize;
     
     let bg_guard = BACKGROUND_CACHE.lock();
-    if let Some(ref bg_buffer) = *bg_guard {
-        if let Some(ref mut back_buffer) = *BACKBUFFER.lock() {
+    if let Some(ref bg_buf) = *bg_guard {
+        if let Some(ref mut back_buf) = *BACKBUFFER.lock() {
             // Fast copy entire background
-            let len = bg_buffer.len().minimum(back_buffer.len());
+            let len = bg_buf.len().min(back_buf.len());
                         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-                core::ptr::copy_nonoverlapping(bg_buffer.as_pointer(), back_buffer.as_mut_pointer(), len);
+                core::ptr::copy_nonoverlapping(bg_buf.as_ptr(), back_buf.as_mut_ptr(), len);
             }
         }
     }
@@ -1908,25 +2133,25 @@ pub fn restore_background_rect(x: u32, y: u32, w: u32, h: u32) {
     let width = FRAMEBUFFER_WIDTH.load(Ordering::SeqCst) as u32;
     let height = FRAMEBUFFER_HEIGHT.load(Ordering::SeqCst) as u32;
     
-    let x1 = x.minimum(width);
-    let y1 = y.minimum(height);
-    let x2 = (x + w).minimum(width);
-    let y2 = (y + h).minimum(height);
+    let x1 = x.min(width);
+    let y1 = y.min(height);
+    let x2 = (x + w).min(width);
+    let y2 = (y + h).min(height);
     
     let bg_guard = BACKGROUND_CACHE.lock();
-    if let Some(ref bg_buffer) = *bg_guard {
-        if let Some(ref mut back_buffer) = *BACKBUFFER.lock() {
+    if let Some(ref bg_buf) = *bg_guard {
+        if let Some(ref mut back_buf) = *BACKBUFFER.lock() {
             for py in y1..y2 {
                 let source_start = py as usize * width as usize + x1 as usize;
                 let source_end = py as usize * width as usize + x2 as usize;
                 let destination_start = source_start;
                 
-                if source_end <= bg_buffer.len() && source_end <= back_buffer.len() {
+                if source_end <= bg_buf.len() && source_end <= back_buf.len() {
                                         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-                        let source = bg_buffer.as_pointer().add(source_start);
-                        let destination = back_buffer.as_mut_pointer().add(destination_start);
-                        core::ptr::copy_nonoverlapping(source, destination, (x2 - x1) as usize);
+                        let src = bg_buf.as_ptr().add(source_start);
+                        let dst = back_buf.as_mut_ptr().add(destination_start);
+                        core::ptr::copy_nonoverlapping(src, dst, (x2 - x1) as usize);
                     }
                 }
             }
@@ -1957,11 +2182,11 @@ pub fn cache_current_background() {
     let mut bg_guard = BACKGROUND_CACHE.lock();
     let back_guard = BACKBUFFER.lock();
     
-    if let (Some(ref mut bg_buffer), Some(ref back_buffer)) = (&mut *bg_guard, &*back_guard) {
-        let len = back_buffer.len().minimum(bg_buffer.len());
+    if let (Some(ref mut bg_buf), Some(ref back_buf)) = (&mut *bg_guard, &*back_guard) {
+        let len = back_buf.len().min(bg_buf.len());
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-            core::ptr::copy_nonoverlapping(back_buffer.as_pointer(), bg_buffer.as_mut_pointer(), len);
+            core::ptr::copy_nonoverlapping(back_buf.as_ptr(), bg_buf.as_mut_ptr(), len);
         }
     }
     
@@ -1969,6 +2194,115 @@ unsafe {
     drop(bg_guard);
     
     BACKGROUND_VALID.store(true, Ordering::SeqCst);
+}
+
+// ==================== WINDOW OVERLAY FUNCTIONS ====================
+
+/// Initialize window overlay buffer (call once during desktop init)
+pub fn initialize_window_overlay() {
+    let width = FRAMEBUFFER_WIDTH.load(Ordering::SeqCst) as usize;
+    let height = FRAMEBUFFER_HEIGHT.load(Ordering::SeqCst) as usize;
+    if width == 0 || height == 0 { return; }
+    let size = width * height;
+    let mut buffer = alloc::vec::Vec::new();
+    if buffer.try_reserve_exact(size).is_err() {
+        crate::serial_println!("[FB] WARNING: Failed to allocate window overlay {} KB — OOM",
+            size * 4 / 1024);
+        return;
+    }
+    buffer.resize(size, 0u32);
+    *WINDOW_OVERLAY.lock() = Some(buffer.into_boxed_slice());
+    WINDOW_OVERLAY_VALID.store(false, Ordering::SeqCst);
+    crate::serial_println!("[FB] Window overlay cache allocated: {} KB", size * 4 / 1024);
+}
+
+/// Snapshot current backbuffer into window overlay cache (call after drawing all windows)
+pub fn cache_window_overlay() {
+    let width = FRAMEBUFFER_WIDTH.load(Ordering::SeqCst) as usize;
+    if width == 0 { return; }
+    let mut ov_guard = WINDOW_OVERLAY.lock();
+    let back_guard = BACKBUFFER.lock();
+    if let (Some(ref mut ov_buf), Some(ref back_buf)) = (&mut *ov_guard, &*back_guard) {
+        let len = back_buf.len().min(ov_buf.len());
+                // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe {
+            core::ptr::copy_nonoverlapping(back_buf.as_ptr(), ov_buf.as_mut_ptr(), len);
+        }
+    }
+    drop(back_guard);
+    drop(ov_guard);
+    WINDOW_OVERLAY_VALID.store(true, Ordering::SeqCst);
+}
+
+/// Check if window overlay cache is valid
+pub fn is_window_overlay_valid() -> bool {
+    WINDOW_OVERLAY_VALID.load(Ordering::SeqCst)
+}
+
+/// Invalidate window overlay cache (force re-render of all windows)
+pub fn invalidate_window_overlay() {
+    WINDOW_OVERLAY_VALID.store(false, Ordering::SeqCst);
+}
+
+/// Blit a rectangular region from the window overlay cache onto the current backbuffer.
+/// Used to stamp cached window pixels over a freshly-drawn background.
+/// Includes shadow margin (extra pixels around the window rect).
+pub fn blit_window_overlay_rect(x: i32, y: i32, w: u32, h: u32, shadow_margin: u32) {
+    let scr_w = FRAMEBUFFER_WIDTH.load(Ordering::SeqCst) as u32;
+    let scr_h = FRAMEBUFFER_HEIGHT.load(Ordering::SeqCst) as u32;
+    if scr_w == 0 || scr_h == 0 { return; }
+
+    // Expand rect by shadow margin
+    let rx = (x - shadow_margin as i32).max(0) as u32;
+    let ry = (y - shadow_margin as i32).max(0) as u32;
+    let rx2 = ((x + w as i32 + shadow_margin as i32) as u32).min(scr_w);
+    let ry2 = ((y + h as i32 + shadow_margin as i32) as u32).min(scr_h);
+    if rx2 <= rx || ry2 <= ry { return; }
+
+    // Use frame-cached pointer for fast writes
+    let ptr = FRAME_BB_POINTER.load(Ordering::Relaxed);
+    if !ptr.is_null() {
+        let stride = FRAME_BB_STRIDE.load(Ordering::Relaxed) as usize;
+        let ov_guard = WINDOW_OVERLAY.lock();
+        if let Some(ref ov_buf) = *ov_guard {
+            let row_length = (rx2 - rx) as usize;
+            for py in ry..ry2 {
+                let off = py as usize * stride + rx as usize;
+                if off + row_length <= ov_buf.len() {
+                                        // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe {
+                        core::ptr::copy_nonoverlapping(
+                            ov_buf.as_ptr().add(off),
+                            ptr.add(off),
+                            row_length,
+                        );
+                    }
+                }
+            }
+        }
+        return;
+    }
+
+    // Fallback: mutex-locked backbuffer
+    let ov_guard = WINDOW_OVERLAY.lock();
+    let mut back_guard = BACKBUFFER.lock();
+    if let (Some(ref ov_buf), Some(ref mut back_buf)) = (&*ov_guard, &mut *back_guard) {
+        let stride = scr_w as usize;
+        let row_length = (rx2 - rx) as usize;
+        for py in ry..ry2 {
+            let off = py as usize * stride + rx as usize;
+            if off + row_length <= ov_buf.len() && off + row_length <= back_buf.len() {
+                                // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe {
+                    core::ptr::copy_nonoverlapping(
+                        ov_buf.as_ptr().add(off),
+                        back_buf.as_mut_ptr().add(off),
+                        row_length,
+                    );
+                }
+            }
+        }
+    }
 }
 
 // ==================== DIRTY RECTANGLE FUNCTIONS ====================
@@ -2001,8 +2335,8 @@ pub fn get_dirty_rects() -> ([DirtyRect; MAXIMUM_DIRTY_RECTS], usize, bool) {
 
 /// Swap only dirty regions to framebuffer (optimized swap)
 pub fn swap_dirty_regions() {
-    let address = FRAMEBUFFER_ADDRESS.load(Ordering::SeqCst);
-    if address.is_null() {
+    let addr = FRAMEBUFFER_ADDRESS.load(Ordering::SeqCst);
+    if addr.is_null() {
         return;
     }
     
@@ -2019,15 +2353,15 @@ pub fn swap_dirty_regions() {
         return;
     }
     
-    if let Some(ref buffer) = *BACKBUFFER.lock() {
+    if let Some(ref buf) = *BACKBUFFER.lock() {
         for i in 0..count {
             let rect = &rects[i];
             if !rect.is_valid() { continue; }
             
-            let x1 = (rect.x as usize).minimum(width);
-            let y1 = (rect.y as usize).minimum(height);
-            let x2 = ((rect.x + rect.w) as usize).minimum(width);
-            let y2 = ((rect.y + rect.h) as usize).minimum(height);
+            let x1 = (rect.x as usize).min(width);
+            let y1 = (rect.y as usize).min(height);
+            let x2 = ((rect.x + rect.w) as usize).min(width);
+            let y2 = ((rect.y + rect.h) as usize).min(height);
             
             for y in y1..y2 {
                 let source_offset = y * width + x1;
@@ -2036,9 +2370,9 @@ pub fn swap_dirty_regions() {
                 
                                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-                    let source = buffer.as_pointer().add(source_offset);
-                    let destination = (address as *mut u32).add(y * pitch / 4 + x1);
-                    core::ptr::copy_nonoverlapping(source, destination, len);
+                    let src = buf.as_ptr().add(source_offset);
+                    let dst = (addr as *mut u32).add(y * pitch / 4 + x1);
+                    core::ptr::copy_nonoverlapping(src, dst, len);
                 }
             }
         }
@@ -2074,7 +2408,7 @@ pub fn scroll_up_lines(lines: usize) {
     let mut scrollback = SCROLLBACK.lock();
     if let Some(ref mut sb) = *scrollback {
         let maximum_scroll = sb.total_lines().saturating_sub(visible_rows);
-        sb.scroll_offset = (sb.scroll_offset + lines).minimum(maximum_scroll);
+        sb.scroll_offset = (sb.scroll_offset + lines).min(maximum_scroll);
         sb.is_scrolled = sb.scroll_offset > 0;
         
         if sb.is_scrolled {
@@ -2200,12 +2534,12 @@ fn redraw_from_scrollback(scroll_offset: usize, total_lines: usize, visible_rows
                 continue;
             }
             let line = &sb.lines[line_index];
-            for (column, i) in (0..line.len.minimum(cols)).enumerate() {
+            for (col, i) in (0..line.len.min(cols)).enumerate() {
                 let c = line.chars[i];
                 let (fg, bg) = line.colors[i];
-                let pixel = column * CHAR_WIDTH;
+                let px = col * CHAR_WIDTH;
                 let py = screen_row * CHAR_HEIGHT;
-                draw_char(c, pixel, py, fg, bg);
+                draw_char(c, px, py, fg, bg);
             }
         }
         
@@ -2214,15 +2548,15 @@ fn redraw_from_scrollback(scroll_offset: usize, total_lines: usize, visible_rows
         if scroll_offset == 0 {
             let screen_row = end_line.saturating_sub(start_line);
             if screen_row < visible_rows && sb.current_line.len > 0 {
-                for column in 0..sb.current_line.len.minimum(cols) {
-                    let c = sb.current_line.chars[column];
-                    let (fg, bg) = sb.current_line.colors[column];
-                    let pixel = column * CHAR_WIDTH;
+                for col in 0..sb.current_line.len.min(cols) {
+                    let c = sb.current_line.chars[col];
+                    let (fg, bg) = sb.current_line.colors[col];
+                    let px = col * CHAR_WIDTH;
                     let py = screen_row * CHAR_HEIGHT;
-                    draw_char(c, pixel, py, fg, bg);
+                    draw_char(c, px, py, fg, bg);
                 }
                 live_cursor_row = screen_row;
-                live_cursor_column = sb.current_line.len.minimum(cols);
+                live_cursor_column = sb.current_line.len.min(cols);
                 has_current_line = true;
             } else if screen_row < visible_rows {
                 // Empty current line - cursor at start of row
@@ -2245,17 +2579,17 @@ fn redraw_from_scrollback(scroll_offset: usize, total_lines: usize, visible_rows
     if scroll_offset > 0 {
         let indicator = format!("-- SCROLL: +{} lines --", scroll_offset);
         let start_column = cols.saturating_sub(indicator.len() + 2);
-        for (i, character) in indicator.chars().enumerate() {
-            let pixel = (start_column + i) * CHAR_WIDTH;
-            draw_char(character, pixel, 0, 0xFFFFFF00, 0xFF000000); // Yellow on black
+        for (i, ch) in indicator.chars().enumerate() {
+            let px = (start_column + i) * CHAR_WIDTH;
+            draw_char(ch, px, 0, 0xFFFFFF00, 0xFF000000); // Yellow on black
         }
     }
 }
 
 /// Clear screen with specific color
 fn clear_with_color(color: u32) {
-    let address = FRAMEBUFFER_ADDRESS.load(Ordering::SeqCst);
-    if address.is_null() {
+    let addr = FRAMEBUFFER_ADDRESS.load(Ordering::SeqCst);
+    if addr.is_null() {
         return;
     }
     
@@ -2264,7 +2598,7 @@ fn clear_with_color(color: u32) {
     
     for y in 0..height {
         let row = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { address.add(y * pitch) };
+unsafe { addr.add(y * pitch) };
         for x in 0..(pitch / 4) {
                         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {

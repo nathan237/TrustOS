@@ -97,57 +97,57 @@ unsafe fn wrmsr(msr: u32, value: u64) {
 #[inline(always)]
 pub // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe fn read_cr0() -> u64 {
-    let value: u64;
-    core::arch::asm!("mov {}, cr0", out(reg) value, options(nomem, nostack, preserves_flags));
-    value
+    let val: u64;
+    core::arch::asm!("mov {}, cr0", out(reg) val, options(nomem, nostack, preserves_flags));
+    val
 }
 
 /// Write CR0
 #[inline(always)]
 pub // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe fn write_cr0(value: u64) {
-    core::arch::asm!("mov cr0, {}", in(reg) value, options(nomem, nostack, preserves_flags));
+unsafe fn write_cr0(val: u64) {
+    core::arch::asm!("mov cr0, {}", in(reg) val, options(nomem, nostack, preserves_flags));
 }
 
 /// Read CR2 (page fault linear address)
 #[inline(always)]
 pub // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe fn read_cr2() -> u64 {
-    let value: u64;
-    core::arch::asm!("mov {}, cr2", out(reg) value, options(nomem, nostack, preserves_flags));
-    value
+    let val: u64;
+    core::arch::asm!("mov {}, cr2", out(reg) val, options(nomem, nostack, preserves_flags));
+    val
 }
 
 /// Read CR3 (page table base)
 #[inline(always)]
 pub // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe fn read_cr3() -> u64 {
-    let value: u64;
-    core::arch::asm!("mov {}, cr3", out(reg) value, options(nomem, nostack, preserves_flags));
-    value
+    let val: u64;
+    core::arch::asm!("mov {}, cr3", out(reg) val, options(nomem, nostack, preserves_flags));
+    val
 }
 
 /// Write CR3 (page table base)
 #[inline(always)]
 pub // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe fn write_cr3(value: u64) {
-    core::arch::asm!("mov cr3, {}", in(reg) value, options(nomem, nostack, preserves_flags));
+unsafe fn write_cr3(val: u64) {
+    core::arch::asm!("mov cr3, {}", in(reg) val, options(nomem, nostack, preserves_flags));
 }
 
 /// Read CR4
 #[inline(always)]
 pub // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe fn read_cr4() -> u64 {
-    let value: u64;
-    core::arch::asm!("mov {}, cr4", out(reg) value, options(nomem, nostack, preserves_flags));
-    value
+    let val: u64;
+    core::arch::asm!("mov {}, cr4", out(reg) val, options(nomem, nostack, preserves_flags));
+    val
 }
 
 /// Write CR4
 #[inline(always)]
 pub // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe fn write_cr4(value: u64) {
-    core::arch::asm!("mov cr4, {}", in(reg) value, options(nomem, nostack, preserves_flags));
+unsafe fn write_cr4(val: u64) {
+    core::arch::asm!("mov cr4, {}", in(reg) val, options(nomem, nostack, preserves_flags));
 }
 
 /// Execute CPUID instruction
@@ -191,19 +191,19 @@ unsafe {
 #[inline(always)]
 // Fonction publique — appelable depuis d'autres modules.
 pub fn rdrand() -> Option<u64> {
-    let value: u64;
+    let val: u64;
     let ok: u8;
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
         core::arch::asm!(
             "rdrand {}",
             "setc {}",
-            out(reg) value,
+            out(reg) val,
             out(reg_byte) ok,
             options(nomem, nostack)
         );
     }
-    if ok != 0 { Some(value) } else { None }
+    if ok != 0 { Some(val) } else { None }
 }
 
 // ============================================================================
@@ -214,24 +214,24 @@ unsafe {
 #[inline(always)]
 pub // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe fn inb(port: u16) -> u8 {
-    let value: u8;
+    let val: u8;
     core::arch::asm!(
         "in al, dx",
         in("dx") port,
-        out("al") value,
+        out("al") val,
         options(nomem, nostack, preserves_flags)
     );
-    value
+    val
 }
 
 /// Write a byte to an I/O port
 #[inline(always)]
 pub // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe fn outb(port: u16, value: u8) {
+unsafe fn outb(port: u16, val: u8) {
     core::arch::asm!(
         "out dx, al",
         in("dx") port,
-        in("al") value,
+        in("al") val,
         options(nomem, nostack, preserves_flags)
     );
 }
@@ -240,24 +240,24 @@ unsafe fn outb(port: u16, value: u8) {
 #[inline(always)]
 pub // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe fn inw(port: u16) -> u16 {
-    let value: u16;
+    let val: u16;
     core::arch::asm!(
         "in ax, dx",
         in("dx") port,
-        out("ax") value,
+        out("ax") val,
         options(nomem, nostack, preserves_flags)
     );
-    value
+    val
 }
 
 /// Write a word to an I/O port
 #[inline(always)]
 pub // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe fn outw(port: u16, value: u16) {
+unsafe fn outw(port: u16, val: u16) {
     core::arch::asm!(
         "out dx, ax",
         in("dx") port,
-        in("ax") value,
+        in("ax") val,
         options(nomem, nostack, preserves_flags)
     );
 }
@@ -266,24 +266,24 @@ unsafe fn outw(port: u16, value: u16) {
 #[inline(always)]
 pub // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe fn inl(port: u16) -> u32 {
-    let value: u32;
+    let val: u32;
     core::arch::asm!(
         "in eax, dx",
         in("dx") port,
-        out("eax") value,
+        out("eax") val,
         options(nomem, nostack, preserves_flags)
     );
-    value
+    val
 }
 
 /// Write a dword to an I/O port
 #[inline(always)]
 pub // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe fn outl(port: u16, value: u32) {
+unsafe fn outl(port: u16, val: u32) {
     core::arch::asm!(
         "out dx, eax",
         in("dx") port,
-        in("eax") value,
+        in("eax") val,
         options(nomem, nostack, preserves_flags)
     );
 }

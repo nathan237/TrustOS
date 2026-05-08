@@ -146,7 +146,7 @@ pub struct TraceState {
     /// Options set by tracer
     pub options: u32,
     /// Event message
-    pub event_message: u64,
+    pub event_msg: u64,
     /// Signal to deliver on continue
     pub pending_signal: u32,
 }
@@ -159,7 +159,7 @@ pub fn new() -> Self {
             tracer_pid: 0,
             state: TraceeState::NotTraced,
             options: 0,
-            event_message: 0,
+            event_msg: 0,
             pending_signal: 0,
         }
     }
@@ -265,16 +265,16 @@ pub fn cleanup_process(pid: u32) {
 }
 
 /// Main ptrace syscall handler
-pub fn ptrace(request: u32, pid: u32, address: u64, data: u64) -> Result<u64, i32> {
+pub fn ptrace(request: u32, pid: u32, addr: u64, data: u64) -> Result<u64, i32> {
     use request::*;
     
         // Correspondance de motifs — branchement exhaustif de Rust.
 match request {
         PTRACE_TRACEME => traceme(),
-        PTRACE_PEEKTEXT | PTRACE_PEEKDATA => peek(pid, address),
-        PTRACE_PEEKUSER => peek_user(pid, address),
-        PTRACE_POKETEXT | PTRACE_POKEDATA => poke(pid, address, data),
-        PTRACE_POKEUSER => poke_user(pid, address, data),
+        PTRACE_PEEKTEXT | PTRACE_PEEKDATA => peek(pid, addr),
+        PTRACE_PEEKUSER => peek_user(pid, addr),
+        PTRACE_POKETEXT | PTRACE_POKEDATA => poke(pid, addr, data),
+        PTRACE_POKEUSER => poke_user(pid, addr, data),
         PTRACE_CONT => cont(pid, data as u32),
         PTRACE_KILL => kill(pid),
         PTRACE_SINGLESTEP => singlestep(pid, data as u32),
@@ -413,9 +413,9 @@ fn singlestep(pid: u32, signal: u32) -> Result<u64, i32> {
     drop(states);
     
     // Set trap flag (bit 8) in tracee's RFLAGS for single-step
-    if let Some(mut context) = crate::process::get_context(pid) {
-        context.rflags |= 1 << 8; // TF = Trap Flag
-        let _ = crate::process::set_context(pid, &context);
+    if let Some(mut ctx) = crate::process::get_context(pid) {
+        ctx.rflags |= 1 << 8; // TF = Trap Flag
+        let _ = crate::process::set_context(pid, &ctx);
     }
     
     crate::process::resume(pid);
@@ -485,27 +485,27 @@ fn setoptions(pid: u32, options: u32) -> Result<u64, i32> {
 }
 
 /// PTRACE_GETEVENTMSG - get event message
-fn geteventmsg(pid: u32, message_pointer: *mut u64) -> Result<u64, i32> {
+fn geteventmsg(pid: u32, msg_ptr: *mut u64) -> Result<u64, i32> {
     check_tracer(pid)?;
     
     let states = TRACE_STATES.lock();
     let state = states.get(&pid).ok_or(-3)?;
     
     // TODO: Copy to user space safely
-    if !message_pointer.is_null() {
+    if !msg_ptr.is_null() {
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe { *message_pointer = state.event_message; }
+unsafe { *msg_ptr = state.event_msg; }
     }
     
     Ok(0)
 }
 
 /// PTRACE_PEEK* - read memory
-fn peek(pid: u32, address: u64) -> Result<u64, i32> {
+fn peek(pid: u32, addr: u64) -> Result<u64, i32> {
     check_tracer(pid)?;
     
     // Read from tracee's address space
-    let value = crate::memory::read_user_u64(pid, address)?;
+    let value = crate::memory::read_user_u64(pid, addr)?;
     Ok(value)
 }
 
@@ -513,27 +513,27 @@ fn peek(pid: u32, address: u64) -> Result<u64, i32> {
 fn peek_user(pid: u32, offset: u64) -> Result<u64, i32> {
     check_tracer(pid)?;
     
-    let context = crate::process::get_context(pid).ok_or(-3i32)?;
+    let ctx = crate::process::get_context(pid).ok_or(-3i32)?;
     // Linux USER area register offsets (in bytes, 8-byte aligned)
-    let value = // Correspondance de motifs — branchement exhaustif de Rust.
+    let val = // Correspondance de motifs — branchement exhaustif de Rust.
 match offset {
-        0   => context.r15, 8   => context.r14, 16  => context.r13, 24  => context.r12,
-        32  => context.rbp, 40  => context.rbx, 48  => context.r11, 56  => context.r10,
-        64  => context.r9,  72  => context.r8,  80  => context.rax, 88  => context.rcx,
-        96  => context.rdx, 104 => context.rsi, 112 => context.rdi, 120 => context.rax, // orig_rax
-        128 => context.rip, 136 => context.cs,  144 => context.rflags,
-        152 => context.rsp, 160 => context.ss,
+        0   => ctx.r15, 8   => ctx.r14, 16  => ctx.r13, 24  => ctx.r12,
+        32  => ctx.rbp, 40  => ctx.rbx, 48  => ctx.r11, 56  => ctx.r10,
+        64  => ctx.r9,  72  => ctx.r8,  80  => ctx.rax, 88  => ctx.rcx,
+        96  => ctx.rdx, 104 => ctx.rsi, 112 => ctx.rdi, 120 => ctx.rax, // orig_rax
+        128 => ctx.rip, 136 => ctx.cs,  144 => ctx.rflags,
+        152 => ctx.rsp, 160 => ctx.ss,
         _ => return Err(-14), // EFAULT - invalid offset
     };
-    Ok(value)
+    Ok(val)
 }
 
 /// PTRACE_POKE* - write memory
-fn poke(pid: u32, address: u64, data: u64) -> Result<u64, i32> {
+fn poke(pid: u32, addr: u64, data: u64) -> Result<u64, i32> {
     check_tracer(pid)?;
     
     // Write to tracee's address space
-    crate::memory::write_user_u64(pid, address, data)?;
+    crate::memory::write_user_u64(pid, addr, data)?;
     Ok(0)
 }
 
@@ -541,22 +541,22 @@ fn poke(pid: u32, address: u64, data: u64) -> Result<u64, i32> {
 fn poke_user(pid: u32, offset: u64, data: u64) -> Result<u64, i32> {
     check_tracer(pid)?;
     
-    let mut context = crate::process::get_context(pid).ok_or(-3i32)?;
+    let mut ctx = crate::process::get_context(pid).ok_or(-3i32)?;
         // Correspondance de motifs — branchement exhaustif de Rust.
 match offset {
-        0   => context.r15 = data, 8   => context.r14 = data,
-        16  => context.r13 = data, 24  => context.r12 = data,
-        32  => context.rbp = data, 40  => context.rbx = data,
-        48  => context.r11 = data, 56  => context.r10 = data,
-        64  => context.r9 = data,  72  => context.r8 = data,
-        80  => context.rax = data, 88  => context.rcx = data,
-        96  => context.rdx = data, 104 => context.rsi = data,
-        112 => context.rdi = data, 128 => context.rip = data,
-        136 => context.cs = data,  144 => context.rflags = data,
-        152 => context.rsp = data, 160 => context.ss = data,
+        0   => ctx.r15 = data, 8   => ctx.r14 = data,
+        16  => ctx.r13 = data, 24  => ctx.r12 = data,
+        32  => ctx.rbp = data, 40  => ctx.rbx = data,
+        48  => ctx.r11 = data, 56  => ctx.r10 = data,
+        64  => ctx.r9 = data,  72  => ctx.r8 = data,
+        80  => ctx.rax = data, 88  => ctx.rcx = data,
+        96  => ctx.rdx = data, 104 => ctx.rsi = data,
+        112 => ctx.rdi = data, 128 => ctx.rip = data,
+        136 => ctx.cs = data,  144 => ctx.rflags = data,
+        152 => ctx.rsp = data, 160 => ctx.ss = data,
         _ => return Err(-14), // EFAULT
     }
-    crate::process::set_context(pid, &context).map_error(|_| -3i32)?;
+    crate::process::set_context(pid, &ctx).map_err(|_| -3i32)?;
     Ok(0)
 }
 
@@ -568,15 +568,15 @@ fn getregs(pid: u32, regs: *mut UserRegs) -> Result<u64, i32> {
         return Err(-14); // EFAULT
     }
     
-    let context = crate::process::get_context(pid).ok_or(-3i32)?;
+    let ctx = crate::process::get_context(pid).ok_or(-3i32)?;
     let user_regs = UserRegs {
-        r15: context.r15, r14: context.r14, r13: context.r13, r12: context.r12,
-        rbp: context.rbp, rbx: context.rbx, r11: context.r11, r10: context.r10,
-        r9: context.r9, r8: context.r8, rax: context.rax, rcx: context.rcx,
-        rdx: context.rdx, rsi: context.rsi, rdi: context.rdi,
-        orig_rax: context.rax, // orig_rax = syscall nr, use rax as fallback
-        rip: context.rip, cs: context.cs, rflags: context.rflags,
-        rsp: context.rsp, ss: context.ss,
+        r15: ctx.r15, r14: ctx.r14, r13: ctx.r13, r12: ctx.r12,
+        rbp: ctx.rbp, rbx: ctx.rbx, r11: ctx.r11, r10: ctx.r10,
+        r9: ctx.r9, r8: ctx.r8, rax: ctx.rax, rcx: ctx.rcx,
+        rdx: ctx.rdx, rsi: ctx.rsi, rdi: ctx.rdi,
+        orig_rax: ctx.rax, // orig_rax = syscall nr, use rax as fallback
+        rip: ctx.rip, cs: ctx.cs, rflags: ctx.rflags,
+        rsp: ctx.rsp, ss: ctx.ss,
         filesystem_base: 0, gs_base: 0, ds: 0, es: 0, fs: 0, gs: 0,
     };
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
@@ -596,18 +596,18 @@ const UserRegs) -> Result<u64, i32> {
     
     let user_regs = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe { &*regs };
-    let mut context = crate::process::get_context(pid).ok_or(-3i32)?;
-    context.r15 = user_regs.r15; context.r14 = user_regs.r14;
-    context.r13 = user_regs.r13; context.r12 = user_regs.r12;
-    context.rbp = user_regs.rbp; context.rbx = user_regs.rbx;
-    context.r11 = user_regs.r11; context.r10 = user_regs.r10;
-    context.r9 = user_regs.r9; context.r8 = user_regs.r8;
-    context.rax = user_regs.rax; context.rcx = user_regs.rcx;
-    context.rdx = user_regs.rdx; context.rsi = user_regs.rsi;
-    context.rdi = user_regs.rdi; context.rip = user_regs.rip;
-    context.cs = user_regs.cs; context.rflags = user_regs.rflags;
-    context.rsp = user_regs.rsp; context.ss = user_regs.ss;
-    crate::process::set_context(pid, &context).map_error(|_| -3i32)?;
+    let mut ctx = crate::process::get_context(pid).ok_or(-3i32)?;
+    ctx.r15 = user_regs.r15; ctx.r14 = user_regs.r14;
+    ctx.r13 = user_regs.r13; ctx.r12 = user_regs.r12;
+    ctx.rbp = user_regs.rbp; ctx.rbx = user_regs.rbx;
+    ctx.r11 = user_regs.r11; ctx.r10 = user_regs.r10;
+    ctx.r9 = user_regs.r9; ctx.r8 = user_regs.r8;
+    ctx.rax = user_regs.rax; ctx.rcx = user_regs.rcx;
+    ctx.rdx = user_regs.rdx; ctx.rsi = user_regs.rsi;
+    ctx.rdi = user_regs.rdi; ctx.rip = user_regs.rip;
+    ctx.cs = user_regs.cs; ctx.rflags = user_regs.rflags;
+    ctx.rsp = user_regs.rsp; ctx.ss = user_regs.ss;
+    crate::process::set_context(pid, &ctx).map_err(|_| -3i32)?;
     
     Ok(0)
 }
@@ -671,12 +671,12 @@ pub fn get_tracer(pid: u32) -> Option<u32> {
 }
 
 /// Notify tracer of event
-pub fn notify_event(pid: u32, event: u32, message: u64) {
+pub fn notify_event(pid: u32, event: u32, msg: u64) {
     let mut states = TRACE_STATES.lock();
     if let Some(state) = states.get_mut(&pid) {
         if state.is_traced() && (state.options & event_to_option(event)) != 0 {
             state.state = TraceeState::EventStop(event);
-            state.event_message = message;
+            state.event_msg = msg;
             
             // Stop tracee and wake tracer
             drop(states);

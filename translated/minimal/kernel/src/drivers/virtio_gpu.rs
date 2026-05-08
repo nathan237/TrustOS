@@ -16,7 +16,7 @@ use alloc::boxed::Box;
 use core::sync::atomic::{AtomicBool, Ordering};
 use spin::Mutex;
 
-use crate::pci::{self, S};
+use crate::pci::{self, L};
 use crate::memory;
 
 
@@ -24,99 +24,99 @@ use crate::memory;
 
 
 
-pub const DAV_: u16 = 0x1050;
+pub const DEN_: u16 = 0x1050;
 
-pub const DAW_: u16 = 0x1AF4;
+pub const DEO_: u16 = 0x1AF4;
 
 
 pub mod virtio_cap {
-    pub const AOU_: u8 = 1;
-    pub const BBO_: u8 = 2;
-    pub const AXK_: u8 = 3;
-    pub const AQA_: u8 = 4;
-    pub const ELL_: u8 = 5;
+    pub const AQU_: u8 = 1;
+    pub const BDR_: u8 = 2;
+    pub const AZL_: u8 = 3;
+    pub const ASD_: u8 = 4;
+    pub const EOW_: u8 = 5;
 }
 
 
 pub mod dev_status {
-    pub const Or: u8 = 1;
-    pub const Fl: u8 = 2;
-    pub const HW_: u8 = 4;
-    pub const MZ_: u8 = 8;
-    pub const ELE_: u8 = 64;
-    pub const Arw: u8 = 128;
+    pub const Gf: u8 = 1;
+    pub const Cl: u8 = 2;
+    pub const IQ_: u8 = 4;
+    pub const NY_: u8 = 8;
+    pub const EOP_: u8 = 64;
+    pub const Sa: u8 = 128;
 }
 
 
 pub mod features {
-    pub const DBW_: u64 = 1 << 0;
-    pub const BIL_: u64 = 1 << 1;
-    pub const ELP_: u64 = 1 << 2;
-    pub const ELO_: u64 = 1 << 3;
-    pub const DAU_: u64 = 1 << 32;
+    pub const DFR_: u64 = 1 << 0;
+    pub const BKS_: u64 = 1 << 1;
+    pub const EPA_: u64 = 1 << 2;
+    pub const EOZ_: u64 = 1 << 3;
+    pub const DEM_: u64 = 1 << 32;
 }
 
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq)]
-#[allow(bgr)]
+#[allow(dead_code)]
 pub enum GpuCtrlType {
     
-    Bzs = 0x0100,
-    Bzu = 0x0101,
-    Ctg = 0x0102,
-    Bzv = 0x0103,
-    Aqa = 0x0104,
-    Aqb = 0x0105,
-    Bzt = 0x0106,
-    Ctf = 0x0107,
-    Bzr = 0x0108,
-    Ctb = 0x0109,
-    Ctc = 0x010a,
+    CmdGetDisplayInfo = 0x0100,
+    CmdResourceCreate2d = 0x0101,
+    CmdResourceUnref = 0x0102,
+    CmdSetScanout = 0x0103,
+    CmdResourceFlush = 0x0104,
+    CmdTransferToHost2d = 0x0105,
+    CmdResourceAttachBacking = 0x0106,
+    CmdResourceDetachBacking = 0x0107,
+    CmdGetCapsetInfo = 0x0108,
+    CmdGetCapset = 0x0109,
+    CmdGetEdid = 0x010a,
 
     
-    Bzp = 0x0200,
-    Bzq = 0x0201,
-    Csz = 0x0202,
-    Cta = 0x0203,
-    Cte = 0x0204,
-    Cti = 0x0205,
-    Cth = 0x0206,
-    Bzw = 0x0207,
+    CmdCtxCreate = 0x0200,
+    CmdCtxDestroy = 0x0201,
+    CmdCtxAttachResource = 0x0202,
+    CmdCtxDetachResource = 0x0203,
+    CmdResourceCreate3d = 0x0204,
+    CmdTransferToHost3d = 0x0205,
+    CmdTransferFromHost3d = 0x0206,
+    CmdSubmit3d = 0x0207,
 
     
-    Ctj = 0x0300,
-    Ctd = 0x0301,
+    CmdUpdateCursor = 0x0300,
+    CmdMoveCursor = 0x0301,
 
     
-    Mg = 0x1100,
-    Ckq = 0x1101,
-    Ckp = 0x1102,
-    Dgd = 0x1103,
-    Dge = 0x1104,
+    RespOkNodata = 0x1100,
+    RespOkDisplayInfo = 0x1101,
+    RespOkCapsetInfo = 0x1102,
+    RespOkCapset = 0x1103,
+    RespOkEdid = 0x1104,
 
     
-    Dgc = 0x1200,
-    Dgb = 0x1201,
-    Dga = 0x1202,
-    Dfz = 0x1203,
-    Dfx = 0x1204,
-    Dfy = 0x1205,
+    RespErrUnspec = 0x1200,
+    RespErrOutOfMemory = 0x1201,
+    RespErrInvalidScanoutId = 0x1202,
+    RespErrInvalidResourceId = 0x1203,
+    RespErrInvalidContextId = 0x1204,
+    RespErrInvalidParameter = 0x1205,
 }
 
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq)]
-#[allow(bgr)]
+#[allow(dead_code)]
 pub enum GpuFormat {
-    Crp = 1,
-    Byc = 2,
-    Cqw = 3,
-    Dmc = 4,
-    Dfb = 67,
-    Dmb = 68,
-    Cqv = 121,
-    Dfc = 134,
+    B8G8R8A8Unorm = 1,
+    B8G8R8X8Unorm = 2,
+    A8R8G8B8Unorm = 3,
+    X8R8G8B8Unorm = 4,
+    R8G8B8A8Unorm = 67,
+    X8B8G8R8Unorm = 68,
+    A8B8G8R8Unorm = 121,
+    R8G8B8X8Unorm = 134,
 }
 
 
@@ -126,100 +126,100 @@ pub enum GpuFormat {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
-pub struct Ar {
-    pub btv: u32,
+pub struct Ac {
+    pub ctrl_type: u32,
     pub flags: u32,
-    pub yqj: u64,
-    pub cjv: u32,
-    pub jml: u8,
-    pub ob: [u8; 3],
+    pub fence_id: u64,
+    pub ctx_id: u32,
+    pub eys: u8,
+    pub padding: [u8; 3],
 }
 
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
-pub struct Ko {
-    pub b: u32,
-    pub c: u32,
-    pub z: u32,
-    pub ac: u32,
+pub struct Eh {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
 }
 
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
-pub struct Ceo {
-    pub m: Ko,
-    pub iq: u32,
+pub struct Akw {
+    pub r: Eh,
+    pub enabled: u32,
     pub flags: u32,
 }
 
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct Bif {
-    pub zj: Ar,
-    pub vjp: [Ceo; 16],
+pub struct Zl {
+    pub kp: Ac,
+    pub pmodes: [Akw; 16],
 }
 
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct Bie {
-    pub zj: Ar,
-    pub awu: u32,
+pub struct Zk {
+    pub kp: Ac,
+    pub zj: u32,
     pub format: u32,
-    pub z: u32,
-    pub ac: u32,
+    pub width: u32,
+    pub height: u32,
 }
 
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct Big {
-    pub zj: Ar,
-    pub m: Ko,
-    pub mcj: u32,
-    pub awu: u32,
+pub struct Zm {
+    pub kp: Ac,
+    pub r: Eh,
+    pub scanout_id: u32,
+    pub zj: u32,
 }
 
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct Wv {
-    pub zj: Ar,
-    pub m: Ko,
-    pub awu: u32,
-    pub ob: u32,
+pub struct Jv {
+    pub kp: Ac,
+    pub r: Eh,
+    pub zj: u32,
+    pub padding: u32,
 }
 
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct Ww {
-    pub zj: Ar,
-    pub m: Ko,
-    pub l: u64,
-    pub awu: u32,
-    pub ob: u32,
+pub struct Jw {
+    pub kp: Ac,
+    pub r: Eh,
+    pub offset: u64,
+    pub zj: u32,
+    pub padding: u32,
 }
 
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct Bid {
-    pub ag: u64,
-    pub go: u32,
-    pub ob: u32,
+pub struct Zj {
+    pub addr: u64,
+    pub length: u32,
+    pub padding: u32,
 }
 
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct Atf {
-    pub zj: Ar,
-    pub awu: u32,
-    pub uvv: u32,
+pub struct Sr {
+    pub kp: Ac,
+    pub zj: u32,
+    pub nr_entries: u32,
 }
 
 
@@ -229,151 +229,151 @@ pub struct Atf {
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
 struct VirtqDesc {
-    ag: u64,
+    addr: u64,
     len: u32,
     flags: u16,
     next: u16,
 }
 
-const QP_: u16 = 1;
-const QQ_: u16 = 2;
+const RJ_: u16 = 1;
+const RK_: u16 = 2;
 
 #[repr(C)]
-struct Zk {
+struct Kx {
     flags: u16,
-    w: u16,
+    idx: u16,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
-struct Aob {
-    ad: u32,
+struct Qv {
+    id: u32,
     len: u32,
 }
 
 #[repr(C)]
-struct Zl {
+struct Ky {
     flags: u16,
-    w: u16,
+    idx: u16,
 }
 
 
 struct GpuVirtqueue {
-    aw: u16,
-    iih: u64,
-    qea: *mut u8,
+    size: u16,
+    _phys_base: u64,
+    _virt_base: *mut u8,
     desc: *mut VirtqDesc,
-    apk: *mut Zk,
-    mr: *mut Zl,
-    cyb: u16,
-    dts: u16,
-    buk: Vec<u16>,
-    csa: u16,
+    avail: *mut Kx,
+    used: *mut Ky,
+    free_head: u16,
+    num_free: u16,
+    free_list: Vec<u16>,
+    last_used_idx: u16,
 }
 
 unsafe impl Send for GpuVirtqueue {}
 unsafe impl Sync for GpuVirtqueue {}
 
 impl GpuVirtqueue {
-    fn new(aw: u16) -> Result<Self, &'static str> {
+    fn new(size: u16) -> Result<Self, &'static str> {
         use alloc::alloc::{alloc_zeroed, Layout};
         
-        let gen = core::mem::size_of::<VirtqDesc>() * aw as usize;
-        let kbm = 6 + 2 * aw as usize;
-        let dxe = ((gen + kbm) + 4095) & !4095;
-        let xpq = 6 + core::mem::size_of::<Aob>() * aw as usize;
-        let aay = dxe + xpq + 4096;
+        let cwj = core::mem::size_of::<VirtqDesc>() * size as usize;
+        let fhs = 6 + 2 * size as usize;
+        let bps = ((cwj + fhs) + 4095) & !4095;
+        let pqn = 6 + core::mem::size_of::<Qv>() * size as usize;
+        let total_size = bps + pqn + 4096;
         
-        let layout = Layout::bjy(aay, 4096)
-            .jd(|_| "Invalid virtqueue layout")?;
+        let layout = Layout::from_size_align(total_size, 4096)
+            .map_err(|_| "Invalid virtqueue layout")?;
         let ptr = unsafe { alloc_zeroed(layout) };
-        if ptr.abq() { return Err("Failed to allocate virtqueue"); }
+        if ptr.is_null() { return Err("Failed to allocate virtqueue"); }
         
-        let vd = ptr as u64;
-        let hp = memory::lr();
-        let ki = if vd >= hp { vd - hp } else { vd };
+        let virt_addr = ptr as u64;
+        let bz = memory::hhdm_offset();
+        let phys_addr = if virt_addr >= bz { virt_addr - bz } else { virt_addr };
         
         let desc = ptr as *mut VirtqDesc;
-        let apk = unsafe { ptr.add(gen) as *mut Zk };
-        let mr = unsafe { ptr.add(dxe) as *mut Zl };
+        let avail = unsafe { ptr.add(cwj) as *mut Kx };
+        let used = unsafe { ptr.add(bps) as *mut Ky };
         
-        let mut buk = vec![0u16; aw as usize];
-        for a in 0..(aw as usize).ao(1) {
-            buk[a] = (a + 1) as u16;
+        let mut free_list = vec![0u16; size as usize];
+        for i in 0..(size as usize).saturating_sub(1) {
+            free_list[i] = (i + 1) as u16;
         }
-        if aw > 0 { buk[aw as usize - 1] = 0xFFFF; }
+        if size > 0 { free_list[size as usize - 1] = 0xFFFF; }
         
         Ok(Self {
-            aw,
-            iih: ki,
-            qea: ptr,
+            size,
+            _phys_base: phys_addr,
+            _virt_base: ptr,
             desc,
-            apk,
-            mr,
-            cyb: 0,
-            dts: aw,
-            buk,
-            csa: 0,
+            avail,
+            used,
+            free_head: 0,
+            num_free: size,
+            free_list,
+            last_used_idx: 0,
         })
     }
     
-    fn blx(&mut self) -> Option<u16> {
-        if self.dts == 0 { return None; }
-        let w = self.cyb;
-        self.cyb = self.buk[w as usize];
-        self.dts -= 1;
-        Some(w)
+    fn alloc_desc(&mut self) -> Option<u16> {
+        if self.num_free == 0 { return None; }
+        let idx = self.free_head;
+        self.free_head = self.free_list[idx as usize];
+        self.num_free -= 1;
+        Some(idx)
     }
     
-    fn ald(&mut self, w: u16) {
-        self.buk[w as usize] = self.cyb;
-        self.cyb = w;
-        self.dts += 1;
+    fn free_desc(&mut self, idx: u16) {
+        self.free_list[idx as usize] = self.free_head;
+        self.free_head = idx;
+        self.num_free += 1;
     }
     
-    fn bwz(&mut self, w: u16, ag: u64, len: u32, flags: u16, next: u16) {
+    fn set_desc(&mut self, idx: u16, addr: u64, len: u32, flags: u16, next: u16) {
         unsafe {
-            let bc = &mut *self.desc.add(w as usize);
-            bc.ag = ag;
-            bc.len = len;
-            bc.flags = flags;
-            bc.next = next;
+            let d = &mut *self.desc.add(idx as usize);
+            d.addr = addr;
+            d.len = len;
+            d.flags = flags;
+            d.next = next;
         }
     }
     
-    fn dmd(&mut self, ale: u16) {
+    fn submit(&mut self, su: u16) {
         unsafe {
-            let apk = &mut *self.apk;
-            let fsy = (self.apk as *mut u8).add(4) as *mut u16;
-            let w = apk.w;
-            *fsy.add((w % self.aw) as usize) = ale;
-            core::sync::atomic::cxt(Ordering::Release);
-            apk.w = w.cn(1);
+            let avail = &mut *self.avail;
+            let cpm = (self.avail as *mut u8).add(4) as *mut u16;
+            let idx = avail.idx;
+            *cpm.add((idx % self.size) as usize) = su;
+            core::sync::atomic::fence(Ordering::Release);
+            avail.idx = idx.wrapping_add(1);
         }
     }
     
-    fn lur(&mut self) -> Option<(u32, u32)> {
+    fn poll_used(&mut self) -> Option<(u32, u32)> {
         unsafe {
-            core::sync::atomic::cxt(Ordering::Acquire);
-            let mr = &*self.mr;
-            if mr.w == self.csa { return None; }
-            let fsy = (self.mr as *mut u8).add(4) as *mut Aob;
-            let fhm = *fsy.add((self.csa % self.aw) as usize);
-            self.csa = self.csa.cn(1);
-            Some((fhm.ad, fhm.len))
+            core::sync::atomic::fence(Ordering::Acquire);
+            let used = &*self.used;
+            if used.idx == self.last_used_idx { return None; }
+            let cpm = (self.used as *mut u8).add(4) as *mut Qv;
+            let cit = *cpm.add((self.last_used_idx % self.size) as usize);
+            self.last_used_idx = self.last_used_idx.wrapping_add(1);
+            Some((cit.id, cit.len))
         }
     }
     
-    fn rwb(&self) -> u64 { self.iih }
-    fn qlp(&self) -> u64 {
-        let gen = core::mem::size_of::<VirtqDesc>() * self.aw as usize;
-        self.iih + gen as u64
+    fn desc_phys(&self) -> u64 { self._phys_base }
+    fn avail_phys(&self) -> u64 {
+        let cwj = core::mem::size_of::<VirtqDesc>() * self.size as usize;
+        self._phys_base + cwj as u64
     }
-    fn xps(&self) -> u64 {
-        let gen = core::mem::size_of::<VirtqDesc>() * self.aw as usize;
-        let kbm = 6 + 2 * self.aw as usize;
-        let dxe = ((gen + kbm) + 4095) & !4095;
-        self.iih + dxe as u64
+    fn used_phys(&self) -> u64 {
+        let cwj = core::mem::size_of::<VirtqDesc>() * self.size as usize;
+        let fhs = 6 + 2 * self.size as usize;
+        let bps = ((cwj + fhs) + 4095) & !4095;
+        self._phys_base + bps as u64
     }
 }
 
@@ -381,65 +381,65 @@ impl GpuVirtqueue {
 
 
 
-struct No {
-    ar: *mut u8,
-    jxx: u32,
+struct Fv {
+    base: *mut u8,
+    _len: u32,
 }
 
-unsafe impl Send for No {}
-unsafe impl Sync for No {}
+unsafe impl Send for Fv {}
+unsafe impl Sync for Fv {}
 
-impl No {
-    fn akm(&self, l: u32) -> u8 {
-        unsafe { core::ptr::read_volatile(self.ar.add(l as usize)) }
+impl Fv {
+    fn read8(&self, offset: u32) -> u8 {
+        unsafe { core::ptr::read_volatile(self.base.add(offset as usize)) }
     }
-    fn aym(&self, l: u32) -> u16 {
-        unsafe { core::ptr::read_volatile(self.ar.add(l as usize) as *const u16) }
+    fn read16(&self, offset: u32) -> u16 {
+        unsafe { core::ptr::read_volatile(self.base.add(offset as usize) as *const u16) }
     }
-    fn amp(&self, l: u32) -> u32 {
-        unsafe { core::ptr::read_volatile(self.ar.add(l as usize) as *const u32) }
+    fn read32(&self, offset: u32) -> u32 {
+        unsafe { core::ptr::read_volatile(self.base.add(offset as usize) as *const u32) }
     }
-    fn akw(&self, l: u32, ap: u8) {
-        unsafe { core::ptr::write_volatile(self.ar.add(l as usize), ap) }
+    fn write8(&self, offset: u32, val: u8) {
+        unsafe { core::ptr::write_volatile(self.base.add(offset as usize), val) }
     }
-    fn asg(&self, l: u32, ap: u16) {
-        unsafe { core::ptr::write_volatile(self.ar.add(l as usize) as *mut u16, ap) }
+    fn write16(&self, offset: u32, val: u16) {
+        unsafe { core::ptr::write_volatile(self.base.add(offset as usize) as *mut u16, val) }
     }
-    fn aiu(&self, l: u32, ap: u32) {
-        unsafe { core::ptr::write_volatile(self.ar.add(l as usize) as *mut u32, ap) }
+    fn write32(&self, offset: u32, val: u32) {
+        unsafe { core::ptr::write_volatile(self.base.add(offset as usize) as *mut u32, val) }
     }
-    fn jxe(&self, l: u32, ap: u64) {
-        self.aiu(l, ap as u32);
-        self.aiu(l + 4, (ap >> 32) as u32);
+    fn write64(&self, offset: u32, val: u64) {
+        self.write32(offset, val as u32);
+        self.write32(offset + 4, (val >> 32) as u32);
     }
 }
 
 
 mod common_cfg {
-    pub const AQC_: u32 = 0x00;
-    pub const AQB_: u32 = 0x04;
-    pub const AQR_: u32 = 0x08;
-    pub const AQQ_: u32 = 0x0C;
-    pub const ELJ_: u32 = 0x10;
-    pub const ELK_: u32 = 0x12;
-    pub const EF_: u32 = 0x14;
-    pub const ELC_: u32 = 0x15;
-    pub const AGU_: u32 = 0x16;
-    pub const WM_: u32 = 0x18;
-    pub const CNA_: u32 = 0x1A;
-    pub const CMZ_: u32 = 0x1C;
-    pub const CNC_: u32 = 0x1E;
-    pub const CMW_: u32 = 0x20;
-    pub const CMY_: u32 = 0x28;
-    pub const CMX_: u32 = 0x30;
+    pub const ASF_: u32 = 0x00;
+    pub const ASE_: u32 = 0x04;
+    pub const ASU_: u32 = 0x08;
+    pub const AST_: u32 = 0x0C;
+    pub const EOU_: u32 = 0x10;
+    pub const EOV_: u32 = 0x12;
+    pub const ES_: u32 = 0x14;
+    pub const EON_: u32 = 0x15;
+    pub const AIO_: u32 = 0x16;
+    pub const XV_: u32 = 0x18;
+    pub const CQJ_: u32 = 0x1A;
+    pub const CQI_: u32 = 0x1C;
+    pub const CQL_: u32 = 0x1E;
+    pub const CQF_: u32 = 0x20;
+    pub const CQH_: u32 = 0x28;
+    pub const CQG_: u32 = 0x30;
 }
 
 
 mod gpu_cfg {
-    pub const ELI_: u32 = 0x00;
-    pub const ELH_: u32 = 0x04;
-    pub const CID_: u32 = 0x08;
-    pub const CIA_: u32 = 0x0C;
+    pub const EOT_: u32 = 0x00;
+    pub const EOS_: u32 = 0x04;
+    pub const CLM_: u32 = 0x08;
+    pub const CLJ_: u32 = 0x0C;
 }
 
 
@@ -447,36 +447,36 @@ mod gpu_cfg {
 
 
 struct DmaCommandBuffer {
-    ht: u64,
-    ju: *mut u8,
-    dds: usize,
+    phys: u64,
+    virt: *mut u8,
+    bek: usize,
 }
 
 unsafe impl Send for DmaCommandBuffer {}
 unsafe impl Sync for DmaCommandBuffer {}
 
 impl DmaCommandBuffer {
-    fn new(aw: usize) -> Result<Self, &'static str> {
+    fn new(size: usize) -> Result<Self, &'static str> {
         use alloc::alloc::{alloc_zeroed, Layout};
-        let layout = Layout::bjy(aw, 4096)
-            .jd(|_| "DMA buffer layout error")?;
+        let layout = Layout::from_size_align(size, 4096)
+            .map_err(|_| "DMA buffer layout error")?;
         let ptr = unsafe { alloc_zeroed(layout) };
-        if ptr.abq() { return Err("DMA buffer allocation failed"); }
-        let ju = ptr as u64;
-        let hp = memory::lr();
-        let ht = if ju >= hp { ju - hp } else { ju };
-        Ok(Self { ht, ju: ptr, dds: aw })
+        if ptr.is_null() { return Err("DMA buffer allocation failed"); }
+        let virt = ptr as u64;
+        let bz = memory::hhdm_offset();
+        let phys = if virt >= bz { virt - bz } else { virt };
+        Ok(Self { phys, virt: ptr, bek: size })
     }
     
-    unsafe fn ciu<T: Copy>(&self, l: usize, ap: &T) {
-        core::ptr::write_volatile(self.ju.add(l) as *mut T, *ap);
+    unsafe fn write_at<T: Copy>(&self, offset: usize, val: &T) {
+        core::ptr::write_volatile(self.virt.add(offset) as *mut T, *val);
     }
     
-    unsafe fn read_at<T: Copy>(&self, l: usize) -> T {
-        core::ptr::read_volatile(self.ju.add(l) as *const T)
+    unsafe fn read_at<T: Copy>(&self, offset: usize) -> T {
+        core::ptr::read_volatile(self.virt.add(offset) as *const T)
     }
     
-    fn zfa(&self, l: usize) -> u64 { self.ht + l as u64 }
+    fn qqh(&self, offset: usize) -> u64 { self.phys + offset as u64 }
 }
 
 
@@ -485,142 +485,142 @@ impl DmaCommandBuffer {
 
 
 pub struct GpuSurface {
-    pub awu: u32,
-    pub z: u32,
-    pub ac: u32,
-    pub f: Box<[u32]>,
+    pub zj: u32,
+    pub width: u32,
+    pub height: u32,
+    pub data: Box<[u32]>,
 }
 
 impl GpuSurface {
-    pub fn new(z: u32, ac: u32) -> Self {
-        let aw = (z * ac) as usize;
+    pub fn new(width: u32, height: u32) -> Self {
+        let size = (width * height) as usize;
         Self {
-            awu: 0,
-            z,
-            ac,
-            f: alloc::vec![0u32; aw].dsd(),
+            zj: 0,
+            width,
+            height,
+            data: alloc::vec![0u32; size].into_boxed_slice(),
         }
     }
     
-    pub fn clear(&mut self, s: u32) { self.f.vi(s); }
+    pub fn clear(&mut self, color: u32) { self.data.fill(color); }
     
     #[inline]
-    pub fn aht(&mut self, b: u32, c: u32, s: u32) {
-        if b < self.z && c < self.ac {
-            self.f[(c * self.z + b) as usize] = s;
+    pub fn set_pixel(&mut self, x: u32, y: u32, color: u32) {
+        if x < self.width && y < self.height {
+            self.data[(y * self.width + x) as usize] = color;
         }
     }
     
     #[inline]
-    pub fn beg(&self, b: u32, c: u32) -> u32 {
-        if b < self.z && c < self.ac {
-            self.f[(c * self.z + b) as usize]
+    pub fn get_pixel(&self, x: u32, y: u32) -> u32 {
+        if x < self.width && y < self.height {
+            self.data[(y * self.width + x) as usize]
         } else { 0 }
     }
     
-    pub fn ah(&mut self, b: u32, c: u32, d: u32, i: u32, s: u32) {
-        let dn = b.v(self.z);
-        let dp = c.v(self.ac);
-        let hy = (b + d).v(self.z);
-        let jz = (c + i).v(self.ac);
-        for x in dp..jz {
-            let ay = (x * self.z + dn) as usize;
-            let ci = (x * self.z + hy) as usize;
-            self.f[ay..ci].vi(s);
+    pub fn fill_rect(&mut self, x: u32, y: u32, w: u32, h: u32, color: u32) {
+        let x1 = x.min(self.width);
+        let y1 = y.min(self.height);
+        let x2 = (x + w).min(self.width);
+        let y2 = (y + h).min(self.height);
+        for o in y1..y2 {
+            let start = (o * self.width + x1) as usize;
+            let end = (o * self.width + x2) as usize;
+            self.data[start..end].fill(color);
         }
     }
     
-    pub fn bge(&mut self, cy: &GpuSurface, buc: i32, bqg: i32) {
-        for cq in 0..cy.ac {
-            for cr in 0..cy.z {
-                let dx = buc + cr as i32;
-                let bg = bqg + cq as i32;
-                if dx >= 0 && bg >= 0 && dx < self.z as i32 && bg < self.ac as i32 {
-                    let il = cy.beg(cr, cq);
-                    let dw = (il >> 24) & 0xFF;
-                    if dw >= 128 {
-                        self.aht(dx as u32, bg as u32, il);
+    pub fn blit(&mut self, src: &GpuSurface, dst_x: i32, dst_y: i32) {
+        for ak in 0..src.height {
+            for am in 0..src.width {
+                let dx = dst_x + am as i32;
+                let ad = dst_y + ak as i32;
+                if dx >= 0 && ad >= 0 && dx < self.width as i32 && ad < self.height as i32 {
+                    let ct = src.get_pixel(am, ak);
+                    let alpha = (ct >> 24) & 0xFF;
+                    if alpha >= 128 {
+                        self.set_pixel(dx as u32, ad as u32, ct);
                     }
                 }
             }
         }
     }
     
-    fn dvq(&mut self, b: i32, c: i32, s: u32) {
-        if b >= 0 && c >= 0 && b < self.z as i32 && c < self.ac as i32 {
-            self.aht(b as u32, c as u32, s);
+    fn set_pixel_safe(&mut self, x: i32, y: i32, color: u32) {
+        if x >= 0 && y >= 0 && x < self.width as i32 && y < self.height as i32 {
+            self.set_pixel(x as u32, y as u32, color);
         }
     }
 
-    pub fn ahj(&mut self, fy: i32, fo: i32, dn: i32, dp: i32, s: u32) {
-        let dx = (dn - fy).gp();
-        let bg = -(dp - fo).gp();
-        let cr = if fy < dn { 1 } else { -1 };
-        let cq = if fo < dp { 1 } else { -1 };
-        let mut rq = dx + bg;
-        let (mut b, mut c) = (fy, fo);
+    pub fn draw_line(&mut self, bm: i32, az: i32, x1: i32, y1: i32, color: u32) {
+        let dx = (x1 - bm).abs();
+        let ad = -(y1 - az).abs();
+        let am = if bm < x1 { 1 } else { -1 };
+        let ak = if az < y1 { 1 } else { -1 };
+        let mut err = dx + ad;
+        let (mut x, mut y) = (bm, az);
         loop {
-            self.dvq(b, c, s);
-            if b == dn && c == dp { break; }
-            let agl = 2 * rq;
-            if agl >= bg { rq += bg; b += cr; }
-            if agl <= dx { rq += dx; c += cq; }
+            self.set_pixel_safe(x, y, color);
+            if x == x1 && y == y1 { break; }
+            let pg = 2 * err;
+            if pg >= ad { err += ad; x += am; }
+            if pg <= dx { err += dx; y += ak; }
         }
     }
 
-    pub fn lx(&mut self, b: u32, c: u32, d: u32, i: u32, s: u32) {
-        let (b, c, d, i) = (b as i32, c as i32, d as i32, i as i32);
-        self.ahj(b, c, b+d-1, c, s);
-        self.ahj(b, c+i-1, b+d-1, c+i-1, s);
-        self.ahj(b, c, b, c+i-1, s);
-        self.ahj(b+d-1, c, b+d-1, c+i-1, s);
+    pub fn draw_rect(&mut self, x: u32, y: u32, w: u32, h: u32, color: u32) {
+        let (x, y, w, h) = (x as i32, y as i32, w as i32, h as i32);
+        self.draw_line(x, y, x+w-1, y, color);
+        self.draw_line(x, y+h-1, x+w-1, y+h-1, color);
+        self.draw_line(x, y, x, y+h-1, color);
+        self.draw_line(x+w-1, y, x+w-1, y+h-1, color);
     }
 
-    pub fn cxc(&mut self, cx: i32, ae: i32, dy: i32, s: u32) {
-        let (mut b, mut c, mut rq) = (dy, 0i32, 0i32);
-        while b >= c {
-            self.dvq(cx+b, ae+c, s);
-            self.dvq(cx+c, ae+b, s);
-            self.dvq(cx-c, ae+b, s);
-            self.dvq(cx-b, ae+c, s);
-            self.dvq(cx-b, ae-c, s);
-            self.dvq(cx-c, ae-b, s);
-            self.dvq(cx+c, ae-b, s);
-            self.dvq(cx+b, ae-c, s);
-            c += 1;
-            rq += 1 + 2*c;
-            if 2*(rq-b)+1 > 0 { b -= 1; rq += 1 - 2*b; }
+    pub fn draw_circle(&mut self, cx: i32, u: i32, radius: i32, color: u32) {
+        let (mut x, mut y, mut err) = (radius, 0i32, 0i32);
+        while x >= y {
+            self.set_pixel_safe(cx+x, u+y, color);
+            self.set_pixel_safe(cx+y, u+x, color);
+            self.set_pixel_safe(cx-y, u+x, color);
+            self.set_pixel_safe(cx-x, u+y, color);
+            self.set_pixel_safe(cx-x, u-y, color);
+            self.set_pixel_safe(cx-y, u-x, color);
+            self.set_pixel_safe(cx+y, u-x, color);
+            self.set_pixel_safe(cx+x, u-y, color);
+            y += 1;
+            err += 1 + 2*y;
+            if 2*(err-x)+1 > 0 { x -= 1; err += 1 - 2*x; }
         }
     }
 
-    pub fn abc(&mut self, cx: i32, ae: i32, dy: i32, s: u32) {
-        for bg in -dy..=dy {
-            for dx in -dy..=dy {
-                if dx*dx + bg*bg <= dy*dy {
-                    self.dvq(cx+dx, ae+bg, s);
+    pub fn fill_circle(&mut self, cx: i32, u: i32, radius: i32, color: u32) {
+        for ad in -radius..=radius {
+            for dx in -radius..=radius {
+                if dx*dx + ad*ad <= radius*radius {
+                    self.set_pixel_safe(cx+dx, u+ad, color);
                 }
             }
         }
     }
 
-    pub fn mf(&mut self, b: u32, c: u32, d: u32, i: u32, jyj: u32, s: u32) {
-        self.lx(b, c, d, i, s);
+    pub fn draw_rounded_rect(&mut self, x: u32, y: u32, w: u32, h: u32, _radius: u32, color: u32) {
+        self.draw_rect(x, y, w, h, color);
     }
 
-    pub fn afp(&mut self, b: u32, c: u32, d: u32, i: u32, jyj: u32, s: u32) {
-        self.ah(b, c, d, i, s);
+    pub fn fill_rounded_rect(&mut self, x: u32, y: u32, w: u32, h: u32, _radius: u32, color: u32) {
+        self.fill_rect(x, y, w, h, color);
     }
 
-    pub fn ygn(&mut self, cy: &GpuSurface, buc: i32, bqg: i32, krx: u32, kru: u32) {
-        if krx == 0 || kru == 0 || cy.z == 0 || cy.ac == 0 { return; }
-        for bg in 0..kru {
-            for dx in 0..krx {
-                let cr = (dx * cy.z) / krx;
-                let cq = (bg * cy.ac) / kru;
-                let y = buc + dx as i32;
-                let x = bqg + bg as i32;
-                if y >= 0 && x >= 0 && y < self.z as i32 && x < self.ac as i32 {
-                    self.aht(y as u32, x as u32, cy.beg(cr, cq));
+    pub fn pyv(&mut self, src: &GpuSurface, dst_x: i32, dst_y: i32, dst_w: u32, dst_h: u32) {
+        if dst_w == 0 || dst_h == 0 || src.width == 0 || src.height == 0 { return; }
+        for ad in 0..dst_h {
+            for dx in 0..dst_w {
+                let am = (dx * src.width) / dst_w;
+                let ak = (ad * src.height) / dst_h;
+                let p = dst_x + dx as i32;
+                let o = dst_y + ad as i32;
+                if p >= 0 && o >= 0 && p < self.width as i32 && o < self.height as i32 {
+                    self.set_pixel(p as u32, o as u32, src.get_pixel(am, ak));
                 }
             }
         }
@@ -632,111 +632,111 @@ impl GpuSurface {
 
 
 pub struct VirtioGpu {
-    mst: Option<S>,
-    common_cfg: Option<No>,
-    fpe: Option<No>,
-    msk: Option<No>,
-    ira: Option<No>,
-    msq: u32,
-    wy: Option<GpuVirtqueue>,
-    alb: Option<DmaCommandBuffer>,
-    bjv: u32,
-    bqf: u32,
-    lpm: u32,
-    loo: u32,
-    eyb: u32,
-    fcx: Option<Box<[u32]>>,
-    mxo: u64,
-    jr: bool,
-    ecl: bool,
+    _pci_dev: Option<L>,
+    common_cfg: Option<Fv>,
+    notify_cfg: Option<Fv>,
+    _isr_cfg: Option<Fv>,
+    device_cfg: Option<Fv>,
+    _notify_off_multiplier: u32,
+    controlq: Option<GpuVirtqueue>,
+    dma_buf: Option<DmaCommandBuffer>,
+    display_width: u32,
+    display_height: u32,
+    num_scanouts: u32,
+    next_resource_id: u32,
+    scanout_resource_id: u32,
+    backing_buffer: Option<Box<[u32]>>,
+    backing_phys: u64,
+    initialized: bool,
+    has_3d: bool,
     
-    kbs: u32,
-    aqt: Option<Box<[u32]>>,
-    mxk: u64,
-    hgq: bool,
-    ghp: bool, 
+    back_resource_id: u32,
+    back_buffer: Option<Box<[u32]>>,
+    back_phys: u64,
+    double_buffer_enabled: bool,
+    front_is_a: bool, 
 }
 
 impl VirtioGpu {
     pub const fn new() -> Self {
         Self {
-            mst: None,
+            _pci_dev: None,
             common_cfg: None,
-            fpe: None,
-            msk: None,
-            ira: None,
-            msq: 0,
-            wy: None,
-            alb: None,
-            bjv: 0,
-            bqf: 0,
-            lpm: 0,
-            loo: 1,
-            eyb: 0,
-            fcx: None,
-            mxo: 0,
-            jr: false,
-            ecl: false,
-            kbs: 0,
-            aqt: None,
-            mxk: 0,
-            hgq: false,
-            ghp: true,
+            notify_cfg: None,
+            _isr_cfg: None,
+            device_cfg: None,
+            _notify_off_multiplier: 0,
+            controlq: None,
+            dma_buf: None,
+            display_width: 0,
+            display_height: 0,
+            num_scanouts: 0,
+            next_resource_id: 1,
+            scanout_resource_id: 0,
+            backing_buffer: None,
+            backing_phys: 0,
+            initialized: false,
+            has_3d: false,
+            back_resource_id: 0,
+            back_buffer: None,
+            back_phys: 0,
+            double_buffer_enabled: false,
+            front_is_a: true,
         }
     }
     
-    fn jev(ba: &S, kcc: u8, l: u32, go: u32) -> Result<No, &'static str> {
-        let kbx = ba.cje(kcc as usize)
+    fn etu(s: &L, agc: u8, offset: u32, length: u32) -> Result<Fv, &'static str> {
+        let fib = s.bar_address(agc as usize)
             .ok_or("BAR not configured")?;
-        if !ba.mxx(kcc as usize) {
+        if !s.bar_is_memory(agc as usize) {
             return Err("Expected memory BAR, got I/O");
         }
-        let ht = kbx + l as u64;
-        let ju = memory::bki(ht, go.am(4096) as usize)?;
+        let phys = fib + offset as u64;
+        let virt = memory::yv(phys, length.max(4096) as usize)?;
         crate::serial_println!("[VIRTIO-GPU] Mapped BAR{}: phys={:#X} virt={:#X} len={}", 
-            kcc, ht, ju, go);
-        Ok(No { ar: ju as *mut u8, jxx: go })
+            agc, phys, virt, length);
+        Ok(Fv { base: virt as *mut u8, _len: length })
     }
     
     
-    pub fn init(&mut self, ba: S) -> Result<(), &'static str> {
+    pub fn init(&mut self, s: L) -> Result<(), &'static str> {
         crate::serial_println!("[VIRTIO-GPU] === Initializing VirtIO GPU ===");
         crate::serial_println!("[VIRTIO-GPU] PCI {:02X}:{:02X}.{} vid={:#06X} did={:#06X}",
-            ba.aq, ba.de, ba.gw, ba.ml, ba.mx);
+            s.bus, s.device, s.function, s.vendor_id, s.device_id);
         
-        pci::fhp(&ba);
-        pci::fhq(&ba);
+        pci::bzi(&s);
+        pci::bzj(&s);
         
         
-        let dr = pci::stp(&ba);
-        if dr.is_empty() {
+        let caps = pci::lwc(&s);
+        if caps.is_empty() {
             return Err("No VirtIO capabilities found");
         }
         
-        crate::serial_println!("[VIRTIO-GPU] Found {} VirtIO capabilities", dr.len());
+        crate::serial_println!("[VIRTIO-GPU] Found {} VirtIO capabilities", caps.len());
         
-        let mut loy: u8 = 0;
+        let mut gjs: u8 = 0;
         
-        for &(aqv, ind, bar, l, go) in &dr {
-            let j = match ind {
+        for &(wa, ehn, bar, offset, length) in &caps {
+            let name = match ehn {
                 1 => "COMMON", 2 => "NOTIFY", 3 => "ISR", 4 => "DEVICE", 5 => "PCI", _ => "?",
             };
             crate::serial_println!("[VIRTIO-GPU]   cap@{:#X}: {} BAR{} off={:#X} len={}", 
-                aqv, j, bar, l, go);
+                wa, name, bar, offset, length);
             
-            match ind {
-                virtio_cap::AOU_ => {
-                    self.common_cfg = Some(Self::jev(&ba, bar, l, go)?);
+            match ehn {
+                virtio_cap::AQU_ => {
+                    self.common_cfg = Some(Self::etu(&s, bar, offset, length)?);
                 }
-                virtio_cap::BBO_ => {
-                    self.fpe = Some(Self::jev(&ba, bar, l, go)?);
-                    loy = aqv;
+                virtio_cap::BDR_ => {
+                    self.notify_cfg = Some(Self::etu(&s, bar, offset, length)?);
+                    gjs = wa;
                 }
-                virtio_cap::AXK_ => {
-                    self.msk = Some(Self::jev(&ba, bar, l, go)?);
+                virtio_cap::AZL_ => {
+                    self._isr_cfg = Some(Self::etu(&s, bar, offset, length)?);
                 }
-                virtio_cap::AQA_ => {
-                    self.ira = Some(Self::jev(&ba, bar, l, go)?);
+                virtio_cap::ASD_ => {
+                    self.device_cfg = Some(Self::etu(&s, bar, offset, length)?);
                 }
                 _ => {}
             }
@@ -744,454 +744,454 @@ impl VirtioGpu {
         
         
         if self.common_cfg.is_none() { return Err("Missing COMMON_CFG"); }
-        if self.fpe.is_none() { return Err("Missing NOTIFY_CFG"); }
-        if self.ira.is_none() { return Err("Missing DEVICE_CFG"); }
+        if self.notify_cfg.is_none() { return Err("Missing NOTIFY_CFG"); }
+        if self.device_cfg.is_none() { return Err("Missing DEVICE_CFG"); }
         
-        if loy > 0 {
-            self.msq = pci::vsd(&ba, loy);
+        if gjs > 0 {
+            self._notify_off_multiplier = pci::ocv(&s, gjs);
         }
         
         
         
         
         
-        self.gdc(common_cfg::EF_, 0);
-        for _ in 0..10000 { core::hint::hc(); }
+        self.common_write8(common_cfg::ES_, 0);
+        for _ in 0..10000 { core::hint::spin_loop(); }
         
         
-        self.gdc(common_cfg::EF_, dev_status::Or);
+        self.common_write8(common_cfg::ES_, dev_status::Gf);
         
         
-        self.gdc(common_cfg::EF_, dev_status::Or | dev_status::Fl);
+        self.common_write8(common_cfg::ES_, dev_status::Gf | dev_status::Cl);
         
         
-        self.gdb(common_cfg::AQC_, 0);
-        let sro = self.nfc(common_cfg::AQB_);
-        self.gdb(common_cfg::AQC_, 1);
-        let srn = self.nfc(common_cfg::AQB_);
-        let bju = (sro as u64) | ((srn as u64) << 32);
+        self.common_write32(common_cfg::ASF_, 0);
+        let luu = self.common_read32(common_cfg::ASE_);
+        self.common_write32(common_cfg::ASF_, 1);
+        let lut = self.common_read32(common_cfg::ASE_);
+        let device_features = (luu as u64) | ((lut as u64) << 32);
         
-        crate::serial_println!("[VIRTIO-GPU] Device features: {:#018X}", bju);
-        self.ecl = bju & features::DBW_ != 0;
+        crate::serial_println!("[VIRTIO-GPU] Device features: {:#018X}", device_features);
+        self.has_3d = device_features & features::DFR_ != 0;
         
-        let mut ckb = features::DAU_;
-        if bju & features::BIL_ != 0 {
-            ckb |= features::BIL_;
+        let mut driver_features = features::DEM_;
+        if device_features & features::BKS_ != 0 {
+            driver_features |= features::BKS_;
         }
         
-        self.gdb(common_cfg::AQR_, 0);
-        self.gdb(common_cfg::AQQ_, ckb as u32);
-        self.gdb(common_cfg::AQR_, 1);
-        self.gdb(common_cfg::AQQ_, (ckb >> 32) as u32);
+        self.common_write32(common_cfg::ASU_, 0);
+        self.common_write32(common_cfg::AST_, driver_features as u32);
+        self.common_write32(common_cfg::ASU_, 1);
+        self.common_write32(common_cfg::AST_, (driver_features >> 32) as u32);
         
         
-        self.gdc(common_cfg::EF_,
-            dev_status::Or | dev_status::Fl | dev_status::MZ_);
+        self.common_write8(common_cfg::ES_,
+            dev_status::Gf | dev_status::Cl | dev_status::NY_);
         
-        let status = self.rmu(common_cfg::EF_);
-        if status & dev_status::MZ_ == 0 {
-            self.gdc(common_cfg::EF_, dev_status::Arw);
+        let status = self.common_read8(common_cfg::ES_);
+        if status & dev_status::NY_ == 0 {
+            self.common_write8(common_cfg::ES_, dev_status::Sa);
             return Err("Device rejected features");
         }
-        crate::serial_println!("[VIRTIO-GPU] Features OK (3D={})", self.ecl);
+        crate::serial_println!("[VIRTIO-GPU] Features OK (3D={})", self.has_3d);
         
         
-        self.wkk()?;
+        self.setup_controlq()?;
         
         
-        self.gdc(common_cfg::EF_,
-            dev_status::Or | dev_status::Fl | dev_status::MZ_ | dev_status::HW_);
+        self.common_write8(common_cfg::ES_,
+            dev_status::Gf | dev_status::Cl | dev_status::NY_ | dev_status::IQ_);
         crate::serial_println!("[VIRTIO-GPU] DRIVER_OK set");
         
         
-        self.alb = Some(DmaCommandBuffer::new(8192)?);
+        self.dma_buf = Some(DmaCommandBuffer::new(8192)?);
         
         
-        self.lpm = self.nlc(gpu_cfg::CID_);
-        let uwe = self.nlc(gpu_cfg::CIA_);
-        crate::serial_println!("[VIRTIO-GPU] scanouts={} capsets={}", self.lpm, uwe);
+        self.num_scanouts = self.device_read32(gpu_cfg::CLM_);
+        let nlr = self.device_read32(gpu_cfg::CLJ_);
+        crate::serial_println!("[VIRTIO-GPU] scanouts={} capsets={}", self.num_scanouts, nlr);
         
         
-        self.tdk()?;
+        self.get_display_info()?;
         
-        self.mst = Some(ba);
-        self.jr = true;
+        self._pci_dev = Some(s);
+        self.initialized = true;
         
         crate::serial_println!("[VIRTIO-GPU] === Init complete: {}x{} ===", 
-            self.bjv, self.bqf);
+            self.display_width, self.display_height);
         Ok(())
     }
     
     
-    fn gdc(&self, l: u32, ap: u8) {
-        if let Some(r) = &self.common_cfg { r.akw(l, ap); }
+    fn common_write8(&self, offset: u32, val: u8) {
+        if let Some(c) = &self.common_cfg { c.write8(offset, val); }
     }
-    fn yjq(&self, l: u32, ap: u16) {
-        if let Some(r) = &self.common_cfg { r.asg(l, ap); }
+    fn qay(&self, offset: u32, val: u16) {
+        if let Some(c) = &self.common_cfg { c.write16(offset, val); }
     }
-    fn gdb(&self, l: u32, ap: u32) {
-        if let Some(r) = &self.common_cfg { r.aiu(l, ap); }
+    fn common_write32(&self, offset: u32, val: u32) {
+        if let Some(c) = &self.common_cfg { c.write32(offset, val); }
     }
-    fn rmu(&self, l: u32) -> u8 {
-        self.common_cfg.as_ref().map(|r| r.akm(l)).unwrap_or(0)
+    fn common_read8(&self, offset: u32) -> u8 {
+        self.common_cfg.as_ref().map(|c| c.read8(offset)).unwrap_or(0)
     }
-    fn yjp(&self, l: u32) -> u16 {
-        self.common_cfg.as_ref().map(|r| r.aym(l)).unwrap_or(0)
+    fn qax(&self, offset: u32) -> u16 {
+        self.common_cfg.as_ref().map(|c| c.read16(offset)).unwrap_or(0)
     }
-    fn nfc(&self, l: u32) -> u32 {
-        self.common_cfg.as_ref().map(|r| r.amp(l)).unwrap_or(0)
+    fn common_read32(&self, offset: u32) -> u32 {
+        self.common_cfg.as_ref().map(|c| c.read32(offset)).unwrap_or(0)
     }
-    fn nlc(&self, l: u32) -> u32 {
-        self.ira.as_ref().map(|r| r.amp(l)).unwrap_or(0)
+    fn device_read32(&self, offset: u32) -> u32 {
+        self.device_cfg.as_ref().map(|c| c.read32(offset)).unwrap_or(0)
     }
     
-    fn wkk(&mut self) -> Result<(), &'static str> {
-        let dzq = self.common_cfg.as_ref().ok_or("Missing COMMON_CFG")?;
-        dzq.asg(common_cfg::AGU_, 0);
-        let ate = dzq.aym(common_cfg::WM_);
-        crate::serial_println!("[VIRTIO-GPU] controlq max_size={}", ate);
-        if ate == 0 { return Err("controlq not available"); }
+    fn setup_controlq(&mut self) -> Result<(), &'static str> {
+        let brb = self.common_cfg.as_ref().ok_or("Missing COMMON_CFG")?;
+        brb.write16(common_cfg::AIO_, 0);
+        let max_size = brb.read16(common_cfg::XV_);
+        crate::serial_println!("[VIRTIO-GPU] controlq max_size={}", max_size);
+        if max_size == 0 { return Err("controlq not available"); }
         
-        let art = ate.v(64);
-        dzq.asg(common_cfg::WM_, art);
+        let queue_size = max_size.min(64);
+        brb.write16(common_cfg::XV_, queue_size);
         
-        let jwa = GpuVirtqueue::new(art)?;
+        let fer = GpuVirtqueue::new(queue_size)?;
         
-        dzq.jxe(common_cfg::CMW_, jwa.rwb());
-        dzq.jxe(common_cfg::CMY_, jwa.qlp());
-        dzq.jxe(common_cfg::CMX_, jwa.xps());
-        dzq.asg(common_cfg::CNA_, 0xFFFF);
-        dzq.asg(common_cfg::CMZ_, 1);
+        brb.write64(common_cfg::CQF_, fer.desc_phys());
+        brb.write64(common_cfg::CQH_, fer.avail_phys());
+        brb.write64(common_cfg::CQG_, fer.used_phys());
+        brb.write16(common_cfg::CQJ_, 0xFFFF);
+        brb.write16(common_cfg::CQI_, 1);
         
-        let ybm = dzq.aym(common_cfg::CNC_);
+        let pxd = brb.read16(common_cfg::CQL_);
         
-        self.wy = Some(jwa);
-        crate::serial_println!("[VIRTIO-GPU] controlq ready (size={})", art);
+        self.controlq = Some(fer);
+        crate::serial_println!("[VIRTIO-GPU] controlq ready (size={})", queue_size);
         Ok(())
     }
     
-    fn zdy(&self) {
-        if let Some(djy) = &self.fpe {
-            djy.asg(0, 0);
+    fn qps(&self) {
+        if let Some(bif) = &self.notify_cfg {
+            bif.write16(0, 0);
         }
     }
     
     
-    fn dvn(&mut self, rfu: u32, pct: usize, vxz: u32) -> Result<u32, &'static str> {
+    fn send_command(&mut self, cmd_len: u32, resp_offset: usize, resp_len: u32) -> Result<u32, &'static str> {
         
-        let nme = self.alb.as_ref().ok_or("DMA not ready")?.ht;
+        let hsv = self.dma_buf.as_ref().ok_or("DMA not ready")?.phys;
         
-        let wy = self.wy.as_mut().ok_or("controlq not ready")?;
+        let controlq = self.controlq.as_mut().ok_or("controlq not ready")?;
         
-        let iqj = wy.blx().ok_or("No free desc (cmd)")?;
-        let iql = wy.blx().ok_or("No free desc (resp)")?;
+        let ejs = controlq.alloc_desc().ok_or("No free desc (cmd)")?;
+        let eju = controlq.alloc_desc().ok_or("No free desc (resp)")?;
         
-        wy.bwz(iqj, nme, rfu, QP_, iql);
-        wy.bwz(iql, nme + pct as u64, vxz, QQ_, 0);
+        controlq.set_desc(ejs, hsv, cmd_len, RJ_, eju);
+        controlq.set_desc(eju, hsv + resp_offset as u64, resp_len, RK_, 0);
         
-        wy.dmd(iqj);
+        controlq.submit(ejs);
         
-        if let Some(djy) = &self.fpe {
-            djy.asg(0, 0);
+        if let Some(bif) = &self.notify_cfg {
+            bif.write16(0, 0);
         }
         
-        let mut aah = 5_000_000u32;
+        let mut mz = 5_000_000u32;
         loop {
-            if let Some(_) = wy.lur() { break; }
-            aah -= 1;
-            if aah == 0 {
-                wy.ald(iql);
-                wy.ald(iqj);
+            if let Some(_) = controlq.poll_used() { break; }
+            mz -= 1;
+            if mz == 0 {
+                controlq.free_desc(eju);
+                controlq.free_desc(ejs);
                 return Err("Command timeout");
             }
-            core::hint::hc();
+            core::hint::spin_loop();
         }
         
-        let dma = self.alb.as_ref().unwrap();
-        let gqw = unsafe { dma.read_at::<Ar>(pct) }.btv;
-        wy.ald(iql);
-        wy.ald(iqj);
-        Ok(gqw)
+        let dma = self.dma_buf.as_ref().ok_or("DMA buffer not initialized")?;
+        let ddm = unsafe { dma.read_at::<Ac>(resp_offset) }.ctrl_type;
+        controlq.free_desc(eju);
+        controlq.free_desc(ejs);
+        Ok(ddm)
     }
     
-    fn tdk(&mut self) -> Result<(), &'static str> {
-        let dma = self.alb.as_ref().ok_or("DMA not ready")?;
+    fn get_display_info(&mut self) -> Result<(), &'static str> {
+        let dma = self.dma_buf.as_ref().ok_or("DMA not ready")?;
         
-        let cmd = Ar {
-            btv: GpuCtrlType::Bzs as u32,
+        let cmd = Ac {
+            ctrl_type: GpuCtrlType::CmdGetDisplayInfo as u32,
             ..Default::default()
         };
-        unsafe { dma.ciu(0, &cmd); }
+        unsafe { dma.write_at(0, &cmd); }
         
-        let gqw = self.dvn(
-            core::mem::size_of::<Ar>() as u32,
+        let ddm = self.send_command(
+            core::mem::size_of::<Ac>() as u32,
             512, 
-            core::mem::size_of::<Bif>() as u32,
+            core::mem::size_of::<Zl>() as u32,
         )?;
         
-        if gqw != GpuCtrlType::Ckq as u32 {
-            crate::serial_println!("[VIRTIO-GPU] GET_DISPLAY_INFO failed: {:#X}", gqw);
+        if ddm != GpuCtrlType::RespOkDisplayInfo as u32 {
+            crate::serial_println!("[VIRTIO-GPU] GET_DISPLAY_INFO failed: {:#X}", ddm);
             return Err("GET_DISPLAY_INFO failed");
         }
         
-        let dma = self.alb.as_ref().unwrap();
-        let lj: Bif = unsafe { dma.read_at(512) };
+        let dma = self.dma_buf.as_ref().ok_or("DMA buffer not initialized")?;
+        let eo: Zl = unsafe { dma.read_at(512) };
         
-        for (a, hvj) in lj.vjp.iter().cf() {
-            if hvj.iq != 0 {
-                self.bjv = hvj.m.z;
-                self.bqf = hvj.m.ac;
-                crate::serial_println!("[VIRTIO-GPU] Display {}: {}x{}", a, hvj.m.z, hvj.m.ac);
+        for (i, pm) in eo.pmodes.iter().enumerate() {
+            if pm.enabled != 0 {
+                self.display_width = pm.r.width;
+                self.display_height = pm.r.height;
+                crate::serial_println!("[VIRTIO-GPU] Display {}: {}x{}", i, pm.r.width, pm.r.height);
                 break;
             }
         }
         
-        if self.bjv == 0 {
-            self.bjv = 1280;
-            self.bqf = 800;
-            crate::serial_println!("[VIRTIO-GPU] Defaulting to {}x{}", self.bjv, self.bqf);
+        if self.display_width == 0 {
+            self.display_width = 1280;
+            self.display_height = 800;
+            crate::serial_println!("[VIRTIO-GPU] Defaulting to {}x{}", self.display_width, self.display_height);
         }
         Ok(())
     }
     
-    pub fn nhg(&mut self, z: u32, ac: u32) -> Result<u32, &'static str> {
-        let ad = self.loo;
-        self.loo += 1;
-        let dma = self.alb.as_ref().ok_or("DMA not ready")?;
+    pub fn create_resource_2d(&mut self, width: u32, height: u32) -> Result<u32, &'static str> {
+        let id = self.next_resource_id;
+        self.next_resource_id += 1;
+        let dma = self.dma_buf.as_ref().ok_or("DMA not ready")?;
         
-        let cmd = Bie {
-            zj: Ar { btv: GpuCtrlType::Bzu as u32, ..Default::default() },
-            awu: ad,
-            format: GpuFormat::Byc as u32,
-            z,
-            ac,
+        let cmd = Zk {
+            kp: Ac { ctrl_type: GpuCtrlType::CmdResourceCreate2d as u32, ..Default::default() },
+            zj: id,
+            format: GpuFormat::B8G8R8X8Unorm as u32,
+            width,
+            height,
         };
-        unsafe { dma.ciu(0, &cmd); }
+        unsafe { dma.write_at(0, &cmd); }
         
-        let lj = self.dvn(
-            core::mem::size_of::<Bie>() as u32,
-            512, core::mem::size_of::<Ar>() as u32,
+        let eo = self.send_command(
+            core::mem::size_of::<Zk>() as u32,
+            512, core::mem::size_of::<Ac>() as u32,
         )?;
         
-        if lj != GpuCtrlType::Mg as u32 {
+        if eo != GpuCtrlType::RespOkNodata as u32 {
             return Err("RESOURCE_CREATE_2D failed");
         }
-        crate::serial_println!("[VIRTIO-GPU] Resource {} created ({}x{})", ad, z, ac);
-        Ok(ad)
+        crate::serial_println!("[VIRTIO-GPU] Resource {} created ({}x{})", id, width, height);
+        Ok(id)
     }
     
-    pub fn mwm(&mut self, awu: u32, rg: u64, bjl: u32) -> Result<(), &'static str> {
-        let dma = self.alb.as_ref().ok_or("DMA not ready")?;
+    pub fn attach_backing(&mut self, zj: u32, hg: u64, buf_len: u32) -> Result<(), &'static str> {
+        let dma = self.dma_buf.as_ref().ok_or("DMA not ready")?;
         
-        let cmd = Atf {
-            zj: Ar { btv: GpuCtrlType::Bzt as u32, ..Default::default() },
-            awu,
-            uvv: 1,
+        let cmd = Sr {
+            kp: Ac { ctrl_type: GpuCtrlType::CmdResourceAttachBacking as u32, ..Default::default() },
+            zj,
+            nr_entries: 1,
         };
-        unsafe { dma.ciu(0, &cmd); }
+        unsafe { dma.write_at(0, &cmd); }
         
-        let bt = Bid { ag: rg, go: bjl, ob: 0 };
-        unsafe { dma.ciu(core::mem::size_of::<Atf>(), &bt); }
+        let entry = Zj { addr: hg, length: buf_len, padding: 0 };
+        unsafe { dma.write_at(core::mem::size_of::<Sr>(), &entry); }
         
-        let kjf = (core::mem::size_of::<Atf>() + core::mem::size_of::<Bid>()) as u32;
-        let lj = self.dvn(kjf, 512, core::mem::size_of::<Ar>() as u32)?;
+        let fnd = (core::mem::size_of::<Sr>() + core::mem::size_of::<Zj>()) as u32;
+        let eo = self.send_command(fnd, 512, core::mem::size_of::<Ac>() as u32)?;
         
-        if lj != GpuCtrlType::Mg as u32 {
+        if eo != GpuCtrlType::RespOkNodata as u32 {
             return Err("ATTACH_BACKING failed");
         }
-        crate::serial_println!("[VIRTIO-GPU] Backing attached: phys={:#X} len={}", rg, bjl);
+        crate::serial_println!("[VIRTIO-GPU] Backing attached: phys={:#X} len={}", hg, buf_len);
         Ok(())
     }
     
-    pub fn mew(&mut self, mcj: u32, awu: u32, d: u32, i: u32) -> Result<(), &'static str> {
-        let dma = self.alb.as_ref().ok_or("DMA not ready")?;
-        let cmd = Big {
-            zj: Ar { btv: GpuCtrlType::Bzv as u32, ..Default::default() },
-            m: Ko { b: 0, c: 0, z: d, ac: i },
-            mcj,
-            awu,
+    pub fn set_scanout(&mut self, scanout_id: u32, zj: u32, w: u32, h: u32) -> Result<(), &'static str> {
+        let dma = self.dma_buf.as_ref().ok_or("DMA not ready")?;
+        let cmd = Zm {
+            kp: Ac { ctrl_type: GpuCtrlType::CmdSetScanout as u32, ..Default::default() },
+            r: Eh { x: 0, y: 0, width: w, height: h },
+            scanout_id,
+            zj,
         };
-        unsafe { dma.ciu(0, &cmd); }
+        unsafe { dma.write_at(0, &cmd); }
         
-        let lj = self.dvn(
-            core::mem::size_of::<Big>() as u32,
-            512, core::mem::size_of::<Ar>() as u32,
+        let eo = self.send_command(
+            core::mem::size_of::<Zm>() as u32,
+            512, core::mem::size_of::<Ac>() as u32,
         )?;
         
-        if lj != GpuCtrlType::Mg as u32 { return Err("SET_SCANOUT failed"); }
-        self.eyb = awu;
-        crate::serial_println!("[VIRTIO-GPU] Scanout {} -> resource {} ({}x{})", mcj, awu, d, i);
+        if eo != GpuCtrlType::RespOkNodata as u32 { return Err("SET_SCANOUT failed"); }
+        self.scanout_resource_id = zj;
+        crate::serial_println!("[VIRTIO-GPU] Scanout {} -> resource {} ({}x{})", scanout_id, zj, w, h);
         Ok(())
     }
     
-    pub fn zto(&mut self, awu: u32, d: u32, i: u32) -> Result<(), &'static str> {
-        let dma = self.alb.as_ref().ok_or("DMA not ready")?;
-        let cmd = Ww {
-            zj: Ar { btv: GpuCtrlType::Aqb as u32, ..Default::default() },
-            m: Ko { b: 0, c: 0, z: d, ac: i },
-            l: 0,
-            awu,
-            ob: 0,
+    pub fn raw(&mut self, zj: u32, w: u32, h: u32) -> Result<(), &'static str> {
+        let dma = self.dma_buf.as_ref().ok_or("DMA not ready")?;
+        let cmd = Jw {
+            kp: Ac { ctrl_type: GpuCtrlType::CmdTransferToHost2d as u32, ..Default::default() },
+            r: Eh { x: 0, y: 0, width: w, height: h },
+            offset: 0,
+            zj,
+            padding: 0,
         };
-        unsafe { dma.ciu(0, &cmd); }
+        unsafe { dma.write_at(0, &cmd); }
         
-        let lj = self.dvn(
-            core::mem::size_of::<Ww>() as u32,
-            512, core::mem::size_of::<Ar>() as u32,
+        let eo = self.send_command(
+            core::mem::size_of::<Jw>() as u32,
+            512, core::mem::size_of::<Ac>() as u32,
         )?;
-        if lj != GpuCtrlType::Mg as u32 { return Err("TRANSFER failed"); }
+        if eo != GpuCtrlType::RespOkNodata as u32 { return Err("TRANSFER failed"); }
         Ok(())
     }
     
-    pub fn yrc(&mut self, awu: u32, d: u32, i: u32) -> Result<(), &'static str> {
-        let dma = self.alb.as_ref().ok_or("DMA not ready")?;
-        let cmd = Wv {
-            zj: Ar { btv: GpuCtrlType::Aqa as u32, ..Default::default() },
-            m: Ko { b: 0, c: 0, z: d, ac: i },
-            awu,
-            ob: 0,
+    pub fn qfz(&mut self, zj: u32, w: u32, h: u32) -> Result<(), &'static str> {
+        let dma = self.dma_buf.as_ref().ok_or("DMA not ready")?;
+        let cmd = Jv {
+            kp: Ac { ctrl_type: GpuCtrlType::CmdResourceFlush as u32, ..Default::default() },
+            r: Eh { x: 0, y: 0, width: w, height: h },
+            zj,
+            padding: 0,
         };
-        unsafe { dma.ciu(0, &cmd); }
+        unsafe { dma.write_at(0, &cmd); }
         
-        let lj = self.dvn(
-            core::mem::size_of::<Wv>() as u32,
-            512, core::mem::size_of::<Ar>() as u32,
+        let eo = self.send_command(
+            core::mem::size_of::<Jv>() as u32,
+            512, core::mem::size_of::<Ac>() as u32,
         )?;
-        if lj != GpuCtrlType::Mg as u32 { return Err("FLUSH failed"); }
+        if eo != GpuCtrlType::RespOkNodata as u32 { return Err("FLUSH failed"); }
         Ok(())
     }
     
     
     
-    pub fn wlj(&mut self) -> Result<(), &'static str> {
-        if !self.jr { return Err("GPU not initialized"); }
+    pub fn setup_scanout(&mut self) -> Result<(), &'static str> {
+        if !self.initialized { return Err("GPU not initialized"); }
         
         
-        let (gz, kc) = crate::framebuffer::yn();
-        if gz > 0 && kc > 0 {
+        let (fb_w, fb_h) = crate::framebuffer::kv();
+        if fb_w > 0 && fb_h > 0 {
             crate::serial_println!("[VIRTIO-GPU] Using framebuffer dimensions: {}x{} (display was {}x{})",
-                gz, kc, self.bjv, self.bqf);
-            self.bjv = gz;
-            self.bqf = kc;
+                fb_w, fb_h, self.display_width, self.display_height);
+            self.display_width = fb_w;
+            self.display_height = fb_h;
         }
         
-        let d = self.bjv;
-        let i = self.bqf;
-        crate::serial_println!("[VIRTIO-GPU] Setting up scanout {}x{}", d, i);
+        let w = self.display_width;
+        let h = self.display_height;
+        crate::serial_println!("[VIRTIO-GPU] Setting up scanout {}x{}", w, h);
         
-        let awu = self.nhg(d, i)?;
+        let zj = self.create_resource_2d(w, h)?;
         
         
-        let dzh = (d * i) as usize;
-        let hbr = dzh * 4;
+        let ate = (w * h) as usize;
+        let djy = ate * 4;
         
         use alloc::alloc::{alloc_zeroed, Layout};
-        let layout = Layout::bjy(hbr, 4096).jd(|_| "Layout error")?;
+        let layout = Layout::from_size_align(djy, 4096).map_err(|_| "Layout error")?;
         let ptr = unsafe { alloc_zeroed(layout) };
-        if ptr.abq() { return Err("Backing buffer allocation failed"); }
+        if ptr.is_null() { return Err("Backing buffer allocation failed"); }
         
-        let ju = ptr as u64;
-        let hp = memory::lr();
-        let ht = if ju >= hp { ju - hp } else { ju };
+        let virt = ptr as u64;
+        let bz = memory::hhdm_offset();
+        let phys = if virt >= bz { virt - bz } else { virt };
         
-        let bi = unsafe {
-            let slice = core::slice::bef(ptr as *mut u32, dzh);
-            Box::nwh(slice as *mut [u32])
+        let buffer = unsafe {
+            let slice = core::slice::from_raw_parts_mut(ptr as *mut u32, ate);
+            Box::from_raw(slice as *mut [u32])
         };
         
-        self.fcx = Some(bi);
-        self.mxo = ht;
+        self.backing_buffer = Some(buffer);
+        self.backing_phys = phys;
         
-        self.mwm(awu, ht, hbr as u32)?;
-        self.mew(0, awu, d, i)?;
+        self.attach_backing(zj, phys, djy as u32)?;
+        self.set_scanout(0, zj, w, h)?;
         
-        crate::serial_println!("[VIRTIO-GPU] Scanout ready! phys={:#X}", ht);
+        crate::serial_println!("[VIRTIO-GPU] Scanout ready! phys={:#X}", phys);
         Ok(())
     }
     
     
     
     
-    pub fn wkp(&mut self) -> Result<(), &'static str> {
-        if !self.jr { return Err("GPU not initialized"); }
-        if self.eyb == 0 { return Err("No primary scanout"); }
+    pub fn setup_double_buffer(&mut self) -> Result<(), &'static str> {
+        if !self.initialized { return Err("GPU not initialized"); }
+        if self.scanout_resource_id == 0 { return Err("No primary scanout"); }
         
-        let d = self.bjv;
-        let i = self.bqf;
-        
-        
-        let kbr = self.nhg(d, i)?;
+        let w = self.display_width;
+        let h = self.display_height;
         
         
-        let dzh = (d * i) as usize;
-        let hbr = dzh * 4;
+        let fhx = self.create_resource_2d(w, h)?;
+        
+        
+        let ate = (w * h) as usize;
+        let djy = ate * 4;
         
         use alloc::alloc::{alloc_zeroed, Layout};
-        let layout = Layout::bjy(hbr, 4096)
-            .jd(|_| "Layout error")?;
+        let layout = Layout::from_size_align(djy, 4096)
+            .map_err(|_| "Layout error")?;
         let ptr = unsafe { alloc_zeroed(layout) };
-        if ptr.abq() { return Err("Back buffer allocation failed"); }
+        if ptr.is_null() { return Err("Back buffer allocation failed"); }
         
-        let ju = ptr as u64;
-        let hp = memory::lr();
-        let ht = if ju >= hp { ju - hp } else { ju };
+        let virt = ptr as u64;
+        let bz = memory::hhdm_offset();
+        let phys = if virt >= bz { virt - bz } else { virt };
         
-        let bi = unsafe {
-            let slice = core::slice::bef(ptr as *mut u32, dzh);
-            Box::nwh(slice as *mut [u32])
+        let buffer = unsafe {
+            let slice = core::slice::from_raw_parts_mut(ptr as *mut u32, ate);
+            Box::from_raw(slice as *mut [u32])
         };
         
-        self.mwm(kbr, ht, hbr as u32)?;
+        self.attach_backing(fhx, phys, djy as u32)?;
         
-        self.kbs = kbr;
-        self.aqt = Some(bi);
-        self.mxk = ht;
-        self.hgq = true;
-        self.ghp = true;
+        self.back_resource_id = fhx;
+        self.back_buffer = Some(buffer);
+        self.back_phys = phys;
+        self.double_buffer_enabled = true;
+        self.front_is_a = true;
         
         crate::serial_println!("[VIRTIO-GPU] Double buffer enabled: resource A={}, B={}", 
-            self.eyb, kbr);
+            self.scanout_resource_id, fhx);
         Ok(())
     }
     
     
-    pub fn wwk(&mut self) -> Result<(), &'static str> {
-        if !self.hgq { return Ok(()); }
+    pub fn swap_gpu_buffers(&mut self) -> Result<(), &'static str> {
+        if !self.double_buffer_enabled { return Ok(()); }
         
-        let (d, i) = (self.bjv, self.bqf);
+        let (w, h) = (self.display_width, self.display_height);
         
-        if self.ghp {
+        if self.front_is_a {
             
-            self.mew(0, self.kbs, d, i)?;
+            self.set_scanout(0, self.back_resource_id, w, h)?;
         } else {
             
-            self.mew(0, self.eyb, d, i)?;
+            self.set_scanout(0, self.scanout_resource_id, w, h)?;
         }
         
-        self.ghp = !self.ghp;
+        self.front_is_a = !self.front_is_a;
         Ok(())
     }
     
     
-    pub fn kyi(&mut self) -> Option<&mut [u32]> {
-        if !self.hgq {
-            return self.fcx.gza();
+    pub fn get_back_buffer(&mut self) -> Option<&mut [u32]> {
+        if !self.double_buffer_enabled {
+            return self.backing_buffer.as_deref_mut();
         }
-        if self.ghp {
+        if self.front_is_a {
             
-            self.aqt.gza()
+            self.back_buffer.as_deref_mut()
         } else {
             
-            self.fcx.gza()
+            self.backing_buffer.as_deref_mut()
         }
     }
     
-    pub fn ysp(&mut self) -> Option<&mut [u32]> {
-        self.fcx.gza()
+    pub fn qhe(&mut self) -> Option<&mut [u32]> {
+        self.backing_buffer.as_deref_mut()
     }
     
-    pub fn yn(&self) -> (u32, u32) {
-        (self.bjv, self.bqf)
+    pub fn kv(&self) -> (u32, u32) {
+        (self.display_width, self.display_height)
     }
     
     
@@ -1199,94 +1199,94 @@ impl VirtioGpu {
     
     
     
-    pub fn brs(&mut self) -> Result<(), &'static str> {
-        let ehs = self.eyb;
-        if ehs == 0 { return Err("No scanout"); }
-        let (d, i) = (self.bjv, self.bqf);
+    pub fn present(&mut self) -> Result<(), &'static str> {
+        let bvl = self.scanout_resource_id;
+        if bvl == 0 { return Err("No scanout"); }
+        let (w, h) = (self.display_width, self.display_height);
         
-        let dma = self.alb.as_ref().ok_or("DMA not ready")?;
-        let bua = dma.ht;
+        let dma = self.dma_buf.as_ref().ok_or("DMA not ready")?;
+        let ali = dma.phys;
         
         
-        let mms = Ww {
-            zj: Ar { btv: GpuCtrlType::Aqb as u32, ..Default::default() },
-            m: Ko { b: 0, c: 0, z: d, ac: i },
-            l: 0,
-            awu: ehs,
-            ob: 0,
+        let gzw = Jw {
+            kp: Ac { ctrl_type: GpuCtrlType::CmdTransferToHost2d as u32, ..Default::default() },
+            r: Eh { x: 0, y: 0, width: w, height: h },
+            offset: 0,
+            zj: bvl,
+            padding: 0,
         };
-        unsafe { dma.ciu(0, &mms); }
+        unsafe { dma.write_at(0, &gzw); }
         
         
-        let hjz = Wv {
-            zj: Ar { btv: GpuCtrlType::Aqa as u32, ..Default::default() },
-            m: Ko { b: 0, c: 0, z: d, ac: i },
-            awu: ehs,
-            ob: 0,
+        let dpz = Jv {
+            kp: Ac { ctrl_type: GpuCtrlType::CmdResourceFlush as u32, ..Default::default() },
+            r: Eh { x: 0, y: 0, width: w, height: h },
+            zj: bvl,
+            padding: 0,
         };
-        unsafe { dma.ciu(256, &hjz); }
+        unsafe { dma.write_at(256, &dpz); }
         
-        let mmu = core::mem::size_of::<Ww>() as u32;
-        let kwp = core::mem::size_of::<Wv>() as u32;
-        let fst = core::mem::size_of::<Ar>() as u32;
+        let gzy = core::mem::size_of::<Jw>() as u32;
+        let fxg = core::mem::size_of::<Jv>() as u32;
+        let cph = core::mem::size_of::<Ac>() as u32;
         
-        let wy = self.wy.as_mut().ok_or("controlq not ready")?;
-        
-        
-        let cdx = wy.blx().ok_or("No free desc")?;
-        let apo = wy.blx().ok_or("No free desc")?;
-        let us = wy.blx().ok_or("No free desc")?;
-        let cdy = wy.blx().ok_or("No free desc")?;
+        let controlq = self.controlq.as_mut().ok_or("controlq not ready")?;
         
         
-        wy.bwz(cdx, bua, mmu, QP_, apo);
-        wy.bwz(apo, bua + 512, fst, QQ_, 0);
+        let aqd = controlq.alloc_desc().ok_or("No free desc")?;
+        let vh = controlq.alloc_desc().ok_or("No free desc")?;
+        let jq = controlq.alloc_desc().ok_or("No free desc")?;
+        let aqe = controlq.alloc_desc().ok_or("No free desc")?;
         
         
-        wy.bwz(us, bua + 256, kwp, QP_, cdy);
-        wy.bwz(cdy, bua + 768, fst, QQ_, 0);
+        controlq.set_desc(aqd, ali, gzy, RJ_, vh);
+        controlq.set_desc(vh, ali + 512, cph, RK_, 0);
         
         
-        wy.dmd(cdx);
-        wy.dmd(us);
+        controlq.set_desc(jq, ali + 256, fxg, RJ_, aqe);
+        controlq.set_desc(aqe, ali + 768, cph, RK_, 0);
         
         
-        if let Some(djy) = &self.fpe {
-            djy.asg(0, 0);
+        controlq.submit(aqd);
+        controlq.submit(jq);
+        
+        
+        if let Some(bif) = &self.notify_cfg {
+            bif.write16(0, 0);
         }
         
         
-        let mut cpn = 0u8;
-        let mut aah = 5_000_000u32;
-        while cpn < 2 {
-            if let Some(_) = wy.lur() {
-                cpn += 1;
+        let mut completed = 0u8;
+        let mut mz = 5_000_000u32;
+        while completed < 2 {
+            if let Some(_) = controlq.poll_used() {
+                completed += 1;
             }
-            if cpn < 2 {
-                aah -= 1;
-                if aah == 0 {
-                    wy.ald(cdy);
-                    wy.ald(us);
-                    wy.ald(apo);
-                    wy.ald(cdx);
+            if completed < 2 {
+                mz -= 1;
+                if mz == 0 {
+                    controlq.free_desc(aqe);
+                    controlq.free_desc(jq);
+                    controlq.free_desc(vh);
+                    controlq.free_desc(aqd);
                     return Err("Batched present timeout");
                 }
-                core::hint::hc();
+                core::hint::spin_loop();
             }
         }
         
         
-        let dma = self.alb.as_ref().unwrap();
-        let wzy = unsafe { dma.read_at::<Ar>(512) }.btv;
-        let sqp = unsafe { dma.read_at::<Ar>(768) }.btv;
+        let dma = self.dma_buf.as_ref().ok_or("DMA buffer not initialized")?;
+        let pcj = unsafe { dma.read_at::<Ac>(512) }.ctrl_type;
+        let ltx = unsafe { dma.read_at::<Ac>(768) }.ctrl_type;
         
-        wy.ald(cdy);
-        wy.ald(us);
-        wy.ald(apo);
-        wy.ald(cdx);
+        controlq.free_desc(aqe);
+        controlq.free_desc(jq);
+        controlq.free_desc(vh);
+        controlq.free_desc(aqd);
         
-        if wzy != GpuCtrlType::Mg as u32 { return Err("TRANSFER failed"); }
-        if sqp != GpuCtrlType::Mg as u32 { return Err("FLUSH failed"); }
+        if pcj != GpuCtrlType::RespOkNodata as u32 { return Err("TRANSFER failed"); }
+        if ltx != GpuCtrlType::RespOkNodata as u32 { return Err("FLUSH failed"); }
         
         Ok(())
     }
@@ -1294,120 +1294,120 @@ impl VirtioGpu {
     
     
     
-    pub fn vkw(&mut self, b: u32, c: u32, d: u32, i: u32) -> Result<(), &'static str> {
-        let ehs = self.eyb;
-        if ehs == 0 { return Err("No scanout"); }
+    pub fn present_rect(&mut self, x: u32, y: u32, w: u32, h: u32) -> Result<(), &'static str> {
+        let bvl = self.scanout_resource_id;
+        if bvl == 0 { return Err("No scanout"); }
         
         
-        let b = b.v(self.bjv);
-        let c = c.v(self.bqf);
-        let d = d.v(self.bjv.ao(b));
-        let i = i.v(self.bqf.ao(c));
-        if d == 0 || i == 0 { return Ok(()); }
+        let x = x.min(self.display_width);
+        let y = y.min(self.display_height);
+        let w = w.min(self.display_width.saturating_sub(x));
+        let h = h.min(self.display_height.saturating_sub(y));
+        if w == 0 || h == 0 { return Ok(()); }
         
-        let dma = self.alb.as_ref().ok_or("DMA not ready")?;
-        let bua = dma.ht;
+        let dma = self.dma_buf.as_ref().ok_or("DMA not ready")?;
+        let ali = dma.phys;
         
         
-        let l = ((c * self.bjv + b) as u64) * 4;
+        let offset = ((y * self.display_width + x) as u64) * 4;
         
-        let mms = Ww {
-            zj: Ar { btv: GpuCtrlType::Aqb as u32, ..Default::default() },
-            m: Ko { b, c, z: d, ac: i },
-            l,
-            awu: ehs,
-            ob: 0,
+        let gzw = Jw {
+            kp: Ac { ctrl_type: GpuCtrlType::CmdTransferToHost2d as u32, ..Default::default() },
+            r: Eh { x, y, width: w, height: h },
+            offset,
+            zj: bvl,
+            padding: 0,
         };
-        unsafe { dma.ciu(0, &mms); }
+        unsafe { dma.write_at(0, &gzw); }
         
-        let hjz = Wv {
-            zj: Ar { btv: GpuCtrlType::Aqa as u32, ..Default::default() },
-            m: Ko { b, c, z: d, ac: i },
-            awu: ehs,
-            ob: 0,
+        let dpz = Jv {
+            kp: Ac { ctrl_type: GpuCtrlType::CmdResourceFlush as u32, ..Default::default() },
+            r: Eh { x, y, width: w, height: h },
+            zj: bvl,
+            padding: 0,
         };
-        unsafe { dma.ciu(256, &hjz); }
+        unsafe { dma.write_at(256, &dpz); }
         
-        let mmu = core::mem::size_of::<Ww>() as u32;
-        let kwp = core::mem::size_of::<Wv>() as u32;
-        let fst = core::mem::size_of::<Ar>() as u32;
+        let gzy = core::mem::size_of::<Jw>() as u32;
+        let fxg = core::mem::size_of::<Jv>() as u32;
+        let cph = core::mem::size_of::<Ac>() as u32;
         
-        let wy = self.wy.as_mut().ok_or("controlq not ready")?;
-        let cdx = wy.blx().ok_or("No free desc")?;
-        let apo = wy.blx().ok_or("No free desc")?;
-        let us = wy.blx().ok_or("No free desc")?;
-        let cdy = wy.blx().ok_or("No free desc")?;
+        let controlq = self.controlq.as_mut().ok_or("controlq not ready")?;
+        let aqd = controlq.alloc_desc().ok_or("No free desc")?;
+        let vh = controlq.alloc_desc().ok_or("No free desc")?;
+        let jq = controlq.alloc_desc().ok_or("No free desc")?;
+        let aqe = controlq.alloc_desc().ok_or("No free desc")?;
         
-        wy.bwz(cdx, bua, mmu, QP_, apo);
-        wy.bwz(apo, bua + 512, fst, QQ_, 0);
-        wy.bwz(us, bua + 256, kwp, QP_, cdy);
-        wy.bwz(cdy, bua + 768, fst, QQ_, 0);
+        controlq.set_desc(aqd, ali, gzy, RJ_, vh);
+        controlq.set_desc(vh, ali + 512, cph, RK_, 0);
+        controlq.set_desc(jq, ali + 256, fxg, RJ_, aqe);
+        controlq.set_desc(aqe, ali + 768, cph, RK_, 0);
         
-        wy.dmd(cdx);
-        wy.dmd(us);
+        controlq.submit(aqd);
+        controlq.submit(jq);
         
-        if let Some(djy) = &self.fpe {
-            djy.asg(0, 0);
+        if let Some(bif) = &self.notify_cfg {
+            bif.write16(0, 0);
         }
         
-        let mut cpn = 0u8;
-        let mut aah = 5_000_000u32;
-        while cpn < 2 {
-            if let Some(_) = wy.lur() { cpn += 1; }
-            if cpn < 2 {
-                aah -= 1;
-                if aah == 0 {
-                    wy.ald(cdy);
-                    wy.ald(us);
-                    wy.ald(apo);
-                    wy.ald(cdx);
+        let mut completed = 0u8;
+        let mut mz = 5_000_000u32;
+        while completed < 2 {
+            if let Some(_) = controlq.poll_used() { completed += 1; }
+            if completed < 2 {
+                mz -= 1;
+                if mz == 0 {
+                    controlq.free_desc(aqe);
+                    controlq.free_desc(jq);
+                    controlq.free_desc(vh);
+                    controlq.free_desc(aqd);
                     return Err("Rect present timeout");
                 }
-                core::hint::hc();
+                core::hint::spin_loop();
             }
         }
         
-        wy.ald(cdy);
-        wy.ald(us);
-        wy.ald(apo);
-        wy.ald(cdx);
+        controlq.free_desc(aqe);
+        controlq.free_desc(jq);
+        controlq.free_desc(vh);
+        controlq.free_desc(aqd);
         Ok(())
     }
     
-    pub fn ky(&self) -> bool { self.jr }
-    pub fn ywf(&self) -> bool { self.ecl }
+    pub fn is_initialized(&self) -> bool { self.initialized }
+    pub fn qkj(&self) -> bool { self.has_3d }
 }
 
 
 
 
 
-static Hq: Mutex<VirtioGpu> = Mutex::new(VirtioGpu::new());
-static KH_: AtomicBool = AtomicBool::new(false);
+static Dg: Mutex<VirtioGpu> = Mutex::new(VirtioGpu::new());
+static LA_: AtomicBool = AtomicBool::new(false);
 
-pub fn oel() -> Result<(), &'static str> {
-    for de in crate::pci::arx() {
-        if de.ml == DAW_ && de.mx == DAV_ {
+pub fn igs() -> Result<(), &'static str> {
+    for device in crate::pci::scan() {
+        if device.vendor_id == DEO_ && device.device_id == DEN_ {
             crate::serial_println!("[VIRTIO-GPU] Found device at {:02x}:{:02x}.{}",
-                de.aq, de.de, de.gw);
+                device.bus, device.device, device.function);
             
-            let mut gpu = Hq.lock();
-            match gpu.init(de) {
+            let mut gpu = Dg.lock();
+            match gpu.init(device) {
                 Ok(()) => {
-                    match gpu.wlj() {
+                    match gpu.setup_scanout() {
                         Ok(()) => {
-                            KH_.store(true, Ordering::SeqCst);
+                            LA_.store(true, Ordering::SeqCst);
                             crate::serial_println!("[VIRTIO-GPU] ✓ Ready for rendering!");
                             
-                            match gpu.wkp() {
+                            match gpu.setup_double_buffer() {
                                 Ok(()) => crate::serial_println!("[VIRTIO-GPU] ✓ Double buffer enabled (tear-free)"),
-                                Err(aa) => crate::serial_println!("[VIRTIO-GPU] Double buffer skipped: {}", aa),
+                                Err(e) => crate::serial_println!("[VIRTIO-GPU] Double buffer skipped: {}", e),
                             }
                         }
-                        Err(aa) => crate::serial_println!("[VIRTIO-GPU] Scanout failed: {}", aa),
+                        Err(e) => crate::serial_println!("[VIRTIO-GPU] Scanout failed: {}", e),
                     }
                 }
-                Err(aa) => crate::serial_println!("[VIRTIO-GPU] Init failed: {}", aa),
+                Err(e) => crate::serial_println!("[VIRTIO-GPU] Init failed: {}", e),
             }
             return Ok(());
         }
@@ -1416,137 +1416,137 @@ pub fn oel() -> Result<(), &'static str> {
     Ok(())
 }
 
-pub fn anl() -> bool {
-    KH_.load(Ordering::SeqCst)
+pub fn sw() -> bool {
+    LA_.load(Ordering::SeqCst)
 }
 
-pub fn fgc(z: u32, ac: u32) -> GpuSurface {
-    GpuSurface::new(z, ac)
+pub fn create_surface(width: u32, height: u32) -> GpuSurface {
+    GpuSurface::new(width, height)
 }
 
 
-pub fn zjk<G: FnOnce(&mut [u32], u32, u32)>(vvu: G) -> Result<(), &'static str> {
-    let mut gpu = Hq.lock();
-    if !gpu.jr { return Err("GPU not initialized"); }
-    let (d, i) = (gpu.bjv, gpu.bqf);
-    if let Some(k) = gpu.fcx.gza() {
-        vvu(k, d, i);
+pub fn qtu<F: FnOnce(&mut [u32], u32, u32)>(render_fn: F) -> Result<(), &'static str> {
+    let mut gpu = Dg.lock();
+    if !gpu.initialized { return Err("GPU not initialized"); }
+    let (w, h) = (gpu.display_width, gpu.display_height);
+    if let Some(buf) = gpu.backing_buffer.as_deref_mut() {
+        render_fn(buf, w, h);
     }
-    gpu.brs()
+    gpu.present()
 }
 
 
-pub fn owx() -> Result<(), &'static str> {
-    Hq.lock().brs()
+pub fn ivv() -> Result<(), &'static str> {
+    Dg.lock().present()
 }
 
 
 
-pub fn vku() -> Result<(), &'static str> {
-    let mut gpu = Hq.lock();
-    if !gpu.hgq {
-        return gpu.brs();
+pub fn nww() -> Result<(), &'static str> {
+    let mut gpu = Dg.lock();
+    if !gpu.double_buffer_enabled {
+        return gpu.present();
     }
     
-    gpu.brs()?;
+    gpu.present()?;
     
-    gpu.wwk()
+    gpu.swap_gpu_buffers()
 }
 
 
-pub fn kyi() -> Option<(*mut u32, u32, u32)> {
-    let mut gpu = Hq.lock();
-    if !gpu.jr { return None; }
-    let (d, i) = (gpu.bjv, gpu.bqf);
-    gpu.kyi().map(|k| (k.mw(), d, i))
+pub fn get_back_buffer() -> Option<(*mut u32, u32, u32)> {
+    let mut gpu = Dg.lock();
+    if !gpu.initialized { return None; }
+    let (w, h) = (gpu.display_width, gpu.display_height);
+    gpu.get_back_buffer().map(|buf| (buf.as_mut_ptr(), w, h))
 }
 
 
 
 
-pub fn vkt(akn: &[(u32, u32, u32, u32)]) {
-    if akn.is_empty() { return; }
+pub fn nwv(rects: &[(u32, u32, u32, u32)]) {
+    if rects.is_empty() { return; }
     
     
-    let (gz, xzd) = crate::framebuffer::yn();
-    if let Some((hlu, erl, hlt)) = iwv() {
-        if let Some(aaa) = crate::framebuffer::nxr() {
-            let aoo = (gz as usize).v(erl as usize);
-            let bbg = hlt as usize;
+    let (fb_w, _fb_h) = crate::framebuffer::kv();
+    if let Some((gpu_ptr, gpu_w, gpu_h)) = eod() {
+        if let Some(mq) = crate::framebuffer::ibg() {
+            let ut = (fb_w as usize).min(gpu_w as usize);
+            let abw = gpu_h as usize;
             unsafe {
-                for c in 0..bbg {
-                    let cy = aaa.add(c * gz as usize);
-                    let cs = hlu.add(c * erl as usize);
+                for y in 0..abw {
+                    let src = mq.add(y * fb_w as usize);
+                    let dst = gpu_ptr.add(y * gpu_w as usize);
                     #[cfg(target_arch = "x86_64")]
-                    crate::graphics::simd::dpd(cs, cy, aoo);
+                    crate::graphics::simd::blg(dst, src, ut);
                     #[cfg(not(target_arch = "x86_64"))]
-                    core::ptr::copy_nonoverlapping(cy, cs, aoo);
+                    core::ptr::copy_nonoverlapping(src, dst, ut);
                 }
             }
         }
     }
     
     
-    let mut gpu = Hq.lock();
-    if !gpu.jr { return; }
-    let ehs = gpu.eyb;
-    if ehs == 0 { return; }
+    let mut gpu = Dg.lock();
+    if !gpu.initialized { return; }
+    let bvl = gpu.scanout_resource_id;
+    if bvl == 0 { return; }
     
-    for &(b, c, d, i) in akn {
-        let _ = gpu.vkw(b, c, d, i);
+    for &(x, y, w, h) in rects {
+        let _ = gpu.present_rect(x, y, w, h);
     }
 }
 
 
-pub fn iwv() -> Option<(*mut u32, u32, u32)> {
-    let mut gpu = Hq.lock();
-    if !gpu.jr { return None; }
-    let (d, i) = (gpu.bjv, gpu.bqf);
-    gpu.fcx.gza().map(|k| (k.mw(), d, i))
+pub fn eod() -> Option<(*mut u32, u32, u32)> {
+    let mut gpu = Dg.lock();
+    if !gpu.initialized { return None; }
+    let (w, h) = (gpu.display_width, gpu.display_height);
+    gpu.backing_buffer.as_deref_mut().map(|buf| (buf.as_mut_ptr(), w, h))
 }
 
 
-pub fn lea() -> alloc::string::String {
-    let gpu = Hq.lock();
-    if gpu.jr {
-        alloc::format!("VirtIO GPU: {}x{} 2D (3D={})", gpu.bjv, gpu.bqf,
-            if gpu.ecl { "virgl" } else { "no" })
+pub fn gcl() -> alloc::string::String {
+    let gpu = Dg.lock();
+    if gpu.initialized {
+        alloc::format!("VirtIO GPU: {}x{} 2D (3D={})", gpu.display_width, gpu.display_height,
+            if gpu.has_3d { "virgl" } else { "no" })
     } else {
         alloc::string::String::from("VirtIO GPU: not available")
     }
 }
 
 
-pub fn qqg(surface: &GpuSurface, b: u32, c: u32) {
-    let (gz, kc) = crate::framebuffer::yn();
-    crate::framebuffer::afi(true);
-    for cq in 0..surface.ac {
-        let bcw = c + cq;
-        if bcw >= kc { break; }
-        for cr in 0..surface.z {
-            let amy = b + cr;
-            if amy >= gz { break; }
-            crate::framebuffer::sf(amy, bcw, surface.beg(cr, cq));
+pub fn kcn(surface: &GpuSurface, x: u32, y: u32) {
+    let (fb_w, fb_h) = crate::framebuffer::kv();
+    crate::framebuffer::pr(true);
+    for ak in 0..surface.height {
+        let acv = y + ak;
+        if acv >= fb_h { break; }
+        for am in 0..surface.width {
+            let tq = x + am;
+            if tq >= fb_w { break; }
+            crate::framebuffer::put_pixel(tq, acv, surface.get_pixel(am, ak));
         }
     }
-    crate::framebuffer::sv();
+    crate::framebuffer::ii();
 }
 
-pub fn yrd() {
-    if crate::framebuffer::bre() {
-        crate::framebuffer::sv();
+pub fn qga() {
+    if crate::framebuffer::ajy() {
+        crate::framebuffer::ii();
     }
 }
 
 pub fn init() {
     crate::serial_println!("[GPU] Initializing graphics subsystem...");
-    if let Err(aa) = oel() {
-        crate::serial_println!("[GPU] PCI init error: {}", aa);
+    if let Err(e) = igs() {
+        crate::serial_println!("[GPU] PCI init error: {}", e);
     }
-    crate::framebuffer::beo();
-    crate::framebuffer::afi(true);
+    crate::framebuffer::adw();
+    crate::framebuffer::pr(true);
     crate::serial_println!("[GPU] Graphics ready (VirtIO: {})", 
-        if anl() { "ACTIVE" } else { "fallback" });
+        if sw() { "ACTIVE" } else { "fallback" });
 }
 
 
@@ -1561,266 +1561,266 @@ pub fn init() {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
-pub struct Bal {
-    pub qwc: u32,
-    pub qwe: u32,
-    pub qwd: u32,
-    pub ob: u32,
+pub struct Vt {
+    pub capset_id: u32,
+    pub capset_max_version: u32,
+    pub capset_max_size: u32,
+    pub padding: u32,
 }
 
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct Bib {
-    pub zj: Ar,
-    pub gnt: u32,
-    pub rom: u32,
-    pub njv: [u8; 64],
+pub struct Zh {
+    pub kp: Ac,
+    pub dbt: u32,
+    pub context_init: u32,
+    pub debug_name: [u8; 64],
 }
 
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct Bic {
-    pub zj: Ar,
+pub struct Zi {
+    pub kp: Ac,
 }
 
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct Cyf {
-    pub zj: Ar,
-    pub awu: u32,
-    pub cd: u32,     
+pub struct Awy {
+    pub kp: Ac,
+    pub zj: u32,
+    pub target: u32,     
     pub format: u32,     
-    pub kdj: u32,       
-    pub z: u32,
-    pub ac: u32,
-    pub eo: u32,
-    pub yfc: u32,
-    pub zak: u32,
-    pub zea: u32,
+    pub fjf: u32,       
+    pub width: u32,
+    pub height: u32,
+    pub depth: u32,
+    pub array_size: u32,
+    pub last_level: u32,
+    pub nr_samples: u32,
     pub flags: u32,
-    pub ob: u32,
+    pub padding: u32,
 }
 
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct Bih {
-    pub zj: Ar,
-    pub aw: u32,
-    pub ob: u32,
+pub struct Zn {
+    pub kp: Ac,
+    pub size: u32,
+    pub padding: u32,
     
 }
 
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct Cye {
-    pub zj: Ar,
-    pub awu: u32,
-    pub ob: u32,
+pub struct Awx {
+    pub kp: Ac,
+    pub zj: u32,
+    pub padding: u32,
 }
 
 
-#[allow(bgr)]
+#[allow(dead_code)]
 pub mod virgl_bind {
-    pub const DJB_: u32 = 1 << 0;
-    pub const ECI_: u32 = 1 << 1;
-    pub const EDS_: u32 = 1 << 3;
-    pub const EJU_: u32 = 1 << 4;
-    pub const DQX_: u32 = 1 << 5;
-    pub const DGP_: u32 = 1 << 6;
-    pub const EGF_: u32 = 1 << 14;
+    pub const DMQ_: u32 = 1 << 0;
+    pub const EFY_: u32 = 1 << 1;
+    pub const EHK_: u32 = 1 << 3;
+    pub const ENI_: u32 = 1 << 4;
+    pub const DUR_: u32 = 1 << 5;
+    pub const DKI_: u32 = 1 << 6;
+    pub const EJY_: u32 = 1 << 14;
 }
 
 
-#[allow(bgr)]
+#[allow(dead_code)]
 pub mod virgl_target {
-    pub const Cru: u32 = 0;
-    pub const EHJ_: u32 = 1;
-    pub const EHK_: u32 = 2;
-    pub const EHL_: u32 = 3;
-    pub const EHM_: u32 = 4;
+    pub const Ata: u32 = 0;
+    pub const ELA_: u32 = 1;
+    pub const ELB_: u32 = 2;
+    pub const ELC_: u32 = 3;
+    pub const ELD_: u32 = 4;
 }
 
 
-pub struct Bvv {
-    cjv: u32,
-    gh: bool,
-    qwf: u32,
+pub struct Agc {
+    ctx_id: u32,
+    active: bool,
+    capset_version: u32,
 }
 
-static YG_: Mutex<Bvv> = Mutex::new(Bvv {
-    cjv: 0,
-    gh: false,
-    qwf: 0,
+static ZK_: Mutex<Agc> = Mutex::new(Agc {
+    ctx_id: 0,
+    active: false,
+    capset_version: 0,
 });
 
 
-pub fn ywo() -> bool {
-    let gpu = Hq.lock();
-    gpu.ecl
+pub fn qkt() -> bool {
+    let gpu = Dg.lock();
+    gpu.has_3d
 }
 
 
-pub fn zhc() -> Option<Bal> {
-    let mut gpu = Hq.lock();
-    if !gpu.ecl || !gpu.jr { return None; }
+pub fn qro() -> Option<Vt> {
+    let mut gpu = Dg.lock();
+    if !gpu.has_3d || !gpu.initialized { return None; }
     
-    let dma = gpu.alb.as_ref()?;
+    let dma = gpu.dma_buf.as_ref()?;
     
     
-    let cmd = Ar {
-        btv: GpuCtrlType::Bzr as u32,
+    let cmd = Ac {
+        ctrl_type: GpuCtrlType::CmdGetCapsetInfo as u32,
         ..Default::default()
     };
-    unsafe { dma.ciu(0, &cmd); }
+    unsafe { dma.write_at(0, &cmd); }
     
-    unsafe { (dma.ju.add(core::mem::size_of::<Ar>()) as *mut u32).write_volatile(0); }
+    unsafe { (dma.virt.add(core::mem::size_of::<Ac>()) as *mut u32).write_volatile(0); }
     
-    let kjf = core::mem::size_of::<Ar>() as u32 + 4;
-    let fst = core::mem::size_of::<Ar>() as u32 + core::mem::size_of::<Bal>() as u32;
+    let fnd = core::mem::size_of::<Ac>() as u32 + 4;
+    let cph = core::mem::size_of::<Ac>() as u32 + core::mem::size_of::<Vt>() as u32;
     
-    let gqw = gpu.dvn(kjf, 512, fst).bq()?;
-    if gqw != GpuCtrlType::Ckp as u32 { return None; }
+    let ddm = gpu.send_command(fnd, 512, cph).ok()?;
+    if ddm != GpuCtrlType::RespOkCapsetInfo as u32 { return None; }
     
-    let dma = gpu.alb.as_ref()?;
-    let co: Bal = unsafe { dma.read_at(512 + core::mem::size_of::<Ar>()) };
+    let dma = gpu.dma_buf.as_ref()?;
+    let info: Vt = unsafe { dma.read_at(512 + core::mem::size_of::<Ac>()) };
     crate::serial_println!("[VIRGL] Capset: id={}, max_version={}, max_size={}", 
-        co.qwc, co.qwe, co.qwd);
-    Some(co)
+        info.capset_id, info.capset_max_version, info.capset_max_size);
+    Some(info)
 }
 
 
-pub fn ykt(j: &str) -> Result<u32, &'static str> {
-    let mut gpu = Hq.lock();
-    if !gpu.ecl { return Err("No 3D support"); }
-    if !gpu.jr { return Err("GPU not initialized"); }
+pub fn qca(name: &str) -> Result<u32, &'static str> {
+    let mut gpu = Dg.lock();
+    if !gpu.has_3d { return Err("No 3D support"); }
+    if !gpu.initialized { return Err("GPU not initialized"); }
     
-    let cjv = 1u32; 
+    let ctx_id = 1u32; 
     
-    let mut cmd = Bib {
-        zj: Ar {
-            btv: GpuCtrlType::Bzp as u32,
-            cjv,
+    let mut cmd = Zh {
+        kp: Ac {
+            ctrl_type: GpuCtrlType::CmdCtxCreate as u32,
+            ctx_id,
             ..Default::default()
         },
-        gnt: j.len().v(63) as u32,
-        rom: 0,
-        njv: [0u8; 64],
+        dbt: name.len().min(63) as u32,
+        context_init: 0,
+        debug_name: [0u8; 64],
     };
     
-    let bko = j.as_bytes();
-    let zg = bko.len().v(63);
-    cmd.njv[..zg].dg(&bko[..zg]);
+    let agt = name.as_bytes();
+    let mb = agt.len().min(63);
+    cmd.debug_name[..mb].copy_from_slice(&agt[..mb]);
     
-    let dma = gpu.alb.as_ref().ok_or("DMA not ready")?;
-    unsafe { dma.ciu(0, &cmd); }
+    let dma = gpu.dma_buf.as_ref().ok_or("DMA not ready")?;
+    unsafe { dma.write_at(0, &cmd); }
     
-    let lj = gpu.dvn(
-        core::mem::size_of::<Bib>() as u32,
+    let eo = gpu.send_command(
+        core::mem::size_of::<Zh>() as u32,
         512,
-        core::mem::size_of::<Ar>() as u32,
+        core::mem::size_of::<Ac>() as u32,
     )?;
     
-    if lj != GpuCtrlType::Mg as u32 {
+    if eo != GpuCtrlType::RespOkNodata as u32 {
         return Err("CTX_CREATE failed");
     }
     
-    let mut cvf = YG_.lock();
-    cvf.cjv = cjv;
-    cvf.gh = true;
+    let mut bae = ZK_.lock();
+    bae.ctx_id = ctx_id;
+    bae.active = true;
     
-    crate::serial_println!("[VIRGL] 3D context created: id={} name={}", cjv, j);
-    Ok(cjv)
+    crate::serial_println!("[VIRGL] 3D context created: id={} name={}", ctx_id, name);
+    Ok(ctx_id)
 }
 
 
-pub fn ylv() -> Result<(), &'static str> {
-    let mut cvf = YG_.lock();
-    if !cvf.gh { return Ok(()); }
+pub fn qcu() -> Result<(), &'static str> {
+    let mut bae = ZK_.lock();
+    if !bae.active { return Ok(()); }
     
-    let mut gpu = Hq.lock();
-    let cmd = Bic {
-        zj: Ar {
-            btv: GpuCtrlType::Bzq as u32,
-            cjv: cvf.cjv,
+    let mut gpu = Dg.lock();
+    let cmd = Zi {
+        kp: Ac {
+            ctrl_type: GpuCtrlType::CmdCtxDestroy as u32,
+            ctx_id: bae.ctx_id,
             ..Default::default()
         },
     };
     
-    let dma = gpu.alb.as_ref().ok_or("DMA not ready")?;
-    unsafe { dma.ciu(0, &cmd); }
+    let dma = gpu.dma_buf.as_ref().ok_or("DMA not ready")?;
+    unsafe { dma.write_at(0, &cmd); }
     
-    let lj = gpu.dvn(
-        core::mem::size_of::<Bic>() as u32,
+    let eo = gpu.send_command(
+        core::mem::size_of::<Zi>() as u32,
         512,
-        core::mem::size_of::<Ar>() as u32,
+        core::mem::size_of::<Ac>() as u32,
     )?;
     
-    if lj != GpuCtrlType::Mg as u32 {
+    if eo != GpuCtrlType::RespOkNodata as u32 {
         return Err("CTX_DESTROY failed");
     }
     
-    cvf.gh = false;
+    bae.active = false;
     crate::serial_println!("[VIRGL] 3D context destroyed");
     Ok(())
 }
 
 
-pub fn zpt(commands: &[u8]) -> Result<(), &'static str> {
-    let cvf = YG_.lock();
-    if !cvf.gh { return Err("No active 3D context"); }
-    let cjv = cvf.cjv;
-    drop(cvf);
+pub fn qxt(commands: &[u8]) -> Result<(), &'static str> {
+    let bae = ZK_.lock();
+    if !bae.active { return Err("No active 3D context"); }
+    let ctx_id = bae.ctx_id;
+    drop(bae);
     
-    let mut gpu = Hq.lock();
-    if !gpu.jr { return Err("GPU not initialized"); }
+    let mut gpu = Dg.lock();
+    if !gpu.initialized { return Err("GPU not initialized"); }
     
     if commands.len() > 3800 { return Err("Command buffer too large"); }
     
-    let dma = gpu.alb.as_ref().ok_or("DMA not ready")?;
+    let dma = gpu.dma_buf.as_ref().ok_or("DMA not ready")?;
     
-    let cmd = Bih {
-        zj: Ar {
-            btv: GpuCtrlType::Bzw as u32,
-            cjv,
+    let cmd = Zn {
+        kp: Ac {
+            ctrl_type: GpuCtrlType::CmdSubmit3d as u32,
+            ctx_id,
             ..Default::default()
         },
-        aw: commands.len() as u32,
-        ob: 0,
+        size: commands.len() as u32,
+        padding: 0,
     };
-    unsafe { dma.ciu(0, &cmd); }
+    unsafe { dma.write_at(0, &cmd); }
     
     
-    let nea = core::mem::size_of::<Bih>();
+    let hly = core::mem::size_of::<Zn>();
     unsafe {
         core::ptr::copy_nonoverlapping(
-            commands.fq(),
-            dma.ju.add(nea),
+            commands.as_ptr(),
+            dma.virt.add(hly),
             commands.len(),
         );
     }
     
-    let xjy = (nea + commands.len()) as u32;
-    let lj = gpu.dvn(xjy, 512, core::mem::size_of::<Ar>() as u32)?;
+    let plr = (hly + commands.len()) as u32;
+    let eo = gpu.send_command(plr, 512, core::mem::size_of::<Ac>() as u32)?;
     
-    if lj != GpuCtrlType::Mg as u32 {
+    if eo != GpuCtrlType::RespOkNodata as u32 {
         return Err("SUBMIT_3D failed");
     }
     Ok(())
 }
 
 
-pub fn zvj() -> alloc::string::String {
-    let gpu = Hq.lock();
-    let cvf = YG_.lock();
-    if gpu.ecl {
+pub fn rbz() -> alloc::string::String {
+    let gpu = Dg.lock();
+    let bae = ZK_.lock();
+    if gpu.has_3d {
         alloc::format!("VIRGL: {} (ctx={})", 
-            if cvf.gh { "active" } else { "ready" },
-            cvf.cjv)
+            if bae.active { "active" } else { "ready" },
+            bae.ctx_id)
     } else {
         alloc::string::String::from("VIRGL: not available")
     }
@@ -1832,40 +1832,40 @@ pub fn zvj() -> alloc::string::String {
 
 pub struct Layer {
     pub surface: GpuSurface,
-    pub b: i32,
-    pub c: i32,
-    pub ell: i32,
-    pub iw: bool,
-    pub adh: u8,
+    pub x: i32,
+    pub y: i32,
+    pub z_order: i32,
+    pub visible: bool,
+    pub opacity: u8,
 }
 
 pub struct Compositor {
-    my: Vec<Layer>,
-    an: GpuSurface,
-    cdb: u32,
+    layers: Vec<Layer>,
+    output: GpuSurface,
+    background_color: u32,
 }
 
 impl Compositor {
-    pub fn new(z: u32, ac: u32) -> Self {
-        Self { my: Vec::new(), an: GpuSurface::new(z, ac), cdb: 0xFF1A1A1A }
+    pub fn new(width: u32, height: u32) -> Self {
+        Self { layers: Vec::new(), output: GpuSurface::new(width, height), background_color: 0xFF1A1A1A }
     }
-    pub fn dyc(&mut self, surface: GpuSurface, b: i32, c: i32, ell: i32) -> usize {
-        let w = self.my.len();
-        self.my.push(Layer { surface, b, c, ell, iw: true, adh: 255 });
-        self.my.bxf(|dm| dm.ell);
-        w
+    pub fn add_layer(&mut self, surface: GpuSurface, x: i32, y: i32, z_order: i32) -> usize {
+        let idx = self.layers.len();
+        self.layers.push(Layer { surface, x, y, z_order, visible: true, opacity: 255 });
+        self.layers.sort_by_key(|l| l.z_order);
+        idx
     }
-    pub fn vux(&mut self, index: usize) {
-        if index < self.my.len() { self.my.remove(index); }
+    pub fn oez(&mut self, index: usize) {
+        if index < self.layers.len() { self.layers.remove(index); }
     }
-    pub fn nff(&mut self) {
-        self.an.clear(self.cdb);
-        for fl in &self.my {
-            if fl.iw { self.an.bge(&fl.surface, fl.b, fl.c); }
+    pub fn compose(&mut self) {
+        self.output.clear(self.background_color);
+        for bj in &self.layers {
+            if bj.visible { self.output.blit(&bj.surface, bj.x, bj.y); }
         }
     }
-    pub fn tj(&self) { qqg(&self.an, 0, 0); }
-    pub fn iws(&self, index: usize) -> Option<&Layer> { self.my.get(index) }
-    pub fn dhm(&mut self, index: usize) -> Option<&mut Layer> { self.my.ds(index) }
-    pub fn wig(&mut self, s: u32) { self.cdb = s; }
+    pub fn render(&self) { kcn(&self.output, 0, 0); }
+    pub fn get_layer(&self, index: usize) -> Option<&Layer> { self.layers.get(index) }
+    pub fn get_layer_mut(&mut self, index: usize) -> Option<&mut Layer> { self.layers.get_mut(index) }
+    pub fn ooo(&mut self, color: u32) { self.background_color = color; }
 }

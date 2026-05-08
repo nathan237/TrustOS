@@ -4,7 +4,7 @@
 //! Wraps linked_list_allocator with devtools allocation tracking.
 
 use linked_list_allocator::LockedHeap;
-use core::alloc::{GlobalAllocator, Layout};
+use core::alloc::{GlobalAlloc, Layout};
 
 /// Inner heap allocator
 static INNER: LockedHeap = LockedHeap::empty();
@@ -14,7 +14,7 @@ struct TrackedAllocator;
 
 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe // Trait implementation — fulfills a behavioral contract.
-impl GlobalAllocator for TrackedAllocator {
+impl GlobalAlloc for TrackedAllocator {
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         let ptr = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.

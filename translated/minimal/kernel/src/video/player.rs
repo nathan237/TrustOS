@@ -11,399 +11,399 @@ use super::codec::{TvDecoder, TvEncoder};
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum PlayState {
-    Ce,
-    Cl,
-    Af,
+    Playing,
+    Paused,
+    Stopped,
 }
 
 pub struct VideoPlayer {
-    g: PlayState,
-    pub okl: bool,
+    state: PlayState,
+    pub loop_playback: bool,
 }
 
 impl VideoPlayer {
     pub fn new() -> Self {
         Self {
-            g: PlayState::Af,
-            okl: false,
+            state: PlayState::Stopped,
+            loop_playback: false,
         }
     }
 
     
-    pub fn vit(&mut self, f: Vec<u8>) -> Result<String, String> {
-        let mut azm = TvDecoder::new(f)
+    pub fn play_data(&mut self, data: Vec<u8>) -> Result<String, String> {
+        let mut aaq = TvDecoder::new(data)
             .ok_or_else(|| String::from("Invalid TrustVideo file"))?;
 
-        let gm = azm.dh.z as u32;
-        let me = azm.dh.ac as u32;
-        let tz = azm.dh.tz as u64;
-        let es = azm.dh.oo;
-        let aps = if tz > 0 { 1000 / tz } else { 33 };
+        let bt = aaq.header.width as u32;
+        let ex = aaq.header.height as u32;
+        let fps = aaq.header.fps as u64;
+        let av = aaq.header.frame_count;
+        let vj = if fps > 0 { 1000 / fps } else { 33 };
 
-        let kp = crate::framebuffer::z();
-        let kl = crate::framebuffer::ac();
-
-        
-        let mp = if kp > gm { (kp - gm) / 2 } else { 0 };
-        let qw = if kl > me { (kl - me) / 2 } else { 0 };
-
-        self.g = PlayState::Ce;
-        let mut kxb: u32 = 0;
+        let dy = crate::framebuffer::width();
+        let dw = crate::framebuffer::height();
 
         
-        crate::framebuffer::cwe(0xFF000000);
-        crate::framebuffer::sv();
+        let fh = if dy > bt { (dy - bt) / 2 } else { 0 };
+        let hk = if dw > ex { (dw - ex) / 2 } else { 0 };
 
-        crate::serial_println!("[video] Playing {}x{} @ {}fps, {} frames", gm, me, tz, es);
+        self.state = PlayState::Playing;
+        let mut fxq: u32 = 0;
+
+        
+        crate::framebuffer::awo(0xFF000000);
+        crate::framebuffer::ii();
+
+        crate::serial_println!("[video] Playing {}x{} @ {}fps, {} frames", bt, ex, fps, av);
 
         loop {
             
-            if let Some(bs) = crate::keyboard::xw() {
-                if bs == 0x1B || bs == b'q' {
+            if let Some(key) = crate::keyboard::kr() {
+                if key == 0x1B || key == b'q' {
                     
-                    self.g = PlayState::Af;
+                    self.state = PlayState::Stopped;
                     break;
-                } else if bs == b' ' {
+                } else if key == b' ' {
                     
-                    self.g = if self.g == PlayState::Ce {
-                        PlayState::Cl
+                    self.state = if self.state == PlayState::Playing {
+                        PlayState::Paused
                     } else {
-                        PlayState::Ce
+                        PlayState::Playing
                     };
                 }
             }
 
-            if self.g == PlayState::Cl {
+            if self.state == PlayState::Paused {
                 
-                let vfo = crate::time::lc();
-                while crate::time::lc() < vfo + 50 {
-                    core::hint::hc();
+                let nsn = crate::time::uptime_ms();
+                while crate::time::uptime_ms() < nsn + 50 {
+                    core::hint::spin_loop();
                 }
                 continue;
             }
 
-            let gho = crate::time::lc();
+            let cyd = crate::time::uptime_ms();
 
-            if let Some(hz) = azm.uue() {
+            if let Some(pixels) = aaq.next_frame() {
                 
-                Self::qqe(hz, gm, me, mp, qw, kp);
+                Self::kcm(pixels, bt, ex, fh, hk, dy);
 
                 
-                Self::sdo(kxb, es, tz as u32, kp, kl);
+                Self::lje(fxq, av, fps as u32, dy, dw);
 
-                crate::framebuffer::sv();
-                kxb += 1;
-            } else if self.okl {
-                azm.lzz();
+                crate::framebuffer::ii();
+                fxq += 1;
+            } else if self.loop_playback {
+                aaq.rewind();
                 continue;
             } else {
                 break;
             }
 
             
-            let ez = crate::time::lc() - gho;
-            if ez < aps {
-                let ccm = aps - ez;
-                let ci = crate::time::lc() + ccm;
-                while crate::time::lc() < ci {
-                    core::hint::hc();
+            let bb = crate::time::uptime_ms() - cyd;
+            if bb < vj {
+                let bqb = vj - bb;
+                let end = crate::time::uptime_ms() + bqb;
+                while crate::time::uptime_ms() < end {
+                    core::hint::spin_loop();
                 }
             }
         }
 
-        self.g = PlayState::Af;
-        Ok(format!("Played {} frames", kxb))
+        self.state = PlayState::Stopped;
+        Ok(format!("Played {} frames", fxq))
     }
 
     
-    fn qqe(hz: &[u32], gm: u32, me: u32, mp: u32, qw: u32, kp: u32) {
-        let be = crate::framebuffer::FastPixelContext::new();
-        let kl = crate::framebuffer::ac();
-        for c in 0..me {
-            let bg = qw + c;
-            if bg >= kl { break; }
-            let mu = (c * gm) as usize;
-            for b in 0..gm {
-                let dx = mp + b;
-                if dx >= kp { break; }
-                let y = hz[mu + b as usize];
-                be.sf(dx as usize, bg as usize, y);
+    fn kcm(pixels: &[u32], bt: u32, ex: u32, fh: u32, hk: u32, dy: u32) {
+        let ab = crate::framebuffer::FastPixelContext::new();
+        let dw = crate::framebuffer::height();
+        for y in 0..ex {
+            let ad = hk + y;
+            if ad >= dw { break; }
+            let fk = (y * bt) as usize;
+            for x in 0..bt {
+                let dx = fh + x;
+                if dx >= dy { break; }
+                let p = pixels[fk + x as usize];
+                ab.put_pixel(dx as usize, ad as usize, p);
             }
         }
     }
 
     
-    fn sdo(cv: u32, es: u32, tz: u32, kp: u32, kl: u32) {
+    fn lje(current: u32, av: u32, fps: u32, dy: u32, dw: u32) {
         
-        crate::framebuffer::ah(0, kl - 20, kp, 20, 0xCC000000);
+        crate::framebuffer::fill_rect(0, dw - 20, dy, 20, 0xCC000000);
 
         
-        let lo = kp - 20;
-        let li = if es > 0 {
-            ((cv as u64 * lo as u64) / es as u64) as u32
+        let ek = dy - 20;
+        let progress = if av > 0 {
+            ((current as u64 * ek as u64) / av as u64) as u32
         } else { 0 };
-        crate::framebuffer::ah(10, kl - 14, lo, 8, 0xFF333333);
-        crate::framebuffer::ah(10, kl - 14, li, 8, 0xFF00AAFF);
+        crate::framebuffer::fill_rect(10, dw - 14, ek, 8, 0xFF333333);
+        crate::framebuffer::fill_rect(10, dw - 14, progress, 8, 0xFF00AAFF);
     }
 }
 
 
 
 
-pub fn ysm(z: u16, ac: u16, vj: u32, tz: u16) -> Vec<u8> {
-    let mut epv = TvEncoder::new(z, ac, tz);
-    let awg = z as usize * ac as usize;
-    let mut k = vec![0u32; awg];
-    let d = z as usize;
-    let i = ac as usize;
+pub fn qhb(width: u16, height: u16, frames: u32, fps: u16) -> Vec<u8> {
+    let mut bzk = TvEncoder::new(width, height, fps);
+    let yz = width as usize * height as usize;
+    let mut buf = vec![0u32; yz];
+    let w = width as usize;
+    let h = height as usize;
 
-    for bb in 0..vj {
-        let ab = bb as i32;
-        for c in 0..i {
-            for b in 0..d {
-                let jf = (b * 256 / d) as i32;
-                let sc = (c * 256 / i) as i32;
-                let agy = etk((jf.hx(3).cn(ab * 4)) as u8);
-                let apg = etk((sc.hx(2).cn(ab * 5)) as u8);
-                let bdf = etk((jf.cn(sc).hx(2).cn(ab * 3)) as u8);
-                let cnq = etk((jf.nj(sc).cn(ab * 7)) as u8);
-                let abl = (agy as i32 + apg as i32 + bdf as i32 + cnq as i32) / 4;
-                let aya = ((abl + 128) & 0xFF) as u8;
-                let (m, at, o) = ocl(aya);
-                k[c * d + b] = 0xFF000000 | ((m as u32) << 16) | ((at as u32) << 8) | o as u32;
+    for f in 0..frames {
+        let t = f as i32;
+        for y in 0..h {
+            for x in 0..w {
+                let dg = (x * 256 / w) as i32;
+                let hj = (y * 256 / h) as i32;
+                let v1 = cbe((dg.wrapping_mul(3).wrapping_add(t * 4)) as u8);
+                let v2 = cbe((hj.wrapping_mul(2).wrapping_add(t * 5)) as u8);
+                let v3 = cbe((dg.wrapping_add(hj).wrapping_mul(2).wrapping_add(t * 3)) as u8);
+                let v4 = cbe((dg.wrapping_sub(hj).wrapping_add(t * 7)) as u8);
+                let ns = (v1 as i32 + v2 as i32 + v3 as i32 + v4 as i32) / 4;
+                let zz = ((ns + 128) & 0xFF) as u8;
+                let (r, g, b) = iff(zz);
+                buf[y * w + x] = 0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | b as u32;
             }
         }
-        epv.jzf(&k);
-        if bb % 10 == 0 {
-            crate::serial_println!("[video] Encoding frame {}/{}", bb + 1, vj);
+        bzk.add_frame(&buf);
+        if f % 10 == 0 {
+            crate::serial_println!("[video] Encoding frame {}/{}", f + 1, frames);
         }
     }
 
-    epv.bqs()
+    bzk.finalize()
 }
 
 
-pub fn ysk(z: u16, ac: u16, vj: u32, tz: u16) -> Vec<u8> {
-    let mut epv = TvEncoder::new(z, ac, tz);
-    let d = z as usize;
-    let i = ac as usize;
-    let awg = d * i;
-    let mut xc = vec![0u8; awg]; 
-    let mut k = vec![0u32; awg];
-    let mut dv: u32 = 42;
+pub fn qgz(width: u16, height: u16, frames: u32, fps: u16) -> Vec<u8> {
+    let mut bzk = TvEncoder::new(width, height, fps);
+    let w = width as usize;
+    let h = height as usize;
+    let yz = w * h;
+    let mut heat = vec![0u8; yz]; 
+    let mut buf = vec![0u32; yz];
+    let mut seed: u32 = 42;
 
-    for bb in 0..vj {
+    for f in 0..frames {
         
-        for b in 0..d {
-            dv = bpk(dv);
-            xc[(i - 1) * d + b] = (dv & 0xFF) as u8;
+        for x in 0..w {
+            seed = xorshift(seed);
+            heat[(h - 1) * w + x] = (seed & 0xFF) as u8;
             
-            dv = bpk(dv);
-            xc[(i - 2) * d + b] = ((dv & 0xFF) as u16).v(255) as u8;
+            seed = xorshift(seed);
+            heat[(h - 2) * w + x] = ((seed & 0xFF) as u16).min(255) as u8;
         }
 
         
-        for c in 0..i - 2 {
-            for b in 0..d {
-                let def = xc[(c + 1) * d + b] as u16;
-                let bl = if b > 0 { xc[(c + 1) * d + b - 1] as u16 } else { def };
-                let avi = if b + 1 < d { xc[(c + 1) * d + b + 1] as u16 } else { def };
-                let aaa = xc[((c + 2).v(i - 1)) * d + b] as u16;
-                let abl = (def + bl + avi + aaa) / 4;
-                let rop = if abl > 2 { abl - 2 } else { 0 };
-                xc[c * d + b] = rop.v(255) as u8;
+        for y in 0..h - 2 {
+            for x in 0..w {
+                let bev = heat[(y + 1) * w + x] as u16;
+                let bl = if x > 0 { heat[(y + 1) * w + x - 1] as u16 } else { bev };
+                let yi = if x + 1 < w { heat[(y + 1) * w + x + 1] as u16 } else { bev };
+                let mq = heat[((y + 2).min(h - 1)) * w + x] as u16;
+                let ns = (bev + bl + yi + mq) / 4;
+                let kxo = if ns > 2 { ns - 2 } else { 0 };
+                heat[y * w + x] = kxo.min(255) as u8;
             }
         }
 
         
-        for a in 0..awg {
-            let ab = xc[a];
-            let (m, at, o) = if ab < 64 {
-                (ab * 4, 0u8, 0u8) 
-            } else if ab < 128 {
-                (255, (ab - 64) * 4, 0u8) 
-            } else if ab < 192 {
-                (255, 255, (ab - 128) * 4) 
+        for i in 0..yz {
+            let t = heat[i];
+            let (r, g, b) = if t < 64 {
+                (t * 4, 0u8, 0u8) 
+            } else if t < 128 {
+                (255, (t - 64) * 4, 0u8) 
+            } else if t < 192 {
+                (255, 255, (t - 128) * 4) 
             } else {
                 (255, 255, 255) 
             };
-            k[a] = 0xFF000000 | ((m as u32) << 16) | ((at as u32) << 8) | o as u32;
+            buf[i] = 0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | b as u32;
         }
 
-        epv.jzf(&k);
-        if bb % 10 == 0 {
-            crate::serial_println!("[video] Fire frame {}/{}", bb + 1, vj);
+        bzk.add_frame(&buf);
+        if f % 10 == 0 {
+            crate::serial_println!("[video] Fire frame {}/{}", f + 1, frames);
         }
     }
 
-    epv.bqs()
+    bzk.finalize()
 }
 
 
-pub fn ysl(z: u16, ac: u16, vj: u32, tz: u16) -> Vec<u8> {
-    let mut epv = TvEncoder::new(z, ac, tz);
-    let d = z as usize;
-    let i = ac as usize;
-    let awg = d * i;
-    let mut k = vec![0u32; awg];
+pub fn qha(width: u16, height: u16, frames: u32, fps: u16) -> Vec<u8> {
+    let mut bzk = TvEncoder::new(width, height, fps);
+    let w = width as usize;
+    let h = height as usize;
+    let yz = w * h;
+    let mut buf = vec![0u32; yz];
 
-    let oy = 8; 
-    let aur = d / oy + 1;
-    let mut agk = vec![0i32; aur];
-    let mut arz = vec![0u8; aur];
-    let mut dv: u32 = 1337;
+    let col_w = 8; 
+    let xx = w / col_w + 1;
+    let mut drops = vec![0i32; xx];
+    let mut speeds = vec![0u8; xx];
+    let mut seed: u32 = 1337;
 
     
-    for a in 0..aur {
-        dv = bpk(dv);
-        agk[a] = -((dv % i as u32) as i32);
-        dv = bpk(dv);
-        arz[a] = 1 + (dv % 4) as u8;
+    for i in 0..xx {
+        seed = xorshift(seed);
+        drops[i] = -((seed % h as u32) as i32);
+        seed = xorshift(seed);
+        speeds[i] = 1 + (seed % 4) as u8;
     }
 
-    for bb in 0..vj {
+    for f in 0..frames {
         
-        for a in 0..awg {
-            let y = k[a];
-            let m = ((y >> 16) & 0xFF) * 92 / 100;
-            let at = ((y >> 8) & 0xFF) * 92 / 100;
-            let o = (y & 0xFF) * 92 / 100;
-            k[a] = 0xFF000000 | (m << 16) | (at << 8) | o;
+        for i in 0..yz {
+            let p = buf[i];
+            let r = ((p >> 16) & 0xFF) * 92 / 100;
+            let g = ((p >> 8) & 0xFF) * 92 / 100;
+            let b = (p & 0xFF) * 92 / 100;
+            buf[i] = 0xFF000000 | (r << 16) | (g << 8) | b;
         }
 
         
-        for r in 0..aur {
-            let elg = r * oy;
-            let bg = agk[r];
+        for c in 0..xx {
+            let bxd = c * col_w;
+            let ad = drops[c];
 
-            if bg >= 0 && (bg as usize) < i {
-                let c = bg as usize;
+            if ad >= 0 && (ad as usize) < h {
+                let y = ad as usize;
                 
-                for y in 0..oy.v(d - elg) {
-                    k[c * d + elg + y] = 0xFFCCFFCC;
+                for p in 0..col_w.min(w - bxd) {
+                    buf[y * w + bxd + p] = 0xFFCCFFCC;
                 }
                 
-                for ase in 1..8u32 {
-                    let ty = bg - ase as i32;
-                    if ty >= 0 && (ty as usize) < i {
-                        let hj = 200 - ase * 20;
-                        let at = hj.v(255);
-                        for y in 0..oy.v(d - elg) {
-                            k[ty as usize * d + elg + y] =
-                                0xFF000000 | ((at / 4) << 16) | (at << 8) | (at / 4);
+                for wr in 1..8u32 {
+                    let ty = ad - wr as i32;
+                    if ty >= 0 && (ty as usize) < h {
+                        let intensity = 200 - wr * 20;
+                        let g = intensity.min(255);
+                        for p in 0..col_w.min(w - bxd) {
+                            buf[ty as usize * w + bxd + p] =
+                                0xFF000000 | ((g / 4) << 16) | (g << 8) | (g / 4);
                         }
                     }
                 }
             }
 
-            agk[r] += arz[r] as i32;
+            drops[c] += speeds[c] as i32;
 
             
-            if agk[r] > (i as i32 + 20) {
-                dv = bpk(dv);
-                agk[r] = -((dv % (i as u32 / 2)) as i32);
-                dv = bpk(dv);
-                arz[r] = 1 + (dv % 4) as u8;
+            if drops[c] > (h as i32 + 20) {
+                seed = xorshift(seed);
+                drops[c] = -((seed % (h as u32 / 2)) as i32);
+                seed = xorshift(seed);
+                speeds[c] = 1 + (seed % 4) as u8;
             }
         }
 
-        epv.jzf(&k);
-        if bb % 10 == 0 {
-            crate::serial_println!("[video] Matrix frame {}/{}", bb + 1, vj);
+        bzk.add_frame(&buf);
+        if f % 10 == 0 {
+            crate::serial_println!("[video] Matrix frame {}/{}", f + 1, frames);
         }
     }
 
-    epv.bqs()
+    bzk.finalize()
 }
 
 
 
-use crate::draw_utils::qas as bpk;
+use crate::draw_utils::jsa as xorshift;
 
 
 
 
 
-pub fn vwl(bzk: &str, z: u16, ac: u16, tz: u16) {
-    let aps = if tz > 0 { 1000u64 / tz as u64 } else { 33 };
+pub fn ofp(aoa: &str, width: u16, height: u16, fps: u16) {
+    let vj = if fps > 0 { 1000u64 / fps as u64 } else { 33 };
 
-    let kp = crate::framebuffer::z();
-    let kl = crate::framebuffer::ac();
-    let yq = (z as u32).v(kp) as usize;
-    let aff = (ac as u32).v(kl) as usize;
-    let mp = if kp > yq as u32 { (kp - yq as u32) / 2 } else { 0 } as usize;
-    let qw = if kl > aff as u32 { (kl - aff as u32) / 2 } else { 0 } as usize;
+    let dy = crate::framebuffer::width();
+    let dw = crate::framebuffer::height();
+    let lk = (width as u32).min(dy) as usize;
+    let pp = (height as u32).min(dw) as usize;
+    let fh = if dy > lk as u32 { (dy - lk as u32) / 2 } else { 0 } as usize;
+    let hk = if dw > pp as u32 { (dw - pp as u32) / 2 } else { 0 } as usize;
 
-    let hxu = yq * aff;
-    let mut k = vec![0u32; hxu];
+    let dxw = lk * pp;
+    let mut buf = vec![0u32; dxw];
     let mut frame: u32 = 0;
-    let mut dv: u32 = 42;
+    let mut seed: u32 = 42;
 
     
-    let mut xc = if bzk == "fire" { vec![0u8; hxu] } else { Vec::new() };
+    let mut heat = if aoa == "fire" { vec![0u8; dxw] } else { Vec::new() };
 
     
-    let oy: usize = 8;
-    let aur = yq / oy + 1;
-    let mut agk = vec![0i32; aur];
-    let mut arz = vec![0u8; aur];
-    if bzk == "matrix" {
-        for a in 0..aur {
-            dv = bpk(dv);
-            agk[a] = -((dv % aff as u32) as i32);
-            dv = bpk(dv);
-            arz[a] = 1 + (dv % 4) as u8;
+    let col_w: usize = 8;
+    let xx = lk / col_w + 1;
+    let mut drops = vec![0i32; xx];
+    let mut speeds = vec![0u8; xx];
+    if aoa == "matrix" {
+        for i in 0..xx {
+            seed = xorshift(seed);
+            drops[i] = -((seed % pp as u32) as i32);
+            seed = xorshift(seed);
+            speeds[i] = 1 + (seed % 4) as u8;
         }
     }
 
     
-    let afk = crate::framebuffer::bre();
-    if !afk {
-        crate::framebuffer::beo();
-        crate::framebuffer::afi(true);
+    let pu = crate::framebuffer::ajy();
+    if !pu {
+        crate::framebuffer::adw();
+        crate::framebuffer::pr(true);
     }
 
     
-    crate::framebuffer::cwe(0xFF000000);
-    crate::framebuffer::sv();
+    crate::framebuffer::awo(0xFF000000);
+    crate::framebuffer::ii();
 
     crate::serial_println!("[video] Starting {} render loop ({}x{} centered on {}x{}, backbuffer={})", 
-        bzk, yq, aff, kp, kl, crate::framebuffer::bre());
+        aoa, lk, pp, dy, dw, crate::framebuffer::ajy());
 
     loop {
-        let gho = crate::time::lc();
+        let cyd = crate::time::uptime_ms();
 
         
-        if let Some(bs) = crate::keyboard::xw() {
-            if bs == 0x1B || bs == b'q' { break; }
+        if let Some(key) = crate::keyboard::kr() {
+            if key == 0x1B || key == b'q' { break; }
         }
 
         
-        match bzk {
-            "plasma" => pca(&mut k, yq, aff, frame),
-            "fire" => pbu(&mut k, &mut xc, yq, aff, &mut dv),
-            "matrix" => pbx(&mut k, yq, aff, &mut agk, &mut arz, &mut dv, oy, aur),
-            "shader" => pcc(&mut k, yq, aff, frame),
+        match aoa {
+            "plasma" => izv(&mut buf, lk, pp, frame),
+            "fire" => izp(&mut buf, &mut heat, lk, pp, &mut seed),
+            "matrix" => izs(&mut buf, lk, pp, &mut drops, &mut speeds, &mut seed, col_w, xx),
+            "shader" => izx(&mut buf, lk, pp, frame),
             _ => break,
         }
 
         
-        if let Some((bgc, dnu, bgb, baz)) = crate::framebuffer::cey() {
-            let aaa = bgc as *mut u32;
-            let bgd = baz as usize;
-            for c in 0..aff {
-                let bg = qw + c;
-                if bg >= bgb as usize { break; }
-                let bxg = &k[c * yq..c * yq + yq];
+        if let Some((bb_ptr, _bb_w, bb_h, bb_stride)) = crate::framebuffer::aqr() {
+            let mq = bb_ptr as *mut u32;
+            let aeu = bb_stride as usize;
+            for y in 0..pp {
+                let ad = hk + y;
+                if ad >= bb_h as usize { break; }
+                let amv = &buf[y * lk..y * lk + lk];
                 unsafe {
-                    let cs = aaa.add(bg * bgd + mp);
-                    core::ptr::copy_nonoverlapping(bxg.fq(), cs, yq);
+                    let dst = mq.add(ad * aeu + fh);
+                    core::ptr::copy_nonoverlapping(amv.as_ptr(), dst, lk);
                 }
             }
         }
-        crate::framebuffer::sv();
+        crate::framebuffer::ii();
 
-        frame = frame.cn(1);
+        frame = frame.wrapping_add(1);
 
         
         if frame <= 3 || frame % 60 == 0 {
@@ -412,8 +412,8 @@ pub fn vwl(bzk: &str, z: u16, ac: u16, tz: u16) {
     }
 
     
-    if !afk {
-        crate::framebuffer::afi(false);
+    if !pu {
+        crate::framebuffer::pr(false);
     }
 
     crate::serial_println!("[video] Stopped after {} frames", frame);
@@ -421,238 +421,238 @@ pub fn vwl(bzk: &str, z: u16, ac: u16, tz: u16) {
 
 
 
-pub fn gqt(bzk: &str, z: u16, ac: u16, tz: u16, uk: u64) {
-    let kp = crate::framebuffer::z();
-    let kl = crate::framebuffer::ac();
-    let yq = (z as u32).v(kp) as usize;
-    let aff = (ac as u32).v(kl) as usize;
-    let mp = if kp > yq as u32 { (kp - yq as u32) / 2 } else { 0 } as usize;
-    let qw = if kl > aff as u32 { (kl - aff as u32) / 2 } else { 0 } as usize;
+pub fn ddk(aoa: &str, width: u16, height: u16, fps: u16, duration_ms: u64) {
+    let dy = crate::framebuffer::width();
+    let dw = crate::framebuffer::height();
+    let lk = (width as u32).min(dy) as usize;
+    let pp = (height as u32).min(dw) as usize;
+    let fh = if dy > lk as u32 { (dy - lk as u32) / 2 } else { 0 } as usize;
+    let hk = if dw > pp as u32 { (dw - pp as u32) / 2 } else { 0 } as usize;
 
-    let hxu = yq * aff;
-    let mut k = vec![0u32; hxu];
+    let dxw = lk * pp;
+    let mut buf = vec![0u32; dxw];
     let mut frame: u32 = 0;
-    let mut dv: u32 = 42;
+    let mut seed: u32 = 42;
 
-    let mut xc = if bzk == "fire" { vec![0u8; hxu] } else { Vec::new() };
+    let mut heat = if aoa == "fire" { vec![0u8; dxw] } else { Vec::new() };
 
-    let oy: usize = 8;
-    let aur = yq / oy + 1;
-    let mut agk = vec![0i32; aur];
-    let mut arz = vec![0u8; aur];
-    if bzk == "matrix" {
-        for a in 0..aur {
-            dv = bpk(dv);
-            agk[a] = -((dv % aff as u32) as i32);
-            dv = bpk(dv);
-            arz[a] = 1 + (dv % 4) as u8;
+    let col_w: usize = 8;
+    let xx = lk / col_w + 1;
+    let mut drops = vec![0i32; xx];
+    let mut speeds = vec![0u8; xx];
+    if aoa == "matrix" {
+        for i in 0..xx {
+            seed = xorshift(seed);
+            drops[i] = -((seed % pp as u32) as i32);
+            seed = xorshift(seed);
+            speeds[i] = 1 + (seed % 4) as u8;
         }
     }
 
-    let afk = crate::framebuffer::bre();
-    if !afk {
-        crate::framebuffer::beo();
-        crate::framebuffer::afi(true);
+    let pu = crate::framebuffer::ajy();
+    if !pu {
+        crate::framebuffer::adw();
+        crate::framebuffer::pr(true);
     }
 
-    crate::framebuffer::cwe(0xFF000000);
-    crate::framebuffer::sv();
+    crate::framebuffer::awo(0xFF000000);
+    crate::framebuffer::ii();
 
     
-    let ayu = crate::cpu::tsc::ow();
-    let kx = crate::cpu::tsc::ard();
-    let cii = if kx > 0 { kx / 1000 * uk } else { u64::O };
+    let rr = crate::cpu::tsc::ey();
+    let freq = crate::cpu::tsc::we();
+    let acx = if freq > 0 { freq / 1000 * duration_ms } else { u64::MAX };
 
     loop {
         
-        let ez = crate::cpu::tsc::ow().ao(ayu);
-        if ez >= cii { break; }
+        let bb = crate::cpu::tsc::ey().saturating_sub(rr);
+        if bb >= acx { break; }
 
         
-        if let Some(bs) = crate::keyboard::xw() {
-            if bs == 0x1B || bs == b'q' { break; }
+        if let Some(key) = crate::keyboard::kr() {
+            if key == 0x1B || key == b'q' { break; }
         }
 
-        match bzk {
-            "plasma" => pca(&mut k, yq, aff, frame),
-            "fire" => pbu(&mut k, &mut xc, yq, aff, &mut dv),
-            "matrix" => pbx(&mut k, yq, aff, &mut agk, &mut arz, &mut dv, oy, aur),
-            "shader" => pcc(&mut k, yq, aff, frame),
+        match aoa {
+            "plasma" => izv(&mut buf, lk, pp, frame),
+            "fire" => izp(&mut buf, &mut heat, lk, pp, &mut seed),
+            "matrix" => izs(&mut buf, lk, pp, &mut drops, &mut speeds, &mut seed, col_w, xx),
+            "shader" => izx(&mut buf, lk, pp, frame),
             _ => break,
         }
 
-        if let Some((bgc, dnu, bgb, baz)) = crate::framebuffer::cey() {
-            let aaa = bgc as *mut u32;
-            let bgd = baz as usize;
-            for c in 0..aff {
-                let bg = qw + c;
-                if bg >= bgb as usize { break; }
-                let bxg = &k[c * yq..c * yq + yq];
+        if let Some((bb_ptr, _bb_w, bb_h, bb_stride)) = crate::framebuffer::aqr() {
+            let mq = bb_ptr as *mut u32;
+            let aeu = bb_stride as usize;
+            for y in 0..pp {
+                let ad = hk + y;
+                if ad >= bb_h as usize { break; }
+                let amv = &buf[y * lk..y * lk + lk];
                 unsafe {
-                    let cs = aaa.add(bg * bgd + mp);
-                    core::ptr::copy_nonoverlapping(bxg.fq(), cs, yq);
+                    let dst = mq.add(ad * aeu + fh);
+                    core::ptr::copy_nonoverlapping(amv.as_ptr(), dst, lk);
                 }
             }
         }
-        crate::framebuffer::sv();
-        frame = frame.cn(1);
+        crate::framebuffer::ii();
+        frame = frame.wrapping_add(1);
     }
 
-    if !afk {
-        crate::framebuffer::afi(false);
+    if !pu {
+        crate::framebuffer::pr(false);
     }
 
-    crate::serial_println!("[video] Timed demo '{}' stopped after {} frames ({} ms)", bzk, frame, uk);
+    crate::serial_println!("[video] Timed demo '{}' stopped after {} frames ({} ms)", aoa, frame, duration_ms);
 }
 
-fn pca(k: &mut [u32], d: usize, i: usize, frame: u32) {
+fn izv(buf: &mut [u32], w: usize, h: usize, frame: u32) {
     
     
-    let ab = frame as i32;
-    for c in 0..i {
-        for b in 0..d {
+    let t = frame as i32;
+    for y in 0..h {
+        for x in 0..w {
             
-            let jf = (b * 256 / d) as i32;
-            let sc = (c * 256 / i) as i32;
+            let dg = (x * 256 / w) as i32;
+            let hj = (y * 256 / h) as i32;
             
-            let agy = etk((jf.hx(3).cn(ab * 4)) as u8);
-            let apg = etk((sc.hx(2).cn(ab * 5)) as u8);
-            let bdf = etk((jf.cn(sc).hx(2).cn(ab * 3)) as u8);
-            let cnq = etk((jf.nj(sc).cn(ab * 7)) as u8);
+            let v1 = cbe((dg.wrapping_mul(3).wrapping_add(t * 4)) as u8);
+            let v2 = cbe((hj.wrapping_mul(2).wrapping_add(t * 5)) as u8);
+            let v3 = cbe((dg.wrapping_add(hj).wrapping_mul(2).wrapping_add(t * 3)) as u8);
+            let v4 = cbe((dg.wrapping_sub(hj).wrapping_add(t * 7)) as u8);
             
-            let abl = (agy as i32 + apg as i32 + bdf as i32 + cnq as i32) / 4;
-            let aya = ((abl + 128) & 0xFF) as u8;
-            let (m, at, o) = ocl(aya);
-            k[c * d + b] = 0xFF000000 | ((m as u32) << 16) | ((at as u32) << 8) | o as u32;
+            let ns = (v1 as i32 + v2 as i32 + v3 as i32 + v4 as i32) / 4;
+            let zz = ((ns + 128) & 0xFF) as u8;
+            let (r, g, b) = iff(zz);
+            buf[y * w + x] = 0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | b as u32;
         }
     }
 }
 
 
 #[inline(always)]
-fn etk(w: u8) -> i8 {
+fn cbe(idx: u8) -> i8 {
     
-    static Cly: [i8; 256] = {
-        let mut ab = [0i8; 256];
-        let mut a = 0u16;
-        while a < 256 {
+    static Apn: [i8; 256] = {
+        let mut t = [0i8; 256];
+        let mut i = 0u16;
+        while i < 256 {
             
             
-            let ib = a as i32; 
+            let phase = i as i32; 
             
-            let fm = (ib & 0xFF) as i32;
-            let ap = if fm < 64 {
+            let q = (phase & 0xFF) as i32;
+            let val = if q < 64 {
                 
-                (fm * 127 / 64) as i8
-            } else if fm < 128 {
+                (q * 127 / 64) as i8
+            } else if q < 128 {
                 
-                ((128 - fm) * 127 / 64) as i8
-            } else if fm < 192 {
+                ((128 - q) * 127 / 64) as i8
+            } else if q < 192 {
                 
-                -((fm - 128) * 127 / 64) as i8
+                -((q - 128) * 127 / 64) as i8
             } else {
                 
-                -((256 - fm) * 127 / 64) as i8
+                -((256 - q) * 127 / 64) as i8
             };
-            ab[a as usize] = ap;
-            a += 1;
+            t[i as usize] = val;
+            i += 1;
         }
-        ab
+        t
     };
-    Cly[w as usize]
+    Apn[idx as usize]
 }
 
 
 #[inline(always)]
-fn ocl(aya: u8) -> (u8, u8, u8) {
-    let i = aya as u16;
-    let jk = i * 6 / 256; 
-    let avw = ((i * 6) % 256) as u8; 
-    let fm = 255 - avw;
-    match jk {
-        0 => (255, avw, 0),
-        1 => (fm, 255, 0),
-        2 => (0, 255, avw),
-        3 => (0, fm, 255),
-        4 => (avw, 0, 255),
-        _ => (255, 0, fm),
+fn iff(zz: u8) -> (u8, u8, u8) {
+    let h = zz as u16;
+    let dj = h * 6 / 256; 
+    let yt = ((h * 6) % 256) as u8; 
+    let q = 255 - yt;
+    match dj {
+        0 => (255, yt, 0),
+        1 => (q, 255, 0),
+        2 => (0, 255, yt),
+        3 => (0, q, 255),
+        4 => (yt, 0, 255),
+        _ => (255, 0, q),
     }
 }
 
-fn pbu(k: &mut [u32], xc: &mut [u8], d: usize, i: usize, dv: &mut u32) {
+fn izp(buf: &mut [u32], heat: &mut [u8], w: usize, h: usize, seed: &mut u32) {
     
-    for b in 0..d {
-        *dv = bpk(*dv);
-        xc[(i - 1) * d + b] = (*dv & 0xFF) as u8;
-        *dv = bpk(*dv);
-        xc[(i - 2) * d + b] = ((*dv & 0xFF) as u16).v(255) as u8;
+    for x in 0..w {
+        *seed = xorshift(*seed);
+        heat[(h - 1) * w + x] = (*seed & 0xFF) as u8;
+        *seed = xorshift(*seed);
+        heat[(h - 2) * w + x] = ((*seed & 0xFF) as u16).min(255) as u8;
     }
     
-    for c in 0..i.ao(2) {
-        for b in 0..d {
-            let def = xc[(c + 1) * d + b] as u16;
-            let bl = if b > 0 { xc[(c + 1) * d + b - 1] as u16 } else { def };
-            let avi = if b + 1 < d { xc[(c + 1) * d + b + 1] as u16 } else { def };
-            let aaa = xc[((c + 2).v(i - 1)) * d + b] as u16;
-            let abl = (def + bl + avi + aaa) / 4;
-            xc[c * d + b] = if abl > 2 { (abl - 2).v(255) as u8 } else { 0 };
+    for y in 0..h.saturating_sub(2) {
+        for x in 0..w {
+            let bev = heat[(y + 1) * w + x] as u16;
+            let bl = if x > 0 { heat[(y + 1) * w + x - 1] as u16 } else { bev };
+            let yi = if x + 1 < w { heat[(y + 1) * w + x + 1] as u16 } else { bev };
+            let mq = heat[((y + 2).min(h - 1)) * w + x] as u16;
+            let ns = (bev + bl + yi + mq) / 4;
+            heat[y * w + x] = if ns > 2 { (ns - 2).min(255) as u8 } else { 0 };
         }
     }
     
-    for a in 0..d * i {
-        let ab = xc[a];
-        let (m, at, o) = if ab < 64 {
-            (ab * 4, 0u8, 0u8)
-        } else if ab < 128 {
-            (255, (ab - 64) * 4, 0u8)
-        } else if ab < 192 {
-            (255, 255, (ab - 128) * 4)
+    for i in 0..w * h {
+        let t = heat[i];
+        let (r, g, b) = if t < 64 {
+            (t * 4, 0u8, 0u8)
+        } else if t < 128 {
+            (255, (t - 64) * 4, 0u8)
+        } else if t < 192 {
+            (255, 255, (t - 128) * 4)
         } else {
             (255, 255, 255)
         };
-        k[a] = 0xFF000000 | ((m as u32) << 16) | ((at as u32) << 8) | o as u32;
+        buf[i] = 0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | b as u32;
     }
 }
 
-fn pbx(k: &mut [u32], d: usize, i: usize,
-    agk: &mut [i32], arz: &mut [u8], dv: &mut u32,
-    oy: usize, aur: usize)
+fn izs(buf: &mut [u32], w: usize, h: usize,
+    drops: &mut [i32], speeds: &mut [u8], seed: &mut u32,
+    col_w: usize, xx: usize)
 {
     
-    for a in 0..d * i {
-        let y = k[a];
-        let m = ((y >> 16) & 0xFF) * 90 / 100;
-        let at = ((y >> 8) & 0xFF) * 90 / 100;
-        let o = (y & 0xFF) * 90 / 100;
-        k[a] = 0xFF000000 | (m << 16) | (at << 8) | o;
+    for i in 0..w * h {
+        let p = buf[i];
+        let r = ((p >> 16) & 0xFF) * 90 / 100;
+        let g = ((p >> 8) & 0xFF) * 90 / 100;
+        let b = (p & 0xFF) * 90 / 100;
+        buf[i] = 0xFF000000 | (r << 16) | (g << 8) | b;
     }
     
-    for r in 0..aur {
-        let elg = r * oy;
-        let bg = agk[r];
-        if bg >= 0 && (bg as usize) < i {
-            let c = bg as usize;
-            for y in 0..oy.v(d.ao(elg)) {
-                k[c * d + elg + y] = 0xFFCCFFCC;
+    for c in 0..xx {
+        let bxd = c * col_w;
+        let ad = drops[c];
+        if ad >= 0 && (ad as usize) < h {
+            let y = ad as usize;
+            for p in 0..col_w.min(w.saturating_sub(bxd)) {
+                buf[y * w + bxd + p] = 0xFFCCFFCC;
             }
-            for ase in 1..8u32 {
-                let ty = bg - ase as i32;
-                if ty >= 0 && (ty as usize) < i {
-                    let hj = (200u32).ao(ase * 20);
-                    let at = hj.v(255);
-                    for y in 0..oy.v(d.ao(elg)) {
-                        k[ty as usize * d + elg + y] =
-                            0xFF000000 | ((at / 4) << 16) | (at << 8) | (at / 4);
+            for wr in 1..8u32 {
+                let ty = ad - wr as i32;
+                if ty >= 0 && (ty as usize) < h {
+                    let intensity = (200u32).saturating_sub(wr * 20);
+                    let g = intensity.min(255);
+                    for p in 0..col_w.min(w.saturating_sub(bxd)) {
+                        buf[ty as usize * w + bxd + p] =
+                            0xFF000000 | ((g / 4) << 16) | (g << 8) | (g / 4);
                     }
                 }
             }
         }
-        agk[r] += arz[r] as i32;
-        if agk[r] > (i as i32 + 20) {
-            *dv = bpk(*dv);
-            agk[r] = -((*dv % (i as u32 / 2)) as i32);
-            *dv = bpk(*dv);
-            arz[r] = 1 + (*dv % 4) as u8;
+        drops[c] += speeds[c] as i32;
+        if drops[c] > (h as i32 + 20) {
+            *seed = xorshift(*seed);
+            drops[c] = -((*seed % (h as u32 / 2)) as i32);
+            *seed = xorshift(*seed);
+            speeds[c] = 1 + (*seed % 4) as u8;
         }
     }
 }
@@ -664,124 +664,124 @@ fn pbx(k: &mut [u32], d: usize, i: usize,
 
 
 #[inline(always)]
-fn cxr(b: f32) -> f32 {
+fn bbo(x: f32) -> f32 {
     
-    let b = if b > 10.0 { 10.0 } else if b < -10.0 { -10.0 } else { b };
+    let x = if x > 10.0 { 10.0 } else if x < -10.0 { -10.0 } else { x };
     
-    let q = (1 << 23) as f32 / core::f32::consts::IG_;
-    let o = (1 << 23) as f32 * (127.0 - 0.04367744890362246);
-    let p = (q * b + o) as i32;
-    f32::bhb(if p > 0 { p as u32 } else { 0 })
+    let a = (1 << 23) as f32 / core::f32::consts::LN_2;
+    let b = (1 << 23) as f32 * (127.0 - 0.04367744890362246);
+    let v = (a * x + b) as i32;
+    f32::from_bits(if v > 0 { v as u32 } else { 0 })
 }
 
 
 #[inline(always)]
-fn fii(b: f32) -> f32 {
-    if b > 5.0 { return 1.0; }
-    if b < -5.0 { return -1.0; }
-    let hy = b * b;
-    b / (1.0 + b.gp() + hy * 0.28)
+fn cjg(x: f32) -> f32 {
+    if x > 5.0 { return 1.0; }
+    if x < -5.0 { return -1.0; }
+    let x2 = x * x;
+    x / (1.0 + x.abs() + x2 * 0.28)
 }
 
-fn pcc(k: &mut [u32], d: usize, i: usize, frame: u32) {
+fn izx(buf: &mut [u32], w: usize, h: usize, frame: u32) {
     
-    let bv = 4usize;
-    let kp = d / bv;
-    let kl = i / bv;
+    let scale = 4usize;
+    let dy = w / scale;
+    let dw = h / scale;
 
-    let ab = frame as f32 * 0.03;
-    let ix = kl as f32;
-    let kb = kp as f32;
+    let t = frame as f32 * 0.03;
+    let cm = dw as f32;
+    let da = dy as f32;
 
     
-    static Bry: [f32; 256] = {
-        let mut djf = [0.0f32; 256];
-        let mut a = 0;
-        while a < 256 {
+    static Aeh: [f32; 256] = {
+        let mut bhu = [0.0f32; 256];
+        let mut i = 0;
+        while i < 256 {
             
-            let hg = (a as f64) * 6.283185307179586 / 256.0;
+            let cc = (i as f64) * 6.283185307179586 / 256.0;
             
-            let q = hg % 6.283185307179586;
-            let b = if q > 3.14159265358979 { q - 6.283185307179586 } else { q };
-            let hy = b * b;
-            let ajr = hy * b;
-            let fbw = ajr * hy;
-            let fyz = fbw * hy;
-            let jxm = fyz * hy;
-            let e = b - ajr / 6.0 + fbw / 120.0 - fyz / 5040.0 + jxm / 362880.0;
-            djf[a] = e as f32;
-            a += 1;
+            let a = cc % 6.283185307179586;
+            let x = if a > 3.14159265358979 { a - 6.283185307179586 } else { a };
+            let x2 = x * x;
+            let x3 = x2 * x;
+            let cfo = x3 * x2;
+            let csy = cfo * x2;
+            let ffn = csy * x2;
+            let j = x - x3 / 6.0 + cfo / 120.0 - csy / 5040.0 + ffn / 362880.0;
+            bhu[i] = j as f32;
+            i += 1;
         }
-        djf
+        bhu
     };
     
     #[inline(always)]
-    fn kxl(b: f32) -> f32 {
+    fn fxx(x: f32) -> f32 {
         
-        let w = ((b * (256.0 / 6.2831853)) as i32 & 255) as u8;
-        Bry[w as usize]
+        let idx = ((x * (256.0 / 6.2831853)) as i32 & 255) as u8;
+        Aeh[idx as usize]
     }
     
     #[inline(always)]
-    fn nsy(b: f32) -> f32 {
-        let w = (((b + 1.5707963) * (256.0 / 6.2831853)) as i32 & 255) as u8;
-        Bry[w as usize]
+    fn hxw(x: f32) -> f32 {
+        let idx = (((x + 1.5707963) * (256.0 / 6.2831853)) as i32 & 255) as u8;
+        Aeh[idx as usize]
     }
 
-    for cq in 0..kl {
-        let cth = (cq as f32 * 2.0 - ix) / ix;
+    for ak in 0..dw {
+        let ayy = (ak as f32 * 2.0 - cm) / cm;
         
-        let ksh = cxr(cth);
-        let ksi = cxr(-cth);
-        let ksj = cxr(cth * -2.0);
+        let fts = bbo(ayy);
+        let ftt = bbo(-ayy);
+        let ftu = bbo(ayy * -2.0);
 
-        for cr in 0..kp {
-            let fqb = (cr as f32 * 2.0 - kb) / ix;
+        for am in 0..dy {
+            let cnq = (am as f32 * 2.0 - da) / cm;
 
-            let kqn = fqb * fqb + cth * cth;
-            let dm = (0.7 - kqn).gp();
+            let fss = cnq * cnq + ayy * ayy;
+            let l = (0.7 - fss).abs();
 
-            let e = (1.0 - dm) * 5.0; 
-            let mut fp = fqb * e;
-            let mut iz = cth * e;
+            let j = (1.0 - l) * 5.0; 
+            let mut vx = cnq * j;
+            let mut vy = ayy * j;
 
-            let mut htk: f32 = 0.0;
-            let mut htj: f32 = 0.0;
-            let mut hti: f32 = 0.0;
+            let mut dvt: f32 = 0.0;
+            let mut dvs: f32 = 0.0;
+            let mut dvr: f32 = 0.0;
 
             
-            let mut a: f32 = 1.0;
-            while a <= 6.0 {
-                let hok = 1.0 / a;
-                fp += nsy(iz * a + ab) * hok + 0.7;
-                iz += nsy(fp * a + a + ab) * hok + 0.7;
+            let mut i: f32 = 1.0;
+            while i <= 6.0 {
+                let dsf = 1.0 / i;
+                vx += hxw(vy * i + t) * dsf + 0.7;
+                vy += hxw(vx * i + i + t) * dsf + 0.7;
 
-                let wz = (fp - iz).gp() * 0.2;
-                htk += (kxl(fp) + 1.0) * wz;
-                htj += (kxl(iz) + 1.0) * wz;
-                hti += (kxl(iz) + 1.0) * wz;
-                a += 1.0;
+                let jr = (vx - vy).abs() * 0.2;
+                dvt += (fxx(vx) + 1.0) * jr;
+                dvs += (fxx(vy) + 1.0) * jr;
+                dvr += (fxx(vy) + 1.0) * jr;
+                i += 1.0;
             }
 
-            let duu = cxr(-4.0 * dm);
-            let xb = fii(ksh * duu / (htk + 0.001));
-            let lp = fii(ksi * duu / (htj + 0.001));
-            let pq = fii(ksj * duu / (hti + 0.001));
+            let boj = bbo(-4.0 * l);
+            let ko = cjg(fts * boj / (dvt + 0.001));
+            let fg = cjg(ftt * boj / (dvs + 0.001));
+            let fb = cjg(ftu * boj / (dvr + 0.001));
 
-            let m = (xb.gp() * 255.0).v(255.0) as u32;
-            let at = (lp.gp() * 255.0).v(255.0) as u32;
-            let o = (pq.gp() * 255.0).v(255.0) as u32;
-            let s = 0xFF000000 | (m << 16) | (at << 8) | o;
+            let r = (ko.abs() * 255.0).min(255.0) as u32;
+            let g = (fg.abs() * 255.0).min(255.0) as u32;
+            let b = (fb.abs() * 255.0).min(255.0) as u32;
+            let color = 0xFF000000 | (r << 16) | (g << 8) | b;
 
             
-            for bg in 0..bv {
-                let x = cq * bv + bg;
-                if x >= i { break; }
-                let fte = x * d + cr * bv;
-                for dx in 0..bv {
-                    let y = cr * bv + dx;
-                    if y < d {
-                        k[fte + dx] = s;
+            for ad in 0..scale {
+                let o = ak * scale + ad;
+                if o >= h { break; }
+                let cpq = o * w + am * scale;
+                for dx in 0..scale {
+                    let p = am * scale + dx;
+                    if p < w {
+                        buf[cpq + dx] = color;
                     }
                 }
             }

@@ -7,32 +7,32 @@
 #[derive(Clone, Copy, PartialEq)]
 pub enum FontMode {
     
-    Bsr,
+    Sharp,
     
-    Ayz,
+    Smooth,
 }
 
 
-static mut ASH_: FontMode = FontMode::Ayz;
+static mut AUL_: FontMode = FontMode::Smooth;
 
 
-pub fn mep(ev: FontMode) {
-    unsafe { ASH_ = ev; }
+pub fn guj(mode: FontMode) {
+    unsafe { AUL_ = mode; }
 }
 
 
-pub fn nye() -> FontMode {
-    unsafe { ASH_ }
+pub fn ibp() -> FontMode {
+    unsafe { AUL_ }
 }
 
 
 
-pub fn ada(r: char) -> [u8; 16] {
-    let w = r as usize;
-    if w < 32 || w > 126 {
-        return ASG_[0]; 
+pub fn ol(c: char) -> [u8; 16] {
+    let idx = c as usize;
+    if idx < 32 || idx > 126 {
+        return AUK_[0]; 
     }
-    ASG_[w - 32]
+    AUK_[idx - 32]
 }
 
 
@@ -43,78 +43,78 @@ pub fn ada(r: char) -> [u8; 16] {
 
 
 #[inline]
-pub fn ymy(
-    bi: &mut [u32],
-    z: u32,
-    b: u32,
-    c: u32,
-    r: char,
-    axw: u32,
-    vp: u32,
+pub fn qdn(
+    buffer: &mut [u32],
+    width: u32,
+    x: u32,
+    y: u32,
+    c: char,
+    fg_color: u32,
+    bg_color: u32,
 ) -> u32 {
-    let ka = ada(r);
-    let ac = bi.len() as u32 / z;
+    let du = ol(c);
+    let height = buffer.len() as u32 / width;
     
     
-    let ebm = ((axw >> 16) & 0xFF) as u32;
-    let ebl = ((axw >> 8) & 0xFF) as u32;
-    let ebk = (axw & 0xFF) as u32;
+    let bsn = ((fg_color >> 16) & 0xFF) as u32;
+    let bsm = ((fg_color >> 8) & 0xFF) as u32;
+    let bsl = (fg_color & 0xFF) as u32;
     
-    let cos = ((vp >> 16) & 0xFF) as u32;
-    let cor = ((vp >> 8) & 0xFF) as u32;
-    let coq = (vp & 0xFF) as u32;
+    let awg = ((bg_color >> 16) & 0xFF) as u32;
+    let awf = ((bg_color >> 8) & 0xFF) as u32;
+    let awe = (bg_color & 0xFF) as u32;
     
     
-    let qpt = gbe(ebm, ebl, ebk, cos, cor, coq, 64);
-    let qpu = gbe(ebm, ebl, ebk, cos, cor, coq, 128);
-    let qpv = gbe(ebm, ebl, ebk, cos, cor, coq, 192);
+    let kcb = cue(bsn, bsm, bsl, awg, awf, awe, 64);
+    let kcc = cue(bsn, bsm, bsl, awg, awf, awe, 128);
+    let kcd = cue(bsn, bsm, bsl, awg, awf, awe, 192);
     
-    for (bwv, &fs) in ka.iter().cf() {
-        let x = c + bwv as u32;
-        if x >= ac { break; }
+    for (amq, &bits) in du.iter().enumerate() {
+        let o = y + amq as u32;
+        if o >= height { break; }
         
-        let afg = (x * z) as usize;
-        let lvg = if bwv > 0 { ka[bwv - 1] } else { 0 };
-        let loi = if bwv < 15 { ka[bwv + 1] } else { 0 };
+        let pq = (o * width) as usize;
+        let gnz = if amq > 0 { du[amq - 1] } else { 0 };
+        let gjl = if amq < 15 { du[amq + 1] } else { 0 };
         
-        for ga in 0..8u32 {
-            let y = b + ga;
-            if y >= z { continue; }
+        for bf in 0..8u32 {
+            let p = x + bf;
+            if p >= width { continue; }
             
-            let hs = 0x80 >> ga;
-            let lgm = fs & hs != 0;
+            let mask = 0x80 >> bf;
+            let gec = bits & mask != 0;
             
-            if lgm {
+            if gec {
                 
-                bi[afg + y as usize] = axw;
+                buffer[pq + p as usize] = fg_color;
             } else {
                 
-                let udw = ga > 0 && (fs & (hs << 1)) != 0;
-                let vyw = ga < 7 && (fs & (hs >> 1)) != 0;
-                let xjr = lvg & hs != 0;
-                let qrm = loi & hs != 0;
+                let mxu = bf > 0 && (bits & (mask << 1)) != 0;
+                let oha = bf < 7 && (bits & (mask >> 1)) != 0;
+                let plj = gnz & mask != 0;
+                let kdq = gjl & mask != 0;
                 
                 
-                let mud = (udw as u8) + (vyw as u8) + (xjr as u8) + (qrm as u8);
+                let hec = (mxu as u8) + (oha as u8) + (plj as u8) + (kdq as u8);
                 
                 
-                let mle = ga > 0 && (lvg & (hs << 1)) != 0;
-                let agd = ga < 7 && (lvg & (hs >> 1)) != 0;
-                let bl = ga > 0 && (loi & (hs << 1)) != 0;
-                let avi = ga < 7 && (loi & (hs >> 1)) != 0;
-                let geq = (mle as u8) + (agd as u8) + (bl as u8) + (avi as u8);
+                let gyy = bf > 0 && (gnz & (mask << 1)) != 0;
+                let tr = bf < 7 && (gnz & (mask >> 1)) != 0;
+                let bl = bf > 0 && (gjl & (mask << 1)) != 0;
+                let yi = bf < 7 && (gjl & (mask >> 1)) != 0;
+                let cwm = (gyy as u8) + (tr as u8) + (bl as u8) + (yi as u8);
                 
-                let s = if mud >= 2 {
-                    qpv
-                } else if mud == 1 && geq >= 1 {
-                    qpu
-                } else if geq >= 2 {
-                    qpt
+                let color = if hec >= 2 {
+                    kcd
+                } else if hec == 1 && cwm >= 1 {
+                    kcc
+                } else if cwm >= 2 {
+                    kcb
                 } else {
-                    vp
+                    bg_color
                 };
                 
-                bi[afg + y as usize] = s;
+                buffer[pq + p as usize] = color;
             }
         }
     }
@@ -124,28 +124,28 @@ pub fn ymy(
 
 
 #[inline]
-pub fn ymx(
-    bi: &mut [u32],
-    z: u32,
-    b: u32,
-    c: u32,
-    r: char,
-    axw: u32,
+pub fn qdm(
+    buffer: &mut [u32],
+    width: u32,
+    x: u32,
+    y: u32,
+    c: char,
+    fg_color: u32,
 ) {
-    let ka = ada(r);
-    let ac = bi.len() as u32 / z;
+    let du = ol(c);
+    let height = buffer.len() as u32 / width;
     
-    for (bwv, &fs) in ka.iter().cf() {
-        let x = c + bwv as u32;
-        if x >= ac { break; }
+    for (amq, &bits) in du.iter().enumerate() {
+        let o = y + amq as u32;
+        if o >= height { break; }
         
-        let afg = (x * z) as usize;
+        let pq = (o * width) as usize;
         
-        for ga in 0..8u32 {
-            if fs & (0x80 >> ga) != 0 {
-                let y = b + ga;
-                if y < z {
-                    bi[afg + y as usize] = axw;
+        for bf in 0..8u32 {
+            if bits & (0x80 >> bf) != 0 {
+                let p = x + bf;
+                if p < width {
+                    buffer[pq + p as usize] = fg_color;
                 }
             }
         }
@@ -154,17 +154,17 @@ pub fn ymx(
 
 
 #[inline]
-fn gbe(ebm: u32, ebl: u32, ebk: u32, cos: u32, cor: u32, coq: u32, dw: u32) -> u32 {
-    let akg = 255 - dw;
-    let m = (ebm * dw + cos * akg) / 255;
-    let at = (ebl * dw + cor * akg) / 255;
-    let o = (ebk * dw + coq * akg) / 255;
-    0xFF000000 | (m << 16) | (at << 8) | o
+fn cue(bsn: u32, bsm: u32, bsl: u32, awg: u32, awf: u32, awe: u32, alpha: u32) -> u32 {
+    let sg = 255 - alpha;
+    let r = (bsn * alpha + awg * sg) / 255;
+    let g = (bsm * alpha + awf * sg) / 255;
+    let b = (bsl * alpha + awe * sg) / 255;
+    0xFF000000 | (r << 16) | (g << 8) | b
 }
 
 
 
-static ASG_: [[u8; 16]; 95] = [
+static AUK_: [[u8; 16]; 95] = [
     
     [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
     

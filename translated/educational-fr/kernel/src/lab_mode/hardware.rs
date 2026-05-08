@@ -23,17 +23,17 @@ pub struct HardwareState {
     pub cpu_pct: u32,
     pub heap_used: usize,
     pub heap_total: usize,
-    pub interrupt_request_rate: u64,
+    pub irq_rate: u64,
     pub uptime_secs: u64,
     pub task_count: usize,
-    pub allocator_count: u64,
+    pub alloc_count: u64,
     pub dealloc_count: u64,
     pub live_allocs: u64,
     pub peak_heap: usize,
-    pub largest_allocator: usize,
+    pub largest_alloc: usize,
     pub frag_pct: f32,
-    pub total_physical_mb: u64,
-    pub context_switches: u64,
+    pub total_phys_mb: u64,
+    pub ctx_switches: u64,
     /// Refresh counter
     refresh_counter: u64,
 }
@@ -47,17 +47,17 @@ pub fn new() -> Self {
             cpu_pct: 0,
             heap_used: 0,
             heap_total: 0,
-            interrupt_request_rate: 0,
+            irq_rate: 0,
             uptime_secs: 0,
             task_count: 0,
-            allocator_count: 0,
+            alloc_count: 0,
             dealloc_count: 0,
             live_allocs: 0,
             peak_heap: 0,
-            largest_allocator: 0,
+            largest_alloc: 0,
             frag_pct: 0.0,
-            total_physical_mb: 0,
-            context_switches: 0,
+            total_phys_mb: 0,
+            ctx_switches: 0,
             refresh_counter: 0,
         }
     }
@@ -76,25 +76,25 @@ pub fn new() -> Self {
         let mem = crate::devtools::memdbg_stats();
         self.heap_used = mem.current_heap_used;
         self.heap_total = mem.heap_total;
-        self.allocator_count = mem.allocator_count;
+        self.alloc_count = mem.alloc_count;
         self.dealloc_count = mem.dealloc_count;
         self.live_allocs = mem.live_allocs;
         self.peak_heap = mem.peak_heap_used;
-        self.largest_allocator = mem.largest_allocator;
+        self.largest_alloc = mem.largest_alloc;
         self.frag_pct = mem.fragmentation_pct;
         
         // Physical memory
-        self.total_physical_mb = crate::memory::total_physical_memory() / (1024 * 1024);
+        self.total_phys_mb = crate::memory::total_physical_memory() / (1024 * 1024);
         
         // IRQ
-        self.interrupt_request_rate = crate::devtools::interrupt_request_rate();
+        self.irq_rate = crate::devtools::irq_rate();
         
         // Uptime
         self.uptime_secs = crate::time::uptime_secs();
         
         // Scheduler stats
         let trace_stats = crate::trace::stats();
-        self.context_switches = trace_stats.events_recorded;
+        self.ctx_switches = trace_stats.events_recorded;
         
         // Tasks
         self.task_count = crate::scheduler::stats().ready_count;
@@ -166,21 +166,21 @@ pub fn draw(state: &HardwareState, x: i32, y: i32, w: u32, h: u32) {
     // ── Stats table ──────────────────────────
     let stats: [(&str, String, u32); 10] = [
         ("Uptime", format_uptime(state.uptime_secs), COLUMN_TEXT),
-        ("Physical RAM", format!("{} MB", state.total_physical_mb), COLUMN_TEXT),
-        ("IRQ Rate", format!("{}/sec", state.interrupt_request_rate), COLUMN_YELLOW),
+        ("Physical RAM", format!("{} MB", state.total_phys_mb), COLUMN_TEXT),
+        ("IRQ Rate", format!("{}/sec", state.irq_rate), COLUMN_YELLOW),
         ("Tasks", format!("{}", state.task_count), COLUMN_TEXT),
-        ("Trace Events", format!("{}", state.context_switches), COLUMN_DIM),
+        ("Trace Events", format!("{}", state.ctx_switches), COLUMN_DIM),
         ("Live Allocs", format!("{}", state.live_allocs), COLUMN_GREEN),
-        ("Total Allocs", format!("{}", state.allocator_count), COLUMN_DIM),
+        ("Total Allocs", format!("{}", state.alloc_count), COLUMN_DIM),
         ("Peak Heap", format!("{} KB", state.peak_heap / 1024), COLUMN_TEXT),
-        ("Largest Alloc", format_bytes(state.largest_allocator), COLUMN_TEXT),
+        ("Largest Alloc", format_bytes(state.largest_alloc), COLUMN_TEXT),
         ("Fragmentation", format!("{:.1}%", state.frag_pct), 
             if state.frag_pct > 50.0 { COLUMN_RED } else { COLUMN_DIM }),
     ];
     
     let visible = ((h as i32 - (cy - y)) / lh) as usize;
-    let start = state.scroll.minimum(stats.len().saturating_sub(1));
-    let end = (start + visible).minimum(stats.len());
+    let start = state.scroll.min(stats.len().saturating_sub(1));
+    let end = (start + visible).min(stats.len());
     
     for i in start..end {
         let (label, ref value, color) = stats[i];

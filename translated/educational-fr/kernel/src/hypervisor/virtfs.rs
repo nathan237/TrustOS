@@ -24,7 +24,7 @@ pub enum VirtFsOp {
     Write = 5,
     Close = 6,
     Stat = 7,
-    ReadDirectory = 8,
+    ReadDir = 8,
     Create = 9,
     Remove = 10,
     Mkdir = 11,
@@ -46,7 +46,7 @@ match value {
             5 => Ok(VirtFsOp::Write),
             6 => Ok(VirtFsOp::Close),
             7 => Ok(VirtFsOp::Stat),
-            8 => Ok(VirtFsOp::ReadDirectory),
+            8 => Ok(VirtFsOp::ReadDir),
             9 => Ok(VirtFsOp::Create),
             10 => Ok(VirtFsOp::Remove),
             11 => Ok(VirtFsOp::Mkdir),
@@ -65,9 +65,9 @@ pub enum VirtFsError {
     NotFound = 1,
     PermissionDenied = 2,
     IoError = 3,
-    InvalidOperation = 4,
-    NotDirectory = 5,
-    IsDirectory = 6,
+    InvalidOp = 4,
+    NotDir = 5,
+    IsDir = 6,
     NotEmpty = 7,
     Exists = 8,
     NoSpace = 9,
@@ -78,7 +78,7 @@ pub enum VirtFsError {
 #[derive(Debug, Clone)]
 struct FdInformation {
     path: String,
-    is_directory: bool,
+    is_dir: bool,
     offset: u64,
 }
 
@@ -162,7 +162,7 @@ match op {
             
             VirtFsOp::Open => {
                 if args.is_empty() {
-                    return (VirtFsError::InvalidOperation as u32, vec![]);
+                    return (VirtFsError::InvalidOp as u32, vec![]);
                 }
                 
                 // args[0] = pointer to path in shared memory
@@ -172,7 +172,7 @@ match op {
                 
                 self.fds.insert(fd, FdInformation {
                     path: String::from("/"),
-                    is_directory: false,
+                    is_dir: false,
                     offset: 0,
                 });
                 
@@ -181,20 +181,20 @@ match op {
             
             VirtFsOp::Read => {
                 if args.len() < 3 {
-                    return (VirtFsError::InvalidOperation as u32, vec![]);
+                    return (VirtFsError::InvalidOp as u32, vec![]);
                 }
                 
                 let fd = args[0] as u32;
                 let _offset = args[1];
                 let count = args[2] as usize;
                 
-                if let Some(fd_information) = self.fds.get(&fd) {
+                if let Some(fd_info) = self.fds.get(&fd) {
                     // Try to read from VFS - simplified, return empty for now
                     // A full implementation would use crate::vfs::open/read
-                    if let Some((_host_path, _readonly)) = self.resolve_path(&fd_information.path) {
+                    if let Some((_host_path, _readonly)) = self.resolve_path(&fd_info.path) {
                         // Placeholder: return empty data
                         let data: Vec<u8> = vec![];
-                        let to_read = core::cmp::minimum(count, data.len());
+                        let to_read = core::cmp::min(count, data.len());
                         (VirtFsError::Success as u32, data[..to_read].to_vec())
                     } else {
                         (VirtFsError::NotFound as u32, vec![])
@@ -206,13 +206,13 @@ match op {
             
             VirtFsOp::Write => {
                 if args.len() < 2 {
-                    return (VirtFsError::InvalidOperation as u32, vec![]);
+                    return (VirtFsError::InvalidOp as u32, vec![]);
                 }
                 
                 let fd = args[0] as u32;
                 
-                if let Some(fd_information) = self.fds.get(&fd) {
-                    if let Some((_host_path, readonly)) = self.resolve_path(&fd_information.path) {
+                if let Some(fd_info) = self.fds.get(&fd) {
+                    if let Some((_host_path, readonly)) = self.resolve_path(&fd_info.path) {
                         if readonly {
                             return (VirtFsError::PermissionDenied as u32, vec![]);
                         }
@@ -228,7 +228,7 @@ match op {
             
             VirtFsOp::Close => {
                 if args.is_empty() {
-                    return (VirtFsError::InvalidOperation as u32, vec![]);
+                    return (VirtFsError::InvalidOp as u32, vec![]);
                 }
                 
                 let fd = args[0] as u32;
@@ -241,19 +241,19 @@ match op {
             
             VirtFsOp::Stat => {
                 // Return file stat (simplified)
-                let status = [0u64; 4]; // size, mode, mtime, type
-                let bytes: Vec<u8> = status.iter()
+                let stat = [0u64; 4]; // size, mode, mtime, type
+                let bytes: Vec<u8> = stat.iter()
                     .flat_map(|&v| v.to_le_bytes())
                     .collect();
                 (VirtFsError::Success as u32, bytes)
             }
             
-            VirtFsOp::ReadDirectory => {
+            VirtFsOp::ReadDir => {
                 // Return directory entries
                 (VirtFsError::Success as u32, vec![])
             }
             
-            _ => (VirtFsError::InvalidOperation as u32, vec![]),
+            _ => (VirtFsError::InvalidOp as u32, vec![]),
         }
     }
 }
@@ -297,8 +297,8 @@ pub fn create_virtfs(vm_id: u64) -> () {
 
 /// Add a mount point
 pub fn add_mount(vm_id: u64, host_path: &str, guest_path: &str, readonly: bool) {
-    let mut manager = VIRTFS_MANAGER.lock();
-    if let Some(vfs) = manager.get(vm_id) {
+    let mut mgr = VIRTFS_MANAGER.lock();
+    if let Some(vfs) = mgr.get(vm_id) {
         vfs.add_mount(host_path, guest_path, readonly);
     }
 }
@@ -310,13 +310,13 @@ pub fn remove_virtfs(vm_id: u64) {
 
 /// Handle VirtFS hypercall
 pub fn handle_hypercall(vm_id: u64, op: u32, args: &[u64]) -> (u32, Vec<u8>) {
-    let mut manager = VIRTFS_MANAGER.lock();
+    let mut mgr = VIRTFS_MANAGER.lock();
     
-    if let Some(vfs) = manager.get(vm_id) {
+    if let Some(vfs) = mgr.get(vm_id) {
         if let Ok(virtfs_operation) = VirtFsOp::try_from(op) {
             vfs.handle_request(virtfs_operation, args)
         } else {
-            (VirtFsError::InvalidOperation as u32, vec![])
+            (VirtFsError::InvalidOp as u32, vec![])
         }
     } else {
         (VirtFsError::NotFound as u32, vec![])

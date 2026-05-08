@@ -5,28 +5,28 @@ use alloc::vec::Vec;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SvmVmState {
-    Cu,
-    Ai,
-    Cl,
-    Af,
+    Created,
+    Running,
+    Paused,
+    Stopped,
 }
 
-pub fn coa<G, Ac>(ddq: u64, xzc: G) -> Option<Ac>
-where G: FnOnce(&mut Btr) -> Ac {
+pub fn avv<F, U>(_id: u64, _f: F) -> Option<U>
+where F: FnOnce(&mut Afc) -> U {
     None
 }
 
-pub fn hqc() -> Vec<(u64, String, SvmVmState)> { Vec::new() }
+pub fn dtn() -> Vec<(u64, String, SvmVmState)> { Vec::new() }
 
 pub struct SvmVmStats {
-    pub ait: u64,
-    pub bmp: u64,
-    pub ank: u64,
-    pub bkn: u64,
-    pub axz: u64,
-    pub cay: u64,
-    pub gwh: u64,
-    pub jap: u64,
+    pub vmexits: u64,
+    pub cpuid_exits: u64,
+    pub io_exits: u64,
+    pub msr_exits: u64,
+    pub hlt_exits: u64,
+    pub npf_exits: u64,
+    pub vmmcall_exits: u64,
+    pub intr_exits: u64,
 }
 
 pub struct GuestRegs {
@@ -49,36 +49,36 @@ pub struct GuestRegs {
 }
 
 pub struct LapicState {
-    pub iq: bool,
-    pub bim: u32,
-    pub guv: u32,
-    pub atq: u32,
-    pub bnh: u64,
-    pub dgc: u32,
+    pub enabled: bool,
+    pub svr: u32,
+    pub tpr: u32,
+    pub timer_lvt: u32,
+    pub icr: u64,
+    pub dcr: u32,
 }
 pub struct Vmcb;
 
 impl Vmcb {
-    pub fn xs(&self, dnv: usize) -> u64 { 0 }
-    pub fn cgx(&self, dnv: usize) -> u64 { 0 }
-    pub fn alp(&self, dnv: usize) -> u16 { 0 }
-    pub fn za(&self, dnv: usize) -> u32 { 0 }
+    pub fn read_state(&self, bkm: usize) -> u64 { 0 }
+    pub fn read_control(&self, bkm: usize) -> u64 { 0 }
+    pub fn read_u16(&self, bkm: usize) -> u16 { 0 }
+    pub fn read_u32(&self, bkm: usize) -> u32 { 0 }
 }
 
-pub struct Btr {
-    pub cm: SvmVmStats,
-    pub ej: GuestRegs,
-    pub apy: usize,
-    pub ajv: u32,
-    pub ku: LapicState,
+pub struct Afc {
+    pub stats: SvmVmStats,
+    pub guest_regs: GuestRegs,
+    pub memory_size: usize,
+    pub asid: u32,
+    pub lapic: LapicState,
     pub vmcb: Option<Vmcb>,
 }
 
-impl Btr {
-    pub fn zvg(&self) -> String { String::new() }
-    pub fn zcq(&self) -> String { String::new() }
-    pub fn duy(&self, qbz: u64, jxx: usize) -> Option<&[u8]> { None }
-    pub fn fvn(&mut self, qbl: &[u8], xyh: &str, xzz: Option<&[u8]>) -> Result<(), String> {
+impl Afc {
+    pub fn rby(&self) -> String { String::new() }
+    pub fn qoz(&self) -> String { String::new() }
+    pub fn read_guest_memory(&self, _gpa: u64, _len: usize) -> Option<&[u8]> { None }
+    pub fn start_linux(&mut self, _bzimage: &[u8], _cmdline: &str, _initrd: Option<&[u8]>) -> Result<(), String> {
         Err(String::from("SVM not available on this architecture"))
     }
 }

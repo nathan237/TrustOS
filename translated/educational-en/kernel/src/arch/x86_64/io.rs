@@ -27,8 +27,8 @@ unsafe fn read_u8(&self) -> u8 {
     /// Write a byte to the port
     #[inline(always)]
     pub     // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe fn write_u8(&self, value: u8) {
-        cpu::outb(self.port, value);
+unsafe fn write_u8(&self, val: u8) {
+        cpu::outb(self.port, val);
     }
     
     /// Read a word from the port
@@ -41,8 +41,8 @@ unsafe fn read_u16(&self) -> u16 {
     /// Write a word to the port
     #[inline(always)]
     pub     // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe fn write_u16(&self, value: u16) {
-        cpu::outw(self.port, value);
+unsafe fn write_u16(&self, val: u16) {
+        cpu::outw(self.port, val);
     }
     
     /// Read a dword from the port
@@ -55,8 +55,8 @@ unsafe fn read_u32(&self) -> u32 {
     /// Write a dword to the port
     #[inline(always)]
     pub     // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe fn write_u32(&self, value: u32) {
-        cpu::outl(self.port, value);
+unsafe fn write_u32(&self, val: u32) {
+        cpu::outl(self.port, val);
     }
     
     /// Get the port number

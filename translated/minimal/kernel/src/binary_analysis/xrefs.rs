@@ -8,7 +8,7 @@ use alloc::vec::Vec;
 use alloc::collections::BTreeMap;
 use alloc::format;
 
-use super::disasm::Dc;
+use super::disasm::Bj;
 
 
 
@@ -16,45 +16,45 @@ use super::disasm::Dc;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum XrefType {
     
-    En,
+    Call,
     
-    Nh,
+    Jump,
     
-    Ahd,
+    ConditionalJump,
     
-    Aaw,
+    DataRef,
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Lc {
+pub struct Er {
     
     pub from: u64,
     
-    pub wh: u64,
+    pub to: u64,
     
-    pub dnl: XrefType,
+    pub xref_type: XrefType,
 }
 
 
 
 
 #[derive(Debug, Clone)]
-pub struct Sb {
+pub struct Hp {
     
-    pub bt: u64,
+    pub entry: u64,
     
-    pub ci: u64,
+    pub end: u64,
     
-    pub j: String,
+    pub name: String,
     
-    pub jak: usize,
+    pub instruction_count: usize,
     
-    pub imr: Vec<u64>,
+    pub calls_to: Vec<u64>,
     
-    pub imq: Vec<u64>,
+    pub called_from: Vec<u64>,
     
-    pub ikx: usize,
+    pub basic_blocks: usize,
 }
 
 
@@ -63,279 +63,279 @@ pub struct Sb {
 #[derive(Debug)]
 pub struct XrefDatabase {
     
-    pub xrefs: Vec<Lc>,
+    pub xrefs: Vec<Er>,
     
-    pub hxh: BTreeMap<u64, Vec<Lc>>,
+    pub refs_from: BTreeMap<u64, Vec<Er>>,
     
-    pub ehj: BTreeMap<u64, Vec<Lc>>,
+    pub refs_to: BTreeMap<u64, Vec<Er>>,
     
-    pub ajb: Vec<Sb>,
+    pub functions: Vec<Hp>,
     
-    pub hkt: BTreeMap<u64, usize>,
+    pub function_entries: BTreeMap<u64, usize>,
 }
 
 impl XrefDatabase {
     
-    pub fn qsy(
-        instructions: &[Dc],
-        blw: &BTreeMap<u64, String>,
+    pub fn ker(
+        instructions: &[Bj],
+        addr_to_symbol: &BTreeMap<u64, String>,
     ) -> Self {
         let mut xrefs = Vec::new();
-        let mut hxh: BTreeMap<u64, Vec<Lc>> = BTreeMap::new();
-        let mut ehj: BTreeMap<u64, Vec<Lc>> = BTreeMap::new();
+        let mut refs_from: BTreeMap<u64, Vec<Er>> = BTreeMap::new();
+        let mut refs_to: BTreeMap<u64, Vec<Er>> = BTreeMap::new();
 
         
-        for fi in instructions {
-            if let Some(cd) = fi.ena {
-                let xwt = if fi.etc {
-                    XrefType::En
-                } else if fi.etd {
-                    XrefType::Ahd
-                } else if fi.etg {
-                    XrefType::Nh
+        for inst in instructions {
+            if let Some(target) = inst.branch_target {
+                let pvx = if inst.is_call {
+                    XrefType::Call
+                } else if inst.is_cond_jump {
+                    XrefType::ConditionalJump
+                } else if inst.is_jump {
+                    XrefType::Jump
                 } else {
-                    XrefType::Aaw
+                    XrefType::DataRef
                 };
 
-                let bta = Lc {
-                    from: fi.re,
-                    wh: cd,
-                    dnl: xwt,
+                let aks = Er {
+                    from: inst.address,
+                    to: target,
+                    xref_type: pvx,
                 };
 
-                xrefs.push(bta.clone());
-                hxh.bt(fi.re).clq(Vec::new).push(bta.clone());
-                ehj.bt(cd).clq(Vec::new).push(bta);
+                xrefs.push(aks.clone());
+                refs_from.entry(inst.address).or_insert_with(Vec::new).push(aks.clone());
+                refs_to.entry(target).or_insert_with(Vec::new).push(aks);
             }
 
             
-            if fi.bes == "lea" && fi.bvs.contains("rip") {
+            if inst.mnemonic == "lea" && inst.operands_str.contains("rip") {
                 
-                if let Some(ag) = sqg(&fi.bvs, fi.re, fi.bf.len() as u64) {
-                    let bta = Lc {
-                        from: fi.re,
-                        wh: ag,
-                        dnl: XrefType::Aaw,
+                if let Some(addr) = lts(&inst.operands_str, inst.address, inst.bytes.len() as u64) {
+                    let aks = Er {
+                        from: inst.address,
+                        to: addr,
+                        xref_type: XrefType::DataRef,
                     };
-                    xrefs.push(bta.clone());
-                    hxh.bt(fi.re).clq(Vec::new).push(bta.clone());
-                    ehj.bt(ag).clq(Vec::new).push(bta);
+                    xrefs.push(aks.clone());
+                    refs_from.entry(inst.address).or_insert_with(Vec::new).push(aks.clone());
+                    refs_to.entry(addr).or_insert_with(Vec::new).push(aks);
                 }
             }
         }
 
         
-        let ajb = rwq(instructions, &ehj, blw);
+        let functions = ldw(instructions, &refs_to, addr_to_symbol);
 
         
-        let mut hkt = BTreeMap::new();
-        for (a, bb) in ajb.iter().cf() {
-            hkt.insert(bb.bt, a);
+        let mut function_entries = BTreeMap::new();
+        for (i, f) in functions.iter().enumerate() {
+            function_entries.insert(f.entry, i);
         }
 
         Self {
             xrefs,
-            hxh,
-            ehj,
-            ajb,
-            hkt,
+            refs_from,
+            refs_to,
+            functions,
+            function_entries,
         }
     }
 
     
-    pub fn ihw(&self, ag: u64) -> &[Lc] {
-        self.ehj.get(&ag).map(|p| p.gai()).unwrap_or(&[])
+    pub fn xrefs_to(&self, addr: u64) -> &[Er] {
+        self.refs_to.get(&addr).map(|v| v.as_slice()).unwrap_or(&[])
     }
 
     
-    pub fn gxa(&self, ag: u64) -> &[Lc] {
-        self.hxh.get(&ag).map(|p| p.gai()).unwrap_or(&[])
+    pub fn xrefs_from(&self, addr: u64) -> &[Er] {
+        self.refs_from.get(&addr).map(|v| v.as_slice()).unwrap_or(&[])
     }
 
     
-    pub fn szk(&self, ag: u64) -> Option<&Sb> {
+    pub fn function_at(&self, addr: u64) -> Option<&Hp> {
         
-        for ke in self.ajb.iter().vv() {
-            if ag >= ke.bt && ag < ke.ci {
-                return Some(ke);
+        for func in self.functions.iter().rev() {
+            if addr >= func.entry && addr < func.end {
+                return Some(func);
             }
         }
         None
     }
 
     
-    pub fn txn(&self, ag: u64) -> bool {
-        self.hkt.bgm(&ag)
+    pub fn is_function_entry(&self, addr: u64) -> bool {
+        self.function_entries.contains_key(&addr)
     }
 
     
-    pub fn ytg(&self, bt: u64) -> Option<&Sb> {
-        self.hkt.get(&bt)
-            .and_then(|&w| self.ajb.get(w))
+    pub fn qhw(&self, entry: u64) -> Option<&Hp> {
+        self.function_entries.get(&entry)
+            .and_then(|&idx| self.functions.get(idx))
     }
 
     
-    pub fn ztk(&self) -> usize {
+    pub fn rat(&self) -> usize {
         self.xrefs.len()
     }
 
     
-    pub fn yhg(&self) -> usize {
-        self.xrefs.iter().hi(|b| b.dnl == XrefType::En).az()
+    pub fn pzd(&self) -> usize {
+        self.xrefs.iter().filter(|x| x.xref_type == XrefType::Call).count()
     }
 
     
-    pub fn awz(&self) -> String {
-        let kgf = self.xrefs.iter().hi(|b| b.dnl == XrefType::En).az();
-        let uav = self.xrefs.iter().hi(|b| b.dnl == XrefType::Nh || b.dnl == XrefType::Ahd).az();
-        let f = self.xrefs.iter().hi(|b| b.dnl == XrefType::Aaw).az();
+    pub fn summary(&self) -> String {
+        let fkp = self.xrefs.iter().filter(|x| x.xref_type == XrefType::Call).count();
+        let mvi = self.xrefs.iter().filter(|x| x.xref_type == XrefType::Jump || x.xref_type == XrefType::ConditionalJump).count();
+        let data = self.xrefs.iter().filter(|x| x.xref_type == XrefType::DataRef).count();
 
         format!(
             "Xrefs: {} total ({} calls, {} jumps, {} data) | {} functions detected",
-            self.xrefs.len(), kgf, uav, f, self.ajb.len()
+            self.xrefs.len(), fkp, mvi, data, self.functions.len()
         )
     }
 }
 
 
 
-fn rwq(
-    instructions: &[Dc],
-    ehj: &BTreeMap<u64, Vec<Lc>>,
-    blw: &BTreeMap<u64, String>,
-) -> Vec<Sb> {
+fn ldw(
+    instructions: &[Bj],
+    refs_to: &BTreeMap<u64, Vec<Er>>,
+    addr_to_symbol: &BTreeMap<u64, String>,
+) -> Vec<Hp> {
     if instructions.is_empty() {
         return Vec::new();
     }
 
     
-    let mut ch: BTreeMap<u64, String> = BTreeMap::new();
+    let mut entries: BTreeMap<u64, String> = BTreeMap::new();
 
     
-    for (ag, xrefs) in ehj.iter() {
-        for bta in xrefs {
-            if bta.dnl == XrefType::En {
-                let j = blw.get(ag)
-                    .abn()
-                    .unwrap_or_else(|| format!("sub_{:x}", ag));
-                ch.insert(*ag, j);
+    for (addr, xrefs) in refs_to.iter() {
+        for aks in xrefs {
+            if aks.xref_type == XrefType::Call {
+                let name = addr_to_symbol.get(addr)
+                    .cloned()
+                    .unwrap_or_else(|| format!("sub_{:x}", addr));
+                entries.insert(*addr, name);
                 break;
             }
         }
     }
 
     
-    for (ag, j) in blw {
-        ch.bt(*ag).clq(|| j.clone());
+    for (addr, name) in addr_to_symbol {
+        entries.entry(*addr).or_insert_with(|| name.clone());
     }
 
     
-    let nur = instructions[0].re;
-    ch.bt(nur).clq(|| {
-        blw.get(&nur)
-            .abn()
+    let hzb = instructions[0].address;
+    entries.entry(hzb).or_insert_with(|| {
+        addr_to_symbol.get(&hzb)
+            .cloned()
             .unwrap_or_else(|| String::from("_start"))
     });
 
     
-    let mgl: Vec<(u64, String)> = ch.dse().collect();
+    let gvp: Vec<(u64, String)> = entries.into_iter().collect();
 
     
-    let mua: BTreeMap<u64, usize> = instructions.iter()
-        .cf()
-        .map(|(a, fi)| (fi.re, a))
+    let hea: BTreeMap<u64, usize> = instructions.iter()
+        .enumerate()
+        .map(|(i, inst)| (inst.address, i))
         .collect();
 
     
-    let mut ajb = Vec::new();
-    for (a, (bt, j)) in mgl.iter().cf() {
+    let mut functions = Vec::new();
+    for (i, (entry, name)) in gvp.iter().enumerate() {
         
-        let dlz = match mua.get(bt) {
-            Some(&w) => w,
+        let bjj = match hea.get(entry) {
+            Some(&idx) => idx,
             None => continue, 
         };
 
         
-        let ktk = if a + 1 < mgl.len() {
-            let uud = mgl[a + 1].0;
-            mua.get(&uud).hu().unwrap_or(instructions.len())
+        let fus = if i + 1 < gvp.len() {
+            let nka = gvp[i + 1].0;
+            hea.get(&nka).copied().unwrap_or(instructions.len())
         } else {
             instructions.len()
         };
 
-        if dlz >= ktk { continue; }
+        if bjj >= fus { continue; }
 
-        let iwa = &instructions[dlz..ktk];
-        let sll = iwa.qv()
-            .map(|fi| fi.re + fi.bf.len() as u64)
-            .unwrap_or(*bt);
+        let eno = &instructions[bjj..fus];
+        let lqa = eno.last()
+            .map(|inst| inst.address + inst.bytes.len() as u64)
+            .unwrap_or(*entry);
 
         
-        let imr: Vec<u64> = iwa.iter()
-            .hi(|fi| fi.etc)
-            .kwb(|fi| fi.ena)
+        let calls_to: Vec<u64> = eno.iter()
+            .filter(|inst| inst.is_call)
+            .filter_map(|inst| inst.branch_target)
             .collect();
 
         
-        let imq: Vec<u64> = ehj.get(bt)
+        let called_from: Vec<u64> = refs_to.get(entry)
             .map(|xrefs| xrefs.iter()
-                .hi(|b| b.dnl == XrefType::En)
-                .map(|b| b.from)
+                .filter(|x| x.xref_type == XrefType::Call)
+                .map(|x| x.from)
                 .collect())
-            .age();
+            .unwrap_or_default();
 
         
-        let ikx = 1 + iwa.iter()
-            .hi(|fi| fi.etg || fi.etd || fi.edy)
-            .az();
+        let basic_blocks = 1 + eno.iter()
+            .filter(|inst| inst.is_jump || inst.is_cond_jump || inst.is_ret)
+            .count();
 
-        ajb.push(Sb {
-            bt: *bt,
-            ci: sll,
-            j: j.clone(),
-            jak: iwa.len(),
-            imr,
-            imq,
-            ikx,
+        functions.push(Hp {
+            entry: *entry,
+            end: lqa,
+            name: name.clone(),
+            instruction_count: eno.len(),
+            calls_to,
+            called_from,
+            basic_blocks,
         });
     }
 
-    ajb.bxf(|bb| bb.bt);
-    ajb
+    functions.sort_by_key(|f| f.entry);
+    functions
 }
 
 
 
 
-fn sqg(bvr: &str, dik: u64, tvg: u64) -> Option<u64> {
+fn lts(operands: &str, bhf: u64, inst_len: u64) -> Option<u64> {
     
-    let mai = bvr.du("rip")?;
-    let muk = &bvr[mai + 3..];
+    let grr = operands.find("rip")?;
+    let hej = &operands[grr + 3..];
 
-    let hsu = dik + tvg; 
+    let dve = bhf + inst_len; 
 
-    if let Some(kr) = muk.blj('+') {
+    if let Some(ef) = hej.strip_prefix('+') {
         
-        let ci = kr.du(']').unwrap_or(kr.len());
-        let nu = kr[..ci].em();
-        let l = if nu.cj("0x") {
-            u64::wa(&nu[2..], 16).bq()?
+        let end = ef.find(']').unwrap_or(ef.len());
+        let ga = ef[..end].trim();
+        let offset = if ga.starts_with("0x") {
+            u64::from_str_radix(&ga[2..], 16).ok()?
         } else {
-            nu.parse::<u64>().bq()?
+            ga.parse::<u64>().ok()?
         };
-        Some(hsu + l)
-    } else if let Some(kr) = muk.blj('-') {
+        Some(dve + offset)
+    } else if let Some(ef) = hej.strip_prefix('-') {
         
-        let ci = kr.du(']').unwrap_or(kr.len());
-        let nu = kr[..ci].em();
-        let l = if nu.cj("0x") {
-            u64::wa(&nu[2..], 16).bq()?
+        let end = ef.find(']').unwrap_or(ef.len());
+        let ga = ef[..end].trim();
+        let offset = if ga.starts_with("0x") {
+            u64::from_str_radix(&ga[2..], 16).ok()?
         } else {
-            nu.parse::<u64>().bq()?
+            ga.parse::<u64>().ok()?
         };
-        Some(hsu.nj(l))
+        Some(dve.wrapping_sub(offset))
     } else {
         
-        Some(hsu)
+        Some(dve)
     }
 }

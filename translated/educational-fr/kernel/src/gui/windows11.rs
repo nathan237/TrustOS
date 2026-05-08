@@ -155,14 +155,14 @@ fn draw_corner_filled(cx: i32, cy: i32, radius: u32, corner: Corner, color: u32)
         for dx in 0..=r {
             // Check if point is inside the circle
             if dx * dx + dy * dy <= r * r {
-                let (pixel, py) = // Correspondance de motifs — branchement exhaustif de Rust.
+                let (px, py) = // Correspondance de motifs — branchement exhaustif de Rust.
 match corner {
                     Corner::TopLeft => (cx - dx, cy - dy),
                     Corner::TopRight => (cx + dx, cy - dy),
                     Corner::BottomLeft => (cx - dx, cy + dy),
                     Corner::BottomRight => (cx + dx, cy + dy),
                 };
-                draw_pixel(pixel, py, color);
+                draw_pixel(px, py, color);
             }
         }
     }
@@ -184,8 +184,8 @@ match corner {
             Corner::BottomRight => [(cx + x, cy + y), (cx + y, cy + x)],
         };
         
-        for (pixel, py) in points {
-            draw_pixel(pixel, py, color);
+        for (px, py) in points {
+            draw_pixel(px, py, color);
         }
         
         if d < 0 {

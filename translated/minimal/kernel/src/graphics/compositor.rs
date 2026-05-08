@@ -10,7 +10,7 @@
 use alloc::vec::Vec;
 use alloc::string::String;
 use spin::Mutex;
-use micromath::Wo;
+use micromath::F32Ext;
 
 use super::math3d::{Vec3, Vec4, Mat4};
 use super::render2d::Color2D;
@@ -25,131 +25,131 @@ use crate::framebuffer;
 #[derive(Clone, Copy, PartialEq)]
 pub enum CompositorTheme {
     
-    Aif,
+    Flat,
     
-    Xq,
+    Modern,
     
-    Ait,
+    Glass,
     
-    Tp,
+    Neon,
     
-    Gy,
+    Minimal,
 }
 
 
 #[derive(Clone, Copy)]
 pub enum Easing {
-    Cgp,
-    Bfq,
-    Arl,
-    Cbn,
-    Byr,
-    Cbo,
+    Linear,
+    EaseIn,
+    EaseOut,
+    EaseInOut,
+    Bounce,
+    Elastic,
 }
 
 
 #[derive(Clone)]
 pub struct WindowSurface {
-    pub ad: u32,
-    pub b: f32,
-    pub c: f32,
-    pub z: f32,
-    pub ac: f32,
-    pub adh: f32,
-    pub bv: f32,
-    pub chh: f32,
-    pub ell: i32,
-    pub iw: bool,
-    pub ja: bool,
-    pub aat: bool,
+    pub id: u32,
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub opacity: f32,
+    pub scale: f32,
+    pub rotation: f32,
+    pub z_order: i32,
+    pub visible: bool,
+    pub focused: bool,
+    pub minimized: bool,
     
     
-    pub ca: Vec<u32>,
-    pub rok: u32,
-    pub eny: u32,
+    pub content: Vec<u32>,
+    pub content_width: u32,
+    pub content_height: u32,
     
     
-    pub ayw: f32,
-    pub ayx: f32,
-    pub jsm: f32,
-    pub jso: f32,
-    pub dyh: f32,
-    pub gys: f32,
-    pub gyt: Easing,
+    pub target_x: f32,
+    pub target_y: f32,
+    pub target_opacity: f32,
+    pub target_scale: f32,
+    pub animation_progress: f32,
+    pub animation_duration: f32,
+    pub animation_easing: Easing,
 }
 
 impl WindowSurface {
-    pub fn new(ad: u32, b: f32, c: f32, z: f32, ac: f32) -> Self {
-        let d = z as u32;
-        let i = ac as u32;
+    pub fn new(id: u32, x: f32, y: f32, width: f32, height: f32) -> Self {
+        let w = width as u32;
+        let h = height as u32;
         Self {
-            ad,
-            b,
-            c,
-            z,
-            ac,
-            adh: 1.0,
-            bv: 1.0,
-            chh: 0.0,
-            ell: 0,
-            iw: true,
-            ja: false,
-            aat: false,
-            ca: alloc::vec![0xFF0A0E0B; (d * i) as usize],
-            rok: d,
-            eny: i,
-            ayw: b,
-            ayx: c,
-            jsm: 1.0,
-            jso: 1.0,
-            dyh: 1.0,
-            gys: 0.0,
-            gyt: Easing::Arl,
+            id,
+            x,
+            y,
+            width,
+            height,
+            opacity: 1.0,
+            scale: 1.0,
+            rotation: 0.0,
+            z_order: 0,
+            visible: true,
+            focused: false,
+            minimized: false,
+            content: alloc::vec![0xFF0A0E0B; (w * h) as usize],
+            content_width: w,
+            content_height: h,
+            target_x: x,
+            target_y: y,
+            target_opacity: 1.0,
+            target_scale: 1.0,
+            animation_progress: 1.0,
+            animation_duration: 0.0,
+            animation_easing: Easing::EaseOut,
         }
     }
     
     
-    pub fn qs(&mut self, os: f32) {
-        if self.dyh < 1.0 {
-            self.dyh += os / self.gys.am(0.001);
-            self.dyh = self.dyh.v(1.0);
+    pub fn update(&mut self, fm: f32) {
+        if self.animation_progress < 1.0 {
+            self.animation_progress += fm / self.animation_duration.max(0.001);
+            self.animation_progress = self.animation_progress.min(1.0);
             
-            let ab = qjs(self.dyh, self.gyt);
+            let t = jwz(self.animation_progress, self.animation_easing);
             
-            self.b = csb(self.b, self.ayw, ab);
-            self.c = csb(self.c, self.ayx, ab);
-            self.adh = csb(self.adh, self.jsm, ab);
-            self.bv = csb(self.bv, self.jso, ab);
+            self.x = lerp(self.x, self.target_x, t);
+            self.y = lerp(self.y, self.target_y, t);
+            self.opacity = lerp(self.opacity, self.target_opacity, t);
+            self.scale = lerp(self.scale, self.target_scale, t);
         }
     }
     
     
-    pub fn yex(&mut self, b: f32, c: f32, avr: f32, ksn: Easing) {
-        self.ayw = b;
-        self.ayx = c;
-        self.dyh = 0.0;
-        self.gys = avr;
-        self.gyt = ksn;
+    pub fn pye(&mut self, x: f32, y: f32, yq: f32, easing: Easing) {
+        self.target_x = x;
+        self.target_y = y;
+        self.animation_progress = 0.0;
+        self.animation_duration = yq;
+        self.animation_easing = easing;
     }
     
     
-    pub fn yqe(&mut self, avr: f32) {
-        self.adh = 0.0;
-        self.jsm = 1.0;
-        self.bv = 0.95;
-        self.jso = 1.0;
-        self.dyh = 0.0;
-        self.gys = avr;
-        self.gyt = Easing::Arl;
+    pub fn qfl(&mut self, yq: f32) {
+        self.opacity = 0.0;
+        self.target_opacity = 1.0;
+        self.scale = 0.95;
+        self.target_scale = 1.0;
+        self.animation_progress = 0.0;
+        self.animation_duration = yq;
+        self.animation_easing = Easing::EaseOut;
     }
     
     
-    pub fn cki(&mut self, avr: f32) {
-        self.jsm = 0.0;
-        self.jso = 0.95;
-        self.dyh = 0.0;
-        self.gys = avr;
-        self.gyt = Easing::Bfq;
+    pub fn ats(&mut self, yq: f32) {
+        self.target_opacity = 0.0;
+        self.target_scale = 0.95;
+        self.animation_progress = 0.0;
+        self.animation_duration = yq;
+        self.animation_easing = Easing::EaseIn;
     }
 }
 
@@ -159,384 +159,384 @@ impl WindowSurface {
 
 
 pub struct Compositor {
-    pub z: u32,
-    pub ac: u32,
-    pub axa: Vec<WindowSurface>,
+    pub width: u32,
+    pub height: u32,
+    pub surfaces: Vec<WindowSurface>,
     pub theme: CompositorTheme,
-    pub cdb: u32,
-    pub jr: bool,
+    pub background_color: u32,
+    pub initialized: bool,
     
     
-    pub pkd: f32,
-    pub gsl: f32,
-    pub dby: f32,
-    pub avn: f32,
-    pub dek: f32,
-    pub gbi: f32,
+    pub shadow_offset: f32,
+    pub shadow_blur: f32,
+    pub shadow_opacity: f32,
+    pub corner_radius: f32,
+    pub border_width: f32,
+    pub border_glow: f32,
     
     
     pub time: f32,
-    pub tz: f32,
+    pub fps: f32,
     
     
-    pub iln: u32,
-    pub ilm: u32,
-    pub haj: BackgroundPattern,
+    pub bg_gradient_top: u32,
+    pub bg_gradient_bottom: u32,
+    pub bg_pattern: BackgroundPattern,
 }
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum BackgroundPattern {
-    Aes,
-    Bii,
-    Pn,
-    Cr,
-    Bxx,
+    Solid,
+    Gradient,
+    Grid,
+    Noise,
+    Animated,
 }
 
 impl Compositor {
     pub const fn new() -> Self {
         Self {
-            z: 1280,
-            ac: 800,
-            axa: Vec::new(),
-            theme: CompositorTheme::Xq,
-            cdb: 0xFF070707,
-            jr: false,
-            pkd: 8.0,
-            gsl: 16.0,
-            dby: 0.4,
-            avn: 8.0,
-            dek: 1.0,
-            gbi: 0.0,
+            width: 1280,
+            height: 800,
+            surfaces: Vec::new(),
+            theme: CompositorTheme::Modern,
+            background_color: 0xFF070707,
+            initialized: false,
+            shadow_offset: 8.0,
+            shadow_blur: 16.0,
+            shadow_opacity: 0.4,
+            corner_radius: 8.0,
+            border_width: 1.0,
+            border_glow: 0.0,
             time: 0.0,
-            tz: 60.0,
-            iln: 0xFF070707,
-            ilm: 0xFF020303,
-            haj: BackgroundPattern::Bii,
+            fps: 60.0,
+            bg_gradient_top: 0xFF070707,
+            bg_gradient_bottom: 0xFF020303,
+            bg_pattern: BackgroundPattern::Gradient,
         }
     }
     
     
-    pub fn init(&mut self, z: u32, ac: u32) {
-        self.z = z;
-        self.ac = ac;
+    pub fn init(&mut self, width: u32, height: u32) {
+        self.width = width;
+        self.height = height;
         
         
-        nyy(z, ac);
-        kzd(TL_);
-        kzd(ACV_);
+        ice(width, height);
+        fzc(UR_);
+        fzc(AEL_);
         
         
-        ixa(NF_);
-        hlp();
-        tft(0.0, z as f32, ac as f32, 0.0, -100.0, 100.0);
+        eoi(OE_);
+        dqu();
+        met(0.0, width as f32, height as f32, 0.0, -100.0, 100.0);
         
-        ixa(ACY_);
-        hlp();
+        eoi(AEO_);
+        dqu();
         
-        self.jr = true;
+        self.initialized = true;
     }
     
     
-    pub fn yep(&mut self, surface: WindowSurface) -> u32 {
-        let ad = surface.ad;
-        self.axa.push(surface);
-        self.wqj();
-        ad
+    pub fn pxx(&mut self, surface: WindowSurface) -> u32 {
+        let id = surface.id;
+        self.surfaces.push(surface);
+        self.sort_surfaces();
+        id
     }
     
     
-    pub fn zji(&mut self, ad: u32) {
-        self.axa.ajm(|e| e.ad != ad);
+    pub fn qts(&mut self, id: u32) {
+        self.surfaces.retain(|j| j.id != id);
     }
     
     
-    pub fn teu(&mut self, ad: u32) -> Option<&mut WindowSurface> {
-        self.axa.el().du(|e| e.ad == ad)
+    pub fn get_surface_mut(&mut self, id: u32) -> Option<&mut WindowSurface> {
+        self.surfaces.iter_mut().find(|j| j.id == id)
     }
     
     
-    fn wqj(&mut self) {
-        self.axa.bxe(|q, o| q.ell.cmp(&o.ell));
+    fn sort_surfaces(&mut self) {
+        self.surfaces.sort_by(|a, b| a.z_order.cmp(&b.z_order));
     }
     
     
-    pub fn qs(&mut self, os: f32) {
-        self.time += os;
-        for surface in &mut self.axa {
-            surface.qs(os);
+    pub fn update(&mut self, fm: f32) {
+        self.time += fm;
+        for surface in &mut self.surfaces {
+            surface.update(fm);
         }
     }
     
     
-    pub fn tj(&self) {
-        if !self.jr {
+    pub fn render(&self) {
+        if !self.initialized {
             return;
         }
         
         
-        nyx(
-            ((self.cdb >> 16) & 0xFF) as f32 / 255.0,
-            ((self.cdb >> 8) & 0xFF) as f32 / 255.0,
-            (self.cdb & 0xFF) as f32 / 255.0,
+        icd(
+            ((self.background_color >> 16) & 0xFF) as f32 / 255.0,
+            ((self.background_color >> 8) & 0xFF) as f32 / 255.0,
+            (self.background_color & 0xFF) as f32 / 255.0,
             1.0,
         );
-        nyw(ACW_ | ACX_);
+        icc(AEM_ | AEN_);
         
         
-        self.vvd();
+        self.render_background();
         
         
-        for surface in &self.axa {
-            if !surface.iw || surface.adh <= 0.001 {
+        for surface in &self.surfaces {
+            if !surface.visible || surface.opacity <= 0.001 {
                 continue;
             }
-            self.vwq(surface);
+            self.render_surface(surface);
         }
         
         
-        tfr();
+        mer();
     }
     
     
-    fn vvd(&self) {
-        match self.haj {
-            BackgroundPattern::Aes => {
-                self.bdx(0.0, 0.0, self.z as f32, self.ac as f32, 
-                                      self.cdb, -99.0);
+    fn render_background(&self) {
+        match self.bg_pattern {
+            BackgroundPattern::Solid => {
+                self.draw_filled_rect(0.0, 0.0, self.width as f32, self.height as f32, 
+                                      self.background_color, -99.0);
             }
-            BackgroundPattern::Bii => {
-                self.krb(0.0, 0.0, self.z as f32, self.ac as f32,
-                                        self.iln, self.ilm, -99.0);
+            BackgroundPattern::Gradient => {
+                self.draw_gradient_rect(0.0, 0.0, self.width as f32, self.height as f32,
+                                        self.bg_gradient_top, self.bg_gradient_bottom, -99.0);
             }
-            BackgroundPattern::Pn => {
-                self.krb(0.0, 0.0, self.z as f32, self.ac as f32,
-                                        self.iln, self.ilm, -99.0);
-                self.fgx(-98.0);
+            BackgroundPattern::Grid => {
+                self.draw_gradient_rect(0.0, 0.0, self.width as f32, self.height as f32,
+                                        self.bg_gradient_top, self.bg_gradient_bottom, -99.0);
+                self.draw_grid(-98.0);
             }
-            BackgroundPattern::Bxx => {
-                self.sbc(-99.0);
+            BackgroundPattern::Animated => {
+                self.draw_animated_background(-99.0);
             }
             _ => {
-                self.bdx(0.0, 0.0, self.z as f32, self.ac as f32,
-                                      self.cdb, -99.0);
+                self.draw_filled_rect(0.0, 0.0, self.width as f32, self.height as f32,
+                                      self.background_color, -99.0);
             }
         }
     }
     
     
-    fn sbc(&self, av: f32) {
+    fn draw_animated_background(&self, z: f32) {
         
-        self.krb(0.0, 0.0, self.z as f32, self.ac as f32,
-                                self.iln, self.ilm, av);
+        self.draw_gradient_rect(0.0, 0.0, self.width as f32, self.height as f32,
+                                self.bg_gradient_top, self.bg_gradient_bottom, z);
         
         
-        let ab = self.time * 0.5;
-        let tgd = (self.z as f32 / 2.0) + (ab.ayq() * 200.0);
-        let tge = (self.ac as f32 / 3.0) + (ab.cjt() * 100.0);
-        self.kra(tgd, tge, 300.0, 0x1000FF44, av + 0.1);
+        let t = self.time * 0.5;
+        let mfa = (self.width as f32 / 2.0) + (t.sin() * 200.0);
+        let mfb = (self.height as f32 / 3.0) + (t.cos() * 100.0);
+        self.draw_glow(mfa, mfb, 300.0, 0x1000FF44, z + 0.1);
     }
     
     
-    fn vwq(&self, surface: &WindowSurface) {
-        let b = surface.b;
-        let c = surface.c;
-        let d = surface.z * surface.bv;
-        let i = surface.ac * surface.bv;
-        let av = surface.ell as f32;
+    fn render_surface(&self, surface: &WindowSurface) {
+        let x = surface.x;
+        let y = surface.y;
+        let w = surface.width * surface.scale;
+        let h = surface.height * surface.scale;
+        let z = surface.z_order as f32;
         
         
         match self.theme {
-            CompositorTheme::Xq => {
+            CompositorTheme::Modern => {
                 
-                if self.dby > 0.0 {
-                    self.gfj(b, c, d, i, av - 0.5);
+                if self.shadow_opacity > 0.0 {
+                    self.draw_shadow(x, y, w, h, z - 0.5);
                 }
                 
-                self.sgr(surface, av);
+                self.draw_window_frame(surface, z);
             }
-            CompositorTheme::Ait => {
+            CompositorTheme::Glass => {
                 
-                self.sbw(b, c, d, i, av - 0.3);
+                self.draw_blur_rect(x, y, w, h, z - 0.3);
                 
-                self.sdf(surface, av);
+                self.draw_glass_frame(surface, z);
             }
-            CompositorTheme::Tp => {
+            CompositorTheme::Neon => {
                 
-                self.sei(b, c, d, i, av - 0.5);
+                self.draw_neon_glow(x, y, w, h, z - 0.5);
                 
-                self.seh(surface, av);
+                self.draw_neon_frame(surface, z);
             }
-            CompositorTheme::Gy => {
+            CompositorTheme::Minimal => {
                 
-                self.sdw(surface, av);
+                self.draw_minimal_frame(surface, z);
             }
-            CompositorTheme::Aif => {
+            CompositorTheme::Flat => {
                 
-                self.scy(surface, av);
+                self.draw_flat_frame(surface, z);
             }
         }
         
         
-        self.sfv(surface, av + 0.1);
+        self.draw_surface_content(surface, z + 0.1);
     }
     
     
-    fn gfj(&self, b: f32, c: f32, d: f32, i: f32, av: f32) {
-        let l = self.pkd;
-        let cou = self.gsl;
-        let dw = (self.dby * 255.0) as u32;
-        let dls = dw << 24;
+    fn draw_shadow(&self, x: f32, y: f32, w: f32, h: f32, z: f32) {
+        let offset = self.shadow_offset;
+        let awi = self.shadow_blur;
+        let alpha = (self.shadow_opacity * 255.0) as u32;
+        let bjd = alpha << 24;
         
         
-        for a in 0..4 {
-            let arb = cou * (a as f32 / 4.0);
-            let udd = dw / (a + 1);
-            let s = udd << 24;
+        for i in 0..4 {
+            let wd = awi * (i as f32 / 4.0);
+            let mxe = alpha / (i + 1);
+            let color = mxe << 24;
             
-            self.bdx(
-                b + l - arb,
-                c + l - arb,
-                d + arb * 2.0,
-                i + arb * 2.0,
-                s,
-                av - (a as f32 * 0.01),
+            self.draw_filled_rect(
+                x + offset - wd,
+                y + offset - wd,
+                w + wd * 2.0,
+                h + wd * 2.0,
+                color,
+                z - (i as f32 * 0.01),
             );
         }
     }
     
     
-    fn sgr(&self, surface: &WindowSurface, av: f32) {
-        let b = surface.b;
-        let c = surface.c;
-        let d = surface.z * surface.bv;
-        let i = surface.ac * surface.bv;
+    fn draw_window_frame(&self, surface: &WindowSurface, z: f32) {
+        let x = surface.x;
+        let y = surface.y;
+        let w = surface.width * surface.scale;
+        let h = surface.height * surface.scale;
         
         
-        let bxn = 32.0;
-        let ejy = if surface.ja { 0xFF0D120F } else { 0xFF0A0D0B };
-        self.bdx(b, c, d, bxn, ejy, av);
+        let ana = 32.0;
+        let bwl = if surface.focused { 0xFF0D120F } else { 0xFF0A0D0B };
+        self.draw_filled_rect(x, y, w, ana, bwl, z);
         
         
-        if surface.ja {
-            self.bdx(b, c + bxn - 2.0, d, 2.0, 0xFF008844, av + 0.01);
+        if surface.focused {
+            self.draw_filled_rect(x, y + ana - 2.0, w, 2.0, 0xFF008844, z + 0.01);
         }
         
         
-        let qqr = 0xFF0A0E0B;
-        self.bdx(b, c + bxn, d, i - bxn, qqr, av);
+        let kda = 0xFF0A0E0B;
+        self.draw_filled_rect(x, y + ana, w, h - ana, kda, z);
         
         
-        let aia = if surface.ja { 0xFF006633 } else { 0xFF004422 };
-        self.epg(b, c, d, i, aia, av + 0.02);
+        let ri = if surface.focused { 0xFF006633 } else { 0xFF004422 };
+        self.draw_rect_outline(x, y, w, h, ri, z + 0.02);
         
         
-        self.sgq(b + 8.0, c + 8.0, surface.ja, av + 0.03);
+        self.draw_window_controls(x + 8.0, y + 8.0, surface.focused, z + 0.03);
     }
     
     
-    fn sdf(&self, surface: &WindowSurface, av: f32) {
-        let b = surface.b;
-        let c = surface.c;
-        let d = surface.z * surface.bv;
-        let i = surface.ac * surface.bv;
+    fn draw_glass_frame(&self, surface: &WindowSurface, z: f32) {
+        let x = surface.x;
+        let y = surface.y;
+        let w = surface.width * surface.scale;
+        let h = surface.height * surface.scale;
         
         
-        let dw = (surface.adh * 0.85 * 255.0) as u32;
-        let tfx = (dw << 24) | 0x0D1210;
-        self.bdx(b, c, d, i, tfx, av);
+        let alpha = (surface.opacity * 0.85 * 255.0) as u32;
+        let mex = (alpha << 24) | 0x0D1210;
+        self.draw_filled_rect(x, y, w, h, mex, z);
         
         
-        self.epg(b, c, d, i, 0x4000FF66, av + 0.01);
+        self.draw_rect_outline(x, y, w, h, 0x4000FF66, z + 0.01);
         
         
-        self.bdx(b + 1.0, c + 1.0, d - 2.0, 1.0, 0x2000FF66, av + 0.02);
+        self.draw_filled_rect(x + 1.0, y + 1.0, w - 2.0, 1.0, 0x2000FF66, z + 0.02);
     }
     
     
-    fn seh(&self, surface: &WindowSurface, av: f32) {
-        let b = surface.b;
-        let c = surface.c;
-        let d = surface.z * surface.bv;
-        let i = surface.ac * surface.bv;
+    fn draw_neon_frame(&self, surface: &WindowSurface, z: f32) {
+        let x = surface.x;
+        let y = surface.y;
+        let w = surface.width * surface.scale;
+        let h = surface.height * surface.scale;
         
         
-        self.bdx(b, c, d, i, 0xFF050505, av);
+        self.draw_filled_rect(x, y, w, h, 0xFF050505, z);
         
         
-        let bzv = if surface.ja { 0xFF00FF66 } else { 0xFF00AA44 };
+        let aog = if surface.focused { 0xFF00FF66 } else { 0xFF00AA44 };
         
         
-        for a in 1..5 {
-            let arb = a as f32 * 2.0;
-            let dw = (60 - a * 15) as u32;
-            let s = (dw << 24) | (bzv & 0x00FFFFFF);
-            self.epg(b - arb, c - arb, d + arb * 2.0, i + arb * 2.0, s, av + 0.01);
+        for i in 1..5 {
+            let wd = i as f32 * 2.0;
+            let alpha = (60 - i * 15) as u32;
+            let color = (alpha << 24) | (aog & 0x00FFFFFF);
+            self.draw_rect_outline(x - wd, y - wd, w + wd * 2.0, h + wd * 2.0, color, z + 0.01);
         }
         
         
-        self.epg(b, c, d, i, bzv, av + 0.05);
+        self.draw_rect_outline(x, y, w, h, aog, z + 0.05);
     }
     
     
-    fn sdw(&self, surface: &WindowSurface, av: f32) {
-        let b = surface.b;
-        let c = surface.c;
-        let d = surface.z * surface.bv;
-        let i = surface.ac * surface.bv;
+    fn draw_minimal_frame(&self, surface: &WindowSurface, z: f32) {
+        let x = surface.x;
+        let y = surface.y;
+        let w = surface.width * surface.scale;
+        let h = surface.height * surface.scale;
         
         
-        self.bdx(b, c, d, i, 0xFF0A0E0B, av);
+        self.draw_filled_rect(x, y, w, h, 0xFF0A0E0B, z);
         
         
-        let aia = if surface.ja { 0xFF00CC55 } else { 0xFF004422 };
-        self.epg(b, c, d, i, aia, av + 0.01);
+        let ri = if surface.focused { 0xFF00CC55 } else { 0xFF004422 };
+        self.draw_rect_outline(x, y, w, h, ri, z + 0.01);
     }
     
     
-    fn scy(&self, surface: &WindowSurface, av: f32) {
-        let b = surface.b;
-        let c = surface.c;
-        let d = surface.z * surface.bv;
-        let i = surface.ac * surface.bv;
+    fn draw_flat_frame(&self, surface: &WindowSurface, z: f32) {
+        let x = surface.x;
+        let y = surface.y;
+        let w = surface.width * surface.scale;
+        let h = surface.height * surface.scale;
         
         
-        let bxn = 32.0;
-        self.bdx(b, c, d, bxn, 0xFF0D120F, av);
+        let ana = 32.0;
+        self.draw_filled_rect(x, y, w, ana, 0xFF0D120F, z);
         
         
-        self.bdx(b, c + bxn, d, i - bxn, 0xFF0A0E0B, av);
+        self.draw_filled_rect(x, y + ana, w, h - ana, 0xFF0A0E0B, z);
         
         
-        self.epg(b, c, d, i, 0xFF006633, av + 0.01);
+        self.draw_rect_outline(x, y, w, h, 0xFF006633, z + 0.01);
     }
     
     
-    fn sgq(&self, b: f32, c: f32, ja: bool, av: f32) {
-        let aoa = 20.0;
-        let dy = 6.0;
+    fn draw_window_controls(&self, x: f32, y: f32, focused: bool, z: f32) {
+        let spacing = 20.0;
+        let radius = 6.0;
         
         
-        let rbu = if ja { 0xFF4A3535 } else { 0xFF2A2020 };
-        self.cxc(b, c + 8.0, dy, rbu, av);
+        let klg = if focused { 0xFF4A3535 } else { 0xFF2A2020 };
+        self.draw_circle(x, y + 8.0, radius, klg, z);
         
         
-        let uoj = if ja { 0xFF3A3A30 } else { 0xFF202010 };
-        self.cxc(b + aoa, c + 8.0, dy, uoj, av);
+        let nfi = if focused { 0xFF3A3A30 } else { 0xFF202010 };
+        self.draw_circle(x + spacing, y + 8.0, radius, nfi, z);
         
         
-        let ukx = if ja { 0xFF2A3A2F } else { 0xFF10201A };
-        self.cxc(b + aoa * 2.0, c + 8.0, dy, ukx, av);
+        let ncs = if focused { 0xFF2A3A2F } else { 0xFF10201A };
+        self.draw_circle(x + spacing * 2.0, y + 8.0, radius, ncs, z);
     }
     
     
-    fn sfv(&self, surface: &WindowSurface, av: f32) {
+    fn draw_surface_content(&self, surface: &WindowSurface, z: f32) {
         
         
-        let b = surface.b;
-        let c = surface.c + 32.0; 
-        let d = surface.z * surface.bv;
-        let i = (surface.ac - 32.0) * surface.bv;
+        let x = surface.x;
+        let y = surface.y + 32.0; 
+        let w = surface.width * surface.scale;
+        let h = (surface.height - 32.0) * surface.scale;
         
         
     }
@@ -546,234 +546,177 @@ impl Compositor {
     
     
     
-    fn bdx(&self, b: f32, c: f32, d: f32, i: f32, s: u32, av: f32) {
-        let (m, at, o, q) = ent(s);
+    fn draw_filled_rect(&self, x: f32, y: f32, w: f32, h: f32, color: u32, z: f32) {
+        let (r, g, b, a) = byg(color);
         
-        cfa(KG_);
-        erd(m, at, o, q);
-        jx(b, c, av);
-        jx(b + d, c, av);
-        jx(b + d, c + i, av);
-        jx(b, c + i, av);
-        cfb();
+        aqw(KZ_);
+        cae(r, g, b, a);
+        dt(x, y, z);
+        dt(x + w, y, z);
+        dt(x + w, y + h, z);
+        dt(x, y + h, z);
+        aqx();
     }
     
     
-    fn krb(&self, b: f32, c: f32, d: f32, i: f32, 
-                          idz: u32, hba: u32, av: f32) {
-        let (aqh, cyd, of, km) = ent(idz);
-        let (uv, cqu, tb, oe) = ent(hba);
+    fn draw_gradient_rect(&self, x: f32, y: f32, w: f32, h: f32, 
+                          top_color: u32, bottom_color: u32, z: f32) {
+        let (uh, bbu, gf, eb) = byg(top_color);
+        let (ju, axe, iq, fy) = byg(bottom_color);
         
-        cfa(KG_);
-        erd(aqh, cyd, of, km);
-        jx(b, c, av);
-        jx(b + d, c, av);
-        erd(uv, cqu, tb, oe);
-        jx(b + d, c + i, av);
-        jx(b, c + i, av);
-        cfb();
+        aqw(KZ_);
+        cae(uh, bbu, gf, eb);
+        dt(x, y, z);
+        dt(x + w, y, z);
+        cae(ju, axe, iq, fy);
+        dt(x + w, y + h, z);
+        dt(x, y + h, z);
+        aqx();
     }
     
     
-    fn epg(&self, b: f32, c: f32, d: f32, i: f32, s: u32, av: f32) {
-        let (m, at, o, q) = ent(s);
+    fn draw_rect_outline(&self, x: f32, y: f32, w: f32, h: f32, color: u32, z: f32) {
+        let (r, g, b, a) = byg(color);
         
-        cfa(NE_);
-        erd(m, at, o, q);
-        jx(b, c, av);
-        jx(b + d, c, av);
-        jx(b + d, c + i, av);
-        jx(b, c + i, av);
-        cfb();
+        aqw(OD_);
+        cae(r, g, b, a);
+        dt(x, y, z);
+        dt(x + w, y, z);
+        dt(x + w, y + h, z);
+        dt(x, y + h, z);
+        aqx();
     }
     
     
-    fn cxc(&self, cx: f32, ae: f32, dy: f32, s: u32, av: f32) {
-        let (m, at, o, q) = ent(s);
-        let jq = 16;
+    fn draw_circle(&self, cx: f32, u: f32, radius: f32, color: u32, z: f32) {
+        let (r, g, b, a) = byg(color);
+        let segments = 16;
         
-        cfa(ATO_);
-        erd(m, at, o, q);
-        jx(cx, ae, av); 
+        aqw(AVS_);
+        cae(r, g, b, a);
+        dt(cx, u, z); 
         
-        for a in 0..=jq {
-            let hg = (a as f32 / jq as f32) * core::f32::consts::Eu * 2.0;
-            let y = cx + hg.cjt() * dy;
-            let x = ae + hg.ayq() * dy;
-            jx(y, x, av);
+        for i in 0..=segments {
+            let cc = (i as f32 / segments as f32) * core::f32::consts::PI * 2.0;
+            let p = cx + cc.cos() * radius;
+            let o = u + cc.sin() * radius;
+            dt(p, o, z);
         }
-        cfb();
+        aqx();
     }
     
     
-    fn kra(&self, cx: f32, ae: f32, dy: f32, s: u32, av: f32) {
-        let (m, at, o, _) = ent(s);
+    fn draw_glow(&self, cx: f32, u: f32, radius: f32, color: u32, z: f32) {
+        let (r, g, b, _) = byg(color);
         
         
-        for a in 0..8 {
-            let ab = a as f32 / 8.0;
-            let nij = dy * (0.3 + ab * 0.7);
-            let dw = 0.3 * (1.0 - ab);
+        for i in 0..8 {
+            let t = i as f32 / 8.0;
+            let hpu = radius * (0.3 + t * 0.7);
+            let alpha = 0.3 * (1.0 - t);
             
-            cfa(ATO_);
-            erd(m, at, o, dw);
-            jx(cx, ae, av);
+            aqw(AVS_);
+            cae(r, g, b, alpha);
+            dt(cx, u, z);
             
-            let jq = 24;
-            for fb in 0..=jq {
-                let hg = (fb as f32 / jq as f32) * core::f32::consts::Eu * 2.0;
-                let y = cx + hg.cjt() * nij;
-                let x = ae + hg.ayq() * nij;
-                jx(y, x, av);
+            let segments = 24;
+            for ay in 0..=segments {
+                let cc = (ay as f32 / segments as f32) * core::f32::consts::PI * 2.0;
+                let p = cx + cc.cos() * hpu;
+                let o = u + cc.sin() * hpu;
+                dt(p, o, z);
             }
-            cfb();
+            aqx();
         }
     }
     
     
-    fn sei(&self, b: f32, c: f32, d: f32, i: f32, av: f32) {
-        let bzv = 0x00FF66u32;
-        let (m, at, o, _) = ent(bzv);
+    fn draw_neon_glow(&self, x: f32, y: f32, w: f32, h: f32, z: f32) {
+        let aog = 0x00FF66u32;
+        let (r, g, b, _) = byg(aog);
         
-        for a in 1..6 {
-            let arb = a as f32 * 3.0;
-            let dw = 0.4 / (a as f32);
+        for i in 1..6 {
+            let wd = i as f32 * 3.0;
+            let alpha = 0.4 / (i as f32);
             
-            cfa(NE_);
-            erd(m, at, o, dw);
-            jx(b - arb, c - arb, av);
-            jx(b + d + arb, c - arb, av);
-            jx(b + d + arb, c + i + arb, av);
-            jx(b - arb, c + i + arb, av);
-            cfb();
+            aqw(OD_);
+            cae(r, g, b, alpha);
+            dt(x - wd, y - wd, z);
+            dt(x + w + wd, y - wd, z);
+            dt(x + w + wd, y + h + wd, z);
+            dt(x - wd, y + h + wd, z);
+            aqx();
         }
     }
     
     
-    fn sbw(&self, b: f32, c: f32, d: f32, i: f32, av: f32) {
+    fn draw_blur_rect(&self, x: f32, y: f32, w: f32, h: f32, z: f32) {
         
-        self.bdx(b, c, d, i, 0x800D1210, av);
+        self.draw_filled_rect(x, y, w, h, 0x800D1210, z);
     }
     
     
-    fn fgx(&self, av: f32) {
-        let lak = 0x08004422u32;
-        let (m, at, o, q) = ent(lak);
-        let aoa = 40.0;
+    fn draw_grid(&self, z: f32) {
+        let fzl = 0x08004422u32;
+        let (r, g, b, a) = byg(fzl);
+        let spacing = 40.0;
         
-        cfa(TO_);
-        erd(m, at, o, q);
+        aqw(UU_);
+        cae(r, g, b, a);
         
         
-        let mut b = 0.0;
-        while b < self.z as f32 {
-            jx(b, 0.0, av);
-            jx(b, self.ac as f32, av);
-            b += aoa;
+        let mut x = 0.0;
+        while x < self.width as f32 {
+            dt(x, 0.0, z);
+            dt(x, self.height as f32, z);
+            x += spacing;
         }
         
         
-        let mut c = 0.0;
-        while c < self.ac as f32 {
-            jx(0.0, c, av);
-            jx(self.z as f32, c, av);
-            c += aoa;
+        let mut y = 0.0;
+        while y < self.height as f32 {
+            dt(0.0, y, z);
+            dt(self.width as f32, y, z);
+            y += spacing;
         }
-        cfb();
+        aqx();
     }
     
     
-    pub fn bxb(&mut self, theme: CompositorTheme) {
+    pub fn set_theme(&mut self, theme: CompositorTheme) {
         self.theme = theme;
         
         
         match theme {
-            CompositorTheme::Xq => {
-                self.dby = 0.4;
-                self.gsl = 16.0;
-                self.avn = 8.0;
-                self.gbi = 0.0;
+            CompositorTheme::Modern => {
+                self.shadow_opacity = 0.4;
+                self.shadow_blur = 16.0;
+                self.corner_radius = 8.0;
+                self.border_glow = 0.0;
             }
-            CompositorTheme::Ait => {
-                self.dby = 0.2;
-                self.gsl = 24.0;
-                self.avn = 12.0;
-                self.gbi = 0.3;
+            CompositorTheme::Glass => {
+                self.shadow_opacity = 0.2;
+                self.shadow_blur = 24.0;
+                self.corner_radius = 12.0;
+                self.border_glow = 0.3;
             }
-            CompositorTheme::Tp => {
-                self.dby = 0.0;
-                self.avn = 4.0;
-                self.gbi = 1.0;
-                self.haj = BackgroundPattern::Pn;
+            CompositorTheme::Neon => {
+                self.shadow_opacity = 0.0;
+                self.corner_radius = 4.0;
+                self.border_glow = 1.0;
+                self.bg_pattern = BackgroundPattern::Grid;
             }
-            CompositorTheme::Gy => {
-                self.dby = 0.0;
-                self.gsl = 0.0;
-                self.avn = 0.0;
-                self.gbi = 0.0;
+            CompositorTheme::Minimal => {
+                self.shadow_opacity = 0.0;
+                self.shadow_blur = 0.0;
+                self.corner_radius = 0.0;
+                self.border_glow = 0.0;
             }
-            CompositorTheme::Aif => {
-                self.dby = 0.0;
-                self.gsl = 0.0;
-                self.avn = 0.0;
-                self.gbi = 0.0;
-            }
-        }
-    }
-}
-
-
-
-
-
-
-fn ent(s: u32) -> (f32, f32, f32, f32) {
-    let q = ((s >> 24) & 0xFF) as f32 / 255.0;
-    let m = ((s >> 16) & 0xFF) as f32 / 255.0;
-    let at = ((s >> 8) & 0xFF) as f32 / 255.0;
-    let o = (s & 0xFF) as f32 / 255.0;
-    (m, at, o, q)
-}
-
-use crate::math::csb;
-
-
-fn qjs(ab: f32, ksn: Easing) -> f32 {
-    match ksn {
-        Easing::Cgp => ab,
-        Easing::Bfq => ab * ab,
-        Easing::Arl => 1.0 - (1.0 - ab) * (1.0 - ab),
-        Easing::Cbn => {
-            if ab < 0.5 {
-                2.0 * ab * ab
-            } else {
-                1.0 - (-2.0 * ab + 2.0).zgc(2) / 2.0
-            }
-        }
-        Easing::Byr => {
-            let jgj = 7.5625;
-            let apo = 2.75;
-            let mut ab = ab;
-            if ab < 1.0 / apo {
-                jgj * ab * ab
-            } else if ab < 2.0 / apo {
-                ab -= 1.5 / apo;
-                jgj * ab * ab + 0.75
-            } else if ab < 2.5 / apo {
-                ab -= 2.25 / apo;
-                jgj * ab * ab + 0.9375
-            } else {
-                ab -= 2.625 / apo;
-                jgj * ab * ab + 0.984375
-            }
-        }
-        Easing::Cbo => {
-            if ab == 0.0 || ab == 1.0 {
-                ab
-            } else {
-                let ai = 0.3;
-                let e = ai / 4.0;
-                (2.0f32).zgb(-10.0 * ab) * ((ab - e) * (2.0 * core::f32::consts::Eu / ai)).ayq() + 1.0
+            CompositorTheme::Flat => {
+                self.shadow_opacity = 0.0;
+                self.shadow_blur = 0.0;
+                self.corner_radius = 0.0;
+                self.border_glow = 0.0;
             }
         }
     }
@@ -783,24 +726,81 @@ fn qjs(ab: f32, ksn: Easing) -> f32 {
 
 
 
-static Oz: Mutex<Compositor> = Mutex::new(Compositor::new());
+
+fn byg(color: u32) -> (f32, f32, f32, f32) {
+    let a = ((color >> 24) & 0xFF) as f32 / 255.0;
+    let r = ((color >> 16) & 0xFF) as f32 / 255.0;
+    let g = ((color >> 8) & 0xFF) as f32 / 255.0;
+    let b = (color & 0xFF) as f32 / 255.0;
+    (r, g, b, a)
+}
+
+use crate::math::lerp;
 
 
-pub fn compositor() -> spin::Aki<'static, Compositor> {
-    Oz.lock()
+fn jwz(t: f32, easing: Easing) -> f32 {
+    match easing {
+        Easing::Linear => t,
+        Easing::EaseIn => t * t,
+        Easing::EaseOut => 1.0 - (1.0 - t) * (1.0 - t),
+        Easing::EaseInOut => {
+            if t < 0.5 {
+                2.0 * t * t
+            } else {
+                1.0 - (-2.0 * t + 2.0).powi(2) / 2.0
+            }
+        }
+        Easing::Bounce => {
+            let eur = 7.5625;
+            let vh = 2.75;
+            let mut t = t;
+            if t < 1.0 / vh {
+                eur * t * t
+            } else if t < 2.0 / vh {
+                t -= 1.5 / vh;
+                eur * t * t + 0.75
+            } else if t < 2.5 / vh {
+                t -= 2.25 / vh;
+                eur * t * t + 0.9375
+            } else {
+                t -= 2.625 / vh;
+                eur * t * t + 0.984375
+            }
+        }
+        Easing::Elastic => {
+            if t == 0.0 || t == 1.0 {
+                t
+            } else {
+                let aa = 0.3;
+                let j = aa / 4.0;
+                (2.0f32).powf(-10.0 * t) * ((t - j) * (2.0 * core::f32::consts::PI / aa)).sin() + 1.0
+            }
+        }
+    }
 }
 
 
-pub fn ttg(z: u32, ac: u32) {
-    compositor().init(z, ac);
+
+
+
+static Gg: Mutex<Compositor> = Mutex::new(Compositor::new());
+
+
+pub fn compositor() -> spin::MutexGuard<'static, Compositor> {
+    Gg.lock()
 }
 
 
-pub fn pis(theme: CompositorTheme) {
-    compositor().bxb(theme);
+pub fn mpa(width: u32, height: u32) {
+    compositor().init(width, height);
 }
 
 
-pub fn vvm() {
-    compositor().tj();
+pub fn jez(theme: CompositorTheme) {
+    compositor().set_theme(theme);
+}
+
+
+pub fn ofh() {
+    compositor().render();
 }

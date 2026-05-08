@@ -47,7 +47,7 @@ pub enum InsightCategory {
 #[derive(Clone, Copy, PartialEq, Ord, PartialOrd, Eq)]
 // Enumeration — a type that can be one of several variants.
 pub enum InsightSeverity {
-    Information,
+    Info,
     Advisory,
     Important,
     Critical,
@@ -88,7 +88,7 @@ impl InsightSeverity {
 pub fn as_str(&self) -> &'static str {
                 // Pattern matching — Rust's exhaustive branching construct.
 match self {
-            InsightSeverity::Information => "INFO",
+            InsightSeverity::Info => "INFO",
             InsightSeverity::Advisory => "NOTE",
             InsightSeverity::Important => "WARN",
             InsightSeverity::Critical => "CRIT",
@@ -111,13 +111,13 @@ pub struct ExecutionPlan {
     /// Number of worker threads for parallel tasks
     pub worker_threads: u32,
     /// Maximum tokens per generation (memory-limited)
-    pub maximum_generator_tokens: usize,
+    pub max_gen_tokens: usize,
     /// Learning rate adjustment factor based on compute
     pub lr_factor: f32,
     /// Whether to enable background learning
     pub background_learning: bool,
     /// Whether to enable hardware monitoring
-    pub hardware_monitoring: bool,
+    pub hw_monitoring: bool,
     /// Strategy description
     pub strategy: String,
 }
@@ -183,7 +183,7 @@ fn analyze_compute(insights: &mut Vec<HardwareInsight>, profile: &HardwareProfil
     if profile.has_avx512 {
         insights.push(HardwareInsight {
             category: InsightCategory::Performance,
-            severity: InsightSeverity::Information,
+            severity: InsightSeverity::Info,
             title: String::from("AVX-512 detected"),
             detail: String::from("CPU supports 512-bit SIMD — 8x FP32 lanes"),
             action: String::from("Enable AVX-512 matmul kernels for 8x neural throughput"),
@@ -210,7 +210,7 @@ fn analyze_compute(insights: &mut Vec<HardwareInsight>, profile: &HardwareProfil
     if profile.cpu_cores >= 8 {
         insights.push(HardwareInsight {
             category: InsightCategory::Opportunity,
-            severity: InsightSeverity::Information,
+            severity: InsightSeverity::Info,
             title: format!("{}-core CPU detected", profile.cpu_cores),
             detail: String::from("Multi-core parallelism available for background tasks"),
             action: String::from("Enable parallel training + inference on separate cores"),
@@ -259,7 +259,7 @@ fn analyze_memory(insights: &mut Vec<HardwareInsight>, profile: &HardwareProfile
     } else {
         insights.push(HardwareInsight {
             category: InsightCategory::Resource,
-            severity: InsightSeverity::Information,
+            severity: InsightSeverity::Info,
             title: format!("Adequate RAM: {} MB", ram_mb),
             detail: String::from("Full model + Adam optimizer + large context fits"),
             action: String::from("Enable full training pipeline with gradient accumulation"),
@@ -296,7 +296,7 @@ fn analyze_storage(insights: &mut Vec<HardwareInsight>, profile: &HardwareProfil
         if has_nvme {
             insights.push(HardwareInsight {
                 category: InsightCategory::Performance,
-                severity: InsightSeverity::Information,
+                severity: InsightSeverity::Info,
                 title: String::from("NVMe storage available"),
                 detail: String::from("Fast I/O for weight checkpoints and data loading"),
                 action: String::from("Enable aggressive checkpointing (every 100 steps)"),
@@ -309,7 +309,7 @@ fn analyze_network(insights: &mut Vec<HardwareInsight>, profile: &HardwareProfil
     if profile.has_network && profile.link_up {
         insights.push(HardwareInsight {
             category: InsightCategory::Opportunity,
-            severity: InsightSeverity::Information,
+            severity: InsightSeverity::Info,
             title: String::from("Network active"),
             detail: String::from("Could receive training data or firmware updates"),
             action: String::from("Enable network mentoring protocol alongside serial"),
@@ -317,7 +317,7 @@ fn analyze_network(insights: &mut Vec<HardwareInsight>, profile: &HardwareProfil
     } else if !profile.has_network {
         insights.push(HardwareInsight {
             category: InsightCategory::Resource,
-            severity: InsightSeverity::Information,
+            severity: InsightSeverity::Info,
             title: String::from("Isolated system (no network)"),
             detail: String::from("Air-gapped — good for security analysis"),
             action: String::from("Use serial mentoring only for external communication"),
@@ -329,7 +329,7 @@ fn analyze_security(insights: &mut Vec<HardwareInsight>, profile: &HardwareProfi
     if profile.has_aesni {
         insights.push(HardwareInsight {
             category: InsightCategory::Security,
-            severity: InsightSeverity::Information,
+            severity: InsightSeverity::Info,
             title: String::from("Hardware AES available"),
             detail: String::from("AES-NI for fast encryption of sensitive data"),
             action: String::from("Use HW AES for weight encryption at rest"),
@@ -349,7 +349,7 @@ fn analyze_security(insights: &mut Vec<HardwareInsight>, profile: &HardwareProfi
     // Privilege level check
     insights.push(HardwareInsight {
         category: InsightCategory::Security,
-        severity: InsightSeverity::Information,
+        severity: InsightSeverity::Info,
         title: format!("Running at {} on {}", profile.privilege_level, profile.arch),
         detail: String::from("Full hardware access — no OS filtering"),
         action: String::from("Direct register access enabled for all probing"),
@@ -362,7 +362,7 @@ match profile.arch {
         "x86_64" => {
             insights.push(HardwareInsight {
                 category: InsightCategory::Resource,
-                severity: InsightSeverity::Information,
+                severity: InsightSeverity::Info,
                 title: String::from("x86_64 platform"),
                 detail: String::from("Full CPUID, PCI, ACPI detection available"),
                 action: String::from("Use native SSE2/AVX paths for max performance"),
@@ -461,10 +461,10 @@ match simd_tier {
         optimal_batch_size: optimal_batch,
         tile_size,
         worker_threads: workers,
-        maximum_generator_tokens: maximum_generator,
+        max_gen_tokens: maximum_generator,
         lr_factor,
         background_learning: bg_learning,
-        hardware_monitoring: true,
+        hw_monitoring: true,
         strategy,
     }
 }
@@ -542,10 +542,10 @@ pub fn format_plan(plan: &ExecutionPlan) -> String {
     s.push_str(&format!("  Batch size:   {}\n", plan.optimal_batch_size));
     s.push_str(&format!("  Tile size:    {}×{}\n", plan.tile_size, plan.tile_size));
     s.push_str(&format!("  Workers:      {}\n", plan.worker_threads));
-    s.push_str(&format!("  Max gen:      {} tokens\n", plan.maximum_generator_tokens));
+    s.push_str(&format!("  Max gen:      {} tokens\n", plan.max_gen_tokens));
     s.push_str(&format!("  LR factor:    ×{:.1}\n", plan.lr_factor));
     s.push_str(&format!("  Background:   {}\n", if plan.background_learning { "ON" } else { "OFF" }));
-    s.push_str(&format!("  Monitoring:   {}\n", if plan.hardware_monitoring { "ON" } else { "OFF" }));
+    s.push_str(&format!("  Monitoring:   {}\n", if plan.hw_monitoring { "ON" } else { "OFF" }));
     s.push_str(&format!("\n  \x01CStrategy:\x01W {}\n", plan.strategy));
     s
 }

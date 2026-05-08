@@ -119,7 +119,7 @@ pub fn full_audit() -> IoAudit {
     };
 
     // Cache result
-    LAST_AUDIT_MOUSE.store(crate::time::uptime_mouse(), Ordering::SeqCst);
+    LAST_AUDIT_MOUSE.store(crate::time::uptime_ms(), Ordering::SeqCst);
     *LAST_AUDIT.lock() = Some(IoAudit {
         keyboard: audit.keyboard,
         mouse: audit.mouse,
@@ -340,7 +340,7 @@ match status {
         }
     }
 
-    ((score * 100) / maximum_score).minimum(100) as u8
+    ((score * 100) / maximum_score).min(100) as u8
 }
 
 /// Check if this node has enough I/O to participate in the mesh network.
@@ -503,7 +503,7 @@ pub fn poll() {
         return;
     }
 
-    let now = crate::time::uptime_mouse();
+    let now = crate::time::uptime_ms();
     let last = LAST_AUDIT_MOUSE.load(Ordering::SeqCst);
     if now.wrapping_sub(last) < 10_000 {
         return;

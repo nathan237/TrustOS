@@ -6,118 +6,118 @@ use super::{CapabilityType, CapabilityRights};
 
 
 #[derive(Debug, Clone, Copy)]
-pub struct Fr {
+pub struct Co {
     
-    pub bsa: CapabilityType,
+    pub akk: CapabilityType,
     
-    pub bao: CapabilityRights,
+    pub abh: CapabilityRights,
     
     pub allow: bool,
 }
 
 
-pub const BRE_: &[Fr] = &[
+pub const BTZ_: &[Co] = &[
     
-    Fr {
-        bsa: CapabilityType::Xj,
-        bao: CapabilityRights::Mr,
+    Co {
+        akk: CapabilityType::Kernel,
+        abh: CapabilityRights::Fi,
         allow: true,
     },
     
-    Fr {
-        bsa: CapabilityType::Cy,
-        bao: CapabilityRights::Cm,
+    Co {
+        akk: CapabilityType::Memory,
+        abh: CapabilityRights::Ba,
         allow: true,
     },
     
-    Fr {
-        bsa: CapabilityType::Channel,
-        bao: CapabilityRights::KZ_,
+    Co {
+        akk: CapabilityType::Channel,
+        abh: CapabilityRights::LQ_,
         allow: true,
     },
     
-    Fr {
-        bsa: CapabilityType::Asj,
-        bao: CapabilityRights::Cm,
+    Co {
+        akk: CapabilityType::Filesystem,
+        abh: CapabilityRights::Ba,
         allow: true,
     },
     
-    Fr {
-        bsa: CapabilityType::As,
-        bao: CapabilityRights::KZ_,
+    Co {
+        akk: CapabilityType::Network,
+        abh: CapabilityRights::LQ_,
         allow: true,
     },
     
-    Fr {
-        bsa: CapabilityType::Asp,
-        bao: CapabilityRights::Cm,
+    Co {
+        akk: CapabilityType::Framebuffer,
+        abh: CapabilityRights::Ba,
         allow: true,
     },
     
-    Fr {
-        bsa: CapabilityType::Jm,
-        bao: CapabilityRights::Cm,
+    Co {
+        akk: CapabilityType::Graphics,
+        abh: CapabilityRights::Ba,
         allow: true,
     },
     
-    Fr {
-        bsa: CapabilityType::Timer,
-        bao: CapabilityRights::Cm,
+    Co {
+        akk: CapabilityType::Timer,
+        abh: CapabilityRights::Ba,
         allow: true,
     },
     
-    Fr {
-        bsa: CapabilityType::Amm,
-        bao: CapabilityRights::KZ_,
+    Co {
+        akk: CapabilityType::Serial,
+        abh: CapabilityRights::LQ_,
         allow: true,
     },
     
-    Fr {
-        bsa: CapabilityType::Process,
-        bao: CapabilityRights::Mt,
+    Co {
+        akk: CapabilityType::Process,
+        abh: CapabilityRights::Fj,
         allow: true,
     },
     
-    Fr {
-        bsa: CapabilityType::Debug,
-        bao: CapabilityRights::Xy,
+    Co {
+        akk: CapabilityType::Debug,
+        abh: CapabilityRights::Kh,
         allow: true,
     },
     
-    Fr {
-        bsa: CapabilityType::Ee,
-        bao: CapabilityRights::Mr,
+    Co {
+        akk: CapabilityType::Hypervisor,
+        abh: CapabilityRights::Fi,
         allow: true,
     },
     
-    Fr {
-        bsa: CapabilityType::Hb,
-        bao: CapabilityRights::Xy,
+    Co {
+        akk: CapabilityType::Power,
+        abh: CapabilityRights::Kh,
         allow: true,
     },
     
-    Fr {
-        bsa: CapabilityType::Awz,
-        bao: CapabilityRights::Xy,
+    Co {
+        akk: CapabilityType::PortIO,
+        abh: CapabilityRights::Kh,
         allow: true,
     },
     
-    Fr {
-        bsa: CapabilityType::Ard,
-        bao: CapabilityRights::Xy,
+    Co {
+        akk: CapabilityType::Dma,
+        abh: CapabilityRights::Kh,
         allow: true,
     },
     
-    Fr {
-        bsa: CapabilityType::Jh,
-        bao: CapabilityRights::AHA_,
+    Co {
+        akk: CapabilityType::Crypto,
+        abh: CapabilityRights::AIU_,
         allow: true,
     },
 ];
 
 
-pub fn ylm() -> &'static [Fr] {
-    BRE_
+pub fn qcl() -> &'static [Co] {
+    BTZ_
 }
 
 
@@ -125,21 +125,21 @@ pub mod invariants {
     use super::*;
     
     
-    pub fn yia(
-        vbp: CapabilityRights,
-        rah: CapabilityRights,
+    pub fn pzp(
+        parent_rights: CapabilityRights,
+        child_rights: CapabilityRights,
     ) -> bool {
-        vbp.contains(rah)
+        parent_rights.contains(child_rights)
     }
     
     
-    pub fn yhy(nbq: CapabilityRights) -> bool {
-        nbq.contains(CapabilityRights::Cm) || 
-        nbq.contains(CapabilityRights::Db)
+    pub fn pzn(cap_rights: CapabilityRights) -> bool {
+        cap_rights.contains(CapabilityRights::Ba) || 
+        cap_rights.contains(CapabilityRights::Bh)
     }
     
     
-    pub fn yhz(cap_type: CapabilityType) -> bool {
-        oh!(cap_type, CapabilityType::Xj)
+    pub fn pzo(cap_type: CapabilityType) -> bool {
+        matches!(cap_type, CapabilityType::Kernel)
     }
 }

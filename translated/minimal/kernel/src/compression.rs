@@ -3,66 +3,66 @@
 
 
 use alloc::vec::Vec;
-use miniz_oxide::inflate::ylj;
+use miniz_oxide::inflate::decompress_to_vec_zlib;
 
 
 
-pub fn yvs(f: &[u8]) -> Result<Vec<u8>, &'static str> {
-    if f.len() < 18 {
+pub fn qka(data: &[u8]) -> Result<Vec<u8>, &'static str> {
+    if data.len() < 18 {
         return Err("Data too small for gzip");
     }
     
     
-    if f[0] != 0x1f || f[1] != 0x8b {
+    if data[0] != 0x1f || data[1] != 0x8b {
         return Err("Not gzip format");
     }
     
     
-    if f[2] != 8 {
+    if data[2] != 8 {
         return Err("Unsupported compression method");
     }
     
-    let flags = f[3];
-    let mut l = 10;
+    let flags = data[3];
+    let mut offset = 10;
     
     
     if flags & 0x04 != 0 {
-        if l + 2 > f.len() {
+        if offset + 2 > data.len() {
             return Err("Invalid extra field");
         }
-        let mrq = u16::dj([f[l], f[l + 1]]) as usize;
-        l += 2 + mrq;
+        let hcy = u16::from_le_bytes([data[offset], data[offset + 1]]) as usize;
+        offset += 2 + hcy;
     }
     
     
     if flags & 0x08 != 0 {
-        while l < f.len() && f[l] != 0 {
-            l += 1;
+        while offset < data.len() && data[offset] != 0 {
+            offset += 1;
         }
-        l += 1; 
+        offset += 1; 
     }
     
     
     if flags & 0x10 != 0 {
-        while l < f.len() && f[l] != 0 {
-            l += 1;
+        while offset < data.len() && data[offset] != 0 {
+            offset += 1;
         }
-        l += 1;
+        offset += 1;
     }
     
     
     if flags & 0x02 != 0 {
-        l += 2;
+        offset += 2;
     }
     
-    if l >= f.len() - 8 {
+    if offset >= data.len() - 8 {
         return Err("Invalid gzip header");
     }
     
     
-    let gde = &f[l..f.len() - 8];
+    let cvm = &data[offset..data.len() - 8];
     
     
-    miniz_oxide::inflate::ruu(gde)
-        .jd(|_| "Deflate decompression failed")
+    miniz_oxide::inflate::decompress_to_vec(cvm)
+        .map_err(|_| "Deflate decompression failed")
 }

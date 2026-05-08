@@ -62,7 +62,7 @@ pub fn set_embedded_images(&mut self, _kernel: &'static [u8], _initramfs: &'stat
         // Public function — callable from other modules.
 pub fn is_running(&self) -> bool { false }
         // Public function — callable from other modules.
-pub fn execute_command(&mut self, _command: &str) -> Result<String, String> {
+pub fn execute_command(&mut self, _cmd: &str) -> Result<String, String> {
         Err(String::from("Not available"))
     }
         // Public function — callable from other modules.

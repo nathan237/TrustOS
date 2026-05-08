@@ -19,9 +19,7 @@ pub struct Aes128Key {
 impl Aes128Key {
     /// Create key schedule from 16-byte key
     pub fn new(key: &[u8; 16]) -> Self {
-        if !is_available() {
-            panic!("AES-NI not available");
-        }
+        assert!(is_available(), "AES-NI: caller must check is_available() first");
         
         unsafe {
             let mut round_keys: [__m128i; 11] = core::mem::zeroed();

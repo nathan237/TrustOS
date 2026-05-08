@@ -103,8 +103,8 @@ pub fn expand_variables(input: &str) -> String {
             if next == b'(' && i + 2 < bytes.len() && bytes[i + 2] == b'(' {
                 if let Some(end) = find_matching_double_paren(input, i + 2) {
                     let expr = &input[i + 3..end];
-                    let value = eval_arithmetic(expr);
-                    result.push_str(&format!("{}", value));
+                    let val = eval_arithmetic(expr);
+                    result.push_str(&format!("{}", val));
                     i = end + 2; // skip ))
                     continue;
                 }
@@ -140,8 +140,8 @@ pub fn expand_variables(input: &str) -> String {
             }
             if end > start {
                 let name = &input[start..end];
-                if let Some(value) = get_var(name) {
-                    result.push_str(&value);
+                if let Some(val) = get_var(name) {
+                    result.push_str(&val);
                 }
                 // If not set, expand to empty string (POSIX behavior)
                 i = end;
@@ -183,27 +183,27 @@ fn expand_var_spec(spec: &str) -> String {
     }
 
     // ${VAR:-default} — use default if unset
-    if let Some(position) = spec.find(":-") {
-        let name = &spec[..position];
-        let default = &spec[position + 2..];
+    if let Some(pos) = spec.find(":-") {
+        let name = &spec[..pos];
+        let default = &spec[pos + 2..];
         return get_var(name).unwrap_or_else(|| String::from(default));
     }
 
     // ${VAR:=default} — assign default if unset
-    if let Some(position) = spec.find(":=") {
-        let name = &spec[..position];
-        let default = &spec[position + 2..];
-        if let Some(value) = get_var(name) {
-            return value;
+    if let Some(pos) = spec.find(":=") {
+        let name = &spec[..pos];
+        let default = &spec[pos + 2..];
+        if let Some(val) = get_var(name) {
+            return val;
         }
         set_var(name, default);
         return String::from(default);
     }
 
     // ${VAR:+alt} — use alt only if set
-    if let Some(position) = spec.find(":+") {
-        let name = &spec[..position];
-        let alt = &spec[position + 2..];
+    if let Some(pos) = spec.find(":+") {
+        let name = &spec[..pos];
+        let alt = &spec[pos + 2..];
         return if get_var(name).is_some() { String::from(alt) } else { String::new() };
     }
 
@@ -217,21 +217,21 @@ fn command_substitution(cmd: &str) -> String {
     use core::sync::atomic::Ordering;
     super::CAPTURE_MODE.store(true, Ordering::SeqCst);
     {
-        let mut buffer = super::CAPTURE_BUFFER.lock();
-        buffer.clear();
+        let mut buf = super::CAPTURE_BUF.lock();
+        buf.clear();
     }
 
     super::execute_command(cmd);
 
     super::CAPTURE_MODE.store(false, Ordering::SeqCst);
-    let buffer = super::CAPTURE_BUFFER.lock();
-    buffer.clone()
+    let buf = super::CAPTURE_BUF.lock();
+    buf.clone()
 }
 
-fn find_matching_paren(s: &str, open_position: usize) -> Option<usize> {
+fn find_matching_paren(s: &str, open_pos: usize) -> Option<usize> {
     let bytes = s.as_bytes();
     let mut depth = 0;
-    for i in open_position..bytes.len() {
+    for i in open_pos..bytes.len() {
         if bytes[i] == b'(' { depth += 1; }
         if bytes[i] == b')' {
             depth -= 1;
@@ -241,10 +241,10 @@ fn find_matching_paren(s: &str, open_position: usize) -> Option<usize> {
     None
 }
 
-fn find_matching_double_paren(s: &str, open_position: usize) -> Option<usize> {
+fn find_matching_double_paren(s: &str, open_pos: usize) -> Option<usize> {
     let bytes = s.as_bytes();
     let mut depth = 0;
-    let mut i = open_position;
+    let mut i = open_pos;
     while i < bytes.len() {
         if bytes[i] == b'(' { depth += 1; }
         if bytes[i] == b')' {
@@ -286,7 +286,7 @@ match bytes[i] {
                 let start = i;
                 while i < bytes.len() && bytes[i].is_ascii_digit() { i += 1; }
                 let n: i64 = expr[start..i].parse().unwrap_or(0);
-                tokens.push(ArithToken::Number(n));
+                tokens.push(ArithToken::Num(n));
             }
             _ => { i += 1; } // skip unknown
         }
@@ -296,35 +296,35 @@ match bytes[i] {
 
 // #[derive] — auto-generates trait implementations at compile time.
 #[derive(Debug, Clone)]
-enum ArithToken { Number(i64), Plus, Minus, Mul, Div, Mod, LParen, RParen }
+enum ArithToken { Num(i64), Plus, Minus, Mul, Div, Mod, LParen, RParen }
 
-fn parse_expr(tokens: &[ArithToken], position: &mut usize) -> i64 {
-    let mut left = parse_term(tokens, position);
-    while *position < tokens.len() {
+fn parse_expr(tokens: &[ArithToken], pos: &mut usize) -> i64 {
+    let mut left = parse_term(tokens, pos);
+    while *pos < tokens.len() {
                 // Pattern matching — Rust's exhaustive branching construct.
-match &tokens[*position] {
-            ArithToken::Plus => { *position += 1; left += parse_term(tokens, position); }
-            ArithToken::Minus => { *position += 1; left -= parse_term(tokens, position); }
+match &tokens[*pos] {
+            ArithToken::Plus => { *pos += 1; left += parse_term(tokens, pos); }
+            ArithToken::Minus => { *pos += 1; left -= parse_term(tokens, pos); }
             _ => break,
         }
     }
     left
 }
 
-fn parse_term(tokens: &[ArithToken], position: &mut usize) -> i64 {
-    let mut left = parse_factor(tokens, position);
-    while *position < tokens.len() {
+fn parse_term(tokens: &[ArithToken], pos: &mut usize) -> i64 {
+    let mut left = parse_factor(tokens, pos);
+    while *pos < tokens.len() {
                 // Pattern matching — Rust's exhaustive branching construct.
-match &tokens[*position] {
-            ArithToken::Mul => { *position += 1; left *= parse_factor(tokens, position); }
+match &tokens[*pos] {
+            ArithToken::Mul => { *pos += 1; left *= parse_factor(tokens, pos); }
             ArithToken::Div => {
-                *position += 1;
-                let r = parse_factor(tokens, position);
+                *pos += 1;
+                let r = parse_factor(tokens, pos);
                 if r != 0 { left /= r; }
             }
             ArithToken::Mod => {
-                *position += 1;
-                let r = parse_factor(tokens, position);
+                *pos += 1;
+                let r = parse_factor(tokens, pos);
                 if r != 0 { left %= r; }
             }
             _ => break,
@@ -333,41 +333,41 @@ match &tokens[*position] {
     left
 }
 
-fn parse_factor(tokens: &[ArithToken], position: &mut usize) -> i64 {
-    if *position >= tokens.len() { return 0; }
+fn parse_factor(tokens: &[ArithToken], pos: &mut usize) -> i64 {
+    if *pos >= tokens.len() { return 0; }
         // Pattern matching — Rust's exhaustive branching construct.
-match &tokens[*position] {
-        ArithToken::Number(n) => { let v = *n; *position += 1; v }
-        ArithToken::Minus => { *position += 1; -parse_factor(tokens, position) }
-        ArithToken::Plus => { *position += 1; parse_factor(tokens, position) }
+match &tokens[*pos] {
+        ArithToken::Num(n) => { let v = *n; *pos += 1; v }
+        ArithToken::Minus => { *pos += 1; -parse_factor(tokens, pos) }
+        ArithToken::Plus => { *pos += 1; parse_factor(tokens, pos) }
         ArithToken::LParen => {
-            *position += 1;
-            let v = parse_expr(tokens, position);
-            if *position < tokens.len() { *position += 1; } // skip RParen
+            *pos += 1;
+            let v = parse_expr(tokens, pos);
+            if *pos < tokens.len() { *pos += 1; } // skip RParen
             v
         }
-        _ => { *position += 1; 0 }
+        _ => { *pos += 1; 0 }
     }
 }
 
 /// Execute an `if/elif/else/fi` block.
 /// Returns true if the block was consumed (input was an if-block).
-pub fn execute_if_block(lines: &[&str], index: &mut usize) -> bool {
-    if *index >= lines.len() { return false; }
-    let first = lines[*index].trim();
+pub fn execute_if_block(lines: &[&str], idx: &mut usize) -> bool {
+    if *idx >= lines.len() { return false; }
+    let first = lines[*idx].trim();
     if !first.starts_with("if ") { return false; }
 
     // Collect the full if/elif/else/fi block
     let mut block_lines: Vec<&str> = Vec::new();
     let mut depth = 0;
-    let start = *index;
+    let start = *idx;
 
-    while *index < lines.len() {
-        let line = lines[*index].trim();
+    while *idx < lines.len() {
+        let line = lines[*idx].trim();
         if line.starts_with("if ") { depth += 1; }
         if line == "fi" { depth -= 1; }
         block_lines.push(line);
-        *index += 1;
+        *idx += 1;
         if depth == 0 { break; }
     }
 
@@ -430,20 +430,20 @@ match condition {
 }
 
 /// Execute a `for VAR in LIST; do ... done` block.
-pub fn execute_for_block(lines: &[&str], index: &mut usize) -> bool {
-    if *index >= lines.len() { return false; }
-    let first = lines[*index].trim();
+pub fn execute_for_block(lines: &[&str], idx: &mut usize) -> bool {
+    if *idx >= lines.len() { return false; }
+    let first = lines[*idx].trim();
     if !first.starts_with("for ") { return false; }
 
     // Collect the full for/do/done block
     let mut block_lines: Vec<&str> = Vec::new();
     let mut depth = 0;
-    while *index < lines.len() {
-        let line = lines[*index].trim();
+    while *idx < lines.len() {
+        let line = lines[*idx].trim();
         if line.starts_with("for ") || line.starts_with("while ") { depth += 1; }
         if line == "done" { depth -= 1; }
         block_lines.push(line);
-        *index += 1;
+        *idx += 1;
         if depth == 0 { break; }
     }
 
@@ -452,8 +452,8 @@ pub fn execute_for_block(lines: &[&str], index: &mut usize) -> bool {
     let after_for = header.strip_prefix("for ").unwrap().trim();
 
     // Split on " in "
-    let (var_name, list_str) = if let Some(position) = after_for.find(" in ") {
-        (&after_for[..position], &after_for[position + 4..])
+    let (var_name, list_str) = if let Some(pos) = after_for.find(" in ") {
+        (&after_for[..pos], &after_for[pos + 4..])
     } else {
         return true; // Malformed
     };
@@ -501,20 +501,20 @@ pub fn execute_for_block(lines: &[&str], index: &mut usize) -> bool {
 }
 
 /// Execute a `while COND; do ... done` block.
-pub fn execute_while_block(lines: &[&str], index: &mut usize) -> bool {
-    if *index >= lines.len() { return false; }
-    let first = lines[*index].trim();
+pub fn execute_while_block(lines: &[&str], idx: &mut usize) -> bool {
+    if *idx >= lines.len() { return false; }
+    let first = lines[*idx].trim();
     if !first.starts_with("while ") { return false; }
 
     // Collect block
     let mut block_lines: Vec<&str> = Vec::new();
     let mut depth = 0;
-    while *index < lines.len() {
-        let line = lines[*index].trim();
+    while *idx < lines.len() {
+        let line = lines[*idx].trim();
         if line.starts_with("for ") || line.starts_with("while ") { depth += 1; }
         if line == "done" { depth -= 1; }
         block_lines.push(line);
-        *index += 1;
+        *idx += 1;
         if depth == 0 { break; }
     }
 
@@ -585,7 +585,7 @@ fn eval_condition(condition: &str) -> bool {
     // (Use capture mode to suppress output)
     let expanded = expand_variables(condition);
     super::CAPTURE_MODE.store(true, core::sync::atomic::Ordering::SeqCst);
-    { super::CAPTURE_BUFFER.lock().clear(); }
+    { super::CAPTURE_BUF.lock().clear(); }
     super::execute_command(&expanded);
     super::CAPTURE_MODE.store(false, core::sync::atomic::Ordering::SeqCst);
     get_exit_code() == 0
@@ -602,10 +602,10 @@ match parts.as_slice() {
         ["-z", s] => s.is_empty(),
         ["-n", s] => !s.is_empty(),
         ["-f", path] => crate::ramfs::with_filesystem(|fs| {
-            fs.status(path).map(|e| e.file_type == crate::ramfs::FileType::File).unwrap_or(false)
+            fs.stat(path).map(|e| e.file_type == crate::ramfs::FileType::File).unwrap_or(false)
         }),
         ["-d", path] => crate::ramfs::with_filesystem(|fs| {
-            fs.status(path).map(|e| e.file_type == crate::ramfs::FileType::Directory).unwrap_or(false)
+            fs.stat(path).map(|e| e.file_type == crate::ramfs::FileType::Directory).unwrap_or(false)
         }),
         ["-e", path] => crate::ramfs::with_filesystem(|fs| fs.exists(path)),
         // String comparison
@@ -629,25 +629,25 @@ match parts.as_slice() {
 /// Execute a script string (multi-line). Handles if/for/while blocks.
 pub fn execute_script(script: &str) {
     let lines: Vec<&str> = script.lines().collect();
-    let mut index = 0;
+    let mut idx = 0;
     
-    while index < lines.len() {
-        let line = lines[index].trim();
+    while idx < lines.len() {
+        let line = lines[idx].trim();
         
         // Skip empty lines and comments
         if line.is_empty() || line.starts_with('#') {
-            index += 1;
+            idx += 1;
             continue;
         }
 
         // Try control flow blocks
-        if execute_if_block(&lines, &mut index) { continue; }
-        if execute_for_block(&lines, &mut index) { continue; }
-        if execute_while_block(&lines, &mut index) { continue; }
+        if execute_if_block(&lines, &mut idx) { continue; }
+        if execute_for_block(&lines, &mut idx) { continue; }
+        if execute_while_block(&lines, &mut idx) { continue; }
 
         // Regular command — expand variables first
         let expanded = expand_variables(line);
         super::execute_command(&expanded);
-        index += 1;
+        idx += 1;
     }
 }

@@ -9,41 +9,41 @@
 //! - SwiGLU FFN (gated feed-forward with SiLU activation)
 //! - Multi-head attention with causal mask
 //!
-//! Memory layout:
+//! Memory layout (Omniscient JARVIS):
 //! ```text
-//! token_embed:  [VOCAB_SIZE × D_MODEL]     = [256 × 256] = 256 KB
-//! pos_embed:    [MAX_SEQ × D_MODEL]         = [256 × 256] = 256 KB
-//! layers[0..3]: each ~4 MB (see LayerWeights)              = 16 MB
-//! rms_final:    [D_MODEL]                    = [256]       = 1 KB
-//! w_output:     [D_MODEL × VOCAB_SIZE]       = [256 × 256] = 256 KB
+//! token_embed:  [VOCAB_SIZE × D_MODEL]     = [256 × 512] = 512 KB
+//! pos_embed:    [MAX_SEQ × D_MODEL]         = [256 × 512] = 512 KB
+//! layers[0..7]: each ~17 MB (see LayerWeights)            = 136 MB
+//! rms_final:    [D_MODEL]                    = [512]       = 2 KB
+//! w_output:     [D_MODEL × VOCAB_SIZE]       = [512 × 256] = 512 KB
 //! ─────────────────────────────────────────────────────────────────
-//! Total: ~4.4M params → ~17.6 MB at FP32
+//! Total: ~35M params → ~140 MB at FP32 (omniscient JARVIS, scales to GPU later)
 //! ```
 
 use alloc::vec::Vec;
 use alloc::vec;
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Model Hyperparameters
+// Model Hyperparameters — Omniscient JARVIS (Scaled for TrustOS Expert)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /// Vocabulary size (byte-level: 256 possible byte values)
 pub const VOCAB_SIZE: usize = 256;
 
-/// Model embedding dimension
-pub const D_MODEL: usize = 256;
+/// Model embedding dimension — SCALED for omniscience
+pub const D_MODEL: usize = 512;
 
-/// Number of attention heads
-pub const N_HEADS: usize = 4;
+/// Number of attention heads — SCALED
+pub const N_HEADS: usize = 8;
 
 /// Key/Query dimension per head
 pub const D_K: usize = D_MODEL / N_HEADS; // = 64
 
 /// Feed-forward inner dimension (4× d_model for SwiGLU)
-pub const D_FF: usize = 1024;
+pub const D_FF: usize = 2048;
 
-/// Number of transformer layers
-pub const N_LAYERS: usize = 4;
+/// Number of transformer layers — SCALED
+pub const N_LAYERS: usize = 8;
 
 /// Maximum sequence length (context window)
 pub const MAX_SEQ: usize = 256;
@@ -99,8 +99,8 @@ impl LayerWeights {
             w_v: random_vec(D_MODEL * D_MODEL, attn_scale, seed),
             w_o: random_vec(D_MODEL * D_MODEL, attn_scale, seed),
             rms_ffn: vec![1.0f32; D_MODEL],
-            w_gate: random_vec(D_MODEL * D_FF, ffn_scale, seed),
-            w_up: random_vec(D_MODEL * D_FF, ffn_scale, seed),
+            w_gate: random_vec(D_MODEL * D_FF, attn_scale, seed),
+            w_up: random_vec(D_MODEL * D_FF, attn_scale, seed),
             w_down: random_vec(D_FF * D_MODEL, ffn_scale, seed),
         }
     }
@@ -143,7 +143,7 @@ impl TransformerWeights {
 
         TransformerWeights {
             token_embed: random_vec(VOCAB_SIZE * D_MODEL, embed_scale, &mut seed),
-            pos_embed: random_vec(MAX_SEQ * D_MODEL, 0.02, &mut seed),
+            pos_embed: random_vec(MAX_SEQ * D_MODEL, embed_scale, &mut seed),
             layers,
             rms_final: vec![1.0f32; D_MODEL],
             w_output: random_vec(D_MODEL * VOCAB_SIZE, embed_scale, &mut seed),

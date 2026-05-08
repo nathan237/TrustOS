@@ -4,7 +4,9 @@
 #>
 param([int]$Port = 5557)
 
-$OutputFile = "C:\Users\nathan\Documents\Scripts\OSrust\jarvis_training_results.txt"
+$LogDir = Join-Path $PSScriptRoot "..\..\logs\jarvis"
+New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
+$OutputFile = Join-Path $LogDir "jarvis_training_results.txt"
 $buf = New-Object byte[] 65536
 $log = ""
 

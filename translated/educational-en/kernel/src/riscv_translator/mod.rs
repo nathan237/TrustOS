@@ -116,16 +116,16 @@ pub fn translate_and_run(elf_data: &[u8]) -> Result<i64, String> {
     crate::serial_println!("[RV-XLAT] Detected architecture: {}", arch.name());
 
     // 2. Extract code
-    let (base_address, code) = extract_elf_code(elf_data)
+    let (base_addr, code) = extract_elf_code(elf_data)
         .ok_or_else(|| String::from("Failed to extract executable code from ELF"))?;
 
-    crate::serial_println!("[RV-XLAT] Code: {} bytes at 0x{:X}", code.len(), base_address);
+    crate::serial_println!("[RV-XLAT] Code: {} bytes at 0x{:X}", code.len(), base_addr);
 
     // 3. Translate to RISC-V IR
     let blocks = // Pattern matching — Rust's exhaustive branching construct.
 match arch {
         SourceArch::X86_64 => {
-            let mut decoder = x86_decoder::X86Decoder::new(&code, base_address);
+            let mut decoder = x86_decoder::X86Decoder::new(&code, base_addr);
             let blocks = decoder.translate_all();
             crate::serial_println!("[RV-XLAT] x86_64: {} blocks, {} instructions → {} RV instructions ({}x expansion)",
                 decoder.stats.blocks_translated,
@@ -143,7 +143,7 @@ match arch {
             blocks
         }
         SourceArch::Aarch64 => {
-            let mut decoder = arm_decoder::ArmDecoder::new(&code, base_address);
+            let mut decoder = arm_decoder::ArmDecoder::new(&code, base_addr);
             let blocks = decoder.translate_all();
             crate::serial_println!("[RV-XLAT] aarch64: {} blocks, {} instructions → {} RV instructions ({}x expansion)",
                 decoder.stats.blocks_translated,
@@ -174,7 +174,7 @@ match arch {
     let mut interp = RvInterpreter::new();
 
     // Map code into interpreter memory
-    interp.mem.map_with_data(base_address, &code);
+    interp.mem.map_with_data(base_addr, &code);
 
     // Map stack (1 MB)
     let stack_base = 0x7FF0_0000u64;
@@ -189,7 +189,7 @@ match arch {
     interp.load_blocks(&blocks);
 
     // Set up entry point via the first block
-    let entry_block_address = blocks[0].source_address;
+    let entry_block_address = blocks[0].src_addr;
     interp.cpu.pc = entry_block_address;
 
     crate::serial_println!("[RV-XLAT] Starting execution at 0x{:X}", entry_block_address);
@@ -203,7 +203,7 @@ loop {
         let pc = interp.cpu.pc;
 
         if let Some(block_insts) = interp.block_cache.get(&pc).map(|v| v.clone()) {
-            let result = interp.execute_block(&block_insts);
+            let result = interp.exec_block(&block_insts);
 
                         // Pattern matching — Rust's exhaustive branching construct.
 match result {
@@ -215,12 +215,12 @@ match result {
                     }
                 }
                 ExecResult::Syscall { number, args } => {
-                    let (return_value, should_exit) = syscall::handle_syscall(
+                    let (ret, should_exit) = syscall::handle_syscall(
                         arch, number, &args, &mut interp.mem,
                     );
 
                     // Set return value in a0 (x10)
-                    interp.cpu.set(Reg::X10, return_value as u64);
+                    interp.cpu.set(Reg::X10, ret as u64);
 
                     if should_exit {
                         exit_code = args[0] as i64;
@@ -229,8 +229,8 @@ match result {
                     // Continue from where we left off - need to find next block
                     // The syscall was mid-block, so PC should be set to continue
                 }
-                ExecResult::Returned(value) => {
-                    exit_code = value as i64;
+                ExecResult::Returned(val) => {
+                    exit_code = val as i64;
                     break;
                 }
                 ExecResult::Breakpoint => {
@@ -238,8 +238,8 @@ match result {
                     crate::serial_println!("{}", interp.dump_state());
                     break;
                 }
-                ExecResult::MemoryFault(address) => {
-                    crate::serial_println!("[RV-XLAT] SEGFAULT: memory access at 0x{:X}", address);
+                ExecResult::MemoryFault(addr) => {
+                    crate::serial_println!("[RV-XLAT] SEGFAULT: memory access at 0x{:X}", addr);
                     crate::serial_println!("{}", interp.dump_state());
                     exit_code = -11; // SIGSEGV
                     break;
@@ -269,28 +269,28 @@ pub fn translate_and_disasm(elf_data: &[u8]) -> Result<String, String> {
     let arch = detect_elf_arch(elf_data)
         .ok_or_else(|| String::from("Not a valid ELF"))?;
 
-    let (base_address, code) = extract_elf_code(elf_data)
+    let (base_addr, code) = extract_elf_code(elf_data)
         .ok_or_else(|| String::from("No executable code"))?;
 
     let blocks = // Pattern matching — Rust's exhaustive branching construct.
 match arch {
         SourceArch::X86_64 => {
-            let mut d = x86_decoder::X86Decoder::new(&code, base_address);
+            let mut d = x86_decoder::X86Decoder::new(&code, base_addr);
             d.translate_all()
         }
         SourceArch::Aarch64 => {
-            let mut d = arm_decoder::ArmDecoder::new(&code, base_address);
+            let mut d = arm_decoder::ArmDecoder::new(&code, base_addr);
             d.translate_all()
         }
         _ => return Err(format!("{} not supported for disasm", arch.name())),
     };
 
     let mut output = format!("=== RISC-V IR Translation ({} → rv64) ===\n", arch.name());
-    output.push_str(&format!("Entry: 0x{:X} | {} blocks\n\n", base_address, blocks.len()));
+    output.push_str(&format!("Entry: 0x{:X} | {} blocks\n\n", base_addr, blocks.len()));
 
     for block in &blocks {
         output.push_str(&format!("Block @ 0x{:X} ({} src instructions → {} RV IR):\n",
-            block.source_address, block.source_inst_count, block.instructions.len()));
+            block.src_addr, block.src_inst_count, block.instructions.len()));
 
         for (i, inst) in block.instructions.iter().enumerate() {
             output.push_str(&format!("  {:3}: {}\n", i, format_rv_inst(inst)));
@@ -341,7 +341,7 @@ match inst {
         RvInst::Ld { rd, rs1, offset } => format!("ld   {}, {}({})", rd.abi_name(), offset, rs1.abi_name()),
         RvInst::Sb { rs2, rs1, offset }=> format!("sb   {}, {}({})", rs2.abi_name(), offset, rs1.abi_name()),
         RvInst::Sh { rs2, rs1, offset }=> format!("sh   {}, {}({})", rs2.abi_name(), offset, rs1.abi_name()),
-        RvInst::Software { rs2, rs1, offset }=> format!("sw   {}, {}({})", rs2.abi_name(), offset, rs1.abi_name()),
+        RvInst::Sw { rs2, rs1, offset }=> format!("sw   {}, {}({})", rs2.abi_name(), offset, rs1.abi_name()),
         RvInst::Sd { rs2, rs1, offset }=> format!("sd   {}, {}({})", rs2.abi_name(), offset, rs1.abi_name()),
         RvInst::Beq { rs1, rs2, offset }  => format!("beq  {}, {}, 0x{:X}", rs1.abi_name(), rs2.abi_name(), *offset as u64),
         RvInst::Bne { rs1, rs2, offset }  => format!("bne  {}, {}, 0x{:X}", rs1.abi_name(), rs2.abi_name(), *offset as u64),
@@ -371,10 +371,10 @@ match inst {
         RvInst::Li { rd, imm } => format!("li   {}, 0x{:X}", rd.abi_name(), *imm as u64),
         RvInst::Mv { rd, rs } => format!("mv   {}, {}", rd.abi_name(), rs.abi_name()),
         RvInst::Nop => String::from("nop"),
-        RvInst::Return_value => String::from("ret"),
+        RvInst::Ret => String::from("ret"),
         RvInst::Call { offset } => format!("call 0x{:X}", *offset as u64),
         RvInst::CmpFlags { rs1, rs2 } => format!("cmp  {}, {}", rs1.abi_name(), rs2.abi_name()),
-        RvInst::BranchCondition { condition, offset } => format!("b{:?} 0x{:X}", condition, *offset as u64),
-        RvInst::SourceAnnotation { arch, address, text } => format!("; [{} @ 0x{:X}] {}", arch.name(), address, text),
+        RvInst::BranchCond { condition, offset } => format!("b{:?} 0x{:X}", condition, *offset as u64),
+        RvInst::SrcAnnotation { arch, addr, text } => format!("; [{} @ 0x{:X}] {}", arch.name(), addr, text),
     }
 }

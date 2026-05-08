@@ -116,8 +116,8 @@ pub fn new(id: u32, x: f32, y: f32, width: f32, height: f32) -> Self {
     /// Update animation state
     pub fn update(&mut self, dt: f32) {
         if self.animation_progress < 1.0 {
-            self.animation_progress += dt / self.animation_duration.maximum(0.001);
-            self.animation_progress = self.animation_progress.minimum(1.0);
+            self.animation_progress += dt / self.animation_duration.max(0.001);
+            self.animation_progress = self.animation_progress.min(1.0);
             
             let t = apply_easing(self.animation_progress, self.animation_easing);
             
@@ -260,7 +260,7 @@ impl Compositor {
     
     /// Get mutable surface by ID
     pub fn get_surface_mut(&mut self, id: u32) -> Option<&mut WindowSurface> {
-        self.surfaces.iterator_mut().find(|s| s.id == id)
+        self.surfaces.iter_mut().find(|s| s.id == id)
     }
     
     /// Sort surfaces by z-order
@@ -607,9 +607,9 @@ match self.bg_pattern {
         
         for i in 0..=segments {
             let angle = (i as f32 / segments as f32) * core::f32::consts::PI * 2.0;
-            let pixel = cx + angle.cos() * radius;
+            let px = cx + angle.cos() * radius;
             let py = cy + angle.sin() * radius;
-            gl_vertex3f(pixel, py, z);
+            gl_vertex3f(px, py, z);
         }
         gl_end();
     }
@@ -631,9 +631,9 @@ match self.bg_pattern {
             let segments = 24;
             for j in 0..=segments {
                 let angle = (j as f32 / segments as f32) * core::f32::consts::PI * 2.0;
-                let pixel = cx + angle.cos() * current_radius;
+                let px = cx + angle.cos() * current_radius;
                 let py = cy + angle.sin() * current_radius;
-                gl_vertex3f(pixel, py, z);
+                gl_vertex3f(px, py, z);
             }
             gl_end();
         }

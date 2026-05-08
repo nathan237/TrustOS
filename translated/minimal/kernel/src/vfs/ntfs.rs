@@ -18,52 +18,52 @@
 
 
 
-use alloc::string::{String, Gd};
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use alloc::vec;
 use alloc::sync::Arc;
 use alloc::format;
 use spin::Mutex;
 
-use super::{Et, Ep, Cc, FileType, Stat, Br, B, VfsError, I};
-use super::fat32::Bj;
+use super::{Bx, Bv, Au, FileType, Stat, Ap, E, VfsError, K};
+use super::fat32::Ak;
 
 
 
 
 
 
-const BAN_: u32 = 0x454C4946; 
+const BCP_: u32 = 0x454C4946; 
 
 
-const BBR_: &[u8; 8] = b"NTFS    ";
+const BDU_: &[u8; 8] = b"NTFS    ";
 
 
-const DTZ_: u64 = 0;          
-const BAO_: u64 = 5;         
+const DXQ_: u64 = 0;          
+const BCQ_: u64 = 5;         
 
 
-const BKQ_: u32 = 0x10;
-const BKN_: u32 = 0x30;
-const AKW_: u32 = 0x80;
-const BKP_: u32 = 0x90;
-const BKO_: u32 = 0xA0;
-const DCS_: u32 = 0xB0;
-const AKX_: u32 = 0xFFFFFFFF;
+const BNE_: u32 = 0x10;
+const BNB_: u32 = 0x30;
+const AMR_: u32 = 0x80;
+const BND_: u32 = 0x90;
+const BNC_: u32 = 0xA0;
+const DGM_: u32 = 0xB0;
+const AMS_: u32 = 0xFFFFFFFF;
 
 
-const ARZ_: u8 = 0;
-const ASA_: u8 = 1;
-const ACC_: u8 = 2;
-const ASB_: u8 = 3;
+const AUD_: u8 = 0;
+const AUE_: u8 = 1;
+const ADT_: u8 = 2;
+const AUF_: u8 = 3;
 
 
-const DTY_: u16 = 0x0001;
-const CGI_: u16 = 0x0002;
+const DXP_: u16 = 0x0001;
+const CJS_: u16 = 0x0002;
 
 
-const DQY_: u32 = 0x01;
-const CBN_: u32 = 0x02;
+const DUS_: u32 = 0x01;
+const CEY_: u32 = 0x02;
 
 
 const H_: usize = 512;
@@ -75,188 +75,188 @@ const H_: usize = 512;
 
 #[repr(C, packed)]
 #[derive(Clone, Copy)]
-struct Bnm {
-    uak: [u8; 3],          
-    clo: [u8; 8],            
-    aid: u16,      
-    anx: u8,    
-    fzp: [u8; 7],        
-    zco: u8,       
-    jyk: [u8; 2],        
-    wge: u16,     
-    uwj: u16,             
-    tor: u32,        
-    yce: u32,            
-    ycf: u32,            
-    axf: u64,         
-    uny: u64,               
-    zcr: u64,        
-    bhk: i8,        
-    ycg: [u8; 3],        
-    bbt: i8,       
-    ych: [u8; 3],        
-    zvu: u64,         
+struct Abu {
+    jmp_boot: [u8; 3],          
+    oem_id: [u8; 8],            
+    bytes_per_sector: u16,      
+    sectors_per_cluster: u8,    
+    _reserved1: [u8; 7],        
+    media_descriptor: u8,       
+    _reserved2: [u8; 2],        
+    sectors_per_track: u16,     
+    num_heads: u16,             
+    hidden_sectors: u32,        
+    _reserved3: u32,            
+    _reserved4: u32,            
+    zp: u64,         
+    mft_lcn: u64,               
+    mft_mirror_lcn: u64,        
+    mft_record_size: i8,        
+    _reserved5: [u8; 3],        
+    index_block_size: i8,       
+    _reserved6: [u8; 3],        
+    volume_serial: u64,         
 }
 
-impl Bnm {
-    fn cld(&self) -> bool {
-        self.clo == *BBR_
+impl Abu {
+    fn is_valid(&self) -> bool {
+        self.oem_id == *BDU_
     }
 
-    fn qt(&self) -> u32 {
-        let hbc = unsafe { core::ptr::md(core::ptr::vf!(self.aid)) };
-        hbc as u32 * self.anx as u32
+    fn cluster_size(&self) -> u32 {
+        let djm = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(self.bytes_per_sector)) };
+        djm as u32 * self.sectors_per_cluster as u32
     }
 
-    fn uoa(&self) -> u32 {
-        if self.bhk > 0 {
-            self.bhk as u32 * self.qt()
+    fn mft_record_bytes(&self) -> u32 {
+        if self.mft_record_size > 0 {
+            self.mft_record_size as u32 * self.cluster_size()
         } else {
             
-            1u32 << (-(self.bhk as i32) as u32)
+            1u32 << (-(self.mft_record_size as i32) as u32)
         }
     }
 
-    fn tst(&self) -> u32 {
-        if self.bbt > 0 {
-            self.bbt as u32 * self.qt()
+    fn index_block_bytes(&self) -> u32 {
+        if self.index_block_size > 0 {
+            self.index_block_size as u32 * self.cluster_size()
         } else {
-            1u32 << (-(self.bbt as i32) as u32)
+            1u32 << (-(self.index_block_size as i32) as u32)
         }
     }
 
-    fn cav(&self) -> u64 {
-        let bve = unsafe { core::ptr::md(core::ptr::vf!(self.uny)) };
-        bve * self.qt() as u64
+    fn mft_start_byte(&self) -> u64 {
+        let lcn = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(self.mft_lcn)) };
+        lcn * self.cluster_size() as u64
     }
 }
 
 
 #[repr(C, packed)]
 #[derive(Clone, Copy, Debug)]
-struct Chj {
-    sj: u32,                 
-    gvq: u16,     
-    ifx: u16,       
-    uhw: u64,        
-    zmk: u16,       
-    yvy: u16,       
-    stx: u16,     
+struct Amu {
+    magic: u32,                 
+    dgb: u16,     
+    edj: u16,       
+    log_seq_number: u64,        
+    sequence_number: u16,       
+    hard_link_count: u16,       
+    first_attr_offset: u16,     
     flags: u16,                 
-    fxx: u32,             
-    kae: u32,        
-    yfo: u64,           
-    zdp: u16,          
+    used_size: u32,             
+    allocated_size: u32,        
+    base_record: u64,           
+    next_attr_id: u16,          
 }
 
 
 #[repr(C, packed)]
 #[derive(Clone, Copy, Debug)]
-struct Crm {
-    gze: u32,             
-    go: u32,                
-    gnw: u8,           
-    hsj: u8,            
-    zdf: u16,           
+struct Asv {
+    dhz: u32,             
+    length: u32,                
+    dbu: u8,           
+    name_length: u8,            
+    name_offset: u16,           
     flags: u16,                 
-    yfe: u16,               
+    attr_id: u16,               
 }
 
 
 #[repr(C, packed)]
 #[derive(Clone, Copy, Debug)]
-struct Dfw {
-    zve: u32,          
-    zvf: u16,          
-    yxm: u16,          
+struct Bbk {
+    value_length: u32,          
+    value_offset: u16,          
+    indexed_flag: u16,          
 }
 
 
 #[repr(C, packed)]
 #[derive(Clone, Copy, Debug)]
-struct Awd {
-    zbt: u64,            
-    yxc: u64,           
-    koc: u16,      
-    yjs: u16,      
-    mss: u32,              
-    kae: u64,        
-    lyc: u64,             
-    yxx: u64,      
+struct Ty {
+    lowest_vcn: u64,            
+    highest_vcn: u64,           
+    data_runs_offset: u16,      
+    compression_unit: u16,      
+    _padding: u32,              
+    allocated_size: u64,        
+    real_size: u64,             
+    initialized_size: u64,      
 }
 
 
 #[repr(C, packed)]
 #[derive(Clone, Copy)]
-struct Bgy {
-    huh: u64,            
-    eaa: u64,         
-    efn: u64,     
-    unz: u64, 
-    dya: u64,           
-    kae: u64,        
-    lyc: u64,             
+struct Yw {
+    parent_ref: u64,            
+    creation_time: u64,         
+    modification_time: u64,     
+    mft_modification_time: u64, 
+    access_time: u64,           
+    allocated_size: u64,        
+    real_size: u64,             
     flags: u32,                 
-    zjq: u32,        
-    hsj: u8,            
-    oox: u8,              
+    reparse_or_ea: u32,        
+    name_length: u8,            
+    namespace: u8,              
     
 }
 
 
 #[repr(C, packed)]
 #[derive(Clone, Copy)]
-struct Cnk {
-    eaa: u64,
-    efn: u64,
-    unz: u64,
-    dya: u64,
-    hjf: u32,       
-    mss: [u8; 4],
+struct Aqf {
+    creation_time: u64,
+    modification_time: u64,
+    mft_modification_time: u64,
+    access_time: u64,
+    file_attributes: u32,       
+    _padding: [u8; 4],
 }
 
 
 #[repr(C, packed)]
 #[derive(Clone, Copy)]
-struct Czq {
-    gze: u32,             
-    yjl: u32,        
-    bbt: u32,      
-    yiz: u8,     
-    mss: [u8; 3],
+struct Axx {
+    dhz: u32,             
+    collation_rule: u32,        
+    index_block_size: u32,      
+    clusters_per_index: u8,     
+    _padding: [u8; 3],
 }
 
 
 #[repr(C, packed)]
 #[derive(Clone, Copy)]
-struct Czp {
-    nqj: u32,        
-    aay: u32,            
-    kae: u32,        
+struct Axw {
+    hwb: u32,        
+    total_size: u32,            
+    allocated_size: u32,        
     flags: u32,                 
 }
 
 
 #[repr(C, packed)]
 #[derive(Clone, Copy)]
-struct Cft {
-    uob: u64,         
-    smf: u16,          
-    roi: u16,        
+struct Alr {
+    mft_reference: u64,         
+    entry_length: u16,          
+    content_length: u16,        
     flags: u32,                 
 }
 
 
-const CBO_: u32 = 0x58444E49; 
+const CEZ_: u32 = 0x58444E49; 
 
 #[repr(C, packed)]
 #[derive(Clone, Copy)]
-struct Czo {
-    sj: u32,                 
-    gvq: u16,
-    ifx: u16,
-    uhw: u64,
-    cnr: u64,                   
+struct Axv {
+    magic: u32,                 
+    dgb: u16,
+    edj: u16,
+    log_seq_number: u64,
+    avq: u64,                   
     
 }
 
@@ -266,75 +266,75 @@ struct Czo {
 
 
 #[derive(Clone, Debug)]
-struct Pe {
+struct Gj {
     
-    dxj: u64,
+    vcn_start: u64,
     
-    go: u64,
+    length: u64,
     
-    bve: u64,
+    lcn: u64,
 }
 
 
-fn kom(f: &[u8]) -> Vec<Pe> {
-    let mut jng = Vec::new();
-    let mut l = 0usize;
-    let mut fgi: u64 = 0;
-    let mut nih: i64 = 0;
+fn frb(data: &[u8]) -> Vec<Gj> {
+    let mut ezh = Vec::new();
+    let mut offset = 0usize;
+    let mut chz: u64 = 0;
+    let mut hps: i64 = 0;
 
-    while l < f.len() {
-        let dh = f[l];
-        if dh == 0 {
+    while offset < data.len() {
+        let header = data[offset];
+        if header == 0 {
             break; 
         }
 
-        let jdh = (dh & 0x0F) as usize;
-        let fpp = ((dh >> 4) & 0x0F) as usize;
-        l += 1;
+        let esv = (header & 0x0F) as usize;
+        let cnj = ((header >> 4) & 0x0F) as usize;
+        offset += 1;
 
-        if jdh == 0 || l + jdh + fpp > f.len() {
+        if esv == 0 || offset + esv + cnj > data.len() {
             break;
         }
 
         
-        let mut mbf: u64 = 0;
-        for a in 0..jdh {
-            mbf |= (f[l + a] as u64) << (a * 8);
+        let mut gsc: u64 = 0;
+        for i in 0..esv {
+            gsc |= (data[offset + i] as u64) << (i * 8);
         }
-        l += jdh;
+        offset += esv;
 
         
-        let mut jnf: i64 = 0;
-        if fpp > 0 {
-            for a in 0..fpp {
-                jnf |= (f[l + a] as i64) << (a * 8);
+        let mut ezg: i64 = 0;
+        if cnj > 0 {
+            for i in 0..cnj {
+                ezg |= (data[offset + i] as i64) << (i * 8);
             }
             
-            let woa = 1i64 << (fpp * 8 - 1);
-            if jnf & woa != 0 {
-                jnf |= !((1i64 << (fpp * 8)) - 1);
+            let osp = 1i64 << (cnj * 8 - 1);
+            if ezg & osp != 0 {
+                ezg |= !((1i64 << (cnj * 8)) - 1);
             }
-            l += fpp;
+            offset += cnj;
 
-            nih += jnf;
+            hps += ezg;
         }
 
-        let bve = if fpp == 0 {
+        let lcn = if cnj == 0 {
             0 
         } else {
-            nih as u64
+            hps as u64
         };
 
-        jng.push(Pe {
-            dxj: fgi,
-            go: mbf,
-            bve,
+        ezh.push(Gj {
+            vcn_start: chz,
+            length: gsc,
+            lcn,
         });
 
-        fgi += mbf;
+        chz += gsc;
     }
 
-    jng
+    ezh
 }
 
 
@@ -343,35 +343,35 @@ fn kom(f: &[u8]) -> Vec<Pe> {
 
 
 #[derive(Clone)]
-struct Xo {
+struct Ke {
     
-    vtg: u64,
+    record_number: u64,
     
     flags: u16,
     
-    kvq: String,
+    fwo: String,
     
-    huh: u64,
+    parent_ref: u64,
     
-    yy: u64,
+    file_size: u64,
     
-    cfr: bool,
+    is_directory: bool,
     
-    eaa: u64,
-    efn: u64,
-    dya: u64,
+    creation_time: u64,
+    modification_time: u64,
+    access_time: u64,
     
-    hjf: u32,
+    file_attributes: u32,
     
-    iqp: Vec<Pe>,
+    data_runs: Vec<Gj>,
     
-    hfe: bool,
+    data_resident: bool,
     
-    fss: Vec<u8>,
+    resident_data: Vec<u8>,
     
-    hnv: Vec<u8>,
+    index_root_data: Vec<u8>,
     
-    gjw: Vec<Pe>,
+    index_alloc_runs: Vec<Gj>,
 }
 
 
@@ -379,100 +379,100 @@ struct Xo {
 
 
 
-pub struct Akn {
-    ff: Mutex<Ts>,
+pub struct Pq {
+    inner: Mutex<Ik>,
 }
 
-struct Ts {
-    de: Arc<dyn Bj>,
-    qt: u32,
-    bhk: u32,
-    bbt: u32,
-    cav: u64,
-    anx: u8,
-    aid: u16,
+struct Ik {
+    device: Arc<dyn Ak>,
+    cluster_size: u32,
+    mft_record_size: u32,
+    index_block_size: u32,
+    mft_start_byte: u64,
+    sectors_per_cluster: u8,
+    bytes_per_sector: u16,
     
-    bvk: Vec<Pe>,
+    mft_data_runs: Vec<Gj>,
 }
 
-impl Ts {
+impl Ik {
     
-    fn day(&self, aok: u64, k: &mut [u8]) -> Result<(), ()> {
-        let zn = self.de.zn() as u64;
-        let awy = aok / zn;
-        let bho = (aok % zn) as usize;
+    fn read_bytes(&self, uo: u64, buf: &mut [u8]) -> Result<(), ()> {
+        let sector_size = self.device.sector_size() as u64;
+        let start_sector = uo / sector_size;
+        let afl = (uo % sector_size) as usize;
 
-        let xv = bho + k.len();
-        let lpn = (xv + zn as usize - 1) / zn as usize;
+        let total_bytes = afl + buf.len();
+        let gkd = (total_bytes + sector_size as usize - 1) / sector_size as usize;
 
-        let mut ia = k.len();
-        let mut avj = 0usize;
-        let mut aae = vec![0u8; zn as usize];
+        let mut ck = buf.len();
+        let mut yj = 0usize;
+        let mut mx = vec![0u8; sector_size as usize];
 
-        for a in 0..lpn {
-            self.de.xr(awy + a as u64, &mut aae)?;
+        for i in 0..gkd {
+            self.device.read_sector(start_sector + i as u64, &mut mx)?;
 
-            let big = if a == 0 { bho } else { 0 };
-            let zg = (zn as usize - big).v(ia);
+            let zl = if i == 0 { afl } else { 0 };
+            let mb = (sector_size as usize - zl).min(ck);
 
-            k[avj..avj + zg]
-                .dg(&aae[big..big + zg]);
+            buf[yj..yj + mb]
+                .copy_from_slice(&mx[zl..zl + mb]);
 
-            avj += zg;
-            ia -= zg;
+            yj += mb;
+            ck -= mb;
         }
 
         Ok(())
     }
 
     
-    fn zhk(&self, bve: u64, az: u64, k: &mut [u8]) -> Result<(), ()> {
-        let aok = bve * self.qt as u64;
-        let nay = az as usize * self.qt as usize;
-        if k.len() < nay {
+    fn qrw(&self, lcn: u64, count: u64, buf: &mut [u8]) -> Result<(), ()> {
+        let uo = lcn * self.cluster_size as u64;
+        let hjj = count as usize * self.cluster_size as usize;
+        if buf.len() < hjj {
             return Err(());
         }
-        self.day(aok, &mut k[..nay])
+        self.read_bytes(uo, &mut buf[..hjj])
     }
 
     
-    fn mwb(&self, k: &mut [u8], gqp: usize) -> Result<(), ()> {
-        if k.len() < 6 {
+    fn apply_fixups(&self, buf: &mut [u8], ddh: usize) -> Result<(), ()> {
+        if buf.len() < 6 {
             return Err(());
         }
-        let gvq = u16::dj([k[4], k[5]]) as usize;
-        let ifx = u16::dj([k[6], k[7]]) as usize;
+        let dgb = u16::from_le_bytes([buf[4], buf[5]]) as usize;
+        let edj = u16::from_le_bytes([buf[6], buf[7]]) as usize;
 
-        if ifx < 2 || gvq + ifx * 2 > k.len() {
+        if edj < 2 || dgb + edj * 2 > buf.len() {
             return Err(());
         }
 
         
-        let signature = u16::dj([
-            k[gvq],
-            k[gvq + 1],
+        let signature = u16::from_le_bytes([
+            buf[dgb],
+            buf[dgb + 1],
         ]);
 
         
-        let zn = self.aid as usize;
-        for a in 1..ifx {
-            let mda = a * zn;
-            if mda > gqp || mda < 2 {
+        let sector_size = self.bytes_per_sector as usize;
+        for i in 1..edj {
+            let gtj = i * sector_size;
+            if gtj > ddh || gtj < 2 {
                 break;
             }
-            let iuw = mda - 2;
+            let emu = gtj - 2;
 
             
-            let mhs = u16::dj([k[iuw], k[iuw + 1]]);
-            if mhs != signature {
+            let gwl = u16::from_le_bytes([buf[emu], buf[emu + 1]]);
+            if gwl != signature {
                 return Err(()); 
             }
 
             
-            let mbu = gvq + a * 2;
-            if mbu + 1 < k.len() {
-                k[iuw] = k[mbu];
-                k[iuw + 1] = k[mbu + 1];
+            let gsm = dgb + i * 2;
+            if gsm + 1 < buf.len() {
+                buf[emu] = buf[gsm];
+                buf[emu + 1] = buf[gsm + 1];
             }
         }
 
@@ -480,191 +480,191 @@ impl Ts {
     }
 
     
-    fn vsb(&self, bwn: u64) -> Result<Vec<u8>, ()> {
-        let gqp = self.bhk as usize;
-        let mut k = vec![0u8; gqp];
+    fn read_mft_record_raw(&self, record_num: u64) -> Result<Vec<u8>, ()> {
+        let ddh = self.mft_record_size as usize;
+        let mut buf = vec![0u8; ddh];
 
         
-        let naz = bwn * gqp as u64;
-        let cnr = naz / self.qt as u64;
-        let dke = (naz % self.qt as u64) as usize;
+        let hjk = record_num * ddh as u64;
+        let avq = hjk / self.cluster_size as u64;
+        let bik = (hjk % self.cluster_size as u64) as usize;
 
         
-        let mut kft = gqp;
-        let mut kfh = 0;
-        let mut fgi = cnr;
-        let mut kmz = dke;
+        let mut fki = ddh;
+        let mut fka = 0;
+        let mut chz = avq;
+        let mut fpu = bik;
 
-        while kft > 0 {
+        while fki > 0 {
             
-            let vw = self.bvk.iter().du(|m| {
-                fgi >= m.dxj && fgi < m.dxj + m.go
+            let run = self.mft_data_runs.iter().find(|r| {
+                chz >= r.vcn_start && chz < r.vcn_start + r.length
             });
 
-            match vw {
-                Some(vw) => {
-                    let xqv = fgi - vw.dxj;
-                    let bve = vw.bve + xqv;
-                    let aok = bve * self.qt as u64 + kmz as u64;
+            match run {
+                Some(run) => {
+                    let prh = chz - run.vcn_start;
+                    let lcn = run.lcn + prh;
+                    let uo = lcn * self.cluster_size as u64 + fpu as u64;
 
-                    let qlt = self.qt as usize - kmz;
-                    let ajp = kft.v(qlt);
+                    let jys = self.cluster_size as usize - fpu;
+                    let rz = fki.min(jys);
 
-                    self.day(aok, &mut k[kfh..kfh + ajp])?;
+                    self.read_bytes(uo, &mut buf[fka..fka + rz])?;
 
-                    kfh += ajp;
-                    kft -= ajp;
-                    kmz = 0;
-                    fgi += 1;
+                    fka += rz;
+                    fki -= rz;
+                    fpu = 0;
+                    chz += 1;
                 }
                 None => return Err(()),
             }
         }
 
         
-        self.mwb(&mut k, gqp)?;
+        self.apply_fixups(&mut buf, ddh)?;
 
         
-        let sj = u32::dj([k[0], k[1], k[2], k[3]]);
-        if sj != BAN_ {
+        let magic = u32::from_le_bytes([buf[0], buf[1], buf[2], buf[3]]);
+        if magic != BCP_ {
             return Err(());
         }
 
-        Ok(k)
+        Ok(buf)
     }
 
     
-    fn vcw(&self, bwn: u64, k: &[u8]) -> Result<Xo, ()> {
-        let dh = unsafe {
-            core::ptr::md(k.fq() as *const Chj)
+    fn parse_mft_record(&self, record_num: u64, buf: &[u8]) -> Result<Ke, ()> {
+        let header = unsafe {
+            core::ptr::read_unaligned(buf.as_ptr() as *const Amu)
         };
 
-        let flags = dh.flags;
-        let cfr = (flags & CGI_) != 0;
-        let kwi = dh.stx as usize;
-        let fxx = dh.fxx as usize;
+        let flags = header.flags;
+        let is_directory = (flags & CJS_) != 0;
+        let fxb = header.first_attr_offset as usize;
+        let used_size = header.used_size as usize;
 
-        let mut kvq = String::new();
-        let mut mys: Option<u8> = None;
-        let mut huh: u64 = 0;
-        let mut yy: u64 = 0;
-        let mut eaa: u64 = 0;
-        let mut efn: u64 = 0;
-        let mut dya: u64 = 0;
-        let mut hjf: u32 = 0;
-        let mut iqp = Vec::new();
-        let mut hfe = false;
-        let mut fss = Vec::new();
-        let mut hnv = Vec::new();
-        let mut gjw = Vec::new();
+        let mut fwo = String::new();
+        let mut hhj: Option<u8> = None;
+        let mut parent_ref: u64 = 0;
+        let mut file_size: u64 = 0;
+        let mut creation_time: u64 = 0;
+        let mut modification_time: u64 = 0;
+        let mut access_time: u64 = 0;
+        let mut file_attributes: u32 = 0;
+        let mut data_runs = Vec::new();
+        let mut data_resident = false;
+        let mut resident_data = Vec::new();
+        let mut index_root_data = Vec::new();
+        let mut index_alloc_runs = Vec::new();
 
-        let mut l = kwi;
-        let ul = fxx.v(k.len());
+        let mut offset = fxb;
+        let jm = used_size.min(buf.len());
 
-        while l + 4 <= ul {
-            let gze = u32::dj([
-                k[l], k[l + 1], k[l + 2], k[l + 3],
+        while offset + 4 <= jm {
+            let dhz = u32::from_le_bytes([
+                buf[offset], buf[offset + 1], buf[offset + 2], buf[offset + 3],
             ]);
 
-            if gze == AKX_ || gze == 0 {
+            if dhz == AMS_ || dhz == 0 {
                 break;
             }
 
-            if l + 8 > ul {
+            if offset + 8 > jm {
                 break;
             }
 
-            let fcu = u32::dj([
-                k[l + 4], k[l + 5], k[l + 6], k[l + 7],
+            let cfy = u32::from_le_bytes([
+                buf[offset + 4], buf[offset + 5], buf[offset + 6], buf[offset + 7],
             ]) as usize;
 
-            if fcu < 16 || fcu > ul - l {
+            if cfy < 16 || cfy > jm - offset {
                 break;
             }
 
-            let gnw = k[l + 8];
-            let hsj = k[l + 9] as usize;
+            let dbu = buf[offset + 8];
+            let name_length = buf[offset + 9] as usize;
 
             
-            let tzh = hsj == 0;
+            let mtz = name_length == 0;
 
-            match gze {
-                BKQ_ if gnw == 0 => {
+            match dhz {
+                BNE_ if dbu == 0 => {
                     
-                    if l + 24 <= ul {
-                        let dxh = u32::dj([
-                            k[l + 16], k[l + 17],
-                            k[l + 18], k[l + 19],
+                    if offset + 24 <= jm {
+                        let bpt = u32::from_le_bytes([
+                            buf[offset + 16], buf[offset + 17],
+                            buf[offset + 18], buf[offset + 19],
                         ]) as usize;
-                        let fya = u16::dj([
-                            k[l + 20], k[l + 21],
+                        let csh = u16::from_le_bytes([
+                            buf[offset + 20], buf[offset + 21],
                         ]) as usize;
-                        let bjt = l + fya;
-                        if dxh >= 48 && bjt + 48 <= k.len() {
+                        let data_start = offset + csh;
+                        if bpt >= 48 && data_start + 48 <= buf.len() {
                             let si = unsafe {
-                                core::ptr::md(
-                                    k[bjt..].fq() as *const Cnk
+                                core::ptr::read_unaligned(
+                                    buf[data_start..].as_ptr() as *const Aqf
                                 )
                             };
-                            eaa = si.eaa;
-                            efn = si.efn;
-                            dya = si.dya;
-                            hjf = si.hjf;
+                            creation_time = si.creation_time;
+                            modification_time = si.modification_time;
+                            access_time = si.access_time;
+                            file_attributes = si.file_attributes;
                         }
                     }
                 }
 
-                BKN_ if gnw == 0 => {
+                BNB_ if dbu == 0 => {
                     
-                    if l + 24 <= ul {
-                        let dxh = u32::dj([
-                            k[l + 16], k[l + 17],
-                            k[l + 18], k[l + 19],
+                    if offset + 24 <= jm {
+                        let bpt = u32::from_le_bytes([
+                            buf[offset + 16], buf[offset + 17],
+                            buf[offset + 18], buf[offset + 19],
                         ]) as usize;
-                        let fya = u16::dj([
-                            k[l + 20], k[l + 21],
+                        let csh = u16::from_le_bytes([
+                            buf[offset + 20], buf[offset + 21],
                         ]) as usize;
-                        let bjt = l + fya;
-                        if dxh >= 66 && bjt + 66 <= k.len() {
-                            let eqo = unsafe {
-                                core::ptr::md(
-                                    k[bjt..].fq() as *const Bgy
+                        let data_start = offset + csh;
+                        if bpt >= 66 && data_start + 66 <= buf.len() {
+                            let bzv = unsafe {
+                                core::ptr::read_unaligned(
+                                    buf[data_start..].as_ptr() as *const Yw
                                 )
                             };
-                            let csw = eqo.oox;
-                            let hsh = eqo.hsj as usize;
-                            let akj = bjt + 66;
+                            let ayq = bzv.namespace;
+                            let duu = bzv.name_length as usize;
+                            let sj = data_start + 66;
 
                             
                             
-                            let abv = match csw {
-                                ASA_ => 4,
-                                ASB_ => 3,
-                                ARZ_ => 2,
-                                ACC_ => 1,
+                            let priority = match ayq {
+                                AUE_ => 4,
+                                AUF_ => 3,
+                                AUD_ => 2,
+                                ADT_ => 1,
                                 _ => 0,
                             };
-                            let kna = mys.map(|bo| match bo {
-                                ASA_ => 4,
-                                ASB_ => 3,
-                                ARZ_ => 2,
-                                ACC_ => 1,
+                            let fpv = hhj.map(|ae| match ae {
+                                AUE_ => 4,
+                                AUF_ => 3,
+                                AUD_ => 2,
+                                ADT_ => 1,
                                 _ => 0,
                             }).unwrap_or(0);
 
-                            if abv > kna {
-                                if akj + hsh * 2 <= k.len() {
-                                    kvq = nkc(
-                                        &k[akj..akj + hsh * 2]
+                            if priority > fpv {
+                                if sj + duu * 2 <= buf.len() {
+                                    fwo = hrb(
+                                        &buf[sj..sj + duu * 2]
                                     );
-                                    mys = Some(csw);
-                                    huh = eqo.huh & 0x0000FFFFFFFFFFFF;
+                                    hhj = Some(ayq);
+                                    parent_ref = bzv.parent_ref & 0x0000FFFFFFFFFFFF;
 
                                     
-                                    if yy == 0 {
-                                        yy = unsafe {
-                                            core::ptr::md(
-                                                core::ptr::vf!(eqo.lyc)
+                                    if file_size == 0 {
+                                        file_size = unsafe {
+                                            core::ptr::read_unaligned(
+                                                core::ptr::addr_of!(bzv.real_size)
                                             )
                                         };
                                     }
@@ -674,83 +674,83 @@ impl Ts {
                     }
                 }
 
-                AKW_ if tzh => {
-                    if gnw == 0 {
+                AMR_ if mtz => {
+                    if dbu == 0 {
                         
-                        hfe = true;
-                        if l + 24 <= ul {
-                            let dxh = u32::dj([
-                                k[l + 16], k[l + 17],
-                                k[l + 18], k[l + 19],
+                        data_resident = true;
+                        if offset + 24 <= jm {
+                            let bpt = u32::from_le_bytes([
+                                buf[offset + 16], buf[offset + 17],
+                                buf[offset + 18], buf[offset + 19],
                             ]) as usize;
-                            let fya = u16::dj([
-                                k[l + 20], k[l + 21],
+                            let csh = u16::from_le_bytes([
+                                buf[offset + 20], buf[offset + 21],
                             ]) as usize;
-                            let bjt = l + fya;
-                            if bjt + dxh <= k.len() {
-                                fss = k[bjt..bjt + dxh].ip();
-                                yy = dxh as u64;
+                            let data_start = offset + csh;
+                            if data_start + bpt <= buf.len() {
+                                resident_data = buf[data_start..data_start + bpt].to_vec();
+                                file_size = bpt as u64;
                             }
                         }
                     } else {
                         
-                        hfe = false;
-                        if l + 64 <= ul {
-                            let jhl = unsafe {
-                                core::ptr::md(
-                                    k[l + 16..].fq() as *const Awd
+                        data_resident = false;
+                        if offset + 64 <= jm {
+                            let evj = unsafe {
+                                core::ptr::read_unaligned(
+                                    buf[offset + 16..].as_ptr() as *const Ty
                                 )
                             };
-                            yy = jhl.lyc;
-                            let mbh = unsafe {
-                                core::ptr::md(
-                                    core::ptr::vf!(jhl.koc)
+                            file_size = evj.real_size;
+                            let gse = unsafe {
+                                core::ptr::read_unaligned(
+                                    core::ptr::addr_of!(evj.data_runs_offset)
                                 )
                             } as usize;
-                            let exx = l + mbh;
-                            if exx < l + fcu {
-                                iqp = kom(
-                                    &k[exx..l + fcu]
+                            let cdn = offset + gse;
+                            if cdn < offset + cfy {
+                                data_runs = frb(
+                                    &buf[cdn..offset + cfy]
                                 );
                             }
                         }
                     }
                 }
 
-                BKP_ if gnw == 0 => {
+                BND_ if dbu == 0 => {
                     
-                    if l + 24 <= ul {
-                        let dxh = u32::dj([
-                            k[l + 16], k[l + 17],
-                            k[l + 18], k[l + 19],
+                    if offset + 24 <= jm {
+                        let bpt = u32::from_le_bytes([
+                            buf[offset + 16], buf[offset + 17],
+                            buf[offset + 18], buf[offset + 19],
                         ]) as usize;
-                        let fya = u16::dj([
-                            k[l + 20], k[l + 21],
+                        let csh = u16::from_le_bytes([
+                            buf[offset + 20], buf[offset + 21],
                         ]) as usize;
-                        let bjt = l + fya;
-                        if bjt + dxh <= k.len() {
-                            hnv = k[bjt..bjt + dxh].ip();
+                        let data_start = offset + csh;
+                        if data_start + bpt <= buf.len() {
+                            index_root_data = buf[data_start..data_start + bpt].to_vec();
                         }
                     }
                 }
 
-                BKO_ if gnw != 0 => {
+                BNC_ if dbu != 0 => {
                     
-                    if l + 64 <= ul {
-                        let jhl = unsafe {
-                            core::ptr::md(
-                                k[l + 16..].fq() as *const Awd
+                    if offset + 64 <= jm {
+                        let evj = unsafe {
+                            core::ptr::read_unaligned(
+                                buf[offset + 16..].as_ptr() as *const Ty
                             )
                         };
-                        let mbh = unsafe {
-                            core::ptr::md(
-                                core::ptr::vf!(jhl.koc)
+                        let gse = unsafe {
+                            core::ptr::read_unaligned(
+                                core::ptr::addr_of!(evj.data_runs_offset)
                             )
                         } as usize;
-                        let exx = l + mbh;
-                        if exx < l + fcu {
-                            gjw = kom(
-                                &k[exx..l + fcu]
+                        let cdn = offset + gse;
+                        if cdn < offset + cfy {
+                            index_alloc_runs = frb(
+                                &buf[cdn..offset + cfy]
                             );
                         }
                     }
@@ -759,135 +759,135 @@ impl Ts {
                 _ => {}
             }
 
-            l += fcu;
+            offset += cfy;
         }
 
-        Ok(Xo {
-            vtg: bwn,
+        Ok(Ke {
+            record_number: record_num,
             flags,
-            kvq,
-            huh,
-            yy,
-            cfr,
-            eaa,
-            efn,
-            dya,
-            hjf,
-            iqp,
-            hfe,
-            fss,
-            hnv,
-            gjw,
+            fwo,
+            parent_ref,
+            file_size,
+            is_directory,
+            creation_time,
+            modification_time,
+            access_time,
+            file_attributes,
+            data_runs,
+            data_resident,
+            resident_data,
+            index_root_data,
+            index_alloc_runs,
         })
     }
 
     
-    fn ehc(&self, bwn: u64) -> Result<Xo, ()> {
-        let js = self.vsb(bwn)?;
-        self.vcw(bwn, &js)
+    fn read_mft_record(&self, record_num: u64) -> Result<Ke, ()> {
+        let dm = self.read_mft_record_raw(record_num)?;
+        self.parse_mft_record(record_num, &dm)
     }
 
     
-    fn hwx(
+    fn read_file_data(
         &self,
-        record: &Xo,
-        azv: u64,
-        k: &mut [u8],
+        record: &Ke,
+        aaw: u64,
+        buf: &mut [u8],
     ) -> Result<usize, ()> {
-        if azv >= record.yy {
+        if aaw >= record.file_size {
             return Ok(0);
         }
 
-        let cgy = ((record.yy - azv) as usize).v(k.len());
-        if cgy == 0 {
+        let arx = ((record.file_size - aaw) as usize).min(buf.len());
+        if arx == 0 {
             return Ok(0);
         }
 
-        if record.hfe {
+        if record.data_resident {
             
-            let ay = azv as usize;
-            let ci = ay + cgy;
-            if ci <= record.fss.len() {
-                k[..cgy].dg(&record.fss[ay..ci]);
+            let start = aaw as usize;
+            let end = start + arx;
+            if end <= record.resident_data.len() {
+                buf[..arx].copy_from_slice(&record.resident_data[start..end]);
             } else {
-                let apk = record.fss.len().ao(ay);
-                k[..apk].dg(&record.fss[ay..ay + apk]);
+                let avail = record.resident_data.len().saturating_sub(start);
+                buf[..avail].copy_from_slice(&record.resident_data[start..start + avail]);
             }
-            return Ok(cgy);
+            return Ok(arx);
         }
 
         
-        let qt = self.qt as u64;
-        let mut ia = cgy;
-        let mut avj = 0usize;
-        let mut l = azv;
+        let cluster_size = self.cluster_size as u64;
+        let mut ck = arx;
+        let mut yj = 0usize;
+        let mut offset = aaw;
 
-        while ia > 0 {
-            let cnr = l / qt;
-            let dke = (l % qt) as usize;
+        while ck > 0 {
+            let avq = offset / cluster_size;
+            let bik = (offset % cluster_size) as usize;
 
             
-            let vw = record.iqp.iter().du(|m| {
-                cnr >= m.dxj && cnr < m.dxj + m.go
+            let run = record.data_runs.iter().find(|r| {
+                avq >= r.vcn_start && avq < r.vcn_start + r.length
             });
 
-            match vw {
-                Some(vw) if vw.bve > 0 => {
-                    let mox = cnr - vw.dxj;
-                    let bve = vw.bve + mox;
-                    let aok = bve * qt + dke as u64;
+            match run {
+                Some(run) if run.lcn > 0 => {
+                    let hbg = avq - run.vcn_start;
+                    let lcn = run.lcn + hbg;
+                    let uo = lcn * cluster_size + bik as u64;
 
-                    let bfz = qt as usize - dke;
-                    let ajp = ia.v(bfz);
+                    let available = cluster_size as usize - bik;
+                    let rz = ck.min(available);
 
-                    self.day(aok, &mut k[avj..avj + ajp])?;
+                    self.read_bytes(uo, &mut buf[yj..yj + rz])?;
 
-                    avj += ajp;
-                    l += ajp as u64;
-                    ia -= ajp;
+                    yj += rz;
+                    offset += rz as u64;
+                    ck -= rz;
                 }
                 Some(_) => {
                     
-                    let bfz = qt as usize - dke;
-                    let jti = ia.v(bfz);
-                    for o in &mut k[avj..avj + jti] {
-                        *o = 0;
+                    let available = cluster_size as usize - bik;
+                    let fcz = ck.min(available);
+                    for b in &mut buf[yj..yj + fcz] {
+                        *b = 0;
                     }
-                    avj += jti;
-                    l += jti as u64;
-                    ia -= jti;
+                    yj += fcz;
+                    offset += fcz as u64;
+                    ck -= fcz;
                 }
                 None => {
                     
-                    for o in &mut k[avj..avj + ia] {
-                        *o = 0;
+                    for b in &mut buf[yj..yj + ck] {
+                        *b = 0;
                     }
-                    ia = 0;
+                    ck = 0;
                 }
             }
         }
 
-        Ok(cgy)
+        Ok(arx)
     }
 
     
-    fn vrs(&self, jng: &[Pe], cnr: u64, k: &mut [u8]) -> Result<(), ()> {
-        let vw = jng.iter().du(|m| {
-            cnr >= m.dxj && cnr < m.dxj + m.go
+    fn read_from_runs(&self, ezh: &[Gj], avq: u64, buf: &mut [u8]) -> Result<(), ()> {
+        let run = ezh.iter().find(|r| {
+            avq >= r.vcn_start && avq < r.vcn_start + r.length
         });
 
-        match vw {
-            Some(vw) if vw.bve > 0 => {
-                let mox = cnr - vw.dxj;
-                let bve = vw.bve + mox;
-                let kie = (k.len() + self.qt as usize - 1)
-                    / self.qt as usize;
+        match run {
+            Some(run) if run.lcn > 0 => {
+                let hbg = avq - run.vcn_start;
+                let lcn = run.lcn + hbg;
+                let fmc = (buf.len() + self.cluster_size as usize - 1)
+                    / self.cluster_size as usize;
                 
-                for a in 0..kie {
-                    let qux = (bve + a as u64) * self.qt as u64;
-                    let nal = a * self.qt as usize;
-                    let qsq = (nal + self.qt as usize).v(k.len());
-                    self.day(qux, &mut k[nal..qsq])?;
+                for i in 0..fmc {
+                    let kgm = (lcn + i as u64) * self.cluster_size as u64;
+                    let hiz = i * self.cluster_size as usize;
+                    let keo = (hiz + self.cluster_size as usize).min(buf.len());
+                    self.read_bytes(kgm, &mut buf[hiz..keo])?;
                 }
                 Ok(())
             }
@@ -896,138 +896,138 @@ impl Ts {
     }
 
     
-    fn exg(&self, record: &Xo) -> Result<Vec<(u64, String, bool)>, ()> {
-        let mut ch = Vec::new();
+    fn read_dir_entries(&self, record: &Ke) -> Result<Vec<(u64, String, bool)>, ()> {
+        let mut entries = Vec::new();
 
         
-        if record.hnv.len() >= 32 {
-            let dim = &record.hnv;
+        if record.index_root_data.len() >= 32 {
+            let bhh = &record.index_root_data;
 
             
-            let djv = 16; 
-            if djv + 16 <= dim.len() {
-                let nqj = u32::dj([
-                    dim[djv], dim[djv + 1],
-                    dim[djv + 2], dim[djv + 3],
+            let bic = 16; 
+            if bic + 16 <= bhh.len() {
+                let hwb = u32::from_le_bytes([
+                    bhh[bic], bhh[bic + 1],
+                    bhh[bic + 2], bhh[bic + 3],
                 ]) as usize;
-                let aay = u32::dj([
-                    dim[djv + 4], dim[djv + 5],
-                    dim[djv + 6], dim[djv + 7],
+                let total_size = u32::from_le_bytes([
+                    bhh[bic + 4], bhh[bic + 5],
+                    bhh[bic + 6], bhh[bic + 7],
                 ]) as usize;
 
-                let ay = djv + nqj;
-                let ci = (djv + aay).v(dim.len());
+                let start = bic + hwb;
+                let end = (bic + total_size).min(bhh.len());
 
-                self.oui(&dim[ay..ci], &mut ch);
+                self.parse_index_entries(&bhh[start..end], &mut entries);
             }
         }
 
         
-        if !record.gjw.is_empty() {
-            let bbt = self.bbt as usize;
-            let rby = (bbt + self.qt as usize - 1)
-                / self.qt as usize;
+        if !record.index_alloc_runs.is_empty() {
+            let index_block_size = self.index_block_size as usize;
+            let kli = (index_block_size + self.cluster_size as usize - 1)
+                / self.cluster_size as usize;
 
             
-            let xku: u64 = record.gjw.iter()
-                .map(|m| m.go)
+            let pmj: u64 = record.index_alloc_runs.iter()
+                .map(|r| r.length)
                 .sum();
 
-            let mut cnr: u64 = 0;
-            while cnr < xku {
-                let mut ajy = vec![0u8; bbt];
-                if self.vrs(&record.gjw, cnr, &mut ajy).is_ok() {
+            let mut avq: u64 = 0;
+            while avq < pmj {
+                let mut se = vec![0u8; index_block_size];
+                if self.read_from_runs(&record.index_alloc_runs, avq, &mut se).is_ok() {
                     
-                    let _ = self.mwb(&mut ajy, bbt);
+                    let _ = self.apply_fixups(&mut se, index_block_size);
 
-                    let sj = u32::dj([
-                        ajy[0], ajy[1], ajy[2], ajy[3],
+                    let magic = u32::from_le_bytes([
+                        se[0], se[1], se[2], se[3],
                     ]);
-                    if sj == CBO_ {
+                    if magic == CEZ_ {
                         
-                        let dju = 0x18;
-                        if dju + 16 <= ajy.len() {
-                            let smn = u32::dj([
-                                ajy[dju], ajy[dju + 1],
-                                ajy[dju + 2], ajy[dju + 3],
+                        let bib = 0x18;
+                        if bib + 16 <= se.len() {
+                            let lqy = u32::from_le_bytes([
+                                se[bib], se[bib + 1],
+                                se[bib + 2], se[bib + 3],
                             ]) as usize;
-                            let wi = u32::dj([
-                                ajy[dju + 4], ajy[dju + 5],
-                                ajy[dju + 6], ajy[dju + 7],
+                            let jy = u32::from_le_bytes([
+                                se[bib + 4], se[bib + 5],
+                                se[bib + 6], se[bib + 7],
                             ]) as usize;
 
-                            let ay = dju + smn;
-                            let ci = (dju + wi).v(ajy.len());
-                            if ay < ci {
-                                self.oui(&ajy[ay..ci], &mut ch);
+                            let start = bib + lqy;
+                            let end = (bib + jy).min(se.len());
+                            if start < end {
+                                self.parse_index_entries(&se[start..end], &mut entries);
                             }
                         }
                     }
                 }
-                cnr += rby as u64;
+                avq += kli as u64;
             }
         }
 
-        Ok(ch)
+        Ok(entries)
     }
 
     
-    fn oui(
+    fn parse_index_entries(
         &self,
-        f: &[u8],
-        ch: &mut Vec<(u64, String, bool)>,
+        data: &[u8],
+        entries: &mut Vec<(u64, String, bool)>,
     ) {
-        let mut u = 0;
-        while u + 16 <= f.len() {
-            let bzn = unsafe {
-                core::ptr::md(f[u..].fq() as *const Cft)
+        let mut pos = 0;
+        while pos + 16 <= data.len() {
+            let aob = unsafe {
+                core::ptr::read_unaligned(data[pos..].as_ptr() as *const Alr)
             };
 
-            let bue = bzn.smf as usize;
-            let byy = bzn.roi as usize;
-            let flags = bzn.flags;
+            let alm = aob.entry_length as usize;
+            let anw = aob.content_length as usize;
+            let flags = aob.flags;
 
-            if bue < 16 || bue > f.len() - u {
+            if alm < 16 || alm > data.len() - pos {
                 break;
             }
 
-            if (flags & CBN_) != 0 {
+            if (flags & CEY_) != 0 {
                 break; 
             }
 
-            if byy >= 66 {
+            if anw >= 66 {
                 
-                let dzt = u + 16; 
-                if dzt + byy <= f.len() {
-                    let ive = &f[dzt..dzt + byy];
-                    if ive.len() >= 66 {
-                        let eqo = unsafe {
-                            core::ptr::md(
-                                ive.fq() as *const Bgy
+                let brc = pos + 16; 
+                if brc + anw <= data.len() {
+                    let ena = &data[brc..brc + anw];
+                    if ena.len() >= 66 {
+                        let bzv = unsafe {
+                            core::ptr::read_unaligned(
+                                ena.as_ptr() as *const Yw
                             )
                         };
 
-                        let csw = eqo.oox;
+                        let ayq = bzv.namespace;
                         
-                        if csw != ACC_ {
-                            let hsh = eqo.hsj as usize;
-                            let akj = 66;
-                            if akj + hsh * 2 <= ive.len() {
-                                let j = nkc(
-                                    &ive[akj..akj + hsh * 2]
+                        if ayq != ADT_ {
+                            let duu = bzv.name_length as usize;
+                            let sj = 66;
+                            if sj + duu * 2 <= ena.len() {
+                                let name = hrb(
+                                    &ena[sj..sj + duu * 2]
                                 );
 
-                                let hrl = bzn.uob & 0x0000FFFFFFFFFFFF;
-                                let sun = unsafe {
-                                    core::ptr::md(
-                                        core::ptr::vf!(eqo.flags)
+                                let duh = aob.mft_reference & 0x0000FFFFFFFFFFFF;
+                                let lwr = unsafe {
+                                    core::ptr::read_unaligned(
+                                        core::ptr::addr_of!(bzv.flags)
                                     )
                                 };
-                                let ta = (sun & 0x10000000) != 0;
+                                let is_dir = (lwr & 0x10000000) != 0;
 
                                 
-                                if !j.cj('$') && !j.is_empty() {
-                                    ch.push((hrl, j, ta));
+                                if !name.starts_with('$') && !name.is_empty() {
+                                    entries.push((duh, name, is_dir));
                                 }
                             }
                         }
@@ -1035,28 +1035,28 @@ impl Ts {
                 }
             }
 
-            u += bue;
+            pos += alm;
         }
     }
 
     
-    fn hgd(&self, rxr: u64, j: &str) -> Result<u64, ()> {
-        let record = self.ehc(rxr)?;
-        let ch = self.exg(&record)?;
-        for (hrl, cxm, yae) in &ch {
-            if cxm.dha(j) {
-                return Ok(*hrl);
+    fn dir_lookup(&self, dir_record_num: u64, name: &str) -> Result<u64, ()> {
+        let record = self.read_mft_record(dir_record_num)?;
+        let entries = self.read_dir_entries(&record)?;
+        for (duh, bbl, _is_dir) in &entries {
+            if bbl.eq_ignore_ascii_case(name) {
+                return Ok(*duh);
             }
         }
         Err(())
     }
 
     
-    fn par(&self, record: &Xo) -> FileType {
-        if record.cfr {
-            FileType::K
+    fn record_file_type(&self, record: &Ke) -> FileType {
+        if record.is_directory {
+            FileType::Directory
         } else {
-            FileType::Ea
+            FileType::Regular
         }
     }
 }
@@ -1066,35 +1066,35 @@ impl Ts {
 
 
 
-fn nkc(f: &[u8]) -> String {
-    let mut bw = Vec::fc(f.len() / 2);
-    for jj in f.ras(2) {
-        let rll = u16::dj([jj[0], jj[1]]);
-        bw.push(rll);
+fn hrb(data: &[u8]) -> String {
+    let mut chars = Vec::with_capacity(data.len() / 2);
+    for df in data.chunks_exact(2) {
+        let kuw = u16::from_le_bytes([df[0], df[1]]);
+        chars.push(kuw);
     }
 
     
-    let mut result = String::fc(bw.len());
-    let mut a = 0;
-    while a < bw.len() {
-        let r = bw[a];
-        if r >= 0xD800 && r <= 0xDBFF && a + 1 < bw.len() {
+    let mut result = String::with_capacity(chars.len());
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        if c >= 0xD800 && c <= 0xDBFF && i + 1 < chars.len() {
             
-            let gd = r;
-            let hh = bw[a + 1];
-            if hh >= 0xDC00 && hh <= 0xDFFF {
-                let bza = 0x10000 + ((gd as u32 - 0xD800) << 10) + (hh as u32 - 0xDC00);
-                if let Some(bm) = char::zi(bza) {
-                    result.push(bm);
+            let hi = c;
+            let lo = chars[i + 1];
+            if lo >= 0xDC00 && lo <= 0xDFFF {
+                let cp = 0x10000 + ((hi as u32 - 0xD800) << 10) + (lo as u32 - 0xDC00);
+                if let Some(ch) = char::from_u32(cp) {
+                    result.push(ch);
                 }
-                a += 2;
+                i += 2;
                 continue;
             }
         }
-        if let Some(bm) = char::zi(r as u32) {
-            result.push(bm);
+        if let Some(ch) = char::from_u32(c as u32) {
+            result.push(ch);
         }
-        a += 1;
+        i += 1;
     }
 
     result
@@ -1105,15 +1105,15 @@ fn nkc(f: &[u8]) -> String {
 
 
 
-fn efv(ori: u64) -> u64 {
-    if ori == 0 {
+fn bun(ntfs_time: u64) -> u64 {
+    if ntfs_time == 0 {
         return 0;
     }
     
     
-    const CHZ_: u64 = 11644473600;
-    let dvm = ori / 10_000_000; 
-    dvm.ao(CHZ_)
+    const CLI_: u64 = 11644473600;
+    let abi = ntfs_time / 10_000_000; 
+    abi.saturating_sub(CLI_)
 }
 
 
@@ -1121,205 +1121,205 @@ fn efv(ori: u64) -> u64 {
 
 
 
-struct Awh {
-    bwn: u64,
-    de: Arc<dyn Bj>,
-    qt: u32,
-    bhk: u32,
-    bbt: u32,
-    cav: u64,
-    anx: u8,
-    aid: u16,
-    bvk: Vec<Pe>,
+struct Ub {
+    record_num: u64,
+    device: Arc<dyn Ak>,
+    cluster_size: u32,
+    mft_record_size: u32,
+    index_block_size: u32,
+    mft_start_byte: u64,
+    sectors_per_cluster: u8,
+    bytes_per_sector: u16,
+    mft_data_runs: Vec<Gj>,
 }
 
-impl Awh {
-    fn csh(&self) -> Ts {
-        Ts {
-            de: self.de.clone(),
-            qt: self.qt,
-            bhk: self.bhk,
-            bbt: self.bbt,
-            cav: self.cav,
-            anx: self.anx,
-            aid: self.aid,
-            bvk: self.bvk.clone(),
+impl Ub {
+    fn make_inner(&self) -> Ik {
+        Ik {
+            device: self.device.clone(),
+            cluster_size: self.cluster_size,
+            mft_record_size: self.mft_record_size,
+            index_block_size: self.index_block_size,
+            mft_start_byte: self.mft_start_byte,
+            sectors_per_cluster: self.sectors_per_cluster,
+            bytes_per_sector: self.bytes_per_sector,
+            mft_data_runs: self.mft_data_runs.clone(),
         }
     }
 }
 
-impl Et for Awh {
-    fn read(&self, l: u64, k: &mut [u8]) -> B<usize> {
-        let ff = self.csh();
-        let record = ff.ehc(self.bwn)
-            .jd(|_| VfsError::Av)?;
-        ff.hwx(&record, l, k)
-            .jd(|_| VfsError::Av)
+impl Bx for Ub {
+    fn read(&self, offset: u64, buf: &mut [u8]) -> E<usize> {
+        let inner = self.make_inner();
+        let record = inner.read_mft_record(self.record_num)
+            .map_err(|_| VfsError::IoError)?;
+        inner.read_file_data(&record, offset, buf)
+            .map_err(|_| VfsError::IoError)
     }
 
-    fn write(&self, dnv: u64, ihz: &[u8]) -> B<usize> {
-        Err(VfsError::Bz)
+    fn write(&self, bkm: u64, _buf: &[u8]) -> E<usize> {
+        Err(VfsError::ReadOnly)
     }
 
-    fn hm(&self) -> B<Stat> {
-        let ff = self.csh();
-        let record = ff.ehc(self.bwn)
-            .jd(|_| VfsError::Av)?;
+    fn stat(&self) -> E<Stat> {
+        let inner = self.make_inner();
+        let record = inner.read_mft_record(self.record_num)
+            .map_err(|_| VfsError::IoError)?;
         Ok(Stat {
-            dd: self.bwn,
-            kd: ff.par(&record),
-            aw: record.yy,
-            xk: (record.yy + 511) / 512,
-            py: ff.qt,
-            ev: 0o444, 
-            pi: 0,
-            pw: 0,
-            byi: efv(record.dya),
-            bnp: efv(record.efn),
-            cpq: efv(record.eaa),
+            ino: self.record_num,
+            file_type: inner.record_file_type(&record),
+            size: record.file_size,
+            blocks: (record.file_size + 511) / 512,
+            block_size: inner.cluster_size,
+            mode: 0o444, 
+            uid: 0,
+            gid: 0,
+            atime: bun(record.access_time),
+            mtime: bun(record.modification_time),
+            ctime: bun(record.creation_time),
         })
     }
 }
 
 
-struct Awg {
-    bwn: u64,
-    de: Arc<dyn Bj>,
-    qt: u32,
-    bhk: u32,
-    bbt: u32,
-    cav: u64,
-    anx: u8,
-    aid: u16,
-    bvk: Vec<Pe>,
+struct Ua {
+    record_num: u64,
+    device: Arc<dyn Ak>,
+    cluster_size: u32,
+    mft_record_size: u32,
+    index_block_size: u32,
+    mft_start_byte: u64,
+    sectors_per_cluster: u8,
+    bytes_per_sector: u16,
+    mft_data_runs: Vec<Gj>,
 }
 
-impl Awg {
-    fn csh(&self) -> Ts {
-        Ts {
-            de: self.de.clone(),
-            qt: self.qt,
-            bhk: self.bhk,
-            bbt: self.bbt,
-            cav: self.cav,
-            anx: self.anx,
-            aid: self.aid,
-            bvk: self.bvk.clone(),
+impl Ua {
+    fn make_inner(&self) -> Ik {
+        Ik {
+            device: self.device.clone(),
+            cluster_size: self.cluster_size,
+            mft_record_size: self.mft_record_size,
+            index_block_size: self.index_block_size,
+            mft_start_byte: self.mft_start_byte,
+            sectors_per_cluster: self.sectors_per_cluster,
+            bytes_per_sector: self.bytes_per_sector,
+            mft_data_runs: self.mft_data_runs.clone(),
         }
     }
 }
 
-impl Ep for Awg {
-    fn cga(&self, j: &str) -> B<I> {
-        let ff = self.csh();
-        ff.hgd(self.bwn, j)
-            .jd(|_| VfsError::N)
+impl Bv for Ua {
+    fn lookup(&self, name: &str) -> E<K> {
+        let inner = self.make_inner();
+        inner.dir_lookup(self.record_num, name)
+            .map_err(|_| VfsError::NotFound)
     }
 
-    fn brx(&self) -> B<Vec<Br>> {
-        let ff = self.csh();
-        let record = ff.ehc(self.bwn)
-            .jd(|_| VfsError::Av)?;
-        let ch = ff.exg(&record)
-            .jd(|_| VfsError::Av)?;
+    fn readdir(&self) -> E<Vec<Ap>> {
+        let inner = self.make_inner();
+        let record = inner.read_mft_record(self.record_num)
+            .map_err(|_| VfsError::IoError)?;
+        let entries = inner.read_dir_entries(&record)
+            .map_err(|_| VfsError::IoError)?;
 
-        Ok(ch.dse()
-            .map(|(hrl, j, ta)| Br {
-                j,
-                dd: hrl,
-                kd: if ta { FileType::K } else { FileType::Ea },
+        Ok(entries.into_iter()
+            .map(|(duh, name, is_dir)| Ap {
+                name,
+                ino: duh,
+                file_type: if is_dir { FileType::Directory } else { FileType::Regular },
             })
             .collect())
     }
 
-    fn avp(&self, blu: &str, gxf: FileType) -> B<I> {
-        Err(VfsError::Bz)
+    fn create(&self, _name: &str, _file_type: FileType) -> E<K> {
+        Err(VfsError::ReadOnly)
     }
 
-    fn cnm(&self, blu: &str) -> B<()> {
-        Err(VfsError::Bz)
+    fn unlink(&self, _name: &str) -> E<()> {
+        Err(VfsError::ReadOnly)
     }
 
-    fn hm(&self) -> B<Stat> {
-        let ff = self.csh();
-        let record = ff.ehc(self.bwn)
-            .jd(|_| VfsError::Av)?;
+    fn stat(&self) -> E<Stat> {
+        let inner = self.make_inner();
+        let record = inner.read_mft_record(self.record_num)
+            .map_err(|_| VfsError::IoError)?;
         Ok(Stat {
-            dd: self.bwn,
-            kd: FileType::K,
-            aw: record.yy,
-            xk: 0,
-            py: ff.qt,
-            ev: 0o555, 
-            pi: 0,
-            pw: 0,
-            byi: efv(record.dya),
-            bnp: efv(record.efn),
-            cpq: efv(record.eaa),
+            ino: self.record_num,
+            file_type: FileType::Directory,
+            size: record.file_size,
+            blocks: 0,
+            block_size: inner.cluster_size,
+            mode: 0o555, 
+            uid: 0,
+            gid: 0,
+            atime: bun(record.access_time),
+            mtime: bun(record.modification_time),
+            ctime: bun(record.creation_time),
         })
     }
 }
 
 
-impl Cc for Akn {
-    fn j(&self) -> &str { "ntfs" }
+impl Au for Pq {
+    fn name(&self) -> &str { "ntfs" }
 
-    fn cbm(&self) -> I { BAO_ }
+    fn root_inode(&self) -> K { BCQ_ }
 
-    fn era(&self, dd: I) -> B<Arc<dyn Et>> {
-        let ff = self.ff.lock();
-        let record = ff.ehc(dd).jd(|_| VfsError::N)?;
-        if record.cfr {
-            return Err(VfsError::Tc);
+    fn get_file(&self, ino: K) -> E<Arc<dyn Bx>> {
+        let inner = self.inner.lock();
+        let record = inner.read_mft_record(ino).map_err(|_| VfsError::NotFound)?;
+        if record.is_directory {
+            return Err(VfsError::IsDirectory);
         }
-        Ok(Arc::new(Awh {
-            bwn: dd,
-            de: ff.de.clone(),
-            qt: ff.qt,
-            bhk: ff.bhk,
-            bbt: ff.bbt,
-            cav: ff.cav,
-            anx: ff.anx,
-            aid: ff.aid,
-            bvk: ff.bvk.clone(),
+        Ok(Arc::new(Ub {
+            record_num: ino,
+            device: inner.device.clone(),
+            cluster_size: inner.cluster_size,
+            mft_record_size: inner.mft_record_size,
+            index_block_size: inner.index_block_size,
+            mft_start_byte: inner.mft_start_byte,
+            sectors_per_cluster: inner.sectors_per_cluster,
+            bytes_per_sector: inner.bytes_per_sector,
+            mft_data_runs: inner.mft_data_runs.clone(),
         }))
     }
 
-    fn dhl(&self, dd: I) -> B<Arc<dyn Ep>> {
-        let ff = self.ff.lock();
-        let record = ff.ehc(dd).jd(|_| VfsError::N)?;
-        if !record.cfr {
-            return Err(VfsError::Lz);
+    fn get_dir(&self, ino: K) -> E<Arc<dyn Bv>> {
+        let inner = self.inner.lock();
+        let record = inner.read_mft_record(ino).map_err(|_| VfsError::NotFound)?;
+        if !record.is_directory {
+            return Err(VfsError::NotDirectory);
         }
-        Ok(Arc::new(Awg {
-            bwn: dd,
-            de: ff.de.clone(),
-            qt: ff.qt,
-            bhk: ff.bhk,
-            bbt: ff.bbt,
-            cav: ff.cav,
-            anx: ff.anx,
-            aid: ff.aid,
-            bvk: ff.bvk.clone(),
+        Ok(Arc::new(Ua {
+            record_num: ino,
+            device: inner.device.clone(),
+            cluster_size: inner.cluster_size,
+            mft_record_size: inner.mft_record_size,
+            index_block_size: inner.index_block_size,
+            mft_start_byte: inner.mft_start_byte,
+            sectors_per_cluster: inner.sectors_per_cluster,
+            bytes_per_sector: inner.bytes_per_sector,
+            mft_data_runs: inner.mft_data_runs.clone(),
         }))
     }
 
-    fn hm(&self, dd: I) -> B<Stat> {
-        let ff = self.ff.lock();
-        let record = ff.ehc(dd).jd(|_| VfsError::N)?;
-        let agm = ff.par(&record);
+    fn stat(&self, ino: K) -> E<Stat> {
+        let inner = self.inner.lock();
+        let record = inner.read_mft_record(ino).map_err(|_| VfsError::NotFound)?;
+        let qk = inner.record_file_type(&record);
         Ok(Stat {
-            dd,
-            kd: agm,
-            aw: record.yy,
-            xk: (record.yy + 511) / 512,
-            py: ff.qt,
-            ev: if record.cfr { 0o555 } else { 0o444 },
-            pi: 0,
-            pw: 0,
-            byi: efv(record.dya),
-            bnp: efv(record.efn),
-            cpq: efv(record.eaa),
+            ino,
+            file_type: qk,
+            size: record.file_size,
+            blocks: (record.file_size + 511) / 512,
+            block_size: inner.cluster_size,
+            mode: if record.is_directory { 0o555 } else { 0o444 },
+            uid: 0,
+            gid: 0,
+            atime: bun(record.access_time),
+            mtime: bun(record.modification_time),
+            ctime: bun(record.creation_time),
         })
     }
 }
@@ -1329,70 +1329,70 @@ impl Cc for Akn {
 
 
 
-pub fn beu(de: Arc<dyn Bj>) -> Result<Arc<Akn>, &'static str> {
+pub fn abd(device: Arc<dyn Ak>) -> Result<Arc<Pq>, &'static str> {
     
-    let mut cvz = [0u8; H_];
-    de.xr(0, &mut cvz).jd(|_| "Failed to read NTFS boot sector")?;
+    let mut bap = [0u8; H_];
+    device.read_sector(0, &mut bap).map_err(|_| "Failed to read NTFS boot sector")?;
 
     
-    let agh = unsafe { core::ptr::md(cvz.fq() as *const Bnm) };
-    if !agh.cld() {
+    let bpb = unsafe { core::ptr::read_unaligned(bap.as_ptr() as *const Abu) };
+    if !bpb.is_valid() {
         return Err("Not an NTFS filesystem (bad OEM ID)");
     }
 
     
-    if cvz[510] != 0x55 || cvz[511] != 0xAA {
+    if bap[510] != 0x55 || bap[511] != 0xAA {
         return Err("Not an NTFS filesystem (bad boot signature)");
     }
 
-    let qt = agh.qt();
-    let bhk = agh.uoa();
-    let bbt = agh.tst();
-    let cav = agh.cav();
-    let aid = unsafe {
-        core::ptr::md(core::ptr::vf!(agh.aid))
+    let cluster_size = bpb.cluster_size();
+    let mft_record_size = bpb.mft_record_bytes();
+    let index_block_size = bpb.index_block_bytes();
+    let mft_start_byte = bpb.mft_start_byte();
+    let bytes_per_sector = unsafe {
+        core::ptr::read_unaligned(core::ptr::addr_of!(bpb.bytes_per_sector))
     };
-    let anx = agh.anx;
+    let sectors_per_cluster = bpb.sectors_per_cluster;
 
     crate::serial_println!("[NTFS] Detected: cluster_size={} mft_record={}B index_block={}B",
-        qt, bhk, bbt);
-    crate::serial_println!("[NTFS] MFT at byte offset 0x{:X}", cav);
+        cluster_size, mft_record_size, index_block_size);
+    crate::serial_println!("[NTFS] MFT at byte offset 0x{:X}", mft_start_byte);
 
     
     
-    let mut afs = vec![0u8; bhk as usize];
-    let zn = de.zn() as u64;
-    let uoc = cav / zn;
-    let dbu = (bhk as u64 + zn - 1) / zn;
+    let mut qa = vec![0u8; mft_record_size as usize];
+    let sector_size = device.sector_size() as u64;
+    let nfe = mft_start_byte / sector_size;
+    let bdq = (mft_record_size as u64 + sector_size - 1) / sector_size;
 
-    let mut ozk = vec![0u8; (dbu * zn) as usize];
-    for a in 0..dbu {
-        de.xr(uoc + a, 
-            &mut ozk[(a as usize * zn as usize)..((a + 1) as usize * zn as usize)])
-            .jd(|_| "Failed to read MFT record 0")?;
+    let mut ixw = vec![0u8; (bdq * sector_size) as usize];
+    for i in 0..bdq {
+        device.read_sector(nfe + i, 
+            &mut ixw[(i as usize * sector_size as usize)..((i + 1) as usize * sector_size as usize)])
+            .map_err(|_| "Failed to read MFT record 0")?;
     }
-    afs.dg(&ozk[..bhk as usize]);
+    qa.copy_from_slice(&ixw[..mft_record_size as usize]);
 
     
     {
-        if afs.len() < 8 {
+        if qa.len() < 8 {
             return Err("MFT record too small");
         }
-        let jux = u16::dj([afs[4], afs[5]]) as usize;
-        let moi = u16::dj([afs[6], afs[7]]) as usize;
-        if moi >= 2 && jux + moi * 2 <= afs.len() {
-            let sig = u16::dj([afs[jux], afs[jux + 1]]);
-            let wgd = aid as usize;
-            for a in 1..moi {
-                let mcz = a * wgd;
-                if mcz <= afs.len() && mcz >= 2 {
-                    let u = mcz - 2;
-                    let mhs = u16::dj([afs[u], afs[u + 1]]);
-                    if mhs == sig {
-                        let mbt = jux + a * 2;
-                        if mbt + 1 < afs.len() {
-                            afs[u] = afs[mbt];
-                            afs[u + 1] = afs[mbt + 1];
+        let feb = u16::from_le_bytes([qa[4], qa[5]]) as usize;
+        let hav = u16::from_le_bytes([qa[6], qa[7]]) as usize;
+        if hav >= 2 && feb + hav * 2 <= qa.len() {
+            let sig = u16::from_le_bytes([qa[feb], qa[feb + 1]]);
+            let omv = bytes_per_sector as usize;
+            for i in 1..hav {
+                let gti = i * omv;
+                if gti <= qa.len() && gti >= 2 {
+                    let pos = gti - 2;
+                    let gwl = u16::from_le_bytes([qa[pos], qa[pos + 1]]);
+                    if gwl == sig {
+                        let gsl = feb + i * 2;
+                        if gsl + 1 < qa.len() {
+                            qa[pos] = qa[gsl];
+                            qa[pos + 1] = qa[gsl + 1];
                         }
                     }
                 }
@@ -1401,85 +1401,85 @@ pub fn beu(de: Arc<dyn Bj>) -> Result<Arc<Akn>, &'static str> {
     }
 
     
-    let sj = u32::dj([afs[0], afs[1], afs[2], afs[3]]);
-    if sj != BAN_ {
+    let magic = u32::from_le_bytes([qa[0], qa[1], qa[2], qa[3]]);
+    if magic != BCP_ {
         return Err("MFT record 0 has bad magic");
     }
 
     
-    let kwi = u16::dj([afs[20], afs[21]]) as usize;
-    let fxx = u32::dj([afs[24], afs[25], afs[26], afs[27]]) as usize;
-    let mut bvk = Vec::new();
+    let fxb = u16::from_le_bytes([qa[20], qa[21]]) as usize;
+    let used_size = u32::from_le_bytes([qa[24], qa[25], qa[26], qa[27]]) as usize;
+    let mut mft_data_runs = Vec::new();
 
-    let mut dz = kwi;
-    let ul = fxx.v(afs.len());
-    while dz + 8 <= ul {
-        let gzf = u32::dj([
-            afs[dz], afs[dz + 1], afs[dz + 2], afs[dz + 3],
+    let mut off = fxb;
+    let jm = used_size.min(qa.len());
+    while off + 8 <= jm {
+        let dia = u32::from_le_bytes([
+            qa[off], qa[off + 1], qa[off + 2], qa[off + 3],
         ]);
-        let gyd = u32::dj([
-            afs[dz + 4], afs[dz + 5], afs[dz + 6], afs[dz + 7],
+        let dhh = u32::from_le_bytes([
+            qa[off + 4], qa[off + 5], qa[off + 6], qa[off + 7],
         ]) as usize;
 
-        if gzf == AKX_ || gzf == 0 || gyd < 16 || gyd > ul - dz {
+        if dia == AMS_ || dia == 0 || dhh < 16 || dhh > jm - off {
             break;
         }
 
-        if gzf == AKW_ && dz + 9 < ul && afs[dz + 8] == 1 {
+        if dia == AMR_ && off + 9 < jm && qa[off + 8] == 1 {
             
-            let baf = afs[dz + 9] as usize;
-            if baf == 0 && dz + 64 <= ul {
+            let name_len = qa[off + 9] as usize;
+            if name_len == 0 && off + 64 <= jm {
                 let nr = unsafe {
-                    core::ptr::md(
-                        afs[dz + 16..].fq() as *const Awd
+                    core::ptr::read_unaligned(
+                        qa[off + 16..].as_ptr() as *const Ty
                     )
                 };
-                let wbo = unsafe {
-                    core::ptr::md(core::ptr::vf!(nr.koc))
+                let oji = unsafe {
+                    core::ptr::read_unaligned(core::ptr::addr_of!(nr.data_runs_offset))
                 } as usize;
-                let exx = dz + wbo;
-                if exx < dz + gyd {
-                    bvk = kom(&afs[exx..dz + gyd]);
+                let cdn = off + oji;
+                if cdn < off + dhh {
+                    mft_data_runs = frb(&qa[cdn..off + dhh]);
                 }
             }
         }
 
-        dz += gyd;
+        off += dhh;
     }
 
-    if bvk.is_empty() {
+    if mft_data_runs.is_empty() {
         return Err("Failed to parse $MFT data runs");
     }
 
-    let xkk: u64 = bvk.iter().map(|m| m.go).sum();
+    let pmb: u64 = mft_data_runs.iter().map(|r| r.length).sum();
     crate::serial_println!("[NTFS] $MFT: {} data runs, {} clusters total",
-        bvk.len(), xkk);
+        mft_data_runs.len(), pmb);
 
-    let fs = Arc::new(Akn {
-        ff: Mutex::new(Ts {
-            de,
-            qt,
-            bhk,
-            bbt,
-            cav,
-            anx,
-            aid,
-            bvk,
+    let fs = Arc::new(Pq {
+        inner: Mutex::new(Ik {
+            device,
+            cluster_size,
+            mft_record_size,
+            index_block_size,
+            mft_start_byte,
+            sectors_per_cluster,
+            bytes_per_sector,
+            mft_data_runs,
         }),
     });
 
     
     {
-        let ff = fs.ff.lock();
-        match ff.ehc(BAO_) {
-            Ok(exv) => {
-                if !exv.cfr {
+        let inner = fs.inner.lock();
+        match inner.read_mft_record(BCQ_) {
+            Ok(cdl) => {
+                if !cdl.is_directory {
                     return Err("MFT record 5 is not a directory");
                 }
                 crate::serial_println!("[NTFS] Root directory OK, reading entries...");
-                match ff.exg(&exv) {
-                    Ok(ch) => {
-                        crate::serial_println!("[NTFS] Root has {} entries", ch.len());
+                match inner.read_dir_entries(&cdl) {
+                    Ok(entries) => {
+                        crate::serial_println!("[NTFS] Root has {} entries", entries.len());
                     }
                     Err(_) => {
                         crate::serial_println!("[NTFS] Warning: could not read root dir entries");
@@ -1495,54 +1495,54 @@ pub fn beu(de: Arc<dyn Bj>) -> Result<Arc<Akn>, &'static str> {
 }
 
 
-pub fn probe(de: &dyn Bj) -> bool {
-    let mut cvz = [0u8; H_];
-    if de.xr(0, &mut cvz).is_err() {
+pub fn probe(device: &dyn Ak) -> bool {
+    let mut bap = [0u8; H_];
+    if device.read_sector(0, &mut bap).is_err() {
         return false;
     }
     
-    &cvz[3..11] == BBR_
+    &bap[3..11] == BDU_
 }
 
 
-pub fn xmr() -> Option<Arc<Akn>> {
-    use crate::drivers::partition::{hul, PartitionType};
+pub fn pny() -> Option<Arc<Pq>> {
+    use crate::drivers::partition::{dwf, PartitionType};
     use crate::drivers::ahci;
     use super::fat32::AhciBlockReader;
 
-    let ik = ahci::bhh();
-    crate::serial_println!("[NTFS] Scanning {} AHCI devices for NTFS partitions", ik.len());
+    let devices = ahci::adz();
+    crate::serial_println!("[NTFS] Scanning {} AHCI devices for NTFS partitions", devices.len());
 
-    for de in ik {
-        let port = de.kg;
-        let axf = de.agw;
+    for device in devices {
+        let port = device.port_num;
+        let zp = device.sector_count;
 
-        let dld = |jk: u64, k: &mut [u8]| -> Result<(), &'static str> {
-            ahci::ain(port, jk, 1, k).map(|_| ())
+        let read_fn = |dj: u64, buf: &mut [u8]| -> Result<(), &'static str> {
+            ahci::read_sectors(port, dj, 1, buf).map(|_| ())
         };
 
-        if let Ok(gg) = hul(dld, axf) {
-            for partition in &gg.aqd {
-                match partition.duf {
-                    PartitionType::Awf | PartitionType::Akg => {
+        if let Ok(bs) = dwf(read_fn, zp) {
+            for partition in &bs.partitions {
+                match partition.partition_type {
+                    PartitionType::Ntfs | PartitionType::MicrosoftBasicData => {
                         crate::serial_println!("[NTFS] Found candidate partition at LBA {} ({})",
-                            partition.aag, partition.ple());
+                            partition.start_lba, partition.size_human());
 
-                        let cha = Arc::new(AhciBlockReader::new(
+                        let reader = Arc::new(AhciBlockReader::new(
                             port as usize,
-                            partition.aag,
+                            partition.start_lba,
                         ));
 
                         
-                        if probe(&*cha) {
-                            match beu(cha) {
+                        if probe(&*reader) {
+                            match abd(reader) {
                                 Ok(fs) => {
                                     crate::serial_println!("[NTFS] Mounted partition from port {} at LBA {}",
-                                        port, partition.aag);
+                                        port, partition.start_lba);
                                     return Some(fs);
                                 }
-                                Err(aa) => {
-                                    crate::serial_println!("[NTFS] Mount failed: {}", aa);
+                                Err(e) => {
+                                    crate::serial_println!("[NTFS] Mount failed: {}", e);
                                 }
                             }
                         }

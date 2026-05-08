@@ -182,15 +182,15 @@ fn query_encrypted_access(profile: &HardwareProfile) -> QueryResult {
     let mut answer = String::new();
     let overall_can = false;
 
-    for encrypt in &profile.encryption_detected {
-        details.push(format!("[{}] {} — {}", encrypt.encryption_type.as_str(), encrypt.disk_name, encrypt.detail));
+    for enc in &profile.encryption_detected {
+        details.push(format!("[{}] {} — {}", enc.encryption_type.as_str(), enc.disk_name, enc.detail));
 
                 // Pattern matching — Rust's exhaustive branching construct.
-match encrypt.encryption_type {
+match enc.encryption_type {
             EncryptionType::Luks1 | EncryptionType::Luks2 => {
                 answer.push_str(&format!(
                     "Disk '{}' has {} encryption. I can detect the volume but CANNOT decrypt without the passphrase/key. ",
-                    encrypt.disk_name, encrypt.encryption_type.as_str()));
+                    enc.disk_name, enc.encryption_type.as_str()));
 
                 if profile.has_aesni {
                     answer.push_str("AES-NI hardware is available — decryption would be fast IF a key is provided. ");
@@ -200,7 +200,7 @@ match encrypt.encryption_type {
             EncryptionType::BitLocker => {
                 answer.push_str(&format!(
                     "Disk '{}' has BitLocker encryption. I can detect the BDE header but CANNOT decrypt without the recovery key or TPM. ",
-                    encrypt.disk_name));
+                    enc.disk_name));
 
                 if profile.pci_crypto_controllers > 0 {
                     answer.push_str("A crypto controller (possibly TPM) is on the PCI bus. ");
@@ -210,12 +210,12 @@ match encrypt.encryption_type {
             EncryptionType::VeraCrypt => {
                 answer.push_str(&format!(
                     "Disk '{}' appears to have a VeraCrypt volume. Cannot decrypt without the password. ",
-                    encrypt.disk_name));
+                    enc.disk_name));
             }
             _ => {
                 answer.push_str(&format!(
                     "Disk '{}' has {} encryption. Cannot access encrypted contents without credentials. ",
-                    encrypt.disk_name, encrypt.encryption_type.as_str()));
+                    enc.disk_name, enc.encryption_type.as_str()));
             }
         }
     }
@@ -380,7 +380,7 @@ fn query_cpu_information(profile: &HardwareProfile) -> QueryResult {
     QueryResult {
         answer: format!("{} ({}) — {} cores, {} MHz, SIMD: {}, Crypto: AES-NI={} SHA={} RDRAND={}",
             profile.cpu_brand, profile.cpu_vendor,
-            profile.cpu_cores, profile.tsc_frequency_hz / 1_000_000,
+            profile.cpu_cores, profile.tsc_freq_hz / 1_000_000,
             simd, profile.has_aesni, profile.has_sha_ext, profile.has_rdrand),
         confidence: 1.0,
         can_do: None,
@@ -390,9 +390,9 @@ fn query_cpu_information(profile: &HardwareProfile) -> QueryResult {
 
 fn query_storage_information(profile: &HardwareProfile) -> QueryResult {
     let mut details = Vec::new();
-    for device in &profile.storage_devices {
-        details.push(format!("{} [{}] '{}' — {} GB", device.name, device.kind.as_str(),
-            device.model, device.capacity_bytes / (1024 * 1024 * 1024)));
+    for dev in &profile.storage_devices {
+        details.push(format!("{} [{}] '{}' — {} GB", dev.name, dev.kind.as_str(),
+            dev.model, dev.capacity_bytes / (1024 * 1024 * 1024)));
     }
     for p in &profile.partitions {
         details.push(format!("  Partition #{} [{}] {} — {} GB{}",

@@ -37,7 +37,7 @@ pub enum EventType {
     SyscallEntry = 7,
     SyscallExit = 8,
     SecurityViolation = 9,
-    MemoryAllocator = 10,
+    MemoryAlloc = 10,
     MemoryFree = 11,
     KeyboardInput = 12,
     Custom = 255,
@@ -153,7 +153,7 @@ pub fn dump_on_panic() {
 pub fn export_buffer() -> alloc::vec::Vec<TraceEvent> {
     let buffer = TRACE_BUFFER.lock();
     let current = WRITE_INDEX.load(Ordering::Relaxed) as usize;
-    let count = current.minimum(TRACE_BUFFER_SIZE);
+    let count = current.min(TRACE_BUFFER_SIZE);
     
     let mut events = alloc::vec::Vec::with_capacity(count);
     let start = if current > TRACE_BUFFER_SIZE {

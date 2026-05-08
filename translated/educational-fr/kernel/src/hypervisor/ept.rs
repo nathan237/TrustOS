@@ -23,9 +23,9 @@ pub struct EptPointer(pub u64);
 // Bloc d'implémentation — définit les méthodes du type ci-dessus.
 impl EptPointer {
         // Fonction publique — appelable depuis d'autres modules.
-pub fn new(pml4_physical: u64) -> Self {
+pub fn new(pml4_phys: u64) -> Self {
         // Memory type = WB (6), Page walk length = 4 levels (3)
-        let eptp = (pml4_physical & 0xFFFF_FFFF_FFFF_F000) | (3 << 3) | 6;
+        let eptp = (pml4_phys & 0xFFFF_FFFF_FFFF_F000) | (3 << 3) | 6;
         EptPointer(eptp)
     }
     
@@ -104,7 +104,7 @@ pub fn is_large_page(&self) -> bool {
     }
     
         // Fonction publique — appelable depuis d'autres modules.
-pub fn physical_address(&self) -> u64 {
+pub fn phys_addr(&self) -> u64 {
         self.0 & 0xFFFF_FFFF_FFFF_F000
     }
 }
@@ -173,9 +173,9 @@ impl EptManager {
     pub fn ept_pointer(&self) -> EptPointer {
         let pml4_virt = self.pml4.as_ref() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
 const EptTable as u64;
-        let pml4_physical = virt_to_physical_vmx(pml4_virt);
-        crate::serial_println!("[EPT] PML4 virt=0x{:016X} phys=0x{:016X}", pml4_virt, pml4_physical);
-        EptPointer::new(pml4_physical)
+        let pml4_phys = virt_to_physical_vmx(pml4_virt);
+        crate::serial_println!("[EPT] PML4 virt=0x{:016X} phys=0x{:016X}", pml4_virt, pml4_phys);
+        EptPointer::new(pml4_phys)
     }
     
     /// Configurer un mapping identité (GPA == HPA)
@@ -184,7 +184,7 @@ const EptTable as u64;
         
         // For simplicity, use 2MB large pages
         let pages_2mb = (size + 0x1FFFFF) / 0x200000;
-        let pdpts_needed = ((pages_2mb + 511) / 512).maximum(1);
+        let pdpts_needed = ((pages_2mb + 511) / 512).max(1);
         
         for pdpt_index in 0..pdpts_needed {
             let mut pd = Box::new(EptTable::new());
@@ -197,8 +197,8 @@ const EptTable as u64;
                     break;
                 }
                 
-                let physical_address = (page_number * 0x200000) as u64;
-                pd.entries[pd_index] = EptEntry::new_large_page(physical_address);
+                let phys_addr = (page_number * 0x200000) as u64;
+                pd.entries[pd_index] = EptEntry::new_large_page(phys_addr);
             }
             
             let pd_virt = pd.as_ref() as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
@@ -226,10 +226,10 @@ const EptTable as u64;
     }
     
     /// Mapper une page physique du guest vers une page physique de l'host
-    pub fn map_page(&mut self, guest_physical: u64, host_physical: u64, _flags: u64) -> Result<()> {
-        let pml4_index = ((guest_physical >> 39) & 0x1FF) as usize;
-        let pdpt_index = ((guest_physical >> 30) & 0x1FF) as usize;
-        let pd_index = ((guest_physical >> 21) & 0x1FF) as usize;
+    pub fn map_page(&mut self, guest_phys: u64, host_physical: u64, _flags: u64) -> Result<()> {
+        let pml4_index = ((guest_phys >> 39) & 0x1FF) as usize;
+        let pdpt_index = ((guest_phys >> 30) & 0x1FF) as usize;
+        let pd_index = ((guest_phys >> 21) & 0x1FF) as usize;
         
         // Ensure PML4 entry exists → PDPT
         if !self.pml4.entries[pml4_index].is_present() {
@@ -242,7 +242,7 @@ const EptTable as u64;
         }
         
         // Get PDPT table via HHDM (physical → virtual conversion)
-        let pdpt_table_physical = self.pml4.entries[pml4_index].physical_address();
+        let pdpt_table_physical = self.pml4.entries[pml4_index].phys_addr();
         let pdpt_table_virt = crate::memory::physical_to_virt(pdpt_table_physical);
         let pdpt_table = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe { &mut *(pdpt_table_virt as *mut EptTable) };
@@ -256,7 +256,7 @@ const EptTable as u64;
             self.pds.push(pd);
         }
         
-        let pd_table_physical = pdpt_table.entries[pdpt_index].physical_address();
+        let pd_table_physical = pdpt_table.entries[pdpt_index].phys_addr();
         let pd_table_virt = crate::memory::physical_to_virt(pd_table_physical);
         let pd_table = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe { &mut *(pd_table_virt as *mut EptTable) };
@@ -273,7 +273,7 @@ unsafe { &mut *(pd_table_virt as *mut EptTable) };
     /// This correctly maps guest physical addresses [0, size) to the host physical
     /// addresses where `guest_memory` actually resides, instead of identity mapping.
     pub fn setup_guest_memory_mapping(&mut self, guest_memory: &[u8]) -> Result<()> {
-        let guest_memory_virt = guest_memory.as_pointer() as u64;
+        let guest_memory_virt = guest_memory.as_ptr() as u64;
         let guest_memory_physical = virt_to_physical_vmx(guest_memory_virt);
         let size = guest_memory.len();
         
@@ -288,7 +288,7 @@ unsafe { &mut *(pd_table_virt as *mut EptTable) };
         
         // Map using 2MB large pages: GPA [0, size) -> HPA [guest_mem_phys, guest_mem_phys + size)
         let pages_2mb = (size + 0x1FFFFF) / 0x200000;
-        let pdpts_needed = ((pages_2mb + 511) / 512).maximum(1);
+        let pdpts_needed = ((pages_2mb + 511) / 512).max(1);
         
         for pdpt_index in 0..pdpts_needed {
             let mut pd = Box::new(EptTable::new());
@@ -328,6 +328,6 @@ const EptTable as u64;
 
 /// Créer un EPT minimal pour un guest "Hello World"
 pub fn create_minimal_ept(guest_memory: &[u8]) -> Result<EptManager> {
-    let size = guest_memory.len().maximum(4 * 1024 * 1024); // Minimum 4MB
+    let size = guest_memory.len().max(4 * 1024 * 1024); // Minimum 4MB
     EptManager::new(size)
 }

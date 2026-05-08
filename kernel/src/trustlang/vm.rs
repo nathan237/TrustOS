@@ -813,13 +813,21 @@ fn exec_builtin(id: u8, args: &[Value], output: &mut String) -> Result<Value, St
         // ══════════════════════════════════════════════════
         // Audio visualizer builtins — live_viz data
         // ══════════════════════════════════════════════════
+        #[cfg(feature = "daw")]
         BUILTIN_BEAT => Ok(Value::F64(crate::trustdaw::live_viz::get_beat() as f64)),
+        #[cfg(feature = "daw")]
         BUILTIN_BASS => Ok(Value::F64(crate::trustdaw::live_viz::get_bass() as f64)),
+        #[cfg(feature = "daw")]
         BUILTIN_SUB_BASS => Ok(Value::F64(crate::trustdaw::live_viz::get_sub_bass() as f64)),
+        #[cfg(feature = "daw")]
         BUILTIN_MID => Ok(Value::F64(crate::trustdaw::live_viz::get_mid() as f64)),
+        #[cfg(feature = "daw")]
         BUILTIN_HIGH_MID => Ok(Value::F64(crate::trustdaw::live_viz::get_high_mid() as f64)),
+        #[cfg(feature = "daw")]
         BUILTIN_TREBLE => Ok(Value::F64(crate::trustdaw::live_viz::get_treble() as f64)),
+        #[cfg(feature = "daw")]
         BUILTIN_ENERGY => Ok(Value::F64(crate::trustdaw::live_viz::get_energy() as f64)),
+        #[cfg(feature = "daw")]
         BUILTIN_FRAME_NUM => Ok(Value::I64(crate::trustdaw::live_viz::get_frame_num() as i64)),
         BUILTIN_SIN_F => {
             let x = args.first().unwrap_or(&Value::F64(0.0)).as_f64().unwrap_or(0.0);

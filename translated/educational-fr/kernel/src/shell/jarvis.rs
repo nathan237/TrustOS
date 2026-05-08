@@ -29,7 +29,7 @@ const MAXIMUM_HISTORY: usize = 32;
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Intent {
     // System queries
-    SystemInformation,         // "how much memory", "system status"
+    SystemInfo,         // "how much memory", "system status"
     ProcessList,        // "what's running", "show processes"
     DiskInformation,           // "disk space", "storage"
     NetworkInformation,        // "network status", "ip address"
@@ -101,7 +101,7 @@ struct ActionStep {
 #[derive(Debug)]
 enum Action {
     ShellCommand(String),
-    ShowInformation(String),
+    ShowInfo(String),
     Respond(String),
     MultiStep(Vec<ActionStep>),
 }
@@ -222,10 +222,10 @@ fn detect_intent(norm: &str) -> Intent {
     
     // ---- System queries ----
     if matches_any(norm, &["memory", "memoire", "ram", "heap", "free mem", "mem usage"]) {
-        return Intent::SystemInformation;
+        return Intent::SystemInfo;
     }
     if matches_any(norm, &["system", "systeme", "status", "etat", "sante", "health", "overview"]) {
-        return Intent::SystemInformation;
+        return Intent::SystemInfo;
     }
     if matches_any(norm, &["process", "processus", "running", "tourne", "ps ", "qui tourne", "what run"]) {
         return Intent::ProcessList;
@@ -326,8 +326,8 @@ match intent {
             // Everything after "run"/"execute"/"lance" is the command
             let triggers = ["run ", "execute ", "lance ", "executer ", "fais "];
             for t in &triggers {
-                if let Some(position) = norm.find(t) {
-                    let cmd = &norm[position + t.len()..];
+                if let Some(pos) = norm.find(t) {
+                    let cmd = &norm[pos + t.len()..];
                     if !cmd.is_empty() {
                         entities.push(Entity { kind: EntityKind::Command, value: String::from(cmd.trim()) });
                     }
@@ -338,8 +338,8 @@ match intent {
         Intent::OpenApp => {
             let triggers = ["open ", "ouvre ", "launch ", "lance ", "start ", "demarre "];
             for t in &triggers {
-                if let Some(position) = norm.find(t) {
-                    let app = &norm[position + t.len()..];
+                if let Some(pos) = norm.find(t) {
+                    let app = &norm[pos + t.len()..];
                     if !app.is_empty() {
                         entities.push(Entity { kind: EntityKind::AppName, value: String::from(app.trim()) });
                     }
@@ -350,8 +350,8 @@ match intent {
         Intent::Explain | Intent::HowTo => {
             let triggers = ["explain ", "explique ", "what is ", "c est quoi ", "how to ", "comment "];
             for t in &triggers {
-                if let Some(position) = norm.find(t) {
-                    let topic = &norm[position + t.len()..];
+                if let Some(pos) = norm.find(t) {
+                    let topic = &norm[pos + t.len()..];
                     if !topic.is_empty() {
                         entities.push(Entity { kind: EntityKind::SearchTerm, value: String::from(topic.trim()) });
                     }
@@ -390,7 +390,7 @@ match *w {
 fn plan_action(intent: Intent, entities: &[Entity], lang: Lang) -> Action {
         // Correspondance de motifs — branchement exhaustif de Rust.
 match intent {
-        Intent::SystemInformation => {
+        Intent::SystemInfo => {
             let used = crate::memory::heap::used();
             let free = crate::memory::heap::free();
             let total = used + free;
@@ -664,11 +664,11 @@ match lang {
                 "A bug walks into a bar.\nIt never leaves. It's a feature.",
                 "Why is TrustOS written in Rust?\nBecause trust is earned... and so is memory safety.",
             ];
-            let index = (crate::rtc::get_time_seconds() as usize) % 5;
+            let idx = (crate::rtc::get_time_seconds() as usize) % 5;
                         // Correspondance de motifs — branchement exhaustif de Rust.
 match lang {
-                Lang::Fr => Action::Respond(String::from(jokes_fr[index])),
-                Lang::En => Action::Respond(String::from(jokes_en[index])),
+                Lang::Fr => Action::Respond(String::from(jokes_fr[idx])),
+                Lang::En => Action::Respond(String::from(jokes_en[idx])),
             }
         }
         Intent::Compliment => {
@@ -853,8 +853,8 @@ match lang {
 fn execute_action(action: Action) {
         // Correspondance de motifs — branchement exhaustif de Rust.
 match action {
-        Action::Respond(message) => {
-            for line in message.lines() {
+        Action::Respond(msg) => {
+            for line in msg.lines() {
                 crate::print_color!(JARVIS_COLOR, "  ");
                 crate::println!("{}", line);
             }
@@ -865,8 +865,8 @@ match action {
             // Execute via the shell command dispatcher
             super::execute_command(&cmd);
         }
-        Action::ShowInformation(message) => {
-            for line in message.lines() {
+        Action::ShowInfo(msg) => {
+            for line in msg.lines() {
                 crate::print_color!(COLOR_CYAN, "  ");
                 crate::println!("{}", line);
             }
@@ -964,14 +964,14 @@ match crate::ramfs::with_filesystem(|fs| fs.read_file(&path).map(|d| d.to_vec())
     // Interactive REPL mode
     print_jarvis_banner();
     
-    let mut context = ConversationContext {
+    let mut ctx = ConversationContext {
         last_intent: Intent::Unknown,
         last_topic: String::new(),
         turn_count: 0,
         lang: Lang::En,
     };
     
-    let mut input_buffer = [0u8; 256];
+    let mut input_buf = [0u8; 256];
     
         // Boucle infinie — tourne jusqu'à un `break` explicite.
 loop {
@@ -984,8 +984,8 @@ loop {
         crate::print_color!(COLOR_WHITE, " > ");
         
         // Read input
-        let len = read_jarvis_input(&mut input_buffer);
-        let raw = core::str::from_utf8(&input_buffer[..len]).unwrap_or("").trim();
+        let len = read_jarvis_input(&mut input_buf);
+        let raw = core::str::from_utf8(&input_buf[..len]).unwrap_or("").trim();
         
         if raw.is_empty() { continue; }
         
@@ -1000,7 +1000,7 @@ match lang {
             break;
         }
         
-        context.turn_count += 1;
+        ctx.turn_count += 1;
         process_query(raw);
     }
 }
@@ -1059,7 +1059,7 @@ fn print_jarvis_banner() {
 /// Simple line reader for Jarvis REPL (no autocomplete, just basic input)
 fn read_jarvis_input(buffer: &mut [u8]) -> usize {
     use crate::keyboard::read_char;
-    let mut position = 0;
+    let mut pos = 0;
 
         // Boucle infinie — tourne jusqu'à un `break` explicite.
 loop {
@@ -1068,18 +1068,18 @@ loop {
 match c {
                 b'\n' | b'\r' => {
                     crate::println!();
-                    return position;
+                    return pos;
                 }
                 8 | 127 => { // Backspace
-                    if position > 0 {
-                        position -= 1;
+                    if pos > 0 {
+                        pos -= 1;
                         crate::print!("\x08 \x08");
                     }
                 }
                 0x1B => {} // Escape: ignore
-                c if c >= 0x20 && position < buffer.len() - 1 => {
-                    buffer[position] = c;
-                    position += 1;
+                c if c >= 0x20 && pos < buffer.len() - 1 => {
+                    buffer[pos] = c;
+                    pos += 1;
                     crate::print!("{}", c as char);
                 }
                 _ => {}
@@ -1146,7 +1146,7 @@ match args[0] {
                 crate::println_color!(COLOR_YELLOW, "  Brain not initialized. Run: jarvis brain init");
                 return;
             }
-            for line in crate::jarvis::information_lines() {
+            for line in crate::jarvis::info_lines() {
                 crate::println!("  {}", line);
             }
         }
@@ -1212,9 +1212,9 @@ match args[0] {
 
             // Introspection
             crate::println_color!(COLOR_CYAN, "  Introspection:");
-            let information = crate::jarvis::agent::introspect(
+            let info = crate::jarvis::agent::introspect(
                 &crate::jarvis::agent::IntrospectTarget::Architecture);
-            for line in information.iter().take(5) {
+            for line in info.iter().take(5) {
                 crate::println!("    {}", line);
             }
 
@@ -1231,9 +1231,9 @@ match args[0] {
         "bench" => {
             if !ensure_brain() { return; }
             crate::println_color!(JARVIS_BRAIN, "  Benchmarking inference speed...");
-            let (token_per_sector, elapsed_mouse) = crate::jarvis::agent::bench_inference();
-            crate::println!("  Speed: {:.1} tokens/sec", token_per_sector);
-            crate::println!("  32 tokens generated in {} ms", elapsed_mouse);
+            let (tok_per_sec, elapsed_ms) = crate::jarvis::agent::bench_inference();
+            crate::println!("  Speed: {:.1} tokens/sec", tok_per_sec);
+            crate::println!("  32 tokens generated in {} ms", elapsed_ms);
             crate::println_color!(COLOR_GRAY, "  (CPU reference — GPU dispatch target: 100×)");
         }
 
@@ -1504,9 +1504,9 @@ match crate::jarvis::load_weights() {
             crate::println!();
 
             crate::println_color!(JARVIS_BRAIN, "  Generating unique math tasks per node...");
-            let start = crate::time::uptime_mouse();
+            let start = crate::time::uptime_ms();
             let results = crate::jarvis::task::run_distributed_math();
-            let elapsed = crate::time::uptime_mouse().wrapping_sub(start);
+            let elapsed = crate::time::uptime_ms().wrapping_sub(start);
 
             crate::println!();
             crate::println_color!(JARVIS_BRAIN, "  Results:");
@@ -1581,7 +1581,7 @@ match peer.role {
                     };
                     crate::println!("    {}.{}.{}.{} [{}] {} params, {} steps",
                         peer.ip[0], peer.ip[1], peer.ip[2], peer.ip[3],
-                        role, peer.parameter_count, peer.training_steps);
+                        role, peer.param_count, peer.training_steps);
                 }
             }
 

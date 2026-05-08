@@ -122,8 +122,8 @@ impl PageTableEntry {
     }
     
         // Public function — callable from other modules.
-pub fn set(&mut self, physical_address: u64, flags: PageFlags) {
-        self.0 = (physical_address & Self::ADDRESS_MASK) | flags.bits();
+pub fn set(&mut self, phys_addr: u64, flags: PageFlags) {
+        self.0 = (phys_addr & Self::ADDRESS_MASK) | flags.bits();
     }
     
         // Public function — callable from other modules.
@@ -132,7 +132,7 @@ pub fn clear(&mut self) {
     }
     
         // Public function — callable from other modules.
-pub fn physical_address(&self) -> u64 {
+pub fn phys_addr(&self) -> u64 {
         self.0 & Self::ADDRESS_MASK
     }
     
@@ -170,7 +170,7 @@ impl PageTable {
     
         // Public function — callable from other modules.
 pub fn zero(&mut self) {
-        for entry in self.entries.iterator_mut() {
+        for entry in self.entries.iter_mut() {
             entry.clear();
         }
     }
@@ -179,7 +179,7 @@ pub fn zero(&mut self) {
 /// Address space for a process
 pub struct AddressSpace {
     /// Physical address of PML4 (CR3 value)
-    pml4_physical: u64,
+    pml4_phys: u64,
     /// Allocated page tables (for cleanup)
     page_tables: Vec<Box<PageTable>>,
     /// HHDM offset for virtual/physical conversion
@@ -199,13 +199,13 @@ impl AddressSpace {
         // Get physical address of PML4
         let pml4_virt = &*pml4 as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const PageTable as u64;
-        let pml4_physical = pml4_virt.checked_sub(hhdm)?;
+        let pml4_phys = pml4_virt.checked_sub(hhdm)?;
         
         let mut page_tables = Vec::new();
         page_tables.push(pml4);
         
         Some(Self {
-            pml4_physical,
+            pml4_phys,
             page_tables,
             hhdm_offset: hhdm,
         })
@@ -229,7 +229,7 @@ const PageTable as u64;
     
     /// Get CR3 value (physical address of PML4)
     pub fn cr3(&self) -> u64 {
-        self.pml4_physical
+        self.pml4_phys
     }
     
     /// Map kernel higher-half space into this address space
@@ -253,7 +253,7 @@ const PageTable)
         };
         
         // Get our PML4
-        let our_pml4_virt = self.pml4_physical + self.hhdm_offset;
+        let our_pml4_virt = self.pml4_phys + self.hhdm_offset;
         let our_pml4 = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { 
             &mut *(our_pml4_virt as *mut PageTable) 
@@ -271,7 +271,7 @@ unsafe {
     }
     
     /// Map a single page
-    pub fn map_page(&mut self, virt: u64, physical: u64, flags: PageFlags) -> Option<()> {
+    pub fn map_page(&mut self, virt: u64, phys: u64, flags: PageFlags) -> Option<()> {
         // Extract indices for each level
         let pml4_index = ((virt >> 39) & 0x1FF) as usize;
         let pdpt_index = ((virt >> 30) & 0x1FF) as usize;
@@ -279,7 +279,7 @@ unsafe {
         let pt_index = ((virt >> 12) & 0x1FF) as usize;
         
         // Walk/create page table hierarchy using raw pointers to avoid borrow conflicts
-        let pml4_virt = self.pml4_physical + self.hhdm_offset;
+        let pml4_virt = self.pml4_phys + self.hhdm_offset;
         let pml4 = pml4_virt as *mut PageTable;
         
         // Get or create PDPT
@@ -298,7 +298,7 @@ unsafe { self.ensure_table_at(&mut (*pd).entries[pd_index])? };
         let pt = (pt_physical + self.hhdm_offset) as *mut PageTable;
         
         // Map the page
-        unsafe { (*pt).entries[pt_index].set(physical, flags); }
+        unsafe { (*pt).entries[pt_index].set(phys, flags); }
         
         // Invalidate TLB for this virtual address
         #[cfg(target_arch = "x86_64")]
@@ -313,7 +313,7 @@ unsafe {
     /// Ensure a table exists at the given entry, returns physical address
     fn ensure_table_at(&mut self, entry: &mut PageTableEntry) -> Option<u64> {
         if entry.is_present() {
-            Some(entry.physical_address())
+            Some(entry.phys_addr())
         } else {
             // Create new table
             let mut new_table = Box::new(PageTable::new());
@@ -350,40 +350,8 @@ const PageTable as u64;
     
     /// Unmap a page
     pub fn unmap_page(&mut self, virt: u64) -> Option<()> {
-        let pml4_index = ((virt >> 39) & 0x1FF) as usize;
-        let pdpt_index = ((virt >> 30) & 0x1FF) as usize;
-        let pd_index = ((virt >> 21) & 0x1FF) as usize;
-        let pt_index = ((virt >> 12) & 0x1FF) as usize;
-        
-        let pml4_virt = self.pml4_physical + self.hhdm_offset;
-        let pml4 = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &mut *(pml4_virt as *mut PageTable) };
-        
-        if !pml4.entries[pml4_index].is_present() {
-            return None;
-        }
-        
-        let pdpt_virt = pml4.entries[pml4_index].physical_address() + self.hhdm_offset;
-        let pdpt = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &mut *(pdpt_virt as *mut PageTable) };
-        
-        if !pdpt.entries[pdpt_index].is_present() {
-            return None;
-        }
-        
-        let pd_virt = pdpt.entries[pdpt_index].physical_address() + self.hhdm_offset;
-        let pd = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &mut *(pd_virt as *mut PageTable) };
-        
-        if !pd.entries[pd_index].is_present() {
-            return None;
-        }
-        
-        let pt_virt = pd.entries[pd_index].physical_address() + self.hhdm_offset;
-        let pt = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &mut *(pt_virt as *mut PageTable) };
-        
-        pt.entries[pt_index].clear();
+        let entry = Self::walk_pt_mut(self.pml4_phys, self.hhdm_offset, virt)?;
+        entry.clear();
         
         // Invalidate TLB for this page
         #[cfg(target_arch = "x86_64")]
@@ -395,37 +363,71 @@ unsafe {
         Some(())
     }
     
+    /// Walk page tables PML4→PDPT→PD→PT and return a reference to the leaf entry.
+    /// Shared helper — eliminates 4× duplicated walk logic.
+    #[inline(always)]
+    fn walk_pt(cr3: u64, hhdm: u64, virt: u64) -> Option<&'static PageTableEntry> {
+        let pml4_index = ((virt >> 39) & 0x1FF) as usize;
+        let pdpt_index = ((virt >> 30) & 0x1FF) as usize;
+        let pd_index   = ((virt >> 21) & 0x1FF) as usize;
+        let pt_index   = ((virt >> 12) & 0x1FF) as usize;
+
+        let pml4 = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { &*((cr3 + hhdm) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const PageTable) };
+        if !pml4.entries[pml4_index].is_present() { return None; }
+
+        let pdpt = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { &*((pml4.entries[pml4_index].phys_addr() + hhdm) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const PageTable) };
+        if !pdpt.entries[pdpt_index].is_present() { return None; }
+
+        let pd = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { &*((pdpt.entries[pdpt_index].phys_addr() + hhdm) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const PageTable) };
+        if !pd.entries[pd_index].is_present() { return None; }
+
+        let pt = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { &*((pd.entries[pd_index].phys_addr() + hhdm) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const PageTable) };
+        if !pt.entries[pt_index].is_present() { return None; }
+
+        Some(&pt.entries[pt_index])
+    }
+
+    /// Mutable variant of walk_pt — returns &mut entry for unmap/modify operations.
+    #[inline(always)]
+    fn walk_pt_mut(cr3: u64, hhdm: u64, virt: u64) -> Option<&'static mut PageTableEntry> {
+        let pml4_index = ((virt >> 39) & 0x1FF) as usize;
+        let pdpt_index = ((virt >> 30) & 0x1FF) as usize;
+        let pd_index   = ((virt >> 21) & 0x1FF) as usize;
+        let pt_index   = ((virt >> 12) & 0x1FF) as usize;
+
+        let pml4 = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { &*((cr3 + hhdm) as *mut PageTable) };
+        if !pml4.entries[pml4_index].is_present() { return None; }
+
+        let pdpt = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { &*((pml4.entries[pml4_index].phys_addr() + hhdm) as *mut PageTable) };
+        if !pdpt.entries[pdpt_index].is_present() { return None; }
+
+        let pd = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { &*((pdpt.entries[pdpt_index].phys_addr() + hhdm) as *mut PageTable) };
+        if !pd.entries[pd_index].is_present() { return None; }
+
+        let pt = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { &mut *((pd.entries[pd_index].phys_addr() + hhdm) as *mut PageTable) };
+        if !pt.entries[pt_index].is_present() { return None; }
+
+        Some(&mut pt.entries[pt_index])
+    }
+
     /// Translate a virtual address to its physical address by walking the page tables.
     /// Returns `Some(phys)` with the physical address of the start of the 4K page + page offset,
     /// or `None` if the page is not mapped.
     pub fn translate(&self, virt: u64) -> Option<u64> {
-        let pml4_index = ((virt >> 39) & 0x1FF) as usize;
-        let pdpt_index = ((virt >> 30) & 0x1FF) as usize;
-        let pd_index = ((virt >> 21) & 0x1FF) as usize;
-        let pt_index = ((virt >> 12) & 0x1FF) as usize;
-        let page_offset = virt & 0xFFF;
-        
-        let pml4 = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*((self.pml4_physical + self.hhdm_offset) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
-const PageTable) };
-        if !pml4.entries[pml4_index].is_present() { return None; }
-        
-        let pdpt = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*((pml4.entries[pml4_index].physical_address() + self.hhdm_offset) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
-const PageTable) };
-        if !pdpt.entries[pdpt_index].is_present() { return None; }
-        
-        let pd = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*((pdpt.entries[pdpt_index].physical_address() + self.hhdm_offset) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
-const PageTable) };
-        if !pd.entries[pd_index].is_present() { return None; }
-        
-        let pt = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*((pd.entries[pd_index].physical_address() + self.hhdm_offset) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
-const PageTable) };
-        if !pt.entries[pt_index].is_present() { return None; }
-        
-        Some(pt.entries[pt_index].physical_address() + page_offset)
+        let entry = Self::walk_pt(self.pml4_phys, self.hhdm_offset, virt)?;
+        Some(entry.phys_addr() + (virt & 0xFFF))
     }
     
     /// Switch to this address space
@@ -434,64 +436,21 @@ unsafe fn activate(&self) {
         #[cfg(target_arch = "x86_64")]
         core::arch::asm!(
             "mov cr3, {}",
-            in(reg) self.pml4_physical,
+            in(reg) self.pml4_phys,
             options(nostack, preserves_flags)
         );
     }
     
     /// Check if a virtual address is mapped and accessible with given flags
     pub fn is_accessible(&self, virt: u64, required_flags: PageFlags) -> bool {
-        let pml4_index = ((virt >> 39) & 0x1FF) as usize;
-        let pdpt_index = ((virt >> 30) & 0x1FF) as usize;
-        let pd_index = ((virt >> 21) & 0x1FF) as usize;
-        let pt_index = ((virt >> 12) & 0x1FF) as usize;
-        
-        let pml4_virt = self.pml4_physical + self.hhdm_offset;
-        let pml4 = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*(pml4_virt as *// Compile-time constant — evaluated at compilation, zero runtime cost.
-const PageTable) };
-        
-        if !pml4.entries[pml4_index].is_present() {
-            return false;
-        }
-        
-        let pdpt_virt = pml4.entries[pml4_index].physical_address() + self.hhdm_offset;
-        let pdpt = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*(pdpt_virt as *// Compile-time constant — evaluated at compilation, zero runtime cost.
-const PageTable) };
-        
-        if !pdpt.entries[pdpt_index].is_present() {
-            return false;
-        }
-        
-        let pd_virt = pdpt.entries[pdpt_index].physical_address() + self.hhdm_offset;
-        let pd = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*(pd_virt as *// Compile-time constant — evaluated at compilation, zero runtime cost.
-const PageTable) };
-        
-        if !pd.entries[pd_index].is_present() {
-            return false;
-        }
-        
-        let pt_virt = pd.entries[pd_index].physical_address() + self.hhdm_offset;
-        let pt = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*(pt_virt as *// Compile-time constant — evaluated at compilation, zero runtime cost.
-const PageTable) };
-        
-        if !pt.entries[pt_index].is_present() {
-            return false;
-        }
-        
-        let entry_flags = pt.entries[pt_index].flags();
-        
-        // Check required flags
-        if required_flags.is_writable() && !entry_flags.is_writable() {
-            return false;
-        }
-        if required_flags.is_user() && !entry_flags.is_user() {
-            return false;
-        }
-        
+        let entry = // Pattern matching — Rust's exhaustive branching construct.
+match Self::walk_pt(self.pml4_phys, self.hhdm_offset, virt) {
+            Some(e) => e,
+            None => return false,
+        };
+        let entry_flags = entry.flags();
+        if required_flags.is_writable() && !entry_flags.is_writable() { return false; }
+        if required_flags.is_user() && !entry_flags.is_user() { return false; }
         true
     }
 }
@@ -505,14 +464,14 @@ impl AddressSpace {
     pub fn release_user_frames(&self) -> usize {
         let hhdm = self.hhdm_offset;
         let pml4 = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*((self.pml4_physical + hhdm) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe { &*((self.pml4_phys + hhdm) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const PageTable) };
         let mut freed = 0usize;
 
         for pml4_index in 0..256 {
             if !pml4.entries[pml4_index].is_present() { continue; }
             let pdpt = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*((pml4.entries[pml4_index].physical_address() + hhdm) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe { &*((pml4.entries[pml4_index].phys_addr() + hhdm) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const PageTable) };
 
             for pdpt_index in 0..ENTRIES_PER_TABLE {
@@ -520,7 +479,7 @@ const PageTable) };
                 // Skip huge 1 GB pages (unlikely, but guard)
                 if pdpt.entries[pdpt_index].flags().0 & PageFlags::HUGE_PAGE != 0 { continue; }
                 let pd = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*((pdpt.entries[pdpt_index].physical_address() + hhdm) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe { &*((pdpt.entries[pdpt_index].phys_addr() + hhdm) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const PageTable) };
 
                 for pd_index in 0..ENTRIES_PER_TABLE {
@@ -528,13 +487,13 @@ const PageTable) };
                     // Skip huge 2 MB pages
                     if pd.entries[pd_index].flags().0 & PageFlags::HUGE_PAGE != 0 { continue; }
                     let pt = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*((pd.entries[pd_index].physical_address() + hhdm) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+unsafe { &*((pd.entries[pd_index].phys_addr() + hhdm) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const PageTable) };
 
                     for pt_index in 0..ENTRIES_PER_TABLE {
                         if !pt.entries[pt_index].is_present() { continue; }
-                        let physical = pt.entries[pt_index].physical_address();
-                        crate::memory::frame::free_frame(physical);
+                        let phys = pt.entries[pt_index].phys_addr();
+                        crate::memory::frame::free_frame(phys);
                         freed += 1;
                     }
                 }
@@ -628,13 +587,13 @@ pub fn kernel_cr3() -> u64 {
 }
 
 /// Check if an address is in user space (lower half)
-pub fn is_user_address(address: u64) -> bool {
-    address < 0x0000_8000_0000_0000
+pub fn is_user_address(addr: u64) -> bool {
+    addr < 0x0000_8000_0000_0000
 }
 
 /// Check if an address is in kernel space (higher half)
-pub fn is_kernel_address(address: u64) -> bool {
-    address >= 0xFFFF_8000_0000_0000
+pub fn is_kernel_address(addr: u64) -> bool {
+    addr >= 0xFFFF_8000_0000_0000
 }
 
 /// Validate a user pointer (returns true if safe to access)
@@ -692,35 +651,14 @@ loop {
 
 /// Check that a single virtual address has the required flags set in the page tables
 fn check_page_flags(cr3: u64, hhdm: u64, virt: u64, required: PageFlags) -> bool {
-    let pml4_index = ((virt >> 39) & 0x1FF) as usize;
-    let pdpt_index = ((virt >> 30) & 0x1FF) as usize;
-    let pd_index   = ((virt >> 21) & 0x1FF) as usize;
-    let pt_index   = ((virt >> 12) & 0x1FF) as usize;
-    
-    let pml4 = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*((cr3 + hhdm) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
-const PageTable) };
-    if !pml4.entries[pml4_index].is_present() { return false; }
-    
-    let pdpt = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*((pml4.entries[pml4_index].physical_address() + hhdm) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
-const PageTable) };
-    if !pdpt.entries[pdpt_index].is_present() { return false; }
-    
-    let pd = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*((pdpt.entries[pdpt_index].physical_address() + hhdm) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
-const PageTable) };
-    if !pd.entries[pd_index].is_present() { return false; }
-    
-    let pt = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe { &*((pd.entries[pd_index].physical_address() + hhdm) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
-const PageTable) };
-    if !pt.entries[pt_index].is_present() { return false; }
-    
-    let flags = pt.entries[pt_index].flags();
+    let entry = // Pattern matching — Rust's exhaustive branching construct.
+match AddressSpace::walk_pt(cr3, hhdm, virt) {
+        Some(e) => e,
+        None => return false,
+    };
+    let flags = entry.flags();
     if required.is_user() && !flags.is_user() { return false; }
     if required.is_writable() && !flags.is_writable() { return false; }
-    
     true
 }
 
@@ -728,7 +666,7 @@ const PageTable) };
 pub struct UserMemoryRegion {
     pub start: u64,
     pub end: u64,
-    pub next_allocator: u64,
+    pub next_alloc: u64,
 }
 
 // Implementation block — defines methods for the type above.
@@ -750,7 +688,7 @@ const STACK_SIZE: u64 = 0x0000_0000_0010_0000;    // 1 MB stack
 
 /// Map a single MMIO page into the kernel's current page tables
 /// Uses flags appropriate for MMIO: present, writable, no-cache, no-execute
-pub fn map_kernel_mmio_page(virt: u64, physical: u64) -> Result<(), &'static str> {
+pub fn map_kernel_mmio_page(virt: u64, phys: u64) -> Result<(), &'static str> {
     use alloc::boxed::Box;
     
     let hhdm = crate::memory::hhdm_offset();
@@ -777,13 +715,13 @@ unsafe { &mut *((cr3 + hhdm) as *mut PageTable) };
     
     // Get or create PDPT
     let pdpt = if pml4.entries[pml4_index].is_present() {
-        let pdpt_physical = pml4.entries[pml4_index].physical_address();
+        let pdpt_physical = pml4.entries[pml4_index].phys_addr();
                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { &mut *((pdpt_physical + hhdm) as *mut PageTable) }
     } else {
         // PML4 entry missing — PCI MMIO regions aren't covered by Limine HHDM.
         // Allocate a new PDPT to extend the mapping.
-        crate::serial_println!("[MMIO] Creating PDPT for PML4[{}] (phys={:#x})", pml4_index, physical);
+        crate::serial_println!("[MMIO] Creating PDPT for PML4[{}] (phys={:#x})", pml4_index, phys);
         let new_pdpt = Box::new(PageTable::new());
         let pdpt_virt = Box::into_raw(new_pdpt) as u64;
         let pdpt_physical = pdpt_virt.checked_sub(hhdm).ok_or("Cannot convert PDPT virt to phys")?;
@@ -797,7 +735,7 @@ unsafe { &mut *(pdpt_virt as *mut PageTable) }
     
     // Get or create PD
     let pd = if pdpt.entries[pdpt_index].is_present() {
-        let pd_physical = pdpt.entries[pdpt_index].physical_address();
+        let pd_physical = pdpt.entries[pdpt_index].phys_addr();
                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { &mut *((pd_physical + hhdm) as *mut PageTable) }
     } else {
@@ -822,7 +760,7 @@ unsafe { &mut *(pd_virt as *mut PageTable) }
             // Already mapped as 2MB page, MMIO access should work
             return Ok(());
         }
-        let pt_physical = pd.entries[pd_index].physical_address();
+        let pt_physical = pd.entries[pd_index].phys_addr();
                 // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { &mut *((pt_physical + hhdm) as *mut PageTable) }
     } else {
@@ -843,8 +781,8 @@ unsafe { &mut *(pt_virt as *mut PageTable) }
     // Check if already mapped
     if pt.entries[pt_index].is_present() {
         // Page already mapped - check if it's the same physical address
-        let existing_physical = pt.entries[pt_index].physical_address();
-        if existing_physical == (physical & !0xFFF) {
+        let existing_physical = pt.entries[pt_index].phys_addr();
+        if existing_physical == (phys & !0xFFF) {
             // Same page, already mapped
             return Ok(());
         }
@@ -861,7 +799,7 @@ unsafe { &mut *(pt_virt as *mut PageTable) }
         PageFlags::NO_EXECUTE
     );
     
-    pt.entries[pt_index].set(physical & !0xFFF, mmio_flags);
+    pt.entries[pt_index].set(phys & !0xFFF, mmio_flags);
     
     Ok(())
 }
@@ -928,7 +866,7 @@ unsafe {
         core::arch::asm!(
             "mov {tmp}, cr3",
             "mov cr3, {tmp}",
-            temporary = out(reg) _,
+            tmp = out(reg) _,
         );
         
         crate::serial_println!(
@@ -956,8 +894,8 @@ unsafe { core::arch::asm!("mov {}, cr3", out(reg) cr3); }
     #[cfg(not(target_arch = "x86_64"))]
     { cr3 = 0; }
     
-    for page_index in 0..number_pages {
-        let virt = virt_start + (page_index * PAGE_SIZE) as u64;
+    for page_idx in 0..number_pages {
+        let virt = virt_start + (page_idx * PAGE_SIZE) as u64;
         
         let pml4_index = ((virt >> 39) & 0x1FF) as usize;
         let pdpt_index = ((virt >> 30) & 0x1FF) as usize;
@@ -968,7 +906,7 @@ unsafe { core::arch::asm!("mov {}, cr3", out(reg) cr3); }
 unsafe { &mut *((cr3 + hhdm) as *mut PageTable) };
         if !pml4.entries[pml4_index].is_present() { continue; }
         
-        let pdpt_physical = pml4.entries[pml4_index].physical_address();
+        let pdpt_physical = pml4.entries[pml4_index].phys_addr();
         let pdpt = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { &mut *((pdpt_physical + hhdm) as *mut PageTable) };
         if !pdpt.entries[pdpt_index].is_present() { continue; }
@@ -976,7 +914,7 @@ unsafe { &mut *((pdpt_physical + hhdm) as *mut PageTable) };
         // Check for 1GB huge page
         if pdpt.entries[pdpt_index].flags().0 & PageFlags::HUGE_PAGE != 0 { continue; }
         
-        let pd_physical = pdpt.entries[pdpt_index].physical_address();
+        let pd_physical = pdpt.entries[pdpt_index].phys_addr();
         let pd = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { &mut *((pd_physical + hhdm) as *mut PageTable) };
         if !pd.entries[pd_index].is_present() { continue; }
@@ -984,20 +922,20 @@ unsafe { &mut *((pd_physical + hhdm) as *mut PageTable) };
         // Check for 2MB huge page
         if pd.entries[pd_index].flags().0 & PageFlags::HUGE_PAGE != 0 { continue; }
         
-        let pt_physical = pd.entries[pd_index].physical_address();
+        let pt_physical = pd.entries[pd_index].phys_addr();
         let pt = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe { &mut *((pt_physical + hhdm) as *mut PageTable) };
         if !pt.entries[pt_index].is_present() { continue; }
         
         // Get current entry
-        let physical_address = pt.entries[pt_index].physical_address();
+        let phys_addr = pt.entries[pt_index].phys_addr();
         let old_flags = pt.entries[pt_index].flags().0;
         
         // Set WC: PWT=1, clear PCD and PAT bit (selects PAT entry 1 = WC)
         let new_flags = (old_flags & !(PageFlags::NO_CACHE | PageFlags::PAGE_PAT))
             | PageFlags::WRITE_THROUGH;  // PWT=1, PCD=0, PAT=0 → entry 1 (WC)
         
-        pt.entries[pt_index].set(physical_address, PageFlags::new(new_flags));
+        pt.entries[pt_index].set(phys_addr, PageFlags::new(new_flags));
         
         // Invalidate this TLB entry
         #[cfg(target_arch = "x86_64")]

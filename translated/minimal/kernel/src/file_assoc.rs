@@ -14,50 +14,50 @@ use spin::Mutex;
 pub enum FileCategory {
     Text,
     Image,
-    Rj,
-    Zj,
-    Vi,
-    Ahv,
-    Are,
-    F,
+    Audio,
+    Video,
+    Archive,
+    Executable,
+    Document,
+    Unknown,
 }
 
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Program {
-    Ag,
-    Bp,
-    Rk,
+    TextEditor,
+    ImageViewer,
+    AudioPlayer,
     VideoPlayer,
-    Ay,
-    Ak,
-    Is,
+    Terminal,
+    FileManager,
+    HexViewer,
     None,
 }
 
 impl Program {
-    pub fn j(&self) -> &'static str {
+    pub fn name(&self) -> &'static str {
         match self {
-            Program::Ag => "Text Editor",
-            Program::Bp => "Image Viewer",
-            Program::Rk => "Audio Player",
+            Program::TextEditor => "Text Editor",
+            Program::ImageViewer => "Image Viewer",
+            Program::AudioPlayer => "Audio Player",
             Program::VideoPlayer => "Video Player",
-            Program::Ay => "Terminal",
-            Program::Ak => "File Manager",
-            Program::Is => "Hex Viewer",
+            Program::Terminal => "Terminal",
+            Program::FileManager => "File Manager",
+            Program::HexViewer => "Hex Viewer",
             Program::None => "(None)",
         }
     }
     
-    pub fn pa(&self) -> &'static str {
+    pub fn icon(&self) -> &'static str {
         match self {
-            Program::Ag => "Aa",
-            Program::Bp => "[]",
-            Program::Rk => "d)",
+            Program::TextEditor => "Aa",
+            Program::ImageViewer => "[]",
+            Program::AudioPlayer => "d)",
             Program::VideoPlayer => ">|",
-            Program::Ay => ">_",
-            Program::Ak => "//",
-            Program::Is => "0x",
+            Program::Terminal => ">_",
+            Program::FileManager => "//",
+            Program::HexViewer => "0x",
             Program::None => "??",
         }
     }
@@ -65,149 +65,149 @@ impl Program {
 
 
 #[derive(Clone, Debug)]
-pub struct Abs {
-    pub fie: String,
-    pub gb: FileCategory,
-    pub alo: Program,
-    pub dc: String,
+pub struct Mb {
+    pub extension: String,
+    pub category: FileCategory,
+    pub program: Program,
+    pub description: String,
 }
 
 
 pub struct FileRegistry {
-    gak: BTreeMap<String, Abs>,
+    associations: BTreeMap<String, Mb>,
 }
 
 impl FileRegistry {
     pub const fn new() -> Self {
         FileRegistry {
-            gak: BTreeMap::new(),
+            associations: BTreeMap::new(),
         }
     }
     
     
-    pub fn tth(&mut self) {
+    pub fn init_defaults(&mut self) {
         
-        self.nw("txt", FileCategory::Text, Program::Ag, "Text Document");
-        self.nw("log", FileCategory::Text, Program::Ag, "Log File");
-        self.nw("md", FileCategory::Text, Program::Ag, "Markdown");
-        self.nw("rs", FileCategory::Text, Program::Ag, "Rust Source");
-        self.nw("c", FileCategory::Text, Program::Ag, "C Source");
-        self.nw("h", FileCategory::Text, Program::Ag, "C Header");
-        self.nw("cpp", FileCategory::Text, Program::Ag, "C++ Source");
-        self.nw("py", FileCategory::Text, Program::Ag, "Python Script");
-        self.nw("js", FileCategory::Text, Program::Ag, "JavaScript");
-        self.nw("json", FileCategory::Text, Program::Ag, "JSON Data");
-        self.nw("xml", FileCategory::Text, Program::Ag, "XML Document");
-        self.nw("html", FileCategory::Text, Program::Ag, "HTML Page");
-        self.nw("css", FileCategory::Text, Program::Ag, "CSS Stylesheet");
-        self.nw("toml", FileCategory::Text, Program::Ag, "TOML Config");
-        self.nw("cfg", FileCategory::Text, Program::Ag, "Config File");
-        self.nw("ini", FileCategory::Text, Program::Ag, "INI Config");
-        
-        
-        self.nw("png", FileCategory::Image, Program::Bp, "PNG Image");
-        self.nw("jpg", FileCategory::Image, Program::Bp, "JPEG Image");
-        self.nw("jpeg", FileCategory::Image, Program::Bp, "JPEG Image");
-        self.nw("gif", FileCategory::Image, Program::Bp, "GIF Image");
-        self.nw("bmp", FileCategory::Image, Program::Bp, "Bitmap Image");
-        self.nw("ico", FileCategory::Image, Program::Bp, "Icon File");
-        self.nw("svg", FileCategory::Image, Program::Bp, "SVG Vector");
+        self.register("txt", FileCategory::Text, Program::TextEditor, "Text Document");
+        self.register("log", FileCategory::Text, Program::TextEditor, "Log File");
+        self.register("md", FileCategory::Text, Program::TextEditor, "Markdown");
+        self.register("rs", FileCategory::Text, Program::TextEditor, "Rust Source");
+        self.register("c", FileCategory::Text, Program::TextEditor, "C Source");
+        self.register("h", FileCategory::Text, Program::TextEditor, "C Header");
+        self.register("cpp", FileCategory::Text, Program::TextEditor, "C++ Source");
+        self.register("py", FileCategory::Text, Program::TextEditor, "Python Script");
+        self.register("js", FileCategory::Text, Program::TextEditor, "JavaScript");
+        self.register("json", FileCategory::Text, Program::TextEditor, "JSON Data");
+        self.register("xml", FileCategory::Text, Program::TextEditor, "XML Document");
+        self.register("html", FileCategory::Text, Program::TextEditor, "HTML Page");
+        self.register("css", FileCategory::Text, Program::TextEditor, "CSS Stylesheet");
+        self.register("toml", FileCategory::Text, Program::TextEditor, "TOML Config");
+        self.register("cfg", FileCategory::Text, Program::TextEditor, "Config File");
+        self.register("ini", FileCategory::Text, Program::TextEditor, "INI Config");
         
         
-        self.nw("mp3", FileCategory::Rj, Program::Rk, "MP3 Audio");
-        self.nw("wav", FileCategory::Rj, Program::Rk, "WAV Audio");
-        self.nw("ogg", FileCategory::Rj, Program::Rk, "OGG Audio");
-        self.nw("flac", FileCategory::Rj, Program::Rk, "FLAC Audio");
+        self.register("png", FileCategory::Image, Program::ImageViewer, "PNG Image");
+        self.register("jpg", FileCategory::Image, Program::ImageViewer, "JPEG Image");
+        self.register("jpeg", FileCategory::Image, Program::ImageViewer, "JPEG Image");
+        self.register("gif", FileCategory::Image, Program::ImageViewer, "GIF Image");
+        self.register("bmp", FileCategory::Image, Program::ImageViewer, "Bitmap Image");
+        self.register("ico", FileCategory::Image, Program::ImageViewer, "Icon File");
+        self.register("svg", FileCategory::Image, Program::ImageViewer, "SVG Vector");
         
         
-        self.nw("mp4", FileCategory::Zj, Program::VideoPlayer, "MP4 Video");
-        self.nw("avi", FileCategory::Zj, Program::VideoPlayer, "AVI Video");
-        self.nw("mkv", FileCategory::Zj, Program::VideoPlayer, "MKV Video");
-        self.nw("webm", FileCategory::Zj, Program::VideoPlayer, "WebM Video");
+        self.register("mp3", FileCategory::Audio, Program::AudioPlayer, "MP3 Audio");
+        self.register("wav", FileCategory::Audio, Program::AudioPlayer, "WAV Audio");
+        self.register("ogg", FileCategory::Audio, Program::AudioPlayer, "OGG Audio");
+        self.register("flac", FileCategory::Audio, Program::AudioPlayer, "FLAC Audio");
         
         
-        self.nw("zip", FileCategory::Vi, Program::Ak, "ZIP Archive");
-        self.nw("tar", FileCategory::Vi, Program::Ak, "TAR Archive");
-        self.nw("gz", FileCategory::Vi, Program::Ak, "GZip Archive");
-        self.nw("7z", FileCategory::Vi, Program::Ak, "7-Zip Archive");
-        self.nw("rar", FileCategory::Vi, Program::Ak, "RAR Archive");
+        self.register("mp4", FileCategory::Video, Program::VideoPlayer, "MP4 Video");
+        self.register("avi", FileCategory::Video, Program::VideoPlayer, "AVI Video");
+        self.register("mkv", FileCategory::Video, Program::VideoPlayer, "MKV Video");
+        self.register("webm", FileCategory::Video, Program::VideoPlayer, "WebM Video");
         
         
-        self.nw("elf", FileCategory::Ahv, Program::Ay, "ELF Executable");
-        self.nw("bin", FileCategory::Ahv, Program::Is, "Binary File");
-        self.nw("exe", FileCategory::Ahv, Program::Ay, "Executable");
+        self.register("zip", FileCategory::Archive, Program::FileManager, "ZIP Archive");
+        self.register("tar", FileCategory::Archive, Program::FileManager, "TAR Archive");
+        self.register("gz", FileCategory::Archive, Program::FileManager, "GZip Archive");
+        self.register("7z", FileCategory::Archive, Program::FileManager, "7-Zip Archive");
+        self.register("rar", FileCategory::Archive, Program::FileManager, "RAR Archive");
         
         
-        self.nw("pdf", FileCategory::Are, Program::Ag, "PDF Document");
-        self.nw("doc", FileCategory::Are, Program::Ag, "Word Document");
+        self.register("elf", FileCategory::Executable, Program::Terminal, "ELF Executable");
+        self.register("bin", FileCategory::Executable, Program::HexViewer, "Binary File");
+        self.register("exe", FileCategory::Executable, Program::Terminal, "Executable");
+        
+        
+        self.register("pdf", FileCategory::Document, Program::TextEditor, "PDF Document");
+        self.register("doc", FileCategory::Document, Program::TextEditor, "Word Document");
     }
     
     
-    pub fn nw(&mut self, wm: &str, gb: FileCategory, alo: Program, desc: &str) {
-        let nsc = wm.aqn();
-        self.gak.insert(nsc.clone(), Abs {
-            fie: nsc,
-            gb,
-            alo,
-            dc: String::from(desc),
+    pub fn register(&mut self, ext: &str, category: FileCategory, program: Program, desc: &str) {
+        let hxh = ext.to_lowercase();
+        self.associations.insert(hxh.clone(), Mb {
+            extension: hxh,
+            category,
+            program,
+            description: String::from(desc),
         });
     }
     
     
-    pub fn get(&self, wm: &str) -> Option<&Abs> {
-        self.gak.get(&wm.aqn())
+    pub fn get(&self, ext: &str) -> Option<&Mb> {
+        self.associations.get(&ext.to_lowercase())
     }
     
     
-    pub fn tem(&self, wm: &str) -> Program {
-        self.get(wm)
-            .map(|q| q.alo.clone())
+    pub fn get_program(&self, ext: &str) -> Program {
+        self.get(ext)
+            .map(|a| a.program.clone())
             .unwrap_or(Program::None)
     }
     
     
-    pub fn nxu(&self, wm: &str) -> FileCategory {
-        self.get(wm)
-            .map(|q| q.gb)
-            .unwrap_or(FileCategory::F)
+    pub fn get_category(&self, ext: &str) -> FileCategory {
+        self.get(ext)
+            .map(|a| a.category)
+            .unwrap_or(FileCategory::Unknown)
     }
     
     
-    pub fn jpe(&mut self, wm: &str, alo: Program) {
-        if let Some(qkt) = self.gak.ds(&wm.aqn()) {
-            qkt.alo = alo;
+    pub fn set_program(&mut self, ext: &str, program: Program) {
+        if let Some(assoc) = self.associations.get_mut(&ext.to_lowercase()) {
+            assoc.program = program;
         }
     }
     
     
-    pub fn ufm(&self) -> Vec<&Abs> {
-        self.gak.alv().collect()
+    pub fn list_all(&self) -> Vec<&Mb> {
+        self.associations.values().collect()
     }
     
     
-    pub fn zav(&self, gb: FileCategory) -> Vec<&Abs> {
-        self.gak.alv()
-            .hi(|q| q.gb == gb)
+    pub fn qnk(&self, category: FileCategory) -> Vec<&Mb> {
+        self.associations.values()
+            .filter(|a| a.category == category)
             .collect()
     }
     
     
-    pub fn kyn(it: &str) -> Option<&str> {
-        it.cmm('.').next()
+    pub fn fyn(filename: &str) -> Option<&str> {
+        filename.rsplit('.').next()
     }
     
     
-    pub fn iwq(&self, it: &str) -> &'static str {
-        if let Some(wm) = Self::kyn(it) {
-            match self.nxu(wm) {
+    pub fn get_file_icon(&self, filename: &str) -> &'static str {
+        if let Some(ext) = Self::fyn(filename) {
+            match self.get_category(ext) {
                 FileCategory::Text => "Aa",
                 FileCategory::Image => "<>",
-                FileCategory::Rj => "d)",
-                FileCategory::Zj => ">|",
-                FileCategory::Vi => "{}",
-                FileCategory::Ahv => ">>",
-                FileCategory::Are => "[]",
-                FileCategory::F => "??",
+                FileCategory::Audio => "d)",
+                FileCategory::Video => ">|",
+                FileCategory::Archive => "{}",
+                FileCategory::Executable => ">>",
+                FileCategory::Document => "[]",
+                FileCategory::Unknown => "??",
             }
         } else {
             "??"
@@ -216,64 +216,64 @@ impl FileRegistry {
 }
 
 
-static KA_: Mutex<FileRegistry> = Mutex::new(FileRegistry::new());
+static KU_: Mutex<FileRegistry> = Mutex::new(FileRegistry::new());
 
 
 pub fn init() {
-    KA_.lock().tth();
+    KU_.lock().init_defaults();
     crate::serial_println!("[FILE_ASSOC] File associations initialized");
 }
 
 
-pub fn gih(it: &str) -> Program {
-    let chc = KA_.lock();
-    if let Some(wm) = FileRegistry::kyn(it) {
-        chc.tem(wm)
+pub fn cyr(filename: &str) -> Program {
+    let ary = KU_.lock();
+    if let Some(ext) = FileRegistry::fyn(filename) {
+        ary.get_program(ext)
     } else {
         Program::None
     }
 }
 
 
-pub fn yte(it: &str) -> FileCategory {
-    let chc = KA_.lock();
-    if let Some(wm) = FileRegistry::kyn(it) {
-        chc.nxu(wm)
+pub fn qhu(filename: &str) -> FileCategory {
+    let ary = KU_.lock();
+    if let Some(ext) = FileRegistry::fyn(filename) {
+        ary.get_category(ext)
     } else {
-        FileCategory::F
+        FileCategory::Unknown
     }
 }
 
 
-pub fn iwq(it: &str) -> &'static str {
-    let chc = KA_.lock();
-    chc.iwq(it)
+pub fn get_file_icon(filename: &str) -> &'static str {
+    let ary = KU_.lock();
+    ary.get_file_icon(filename)
 }
 
 
-pub fn jpe(wm: &str, alo: Program) {
-    KA_.lock().jpe(wm, alo);
+pub fn set_program(ext: &str, program: Program) {
+    KU_.lock().set_program(ext, program);
 }
 
 
-pub fn ojn() -> Vec<(String, String, String)> {
-    let chc = KA_.lock();
-    chc.ufm()
+pub fn iko() -> Vec<(String, String, String)> {
+    let ary = KU_.lock();
+    ary.list_all()
         .iter()
-        .map(|q| (q.fie.clone(), q.alo.j().into(), q.dc.clone()))
+        .map(|a| (a.extension.clone(), a.program.name().into(), a.description.clone()))
         .collect()
 }
 
 
-pub fn zaz() -> Vec<(Program, &'static str)> {
+pub fn qno() -> Vec<(Program, &'static str)> {
     vec![
-        (Program::Ag, "Text Editor"),
-        (Program::Bp, "Image Viewer"),
-        (Program::Rk, "Audio Player"),
+        (Program::TextEditor, "Text Editor"),
+        (Program::ImageViewer, "Image Viewer"),
+        (Program::AudioPlayer, "Audio Player"),
         (Program::VideoPlayer, "Video Player"),
-        (Program::Ay, "Terminal"),
-        (Program::Ak, "File Manager"),
-        (Program::Is, "Hex Viewer"),
+        (Program::Terminal, "Terminal"),
+        (Program::FileManager, "File Manager"),
+        (Program::HexViewer, "Hex Viewer"),
         (Program::None, "(None)"),
     ]
 }

@@ -5,15 +5,17 @@
 //! Initialized from the Limine memory map after the heap is ready.
 
 use core::sync::atomic::{AtomicU64, Ordering};
-use spin::Mutex;
+use crate::sync::TicketLock;
 use alloc::vec;
 use alloc::vec::Vec;
 
 /// Page / frame size (4 KB)
 const FRAME_SIZE: u64 = 4096;
 
-/// Global frame allocator (initialized in main.rs after heap is ready)
-static FRAME_ALLOC: Mutex<Option<FrameAllocator>> = Mutex::new(None);
+/// Global frame allocator (initialized in main.rs after heap is ready).
+/// Uses a TicketLock for fairness under heavy SMP contention — multiple CPUs
+/// frequently page-fault / map memory in parallel during boot and runtime.
+static FRAME_ALLOC: TicketLock<Option<FrameAllocator>> = TicketLock::new(None);
 
 /// Statistics: total frames managed
 static TOTAL_FRAMES: AtomicU64 = AtomicU64::new(0);
@@ -90,6 +92,43 @@ impl FrameAllocator {
             self.bitmap[idx] |= 1u64 << bit;
             USED_FRAMES.fetch_add(1, Ordering::Relaxed);
             return Some(self.base_phys + frame_index as u64 * FRAME_SIZE);
+        }
+        None
+    }
+
+    /// Allocate `count` physically contiguous frames below `limit`.
+    /// Returns the base physical address of the contiguous block, or None.
+    fn alloc_contiguous_below(&mut self, count: usize, limit: u64) -> Option<u64> {
+        if count == 0 { return None; }
+        let max_frame = if limit <= self.base_phys {
+            return None;
+        } else {
+            (((limit - self.base_phys) / FRAME_SIZE) as usize).min(self.total_frames)
+        };
+        if max_frame < count { return None; }
+
+        let mut run_start = 0usize;
+        let mut run_len = 0usize;
+        for fi in 0..max_frame {
+            let word = fi / 64;
+            let bit = fi % 64;
+            if self.bitmap[word] & (1u64 << bit) != 0 {
+                // frame allocated, reset run
+                run_start = fi + 1;
+                run_len = 0;
+            } else {
+                run_len += 1;
+                if run_len >= count {
+                    // Found a contiguous block — mark all as allocated
+                    for j in run_start..run_start + count {
+                        let w = j / 64;
+                        let b = j % 64;
+                        self.bitmap[w] |= 1u64 << b;
+                    }
+                    USED_FRAMES.fetch_add(count as u64, Ordering::Relaxed);
+                    return Some(self.base_phys + run_start as u64 * FRAME_SIZE);
+                }
+            }
         }
         None
     }
@@ -249,6 +288,12 @@ pub fn alloc_frame_below_4g_zeroed() -> Option<u64> {
         core::ptr::write_bytes(virt as *mut u8, 0, FRAME_SIZE as usize);
     }
     Some(phys)
+}
+
+/// Allocate `count` physically contiguous 4KB frames below `limit`.
+/// Returns the base physical address, or None if no contiguous block available.
+pub fn alloc_contiguous_below(count: usize, limit: u64) -> Option<u64> {
+    FRAME_ALLOC.lock().as_mut()?.alloc_contiguous_below(count, limit)
 }
 
 /// Return (total, used) frame counts.

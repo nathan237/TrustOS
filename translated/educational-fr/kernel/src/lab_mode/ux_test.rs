@@ -86,9 +86,9 @@ pub fn run_ux_tests(state: &mut LabState) {
         let cx = 2i32;
         let cy = 30i32; // TITLE_BAR_HEIGHT + 2
         let cw = ww - 4;
-        let character = wh - 32;
+        let ch = wh - 32;
 
-        let panels = super::compute_panels(cx, cy, cw, character);
+        let panels = super::compute_panels(cx, cy, cw, ch);
         let mut ok = true;
         let mut detail = String::new();
         for (i, pr) in panels.iter().enumerate() {
@@ -128,7 +128,7 @@ pub fn run_ux_tests(state: &mut LabState) {
         trace_bus::emit_syscall(1, [1, 0x1000, 32], 32);
         state.trace_state.update();
         let has_syscall = state.trace_state.events.iter()
-            .any(|e| e.syscall_number == Some(1));
+            .any(|e| e.syscall_nr == Some(1));
         let detail = if has_syscall {
             String::from("syscall event with nr=1 (write) found with structured data")
         } else {
@@ -155,11 +155,11 @@ pub fn run_ux_tests(state: &mut LabState) {
 
     // ── Test 7: Hardware state has live data ───────────────────────
     {
-        state.hardware_state.force_refresh();
-        state.hardware_state.update();
-        let has_data = state.hardware_state.uptime_secs > 0 || state.hardware_state.heap_total > 0;
+        state.hw_state.force_refresh();
+        state.hw_state.update();
+        let has_data = state.hw_state.uptime_secs > 0 || state.hw_state.heap_total > 0;
         let detail = format!("uptime={}s heap={}B irq_rate={}",
-            state.hardware_state.uptime_secs, state.hardware_state.heap_total, state.hardware_state.interrupt_request_rate);
+            state.hw_state.uptime_secs, state.hw_state.heap_total, state.hw_state.irq_rate);
         results.push(TestResult { name: "HW live data", passed: has_data, detail });
     }
 
@@ -205,8 +205,8 @@ pub fn run_ux_tests(state: &mut LabState) {
 
     for r in &results {
         let icon = if r.passed { "PASS" } else { "FAIL" };
-        let message = format!("[{}] {} | {}", icon, r.name, r.detail);
-        trace_bus::emit(trace_bus::EventCategory::Custom, message, if r.passed { 1 } else { 0 });
+        let msg = format!("[{}] {} | {}", icon, r.name, r.detail);
+        trace_bus::emit(trace_bus::EventCategory::Custom, msg, if r.passed { 1 } else { 0 });
     }
 
     // Also print to serial for external verification

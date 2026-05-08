@@ -18,10 +18,23 @@ pub mod socket;
 pub mod ipv6;
 pub mod icmpv6;
 pub mod firewall;
+pub mod wifi;
 
 use alloc::vec::Vec;
 use alloc::collections::VecDeque;
 use spin::Mutex;
+use core::sync::atomic::{AtomicBool, Ordering};
+
+static NET_INITIALIZED: AtomicBool = AtomicBool::new(false);
+
+pub fn mark_initialized() {
+    NET_INITIALIZED.store(true, Ordering::Release);
+}
+
+pub fn is_initialized() -> bool {
+    NET_INITIALIZED.load(Ordering::Acquire)
+}
+
 
 /// Ethernet frame header
 #[repr(C, packed)]
@@ -92,6 +105,12 @@ pub fn process_packet(data: Vec<u8>) {
 
 /// Poll network driver and process packets
 pub fn poll() {
+    poll_net_only();
+}
+
+/// Lightweight network poll: driver + packets + remote shell, but NO training tick.
+/// Safe to call from inside forward_backward() to keep network alive during long compute.
+pub fn poll_net_only() {
     // Poll driver
     crate::drivers::net::poll();
     
@@ -111,6 +130,9 @@ pub fn poll() {
 
     // Poll remote shell for incoming commands
     crate::debug::remoteshell::poll();
+
+    // Poll screencap requests (separate port, non-blocking)
+    crate::debug::remoteshell::poll_screencap();
 }
 
 /// Send raw ethernet frame

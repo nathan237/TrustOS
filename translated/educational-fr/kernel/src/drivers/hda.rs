@@ -271,7 +271,7 @@ pub enum WidgetType {
     PinComplex   = 4,
     Power        = 5,
     VolumeKnob   = 6,
-    BeepGenerator      = 7,
+    BeepGen      = 7,
     VendorDef    = 0xF,
     Unknown      = 0xFF,
 }
@@ -288,7 +288,7 @@ match (caps >> 20) & 0xF {
             4 => Self::PinComplex,
             5 => Self::Power,
             6 => Self::VolumeKnob,
-            7 => Self::BeepGenerator,
+            7 => Self::BeepGen,
             0xF => Self::VendorDef,
             _ => Self::Unknown,
         }
@@ -304,7 +304,7 @@ match self {
             Self::PinComplex => "Pin Complex",
             Self::Power => "Power Widget",
             Self::VolumeKnob => "Volume Knob",
-            Self::BeepGenerator => "Beep Generator",
+            Self::BeepGen => "Beep Generator",
             Self::VendorDef => "Vendor Defined",
             Self::Unknown => "Unknown",
         }
@@ -377,22 +377,22 @@ pub struct HdaController {
     /// MMIO base virtual address
     mmio_base: u64,
     /// Number of input streams
-    number_iss: u8,
+    num_iss: u8,
     /// Number of output streams
-    number_oss: u8,
+    num_oss: u8,
     /// Number of bidirectional streams
-    number_bss: u8,
+    num_bss: u8,
     /// 64-bit addressing supported
     addr64: bool,
 
     /// CORB buffer (virtual address, leaked allocation)
     corb_virt: u64,
-    corb_physical: u64,
+    corb_phys: u64,
     corb_entries: u16,
 
     /// RIRB buffer (virtual address, leaked allocation)
     rirb_virt: u64,
-    rirb_physical: u64,
+    rirb_phys: u64,
     rirb_entries: u16,
     rirb_rp: u16,  // Software read pointer
 
@@ -406,12 +406,12 @@ pub struct HdaController {
     /// Output stream state
     stream_tag: u8,
     /// Audio buffer (virtual)
-    audio_buffer_virt: u64,
-    audio_buffer_physical: u64,
-    audio_buffer_size: u32,
+    audio_buf_virt: u64,
+    audio_buf_phys: u64,
+    audio_buf_size: u32,
     /// BDL (virtual)
     bdl_virt: u64,
-    bdl_physical: u64,
+    bdl_phys: u64,
 
     /// Is audio currently playing?
     playing: bool,
@@ -453,25 +453,25 @@ const u32)
 
     #[inline]
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe fn write8(&self, offset: u32, value: u8) {
-        core::ptr::write_volatile((self.mmio_base + offset as u64) as *mut u8, value);
+unsafe fn write8(&self, offset: u32, val: u8) {
+        core::ptr::write_volatile((self.mmio_base + offset as u64) as *mut u8, val);
     }
 
     #[inline]
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe fn write16(&self, offset: u32, value: u16) {
-        core::ptr::write_volatile((self.mmio_base + offset as u64) as *mut u16, value);
+unsafe fn write16(&self, offset: u32, val: u16) {
+        core::ptr::write_volatile((self.mmio_base + offset as u64) as *mut u16, val);
     }
 
     #[inline]
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
-unsafe fn write32(&self, offset: u32, value: u32) {
-        core::ptr::write_volatile((self.mmio_base + offset as u64) as *mut u32, value);
+unsafe fn write32(&self, offset: u32, val: u32) {
+        core::ptr::write_volatile((self.mmio_base + offset as u64) as *mut u32, val);
     }
 
     /// Stream descriptor register base for output stream index `n`
     fn osd_base(&self, n: u8) -> u32 {
-        reg::SD_BASE + ((self.number_iss + n) as u32) * reg::SD_SIZE
+        reg::SD_BASE + ((self.num_iss + n) as u32) * reg::SD_SIZE
     }
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -479,17 +479,17 @@ unsafe fn write32(&self, offset: u32, value: u32) {
     // ═════════════════════════════════════════════════════════════════════════
 
     /// Initialize the HDA controller from a PCI device
-    pub fn init(device: &crate::pci::PciDevice) -> Result<Self, &'static str> {
+    pub fn init(dev: &crate::pci::PciDevice) -> Result<Self, &'static str> {
         crate::serial_println!("[HDA] Initializing Intel HDA controller...");
         crate::serial_println!("[HDA]   PCI {:02X}:{:02X}.{} {:04X}:{:04X}",
-            device.bus, device.device, device.function, device.vendor_id, device.device_id);
+            dev.bus, dev.device, dev.function, dev.vendor_id, dev.device_id);
 
         // Enable bus mastering + memory space
-        crate::pci::enable_bus_master(device);
-        crate::pci::enable_memory_space(device);
+        crate::pci::enable_bus_master(dev);
+        crate::pci::enable_memory_space(dev);
 
         // Get BAR0 (MMIO base)
-        let bar0_physical = device.bar_address(0).ok_or("HDA: no BAR0")?;
+        let bar0_physical = dev.bar_address(0).ok_or("HDA: no BAR0")?;
         crate::serial_println!("[HDA]   BAR0 phys = {:#010X}", bar0_physical);
 
         // Map MMIO pages (HDA register space is typically 16 KB)
@@ -498,26 +498,26 @@ unsafe fn write32(&self, offset: u32, value: u32) {
 
         // Map 4 pages (16 KB) for register space
         for page in 0..4 {
-            let physical = (bar0_physical & !0xFFF) + page * 0x1000;
-            let virt = physical + hhdm;
-            crate::memory::paging::map_kernel_mmio_page(virt, physical)?;
+            let phys = (bar0_physical & !0xFFF) + page * 0x1000;
+            let virt = phys + hhdm;
+            crate::memory::paging::map_kernel_mmio_page(virt, phys)?;
         }
 
         crate::serial_println!("[HDA]   MMIO mapped at virt {:#018X}", mmio_base);
 
-        let mut controller = HdaController {
+        let mut ctrl = HdaController {
             mmio_base,
-            number_iss: 0, number_oss: 0, number_bss: 0,
+            num_iss: 0, num_oss: 0, num_bss: 0,
             addr64: false,
-            corb_virt: 0, corb_physical: 0, corb_entries: 0,
-            rirb_virt: 0, rirb_physical: 0, rirb_entries: 0,
+            corb_virt: 0, corb_phys: 0, corb_entries: 0,
+            rirb_virt: 0, rirb_phys: 0, rirb_entries: 0,
             rirb_rp: 0,
             codecs: Vec::new(),
             widgets: Vec::new(),
             output_paths: Vec::new(),
             stream_tag: 1,
-            audio_buffer_virt: 0, audio_buffer_physical: 0, audio_buffer_size: 0,
-            bdl_virt: 0, bdl_physical: 0,
+            audio_buf_virt: 0, audio_buf_phys: 0, audio_buf_size: 0,
+            bdl_virt: 0, bdl_phys: 0,
             playing: false,
             afg_amp_out_caps: 0,
             afg_amp_in_caps: 0,
@@ -525,42 +525,42 @@ unsafe fn write32(&self, offset: u32, value: u32) {
 
         // Read capabilities
         unsafe {
-            let gcap = controller.read16(reg::GCAP);
-            let vmin = controller.read8(reg::VMIN);
-            let vmaj = controller.read8(reg::VMAJ);
+            let gcap = ctrl.read16(reg::GCAP);
+            let vmin = ctrl.read8(reg::VMIN);
+            let vmaj = ctrl.read8(reg::VMAJ);
 
-            controller.number_oss = ((gcap >> 12) & 0xF) as u8;
-            controller.number_iss = ((gcap >> 8) & 0xF) as u8;
-            controller.number_bss = ((gcap >> 3) & 0x1F) as u8;
-            controller.addr64 = (gcap & 1) != 0;
+            ctrl.num_oss = ((gcap >> 12) & 0xF) as u8;
+            ctrl.num_iss = ((gcap >> 8) & 0xF) as u8;
+            ctrl.num_bss = ((gcap >> 3) & 0x1F) as u8;
+            ctrl.addr64 = (gcap & 1) != 0;
 
             crate::serial_println!("[HDA]   Version {}.{}", vmaj, vmin);
             crate::serial_println!("[HDA]   Streams: {} output, {} input, {} bidir",
-                controller.number_oss, controller.number_iss, controller.number_bss);
-            crate::serial_println!("[HDA]   64-bit: {}", controller.addr64);
+                ctrl.num_oss, ctrl.num_iss, ctrl.num_bss);
+            crate::serial_println!("[HDA]   64-bit: {}", ctrl.addr64);
 
-            if controller.number_oss == 0 {
+            if ctrl.num_oss == 0 {
                 return Err("HDA: no output streams available");
             }
         }
 
         // Controller reset
-        controller.reset()?;
+        ctrl.reset()?;
 
         // Setup CORB/RIRB
-        controller.setup_corb_rirb()?;
+        ctrl.setup_corb_rirb()?;
 
         // Discover codecs
-        controller.discover_codecs()?;
+        ctrl.discover_codecs()?;
 
         // Find output paths
-        controller.find_output_paths();
+        ctrl.find_output_paths();
 
         // Setup output stream
-        controller.setup_output_stream()?;
+        ctrl.setup_output_stream()?;
 
         crate::serial_println!("[HDA] Initialization complete!");
-        Ok(controller)
+        Ok(ctrl)
     }
 
     /// Reset the controller (§4.2.2)
@@ -602,7 +602,7 @@ unsafe {
             }
 
             // Wait for codecs to initialize (~521 µs per spec, but some
-            // codecs — especially on older chipsets like ICH8 (Lenovo T61) —
+            // codecs — especially on older chipsets like ICH8 —
             // need significantly longer.  Retry up to 50 ms total.
             let mut statests = 0u16;
             for attempt in 0..10 {
@@ -658,35 +658,35 @@ unsafe {
 
             // ── CORB size: pick largest supported ──
             let corbsize_capability = self.read8(reg::CORBSIZE);
-            let (corb_size_sel, corb_entries) = if corbsize_capability & 0x40 != 0 {
+            let (corb_sz_sel, corb_entries) = if corbsize_capability & 0x40 != 0 {
                 (2u8, 256u16)
             } else if corbsize_capability & 0x20 != 0 {
                 (1, 16)
             } else {
                 (0, 2)
             };
-            self.write8(reg::CORBSIZE, corb_size_sel);
+            self.write8(reg::CORBSIZE, corb_sz_sel);
             self.corb_entries = corb_entries;
             crate::serial_println!("[HDA]   CORB: {} entries", corb_entries);
 
             // Allocate CORB buffer (4 bytes per entry, page-aligned)
             let corb_bytes = (corb_entries as usize) * 4;
             let corb_buffer: Vec<u8> = vec![0u8; corb_bytes + 4096]; // extra for alignment
-            let corb_virt_raw = corb_buffer.as_pointer() as u64;
+            let corb_virt_raw = corb_buffer.as_ptr() as u64;
             let corb_virt = (corb_virt_raw + 0xFFF) & !0xFFF; // page-align
             core::mem::forget(corb_buffer);
 
-            let corb_physical = corb_virt.checked_sub(hhdm)
+            let corb_phys = corb_virt.checked_sub(hhdm)
                 .ok_or("HDA: CORB virt->phys failed")?;
             self.corb_virt = corb_virt;
-            self.corb_physical = corb_physical;
+            self.corb_phys = corb_phys;
 
             // Zero the buffer
             core::ptr::write_bytes(corb_virt as *mut u8, 0, corb_bytes);
 
             // Set CORB base address
-            self.write32(reg::CORBLBASE, corb_physical as u32);
-            self.write32(reg::CORBUBASE, (corb_physical >> 32) as u32);
+            self.write32(reg::CORBLBASE, corb_phys as u32);
+            self.write32(reg::CORBUBASE, (corb_phys >> 32) as u32);
 
             // Reset CORB read pointer
             self.write16(reg::CORBRP, 1 << 15); // Set reset bit
@@ -700,34 +700,34 @@ unsafe {
 
             // ── RIRB size ──
             let rirbsize_capability = self.read8(reg::RIRBSIZE);
-            let (rirb_size_sel, rirb_entries) = if rirbsize_capability & 0x40 != 0 {
+            let (rirb_sz_sel, rirb_entries) = if rirbsize_capability & 0x40 != 0 {
                 (2u8, 256u16)
             } else if rirbsize_capability & 0x20 != 0 {
                 (1, 16)
             } else {
                 (0, 2)
             };
-            self.write8(reg::RIRBSIZE, rirb_size_sel);
+            self.write8(reg::RIRBSIZE, rirb_sz_sel);
             self.rirb_entries = rirb_entries;
             crate::serial_println!("[HDA]   RIRB: {} entries", rirb_entries);
 
             // Allocate RIRB buffer (8 bytes per entry)
             let rirb_bytes = (rirb_entries as usize) * 8;
             let rirb_buffer: Vec<u8> = vec![0u8; rirb_bytes + 4096];
-            let rirb_virt_raw = rirb_buffer.as_pointer() as u64;
+            let rirb_virt_raw = rirb_buffer.as_ptr() as u64;
             let rirb_virt = (rirb_virt_raw + 0xFFF) & !0xFFF;
             core::mem::forget(rirb_buffer);
 
-            let rirb_physical = rirb_virt.checked_sub(hhdm)
+            let rirb_phys = rirb_virt.checked_sub(hhdm)
                 .ok_or("HDA: RIRB virt->phys failed")?;
             self.rirb_virt = rirb_virt;
-            self.rirb_physical = rirb_physical;
+            self.rirb_phys = rirb_phys;
 
             core::ptr::write_bytes(rirb_virt as *mut u8, 0, rirb_bytes);
 
             // Set RIRB base address
-            self.write32(reg::RIRBLBASE, rirb_physical as u32);
-            self.write32(reg::RIRBUBASE, (rirb_physical >> 32) as u32);
+            self.write32(reg::RIRBLBASE, rirb_phys as u32);
+            self.write32(reg::RIRBUBASE, (rirb_phys >> 32) as u32);
 
             // Reset RIRB write pointer
             self.write16(reg::RIRBWP, 1 << 15);
@@ -744,7 +744,7 @@ unsafe {
             Self::delay_us(100);
 
             crate::serial_println!("[HDA]   CORB phys={:#010X}, RIRB phys={:#010X}",
-                corb_physical, rirb_physical);
+                corb_phys, rirb_phys);
         }
 
         Ok(())
@@ -793,14 +793,14 @@ const u64;
     }
 
     /// Higher-level: send a 12-bit verb with 8-bit data
-    fn codec_command(&mut self, codec: u8, nid: u16, verb: u32, data: u8) -> Result<u32, &'static str> {
+    fn codec_cmd(&mut self, codec: u8, nid: u16, verb: u32, data: u8) -> Result<u32, &'static str> {
         let full_verb = (verb << 8) | (data as u32);
         self.send_verb(codec, nid, full_verb, 0)
     }
 
     /// Get parameter from a codec node
-    fn get_parameter(&mut self, codec: u8, nid: u16, parameter: u32) -> Result<u32, &'static str> {
-        self.codec_command(codec, nid, verb::GET_PARAMETER, parameter as u8)
+    fn get_param(&mut self, codec: u8, nid: u16, param: u32) -> Result<u32, &'static str> {
+        self.codec_cmd(codec, nid, verb::GET_PARAMETER, param as u8)
     }
 
     /// Set verb (4-bit verb ID in bits [19:16], 16-bit payload in [15:0])
@@ -821,19 +821,19 @@ const u64;
             crate::serial_println!("[HDA] Walking codec {}...", caddr);
 
             // Get vendor/device
-            let vendor = self.get_parameter(caddr, 0, verb::PARAMETER_VENDOR_ID)?;
+            let vendor = self.get_param(caddr, 0, verb::PARAMETER_VENDOR_ID)?;
             crate::serial_println!("[HDA]   Vendor={:04X}, Device={:04X}",
                 vendor >> 16, vendor & 0xFFFF);
 
             // Get sub-node count from root (NID 0)
-            let node_count = self.get_parameter(caddr, 0, verb::PARAMETER_NODE_COUNT)?;
+            let node_count = self.get_param(caddr, 0, verb::PARAMETER_NODE_COUNT)?;
             let start_nid = ((node_count >> 16) & 0xFF) as u16;
             let number_nodes = (node_count & 0xFF) as u16;
             crate::serial_println!("[HDA]   Root: subnodes {}..{}", start_nid, start_nid + number_nodes - 1);
 
             // Walk function groups
             for fg_nid in start_nid..(start_nid + number_nodes) {
-                let fg_type = self.get_parameter(caddr, fg_nid, verb::PARAMETER_FN_GROUP_TYPE)?;
+                let fg_type = self.get_param(caddr, fg_nid, verb::PARAMETER_FN_GROUP_TYPE)?;
                 let fg_type_id = fg_type & 0xFF;
                 crate::serial_println!("[HDA]   FG NID {}: type={} ({})", fg_nid, fg_type_id,
                     if fg_type_id == 1 { "Audio" } else { "Other" });
@@ -841,23 +841,23 @@ const u64;
                 if fg_type_id != 1 { continue; } // Only Audio Function Group
 
                 // Power on the AFG
-                let _ = self.codec_command(caddr, fg_nid, verb::SET_POWER_STATE, 0x00); // D0
+                let _ = self.codec_cmd(caddr, fg_nid, verb::SET_POWER_STATE, 0x00); // D0
 
                 // Read AFG-level default amp capabilities (inherited by widgets with caps=0)
-                self.afg_amp_out_caps = self.get_parameter(caddr, fg_nid, verb::PARAMETER_AMP_OUT_CAPS).unwrap_or(0);
-                self.afg_amp_in_caps = self.get_parameter(caddr, fg_nid, verb::PARAMETER_AMP_IN_CAPS).unwrap_or(0);
+                self.afg_amp_out_caps = self.get_param(caddr, fg_nid, verb::PARAMETER_AMP_OUT_CAPS).unwrap_or(0);
+                self.afg_amp_in_caps = self.get_param(caddr, fg_nid, verb::PARAMETER_AMP_IN_CAPS).unwrap_or(0);
                 crate::serial_println!("[HDA]   AFG amp caps: out={:#010X} in={:#010X}",
                     self.afg_amp_out_caps, self.afg_amp_in_caps);
 
                 // Get sub-nodes of this function group
-                let sub_count = self.get_parameter(caddr, fg_nid, verb::PARAMETER_NODE_COUNT)?;
+                let sub_count = self.get_param(caddr, fg_nid, verb::PARAMETER_NODE_COUNT)?;
                 let w_start = ((sub_count >> 16) & 0xFF) as u16;
                 let w_count = (sub_count & 0xFF) as u16;
                 crate::serial_println!("[HDA]   AFG widgets: {}..{}", w_start, w_start + w_count - 1);
 
                 // Walk each widget
                 for nid in w_start..(w_start + w_count) {
-                    let caps = self.get_parameter(caddr, nid, verb::PARAMETER_AUDIO_CAPS)?;
+                    let caps = self.get_param(caddr, nid, verb::PARAMETER_AUDIO_CAPS)?;
                     let wtype = WidgetType::from_caps(caps);
 
                     let mut widget = Widget {
@@ -871,7 +871,7 @@ const u64;
                     };
 
                     // Get connection list
-                    let connection_length_raw = self.get_parameter(caddr, nid, verb::PARAMETER_CONNECTION_LIST_LENGTH)?;
+                    let connection_length_raw = self.get_param(caddr, nid, verb::PARAMETER_CONNECTION_LIST_LENGTH)?;
                     let connection_length = (connection_length_raw & 0x7F) as u16;
                     let long_form = (connection_length_raw & 0x80) != 0;
 
@@ -879,10 +879,10 @@ const u64;
                         // Read connection list entries (4 per response for short form)
                         let mut offset = 0u8;
                         while (offset as u16) < connection_length {
-                            let response = self.codec_command(caddr, nid, verb::GET_CONNECTION_LIST, offset)?;
+                            let resp = self.codec_cmd(caddr, nid, verb::GET_CONNECTION_LIST, offset)?;
                             for i in 0..4u32 {
                                 if (offset as u16) + (i as u16) >= connection_length { break; }
-                                let connection_nid = ((response >> (i * 8)) & 0xFF) as u16;
+                                let connection_nid = ((resp >> (i * 8)) & 0xFF) as u16;
                                 widget.connections.push(connection_nid);
                             }
                             offset += 4;
@@ -891,7 +891,7 @@ const u64;
 
                     // Pin-specific data
                     if wtype == WidgetType::PinComplex {
-                        widget.pin_config = self.codec_command(caddr, nid, verb::GET_CONFIG_DEFAULT, 0)?;
+                        widget.pin_config = self.codec_cmd(caddr, nid, verb::GET_CONFIG_DEFAULT, 0)?;
                     }
 
                     // Amp capabilities  (HDA spec §7.3.4.7)
@@ -900,7 +900,7 @@ const u64;
                     let amp_override = caps & (1 << 3) != 0;
                     if caps & (1 << 2) != 0 { // Out Amp Present
                         if amp_override {
-                            widget.amp_out_caps = self.get_parameter(caddr, nid, verb::PARAMETER_AMP_OUT_CAPS)?;
+                            widget.amp_out_caps = self.get_param(caddr, nid, verb::PARAMETER_AMP_OUT_CAPS)?;
                             if widget.amp_out_caps == 0 {
                                 widget.amp_out_caps = self.afg_amp_out_caps;
                             }
@@ -911,7 +911,7 @@ const u64;
                     }
                     if caps & (1 << 1) != 0 { // In Amp Present
                         if amp_override {
-                            widget.amp_in_caps = self.get_parameter(caddr, nid, verb::PARAMETER_AMP_IN_CAPS)?;
+                            widget.amp_in_caps = self.get_param(caddr, nid, verb::PARAMETER_AMP_IN_CAPS)?;
                             if widget.amp_in_caps == 0 {
                                 widget.amp_in_caps = self.afg_amp_in_caps;
                             }
@@ -1023,12 +1023,12 @@ const u64;
         // ── Configure the codec path ──
         // Power on all widgets in the path
         for &nid in &path.path {
-            let _ = self.codec_command(codec, nid, verb::SET_POWER_STATE, 0x00); // D0
+            let _ = self.codec_cmd(codec, nid, verb::SET_POWER_STATE, 0x00); // D0
         }
 
         // ── Codec-specific quirks ──
         // Detect vendor ID for quirk selection
-        let vendor_id = self.get_parameter(codec, 0, verb::PARAMETER_VENDOR_ID).unwrap_or(0);
+        let vendor_id = self.get_param(codec, 0, verb::PARAMETER_VENDOR_ID).unwrap_or(0);
         let vendor_hi = (vendor_id >> 16) & 0xFFFF;
         let codec_device = vendor_id & 0xFFFF;
         crate::serial_println!("[HDA]   Codec vendor={:#06X} device={:#06X}", vendor_hi, codec_device);
@@ -1052,21 +1052,21 @@ const u64;
                 .collect();
 
             // Power on AFG (node 1) first, then all widgets
-            let _ = self.codec_command(codec, 1, verb::SET_POWER_STATE, 0x00);
+            let _ = self.codec_cmd(codec, 1, verb::SET_POWER_STATE, 0x00);
             HdaController::delay_us(10_000); // 10ms for AFG to wake
             for &nid in &all_nids {
-                let _ = self.codec_command(codec, nid, verb::SET_POWER_STATE, 0x00);
+                let _ = self.codec_cmd(codec, nid, verb::SET_POWER_STATE, 0x00);
             }
             // AD1984/CX20549 need 50-100ms to fully transition D3→D0
-            HdaController::delay_us(100_000); // 100ms — critical for T61
+            HdaController::delay_us(100_000); // 100ms — critical for AD1984/CX20549 power-up
 
             // For AD1984: override pin configs that BIOS may have set incorrectly
             // Set all output pins to enable HP amp + output
             for &nid in &output_pin_nids {
-                let _ = self.codec_command(codec, nid, verb::SET_PIN_CONTROL, 0xC0);
+                let _ = self.codec_cmd(codec, nid, verb::SET_PIN_CONTROL, 0xC0);
                 // Enable EAPD (bit 1) — do NOT set bit 2 (L/R swap) on AD1984
                 // as it can cause silence on some configurations
-                let _ = self.codec_command(codec, nid, verb::SET_EAPD, 0x02);
+                let _ = self.codec_cmd(codec, nid, verb::SET_EAPD, 0x02);
                 crate::serial_println!("[HDA]   Pin NID {} -> EAPD=0x02, PIN_CTL=0xC0", nid);
             }
 
@@ -1086,20 +1086,20 @@ const u64;
                 (1u16 << 14) | (1 << 13) | (1 << 12) | 0x27);
 
             // ── GPIO1 enable — powers the external speaker/HP amplifier ──
-            // T61 ThinkPad: GPIO1=HIGH powers the amplifier (confirmed by amp pop test).
-            // Linux HP fixup inverts this (GPIO1=LOW=on), but T61 uses direct polarity.
+            // AD1984/CX20549: GPIO1=HIGH powers the amplifier.
+            // Linux HP fixup inverts this (GPIO1=LOW=on), but direct polarity is common.
             // Test data=0x01(GPIO1 LOW) = silence, data=0x03(GPIO1 HIGH) = sound.
-            let _ = self.codec_command(codec, 1, verb::SET_GPIO_MASK, 0x02); // Enable GPIO1
-            let _ = self.codec_command(codec, 1, verb::SET_GPIO_DIRECTORY,  0x02); // GPIO1 = output
-            let _ = self.codec_command(codec, 1, verb::SET_GPIO_DATA, 0x02); // GPIO1 = HIGH (amp on)
+            let _ = self.codec_cmd(codec, 1, verb::SET_GPIO_MASK, 0x02); // Enable GPIO1
+            let _ = self.codec_cmd(codec, 1, verb::SET_GPIO_DIRECTORY,  0x02); // GPIO1 = output
+            let _ = self.codec_cmd(codec, 1, verb::SET_GPIO_DATA, 0x02); // GPIO1 = HIGH (amp on)
             crate::serial_println!("[HDA]   GPIO1 HIGH (speaker amp power on)");
         }
 
         // Configure the pin: OUT enable + HP amp enable
-        let _ = self.codec_command(codec, path.pin_nid, verb::SET_PIN_CONTROL, 0xC0);
+        let _ = self.codec_cmd(codec, path.pin_nid, verb::SET_PIN_CONTROL, 0xC0);
         // Enable EAPD (External Amplifier) — bit 1 only
         // Bit 2 is L/R swap which causes silence on AD1984/CX20549
-        let _ = self.codec_command(codec, path.pin_nid, verb::SET_EAPD, 0x02);
+        let _ = self.codec_cmd(codec, path.pin_nid, verb::SET_EAPD, 0x02);
         crate::serial_println!("[HDA]   Output pin {} -> EAPD=0x02, PIN_CTL=0xC0", path.pin_nid);
 
         // Set stream tag on DAC — configure ALL DACs with our stream tag/format
@@ -1114,7 +1114,7 @@ const u64;
             .collect();
 
         for &dac_nid in &all_dac_nids {
-            let _ = self.codec_command(codec, dac_nid, verb::SET_CHANNEL_STREAM,
+            let _ = self.codec_cmd(codec, dac_nid, verb::SET_CHANNEL_STREAM,
                 (stream_tag << 4) | channel);
             let _ = self.set_verb_16(codec, dac_nid, verb::SET_STREAM_FORMAT, fmt);
             crate::serial_println!("[HDA]   DAC NID {} -> stream_tag={}, fmt=0x{:04X}",
@@ -1135,7 +1135,7 @@ const u64;
         let afg_out_steps = ((self.afg_amp_out_caps >> 8) & 0x7F) as u16;
         let afg_in_steps = ((self.afg_amp_in_caps >> 8) & 0x7F) as u16;
 
-        for &(nid, caps, number_conns, out_caps, in_caps) in &all_widget_conns {
+        for &(nid, caps, num_conns, out_caps, in_caps) in &all_widget_conns {
             // Extract max gain from amp caps: numsteps is bits [14:8]
             // AD1984 silently ignores gain values > numsteps!
             let out_steps = ((out_caps >> 8) & 0x7F) as u16;
@@ -1156,9 +1156,9 @@ const u64;
             let _ = self.set_verb_16(codec, nid, 0x300, amp_in);
 
             // For widgets with multiple connections, unmute each input index
-            if number_conns > 1 {
-                for index in 1..number_conns.minimum(16) {
-                    let amp_in_index: u16 = (1 << 14) | (1 << 13) | (1 << 12) | ((index as u16 & 0xF) << 8) | (in_gain & 0x7F);
+            if num_conns > 1 {
+                for idx in 1..num_conns.min(16) {
+                    let amp_in_index: u16 = (1 << 14) | (1 << 13) | (1 << 12) | ((idx as u16 & 0xF) << 8) | (in_gain & 0x7F);
                     let _ = self.set_verb_16(codec, nid, 0x300, amp_in_index);
                 }
             }
@@ -1177,7 +1177,7 @@ const u64;
         for (pin_nid, path_nids) in &all_path_information {
             // Power on all widgets in this path
             for &nid in path_nids {
-                let _ = self.codec_command(codec, nid, verb::SET_POWER_STATE, 0x00);
+                let _ = self.codec_cmd(codec, nid, verb::SET_POWER_STATE, 0x00);
             }
             // Output amp: L+R, unmuted, gain = AFG max
             let pin_amp: u16 = (1 << 15) | (1 << 13) | (1 << 12) | (afg_gain & 0x7F);
@@ -1186,8 +1186,8 @@ const u64;
             let pin_amp_in: u16 = (1 << 14) | (1 << 13) | (1 << 12) | (afg_gain & 0x7F);
             let _ = self.set_verb_16(codec, *pin_nid, 0x300, pin_amp_in);
             // Pin control: output enable + HP amp enable + EAPD
-            let _ = self.codec_command(codec, *pin_nid, verb::SET_PIN_CONTROL, 0xC0);
-            let _ = self.codec_command(codec, *pin_nid, verb::SET_EAPD, 0x02);
+            let _ = self.codec_cmd(codec, *pin_nid, verb::SET_PIN_CONTROL, 0xC0);
+            let _ = self.codec_cmd(codec, *pin_nid, verb::SET_EAPD, 0x02);
             crate::serial_println!("[HDA]   Path pin NID {} -> amp forced gain={}, EAPD+OUT",
                 pin_nid, afg_gain);
         }
@@ -1211,13 +1211,13 @@ const u64;
                 // Without this, the pin may point to the wrong source → no audio.
                 let next_in_path = out_path.iter()
                     .position(|&n| n == *nid)
-                    .and_then(|position| out_path.get(position + 1))
+                    .and_then(|pos| out_path.get(pos + 1))
                     .copied();
                 if let Some(next_nid) = next_in_path {
-                    if let Some(index) = connections.iter().position(|&c| c == next_nid) {
-                        let _ = self.codec_command(codec, *nid, verb::SET_CONNECTION_SELECT, index as u8);
+                    if let Some(idx) = connections.iter().position(|&c| c == next_nid) {
+                        let _ = self.codec_cmd(codec, *nid, verb::SET_CONNECTION_SELECT, idx as u8);
                         crate::serial_println!("[HDA]   NID {} conn_sel={} (-> NID {})",
-                            nid, index, next_nid);
+                            nid, idx, next_nid);
                     }
                 }
             }
@@ -1228,8 +1228,8 @@ const u64;
 
         unsafe {
             // Reset stream
-            let controller = self.read32(sd_base + sd::CTL) & 0xFF;
-            self.write8(sd_base + sd::CTL, (controller as u8) | sctl::SRST as u8);
+            let ctl = self.read32(sd_base + sd::CTL) & 0xFF;
+            self.write8(sd_base + sd::CTL, (ctl as u8) | sctl::SRST as u8);
             Self::delay_us(100);
             // Wait for reset
             for _ in 0..1000 {
@@ -1252,31 +1252,31 @@ const u64;
             let total_size = frag_size * number_frags;
 
             let audio_buffer: Vec<u8> = vec![0u8; total_size as usize + 4096];
-            let buffer_virt_raw = audio_buffer.as_pointer() as u64;
+            let buffer_virt_raw = audio_buffer.as_ptr() as u64;
             let buffer_virt = (buffer_virt_raw + 0xFFF) & !0xFFF;
             core::mem::forget(audio_buffer);
 
             let buffer_physical = buffer_virt.checked_sub(hhdm)
                 .ok_or("HDA: audio buf virt->phys failed")?;
 
-            self.audio_buffer_virt = buffer_virt;
-            self.audio_buffer_physical = buffer_physical;
-            self.audio_buffer_size = total_size;
+            self.audio_buf_virt = buffer_virt;
+            self.audio_buf_phys = buffer_physical;
+            self.audio_buf_size = total_size;
 
             // Zero the audio buffer
             core::ptr::write_bytes(buffer_virt as *mut u8, 0, total_size as usize);
 
             // Allocate BDL: 2 entries × 16 bytes = 32 bytes (128-byte aligned)
             let bdl_buffer: Vec<u8> = vec![0u8; 256 + 4096]; // oversized for alignment
-            let bdl_virt_raw = bdl_buffer.as_pointer() as u64;
+            let bdl_virt_raw = bdl_buffer.as_ptr() as u64;
             let bdl_virt = (bdl_virt_raw + 127) & !127; // 128-byte align
             core::mem::forget(bdl_buffer);
 
-            let bdl_physical = bdl_virt.checked_sub(hhdm)
+            let bdl_phys = bdl_virt.checked_sub(hhdm)
                 .ok_or("HDA: BDL virt->phys failed")?;
 
             self.bdl_virt = bdl_virt;
-            self.bdl_physical = bdl_physical;
+            self.bdl_phys = bdl_phys;
 
             // Fill BDL entries
             let bdl = bdl_virt as *mut BdlEntry;
@@ -1291,8 +1291,8 @@ const u64;
             self.write32(sd_base + sd::CBL, total_size);  // Cyclic buffer length
             self.write16(sd_base + sd::LVI, (number_frags - 1) as u16); // Last valid index
             self.write16(sd_base + sd::FMT, fmt);  // Stream format
-            self.write32(sd_base + sd::BDLPL, bdl_physical as u32);
-            self.write32(sd_base + sd::BDLPU, (bdl_physical >> 32) as u32);
+            self.write32(sd_base + sd::BDLPL, bdl_phys as u32);
+            self.write32(sd_base + sd::BDLPU, (bdl_phys >> 32) as u32);
 
             // Set stream tag in CTL bits [23:20]
             let controller_high = (stream_tag as u32) << (sctl::STREAM_TAG_SHIFT - 16);
@@ -1301,7 +1301,7 @@ const u64;
             crate::serial_println!("[HDA]   Stream configured: 48kHz 16-bit stereo");
             crate::serial_println!("[HDA]   Audio buf phys={:#010X} size={}",
                 buffer_physical, total_size);
-            crate::serial_println!("[HDA]   BDL phys={:#010X} entries={}", bdl_physical, number_frags);
+            crate::serial_println!("[HDA]   BDL phys={:#010X} entries={}", bdl_phys, number_frags);
         }
 
         Ok(())
@@ -1316,13 +1316,13 @@ const u64;
     /// Then reconfigure CBL/LVI/FMT/BDL/stream-tag so it's ready for the next play().
     /// Must be called with &mut self (caller already holds HDA lock).
     fn reset_output_stream(&mut self) {
-        if self.audio_buffer_size == 0 { return; }
+        if self.audio_buf_size == 0 { return; }
         let sd_base = self.osd_base(0);
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
             // Make sure RUN is clear, then assert SRST
-            let controller = self.read8(sd_base + sd::CTL);
-            self.write8(sd_base + sd::CTL, (controller & !(sctl::RUN as u8)) | sctl::SRST as u8);
+            let ctl = self.read8(sd_base + sd::CTL);
+            self.write8(sd_base + sd::CTL, (ctl & !(sctl::RUN as u8)) | sctl::SRST as u8);
             for _ in 0..1000 {
                 if self.read8(sd_base + sd::CTL) & (sctl::SRST as u8) != 0 { break; }
                 HdaController::delay_us(10);
@@ -1339,11 +1339,11 @@ unsafe {
             // Reconfigure stream (SRST clears all descriptor registers)
             let number_frags: u16 = 2;
             let fmt: u16 = 0x0011; // 48kHz, 16-bit, stereo
-            self.write32(sd_base + sd::CBL, self.audio_buffer_size);
+            self.write32(sd_base + sd::CBL, self.audio_buf_size);
             self.write16(sd_base + sd::LVI, number_frags - 1);
             self.write16(sd_base + sd::FMT, fmt);
-            self.write32(sd_base + sd::BDLPL, self.bdl_physical as u32);
-            self.write32(sd_base + sd::BDLPU, (self.bdl_physical >> 32) as u32);
+            self.write32(sd_base + sd::BDLPL, self.bdl_phys as u32);
+            self.write32(sd_base + sd::BDLPU, (self.bdl_phys >> 32) as u32);
 
             // Restore stream tag
             let controller_high = (self.stream_tag as u32) << (sctl::STREAM_TAG_SHIFT - 16);
@@ -1354,50 +1354,50 @@ unsafe {
     }
 
         // Fonction publique — appelable depuis d'autres modules.
-pub fn fill_tone(&mut self, frequency_hz: u32, duration_mouse: u32) {
+pub fn fill_tone(&mut self, freq_hz: u32, duration_ms: u32) {
         let sample_rate = 48000u32;
         let channels = 2u32;
         let bytes_per_sample = 2u32; // 16-bit
-        let total_samples = (sample_rate * duration_mouse / 1000) as usize;
-        let buffer_samples = (self.audio_buffer_size / (channels * bytes_per_sample)) as usize;
-        let samples_to_fill = total_samples.minimum(buffer_samples);
+        let total_samples = (sample_rate * duration_ms / 1000) as usize;
+        let buffer_samples = (self.audio_buf_size / (channels * bytes_per_sample)) as usize;
+        let samples_to_fill = total_samples.min(buffer_samples);
 
-        let buffer = self.audio_buffer_virt as *mut i16;
+        let buf = self.audio_buf_virt as *mut i16;
 
         // Triangle wave generation — clean integer math, no i16 overflow
-        let period = sample_rate / frequency_hz;
+        let period = sample_rate / freq_hz;
         if period == 0 { return; }
-        let quarter = (period / 4).maximum(1);
+        let quarter = (period / 4).max(1);
         let amplitude: i32 = 16000; // Well below i16 max (32767), comfortable volume
 
         unsafe {
             for i in 0..samples_to_fill {
-                let position = (i as u32) % period;
+                let pos = (i as u32) % period;
                 // Triangle wave: 4 segments of ~quarter each
                 // 0..Q: rise 0→+A, Q..3Q: fall +A→-A, 3Q..P: rise -A→0
-                let sample_i32: i32 = if position < quarter {
-                    amplitude * position as i32 / quarter as i32
-                } else if position < 3 * quarter {
-                    amplitude * (2 * quarter as i32 - position as i32) / quarter as i32
+                let sample_i32: i32 = if pos < quarter {
+                    amplitude * pos as i32 / quarter as i32
+                } else if pos < 3 * quarter {
+                    amplitude * (2 * quarter as i32 - pos as i32) / quarter as i32
                 } else {
-                    amplitude * (position as i32 - period as i32) / quarter as i32
+                    amplitude * (pos as i32 - period as i32) / quarter as i32
                 };
                 // Clamp to i16 range (safety net)
                 let sample = sample_i32.clamp(-32000, 32000) as i16;
 
                 // Write to both channels (stereo interleaved)
-                let index = i * channels as usize;
-                *buffer.add(index) = sample;
-                *buffer.add(index + 1) = sample;
+                let idx = i * channels as usize;
+                *buf.add(idx) = sample;
+                *buf.add(idx + 1) = sample;
             }
 
             // Zero remaining buffer
             let filled_bytes = samples_to_fill * channels as usize * bytes_per_sample as usize;
-            if filled_bytes < self.audio_buffer_size as usize {
+            if filled_bytes < self.audio_buf_size as usize {
                 core::ptr::write_bytes(
-                    (self.audio_buffer_virt as *mut u8).add(filled_bytes),
+                    (self.audio_buf_virt as *mut u8).add(filled_bytes),
                     0,
-                    self.audio_buffer_size as usize - filled_bytes
+                    self.audio_buf_size as usize - filled_bytes
                 );
             }
         }
@@ -1411,7 +1411,7 @@ unsafe {
             if start {
                 // Enable interrupt control
                 let intctl = self.read32(reg::INTCTL);
-                let stream_bit = 1u32 << (self.number_iss as u32); // First output stream
+                let stream_bit = 1u32 << (self.num_iss as u32); // First output stream
                 self.write32(reg::INTCTL, intctl | (1 << 31) | (1 << 30) | stream_bit);
 
                 // Clear status bits (BCIS, FIFOE, DESE — write-1-to-clear)
@@ -1419,15 +1419,15 @@ unsafe {
 
                 // Start stream: RUN only (no IOCE — we poll, not interrupt-driven)
                 // IOCE causes VBox to halt the stream when BCIS isn't acknowledged
-                let controller = self.read8(sd_base + sd::CTL);
-                self.write8(sd_base + sd::CTL, (controller | sctl::RUN as u8) & !(sctl::IOCE as u8));
+                let ctl = self.read8(sd_base + sd::CTL);
+                self.write8(sd_base + sd::CTL, (ctl | sctl::RUN as u8) & !(sctl::IOCE as u8));
 
                 self.playing = true;
                 crate::serial_println!("[HDA] Playback started");
             } else {
                 // Stop stream
-                let controller = self.read8(sd_base + sd::CTL);
-                self.write8(sd_base + sd::CTL, controller & !(sctl::RUN as u8));
+                let ctl = self.read8(sd_base + sd::CTL);
+                self.write8(sd_base + sd::CTL, ctl & !(sctl::RUN as u8));
 
                 self.playing = false;
                 crate::serial_println!("[HDA] Playback stopped");
@@ -1463,11 +1463,11 @@ unsafe {
     }
 
     /// Return status info string
-    pub fn status_information(&self) -> String {
+    pub fn status_info(&self) -> String {
         let mut s = String::new();
         s.push_str(&format!("Intel HDA Controller\n"));
         s.push_str(&format!("  Streams: {} out, {} in, {} bidir\n",
-            self.number_oss, self.number_iss, self.number_bss));
+            self.num_oss, self.num_iss, self.num_bss));
         s.push_str(&format!("  Codecs: {:?}\n", self.codecs));
         s.push_str(&format!("  Widgets: {}\n", self.widgets.len()));
         s.push_str(&format!("  Output paths: {}\n", self.output_paths.len()));
@@ -1496,8 +1496,8 @@ pub fn init() -> Result<(), &'static str> {
         .ok_or("HDA: no Intel HDA device found on PCI bus")?
         .clone();
 
-    let controller = HdaController::init(&hda_device)?;
-    *HDA.lock() = Some(controller);
+    let ctrl = HdaController::init(&hda_device)?;
+    *HDA.lock() = Some(ctrl);
     HDA_INITIALIZED.store(true, Ordering::SeqCst);
 
     Ok(())
@@ -1509,37 +1509,37 @@ pub fn is_initialized() -> bool {
 }
 
 /// Play a tone at given frequency for given duration
-pub fn play_tone(frequency_hz: u32, duration_mouse: u32) -> Result<(), &'static str> {
+pub fn play_tone(freq_hz: u32, duration_ms: u32) -> Result<(), &'static str> {
     let mut hda = HDA.lock();
-    let controller = hda.as_mut().ok_or("HDA: not initialized")?;
+    let ctrl = hda.as_mut().ok_or("HDA: not initialized")?;
 
     // Reset stream to zero LPIB before each tone — prevents stale position
-    controller.reset_output_stream();
-    controller.fill_tone(frequency_hz, duration_mouse);
+    ctrl.reset_output_stream();
+    ctrl.fill_tone(freq_hz, duration_ms);
 
     // Read LPIB before play
-    let position_before = controller.stream_position();
-    controller.play(true);
+    let position_before = ctrl.stream_position();
+    ctrl.play(true);
 
     // Brief delay then check if LPIB is advancing (DMA running check)
     HdaController::delay_us(5000); // 5ms
-    let position_early = controller.stream_position();
+    let position_early = ctrl.stream_position();
 
     // Busy-wait for the duration
     let sample_rate = 48000u32;
-    let total_bytes = (sample_rate * duration_mouse / 1000) * 4; // 16-bit stereo = 4 bytes/sample
-    let target = total_bytes.minimum(controller.audio_buffer_size);
+    let total_bytes = (sample_rate * duration_ms / 1000) * 4; // 16-bit stereo = 4 bytes/sample
+    let target = total_bytes.min(ctrl.audio_buf_size);
 
-    for _ in 0..(duration_mouse * 10) {
+    for _ in 0..(duration_ms * 10) {
         HdaController::delay_us(100);
-        let position = controller.stream_position();
-        if position >= target {
+        let pos = ctrl.stream_position();
+        if pos >= target {
             break;
         }
     }
 
-    let position_after = controller.stream_position();
-    controller.play(false);
+    let position_after = ctrl.stream_position();
+    ctrl.play(false);
 
     // Log DMA status for debugging
     crate::serial_println!("[HDA] play_tone: LPIB before={} early={} after={} target={}",
@@ -1552,21 +1552,21 @@ pub fn play_tone(frequency_hz: u32, duration_mouse: u32) -> Result<(), &'static 
 }
 
 /// Toggle GPIO data on AFG node 1. val: 0=LOW (active for some amps), 2=HIGH.
-pub fn set_gpio(value: u8) -> Result<(), &'static str> {
+pub fn set_gpio(val: u8) -> Result<(), &'static str> {
     let mut hda = HDA.lock();
-    let controller = hda.as_mut().ok_or("HDA: not initialized")?;
-    if controller.codecs.is_empty() { return Err("No codecs"); }
-    let codec = controller.codecs[0];
-    let _ = controller.codec_command(codec, 1, verb::SET_GPIO_DATA, value);
-    crate::serial_println!("[HDA] GPIO DATA set to {:#04X}", value);
+    let ctrl = hda.as_mut().ok_or("HDA: not initialized")?;
+    if ctrl.codecs.is_empty() { return Err("No codecs"); }
+    let codec = ctrl.codecs[0];
+    let _ = ctrl.codec_cmd(codec, 1, verb::SET_GPIO_DATA, val);
+    crate::serial_println!("[HDA] GPIO DATA set to {:#04X}", val);
     Ok(())
 }
 
 /// Stop any playing audio
 pub fn stop() -> Result<(), &'static str> {
     let mut hda = HDA.lock();
-    let controller = hda.as_mut().ok_or("HDA: not initialized")?;
-    controller.play(false);
+    let ctrl = hda.as_mut().ok_or("HDA: not initialized")?;
+    ctrl.play(false);
     Ok(())
 }
 
@@ -1575,7 +1575,7 @@ pub fn get_lpib() -> u32 {
     let hda = HDA.lock();
         // Correspondance de motifs — branchement exhaustif de Rust.
 match hda.as_ref() {
-        Some(controller) => controller.stream_position(),
+        Some(ctrl) => ctrl.stream_position(),
         None => 0,
     }
 }
@@ -1586,39 +1586,39 @@ match hda.as_ref() {
 /// the hardware reads from position 0 on the next start.
 pub fn reset_stream() {
     let hda = HDA.lock();
-    if let Some(controller) = hda.as_ref() {
-        if controller.audio_buffer_size == 0 { return; }
-        let sd_base = controller.osd_base(0);
+    if let Some(ctrl) = hda.as_ref() {
+        if ctrl.audio_buf_size == 0 { return; }
+        let sd_base = ctrl.osd_base(0);
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
             // Assert SRST (make sure RUN is clear first)
-            let controller = controller.read8(sd_base + sd::CTL);
-            controller.write8(sd_base + sd::CTL, (controller & !(sctl::RUN as u8)) | sctl::SRST as u8);
+            let ctl = ctrl.read8(sd_base + sd::CTL);
+            ctrl.write8(sd_base + sd::CTL, (ctl & !(sctl::RUN as u8)) | sctl::SRST as u8);
             for _ in 0..1000 {
-                if controller.read8(sd_base + sd::CTL) & (sctl::SRST as u8) != 0 { break; }
+                if ctrl.read8(sd_base + sd::CTL) & (sctl::SRST as u8) != 0 { break; }
                 HdaController::delay_us(10);
             }
             // Deassert SRST
-            controller.write8(sd_base + sd::CTL, 0);
+            ctrl.write8(sd_base + sd::CTL, 0);
             for _ in 0..1000 {
-                if controller.read8(sd_base + sd::CTL) & (sctl::SRST as u8) == 0 { break; }
+                if ctrl.read8(sd_base + sd::CTL) & (sctl::SRST as u8) == 0 { break; }
                 HdaController::delay_us(10);
             }
             // Clear status
-            controller.write8(sd_base + sd::STS, 0x1C);
+            ctrl.write8(sd_base + sd::STS, 0x1C);
 
             // Reconfigure stream descriptor (SRST clears all registers)
             let number_frags: u16 = 2;
             let fmt: u16 = 0x0011; // 48kHz, 16-bit, stereo
-            controller.write32(sd_base + sd::CBL, controller.audio_buffer_size);
-            controller.write16(sd_base + sd::LVI, number_frags - 1);
-            controller.write16(sd_base + sd::FMT, fmt);
-            controller.write32(sd_base + sd::BDLPL, controller.bdl_physical as u32);
-            controller.write32(sd_base + sd::BDLPU, (controller.bdl_physical >> 32) as u32);
+            ctrl.write32(sd_base + sd::CBL, ctrl.audio_buf_size);
+            ctrl.write16(sd_base + sd::LVI, number_frags - 1);
+            ctrl.write16(sd_base + sd::FMT, fmt);
+            ctrl.write32(sd_base + sd::BDLPL, ctrl.bdl_phys as u32);
+            ctrl.write32(sd_base + sd::BDLPU, (ctrl.bdl_phys >> 32) as u32);
 
             // Restore stream tag
-            let controller_high = (controller.stream_tag as u32) << (sctl::STREAM_TAG_SHIFT - 16);
-            controller.write8(sd_base + sd::CTL + 2, controller_high as u8);
+            let controller_high = (ctrl.stream_tag as u32) << (sctl::STREAM_TAG_SHIFT - 16);
+            ctrl.write8(sd_base + sd::CTL + 2, controller_high as u8);
         }
         crate::serial_println!("[HDA] Stream reset (LPIB→0, reconfig done)");
     }
@@ -1631,43 +1631,43 @@ unsafe {
 /// Call `stop()` to end playback.
 pub fn start_looped_playback(samples: &[i16]) -> Result<(), &'static str> {
     let mut hda = HDA.lock();
-    let controller = hda.as_mut().ok_or("HDA: not initialized")?;
+    let ctrl = hda.as_mut().ok_or("HDA: not initialized")?;
 
     // Stop current playback
-    if controller.playing {
-        controller.play(false);
+    if ctrl.playing {
+        ctrl.play(false);
     }
 
     // Reset stream to zero LPIB for clean start
-    controller.reset_output_stream();
+    ctrl.reset_output_stream();
 
     // Ensure DMA buffer was allocated
-    if controller.audio_buffer_virt == 0 || controller.audio_buffer_size == 0 {
+    if ctrl.audio_buf_virt == 0 || ctrl.audio_buf_size == 0 {
         return Err("HDA: DMA buffer not initialized");
     }
 
     // Copy samples to DMA buffer
-    let buffer = controller.audio_buffer_virt as *mut i16;
-    let buffer_capacity = (controller.audio_buffer_size / 2) as usize;
-    let to_copy = samples.len().minimum(buffer_capacity);
+    let buf = ctrl.audio_buf_virt as *mut i16;
+    let buffer_capacity = (ctrl.audio_buf_size / 2) as usize;
+    let to_copy = samples.len().min(buffer_capacity);
 
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-        core::ptr::copy_nonoverlapping(samples.as_pointer(), buffer, to_copy);
+        core::ptr::copy_nonoverlapping(samples.as_ptr(), buf, to_copy);
         // Zero the rest of the buffer (silence padding)
         if to_copy < buffer_capacity {
-            core::ptr::write_bytes(buffer.add(to_copy), 0, buffer_capacity - to_copy);
+            core::ptr::write_bytes(buf.add(to_copy), 0, buffer_capacity - to_copy);
         }
     }
 
     let data_bytes = (to_copy * 2) as u32;
     crate::serial_println!("[HDA] Looped playback: {} bytes ({} ms), buf={}",
-        data_bytes, data_bytes / (48000 * 4 / 1000), controller.audio_buffer_size);
+        data_bytes, data_bytes / (48000 * 4 / 1000), ctrl.audio_buf_size);
 
     // Just start DMA — buffer is already configured from init
     // The stream uses the original CBL (full buffer size) and BDL from setup_output_stream.
     // Audio data is followed by silence which loops back around.
-    controller.play(true);
+    ctrl.play(true);
     Ok(())
 }
 
@@ -1676,9 +1676,9 @@ unsafe {
 /// Used by the visualizer for gapless ping-pong streaming without stop/restart.
 pub fn get_dma_buffer_information() -> Option<(*mut i16, usize)> {
     let hda = HDA.lock();
-    let controller = hda.as_ref()?;
-    if controller.audio_buffer_virt == 0 { return None; }
-    Some((controller.audio_buffer_virt as *mut i16, (controller.audio_buffer_size / 2) as usize))
+    let ctrl = hda.as_ref()?;
+    if ctrl.audio_buf_virt == 0 { return None; }
+    Some((ctrl.audio_buf_virt as *mut i16, (ctrl.audio_buf_size / 2) as usize))
 }
 
 /// Check if HDA is currently playing audio.
@@ -1686,7 +1686,7 @@ pub fn is_playing() -> bool {
     let hda = HDA.lock();
         // Correspondance de motifs — branchement exhaustif de Rust.
 match hda.as_ref() {
-        Some(controller) => controller.is_playing(),
+        Some(ctrl) => ctrl.is_playing(),
         None => false,
     }
 }
@@ -1696,7 +1696,7 @@ pub fn get_playback_position() -> u32 {
     let hda = HDA.lock();
         // Correspondance de motifs — branchement exhaustif de Rust.
 match hda.as_ref() {
-        Some(controller) => controller.stream_position(),
+        Some(ctrl) => ctrl.stream_position(),
         None => 0,
     }
 }
@@ -1705,9 +1705,9 @@ match hda.as_ref() {
 /// Assumes the DMA buffer has been pre-filled by the caller.
 pub fn start_dma() -> Result<(), &'static str> {
     let mut hda = HDA.lock();
-    let controller = hda.as_mut().ok_or("HDA: not initialized")?;
-    if !controller.playing {
-        controller.play(true);
+    let ctrl = hda.as_mut().ok_or("HDA: not initialized")?;
+    if !ctrl.playing {
+        ctrl.play(true);
     }
     Ok(())
 }
@@ -1717,12 +1717,12 @@ pub fn start_dma() -> Result<(), &'static str> {
 /// long looped playback to prevent VBox from stalling the stream.
 pub fn clear_stream_status() {
     let hda = HDA.lock();
-    if let Some(controller) = hda.as_ref() {
-        let sd_base = controller.osd_base(0);
+    if let Some(ctrl) = hda.as_ref() {
+        let sd_base = ctrl.osd_base(0);
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
             // Write 0x1C to clear BCIS (bit 2), FIFOE (bit 3), DESE (bit 4)
-            controller.write8(sd_base + sd::STS, 0x1C);
+            ctrl.write8(sd_base + sd::STS, 0x1C);
         }
     }
 }
@@ -1732,18 +1732,18 @@ unsafe {
 /// Returns true if the stream had to be re-started.
 pub fn ensure_running() -> bool {
     let hda = HDA.lock();
-    if let Some(controller) = hda.as_ref() {
-        if !controller.playing { return false; }
-        let sd_base = controller.osd_base(0);
+    if let Some(ctrl) = hda.as_ref() {
+        if !ctrl.playing { return false; }
+        let sd_base = ctrl.osd_base(0);
                 // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
-            let controller = controller.read8(sd_base + sd::CTL);
-            if controller & (sctl::RUN as u8) == 0 {
+            let ctl = ctrl.read8(sd_base + sd::CTL);
+            if ctl & (sctl::RUN as u8) == 0 {
                 // Stream stalled — clear status and restart
-                controller.write8(sd_base + sd::STS, 0x1C);
-                controller.write8(sd_base + sd::CTL, controller | sctl::RUN as u8);
+                ctrl.write8(sd_base + sd::STS, 0x1C);
+                ctrl.write8(sd_base + sd::CTL, ctl | sctl::RUN as u8);
                 crate::serial_println!("[HDA] Stream stalled — restarted (LPIB={})",
-                    controller.stream_position());
+                    ctrl.stream_position());
                 return true;
             }
         }
@@ -1756,7 +1756,7 @@ pub fn status() -> String {
     let hda = HDA.lock();
         // Correspondance de motifs — branchement exhaustif de Rust.
 match hda.as_ref() {
-        Some(controller) => controller.status_information(),
+        Some(ctrl) => ctrl.status_info(),
         None => String::from("HDA: not initialized"),
     }
 }
@@ -1765,7 +1765,7 @@ match hda.as_ref() {
 pub fn diag() -> String {
     let mut s = String::new();
     let mut hda = HDA.lock();
-    let controller = // Correspondance de motifs — branchement exhaustif de Rust.
+    let ctrl = // Correspondance de motifs — branchement exhaustif de Rust.
 match hda.as_mut() {
         Some(c) => c,
         None => {
@@ -1777,13 +1777,13 @@ match hda.as_mut() {
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
         // Global state
-        let gcap = controller.read16(reg::GCAP);
-        let gctl = controller.read32(reg::GCTL);
-        let intctl = controller.read32(reg::INTCTL);
-        let intsts = controller.read32(0x24); // INTSTS
-        let ssync = controller.read32(reg::SSYNC);
-        let walclk = controller.read32(reg::WALCLK);
-        let statests = controller.read16(reg::STATESTS);
+        let gcap = ctrl.read16(reg::GCAP);
+        let gctl = ctrl.read32(reg::GCTL);
+        let intctl = ctrl.read32(reg::INTCTL);
+        let intsts = ctrl.read32(0x24); // INTSTS
+        let ssync = ctrl.read32(reg::SSYNC);
+        let walclk = ctrl.read32(reg::WALCLK);
+        let statests = ctrl.read16(reg::STATESTS);
 
         s.push_str(&format!("=== HDA Hardware Diagnostic ===\n"));
         s.push_str(&format!("GCAP={:#06X} GCTL={:#010X}\n", gcap, gctl));
@@ -1795,17 +1795,17 @@ unsafe {
             if gctl & gctl::UNSOL != 0 { "on" } else { "off" }));
 
         // Output stream descriptor
-        let sd_base = controller.osd_base(0);
-        let ctl0 = controller.read8(sd_base + sd::CTL);
-        let ctl2 = controller.read8(sd_base + sd::CTL + 2);
-        let sts = controller.read8(sd_base + sd::STS);
-        let lpib = controller.read32(sd_base + sd::LPIB);
-        let cbl = controller.read32(sd_base + sd::CBL);
-        let lvi = controller.read16(sd_base + sd::LVI);
-        let fifos = controller.read16(sd_base + sd::FIFOS);
-        let fmt = controller.read16(sd_base + sd::FMT);
-        let bdlpl = controller.read32(sd_base + sd::BDLPL);
-        let bdlpu = controller.read32(sd_base + sd::BDLPU);
+        let sd_base = ctrl.osd_base(0);
+        let ctl0 = ctrl.read8(sd_base + sd::CTL);
+        let ctl2 = ctrl.read8(sd_base + sd::CTL + 2);
+        let sts = ctrl.read8(sd_base + sd::STS);
+        let lpib = ctrl.read32(sd_base + sd::LPIB);
+        let cbl = ctrl.read32(sd_base + sd::CBL);
+        let lvi = ctrl.read16(sd_base + sd::LVI);
+        let fifos = ctrl.read16(sd_base + sd::FIFOS);
+        let fmt = ctrl.read16(sd_base + sd::FMT);
+        let bdlpl = ctrl.read32(sd_base + sd::BDLPL);
+        let bdlpu = ctrl.read32(sd_base + sd::BDLPU);
 
         s.push_str(&format!("\n--- Output Stream 0 (base={:#X}) ---\n", sd_base));
         s.push_str(&format!("CTL[0]={:#04X} CTL[2]={:#04X} (RUN={} SRST={} TAG={})\n",
@@ -1822,18 +1822,18 @@ unsafe {
         s.push_str(&format!("LPIB={} CBL={} LVI={} FIFOS={}\n", lpib, cbl, lvi, fifos));
         s.push_str(&format!("FMT={:#06X} (48kHz/16bit/stereo=0x0011)\n", fmt));
         s.push_str(&format!("BDL={:#010X}:{:#010X}\n", bdlpu, bdlpl));
-        s.push_str(&format!("Audio buf phys={:#010X} size={}\n", controller.audio_buffer_physical, controller.audio_buffer_size));
+        s.push_str(&format!("Audio buf phys={:#010X} size={}\n", ctrl.audio_buf_phys, ctrl.audio_buf_size));
 
         // Codec path check
-        if !controller.codecs.is_empty() && !controller.output_paths.is_empty() {
-            let codec = controller.codecs[0];
-            let path = controller.output_paths[0].clone();
+        if !ctrl.codecs.is_empty() && !ctrl.output_paths.is_empty() {
+            let codec = ctrl.codecs[0];
+            let path = ctrl.output_paths[0].clone();
             s.push_str(&format!("\n--- Codec {} Path ---\n", codec));
             s.push_str(&format!("Path: {:?} Type={}\n", path.path, path.device_type));
 
             // Read back power states
             for &nid in &path.path {
-                if let Ok(ps) = controller.codec_command(codec, nid, verb::GET_POWER_STATE, 0) {
+                if let Ok(ps) = ctrl.codec_cmd(codec, nid, verb::GET_POWER_STATE, 0) {
                     let actual = ps & 0xF;
                     let target = (ps >> 4) & 0xF;
                     s.push_str(&format!("  NID {}: power D{}/D{}{}\n",
@@ -1843,20 +1843,20 @@ unsafe {
             }
 
             // Read back pin control and EAPD
-            if let Ok(pc) = controller.codec_command(codec, path.pin_nid, verb::GET_PIN_CONTROL, 0) {
+            if let Ok(pc) = ctrl.codec_cmd(codec, path.pin_nid, verb::GET_PIN_CONTROL, 0) {
                 s.push_str(&format!("  Pin {} PIN_CTL={:#04X} (out={})\n",
                     path.pin_nid, pc, if pc & 0x40 != 0 { "YES" } else { "NO!" }));
             }
-            if let Ok(ea) = controller.codec_command(codec, path.pin_nid, verb::GET_EAPD, 0) {
+            if let Ok(ea) = ctrl.codec_cmd(codec, path.pin_nid, verb::GET_EAPD, 0) {
                 s.push_str(&format!("  Pin {} EAPD={:#04X} (on={})\n",
                     path.pin_nid, ea, if ea & 0x02 != 0 { "YES" } else { "NO!" }));
             }
 
             // Read back DAC stream assignment
-            if let Ok(sc) = controller.codec_command(codec, path.dac_nid, verb::GET_CHANNEL_STREAM, 0) {
+            if let Ok(sc) = ctrl.codec_cmd(codec, path.dac_nid, verb::GET_CHANNEL_STREAM, 0) {
                 let tag = (sc >> 4) & 0xF;
                 s.push_str(&format!("  DAC {} STREAM_TAG={} (expect {})\n",
-                    path.dac_nid, tag, controller.stream_tag));
+                    path.dac_nid, tag, ctrl.stream_tag));
             }
         }
     }
@@ -1868,7 +1868,7 @@ unsafe {
 pub fn codec_dump() -> String {
     let mut s = String::new();
     let mut hda = HDA.lock();
-    let controller = // Correspondance de motifs — branchement exhaustif de Rust.
+    let ctrl = // Correspondance de motifs — branchement exhaustif de Rust.
 match hda.as_mut() {
         Some(c) => c,
         None => {
@@ -1877,43 +1877,43 @@ match hda.as_mut() {
         }
     };
 
-    if controller.codecs.is_empty() {
+    if ctrl.codecs.is_empty() {
         s.push_str("No codecs found\n");
         return s;
     }
 
-    let codec = controller.codecs[0];
+    let codec = ctrl.codecs[0];
 
     // Read vendor ID
-    if let Ok(vid) = controller.codec_command(codec, 0, verb::GET_PARAMETER, verb::PARAMETER_VENDOR_ID as u8) {
+    if let Ok(vid) = ctrl.codec_cmd(codec, 0, verb::GET_PARAMETER, verb::PARAMETER_VENDOR_ID as u8) {
         s.push_str(&format!("Codec {}: vendor={:#06X} device={:#06X}\n",
             codec, (vid >> 16) & 0xFFFF, vid & 0xFFFF));
     }
 
-    s.push_str(&format!("Widgets: {} discovered\n", controller.widgets.len()));
-    s.push_str(&format!("Output paths: {}\n", controller.output_paths.len()));
-    for (i, p) in controller.output_paths.iter().enumerate() {
+    s.push_str(&format!("Widgets: {} discovered\n", ctrl.widgets.len()));
+    s.push_str(&format!("Output paths: {}\n", ctrl.output_paths.len()));
+    for (i, p) in ctrl.output_paths.iter().enumerate() {
         s.push_str(&format!("  Path[{}]: pin={} dac={} type={} route={:?}\n",
             i, p.pin_nid, p.dac_nid, p.device_type, p.path));
     }
 
     // GPIO state (sent to AFG node 1)
-    let gpio_data = controller.codec_command(codec, 1, verb::GET_GPIO_DATA, 0).unwrap_or(0);
-    let gpio_mask = controller.codec_command(codec, 1, verb::GET_GPIO_MASK, 0).unwrap_or(0);
-    let gpio_directory  = controller.codec_command(codec, 1, verb::GET_GPIO_DIRECTORY,  0).unwrap_or(0);
-    let gpio_count = controller.get_parameter(codec, 1, verb::PARAMETER_GPIO_COUNT).unwrap_or(0);
+    let gpio_data = ctrl.codec_cmd(codec, 1, verb::GET_GPIO_DATA, 0).unwrap_or(0);
+    let gpio_mask = ctrl.codec_cmd(codec, 1, verb::GET_GPIO_MASK, 0).unwrap_or(0);
+    let gpio_directory  = ctrl.codec_cmd(codec, 1, verb::GET_GPIO_DIRECTORY,  0).unwrap_or(0);
+    let gpio_count = ctrl.get_param(codec, 1, verb::PARAMETER_GPIO_COUNT).unwrap_or(0);
     s.push_str(&format!("GPIO: count={} mask={:#04X} dir={:#04X} data={:#04X}\n",
         gpio_count & 0xFF, gpio_mask, gpio_directory, gpio_data));
 
     // Dump all pin complexes with their actual hardware state
     s.push_str(&format!("\n--- Pin Widgets ---\n"));
-    let pin_widgets: Vec<(u16, u32)> = controller.widgets.iter()
+    let pin_widgets: Vec<(u16, u32)> = ctrl.widgets.iter()
         .filter(|w| w.widget_type == WidgetType::PinComplex)
         .map(|w| (w.nid, w.pin_config))
         .collect();
 
     for (nid, cfg) in &pin_widgets {
-        let device = pin_default_device(*cfg);
+        let dev = pin_default_device(*cfg);
         let connectivity = // Correspondance de motifs — branchement exhaustif de Rust.
 match (*cfg >> 30) & 0x3 {
             0 => "Jack",
@@ -1925,16 +1925,16 @@ match (*cfg >> 30) & 0x3 {
         let location = (*cfg >> 24) & 0x3F;
 
         // Read live hardware state
-        let pin_controller = controller.codec_command(codec, *nid, verb::GET_PIN_CONTROL, 0).unwrap_or(0);
-        let eapd = controller.codec_command(codec, *nid, verb::GET_EAPD, 0).unwrap_or(0);
-        let power = controller.codec_command(codec, *nid, verb::GET_POWER_STATE, 0).unwrap_or(0);
-        let wcaps = controller.codec_command(codec, *nid, verb::GET_PARAMETER, verb::PARAMETER_AUDIO_CAPS as u8).unwrap_or(0);
+        let pin_controller = ctrl.codec_cmd(codec, *nid, verb::GET_PIN_CONTROL, 0).unwrap_or(0);
+        let eapd = ctrl.codec_cmd(codec, *nid, verb::GET_EAPD, 0).unwrap_or(0);
+        let power = ctrl.codec_cmd(codec, *nid, verb::GET_POWER_STATE, 0).unwrap_or(0);
+        let wcaps = ctrl.codec_cmd(codec, *nid, verb::GET_PARAMETER, verb::PARAMETER_AUDIO_CAPS as u8).unwrap_or(0);
         // GET_AMP is 4-bit verb: bit15=output, bit13=left, bits3:0=index
-        let amp_out_l = controller.set_verb_16(codec, *nid, verb::GET_AMP_GAIN, 0xA000).unwrap_or(0); // output, left
-        let amp_out_r = controller.set_verb_16(codec, *nid, verb::GET_AMP_GAIN, 0x8000).unwrap_or(0); // output, right
-        let pin_caps = controller.codec_command(codec, *nid, verb::GET_PARAMETER, verb::PARAMETER_PIN_CAPS as u8).unwrap_or(0);
+        let amp_out_l = ctrl.set_verb_16(codec, *nid, verb::GET_AMP_GAIN, 0xA000).unwrap_or(0); // output, left
+        let amp_out_r = ctrl.set_verb_16(codec, *nid, verb::GET_AMP_GAIN, 0x8000).unwrap_or(0); // output, right
+        let pin_caps = ctrl.codec_cmd(codec, *nid, verb::GET_PARAMETER, verb::PARAMETER_PIN_CAPS as u8).unwrap_or(0);
         // Also read amp_out_caps (may be inherited from AFG)
-        let widget_amp_caps = controller.widgets.iter().find(|w| w.nid == *nid).map(|w| w.amp_out_caps).unwrap_or(0);
+        let widget_amp_caps = ctrl.widgets.iter().find(|w| w.nid == *nid).map(|w| w.amp_out_caps).unwrap_or(0);
 
         let out_en = pin_controller & 0x40 != 0;
         let hp_en = pin_controller & 0x80 != 0;
@@ -1945,7 +1945,7 @@ match (*cfg >> 30) & 0x3 {
         let has_amp_ovrd = wcaps & (1 << 3) != 0;
 
         s.push_str(&format!("  NID {:2}: {} ({}) loc={:#04X} cfg={:#010X}\n",
-            nid, device, connectivity, location, cfg));
+            nid, dev, connectivity, location, cfg));
         s.push_str(&format!("         wcaps={:#010X}(out_amp={} amp_ovrd={}) pin_caps={:#010X}\n",
             wcaps, has_out_amp, has_amp_ovrd, pin_caps));
         s.push_str(&format!("         pin_ctl={:#04X}(out={} hp={}) eapd={:#04X}(on={} has={})\n",
@@ -1956,24 +1956,24 @@ match (*cfg >> 30) & 0x3 {
 
     // Dump DACs with amp capabilities
     s.push_str(&format!("\n--- DAC Widgets ---\n"));
-    let dac_widgets: Vec<u16> = controller.widgets.iter()
+    let dac_widgets: Vec<u16> = ctrl.widgets.iter()
         .filter(|w| w.widget_type == WidgetType::AudioOutput)
         .map(|w| w.nid)
         .collect();
 
     for nid in &dac_widgets {
-        let power = controller.codec_command(codec, *nid, verb::GET_POWER_STATE, 0).unwrap_or(0);
-        let stream = controller.codec_command(codec, *nid, verb::GET_CHANNEL_STREAM, 0).unwrap_or(0);
+        let power = ctrl.codec_cmd(codec, *nid, verb::GET_POWER_STATE, 0).unwrap_or(0);
+        let stream = ctrl.codec_cmd(codec, *nid, verb::GET_CHANNEL_STREAM, 0).unwrap_or(0);
         // GET_STREAM_FORMAT is also 4-bit verb
-        let fmt = controller.set_verb_16(codec, *nid, verb::GET_STREAM_FORMAT, 0).unwrap_or(0);
-        let wcaps = controller.codec_command(codec, *nid, verb::GET_PARAMETER, verb::PARAMETER_AUDIO_CAPS as u8).unwrap_or(0);
+        let fmt = ctrl.set_verb_16(codec, *nid, verb::GET_STREAM_FORMAT, 0).unwrap_or(0);
+        let wcaps = ctrl.codec_cmd(codec, *nid, verb::GET_PARAMETER, verb::PARAMETER_AUDIO_CAPS as u8).unwrap_or(0);
         let has_out_amp = wcaps & (1 << 2) != 0;
         let has_in_amp = wcaps & (1 << 1) != 0;
         // GET_AMP is 4-bit verb: payload bit15=output, bit13=left, bits3:0=index
-        let amp_out_l = controller.set_verb_16(codec, *nid, verb::GET_AMP_GAIN, 0xA000).unwrap_or(0); // out, left
-        let amp_out_r = controller.set_verb_16(codec, *nid, verb::GET_AMP_GAIN, 0x8000).unwrap_or(0); // out, right
+        let amp_out_l = ctrl.set_verb_16(codec, *nid, verb::GET_AMP_GAIN, 0xA000).unwrap_or(0); // out, left
+        let amp_out_r = ctrl.set_verb_16(codec, *nid, verb::GET_AMP_GAIN, 0x8000).unwrap_or(0); // out, right
         // Read amp capabilities
-        let amp_ocaps = if has_out_amp { controller.codec_command(codec, *nid, verb::GET_PARAMETER, verb::PARAMETER_AMP_OUT_CAPS as u8).unwrap_or(0) } else { 0 };
+        let amp_ocaps = if has_out_amp { ctrl.codec_cmd(codec, *nid, verb::GET_PARAMETER, verb::PARAMETER_AMP_OUT_CAPS as u8).unwrap_or(0) } else { 0 };
 
         s.push_str(&format!("  NID {:2}: power=D{} stream_tag={} chan={} fmt={:#06X}\n",
             nid, power & 0xF, (stream >> 4) & 0xF, stream & 0xF, fmt));
@@ -1986,8 +1986,8 @@ match (*cfg >> 30) & 0x3 {
     // Dump Mixer/Selector widgets in audio paths
     s.push_str(&format!("\n--- Path Mixer/Selector ---\n"));
     let mut seen_nids: Vec<u16> = Vec::new();
-    let paths_clone: Vec<Vec<u16>> = controller.output_paths.iter().map(|p| p.path.clone()).collect();
-    let widgets_snapshot: Vec<(u16, WidgetType, Vec<u16>)> = controller.widgets.iter()
+    let paths_clone: Vec<Vec<u16>> = ctrl.output_paths.iter().map(|p| p.path.clone()).collect();
+    let widgets_snapshot: Vec<(u16, WidgetType, Vec<u16>)> = ctrl.widgets.iter()
         .map(|w| (w.nid, w.widget_type, w.connections.clone()))
         .collect();
     for path in &paths_clone {
@@ -1997,18 +1997,18 @@ match (*cfg >> 30) & 0x3 {
                 if *wtype != WidgetType::AudioMixer && *wtype != WidgetType::AudioSelector { continue; }
                 if seen_nids.contains(&nid) { continue; }
                 seen_nids.push(nid);
-                let wcaps = controller.codec_command(codec, nid, verb::GET_PARAMETER, verb::PARAMETER_AUDIO_CAPS as u8).unwrap_or(0);
+                let wcaps = ctrl.codec_cmd(codec, nid, verb::GET_PARAMETER, verb::PARAMETER_AUDIO_CAPS as u8).unwrap_or(0);
                 let has_out_amp = wcaps & (1 << 2) != 0;
                 let has_in_amp = wcaps & (1 << 1) != 0;
                 // 4-bit verb GET_AMP: bit15=output, bit13=left, bits3:0=index
-                let amp_out_l = controller.set_verb_16(codec, nid, verb::GET_AMP_GAIN, 0xA000).unwrap_or(0);
-                let amp_out_r = controller.set_verb_16(codec, nid, verb::GET_AMP_GAIN, 0x8000).unwrap_or(0);
-                let amp_in_l = controller.set_verb_16(codec, nid, verb::GET_AMP_GAIN, 0x2000).unwrap_or(0);
-                let amp_in_r = controller.set_verb_16(codec, nid, verb::GET_AMP_GAIN, 0x0000).unwrap_or(0);
-                let amp_ocaps = if has_out_amp { controller.codec_command(codec, nid, verb::GET_PARAMETER, verb::PARAMETER_AMP_OUT_CAPS as u8).unwrap_or(0) } else { 0 };
-                let amp_icaps = if has_in_amp { controller.codec_command(codec, nid, verb::GET_PARAMETER, verb::PARAMETER_AMP_IN_CAPS as u8).unwrap_or(0) } else { 0 };
-                let connection_sel = controller.codec_command(codec, nid, verb::GET_CONNECTION_SELECT, 0).unwrap_or(0);
-                let power = controller.codec_command(codec, nid, verb::GET_POWER_STATE, 0).unwrap_or(0);
+                let amp_out_l = ctrl.set_verb_16(codec, nid, verb::GET_AMP_GAIN, 0xA000).unwrap_or(0);
+                let amp_out_r = ctrl.set_verb_16(codec, nid, verb::GET_AMP_GAIN, 0x8000).unwrap_or(0);
+                let amp_in_l = ctrl.set_verb_16(codec, nid, verb::GET_AMP_GAIN, 0x2000).unwrap_or(0);
+                let amp_in_r = ctrl.set_verb_16(codec, nid, verb::GET_AMP_GAIN, 0x0000).unwrap_or(0);
+                let amp_ocaps = if has_out_amp { ctrl.codec_cmd(codec, nid, verb::GET_PARAMETER, verb::PARAMETER_AMP_OUT_CAPS as u8).unwrap_or(0) } else { 0 };
+                let amp_icaps = if has_in_amp { ctrl.codec_cmd(codec, nid, verb::GET_PARAMETER, verb::PARAMETER_AMP_IN_CAPS as u8).unwrap_or(0) } else { 0 };
+                let connection_sel = ctrl.codec_cmd(codec, nid, verb::GET_CONNECTION_SELECT, 0).unwrap_or(0);
+                let power = ctrl.codec_cmd(codec, nid, verb::GET_POWER_STATE, 0).unwrap_or(0);
 
                 s.push_str(&format!("  NID {:2}: {} conns={:?}\n", nid, wtype.name(), conns));
                 s.push_str(&format!("         wcaps={:#010X}(out_amp={} in_amp={})\n",
@@ -2031,7 +2031,7 @@ match (*cfg >> 30) & 0x3 {
 pub fn amp_probe() -> String {
     let mut s = String::new();
     let mut hda = HDA.lock();
-    let controller = // Correspondance de motifs — branchement exhaustif de Rust.
+    let ctrl = // Correspondance de motifs — branchement exhaustif de Rust.
 match hda.as_mut() {
         Some(c) => c,
         None => {
@@ -2040,34 +2040,34 @@ match hda.as_mut() {
         }
     };
 
-    if controller.codecs.is_empty() || controller.output_paths.is_empty() {
+    if ctrl.codecs.is_empty() || ctrl.output_paths.is_empty() {
         s.push_str("No codecs or paths\n");
         return s;
     }
 
-    let codec = controller.codecs[0];
+    let codec = ctrl.codecs[0];
     s.push_str("=== Amp Probe (SET then GET) ===\n");
 
     // Probe all widgets in output paths
     let mut probed: Vec<u16> = Vec::new();
-    let paths: Vec<Vec<u16>> = controller.output_paths.iter().map(|p| p.path.clone()).collect();
+    let paths: Vec<Vec<u16>> = ctrl.output_paths.iter().map(|p| p.path.clone()).collect();
     for path in &paths {
         for &nid in path {
             if probed.contains(&nid) { continue; }
             probed.push(nid);
 
-            let wcaps = controller.codec_command(codec, nid, verb::GET_PARAMETER, verb::PARAMETER_AUDIO_CAPS as u8).unwrap_or(0);
+            let wcaps = ctrl.codec_cmd(codec, nid, verb::GET_PARAMETER, verb::PARAMETER_AUDIO_CAPS as u8).unwrap_or(0);
             let wtype = (wcaps >> 20) & 0xF;
             let has_out_amp = wcaps & (1 << 2) != 0;
             let has_in_amp = wcaps & (1 << 1) != 0;
 
             // Read BEFORE (4-bit verb: bit15=output, bit13=left)
-            let before_out_l = controller.set_verb_16(codec, nid, verb::GET_AMP_GAIN, 0xA000).unwrap_or(0xDEAD); // out, left
-            let before_in_l = controller.set_verb_16(codec, nid, verb::GET_AMP_GAIN, 0x2000).unwrap_or(0xDEAD);  // in, left
+            let before_out_l = ctrl.set_verb_16(codec, nid, verb::GET_AMP_GAIN, 0xA000).unwrap_or(0xDEAD); // out, left
+            let before_in_l = ctrl.set_verb_16(codec, nid, verb::GET_AMP_GAIN, 0x2000).unwrap_or(0xDEAD);  // in, left
 
             // Query amp caps to get valid gain range
-            let out_caps = if has_out_amp { controller.get_parameter(codec, nid, verb::PARAMETER_AMP_OUT_CAPS).unwrap_or(0) } else { 0 };
-            let in_caps = if has_in_amp { controller.get_parameter(codec, nid, verb::PARAMETER_AMP_IN_CAPS).unwrap_or(0) } else { 0 };
+            let out_caps = if has_out_amp { ctrl.get_param(codec, nid, verb::PARAMETER_AMP_OUT_CAPS).unwrap_or(0) } else { 0 };
+            let in_caps = if has_in_amp { ctrl.get_param(codec, nid, verb::PARAMETER_AMP_IN_CAPS).unwrap_or(0) } else { 0 };
             let out_steps = ((out_caps >> 8) & 0x7F) as u16;
             let in_steps = ((in_caps >> 8) & 0x7F) as u16;
             let out_gain = if out_steps > 0 { out_steps } else { 0x1F };
@@ -2075,14 +2075,14 @@ match hda.as_mut() {
 
             // SET output amp: gain = numsteps (max), unmuted, L+R
             let set_out: u16 = (1 << 15) | (1 << 13) | (1 << 12) | (out_gain & 0x7F);
-            let out_result = controller.set_verb_16(codec, nid, 0x300, set_out);
+            let out_result = ctrl.set_verb_16(codec, nid, 0x300, set_out);
             // SET input amp index 0: gain = numsteps (max), unmuted, L+R
             let set_in: u16 = (1 << 14) | (1 << 13) | (1 << 12) | (in_gain & 0x7F);
-            let in_result = controller.set_verb_16(codec, nid, 0x300, set_in);
+            let in_result = ctrl.set_verb_16(codec, nid, 0x300, set_in);
 
             // Read AFTER (same 4-bit GET encoding)
-            let after_out_l = controller.set_verb_16(codec, nid, verb::GET_AMP_GAIN, 0xA000).unwrap_or(0xDEAD);
-            let after_in_l = controller.set_verb_16(codec, nid, verb::GET_AMP_GAIN, 0x2000).unwrap_or(0xDEAD);
+            let after_out_l = ctrl.set_verb_16(codec, nid, verb::GET_AMP_GAIN, 0xA000).unwrap_or(0xDEAD);
+            let after_in_l = ctrl.set_verb_16(codec, nid, verb::GET_AMP_GAIN, 0x2000).unwrap_or(0xDEAD);
 
             let changed_out = before_out_l != after_out_l;
             let changed_in = before_in_l != after_in_l;
@@ -2107,50 +2107,50 @@ match hda.as_mut() {
 
 /// Write raw audio samples to the DMA buffer and play for a given duration
 /// Samples are stereo interleaved i16 (left, right, left, right, ...)
-pub fn write_samples_and_play(samples: &[i16], duration_mouse: u32) -> Result<(), &'static str> {
+pub fn write_samples_and_play(samples: &[i16], duration_ms: u32) -> Result<(), &'static str> {
     let mut hda = HDA.lock();
-    let controller = hda.as_mut().ok_or("HDA: not initialized")?;
+    let ctrl = hda.as_mut().ok_or("HDA: not initialized")?;
 
     // Stop any current playback first
-    if controller.playing {
-        controller.play(false);
+    if ctrl.playing {
+        ctrl.play(false);
     }
 
     // Reset stream to zero LPIB — prevents stale position from previous play
-    controller.reset_output_stream();
+    ctrl.reset_output_stream();
 
-    let buffer = controller.audio_buffer_virt as *mut i16;
-    let buffer_capacity = (controller.audio_buffer_size / 2) as usize; // capacity in i16 samples
+    let buf = ctrl.audio_buf_virt as *mut i16;
+    let buffer_capacity = (ctrl.audio_buf_size / 2) as usize; // capacity in i16 samples
 
-    let to_copy = samples.len().minimum(buffer_capacity);
+    let to_copy = samples.len().min(buffer_capacity);
 
         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
 unsafe {
         // Copy samples to DMA buffer
-        core::ptr::copy_nonoverlapping(samples.as_pointer(), buffer, to_copy);
+        core::ptr::copy_nonoverlapping(samples.as_ptr(), buf, to_copy);
 
         // Zero the rest
         if to_copy < buffer_capacity {
-            core::ptr::write_bytes(buffer.add(to_copy), 0, buffer_capacity - to_copy);
+            core::ptr::write_bytes(buf.add(to_copy), 0, buffer_capacity - to_copy);
         }
     }
 
     // Start playback
-    controller.play(true);
+    ctrl.play(true);
 
     // Wait for the duration
     let total_bytes = (to_copy * 2) as u32; // i16 = 2 bytes
-    let target = total_bytes.minimum(controller.audio_buffer_size);
+    let target = total_bytes.min(ctrl.audio_buf_size);
 
-    for _ in 0..(duration_mouse * 10 + 500) {
+    for _ in 0..(duration_ms * 10 + 500) {
         HdaController::delay_us(100);
-        let position = controller.stream_position();
-        if position >= target {
+        let pos = ctrl.stream_position();
+        if pos >= target {
             break;
         }
     }
 
-    controller.play(false);
+    ctrl.play(false);
     Ok(())
 }
 
@@ -2163,23 +2163,23 @@ static VOLUME: Mutex<u8> = Mutex::new(80);
 
 /// Set master volume (0-100)
 pub fn set_volume(level: u8) -> Result<(), &'static str> {
-    let level = level.minimum(100);
+    let level = level.min(100);
     *VOLUME.lock() = level;
     
     let mut hda = HDA.lock();
-    let controller = hda.as_mut().ok_or("HDA: not initialized")?;
+    let ctrl = hda.as_mut().ok_or("HDA: not initialized")?;
     
-    if controller.codecs.is_empty() || controller.output_paths.is_empty() {
+    if ctrl.codecs.is_empty() || ctrl.output_paths.is_empty() {
         return Ok(());
     }
     
-    let codec = controller.codecs[0];
-    let path = controller.output_paths[0].clone();
+    let codec = ctrl.codecs[0];
+    let path = ctrl.output_paths[0].clone();
     
     // Convert 0-100 to gain scaled to actual amp numsteps (not 0-127)
     // AD1984 DACs have 39 steps — gain > numsteps is silently ignored!
     let path_dac_nid = path.dac_nid;
-    let maximum_gain = controller.widgets.iter()
+    let maximum_gain = ctrl.widgets.iter()
         .find(|w| w.nid == path_dac_nid)
         .map(|w| ((w.amp_out_caps >> 8) & 0x7F) as u16)
         .unwrap_or(39);
@@ -2190,10 +2190,10 @@ pub fn set_volume(level: u8) -> Result<(), &'static str> {
     for &nid in &path.path {
         // Output amp: bit 15 only + L+R + gain
         let amp_out: u16 = (1 << 15) | (1 << 13) | (1 << 12) | (gain & 0x7F);
-        let _ = controller.set_verb_16(codec, nid, 0x300, amp_out);
+        let _ = ctrl.set_verb_16(codec, nid, 0x300, amp_out);
         // Input amp: bit 14 only + L+R + gain
         let amp_in: u16 = (1 << 14) | (1 << 13) | (1 << 12) | (gain & 0x7F);
-        let _ = controller.set_verb_16(codec, nid, 0x300, amp_in);
+        let _ = ctrl.set_verb_16(codec, nid, 0x300, amp_in);
     }
     
     crate::serial_println!("[HDA] Volume set to {}% (gain={})", level, gain);
@@ -2208,22 +2208,22 @@ pub fn get_volume() -> u8 {
 /// Mute audio (set amp gain to 0 without changing stored level)
 pub fn mute() -> Result<(), &'static str> {
     let mut hda = HDA.lock();
-    let controller = hda.as_mut().ok_or("HDA: not initialized")?;
+    let ctrl = hda.as_mut().ok_or("HDA: not initialized")?;
     
-    if controller.codecs.is_empty() || controller.output_paths.is_empty() {
+    if ctrl.codecs.is_empty() || ctrl.output_paths.is_empty() {
         return Ok(());
     }
     
-    let codec = controller.codecs[0];
-    let path = controller.output_paths[0].clone();
+    let codec = ctrl.codecs[0];
+    let path = ctrl.output_paths[0].clone();
     
     for &nid in &path.path {
         // Mute output amp: bit 15 + L+R + mute bit
         let mute_out: u16 = (1 << 15) | (1 << 13) | (1 << 12) | (1 << 7);
-        let _ = controller.set_verb_16(codec, nid, 0x300, mute_out);
+        let _ = ctrl.set_verb_16(codec, nid, 0x300, mute_out);
         // Mute input amp: bit 14 + L+R + mute bit
         let mute_in: u16 = (1 << 14) | (1 << 13) | (1 << 12) | (1 << 7);
-        let _ = controller.set_verb_16(codec, nid, 0x300, mute_in);
+        let _ = ctrl.set_verb_16(codec, nid, 0x300, mute_in);
     }
     
     Ok(())
@@ -2241,9 +2241,9 @@ pub fn unmute() -> Result<(), &'static str> {
 
 /// Generate a sine wave tone at the given frequency and amplitude.
 /// Returns stereo interleaved i16 samples at 48 kHz with fade-in/out.
-pub fn generate_sine(frequency_hz: u32, duration_mouse: u32, amplitude: i16) -> Vec<i16> {
+pub fn generate_sine(freq_hz: u32, duration_ms: u32, amplitude: i16) -> Vec<i16> {
     let sample_rate = 48000u32;
-    let number_samples = (sample_rate as u64 * duration_mouse as u64 / 1000) as usize;
+    let number_samples = (sample_rate as u64 * duration_ms as u64 / 1000) as usize;
     let mut samples = Vec::with_capacity(number_samples * 2);
     
     let vol = *VOLUME.lock() as i32;
@@ -2251,7 +2251,7 @@ pub fn generate_sine(frequency_hz: u32, duration_mouse: u32, amplitude: i16) -> 
     
     for i in 0..number_samples {
         // Phase in 0-255 range (one cycle = 256 steps)
-        let phase_fixed = ((frequency_hz as u64 * i as u64 * 256) / sample_rate as u64) as u32;
+        let phase_fixed = ((freq_hz as u64 * i as u64 * 256) / sample_rate as u64) as u32;
         let phase_byte = (phase_fixed & 0xFF) as u8;
         
         let sample = sine_approx(phase_byte, scaled_amp);
@@ -2260,18 +2260,18 @@ pub fn generate_sine(frequency_hz: u32, duration_mouse: u32, amplitude: i16) -> 
     }
     
     // Fade-in and fade-out (5 ms each) to avoid clicks
-    let fade_samples = (sample_rate as usize * 5 / 1000).minimum(number_samples / 2);
+    let fade_samples = (sample_rate as usize * 5 / 1000).min(number_samples / 2);
     for i in 0..fade_samples {
         let factor = i as i32 * 256 / fade_samples as i32;
         samples[i * 2] = (samples[i * 2] as i32 * factor / 256) as i16;
         samples[i * 2 + 1] = (samples[i * 2 + 1] as i32 * factor / 256) as i16;
     }
     for i in 0..fade_samples {
-        let index = number_samples - 1 - i;
+        let idx = number_samples - 1 - i;
         let factor = i as i32 * 256 / fade_samples as i32;
-        if index * 2 + 1 < samples.len() {
-            samples[index * 2] = (samples[index * 2] as i32 * factor / 256) as i16;
-            samples[index * 2 + 1] = (samples[index * 2 + 1] as i32 * factor / 256) as i16;
+        if idx * 2 + 1 < samples.len() {
+            samples[idx * 2] = (samples[idx * 2] as i32 * factor / 256) as i16;
+            samples[idx * 2 + 1] = (samples[idx * 2 + 1] as i32 * factor / 256) as i16;
         }
     }
     
@@ -2297,9 +2297,9 @@ fn sine_approx(phase: u8, amplitude: i16) -> i16 {
 }
 
 /// Play a sine tone (better quality than the triangle-based play_tone)
-pub fn play_sine(frequency_hz: u32, duration_mouse: u32) -> Result<(), &'static str> {
-    let samples = generate_sine(frequency_hz, duration_mouse, 24000);
-    write_samples_and_play(&samples, duration_mouse)
+pub fn play_sine(freq_hz: u32, duration_ms: u32) -> Result<(), &'static str> {
+    let samples = generate_sine(freq_hz, duration_ms, 24000);
+    write_samples_and_play(&samples, duration_ms)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2346,7 +2346,7 @@ pub fn parse_wav(data: &[u8]) -> Result<WavInformation, &'static str> {
             bits_per_sample = u16::from_le_bytes([data[offset+22], data[offset+23]]);
         } else if chunk_id == b"data" {
             data_offset = offset + 8;
-            data_size = chunk_size.minimum(data.len() - data_offset);
+            data_size = chunk_size.min(data.len() - data_offset);
             break;
         }
         
@@ -2363,37 +2363,37 @@ pub fn parse_wav(data: &[u8]) -> Result<WavInformation, &'static str> {
 
 /// Play a WAV file from raw bytes (PCM 16-bit only, resamples to 48 kHz)
 pub fn play_wav(data: &[u8]) -> Result<(), &'static str> {
-    let information = parse_wav(data)?;
+    let info = parse_wav(data)?;
     
-    if information.bits_per_sample != 16 {
+    if info.bits_per_sample != 16 {
         return Err("WAV: only 16-bit PCM supported");
     }
     
-    let pcm_data = &data[information.data_offset..information.data_offset + information.data_size];
-    let number_source_frames = information.data_size / (2 * information.channels as usize);
+    let pcm_data = &data[info.data_offset..info.data_offset + info.data_size];
+    let number_source_frames = info.data_size / (2 * info.channels as usize);
     
     let target_rate = 48000u32;
     let number_destination_frames = (number_source_frames as u64 * target_rate as u64
-        / information.sample_rate as u64) as usize;
+        / info.sample_rate as u64) as usize;
     let mut output = Vec::with_capacity(number_destination_frames * 2);
     
     let vol = *VOLUME.lock() as i32;
     
-    for destination_frame in 0..number_destination_frames {
-        let source_frame = (destination_frame as u64 * information.sample_rate as u64
+    for dst_frame in 0..number_destination_frames {
+        let source_frame = (dst_frame as u64 * info.sample_rate as u64
             / target_rate as u64) as usize;
         
         if source_frame >= number_source_frames { break; }
         
-        let index = source_frame * information.channels as usize;
-        let byte_index = index * 2;
+        let idx = source_frame * info.channels as usize;
+        let byte_index = idx * 2;
         
         let left = if byte_index + 1 < pcm_data.len() {
             i16::from_le_bytes([pcm_data[byte_index], pcm_data[byte_index + 1]])
         } else { 0 };
         
-        let right = if information.channels >= 2 {
-            let byte_index_r = (index + 1) * 2;
+        let right = if info.channels >= 2 {
+            let byte_index_r = (idx + 1) * 2;
             if byte_index_r + 1 < pcm_data.len() {
                 i16::from_le_bytes([pcm_data[byte_index_r], pcm_data[byte_index_r + 1]])
             } else { left }
@@ -2403,8 +2403,8 @@ pub fn play_wav(data: &[u8]) -> Result<(), &'static str> {
         output.push((right as i32 * vol / 100) as i16);
     }
     
-    let duration_mouse = (number_destination_frames as u64 * 1000 / target_rate as u64) as u32;
-    write_samples_and_play(&output, duration_mouse + 100)
+    let duration_ms = (number_destination_frames as u64 * 1000 / target_rate as u64) as u32;
+    write_samples_and_play(&output, duration_ms + 100)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2463,20 +2463,20 @@ match effect {
     };
     
     let mut all_samples: Vec<i16> = Vec::new();
-    let mut total_mouse = 0u32;
+    let mut total_ms = 0u32;
     
-    for (frequency, dur_mouse, amp) in &tones {
-        if *frequency == 0 {
-            let silence_count = (48000u32 * *dur_mouse / 1000) as usize;
+    for (freq, dur_ms, amp) in &tones {
+        if *freq == 0 {
+            let silence_count = (48000u32 * *dur_ms / 1000) as usize;
             all_samples.extend(core::iter::repeat(0i16).take(silence_count * 2));
         } else {
-            let tone = generate_sine(*frequency, *dur_mouse, *amp);
+            let tone = generate_sine(*freq, *dur_ms, *amp);
             all_samples.extend_from_slice(&tone);
         }
-        total_mouse += dur_mouse;
+        total_ms += dur_ms;
     }
     
-    write_samples_and_play(&all_samples, total_mouse + 50)
+    write_samples_and_play(&all_samples, total_ms + 50)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2509,7 +2509,7 @@ pub fn rest(dur: u8) -> Self {
     
     /// Convert MIDI note number to frequency in Hz.
     /// Uses integer arithmetic with a semitone ratio lookup table.
-    pub fn frequency_hz(&self) -> u32 {
+    pub fn freq_hz(&self) -> u32 {
         if self.midi_note == 0 { return 0; }
         let semitone_offset = self.midi_note as i32 - 69;
         let octave_offset = semitone_offset.div_euclid(12);
@@ -2537,24 +2537,24 @@ pub fn play_sequence(notes: &[Note], bpm: u32) -> Result<(), &'static str> {
     let sixteenth_mouse = 60_000 / (bpm * 4);
     
     let mut all_samples: Vec<i16> = Vec::new();
-    let mut total_mouse = 0u32;
+    let mut total_ms = 0u32;
     
     for note in notes {
-        let dur_mouse = sixteenth_mouse * note.duration_16th as u32;
-        let frequency = note.frequency_hz();
+        let dur_ms = sixteenth_mouse * note.duration_16th as u32;
+        let freq = note.freq_hz();
         
-        if frequency == 0 || note.velocity == 0 {
-            let silence = (48000u32 * dur_mouse / 1000) as usize;
+        if freq == 0 || note.velocity == 0 {
+            let silence = (48000u32 * dur_ms / 1000) as usize;
             all_samples.extend(core::iter::repeat(0i16).take(silence * 2));
         } else {
             let amp = (note.velocity as i32 * 24000 / 127) as i16;
-            let tone = generate_sine(frequency, dur_mouse, amp);
+            let tone = generate_sine(freq, dur_ms, amp);
             all_samples.extend_from_slice(&tone);
         }
-        total_mouse += dur_mouse;
+        total_ms += dur_ms;
     }
     
-    write_samples_and_play(&all_samples, total_mouse + 50)
+    write_samples_and_play(&all_samples, total_ms + 50)
 }
 
 /// Play a simple melody from a text string.

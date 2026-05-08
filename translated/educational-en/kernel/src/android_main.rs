@@ -120,10 +120,10 @@ unsafe fn early_uart_print(s: &[u8]) {
 }
 
 /// Print a u64 as hex via early UART
-unsafe fn early_uart_print_hex(value: u64) {
+unsafe fn early_uart_print_hex(val: u64) {
     let hex = b"0123456789ABCDEF";
     for i in (0..16).rev() {
-        let nibble = ((value >> (i * 4)) & 0xF) as usize;
+        let nibble = ((val >> (i * 4)) & 0xF) as usize;
         early_uart_putc(hex[nibble]);
     }
 }
@@ -158,22 +158,22 @@ unsafe fn update_uart_base(new_base: u64) {
 /// 7. Boot into standard TrustOS shell
 #[no_mangle]
 pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
-unsafe extern "C" fn android_main(dtb_pointer: u64) -> ! {
+unsafe extern "C" fn android_main(dtb_ptr: u64) -> ! {
     // Mark that we booted via Android path
     ANDROID_BOOT = true;
-    DTB_PHYSICAL_ADDRESS = dtb_pointer;
+    DTB_PHYSICAL_ADDRESS = dtb_ptr;
 
     early_uart_print(b"[ANDROID] TrustOS android_main entered\r\n");
 
     // ── Step 1: Validate DTB (quick check before heap) ──
-    if dtb_pointer != 0 {
-        let valid = FdtHeader::validate(dtb_pointer as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+    if dtb_ptr != 0 {
+        let valid = FdtHeader::validate(dtb_ptr as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u8);
         if valid {
             early_uart_print(b"[ANDROID] DTB valid at 0x");
-            early_uart_print_hex(dtb_pointer);
+            early_uart_print_hex(dtb_ptr);
             early_uart_print(b"\r\n");
-            DTB_INFORMATION = DtbInfo::from_dtb_pointer(dtb_pointer as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+            DTB_INFORMATION = DtbInfo::from_dtb_pointer(dtb_ptr as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u8);
         } else {
             early_uart_print(b"[ANDROID] WARNING: DTB magic invalid!\r\n");
@@ -213,8 +213,8 @@ const u8 as u64;
     let mut uart_from_dtb: u64 = 0;
     let mut has_simplefb = false;
 
-    if dtb_pointer != 0 {
-        if let Some(parsed) = dtb_parser::parse_dtb(dtb_pointer as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+    if dtb_ptr != 0 {
+        if let Some(parsed) = dtb_parser::parse_dtb(dtb_ptr as *// Compile-time constant — evaluated at compilation, zero runtime cost.
 const u8) {
             early_uart_print(b"[DTB] Parsed ");
             early_uart_print_hex(parsed.node_count as u64);
@@ -241,17 +241,17 @@ const u8) {
                 early_uart_print(b"\r\n");
             } else {
                 // Fallback: look for UART-compatible devices in the device list
-                for device in &parsed.devices {
-                    if device.compatible.contains("pl011")
-                        || device.compatible.contains("uart")
-                        || device.compatible.contains("serial")
-                        || device.compatible.contains("ns16550")
-                        || device.compatible.contains("geni")
+                for dev in &parsed.devices {
+                    if dev.compatible.contains("pl011")
+                        || dev.compatible.contains("uart")
+                        || dev.compatible.contains("serial")
+                        || dev.compatible.contains("ns16550")
+                        || dev.compatible.contains("geni")
                     {
-                        if device.status == "okay" || device.status == "ok" {
-                            uart_from_dtb = device.register_base;
+                        if dev.status == "okay" || dev.status == "ok" {
+                            uart_from_dtb = dev.reg_base;
                             early_uart_print(b"[DTB] UART found: 0x");
-                            early_uart_print_hex(device.register_base);
+                            early_uart_print_hex(dev.reg_base);
                             early_uart_print(b"\r\n");
                             break;
                         }
@@ -317,18 +317,18 @@ match sfb.format.as_str() {
                 early_uart_print(b"[ANDROID] Framebuffer initialized from DTB SimpleFB\r\n");
             } else {
                 // No SimpleFB in DTB — try scanning for framebuffer-compatible nodes
-                for device in &parsed.devices {
-                    if device.compatible.contains("simple-framebuffer") {
+                for dev in &parsed.devices {
+                    if dev.compatible.contains("simple-framebuffer") {
                         early_uart_print(b"[DTB] Found simple-framebuffer device\r\n");
                         // Use reg as framebuffer base
-                        if device.register_base != 0 {
+                        if dev.reg_base != 0 {
                             // Default: 1080x1920 32bpp (common Android phone)
                             let w = 1080u64;
                             let h = 1920u64;
                             let bpp = 32u16;
                             let pitch = w * 4;
                             crate::framebuffer::init(
-                                device.register_base as *mut u8, w, h, pitch, bpp,
+                                dev.reg_base as *mut u8, w, h, pitch, bpp,
                             );
                             crate::framebuffer::initialize_scrollback();
                             has_simplefb = true;

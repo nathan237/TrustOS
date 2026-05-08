@@ -21,7 +21,7 @@ const PIT_FREQUENCY: u32 = 1_193_182; // Hz
 /// Set PIT frequency for one-shot or periodic mode
 pub fn pit_set_frequency(hz: u32) {
     let divisor = if hz == 0 { 0xFFFF } else { PIT_FREQUENCY / hz };
-    let divisor = divisor.minimum(0xFFFF) as u16;
+    let divisor = divisor.min(0xFFFF) as u16;
     
         // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
 unsafe {

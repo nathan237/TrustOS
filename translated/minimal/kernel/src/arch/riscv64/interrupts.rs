@@ -6,7 +6,7 @@ use super::cpu;
 
 
 #[inline(always)]
-pub fn aiy() {
+pub fn enable() {
     unsafe {
         core::arch::asm!("csrsi sstatus, 0x2", options(nomem, nostack, preserves_flags));
     }
@@ -14,7 +14,7 @@ pub fn aiy() {
 
 
 #[inline(always)]
-pub fn cwz() {
+pub fn bbc() {
     unsafe {
         core::arch::asm!("csrci sstatus, 0x2", options(nomem, nostack, preserves_flags));
     }
@@ -22,24 +22,24 @@ pub fn cwz() {
 
 
 #[inline(always)]
-pub fn gag() -> bool {
-    let sstatus = cpu::vsm();
-    sstatus & cpu::sstatus::Clr != 0
+pub fn ctq() -> bool {
+    let sstatus = cpu::odd();
+    sstatus & cpu::sstatus::Apg != 0
 }
 
 
 #[inline(always)]
-pub fn cvh<G, Ac>(bb: G) -> Ac
+pub fn bag<F, U>(f: F) -> U
 where
-    G: FnOnce() -> Ac,
+    F: FnOnce() -> U,
 {
-    let fbg = gag();
-    if fbg {
-        cwz();
+    let cfc = ctq();
+    if cfc {
+        bbc();
     }
-    let result = bb();
-    if fbg {
-        aiy();
+    let result = f();
+    if cfc {
+        enable();
     }
     result
 }

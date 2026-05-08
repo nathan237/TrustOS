@@ -22,87 +22,87 @@ use core::sync::atomic::{AtomicBool, Ordering};
 
 
 mod reg {
-    pub const Bhn: u32     = 0x00;  
-    pub const Cpe: u32     = 0x02;  
-    pub const Cpc: u32     = 0x03;  
-    pub const Ddk: u32   = 0x04;  
-    pub const Cys: u32    = 0x06;  
-    pub const Km: u32     = 0x08;  
-    pub const Dlx: u32   = 0x0C;  
-    pub const Ayi: u32 = 0x0E;  
-    pub const Cxz: u32     = 0x10;  
-    pub const Atu: u32   = 0x20;  
-    pub const Cyw: u32   = 0x24;  
-    pub const Cqa: u32   = 0x30;  
-    pub const Bsa: u32    = 0x38;  
+    pub const Yz: u32     = 0x00;  
+    pub const Arn: u32     = 0x02;  
+    pub const Arl: u32     = 0x03;  
+    pub const Azx: u32   = 0x04;  
+    pub const Axd: u32    = 0x06;  
+    pub const Ef: u32     = 0x08;  
+    pub const Bfl: u32   = 0x0C;  
+    pub const Ux: u32 = 0x0E;  
+    pub const Awv: u32     = 0x10;  
+    pub const Sx: u32   = 0x20;  
+    pub const Axh: u32   = 0x24;  
+    pub const Arw: u32   = 0x30;  
+    pub const Aej: u32    = 0x38;  
 
     
-    pub const Bzc: u32 = 0x40;  
-    pub const Bzd: u32 = 0x44;  
-    pub const Apq: u32    = 0x48;  
-    pub const Bdc: u32    = 0x4A;  
-    pub const Bdb: u32   = 0x4C;  
-    pub const Csn: u32   = 0x4D;  
-    pub const Bdd: u32  = 0x4E;  
+    pub const Ahv: u32 = 0x40;  
+    pub const Ahw: u32 = 0x44;  
+    pub const Rg: u32    = 0x48;  
+    pub const Wz: u32    = 0x4A;  
+    pub const Wy: u32   = 0x4C;  
+    pub const Atl: u32   = 0x4D;  
+    pub const Xa: u32  = 0x4E;  
 
     
-    pub const Cjw: u32 = 0x50;  
-    pub const Cjy: u32 = 0x54;  
-    pub const Bqe: u32    = 0x58;  
-    pub const Cjv: u32   = 0x5A;  
-    pub const Bqc: u32   = 0x5C;  
-    pub const Cjx: u32   = 0x5D;  
-    pub const Bqd: u32  = 0x5E;  
+    pub const Aoe: u32 = 0x50;  
+    pub const Aog: u32 = 0x54;  
+    pub const Ade: u32    = 0x58;  
+    pub const Aod: u32   = 0x5A;  
+    pub const Adb: u32   = 0x5C;  
+    pub const Aof: u32   = 0x5D;  
+    pub const Adc: u32  = 0x5E;  
 
     
-    pub const Cyo: u32  = 0x60;  
-    pub const Czg: u32  = 0x64;  
-    pub const Cyq: u32 = 0x68;  
+    pub const Awz: u32  = 0x60;  
+    pub const Axr: u32  = 0x64;  
+    pub const Axb: u32 = 0x68;  
 
     
-    pub const Can: u32 = 0x70;  
-    pub const Cao: u32 = 0x74;  
+    pub const Aim: u32 = 0x70;  
+    pub const Ain: u32 = 0x74;  
 
     
-    pub const CRY_: u32 = 0x80;
-    pub const CRZ_: u32 = 0x20;
+    pub const CVP_: u32 = 0x80;
+    pub const CVQ_: u32 = 0x20;
 }
 
 
 mod sd {
-    pub const Cx: u32    = 0x00;  
-    pub const Ui: u32    = 0x03;  
-    pub const Bkm: u32   = 0x04;  
-    pub const Agw: u32    = 0x08;  
-    pub const Ajp: u32    = 0x0C;  
-    pub const Ccz: u32  = 0x10;  
-    pub const Aia: u32    = 0x12;  
-    pub const Agm: u32  = 0x18;  
-    pub const Agn: u32  = 0x1C;  
+    pub const Bf: u32    = 0x00;  
+    pub const Ix: u32    = 0x03;  
+    pub const Aap: u32   = 0x04;  
+    pub const Oe: u32    = 0x08;  
+    pub const Pg: u32    = 0x0C;  
+    pub const Ajt: u32  = 0x10;  
+    pub const Ov: u32    = 0x12;  
+    pub const Ob: u32  = 0x18;  
+    pub const Oc: u32  = 0x1C;  
 }
 
 
 mod gctl {
-    pub const Rs: u32   = 1 << 0;   
-    pub const Cwq: u32 = 1 << 1;   
-    pub const Bvb: u32  = 1 << 8;   
+    pub const Hi: u32   = 1 << 0;   
+    pub const Avr: u32 = 1 << 1;   
+    pub const Afr: u32  = 1 << 8;   
 }
 
 
 mod sctl {
-    pub const Mh: u32 = 1 << 0;     
-    pub const Ub: u32  = 1 << 1;     
-    pub const Cfo: u32 = 1 << 2;     
+    pub const Fc: u32 = 1 << 0;     
+    pub const Ir: u32  = 1 << 1;     
+    pub const Aln: u32 = 1 << 2;     
     
-    pub const AIJ_: u32 = 20;
+    pub const AKF_: u32 = 20;
 }
 
 
 mod ssts {
-    pub const Bye: u8 = 1 << 2;   
-    pub const Ccx: u8 = 1 << 3;  
-    pub const Cae: u8 = 1 << 4;   
-    pub const Ccy: u8 = 1 << 5; 
+    pub const Ahf: u8 = 1 << 2;   
+    pub const Ajr: u8 = 1 << 3;  
+    pub const Aif: u8 = 1 << 4;   
+    pub const Ajs: u8 = 1 << 5; 
 }
 
 
@@ -111,109 +111,109 @@ mod ssts {
 
 mod verb {
     
-    pub const EI_: u32        = 0xF00;
-    pub const BWU_: u32        = 0xF02;
-    pub const BWV_: u32      = 0xF01;
-    pub const ASV_: u32      = 0xF07;
-    pub const BWT_: u32   = 0xF1C;
-    pub const ASU_: u32             = 0xF0C;
-    pub const TI_: u32      = 0xF05;
-    pub const AST_: u32   = 0xF06;
+    pub const EW_: u32        = 0xF00;
+    pub const CAA_: u32        = 0xF02;
+    pub const CAB_: u32      = 0xF01;
+    pub const AUZ_: u32      = 0xF07;
+    pub const BZZ_: u32   = 0xF1C;
+    pub const AUY_: u32             = 0xF0C;
+    pub const UO_: u32      = 0xF05;
+    pub const AUX_: u32   = 0xF06;
 
     
-    pub const DI_: u32         = 0xB00;  
-    pub const BXB_: u32    = 0xA00;  
+    pub const DQ_: u32         = 0xB00;  
+    pub const CAH_: u32    = 0xA00;  
 
     
-    pub const CSI_: u32      = 0x701;
-    pub const PL_: u32      = 0x705;
-    pub const CSH_: u32   = 0x706;
-    pub const AHT_: u32      = 0x707;
-    pub const AHS_: u32             = 0x70C;
+    pub const CVZ_: u32      = 0x701;
+    pub const QI_: u32      = 0x705;
+    pub const CVY_: u32   = 0x706;
+    pub const AJQ_: u32      = 0x707;
+    pub const AJP_: u32             = 0x70C;
 
     
-    pub const EFM_: u32    = 0x300;
-    pub const CSN_: u32    = 0x200;
-    pub const EFQ_: u32       = 0x500;  
-    pub const CSL_: u32        = 0x400;  
-    pub const DMS_: u32       = 0xD00;  
-    pub const DMX_: u32        = 0xC00;  
+    pub const EJF_: u32    = 0x300;
+    pub const CWE_: u32    = 0x200;
+    pub const EJJ_: u32       = 0x500;  
+    pub const CWC_: u32        = 0x400;  
+    pub const DQM_: u32       = 0xD00;  
+    pub const DQR_: u32        = 0xC00;  
 
     
-    pub const BFM_: u32        = 0x715;
-    pub const CSK_: u32        = 0x716;
-    pub const CSJ_: u32         = 0x717;
-    pub const BWW_: u32        = 0xF15;
-    pub const BWY_: u32        = 0xF16;
-    pub const BWX_: u32         = 0xF17;
-    pub const CIQ_: u32    = 0x11;  
+    pub const BHQ_: u32        = 0x715;
+    pub const CWB_: u32        = 0x716;
+    pub const CWA_: u32         = 0x717;
+    pub const CAC_: u32        = 0xF15;
+    pub const CAE_: u32        = 0xF16;
+    pub const CAD_: u32         = 0xF17;
+    pub const CLZ_: u32    = 0x11;  
 
     
-    pub const AGI_: u32     = 0x00;
-    pub const DYU_: u32      = 0x02;
-    pub const BCP_: u32    = 0x04;
-    pub const CIP_: u32 = 0x05;
-    pub const OU_: u32    = 0x09;  
-    pub const DYS_: u32     = 0x0A;  
-    pub const DYV_: u32   = 0x0B;  
-    pub const CIR_: u32      = 0x0C;  
-    pub const WB_: u32   = 0x0D;  
-    pub const CIO_: u32 = 0x0E;  
-    pub const DYT_: u32  = 0x0F;  
-    pub const OT_: u32  = 0x12;  
-    pub const DYW_: u32 = 0x13;
+    pub const AIC_: u32     = 0x00;
+    pub const ECL_: u32      = 0x02;
+    pub const BES_: u32    = 0x04;
+    pub const CLY_: u32 = 0x05;
+    pub const PS_: u32    = 0x09;  
+    pub const ECJ_: u32     = 0x0A;  
+    pub const ECM_: u32   = 0x0B;  
+    pub const CMA_: u32      = 0x0C;  
+    pub const XK_: u32   = 0x0D;  
+    pub const CLX_: u32 = 0x0E;  
+    pub const ECK_: u32  = 0x0F;  
+    pub const PR_: u32  = 0x12;  
+    pub const ECN_: u32 = 0x13;
 }
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum WidgetType {
-    Zw  = 0,
-    Bcc   = 1,
-    Apg   = 2,
-    Aph = 3,
-    Tx   = 4,
-    Hb        = 5,
-    Bwe   = 6,
-    Bco      = 7,
-    Bvs    = 0xF,
-    F      = 0xFF,
+    AudioOutput  = 0,
+    AudioInput   = 1,
+    AudioMixer   = 2,
+    AudioSelector = 3,
+    PinComplex   = 4,
+    Power        = 5,
+    VolumeKnob   = 6,
+    BeepGen      = 7,
+    VendorDef    = 0xF,
+    Unknown      = 0xFF,
 }
 
 impl WidgetType {
-    fn sxs(dr: u32) -> Self {
-        match (dr >> 20) & 0xF {
-            0 => Self::Zw,
-            1 => Self::Bcc,
-            2 => Self::Apg,
-            3 => Self::Aph,
-            4 => Self::Tx,
-            5 => Self::Hb,
-            6 => Self::Bwe,
-            7 => Self::Bco,
-            0xF => Self::Bvs,
-            _ => Self::F,
+    fn lzc(caps: u32) -> Self {
+        match (caps >> 20) & 0xF {
+            0 => Self::AudioOutput,
+            1 => Self::AudioInput,
+            2 => Self::AudioMixer,
+            3 => Self::AudioSelector,
+            4 => Self::PinComplex,
+            5 => Self::Power,
+            6 => Self::VolumeKnob,
+            7 => Self::BeepGen,
+            0xF => Self::VendorDef,
+            _ => Self::Unknown,
         }
     }
 
-    fn j(&self) -> &'static str {
+    fn name(&self) -> &'static str {
         match self {
-            Self::Zw => "Audio Output (DAC)",
-            Self::Bcc => "Audio Input (ADC)",
-            Self::Apg => "Audio Mixer",
-            Self::Aph => "Audio Selector",
-            Self::Tx => "Pin Complex",
-            Self::Hb => "Power Widget",
-            Self::Bwe => "Volume Knob",
-            Self::Bco => "Beep Generator",
-            Self::Bvs => "Vendor Defined",
-            Self::F => "Unknown",
+            Self::AudioOutput => "Audio Output (DAC)",
+            Self::AudioInput => "Audio Input (ADC)",
+            Self::AudioMixer => "Audio Mixer",
+            Self::AudioSelector => "Audio Selector",
+            Self::PinComplex => "Pin Complex",
+            Self::Power => "Power Widget",
+            Self::VolumeKnob => "Volume Knob",
+            Self::BeepGen => "Beep Generator",
+            Self::VendorDef => "Vendor Defined",
+            Self::Unknown => "Unknown",
         }
     }
 }
 
 
-fn lty(config: u32) -> &'static str {
+fn gnb(config: u32) -> &'static str {
     match (config >> 20) & 0xF {
         0x0 => "Line Out",
         0x1 => "Speaker",
@@ -241,85 +241,85 @@ fn lty(config: u32) -> &'static str {
 
 
 #[derive(Debug, Clone)]
-pub struct Cf {
-    pub lb: u16,
-    pub ekw: WidgetType,
-    pub dr: u32,
-    pub dui: u32,
-    pub dpc: Vec<u16>,
-    pub gad: u32,
-    pub eme: u32,
+pub struct Aw {
+    pub nid: u16,
+    pub widget_type: WidgetType,
+    pub caps: u32,
+    pub pin_config: u32,
+    pub connections: Vec<u16>,
+    pub amp_in_caps: u32,
+    pub amp_out_caps: u32,
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Bcd {
-    pub bnw: u16,
-    pub eak: u16,
+pub struct Wk {
+    pub pin_nid: u16,
+    pub dac_nid: u16,
     pub path: Vec<u16>,  
-    pub ceb: &'static str,
+    pub device_type: &'static str,
 }
 
 
 #[repr(C, align(16))]
 #[derive(Debug, Clone, Copy)]
-struct Byl {
-    re: u64,    
-    go: u32,     
-    twi: u32,        
+struct Ahj {
+    address: u64,    
+    length: u32,     
+    ioc: u32,        
 }
 
 
 pub struct HdaController {
     
-    hv: u64,
+    mmio_base: u64,
     
-    goe: u8,
+    num_iss: u8,
     
-    htf: u8,
+    num_oss: u8,
     
-    jhn: u8,
+    num_bss: u8,
     
-    jzk: bool,
+    addr64: bool,
 
     
-    ffv: u64,
-    ffu: u64,
-    fft: u16,
+    corb_virt: u64,
+    corb_phys: u64,
+    corb_entries: u16,
 
     
-    ftb: u64,
-    fta: u64,
-    fsz: u16,
-    gra: u16,  
+    rirb_virt: u64,
+    rirb_phys: u64,
+    rirb_entries: u16,
+    rirb_rp: u16,  
 
     
-    bml: Vec<u8>,
+    codecs: Vec<u8>,
     
-    widgets: Vec<Cf>,
+    widgets: Vec<Aw>,
     
-    bhq: Vec<Bcd>,
+    output_paths: Vec<Wk>,
 
     
-    ejf: u8,
+    stream_tag: u8,
     
-    dym: u64,
-    kbk: u64,
-    btf: u32,
+    audio_buf_virt: u64,
+    audio_buf_phys: u64,
+    audio_buf_size: u32,
     
-    gav: u64,
-    ded: u64,
+    bdl_virt: u64,
+    bdl_phys: u64,
 
     
-    uu: bool,
+    playing: bool,
     
-    fzy: u32,
-    fzx: u32,
+    afg_amp_out_caps: u32,
+    afg_amp_in_caps: u32,
 }
 
 
-static Fa: Mutex<Option<HdaController>> = Mutex::new(None);
-static AVS_: AtomicBool = AtomicBool::new(false);
+static Cd: Mutex<Option<HdaController>> = Mutex::new(None);
+static AXW_: AtomicBool = AtomicBool::new(false);
 
 
 
@@ -327,38 +327,38 @@ static AVS_: AtomicBool = AtomicBool::new(false);
 
 impl HdaController {
     #[inline]
-    unsafe fn akm(&self, l: u32) -> u8 {
-        core::ptr::read_volatile((self.hv + l as u64) as *const u8)
+    unsafe fn read8(&self, offset: u32) -> u8 {
+        core::ptr::read_volatile((self.mmio_base + offset as u64) as *const u8)
     }
 
     #[inline]
-    unsafe fn aym(&self, l: u32) -> u16 {
-        core::ptr::read_volatile((self.hv + l as u64) as *const u16)
+    unsafe fn read16(&self, offset: u32) -> u16 {
+        core::ptr::read_volatile((self.mmio_base + offset as u64) as *const u16)
     }
 
     #[inline]
-    unsafe fn amp(&self, l: u32) -> u32 {
-        core::ptr::read_volatile((self.hv + l as u64) as *const u32)
+    unsafe fn read32(&self, offset: u32) -> u32 {
+        core::ptr::read_volatile((self.mmio_base + offset as u64) as *const u32)
     }
 
     #[inline]
-    unsafe fn akw(&self, l: u32, ap: u8) {
-        core::ptr::write_volatile((self.hv + l as u64) as *mut u8, ap);
+    unsafe fn write8(&self, offset: u32, val: u8) {
+        core::ptr::write_volatile((self.mmio_base + offset as u64) as *mut u8, val);
     }
 
     #[inline]
-    unsafe fn asg(&self, l: u32, ap: u16) {
-        core::ptr::write_volatile((self.hv + l as u64) as *mut u16, ap);
+    unsafe fn write16(&self, offset: u32, val: u16) {
+        core::ptr::write_volatile((self.mmio_base + offset as u64) as *mut u16, val);
     }
 
     #[inline]
-    unsafe fn aiu(&self, l: u32, ap: u32) {
-        core::ptr::write_volatile((self.hv + l as u64) as *mut u32, ap);
+    unsafe fn write32(&self, offset: u32, val: u32) {
+        core::ptr::write_volatile((self.mmio_base + offset as u64) as *mut u32, val);
     }
 
     
-    fn evt(&self, bo: u8) -> u32 {
-        reg::CRY_ + ((self.goe + bo) as u32) * reg::CRZ_
+    fn osd_base(&self, ae: u8) -> u32 {
+        reg::CVP_ + ((self.num_iss + ae) as u32) * reg::CVQ_
     }
 
     
@@ -366,161 +366,161 @@ impl HdaController {
     
 
     
-    pub fn init(ba: &crate::pci::S) -> Result<Self, &'static str> {
+    pub fn init(s: &crate::pci::L) -> Result<Self, &'static str> {
         crate::serial_println!("[HDA] Initializing Intel HDA controller...");
         crate::serial_println!("[HDA]   PCI {:02X}:{:02X}.{} {:04X}:{:04X}",
-            ba.aq, ba.de, ba.gw, ba.ml, ba.mx);
+            s.bus, s.device, s.function, s.vendor_id, s.device_id);
 
         
-        crate::pci::fhp(ba);
-        crate::pci::fhq(ba);
+        crate::pci::bzi(s);
+        crate::pci::bzj(s);
 
         
-        let fcz = ba.cje(0).ok_or("HDA: no BAR0")?;
-        crate::serial_println!("[HDA]   BAR0 phys = {:#010X}", fcz);
+        let cgc = s.bar_address(0).ok_or("HDA: no BAR0")?;
+        crate::serial_println!("[HDA]   BAR0 phys = {:#010X}", cgc);
 
         
-        let hp = crate::memory::lr();
-        let hv = fcz + hp;
+        let bz = crate::memory::hhdm_offset();
+        let mmio_base = cgc + bz;
 
         
-        for awl in 0..4 {
-            let ht = (fcz & !0xFFF) + awl * 0x1000;
-            let ju = ht + hp;
-            crate::memory::paging::oky(ju, ht)?;
+        for za in 0..4 {
+            let phys = (cgc & !0xFFF) + za * 0x1000;
+            let virt = phys + bz;
+            crate::memory::paging::ilu(virt, phys)?;
         }
 
-        crate::serial_println!("[HDA]   MMIO mapped at virt {:#018X}", hv);
+        crate::serial_println!("[HDA]   MMIO mapped at virt {:#018X}", mmio_base);
 
-        let mut db = HdaController {
-            hv,
-            goe: 0, htf: 0, jhn: 0,
-            jzk: false,
-            ffv: 0, ffu: 0, fft: 0,
-            ftb: 0, fta: 0, fsz: 0,
-            gra: 0,
-            bml: Vec::new(),
+        let mut ctrl = HdaController {
+            mmio_base,
+            num_iss: 0, num_oss: 0, num_bss: 0,
+            addr64: false,
+            corb_virt: 0, corb_phys: 0, corb_entries: 0,
+            rirb_virt: 0, rirb_phys: 0, rirb_entries: 0,
+            rirb_rp: 0,
+            codecs: Vec::new(),
             widgets: Vec::new(),
-            bhq: Vec::new(),
-            ejf: 1,
-            dym: 0, kbk: 0, btf: 0,
-            gav: 0, ded: 0,
-            uu: false,
-            fzy: 0,
-            fzx: 0,
+            output_paths: Vec::new(),
+            stream_tag: 1,
+            audio_buf_virt: 0, audio_buf_phys: 0, audio_buf_size: 0,
+            bdl_virt: 0, bdl_phys: 0,
+            playing: false,
+            afg_amp_out_caps: 0,
+            afg_amp_in_caps: 0,
         };
 
         
         unsafe {
-            let cew = db.aym(reg::Bhn);
-            let xsm = db.akm(reg::Cpe);
-            let xsh = db.akm(reg::Cpc);
+            let agk = ctrl.read16(reg::Yz);
+            let pst = ctrl.read8(reg::Arn);
+            let psp = ctrl.read8(reg::Arl);
 
-            db.htf = ((cew >> 12) & 0xF) as u8;
-            db.goe = ((cew >> 8) & 0xF) as u8;
-            db.jhn = ((cew >> 3) & 0x1F) as u8;
-            db.jzk = (cew & 1) != 0;
+            ctrl.num_oss = ((agk >> 12) & 0xF) as u8;
+            ctrl.num_iss = ((agk >> 8) & 0xF) as u8;
+            ctrl.num_bss = ((agk >> 3) & 0x1F) as u8;
+            ctrl.addr64 = (agk & 1) != 0;
 
-            crate::serial_println!("[HDA]   Version {}.{}", xsh, xsm);
+            crate::serial_println!("[HDA]   Version {}.{}", psp, pst);
             crate::serial_println!("[HDA]   Streams: {} output, {} input, {} bidir",
-                db.htf, db.goe, db.jhn);
-            crate::serial_println!("[HDA]   64-bit: {}", db.jzk);
+                ctrl.num_oss, ctrl.num_iss, ctrl.num_bss);
+            crate::serial_println!("[HDA]   64-bit: {}", ctrl.addr64);
 
-            if db.htf == 0 {
+            if ctrl.num_oss == 0 {
                 return Err("HDA: no output streams available");
             }
         }
 
         
-        db.apa()?;
+        ctrl.reset()?;
 
         
-        db.wkl()?;
+        ctrl.setup_corb_rirb()?;
 
         
-        db.ryd()?;
+        ctrl.discover_codecs()?;
 
         
-        db.stn();
+        ctrl.find_output_paths();
 
         
-        db.wlf()?;
+        ctrl.setup_output_stream()?;
 
         crate::serial_println!("[HDA] Initialization complete!");
-        Ok(db)
+        Ok(ctrl)
     }
 
     
-    fn apa(&mut self) -> Result<(), &'static str> {
+    fn reset(&mut self) -> Result<(), &'static str> {
         crate::serial_println!("[HDA] Resetting controller...");
         unsafe {
             
-            self.asg(reg::Ayi, 0xFFFF);
+            self.write16(reg::Ux, 0xFFFF);
 
             
-            let gctl = self.amp(reg::Km);
-            self.aiu(reg::Km, gctl & !gctl::Rs);
+            let gctl = self.read32(reg::Ef);
+            self.write32(reg::Ef, gctl & !gctl::Hi);
 
             
             for _ in 0..1000 {
-                if self.amp(reg::Km) & gctl::Rs == 0 {
+                if self.read32(reg::Ef) & gctl::Hi == 0 {
                     break;
                 }
-                Self::azo(10);
+                Self::aas(10);
             }
-            if self.amp(reg::Km) & gctl::Rs != 0 {
+            if self.read32(reg::Ef) & gctl::Hi != 0 {
                 return Err("HDA: reset enter timeout");
             }
 
             
-            let gctl = self.amp(reg::Km);
-            self.aiu(reg::Km, gctl | gctl::Rs);
+            let gctl = self.read32(reg::Ef);
+            self.write32(reg::Ef, gctl | gctl::Hi);
 
             
             for _ in 0..1000 {
-                if self.amp(reg::Km) & gctl::Rs != 0 {
+                if self.read32(reg::Ef) & gctl::Hi != 0 {
                     break;
                 }
-                Self::azo(10);
+                Self::aas(10);
             }
-            if self.amp(reg::Km) & gctl::Rs == 0 {
+            if self.read32(reg::Ef) & gctl::Hi == 0 {
                 return Err("HDA: reset exit timeout");
             }
 
             
             
             
-            let mut fvp = 0u16;
-            for kbj in 0..10 {
-                Self::azo(if kbj == 0 { 1000 } else { 5000 });
-                fvp = self.aym(reg::Ayi);
-                if fvp != 0 { break; }
+            let mut bdv = 0u16;
+            for attempt in 0..10 {
+                Self::aas(if attempt == 0 { 1000 } else { 5000 });
+                bdv = self.read16(reg::Ux);
+                if bdv != 0 { break; }
             }
 
             
-            let gctl = self.amp(reg::Km);
-            self.aiu(reg::Km, gctl | gctl::Bvb);
+            let gctl = self.read32(reg::Ef);
+            self.write32(reg::Ef, gctl | gctl::Afr);
 
             
             
-            self.aiu(reg::Bsa, 0x00000000);
+            self.write32(reg::Aej, 0x00000000);
 
             
             
-            self.aiu(reg::Cao, 0);
-            self.aiu(reg::Can, 0x01); 
+            self.write32(reg::Ain, 0);
+            self.write32(reg::Aim, 0x01); 
 
-            crate::serial_println!("[HDA]   STATESTS = {:#06X} (codec presence)", fvp);
+            crate::serial_println!("[HDA]   STATESTS = {:#06X} (codec presence)", bdv);
 
-            if fvp == 0 {
+            if bdv == 0 {
                 return Err("HDA: no codecs detected after reset");
             }
 
             
-            for a in 0..15u8 {
-                if fvp & (1 << a) != 0 {
-                    self.bml.push(a);
-                    crate::serial_println!("[HDA]   Codec {} present", a);
+            for i in 0..15u8 {
+                if bdv & (1 << i) != 0 {
+                    self.codecs.push(i);
+                    crate::serial_println!("[HDA]   Codec {} present", i);
                 }
             }
         }
@@ -531,290 +531,290 @@ impl HdaController {
     
     
 
-    fn wkl(&mut self) -> Result<(), &'static str> {
+    fn setup_corb_rirb(&mut self) -> Result<(), &'static str> {
         crate::serial_println!("[HDA] Setting up CORB/RIRB...");
-        let hp = crate::memory::lr();
+        let bz = crate::memory::hhdm_offset();
 
         unsafe {
             
-            self.akw(reg::Bdb, 0);
-            self.akw(reg::Bqc, 0);
-            Self::azo(100);
+            self.write8(reg::Wy, 0);
+            self.write8(reg::Adb, 0);
+            Self::aas(100);
 
             
-            let ngc = self.akm(reg::Bdd);
-            let (roy, fft) = if ngc & 0x40 != 0 {
+            let hnv = self.read8(reg::Xa);
+            let (corb_sz_sel, corb_entries) = if hnv & 0x40 != 0 {
                 (2u8, 256u16)
-            } else if ngc & 0x20 != 0 {
+            } else if hnv & 0x20 != 0 {
                 (1, 16)
             } else {
                 (0, 2)
             };
-            self.akw(reg::Bdd, roy);
-            self.fft = fft;
-            crate::serial_println!("[HDA]   CORB: {} entries", fft);
+            self.write8(reg::Xa, corb_sz_sel);
+            self.corb_entries = corb_entries;
+            crate::serial_println!("[HDA]   CORB: {} entries", corb_entries);
 
             
-            let ngb = (fft as usize) * 4;
-            let nga: Vec<u8> = vec![0u8; ngb + 4096]; 
-            let roz = nga.fq() as u64;
-            let ffv = (roz + 0xFFF) & !0xFFF; 
-            core::mem::forget(nga);
+            let hnu = (corb_entries as usize) * 4;
+            let hnt: Vec<u8> = vec![0u8; hnu + 4096]; 
+            let kxx = hnt.as_ptr() as u64;
+            let corb_virt = (kxx + 0xFFF) & !0xFFF; 
+            core::mem::forget(hnt);
 
-            let ffu = ffv.enj(hp)
+            let corb_phys = corb_virt.checked_sub(bz)
                 .ok_or("HDA: CORB virt->phys failed")?;
-            self.ffv = ffv;
-            self.ffu = ffu;
+            self.corb_virt = corb_virt;
+            self.corb_phys = corb_phys;
 
             
-            core::ptr::ahx(ffv as *mut u8, 0, ngb);
+            core::ptr::write_bytes(corb_virt as *mut u8, 0, hnu);
 
             
-            self.aiu(reg::Bzc, ffu as u32);
-            self.aiu(reg::Bzd, (ffu >> 32) as u32);
+            self.write32(reg::Ahv, corb_phys as u32);
+            self.write32(reg::Ahw, (corb_phys >> 32) as u32);
 
             
-            self.asg(reg::Bdc, 1 << 15); 
-            Self::azo(100);
+            self.write16(reg::Wz, 1 << 15); 
+            Self::aas(100);
             
-            self.asg(reg::Bdc, 0);
-            Self::azo(100);
+            self.write16(reg::Wz, 0);
+            Self::aas(100);
 
             
-            self.asg(reg::Apq, 0);
+            self.write16(reg::Rg, 0);
 
             
-            let pdo = self.akm(reg::Bqd);
-            let (vzh, fsz) = if pdo & 0x40 != 0 {
+            let jaz = self.read8(reg::Adc);
+            let (rirb_sz_sel, rirb_entries) = if jaz & 0x40 != 0 {
                 (2u8, 256u16)
-            } else if pdo & 0x20 != 0 {
+            } else if jaz & 0x20 != 0 {
                 (1, 16)
             } else {
                 (0, 2)
             };
-            self.akw(reg::Bqd, vzh);
-            self.fsz = fsz;
-            crate::serial_println!("[HDA]   RIRB: {} entries", fsz);
+            self.write8(reg::Adc, rirb_sz_sel);
+            self.rirb_entries = rirb_entries;
+            crate::serial_println!("[HDA]   RIRB: {} entries", rirb_entries);
 
             
-            let pdn = (fsz as usize) * 8;
-            let pdm: Vec<u8> = vec![0u8; pdn + 4096];
-            let vzi = pdm.fq() as u64;
-            let ftb = (vzi + 0xFFF) & !0xFFF;
-            core::mem::forget(pdm);
+            let jay = (rirb_entries as usize) * 8;
+            let jax: Vec<u8> = vec![0u8; jay + 4096];
+            let ohk = jax.as_ptr() as u64;
+            let rirb_virt = (ohk + 0xFFF) & !0xFFF;
+            core::mem::forget(jax);
 
-            let fta = ftb.enj(hp)
+            let rirb_phys = rirb_virt.checked_sub(bz)
                 .ok_or("HDA: RIRB virt->phys failed")?;
-            self.ftb = ftb;
-            self.fta = fta;
+            self.rirb_virt = rirb_virt;
+            self.rirb_phys = rirb_phys;
 
-            core::ptr::ahx(ftb as *mut u8, 0, pdn);
-
-            
-            self.aiu(reg::Cjw, fta as u32);
-            self.aiu(reg::Cjy, (fta >> 32) as u32);
+            core::ptr::write_bytes(rirb_virt as *mut u8, 0, jay);
 
             
-            self.asg(reg::Bqe, 1 << 15);
-            Self::azo(100);
+            self.write32(reg::Aoe, rirb_phys as u32);
+            self.write32(reg::Aog, (rirb_phys >> 32) as u32);
 
             
-            self.asg(reg::Cjv, 1);
-
-            self.gra = 0;
+            self.write16(reg::Ade, 1 << 15);
+            Self::aas(100);
 
             
-            self.akw(reg::Bdb, 0x02); 
-            self.akw(reg::Bqc, 0x02); 
-            Self::azo(100);
+            self.write16(reg::Aod, 1);
+
+            self.rirb_rp = 0;
+
+            
+            self.write8(reg::Wy, 0x02); 
+            self.write8(reg::Adb, 0x02); 
+            Self::aas(100);
 
             crate::serial_println!("[HDA]   CORB phys={:#010X}, RIRB phys={:#010X}",
-                ffu, fta);
+                corb_phys, rirb_phys);
         }
 
         Ok(())
     }
 
     
-    fn phy(&mut self, codec: u8, lb: u16, verb: u32, ew: u32) -> Result<u32, &'static str> {
+    fn send_verb(&mut self, codec: u8, nid: u16, verb: u32, payload: u32) -> Result<u32, &'static str> {
         
         let cmd = ((codec as u32) << 28)
-            | ((lb as u32 & 0xFF) << 20)
+            | ((nid as u32 & 0xFF) << 20)
             | (verb & 0xFFFFF);
         
         
         
-        let _ = ew; 
+        let _ = payload; 
 
         unsafe {
             
-            let zd = self.aym(reg::Apq) & 0xFF;
-            let oqi = ((zd + 1) % self.fft) as u16;
+            let ma = self.read16(reg::Rg) & 0xFF;
+            let iql = ((ma + 1) % self.corb_entries) as u16;
 
-            let rox = self.ffv as *mut u32;
-            core::ptr::write_volatile(rox.add(oqi as usize), cmd);
+            let kxw = self.corb_virt as *mut u32;
+            core::ptr::write_volatile(kxw.add(iql as usize), cmd);
 
             
-            self.asg(reg::Apq, oqi);
+            self.write16(reg::Rg, iql);
 
             
             for _ in 0..10000 {
-                let vzj = self.aym(reg::Bqe) & 0xFF;
-                if vzj != self.gra {
+                let ohl = self.read16(reg::Ade) & 0xFF;
+                if ohl != self.rirb_rp {
                     
-                    self.gra = (self.gra + 1) % self.fsz;
-                    let vzg = self.ftb as *const u64;
-                    let mk = core::ptr::read_volatile(vzg.add(self.gra as usize));
-                    let f = mk as u32;
+                    self.rirb_rp = (self.rirb_rp + 1) % self.rirb_entries;
+                    let ohj = self.rirb_virt as *const u64;
+                    let fa = core::ptr::read_volatile(ohj.add(self.rirb_rp as usize));
+                    let data = fa as u32;
                     
-                    self.akw(reg::Cjx, 0x05);
-                    return Ok(f);
+                    self.write8(reg::Aof, 0x05);
+                    return Ok(data);
                 }
-                Self::azo(10);
+                Self::aas(10);
             }
         }
         Err("HDA: RIRB timeout")
     }
 
     
-    fn adp(&mut self, codec: u8, lb: u16, verb: u32, f: u8) -> Result<u32, &'static str> {
-        let szc = (verb << 8) | (f as u32);
-        self.phy(codec, lb, szc, 0)
+    fn codec_cmd(&mut self, codec: u8, nid: u16, verb: u32, data: u8) -> Result<u32, &'static str> {
+        let mai = (verb << 8) | (data as u32);
+        self.send_verb(codec, nid, mai, 0)
     }
 
     
-    fn cku(&mut self, codec: u8, lb: u16, evz: u32) -> Result<u32, &'static str> {
-        self.adp(codec, lb, verb::EI_, evz as u8)
+    fn get_param(&mut self, codec: u8, nid: u16, param: u32) -> Result<u32, &'static str> {
+        self.codec_cmd(codec, nid, verb::EW_, param as u8)
     }
 
     
-    fn atk(&mut self, codec: u8, lb: u16, xre: u32, ew: u16) -> Result<u32, &'static str> {
+    fn set_verb_16(&mut self, codec: u8, nid: u16, verb_id: u32, payload: u16) -> Result<u32, &'static str> {
         
         
-        let vqi = ((xre & 0xF00) << 8) | (ew as u32);
-        self.phy(codec, lb, vqi, 0)
+        let obn = ((verb_id & 0xF00) << 8) | (payload as u32);
+        self.send_verb(codec, nid, obn, 0)
     }
 
     
     
     
 
-    fn ryd(&mut self) -> Result<(), &'static str> {
-        let bml = self.bml.clone();
-        for &cjn in &bml {
-            crate::serial_println!("[HDA] Walking codec {}...", cjn);
+    fn discover_codecs(&mut self) -> Result<(), &'static str> {
+        let codecs = self.codecs.clone();
+        for &caddr in &codecs {
+            crate::serial_println!("[HDA] Walking codec {}...", caddr);
 
             
-            let acs = self.cku(cjn, 0, verb::AGI_)?;
+            let vendor = self.get_param(caddr, 0, verb::AIC_)?;
             crate::serial_println!("[HDA]   Vendor={:04X}, Device={:04X}",
-                acs >> 16, acs & 0xFFFF);
+                vendor >> 16, vendor & 0xFFFF);
 
             
-            let fpb = self.cku(cjn, 0, verb::BCP_)?;
-            let jrm = ((fpb >> 16) & 0xFF) as u16;
-            let ort = (fpb & 0xFF) as u16;
-            crate::serial_println!("[HDA]   Root: subnodes {}..{}", jrm, jrm + ort - 1);
+            let node_count = self.get_param(caddr, 0, verb::BES_)?;
+            let fbn = ((node_count >> 16) & 0xFF) as u16;
+            let iro = (node_count & 0xFF) as u16;
+            crate::serial_println!("[HDA]   Root: subnodes {}..{}", fbn, fbn + iro - 1);
 
             
-            for ggx in jrm..(jrm + ort) {
-                let sry = self.cku(cjn, ggx, verb::CIP_)?;
-                let kvo = sry & 0xFF;
-                crate::serial_println!("[HDA]   FG NID {}: type={} ({})", ggx, kvo,
-                    if kvo == 1 { "Audio" } else { "Other" });
+            for fg_nid in fbn..(fbn + iro) {
+                let luy = self.get_param(caddr, fg_nid, verb::CLY_)?;
+                let fwm = luy & 0xFF;
+                crate::serial_println!("[HDA]   FG NID {}: type={} ({})", fg_nid, fwm,
+                    if fwm == 1 { "Audio" } else { "Other" });
 
-                if kvo != 1 { continue; } 
-
-                
-                let _ = self.adp(cjn, ggx, verb::PL_, 0x00); 
+                if fwm != 1 { continue; } 
 
                 
-                self.fzy = self.cku(cjn, ggx, verb::OT_).unwrap_or(0);
-                self.fzx = self.cku(cjn, ggx, verb::WB_).unwrap_or(0);
+                let _ = self.codec_cmd(caddr, fg_nid, verb::QI_, 0x00); 
+
+                
+                self.afg_amp_out_caps = self.get_param(caddr, fg_nid, verb::PR_).unwrap_or(0);
+                self.afg_amp_in_caps = self.get_param(caddr, fg_nid, verb::XK_).unwrap_or(0);
                 crate::serial_println!("[HDA]   AFG amp caps: out={:#010X} in={:#010X}",
-                    self.fzy, self.fzx);
+                    self.afg_amp_out_caps, self.afg_amp_in_caps);
 
                 
-                let ppj = self.cku(cjn, ggx, verb::BCP_)?;
-                let jwe = ((ppj >> 16) & 0xFF) as u16;
-                let pyz = (ppj & 0xFF) as u16;
-                crate::serial_println!("[HDA]   AFG widgets: {}..{}", jwe, jwe + pyz - 1);
+                let jjl = self.get_param(caddr, fg_nid, verb::BES_)?;
+                let fet = ((jjl >> 16) & 0xFF) as u16;
+                let jqr = (jjl & 0xFF) as u16;
+                crate::serial_println!("[HDA]   AFG widgets: {}..{}", fet, fet + jqr - 1);
 
                 
-                for lb in jwe..(jwe + pyz) {
-                    let dr = self.cku(cjn, lb, verb::OU_)?;
-                    let ash = WidgetType::sxs(dr);
+                for nid in fet..(fet + jqr) {
+                    let caps = self.get_param(caddr, nid, verb::PS_)?;
+                    let wt = WidgetType::lzc(caps);
 
-                    let mut bsy = Cf {
-                        lb,
-                        ekw: ash,
-                        dr,
-                        dui: 0,
-                        dpc: Vec::new(),
-                        gad: 0,
-                        eme: 0,
+                    let mut akq = Aw {
+                        nid,
+                        widget_type: wt,
+                        caps,
+                        pin_config: 0,
+                        connections: Vec::new(),
+                        amp_in_caps: 0,
+                        amp_out_caps: 0,
                     };
 
                     
-                    let nfm = self.cku(cjn, lb, verb::CIO_)?;
-                    let kkm = (nfm & 0x7F) as u16;
-                    let uif = (nfm & 0x80) != 0;
+                    let hni = self.get_param(caddr, nid, verb::CLX_)?;
+                    let fod = (hni & 0x7F) as u16;
+                    let naq = (hni & 0x80) != 0;
 
-                    if kkm > 0 && !uif {
+                    if fod > 0 && !naq {
                         
-                        let mut l = 0u8;
-                        while (l as u16) < kkm {
-                            let lj = self.adp(cjn, lb, verb::BWU_, l)?;
-                            for a in 0..4u32 {
-                                if (l as u16) + (a as u16) >= kkm { break; }
-                                let kkn = ((lj >> (a * 8)) & 0xFF) as u16;
-                                bsy.dpc.push(kkn);
+                        let mut offset = 0u8;
+                        while (offset as u16) < fod {
+                            let eo = self.codec_cmd(caddr, nid, verb::CAA_, offset)?;
+                            for i in 0..4u32 {
+                                if (offset as u16) + (i as u16) >= fod { break; }
+                                let foe = ((eo >> (i * 8)) & 0xFF) as u16;
+                                akq.connections.push(foe);
                             }
-                            l += 4;
+                            offset += 4;
                         }
                     }
 
                     
-                    if ash == WidgetType::Tx {
-                        bsy.dui = self.adp(cjn, lb, verb::BWT_, 0)?;
+                    if wt == WidgetType::PinComplex {
+                        akq.pin_config = self.codec_cmd(caddr, nid, verb::BZZ_, 0)?;
                     }
 
                     
                     
                     
-                    let mvp = dr & (1 << 3) != 0;
-                    if dr & (1 << 2) != 0 { 
-                        if mvp {
-                            bsy.eme = self.cku(cjn, lb, verb::OT_)?;
-                            if bsy.eme == 0 {
-                                bsy.eme = self.fzy;
+                    let hfc = caps & (1 << 3) != 0;
+                    if caps & (1 << 2) != 0 { 
+                        if hfc {
+                            akq.amp_out_caps = self.get_param(caddr, nid, verb::PR_)?;
+                            if akq.amp_out_caps == 0 {
+                                akq.amp_out_caps = self.afg_amp_out_caps;
                             }
                         } else {
                             
-                            bsy.eme = self.fzy;
+                            akq.amp_out_caps = self.afg_amp_out_caps;
                         }
                     }
-                    if dr & (1 << 1) != 0 { 
-                        if mvp {
-                            bsy.gad = self.cku(cjn, lb, verb::WB_)?;
-                            if bsy.gad == 0 {
-                                bsy.gad = self.fzx;
+                    if caps & (1 << 1) != 0 { 
+                        if hfc {
+                            akq.amp_in_caps = self.get_param(caddr, nid, verb::XK_)?;
+                            if akq.amp_in_caps == 0 {
+                                akq.amp_in_caps = self.afg_amp_in_caps;
                             }
                         } else {
-                            bsy.gad = self.fzx;
+                            akq.amp_in_caps = self.afg_amp_in_caps;
                         }
                     }
 
                     crate::serial_println!("[HDA]     NID {:3}: {} conns={:?}{}",
-                        lb, ash.j(),
-                        bsy.dpc,
-                        if ash == WidgetType::Tx {
-                            alloc::format!(" [{}]", lty(bsy.dui))
+                        nid, wt.name(),
+                        akq.connections,
+                        if wt == WidgetType::PinComplex {
+                            alloc::format!(" [{}]", gnb(akq.pin_config))
                         } else {
                             String::new()
                         }
                     );
 
-                    self.widgets.push(bsy);
+                    self.widgets.push(akq);
                 }
             }
         }
@@ -822,66 +822,66 @@ impl HdaController {
     }
 
     
-    fn stn(&mut self) {
+    fn find_output_paths(&mut self) {
         crate::serial_println!("[HDA] Searching output paths...");
 
         
-        let vic: Vec<(u16, u32, Vec<u16>)> = self.widgets.iter()
-            .hi(|d| d.ekw == WidgetType::Tx)
-            .hi(|d| {
+        let nuv: Vec<(u16, u32, Vec<u16>)> = self.widgets.iter()
+            .filter(|w| w.widget_type == WidgetType::PinComplex)
+            .filter(|w| {
                 
-                let hdw = (d.dui >> 30) & 0x3;
-                let rva = (d.dui >> 20) & 0xF;
+                let dli = (w.pin_config >> 30) & 0x3;
+                let lcy = (w.pin_config >> 20) & 0xF;
                 
                 
                 
-                let tyn = oh!(rva,
+                let mtk = matches!(lcy,
                     0x0 | 0x1 | 0x2 | 0x4 | 0x5 | 0x6 | 0xF);
                 
                 
-                let rnv = hdw == 0 || hdw == 2; 
-                (hdw != 1 && tyn) || rnv
+                let kwz = dli == 0 || dli == 2; 
+                (dli != 1 && mtk) || kwz
             })
-            .map(|d| (d.lb, d.dui, d.dpc.clone()))
+            .map(|w| (w.nid, w.pin_config, w.connections.clone()))
             .collect();
 
-        for (bnw, dui, zfe) in &vic {
+        for (pin_nid, pin_config, pin_conns) in &nuv {
             
-            if let Some(path) = self.pvp(*bnw, &mut Vec::new()) {
-                let de = lty(*dui);
-                crate::serial_println!("[HDA]   Path found: {} -> {:?}", de,
-                    path.iter().map(|bo| alloc::format!("{}", bo)).collect::<Vec<_>>());
-                self.bhq.push(Bcd {
-                    bnw: *bnw,
-                    eak: *path.qv().unwrap_or(&0),
+            if let Some(path) = self.trace_to_dac(*pin_nid, &mut Vec::new()) {
+                let device = gnb(*pin_config);
+                crate::serial_println!("[HDA]   Path found: {} -> {:?}", device,
+                    path.iter().map(|ae| alloc::format!("{}", ae)).collect::<Vec<_>>());
+                self.output_paths.push(Wk {
+                    pin_nid: *pin_nid,
+                    dac_nid: *path.last().unwrap_or(&0),
                     path: path,
-                    ceb: de,
+                    device_type: device,
                 });
             }
         }
 
-        if self.bhq.is_empty() {
+        if self.output_paths.is_empty() {
             crate::serial_println!("[HDA]   WARNING: No output paths found!");
         } else {
-            crate::serial_println!("[HDA]   {} output path(s) found", self.bhq.len());
+            crate::serial_println!("[HDA]   {} output path(s) found", self.output_paths.len());
         }
     }
 
     
-    fn pvp(&self, lb: u16, bxs: &mut Vec<u16>) -> Option<Vec<u16>> {
-        if bxs.contains(&lb) { return None; } 
-        bxs.push(lb);
+    fn trace_to_dac(&self, nid: u16, anc: &mut Vec<u16>) -> Option<Vec<u16>> {
+        if anc.contains(&nid) { return None; } 
+        anc.push(nid);
 
-        let bsy = self.widgets.iter().du(|d| d.lb == lb)?;
+        let akq = self.widgets.iter().find(|w| w.nid == nid)?;
 
-        if bsy.ekw == WidgetType::Zw {
-            return Some(vec![lb]); 
+        if akq.widget_type == WidgetType::AudioOutput {
+            return Some(vec![nid]); 
         }
 
         
-        for &kkn in &bsy.dpc {
-            if let Some(mut path) = self.pvp(kkn, bxs) {
-                path.insert(0, lb);
+        for &foe in &akq.connections {
+            if let Some(mut path) = self.trace_to_dac(foe, anc) {
+                path.insert(0, nid);
                 return Some(path);
             }
         }
@@ -893,299 +893,299 @@ impl HdaController {
     
     
 
-    fn wlf(&mut self) -> Result<(), &'static str> {
-        if self.bhq.is_empty() {
+    fn setup_output_stream(&mut self) -> Result<(), &'static str> {
+        if self.output_paths.is_empty() {
             return Err("HDA: no output paths to configure");
         }
 
-        let hp = crate::memory::lr();
-        let codec = self.bml[0];
-        let path = self.bhq[0].clone();
+        let bz = crate::memory::hhdm_offset();
+        let codec = self.codecs[0];
+        let path = self.output_paths[0].clone();
 
         crate::serial_println!("[HDA] Setting up output stream for path: {:?}", path.path);
 
         
         
-        for &lb in &path.path {
-            let _ = self.adp(codec, lb, verb::PL_, 0x00); 
+        for &nid in &path.path {
+            let _ = self.codec_cmd(codec, nid, verb::QI_, 0x00); 
         }
 
         
         
-        let ml = self.cku(codec, 0, verb::AGI_).unwrap_or(0);
-        let mpa = (ml >> 16) & 0xFFFF;
-        let rlm = ml & 0xFFFF;
-        crate::serial_println!("[HDA]   Codec vendor={:#06X} device={:#06X}", mpa, rlm);
+        let vendor_id = self.get_param(codec, 0, verb::AIC_).unwrap_or(0);
+        let hbj = (vendor_id >> 16) & 0xFFFF;
+        let kux = vendor_id & 0xFFFF;
+        crate::serial_println!("[HDA]   Codec vendor={:#06X} device={:#06X}", hbj, kux);
 
         
         
-        let lfu = mpa == 0x11D4; 
-        let txa = mpa == 0x14F1; 
-        let urs = lfu || txa;
+        let gdp = hbj == 0x11D4; 
+        let mse = hbj == 0x14F1; 
+        let nhy = gdp || mse;
 
-        if urs {
+        if nhy {
             crate::serial_println!("[HDA]   Applying {} codec quirks",
-                if lfu { "Analog Devices AD198x" } else { "Conexant CX205xx" });
+                if gdp { "Analog Devices AD198x" } else { "Conexant CX205xx" });
 
             
-            let qgl: Vec<u16> = self.widgets.iter().map(|d| d.lb).collect();
-            let vaa: Vec<u16> = self.widgets.iter()
-                .hi(|d| d.ekw == WidgetType::Tx
-                    && oh!((d.dui >> 20) & 0xF, 0x0 | 0x1 | 0x2))
-                .map(|d| d.lb)
+            let jup: Vec<u16> = self.widgets.iter().map(|w| w.nid).collect();
+            let nop: Vec<u16> = self.widgets.iter()
+                .filter(|w| w.widget_type == WidgetType::PinComplex
+                    && matches!((w.pin_config >> 20) & 0xF, 0x0 | 0x1 | 0x2))
+                .map(|w| w.nid)
                 .collect();
 
             
-            let _ = self.adp(codec, 1, verb::PL_, 0x00);
-            HdaController::azo(10_000); 
-            for &lb in &qgl {
-                let _ = self.adp(codec, lb, verb::PL_, 0x00);
+            let _ = self.codec_cmd(codec, 1, verb::QI_, 0x00);
+            HdaController::aas(10_000); 
+            for &nid in &jup {
+                let _ = self.codec_cmd(codec, nid, verb::QI_, 0x00);
             }
             
-            HdaController::azo(100_000); 
+            HdaController::aas(100_000); 
 
             
             
-            for &lb in &vaa {
-                let _ = self.adp(codec, lb, verb::AHT_, 0xC0);
+            for &nid in &nop {
+                let _ = self.codec_cmd(codec, nid, verb::AJQ_, 0xC0);
                 
                 
-                let _ = self.adp(codec, lb, verb::AHS_, 0x02);
-                crate::serial_println!("[HDA]   Pin NID {} -> EAPD=0x02, PIN_CTL=0xC0", lb);
+                let _ = self.codec_cmd(codec, nid, verb::AJP_, 0x02);
+                crate::serial_println!("[HDA]   Pin NID {} -> EAPD=0x02, PIN_CTL=0xC0", nid);
             }
 
             
             
             
-            if lfu {
-                let _ = self.atk(codec, 1, verb::CSL_, 0x0008);
+            if gdp {
+                let _ = self.set_verb_16(codec, 1, verb::CWC_, 0x0008);
                 crate::serial_println!("[HDA]   AD1984 DMIC COEF: val=0x08 (default index)");
             }
 
             
             
-            let _ = self.atk(codec, 1, 0x300,
+            let _ = self.set_verb_16(codec, 1, 0x300,
                 (1u16 << 15) | (1 << 13) | (1 << 12) | 0x27);
-            let _ = self.atk(codec, 1, 0x300,
+            let _ = self.set_verb_16(codec, 1, 0x300,
                 (1u16 << 14) | (1 << 13) | (1 << 12) | 0x27);
 
             
             
             
             
-            let _ = self.adp(codec, 1, verb::CSK_, 0x02); 
-            let _ = self.adp(codec, 1, verb::CSJ_,  0x02); 
-            let _ = self.adp(codec, 1, verb::BFM_, 0x02); 
+            let _ = self.codec_cmd(codec, 1, verb::CWB_, 0x02); 
+            let _ = self.codec_cmd(codec, 1, verb::CWA_,  0x02); 
+            let _ = self.codec_cmd(codec, 1, verb::BHQ_, 0x02); 
             crate::serial_println!("[HDA]   GPIO1 HIGH (speaker amp power on)");
         }
 
         
-        let _ = self.adp(codec, path.bnw, verb::AHT_, 0xC0);
+        let _ = self.codec_cmd(codec, path.pin_nid, verb::AJQ_, 0xC0);
         
         
-        let _ = self.adp(codec, path.bnw, verb::AHS_, 0x02);
-        crate::serial_println!("[HDA]   Output pin {} -> EAPD=0x02, PIN_CTL=0xC0", path.bnw);
+        let _ = self.codec_cmd(codec, path.pin_nid, verb::AJP_, 0x02);
+        crate::serial_println!("[HDA]   Output pin {} -> EAPD=0x02, PIN_CTL=0xC0", path.pin_nid);
 
         
         
-        let ejf = self.ejf;
+        let stream_tag = self.stream_tag;
         let channel = 0u8;
         let fmt: u16 = 0x0011; 
 
-        let qgg: Vec<u16> = self.widgets.iter()
-            .hi(|d| d.ekw == WidgetType::Zw)
-            .map(|d| d.lb)
+        let jul: Vec<u16> = self.widgets.iter()
+            .filter(|w| w.widget_type == WidgetType::AudioOutput)
+            .map(|w| w.nid)
             .collect();
 
-        for &eak in &qgg {
-            let _ = self.adp(codec, eak, verb::CSH_,
-                (ejf << 4) | channel);
-            let _ = self.atk(codec, eak, verb::CSN_, fmt);
+        for &dac_nid in &jul {
+            let _ = self.codec_cmd(codec, dac_nid, verb::CVY_,
+                (stream_tag << 4) | channel);
+            let _ = self.set_verb_16(codec, dac_nid, verb::CWE_, fmt);
             crate::serial_println!("[HDA]   DAC NID {} -> stream_tag={}, fmt=0x{:04X}",
-                eak, ejf, fmt);
+                dac_nid, stream_tag, fmt);
         }
 
         
-        HdaController::azo(5000);
+        HdaController::aas(5000);
 
         
         
         
-        let muv: Vec<(u16, u32, usize, u32, u32)> = self.widgets.iter()
-            .map(|d| (d.lb, d.dr, d.dpc.len(), d.eme, d.gad))
+        let hes: Vec<(u16, u32, usize, u32, u32)> = self.widgets.iter()
+            .map(|w| (w.nid, w.caps, w.connections.len(), w.amp_out_caps, w.amp_in_caps))
             .collect();
 
         
-        let ije = ((self.fzy >> 8) & 0x7F) as u16;
-        let muh = ((self.fzx >> 8) & 0x7F) as u16;
+        let efd = ((self.afg_amp_out_caps >> 8) & 0x7F) as u16;
+        let heg = ((self.afg_amp_in_caps >> 8) & 0x7F) as u16;
 
-        for &(lb, dr, orp, lra, ldr) in &muv {
+        for &(nid, caps, num_conns, glg, gcd) in &hes {
             
             
-            let goq = ((lra >> 8) & 0x7F) as u16;
-            let gju = ((ldr >> 8) & 0x7F) as u16;
-            
-            
-            
-            let jia = if goq > 0 { goq } else { ije };
-            let hnt = if gju > 0 { gju } else { muh };
-
+            let dcc = ((glg >> 8) & 0x7F) as u16;
+            let czq = ((gcd >> 8) & 0x7F) as u16;
             
             
             
-            let kam: u16 = (1 << 15) | (1 << 13) | (1 << 12) | (jia & 0x7F);
-            let _ = self.atk(codec, lb, 0x300, kam);
-            
-            let kak: u16 = (1 << 14) | (1 << 13) | (1 << 12) | (hnt & 0x7F);
-            let _ = self.atk(codec, lb, 0x300, kak);
+            let evu = if dcc > 0 { dcc } else { efd };
+            let drv = if czq > 0 { czq } else { heg };
 
             
-            if orp > 1 {
-                for w in 1..orp.v(16) {
-                    let qho: u16 = (1 << 14) | (1 << 13) | (1 << 12) | ((w as u16 & 0xF) << 8) | (hnt & 0x7F);
-                    let _ = self.atk(codec, lb, 0x300, qho);
+            
+            
+            let fhb: u16 = (1 << 15) | (1 << 13) | (1 << 12) | (evu & 0x7F);
+            let _ = self.set_verb_16(codec, nid, 0x300, fhb);
+            
+            let fgz: u16 = (1 << 14) | (1 << 13) | (1 << 12) | (drv & 0x7F);
+            let _ = self.set_verb_16(codec, nid, 0x300, fgz);
+
+            
+            if num_conns > 1 {
+                for idx in 1..num_conns.min(16) {
+                    let jvm: u16 = (1 << 14) | (1 << 13) | (1 << 12) | ((idx as u16 & 0xF) << 8) | (drv & 0x7F);
+                    let _ = self.set_verb_16(codec, nid, 0x300, jvm);
                 }
             }
         }
         crate::serial_println!("[HDA]   Unmuted all {} widget amps (separate OUT/IN, afg_out={} afg_in={})",
-            muv.len(), ije, muh);
+            hes.len(), efd, heg);
 
         
         
         
-        let jzp = if ije > 0 { ije } else { 3u16 };
-        let qgn: Vec<(u16, Vec<u16>)> = self.bhq.iter()
-            .map(|ai| (ai.bnw, ai.path.clone()))
+        let fgk = if efd > 0 { efd } else { 3u16 };
+        let juq: Vec<(u16, Vec<u16>)> = self.output_paths.iter()
+            .map(|aa| (aa.pin_nid, aa.path.clone()))
             .collect();
 
-        for (bnw, vex) in &qgn {
+        for (pin_nid, path_nids) in &juq {
             
-            for &lb in vex {
-                let _ = self.adp(codec, lb, verb::PL_, 0x00);
+            for &nid in path_nids {
+                let _ = self.codec_cmd(codec, nid, verb::QI_, 0x00);
             }
             
-            let vhv: u16 = (1 << 15) | (1 << 13) | (1 << 12) | (jzp & 0x7F);
-            let _ = self.atk(codec, *bnw, 0x300, vhv);
+            let nuo: u16 = (1 << 15) | (1 << 13) | (1 << 12) | (fgk & 0x7F);
+            let _ = self.set_verb_16(codec, *pin_nid, 0x300, nuo);
             
-            let vhw: u16 = (1 << 14) | (1 << 13) | (1 << 12) | (jzp & 0x7F);
-            let _ = self.atk(codec, *bnw, 0x300, vhw);
+            let nup: u16 = (1 << 14) | (1 << 13) | (1 << 12) | (fgk & 0x7F);
+            let _ = self.set_verb_16(codec, *pin_nid, 0x300, nup);
             
-            let _ = self.adp(codec, *bnw, verb::AHT_, 0xC0);
-            let _ = self.adp(codec, *bnw, verb::AHS_, 0x02);
+            let _ = self.codec_cmd(codec, *pin_nid, verb::AJQ_, 0xC0);
+            let _ = self.codec_cmd(codec, *pin_nid, verb::AJP_, 0x02);
             crate::serial_println!("[HDA]   Path pin NID {} -> amp forced gain={}, EAPD+OUT",
-                bnw, jzp);
+                pin_nid, fgk);
         }
 
         
         
         
-        let qgo: Vec<Vec<u16>> = self.bhq.iter()
-            .map(|ai| ai.path.clone())
+        let jur: Vec<Vec<u16>> = self.output_paths.iter()
+            .map(|aa| aa.path.clone())
             .collect();
 
-        for evu in &qgo {
-            let vey: Vec<(u16, WidgetType, Vec<u16>)> = evu.iter()
-                .kwb(|&lb| self.widgets.iter().du(|d| d.lb == lb)
-                    .map(|d| (lb, d.ekw, d.dpc.clone())))
+        for ccc in &jur {
+            let nry: Vec<(u16, WidgetType, Vec<u16>)> = ccc.iter()
+                .filter_map(|&nid| self.widgets.iter().find(|w| w.nid == nid)
+                    .map(|w| (nid, w.widget_type, w.connections.clone())))
                 .collect();
 
-            for (lb, ydy, dpc) in &vey {
+            for (nid, _wtype, connections) in &nry {
                 
                 
                 
-                let uuh = evu.iter()
-                    .qf(|&bo| bo == *lb)
-                    .and_then(|u| evu.get(u + 1))
-                    .hu();
-                if let Some(oql) = uuh {
-                    if let Some(w) = dpc.iter().qf(|&r| r == oql) {
-                        let _ = self.adp(codec, *lb, verb::CSI_, w as u8);
+                let nkc = ccc.iter()
+                    .position(|&ae| ae == *nid)
+                    .and_then(|pos| ccc.get(pos + 1))
+                    .copied();
+                if let Some(next_nid) = nkc {
+                    if let Some(idx) = connections.iter().position(|&c| c == next_nid) {
+                        let _ = self.codec_cmd(codec, *nid, verb::CVZ_, idx as u8);
                         crate::serial_println!("[HDA]   NID {} conn_sel={} (-> NID {})",
-                            lb, w, oql);
+                            nid, idx, next_nid);
                     }
                 }
             }
         }
 
         
-        let uh = self.evt(0); 
+        let jk = self.osd_base(0); 
 
         unsafe {
             
-            let bqb = self.amp(uh + sd::Cx) & 0xFF;
-            self.akw(uh + sd::Cx, (bqb as u8) | sctl::Mh as u8);
-            Self::azo(100);
+            let ajj = self.read32(jk + sd::Bf) & 0xFF;
+            self.write8(jk + sd::Bf, (ajj as u8) | sctl::Fc as u8);
+            Self::aas(100);
             
             for _ in 0..1000 {
-                if self.akm(uh + sd::Cx) & (sctl::Mh as u8) != 0 { break; }
-                Self::azo(10);
+                if self.read8(jk + sd::Bf) & (sctl::Fc as u8) != 0 { break; }
+                Self::aas(10);
             }
             
-            self.akw(uh + sd::Cx, 0);
+            self.write8(jk + sd::Bf, 0);
             for _ in 0..1000 {
-                if self.akm(uh + sd::Cx) & (sctl::Mh as u8) == 0 { break; }
-                Self::azo(10);
+                if self.read8(jk + sd::Bf) & (sctl::Fc as u8) == 0 { break; }
+                Self::aas(10);
             }
 
             
-            self.akw(uh + sd::Ui, 0x1C);
+            self.write8(jk + sd::Ix, 0x1C);
 
             
-            let kwz: u32 = 524288; 
-            let evn: u32 = 2;
-            let aay = kwz * evn;
+            let fxp: u32 = 524288; 
+            let cby: u32 = 2;
+            let total_size = fxp * cby;
 
-            let mwt: Vec<u8> = vec![0u8; aay as usize + 4096];
-            let qss = mwt.fq() as u64;
-            let aak = (qss + 0xFFF) & !0xFFF;
-            core::mem::forget(mwt);
+            let hfz: Vec<u8> = vec![0u8; total_size as usize + 4096];
+            let keq = hfz.as_ptr() as u64;
+            let kt = (keq + 0xFFF) & !0xFFF;
+            core::mem::forget(hfz);
 
-            let rg = aak.enj(hp)
+            let hg = kt.checked_sub(bz)
                 .ok_or("HDA: audio buf virt->phys failed")?;
 
-            self.dym = aak;
-            self.kbk = rg;
-            self.btf = aay;
+            self.audio_buf_virt = kt;
+            self.audio_buf_phys = hg;
+            self.audio_buf_size = total_size;
 
             
-            core::ptr::ahx(aak as *mut u8, 0, aay as usize);
+            core::ptr::write_bytes(kt as *mut u8, 0, total_size as usize);
 
             
-            let myh: Vec<u8> = vec![0u8; 256 + 4096]; 
-            let qoh = myh.fq() as u64;
-            let gav = (qoh + 127) & !127; 
-            core::mem::forget(myh);
+            let hgz: Vec<u8> = vec![0u8; 256 + 4096]; 
+            let kau = hgz.as_ptr() as u64;
+            let bdl_virt = (kau + 127) & !127; 
+            core::mem::forget(hgz);
 
-            let ded = gav.enj(hp)
+            let bdl_phys = bdl_virt.checked_sub(bz)
                 .ok_or("HDA: BDL virt->phys failed")?;
 
-            self.gav = gav;
-            self.ded = ded;
+            self.bdl_virt = bdl_virt;
+            self.bdl_phys = bdl_phys;
 
             
-            let qog = gav as *mut Byl;
-            for a in 0..evn {
-                let bt = &mut *qog.add(a as usize);
-                bt.re = rg + (a as u64) * (kwz as u64);
-                bt.go = kwz;
-                bt.twi = 1; 
+            let kat = bdl_virt as *mut Ahj;
+            for i in 0..cby {
+                let entry = &mut *kat.add(i as usize);
+                entry.address = hg + (i as u64) * (fxp as u64);
+                entry.length = fxp;
+                entry.ioc = 1; 
             }
 
             
-            self.aiu(uh + sd::Agw, aay);  
-            self.asg(uh + sd::Ajp, (evn - 1) as u16); 
-            self.asg(uh + sd::Aia, fmt);  
-            self.aiu(uh + sd::Agm, ded as u32);
-            self.aiu(uh + sd::Agn, (ded >> 32) as u32);
+            self.write32(jk + sd::Oe, total_size);  
+            self.write16(jk + sd::Pg, (cby - 1) as u16); 
+            self.write16(jk + sd::Ov, fmt);  
+            self.write32(jk + sd::Ob, bdl_phys as u32);
+            self.write32(jk + sd::Oc, (bdl_phys >> 32) as u32);
 
             
-            let hem = (ejf as u32) << (sctl::AIJ_ - 16);
-            self.akw(uh + sd::Cx + 2, hem as u8);
+            let dlu = (stream_tag as u32) << (sctl::AKF_ - 16);
+            self.write8(jk + sd::Bf + 2, dlu as u8);
 
             crate::serial_println!("[HDA]   Stream configured: 48kHz 16-bit stereo");
             crate::serial_println!("[HDA]   Audio buf phys={:#010X} size={}",
-                rg, aay);
-            crate::serial_println!("[HDA]   BDL phys={:#010X} entries={}", ded, evn);
+                hg, total_size);
+            crate::serial_println!("[HDA]   BDL phys={:#010X} entries={}", bdl_phys, cby);
         }
 
         Ok(())
@@ -1199,141 +1199,141 @@ impl HdaController {
     
     
     
-    fn lzp(&mut self) {
-        if self.btf == 0 { return; }
-        let uh = self.evt(0);
+    fn reset_output_stream(&mut self) {
+        if self.audio_buf_size == 0 { return; }
+        let jk = self.osd_base(0);
         unsafe {
             
-            let bqb = self.akm(uh + sd::Cx);
-            self.akw(uh + sd::Cx, (bqb & !(sctl::Ub as u8)) | sctl::Mh as u8);
+            let ajj = self.read8(jk + sd::Bf);
+            self.write8(jk + sd::Bf, (ajj & !(sctl::Ir as u8)) | sctl::Fc as u8);
             for _ in 0..1000 {
-                if self.akm(uh + sd::Cx) & (sctl::Mh as u8) != 0 { break; }
-                HdaController::azo(10);
+                if self.read8(jk + sd::Bf) & (sctl::Fc as u8) != 0 { break; }
+                HdaController::aas(10);
             }
             
-            self.akw(uh + sd::Cx, 0);
+            self.write8(jk + sd::Bf, 0);
             for _ in 0..1000 {
-                if self.akm(uh + sd::Cx) & (sctl::Mh as u8) == 0 { break; }
-                HdaController::azo(10);
+                if self.read8(jk + sd::Bf) & (sctl::Fc as u8) == 0 { break; }
+                HdaController::aas(10);
             }
             
-            self.akw(uh + sd::Ui, 0x1C);
+            self.write8(jk + sd::Ix, 0x1C);
 
             
-            let evn: u16 = 2;
+            let cby: u16 = 2;
             let fmt: u16 = 0x0011; 
-            self.aiu(uh + sd::Agw, self.btf);
-            self.asg(uh + sd::Ajp, evn - 1);
-            self.asg(uh + sd::Aia, fmt);
-            self.aiu(uh + sd::Agm, self.ded as u32);
-            self.aiu(uh + sd::Agn, (self.ded >> 32) as u32);
+            self.write32(jk + sd::Oe, self.audio_buf_size);
+            self.write16(jk + sd::Pg, cby - 1);
+            self.write16(jk + sd::Ov, fmt);
+            self.write32(jk + sd::Ob, self.bdl_phys as u32);
+            self.write32(jk + sd::Oc, (self.bdl_phys >> 32) as u32);
 
             
-            let hem = (self.ejf as u32) << (sctl::AIJ_ - 16);
-            self.akw(uh + sd::Cx + 2, hem as u8);
+            let dlu = (self.stream_tag as u32) << (sctl::AKF_ - 16);
+            self.write8(jk + sd::Bf + 2, dlu as u8);
         }
-        self.uu = false;
+        self.playing = false;
         crate::serial_println!("[HDA] Stream reset (LPIB→0, reconfig done)");
     }
 
-    pub fn ssn(&mut self, auf: u32, uk: u32) {
-        let auy = 48000u32;
-        let lq = 2u32;
-        let nbb = 2u32; 
-        let ayz = (auy * uk / 1000) as usize;
-        let qsr = (self.btf / (lq * nbb)) as usize;
-        let pfi = ayz.v(qsr);
+    pub fn fill_tone(&mut self, freq_hz: u32, duration_ms: u32) {
+        let sample_rate = 48000u32;
+        let channels = 2u32;
+        let hjl = 2u32; 
+        let aai = (sample_rate * duration_ms / 1000) as usize;
+        let kep = (self.audio_buf_size / (channels * hjl)) as usize;
+        let jcl = aai.min(kep);
 
-        let k = self.dym as *mut i16;
+        let buf = self.audio_buf_virt as *mut i16;
 
         
-        let awn = auy / auf;
-        if awn == 0 { return; }
-        let exd = (awn / 4).am(1);
-        let dyg: i32 = 16000; 
+        let zd = sample_rate / freq_hz;
+        if zd == 0 { return; }
+        let ccz = (zd / 4).max(1);
+        let bqf: i32 = 16000; 
 
         unsafe {
-            for a in 0..pfi {
-                let u = (a as u32) % awn;
+            for i in 0..jcl {
+                let pos = (i as u32) % zd;
                 
                 
-                let wcm: i32 = if u < exd {
-                    dyg * u as i32 / exd as i32
-                } else if u < 3 * exd {
-                    dyg * (2 * exd as i32 - u as i32) / exd as i32
+                let ojz: i32 = if pos < ccz {
+                    bqf * pos as i32 / ccz as i32
+                } else if pos < 3 * ccz {
+                    bqf * (2 * ccz as i32 - pos as i32) / ccz as i32
                 } else {
-                    dyg * (u as i32 - awn as i32) / exd as i32
+                    bqf * (pos as i32 - zd as i32) / ccz as i32
                 };
                 
-                let yr = wcm.qp(-32000, 32000) as i16;
+                let sample = ojz.clamp(-32000, 32000) as i16;
 
                 
-                let w = a * lq as usize;
-                *k.add(w) = yr;
-                *k.add(w + 1) = yr;
+                let idx = i * channels as usize;
+                *buf.add(idx) = sample;
+                *buf.add(idx + 1) = sample;
             }
 
             
-            let kvy = pfi * lq as usize * nbb as usize;
-            if kvy < self.btf as usize {
-                core::ptr::ahx(
-                    (self.dym as *mut u8).add(kvy),
+            let fwu = jcl * channels as usize * hjl as usize;
+            if fwu < self.audio_buf_size as usize {
+                core::ptr::write_bytes(
+                    (self.audio_buf_virt as *mut u8).add(fwu),
                     0,
-                    self.btf as usize - kvy
+                    self.audio_buf_size as usize - fwu
                 );
             }
         }
     }
 
     
-    pub fn daq(&mut self, ay: bool) {
-        let uh = self.evt(0);
+    pub fn play(&mut self, start: bool) {
+        let jk = self.osd_base(0);
         unsafe {
-            if ay {
+            if start {
                 
-                let lez = self.amp(reg::Atu);
-                let wva = 1u32 << (self.goe as u32); 
-                self.aiu(reg::Atu, lez | (1 << 31) | (1 << 30) | wva);
+                let gdb = self.read32(reg::Sx);
+                let oxy = 1u32 << (self.num_iss as u32); 
+                self.write32(reg::Sx, gdb | (1 << 31) | (1 << 30) | oxy);
 
                 
-                self.akw(uh + sd::Ui, 0x1C);
+                self.write8(jk + sd::Ix, 0x1C);
 
                 
                 
-                let bqb = self.akm(uh + sd::Cx);
-                self.akw(uh + sd::Cx, (bqb | sctl::Ub as u8) & !(sctl::Cfo as u8));
+                let ajj = self.read8(jk + sd::Bf);
+                self.write8(jk + sd::Bf, (ajj | sctl::Ir as u8) & !(sctl::Aln as u8));
 
-                self.uu = true;
+                self.playing = true;
                 crate::serial_println!("[HDA] Playback started");
             } else {
                 
-                let bqb = self.akm(uh + sd::Cx);
-                self.akw(uh + sd::Cx, bqb & !(sctl::Ub as u8));
+                let ajj = self.read8(jk + sd::Bf);
+                self.write8(jk + sd::Bf, ajj & !(sctl::Ir as u8));
 
-                self.uu = false;
+                self.playing = false;
                 crate::serial_println!("[HDA] Playback stopped");
             }
         }
     }
 
     
-    pub fn lgj(&self) -> bool {
-        self.uu
+    pub fn is_playing(&self) -> bool {
+        self.playing
     }
 
     
-    pub fn eje(&self) -> u32 {
-        let uh = self.evt(0);
-        unsafe { self.amp(uh + sd::Bkm) }
+    pub fn stream_position(&self) -> u32 {
+        let jk = self.osd_base(0);
+        unsafe { self.read32(jk + sd::Aap) }
     }
 
     
     
     
 
-    fn azo(ifz: u64) {
+    fn aas(us: u64) {
         
-        for _ in 0..ifz {
+        for _ in 0..us {
             unsafe {
                 let mut port: crate::arch::Port<u8> = crate::arch::Port::new(0x80);
                 port.write(0);
@@ -1342,22 +1342,22 @@ impl HdaController {
     }
 
     
-    pub fn wtt(&self) -> String {
-        let mut e = String::new();
-        e.t(&format!("Intel HDA Controller\n"));
-        e.t(&format!("  Streams: {} out, {} in, {} bidir\n",
-            self.htf, self.goe, self.jhn));
-        e.t(&format!("  Codecs: {:?}\n", self.bml));
-        e.t(&format!("  Widgets: {}\n", self.widgets.len()));
-        e.t(&format!("  Output paths: {}\n", self.bhq.len()));
-        for (a, ai) in self.bhq.iter().cf() {
-            e.t(&format!("    [{}] {} -> path {:?}\n", a, ai.ceb, ai.path));
+    pub fn status_info(&self) -> String {
+        let mut j = String::new();
+        j.push_str(&format!("Intel HDA Controller\n"));
+        j.push_str(&format!("  Streams: {} out, {} in, {} bidir\n",
+            self.num_oss, self.num_iss, self.num_bss));
+        j.push_str(&format!("  Codecs: {:?}\n", self.codecs));
+        j.push_str(&format!("  Widgets: {}\n", self.widgets.len()));
+        j.push_str(&format!("  Output paths: {}\n", self.output_paths.len()));
+        for (i, aa) in self.output_paths.iter().enumerate() {
+            j.push_str(&format!("    [{}] {} -> path {:?}\n", i, aa.device_type, aa.path));
         }
-        e.t(&format!("  Playing: {}\n", self.uu));
-        if self.uu {
-            e.t(&format!("  Position: {}\n", self.eje()));
+        j.push_str(&format!("  Playing: {}\n", self.playing));
+        if self.playing {
+            j.push_str(&format!("  Position: {}\n", self.stream_position()));
         }
-        e
+        j
     }
 }
 
@@ -1368,62 +1368,62 @@ impl HdaController {
 
 pub fn init() -> Result<(), &'static str> {
     
-    let ik = crate::pci::ebq(crate::pci::class::Blx);
-    let tns = ik.iter()
-        .du(|bc| bc.adl == 0x03) 
-        .or_else(|| ik.iter().du(|bc| bc.adl == 0x01)) 
+    let devices = crate::pci::bsp(crate::pci::class::Abd);
+    let gae = devices.iter()
+        .find(|d| d.subclass == 0x03) 
+        .or_else(|| devices.iter().find(|d| d.subclass == 0x01)) 
         .ok_or("HDA: no Intel HDA device found on PCI bus")?
         .clone();
 
-    let db = HdaController::init(&tns)?;
-    *Fa.lock() = Some(db);
-    AVS_.store(true, Ordering::SeqCst);
+    let ctrl = HdaController::init(&gae)?;
+    *Cd.lock() = Some(ctrl);
+    AXW_.store(true, Ordering::SeqCst);
 
     Ok(())
 }
 
 
-pub fn ky() -> bool {
-    AVS_.load(Ordering::SeqCst)
+pub fn is_initialized() -> bool {
+    AXW_.load(Ordering::SeqCst)
 }
 
 
-pub fn owd(auf: u32, uk: u32) -> Result<(), &'static str> {
-    let mut hda = Fa.lock();
-    let db = hda.as_mut().ok_or("HDA: not initialized")?;
+pub fn ivg(freq_hz: u32, duration_ms: u32) -> Result<(), &'static str> {
+    let mut hda = Cd.lock();
+    let ctrl = hda.as_mut().ok_or("HDA: not initialized")?;
 
     
-    db.lzp();
-    db.ssn(auf, uk);
+    ctrl.reset_output_stream();
+    ctrl.fill_tone(freq_hz, duration_ms);
 
     
-    let vkb = db.eje();
-    db.daq(true);
+    let nwg = ctrl.stream_position();
+    ctrl.play(true);
 
     
-    HdaController::azo(5000); 
-    let owr = db.eje();
+    HdaController::aas(5000); 
+    let ivo = ctrl.stream_position();
 
     
-    let auy = 48000u32;
-    let xv = (auy * uk / 1000) * 4; 
-    let cd = xv.v(db.btf);
+    let sample_rate = 48000u32;
+    let total_bytes = (sample_rate * duration_ms / 1000) * 4; 
+    let target = total_bytes.min(ctrl.audio_buf_size);
 
-    for _ in 0..(uk * 10) {
-        HdaController::azo(100);
-        let u = db.eje();
-        if u >= cd {
+    for _ in 0..(duration_ms * 10) {
+        HdaController::aas(100);
+        let pos = ctrl.stream_position();
+        if pos >= target {
             break;
         }
     }
 
-    let owq = db.eje();
-    db.daq(false);
+    let ivn = ctrl.stream_position();
+    ctrl.play(false);
 
     
     crate::serial_println!("[HDA] play_tone: LPIB before={} early={} after={} target={}",
-        vkb, owr, owq, cd);
-    if owr == 0 && owq == 0 {
+        nwg, ivo, ivn, target);
+    if ivo == 0 && ivn == 0 {
         crate::serial_println!("[HDA] WARNING: LPIB never advanced! DMA may not be running.");
     }
 
@@ -1431,29 +1431,29 @@ pub fn owd(auf: u32, uk: u32) -> Result<(), &'static str> {
 }
 
 
-pub fn wix(ap: u8) -> Result<(), &'static str> {
-    let mut hda = Fa.lock();
-    let db = hda.as_mut().ok_or("HDA: not initialized")?;
-    if db.bml.is_empty() { return Err("No codecs"); }
-    let codec = db.bml[0];
-    let _ = db.adp(codec, 1, verb::BFM_, ap);
-    crate::serial_println!("[HDA] GPIO DATA set to {:#04X}", ap);
+pub fn ooz(val: u8) -> Result<(), &'static str> {
+    let mut hda = Cd.lock();
+    let ctrl = hda.as_mut().ok_or("HDA: not initialized")?;
+    if ctrl.codecs.is_empty() { return Err("No codecs"); }
+    let codec = ctrl.codecs[0];
+    let _ = ctrl.codec_cmd(codec, 1, verb::BHQ_, val);
+    crate::serial_println!("[HDA] GPIO DATA set to {:#04X}", val);
     Ok(())
 }
 
 
-pub fn qg() -> Result<(), &'static str> {
-    let mut hda = Fa.lock();
-    let db = hda.as_mut().ok_or("HDA: not initialized")?;
-    db.daq(false);
+pub fn stop() -> Result<(), &'static str> {
+    let mut hda = Cd.lock();
+    let ctrl = hda.as_mut().ok_or("HDA: not initialized")?;
+    ctrl.play(false);
     Ok(())
 }
 
 
-pub fn tdy() -> u32 {
-    let hda = Fa.lock();
+pub fn mdk() -> u32 {
+    let hda = Cd.lock();
     match hda.as_ref() {
-        Some(db) => db.eje(),
+        Some(ctrl) => ctrl.stream_position(),
         None => 0,
     }
 }
@@ -1462,40 +1462,40 @@ pub fn tdy() -> u32 {
 
 
 
-pub fn jmf() {
-    let hda = Fa.lock();
-    if let Some(db) = hda.as_ref() {
-        if db.btf == 0 { return; }
-        let uh = db.evt(0);
+pub fn eyn() {
+    let hda = Cd.lock();
+    if let Some(ctrl) = hda.as_ref() {
+        if ctrl.audio_buf_size == 0 { return; }
+        let jk = ctrl.osd_base(0);
         unsafe {
             
-            let bqb = db.akm(uh + sd::Cx);
-            db.akw(uh + sd::Cx, (bqb & !(sctl::Ub as u8)) | sctl::Mh as u8);
+            let ajj = ctrl.read8(jk + sd::Bf);
+            ctrl.write8(jk + sd::Bf, (ajj & !(sctl::Ir as u8)) | sctl::Fc as u8);
             for _ in 0..1000 {
-                if db.akm(uh + sd::Cx) & (sctl::Mh as u8) != 0 { break; }
-                HdaController::azo(10);
+                if ctrl.read8(jk + sd::Bf) & (sctl::Fc as u8) != 0 { break; }
+                HdaController::aas(10);
             }
             
-            db.akw(uh + sd::Cx, 0);
+            ctrl.write8(jk + sd::Bf, 0);
             for _ in 0..1000 {
-                if db.akm(uh + sd::Cx) & (sctl::Mh as u8) == 0 { break; }
-                HdaController::azo(10);
+                if ctrl.read8(jk + sd::Bf) & (sctl::Fc as u8) == 0 { break; }
+                HdaController::aas(10);
             }
             
-            db.akw(uh + sd::Ui, 0x1C);
+            ctrl.write8(jk + sd::Ix, 0x1C);
 
             
-            let evn: u16 = 2;
+            let cby: u16 = 2;
             let fmt: u16 = 0x0011; 
-            db.aiu(uh + sd::Agw, db.btf);
-            db.asg(uh + sd::Ajp, evn - 1);
-            db.asg(uh + sd::Aia, fmt);
-            db.aiu(uh + sd::Agm, db.ded as u32);
-            db.aiu(uh + sd::Agn, (db.ded >> 32) as u32);
+            ctrl.write32(jk + sd::Oe, ctrl.audio_buf_size);
+            ctrl.write16(jk + sd::Pg, cby - 1);
+            ctrl.write16(jk + sd::Ov, fmt);
+            ctrl.write32(jk + sd::Ob, ctrl.bdl_phys as u32);
+            ctrl.write32(jk + sd::Oc, (ctrl.bdl_phys >> 32) as u32);
 
             
-            let hem = (db.ejf as u32) << (sctl::AIJ_ - 16);
-            db.akw(uh + sd::Cx + 2, hem as u8);
+            let dlu = (ctrl.stream_tag as u32) << (sctl::AKF_ - 16);
+            ctrl.write8(jk + sd::Bf + 2, dlu as u8);
         }
         crate::serial_println!("[HDA] Stream reset (LPIB→0, reconfig done)");
     }
@@ -1506,82 +1506,82 @@ pub fn jmf() {
 
 
 
-pub fn dcg(un: &[i16]) -> Result<(), &'static str> {
-    let mut hda = Fa.lock();
-    let db = hda.as_mut().ok_or("HDA: not initialized")?;
+pub fn bdu(jo: &[i16]) -> Result<(), &'static str> {
+    let mut hda = Cd.lock();
+    let ctrl = hda.as_mut().ok_or("HDA: not initialized")?;
 
     
-    if db.uu {
-        db.daq(false);
+    if ctrl.playing {
+        ctrl.play(false);
     }
 
     
-    db.lzp();
+    ctrl.reset_output_stream();
 
     
-    if db.dym == 0 || db.btf == 0 {
+    if ctrl.audio_buf_virt == 0 || ctrl.audio_buf_size == 0 {
         return Err("HDA: DMA buffer not initialized");
     }
 
     
-    let k = db.dym as *mut i16;
-    let fdv = (db.btf / 2) as usize;
-    let acq = un.len().v(fdv);
+    let buf = ctrl.audio_buf_virt as *mut i16;
+    let cgn = (ctrl.audio_buf_size / 2) as usize;
+    let od = jo.len().min(cgn);
 
     unsafe {
-        core::ptr::copy_nonoverlapping(un.fq(), k, acq);
+        core::ptr::copy_nonoverlapping(jo.as_ptr(), buf, od);
         
-        if acq < fdv {
-            core::ptr::ahx(k.add(acq), 0, fdv - acq);
+        if od < cgn {
+            core::ptr::write_bytes(buf.add(od), 0, cgn - od);
         }
     }
 
-    let njk = (acq * 2) as u32;
+    let hqo = (od * 2) as u32;
     crate::serial_println!("[HDA] Looped playback: {} bytes ({} ms), buf={}",
-        njk, njk / (48000 * 4 / 1000), db.btf);
+        hqo, hqo / (48000 * 4 / 1000), ctrl.audio_buf_size);
 
     
     
     
-    db.daq(true);
+    ctrl.play(true);
     Ok(())
 }
 
 
 
 
-pub fn gic() -> Option<(*mut i16, usize)> {
-    let hda = Fa.lock();
-    let db = hda.as_ref()?;
-    if db.dym == 0 { return None; }
-    Some((db.dym as *mut i16, (db.btf / 2) as usize))
+pub fn cym() -> Option<(*mut i16, usize)> {
+    let hda = Cd.lock();
+    let ctrl = hda.as_ref()?;
+    if ctrl.audio_buf_virt == 0 { return None; }
+    Some((ctrl.audio_buf_virt as *mut i16, (ctrl.audio_buf_size / 2) as usize))
 }
 
 
-pub fn lgj() -> bool {
-    let hda = Fa.lock();
+pub fn is_playing() -> bool {
+    let hda = Cd.lock();
     match hda.as_ref() {
-        Some(db) => db.lgj(),
+        Some(ctrl) => ctrl.is_playing(),
         None => false,
     }
 }
 
 
-pub fn hlj() -> u32 {
-    let hda = Fa.lock();
+pub fn dqq() -> u32 {
+    let hda = Cd.lock();
     match hda.as_ref() {
-        Some(db) => db.eje(),
+        Some(ctrl) => ctrl.stream_position(),
         None => 0,
     }
 }
 
 
 
-pub fn wsr() -> Result<(), &'static str> {
-    let mut hda = Fa.lock();
-    let db = hda.as_mut().ok_or("HDA: not initialized")?;
-    if !db.uu {
-        db.daq(true);
+pub fn owe() -> Result<(), &'static str> {
+    let mut hda = Cd.lock();
+    let ctrl = hda.as_mut().ok_or("HDA: not initialized")?;
+    if !ctrl.playing {
+        ctrl.play(true);
     }
     Ok(())
 }
@@ -1589,13 +1589,13 @@ pub fn wsr() -> Result<(), &'static str> {
 
 
 
-pub fn ndi() {
-    let hda = Fa.lock();
-    if let Some(db) = hda.as_ref() {
-        let uh = db.evt(0);
+pub fn hli() {
+    let hda = Cd.lock();
+    if let Some(ctrl) = hda.as_ref() {
+        let jk = ctrl.osd_base(0);
         unsafe {
             
-            db.akw(uh + sd::Ui, 0x1C);
+            ctrl.write8(jk + sd::Ix, 0x1C);
         }
     }
 }
@@ -1603,19 +1603,19 @@ pub fn ndi() {
 
 
 
-pub fn nqi() -> bool {
-    let hda = Fa.lock();
-    if let Some(db) = hda.as_ref() {
-        if !db.uu { return false; }
-        let uh = db.evt(0);
+pub fn hwa() -> bool {
+    let hda = Cd.lock();
+    if let Some(ctrl) = hda.as_ref() {
+        if !ctrl.playing { return false; }
+        let jk = ctrl.osd_base(0);
         unsafe {
-            let bqb = db.akm(uh + sd::Cx);
-            if bqb & (sctl::Ub as u8) == 0 {
+            let ajj = ctrl.read8(jk + sd::Bf);
+            if ajj & (sctl::Ir as u8) == 0 {
                 
-                db.akw(uh + sd::Ui, 0x1C);
-                db.akw(uh + sd::Cx, bqb | sctl::Ub as u8);
+                ctrl.write8(jk + sd::Ix, 0x1C);
+                ctrl.write8(jk + sd::Bf, ajj | sctl::Ir as u8);
                 crate::serial_println!("[HDA] Stream stalled — restarted (LPIB={})",
-                    db.eje());
+                    ctrl.stream_position());
                 return true;
             }
         }
@@ -1625,397 +1625,397 @@ pub fn nqi() -> bool {
 
 
 pub fn status() -> String {
-    let hda = Fa.lock();
+    let hda = Cd.lock();
     match hda.as_ref() {
-        Some(db) => db.wtt(),
+        Some(ctrl) => ctrl.status_info(),
         None => String::from("HDA: not initialized"),
     }
 }
 
 
-pub fn geq() -> String {
-    let mut e = String::new();
-    let mut hda = Fa.lock();
-    let db = match hda.as_mut() {
-        Some(r) => r,
+pub fn cwm() -> String {
+    let mut j = String::new();
+    let mut hda = Cd.lock();
+    let ctrl = match hda.as_mut() {
+        Some(c) => c,
         None => {
-            e.t("HDA: not initialized\n");
-            return e;
+            j.push_str("HDA: not initialized\n");
+            return j;
         }
     };
 
     unsafe {
         
-        let cew = db.aym(reg::Bhn);
-        let gctl = db.amp(reg::Km);
-        let lez = db.amp(reg::Atu);
-        let tvr = db.amp(0x24); 
-        let wsa = db.amp(reg::Bsa);
-        let xtn = db.amp(reg::Cqa);
-        let fvp = db.aym(reg::Ayi);
+        let agk = ctrl.read16(reg::Yz);
+        let gctl = ctrl.read32(reg::Ef);
+        let gdb = ctrl.read32(reg::Sx);
+        let mrb = ctrl.read32(0x24); 
+        let ovs = ctrl.read32(reg::Aej);
+        let pto = ctrl.read32(reg::Arw);
+        let bdv = ctrl.read16(reg::Ux);
 
-        e.t(&format!("=== HDA Hardware Diagnostic ===\n"));
-        e.t(&format!("GCAP={:#06X} GCTL={:#010X}\n", cew, gctl));
-        e.t(&format!("INTCTL={:#010X} INTSTS={:#010X}\n", lez, tvr));
-        e.t(&format!("SSYNC={:#010X} WALCLK={}\n", wsa, xtn));
-        e.t(&format!("STATESTS={:#06X}\n", fvp));
-        e.t(&format!("CRST={} UNSOL={}\n",
-            if gctl & gctl::Rs != 0 { "OK" } else { "IN RESET!" },
-            if gctl & gctl::Bvb != 0 { "on" } else { "off" }));
-
-        
-        let uh = db.evt(0);
-        let kmd = db.akm(uh + sd::Cx);
-        let nht = db.akm(uh + sd::Cx + 2);
-        let ica = db.akm(uh + sd::Ui);
-        let bvg = db.amp(uh + sd::Bkm);
-        let qwz = db.amp(uh + sd::Agw);
-        let uiw = db.aym(uh + sd::Ajp);
-        let ssc = db.aym(uh + sd::Ccz);
-        let fmt = db.aym(uh + sd::Aia);
-        let qoi = db.amp(uh + sd::Agm);
-        let qoj = db.amp(uh + sd::Agn);
-
-        e.t(&format!("\n--- Output Stream 0 (base={:#X}) ---\n", uh));
-        e.t(&format!("CTL[0]={:#04X} CTL[2]={:#04X} (RUN={} SRST={} TAG={})\n",
-            kmd, nht,
-            if kmd & sctl::Ub as u8 != 0 { "YES" } else { "no" },
-            if kmd & sctl::Mh as u8 != 0 { "YES!" } else { "no" },
-            nht >> 4));
-        e.t(&format!("STS={:#04X} (BCIS={} FIFOE={} DESE={} FIFORDY={})\n",
-            ica,
-            if ica & ssts::Bye != 0 { "Y" } else { "n" },
-            if ica & ssts::Ccx != 0 { "ERR" } else { "ok" },
-            if ica & ssts::Cae != 0 { "ERR" } else { "ok" },
-            if ica & ssts::Ccy != 0 { "Y" } else { "n" }));
-        e.t(&format!("LPIB={} CBL={} LVI={} FIFOS={}\n", bvg, qwz, uiw, ssc));
-        e.t(&format!("FMT={:#06X} (48kHz/16bit/stereo=0x0011)\n", fmt));
-        e.t(&format!("BDL={:#010X}:{:#010X}\n", qoj, qoi));
-        e.t(&format!("Audio buf phys={:#010X} size={}\n", db.kbk, db.btf));
+        j.push_str(&format!("=== HDA Hardware Diagnostic ===\n"));
+        j.push_str(&format!("GCAP={:#06X} GCTL={:#010X}\n", agk, gctl));
+        j.push_str(&format!("INTCTL={:#010X} INTSTS={:#010X}\n", gdb, mrb));
+        j.push_str(&format!("SSYNC={:#010X} WALCLK={}\n", ovs, pto));
+        j.push_str(&format!("STATESTS={:#06X}\n", bdv));
+        j.push_str(&format!("CRST={} UNSOL={}\n",
+            if gctl & gctl::Hi != 0 { "OK" } else { "IN RESET!" },
+            if gctl & gctl::Afr != 0 { "on" } else { "off" }));
 
         
-        if !db.bml.is_empty() && !db.bhq.is_empty() {
-            let codec = db.bml[0];
-            let path = db.bhq[0].clone();
-            e.t(&format!("\n--- Codec {} Path ---\n", codec));
-            e.t(&format!("Path: {:?} Type={}\n", path.path, path.ceb));
+        let jk = ctrl.osd_base(0);
+        let fpg = ctrl.read8(jk + sd::Bf);
+        let hpe = ctrl.read8(jk + sd::Bf + 2);
+        let eao = ctrl.read8(jk + sd::Ix);
+        let alw = ctrl.read32(jk + sd::Aap);
+        let khs = ctrl.read32(jk + sd::Oe);
+        let nbh = ctrl.read16(jk + sd::Pg);
+        let lvb = ctrl.read16(jk + sd::Ajt);
+        let fmt = ctrl.read16(jk + sd::Ov);
+        let kav = ctrl.read32(jk + sd::Ob);
+        let kaw = ctrl.read32(jk + sd::Oc);
+
+        j.push_str(&format!("\n--- Output Stream 0 (base={:#X}) ---\n", jk));
+        j.push_str(&format!("CTL[0]={:#04X} CTL[2]={:#04X} (RUN={} SRST={} TAG={})\n",
+            fpg, hpe,
+            if fpg & sctl::Ir as u8 != 0 { "YES" } else { "no" },
+            if fpg & sctl::Fc as u8 != 0 { "YES!" } else { "no" },
+            hpe >> 4));
+        j.push_str(&format!("STS={:#04X} (BCIS={} FIFOE={} DESE={} FIFORDY={})\n",
+            eao,
+            if eao & ssts::Ahf != 0 { "Y" } else { "n" },
+            if eao & ssts::Ajr != 0 { "ERR" } else { "ok" },
+            if eao & ssts::Aif != 0 { "ERR" } else { "ok" },
+            if eao & ssts::Ajs != 0 { "Y" } else { "n" }));
+        j.push_str(&format!("LPIB={} CBL={} LVI={} FIFOS={}\n", alw, khs, nbh, lvb));
+        j.push_str(&format!("FMT={:#06X} (48kHz/16bit/stereo=0x0011)\n", fmt));
+        j.push_str(&format!("BDL={:#010X}:{:#010X}\n", kaw, kav));
+        j.push_str(&format!("Audio buf phys={:#010X} size={}\n", ctrl.audio_buf_phys, ctrl.audio_buf_size));
+
+        
+        if !ctrl.codecs.is_empty() && !ctrl.output_paths.is_empty() {
+            let codec = ctrl.codecs[0];
+            let path = ctrl.output_paths[0].clone();
+            j.push_str(&format!("\n--- Codec {} Path ---\n", codec));
+            j.push_str(&format!("Path: {:?} Type={}\n", path.path, path.device_type));
 
             
-            for &lb in &path.path {
-                if let Ok(jkk) = db.adp(codec, lb, verb::TI_, 0) {
-                    let elw = jkk & 0xF;
-                    let cd = (jkk >> 4) & 0xF;
-                    e.t(&format!("  NID {}: power D{}/D{}{}\n",
-                        lb, elw, cd,
-                        if elw != 0 { " NOT D0!" } else { "" }));
+            for &nid in &path.path {
+                if let Ok(exe) = ctrl.codec_cmd(codec, nid, verb::UO_, 0) {
+                    let bxh = exe & 0xF;
+                    let target = (exe >> 4) & 0xF;
+                    j.push_str(&format!("  NID {}: power D{}/D{}{}\n",
+                        nid, bxh, target,
+                        if bxh != 0 { " NOT D0!" } else { "" }));
                 }
             }
 
             
-            if let Ok(fz) = db.adp(codec, path.bnw, verb::ASV_, 0) {
-                e.t(&format!("  Pin {} PIN_CTL={:#04X} (out={})\n",
-                    path.bnw, fz, if fz & 0x40 != 0 { "YES" } else { "NO!" }));
+            if let Ok(pc) = ctrl.codec_cmd(codec, path.pin_nid, verb::AUZ_, 0) {
+                j.push_str(&format!("  Pin {} PIN_CTL={:#04X} (out={})\n",
+                    path.pin_nid, pc, if pc & 0x40 != 0 { "YES" } else { "NO!" }));
             }
-            if let Ok(now) = db.adp(codec, path.bnw, verb::ASU_, 0) {
-                e.t(&format!("  Pin {} EAPD={:#04X} (on={})\n",
-                    path.bnw, now, if now & 0x02 != 0 { "YES" } else { "NO!" }));
+            if let Ok(ea) = ctrl.codec_cmd(codec, path.pin_nid, verb::AUY_, 0) {
+                j.push_str(&format!("  Pin {} EAPD={:#04X} (on={})\n",
+                    path.pin_nid, ea, if ea & 0x02 != 0 { "YES" } else { "NO!" }));
             }
 
             
-            if let Ok(jt) = db.adp(codec, path.eak, verb::AST_, 0) {
-                let ll = (jt >> 4) & 0xF;
-                e.t(&format!("  DAC {} STREAM_TAG={} (expect {})\n",
-                    path.eak, ll, db.ejf));
+            if let Ok(dr) = ctrl.codec_cmd(codec, path.dac_nid, verb::AUX_, 0) {
+                let tag = (dr >> 4) & 0xF;
+                j.push_str(&format!("  DAC {} STREAM_TAG={} (expect {})\n",
+                    path.dac_nid, tag, ctrl.stream_tag));
             }
         }
     }
-    e
+    j
 }
 
 
 
-pub fn rln() -> String {
-    let mut e = String::new();
-    let mut hda = Fa.lock();
-    let db = match hda.as_mut() {
-        Some(r) => r,
+pub fn kuy() -> String {
+    let mut j = String::new();
+    let mut hda = Cd.lock();
+    let ctrl = match hda.as_mut() {
+        Some(c) => c,
         None => {
-            e.t("HDA: not initialized\n");
-            return e;
+            j.push_str("HDA: not initialized\n");
+            return j;
         }
     };
 
-    if db.bml.is_empty() {
-        e.t("No codecs found\n");
-        return e;
+    if ctrl.codecs.is_empty() {
+        j.push_str("No codecs found\n");
+        return j;
     }
 
-    let codec = db.bml[0];
+    let codec = ctrl.codecs[0];
 
     
-    if let Ok(cck) = db.adp(codec, 0, verb::EI_, verb::AGI_ as u8) {
-        e.t(&format!("Codec {}: vendor={:#06X} device={:#06X}\n",
-            codec, (cck >> 16) & 0xFFFF, cck & 0xFFFF));
+    if let Ok(bpx) = ctrl.codec_cmd(codec, 0, verb::EW_, verb::AIC_ as u8) {
+        j.push_str(&format!("Codec {}: vendor={:#06X} device={:#06X}\n",
+            codec, (bpx >> 16) & 0xFFFF, bpx & 0xFFFF));
     }
 
-    e.t(&format!("Widgets: {} discovered\n", db.widgets.len()));
-    e.t(&format!("Output paths: {}\n", db.bhq.len()));
-    for (a, ai) in db.bhq.iter().cf() {
-        e.t(&format!("  Path[{}]: pin={} dac={} type={} route={:?}\n",
-            a, ai.bnw, ai.eak, ai.ceb, ai.path));
+    j.push_str(&format!("Widgets: {} discovered\n", ctrl.widgets.len()));
+    j.push_str(&format!("Output paths: {}\n", ctrl.output_paths.len()));
+    for (i, aa) in ctrl.output_paths.iter().enumerate() {
+        j.push_str(&format!("  Path[{}]: pin={} dac={} type={} route={:?}\n",
+            i, aa.pin_nid, aa.dac_nid, aa.device_type, aa.path));
     }
 
     
-    let tgv = db.adp(codec, 1, verb::BWW_, 0).unwrap_or(0);
-    let tgx = db.adp(codec, 1, verb::BWY_, 0).unwrap_or(0);
-    let tgw  = db.adp(codec, 1, verb::BWX_,  0).unwrap_or(0);
-    let tgu = db.cku(codec, 1, verb::CIQ_).unwrap_or(0);
-    e.t(&format!("GPIO: count={} mask={:#04X} dir={:#04X} data={:#04X}\n",
-        tgu & 0xFF, tgx, tgw, tgv));
+    let mfn = ctrl.codec_cmd(codec, 1, verb::CAC_, 0).unwrap_or(0);
+    let mfp = ctrl.codec_cmd(codec, 1, verb::CAE_, 0).unwrap_or(0);
+    let mfo  = ctrl.codec_cmd(codec, 1, verb::CAD_,  0).unwrap_or(0);
+    let mfm = ctrl.get_param(codec, 1, verb::CLZ_).unwrap_or(0);
+    j.push_str(&format!("GPIO: count={} mask={:#04X} dir={:#04X} data={:#04X}\n",
+        mfm & 0xFF, mfp, mfo, mfn));
 
     
-    e.t(&format!("\n--- Pin Widgets ---\n"));
-    let vhy: Vec<(u16, u32)> = db.widgets.iter()
-        .hi(|d| d.ekw == WidgetType::Tx)
-        .map(|d| (d.lb, d.dui))
+    j.push_str(&format!("\n--- Pin Widgets ---\n"));
+    let nur: Vec<(u16, u32)> = ctrl.widgets.iter()
+        .filter(|w| w.widget_type == WidgetType::PinComplex)
+        .map(|w| (w.nid, w.pin_config))
         .collect();
 
-    for (lb, cfg) in &vhy {
-        let ba = lty(*cfg);
-        let hdw = match (*cfg >> 30) & 0x3 {
+    for (nid, cfg) in &nur {
+        let s = gnb(*cfg);
+        let dli = match (*cfg >> 30) & 0x3 {
             0 => "Jack",
             1 => "None",
             2 => "Fixed",
             3 => "Both",
             _ => "?",
         };
-        let cse = (*cfg >> 24) & 0x3F;
+        let axx = (*cfg >> 24) & 0x3F;
 
         
-        let ltx = db.adp(codec, *lb, verb::ASV_, 0).unwrap_or(0);
-        let nox = db.adp(codec, *lb, verb::ASU_, 0).unwrap_or(0);
-        let hvt = db.adp(codec, *lb, verb::TI_, 0).unwrap_or(0);
-        let cit = db.adp(codec, *lb, verb::EI_, verb::OU_ as u8).unwrap_or(0);
+        let gna = ctrl.codec_cmd(codec, *nid, verb::AUZ_, 0).unwrap_or(0);
+        let hus = ctrl.codec_cmd(codec, *nid, verb::AUY_, 0).unwrap_or(0);
+        let dwt = ctrl.codec_cmd(codec, *nid, verb::UO_, 0).unwrap_or(0);
+        let ast = ctrl.codec_cmd(codec, *nid, verb::EW_, verb::PS_ as u8).unwrap_or(0);
         
-        let gym = db.atk(codec, *lb, verb::DI_, 0xA000).unwrap_or(0); 
-        let gyn = db.atk(codec, *lb, verb::DI_, 0x8000).unwrap_or(0); 
-        let ltw = db.adp(codec, *lb, verb::EI_, verb::CIR_ as u8).unwrap_or(0);
+        let dho = ctrl.set_verb_16(codec, *nid, verb::DQ_, 0xA000).unwrap_or(0); 
+        let dhp = ctrl.set_verb_16(codec, *nid, verb::DQ_, 0x8000).unwrap_or(0); 
+        let gmz = ctrl.codec_cmd(codec, *nid, verb::EW_, verb::CMA_ as u8).unwrap_or(0);
         
-        let xuk = db.widgets.iter().du(|d| d.lb == *lb).map(|d| d.eme).unwrap_or(0);
+        let pum = ctrl.widgets.iter().find(|w| w.nid == *nid).map(|w| w.amp_out_caps).unwrap_or(0);
 
-        let uzr = ltx & 0x40 != 0;
-        let tqg = ltx & 0x80 != 0;
-        let sic = nox & 0x02 != 0;
-        let tmj = ltw & (1 << 16) != 0;
-        let ywk = ltw & (1 << 4) != 0;
-        let drn = cit & (1 << 2) != 0;
-        let tma = cit & (1 << 3) != 0;
+        let nog = gna & 0x40 != 0;
+        let mmk = gna & 0x80 != 0;
+        let lnd = hus & 0x02 != 0;
+        let mji = gmz & (1 << 16) != 0;
+        let qkp = gmz & (1 << 4) != 0;
+        let bmr = ast & (1 << 2) != 0;
+        let mjb = ast & (1 << 3) != 0;
 
-        e.t(&format!("  NID {:2}: {} ({}) loc={:#04X} cfg={:#010X}\n",
-            lb, ba, hdw, cse, cfg));
-        e.t(&format!("         wcaps={:#010X}(out_amp={} amp_ovrd={}) pin_caps={:#010X}\n",
-            cit, drn, tma, ltw));
-        e.t(&format!("         pin_ctl={:#04X}(out={} hp={}) eapd={:#04X}(on={} has={})\n",
-            ltx, uzr, tqg, nox, sic, tmj));
-        e.t(&format!("         power=D{} amp_out L={:#04X} R={:#04X} amp_caps={:#010X}\n",
-            hvt & 0xF, gym, gyn, xuk));
+        j.push_str(&format!("  NID {:2}: {} ({}) loc={:#04X} cfg={:#010X}\n",
+            nid, s, dli, axx, cfg));
+        j.push_str(&format!("         wcaps={:#010X}(out_amp={} amp_ovrd={}) pin_caps={:#010X}\n",
+            ast, bmr, mjb, gmz));
+        j.push_str(&format!("         pin_ctl={:#04X}(out={} hp={}) eapd={:#04X}(on={} has={})\n",
+            gna, nog, mmk, hus, lnd, mji));
+        j.push_str(&format!("         power=D{} amp_out L={:#04X} R={:#04X} amp_caps={:#010X}\n",
+            dwt & 0xF, dho, dhp, pum));
     }
 
     
-    e.t(&format!("\n--- DAC Widgets ---\n"));
-    let rtg: Vec<u16> = db.widgets.iter()
-        .hi(|d| d.ekw == WidgetType::Zw)
-        .map(|d| d.lb)
+    j.push_str(&format!("\n--- DAC Widgets ---\n"));
+    let lbj: Vec<u16> = ctrl.widgets.iter()
+        .filter(|w| w.widget_type == WidgetType::AudioOutput)
+        .map(|w| w.nid)
         .collect();
 
-    for lb in &rtg {
-        let hvt = db.adp(codec, *lb, verb::TI_, 0).unwrap_or(0);
-        let poz = db.adp(codec, *lb, verb::AST_, 0).unwrap_or(0);
+    for nid in &lbj {
+        let dwt = ctrl.codec_cmd(codec, *nid, verb::UO_, 0).unwrap_or(0);
+        let jja = ctrl.codec_cmd(codec, *nid, verb::AUX_, 0).unwrap_or(0);
         
-        let fmt = db.atk(codec, *lb, verb::BXB_, 0).unwrap_or(0);
-        let cit = db.adp(codec, *lb, verb::EI_, verb::OU_ as u8).unwrap_or(0);
-        let drn = cit & (1 << 2) != 0;
-        let fkg = cit & (1 << 1) != 0;
+        let fmt = ctrl.set_verb_16(codec, *nid, verb::CAH_, 0).unwrap_or(0);
+        let ast = ctrl.codec_cmd(codec, *nid, verb::EW_, verb::PS_ as u8).unwrap_or(0);
+        let bmr = ast & (1 << 2) != 0;
+        let ckj = ast & (1 << 1) != 0;
         
-        let gym = db.atk(codec, *lb, verb::DI_, 0xA000).unwrap_or(0); 
-        let gyn = db.atk(codec, *lb, verb::DI_, 0x8000).unwrap_or(0); 
+        let dho = ctrl.set_verb_16(codec, *nid, verb::DQ_, 0xA000).unwrap_or(0); 
+        let dhp = ctrl.set_verb_16(codec, *nid, verb::DQ_, 0x8000).unwrap_or(0); 
         
-        let kal = if drn { db.adp(codec, *lb, verb::EI_, verb::OT_ as u8).unwrap_or(0) } else { 0 };
+        let fha = if bmr { ctrl.codec_cmd(codec, *nid, verb::EW_, verb::PR_ as u8).unwrap_or(0) } else { 0 };
 
-        e.t(&format!("  NID {:2}: power=D{} stream_tag={} chan={} fmt={:#06X}\n",
-            lb, hvt & 0xF, (poz >> 4) & 0xF, poz & 0xF, fmt));
-        e.t(&format!("         wcaps={:#010X}(out_amp={} in_amp={})\n",
-            cit, drn, fkg));
-        e.t(&format!("         amp_out L={:#04X} R={:#04X} caps={:#010X}\n",
-            gym, gyn, kal));
+        j.push_str(&format!("  NID {:2}: power=D{} stream_tag={} chan={} fmt={:#06X}\n",
+            nid, dwt & 0xF, (jja >> 4) & 0xF, jja & 0xF, fmt));
+        j.push_str(&format!("         wcaps={:#010X}(out_amp={} in_amp={})\n",
+            ast, bmr, ckj));
+        j.push_str(&format!("         amp_out L={:#04X} R={:#04X} caps={:#010X}\n",
+            dho, dhp, fha));
     }
 
     
-    e.t(&format!("\n--- Path Mixer/Selector ---\n"));
-    let mut phn: Vec<u16> = Vec::new();
-    let vfa: Vec<Vec<u16>> = db.bhq.iter().map(|ai| ai.path.clone()).collect();
-    let xul: Vec<(u16, WidgetType, Vec<u16>)> = db.widgets.iter()
-        .map(|d| (d.lb, d.ekw, d.dpc.clone()))
+    j.push_str(&format!("\n--- Path Mixer/Selector ---\n"));
+    let mut jeg: Vec<u16> = Vec::new();
+    let nsa: Vec<Vec<u16>> = ctrl.output_paths.iter().map(|aa| aa.path.clone()).collect();
+    let pun: Vec<(u16, WidgetType, Vec<u16>)> = ctrl.widgets.iter()
+        .map(|w| (w.nid, w.widget_type, w.connections.clone()))
         .collect();
-    for path in &vfa {
-        for &lb in path {
-            let xut = xul.iter().du(|d| d.0 == lb);
-            if let Some((_, ash, aan)) = xut {
-                if *ash != WidgetType::Apg && *ash != WidgetType::Aph { continue; }
-                if phn.contains(&lb) { continue; }
-                phn.push(lb);
-                let cit = db.adp(codec, lb, verb::EI_, verb::OU_ as u8).unwrap_or(0);
-                let drn = cit & (1 << 2) != 0;
-                let fkg = cit & (1 << 1) != 0;
+    for path in &nsa {
+        for &nid in path {
+            let puv = pun.iter().find(|w| w.0 == nid);
+            if let Some((_, wt, nc)) = puv {
+                if *wt != WidgetType::AudioMixer && *wt != WidgetType::AudioSelector { continue; }
+                if jeg.contains(&nid) { continue; }
+                jeg.push(nid);
+                let ast = ctrl.codec_cmd(codec, nid, verb::EW_, verb::PS_ as u8).unwrap_or(0);
+                let bmr = ast & (1 << 2) != 0;
+                let ckj = ast & (1 << 1) != 0;
                 
-                let gym = db.atk(codec, lb, verb::DI_, 0xA000).unwrap_or(0);
-                let gyn = db.atk(codec, lb, verb::DI_, 0x8000).unwrap_or(0);
-                let qhp = db.atk(codec, lb, verb::DI_, 0x2000).unwrap_or(0);
-                let qhq = db.atk(codec, lb, verb::DI_, 0x0000).unwrap_or(0);
-                let kal = if drn { db.adp(codec, lb, verb::EI_, verb::OT_ as u8).unwrap_or(0) } else { 0 };
-                let qhn = if fkg { db.adp(codec, lb, verb::EI_, verb::WB_ as u8).unwrap_or(0) } else { 0 };
-                let rnw = db.adp(codec, lb, verb::BWV_, 0).unwrap_or(0);
-                let hvt = db.adp(codec, lb, verb::TI_, 0).unwrap_or(0);
+                let dho = ctrl.set_verb_16(codec, nid, verb::DQ_, 0xA000).unwrap_or(0);
+                let dhp = ctrl.set_verb_16(codec, nid, verb::DQ_, 0x8000).unwrap_or(0);
+                let jvn = ctrl.set_verb_16(codec, nid, verb::DQ_, 0x2000).unwrap_or(0);
+                let jvo = ctrl.set_verb_16(codec, nid, verb::DQ_, 0x0000).unwrap_or(0);
+                let fha = if bmr { ctrl.codec_cmd(codec, nid, verb::EW_, verb::PR_ as u8).unwrap_or(0) } else { 0 };
+                let jvl = if ckj { ctrl.codec_cmd(codec, nid, verb::EW_, verb::XK_ as u8).unwrap_or(0) } else { 0 };
+                let kxa = ctrl.codec_cmd(codec, nid, verb::CAB_, 0).unwrap_or(0);
+                let dwt = ctrl.codec_cmd(codec, nid, verb::UO_, 0).unwrap_or(0);
 
-                e.t(&format!("  NID {:2}: {} conns={:?}\n", lb, ash.j(), aan));
-                e.t(&format!("         wcaps={:#010X}(out_amp={} in_amp={})\n",
-                    cit, drn, fkg));
-                e.t(&format!("         out L={:#04X} R={:#04X} ocaps={:#010X}\n",
-                    gym, gyn, kal));
-                e.t(&format!("         in[0] L={:#04X} R={:#04X} icaps={:#010X}\n",
-                    qhp, qhq, qhn));
-                e.t(&format!("         conn_sel={} power=D{}\n", rnw, hvt & 0xF));
+                j.push_str(&format!("  NID {:2}: {} conns={:?}\n", nid, wt.name(), nc));
+                j.push_str(&format!("         wcaps={:#010X}(out_amp={} in_amp={})\n",
+                    ast, bmr, ckj));
+                j.push_str(&format!("         out L={:#04X} R={:#04X} ocaps={:#010X}\n",
+                    dho, dhp, fha));
+                j.push_str(&format!("         in[0] L={:#04X} R={:#04X} icaps={:#010X}\n",
+                    jvn, jvo, jvl));
+                j.push_str(&format!("         conn_sel={} power=D{}\n", kxa, dwt & 0xF));
             }
         }
     }
 
-    e
+    j
 }
 
 
 
 
-pub fn qhr() -> String {
-    let mut e = String::new();
-    let mut hda = Fa.lock();
-    let db = match hda.as_mut() {
-        Some(r) => r,
+pub fn jvp() -> String {
+    let mut j = String::new();
+    let mut hda = Cd.lock();
+    let ctrl = match hda.as_mut() {
+        Some(c) => c,
         None => {
-            e.t("HDA: not initialized\n");
-            return e;
+            j.push_str("HDA: not initialized\n");
+            return j;
         }
     };
 
-    if db.bml.is_empty() || db.bhq.is_empty() {
-        e.t("No codecs or paths\n");
-        return e;
+    if ctrl.codecs.is_empty() || ctrl.output_paths.is_empty() {
+        j.push_str("No codecs or paths\n");
+        return j;
     }
 
-    let codec = db.bml[0];
-    e.t("=== Amp Probe (SET then GET) ===\n");
+    let codec = ctrl.codecs[0];
+    j.push_str("=== Amp Probe (SET then GET) ===\n");
 
     
-    let mut oxz: Vec<u16> = Vec::new();
-    let vez: Vec<Vec<u16>> = db.bhq.iter().map(|ai| ai.path.clone()).collect();
-    for path in &vez {
-        for &lb in path {
-            if oxz.contains(&lb) { continue; }
-            oxz.push(lb);
+    let mut iwt: Vec<u16> = Vec::new();
+    let nrz: Vec<Vec<u16>> = ctrl.output_paths.iter().map(|aa| aa.path.clone()).collect();
+    for path in &nrz {
+        for &nid in path {
+            if iwt.contains(&nid) { continue; }
+            iwt.push(nid);
 
-            let cit = db.adp(codec, lb, verb::EI_, verb::OU_ as u8).unwrap_or(0);
-            let ash = (cit >> 20) & 0xF;
-            let drn = cit & (1 << 2) != 0;
-            let fkg = cit & (1 << 1) != 0;
-
-            
-            let myn = db.atk(codec, lb, verb::DI_, 0xA000).unwrap_or(0xDEAD); 
-            let mym = db.atk(codec, lb, verb::DI_, 0x2000).unwrap_or(0xDEAD);  
+            let ast = ctrl.codec_cmd(codec, nid, verb::EW_, verb::PS_ as u8).unwrap_or(0);
+            let wt = (ast >> 20) & 0xF;
+            let bmr = ast & (1 << 2) != 0;
+            let ckj = ast & (1 << 1) != 0;
 
             
-            let lra = if drn { db.cku(codec, lb, verb::OT_).unwrap_or(0) } else { 0 };
-            let ldr = if fkg { db.cku(codec, lb, verb::WB_).unwrap_or(0) } else { 0 };
-            let goq = ((lra >> 8) & 0x7F) as u16;
-            let gju = ((ldr >> 8) & 0x7F) as u16;
-            let jia = if goq > 0 { goq } else { 0x1F };
-            let hnt = if gju > 0 { gju } else { 0x1F };
+            let hhf = ctrl.set_verb_16(codec, nid, verb::DQ_, 0xA000).unwrap_or(0xDEAD); 
+            let hhe = ctrl.set_verb_16(codec, nid, verb::DQ_, 0x2000).unwrap_or(0xDEAD);  
 
             
-            let wji: u16 = (1 << 15) | (1 << 13) | (1 << 12) | (jia & 0x7F);
-            let uzw = db.atk(codec, lb, 0x300, wji);
-            
-            let wiz: u16 = (1 << 14) | (1 << 13) | (1 << 12) | (hnt & 0x7F);
-            let tsm = db.atk(codec, lb, 0x300, wiz);
+            let glg = if bmr { ctrl.get_param(codec, nid, verb::PR_).unwrap_or(0) } else { 0 };
+            let gcd = if ckj { ctrl.get_param(codec, nid, verb::XK_).unwrap_or(0) } else { 0 };
+            let dcc = ((glg >> 8) & 0x7F) as u16;
+            let czq = ((gcd >> 8) & 0x7F) as u16;
+            let evu = if dcc > 0 { dcc } else { 0x1F };
+            let drv = if czq > 0 { czq } else { 0x1F };
 
             
-            let muj = db.atk(codec, lb, verb::DI_, 0xA000).unwrap_or(0xDEAD);
-            let mui = db.atk(codec, lb, verb::DI_, 0x2000).unwrap_or(0xDEAD);
+            let opg: u16 = (1 << 15) | (1 << 13) | (1 << 12) | (evu & 0x7F);
+            let nol = ctrl.set_verb_16(codec, nid, 0x300, opg);
+            
+            let opb: u16 = (1 << 14) | (1 << 13) | (1 << 12) | (drv & 0x7F);
+            let mol = ctrl.set_verb_16(codec, nid, 0x300, opb);
 
-            let qyd = myn != muj;
-            let qyc = mym != mui;
+            
+            let hei = ctrl.set_verb_16(codec, nid, verb::DQ_, 0xA000).unwrap_or(0xDEAD);
+            let heh = ctrl.set_verb_16(codec, nid, verb::DQ_, 0x2000).unwrap_or(0xDEAD);
 
-            e.t(&format!("NID {:2} type={} oamp={}({}) iamp={}({})\n",
-                lb, ash, drn, goq, fkg, gju));
-            e.t(&format!("  OUT: {:#04X}->{:#04X} {} set={} gain={}\n",
-                myn, muj,
-                if qyd { "CHANGED" } else { "same" },
-                if uzw.is_ok() { "ok" } else { "ERR" },
-                jia));
-            e.t(&format!("  IN:  {:#04X}->{:#04X} {} set={} gain={}\n",
-                mym, mui,
-                if qyc { "CHANGED" } else { "same" },
-                if tsm.is_ok() { "ok" } else { "ERR" },
-                hnt));
+            let kim = hhf != hei;
+            let kil = hhe != heh;
+
+            j.push_str(&format!("NID {:2} type={} oamp={}({}) iamp={}({})\n",
+                nid, wt, bmr, dcc, ckj, czq));
+            j.push_str(&format!("  OUT: {:#04X}->{:#04X} {} set={} gain={}\n",
+                hhf, hei,
+                if kim { "CHANGED" } else { "same" },
+                if nol.is_ok() { "ok" } else { "ERR" },
+                evu));
+            j.push_str(&format!("  IN:  {:#04X}->{:#04X} {} set={} gain={}\n",
+                hhe, heh,
+                if kil { "CHANGED" } else { "same" },
+                if mol.is_ok() { "ok" } else { "ERR" },
+                drv));
         }
     }
 
-    e
+    j
 }
 
 
 
-pub fn ele(un: &[i16], uk: u32) -> Result<(), &'static str> {
-    let mut hda = Fa.lock();
-    let db = hda.as_mut().ok_or("HDA: not initialized")?;
+pub fn bxb(jo: &[i16], duration_ms: u32) -> Result<(), &'static str> {
+    let mut hda = Cd.lock();
+    let ctrl = hda.as_mut().ok_or("HDA: not initialized")?;
 
     
-    if db.uu {
-        db.daq(false);
+    if ctrl.playing {
+        ctrl.play(false);
     }
 
     
-    db.lzp();
+    ctrl.reset_output_stream();
 
-    let k = db.dym as *mut i16;
-    let fdv = (db.btf / 2) as usize; 
+    let buf = ctrl.audio_buf_virt as *mut i16;
+    let cgn = (ctrl.audio_buf_size / 2) as usize; 
 
-    let acq = un.len().v(fdv);
+    let od = jo.len().min(cgn);
 
     unsafe {
         
-        core::ptr::copy_nonoverlapping(un.fq(), k, acq);
+        core::ptr::copy_nonoverlapping(jo.as_ptr(), buf, od);
 
         
-        if acq < fdv {
-            core::ptr::ahx(k.add(acq), 0, fdv - acq);
+        if od < cgn {
+            core::ptr::write_bytes(buf.add(od), 0, cgn - od);
         }
     }
 
     
-    db.daq(true);
+    ctrl.play(true);
 
     
-    let xv = (acq * 2) as u32; 
-    let cd = xv.v(db.btf);
+    let total_bytes = (od * 2) as u32; 
+    let target = total_bytes.min(ctrl.audio_buf_size);
 
-    for _ in 0..(uk * 10 + 500) {
-        HdaController::azo(100);
-        let u = db.eje();
-        if u >= cd {
+    for _ in 0..(duration_ms * 10 + 500) {
+        HdaController::aas(100);
+        let pos = ctrl.stream_position();
+        if pos >= target {
             break;
         }
     }
 
-    db.daq(false);
+    ctrl.play(false);
     Ok(())
 }
 
@@ -2024,80 +2024,80 @@ pub fn ele(un: &[i16], uk: u32) -> Result<(), &'static str> {
 
 
 
-static Afm: Mutex<u8> = Mutex::new(80);
+static Nu: Mutex<u8> = Mutex::new(80);
 
 
-pub fn chv(jy: u8) -> Result<(), &'static str> {
-    let jy = jy.v(100);
-    *Afm.lock() = jy;
+pub fn set_volume(level: u8) -> Result<(), &'static str> {
+    let level = level.min(100);
+    *Nu.lock() = level;
     
-    let mut hda = Fa.lock();
-    let db = hda.as_mut().ok_or("HDA: not initialized")?;
+    let mut hda = Cd.lock();
+    let ctrl = hda.as_mut().ok_or("HDA: not initialized")?;
     
-    if db.bml.is_empty() || db.bhq.is_empty() {
+    if ctrl.codecs.is_empty() || ctrl.output_paths.is_empty() {
         return Ok(());
     }
     
-    let codec = db.bml[0];
-    let path = db.bhq[0].clone();
+    let codec = ctrl.codecs[0];
+    let path = ctrl.output_paths[0].clone();
     
     
     
-    let vew = path.eak;
-    let jfh = db.widgets.iter()
-        .du(|d| d.lb == vew)
-        .map(|d| ((d.eme >> 8) & 0x7F) as u16)
+    let nrx = path.dac_nid;
+    let eua = ctrl.widgets.iter()
+        .find(|w| w.nid == nrx)
+        .map(|w| ((w.amp_out_caps >> 8) & 0x7F) as u16)
         .unwrap_or(39);
-    let jfh = if jfh == 0 { 39 } else { jfh };
-    let dqz = ((jy as u32) * (jfh as u32) / 100) as u16;
+    let eua = if eua == 0 { 39 } else { eua };
+    let bmi = ((level as u32) * (eua as u32) / 100) as u16;
     
     
-    for &lb in &path.path {
+    for &nid in &path.path {
         
-        let kam: u16 = (1 << 15) | (1 << 13) | (1 << 12) | (dqz & 0x7F);
-        let _ = db.atk(codec, lb, 0x300, kam);
+        let fhb: u16 = (1 << 15) | (1 << 13) | (1 << 12) | (bmi & 0x7F);
+        let _ = ctrl.set_verb_16(codec, nid, 0x300, fhb);
         
-        let kak: u16 = (1 << 14) | (1 << 13) | (1 << 12) | (dqz & 0x7F);
-        let _ = db.atk(codec, lb, 0x300, kak);
+        let fgz: u16 = (1 << 14) | (1 << 13) | (1 << 12) | (bmi & 0x7F);
+        let _ = ctrl.set_verb_16(codec, nid, 0x300, fgz);
     }
     
-    crate::serial_println!("[HDA] Volume set to {}% (gain={})", jy, dqz);
+    crate::serial_println!("[HDA] Volume set to {}% (gain={})", level, bmi);
     Ok(())
 }
 
 
-pub fn nyu() -> u8 {
-    *Afm.lock()
+pub fn ica() -> u8 {
+    *Nu.lock()
 }
 
 
-pub fn zde() -> Result<(), &'static str> {
-    let mut hda = Fa.lock();
-    let db = hda.as_mut().ok_or("HDA: not initialized")?;
+pub fn qpf() -> Result<(), &'static str> {
+    let mut hda = Cd.lock();
+    let ctrl = hda.as_mut().ok_or("HDA: not initialized")?;
     
-    if db.bml.is_empty() || db.bhq.is_empty() {
+    if ctrl.codecs.is_empty() || ctrl.output_paths.is_empty() {
         return Ok(());
     }
     
-    let codec = db.bml[0];
-    let path = db.bhq[0].clone();
+    let codec = ctrl.codecs[0];
+    let path = ctrl.output_paths[0].clone();
     
-    for &lb in &path.path {
+    for &nid in &path.path {
         
-        let uqu: u16 = (1 << 15) | (1 << 13) | (1 << 12) | (1 << 7);
-        let _ = db.atk(codec, lb, 0x300, uqu);
+        let nhg: u16 = (1 << 15) | (1 << 13) | (1 << 12) | (1 << 7);
+        let _ = ctrl.set_verb_16(codec, nid, 0x300, nhg);
         
-        let uqt: u16 = (1 << 14) | (1 << 13) | (1 << 12) | (1 << 7);
-        let _ = db.atk(codec, lb, 0x300, uqt);
+        let nhf: u16 = (1 << 14) | (1 << 13) | (1 << 12) | (1 << 7);
+        let _ = ctrl.set_verb_16(codec, nid, 0x300, nhf);
     }
     
     Ok(())
 }
 
 
-pub fn zue() -> Result<(), &'static str> {
-    let jy = *Afm.lock();
-    chv(jy)
+pub fn rbk() -> Result<(), &'static str> {
+    let level = *Nu.lock();
+    set_volume(level)
 }
 
 
@@ -2106,65 +2106,65 @@ pub fn zue() -> Result<(), &'static str> {
 
 
 
-pub fn ghw(auf: u32, uk: u32, dyg: i16) -> Vec<i16> {
-    let auy = 48000u32;
-    let evo = (auy as u64 * uk as u64 / 1000) as usize;
-    let mut un = Vec::fc(evo * 2);
+pub fn cyi(freq_hz: u32, duration_ms: u32, bqf: i16) -> Vec<i16> {
+    let sample_rate = 48000u32;
+    let cbz = (sample_rate as u64 * duration_ms as u64 / 1000) as usize;
+    let mut jo = Vec::with_capacity(cbz * 2);
     
-    let api = *Afm.lock() as i32;
-    let wdn = (dyg as i32 * api / 100) as i16;
+    let vd = *Nu.lock() as i32;
+    let oku = (bqf as i32 * vd / 100) as i16;
     
-    for a in 0..evo {
+    for i in 0..cbz {
         
-        let vhi = ((auf as u64 * a as u64 * 256) / auy as u64) as u32;
-        let vhg = (vhi & 0xFF) as u8;
+        let nue = ((freq_hz as u64 * i as u64 * 256) / sample_rate as u64) as u32;
+        let nuc = (nue & 0xFF) as u8;
         
-        let yr = wox(vhg, wdn);
-        un.push(yr); 
-        un.push(yr); 
+        let sample = otg(nuc, oku);
+        jo.push(sample); 
+        jo.push(sample); 
     }
     
     
-    let itt = (auy as usize * 5 / 1000).v(evo / 2);
-    for a in 0..itt {
-        let pv = a as i32 * 256 / itt as i32;
-        un[a * 2] = (un[a * 2] as i32 * pv / 256) as i16;
-        un[a * 2 + 1] = (un[a * 2 + 1] as i32 * pv / 256) as i16;
+    let emb = (sample_rate as usize * 5 / 1000).min(cbz / 2);
+    for i in 0..emb {
+        let ha = i as i32 * 256 / emb as i32;
+        jo[i * 2] = (jo[i * 2] as i32 * ha / 256) as i16;
+        jo[i * 2 + 1] = (jo[i * 2 + 1] as i32 * ha / 256) as i16;
     }
-    for a in 0..itt {
-        let w = evo - 1 - a;
-        let pv = a as i32 * 256 / itt as i32;
-        if w * 2 + 1 < un.len() {
-            un[w * 2] = (un[w * 2] as i32 * pv / 256) as i16;
-            un[w * 2 + 1] = (un[w * 2 + 1] as i32 * pv / 256) as i16;
+    for i in 0..emb {
+        let idx = cbz - 1 - i;
+        let ha = i as i32 * 256 / emb as i32;
+        if idx * 2 + 1 < jo.len() {
+            jo[idx * 2] = (jo[idx * 2] as i32 * ha / 256) as i16;
+            jo[idx * 2 + 1] = (jo[idx * 2 + 1] as i32 * ha / 256) as i16;
         }
     }
     
-    un
+    jo
 }
 
 
 
-fn wox(ib: u8, dyg: i16) -> i16 {
-    let b = ib as i32;
+fn otg(phase: u8, bqf: i16) -> i16 {
+    let x = phase as i32;
     
-    let tiv = if b < 128 {
-        let ab = b - 64; 
-        let js = -(ab * ab) + 64 * 64;
-        js * 127 / (64 * 64)
+    let mhe = if x < 128 {
+        let t = x - 64; 
+        let dm = -(t * t) + 64 * 64;
+        dm * 127 / (64 * 64)
     } else {
-        let ab = (b - 128) - 64;
-        let js = (ab * ab) - 64 * 64;
-        js * 127 / (64 * 64)
+        let t = (x - 128) - 64;
+        let dm = (t * t) - 64 * 64;
+        dm * 127 / (64 * 64)
     };
     
-    (tiv as i32 * dyg as i32 / 127) as i16
+    (mhe as i32 * bqf as i32 / 127) as i16
 }
 
 
-pub fn vjc(auf: u32, uk: u32) -> Result<(), &'static str> {
-    let un = ghw(auf, uk, 24000);
-    ele(&un, uk)
+pub fn nvn(freq_hz: u32, duration_ms: u32) -> Result<(), &'static str> {
+    let jo = cyi(freq_hz, duration_ms, 24000);
+    bxb(&jo, duration_ms)
 }
 
 
@@ -2173,102 +2173,102 @@ pub fn vjc(auf: u32, uk: u32) -> Result<(), &'static str> {
 
 
 #[derive(Debug, Clone)]
-pub struct Bws {
-    pub lq: u16,
-    pub auy: u32,
-    pub emv: u16,
-    pub bbj: usize,
-    pub cpv: usize,
+pub struct Agr {
+    pub channels: u16,
+    pub sample_rate: u32,
+    pub bits_per_sample: u16,
+    pub data_offset: usize,
+    pub data_size: usize,
 }
 
 
-pub fn jiu(f: &[u8]) -> Result<Bws, &'static str> {
-    if f.len() < 44 { return Err("WAV: too short"); }
-    if &f[0..4] != b"RIFF" { return Err("WAV: missing RIFF"); }
-    if &f[8..12] != b"WAVE" { return Err("WAV: missing WAVE"); }
+pub fn ewj(data: &[u8]) -> Result<Agr, &'static str> {
+    if data.len() < 44 { return Err("WAV: too short"); }
+    if &data[0..4] != b"RIFF" { return Err("WAV: missing RIFF"); }
+    if &data[8..12] != b"WAVE" { return Err("WAV: missing WAVE"); }
     
-    let mut l = 12;
-    let mut lq = 0u16;
-    let mut auy = 0u32;
-    let mut emv = 0u16;
-    let mut bbj = 0usize;
-    let mut cpv = 0usize;
+    let mut offset = 12;
+    let mut channels = 0u16;
+    let mut sample_rate = 0u32;
+    let mut bits_per_sample = 0u16;
+    let mut data_offset = 0usize;
+    let mut data_size = 0usize;
     
-    while l + 8 <= f.len() {
-        let ncx = &f[l..l+4];
-        let aiw = u32::dj([
-            f[l+4], f[l+5], f[l+6], f[l+7]
+    while offset + 8 <= data.len() {
+        let hkx = &data[offset..offset+4];
+        let rs = u32::from_le_bytes([
+            data[offset+4], data[offset+5], data[offset+6], data[offset+7]
         ]) as usize;
         
-        if ncx == b"fmt " && aiw >= 16 {
-            let qlb = u16::dj([f[l+8], f[l+9]]);
-            if qlb != 1 { return Err("WAV: not PCM format"); }
-            lq = u16::dj([f[l+10], f[l+11]]);
-            auy = u32::dj([
-                f[l+12], f[l+13], f[l+14], f[l+15]
+        if hkx == b"fmt " && rs >= 16 {
+            let jyc = u16::from_le_bytes([data[offset+8], data[offset+9]]);
+            if jyc != 1 { return Err("WAV: not PCM format"); }
+            channels = u16::from_le_bytes([data[offset+10], data[offset+11]]);
+            sample_rate = u32::from_le_bytes([
+                data[offset+12], data[offset+13], data[offset+14], data[offset+15]
             ]);
-            emv = u16::dj([f[l+22], f[l+23]]);
-        } else if ncx == b"data" {
-            bbj = l + 8;
-            cpv = aiw.v(f.len() - bbj);
+            bits_per_sample = u16::from_le_bytes([data[offset+22], data[offset+23]]);
+        } else if hkx == b"data" {
+            data_offset = offset + 8;
+            data_size = rs.min(data.len() - data_offset);
             break;
         }
         
-        l += 8 + aiw;
-        if l % 2 != 0 { l += 1; } 
+        offset += 8 + rs;
+        if offset % 2 != 0 { offset += 1; } 
     }
     
-    if bbj == 0 || lq == 0 {
+    if data_offset == 0 || channels == 0 {
         return Err("WAV: missing fmt or data chunk");
     }
     
-    Ok(Bws { lq, auy, emv, bbj, cpv })
+    Ok(Agr { channels, sample_rate, bits_per_sample, data_offset, data_size })
 }
 
 
-pub fn zfk(f: &[u8]) -> Result<(), &'static str> {
-    let co = jiu(f)?;
+pub fn qqp(data: &[u8]) -> Result<(), &'static str> {
+    let info = ewj(data)?;
     
-    if co.emv != 16 {
+    if info.bits_per_sample != 16 {
         return Err("WAV: only 16-bit PCM supported");
     }
     
-    let gpc = &f[co.bbj..co.bbj + co.cpv];
-    let hth = co.cpv / (2 * co.lq as usize);
+    let dcl = &data[info.data_offset..info.data_offset + info.data_size];
+    let dvq = info.data_size / (2 * info.channels as usize);
     
-    let gue = 48000u32;
-    let god = (hth as u64 * gue as u64
-        / co.auy as u64) as usize;
-    let mut an = Vec::fc(god * 2);
+    let dfi = 48000u32;
+    let dbw = (dvq as u64 * dfi as u64
+        / info.sample_rate as u64) as usize;
+    let mut output = Vec::with_capacity(dbw * 2);
     
-    let api = *Afm.lock() as i32;
+    let vd = *Nu.lock() as i32;
     
-    for krt in 0..god {
-        let ibk = (krt as u64 * co.auy as u64
-            / gue as u64) as usize;
+    for dst_frame in 0..dbw {
+        let eaf = (dst_frame as u64 * info.sample_rate as u64
+            / dfi as u64) as usize;
         
-        if ibk >= hth { break; }
+        if eaf >= dvq { break; }
         
-        let w = ibk * co.lq as usize;
-        let avk = w * 2;
+        let idx = eaf * info.channels as usize;
+        let yk = idx * 2;
         
-        let fd = if avk + 1 < gpc.len() {
-            i16::dj([gpc[avk], gpc[avk + 1]])
+        let left = if yk + 1 < dcl.len() {
+            i16::from_le_bytes([dcl[yk], dcl[yk + 1]])
         } else { 0 };
         
-        let hw = if co.lq >= 2 {
-            let kfr = (w + 1) * 2;
-            if kfr + 1 < gpc.len() {
-                i16::dj([gpc[kfr], gpc[kfr + 1]])
-            } else { fd }
-        } else { fd };
+        let right = if info.channels >= 2 {
+            let fkg = (idx + 1) * 2;
+            if fkg + 1 < dcl.len() {
+                i16::from_le_bytes([dcl[fkg], dcl[fkg + 1]])
+            } else { left }
+        } else { left };
         
-        an.push((fd as i32 * api / 100) as i16);
-        an.push((hw as i32 * api / 100) as i16);
+        output.push((left as i32 * vd / 100) as i16);
+        output.push((right as i32 * vd / 100) as i16);
     }
     
-    let uk = (god as u64 * 1000 / gue as u64) as u32;
-    ele(&an, uk + 100)
+    let duration_ms = (dbw as u64 * 1000 / dfi as u64) as u32;
+    bxb(&output, duration_ms + 100)
 }
 
 
@@ -2279,66 +2279,66 @@ pub fn zfk(f: &[u8]) -> Result<(), &'static str> {
 #[derive(Clone, Copy, Debug)]
 pub enum SoundEffect {
     
-    Byo,
+    BootChime,
     
-    Vy,
+    Click,
     
-    Q,
+    Error,
     
-    Cic,
+    Notification,
     
-    Oo,
+    Warning,
     
-    Hf,
+    Success,
     
-    Cgj,
+    Keypress,
 }
 
 
-pub fn viv(bzk: SoundEffect) -> Result<(), &'static str> {
-    let xjk: Vec<(u32, u32, i16)> = match bzk {
-        SoundEffect::Byo => vec![
+pub fn nvi(aoa: SoundEffect) -> Result<(), &'static str> {
+    let plc: Vec<(u32, u32, i16)> = match aoa {
+        SoundEffect::BootChime => vec![
             (523, 150, 20000),  
             (659, 150, 20000),  
             (784, 250, 22000),  
         ],
-        SoundEffect::Vy => vec![(1000, 15, 16000)],
-        SoundEffect::Q => vec![
+        SoundEffect::Click => vec![(1000, 15, 16000)],
+        SoundEffect::Error => vec![
             (400, 120, 22000),
             (0, 60, 0),    
             (400, 120, 22000),
         ],
-        SoundEffect::Cic => vec![
+        SoundEffect::Notification => vec![
             (880, 100, 18000),   
             (1109, 100, 18000),  
             (1319, 200, 20000),  
         ],
-        SoundEffect::Oo => vec![
+        SoundEffect::Warning => vec![
             (880, 200, 20000),
             (660, 300, 18000),
         ],
-        SoundEffect::Hf => vec![
+        SoundEffect::Success => vec![
             (523, 100, 18000),  
             (659, 200, 20000),  
         ],
-        SoundEffect::Cgj => vec![(2000, 8, 8000)],
+        SoundEffect::Keypress => vec![(2000, 8, 8000)],
     };
     
-    let mut fcp: Vec<i16> = Vec::new();
-    let mut alu = 0u32;
+    let mut cfu: Vec<i16> = Vec::new();
+    let mut total_ms = 0u32;
     
-    for (kx, aie, byf) in &xjk {
-        if *kx == 0 {
-            let woh = (48000u32 * *aie / 1000) as usize;
-            fcp.lg(core::iter::afd(0i16).take(woh * 2));
+    for (freq, dur_ms, ank) in &plc {
+        if *freq == 0 {
+            let ost = (48000u32 * *dur_ms / 1000) as usize;
+            cfu.extend(core::iter::repeat(0i16).take(ost * 2));
         } else {
-            let mlt = ghw(*kx, *aie, *byf);
-            fcp.bk(&mlt);
+            let gzj = cyi(*freq, *dur_ms, *ank);
+            cfu.extend_from_slice(&gzj);
         }
-        alu += aie;
+        total_ms += dur_ms;
     }
     
-    ele(&fcp, alu + 50)
+    bxb(&cfu, total_ms + 50)
 }
 
 
@@ -2349,70 +2349,70 @@ pub fn viv(bzk: SoundEffect) -> Result<(), &'static str> {
 #[derive(Clone, Copy, Debug)]
 pub struct Note {
     
-    pub ti: u8,
+    pub midi_note: u8,
     
-    pub ksc: u8,
+    pub duration_16th: u8,
     
-    pub qm: u8,
+    pub velocity: u8,
 }
 
 impl Note {
-    pub fn new(ayg: u8, dqi: u8, bxr: u8) -> Self {
-        Self { ti: ayg, ksc: dqi, qm: bxr }
+    pub fn new(aad: u8, blz: u8, anb: u8) -> Self {
+        Self { midi_note: aad, duration_16th: blz, velocity: anb }
     }
     
-    pub fn kr(dqi: u8) -> Self {
-        Self { ti: 0, ksc: dqi, qm: 0 }
+    pub fn ef(blz: u8) -> Self {
+        Self { midi_note: 0, duration_16th: blz, velocity: 0 }
     }
     
     
     
-    pub fn auf(&self) -> u32 {
-        if self.ti == 0 { return 0; }
-        let joi = self.ti as i32 - 69;
-        let lpt = joi.ymh(12);
-        let grz = joi.zje(12) as usize;
+    pub fn freq_hz(&self) -> u32 {
+        if self.midi_note == 0 { return 0; }
+        let faa = self.midi_note as i32 - 69;
+        let gki = faa.div_euclid(12);
+        let dee = faa.rem_euclid(12) as usize;
         
         
-        const CSC_: [u32; 12] = [
+        const CVT_: [u32; 12] = [
             1000, 1059, 1122, 1189, 1260, 1335, 1414, 1498, 1587, 1682, 1782, 1888
         ];
         
-        let mya = CSC_[grz] * 440 / 1000;
+        let hgw = CVT_[dee] * 440 / 1000;
         
-        if lpt >= 0 {
-            mya << lpt as u32
+        if gki >= 0 {
+            hgw << gki as u32
         } else {
-            mya >> (-lpt) as u32
+            hgw >> (-gki) as u32
         }
     }
 }
 
 
-pub fn vjb(ts: &[Note], kz: u32) -> Result<(), &'static str> {
-    if ts.is_empty() { return Ok(()); }
+pub fn nvm(notes: &[Note], bpm: u32) -> Result<(), &'static str> {
+    if notes.is_empty() { return Ok(()); }
     
-    let woz = 60_000 / (kz * 4);
+    let oti = 60_000 / (bpm * 4);
     
-    let mut fcp: Vec<i16> = Vec::new();
-    let mut alu = 0u32;
+    let mut cfu: Vec<i16> = Vec::new();
+    let mut total_ms = 0u32;
     
-    for jp in ts {
-        let aie = woz * jp.ksc as u32;
-        let kx = jp.auf();
+    for note in notes {
+        let dur_ms = oti * note.duration_16th as u32;
+        let freq = note.freq_hz();
         
-        if kx == 0 || jp.qm == 0 {
-            let jqj = (48000u32 * aie / 1000) as usize;
-            fcp.lg(core::iter::afd(0i16).take(jqj * 2));
+        if freq == 0 || note.velocity == 0 {
+            let fba = (48000u32 * dur_ms / 1000) as usize;
+            cfu.extend(core::iter::repeat(0i16).take(fba * 2));
         } else {
-            let byf = (jp.qm as i32 * 24000 / 127) as i16;
-            let mlt = ghw(kx, aie, byf);
-            fcp.bk(&mlt);
+            let ank = (note.velocity as i32 * 24000 / 127) as i16;
+            let gzj = cyi(freq, dur_ms, ank);
+            cfu.extend_from_slice(&gzj);
         }
-        alu += aie;
+        total_ms += dur_ms;
     }
     
-    ele(&fcp, alu + 50)
+    bxb(&cfu, total_ms + 50)
 }
 
 
@@ -2424,40 +2424,40 @@ pub fn vjb(ts: &[Note], kz: u32) -> Result<(), &'static str> {
 
 
 
-pub fn viy(czq: &str, kz: u32) -> Result<(), &'static str> {
-    let mut ts = Vec::new();
+pub fn nvl(bcq: &str, bpm: u32) -> Result<(), &'static str> {
+    let mut notes = Vec::new();
     
-    for bat in czq.ayt() {
-        if bat.is_empty() { continue; }
+    for abm in bcq.split_whitespace() {
+        if abm.is_empty() { continue; }
         
-        let bf = bat.as_bytes();
-        if bf[0] == b'R' || bf[0] == b'r' {
-            ts.push(Note::kr(ouf(&bf[1..])));
+        let bytes = abm.as_bytes();
+        if bytes[0] == b'R' || bytes[0] == b'r' {
+            notes.push(Note::ef(its(&bytes[1..])));
             continue;
         }
         
-        let (oqx, kr) = vcx(bf);
-        if oqx == 255 { continue; }
+        let (note_base, ef) = nqs(bytes);
+        if note_base == 255 { continue; }
         
-        let (cgg, vyc) = if !kr.is_empty() && kr[0] >= b'0' && kr[0] <= b'9' {
-            (kr[0] - b'0', &kr[1..])
+        let (octave, rest2) = if !ef.is_empty() && ef[0] >= b'0' && ef[0] <= b'9' {
+            (ef[0] - b'0', &ef[1..])
         } else {
-            (4, kr)
+            (4, ef)
         };
         
-        let dqi = ouf(vyc);
-        let ayg = 12 * (cgg + 1) + oqx;
-        ts.push(Note::new(ayg, dqi, 100));
+        let blz = its(rest2);
+        let aad = 12 * (octave + 1) + note_base;
+        notes.push(Note::new(aad, blz, 100));
     }
     
-    vjb(&ts, kz)
+    nvm(&notes, bpm)
 }
 
 
-fn vcx(bf: &[u8]) -> (u8, &[u8]) {
-    if bf.is_empty() { return (255, bf); }
+fn nqs(bytes: &[u8]) -> (u8, &[u8]) {
+    if bytes.is_empty() { return (255, bytes); }
     
-    let ar = match bf[0] {
+    let base = match bytes[0] {
         b'C' | b'c' => 0,
         b'D' | b'd' => 2,
         b'E' | b'e' => 4,
@@ -2465,20 +2465,20 @@ fn vcx(bf: &[u8]) -> (u8, &[u8]) {
         b'G' | b'g' => 7,
         b'A' | b'a' => 9,
         b'B' | b'b' => 11,
-        _ => return (255, bf),
+        _ => return (255, bytes),
     };
     
-    if bf.len() > 1 && bf[1] == b'#' {
-        return ((ar + 1) % 12, &bf[2..]);
+    if bytes.len() > 1 && bytes[1] == b'#' {
+        return ((base + 1) % 12, &bytes[2..]);
     }
     
-    (ar, &bf[1..])
+    (base, &bytes[1..])
 }
 
 
-fn ouf(bf: &[u8]) -> u8 {
-    if bf.is_empty() { return 4; }
-    match bf[0] {
+fn its(bytes: &[u8]) -> u8 {
+    if bytes.is_empty() { return 4; }
+    match bytes[0] {
         b'w' => 16,
         b'h' => 8,
         b'q' => 4,
@@ -2489,6 +2489,6 @@ fn ouf(bf: &[u8]) -> u8 {
 }
 
 
-pub fn viu() -> Result<(), &'static str> {
-    viy("E4q E4q F4q G4q G4q F4q E4q D4q C4q C4q D4q E4q E4q D4h", 120)
+pub fn nvh() -> Result<(), &'static str> {
+    nvl("E4q E4q F4q G4q G4q F4q E4q D4q C4q C4q D4q E4q E4q D4h", 120)
 }

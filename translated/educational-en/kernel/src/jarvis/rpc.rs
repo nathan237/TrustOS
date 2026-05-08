@@ -151,34 +151,34 @@ static CALLS_MADE: AtomicU64 = AtomicU64::new(0);
 
 /// Build an RPC request packet
 fn build_request(request_id: u32, cmd: Command, payload: &[u8]) -> Vec<u8> {
-    let mut packet = Vec::with_capacity(HEADER_SIZE + payload.len());
-    packet.extend_from_slice(MAGIC);
-    packet.extend_from_slice(&request_id.to_be_bytes());
-    packet.push(cmd as u8);
-    packet.extend_from_slice(&(payload.len() as u32).to_be_bytes());
-    packet.extend_from_slice(payload);
-    packet
+    let mut pkt = Vec::with_capacity(HEADER_SIZE + payload.len());
+    pkt.extend_from_slice(MAGIC);
+    pkt.extend_from_slice(&request_id.to_be_bytes());
+    pkt.push(cmd as u8);
+    pkt.extend_from_slice(&(payload.len() as u32).to_be_bytes());
+    pkt.extend_from_slice(payload);
+    pkt
 }
 
 /// Build an RPC response packet
 fn build_response(request_id: u32, status: Status, payload: &[u8]) -> Vec<u8> {
-    let mut packet = Vec::with_capacity(HEADER_SIZE + payload.len());
-    packet.extend_from_slice(MAGIC);
-    packet.extend_from_slice(&request_id.to_be_bytes());
-    packet.push(status as u8);
-    packet.extend_from_slice(&(payload.len() as u32).to_be_bytes());
-    packet.extend_from_slice(payload);
-    packet
+    let mut pkt = Vec::with_capacity(HEADER_SIZE + payload.len());
+    pkt.extend_from_slice(MAGIC);
+    pkt.extend_from_slice(&request_id.to_be_bytes());
+    pkt.push(status as u8);
+    pkt.extend_from_slice(&(payload.len() as u32).to_be_bytes());
+    pkt.extend_from_slice(payload);
+    pkt
 }
 
 /// Build just the RPC response header (for streaming large payloads separately)
-fn build_response_header(request_id: u32, status: Status, payload_length: u32) -> Vec<u8> {
-    let mut packet = Vec::with_capacity(HEADER_SIZE);
-    packet.extend_from_slice(MAGIC);
-    packet.extend_from_slice(&request_id.to_be_bytes());
-    packet.push(status as u8);
-    packet.extend_from_slice(&payload_length.to_be_bytes());
-    packet
+fn build_response_header(request_id: u32, status: Status, payload_len: u32) -> Vec<u8> {
+    let mut pkt = Vec::with_capacity(HEADER_SIZE);
+    pkt.extend_from_slice(MAGIC);
+    pkt.extend_from_slice(&request_id.to_be_bytes());
+    pkt.push(status as u8);
+    pkt.extend_from_slice(&payload_len.to_be_bytes());
+    pkt
 }
 
 /// Parse an RPC header from raw bytes
@@ -192,13 +192,13 @@ fn parse_header(data: &[u8]) -> Option<(u32, u8, u32)> {
     }
     let request_id = u32::from_be_bytes([data[4], data[5], data[6], data[7]]);
     let cmd = data[8];
-    let payload_length = u32::from_be_bytes([data[9], data[10], data[11], data[12]]);
+    let payload_len = u32::from_be_bytes([data[9], data[10], data[11], data[12]]);
 
-    if payload_length as usize > MAXIMUM_PAYLOAD_SIZE {
+    if payload_len as usize > MAXIMUM_PAYLOAD_SIZE {
         return None;
     }
 
-    Some((request_id, cmd, payload_length))
+    Some((request_id, cmd, payload_len))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -211,24 +211,24 @@ pub fn call(dest_ip: [u8; 4], dest_port: u16, cmd: Command, payload: &[u8]) -> R
     let request_id = NEXT_REQUEST_ID.fetch_add(1, Ordering::SeqCst);
 
     // Connect
-    let source_port = crate::netstack::tcp::send_syn(dest_ip, dest_port)?;
+    let src_port = crate::netstack::tcp::send_syn(dest_ip, dest_port)?;
 
-    if !crate::netstack::tcp::wait_for_established(dest_ip, dest_port, source_port, CONNECT_TIMEOUT_MOUSE) {
+    if !crate::netstack::tcp::wait_for_established(dest_ip, dest_port, src_port, CONNECT_TIMEOUT_MOUSE) {
         return Err("RPC connect timeout");
     }
     // Send request
     let request = build_request(request_id, cmd, payload);
-    crate::netstack::tcp::send_data(dest_ip, dest_port, source_port, &request)?;
+    crate::netstack::tcp::send_data(dest_ip, dest_port, src_port, &request)?;
 
     // Wait for response — drain all available data each iteration
     let mut response_buffer = Vec::new();
-    let start = crate::time::uptime_mouse();
-    let timeout_mouse = CONNECT_TIMEOUT_MOUSE as u64 * 4; // 120s for large transfers
+    let start = crate::time::uptime_ms();
+    let timeout_ms = CONNECT_TIMEOUT_MOUSE as u64 * 4; // 120s for large transfers
     loop {
         crate::netstack::poll();
 
         // Drain all queued segments (not just one per iteration)
-        while let Some(data) = crate::netstack::tcp::recv_data(dest_ip, dest_port, source_port) {
+        while let Some(data) = crate::netstack::tcp::recv_data(dest_ip, dest_port, src_port) {
             response_buffer.extend_from_slice(&data);
         }
 
@@ -244,20 +244,20 @@ match response_buffer[8] {
                         2 => Status::Busy,
                         _ => Status::Error,
                     };
-                    let response_payload = response_buffer[HEADER_SIZE..total].to_vec();
+                    let resp_payload = response_buffer[HEADER_SIZE..total].to_vec();
 
                     // Close connection
-                    let _ = crate::netstack::tcp::send_fin(dest_ip, dest_port, source_port);
+                    let _ = crate::netstack::tcp::send_fin(dest_ip, dest_port, src_port);
                     CALLS_MADE.fetch_add(1, Ordering::SeqCst);
 
-                    return Ok((status, response_payload));
+                    return Ok((status, resp_payload));
                 }
             }
         }
 
         // Timeout check
-        if crate::time::uptime_mouse().wrapping_sub(start) > timeout_mouse {
-            let _ = crate::netstack::tcp::send_fin(dest_ip, dest_port, source_port);
+        if crate::time::uptime_ms().wrapping_sub(start) > timeout_ms {
+            let _ = crate::netstack::tcp::send_fin(dest_ip, dest_port, src_port);
             return Err("RPC response timeout");
         }
 
@@ -318,7 +318,7 @@ pub fn get_weights_chunked(dest_ip: [u8; 4], dest_port: u16, total_size: u32, ch
     let mut offset: u32 = 0;
     while offset < total_size {
         let remaining = total_size - offset;
-        let this_chunk = chunk_size.minimum(remaining);
+        let this_chunk = chunk_size.min(remaining);
         let chunk = get_weights_chunk(dest_ip, dest_port, offset, this_chunk)?;
         result.extend_from_slice(&chunk);
         offset += chunk.len() as u32;
@@ -395,40 +395,40 @@ pub fn poll_server() {
     let port = super::mesh::MESH_RPC_PORT;
 
     // Accept one connection per poll
-    if let Some((source_port, remote_ip, remote_port)) = crate::netstack::tcp::accept_connection(port) {
-        handle_connection(source_port, remote_ip, remote_port);
+    if let Some((src_port, remote_ip, remote_port)) = crate::netstack::tcp::accept_connection(port) {
+        handle_connection(src_port, remote_ip, remote_port);
     }
 }
 
 /// Handle a single RPC connection
-fn handle_connection(source_port: u16, remote_ip: [u8; 4], remote_port: u16) {
-    let mut buffer = Vec::new();
-    let start = crate::time::uptime_mouse();
+fn handle_connection(src_port: u16, remote_ip: [u8; 4], remote_port: u16) {
+    let mut buf = Vec::new();
+    let start = crate::time::uptime_ms();
 
     // Drain data already in RX queue (arrived before accept)
-    while let Some(data) = crate::netstack::tcp::recv_data(remote_ip, remote_port, source_port) {
-        buffer.extend_from_slice(&data);
+    while let Some(data) = crate::netstack::tcp::recv_data(remote_ip, remote_port, src_port) {
+        buf.extend_from_slice(&data);
     }
 
         // Infinite loop — runs until an explicit `break`.
 loop {
         crate::netstack::poll();
 
-        while let Some(data) = crate::netstack::tcp::recv_data(remote_ip, remote_port, source_port) {
-            buffer.extend_from_slice(&data);
+        while let Some(data) = crate::netstack::tcp::recv_data(remote_ip, remote_port, src_port) {
+            buf.extend_from_slice(&data);
         }
 
         // Check if we have a complete request
-        if buffer.len() >= HEADER_SIZE {
-            if let Some((_, _, plen)) = parse_header(&buffer) {
-                if buffer.len() >= HEADER_SIZE + plen as usize {
+        if buf.len() >= HEADER_SIZE {
+            if let Some((_, _, plen)) = parse_header(&buf) {
+                if buf.len() >= HEADER_SIZE + plen as usize {
                     break;
                 }
             }
         }
 
-        if crate::time::uptime_mouse().wrapping_sub(start) > CONNECT_TIMEOUT_MOUSE as u64 {
-            let _ = crate::netstack::tcp::send_fin(remote_ip, remote_port, source_port);
+        if crate::time::uptime_ms().wrapping_sub(start) > CONNECT_TIMEOUT_MOUSE as u64 {
+            let _ = crate::netstack::tcp::send_fin(remote_ip, remote_port, src_port);
             return;
         }
 
@@ -436,27 +436,27 @@ loop {
     }
 
     // Parse request
-    let (request_id, command_byte, payload_length) = // Pattern matching — Rust's exhaustive branching construct.
-match parse_header(&buffer) {
+    let (request_id, cmd_byte, payload_len) = // Pattern matching — Rust's exhaustive branching construct.
+match parse_header(&buf) {
         Some(v) => v,
         None => {
-            let _ = crate::netstack::tcp::send_fin(remote_ip, remote_port, source_port);
+            let _ = crate::netstack::tcp::send_fin(remote_ip, remote_port, src_port);
             return;
         }
     };
 
     let cmd = // Pattern matching — Rust's exhaustive branching construct.
-match Command::from_byte(command_byte) {
+match Command::from_byte(cmd_byte) {
         Some(c) => c,
         None => {
-            let response = build_response(request_id, Status::Error, b"Unknown command");
-            let _ = crate::netstack::tcp::send_data(remote_ip, remote_port, source_port, &response);
-            let _ = crate::netstack::tcp::send_fin(remote_ip, remote_port, source_port);
+            let resp = build_response(request_id, Status::Error, b"Unknown command");
+            let _ = crate::netstack::tcp::send_data(remote_ip, remote_port, src_port, &resp);
+            let _ = crate::netstack::tcp::send_fin(remote_ip, remote_port, src_port);
             return;
         }
     };
 
-    let payload = &buffer[HEADER_SIZE..HEADER_SIZE + payload_length as usize];
+    let payload = &buf[HEADER_SIZE..HEADER_SIZE + payload_len as usize];
 
     // Dispatch command
     let (status, response_payload) = dispatch_command(cmd, payload);
@@ -467,14 +467,14 @@ match Command::from_byte(command_byte) {
 
     if response_payload.len() <= 65536 {
         // Small payload: build complete response
-        let response = build_response(request_id, status, &response_payload);
-        let _ = crate::netstack::tcp::send_data(remote_ip, remote_port, source_port, &response);
+        let resp = build_response(request_id, status, &response_payload);
+        let _ = crate::netstack::tcp::send_data(remote_ip, remote_port, src_port, &resp);
     } else {
         // Large payload: send header then payload separately to halve memory usage
         let response_header = build_response_header(request_id, status, response_payload.len() as u32);
-        let _ = crate::netstack::tcp::send_data(remote_ip, remote_port, source_port, &response_header);
+        let _ = crate::netstack::tcp::send_data(remote_ip, remote_port, src_port, &response_header);
         crate::netstack::poll();
-        let _ = crate::netstack::tcp::send_data(remote_ip, remote_port, source_port, &response_payload);
+        let _ = crate::netstack::tcp::send_data(remote_ip, remote_port, src_port, &response_payload);
     }
 
     // Allow data to flush — give receiver time to drain all segments
@@ -485,7 +485,7 @@ match Command::from_byte(command_byte) {
         for _ in 0..10_000 { core::hint::spin_loop(); }
     }
 
-    let _ = crate::netstack::tcp::send_fin(remote_ip, remote_port, source_port);
+    let _ = crate::netstack::tcp::send_fin(remote_ip, remote_port, src_port);
     CALLS_SERVED.fetch_add(1, Ordering::SeqCst);
 }
 
@@ -613,11 +613,11 @@ match super::model::TransformerWeights::deserialize(&floats) {
                         // Pattern matching — Rust's exhaustive branching construct.
 match model.as_ref() {
                 Some(m) => {
-                    let total_bytes = m.parameter_count() * 4;
+                    let total_bytes = m.param_count() * 4;
                     if offset >= total_bytes {
                         return (Status::Error, b"Offset out of range".to_vec());
                     }
-                    let end = (offset + length).minimum(total_bytes);
+                    let end = (offset + length).min(total_bytes);
                     let full = m.serialize_to_bytes();
                     drop(model);
                     let chunk = full[offset..end].to_vec();

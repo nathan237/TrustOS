@@ -14,37 +14,37 @@ use spin::Mutex;
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum VirtFsOp {
-    Re = 0,
-    Bcb = 1,
-    Cqh = 2,
-    Ck = 3,
+    Version = 0,
+    Attach = 1,
+    Walk = 2,
+    Open = 3,
     Read = 4,
     Write = 5,
-    Mx = 6,
+    Close = 6,
     Stat = 7,
-    Bqr = 8,
-    Cac = 9,
-    Ckj = 10,
-    Ada = 11,
+    ReadDir = 8,
+    Create = 9,
+    Remove = 10,
+    Mkdir = 11,
 }
 
 impl TryFrom<u32> for VirtFsOp {
-    type Q = ();
+    type Error = ();
     
-    fn try_from(bn: u32) -> Result<Self, Self::Q> {
-        match bn {
-            0 => Ok(VirtFsOp::Re),
-            1 => Ok(VirtFsOp::Bcb),
-            2 => Ok(VirtFsOp::Cqh),
-            3 => Ok(VirtFsOp::Ck),
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(VirtFsOp::Version),
+            1 => Ok(VirtFsOp::Attach),
+            2 => Ok(VirtFsOp::Walk),
+            3 => Ok(VirtFsOp::Open),
             4 => Ok(VirtFsOp::Read),
             5 => Ok(VirtFsOp::Write),
-            6 => Ok(VirtFsOp::Mx),
+            6 => Ok(VirtFsOp::Close),
             7 => Ok(VirtFsOp::Stat),
-            8 => Ok(VirtFsOp::Bqr),
-            9 => Ok(VirtFsOp::Cac),
-            10 => Ok(VirtFsOp::Ckj),
-            11 => Ok(VirtFsOp::Ada),
+            8 => Ok(VirtFsOp::ReadDir),
+            9 => Ok(VirtFsOp::Create),
+            10 => Ok(VirtFsOp::Remove),
+            11 => Ok(VirtFsOp::Mkdir),
             _ => Err(()),
         }
     }
@@ -54,255 +54,255 @@ impl TryFrom<u32> for VirtFsOp {
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum VirtFsError {
-    Hf = 0,
-    N = 1,
-    Jt = 2,
-    Av = 3,
-    Xe = 4,
-    Ddd = 5,
-    Daf = 6,
-    Bnj = 7,
-    Cwh = 8,
-    Tq = 9,
-    Aul = 10,
+    Success = 0,
+    NotFound = 1,
+    PermissionDenied = 2,
+    IoError = 3,
+    InvalidOp = 4,
+    NotDir = 5,
+    IsDir = 6,
+    NotEmpty = 7,
+    Exists = 8,
+    NoSpace = 9,
+    InvalidFd = 10,
 }
 
 
 #[derive(Debug, Clone)]
-struct Bgv {
+struct Yu {
     path: String,
-    ta: bool,
-    l: u64,
+    is_dir: bool,
+    offset: u64,
 }
 
 
 #[derive(Debug, Clone)]
-pub struct Bsq {
+pub struct Aeu {
     
-    pub cac: String,
+    pub host_path: String,
     
-    pub bqx: String,
+    pub guest_path: String,
     
-    pub awr: bool,
+    pub readonly: bool,
 }
 
 
 pub struct VirtFs {
-    fk: u64,
+    vm_id: u64,
     
-    ajf: Vec<Bsq>,
+    mounts: Vec<Aeu>,
     
-    aho: BTreeMap<u32, Bgv>,
+    fds: BTreeMap<u32, Yu>,
     
-    bca: u32,
+    next_fd: u32,
 }
 
 impl VirtFs {
-    pub fn new(fk: u64) -> Self {
+    pub fn new(vm_id: u64) -> Self {
         VirtFs {
-            fk,
-            ajf: Vec::new(),
-            aho: BTreeMap::new(),
-            bca: 3, 
+            vm_id,
+            mounts: Vec::new(),
+            fds: BTreeMap::new(),
+            next_fd: 3, 
         }
     }
     
     
-    pub fn elx(&mut self, cac: &str, bqx: &str, awr: bool) {
-        self.ajf.push(Bsq {
-            cac: String::from(cac),
-            bqx: String::from(bqx),
-            awr,
+    pub fn add_mount(&mut self, host_path: &str, guest_path: &str, readonly: bool) {
+        self.mounts.push(Aeu {
+            host_path: String::from(host_path),
+            guest_path: String::from(guest_path),
+            readonly,
         });
         crate::serial_println!("[VirtFS] VM {} mounted {} -> {} (ro={})", 
-                              self.fk, cac, bqx, awr);
+                              self.vm_id, host_path, guest_path, readonly);
     }
     
     
-    fn aqj(&self, bqx: &str) -> Option<(String, bool)> {
-        for beu in &self.ajf {
-            if bqx.cj(&beu.bqx) {
-                let atj = &bqx[beu.bqx.len()..];
-                let atj = atj.tl('/');
-                let tpu = if beu.cac.pp('/') || atj.is_empty() {
-                    format!("{}{}", beu.cac, atj)
+    fn resolve_path(&self, guest_path: &str) -> Option<(String, bool)> {
+        for abd in &self.mounts {
+            if guest_path.starts_with(&abd.guest_path) {
+                let xj = &guest_path[abd.guest_path.len()..];
+                let xj = xj.trim_start_matches('/');
+                let mme = if abd.host_path.ends_with('/') || xj.is_empty() {
+                    format!("{}{}", abd.host_path, xj)
                 } else {
-                    format!("{}/{}", beu.cac, atj)
+                    format!("{}/{}", abd.host_path, xj)
                 };
-                return Some((tpu, beu.awr));
+                return Some((mme, abd.readonly));
             }
         }
         None
     }
     
     
-    pub fn lba(&mut self, op: VirtFsOp, n: &[u64]) -> (u32, Vec<u8>) {
+    pub fn handle_request(&mut self, op: VirtFsOp, args: &[u64]) -> (u32, Vec<u8>) {
         match op {
-            VirtFsOp::Re => {
+            VirtFsOp::Version => {
                 
-                let dk = b"VirtFS 1.0\0";
-                (VirtFsError::Hf as u32, dk.ip())
+                let version = b"VirtFS 1.0\0";
+                (VirtFsError::Success as u32, version.to_vec())
             }
             
-            VirtFsOp::Bcb => {
+            VirtFsOp::Attach => {
                 
-                (VirtFsError::Hf as u32, vec![])
+                (VirtFsError::Success as u32, vec![])
             }
             
-            VirtFsOp::Ck => {
-                if n.is_empty() {
-                    return (VirtFsError::Xe as u32, vec![]);
+            VirtFsOp::Open => {
+                if args.is_empty() {
+                    return (VirtFsError::InvalidOp as u32, vec![]);
                 }
                 
                 
                 
-                let da = self.bca;
-                self.bca += 1;
+                let fd = self.next_fd;
+                self.next_fd += 1;
                 
-                self.aho.insert(da, Bgv {
+                self.fds.insert(fd, Yu {
                     path: String::from("/"),
-                    ta: false,
-                    l: 0,
+                    is_dir: false,
+                    offset: 0,
                 });
                 
-                (VirtFsError::Hf as u32, da.ho().ip())
+                (VirtFsError::Success as u32, fd.to_le_bytes().to_vec())
             }
             
             VirtFsOp::Read => {
-                if n.len() < 3 {
-                    return (VirtFsError::Xe as u32, vec![]);
+                if args.len() < 3 {
+                    return (VirtFsError::InvalidOp as u32, vec![]);
                 }
                 
-                let da = n[0] as u32;
-                let dnv = n[1];
-                let az = n[2] as usize;
+                let fd = args[0] as u32;
+                let bkm = args[1];
+                let count = args[2] as usize;
                 
-                if let Some(kvi) = self.aho.get(&da) {
+                if let Some(fd_info) = self.fds.get(&fd) {
                     
                     
-                    if let Some((qcf, ycc)) = self.aqj(&kvi.path) {
+                    if let Some((_host_path, _readonly)) = self.resolve_path(&fd_info.path) {
                         
-                        let f: Vec<u8> = vec![];
-                        let ajp = core::cmp::v(az, f.len());
-                        (VirtFsError::Hf as u32, f[..ajp].ip())
+                        let data: Vec<u8> = vec![];
+                        let rz = core::cmp::min(count, data.len());
+                        (VirtFsError::Success as u32, data[..rz].to_vec())
                     } else {
-                        (VirtFsError::N as u32, vec![])
+                        (VirtFsError::NotFound as u32, vec![])
                     }
                 } else {
-                    (VirtFsError::Aul as u32, vec![])
+                    (VirtFsError::InvalidFd as u32, vec![])
                 }
             }
             
             VirtFsOp::Write => {
-                if n.len() < 2 {
-                    return (VirtFsError::Xe as u32, vec![]);
+                if args.len() < 2 {
+                    return (VirtFsError::InvalidOp as u32, vec![]);
                 }
                 
-                let da = n[0] as u32;
+                let fd = args[0] as u32;
                 
-                if let Some(kvi) = self.aho.get(&da) {
-                    if let Some((qcf, awr)) = self.aqj(&kvi.path) {
-                        if awr {
-                            return (VirtFsError::Jt as u32, vec![]);
+                if let Some(fd_info) = self.fds.get(&fd) {
+                    if let Some((_host_path, readonly)) = self.resolve_path(&fd_info.path) {
+                        if readonly {
+                            return (VirtFsError::PermissionDenied as u32, vec![]);
                         }
                         
-                        (VirtFsError::Hf as u32, vec![])
+                        (VirtFsError::Success as u32, vec![])
                     } else {
-                        (VirtFsError::N as u32, vec![])
+                        (VirtFsError::NotFound as u32, vec![])
                     }
                 } else {
-                    (VirtFsError::Aul as u32, vec![])
+                    (VirtFsError::InvalidFd as u32, vec![])
                 }
             }
             
-            VirtFsOp::Mx => {
-                if n.is_empty() {
-                    return (VirtFsError::Xe as u32, vec![]);
+            VirtFsOp::Close => {
+                if args.is_empty() {
+                    return (VirtFsError::InvalidOp as u32, vec![]);
                 }
                 
-                let da = n[0] as u32;
-                if self.aho.remove(&da).is_some() {
-                    (VirtFsError::Hf as u32, vec![])
+                let fd = args[0] as u32;
+                if self.fds.remove(&fd).is_some() {
+                    (VirtFsError::Success as u32, vec![])
                 } else {
-                    (VirtFsError::Aul as u32, vec![])
+                    (VirtFsError::InvalidFd as u32, vec![])
                 }
             }
             
             VirtFsOp::Stat => {
                 
-                let hm = [0u64; 4]; 
-                let bf: Vec<u8> = hm.iter()
-                    .iva(|&p| p.ho())
+                let stat = [0u64; 4]; 
+                let bytes: Vec<u8> = stat.iter()
+                    .flat_map(|&v| v.to_le_bytes())
                     .collect();
-                (VirtFsError::Hf as u32, bf)
+                (VirtFsError::Success as u32, bytes)
             }
             
-            VirtFsOp::Bqr => {
+            VirtFsOp::ReadDir => {
                 
-                (VirtFsError::Hf as u32, vec![])
+                (VirtFsError::Success as u32, vec![])
             }
             
-            _ => (VirtFsError::Xe as u32, vec![]),
+            _ => (VirtFsError::InvalidOp as u32, vec![]),
         }
     }
 }
 
 
 pub struct VirtFsManager {
-    jaj: BTreeMap<u64, VirtFs>,
+    instances: BTreeMap<u64, VirtFs>,
 }
 
 impl VirtFsManager {
     pub const fn new() -> Self {
         VirtFsManager {
-            jaj: BTreeMap::new(),
+            instances: BTreeMap::new(),
         }
     }
     
-    pub fn avp(&mut self, fk: u64) -> &mut VirtFs {
-        self.jaj.bt(fk).clq(|| VirtFs::new(fk))
+    pub fn create(&mut self, vm_id: u64) -> &mut VirtFs {
+        self.instances.entry(vm_id).or_insert_with(|| VirtFs::new(vm_id))
     }
     
-    pub fn get(&mut self, fk: u64) -> Option<&mut VirtFs> {
-        self.jaj.ds(&fk)
+    pub fn get(&mut self, vm_id: u64) -> Option<&mut VirtFs> {
+        self.instances.get_mut(&vm_id)
     }
     
-    pub fn remove(&mut self, fk: u64) {
-        self.jaj.remove(&fk);
+    pub fn remove(&mut self, vm_id: u64) {
+        self.instances.remove(&vm_id);
     }
 }
 
-static YH_: Mutex<VirtFsManager> = Mutex::new(VirtFsManager::new());
+static ZL_: Mutex<VirtFsManager> = Mutex::new(VirtFsManager::new());
 
 
-pub fn nhj(fk: u64) -> () {
-    YH_.lock().avp(fk);
+pub fn hot(vm_id: u64) -> () {
+    ZL_.lock().create(vm_id);
 }
 
 
-pub fn elx(fk: u64, cac: &str, bqx: &str, awr: bool) {
-    let mut aas = YH_.lock();
-    if let Some(vfs) = aas.get(fk) {
-        vfs.elx(cac, bqx, awr);
+pub fn add_mount(vm_id: u64, host_path: &str, guest_path: &str, readonly: bool) {
+    let mut ng = ZL_.lock();
+    if let Some(vfs) = ng.get(vm_id) {
+        vfs.add_mount(host_path, guest_path, readonly);
     }
 }
 
 
-pub fn vuz(fk: u64) {
-    YH_.lock().remove(fk);
+pub fn ofb(vm_id: u64) {
+    ZL_.lock().remove(vm_id);
 }
 
 
-pub fn lau(fk: u64, op: u32, n: &[u64]) -> (u32, Vec<u8>) {
-    let mut aas = YH_.lock();
+pub fn fzs(vm_id: u64, op: u32, args: &[u64]) -> (u32, Vec<u8>) {
+    let mut ng = ZL_.lock();
     
-    if let Some(vfs) = aas.get(fk) {
-        if let Ok(mpi) = VirtFsOp::try_from(op) {
-            vfs.lba(mpi, n)
+    if let Some(vfs) = ng.get(vm_id) {
+        if let Ok(hbo) = VirtFsOp::try_from(op) {
+            vfs.handle_request(hbo, args)
         } else {
-            (VirtFsError::Xe as u32, vec![])
+            (VirtFsError::InvalidOp as u32, vec![])
         }
     } else {
-        (VirtFsError::N as u32, vec![])
+        (VirtFsError::NotFound as u32, vec![])
     }
 }
